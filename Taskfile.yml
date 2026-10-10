@@ -111,9 +111,9 @@ tasks:
       - git diff --exit-code -- internal/gen
 
   trace:
-    desc: Fail if a hardening rule or threat due by MILESTONE has no test (default M5)
+    desc: Fail if a hardening rule or threat due by MILESTONE has no test (default M6)
     cmds:
-      - go -C tools run ./traceability -root .. -through {{.MILESTONE | default "M5"}}
+      - go -C tools run ./traceability -root .. -through {{.MILESTONE | default "M6"}}
 
   license:check:
     desc: Verify SPDX + copyright headers on every source file
