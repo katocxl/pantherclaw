@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"time"
 
+	agents "github.com/katocxl/pantherclaw/internal/agents/app"
 	"github.com/katocxl/pantherclaw/internal/budgets/adapters/pgbudgets"
 	bdomain "github.com/katocxl/pantherclaw/internal/budgets/domain"
 	defs "github.com/katocxl/pantherclaw/internal/definitions/domain"
@@ -46,7 +47,7 @@ func releasable(ctx context.Context, q *dbq.Queries, c tenancy.Caller, id ids.UU
 	} else if err != nil {
 		return k, err
 	}
-	if err := require(ctx, q, c, td.PermTransactionReconcile, k.AgentID); err != nil {
+	if err := reconciles(ctx, q, c, k.AgentID); err != nil {
 		return k, err
 	}
 	if err := domain.CheckReleasable(domain.TaskKind(k.Kind), domain.TaskState(k.State)); err != nil {
@@ -60,6 +61,19 @@ func releasable(ctx context.Context, q *dbq.Queries, c tenancy.Caller, id ids.UU
 		Launcher: orZero(p.LauncherUserID), Principal: orZero(p.PrincipalUserID), Owner: orZero(p.OwnerUserID),
 		BackupOwner: orZero(p.BackupOwnerUserID),
 	})
+}
+
+// reconciles checks that c holds transaction.reconcile where agent lives.
+func reconciles(ctx context.Context, q *dbq.Queries, c tenancy.Caller, agent ids.UUID) error {
+	a, err := q.GetAgent(ctx, c.Org, agent)
+	if err != nil {
+		return err
+	}
+	path, err := agents.PathOf(ctx, q, a)
+	if err != nil {
+		return err
+	}
+	return c.Require(td.PermTransactionReconcile, path)
 }
 
 func orZero(p *ids.UUID) ids.UUID {

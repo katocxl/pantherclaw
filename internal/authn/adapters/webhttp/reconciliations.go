@@ -344,23 +344,23 @@ func (h *Handler) release(w http.ResponseWriter, r *http.Request, s authnapp.Bro
 		h.jsonError(w, http.StatusBadRequest, "bad_request")
 		return
 	}
-	a, err := h.releaseBindings.VerifyBinding(r.Context(), s, ceremony, body.Response)
+	ctx := callerContext(r, s)
+	a, err := h.releaseBindings.VerifyBinding(ctx, s, ceremony, body.Response)
 	if err != nil {
 		h.releaseError(w, r, err)
 		return
 	}
 	if a.Subject.Reconciliation != id {
-		h.releaseBindings.SpendBinding(r.Context(), s, ceremony)
+		h.releaseBindings.SpendBinding(ctx, s, ceremony)
 		h.jsonError(w, http.StatusBadRequest, "ceremony_invalid")
 		return
 	}
-	ctx := callerContext(r, s)
 	out, err := h.reconciliations.Release(ctx, req, expires, txapp.Assertion{
 		Ceremony: a.Ceremony, Credential: a.Credential, AuthenticatorData: a.AuthenticatorData,
 		ClientDataJSON: a.ClientDataJSON, Signature: a.Signature,
 	})
 	if err != nil {
-		h.releaseBindings.SpendBinding(r.Context(), s, ceremony)
+		h.releaseBindings.SpendBinding(ctx, s, ceremony)
 		h.releaseError(w, r, h.visible(ctx, id, err))
 		return
 	}

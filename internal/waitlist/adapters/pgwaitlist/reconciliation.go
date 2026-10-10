@@ -25,11 +25,11 @@ const (
 // whose unknown outcome was resolved, in the transaction that resolved it
 // (G0 M7 slice A11; M5 part 2 decision 20: the entry never ends by
 // itself). A person's resolution (by a user: "occurred", or the release on
-// the reconciliation page) decides the entry: APPROVED, with the
+// the reconciliation page) decides the entry: StateApproved, with the
 // resolution as its reason. Evidence that the effect happened (the
 // verifier, a late report, the target log) leaves nothing to decide:
-// CANCELLED, with the resolution as its reason. A transaction without an
-// open entry changes nothing.
+// StateCancelled, with the resolution as its reason. A transaction without
+// an open entry changes nothing.
 func CloseReconciliation(ctx context.Context, tx db.TenantTx, org ids.OrgID, transaction ids.UUID, resolution string,
 	by evdomain.Actor,
 ) error {

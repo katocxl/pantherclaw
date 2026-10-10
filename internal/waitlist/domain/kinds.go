@@ -9,7 +9,7 @@ import (
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
 )
 
-// Entry states. CANCELLED ends an entry that no longer needs anyone's
+// Entry states. StateCancelled ends an entry that no longer needs anyone's
 // decision (a superseded hold, an unknown outcome evidence resolved).
 const (
 	StateOpen      = "OPEN"
