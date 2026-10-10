@@ -15,9 +15,10 @@ SELECT format_version, pipeline_version, inputs, inputs_sha256, truncated
 FROM pc.evaluation_inputs
 WHERE org_id = sqlc.arg(org_id) AND transaction_id = sqlc.arg(transaction_id) AND evaluation = sqlc.arg(evaluation);
 
--- The decision receipt of one evaluation, which a replay compares with.
+-- The decision receipt of one evaluation, which a replay compares with;
+-- empty when retention removed its body.
 -- name: GetEvaluationReceipt :one
-SELECT receipt_jws FROM pc.decision_receipts
+SELECT coalesce(receipt_jws, '')::text AS receipt_jws FROM pc.decision_receipts
 WHERE org_id = sqlc.arg(org_id) AND transaction_id = sqlc.arg(transaction_id) AND evaluation = sqlc.arg(evaluation);
 
 -- A stored policy bundle by its id and version number: the version an

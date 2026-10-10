@@ -302,10 +302,11 @@ func (q *Queries) GetBudgetByName(ctx context.Context, orgID ids.OrgID, name str
 }
 
 const getDecisionReceipt = `-- name: GetDecisionReceipt :one
-SELECT receipt_jws FROM pc.decision_receipts
+SELECT coalesce(receipt_jws, '')::text AS receipt_jws FROM pc.decision_receipts
 WHERE org_id = $1 AND transaction_id = $2
 `
 
+// Empty when retention removed the receipt's body.
 func (q *Queries) GetDecisionReceipt(ctx context.Context, orgID ids.OrgID, transactionID ids.UUID) (string, error) {
 	row := q.db.QueryRow(ctx, getDecisionReceipt, orgID, transactionID)
 	var receipt_jws string
@@ -436,7 +437,7 @@ func (q *Queries) InsertContainment(ctx context.Context, orgID ids.OrgID) error 
 
 const insertDecisionReceipt = `-- name: InsertDecisionReceipt :exec
 INSERT INTO pc.decision_receipts (org_id, transaction_id, receipt_jws, ledger_entry_id)
-VALUES ($1, $2, $3, $4)
+VALUES ($1, $2, $3::text, $4)
 `
 
 type InsertDecisionReceiptParams struct {

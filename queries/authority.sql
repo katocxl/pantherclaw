@@ -48,10 +48,11 @@ VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(transaction_id), sqlc.arg(gatew
 
 -- name: InsertDecisionReceipt :exec
 INSERT INTO pc.decision_receipts (org_id, transaction_id, receipt_jws, ledger_entry_id)
-VALUES (sqlc.arg(org_id), sqlc.arg(transaction_id), sqlc.arg(receipt_jws), sqlc.arg(ledger_entry_id));
+VALUES (sqlc.arg(org_id), sqlc.arg(transaction_id), sqlc.arg(receipt_jws)::text, sqlc.arg(ledger_entry_id));
 
+-- Empty when retention removed the receipt's body.
 -- name: GetDecisionReceipt :one
-SELECT receipt_jws FROM pc.decision_receipts
+SELECT coalesce(receipt_jws, '')::text AS receipt_jws FROM pc.decision_receipts
 WHERE org_id = sqlc.arg(org_id) AND transaction_id = sqlc.arg(transaction_id);
 
 -- BeginDispatch is the commit point (HR-001): ISSUED -> DISPATCHING only if

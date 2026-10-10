@@ -170,12 +170,12 @@ Rules: tests first for security behavior; no sleeps (use clocks/conditions); no 
 ```bash
 task up                                                   # PostgreSQL 17 on 127.0.0.1:5432
 mkdir -p deploy/dev/secrets
-for r in pc_app pc_migrator pc_audit_ro; do openssl rand -hex 24 > deploy/dev/secrets/$r.pw; done
+for r in pc_app pc_migrator pc_audit_ro pc_retention; do openssl rand -hex 24 > deploy/dev/secrets/$r.pw; done
 set -a; . deploy/compose/.env; set +a                       # PC_PG_PASSWORD of the compose database
 printf 'postgres://pc_owner:%s@127.0.0.1:5432/pantherclaw?sslmode=disable' "$PC_PG_PASSWORD" > deploy/dev/secrets/admin.url
 go run ./cmd/pantherclaw-server db bootstrap --admin-url-file deploy/dev/secrets/admin.url \
   --app-password-file deploy/dev/secrets/pc_app.pw --migrator-password-file deploy/dev/secrets/pc_migrator.pw \
-  --audit-password-file deploy/dev/secrets/pc_audit_ro.pw
+  --audit-password-file deploy/dev/secrets/pc_audit_ro.pw --retention-password-file deploy/dev/secrets/pc_retention.pw
 go run ./cmd/pantherclaw-server keys gen-kek --out deploy/dev/secrets/kek
 go run ./cmd/pantherclaw-server migrate up --config deploy/dev/server.example.json
 go run ./cmd/pantherclaw-server serve --config deploy/dev/server.example.json

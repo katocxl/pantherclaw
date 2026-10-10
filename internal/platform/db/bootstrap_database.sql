@@ -8,7 +8,7 @@
 DO $$
 BEGIN
     EXECUTE format('REVOKE ALL ON DATABASE %I FROM PUBLIC', current_database());
-    EXECUTE format('GRANT CONNECT ON DATABASE %I TO pc_migrator, pc_app, pc_audit_ro', current_database());
+    EXECUTE format('GRANT CONNECT ON DATABASE %I TO pc_migrator, pc_app, pc_audit_ro, pc_retention', current_database());
 END
 $$;
 REVOKE CREATE ON SCHEMA public FROM PUBLIC;
@@ -16,7 +16,7 @@ REVOKE CREATE ON SCHEMA public FROM PUBLIC;
 CREATE SCHEMA IF NOT EXISTS pc AUTHORIZATION pc_migrator;
 ALTER SCHEMA pc OWNER TO pc_migrator;
 REVOKE ALL ON SCHEMA pc FROM PUBLIC;
-GRANT USAGE ON SCHEMA pc TO pc_app, pc_audit_ro, pc_lister;
+GRANT USAGE ON SCHEMA pc TO pc_app, pc_audit_ro, pc_lister, pc_retention;
 -- A new function owner needs CREATE on the schema (ALTER FUNCTION … OWNER TO
 -- pc_lister). pc_lister cannot log in, so only pc_migrator can use this.
 GRANT CREATE ON SCHEMA pc TO pc_lister;

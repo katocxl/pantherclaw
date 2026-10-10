@@ -24,7 +24,7 @@ WHERE t.org_id = sqlc.arg(org_id) AND t.id = sqlc.arg(transaction_id);
 
 -- name: TransactionReceipts :many
 -- Decision, execution and effect receipts, in the order they were written.
-SELECT receipt_jws, ledger_entry_id, body_removed_at, created_at
+SELECT coalesce(receipt_jws, '')::text AS receipt_jws, ledger_entry_id, body_removed_at, created_at
 FROM (
     SELECT d.receipt_jws, d.ledger_entry_id, d.body_removed_at, d.created_at
     FROM pc.decision_receipts d WHERE d.org_id = sqlc.arg(org_id) AND d.transaction_id = sqlc.arg(transaction_id)
@@ -39,7 +39,7 @@ ORDER BY created_at, ledger_entry_id;
 
 -- name: ReceiptsOfEntries :many
 -- The receipts that the given ledger entries record.
-SELECT receipt_jws, ledger_entry_id, body_removed_at, created_at
+SELECT coalesce(receipt_jws, '')::text AS receipt_jws, ledger_entry_id, body_removed_at, created_at
 FROM (
     SELECT d.receipt_jws, d.ledger_entry_id, d.body_removed_at, d.created_at
     FROM pc.decision_receipts d WHERE d.org_id = sqlc.arg(org_id) AND d.ledger_entry_id = ANY(sqlc.arg(entry_ids)::uuid[])

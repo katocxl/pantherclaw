@@ -83,19 +83,25 @@ type HTTPConfig struct {
 
 // DBConfig configures PostgreSQL access.
 type DBConfig struct {
-	Host                 string          `json:"host" env:"PC_DB_HOST"`
-	Port                 int             `json:"port" env:"PC_DB_PORT"`
-	Name                 string          `json:"name" env:"PC_DB_NAME"`
-	SSLMode              string          `json:"sslmode" env:"PC_DB_SSLMODE"`
-	SSLRootCert          string          `json:"sslrootcert" env:"PC_DB_SSLROOTCERT"`
-	AppUser              string          `json:"app_user" env:"PC_DB_APP_USER"`
-	AppPasswordFile      string          `json:"app_password_file" env:"PC_DB_APP_PASSWORD_FILE"`
-	MigratorUser         string          `json:"migrator_user" env:"PC_DB_MIGRATOR_USER"`
-	MigratorPasswordFile string          `json:"migrator_password_file" env:"PC_DB_MIGRATOR_PASSWORD_FILE"`
-	MaxConns             int             `json:"max_conns" env:"PC_DB_MAX_CONNS"`
-	StatementTimeout     config.Duration `json:"statement_timeout" env:"PC_DB_STATEMENT_TIMEOUT"`
-	LockTimeout          config.Duration `json:"lock_timeout" env:"PC_DB_LOCK_TIMEOUT"`
-	IdleInTxTimeout      config.Duration `json:"idle_in_transaction_timeout" env:"PC_DB_IDLE_IN_TX_TIMEOUT"`
+	Host                 string `json:"host" env:"PC_DB_HOST"`
+	Port                 int    `json:"port" env:"PC_DB_PORT"`
+	Name                 string `json:"name" env:"PC_DB_NAME"`
+	SSLMode              string `json:"sslmode" env:"PC_DB_SSLMODE"`
+	SSLRootCert          string `json:"sslrootcert" env:"PC_DB_SSLROOTCERT"`
+	AppUser              string `json:"app_user" env:"PC_DB_APP_USER"`
+	AppPasswordFile      string `json:"app_password_file" env:"PC_DB_APP_PASSWORD_FILE"`
+	MigratorUser         string `json:"migrator_user" env:"PC_DB_MIGRATOR_USER"`
+	MigratorPasswordFile string `json:"migrator_password_file" env:"PC_DB_MIGRATOR_PASSWORD_FILE"`
+	// RetentionUser and RetentionPasswordFile are the pc_retention role's
+	// (G0 M7 design decision 9): only the worker's retention job connects
+	// with them. Without the password file nothing is removed and the job
+	// reports ROLE_UNAVAILABLE (config_retention.go).
+	RetentionUser         string          `json:"retention_user" env:"PC_DB_RETENTION_USER"`
+	RetentionPasswordFile string          `json:"retention_password_file" env:"PC_DB_RETENTION_PASSWORD_FILE"`
+	MaxConns              int             `json:"max_conns" env:"PC_DB_MAX_CONNS"`
+	StatementTimeout      config.Duration `json:"statement_timeout" env:"PC_DB_STATEMENT_TIMEOUT"`
+	LockTimeout           config.Duration `json:"lock_timeout" env:"PC_DB_LOCK_TIMEOUT"`
+	IdleInTxTimeout       config.Duration `json:"idle_in_transaction_timeout" env:"PC_DB_IDLE_IN_TX_TIMEOUT"`
 }
 
 // DefaultConfig returns safe defaults: loopback listener, TLS-verified DB.
@@ -161,6 +167,7 @@ func (c *Config) Validate() error {
 	errs = append(errs, c.validateM5p2()...)
 	errs = append(errs, c.validateM6()...)
 	errs = append(errs, c.validateEvidence()...)
+	errs = append(errs, c.validateRetention()...)
 	errs = append(errs, c.validateDev()...)
 	if _, err := c.trustedProxies(); err != nil {
 		errs = append(errs, err)
