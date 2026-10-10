@@ -304,3 +304,26 @@ func End(ctx context.Context, tx db.TenantTx, org ids.OrgID, request ids.UUID, e
 	}
 	return closeEntry(ctx, q, org, request, entryState, endReason)
 }
+
+// Invalidate ends a live request made moot by a change (decision 6): it
+// becomes INVALIDATED with the change as its reason, its slots are freed
+// and its entry is closed. The next evaluation of the action decides
+// again; correctness never depends on this, because the change already
+// gives a different binding.
+func Invalidate(ctx context.Context, tx db.TenantTx, org ids.OrgID, request ids.UUID, reason string) error {
+	q := dbq.New(tx)
+	row, err := q.InvalidateApprovalRequest(ctx, &reason, org, request)
+	if db.IsNoRows(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if err := release(ctx, q, org, row.GrantID, row.RunID); err != nil {
+		return err
+	}
+	if err := closeEntry(ctx, q, org, request, entryCancelled, reason); err != nil {
+		return err
+	}
+	return event(ctx, tx, "approval.invalidated", evdomain.Actor{Type: system, ID: system}, audit.Success, reason, request, nil)
+}

@@ -80,6 +80,33 @@ type PcAgentInstance struct {
 	ExpiresAt         *time.Time
 }
 
+type PcAnchor struct {
+	ID             ids.UUID
+	Period         time.Time
+	Leaves         []byte
+	Root           []byte
+	Statement      []byte
+	Signature      []byte
+	Kid            string
+	State          string
+	Attempts       int32
+	NextAt         time.Time
+	ErrorCode      *string
+	RekorEntry     []byte
+	TimestampToken []byte
+	CreatedAt      time.Time
+	AnchoredAt     *time.Time
+}
+
+type PcAnchorLeafe struct {
+	OrgID          ids.OrgID
+	AnchorID       ids.UUID
+	LeafIndex      int32
+	Nonce          []byte
+	CheckpointSize int64
+	CreatedAt      time.Time
+}
+
 type PcApiKey struct {
 	OrgID            ids.OrgID
 	ID               ids.UUID
@@ -262,6 +289,16 @@ type PcBusinessUnit struct {
 	UpdatedAt   time.Time
 }
 
+type PcCheckpoint struct {
+	OrgID     ids.OrgID
+	TreeSize  int64
+	RootHash  []byte
+	Note      []byte
+	Kid       string
+	PqKid     *string
+	CreatedAt time.Time
+}
+
 type PcCircuitState struct {
 	OrgID        ids.OrgID
 	ConnectionID ids.UUID
@@ -375,12 +412,14 @@ type PcCrossOrgListAudit struct {
 }
 
 type PcDecisionReceipt struct {
-	OrgID         ids.OrgID
-	TransactionID ids.UUID
-	ReceiptJws    string
-	LedgerEntryID ids.UUID
-	CreatedAt     time.Time
-	Evaluation    int32
+	OrgID           ids.OrgID
+	TransactionID   ids.UUID
+	ReceiptJws      string
+	LedgerEntryID   ids.UUID
+	CreatedAt       time.Time
+	Evaluation      int32
+	BodyRemovedAt   *time.Time
+	RemovedByPolicy *ids.UUID
 }
 
 type PcDedupeClaim struct {
@@ -475,16 +514,18 @@ type PcDpopNonce struct {
 }
 
 type PcEffectReceipt struct {
-	OrgID         ids.OrgID
-	TransactionID ids.UUID
-	Seq           int32
-	State         string
-	LevelRequired string
-	LevelAchieved *string
-	Basis         string
-	ReceiptJws    string
-	LedgerEntryID ids.UUID
-	CreatedAt     time.Time
+	OrgID           ids.OrgID
+	TransactionID   ids.UUID
+	Seq             int32
+	State           string
+	LevelRequired   string
+	LevelAchieved   *string
+	Basis           string
+	ReceiptJws      string
+	LedgerEntryID   ids.UUID
+	CreatedAt       time.Time
+	BodyRemovedAt   *time.Time
+	RemovedByPolicy *ids.UUID
 }
 
 type PcEnrollmentToken struct {
@@ -552,6 +593,29 @@ type PcEscalationChain struct {
 	CreatedAt time.Time
 }
 
+type PcEvaluationInput struct {
+	OrgID           ids.OrgID
+	TransactionID   ids.UUID
+	Evaluation      int32
+	FormatVersion   int32
+	PipelineVersion int32
+	Inputs          []byte
+	InputsSha256    []byte
+	Truncated       bool
+	CreatedAt       time.Time
+}
+
+type PcEvidenceIntegrity struct {
+	OrgID        ids.OrgID
+	State        string
+	FailureCode  *string
+	FailedSeq    pgtype.Int8
+	FailedAt     *time.Time
+	VerifiedSize pgtype.Int8
+	VerifiedAt   *time.Time
+	UpdatedAt    time.Time
+}
+
 type PcExecutionAttempt struct {
 	OrgID          ids.OrgID
 	ID             ids.UUID
@@ -568,13 +632,15 @@ type PcExecutionAttempt struct {
 }
 
 type PcExecutionReceipt struct {
-	OrgID         ids.OrgID
-	AttemptID     ids.UUID
-	TransactionID ids.UUID
-	PermitID      ids.UUID
-	ReceiptJws    string
-	LedgerEntryID ids.UUID
-	CreatedAt     time.Time
+	OrgID           ids.OrgID
+	AttemptID       ids.UUID
+	TransactionID   ids.UUID
+	PermitID        ids.UUID
+	ReceiptJws      string
+	LedgerEntryID   ids.UUID
+	CreatedAt       time.Time
+	BodyRemovedAt   *time.Time
+	RemovedByPolicy *ids.UUID
 }
 
 type PcFact struct {
@@ -761,14 +827,16 @@ type PcLedgerChain struct {
 }
 
 type PcLedgerEntry struct {
-	OrgID      ids.OrgID
-	ID         ids.UUID
-	Kind       string
-	ActorType  string
-	ActorID    string
-	OccurredAt time.Time
-	Body       []byte
-	Xid        pgtype.Uint64
+	OrgID           ids.OrgID
+	ID              ids.UUID
+	Kind            string
+	ActorType       string
+	ActorID         string
+	OccurredAt      time.Time
+	Body            []byte
+	Xid             pgtype.Uint64
+	BodyRemovedAt   *time.Time
+	RemovedByPolicy *ids.UUID
 }
 
 type PcLedgerHead struct {
@@ -777,6 +845,15 @@ type PcLedgerHead struct {
 	HeadHash     []byte
 	XidWatermark pgtype.Uint64
 	UpdatedAt    time.Time
+}
+
+type PcLedgerTile struct {
+	OrgID     ids.OrgID
+	Level     int16
+	TileIndex int64
+	Width     int16
+	Hashes    []byte
+	CreatedAt time.Time
 }
 
 type PcLicenceState struct {
@@ -954,6 +1031,8 @@ type PcPermit struct {
 	OutboundUrl        *string
 	OutboundBodySha256 []byte
 	ActionTokenJti     *ids.UUID
+	DefinitionDigest   *string
+	VerifyExpect       []byte
 }
 
 type PcPolicy struct {

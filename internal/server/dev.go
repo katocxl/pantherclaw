@@ -59,6 +59,7 @@ func cmdDev(ctx context.Context, args []string, stdout, stderr io.Writer, env En
 		"with --workload-out the grant also allows shell commands")
 	workloadOut := fs.String("workload-out", "", "also seed an admitted PAP/1 workload with a grant and a run; write its key file here (0600, never overwritten)")
 	factsOut := fs.String("facts-key-out", "", "with --workload-out: write the API key of the development fact provider here (0600, never overwritten)")
+	holdOver := fs.String("hold-over", "50.00", "publish a policy holding refunds over this amount (grant currency) for an approver; empty for none")
 	if err := fs.Parse(args[1:]); err != nil {
 		return err
 	}
@@ -77,6 +78,14 @@ func cmdDev(ctx context.Context, args []string, stdout, stderr io.Writer, env En
 	maxPer, err := money.ParseMoney(cfg.Authority.GrantMaxPerAction, cfg.Authority.GrantCurrency)
 	if err != nil {
 		return fmt.Errorf("dev seed: authority.grant_max_per_action: %w", err)
+	}
+	var hold *money.Money
+	if *holdOver != "" {
+		h, err := money.ParseMoney(*holdOver, cfg.Authority.GrantCurrency)
+		if err != nil || h.Amount.Sign() <= 0 {
+			return fmt.Errorf("dev seed: --hold-over must be a positive %s amount", cfg.Authority.GrantCurrency)
+		}
+		hold = &h
 	}
 	for _, out := range []string{*workloadOut, *factsOut, *gatewayOut} {
 		if out == "" {
@@ -143,6 +152,13 @@ func cmdDev(ctx context.Context, args []string, stdout, stderr io.Writer, env En
 		return err
 	}
 	_, _ = fmt.Fprintf(stdout, "seeded org %s (%q) with package %s@%s active\n", org, *name, mockpayments.Name, mockpayments.Version)
+	if hold != nil {
+		if _, err := seedHoldPolicy(ctx, pool, org, *hold); err != nil {
+			return err
+		}
+		_, _ = fmt.Fprintf(stdout, "published policy dev-holds: refunds over %s wait for an approver (%s)\n%s", hold, devHoldReason,
+			approverSteps(cfg.Auth.PublicURL, org))
+	}
 	if *gatewayOut != "" {
 		gw, err := seedGateway(ctx, cfg, pool, org, "dev-gateway", *gatewayOut)
 		if err != nil {

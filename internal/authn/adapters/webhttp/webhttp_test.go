@@ -43,9 +43,13 @@ func (f *fakeBrowser) Callback(_ context.Context, _ string, params url.Values, b
 
 func (f *fakeBrowser) Authenticate(_ context.Context, cookie string) (authnapp.BrowserSession, error) {
 	s := authnapp.BrowserSession{
-		Caller: tapp.Caller{Subject: td.Subject{Org: testOrg, Principal: td.PrincipalRef{Kind: td.KindUser, ID: ids.NewV7()}}},
-		ID:     ids.NewV7(),
+		Caller: tapp.Caller{
+			Subject:    td.Subject{Org: testOrg, Principal: td.PrincipalRef{Kind: td.KindUser, ID: ids.NewV7()}},
+			Credential: authnapp.CredBrowserSession,
+		},
+		ID: ids.NewV7(),
 	}
+	s.Session = s.ID
 	switch cookie {
 	case "good":
 		return s, nil
@@ -84,7 +88,7 @@ func newHandler(t *testing.T, publicURL string) (*webhttp.Handler, *fakeBrowser,
 	fb := &fakeBrowser{}
 	h, err := webhttp.New(fb, publicURL, nil, nil)
 	if err == nil {
-		h.WithKeys(&fakeKeys{}).WithContainment(&fakeContainment{})
+		h.WithKeys(&fakeKeys{}).WithContainment(&fakeContainment{}).WithApprovals(&fakeApprovals{}, &fakeBindings{})
 	}
 	if err != nil {
 		t.Fatal(err)
@@ -180,6 +184,7 @@ func TestHR151_RouteTable(t *testing.T) {
 	h, _, mux := newHandler(t, origin)
 	for _, rt := range h.Routes() {
 		private := strings.HasPrefix(rt.Path, authnapp.AccountPath) || strings.HasPrefix(rt.Path, authnapp.ContainmentPath) ||
+			strings.HasPrefix(rt.Path, authnapp.ApprovalsPath) ||
 			rt.Path == authnapp.LogoutPath
 		if private != rt.Session {
 			t.Errorf("%s %s: session=%v, want %v", rt.Method, rt.Path, rt.Session, private)
@@ -198,6 +203,16 @@ func TestHR151_RouteTable(t *testing.T) {
 		{Method: http.MethodPost, Path: "/containment/kill-switch/restore", Session: true, CSRF: true},
 		{Method: http.MethodPost, Path: "/containment/kill-switch/restore/{id}/confirm", Session: true, CSRF: true},
 		{Method: http.MethodPost, Path: "/containment/kill-switch/restore/{id}/cancel", Session: true, CSRF: true},
+		// The approval page (G0 M5 part 2).
+		{Method: http.MethodGet, Path: "/approvals", Session: true},
+		{Method: http.MethodGet, Path: "/approvals/{id}", Session: true},
+		{Method: http.MethodPost, Path: "/approvals/batch-options", Session: true, CSRF: true},
+		{Method: http.MethodPost, Path: "/approvals/batch", Session: true, CSRF: true},
+		{Method: http.MethodPost, Path: "/approvals/{id}/approve-options", Session: true, CSRF: true},
+		{Method: http.MethodPost, Path: "/approvals/{id}/approve", Session: true, CSRF: true},
+		{Method: http.MethodPost, Path: "/approvals/{id}/decline", Session: true, CSRF: true},
+		{Method: http.MethodPost, Path: "/approvals/{id}/evidence-request", Session: true, CSRF: true},
+		{Method: http.MethodPost, Path: "/approvals/{id}/narrower", Session: true, CSRF: true},
 	} {
 		if !slices.Contains(h.Routes(), want) {
 			t.Errorf("route %+v is not mounted", want)

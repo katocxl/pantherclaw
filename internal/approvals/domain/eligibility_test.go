@@ -231,3 +231,42 @@ func TestHR170_StepUpIsOnlyTheNamedPerson(t *testing.T) {
 		t.Fatalf("a service account principal: %v", err)
 	}
 }
+
+// TestHR176_ARestorationIsDecidedByAnotherRestorer (decision 11): a person
+// holding a role with agent.restore, other than the requester, with an
+// active key; an approver's role does not qualify, and a restorer's role
+// does not approve actions.
+func TestHR176_ARestorationIsDecidedByAnotherRestorer(t *testing.T) {
+	c := ctx()
+	restorer := veteran()
+	restorer.Bindings = []domain.RoleBinding{{Role: "responder", CreatedAt: now.Add(-30 * day)}}
+	r := domain.RestoreRequirement
+	ok, code := domain.Check(r, restorer, c, ids.UUID{})
+	wantCode(t, "a responder", ok, code, "")
+	admin := restorer
+	admin.Bindings = []domain.RoleBinding{{Role: "security_admin", CreatedAt: now.Add(-30 * day)}}
+	ok, code = domain.Check(r, admin, c, ids.UUID{})
+	wantCode(t, "a security admin", ok, code, "")
+
+	c.Requester = restorer.UserID
+	ok, code = domain.Check(r, restorer, c, ids.UUID{})
+	wantCode(t, "the requester", ok, code, domain.IneligibleRequester)
+	c.Requester = ids.NewV7()
+
+	ok, code = domain.Check(r, veteran(), c, ids.UUID{})
+	wantCode(t, "an approver", ok, code, domain.IneligibleNoRole)
+	ok, code = domain.Check(domain.Requirement{Kind: domain.KindApproval, Role: "approver", Count: 1}, restorer, c, ids.UUID{})
+	wantCode(t, "a responder approving an action", ok, code, domain.IneligibleNoRole)
+
+	self := restorer
+	self.Bindings = []domain.RoleBinding{{Role: "responder", CreatedAt: now.Add(-time.Hour), SelfGranted: true}}
+	ok, code = domain.Check(r, self, c, ids.UUID{})
+	wantCode(t, "a self-granted responder", ok, code, domain.IneligibleSelfGrant)
+	keyless := restorer
+	keyless.Credentials = nil
+	ok, code = domain.Check(r, keyless, c, ids.UUID{})
+	wantCode(t, "no key", ok, code, domain.IneligibleNoCredential)
+	if ok, _ := domain.MayRespond(r, restorer, c); !ok {
+		t.Error("a restorer may decline a restoration")
+	}
+}

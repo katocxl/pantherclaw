@@ -46,6 +46,8 @@ type finalState struct {
 	debits   map[bdomain.Ref]bdomain.Debit
 	counters map[bdomain.Ref]bdomain.CounterDebit
 	events   []string
+	// receipts are every evaluation's receipt, with its sealed inputs (G0 M7).
+	receipts map[InputKey]finalize.Receipt
 }
 
 func (w *World) fin() *finalState {
@@ -53,6 +55,7 @@ func (w *World) fin() *finalState {
 		w.final = &finalState{
 			txns: map[txnKey]*finalize.Stored{}, permits: map[ids.UUID]*permitRow{}, rowRefs: map[ids.UUID]bdomain.Ref{},
 			refRows: map[bdomain.Ref]ids.UUID{}, debits: map[bdomain.Ref]bdomain.Debit{}, counters: map[bdomain.Ref]bdomain.CounterDebit{},
+			receipts: map[InputKey]finalize.Receipt{},
 		}
 	}
 	return w.final
@@ -217,6 +220,7 @@ func (w *World) Finalize(ctx context.Context, org ids.OrgID, wr finalize.Write) 
 	if err != nil {
 		return err
 	}
+	f.receipts[InputKey{wr.TransactionID, wr.Evaluation}] = receipt
 	f.txns[key] = &finalize.Stored{
 		TransactionID: wr.TransactionID, ActionHash: ev.ActionHash, Decision: ev.Decision,
 		Reason: wr.Reason, Final: wr.Final, Evaluations: wr.Evaluation, Receipt: receipt.JWS,
@@ -296,6 +300,7 @@ func (w *World) Tamper(_ context.Context, _ ids.OrgID, prev finalize.Stored, rec
 			if s.Final || s.Evaluations != prev.Evaluations {
 				return finalize.ErrConflict
 			}
+			f.receipts[InputKey{s.TransactionID, s.Evaluations + 1}] = *receipt
 			f.txns[k] = &finalize.Stored{
 				TransactionID: s.TransactionID, ActionHash: s.ActionHash, Decision: "DENY",
 				Reason: "ACTION_TAMPERED", Final: true, Evaluations: s.Evaluations + 1, Receipt: receipt.JWS,
@@ -429,18 +434,28 @@ func (w *World) settle(p *permitRow, o bdomain.Outcome, claim pipeline.ClaimStat
 // accounts and counters at once, so nothing is left to apply.
 func (w *World) ApplySettlements(context.Context, ids.OrgID) (int, error) { return 0, nil }
 
-// Sweep implements finalize.Store.
-func (w *World) Sweep(_ context.Context, _ ids.OrgID, staleAfter time.Duration) (int, int, error) {
+// Sweep implements finalize.Store. A swept permit's receipt is signed as
+// the sweeper's, like the database store's (HR-192).
+func (w *World) Sweep(_ context.Context, _ ids.OrgID, staleAfter time.Duration,
+	sign func(gatewayID string, e finalize.Execution, x finalize.Executed, now time.Time) (finalize.Receipt, error),
+) (int, int, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	released, unknown := 0, 0
-	for _, p := range w.fin().permits {
+	for id, p := range w.fin().permits {
 		switch {
 		case p.state == "ISSUED" && !w.Cont.Now.Before(p.expires):
 			p.state = "RELEASED"
 			w.settle(p, bdomain.Release, pipeline.ClaimReleased)
 			released++
 		case p.state == "DISPATCHING" && w.Cont.Now.Sub(p.dispatched) > staleAfter:
+			x := finalize.Executed{
+				Transaction: p.txn, Connection: p.dispatch.Connection, AccessMode: finalize.AccessPantherClawHeld,
+				Monitor: p.monitor, DispatchedAt: p.dispatched, RecordedBy: finalize.RecordedBySweeper,
+			}
+			if _, err := sign(p.gateway, finalize.Execution{Permit: id, Outcome: finalize.Unknown, DispatchMS: -1}, x, w.Cont.Now); err != nil {
+				return released, unknown, err
+			}
 			p.state = "UNKNOWN"
 			unknown++
 		}

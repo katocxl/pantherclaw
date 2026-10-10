@@ -67,3 +67,27 @@ WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND user_id = sqlc.arg(use
 -- name: RecordStepUp :execrows
 UPDATE pc.sessions SET step_up_at = now(), step_up_credential_id = sqlc.arg(credential_id)
 WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND user_id = sqlc.arg(user_id) AND state = 'ACTIVE';
+
+-- An approval's BINDING ceremony (G0 M5 part 2, HR-033): its challenge is
+-- the binding (or a batch's hash), bound to the browser session, the user
+-- and the request or batch. A person's open ceremony for the same request
+-- is replaced.
+-- name: DeleteOpenBindingCeremonies :exec
+DELETE FROM pc.webauthn_ceremonies
+WHERE org_id = sqlc.arg(org_id) AND user_id = sqlc.arg(user_id) AND purpose = 'BINDING' AND consumed_at IS NULL
+  AND (approval_request_id = sqlc.narg(approval_request_id)::uuid OR batch_id = sqlc.narg(batch_id)::uuid);
+
+-- name: InsertBindingCeremony :exec
+INSERT INTO pc.webauthn_ceremonies (org_id, id, session_id, user_id, purpose, challenge, allowed_credentials,
+    approval_request_id, batch_id, expires_at)
+VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(session_id), sqlc.arg(user_id), 'BINDING', sqlc.arg(challenge),
+    sqlc.arg(allowed_credentials), sqlc.narg(approval_request_id), sqlc.narg(batch_id),
+    now() + make_interval(secs => sqlc.arg(ttl_seconds)::int));
+
+-- The approval page verifies an assertion against an open ceremony of this
+-- session and user; the approval consumes it in the transaction that
+-- records the response.
+-- name: GetOpenBindingCeremony :one
+SELECT challenge, allowed_credentials, expires_at, approval_request_id, batch_id FROM pc.webauthn_ceremonies
+WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND session_id = sqlc.arg(session_id) AND user_id = sqlc.arg(user_id)
+  AND purpose = 'BINDING' AND consumed_at IS NULL AND expires_at > now();

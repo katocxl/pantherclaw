@@ -1171,7 +1171,13 @@ type RecordExecutionRequest struct {
 	// SHA-256 of the target response body, empty when none was received.
 	ResponseDigest []byte `protobuf:"bytes,4,opt,name=response_digest,json=responseDigest,proto3" json:"response_digest,omitempty"`
 	// Time spent dispatching, in milliseconds.
-	DispatchMs    int32 `protobuf:"varint,5,opt,name=dispatch_ms,json=dispatchMs,proto3" json:"dispatch_ms,omitempty"`
+	DispatchMs int32 `protobuf:"varint,5,opt,name=dispatch_ms,json=dispatchMs,proto3" json:"dispatch_ms,omitempty"`
+	// The identifier of what the target created, read from a 2xx response at
+	// the place the definition's verifier names (G0 M7, PAP-1 §7.4); empty
+	// when there is none. The Authority keeps it only when it matches the
+	// verifier read's target pattern. It is the only part of a response body
+	// the gateway sends.
+	TargetRef     string `protobuf:"bytes,6,opt,name=target_ref,json=targetRef,proto3" json:"target_ref,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1239,6 +1245,13 @@ func (x *RecordExecutionRequest) GetDispatchMs() int32 {
 		return x.DispatchMs
 	}
 	return 0
+}
+
+func (x *RecordExecutionRequest) GetTargetRef() string {
+	if x != nil {
+		return x.TargetRef
+	}
+	return ""
 }
 
 // RecordExecutionResponse returns the execution receipt.
@@ -1824,7 +1837,7 @@ const file_pantherclaw_v1_authority_proto_rawDesc = "" +
 	"\foutbound_url\x18\x04 \x01(\tB\b\xbaH\x05r\x03\x18\x80 R\voutboundUrl\x129\n" +
 	"\x14outbound_body_sha256\x18\x05 \x01(\fB\a\xbaH\x04z\x02\x18 R\x12outboundBodySha256\":\n" +
 	"\x15BeginDispatchResponse\x12!\n" +
-	"\faction_token\x18\x01 \x01(\tR\vactionToken\"\x8f\x02\n" +
+	"\faction_token\x18\x01 \x01(\tR\vactionToken\"\xc2\x02\n" +
 	"\x16RecordExecutionRequest\x12%\n" +
 	"\tpermit_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\bpermitId\x12=\n" +
 	"\aoutcome\x18\x02 \x01(\x0e2\x17.pantherclaw.v1.OutcomeB\n" +
@@ -1833,7 +1846,9 @@ const file_pantherclaw_v1_authority_proto_rawDesc = "" +
 	"\xbaH\a\x1a\x05\x18\xd7\x04(\x00R\ftargetStatus\x120\n" +
 	"\x0fresponse_digest\x18\x04 \x01(\fB\a\xbaH\x04z\x02\x18 R\x0eresponseDigest\x12,\n" +
 	"\vdispatch_ms\x18\x05 \x01(\x05B\v\xbaH\b\x1a\x06\x18\xc0\xcf$(\x00R\n" +
-	"dispatchMs\"3\n" +
+	"dispatchMs\x121\n" +
+	"\n" +
+	"target_ref\x18\x06 \x01(\tB\x12\xbaH\x0fr\r\x18\x80\x022\b^[!-~]*$R\ttargetRef\"3\n" +
 	"\x17RecordExecutionResponse\x12\x18\n" +
 	"\areceipt\x18\x01 \x01(\tR\areceipt\"\x88\x02\n" +
 	"\x13WorkloadCredentials\x12/\n" +

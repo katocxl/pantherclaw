@@ -47,8 +47,12 @@ type Config struct {
 	// WebAuthn and Notifications are M5 part 1 (config_m5.go).
 	WebAuthn      WebAuthnConfig      `json:"webauthn"`
 	Notifications NotificationsConfig `json:"notifications"`
+	// Waitlist is M5 part 2 (config_m5p2.go).
+	Waitlist WaitlistConfig `json:"waitlist"`
 	// GatewayAPI is M6 (config_m6.go).
 	GatewayAPI GatewayAPIConfig `json:"gateway_api"`
+	// Evidence is M7 track B (config_evidence.go).
+	Evidence EvidenceConfig `json:"evidence"`
 	// Dev holds development-only settings (config_dev.go).
 	Dev DevConfig `json:"dev"`
 }
@@ -119,6 +123,7 @@ func DefaultConfig() Config {
 			Concurrency: 5,
 			SMTP:        SMTPConfig{Port: 587, TLS: "starttls"},
 		},
+		Waitlist: defaultWaitlist(),
 	}
 }
 
@@ -153,7 +158,9 @@ func (c *Config) Validate() error {
 	errs = append(errs, c.validateAuth()...)
 	errs = append(errs, c.validateOIDC()...)
 	errs = append(errs, c.validateM5()...)
+	errs = append(errs, c.validateM5p2()...)
 	errs = append(errs, c.validateM6()...)
+	errs = append(errs, c.validateEvidence()...)
 	errs = append(errs, c.validateDev()...)
 	if _, err := c.trustedProxies(); err != nil {
 		errs = append(errs, err)

@@ -185,3 +185,13 @@ WHERE d.org_id = sqlc.arg(org_id)
   AND d.id < coalesce(sqlc.narg(before)::uuid, 'ffffffff-ffff-ffff-ffff-ffffffffffff')
 ORDER BY d.id DESC
 LIMIT sqlc.arg(page_limit);
+
+-- The subjects, among subject_ids, whose notices failed to deliver (G0 M5
+-- part 2: a waitlist entry's routing health). It is shown to people only
+-- and never reaches an authorization decision (HR-039).
+-- name: FailedNoticeSubjects :many
+SELECT DISTINCT n.subject_id::uuid AS subject_id
+FROM pc.notifications n
+JOIN pc.deliveries d ON d.org_id = n.org_id AND d.notification_id = n.id
+WHERE n.org_id = sqlc.arg(org_id) AND n.subject_type = sqlc.arg(subject_type) AND n.subject_id = ANY (sqlc.arg(subject_ids)::uuid[])
+  AND d.state = 'FAILED';

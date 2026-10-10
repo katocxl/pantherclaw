@@ -26,6 +26,7 @@ import (
 	"connectrpc.com/connect/v2"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	approvals "github.com/katocxl/pantherclaw/internal/approvals/app"
 	"github.com/katocxl/pantherclaw/internal/authn/credential"
 	pantherclawv1 "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
 	"github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1/pantherclawv1connect"
@@ -40,6 +41,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	"github.com/katocxl/pantherclaw/internal/runs/adapters/runsrpc"
 	runsapp "github.com/katocxl/pantherclaw/internal/runs/app"
+	waitlist "github.com/katocxl/pantherclaw/internal/waitlist/app"
 )
 
 // Prefix is the URL path prefix of WorkloadService procedures.
@@ -87,6 +89,9 @@ type Workload struct {
 	runs      *runsapp.Service
 	grants    *grantsapp.Service
 	publicURL string
+	waits     *approvals.Waits
+	approvals *approvals.Service
+	access    *waitlist.Writer
 	clk       clock.Clock
 }
 

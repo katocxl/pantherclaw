@@ -1,0 +1,587 @@
+// SPDX-License-Identifier: BUSL-1.1
+// Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+
+syntax = "proto3";
+
+package pantherclaw.v1;
+
+import "buf/validate/validate.proto";
+import "google/protobuf/timestamp.proto";
+import "pantherclaw/v1/authority.proto";
+
+// TransactionService reads what happened to agent actions (G0 M7 track A,
+// F466–F479). A decision receipt says what was allowed, an execution
+// receipt what the gateway sent and what the target answered, and an effect
+// receipt what a verifier observed; the execution state and the effect
+// state are always shown side by side. Reads are scoped like run.read, by
+// the agent's place in the hierarchy: a list leaves out what the caller
+// cannot read.
+service TransactionService {
+  // ListTransactions lists transactions, newest first.
+  // permission: evidence.read
+  rpc ListTransactions(ListTransactionsRequest) returns (ListTransactionsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // GetTransactionEvidence returns everything recorded about one
+  // transaction (the evidence explorer).
+  // permission: evidence.read
+  rpc GetTransactionEvidence(GetTransactionEvidenceRequest) returns (GetTransactionEvidenceResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+}
+
+// ExecutionState is where an action stands between its decision and its
+// effect (F471–F479). It is derived from the records, never stored.
+enum ExecutionState {
+  EXECUTION_STATE_UNSPECIFIED = 0;
+  // An evaluation is open.
+  EXECUTION_STATE_REQUESTED = 1;
+  // DENY or CANNOT_AUTHORIZE.
+  EXECUTION_STATE_BLOCKED = 2;
+  // Held for an approval or a step-up.
+  EXECUTION_STATE_WAITING = 3;
+  // A permit, not yet dispatching.
+  EXECUTION_STATE_AUTHORIZED = 4;
+  // Sent, including an unknown outcome.
+  EXECUTION_STATE_DISPATCHED = 5;
+  // The target accepted it.
+  EXECUTION_STATE_ACCEPTED = 6;
+  // The target refused it.
+  EXECUTION_STATE_FAILED = 7;
+  // Nothing was sent: a permit released unused, or a hold declined or
+  // expired.
+  EXECUTION_STATE_CANCELLED = 8;
+}
+
+// EffectState is what verification established about the effect (HR-191).
+enum EffectState {
+  // No effect receipt yet.
+  EFFECT_STATE_UNSPECIFIED = 0;
+  // The expected effect was observed.
+  EFFECT_STATE_CONFIRMED = 1;
+  // A conclusive read found no effect.
+  EFFECT_STATE_NONE_CONFIRMED = 2;
+  // Some declared effects were observed and others not.
+  EFFECT_STATE_PARTIAL = 3;
+  // The target reports it as still in progress.
+  EFFECT_STATE_PROPAGATION_PENDING = 4;
+  // Observations disagree with each other or with the target's answer.
+  EFFECT_STATE_CONFLICTING = 5;
+  // Nothing can verify it.
+  EFFECT_STATE_UNVERIFIABLE = 6;
+  // Nothing conclusive within the verifier's window.
+  EFFECT_STATE_UNKNOWN = 7;
+  // A linked compensating transaction's effect was confirmed. It never
+  // claims an exact reversal.
+  EFFECT_STATE_COMPENSATED = 8;
+}
+
+// VerificationLevel is how far verification reached.
+enum VerificationLevel {
+  VERIFICATION_LEVEL_UNSPECIFIED = 0;
+  // The target accepted the write.
+  VERIFICATION_LEVEL_ACCEPTANCE = 1;
+  // A follow-up read found the effect.
+  VERIFICATION_LEVEL_FOLLOW_UP = 2;
+  // A read of the domain object established the effect itself.
+  VERIFICATION_LEVEL_DOMAIN_EFFECT = 3;
+  // A downstream system confirmed it.
+  VERIFICATION_LEVEL_DOWNSTREAM = 4;
+}
+
+// IntegrityStatus is how far an evidence item's ledger entry is protected.
+enum IntegrityStatus {
+  INTEGRITY_STATUS_UNSPECIFIED = 0;
+  // In the ledger, not yet linked into the org's hash chain.
+  INTEGRITY_STATUS_PENDING = 1;
+  // Linked into the org's hash chain.
+  INTEGRITY_STATUS_CHAINED = 2;
+  // Covered by a signed checkpoint of the org's Merkle tree.
+  INTEGRITY_STATUS_CHECKPOINTED = 3;
+  // Covered by a checkpoint whose blinded root is anchored publicly.
+  INTEGRITY_STATUS_ANCHORED = 4;
+}
+
+// Integrity names an evidence item's ledger entry and its protection.
+message Integrity {
+  // Ledger entry id.
+  string ledger_entry_id = 1;
+  // Position in the org's hash chain; 0 while pending.
+  int64 sequence = 2;
+  // Status.
+  IntegrityStatus status = 3;
+}
+
+// Transaction is one agent action.
+message Transaction {
+  // Transaction id.
+  string id = 1;
+  // Run.
+  string run_id = 2;
+  // The run's agent.
+  string agent_id = 3;
+  // Operation (the action definition's name).
+  string operation = 4;
+  // Connection it goes through; empty for an action without one.
+  string connection_id = 5;
+  // Latest decision.
+  Decision decision = 6;
+  // Its reason code.
+  string reason_code = 7;
+  // Derived execution state.
+  ExecutionState execution_state = 8;
+  // Effect state; unspecified until the first effect receipt.
+  EffectState effect_state = 9;
+  // Level the action needs.
+  VerificationLevel level_required = 10;
+  // Level reached.
+  VerificationLevel level_achieved = 11;
+  // What the action reserved, per budget, is in its decision receipts.
+  reserved 12, 13;
+  reserved "amount", "currency";
+  // True for a hypothetical decision in monitor mode, which prevented
+  // nothing (HR-184).
+  bool monitor = 14;
+  // Number of evaluations (a held action is evaluated again).
+  int32 evaluations = 15;
+  // When it was first evaluated.
+  google.protobuf.Timestamp create_time = 16;
+}
+
+// ListTransactionsRequest pages through transactions, newest first.
+message ListTransactionsRequest {
+  // Maximum results (default 50, at most 200). A page can hold fewer when
+  // some transactions are not readable.
+  int32 page_size = 1 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 200
+  }];
+  // Token from a previous response.
+  string page_token = 2 [(buf.validate.field).string = {
+    max_len: 64
+    pattern: "^[A-Za-z0-9_-]*$"
+  }];
+  // Only this run's.
+  optional string run_id = 3 [(buf.validate.field).string.uuid = true];
+  // Only this agent's.
+  optional string agent_id = 4 [(buf.validate.field).string.uuid = true];
+  // Only through this connection.
+  optional string connection_id = 5 [(buf.validate.field).string.uuid = true];
+  // Only with these latest decisions (all when empty).
+  repeated Decision decisions = 6 [(buf.validate.field).repeated = {
+    max_items: 6
+    unique: true
+    items: {
+      enum: {
+        defined_only: true
+        not_in: [0]
+      }
+    }
+  }];
+  // Only in these execution states (all when empty).
+  repeated ExecutionState execution_states = 7 [(buf.validate.field).repeated = {
+    max_items: 8
+    unique: true
+    items: {
+      enum: {
+        defined_only: true
+        not_in: [0]
+      }
+    }
+  }];
+  // Only in these effect states (all when empty).
+  repeated EffectState effect_states = 8 [(buf.validate.field).repeated = {
+    max_items: 8
+    unique: true
+    items: {
+      enum: {
+        defined_only: true
+        not_in: [0]
+      }
+    }
+  }];
+  // Only created at or after this time.
+  google.protobuf.Timestamp start_time = 9;
+  // Only created before this time.
+  google.protobuf.Timestamp end_time = 10;
+}
+
+// ListTransactionsResponse is one page.
+message ListTransactionsResponse {
+  // Transactions, newest first.
+  repeated Transaction transactions = 1;
+  // Token for the next page; empty at the end.
+  string next_page_token = 2;
+}
+
+// GetTransactionEvidenceRequest names a transaction.
+message GetTransactionEvidenceRequest {
+  // Transaction id.
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// DecisionReceipt is one evaluation's signed decision receipt.
+message DecisionReceipt {
+  // Evaluation number, from 1.
+  int32 evaluation = 1;
+  // Compact JWS (pap-decision+jwt).
+  string receipt_jws = 2;
+  // Its ledger entry.
+  Integrity integrity = 3;
+  // When it was issued.
+  google.protobuf.Timestamp create_time = 4;
+}
+
+// Execution is the dispatch attempt and its signed execution receipt.
+message Execution {
+  // Attempt id.
+  string attempt_id = 1;
+  // Permit id.
+  string permit_id = 2;
+  // Outcome the gateway (or the sweeper) recorded.
+  Outcome outcome = 3;
+  // The target's HTTP status, 0 when none.
+  int32 target_status = 4;
+  // "gateway", or "sweeper" for a permit nobody reported (always unknown).
+  string recorded_by = 5;
+  // The object the target says it created, extracted by the gateway from
+  // the reviewed response pointer. UNTRUSTED target data.
+  string target_ref = 6;
+  // How long dispatch took, in milliseconds.
+  int32 dispatch_ms = 7;
+  // When the permit started dispatching.
+  google.protobuf.Timestamp dispatch_time = 8;
+  // When the outcome was recorded.
+  google.protobuf.Timestamp record_time = 9;
+  // Compact JWS (pap-execution+jwt).
+  string receipt_jws = 10;
+  // Its ledger entry.
+  Integrity integrity = 11;
+}
+
+// Observation is what a gateway read at the target (HR-190).
+message Observation {
+  // Observation id.
+  string id = 1;
+  // "verifier", "late_report" or "target_log".
+  string source = 2;
+  // The verification task that leased the read; empty for a late report.
+  string verification_id = 3;
+  // Gateway that read it.
+  string gateway_id = 4;
+  // HTTP status of the read, 0 when none.
+  int32 http_status = 5;
+  // For a late report, the outcome it reported.
+  Outcome outcome = 6;
+  // Whether the object was found.
+  optional bool found = 7;
+  // For a listing, whether it was read to the end.
+  optional bool complete = 8;
+  // The fields the verifier declares, by JSON pointer. UNTRUSTED target
+  // data.
+  map<string, string> fields = 9;
+  // Hex SHA-256 of the response body.
+  string response_sha256 = 10;
+  // When it was read.
+  google.protobuf.Timestamp observe_time = 11;
+}
+
+// EffectReceipt is one signed effect receipt; receipts are appended, never
+// changed (HR-191).
+message EffectReceipt {
+  // Sequence within the transaction, from 1.
+  int32 seq = 1;
+  // State it records.
+  EffectState state = 2;
+  // Level required.
+  VerificationLevel level_required = 3;
+  // Level achieved.
+  VerificationLevel level_achieved = 4;
+  // "verifier", "late_report", "target_log", "person", "compensation",
+  // "definition" or "deadline".
+  string basis = 5;
+  // Compact JWS (pap-effect+jwt).
+  string receipt_jws = 6;
+  // Its ledger entry.
+  Integrity integrity = 7;
+  // When it was appended.
+  google.protobuf.Timestamp create_time = 8;
+}
+
+// ReconciliationKind is why a reconciliation exists.
+enum ReconciliationKind {
+  RECONCILIATION_KIND_UNSPECIFIED = 0;
+  // The outcome of a dispatch is unknown; its budget stays held.
+  RECONCILIATION_KIND_UNKNOWN_OUTCOME = 1;
+  // Observations conflict with the target's answer.
+  RECONCILIATION_KIND_CONFLICTING_EFFECT = 2;
+}
+
+// ReconciliationState is where a reconciliation stands.
+enum ReconciliationState {
+  RECONCILIATION_STATE_UNSPECIFIED = 0;
+  RECONCILIATION_STATE_OPEN = 1;
+  // The effect happened.
+  RECONCILIATION_STATE_OCCURRED = 2;
+  // A person released it on its page with a security key.
+  RECONCILIATION_STATE_NOT_OCCURRED = 3;
+}
+
+// Reconciliation is one owned reconciliation task (HR-192).
+message Reconciliation {
+  // Reconciliation id.
+  string id = 1;
+  // Transaction.
+  string transaction_id = 2;
+  // Kind.
+  ReconciliationKind kind = 3;
+  // State.
+  ReconciliationState state = 4;
+  // How it was resolved: "verifier", "late_report", "target_log" or
+  // "person"; empty while open.
+  string resolved_via = 5;
+  // The observation that resolved it, or the one a person found
+  // authoritative.
+  string observation_id = 6;
+  // The person who resolved it.
+  string resolved_by_user_id = 7;
+  // Their written basis. UNTRUSTED text.
+  string basis = 8;
+  // The observations they were shown.
+  repeated string evidence = 9;
+  // The waitlist entry that tracks it.
+  string waitlist_entry_id = 10;
+  // When it was opened.
+  google.protobuf.Timestamp open_time = 11;
+  // When it was resolved.
+  google.protobuf.Timestamp resolve_time = 12;
+}
+
+// LinkKind is how a later transaction relates to an earlier one (HR-193).
+enum LinkKind {
+  LINK_KIND_UNSPECIFIED = 0;
+  // It undoes the earlier effect as far as the target allows.
+  LINK_KIND_COMPENSATES = 1;
+  // It completes what the earlier one did not.
+  LINK_KIND_RECOVERS = 2;
+}
+
+// TransactionLink links a later transaction to an earlier one.
+message TransactionLink {
+  // The later transaction.
+  string from_transaction_id = 1;
+  // The earlier transaction.
+  string to_transaction_id = 2;
+  // Kind.
+  LinkKind kind = 3;
+  // Who linked them ("user:<id>").
+  string created_by = 4;
+  // When.
+  google.protobuf.Timestamp create_time = 5;
+}
+
+// AuthorityLevel is one level of authority a decision used, at its
+// revision.
+message AuthorityLevel {
+  // "grant", "delegation" and the like.
+  string kind = 1;
+  // Its id.
+  string id = 2;
+  // Its revision.
+  int32 revision = 3;
+}
+
+// DecisionBasis is what the latest decision was made on, from its receipt.
+message DecisionBasis {
+  // Policy version, or "none".
+  string policy_version = 1;
+  // Every level of authority, at its revision.
+  repeated AuthorityLevel levels = 2;
+  // Action definition digest.
+  string definition_digest = 3;
+  // Digest of the facts used.
+  string facts_digest = 4;
+  // Digest of the whole basis (approvals bind it).
+  string basis_digest = 5;
+  // The approval request the decision consumed, if any.
+  string approval_request_id = 6;
+  // The connection the action named.
+  string connection_id = 7;
+}
+
+// GetTransactionEvidenceResponse is everything recorded about one
+// transaction. Receipts are returned as signed; pclaw verify checks them.
+message GetTransactionEvidenceResponse {
+  // The transaction.
+  Transaction transaction = 1;
+  // Every evaluation's decision receipt.
+  repeated DecisionReceipt decision_receipts = 2;
+  // What the latest decision was made on.
+  DecisionBasis basis = 3;
+  // The dispatch attempt, if it was dispatched.
+  Execution execution = 4;
+  // Every observation of its effect.
+  repeated Observation observations = 5;
+  // Every effect receipt, in order.
+  repeated EffectReceipt effect_receipts = 6;
+  // Its reconciliations.
+  repeated Reconciliation reconciliations = 7;
+  // Links from and to it.
+  repeated TransactionLink links = 8;
+}
+
+// ReconciliationService owns unknown outcomes and conflicting effects
+// (HR-192, HR-193). Evidence resolves a reconciliation only towards
+// "occurred"; "did not occur" is released only on the reconciliation's page,
+// by an independent person with a security key, never through this API.
+// Writes are human only.
+service ReconciliationService {
+  // ListReconciliations lists reconciliations, newest first.
+  // permission: evidence.read
+  rpc ListReconciliations(ListReconciliationsRequest) returns (ListReconciliationsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // GetReconciliation returns one reconciliation and its transaction.
+  // permission: evidence.read
+  rpc GetReconciliation(GetReconciliationRequest) returns (GetReconciliationResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // ResolveOccurred records, with a written basis, that the effect
+  // happened. For an unknown outcome the held budget is committed and an
+  // exact repeat stays refused within the repeat window; a conflicting
+  // effect's committed budget stays committed. It only ever commits, the
+  // safe direction.
+  // permission: transaction.reconcile
+  rpc ResolveOccurred(ResolveOccurredRequest) returns (ResolveOccurredResponse);
+  // RequestVerification asks the transaction's verifier to read the target
+  // again now.
+  // permission: transaction.reconcile
+  rpc RequestVerification(RequestVerificationRequest) returns (RequestVerificationResponse);
+  // LinkTransaction links a later, separately authorized transaction to an
+  // earlier one as its compensation or recovery. The earlier transaction's
+  // records and budget never change; it becomes COMPENSATED only once the
+  // compensating effect is confirmed.
+  // permission: transaction.reconcile
+  rpc LinkTransaction(LinkTransactionRequest) returns (LinkTransactionResponse);
+}
+
+// ListReconciliationsRequest pages through reconciliations, newest first.
+message ListReconciliationsRequest {
+  // Maximum results (default 50, at most 200). A page can hold fewer when
+  // some are not readable.
+  int32 page_size = 1 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 200
+  }];
+  // Token from a previous response.
+  string page_token = 2 [(buf.validate.field).string = {
+    max_len: 64
+    pattern: "^[A-Za-z0-9_-]*$"
+  }];
+  // Only in these states (all when empty).
+  repeated ReconciliationState states = 3 [(buf.validate.field).repeated = {
+    max_items: 3
+    unique: true
+    items: {
+      enum: {
+        defined_only: true
+        not_in: [0]
+      }
+    }
+  }];
+  // Only of these kinds (all when empty).
+  repeated ReconciliationKind kinds = 4 [(buf.validate.field).repeated = {
+    max_items: 2
+    unique: true
+    items: {
+      enum: {
+        defined_only: true
+        not_in: [0]
+      }
+    }
+  }];
+  // Only this transaction's.
+  optional string transaction_id = 5 [(buf.validate.field).string.uuid = true];
+}
+
+// ListReconciliationsResponse is one page.
+message ListReconciliationsResponse {
+  // Reconciliations, newest first.
+  repeated Reconciliation reconciliations = 1;
+  // Token for the next page; empty at the end.
+  string next_page_token = 2;
+}
+
+// GetReconciliationRequest names a reconciliation.
+message GetReconciliationRequest {
+  // Reconciliation id.
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// GetReconciliationResponse returns it.
+message GetReconciliationResponse {
+  // The reconciliation.
+  Reconciliation reconciliation = 1;
+  // Its transaction.
+  Transaction transaction = 2;
+}
+
+// ResolveOccurredRequest records that an effect happened.
+message ResolveOccurredRequest {
+  // Reconciliation id; it must be open.
+  string id = 1 [(buf.validate.field).string.uuid = true];
+  // What the person checked, in their words (stored and shown as
+  // untrusted text).
+  string basis = 2 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 2000
+  }];
+  // The transaction's observations the person relied on.
+  repeated string evidence = 3 [(buf.validate.field).repeated = {
+    max_items: 64
+    unique: true
+    items: {
+      string: {uuid: true}
+    }
+  }];
+  // The observation the person found authoritative; one of evidence.
+  optional string observation_id = 4 [(buf.validate.field).string.uuid = true];
+}
+
+// ResolveOccurredResponse returns the resolved reconciliation.
+message ResolveOccurredResponse {
+  // The reconciliation.
+  Reconciliation reconciliation = 1;
+}
+
+// RequestVerificationRequest names a dispatched transaction.
+message RequestVerificationRequest {
+  // Transaction id.
+  string transaction_id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// RequestVerificationResponse names the verification task.
+message RequestVerificationResponse {
+  // The task that reads the target next.
+  string verification_id = 1;
+}
+
+// LinkTransactionRequest links two transactions.
+message LinkTransactionRequest {
+  // The later transaction: the compensation or recovery.
+  string from_transaction_id = 1 [(buf.validate.field).string.uuid = true];
+  // The earlier transaction it compensates or recovers. It must have been
+  // dispatched before the later one was decided.
+  string to_transaction_id = 2 [(buf.validate.field).string.uuid = true];
+  // Kind.
+  LinkKind kind = 3 [(buf.validate.field).enum = {
+    defined_only: true
+    not_in: [0]
+  }];
+}
+
+// LinkTransactionResponse returns the link.
+message LinkTransactionResponse {
+  // The link.
+  TransactionLink link = 1;
+}

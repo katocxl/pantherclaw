@@ -126,6 +126,110 @@ func (q *Queries) CredentialOfUser(ctx context.Context, orgID ids.OrgID, iD ids.
 	return i, err
 }
 
+const deleteOpenBindingCeremonies = `-- name: DeleteOpenBindingCeremonies :exec
+DELETE FROM pc.webauthn_ceremonies
+WHERE org_id = $1 AND user_id = $2 AND purpose = 'BINDING' AND consumed_at IS NULL
+  AND (approval_request_id = $3::uuid OR batch_id = $4::uuid)
+`
+
+type DeleteOpenBindingCeremoniesParams struct {
+	OrgID             ids.OrgID
+	UserID            ids.UUID
+	ApprovalRequestID *ids.UUID
+	BatchID           *ids.UUID
+}
+
+// An approval's BINDING ceremony (G0 M5 part 2, HR-033): its challenge is
+// the binding (or a batch's hash), bound to the browser session, the user
+// and the request or batch. A person's open ceremony for the same request
+// is replaced.
+func (q *Queries) DeleteOpenBindingCeremonies(ctx context.Context, arg DeleteOpenBindingCeremoniesParams) error {
+	_, err := q.db.Exec(ctx, deleteOpenBindingCeremonies,
+		arg.OrgID,
+		arg.UserID,
+		arg.ApprovalRequestID,
+		arg.BatchID,
+	)
+	return err
+}
+
+const getOpenBindingCeremony = `-- name: GetOpenBindingCeremony :one
+SELECT challenge, allowed_credentials, expires_at, approval_request_id, batch_id FROM pc.webauthn_ceremonies
+WHERE org_id = $1 AND id = $2 AND session_id = $3 AND user_id = $4
+  AND purpose = 'BINDING' AND consumed_at IS NULL AND expires_at > now()
+`
+
+type GetOpenBindingCeremonyParams struct {
+	OrgID     ids.OrgID
+	ID        ids.UUID
+	SessionID ids.UUID
+	UserID    ids.UUID
+}
+
+type GetOpenBindingCeremonyRow struct {
+	Challenge          []byte
+	AllowedCredentials [][]byte
+	ExpiresAt          time.Time
+	ApprovalRequestID  *ids.UUID
+	BatchID            *ids.UUID
+}
+
+// The approval page verifies an assertion against an open ceremony of this
+// session and user; the approval consumes it in the transaction that
+// records the response.
+func (q *Queries) GetOpenBindingCeremony(ctx context.Context, arg GetOpenBindingCeremonyParams) (GetOpenBindingCeremonyRow, error) {
+	row := q.db.QueryRow(ctx, getOpenBindingCeremony,
+		arg.OrgID,
+		arg.ID,
+		arg.SessionID,
+		arg.UserID,
+	)
+	var i GetOpenBindingCeremonyRow
+	err := row.Scan(
+		&i.Challenge,
+		&i.AllowedCredentials,
+		&i.ExpiresAt,
+		&i.ApprovalRequestID,
+		&i.BatchID,
+	)
+	return i, err
+}
+
+const insertBindingCeremony = `-- name: InsertBindingCeremony :exec
+INSERT INTO pc.webauthn_ceremonies (org_id, id, session_id, user_id, purpose, challenge, allowed_credentials,
+    approval_request_id, batch_id, expires_at)
+VALUES ($1, $2, $3, $4, 'BINDING', $5,
+    $6, $7, $8,
+    now() + make_interval(secs => $9::int))
+`
+
+type InsertBindingCeremonyParams struct {
+	OrgID              ids.OrgID
+	ID                 ids.UUID
+	SessionID          ids.UUID
+	UserID             ids.UUID
+	Challenge          []byte
+	AllowedCredentials [][]byte
+	ApprovalRequestID  *ids.UUID
+	BatchID            *ids.UUID
+	TtlSeconds         int32
+}
+
+func (q *Queries) InsertBindingCeremony(ctx context.Context, arg InsertBindingCeremonyParams) error {
+	_, err := q.db.Exec(ctx, insertBindingCeremony,
+		arg.OrgID,
+		arg.ID,
+		arg.SessionID,
+		arg.UserID,
+		arg.Challenge,
+		arg.AllowedCredentials,
+		arg.ApprovalRequestID,
+		arg.BatchID,
+		arg.TtlSeconds,
+	)
+	return err
+}
+
 const insertCeremony = `-- name: InsertCeremony :exec
 INSERT INTO pc.webauthn_ceremonies (org_id, id, session_id, user_id, purpose, challenge, allowed_credentials, expires_at)
 VALUES ($1, $2, $3, $4, $5, $6,

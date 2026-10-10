@@ -49,6 +49,9 @@ type Config struct {
 		// IdentityDir keeps the gateway's key and certificate (0700).
 		IdentityDir string          `json:"identity_dir" env:"PC_GW_IDENTITY_DIR"`
 		Timeout     config.Duration `json:"timeout" env:"PC_GW_CONTROL_TIMEOUT"`
+		// VerifyEvery is how often the gateway claims verification tasks
+		// (G0 M7): 1 second to 10 minutes, default 10 seconds.
+		VerifyEvery config.Duration `json:"verify_every" env:"PC_GW_CONTROL_VERIFY_EVERY"`
 	} `json:"control"`
 	// Egress is what the gateway may reach (HR-071, HR-077). The targets
 	// themselves are the connections the server configures.
@@ -78,6 +81,7 @@ func DefaultConfig() Config {
 	c.Control.APIURL = "http://127.0.0.1:8080"
 	c.Control.IdentityDir = "deploy/dev/secrets/gateway"
 	c.Control.Timeout = config.Duration(2 * time.Second)
+	c.Control.VerifyEvery = config.Duration(VerifyEvery)
 	return c
 }
 
@@ -97,6 +101,9 @@ func (c *Config) Validate() error {
 	}
 	if c.Control.IdentityDir == "" {
 		errs = append(errs, errors.New("control.identity_dir is required"))
+	}
+	if d := c.Control.VerifyEvery.D(); d != 0 && (d < time.Second || d > 10*time.Minute) {
+		errs = append(errs, errors.New("control.verify_every must be between 1s and 10m"))
 	}
 	if c.Control.CASHA256 != "" && !pinPattern.MatchString(c.Control.CASHA256) {
 		errs = append(errs, errors.New("control.ca_sha256 must be sha256: and 64 hex digits"))

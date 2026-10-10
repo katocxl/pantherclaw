@@ -139,6 +139,9 @@ type Message struct {
 	// OnlyChannel delivers to that channel alone, whatever its
 	// subscription (channel tests).
 	OnlyChannel *ids.UUID
+	// PersonalOnly delivers to the personal recipients alone, not to
+	// subscribed channels (an escalation step that does not notify them).
+	PersonalOnly bool
 }
 
 // Enqueued reports what Enqueue created.
@@ -146,6 +149,8 @@ type Enqueued struct {
 	Notification ids.UUID
 	Deliveries   int
 	Duplicate    bool
+	// Channels are the channels it was routed to.
+	Channels []ids.UUID
 }
 
 // Enqueue renders m from its fixed template (HR-158), routes it to the
@@ -194,6 +199,9 @@ func (s *Service) Enqueue(ctx context.Context, tx db.TenantTx, m Message) (Enque
 		}
 		out.Deliveries++
 	}
+	if m.PersonalOnly {
+		return out, nil
+	}
 	channels, err := q.ChannelsForRouting(ctx, m.Org)
 	if err != nil {
 		return Enqueued{}, err
@@ -212,6 +220,7 @@ func (s *Service) Enqueue(ctx context.Context, tx db.TenantTx, m Message) (Enque
 			return Enqueued{}, err
 		}
 		out.Deliveries += added
+		out.Channels = append(out.Channels, c.ID)
 	}
 	return out, nil
 }
@@ -332,4 +341,15 @@ func deref(s *string) string {
 		return ""
 	}
 	return *s
+}
+
+// FailedSubjects returns the subjects of subjectType, among subjects, whose
+// notices failed to deliver, read in tx (G0 M5 part 2: a waitlist entry's
+// routing health). Delivery state is shown to people only and never
+// reaches an authorization decision (HR-039).
+func (s *Service) FailedSubjects(ctx context.Context, tx db.TenantTx, org ids.OrgID, subjectType string, subjects []ids.UUID) ([]ids.UUID, error) {
+	if len(subjects) == 0 {
+		return nil, nil
+	}
+	return dbq.New(tx).FailedNoticeSubjects(ctx, org, &subjectType, subjects)
 }

@@ -316,6 +316,14 @@ func TestHR181_AGatewayEnrolledByDevSeedAuthorizesOverMTLS(t *testing.T) {
 	if err != nil || res.GetDecision() != pantherclawv1.Decision_DECISION_ALLOW || res.GetPermit() == "" {
 		t.Fatalf("Authorize = %v, %v", res, err)
 	}
+	// The seeded hold policy holds a refund over 50.00 USD for an approver,
+	// with its wait handle (S02).
+	held, err := authorize(client, refund(t, org, wl, "60.00"), wl.creds(t, nonce.GetNonce()))
+	if err != nil || held.GetDecision() != pantherclawv1.Decision_DECISION_REQUIRE_APPROVAL || held.GetPermit() != "" ||
+		held.GetWait().GetHandle() != held.GetTransactionId() || held.GetWait().GetState() != pantherclawv1.WaitState_WAIT_STATE_PENDING ||
+		held.GetWait().GetApprovalRequestId() == "" {
+		t.Fatalf("a refund over the hold limit = %v, %v", held, err)
+	}
 	// Another org's action is denied: the org comes from the certificate.
 	other, err := authorize(client, refund(t, ids.New[ids.Org](), wl, "30.00"), wl.creds(t, nonce.GetNonce()))
 	if err != nil || other.GetDecision() != pantherclawv1.Decision_DECISION_DENY {
@@ -388,7 +396,10 @@ func TestIntDevSeedAudits(t *testing.T) {
 		return rows.Err()
 	})
 	want := []string{
-		"audit.dev.org_seeded", "audit.dev.workload_seeded", "audit.package.imported", "audit.package.transitioned",
+		// Importing the reviewed package opens its TOOL_REVIEW entry, which
+		// activating it settles (G0 M5 part 2).
+		"audit.dev.org_seeded", "audit.dev.workload_seeded", "audit.waitlist.entry_opened", "audit.package.imported",
+		"audit.package.transitioned", "audit.policy.version_created", "audit.policy.published",
 		"audit.dev.gateway_seeded", "audit.connection.created", "audit.facts.provider_registered", "audit.grant.issued", "audit.run.started",
 	}
 	if err != nil || !slices.Equal(kinds, want) {

@@ -222,6 +222,8 @@ type GatewayHandler struct {
 	hub      *gwapp.Hub
 	circuits Circuits
 	drifts   Drifts
+	// verifications leases and takes verification reports (G0 M7).
+	verifications Verifications
 }
 
 // NewGateway returns the GatewayService handler.

@@ -306,6 +306,21 @@ go run ./cmd/pclaw user revoke-sessions <user id>                               
 
 Browser sessions last 30 idle minutes and 12 hours at most. Adding or removing a key needs a sign-in at most 5 minutes old (the page sends you back to your identity provider) or a step-up with a key you already have, and the user is emailed about it. Webhooks are signed per Standard Webhooks: any `standardwebhooks` library verifies them with the `whsec_` secret. Slack and email messages only link back to PantherClaw; nothing in a channel can approve anything. Community allows 3 channels. Without `notifications.smtp.host`, email deliveries are skipped and shown as such in `pclaw delivery list`.
 
+**Approvals and the Agent Waitlist (M5 part 2):** `dev seed` publishes the policy `dev-holds`, so a refund over `--hold-over` (default 50.00) is held for one Approver. The gateway answers a held call with its transaction id, which is the wait handle. A person approves only on the approval page, with a security key bound to that exact action (decision 1); `pclaw` declines, asks for evidence or proposes a narrower action, and opens the page to approve.
+
+```bash
+go run ./cmd/pantherclaw-server org admin-invite --config deploy/dev/server.local.json --org <org id>   # alice signs in with this token
+go run ./cmd/pclaw invite create --email bob@example.test --role approver                              # as alice; bob signs in with that token
+# bob: open http://localhost:8080/account?org=<org id>, sign in, add a security key
+go run ./cmd/pclaw workload wait <transaction id> --key-file deploy/dev/secrets/workload.json --follow   # the agent's side: READY or how it ended
+go run ./cmd/pclaw approval list --waiting-for-me                                                      # as bob
+go run ./cmd/pclaw approval approve <request id>                                                       # opens /approvals/<id> to approve with the key
+go run ./cmd/pclaw approval decline <request id> --reason too_risky --alternative person_performs
+go run ./cmd/pclaw waitlist list --overdue && go run ./cmd/pclaw escalation get
+```
+
+Approvals count only from people whose account is 7 days old and whose role and key are 1 day old (decision 5), so a freshly invited approver waits that long; the tests backdate their fixtures. Batch review and `pclaw waitlist metrics` need the Team edition. Each org sets its hold deadline, consume window and batch ceilings with `pclaw waitlist update-settings`; a server sets its wait limits with `waitlist.max_waits_per_instance`, `waitlist.max_waits` and `waitlist.long_poll_max`.
+
 **Measure latency (M1.5):** seed a budget large enough for the run (for example `--budget-limit 100000000.00`), start the three processes as above, then drive an open-loop constant rate. Authorize and gateway overhead come from `Server-Timing`, so the target's own latency is excluded:
 
 ```bash

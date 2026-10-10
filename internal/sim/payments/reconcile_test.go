@@ -15,6 +15,7 @@ import (
 	"time"
 
 	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
+	"github.com/katocxl/pantherclaw/internal/platform/money"
 )
 
 type listed struct {
@@ -150,4 +151,34 @@ func TestLostResponsesHappenWithoutAnAnswer(t *testing.T) {
 	if l := list(t, ts2.URL, "charge=ch_1"); len(l.Data) != 0 {
 		t.Fatalf("a hang made a refund: %+v", l)
 	}
+}
+
+// TestShortRefundsDisagreeWithTheRequest: the short fault accepts a refund
+// and records it one minor unit short, so a verifier's read disagrees with
+// what was asked (G0 M7, a conflicting observation).
+func TestShortRefundsDisagreeWithTheRequest(t *testing.T) {
+	s := New(Faults{ShortRate: 1}, pclog.Discard())
+	ts := httptest.NewServer(s.Handler())
+	defer ts.Close()
+	if code, _, _ := post(t, ts.URL, "pc-txn-short", okBody); code != http.StatusOK {
+		t.Fatalf("a short refund answered %d", code)
+	}
+	if l := list(t, ts.URL, "charge=ch_1"); len(l.Data) != 1 || l.Data[0].Amount != "29.99" {
+		t.Fatalf("listed %+v, want 29.99", l)
+	}
+	if got := short(mustMoney(t, "0.01", "USD")); got.Amount.String() != "0.01" {
+		t.Fatalf("the smallest refund became %s", got)
+	}
+	if got := short(mustMoney(t, "3000", "JPY")); got.Amount.String() != "2999" {
+		t.Fatalf("a zero-decimal currency: %s", got)
+	}
+}
+
+func mustMoney(t *testing.T, amount, currency string) money.Money {
+	t.Helper()
+	m, err := money.ParseMoney(amount, currency)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return m
 }

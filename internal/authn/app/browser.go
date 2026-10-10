@@ -9,6 +9,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/url"
+	"regexp"
 	"slices"
 	"strings"
 	"time"
@@ -50,7 +51,7 @@ const (
 )
 
 // CredBrowserSession marks a caller authenticated by a browser session.
-const CredBrowserSession tapp.Credential = "browser_session"
+const CredBrowserSession = tapp.CredBrowserSession
 
 // Browser sign-in errors.
 var (
@@ -61,12 +62,22 @@ var (
 	ErrSignInBusy = errors.New("authn: too many sign-ins in progress")
 )
 
-// returnPaths are the pages a sign-in may return to (HR-152). Part 2 adds
-// the approval pages.
-var returnPaths = []string{AccountPath, ContainmentPath}
+// ApprovalsPath is the approval page (G0 M5 part 2): /approvals lists the
+// requests waiting for the person, /approvals/{id} shows one.
+const ApprovalsPath = "/approvals"
 
-// ValidReturnPath reports whether p is a page a sign-in may return to.
-func ValidReturnPath(p string) bool { return slices.Contains(returnPaths, p) }
+// returnPaths are the pages a sign-in may return to (HR-152).
+var returnPaths = []string{AccountPath, ContainmentPath, ApprovalsPath}
+
+// approvalPath is one approval request's page, matched exactly: the
+// request id in its canonical lower-case form and nothing else.
+var approvalPath = regexp.MustCompile(`^/approvals/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
+
+// ValidReturnPath reports whether p is a page a sign-in may return to: one
+// on the fixed list or one approval request's page, matched exactly.
+func ValidReturnPath(p string) bool {
+	return slices.Contains(returnPaths, p) || approvalPath.MatchString(p)
+}
 
 // Browser implements browser sign-in (OIDC authorization code with PKCE)
 // and browser sessions.
@@ -394,8 +405,10 @@ func (b *Browser) Authenticate(ctx context.Context, cookie string) (BrowserSessi
 			return err
 		}
 		out = BrowserSession{
-			Caller: tapp.Caller{Subject: td.Subject{Org: org, Principal: p, Bindings: bs}, Credential: CredBrowserSession},
-			ID:     s.ID, Now: s.DbNow,
+			Caller: tapp.Caller{
+				Subject: td.Subject{Org: org, Principal: p, Bindings: bs}, Credential: CredBrowserSession, Session: s.ID,
+			},
+			ID: s.ID, Now: s.DbNow,
 		}
 		if s.AuthTime != nil {
 			out.AuthTime = *s.AuthTime

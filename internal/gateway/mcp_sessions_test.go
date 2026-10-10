@@ -83,11 +83,17 @@ func TestHR083_SessionsAreBoundToTheirWorkload(t *testing.T) {
 	}
 	before, _ = h.auth.verifyCount()
 	authorized := h.auth.snap().authorize
+	// An id one character away from the real one; a random id starts with
+	// "A" one time in 64, so pick a first character it does not have.
+	unknown := "A" + sid[1:]
+	if sid[0] == 'A' {
+		unknown = "B" + sid[1:]
+	}
 	for name, hdr := range map[string]map[string]string{
 		"another instance": {"Authorization": "PAP " + workloadTokenFor(ids.NewV7().String())},
 		"another key":      {"Authorization": "PAP " + workloadTokenWith(testAgent, "another-key-thumbprint-0000000000000000000")},
 		"another run":      {HeaderRunID: ids.NewV7().String()},
-		"unknown session":  {"Mcp-Session-Id": "A" + sid[1:]},
+		"unknown session":  {"Mcp-Session-Id": unknown},
 	} {
 		for _, body := range []string{legacyRPC("tools/list", ""), legacyRPC("tools/call", refundArgs)} {
 			if r := h.inSession(t, http.MethodPost, sid, run, body, hdr); r.code != http.StatusNotFound {

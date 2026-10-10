@@ -211,23 +211,41 @@ type Execution struct {
 	ResponseDigest []byte
 	// DispatchMS is how long the dispatch took (-1: unknown).
 	DispatchMS int32
+	// TargetRef is the identifier of what the target created, as the
+	// gateway read it at the place the verifier names (G0 M7, PAP-1 §7.4);
+	// empty when there was none. The store keeps it only when it matches
+	// the verifier read's target pattern.
+	TargetRef string
 }
 
-// executionReceipt signs what the gateway reported about a dispatch. It
-// records the attempt, never a verified effect (invariant 11): effect
-// receipts come with reconciliation (M7).
+// executionReceipt signs what the gateway (or, for a dispatch that never
+// reported, the sweeper) recorded about a dispatch (PAP-1 §9.2). It records
+// the attempt, never a verified effect (invariant 11): effect receipts are
+// appended by verification and reconciliation (HR-191).
 func (a *Authority) executionReceipt(gw Gateway, e Execution, x Executed, now time.Time) (Receipt, error) {
 	txn := x.Transaction
 	pap := map[string]any{
 		"v": 1, "kind": "execution", "org": gw.Org.String(), "txn": txn.String(), "permit": e.Permit.String(),
 		"outcome": string(e.Outcome), "target_status": e.TargetStatus, "response_digest": hex.EncodeToString(e.ResponseDigest),
-		"gateway": gw.ID, "access_mode": x.AccessMode, "simulated": false,
+		"gateway": gw.ID, "access_mode": x.AccessMode, "simulated": false, "attempt": 1,
 	}
 	if x.Monitor {
 		pap["monitor"] = true // nothing was prevented (HR-184)
 	}
 	if x.Connection != nil {
 		pap["connection"] = x.Connection.String()
+	}
+	if x.EffectiveHash != "" {
+		pap["effective"] = x.EffectiveHash
+	}
+	if !x.DispatchedAt.IsZero() {
+		pap["dispatched_at"] = x.DispatchedAt.UTC().Format(time.RFC3339Nano)
+	}
+	if x.RecordedBy != "" {
+		pap["recorded_by"] = x.RecordedBy
+	}
+	if x.TargetRef != "" {
+		pap["target_ref"] = x.TargetRef
 	}
 	payload, err := json.Marshal(map[string]any{"iss": a.issuer(), "jti": e.Permit.String(), "iat": now.Unix(), "pap": pap}, json.Deterministic(true))
 	if err != nil {

@@ -11,9 +11,9 @@
 -- a release lowers reserved. Views that show a budget add the pending ones
 -- (reserved minus pending, spent plus pending commits). The sweep lister
 -- gets a budget_settle purpose: orgs with pending reservations (HR-054),
--- added to its definition from 00060_effects. This migration must reach
--- main after M7's 00060-00069: any later redefinition of the lister there
--- has to be carried into this one first.
+-- added to its definition from 00065_checkpoints. It reached main after
+-- M7's 00060-00066; M7 migrations still to come take 00071 and later, and
+-- any that redefines the lister starts from this definition.
 
 -- +goose Up
 ALTER TABLE pc.reservations
@@ -37,7 +37,7 @@ BEGIN
     FROM regexp_matches(
         (SELECT prosrc FROM pg_proc WHERE oid = 'pc.cross_org_list(text, integer)'::regprocedure),
         'WHEN ''([a-z_]+)'' THEN', 'g') AS m;
-    IF found IS DISTINCT FROM ARRAY['ledger_unchained', 'orgs', 'permits_sweep', 'verifications_due'] THEN
+    IF found IS DISTINCT FROM ARRAY['checkpoints_due', 'integrity_due', 'ledger_unchained', 'orgs', 'permits_sweep', 'verifications_due'] THEN
         RAISE EXCEPTION '00070_budget_settlement: pc.cross_org_list has purposes %; carry the new ones into this migration', found;
     END IF;
 END
@@ -82,6 +82,27 @@ BEGIN
                 FROM pc.verifications v
                 WHERE (v.state IN ('PENDING', 'LEASED') AND v.deadline_at <= now())
                    OR (v.state = 'LEASED' AND v.lease_expires_at <= now())
+                ORDER BY 1
+                LIMIT p_max_rows;
+        WHEN 'checkpoints_due' THEN
+            -- Orgs whose chain grew past their latest checkpoint and whose
+            -- checkpointing has not stopped.
+            RETURN QUERY
+                SELECT h.org_id, h.org_id
+                FROM pc.ledger_heads h
+                WHERE h.seq > coalesce((SELECT max(c.tree_size) FROM pc.checkpoints c WHERE c.org_id = h.org_id), 0)
+                  AND NOT EXISTS (SELECT 1 FROM pc.evidence_integrity i WHERE i.org_id = h.org_id AND i.state = 'FAILED')
+                ORDER BY 1
+                LIMIT p_max_rows;
+        WHEN 'integrity_due' THEN
+            -- Orgs with a checkpoint whose chain was not re-verified in the
+            -- last day.
+            RETURN QUERY
+                SELECT h.org_id, h.org_id
+                FROM pc.ledger_heads h
+                WHERE EXISTS (SELECT 1 FROM pc.checkpoints c WHERE c.org_id = h.org_id)
+                  AND NOT EXISTS (SELECT 1 FROM pc.evidence_integrity i WHERE i.org_id = h.org_id
+                                  AND (i.state = 'FAILED' OR i.verified_at > now() - interval '1 day'))
                 ORDER BY 1
                 LIMIT p_max_rows;
         WHEN 'budget_settle' THEN
@@ -137,6 +158,27 @@ BEGIN
                 FROM pc.verifications v
                 WHERE (v.state IN ('PENDING', 'LEASED') AND v.deadline_at <= now())
                    OR (v.state = 'LEASED' AND v.lease_expires_at <= now())
+                ORDER BY 1
+                LIMIT p_max_rows;
+        WHEN 'checkpoints_due' THEN
+            -- Orgs whose chain grew past their latest checkpoint and whose
+            -- checkpointing has not stopped.
+            RETURN QUERY
+                SELECT h.org_id, h.org_id
+                FROM pc.ledger_heads h
+                WHERE h.seq > coalesce((SELECT max(c.tree_size) FROM pc.checkpoints c WHERE c.org_id = h.org_id), 0)
+                  AND NOT EXISTS (SELECT 1 FROM pc.evidence_integrity i WHERE i.org_id = h.org_id AND i.state = 'FAILED')
+                ORDER BY 1
+                LIMIT p_max_rows;
+        WHEN 'integrity_due' THEN
+            -- Orgs with a checkpoint whose chain was not re-verified in the
+            -- last day.
+            RETURN QUERY
+                SELECT h.org_id, h.org_id
+                FROM pc.ledger_heads h
+                WHERE EXISTS (SELECT 1 FROM pc.checkpoints c WHERE c.org_id = h.org_id)
+                  AND NOT EXISTS (SELECT 1 FROM pc.evidence_integrity i WHERE i.org_id = h.org_id
+                                  AND (i.state = 'FAILED' OR i.verified_at > now() - interval '1 day'))
                 ORDER BY 1
                 LIMIT p_max_rows;
         ELSE

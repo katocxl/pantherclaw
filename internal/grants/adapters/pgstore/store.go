@@ -17,6 +17,7 @@ package pgstore
 import (
 	"context"
 	"encoding/json/v2"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -31,6 +32,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	tdomain "github.com/katocxl/pantherclaw/internal/tenancy/domain"
+	"github.com/katocxl/pantherclaw/internal/waitlist/adapters/pgwaitlist"
 )
 
 // Store implements app.Repository and app.Subjects.
@@ -533,8 +535,8 @@ func (s *Store) Delegate(ctx context.Context, org ids.OrgID, child domain.Grant,
 }
 
 // Revise implements app.Repository: the containment epoch first, then the
-// conditional revision advance.
-func (s *Store) Revise(ctx context.Context, org ids.OrgID, next domain.Grant, widens bool, ev audit.Event) error {
+// conditional revision advance, and the access request it answers.
+func (s *Store) Revise(ctx context.Context, org ids.OrgID, next domain.Grant, widens bool, accessRequest ids.UUID, ev audit.Event) error {
 	err := s.Pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
 		q := dbq.New(tx)
 		if err := db.ExpectOneRow(q.RaiseContainmentEpoch(ctx, org)); err != nil {
@@ -547,6 +549,14 @@ func (s *Store) Revise(ctx context.Context, org ids.OrgID, next domain.Grant, wi
 		}
 		if err := insertGrant(ctx, q, org, next, widens, actorString(ev)); err != nil {
 			return err
+		}
+		if !accessRequest.IsZero() {
+			err := pgwaitlist.SettleAccessRequest(ctx, tx, org, accessRequest, next.ID.UUID(), actorString(ev), next.Revision)
+			if errors.Is(err, pgwaitlist.ErrAccessRequestNotOpen) {
+				return app.ErrAccessRequestNotOpen
+			} else if err != nil {
+				return err
+			}
 		}
 		_, err := audit.Record(ctx, tx, ev)
 		return err

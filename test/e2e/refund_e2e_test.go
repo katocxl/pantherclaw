@@ -37,6 +37,7 @@ import (
 	pantherclawv1 "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
 	"github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1/pantherclawv1connect"
 	"github.com/katocxl/pantherclaw/internal/identity/workloadclient"
+	"github.com/katocxl/pantherclaw/internal/notifications/smtptest"
 	"github.com/katocxl/pantherclaw/internal/platform/config"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/db/dbtest"
@@ -57,10 +58,13 @@ type stack struct {
 	gateway  string
 	sim      *payments.Server
 	simURL   string
-	simCalls *atomic.Int64
+	simCalls *atomic.Int64 // dispatches (non-GET requests) the target received
 	stop     context.CancelFunc
 	done     chan struct{} // closed when the server has stopped
 	apiURL   string
+	// kek is the server's key-encryption key file: a test loads the
+	// server's signing keys with it to sign as the server does.
+	kek string
 	// serverCfg is the server's configuration file and logs its output, for
 	// a restart (serve).
 	serverCfg string
@@ -98,6 +102,10 @@ type options struct {
 	// shell also seeds pc.shell and the hook connection "shell" (dev seed
 	// --shell).
 	shell bool
+	// people serves the API at http://localhost (security keys need a
+	// name) with this OIDC provider and, with relay, email (M5 part 2).
+	people *idp
+	relay  *smtptest.Server
 }
 
 func freeAddr(t *testing.T) string {
@@ -130,6 +138,7 @@ func start(t *testing.T, o options) *stack {
 	s := &stack{db: dbtest.New(t), simCalls: &atomic.Int64{}}
 	dir := t.TempDir()
 	kek := filepath.Join(dir, "kek")
+	s.kek = kek
 	if err := keys.GenerateKEKFile(kek); err != nil {
 		t.Fatal(err)
 	}
@@ -146,6 +155,10 @@ func start(t *testing.T, o options) *stack {
 	}
 	// Workload proofs name the address they are sent to.
 	cfg["auth"] = map[string]any{"public_url": "http://" + apiAddr}
+	public := "http://" + apiAddr
+	if o.people != nil {
+		public = withPeople(t, cfg, dir, apiAddr, *o.people, o.relay)
+	}
 	// The gateway reaches the Authority only over mTLS (HR-181).
 	cfg["gateway_api"] = map[string]any{"addr": gwAPIAddr, "hostnames": []string{"127.0.0.1"}, "url": "https://" + gwAPIAddr}
 	write := func(name string) string {
@@ -161,7 +174,7 @@ func start(t *testing.T, o options) *stack {
 	// target-enforced target checks that its action tokens name it.
 	simSrv := httptest.NewUnstartedServer(nil)
 	t.Cleanup(simSrv.Close)
-	s.simURL, s.apiURL = "http://"+simSrv.Listener.Addr().String(), "http://"+apiAddr
+	s.simURL, s.apiURL = "http://"+simSrv.Listener.Addr().String(), public
 
 	enrollFile, keyFile, factsFile := filepath.Join(dir, "gateway.json"), filepath.Join(dir, "workload.json"), filepath.Join(dir, "facts.key")
 	args := []string{
@@ -194,7 +207,12 @@ func start(t *testing.T, o options) *stack {
 	}
 	s.sim = payments.New(o.faults, pclog.Discard()).WithRequire(require)
 	simSrv.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		s.simCalls.Add(1)
+		// simCalls counts dispatches (writes). The reads the gateway makes
+		// to verify effects and list the target log (G0 M7) are not
+		// dispatches, and never retry one.
+		if r.Method != http.MethodGet {
+			s.simCalls.Add(1)
+		}
 		s.sim.Handler().ServeHTTP(w, r)
 	})
 	simSrv.Start()
@@ -225,6 +243,9 @@ func start(t *testing.T, o options) *stack {
 	// Several sessions' suites share one test database on a laptop; a slow
 	// Authorize there is not the Authority being down (S09 stops it).
 	gc.Control.Timeout = config.Duration(10 * time.Second)
+	// Verification tasks are claimed every second rather than every ten
+	// (G0 M7), so effects are verified within a test's patience.
+	gc.Control.VerifyEvery = config.Duration(time.Second)
 	if o.access == "pantherclaw_held" {
 		// The gateway's broker key, which only it can open credentials with
 		// (HR-061); it registers the public half when it starts.

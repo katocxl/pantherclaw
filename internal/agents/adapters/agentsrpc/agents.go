@@ -17,6 +17,7 @@ import (
 
 	"github.com/katocxl/pantherclaw/internal/agents/app"
 	"github.com/katocxl/pantherclaw/internal/agents/domain"
+	approvals "github.com/katocxl/pantherclaw/internal/approvals/app"
 	pantherclawv1 "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
 	"github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1/pantherclawv1connect"
 	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
@@ -27,7 +28,8 @@ import (
 // Agents serves AgentService.
 type Agents struct {
 	pantherclawv1connect.UnimplementedAgentServiceHandler
-	inv *app.Inventory
+	inv     *app.Inventory
+	restore *approvals.Service
 }
 
 // NewAgents returns the AgentService handler.

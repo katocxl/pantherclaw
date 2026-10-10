@@ -44,6 +44,7 @@ var (
 		"the evidence deadline must be in the future and before the request's deadline")
 	ErrTooMuchEvidence = pcerr.New(pcerr.ResourceExhausted, "EVIDENCE_LIMIT_REACHED", "the request has its maximum of evidence notes")
 	ErrNoProposals     = pcerr.New(pcerr.FailedPrecondition, "PROPOSAL_UNAVAILABLE", "this request cannot take a narrower proposal")
+	ErrNoEvidence      = pcerr.New(pcerr.FailedPrecondition, "EVIDENCE_UNAVAILABLE", "this request cannot take evidence")
 	// ErrCeremony refuses an approval whose BINDING ceremony is unknown,
 	// used, expired or bound to another session, user or request (HR-033).
 	ErrCeremony = pcerr.New(pcerr.PermissionDenied, "CEREMONY_INVALID", "the security key ceremony is not valid for this approval")
@@ -60,10 +61,17 @@ type Responder struct {
 
 // ResponderFrom returns the caller as a responder, or ErrHumanSession.
 func ResponderFrom(c tenancy.Caller) (Responder, error) {
-	if c.Principal.Kind != td.KindUser || c.Credential != tenancy.CredAccessToken || c.Session.IsZero() {
+	if c.Principal.Kind != td.KindUser || c.Session.IsZero() {
 		return Responder{}, ErrHumanSession
 	}
-	return Responder{User: c.Principal.ID, CLI: c.Session}, nil
+	switch c.Credential {
+	case tenancy.CredAccessToken:
+		return Responder{User: c.Principal.ID, CLI: c.Session}, nil
+	case tenancy.CredBrowserSession:
+		return Responder{User: c.Principal.ID, Browser: c.Session}, nil
+	case tenancy.CredAPIKey:
+	}
+	return Responder{}, ErrHumanSession
 }
 
 func (r Responder) sessions() (browser, cli *ids.UUID) {
@@ -102,6 +110,12 @@ type Reason struct {
 type Service struct {
 	Pool      *db.Pool
 	Simulator Simulator
+	// Defs reads pinned definitions for batch approval.
+	Defs Definitions
+	// Ents gates batch review (Team edition); nil fails closed.
+	Ents Entitlements
+	// Notify sends outcome notices (slice 211); nil sends none.
+	Notify Notifier
 }
 
 // Request is an approval request as the use cases return it.

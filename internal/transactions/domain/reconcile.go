@@ -59,6 +59,7 @@ var (
 	ErrBasisRequired     = errors.New("transactions: a person resolves a reconciliation with a written basis")
 	ErrBasisTooLong      = errors.New("transactions: the basis is at most 2000 characters")
 	ErrTooMuchEvidence   = errors.New("transactions: at most 64 observations can be named as evidence")
+	ErrNotEvidence       = errors.New("transactions: evidence names only the transaction's observations, the authoritative one among them")
 	ErrLinkOrder         = errors.New("transactions: a compensating or recovering transaction is decided after the original was dispatched")
 	ErrLinkSelf          = errors.New("transactions: a transaction cannot be linked to itself")
 	ErrNotCompensateable = errors.New("transactions: only a confirmed effect can become compensated")
@@ -103,6 +104,26 @@ func CheckResolver(human bool, user ids.UUID, p Party, basis string, evidence []
 		return ErrBasisTooLong
 	case len(evidence) > 64:
 		return ErrTooMuchEvidence
+	}
+	return nil
+}
+
+// CheckOccurred checks a person's "occurred" (design decision 3). It only
+// commits, the safe direction, so the person need not be independent of
+// the run; they write a basis and name the observations they relied on,
+// among which the authoritative one, when they name one.
+func CheckOccurred(human bool, basis string, evidence []ids.UUID, authoritative *ids.UUID) error {
+	switch {
+	case !human:
+		return ErrNotAPerson
+	case basis == "":
+		return ErrBasisRequired
+	case len([]rune(basis)) > MaxBasis:
+		return ErrBasisTooLong
+	case len(evidence) > 64:
+		return ErrTooMuchEvidence
+	case authoritative != nil && !slices.Contains(evidence, *authoritative):
+		return ErrNotEvidence
 	}
 	return nil
 }

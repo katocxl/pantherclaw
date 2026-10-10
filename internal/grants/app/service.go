@@ -35,6 +35,10 @@ var (
 	ErrPrincipalUnknown = pcerr.New(pcerr.FailedPrecondition, "PRINCIPAL_UNKNOWN", "the represented principal is not an active user or service account of the org")
 	ErrRevisionChanged  = pcerr.New(pcerr.Aborted, "REVISION_CHANGED", "the grant or guardrail changed; read it again")
 	ErrRunNotEligible   = pcerr.New(pcerr.FailedPrecondition, "RUN_NOT_ELIGIBLE", "the run cannot delegate to that child run")
+	// ErrAccessRequestNotOpen refuses a revision citing an entry that is
+	// not an open access request for the grant (G0 M5 part 2).
+	ErrAccessRequestNotOpen = pcerr.New(pcerr.FailedPrecondition, "ACCESS_REQUEST_NOT_OPEN",
+		"the access request is not an open request for this grant")
 )
 
 // apiError maps domain and repository errors to API errors. Messages from
@@ -145,12 +149,16 @@ type ReviseRequest struct {
 	Limits         domain.Limits
 	Delegation     domain.Delegation
 	MinAttestation int
+	// AccessRequest, when set, is the open access request of this grant
+	// the revision answers: it is closed in the same transaction (HR-176).
+	AccessRequest ids.UUID
 }
 
 // Revise stores a new revision of a grant. Only a person holding
 // grant.issue on the agent's team may. Narrowing takes effect at once
 // (the repository increments the containment epoch); widening is checked
-// like an issuance and audited as such.
+// like an issuance and audited as such. A revision citing an access
+// request closes it, or fails when it is not open for this grant.
 func (s *Service) Revise(ctx context.Context, req ReviseRequest) (domain.Grant, domain.Revision, error) {
 	c, err := tapp.CallerFrom(ctx)
 	if err != nil {
@@ -201,7 +209,10 @@ func (s *Service) Revise(ctx context.Context, req ReviseRequest) (domain.Grant, 
 	ev := grantEvent(c.Actor(), "grant.revised", next, map[string]string{
 		"revision": strconv.Itoa(next.Revision), "widens": strconv.FormatBool(rev.Widens), "change": rev.Detail,
 	})
-	if err := s.Repo.Revise(ctx, c.Org, next, rev.Widens, ev); err != nil {
+	if !req.AccessRequest.IsZero() {
+		ev.Details["access_request"] = req.AccessRequest.String()
+	}
+	if err := s.Repo.Revise(ctx, c.Org, next, rev.Widens, req.AccessRequest, ev); err != nil {
 		return domain.Grant{}, domain.Revision{}, apiError(err)
 	}
 	next.RevisedAt = ic.Now

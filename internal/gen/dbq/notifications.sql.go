@@ -225,6 +225,37 @@ func (q *Queries) ExpireStaleDeliveries(ctx context.Context, orgID ids.OrgID) (i
 	return result.RowsAffected(), nil
 }
 
+const failedNoticeSubjects = `-- name: FailedNoticeSubjects :many
+SELECT DISTINCT n.subject_id::uuid AS subject_id
+FROM pc.notifications n
+JOIN pc.deliveries d ON d.org_id = n.org_id AND d.notification_id = n.id
+WHERE n.org_id = $1 AND n.subject_type = $2 AND n.subject_id = ANY ($3::uuid[])
+  AND d.state = 'FAILED'
+`
+
+// The subjects, among subject_ids, whose notices failed to deliver (G0 M5
+// part 2: a waitlist entry's routing health). It is shown to people only
+// and never reaches an authorization decision (HR-039).
+func (q *Queries) FailedNoticeSubjects(ctx context.Context, orgID ids.OrgID, subjectType *string, subjectIds []ids.UUID) ([]ids.UUID, error) {
+	rows, err := q.db.Query(ctx, failedNoticeSubjects, orgID, subjectType, subjectIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ids.UUID{}
+	for rows.Next() {
+		var subject_id ids.UUID
+		if err := rows.Scan(&subject_id); err != nil {
+			return nil, err
+		}
+		items = append(items, subject_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const finishDelivery = `-- name: FinishDelivery :execrows
 UPDATE pc.deliveries SET state = $1, last_error = $2, finished_at = now()
 WHERE org_id = $3 AND id = $4 AND state = 'PENDING'

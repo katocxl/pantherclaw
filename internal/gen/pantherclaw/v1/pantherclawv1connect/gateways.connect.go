@@ -66,6 +66,12 @@ const (
 	GatewayServiceReportCircuitProcedure = "/pantherclaw.v1.GatewayService/ReportCircuit"
 	// GatewayServiceReportDriftProcedure is the procedure name of the GatewayService's ReportDrift RPC.
 	GatewayServiceReportDriftProcedure = "/pantherclaw.v1.GatewayService/ReportDrift"
+	// GatewayServiceClaimVerificationsProcedure is the procedure name of the GatewayService's
+	// ClaimVerifications RPC.
+	GatewayServiceClaimVerificationsProcedure = "/pantherclaw.v1.GatewayService/ClaimVerifications"
+	// GatewayServiceReportObservationProcedure is the procedure name of the GatewayService's
+	// ReportObservation RPC.
+	GatewayServiceReportObservationProcedure = "/pantherclaw.v1.GatewayService/ReportObservation"
 )
 
 var (
@@ -394,6 +400,20 @@ var (
 			Procedure:  GatewayServiceReportDriftProcedure,
 		}
 	})
+	gatewayServiceClaimVerificationsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_pantherclaw_v1_gateways_proto.Services().ByName("GatewayService").Methods().ByName("ClaimVerifications"),
+			Procedure:  GatewayServiceClaimVerificationsProcedure,
+		}
+	})
+	gatewayServiceReportObservationSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_pantherclaw_v1_gateways_proto.Services().ByName("GatewayService").Methods().ByName("ReportObservation"),
+			Procedure:  GatewayServiceReportObservationProcedure,
+		}
+	})
 )
 
 // GatewayServiceClient is a client for the pantherclaw.v1.GatewayService service.
@@ -430,6 +450,16 @@ type GatewayServiceClient interface {
 	// that package version.
 	// permission: gateway.observe
 	ReportDrift(context.Context, *v1.ReportDriftRequest) (*v1.ReportDriftResponse, error)
+	// ClaimVerifications leases due verification tasks of the calling
+	// gateway's connections (G0 M7, HR-190): each lease is single use, lasts
+	// at most 30 s and names a reviewed read the gateway makes with the
+	// connection's credential. Nothing is leased under containment.
+	// permission: gateway.verify
+	ClaimVerifications(context.Context, *v1.ClaimVerificationsRequest) (*v1.ClaimVerificationsResponse, error)
+	// ReportObservation reports what a leased read observed: only the fields
+	// the verifier declares, and a digest of the answer (HR-190).
+	// permission: gateway.verify
+	ReportObservation(context.Context, *v1.ReportObservationRequest) (*v1.ReportObservationResponse, error)
 }
 
 // NewGatewayServiceClient constructs a client for the pantherclaw.v1.GatewayService service.
@@ -493,6 +523,16 @@ type GatewayServiceHandler interface {
 	// that package version.
 	// permission: gateway.observe
 	ReportDrift(context.Context, *v1.ReportDriftRequest) (*v1.ReportDriftResponse, error)
+	// ClaimVerifications leases due verification tasks of the calling
+	// gateway's connections (G0 M7, HR-190): each lease is single use, lasts
+	// at most 30 s and names a reviewed read the gateway makes with the
+	// connection's credential. Nothing is leased under containment.
+	// permission: gateway.verify
+	ClaimVerifications(context.Context, *v1.ClaimVerificationsRequest) (*v1.ClaimVerificationsResponse, error)
+	// ReportObservation reports what a leased read observed: only the fields
+	// the verifier declares, and a digest of the answer (HR-190).
+	// permission: gateway.verify
+	ReportObservation(context.Context, *v1.ReportObservationRequest) (*v1.ReportObservationResponse, error)
 }
 
 // RegisterGatewayServiceHandler registers svc as the pantherclaw.v1.GatewayService implementation
@@ -507,6 +547,8 @@ func RegisterGatewayServiceHandler(server *connect.Server, svc GatewayServiceHan
 		connect.Method{Spec: gatewayServiceWatchContainmentSpec(), Handler: adapter.watchContainment},
 		connect.Method{Spec: gatewayServiceReportCircuitSpec(), Handler: adapter.reportCircuit},
 		connect.Method{Spec: gatewayServiceReportDriftSpec(), Handler: adapter.reportDrift},
+		connect.Method{Spec: gatewayServiceClaimVerificationsSpec(), Handler: adapter.claimVerifications},
+		connect.Method{Spec: gatewayServiceReportObservationSpec(), Handler: adapter.reportObservation},
 	)
 }
 
@@ -555,6 +597,14 @@ func (UnimplementedGatewayServiceHandler) ReportCircuit(context.Context, *v1.Rep
 
 func (UnimplementedGatewayServiceHandler) ReportDrift(context.Context, *v1.ReportDriftRequest) (*v1.ReportDriftResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.GatewayService.ReportDrift is not implemented")
+}
+
+func (UnimplementedGatewayServiceHandler) ClaimVerifications(context.Context, *v1.ClaimVerificationsRequest) (*v1.ClaimVerificationsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.GatewayService.ClaimVerifications is not implemented")
+}
+
+func (UnimplementedGatewayServiceHandler) ReportObservation(context.Context, *v1.ReportObservationRequest) (*v1.ReportObservationResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.GatewayService.ReportObservation is not implemented")
 }
 
 type gatewayServiceClient struct {
@@ -612,6 +662,22 @@ func (c *gatewayServiceClient) ReportCircuit(ctx context.Context, req *v1.Report
 func (c *gatewayServiceClient) ReportDrift(ctx context.Context, req *v1.ReportDriftRequest) (*v1.ReportDriftResponse, error) {
 	var res v1.ReportDriftResponse
 	if err := c.client.CallUnary(ctx, gatewayServiceReportDriftSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *gatewayServiceClient) ClaimVerifications(ctx context.Context, req *v1.ClaimVerificationsRequest) (*v1.ClaimVerificationsResponse, error) {
+	var res v1.ClaimVerificationsResponse
+	if err := c.client.CallUnary(ctx, gatewayServiceClaimVerificationsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *gatewayServiceClient) ReportObservation(ctx context.Context, req *v1.ReportObservationRequest) (*v1.ReportObservationResponse, error) {
+	var res v1.ReportObservationResponse
+	if err := c.client.CallUnary(ctx, gatewayServiceReportObservationSpec(), req, &res); err != nil {
 		return nil, err
 	}
 	return &res, nil
@@ -693,6 +759,30 @@ func (h gatewayServiceHandler) reportDrift(ctx context.Context, _ connect.Spec, 
 		return err
 	}
 	res, err := h.svc.ReportDrift(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h gatewayServiceHandler) claimVerifications(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ClaimVerificationsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ClaimVerifications(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h gatewayServiceHandler) reportObservation(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ReportObservationRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ReportObservation(ctx, &req)
 	if err != nil {
 		return err
 	}

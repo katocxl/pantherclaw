@@ -177,3 +177,23 @@ func TestHR158_SlackTextHasOneLinkAndNoMarkup(t *testing.T) {
 		t.Fatalf("slack text %q", got)
 	}
 }
+
+// TestHR173_ApprovalNoticesLinkOnlyToTheirRequest (G0 M5 part 2): an
+// approval notice links to its request's approval page, and only a
+// canonical id fills the link.
+func TestHR173_ApprovalNoticesLinkOnlyToTheirRequest(t *testing.T) {
+	params := map[string]string{
+		"operation": "payments.refund.create", "agent": "019a0000-0000-7000-8000-000000000001",
+		"deadline": "2026-10-10T13:00:00Z", "request": "019a0000-0000-7000-8000-000000000002",
+	}
+	r, err := domain.Render("approval.requested", params)
+	if err != nil || r.Link != "/approvals/019a0000-0000-7000-8000-000000000002" || r.Severity != domain.Warning {
+		t.Fatalf("render: %+v, %v", r, err)
+	}
+	for _, bad := range []string{"../account", "https://evil.example", "019A0000-0000-7000-8000-000000000002", "x"} {
+		params["request"] = bad
+		if _, err := domain.Render("approval.requested", params); !errors.Is(err, domain.ErrBadParams) {
+			t.Errorf("request %q: %v", bad, err)
+		}
+	}
+}

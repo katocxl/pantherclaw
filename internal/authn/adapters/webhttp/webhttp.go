@@ -2,8 +2,8 @@
 // Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
 
 // Package webhttp serves PantherClaw's own browser pages (G0 M5 part 1):
-// browser sign-in and sign-out and the account page. Part 2 adds the
-// approval page on the same foundation.
+// browser sign-in and sign-out and the account page, and (part 2) the
+// approval page, on the same foundation.
 //
 // Every response carries a strict CSP with required Trusted Types, is never
 // cached or framed, and pages are rendered with html/template from embedded
@@ -83,6 +83,9 @@ type Handler struct {
 	keys    Keys
 	// containment is the emergency-stop page (G0 M6); nil when not mounted.
 	containment Containment
+	// approvals is the approval page (G0 M5 part 2); nil when not mounted.
+	approvals Approvals
+	bindings  Bindings
 }
 
 // New returns the handler. publicURL is the server's public URL: its origin
@@ -113,6 +116,7 @@ func (h *Handler) Mount(mux *http.ServeMux) {
 	h.withSession(mux, http.MethodPost, authnapp.AccountPath+"/sessions/{id}/revoke", h.revokeSession)
 	h.mountKeys(mux)
 	h.mountContainment(mux)
+	h.mountApprovals(mux)
 }
 
 // Routes lists the mounted routes.
@@ -426,7 +430,8 @@ func (h *Handler) static(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("file")
 	types := map[string]string{
 		"account.js": "text/javascript; charset=utf-8", "containment.js": "text/javascript; charset=utf-8",
-		"pc.css": "text/css; charset=utf-8",
+		"approvals.js": "text/javascript; charset=utf-8",
+		"pc.css":       "text/css; charset=utf-8",
 	}
 	ct, ok := types[name]
 	if !ok {

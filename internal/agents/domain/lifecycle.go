@@ -31,9 +31,10 @@ const (
 //     OBSERVED on its first verified request.
 //   - The protection states are derived from coverage evidence (M9) and move
 //     both ways as that evidence appears and expires (F021).
-//   - Any state except RETIRED can be suspended. Leaving SUSPENDED needs a
-//     RESTORATION entry with independent review (F563, M5), so in M3 the
-//     only way out is retirement.
+//   - Any state except RETIRED can be suspended. Leaving SUSPENDED for the
+//     state it was suspended from needs an approved RESTORATION request
+//     (F563, M5 decision 11; agents/app.Restore), so this table's only
+//     other way out is retirement.
 //   - RETIRED is terminal (F023).
 var Lifecycle = statemachine.New("agent", map[State][]State{
 	StateDiscovered:         {StateClaimed, StateSuspended, StateRetired},

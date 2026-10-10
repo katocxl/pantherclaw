@@ -550,8 +550,34 @@ func TestT024_CrashMidDispatchYieldsUnknown(t *testing.T) {
 	if b := f.budgetRow(t); b.Reserved.String() != "40" {
 		t.Fatalf("reservation released after a crash mid-dispatch: reserved %s (HR-003)", b.Reserved)
 	}
-	if _, err := f.svc.RecordExecution(ctx, f.gw, authority.Execution{Permit: res.PermitID, Outcome: authority.Accepted}); !errors.Is(err, authority.ErrNotDispatching) {
-		t.Fatalf("late RecordExecution: %v, want ErrNotDispatching", err)
+	// A gateway that reports after the sweeper is heard as evidence (G0 M7,
+	// PAP-1 §7.4, HR-192): a late failure releases nothing, because only a
+	// person may release an unknown outcome; a late acceptance shows the
+	// effect happened and commits the reservation, once.
+	if _, err := f.svc.RecordExecution(ctx, f.gw, authority.Execution{Permit: res.PermitID, Outcome: authority.Failed, TargetStatus: 402}); err != nil {
+		t.Fatalf("late failure: %v", err)
+	}
+	if b := f.budgetRow(t); b.Reserved.String() != "40" || !b.Spent.IsZero() {
+		t.Fatalf("a late failure settled the reservation: reserved %s spent %s (HR-003, HR-192)", b.Reserved, b.Spent)
+	}
+	for range 2 {
+		if _, err := f.svc.RecordExecution(ctx, f.gw, authority.Execution{Permit: res.PermitID, Outcome: authority.Accepted}); err != nil {
+			t.Fatalf("late acceptance: %v", err)
+		}
+		if b := f.budgetRow(t); !b.Reserved.IsZero() || b.Spent.String() != "40" {
+			t.Fatalf("a late acceptance settled %s reserved, %s spent; want it committed once", b.Reserved, b.Spent)
+		}
+	}
+	// A permit the gateway already recorded is not recorded again.
+	done := f.authorize(t, "10.00")
+	if _, err := f.svc.BeginDispatch(ctx, f.gw, done.PermitID, done.Epoch, authority.Outbound{}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.svc.RecordExecution(ctx, f.gw, authority.Execution{Permit: done.PermitID, Outcome: authority.Failed, TargetStatus: 402}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.svc.RecordExecution(ctx, f.gw, authority.Execution{Permit: done.PermitID, Outcome: authority.Accepted}); !errors.Is(err, authority.ErrNotDispatching) {
+		t.Fatalf("a second record of a recorded permit: %v, want ErrNotDispatching", err)
 	}
 }
 

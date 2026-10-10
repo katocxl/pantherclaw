@@ -82,6 +82,16 @@ service GatewayService {
   // that package version.
   // permission: gateway.observe
   rpc ReportDrift(ReportDriftRequest) returns (ReportDriftResponse);
+  // ClaimVerifications leases due verification tasks of the calling
+  // gateway's connections (G0 M7, HR-190): each lease is single use, lasts
+  // at most 30 s and names a reviewed read the gateway makes with the
+  // connection's credential. Nothing is leased under containment.
+  // permission: gateway.verify
+  rpc ClaimVerifications(ClaimVerificationsRequest) returns (ClaimVerificationsResponse);
+  // ReportObservation reports what a leased read observed: only the fields
+  // the verifier declares, and a digest of the answer (HR-190).
+  // permission: gateway.verify
+  rpc ReportObservation(ReportObservationRequest) returns (ReportObservationResponse);
 }
 
 // GatewayState is whether a gateway may act.
@@ -502,4 +512,105 @@ message ReportDriftRequest {
 message ReportDriftResponse {
   // Whether the package pin is now quarantined.
   bool quarantined = 1;
+}
+
+// ClaimVerificationsRequest asks for due verification tasks.
+message ClaimVerificationsRequest {
+  // The most tasks to lease.
+  int32 max_tasks = 1 [(buf.validate.field).int32 = {
+    gte: 1
+    lte: 16
+  }];
+}
+
+// VerificationLease is one leased task: the reviewed read to make.
+message VerificationLease {
+  // Task id.
+  string task_id = 1;
+  // The lease's single-use secret, returned with the report.
+  bytes lease = 2;
+  // follow_up or reconcile.
+  string purpose = 3;
+  // The connection to read through.
+  string connection_id = 4;
+  // The read operation of the connection's pinned package.
+  string operation = 5;
+  // The read the server computed, as JSON: mode (reference | lookup),
+  // target and params.
+  bytes request = 6;
+  // The idempotency key an item of a listing must carry to be the write's
+  // effect (pc-<transaction>).
+  string correlate = 7;
+  // Which attempt this is.
+  int32 attempt = 8;
+}
+
+// ClaimVerificationsResponse lists the leased tasks.
+message ClaimVerificationsResponse {
+  // Leases.
+  repeated VerificationLease leases = 1;
+}
+
+// ReportObservationRequest reports one leased read.
+message ReportObservationRequest {
+  // Task id.
+  string task_id = 1 [(buf.validate.field).string.uuid = true];
+  // The lease's secret.
+  bytes lease = 2 [(buf.validate.field).bytes.len = 32];
+  // The target's HTTP status; 0 when the read failed before an answer.
+  int32 http_status = 3 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 599
+  }];
+  // Whether the object was found (by reference: a 2xx answer; in a
+  // listing: an item carrying the correlation value).
+  bool found = 4;
+  // Whether a listing was read to its end.
+  bool complete = 5;
+  // The fields the verifier declares, by JSON pointer, as text.
+  map<string, string> fields = 6 [(buf.validate.field).map = {
+    max_pairs: 16
+    keys: {
+      string: {
+        max_len: 520
+        pattern: "^(/([A-Za-z0-9_.-]|~[01]){1,64}){1,8}$"
+      }
+    }
+    values: {
+      string: {max_len: 256}
+    }
+  }];
+  // SHA-256 of the answer the fields were read from.
+  bytes response_digest = 7 [(buf.validate.field).bytes.max_len = 32];
+  // For a target-log task (HR-112): the objects the target created in the
+  // window, as listed. Empty for every other task.
+  repeated TargetLogItem items = 8 [(buf.validate.field).repeated.max_items = 1000];
+}
+
+// TargetLogItem is one object a target log lists.
+message TargetLogItem {
+  // The object's id at the target.
+  string object_ref = 1 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 256
+    pattern: "^[!-~]+$"
+  }];
+  // Its correlation value (the idempotency key it was created with), empty
+  // when it has none.
+  string correlation = 2 [(buf.validate.field).string = {
+    max_len: 256
+    pattern: "^[!-~]*$"
+  }];
+  // When the target created it (unix seconds), 0 when unknown.
+  int64 created = 3 [(buf.validate.field).int64.gte = 0];
+}
+
+// ReportObservationResponse says what the report changed.
+message ReportObservationResponse {
+  // The observation recorded.
+  string observation_id = 1;
+  // The effect state the observation shows; empty when inconclusive.
+  string effect_state = 2;
+  // Whether the task ended.
+  bool done = 3;
 }

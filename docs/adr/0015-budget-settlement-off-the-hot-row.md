@@ -33,7 +33,7 @@ Delaying either can only make the budget look **more** consumed than it is, whic
 
 ## As implemented
 
-Accepted on 2026-10-10 for parts 1 and 2, on the M4 decision pipeline (its budget accounts and counters, which replaced the M1.5 budget row). Migration `00070_budget_settlement`, numbered after M7's reserved `00060`–`00069` (founder, 2026-10-10), so it reaches `main` after them.
+Accepted on 2026-10-10 for parts 1 and 2, on the M4 decision pipeline (its budget accounts and counters, which replaced the M1.5 budget row). Migration `00070_budget_settlement`, numbered after M7's range (founder, 2026-10-10). It reached `main` after M7's `00060`–`00066`, and M7 migrations still to come take `00071` and later. Its guard refuses to replace the lister if the lister has purposes it does not carry.
 
 **Part 1, asynchronous settlement.**
 - **The pending settlement is the reservation itself.** `RecordExecution` (accepted, delegated or failed) and the sweep (an expired permit) record each held reservation `COMMITTED` or `RELEASED` and **`pending`**, in one statement per permit. They never update an account or counter row. An `UNKNOWN` outcome still keeps its reservations `HELD` (HR-003).

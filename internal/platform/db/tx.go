@@ -178,6 +178,12 @@ const (
 	// ListVerificationsDue lists orgs with verification tasks past their
 	// deadline or with expired leases (G0 M7, HR-190).
 	ListVerificationsDue ListerPurpose = "verifications_due"
+	// ListCheckpointsDue lists orgs whose chain grew past their latest
+	// checkpoint and whose checkpointing has not stopped (G0 M7, HR-194).
+	ListCheckpointsDue ListerPurpose = "checkpoints_due"
+	// ListIntegrityDue lists orgs with a checkpoint whose chain was not
+	// re-verified in the last day (HR-194).
+	ListIntegrityDue ListerPurpose = "integrity_due"
 )
 
 // CrossOrgList calls the single audited cross-org lister (HR-053, HR-054).

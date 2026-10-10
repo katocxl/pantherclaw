@@ -34,16 +34,25 @@ type Eligibility struct {
 	RequestedBy ids.UUID
 }
 
-// approvalRoles are the default roles holding approval.respond (decision 2).
-func approvalRoles() []string {
+// deciderRoles are the default roles that decide a request of kind: those
+// holding approval.respond (decision 2), or agent.restore for a
+// restoration (decision 11).
+func deciderRoles(subjectKind string) []string {
+	p := td.PermApprovalRespond
+	if subjectKind == subjectRestoration {
+		p = td.PermAgentRestore
+	}
 	var out []string
 	for _, r := range td.Roles() {
-		if r.Has(td.PermApprovalRespond) {
+		if r.Has(p) {
 			out = append(out, string(r.Name))
 		}
 	}
 	return out
 }
+
+// subjectRestoration is the subject kind of a restoration request.
+const subjectRestoration = "RESTORATION"
 
 func principal(user, sa, instance *ids.UUID) gdomain.Principal {
 	switch {
@@ -113,6 +122,7 @@ func LoadEligibility(ctx context.Context, q *dbq.Queries, org ids.OrgID, request
 			return Eligibility{}, err
 		}
 	}
+	c.Requester = out.RequestedBy
 	out.Context = c
 	if len(users) == 0 {
 		return out, nil
@@ -125,7 +135,7 @@ func LoadEligibility(ctx context.Context, q *dbq.Queries, org ids.OrgID, request
 		out.People[u.ID] = apdomain.Person{UserID: u.ID, Enabled: u.State == "ACTIVE", JoinedAt: u.CreatedAt}
 	}
 	bs, err := q.EligibilityBindings(ctx, dbq.EligibilityBindingsParams{
-		OrgID: org, Ids: users, Roles: approvalRoles(), BusinessUnitID: row.BusinessUnitID, TeamID: row.TeamID,
+		OrgID: org, Ids: users, Roles: deciderRoles(row.SubjectKind), BusinessUnitID: row.BusinessUnitID, TeamID: row.TeamID,
 		EnvironmentID: row.EnvironmentID,
 	})
 	if err != nil {

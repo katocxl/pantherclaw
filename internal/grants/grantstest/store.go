@@ -278,7 +278,7 @@ func (s *Store) Delegate(_ context.Context, org ids.OrgID, child domain.Grant, p
 }
 
 // Revise implements app.Repository.
-func (s *Store) Revise(_ context.Context, org ids.OrgID, next domain.Grant, _ bool, ev audit.Event) error {
+func (s *Store) Revise(_ context.Context, org ids.OrgID, next domain.Grant, _ bool, _ ids.UUID, ev audit.Event) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if err := s.checkOrg(org); err != nil {

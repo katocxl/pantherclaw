@@ -23,9 +23,11 @@ import (
 	"github.com/katocxl/pantherclaw/internal/definitions/manifest"
 	"github.com/katocxl/pantherclaw/internal/definitions/trust"
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
+	evdomain "github.com/katocxl/pantherclaw/internal/evidence/domain"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
+	pgwaitlist "github.com/katocxl/pantherclaw/internal/waitlist/adapters/pgwaitlist"
 )
 
 // ErrNotFound reports a package, version or definition the org does not
@@ -137,6 +139,12 @@ func (s *Store) Import(ctx context.Context, org ids.OrgID, rec app.Record) error
 		if err := advancePin(ctx, q, org, pkgID, versionID, rec); err != nil {
 			return err
 		}
+		// A version that is not active yet waits for review (G0 M5 part 2).
+		if rec.State != domain.StateActive {
+			if _, err := pgwaitlist.OpenToolReview(ctx, tx, org, versionID, rec.Package.Name, rec.Package.Version, actorOf(rec.Event)); err != nil {
+				return err
+			}
+		}
 		return record(ctx, tx, rec.Event)
 	})
 	if db.IsUniqueViolation(err) || errors.Is(err, db.ErrLostRace) {
@@ -214,6 +222,9 @@ func (s *Store) Transition(ctx context.Context, org ids.OrgID, pkg, version stri
 		if err := db.ExpectOneRow(q.TransitionPackageVersion(ctx, dbq.TransitionPackageVersionParams{
 			ToState: string(to), OrgID: org, ID: row.ID, FromState: string(from),
 		})); err != nil {
+			return err
+		}
+		if err := pgwaitlist.CloseToolReview(ctx, tx, org, row.ID, string(to), actorOf(ev).Type+":"+actorOf(ev).ID); err != nil {
 			return err
 		}
 		return record(ctx, tx, ev)
@@ -346,6 +357,14 @@ func (s *Store) decoded(ctx context.Context, q *dbq.Queries, org ids.OrgID, vers
 	}
 	s.cache[version] = p
 	return p, nil
+}
+
+// actorOf is who made a change: its audit event's actor, or the system.
+func actorOf(ev *audit.Event) evdomain.Actor {
+	if ev == nil {
+		return pgwaitlist.System
+	}
+	return ev.Actor
 }
 
 func record(ctx context.Context, tx db.TenantTx, ev *audit.Event) error {

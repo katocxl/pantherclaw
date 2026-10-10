@@ -198,7 +198,7 @@ type SweepResult struct {
 // reservations, those it released and those outcomes recorded, to their
 // budget account and counter rows (ADR-0015).
 func (s *Service) SweepOrg(ctx context.Context, org ids.OrgID, staleAfter time.Duration) (SweepResult, error) {
-	released, unknown, err := s.decider.Store.Sweep(ctx, org, staleAfter)
+	released, unknown, err := s.decider.Sweep(ctx, org, staleAfter)
 	r := SweepResult{Released: released, Unknown: unknown}
 	if r.Unknown > 0 {
 		s.log.WarnContext(ctx, "authz.dispatch_unknown", slog.String("org_id", org.String()), slog.Int("count", r.Unknown))

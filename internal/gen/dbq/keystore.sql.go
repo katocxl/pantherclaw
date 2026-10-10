@@ -10,6 +10,7 @@ package dbq
 
 import (
 	"context"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
@@ -71,9 +72,9 @@ func (q *Queries) InsertDEK(ctx context.Context, arg InsertDEKParams) error {
 }
 
 const insertSigningKey = `-- name: InsertSigningKey :exec
-INSERT INTO pc.keys (org_id, id, kid, purpose, public_key, wrapped_private_key, kek_id, state)
-VALUES ($1, $2, $3, $4, $5,
-        $6, $7, 'ACTIVE')
+INSERT INTO pc.keys (org_id, id, kid, purpose, algorithm, public_key, wrapped_private_key, kek_id, state)
+VALUES ($1, $2, $3, $4, $5, $6,
+        $7, $8, 'ACTIVE')
 `
 
 type InsertSigningKeyParams struct {
@@ -81,6 +82,7 @@ type InsertSigningKeyParams struct {
 	ID                ids.UUID
 	Kid               string
 	Purpose           string
+	Algorithm         string
 	PublicKey         []byte
 	WrappedPrivateKey []byte
 	KekID             string
@@ -92,6 +94,7 @@ func (q *Queries) InsertSigningKey(ctx context.Context, arg InsertSigningKeyPara
 		arg.ID,
 		arg.Kid,
 		arg.Purpose,
+		arg.Algorithm,
 		arg.PublicKey,
 		arg.WrappedPrivateKey,
 		arg.KekID,
@@ -99,9 +102,56 @@ func (q *Queries) InsertSigningKey(ctx context.Context, arg InsertSigningKeyPara
 	return err
 }
 
+const listPublishedKeys = `-- name: ListPublishedKeys :many
+SELECT kid, purpose, algorithm, public_key, state, created_at, state_changed_at
+FROM pc.keys
+WHERE org_id = $1 AND purpose = ANY($2::text[])
+ORDER BY created_at, kid
+`
+
+type ListPublishedKeysRow struct {
+	Kid            string
+	Purpose        string
+	Algorithm      string
+	PublicKey      []byte
+	State          string
+	CreatedAt      time.Time
+	StateChangedAt time.Time
+}
+
+// Public halves only, revoked keys included, for the well-known documents
+// (PAP-1 §11).
+func (q *Queries) ListPublishedKeys(ctx context.Context, orgID ids.OrgID, purposes []string) ([]ListPublishedKeysRow, error) {
+	rows, err := q.db.Query(ctx, listPublishedKeys, orgID, purposes)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListPublishedKeysRow{}
+	for rows.Next() {
+		var i ListPublishedKeysRow
+		if err := rows.Scan(
+			&i.Kid,
+			&i.Purpose,
+			&i.Algorithm,
+			&i.PublicKey,
+			&i.State,
+			&i.CreatedAt,
+			&i.StateChangedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listSigningKeys = `-- name: ListSigningKeys :many
 
-SELECT id, kid, purpose, public_key, wrapped_private_key, kek_id, state
+SELECT id, kid, purpose, algorithm, public_key, wrapped_private_key, kek_id, state
 FROM pc.keys
 WHERE org_id = $1 AND state <> 'REVOKED'
 ORDER BY created_at, kid
@@ -111,6 +161,7 @@ type ListSigningKeysRow struct {
 	ID                ids.UUID
 	Kid               string
 	Purpose           string
+	Algorithm         string
 	PublicKey         []byte
 	WrappedPrivateKey []byte
 	KekID             string
@@ -132,6 +183,7 @@ func (q *Queries) ListSigningKeys(ctx context.Context, orgID ids.OrgID) ([]ListS
 			&i.ID,
 			&i.Kid,
 			&i.Purpose,
+			&i.Algorithm,
 			&i.PublicKey,
 			&i.WrappedPrivateKey,
 			&i.KekID,

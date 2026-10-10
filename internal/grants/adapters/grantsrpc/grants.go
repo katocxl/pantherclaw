@@ -203,6 +203,11 @@ func (s *Grants) ReviseGrant(ctx context.Context, req *pantherclawv1.ReviseGrant
 	if req.GetExpireTime() != nil {
 		in.ExpiresAt = req.GetExpireTime().AsTime()
 	}
+	if req.AccessRequestId != nil {
+		if in.AccessRequest, err = parseID(req.GetAccessRequestId()); err != nil {
+			return nil, err
+		}
+	}
 	g, rev, err := s.svc.Revise(ctx, in)
 	if err != nil {
 		return nil, err

@@ -44,32 +44,47 @@ func (s *Service) end(ctx context.Context, id ids.UUID, resp dbq.InsertApprovalR
 	}
 	var out Request
 	err = s.Pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
-		q := dbq.New(tx)
-		l, err := lock(ctx, q, c.Org, id, r.User)
-		if err != nil {
-			return err
-		}
-		if !l.mayRespond(r.User) {
-			return refuse(ctx, q, c, l)
-		}
-		if !waiting(l.row, l.elig.Context.Now, apdomain.StatePending, apdomain.StateEvidenceRequested) {
-			return ErrNotWaiting
-		}
-		resp.OrgID, resp.ID, resp.RequestID, resp.UserID = c.Org, ids.NewV7(), id, r.User
-		resp.SessionID, resp.CliSessionID = r.sessions()
-		if err := q.InsertApprovalResponse(ctx, resp); err != nil {
-			return err
-		}
-		if err := pgapprovals.End(ctx, tx, org(c), id, endReason, "REJECTED"); err != nil {
-			return err
-		}
-		if err := event(ctx, tx, eventName, userActor(r.User), code, id, nil); err != nil {
-			return err
-		}
-		out, err = q.GetApprovalRequest(ctx, c.Org, id)
+		out, err = s.endIn(ctx, tx, c, r, id, resp, endReason, eventName, code)
 		return err
 	})
 	return out, err
+}
+
+// endIn is end inside the caller's transaction.
+func (s *Service) endIn(ctx context.Context, tx db.TenantTx, c tenancy.Caller, r Responder, id ids.UUID, resp dbq.InsertApprovalResponseParams,
+	endReason, eventName, code string,
+) (Request, error) {
+	q := dbq.New(tx)
+	l, err := lock(ctx, q, c.Org, id, r.User)
+	if err != nil {
+		return Request{}, err
+	}
+	if !l.mayRespond(r.User) {
+		return Request{}, refuse(ctx, q, c, l)
+	}
+	if !waiting(l.row, l.elig.Context.Now, apdomain.StatePending, apdomain.StateEvidenceRequested) {
+		return Request{}, ErrNotWaiting
+	}
+	resp.OrgID, resp.ID, resp.RequestID, resp.UserID = c.Org, ids.NewV7(), id, r.User
+	resp.SessionID, resp.CliSessionID = r.sessions()
+	if err := q.InsertApprovalResponse(ctx, resp); err != nil {
+		return Request{}, err
+	}
+	if err := pgapprovals.End(ctx, tx, org(c), id, endReason, "REJECTED"); err != nil {
+		return Request{}, err
+	}
+	details := map[string]string(nil)
+	if resp.BatchID != nil {
+		details = map[string]string{"batch": resp.BatchID.String()}
+	}
+	if err := event(ctx, tx, eventName, userActor(r.User), code, id, details); err != nil {
+		return Request{}, err
+	}
+	if err := tell(ctx, tx, s.Notify, c.Org, id, string(apdomain.StateDeclined), "approval.decided",
+		map[string]string{"outcome": endReason}); err != nil {
+		return Request{}, err
+	}
+	return q.GetApprovalRequest(ctx, c.Org, id)
 }
 
 func org(c tenancy.Caller) ids.OrgID { return c.Org }
@@ -105,6 +120,9 @@ func (s *Service) RequestEvidence(ctx context.Context, id ids.UUID, question, no
 		}
 		if !l.mayRespond(r.User) {
 			return refuse(ctx, q, c, l)
+		}
+		if l.row.SubjectKind != subjectAction {
+			return ErrNoEvidence // a restoration has no run to give it
 		}
 		if !waiting(l.row, l.elig.Context.Now, apdomain.StatePending) {
 			return ErrNotWaiting
@@ -337,6 +355,12 @@ func (s *Service) Approve(ctx context.Context, orgID ids.OrgID, r Responder, id 
 		if n == 0 {
 			return ErrCeremony
 		}
+		l, err := lock(ctx, q, orgID, id, r.User)
+		if err != nil {
+			return err
+		}
+		// Count the responses only under the lock: two people approving at
+		// once each see the other's response (TestRace_TwoApproversAtOnce).
 		rows, err := q.CountingResponses(ctx, orgID, id)
 		if err != nil {
 			return err
@@ -347,16 +371,12 @@ func (s *Service) Approve(ctx context.Context, orgID ids.OrgID, r Responder, id 
 			users = append(users, x.UserID)
 			counted = append(counted, apdomain.Response{UserID: x.UserID, CredentialID: x.CredentialID, Requirement: int(x.Requirement)})
 		}
-		l, err := lock(ctx, q, orgID, id, r.User)
-		if err != nil {
-			return err
-		}
 		if e, err := pgapprovals.LoadEligibility(ctx, q, orgID, id, users); err == nil {
 			l.elig = e
 		} else {
 			return err
 		}
-		if l.row.SubjectKind != "ACTION" || !waiting(l.row, l.elig.Context.Now, apdomain.StatePending) {
+		if !approvalSubject(l.row.SubjectKind) || !waiting(l.row, l.elig.Context.Now, apdomain.StatePending) {
 			return ErrNotWaiting
 		}
 		reqs := l.elig.Requirements
@@ -387,6 +407,26 @@ func (s *Service) Approve(ctx context.Context, orgID ids.OrgID, r Responder, id 
 		if apdomain.Met(reqs, counted) {
 			if err := approved(ctx, tx, q, orgID, l, counted); err != nil {
 				return err
+			}
+			state := apdomain.StateApproved
+			if l.row.SubjectKind == subjectRestoration {
+				if err := restored(ctx, q, orgID, l, r.User); err != nil {
+					return err
+				}
+				if err := event(ctx, tx, "approval.restoration_completed", userActor(r.User), "", id,
+					map[string]string{"agent": l.row.AgentID.String()}); err != nil {
+					return err
+				}
+				state = apdomain.StateConsumed
+			}
+			if err := tell(ctx, tx, s.Notify, orgID, id, string(state), "approval.decided",
+				map[string]string{"outcome": string(apdomain.StateApproved)}); err != nil {
+				return err
+			}
+			if slices.ContainsFunc(reqs, func(r apdomain.Requirement) bool { return r.Count >= 2 }) {
+				if err := tellAdmins(ctx, tx, s.Notify, orgID, l.row, "approval.multi_person_completed"); err != nil {
+					return err
+				}
 			}
 		}
 		out, err = q.GetApprovalRequest(ctx, orgID, id)
@@ -428,4 +468,66 @@ func approved(ctx context.Context, tx db.TenantTx, q *dbq.Queries, orgID ids.Org
 		return nil
 	}
 	return event(ctx, tx, "approval.multi_person_completed", userActor(rs[len(rs)-1].UserID), "", l.row.ID, nil)
+}
+
+// BeginApproval checks that a person may approve or step up now, before the
+// approval page starts the BINDING ceremony (design decision 7), and
+// returns the binding, which is the ceremony's challenge (HR-033). The page
+// has already checked that the person may see the request.
+func (s *Service) BeginApproval(ctx context.Context, orgID ids.OrgID, r Responder, id ids.UUID) ([32]byte, error) {
+	var binding [32]byte
+	if r.Browser.IsZero() || r.User.IsZero() {
+		return binding, ErrHumanSession
+	}
+	err := s.Pool.InTenantTx(ctx, orgID, func(ctx context.Context, tx db.TenantTx) error {
+		q := dbq.New(tx)
+		row, err := q.GetApprovalRequest(ctx, orgID, id)
+		if db.IsNoRows(err) {
+			return ErrNotFound
+		}
+		if err != nil {
+			return err
+		}
+		if err := approvable(ctx, q, orgID, row, r.User); err != nil {
+			return err
+		}
+		copy(binding[:], row.Binding)
+		return nil
+	}, db.ReadOnly())
+	return binding, err
+}
+
+// approvable checks that user may approve or step up the request now: it is
+// PENDING, they have not responded yet, and they are eligible, with one of
+// their active keys, for a requirement still short. It returns
+// ErrNotEligible or ErrNotWaiting otherwise.
+func approvable(ctx context.Context, q *dbq.Queries, orgID ids.OrgID, row dbq.PcApprovalRequest, user ids.UUID) error {
+	rows, err := q.CountingResponses(ctx, orgID, row.ID)
+	if err != nil {
+		return err
+	}
+	users := []ids.UUID{user}
+	var counted []apdomain.Response
+	for _, x := range rows {
+		if x.UserID == user {
+			return ErrNotEligible // one response per person (HR-035)
+		}
+		users = append(users, x.UserID)
+		counted = append(counted, apdomain.Response{UserID: x.UserID, CredentialID: x.CredentialID, Requirement: int(x.Requirement)})
+	}
+	e, err := pgapprovals.LoadEligibility(ctx, q, orgID, row.ID, users)
+	if err != nil {
+		return err
+	}
+	if !approvalSubject(row.SubjectKind) || !waiting(row, e.Context.Now, apdomain.StatePending) {
+		return ErrNotWaiting
+	}
+	me := e.People[user]
+	if _, ok := apdomain.Next(e.Requirements, counted, func(i int) bool {
+		ok, _ := apdomain.Check(e.Requirements[i], me, e.Context, ids.UUID{})
+		return ok
+	}); !ok {
+		return ErrNotEligible
+	}
+	return nil
 }

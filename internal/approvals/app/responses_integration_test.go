@@ -92,6 +92,12 @@ func newFx(t *testing.T, count int) *fx {
 		VALUES ($1, $2, $3, $4, $5, $5, 'launcher', now() + interval '8 hours')`, f.org, f.run, f.agent, env, f.alice.id)
 	f.exec(`INSERT INTO pc.grants (org_id, id, agent_id, principal_user_id, environment_id, depth, current_revision, grantor_kind,
 		grantor_id, basis) VALUES ($1, $2, $3, $4, $5, 0, 1, 'user', $4, 'test')`, f.org, f.grant, f.agent, f.alice.id, env)
+	f.exec("INSERT INTO pc.grant_lineage (org_id, grant_id, ancestor_id, distance) VALUES ($1, $2, $2, 0)", f.org, f.grant)
+	f.exec("INSERT INTO pc.org_containment (org_id) VALUES ($1)", f.org)
+	pkg, version := ids.NewV7(), ids.NewV7()
+	f.exec("INSERT INTO pc.tool_packages (org_id, id, name) VALUES ($1, $2, 'pc.mock-payments')", f.org, pkg)
+	f.exec(`INSERT INTO pc.package_versions (org_id, id, package_id, version, file_digest, raw, state)
+		VALUES ($1, $2, $3, '1.0.0', 'sha256:' || repeat('0', 64), '{7d', 'ACTIVE')`, f.org, version, pkg)
 	f.exec(`INSERT INTO pc.transactions (org_id, id, run_id, action_id, action_hash, operation, decision, reason_code, gateway_id, state)
 		VALUES ($1, $2, $3, $4, $5, 'payments.refund.create', 'REQUIRE_APPROVAL', 'REFUND_OVER_50', 'gw', 'OPEN')`,
 		f.org, f.txn, f.run, ids.NewV7(), make([]byte, 32))
@@ -108,7 +114,8 @@ func (f *fx) request(count int) ids.UUID {
 	copy(binding, id[:])
 	f.exec(`INSERT INTO pc.approval_requests (org_id, id, subject_kind, agent_id, transaction_id, evaluation, run_id, grant_id,
 		grant_revision, variant_key, operation, binding, binding_input, requirements, display, display_hash, action_ir, deadline_at)
-		VALUES ($1, $2, 'ACTION', $3, $4, 1, $5, $6, 1, $7, 'payments.refund.create', $7, '\x7b7d', $8, '{}', $7, '\x7b7d',
+		VALUES ($1, $2, 'ACTION', $3, $4, 1, $5, $6, 1, $7, 'payments.refund.create', $7, '\x7b7d', $8, '{}', $7,
+		convert_to('{"definition":{"package":"pc.mock-payments","version":"1.0.0"}}', 'UTF8'),
 		date_trunc('second', now()) + interval '1 hour')`, f.org, id, f.agent, f.txn, f.run, f.grant, binding,
 		`[{"kind":"approval","role":"approver","count":`+string(rune('0'+count))+`,"sources":[]}]`)
 	f.exec(`INSERT INTO pc.hold_slots (org_id, scope_kind, scope_id, pending) VALUES ($1, 'grant', $2, 1), ($1, 'run', $3, 1)
@@ -166,7 +173,7 @@ func TestHR172_ADeclineEndsTheRequestAndGrantsNothing(t *testing.T) {
 	if s := f.str("SELECT cli_session_id::text FROM pc.approval_responses WHERE request_id = $1", req); s != f.bob.cli.String() {
 		t.Fatalf("response session %s", s)
 	}
-	if s := f.str("SELECT state FROM pc.waitlist_entries WHERE subject_id = $1", req); s != "REJECTED" {
+	if s := f.str("SELECT state || ' ' || (first_response_at IS NOT NULL) FROM pc.waitlist_entries WHERE subject_id = $1", req); s != "REJECTED true" {
 		t.Fatalf("entry %s", s)
 	}
 	if s := f.str("SELECT sum(pending)::text FROM pc.hold_slots"); s != "0" {
@@ -298,4 +305,150 @@ func TestHR172_ANarrowerProposalEndsTheHeldAction(t *testing.T) {
 	if s := f.str("SELECT proposed_params::text FROM pc.approval_responses WHERE request_id = $1", req); s == "" {
 		t.Fatal("the proposal was not kept")
 	}
+}
+
+func (f *fx) sweep() approvals.Swept {
+	f.t.Helper()
+	s, err := approvals.SweepOrg(context.Background(), f.p, nil, f.org)
+	if err != nil {
+		f.t.Fatal(err)
+	}
+	return s
+}
+
+// TestHR039_TheJanitorExpiresOverdueRequests: the minute janitor records
+// what use would decide anyway: an overdue request expires, its entry
+// expires and its slots are freed.
+func TestHR039_TheJanitorExpiresOverdueRequests(t *testing.T) {
+	f := newFx(t, 1)
+	req := f.request(1)
+	if s := f.sweep(); s.Expired+s.Invalidated != 0 {
+		t.Fatalf("a waiting request was swept: %+v", s)
+	}
+	f.d.AdminExec(t, `UPDATE pc.approval_requests SET created_at = now() - interval '2 hours',
+		deadline_at = date_trunc('second', now()) - interval '1 second' WHERE id = $1`, req)
+	if s := f.sweep(); s.Expired != 1 {
+		t.Fatalf("swept %+v", s)
+	}
+	if s := f.str("SELECT r.state || '/' || e.state FROM pc.approval_requests r JOIN pc.waitlist_entries e ON e.subject_id = r.id WHERE r.id = $1", req); s != "EXPIRED/EXPIRED" {
+		t.Fatalf("request/entry %s", s)
+	}
+	if s := f.str("SELECT sum(pending)::text FROM pc.hold_slots"); s != "0" {
+		t.Fatalf("slots %s", s)
+	}
+}
+
+// TestHR171_ChangesInvalidateLiveRequests (decision 6, F153): a suspended
+// agent, a revoked or revised grant, an ended run, the kill switch or a
+// quarantined definition makes a live request moot; the janitor records it
+// INVALIDATED with the change, and the next evaluation decides again.
+func TestHR171_ChangesInvalidateLiveRequests(t *testing.T) {
+	for _, c := range []struct {
+		reason string
+		change func(f *fx)
+	}{
+		{"AGENT_SUSPENDED", func(f *fx) {
+			f.exec("UPDATE pc.agents SET state = 'SUSPENDED', suspended_from = 'DISCOVERED' WHERE id = $1", f.agent)
+		}},
+		{"GRANT_REVOKED", func(f *fx) {
+			f.exec("UPDATE pc.grants SET state = 'REVOKED', revoked_at = now(), revoke_reason = 'test' WHERE id = $1", f.grant)
+		}},
+		{"GRANT_REVISED", func(f *fx) { f.d.AdminExec(f.t, "UPDATE pc.grants SET current_revision = 2 WHERE id = $1", f.grant) }},
+		{"RUN_ENDED", func(f *fx) {
+			f.exec("UPDATE pc.runs SET state = 'ENDED', end_reason = 'DONE', ended_at = now() WHERE id = $1", f.run)
+		}},
+		{"KILL_SWITCH_ENGAGED", func(f *fx) {
+			f.d.AdminExec(f.t, "UPDATE pc.org_containment SET kill_switch = true, engaged_at = now(), engaged_by = 'test' WHERE org_id = $1", f.org)
+		}},
+		{"DEFINITION_CHANGED", func(f *fx) {
+			f.exec("UPDATE pc.package_versions SET state = 'QUARANTINED'")
+		}},
+	} {
+		t.Run(c.reason, func(t *testing.T) {
+			f := newFx(t, 1)
+			req := f.request(1)
+			c.change(f)
+			if s := f.sweep(); s.Invalidated != 1 {
+				t.Fatalf("swept %+v", s)
+			}
+			if s := f.str("SELECT state || '/' || end_reason FROM pc.approval_requests WHERE id = $1", req); s != "INVALIDATED/"+c.reason {
+				t.Fatalf("request %s", s)
+			}
+			if s := f.str("SELECT state FROM pc.waitlist_entries WHERE subject_id = $1", req); s != "CANCELLED" {
+				t.Fatalf("entry %s", s)
+			}
+		})
+	}
+}
+
+// TestHR170_RemovingTheRoleDisablingTheUserOrTheKeyVoidsResponses: an
+// approval stops counting as soon as its person is no longer eligible; an
+// approved request below its count returns to PENDING with a new entry.
+func TestHR170_RemovingTheRoleDisablingTheUserOrTheKeyVoidsResponses(t *testing.T) {
+	for _, c := range []struct {
+		void   string
+		change func(f *fx)
+	}{
+		{"ROLE_REMOVED", func(f *fx) { f.exec("DELETE FROM pc.role_bindings WHERE user_id = $1", f.bob.id) }},
+		{"USER_DISABLED", func(f *fx) { f.exec("UPDATE pc.users SET state = 'DISABLED' WHERE id = $1", f.bob.id) }},
+		{"CREDENTIAL_REMOVED", func(f *fx) {
+			f.exec(`UPDATE pc.webauthn_credentials SET state = 'SUSPENDED', state_reason = 'CLONE_SUSPECTED', changed_at = now(),
+				changed_by = 'test' WHERE id = $1`, f.bob.cred)
+		}},
+	} {
+		t.Run(c.void, func(t *testing.T) {
+			f := newFx(t, 1)
+			req := f.request(1)
+			if r, err := f.approve(f.bob, req); err != nil || r.State != "APPROVED" {
+				t.Fatalf("approve: %v", err)
+			}
+			c.change(f)
+			f.sweep()
+			if s := f.str("SELECT void_reason FROM pc.approval_responses WHERE request_id = $1", req); s != c.void {
+				t.Fatalf("void reason %s", s)
+			}
+			if s := f.str("SELECT state FROM pc.approval_requests WHERE id = $1", req); s != "PENDING" {
+				t.Fatalf("request %s", s)
+			}
+			if s := f.str("SELECT count(*)::text FROM pc.waitlist_entries WHERE subject_id = $1 AND state = 'OPEN'", req); s != "1" {
+				t.Fatalf("%s open entries", s)
+			}
+		})
+	}
+}
+
+// TestHR033_OnlyAnEligibleDeciderGetsTheBindingToSign: approve-options
+// gives the binding (the ceremony's challenge) only to a person who may
+// approve now, once.
+func TestHR033_OnlyAnEligibleDeciderGetsTheBindingToSign(t *testing.T) {
+	f := newFx(t, 1)
+	req := f.request(1)
+	ctx := context.Background()
+	b, err := f.svc.BeginApproval(ctx, f.org, approvals.Responder{User: f.bob.id, Browser: f.bob.browser}, req)
+	if err != nil || f.str("SELECT encode(binding, 'hex') FROM pc.approval_requests WHERE id = $1", req) != hexString(b[:]) {
+		t.Fatalf("bob: %x, %v", b, err)
+	}
+	for name, p := range map[string]person{"the launcher": f.alice, "someone without the role": f.carol} {
+		if _, err := f.svc.BeginApproval(ctx, f.org, approvals.Responder{User: p.id, Browser: p.browser}, req); !errors.Is(err, approvals.ErrNotEligible) {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+	if _, err := f.svc.BeginApproval(ctx, f.org, approvals.Responder{User: f.bob.id, CLI: f.bob.cli}, req); !errors.Is(err, approvals.ErrHumanSession) {
+		t.Fatalf("from the CLI: %v", err)
+	}
+	if _, err := f.approve(f.bob, req); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.svc.BeginApproval(ctx, f.org, approvals.Responder{User: f.dave.id, Browser: f.dave.browser}, req); !errors.Is(err, approvals.ErrNotWaiting) {
+		t.Fatalf("after approval: %v", err)
+	}
+}
+
+func hexString(b []byte) string {
+	const digits = "0123456789abcdef"
+	out := make([]byte, 0, 2*len(b))
+	for _, c := range b {
+		out = append(out, digits[c>>4], digits[c&15])
+	}
+	return string(out)
 }

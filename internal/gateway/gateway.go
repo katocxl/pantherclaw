@@ -58,6 +58,10 @@ type Gateway struct {
 	// (drift.go).
 	reportDrift           DriftReporter
 	driftEvery, driftPoll time.Duration
+	// verifications and verifyEvery drive the verification reads
+	// (verify.go, G0 M7).
+	verifications Verifications
+	verifyEvery   time.Duration
 }
 
 // Handler returns the gateway's agent-facing HTTP handler: `/mcp/{connection}`
@@ -98,6 +102,9 @@ type Deps struct {
 	// ReportDrift tells the server an upstream MCP tool drifted (HR-081);
 	// nil reports nothing.
 	ReportDrift DriftReporter
+	// Verifications claims and reports verification tasks (G0 M7); nil
+	// makes no verification reads.
+	Verifications Verifications
 	// Run is background work (certificate renewal, the containment stream,
 	// configuration sync); nil for none.
 	Run []func(ctx context.Context) error
@@ -135,6 +142,7 @@ func New(ctx context.Context, cfg *Config, id *control.Identity, log *slog.Logge
 			})
 			return err
 		},
+		Verifications: controlVerifications{ctl},
 	}
 	if cfg.Broker.KeyFile != "" {
 		key, err := broker.Load(ctx, cfg.Broker.KeyFile, cfg.Broker.KEKFiles)
@@ -182,6 +190,10 @@ func newGateway(cfg *Config, d Deps, log *slog.Logger) (*Gateway, error) {
 		mcp:  mcp.New(engine, d.Configuration, cfg.PublicURL, log),
 		hook: hook.New(engine, d.Configuration, cfg.PublicURL, log),
 		log:  log, reportDrift: d.ReportDrift, driftEvery: DriftEvery, driftPoll: driftPoll,
+		verifications: d.Verifications, verifyEvery: VerifyEvery,
+	}
+	if e := cfg.Control.VerifyEvery.D(); e > 0 {
+		g.verifyEvery = e
 	}
 	return g, nil
 }
@@ -193,6 +205,7 @@ func (g *Gateway) Run(ctx context.Context) error {
 		eg.Go(func() error { return f(ctx) })
 	}
 	eg.Go(func() error { return g.watchDrift(ctx) })
+	eg.Go(func() error { return g.watchVerifications(ctx) })
 	eg.Go(func() error { <-ctx.Done(); return nil })
 	return eg.Wait()
 }
