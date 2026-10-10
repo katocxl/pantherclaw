@@ -700,8 +700,8 @@ type RetentionPolicyLabelsRow struct {
 	Revision int32
 }
 
-func (q *Queries) RetentionPolicyLabels(ctx context.Context, orgID ids.OrgID, ids []ids.UUID) ([]RetentionPolicyLabelsRow, error) {
-	rows, err := q.db.Query(ctx, retentionPolicyLabels, orgID, ids)
+func (q *Queries) RetentionPolicyLabels(ctx context.Context, orgID ids.OrgID, policyIds []ids.UUID) ([]RetentionPolicyLabelsRow, error) {
+	rows, err := q.db.Query(ctx, retentionPolicyLabels, orgID, policyIds)
 	if err != nil {
 		return nil, err
 	}
