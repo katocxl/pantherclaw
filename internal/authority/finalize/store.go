@@ -17,6 +17,7 @@ import (
 
 	adomain "github.com/katocxl/pantherclaw/internal/authority/domain"
 	"github.com/katocxl/pantherclaw/internal/authority/pipeline"
+	"github.com/katocxl/pantherclaw/internal/authority/recording"
 	bdomain "github.com/katocxl/pantherclaw/internal/budgets/domain"
 	gdomain "github.com/katocxl/pantherclaw/internal/grants/domain"
 	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
@@ -147,6 +148,10 @@ type Write struct {
 type Receipt struct {
 	JWS  string
 	Body []byte
+	// Inputs are what the evaluation read, sealed for replay (G0 M7 design
+	// decision 11): a decision receipt's store writes them in the same
+	// transaction. Nil when the Authority records none.
+	Inputs *recording.Sealed
 }
 
 // Outcome of a dispatched permit (PAP-1 §7.4).

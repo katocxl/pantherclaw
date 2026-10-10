@@ -412,9 +412,12 @@ func writeReceipt(ctx context.Context, tx db.TenantTx, org ids.OrgID, txn ids.UU
 	if err != nil {
 		return err
 	}
-	return dbq.New(tx).InsertEvaluationReceipt(ctx, dbq.InsertEvaluationReceiptParams{
+	if err := dbq.New(tx).InsertEvaluationReceipt(ctx, dbq.InsertEvaluationReceiptParams{
 		OrgID: org, TransactionID: txn, Evaluation: int32(evaluation), ReceiptJws: r.JWS, LedgerEntryID: entry.ID, //nolint:gosec // ≤ 33
-	})
+	}); err != nil {
+		return err
+	}
+	return writeInputs(ctx, tx, org, txn, evaluation, r.Inputs)
 }
 
 // Tamper implements finalize.Store.

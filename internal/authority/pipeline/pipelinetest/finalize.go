@@ -46,6 +46,8 @@ type finalState struct {
 	debits   map[bdomain.Ref]bdomain.Debit
 	counters map[bdomain.Ref]bdomain.CounterDebit
 	events   []string
+	// receipts are every evaluation's receipt, with its sealed inputs (G0 M7).
+	receipts map[InputKey]finalize.Receipt
 }
 
 func (w *World) fin() *finalState {
@@ -53,6 +55,7 @@ func (w *World) fin() *finalState {
 		w.final = &finalState{
 			txns: map[txnKey]*finalize.Stored{}, permits: map[ids.UUID]*permitRow{}, rowRefs: map[ids.UUID]bdomain.Ref{},
 			refRows: map[bdomain.Ref]ids.UUID{}, debits: map[bdomain.Ref]bdomain.Debit{}, counters: map[bdomain.Ref]bdomain.CounterDebit{},
+			receipts: map[InputKey]finalize.Receipt{},
 		}
 	}
 	return w.final
@@ -217,6 +220,7 @@ func (w *World) Finalize(ctx context.Context, org ids.OrgID, wr finalize.Write) 
 	if err != nil {
 		return err
 	}
+	f.receipts[InputKey{wr.TransactionID, wr.Evaluation}] = receipt
 	f.txns[key] = &finalize.Stored{
 		TransactionID: wr.TransactionID, ActionHash: ev.ActionHash, Decision: ev.Decision,
 		Reason: wr.Reason, Final: wr.Final, Evaluations: wr.Evaluation, Receipt: receipt.JWS,
@@ -296,6 +300,7 @@ func (w *World) Tamper(_ context.Context, _ ids.OrgID, prev finalize.Stored, rec
 			if s.Final || s.Evaluations != prev.Evaluations {
 				return finalize.ErrConflict
 			}
+			f.receipts[InputKey{s.TransactionID, s.Evaluations + 1}] = *receipt
 			f.txns[k] = &finalize.Stored{
 				TransactionID: s.TransactionID, ActionHash: s.ActionHash, Decision: "DENY",
 				Reason: "ACTION_TAMPERED", Final: true, Evaluations: s.Evaluations + 1, Receipt: receipt.JWS,

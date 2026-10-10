@@ -593,6 +593,18 @@ type PcEscalationChain struct {
 	CreatedAt time.Time
 }
 
+type PcEvaluationInput struct {
+	OrgID           ids.OrgID
+	TransactionID   ids.UUID
+	Evaluation      int32
+	FormatVersion   int32
+	PipelineVersion int32
+	Inputs          []byte
+	InputsSha256    []byte
+	Truncated       bool
+	CreatedAt       time.Time
+}
+
 type PcEvidenceIntegrity struct {
 	OrgID        ids.OrgID
 	State        string

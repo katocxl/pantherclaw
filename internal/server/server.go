@@ -219,7 +219,7 @@ func cmdServe(ctx context.Context, args []string, stderr io.Writer, env Env, onS
 		return err
 	}
 
-	svc, err := newAuthority(cfg, pool, reg, log)
+	svc, err := newAuthority(cfg, pool, reg, kp, log)
 	if err != nil {
 		return err
 	}

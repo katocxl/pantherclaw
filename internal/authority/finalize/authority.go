@@ -13,6 +13,7 @@ import (
 	apdomain "github.com/katocxl/pantherclaw/internal/approvals/domain"
 	adomain "github.com/katocxl/pantherclaw/internal/authority/domain"
 	"github.com/katocxl/pantherclaw/internal/authority/pipeline"
+	"github.com/katocxl/pantherclaw/internal/authority/recording"
 	bdomain "github.com/katocxl/pantherclaw/internal/budgets/domain"
 	gdomain "github.com/katocxl/pantherclaw/internal/grants/domain"
 	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
@@ -54,6 +55,9 @@ type Authority struct {
 	Issuer       string
 	PermitTTL    time.Duration
 	Log          *slog.Logger
+	// Inputs seals every evaluation's inputs for decision replay, written
+	// with its receipt (G0 M7 design decision 11); nil keeps none.
+	Inputs InputSealer
 }
 
 // Result is the answer to Authorize.
@@ -160,7 +164,7 @@ func (a *Authority) Authorize(ctx context.Context, gw Gateway, req pipeline.Requ
 		if attempt > maxAttempts+1 {
 			return Result{}, fmt.Errorf("finalize: no stable decision after %d attempts", attempt)
 		}
-		prev, ev, err := a.evaluate(ctx, req, run, action)
+		prev, ev, rec, err := a.evaluate(ctx, req, run, action)
 		if err != nil {
 			return Result{}, err
 		}
@@ -173,7 +177,7 @@ func (a *Authority) Authorize(ctx context.Context, gw Gateway, req pipeline.Requ
 		if attempt >= maxAttempts {
 			ev = override(ev, ReasonConcurrentChange, "the authority changed while deciding; try again")
 		}
-		res, err := a.bind(ctx, gw, ev, prev)
+		res, err := a.bind(ctx, gw, ev, prev, rec)
 		switch {
 		case err == nil:
 			a.log(ctx).InfoContext(ctx, "authz.decision", slog.String("txn_id", res.TransactionID.String()),
@@ -185,7 +189,7 @@ func (a *Authority) Authorize(ctx context.Context, gw Gateway, req pipeline.Requ
 				code, detail = apdomain.ReasonHoldLimitReached, "the grant or the run already has its maximum of pending holds"
 			}
 			ev = override(ev, code, detail)
-			if res, err = a.bind(ctx, gw, ev, prev); err == nil {
+			if res, err = a.bind(ctx, gw, ev, prev, rec); err == nil {
 				return res, nil
 			}
 			if !retryable(err) {
@@ -214,10 +218,14 @@ type Lookuper interface {
 // evaluate looks up the stored transaction for (run, action) and, unless it
 // answers the request (another action hash, a final decision, or the
 // evaluation cap), evaluates the action: both from one snapshot when the
-// pipeline's Reader offers one. A nil evaluation means prev answers.
-func (a *Authority) evaluate(ctx context.Context, req pipeline.Request, run, action ids.UUID) (*Stored, *pipeline.Evaluation, error) {
+// pipeline's Reader offers one. A nil evaluation means prev answers. The
+// recorder holds what the evaluation read, when the Authority keeps inputs.
+func (a *Authority) evaluate(ctx context.Context, req pipeline.Request, run, action ids.UUID) (
+	*Stored, *pipeline.Evaluation, *recording.Recorder, error,
+) {
 	var prev *Stored
 	var ev *pipeline.Evaluation
+	var rec *recording.Recorder
 	err := a.Pipeline.Snapshot(ctx, req.Org, func(ctx context.Context, r pipeline.Reader) error {
 		l, ok := r.(Lookuper)
 		if !ok {
@@ -230,13 +238,15 @@ func (a *Authority) evaluate(ctx context.Context, req pipeline.Request, run, act
 		if prev != nil && (prev.ActionHash != req.Action.HashHex() || prev.Final || prev.Evaluations >= MaxEvaluations) {
 			return nil
 		}
-		ev, err = a.Pipeline.EvaluateWith(ctx, r, req)
+		var reader pipeline.Reader
+		reader, rec = a.recorder(r, req)
+		ev, err = a.Pipeline.EvaluateWith(ctx, reader, req)
 		return err
 	})
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
-	return prev, ev, nil
+	return prev, ev, rec, nil
 }
 
 // Holds reports whether an evaluation records a hold: an enforced
@@ -286,7 +296,7 @@ func monitorView(ev *pipeline.Evaluation) *pipeline.Evaluation {
 // containment passed gets a permit whatever its (hypothetical) decision,
 // with nothing reserved, and closes its transaction so no second permit
 // can follow (HR-184).
-func (a *Authority) bind(ctx context.Context, gw Gateway, ev *pipeline.Evaluation, prev *Stored) (Result, error) {
+func (a *Authority) bind(ctx context.Context, gw Gateway, ev *pipeline.Evaluation, prev *Stored, rec *recording.Recorder) (Result, error) {
 	monitor := ev.MonitorPermit()
 	if monitor {
 		ev = monitorView(ev)
@@ -335,10 +345,15 @@ func (a *Authority) bind(ctx context.Context, gw Gateway, ev *pipeline.Evaluatio
 		w.Permit = p
 		res.Permit, res.PermitID, res.Epoch = p.JWS, p.ID, p.Epoch
 	}
+	inputs, err := a.sealInputs(ctx, gw.Org, w.TransactionID, w.Evaluation, rec)
+	if err != nil {
+		return Result{}, err
+	}
 	// The receipt Finalize records is the one Sign returned last, so it
 	// needs no second lookup.
 	w.Sign = func(budgets []BudgetState) (Receipt, error) {
 		r, err := a.receipt(gw, ev, w.TransactionID, w.Evaluation, budgets)
+		r.Inputs = inputs
 		res.Receipt = r.JWS
 		return r, err
 	}
@@ -440,6 +455,9 @@ func (a *Authority) tampered(ctx context.Context, gw Gateway, req pipeline.Reque
 		ev.ActionID, _ = ids.ParseUUID(req.Action.Action.ActionID)
 		r, err := a.receipt(gw, ev, prev.TransactionID, prev.Evaluations+1, nil)
 		if err != nil {
+			return Result{}, err
+		}
+		if r.Inputs, err = a.sealTampered(ctx, gw.Org, req, prev, prev.Evaluations+1); err != nil {
 			return Result{}, err
 		}
 		receipt, res.Receipt, res.Evaluation = &r, r.JWS, prev.Evaluations+1
