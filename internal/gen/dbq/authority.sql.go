@@ -12,9 +12,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
-	"github.com/katocxl/pantherclaw/internal/platform/money"
 )
 
 const beginDispatch = `-- name: BeginDispatch :one
@@ -75,17 +73,6 @@ func (q *Queries) ClearKillSwitch(ctx context.Context, orgID ids.OrgID) (int64, 
 	var epoch int64
 	err := row.Scan(&epoch)
 	return epoch, err
-}
-
-const commitReservation = `-- name: CommitReservation :execresult
-UPDATE pc.budgets
-SET reserved = reserved - $1, spent = spent + $1,
-    reserved_count = reserved_count - 1, spent_count = spent_count + 1
-WHERE org_id = $2 AND id = $3 AND reserved >= $1 AND reserved_count >= 1
-`
-
-func (q *Queries) CommitReservation(ctx context.Context, amount money.Decimal, orgID ids.OrgID, iD ids.UUID) (pgconn.CommandTag, error) {
-	return q.db.Exec(ctx, commitReservation, amount, orgID, iD)
 }
 
 const dBNow = `-- name: DBNow :one
@@ -215,104 +202,6 @@ func (q *Queries) ExecutionContext(ctx context.Context, orgID ids.OrgID, iD ids.
 	return i, err
 }
 
-const finishPermit = `-- name: FinishPermit :one
-UPDATE pc.permits
-SET state = $1, finished_at = now()
-WHERE org_id = $2 AND id = $3 AND gateway_id = $4 AND state = 'DISPATCHING'
-  AND budget_id IS NOT NULL
-RETURNING transaction_id, budget_id, amount
-`
-
-type FinishPermitParams struct {
-	ToState   string
-	OrgID     ids.OrgID
-	ID        ids.UUID
-	GatewayID string
-}
-
-type FinishPermitRow struct {
-	TransactionID ids.UUID
-	BudgetID      *ids.UUID
-	Amount        *money.Decimal
-}
-
-func (q *Queries) FinishPermit(ctx context.Context, arg FinishPermitParams) (FinishPermitRow, error) {
-	row := q.db.QueryRow(ctx, finishPermit,
-		arg.ToState,
-		arg.OrgID,
-		arg.ID,
-		arg.GatewayID,
-	)
-	var i FinishPermitRow
-	err := row.Scan(&i.TransactionID, &i.BudgetID, &i.Amount)
-	return i, err
-}
-
-const getBudget = `-- name: GetBudget :one
-SELECT id, name, currency, limit_amount, reserved, spent, max_count, reserved_count, spent_count
-FROM pc.budgets
-WHERE org_id = $1 AND id = $2
-`
-
-type GetBudgetRow struct {
-	ID            ids.UUID
-	Name          string
-	Currency      string
-	LimitAmount   money.Decimal
-	Reserved      money.Decimal
-	Spent         money.Decimal
-	MaxCount      *int32
-	ReservedCount int32
-	SpentCount    int32
-}
-
-func (q *Queries) GetBudget(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (GetBudgetRow, error) {
-	row := q.db.QueryRow(ctx, getBudget, orgID, iD)
-	var i GetBudgetRow
-	err := row.Scan(
-		&i.ID,
-		&i.Name,
-		&i.Currency,
-		&i.LimitAmount,
-		&i.Reserved,
-		&i.Spent,
-		&i.MaxCount,
-		&i.ReservedCount,
-		&i.SpentCount,
-	)
-	return i, err
-}
-
-const getBudgetByName = `-- name: GetBudgetByName :one
-SELECT id, currency
-FROM pc.budgets
-WHERE org_id = $1 AND name = $2
-`
-
-type GetBudgetByNameRow struct {
-	ID       ids.UUID
-	Currency string
-}
-
-func (q *Queries) GetBudgetByName(ctx context.Context, orgID ids.OrgID, name string) (GetBudgetByNameRow, error) {
-	row := q.db.QueryRow(ctx, getBudgetByName, orgID, name)
-	var i GetBudgetByNameRow
-	err := row.Scan(&i.ID, &i.Currency)
-	return i, err
-}
-
-const getDecisionReceipt = `-- name: GetDecisionReceipt :one
-SELECT receipt_jws FROM pc.decision_receipts
-WHERE org_id = $1 AND transaction_id = $2
-`
-
-func (q *Queries) GetDecisionReceipt(ctx context.Context, orgID ids.OrgID, transactionID ids.UUID) (string, error) {
-	row := q.db.QueryRow(ctx, getDecisionReceipt, orgID, transactionID)
-	var receipt_jws string
-	err := row.Scan(&receipt_jws)
-	return receipt_jws, err
-}
-
 const getPermit = `-- name: GetPermit :one
 SELECT p.state, p.epoch, p.expires_at, p.gateway_id, p.transaction_id, (p.expires_at <= clock_timestamp())::boolean AS expired,
        c.epoch AS current_epoch, c.kill_switch
@@ -348,111 +237,12 @@ func (q *Queries) GetPermit(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (
 	return i, err
 }
 
-const getTransactionByAction = `-- name: GetTransactionByAction :one
-SELECT id, action_hash, decision, reason_code
-FROM pc.transactions
-WHERE org_id = $1 AND run_id = $2 AND action_id = $3
-`
-
-type GetTransactionByActionRow struct {
-	ID         ids.UUID
-	ActionHash []byte
-	Decision   string
-	ReasonCode string
-}
-
-func (q *Queries) GetTransactionByAction(ctx context.Context, orgID ids.OrgID, runID ids.UUID, actionID ids.UUID) (GetTransactionByActionRow, error) {
-	row := q.db.QueryRow(ctx, getTransactionByAction, orgID, runID, actionID)
-	var i GetTransactionByActionRow
-	err := row.Scan(
-		&i.ID,
-		&i.ActionHash,
-		&i.Decision,
-		&i.ReasonCode,
-	)
-	return i, err
-}
-
-const insertBudget = `-- name: InsertBudget :exec
-INSERT INTO pc.budgets (org_id, id, name, currency, limit_amount, max_count)
-VALUES ($1, $2, $3, $4, $5, $6)
-`
-
-type InsertBudgetParams struct {
-	OrgID       ids.OrgID
-	ID          ids.UUID
-	Name        string
-	Currency    string
-	LimitAmount money.Decimal
-	MaxCount    *int32
-}
-
-func (q *Queries) InsertBudget(ctx context.Context, arg InsertBudgetParams) error {
-	_, err := q.db.Exec(ctx, insertBudget,
-		arg.OrgID,
-		arg.ID,
-		arg.Name,
-		arg.Currency,
-		arg.LimitAmount,
-		arg.MaxCount,
-	)
-	return err
-}
-
-const insertBudgetLedger = `-- name: InsertBudgetLedger :exec
-INSERT INTO pc.budget_ledger (org_id, id, budget_id, transaction_id, kind, amount)
-VALUES ($1, $2, $3, $4, $5, $6)
-`
-
-type InsertBudgetLedgerParams struct {
-	OrgID         ids.OrgID
-	ID            ids.UUID
-	BudgetID      ids.UUID
-	TransactionID ids.UUID
-	Kind          string
-	Amount        money.Decimal
-}
-
-func (q *Queries) InsertBudgetLedger(ctx context.Context, arg InsertBudgetLedgerParams) error {
-	_, err := q.db.Exec(ctx, insertBudgetLedger,
-		arg.OrgID,
-		arg.ID,
-		arg.BudgetID,
-		arg.TransactionID,
-		arg.Kind,
-		arg.Amount,
-	)
-	return err
-}
-
 const insertContainment = `-- name: InsertContainment :exec
 INSERT INTO pc.org_containment (org_id) VALUES ($1) ON CONFLICT (org_id) DO NOTHING
 `
 
 func (q *Queries) InsertContainment(ctx context.Context, orgID ids.OrgID) error {
 	_, err := q.db.Exec(ctx, insertContainment, orgID)
-	return err
-}
-
-const insertDecisionReceipt = `-- name: InsertDecisionReceipt :exec
-INSERT INTO pc.decision_receipts (org_id, transaction_id, receipt_jws, ledger_entry_id)
-VALUES ($1, $2, $3, $4)
-`
-
-type InsertDecisionReceiptParams struct {
-	OrgID         ids.OrgID
-	TransactionID ids.UUID
-	ReceiptJws    string
-	LedgerEntryID ids.UUID
-}
-
-func (q *Queries) InsertDecisionReceipt(ctx context.Context, arg InsertDecisionReceiptParams) error {
-	_, err := q.db.Exec(ctx, insertDecisionReceipt,
-		arg.OrgID,
-		arg.TransactionID,
-		arg.ReceiptJws,
-		arg.LedgerEntryID,
-	)
 	return err
 }
 
@@ -495,120 +285,6 @@ func (q *Queries) InsertExecutionAttempt(ctx context.Context, arg InsertExecutio
 	return err
 }
 
-const insertPermit = `-- name: InsertPermit :exec
-INSERT INTO pc.permits (org_id, id, transaction_id, gateway_id, epoch, budget_id, amount, expires_at)
-VALUES ($1, $2, $3, $4, $5,
-        $6, $7, $8)
-`
-
-type InsertPermitParams struct {
-	OrgID         ids.OrgID
-	ID            ids.UUID
-	TransactionID ids.UUID
-	GatewayID     string
-	Epoch         int64
-	BudgetID      *ids.UUID
-	Amount        *money.Decimal
-	ExpiresAt     time.Time
-}
-
-func (q *Queries) InsertPermit(ctx context.Context, arg InsertPermitParams) error {
-	_, err := q.db.Exec(ctx, insertPermit,
-		arg.OrgID,
-		arg.ID,
-		arg.TransactionID,
-		arg.GatewayID,
-		arg.Epoch,
-		arg.BudgetID,
-		arg.Amount,
-		arg.ExpiresAt,
-	)
-	return err
-}
-
-const insertTransaction = `-- name: InsertTransaction :exec
-INSERT INTO pc.transactions (org_id, id, run_id, action_id, action_hash, operation, decision, reason_code,
-                             budget_id, amount, currency, gateway_id)
-VALUES ($1, $2, $3, $4, $5,
-        $6, $7, $8, $9,
-        $10, $11, $12)
-`
-
-type InsertTransactionParams struct {
-	OrgID      ids.OrgID
-	ID         ids.UUID
-	RunID      ids.UUID
-	ActionID   ids.UUID
-	ActionHash []byte
-	Operation  string
-	Decision   string
-	ReasonCode string
-	BudgetID   *ids.UUID
-	Amount     *money.Decimal
-	Currency   *string
-	GatewayID  string
-}
-
-func (q *Queries) InsertTransaction(ctx context.Context, arg InsertTransactionParams) error {
-	_, err := q.db.Exec(ctx, insertTransaction,
-		arg.OrgID,
-		arg.ID,
-		arg.RunID,
-		arg.ActionID,
-		arg.ActionHash,
-		arg.Operation,
-		arg.Decision,
-		arg.ReasonCode,
-		arg.BudgetID,
-		arg.Amount,
-		arg.Currency,
-		arg.GatewayID,
-	)
-	return err
-}
-
-const markStaleDispatchingUnknown = `-- name: MarkStaleDispatchingUnknown :many
-UPDATE pc.permits
-SET state = 'UNKNOWN', finished_at = now()
-WHERE org_id = $1 AND state = 'DISPATCHING'
-  AND dispatching_at < now() - make_interval(secs => $2::float8)
-  AND budget_id IS NOT NULL
-RETURNING id, transaction_id, budget_id, amount
-`
-
-type MarkStaleDispatchingUnknownRow struct {
-	ID            ids.UUID
-	TransactionID ids.UUID
-	BudgetID      *ids.UUID
-	Amount        *money.Decimal
-}
-
-// Stale DISPATCHING permits become UNKNOWN and keep their reservation.
-func (q *Queries) MarkStaleDispatchingUnknown(ctx context.Context, orgID ids.OrgID, staleSeconds float64) ([]MarkStaleDispatchingUnknownRow, error) {
-	rows, err := q.db.Query(ctx, markStaleDispatchingUnknown, orgID, staleSeconds)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []MarkStaleDispatchingUnknownRow{}
-	for rows.Next() {
-		var i MarkStaleDispatchingUnknownRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.TransactionID,
-			&i.BudgetID,
-			&i.Amount,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const recordOutbound = `-- name: RecordOutbound :exec
 UPDATE pc.permits
 SET outbound_method = $1, outbound_url = $2,
@@ -635,106 +311,6 @@ func (q *Queries) RecordOutbound(ctx context.Context, arg RecordOutboundParams) 
 		arg.ID,
 	)
 	return err
-}
-
-const releaseExpiredPermits = `-- name: ReleaseExpiredPermits :many
-UPDATE pc.permits
-SET state = 'RELEASED', finished_at = now()
-WHERE org_id = $1 AND state = 'ISSUED' AND expires_at < now()
-  AND budget_id IS NOT NULL
-RETURNING id, transaction_id, budget_id, amount
-`
-
-type ReleaseExpiredPermitsRow struct {
-	ID            ids.UUID
-	TransactionID ids.UUID
-	BudgetID      *ids.UUID
-	Amount        *money.Decimal
-}
-
-// Sweeper (HR-003): only expired ISSUED permits release their reservation.
-func (q *Queries) ReleaseExpiredPermits(ctx context.Context, orgID ids.OrgID) ([]ReleaseExpiredPermitsRow, error) {
-	rows, err := q.db.Query(ctx, releaseExpiredPermits, orgID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []ReleaseExpiredPermitsRow{}
-	for rows.Next() {
-		var i ReleaseExpiredPermitsRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.TransactionID,
-			&i.BudgetID,
-			&i.Amount,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const releaseReservation = `-- name: ReleaseReservation :execresult
-UPDATE pc.budgets
-SET reserved = reserved - $1, reserved_count = reserved_count - 1
-WHERE org_id = $2 AND id = $3 AND reserved >= $1 AND reserved_count >= 1
-`
-
-func (q *Queries) ReleaseReservation(ctx context.Context, amount money.Decimal, orgID ids.OrgID, iD ids.UUID) (pgconn.CommandTag, error) {
-	return q.db.Exec(ctx, releaseReservation, amount, orgID, iD)
-}
-
-const releaseReservations = `-- name: ReleaseReservations :execresult
-UPDATE pc.budgets
-SET reserved = reserved - $1, reserved_count = reserved_count - $2::int4
-WHERE org_id = $3 AND id = $4
-  AND reserved >= $1 AND reserved_count >= $2::int4
-`
-
-type ReleaseReservationsParams struct {
-	Amount money.Decimal
-	Count  int32
-	OrgID  ids.OrgID
-	ID     ids.UUID
-}
-
-// ReleaseReservations releases several reservations of one budget in one
-// statement, so a sweep locks the hot row once.
-func (q *Queries) ReleaseReservations(ctx context.Context, arg ReleaseReservationsParams) (pgconn.CommandTag, error) {
-	return q.db.Exec(ctx, releaseReservations,
-		arg.Amount,
-		arg.Count,
-		arg.OrgID,
-		arg.ID,
-	)
-}
-
-const reserveBudget = `-- name: ReserveBudget :execresult
-UPDATE pc.budgets
-SET reserved = reserved + $1, reserved_count = reserved_count + 1
-WHERE org_id = $2 AND id = $3 AND currency = $4
-  AND spent + reserved + $1 <= limit_amount
-  AND (max_count IS NULL OR spent_count + reserved_count + 1 <= max_count)
-`
-
-type ReserveBudgetParams struct {
-	Amount   money.Decimal
-	OrgID    ids.OrgID
-	ID       ids.UUID
-	Currency string
-}
-
-func (q *Queries) ReserveBudget(ctx context.Context, arg ReserveBudgetParams) (pgconn.CommandTag, error) {
-	return q.db.Exec(ctx, reserveBudget,
-		arg.Amount,
-		arg.OrgID,
-		arg.ID,
-		arg.Currency,
-	)
 }
 
 const shareContainment = `-- name: ShareContainment :one
