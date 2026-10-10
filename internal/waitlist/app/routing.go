@@ -116,7 +116,7 @@ func (r *Router) step(ctx context.Context, tx db.TenantTx, org ids.OrgID, id ids
 	if err != nil {
 		return err
 	}
-	base, approval, err := notice(ctx, q, org, e)
+	base, fam, err := notice(ctx, q, org, e)
 	if err != nil {
 		return err
 	}
@@ -125,7 +125,7 @@ func (r *Router) step(ctx context.Context, tx db.TenantTx, org ids.OrgID, id ids
 	reached := wdomain.Reach(s, ds)
 	if len(ds) == 0 {
 		health = wdomain.HealthNoDecider
-		if err := r.unroutable(ctx, tx, q, org, e, base, approval, stepNo); err != nil {
+		if err := r.unroutable(ctx, tx, q, org, e, base, fam, stepNo); err != nil {
 			return err
 		}
 	}
@@ -141,7 +141,7 @@ func (r *Router) step(ctx context.Context, tx db.TenantTx, org ids.OrgID, id ids
 		m.Personal, m.PersonalOnly = fresh, !s.NotifyChannels
 		m.DedupeKey = "route:" + id.String() + ":" + strconv.Itoa(i)
 		if i > 0 {
-			m.Type = escalatedType(approval)
+			m.Type = fam.escalated
 		}
 		if err := r.send(ctx, tx, q, org, id, stepNo, "decider", m); err != nil {
 			return err
@@ -157,18 +157,14 @@ func (r *Router) step(ctx context.Context, tx db.TenantTx, org ids.OrgID, id ids
 		if len(again) > 0 {
 			m := base
 			m.Personal, m.PersonalOnly, m.DedupeKey = again, true, "remind:"+id.String()+":"+strconv.Itoa(i)
-			if approval {
-				m.Type = "approval.reminder"
-			} else {
-				m.Type = "waitlist.entry_escalated"
-			}
+			m.Type = fam.reminder
 			if err := r.send(ctx, tx, q, org, id, stepNo, "decider", m); err != nil {
 				return err
 			}
 		}
 	}
 	if s.NotifyOwners && e.AgentID != nil {
-		if err := r.owners(ctx, tx, q, org, e, base, approval, stepNo, told, ds); err != nil {
+		if err := r.owners(ctx, tx, q, org, e, base, fam, stepNo, told, ds); err != nil {
 			return err
 		}
 	}
@@ -202,27 +198,35 @@ func routedEvent(step int) string {
 	return "waitlist.escalated"
 }
 
-func escalatedType(approval bool) string {
-	if approval {
-		return "approval.escalated"
+// family names the notice types of an entry after its first notice: an
+// escalation, a reminder, and "no one can decide it".
+type family struct{ escalated, reminder, unroutable string }
+
+var (
+	// approvalNotices are a hold's or a restoration's.
+	approvalNotices = family{escalated: "approval.escalated", reminder: "approval.reminder", unroutable: "approval.unroutable"}
+	// reconciliationNotices are an unknown outcome's, which link to its
+	// reconciliation page (G0 M7).
+	reconciliationNotices = family{
+		escalated: "reconciliation.escalated", reminder: "reconciliation.escalated", unroutable: "reconciliation.escalated",
 	}
-	return "waitlist.entry_escalated"
-}
+	// entryNotices are every other kind's.
+	entryNotices = family{
+		escalated: "waitlist.entry_escalated", reminder: "waitlist.entry_escalated", unroutable: "waitlist.entry_escalated",
+	}
+)
 
 // unroutable tells the org's admins and Security Admins, once per entry,
 // that no one may decide it.
 func (r *Router) unroutable(ctx context.Context, tx db.TenantTx, q *dbq.Queries, org ids.OrgID, e dbq.EntryForRoutingRow,
-	base notifapp.Message, approval bool, step int16,
+	base notifapp.Message, fam family, step int16,
 ) error {
 	admins, err := q.OrgUsersWithRoles(ctx, org, []string{string(td.RoleOrgAdmin), string(td.RoleSecurityAdmin)})
 	if err != nil {
 		return err
 	}
 	m := base
-	m.Personal, m.DedupeKey, m.Type = admins, "unroutable:"+e.ID.String(), escalatedType(approval)
-	if approval {
-		m.Type = "approval.unroutable"
-	}
+	m.Personal, m.DedupeKey, m.Type = admins, "unroutable:"+e.ID.String(), fam.unroutable
 	return r.send(ctx, tx, q, org, e.ID, step, "admin", m)
 }
 
@@ -230,7 +234,7 @@ func (r *Router) unroutable(ctx context.Context, tx db.TenantTx, q *dbq.Queries,
 // no vote unless they are eligible; an eligible one is recorded as a
 // decider.
 func (r *Router) owners(ctx context.Context, tx db.TenantTx, q *dbq.Queries, org ids.OrgID, e dbq.EntryForRoutingRow,
-	base notifapp.Message, approval bool, step int16, told []ids.UUID, ds []wdomain.Candidate,
+	base notifapp.Message, fam family, step int16, told []ids.UUID, ds []wdomain.Candidate,
 ) error {
 	a, err := q.GetAgent(ctx, org, *e.AgentID)
 	if err != nil {
@@ -246,7 +250,7 @@ func (r *Router) owners(ctx context.Context, tx db.TenantTx, q *dbq.Queries, org
 		return nil
 	}
 	m := base
-	m.Personal, m.PersonalOnly, m.Type = owners, true, escalatedType(approval)
+	m.Personal, m.PersonalOnly, m.Type = owners, true, fam.escalated
 	m.DedupeKey = "owners:" + e.ID.String() + ":" + strconv.Itoa(int(step))
 	kind := "owner"
 	if slices.ContainsFunc(ds, func(c wdomain.Candidate) bool { return slices.Contains(owners, c.User) }) {
@@ -364,24 +368,42 @@ func storedChain(ctx context.Context, q *dbq.Queries, org ids.OrgID, team *ids.U
 	return c, json.Unmarshal(row.Steps, &c.Steps)
 }
 
-// notice is an entry's notice: approval.requested for a hold or a
-// restoration (ids, the operation and the deadline only), else
-// waitlist.entry_created.
-func notice(ctx context.Context, q *dbq.Queries, org ids.OrgID, e dbq.EntryForRoutingRow) (notifapp.Message, bool, error) {
+// notice is an entry's notice, with the family of its later notices:
+// approval.requested for a hold or a restoration (ids, the operation and
+// the deadline only); reconciliation.waiting for an unknown outcome, linked
+// to its reconciliation page (G0 M7); else waitlist.entry_created.
+func notice(ctx context.Context, q *dbq.Queries, org ids.OrgID, e dbq.EntryForRoutingRow) (notifapp.Message, family, error) {
 	m := notifapp.Message{Org: org, Subject: &notifapp.Subject{Type: "waitlist_entry", ID: e.ID}}
 	deadline := e.DeadlineAt.UTC().Format(time.RFC3339)
-	if e.Kind != wdomain.KindActionHold && e.Kind != wdomain.KindRestoration {
-		m.Type, m.Params = "waitlist.entry_created", map[string]string{"kind": e.Kind, "deadline": deadline}
-		return m, false, nil
+	switch e.Kind {
+	case wdomain.KindActionHold, wdomain.KindRestoration:
+		req, err := q.GetApprovalRequest(ctx, org, e.SubjectID)
+		if err != nil {
+			return m, approvalNotices, err
+		}
+		m.Type, m.Params = "approval.requested", map[string]string{
+			"operation": req.Operation, "agent": req.AgentID.String(), "deadline": deadline, "request": req.ID.String(),
+		}
+		return m, approvalNotices, nil
+	case wdomain.KindReconciliation:
+		k, err := q.ReconciliationOfTransaction(ctx, org, e.SubjectID)
+		switch {
+		case db.IsNoRows(err): // an entry without its task: the generic notice
+		case err != nil:
+			return m, reconciliationNotices, err
+		default:
+			t, err := q.TransactionOfRun(ctx, org, e.SubjectID)
+			if err != nil {
+				return m, reconciliationNotices, err
+			}
+			m.Type, m.Params = "reconciliation.waiting", map[string]string{
+				"operation": t.Operation, "agent": t.AgentID.String(), "reconciliation": k.String(),
+			}
+			return m, reconciliationNotices, nil
+		}
 	}
-	req, err := q.GetApprovalRequest(ctx, org, e.SubjectID)
-	if err != nil {
-		return m, true, err
-	}
-	m.Type, m.Params = "approval.requested", map[string]string{
-		"operation": req.Operation, "agent": req.AgentID.String(), "deadline": deadline, "request": req.ID.String(),
-	}
-	return m, true, nil
+	m.Type, m.Params = "waitlist.entry_created", map[string]string{"kind": e.Kind, "deadline": deadline}
+	return m, entryNotices, nil
 }
 
 func recordRoutes(ctx context.Context, q *dbq.Queries, org ids.OrgID, entry ids.UUID, step int16, kind string, users, channels []ids.UUID) error {

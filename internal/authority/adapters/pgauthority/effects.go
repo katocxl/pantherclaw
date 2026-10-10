@@ -24,6 +24,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	tdomain "github.com/katocxl/pantherclaw/internal/transactions/domain"
+	"github.com/katocxl/pantherclaw/internal/waitlist/adapters/pgwaitlist"
 )
 
 // What happens after a dispatch (G0 M7 track A, HR-190..192): every
@@ -198,10 +199,11 @@ func scheduleVerification(ctx context.Context, q *dbq.Queries, org ids.OrgID, c 
 // lateReport handles a gateway's RecordExecution for a permit the sweeper
 // already marked UNKNOWN (PAP-1 §7.4): the report is kept as an
 // observation; accepted resolves the reconciliation as occurred (evidence
-// only ever resolves that way, HR-192), commits the reservations and
-// schedules the follow-up read; any other outcome resolves nothing. It
-// returns the sweeper's execution receipt.
-func lateReport(ctx context.Context, q *dbq.Queries, org ids.OrgID, gatewayID string, e finalize.Execution,
+// only ever resolves that way, HR-192), commits the reservations, closes
+// the RECONCILIATION waitlist entry and schedules the follow-up read; any
+// other outcome resolves nothing. It returns the sweeper's execution
+// receipt.
+func lateReport(ctx context.Context, tx db.TenantTx, q *dbq.Queries, org ids.OrgID, gatewayID string, e finalize.Execution,
 	c dbq.ExecutionContextRow,
 ) (string, error) {
 	rec, err := q.RecordedExecution(ctx, org, e.Permit, gatewayID)
@@ -244,6 +246,10 @@ func lateReport(ctx context.Context, q *dbq.Queries, org ids.OrgID, gatewayID st
 			return "", err
 		}
 		if err := q.SettleDedupeClaim(ctx, string(pipeline.ClaimSucceeded), org, txn); err != nil {
+			return "", err
+		}
+		if err := pgwaitlist.CloseReconciliation(ctx, tx, org, txn, pgwaitlist.ResolvedOccurred,
+			evdomain.Actor{Type: "gateway", ID: gatewayID}); err != nil {
 			return "", err
 		}
 	}
