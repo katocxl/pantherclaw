@@ -37,7 +37,7 @@ const (
 // retention policy revisions.
 var m7rEvidenceTables = []string{
 	"ledger_entries", "ledger_chain", "decision_receipts", "execution_receipts", "effect_receipts", "observations",
-	"evaluation_inputs", "approval_evidence", "ledger_tiles", "checkpoints", "anchor_leaves", "retention_policies",
+	"evaluation_inputs", "approval_evidence", "ledger_tiles", "checkpoints", "anchor_leaves", "retention_policies", "payload_captures",
 }
 
 // TestHR055_PcAppCannotUpdateOrDeleteAnyEvidenceTable (M7 part): pc_app
@@ -103,14 +103,15 @@ func TestHR198_RetentionRoleHasOnlyItsGrants(t *testing.T) {
 	}
 	for _, c := range cols("SELECT") {
 		if strings.HasSuffix(c, ".reason") || strings.HasSuffix(c, ".release_reason") || strings.HasPrefix(c, "evaluation_inputs.inputs") ||
-			strings.HasSuffix(c, ".receipt_jws") || strings.HasSuffix(c, ".note") || strings.HasPrefix(c, "observations.fields") {
+			strings.HasSuffix(c, ".receipt_jws") || strings.HasSuffix(c, ".note") || strings.HasPrefix(c, "observations.fields") ||
+			c == "payload_captures.content" {
 			t.Errorf("pc_retention reads %s, which it never needs", c)
 		}
 	}
 	var tables []string
 	d.AdminQueryRow(t, `SELECT coalesce(array_agg(table_name || ':' || privilege_type ORDER BY table_name, privilege_type), '{}')
 		FROM information_schema.table_privileges WHERE grantee = 'pc_retention' AND table_schema = 'pc'`, nil, &tables)
-	if want := []string{"evaluation_inputs:DELETE", "retention_policies:SELECT"}; !slices.Equal(tables, want) {
+	if want := []string{"evaluation_inputs:DELETE", "payload_captures:DELETE", "retention_policies:SELECT"}; !slices.Equal(tables, want) {
 		t.Errorf("pc_retention table privileges = %v, want %v", tables, want)
 	}
 }

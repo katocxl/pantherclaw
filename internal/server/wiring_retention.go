@@ -18,13 +18,15 @@ import (
 )
 
 // registerEvidenceAdmin serves EvidenceAdminService on the public API (G0
-// M7 design decision 9): retention policies and legal holds, as pc_app.
+// M7 design decisions 9 and 10): retention policies, legal holds, capture
+// profiles and the audited read of a capture, as pc_app.
 func registerEvidenceAdmin(rs *connect.Server, d apiDeps) {
 	svc := &retention.Service{Pool: d.pool}
+	cs := d.captures.service(d.pool)
 	if d.m5 != nil && d.m5.notifications != nil {
-		svc.Notify = d.m5.notifications
+		svc.Notify, cs.Notify = d.m5.notifications, d.m5.notifications
 	}
-	pantherclawv1connect.RegisterEvidenceAdminServiceHandler(rs, evidenceadminrpc.New(svc))
+	pantherclawv1connect.RegisterEvidenceAdminServiceHandler(rs, evidenceadminrpc.New(svc, cs))
 }
 
 // retentionPoolConns bounds the retention role's pool: one job per org at a

@@ -42,24 +42,32 @@ func TestHR198_RetentionRunsOnARoleOfItsOwn(t *testing.T) {
 	}
 }
 
-// TestHR198_EvidenceAdminIsRetentionManageOnly: every EvidenceAdminService
-// procedure needs evidence.retention.manage, a human-only permission that
-// neither the Org Admin nor the Auditor holds (T-043).
-func TestHR198_EvidenceAdminIsRetentionManageOnly(t *testing.T) {
-	if len(evidenceAdminProcedures) != 5 {
-		t.Fatalf("procedures %v", slices.Collect(maps.Keys(evidenceAdminProcedures)))
-	}
+// TestHR198_EvidenceAdminNeedsItsHumanOnlyPermissions: retention and holds
+// need evidence.retention.manage, capture profiles evidence.capture.manage
+// and reading a capture evidence.read_restricted (HR-199), all human only;
+// the Org Admin holds none of them, and the Auditor only the read (T-043).
+func TestHR198_EvidenceAdminNeedsItsHumanOnlyPermissions(t *testing.T) {
+	want := map[td.Permission]int{td.PermEvidenceRetentionManage: 5, td.PermEvidenceCaptureManage: 3, td.PermEvidenceReadRestricted: 1}
+	got := map[td.Permission]int{}
 	for proc, perm := range evidenceAdminProcedures {
-		if perm != td.PermEvidenceRetentionManage || procedurePermissions[proc] != perm {
+		got[perm]++
+		if procedurePermissions[proc] != perm {
 			t.Errorf("%s: %q", proc, perm)
 		}
 	}
-	if !td.PermEvidenceRetentionManage.HumanOnly() {
-		t.Fatal("evidence.retention.manage must be human only")
+	if !maps.Equal(got, want) {
+		t.Fatalf("procedures by permission %v, want %v (%v)", got, want, slices.Collect(maps.Keys(evidenceAdminProcedures)))
 	}
-	for _, name := range []td.RoleName{td.RoleOrgAdmin, td.RoleAuditor, td.RoleSecurityAdmin} {
-		if r, ok := td.LookupRole(name); !ok || r.Has(td.PermEvidenceRetentionManage) {
-			t.Errorf("%s holds evidence.retention.manage", name)
+	for p := range want {
+		if !p.HumanOnly() {
+			t.Errorf("%s must be human only", p)
 		}
+		if r, ok := td.LookupRole(td.RoleOrgAdmin); !ok || r.Has(p) {
+			t.Errorf("the Org Admin holds %s", p)
+		}
+	}
+	if r, ok := td.LookupRole(td.RoleAuditor); !ok || r.Has(td.PermEvidenceRetentionManage) || r.Has(td.PermEvidenceCaptureManage) ||
+		!r.Has(td.PermEvidenceReadRestricted) {
+		t.Error("the Auditor reads captures and neither configures retention nor capture")
 	}
 }

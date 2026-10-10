@@ -42,6 +42,18 @@ const (
 	// EvidenceAdminServiceListLegalHoldsProcedure is the procedure name of the EvidenceAdminService's
 	// ListLegalHolds RPC.
 	EvidenceAdminServiceListLegalHoldsProcedure = "/pantherclaw.v1.EvidenceAdminService/ListLegalHolds"
+	// EvidenceAdminServiceCreateCaptureProfileProcedure is the procedure name of the
+	// EvidenceAdminService's CreateCaptureProfile RPC.
+	EvidenceAdminServiceCreateCaptureProfileProcedure = "/pantherclaw.v1.EvidenceAdminService/CreateCaptureProfile"
+	// EvidenceAdminServiceListCaptureProfilesProcedure is the procedure name of the
+	// EvidenceAdminService's ListCaptureProfiles RPC.
+	EvidenceAdminServiceListCaptureProfilesProcedure = "/pantherclaw.v1.EvidenceAdminService/ListCaptureProfiles"
+	// EvidenceAdminServiceDisableCaptureProfileProcedure is the procedure name of the
+	// EvidenceAdminService's DisableCaptureProfile RPC.
+	EvidenceAdminServiceDisableCaptureProfileProcedure = "/pantherclaw.v1.EvidenceAdminService/DisableCaptureProfile"
+	// EvidenceAdminServiceReadPayloadCaptureProcedure is the procedure name of the
+	// EvidenceAdminService's ReadPayloadCapture RPC.
+	EvidenceAdminServiceReadPayloadCaptureProcedure = "/pantherclaw.v1.EvidenceAdminService/ReadPayloadCapture"
 )
 
 var (
@@ -82,6 +94,35 @@ var (
 			IdempotencyLevel: connect.IdempotencyNoSideEffects,
 		}
 	})
+	evidenceAdminServiceCreateCaptureProfileSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_pantherclaw_v1_evidence_admin_proto.Services().ByName("EvidenceAdminService").Methods().ByName("CreateCaptureProfile"),
+			Procedure:  EvidenceAdminServiceCreateCaptureProfileProcedure,
+		}
+	})
+	evidenceAdminServiceListCaptureProfilesSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_pantherclaw_v1_evidence_admin_proto.Services().ByName("EvidenceAdminService").Methods().ByName("ListCaptureProfiles"),
+			Procedure:        EvidenceAdminServiceListCaptureProfilesProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
+	evidenceAdminServiceDisableCaptureProfileSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_pantherclaw_v1_evidence_admin_proto.Services().ByName("EvidenceAdminService").Methods().ByName("DisableCaptureProfile"),
+			Procedure:  EvidenceAdminServiceDisableCaptureProfileProcedure,
+		}
+	})
+	evidenceAdminServiceReadPayloadCaptureSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_pantherclaw_v1_evidence_admin_proto.Services().ByName("EvidenceAdminService").Methods().ByName("ReadPayloadCapture"),
+			Procedure:  EvidenceAdminServiceReadPayloadCaptureProcedure,
+		}
+	})
 )
 
 // EvidenceAdminServiceClient is a client for the pantherclaw.v1.EvidenceAdminService service.
@@ -105,6 +146,23 @@ type EvidenceAdminServiceClient interface {
 	// ListLegalHolds lists the org's holds, newest first.
 	// permission: evidence.retention.manage
 	ListLegalHolds(context.Context, *v1.ListLegalHoldsRequest) (*v1.ListLegalHoldsResponse, error)
+	// CreateCaptureProfile switches payload capture on for some connections
+	// and operations, with a purpose and limits. It is audited, notified to
+	// the org's admins and auditors, and reaches the gateways serving those
+	// connections in their configuration.
+	// permission: evidence.capture.manage
+	CreateCaptureProfile(context.Context, *v1.CreateCaptureProfileRequest) (*v1.CreateCaptureProfileResponse, error)
+	// ListCaptureProfiles lists the org's capture profiles, newest first.
+	// permission: evidence.capture.manage
+	ListCaptureProfiles(context.Context, *v1.ListCaptureProfilesRequest) (*v1.ListCaptureProfilesResponse, error)
+	// DisableCaptureProfile stops a profile at once (audited and notified).
+	// permission: evidence.capture.manage
+	DisableCaptureProfile(context.Context, *v1.DisableCaptureProfileRequest) (*v1.DisableCaptureProfileResponse, error)
+	// ReadPayloadCapture returns one captured body. The read (who, which
+	// capture, the reason) is written to the audit ledger before the
+	// content is returned.
+	// permission: evidence.read_restricted
+	ReadPayloadCapture(context.Context, *v1.ReadPayloadCaptureRequest) (*v1.ReadPayloadCaptureResponse, error)
 }
 
 // NewEvidenceAdminServiceClient constructs a client for the pantherclaw.v1.EvidenceAdminService
@@ -135,6 +193,23 @@ type EvidenceAdminServiceHandler interface {
 	// ListLegalHolds lists the org's holds, newest first.
 	// permission: evidence.retention.manage
 	ListLegalHolds(context.Context, *v1.ListLegalHoldsRequest) (*v1.ListLegalHoldsResponse, error)
+	// CreateCaptureProfile switches payload capture on for some connections
+	// and operations, with a purpose and limits. It is audited, notified to
+	// the org's admins and auditors, and reaches the gateways serving those
+	// connections in their configuration.
+	// permission: evidence.capture.manage
+	CreateCaptureProfile(context.Context, *v1.CreateCaptureProfileRequest) (*v1.CreateCaptureProfileResponse, error)
+	// ListCaptureProfiles lists the org's capture profiles, newest first.
+	// permission: evidence.capture.manage
+	ListCaptureProfiles(context.Context, *v1.ListCaptureProfilesRequest) (*v1.ListCaptureProfilesResponse, error)
+	// DisableCaptureProfile stops a profile at once (audited and notified).
+	// permission: evidence.capture.manage
+	DisableCaptureProfile(context.Context, *v1.DisableCaptureProfileRequest) (*v1.DisableCaptureProfileResponse, error)
+	// ReadPayloadCapture returns one captured body. The read (who, which
+	// capture, the reason) is written to the audit ledger before the
+	// content is returned.
+	// permission: evidence.read_restricted
+	ReadPayloadCapture(context.Context, *v1.ReadPayloadCaptureRequest) (*v1.ReadPayloadCaptureResponse, error)
 }
 
 // RegisterEvidenceAdminServiceHandler registers svc as the pantherclaw.v1.EvidenceAdminService
@@ -147,6 +222,10 @@ func RegisterEvidenceAdminServiceHandler(server *connect.Server, svc EvidenceAdm
 		connect.Method{Spec: evidenceAdminServiceCreateLegalHoldSpec(), Handler: adapter.createLegalHold},
 		connect.Method{Spec: evidenceAdminServiceReleaseLegalHoldSpec(), Handler: adapter.releaseLegalHold},
 		connect.Method{Spec: evidenceAdminServiceListLegalHoldsSpec(), Handler: adapter.listLegalHolds},
+		connect.Method{Spec: evidenceAdminServiceCreateCaptureProfileSpec(), Handler: adapter.createCaptureProfile},
+		connect.Method{Spec: evidenceAdminServiceListCaptureProfilesSpec(), Handler: adapter.listCaptureProfiles},
+		connect.Method{Spec: evidenceAdminServiceDisableCaptureProfileSpec(), Handler: adapter.disableCaptureProfile},
+		connect.Method{Spec: evidenceAdminServiceReadPayloadCaptureSpec(), Handler: adapter.readPayloadCapture},
 	)
 }
 
@@ -171,6 +250,22 @@ func (UnimplementedEvidenceAdminServiceHandler) ReleaseLegalHold(context.Context
 
 func (UnimplementedEvidenceAdminServiceHandler) ListLegalHolds(context.Context, *v1.ListLegalHoldsRequest) (*v1.ListLegalHoldsResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.EvidenceAdminService.ListLegalHolds is not implemented")
+}
+
+func (UnimplementedEvidenceAdminServiceHandler) CreateCaptureProfile(context.Context, *v1.CreateCaptureProfileRequest) (*v1.CreateCaptureProfileResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.EvidenceAdminService.CreateCaptureProfile is not implemented")
+}
+
+func (UnimplementedEvidenceAdminServiceHandler) ListCaptureProfiles(context.Context, *v1.ListCaptureProfilesRequest) (*v1.ListCaptureProfilesResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.EvidenceAdminService.ListCaptureProfiles is not implemented")
+}
+
+func (UnimplementedEvidenceAdminServiceHandler) DisableCaptureProfile(context.Context, *v1.DisableCaptureProfileRequest) (*v1.DisableCaptureProfileResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.EvidenceAdminService.DisableCaptureProfile is not implemented")
+}
+
+func (UnimplementedEvidenceAdminServiceHandler) ReadPayloadCapture(context.Context, *v1.ReadPayloadCaptureRequest) (*v1.ReadPayloadCaptureResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.EvidenceAdminService.ReadPayloadCapture is not implemented")
 }
 
 type evidenceAdminServiceClient struct {
@@ -212,6 +307,38 @@ func (c *evidenceAdminServiceClient) ReleaseLegalHold(ctx context.Context, req *
 func (c *evidenceAdminServiceClient) ListLegalHolds(ctx context.Context, req *v1.ListLegalHoldsRequest) (*v1.ListLegalHoldsResponse, error) {
 	var res v1.ListLegalHoldsResponse
 	if err := c.client.CallUnary(ctx, evidenceAdminServiceListLegalHoldsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *evidenceAdminServiceClient) CreateCaptureProfile(ctx context.Context, req *v1.CreateCaptureProfileRequest) (*v1.CreateCaptureProfileResponse, error) {
+	var res v1.CreateCaptureProfileResponse
+	if err := c.client.CallUnary(ctx, evidenceAdminServiceCreateCaptureProfileSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *evidenceAdminServiceClient) ListCaptureProfiles(ctx context.Context, req *v1.ListCaptureProfilesRequest) (*v1.ListCaptureProfilesResponse, error) {
+	var res v1.ListCaptureProfilesResponse
+	if err := c.client.CallUnary(ctx, evidenceAdminServiceListCaptureProfilesSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *evidenceAdminServiceClient) DisableCaptureProfile(ctx context.Context, req *v1.DisableCaptureProfileRequest) (*v1.DisableCaptureProfileResponse, error) {
+	var res v1.DisableCaptureProfileResponse
+	if err := c.client.CallUnary(ctx, evidenceAdminServiceDisableCaptureProfileSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *evidenceAdminServiceClient) ReadPayloadCapture(ctx context.Context, req *v1.ReadPayloadCaptureRequest) (*v1.ReadPayloadCaptureResponse, error) {
+	var res v1.ReadPayloadCaptureResponse
+	if err := c.client.CallUnary(ctx, evidenceAdminServiceReadPayloadCaptureSpec(), req, &res); err != nil {
 		return nil, err
 	}
 	return &res, nil
@@ -273,6 +400,54 @@ func (h evidenceAdminServiceHandler) listLegalHolds(ctx context.Context, _ conne
 		return err
 	}
 	res, err := h.svc.ListLegalHolds(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h evidenceAdminServiceHandler) createCaptureProfile(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.CreateCaptureProfileRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.CreateCaptureProfile(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h evidenceAdminServiceHandler) listCaptureProfiles(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListCaptureProfilesRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListCaptureProfiles(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h evidenceAdminServiceHandler) disableCaptureProfile(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.DisableCaptureProfileRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.DisableCaptureProfile(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h evidenceAdminServiceHandler) readPayloadCapture(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ReadPayloadCaptureRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ReadPayloadCapture(ctx, &req)
 	if err != nil {
 		return err
 	}

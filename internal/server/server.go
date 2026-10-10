@@ -224,6 +224,8 @@ func cmdServe(ctx context.Context, args []string, stderr io.Writer, env Env, onS
 	if err != nil {
 		return err
 	}
+	captures := newCaptures(pool, kp, log)
+	svc.WithCaptures(captures.recorder)
 	m5, err := newM5(ctx, cfg, pool, kp, bill, log)
 	if err != nil {
 		return err
@@ -307,6 +309,7 @@ func cmdServe(ctx context.Context, args []string, stderr io.Writer, env Env, onS
 			packageRoots: roots,
 			web:          web,
 			m5:           m5,
+			captures:     captures,
 			m6:           m6,
 			m5p2:         m5p2,
 			verification: verification,
@@ -468,6 +471,8 @@ type apiDeps struct {
 	m5p2 *m5p2Services
 	// M7: verification signs the effect receipts people's actions append.
 	verification *txapp.Service
+	// captures seal and open restricted payload captures (M7 B9).
+	captures *captureServices
 }
 
 // apiHandler mounts the RPC services, health endpoints and the JWKS.

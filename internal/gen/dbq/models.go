@@ -291,6 +291,24 @@ type PcBusinessUnit struct {
 	UpdatedAt   time.Time
 }
 
+type PcCaptureProfile struct {
+	OrgID           ids.OrgID
+	ID              ids.UUID
+	Purpose         string
+	Connections     []ids.UUID
+	Operations      []string
+	CaptureRequest  bool
+	CaptureResponse bool
+	ByteCap         int32
+	RetentionDays   int32
+	ExpiresAt       time.Time
+	State           string
+	CreatedBy       ids.UUID
+	CreatedAt       time.Time
+	DisabledBy      *ids.UUID
+	DisabledAt      *time.Time
+}
+
 type PcCheckpoint struct {
 	OrgID     ids.OrgID
 	TreeSize  int64
@@ -1030,6 +1048,20 @@ type PcPackageVersion struct {
 	ImportedAt   time.Time
 	ChangedAt    time.Time
 	SigningKeyID *ids.UUID
+}
+
+type PcPayloadCapture struct {
+	OrgID         ids.OrgID
+	ID            ids.UUID
+	AttemptID     ids.UUID
+	TransactionID ids.UUID
+	ProfileID     ids.UUID
+	Direction     string
+	Content       []byte
+	Size          int32
+	Truncated     bool
+	CreatedAt     time.Time
+	RemoveAt      time.Time
 }
 
 type PcPermit struct {

@@ -164,6 +164,7 @@ func (h *Handler) RecordExecution(ctx context.Context, req *pantherclawv1.Record
 	if err != nil {
 		return nil, err
 	}
+	h.svc.recordCaptures(ctx, gw, id, outcome, req.GetCaptures())
 	return &pantherclawv1.RecordExecutionResponse{Receipt: receipt}, nil
 }
 
