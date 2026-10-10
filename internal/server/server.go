@@ -289,6 +289,7 @@ func cmdServe(ctx context.Context, args []string, stderr io.Writer, env Env, onS
 		}
 		m6.mountPages(web)
 		m5p2.mountPages(web, m5)
+		mountM7Pages(web, pool, verification, m5)
 		device.WithBrowserCallback(web.Callback)
 		roots, err := packageRoots(ctx, cfg, log)
 		if err != nil {
