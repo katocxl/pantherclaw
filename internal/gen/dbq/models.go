@@ -616,6 +616,26 @@ type PcEvidenceIntegrity struct {
 	UpdatedAt    time.Time
 }
 
+type PcEvidencePack struct {
+	OrgID          ids.OrgID
+	ID             ids.UUID
+	CreatedBy      ids.UUID
+	ScopeKind      string
+	Scope          []byte
+	Include        []byte
+	State          string
+	ErrorCode      *string
+	Manifest       *string
+	ManifestSha256 []byte
+	Content        []byte
+	ContentSha256  []byte
+	ContentSize    pgtype.Int8
+	Items          *int32
+	CreatedAt      time.Time
+	ReadyAt        *time.Time
+	ExpiresAt      *time.Time
+}
+
 type PcExecutionAttempt struct {
 	OrgID          ids.OrgID
 	ID             ids.UUID

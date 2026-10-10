@@ -84,3 +84,13 @@ The incident is closed when the status query shows `OK` with a `verified_at` lat
 | `a reason of 1 to 500 bytes …` | Give a one-line reason without control or bidi characters. |
 | `no such organization` | Check the org id. |
 | `… is not FAILED: nothing changed` | The org has not failed, or another operator reset it already. Check the status. |
+
+## Evidence packs
+
+An evidence pack (Team edition; G0 M7 design decision 15, HR-196) is a ZIP of canonical JSON with a signed manifest. A person holding `evidence.export` asks for one with `pclaw pack create` (transactions, a run, an agent, or a time range); the worker builds it from that person's permissions when the job runs, and what they could not read is left out and listed as a gap with its reason. Download it within 7 days with `pclaw pack download ID --out pack.zip`; every download is audited (`evidence.pack_downloaded`). Check it offline with the same trust file as bundles:
+
+```bash
+pclaw verify pack.zip --trust trust.json [--sigstore-trusted-root trusted_root.json]
+```
+
+`pclaw verify` checks the manifest's signature by a pinned `evidence_packs` key, the origin, every file's SHA-256, that no file was added, the optional ML-DSA-65 co-signature, the fixed sentence "This pack supports review; it does not certify compliance.", and every verify bundle inside (receipts, chain links, inclusion proofs, checkpoints, the anchor). The gaps the manifest declares (removed bodies, transactions outside the creator's permissions, not checkpointed, not anchored, captures not available) are reported as not available. A pack that fails is changed or not from your deployment: do not rely on it.

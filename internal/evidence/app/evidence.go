@@ -66,6 +66,9 @@ type Service struct {
 	// replay and its per-caller limit; nil until WithReplay.
 	replay      Replayer
 	replayLimit *httpx.Limiter
+	// Evidence packs; nil until WithPacks.
+	enqueuePack PackEnqueuer
+	editions    Editions
 }
 
 // New returns the service; logOrigin is evidence.log_origin.
