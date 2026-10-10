@@ -79,6 +79,64 @@ func (LedgerIntegrityState) EnumDescriptor() ([]byte, []int) {
 	return file_pantherclaw_v1_evidence_proto_rawDescGZIP(), []int{0}
 }
 
+// AnchorState is where one anchor of the global root stands (HR-195).
+type AnchorState int32
+
+const (
+	AnchorState_ANCHOR_STATE_UNSPECIFIED AnchorState = 0
+	// Signed, not yet entered in the transparency log and timestamped.
+	AnchorState_ANCHOR_STATE_PENDING AnchorState = 1
+	// Entered in the configured transparency log and timestamped; both
+	// responses verified.
+	AnchorState_ANCHOR_STATE_ANCHORED AnchorState = 2
+	// The last attempt failed; it is retried with backoff until its attempts
+	// run out. Authorization never waits for an anchor.
+	AnchorState_ANCHOR_STATE_FAILED AnchorState = 3
+)
+
+// Enum value maps for AnchorState.
+var (
+	AnchorState_name = map[int32]string{
+		0: "ANCHOR_STATE_UNSPECIFIED",
+		1: "ANCHOR_STATE_PENDING",
+		2: "ANCHOR_STATE_ANCHORED",
+		3: "ANCHOR_STATE_FAILED",
+	}
+	AnchorState_value = map[string]int32{
+		"ANCHOR_STATE_UNSPECIFIED": 0,
+		"ANCHOR_STATE_PENDING":     1,
+		"ANCHOR_STATE_ANCHORED":    2,
+		"ANCHOR_STATE_FAILED":      3,
+	}
+)
+
+func (x AnchorState) Enum() *AnchorState {
+	p := new(AnchorState)
+	*p = x
+	return p
+}
+
+func (x AnchorState) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (AnchorState) Descriptor() protoreflect.EnumDescriptor {
+	return file_pantherclaw_v1_evidence_proto_enumTypes[1].Descriptor()
+}
+
+func (AnchorState) Type() protoreflect.EnumType {
+	return &file_pantherclaw_v1_evidence_proto_enumTypes[1]
+}
+
+func (x AnchorState) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use AnchorState.Descriptor instead.
+func (AnchorState) EnumDescriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_evidence_proto_rawDescGZIP(), []int{1}
+}
+
 // LedgerIntegrity is the integrity status of the org's evidence ledger (HR-194).
 type LedgerIntegrity struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -93,9 +151,16 @@ type LedgerIntegrity struct {
 	// The tree size the daily job last verified, and when.
 	VerifiedSize uint64 `protobuf:"varint,5,opt,name=verified_size,json=verifiedSize,proto3" json:"verified_size,omitempty"`
 	// When it last verified it.
-	VerifyTime    *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=verify_time,json=verifyTime,proto3" json:"verify_time,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	VerifyTime *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=verify_time,json=verifyTime,proto3" json:"verify_time,omitempty"`
+	// The state of the org's newest anchor (HR-195); unspecified when none
+	// holds one of its checkpoints yet (anchoring off, or not run yet).
+	AnchorState AnchorState `protobuf:"varint,7,opt,name=anchor_state,json=anchorState,proto3,enum=pantherclaw.v1.AnchorState" json:"anchor_state,omitempty"`
+	// That anchor's period.
+	AnchorPeriod *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=anchor_period,json=anchorPeriod,proto3" json:"anchor_period,omitempty"`
+	// For a FAILED anchor: why its last attempt failed.
+	AnchorErrorCode string `protobuf:"bytes,9,opt,name=anchor_error_code,json=anchorErrorCode,proto3" json:"anchor_error_code,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *LedgerIntegrity) Reset() {
@@ -168,6 +233,27 @@ func (x *LedgerIntegrity) GetVerifyTime() *timestamppb.Timestamp {
 		return x.VerifyTime
 	}
 	return nil
+}
+
+func (x *LedgerIntegrity) GetAnchorState() AnchorState {
+	if x != nil {
+		return x.AnchorState
+	}
+	return AnchorState_ANCHOR_STATE_UNSPECIFIED
+}
+
+func (x *LedgerIntegrity) GetAnchorPeriod() *timestamppb.Timestamp {
+	if x != nil {
+		return x.AnchorPeriod
+	}
+	return nil
+}
+
+func (x *LedgerIntegrity) GetAnchorErrorCode() string {
+	if x != nil {
+		return x.AnchorErrorCode
+	}
+	return ""
 }
 
 // Checkpoint is one signed checkpoint of the org's tree.
@@ -947,8 +1033,10 @@ type ExportBundleResponse struct {
 	Receipts int32 `protobuf:"varint,3,opt,name=receipts,proto3" json:"receipts,omitempty"`
 	// The tree size of its latest checkpoint; 0 when the org has none yet.
 	CheckpointSize uint64 `protobuf:"varint,4,opt,name=checkpoint_size,json=checkpointSize,proto3" json:"checkpoint_size,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// Whether it holds the anchor of one of its checkpoints.
+	Anchored      bool `protobuf:"varint,5,opt,name=anchored,proto3" json:"anchored,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ExportBundleResponse) Reset() {
@@ -1009,11 +1097,744 @@ func (x *ExportBundleResponse) GetCheckpointSize() uint64 {
 	return 0
 }
 
+func (x *ExportBundleResponse) GetAnchored() bool {
+	if x != nil {
+		return x.Anchored
+	}
+	return false
+}
+
+// Anchor is one anchor of the global root as it concerns the org: the org's
+// blinded leaf in it and the checkpoint that leaf commits to.
+type Anchor struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The anchor's id.
+	Id string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	// Start of its anchoring period.
+	Period *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=period,proto3" json:"period,omitempty"`
+	// State.
+	State AnchorState `protobuf:"varint,3,opt,name=state,proto3,enum=pantherclaw.v1.AnchorState" json:"state,omitempty"`
+	// The tree size of the org's checkpoint the leaf commits to.
+	CheckpointSize uint64 `protobuf:"varint,4,opt,name=checkpoint_size,json=checkpointSize,proto3" json:"checkpoint_size,omitempty"`
+	// The org's leaf position in the global tree.
+	LeafIndex uint32 `protobuf:"varint,5,opt,name=leaf_index,json=leafIndex,proto3" json:"leaf_index,omitempty"`
+	// How many leaves (orgs) the global tree has.
+	Leaves uint32 `protobuf:"varint,6,opt,name=leaves,proto3" json:"leaves,omitempty"`
+	// The global root (32 bytes).
+	Root []byte `protobuf:"bytes,7,opt,name=root,proto3" json:"root,omitempty"`
+	// The anchors key that signed the statement.
+	Kid string `protobuf:"bytes,8,opt,name=kid,proto3" json:"kid,omitempty"`
+	// Attempts made to log and timestamp it.
+	Attempts int32 `protobuf:"varint,9,opt,name=attempts,proto3" json:"attempts,omitempty"`
+	// For FAILED: why the last attempt failed, for example REKOR_FAILED.
+	ErrorCode string `protobuf:"bytes,10,opt,name=error_code,json=errorCode,proto3" json:"error_code,omitempty"`
+	// When it was created.
+	CreateTime *timestamppb.Timestamp `protobuf:"bytes,11,opt,name=create_time,json=createTime,proto3" json:"create_time,omitempty"`
+	// For ANCHORED: when both responses were verified.
+	AnchorTime    *timestamppb.Timestamp `protobuf:"bytes,12,opt,name=anchor_time,json=anchorTime,proto3" json:"anchor_time,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Anchor) Reset() {
+	*x = Anchor{}
+	mi := &file_pantherclaw_v1_evidence_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Anchor) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Anchor) ProtoMessage() {}
+
+func (x *Anchor) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_evidence_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Anchor.ProtoReflect.Descriptor instead.
+func (*Anchor) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_evidence_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *Anchor) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *Anchor) GetPeriod() *timestamppb.Timestamp {
+	if x != nil {
+		return x.Period
+	}
+	return nil
+}
+
+func (x *Anchor) GetState() AnchorState {
+	if x != nil {
+		return x.State
+	}
+	return AnchorState_ANCHOR_STATE_UNSPECIFIED
+}
+
+func (x *Anchor) GetCheckpointSize() uint64 {
+	if x != nil {
+		return x.CheckpointSize
+	}
+	return 0
+}
+
+func (x *Anchor) GetLeafIndex() uint32 {
+	if x != nil {
+		return x.LeafIndex
+	}
+	return 0
+}
+
+func (x *Anchor) GetLeaves() uint32 {
+	if x != nil {
+		return x.Leaves
+	}
+	return 0
+}
+
+func (x *Anchor) GetRoot() []byte {
+	if x != nil {
+		return x.Root
+	}
+	return nil
+}
+
+func (x *Anchor) GetKid() string {
+	if x != nil {
+		return x.Kid
+	}
+	return ""
+}
+
+func (x *Anchor) GetAttempts() int32 {
+	if x != nil {
+		return x.Attempts
+	}
+	return 0
+}
+
+func (x *Anchor) GetErrorCode() string {
+	if x != nil {
+		return x.ErrorCode
+	}
+	return ""
+}
+
+func (x *Anchor) GetCreateTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.CreateTime
+	}
+	return nil
+}
+
+func (x *Anchor) GetAnchorTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.AnchorTime
+	}
+	return nil
+}
+
+// ListAnchorsRequest pages through the org's anchors.
+type ListAnchorsRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Maximum results (default 50, at most 200).
+	PageSize int32 `protobuf:"varint,1,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
+	// Token from a previous response.
+	PageToken     string `protobuf:"bytes,2,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListAnchorsRequest) Reset() {
+	*x = ListAnchorsRequest{}
+	mi := &file_pantherclaw_v1_evidence_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListAnchorsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListAnchorsRequest) ProtoMessage() {}
+
+func (x *ListAnchorsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_evidence_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListAnchorsRequest.ProtoReflect.Descriptor instead.
+func (*ListAnchorsRequest) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_evidence_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *ListAnchorsRequest) GetPageSize() int32 {
+	if x != nil {
+		return x.PageSize
+	}
+	return 0
+}
+
+func (x *ListAnchorsRequest) GetPageToken() string {
+	if x != nil {
+		return x.PageToken
+	}
+	return ""
+}
+
+// ListAnchorsResponse returns a page.
+type ListAnchorsResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Anchors, newest period first.
+	Anchors []*Anchor `protobuf:"bytes,1,rep,name=anchors,proto3" json:"anchors,omitempty"`
+	// Token for the next page; empty on the last.
+	NextPageToken string `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListAnchorsResponse) Reset() {
+	*x = ListAnchorsResponse{}
+	mi := &file_pantherclaw_v1_evidence_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListAnchorsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListAnchorsResponse) ProtoMessage() {}
+
+func (x *ListAnchorsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_evidence_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListAnchorsResponse.ProtoReflect.Descriptor instead.
+func (*ListAnchorsResponse) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_evidence_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *ListAnchorsResponse) GetAnchors() []*Anchor {
+	if x != nil {
+		return x.Anchors
+	}
+	return nil
+}
+
+func (x *ListAnchorsResponse) GetNextPageToken() string {
+	if x != nil {
+		return x.NextPageToken
+	}
+	return ""
+}
+
+// ReplayDecisionRequest names an evaluation to replay.
+type ReplayDecisionRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The transaction.
+	TransactionId string `protobuf:"bytes,1,opt,name=transaction_id,json=transactionId,proto3" json:"transaction_id,omitempty"`
+	// The evaluation, from 1; 0 for the latest.
+	Evaluation int32 `protobuf:"varint,2,opt,name=evaluation,proto3" json:"evaluation,omitempty"`
+	// A stored policy version of the org (a draft, the published one or an
+	// earlier one) to replay under instead of the recorded policy (F505);
+	// empty for the recorded policy.
+	PolicyVersionId string `protobuf:"bytes,3,opt,name=policy_version_id,json=policyVersionId,proto3" json:"policy_version_id,omitempty"`
+	// Also return the recorded input values. They are returned only to a
+	// caller holding evidence.read_restricted where the transaction's agent
+	// lives (design decision 11); otherwise the replay comes back without
+	// them and inputs_withheld says why.
+	IncludeInputs bool `protobuf:"varint,4,opt,name=include_inputs,json=includeInputs,proto3" json:"include_inputs,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ReplayDecisionRequest) Reset() {
+	*x = ReplayDecisionRequest{}
+	mi := &file_pantherclaw_v1_evidence_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ReplayDecisionRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ReplayDecisionRequest) ProtoMessage() {}
+
+func (x *ReplayDecisionRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_evidence_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ReplayDecisionRequest.ProtoReflect.Descriptor instead.
+func (*ReplayDecisionRequest) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_evidence_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *ReplayDecisionRequest) GetTransactionId() string {
+	if x != nil {
+		return x.TransactionId
+	}
+	return ""
+}
+
+func (x *ReplayDecisionRequest) GetEvaluation() int32 {
+	if x != nil {
+		return x.Evaluation
+	}
+	return 0
+}
+
+func (x *ReplayDecisionRequest) GetPolicyVersionId() string {
+	if x != nil {
+		return x.PolicyVersionId
+	}
+	return ""
+}
+
+func (x *ReplayDecisionRequest) GetIncludeInputs() bool {
+	if x != nil {
+		return x.IncludeInputs
+	}
+	return false
+}
+
+// ReplayLimitation is why a replay is incomplete (F507).
+type ReplayLimitation struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// INPUTS_MISSING, INPUTS_TRUNCATED, INPUTS_UNREADABLE,
+	// FORMAT_UNSUPPORTED, PIPELINE_VERSION_UNSUPPORTED, POLICY_UNCOMPILABLE or
+	// INPUT_UNAVAILABLE.
+	Code string `protobuf:"bytes,1,opt,name=code,proto3" json:"code,omitempty"`
+	// The pipeline step it concerns; 0 for the whole replay.
+	Step int32 `protobuf:"varint,2,opt,name=step,proto3" json:"step,omitempty"`
+	// What is missing, never an input value.
+	Detail        string `protobuf:"bytes,3,opt,name=detail,proto3" json:"detail,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ReplayLimitation) Reset() {
+	*x = ReplayLimitation{}
+	mi := &file_pantherclaw_v1_evidence_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ReplayLimitation) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ReplayLimitation) ProtoMessage() {}
+
+func (x *ReplayLimitation) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_evidence_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ReplayLimitation.ProtoReflect.Descriptor instead.
+func (*ReplayLimitation) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_evidence_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *ReplayLimitation) GetCode() string {
+	if x != nil {
+		return x.Code
+	}
+	return ""
+}
+
+func (x *ReplayLimitation) GetStep() int32 {
+	if x != nil {
+		return x.Step
+	}
+	return 0
+}
+
+func (x *ReplayLimitation) GetDetail() string {
+	if x != nil {
+		return x.Detail
+	}
+	return ""
+}
+
+// ReplayDifference is one check whose items differ between the original and
+// the replay (F506).
+type ReplayDifference struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The pipeline step.
+	Step int32 `protobuf:"varint,1,opt,name=step,proto3" json:"step,omitempty"`
+	// The check's name.
+	Check string `protobuf:"bytes,2,opt,name=check,proto3" json:"check,omitempty"`
+	// The original's items of this check.
+	Original []*ChecklistItem `protobuf:"bytes,3,rep,name=original,proto3" json:"original,omitempty"`
+	// The replay's items of this check.
+	Replayed []*ChecklistItem `protobuf:"bytes,4,rep,name=replayed,proto3" json:"replayed,omitempty"`
+	// The policy rules among the differing items.
+	Rules []string `protobuf:"bytes,5,rep,name=rules,proto3" json:"rules,omitempty"`
+	// What differed in the inputs: the policy version, or reads the replay
+	// needed and could not have.
+	Inputs        []string `protobuf:"bytes,6,rep,name=inputs,proto3" json:"inputs,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ReplayDifference) Reset() {
+	*x = ReplayDifference{}
+	mi := &file_pantherclaw_v1_evidence_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ReplayDifference) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ReplayDifference) ProtoMessage() {}
+
+func (x *ReplayDifference) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_evidence_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ReplayDifference.ProtoReflect.Descriptor instead.
+func (*ReplayDifference) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_evidence_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *ReplayDifference) GetStep() int32 {
+	if x != nil {
+		return x.Step
+	}
+	return 0
+}
+
+func (x *ReplayDifference) GetCheck() string {
+	if x != nil {
+		return x.Check
+	}
+	return ""
+}
+
+func (x *ReplayDifference) GetOriginal() []*ChecklistItem {
+	if x != nil {
+		return x.Original
+	}
+	return nil
+}
+
+func (x *ReplayDifference) GetReplayed() []*ChecklistItem {
+	if x != nil {
+		return x.Replayed
+	}
+	return nil
+}
+
+func (x *ReplayDifference) GetRules() []string {
+	if x != nil {
+		return x.Rules
+	}
+	return nil
+}
+
+func (x *ReplayDifference) GetInputs() []string {
+	if x != nil {
+		return x.Inputs
+	}
+	return nil
+}
+
+// ReplayDecisionResponse is what the replay found. Decisions and checklists
+// need evidence.read; inputs is set only for evidence.read_restricted.
+type ReplayDecisionResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The transaction.
+	TransactionId string `protobuf:"bytes,1,opt,name=transaction_id,json=transactionId,proto3" json:"transaction_id,omitempty"`
+	// The evaluation replayed.
+	Evaluation int32 `protobuf:"varint,2,opt,name=evaluation,proto3" json:"evaluation,omitempty"`
+	// The policy replayed: "<bundle>@<version>", "none" (the evaluation read
+	// no policy), "unknown" or "unreadable".
+	Policy string `protobuf:"bytes,3,opt,name=policy,proto3" json:"policy,omitempty"`
+	// Whether a proposed policy version replaced the recorded one.
+	Proposed bool `protobuf:"varint,4,opt,name=proposed,proto3" json:"proposed,omitempty"`
+	// Whether the replay ran exactly; when false, incomplete says why and
+	// nothing is guessed.
+	Complete bool `protobuf:"varint,5,opt,name=complete,proto3" json:"complete,omitempty"`
+	// Why it is incomplete.
+	Incomplete []*ReplayLimitation `protobuf:"bytes,6,rep,name=incomplete,proto3" json:"incomplete,omitempty"`
+	// The replayed decision; unspecified when the replay could not run.
+	Decision Decision `protobuf:"varint,7,opt,name=decision,proto3,enum=pantherclaw.v1.Decision" json:"decision,omitempty"`
+	// The replayed decisive reason code.
+	Reason string `protobuf:"bytes,8,opt,name=reason,proto3" json:"reason,omitempty"`
+	// The replayed decision basis digest.
+	BasisDigest string `protobuf:"bytes,9,opt,name=basis_digest,json=basisDigest,proto3" json:"basis_digest,omitempty"`
+	// The replayed checklist.
+	Checklist []*ChecklistItem `protobuf:"bytes,10,rep,name=checklist,proto3" json:"checklist,omitempty"`
+	// The original decision, from its decision receipt.
+	OriginalDecision Decision `protobuf:"varint,11,opt,name=original_decision,json=originalDecision,proto3,enum=pantherclaw.v1.Decision" json:"original_decision,omitempty"`
+	// The original decisive reason code.
+	OriginalReason string `protobuf:"bytes,12,opt,name=original_reason,json=originalReason,proto3" json:"original_reason,omitempty"`
+	// The original decision basis digest.
+	OriginalBasisDigest string `protobuf:"bytes,13,opt,name=original_basis_digest,json=originalBasisDigest,proto3" json:"original_basis_digest,omitempty"`
+	// The original checklist, as the receipt kept it.
+	OriginalChecklist []*ChecklistItem `protobuf:"bytes,14,rep,name=original_checklist,json=originalChecklist,proto3" json:"original_checklist,omitempty"`
+	// Checklist items the receipt left out to fit.
+	OriginalOmitted int32 `protobuf:"varint,15,opt,name=original_omitted,json=originalOmitted,proto3" json:"original_omitted,omitempty"`
+	// The decision and its decisive reason are the original's.
+	SameDecision bool `protobuf:"varint,16,opt,name=same_decision,json=sameDecision,proto3" json:"same_decision,omitempty"`
+	// A complete replay with the recorded policy gave the same decision,
+	// decisive reason and decision basis.
+	Reproduced bool `protobuf:"varint,17,opt,name=reproduced,proto3" json:"reproduced,omitempty"`
+	// The checks that differ, with the rules and inputs that explain them.
+	Differences []*ReplayDifference `protobuf:"bytes,18,rep,name=differences,proto3" json:"differences,omitempty"`
+	// Limits of a complete replay worth knowing.
+	Notes []string `protobuf:"bytes,19,rep,name=notes,proto3" json:"notes,omitempty"`
+	// The recorded inputs as JSON: only with include_inputs, for a caller
+	// holding evidence.read_restricted. They may hold business values; never
+	// log them.
+	Inputs []byte `protobuf:"bytes,20,opt,name=inputs,proto3" json:"inputs,omitempty"`
+	// Why inputs is empty although include_inputs was set: the missing
+	// permission, or the inputs' own state (missing, truncated, unreadable).
+	InputsWithheld string `protobuf:"bytes,21,opt,name=inputs_withheld,json=inputsWithheld,proto3" json:"inputs_withheld,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *ReplayDecisionResponse) Reset() {
+	*x = ReplayDecisionResponse{}
+	mi := &file_pantherclaw_v1_evidence_proto_msgTypes[20]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ReplayDecisionResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ReplayDecisionResponse) ProtoMessage() {}
+
+func (x *ReplayDecisionResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_evidence_proto_msgTypes[20]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ReplayDecisionResponse.ProtoReflect.Descriptor instead.
+func (*ReplayDecisionResponse) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_evidence_proto_rawDescGZIP(), []int{20}
+}
+
+func (x *ReplayDecisionResponse) GetTransactionId() string {
+	if x != nil {
+		return x.TransactionId
+	}
+	return ""
+}
+
+func (x *ReplayDecisionResponse) GetEvaluation() int32 {
+	if x != nil {
+		return x.Evaluation
+	}
+	return 0
+}
+
+func (x *ReplayDecisionResponse) GetPolicy() string {
+	if x != nil {
+		return x.Policy
+	}
+	return ""
+}
+
+func (x *ReplayDecisionResponse) GetProposed() bool {
+	if x != nil {
+		return x.Proposed
+	}
+	return false
+}
+
+func (x *ReplayDecisionResponse) GetComplete() bool {
+	if x != nil {
+		return x.Complete
+	}
+	return false
+}
+
+func (x *ReplayDecisionResponse) GetIncomplete() []*ReplayLimitation {
+	if x != nil {
+		return x.Incomplete
+	}
+	return nil
+}
+
+func (x *ReplayDecisionResponse) GetDecision() Decision {
+	if x != nil {
+		return x.Decision
+	}
+	return Decision_DECISION_UNSPECIFIED
+}
+
+func (x *ReplayDecisionResponse) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
+func (x *ReplayDecisionResponse) GetBasisDigest() string {
+	if x != nil {
+		return x.BasisDigest
+	}
+	return ""
+}
+
+func (x *ReplayDecisionResponse) GetChecklist() []*ChecklistItem {
+	if x != nil {
+		return x.Checklist
+	}
+	return nil
+}
+
+func (x *ReplayDecisionResponse) GetOriginalDecision() Decision {
+	if x != nil {
+		return x.OriginalDecision
+	}
+	return Decision_DECISION_UNSPECIFIED
+}
+
+func (x *ReplayDecisionResponse) GetOriginalReason() string {
+	if x != nil {
+		return x.OriginalReason
+	}
+	return ""
+}
+
+func (x *ReplayDecisionResponse) GetOriginalBasisDigest() string {
+	if x != nil {
+		return x.OriginalBasisDigest
+	}
+	return ""
+}
+
+func (x *ReplayDecisionResponse) GetOriginalChecklist() []*ChecklistItem {
+	if x != nil {
+		return x.OriginalChecklist
+	}
+	return nil
+}
+
+func (x *ReplayDecisionResponse) GetOriginalOmitted() int32 {
+	if x != nil {
+		return x.OriginalOmitted
+	}
+	return 0
+}
+
+func (x *ReplayDecisionResponse) GetSameDecision() bool {
+	if x != nil {
+		return x.SameDecision
+	}
+	return false
+}
+
+func (x *ReplayDecisionResponse) GetReproduced() bool {
+	if x != nil {
+		return x.Reproduced
+	}
+	return false
+}
+
+func (x *ReplayDecisionResponse) GetDifferences() []*ReplayDifference {
+	if x != nil {
+		return x.Differences
+	}
+	return nil
+}
+
+func (x *ReplayDecisionResponse) GetNotes() []string {
+	if x != nil {
+		return x.Notes
+	}
+	return nil
+}
+
+func (x *ReplayDecisionResponse) GetInputs() []byte {
+	if x != nil {
+		return x.Inputs
+	}
+	return nil
+}
+
+func (x *ReplayDecisionResponse) GetInputsWithheld() string {
+	if x != nil {
+		return x.InputsWithheld
+	}
+	return ""
+}
+
 var File_pantherclaw_v1_evidence_proto protoreflect.FileDescriptor
 
 const file_pantherclaw_v1_evidence_proto_rawDesc = "" +
 	"\n" +
-	"\x1dpantherclaw/v1/evidence.proto\x12\x0epantherclaw.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xaa\x02\n" +
+	"\x1dpantherclaw/v1/evidence.proto\x12\x0epantherclaw.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1epantherclaw/v1/authority.proto\"\xd7\x03\n" +
 	"\x0fLedgerIntegrity\x12:\n" +
 	"\x05state\x18\x01 \x01(\x0e2$.pantherclaw.v1.LedgerIntegrityStateR\x05state\x12!\n" +
 	"\ffailure_code\x18\x02 \x01(\tR\vfailureCode\x12\x1d\n" +
@@ -1022,7 +1843,10 @@ const file_pantherclaw_v1_evidence_proto_rawDesc = "" +
 	"\tfail_time\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\bfailTime\x12#\n" +
 	"\rverified_size\x18\x05 \x01(\x04R\fverifiedSize\x12;\n" +
 	"\vverify_time\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"verifyTime\"\xc0\x01\n" +
+	"verifyTime\x12>\n" +
+	"\fanchor_state\x18\a \x01(\x0e2\x1b.pantherclaw.v1.AnchorStateR\vanchorState\x12?\n" +
+	"\ranchor_period\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\fanchorPeriod\x12*\n" +
+	"\x11anchor_error_code\x18\t \x01(\tR\x0fanchorErrorCode\"\xc0\x01\n" +
 	"\n" +
 	"Checkpoint\x12\x1b\n" +
 	"\ttree_size\x18\x01 \x01(\x04R\btreeSize\x12\x1b\n" +
@@ -1075,22 +1899,103 @@ const file_pantherclaw_v1_evidence_proto_rawDesc = "" +
 	"\ftransactions\x18\x01 \x01(\v2\".pantherclaw.v1.BundleTransactionsH\x00R\ftransactions\x123\n" +
 	"\x05range\x18\x02 \x01(\v2\x1b.pantherclaw.v1.BundleRangeH\x00R\x05range\x12)\n" +
 	"\x10consistency_from\x18\x03 \x01(\x04R\x0fconsistencyFromB\x12\n" +
-	"\tselection\x12\x05\xbaH\x02\b\x01\"\x8d\x01\n" +
+	"\tselection\x12\x05\xbaH\x02\b\x01\"\xa9\x01\n" +
 	"\x14ExportBundleResponse\x12\x16\n" +
 	"\x06bundle\x18\x01 \x01(\fR\x06bundle\x12\x18\n" +
 	"\aentries\x18\x02 \x01(\x05R\aentries\x12\x1a\n" +
 	"\breceipts\x18\x03 \x01(\x05R\breceipts\x12'\n" +
-	"\x0fcheckpoint_size\x18\x04 \x01(\x04R\x0echeckpointSize*\x80\x01\n" +
+	"\x0fcheckpoint_size\x18\x04 \x01(\x04R\x0echeckpointSize\x12\x1a\n" +
+	"\banchored\x18\x05 \x01(\bR\banchored\"\xba\x03\n" +
+	"\x06Anchor\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x122\n" +
+	"\x06period\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x06period\x121\n" +
+	"\x05state\x18\x03 \x01(\x0e2\x1b.pantherclaw.v1.AnchorStateR\x05state\x12'\n" +
+	"\x0fcheckpoint_size\x18\x04 \x01(\x04R\x0echeckpointSize\x12\x1d\n" +
+	"\n" +
+	"leaf_index\x18\x05 \x01(\rR\tleafIndex\x12\x16\n" +
+	"\x06leaves\x18\x06 \x01(\rR\x06leaves\x12\x12\n" +
+	"\x04root\x18\a \x01(\fR\x04root\x12\x10\n" +
+	"\x03kid\x18\b \x01(\tR\x03kid\x12\x1a\n" +
+	"\battempts\x18\t \x01(\x05R\battempts\x12\x1d\n" +
+	"\n" +
+	"error_code\x18\n" +
+	" \x01(\tR\terrorCode\x12;\n" +
+	"\vcreate_time\x18\v \x01(\v2\x1a.google.protobuf.TimestampR\n" +
+	"createTime\x12;\n" +
+	"\vanchor_time\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\n" +
+	"anchorTime\"w\n" +
+	"\x12ListAnchorsRequest\x12'\n" +
+	"\tpage_size\x18\x01 \x01(\x05B\n" +
+	"\xbaH\a\x1a\x05\x18\xc8\x01(\x00R\bpageSize\x128\n" +
+	"\n" +
+	"page_token\x18\x02 \x01(\tB\x19\xbaH\x16r\x14\x18@2\x10^[A-Za-z0-9_-]*$R\tpageToken\"o\n" +
+	"\x13ListAnchorsResponse\x120\n" +
+	"\aanchors\x18\x01 \x03(\v2\x16.pantherclaw.v1.AnchorR\aanchors\x12&\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"\xd3\x01\n" +
+	"\x15ReplayDecisionRequest\x12/\n" +
+	"\x0etransaction_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\rtransactionId\x12)\n" +
+	"\n" +
+	"evaluation\x18\x02 \x01(\x05B\t\xbaH\x06\x1a\x04\x18@(\x00R\n" +
+	"evaluation\x127\n" +
+	"\x11policy_version_id\x18\x03 \x01(\tB\v\xbaH\b\xd8\x01\x01r\x03\xb0\x01\x01R\x0fpolicyVersionId\x12%\n" +
+	"\x0einclude_inputs\x18\x04 \x01(\bR\rincludeInputs\"R\n" +
+	"\x10ReplayLimitation\x12\x12\n" +
+	"\x04code\x18\x01 \x01(\tR\x04code\x12\x12\n" +
+	"\x04step\x18\x02 \x01(\x05R\x04step\x12\x16\n" +
+	"\x06detail\x18\x03 \x01(\tR\x06detail\"\xe0\x01\n" +
+	"\x10ReplayDifference\x12\x12\n" +
+	"\x04step\x18\x01 \x01(\x05R\x04step\x12\x14\n" +
+	"\x05check\x18\x02 \x01(\tR\x05check\x129\n" +
+	"\boriginal\x18\x03 \x03(\v2\x1d.pantherclaw.v1.ChecklistItemR\boriginal\x129\n" +
+	"\breplayed\x18\x04 \x03(\v2\x1d.pantherclaw.v1.ChecklistItemR\breplayed\x12\x14\n" +
+	"\x05rules\x18\x05 \x03(\tR\x05rules\x12\x16\n" +
+	"\x06inputs\x18\x06 \x03(\tR\x06inputs\"\x9c\a\n" +
+	"\x16ReplayDecisionResponse\x12%\n" +
+	"\x0etransaction_id\x18\x01 \x01(\tR\rtransactionId\x12\x1e\n" +
+	"\n" +
+	"evaluation\x18\x02 \x01(\x05R\n" +
+	"evaluation\x12\x16\n" +
+	"\x06policy\x18\x03 \x01(\tR\x06policy\x12\x1a\n" +
+	"\bproposed\x18\x04 \x01(\bR\bproposed\x12\x1a\n" +
+	"\bcomplete\x18\x05 \x01(\bR\bcomplete\x12@\n" +
+	"\n" +
+	"incomplete\x18\x06 \x03(\v2 .pantherclaw.v1.ReplayLimitationR\n" +
+	"incomplete\x124\n" +
+	"\bdecision\x18\a \x01(\x0e2\x18.pantherclaw.v1.DecisionR\bdecision\x12\x16\n" +
+	"\x06reason\x18\b \x01(\tR\x06reason\x12!\n" +
+	"\fbasis_digest\x18\t \x01(\tR\vbasisDigest\x12;\n" +
+	"\tchecklist\x18\n" +
+	" \x03(\v2\x1d.pantherclaw.v1.ChecklistItemR\tchecklist\x12E\n" +
+	"\x11original_decision\x18\v \x01(\x0e2\x18.pantherclaw.v1.DecisionR\x10originalDecision\x12'\n" +
+	"\x0foriginal_reason\x18\f \x01(\tR\x0eoriginalReason\x122\n" +
+	"\x15original_basis_digest\x18\r \x01(\tR\x13originalBasisDigest\x12L\n" +
+	"\x12original_checklist\x18\x0e \x03(\v2\x1d.pantherclaw.v1.ChecklistItemR\x11originalChecklist\x12)\n" +
+	"\x10original_omitted\x18\x0f \x01(\x05R\x0foriginalOmitted\x12#\n" +
+	"\rsame_decision\x18\x10 \x01(\bR\fsameDecision\x12\x1e\n" +
+	"\n" +
+	"reproduced\x18\x11 \x01(\bR\n" +
+	"reproduced\x12B\n" +
+	"\vdifferences\x18\x12 \x03(\v2 .pantherclaw.v1.ReplayDifferenceR\vdifferences\x12\x14\n" +
+	"\x05notes\x18\x13 \x03(\tR\x05notes\x12\x16\n" +
+	"\x06inputs\x18\x14 \x01(\fR\x06inputs\x12'\n" +
+	"\x0finputs_withheld\x18\x15 \x01(\tR\x0einputsWithheld*\x80\x01\n" +
 	"\x14LedgerIntegrityState\x12&\n" +
 	"\"LEDGER_INTEGRITY_STATE_UNSPECIFIED\x10\x00\x12\x1d\n" +
 	"\x19LEDGER_INTEGRITY_STATE_OK\x10\x01\x12!\n" +
-	"\x1dLEDGER_INTEGRITY_STATE_FAILED\x10\x022\xa1\x04\n" +
+	"\x1dLEDGER_INTEGRITY_STATE_FAILED\x10\x02*y\n" +
+	"\vAnchorState\x12\x1c\n" +
+	"\x18ANCHOR_STATE_UNSPECIFIED\x10\x00\x12\x18\n" +
+	"\x14ANCHOR_STATE_PENDING\x10\x01\x12\x19\n" +
+	"\x15ANCHOR_STATE_ANCHORED\x10\x02\x12\x17\n" +
+	"\x13ANCHOR_STATE_FAILED\x10\x032\xe4\x05\n" +
 	"\x0fEvidenceService\x12g\n" +
 	"\x0fListCheckpoints\x12&.pantherclaw.v1.ListCheckpointsRequest\x1a'.pantherclaw.v1.ListCheckpointsResponse\"\x03\x90\x02\x01\x12a\n" +
 	"\rGetCheckpoint\x12$.pantherclaw.v1.GetCheckpointRequest\x1a%.pantherclaw.v1.GetCheckpointResponse\"\x03\x90\x02\x01\x12m\n" +
 	"\x11GetInclusionProof\x12(.pantherclaw.v1.GetInclusionProofRequest\x1a).pantherclaw.v1.GetInclusionProofResponse\"\x03\x90\x02\x01\x12s\n" +
 	"\x13GetConsistencyProof\x12*.pantherclaw.v1.GetConsistencyProofRequest\x1a+.pantherclaw.v1.GetConsistencyProofResponse\"\x03\x90\x02\x01\x12^\n" +
-	"\fExportBundle\x12#.pantherclaw.v1.ExportBundleRequest\x1a$.pantherclaw.v1.ExportBundleResponse\"\x03\x90\x02\x01B\xc6\x01\n" +
+	"\fExportBundle\x12#.pantherclaw.v1.ExportBundleRequest\x1a$.pantherclaw.v1.ExportBundleResponse\"\x03\x90\x02\x01\x12[\n" +
+	"\vListAnchors\x12\".pantherclaw.v1.ListAnchorsRequest\x1a#.pantherclaw.v1.ListAnchorsResponse\"\x03\x90\x02\x01\x12d\n" +
+	"\x0eReplayDecision\x12%.pantherclaw.v1.ReplayDecisionRequest\x1a&.pantherclaw.v1.ReplayDecisionResponse\"\x03\x90\x02\x01B\xc6\x01\n" +
 	"\x12com.pantherclaw.v1B\rEvidenceProtoP\x01ZHgithub.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1;pantherclawv1\xa2\x02\x03PXX\xaa\x02\x0ePantherclaw.V1\xca\x02\x0ePantherclaw\\V1\xe2\x02\x1aPantherclaw\\V1\\GPBMetadata\xea\x02\x0fPantherclaw::V1b\x06proto3"
 
 var (
@@ -1105,51 +2010,80 @@ func file_pantherclaw_v1_evidence_proto_rawDescGZIP() []byte {
 	return file_pantherclaw_v1_evidence_proto_rawDescData
 }
 
-var file_pantherclaw_v1_evidence_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_pantherclaw_v1_evidence_proto_msgTypes = make([]protoimpl.MessageInfo, 14)
+var file_pantherclaw_v1_evidence_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
+var file_pantherclaw_v1_evidence_proto_msgTypes = make([]protoimpl.MessageInfo, 21)
 var file_pantherclaw_v1_evidence_proto_goTypes = []any{
 	(LedgerIntegrityState)(0),           // 0: pantherclaw.v1.LedgerIntegrityState
-	(*LedgerIntegrity)(nil),             // 1: pantherclaw.v1.LedgerIntegrity
-	(*Checkpoint)(nil),                  // 2: pantherclaw.v1.Checkpoint
-	(*ListCheckpointsRequest)(nil),      // 3: pantherclaw.v1.ListCheckpointsRequest
-	(*ListCheckpointsResponse)(nil),     // 4: pantherclaw.v1.ListCheckpointsResponse
-	(*GetCheckpointRequest)(nil),        // 5: pantherclaw.v1.GetCheckpointRequest
-	(*GetCheckpointResponse)(nil),       // 6: pantherclaw.v1.GetCheckpointResponse
-	(*GetInclusionProofRequest)(nil),    // 7: pantherclaw.v1.GetInclusionProofRequest
-	(*GetInclusionProofResponse)(nil),   // 8: pantherclaw.v1.GetInclusionProofResponse
-	(*GetConsistencyProofRequest)(nil),  // 9: pantherclaw.v1.GetConsistencyProofRequest
-	(*GetConsistencyProofResponse)(nil), // 10: pantherclaw.v1.GetConsistencyProofResponse
-	(*BundleTransactions)(nil),          // 11: pantherclaw.v1.BundleTransactions
-	(*BundleRange)(nil),                 // 12: pantherclaw.v1.BundleRange
-	(*ExportBundleRequest)(nil),         // 13: pantherclaw.v1.ExportBundleRequest
-	(*ExportBundleResponse)(nil),        // 14: pantherclaw.v1.ExportBundleResponse
-	(*timestamppb.Timestamp)(nil),       // 15: google.protobuf.Timestamp
+	(AnchorState)(0),                    // 1: pantherclaw.v1.AnchorState
+	(*LedgerIntegrity)(nil),             // 2: pantherclaw.v1.LedgerIntegrity
+	(*Checkpoint)(nil),                  // 3: pantherclaw.v1.Checkpoint
+	(*ListCheckpointsRequest)(nil),      // 4: pantherclaw.v1.ListCheckpointsRequest
+	(*ListCheckpointsResponse)(nil),     // 5: pantherclaw.v1.ListCheckpointsResponse
+	(*GetCheckpointRequest)(nil),        // 6: pantherclaw.v1.GetCheckpointRequest
+	(*GetCheckpointResponse)(nil),       // 7: pantherclaw.v1.GetCheckpointResponse
+	(*GetInclusionProofRequest)(nil),    // 8: pantherclaw.v1.GetInclusionProofRequest
+	(*GetInclusionProofResponse)(nil),   // 9: pantherclaw.v1.GetInclusionProofResponse
+	(*GetConsistencyProofRequest)(nil),  // 10: pantherclaw.v1.GetConsistencyProofRequest
+	(*GetConsistencyProofResponse)(nil), // 11: pantherclaw.v1.GetConsistencyProofResponse
+	(*BundleTransactions)(nil),          // 12: pantherclaw.v1.BundleTransactions
+	(*BundleRange)(nil),                 // 13: pantherclaw.v1.BundleRange
+	(*ExportBundleRequest)(nil),         // 14: pantherclaw.v1.ExportBundleRequest
+	(*ExportBundleResponse)(nil),        // 15: pantherclaw.v1.ExportBundleResponse
+	(*Anchor)(nil),                      // 16: pantherclaw.v1.Anchor
+	(*ListAnchorsRequest)(nil),          // 17: pantherclaw.v1.ListAnchorsRequest
+	(*ListAnchorsResponse)(nil),         // 18: pantherclaw.v1.ListAnchorsResponse
+	(*ReplayDecisionRequest)(nil),       // 19: pantherclaw.v1.ReplayDecisionRequest
+	(*ReplayLimitation)(nil),            // 20: pantherclaw.v1.ReplayLimitation
+	(*ReplayDifference)(nil),            // 21: pantherclaw.v1.ReplayDifference
+	(*ReplayDecisionResponse)(nil),      // 22: pantherclaw.v1.ReplayDecisionResponse
+	(*timestamppb.Timestamp)(nil),       // 23: google.protobuf.Timestamp
+	(*ChecklistItem)(nil),               // 24: pantherclaw.v1.ChecklistItem
+	(Decision)(0),                       // 25: pantherclaw.v1.Decision
 }
 var file_pantherclaw_v1_evidence_proto_depIdxs = []int32{
 	0,  // 0: pantherclaw.v1.LedgerIntegrity.state:type_name -> pantherclaw.v1.LedgerIntegrityState
-	15, // 1: pantherclaw.v1.LedgerIntegrity.fail_time:type_name -> google.protobuf.Timestamp
-	15, // 2: pantherclaw.v1.LedgerIntegrity.verify_time:type_name -> google.protobuf.Timestamp
-	15, // 3: pantherclaw.v1.Checkpoint.create_time:type_name -> google.protobuf.Timestamp
-	2,  // 4: pantherclaw.v1.ListCheckpointsResponse.checkpoints:type_name -> pantherclaw.v1.Checkpoint
-	1,  // 5: pantherclaw.v1.ListCheckpointsResponse.integrity:type_name -> pantherclaw.v1.LedgerIntegrity
-	2,  // 6: pantherclaw.v1.GetCheckpointResponse.checkpoint:type_name -> pantherclaw.v1.Checkpoint
-	11, // 7: pantherclaw.v1.ExportBundleRequest.transactions:type_name -> pantherclaw.v1.BundleTransactions
-	12, // 8: pantherclaw.v1.ExportBundleRequest.range:type_name -> pantherclaw.v1.BundleRange
-	3,  // 9: pantherclaw.v1.EvidenceService.ListCheckpoints:input_type -> pantherclaw.v1.ListCheckpointsRequest
-	5,  // 10: pantherclaw.v1.EvidenceService.GetCheckpoint:input_type -> pantherclaw.v1.GetCheckpointRequest
-	7,  // 11: pantherclaw.v1.EvidenceService.GetInclusionProof:input_type -> pantherclaw.v1.GetInclusionProofRequest
-	9,  // 12: pantherclaw.v1.EvidenceService.GetConsistencyProof:input_type -> pantherclaw.v1.GetConsistencyProofRequest
-	13, // 13: pantherclaw.v1.EvidenceService.ExportBundle:input_type -> pantherclaw.v1.ExportBundleRequest
-	4,  // 14: pantherclaw.v1.EvidenceService.ListCheckpoints:output_type -> pantherclaw.v1.ListCheckpointsResponse
-	6,  // 15: pantherclaw.v1.EvidenceService.GetCheckpoint:output_type -> pantherclaw.v1.GetCheckpointResponse
-	8,  // 16: pantherclaw.v1.EvidenceService.GetInclusionProof:output_type -> pantherclaw.v1.GetInclusionProofResponse
-	10, // 17: pantherclaw.v1.EvidenceService.GetConsistencyProof:output_type -> pantherclaw.v1.GetConsistencyProofResponse
-	14, // 18: pantherclaw.v1.EvidenceService.ExportBundle:output_type -> pantherclaw.v1.ExportBundleResponse
-	14, // [14:19] is the sub-list for method output_type
-	9,  // [9:14] is the sub-list for method input_type
-	9,  // [9:9] is the sub-list for extension type_name
-	9,  // [9:9] is the sub-list for extension extendee
-	0,  // [0:9] is the sub-list for field type_name
+	23, // 1: pantherclaw.v1.LedgerIntegrity.fail_time:type_name -> google.protobuf.Timestamp
+	23, // 2: pantherclaw.v1.LedgerIntegrity.verify_time:type_name -> google.protobuf.Timestamp
+	1,  // 3: pantherclaw.v1.LedgerIntegrity.anchor_state:type_name -> pantherclaw.v1.AnchorState
+	23, // 4: pantherclaw.v1.LedgerIntegrity.anchor_period:type_name -> google.protobuf.Timestamp
+	23, // 5: pantherclaw.v1.Checkpoint.create_time:type_name -> google.protobuf.Timestamp
+	3,  // 6: pantherclaw.v1.ListCheckpointsResponse.checkpoints:type_name -> pantherclaw.v1.Checkpoint
+	2,  // 7: pantherclaw.v1.ListCheckpointsResponse.integrity:type_name -> pantherclaw.v1.LedgerIntegrity
+	3,  // 8: pantherclaw.v1.GetCheckpointResponse.checkpoint:type_name -> pantherclaw.v1.Checkpoint
+	12, // 9: pantherclaw.v1.ExportBundleRequest.transactions:type_name -> pantherclaw.v1.BundleTransactions
+	13, // 10: pantherclaw.v1.ExportBundleRequest.range:type_name -> pantherclaw.v1.BundleRange
+	23, // 11: pantherclaw.v1.Anchor.period:type_name -> google.protobuf.Timestamp
+	1,  // 12: pantherclaw.v1.Anchor.state:type_name -> pantherclaw.v1.AnchorState
+	23, // 13: pantherclaw.v1.Anchor.create_time:type_name -> google.protobuf.Timestamp
+	23, // 14: pantherclaw.v1.Anchor.anchor_time:type_name -> google.protobuf.Timestamp
+	16, // 15: pantherclaw.v1.ListAnchorsResponse.anchors:type_name -> pantherclaw.v1.Anchor
+	24, // 16: pantherclaw.v1.ReplayDifference.original:type_name -> pantherclaw.v1.ChecklistItem
+	24, // 17: pantherclaw.v1.ReplayDifference.replayed:type_name -> pantherclaw.v1.ChecklistItem
+	20, // 18: pantherclaw.v1.ReplayDecisionResponse.incomplete:type_name -> pantherclaw.v1.ReplayLimitation
+	25, // 19: pantherclaw.v1.ReplayDecisionResponse.decision:type_name -> pantherclaw.v1.Decision
+	24, // 20: pantherclaw.v1.ReplayDecisionResponse.checklist:type_name -> pantherclaw.v1.ChecklistItem
+	25, // 21: pantherclaw.v1.ReplayDecisionResponse.original_decision:type_name -> pantherclaw.v1.Decision
+	24, // 22: pantherclaw.v1.ReplayDecisionResponse.original_checklist:type_name -> pantherclaw.v1.ChecklistItem
+	21, // 23: pantherclaw.v1.ReplayDecisionResponse.differences:type_name -> pantherclaw.v1.ReplayDifference
+	4,  // 24: pantherclaw.v1.EvidenceService.ListCheckpoints:input_type -> pantherclaw.v1.ListCheckpointsRequest
+	6,  // 25: pantherclaw.v1.EvidenceService.GetCheckpoint:input_type -> pantherclaw.v1.GetCheckpointRequest
+	8,  // 26: pantherclaw.v1.EvidenceService.GetInclusionProof:input_type -> pantherclaw.v1.GetInclusionProofRequest
+	10, // 27: pantherclaw.v1.EvidenceService.GetConsistencyProof:input_type -> pantherclaw.v1.GetConsistencyProofRequest
+	14, // 28: pantherclaw.v1.EvidenceService.ExportBundle:input_type -> pantherclaw.v1.ExportBundleRequest
+	17, // 29: pantherclaw.v1.EvidenceService.ListAnchors:input_type -> pantherclaw.v1.ListAnchorsRequest
+	19, // 30: pantherclaw.v1.EvidenceService.ReplayDecision:input_type -> pantherclaw.v1.ReplayDecisionRequest
+	5,  // 31: pantherclaw.v1.EvidenceService.ListCheckpoints:output_type -> pantherclaw.v1.ListCheckpointsResponse
+	7,  // 32: pantherclaw.v1.EvidenceService.GetCheckpoint:output_type -> pantherclaw.v1.GetCheckpointResponse
+	9,  // 33: pantherclaw.v1.EvidenceService.GetInclusionProof:output_type -> pantherclaw.v1.GetInclusionProofResponse
+	11, // 34: pantherclaw.v1.EvidenceService.GetConsistencyProof:output_type -> pantherclaw.v1.GetConsistencyProofResponse
+	15, // 35: pantherclaw.v1.EvidenceService.ExportBundle:output_type -> pantherclaw.v1.ExportBundleResponse
+	18, // 36: pantherclaw.v1.EvidenceService.ListAnchors:output_type -> pantherclaw.v1.ListAnchorsResponse
+	22, // 37: pantherclaw.v1.EvidenceService.ReplayDecision:output_type -> pantherclaw.v1.ReplayDecisionResponse
+	31, // [31:38] is the sub-list for method output_type
+	24, // [24:31] is the sub-list for method input_type
+	24, // [24:24] is the sub-list for extension type_name
+	24, // [24:24] is the sub-list for extension extendee
+	0,  // [0:24] is the sub-list for field type_name
 }
 
 func init() { file_pantherclaw_v1_evidence_proto_init() }
@@ -1157,6 +2091,7 @@ func file_pantherclaw_v1_evidence_proto_init() {
 	if File_pantherclaw_v1_evidence_proto != nil {
 		return
 	}
+	file_pantherclaw_v1_authority_proto_init()
 	file_pantherclaw_v1_evidence_proto_msgTypes[12].OneofWrappers = []any{
 		(*ExportBundleRequest_Transactions)(nil),
 		(*ExportBundleRequest_Range)(nil),
@@ -1166,8 +2101,8 @@ func file_pantherclaw_v1_evidence_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pantherclaw_v1_evidence_proto_rawDesc), len(file_pantherclaw_v1_evidence_proto_rawDesc)),
-			NumEnums:      1,
-			NumMessages:   14,
+			NumEnums:      2,
+			NumMessages:   21,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

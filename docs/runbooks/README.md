@@ -8,6 +8,7 @@ Operational procedures. Each runbook is completed (from stub to tested procedure
 | [gateway.md](gateway.md) | M6 | Enroll, renew, check and revoke gateways |
 | [kill-switch.md](kill-switch.md) | M6 | Engage and restore the org-wide emergency stop |
 | [evidence-verification.md](evidence-verification.md) | M7 | Investigate an evidence integrity failure and resume checkpointing |
+| [anchoring.md](anchoring.md) | M7 | Turn on, watch and update the anchored global root (Rekor v2 and RFC 3161) |
 | [backup-restore.md](backup-restore.md) | M13 | Backups, point-in-time recovery, restore drill |
 | [incident-response.md](incident-response.md) | M10 | Respond to a security incident in PantherClaw itself |
 | [dmca-takedown.md](dmca-takedown.md) | M0 | Handle copies that violate the licence or trademark |
