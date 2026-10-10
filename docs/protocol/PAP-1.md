@@ -156,6 +156,8 @@ Rules (MUST):
 }
 ```
 
+`obligations` lists only what the gateway applies. A policy's `verify` obligation (`{"kind": "verify", "level": "follow_up", "timing": "after_dispatch"}`) raises the level the effect must be verified at (§9.3); the Authority applies it, the decision receipt states it, and the gateway is never sent it. When the required level is above what the definition's verifier reaches, or the action's connection cannot make the verifier's reads, the decision is `CANNOT_AUTHORIZE` with `VERIFIER_UNSUPPORTED`.
+
 Idempotency: `(org, run_id, action_id)` is unique. Same triple + same hash ⇒ the stored decision is returned. Same triple + different hash ⇒ `DENY` with code `ACTION_TAMPERED` and a security alert. `DENY` and expired decisions are terminal for that triple; `CANNOT_AUTHORIZE` MAY be retried.
 
 **Monitor mode.** When the action's route runs in `monitor` mode, the response carries `"mode": "monitor"` and `decision` is hypothetical: the Authority records it, reserves nothing, and returns a permit whatever the decision, unless the identity or containment checks failed. In monitor mode the presence of a permit, not the decision, tells the gateway to dispatch; the permit still goes through `BeginDispatch`. Nothing about a monitor-mode action may be reported as prevented.

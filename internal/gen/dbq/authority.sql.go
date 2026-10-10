@@ -17,6 +17,47 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/money"
 )
 
+const authorityConnection = `-- name: AuthorityConnection :one
+SELECT c.id, c.gateway_id, c.kind, c.package, c.state, c.access_mode, c.default_mode, c.destination_class,
+       p.version_id AS pinned_version_id
+FROM pc.connections c
+LEFT JOIN pc.tool_packages t ON t.org_id = c.org_id AND t.name = c.package
+LEFT JOIN pc.package_pins p ON p.org_id = t.org_id AND p.package_id = t.id
+WHERE c.org_id = $1 AND c.id = $2
+`
+
+type AuthorityConnectionRow struct {
+	ID               ids.UUID
+	GatewayID        ids.UUID
+	Kind             string
+	Package          string
+	State            string
+	AccessMode       string
+	DefaultMode      string
+	DestinationClass string
+	PinnedVersionID  *ids.UUID
+}
+
+// AuthorityConnection is a connection as the decision pipeline checks it,
+// with the package version the org pinned for it, whose reads a verifier
+// can make through it (G0 M7 design decision 2); NULL when none is pinned.
+func (q *Queries) AuthorityConnection(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (AuthorityConnectionRow, error) {
+	row := q.db.QueryRow(ctx, authorityConnection, orgID, iD)
+	var i AuthorityConnectionRow
+	err := row.Scan(
+		&i.ID,
+		&i.GatewayID,
+		&i.Kind,
+		&i.Package,
+		&i.State,
+		&i.AccessMode,
+		&i.DefaultMode,
+		&i.DestinationClass,
+		&i.PinnedVersionID,
+	)
+	return i, err
+}
+
 const beginDispatch = `-- name: BeginDispatch :one
 UPDATE pc.permits p
 SET state = 'DISPATCHING', dispatching_at = clock_timestamp()
@@ -171,7 +212,7 @@ func (q *Queries) EngageKillSwitch(ctx context.Context, engagedBy string, reason
 
 const executionContext = `-- name: ExecutionContext :one
 SELECT p.mode, p.connection_id, t.channel, c.access_mode, t.id AS transaction_id, t.action_hash, t.effective_hash,
-       p.dispatching_at, p.definition_digest, p.verify_expect, t.target_type, t.target_id
+       p.dispatching_at, p.definition_digest, p.verify_expect, t.target_type, t.target_id, t.effect_level_required
 FROM pc.permits p
 JOIN pc.transactions t ON t.org_id = p.org_id AND t.id = p.transaction_id
 LEFT JOIN pc.connections c ON c.org_id = p.org_id AND c.id = p.connection_id
@@ -179,22 +220,24 @@ WHERE p.org_id = $1 AND p.id = $2 AND p.gateway_id = $3
 `
 
 type ExecutionContextRow struct {
-	Mode             string
-	ConnectionID     *ids.UUID
-	Channel          *string
-	AccessMode       *string
-	TransactionID    ids.UUID
-	ActionHash       []byte
-	EffectiveHash    []byte
-	DispatchingAt    *time.Time
-	DefinitionDigest *string
-	VerifyExpect     []byte
-	TargetType       *string
-	TargetID         *string
+	Mode                string
+	ConnectionID        *ids.UUID
+	Channel             *string
+	AccessMode          *string
+	TransactionID       ids.UUID
+	ActionHash          []byte
+	EffectiveHash       []byte
+	DispatchingAt       *time.Time
+	DefinitionDigest    *string
+	VerifyExpect        []byte
+	TargetType          *string
+	TargetID            *string
+	EffectLevelRequired *string
 }
 
 // ExecutionContext is what an execution receipt states about a permit:
-// its mode, connection, channel and the connection's access mode (F416).
+// its mode, connection, channel and the connection's access mode (F416),
+// and the verification level its decision required (G0 M7).
 func (q *Queries) ExecutionContext(ctx context.Context, orgID ids.OrgID, iD ids.UUID, gatewayID string) (ExecutionContextRow, error) {
 	row := q.db.QueryRow(ctx, executionContext, orgID, iD, gatewayID)
 	var i ExecutionContextRow
@@ -211,6 +254,7 @@ func (q *Queries) ExecutionContext(ctx context.Context, orgID ids.OrgID, iD ids.
 		&i.VerifyExpect,
 		&i.TargetType,
 		&i.TargetID,
+		&i.EffectLevelRequired,
 	)
 	return i, err
 }
