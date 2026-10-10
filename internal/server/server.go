@@ -100,9 +100,11 @@ Usage:
                                                      after investigating; its ledger is checked again
   pantherclaw-server dev seed [--config FILE] [--org-name N] [--budget-limit X] [--max-count N] [--gateway-out FILE
                              [--target-url URL [--access-mode M]] [--shell]] [--workload-out FILE [--facts-key-out FILE]]
+                             [--hold-over AMOUNT]
                                                      DEVELOPMENT ONLY: demo org with the reference package; a gateway
                                                      enrollment file and a payments connection; a workload with a grant,
-                                                     a run and a fact provider
+                                                     a run and a fact provider; a policy holding refunds over
+                                                     --hold-over (default 50.00, empty for none) for an approver
   pantherclaw-server dev gateway --org ID --out FILE [--config FILE] [--name NAME]
                                                      DEVELOPMENT ONLY: a gateway enrollment file for an existing org
   pantherclaw-server dev connection --org ID --target-url URL [--config FILE] [--gateway NAME] [--name N] [--mode M]
