@@ -41,8 +41,36 @@ func (q *Queries) GetEvaluationInputs(ctx context.Context, orgID ids.OrgID, tran
 	return i, err
 }
 
-const insertEvaluationInputs = `-- name: InsertEvaluationInputs :exec
+const getEvaluationReceipt = `-- name: GetEvaluationReceipt :one
+SELECT receipt_jws FROM pc.decision_receipts
+WHERE org_id = $1 AND transaction_id = $2 AND evaluation = $3
+`
 
+// The decision receipt of one evaluation, which a replay compares with.
+func (q *Queries) GetEvaluationReceipt(ctx context.Context, orgID ids.OrgID, transactionID ids.UUID, evaluation int32) (string, error) {
+	row := q.db.QueryRow(ctx, getEvaluationReceipt, orgID, transactionID, evaluation)
+	var receipt_jws string
+	err := row.Scan(&receipt_jws)
+	return receipt_jws, err
+}
+
+const getPolicyBundleByNumber = `-- name: GetPolicyBundleByNumber :one
+SELECT v.bundle
+FROM pc.policy_versions v
+JOIN pc.policies p ON p.org_id = v.org_id AND p.id = v.policy_id
+WHERE v.org_id = $1 AND p.bundle_id = $2 AND v.version = $3
+`
+
+// A stored policy bundle by its id and version number: the version an
+// evaluation recorded as id@version, whatever its state now.
+func (q *Queries) GetPolicyBundleByNumber(ctx context.Context, orgID ids.OrgID, bundleID string, version int32) ([]byte, error) {
+	row := q.db.QueryRow(ctx, getPolicyBundleByNumber, orgID, bundleID, version)
+	var bundle []byte
+	err := row.Scan(&bundle)
+	return bundle, err
+}
+
+const insertEvaluationInputs = `-- name: InsertEvaluationInputs :exec
 
 INSERT INTO pc.evaluation_inputs (org_id, transaction_id, evaluation, format_version, pipeline_version, inputs,
     inputs_sha256, truncated)
@@ -63,6 +91,7 @@ type InsertEvaluationInputsParams struct {
 
 // SPDX-License-Identifier: BUSL-1.1
 // Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+//
 // Replay inputs (G0 M7 design decision 11): one sealed row per evaluation,
 // written with its decision receipt.
 func (q *Queries) InsertEvaluationInputs(ctx context.Context, arg InsertEvaluationInputsParams) error {
