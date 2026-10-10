@@ -164,6 +164,63 @@ func (q *Queries) EffectReceiptsOf(ctx context.Context, orgID ids.OrgID, transac
 	return items, nil
 }
 
+const entryProtection = `-- name: EntryProtection :many
+SELECT s.seq::bigint AS seq, coalesce(k.tree_size, 0)::bigint AS checkpoint_size,
+       coalesce(a.checkpoint_size, 0)::bigint AS anchored_size, a.anchored_at
+FROM unnest($1::bigint[]) AS s (seq)
+LEFT JOIN LATERAL (
+    SELECT c.tree_size FROM pc.checkpoints c
+    WHERE c.org_id = $2 AND c.tree_size >= s.seq
+    ORDER BY c.tree_size
+    LIMIT 1
+) k ON true
+LEFT JOIN LATERAL (
+    SELECT l.checkpoint_size, n.anchored_at
+    FROM pc.anchor_leaves l
+    JOIN pc.anchors n ON n.id = l.anchor_id
+    WHERE l.org_id = $2 AND l.checkpoint_size >= s.seq AND n.state = 'ANCHORED'
+    ORDER BY l.checkpoint_size, n.anchored_at
+    LIMIT 1
+) a ON true
+`
+
+type EntryProtectionRow struct {
+	Seq            int64
+	CheckpointSize int64
+	AnchoredSize   int64
+	AnchoredAt     *time.Time
+}
+
+// EntryProtection reports, for positions in the org's hash chain, the
+// first checkpoint whose tree covers each (tree size at least the
+// position, HR-194) and the first such checkpoint anchored publicly
+// (HR-195): the org's anchor leaves name its checkpoints, and the global
+// anchors only their state. 0 and NULL: none yet.
+func (q *Queries) EntryProtection(ctx context.Context, seqs []int64, orgID ids.OrgID) ([]EntryProtectionRow, error) {
+	rows, err := q.db.Query(ctx, entryProtection, seqs, orgID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []EntryProtectionRow{}
+	for rows.Next() {
+		var i EntryProtectionRow
+		if err := rows.Scan(
+			&i.Seq,
+			&i.CheckpointSize,
+			&i.AnchoredSize,
+			&i.AnchoredAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const executionOf = `-- name: ExecutionOf :one
 SELECT a.id AS attempt_id, a.permit_id, a.outcome, a.target_status, a.recorded_by, a.target_ref, a.dispatch_ms,
        a.recorded_at, p.dispatching_at, e.receipt_jws, e.ledger_entry_id, c.seq AS chain_seq
