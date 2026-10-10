@@ -16,6 +16,7 @@ import (
 
 	"connectrpc.com/connect/v2"
 	"connectrpc.com/connect/v2/connecthttp"
+	"google.golang.org/protobuf/encoding/protojson"
 
 	"github.com/katocxl/pantherclaw/internal/evidence/bundle"
 	"github.com/katocxl/pantherclaw/internal/evidence/bundle/bundletest"
@@ -134,7 +135,9 @@ func TestHR197_EvidenceReplayAsksForTheEvaluationAndShowsTheOutcome(t *testing.T
 	const txn, policy = "0192aaaa-bbbb-7ccc-8ddd-000000000001", "0192aaaa-bbbb-7ccc-8ddd-000000000009"
 
 	code, stdout, errs := run(t, env, "evidence", "replay", "--txn", txn, "--evaluation", "2", "--policy-version", policy)
-	if code != 0 || !strings.Contains(stdout, `"reproduced": true`) || strings.Contains(stdout, `"inputs"`) {
+	var printed pantherclawv1.ReplayDecisionResponse
+	// protojson varies its whitespace on purpose: decode, never compare text.
+	if code != 0 || protojson.Unmarshal([]byte(stdout), &printed) != nil || !printed.GetReproduced() || len(printed.GetInputs()) != 0 {
 		t.Fatalf("evidence replay = %d %s %s", code, stdout, errs)
 	}
 	if rec.replay.GetTransactionId() != txn || rec.replay.GetEvaluation() != 2 || rec.replay.GetPolicyVersionId() != policy ||
