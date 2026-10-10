@@ -165,3 +165,62 @@ func TestNextRejectsBadHead(t *testing.T) {
 		t.Fatal("seq 0 accepted")
 	}
 }
+
+// TestVerifierResumesAtACheckpointAndNamesTheBrokenPosition: a verifier
+// that starts after a checkpointed position checks only the entries after
+// it, and a break reports its seq.
+func TestVerifierResumesAtACheckpointAndNamesTheBrokenPosition(t *testing.T) {
+	links, entries := chain(t, 6)
+	v, err := NewVerifierAt(links[2].Seq, links[2].EntryHash)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := 3; i < 6; i++ {
+		if err := v.Add(links[i], entries[i]); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if seq, head := v.Head(); seq != 6 || !bytes.Equal(head, links[5].EntryHash) {
+		t.Fatalf("head = %d", seq)
+	}
+	if _, err := NewVerifierAt(0, links[0].EntryHash); err == nil {
+		t.Error("position 0 must start from the genesis hash")
+	}
+	v, _ = NewVerifierAt(links[2].Seq, links[2].EntryHash)
+	entries[4].Body = []byte(`{"n":999,"note":"test"}`)
+	_ = v.Add(links[3], entries[3])
+	err = v.Add(links[4], entries[4])
+	var ce *ChainError
+	if !errors.As(err, &ce) || ce.Seq != 5 || !errors.Is(err, ErrChainBroken) {
+		t.Fatalf("an edited entry at seq 5: %v", err)
+	}
+}
+
+// TestVerifierAcceptsRemovedBodiesButNotBrokenLinks: an entry whose body
+// retention removed continues the chain by its stored hash (decision 4);
+// its position and prev_hash are still checked.
+func TestVerifierAcceptsRemovedBodiesButNotBrokenLinks(t *testing.T) {
+	links, entries := chain(t, 4)
+	v := NewVerifier()
+	for i := range 4 {
+		var err error
+		if i == 1 {
+			err = v.AddRemoved(links[i])
+		} else {
+			err = v.Add(links[i], entries[i])
+		}
+		if err != nil {
+			t.Fatalf("seq %d: %v", i+1, err)
+		}
+	}
+	v = NewVerifier()
+	_ = v.Add(links[0], entries[0])
+	bad := links[1]
+	bad.PrevHash = links[2].EntryHash
+	if err := v.AddRemoved(bad); !errors.Is(err, ErrChainBroken) {
+		t.Fatalf("a removed entry with a wrong prev_hash: %v", err)
+	}
+	if err := v.AddRemoved(links[2]); !errors.Is(err, ErrChainBroken) {
+		t.Fatalf("a gap after the removed entry: %v", err)
+	}
+}

@@ -15,6 +15,7 @@ import (
 	"crypto/ed25519"
 	"errors"
 	"fmt"
+	"slices"
 
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
 	"github.com/katocxl/pantherclaw/internal/evidence/domain"
@@ -33,10 +34,21 @@ func signingAAD(org ids.OrgID, purpose keys.Purpose, kid string) []byte {
 }
 
 // LoadSigningKeys loads every non-revoked platform signing key into reg,
-// creating an active key for each purpose that has none. Unwrapping fails
+// creating an active key for each Ed25519 purpose, the anchors purpose and
+// each of extra that has none. The checkpoints_pq key is created only when
+// the caller names it in extra (evidence.mldsa_cosign). Unwrapping fails
 // closed: a key that cannot be unwrapped stops the load.
-func LoadSigningKeys(ctx context.Context, pool *db.Pool, kp keys.KeyProvider, reg *keys.Registry) error {
+func LoadSigningKeys(ctx context.Context, pool *db.Pool, kp keys.KeyProvider, reg *keys.Registry, extra ...keys.Purpose) error {
 	org := ids.PlatformOrg
+	want := append(keys.Purposes(), keys.PurposeAnchors)
+	for _, p := range extra {
+		if !p.Valid() {
+			return fmt.Errorf("keystore: unknown purpose %q", p)
+		}
+		if !slices.Contains(want, p) {
+			want = append(want, p)
+		}
+	}
 	return pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
 		q := dbq.New(tx)
 		if err := q.LockKeystore(ctx, org.UUID()); err != nil {
@@ -48,6 +60,13 @@ func LoadSigningKeys(ctx context.Context, pool *db.Pool, kp keys.KeyProvider, re
 		}
 		active := map[keys.Purpose]bool{}
 		for _, r := range rows {
+			if keys.Purpose(r.Purpose).Algorithm() != keys.AlgEdDSA {
+				if err := loadAltKey(ctx, kp, reg, org, r); err != nil {
+					return err
+				}
+				active[keys.Purpose(r.Purpose)] = active[keys.Purpose(r.Purpose)] || r.State == string(keys.StateActive)
+				continue
+			}
 			k := keys.SigningKey{KID: r.Kid, Purpose: keys.Purpose(r.Purpose), State: keys.State(r.State), Public: ed25519.PublicKey(r.PublicKey)}
 			// The gateway CA's retiring keys keep their private half, so that
 			// their (deterministic) CA certificates stay trusted during a
@@ -69,45 +88,85 @@ func LoadSigningKeys(ctx context.Context, pool *db.Pool, kp keys.KeyProvider, re
 				return fmt.Errorf("keystore: %w", err)
 			}
 		}
-		for _, p := range keys.Purposes() {
+		for _, p := range want {
 			if active[p] {
 				continue
 			}
-			k, err := createSigningKey(ctx, tx, kp, p)
-			if err != nil {
+			if _, err := createSigningKey(ctx, tx, kp, reg, p); err != nil {
 				return err
-			}
-			if err := reg.Put(k); err != nil {
-				return fmt.Errorf("keystore: %w", err)
 			}
 		}
 		return nil
 	})
 }
 
-func createSigningKey(ctx context.Context, tx db.TenantTx, kp keys.KeyProvider, p keys.Purpose) (keys.SigningKey, error) {
-	k, err := keys.GenerateSigningKey(p)
-	if err != nil {
-		return keys.SigningKey{}, err
+// loadAltKey loads an ES256 or ML-DSA-65 key; only the active one is
+// unwrapped.
+func loadAltKey(ctx context.Context, kp keys.KeyProvider, reg *keys.Registry, org ids.OrgID, r dbq.ListSigningKeysRow) error {
+	p := keys.Purpose(r.Purpose)
+	if keys.Algorithm(r.Algorithm) != p.Algorithm() {
+		return fmt.Errorf("keystore: signing key %s has algorithm %s, not %s", r.Kid, r.Algorithm, p.Algorithm())
 	}
-	wrapped, err := kp.Wrap(ctx, k.Private.Reveal().Seed(), signingAAD(tx.OrgID(), p, k.KID))
+	k := keys.AltKey{KID: r.Kid, Purpose: p, State: keys.State(r.State), Public: r.PublicKey}
+	if k.State == keys.StateActive {
+		private, err := kp.Unwrap(ctx, r.WrappedPrivateKey, signingAAD(org, p, r.Kid))
+		if err != nil {
+			return fmt.Errorf("keystore: unwrap signing key %s: %w", r.Kid, err)
+		}
+		if k, err = keys.OpenAltKey(p, r.Kid, r.PublicKey, private); err != nil {
+			return fmt.Errorf("keystore: %w", err)
+		}
+	}
+	if err := reg.PutAlt(k); err != nil {
+		return fmt.Errorf("keystore: %w", err)
+	}
+	return nil
+}
+
+// createSigningKey creates, stores and audits a new active key of p, puts
+// it in reg when reg is not nil, and returns its kid.
+func createSigningKey(ctx context.Context, tx db.TenantTx, kp keys.KeyProvider, reg *keys.Registry, p keys.Purpose) (string, error) {
+	var kid string
+	var public, private []byte
+	var put func() error
+	if p.Algorithm() == keys.AlgEdDSA {
+		k, err := keys.GenerateSigningKey(p)
+		if err != nil {
+			return "", err
+		}
+		kid, public, private = k.KID, k.Public, k.Private.Reveal().Seed()
+		put = func() error { return reg.Put(k) }
+	} else {
+		k, priv, err := keys.GenerateAltKey(p)
+		if err != nil {
+			return "", err
+		}
+		kid, public, private = k.KID, k.Public, priv.Reveal()
+		put = func() error { return reg.PutAlt(k) }
+	}
+	wrapped, err := kp.Wrap(ctx, private, signingAAD(tx.OrgID(), p, kid))
 	if err != nil {
-		return keys.SigningKey{}, fmt.Errorf("keystore: wrap: %w", err)
+		return "", fmt.Errorf("keystore: wrap: %w", err)
 	}
 	if err := dbq.New(tx).InsertSigningKey(ctx, dbq.InsertSigningKeyParams{
-		OrgID: tx.OrgID(), ID: ids.NewV7(), Kid: k.KID, Purpose: string(p),
-		PublicKey: k.Public, WrappedPrivateKey: wrapped, KekID: kp.CurrentKEK(),
+		OrgID: tx.OrgID(), ID: ids.NewV7(), Kid: kid, Purpose: string(p), Algorithm: string(p.Algorithm()),
+		PublicKey: public, WrappedPrivateKey: wrapped, KekID: kp.CurrentKEK(),
 	}); err != nil {
-		return keys.SigningKey{}, fmt.Errorf("keystore: insert signing key: %w", err)
+		return "", fmt.Errorf("keystore: insert signing key: %w", err)
 	}
 	if _, err := audit.Record(ctx, tx, audit.Event{
 		Name: "signing_key.created", Actor: Actor, Outcome: audit.Success,
-		Object:  &audit.Object{Type: "signing_key", ID: k.KID},
-		Details: map[string]string{"purpose": string(p), "kek_id": kp.CurrentKEK()},
+		Object:  &audit.Object{Type: "signing_key", ID: kid},
+		Details: map[string]string{"purpose": string(p), "algorithm": string(p.Algorithm()), "kek_id": kp.CurrentKEK()},
 	}); err != nil {
-		return keys.SigningKey{}, err
+		return "", err
 	}
-	return k, nil
+	if reg != nil {
+		if err := put(); err != nil {
+			return "", fmt.Errorf("keystore: %w", err)
+		}
+	}
+	return kid, nil
 }
 
 // ErrNotFound reports a missing key.
@@ -145,11 +204,11 @@ func RotateSigningKey(ctx context.Context, pool *db.Pool, kp keys.KeyProvider, p
 				}
 			}
 		}
-		k, err := createSigningKey(ctx, tx, kp, p)
+		kid, err := createSigningKey(ctx, tx, kp, nil, p)
 		if err != nil {
 			return err
 		}
-		newKID = k.KID
+		newKID = kid
 		return nil
 	})
 	return newKID, err
@@ -202,11 +261,11 @@ func ReplaceSigningKey(ctx context.Context, pool *db.Pool, kp keys.KeyProvider, 
 			}
 			revoked = append(revoked, r.Kid)
 		}
-		k, err := createSigningKey(ctx, tx, kp, p)
+		kid, err := createSigningKey(ctx, tx, kp, nil, p)
 		if err != nil {
 			return err
 		}
-		newKID = k.KID
+		newKID = kid
 		return nil
 	})
 	if err != nil {

@@ -16,7 +16,7 @@ import (
 )
 
 const chainedLedgerEntries = `-- name: ChainedLedgerEntries :many
-SELECT c.seq, c.prev_hash, c.entry_hash, e.id, e.kind, e.actor_type, e.actor_id, e.occurred_at, e.body
+SELECT c.seq, c.prev_hash, c.entry_hash, e.id, e.kind, e.actor_type, e.actor_id, e.occurred_at, e.body, e.body_removed_at
 FROM pc.ledger_chain c
 JOIN pc.ledger_entries e ON e.org_id = c.org_id AND e.id = c.entry_id
 WHERE c.org_id = $1 AND c.seq > $2
@@ -25,15 +25,16 @@ LIMIT $3
 `
 
 type ChainedLedgerEntriesRow struct {
-	Seq        int64
-	PrevHash   []byte
-	EntryHash  []byte
-	ID         ids.UUID
-	Kind       string
-	ActorType  string
-	ActorID    string
-	OccurredAt time.Time
-	Body       []byte
+	Seq           int64
+	PrevHash      []byte
+	EntryHash     []byte
+	ID            ids.UUID
+	Kind          string
+	ActorType     string
+	ActorID       string
+	OccurredAt    time.Time
+	Body          []byte
+	BodyRemovedAt *time.Time
 }
 
 func (q *Queries) ChainedLedgerEntries(ctx context.Context, orgID ids.OrgID, afterSeq int64, maxRows int32) ([]ChainedLedgerEntriesRow, error) {
@@ -55,6 +56,7 @@ func (q *Queries) ChainedLedgerEntries(ctx context.Context, orgID ids.OrgID, aft
 			&i.ActorID,
 			&i.OccurredAt,
 			&i.Body,
+			&i.BodyRemovedAt,
 		); err != nil {
 			return nil, err
 		}

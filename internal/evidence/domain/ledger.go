@@ -169,6 +169,21 @@ func Next(headSeq int64, headHash []byte, e Entry) (Link, error) {
 // ErrChainBroken reports a chain that fails verification.
 var ErrChainBroken = errors.New("evidence: ledger chain broken")
 
+// ChainError is an ErrChainBroken at one position of the chain.
+type ChainError struct {
+	Seq int64 // the first position that failed
+	err error
+}
+
+func (e *ChainError) Error() string { return e.err.Error() }
+
+// Unwrap returns the error, which wraps ErrChainBroken.
+func (e *ChainError) Unwrap() error { return e.err }
+
+func broken(seq int64, format string, args ...any) error {
+	return &ChainError{Seq: seq, err: fmt.Errorf("%w: "+format, append([]any{ErrChainBroken}, args...)...)}
+}
+
 // Verifier checks a chain incrementally, in seq order.
 type Verifier struct {
 	seq  int64
@@ -178,22 +193,51 @@ type Verifier struct {
 // NewVerifier starts verification at the genesis of a chain.
 func NewVerifier() *Verifier { return &Verifier{head: bytes.Clone(GenesisHash)} }
 
-// Add verifies the next (link, entry) pair.
-func (v *Verifier) Add(l Link, e Entry) error {
+// NewVerifierAt starts verification after the position seq whose
+// entry_hash is head (a checkpointed position).
+func NewVerifierAt(seq int64, head []byte) (*Verifier, error) {
+	if seq < 0 || len(head) != HashSize || (seq == 0 && !bytes.Equal(head, GenesisHash)) {
+		return nil, fmt.Errorf("%w: invalid starting position", ErrInvalidEntry)
+	}
+	return &Verifier{seq: seq, head: bytes.Clone(head)}, nil
+}
+
+func (v *Verifier) position(l Link, id ids.UUID) error {
 	switch {
 	case l.Seq != v.seq+1:
-		return fmt.Errorf("%w: expected seq %d, found %d", ErrChainBroken, v.seq+1, l.Seq)
-	case l.EntryID != e.ID:
-		return fmt.Errorf("%w: seq %d links entry %s but carries %s", ErrChainBroken, l.Seq, l.EntryID, e.ID)
+		return broken(v.seq+1, "expected seq %d, found %d", v.seq+1, l.Seq)
+	case l.EntryID != id:
+		return broken(l.Seq, "seq %d links entry %s but carries %s", l.Seq, l.EntryID, id)
 	case !bytes.Equal(l.PrevHash, v.head):
-		return fmt.Errorf("%w: seq %d prev_hash does not match the previous entry", ErrChainBroken, l.Seq)
+		return broken(l.Seq, "seq %d prev_hash does not match the previous entry", l.Seq)
+	case len(l.EntryHash) != HashSize:
+		return broken(l.Seq, "seq %d entry hash is not %d bytes", l.Seq, HashSize)
+	}
+	return nil
+}
+
+// Add verifies the next (link, entry) pair.
+func (v *Verifier) Add(l Link, e Entry) error {
+	if err := v.position(l, e.ID); err != nil {
+		return err
 	}
 	c, err := e.Canonical(l.Seq)
 	if err != nil {
-		return fmt.Errorf("%w: seq %d: %w", ErrChainBroken, l.Seq, err)
+		return broken(l.Seq, "seq %d: %w", l.Seq, err)
 	}
 	if !bytes.Equal(LinkHash(v.head, c), l.EntryHash) {
-		return fmt.Errorf("%w: seq %d entry hash mismatch (entry or link altered)", ErrChainBroken, l.Seq)
+		return broken(l.Seq, "seq %d entry hash mismatch (entry or link altered)", l.Seq)
+	}
+	v.seq, v.head = l.Seq, bytes.Clone(l.EntryHash)
+	return nil
+}
+
+// AddRemoved accepts the next link of an entry whose body retention
+// removed (decision 4): its position and prev_hash are checked, and its
+// stored entry_hash, which can no longer be recomputed, continues the chain.
+func (v *Verifier) AddRemoved(l Link) error {
+	if err := v.position(l, l.EntryID); err != nil {
+		return err
 	}
 	v.seq, v.head = l.Seq, bytes.Clone(l.EntryHash)
 	return nil

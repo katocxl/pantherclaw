@@ -1,0 +1,225 @@
+// SPDX-License-Identifier: BUSL-1.1
+// Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+
+syntax = "proto3";
+
+package pantherclaw.v1;
+
+import "buf/validate/validate.proto";
+import "google/protobuf/timestamp.proto";
+
+// EvidenceService reads the proof of the caller's org's evidence ledger (G0
+// M7 track B, design decisions 8 and 13; HR-194, HR-196; PAP-1 §9.4): its
+// signed checkpoints, inclusion and consistency proofs, and verify bundles
+// for `pclaw verify`, which checks them offline against keys pinned from
+// /.well-known/pantherclaw/evidence-keys.json. Checkpoints and proofs
+// commit to the whole org and carry only sizes and hashes; a bundle of
+// transactions needs evidence.read where each transaction's agent lives,
+// like run.read, and a bundle of a sequence range, which covers the whole
+// org and its audit events, needs evidence.read and audit.read at org scope.
+// Anchors, replay and evidence packs come in later slices.
+service EvidenceService {
+  // ListCheckpoints lists the org's checkpoints, newest first, and its
+  // integrity status.
+  // permission: evidence.read
+  rpc ListCheckpoints(ListCheckpointsRequest) returns (ListCheckpointsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // GetCheckpoint returns one checkpoint, or the latest.
+  // permission: evidence.read
+  rpc GetCheckpoint(GetCheckpointRequest) returns (GetCheckpointResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // GetInclusionProof proves that the entry at a sequence number is in a
+  // checkpoint's tree (RFC 9162).
+  // permission: evidence.read
+  rpc GetInclusionProof(GetInclusionProofRequest) returns (GetInclusionProofResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // GetConsistencyProof proves that a checkpoint's tree extends a smaller
+  // one (RFC 9162).
+  // permission: evidence.read
+  rpc GetConsistencyProof(GetConsistencyProofRequest) returns (GetConsistencyProofResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // ExportBundle builds a pantherclaw.bundle/v1 verify bundle.
+  // permission: evidence.read
+  rpc ExportBundle(ExportBundleRequest) returns (ExportBundleResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+}
+
+// LedgerIntegrityState is where the integrity of the org's evidence ledger stands.
+enum LedgerIntegrityState {
+  LEDGER_INTEGRITY_STATE_UNSPECIFIED = 0;
+  // No check failed.
+  LEDGER_INTEGRITY_STATE_OK = 1;
+  // A check failed: checkpointing is stopped until an operator
+  // investigates; receipts are still written and chained.
+  LEDGER_INTEGRITY_STATE_FAILED = 2;
+}
+
+// LedgerIntegrity is the integrity status of the org's evidence ledger (HR-194).
+message LedgerIntegrity {
+  // State.
+  LedgerIntegrityState state = 1;
+  // For FAILED: the failed check's code, for example CHAIN_LINK.
+  string failure_code = 2;
+  // For FAILED: the first sequence number involved, when known.
+  int64 failed_seq = 3;
+  // For FAILED: when it failed.
+  google.protobuf.Timestamp fail_time = 4;
+  // The tree size the daily job last verified, and when.
+  uint64 verified_size = 5;
+  // When it last verified it.
+  google.protobuf.Timestamp verify_time = 6;
+}
+
+// Checkpoint is one signed checkpoint of the org's tree.
+message Checkpoint {
+  // Tree size: the entries with sequence numbers 1 to tree_size.
+  uint64 tree_size = 1;
+  // RFC 9162 root hash (32 bytes).
+  bytes root_hash = 2;
+  // The C2SP signed note, exactly as signed and stored.
+  bytes note = 3;
+  // The checkpoints key that signed it.
+  string kid = 4;
+  // The checkpoints_pq key that co-signed it, if any.
+  string pq_kid = 5;
+  // When it was signed.
+  google.protobuf.Timestamp create_time = 6;
+}
+
+// ListCheckpointsRequest pages through checkpoints.
+message ListCheckpointsRequest {
+  // Maximum results (default 50, at most 200).
+  int32 page_size = 1 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 200
+  }];
+  // Token from a previous response.
+  string page_token = 2 [(buf.validate.field).string = {
+    max_len: 64
+    pattern: "^[A-Za-z0-9_-]*$"
+  }];
+}
+
+// ListCheckpointsResponse returns a page.
+message ListCheckpointsResponse {
+  // Checkpoints, newest first.
+  repeated Checkpoint checkpoints = 1;
+  // Token for the next page; empty on the last.
+  string next_page_token = 2;
+  // The checkpoints' origin: "<log origin>/org/<org id>".
+  string origin = 3;
+  // The org's integrity status.
+  LedgerIntegrity integrity = 4;
+}
+
+// GetCheckpointRequest names a checkpoint.
+message GetCheckpointRequest {
+  // Its tree size; 0 for the latest.
+  uint64 tree_size = 1;
+}
+
+// GetCheckpointResponse returns it.
+message GetCheckpointResponse {
+  // The checkpoint.
+  Checkpoint checkpoint = 1;
+  // Its origin.
+  string origin = 2;
+}
+
+// GetInclusionProofRequest names an entry and a checkpoint.
+message GetInclusionProofRequest {
+  // The entry's sequence number.
+  int64 seq = 1 [(buf.validate.field).int64.gte = 1];
+  // The checkpoint's tree size, at least seq; 0 for the latest.
+  uint64 tree_size = 2;
+}
+
+// GetInclusionProofResponse returns the proof.
+message GetInclusionProofResponse {
+  // The entry's sequence number; its leaf index is seq - 1.
+  int64 seq = 1;
+  // The checkpoint's tree size.
+  uint64 tree_size = 2;
+  // The entry's chained entry_hash; the leaf is its RFC 9162 leaf hash.
+  bytes entry_hash = 3;
+  // The audit path, leaf to root.
+  repeated bytes proof = 4;
+}
+
+// GetConsistencyProofRequest names two checkpoints.
+message GetConsistencyProofRequest {
+  // The smaller tree size.
+  uint64 from_size = 1 [(buf.validate.field).uint64.gte = 1];
+  // The larger checkpoint's tree size; 0 for the latest.
+  uint64 to_size = 2;
+}
+
+// GetConsistencyProofResponse returns the proof.
+message GetConsistencyProofResponse {
+  // The smaller tree size.
+  uint64 from_size = 1;
+  // The larger checkpoint's tree size.
+  uint64 to_size = 2;
+  // The RFC 9162 consistency proof.
+  repeated bytes proof = 3;
+}
+
+// BundleTransactions selects transactions for a bundle.
+message BundleTransactions {
+  // Transaction ids.
+  repeated string ids = 1 [(buf.validate.field).repeated = {
+    min_items: 1
+    max_items: 50
+    unique: true
+    items: {
+      string: {uuid: true}
+    }
+  }];
+}
+
+// BundleRange selects consecutive ledger entries for a bundle.
+message BundleRange {
+  // The first sequence number.
+  int64 from_seq = 1 [(buf.validate.field).int64.gte = 1];
+  // The last sequence number; at most 1,000 entries.
+  int64 to_seq = 2 [(buf.validate.field).int64.gte = 1];
+
+  option (buf.validate.message).cel = {
+    id: "bundle_range"
+    message: "to_seq must be at least from_seq and the range at most 1,000 entries"
+    expression: "this.to_seq >= this.from_seq && this.to_seq - this.from_seq < 1000"
+  };
+}
+
+// ExportBundleRequest selects what a bundle holds.
+message ExportBundleRequest {
+  // What to export.
+  oneof selection {
+    option (buf.validate.oneof).required = true;
+    // The receipts of these transactions and their ledger entries.
+    BundleTransactions transactions = 1;
+    // These ledger entries and the receipts they record.
+    BundleRange range = 2;
+  }
+  // The tree size of a checkpoint the requester saved earlier: the bundle
+  // then also proves its checkpoint extends that one, for `pclaw verify
+  // --previous`. 0 for none.
+  uint64 consistency_from = 3;
+}
+
+// ExportBundleResponse returns the bundle.
+message ExportBundleResponse {
+  // The pantherclaw.bundle/v1 bundle, canonical JSON (RFC 8785).
+  bytes bundle = 1;
+  // How many ledger entries it holds.
+  int32 entries = 2;
+  // How many receipts it holds.
+  int32 receipts = 3;
+  // The tree size of its latest checkpoint; 0 when the org has none yet.
+  uint64 checkpoint_size = 4;
+}
