@@ -73,7 +73,7 @@ func retentionCommands() map[string]command {
 				if *days < 1 || *days > 3650 {
 					return nil, errors.New("--days must be 1..3650 and within the category's bounds")
 				}
-				return c.SetRetentionPolicy(ctx, &pantherclawv1.SetRetentionPolicyRequest{Category: cat, Days: int32(*days)}) //nolint:gosec // G115: ≤ 3650
+				return c.SetRetentionPolicy(ctx, &pantherclawv1.SetRetentionPolicyRequest{Category: cat, Days: int32(*days)})
 			}
 		}),
 		"hold create": adminRPC("hold create --scope org|agent|run|transaction|time_range [--id ID] [--start TIME --end TIME] "+

@@ -11,7 +11,7 @@
 // and approval notes) and the security audit (every other audit ledger
 // entry). Each category's period is an immutable revision; the one in
 // effect at a time is the newest that took effect by then and that no
-// later revision cancelled (a revision recorded before an earlier one took
+// later revision superseded (a revision recorded before an earlier one took
 // effect cancels it). Lengthening applies at once; shortening is a
 // weakening change that takes effect 7 days after it was recorded, so a
 // hold can still be placed.
@@ -99,9 +99,9 @@ func (r Revision) Label() string { return Label(r.Category, r.Number) }
 // Label names revision n of c.
 func Label(c Category, n int) string { return string(c) + " r" + strconv.Itoa(n) }
 
-// cancelled reports whether a later revision was recorded before r took
+// superseded reports whether a later revision was recorded before r took
 // effect.
-func cancelled(revs []Revision, r Revision) bool {
+func superseded(revs []Revision, r Revision) bool {
 	return slices.ContainsFunc(revs, func(n Revision) bool {
 		return n.Category == r.Category && n.Number > r.Number && n.Created.Before(r.Effective)
 	})
@@ -113,7 +113,7 @@ func Current(revs []Revision, c Category, at time.Time) (Revision, bool) {
 	var best Revision
 	found := false
 	for _, r := range revs {
-		if r.Category != c || r.Effective.After(at) || cancelled(revs, r) {
+		if r.Category != c || r.Effective.After(at) || superseded(revs, r) {
 			continue
 		}
 		if !found || r.Number > best.Number {

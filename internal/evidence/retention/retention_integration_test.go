@@ -311,7 +311,7 @@ func TestHR198_ShorteningTakesEffectAfterSevenDaysAndIsAudited(t *testing.T) {
 	if err != nil || !ch.Changed || ch.Shortened || ch.Policy.Current.Days != 400 || ch.Policy.Pending != nil {
 		t.Fatalf("lengthening = %+v, %v", ch, err)
 	}
-	// A shortening, then the period in effect again: cancelled.
+	// A shortening, then the period in effect again: withdrawn.
 	if _, err := f.svc.SetPolicy(ctx, retention.Approvals, 365); err != nil {
 		t.Fatal(err)
 	}
