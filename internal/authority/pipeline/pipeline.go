@@ -55,6 +55,9 @@ const (
 	ReasonConnectionUnknown    = "CONNECTION_UNKNOWN"
 	ReasonConnectionRequired   = "CONNECTION_REQUIRED"
 	ReasonConnectionContained  = "CONNECTION_QUARANTINED"
+	// ReasonVerifierUnsupported: the definition requires a verification
+	// level its verifier cannot reach for this action (F497, HR-191).
+	ReasonVerifierUnsupported = "VERIFIER_UNSUPPORTED"
 )
 
 // Pipeline evaluates steps 1–8.
@@ -119,6 +122,20 @@ type Evaluation struct {
 	// Channel and Target are the action's, for the transaction record.
 	Channel string
 	Target  actionir.Target
+	// Verify is what the effect of a permit is verified against (G0 M7,
+	// HR-191), set when step 8 knew the definition; the permit records it.
+	Verify *VerifyPlan
+}
+
+// VerifyPlan is fixed when a permit is issued: the digest of the
+// definition the decision used, the level it requires, and the values an
+// extended verifier must observe, from the effective action. A verification
+// task is built from it, never from what a target or an agent says.
+type VerifyPlan struct {
+	DefinitionDigest string
+	Required         defs.Level
+	// Expected is nil when the definition's verifier compares no fields.
+	Expected map[string]string
 }
 
 // Hold is step 8's view of the transaction's approval request.
@@ -856,6 +873,7 @@ func (p *Pipeline) requirements(ctx context.Context, s *state) {
 	if eff, vals, ok := s.effective(); ok {
 		s.ev.EffectiveHash, effective = eff, vals
 	}
+	s.verification(effective)
 	latest, err := p.Reader.Hold(ctx, s.req.Org, s.ev.RunID, s.ev.ActionID)
 	if err != nil {
 		s.missing(StepRequirements, err, "the approval request")
@@ -990,6 +1008,31 @@ func (p *Pipeline) bind(s *state, h *Hold, effective defs.Values, deadline time.
 
 // effective applies clamping obligations to the action and returns the
 // effective action's hash and parameters (F104, F107).
+// verification fixes the verify plan of the effective action (G0 M7 design
+// decision 2): the definition's digest and required level, and an extended
+// verifier's expected values. When the definition requires more than the
+// target's acceptance and the values cannot be computed, nothing could
+// ever show the effect, so the action cannot be authorized (F497).
+func (s *state) verification(effective defs.Values) {
+	if s.def == nil || s.pinned == nil {
+		return
+	}
+	plan := &VerifyPlan{DefinitionDigest: s.pinned.Definition.Digest, Required: defs.LevelAcceptance}
+	if v := s.def.Verifier; v != nil && v.Extended() {
+		plan.Required = v.RequiredLevel()
+		if len(v.Expect) > 0 {
+			exp, ok := v.Expected(s.a.Target, effective)
+			if !ok && plan.Required != defs.LevelAcceptance {
+				s.cl.add(StepRequirements, adomain.CannotAuthorize, ReasonVerifierUnsupported,
+					"the verifier cannot compute what it must observe, and the definition requires "+string(plan.Required), "")
+				return
+			}
+			plan.Expected = exp
+		}
+	}
+	s.ev.Verify = plan
+}
+
 func (s *state) effective() (string, defs.Values, bool) {
 	vals := maps.Clone(s.vals)
 	changed := false

@@ -56,11 +56,11 @@ func TestIntSigningKeysAreCreatedOnceAndAudited(t *testing.T) {
 	if err := keystore.LoadSigningKeys(ctx, p, kp, reg); err != nil {
 		t.Fatal(err)
 	}
-	if n := platformCount(t, p, "SELECT count(*) FROM pc.keys WHERE state = 'ACTIVE'"); n != len(keys.Purposes()) {
-		t.Fatalf("active keys = %d, want %d", n, len(keys.Purposes()))
+	if n := platformCount(t, p, "SELECT count(*) FROM pc.keys WHERE state = 'ACTIVE'"); n != len(keys.Purposes())+1 {
+		t.Fatalf("active keys = %d, want %d (every Ed25519 purpose and the anchors key)", n, len(keys.Purposes())+1)
 	}
-	if n := platformCount(t, p, "SELECT count(*) FROM pc.ledger_entries WHERE kind = 'audit.signing_key.created'"); n != len(keys.Purposes()) {
-		t.Fatalf("audit entries = %d, want %d", n, len(keys.Purposes()))
+	if n := platformCount(t, p, "SELECT count(*) FROM pc.ledger_entries WHERE kind = 'audit.signing_key.created'"); n != len(keys.Purposes())+1 {
+		t.Fatalf("audit entries = %d, want %d", n, len(keys.Purposes())+1)
 	}
 	s1, _ := reg.Signer(keys.PurposePermits)
 	tok, _ := s1.Sign("pap-permit+jwt", []byte(`{}`))
@@ -78,7 +78,7 @@ func TestIntSigningKeysAreCreatedOnceAndAudited(t *testing.T) {
 	if _, _, err := v.Verify(tok); err != nil {
 		t.Fatalf("token from before restart does not verify: %v", err)
 	}
-	if n := platformCount(t, p, "SELECT count(*) FROM pc.keys"); n != len(keys.Purposes()) {
+	if n := platformCount(t, p, "SELECT count(*) FROM pc.keys"); n != len(keys.Purposes())+1 {
 		t.Fatalf("keys after restart = %d", n)
 	}
 }

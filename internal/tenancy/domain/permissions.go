@@ -151,6 +151,21 @@ const (
 	PermContainmentKillSwitch Permission = "containment.killswitch"
 )
 
+// Evidence and reconciliation permissions (G0 M7, Contracts → Permissions).
+// evidence.read covers the explorer, checkpoints, proofs, anchors, bundles,
+// replay outcomes and pack metadata, scoped like run.read. Resolving unknown
+// outcomes, exporting packs, setting retention and configuring capture are
+// human only; whoever configures capture cannot read it
+// (evidence.read_restricted stays with the Auditor).
+const (
+	PermEvidenceRead            Permission = "evidence.read"
+	PermEvidenceExport          Permission = "evidence.export"
+	PermEvidenceRetentionManage Permission = "evidence.retention.manage"
+	PermEvidenceCaptureManage   Permission = "evidence.capture.manage"
+	PermTransactionReconcile    Permission = "transaction.reconcile"
+	PermGatewayVerify           Permission = "gateway.verify" // gateways only: lease and report verifications (HR-190)
+)
+
 // Workload permissions are held only by PAP/1-authenticated workloads
 // (WorkloadService), never by users, service accounts or roles.
 const (
@@ -187,6 +202,8 @@ var catalog = []Permission{
 	PermApprovalRespond, PermIncidentRespond, PermEvidenceReadRestricted,
 	PermGatewayRead, PermGatewayManage, PermConnectionRead, PermConnectionManage, PermCredentialSeal,
 	PermContainmentRead, PermContainmentKillSwitch,
+	PermEvidenceRead, PermEvidenceExport, PermEvidenceRetentionManage, PermEvidenceCaptureManage,
+	PermTransactionReconcile,
 }
 
 // humanOnly permissions can never be exercised by a service account or an
@@ -196,6 +213,7 @@ var humanOnly = []Permission{
 	PermApprovalRespond, PermPolicyPublish, PermEvidenceReadRestricted, PermAgentAdmit, PermIssuerActivate,
 	PermGrantIssue, PermGuardrailsManage, PermFactProviderManage, PermPackageActivate,
 	PermGatewayManage, PermConnectionManage, PermCredentialSeal, PermContainmentKillSwitch, PermAgentRestore,
+	PermTransactionReconcile, PermEvidenceExport, PermEvidenceRetentionManage, PermEvidenceCaptureManage,
 }
 
 // Catalog returns every grantable permission in a stable order.
@@ -210,7 +228,7 @@ func (p Permission) HumanOnly() bool { return slices.Contains(humanOnly, p) }
 // gatewayOnly permissions belong to authenticated gateways. gateway.read
 // and gateway.manage are ordinary permissions for people.
 var gatewayOnly = []Permission{
-	PermGatewayAuthorize, PermGatewayDispatch, PermGatewayObserve, PermGatewayEnroll, PermGatewaySync,
+	PermGatewayAuthorize, PermGatewayDispatch, PermGatewayObserve, PermGatewayEnroll, PermGatewaySync, PermGatewayVerify,
 }
 
 // Gateway reports whether p belongs to gateways.
@@ -222,7 +240,7 @@ func (p Permission) Workload() bool { return strings.HasPrefix(string(p), "workl
 // declarableOnly are requirements an RPC may declare that no role grants.
 var declarableOnly = []Permission{
 	PermPublic, PermAuthenticated, PermGatewayAuthorize, PermGatewayDispatch, PermGatewayObserve, PermGatewayEnroll,
-	PermGatewaySync, PermWorkloadEnroll, PermWorkloadToken, PermWorkloadRun, PermWorkloadDelegate,
+	PermGatewaySync, PermGatewayVerify, PermWorkloadEnroll, PermWorkloadToken, PermWorkloadRun, PermWorkloadDelegate,
 }
 
 // Declarable reports whether an RPC may declare p as its requirement.

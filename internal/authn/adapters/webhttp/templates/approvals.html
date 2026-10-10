@@ -1,0 +1,39 @@
+{{template "head" .}}
+<h1>Approvals</h1>
+{{with .Inbox}}
+{{if .Waiting}}
+<p class="note">Requests waiting for your decision, the most urgent first.</p>
+<table>
+<thead><tr><th></th><th>Priority</th><th>Request</th><th>Operation</th><th>State</th><th>Deadline</th></tr></thead>
+<tbody>
+{{range .Waiting}}<tr><td><input type="checkbox" class="batch" value="{{.ID}}" aria-label="Select for a batch"></td><td>P{{.Priority}}</td><td><a href="/approvals/{{.ID}}">{{.Title}}</a></td><td><code>{{.Operation}}</code></td><td>{{.State}}</td><td>{{.Deadline.UTC.Format "2006-01-02 15:04 UTC"}}</td></tr>
+{{end}}</tbody>
+</table>
+<p><button type="button" id="approve-batch">Approve the selected requests with your security key</button></p>
+<p class="note">Batch approval (Team edition) takes up to 25 reversible, single-approver requests of one operation, each at or below your organization's ceiling. Anything else is reviewed on its own page.</p>
+{{else}}
+<p class="ok">Nothing is waiting for your decision.</p>
+{{end}}
+<h2>What was checked</h2>
+{{if .Scopes}}
+<p class="note">Requests for agents within the scopes where you hold a role that decides approvals, and step-ups that name you:</p>
+<ul>{{range .Scopes}}<li><code>{{.Role}}</code> at {{.Scope.Type}} <code>{{.Scope.ID}}</code></li>{{end}}</ul>
+{{else}}
+<p class="note">You hold no role that decides approvals, so only step-ups that name you can wait for you.</p>
+{{end}}
+{{if .Capped}}<p class="note">Only the organization's {{$.Scan}} most urgent waiting requests were checked.</p>{{end}}
+<h2>Your recent responses</h2>
+{{if .Recent}}
+<table>
+<thead><tr><th>When</th><th>Response</th><th>Request</th><th>Request state</th></tr></thead>
+<tbody>
+{{range .Recent}}<tr><td>{{.At.UTC.Format "2006-01-02 15:04 UTC"}}</td><td>{{.Kind}}{{if .Voided}} (no longer counts){{end}}</td><td><a href="/approvals/{{.Request}}"><code>{{.Operation}}</code></a></td><td>{{.State}}</td></tr>
+{{end}}</tbody>
+</table>
+{{else}}
+<p class="note">You have not responded to any request.</p>
+{{end}}
+{{end}}
+<p id="status" role="status"></p>
+<script src="/static/approvals.js"></script>
+{{template "foot" .}}

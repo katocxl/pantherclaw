@@ -1,0 +1,135 @@
+{{template "head" .}}
+<p><a href="/approvals">All approvals</a></p>
+<h1>{{.Display.Title}}</h1>
+<p>State: <strong>{{.State}}</strong>. Deadline {{.Request.DeadlineAt.UTC.Format "2006-01-02 15:04:05 UTC"}}{{with .Request.EvidenceDeadlineAt}}; evidence is due by {{.UTC.Format "2006-01-02 15:04:05 UTC"}}{{end}}.</p>
+{{if .MayApprove}}<p class="ok">You can approve this request with your security key.</p>
+{{else if .MayRespond}}<p class="note">You can decline this request, ask for evidence or propose a narrower action, but you cannot approve it now.</p>{{end}}
+{{with .Display.Consequence}}
+<h2>What will happen</h2>
+<dl>
+<dt>Operation</dt><dd><code>{{.Operation}}</code></dd>
+{{with .Summary}}<dt>Summary</dt><dd>{{.}}</dd>{{end}}
+<dt>Target</dt><dd>{{.Target.Type}} <code>{{.Target.ID}}</code>{{with .Target.Account}} in account <code>{{.}}</code>{{end}}</dd>
+{{with .Effects}}<dt>Effects</dt><dd>{{range $i, $e := .}}{{if $i}}, {{end}}{{$e}}{{end}}</dd>{{end}}
+{{with .Reversibility}}<dt>Reversibility</dt><dd>{{.}}</dd>{{end}}
+{{with .Verifier}}<dt>Verified by</dt><dd>{{.}}</dd>{{end}}
+</dl>
+{{if .Clamped}}<p class="note">An obligation lowered a parameter: the fields show the action that will run, beside what the agent asked for.</p>{{end}}
+{{end}}
+{{if .Display.Fields}}
+<h2>Fields</h2>
+<table>
+<thead><tr><th>Field</th><th>Value</th>{{if .Display.Consequence.Clamped}}<th>Requested</th>{{end}}</tr></thead>
+<tbody>
+{{range .Display.Fields}}<tr><td>{{.Name}}</td><td><code>{{.Value}}</code></td>{{if $.Display.Consequence.Clamped}}<td><code>{{.Requested}}</code></td>{{end}}</tr>
+{{end}}</tbody>
+</table>
+{{end}}
+{{if .Facts}}
+<h2>Facts used</h2>
+<table>
+<thead><tr><th>Fact</th><th>Subject</th><th>Value</th><th>Provider</th><th>Age</th></tr></thead>
+<tbody>
+{{range .Facts}}<tr><td>{{.Name}}</td><td><code>{{.Subject}}</code></td><td><code>{{.Value}}</code></td><td>{{.Provider}}</td><td>{{.Age}}</td></tr>
+{{end}}</tbody>
+</table>
+{{end}}
+{{with .Display.Run}}
+<h2>The run</h2>
+<dl>
+<dt>Run</dt><dd><code>{{.Run}}</code></dd>
+<dt>Agent</dt><dd><code>{{.Agent}}</code></dd>
+<dt>Instance</dt><dd><code>{{.Instance}}</code></dd>
+<dt>Launched by</dt><dd><code>{{.Launcher}}</code></dd>
+<dt>On behalf of</dt><dd><code>{{.Principal}}</code></dd>
+</dl>
+{{end}}
+{{with .Display}}
+{{if .Basis}}
+<h2>Why approval is needed</h2>
+<ul>{{range .Basis}}<li>{{.Reason}} <span class="note">({{.Level}})</span></li>{{end}}</ul>
+{{end}}
+<h2>Who can decide</h2>
+<ul>{{range .Deciders}}<li>{{if eq .Kind "step_up"}}A step-up by <code>{{.Subject}}</code>{{else if eq .Kind "restore"}}A person holding <code>agent.restore</code> where the agent lives, other than the requester{{else}}{{.Count}} × <code>{{.Role}}</code>{{if .Independent}}, independent of the agent's owners and the grant's issuer{{end}}{{with .Scope}}, {{.}}{{end}}{{end}}</li>{{end}}</ul>
+<p class="note">The run's launcher and principal, and a restoration's requester, never decide. Eligibility is checked again at every response and when the approval is used.</p>
+{{if .Variants}}
+<h2>Earlier variants</h2>
+<p class="note">Earlier requests of this grant for the same operation and target.</p>
+<table>
+<thead><tr><th>Request</th><th>Created</th><th>State</th></tr></thead>
+<tbody>
+{{range .Variants}}<tr><td><code>{{.Request}}</code></td><td>{{.Created}}</td><td>{{.State}}</td></tr>
+{{end}}</tbody>
+</table>
+{{end}}
+{{if .Context}}
+<h2>Context, not precedent</h2>
+<p class="note">Earlier approved requests for the same operation and target. They do not make this one safe.</p>
+<ul>{{range .Context}}<li><code>{{.Request}}</code>, approved {{.Approved}}</li>{{end}}</ul>
+{{end}}
+<h2>Written by the agent or the requester</h2>
+<p class="alert">{{.Untrusted.Label}}</p>
+{{if .Untrusted.Items}}
+<dl>{{range .Untrusted.Items}}<dt>{{.Source}}</dt><dd class="untrusted">{{.Text}}{{if .MixedScript}} <strong>(mixes writing systems: look for look-alike characters)</strong>{{end}}{{if .Truncated}} (cut short){{end}}</dd>
+{{end}}</dl>
+{{else}}
+<p class="note">None.</p>
+{{end}}
+{{end}}
+{{if .Evidence}}
+<h2>Evidence</h2>
+<p class="alert">Written by the run or the person who launched it. PantherClaw has not checked this text.</p>
+<dl>{{range .Evidence}}<dt><code>{{.Author}}</code>, {{.At.UTC.Format "2006-01-02 15:04:05 UTC"}}</dt><dd class="untrusted">{{.Note.Text}}{{if .Note.MixedScript}} <strong>(mixes writing systems: look for look-alike characters)</strong>{{end}}{{if .Note.Truncated}} (cut short){{end}}</dd>
+{{end}}</dl>
+{{end}}
+<h2>Responses</h2>
+{{if .Responses}}
+<table>
+<thead><tr><th>When</th><th>Who</th><th>Response</th><th>Reason</th><th>Note</th></tr></thead>
+<tbody>
+{{range .Responses}}<tr><td>{{.At.UTC.Format "2006-01-02 15:04:05 UTC"}}</td><td><code>{{.User}}</code></td><td>{{.Kind}}{{with .Voided}} (no longer counts: {{.}}){{end}}</td><td>{{.Reason}}{{with .Alternative}}, try instead: {{.}}{{end}}</td><td class="untrusted">{{.Note.Text}}{{with .Proposed}}<br>Proposed: <code>{{.}}</code>{{end}}</td></tr>
+{{end}}</tbody>
+</table>
+{{else}}
+<p class="note">No responses yet.</p>
+{{end}}
+{{if .MayApprove}}
+<h2>Approve</h2>
+<p class="note">Your security key signs exactly what this page shows. Nothing else can approve: no link, command or message.</p>
+<p><button type="button" id="approve" data-id="{{.Request.ID}}">Approve with your security key</button></p>
+{{end}}
+{{if .MayRespond}}
+<h2>Decline</h2>
+<p><label for="decline-reason">Reason</label>
+<select id="decline-reason">{{range .Reasons}}<option value="{{.}}">{{.}}</option>{{end}}</select></p>
+<p><label for="decline-alternative">Suggest instead</label>
+<select id="decline-alternative"><option value="">(nothing)</option>{{range .Alternatives}}<option value="{{.}}">{{.}}</option>{{end}}</select></p>
+<p><label for="decline-note">Note for people (never sent to the agent)</label>
+<input id="decline-note" type="text" maxlength="500"></p>
+<p><button type="button" id="decline" data-id="{{.Request.ID}}">Decline</button></p>
+{{if and (eq .State "PENDING") (eq .Request.SubjectKind "ACTION")}}
+<h2>Ask for evidence</h2>
+<p><label for="evidence-question">Question</label>
+<select id="evidence-question">{{range .Questions}}<option value="{{.}}">{{.}}</option>{{end}}</select></p>
+<p><label for="evidence-note">Note</label>
+<input id="evidence-note" type="text" maxlength="500"></p>
+<p><label for="evidence-minutes">Evidence due within</label>
+<select id="evidence-minutes"><option value="10">10 minutes</option><option value="30" selected>30 minutes</option><option value="60">1 hour</option><option value="240">4 hours</option></select>
+<span class="note">(it must come before the request's deadline)</span></p>
+<p><button type="button" id="request-evidence" data-id="{{.Request.ID}}">Ask for evidence</button></p>
+{{end}}
+{{if .Params.Text}}
+<h2>Propose a narrower action</h2>
+<p class="note">Change only amounts, integers and lists, to values no larger. The agent must submit the proposal as a new action, which gets its own decision. The parameters below are the held action's, as the agent sent them.</p>
+<p><label for="narrower-params">Parameters</label></p>
+<p><textarea id="narrower-params" rows="8" cols="72" spellcheck="false">{{.Params.Text}}</textarea></p>
+<p><label for="narrower-note">Note for people</label>
+<input id="narrower-note" type="text" maxlength="500"></p>
+<p><button type="button" id="narrower-check" data-id="{{.Request.ID}}">Check the proposal</button>
+<button type="button" id="narrower-propose" data-id="{{.Request.ID}}">Propose and end this request</button></p>
+<pre id="narrower-result" class="untrusted"></pre>
+{{end}}
+{{end}}
+<p id="status" role="status"></p>
+<script src="/static/approvals.js"></script>
+{{template "foot" .}}

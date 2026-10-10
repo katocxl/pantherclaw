@@ -195,7 +195,7 @@ type SweepResult struct {
 // SweepOrg releases expired ISSUED permits and marks stale DISPATCHING ones
 // UNKNOWN, never releasing them (HR-003).
 func (s *Service) SweepOrg(ctx context.Context, org ids.OrgID, staleAfter time.Duration) (SweepResult, error) {
-	released, unknown, err := s.decider.Store.Sweep(ctx, org, staleAfter)
+	released, unknown, err := s.decider.Sweep(ctx, org, staleAfter)
 	r := SweepResult{Released: released, Unknown: unknown}
 	if r.Unknown > 0 {
 		s.log.WarnContext(ctx, "authz.dispatch_unknown", slog.String("org_id", org.String()), slog.Int("count", r.Unknown))

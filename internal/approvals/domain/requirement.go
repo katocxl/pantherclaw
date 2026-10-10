@@ -24,7 +24,22 @@ import (
 const (
 	KindApproval = "approval"
 	KindStepUp   = "step_up"
+	// KindRestore is a restoration's one requirement (decision 11): a
+	// person holding agent.restore on the agent's scope path, other than
+	// the requester. Only the server creates it; no grant or policy may
+	// name it.
+	KindRestore = "restore"
 )
+
+// RestoreRequirement is the requirement of every restoration.
+var RestoreRequirement = Requirement{Kind: KindRestore, Count: 1, Sources: []Source{}}
+
+// RestoreRole reports whether role decides restorations: it holds
+// agent.restore (Security Admin and Responder).
+func RestoreRole(role string) bool {
+	r, ok := td.LookupRole(td.RoleName(role))
+	return ok && r.Has(td.PermAgentRestore)
+}
 
 // Step-up subjects and the only method (decision 4).
 const (

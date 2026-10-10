@@ -149,6 +149,12 @@ func githubOIDC(ctx context.Context, a *app, audience string) (string, error) {
 }
 
 func (a *app) workloadClient(server string, kf workloadclient.KeyFile) (pantherclawv1connect.WorkloadServiceClient, error) {
+	return a.workloadClientAt(server, kf, nil)
+}
+
+// workloadClientAt is WorkloadService at server, signing with the key file's
+// key and sending token's workload token when token is not nil.
+func (a *app) workloadClientAt(server string, kf workloadclient.KeyFile, token func() string) (pantherclawv1connect.WorkloadServiceClient, error) {
 	base, err := checkServer(server)
 	if err != nil {
 		return nil, err
@@ -161,7 +167,7 @@ func (a *app) workloadClient(server string, kf workloadclient.KeyFile) (pantherc
 	if rt == nil {
 		rt = http.DefaultTransport
 	}
-	hc := &http.Client{Timeout: a.http.Timeout, CheckRedirect: a.http.CheckRedirect, Transport: &workloadclient.Transport{Key: key, Base: rt}}
+	hc := &http.Client{Timeout: a.http.Timeout, CheckRedirect: a.http.CheckRedirect, Transport: &workloadclient.Transport{Key: key, Base: rt, Token: token}}
 	return pantherclawv1connect.NewWorkloadServiceClient(connect.NewClient(connecthttp.NewTransport(hc, base))), nil
 }
 

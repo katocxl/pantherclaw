@@ -568,17 +568,41 @@ func (e *Engine) send(ctx context.Context, r Result, conn *control.Connection, d
 			pclog.Err(err))
 	}
 	var digest []byte
+	ref := ""
 	if res.Status != 0 {
 		// The digest is of what the target sent; the agent gets it without
 		// the credential.
 		sum := sha256.Sum256(res.Body)
 		digest = sum[:]
+		if outcome == pb.Outcome_OUTCOME_ACCEPTED {
+			ref = targetRef(def, res.Body, secret)
+		}
 		res.Body = egress.Redacted(res.Body, secret)
 		res.ContentType = string(egress.Redacted([]byte(res.ContentType), secret))
 		res.RequestID = string(egress.Redacted([]byte(res.RequestID), secret))
 		r.Response = &res
 	}
-	return e.record(ctx, r, want, outcome, res.Status, digest, elapsed, class, code, t)
+	return e.record(ctx, r, want, outcome, res.Status, digest, elapsed, class, code, t, ref)
+}
+
+// maxTargetRef is the longest reference the Authority accepts.
+const maxTargetRef = 256
+
+// targetRef reads the created object's identifier from an accepted answer
+// at the place the definition's verifier names (G0 M7 design decision 5):
+// printable ASCII only, never one that contains the credential. It is the
+// only part of a response body the gateway sends to the Authority.
+func targetRef(def *defs.Definition, body, secret []byte) string {
+	v := def.Verifier
+	if v == nil || v.Reference == nil {
+		return ""
+	}
+	s, ok := defs.PointerValue(body, v.Reference.FromResponse)
+	if !ok || s == "" || len(s) > maxTargetRef || strings.ContainsFunc(s, func(c rune) bool { return c < '!' || c > '~' }) ||
+		(len(secret) > 0 && strings.Contains(s, string(secret))) {
+		return ""
+	}
+	return s
 }
 
 // credential opens the connection's sealed credential and places it on req.
@@ -643,12 +667,16 @@ func classify(status int, err error) (pb.Outcome, Class, string) {
 // permit DISPATCHING, which the Authority's sweeper marks UNKNOWN: the
 // reservation stays held.
 func (e *Engine) record(ctx context.Context, r Result, want permitWant, outcome pb.Outcome, status int, digest []byte,
-	elapsed time.Duration, class Class, code string, t *timer,
+	elapsed time.Duration, class Class, code string, t *timer, targetRef ...string,
 ) Result {
-	rec, err := e.authority.RecordExecution(ctx, &pb.RecordExecutionRequest{
+	req := &pb.RecordExecutionRequest{
 		PermitId: want.PermitID, Outcome: outcome, TargetStatus: int32(min(status, 599)), ResponseDigest: digest, //nolint:gosec // G115: clamped
 		DispatchMs: int32(min(elapsed.Milliseconds(), 600000)), //nolint:gosec // G115: clamped
-	})
+	}
+	if len(targetRef) > 0 {
+		req.TargetRef = targetRef[0]
+	}
+	rec, err := e.authority.RecordExecution(ctx, req)
 	t.lap("record")
 	r.Outcome, r.Receipt = outcome, rec.GetReceipt()
 	if err != nil {

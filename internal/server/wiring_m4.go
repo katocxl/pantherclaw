@@ -38,17 +38,21 @@ func newAuthority(cfg *Config, pool *db.Pool, reg *keys.Registry, kp keys.KeyPro
 	if err != nil {
 		return nil, err
 	}
-	reader := &pgauthority.Reader{
-		Pool: pool, Definitions: &defspg.Store{Pool: pool}, Policies: &polpg.Store{Pool: pool},
-		FactStore: &factspg.Store{Pool: pool}, Grants: &grantspg.Store{Pool: pool},
-		Limits: celenv.DefaultLimits, Budget: policyapp.DefaultBudget,
-	}
 	return authority.New(authority.Config{
 		Decider: &finalize.Authority{
-			Pipeline: &pipeline.Pipeline{Reader: reader}, Store: &pgauthority.Store{Pool: pool},
+			Pipeline: &pipeline.Pipeline{Reader: authorityReader(pool)}, Store: &pgauthority.Store{Pool: pool},
 			Receipts: receipts, Permits: permits, ActionTokens: actionTokens, PermitTTL: cfg.Authority.PermitTTL.D(), Log: log,
 			Inputs: replayInputs(pool, kp),
 		},
 		Logger: log,
 	}), nil
+}
+
+// authorityReader reads the pipeline's inputs from Postgres.
+func authorityReader(pool *db.Pool) *pgauthority.Reader {
+	return &pgauthority.Reader{
+		Pool: pool, Definitions: &defspg.Store{Pool: pool}, Policies: &polpg.Store{Pool: pool},
+		FactStore: &factspg.Store{Pool: pool}, Grants: &grantspg.Store{Pool: pool},
+		Limits: celenv.DefaultLimits, Budget: policyapp.DefaultBudget,
+	}
 }

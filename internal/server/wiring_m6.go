@@ -51,6 +51,9 @@ type m6Services struct {
 	connections *capp.Service
 	// credentials hold sealed credentials (HR-182).
 	credentials *credapp.Service
+	// verifications are leased to gateways over this listener (G0 M7);
+	// nil leaves the RPCs unimplemented.
+	verifications gatewaysrpc.Verifications
 }
 
 // newM6 builds the M6 services; notify (M5 notifications) may be nil.
@@ -98,7 +101,11 @@ func (m *m6Services) gatewayHandler(svc *authority.Service, log *slog.Logger) (h
 		return nil, err
 	}
 	pantherclawv1connect.RegisterAuthorityServiceHandler(rs, authority.NewHandler(svc))
-	pantherclawv1connect.RegisterGatewayServiceHandler(rs, gatewaysrpc.NewGateway(m.gateways).WithHub(m.hub).WithCircuits(m.connections).WithDrifts(m.connections))
+	gw := gatewaysrpc.NewGateway(m.gateways).WithHub(m.hub).WithCircuits(m.connections).WithDrifts(m.connections)
+	if m.verifications != nil {
+		gw = gw.WithVerifications(m.verifications)
+	}
+	pantherclawv1connect.RegisterGatewayServiceHandler(rs, gw)
 	mux := http.NewServeMux()
 	rpc.Mount(mux, rs)
 	// Gateways verify permits with the JWKS, fetched here over mTLS.

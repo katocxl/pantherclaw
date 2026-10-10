@@ -260,7 +260,7 @@ func TestHR003_ExpiredPermitsReleaseUnknownOnesHold(t *testing.T) {
 		t.Fatalf("the reservation counts: %s", decisive(r))
 	}
 	s.W.Advance(10 * time.Second) // the permit expired unused
-	if rel, _, err := s.W.Sweep(ctx, s.Org, 30*time.Second); err != nil || rel != 1 {
+	if rel, _, err := s.Authority.Sweep(ctx, s.Org, 30*time.Second); err != nil || rel != 1 {
 		t.Fatalf("sweep released %d, %v", rel, err)
 	}
 	b := s.Authorize(s.Request(run, ids.NewV7(), "create_refund", pipelinetest.Refund("ch_2", "60.00")))
@@ -271,7 +271,7 @@ func TestHR003_ExpiredPermitsReleaseUnknownOnesHold(t *testing.T) {
 		t.Fatal(err)
 	}
 	s.W.Advance(time.Minute)
-	if _, unk, _ := s.W.Sweep(ctx, s.Org, 30*time.Second); unk != 1 {
+	if _, unk, _ := s.Authority.Sweep(ctx, s.Org, 30*time.Second); unk != 1 {
 		t.Fatal("a stale DISPATCHING permit becomes UNKNOWN")
 	}
 	if st := s.W.PermitState(b.PermitID); st != "UNKNOWN" {

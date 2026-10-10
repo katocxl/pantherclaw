@@ -29,6 +29,7 @@ const (
 	IneligibleCredentialTooNew  = "CREDENTIAL_TOO_NEW"    //nolint:gosec // G101: a reason code, not a credential
 	IneligibleCredentialRevoked = "CREDENTIAL_NOT_ACTIVE" //nolint:gosec // G101: a reason code, not a credential
 	IneligibleNotStepUpSubject  = "NOT_STEP_UP_SUBJECT"
+	IneligibleRequester         = "REQUESTER_EXCLUDED"
 )
 
 // ErrStepUpSubjectNotAPerson is returned when a step-up names a launcher or
@@ -109,8 +110,11 @@ type Context struct {
 	Owners []ids.UUID
 	// The people who issued or revised a grant of the run's chain.
 	GrantIssuers []ids.UUID
-	Cooldowns    Cooldowns
-	Now          time.Time
+	// Requester is a restoration's requester, who never decides it
+	// (decision 11).
+	Requester ids.UUID
+	Cooldowns Cooldowns
+	Now       time.Time
 }
 
 func isUser(p gdomain.Principal, u ids.UUID) bool {
@@ -144,6 +148,9 @@ func Check(r Requirement, p Person, c Context, cred ids.UUID) (bool, string) {
 			return false, IneligibleNotStepUpSubject
 		}
 		return credentialOK(p, cred, 0, c.Now)
+	}
+	if r.Kind == KindRestore {
+		return checkRestore(p, c, cred)
 	}
 	switch {
 	case isUser(c.Run.Launcher, p.UserID):
@@ -192,6 +199,31 @@ func Check(r Requirement, p Person, c Context, cred ids.UUID) (bool, string) {
 		minAge = cd.CredentialAge
 	}
 	return credentialOK(p, cred, minAge, c.Now)
+}
+
+// checkRestore checks a restoration's decider (decision 11): not the
+// requester, holding a role with agent.restore where the agent lives (a
+// self-granted one only after the self-grant delay), with an active key.
+func checkRestore(p Person, c Context, cred ids.UUID) (bool, string) {
+	if p.UserID == c.Requester {
+		return false, IneligibleRequester
+	}
+	cd := c.Cooldowns.AtLeastMinimum()
+	why := IneligibleNoRole
+	held := slices.ContainsFunc(p.Bindings, func(b RoleBinding) bool {
+		if !RestoreRole(b.Role) {
+			return false
+		}
+		if b.SelfGranted && c.Now.Sub(b.CreatedAt) < cd.SelfGrantDelay {
+			why = IneligibleSelfGrant
+			return false
+		}
+		return true
+	})
+	if !held {
+		return false, why
+	}
+	return credentialOK(p, cred, 0, c.Now)
 }
 
 func credentialOK(p Person, cred ids.UUID, minAge time.Duration, now time.Time) (bool, string) {

@@ -24,6 +24,7 @@ import (
 	"net/http"
 	"regexp"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -40,6 +41,10 @@ type Faults struct {
 	// LoseRate is the probability of refunding and then never answering:
 	// an unknown outcome whose effect happened (G0 M7, S07).
 	LoseRate float64
+	// ShortRate is the probability of recording a refund one minor unit
+	// short of what was asked and accepting it: the target's record then
+	// disagrees with the request (G0 M7, a conflicting observation).
+	ShortRate float64
 	// SettleAfter keeps a new refund "pending" for this long before it is
 	// "succeeded" (propagation pending, F483); zero settles at once.
 	SettleAfter time.Duration
@@ -349,6 +354,9 @@ func (s *Server) apply(key string, req refundRequest, amount money.Money, hash [
 	if chance(s.faults.DeclineRate) {
 		return http.StatusPaymentRequired, map[string]string{"error": "card_declined"}, false
 	}
+	if chance(s.faults.ShortRate) {
+		amount = short(amount)
+	}
 	now := s.now()
 	ref := Refund{
 		ID: "re_" + ids.NewV7().String(), Charge: req.Charge, Amount: amount, Reason: req.Reason, BodyHash: hash,
@@ -388,6 +396,28 @@ func (s *Server) stats(w http.ResponseWriter, _ *http.Request) {
 
 // chance returns true with probability p, using crypto/rand (math/rand is
 // banned in this repository).
+// short returns m less one minor unit of its currency, or m when that
+// would leave nothing.
+func short(m money.Money) money.Money {
+	n, err := m.Currency.MinorUnits()
+	if err != nil {
+		return m
+	}
+	unit := "1"
+	if n > 0 {
+		unit = "0." + strings.Repeat("0", n-1) + "1"
+	}
+	d, err := money.Parse(unit)
+	if err != nil {
+		return m
+	}
+	out, err := m.Sub(money.Money{Amount: d, Currency: m.Currency})
+	if err != nil || out.Amount.Sign() <= 0 {
+		return m
+	}
+	return out
+}
+
 func chance(p float64) bool {
 	if p <= 0 {
 		return false

@@ -430,18 +430,28 @@ func (w *World) settle(p *permitRow, o bdomain.Outcome, claim pipeline.ClaimStat
 	}
 }
 
-// Sweep implements finalize.Store.
-func (w *World) Sweep(_ context.Context, _ ids.OrgID, staleAfter time.Duration) (int, int, error) {
+// Sweep implements finalize.Store. A swept permit's receipt is signed as
+// the sweeper's, like the database store's (HR-192).
+func (w *World) Sweep(_ context.Context, _ ids.OrgID, staleAfter time.Duration,
+	sign func(gatewayID string, e finalize.Execution, x finalize.Executed, now time.Time) (finalize.Receipt, error),
+) (int, int, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	released, unknown := 0, 0
-	for _, p := range w.fin().permits {
+	for id, p := range w.fin().permits {
 		switch {
 		case p.state == "ISSUED" && !w.Cont.Now.Before(p.expires):
 			p.state = "RELEASED"
 			w.settle(p, bdomain.Release, pipeline.ClaimReleased)
 			released++
 		case p.state == "DISPATCHING" && w.Cont.Now.Sub(p.dispatched) > staleAfter:
+			x := finalize.Executed{
+				Transaction: p.txn, Connection: p.dispatch.Connection, AccessMode: finalize.AccessPantherClawHeld,
+				Monitor: p.monitor, DispatchedAt: p.dispatched, RecordedBy: finalize.RecordedBySweeper,
+			}
+			if _, err := sign(p.gateway, finalize.Execution{Permit: id, Outcome: finalize.Unknown, DispatchMS: -1}, x, w.Cont.Now); err != nil {
+				return released, unknown, err
+			}
 			p.state = "UNKNOWN"
 			unknown++
 		}

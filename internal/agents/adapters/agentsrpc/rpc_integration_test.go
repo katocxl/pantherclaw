@@ -18,6 +18,7 @@ import (
 
 	"github.com/katocxl/pantherclaw/internal/agents/adapters/agentsrpc"
 	aapp "github.com/katocxl/pantherclaw/internal/agents/app"
+	approvals "github.com/katocxl/pantherclaw/internal/approvals/app"
 	"github.com/katocxl/pantherclaw/internal/authn/adapters/rpcauth"
 	authnapp "github.com/katocxl/pantherclaw/internal/authn/app"
 	"github.com/katocxl/pantherclaw/internal/authn/credential"
@@ -84,7 +85,7 @@ func newStack(t *testing.T) *stack {
 	if err != nil {
 		t.Fatal(err)
 	}
-	pantherclawv1connect.RegisterAgentServiceHandler(s, agentsrpc.NewAgents(aapp.NewInventory(pool, business{})))
+	pantherclawv1connect.RegisterAgentServiceHandler(s, agentsrpc.NewAgents(aapp.NewInventory(pool, business{})).WithRestorations(&approvals.Service{Pool: pool}))
 	pantherclawv1connect.RegisterWaitlistServiceHandler(s, waitlistrpc.NewWaitlist(wapp.NewReader(pool)))
 	mux := http.NewServeMux()
 	rpc.Mount(mux, s)
@@ -215,5 +216,41 @@ func TestIntRPCAgentsAndWaitlist(t *testing.T) {
 	wantCode(t, "viewer reads the waitlist", err, connect.CodePermissionDenied)
 	if _, err := agents.RetireAgent(ctx, &pantherclawv1.RetireAgentRequest{Id: id, Reason: "replaced"}); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// TestHR176_ARestorationIsRequestedThroughTheAPI (decision 11): the owner
+// asks for a suspended agent to be restored and gets the approval request,
+// its waitlist entry and the deadline; asking again returns the same one.
+func TestHR176_ARestorationIsRequestedThroughTheAPI(t *testing.T) {
+	s := newStack(t)
+	ctx := context.Background()
+	org := ids.New[ids.Org]()
+	s.exec(t, org, "INSERT INTO pc.orgs (id, name) VALUES ($1, 'acme')", org)
+	team, env := ids.NewV7(), ids.NewV7()
+	s.exec(t, org, "INSERT INTO pc.teams (org_id, id, slug, name) VALUES ($1, $2, 'eng', 'Eng')", org, team)
+	s.exec(t, org, "INSERT INTO pc.environments (org_id, id, team_id, slug, name, kind) VALUES ($1, $2, $3, 'dev', 'Dev', 'DEVELOPMENT')", org, env, team)
+	owner, ownerTok := s.login(t, org, "owner", td.RoleAgentOwner)
+	agents, _ := s.clients(ownerTok)
+	created, err := agents.CreateAgent(ctx, &pantherclawv1.CreateAgentRequest{
+		Name: "refunds", TeamId: team.String(), EnvironmentId: env.String(), OwnerUserId: owner.String(),
+		ExecutionContext: pantherclawv1.ExecutionContext_EXECUTION_CONTEXT_CI,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	id := created.GetAgent().GetId()
+	_, err = agents.RequestAgentRestoration(ctx, &pantherclawv1.RequestAgentRestorationRequest{Id: id, Reason: "fixed"})
+	wantCode(t, "an agent that is not suspended", err, connect.CodeFailedPrecondition)
+	if _, err := agents.SuspendAgent(ctx, &pantherclawv1.SuspendAgentRequest{Id: id, Reason: "leaked key"}); err != nil {
+		t.Fatal(err)
+	}
+	r, err := agents.RequestAgentRestoration(ctx, &pantherclawv1.RequestAgentRestorationRequest{Id: id, Reason: "the key was rotated"})
+	if err != nil || r.GetApprovalRequestId() == "" || r.GetWaitlistEntryId() == "" || r.GetDeadlineTime() == nil {
+		t.Fatalf("restoration: %v, %v", r, err)
+	}
+	again, err := agents.RequestAgentRestoration(ctx, &pantherclawv1.RequestAgentRestorationRequest{Id: id, Reason: "again"})
+	if err != nil || again.GetApprovalRequestId() != r.GetApprovalRequestId() || again.GetWaitlistEntryId() != r.GetWaitlistEntryId() {
+		t.Fatalf("again: %v, %v", again, err)
 	}
 }

@@ -24,6 +24,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	tapp "github.com/katocxl/pantherclaw/internal/tenancy/app"
 	tdomain "github.com/katocxl/pantherclaw/internal/tenancy/domain"
+	waitlist "github.com/katocxl/pantherclaw/internal/waitlist/app"
 )
 
 type allow struct{}
@@ -277,5 +278,45 @@ func TestIntGuardrailRevisions(t *testing.T) {
 	team := domain.Scope{Kind: domain.ScopeTeam, ID: ids.NewV7()}
 	if _, _, err := w.svc.PutEnvelope(w.ctx, app.EnvelopeRequest{Scope: team, Name: "ghost"}); !errors.Is(err, app.ErrNotFound) {
 		t.Fatalf("a guardrail for a team that does not exist: %v", err)
+	}
+}
+
+// TestHR176_ARevisionAnswersAnAccessRequest: a revision citing the grant's
+// open access request closes it as APPROVED in the same transaction; one
+// citing anything else fails and stores no revision.
+func TestHR176_ARevisionAnswersAnAccessRequest(t *testing.T) {
+	w := newWorld(t, dbtest.New(t).AppPool(t))
+	g := w.issue(3)
+	run := w.run(g.ID, ids.UUID{})
+	entry, err := waitlist.NewWriter(w.pool).RequestAccess(w.ctx, run, "refunds over 50 USD for ticket 77", nil)
+	if err != nil || entry.State != "OPEN" || entry.SubjectID != g.ID.UUID() {
+		t.Fatalf("request: %+v, %v", entry, err)
+	}
+	if _, _, err := w.svc.Revise(w.ctx, app.ReviseRequest{
+		ID: g.ID, Revision: 1, Bounds: g.Bounds, Delegation: g.Delegation,
+		AccessRequest: ids.NewV7(),
+	}); !errors.Is(err, app.ErrAccessRequestNotOpen) {
+		t.Fatalf("an unknown access request: %v", err)
+	}
+	if got, _ := w.store.Grant(context.Background(), w.org, g.ID); got.Revision != 1 {
+		t.Fatalf("a failed revision was stored: %d", got.Revision)
+	}
+	if _, _, err := w.svc.Revise(w.ctx, app.ReviseRequest{
+		ID: g.ID, Revision: 1, Bounds: g.Bounds, Delegation: g.Delegation,
+		AccessRequest: entry.ID,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	var state, by, reason string
+	if err := w.pool.InTenantTx(context.Background(), w.org, func(ctx context.Context, tx db.TenantTx) error {
+		return tx.QueryRow(ctx, "SELECT state, decided_by, decision_reason FROM pc.waitlist_entries WHERE id = $1", entry.ID).Scan(&state, &by, &reason)
+	}); err != nil || state != "APPROVED" || by != "user:"+w.alice.String() || reason != "revision 2" {
+		t.Fatalf("the answered request: %s %s %q, %v", state, by, reason, err)
+	}
+	if _, _, err := w.svc.Revise(w.ctx, app.ReviseRequest{
+		ID: g.ID, Revision: 2, Bounds: g.Bounds, Delegation: g.Delegation,
+		AccessRequest: entry.ID,
+	}); !errors.Is(err, app.ErrAccessRequestNotOpen) {
+		t.Fatalf("a closed access request: %v", err)
 	}
 }

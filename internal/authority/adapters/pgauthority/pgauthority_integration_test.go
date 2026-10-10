@@ -408,6 +408,19 @@ func (w *world) waitExpired(permit ids.UUID) {
 	}
 }
 
+// reconciliation checks that a transaction with an unknown outcome has one
+// open, urgent RECONCILIATION entry (HR-003, HR-177).
+func (w *world) reconciliation(txn ids.UUID) {
+	w.t.Helper()
+	var n, priority int
+	w.db.AdminQueryRow(w.t, `SELECT count(*), coalesce(min(priority), 0) FROM pc.waitlist_entries
+		WHERE org_id = $1 AND kind = 'RECONCILIATION' AND subject_id = $2 AND transaction_id = $2 AND state = 'OPEN'`,
+		[]any{w.org, txn}, &n, &priority)
+	if n != 1 || priority != 1 {
+		w.t.Fatalf("transaction %s: %d open RECONCILIATION entries, priority %d", txn, n, priority)
+	}
+}
+
 // TestINV07_SettlementOnPostgres: a decision reserves, only an accepted
 // outcome spends; a failed one or an expired permit releases the budget
 // and the refund's dedupe claim, and an unknown one holds both (HR-003).
@@ -454,6 +467,8 @@ func TestINV07_SettlementOnPostgres(t *testing.T) {
 	if r := w.authorize(w.request(run, ids.NewV7(), "ch_1", "30.00")); decisive(r) != pipeline.ReasonReconciliation {
 		t.Fatalf("an unknown outcome holds the claim: %s", decisive(r))
 	}
+	// The unknown outcome waits for reconciliation (G0 M5 part 2).
+	w.reconciliation(second.TransactionID)
 
 	// An issued permit that expires is released by the sweep, and a permit
 	// stuck in DISPATCHING becomes UNKNOWN, even once it has expired too.
@@ -466,13 +481,14 @@ func TestINV07_SettlementOnPostgres(t *testing.T) {
 	expiring := w.authorize(w.request(run, ids.NewV7(), "ch_2", "20.00"))
 	w.auth.PermitTTL = long
 	w.waitExpired(expiring.PermitID)
-	released, unknown, err := w.auth.Store.Sweep(ctx, w.org, time.Nanosecond)
+	released, unknown, err := w.auth.Sweep(ctx, w.org, time.Nanosecond)
 	if err != nil || released != 1 || unknown != 1 {
 		t.Fatalf("sweep: released %d unknown %d: %v", released, unknown, err)
 	}
 	if _, err := w.auth.BeginDispatch(ctx, w.gw, expiring.PermitID, expiring.Epoch, finalize.Outbound{}); err == nil {
 		t.Fatal("a released permit was dispatched")
 	}
+	w.reconciliation(stuck.TransactionID)
 	if res, sp := w.budget(); res != "35" || sp != "0" {
 		t.Fatalf("after the sweep: reserved %s spent %s, want the unknown 30 and 5 held", res, sp)
 	}

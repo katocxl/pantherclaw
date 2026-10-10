@@ -31,18 +31,54 @@ const (
 	PurposeAccessTokens   Purpose = "access_tokens"   // control-plane access tokens (ADR-0016); never published
 	PurposeGatewayCA      Purpose = "gateway_ca"      // the internal CA for gateway mTLS (G0 M6); in its certificate, never in the JWKS
 	PurposeActionTokens   Purpose = "action_tokens"   // PAP-Action tokens for target-enforced connections (PAP-1 §10)
+	PurposeEvidencePacks  Purpose = "evidence_packs"  // evidence-pack manifests (G0 M7)
+	// The anchors and checkpoints_pq keys are not Ed25519 (AltKey).
+	PurposeAnchors       Purpose = "anchors"        // ECDSA P-256: the anchored global root (G0 M7, HR-195)
+	PurposeCheckpointsPQ Purpose = "checkpoints_pq" // ML-DSA-65: optional checkpoint and pack co-signatures
 )
 
-// Purposes lists every signing purpose.
+// Purposes lists every Ed25519 signing purpose; each has an active key.
 func Purposes() []Purpose {
 	return []Purpose{
 		PurposeReceipts, PurposePermits, PurposeWorkloadTokens, PurposeCheckpoints, PurposeAccessTokens,
-		PurposeGatewayCA, PurposeActionTokens,
+		PurposeGatewayCA, PurposeActionTokens, PurposeEvidencePacks,
 	}
 }
 
+// AltPurposes lists the purposes whose keys use another algorithm.
+func AltPurposes() []Purpose { return []Purpose{PurposeAnchors, PurposeCheckpointsPQ} }
+
+// EvidencePurposes lists the purposes of the keys published in
+// evidence-keys.json (PAP-1 §11): what offline verifiers pin.
+func EvidencePurposes() []Purpose {
+	return []Purpose{PurposeReceipts, PurposeCheckpoints, PurposeCheckpointsPQ, PurposeAnchors, PurposeEvidencePacks}
+}
+
 // Valid reports whether p is a known purpose.
-func (p Purpose) Valid() bool { return slices.Contains(Purposes(), p) }
+func (p Purpose) Valid() bool {
+	return slices.Contains(Purposes(), p) || slices.Contains(AltPurposes(), p)
+}
+
+// Algorithm is a signing algorithm, named as in JOSE and the trust file.
+type Algorithm string
+
+// Algorithms. Each purpose has exactly one (HR-095).
+const (
+	AlgEdDSA   Algorithm = "EdDSA"
+	AlgES256   Algorithm = "ES256"
+	AlgMLDSA65 Algorithm = "ML-DSA-65"
+)
+
+// Algorithm returns the one algorithm of purpose p.
+func (p Purpose) Algorithm() Algorithm {
+	if p == PurposeAnchors {
+		return AlgES256
+	}
+	if p == PurposeCheckpointsPQ {
+		return AlgMLDSA65
+	}
+	return AlgEdDSA
+}
 
 // State is the lifecycle state of a signing key.
 type State string
@@ -68,8 +104,8 @@ type SigningKey struct {
 // GenerateSigningKey creates a new active key for purpose. The kid is
 // "<purpose>-<RFC 7638 thumbprint prefix>".
 func GenerateSigningKey(purpose Purpose) (SigningKey, error) {
-	if !purpose.Valid() {
-		return SigningKey{}, fmt.Errorf("keys: unknown purpose %q", purpose)
+	if !purpose.Valid() || purpose.Algorithm() != AlgEdDSA {
+		return SigningKey{}, fmt.Errorf("keys: %q is not an Ed25519 purpose", purpose)
 	}
 	pub, priv, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
@@ -93,16 +129,19 @@ func KIDFor(purpose Purpose, pub ed25519.PublicKey) string {
 type Registry struct {
 	mu   sync.RWMutex
 	keys map[string]SigningKey
+	alt  map[string]AltKey
 }
 
 // NewRegistry returns an empty Registry.
-func NewRegistry() *Registry { return &Registry{keys: map[string]SigningKey{}} }
+func NewRegistry() *Registry {
+	return &Registry{keys: map[string]SigningKey{}, alt: map[string]AltKey{}}
+}
 
 // Put adds or replaces a key. At most one key per purpose may be Active, and
 // an Active key must carry its private half.
 func (r *Registry) Put(k SigningKey) error {
-	if !k.Purpose.Valid() {
-		return fmt.Errorf("keys: unknown purpose %q", k.Purpose)
+	if !k.Purpose.Valid() || k.Purpose.Algorithm() != AlgEdDSA {
+		return fmt.Errorf("keys: %q is not an Ed25519 purpose", k.Purpose)
 	}
 	if len(k.Public) != ed25519.PublicKeySize || k.KID != KIDFor(k.Purpose, k.Public) {
 		return fmt.Errorf("keys: kid %q does not match its public key and purpose", k.KID)
@@ -188,6 +227,9 @@ func (r *Registry) Keys(purpose Purpose) []SigningKey {
 // (PAP-1 §11). Checkpoint keys are verified through `pclaw verify` bundles;
 // the gateway CA is published as its certificate.
 var published = []Purpose{PurposeReceipts, PurposePermits, PurposeWorkloadTokens, PurposeActionTokens}
+
+// JWKSPurposes lists the purposes whose keys the JWKS publishes.
+func JWKSPurposes() []Purpose { return slices.Clone(published) }
 
 // JWKS returns the public JWKS document for /.well-known/pantherclaw/jwks.json:
 // active and retiring keys of published purposes, sorted by kid.

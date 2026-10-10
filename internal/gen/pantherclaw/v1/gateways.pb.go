@@ -2440,6 +2440,449 @@ func (x *ReportDriftResponse) GetQuarantined() bool {
 	return false
 }
 
+// ClaimVerificationsRequest asks for due verification tasks.
+type ClaimVerificationsRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The most tasks to lease.
+	MaxTasks      int32 `protobuf:"varint,1,opt,name=max_tasks,json=maxTasks,proto3" json:"max_tasks,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ClaimVerificationsRequest) Reset() {
+	*x = ClaimVerificationsRequest{}
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[34]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ClaimVerificationsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ClaimVerificationsRequest) ProtoMessage() {}
+
+func (x *ClaimVerificationsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[34]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ClaimVerificationsRequest.ProtoReflect.Descriptor instead.
+func (*ClaimVerificationsRequest) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{34}
+}
+
+func (x *ClaimVerificationsRequest) GetMaxTasks() int32 {
+	if x != nil {
+		return x.MaxTasks
+	}
+	return 0
+}
+
+// VerificationLease is one leased task: the reviewed read to make.
+type VerificationLease struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Task id.
+	TaskId string `protobuf:"bytes,1,opt,name=task_id,json=taskId,proto3" json:"task_id,omitempty"`
+	// The lease's single-use secret, returned with the report.
+	Lease []byte `protobuf:"bytes,2,opt,name=lease,proto3" json:"lease,omitempty"`
+	// follow_up or reconcile.
+	Purpose string `protobuf:"bytes,3,opt,name=purpose,proto3" json:"purpose,omitempty"`
+	// The connection to read through.
+	ConnectionId string `protobuf:"bytes,4,opt,name=connection_id,json=connectionId,proto3" json:"connection_id,omitempty"`
+	// The read operation of the connection's pinned package.
+	Operation string `protobuf:"bytes,5,opt,name=operation,proto3" json:"operation,omitempty"`
+	// The read the server computed, as JSON: mode (reference | lookup),
+	// target and params.
+	Request []byte `protobuf:"bytes,6,opt,name=request,proto3" json:"request,omitempty"`
+	// The idempotency key an item of a listing must carry to be the write's
+	// effect (pc-<transaction>).
+	Correlate string `protobuf:"bytes,7,opt,name=correlate,proto3" json:"correlate,omitempty"`
+	// Which attempt this is.
+	Attempt       int32 `protobuf:"varint,8,opt,name=attempt,proto3" json:"attempt,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *VerificationLease) Reset() {
+	*x = VerificationLease{}
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[35]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *VerificationLease) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*VerificationLease) ProtoMessage() {}
+
+func (x *VerificationLease) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[35]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use VerificationLease.ProtoReflect.Descriptor instead.
+func (*VerificationLease) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{35}
+}
+
+func (x *VerificationLease) GetTaskId() string {
+	if x != nil {
+		return x.TaskId
+	}
+	return ""
+}
+
+func (x *VerificationLease) GetLease() []byte {
+	if x != nil {
+		return x.Lease
+	}
+	return nil
+}
+
+func (x *VerificationLease) GetPurpose() string {
+	if x != nil {
+		return x.Purpose
+	}
+	return ""
+}
+
+func (x *VerificationLease) GetConnectionId() string {
+	if x != nil {
+		return x.ConnectionId
+	}
+	return ""
+}
+
+func (x *VerificationLease) GetOperation() string {
+	if x != nil {
+		return x.Operation
+	}
+	return ""
+}
+
+func (x *VerificationLease) GetRequest() []byte {
+	if x != nil {
+		return x.Request
+	}
+	return nil
+}
+
+func (x *VerificationLease) GetCorrelate() string {
+	if x != nil {
+		return x.Correlate
+	}
+	return ""
+}
+
+func (x *VerificationLease) GetAttempt() int32 {
+	if x != nil {
+		return x.Attempt
+	}
+	return 0
+}
+
+// ClaimVerificationsResponse lists the leased tasks.
+type ClaimVerificationsResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Leases.
+	Leases        []*VerificationLease `protobuf:"bytes,1,rep,name=leases,proto3" json:"leases,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ClaimVerificationsResponse) Reset() {
+	*x = ClaimVerificationsResponse{}
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[36]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ClaimVerificationsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ClaimVerificationsResponse) ProtoMessage() {}
+
+func (x *ClaimVerificationsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[36]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ClaimVerificationsResponse.ProtoReflect.Descriptor instead.
+func (*ClaimVerificationsResponse) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{36}
+}
+
+func (x *ClaimVerificationsResponse) GetLeases() []*VerificationLease {
+	if x != nil {
+		return x.Leases
+	}
+	return nil
+}
+
+// ReportObservationRequest reports one leased read.
+type ReportObservationRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Task id.
+	TaskId string `protobuf:"bytes,1,opt,name=task_id,json=taskId,proto3" json:"task_id,omitempty"`
+	// The lease's secret.
+	Lease []byte `protobuf:"bytes,2,opt,name=lease,proto3" json:"lease,omitempty"`
+	// The target's HTTP status; 0 when the read failed before an answer.
+	HttpStatus int32 `protobuf:"varint,3,opt,name=http_status,json=httpStatus,proto3" json:"http_status,omitempty"`
+	// Whether the object was found (by reference: a 2xx answer; in a
+	// listing: an item carrying the correlation value).
+	Found bool `protobuf:"varint,4,opt,name=found,proto3" json:"found,omitempty"`
+	// Whether a listing was read to its end.
+	Complete bool `protobuf:"varint,5,opt,name=complete,proto3" json:"complete,omitempty"`
+	// The fields the verifier declares, by JSON pointer, as text.
+	Fields map[string]string `protobuf:"bytes,6,rep,name=fields,proto3" json:"fields,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	// SHA-256 of the answer the fields were read from.
+	ResponseDigest []byte `protobuf:"bytes,7,opt,name=response_digest,json=responseDigest,proto3" json:"response_digest,omitempty"`
+	// For a target-log task (HR-112): the objects the target created in the
+	// window, as listed. Empty for every other task.
+	Items         []*TargetLogItem `protobuf:"bytes,8,rep,name=items,proto3" json:"items,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ReportObservationRequest) Reset() {
+	*x = ReportObservationRequest{}
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[37]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ReportObservationRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ReportObservationRequest) ProtoMessage() {}
+
+func (x *ReportObservationRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[37]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ReportObservationRequest.ProtoReflect.Descriptor instead.
+func (*ReportObservationRequest) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{37}
+}
+
+func (x *ReportObservationRequest) GetTaskId() string {
+	if x != nil {
+		return x.TaskId
+	}
+	return ""
+}
+
+func (x *ReportObservationRequest) GetLease() []byte {
+	if x != nil {
+		return x.Lease
+	}
+	return nil
+}
+
+func (x *ReportObservationRequest) GetHttpStatus() int32 {
+	if x != nil {
+		return x.HttpStatus
+	}
+	return 0
+}
+
+func (x *ReportObservationRequest) GetFound() bool {
+	if x != nil {
+		return x.Found
+	}
+	return false
+}
+
+func (x *ReportObservationRequest) GetComplete() bool {
+	if x != nil {
+		return x.Complete
+	}
+	return false
+}
+
+func (x *ReportObservationRequest) GetFields() map[string]string {
+	if x != nil {
+		return x.Fields
+	}
+	return nil
+}
+
+func (x *ReportObservationRequest) GetResponseDigest() []byte {
+	if x != nil {
+		return x.ResponseDigest
+	}
+	return nil
+}
+
+func (x *ReportObservationRequest) GetItems() []*TargetLogItem {
+	if x != nil {
+		return x.Items
+	}
+	return nil
+}
+
+// TargetLogItem is one object a target log lists.
+type TargetLogItem struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The object's id at the target.
+	ObjectRef string `protobuf:"bytes,1,opt,name=object_ref,json=objectRef,proto3" json:"object_ref,omitempty"`
+	// Its correlation value (the idempotency key it was created with), empty
+	// when it has none.
+	Correlation string `protobuf:"bytes,2,opt,name=correlation,proto3" json:"correlation,omitempty"`
+	// When the target created it (unix seconds), 0 when unknown.
+	Created       int64 `protobuf:"varint,3,opt,name=created,proto3" json:"created,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TargetLogItem) Reset() {
+	*x = TargetLogItem{}
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[38]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TargetLogItem) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TargetLogItem) ProtoMessage() {}
+
+func (x *TargetLogItem) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[38]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TargetLogItem.ProtoReflect.Descriptor instead.
+func (*TargetLogItem) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{38}
+}
+
+func (x *TargetLogItem) GetObjectRef() string {
+	if x != nil {
+		return x.ObjectRef
+	}
+	return ""
+}
+
+func (x *TargetLogItem) GetCorrelation() string {
+	if x != nil {
+		return x.Correlation
+	}
+	return ""
+}
+
+func (x *TargetLogItem) GetCreated() int64 {
+	if x != nil {
+		return x.Created
+	}
+	return 0
+}
+
+// ReportObservationResponse says what the report changed.
+type ReportObservationResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The observation recorded.
+	ObservationId string `protobuf:"bytes,1,opt,name=observation_id,json=observationId,proto3" json:"observation_id,omitempty"`
+	// The effect state the observation shows; empty when inconclusive.
+	EffectState string `protobuf:"bytes,2,opt,name=effect_state,json=effectState,proto3" json:"effect_state,omitempty"`
+	// Whether the task ended.
+	Done          bool `protobuf:"varint,3,opt,name=done,proto3" json:"done,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ReportObservationResponse) Reset() {
+	*x = ReportObservationResponse{}
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[39]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ReportObservationResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ReportObservationResponse) ProtoMessage() {}
+
+func (x *ReportObservationResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_gateways_proto_msgTypes[39]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ReportObservationResponse.ProtoReflect.Descriptor instead.
+func (*ReportObservationResponse) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_gateways_proto_rawDescGZIP(), []int{39}
+}
+
+func (x *ReportObservationResponse) GetObservationId() string {
+	if x != nil {
+		return x.ObservationId
+	}
+	return ""
+}
+
+func (x *ReportObservationResponse) GetEffectState() string {
+	if x != nil {
+		return x.EffectState
+	}
+	return ""
+}
+
+func (x *ReportObservationResponse) GetDone() bool {
+	if x != nil {
+		return x.Done
+	}
+	return false
+}
+
 var File_pantherclaw_v1_gateways_proto protoreflect.FileDescriptor
 
 const file_pantherclaw_v1_gateways_proto_rawDesc = "" +
@@ -2612,7 +3055,43 @@ const file_pantherclaw_v1_gateways_proto_rawDesc = "" +
 	"\x0fexpected_digest\x18\x03 \x01(\tB\x1c\xbaH\x19r\x172\x15^sha256:[0-9a-f]{64}$R\x0eexpectedDigest\x12H\n" +
 	"\x0fobserved_digest\x18\x04 \x01(\tB\x1f\xbaH\x1cr\x1a2\x18^(sha256:[0-9a-f]{64})?$R\x0eobservedDigest\"7\n" +
 	"\x13ReportDriftResponse\x12 \n" +
-	"\vquarantined\x18\x01 \x01(\bR\vquarantined*b\n" +
+	"\vquarantined\x18\x01 \x01(\bR\vquarantined\"C\n" +
+	"\x19ClaimVerificationsRequest\x12&\n" +
+	"\tmax_tasks\x18\x01 \x01(\x05B\t\xbaH\x06\x1a\x04\x18\x10(\x01R\bmaxTasks\"\xf1\x01\n" +
+	"\x11VerificationLease\x12\x17\n" +
+	"\atask_id\x18\x01 \x01(\tR\x06taskId\x12\x14\n" +
+	"\x05lease\x18\x02 \x01(\fR\x05lease\x12\x18\n" +
+	"\apurpose\x18\x03 \x01(\tR\apurpose\x12#\n" +
+	"\rconnection_id\x18\x04 \x01(\tR\fconnectionId\x12\x1c\n" +
+	"\toperation\x18\x05 \x01(\tR\toperation\x12\x18\n" +
+	"\arequest\x18\x06 \x01(\fR\arequest\x12\x1c\n" +
+	"\tcorrelate\x18\a \x01(\tR\tcorrelate\x12\x18\n" +
+	"\aattempt\x18\b \x01(\x05R\aattempt\"W\n" +
+	"\x1aClaimVerificationsResponse\x129\n" +
+	"\x06leases\x18\x01 \x03(\v2!.pantherclaw.v1.VerificationLeaseR\x06leases\"\xf7\x03\n" +
+	"\x18ReportObservationRequest\x12!\n" +
+	"\atask_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x06taskId\x12\x1d\n" +
+	"\x05lease\x18\x02 \x01(\fB\a\xbaH\x04z\x02h R\x05lease\x12+\n" +
+	"\vhttp_status\x18\x03 \x01(\x05B\n" +
+	"\xbaH\a\x1a\x05\x18\xd7\x04(\x00R\n" +
+	"httpStatus\x12\x14\n" +
+	"\x05found\x18\x04 \x01(\bR\x05found\x12\x1a\n" +
+	"\bcomplete\x18\x05 \x01(\bR\bcomplete\x12\x8c\x01\n" +
+	"\x06fields\x18\x06 \x03(\v24.pantherclaw.v1.ReportObservationRequest.FieldsEntryB>\xbaH;\x9a\x018\x10\x10\"-r+\x18\x88\x042&^(/([A-Za-z0-9_.-]|~[01]){1,64}){1,8}$*\x05r\x03\x18\x80\x02R\x06fields\x120\n" +
+	"\x0fresponse_digest\x18\a \x01(\fB\a\xbaH\x04z\x02\x18 R\x0eresponseDigest\x12>\n" +
+	"\x05items\x18\b \x03(\v2\x1d.pantherclaw.v1.TargetLogItemB\t\xbaH\x06\x92\x01\x03\x10\xe8\aR\x05items\x1a9\n" +
+	"\vFieldsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x9d\x01\n" +
+	"\rTargetLogItem\x123\n" +
+	"\n" +
+	"object_ref\x18\x01 \x01(\tB\x14\xbaH\x11r\x0f\x10\x01\x18\x80\x022\b^[!-~]+$R\tobjectRef\x124\n" +
+	"\vcorrelation\x18\x02 \x01(\tB\x12\xbaH\x0fr\r\x18\x80\x022\b^[!-~]*$R\vcorrelation\x12!\n" +
+	"\acreated\x18\x03 \x01(\x03B\a\xbaH\x04\"\x02(\x00R\acreated\"y\n" +
+	"\x19ReportObservationResponse\x12%\n" +
+	"\x0eobservation_id\x18\x01 \x01(\tR\robservationId\x12!\n" +
+	"\feffect_state\x18\x02 \x01(\tR\veffectState\x12\x12\n" +
+	"\x04done\x18\x03 \x01(\bR\x04done*b\n" +
 	"\fGatewayState\x12\x1d\n" +
 	"\x19GATEWAY_STATE_UNSPECIFIED\x10\x00\x12\x18\n" +
 	"\x14GATEWAY_STATE_ACTIVE\x10\x01\x12\x19\n" +
@@ -2634,7 +3113,7 @@ const file_pantherclaw_v1_gateways_proto_rawDesc = "" +
 	"\n" +
 	"GetGateway\x12!.pantherclaw.v1.GetGatewayRequest\x1a\".pantherclaw.v1.GetGatewayResponse\"\x03\x90\x02\x01\x12\\\n" +
 	"\rRevokeGateway\x12$.pantherclaw.v1.RevokeGatewayRequest\x1a%.pantherclaw.v1.RevokeGatewayResponse\x12}\n" +
-	"\x18RevokeGatewayCertificate\x12/.pantherclaw.v1.RevokeGatewayCertificateRequest\x1a0.pantherclaw.v1.RevokeGatewayCertificateResponse2\xd1\x05\n" +
+	"\x18RevokeGatewayCertificate\x12/.pantherclaw.v1.RevokeGatewayCertificateRequest\x1a0.pantherclaw.v1.RevokeGatewayCertificateResponse2\xa8\a\n" +
 	"\x0eGatewayService\x12c\n" +
 	"\x06Enroll\x12+.pantherclaw.v1.GatewayServiceEnrollRequest\x1a,.pantherclaw.v1.GatewayServiceEnrollResponse\x12e\n" +
 	"\x10RenewCertificate\x12'.pantherclaw.v1.RenewCertificateRequest\x1a(.pantherclaw.v1.RenewCertificateResponse\x12h\n" +
@@ -2642,7 +3121,9 @@ const file_pantherclaw_v1_gateways_proto_rawDesc = "" +
 	"\x10GetConfiguration\x12'.pantherclaw.v1.GetConfigurationRequest\x1a(.pantherclaw.v1.GetConfigurationResponse\"\x03\x90\x02\x01\x12g\n" +
 	"\x10WatchContainment\x12'.pantherclaw.v1.WatchContainmentRequest\x1a(.pantherclaw.v1.WatchContainmentResponse0\x01\x12\\\n" +
 	"\rReportCircuit\x12$.pantherclaw.v1.ReportCircuitRequest\x1a%.pantherclaw.v1.ReportCircuitResponse\x12V\n" +
-	"\vReportDrift\x12\".pantherclaw.v1.ReportDriftRequest\x1a#.pantherclaw.v1.ReportDriftResponseB\xc6\x01\n" +
+	"\vReportDrift\x12\".pantherclaw.v1.ReportDriftRequest\x1a#.pantherclaw.v1.ReportDriftResponse\x12k\n" +
+	"\x12ClaimVerifications\x12).pantherclaw.v1.ClaimVerificationsRequest\x1a*.pantherclaw.v1.ClaimVerificationsResponse\x12h\n" +
+	"\x11ReportObservation\x12(.pantherclaw.v1.ReportObservationRequest\x1a).pantherclaw.v1.ReportObservationResponseB\xc6\x01\n" +
 	"\x12com.pantherclaw.v1B\rGatewaysProtoP\x01ZHgithub.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1;pantherclawv1\xa2\x02\x03PXX\xaa\x02\x0ePantherclaw.V1\xca\x02\x0ePantherclaw\\V1\xe2\x02\x1aPantherclaw\\V1\\GPBMetadata\xea\x02\x0fPantherclaw::V1b\x06proto3"
 
 var (
@@ -2658,7 +3139,7 @@ func file_pantherclaw_v1_gateways_proto_rawDescGZIP() []byte {
 }
 
 var file_pantherclaw_v1_gateways_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_pantherclaw_v1_gateways_proto_msgTypes = make([]protoimpl.MessageInfo, 34)
+var file_pantherclaw_v1_gateways_proto_msgTypes = make([]protoimpl.MessageInfo, 41)
 var file_pantherclaw_v1_gateways_proto_goTypes = []any{
 	(GatewayState)(0),                            // 0: pantherclaw.v1.GatewayState
 	(GatewayCertificateState)(0),                 // 1: pantherclaw.v1.GatewayCertificateState
@@ -2697,18 +3178,25 @@ var file_pantherclaw_v1_gateways_proto_goTypes = []any{
 	(*ReportCircuitResponse)(nil),                // 34: pantherclaw.v1.ReportCircuitResponse
 	(*ReportDriftRequest)(nil),                   // 35: pantherclaw.v1.ReportDriftRequest
 	(*ReportDriftResponse)(nil),                  // 36: pantherclaw.v1.ReportDriftResponse
-	(*timestamppb.Timestamp)(nil),                // 37: google.protobuf.Timestamp
+	(*ClaimVerificationsRequest)(nil),            // 37: pantherclaw.v1.ClaimVerificationsRequest
+	(*VerificationLease)(nil),                    // 38: pantherclaw.v1.VerificationLease
+	(*ClaimVerificationsResponse)(nil),           // 39: pantherclaw.v1.ClaimVerificationsResponse
+	(*ReportObservationRequest)(nil),             // 40: pantherclaw.v1.ReportObservationRequest
+	(*TargetLogItem)(nil),                        // 41: pantherclaw.v1.TargetLogItem
+	(*ReportObservationResponse)(nil),            // 42: pantherclaw.v1.ReportObservationResponse
+	nil,                                          // 43: pantherclaw.v1.ReportObservationRequest.FieldsEntry
+	(*timestamppb.Timestamp)(nil),                // 44: google.protobuf.Timestamp
 }
 var file_pantherclaw_v1_gateways_proto_depIdxs = []int32{
 	0,  // 0: pantherclaw.v1.Gateway.state:type_name -> pantherclaw.v1.GatewayState
-	37, // 1: pantherclaw.v1.Gateway.create_time:type_name -> google.protobuf.Timestamp
-	37, // 2: pantherclaw.v1.Gateway.revoke_time:type_name -> google.protobuf.Timestamp
+	44, // 1: pantherclaw.v1.Gateway.create_time:type_name -> google.protobuf.Timestamp
+	44, // 2: pantherclaw.v1.Gateway.revoke_time:type_name -> google.protobuf.Timestamp
 	1,  // 3: pantherclaw.v1.GatewayCertificate.state:type_name -> pantherclaw.v1.GatewayCertificateState
-	37, // 4: pantherclaw.v1.GatewayCertificate.not_before:type_name -> google.protobuf.Timestamp
-	37, // 5: pantherclaw.v1.GatewayCertificate.not_after:type_name -> google.protobuf.Timestamp
-	37, // 6: pantherclaw.v1.BrokerKey.register_time:type_name -> google.protobuf.Timestamp
+	44, // 4: pantherclaw.v1.GatewayCertificate.not_before:type_name -> google.protobuf.Timestamp
+	44, // 5: pantherclaw.v1.GatewayCertificate.not_after:type_name -> google.protobuf.Timestamp
+	44, // 6: pantherclaw.v1.BrokerKey.register_time:type_name -> google.protobuf.Timestamp
 	3,  // 7: pantherclaw.v1.CreateGatewayResponse.gateway:type_name -> pantherclaw.v1.Gateway
-	37, // 8: pantherclaw.v1.CreateGatewayEnrollmentTokenResponse.expire_time:type_name -> google.protobuf.Timestamp
+	44, // 8: pantherclaw.v1.CreateGatewayEnrollmentTokenResponse.expire_time:type_name -> google.protobuf.Timestamp
 	3,  // 9: pantherclaw.v1.ListGatewaysResponse.gateways:type_name -> pantherclaw.v1.Gateway
 	3,  // 10: pantherclaw.v1.GetGatewayResponse.gateway:type_name -> pantherclaw.v1.Gateway
 	4,  // 11: pantherclaw.v1.GetGatewayResponse.certificates:type_name -> pantherclaw.v1.GatewayCertificate
@@ -2721,38 +3209,45 @@ var file_pantherclaw_v1_gateways_proto_depIdxs = []int32{
 	27, // 18: pantherclaw.v1.GatewayConnection.routes:type_name -> pantherclaw.v1.RouteModeSetting
 	2,  // 19: pantherclaw.v1.WatchContainmentResponse.kind:type_name -> pantherclaw.v1.ContainmentStateKind
 	32, // 20: pantherclaw.v1.WatchContainmentResponse.connections:type_name -> pantherclaw.v1.ConnectionStateEntry
-	37, // 21: pantherclaw.v1.WatchContainmentResponse.as_of:type_name -> google.protobuf.Timestamp
-	6,  // 22: pantherclaw.v1.GatewayAdminService.CreateGateway:input_type -> pantherclaw.v1.CreateGatewayRequest
-	8,  // 23: pantherclaw.v1.GatewayAdminService.CreateGatewayEnrollmentToken:input_type -> pantherclaw.v1.CreateGatewayEnrollmentTokenRequest
-	10, // 24: pantherclaw.v1.GatewayAdminService.ListGateways:input_type -> pantherclaw.v1.ListGatewaysRequest
-	12, // 25: pantherclaw.v1.GatewayAdminService.GetGateway:input_type -> pantherclaw.v1.GetGatewayRequest
-	14, // 26: pantherclaw.v1.GatewayAdminService.RevokeGateway:input_type -> pantherclaw.v1.RevokeGatewayRequest
-	16, // 27: pantherclaw.v1.GatewayAdminService.RevokeGatewayCertificate:input_type -> pantherclaw.v1.RevokeGatewayCertificateRequest
-	18, // 28: pantherclaw.v1.GatewayService.Enroll:input_type -> pantherclaw.v1.GatewayServiceEnrollRequest
-	20, // 29: pantherclaw.v1.GatewayService.RenewCertificate:input_type -> pantherclaw.v1.RenewCertificateRequest
-	22, // 30: pantherclaw.v1.GatewayService.RegisterBrokerKey:input_type -> pantherclaw.v1.RegisterBrokerKeyRequest
-	24, // 31: pantherclaw.v1.GatewayService.GetConfiguration:input_type -> pantherclaw.v1.GetConfigurationRequest
-	30, // 32: pantherclaw.v1.GatewayService.WatchContainment:input_type -> pantherclaw.v1.WatchContainmentRequest
-	33, // 33: pantherclaw.v1.GatewayService.ReportCircuit:input_type -> pantherclaw.v1.ReportCircuitRequest
-	35, // 34: pantherclaw.v1.GatewayService.ReportDrift:input_type -> pantherclaw.v1.ReportDriftRequest
-	7,  // 35: pantherclaw.v1.GatewayAdminService.CreateGateway:output_type -> pantherclaw.v1.CreateGatewayResponse
-	9,  // 36: pantherclaw.v1.GatewayAdminService.CreateGatewayEnrollmentToken:output_type -> pantherclaw.v1.CreateGatewayEnrollmentTokenResponse
-	11, // 37: pantherclaw.v1.GatewayAdminService.ListGateways:output_type -> pantherclaw.v1.ListGatewaysResponse
-	13, // 38: pantherclaw.v1.GatewayAdminService.GetGateway:output_type -> pantherclaw.v1.GetGatewayResponse
-	15, // 39: pantherclaw.v1.GatewayAdminService.RevokeGateway:output_type -> pantherclaw.v1.RevokeGatewayResponse
-	17, // 40: pantherclaw.v1.GatewayAdminService.RevokeGatewayCertificate:output_type -> pantherclaw.v1.RevokeGatewayCertificateResponse
-	19, // 41: pantherclaw.v1.GatewayService.Enroll:output_type -> pantherclaw.v1.GatewayServiceEnrollResponse
-	21, // 42: pantherclaw.v1.GatewayService.RenewCertificate:output_type -> pantherclaw.v1.RenewCertificateResponse
-	23, // 43: pantherclaw.v1.GatewayService.RegisterBrokerKey:output_type -> pantherclaw.v1.RegisterBrokerKeyResponse
-	25, // 44: pantherclaw.v1.GatewayService.GetConfiguration:output_type -> pantherclaw.v1.GetConfigurationResponse
-	31, // 45: pantherclaw.v1.GatewayService.WatchContainment:output_type -> pantherclaw.v1.WatchContainmentResponse
-	34, // 46: pantherclaw.v1.GatewayService.ReportCircuit:output_type -> pantherclaw.v1.ReportCircuitResponse
-	36, // 47: pantherclaw.v1.GatewayService.ReportDrift:output_type -> pantherclaw.v1.ReportDriftResponse
-	35, // [35:48] is the sub-list for method output_type
-	22, // [22:35] is the sub-list for method input_type
-	22, // [22:22] is the sub-list for extension type_name
-	22, // [22:22] is the sub-list for extension extendee
-	0,  // [0:22] is the sub-list for field type_name
+	44, // 21: pantherclaw.v1.WatchContainmentResponse.as_of:type_name -> google.protobuf.Timestamp
+	38, // 22: pantherclaw.v1.ClaimVerificationsResponse.leases:type_name -> pantherclaw.v1.VerificationLease
+	43, // 23: pantherclaw.v1.ReportObservationRequest.fields:type_name -> pantherclaw.v1.ReportObservationRequest.FieldsEntry
+	41, // 24: pantherclaw.v1.ReportObservationRequest.items:type_name -> pantherclaw.v1.TargetLogItem
+	6,  // 25: pantherclaw.v1.GatewayAdminService.CreateGateway:input_type -> pantherclaw.v1.CreateGatewayRequest
+	8,  // 26: pantherclaw.v1.GatewayAdminService.CreateGatewayEnrollmentToken:input_type -> pantherclaw.v1.CreateGatewayEnrollmentTokenRequest
+	10, // 27: pantherclaw.v1.GatewayAdminService.ListGateways:input_type -> pantherclaw.v1.ListGatewaysRequest
+	12, // 28: pantherclaw.v1.GatewayAdminService.GetGateway:input_type -> pantherclaw.v1.GetGatewayRequest
+	14, // 29: pantherclaw.v1.GatewayAdminService.RevokeGateway:input_type -> pantherclaw.v1.RevokeGatewayRequest
+	16, // 30: pantherclaw.v1.GatewayAdminService.RevokeGatewayCertificate:input_type -> pantherclaw.v1.RevokeGatewayCertificateRequest
+	18, // 31: pantherclaw.v1.GatewayService.Enroll:input_type -> pantherclaw.v1.GatewayServiceEnrollRequest
+	20, // 32: pantherclaw.v1.GatewayService.RenewCertificate:input_type -> pantherclaw.v1.RenewCertificateRequest
+	22, // 33: pantherclaw.v1.GatewayService.RegisterBrokerKey:input_type -> pantherclaw.v1.RegisterBrokerKeyRequest
+	24, // 34: pantherclaw.v1.GatewayService.GetConfiguration:input_type -> pantherclaw.v1.GetConfigurationRequest
+	30, // 35: pantherclaw.v1.GatewayService.WatchContainment:input_type -> pantherclaw.v1.WatchContainmentRequest
+	33, // 36: pantherclaw.v1.GatewayService.ReportCircuit:input_type -> pantherclaw.v1.ReportCircuitRequest
+	35, // 37: pantherclaw.v1.GatewayService.ReportDrift:input_type -> pantherclaw.v1.ReportDriftRequest
+	37, // 38: pantherclaw.v1.GatewayService.ClaimVerifications:input_type -> pantherclaw.v1.ClaimVerificationsRequest
+	40, // 39: pantherclaw.v1.GatewayService.ReportObservation:input_type -> pantherclaw.v1.ReportObservationRequest
+	7,  // 40: pantherclaw.v1.GatewayAdminService.CreateGateway:output_type -> pantherclaw.v1.CreateGatewayResponse
+	9,  // 41: pantherclaw.v1.GatewayAdminService.CreateGatewayEnrollmentToken:output_type -> pantherclaw.v1.CreateGatewayEnrollmentTokenResponse
+	11, // 42: pantherclaw.v1.GatewayAdminService.ListGateways:output_type -> pantherclaw.v1.ListGatewaysResponse
+	13, // 43: pantherclaw.v1.GatewayAdminService.GetGateway:output_type -> pantherclaw.v1.GetGatewayResponse
+	15, // 44: pantherclaw.v1.GatewayAdminService.RevokeGateway:output_type -> pantherclaw.v1.RevokeGatewayResponse
+	17, // 45: pantherclaw.v1.GatewayAdminService.RevokeGatewayCertificate:output_type -> pantherclaw.v1.RevokeGatewayCertificateResponse
+	19, // 46: pantherclaw.v1.GatewayService.Enroll:output_type -> pantherclaw.v1.GatewayServiceEnrollResponse
+	21, // 47: pantherclaw.v1.GatewayService.RenewCertificate:output_type -> pantherclaw.v1.RenewCertificateResponse
+	23, // 48: pantherclaw.v1.GatewayService.RegisterBrokerKey:output_type -> pantherclaw.v1.RegisterBrokerKeyResponse
+	25, // 49: pantherclaw.v1.GatewayService.GetConfiguration:output_type -> pantherclaw.v1.GetConfigurationResponse
+	31, // 50: pantherclaw.v1.GatewayService.WatchContainment:output_type -> pantherclaw.v1.WatchContainmentResponse
+	34, // 51: pantherclaw.v1.GatewayService.ReportCircuit:output_type -> pantherclaw.v1.ReportCircuitResponse
+	36, // 52: pantherclaw.v1.GatewayService.ReportDrift:output_type -> pantherclaw.v1.ReportDriftResponse
+	39, // 53: pantherclaw.v1.GatewayService.ClaimVerifications:output_type -> pantherclaw.v1.ClaimVerificationsResponse
+	42, // 54: pantherclaw.v1.GatewayService.ReportObservation:output_type -> pantherclaw.v1.ReportObservationResponse
+	40, // [40:55] is the sub-list for method output_type
+	25, // [25:40] is the sub-list for method input_type
+	25, // [25:25] is the sub-list for extension type_name
+	25, // [25:25] is the sub-list for extension extendee
+	0,  // [0:25] is the sub-list for field type_name
 }
 
 func init() { file_pantherclaw_v1_gateways_proto_init() }
@@ -2766,7 +3261,7 @@ func file_pantherclaw_v1_gateways_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pantherclaw_v1_gateways_proto_rawDesc), len(file_pantherclaw_v1_gateways_proto_rawDesc)),
 			NumEnums:      3,
-			NumMessages:   34,
+			NumMessages:   41,
 			NumExtensions: 0,
 			NumServices:   2,
 		},

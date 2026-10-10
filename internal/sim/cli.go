@@ -29,7 +29,8 @@ import (
 const usage = `pantherclaw-sim — simulated targets and load driver (everything is SIMULATED)
 
 Usage:
-  pantherclaw-sim payments [--addr 127.0.0.1:9090] [--latency 0s] [--decline-rate 0] [--hang-rate 0] [--redirect-to URL]
+  pantherclaw-sim payments [--addr 127.0.0.1:9090] [--latency 0s] [--decline-rate 0] [--hang-rate 0] [--lose-response-rate 0]
+                           [--short-rate 0] [--settle-after 0s] [--redirect-to URL]
                            [--token-file FILE] [--require-action-tokens --jwks-url URL --audience CONNECTION]
   pantherclaw-sim mcp [--addr 127.0.0.1:9091] [--legacy] [--stream] [--ask LIST] [--input-required] [--tool-error] [--description TEXT] [--token-file FILE]
   pantherclaw-sim load --workload-file FILE [--token-file FILE] [--run ID] [--gateway URL] [--rate 1000] [--duration 30s] [--warmup 5s] [--amount 1.00] [--out FILE]
@@ -75,6 +76,7 @@ func runPayments(ctx context.Context, args []string, stderr io.Writer) error {
 	decline := fs.Float64("decline-rate", 0, "probability of a 402 decline (no effect)")
 	hang := fs.Float64("hang-rate", 0, "probability of never answering, refunding nothing (unknown outcome, no effect)")
 	lose := fs.Float64("lose-response-rate", 0, "probability of refunding and then never answering (unknown outcome, effect happened)")
+	shortRate := fs.Float64("short-rate", 0, "probability of recording a refund one minor unit short of what was asked (a conflicting observation)")
 	settle := fs.Duration("settle-after", 0, "how long a new refund stays pending before it succeeds")
 	redirect := fs.String("redirect-to", "", "answer every refund with a 307 redirect to this URL")
 	tokenFile := fs.String("token-file", "", "file holding the bearer token every request must carry (the credential PantherClaw holds)")
@@ -100,7 +102,7 @@ func runPayments(ctx context.Context, args []string, stderr io.Writer) error {
 	}
 	log := pclog.New(stderr, pclog.Options{Service: "pantherclaw-sim", Version: version.Get().Version})
 	sim := payments.New(payments.Faults{
-		Latency: *latency, DeclineRate: *decline, HangRate: *hang, LoseRate: *lose, SettleAfter: *settle, RedirectTo: *redirect,
+		Latency: *latency, DeclineRate: *decline, HangRate: *hang, LoseRate: *lose, ShortRate: *shortRate, SettleAfter: *settle, RedirectTo: *redirect,
 	}, log).WithRequire(req)
 	return serve(ctx, *addr, sim.Handler(), log, "sim.payments_listening")
 }

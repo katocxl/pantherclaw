@@ -269,7 +269,7 @@ func TestHR150_SessionsAreHashedBoundedAndChecked(t *testing.T) {
 	ctx := context.Background()
 	out := b.mustSignIn(t)
 	s, err := b.browser.Authenticate(ctx, out.Secret)
-	if err != nil || s.Credential != authnapp.CredBrowserSession || s.User() != b.user || s.ID != out.Session {
+	if err != nil || s.Credential != authnapp.CredBrowserSession || s.User() != b.user || s.ID != out.Session || s.Session != s.ID {
 		t.Fatalf("authenticate: %+v %v", s, err)
 	}
 	sum := sha256.Sum256([]byte(out.Secret))

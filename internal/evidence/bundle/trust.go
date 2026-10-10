@@ -86,9 +86,27 @@ func (k *TrustedKey) ValidAt(t time.Time) bool {
 	return k.State != StateRevoked && !t.Before(k.NotBefore) && (k.NotAfter.IsZero() || !t.After(k.NotAfter))
 }
 
+// EvidenceKeysFormat is the format of a deployment's
+// /.well-known/pantherclaw/evidence-keys.json (PAP-1 §11). The document has
+// the trust file's members, so pinning it is a change of format alone.
+const EvidenceKeysFormat = "pantherclaw.evidence-keys/v1"
+
 // ParseTrust parses and checks a trust file: known purposes, each with its
 // pinned algorithm, well-formed keys, unique kids and states.
-func ParseTrust(b []byte) (*Trust, error) {
+func ParseTrust(b []byte) (*Trust, error) { return parseTrust(b, TrustFormat) }
+
+// ParseEvidenceKeys parses and checks a deployment's evidence-keys.json like
+// a trust file, and returns it as the trust file that pins those keys.
+func ParseEvidenceKeys(b []byte) (*Trust, error) {
+	t, err := parseTrust(b, EvidenceKeysFormat)
+	if err != nil {
+		return nil, err
+	}
+	t.Format = TrustFormat
+	return t, nil
+}
+
+func parseTrust(b []byte, format string) (*Trust, error) {
 	if len(b) > MaxTrustBytes {
 		return nil, fmt.Errorf("%w: larger than %d bytes", ErrInvalidTrust, MaxTrustBytes)
 	}
@@ -96,7 +114,7 @@ func ParseTrust(b []byte) (*Trust, error) {
 	if err := json.Unmarshal(b, &t, json.RejectUnknownMembers(true)); err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrInvalidTrust, err)
 	}
-	if t.Format != TrustFormat || t.LogOrigin == "" || len(t.LogOrigin) > 256 || strings.ContainsAny(t.LogOrigin, " \n+") {
+	if t.Format != format || t.LogOrigin == "" || len(t.LogOrigin) > 256 || strings.ContainsAny(t.LogOrigin, " \n+") {
 		return nil, fmt.Errorf("%w: format and a log origin are required", ErrInvalidTrust)
 	}
 	seen := map[string]bool{}

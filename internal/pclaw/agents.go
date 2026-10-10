@@ -8,6 +8,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 
 	"google.golang.org/protobuf/proto"
@@ -144,18 +145,36 @@ func agentCommands() map[string]command {
 			}
 		}),
 		"agent enroll-token": {"agent enroll-token AGENT --out FILE [--ttl MINUTES]", enrollToken},
-		"waitlist list": rpc("waitlist list [--state S,...] [--agent ID]", 0, func(fs *flag.FlagSet) call {
-			var states list
+		"waitlist list": rpc("waitlist list [--state S,...] [--agent ID] [--kind K,...] [--priority 1-4,...] [--assigned-to-me] [--overdue]", 0, func(fs *flag.FlagSet) call {
+			var states, kinds, priorities list
 			fs.Var(&states, "state", "only these states (open, approved, rejected, expired, cancelled)") //nolint:misspell // API value
 			agent := fs.String("agent", "", "only this agent")
+			fs.Var(&kinds, "kind", "only these kinds (admission, access_request, action_hold, tool_review, restoration, reconciliation)")
+			fs.Var(&priorities, "priority", "only these priorities (1 most urgent to 4)")
+			mine, overdue := fs.Bool("assigned-to-me", false, "only entries assigned to you"), fs.Bool("overdue", false, "only open entries past their next escalation or near their deadline")
 			n, tok := paging(fs)
 			return func(ctx context.Context, c clients, _ []string) (proto.Message, error) {
 				st, err := enumList[pantherclawv1.WaitlistState](states, "WAITLIST_STATE_", pantherclawv1.WaitlistState_value)
 				if err != nil {
 					return nil, err
 				}
+				k, err := enumList[pantherclawv1.WaitlistKind](kinds, "WAITLIST_KIND_", pantherclawv1.WaitlistKind_value)
+				if err != nil {
+					return nil, err
+				}
+				var prio []int32
+				for _, v := range priorities {
+					for s := range strings.SplitSeq(v, ",") {
+						p, err := strconv.Atoi(strings.TrimSpace(s))
+						if err != nil || p < 1 || p > 4 {
+							return nil, fmt.Errorf("--priority: %q is not 1 to 4", s)
+						}
+						prio = append(prio, int32(p)) //nolint:gosec // 1..4
+					}
+				}
 				return c.waitlist.ListWaitlistEntries(ctx, &pantherclawv1.ListWaitlistEntriesRequest{
-					PageSize: size(n), PageToken: *tok, States: st, AgentId: optStr(*agent),
+					PageSize: size(n), PageToken: *tok, States: st, AgentId: optStr(*agent), Kinds: k, Priorities: prio,
+					AssignedToMe: *mine, Overdue: *overdue,
 				})
 			}
 		}),

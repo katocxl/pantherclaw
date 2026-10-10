@@ -132,8 +132,22 @@ func Render(typ string, params map[string]string) (Rendered, error) {
 	if utf8.RuneCountInString(r.Title) > MaxTitle || utf8.RuneCountInString(r.Body) > MaxBody {
 		return Rendered{}, ErrBadParams
 	}
+	// A link holds at most the request id placeholder (G0 M5 part 2), and
+	// only a canonical id fills it, so a link always opens a PantherClaw
+	// page.
+	for _, m := range placeholder.FindAllStringSubmatch(t.Link, -1) {
+		if m[1] != linkParam || !idValue.MatchString(params[linkParam]) {
+			return Rendered{}, fmt.Errorf("%w: link %s", ErrBadParams, m[1])
+		}
+	}
+	r.Link = fill(t.Link)
 	return r, nil
 }
+
+// linkParam is the one placeholder a link may hold.
+const linkParam = "request"
+
+var idValue = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 
 // PlainValue reports whether v is acceptable as a template parameter.
 func PlainValue(v string) bool {

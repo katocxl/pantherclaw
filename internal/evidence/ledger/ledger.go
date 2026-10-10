@@ -122,6 +122,15 @@ type Head struct {
 // Verify recomputes the org's chain from genesis and checks it against the
 // stored head. It returns domain.ErrChainBroken on any mismatch.
 func Verify(ctx context.Context, pool *db.Pool, org ids.OrgID) (Head, error) {
+	return VerifyEach(ctx, pool, org, nil)
+}
+
+// VerifyEach is Verify, calling visit with each link once it verified, in
+// seq order. It reads the whole chain in one snapshot, so a chainer running
+// meanwhile changes nothing it sees. An entry whose body retention removed
+// is checked by its position and prev_hash, and continues the chain by its
+// stored hash.
+func VerifyEach(ctx context.Context, pool *db.Pool, org ids.OrgID, visit func(domain.Link) error) (Head, error) {
 	v := domain.NewVerifier()
 	var stored dbq.GetLedgerHeadRow
 	err := pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
@@ -140,12 +149,22 @@ func Verify(ctx context.Context, pool *db.Pool, org ids.OrgID) (Head, error) {
 				return err
 			}
 			for _, r := range page {
-				e := domain.Entry{
-					Org: org, ID: r.ID, Kind: r.Kind,
-					Actor: domain.Actor{Type: r.ActorType, ID: r.ActorID}, OccurredAt: r.OccurredAt, Body: r.Body,
+				link := domain.Link{Seq: r.Seq, EntryID: r.ID, PrevHash: r.PrevHash, EntryHash: r.EntryHash}
+				if r.BodyRemovedAt != nil {
+					err = v.AddRemoved(link)
+				} else {
+					err = v.Add(link, domain.Entry{
+						Org: org, ID: r.ID, Kind: r.Kind,
+						Actor: domain.Actor{Type: r.ActorType, ID: r.ActorID}, OccurredAt: r.OccurredAt, Body: r.Body,
+					})
 				}
-				if err := v.Add(domain.Link{Seq: r.Seq, EntryID: r.ID, PrevHash: r.PrevHash, EntryHash: r.EntryHash}, e); err != nil {
+				if err != nil {
 					return err
+				}
+				if visit != nil {
+					if err := visit(link); err != nil {
+						return err
+					}
 				}
 				after = r.Seq
 			}
@@ -153,7 +172,7 @@ func Verify(ctx context.Context, pool *db.Pool, org ids.OrgID) (Head, error) {
 				return nil
 			}
 		}
-	}, db.ReadOnly())
+	}, db.ReadOnly(), db.RepeatableRead())
 	if err != nil {
 		return Head{}, fmt.Errorf("ledger: verify org %s: %w", org, err)
 	}

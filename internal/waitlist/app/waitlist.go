@@ -21,6 +21,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/page"
 	tenancy "github.com/katocxl/pantherclaw/internal/tenancy/app"
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
+	wdomain "github.com/katocxl/pantherclaw/internal/waitlist/domain"
 )
 
 // ErrEntryNotFound is returned for unknown or unreadable entries.
@@ -43,16 +44,48 @@ type Entry struct {
 	DecidedAt      *time.Time
 	DecisionReason string
 	CreatedAt      time.Time
+	// Priority runs from 1 (most urgent) to 4 (HR-177). Assignee is who
+	// is working on the entry, if anyone; it decides nothing.
+	Priority   int
+	Assignee   ids.UUID
+	AssignedAt *time.Time
+	// Run, transaction and requester, when the kind has them; routing
+	// health, escalation steps taken and when the next one is due.
+	RunID, TransactionID ids.UUID
+	RequestedBy          string
+	RoutingHealth        string
+	EscalationStep       int
+	NextStepAt           *time.Time
+	FirstResponseAt      *time.Time
 }
 
 // Page is one page of entries.
 type Page struct {
 	Items []Entry
 	Next  string
+	// Scopes are the caller's bindings of roles holding waitlist.read: an
+	// empty page means nothing is waiting there (F626).
+	Scopes []td.Binding
+}
+
+// Filter narrows List.
+type Filter struct {
+	// States default to OPEN.
+	States     []string
+	Agent      ids.UUID
+	Kinds      []string
+	Priorities []int
+	// AssignedToMe keeps the entries assigned to the caller; Overdue the
+	// open ones past their next escalation step or within a tenth of their
+	// deadline.
+	AssignedToMe, Overdue bool
 }
 
 // Reader serves the waitlist reads.
-type Reader struct{ pool *db.Pool }
+type Reader struct {
+	pool *db.Pool
+	ents Entitlements
+}
 
 // NewReader returns the waitlist reads.
 func NewReader(pool *db.Pool) *Reader { return &Reader{pool: pool} }
@@ -71,6 +104,20 @@ func view(r dbq.PcWaitlistEntry) (Entry, error) {
 	if r.DecidedBy != nil {
 		e.DecidedBy = *r.DecidedBy
 	}
+	e.Priority, e.AssignedAt = int(r.Priority), r.AssignedAt
+	if r.AssigneeUserID != nil {
+		e.Assignee = *r.AssigneeUserID
+	}
+	if r.RunID != nil {
+		e.RunID = *r.RunID
+	}
+	if r.TransactionID != nil {
+		e.TransactionID = *r.TransactionID
+	}
+	if r.RequestedBy != nil {
+		e.RequestedBy = *r.RequestedBy
+	}
+	e.RoutingHealth, e.EscalationStep, e.NextStepAt, e.FirstResponseAt = r.RoutingHealth, int(r.EscalationStep), r.NextStepAt, r.FirstResponseAt
 	var ev evidence
 	if err := json.Unmarshal(r.Evidence, &ev); err != nil {
 		return e, err
@@ -88,11 +135,11 @@ func agentOf(r dbq.PcWaitlistEntry) ids.UUID {
 	return *r.AgentID
 }
 
-// canRead reports whether the caller may read entries about agent. Entries
-// about no agent are not readable here.
+// canRead reports whether the caller may read entries about agent. An
+// entry about no agent (a tool review) needs waitlist.read at org scope.
 func canRead(ctx context.Context, c tenancy.Caller, q *dbq.Queries, agent ids.UUID) (bool, error) {
 	if agent.IsZero() {
-		return false, nil
+		return c.Can(td.PermWaitlistRead, td.OrgPath(c.Org)), nil
 	}
 	a, err := q.GetAgent(ctx, c.Org, agent)
 	if err != nil {
@@ -105,26 +152,44 @@ func canRead(ctx context.Context, c tenancy.Caller, q *dbq.Queries, agent ids.UU
 	return c.Can(td.PermWaitlistRead, path), nil
 }
 
-// List lists entries the caller may read, open ones by default, oldest
-// first.
-func (rd *Reader) List(ctx context.Context, pr page.Request, states []string, agent ids.UUID) (Page, error) {
-	if len(states) == 0 {
-		states = []string{"OPEN"}
+// List lists entries the caller may read, open ones by default, by
+// priority and then deadline (HR-177), with the scopes it checked (F626).
+func (rd *Reader) List(ctx context.Context, pr page.Request, f Filter) (Page, error) {
+	if len(f.States) == 0 {
+		f.States = []string{wdomain.StateOpen}
 	}
 	c, err := tenancy.CallerFrom(ctx)
 	if err != nil {
 		return Page{}, err
 	}
-	var out Page
+	out := Page{}
+	for _, b := range c.Bindings {
+		if r, ok := td.LookupRole(b.Role); ok && r.Has(td.PermWaitlistRead) {
+			out.Scopes = append(out.Scopes, b)
+		}
+	}
+	p := dbq.ListWaitlistEntriesParams{
+		OrgID: c.Org, States: f.States, Kinds: f.Kinds, Overdue: f.Overdue, PageLimit: pr.Limit(),
+	}
+	if p.Kinds == nil {
+		p.Kinds = []string{}
+	}
+	p.Priorities = []int16{}
+	for _, x := range f.Priorities {
+		p.Priorities = append(p.Priorities, int16(x)) //nolint:gosec // 1..4
+	}
+	if !f.Agent.IsZero() {
+		p.AgentID = &f.Agent
+	}
+	if f.AssignedToMe {
+		p.Assignee = &c.Principal.ID
+	}
+	if !pr.After.IsZero() {
+		p.After = &pr.After
+	}
 	err = rd.pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
 		q := dbq.New(tx)
-		var agentID *ids.UUID
-		if !agent.IsZero() {
-			agentID = &agent
-		}
-		rows, err := q.ListWaitlistEntries(ctx, dbq.ListWaitlistEntriesParams{
-			OrgID: c.Org, After: pr.After, States: states, AgentID: agentID, PageLimit: pr.Limit(),
-		})
+		rows, err := q.ListWaitlistEntries(ctx, p)
 		if err != nil {
 			return err
 		}

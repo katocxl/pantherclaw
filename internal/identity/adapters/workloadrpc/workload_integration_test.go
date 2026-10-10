@@ -27,6 +27,7 @@ import (
 
 	"github.com/katocxl/pantherclaw/internal/agents/adapters/agentsrpc"
 	aapp "github.com/katocxl/pantherclaw/internal/agents/app"
+	approvals "github.com/katocxl/pantherclaw/internal/approvals/app"
 	"github.com/katocxl/pantherclaw/internal/authn/adapters/rpcauth"
 	authnapp "github.com/katocxl/pantherclaw/internal/authn/app"
 	"github.com/katocxl/pantherclaw/internal/authn/credential"
@@ -57,6 +58,7 @@ import (
 	runsapp "github.com/katocxl/pantherclaw/internal/runs/app"
 	tenancy "github.com/katocxl/pantherclaw/internal/tenancy/app"
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
+	waitlist "github.com/katocxl/pantherclaw/internal/waitlist/app"
 )
 
 type unlimited struct{}
@@ -72,6 +74,7 @@ type stack struct {
 	tokens *token.Service
 	svc    *iapp.Service
 	url    string
+	waits  *approvals.Waits
 }
 
 func newStack(t *testing.T) *stack { return newStackAt(t, clock.System{}) }
@@ -125,11 +128,15 @@ func newStackAt(t *testing.T, clk clock.Clock) *stack {
 	pantherclawv1connect.RegisterGrantServiceHandler(s, grantsrpc.NewGrants(grants))
 	pantherclawv1connect.RegisterAgentServiceHandler(s, agentsrpc.NewAgents(aapp.NewInventory(pool, unlimited{})))
 	pantherclawv1connect.RegisterIdentityServiceHandler(s, identityrpc.NewIdentity(svc, nil))
-	pantherclawv1connect.RegisterWorkloadServiceHandler(s, workloadrpc.NewWorkload(svc, runs, ts.URL, clk).WithGrants(grants))
+	waits := approvals.NewWaits(pool, 1, 0, nil)
+	wl := workloadrpc.NewWorkload(svc, runs, ts.URL, clk).WithGrants(grants).WithWaits(waits).
+		WithApprovals(&approvals.Service{Pool: pool}, waitlist.NewWriter(pool))
+	pantherclawv1connect.RegisterWorkloadServiceHandler(s, wl)
 	inner := http.NewServeMux()
 	rpc.Mount(inner, s)
+	inner.HandleFunc("GET "+workloadrpc.WaitPath+"{transaction}", wl.WaitStream)
 	mux.Handle("/", workloadrpc.RawBody(inner, nil))
-	return &stack{pool: pool, tokens: tokens, svc: svc, url: ts.URL}
+	return &stack{pool: pool, tokens: tokens, svc: svc, url: ts.URL, waits: waits}
 }
 
 func (s *stack) exec(t *testing.T, org ids.OrgID, sql string, args ...any) {

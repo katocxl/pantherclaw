@@ -182,7 +182,25 @@ type Executed struct {
 	Connection  *ids.UUID
 	AccessMode  string
 	Monitor     bool
+	// EffectiveHash is the hex SHA-256 of the action the permit bound (the
+	// effective one, or the requested one when nothing was clamped);
+	// DispatchedAt is when the permit moved to DISPATCHING (G0 M7, PAP-1
+	// §9.2).
+	EffectiveHash string
+	DispatchedAt  time.Time
+	// RecordedBy is RecordedByGateway, or RecordedBySweeper for a dispatch
+	// that never reported (HR-192).
+	RecordedBy string
+	// TargetRef is the target's reference for what it created, when the
+	// gateway read one and it matches the verifier's read.
+	TargetRef string
 }
+
+// Who recorded an attempt.
+const (
+	RecordedByGateway = "gateway"
+	RecordedBySweeper = "sweeper"
+)
 
 // Store is the finalization and settlement port.
 type Store interface {
@@ -216,8 +234,12 @@ type Store interface {
 	// the database time.
 	RecordExecution(ctx context.Context, org ids.OrgID, gatewayID string, e Execution, sign func(x Executed, now time.Time) (Receipt, error)) (string, error)
 	// Sweep releases expired ISSUED permits (and their claims) and marks
-	// stale DISPATCHING ones UNKNOWN, never releasing them (HR-003).
-	Sweep(ctx context.Context, org ids.OrgID, staleAfter time.Duration) (released, unknown int, err error)
+	// stale DISPATCHING ones UNKNOWN, never releasing them (HR-003). Each
+	// swept permit gets, in the same transaction, the attempt, the
+	// execution receipt sign returns for it and an open reconciliation task
+	// (HR-192), as an unknown outcome a gateway reported would.
+	Sweep(ctx context.Context, org ids.OrgID, staleAfter time.Duration,
+		sign func(gatewayID string, e Execution, x Executed, now time.Time) (Receipt, error)) (released, unknown int, err error)
 	// Revalidate voids the responses of an approval request whose people
 	// are no longer eligible and returns an approved request that is no
 	// longer met to PENDING (HR-170), in its own transaction.

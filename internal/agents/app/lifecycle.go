@@ -190,6 +190,28 @@ func (inv *Inventory) Suspend(ctx context.Context, id ids.UUID, reason string) (
 	return out, err
 }
 
+// Restore returns a suspended agent to the state it was suspended from,
+// in the caller's transaction (G0 M5 part 2, decision 11). Only the
+// approval of a RESTORATION request calls it: an agent.restore holder other
+// than the requester signed it with a security key. It is conditional on
+// the agent still being suspended (HR-004) and records the change.
+func Restore(ctx context.Context, q *dbq.Queries, org ids.OrgID, agent ids.UUID, to domain.State, by domain.Actor, request ids.UUID) error {
+	if to == "" || to == domain.StateSuspended || to == domain.StateRetired {
+		return pcerr.New(pcerr.FailedPrecondition, "AGENT_STATE", "the agent cannot return to "+string(to))
+	}
+	_, err := q.SetAgentState(ctx, dbq.SetAgentStateParams{
+		OrgID: org, ID: agent, FromState: string(domain.StateSuspended), ToState: string(to),
+	})
+	if db.IsNoRows(err) {
+		return ErrLostRace
+	} else if err != nil {
+		return err
+	}
+	return RecordChange(ctx, q, org, agent, domain.Change{
+		Kind: domain.ChangeRestored, Actor: by, Details: map[string]string{"to": string(to), "approval_request": request.String()},
+	})
+}
+
 // Retire retires an agent for good (F023): it revokes its instances and
 // enrollment tokens, ends its runs, closes its open waitlist entries and
 // moves the containment epoch. History is kept. Retiring a discovered

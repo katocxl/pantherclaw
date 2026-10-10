@@ -501,6 +501,16 @@ func (a *Authority) RecordExecution(ctx context.Context, gw Gateway, e Execution
 	})
 }
 
+// Sweep releases expired permits and marks stale DISPATCHING ones UNKNOWN
+// (HR-003). A swept permit leaves the same evidence as an unknown outcome
+// its gateway reported: an attempt, a signed execution receipt recorded by
+// the sweeper, and an open reconciliation task (HR-192).
+func (a *Authority) Sweep(ctx context.Context, org ids.OrgID, staleAfter time.Duration) (int, int, error) {
+	return a.Store.Sweep(ctx, org, staleAfter, func(gatewayID string, e Execution, x Executed, now time.Time) (Receipt, error) {
+		return a.executionReceipt(Gateway{Org: org, ID: gatewayID}, e, x, now)
+	})
+}
+
 // Errors of RecordExecution.
 var (
 	ErrOutcomeInvalid = pcerr.New(pcerr.InvalidArgument, "OUTCOME_INVALID", "unknown outcome")

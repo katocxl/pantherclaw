@@ -29,6 +29,7 @@ import (
 	gdomain "github.com/katocxl/pantherclaw/internal/grants/domain"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
+	pgwaitlist "github.com/katocxl/pantherclaw/internal/waitlist/adapters/pgwaitlist"
 )
 
 const (
@@ -151,10 +152,14 @@ func (s *Store) Finalize(ctx context.Context, org ids.OrgID, w finalize.Write) e
 			if ev.MonitorPermit() {
 				mode = pipeline.ModeMonitor
 			}
-			if err := q.InsertPermitForTransaction(ctx, dbq.InsertPermitForTransactionParams{
+			ins := dbq.InsertPermitForTransactionParams{
 				OrgID: org, ID: w.Permit.ID, TransactionID: w.TransactionID, GatewayID: w.Permit.GatewayID,
 				Epoch: w.Permit.Epoch, ExpiresAt: w.Permit.ExpiresAt, Mode: mode, ConnectionID: connectionOf(ev),
-			}); err != nil {
+			}
+			if err := verifyPlan(&ins, ev.Verify); err != nil {
+				return err
+			}
+			if err := q.InsertPermitForTransaction(ctx, ins); err != nil {
 				return err
 			}
 			// The permit consumes the approval it rests on, once, after every
@@ -427,10 +432,9 @@ func (s *Store) Tamper(ctx context.Context, org ids.OrgID, prev finalize.Stored,
 		if prev.Final || receipt == nil {
 			return nil
 		}
-		if err := expect(dbq.New(tx).UpdateDecision(ctx, dbq.UpdateDecisionParams{
-			Decision: "DENY", ReasonCode: "ACTION_TAMPERED", State: "FINAL", Evaluations: int32(prev.Evaluations + 1), //nolint:gosec // ≤ 33
-			OrgID: org, ID: prev.TransactionID, PrevEvaluations: int32(prev.Evaluations), //nolint:gosec // ≤ 32
-		})); err != nil {
+		// Only the decision changes: the transaction keeps its mode, grant
+		// and hashes.
+		if err := expect(dbq.New(tx).CloseTampered(ctx, org, prev.TransactionID, int32(prev.Evaluations))); err != nil { //nolint:gosec // ≤ 32
 			return err
 		}
 		return writeReceipt(ctx, tx, org, prev.TransactionID, prev.Evaluations+1, gatewayID, *receipt)
@@ -521,10 +525,7 @@ func (s *Store) RecordExecution(ctx context.Context, org ids.OrgID, gatewayID st
 		} else if err != nil {
 			return err
 		}
-		x := finalize.Executed{Connection: pc.ConnectionID, AccessMode: finalize.AccessPantherClawHeld, Monitor: pc.Mode == pipeline.ModeMonitor}
-		if pc.AccessMode != nil {
-			x.AccessMode = *pc.AccessMode
-		}
+		x := executed(pc, finalize.RecordedByGateway)
 		if o == finalize.Delegated {
 			if pc.Channel == nil || (*pc.Channel != "hook" && *pc.Channel != "sdk") {
 				return finalize.ErrNotCooperative
@@ -537,14 +538,23 @@ func (s *Store) RecordExecution(ctx context.Context, org ids.OrgID, gatewayID st
 		}
 		txn, err := q.FinishPermitForTransaction(ctx, dbq.FinishPermitForTransactionParams{ToState: to, OrgID: org, ID: permit, GatewayID: gatewayID})
 		if db.IsNoRows(err) {
-			return finalize.ErrNotDispatching
+			// Too late: the sweeper may have marked it UNKNOWN (G0 M7).
+			receipt, err = lateReport(ctx, q, org, gatewayID, e, pc)
+			return err
 		}
 		if err != nil {
 			return err
 		}
 		x.Transaction = txn
+		if x.TargetRef, err = scheduleVerification(ctx, q, org, pc, o, e.TargetRef); err != nil {
+			return err
+		}
 		attempt := dbq.InsertExecutionAttemptParams{
 			OrgID: org, ID: ids.NewV7(), PermitID: permit, TransactionID: txn, Outcome: string(o), AccessMode: &x.AccessMode,
+			RecordedBy: finalize.RecordedByGateway,
+		}
+		if x.TargetRef != "" {
+			attempt.TargetRef = &x.TargetRef
 		}
 		if e.TargetStatus > 0 {
 			attempt.TargetStatus = &e.TargetStatus
@@ -566,7 +576,7 @@ func (s *Store) RecordExecution(ctx context.Context, org ids.OrgID, gatewayID st
 		if err != nil {
 			return err
 		}
-		if _, err := ledger.Append(ctx, tx, receiptKindExecution, evdomain.Actor{Type: "gateway", ID: gatewayID}, r.Body); err != nil {
+		if err := keepReceipt(ctx, tx, q, org, attempt.ID, txn, permit, evdomain.Actor{Type: "gateway", ID: gatewayID}, r); err != nil {
 			return err
 		}
 		receipt = r.JWS
@@ -581,15 +591,24 @@ func (s *Store) RecordExecution(ctx context.Context, org ids.OrgID, gatewayID st
 				return err
 			}
 			return q.SettleDedupeClaim(ctx, string(pipeline.ClaimReleased), org, txn)
-		case finalize.Unknown: // reservations and claim stay held (HR-003, F115)
+		case finalize.Unknown: // reservations and claim stay held until reconciled (HR-003, HR-192, F115)
+			if err := openReconciliation(ctx, q, org, txn); err != nil {
+				return err
+			}
+			// The waitlist entry people work it from (G0 M5 part 2); A11
+			// links it to the reconciliation.
+			_, err := pgwaitlist.OpenReconciliation(ctx, tx, org, txn, evdomain.Actor{Type: "gateway", ID: gatewayID})
+			return err
 		}
 		return nil
 	})
 	return receipt, err
 }
 
-// Sweep implements finalize.Store (HR-003).
-func (s *Store) Sweep(ctx context.Context, org ids.OrgID, staleAfter time.Duration) (int, int, error) {
+// Sweep implements finalize.Store (HR-003, HR-192).
+func (s *Store) Sweep(ctx context.Context, org ids.OrgID, staleAfter time.Duration,
+	sign func(gatewayID string, e finalize.Execution, x finalize.Executed, now time.Time) (finalize.Receipt, error),
+) (int, int, error) {
 	var released, unknown int
 	err := s.Pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
 		q := dbq.New(tx)
@@ -606,8 +625,21 @@ func (s *Store) Sweep(ctx context.Context, org ids.OrgID, staleAfter time.Durati
 			}
 		}
 		stale, err := q.MarkStaleDispatching(ctx, org, staleAfter.Seconds())
+		if err != nil {
+			return err
+		}
+		// Each unknown outcome gets its evidence and a reconciliation, and
+		// waits on the waitlist (G0 M5 part 2).
+		for _, p := range stale {
+			if err := sweptEvidence(ctx, tx, q, org, p, sign); err != nil {
+				return err
+			}
+			if _, err := pgwaitlist.OpenReconciliation(ctx, tx, org, p.TransactionID, pgwaitlist.System); err != nil {
+				return err
+			}
+		}
 		released, unknown = len(expired), len(stale)
-		return err
+		return nil
 	})
 	return released, unknown, err
 }

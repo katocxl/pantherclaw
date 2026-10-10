@@ -314,6 +314,15 @@ message RecordExecutionRequest {
     gte: 0
     lte: 600000
   }];
+  // The identifier of what the target created, read from a 2xx response at
+  // the place the definition's verifier names (G0 M7, PAP-1 §7.4); empty
+  // when there is none. The Authority keeps it only when it matches the
+  // verifier read's target pattern. It is the only part of a response body
+  // the gateway sends.
+  string target_ref = 6 [(buf.validate.field).string = {
+    max_len: 256
+    pattern: "^[!-~]*$"
+  }];
 }
 
 // RecordExecutionResponse returns the execution receipt.

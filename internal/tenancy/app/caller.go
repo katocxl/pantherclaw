@@ -25,15 +25,19 @@ type Credential string
 const (
 	CredAccessToken Credential = "access_token"
 	CredAPIKey      Credential = "api_key"
+	// CredBrowserSession is a browser session of PantherClaw's own pages
+	// (G0 M5).
+	CredBrowserSession Credential = "browser_session"
 )
 
 // Caller is an authenticated principal with its current bindings.
 type Caller struct {
 	domain.Subject
 	Credential Credential
-	// Session is the CLI session a user's access token belongs to (zero for
-	// API keys and service accounts): the human session an approval
-	// response records (G0 M5 part 2, HR-172).
+	// Session is the CLI session a user's access token belongs to, or the
+	// browser session of a page request (zero for API keys and service
+	// accounts): the human session an approval response records (G0 M5
+	// part 2, HR-172).
 	Session ids.UUID
 }
 

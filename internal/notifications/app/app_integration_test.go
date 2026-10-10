@@ -328,3 +328,41 @@ func TestHR155_SecurityNoticesEmailTheUser(t *testing.T) {
 		t.Fatalf("notice %q / %q", title, body)
 	}
 }
+
+// TestHR039_FailedNoticesAreReportedPerSubject (G0 M5 part 2): the
+// subjects whose notices failed, for a waitlist entry's routing health;
+// personal-only notices skip the channels; an approval notice links to its
+// request.
+func TestHR039_FailedNoticesAreReportedPerSubject(t *testing.T) {
+	e := newEnv(t)
+	e.channel(t, napp.NewChannel{Name: "approvals-log", Kind: "log", EventTypes: []string{"approval.*"}, MinSeverity: "INFO"})
+	failing, fine := ids.NewV7(), ids.NewV7()
+	request := "019a0000-0000-7000-8000-000000000002"
+	params := map[string]string{"operation": "payments.refund.create", "agent": failing.String(), "deadline": "2026-10-10T13:00:00Z", "request": request}
+	out := e.enqueue(t, napp.Message{
+		Type: "approval.requested", Params: params, Personal: []ids.UUID{e.carol},
+		Subject: &napp.Subject{Type: "waitlist_entry", ID: failing},
+	})
+	if len(out.Channels) != 1 || out.Deliveries != 2 {
+		t.Fatalf("enqueued %+v", out)
+	}
+	if n := e.count(t, "SELECT count(*) FROM pc.notifications WHERE id = $1 AND link_path = $2", out.Notification, "/approvals/"+request); n != 1 {
+		t.Fatal("the notice does not link to its request")
+	}
+	only := e.enqueue(t, napp.Message{
+		Type: "approval.requested", Params: params, Personal: []ids.UUID{e.carol}, PersonalOnly: true,
+		Subject: &napp.Subject{Type: "waitlist_entry", ID: fine},
+	})
+	if len(only.Channels) != 0 || only.Deliveries != 1 {
+		t.Fatalf("personal only: %+v", only)
+	}
+	e.exec(t, "UPDATE pc.deliveries SET state = 'FAILED', finished_at = now() WHERE notification_id = $1 AND kind = 'email'", out.Notification)
+	var got []ids.UUID
+	if err := e.pool.InTenantTx(context.Background(), e.org, func(ctx context.Context, tx db.TenantTx) error {
+		var err error
+		got, err = e.svc.FailedSubjects(ctx, tx, e.org, "waitlist_entry", []ids.UUID{failing, fine})
+		return err
+	}); err != nil || len(got) != 1 || got[0] != failing {
+		t.Fatalf("failed subjects %v, %v", got, err)
+	}
+}

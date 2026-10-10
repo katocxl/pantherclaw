@@ -12,6 +12,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"os"
+	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -192,5 +193,62 @@ func TestHR123_StoredPinsAndMetadataOnlyMoveForward(t *testing.T) {
 	}
 	if p, _ := f.store.CurrentPin(ctx, org, "pc.mock-payments"); p.Version != "1.2.0" {
 		t.Fatalf("pin %+v", p)
+	}
+}
+
+// reviews lists the org's TOOL_REVIEW entries as "version state priority",
+// oldest first.
+func (f *fixture) reviews(org ids.OrgID) []string {
+	f.t.Helper()
+	var out []string
+	err := f.pool.InTenantTx(context.Background(), org, func(ctx context.Context, tx db.TenantTx) error {
+		rows, err := tx.Query(ctx, `SELECT v.version || ' ' || e.state || ' ' || e.priority FROM pc.waitlist_entries e
+			JOIN pc.package_versions v ON v.org_id = e.org_id AND v.id = e.subject_id
+			WHERE e.org_id = $1 AND e.kind = 'TOOL_REVIEW' AND e.subject_type = 'package_version'
+			  AND e.deadline_at BETWEEN now() + interval '29 days' AND now() + interval '31 days'
+			ORDER BY e.created_at, e.id`, org)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var s string
+			if err := rows.Scan(&s); err != nil {
+				return err
+			}
+			out = append(out, s)
+		}
+		return rows.Err()
+	})
+	if err != nil {
+		f.t.Fatal(err)
+	}
+	return out
+}
+
+// TestHR177_AnImportedVersionWaitsForReview: importing a version that is
+// not active opens a low-priority TOOL_REVIEW entry with a 30-day
+// deadline; activating the version approves it and retiring one rejects it.
+func TestHR177_AnImportedVersionWaitsForReview(t *testing.T) {
+	f := setup(t)
+	ctx := context.Background()
+	org := newOrg(t, f.pool)
+	if _, err := f.im.Import(ctx, org, "pc.mock-payments", "1.0.0", f.targets(1, "1.0.0"), f.files["1.0.0"], nil); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.reviews(org); !slices.Equal(got, []string{"1.0.0 OPEN 4"}) {
+		t.Fatalf("after the import: %v", got)
+	}
+	if err := f.im.Transition(ctx, org, "pc.mock-payments", "1.0.0", domain.StateActive, nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.im.Import(ctx, org, "pc.mock-payments", "1.1.0", f.targets(2, "1.0.0", "1.1.0"), f.files["1.1.0"], nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.im.Transition(ctx, org, "pc.mock-payments", "1.1.0", domain.StateRetired, nil); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.reviews(org); !slices.Equal(got, []string{"1.0.0 APPROVED 4", "1.1.0 REJECTED 4"}) {
+		t.Fatalf("after activating 1.0.0 and retiring 1.1.0: %v", got)
 	}
 }

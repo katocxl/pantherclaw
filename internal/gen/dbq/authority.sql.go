@@ -170,7 +170,8 @@ func (q *Queries) EngageKillSwitch(ctx context.Context, engagedBy string, reason
 }
 
 const executionContext = `-- name: ExecutionContext :one
-SELECT p.mode, p.connection_id, t.channel, c.access_mode
+SELECT p.mode, p.connection_id, t.channel, c.access_mode, t.id AS transaction_id, t.action_hash, t.effective_hash,
+       p.dispatching_at, p.definition_digest, p.verify_expect, t.target_type, t.target_id
 FROM pc.permits p
 JOIN pc.transactions t ON t.org_id = p.org_id AND t.id = p.transaction_id
 LEFT JOIN pc.connections c ON c.org_id = p.org_id AND c.id = p.connection_id
@@ -178,10 +179,18 @@ WHERE p.org_id = $1 AND p.id = $2 AND p.gateway_id = $3
 `
 
 type ExecutionContextRow struct {
-	Mode         string
-	ConnectionID *ids.UUID
-	Channel      *string
-	AccessMode   *string
+	Mode             string
+	ConnectionID     *ids.UUID
+	Channel          *string
+	AccessMode       *string
+	TransactionID    ids.UUID
+	ActionHash       []byte
+	EffectiveHash    []byte
+	DispatchingAt    *time.Time
+	DefinitionDigest *string
+	VerifyExpect     []byte
+	TargetType       *string
+	TargetID         *string
 }
 
 // ExecutionContext is what an execution receipt states about a permit:
@@ -194,6 +203,14 @@ func (q *Queries) ExecutionContext(ctx context.Context, orgID ids.OrgID, iD ids.
 		&i.ConnectionID,
 		&i.Channel,
 		&i.AccessMode,
+		&i.TransactionID,
+		&i.ActionHash,
+		&i.EffectiveHash,
+		&i.DispatchingAt,
+		&i.DefinitionDigest,
+		&i.VerifyExpect,
+		&i.TargetType,
+		&i.TargetID,
 	)
 	return i, err
 }
@@ -441,9 +458,10 @@ func (q *Queries) InsertDecisionReceipt(ctx context.Context, arg InsertDecisionR
 
 const insertExecutionAttempt = `-- name: InsertExecutionAttempt :exec
 INSERT INTO pc.execution_attempts (org_id, id, permit_id, transaction_id, outcome, target_status, response_digest, dispatch_ms,
-                                   access_mode)
+                                   access_mode, recorded_by, target_ref)
 VALUES ($1, $2, $3, $4, $5,
-        $6, $7, $8, $9)
+        $6, $7, $8, $9,
+        $10, $11)
 `
 
 type InsertExecutionAttemptParams struct {
@@ -456,6 +474,8 @@ type InsertExecutionAttemptParams struct {
 	ResponseDigest []byte
 	DispatchMs     *int32
 	AccessMode     *string
+	RecordedBy     string
+	TargetRef      *string
 }
 
 func (q *Queries) InsertExecutionAttempt(ctx context.Context, arg InsertExecutionAttemptParams) error {
@@ -469,6 +489,8 @@ func (q *Queries) InsertExecutionAttempt(ctx context.Context, arg InsertExecutio
 		arg.ResponseDigest,
 		arg.DispatchMs,
 		arg.AccessMode,
+		arg.RecordedBy,
+		arg.TargetRef,
 	)
 	return err
 }

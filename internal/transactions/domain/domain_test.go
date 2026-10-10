@@ -180,6 +180,34 @@ func TestHR192_OnlyAnIndependentPersonResolves(t *testing.T) {
 	}
 }
 
+// TestHR192_APersonRecordsOccurredWithABasis: "occurred" only commits, so
+// any person holding transaction.reconcile records it, with a basis, naming
+// the authoritative observation among their evidence.
+func TestHR192_APersonRecordsOccurredWithABasis(t *testing.T) {
+	seen := ids.NewV7()
+	cases := []struct {
+		name          string
+		human         bool
+		basis         string
+		evidence      []ids.UUID
+		authoritative *ids.UUID
+		want          error
+	}{
+		{"a person with a basis", true, "the refund is in the processor's dashboard", nil, nil, nil},
+		{"naming the authoritative observation", true, "basis", []ids.UUID{seen}, &seen, nil},
+		{"a service", false, "basis", nil, nil, domain.ErrNotAPerson},
+		{"no basis", true, "", nil, nil, domain.ErrBasisRequired},
+		{"a long basis", true, strings.Repeat("é", domain.MaxBasis+1), nil, nil, domain.ErrBasisTooLong},
+		{"too much evidence", true, "basis", make([]ids.UUID, 65), nil, domain.ErrTooMuchEvidence},
+		{"an authoritative observation not shown", true, "basis", []ids.UUID{seen}, new(ids.NewV7()), domain.ErrNotEvidence},
+	}
+	for _, c := range cases {
+		if err := domain.CheckOccurred(c.human, c.basis, c.evidence, c.authoritative); !errors.Is(err, c.want) {
+			t.Errorf("%s: %v, want %v", c.name, err, c.want)
+		}
+	}
+}
+
 // TestHR192_ReleaseBindingIsStable pins the release binding: a change to its
 // inputs or encoding changes the challenge a person's key signed.
 func TestHR192_ReleaseBindingIsStable(t *testing.T) {

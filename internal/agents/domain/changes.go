@@ -25,6 +25,7 @@ const (
 	ChangeObserved             ChangeKind = "agent.observed"
 	ChangeSuspended            ChangeKind = "agent.suspended"
 	ChangeRetired              ChangeKind = "agent.retired"
+	ChangeRestored             ChangeKind = "agent.restored"
 	ChangeInstanceEnrolled     ChangeKind = "instance.enrolled"
 	ChangeInstanceAdmitted     ChangeKind = "instance.admitted"
 	ChangeInstanceAutoAdmitted ChangeKind = "instance.auto_admitted"

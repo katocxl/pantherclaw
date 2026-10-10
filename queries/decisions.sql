@@ -61,9 +61,10 @@ WHERE c.org_id = sqlc.arg(org_id) AND t.org_id = c.org_id AND t.id = sqlc.arg(tr
   AND c.dedupe_key = t.dedupe_key AND c.transaction_id = t.id;
 
 -- name: InsertPermitForTransaction :exec
-INSERT INTO pc.permits (org_id, id, transaction_id, gateway_id, epoch, expires_at, mode, connection_id)
+INSERT INTO pc.permits (org_id, id, transaction_id, gateway_id, epoch, expires_at, mode, connection_id, definition_digest,
+                        verify_expect)
 VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(transaction_id), sqlc.arg(gateway_id), sqlc.arg(epoch), sqlc.arg(expires_at),
-        sqlc.arg(mode), sqlc.narg(connection_id));
+        sqlc.arg(mode), sqlc.narg(connection_id), sqlc.narg(definition_digest), sqlc.narg(verify_expect));
 
 -- name: FinishPermitForTransaction :one
 UPDATE pc.permits
@@ -83,7 +84,7 @@ UPDATE pc.permits
 SET state = 'UNKNOWN', finished_at = now()
 WHERE org_id = sqlc.arg(org_id) AND state = 'DISPATCHING'
   AND dispatching_at < now() - make_interval(secs => sqlc.arg(stale_seconds)::float8) AND budget_id IS NULL
-RETURNING id;
+RETURNING id, transaction_id, gateway_id;
 
 -- name: GetContainmentNow :one
 SELECT epoch, kill_switch, now()::timestamptz AS now

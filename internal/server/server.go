@@ -78,8 +78,7 @@ import (
 	runsapp "github.com/katocxl/pantherclaw/internal/runs/app"
 	"github.com/katocxl/pantherclaw/internal/tenancy/adapters/tenancyrpc"
 	tapp "github.com/katocxl/pantherclaw/internal/tenancy/app"
-	"github.com/katocxl/pantherclaw/internal/waitlist/adapters/waitlistrpc"
-	wapp "github.com/katocxl/pantherclaw/internal/waitlist/app"
+	txapp "github.com/katocxl/pantherclaw/internal/transactions/app"
 )
 
 const usage = `pantherclaw-server — PantherClaw control plane
@@ -96,6 +95,9 @@ Usage:
                                                      create an organization and print its one-time admin token
   pantherclaw-server org admin-invite --org ID [--admin-email E] [--config FILE]
                                                      issue a new one-time admin token (recovery)
+  pantherclaw-server evidence integrity reset --org ID --reason TEXT --confirm [--config FILE]
+                                                     resume checkpointing of an org whose evidence integrity FAILED,
+                                                     after investigating; its ledger is checked again
   pantherclaw-server dev seed [--config FILE] [--org-name N] [--budget-limit X] [--max-count N] [--gateway-out FILE
                              [--target-url URL [--access-mode M]] [--shell]] [--workload-out FILE [--facts-key-out FILE]]
                                                      DEVELOPMENT ONLY: demo org with the reference package; a gateway
@@ -135,6 +137,8 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer, env Env) 
 		err = cmdKeys(ctx, args[1:], stdout, stderr, env)
 	case "org":
 		err = cmdOrg(ctx, args[1:], stdout, stderr, env)
+	case "evidence":
+		err = cmdEvidence(ctx, args[1:], stdout, stderr, env)
 	case "dev":
 		err = cmdDev(ctx, args[1:], stdout, stderr, env)
 	default:
@@ -199,12 +203,19 @@ func cmdServe(ctx context.Context, args []string, stderr io.Writer, env Env, onS
 	if err != nil {
 		return err
 	}
-	reg := keys.NewRegistry()
-	if err := keystore.LoadSigningKeys(ctx, pool, kp, reg); err != nil {
-		return err
-	}
 	bill, err := applyLicence(ctx, cfg, pool, log)
 	if err != nil {
+		return err
+	}
+	ents, err := bill.Current(ctx)
+	if err != nil {
+		return err
+	}
+	if err := cfg.checkEvidenceEdition(ents); err != nil {
+		return err
+	}
+	reg := keys.NewRegistry()
+	if err := keystore.LoadSigningKeys(ctx, pool, kp, reg, cfg.evidenceKeyPurposes()...); err != nil {
 		return err
 	}
 
@@ -220,6 +231,15 @@ func cmdServe(ctx context.Context, args []string, stderr io.Writer, env Env, onS
 	if err != nil {
 		return err
 	}
+	m5p2, err := newM5p2(cfg, pool, bill, m5.notifications, log)
+	if err != nil {
+		return err
+	}
+	verification, err := newVerification(pool, reg, m5.notifications)
+	if err != nil {
+		return err
+	}
+	m6.verifications = verification
 
 	g, ctx := errgroup.WithContext(ctx)
 	if cfg.Role == RoleAPI || cfg.Role == RoleAll {
@@ -268,6 +288,7 @@ func cmdServe(ctx context.Context, args []string, stderr io.Writer, env Env, onS
 			return err
 		}
 		m6.mountPages(web)
+		m5p2.mountPages(web, m5)
 		device.WithBrowserCallback(web.Callback)
 		roots, err := packageRoots(ctx, cfg, log)
 		if err != nil {
@@ -281,10 +302,13 @@ func cmdServe(ctx context.Context, args []string, stderr io.Writer, env Env, onS
 				cfg.Auth.PublicURL, limiter),
 			device:    device,
 			publicURL: cfg.Auth.PublicURL, clientIP: limiter.ClientIP, clusters: clusters, subjects: subjects,
+			logOrigin:    cfg.logOrigin(),
 			packageRoots: roots,
 			web:          web,
 			m5:           m5,
 			m6:           m6,
+			m5p2:         m5p2,
+			verification: verification,
 		})
 		if err != nil {
 			return err
@@ -300,6 +324,7 @@ func cmdServe(ctx context.Context, args []string, stderr io.Writer, env Env, onS
 			onStart(ln.Addr().String())
 		}
 		log.InfoContext(ctx, "server.listening", slog.String("addr", ln.Addr().String()), slog.String("role", cfg.Role))
+		m5p2.serveWaits(ctx, g)
 		g.Go(func() error {
 			var err error
 			if srv.TLSConfig != nil {
@@ -327,6 +352,10 @@ func cmdServe(ctx context.Context, args []string, stderr io.Writer, env Env, onS
 		if err := authority.RegisterSweeper(jreg, pool, svc, cfg.Authority.StaleDispatch.D()); err != nil {
 			return err
 		}
+		evidenceJobs, err := registerEvidenceWorkers(jreg, cfg, pool, reg, m5.notifications, log)
+		if err != nil {
+			return err
+		}
 		if err := authnapp.RegisterJanitor(jreg, pool, log); err != nil {
 			return err
 		}
@@ -336,15 +365,22 @@ func cmdServe(ctx context.Context, args []string, stderr io.Writer, env Env, onS
 		if err := m5.registerWorkers(jreg); err != nil {
 			return err
 		}
+		if err := m5p2.registerWorkers(jreg, log); err != nil {
+			return err
+		}
+		if err := txapp.Register(jreg, pool, verification); err != nil {
+			return err
+		}
 		client, err := jobs.NewClient(pool, jreg, jobs.Config{
 			Queues: map[string]int{river.QueueDefault: cfg.WorkerConcurrency, napp.Queue: cfg.Notifications.Concurrency},
 			PeriodicJobs: slices.Concat(chainer.PeriodicJobs(), authority.SweeperPeriodicJobs(), authnapp.JanitorPeriodicJobs(),
-				iapp.JanitorPeriodicJobs(), napp.PeriodicJobs()),
+				iapp.JanitorPeriodicJobs(), napp.PeriodicJobs(), m5p2.periodicJobs(), txapp.PeriodicJobs()),
 			Logger: log,
 		})
 		if err != nil {
 			return err
 		}
+		client.PeriodicJobs().AddMany(evidenceJobs)
 		if err := client.Start(ctx); err != nil {
 			return fmt.Errorf("server: start workers: %w", err)
 		}
@@ -406,6 +442,8 @@ type apiDeps struct {
 	device    *devicehttp.Handler
 	// publicURL is the server's external base URL (PAP/1 htu and token iss).
 	publicURL string
+	// logOrigin names the evidence log (evidence.log_origin).
+	logOrigin string
 	// clientIP resolves client addresses behind trusted proxies.
 	clientIP httpx.ClientIPFunc
 	// clusters are the configured Kubernetes clusters (identity.kubernetes_clusters).
@@ -419,6 +457,10 @@ type apiDeps struct {
 	m5  *m5Services
 	// M6: gateway identity.
 	m6 *m6Services
+	// M5 part 2: approvals, the waitlist and wait handles.
+	m5p2 *m5p2Services
+	// M7: verification signs the effect receipts people's actions append.
+	verification *txapp.Service
 }
 
 // apiHandler mounts the RPC services, health endpoints and the JWKS.
@@ -437,8 +479,8 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	pantherclawv1connect.RegisterTenancyServiceHandler(rs, tenancyrpc.NewTenancy(tapp.NewHierarchy(pool, d.billing)))
 	pantherclawv1connect.RegisterAccessServiceHandler(rs, tenancyrpc.NewAccess(tapp.NewAccess(pool, log)))
 	pantherclawv1connect.RegisterServiceAccountServiceHandler(rs, tenancyrpc.NewServiceAccounts(tapp.NewServiceAccounts(pool, d.apiKeyEnv)))
-	pantherclawv1connect.RegisterAgentServiceHandler(rs, agentsrpc.NewAgents(aapp.NewInventory(pool, d.billing)))
-	pantherclawv1connect.RegisterWaitlistServiceHandler(rs, waitlistrpc.NewWaitlist(wapp.NewReader(pool)))
+	pantherclawv1connect.RegisterAgentServiceHandler(rs, d.m5p2.agents(agentsrpc.NewAgents(aapp.NewInventory(pool, d.billing))))
+	pantherclawv1connect.RegisterWaitlistServiceHandler(rs, d.m5p2.waitlist())
 	attestors, err := newAttestors(d.clusters)
 	if err != nil {
 		return nil, err
@@ -456,8 +498,8 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	}
 	pantherclawv1connect.RegisterRunServiceHandler(rs, runsrpc.NewRuns(runs))
 	d.authority.WithWorkloads(identity, runs)
-	pantherclawv1connect.RegisterWorkloadServiceHandler(rs,
-		workloadrpc.NewWorkload(identity, runs, d.publicURL, clock.System{}).WithGrants(grants))
+	workload := d.m5p2.workload(workloadrpc.NewWorkload(identity, runs, d.publicURL, clock.System{}).WithGrants(grants))
+	pantherclawv1connect.RegisterWorkloadServiceHandler(rs, workload)
 	if err := registerAuthorityAdmin(rs, d, grants); err != nil {
 		return nil, err
 	}
@@ -466,8 +508,12 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 		pantherclawv1connect.RegisterNotificationServiceHandler(rs, notificationsrpc.New(d.m5.notifications))
 	}
 	d.m6.registerPublic(rs)
+	d.m5p2.registerPublic(rs)
+	registerM7(rs, pool, d.verification)
+	registerEvidence(rs, d)
 	mux := http.NewServeMux()
 	rpc.Mount(mux, rs)
+	d.m5p2.mount(mux, workload)
 	d.oauth.Mount(mux)
 	d.device.Mount(mux, d.oauth)
 	if d.web != nil {
@@ -501,6 +547,7 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 		w.Header().Set("Cache-Control", "public, max-age=300")
 		_, _ = w.Write(b)
 	})
+	mountEvidenceKeys(mux, d)
 	return workloadrpc.RawBody(mux, d.clientIP), nil
 }
 

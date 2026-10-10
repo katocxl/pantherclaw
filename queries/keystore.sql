@@ -2,14 +2,14 @@
 -- Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
 
 -- name: ListSigningKeys :many
-SELECT id, kid, purpose, public_key, wrapped_private_key, kek_id, state
+SELECT id, kid, purpose, algorithm, public_key, wrapped_private_key, kek_id, state
 FROM pc.keys
 WHERE org_id = sqlc.arg(org_id) AND state <> 'REVOKED'
 ORDER BY created_at, kid;
 
 -- name: InsertSigningKey :exec
-INSERT INTO pc.keys (org_id, id, kid, purpose, public_key, wrapped_private_key, kek_id, state)
-VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(kid), sqlc.arg(purpose), sqlc.arg(public_key),
+INSERT INTO pc.keys (org_id, id, kid, purpose, algorithm, public_key, wrapped_private_key, kek_id, state)
+VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(kid), sqlc.arg(purpose), sqlc.arg(algorithm), sqlc.arg(public_key),
         sqlc.arg(wrapped_private_key), sqlc.arg(kek_id), 'ACTIVE');
 
 -- name: TransitionSigningKey :execresult
@@ -38,3 +38,11 @@ WHERE org_id = sqlc.arg(org_id) AND purpose = sqlc.arg(purpose);
 -- name: InsertDEK :exec
 INSERT INTO pc.deks (org_id, purpose, version, wrapped_key, kek_id, state)
 VALUES (sqlc.arg(org_id), sqlc.arg(purpose), sqlc.arg(version), sqlc.arg(wrapped_key), sqlc.arg(kek_id), 'ACTIVE');
+
+-- name: ListPublishedKeys :many
+-- Public halves only, revoked keys included, for the well-known documents
+-- (PAP-1 §11).
+SELECT kid, purpose, algorithm, public_key, state, created_at, state_changed_at
+FROM pc.keys
+WHERE org_id = sqlc.arg(org_id) AND purpose = ANY(sqlc.arg(purposes)::text[])
+ORDER BY created_at, kid;
