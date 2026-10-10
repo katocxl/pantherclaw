@@ -41,6 +41,15 @@ service GatewayAdminService {
   // RevokeGatewayCertificate revokes one certificate (one replica).
   // permission: gateway.manage
   rpc RevokeGatewayCertificate(RevokeGatewayCertificateRequest) returns (RevokeGatewayCertificateResponse);
+  // ListApproverKeys lists the active security keys of the org's enabled
+  // people, with their fingerprints, for the approver keys file that a
+  // customer-hosted gateway verifies approvals against (HR-038, T-030).
+  // A person reviews the fingerprints before installing the file; the
+  // gateway never asks the server for keys.
+  // permission: gateway.read
+  rpc ListApproverKeys(ListApproverKeysRequest) returns (ListApproverKeysResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 }
 
 // GatewayService is called by gateways. Enroll is served on the public API
@@ -226,6 +235,58 @@ message ListGatewaysResponse {
   repeated Gateway gateways = 1;
   // Token for the next page; empty at the end.
   string next_page_token = 2;
+}
+
+// ListApproverKeysRequest pages through the org's active security keys.
+message ListApproverKeysRequest {
+  // Maximum results (default 50, at most 200).
+  int32 page_size = 1 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 200
+  }];
+  // Token from a previous response.
+  string page_token = 2 [(buf.validate.field).string = {
+    max_len: 64
+    pattern: "^[A-Za-z0-9_-]*$"
+  }];
+}
+
+// ListApproverKeysResponse is one page, with what every page shares.
+message ListApproverKeysResponse {
+  // The org the keys belong to.
+  string org_id = 1;
+  // The WebAuthn relying party id the keys are registered for; assertions
+  // carry its SHA-256.
+  string rp_id = 2;
+  // Keys, by key id.
+  repeated ApproverKey keys = 3;
+  // Token for the next page; empty at the end.
+  string next_page_token = 4;
+}
+
+// ApproverKey is one person's active security key (HR-038).
+message ApproverKey {
+  // The key's record id.
+  string id = 1;
+  // The person it belongs to.
+  string user_id = 2;
+  // Their email, for review (untrusted text from the identity provider).
+  string user_email = 3;
+  // Their display name, for review (untrusted text from the identity
+  // provider).
+  string user_display_name = 4;
+  // The name the person gave the key.
+  string name = 5;
+  // The WebAuthn credential id the authenticator signs with.
+  bytes credential_id = 6;
+  // The COSE algorithm: -7 (ES256), -8 (EdDSA) or -257 (RS256).
+  int32 algorithm = 7;
+  // The public key as a DER SubjectPublicKeyInfo (PKIX).
+  bytes public_key = 8;
+  // "sha256:" and 64 hex digits of public_key, for review.
+  string fingerprint = 9;
+  // When the key was registered.
+  google.protobuf.Timestamp create_time = 10;
 }
 
 // GetGatewayRequest names a gateway.

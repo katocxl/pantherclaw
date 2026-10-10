@@ -27,11 +27,14 @@ const (
 
 // Lifecycle is the request state machine. An approved request returns to
 // PENDING when a void leaves a requirement short (HR-170); a changed binding
-// supersedes a request, never updates it.
+// supersedes a request, never updates it. A consumed request returns to
+// APPROVED only when the server can prove its permit sent nothing: the
+// permit was released without reaching DISPATCHING (HR-011, M6 slice 23).
 var Lifecycle = statemachine.New("approval request", map[State][]State{
 	StatePending:           {StateEvidenceRequested, StateApproved, StateDeclined, StateExpired, StateInvalidated, StateSuperseded},
 	StateEvidenceRequested: {StatePending, StateDeclined, StateExpired, StateInvalidated, StateSuperseded},
 	StateApproved:          {StateConsumed, StatePending, StateExpired, StateInvalidated, StateSuperseded},
+	StateConsumed:          {StateApproved},
 })
 
 // Live reports whether the request still waits for deciders or for its

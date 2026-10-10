@@ -126,5 +126,5 @@ func cmdDevGateway(ctx context.Context, args []string, stdout, stderr io.Writer,
 		return err
 	}
 	_, _ = fmt.Fprintf(stdout, "seeded gateway %s in org %s; enroll it within 15 minutes with: pantherclaw-gateway serve --enroll-file %s\n", gw, org, *out)
-	return nil
+	return seedApproverKeys(ctx, cfg, pool, org, *out, stdout)
 }

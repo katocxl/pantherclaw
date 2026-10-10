@@ -9,6 +9,7 @@ import (
 
 	"github.com/katocxl/pantherclaw/internal/actionir"
 	apdomain "github.com/katocxl/pantherclaw/internal/approvals/domain"
+	"github.com/katocxl/pantherclaw/internal/approvals/proof"
 	adomain "github.com/katocxl/pantherclaw/internal/authority/domain"
 	"github.com/katocxl/pantherclaw/internal/authority/finalize"
 	"github.com/katocxl/pantherclaw/internal/authority/pipeline"
@@ -131,3 +132,9 @@ func (w *World) holdWrite(wr finalize.Write) error {
 // Revalidate implements finalize.Store: the world has no responses, so
 // nothing is ever voided.
 func (w *World) Revalidate(context.Context, ids.OrgID, ids.UUID) error { return nil }
+
+// ApprovalProof implements finalize.Store: the world has no responses, so
+// a permit's approval carries no assertion (HR-038 is the gateway's check).
+func (w *World) ApprovalProof(context.Context, ids.OrgID, ids.UUID) ([]proof.Assertion, error) {
+	return nil, nil
+}

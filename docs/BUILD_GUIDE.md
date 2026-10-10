@@ -183,7 +183,7 @@ go run ./cmd/pantherclaw-server serve --config deploy/dev/server.example.json
 
 Then `curl http://127.0.0.1:8080/readyz`, `curl http://127.0.0.1:8080/.well-known/pantherclaw/jwks.json`, or call `pantherclaw.v1.SystemService/GetBuildInfo` with `buf curl`. The server refuses to run the application pool as a superuser or BYPASSRLS role, and plaintext HTTP only on loopback.
 
-**Gateway (M6):** gateways reach `AuthorityService` only on the server's mTLS gateway listener (`gateway_api`), with a 24-hour certificate from PantherClaw's internal CA. A gateway gets its first certificate with a single-use enrollment token and pins the CA by its SHA-256. The public API refuses every gateway call. For development, `dev seed --gateway-out` (or `dev gateway --org ID --out FILE` for an existing org) writes an enrollment file holding the API URL, the token (valid 15 minutes) and the CA pin. The gateway enrolls from it on first start, keeps its identity in `control.identity_dir`, and renews the certificate itself.
+**Gateway (M6):** gateways reach `AuthorityService` only on the server's mTLS gateway listener (`gateway_api`), with a 24-hour certificate from PantherClaw's internal CA. A gateway gets its first certificate with a single-use enrollment token and pins the CA by its SHA-256. The public API refuses every gateway call. For development, `dev seed --gateway-out` (or `dev gateway --org ID --out FILE` for an existing org) writes an enrollment file holding the API URL, the token (valid 15 minutes) and the CA pin, and, when security keys are on, the approver keys file `approver-keys.json` beside it (M5 part 2 below). The gateway enrolls from it on first start, keeps its identity in `control.identity_dir`, and renews the certificate itself.
 
 ```bash
 go run ./cmd/pantherclaw-server dev seed --config deploy/dev/server.example.json \
@@ -312,12 +312,15 @@ Browser sessions last 30 idle minutes and 12 hours at most. Adding or removing a
 go run ./cmd/pantherclaw-server org admin-invite --config deploy/dev/server.local.json --org <org id>   # alice signs in with this token
 go run ./cmd/pclaw invite create --email bob@example.test --role approver                              # as alice; bob signs in with that token
 # bob: open http://localhost:8080/account?org=<org id>, sign in, add a security key
+go run ./cmd/pclaw approver-keys export --out deploy/dev/secrets/approver-keys.json                     # as alice: review the fingerprints; the gateway pins this file
 go run ./cmd/pclaw workload wait <transaction id> --key-file deploy/dev/secrets/workload.json --follow   # the agent's side: READY or how it ended
 go run ./cmd/pclaw approval list --waiting-for-me                                                      # as bob
 go run ./cmd/pclaw approval approve <request id>                                                       # opens /approvals/<id> to approve with the key
 go run ./cmd/pclaw approval decline <request id> --reason too_risky --alternative person_performs
 go run ./cmd/pclaw waitlist list --overdue && go run ./cmd/pclaw escalation get
 ```
+
+Since M6 the gateway checks every approval itself (HR-038): the permit of an approved action carries each approver's WebAuthn assertion, and the gateway dispatches it only when every assertion verifies against a key in `approvals.approver_keys_file`. `dev seed --gateway-out` writes that file (`approver-keys.json`, next to the enrollment file, empty for a new org) and `deploy/dev/gateway.example.json` pins it. After anyone adds or removes a key, export it again; the gateway reads it again when it changes ([gateway runbook](runbooks/gateway.md) §7). If a permit is refused before `BeginDispatch`, or expires unused, its approval is restored and the agent's identical resubmission uses it (HR-011).
 
 Approvals count only from people whose account is 7 days old and whose role and key are 1 day old (decision 5), so a freshly invited approver waits that long; the tests backdate their fixtures. Batch review and `pclaw waitlist metrics` need the Team edition. Each org sets its hold deadline, consume window and batch ceilings with `pclaw waitlist update-settings`; a server sets its wait limits with `waitlist.max_waits_per_instance`, `waitlist.max_waits` and `waitlist.long_poll_max`.
 

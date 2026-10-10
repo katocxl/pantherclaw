@@ -47,6 +47,9 @@ const (
 	// GatewayAdminServiceRevokeGatewayCertificateProcedure is the procedure name of the
 	// GatewayAdminService's RevokeGatewayCertificate RPC.
 	GatewayAdminServiceRevokeGatewayCertificateProcedure = "/pantherclaw.v1.GatewayAdminService/RevokeGatewayCertificate"
+	// GatewayAdminServiceListApproverKeysProcedure is the procedure name of the GatewayAdminService's
+	// ListApproverKeys RPC.
+	GatewayAdminServiceListApproverKeysProcedure = "/pantherclaw.v1.GatewayAdminService/ListApproverKeys"
 	// GatewayServiceEnrollProcedure is the procedure name of the GatewayService's Enroll RPC.
 	GatewayServiceEnrollProcedure = "/pantherclaw.v1.GatewayService/Enroll"
 	// GatewayServiceRenewCertificateProcedure is the procedure name of the GatewayService's
@@ -119,6 +122,14 @@ var (
 			Procedure:  GatewayAdminServiceRevokeGatewayCertificateProcedure,
 		}
 	})
+	gatewayAdminServiceListApproverKeysSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_pantherclaw_v1_gateways_proto.Services().ByName("GatewayAdminService").Methods().ByName("ListApproverKeys"),
+			Procedure:        GatewayAdminServiceListApproverKeysProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
 )
 
 // GatewayAdminServiceClient is a client for the pantherclaw.v1.GatewayAdminService service.
@@ -146,6 +157,13 @@ type GatewayAdminServiceClient interface {
 	// RevokeGatewayCertificate revokes one certificate (one replica).
 	// permission: gateway.manage
 	RevokeGatewayCertificate(context.Context, *v1.RevokeGatewayCertificateRequest) (*v1.RevokeGatewayCertificateResponse, error)
+	// ListApproverKeys lists the active security keys of the org's enabled
+	// people, with their fingerprints, for the approver keys file that a
+	// customer-hosted gateway verifies approvals against (HR-038, T-030).
+	// A person reviews the fingerprints before installing the file; the
+	// gateway never asks the server for keys.
+	// permission: gateway.read
+	ListApproverKeys(context.Context, *v1.ListApproverKeysRequest) (*v1.ListApproverKeysResponse, error)
 }
 
 // NewGatewayAdminServiceClient constructs a client for the pantherclaw.v1.GatewayAdminService
@@ -180,6 +198,13 @@ type GatewayAdminServiceHandler interface {
 	// RevokeGatewayCertificate revokes one certificate (one replica).
 	// permission: gateway.manage
 	RevokeGatewayCertificate(context.Context, *v1.RevokeGatewayCertificateRequest) (*v1.RevokeGatewayCertificateResponse, error)
+	// ListApproverKeys lists the active security keys of the org's enabled
+	// people, with their fingerprints, for the approver keys file that a
+	// customer-hosted gateway verifies approvals against (HR-038, T-030).
+	// A person reviews the fingerprints before installing the file; the
+	// gateway never asks the server for keys.
+	// permission: gateway.read
+	ListApproverKeys(context.Context, *v1.ListApproverKeysRequest) (*v1.ListApproverKeysResponse, error)
 }
 
 // RegisterGatewayAdminServiceHandler registers svc as the pantherclaw.v1.GatewayAdminService
@@ -193,6 +218,7 @@ func RegisterGatewayAdminServiceHandler(server *connect.Server, svc GatewayAdmin
 		connect.Method{Spec: gatewayAdminServiceGetGatewaySpec(), Handler: adapter.getGateway},
 		connect.Method{Spec: gatewayAdminServiceRevokeGatewaySpec(), Handler: adapter.revokeGateway},
 		connect.Method{Spec: gatewayAdminServiceRevokeGatewayCertificateSpec(), Handler: adapter.revokeGatewayCertificate},
+		connect.Method{Spec: gatewayAdminServiceListApproverKeysSpec(), Handler: adapter.listApproverKeys},
 	)
 }
 
@@ -221,6 +247,10 @@ func (UnimplementedGatewayAdminServiceHandler) RevokeGateway(context.Context, *v
 
 func (UnimplementedGatewayAdminServiceHandler) RevokeGatewayCertificate(context.Context, *v1.RevokeGatewayCertificateRequest) (*v1.RevokeGatewayCertificateResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.GatewayAdminService.RevokeGatewayCertificate is not implemented")
+}
+
+func (UnimplementedGatewayAdminServiceHandler) ListApproverKeys(context.Context, *v1.ListApproverKeysRequest) (*v1.ListApproverKeysResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.GatewayAdminService.ListApproverKeys is not implemented")
 }
 
 type gatewayAdminServiceClient struct {
@@ -270,6 +300,14 @@ func (c *gatewayAdminServiceClient) RevokeGateway(ctx context.Context, req *v1.R
 func (c *gatewayAdminServiceClient) RevokeGatewayCertificate(ctx context.Context, req *v1.RevokeGatewayCertificateRequest) (*v1.RevokeGatewayCertificateResponse, error) {
 	var res v1.RevokeGatewayCertificateResponse
 	if err := c.client.CallUnary(ctx, gatewayAdminServiceRevokeGatewayCertificateSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *gatewayAdminServiceClient) ListApproverKeys(ctx context.Context, req *v1.ListApproverKeysRequest) (*v1.ListApproverKeysResponse, error) {
+	var res v1.ListApproverKeysResponse
+	if err := c.client.CallUnary(ctx, gatewayAdminServiceListApproverKeysSpec(), req, &res); err != nil {
 		return nil, err
 	}
 	return &res, nil
@@ -343,6 +381,18 @@ func (h gatewayAdminServiceHandler) revokeGatewayCertificate(ctx context.Context
 		return err
 	}
 	res, err := h.svc.RevokeGatewayCertificate(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h gatewayAdminServiceHandler) listApproverKeys(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListApproverKeysRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListApproverKeys(ctx, &req)
 	if err != nil {
 		return err
 	}

@@ -54,6 +54,9 @@ type m6Services struct {
 	// verifications are leased to gateways over this listener (G0 M7);
 	// nil leaves the RPCs unimplemented.
 	verifications gatewaysrpc.Verifications
+	// rpID is the WebAuthn relying party approver keys are exported for
+	// (HR-038); "" when security keys are off.
+	rpID string
 }
 
 // newM6 builds the M6 services; notify (M5 notifications) may be nil.
@@ -67,6 +70,7 @@ func newM6(cfg *Config, pool *db.Pool, reg *keys.Registry, notify rapp.Notifier,
 		response:    rapp.New(pool, notify, cfg.Auth.PublicURL),
 		connections: capp.New(pool, notify, cfg.Auth.PublicURL, cfg.GatewayAPI.URL),
 		credentials: credapp.New(pool, notify),
+		rpID:        cfg.webAuthnRPID(),
 	}, nil
 }
 
@@ -78,7 +82,7 @@ func (m *m6Services) registerPublic(rs *connect.Server) {
 	if m == nil {
 		return
 	}
-	pantherclawv1connect.RegisterGatewayAdminServiceHandler(rs, gatewaysrpc.NewAdmin(m.gateways))
+	pantherclawv1connect.RegisterGatewayAdminServiceHandler(rs, gatewaysrpc.NewAdmin(m.gateways).WithRPID(m.rpID))
 	pantherclawv1connect.RegisterGatewayServiceHandler(rs, gatewaysrpc.NewGateway(m.gateways))
 	pantherclawv1connect.RegisterContainmentServiceHandler(rs, responserpc.New(m.response))
 	pantherclawv1connect.RegisterConnectionServiceHandler(rs, connectionsrpc.New(m.connections, m.credentials))
