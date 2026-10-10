@@ -330,7 +330,8 @@ func TestHR181_AGatewayEnrolledByDevSeedAuthorizesOverMTLS(t *testing.T) {
 		t.Fatalf("cross-org Authorize = %v, %v", other, err)
 	}
 
-	// The worker's sweeper releases the undispatched permit after its 1s TTL.
+	// The worker's sweeper releases the undispatched permit after its 1s TTL
+	// and then applies the release to the budget row (ADR-0015).
 	p := d.AppPool(t)
 	deadline := time.Now().Add(30 * time.Second)
 	for {
@@ -345,13 +346,13 @@ func TestHR181_AGatewayEnrolledByDevSeedAuthorizesOverMTLS(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if state == "RELEASED" {
-			if !free {
-				t.Fatal("released permit left its reservation")
-			}
+		if state == "RELEASED" && free {
 			break
 		}
 		if time.Now().After(deadline) {
+			if state == "RELEASED" {
+				t.Fatal("released permit left its reservation")
+			}
 			t.Fatalf("permit still %s after 30s", state)
 		}
 		time.Sleep(200 * time.Millisecond)

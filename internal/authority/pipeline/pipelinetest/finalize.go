@@ -430,6 +430,10 @@ func (w *World) settle(p *permitRow, o bdomain.Outcome, claim pipeline.ClaimStat
 	}
 }
 
+// ApplySettlements implements finalize.Store: the world settles its
+// accounts and counters at once, so nothing is left to apply.
+func (w *World) ApplySettlements(context.Context, ids.OrgID) (int, error) { return 0, nil }
+
 // Sweep implements finalize.Store. A swept permit's receipt is signed as
 // the sweeper's, like the database store's (HR-192).
 func (w *World) Sweep(_ context.Context, _ ids.OrgID, staleAfter time.Duration,

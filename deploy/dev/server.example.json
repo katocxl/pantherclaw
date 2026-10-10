@@ -19,7 +19,8 @@
     "grant_currency": "USD",
     "budget_name": "dev-refunds",
     "permit_ttl": "5s",
-    "stale_dispatch_after": "30s"
+    "stale_dispatch_after": "30s",
+    "budget_lock_timeout": "100ms"
   },
   "gateway_api": {
     "addr": "127.0.0.1:8443",

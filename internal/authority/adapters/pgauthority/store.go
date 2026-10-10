@@ -40,6 +40,10 @@ const (
 // Store implements finalize.Store.
 type Store struct {
 	Pool *db.Pool
+	// LockTimeout bounds how long a finalization waits for a budget account
+	// or counter row (ADR-0015): past it, Finalize returns finalize.ErrBusy.
+	// Zero keeps the pool's lock timeout.
+	LockTimeout time.Duration
 }
 
 var _ finalize.Store = (*Store)(nil)
@@ -173,10 +177,20 @@ func (s *Store) Finalize(ctx context.Context, org ids.OrgID, w finalize.Write) e
 			if err := pgbudgets.Record(ctx, q, org, w.TransactionID, w.Permit.ID, lines); err != nil {
 				return err
 			}
-			// Budget last: the hot rows are locked only until COMMIT.
+			// Budget last: the hot rows are locked only until COMMIT, and a
+			// row another transaction holds for longer than LockTimeout
+			// fails fast instead of queueing (ADR-0015).
+			if s.LockTimeout > 0 && len(lines) > 0 {
+				if err := q.SetLockTimeout(ctx, fmt.Sprintf("%dms", max(s.LockTimeout.Milliseconds(), 1))); err != nil {
+					return err
+				}
+			}
 			if err := pgbudgets.ReserveLines(ctx, q, org, lines); err != nil {
-				if errors.Is(err, pgbudgets.ErrExhausted) {
+				switch {
+				case errors.Is(err, pgbudgets.ErrExhausted):
 					return finalize.ErrExhausted
+				case db.IsLockTimeout(err):
+					return finalize.ErrBusy
 				}
 				return err
 			}
@@ -379,7 +393,9 @@ func budgetStates(ctx context.Context, q *dbq.Queries, org ids.OrgID, ev *pipeli
 	if len(ev.Plan.Budgets) == 0 {
 		return nil, nil
 	}
-	acc, _, _, err := pgbudgets.Usage(ctx, q, org, ev.Plan.Budgets, nil)
+	// The receipt shows each budget as settled: an outcome recorded but
+	// not yet applied to its row counts as spent or released (ADR-0015).
+	acc, err := pgbudgets.Settled(ctx, q, org, ev.Plan.Budgets)
 	if err != nil {
 		return nil, err
 	}
@@ -642,6 +658,30 @@ func (s *Store) Sweep(ctx context.Context, org ids.OrgID, staleAfter time.Durati
 		return nil
 	})
 	return released, unknown, err
+}
+
+// maxApplyRounds bounds one ApplySettlements call; the next sweep goes on.
+const maxApplyRounds = 20
+
+// ApplySettlements implements finalize.Store: batches of pending
+// reservations, each applied in its own short transaction (ADR-0015).
+func (s *Store) ApplySettlements(ctx context.Context, org ids.OrgID) (int, error) {
+	total := 0
+	for range maxApplyRounds {
+		var n int
+		if err := s.Pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
+			var err error
+			n, err = pgbudgets.Apply(ctx, dbq.New(tx), org, pgbudgets.MaxApplyBatch)
+			return err
+		}); err != nil {
+			return total, err
+		}
+		total += n
+		if n < pgbudgets.MaxApplyBatch {
+			break
+		}
+	}
+	return total, nil
 }
 
 func expect(tag interface{ RowsAffected() int64 }, err error) error {

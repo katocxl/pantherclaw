@@ -41,6 +41,8 @@ func TestConfigValidation(t *testing.T) {
 		"permit ttl":   func(c *Config) { c.Authority.PermitTTL = 0 },
 		"long ttl":     func(c *Config) { c.Authority.PermitTTL = config.Duration(time.Hour) },
 		"stale":        func(c *Config) { c.Authority.StaleDispatch = config.Duration(5 * time.Second) },
+		"no lock wait": func(c *Config) { c.Authority.BudgetLockTimeout = 0 },
+		"long lock":    func(c *Config) { c.Authority.BudgetLockTimeout = config.Duration(2 * time.Second) },
 		"gateway api without names": func(c *Config) {
 			c.GatewayAPI = GatewayAPIConfig{Addr: "127.0.0.1:8443", URL: "https://127.0.0.1:8443"}
 		},

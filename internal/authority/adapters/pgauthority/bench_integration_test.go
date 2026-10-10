@@ -41,6 +41,23 @@ func BenchmarkRefund(b *testing.B) {
 			took := make([]time.Duration, b.N)
 			var next atomic.Int64
 			var wg sync.WaitGroup
+			// The outcomes reach the budget row as the server's sweep job
+			// applies them, once a second (ADR-0015).
+			stop, settled := make(chan struct{}), make(chan error, 1)
+			go func() {
+				for {
+					select {
+					case <-stop:
+						settled <- nil
+						return
+					case <-time.After(time.Second):
+					}
+					if _, err := w.auth.Store.ApplySettlements(ctx, w.org); err != nil {
+						settled <- err
+						return
+					}
+				}
+			}()
 			b.ResetTimer()
 			for range workers {
 				wg.Go(func() {
@@ -67,6 +84,10 @@ func BenchmarkRefund(b *testing.B) {
 			}
 			wg.Wait()
 			b.StopTimer()
+			close(stop)
+			if err := <-settled; err != nil {
+				b.Fatal(err)
+			}
 			slices.Sort(took)
 			ms := func(d time.Duration) float64 { return float64(d) / float64(time.Millisecond) }
 			b.ReportMetric(ms(took[b.N/2]), "authorize-p50-ms")

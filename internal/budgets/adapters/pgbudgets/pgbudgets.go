@@ -6,7 +6,9 @@
 // rows a plan needs in its own short transaction; the finalization then
 // calls Reserve inside its transaction, last, which applies one conditional
 // update per row in the fixed (rank, id) order and records a reservation
-// per row; Settle applies an outcome to every reservation of a permit.
+// per row. Settle records an outcome on every reservation of a permit
+// without touching the rows; Apply later applies settled reservations to
+// their rows in batches, off the hot path (ADR-0015).
 package pgbudgets
 
 import (
@@ -234,34 +236,117 @@ func Record(ctx context.Context, q *dbq.Queries, org ids.OrgID, txn, permit ids.
 	return nil
 }
 
-// Settle applies an outcome to every held reservation of a permit: commit
-// moves it to spent, release gives it back, hold keeps it (HR-003, F115).
+// Settle records an outcome on every held reservation of a permit: commit
+// will move it to spent, release give it back, hold keeps it (HR-003,
+// F115). The reservations become pending and their rows are left to Apply,
+// so an outcome never waits on a hot row (ADR-0015). Until then a row
+// still counts them as reserved, which only makes its budget look more
+// consumed than it is.
 func Settle(ctx context.Context, q *dbq.Queries, org ids.OrgID, permit ids.UUID, o bdomain.Outcome) error {
 	if o == bdomain.Hold {
 		return nil
 	}
-	held, err := q.ListHeldReservations(ctx, org, permit)
-	if err != nil {
-		return err
-	}
-	commit := o == bdomain.Commit
 	state := "RELEASED"
-	if commit {
+	if o == bdomain.Commit {
 		state = "COMMITTED"
 	}
-	for _, r := range held {
-		if err := db.ExpectOneRow(q.SettleReservation(ctx, state, org, r.ID)); err != nil {
-			return err
+	_, err := q.SettleHeldReservations(ctx, state, org, permit)
+	return err
+}
+
+// MaxApplyBatch is how many settled reservations one Apply takes.
+const MaxApplyBatch = 1000
+
+// settled is what a batch of settled reservations applies to one row.
+type settled struct {
+	line          bdomain.Line
+	amount, spent money.Decimal
+	n, spentN     int32
+}
+
+// Apply applies up to max settled reservations to their account and
+// counter rows, in q's transaction: it clears their pending flag, then
+// updates each row once, in the lock order (HR-048), last, so the rows are
+// locked only until COMMIT. Reservations another Apply holds are skipped.
+// It returns how many it applied.
+func Apply(ctx context.Context, q *dbq.Queries, org ids.OrgID, maxRows int) (int, error) {
+	batch, err := q.LockPendingReservations(ctx, org, int32(min(maxRows, MaxApplyBatch))) //nolint:gosec // clamped
+	if err != nil || len(batch) == 0 {
+		return 0, err
+	}
+	rows := map[ids.UUID]*settled{}
+	var lines []bdomain.Line
+	done := make([]ids.UUID, 0, len(batch))
+	for _, r := range batch {
+		kind, id := bdomain.KindBudget, r.AccountID
+		if r.CounterID != nil {
+			kind, id = bdomain.KindCounter, r.CounterID
 		}
-		switch {
-		case r.AccountID != nil:
-			err = db.ExpectOneRow(q.SettleBudgetAccount(ctx, dbq.SettleBudgetAccountParams{Amount: r.Amount, Commit: commit, OrgID: org, ID: *r.AccountID}))
-		case r.CounterID != nil:
-			err = db.ExpectOneRow(q.SettleCounter(ctx, commit, org, *r.CounterID))
+		if id == nil {
+			return 0, fmt.Errorf("budgets: reservation %s names no row", r.ID)
+		}
+		s := rows[*id]
+		if s == nil {
+			s = &settled{line: bdomain.Line{Kind: kind, ID: *id, Rank: int(r.Rank)}}
+			rows[*id] = s
+			lines = append(lines, s.line)
+		}
+		if s.amount, err = s.amount.Add(r.Amount); err != nil {
+			return 0, err
+		}
+		s.n++
+		if r.State == "COMMITTED" {
+			if s.spent, err = s.spent.Add(r.Amount); err != nil {
+				return 0, err
+			}
+			s.spentN++
+		}
+		done = append(done, r.ID)
+	}
+	cleared, err := q.ClearPendingReservations(ctx, org, done)
+	if err != nil {
+		return 0, err
+	}
+	if cleared != int64(len(done)) {
+		return 0, fmt.Errorf("budgets: cleared %d of %d pending reservations", cleared, len(done))
+	}
+	for _, l := range bdomain.Order(lines) {
+		s := rows[l.ID]
+		if l.Kind == bdomain.KindCounter {
+			err = db.ExpectOneRow(q.ApplyToCounter(ctx, dbq.ApplyToCounterParams{N: s.n, SpentN: s.spentN, OrgID: org, ID: l.ID}))
+		} else {
+			err = db.ExpectOneRow(q.ApplyToBudgetAccount(ctx, dbq.ApplyToBudgetAccountParams{
+				Amount: s.amount, N: s.n, Spent: s.spent, SpentN: s.spentN, OrgID: org, ID: l.ID,
+			}))
 		}
 		if err != nil {
-			return fmt.Errorf("budgets: settle: %w", err)
+			return 0, fmt.Errorf("budgets: apply to %s row %s: %w", kindName(l.Kind), l.ID, err)
 		}
 	}
-	return nil
+	return len(batch), nil
+}
+
+// Settled reads the budget accounts of a plan as they are once their
+// settled reservations are applied (ADR-0015), for views that show a
+// budget; decisions use Usage, which reads the rows alone. Accounts that do
+// not exist yet are absent.
+func Settled(ctx context.Context, q *dbq.Queries, org ids.OrgID, budgets []bdomain.Debit) (map[bdomain.Ref]bdomain.Account, error) {
+	out := map[bdomain.Ref]bdomain.Account{}
+	for _, d := range budgets {
+		_, owner := ownerKey(d.Ref)
+		row, err := q.GetSettledBudgetAccount(ctx, dbq.GetSettledBudgetAccountParams{
+			OrgID: org, OwnerID: owner, Rule: d.Ref.Rule, KeyHash: d.Ref.Key[:], PeriodStart: d.Ref.Start,
+		})
+		if db.IsNoRows(err) {
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		out[d.Ref] = bdomain.Account{
+			ID: row.ID, Reserved: row.Reserved, Spent: row.Spent,
+			ReservedCount: int64(row.ReservedCount), SpentCount: int64(row.SpentCount),
+		}
+	}
+	return out, nil
 }

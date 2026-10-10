@@ -40,7 +40,7 @@ func newAuthority(cfg *Config, pool *db.Pool, reg *keys.Registry, kp keys.KeyPro
 	}
 	return authority.New(authority.Config{
 		Decider: &finalize.Authority{
-			Pipeline: &pipeline.Pipeline{Reader: authorityReader(pool)}, Store: &pgauthority.Store{Pool: pool},
+			Pipeline: &pipeline.Pipeline{Reader: authorityReader(pool)}, Store: &pgauthority.Store{Pool: pool, LockTimeout: cfg.Authority.BudgetLockTimeout.D()},
 			Receipts: receipts, Permits: permits, ActionTokens: actionTokens, PermitTTL: cfg.Authority.PermitTTL.D(), Log: log,
 			Inputs: replayInputs(pool, kp),
 		},

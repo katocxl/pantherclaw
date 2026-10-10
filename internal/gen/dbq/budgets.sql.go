@@ -17,6 +17,73 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/money"
 )
 
+const applyToBudgetAccount = `-- name: ApplyToBudgetAccount :execresult
+UPDATE pc.budget_accounts
+SET reserved = reserved - $1, reserved_count = reserved_count - $2::integer,
+    spent = spent + $3, spent_count = spent_count + $4::integer
+WHERE org_id = $5 AND id = $6
+  AND reserved >= $1 AND reserved_count >= $2::integer
+`
+
+type ApplyToBudgetAccountParams struct {
+	Amount money.Decimal
+	N      int32
+	Spent  money.Decimal
+	SpentN int32
+	OrgID  ids.OrgID
+	ID     ids.UUID
+}
+
+// ApplyToBudgetAccount applies settled reservations to an account: amount
+// and n are all of them, spent and spent_n the committed ones.
+func (q *Queries) ApplyToBudgetAccount(ctx context.Context, arg ApplyToBudgetAccountParams) (pgconn.CommandTag, error) {
+	return q.db.Exec(ctx, applyToBudgetAccount,
+		arg.Amount,
+		arg.N,
+		arg.Spent,
+		arg.SpentN,
+		arg.OrgID,
+		arg.ID,
+	)
+}
+
+const applyToCounter = `-- name: ApplyToCounter :execresult
+UPDATE pc.counters
+SET reserved = reserved - $1::integer, spent = spent + $2::integer
+WHERE org_id = $3 AND id = $4 AND reserved >= $1::integer
+`
+
+type ApplyToCounterParams struct {
+	N      int32
+	SpentN int32
+	OrgID  ids.OrgID
+	ID     ids.UUID
+}
+
+// ApplyToCounter applies n settled reservations, spent_n of them
+// committed, to a counter.
+func (q *Queries) ApplyToCounter(ctx context.Context, arg ApplyToCounterParams) (pgconn.CommandTag, error) {
+	return q.db.Exec(ctx, applyToCounter,
+		arg.N,
+		arg.SpentN,
+		arg.OrgID,
+		arg.ID,
+	)
+}
+
+const clearPendingReservations = `-- name: ClearPendingReservations :execrows
+UPDATE pc.reservations SET pending = false
+WHERE org_id = $1 AND id = ANY($2::uuid[]) AND pending
+`
+
+func (q *Queries) ClearPendingReservations(ctx context.Context, orgID ids.OrgID, ids []ids.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, clearPendingReservations, orgID, ids)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const countCounterRows = `-- name: CountCounterRows :one
 SELECT count(*)::integer AS rows
 FROM pc.counters
@@ -69,7 +136,9 @@ type EnsureBudgetAccountParams struct {
 // Budget accounts and counters (M4 part 2, HR-048, HR-049). Rows are
 // ensured before finalization; finalization only runs the conditional
 // updates below, last, in the fixed (rank, id) order. A 0-row update means
-// the limit is reached and rolls the whole finalization back.
+// the limit is reached and rolls the whole finalization back. An outcome
+// only records its reservations settled and pending; a background job
+// applies them to the rows in batches (ADR-0015).
 func (q *Queries) EnsureBudgetAccount(ctx context.Context, arg EnsureBudgetAccountParams) error {
 	_, err := q.db.Exec(ctx, ensureBudgetAccount,
 		arg.OrgID,
@@ -193,6 +262,61 @@ func (q *Queries) GetCounter(ctx context.Context, arg GetCounterParams) (GetCoun
 	return i, err
 }
 
+const getSettledBudgetAccount = `-- name: GetSettledBudgetAccount :one
+SELECT a.id,
+       (a.reserved - coalesce(p.amount, 0))::numeric(26,8) AS reserved,
+       (a.spent + coalesce(p.spent, 0))::numeric(26,8) AS spent,
+       (a.reserved_count - coalesce(p.n, 0))::integer AS reserved_count,
+       (a.spent_count + coalesce(p.spent_n, 0))::integer AS spent_count
+FROM pc.budget_accounts a
+LEFT JOIN LATERAL (
+    SELECT sum(r.amount) AS amount, count(*) AS n,
+           sum(r.amount) FILTER (WHERE r.state = 'COMMITTED') AS spent,
+           count(*) FILTER (WHERE r.state = 'COMMITTED') AS spent_n
+    FROM pc.reservations r
+    WHERE r.org_id = a.org_id AND r.account_id = a.id AND r.pending
+) p ON true
+WHERE a.org_id = $1 AND a.owner_id = $2 AND a.rule = $3
+  AND a.key_hash = $4 AND a.period_start = $5
+`
+
+type GetSettledBudgetAccountParams struct {
+	OrgID       ids.OrgID
+	OwnerID     ids.UUID
+	Rule        string
+	KeyHash     []byte
+	PeriodStart time.Time
+}
+
+type GetSettledBudgetAccountRow struct {
+	ID            ids.UUID
+	Reserved      money.Decimal
+	Spent         money.Decimal
+	ReservedCount int32
+	SpentCount    int32
+}
+
+// GetSettledBudgetAccount is GetBudgetAccount with the account's pending
+// reservations applied, for views that show a budget (ADR-0015).
+func (q *Queries) GetSettledBudgetAccount(ctx context.Context, arg GetSettledBudgetAccountParams) (GetSettledBudgetAccountRow, error) {
+	row := q.db.QueryRow(ctx, getSettledBudgetAccount,
+		arg.OrgID,
+		arg.OwnerID,
+		arg.Rule,
+		arg.KeyHash,
+		arg.PeriodStart,
+	)
+	var i GetSettledBudgetAccountRow
+	err := row.Scan(
+		&i.ID,
+		&i.Reserved,
+		&i.Spent,
+		&i.ReservedCount,
+		&i.SpentCount,
+	)
+	return i, err
+}
+
 const insertReservation = `-- name: InsertReservation :exec
 INSERT INTO pc.reservations (org_id, id, transaction_id, permit_id, account_id, counter_id, amount)
 VALUES ($1, $2, $3, $4, $5,
@@ -222,51 +346,23 @@ func (q *Queries) InsertReservation(ctx context.Context, arg InsertReservationPa
 	return err
 }
 
-const listHeldReservations = `-- name: ListHeldReservations :many
-SELECT id, account_id, counter_id, amount
-FROM pc.reservations
-WHERE org_id = $1 AND permit_id = $2 AND state = 'HELD'
-ORDER BY id
-`
-
-type ListHeldReservationsRow struct {
-	ID        ids.UUID
-	AccountID *ids.UUID
-	CounterID *ids.UUID
-	Amount    money.Decimal
-}
-
-func (q *Queries) ListHeldReservations(ctx context.Context, orgID ids.OrgID, permitID ids.UUID) ([]ListHeldReservationsRow, error) {
-	rows, err := q.db.Query(ctx, listHeldReservations, orgID, permitID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []ListHeldReservationsRow{}
-	for rows.Next() {
-		var i ListHeldReservationsRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.AccountID,
-			&i.CounterID,
-			&i.Amount,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listOwnerBudgetAccounts = `-- name: ListOwnerBudgetAccounts :many
-SELECT DISTINCT ON (owner_id, rule, key_hash)
-       id, owner_kind, owner_id, rule, period_start, rank, currency, reserved, spent, reserved_count, spent_count
-FROM pc.budget_accounts
-WHERE org_id = $1 AND owner_id = ANY($2::uuid[])
-ORDER BY owner_id, rule, key_hash, period_start DESC
+SELECT DISTINCT ON (a.owner_id, a.rule, a.key_hash)
+       a.id, a.owner_kind, a.owner_id, a.rule, a.period_start, a.rank, a.currency,
+       (a.reserved - coalesce(p.amount, 0))::numeric(26,8) AS reserved,
+       (a.spent + coalesce(p.spent, 0))::numeric(26,8) AS spent,
+       (a.reserved_count - coalesce(p.n, 0))::integer AS reserved_count,
+       (a.spent_count + coalesce(p.spent_n, 0))::integer AS spent_count
+FROM pc.budget_accounts a
+LEFT JOIN LATERAL (
+    SELECT sum(r.amount) AS amount, count(*) AS n,
+           sum(r.amount) FILTER (WHERE r.state = 'COMMITTED') AS spent,
+           count(*) FILTER (WHERE r.state = 'COMMITTED') AS spent_n
+    FROM pc.reservations r
+    WHERE r.org_id = a.org_id AND r.account_id = a.id AND r.pending
+) p ON true
+WHERE a.org_id = $1 AND a.owner_id = ANY($2::uuid[])
+ORDER BY a.owner_id, a.rule, a.key_hash, a.period_start DESC
 `
 
 type ListOwnerBudgetAccountsRow struct {
@@ -284,7 +380,8 @@ type ListOwnerBudgetAccountsRow struct {
 }
 
 // ListOwnerBudgetAccounts returns the latest period of every budget
-// account the given grants and guardrails own.
+// account the given grants and guardrails own, with its pending
+// reservations applied (ADR-0015).
 func (q *Queries) ListOwnerBudgetAccounts(ctx context.Context, orgID ids.OrgID, ownerIds []ids.UUID) ([]ListOwnerBudgetAccountsRow, error) {
 	rows, err := q.db.Query(ctx, listOwnerBudgetAccounts, orgID, ownerIds)
 	if err != nil {
@@ -306,6 +403,56 @@ func (q *Queries) ListOwnerBudgetAccounts(ctx context.Context, orgID ids.OrgID, 
 			&i.Spent,
 			&i.ReservedCount,
 			&i.SpentCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const lockPendingReservations = `-- name: LockPendingReservations :many
+SELECT r.id, r.account_id, r.counter_id, r.amount, r.state, coalesce(a.rank, c.rank)::smallint AS rank
+FROM pc.reservations r
+LEFT JOIN pc.budget_accounts a ON a.org_id = r.org_id AND a.id = r.account_id
+LEFT JOIN pc.counters c ON c.org_id = r.org_id AND c.id = r.counter_id
+WHERE r.org_id = $1 AND r.pending
+ORDER BY r.id
+LIMIT $2
+FOR UPDATE OF r SKIP LOCKED
+`
+
+type LockPendingReservationsRow struct {
+	ID        ids.UUID
+	AccountID *ids.UUID
+	CounterID *ids.UUID
+	Amount    money.Decimal
+	State     string
+	Rank      int16
+}
+
+// LockPendingReservations takes a batch of pending reservations, with the
+// rank of the row each one reserved (for the lock order), skipping any
+// that another settlement holds.
+func (q *Queries) LockPendingReservations(ctx context.Context, orgID ids.OrgID, maxRows int32) ([]LockPendingReservationsRow, error) {
+	rows, err := q.db.Query(ctx, lockPendingReservations, orgID, maxRows)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []LockPendingReservationsRow{}
+	for rows.Next() {
+		var i LockPendingReservationsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.AccountID,
+			&i.CounterID,
+			&i.Amount,
+			&i.State,
+			&i.Rank,
 		); err != nil {
 			return nil, err
 		}
@@ -367,45 +514,28 @@ func (q *Queries) ReserveCounter(ctx context.Context, arg ReserveCounterParams) 
 	)
 }
 
-const settleBudgetAccount = `-- name: SettleBudgetAccount :execresult
-UPDATE pc.budget_accounts
-SET reserved = reserved - $1, reserved_count = reserved_count - 1,
-    spent = spent + CASE WHEN $2::boolean THEN $1 ELSE 0 END,
-    spent_count = spent_count + CASE WHEN $2::boolean THEN 1 ELSE 0 END
-WHERE org_id = $3 AND id = $4 AND reserved >= $1 AND reserved_count >= 1
+const setLockTimeout = `-- name: SetLockTimeout :exec
+SELECT set_config('lock_timeout', $1::text, true)
 `
 
-type SettleBudgetAccountParams struct {
-	Amount money.Decimal
-	Commit bool
-	OrgID  ids.OrgID
-	ID     ids.UUID
+// SetLockTimeout bounds lock waits for the rest of the transaction.
+func (q *Queries) SetLockTimeout(ctx context.Context, timeout string) error {
+	_, err := q.db.Exec(ctx, setLockTimeout, timeout)
+	return err
 }
 
-func (q *Queries) SettleBudgetAccount(ctx context.Context, arg SettleBudgetAccountParams) (pgconn.CommandTag, error) {
-	return q.db.Exec(ctx, settleBudgetAccount,
-		arg.Amount,
-		arg.Commit,
-		arg.OrgID,
-		arg.ID,
-	)
-}
-
-const settleCounter = `-- name: SettleCounter :execresult
-UPDATE pc.counters
-SET reserved = reserved - 1, spent = spent + CASE WHEN $1::boolean THEN 1 ELSE 0 END
-WHERE org_id = $2 AND id = $3 AND reserved >= 1
+const settleHeldReservations = `-- name: SettleHeldReservations :execrows
+UPDATE pc.reservations SET state = $1, settled_at = now(), pending = true
+WHERE org_id = $2 AND permit_id = $3 AND state = 'HELD'
 `
 
-func (q *Queries) SettleCounter(ctx context.Context, commit bool, orgID ids.OrgID, iD ids.UUID) (pgconn.CommandTag, error) {
-	return q.db.Exec(ctx, settleCounter, commit, orgID, iD)
-}
-
-const settleReservation = `-- name: SettleReservation :execresult
-UPDATE pc.reservations SET state = $1, settled_at = now()
-WHERE org_id = $2 AND id = $3 AND state = 'HELD'
-`
-
-func (q *Queries) SettleReservation(ctx context.Context, toState string, orgID ids.OrgID, iD ids.UUID) (pgconn.CommandTag, error) {
-	return q.db.Exec(ctx, settleReservation, toState, orgID, iD)
+// SettleHeldReservations records an outcome on every held reservation of a
+// permit and leaves them pending: the rows are updated later, by
+// ApplyToBudgetAccount and ApplyToCounter (ADR-0015).
+func (q *Queries) SettleHeldReservations(ctx context.Context, toState string, orgID ids.OrgID, permitID ids.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, settleHeldReservations, toState, orgID, permitID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }

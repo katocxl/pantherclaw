@@ -18,7 +18,7 @@ Format: Context → Decision → Consequences → Alternatives considered. Statu
 | [0012](0012-crypto-and-keys.md) | Standard-library cryptography and KeyProvider |
 | [0013](0013-pap1-workload-identity.md) | PAP/1 workload identity with DPoP-style proofs |
 | [0014](0014-permits-and-dispatch-commit.md) | Dispatch permits with a server-side commit point |
-| [0015](0015-budget-settlement-off-the-hot-row.md) | Keep budget settlement off the hot row (**Proposed**, M1.5) |
+| [0015](0015-budget-settlement-off-the-hot-row.md) | Keep budget settlement off the hot row (accepted 2026-10-10: asynchronous settlement and a fail-fast lock timeout; escrow slots deferred) |
 | [0016](0016-human-and-service-authentication.md) | Human and service authentication for the control plane (M2) |
 | [0017](0017-coding-agents-first-and-proven-coverage.md) | Coding and DevOps agents first; v0.1.0 built around proven coverage (2026-10-09) |
 | [0018](0018-federated-workload-identity-and-represented-principals.md) | Federated workload identity and represented principals from the customer's IdP (M3) |

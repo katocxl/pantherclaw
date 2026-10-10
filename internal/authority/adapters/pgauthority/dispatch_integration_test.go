@@ -141,6 +141,7 @@ func TestHR186_DelegatedSettlesOnlyCooperativeChannelsInPostgres(t *testing.T) {
 		JOIN pc.permits p ON p.org_id = a.org_id AND p.id = a.permit_id WHERE a.permit_id = $1`, res.PermitID); got != "delegated/agent_held/DISPATCHED" {
 		t.Fatalf("delegated records %q", got)
 	}
+	w.settle()
 	if spent := w.scalar("SELECT coalesce(sum(spent), 0)::text FROM pc.budget_accounts"); spent == "0" || spent == "0.00000000" {
 		t.Fatal("a delegated action did not commit its reservation")
 	}

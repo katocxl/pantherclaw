@@ -115,6 +115,7 @@ func DefaultConfig() Config {
 		Authority: AuthorityConfig{
 			GrantMaxPerAction: "100", GrantCurrency: "USD", BudgetName: "dev-refunds",
 			PermitTTL: config.Duration(5 * time.Second), StaleDispatch: config.Duration(30 * time.Second),
+			BudgetLockTimeout: config.Duration(100 * time.Millisecond),
 		},
 		Auth:     AuthConfig{PublicURL: "http://127.0.0.1:8080", APIKeyEnv: string(credential.EnvLive)},
 		WebAuthn: WebAuthnConfig{RPName: "PantherClaw"},
@@ -190,13 +191,16 @@ const shutdownGrace = 20 * time.Second
 // `dev seed` issues to its workload: at most grant_max_per_action per refund,
 // in grant_currency. budget_name named the M1.5 development budget; since
 // M4 decisions use grants and it is ignored, but still accepted so existing
-// configurations load.
+// configurations load. budget_lock_timeout is how long a decision waits for
+// a contended budget or counter row before it answers CANNOT_AUTHORIZE
+// BUDGET_BUSY (ADR-0015).
 type AuthorityConfig struct {
 	GrantMaxPerAction string          `json:"grant_max_per_action" env:"PC_AUTHORITY_GRANT_MAX"`
 	GrantCurrency     string          `json:"grant_currency" env:"PC_AUTHORITY_GRANT_CURRENCY"`
 	BudgetName        string          `json:"budget_name" env:"PC_AUTHORITY_BUDGET_NAME"`
 	PermitTTL         config.Duration `json:"permit_ttl" env:"PC_AUTHORITY_PERMIT_TTL"`
 	StaleDispatch     config.Duration `json:"stale_dispatch_after" env:"PC_AUTHORITY_STALE_DISPATCH"`
+	BudgetLockTimeout config.Duration `json:"budget_lock_timeout" env:"PC_AUTHORITY_BUDGET_LOCK_TIMEOUT"`
 }
 
 func (c *Config) validateAuthority() []error {
@@ -214,6 +218,9 @@ func (c *Config) validateAuthority() []error {
 	}
 	if c.Authority.StaleDispatch.D() < 30*time.Second {
 		errs = append(errs, errors.New("authority.stale_dispatch_after must be at least 30s (the sweep lister looks for dispatches older than 30s)"))
+	}
+	if d := c.Authority.BudgetLockTimeout.D(); d < 10*time.Millisecond || d > time.Second {
+		errs = append(errs, errors.New("authority.budget_lock_timeout must be 10ms..1s, well below the gateway's timeout (ADR-0015)"))
 	}
 	return errs
 }

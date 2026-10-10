@@ -190,16 +190,23 @@ func (s *Service) RecordExecution(ctx context.Context, gw Gateway, e Execution) 
 type SweepResult struct {
 	Released int // expired ISSUED permits whose reservations were released
 	Unknown  int // stale DISPATCHING permits moved to UNKNOWN (reservations kept)
+	Applied  int // settled reservations applied to their budget rows (ADR-0015)
 }
 
 // SweepOrg releases expired ISSUED permits and marks stale DISPATCHING ones
-// UNKNOWN, never releasing them (HR-003).
+// UNKNOWN, never releasing them (HR-003). Then it applies the settled
+// reservations, those it released and those outcomes recorded, to their
+// budget account and counter rows (ADR-0015).
 func (s *Service) SweepOrg(ctx context.Context, org ids.OrgID, staleAfter time.Duration) (SweepResult, error) {
 	released, unknown, err := s.decider.Sweep(ctx, org, staleAfter)
 	r := SweepResult{Released: released, Unknown: unknown}
 	if r.Unknown > 0 {
 		s.log.WarnContext(ctx, "authz.dispatch_unknown", slog.String("org_id", org.String()), slog.Int("count", r.Unknown))
 	}
+	if err != nil {
+		return r, err
+	}
+	r.Applied, err = s.decider.Store.ApplySettlements(ctx, org)
 	return r, err
 }
 

@@ -428,9 +428,15 @@ func (s *stack) tryRefundVia(conn string, act ids.UUID, amount string) (int, rep
 func (s *stack) budget(t *testing.T, txn string) (reserved, spent, permit string) {
 	t.Helper()
 	err := s.db.AppPool(t).InTenantTx(context.Background(), s.org, func(ctx context.Context, tx db.TenantTx) error {
-		// The account exists from the first reservation; before it, both are 0.
-		if err := tx.QueryRow(ctx, `SELECT coalesce(sum(reserved), 0)::float8::text, coalesce(sum(spent), 0)::float8::text
-			FROM pc.budget_accounts`).Scan(&reserved, &spent); err != nil {
+		// The account exists from the first reservation; before it, both are
+		// 0. Outcomes recorded but not yet applied to the row by the
+		// settlement job count as settled (ADR-0015).
+		if err := tx.QueryRow(ctx, `SELECT
+			((SELECT coalesce(sum(reserved), 0) FROM pc.budget_accounts)
+			 - (SELECT coalesce(sum(amount), 0) FROM pc.reservations WHERE pending AND account_id IS NOT NULL))::float8::text,
+			((SELECT coalesce(sum(spent), 0) FROM pc.budget_accounts)
+			 + (SELECT coalesce(sum(amount), 0) FROM pc.reservations WHERE pending AND state = 'COMMITTED' AND account_id IS NOT NULL))::float8::text`).
+			Scan(&reserved, &spent); err != nil {
 			return err
 		}
 		if txn == "" {
@@ -442,6 +448,29 @@ func (s *stack) budget(t *testing.T, txn string) (reserved, spent, permit string
 		t.Fatal(err)
 	}
 	return reserved, spent, permit
+}
+
+// waitSettled waits until the worker's settlement job has applied every
+// recorded outcome to the budget rows (ADR-0015): nothing is pending and
+// the rows' spent total is spent.
+func (s *stack) waitSettled(t *testing.T, spent string) {
+	t.Helper()
+	for deadline := time.Now().Add(30 * time.Second); ; time.Sleep(200 * time.Millisecond) {
+		var pending int
+		var rows string
+		if err := s.pool.InTenantTx(context.Background(), s.org, func(ctx context.Context, tx db.TenantTx) error {
+			return tx.QueryRow(ctx, `SELECT (SELECT count(*) FROM pc.reservations WHERE pending)::integer,
+				(SELECT coalesce(sum(spent), 0) FROM pc.budget_accounts)::float8::text`).Scan(&pending, &rows)
+		}); err != nil {
+			t.Fatal(err)
+		}
+		if pending == 0 && rows == spent {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("after 30s: %d reservations pending, rows spent %s, want %s", pending, rows, spent)
+		}
+	}
 }
 
 // S01: $30 within the grant is accepted, with exactly one effect when the
@@ -456,6 +485,8 @@ func TestS01_ARefundWithinTheGrantIsAcceptedOnce(t *testing.T) {
 	if reserved, spent, permit := s.budget(t, r.TransactionID); reserved != "0" || spent != "30" || permit != "DISPATCHED" {
 		t.Fatalf("S01 budget reserved=%s spent=%s permit=%s", reserved, spent, permit)
 	}
+	// The worker applies the commit to the budget row itself (ADR-0015).
+	s.waitSettled(t, "30")
 	// The agent retries the same action: no second permit, no second refund.
 	if code, r2 := s.refund(t, act, "30.00"); code != http.StatusConflict || r2.TransactionID != r.TransactionID {
 		t.Fatalf("S01 retry: %d %+v", code, r2)

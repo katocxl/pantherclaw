@@ -222,6 +222,10 @@ func IsPermissionDenied(err error) bool { return hasCode(err, "42501") }
 // in one fixed order never sees it; tests use it to prove that.
 func IsDeadlock(err error) bool { return hasCode(err, "40P01") }
 
+// IsLockTimeout reports SQLSTATE 55P03 (lock_not_available): a lock wait
+// reached lock_timeout.
+func IsLockTimeout(err error) bool { return hasCode(err, "55P03") }
+
 func hasCode(err error, code string) bool {
 	var pgErr *pgconn.PgError
 	return errors.As(err, &pgErr) && pgErr.Code == code

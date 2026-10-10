@@ -21,6 +21,9 @@ const (
 	SweepInterval    = time.Second
 	maxOrgsPerSweep  = 1000
 	listPermitsSweep = db.ListerPurpose("permits_sweep")
+	// listBudgetSettle finds orgs with settled reservations not yet applied
+	// to their budget rows (ADR-0015).
+	listBudgetSettle = db.ListerPurpose("budget_settle")
 )
 
 // SweepOrgArgs asks for one org's permits to be swept (HR-003).
@@ -61,7 +64,8 @@ type SweepDispatchArgs struct{}
 // Kind implements river.JobArgs.
 func (SweepDispatchArgs) Kind() string { return "authority.sweep_dispatch" }
 
-// SweepDispatchWorker finds orgs via the audited lister (HR-054).
+// SweepDispatchWorker finds orgs via the audited lister (HR-054): those
+// with permits to sweep and those with settlements to apply.
 type SweepDispatchWorker struct {
 	river.WorkerDefaults[SweepDispatchArgs]
 	Pool *db.Pool
@@ -69,9 +73,22 @@ type SweepDispatchWorker struct {
 
 // Work implements river.Worker.
 func (w *SweepDispatchWorker) Work(ctx context.Context, _ *river.Job[SweepDispatchArgs]) error {
-	refs, err := w.Pool.CrossOrgList(ctx, listPermitsSweep, maxOrgsPerSweep)
-	if err != nil || len(refs) == 0 {
-		return err
+	var refs []db.OrgRef
+	seen := map[ids.OrgID]bool{}
+	for _, purpose := range []db.ListerPurpose{listPermitsSweep, listBudgetSettle} {
+		found, err := w.Pool.CrossOrgList(ctx, purpose, maxOrgsPerSweep)
+		if err != nil {
+			return err
+		}
+		for _, r := range found {
+			if !seen[r.Org] {
+				seen[r.Org] = true
+				refs = append(refs, r)
+			}
+		}
+	}
+	if len(refs) == 0 {
+		return nil
 	}
 	client, err := river.ClientFromContextSafely[jobs.TxType](ctx)
 	if err != nil {

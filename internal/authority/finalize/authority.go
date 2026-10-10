@@ -26,10 +26,13 @@ type Signer interface {
 	Sign(typ string, payload []byte) (string, error)
 }
 
-// Reason codes of the final binding.
+// Reason codes of the final binding. BUDGET_BUSY: a budget or counter was
+// too contended to reserve within the lock timeout (ADR-0015); the agent
+// may resubmit.
 const (
 	ReasonConcurrentChange = "CONCURRENT_CHANGE"
 	ReasonDuplicateRequest = "DUPLICATE_REQUEST"
+	ReasonBudgetBusy       = "BUDGET_BUSY"
 	maxAttempts            = 3
 )
 
@@ -183,10 +186,13 @@ func (a *Authority) Authorize(ctx context.Context, gw Gateway, req pipeline.Requ
 			a.log(ctx).InfoContext(ctx, "authz.decision", slog.String("txn_id", res.TransactionID.String()),
 				slog.String("decision", string(res.Decision)), slog.String("reason_code", ev.Decisive().Code))
 			return res, nil
-		case errors.Is(err, ErrParked), errors.Is(err, ErrHoldLimit):
+		case errors.Is(err, ErrParked), errors.Is(err, ErrHoldLimit), errors.Is(err, ErrBusy):
 			code, detail := pipeline.ReasonReconciliation, "an identical irreversible action is in flight, unknown or recently succeeded"
-			if errors.Is(err, ErrHoldLimit) {
+			switch {
+			case errors.Is(err, ErrHoldLimit):
 				code, detail = apdomain.ReasonHoldLimitReached, "the grant or the run already has its maximum of pending holds"
+			case errors.Is(err, ErrBusy):
+				code, detail = ReasonBudgetBusy, "a budget is busy with other actions; try again"
 			}
 			ev = override(ev, code, detail)
 			if res, err = a.bind(ctx, gw, ev, prev, rec); err == nil {

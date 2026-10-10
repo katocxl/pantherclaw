@@ -280,12 +280,36 @@ type budgetState struct {
 	ReservedCount, SpentCount int32
 }
 
+// budgetRow returns the account as settled: an outcome recorded but not
+// yet applied to the row by the sweep counts as spent or released
+// (ADR-0015), as the budget views show it.
 func (f fixture) budgetRow(t *testing.T) budgetState {
+	t.Helper()
+	return f.readBudget(t, `SELECT a.reserved - coalesce(p.amount, 0), a.spent + coalesce(p.spent, 0),
+			(a.reserved_count - coalesce(p.n, 0))::integer, (a.spent_count + coalesce(p.spent_n, 0))::integer
+		FROM pc.budget_accounts a
+		LEFT JOIN LATERAL (
+			SELECT sum(r.amount) AS amount, count(*) AS n,
+			       sum(r.amount) FILTER (WHERE r.state = 'COMMITTED') AS spent,
+			       count(*) FILTER (WHERE r.state = 'COMMITTED') AS spent_n
+			FROM pc.reservations r WHERE r.org_id = a.org_id AND r.account_id = a.id AND r.pending
+		) p ON true
+		WHERE a.org_id = $1 AND a.owner_id = $2`)
+}
+
+// rawBudgetRow returns the account row itself, which an outcome reaches
+// only when the sweep applies it.
+func (f fixture) rawBudgetRow(t *testing.T) budgetState {
+	t.Helper()
+	return f.readBudget(t, `SELECT reserved, spent, reserved_count, spent_count FROM pc.budget_accounts
+		WHERE org_id = $1 AND owner_id = $2`)
+}
+
+func (f fixture) readBudget(t *testing.T, sql string) budgetState {
 	t.Helper()
 	var b budgetState
 	err := f.pool.InTenantTx(context.Background(), f.gw.Org, func(ctx context.Context, tx db.TenantTx) error {
-		err := tx.QueryRow(ctx, `SELECT reserved, spent, reserved_count, spent_count FROM pc.budget_accounts
-			WHERE org_id = $1 AND owner_id = $2`, f.gw.Org, f.grant.UUID()).Scan(&b.Reserved, &b.Spent, &b.ReservedCount, &b.SpentCount)
+		err := tx.QueryRow(ctx, sql, f.gw.Org, f.grant.UUID()).Scan(&b.Reserved, &b.Spent, &b.ReservedCount, &b.SpentCount)
 		if db.IsNoRows(err) {
 			return nil
 		}
@@ -295,6 +319,17 @@ func (f fixture) budgetRow(t *testing.T) budgetState {
 		t.Fatal(err)
 	}
 	return b
+}
+
+// settle runs the sweep, which applies the recorded outcomes to the budget
+// rows (ADR-0015), and returns how many reservations it applied.
+func (f fixture) settle(t *testing.T) int {
+	t.Helper()
+	r, err := f.svc.SweepOrg(context.Background(), f.gw.Org, time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return r.Applied
 }
 
 func (f fixture) authorize(t *testing.T, amount string) authority.Result {
@@ -360,7 +395,19 @@ func TestIntAllowDispatchCommit(t *testing.T) {
 	if body, _, err := ev.Verify(receipt); err != nil || !jsontext.Value(body).IsValid() {
 		t.Fatalf("execution receipt: %v", err)
 	}
-	if b := f.budgetRow(t); b.Reserved.String() != "0" || b.Spent.String() != "30" || b.SpentCount != 1 {
+	// The commit reaches the budget row with the settlement (ADR-0015);
+	// until then the row still counts it reserved, while the settled
+	// account already shows it spent.
+	if b := f.rawBudgetRow(t); b.Reserved.String() != "30" || b.Spent.String() != "0" {
+		t.Fatalf("before the settlement the row: reserved %s spent %s", b.Reserved, b.Spent)
+	}
+	if b := f.budgetRow(t); b.Reserved.String() != "0" || b.Spent.String() != "30" {
+		t.Fatalf("before the settlement the settled account: reserved %s spent %s", b.Reserved, b.Spent)
+	}
+	if n := f.settle(t); n != 1 {
+		t.Fatalf("settled %d reservations, want 1", n)
+	}
+	if b := f.rawBudgetRow(t); b.Reserved.String() != "0" || b.Spent.String() != "30" || b.SpentCount != 1 {
 		t.Fatalf("after commit: reserved %s spent %s count %d", b.Reserved, b.Spent, b.SpentCount)
 	}
 	if n := f.count(t, `SELECT count(*) FROM pc.execution_attempts WHERE org_id = $1 AND target_status = 200 AND dispatch_ms = 12
@@ -549,6 +596,13 @@ func TestT024_CrashMidDispatchYieldsUnknown(t *testing.T) {
 			t.Fatalf("a late acceptance settled %s reserved, %s spent; want it committed once", b.Reserved, b.Spent)
 		}
 	}
+	// The sweep applies the commit to the row once (ADR-0015).
+	if n := f.settle(t); n != 1 {
+		t.Fatalf("settled %d reservations, want 1", n)
+	}
+	if b := f.rawBudgetRow(t); !b.Reserved.IsZero() || b.Spent.String() != "40" {
+		t.Fatalf("the row after the settlement: reserved %s spent %s", b.Reserved, b.Spent)
+	}
 	// A permit the gateway already recorded is not recorded again.
 	done := f.authorize(t, "10.00")
 	if _, err := f.svc.BeginDispatch(ctx, f.gw, done.PermitID, done.Epoch, authority.Outbound{}); err != nil {
@@ -569,7 +623,7 @@ func TestHR003_SweeperReleasesOnlyExpiredIssued(t *testing.T) {
 		f.authorize(t, amount)
 	}
 	r, err := f.svc.SweepOrg(ctx, f.gw.Org, time.Hour)
-	if err != nil || r.Released != 3 || r.Unknown != 0 {
+	if err != nil || r.Released != 3 || r.Unknown != 0 || r.Applied != 3 {
 		t.Fatalf("sweep = %+v, %v", r, err)
 	}
 	if b := f.budgetRow(t); !b.Reserved.IsZero() || b.ReservedCount != 0 {
@@ -589,6 +643,9 @@ func TestIntFailedDispatchReleases(t *testing.T) {
 	}
 	if _, err := f.svc.RecordExecution(ctx, f.gw, authority.Execution{Permit: res.PermitID, Outcome: authority.Failed, TargetStatus: 402}); err != nil {
 		t.Fatal(err)
+	}
+	if n := f.settle(t); n != 1 {
+		t.Fatalf("settled %d reservations, want 1", n)
 	}
 	if b := f.budgetRow(t); !b.Reserved.IsZero() || !b.Spent.IsZero() {
 		t.Fatalf("after failure: reserved %s spent %s", b.Reserved, b.Spent)
