@@ -177,7 +177,7 @@ func (r *Recorder) Record(ctx context.Context, org ids.OrgID, gateway string, pe
 			}
 			n, err := q.InsertPayloadCapture(ctx, dbq.InsertPayloadCaptureParams{
 				OrgID: org, ID: id, AttemptID: t.AttemptID, TransactionID: t.TransactionID, ProfileID: p.ID,
-				Direction: string(b.Direction), Content: sealed, Size: int32(min(size, 1<<30)), Truncated: truncated, //nolint:gosec // G115: clamped
+				Direction: string(b.Direction), Content: sealed, Size: int32(min(size, 1<<30)), Truncated: truncated,
 				RetentionDays: p.RetentionDays,
 			})
 			if err != nil {

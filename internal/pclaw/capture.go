@@ -71,7 +71,7 @@ func captureProfileCommands() map[string]command {
 				}
 				return c.CreateCaptureProfile(ctx, &pantherclawv1.CreateCaptureProfileRequest{
 					Purpose: *purpose, ConnectionIds: conns, Operations: ops, CaptureRequest: *req, CaptureResponse: *resp,
-					ByteCap: int32(*byteCap), RetentionDays: int32(*retention), ExpiresInDays: int32(*expires), //nolint:gosec // G115: checked above
+					ByteCap: int32(*byteCap), RetentionDays: int32(*retention), ExpiresInDays: int32(*expires),
 				})
 			}
 		}),
