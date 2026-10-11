@@ -82,13 +82,13 @@ func TestF048_CredentialReachBeyondTheNeedIsAFinding(t *testing.T) {
 		!slices.Equal(rows[0].Excess, []string{"workflows:write"}) || rows[1].State != "RESOLVED" {
 		t.Fatalf("another excess: %+v", rows)
 	}
-	if _, err := f.svc.DismissFinding(f.as(td.RoleSecurityAdmin), rows[0].ID, "ok"); !errors.Is(err, app.ErrDismissal) {
+	if _, err := f.svc.AcknowledgeFinding(f.as(td.RoleSecurityAdmin), rows[0].ID, "ok"); !errors.Is(err, app.ErrDismissal) {
 		t.Fatalf("a dismissal without a reason: %v", err)
 	}
-	if _, err := f.svc.DismissFinding(f.as(td.RoleAuditor), rows[0].ID, "Accepted for the pilot by the CISO."); err == nil {
+	if _, err := f.svc.AcknowledgeFinding(f.as(td.RoleAuditor), rows[0].ID, "Accepted for the pilot by the CISO."); err == nil {
 		t.Fatal("an auditor dismissed a finding")
 	}
-	if _, err := f.svc.DismissFinding(f.as(td.RoleSecurityAdmin), rows[0].ID, "Accepted for the pilot by the CISO."); err != nil {
+	if _, err := f.svc.AcknowledgeFinding(f.as(td.RoleSecurityAdmin), rows[0].ID, "Accepted for the pilot by the CISO."); err != nil {
 		t.Fatal(err)
 	}
 	if rows := f.refreshFindings(t); len(rows) != 2 || rows[0].State != "DISMISSED" {

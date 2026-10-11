@@ -14,19 +14,19 @@ import (
 // Reads check coverage.read over each agent, reassessing coverage.reassess,
 // and exclusions coverage.manage, which is human only.
 var coverageProcedures = map[string]td.Permission{
-	pantherclawv1connect.CoverageServiceGetCoverageProcedure:            td.PermCoverageRead,
-	pantherclawv1connect.CoverageServiceListCoverageProcedure:           td.PermCoverageRead,
-	pantherclawv1connect.CoverageServiceListRoutesProcedure:             td.PermCoverageRead,
-	pantherclawv1connect.CoverageServiceGetClosureProcedure:             td.PermCoverageRead,
-	pantherclawv1connect.CoverageServiceListClosuresProcedure:           td.PermCoverageRead,
-	pantherclawv1connect.CoverageServiceGetFreshnessContractProcedure:   td.PermCoverageRead,
-	pantherclawv1connect.CoverageServiceReassessProcedure:               td.PermCoverageReassess,
-	pantherclawv1connect.CoverageServiceCreateExclusionProcedure:        td.PermCoverageManage,
-	pantherclawv1connect.CoverageServiceRevokeExclusionProcedure:        td.PermCoverageManage,
-	pantherclawv1connect.CoverageServiceListExclusionsProcedure:         td.PermCoverageRead,
-	pantherclawv1connect.CoverageServiceGetAccessDetailProcedure:        td.PermCoverageRead,
-	pantherclawv1connect.CoverageServiceListCoverageFindingsProcedure:   td.PermCoverageRead,
-	pantherclawv1connect.CoverageServiceDismissCoverageFindingProcedure: td.PermCoverageManage,
+	pantherclawv1connect.CoverageServiceGetCoverageProcedure:          td.PermCoverageRead,
+	pantherclawv1connect.CoverageServiceListCoverageProcedure:         td.PermCoverageRead,
+	pantherclawv1connect.CoverageServiceListRoutesProcedure:           td.PermCoverageRead,
+	pantherclawv1connect.CoverageServiceGetClosureProcedure:           td.PermCoverageRead,
+	pantherclawv1connect.CoverageServiceListClosuresProcedure:         td.PermCoverageRead,
+	pantherclawv1connect.CoverageServiceGetFreshnessContractProcedure: td.PermCoverageRead,
+	pantherclawv1connect.CoverageServiceReassessProcedure:             td.PermCoverageReassess,
+	pantherclawv1connect.CoverageServiceCreateExclusionProcedure:      td.PermCoverageManage,
+	pantherclawv1connect.CoverageServiceRevokeExclusionProcedure:      td.PermCoverageManage,
+	pantherclawv1connect.CoverageServiceListExclusionsProcedure:       td.PermCoverageRead,
+	pantherclawv1connect.CoverageServiceGetAccessDetailProcedure:      td.PermCoverageRead,
+	pantherclawv1connect.CoverageServiceListFindingsProcedure:         td.PermCoverageRead,
+	pantherclawv1connect.CoverageServiceAcknowledgeFindingProcedure:   td.PermCoverageManage,
 }
 
 func init() { maps.Copy(procedurePermissions, coverageProcedures) }

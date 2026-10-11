@@ -89,17 +89,18 @@ service CoverageService {
   rpc GetAccessDetail(GetAccessDetailRequest) returns (GetAccessDetailResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
-  // ListCoverageFindings lists exposure findings, starting with credential
+  // ListFindings lists exposure findings, starting with credential
   // overreach (F048): reach a credential holds beyond what the operations
   // need, shown as exposure, never as extra permission.
   // permission: coverage.read
-  rpc ListCoverageFindings(ListCoverageFindingsRequest) returns (ListCoverageFindingsResponse) {
+  rpc ListFindings(ListFindingsRequest) returns (ListFindingsResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
-  // DismissCoverageFinding dismisses an open finding with a written
-  // reason; it is audited, and the finding stays dismissed when seen again.
+  // AcknowledgeFinding acknowledges an open finding with a written reason,
+  // which dismisses it; it is audited, and the finding stays dismissed
+  // when seen again with the same excess.
   // permission: coverage.manage
-  rpc DismissCoverageFinding(DismissCoverageFindingRequest) returns (DismissCoverageFindingResponse);
+  rpc AcknowledgeFinding(AcknowledgeFindingRequest) returns (AcknowledgeFindingResponse);
 }
 
 // CoverageState is the protection claim of one scope (F435–F438).
@@ -703,8 +704,8 @@ message CoverageFinding {
   string dismiss_reason = 16;
 }
 
-// ListCoverageFindingsRequest filters findings.
-message ListCoverageFindingsRequest {
+// ListFindingsRequest filters findings.
+message ListFindingsRequest {
   // Maximum results (default 50, at most 200).
   int32 page_size = 1 [(buf.validate.field).int32 = {
     gte: 0
@@ -723,16 +724,16 @@ message ListCoverageFindingsRequest {
   optional string connection_id = 4 [(buf.validate.field).string.uuid = true];
 }
 
-// ListCoverageFindingsResponse is one page.
-message ListCoverageFindingsResponse {
+// ListFindingsResponse is one page.
+message ListFindingsResponse {
   // Findings, newest first.
   repeated CoverageFinding findings = 1;
   // Token for the next page; empty at the end.
   string next_page_token = 2;
 }
 
-// DismissCoverageFindingRequest names a finding and why it is dismissed.
-message DismissCoverageFindingRequest {
+// AcknowledgeFindingRequest names a finding and why it is dismissed.
+message AcknowledgeFindingRequest {
   // Finding id.
   string id = 1 [(buf.validate.field).string.uuid = true];
   // A written reason (10 to 1,000 characters).
@@ -742,8 +743,8 @@ message DismissCoverageFindingRequest {
   }];
 }
 
-// DismissCoverageFindingResponse returns the finding.
-message DismissCoverageFindingResponse {
+// AcknowledgeFindingResponse returns the finding.
+message AcknowledgeFindingResponse {
   // Finding.
   CoverageFinding finding = 1;
 }

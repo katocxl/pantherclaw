@@ -19,8 +19,8 @@ func findingProto(f dbq.PcCoverageFinding) *pantherclawv1.CoverageFinding {
 	}
 }
 
-// ListCoverageFindings implements CoverageServiceHandler.
-func (h *Handler) ListCoverageFindings(ctx context.Context, req *pantherclawv1.ListCoverageFindingsRequest) (*pantherclawv1.ListCoverageFindingsResponse, error) {
+// ListFindings implements CoverageServiceHandler.
+func (h *Handler) ListFindings(ctx context.Context, req *pantherclawv1.ListFindingsRequest) (*pantherclawv1.ListFindingsResponse, error) {
 	conn, err := optID(req.ConnectionId)
 	if err != nil {
 		return nil, err
@@ -29,22 +29,22 @@ func (h *Handler) ListCoverageFindings(ctx context.Context, req *pantherclawv1.L
 	if err != nil {
 		return nil, err
 	}
-	out := &pantherclawv1.ListCoverageFindingsResponse{NextPageToken: next}
+	out := &pantherclawv1.ListFindingsResponse{NextPageToken: next}
 	for _, f := range rows {
 		out.Findings = append(out.Findings, findingProto(f))
 	}
 	return out, nil
 }
 
-// DismissCoverageFinding implements CoverageServiceHandler.
-func (h *Handler) DismissCoverageFinding(ctx context.Context, req *pantherclawv1.DismissCoverageFindingRequest) (*pantherclawv1.DismissCoverageFindingResponse, error) {
+// AcknowledgeFinding implements CoverageServiceHandler.
+func (h *Handler) AcknowledgeFinding(ctx context.Context, req *pantherclawv1.AcknowledgeFindingRequest) (*pantherclawv1.AcknowledgeFindingResponse, error) {
 	id, err := idOf(req.GetId())
 	if err != nil {
 		return nil, err
 	}
-	f, err := h.svc.DismissFinding(ctx, id, req.GetReason())
+	f, err := h.svc.AcknowledgeFinding(ctx, id, req.GetReason())
 	if err != nil {
 		return nil, err
 	}
-	return &pantherclawv1.DismissCoverageFindingResponse{Finding: findingProto(f)}, nil
+	return &pantherclawv1.AcknowledgeFindingResponse{Finding: findingProto(f)}, nil
 }

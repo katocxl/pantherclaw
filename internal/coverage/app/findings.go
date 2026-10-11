@@ -179,10 +179,10 @@ func (s *Service) ListFindings(ctx context.Context, state *string, connection *i
 	return out, next, err
 }
 
-// DismissFinding dismisses an open finding with a written reason; only a
-// person holding coverage.manage at org scope does, since a dismissal
-// hides exposure.
-func (s *Service) DismissFinding(ctx context.Context, id ids.UUID, reason string) (dbq.PcCoverageFinding, error) {
+// AcknowledgeFinding acknowledges an open finding with a written reason,
+// dismissing it; only a person holding coverage.manage at org scope does,
+// since a dismissal hides exposure.
+func (s *Service) AcknowledgeFinding(ctx context.Context, id ids.UUID, reason string) (dbq.PcCoverageFinding, error) {
 	var out dbq.PcCoverageFinding
 	reason = strings.TrimSpace(reason)
 	if n := utf8.RuneCountInString(reason); n < 10 || n > 1000 {
