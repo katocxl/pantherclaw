@@ -169,6 +169,12 @@ type Options struct {
 	// Approvers verifies approvals (HR-038); nil refuses every action
 	// whose permit carries one.
 	Approvers Approvers
+	// ReportFacts reports the github.* facts a GitHub App connection's
+	// action needs, read just before its decision (G0 M8 decision 5); nil
+	// reads none.
+	ReportFacts FactReporter
+	// FactTimeout bounds those reads; zero is DefaultFactTimeout.
+	FactTimeout time.Duration
 }
 
 // Engine dispatches mapped actions.
@@ -184,6 +190,8 @@ type Engine struct {
 	nonces      nonces
 	onDrift     func(ctx context.Context, connection string, d Drift)
 	approvers   Approvers
+	reportFacts FactReporter
+	factTimeout time.Duration
 
 	mu      sync.Mutex
 	clients map[string]clientEntry
@@ -212,10 +220,14 @@ func New(o Options) (*Engine, error) {
 	if o.Now == nil {
 		o.Now = time.Now
 	}
+	if o.FactTimeout <= 0 {
+		o.FactTimeout = DefaultFactTimeout
+	}
 	return &Engine{
 		org: o.Org, authority: o.Authority, permits: newPermitVerifier(o.JWKSURL, o.JWKSClient, o.GatewayID, o.Org),
 		containment: o.Containment, broker: o.Broker, allowed: o.AllowedPrefixes, breaker: newBreaker(o.Now, o.ReportCircuit, o.Log),
 		log: o.Log, onDrift: o.OnDrift, clients: map[string]clientEntry{}, drift: map[string]driftEntry{}, approvers: o.Approvers,
+		reportFacts: o.ReportFacts, factTimeout: o.FactTimeout,
 	}, nil
 }
 
@@ -316,6 +328,9 @@ func (e *Engine) dispatch(ctx context.Context, c Call, t *timer) Result {
 	}
 	if code := e.refusedUpstream(conn, c.Action.Action.Operation); code != "" {
 		return Result{Class: EnforcementFailed, Code: code}
+	}
+	if e.reportGitHubFacts(ctx, conn, c.Action.Action) {
+		t.lap("facts")
 	}
 	ar, err := e.authority.Authorize(ctx, &pb.AuthorizeRequest{ActionIr: c.Action.Canonical, Workload: c.Workload})
 	t.lap("authz")
@@ -659,26 +674,20 @@ func targetRef(def *defs.Definition, body, secret []byte) string {
 func (e *Engine) credential(ctx context.Context, conn *control.Connection, def *defs.Definition, target actionir.Target,
 	req *http.Request, c broker.Sender,
 ) (secret []byte, release func(), err error) {
-	plain, err := e.openCredential(conn)
-	if err != nil {
-		return nil, nil, err
-	}
 	if conn.Credential.GetKind() != credentials.KindGitHubApp {
+		plain, err := e.openCredential(conn)
+		if err != nil {
+			return nil, nil, err
+		}
 		if err := placeCredential(conn, req, plain); err != nil {
 			clear(plain)
 			return nil, nil, err
 		}
 		return plain, func() { clear(plain) }, nil
 	}
-	app, err := credentials.DecodeGitHubApp(plain)
-	clear(plain)
-	defer app.Clear()
-	if err != nil {
-		return nil, nil, err
-	}
 	owner, _ := def.Target.Part(target.ID, "owner")
 	repo, _ := def.Target.Part(target.ID, "repo")
-	tok, err := broker.MintInstallationToken(ctx, c, conn.GetBaseUrl(), conn.Credential.GetAllowedHosts(), app, owner, repo, def.Scopes(), time.Now())
+	tok, err := e.mint(ctx, conn, owner, repo, def.Scopes(), c)
 	if err != nil {
 		return nil, nil, err
 	}

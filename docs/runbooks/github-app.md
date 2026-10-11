@@ -1,6 +1,6 @@
 # GitHub App connections
 
-**Milestone:** M8 ([G0 M8](../g0/M8.md) decision 3, ADR-0021, HR-203, HR-204). **Audience:** an org admin who connects coding agents to GitHub through PantherClaw.
+**Milestone:** M8 ([G0 M8](../g0/M8.md) decisions 3 and 5, ADR-0021, HR-160, HR-203, HR-204, HR-206). **Audience:** an org admin who connects coding agents to GitHub through PantherClaw.
 
 A GitHub App connection keeps the App's private key sealed to one gateway. For each action PantherClaw authorizes, that gateway does five things:
 
@@ -19,12 +19,15 @@ The agent never holds a GitHub credential. Tokens are never cached between actio
 
    | Permission | Level | Operations |
    |---|---|---|
-   | Metadata | read | always (GitHub adds it) |
-   | Contents | read | `github.contents.get`, `github.branch.list` |
-   | Contents | write | `github.branch.create`, `github.pull_request.merge` |
-   | Pull requests | read | `github.pull_request.reviews.list` and the merge verifier |
-   | Pull requests | write | `github.pull_request.create` |
-   | Administration | write | `github.repository.update` only; leave it off unless you allow it |
+   | Metadata | read | always (GitHub adds it); `github.installation.repositories` (the connection test); the fact reads of branch rules and of who pushed |
+   | Contents | read | `github.contents.read`; the fact reads of workflow files |
+   | Contents | write | `github.branch.create`, `github.contents.write`, `github.pull.merge` |
+   | Pull requests | read | `github.pull.read` (also the merge verifier); the fact reads of a pull request, its commits, files and reviews |
+   | Pull requests | write | `github.pull.create` |
+   | Checks | read | the fact read of a pull request's check runs |
+   | Administration | write | `github.repo.settings.update` only; leave it off unless you allow it |
+
+   Never grant **Workflows**: no operation declares it, and `github.contents.write` refuses `.github/` paths.
 
    An operation that needs a permission the App lacks fails closed. GitHub refuses the token, and nothing is sent.
 3. Install the App on the repositories the agents may touch. Note the installation id from the installation's settings URL, and the App's client id.
@@ -43,7 +46,27 @@ pclaw seal --connection <connection id> --github-app <client id> --installation 
 
 `pclaw seal` checks the key (RSA, at least 2048 bits), the account and the connection's `Authorization: Bearer` binding before it seals. It seals the App's id, installation, account and key as one GitHub App credential, bound to the connection, its hosts, the broker key and its kind. Then **delete every copy of the `.pem` file**: the sealed credential is the only one PantherClaw needs. To rotate, generate a new key on GitHub, seal it again (a new version supersedes the old one) and delete the old key on GitHub.
 
-## 3. Check it
+## 3. Register the gateway as the connection's fact provider
+
+Before it decides a merge, a contents write or a branch creation, PantherClaw needs facts that only GitHub knows. These are the pull request's head, its people, reviews and checks, the base branch's rules, and whether the push would start a deployment ([G0 M8](../g0/M8.md) decision 5, HR-160, HR-206). The gateway that holds the App reads them just before each such decision, with a read-only token of its own (`metadata`, `contents`, `pull_requests` and `checks`, all `read`). The token is revoked after the read, and the gateway reports the facts as the connection's provider. Register it once:
+
+```bash
+pclaw fact-provider register --name github --gateway <gateway id> --connection <connection id> \
+  --fact github.pull.head:object:github.pull_request:30s --fact github.pull.people:object:github.pull_request:30s \
+  --fact github.pull.reviews:object:github.pull_request:30s --fact github.pull.checks:object:github.pull_request:30s \
+  --fact github.branch.rules:object:github.pull_request:30s --fact github.repo.deploy_triggers:object:github.pull_request:30s \
+  --fact github.branch.deploy_triggers:object:github.branch:30s
+```
+
+Only a person holding `fact.provider.manage` can register it. Only the gateway that serves the connection may be registered, and only for facts the connection's package names. The reads must finish within the gateway's `github.fact_timeout` (default 2s, at most 5s, in the gateway configuration under `github`).
+
+When a fact cannot be read in time, nothing is reported for it, and the decision never guesses:
+
+- A merge whose prerequisite is missing is `CANNOT_AUTHORIZE`.
+- A missing deploy-trigger fact holds the action with "Consequence unknown", which needs a release approver.
+- A workflow the gateway's parser cannot evaluate, or a pull request that changes `.github/workflows/` or `.github/actions/`, also gives "Consequence unknown".
+
+## 4. Check it
 
 - `pclaw credential list <connection id>` shows the active version with kind `github_app`.
 - An allowed read through the gateway (`GET /github/repos/<owner>/<repo>`) answers. In the App's GitHub audit log, each action shows one token created and one revoked.
@@ -55,4 +78,7 @@ pclaw seal --connection <connection id> --github-app <client id> --installation 
 |---|---|---|
 | Every action `credential_unavailable` | The App was uninstalled, the key was deleted on GitHub, or the gateway cannot reach `api.github.com` | Check the installation; seal a new key; check the gateway's egress allow-list |
 | One operation refused | The App lacks the permission its definition declares | Grant it on GitHub (the owner approves the new permission), or leave the operation refused |
-| `gateway.installation_token_not_revoked` in the gateway log | Revocation failed after a dispatch | The token expires within an hour. Look for GitHub availability problems; nothing else is needed |
+| `gateway.installation_token_not_revoked` in the gateway log | Revocation failed after a dispatch or a fact read | The token expires within an hour. Look for GitHub availability problems; nothing else is needed |
+| Merges `CANNOT_AUTHORIZE`, `gateway.facts_unavailable` in the gateway log | The fact token was refused: the App lacks Checks, Contents or Pull requests read | Grant the read permissions in section 1 |
+| `gateway.facts_not_reported` in the gateway log | The gateway is not the connection's registered fact provider, or a fact is not declared | Register it as in section 3 |
+| Merges `AUTHORSHIP_UNKNOWN` | `github.pull.people` is incomplete: a fork, more than 100 commits or pushes, or the activity feed could not be read | Expected for forks. Otherwise check that the App can read the repository's activity (Metadata read) |
