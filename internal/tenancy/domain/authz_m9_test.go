@@ -11,15 +11,17 @@ import (
 )
 
 // TestM9_CoveragePermissionsAndRoles: the coverage permissions of G0 M9
-// track A and the roles that hold them, exactly.
+// track A and the roles that hold them, exactly. Org Admin reads coverage
+// but does not manage it: a human-only permission would make Org Admin a
+// human-only role (HR-183).
 func TestM9_CoveragePermissionsAndRoles(t *testing.T) {
 	want := map[domain.Permission][]domain.RoleName{
 		domain.PermCoverageRead: {
-			domain.RoleAgentOwner, domain.RoleAuditor, domain.RoleEmergency, domain.RoleGatewayAdmin, domain.RoleOrgAdmin,
+			domain.RoleAgentOwner, domain.RoleAuditor, domain.RoleDeveloper, domain.RoleOrgAdmin, domain.RoleResponder,
 			domain.RoleSecurityAdmin,
 		},
-		domain.PermCoverageManage:  {domain.RoleGatewayAdmin, domain.RoleSecurityAdmin},
-		domain.PermCoverageExclude: {domain.RoleSecurityAdmin},
+		domain.PermCoverageManage:   {domain.RoleSecurityAdmin},
+		domain.PermCoverageReassess: {domain.RoleAgentOwner, domain.RoleSecurityAdmin},
 	}
 	for p, roles := range want {
 		if !p.Known() || !p.Declarable() {
@@ -33,15 +35,15 @@ func TestM9_CoveragePermissionsAndRoles(t *testing.T) {
 }
 
 // TestHR212_OnlyPeopleExcludeFromCoverage: excluding a route from coverage
-// weakens the claim, so coverage.exclude (and coverage.manage, which
-// dismisses findings) is human only: no API key can carry it.
+// or acknowledging a finding weakens the claim, so coverage.manage is human
+// only: no API key or service account can carry it.
 func TestHR212_OnlyPeopleExcludeFromCoverage(t *testing.T) {
-	for _, p := range []domain.Permission{domain.PermCoverageExclude, domain.PermCoverageManage} {
-		if !p.HumanOnly() || p.APIKeyScopable() {
-			t.Errorf("%s: human only %v, API-key scopable %v; want true, false", p, p.HumanOnly(), p.APIKeyScopable())
-		}
+	if p := domain.PermCoverageManage; !p.HumanOnly() || p.APIKeyScopable() {
+		t.Errorf("%s: human only %v, API-key scopable %v; want true, false", p, p.HumanOnly(), p.APIKeyScopable())
 	}
-	if domain.PermCoverageRead.HumanOnly() {
-		t.Error("coverage.read is human only; services read coverage too")
+	for _, p := range []domain.Permission{domain.PermCoverageRead, domain.PermCoverageReassess} {
+		if p.HumanOnly() {
+			t.Errorf("%s is human only; services read and refresh coverage too", p)
+		}
 	}
 }
