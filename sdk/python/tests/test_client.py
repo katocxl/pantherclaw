@@ -327,6 +327,29 @@ class WaitTest(unittest.TestCase):
         finally:
             f.close()
 
+    def test_HR200_a_stream_that_falls_silent_ends_at_the_deadline_not_at_its_open_timeout(self) -> None:
+        def stream(h: BaseHTTPRequestHandler) -> None:
+            h.send_response(200)
+            h.send_header("Content-Type", "text/event-stream")
+            h.end_headers()
+            try:
+                for _ in range(4):
+                    h.wfile.write(b": heartbeat\n\n")
+                    h.wfile.flush()
+                    time.sleep(0.5)
+                time.sleep(5)
+            except OSError:
+                pass
+
+        f = Fake(held_then_allowed([]), wait=stream)
+        try:
+            start = time.monotonic()
+            r = f.client.authorize_and_wait("payments", "mcp__payments__create_refund", REFUND, "toolu_01", new_action_id(), server="payments", deadline=2.5)
+            self.assertEqual(r.outcome, "cannot_decide", r.why)
+            self.assertLess(time.monotonic() - start, 3.5)
+        finally:
+            f.close()
+
     def test_HR200_a_stream_of_heartbeats_ends_at_the_deadline(self) -> None:
         def stream(h: BaseHTTPRequestHandler) -> None:
             h.send_response(200)

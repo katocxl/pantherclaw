@@ -268,7 +268,7 @@ def next_step(state: dict[str, Any]) -> str:
 
 def parse_wait_response(body: bytes | str) -> tuple[dict[str, Any], bool]:
     """Reads a WorkloadService.Wait answer (Connect JSON)."""
-    r = json.loads(body)
+    r = jcs.parse(body)
     w = r.get("wait") if isinstance(r, dict) else None
     if not isinstance(w, dict):
         raise ValueError("no wait state")
@@ -294,7 +294,7 @@ def read_stream(lines: Iterator[bytes], fn: Callable[[dict[str, Any]], bool]) ->
             raise ValueError("wait event too long")
         line = raw.decode("utf-8").rstrip("\r\n")
         if line == "":
-            if event == "state" and data and not fn(json.loads(data)):
+            if event == "state" and data and not fn(jcs.parse(data)):
                 return
             event, data = "", ""
         elif line.startswith("event:"):
@@ -333,6 +333,14 @@ def _deadline(held: dict[str, Any]) -> float | None:
         return datetime.fromisoformat(raw.replace("Z", "+00:00")).timestamp()
     except ValueError:
         return None
+
+
+def _read_timeout(res: Any, seconds: float) -> None:
+    """Sets the timeout of the stream's next socket read. Where the socket
+    cannot be reached, the timeout set when the stream opened applies."""
+    sock = getattr(getattr(getattr(res, "fp", None), "raw", None), "_sock", None)
+    if sock is not None:
+        sock.settimeout(max(0.05, seconds))
 
 
 @dataclass
@@ -377,7 +385,8 @@ class Client:
         res = self._send("POST", self._server + "/pantherclaw.v1.WorkloadService/IssueToken", body, CONNECT, True, 0)
         if res.status != 200:
             raise RuntimeError(f"token issuance: HTTP {res.status} {res.headers.get(pap.HEADER_ERROR.lower(), '')}")
-        token = str(json.loads(res.body).get("workloadToken", ""))
+        answer = jcs.parse(res.body)
+        token = str(answer.get("workloadToken", "")) if isinstance(answer, dict) else ""
         claims = pap.parse_token_claims(token)
         if claims["cnf"]["jkt"] != self._key.jkt:
             raise RuntimeError("the server issued a token for another key")
@@ -497,7 +506,8 @@ class Client:
         """Follows the server's SSE stream for a held call until ``fn``
         returns False, the state is final, or ``until`` (a time.monotonic()
         value) passes. The deadline is checked on every line, heartbeats
-        included, and no read blocks longer than 20 seconds or past it."""
+        included, and each read's socket timeout is the time left (at most 20
+        seconds), so no read blocks past it."""
         if until is None:
             until = time.monotonic() + 300.0
         read = max(0.1, min(_STREAM_READ, until - time.monotonic()))
@@ -507,8 +517,10 @@ class Client:
 
         def lines() -> Iterator[bytes]:
             while True:
-                if time.monotonic() >= until:
+                left = until - time.monotonic()
+                if left <= 0:
                     raise TimeoutError("deadline")
+                _read_timeout(res.stream, min(_STREAM_READ, left))
                 line = res.stream.readline(_MAX_EVENT)
                 if not line:
                     return
