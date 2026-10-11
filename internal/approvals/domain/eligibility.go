@@ -30,6 +30,12 @@ const (
 	IneligibleCredentialRevoked = "CREDENTIAL_NOT_ACTIVE" //nolint:gosec // G101: a reason code, not a credential
 	IneligibleNotStepUpSubject  = "NOT_STEP_UP_SUBJECT"
 	IneligibleRequester         = "REQUESTER_EXCLUDED"
+	// IneligibleAuthor: the person is linked to a GitHub user the
+	// requirement's fact lists (an author, committer or pusher, HR-207).
+	IneligibleAuthor = "AUTHOR_EXCLUDED"
+	// IneligibleAuthorshipUnknown: the fact could not list everyone, so
+	// nobody can count as independent (design decision 18).
+	IneligibleAuthorshipUnknown = "AUTHORSHIP_UNKNOWN"
 )
 
 // ErrStepUpSubjectNotAPerson is returned when a step-up names a launcher or
@@ -113,8 +119,12 @@ type Context struct {
 	// Requester is a restoration's requester, who never decides it
 	// (decision 11).
 	Requester ids.UUID
-	Cooldowns Cooldowns
-	Now       time.Time
+	// Authorship is, for each fact an independent requirement names, the
+	// users linked to the GitHub users it lists and whether it could list
+	// them all (G0 M8, HR-207).
+	Authorship map[string]Authorship
+	Cooldowns  Cooldowns
+	Now        time.Time
 }
 
 func isUser(p gdomain.Principal, u ids.UUID) bool {
@@ -159,6 +169,15 @@ func Check(r Requirement, p Person, c Context, cred ids.UUID) (bool, string) {
 		return false, IneligiblePrincipal
 	case slices.ContainsFunc(c.Run.Ancestors, func(a gdomain.Principal) bool { return isUser(a, p.UserID) }):
 		return false, IneligibleAncestor
+	}
+	if r.Independent && r.IndependentOf != "" {
+		a, ok := c.Authorship[r.IndependentOf]
+		switch {
+		case !ok || !a.Complete:
+			return false, IneligibleAuthorshipUnknown
+		case slices.Contains(a.Users, p.UserID):
+			return false, IneligibleAuthor
+		}
 	}
 	if r.Independent {
 		if slices.Contains(c.Owners, p.UserID) {
@@ -294,4 +313,14 @@ func Next(reqs []Requirement, rs []Response, eligible func(i int) bool) (int, bo
 		}
 	}
 	return -1, false
+}
+
+// Authorship is who a fact such as github.pull.people lists, as users.
+type Authorship struct {
+	// Users are the users linked to the GitHub users it lists; a person who
+	// is not linked is not among them.
+	Users []ids.UUID
+	// Complete is false when the fact could not list everyone (a fork, too
+	// many commits, an unreadable activity feed) or is not known.
+	Complete bool
 }

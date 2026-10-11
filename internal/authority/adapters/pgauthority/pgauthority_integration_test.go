@@ -151,6 +151,7 @@ func newWorldWith(t testing.TB, edit func(string) string) *world {
 		{Name: "payments.charge.refundable", Type: fdomain.TypeBoolean, SubjectType: "payments.charge", MaxLag: 5 * time.Minute},
 		{Name: "payments.charge.payouts", Type: fdomain.TypeObject, SubjectType: "payments.charge", MaxLag: 5 * time.Minute},
 		{Name: "payments.charge.state", Type: fdomain.TypeObject, SubjectType: "payments.charge", MaxLag: 5 * time.Minute},
+		{Name: "payments.charge.people", Type: fdomain.TypeObject, SubjectType: "payments.charge", MaxLag: 5 * time.Minute},
 	}); err != nil {
 		t.Fatal(err)
 	}

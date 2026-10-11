@@ -17,8 +17,10 @@ import (
 	"time"
 
 	apdomain "github.com/katocxl/pantherclaw/internal/approvals/domain"
+	fdomain "github.com/katocxl/pantherclaw/internal/facts/domain"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	gdomain "github.com/katocxl/pantherclaw/internal/grants/domain"
+	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
 )
@@ -123,6 +125,9 @@ func LoadEligibility(ctx context.Context, q *dbq.Queries, org ids.OrgID, request
 		}
 	}
 	c.Requester = out.RequestedBy
+	if c.Authorship, err = authorship(ctx, q, org, request, out.Requirements); err != nil {
+		return Eligibility{}, err
+	}
 	out.Context = c
 	if len(users) == 0 {
 		return out, nil
@@ -223,4 +228,64 @@ func voidReason(code string) string {
 		return "CREDENTIAL_REMOVED"
 	}
 	return "NOT_ELIGIBLE"
+}
+
+// authorship reads, for each fact an independent requirement names, the
+// people it lists now about the held action's target and the users linked
+// to them (G0 M8, HR-207). The fact is read as it is when a person
+// responds, so a commit pushed after the hold excludes its pusher too. A
+// fact that is not known, does not decode or says it is incomplete leaves
+// the authorship incomplete, and nobody counts as independent.
+func authorship(ctx context.Context, q *dbq.Queries, org ids.OrgID, request ids.UUID, reqs []apdomain.Requirement) (
+	map[string]apdomain.Authorship, error,
+) {
+	out := map[string]apdomain.Authorship{}
+	for _, r := range reqs {
+		name := r.IndependentOf
+		if !r.Independent || name == "" {
+			continue
+		}
+		if _, done := out[name]; done {
+			continue
+		}
+		raw, err := q.RequestSubjectFact(ctx, name, org, request)
+		if db.IsNoRows(err) {
+			out[name] = apdomain.Authorship{}
+			continue
+		} else if err != nil {
+			return nil, err
+		}
+		v, err := fdomain.DecodeValue(fdomain.TypeObject, raw)
+		if err != nil || v.Object["complete"] != true {
+			out[name] = apdomain.Authorship{}
+			continue
+		}
+		ghIDs := githubIDs(v.Object)
+		users, err := q.LinkedGitHubUsers(ctx, org, ghIDs)
+		if err != nil {
+			return nil, err
+		}
+		out[name] = apdomain.Authorship{Users: users, Complete: true}
+	}
+	return out, nil
+}
+
+// githubIDs are the GitHub user ids a people fact lists: its author and
+// every author, committer and pusher.
+func githubIDs(people map[string]any) []int64 {
+	var out []int64
+	add := func(v any) {
+		if id, ok := v.(int64); ok && !slices.Contains(out, id) {
+			out = append(out, id)
+		}
+	}
+	add(people["author"])
+	for _, member := range []string{"authors", "committers", "pushers"} {
+		if list, ok := people[member].([]any); ok {
+			for _, v := range list {
+				add(v)
+			}
+		}
+	}
+	return out
 }

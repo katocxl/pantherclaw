@@ -170,6 +170,11 @@ type ApprovalTemplate struct {
 	// unconsumed approval request for the same target (G0 M8, HR-205: a
 	// pull request's new head, github.pull.head).
 	InvalidateOn string `json:"invalidate_on,omitzero"`
+	// IndependentOf names a prerequisite fact listing, by GitHub user id,
+	// the people an independent approver must not be (G0 M8, HR-207: a
+	// pull request's author, committers and pushers, github.pull.people,
+	// with complete false when they cannot all be read).
+	IndependentOf string `json:"independent_of,omitzero"`
 }
 
 // Basis is where the evidence for a definition comes from (F391).
@@ -434,6 +439,9 @@ func (d *Definition) validateApproval() error {
 	}
 	if a.InvalidateOn != "" && !d.prerequisiteField("facts."+a.InvalidateOn) {
 		return invalid("%s: approval.invalidate_on names %q, which is not a prerequisite fact", d.Operation, a.InvalidateOn)
+	}
+	if a.IndependentOf != "" && !d.prerequisiteField("facts."+a.IndependentOf) {
+		return invalid("%s: approval.independent_of names %q, which is not a prerequisite fact", d.Operation, a.IndependentOf)
 	}
 	refs := a.Fields
 	for _, m := range holderRe.FindAllStringSubmatch(a.Title, -1) {

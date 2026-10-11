@@ -493,3 +493,18 @@ WHERE org_id = sqlc.arg(org_id) AND invalidation_key = sqlc.arg(invalidation_key
   AND state IN ('PENDING', 'EVIDENCE_REQUESTED', 'APPROVED')
 ORDER BY created_at, id
 FOR UPDATE;
+
+-- name: RequestSubjectFact :one
+-- The current value of a fact, from an active provider, about the action a
+-- request holds (G0 M8, HR-207: the people of the pull request it merges).
+SELECT f.value
+FROM pc.approval_requests r
+JOIN pc.transactions t ON t.org_id = r.org_id AND t.id = r.transaction_id
+JOIN pc.facts f ON f.org_id = t.org_id AND f.subject_type = t.target_type AND f.subject_id = t.target_id AND f.name = sqlc.arg(name)
+JOIN pc.fact_providers p ON p.org_id = f.org_id AND p.id = f.provider_id AND p.state = 'ACTIVE'
+WHERE r.org_id = sqlc.arg(org_id) AND r.id = sqlc.arg(request_id);
+
+-- name: LinkedGitHubUsers :many
+-- The users linked to GitHub user ids (HR-207).
+SELECT DISTINCT user_id FROM pc.github_identities
+WHERE org_id = sqlc.arg(org_id) AND github_user_id = ANY(sqlc.arg(github_ids)::bigint[]);

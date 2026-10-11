@@ -1112,6 +1112,32 @@ func (q *Queries) LatestApprovalRequest(ctx context.Context, orgID ids.OrgID, ru
 	return i, err
 }
 
+const linkedGitHubUsers = `-- name: LinkedGitHubUsers :many
+SELECT DISTINCT user_id FROM pc.github_identities
+WHERE org_id = $1 AND github_user_id = ANY($2::bigint[])
+`
+
+// The users linked to GitHub user ids (HR-207).
+func (q *Queries) LinkedGitHubUsers(ctx context.Context, orgID ids.OrgID, githubIds []int64) ([]ids.UUID, error) {
+	rows, err := q.db.Query(ctx, linkedGitHubUsers, orgID, githubIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ids.UUID{}
+	for rows.Next() {
+		var user_id ids.UUID
+		if err := rows.Scan(&user_id); err != nil {
+			return nil, err
+		}
+		items = append(items, user_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listApprovalRequests = `-- name: ListApprovalRequests :many
 SELECT org_id, id, subject_kind, agent_id, transaction_id, evaluation, run_id, grant_id, grant_revision, variant_key, requested_by, operation, previous_id, binding, binding_input, requirements, display, display_hash, state, end_reason, created_at, deadline_at, evidence_deadline_at, approved_at, consume_by, consumed_at, permit_id, ended_at, action_ir, invalidation_key FROM pc.approval_requests
 WHERE org_id = $1 AND state = ANY ($2::text[])
@@ -1696,6 +1722,24 @@ func (q *Queries) RequestResponses(ctx context.Context, orgID ids.OrgID, request
 		return nil, err
 	}
 	return items, nil
+}
+
+const requestSubjectFact = `-- name: RequestSubjectFact :one
+SELECT f.value
+FROM pc.approval_requests r
+JOIN pc.transactions t ON t.org_id = r.org_id AND t.id = r.transaction_id
+JOIN pc.facts f ON f.org_id = t.org_id AND f.subject_type = t.target_type AND f.subject_id = t.target_id AND f.name = $1
+JOIN pc.fact_providers p ON p.org_id = f.org_id AND p.id = f.provider_id AND p.state = 'ACTIVE'
+WHERE r.org_id = $2 AND r.id = $3
+`
+
+// The current value of a fact, from an active provider, about the action a
+// request holds (G0 M8, HR-207: the people of the pull request it merges).
+func (q *Queries) RequestSubjectFact(ctx context.Context, name string, orgID ids.OrgID, requestID ids.UUID) ([]byte, error) {
+	row := q.db.QueryRow(ctx, requestSubjectFact, name, orgID, requestID)
+	var value []byte
+	err := row.Scan(&value)
+	return value, err
 }
 
 const requestsWithResponses = `-- name: RequestsWithResponses :many
