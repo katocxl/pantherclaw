@@ -20,7 +20,7 @@ import (
 
 // RequireEnv runs the Docker tests: unset, they skip; "1", an unreachable or
 // unsuitable engine fails them.
-const RequireEnv = "PC_TEST_REQUIRE_DOCKER"
+const RequireEnv = "PC_TEST_SANDBOX"
 
 // cleanupTimeout bounds each removal at the end of a test.
 const cleanupTimeout = 30 * time.Second

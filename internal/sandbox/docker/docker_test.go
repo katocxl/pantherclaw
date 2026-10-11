@@ -57,46 +57,48 @@ func TestHR218_RefusesAnEngineOlderThan28(t *testing.T) {
 	}
 }
 
-func TestHR218_RefusesAnEngineWithoutSeccompOrLinux(t *testing.T) {
-	e, err := New(engineFake("29.8.2", `{"Runtimes":{"runc":{"path":"runc"}},"SecurityOptions":["name=cgroupns"]}`)).Engine(t.Context())
-	if err != nil {
-		t.Fatal(err)
+func TestHR218_RefusesAnEngineWithoutSeccompLinuxOrRunc(t *testing.T) {
+	for name, info := range map[string]string{
+		"no seccomp": `{"Runtimes":{"runc":{"path":"runc"}},"SecurityOptions":["name=cgroupns"]}`,
+		"no runc":    `{"Runtimes":{"nvidia":{"path":"nvidia-container-runtime"}},"SecurityOptions":["name=seccomp,profile=builtin"]}`,
+	} {
+		e, err := New(engineFake("29.8.2", info)).Engine(t.Context())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := e.Check(); !errors.Is(err, ErrEngine) {
+			t.Errorf("%s: Check() = %v", name, err)
+		}
 	}
-	if err := e.Check(); !errors.Is(err, ErrEngine) {
-		t.Fatalf("no seccomp: Check() = %v", err)
-	}
-	e, _ = New(engineFake("29.8.2", desktopInfo)).Engine(t.Context())
+	e, _ := New(engineFake("29.8.2", desktopInfo)).Engine(t.Context())
 	e.OS = "windows"
 	if err := e.Check(); !errors.Is(err, ErrEngine) {
 		t.Fatalf("windows containers: Check() = %v", err)
 	}
 }
 
-func TestHR218_RecordsEngineAPIAndRuntime(t *testing.T) {
+// TestHR218_TheRuntimeIsRuncOrRunscAndRecorded: a container always names
+// its runtime, so that an engine's default (here nvidia) never applies;
+// runsc is used when listed, except on Docker Desktop, where it is skipped.
+func TestHR218_TheRuntimeIsRuncOrRunscAndRecorded(t *testing.T) {
 	e, err := New(engineFake("29.8.2", desktopInfo)).Engine(t.Context())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if e.GVisor() {
-		t.Fatal("Docker Desktop has no runsc")
+	if !e.Desktop || e.GVisor() || e.Runtime() != RuntimeRunc {
+		t.Fatalf("Docker Desktop: desktop=%v gVisor=%v runtime=%q", e.Desktop, e.GVisor(), e.Runtime())
 	}
-	if _, err := e.Runtime(true); !errors.Is(err, ErrEngine) {
-		t.Fatalf("gVisor asked without runsc: %v", err)
-	}
-	if r, err := e.Runtime(false); err != nil || r != "" {
-		t.Fatalf("Runtime(false) = %q, %v", r, err)
-	}
-	got := e.Evidence(RuntimeRunc)
-	if got != (Evidence{EngineVersion: "29.8.2", APIVersion: "1.56", Platform: "Docker Desktop 4.94.0", Runtime: "runc"}) {
+	if got := e.Evidence(RuntimeRunc); got != (Evidence{Version: "29.8.2", APIVersion: "1.56", Runtime: "runc", Desktop: true}) {
 		t.Fatalf("evidence %+v", got)
 	}
-
-	e, err = New(engineFake("29.8.2", `{"Runtimes":{"gvisor":{"path":"/usr/local/bin/runsc"},"runc":{"path":"runc"}},"SecurityOptions":["name=seccomp,profile=builtin"]}`)).Engine(t.Context())
-	if err != nil {
-		t.Fatal(err)
+	gvisor := `{"Runtimes":{"runsc":{"path":"/usr/local/bin/runsc"},"runc":{"path":"runc"}},"DefaultRuntime":"runc","SecurityOptions":["name=seccomp,profile=builtin"],"OperatingSystem":"Ubuntu 24.04"}`
+	f := engineFake("29.8.2", gvisor)
+	f.out["version"] = strings.Replace(f.out["version"], "Docker Desktop 4.94.0", "Docker Engine - Community", 1)
+	if e, _ = New(f).Engine(t.Context()); e.Desktop || !e.GVisor() || e.Runtime() != RuntimeRunsc {
+		t.Fatalf("Linux with runsc: desktop=%v gVisor=%v runtime=%q", e.Desktop, e.GVisor(), e.Runtime())
 	}
-	if r, err := e.Runtime(true); !e.GVisor() || err != nil || r != RuntimeRunsc {
-		t.Fatalf("runsc installed: GVisor()=%v Runtime(true)=%q, %v", e.GVisor(), r, err)
+	if e, _ = New(engineFake("29.8.2", gvisor)).Engine(t.Context()); !e.GVisor() || e.Runtime() != RuntimeRunc {
+		t.Fatalf("Docker Desktop with runsc: runtime=%q", e.Runtime())
 	}
 }
 
@@ -152,7 +154,7 @@ func TestHR218_ANetworkTheEngineDidNotIsolateIsRemoved(t *testing.T) {
 
 func agent() Container {
 	return Container{
-		Name: "pc-agent-1", Image: testImage, User: "65532:65532", Args: []string{"/pc/agent", "--flag"},
+		Name: "pc-agent-1", Image: testImage, User: "65532:65532", Args: []string{"/pc/agent", "--flag"}, Runtime: RuntimeRunc,
 		Networks: []string{"pc-sbx-1"}, Env: []string{"HTTPS_PROXY=http://pc-edge-1:3128"},
 		Mounts: []Mount{
 			{Kind: Bind, Source: `C:\Users\dev\bin\agent`, Target: "/pc/agent"},
@@ -171,7 +173,7 @@ func TestHR085_EveryContainerGetsTheHardeningFlags(t *testing.T) {
 	for _, want := range []string{
 		"create --name pc-agent-1 --pull never --restart no --init",
 		"--read-only --tmpfs /tmp:rw,noexec,nosuid,nodev,size=64m",
-		"--user 65532:65532 --cap-drop ALL",
+		"--runtime runc --user 65532:65532 --cap-drop ALL",
 		"--security-opt no-new-privileges=true --security-opt seccomp=builtin",
 		"--ipc private --cgroupns private",
 		"--sysctl net.ipv4.ping_group_range=1 0 --sysctl net.ipv6.conf.all.disable_ipv6=1 --sysctl net.ipv4.ip_forward=0",
@@ -213,6 +215,7 @@ func TestHR216_RefusesTheDockerSocketHostEnvironmentAndRoot(t *testing.T) {
 		"no network":             func(c *Container) { c.Networks = nil },
 		"tag only":               func(c *Container) { c.Image = "gcr.io/distroless/static-debian12:nonroot" },
 		"unknown runtime":        func(c *Container) { c.Runtime = "nvidia" },
+		"engine default runtime": func(c *Container) { c.Runtime = "" },
 		"comma in source":        func(c *Container) { c.Mounts[0].Source = "/x,target=/etc" },
 		"relative target":        func(c *Container) { c.Mounts[0].Target = "pc/agent" },
 		"unclean target":         func(c *Container) { c.Mounts[0].Target = "/pc/../etc" },
@@ -289,5 +292,77 @@ func TestErrorNamesTheSubcommandNotItsValues(t *testing.T) {
 	}
 	if got := command([]string{"create", "--name", "pc-1"}); got != "create" {
 		t.Fatalf("command = %q", got)
+	}
+}
+
+// TestHR085_OnlyTheProbeGetsNETRAWBack: NET_RAW is the one capability a
+// container may get back, only when asked, and the self-check holds the
+// engine to exactly that.
+func TestHR085_OnlyTheProbeGetsNETRAWBack(t *testing.T) {
+	plain, _ := agent().args()
+	if slices.Contains(plain, "--cap-add") {
+		t.Fatalf("a capability was added: %q", plain)
+	}
+	p := agent()
+	p.NetRaw = true
+	args, _ := p.args()
+	if !strings.Contains(strings.Join(args, " "), "--cap-drop ALL") || !strings.Contains(strings.Join(args, " "), "--cap-add NET_RAW") {
+		t.Fatalf("probe args %q", args)
+	}
+	withRaw := strings.Replace(hardenedInspect, `"CapAdd":null`, `"CapAdd":["CAP_NET_RAW"]`, 1)
+	if err := verifyJSON(t, p, withRaw); err != nil {
+		t.Fatalf("probe with NET_RAW: %v", err)
+	}
+	if err := verifyJSON(t, p, hardenedInspect); !errors.Is(err, ErrIsolation) {
+		t.Fatalf("probe without NET_RAW: %v", err)
+	}
+	if err := verifyJSON(t, agent(), withRaw); !errors.Is(err, ErrIsolation) {
+		t.Fatalf("agent with NET_RAW: %v", err)
+	}
+	p.Runtime = RuntimeRunsc
+	if err := verifyJSON(t, p, withRaw); !errors.Is(err, ErrIsolation) {
+		t.Fatalf("runsc asked, runc got: %v", err)
+	}
+}
+
+func verifyJSON(t *testing.T, c Container, inspected string) error {
+	t.Helper()
+	f := &fake{out: map[string]string{"container inspect": inspected}}
+	info, err := New(f).InspectContainer(t.Context(), c.Name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return VerifyContainer(c, info)
+}
+
+// TestHR216_CleanupTouchesOnlyTheSessionsLabel: removal lists by the exact
+// session label and removes only what the engine listed.
+func TestHR216_CleanupTouchesOnlyTheSessionsLabel(t *testing.T) {
+	f := &fake{out: map[string]string{
+		"ps": "0123456789ab\n", "rm": "", "network ls": "abcdef0123456789\n", "network rm": "", "volume ls": "pc-ws-1\n", "volume rm": "",
+	}}
+	if err := New(f).RemoveLabelled(t.Context(), "3f2a9c"); err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, c := range f.calls {
+		got = append(got, strings.Join(c, " "))
+	}
+	want := []string{
+		"ps --all --quiet --no-trunc --filter label=org.pantherclaw.sandbox.session=3f2a9c", "rm --force --volumes 0123456789ab",
+		"network ls --quiet --no-trunc --filter label=org.pantherclaw.sandbox.session=3f2a9c", "network rm abcdef0123456789",
+		"volume ls --quiet --filter label=org.pantherclaw.sandbox.session=3f2a9c", "volume rm --force pc-ws-1",
+	}
+	if !slices.Equal(got, want) {
+		t.Fatalf("calls:\n%s", strings.Join(got, "\n"))
+	}
+	for _, bad := range []string{"", "x,label=other", "A", "s1 --all"} {
+		if err := New(&fake{}).RemoveLabelled(t.Context(), bad); !errors.Is(err, ErrInvalid) {
+			t.Errorf("%q: %v", bad, err)
+		}
+	}
+	f = &fake{out: map[string]string{"ps": "--all\n", "network ls": "", "volume ls": ""}}
+	if err := New(f).RemoveLabelled(t.Context(), "3f2a9c"); err == nil || f.called("rm") {
+		t.Fatal("an unexpected listing reached rm")
 	}
 }

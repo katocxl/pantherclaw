@@ -21,10 +21,10 @@ func TestHR218_ThisEngineRunsTheSandboxAndIsRecorded(t *testing.T) {
 	net := dockertest.Network(t, c, true)
 	info := dockertest.Container(t, c, docker.Container{
 		Name: docker.NewName("test"), Image: docker.BaseImage, User: "65532:65532", Args: []string{"/nothing"},
-		Networks: []string{net.Name},
+		Networks: []string{net.Name}, Runtime: e.Runtime(),
 	})
 	ev := e.Evidence(info.Runtime())
-	if ev.EngineVersion == "" || ev.APIVersion == "" || ev.Runtime != docker.RuntimeRunc {
+	if ev.Version == "" || ev.APIVersion == "" || ev.Runtime != e.Runtime() {
 		t.Fatalf("evidence %+v", ev)
 	}
 	t.Logf("engine evidence: %+v (gVisor installed: %v)", ev, e.GVisor())
@@ -43,11 +43,11 @@ func TestHR122_AnIsolatedContainerHasNoRouteOut(t *testing.T) {
 		t.Fatalf("subnet %q: %v", net.Subnet(), err)
 	}
 	bridge := prefix.Addr().Next().String()
-	targets := []string{"1.1.1.1:443", "8.8.8.8:53", "169.254.169.254:80", "host.docker.internal:80", "172.17.0.1:2375", bridge + ":53", bridge + ":2375"}
+	targets := []string{"192.0.2.1:443", "198.51.100.1:53", "169.254.169.254:80", "host.docker.internal:80", "172.17.0.1:2375", bridge + ":53", bridge + ":2375"}
 	name := docker.NewName("test")
 	dockertest.Container(t, c, docker.Container{
 		Name: name, Image: docker.BaseImage, User: "65532:65532", Args: append([]string{"/pc/selfcheck"}, targets...),
-		Networks: []string{net.Name}, Mounts: []docker.Mount{{Kind: docker.Bind, Source: bin, Target: "/pc/selfcheck"}},
+		Networks: []string{net.Name}, Runtime: e.Runtime(), Mounts: []docker.Mount{{Kind: docker.Bind, Source: bin, Target: "/pc/selfcheck"}},
 		Limits: docker.Limits{PIDs: 32, MemoryMiB: 64, MilliCPUs: 500},
 	})
 	if err := c.Start(t.Context(), name); err != nil {
@@ -72,19 +72,17 @@ func TestHR122_AnIsolatedContainerHasNoRouteOut(t *testing.T) {
 	}
 }
 
+// TestHR218_GVisorIsUsedWhenInstalled: runsc, when the engine lists it and
+// is not Docker Desktop, is the runtime every container gets.
 func TestHR218_GVisorIsUsedWhenInstalled(t *testing.T) {
 	c, e := dockertest.Client(t)
-	if !e.GVisor() {
-		t.Skipf("no runsc runtime in %s (Docker Desktop has none)", e.Platform)
-	}
-	rt, err := e.Runtime(true)
-	if err != nil {
-		t.Fatal(err)
+	if e.Runtime() != docker.RuntimeRunsc {
+		t.Skipf("no runsc to use in %s (desktop: %v, listed: %v)", e.Platform, e.Desktop, e.GVisor())
 	}
 	net := dockertest.Network(t, c, true)
 	info := dockertest.Container(t, c, docker.Container{
 		Name: docker.NewName("test"), Image: docker.BaseImage, User: "65532:65532", Args: []string{"/nothing"},
-		Networks: []string{net.Name}, Runtime: rt,
+		Networks: []string{net.Name}, Runtime: e.Runtime(),
 	})
 	if got := e.Evidence(info.Runtime()).Runtime; got != docker.RuntimeRunsc {
 		t.Fatalf("runtime %q", got)

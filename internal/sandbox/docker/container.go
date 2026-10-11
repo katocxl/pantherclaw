@@ -73,10 +73,15 @@ type Container struct {
 	Env     []string
 	Mounts  []Mount
 	WorkDir string
-	// Runtime is "" (the engine's default) or RuntimeRunsc (Engine.Runtime).
+	// Runtime is RuntimeRunc or RuntimeRunsc (Engine.Runtime): always
+	// named, so that the engine's default never applies (HR-218).
 	Runtime string
-	Limits  Limits
-	Labels  map[string]string
+	// NetRaw adds NET_RAW, the one capability a container may get back:
+	// the probe container sends ICMP to prove the network drops it (G0 M9
+	// design decision 5).
+	NetRaw bool
+	Limits Limits
+	Labels map[string]string
 	// Interactive keeps standard input open (stdio MCP connectors).
 	Interactive bool
 }
@@ -102,7 +107,7 @@ func (c Container) args() ([]string, error) {
 	if len(c.Networks) == 0 {
 		return nil, bad("no network")
 	}
-	if c.Runtime != "" && c.Runtime != RuntimeRunsc {
+	if c.Runtime != RuntimeRunc && c.Runtime != RuntimeRunsc {
 		return nil, bad("runtime " + c.Runtime)
 	}
 	if c.WorkDir != "" && !targetRE.MatchString(c.WorkDir) {
@@ -121,7 +126,7 @@ func (c Container) args() ([]string, error) {
 	args := []string{
 		"create", "--name", c.Name, "--pull", "never", "--restart", "no", "--init",
 		"--read-only", "--tmpfs", "/tmp:rw,noexec,nosuid,nodev,size=64m",
-		"--user", c.User, "--cap-drop", "ALL",
+		"--runtime", c.Runtime, "--user", c.User, "--cap-drop", "ALL",
 		"--security-opt", "no-new-privileges=true", "--security-opt", "seccomp=builtin",
 		"--ipc", "private", "--cgroupns", "private",
 		"--sysctl", "net.ipv4.ping_group_range=1 0", "--sysctl", "net.ipv6.conf.all.disable_ipv6=1", "--sysctl", "net.ipv4.ip_forward=0",
@@ -134,8 +139,8 @@ func (c Container) args() ([]string, error) {
 		}
 		args = append(args, "--network", n)
 	}
-	if c.Runtime != "" {
-		args = append(args, "--runtime", c.Runtime)
+	if c.NetRaw {
+		args = append(args, "--cap-add", "NET_RAW")
 	}
 	for _, e := range c.Env {
 		if !envRE.MatchString(e) || strings.ContainsAny(e, "\r\n\x00") {
@@ -284,7 +289,7 @@ func VerifyContainer(ct Container, info ContainerInfo) error {
 	switch {
 	case strings.TrimPrefix(info.Name, "/") != ct.Name || info.Config.Image != ct.Image:
 		return fail("another container answered")
-	case h.Privileged || len(h.CapAdd) > 0 || !slices.Equal(h.CapDrop, []string{"ALL"}) || len(h.Devices) > 0:
+	case h.Privileged || !slices.Equal(capsAdded(h.CapAdd), ct.capsAdded()) || !slices.Equal(h.CapDrop, []string{"ALL"}) || len(h.Devices) > 0:
 		return fail("privileges")
 	case !h.ReadonlyRootfs:
 		return fail("the root file system is writable")
@@ -302,7 +307,7 @@ func VerifyContainer(ct Container, info ContainerInfo) error {
 		return fail("sysctls")
 	case h.PidsLimit <= 0 || h.Memory <= 0 || h.NanoCPUs <= 0 || !h.Init:
 		return fail("limits")
-	case ct.Runtime != "" && h.Runtime != ct.Runtime:
+	case h.Runtime != ct.Runtime:
 		return fail("runtime " + h.Runtime)
 	case len(h.Binds) > 0 || len(h.VolumesFrom) > 0 || len(h.Mounts) != len(ct.Mounts) || len(h.Tmpfs) != 1 || h.Tmpfs["/tmp"] == "":
 		return fail("mounts")
@@ -366,4 +371,23 @@ func (c *Client) Pull(ctx context.Context, image string) error {
 	}
 	_, err := c.r.Run(ctx, "pull", "--quiet", image)
 	return err
+}
+
+// capsAdded is the capabilities a container is to get back.
+func (c Container) capsAdded() []string {
+	if c.NetRaw {
+		return []string{"NET_RAW"}
+	}
+	return []string{}
+}
+
+// capsAdded normalises inspected capability names ("CAP_NET_RAW" and
+// "NET_RAW" are one).
+func capsAdded(caps []string) []string {
+	out := []string{}
+	for _, c := range caps {
+		out = append(out, strings.TrimPrefix(strings.ToUpper(c), "CAP_"))
+	}
+	slices.Sort(out)
+	return out
 }
