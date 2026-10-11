@@ -236,7 +236,9 @@ type ConnectionServiceClient interface {
 	// GetConnectionCapabilities returns what a connection declares it
 	// supports: discovery, observation, enforcement and response, its
 	// operations, permissions with reasons, limits, failure behavior and its
-	// last successful test (F346).
+	// last successful test (F346). It is a declared capability, never
+	// coverage: what a target declares is not evidence until a test shows it
+	// (HR-210).
 	// permission: connection.read
 	GetConnectionCapabilities(context.Context, *v1.GetConnectionCapabilitiesRequest) (*v1.GetConnectionCapabilitiesResponse, error)
 	// TestConnection tests what a connection depends on (its state, its
@@ -309,7 +311,9 @@ type ConnectionServiceHandler interface {
 	// GetConnectionCapabilities returns what a connection declares it
 	// supports: discovery, observation, enforcement and response, its
 	// operations, permissions with reasons, limits, failure behavior and its
-	// last successful test (F346).
+	// last successful test (F346). It is a declared capability, never
+	// coverage: what a target declares is not evidence until a test shows it
+	// (HR-210).
 	// permission: connection.read
 	GetConnectionCapabilities(context.Context, *v1.GetConnectionCapabilitiesRequest) (*v1.GetConnectionCapabilitiesResponse, error)
 	// TestConnection tests what a connection depends on (its state, its
