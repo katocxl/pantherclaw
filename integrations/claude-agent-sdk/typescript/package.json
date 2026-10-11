@@ -1,0 +1,28 @@
+{
+  "name": "@pantherclaw/claude-agent-sdk",
+  "version": "0.0.0",
+  "private": true,
+  "description": "PantherClaw enforcement for the Claude Agent SDK: a PreToolUse hook that fails closed and a canUseTool that waits on holds",
+  "license": "Apache-2.0",
+  "type": "module",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "files": [
+    "src"
+  ],
+  "scripts": {
+    "test": "node --test \"test/**/*.test.ts\""
+  },
+  "peerDependencies": {
+    "@anthropic-ai/claude-agent-sdk": ">=0.3.286 <0.4.0"
+  },
+  "peerDependenciesMeta": {
+    "@anthropic-ai/claude-agent-sdk": {
+      "optional": true
+    }
+  }
+}

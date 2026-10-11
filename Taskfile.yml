@@ -129,6 +129,7 @@ tasks:
       - go -C sdk/go test -shuffle=on -count=1 ./...
       - cd sdk/typescript && node --test "test/**/*.test.ts"
       - cd sdk/python && PYTHONPATH=src {{.PYTHON}} -m unittest discover -s tests
+      - cd integrations/claude-agent-sdk/typescript && node --test "test/**/*.test.ts"
 
   license:check:
     desc: Verify SPDX + copyright headers on every source file
