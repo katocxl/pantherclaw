@@ -353,6 +353,63 @@ func (SealedCredentialState) EnumDescriptor() ([]byte, []int) {
 	return file_pantherclaw_v1_connections_proto_rawDescGZIP(), []int{5}
 }
 
+// CapabilityLevel is how far a connection supports a capability (F347).
+type CapabilityLevel int32
+
+const (
+	CapabilityLevel_CAPABILITY_LEVEL_UNSPECIFIED CapabilityLevel = 0
+	// The connection does it.
+	CapabilityLevel_CAPABILITY_LEVEL_SUPPORTED CapabilityLevel = 1
+	// Only as far as a cooperative agent or an opaque server lets it
+	// (HR-024, HR-086).
+	CapabilityLevel_CAPABILITY_LEVEL_PARTIAL CapabilityLevel = 2
+	// It cannot.
+	CapabilityLevel_CAPABILITY_LEVEL_UNSUPPORTED CapabilityLevel = 3
+)
+
+// Enum value maps for CapabilityLevel.
+var (
+	CapabilityLevel_name = map[int32]string{
+		0: "CAPABILITY_LEVEL_UNSPECIFIED",
+		1: "CAPABILITY_LEVEL_SUPPORTED",
+		2: "CAPABILITY_LEVEL_PARTIAL",
+		3: "CAPABILITY_LEVEL_UNSUPPORTED",
+	}
+	CapabilityLevel_value = map[string]int32{
+		"CAPABILITY_LEVEL_UNSPECIFIED": 0,
+		"CAPABILITY_LEVEL_SUPPORTED":   1,
+		"CAPABILITY_LEVEL_PARTIAL":     2,
+		"CAPABILITY_LEVEL_UNSUPPORTED": 3,
+	}
+)
+
+func (x CapabilityLevel) Enum() *CapabilityLevel {
+	p := new(CapabilityLevel)
+	*p = x
+	return p
+}
+
+func (x CapabilityLevel) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (CapabilityLevel) Descriptor() protoreflect.EnumDescriptor {
+	return file_pantherclaw_v1_connections_proto_enumTypes[6].Descriptor()
+}
+
+func (CapabilityLevel) Type() protoreflect.EnumType {
+	return &file_pantherclaw_v1_connections_proto_enumTypes[6]
+}
+
+func (x CapabilityLevel) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use CapabilityLevel.Descriptor instead.
+func (CapabilityLevel) EnumDescriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_connections_proto_rawDescGZIP(), []int{6}
+}
+
 // Connection is one connection.
 type Connection struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -2300,6 +2357,503 @@ func (*RevokeCredentialResponse) Descriptor() ([]byte, []int) {
 	return file_pantherclaw_v1_connections_proto_rawDescGZIP(), []int{26}
 }
 
+// CapabilitySupport is one capability's level and why.
+type CapabilitySupport struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Level.
+	Level CapabilityLevel `protobuf:"varint,1,opt,name=level,proto3,enum=pantherclaw.v1.CapabilityLevel" json:"level,omitempty"`
+	// Why, for people.
+	Detail        string `protobuf:"bytes,2,opt,name=detail,proto3" json:"detail,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CapabilitySupport) Reset() {
+	*x = CapabilitySupport{}
+	mi := &file_pantherclaw_v1_connections_proto_msgTypes[27]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CapabilitySupport) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CapabilitySupport) ProtoMessage() {}
+
+func (x *CapabilitySupport) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_connections_proto_msgTypes[27]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CapabilitySupport.ProtoReflect.Descriptor instead.
+func (*CapabilitySupport) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_connections_proto_rawDescGZIP(), []int{27}
+}
+
+func (x *CapabilitySupport) GetLevel() CapabilityLevel {
+	if x != nil {
+		return x.Level
+	}
+	return CapabilityLevel_CAPABILITY_LEVEL_UNSPECIFIED
+}
+
+func (x *CapabilitySupport) GetDetail() string {
+	if x != nil {
+		return x.Detail
+	}
+	return ""
+}
+
+// ConnectionOperation is one operation a connection serves (F348).
+type ConnectionOperation struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Operation, for example payments.refund.create.
+	Operation string `protobuf:"bytes,1,opt,name=operation,proto3" json:"operation,omitempty"`
+	// The definition's summary.
+	Summary string `protobuf:"bytes,2,opt,name=summary,proto3" json:"summary,omitempty"`
+	// Route of the package.
+	Route string `protobuf:"bytes,3,opt,name=route,proto3" json:"route,omitempty"`
+	// The definition's access: read or write.
+	Access string `protobuf:"bytes,4,opt,name=access,proto3" json:"access,omitempty"`
+	// Target type.
+	TargetType string `protobuf:"bytes,5,opt,name=target_type,json=targetType,proto3" json:"target_type,omitempty"`
+	// Reversibility: reversible, compensatable or irreversible.
+	Reversibility string `protobuf:"bytes,6,opt,name=reversibility,proto3" json:"reversibility,omitempty"`
+	// Whether the definition declares a verifier, so the effect can be
+	// observed after dispatch (M7).
+	Verified bool `protobuf:"varint,7,opt,name=verified,proto3" json:"verified,omitempty"`
+	// The route's mode on the connection.
+	Mode          RouteMode `protobuf:"varint,8,opt,name=mode,proto3,enum=pantherclaw.v1.RouteMode" json:"mode,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ConnectionOperation) Reset() {
+	*x = ConnectionOperation{}
+	mi := &file_pantherclaw_v1_connections_proto_msgTypes[28]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ConnectionOperation) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ConnectionOperation) ProtoMessage() {}
+
+func (x *ConnectionOperation) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_connections_proto_msgTypes[28]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ConnectionOperation.ProtoReflect.Descriptor instead.
+func (*ConnectionOperation) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_connections_proto_rawDescGZIP(), []int{28}
+}
+
+func (x *ConnectionOperation) GetOperation() string {
+	if x != nil {
+		return x.Operation
+	}
+	return ""
+}
+
+func (x *ConnectionOperation) GetSummary() string {
+	if x != nil {
+		return x.Summary
+	}
+	return ""
+}
+
+func (x *ConnectionOperation) GetRoute() string {
+	if x != nil {
+		return x.Route
+	}
+	return ""
+}
+
+func (x *ConnectionOperation) GetAccess() string {
+	if x != nil {
+		return x.Access
+	}
+	return ""
+}
+
+func (x *ConnectionOperation) GetTargetType() string {
+	if x != nil {
+		return x.TargetType
+	}
+	return ""
+}
+
+func (x *ConnectionOperation) GetReversibility() string {
+	if x != nil {
+		return x.Reversibility
+	}
+	return ""
+}
+
+func (x *ConnectionOperation) GetVerified() bool {
+	if x != nil {
+		return x.Verified
+	}
+	return false
+}
+
+func (x *ConnectionOperation) GetMode() RouteMode {
+	if x != nil {
+		return x.Mode
+	}
+	return RouteMode_ROUTE_MODE_UNSPECIFIED
+}
+
+// ConnectionPermission is something the connection's credential is used
+// for, with the operations that need it (F349).
+type ConnectionPermission struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The permission.
+	Name string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	// The operations that need it.
+	Reasons       []string `protobuf:"bytes,2,rep,name=reasons,proto3" json:"reasons,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ConnectionPermission) Reset() {
+	*x = ConnectionPermission{}
+	mi := &file_pantherclaw_v1_connections_proto_msgTypes[29]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ConnectionPermission) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ConnectionPermission) ProtoMessage() {}
+
+func (x *ConnectionPermission) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_connections_proto_msgTypes[29]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ConnectionPermission.ProtoReflect.Descriptor instead.
+func (*ConnectionPermission) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_connections_proto_rawDescGZIP(), []int{29}
+}
+
+func (x *ConnectionPermission) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *ConnectionPermission) GetReasons() []string {
+	if x != nil {
+		return x.Reasons
+	}
+	return nil
+}
+
+// ConnectionLimit is something the connection does not do (F350).
+type ConnectionLimit struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// A stable code, for example OPERATION_NOT_SERVED.
+	Code string `protobuf:"bytes,1,opt,name=code,proto3" json:"code,omitempty"`
+	// Why, for people.
+	Detail        string `protobuf:"bytes,2,opt,name=detail,proto3" json:"detail,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ConnectionLimit) Reset() {
+	*x = ConnectionLimit{}
+	mi := &file_pantherclaw_v1_connections_proto_msgTypes[30]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ConnectionLimit) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ConnectionLimit) ProtoMessage() {}
+
+func (x *ConnectionLimit) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_connections_proto_msgTypes[30]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ConnectionLimit.ProtoReflect.Descriptor instead.
+func (*ConnectionLimit) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_connections_proto_rawDescGZIP(), []int{30}
+}
+
+func (x *ConnectionLimit) GetCode() string {
+	if x != nil {
+		return x.Code
+	}
+	return ""
+}
+
+func (x *ConnectionLimit) GetDetail() string {
+	if x != nil {
+		return x.Detail
+	}
+	return ""
+}
+
+// ConnectionCapabilities is a connection's declaration (F346).
+type ConnectionCapabilities struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Connection id.
+	ConnectionId string `protobuf:"bytes,1,opt,name=connection_id,json=connectionId,proto3" json:"connection_id,omitempty"`
+	// Discovery: unknown workloads and, for MCP, upstream tools.
+	Discovery *CapabilitySupport `protobuf:"bytes,2,opt,name=discovery,proto3" json:"discovery,omitempty"`
+	// Observation: decisions recorded, monitor mode.
+	Observation *CapabilitySupport `protobuf:"bytes,3,opt,name=observation,proto3" json:"observation,omitempty"`
+	// Enforcement: whether a decision stops the call.
+	Enforcement *CapabilitySupport `protobuf:"bytes,4,opt,name=enforcement,proto3" json:"enforcement,omitempty"`
+	// Response: quarantine, the kill switch, credential revocation.
+	Response *CapabilitySupport `protobuf:"bytes,5,opt,name=response,proto3" json:"response,omitempty"`
+	// The response controls that apply: quarantine, kill_switch,
+	// revoke_credential, rotate_credential.
+	ResponseActions []string `protobuf:"bytes,6,rep,name=response_actions,json=responseActions,proto3" json:"response_actions,omitempty"`
+	// Operations it serves.
+	Operations []*ConnectionOperation `protobuf:"bytes,7,rep,name=operations,proto3" json:"operations,omitempty"`
+	// What PantherClaw's credential for it is used for; empty when it holds
+	// none.
+	Permissions []*ConnectionPermission `protobuf:"bytes,8,rep,name=permissions,proto3" json:"permissions,omitempty"`
+	// What it does not do.
+	Limits []*ConnectionLimit `protobuf:"bytes,9,rep,name=limits,proto3" json:"limits,omitempty"`
+	// How it behaves when something fails, one statement each.
+	FailureBehavior []string `protobuf:"bytes,10,rep,name=failure_behavior,json=failureBehavior,proto3" json:"failure_behavior,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *ConnectionCapabilities) Reset() {
+	*x = ConnectionCapabilities{}
+	mi := &file_pantherclaw_v1_connections_proto_msgTypes[31]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ConnectionCapabilities) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ConnectionCapabilities) ProtoMessage() {}
+
+func (x *ConnectionCapabilities) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_connections_proto_msgTypes[31]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ConnectionCapabilities.ProtoReflect.Descriptor instead.
+func (*ConnectionCapabilities) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_connections_proto_rawDescGZIP(), []int{31}
+}
+
+func (x *ConnectionCapabilities) GetConnectionId() string {
+	if x != nil {
+		return x.ConnectionId
+	}
+	return ""
+}
+
+func (x *ConnectionCapabilities) GetDiscovery() *CapabilitySupport {
+	if x != nil {
+		return x.Discovery
+	}
+	return nil
+}
+
+func (x *ConnectionCapabilities) GetObservation() *CapabilitySupport {
+	if x != nil {
+		return x.Observation
+	}
+	return nil
+}
+
+func (x *ConnectionCapabilities) GetEnforcement() *CapabilitySupport {
+	if x != nil {
+		return x.Enforcement
+	}
+	return nil
+}
+
+func (x *ConnectionCapabilities) GetResponse() *CapabilitySupport {
+	if x != nil {
+		return x.Response
+	}
+	return nil
+}
+
+func (x *ConnectionCapabilities) GetResponseActions() []string {
+	if x != nil {
+		return x.ResponseActions
+	}
+	return nil
+}
+
+func (x *ConnectionCapabilities) GetOperations() []*ConnectionOperation {
+	if x != nil {
+		return x.Operations
+	}
+	return nil
+}
+
+func (x *ConnectionCapabilities) GetPermissions() []*ConnectionPermission {
+	if x != nil {
+		return x.Permissions
+	}
+	return nil
+}
+
+func (x *ConnectionCapabilities) GetLimits() []*ConnectionLimit {
+	if x != nil {
+		return x.Limits
+	}
+	return nil
+}
+
+func (x *ConnectionCapabilities) GetFailureBehavior() []string {
+	if x != nil {
+		return x.FailureBehavior
+	}
+	return nil
+}
+
+// GetConnectionCapabilitiesRequest names a connection.
+type GetConnectionCapabilitiesRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Connection id.
+	Id            string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetConnectionCapabilitiesRequest) Reset() {
+	*x = GetConnectionCapabilitiesRequest{}
+	mi := &file_pantherclaw_v1_connections_proto_msgTypes[32]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetConnectionCapabilitiesRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetConnectionCapabilitiesRequest) ProtoMessage() {}
+
+func (x *GetConnectionCapabilitiesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_connections_proto_msgTypes[32]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetConnectionCapabilitiesRequest.ProtoReflect.Descriptor instead.
+func (*GetConnectionCapabilitiesRequest) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_connections_proto_rawDescGZIP(), []int{32}
+}
+
+func (x *GetConnectionCapabilitiesRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+// GetConnectionCapabilitiesResponse returns its declaration.
+type GetConnectionCapabilitiesResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The declaration.
+	Capabilities  *ConnectionCapabilities `protobuf:"bytes,1,opt,name=capabilities,proto3" json:"capabilities,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetConnectionCapabilitiesResponse) Reset() {
+	*x = GetConnectionCapabilitiesResponse{}
+	mi := &file_pantherclaw_v1_connections_proto_msgTypes[33]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetConnectionCapabilitiesResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetConnectionCapabilitiesResponse) ProtoMessage() {}
+
+func (x *GetConnectionCapabilitiesResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_connections_proto_msgTypes[33]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetConnectionCapabilitiesResponse.ProtoReflect.Descriptor instead.
+func (*GetConnectionCapabilitiesResponse) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_connections_proto_rawDescGZIP(), []int{33}
+}
+
+func (x *GetConnectionCapabilitiesResponse) GetCapabilities() *ConnectionCapabilities {
+	if x != nil {
+		return x.Capabilities
+	}
+	return nil
+}
+
 var File_pantherclaw_v1_connections_proto protoreflect.FileDescriptor
 
 const file_pantherclaw_v1_connections_proto_rawDesc = "" +
@@ -2493,7 +3047,44 @@ const file_pantherclaw_v1_connections_proto_rawDesc = "" +
 	"\x17RevokeCredentialRequest\x12-\n" +
 	"\rconnection_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\fconnectionId\x12!\n" +
 	"\aversion\x18\x02 \x01(\x05B\a\xbaH\x04\x1a\x02 \x00R\aversion\"\x1a\n" +
-	"\x18RevokeCredentialResponse*\x7f\n" +
+	"\x18RevokeCredentialResponse\"b\n" +
+	"\x11CapabilitySupport\x125\n" +
+	"\x05level\x18\x01 \x01(\x0e2\x1f.pantherclaw.v1.CapabilityLevelR\x05level\x12\x16\n" +
+	"\x06detail\x18\x02 \x01(\tR\x06detail\"\x8d\x02\n" +
+	"\x13ConnectionOperation\x12\x1c\n" +
+	"\toperation\x18\x01 \x01(\tR\toperation\x12\x18\n" +
+	"\asummary\x18\x02 \x01(\tR\asummary\x12\x14\n" +
+	"\x05route\x18\x03 \x01(\tR\x05route\x12\x16\n" +
+	"\x06access\x18\x04 \x01(\tR\x06access\x12\x1f\n" +
+	"\vtarget_type\x18\x05 \x01(\tR\n" +
+	"targetType\x12$\n" +
+	"\rreversibility\x18\x06 \x01(\tR\rreversibility\x12\x1a\n" +
+	"\bverified\x18\a \x01(\bR\bverified\x12-\n" +
+	"\x04mode\x18\b \x01(\x0e2\x19.pantherclaw.v1.RouteModeR\x04mode\"D\n" +
+	"\x14ConnectionPermission\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n" +
+	"\areasons\x18\x02 \x03(\tR\areasons\"=\n" +
+	"\x0fConnectionLimit\x12\x12\n" +
+	"\x04code\x18\x01 \x01(\tR\x04code\x12\x16\n" +
+	"\x06detail\x18\x02 \x01(\tR\x06detail\"\xe3\x04\n" +
+	"\x16ConnectionCapabilities\x12#\n" +
+	"\rconnection_id\x18\x01 \x01(\tR\fconnectionId\x12?\n" +
+	"\tdiscovery\x18\x02 \x01(\v2!.pantherclaw.v1.CapabilitySupportR\tdiscovery\x12C\n" +
+	"\vobservation\x18\x03 \x01(\v2!.pantherclaw.v1.CapabilitySupportR\vobservation\x12C\n" +
+	"\venforcement\x18\x04 \x01(\v2!.pantherclaw.v1.CapabilitySupportR\venforcement\x12=\n" +
+	"\bresponse\x18\x05 \x01(\v2!.pantherclaw.v1.CapabilitySupportR\bresponse\x12)\n" +
+	"\x10response_actions\x18\x06 \x03(\tR\x0fresponseActions\x12C\n" +
+	"\n" +
+	"operations\x18\a \x03(\v2#.pantherclaw.v1.ConnectionOperationR\n" +
+	"operations\x12F\n" +
+	"\vpermissions\x18\b \x03(\v2$.pantherclaw.v1.ConnectionPermissionR\vpermissions\x127\n" +
+	"\x06limits\x18\t \x03(\v2\x1f.pantherclaw.v1.ConnectionLimitR\x06limits\x12)\n" +
+	"\x10failure_behavior\x18\n" +
+	" \x03(\tR\x0ffailureBehavior\"<\n" +
+	" GetConnectionCapabilitiesRequest\x12\x18\n" +
+	"\x02id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x02id\"o\n" +
+	"!GetConnectionCapabilitiesResponse\x12J\n" +
+	"\fcapabilities\x18\x01 \x01(\v2&.pantherclaw.v1.ConnectionCapabilitiesR\fcapabilities*\x7f\n" +
 	"\x0eConnectionKind\x12\x1f\n" +
 	"\x1bCONNECTION_KIND_UNSPECIFIED\x10\x00\x12\x18\n" +
 	"\x14CONNECTION_KIND_HTTP\x10\x01\x12\x17\n" +
@@ -2523,7 +3114,13 @@ const file_pantherclaw_v1_connections_proto_rawDesc = "" +
 	"#SEALED_CREDENTIAL_STATE_UNSPECIFIED\x10\x00\x12\"\n" +
 	"\x1eSEALED_CREDENTIAL_STATE_ACTIVE\x10\x01\x12&\n" +
 	"\"SEALED_CREDENTIAL_STATE_SUPERSEDED\x10\x02\x12#\n" +
-	"\x1fSEALED_CREDENTIAL_STATE_REVOKED\x10\x032\xdd\t\n" +
+	"\x1fSEALED_CREDENTIAL_STATE_REVOKED\x10\x03*\x93\x01\n" +
+	"\x0fCapabilityLevel\x12 \n" +
+	"\x1cCAPABILITY_LEVEL_UNSPECIFIED\x10\x00\x12\x1e\n" +
+	"\x1aCAPABILITY_LEVEL_SUPPORTED\x10\x01\x12\x1c\n" +
+	"\x18CAPABILITY_LEVEL_PARTIAL\x10\x02\x12 \n" +
+	"\x1cCAPABILITY_LEVEL_UNSUPPORTED\x10\x032\xe5\n" +
+	"\n" +
 	"\x11ConnectionService\x12e\n" +
 	"\x10CreateConnection\x12'.pantherclaw.v1.CreateConnectionRequest\x1a(.pantherclaw.v1.CreateConnectionResponse\x12a\n" +
 	"\rGetConnection\x12$.pantherclaw.v1.GetConnectionRequest\x1a%.pantherclaw.v1.GetConnectionResponse\"\x03\x90\x02\x01\x12g\n" +
@@ -2536,7 +3133,8 @@ const file_pantherclaw_v1_connections_proto_rawDesc = "" +
 	"\rGetSealingKey\x12$.pantherclaw.v1.GetSealingKeyRequest\x1a%.pantherclaw.v1.GetSealingKeyResponse\"\x03\x90\x02\x01\x12\\\n" +
 	"\rPutCredential\x12$.pantherclaw.v1.PutCredentialRequest\x1a%.pantherclaw.v1.PutCredentialResponse\x12g\n" +
 	"\x0fListCredentials\x12&.pantherclaw.v1.ListCredentialsRequest\x1a'.pantherclaw.v1.ListCredentialsResponse\"\x03\x90\x02\x01\x12e\n" +
-	"\x10RevokeCredential\x12'.pantherclaw.v1.RevokeCredentialRequest\x1a(.pantherclaw.v1.RevokeCredentialResponseB\xc9\x01\n" +
+	"\x10RevokeCredential\x12'.pantherclaw.v1.RevokeCredentialRequest\x1a(.pantherclaw.v1.RevokeCredentialResponse\x12\x85\x01\n" +
+	"\x19GetConnectionCapabilities\x120.pantherclaw.v1.GetConnectionCapabilitiesRequest\x1a1.pantherclaw.v1.GetConnectionCapabilitiesResponse\"\x03\x90\x02\x01B\xc9\x01\n" +
 	"\x12com.pantherclaw.v1B\x10ConnectionsProtoP\x01ZHgithub.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1;pantherclawv1\xa2\x02\x03PXX\xaa\x02\x0ePantherclaw.V1\xca\x02\x0ePantherclaw\\V1\xe2\x02\x1aPantherclaw\\V1\\GPBMetadata\xea\x02\x0fPantherclaw::V1b\x06proto3"
 
 var (
@@ -2551,104 +3149,124 @@ func file_pantherclaw_v1_connections_proto_rawDescGZIP() []byte {
 	return file_pantherclaw_v1_connections_proto_rawDescData
 }
 
-var file_pantherclaw_v1_connections_proto_enumTypes = make([]protoimpl.EnumInfo, 6)
-var file_pantherclaw_v1_connections_proto_msgTypes = make([]protoimpl.MessageInfo, 27)
+var file_pantherclaw_v1_connections_proto_enumTypes = make([]protoimpl.EnumInfo, 7)
+var file_pantherclaw_v1_connections_proto_msgTypes = make([]protoimpl.MessageInfo, 34)
 var file_pantherclaw_v1_connections_proto_goTypes = []any{
-	(ConnectionKind)(0),                  // 0: pantherclaw.v1.ConnectionKind
-	(ConnectionState)(0),                 // 1: pantherclaw.v1.ConnectionState
-	(RouteMode)(0),                       // 2: pantherclaw.v1.RouteMode
-	(AccessMode)(0),                      // 3: pantherclaw.v1.AccessMode
-	(DestinationClass)(0),                // 4: pantherclaw.v1.DestinationClass
-	(SealedCredentialState)(0),           // 5: pantherclaw.v1.SealedCredentialState
-	(*Connection)(nil),                   // 6: pantherclaw.v1.Connection
-	(*ConnectionRoute)(nil),              // 7: pantherclaw.v1.ConnectionRoute
-	(*ConnectionCredential)(nil),         // 8: pantherclaw.v1.ConnectionCredential
-	(*CreateConnectionRequest)(nil),      // 9: pantherclaw.v1.CreateConnectionRequest
-	(*CreateConnectionResponse)(nil),     // 10: pantherclaw.v1.CreateConnectionResponse
-	(*GetConnectionRequest)(nil),         // 11: pantherclaw.v1.GetConnectionRequest
-	(*GetConnectionResponse)(nil),        // 12: pantherclaw.v1.GetConnectionResponse
-	(*ListConnectionsRequest)(nil),       // 13: pantherclaw.v1.ListConnectionsRequest
-	(*ListConnectionsResponse)(nil),      // 14: pantherclaw.v1.ListConnectionsResponse
-	(*UpdateConnectionRequest)(nil),      // 15: pantherclaw.v1.UpdateConnectionRequest
-	(*UpdateConnectionResponse)(nil),     // 16: pantherclaw.v1.UpdateConnectionResponse
-	(*SetRouteModeRequest)(nil),          // 17: pantherclaw.v1.SetRouteModeRequest
-	(*SetRouteModeResponse)(nil),         // 18: pantherclaw.v1.SetRouteModeResponse
-	(*QuarantineConnectionRequest)(nil),  // 19: pantherclaw.v1.QuarantineConnectionRequest
-	(*QuarantineConnectionResponse)(nil), // 20: pantherclaw.v1.QuarantineConnectionResponse
-	(*RestoreConnectionRequest)(nil),     // 21: pantherclaw.v1.RestoreConnectionRequest
-	(*RestoreConnectionResponse)(nil),    // 22: pantherclaw.v1.RestoreConnectionResponse
-	(*RetireConnectionRequest)(nil),      // 23: pantherclaw.v1.RetireConnectionRequest
-	(*RetireConnectionResponse)(nil),     // 24: pantherclaw.v1.RetireConnectionResponse
-	(*GetSealingKeyRequest)(nil),         // 25: pantherclaw.v1.GetSealingKeyRequest
-	(*GetSealingKeyResponse)(nil),        // 26: pantherclaw.v1.GetSealingKeyResponse
-	(*PutCredentialRequest)(nil),         // 27: pantherclaw.v1.PutCredentialRequest
-	(*PutCredentialResponse)(nil),        // 28: pantherclaw.v1.PutCredentialResponse
-	(*ListCredentialsRequest)(nil),       // 29: pantherclaw.v1.ListCredentialsRequest
-	(*ListCredentialsResponse)(nil),      // 30: pantherclaw.v1.ListCredentialsResponse
-	(*RevokeCredentialRequest)(nil),      // 31: pantherclaw.v1.RevokeCredentialRequest
-	(*RevokeCredentialResponse)(nil),     // 32: pantherclaw.v1.RevokeCredentialResponse
-	(*timestamppb.Timestamp)(nil),        // 33: google.protobuf.Timestamp
+	(ConnectionKind)(0),                       // 0: pantherclaw.v1.ConnectionKind
+	(ConnectionState)(0),                      // 1: pantherclaw.v1.ConnectionState
+	(RouteMode)(0),                            // 2: pantherclaw.v1.RouteMode
+	(AccessMode)(0),                           // 3: pantherclaw.v1.AccessMode
+	(DestinationClass)(0),                     // 4: pantherclaw.v1.DestinationClass
+	(SealedCredentialState)(0),                // 5: pantherclaw.v1.SealedCredentialState
+	(CapabilityLevel)(0),                      // 6: pantherclaw.v1.CapabilityLevel
+	(*Connection)(nil),                        // 7: pantherclaw.v1.Connection
+	(*ConnectionRoute)(nil),                   // 8: pantherclaw.v1.ConnectionRoute
+	(*ConnectionCredential)(nil),              // 9: pantherclaw.v1.ConnectionCredential
+	(*CreateConnectionRequest)(nil),           // 10: pantherclaw.v1.CreateConnectionRequest
+	(*CreateConnectionResponse)(nil),          // 11: pantherclaw.v1.CreateConnectionResponse
+	(*GetConnectionRequest)(nil),              // 12: pantherclaw.v1.GetConnectionRequest
+	(*GetConnectionResponse)(nil),             // 13: pantherclaw.v1.GetConnectionResponse
+	(*ListConnectionsRequest)(nil),            // 14: pantherclaw.v1.ListConnectionsRequest
+	(*ListConnectionsResponse)(nil),           // 15: pantherclaw.v1.ListConnectionsResponse
+	(*UpdateConnectionRequest)(nil),           // 16: pantherclaw.v1.UpdateConnectionRequest
+	(*UpdateConnectionResponse)(nil),          // 17: pantherclaw.v1.UpdateConnectionResponse
+	(*SetRouteModeRequest)(nil),               // 18: pantherclaw.v1.SetRouteModeRequest
+	(*SetRouteModeResponse)(nil),              // 19: pantherclaw.v1.SetRouteModeResponse
+	(*QuarantineConnectionRequest)(nil),       // 20: pantherclaw.v1.QuarantineConnectionRequest
+	(*QuarantineConnectionResponse)(nil),      // 21: pantherclaw.v1.QuarantineConnectionResponse
+	(*RestoreConnectionRequest)(nil),          // 22: pantherclaw.v1.RestoreConnectionRequest
+	(*RestoreConnectionResponse)(nil),         // 23: pantherclaw.v1.RestoreConnectionResponse
+	(*RetireConnectionRequest)(nil),           // 24: pantherclaw.v1.RetireConnectionRequest
+	(*RetireConnectionResponse)(nil),          // 25: pantherclaw.v1.RetireConnectionResponse
+	(*GetSealingKeyRequest)(nil),              // 26: pantherclaw.v1.GetSealingKeyRequest
+	(*GetSealingKeyResponse)(nil),             // 27: pantherclaw.v1.GetSealingKeyResponse
+	(*PutCredentialRequest)(nil),              // 28: pantherclaw.v1.PutCredentialRequest
+	(*PutCredentialResponse)(nil),             // 29: pantherclaw.v1.PutCredentialResponse
+	(*ListCredentialsRequest)(nil),            // 30: pantherclaw.v1.ListCredentialsRequest
+	(*ListCredentialsResponse)(nil),           // 31: pantherclaw.v1.ListCredentialsResponse
+	(*RevokeCredentialRequest)(nil),           // 32: pantherclaw.v1.RevokeCredentialRequest
+	(*RevokeCredentialResponse)(nil),          // 33: pantherclaw.v1.RevokeCredentialResponse
+	(*CapabilitySupport)(nil),                 // 34: pantherclaw.v1.CapabilitySupport
+	(*ConnectionOperation)(nil),               // 35: pantherclaw.v1.ConnectionOperation
+	(*ConnectionPermission)(nil),              // 36: pantherclaw.v1.ConnectionPermission
+	(*ConnectionLimit)(nil),                   // 37: pantherclaw.v1.ConnectionLimit
+	(*ConnectionCapabilities)(nil),            // 38: pantherclaw.v1.ConnectionCapabilities
+	(*GetConnectionCapabilitiesRequest)(nil),  // 39: pantherclaw.v1.GetConnectionCapabilitiesRequest
+	(*GetConnectionCapabilitiesResponse)(nil), // 40: pantherclaw.v1.GetConnectionCapabilitiesResponse
+	(*timestamppb.Timestamp)(nil),             // 41: google.protobuf.Timestamp
 }
 var file_pantherclaw_v1_connections_proto_depIdxs = []int32{
 	0,  // 0: pantherclaw.v1.Connection.kind:type_name -> pantherclaw.v1.ConnectionKind
 	4,  // 1: pantherclaw.v1.Connection.destination_class:type_name -> pantherclaw.v1.DestinationClass
 	3,  // 2: pantherclaw.v1.Connection.access_mode:type_name -> pantherclaw.v1.AccessMode
 	2,  // 3: pantherclaw.v1.Connection.default_mode:type_name -> pantherclaw.v1.RouteMode
-	7,  // 4: pantherclaw.v1.Connection.routes:type_name -> pantherclaw.v1.ConnectionRoute
+	8,  // 4: pantherclaw.v1.Connection.routes:type_name -> pantherclaw.v1.ConnectionRoute
 	1,  // 5: pantherclaw.v1.Connection.state:type_name -> pantherclaw.v1.ConnectionState
-	33, // 6: pantherclaw.v1.Connection.create_time:type_name -> google.protobuf.Timestamp
-	33, // 7: pantherclaw.v1.Connection.update_time:type_name -> google.protobuf.Timestamp
+	41, // 6: pantherclaw.v1.Connection.create_time:type_name -> google.protobuf.Timestamp
+	41, // 7: pantherclaw.v1.Connection.update_time:type_name -> google.protobuf.Timestamp
 	2,  // 8: pantherclaw.v1.ConnectionRoute.mode:type_name -> pantherclaw.v1.RouteMode
-	33, // 9: pantherclaw.v1.ConnectionRoute.change_time:type_name -> google.protobuf.Timestamp
+	41, // 9: pantherclaw.v1.ConnectionRoute.change_time:type_name -> google.protobuf.Timestamp
 	5,  // 10: pantherclaw.v1.ConnectionCredential.state:type_name -> pantherclaw.v1.SealedCredentialState
-	33, // 11: pantherclaw.v1.ConnectionCredential.create_time:type_name -> google.protobuf.Timestamp
+	41, // 11: pantherclaw.v1.ConnectionCredential.create_time:type_name -> google.protobuf.Timestamp
 	0,  // 12: pantherclaw.v1.CreateConnectionRequest.kind:type_name -> pantherclaw.v1.ConnectionKind
 	4,  // 13: pantherclaw.v1.CreateConnectionRequest.destination_class:type_name -> pantherclaw.v1.DestinationClass
 	3,  // 14: pantherclaw.v1.CreateConnectionRequest.access_mode:type_name -> pantherclaw.v1.AccessMode
 	2,  // 15: pantherclaw.v1.CreateConnectionRequest.default_mode:type_name -> pantherclaw.v1.RouteMode
-	6,  // 16: pantherclaw.v1.CreateConnectionResponse.connection:type_name -> pantherclaw.v1.Connection
-	6,  // 17: pantherclaw.v1.GetConnectionResponse.connection:type_name -> pantherclaw.v1.Connection
-	8,  // 18: pantherclaw.v1.GetConnectionResponse.active_credential:type_name -> pantherclaw.v1.ConnectionCredential
-	6,  // 19: pantherclaw.v1.ListConnectionsResponse.connections:type_name -> pantherclaw.v1.Connection
+	7,  // 16: pantherclaw.v1.CreateConnectionResponse.connection:type_name -> pantherclaw.v1.Connection
+	7,  // 17: pantherclaw.v1.GetConnectionResponse.connection:type_name -> pantherclaw.v1.Connection
+	9,  // 18: pantherclaw.v1.GetConnectionResponse.active_credential:type_name -> pantherclaw.v1.ConnectionCredential
+	7,  // 19: pantherclaw.v1.ListConnectionsResponse.connections:type_name -> pantherclaw.v1.Connection
 	4,  // 20: pantherclaw.v1.UpdateConnectionRequest.destination_class:type_name -> pantherclaw.v1.DestinationClass
 	3,  // 21: pantherclaw.v1.UpdateConnectionRequest.access_mode:type_name -> pantherclaw.v1.AccessMode
 	2,  // 22: pantherclaw.v1.UpdateConnectionRequest.default_mode:type_name -> pantherclaw.v1.RouteMode
-	6,  // 23: pantherclaw.v1.UpdateConnectionResponse.connection:type_name -> pantherclaw.v1.Connection
+	7,  // 23: pantherclaw.v1.UpdateConnectionResponse.connection:type_name -> pantherclaw.v1.Connection
 	2,  // 24: pantherclaw.v1.SetRouteModeRequest.mode:type_name -> pantherclaw.v1.RouteMode
-	6,  // 25: pantherclaw.v1.SetRouteModeResponse.connection:type_name -> pantherclaw.v1.Connection
-	6,  // 26: pantherclaw.v1.QuarantineConnectionResponse.connection:type_name -> pantherclaw.v1.Connection
-	6,  // 27: pantherclaw.v1.RestoreConnectionResponse.connection:type_name -> pantherclaw.v1.Connection
-	8,  // 28: pantherclaw.v1.PutCredentialResponse.credential:type_name -> pantherclaw.v1.ConnectionCredential
-	8,  // 29: pantherclaw.v1.ListCredentialsResponse.credentials:type_name -> pantherclaw.v1.ConnectionCredential
-	9,  // 30: pantherclaw.v1.ConnectionService.CreateConnection:input_type -> pantherclaw.v1.CreateConnectionRequest
-	11, // 31: pantherclaw.v1.ConnectionService.GetConnection:input_type -> pantherclaw.v1.GetConnectionRequest
-	13, // 32: pantherclaw.v1.ConnectionService.ListConnections:input_type -> pantherclaw.v1.ListConnectionsRequest
-	15, // 33: pantherclaw.v1.ConnectionService.UpdateConnection:input_type -> pantherclaw.v1.UpdateConnectionRequest
-	17, // 34: pantherclaw.v1.ConnectionService.SetRouteMode:input_type -> pantherclaw.v1.SetRouteModeRequest
-	19, // 35: pantherclaw.v1.ConnectionService.QuarantineConnection:input_type -> pantherclaw.v1.QuarantineConnectionRequest
-	21, // 36: pantherclaw.v1.ConnectionService.RestoreConnection:input_type -> pantherclaw.v1.RestoreConnectionRequest
-	23, // 37: pantherclaw.v1.ConnectionService.RetireConnection:input_type -> pantherclaw.v1.RetireConnectionRequest
-	25, // 38: pantherclaw.v1.ConnectionService.GetSealingKey:input_type -> pantherclaw.v1.GetSealingKeyRequest
-	27, // 39: pantherclaw.v1.ConnectionService.PutCredential:input_type -> pantherclaw.v1.PutCredentialRequest
-	29, // 40: pantherclaw.v1.ConnectionService.ListCredentials:input_type -> pantherclaw.v1.ListCredentialsRequest
-	31, // 41: pantherclaw.v1.ConnectionService.RevokeCredential:input_type -> pantherclaw.v1.RevokeCredentialRequest
-	10, // 42: pantherclaw.v1.ConnectionService.CreateConnection:output_type -> pantherclaw.v1.CreateConnectionResponse
-	12, // 43: pantherclaw.v1.ConnectionService.GetConnection:output_type -> pantherclaw.v1.GetConnectionResponse
-	14, // 44: pantherclaw.v1.ConnectionService.ListConnections:output_type -> pantherclaw.v1.ListConnectionsResponse
-	16, // 45: pantherclaw.v1.ConnectionService.UpdateConnection:output_type -> pantherclaw.v1.UpdateConnectionResponse
-	18, // 46: pantherclaw.v1.ConnectionService.SetRouteMode:output_type -> pantherclaw.v1.SetRouteModeResponse
-	20, // 47: pantherclaw.v1.ConnectionService.QuarantineConnection:output_type -> pantherclaw.v1.QuarantineConnectionResponse
-	22, // 48: pantherclaw.v1.ConnectionService.RestoreConnection:output_type -> pantherclaw.v1.RestoreConnectionResponse
-	24, // 49: pantherclaw.v1.ConnectionService.RetireConnection:output_type -> pantherclaw.v1.RetireConnectionResponse
-	26, // 50: pantherclaw.v1.ConnectionService.GetSealingKey:output_type -> pantherclaw.v1.GetSealingKeyResponse
-	28, // 51: pantherclaw.v1.ConnectionService.PutCredential:output_type -> pantherclaw.v1.PutCredentialResponse
-	30, // 52: pantherclaw.v1.ConnectionService.ListCredentials:output_type -> pantherclaw.v1.ListCredentialsResponse
-	32, // 53: pantherclaw.v1.ConnectionService.RevokeCredential:output_type -> pantherclaw.v1.RevokeCredentialResponse
-	42, // [42:54] is the sub-list for method output_type
-	30, // [30:42] is the sub-list for method input_type
-	30, // [30:30] is the sub-list for extension type_name
-	30, // [30:30] is the sub-list for extension extendee
-	0,  // [0:30] is the sub-list for field type_name
+	7,  // 25: pantherclaw.v1.SetRouteModeResponse.connection:type_name -> pantherclaw.v1.Connection
+	7,  // 26: pantherclaw.v1.QuarantineConnectionResponse.connection:type_name -> pantherclaw.v1.Connection
+	7,  // 27: pantherclaw.v1.RestoreConnectionResponse.connection:type_name -> pantherclaw.v1.Connection
+	9,  // 28: pantherclaw.v1.PutCredentialResponse.credential:type_name -> pantherclaw.v1.ConnectionCredential
+	9,  // 29: pantherclaw.v1.ListCredentialsResponse.credentials:type_name -> pantherclaw.v1.ConnectionCredential
+	6,  // 30: pantherclaw.v1.CapabilitySupport.level:type_name -> pantherclaw.v1.CapabilityLevel
+	2,  // 31: pantherclaw.v1.ConnectionOperation.mode:type_name -> pantherclaw.v1.RouteMode
+	34, // 32: pantherclaw.v1.ConnectionCapabilities.discovery:type_name -> pantherclaw.v1.CapabilitySupport
+	34, // 33: pantherclaw.v1.ConnectionCapabilities.observation:type_name -> pantherclaw.v1.CapabilitySupport
+	34, // 34: pantherclaw.v1.ConnectionCapabilities.enforcement:type_name -> pantherclaw.v1.CapabilitySupport
+	34, // 35: pantherclaw.v1.ConnectionCapabilities.response:type_name -> pantherclaw.v1.CapabilitySupport
+	35, // 36: pantherclaw.v1.ConnectionCapabilities.operations:type_name -> pantherclaw.v1.ConnectionOperation
+	36, // 37: pantherclaw.v1.ConnectionCapabilities.permissions:type_name -> pantherclaw.v1.ConnectionPermission
+	37, // 38: pantherclaw.v1.ConnectionCapabilities.limits:type_name -> pantherclaw.v1.ConnectionLimit
+	38, // 39: pantherclaw.v1.GetConnectionCapabilitiesResponse.capabilities:type_name -> pantherclaw.v1.ConnectionCapabilities
+	10, // 40: pantherclaw.v1.ConnectionService.CreateConnection:input_type -> pantherclaw.v1.CreateConnectionRequest
+	12, // 41: pantherclaw.v1.ConnectionService.GetConnection:input_type -> pantherclaw.v1.GetConnectionRequest
+	14, // 42: pantherclaw.v1.ConnectionService.ListConnections:input_type -> pantherclaw.v1.ListConnectionsRequest
+	16, // 43: pantherclaw.v1.ConnectionService.UpdateConnection:input_type -> pantherclaw.v1.UpdateConnectionRequest
+	18, // 44: pantherclaw.v1.ConnectionService.SetRouteMode:input_type -> pantherclaw.v1.SetRouteModeRequest
+	20, // 45: pantherclaw.v1.ConnectionService.QuarantineConnection:input_type -> pantherclaw.v1.QuarantineConnectionRequest
+	22, // 46: pantherclaw.v1.ConnectionService.RestoreConnection:input_type -> pantherclaw.v1.RestoreConnectionRequest
+	24, // 47: pantherclaw.v1.ConnectionService.RetireConnection:input_type -> pantherclaw.v1.RetireConnectionRequest
+	26, // 48: pantherclaw.v1.ConnectionService.GetSealingKey:input_type -> pantherclaw.v1.GetSealingKeyRequest
+	28, // 49: pantherclaw.v1.ConnectionService.PutCredential:input_type -> pantherclaw.v1.PutCredentialRequest
+	30, // 50: pantherclaw.v1.ConnectionService.ListCredentials:input_type -> pantherclaw.v1.ListCredentialsRequest
+	32, // 51: pantherclaw.v1.ConnectionService.RevokeCredential:input_type -> pantherclaw.v1.RevokeCredentialRequest
+	39, // 52: pantherclaw.v1.ConnectionService.GetConnectionCapabilities:input_type -> pantherclaw.v1.GetConnectionCapabilitiesRequest
+	11, // 53: pantherclaw.v1.ConnectionService.CreateConnection:output_type -> pantherclaw.v1.CreateConnectionResponse
+	13, // 54: pantherclaw.v1.ConnectionService.GetConnection:output_type -> pantherclaw.v1.GetConnectionResponse
+	15, // 55: pantherclaw.v1.ConnectionService.ListConnections:output_type -> pantherclaw.v1.ListConnectionsResponse
+	17, // 56: pantherclaw.v1.ConnectionService.UpdateConnection:output_type -> pantherclaw.v1.UpdateConnectionResponse
+	19, // 57: pantherclaw.v1.ConnectionService.SetRouteMode:output_type -> pantherclaw.v1.SetRouteModeResponse
+	21, // 58: pantherclaw.v1.ConnectionService.QuarantineConnection:output_type -> pantherclaw.v1.QuarantineConnectionResponse
+	23, // 59: pantherclaw.v1.ConnectionService.RestoreConnection:output_type -> pantherclaw.v1.RestoreConnectionResponse
+	25, // 60: pantherclaw.v1.ConnectionService.RetireConnection:output_type -> pantherclaw.v1.RetireConnectionResponse
+	27, // 61: pantherclaw.v1.ConnectionService.GetSealingKey:output_type -> pantherclaw.v1.GetSealingKeyResponse
+	29, // 62: pantherclaw.v1.ConnectionService.PutCredential:output_type -> pantherclaw.v1.PutCredentialResponse
+	31, // 63: pantherclaw.v1.ConnectionService.ListCredentials:output_type -> pantherclaw.v1.ListCredentialsResponse
+	33, // 64: pantherclaw.v1.ConnectionService.RevokeCredential:output_type -> pantherclaw.v1.RevokeCredentialResponse
+	40, // 65: pantherclaw.v1.ConnectionService.GetConnectionCapabilities:output_type -> pantherclaw.v1.GetConnectionCapabilitiesResponse
+	53, // [53:66] is the sub-list for method output_type
+	40, // [40:53] is the sub-list for method input_type
+	40, // [40:40] is the sub-list for extension type_name
+	40, // [40:40] is the sub-list for extension extendee
+	0,  // [0:40] is the sub-list for field type_name
 }
 
 func init() { file_pantherclaw_v1_connections_proto_init() }
@@ -2662,8 +3280,8 @@ func file_pantherclaw_v1_connections_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pantherclaw_v1_connections_proto_rawDesc), len(file_pantherclaw_v1_connections_proto_rawDesc)),
-			NumEnums:      6,
-			NumMessages:   27,
+			NumEnums:      7,
+			NumMessages:   34,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

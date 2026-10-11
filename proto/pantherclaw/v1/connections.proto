@@ -68,6 +68,14 @@ service ConnectionService {
   // RevokeCredential revokes the active credential at once.
   // permission: connection.manage
   rpc RevokeCredential(RevokeCredentialRequest) returns (RevokeCredentialResponse);
+  // GetConnectionCapabilities returns what a connection declares it
+  // supports: discovery, observation, enforcement and response, its
+  // operations, permissions with reasons, limits and failure behavior
+  // (F346).
+  // permission: connection.read
+  rpc GetConnectionCapabilities(GetConnectionCapabilitiesRequest) returns (GetConnectionCapabilitiesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 }
 
 // ConnectionKind is what a connection reaches.
@@ -542,3 +550,104 @@ message RevokeCredentialRequest {
 
 // RevokeCredentialResponse confirms it.
 message RevokeCredentialResponse {}
+
+// Capability declarations of connections (G0 M8 track C, F346–F350). A
+// declaration follows from the connection's kind, access mode and reviewed
+// package, never from a setting; it says what the connection can do, not
+// what it was shown to do (coverage, M9).
+
+// CapabilityLevel is how far a connection supports a capability (F347).
+enum CapabilityLevel {
+  CAPABILITY_LEVEL_UNSPECIFIED = 0;
+  // The connection does it.
+  CAPABILITY_LEVEL_SUPPORTED = 1;
+  // Only as far as a cooperative agent or an opaque server lets it
+  // (HR-024, HR-086).
+  CAPABILITY_LEVEL_PARTIAL = 2;
+  // It cannot.
+  CAPABILITY_LEVEL_UNSUPPORTED = 3;
+}
+
+// CapabilitySupport is one capability's level and why.
+message CapabilitySupport {
+  // Level.
+  CapabilityLevel level = 1;
+  // Why, for people.
+  string detail = 2;
+}
+
+// ConnectionOperation is one operation a connection serves (F348).
+message ConnectionOperation {
+  // Operation, for example payments.refund.create.
+  string operation = 1;
+  // The definition's summary.
+  string summary = 2;
+  // Route of the package.
+  string route = 3;
+  // The definition's access: read or write.
+  string access = 4;
+  // Target type.
+  string target_type = 5;
+  // Reversibility: reversible, compensatable or irreversible.
+  string reversibility = 6;
+  // Whether the definition declares a verifier, so the effect can be
+  // observed after dispatch (M7).
+  bool verified = 7;
+  // The route's mode on the connection.
+  RouteMode mode = 8;
+}
+
+// ConnectionPermission is something the connection's credential is used
+// for, with the operations that need it (F349).
+message ConnectionPermission {
+  // The permission.
+  string name = 1;
+  // The operations that need it.
+  repeated string reasons = 2;
+}
+
+// ConnectionLimit is something the connection does not do (F350).
+message ConnectionLimit {
+  // A stable code, for example OPERATION_NOT_SERVED.
+  string code = 1;
+  // Why, for people.
+  string detail = 2;
+}
+
+// ConnectionCapabilities is a connection's declaration (F346).
+message ConnectionCapabilities {
+  // Connection id.
+  string connection_id = 1;
+  // Discovery: unknown workloads and, for MCP, upstream tools.
+  CapabilitySupport discovery = 2;
+  // Observation: decisions recorded, monitor mode.
+  CapabilitySupport observation = 3;
+  // Enforcement: whether a decision stops the call.
+  CapabilitySupport enforcement = 4;
+  // Response: quarantine, the kill switch, credential revocation.
+  CapabilitySupport response = 5;
+  // The response controls that apply: quarantine, kill_switch,
+  // revoke_credential, rotate_credential.
+  repeated string response_actions = 6;
+  // Operations it serves.
+  repeated ConnectionOperation operations = 7;
+  // What PantherClaw's credential for it is used for; empty when it holds
+  // none.
+  repeated ConnectionPermission permissions = 8;
+  // What it does not do.
+  repeated ConnectionLimit limits = 9;
+  // How it behaves when something fails, one statement each.
+  repeated string failure_behavior = 10;
+}
+
+// GetConnectionCapabilitiesRequest names a connection.
+message GetConnectionCapabilitiesRequest {
+  // Connection id.
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// GetConnectionCapabilitiesResponse returns its declaration.
+message GetConnectionCapabilitiesResponse {
+  // The declaration.
+  ConnectionCapabilities capabilities = 1;
+}

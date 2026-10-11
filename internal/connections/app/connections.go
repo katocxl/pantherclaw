@@ -231,19 +231,10 @@ func routes(ctx context.Context, q *dbq.Queries, org ids.OrgID, pkg, kind string
 		return nil, ErrPackage
 	}
 	var out []string
-	for _, d := range p.Definitions {
-		for _, m := range d.Mappings {
-			serves := false
-			switch kind {
-			case KindHTTP:
-				serves = d.Dispatch != nil && d.Dispatch.HTTP != nil && m.Channel != domain.ChannelHook
-			case KindMCP:
-				serves = d.Dispatch != nil && d.Dispatch.MCP != nil && m.Channel != domain.ChannelHook
-			case KindLocal:
-				serves = m.Channel == domain.ChannelHook || m.Channel == domain.ChannelMCP
-			}
-			if serves && !slices.Contains(out, m.Route) {
-				out = append(out, m.Route)
+	for i := range p.Definitions {
+		for _, r := range servedRoutes(kind, &p.Definitions[i]) {
+			if !slices.Contains(out, r) {
+				out = append(out, r)
 			}
 		}
 	}
@@ -252,6 +243,27 @@ func routes(ctx context.Context, q *dbq.Queries, org ids.OrgID, pkg, kind string
 	}
 	slices.Sort(out)
 	return out, nil
+}
+
+// servedRoutes are the routes of d a connection of this kind serves, in
+// mapping order.
+func servedRoutes(kind string, d *domain.Definition) []string {
+	var out []string
+	for _, m := range d.Mappings {
+		serves := false
+		switch kind {
+		case KindHTTP:
+			serves = d.Dispatch != nil && d.Dispatch.HTTP != nil && m.Channel != domain.ChannelHook
+		case KindMCP:
+			serves = d.Dispatch != nil && d.Dispatch.MCP != nil && m.Channel != domain.ChannelHook
+		case KindLocal:
+			serves = m.Channel == domain.ChannelHook || m.Channel == domain.ChannelMCP
+		}
+		if serves && !slices.Contains(out, m.Route) {
+			out = append(out, m.Route)
+		}
+	}
+	return out
 }
 
 // shape checks the fields that depend on the kind and access mode, and

@@ -63,6 +63,9 @@ const (
 	// ConnectionServiceRevokeCredentialProcedure is the procedure name of the ConnectionService's
 	// RevokeCredential RPC.
 	ConnectionServiceRevokeCredentialProcedure = "/pantherclaw.v1.ConnectionService/RevokeCredential"
+	// ConnectionServiceGetConnectionCapabilitiesProcedure is the procedure name of the
+	// ConnectionService's GetConnectionCapabilities RPC.
+	ConnectionServiceGetConnectionCapabilitiesProcedure = "/pantherclaw.v1.ConnectionService/GetConnectionCapabilities"
 )
 
 var (
@@ -154,6 +157,14 @@ var (
 			Procedure:  ConnectionServiceRevokeCredentialProcedure,
 		}
 	})
+	connectionServiceGetConnectionCapabilitiesSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_pantherclaw_v1_connections_proto.Services().ByName("ConnectionService").Methods().ByName("GetConnectionCapabilities"),
+			Procedure:        ConnectionServiceGetConnectionCapabilitiesProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
 )
 
 // ConnectionServiceClient is a client for the pantherclaw.v1.ConnectionService service.
@@ -201,6 +212,12 @@ type ConnectionServiceClient interface {
 	// RevokeCredential revokes the active credential at once.
 	// permission: connection.manage
 	RevokeCredential(context.Context, *v1.RevokeCredentialRequest) (*v1.RevokeCredentialResponse, error)
+	// GetConnectionCapabilities returns what a connection declares it
+	// supports: discovery, observation, enforcement and response, its
+	// operations, permissions with reasons, limits and failure behavior
+	// (F346).
+	// permission: connection.read
+	GetConnectionCapabilities(context.Context, *v1.GetConnectionCapabilitiesRequest) (*v1.GetConnectionCapabilitiesResponse, error)
 }
 
 // NewConnectionServiceClient constructs a client for the pantherclaw.v1.ConnectionService service.
@@ -254,6 +271,12 @@ type ConnectionServiceHandler interface {
 	// RevokeCredential revokes the active credential at once.
 	// permission: connection.manage
 	RevokeCredential(context.Context, *v1.RevokeCredentialRequest) (*v1.RevokeCredentialResponse, error)
+	// GetConnectionCapabilities returns what a connection declares it
+	// supports: discovery, observation, enforcement and response, its
+	// operations, permissions with reasons, limits and failure behavior
+	// (F346).
+	// permission: connection.read
+	GetConnectionCapabilities(context.Context, *v1.GetConnectionCapabilitiesRequest) (*v1.GetConnectionCapabilitiesResponse, error)
 }
 
 // RegisterConnectionServiceHandler registers svc as the pantherclaw.v1.ConnectionService
@@ -273,6 +296,7 @@ func RegisterConnectionServiceHandler(server *connect.Server, svc ConnectionServ
 		connect.Method{Spec: connectionServicePutCredentialSpec(), Handler: adapter.putCredential},
 		connect.Method{Spec: connectionServiceListCredentialsSpec(), Handler: adapter.listCredentials},
 		connect.Method{Spec: connectionServiceRevokeCredentialSpec(), Handler: adapter.revokeCredential},
+		connect.Method{Spec: connectionServiceGetConnectionCapabilitiesSpec(), Handler: adapter.getConnectionCapabilities},
 	)
 }
 
@@ -325,6 +349,10 @@ func (UnimplementedConnectionServiceHandler) ListCredentials(context.Context, *v
 
 func (UnimplementedConnectionServiceHandler) RevokeCredential(context.Context, *v1.RevokeCredentialRequest) (*v1.RevokeCredentialResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.ConnectionService.RevokeCredential is not implemented")
+}
+
+func (UnimplementedConnectionServiceHandler) GetConnectionCapabilities(context.Context, *v1.GetConnectionCapabilitiesRequest) (*v1.GetConnectionCapabilitiesResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.ConnectionService.GetConnectionCapabilities is not implemented")
 }
 
 type connectionServiceClient struct {
@@ -422,6 +450,14 @@ func (c *connectionServiceClient) ListCredentials(ctx context.Context, req *v1.L
 func (c *connectionServiceClient) RevokeCredential(ctx context.Context, req *v1.RevokeCredentialRequest) (*v1.RevokeCredentialResponse, error) {
 	var res v1.RevokeCredentialResponse
 	if err := c.client.CallUnary(ctx, connectionServiceRevokeCredentialSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *connectionServiceClient) GetConnectionCapabilities(ctx context.Context, req *v1.GetConnectionCapabilitiesRequest) (*v1.GetConnectionCapabilitiesResponse, error) {
+	var res v1.GetConnectionCapabilitiesResponse
+	if err := c.client.CallUnary(ctx, connectionServiceGetConnectionCapabilitiesSpec(), req, &res); err != nil {
 		return nil, err
 	}
 	return &res, nil
@@ -567,6 +603,18 @@ func (h connectionServiceHandler) revokeCredential(ctx context.Context, _ connec
 		return err
 	}
 	res, err := h.svc.RevokeCredential(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h connectionServiceHandler) getConnectionCapabilities(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetConnectionCapabilitiesRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetConnectionCapabilities(ctx, &req)
 	if err != nil {
 		return err
 	}

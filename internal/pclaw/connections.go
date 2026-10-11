@@ -167,5 +167,10 @@ func connectionCommands() map[string]command {
 				return c.connections.RetireConnection(ctx, &pb.RetireConnectionRequest{Id: a[0]})
 			}
 		}),
+		"connection capabilities": rpc("connection capabilities ID", 1, func(*flag.FlagSet) call {
+			return func(ctx context.Context, c clients, a []string) (proto.Message, error) {
+				return c.connections.GetConnectionCapabilities(ctx, &pb.GetConnectionCapabilitiesRequest{Id: a[0]})
+			}
+		}),
 	}
 }
