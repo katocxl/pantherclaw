@@ -316,8 +316,19 @@ message CoverageProbeResult {
   string observed = 4;
   // Whether observed equals expect.
   bool passed = 5;
-  // Detail from the probe; untrusted text.
+  // Detail from the probe, at most 512 characters. UNTRUSTED: it comes
+  // from the launcher's host; show it as text in the untrusted block.
   string detail = 6;
+}
+
+// CoverageConfigCheck is one of pclaw's checks of the agent container.
+message CoverageConfigCheck {
+  // Check id, e.g. "agent_no_docker_socket".
+  string id = 1;
+  // Whether the check passed.
+  bool ok = 2;
+  // Detail, at most 512 characters. UNTRUSTED, like a probe's.
+  string detail = 3;
 }
 
 // CoverageClosure is the closure evidence of one sandbox session for one
@@ -331,7 +342,9 @@ message CoverageClosure {
   string connection_id = 3;
   // The sandbox session that produced it.
   string sandbox_session_id = 4;
-  // Whether every required probe, both controls and the canary passed.
+  // Whether the evidence is sound: every result and configuration check
+  // passed, with the named controls and the canary (PASSED). What it
+  // proves is closed_kinds.
   bool passed = 5;
   // Every result.
   repeated CoverageProbeResult probes = 6;
@@ -349,7 +362,8 @@ message CoverageClosure {
   string runtime = 12;
   // Image digests of the session.
   repeated string image_digests = 13;
-  // The gateway, connection revision and package version it is bound to.
+  // The gateway, connection revision, package version and credential
+  // version its session opened under.
   string gateway_id = 14;
   // Connection revision.
   int32 connection_revision = 15;
@@ -361,6 +375,11 @@ message CoverageClosure {
   google.protobuf.Timestamp expire_time = 18;
   // Recording time.
   google.protobuf.Timestamp record_time = 19;
+  // pclaw's checks of the agent container.
+  repeated CoverageConfigCheck config_checks = 20;
+  // The active sealed credential's version; absent when the connection
+  // had none.
+  optional int32 credential_version = 21;
 }
 
 // GetClosureRequest names a closure.
