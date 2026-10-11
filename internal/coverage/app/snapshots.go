@@ -145,5 +145,8 @@ func (s *Service) reassess(ctx context.Context, tx db.TenantTx, sc domain.Scope,
 		InvalidationID: cause, Body: body, BodySha256: digest[:], LedgerEntryID: entry.ID, ExpiresAt: r.ExpiresAt,
 		ComputedAt: now.Truncate(time.Microsecond),
 	})
-	return err == nil, err
+	if err != nil {
+		return false, err
+	}
+	return true, deriveLifecycle(ctx, tx, sc.Agent, now)
 }

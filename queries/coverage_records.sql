@@ -288,3 +288,17 @@ LIMIT 1;
 -- name: CoverageSnapshotEntries :many
 SELECT ledger_entry_id FROM pc.coverage_snapshots
 WHERE org_id = sqlc.arg(org_id) AND id = ANY (sqlc.arg(snapshot_ids)::uuid[]);
+
+-- The current snapshot of each of an agent's scopes, whether a whole-scope
+-- exclusion applied, and whether an invalidating change followed it.
+-- name: CurrentCoverageOfAgent :many
+SELECT DISTINCT ON (s.connection_id, s.operation) s.id, s.state, s.expires_at,
+    ((s.body ->> 'excluded')::boolean IS TRUE)::boolean AS excluded,
+    EXISTS (SELECT 1 FROM pc.coverage_invalidations i
+            WHERE i.org_id = s.org_id AND i.connection_id = s.connection_id
+              AND (i.agent_id IS NULL OR i.agent_id = s.agent_id) AND i.occurred_at > s.computed_at
+              AND i.kind NOT IN ('exclusion', 'evidence_expired'))::boolean AS changed
+FROM pc.coverage_snapshots s
+WHERE s.org_id = sqlc.arg(org_id) AND s.agent_id = sqlc.arg(agent_id)
+ORDER BY s.connection_id, s.operation, s.id DESC
+LIMIT 1000;

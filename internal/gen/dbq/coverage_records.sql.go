@@ -394,6 +394,55 @@ func (q *Queries) CoverageTrafficAfter(ctx context.Context, orgID ids.OrgID, aft
 	return items, nil
 }
 
+const currentCoverageOfAgent = `-- name: CurrentCoverageOfAgent :many
+SELECT DISTINCT ON (s.connection_id, s.operation) s.id, s.state, s.expires_at,
+    ((s.body ->> 'excluded')::boolean IS TRUE)::boolean AS excluded,
+    EXISTS (SELECT 1 FROM pc.coverage_invalidations i
+            WHERE i.org_id = s.org_id AND i.connection_id = s.connection_id
+              AND (i.agent_id IS NULL OR i.agent_id = s.agent_id) AND i.occurred_at > s.computed_at
+              AND i.kind NOT IN ('exclusion', 'evidence_expired'))::boolean AS changed
+FROM pc.coverage_snapshots s
+WHERE s.org_id = $1 AND s.agent_id = $2
+ORDER BY s.connection_id, s.operation, s.id DESC
+LIMIT 1000
+`
+
+type CurrentCoverageOfAgentRow struct {
+	ID        ids.UUID
+	State     string
+	ExpiresAt *time.Time
+	Excluded  bool
+	Changed   bool
+}
+
+// The current snapshot of each of an agent's scopes, whether a whole-scope
+// exclusion applied, and whether an invalidating change followed it.
+func (q *Queries) CurrentCoverageOfAgent(ctx context.Context, orgID ids.OrgID, agentID ids.UUID) ([]CurrentCoverageOfAgentRow, error) {
+	rows, err := q.db.Query(ctx, currentCoverageOfAgent, orgID, agentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []CurrentCoverageOfAgentRow{}
+	for rows.Next() {
+		var i CurrentCoverageOfAgentRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.State,
+			&i.ExpiresAt,
+			&i.Excluded,
+			&i.Changed,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const currentCoverageSnapshot = `-- name: CurrentCoverageSnapshot :one
 SELECT org_id, id, agent_id, connection_id, operation, state, reasons, closure_id, last_valid_id, invalidation_id, body, body_sha256, ledger_entry_id, computed_at, expires_at FROM pc.coverage_snapshots
 WHERE org_id = $1 AND agent_id = $2 AND connection_id = $3
