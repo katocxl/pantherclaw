@@ -35,7 +35,9 @@ export * from "./pap.ts";
 export {
   type ActionClaims,
   actionTokenKid,
+  DEFAULT_MAX_BODY,
   MemoryStore,
+  middleware,
   Refusal,
   type RefusalCode,
   type ReplayStore,
