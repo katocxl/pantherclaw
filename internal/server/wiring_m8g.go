@@ -6,10 +6,15 @@ package server
 import (
 	"context"
 
+	"connectrpc.com/connect/v2"
+
 	"github.com/katocxl/pantherclaw/internal/definitions/manifest"
 	factspg "github.com/katocxl/pantherclaw/internal/facts/adapters/pgstore"
 	factsapp "github.com/katocxl/pantherclaw/internal/facts/app"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
+	"github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1/pantherclawv1connect"
+	"github.com/katocxl/pantherclaw/internal/github/adapters/githubrpc"
+	githubapp "github.com/katocxl/pantherclaw/internal/github/app"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 )
@@ -62,4 +67,10 @@ func packageFacts(pool *db.Pool) factsapp.PackageFacts {
 		}, db.ReadOnly())
 		return out, err
 	}
+}
+
+// registerM8G mounts the M8 track G services people use: the GitHub
+// identity links independence compares (HR-207).
+func registerM8G(rs *connect.Server, pool *db.Pool) {
+	pantherclawv1connect.RegisterGitHubServiceHandler(rs, githubrpc.New(&githubapp.Service{Pool: pool}))
 }
