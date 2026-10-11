@@ -272,7 +272,9 @@ func (v *Verifier) key(ctx context.Context, kid string) (ed25519.PublicKey, erro
 	v.mu.Lock()
 	now := v.cfg.Now()
 	stale := v.keys == nil || now.Sub(v.fetched) >= jwksMaxAge
-	if (stale || v.keys[kid] == nil) && (v.tried.IsZero() || now.Sub(v.tried) >= jwksMinGap || stale) {
+	// A verification that needs the keys waits for a fetch in flight, even
+	// one started within the minute (a burst after a key rotation).
+	if (stale || v.keys[kid] == nil) && (v.tried.IsZero() || now.Sub(v.tried) >= jwksMinGap || stale || v.flight != nil) {
 		flight := v.flight
 		if flight == nil {
 			v.tried, v.flight = now, make(chan struct{})
