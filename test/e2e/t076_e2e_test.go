@@ -15,8 +15,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/katocxl/pantherclaw/internal/evidence/capture"
 	evapp "github.com/katocxl/pantherclaw/internal/evidence/app"
+	"github.com/katocxl/pantherclaw/internal/evidence/capture"
 	"github.com/katocxl/pantherclaw/internal/evidence/pack"
 	"github.com/katocxl/pantherclaw/internal/evidence/packbuild"
 	"github.com/katocxl/pantherclaw/internal/keystore"

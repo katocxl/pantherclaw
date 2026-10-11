@@ -43,6 +43,9 @@ func newSource(s *pipelinetest.Scenario) *source {
 func (x *source) Receipt(_ context.Context, org ids.OrgID, txn ids.UUID, evaluation int) (string, error) {
 	x.reads++
 	if r := x.s.W.Receipt(txn, evaluation); r != "" && org == x.s.Org {
+		if x.missing["receipt body"] {
+			return "", nil // retention removed it; the row stays
+		}
 		return r, nil
 	}
 	return "", replay.ErrNotFound
@@ -271,6 +274,9 @@ func TestHR197_RemovedOrTruncatedInputsGiveAnIncompleteReplay(t *testing.T) {
 	f.src.missing["bundle"] = true
 	check("a policy version gone", replay.IncompleteInputUnavailable, pipeline.StepFacts)
 	f.src.missing["bundle"] = false
+	f.src.missing["receipt body"] = true
+	check("a receipt body removed by retention", replay.IncompleteReceiptRemoved, 0)
+	f.src.missing["receipt body"] = false
 
 	if out := f.replay(t, ok, nil); !out.Reproduced {
 		t.Fatalf("restored: %+v", out)
