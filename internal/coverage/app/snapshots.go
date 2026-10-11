@@ -124,12 +124,7 @@ func snapshotOf(sc domain.Scope, r domain.Result, exclusions []domain.Exclusion)
 	for _, x := range exclusions {
 		s.Exclusions = append(s.Exclusions, x.ID)
 	}
-	for _, rt := range r.Routes {
-		s.Routes = append(s.Routes, SnapshotRoute{
-			Kind: string(rt.Kind), Channel: string(rt.Channel), Locator: rt.Locator, Route: optID(rt.Route),
-			Status: string(rt.Status), Closure: optID(rt.Closure),
-		})
-	}
+	s.Routes = append(s.Routes, RoutesOf(r)...)
 	return s
 }
 
@@ -221,4 +216,16 @@ func entryOf(s Snapshot) ([]byte, error) {
 		e.Exclusions = []ids.UUID{}
 	}
 	return evdomain.CanonicalBody(e)
+}
+
+// RoutesOf is a computed result's routes as a snapshot records them.
+func RoutesOf(r domain.Result) []SnapshotRoute {
+	out := make([]SnapshotRoute, 0, len(r.Routes))
+	for _, rt := range r.Routes {
+		out = append(out, SnapshotRoute{
+			Kind: string(rt.Kind), Channel: string(rt.Channel), Locator: rt.Locator, Route: optID(rt.Route),
+			Status: string(rt.Status), Closure: optID(rt.Closure),
+		})
+	}
+	return out
 }

@@ -18,8 +18,16 @@
 <h2>Routes</h2>
 <p class="note">Every way to produce this effect. A route no source showed is <em>not observed</em>, which is not proof that it does not exist.</p>
 <table>
-<thead><tr><th>Route</th><th>Status</th></tr></thead>
-<tbody>{{range .Routes}}<tr><td class="untrusted">{{.Name}}</td><td class="{{.Class}}">{{.Status}}</td></tr>{{end}}</tbody>
+<thead><tr><th>Route</th><th>Status</th><th>Evidence</th></tr></thead>
+<tbody>{{range .Routes}}<tr><td class="untrusted">{{.Name}}</td><td class="{{.Class}}">{{.Status}}</td><td>{{if .Evidence}}<code>{{.Evidence}}</code>{{end}}</td></tr>{{end}}</tbody>
+</table>
+{{end}}
+{{if .Changes}}
+<h2>Since the previous snapshot</h2>
+<p class="note">What changed between the snapshot computed {{.Before}} and the one computed {{.After}}.</p>
+<table>
+<thead><tr><th>What</th><th>Before</th><th>After</th></tr></thead>
+<tbody>{{range .Changes}}<tr><td class="untrusted">{{.What}}</td><td>{{.Before}}</td><td>{{.After}}</td></tr>{{end}}</tbody>
 </table>
 {{end}}
 {{if .LastValid}}
@@ -32,6 +40,6 @@
 <ul>{{range .Excluded}}<li>{{.Scope}}, by <code>{{.By}}</code> until {{.Until}}: <span class="untrusted">{{.Reason}}</span></li>{{end}}</ul>
 {{end}}
 <h2>Freshness</h2>
-<p class="note">ENFORCED holds for {{.TTL}} from its sandbox evidence. Any of these drops it to PARTIAL at once: {{.Kinds}}.</p>
+<p class="note">ENFORCED holds for {{.TTL}} from its sandbox evidence. Any of these drops it to at most PARTIAL at once: {{.Kinds}}.</p>
 <p><a href="/coverage">All coverage records</a></p>
 {{template "foot" .}}
