@@ -687,14 +687,22 @@ message ConnectionTest {
   string id = 1;
   // Connection id.
   string connection_id = 2;
-  // Result.
+  // Result, once the test is done.
   ConnectionTestResult result = 3;
   // The checks, in order.
   repeated ConnectionTestCheck checks = 4;
-  // Who ran it.
-  string tested_by = 5;
-  // When.
-  google.protobuf.Timestamp test_time = 6;
+  // Who asked for it.
+  string requested_by = 5;
+  // When it finished; unset while it runs.
+  google.protobuf.Timestamp finish_time = 6;
+  // credential (checks what the connection depends on, without calling
+  // the target), read (a harmless read through the gateway) or
+  // target_verifier (the target refuses calls without a valid token).
+  string kind = 7;
+  // PENDING, RUNNING, DONE (with a result) or FAILED (could not run).
+  string state = 8;
+  // When it was asked for.
+  google.protobuf.Timestamp create_time = 9;
 }
 
 // TestConnectionRequest names a connection.

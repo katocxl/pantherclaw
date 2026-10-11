@@ -60,8 +60,11 @@ var testResults = map[string]pb.ConnectionTestResult{
 
 func testOf(t capp.TestResult) *pb.ConnectionTest {
 	out := &pb.ConnectionTest{
-		Id: t.ID.String(), ConnectionId: t.Connection.String(), Result: testResults[t.Result], TestedBy: t.TestedBy,
-		TestTime: timestamppb.New(t.TestedAt),
+		Id: t.ID.String(), ConnectionId: t.Connection.String(), Result: testResults[t.Result], RequestedBy: t.RequestedBy, Kind: t.Kind,
+		State: t.State, CreateTime: timestamppb.New(t.CreatedAt),
+	}
+	if t.FinishedAt != nil {
+		out.FinishTime = timestamppb.New(*t.FinishedAt)
 	}
 	for _, c := range t.Checks {
 		out.Checks = append(out.Checks, &pb.ConnectionTestCheck{Check: c.Check, Passed: c.Passed, Detail: c.Detail})

@@ -209,52 +209,60 @@ func (q *Queries) InsertConnectionRoute(ctx context.Context, arg InsertConnectio
 	return err
 }
 
-const insertConnectionTest = `-- name: InsertConnectionTest :one
-INSERT INTO pc.connection_tests (org_id, id, connection_id, result, checks, tested_by)
-VALUES ($1, $2, $3, $4, $5, $6)
-RETURNING org_id, id, connection_id, result, checks, tested_by, tested_at
+const insertCredentialTest = `-- name: InsertCredentialTest :one
+INSERT INTO pc.connection_tests (org_id, id, connection_id, kind, state, result, checks, requested_by, finished_at)
+VALUES ($1, $2, $3, 'credential', 'DONE', $4, $5,
+    $6, now())
+RETURNING org_id, id, connection_id, kind, state, gateway_id, verification_id, result, checks, detail_sha256, requested_by, created_at, finished_at
 `
 
-type InsertConnectionTestParams struct {
+type InsertCredentialTestParams struct {
 	OrgID        ids.OrgID
 	ID           ids.UUID
 	ConnectionID ids.UUID
-	Result       string
+	Result       *string
 	Checks       []byte
-	TestedBy     string
+	RequestedBy  string
 }
 
-func (q *Queries) InsertConnectionTest(ctx context.Context, arg InsertConnectionTestParams) (PcConnectionTest, error) {
-	row := q.db.QueryRow(ctx, insertConnectionTest,
+// A credential test, which runs at once without calling the target.
+func (q *Queries) InsertCredentialTest(ctx context.Context, arg InsertCredentialTestParams) (PcConnectionTest, error) {
+	row := q.db.QueryRow(ctx, insertCredentialTest,
 		arg.OrgID,
 		arg.ID,
 		arg.ConnectionID,
 		arg.Result,
 		arg.Checks,
-		arg.TestedBy,
+		arg.RequestedBy,
 	)
 	var i PcConnectionTest
 	err := row.Scan(
 		&i.OrgID,
 		&i.ID,
 		&i.ConnectionID,
+		&i.Kind,
+		&i.State,
+		&i.GatewayID,
+		&i.VerificationID,
 		&i.Result,
 		&i.Checks,
-		&i.TestedBy,
-		&i.TestedAt,
+		&i.DetailSha256,
+		&i.RequestedBy,
+		&i.CreatedAt,
+		&i.FinishedAt,
 	)
 	return i, err
 }
 
 const latestConnectionTest = `-- name: LatestConnectionTest :one
-SELECT org_id, id, connection_id, result, checks, tested_by, tested_at FROM pc.connection_tests
-WHERE org_id = $1 AND connection_id = $2
+SELECT org_id, id, connection_id, kind, state, gateway_id, verification_id, result, checks, detail_sha256, requested_by, created_at, finished_at FROM pc.connection_tests
+WHERE org_id = $1 AND connection_id = $2 AND state IN ('DONE', 'FAILED')
     AND (NOT $3::boolean OR result = 'PASSED')
-ORDER BY tested_at DESC, id DESC
+ORDER BY finished_at DESC, id DESC
 LIMIT 1
 `
 
-// A connection's latest test, or its latest passed one.
+// A connection's latest finished test, or its latest passed one.
 func (q *Queries) LatestConnectionTest(ctx context.Context, orgID ids.OrgID, connectionID ids.UUID, passedOnly bool) (PcConnectionTest, error) {
 	row := q.db.QueryRow(ctx, latestConnectionTest, orgID, connectionID, passedOnly)
 	var i PcConnectionTest
@@ -262,10 +270,16 @@ func (q *Queries) LatestConnectionTest(ctx context.Context, orgID ids.OrgID, con
 		&i.OrgID,
 		&i.ID,
 		&i.ConnectionID,
+		&i.Kind,
+		&i.State,
+		&i.GatewayID,
+		&i.VerificationID,
 		&i.Result,
 		&i.Checks,
-		&i.TestedBy,
-		&i.TestedAt,
+		&i.DetailSha256,
+		&i.RequestedBy,
+		&i.CreatedAt,
+		&i.FinishedAt,
 	)
 	return i, err
 }
