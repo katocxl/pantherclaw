@@ -65,13 +65,13 @@ END
 $$;
 -- +goose StatementEnd
 
--- A nonce is used once, at the database's time.
+-- A nonce is used once, before it expires, at the database's time.
 -- +goose StatementBegin
 CREATE FUNCTION pc.probe_nonce_used() RETURNS trigger
-    LANGUAGE plpgsql AS $$
+    LANGUAGE plpgsql SET search_path = pc, pg_temp AS $$
 BEGIN
-    IF OLD.used_at IS NOT NULL OR NEW.used_at IS NULL THEN
-        RAISE EXCEPTION 'probe nonce % is used once', OLD.id USING ERRCODE = 'check_violation';
+    IF OLD.used_at IS NOT NULL OR NEW.used_at IS NULL OR OLD.expires_at <= now() THEN
+        RAISE EXCEPTION 'probe nonce % is used once, before it expires', OLD.id USING ERRCODE = 'check_violation';
     END IF;
     NEW.used_at := now();
     RETURN NEW;

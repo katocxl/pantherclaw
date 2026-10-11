@@ -77,6 +77,58 @@ func (q *Queries) EndSandboxSession(ctx context.Context, state string, orgID ids
 	return i, err
 }
 
+const expiredSandboxSessions = `-- name: ExpiredSandboxSessions :many
+SELECT org_id, id, agent_id, launcher, enrollment_token_id, instance_id, run_id, agent_image, edge_image, probe_image, config_digest, probe_jkt, probe_public_key, host_jkt, host_public_key, engine_version, api_version, runtime, state, opened_at, expires_at, ended_at FROM pc.sandbox_sessions
+WHERE org_id = $1 AND state = 'OPEN' AND expires_at <= now()
+ORDER BY expires_at, id
+LIMIT $2
+FOR UPDATE SKIP LOCKED
+`
+
+// Open sessions past their expiry, oldest first, locked for the sweep.
+func (q *Queries) ExpiredSandboxSessions(ctx context.Context, orgID ids.OrgID, maxRows int32) ([]PcSandboxSession, error) {
+	rows, err := q.db.Query(ctx, expiredSandboxSessions, orgID, maxRows)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []PcSandboxSession{}
+	for rows.Next() {
+		var i PcSandboxSession
+		if err := rows.Scan(
+			&i.OrgID,
+			&i.ID,
+			&i.AgentID,
+			&i.Launcher,
+			&i.EnrollmentTokenID,
+			&i.InstanceID,
+			&i.RunID,
+			&i.AgentImage,
+			&i.EdgeImage,
+			&i.ProbeImage,
+			&i.ConfigDigest,
+			&i.ProbeJkt,
+			&i.ProbePublicKey,
+			&i.HostJkt,
+			&i.HostPublicKey,
+			&i.EngineVersion,
+			&i.ApiVersion,
+			&i.Runtime,
+			&i.State,
+			&i.OpenedAt,
+			&i.ExpiresAt,
+			&i.EndedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getSandboxSession = `-- name: GetSandboxSession :one
 SELECT org_id, id, agent_id, launcher, enrollment_token_id, instance_id, run_id, agent_image, edge_image, probe_image, config_digest, probe_jkt, probe_public_key, host_jkt, host_public_key, engine_version, api_version, runtime, state, opened_at, expires_at, ended_at FROM pc.sandbox_sessions WHERE org_id = $1 AND id = $2
 `
@@ -329,15 +381,16 @@ func (q *Queries) LastSandboxClosure(ctx context.Context, orgID ids.OrgID, agent
 }
 
 const latestProbeRuns = `-- name: LatestProbeRuns :many
-SELECT DISTINCT ON (kind) org_id, id, session_id, nonce_id, kind, report, report_sha256, received_at FROM pc.probe_runs
-WHERE org_id = $1 AND session_id = $2 AND received_at >= $3
-ORDER BY kind, id DESC
+SELECT DISTINCT ON (r.kind) r.org_id, r.id, r.session_id, r.nonce_id, r.kind, r.report, r.report_sha256, r.received_at FROM pc.probe_runs r
+JOIN pc.probe_nonces n ON n.org_id = r.org_id AND n.id = r.nonce_id AND n.session_id = r.session_id AND n.kind = r.kind
+WHERE r.org_id = $1 AND r.session_id = $2 AND n.created_at = $3
+ORDER BY r.kind, r.id DESC
 `
 
-// The latest report of each kind since a time: one probe run is the
-// session's last SANDBOX, CONTROL and CANARY reports.
-func (q *Queries) LatestProbeRuns(ctx context.Context, orgID ids.OrgID, sessionID ids.UUID, since time.Time) ([]PcProbeRun, error) {
-	rows, err := q.db.Query(ctx, latestProbeRuns, orgID, sessionID, since)
+// The reports of one probe run: those whose nonces were issued together
+// with the canary's (in one transaction, so at one time), one per kind.
+func (q *Queries) LatestProbeRuns(ctx context.Context, orgID ids.OrgID, sessionID ids.UUID, issuedAt time.Time) ([]PcProbeRun, error) {
+	rows, err := q.db.Query(ctx, latestProbeRuns, orgID, sessionID, issuedAt)
 	if err != nil {
 		return nil, err
 	}

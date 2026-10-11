@@ -118,7 +118,9 @@ func (s *Service) submit(ctx context.Context, session ids.UUID, compact string, 
 // control run and the canary), a kind the call accepts, the session, a
 // nonce of that kind issued to the session, unused and at most 15 minutes
 // old (used now), the session's images, configuration and engine, and for
-// the sandbox run the isolated network and passing configuration checks.
+// the sandbox and control runs the isolated network and passing
+// configuration checks: pclaw's facts, which the control report carries
+// under the host key.
 func verify(ctx context.Context, q *dbq.Queries, sess dbq.PcSandboxSession, compact string, allowed func(string) bool,
 ) (Accepted, dbq.PcProbeNonce, error) {
 	r, err := report.Verify(compact, ed25519.PublicKey(sess.ProbePublicKey))
@@ -144,7 +146,7 @@ func verify(ctx context.Context, q *dbq.Queries, sess dbq.PcSandboxSession, comp
 	case r.Engine.Version != sess.EngineVersion || r.Engine.APIVersion != sess.ApiVersion || r.Engine.Runtime != sess.Runtime ||
 		major(r.Engine.Version) < docker.MinEngineMajor:
 		return Accepted{}, dbq.PcProbeNonce{}, reject("engine")
-	case kind == KindSandbox && (!r.Network.Internal || r.Network.GatewayModeIPv4 != "isolated" || r.Network.IPv6 ||
+	case (kind == KindSandbox || kind == KindControl) && (!r.Network.Internal || r.Network.GatewayModeIPv4 != "isolated" || r.Network.IPv6 ||
 		len(r.Config.Checks) == 0 || slices.ContainsFunc(r.Config.Checks, func(c report.Check) bool { return !c.OK })):
 		return Accepted{}, dbq.PcProbeNonce{}, reject("the sandbox network or configuration is not isolated")
 	}
