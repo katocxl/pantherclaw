@@ -313,3 +313,9 @@ ORDER BY i.id;
 SELECT pg_advisory_xact_lock(hashtextextended(
     (sqlc.arg(org_id)::uuid)::text || '/' || (sqlc.arg(agent_id)::uuid)::text || '/' || (sqlc.arg(connection_id)::uuid)::text,
     85));
+
+-- Marks one invalidation reassessed with its ledger entry; a second call
+-- changes nothing.
+-- name: EnterCoverageInvalidation :execrows
+UPDATE pc.coverage_invalidations SET reassessed_at = now(), ledger_entry_id = sqlc.arg(ledger_entry_id)
+WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND reassessed_at IS NULL;

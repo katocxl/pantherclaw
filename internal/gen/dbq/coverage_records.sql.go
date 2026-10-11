@@ -148,7 +148,7 @@ func (q *Queries) CoverageInstancesOfAgent(ctx context.Context, orgID ids.OrgID,
 }
 
 const coverageInvalidationsSince = `-- name: CoverageInvalidationsSince :many
-SELECT org_id, id, kind, connection_id, agent_id, subject_id, detail, occurred_at, reassessed_at FROM pc.coverage_invalidations
+SELECT org_id, id, kind, connection_id, agent_id, subject_id, detail, occurred_at, reassessed_at, ledger_entry_id FROM pc.coverage_invalidations
 WHERE org_id = $1 AND connection_id = $2
   AND (agent_id IS NULL OR agent_id = $3)
   AND occurred_at >= $4
@@ -192,6 +192,7 @@ func (q *Queries) CoverageInvalidationsSince(ctx context.Context, arg CoverageIn
 			&i.Detail,
 			&i.OccurredAt,
 			&i.ReassessedAt,
+			&i.LedgerEntryID,
 		); err != nil {
 			return nil, err
 		}
@@ -464,6 +465,21 @@ func (q *Queries) DismissCoverageFinding(ctx context.Context, arg DismissCoverag
 	return i, err
 }
 
+const enterCoverageInvalidation = `-- name: EnterCoverageInvalidation :execrows
+UPDATE pc.coverage_invalidations SET reassessed_at = now(), ledger_entry_id = $1
+WHERE org_id = $2 AND id = $3 AND reassessed_at IS NULL
+`
+
+// Marks one invalidation reassessed with its ledger entry; a second call
+// changes nothing.
+func (q *Queries) EnterCoverageInvalidation(ctx context.Context, ledgerEntryID *ids.UUID, orgID ids.OrgID, iD ids.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, enterCoverageInvalidation, ledgerEntryID, orgID, iD)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const expiredEnforcedCoverageScopes = `-- name: ExpiredEnforcedCoverageScopes :many
 SELECT s.agent_id, s.connection_id, s.operation FROM pc.coverage_snapshots s
 WHERE s.org_id = $1 AND s.state = 'ENFORCED' AND s.expires_at <= now()
@@ -731,7 +747,7 @@ const insertCoverageInvalidation = `-- name: InsertCoverageInvalidation :one
 INSERT INTO pc.coverage_invalidations (org_id, id, kind, connection_id, agent_id, subject_id, detail)
 VALUES ($1, $2, $3, $4, $5, $6,
     $7)
-RETURNING org_id, id, kind, connection_id, agent_id, subject_id, detail, occurred_at, reassessed_at
+RETURNING org_id, id, kind, connection_id, agent_id, subject_id, detail, occurred_at, reassessed_at, ledger_entry_id
 `
 
 type InsertCoverageInvalidationParams struct {
@@ -765,6 +781,7 @@ func (q *Queries) InsertCoverageInvalidation(ctx context.Context, arg InsertCove
 		&i.Detail,
 		&i.OccurredAt,
 		&i.ReassessedAt,
+		&i.LedgerEntryID,
 	)
 	return i, err
 }
@@ -1293,7 +1310,7 @@ func (q *Queries) MarkCoverageInvalidationsReassessed(ctx context.Context, orgID
 }
 
 const pendingCoverageInvalidations = `-- name: PendingCoverageInvalidations :many
-SELECT org_id, id, kind, connection_id, agent_id, subject_id, detail, occurred_at, reassessed_at FROM pc.coverage_invalidations
+SELECT org_id, id, kind, connection_id, agent_id, subject_id, detail, occurred_at, reassessed_at, ledger_entry_id FROM pc.coverage_invalidations
 WHERE org_id = $1 AND reassessed_at IS NULL
 ORDER BY id
 LIMIT $2
@@ -1318,6 +1335,7 @@ func (q *Queries) PendingCoverageInvalidations(ctx context.Context, orgID ids.Or
 			&i.Detail,
 			&i.OccurredAt,
 			&i.ReassessedAt,
+			&i.LedgerEntryID,
 		); err != nil {
 			return nil, err
 		}
