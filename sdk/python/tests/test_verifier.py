@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import threading
 import time
@@ -10,6 +11,9 @@ import unittest
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+from pantherclaw import pap
 from pantherclaw.verifier import MemoryStore, Refusal, Spend, Verifier
 from vectors import load
 
@@ -51,8 +55,23 @@ class VerifierTest(unittest.TestCase):
                     got = e.code
                 self.assertEqual(got, c["expect"])
                 if c.get("then_valid"):
-                    # Verify before insert: the refusal left the token unspent.
-                    v.verify(c["token"], valid["body"], lambda cl, w=valid: match(cl, w))
+                    # Verify before insert: the refusal left the minted token unspent.
+                    v.verify(valid["token"], valid["body"], lambda cl, w=valid: match(cl, w))
+
+    def test_HR202_pap_v_true_is_not_version_1(self) -> None:
+        f = load("action_tokens.json")
+        c = f["cases"][0]
+        # The vectors' action-tokens key is derived from its public name (sdk/conformance/README.md).
+        key = Ed25519PrivateKey.from_private_bytes(hashlib.sha256(b"pantherclaw conformance action_tokens").digest())
+        head, payload, _ = c["token"].split(".")
+        claims = pap.from_b64url(payload).decode().replace('"v":1', '"v":true', 1)
+        signing = head + "." + pap.b64url(claims.encode())
+        token = signing + "." + pap.b64url(key.sign(signing.encode()))
+        v = Verifier("https://x.test/jwks.json", c["issuer"], c["audience"], MemoryStore(started=0), now=lambda: c["now"],
+                     fetch=lambda _u: json.dumps(f["jwks"]).encode())
+        with self.assertRaises(Refusal) as e:
+            v.verify(token, c["body"], lambda _c: True)
+        self.assertEqual(e.exception.code, "bad_signature")
 
     def test_HR024_a_memory_store_declares_the_verifier_single_replica(self) -> None:
         self.assertTrue(Verifier("https://x.test/jwks.json", "i", "a", MemoryStore()).single_replica)

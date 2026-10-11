@@ -72,3 +72,15 @@ class Strictness(unittest.TestCase):
             signing = pap.b64url(header.encode()) + "." + pap.b64url(claims.encode())
             proof = signing + "." + pap.b64url(key.sign(signing.encode()))
             self.assertEqual(check_proof(proof, "POST", url, b"", now=1791201600), "invalid_proof", iat)
+
+    def test_a_token_check_never_raises(self) -> None:
+        key = pap.KeyFile.new().key()
+        url = "https://gateway.example.test/sdk/payments"
+        header = '{"alg":"EdDSA","jwk":{"crv":"Ed25519","kty":"OKP","x":"' + pap.b64url(key.public_key) + '"},"typ":"pap-proof+jwt"}'
+        claims = '{"htm":"POST","htu":"' + url + '","iat":1791201600,"jti":"abcdefghijklmnopqrstuvwx","bh":"' + pap.body_hash(b"") + '","nonce":"abcdefghijklmnopqrstuvwx"}'
+        signing = pap.b64url(header.encode()) + "." + pap.b64url(claims.encode())
+        proof = signing + "." + pap.b64url(key.sign(signing.encode()))
+        for payload in (b"[" * 100000, b'{"exp":1,"exp":2}', b"[" * 2000 + b"]" * 2000):
+            token = pap.b64url(b'{"alg":"EdDSA"}') + "." + pap.b64url(payload) + "." + pap.b64url(b"sig")
+            self.assertEqual(check_proof(proof, "POST", url, b"", token=token, now=1791201600), "invalid_token")
+

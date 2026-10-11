@@ -209,21 +209,26 @@ def parse_token_claims(token: str) -> dict[str, Any]:
     """Reads a workload token's claims without verifying it, to know when to
     renew it and which key it is bound to. PantherClaw verifies the token."""
     parts = token.split(".")
-    if len(parts) != 3:
-        raise ValueError("not a compact JWS")
-    c = json.loads(from_b64url(parts[1]))
+    if len(token) > 8 << 10 or len(parts) != 3:
+        raise ValueError("not a compact JWS of at most 8 KiB")
+    # The strict parser: duplicate members and deep nesting are a JCSError,
+    # which is a ValueError.
+    c = jcs.parse(from_b64url(parts[1]))
+    exp = c.get("exp") if isinstance(c, dict) else None
     if (
         not isinstance(c, dict)
         or not isinstance(c.get("pap"), dict)
         or not isinstance(c.get("cnf"), dict)
-        or c["pap"].get("v") != VERSION
+        or not isinstance(c["pap"].get("v"), float)
+        or c["pap"]["v"] != VERSION
         or c.get("aud") != TOKEN_AUDIENCE
-        or not isinstance(c.get("exp"), int)
-        or isinstance(c.get("exp"), bool)
+        or not isinstance(exp, float)
+        or not exp.is_integer()
         or not isinstance(c["cnf"].get("jkt"), str)
         or not c["cnf"]["jkt"]
     ):
         raise ValueError("not a PAP/1 workload token")
+    c["exp"] = int(exp)
     return c
 
 
