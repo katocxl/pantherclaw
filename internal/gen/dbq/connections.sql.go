@@ -213,7 +213,7 @@ const insertCredentialTest = `-- name: InsertCredentialTest :one
 INSERT INTO pc.connection_tests (org_id, id, connection_id, kind, state, result, checks, requested_by, finished_at)
 VALUES ($1, $2, $3, 'credential', 'DONE', $4, $5,
     $6, now())
-RETURNING org_id, id, connection_id, kind, state, gateway_id, verification_id, result, checks, detail_sha256, requested_by, created_at, finished_at
+RETURNING org_id, id, connection_id, kind, operation, state, gateway_id, verification_id, result, checks, detail_sha256, requested_by, created_at, finished_at
 `
 
 type InsertCredentialTestParams struct {
@@ -241,6 +241,7 @@ func (q *Queries) InsertCredentialTest(ctx context.Context, arg InsertCredential
 		&i.ID,
 		&i.ConnectionID,
 		&i.Kind,
+		&i.Operation,
 		&i.State,
 		&i.GatewayID,
 		&i.VerificationID,
@@ -255,7 +256,7 @@ func (q *Queries) InsertCredentialTest(ctx context.Context, arg InsertCredential
 }
 
 const latestConnectionTest = `-- name: LatestConnectionTest :one
-SELECT org_id, id, connection_id, kind, state, gateway_id, verification_id, result, checks, detail_sha256, requested_by, created_at, finished_at FROM pc.connection_tests
+SELECT org_id, id, connection_id, kind, operation, state, gateway_id, verification_id, result, checks, detail_sha256, requested_by, created_at, finished_at FROM pc.connection_tests
 WHERE org_id = $1 AND connection_id = $2 AND state IN ('DONE', 'FAILED')
     AND (NOT $3::boolean OR result = 'PASSED')
 ORDER BY finished_at DESC, id DESC
@@ -271,6 +272,7 @@ func (q *Queries) LatestConnectionTest(ctx context.Context, orgID ids.OrgID, con
 		&i.ID,
 		&i.ConnectionID,
 		&i.Kind,
+		&i.Operation,
 		&i.State,
 		&i.GatewayID,
 		&i.VerificationID,
