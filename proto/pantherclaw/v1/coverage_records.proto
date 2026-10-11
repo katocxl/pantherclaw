@@ -45,6 +45,16 @@ service CoverageService {
   rpc ListCoverageRoutes(ListCoverageRoutesRequest) returns (ListCoverageRoutesResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
+  // GetClosure returns one closure evidence record (F457).
+  // permission: coverage.read
+  rpc GetClosure(GetClosureRequest) returns (GetClosureResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // ListClosures lists closure evidence, newest first.
+  // permission: coverage.read
+  rpc ListClosures(ListClosuresRequest) returns (ListClosuresResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
   // GetFreshnessContract publishes when evidence stops supporting a claim
   // and what invalidates it (F440).
   // permission: coverage.read
@@ -292,6 +302,104 @@ message ListCoverageRoutesResponse {
   // Token for the next page; empty at the end.
   string next_page_token = 2;
 }
+
+// CoverageProbeResult is one probe, control or canary result of a closure.
+message CoverageProbeResult {
+  // Probe name, e.g. "direct_https".
+  string name = 1;
+  // "probe", "positive_control", "negative_control" or "canary".
+  string role = 2;
+  // "blocked" or "reachable".
+  string expect = 3;
+  // "blocked", "reachable" or "error".
+  string observed = 4;
+  // Whether observed equals expect.
+  bool passed = 5;
+  // Detail from the probe; untrusted text.
+  string detail = 6;
+}
+
+// CoverageClosure is the closure evidence of one sandbox session for one
+// agent and connection (F457, PN-008.2).
+message CoverageClosure {
+  // Closure id.
+  string id = 1;
+  // Agent.
+  string agent_id = 2;
+  // Connection.
+  string connection_id = 3;
+  // The sandbox session that produced it.
+  string sandbox_session_id = 4;
+  // Whether every required probe, both controls and the canary passed.
+  bool passed = 5;
+  // Every result.
+  repeated CoverageProbeResult probes = 6;
+  // The route kinds it proves blocked.
+  repeated CoverageRouteKind closed_kinds = 7;
+  // RFC 7638 thumbprint of the per-session key that signed the results.
+  string signing_key_jkt = 8;
+  // "sha256:" and the hex digest of the signed results.
+  string results_digest = 9;
+  // Docker engine version, API version and runtime ("runc" or "runsc").
+  string engine_version = 10;
+  // API version.
+  string api_version = 11;
+  // Runtime.
+  string runtime = 12;
+  // Image digests of the session.
+  repeated string image_digests = 13;
+  // The gateway, connection revision and package version it is bound to.
+  string gateway_id = 14;
+  // Connection revision.
+  int32 connection_revision = 15;
+  // Package version id.
+  string package_version_id = 16;
+  // When the probes ran, when it expires and when it was recorded.
+  google.protobuf.Timestamp observe_time = 17;
+  // Expiry.
+  google.protobuf.Timestamp expire_time = 18;
+  // Recording time.
+  google.protobuf.Timestamp record_time = 19;
+}
+
+// GetClosureRequest names a closure.
+message GetClosureRequest {
+  // Closure id.
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// GetClosureResponse returns it.
+message GetClosureResponse {
+  // Closure.
+  CoverageClosure closure = 1;
+}
+
+// ListClosuresRequest filters closures.
+message ListClosuresRequest {
+  // Maximum results (default 50, at most 200).
+  int32 page_size = 1 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 200
+  }];
+  // Token from a previous response.
+  string page_token = 2 [(buf.validate.field).string = {
+    max_len: 64
+    pattern: "^[A-Za-z0-9_-]*$"
+  }];
+  // Only this agent.
+  optional string agent_id = 3 [(buf.validate.field).string.uuid = true];
+  // Only this connection.
+  optional string connection_id = 4 [(buf.validate.field).string.uuid = true];
+}
+
+// ListClosuresResponse is one page; probes are left out.
+message ListClosuresResponse {
+  // Closures, newest first.
+  repeated CoverageClosure closures = 1;
+  // Token for the next page; empty at the end.
+  string next_page_token = 2;
+}
+
 // GetFreshnessContractRequest takes no parameters.
 message GetFreshnessContractRequest {}
 

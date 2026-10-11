@@ -36,6 +36,11 @@ const (
 	// CoverageServiceListCoverageRoutesProcedure is the procedure name of the CoverageService's
 	// ListCoverageRoutes RPC.
 	CoverageServiceListCoverageRoutesProcedure = "/pantherclaw.v1.CoverageService/ListCoverageRoutes"
+	// CoverageServiceGetClosureProcedure is the procedure name of the CoverageService's GetClosure RPC.
+	CoverageServiceGetClosureProcedure = "/pantherclaw.v1.CoverageService/GetClosure"
+	// CoverageServiceListClosuresProcedure is the procedure name of the CoverageService's ListClosures
+	// RPC.
+	CoverageServiceListClosuresProcedure = "/pantherclaw.v1.CoverageService/ListClosures"
 	// CoverageServiceGetFreshnessContractProcedure is the procedure name of the CoverageService's
 	// GetFreshnessContract RPC.
 	CoverageServiceGetFreshnessContractProcedure = "/pantherclaw.v1.CoverageService/GetFreshnessContract"
@@ -69,6 +74,22 @@ var (
 			IdempotencyLevel: connect.IdempotencyNoSideEffects,
 		}
 	})
+	coverageServiceGetClosureSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_pantherclaw_v1_coverage_records_proto.Services().ByName("CoverageService").Methods().ByName("GetClosure"),
+			Procedure:        CoverageServiceGetClosureProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
+	coverageServiceListClosuresSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_pantherclaw_v1_coverage_records_proto.Services().ByName("CoverageService").Methods().ByName("ListClosures"),
+			Procedure:        CoverageServiceListClosuresProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
 	coverageServiceGetFreshnessContractSpec = sync.OnceValue(func() connect.Spec {
 		return connect.Spec{
 			StreamType:       connect.StreamTypeUnary,
@@ -98,6 +119,12 @@ type CoverageServiceClient interface {
 	// entry is not observed, never absent (F450).
 	// permission: coverage.read
 	ListCoverageRoutes(context.Context, *v1.ListCoverageRoutesRequest) (*v1.ListCoverageRoutesResponse, error)
+	// GetClosure returns one closure evidence record (F457).
+	// permission: coverage.read
+	GetClosure(context.Context, *v1.GetClosureRequest) (*v1.GetClosureResponse, error)
+	// ListClosures lists closure evidence, newest first.
+	// permission: coverage.read
+	ListClosures(context.Context, *v1.ListClosuresRequest) (*v1.ListClosuresResponse, error)
 	// GetFreshnessContract publishes when evidence stops supporting a claim
 	// and what invalidates it (F440).
 	// permission: coverage.read
@@ -126,6 +153,12 @@ type CoverageServiceHandler interface {
 	// entry is not observed, never absent (F450).
 	// permission: coverage.read
 	ListCoverageRoutes(context.Context, *v1.ListCoverageRoutesRequest) (*v1.ListCoverageRoutesResponse, error)
+	// GetClosure returns one closure evidence record (F457).
+	// permission: coverage.read
+	GetClosure(context.Context, *v1.GetClosureRequest) (*v1.GetClosureResponse, error)
+	// ListClosures lists closure evidence, newest first.
+	// permission: coverage.read
+	ListClosures(context.Context, *v1.ListClosuresRequest) (*v1.ListClosuresResponse, error)
 	// GetFreshnessContract publishes when evidence stops supporting a claim
 	// and what invalidates it (F440).
 	// permission: coverage.read
@@ -144,6 +177,8 @@ func RegisterCoverageServiceHandler(server *connect.Server, svc CoverageServiceH
 		connect.Method{Spec: coverageServiceGetCoverageSpec(), Handler: adapter.getCoverage},
 		connect.Method{Spec: coverageServiceListCoverageSpec(), Handler: adapter.listCoverage},
 		connect.Method{Spec: coverageServiceListCoverageRoutesSpec(), Handler: adapter.listCoverageRoutes},
+		connect.Method{Spec: coverageServiceGetClosureSpec(), Handler: adapter.getClosure},
+		connect.Method{Spec: coverageServiceListClosuresSpec(), Handler: adapter.listClosures},
 		connect.Method{Spec: coverageServiceGetFreshnessContractSpec(), Handler: adapter.getFreshnessContract},
 		connect.Method{Spec: coverageServiceReassessCoverageSpec(), Handler: adapter.reassessCoverage},
 	)
@@ -162,6 +197,14 @@ func (UnimplementedCoverageServiceHandler) ListCoverage(context.Context, *v1.Lis
 
 func (UnimplementedCoverageServiceHandler) ListCoverageRoutes(context.Context, *v1.ListCoverageRoutesRequest) (*v1.ListCoverageRoutesResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.CoverageService.ListCoverageRoutes is not implemented")
+}
+
+func (UnimplementedCoverageServiceHandler) GetClosure(context.Context, *v1.GetClosureRequest) (*v1.GetClosureResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.CoverageService.GetClosure is not implemented")
+}
+
+func (UnimplementedCoverageServiceHandler) ListClosures(context.Context, *v1.ListClosuresRequest) (*v1.ListClosuresResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.CoverageService.ListClosures is not implemented")
 }
 
 func (UnimplementedCoverageServiceHandler) GetFreshnessContract(context.Context, *v1.GetFreshnessContractRequest) (*v1.GetFreshnessContractResponse, error) {
@@ -195,6 +238,22 @@ func (c *coverageServiceClient) ListCoverage(ctx context.Context, req *v1.ListCo
 func (c *coverageServiceClient) ListCoverageRoutes(ctx context.Context, req *v1.ListCoverageRoutesRequest) (*v1.ListCoverageRoutesResponse, error) {
 	var res v1.ListCoverageRoutesResponse
 	if err := c.client.CallUnary(ctx, coverageServiceListCoverageRoutesSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *coverageServiceClient) GetClosure(ctx context.Context, req *v1.GetClosureRequest) (*v1.GetClosureResponse, error) {
+	var res v1.GetClosureResponse
+	if err := c.client.CallUnary(ctx, coverageServiceGetClosureSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *coverageServiceClient) ListClosures(ctx context.Context, req *v1.ListClosuresRequest) (*v1.ListClosuresResponse, error) {
+	var res v1.ListClosuresResponse
+	if err := c.client.CallUnary(ctx, coverageServiceListClosuresSpec(), req, &res); err != nil {
 		return nil, err
 	}
 	return &res, nil
@@ -248,6 +307,30 @@ func (h coverageServiceHandler) listCoverageRoutes(ctx context.Context, _ connec
 		return err
 	}
 	res, err := h.svc.ListCoverageRoutes(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h coverageServiceHandler) getClosure(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetClosureRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetClosure(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h coverageServiceHandler) listClosures(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListClosuresRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListClosures(ctx, &req)
 	if err != nil {
 		return err
 	}

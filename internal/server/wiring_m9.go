@@ -7,6 +7,7 @@ import (
 	"connectrpc.com/connect/v2"
 
 	"github.com/katocxl/pantherclaw/internal/coverage/adapters/coveragerpc"
+	covapp "github.com/katocxl/pantherclaw/internal/coverage/app"
 	coverage "github.com/katocxl/pantherclaw/internal/coverage/domain"
 	"github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1/pantherclawv1connect"
 )
@@ -14,7 +15,7 @@ import (
 // registerCoverage serves CoverageService on the public API (G0 M9 track
 // A), as pc_app.
 func registerCoverage(rs *connect.Server, d apiDeps) {
-	pantherclawv1connect.RegisterCoverageServiceHandler(rs, coveragerpc.New(d.freshness))
+	pantherclawv1connect.RegisterCoverageServiceHandler(rs, coveragerpc.New(&covapp.Service{Pool: d.pool, Freshness: d.freshness}))
 }
 
 // freshnessOf returns the configured freshness contract; Validate has

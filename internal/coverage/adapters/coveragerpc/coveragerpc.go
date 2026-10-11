@@ -13,6 +13,7 @@ import (
 
 	"google.golang.org/protobuf/types/known/durationpb"
 
+	"github.com/katocxl/pantherclaw/internal/coverage/app"
 	"github.com/katocxl/pantherclaw/internal/coverage/domain"
 	pantherclawv1 "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
 	"github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1/pantherclawv1connect"
@@ -21,11 +22,12 @@ import (
 // Handler serves CoverageService.
 type Handler struct {
 	pantherclawv1connect.UnimplementedCoverageServiceHandler
+	svc       *app.Service
 	freshness domain.Freshness
 }
 
 // New returns the CoverageService handler.
-func New(f domain.Freshness) *Handler { return &Handler{freshness: f} }
+func New(svc *app.Service) *Handler { return &Handler{svc: svc, freshness: svc.Freshness} }
 
 var states = map[domain.State]pantherclawv1.CoverageState{
 	domain.Unknown:     pantherclawv1.CoverageState_COVERAGE_STATE_UNKNOWN,

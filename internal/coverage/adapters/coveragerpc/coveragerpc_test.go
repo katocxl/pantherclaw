@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/katocxl/pantherclaw/internal/coverage/adapters/coveragerpc"
+	"github.com/katocxl/pantherclaw/internal/coverage/app"
 	"github.com/katocxl/pantherclaw/internal/coverage/domain"
 	pantherclawv1 "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
 )
@@ -22,7 +23,7 @@ func TestFreshnessContractIsPublished(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	res, err := coveragerpc.New(f).GetFreshnessContract(context.Background(), &pantherclawv1.GetFreshnessContractRequest{})
+	res, err := coveragerpc.New(&app.Service{Freshness: f}).GetFreshnessContract(context.Background(), &pantherclawv1.GetFreshnessContractRequest{})
 	if err != nil {
 		t.Fatal(err)
 	}
