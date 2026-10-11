@@ -41,7 +41,7 @@ import (
 
 func init() {
 	commands["init"] = command{
-		usage: "init --gateway URL --connection NAME --key-file FILE [--agent ID] [--run ID] [--project DIR] " +
+		usage: "init --gateway URL --connection NAME --key-file FILE [--agent ID] [--mcp NAME=CONNECTION...] [--run ID] [--project DIR] " +
 			"[--scope local|project|user] [--dry-run | --yes] [--managed-settings FILE]",
 		run: claudeInit,
 	}
@@ -178,11 +178,17 @@ func claudeInit(ctx context.Context, a *app, args []string) error {
 	fs.StringVar(&f.managed, "managed-settings", "", "read managed settings from this file instead of the platform's")
 	fs.BoolVar(&f.dryRun, "dry-run", false, "show what would change and change nothing")
 	fs.BoolVar(&f.yes, "yes", false, "make the changes without asking")
+	var mcp list
+	fs.Var(&mcp, "mcp", "NAME=CONNECTION: govern the MCP server NAME through pclaw mcp proxy to CONNECTION (repeatable)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	if f.gateway == "" || f.connection == "" || f.keyFile == "" || fs.NArg() != 0 || (f.dryRun && f.yes) {
 		return errUsage
+	}
+	routes, err := parseMCPRoutes(mcp)
+	if err != nil {
+		return err
 	}
 	hook, err := f.hookEntry()
 	if err != nil {
@@ -236,7 +242,7 @@ func claudeInit(ctx context.Context, a *app, args []string) error {
 			managed = append(managed, s)
 		}
 	}
-	report(a, home, f.project, settings, managed)
+	findings := report(a, a.scanOptions(home, f.project), settings, managed)
 	target := settings[slices.IndexFunc(settings, func(s claudeSettings) bool { return s.scope == f.scope })]
 	if err := hookBlocked(managed, target); err != nil {
 		return &exitError{code: 1, msg: "pclaw init: " + err.Error()}
@@ -246,6 +252,10 @@ func claudeInit(ctx context.Context, a *app, args []string) error {
 	} else if err := p.addHook(target, hook); err != nil {
 		return err
 	}
+	if err := f.governMCP(a, p, routes, home, config, managed, settings, target); err != nil {
+		return err
+	}
+	f.agentSDKSnippets(a, findings)
 	return f.apply(ctx, a, p)
 }
 
@@ -297,10 +307,12 @@ func hookBlocked(managed []claudeSettings, target claudeSettings) error {
 	return nil
 }
 
-// report shows what init found: the settings files, the MCP servers Claude
-// Code runs (which go around PantherClaw unless they use pclaw mcp proxy),
-// and agent-framework projects.
-func report(a *app, home, project string, settings, managed []claudeSettings) {
+// report shows what init found: the settings files, the MCP servers of
+// Claude Code and the other clients pclaw scan knows (which go around
+// PantherClaw unless they use pclaw mcp proxy), the credentials their
+// configuration holds, by name only (each is a route around PantherClaw;
+// init never copies one), and agent-framework projects.
+func report(a *app, opts scan.Options, settings, managed []claudeSettings) []scan.Finding {
 	w := a.stdout
 	_, _ = fmt.Fprintln(w, "Claude Code settings:")
 	for _, s := range append(slices.Clone(settings), managed...) {
@@ -316,21 +328,44 @@ func report(a *app, home, project string, settings, managed []claudeSettings) {
 	if len(managed) == 0 {
 		_, _ = fmt.Fprintln(w, "  managed  none found in the platform's file (registry, MDM and server-managed settings are not read)")
 	}
-	findings := scan.Run(scan.Options{Home: home, Paths: []string{project}})
+	findings := scan.Run(opts)
 	for _, f := range findings {
 		at := f.Attributes
 		switch f.Kind {
 		case scan.KindMCPServer:
-			if at["client"] != "claude_code" && at["client"] != "project" {
-				continue
-			}
 			routed := "goes around PantherClaw"
 			if at["command"] == "pclaw" || at["command"] == "pclaw.exe" {
 				routed = "through pclaw mcp proxy"
+			} else if at["client"] != "claude_code" && at["client"] != "project" {
+				routed += " (pclaw init changes only Claude Code's configuration)"
 			}
-			_, _ = fmt.Fprintf(w, "MCP server %q in %s (%s): %s\n", at["name"], at["config"], at["transport"], routed)
+			_, _ = fmt.Fprintf(w, "MCP server %q of %s in %s (%s): %s\n", at["name"], at["client"], at["config"], at["transport"], routed)
+		case scan.KindEnvSecret:
+			_, _ = fmt.Fprintf(w, "Credential %s (%s) in %s's configuration: a route around PantherClaw; init never copies it, "+
+				"so give it to the gateway's connection instead\n", at["name"], at["secret_kind"], at["where"])
 		case scan.KindAgentProject:
 			_, _ = fmt.Fprintf(w, "Agent framework project: %s (%s)\n", at["path"], at["frameworks"])
 		}
 	}
+	return findings
+}
+
+// scanOptions are where init looks: the person's configuration, as pclaw
+// scan does, read from init's own environment, and the project.
+func (a *app) scanOptions(home, project string) scan.Options {
+	o := scan.Options{Home: home, Paths: []string{project}}
+	switch runtime.GOOS {
+	case "windows":
+		o.ConfigDir, _ = a.env("APPDATA")
+	case "darwin":
+		o.ConfigDir = filepath.Join(home, "Library", "Application Support")
+	default:
+		o.ConfigDir = filepath.Join(home, ".config")
+		if v, ok := a.env("XDG_CONFIG_HOME"); ok && v != "" {
+			o.ConfigDir = v
+		}
+	}
+	o.CodexHome, _ = a.env("CODEX_HOME")
+	o.GeminiCLIHome, _ = a.env("GEMINI_CLI_HOME")
+	return o
 }

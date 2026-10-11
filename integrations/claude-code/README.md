@@ -37,7 +37,7 @@ The plugin adds a `PreToolUse` hook for **Bash and PowerShell** commands ([hooks
 
 ```bash
 pclaw login --server https://pantherclaw.example.com --org <org>
-pclaw init --gateway https://gateway.example.com --connection shell --key-file ~/.pantherclaw/workload.json --agent <agent id> --dry-run
+pclaw init --gateway https://gateway.example.com --connection shell --key-file ~/.pantherclaw/workload.json --agent <agent id> --mcp github=github --dry-run
 ```
 
 `pclaw init`:
@@ -52,6 +52,15 @@ It only adds (HR-208):
 - no secret is written, only the gateway URL, the connection, the key file's path and the run.
 
 It fails without changing anything when managed settings would keep the hook from running: `allowManagedHooksOnly` without the hook in managed settings, or `disableAllHooks`. Running it again changes nothing.
+
+**Governing an MCP server.** `--mcp NAME=CONNECTION` (repeatable) governs Claude Code's MCP server `NAME` through the gateway connection `CONNECTION`:
+- the original entry stays exactly as it is;
+- a new entry, `pantherclaw-NAME`, runs `pclaw mcp proxy` to the connection, so its calls are decided like any other. It goes in `~/.claude.json` under the project for `--scope local`, `.mcp.json` for `project`, and `~/.claude.json`'s top level for `user`;
+- the deny rule `mcp__NAME__*` goes in the scope's settings, so the original cannot be used. A deny rule only strengthens.
+
+Credentials in an MCP server's configuration (a token in its `env`, for example) are reported by name as routes around PantherClaw and never copied: give them to the gateway's connection instead. `init` fails without changing anything when `deniedMcpServers` or an `allowedMcpServers` list that applies would keep the governed server from running, or when managed settings set `allowManagedPermissionRulesOnly` without denying the original themselves.
+
+**Agent SDK projects.** For a project that depends on `@anthropic-ai/claude-agent-sdk` or `claude-agent-sdk`, `init` prints the integration snippet for its code and never writes code.
 
 With the plugin loaded and PantherClaw unreachable or not configured, **every** Bash and PowerShell command is blocked. That is the point. So dogfooding on the PantherClaw repository stays opt-in per developer, and parallel sessions without a local stack keep working (decision 4).
 

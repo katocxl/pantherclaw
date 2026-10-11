@@ -49,16 +49,24 @@ func (p *initPlan) file(s claudeSettings) *claudeSettings {
 // addHook adds the hook to the target file's PreToolUse hooks.
 func (p *initPlan) addHook(target claudeSettings, hook *jsonNode) error {
 	s := p.file(target)
-	hooks, ok := s.doc.object("hooks")
+	if err := addHook(s.doc, hook); err != nil {
+		return &exitError{code: 1, msg: "pclaw init: " + s.path + ": " + err.Error() + "; it is left as it is"}
+	}
+	p.done = append(p.done, "Every Bash and PowerShell command now asks PantherClaw first; when it cannot answer, the command is blocked.")
+	return nil
+}
+
+// addHook appends a PreToolUse hook group to a settings document.
+func addHook(doc, hook *jsonNode) error {
+	hooks, ok := doc.object("hooks")
 	if !ok {
-		return &exitError{code: 1, msg: "pclaw init: " + s.path + ": hooks is not an object; it is left as it is"}
+		return errors.New("hooks is not an object")
 	}
 	pre, ok := hooks.array("PreToolUse")
 	if !ok {
-		return &exitError{code: 1, msg: "pclaw init: " + s.path + ": hooks.PreToolUse is not a list; it is left as it is"}
+		return errors.New("hooks.PreToolUse is not a list")
 	}
 	pre.items = append(pre.items, hook)
-	p.done = append(p.done, "Every Bash and PowerShell command now asks PantherClaw first; when it cannot answer, the command is blocked.")
 	return nil
 }
 
@@ -80,13 +88,28 @@ func (f initFlags) apply(ctx context.Context, a *app, p *initPlan) error {
 	}
 	var writes []write
 	for _, s := range p.edits {
+		// A file the plan read but did not add to stays as it is, even
+		// when its layout is not the one init writes.
+		before := &jsonNode{kind: '{'}
+		if s.raw != nil {
+			parsed, err := parseJSONDoc(s.raw)
+			if err != nil {
+				return err
+			}
+			before = parsed
+		}
+		was, err := before.encode()
+		if err != nil {
+			return err
+		}
 		after, err := s.doc.encode()
 		if err != nil {
 			return err
 		}
-		if after = likeOriginal(s.raw, after); bytes.Equal(after, s.raw) {
+		if bytes.Equal(after, was) {
 			continue
 		}
+		after = likeOriginal(s.raw, after)
 		if _, err := fmt.Fprint(a.stdout, lineDiff(s.path, s.raw, after)); err != nil {
 			return err
 		}
