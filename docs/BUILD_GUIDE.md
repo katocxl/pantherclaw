@@ -200,7 +200,7 @@ go run ./cmd/pantherclaw-sim load --workload-file deploy/dev/secrets/workload.js
   --unique --rate 1 --duration 2s --warmup 0s
 ```
 
-Since M4 (slice 214) `dev seed` imports and activates the reference package (signed with the development package key, see M4 below), registers a development fact provider, issues the workload a grant (refunds up to `authority.grant_max_per_action` each, a task budget of `--budget-limit`, at most `--max-count` refunds) and binds its run to it. Identical irreversible refunds are parked for the repeat window (HR-007), so without `--unique` the load driver gets one acceptance and then `RECONCILIATION_REQUIRED`. To report a fact by hand, use `pclaw fact put` with the provider's API key in `PANTHERCLAW_API_KEY`. The M4 measurements are in [docs/perf/M4.md](perf/M4.md).
+Since M4 (slice 214) `dev seed` imports and activates the reference package (signed with the development package key, see M4 below), registers a development fact provider, issues the workload a grant (refunds up to `authority.grant_max_per_action` each, a task budget of `--budget-limit`, at most `--max-count` refunds) and binds its run to it. Identical irreversible refunds are parked for the repeat window (HR-007), so without `--unique` the load driver gets one acceptance and then `RECONCILIATION_REQUIRED`. To report a fact by hand, use `pclaw fact put` with the provider's API key in `PANTHERCLAW_API_KEY`. The M4 measurements are in [docs/perf/M4.md](perf/M4.md), and M6's, with mTLS and PAP/1 through the gateway, in [docs/perf/M6.md](perf/M6.md).
 
 Since M6 the gateway serves the routes of its connections at `/{connection}/…`: `--target-url` creates the connection `payments` to the simulator, in enforce mode, so a refund is `POST /payments/v1/refunds` (`dev connection --org ID --target-url URL` adds one to an existing org). The gateway maps the request through the connection's reviewed package to ActionIR, asks the Authority, verifies the permit, builds the request from the package's dispatch template, commits it with `BeginDispatch`, sends that **re-serialized** request to the target with `Idempotency-Key: pc-<transaction id>`, and records the outcome. The agent gets the target's answer with `PC-Transaction-Id`, `PC-Outcome` and `PC-Receipt` headers, or a JSON refusal with an `error_class`. Its `Server-Timing` header breaks down where the time went. Since M3 every request is PAP/1-signed: the workload sends its workload token (`Authorization: PAP …`), a `PAP-Proof` over the method, the gateway's `public_url`, the body hash and a server nonce, its run in `PAP-Run-Id` and its action in `PC-Action-Id`; the gateway forwards them and the Authority verifies them. `curl` cannot sign, so the example uses `pantherclaw-sim load`, which reads the key file, gets a workload token from the server and signs every request.
 
@@ -505,18 +505,20 @@ Releases: `v0.0.x` pre-releases from M1; **v0.1.0 preview after M12** (coding-ag
 | ID | Scenario | Expected |
 |---|---|---|
 | S01 | $30 refund within grant | ALLOW → dispatched → accepted |
-| S02 | $85 refund (policy: approval > $50) | HOLD → approve (WebAuthn) → resubmit → dispatched |
+| S02 | $85 refund (policy: approval > $50) | HOLD → approve (WebAuthn) → resubmit → dispatched (with M5 part 2) |
 | S03 | $125 refund (grant max $100) | DENY even if a manager tries to approve |
-| S04 | Revoke grant while held | Pending approval invalidated; resubmit → DENY |
-| S05 | Change amount after approval | Material change → new decision; old approval unusable |
+| S04 | Revoke grant while held | Pending approval invalidated; resubmit → DENY (with M5 part 2) |
+| S05 | Change amount after approval | Material change → new decision; old approval unusable (with M5 part 2) |
 | S06 | Two concurrent refunds against one-refund budget | Exactly one succeeds |
 | S07 | Target timeout | UNKNOWN; reservation held; no auto-retry; reconciliation entry |
 | S08 | Gateway killed between BeginDispatch and Record | UNKNOWN, not released |
 | S09 | Authority unavailable | CANNOT_AUTHORIZE; nothing dispatched |
 | S10 | Child agent with narrowed grant | Child cannot exceed parent; parent revocation cascades |
-| S11 | Direct call to simulator bypassing gateway | Route labeled uncontrolled; coverage PARTIAL |
+| S11 | Direct call to simulator bypassing gateway | Refused by the target without the custody credential (and without an action token); the route is recorded as uncontrolled |
 | S12 | SSRF/rebinding/redirect payloads | Blocked by egress guards |
 | S13 | Kill switch engaged mid-run | All subsequent dispatches refused < 1 s |
+
+S07's "reconciliation entry" is the `UNKNOWN` permit and its held reservation, which M7's reconciliation queue picks up. In S11, M9 computes the `PARTIAL` coverage state; M6 shows the facts it rests on. The exit status is in [g0/M6.md](g0/M6.md), and the latency re-measurement in [docs/perf/M6.md](perf/M6.md).
 
 ### M7 — Effects, reconciliation & proof
 **Threat slice:** T-013, T-024, T-029, T-043, T-070..T-077 · **HR:** HR-003 and HR-007 (resolution), HR-110..112, HR-190..199 · **F:** F461–F532 (F500 and F533 in M11) · **PN:** PN-007 · **G0:** [g0/M7.md](g0/M7.md), built in two parallel tracks (A: effects and reconciliation; B: proof).
