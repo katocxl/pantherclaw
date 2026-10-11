@@ -37,7 +37,7 @@ test("TestHR202_ConformanceActionTokens: every refusal code of the shared vector
     }
     assert.equal(got, c.expect, c.name);
     // Verify before insert: a refused request leaves the token unspent.
-    if (c.then_valid) await v.verify(c.token, valid.body, matchOf(valid));
+    if (c.then_valid) await v.verify(valid.token, valid.body, matchOf(valid));
   }
 });
 
@@ -176,4 +176,27 @@ test("TestHR202_an unknown kid refetches the JWKS at most once a minute; an unre
     fetch: (async () => new Response("", { status: 503 })) as typeof fetch,
   });
   await assert.rejects(down.verify(f.cases[0].token, f.cases[0].body, () => true), (e: unknown) => e instanceof Refusal && e.code === "store_unavailable" && e.status === 503);
+});
+
+test("TestHR202_a JWKS larger than 64 KiB is refused without buffering it whole", async () => {
+  const f = await load("action_tokens.json");
+  const c = f.cases[0];
+  let pulled = 0;
+  const huge = new ReadableStream<Uint8Array>({
+    pull(ctl) {
+      pulled++;
+      ctl.enqueue(new Uint8Array(16 << 10).fill(0x20));
+      if (pulled > 1000) ctl.close();
+    },
+  });
+  const v = new Verifier({
+    jwksUrl: "https://pantherclaw.example.test/jwks.json",
+    issuer: c.issuer,
+    audience: c.audience,
+    store: new MemoryStore(100, c.now - 3600),
+    now: () => c.now,
+    fetch: (async () => new Response(huge, { status: 200 })) as typeof fetch,
+  });
+  await assert.rejects(v.verify(c.token, c.body, () => true), (e: unknown) => e instanceof Refusal && e.code === "store_unavailable");
+  assert.ok(pulled < 10, `read ${pulled} chunks`);
 });
