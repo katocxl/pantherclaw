@@ -78,7 +78,7 @@ func TestF346_ConnectionsDeclareTheirCapabilities(t *testing.T) {
 		"open":       {conn(app.KindHTTP, app.AccessNone), []string{"OPEN_TARGET"}, 2},
 		// The mock payments package has no MCP dispatch template.
 		"mcp":   {conn(app.KindMCP, app.AccessHeld), []string{"OPERATION_NOT_SERVED", "OPERATION_NOT_SERVED"}, 0},
-		"local": {conn(app.KindLocal, app.AccessNone), []string{"COOPERATIVE"}, 2},
+		"local": {conn(app.KindLocal, app.AccessNone), []string{"OPERATION_NOT_SERVED", "OPERATION_NOT_SERVED", "COOPERATIVE"}, 0},
 	} {
 		c := app.Declare(tc.c, payments)
 		if c.Enforcement.Level != app.Partial || !slices.Equal(limits(c), tc.limits) || len(c.Operations) != tc.ops {
