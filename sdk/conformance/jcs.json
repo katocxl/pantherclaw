@@ -1,0 +1,101 @@
+{
+  "format": "pantherclaw.conformance/v1",
+  "group": "jcs",
+  "description": "RFC 8785 canonical JSON as PantherClaw computes it. An SDK's canonicalizer must give exactly canonical for every accepted input and refuse every rejected one.",
+  "source": "encoding/json/jsontext Value.Canonicalize (actionir, approval bindings, packages)",
+  "cases": [
+    {
+      "name": "object members sorted by UTF-16 code units, not code points",
+      "input": "{\"\\u20ac\":\"euro\",\"\\u000d\":\"cr\",\"\\ufb33\":\"hebrew\",\"1\":\"one\",\"\\ud83d\\ude00\":\"emoji\",\"\\u0080\":\"c1\",\"\\u00f6\":\"o\"}",
+      "canonical": "{\"\\r\":\"cr\",\"1\":\"one\",\"\":\"c1\",\"ö\":\"o\",\"€\":\"euro\",\"😀\":\"emoji\",\"דּ\":\"hebrew\"}",
+      "sha256": "af92e3d8be64c9b9e539a5c3d9877585c30605c43dde82e4b6e53f1db32fe4b3"
+    },
+    {
+      "name": "negative zero is 0",
+      "input": "[-0,0.0,-0.0,0e10]",
+      "canonical": "[0,0,0,0]",
+      "sha256": "1c10b03518fff8fc374a20bbf5107c66496656bec0662d6c6db123d4a898f121"
+    },
+    {
+      "name": "exponents at the ES6 boundaries",
+      "input": "[1e21,1e20,123456789012345678901,1E+2,1e-7,0.000001,1E-6]",
+      "canonical": "[1e+21,100000000000000000000,123456789012345680000,100,1e-7,0.000001,0.000001]",
+      "sha256": "785016f06399c8ca19ade806c12b601d79c4cc74a43bb684535742cce06af6c6"
+    },
+    {
+      "name": "shortest round-trip floats",
+      "input": "[0.1,1.5e300,-1.2345678901234567e-20,4.50,5e-324,1.7976931348623157e308]",
+      "canonical": "[0.1,1.5e+300,-1.2345678901234567e-20,4.5,5e-324,1.7976931348623157e+308]",
+      "sha256": "53849840418ecc535a48c42e1cc0e9b9e4a9275b7bb4e071e5c616936c7b58b8"
+    },
+    {
+      "name": "integers beyond 2^53 become the nearest double",
+      "input": "[9007199254740993,-9007199254740993]",
+      "canonical": "[9007199254740992,-9007199254740992]",
+      "sha256": "7aa043f2a6cb9ffd418b10f042f2c8eba281d240351c1e85eb261b4599ea5151"
+    },
+    {
+      "name": "string escapes",
+      "input": "{\"s\":\"\\u000f\\b\\t\\n\\f\\r\\\"\\\\\\/\\u007f\\u2028\\u2029\"}",
+      "canonical": "{\"s\":\"\\u000f\\b\\t\\n\\f\\r\\\"\\\\/  \"}",
+      "sha256": "0d03ec1d0f1e61d305bcc71bad7ecf88002e2a0c07082233e738b56413bd7813"
+    },
+    {
+      "name": "non-ASCII escapes become UTF-8",
+      "input": "{\"name\":\"Gr\\u00fc\\u00dfe \\ud83d\\ude00\"}",
+      "canonical": "{\"name\":\"Grüße 😀\"}",
+      "sha256": "0a78df1ebb752be42e4cd03856124cbd2f61c1849d5e5ca0b868dd23bad877ea"
+    },
+    {
+      "name": "whitespace and nesting",
+      "input": " {\n \"b\" : [ true , false , null , { } , [ ] ] ,\r\n\t\"a\" : { \"z\" : 1 , \"y\" : \"\" } } ",
+      "canonical": "{\"a\":{\"y\":\"\",\"z\":1},\"b\":[true,false,null,{},[]]}",
+      "sha256": "11ef74984fae8f19b6d0737df8c7bbb57b9cc32dab9657fbce2186e3b6690208"
+    },
+    {
+      "name": "a lone high surrogate",
+      "input": "{\"a\":\"\\ud800\"}",
+      "reject": "a lone surrogate is not a Unicode scalar value"
+    },
+    {
+      "name": "a lone low surrogate",
+      "input": "[\"\\udc00\"]",
+      "reject": "a lone surrogate is not a Unicode scalar value"
+    },
+    {
+      "name": "reversed surrogates",
+      "input": "[\"\\ude00\\ud83d\"]",
+      "reject": "a lone surrogate is not a Unicode scalar value"
+    },
+    {
+      "name": "a duplicate member",
+      "input": "{\"a\":1,\"a\":2}",
+      "reject": "duplicate object member names"
+    },
+    {
+      "name": "a duplicate member after unescaping",
+      "input": "{\"a\":1,\"\\u0061\":2}",
+      "reject": "duplicate object member names"
+    },
+    {
+      "name": "invalid UTF-8",
+      "input_hex": "7b2261223a22ff227d",
+      "reject": "invalid UTF-8"
+    },
+    {
+      "name": "a trailing comma",
+      "input": "{\"a\":1,}",
+      "reject": "not JSON"
+    },
+    {
+      "name": "a leading zero",
+      "input": "[01]",
+      "reject": "not JSON"
+    },
+    {
+      "name": "two values",
+      "input": "{} {}",
+      "reject": "not one JSON value"
+    }
+  ]
+}

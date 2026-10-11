@@ -1,0 +1,112 @@
+{
+  "format": "pantherclaw.conformance/v1",
+  "group": "actionir",
+  "description": "ActionIR v1 (PAP-1 §6): action_hash = lowercase hex SHA-256 of the RFC 8785 form. Inputs have every object's members reversed and whitespace added.",
+  "source": "internal/actionir Parse over internal/definitions/mapping/testdata",
+  "cases": [
+    {
+      "name": "mcp create_refund",
+      "input": "{ \"v\" : 1 ,\n  \"target\" : { \"type\" : \"payments.charge\" ,\n  \"id\" : \"ch_1\" } ,\n  \"run_id\" : \"01920000-0000-7000-8000-000000000003\" ,\n  \"route\" : \"payments-refund\" ,\n  \"params\" : { \"reason\" : \"duplicate\" ,\n  \"amount\" : { \"value\" : \"30.00\" ,\n  \"currency\" : \"USD\" } } ,\n  \"org\" : \"01920000-0000-7000-8000-000000000001\" ,\n  \"operation\" : \"payments.refund.create\" ,\n  \"env\" : \"01920000-0000-7000-8000-000000000002\" ,\n  \"destinations\" : [  ] ,\n  \"definition\" : { \"version\" : \"1.0.0\" ,\n  \"package\" : \"pc.mock-payments\" ,\n  \"digest\" : \"sha256:53b3effc5d6fc11070820fefd14806b01cdd6485d0e2a2136ff15925031fac43\" } ,\n  \"dedupe_key\" : \"sha256:3e58074a5e5dc6168aa9bbaadafffddd2f91c2efaaee003e514ddf27fd99cf10\" ,\n  \"channel\" : \"mcp\" ,\n  \"agent_instance\" : \"01920000-0000-7000-8000-000000000005\" ,\n  \"action_id\" : \"01920000-0000-7000-8000-000000000004\" }",
+      "canonical": "{\"action_id\":\"01920000-0000-7000-8000-000000000004\",\"agent_instance\":\"01920000-0000-7000-8000-000000000005\",\"channel\":\"mcp\",\"dedupe_key\":\"sha256:3e58074a5e5dc6168aa9bbaadafffddd2f91c2efaaee003e514ddf27fd99cf10\",\"definition\":{\"digest\":\"sha256:53b3effc5d6fc11070820fefd14806b01cdd6485d0e2a2136ff15925031fac43\",\"package\":\"pc.mock-payments\",\"version\":\"1.0.0\"},\"destinations\":[],\"env\":\"01920000-0000-7000-8000-000000000002\",\"operation\":\"payments.refund.create\",\"org\":\"01920000-0000-7000-8000-000000000001\",\"params\":{\"amount\":{\"currency\":\"USD\",\"value\":\"30.00\"},\"reason\":\"duplicate\"},\"route\":\"payments-refund\",\"run_id\":\"01920000-0000-7000-8000-000000000003\",\"target\":{\"id\":\"ch_1\",\"type\":\"payments.charge\"},\"v\":1}",
+      "action_hash": "330c7672f1a3b90eb5e29d9a8822e25d854808ff7c5a476a492554c627cad990"
+    },
+    {
+      "name": "http POST /v1/refunds",
+      "input": "{ \"v\" : 1 ,\n  \"target\" : { \"type\" : \"payments.charge\" ,\n  \"id\" : \"ch_1\" } ,\n  \"run_id\" : \"01920000-0000-7000-8000-000000000003\" ,\n  \"route\" : \"payments-refund\" ,\n  \"params\" : { \"reason\" : \"duplicate\" ,\n  \"amount\" : { \"value\" : \"30.00\" ,\n  \"currency\" : \"USD\" } } ,\n  \"org\" : \"01920000-0000-7000-8000-000000000001\" ,\n  \"operation\" : \"payments.refund.create\" ,\n  \"env\" : \"01920000-0000-7000-8000-000000000002\" ,\n  \"destinations\" : [  ] ,\n  \"definition\" : { \"version\" : \"1.0.0\" ,\n  \"package\" : \"pc.mock-payments\" ,\n  \"digest\" : \"sha256:53b3effc5d6fc11070820fefd14806b01cdd6485d0e2a2136ff15925031fac43\" } ,\n  \"dedupe_key\" : \"sha256:3e58074a5e5dc6168aa9bbaadafffddd2f91c2efaaee003e514ddf27fd99cf10\" ,\n  \"channel\" : \"http\" ,\n  \"agent_instance\" : \"01920000-0000-7000-8000-000000000005\" ,\n  \"action_id\" : \"01920000-0000-7000-8000-000000000004\" }",
+      "canonical": "{\"action_id\":\"01920000-0000-7000-8000-000000000004\",\"agent_instance\":\"01920000-0000-7000-8000-000000000005\",\"channel\":\"http\",\"dedupe_key\":\"sha256:3e58074a5e5dc6168aa9bbaadafffddd2f91c2efaaee003e514ddf27fd99cf10\",\"definition\":{\"digest\":\"sha256:53b3effc5d6fc11070820fefd14806b01cdd6485d0e2a2136ff15925031fac43\",\"package\":\"pc.mock-payments\",\"version\":\"1.0.0\"},\"destinations\":[],\"env\":\"01920000-0000-7000-8000-000000000002\",\"operation\":\"payments.refund.create\",\"org\":\"01920000-0000-7000-8000-000000000001\",\"params\":{\"amount\":{\"currency\":\"USD\",\"value\":\"30.00\"},\"reason\":\"duplicate\"},\"route\":\"payments-refund\",\"run_id\":\"01920000-0000-7000-8000-000000000003\",\"target\":{\"id\":\"ch_1\",\"type\":\"payments.charge\"},\"v\":1}",
+      "action_hash": "feb23e136225e8813d32b57771754f60177c5478ce4159faa26a9661b90b6fc9"
+    },
+    {
+      "name": "mcp get_refund",
+      "input": "{ \"v\" : 1 ,\n  \"target\" : { \"type\" : \"payments.refund\" ,\n  \"id\" : \"re_1\" } ,\n  \"run_id\" : \"01920000-0000-7000-8000-000000000003\" ,\n  \"route\" : \"payments-refund-get\" ,\n  \"params\" : {  } ,\n  \"org\" : \"01920000-0000-7000-8000-000000000001\" ,\n  \"operation\" : \"payments.refund.get\" ,\n  \"env\" : \"01920000-0000-7000-8000-000000000002\" ,\n  \"destinations\" : [  ] ,\n  \"definition\" : { \"version\" : \"1.0.0\" ,\n  \"package\" : \"pc.mock-payments\" ,\n  \"digest\" : \"sha256:1f901328f770e15d2aca9eacad9850ace38974ccab7ea68dcfcba29fe9522e39\" } ,\n  \"channel\" : \"mcp\" ,\n  \"agent_instance\" : \"01920000-0000-7000-8000-000000000005\" ,\n  \"action_id\" : \"01920000-0000-7000-8000-000000000004\" }",
+      "canonical": "{\"action_id\":\"01920000-0000-7000-8000-000000000004\",\"agent_instance\":\"01920000-0000-7000-8000-000000000005\",\"channel\":\"mcp\",\"definition\":{\"digest\":\"sha256:1f901328f770e15d2aca9eacad9850ace38974ccab7ea68dcfcba29fe9522e39\",\"package\":\"pc.mock-payments\",\"version\":\"1.0.0\"},\"destinations\":[],\"env\":\"01920000-0000-7000-8000-000000000002\",\"operation\":\"payments.refund.get\",\"org\":\"01920000-0000-7000-8000-000000000001\",\"params\":{},\"route\":\"payments-refund-get\",\"run_id\":\"01920000-0000-7000-8000-000000000003\",\"target\":{\"id\":\"re_1\",\"type\":\"payments.refund\"},\"v\":1}",
+      "action_hash": "d8488cc9cfb274327b9c2b7e17f3a8aa42ab13e2c5f72f45297f1d0320556c84"
+    },
+    {
+      "name": "http GET /v1/refunds/re_1",
+      "input": "{ \"v\" : 1 ,\n  \"target\" : { \"type\" : \"payments.refund\" ,\n  \"id\" : \"re_1\" } ,\n  \"run_id\" : \"01920000-0000-7000-8000-000000000003\" ,\n  \"route\" : \"payments-refund-get\" ,\n  \"params\" : {  } ,\n  \"org\" : \"01920000-0000-7000-8000-000000000001\" ,\n  \"operation\" : \"payments.refund.get\" ,\n  \"env\" : \"01920000-0000-7000-8000-000000000002\" ,\n  \"destinations\" : [  ] ,\n  \"definition\" : { \"version\" : \"1.0.0\" ,\n  \"package\" : \"pc.mock-payments\" ,\n  \"digest\" : \"sha256:1f901328f770e15d2aca9eacad9850ace38974ccab7ea68dcfcba29fe9522e39\" } ,\n  \"channel\" : \"http\" ,\n  \"agent_instance\" : \"01920000-0000-7000-8000-000000000005\" ,\n  \"action_id\" : \"01920000-0000-7000-8000-000000000004\" }",
+      "canonical": "{\"action_id\":\"01920000-0000-7000-8000-000000000004\",\"agent_instance\":\"01920000-0000-7000-8000-000000000005\",\"channel\":\"http\",\"definition\":{\"digest\":\"sha256:1f901328f770e15d2aca9eacad9850ace38974ccab7ea68dcfcba29fe9522e39\",\"package\":\"pc.mock-payments\",\"version\":\"1.0.0\"},\"destinations\":[],\"env\":\"01920000-0000-7000-8000-000000000002\",\"operation\":\"payments.refund.get\",\"org\":\"01920000-0000-7000-8000-000000000001\",\"params\":{},\"route\":\"payments-refund-get\",\"run_id\":\"01920000-0000-7000-8000-000000000003\",\"target\":{\"id\":\"re_1\",\"type\":\"payments.refund\"},\"v\":1}",
+      "action_hash": "81f7a8e7873e08e21359d1725961e94f25b322709f5dadb40d4b78019240e85a"
+    },
+    {
+      "name": "hook shell",
+      "input": "{ \"v\" : 1 ,\n  \"target\" : { \"type\" : \"shell.workspace\" ,\n  \"id\" : \"local\" } ,\n  \"run_id\" : \"01920000-0000-7000-8000-000000000003\" ,\n  \"route\" : \"shell-command\" ,\n  \"params\" : { \"shell\" : \"bash\" ,\n  \"cwd\" : \"/home/dev/repo\" ,\n  \"command\" : \"go test ./...\" ,\n  \"call\" : \"toolu_01\" } ,\n  \"org\" : \"01920000-0000-7000-8000-000000000001\" ,\n  \"operation\" : \"shell.command.run\" ,\n  \"env\" : \"01920000-0000-7000-8000-000000000002\" ,\n  \"destinations\" : [  ] ,\n  \"definition\" : { \"version\" : \"1.0.0\" ,\n  \"package\" : \"pc.shell\" ,\n  \"digest\" : \"sha256:06a11be18a2ce1d2edc3a63eb45dec008f0ef4d0158890a255f1b4f047961327\" } ,\n  \"dedupe_key\" : \"sha256:968e5c91cfbfee901dc7f754a8b6198e9280c4ba643c203c7c2bba042655b3d9\" ,\n  \"channel\" : \"hook\" ,\n  \"agent_instance\" : \"01920000-0000-7000-8000-000000000005\" ,\n  \"action_id\" : \"01920000-0000-7000-8000-000000000004\" }",
+      "canonical": "{\"action_id\":\"01920000-0000-7000-8000-000000000004\",\"agent_instance\":\"01920000-0000-7000-8000-000000000005\",\"channel\":\"hook\",\"dedupe_key\":\"sha256:968e5c91cfbfee901dc7f754a8b6198e9280c4ba643c203c7c2bba042655b3d9\",\"definition\":{\"digest\":\"sha256:06a11be18a2ce1d2edc3a63eb45dec008f0ef4d0158890a255f1b4f047961327\",\"package\":\"pc.shell\",\"version\":\"1.0.0\"},\"destinations\":[],\"env\":\"01920000-0000-7000-8000-000000000002\",\"operation\":\"shell.command.run\",\"org\":\"01920000-0000-7000-8000-000000000001\",\"params\":{\"call\":\"toolu_01\",\"command\":\"go test ./...\",\"cwd\":\"/home/dev/repo\",\"shell\":\"bash\"},\"route\":\"shell-command\",\"run_id\":\"01920000-0000-7000-8000-000000000003\",\"target\":{\"id\":\"local\",\"type\":\"shell.workspace\"},\"v\":1}",
+      "action_hash": "d317ed0919b225c7fa1acecc45e1b723b2f1dabf3fb5e1a195c74495c9aca8c2"
+    },
+    {
+      "name": "hook shell",
+      "input": "{ \"v\" : 1 ,\n  \"target\" : { \"type\" : \"shell.workspace\" ,\n  \"id\" : \"local\" } ,\n  \"run_id\" : \"01920000-0000-7000-8000-000000000003\" ,\n  \"route\" : \"shell-command\" ,\n  \"params\" : { \"shell\" : \"powershell\" ,\n  \"cwd\" : \"C:\\\\Users\\\\dev\\\\repo\" ,\n  \"command\" : \"Get-ChildItem -Force\\nRemove-Item .\\\\tmp\" ,\n  \"call\" : \"toolu_02\" } ,\n  \"org\" : \"01920000-0000-7000-8000-000000000001\" ,\n  \"operation\" : \"shell.command.run\" ,\n  \"env\" : \"01920000-0000-7000-8000-000000000002\" ,\n  \"destinations\" : [  ] ,\n  \"definition\" : { \"version\" : \"1.0.0\" ,\n  \"package\" : \"pc.shell\" ,\n  \"digest\" : \"sha256:06a11be18a2ce1d2edc3a63eb45dec008f0ef4d0158890a255f1b4f047961327\" } ,\n  \"dedupe_key\" : \"sha256:48f5004e3cfc6958bdee97e5c1f40fb6283a29f7274ca1cc50818539c952a7cb\" ,\n  \"channel\" : \"hook\" ,\n  \"agent_instance\" : \"01920000-0000-7000-8000-000000000005\" ,\n  \"action_id\" : \"01920000-0000-7000-8000-000000000004\" }",
+      "canonical": "{\"action_id\":\"01920000-0000-7000-8000-000000000004\",\"agent_instance\":\"01920000-0000-7000-8000-000000000005\",\"channel\":\"hook\",\"dedupe_key\":\"sha256:48f5004e3cfc6958bdee97e5c1f40fb6283a29f7274ca1cc50818539c952a7cb\",\"definition\":{\"digest\":\"sha256:06a11be18a2ce1d2edc3a63eb45dec008f0ef4d0158890a255f1b4f047961327\",\"package\":\"pc.shell\",\"version\":\"1.0.0\"},\"destinations\":[],\"env\":\"01920000-0000-7000-8000-000000000002\",\"operation\":\"shell.command.run\",\"org\":\"01920000-0000-7000-8000-000000000001\",\"params\":{\"call\":\"toolu_02\",\"command\":\"Get-ChildItem -Force\\nRemove-Item .\\\\tmp\",\"cwd\":\"C:\\\\Users\\\\dev\\\\repo\",\"shell\":\"powershell\"},\"route\":\"shell-command\",\"run_id\":\"01920000-0000-7000-8000-000000000003\",\"target\":{\"id\":\"local\",\"type\":\"shell.workspace\"},\"v\":1}",
+      "action_hash": "d3e6a2c4d6991eadb7760c7d0da0fabdef0347b2a7547b222c96ee8fb4f18639"
+    },
+    {
+      "name": "hook shell",
+      "input": "{ \"v\" : 1 ,\n  \"target\" : { \"type\" : \"shell.workspace\" ,\n  \"id\" : \"local\" } ,\n  \"run_id\" : \"01920000-0000-7000-8000-000000000003\" ,\n  \"route\" : \"shell-command\" ,\n  \"params\" : { \"shell\" : \"bash\" ,\n  \"cwd\" : \"\\\\\\\\fileserver\\\\share\\\\repo\" ,\n  \"command\" : \"ls\" ,\n  \"call\" : \"toolu_03\" } ,\n  \"org\" : \"01920000-0000-7000-8000-000000000001\" ,\n  \"operation\" : \"shell.command.run\" ,\n  \"env\" : \"01920000-0000-7000-8000-000000000002\" ,\n  \"destinations\" : [  ] ,\n  \"definition\" : { \"version\" : \"1.0.0\" ,\n  \"package\" : \"pc.shell\" ,\n  \"digest\" : \"sha256:06a11be18a2ce1d2edc3a63eb45dec008f0ef4d0158890a255f1b4f047961327\" } ,\n  \"dedupe_key\" : \"sha256:939df506887b25c1e80cb3e215a0ed88891d6951d1f8e27c76d7f82c8e6555aa\" ,\n  \"channel\" : \"hook\" ,\n  \"agent_instance\" : \"01920000-0000-7000-8000-000000000005\" ,\n  \"action_id\" : \"01920000-0000-7000-8000-000000000004\" }",
+      "canonical": "{\"action_id\":\"01920000-0000-7000-8000-000000000004\",\"agent_instance\":\"01920000-0000-7000-8000-000000000005\",\"channel\":\"hook\",\"dedupe_key\":\"sha256:939df506887b25c1e80cb3e215a0ed88891d6951d1f8e27c76d7f82c8e6555aa\",\"definition\":{\"digest\":\"sha256:06a11be18a2ce1d2edc3a63eb45dec008f0ef4d0158890a255f1b4f047961327\",\"package\":\"pc.shell\",\"version\":\"1.0.0\"},\"destinations\":[],\"env\":\"01920000-0000-7000-8000-000000000002\",\"operation\":\"shell.command.run\",\"org\":\"01920000-0000-7000-8000-000000000001\",\"params\":{\"call\":\"toolu_03\",\"command\":\"ls\",\"cwd\":\"\\\\\\\\fileserver\\\\share\\\\repo\",\"shell\":\"bash\"},\"route\":\"shell-command\",\"run_id\":\"01920000-0000-7000-8000-000000000003\",\"target\":{\"id\":\"local\",\"type\":\"shell.workspace\"},\"v\":1}",
+      "action_hash": "3765f81be5fcc41f71aa524b3e97a0c81b82356548fdc5075d90e73bc633c3d2"
+    },
+    {
+      "name": "sdk channel through a connection",
+      "input": "{ \"v\" : 1 ,\n  \"target\" : { \"type\" : \"payments.charge\" ,\n  \"id\" : \"ch_1\" } ,\n  \"run_id\" : \"01920000-0000-7000-8000-000000000003\" ,\n  \"route\" : \"payments-refund\" ,\n  \"params\" : { \"reason\" : \"duplicate\" ,\n  \"amount\" : { \"value\" : \"30.00\" ,\n  \"currency\" : \"USD\" } } ,\n  \"org\" : \"01920000-0000-7000-8000-000000000001\" ,\n  \"operation\" : \"payments.refund.create\" ,\n  \"env\" : \"01920000-0000-7000-8000-000000000002\" ,\n  \"destinations\" : [  ] ,\n  \"definition\" : { \"version\" : \"1.0.0\" ,\n  \"package\" : \"pc.mock-payments\" ,\n  \"digest\" : \"sha256:53b3effc5d6fc11070820fefd14806b01cdd6485d0e2a2136ff15925031fac43\" } ,\n  \"dedupe_key\" : \"sha256:3e58074a5e5dc6168aa9bbaadafffddd2f91c2efaaee003e514ddf27fd99cf10\" ,\n  \"connection\" : \"01920000-0000-7000-8000-000000000007\" ,\n  \"channel\" : \"sdk\" ,\n  \"agent_instance\" : \"01920000-0000-7000-8000-000000000005\" ,\n  \"action_id\" : \"01920000-0000-7000-8000-000000000004\" }",
+      "canonical": "{\"action_id\":\"01920000-0000-7000-8000-000000000004\",\"agent_instance\":\"01920000-0000-7000-8000-000000000005\",\"channel\":\"sdk\",\"connection\":\"01920000-0000-7000-8000-000000000007\",\"dedupe_key\":\"sha256:3e58074a5e5dc6168aa9bbaadafffddd2f91c2efaaee003e514ddf27fd99cf10\",\"definition\":{\"digest\":\"sha256:53b3effc5d6fc11070820fefd14806b01cdd6485d0e2a2136ff15925031fac43\",\"package\":\"pc.mock-payments\",\"version\":\"1.0.0\"},\"destinations\":[],\"env\":\"01920000-0000-7000-8000-000000000002\",\"operation\":\"payments.refund.create\",\"org\":\"01920000-0000-7000-8000-000000000001\",\"params\":{\"amount\":{\"currency\":\"USD\",\"value\":\"30.00\"},\"reason\":\"duplicate\"},\"route\":\"payments-refund\",\"run_id\":\"01920000-0000-7000-8000-000000000003\",\"target\":{\"id\":\"ch_1\",\"type\":\"payments.charge\"},\"v\":1}",
+      "action_hash": "8af51c7f1532efc128eada40f6ffae64990975fc30d5aa748382635361ce4ae3"
+    },
+    {
+      "name": "a JSON number in params",
+      "input": "{\"action_id\":\"01920000-0000-7000-8000-000000000004\",\"agent_instance\":\"01920000-0000-7000-8000-000000000005\",\"channel\":\"mcp\",\"dedupe_key\":\"sha256:3e58074a5e5dc6168aa9bbaadafffddd2f91c2efaaee003e514ddf27fd99cf10\",\"definition\":{\"digest\":\"sha256:53b3effc5d6fc11070820fefd14806b01cdd6485d0e2a2136ff15925031fac43\",\"package\":\"pc.mock-payments\",\"version\":\"1.0.0\"},\"destinations\":[],\"env\":\"01920000-0000-7000-8000-000000000002\",\"operation\":\"payments.refund.create\",\"org\":\"01920000-0000-7000-8000-000000000001\",\"params\":{\"amount\":{\"currency\":\"USD\",\"value\":30.00},\"reason\":\"duplicate\"},\"route\":\"payments-refund\",\"run_id\":\"01920000-0000-7000-8000-000000000003\",\"target\":{\"id\":\"ch_1\",\"type\":\"payments.charge\"},\"v\":1}",
+      "reject": {
+        "level": "actionir",
+        "reason": "a JSON number in params"
+      }
+    },
+    {
+      "name": "an unknown member",
+      "input": "{\"extra\":true,\"action_id\":\"01920000-0000-7000-8000-000000000004\",\"agent_instance\":\"01920000-0000-7000-8000-000000000005\",\"channel\":\"mcp\",\"dedupe_key\":\"sha256:3e58074a5e5dc6168aa9bbaadafffddd2f91c2efaaee003e514ddf27fd99cf10\",\"definition\":{\"digest\":\"sha256:53b3effc5d6fc11070820fefd14806b01cdd6485d0e2a2136ff15925031fac43\",\"package\":\"pc.mock-payments\",\"version\":\"1.0.0\"},\"destinations\":[],\"env\":\"01920000-0000-7000-8000-000000000002\",\"operation\":\"payments.refund.create\",\"org\":\"01920000-0000-7000-8000-000000000001\",\"params\":{\"amount\":{\"currency\":\"USD\",\"value\":\"30.00\"},\"reason\":\"duplicate\"},\"route\":\"payments-refund\",\"run_id\":\"01920000-0000-7000-8000-000000000003\",\"target\":{\"id\":\"ch_1\",\"type\":\"payments.charge\"},\"v\":1}",
+      "reject": {
+        "level": "actionir",
+        "reason": "an unknown member"
+      }
+    },
+    {
+      "name": "a non-ASCII target id",
+      "input": "{\"action_id\":\"01920000-0000-7000-8000-000000000004\",\"agent_instance\":\"01920000-0000-7000-8000-000000000005\",\"channel\":\"mcp\",\"dedupe_key\":\"sha256:3e58074a5e5dc6168aa9bbaadafffddd2f91c2efaaee003e514ddf27fd99cf10\",\"definition\":{\"digest\":\"sha256:53b3effc5d6fc11070820fefd14806b01cdd6485d0e2a2136ff15925031fac43\",\"package\":\"pc.mock-payments\",\"version\":\"1.0.0\"},\"destinations\":[],\"env\":\"01920000-0000-7000-8000-000000000002\",\"operation\":\"payments.refund.create\",\"org\":\"01920000-0000-7000-8000-000000000001\",\"params\":{\"amount\":{\"currency\":\"USD\",\"value\":\"30.00\"},\"reason\":\"duplicate\"},\"route\":\"payments-refund\",\"run_id\":\"01920000-0000-7000-8000-000000000003\",\"target\":{\"id\":\"ch_\\u0441\",\"type\":\"payments.charge\"},\"v\":1}",
+      "reject": {
+        "level": "actionir",
+        "reason": "a non-ASCII target id"
+      }
+    },
+    {
+      "name": "nesting deeper than 16",
+      "input": "{\"action_id\":\"01920000-0000-7000-8000-000000000004\",\"agent_instance\":\"01920000-0000-7000-8000-000000000005\",\"channel\":\"mcp\",\"dedupe_key\":\"sha256:3e58074a5e5dc6168aa9bbaadafffddd2f91c2efaaee003e514ddf27fd99cf10\",\"definition\":{\"digest\":\"sha256:53b3effc5d6fc11070820fefd14806b01cdd6485d0e2a2136ff15925031fac43\",\"package\":\"pc.mock-payments\",\"version\":\"1.0.0\"},\"destinations\":[],\"env\":\"01920000-0000-7000-8000-000000000002\",\"operation\":\"payments.refund.create\",\"org\":\"01920000-0000-7000-8000-000000000001\",\"params\":{\"amount\":{\"currency\":\"USD\",\"value\":\"30.00\"},\"reason\":\"duplicate\",\"x\":{\"x\":{\"x\":{\"x\":{\"x\":{\"x\":{\"x\":{\"x\":{\"x\":{\"x\":{\"x\":{\"x\":{\"x\":{\"x\":{\"x\":{\"x\":{\"x\":1}}}}}}}}}}}}}}}}},\"route\":\"payments-refund\",\"run_id\":\"01920000-0000-7000-8000-000000000003\",\"target\":{\"id\":\"ch_1\",\"type\":\"payments.charge\"},\"v\":1}",
+      "reject": {
+        "level": "actionir",
+        "reason": "nesting deeper than 16"
+      }
+    },
+    {
+      "name": "no destinations",
+      "input": "{\"action_id\":\"01920000-0000-7000-8000-000000000004\",\"agent_instance\":\"01920000-0000-7000-8000-000000000005\",\"channel\":\"mcp\",\"dedupe_key\":\"sha256:3e58074a5e5dc6168aa9bbaadafffddd2f91c2efaaee003e514ddf27fd99cf10\",\"definition\":{\"digest\":\"sha256:53b3effc5d6fc11070820fefd14806b01cdd6485d0e2a2136ff15925031fac43\",\"package\":\"pc.mock-payments\",\"version\":\"1.0.0\"},\"env\":\"01920000-0000-7000-8000-000000000002\",\"operation\":\"payments.refund.create\",\"org\":\"01920000-0000-7000-8000-000000000001\",\"params\":{\"amount\":{\"currency\":\"USD\",\"value\":\"30.00\"},\"reason\":\"duplicate\"},\"route\":\"payments-refund\",\"run_id\":\"01920000-0000-7000-8000-000000000003\",\"target\":{\"id\":\"ch_1\",\"type\":\"payments.charge\"},\"v\":1}",
+      "reject": {
+        "level": "actionir",
+        "reason": "no destinations"
+      }
+    },
+    {
+      "name": "a duplicate member",
+      "input": "{\"action_id\":\"01920000-0000-7000-8000-000000000004\",\"agent_instance\":\"01920000-0000-7000-8000-000000000005\",\"channel\":\"mcp\",\"dedupe_key\":\"sha256:3e58074a5e5dc6168aa9bbaadafffddd2f91c2efaaee003e514ddf27fd99cf10\",\"definition\":{\"digest\":\"sha256:53b3effc5d6fc11070820fefd14806b01cdd6485d0e2a2136ff15925031fac43\",\"package\":\"pc.mock-payments\",\"version\":\"1.0.0\"},\"destinations\":[],\"env\":\"01920000-0000-7000-8000-000000000002\",\"operation\":\"payments.refund.create\",\"org\":\"01920000-0000-7000-8000-000000000001\",\"params\":{\"amount\":{\"currency\":\"USD\",\"value\":\"30.00\"},\"reason\":\"duplicate\"},\"route\":\"payments-refund\",\"run_id\":\"01920000-0000-7000-8000-000000000003\",\"target\":{\"id\":\"ch_1\",\"type\":\"payments.charge\"},\"v\":1,\"v\":1}",
+      "reject": {
+        "level": "jcs",
+        "reason": "a duplicate member"
+      }
+    },
+    {
+      "name": "a lone surrogate in params",
+      "input": "{\"action_id\":\"01920000-0000-7000-8000-000000000004\",\"agent_instance\":\"01920000-0000-7000-8000-000000000005\",\"channel\":\"mcp\",\"dedupe_key\":\"sha256:3e58074a5e5dc6168aa9bbaadafffddd2f91c2efaaee003e514ddf27fd99cf10\",\"definition\":{\"digest\":\"sha256:53b3effc5d6fc11070820fefd14806b01cdd6485d0e2a2136ff15925031fac43\",\"package\":\"pc.mock-payments\",\"version\":\"1.0.0\"},\"destinations\":[],\"env\":\"01920000-0000-7000-8000-000000000002\",\"operation\":\"payments.refund.create\",\"org\":\"01920000-0000-7000-8000-000000000001\",\"params\":{\"amount\":{\"currency\":\"USD\",\"value\":\"30.00\"},\"reason\":\"\\ud800\"},\"route\":\"payments-refund\",\"run_id\":\"01920000-0000-7000-8000-000000000003\",\"target\":{\"id\":\"ch_1\",\"type\":\"payments.charge\"},\"v\":1}",
+      "reject": {
+        "level": "jcs",
+        "reason": "a lone surrogate in params"
+      }
+    }
+  ]
+}
