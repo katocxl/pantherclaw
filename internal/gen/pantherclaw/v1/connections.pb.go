@@ -2578,7 +2578,8 @@ func (x *ConnectionOperation) GetMode() RouteMode {
 // for, with the operations that need it (F349).
 type ConnectionPermission struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// The permission.
+	// The permission: a credential scope the definition declares
+	// (`name:level`), or without one `<access> <target type>`.
 	Name string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	// The operations that need it.
 	Reasons       []string `protobuf:"bytes,2,rep,name=reasons,proto3" json:"reasons,omitempty"`

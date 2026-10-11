@@ -621,7 +621,8 @@ message ConnectionOperation {
 // ConnectionPermission is something the connection's credential is used
 // for, with the operations that need it (F349).
 message ConnectionPermission {
-  // The permission.
+  // The permission: a credential scope the definition declares
+  // (`name:level`), or without one `<access> <target type>`.
   string name = 1;
   // The operations that need it.
   repeated string reasons = 2;

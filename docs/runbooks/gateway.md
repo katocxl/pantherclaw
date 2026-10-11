@@ -156,7 +156,7 @@ pclaw connection health <connection-id>         # circuits, permissions, tests, 
 **Capabilities** follow from the connection's kind, access mode and pinned package, never from a setting (F346):
 - discovery, observation, enforcement and response, each `SUPPORTED`, `PARTIAL` or `UNSUPPORTED`, with the reason. Only an `http` connection whose credential PantherClaw holds, or whose target checks action tokens, declares enforcement `SUPPORTED`. An `mcp` connection (opaque, HR-086), an agent-held or open target, and a `local` connection (cooperative, HR-024) declare `PARTIAL`;
 - the operations it serves, with each route's mode;
-- the permissions PantherClaw's credential is used for, each with the operations that need it;
+- the permissions PantherClaw's credential is used for, each with the operations that need it: the definition's `credential_scope` (`contents:write`), or without one its access to its target type (`write payments.charge`);
 - its limits and failure behaviour;
 - its last successful test.
 

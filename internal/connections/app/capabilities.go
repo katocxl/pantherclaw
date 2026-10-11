@@ -164,8 +164,9 @@ func Declare(c Connection, p *domain.Package) Capabilities {
 				d.Operation + ": no verifier is declared, so its effect is recorded UNVERIFIABLE (M7).",
 			})
 		}
-		name := string(d.Access) + " " + d.Target.Type
-		permissions[name] = append(permissions[name], d.Operation+": "+d.Summary)
+		for _, name := range permissionNames(d) {
+			permissions[name] = append(permissions[name], d.Operation+": "+d.Summary)
+		}
 	}
 	if c.AccessMode != AccessHeld && c.AccessMode != AccessTargetEnforced {
 		// No credential of PantherClaw's is used for it.
@@ -238,4 +239,19 @@ func declareKind(out *Capabilities, c Connection) {
 			"call it directly."}
 		out.Limits = append(out.Limits, Limit{"OPEN_TARGET", "The target accepts calls that do not come through the gateway."})
 	}
+}
+
+// permissionNames are what definition d needs of the connection's
+// credential (F349): its credential scope, each name:level as the target
+// names it, or without one its access to its target type.
+func permissionNames(d *domain.Definition) []string {
+	scopes := d.Scopes()
+	if len(scopes) == 0 {
+		return []string{string(d.Access) + " " + d.Target.Type}
+	}
+	out := make([]string, 0, len(scopes))
+	for _, name := range slices.Sorted(maps.Keys(scopes)) {
+		out = append(out, name+":"+scopes[name])
+	}
+	return out
 }
