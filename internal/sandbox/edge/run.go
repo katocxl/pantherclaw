@@ -26,7 +26,8 @@ import (
 // ConfigFormat names the edge's configuration format (G0 M9 edge protocol).
 const ConfigFormat = "pantherclaw.edge/v1"
 
-// Modes. The connector mode arrives with the connector runtime (track C).
+// Modes: in front of an agent in a sandbox, or of a connector's container
+// (track C, connector.go).
 const (
 	ModeSandbox   = "sandbox"
 	ModeConnector = "connector"
@@ -60,6 +61,9 @@ type Config struct {
 	TokenFile string `json:"token_file"`
 	// CAValiditySeconds bounds the session CA; 24 h when zero.
 	CAValiditySeconds int64 `json:"ca_validity_seconds,omitzero"`
+	// BindingFile holds the connector's binding token (connector mode),
+	// read for every request.
+	BindingFile string `json:"binding_file,omitzero"`
 }
 
 // ReadConfig reads a configuration file strictly.
@@ -75,8 +79,10 @@ func ReadConfig(path string) (Config, error) {
 	switch {
 	case c.Format != ConfigFormat:
 		return Config{}, fmt.Errorf("edge: format %q, want %s", c.Format, ConfigFormat)
+	case c.Mode == ModeConnector && (c.Listen == "" || c.Subnet == "" || c.BindingFile == "" || c.KeyFile != "" || c.TokenFile != ""):
+		return Config{}, errors.New("edge: a connector's edge needs listen, subnet and binding_file, and has no workload key or token")
 	case c.Mode == ModeConnector:
-		return Config{}, errors.New("edge: connector mode is not available in this build")
+		return c, nil
 	case c.Mode != ModeSandbox:
 		return Config{}, fmt.Errorf("edge: mode %q", c.Mode)
 	case c.Listen == "" || c.Subnet == "" || c.KeyFile == "" || c.TokenFile == "":
@@ -107,26 +113,32 @@ const ReadyEvent = "edge.ready"
 // writes Ready to out, and logs every request it forwards or refuses to
 // log.
 func Run(ctx context.Context, c Config, out io.Writer, log *slog.Logger) error {
-	kf, err := workloadclient.ReadKeyFile(c.KeyFile)
-	if err != nil {
-		return err
-	}
-	key, err := kf.Key()
-	if err != nil {
-		return err
-	}
-	e, err := New(Options{
-		Session: c.Session, GatewayURL: c.GatewayURL, GatewayAddr: c.GatewayAddr, GatewayCAPin: c.GatewayCAPin, Hosts: c.Hosts,
-		Run: c.Run, Key: key,
-		Token: func() string {
-			b, err := os.ReadFile(c.TokenFile)
+	read := func(path string) func() string {
+		return func() string {
+			b, err := os.ReadFile(path) //nolint:gosec // G304: the edge's own mounted file
 			if err != nil {
 				return ""
 			}
 			return strings.TrimSpace(string(b))
-		},
-		CAValidity: time.Duration(c.CAValiditySeconds) * time.Second, Log: log,
-	})
+		}
+	}
+	o := Options{
+		Session: c.Session, GatewayURL: c.GatewayURL, GatewayAddr: c.GatewayAddr, GatewayCAPin: c.GatewayCAPin, Hosts: c.Hosts,
+		Run: c.Run, CAValidity: time.Duration(c.CAValiditySeconds) * time.Second, Log: log,
+	}
+	if c.Mode == ModeConnector {
+		o.Binding = read(c.BindingFile)
+	} else {
+		kf, err := workloadclient.ReadKeyFile(c.KeyFile)
+		if err != nil {
+			return err
+		}
+		if o.Key, err = kf.Key(); err != nil {
+			return err
+		}
+		o.Token = read(c.TokenFile)
+	}
+	e, err := New(o)
 	if err != nil {
 		return err
 	}

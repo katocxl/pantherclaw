@@ -105,6 +105,12 @@ type Options struct {
 	// valid; 24 h when zero.
 	CAValidity time.Duration
 	Log        *slog.Logger
+	// Binding, set in connector mode (G0 M9 track C), returns the binding
+	// token the gateway generated for the connector's container. The edge
+	// then sends each request to the gateway's egress listener at
+	// GatewayURL instead of its HTTP face, unsigned: the gateway maps it
+	// to the call in flight and places the credential (connector.go).
+	Binding func() string
 }
 
 // Edge is one session's sidecar.
@@ -112,6 +118,7 @@ type Edge struct {
 	session, gateway, run string
 	hosts                 map[string]string
 	token                 func() string
+	binding               func() string
 	client                *http.Client
 	ca                    *authority
 	log                   *slog.Logger
@@ -124,11 +131,13 @@ func New(o Options) (*Edge, error) {
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || u.RawQuery != "" {
 		return nil, fmt.Errorf("edge: gateway URL %q", o.GatewayURL)
 	}
-	if _, err := ids.ParseUUID(o.Run); err != nil {
-		return nil, errors.New("edge: the run must be a run id")
-	}
-	if len(o.Key) != ed25519.PrivateKeySize || o.Token == nil {
-		return nil, errors.New("edge: a workload key and token source are required")
+	if o.Binding == nil {
+		if _, err := ids.ParseUUID(o.Run); err != nil {
+			return nil, errors.New("edge: the run must be a run id")
+		}
+		if len(o.Key) != ed25519.PrivateKeySize || o.Token == nil {
+			return nil, errors.New("edge: a workload key and token source are required")
+		}
 	}
 	if len(o.Hosts) == 0 || len(o.Hosts) > 64 {
 		return nil, errors.New("edge: 1 to 64 agent hosts")
@@ -169,10 +178,14 @@ func New(o Options) (*Edge, error) {
 		IdleConnTimeout:       90 * time.Second,
 		ForceAttemptHTTP2:     true,
 	}
+	var transport http.RoundTripper = &workloadclient.Transport{Key: o.Key, Token: o.Token, Base: base}
+	if o.Binding != nil {
+		transport = base // the egress listener checks the binding token
+	}
 	return &Edge{
-		session: o.Session, gateway: u.String(), run: o.Run, hosts: maps.Clone(o.Hosts), token: o.Token, ca: ca, log: log,
+		session: o.Session, gateway: u.String(), run: o.Run, hosts: maps.Clone(o.Hosts), token: o.Token, binding: o.Binding, ca: ca, log: log,
 		client: &http.Client{
-			Transport: &workloadclient.Transport{Key: o.Key, Token: o.Token, Base: base},
+			Transport: transport,
 			Timeout:   requestTimeout,
 			CheckRedirect: func(*http.Request, []*http.Request) error {
 				return http.ErrUseLastResponse // HR-070
@@ -354,6 +367,10 @@ func (e *Edge) tunnel(w http.ResponseWriter, r *http.Request, host, conn string)
 // headers never leave the sandbox, and each credential stripped is
 // reported.
 func (e *Edge) forward(w http.ResponseWriter, r *http.Request, host, conn string) {
+	if e.binding != nil {
+		e.egress(w, r, host, conn)
+		return
+	}
 	e.strip(r, host)
 	query := e.stripQuery(r, host)
 	body, err := io.ReadAll(io.LimitReader(r.Body, MaxBody+1))
@@ -387,7 +404,13 @@ func (e *Edge) forward(w http.ResponseWriter, r *http.Request, host, conn string
 	if e.session != "" {
 		out.Header.Set(headerSession, e.session)
 	}
-	res, err := e.client.Do(out) //nolint:gosec // G704: only the configured gateway (see above)
+	res, err := e.client.Do(out) //nolint:gosec,bodyclose // G704: only the configured gateway (see above); relay closes the body
+	e.relay(w, r, host, conn, action, res, err)
+}
+
+// relay answers the agent with the gateway's answer: its status, body and
+// a header allowlist, never the gateway's own refusal marker.
+func (e *Edge) relay(w http.ResponseWriter, r *http.Request, host, conn, action string, res *http.Response, err error) {
 	if err != nil {
 		e.log.WarnContext(r.Context(), "edge.gateway_unreachable", "connection", conn, "error", err.Error())
 		e.answer(w, r, host, http.StatusBadGateway, "gateway_unreachable")
