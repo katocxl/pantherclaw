@@ -18,7 +18,7 @@ import (
 func icmpEcho(ctx context.Context, ip net.IP) error {
 	fd, err := syscall.Socket(syscall.AF_INET, syscall.SOCK_DGRAM, syscall.IPPROTO_ICMP)
 	if err != nil {
-		return fmt.Errorf("ICMP socket: %w", err)
+		return failed{fmt.Errorf("ICMP socket: %w", err)} // the ping group was not applied
 	}
 	defer func() { _ = syscall.Close(fd) }()
 	// The kernel sets the identifier and the checksum of a ping socket.
@@ -34,17 +34,20 @@ func icmpEcho(ctx context.Context, ip net.IP) error {
 	}
 	tv := syscall.NsecToTimeval(time.Until(deadline).Nanoseconds())
 	if err := syscall.SetsockoptTimeval(fd, syscall.SOL_SOCKET, syscall.SO_RCVTIMEO, &tv); err != nil {
-		return err
+		return failed{err}
 	}
 	buf := make([]byte, 1500)
 	for time.Now().Before(deadline) {
 		n, from, err := syscall.Recvfrom(fd, buf, 0)
 		if err != nil {
-			return fmt.Errorf("no echo reply: %w", err)
+			if errors.Is(err, syscall.EAGAIN) || errors.Is(err, syscall.EINTR) {
+				return closed{"no echo reply"}
+			}
+			return err
 		}
 		if src, ok := from.(*syscall.SockaddrInet4); ok && net.IP(src.Addr[:]).Equal(ip) && n >= 8 && buf[0] == 0 {
 			return nil
 		}
 	}
-	return errors.New("no echo reply")
+	return closed{"no echo reply"}
 }

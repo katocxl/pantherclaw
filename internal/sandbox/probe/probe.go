@@ -13,7 +13,9 @@
 // hosts' real addresses (resolved on the host), never another third party.
 // Every probe aimed at the canary carries the run's marker, so that the
 // canary report shows whether anything left. A control run on an open
-// network aims the same probes at the canary and must reach it.
+// network runs each probe again where it has a live target, as a positive
+// twin that must reach it: a probe that cannot see an open route proves
+// nothing about a closed one.
 package probe
 
 import (
@@ -25,11 +27,13 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"os"
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/katocxl/pantherclaw/internal/sandbox/report"
@@ -53,6 +57,49 @@ type probe struct {
 	run                        func(ctx context.Context) error
 }
 
+// closed is a probe's own finding that its route is closed: the edge
+// refused, a name did not resolve, no echo reply came.
+type closed struct{ why string }
+
+func (c closed) Error() string { return c.why }
+
+// failed is a probe that could not run (no ICMP socket, no CA file): its
+// result is an error, which never passes.
+type failed struct{ err error }
+
+func (f failed) Error() string { return f.err.Error() }
+func (f failed) Unwrap() error { return f.err }
+
+// observe is what a probe saw (HR-121). Anything that answered is
+// reachable: a connection, a reset, an ICMP port unreachable, any DNS
+// answer. Only silence is blocked: a timeout, no route, a name that does
+// not resolve, the probe's own finding. A probe that failed to run, or an
+// error nothing explains, is an error, which never passes.
+func observe(err error) string {
+	var c closed
+	var f failed
+	var dns *net.DNSError
+	var ne net.Error
+	switch {
+	case err == nil:
+		return report.Reachable
+	case errors.As(err, &f):
+		return report.Error
+	case errors.As(err, &c):
+		return report.Blocked
+	case errors.Is(err, syscall.ECONNREFUSED), errors.Is(err, syscall.ECONNRESET):
+		return report.Reachable
+	case errors.Is(err, syscall.ENETUNREACH), errors.Is(err, syscall.EHOSTUNREACH), errors.Is(err, syscall.EADDRNOTAVAIL),
+		errors.Is(err, syscall.EAFNOSUPPORT):
+		return report.Blocked
+	case errors.As(err, &dns) && dns.IsNotFound:
+		return report.Blocked
+	case errors.Is(err, context.DeadlineExceeded), errors.As(err, &ne) && ne.Timeout():
+		return report.Blocked
+	}
+	return report.Error
+}
+
 // Run runs the catalog for c and returns its results in catalog order.
 func Run(ctx context.Context, c Config) []report.Result {
 	ps := catalog(c)
@@ -65,9 +112,10 @@ func Run(ctx context.Context, c Config) []report.Result {
 			defer func() { <-sem }()
 			pctx, cancel := context.WithTimeout(ctx, 2*dialTimeout)
 			defer cancel()
-			r := report.Result{Name: p.name, Role: p.role, Expect: p.expect, Observed: report.Reachable, Detail: bounded(p.target)}
-			if err := p.run(pctx); err != nil {
-				r.Observed, r.Detail = report.Blocked, bounded(p.target+": "+err.Error())
+			err := p.run(pctx)
+			r := report.Result{Name: p.name, Role: p.role, Expect: p.expect, Observed: observe(err), Detail: bounded(p.target)}
+			if err != nil {
+				r.Detail = bounded(p.target + ": " + err.Error())
 			}
 			out[i] = r
 		})
@@ -86,7 +134,7 @@ func bounded(s string) string {
 
 func catalog(c Config) []probe {
 	if c.Kind == report.KindControl {
-		return canaryProbes(c, "canary_control", report.RolePositive, report.Reachable)
+		return twins(c)
 	}
 	var ps []probe
 	blocked := func(name, target string, f func(context.Context) error) {
@@ -110,20 +158,20 @@ func catalog(c Config) []probe {
 	// only on internal networks (CVE-2024-29018): the agent hosts and the
 	// marker's name must not resolve through it.
 	for _, h := range append(append([]string{}, c.AgentHosts...), marker+".canary.invalid") {
-		blocked("dns_docker_resolver", "127.0.0.11 "+h, lookup("127.0.0.11:53", "udp", h))
+		blocked("dns_docker_resolver", "127.0.0.11 "+h, resolves("127.0.0.11:53", h))
 	}
 	// Every probe aimed at the canary: DNS (UDP and TCP), HTTPS, SSH, a
 	// push with a planted token and key, ICMP.
-	ps = append(ps, canaryProbes(c, "", report.RoleProbe, report.Blocked)...)
+	ps = append(ps, canaryProbes(c, report.RoleProbe, report.Blocked)...)
 	for _, h := range c.HostAddrs {
-		blocked("dns_external", "udp "+h+":53", lookup(net.JoinHostPort(h, "53"), "udp", marker+".canary.invalid"))
+		blocked("dns_external", "udp "+h+":53", answers(net.JoinHostPort(h, "53"), "udp", marker))
 	}
 	tcp("direct_https", mapped("443")...)
 	tcp("direct_ssh", mapped("22")...)
 	for _, a := range mapped("22") {
 		blocked("ssh_push", a, func(ctx context.Context) error { return sendLine(ctx, a, "SSH-2.0-pantherclaw-probe "+marker) })
 	}
-	blocked("ipv6", "[2001:db8::1]:443", func(ctx context.Context) error { return dialTCP(ctx, "tcp6", "[2001:db8::1]:443") })
+	blocked("ipv6", "an IPv6 address or default route", func(context.Context) error { return ipv6Route() })
 	for _, a := range c.MappedAddrs {
 		if ip := net.ParseIP(a); ip != nil && ip.To4() == nil {
 			blocked("ipv6", a, func(ctx context.Context) error { return dialTCP(ctx, "tcp6", net.JoinHostPort(a, "443")) })
@@ -150,14 +198,10 @@ func catalog(c Config) []probe {
 		}
 	}
 	tcp("host_gateway", hosts...)
-	blocked("docker_socket", "/var/run/docker.sock, /run/docker.sock", func(context.Context) error {
-		for _, p := range []string{"/var/run/docker.sock", "/run/docker.sock"} {
-			if _, err := os.Stat(p); err == nil {
-				return nil
-			}
-		}
-		return errors.New("no socket")
-	})
+	// The engine's API over TCP. Whether the agent holds the engine's
+	// socket is pclaw's configuration check (agent_no_docker_socket), from
+	// its inspect of the agent's container: this container's own file
+	// system says nothing about the agent's.
 	var daemons []string
 	for _, h := range append([]string{bridgeGateway()}, c.HostAddrs...) {
 		if h != "" {
@@ -183,13 +227,13 @@ func catalog(c Config) []probe {
 			viaEdge(proxy, nil, http.MethodGet, "http://unmapped.invalid/"+marker, nil),
 		},
 		probe{"edge_reachable", report.RolePositive, report.Reachable, c.Edge, func(ctx context.Context) error { return dialTCP(ctx, "tcp", c.Edge) }},
-		probe{"dns_resolver_works", report.RolePositive, report.Reachable, "127.0.0.11 " + hostOf(c.Edge), lookup("127.0.0.11:53", "udp", hostOf(c.Edge))},
+		probe{"dns_resolver_works", report.RolePositive, report.Reachable, "127.0.0.11 " + hostOf(c.Edge), resolves("127.0.0.11:53", hostOf(c.Edge))},
 	)
 	for _, h := range c.AgentHosts {
 		ps = append(ps, probe{"edge_mediated", report.RolePositive, report.Reachable, "https://" + h + " through the edge", func(ctx context.Context) error {
 			roots, err := caPool(c.CAFile)
 			if err != nil {
-				return err
+				return failed{err}
 			}
 			return viaEdge(proxy, roots, http.MethodGet, "https://"+h+"/.well-known/pantherclaw-probe/"+marker, nil)(ctx)
 		}})
@@ -197,16 +241,45 @@ func catalog(c Config) []probe {
 	return ps
 }
 
-// canaryProbes aims DNS (UDP and TCP), HTTPS, SSH and a planted-token push
-// at every canary address, each carrying the run's marker.
-func canaryProbes(c Config, name, role, expect string) []probe {
+// twins is the control run's catalog: on an open network, each probe that
+// has a live target there runs again under its own name as a positive
+// control that must reach it (G0 M9 design decision 15). ipv6, metadata
+// and docker_socket have none: no IPv6, metadata service or engine API is
+// known to answer on the control network.
+func twins(c Config) []probe {
+	ps := canaryProbes(c, report.RolePositive, report.Reachable)
+	add := func(name, target string, f func(context.Context) error) {
+		ps = append(ps, probe{name, report.RolePositive, report.Reachable, target, f})
+	}
+	for _, a := range c.Canary.Addrs {
+		if ip := net.ParseIP(a); ip != nil && ip.To4() != nil {
+			add("icmp", "echo "+a, func(ctx context.Context) error { return icmpEcho(ctx, ip.To4()) })
+		}
+	}
+	hosts := c.HostAddrs
+	if len(hosts) == 0 {
+		hosts = []string{"host.docker.internal"}
+	}
+	for _, p := range c.HostPorts {
+		for _, h := range hosts {
+			a := net.JoinHostPort(h, strconv.Itoa(p))
+			add("host_gateway", a, func(ctx context.Context) error { return dialTCP(ctx, "tcp", a) })
+		}
+	}
+	for _, h := range c.AgentHosts {
+		add("dns_docker_resolver", "127.0.0.11 "+h, resolves("127.0.0.11:53", h))
+	}
+	return ps
+}
+
+// canaryProbes aims DNS (UDP and TCP), HTTPS, SSH and planted-token and
+// planted-key pushes at every canary address, each carrying the run's
+// marker.
+func canaryProbes(c Config, role, expect string) []probe {
 	marker := report.Marker(c.Report.Nonce)
 	var ps []probe
-	add := func(n, target string, f func(context.Context) error) {
-		if name != "" {
-			n = name
-		}
-		ps = append(ps, probe{n, role, expect, target, f})
+	add := func(name, target string, f func(context.Context) error) {
+		ps = append(ps, probe{name, role, expect, target, f})
 	}
 	for _, a := range c.Canary.Addrs {
 		dns := net.JoinHostPort(a, strconv.Itoa(c.Canary.DNS))
@@ -216,6 +289,9 @@ func canaryProbes(c Config, name, role, expect string) []probe {
 		add("dns_external", "tcp "+dns, sendDNS(dns, "tcp", marker))
 		add("direct_https", https, func(ctx context.Context) error { return sendLine(ctx, https, "GET /"+marker+" HTTP/1.1") })
 		add("direct_ssh", ssh, func(ctx context.Context) error { return sendLine(ctx, ssh, "SSH-2.0-pantherclaw-probe "+marker) })
+		add("ssh_push", "push "+ssh, func(ctx context.Context) error {
+			return sendLine(ctx, ssh, "SSH-2.0-pantherclaw-probe-push "+marker)
+		})
 		add("pat_push", "direct "+https, func(ctx context.Context) error {
 			return sendLine(ctx, https, "POST /canary.git/git-receive-pack HTTP/1.1\r\nAuthorization: Basic "+plantedPAT(marker))
 		})
@@ -258,23 +334,54 @@ func sendLine(ctx context.Context, addr, line string) error {
 	return err
 }
 
-// lookup resolves name with the resolver at server only.
-func lookup(server, network, name string) func(context.Context) error {
+// resolves asks the resolver at server for name: reachable when it gives
+// an address, blocked when it gives none (whatever it answered) or never
+// answers.
+func resolves(server, name string) func(context.Context) error {
 	return func(ctx context.Context) error {
-		r := &net.Resolver{PreferGo: true, Dial: func(ctx context.Context, _, _ string) (net.Conn, error) {
+		r := &net.Resolver{PreferGo: true, Dial: func(ctx context.Context, network, _ string) (net.Conn, error) {
 			d := net.Dialer{Timeout: dialTimeout}
 			return d.DialContext(ctx, network, server)
 		}}
 		addrs, err := r.LookupHost(ctx, name)
-		if err == nil && len(addrs) == 0 {
-			return errors.New("no address")
+		var dns *net.DNSError
+		switch {
+		case errors.As(err, &dns):
+			return closed{"does not resolve: " + dns.Err}
+		case err != nil:
+			return err
+		case len(addrs) == 0:
+			return closed{"no address"}
 		}
+		return nil
+	}
+}
+
+// answers sends a DNS query for the marker's name to server and waits for
+// any answer: an answer, even NXDOMAIN or a refusal, is reachable.
+func answers(server, network, marker string) func(context.Context) error {
+	return func(ctx context.Context) error {
+		d := net.Dialer{Timeout: dialTimeout}
+		c, err := d.DialContext(ctx, network, server)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = c.Close() }()
+		deadline := time.Now().Add(dialTimeout)
+		if dl, ok := ctx.Deadline(); ok && dl.Before(deadline) {
+			deadline = dl
+		}
+		_ = c.SetDeadline(deadline)
+		if _, err := c.Write(query(network, marker)); err != nil {
+			return err
+		}
+		_, err = c.Read(make([]byte, 512))
 		return err
 	}
 }
 
 // sendDNS asks the canary for the marker's name: reachable when the query
-// was sent (UDP has no reliable answer; the canary has the last word).
+// was sent (the canary does not answer; its hits have the last word).
 func sendDNS(server, network, marker string) func(context.Context) error {
 	return func(ctx context.Context) error {
 		d := net.Dialer{Timeout: dialTimeout}
@@ -283,39 +390,83 @@ func sendDNS(server, network, marker string) func(context.Context) error {
 			return err
 		}
 		defer func() { _ = c.Close() }()
-		q := append([]byte{0x50, 0x43, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, byte(len(marker))}, marker+"\x06canary\x07invalid\x00\x00\x01\x00\x01"...) //nolint:gosec // G115: a marker is 34 bytes, a DNS label at most 63
-		if network == "tcp" {
-			q = append([]byte{byte(len(q) >> 8), byte(len(q))}, q...) //nolint:gosec // G115: the query is under 100 bytes
-		}
-		_, err = c.Write(q)
+		_, err = c.Write(query(network, marker))
 		return err
 	}
 }
 
+// query is a DNS query for <marker>.canary.invalid, framed for network.
+func query(network, marker string) []byte {
+	q := append([]byte{0x50, 0x43, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, byte(len(marker))}, marker+"\x06canary\x07invalid\x00\x00\x01\x00\x01"...) //nolint:gosec // G115: a marker is 34 bytes, a DNS label at most 63
+	if network == "tcp" {
+		q = append([]byte{byte(len(q) >> 8), byte(len(q))}, q...) //nolint:gosec // G115: the query is under 100 bytes
+	}
+	return q
+}
+
+// ipv6Route finds IPv6 beyond the loopback: an address that is neither
+// loopback nor link-local, or a default route on an interface.
+func ipv6Route() error {
+	addrs, err := net.InterfaceAddrs()
+	if err != nil {
+		return failed{err}
+	}
+	for _, a := range addrs {
+		p, err := netip.ParsePrefix(a.String())
+		if err == nil && p.Addr().Is6() && !p.Addr().Is4In6() && !p.Addr().IsLoopback() && !p.Addr().IsLinkLocalUnicast() {
+			return nil
+		}
+	}
+	// destination, its prefix length, source, its prefix length, next hop,
+	// metric, references, use, flags, device.
+	if b, err := os.ReadFile("/proc/net/ipv6_route"); err == nil {
+		for line := range strings.Lines(string(b)) {
+			if f := strings.Fields(line); len(f) == 10 && f[0] == strings.Repeat("0", 32) && f[1] == "00" && f[9] != "lo" {
+				return nil
+			}
+		}
+	}
+	return closed{"no IPv6 address or default route"}
+}
+
 // viaEdge sends a request through the edge. The edge's own refusal
 // (PC-Refused-By) is blocked: nothing left the sandbox. Anything else is
-// the gateway's answer.
+// the gateway's answer. An edge that cannot be reached is a failure, not a
+// closed route.
 func viaEdge(proxy *url.URL, roots *x509.CertPool, method, u string, hdr map[string]string) func(context.Context) error {
 	return func(ctx context.Context) error {
 		req, err := http.NewRequestWithContext(ctx, method, u, strings.NewReader(""))
 		if err != nil {
-			return err
+			return failed{err}
 		}
 		for k, v := range hdr {
 			req.Header.Set(k, v)
 		}
 		client := &http.Client{
-			Transport:     &http.Transport{Proxy: http.ProxyURL(proxy), TLSClientConfig: &tls.Config{RootCAs: roots, MinVersion: tls.VersionTLS12}},
+			Transport: &http.Transport{
+				Proxy: http.ProxyURL(proxy), TLSClientConfig: &tls.Config{RootCAs: roots, MinVersion: tls.VersionTLS12},
+				// A refused CONNECT is no response to the request: its
+				// answer is seen here.
+				OnProxyConnectResponse: func(_ context.Context, _ *url.URL, _ *http.Request, res *http.Response) error {
+					if res.StatusCode != http.StatusOK && res.Header.Get("PC-Refused-By") != "" {
+						return closed{fmt.Sprintf("CONNECT refused by the edge (%d)", res.StatusCode)}
+					}
+					return nil
+				},
+			},
 			CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 		}
 		res, err := client.Do(req)
-		if err != nil {
-			return err
+		var c closed
+		if errors.As(err, &c) {
+			return c
+		} else if err != nil {
+			return failed{err}
 		}
 		_, _ = io.Copy(io.Discard, io.LimitReader(res.Body, 64<<10))
 		_ = res.Body.Close()
 		if res.Header.Get("PC-Refused-By") != "" {
-			return fmt.Errorf("refused by the edge (%d)", res.StatusCode)
+			return closed{fmt.Sprintf("refused by the edge (%d)", res.StatusCode)}
 		}
 		return nil
 	}
