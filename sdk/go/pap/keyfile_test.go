@@ -5,6 +5,7 @@ package pap_test
 
 import (
 	"bytes"
+	"encoding/json/v2"
 	"fmt"
 	"log/slog"
 	"os"
@@ -32,7 +33,11 @@ func TestKeyFileNeverPrintsItsSeed(t *testing.T) {
 	k := newKeyFile(t)
 	var logged bytes.Buffer
 	slog.New(slog.NewJSONHandler(&logged, nil)).Info("enrolled", "key", k)
-	for _, out := range []string{fmt.Sprintf("%v %+v %#v %s", k, k, k, k), fmt.Sprint(&k), logged.String()} {
+	dumped, err := json.Marshal(struct{ Key pap.KeyFile }{k})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, out := range []string{fmt.Sprintf("%v %+v %#v %s", k, k, k, k), fmt.Sprint(&k), logged.String(), string(dumped)} {
 		if strings.Contains(out, k.PrivateKey) || !strings.Contains(out, k.Identifier) {
 			t.Errorf("printed %q", out)
 		}
@@ -85,5 +90,18 @@ func TestReadKeyFileRefusesAFileOthersCanRead(t *testing.T) {
 	}
 	if _, err := pap.ReadKeyFile(path); err == nil {
 		t.Fatal("read a key file the group can read")
+	}
+}
+
+// TestMarshalStillWritesTheSeed: the file's own encoding keeps the key.
+func TestMarshalStillWritesTheSeed(t *testing.T) {
+	k := newKeyFile(t)
+	b, err := k.Marshal()
+	if err != nil || !strings.Contains(string(b), k.PrivateKey) {
+		t.Fatalf("%s %v", b, err)
+	}
+	back, err := pap.ParseKeyFile(b)
+	if err != nil || back != k {
+		t.Fatalf("%v %v", back, err)
 	}
 }
