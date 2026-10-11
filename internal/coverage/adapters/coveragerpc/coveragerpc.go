@@ -42,6 +42,9 @@ func (h *Handler) GetFreshnessContract(context.Context, *pantherclawv1.GetFreshn
 		StaleState:       states[domain.StaleState],
 	}
 	for _, k := range domain.InvalidationKinds {
+		if !k.Invalidates() {
+			continue
+		}
 		out.InvalidationKinds = append(out.InvalidationKinds, string(k))
 	}
 	return out, nil

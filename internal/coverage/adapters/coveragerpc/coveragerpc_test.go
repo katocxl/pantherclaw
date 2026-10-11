@@ -5,6 +5,7 @@ package coveragerpc_test
 
 import (
 	"context"
+	"slices"
 	"testing"
 	"time"
 
@@ -28,7 +29,7 @@ func TestFreshnessContractIsPublished(t *testing.T) {
 	if res.GetEnforcedTtl().AsDuration() != 6*time.Hour || res.GetReassessInterval().AsDuration() != time.Minute {
 		t.Errorf("durations %v, %v", res.GetEnforcedTtl().AsDuration(), res.GetReassessInterval().AsDuration())
 	}
-	if len(res.GetInvalidationKinds()) != len(domain.InvalidationKinds) {
+	if len(res.GetInvalidationKinds()) != len(domain.InvalidationKinds)-2 || slices.Contains(res.GetInvalidationKinds(), "exclusion") {
 		t.Errorf("invalidation kinds %v", res.GetInvalidationKinds())
 	}
 	if res.GetStaleState() != pantherclawv1.CoverageState_COVERAGE_STATE_PARTIAL {
