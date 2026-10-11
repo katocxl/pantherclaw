@@ -103,3 +103,28 @@ func TestConformanceProofs(t *testing.T) {
 		}
 	}
 }
+
+// TestConformanceHTU: the htu signed for a request URL is the one
+// PantherClaw's client signs, and a URL it cannot sign for is refused.
+func TestConformanceHTU(t *testing.T) {
+	var f struct {
+		HTUs []struct {
+			URL    string `json:"url"`
+			HTU    string `json:"htu"`
+			Reject bool   `json:"reject"`
+		} `json:"htus"`
+	}
+	vectors.Load(t, "proofs.json", &f)
+	if len(f.HTUs) == 0 {
+		t.Fatal("no htu vectors")
+	}
+	for _, c := range f.HTUs {
+		got, err := pap.HTU(c.URL)
+		switch {
+		case c.Reject && err == nil:
+			t.Errorf("%q: signed %q, want a refusal", c.URL, got)
+		case !c.Reject && (err != nil || got != c.HTU):
+			t.Errorf("%q: %q %v, want %q", c.URL, got, err, c.HTU)
+		}
+	}
+}
