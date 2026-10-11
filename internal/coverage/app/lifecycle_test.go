@@ -13,7 +13,8 @@ import (
 
 // TestF021_ProtectedOnlyWhileEveryScopeIsEnforced: an agent is PROTECTED
 // only when every scope that counts is ENFORCED, PARTIALLY_PROTECTED for a
-// mix and OBSERVED when none is; a whole-scope exclusion does not count.
+// mix and OBSERVED when none is. A scope with an exclusion counts as not
+// protected, so exclusions never raise the agent (design decision 1).
 func TestF021_ProtectedOnlyWhileEveryScopeIsEnforced(t *testing.T) {
 	e, p, o := domain.Enforced, domain.Partial, domain.ObserveOnly
 	for _, c := range []struct {
@@ -26,7 +27,8 @@ func TestF021_ProtectedOnlyWhileEveryScopeIsEnforced(t *testing.T) {
 		{[]domain.State{e, e}, []bool{false, false}, adomain.StateProtected},
 		{[]domain.State{e, p}, []bool{false, false}, adomain.StatePartiallyProtected},
 		{[]domain.State{p, o}, []bool{false, false}, adomain.StateObserved},
-		{[]domain.State{e, p}, []bool{false, true}, adomain.StateProtected},
+		{[]domain.State{e, p}, []bool{false, true}, adomain.StatePartiallyProtected},
+		{[]domain.State{e, e}, []bool{false, true}, adomain.StatePartiallyProtected},
 		{[]domain.State{e}, []bool{true}, adomain.StateObserved},
 	} {
 		if got := app.Protection(c.states, c.excluded); got != c.want {

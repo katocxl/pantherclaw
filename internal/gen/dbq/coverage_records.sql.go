@@ -394,6 +394,37 @@ func (q *Queries) CoverageInventoryWatermark(ctx context.Context, orgID ids.OrgI
 	return transactions_after, err
 }
 
+const coverageProtectedAgents = `-- name: CoverageProtectedAgents :many
+SELECT id FROM pc.agents
+WHERE org_id = $1 AND state IN ('PROTECTED', 'PARTIALLY_PROTECTED')
+ORDER BY id
+LIMIT $2
+`
+
+// The org's agents that coverage holds protected or partially protected:
+// each reassess job derives them again, so a grant that starts, ends or
+// changes lowers them within one run although it writes no coverage change
+// (F021).
+func (q *Queries) CoverageProtectedAgents(ctx context.Context, orgID ids.OrgID, maxRows int32) ([]ids.UUID, error) {
+	rows, err := q.db.Query(ctx, coverageProtectedAgents, orgID, maxRows)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ids.UUID{}
+	for rows.Next() {
+		var id ids.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const coverageRoutesForScope = `-- name: CoverageRoutesForScope :many
 SELECT org_id, id, agent_id, connection_id, operation, kind, channel, locator, observation, source, source_ref, mode, attributes, seen_count, first_seen_at, last_seen_at FROM pc.coverage_routes
 WHERE org_id = $1 AND connection_id = $2

@@ -361,6 +361,16 @@ JOIN pc.grant_revisions r ON r.org_id = g.org_id AND r.grant_id = g.id AND r.rev
 WHERE g.org_id = sqlc.arg(org_id) AND g.agent_id = sqlc.arg(agent_id) AND g.state = 'ACTIVE'
   AND r.not_before <= now() AND r.expires_at > now();
 
+-- The org's agents that coverage holds protected or partially protected:
+-- each reassess job derives them again, so a grant that starts, ends or
+-- changes lowers them within one run although it writes no coverage change
+-- (F021).
+-- name: CoverageProtectedAgents :many
+SELECT id FROM pc.agents
+WHERE org_id = sqlc.arg(org_id) AND state IN ('PROTECTED', 'PARTIALLY_PROTECTED')
+ORDER BY id
+LIMIT sqlc.arg(max_rows);
+
 -- The org's connections that can carry actions, with their pinned package
 -- version.
 -- name: CoverageConnectionPackages :many
