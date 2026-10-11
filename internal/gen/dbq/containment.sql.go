@@ -208,15 +208,25 @@ func (q *Queries) PendingRestore(ctx context.Context, orgID ids.OrgID) (PendingR
 }
 
 const watchedConnections = `-- name: WatchedConnections :many
-SELECT id, gateway_id, state FROM pc.connections WHERE org_id = $1 AND state <> 'RETIRED'
+SELECT c.id, c.gateway_id, c.state,
+       (c.state = 'ACTIVE' AND EXISTS (
+           SELECT 1 FROM pc.verifications v
+           WHERE v.org_id = c.org_id AND v.connection_id = c.id AND v.state = 'PENDING' AND v.next_at <= now()
+             AND v.deadline_at > now()))::boolean AS verifications_due
+FROM pc.connections c
+WHERE c.org_id = $1 AND c.state <> 'RETIRED'
 `
 
 type WatchedConnectionsRow struct {
-	ID        ids.UUID
-	GatewayID ids.UUID
-	State     string
+	ID               ids.UUID
+	GatewayID        ids.UUID
+	State            string
+	VerificationsDue bool
 }
 
+// WatchedConnections also says whether an active connection has a
+// verification task due, as DueVerifications would lease it (G0 M7 design
+// decision 1): one probe of verifications_due per connection.
 func (q *Queries) WatchedConnections(ctx context.Context, orgID ids.OrgID) ([]WatchedConnectionsRow, error) {
 	rows, err := q.db.Query(ctx, watchedConnections, orgID)
 	if err != nil {
@@ -226,7 +236,12 @@ func (q *Queries) WatchedConnections(ctx context.Context, orgID ids.OrgID) ([]Wa
 	items := []WatchedConnectionsRow{}
 	for rows.Next() {
 		var i WatchedConnectionsRow
-		if err := rows.Scan(&i.ID, &i.GatewayID, &i.State); err != nil {
+		if err := rows.Scan(
+			&i.ID,
+			&i.GatewayID,
+			&i.State,
+			&i.VerificationsDue,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

@@ -55,7 +55,7 @@ LEFT JOIN pc.execution_attempts a ON a.org_id = p.org_id AND a.permit_id = p.id
 WHERE t.org_id = sqlc.arg(org_id) AND t.id = sqlc.arg(id);
 
 -- name: DecisionReceiptsOf :many
-SELECT d.evaluation, d.receipt_jws, d.ledger_entry_id, d.created_at, c.seq AS chain_seq
+SELECT d.evaluation, coalesce(d.receipt_jws, '')::text AS receipt_jws, d.ledger_entry_id, d.created_at, c.seq AS chain_seq
 FROM pc.decision_receipts d
 LEFT JOIN pc.ledger_chain c ON c.org_id = d.org_id AND c.entry_id = d.ledger_entry_id
 WHERE d.org_id = sqlc.arg(org_id) AND d.transaction_id = sqlc.arg(transaction_id)
@@ -63,7 +63,8 @@ ORDER BY d.evaluation;
 
 -- name: ExecutionOf :one
 SELECT a.id AS attempt_id, a.permit_id, a.outcome, a.target_status, a.recorded_by, a.target_ref, a.dispatch_ms,
-       a.recorded_at, p.dispatching_at, e.receipt_jws, e.ledger_entry_id, c.seq AS chain_seq
+       a.recorded_at, p.dispatching_at, coalesce(e.receipt_jws, '')::text AS receipt_jws, e.ledger_entry_id,
+       c.seq AS chain_seq
 FROM pc.execution_attempts a
 JOIN pc.permits p ON p.org_id = a.org_id AND p.id = a.permit_id
 JOIN pc.execution_receipts e ON e.org_id = a.org_id AND e.attempt_id = a.id
@@ -85,7 +86,8 @@ ORDER BY o.observed_at, o.id
 LIMIT 1000;
 
 -- name: EffectReceiptsOf :many
-SELECT f.seq, f.state, f.level_required, f.level_achieved, f.basis, f.receipt_jws, f.ledger_entry_id, f.created_at,
+SELECT f.seq, f.state, f.level_required, f.level_achieved, f.basis, coalesce(f.receipt_jws, '')::text AS receipt_jws,
+       f.ledger_entry_id, f.created_at,
        c.seq AS chain_seq
 FROM pc.effect_receipts f
 LEFT JOIN pc.ledger_chain c ON c.org_id = f.org_id AND c.entry_id = f.ledger_entry_id
@@ -98,6 +100,30 @@ SELECT id, transaction_id, kind, state, resolved_via, observation_id, user_id, b
 FROM pc.reconciliation_tasks
 WHERE org_id = sqlc.arg(org_id) AND transaction_id = sqlc.arg(transaction_id)
 ORDER BY opened_at, id;
+
+-- EntryProtection reports, for positions in the org's hash chain, the
+-- first checkpoint whose tree covers each (tree size at least the
+-- position, HR-194) and the first such checkpoint anchored publicly
+-- (HR-195): the org's anchor leaves name its checkpoints, and the global
+-- anchors only their state. 0 and NULL: none yet.
+-- name: EntryProtection :many
+SELECT s.seq::bigint AS seq, coalesce(k.tree_size, 0)::bigint AS checkpoint_size,
+       coalesce(a.checkpoint_size, 0)::bigint AS anchored_size, a.anchored_at
+FROM unnest(sqlc.arg(seqs)::bigint[]) AS s (seq)
+LEFT JOIN LATERAL (
+    SELECT c.tree_size FROM pc.checkpoints c
+    WHERE c.org_id = sqlc.arg(org_id) AND c.tree_size >= s.seq
+    ORDER BY c.tree_size
+    LIMIT 1
+) k ON true
+LEFT JOIN LATERAL (
+    SELECT l.checkpoint_size, n.anchored_at
+    FROM pc.anchor_leaves l
+    JOIN pc.anchors n ON n.id = l.anchor_id
+    WHERE l.org_id = sqlc.arg(org_id) AND l.checkpoint_size >= s.seq AND n.state = 'ANCHORED'
+    ORDER BY l.checkpoint_size, n.anchored_at
+    LIMIT 1
+) a ON true;
 
 -- name: LinksOf :many
 SELECT from_transaction_id, to_transaction_id, kind, created_by, created_at

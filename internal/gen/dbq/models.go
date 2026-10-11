@@ -144,8 +144,10 @@ type PcApprovalEvidence struct {
 	AuthorKind       string
 	AuthorUserID     *ids.UUID
 	AuthorInstanceID *ids.UUID
-	Note             string
+	Note             *string
 	CreatedAt        time.Time
+	BodyRemovedAt    *time.Time
+	RemovedByPolicy  *ids.UUID
 }
 
 type PcApprovalRequest struct {
@@ -289,6 +291,24 @@ type PcBusinessUnit struct {
 	UpdatedAt   time.Time
 }
 
+type PcCaptureProfile struct {
+	OrgID           ids.OrgID
+	ID              ids.UUID
+	Purpose         string
+	Connections     []ids.UUID
+	Operations      []string
+	CaptureRequest  bool
+	CaptureResponse bool
+	ByteCap         int32
+	RetentionDays   int32
+	ExpiresAt       time.Time
+	State           string
+	CreatedBy       ids.UUID
+	CreatedAt       time.Time
+	DisabledBy      *ids.UUID
+	DisabledAt      *time.Time
+}
+
 type PcCheckpoint struct {
 	OrgID     ids.OrgID
 	TreeSize  int64
@@ -414,7 +434,7 @@ type PcCrossOrgListAudit struct {
 type PcDecisionReceipt struct {
 	OrgID           ids.OrgID
 	TransactionID   ids.UUID
-	ReceiptJws      string
+	ReceiptJws      *string
 	LedgerEntryID   ids.UUID
 	CreatedAt       time.Time
 	Evaluation      int32
@@ -521,7 +541,7 @@ type PcEffectReceipt struct {
 	LevelRequired   string
 	LevelAchieved   *string
 	Basis           string
-	ReceiptJws      string
+	ReceiptJws      *string
 	LedgerEntryID   ids.UUID
 	CreatedAt       time.Time
 	BodyRemovedAt   *time.Time
@@ -656,7 +676,7 @@ type PcExecutionReceipt struct {
 	AttemptID       ids.UUID
 	TransactionID   ids.UUID
 	PermitID        ids.UUID
-	ReceiptJws      string
+	ReceiptJws      *string
 	LedgerEntryID   ids.UUID
 	CreatedAt       time.Time
 	BodyRemovedAt   *time.Time
@@ -876,6 +896,22 @@ type PcLedgerTile struct {
 	CreatedAt time.Time
 }
 
+type PcLegalHold struct {
+	OrgID         ids.OrgID
+	ID            ids.UUID
+	Scope         string
+	ScopeID       *ids.UUID
+	RangeStart    *time.Time
+	RangeEnd      *time.Time
+	Reason        string
+	State         string
+	CreatedBy     ids.UUID
+	CreatedAt     time.Time
+	ReleasedBy    *ids.UUID
+	ReleasedAt    *time.Time
+	ReleaseReason *string
+}
+
 type PcLicenceState struct {
 	ID             int16
 	Document       *string
@@ -951,20 +987,22 @@ type PcNotificationChannel struct {
 }
 
 type PcObservation struct {
-	OrgID          ids.OrgID
-	ID             ids.UUID
-	Source         string
-	TransactionID  *ids.UUID
-	VerificationID *ids.UUID
-	GatewayID      ids.UUID
-	Attempt        *int32
-	HttpStatus     *int32
-	Outcome        *string
-	Found          pgtype.Bool
-	Complete       pgtype.Bool
-	Fields         []byte
-	ResponseDigest []byte
-	ObservedAt     time.Time
+	OrgID           ids.OrgID
+	ID              ids.UUID
+	Source          string
+	TransactionID   *ids.UUID
+	VerificationID  *ids.UUID
+	GatewayID       ids.UUID
+	Attempt         *int32
+	HttpStatus      *int32
+	Outcome         *string
+	Found           pgtype.Bool
+	Complete        pgtype.Bool
+	Fields          []byte
+	ResponseDigest  []byte
+	ObservedAt      time.Time
+	BodyRemovedAt   *time.Time
+	RemovedByPolicy *ids.UUID
 }
 
 type PcOrg struct {
@@ -1030,6 +1068,20 @@ type PcPackageVersion struct {
 	ImportedAt   time.Time
 	ChangedAt    time.Time
 	SigningKeyID *ids.UUID
+}
+
+type PcPayloadCapture struct {
+	OrgID         ids.OrgID
+	ID            ids.UUID
+	AttemptID     ids.UUID
+	TransactionID ids.UUID
+	ProfileID     ids.UUID
+	Direction     string
+	Content       []byte
+	Size          int32
+	Truncated     bool
+	CreatedAt     time.Time
+	RemoveAt      time.Time
 }
 
 type PcPermit struct {
@@ -1108,6 +1160,25 @@ type PcReservation struct {
 	CreatedAt     time.Time
 	SettledAt     *time.Time
 	Pending       bool
+}
+
+type PcRetentionPolicy struct {
+	OrgID         ids.OrgID
+	ID            ids.UUID
+	Category      string
+	Revision      int32
+	Days          int32
+	SetBy         *ids.UUID
+	EffectiveFrom time.Time
+	CreatedAt     time.Time
+}
+
+type PcRetentionStatus struct {
+	OrgID         ids.OrgID
+	LastAttemptAt time.Time
+	LastRunAt     *time.Time
+	LastError     *string
+	Removed       int64
 }
 
 type PcRoleBinding struct {
@@ -1411,6 +1482,7 @@ type PcWebauthnCeremony struct {
 	ConsumedAt         *time.Time
 	ApprovalRequestID  *ids.UUID
 	BatchID            *ids.UUID
+	ReconciliationID   *ids.UUID
 }
 
 type PcWebauthnCredential struct {

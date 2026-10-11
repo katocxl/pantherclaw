@@ -6,6 +6,9 @@ package gatewaysrpc
 import (
 	"context"
 
+	"google.golang.org/protobuf/types/known/timestamppb"
+
+	gwapp "github.com/katocxl/pantherclaw/internal/gateways/app"
 	pb "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
 )
 
@@ -56,5 +59,32 @@ func (h *GatewayHandler) GetConfiguration(ctx context.Context, req *pb.GetConfig
 			Sealed: cr.Sealed, AllowedHosts: cr.AllowedHosts, Header: cr.Header, Scheme: deref(cr.Scheme),
 		})
 	}
+	out.CaptureProfiles = captureProfiles(c)
 	return out, nil
+}
+
+// captureProfiles are the capture profiles of the gateway's connections,
+// each naming only the connections this gateway serves (G0 M7 design
+// decision 10, HR-199).
+func captureProfiles(c gwapp.Configuration) []*pb.GatewayCaptureProfile {
+	served := map[string]bool{}
+	for _, conn := range c.Connections {
+		served[conn.ID.String()] = true
+	}
+	var out []*pb.GatewayCaptureProfile
+	for _, p := range c.Captures {
+		g := &pb.GatewayCaptureProfile{
+			Id: p.ID.String(), Operations: p.Operations, Request: p.CaptureRequest, Response: p.CaptureResponse,
+			ByteCap: p.ByteCap, ExpireTime: timestamppb.New(p.ExpiresAt),
+		}
+		for _, id := range p.Connections {
+			if served[id.String()] {
+				g.ConnectionIds = append(g.ConnectionIds, id.String())
+			}
+		}
+		if len(g.ConnectionIds) > 0 {
+			out = append(out, g)
+		}
+	}
+	return out
 }

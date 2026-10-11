@@ -323,6 +323,44 @@ message RecordExecutionRequest {
     max_len: 256
     pattern: "^[!-~]*$"
   }];
+  // The bodies captured under an active capture profile (G0 M7 design
+  // decision 10, HR-199): the outbound body the gateway built and/or the
+  // target's response after secret-echo redaction, each truncated to the
+  // profile's cap; never headers. Empty unless a profile covers the
+  // dispatch; never sent for monitor-mode or delegated outcomes.
+  repeated PayloadCapture captures = 7 [(buf.validate.field).repeated.max_items = 2];
+}
+
+// CaptureDirection is which body of a dispatch a payload capture holds.
+enum CaptureDirection {
+  CAPTURE_DIRECTION_UNSPECIFIED = 0;
+  // The outbound body the gateway built from the action.
+  CAPTURE_DIRECTION_REQUEST = 1;
+  // The target's response body, after secret-echo redaction.
+  CAPTURE_DIRECTION_RESPONSE = 2;
+}
+
+// PayloadCapture is one captured body of a dispatch (HR-199).
+message PayloadCapture {
+  // The capture profile it was taken under.
+  string profile_id = 1 [(buf.validate.field).string.uuid = true];
+  // Which body.
+  CaptureDirection direction = 2 [(buf.validate.field).enum = {
+    defined_only: true
+    not_in: [0]
+  }];
+  // The body, truncated to the profile's cap (at most 64 KiB).
+  bytes content = 3 [(buf.validate.field).bytes = {
+    min_len: 1
+    max_len: 65536
+  }];
+  // The body's size before truncation.
+  int64 size = 4 [(buf.validate.field).int64 = {
+    gte: 1
+    lte: 1073741824
+  }];
+  // Whether content is cut to the cap.
+  bool truncated = 5;
 }
 
 // RecordExecutionResponse returns the execution receipt.

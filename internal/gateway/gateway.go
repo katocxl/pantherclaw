@@ -58,10 +58,10 @@ type Gateway struct {
 	// (drift.go).
 	reportDrift           DriftReporter
 	driftEvery, driftPoll time.Duration
-	// verifications and verifyEvery drive the verification reads
-	// (verify.go, G0 M7).
-	verifications Verifications
-	verifyEvery   time.Duration
+	// verifications, verifyEvery and verifyHintGap drive the verification
+	// reads (verify.go, G0 M7).
+	verifications              Verifications
+	verifyEvery, verifyHintGap time.Duration
 }
 
 // Handler returns the gateway's agent-facing HTTP handler: `/mcp/{connection}`
@@ -190,7 +190,7 @@ func newGateway(cfg *Config, d Deps, log *slog.Logger) (*Gateway, error) {
 		mcp:  mcp.New(engine, d.Configuration, cfg.PublicURL, log),
 		hook: hook.New(engine, d.Configuration, cfg.PublicURL, log),
 		log:  log, reportDrift: d.ReportDrift, driftEvery: DriftEvery, driftPoll: driftPoll,
-		verifications: d.Verifications, verifyEvery: VerifyEvery,
+		verifications: d.Verifications, verifyEvery: VerifyEvery, verifyHintGap: verifyHintGap,
 	}
 	if e := cfg.Control.VerifyEvery.D(); e > 0 {
 		g.verifyEvery = e
