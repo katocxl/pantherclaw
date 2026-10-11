@@ -130,7 +130,7 @@ func (s *Service) currentClosure(ctx context.Context, q *dbq.Queries, org ids.Or
 	if err := json.Unmarshal(c.Probes, &probes); err != nil {
 		return nil, err
 	}
-	if !domain.Evaluate(probes).Passed || !s.now().Before(c.ExpiresAt) || b.Revision != c.ConnectionRevision ||
+	if !domain.Evaluate(probes, nil).Passed || !s.now().Before(c.ExpiresAt) || b.Revision != c.ConnectionRevision ||
 		b.GatewayID != c.GatewayID || b.PackageVersionID == nil || *b.PackageVersionID != c.PackageVersionID {
 		return nil, nil
 	}

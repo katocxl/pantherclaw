@@ -5,7 +5,10 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"log/slog"
+	"slices"
 	"time"
 
 	"github.com/riverqueue/river"
@@ -13,6 +16,7 @@ import (
 
 	"github.com/katocxl/pantherclaw/internal/coverage/domain"
 	evdomain "github.com/katocxl/pantherclaw/internal/evidence/domain"
+	"github.com/katocxl/pantherclaw/internal/evidence/ledger"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
@@ -24,8 +28,10 @@ import (
 // and enqueues one unique job per org (HR-054, HR-056: ids only); the job
 // reads new traffic, reassesses the scopes of every pending invalidation
 // and of every lapsed ENFORCED snapshot in that org's tenant transaction,
-// and marks the invalidations reassessed. A failed job retries; nothing is
-// marked until its snapshots are recorded.
+// and marks the invalidations reassessed, entering each in the ledger. A
+// scope that fails is rolled back alone, logged and skipped, and the
+// invalidations that touched it stay pending; a failed transaction retries
+// the job, and nothing is marked until its snapshots are recorded.
 const (
 	// ListReassess is the lister purpose coverage_reassess (migration
 	// 00087).
@@ -38,9 +44,6 @@ const (
 	maxScopesPerJob  = 500
 	reassessTimeout  = 5 * time.Minute
 )
-
-// Actor is who records the snapshots of the reassess job.
-var Actor = evdomain.Actor{Type: "system", ID: "coverage-reassess"}
 
 // ReassessOrgArgs asks for one org's reassessment.
 type ReassessOrgArgs struct {
@@ -91,7 +94,8 @@ func (s *Service) ReassessOrg(ctx context.Context, org ids.OrgID) (Reassessed, e
 		if err != nil {
 			return err
 		}
-		done := make([]ids.UUID, 0, len(pending))
+		done := make([]dbq.PcCoverageInvalidation, 0, len(pending))
+		touched := map[ids.UUID][]domain.Scope{}
 		for _, inv := range pending {
 			scopes, err := scopesOf(ctx, q, org, inv.ConnectionID, inv.AgentID)
 			if err != nil {
@@ -103,7 +107,8 @@ func (s *Service) ReassessOrg(ctx context.Context, org ids.OrgID) (Reassessed, e
 			for _, sc := range scopes {
 				add(sc, &inv.ID)
 			}
-			done = append(done, inv.ID)
+			touched[inv.ID] = scopes
+			done = append(done, inv)
 		}
 		expired, err := q.ExpiredEnforcedCoverageScopes(ctx, org, maxScopesPerJob)
 		if err != nil {
@@ -113,22 +118,83 @@ func (s *Service) ReassessOrg(ctx context.Context, org ids.OrgID) (Reassessed, e
 			add(domain.Scope{Agent: x.AgentID, Connection: x.ConnectionID, Operation: x.Operation}, nil)
 		}
 		pkgs := packages{}
+		failed := map[domain.Scope]bool{}
 		for _, sc := range order {
-			recorded, err := s.reassess(ctx, tx, sc, causes[sc], Actor, pkgs)
+			recorded, skip, err := s.reassessIsolated(ctx, tx, sc, causes[sc], pkgs)
 			if err != nil {
-				return fmt.Errorf("coverage: reassess %v: %w", sc, err)
+				return err
+			}
+			if skip != nil {
+				failed[sc] = true
+				out.Skipped++
+				s.log().WarnContext(ctx, "coverage.reassess: scope skipped", slog.String("org", org.String()),
+					slog.String("agent", sc.Agent.String()), slog.String("connection", sc.Connection.String()),
+					slog.String("operation", sc.Operation), slog.String("error", skip.Error()))
+				continue
 			}
 			out.Scopes++
 			if recorded {
 				out.Snapshots++
 			}
 		}
-		if len(done) > 0 {
-			_, err = q.MarkCoverageInvalidationsReassessed(ctx, org, done)
+		// An invalidation is entered in the ledger and marked reassessed only
+		// once every scope it touched was reassessed; a skipped one stays
+		// pending and the next job tries again.
+		for _, inv := range done {
+			if slices.ContainsFunc(touched[inv.ID], func(sc domain.Scope) bool { return failed[sc] }) {
+				continue
+			}
+			if err := s.enterInvalidation(ctx, tx, inv); err != nil {
+				return err
+			}
 		}
-		return err
+		// With the changes they saw marked, the agents' protection is derived
+		// from their scopes as they read now.
+		return s.deriveAgents(ctx, tx, slices.DeleteFunc(slices.Clone(order), func(sc domain.Scope) bool { return failed[sc] }),
+			s.now(), pkgs)
 	})
 	return out, err
+}
+
+// reassessIsolated reassesses one scope inside a savepoint, so a scope
+// whose evidence cannot be read or recorded is rolled back alone and
+// reported in skip. err is a failure of the transaction itself.
+func (s *Service) reassessIsolated(ctx context.Context, tx db.TenantTx, sc domain.Scope, cause *ids.UUID, pkgs packages,
+) (recorded bool, skip, err error) {
+	if _, err := tx.Exec(ctx, "SAVEPOINT coverage_scope"); err != nil {
+		return false, nil, err
+	}
+	recorded, skip = s.reassess(ctx, tx, sc, cause, Actor, pkgs)
+	if skip != nil {
+		if ctx.Err() != nil {
+			return false, nil, skip
+		}
+		if _, err := tx.Exec(ctx, "ROLLBACK TO SAVEPOINT coverage_scope"); err != nil {
+			return false, nil, errors.Join(skip, err)
+		}
+		return false, skip, nil
+	}
+	_, err = tx.Exec(ctx, "RELEASE SAVEPOINT coverage_scope")
+	return recorded, nil, err
+}
+
+// enterInvalidation appends a reassessed invalidation to the ledger as a
+// coverage.invalidation entry, which a lapsed claim names (HR-217), and
+// marks it reassessed with that entry.
+func (s *Service) enterInvalidation(ctx context.Context, tx db.TenantTx, inv dbq.PcCoverageInvalidation) error {
+	body, err := evdomain.CanonicalBody(InvalidationEntry{
+		V: 1, ID: inv.ID, Connection: inv.ConnectionID, Agent: inv.AgentID, Kind: inv.Kind, Subject: inv.SubjectID,
+		OccurredAt: evdomain.Timestamp(inv.OccurredAt),
+	})
+	if err != nil {
+		return err
+	}
+	entry, err := ledger.Append(ctx, tx, InvalidationLedgerKind, Actor, body)
+	if err != nil {
+		return err
+	}
+	_, err = dbq.New(tx).EnterCoverageInvalidation(ctx, &entry.ID, tx.OrgID(), inv.ID)
+	return err
 }
 
 type reassessWorker struct {
@@ -179,7 +245,7 @@ func Register(reg *jobs.Registry, svc *Service) error {
 // of the freshness contract.
 func PeriodicJobs(f domain.Freshness) []*river.PeriodicJob {
 	return []*river.PeriodicJob{
-		river.NewPeriodicJob(river.PeriodicInterval(f.ReassessInterval),
+		river.NewPeriodicJob(river.PeriodicInterval(f.ReassessEvery),
 			func() (river.JobArgs, *river.InsertOpts) { return ReassessDispatchArgs{}, nil },
 			&river.PeriodicJobOpts{RunOnStart: true}),
 	}

@@ -21,13 +21,14 @@ import "google/protobuf/timestamp.proto";
 // action tokens (HR-024), and routes through opaque MCP servers unless
 // their egress is mediated (HR-086). ENFORCED expires (24 hours by
 // default) and every invalidating change drops it at once; a record read
-// after that is PARTIAL and keeps the last valid record (HR-211, F442).
+// after that is recomputed from current evidence, reads at most PARTIAL and
+// keeps the last valid record (HR-211, F442).
 //
 // Closure evidence is never written through this service: the sandbox
 // records it after verifying the signed probe results (HR-215).
-// Exclusions are weakening changes that only a person makes, with a
-// written reason and an expiry (HR-212). Reads follow the caller's
-// coverage.read scope over the agent.
+// Exclusions are weakening changes that only a person holding
+// coverage.manage makes, with a written reason and an expiry (HR-212).
+// Reads follow the caller's coverage.read scope over the agent.
 service CoverageService {
   // GetCoverage returns one scope's record as it reads now.
   // permission: coverage.read
@@ -39,10 +40,10 @@ service CoverageService {
   rpc ListCoverage(ListCoverageRequest) returns (ListCoverageResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
-  // ListCoverageRoutes lists the route inventory. A route kind without an
+  // ListRoutes lists the route inventory. A route kind without an
   // entry is not observed, never absent (F450).
   // permission: coverage.read
-  rpc ListCoverageRoutes(ListCoverageRoutesRequest) returns (ListCoverageRoutesResponse) {
+  rpc ListRoutes(ListRoutesRequest) returns (ListRoutesResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
   // GetClosure returns one closure evidence record (F457).
@@ -61,17 +62,18 @@ service CoverageService {
   rpc GetFreshnessContract(GetFreshnessContractRequest) returns (GetFreshnessContractResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
-  // ReassessCoverage recomputes the scopes of one connection now, from
-  // evidence, and records a snapshot for each that changed.
+  // Reassess recomputes the scopes of one connection now, from evidence,
+  // and records a snapshot for each that changed.
+  // permission: coverage.reassess
+  rpc Reassess(ReassessRequest) returns (ReassessResponse);
+  // CreateExclusion excludes a scope or a route kind from what an
+  // ENFORCED claim must cover until it expires (HR-212, design decision 1).
+  // Only a person makes one, with a written reason; it is audited,
+  // notified to org admins and listed with every claim it narrows.
   // permission: coverage.manage
-  rpc ReassessCoverage(ReassessCoverageRequest) returns (ReassessCoverageResponse);
-  // CreateExclusion excludes a scope or a route kind from the claim until
-  // it expires. It never raises a state; it is audited and shown with the
-  // coverage it changes.
-  // permission: coverage.exclude
   rpc CreateExclusion(CreateExclusionRequest) returns (CreateExclusionResponse);
   // RevokeExclusion ends an active exclusion at once.
-  // permission: coverage.exclude
+  // permission: coverage.manage
   rpc RevokeExclusion(RevokeExclusionRequest) returns (RevokeExclusionResponse);
   // ListExclusions lists exclusions, newest first.
   // permission: coverage.read
@@ -298,8 +300,8 @@ message ListCoverageResponse {
   string next_page_token = 2;
 }
 
-// ListCoverageRoutesRequest filters the inventory.
-message ListCoverageRoutesRequest {
+// ListRoutesRequest filters the inventory.
+message ListRoutesRequest {
   // Maximum results (default 50, at most 200).
   int32 page_size = 1 [(buf.validate.field).int32 = {
     gte: 0
@@ -316,9 +318,9 @@ message ListCoverageRoutesRequest {
   optional string connection_id = 4 [(buf.validate.field).string.uuid = true];
 }
 
-// ListCoverageRoutesResponse is one page of inventory entries; status is
+// ListRoutesResponse is one page of inventory entries; status is
 // unset (it depends on a scope's evidence: GetCoverage).
-message ListCoverageRoutesResponse {
+message ListRoutesResponse {
   // Routes, oldest first.
   repeated CoverageRoute routes = 1;
   // Token for the next page; empty at the end.
@@ -337,8 +339,19 @@ message CoverageProbeResult {
   string observed = 4;
   // Whether observed equals expect.
   bool passed = 5;
-  // Detail from the probe; untrusted text.
+  // Detail from the probe, at most 512 characters. UNTRUSTED: it comes
+  // from the launcher's host; show it as text in the untrusted block.
   string detail = 6;
+}
+
+// CoverageConfigCheck is one of pclaw's checks of the agent container.
+message CoverageConfigCheck {
+  // Check id, e.g. "agent_no_docker_socket".
+  string id = 1;
+  // Whether the check passed.
+  bool ok = 2;
+  // Detail, at most 512 characters. UNTRUSTED, like a probe's.
+  string detail = 3;
 }
 
 // CoverageClosure is the closure evidence of one sandbox session for one
@@ -352,7 +365,9 @@ message CoverageClosure {
   string connection_id = 3;
   // The sandbox session that produced it.
   string sandbox_session_id = 4;
-  // Whether every required probe, both controls and the canary passed.
+  // Whether the evidence is sound: every result and configuration check
+  // passed, with the named controls and the canary (PASSED). What it
+  // proves is closed_kinds.
   bool passed = 5;
   // Every result.
   repeated CoverageProbeResult probes = 6;
@@ -370,7 +385,8 @@ message CoverageClosure {
   string runtime = 12;
   // Image digests of the session.
   repeated string image_digests = 13;
-  // The gateway, connection revision and package version it is bound to.
+  // The gateway, connection revision, package version and credential
+  // version its session opened under.
   string gateway_id = 14;
   // Connection revision.
   int32 connection_revision = 15;
@@ -382,6 +398,11 @@ message CoverageClosure {
   google.protobuf.Timestamp expire_time = 18;
   // Recording time.
   google.protobuf.Timestamp record_time = 19;
+  // pclaw's checks of the agent container.
+  repeated CoverageConfigCheck config_checks = 20;
+  // The active sealed credential's version; absent when the connection
+  // had none.
+  optional int32 credential_version = 21;
 }
 
 // GetClosureRequest names a closure.
@@ -429,24 +450,29 @@ message GetFreshnessContractRequest {}
 message GetFreshnessContractResponse {
   // How long closure evidence supports ENFORCED.
   google.protobuf.Duration enforced_ttl = 1;
-  // How often pending invalidations are reassessed at most.
-  google.protobuf.Duration reassess_interval = 2;
-  // The changes that drop ENFORCED at once.
+  // How often pending changes are reassessed at most
+  // (coverage.reassess_every).
+  google.protobuf.Duration reassess_every = 2;
+  // The changes that invalidate closure evidence taken before them, and so
+  // drop ENFORCED at once. A new route, an exclusion and an expiry only
+  // make the scope be recomputed.
   repeated string invalidation_kinds = 3;
-  // The state an expired or invalidated ENFORCED record reads as.
+  // The highest state an expired or invalidated ENFORCED record reads as:
+  // it is recomputed from current evidence, capped at this state, and may
+  // read lower.
   CoverageState stale_state = 4;
 }
 
-// ReassessCoverageRequest names a connection.
-message ReassessCoverageRequest {
+// ReassessRequest names a connection.
+message ReassessRequest {
   // Connection id.
   string connection_id = 1 [(buf.validate.field).string.uuid = true];
   // Only this agent.
   optional string agent_id = 2 [(buf.validate.field).string.uuid = true];
 }
 
-// ReassessCoverageResponse counts what changed.
-message ReassessCoverageResponse {
+// ReassessResponse counts what changed.
+message ReassessResponse {
   // Scopes recomputed.
   int32 scopes = 1;
   // Snapshots recorded (scopes whose record changed).

@@ -268,6 +268,9 @@ func (b *builder) build() ([]byte, string, int, error) {
 		if err := b.versions(); err != nil {
 			return nil, "", 0, err
 		}
+		if err := b.coverage(); err != nil {
+			return nil, "", 0, err
+		}
 	}
 	if r.include.Approvals {
 		b.m.Filters = append(b.m.Filters, "approval.read where each transaction's agent lives")

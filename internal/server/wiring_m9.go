@@ -5,7 +5,6 @@ package server
 
 import (
 	"context"
-	"encoding/hex"
 	"time"
 
 	"connectrpc.com/connect/v2"
@@ -15,6 +14,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/coverage/adapters/coveragerpc"
 	covapp "github.com/katocxl/pantherclaw/internal/coverage/app"
 	coverage "github.com/katocxl/pantherclaw/internal/coverage/domain"
+	evdomain "github.com/katocxl/pantherclaw/internal/evidence/domain"
 	"github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1/pantherclawv1connect"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
@@ -24,7 +24,11 @@ import (
 // registerCoverage serves CoverageService on the public API (G0 M9 track
 // A), as pc_app.
 func registerCoverage(rs *connect.Server, d apiDeps) {
-	pantherclawv1connect.RegisterCoverageServiceHandler(rs, coveragerpc.New(&covapp.Service{Pool: d.pool, Freshness: d.freshness}))
+	svc := &covapp.Service{Pool: d.pool, Freshness: d.freshness}
+	if d.m5 != nil && d.m5.notifications != nil {
+		svc.Notify = d.m5.notifications
+	}
+	pantherclawv1connect.RegisterCoverageServiceHandler(rs, coveragerpc.New(svc))
 }
 
 // freshnessOf returns the configured freshness contract; Validate has
@@ -59,8 +63,16 @@ func (c coverageClaims) CoverageClaim(ctx context.Context, org ids.OrgID, agent,
 	if err != nil || claim == nil {
 		return nil, err
 	}
-	return &finalize.CoverageClaim{
-		State: claim.State.String(), Snapshot: claim.Snapshot.String(), Digest: "sha256:" + hex.EncodeToString(claim.Digest),
-		Agent: agent.String(), Connection: connection.String(), Operation: operation,
-	}, nil
+	out := &finalize.CoverageClaim{
+		V: 1, State: claim.State.String(), Snapshot: claim.Snapshot.String(),
+		Scope:         finalize.CoverageClaimScope{Agent: agent.String(), Connection: connection.String(), Operation: operation},
+		SnapshotState: claim.SnapshotState.String(), Lapsed: claim.Lapsed, Reason: claim.Reason, Exclusions: []string{},
+	}
+	for _, x := range claim.Exclusions {
+		out.Exclusions = append(out.Exclusions, x.String())
+	}
+	if claim.ExpiresAt != nil {
+		out.ExpiresAt = evdomain.Timestamp(*claim.ExpiresAt)
+	}
+	return out, nil
 }
