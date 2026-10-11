@@ -213,9 +213,9 @@ func serves(conn *control.Connection) (ok, useGateway bool) {
 
 // ServeHTTP serves one request.
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		w.Header().Set("Allow", http.MethodPost)
-		deny(w, http.StatusMethodNotAllowed, dispatch.CannotAuthorize, "method_not_allowed", "the SDK endpoint takes POST only")
+	if r.Method != http.MethodPost && r.Method != http.MethodGet {
+		w.Header().Set("Allow", "GET, POST")
+		deny(w, http.StatusMethodNotAllowed, dispatch.CannotAuthorize, "method_not_allowed", "the SDK endpoint takes GET and POST only")
 		return
 	}
 	if r.Header.Get("Origin") != "" {
@@ -237,6 +237,10 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	case !ok:
 		deny(w, http.StatusNotFound, dispatch.CannotAuthorize, "unknown_connection", "no connection of that name serves SDKs")
+		return
+	}
+	if r.Method == http.MethodGet {
+		h.list(w, r, name, conn)
 		return
 	}
 	// The raw body is hashed before anything parses it (HR-091).
@@ -427,6 +431,57 @@ func (h *Handler) observe(w http.ResponseWriter, r *http.Request, conn *control.
 		Decision: "allow", Mode: "monitor", Coverage: CoverageObserveOnly,
 		Reason: "PantherClaw does not map the " + tool + " tool: the call is recorded, not decided.",
 	})
+}
+
+// Listing is the answer to GET /sdk/{connection}: exactly the tools the
+// connection's reviewed package maps, each with its operation. An
+// integration that cannot read it treats every tool it has not seen
+// answered OBSERVE_ONLY as mapped, so it fails closed.
+type Listing struct {
+	V          int            `json:"v"`
+	Connection string         `json:"connection"`
+	Coverage   string         `json:"coverage"`
+	Tools      []mapping.Tool `json:"tools"`
+}
+
+// list answers GET /sdk/{connection} for a workload the Authority verifies
+// (HR-021): PAP/1 over the empty body, and the run when the request names
+// one. It decides nothing and records nothing.
+func (h *Handler) list(w http.ResponseWriter, r *http.Request, name string, conn *control.Connection) {
+	if body, err := io.ReadAll(io.LimitReader(r.Body, 1)); err != nil || len(body) != 0 {
+		deny(w, http.StatusBadRequest, dispatch.CannotAuthorize, "invalid_request", "a GET to the SDK endpoint has an empty body")
+		return
+	}
+	in := dispatch.ReadInbound(r, nil, h.publicURL+r.URL.Path)
+	switch {
+	case in.Creds.GetProof() == "":
+		h.refusePAP(w, r, pap.CodeUseNonce, "")
+		return
+	case !in.HasToken:
+		code, nonce := h.engine.ReportUnknown(r.Context(), in.Creds, r.UserAgent(), "")
+		h.refusePAP(w, r, code, nonce)
+		return
+	case !in.SubjectOK:
+		h.refusePAP(w, r, pap.CodeInvalidToken, "")
+		return
+	}
+	v, err := h.engine.Verify(r.Context(), in.Creds, in.Run)
+	if err != nil {
+		h.log.ErrorContext(r.Context(), "gateway.authority_unavailable", slog.String("connection_id", conn.GetId()), pclog.Err(err))
+		deny(w, http.StatusOK, dispatch.CannotAuthorize, dispatch.CodeAuthorityUnavailable, "PantherClaw cannot verify this workload now.")
+		return
+	}
+	if !v.OK {
+		h.refusePAP(w, r, v.Code, v.Nonce)
+		return
+	}
+	if v.Nonce != "" {
+		w.Header().Set(dispatch.HeaderNonce, v.Nonce)
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
+	w.WriteHeader(http.StatusOK)
+	_ = json.MarshalWrite(w, Listing{V: 1, Connection: name, Coverage: CoveragePartial, Tools: conn.Mapper.Tools()}, json.Deterministic(true))
 }
 
 // refusePAP answers 401 with a PAP-Error code and a nonce (PAP-1 §12).

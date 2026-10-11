@@ -233,6 +233,8 @@ The body is the raw call: `{"tool": "mcp__{server}__{name}", "server", "input", 
 
 Every answer is labelled `PARTIAL` and carries the action's id, hash and canonical form (`action_ir`). On a `target_enforced` connection, an allowed call also carries `dispatch`: the request the gateway re-serialized, with the action token that binds its body. The SDK sends it unchanged. A tool the agent SDK has built in is answered `allow`, labelled `OBSERVE_ONLY` (G0 M8 decision 2).
 
+`GET /sdk/{connection}`, PAP/1-signed over the empty body, lists exactly the tools the connection's package maps, each with its operation: `{"v":1,"connection":…,"coverage":"PARTIAL","tools":[{"tool":…,"operation":…}]}`. An integration that cannot read it treats every tool it has not seen observed as mapped, so it fails closed.
+
 Operator procedures are in the runbooks: [gateways](runbooks/gateway.md), [the kill switch](runbooks/kill-switch.md) and [broker keys and credentials](runbooks/key-rotation.md).
 
 **Sign in and administer (M2):** people sign in through an OpenID provider; locally that is the Keycloak development realm in `deploy/keycloak` (users `alice` / `alice-dev-only` and `bob` / `bob-dev-only`, development only). The server is the relying party; `pclaw` never talks to the provider.

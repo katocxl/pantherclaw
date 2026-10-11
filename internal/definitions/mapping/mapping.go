@@ -21,6 +21,7 @@ import (
 	"maps"
 	"reflect"
 	"slices"
+	"strings"
 
 	"cel.dev/cel-go/cel"
 	"cel.dev/cel-go/common/types"
@@ -217,6 +218,23 @@ func (m *Mapper) Hook(ctx context.Context, tc Context, kind string, input []byte
 // is sdk (F099). Shell commands go through the hook face (HR-200).
 func (m *Mapper) SDK(ctx context.Context, tc Context, tool string, input []byte) (actionir.Parsed, error) {
 	return m.byName(ctx, tc, m.mcp, tool, input, domain.ChannelSDK)
+}
+
+// Tool is an MCP tool the package maps, with the operation it maps to.
+type Tool struct {
+	Tool      string `json:"tool"`
+	Operation string `json:"operation"`
+}
+
+// Tools lists exactly the MCP tools the package maps, which SDK calls
+// map through too, by tool name.
+func (m *Mapper) Tools() []Tool {
+	out := make([]Tool, 0, len(m.mcp))
+	for name, c := range m.mcp {
+		out = append(out, Tool{Tool: name, Operation: c.def.Operation})
+	}
+	slices.SortFunc(out, func(a, b Tool) int { return strings.Compare(a.Tool, b.Tool) })
+	return out
 }
 
 // byName maps a call by tool name into an action of the given channel.
