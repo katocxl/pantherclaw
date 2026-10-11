@@ -243,6 +243,19 @@ For targets that run PantherClaw verifier middleware, the gateway attaches `PAP-
 
 The verifier MUST check signature (JWKS), `aud`, expiry, `bh` against the received body, single use of `jti` in a **shared** replay store, and that the requested operation/target match. Only then may the route be counted as `ENFORCED` for cooperative (SDK) modes.
 
+Encoding as implemented since M6 (pinned by G0 M8; the conformance vectors in `sdk/conformance` fix it byte for byte):
+- **Header:** `{"alg": "EdDSA", "kid": "action-tokens-<first 22 characters of the key's RFC 7638 thumbprint>", "typ": "pap-action+jwt"}`. Verifiers accept only keys of the `action_tokens` purpose; a key of another purpose never verifies an action token. Verifiers also accept the fully-specified name `Ed25519` (RFC 9864) for the same keys; PantherClaw emits `EdDSA`.
+- **Claims:**
+  - `iss` is the deployment's issuer (`pantherclaw` unless configured).
+  - `aud` is the connection id (a UUID string).
+  - `jti` is a UUIDv7 string.
+  - `iat` and `exp` are integer seconds, with `exp − iat` ≤ 60.
+  - `pap.v` is `1`, and `pap.txn` is the transaction id.
+  - `pap.act` is the effective action hash and `pap.bh` the SHA-256 of the exact outbound body. Both are **lowercase hexadecimal**, unlike the base64url `bh` and `ath` of a request proof (§4) and the base64url hashes in an approval binding (§8).
+  - `pap.op` is the operation, and `pap.target` is `{type, id}`.
+- **Verification order:** read the body (bounded), then check the JWS, `iss`, `aud`, lifetime (5 seconds of clock skew), `pap.v`, `bh`, operation and target. Insert `jti` only after all of these pass (as §4 does for proofs). A store or JWKS that cannot be reached refuses the request.
+- **Single-replica stores:** a replay store that is not shared between all replicas of a target (an in-memory store) is valid for a single-replica target only. A target that declares such a store is never counted as target-enforced for more than one replica.
+
 ## 11. Keys and discovery
 
 - JWKS: `GET /.well-known/pantherclaw/jwks.json` (Authority signing keys, with `use`, `alg`, `kid`).
