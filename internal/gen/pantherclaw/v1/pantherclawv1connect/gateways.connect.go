@@ -64,6 +64,9 @@ const (
 	// GatewayServiceWatchContainmentProcedure is the procedure name of the GatewayService's
 	// WatchContainment RPC.
 	GatewayServiceWatchContainmentProcedure = "/pantherclaw.v1.GatewayService/WatchContainment"
+	// GatewayServiceReportConnectorStateProcedure is the procedure name of the GatewayService's
+	// ReportConnectorState RPC.
+	GatewayServiceReportConnectorStateProcedure = "/pantherclaw.v1.GatewayService/ReportConnectorState"
 	// GatewayServiceReportCircuitProcedure is the procedure name of the GatewayService's ReportCircuit
 	// RPC.
 	GatewayServiceReportCircuitProcedure = "/pantherclaw.v1.GatewayService/ReportCircuit"
@@ -75,9 +78,6 @@ const (
 	// GatewayServiceReportObservationProcedure is the procedure name of the GatewayService's
 	// ReportObservation RPC.
 	GatewayServiceReportObservationProcedure = "/pantherclaw.v1.GatewayService/ReportObservation"
-	// GatewayServiceReportConnectorStateProcedure is the procedure name of the GatewayService's
-	// ReportConnectorState RPC.
-	GatewayServiceReportConnectorStateProcedure = "/pantherclaw.v1.GatewayService/ReportConnectorState"
 )
 
 var (
@@ -439,6 +439,13 @@ var (
 			Procedure:  GatewayServiceWatchContainmentProcedure,
 		}
 	})
+	gatewayServiceReportConnectorStateSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_pantherclaw_v1_gateways_proto.Services().ByName("GatewayService").Methods().ByName("ReportConnectorState"),
+			Procedure:  GatewayServiceReportConnectorStateProcedure,
+		}
+	})
 	gatewayServiceReportCircuitSpec = sync.OnceValue(func() connect.Spec {
 		return connect.Spec{
 			StreamType: connect.StreamTypeUnary,
@@ -465,13 +472,6 @@ var (
 			StreamType: connect.StreamTypeUnary,
 			Schema:     v1.File_pantherclaw_v1_gateways_proto.Services().ByName("GatewayService").Methods().ByName("ReportObservation"),
 			Procedure:  GatewayServiceReportObservationProcedure,
-		}
-	})
-	gatewayServiceReportConnectorStateSpec = sync.OnceValue(func() connect.Spec {
-		return connect.Spec{
-			StreamType: connect.StreamTypeUnary,
-			Schema:     v1.File_pantherclaw_v1_gateways_proto.Services().ByName("GatewayService").Methods().ByName("ReportConnectorState"),
-			Procedure:  GatewayServiceReportConnectorStateProcedure,
 		}
 	})
 )
@@ -501,6 +501,13 @@ type GatewayServiceClient interface {
 	// dispatching.
 	// permission: gateway.sync
 	WatchContainment(context.Context, *v1.WatchContainmentRequest) (GatewayServiceWatchContainmentClientStream, error)
+	// ReportConnectorState reports a run of one of the calling gateway's
+	// connectors (G0 M9 track C): its spec revision, container, engine and
+	// state, which moves only forward. The org and gateway come from the
+	// certificate alone; only a connector connection that gateway serves is
+	// accepted.
+	// permission: gateway.observe
+	ReportConnectorState(context.Context, *v1.ReportConnectorStateRequest) (*v1.ReportConnectorStateResponse, error)
 	// ReportCircuit reports that a connection's circuit breaker opened
 	// (HR-078); the server quarantines the connection.
 	// permission: gateway.observe
@@ -520,13 +527,6 @@ type GatewayServiceClient interface {
 	// the verifier declares, and a digest of the answer (HR-190).
 	// permission: gateway.verify
 	ReportObservation(context.Context, *v1.ReportObservationRequest) (*v1.ReportObservationResponse, error)
-	// ReportConnectorState reports a run of one of the calling gateway's
-	// connectors (G0 M9 track C): its spec revision, container, engine and
-	// state, which moves only forward. The org and gateway come from the
-	// certificate alone; only a connector connection that gateway serves is
-	// accepted.
-	// permission: gateway.observe
-	ReportConnectorState(context.Context, *v1.ReportConnectorStateRequest) (*v1.ReportConnectorStateResponse, error)
 }
 
 // NewGatewayServiceClient constructs a client for the pantherclaw.v1.GatewayService service.
@@ -581,6 +581,13 @@ type GatewayServiceHandler interface {
 	// dispatching.
 	// permission: gateway.sync
 	WatchContainment(context.Context, *v1.WatchContainmentRequest, GatewayServiceWatchContainmentServerStream) error
+	// ReportConnectorState reports a run of one of the calling gateway's
+	// connectors (G0 M9 track C): its spec revision, container, engine and
+	// state, which moves only forward. The org and gateway come from the
+	// certificate alone; only a connector connection that gateway serves is
+	// accepted.
+	// permission: gateway.observe
+	ReportConnectorState(context.Context, *v1.ReportConnectorStateRequest) (*v1.ReportConnectorStateResponse, error)
 	// ReportCircuit reports that a connection's circuit breaker opened
 	// (HR-078); the server quarantines the connection.
 	// permission: gateway.observe
@@ -600,13 +607,6 @@ type GatewayServiceHandler interface {
 	// the verifier declares, and a digest of the answer (HR-190).
 	// permission: gateway.verify
 	ReportObservation(context.Context, *v1.ReportObservationRequest) (*v1.ReportObservationResponse, error)
-	// ReportConnectorState reports a run of one of the calling gateway's
-	// connectors (G0 M9 track C): its spec revision, container, engine and
-	// state, which moves only forward. The org and gateway come from the
-	// certificate alone; only a connector connection that gateway serves is
-	// accepted.
-	// permission: gateway.observe
-	ReportConnectorState(context.Context, *v1.ReportConnectorStateRequest) (*v1.ReportConnectorStateResponse, error)
 }
 
 // RegisterGatewayServiceHandler registers svc as the pantherclaw.v1.GatewayService implementation
@@ -619,11 +619,11 @@ func RegisterGatewayServiceHandler(server *connect.Server, svc GatewayServiceHan
 		connect.Method{Spec: gatewayServiceRegisterBrokerKeySpec(), Handler: adapter.registerBrokerKey},
 		connect.Method{Spec: gatewayServiceGetConfigurationSpec(), Handler: adapter.getConfiguration},
 		connect.Method{Spec: gatewayServiceWatchContainmentSpec(), Handler: adapter.watchContainment},
+		connect.Method{Spec: gatewayServiceReportConnectorStateSpec(), Handler: adapter.reportConnectorState},
 		connect.Method{Spec: gatewayServiceReportCircuitSpec(), Handler: adapter.reportCircuit},
 		connect.Method{Spec: gatewayServiceReportDriftSpec(), Handler: adapter.reportDrift},
 		connect.Method{Spec: gatewayServiceClaimVerificationsSpec(), Handler: adapter.claimVerifications},
 		connect.Method{Spec: gatewayServiceReportObservationSpec(), Handler: adapter.reportObservation},
-		connect.Method{Spec: gatewayServiceReportConnectorStateSpec(), Handler: adapter.reportConnectorState},
 	)
 }
 
@@ -666,6 +666,10 @@ func (UnimplementedGatewayServiceHandler) WatchContainment(context.Context, *v1.
 	return connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.GatewayService.WatchContainment is not implemented")
 }
 
+func (UnimplementedGatewayServiceHandler) ReportConnectorState(context.Context, *v1.ReportConnectorStateRequest) (*v1.ReportConnectorStateResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.GatewayService.ReportConnectorState is not implemented")
+}
+
 func (UnimplementedGatewayServiceHandler) ReportCircuit(context.Context, *v1.ReportCircuitRequest) (*v1.ReportCircuitResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.GatewayService.ReportCircuit is not implemented")
 }
@@ -680,10 +684,6 @@ func (UnimplementedGatewayServiceHandler) ClaimVerifications(context.Context, *v
 
 func (UnimplementedGatewayServiceHandler) ReportObservation(context.Context, *v1.ReportObservationRequest) (*v1.ReportObservationResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.GatewayService.ReportObservation is not implemented")
-}
-
-func (UnimplementedGatewayServiceHandler) ReportConnectorState(context.Context, *v1.ReportConnectorStateRequest) (*v1.ReportConnectorStateResponse, error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.GatewayService.ReportConnectorState is not implemented")
 }
 
 type gatewayServiceClient struct {
@@ -730,6 +730,14 @@ func (c *gatewayServiceClient) WatchContainment(ctx context.Context, req *v1.Wat
 	return GatewayServiceWatchContainmentClientStream{stream: stream}, nil
 }
 
+func (c *gatewayServiceClient) ReportConnectorState(ctx context.Context, req *v1.ReportConnectorStateRequest) (*v1.ReportConnectorStateResponse, error) {
+	var res v1.ReportConnectorStateResponse
+	if err := c.client.CallUnary(ctx, gatewayServiceReportConnectorStateSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
 func (c *gatewayServiceClient) ReportCircuit(ctx context.Context, req *v1.ReportCircuitRequest) (*v1.ReportCircuitResponse, error) {
 	var res v1.ReportCircuitResponse
 	if err := c.client.CallUnary(ctx, gatewayServiceReportCircuitSpec(), req, &res); err != nil {
@@ -757,14 +765,6 @@ func (c *gatewayServiceClient) ClaimVerifications(ctx context.Context, req *v1.C
 func (c *gatewayServiceClient) ReportObservation(ctx context.Context, req *v1.ReportObservationRequest) (*v1.ReportObservationResponse, error) {
 	var res v1.ReportObservationResponse
 	if err := c.client.CallUnary(ctx, gatewayServiceReportObservationSpec(), req, &res); err != nil {
-		return nil, err
-	}
-	return &res, nil
-}
-
-func (c *gatewayServiceClient) ReportConnectorState(ctx context.Context, req *v1.ReportConnectorStateRequest) (*v1.ReportConnectorStateResponse, error) {
-	var res v1.ReportConnectorStateResponse
-	if err := c.client.CallUnary(ctx, gatewayServiceReportConnectorStateSpec(), req, &res); err != nil {
 		return nil, err
 	}
 	return &res, nil
@@ -828,6 +828,18 @@ func (h gatewayServiceHandler) watchContainment(ctx context.Context, _ connect.S
 	return h.svc.WatchContainment(ctx, &req, GatewayServiceWatchContainmentServerStream{stream: stream})
 }
 
+func (h gatewayServiceHandler) reportConnectorState(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ReportConnectorStateRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ReportConnectorState(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
 func (h gatewayServiceHandler) reportCircuit(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
 	var req v1.ReportCircuitRequest
 	if err := stream.Receive(&req); err != nil {
@@ -870,18 +882,6 @@ func (h gatewayServiceHandler) reportObservation(ctx context.Context, _ connect.
 		return err
 	}
 	res, err := h.svc.ReportObservation(ctx, &req)
-	if err != nil {
-		return err
-	}
-	return stream.Send(res)
-}
-
-func (h gatewayServiceHandler) reportConnectorState(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
-	var req v1.ReportConnectorStateRequest
-	if err := stream.Receive(&req); err != nil {
-		return err
-	}
-	res, err := h.svc.ReportConnectorState(ctx, &req)
 	if err != nil {
 		return err
 	}
