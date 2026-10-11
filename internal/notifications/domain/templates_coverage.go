@@ -4,8 +4,8 @@
 package domain
 
 // coverageTemplates are coverage's notification types (G0 M9 track A,
-// HR-212). An exclusion narrows what an ENFORCED claim covers, a weakening
-// change like a connection's (HR-183), so every one is told. They render
+// HR-212). An exclusion records a person's acceptance of a coverage gap, a
+// weakening change like a connection's (HR-183), so every one is told. They render
 // only names and fixed text, never the exclusion's reason (HR-158).
 var coverageTemplates = []Template{
 	{

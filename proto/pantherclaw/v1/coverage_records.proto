@@ -78,10 +78,11 @@ service CoverageService {
   // and records a snapshot for each that changed.
   // permission: coverage.reassess
   rpc Reassess(ReassessRequest) returns (ReassessResponse);
-  // CreateExclusion excludes a scope or a route kind from what an
-  // ENFORCED claim must cover until it expires (HR-212, design decision 1).
-  // Only a person makes one, with a written reason; it is audited,
-  // notified to org admins and listed with every claim it narrows.
+  // CreateExclusion records, until it expires, that a person accepts a scope
+  // or a route kind as outside the boundary (HR-212). It never raises a
+  // state: an excluded route still counts as open (design decision 1). Only
+  // a person makes one, with a written reason; it is audited, notified to
+  // org admins and listed with every claim on the scope.
   // permission: coverage.manage
   rpc CreateExclusion(CreateExclusionRequest) returns (CreateExclusionResponse);
   // RevokeExclusion ends an active exclusion at once.
@@ -669,8 +670,19 @@ message AccessDetail {
   repeated string agent_ids = 17;
   // What verifies the modes.
   repeated string verification_basis = 18;
-  // The latest passing target-verifier test.
-  google.protobuf.Timestamp verify_time = 19;
+  // For each read of the scopes shown, when its latest passing
+  // target-verifier test ran. A test vouches only for the read it tested;
+  // writes stay PARTIAL in M9 (founder decision N15).
+  repeated VerifiedOperation verified_operations = 19;
+}
+
+// VerifiedOperation is when the latest passing target-verifier test of one
+// operation ran.
+message VerifiedOperation {
+  // Operation.
+  string operation = 1;
+  // When the test ran.
+  google.protobuf.Timestamp verify_time = 2;
 }
 
 // GetAccessDetailResponse returns the disclosure.
