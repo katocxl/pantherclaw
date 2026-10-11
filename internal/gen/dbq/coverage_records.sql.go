@@ -318,6 +318,33 @@ func (q *Queries) CoverageScopesOfConnection(ctx context.Context, orgID ids.OrgI
 	return items, nil
 }
 
+const coverageSnapshotEntries = `-- name: CoverageSnapshotEntries :many
+SELECT ledger_entry_id FROM pc.coverage_snapshots
+WHERE org_id = $1 AND id = ANY ($2::uuid[])
+`
+
+// The ledger entries of coverage snapshots, which evidence bundles carry
+// beside the receipts that claim them (HR-217).
+func (q *Queries) CoverageSnapshotEntries(ctx context.Context, orgID ids.OrgID, snapshotIds []ids.UUID) ([]ids.UUID, error) {
+	rows, err := q.db.Query(ctx, coverageSnapshotEntries, orgID, snapshotIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ids.UUID{}
+	for rows.Next() {
+		var ledger_entry_id ids.UUID
+		if err := rows.Scan(&ledger_entry_id); err != nil {
+			return nil, err
+		}
+		items = append(items, ledger_entry_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const coverageTrafficAfter = `-- name: CoverageTrafficAfter :many
 SELECT t.id, r.agent_id, t.connection_id, t.operation, t.channel, t.mode
 FROM pc.transactions t

@@ -567,6 +567,11 @@ func (s *Service) transactions(ctx context.Context, c tenancy.Caller, q *dbq.Que
 			entryIDs = append(entryIDs, r.LedgerEntryID)
 		}
 	}
+	snapshots, err := q.CoverageSnapshotEntries(ctx, c.Org, claimedSnapshots(receipts))
+	if err != nil {
+		return nil, nil, err
+	}
+	entryIDs = append(entryIDs, snapshots...)
 	rows, err := q.ChainedEntriesByID(ctx, c.Org, entryIDs)
 	if err != nil {
 		return nil, nil, err

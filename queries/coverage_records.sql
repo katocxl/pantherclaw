@@ -282,3 +282,9 @@ WHERE s.org_id = sqlc.arg(org_id) AND s.agent_id = sqlc.arg(agent_id) AND s.conn
   AND s.operation = sqlc.arg(operation)
 ORDER BY s.id DESC
 LIMIT 1;
+
+-- The ledger entries of coverage snapshots, which evidence bundles carry
+-- beside the receipts that claim them (HR-217).
+-- name: CoverageSnapshotEntries :many
+SELECT ledger_entry_id FROM pc.coverage_snapshots
+WHERE org_id = sqlc.arg(org_id) AND id = ANY (sqlc.arg(snapshot_ids)::uuid[]);

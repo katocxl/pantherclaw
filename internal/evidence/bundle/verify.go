@@ -62,6 +62,9 @@ type verifier struct {
 	cps     map[uint64]checkpoint // verified checkpoints by size
 	sizes   []uint64              // their sizes, ascending
 	digests map[string]int64      // receipt_sha256 of verified entries → seq
+	// snapshots are the verified coverage snapshot entries by snapshot id
+	// (HR-217).
+	snapshots map[string]snapshotEntry
 }
 
 // Verify checks a bundle offline against the pinned keys and returns the
@@ -73,7 +76,9 @@ func Verify(b *Bundle, o Options) *Report {
 		r.add("bundle.format", "", Failed, "a bundle and a trust file are required")
 		return r
 	}
-	v := &verifier{b: b, o: o, r: r, cps: map[uint64]checkpoint{}, digests: map[string]int64{}}
+	v := &verifier{
+		b: b, o: o, r: r, cps: map[uint64]checkpoint{}, digests: map[string]int64{}, snapshots: map[string]snapshotEntry{},
+	}
 	v.checkOrigin()
 	v.checkpoints()
 	v.consistency()
@@ -321,6 +326,9 @@ func (v *verifier) link(e, prev *Entry) (Status, string) {
 	if json.Unmarshal(body, &ref) == nil && ref.Receipt != "" {
 		v.digests[ref.Receipt] = e.Seq
 	}
+	if e.Kind == SnapshotKind {
+		v.noteSnapshot(e, body)
+	}
 	return Passed, "entry_hash recomputed from the entry and prev_hash"
 }
 
@@ -350,7 +358,7 @@ func (v *verifier) inclusion(e *Entry, subject string, proofs []Inclusion) {
 func (v *verifier) receipts() {
 	for i, compact := range v.b.Receipts {
 		subject := fmt.Sprintf("receipt %d", i+1)
-		st, d, subj := v.receipt(compact)
+		st, d, subj, payload := v.receipt(compact)
 		if subj != "" {
 			subject = subj
 		}
@@ -364,30 +372,31 @@ func (v *verifier) receipts() {
 		} else {
 			v.r.add("receipt.ledger", subject, NotAvailable, "no verified entry in this bundle records it")
 		}
+		v.coverage(subject, payload)
 	}
 }
 
 // receipt checks one receipt: an allowed type, EdDSA only, a pinned
 // receipts key, valid when the receipt was issued (iat), of this org.
-func (v *verifier) receipt(compact string) (Status, string, string) {
+func (v *verifier) receipt(compact string) (Status, string, string, []byte) {
 	kid, typ, err := jws.Unverified(compact)
 	if err != nil {
-		return Failed, "not a compact JWS", ""
+		return Failed, "not a compact JWS", "", nil
 	}
 	if !receiptTypes[typ] {
-		return Failed, fmt.Sprintf("type %q is not a receipt", truncate(typ)), ""
+		return Failed, fmt.Sprintf("type %q is not a receipt", truncate(typ)), "", nil
 	}
 	k := v.o.Trust.key(PurposeReceipts, kid)
 	if k == nil {
-		return Failed, fmt.Sprintf("signed by key %q, which is not in your trust file", truncate(kid)), ""
+		return Failed, fmt.Sprintf("signed by key %q, which is not in your trust file", truncate(kid)), "", nil
 	}
 	jv, err := jws.NewVerifier(typ, map[string]ed25519.PublicKey{kid: k.ed})
 	if err != nil {
-		return Failed, err.Error(), ""
+		return Failed, err.Error(), "", nil
 	}
 	payload, _, err := jv.Verify(compact)
 	if err != nil {
-		return Failed, "the EdDSA signature does not verify", ""
+		return Failed, "the EdDSA signature does not verify", "", nil
 	}
 	var claims struct {
 		Jti string `json:"jti"`
@@ -397,17 +406,17 @@ func (v *verifier) receipt(compact string) (Status, string, string) {
 		} `json:"pap"`
 	}
 	if err := json.Unmarshal(payload, &claims); err != nil || claims.Iat == nil {
-		return Failed, "the receipt's claims are malformed or have no iat", ""
+		return Failed, "the receipt's claims are malformed or have no iat", "", nil
 	}
 	subject := strings.TrimSuffix(typ, "+jwt") + " " + truncate(claims.Jti)
 	at := time.Unix(*claims.Iat, 0).UTC()
 	switch {
 	case !k.ValidAt(at):
-		return Failed, fmt.Sprintf("key %s was not valid when the receipt was issued (%s; state %s)", kid, at.Format(time.RFC3339), k.State), subject
+		return Failed, fmt.Sprintf("key %s was not valid when the receipt was issued (%s; state %s)", kid, at.Format(time.RFC3339), k.State), subject, nil
 	case claims.Pap.Org != "" && claims.Pap.Org != v.b.Org:
-		return Failed, "the receipt belongs to another org", subject
+		return Failed, "the receipt belongs to another org", subject, nil
 	}
-	return Passed, fmt.Sprintf("EdDSA signature by %s, valid when issued (%s)", kid, at.Format(time.RFC3339)), subject
+	return Passed, fmt.Sprintf("EdDSA signature by %s, valid when issued (%s)", kid, at.Format(time.RFC3339)), subject, payload
 }
 
 func (v *verifier) anchor() {
