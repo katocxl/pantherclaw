@@ -90,6 +90,10 @@ type Ready struct {
 	Listen   string `json:"listen"`
 	CASHA256 string `json:"ca_sha256"`
 	CAPEM    string `json:"ca_pem"`
+	// HostAddrs are the addresses host.docker.internal resolves to on the
+	// edge's uplink: the host as containers see it, where the canary
+	// listens. Resolving is not dialing; the edge dials only the gateway.
+	HostAddrs []string `json:"host_addrs"`
 }
 
 // ReadyEvent is Ready's event name.
@@ -139,7 +143,7 @@ func Run(ctx context.Context, c Config, out io.Writer, log *slog.Logger) error {
 		defer cancel()
 		_ = srv.Shutdown(sctx)
 	}()
-	ready := Ready{Event: ReadyEvent, Listen: ln.Addr().String(), CASHA256: e.CAFingerprint(), CAPEM: string(e.CACertificate())}
+	ready := Ready{Event: ReadyEvent, Listen: ln.Addr().String(), CASHA256: e.CAFingerprint(), CAPEM: string(e.CACertificate()), HostAddrs: hostAddrs(ctx)}
 	if err := json.MarshalWrite(out, ready); err != nil {
 		_ = ln.Close()
 		return err
@@ -173,4 +177,15 @@ func Main(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 	return 0
+}
+
+// hostAddrs resolves host.docker.internal; none on an engine without it.
+func hostAddrs(ctx context.Context) []string {
+	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+	addrs, err := net.DefaultResolver.LookupHost(ctx, "host.docker.internal")
+	if err != nil {
+		return []string{}
+	}
+	return addrs
 }

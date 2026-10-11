@@ -83,14 +83,16 @@ type Container struct {
 	// process anyway, which Docker gives no ambient capabilities (G0 M9
 	// design decision 5, as built).
 	PingGID int
-	Limits Limits
-	Labels map[string]string
+	Limits  Limits
+	Labels  map[string]string
 	// Interactive keeps standard input open (stdio MCP connectors).
 	Interactive bool
 }
 
 var (
-	imageRE  = regexp.MustCompile(`^[a-z0-9][a-z0-9._/:-]*@sha256:[0-9a-f]{64}$`)
+	// imageRE: a reference pinned by digest, or a local image id (images
+	// built by task sandbox:images are referenced by their id).
+	imageRE  = regexp.MustCompile(`^([a-z0-9][a-z0-9._/:-]*@)?sha256:[0-9a-f]{64}$`)
 	userRE   = regexp.MustCompile(`^([0-9]{1,9}):([0-9]{1,9})$`)
 	envRE    = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]{0,127}=`)
 	targetRE = regexp.MustCompile(`^/[A-Za-z0-9._/-]+$`)
@@ -237,6 +239,12 @@ type ContainerInfo struct {
 			ReadOnly bool   `json:"ReadOnly"`
 		} `json:"Mounts"`
 	} `json:"HostConfig"`
+	// State is the container's run state, current when inspected.
+	State struct {
+		Status   string `json:"Status"`
+		Running  bool   `json:"Running"`
+		ExitCode int    `json:"ExitCode"`
+	} `json:"State"`
 	NetworkSettings struct {
 		Networks map[string]jsontext.Value `json:"Networks"`
 	} `json:"NetworkSettings"`

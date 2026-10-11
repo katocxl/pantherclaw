@@ -96,3 +96,44 @@ func BuildLinux(t testing.TB, e docker.Engine, pkg string) string {
 	}
 	return out
 }
+
+// Image builds the image of a repository Dockerfile (for example
+// deploy/sandbox/edge.Dockerfile) around a static Linux build of pkg, as
+// task sandbox:images does, and removes it when the test ends. The test's
+// name is a label, so that concurrent test packages never share an image.
+func Image(t testing.TB, c *docker.Client, e docker.Engine, pkg, dockerfile string) string {
+	t.Helper()
+	bin := BuildLinux(t, e, pkg)
+	id, err := c.BuildImage(t.Context(), filepath.Join(repoRoot(t), filepath.FromSlash(dockerfile)), filepath.Dir(bin),
+		map[string]string{"org.pantherclaw.test": t.Name()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), cleanupTimeout)
+		defer cancel()
+		if err := c.RemoveImage(ctx, id); err != nil {
+			t.Errorf("remove image %s: %v", id, err)
+		}
+	})
+	return id
+}
+
+// repoRoot is the directory of the module's go.mod above the test's.
+func repoRoot(t testing.TB) string {
+	t.Helper()
+	dir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for {
+		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
+			return dir
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			t.Fatal("no go.mod above the test")
+		}
+		dir = parent
+	}
+}
