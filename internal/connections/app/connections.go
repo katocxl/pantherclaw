@@ -214,8 +214,7 @@ func activeGateway(ctx context.Context, q *dbq.Queries, org ids.OrgID, id ids.UU
 // routes returns the routes of the org's pinned version of a package that a
 // connection of this kind serves: for http and mcp, the mappings of
 // definitions with a dispatch template of that kind; for local, the hook
-// and MCP mappings, through which the hook and SDK faces map the calls an
-// agent runs itself (HR-186, HR-201).
+// mappings.
 func routes(ctx context.Context, q *dbq.Queries, org ids.OrgID, pkg, kind string) ([]string, error) {
 	pin, err := q.PinnedPackageRaw(ctx, org, pkg)
 	if db.IsNoRows(err) {
@@ -240,7 +239,7 @@ func routes(ctx context.Context, q *dbq.Queries, org ids.OrgID, pkg, kind string
 			case KindMCP:
 				serves = d.Dispatch != nil && d.Dispatch.MCP != nil && m.Channel != domain.ChannelHook
 			case KindLocal:
-				serves = m.Channel == domain.ChannelHook || m.Channel == domain.ChannelMCP
+				serves = m.Channel == domain.ChannelHook
 			}
 			if serves && !slices.Contains(out, m.Route) {
 				out = append(out, m.Route)

@@ -211,20 +211,12 @@ func (m *Mapper) Hook(ctx context.Context, tc Context, kind string, input []byte
 	return m.byName(ctx, tc, m.hook, kind, input, domain.ChannelHook)
 }
 
-// SDK maps an agent SDK's call (the gateway's /sdk face, HR-201) through a
-// hook mapping (a built-in tool the gateway adapted, such as a shell
-// command) or an MCP mapping (a tool of an MCP server the agent calls
-// itself), by tool name and JSON input. The action's channel is sdk and
-// its route the mapping's.
-func (m *Mapper) SDK(ctx context.Context, tc Context, via domain.Channel, tool string, input []byte) (actionir.Parsed, error) {
-	switch via {
-	case domain.ChannelHook:
-		return m.byName(ctx, tc, m.hook, tool, input, domain.ChannelSDK)
-	case domain.ChannelMCP:
-		return m.byName(ctx, tc, m.mcp, tool, input, domain.ChannelSDK)
-	case domain.ChannelHTTP, domain.ChannelSDK:
-	}
-	return actionir.Parsed{}, fmt.Errorf("%w: %s calls", ErrUnmapped, via)
+// SDK maps an agent SDK's tool call (the gateway's /sdk face, HR-201)
+// through the package's MCP mapping of the tool, by tool name and JSON
+// input, exactly as the MCP face maps it except that the action's channel
+// is sdk (F099). Shell commands go through the hook face (HR-200).
+func (m *Mapper) SDK(ctx context.Context, tc Context, tool string, input []byte) (actionir.Parsed, error) {
+	return m.byName(ctx, tc, m.mcp, tool, input, domain.ChannelSDK)
 }
 
 // byName maps a call by tool name into an action of the given channel.

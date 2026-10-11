@@ -10,7 +10,6 @@ import (
 
 	adomain "github.com/katocxl/pantherclaw/internal/authority/domain"
 	"github.com/katocxl/pantherclaw/internal/authority/pipeline"
-	defs "github.com/katocxl/pantherclaw/internal/definitions/domain"
 	"github.com/katocxl/pantherclaw/internal/definitions/mapping"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	pdomain "github.com/katocxl/pantherclaw/internal/policy/domain"
@@ -149,19 +148,19 @@ func TestPAP1_AConnectionMustBeTheCallingGatewaysOwn(t *testing.T) {
 	expect(t, f.on(gw, c.ID, "create_refund", refund("ch_1", "10.00")), adomain.CannotAuthorize, pipeline.ReasonEvidenceUnavailable)
 }
 
-// TestHR201_SDKActionsComeThroughALocalConnection: an action the gateway's
-// SDK face mapped (channel sdk) is decided through a local connection,
-// whose agent performs it; an MCP call through a local connection is still
-// refused, and so is an sdk action through a connection whose kind cannot
-// serve its definition.
-func TestHR201_SDKActionsComeThroughALocalConnection(t *testing.T) {
+// TestHR201_SDKActionsComeThroughHTTPOrMCPConnections: an action the
+// gateway's /sdk face mapped (channel sdk) is decided through the http
+// connection serving its package, as the gateway's other channels are, and
+// never through a local connection, which serves the hook alone; nor
+// through a connection whose kind cannot serve its definition.
+func TestHR201_SDKActionsComeThroughHTTPOrMCPConnections(t *testing.T) {
 	f := newFx(t)
 	gw := ids.NewV7()
 	sdkOn := func(conn ids.UUID) *pipeline.Evaluation {
 		p, err := f.mapper.SDK(context.Background(), mapping.Context{
 			Org: org.String(), Env: f.env.String(), RunID: f.run.String(), ActionID: ids.NewV7().String(), AgentInstance: f.instance.String(),
 			Connection: conn.String(),
-		}, defs.ChannelMCP, "create_refund", jsontext.Value(refund("ch_1", "10.00")))
+		}, "create_refund", jsontext.Value(refund("ch_1", "10.00")))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -170,15 +169,18 @@ func TestHR201_SDKActionsComeThroughALocalConnection(t *testing.T) {
 			Gateway: gw.String(),
 		})
 	}
-	local := connection(gw)
-	local.Kind, local.AccessMode, local.DefaultMode = "local", "none", pipeline.ModeEnforce
-	f.w.PutConnection(local)
-	ev := sdkOn(local.ID)
+	agentHeld := connection(gw)
+	agentHeld.AccessMode = "agent_held"
+	f.w.PutConnection(agentHeld)
+	ev := sdkOn(agentHeld.ID)
 	expect(t, ev, adomain.Allow, pipeline.ReasonGrantCovers)
-	if ev.Connection == nil || ev.Connection.ID != local.ID {
+	if ev.Connection == nil || ev.Connection.ID != agentHeld.ID {
 		t.Fatalf("evaluated connection %+v", ev.Connection)
 	}
-	expect(t, f.on(gw, local.ID, "create_refund", refund("ch_1", "10.00")), adomain.CannotAuthorize, pipeline.ReasonRouteUnknown)
+	local := connection(gw)
+	local.Kind, local.AccessMode = "local", "none"
+	f.w.PutConnection(local)
+	expect(t, sdkOn(local.ID), adomain.CannotAuthorize, pipeline.ReasonRouteUnknown)
 	// The mock payments package has no MCP dispatch template.
 	mcp := connection(gw)
 	mcp.Kind = "mcp"
