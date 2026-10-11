@@ -64,8 +64,10 @@ func newFixture(t *testing.T) *fixture {
 		{`INSERT INTO pc.enrollment_tokens (org_id, id, agent_id, environment_id, token_hash, created_by, expires_at)
 			VALUES ($1, $2, $3, $4, sha256(convert_to($2::uuid::text, 'UTF8')), 'test', now() + interval '15 minutes')`, []any{f.org, token, f.agent, env}},
 		{`INSERT INTO pc.sandbox_sessions (org_id, id, agent_id, launcher, enrollment_token_id, agent_image, edge_image, probe_image,
-			config_digest, probe_jkt, probe_public_key, engine_version, api_version, runtime, expires_at) VALUES ($1, $2, $3, 'test', $4,
-			$5, $5, $5, $5, 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA', sha256(convert_to($2::uuid::text, 'UTF8')), '29.0.1', '1.51', 'runc',
+			config_digest, probe_jkt, probe_public_key, host_jkt, host_public_key, engine_version, api_version, runtime, expires_at)
+			VALUES ($1, $2, $3, 'test', $4,
+			$5, $5, $5, $5, 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA', sha256(convert_to($2::uuid::text, 'UTF8')),
+			'BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB', sha256(convert_to($3::uuid::text, 'UTF8')), '29.0.1', '1.51', 'runc',
 			now() + interval '1 hour')`, []any{f.org, f.session, f.agent, token, digest}},
 	} {
 		f.exec(t, s.sql, s.args...)

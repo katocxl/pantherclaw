@@ -44,7 +44,7 @@ func (q *Queries) BindSandboxSessionRun(ctx context.Context, runID *ids.UUID, or
 const endSandboxSession = `-- name: EndSandboxSession :one
 UPDATE pc.sandbox_sessions SET state = $1, ended_at = now()
 WHERE org_id = $2 AND id = $3 AND state = 'OPEN'
-RETURNING org_id, id, agent_id, launcher, enrollment_token_id, instance_id, run_id, agent_image, edge_image, probe_image, config_digest, probe_jkt, probe_public_key, engine_version, api_version, runtime, state, opened_at, expires_at, ended_at
+RETURNING org_id, id, agent_id, launcher, enrollment_token_id, instance_id, run_id, agent_image, edge_image, probe_image, config_digest, probe_jkt, probe_public_key, host_jkt, host_public_key, engine_version, api_version, runtime, state, opened_at, expires_at, ended_at
 `
 
 func (q *Queries) EndSandboxSession(ctx context.Context, state string, orgID ids.OrgID, iD ids.UUID) (PcSandboxSession, error) {
@@ -64,6 +64,8 @@ func (q *Queries) EndSandboxSession(ctx context.Context, state string, orgID ids
 		&i.ConfigDigest,
 		&i.ProbeJkt,
 		&i.ProbePublicKey,
+		&i.HostJkt,
+		&i.HostPublicKey,
 		&i.EngineVersion,
 		&i.ApiVersion,
 		&i.Runtime,
@@ -76,7 +78,7 @@ func (q *Queries) EndSandboxSession(ctx context.Context, state string, orgID ids
 }
 
 const getSandboxSession = `-- name: GetSandboxSession :one
-SELECT org_id, id, agent_id, launcher, enrollment_token_id, instance_id, run_id, agent_image, edge_image, probe_image, config_digest, probe_jkt, probe_public_key, engine_version, api_version, runtime, state, opened_at, expires_at, ended_at FROM pc.sandbox_sessions WHERE org_id = $1 AND id = $2
+SELECT org_id, id, agent_id, launcher, enrollment_token_id, instance_id, run_id, agent_image, edge_image, probe_image, config_digest, probe_jkt, probe_public_key, host_jkt, host_public_key, engine_version, api_version, runtime, state, opened_at, expires_at, ended_at FROM pc.sandbox_sessions WHERE org_id = $1 AND id = $2
 `
 
 func (q *Queries) GetSandboxSession(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (PcSandboxSession, error) {
@@ -96,6 +98,8 @@ func (q *Queries) GetSandboxSession(ctx context.Context, orgID ids.OrgID, iD ids
 		&i.ConfigDigest,
 		&i.ProbeJkt,
 		&i.ProbePublicKey,
+		&i.HostJkt,
+		&i.HostPublicKey,
 		&i.EngineVersion,
 		&i.ApiVersion,
 		&i.Runtime,
@@ -188,12 +192,13 @@ func (q *Queries) InsertProbeRun(ctx context.Context, arg InsertProbeRunParams) 
 const insertSandboxSession = `-- name: InsertSandboxSession :one
 
 INSERT INTO pc.sandbox_sessions (org_id, id, agent_id, launcher, enrollment_token_id, agent_image, edge_image, probe_image,
-    config_digest, probe_jkt, probe_public_key, engine_version, api_version, runtime, expires_at)
+    config_digest, probe_jkt, probe_public_key, host_jkt, host_public_key, engine_version, api_version, runtime, expires_at)
 VALUES ($1, $2, $3, $4, $5,
     $6, $7, $8, $9, $10,
-    $11, $12, $13, $14,
-    now() + make_interval(secs => $15::integer))
-RETURNING org_id, id, agent_id, launcher, enrollment_token_id, instance_id, run_id, agent_image, edge_image, probe_image, config_digest, probe_jkt, probe_public_key, engine_version, api_version, runtime, state, opened_at, expires_at, ended_at
+    $11, $12, $13, $14, $15,
+    $16,
+    now() + make_interval(secs => $17::integer))
+RETURNING org_id, id, agent_id, launcher, enrollment_token_id, instance_id, run_id, agent_image, edge_image, probe_image, config_digest, probe_jkt, probe_public_key, host_jkt, host_public_key, engine_version, api_version, runtime, state, opened_at, expires_at, ended_at
 `
 
 type InsertSandboxSessionParams struct {
@@ -208,6 +213,8 @@ type InsertSandboxSessionParams struct {
 	ConfigDigest      string
 	ProbeJkt          string
 	ProbePublicKey    []byte
+	HostJkt           string
+	HostPublicKey     []byte
 	EngineVersion     string
 	ApiVersion        string
 	Runtime           string
@@ -233,6 +240,8 @@ func (q *Queries) InsertSandboxSession(ctx context.Context, arg InsertSandboxSes
 		arg.ConfigDigest,
 		arg.ProbeJkt,
 		arg.ProbePublicKey,
+		arg.HostJkt,
+		arg.HostPublicKey,
 		arg.EngineVersion,
 		arg.ApiVersion,
 		arg.Runtime,
@@ -253,6 +262,8 @@ func (q *Queries) InsertSandboxSession(ctx context.Context, arg InsertSandboxSes
 		&i.ConfigDigest,
 		&i.ProbeJkt,
 		&i.ProbePublicKey,
+		&i.HostJkt,
+		&i.HostPublicKey,
 		&i.EngineVersion,
 		&i.ApiVersion,
 		&i.Runtime,
@@ -312,7 +323,7 @@ func (q *Queries) LatestProbeRuns(ctx context.Context, orgID ids.OrgID, sessionI
 }
 
 const listSandboxSessionsPage = `-- name: ListSandboxSessionsPage :many
-SELECT org_id, id, agent_id, launcher, enrollment_token_id, instance_id, run_id, agent_image, edge_image, probe_image, config_digest, probe_jkt, probe_public_key, engine_version, api_version, runtime, state, opened_at, expires_at, ended_at FROM pc.sandbox_sessions
+SELECT org_id, id, agent_id, launcher, enrollment_token_id, instance_id, run_id, agent_image, edge_image, probe_image, config_digest, probe_jkt, probe_public_key, host_jkt, host_public_key, engine_version, api_version, runtime, state, opened_at, expires_at, ended_at FROM pc.sandbox_sessions
 WHERE org_id = $1
   AND ($2::uuid IS NULL OR agent_id = $2::uuid)
   AND ($3::uuid IS NULL OR id < $3::uuid)
@@ -355,6 +366,8 @@ func (q *Queries) ListSandboxSessionsPage(ctx context.Context, arg ListSandboxSe
 			&i.ConfigDigest,
 			&i.ProbeJkt,
 			&i.ProbePublicKey,
+			&i.HostJkt,
+			&i.HostPublicKey,
 			&i.EngineVersion,
 			&i.ApiVersion,
 			&i.Runtime,
@@ -374,7 +387,7 @@ func (q *Queries) ListSandboxSessionsPage(ctx context.Context, arg ListSandboxSe
 }
 
 const lockSandboxSession = `-- name: LockSandboxSession :one
-SELECT org_id, id, agent_id, launcher, enrollment_token_id, instance_id, run_id, agent_image, edge_image, probe_image, config_digest, probe_jkt, probe_public_key, engine_version, api_version, runtime, state, opened_at, expires_at, ended_at FROM pc.sandbox_sessions WHERE org_id = $1 AND id = $2 FOR UPDATE
+SELECT org_id, id, agent_id, launcher, enrollment_token_id, instance_id, run_id, agent_image, edge_image, probe_image, config_digest, probe_jkt, probe_public_key, host_jkt, host_public_key, engine_version, api_version, runtime, state, opened_at, expires_at, ended_at FROM pc.sandbox_sessions WHERE org_id = $1 AND id = $2 FOR UPDATE
 `
 
 // The session row is locked while a report is verified and recorded, so
@@ -396,6 +409,8 @@ func (q *Queries) LockSandboxSession(ctx context.Context, orgID ids.OrgID, iD id
 		&i.ConfigDigest,
 		&i.ProbeJkt,
 		&i.ProbePublicKey,
+		&i.HostJkt,
+		&i.HostPublicKey,
 		&i.EngineVersion,
 		&i.ApiVersion,
 		&i.Runtime,

@@ -1374,6 +1374,8 @@ type PcSandboxSession struct {
 	ConfigDigest      string
 	ProbeJkt          string
 	ProbePublicKey    []byte
+	HostJkt           string
+	HostPublicKey     []byte
 	EngineVersion     string
 	ApiVersion        string
 	Runtime           string

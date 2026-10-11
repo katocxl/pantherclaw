@@ -223,13 +223,15 @@ type SandboxSession struct {
 	ConnectionIds []string       `protobuf:"bytes,6,rep,name=connection_ids,json=connectionIds,proto3" json:"connection_ids,omitempty"`
 	Images        *SandboxImages `protobuf:"bytes,7,opt,name=images,proto3" json:"images,omitempty"`
 	ConfigDigest  string         `protobuf:"bytes,8,opt,name=config_digest,json=configDigest,proto3" json:"config_digest,omitempty"`
-	// probe_key_thumbprint is the RFC 7638 thumbprint of the probe key.
+	// probe_key_thumbprint and host_key_thumbprint are the RFC 7638
+	// thumbprints of the probe and host keys.
 	ProbeKeyThumbprint string                 `protobuf:"bytes,9,opt,name=probe_key_thumbprint,json=probeKeyThumbprint,proto3" json:"probe_key_thumbprint,omitempty"`
 	Engine             *SandboxEngine         `protobuf:"bytes,10,opt,name=engine,proto3" json:"engine,omitempty"`
 	State              SandboxSessionState    `protobuf:"varint,11,opt,name=state,proto3,enum=pantherclaw.v1.SandboxSessionState" json:"state,omitempty"`
 	OpenTime           *timestamppb.Timestamp `protobuf:"bytes,12,opt,name=open_time,json=openTime,proto3" json:"open_time,omitempty"`
 	ExpireTime         *timestamppb.Timestamp `protobuf:"bytes,13,opt,name=expire_time,json=expireTime,proto3" json:"expire_time,omitempty"`
 	EndTime            *timestamppb.Timestamp `protobuf:"bytes,14,opt,name=end_time,json=endTime,proto3" json:"end_time,omitempty"`
+	HostKeyThumbprint  string                 `protobuf:"bytes,15,opt,name=host_key_thumbprint,json=hostKeyThumbprint,proto3" json:"host_key_thumbprint,omitempty"`
 	unknownFields      protoimpl.UnknownFields
 	sizeCache          protoimpl.SizeCache
 }
@@ -362,6 +364,13 @@ func (x *SandboxSession) GetEndTime() *timestamppb.Timestamp {
 	return nil
 }
 
+func (x *SandboxSession) GetHostKeyThumbprint() string {
+	if x != nil {
+		return x.HostKeyThumbprint
+	}
+	return ""
+}
+
 // ProbeNonces are fresh single-use server nonces, one for each report of a
 // probe run, valid 15 minutes.
 type ProbeNonces struct {
@@ -438,8 +447,12 @@ type SandboxServiceStartSessionRequest struct {
 	ConnectionIds []string               `protobuf:"bytes,2,rep,name=connection_ids,json=connectionIds,proto3" json:"connection_ids,omitempty"`
 	Images        *SandboxImages         `protobuf:"bytes,3,opt,name=images,proto3" json:"images,omitempty"`
 	ConfigDigest  string                 `protobuf:"bytes,4,opt,name=config_digest,json=configDigest,proto3" json:"config_digest,omitempty"`
-	// probe_public_key is the raw Ed25519 public key of the probe key.
+	// probe_public_key is the raw Ed25519 public key of the probe key, which
+	// signs only the sandbox report; host_public_key that of the host key,
+	// which never enters a container and signs the control and canary
+	// reports (HR-215). They differ.
 	ProbePublicKey []byte         `protobuf:"bytes,5,opt,name=probe_public_key,json=probePublicKey,proto3" json:"probe_public_key,omitempty"`
+	HostPublicKey  []byte         `protobuf:"bytes,8,opt,name=host_public_key,json=hostPublicKey,proto3" json:"host_public_key,omitempty"`
 	Engine         *SandboxEngine `protobuf:"bytes,6,opt,name=engine,proto3" json:"engine,omitempty"`
 	// ttl is how long the session lasts; at most and by default 24 hours.
 	Ttl           *durationpb.Duration `protobuf:"bytes,7,opt,name=ttl,proto3" json:"ttl,omitempty"`
@@ -508,6 +521,13 @@ func (x *SandboxServiceStartSessionRequest) GetConfigDigest() string {
 func (x *SandboxServiceStartSessionRequest) GetProbePublicKey() []byte {
 	if x != nil {
 		return x.ProbePublicKey
+	}
+	return nil
+}
+
+func (x *SandboxServiceStartSessionRequest) GetHostPublicKey() []byte {
+	if x != nil {
+		return x.HostPublicKey
 	}
 	return nil
 }
@@ -1200,7 +1220,7 @@ const file_pantherclaw_v1_sandbox_proto_rawDesc = "" +
 	"\vapi_version\x18\x02 \x01(\tB\x1f\xbaH\x1cr\x1a2\x18^[0-9]{1,3}\\.[0-9]{1,3}$R\n" +
 	"apiVersion\x12,\n" +
 	"\aruntime\x18\x03 \x01(\tB\x12\xbaH\x0fr\rR\x04runcR\x05runscR\aruntime\x12\x18\n" +
-	"\adesktop\x18\x04 \x01(\bR\adesktop\"\xe3\x04\n" +
+	"\adesktop\x18\x04 \x01(\bR\adesktop\"\x93\x05\n" +
 	"\x0eSandboxSession\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x19\n" +
 	"\bagent_id\x18\x02 \x01(\tR\aagentId\x12\x1a\n" +
@@ -1218,19 +1238,21 @@ const file_pantherclaw_v1_sandbox_proto_rawDesc = "" +
 	"\topen_time\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\bopenTime\x12;\n" +
 	"\vexpire_time\x18\r \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"expireTime\x125\n" +
-	"\bend_time\x18\x0e \x01(\v2\x1a.google.protobuf.TimestampR\aendTime\"\x96\x01\n" +
+	"\bend_time\x18\x0e \x01(\v2\x1a.google.protobuf.TimestampR\aendTime\x12.\n" +
+	"\x13host_key_thumbprint\x18\x0f \x01(\tR\x11hostKeyThumbprint\"\x96\x01\n" +
 	"\vProbeNonces\x12\x18\n" +
 	"\asandbox\x18\x01 \x01(\tR\asandbox\x12\x18\n" +
 	"\acontrol\x18\x02 \x01(\tR\acontrol\x12\x16\n" +
 	"\x06canary\x18\x03 \x01(\tR\x06canary\x12;\n" +
 	"\vexpire_time\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"expireTime\"\xb7\x03\n" +
+	"expireTime\"\xe8\x03\n" +
 	"!SandboxServiceStartSessionRequest\x12#\n" +
 	"\bagent_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\aagentId\x12:\n" +
 	"\x0econnection_ids\x18\x02 \x03(\tB\x13\xbaH\x10\x92\x01\r\b\x01\x10\x10\x18\x01\"\x05r\x03\xb0\x01\x01R\rconnectionIds\x12=\n" +
 	"\x06images\x18\x03 \x01(\v2\x1d.pantherclaw.v1.SandboxImagesB\x06\xbaH\x03\xc8\x01\x01R\x06images\x12A\n" +
 	"\rconfig_digest\x18\x04 \x01(\tB\x1c\xbaH\x19r\x172\x15^sha256:[0-9a-f]{64}$R\fconfigDigest\x121\n" +
-	"\x10probe_public_key\x18\x05 \x01(\fB\a\xbaH\x04z\x02h R\x0eprobePublicKey\x12=\n" +
+	"\x10probe_public_key\x18\x05 \x01(\fB\a\xbaH\x04z\x02h R\x0eprobePublicKey\x12/\n" +
+	"\x0fhost_public_key\x18\b \x01(\fB\a\xbaH\x04z\x02h R\rhostPublicKey\x12=\n" +
 	"\x06engine\x18\x06 \x01(\v2\x1d.pantherclaw.v1.SandboxEngineB\x06\xbaH\x03\xc8\x01\x01R\x06engine\x12=\n" +
 	"\x03ttl\x18\a \x01(\v2\x19.google.protobuf.DurationB\x10\xbaH\r\xaa\x01\n" +
 	"\"\x04\b\x80\xa3\x052\x02\b<R\x03ttl\"\xe2\x02\n" +

@@ -7,10 +7,11 @@
 
 -- name: InsertSandboxSession :one
 INSERT INTO pc.sandbox_sessions (org_id, id, agent_id, launcher, enrollment_token_id, agent_image, edge_image, probe_image,
-    config_digest, probe_jkt, probe_public_key, engine_version, api_version, runtime, expires_at)
+    config_digest, probe_jkt, probe_public_key, host_jkt, host_public_key, engine_version, api_version, runtime, expires_at)
 VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(agent_id), sqlc.arg(launcher), sqlc.arg(enrollment_token_id),
     sqlc.arg(agent_image), sqlc.arg(edge_image), sqlc.arg(probe_image), sqlc.arg(config_digest), sqlc.arg(probe_jkt),
-    sqlc.arg(probe_public_key), sqlc.arg(engine_version), sqlc.arg(api_version), sqlc.arg(runtime),
+    sqlc.arg(probe_public_key), sqlc.arg(host_jkt), sqlc.arg(host_public_key), sqlc.arg(engine_version), sqlc.arg(api_version),
+    sqlc.arg(runtime),
     now() + make_interval(secs => sqlc.arg(ttl_seconds)::integer))
 RETURNING *;
 

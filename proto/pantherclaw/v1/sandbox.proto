@@ -95,13 +95,15 @@ message SandboxSession {
   repeated string connection_ids = 6;
   SandboxImages images = 7;
   string config_digest = 8;
-  // probe_key_thumbprint is the RFC 7638 thumbprint of the probe key.
+  // probe_key_thumbprint and host_key_thumbprint are the RFC 7638
+  // thumbprints of the probe and host keys.
   string probe_key_thumbprint = 9;
   SandboxEngine engine = 10;
   SandboxSessionState state = 11;
   google.protobuf.Timestamp open_time = 12;
   google.protobuf.Timestamp expire_time = 13;
   google.protobuf.Timestamp end_time = 14;
+  string host_key_thumbprint = 15;
 }
 
 // ProbeNonces are fresh single-use server nonces, one for each report of a
@@ -125,8 +127,12 @@ message SandboxServiceStartSessionRequest {
   }];
   SandboxImages images = 3 [(buf.validate.field).required = true];
   string config_digest = 4 [(buf.validate.field).string.pattern = "^sha256:[0-9a-f]{64}$"];
-  // probe_public_key is the raw Ed25519 public key of the probe key.
+  // probe_public_key is the raw Ed25519 public key of the probe key, which
+  // signs only the sandbox report; host_public_key that of the host key,
+  // which never enters a container and signs the control and canary
+  // reports (HR-215). They differ.
   bytes probe_public_key = 5 [(buf.validate.field).bytes.len = 32];
+  bytes host_public_key = 8 [(buf.validate.field).bytes.len = 32];
   SandboxEngine engine = 6 [(buf.validate.field).required = true];
   // ttl is how long the session lasts; at most and by default 24 hours.
   google.protobuf.Duration ttl = 7 [(buf.validate.field).duration = {

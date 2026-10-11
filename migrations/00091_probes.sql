@@ -24,6 +24,8 @@ CREATE TABLE pc.probe_nonces (
     used_at      timestamptz,
     PRIMARY KEY (org_id, id),
     UNIQUE (org_id, nonce_sha256),
+    -- A report names its nonce with the nonce's session and kind.
+    UNIQUE (org_id, id, session_id, kind),
     FOREIGN KEY (org_id, session_id) REFERENCES pc.sandbox_sessions (org_id, id),
     CONSTRAINT probe_nonces_ttl CHECK (expires_at > created_at AND expires_at <= created_at + interval '15 minutes')
 );
@@ -42,7 +44,7 @@ CREATE TABLE pc.probe_runs (
     PRIMARY KEY (org_id, id),
     UNIQUE (org_id, nonce_id),
     FOREIGN KEY (org_id, session_id) REFERENCES pc.sandbox_sessions (org_id, id),
-    FOREIGN KEY (org_id, nonce_id) REFERENCES pc.probe_nonces (org_id, id)
+    FOREIGN KEY (org_id, nonce_id, session_id, kind) REFERENCES pc.probe_nonces (org_id, id, session_id, kind)
 );
 CREATE INDEX probe_runs_session ON pc.probe_runs (org_id, session_id, kind, id DESC);
 
@@ -63,11 +65,32 @@ END
 $$;
 -- +goose StatementEnd
 
+-- A nonce is used once, at the database's time.
+-- +goose StatementBegin
+CREATE FUNCTION pc.probe_nonce_used() RETURNS trigger
+    LANGUAGE plpgsql AS $$
+BEGIN
+    IF OLD.used_at IS NOT NULL OR NEW.used_at IS NULL THEN
+        RAISE EXCEPTION 'probe nonce % is used once', OLD.id USING ERRCODE = 'check_violation';
+    END IF;
+    NEW.used_at := now();
+    RETURN NEW;
+END
+$$;
+-- +goose StatementEnd
+CREATE TRIGGER probe_nonces_used BEFORE UPDATE OF used_at ON pc.probe_nonces
+    FOR EACH ROW EXECUTE FUNCTION pc.probe_nonce_used();
+
 -- Reports are evidence (HR-055): inserted, never changed.
-GRANT SELECT, INSERT ON pc.probe_nonces, pc.probe_runs TO pc_app;
+-- pc_app inserts no time: a nonce's life and a report's receipt are the
+-- database's clock.
+GRANT SELECT ON pc.probe_nonces, pc.probe_runs TO pc_app;
+GRANT INSERT (org_id, id, session_id, kind, nonce_sha256, expires_at) ON pc.probe_nonces TO pc_app;
+GRANT INSERT (org_id, id, session_id, nonce_id, kind, report, report_sha256) ON pc.probe_runs TO pc_app;
 GRANT UPDATE (used_at) ON pc.probe_nonces TO pc_app;
 GRANT SELECT ON pc.probe_nonces, pc.probe_runs TO pc_audit_ro;
 
 -- +goose Down
 DROP TABLE pc.probe_runs;
 DROP TABLE pc.probe_nonces;
+DROP FUNCTION pc.probe_nonce_used();
