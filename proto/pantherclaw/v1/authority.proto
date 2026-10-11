@@ -329,6 +329,67 @@ message RecordExecutionRequest {
   // profile's cap; never headers. Empty unless a profile covers the
   // dispatch; never sent for monitor-mode or delegated outcomes.
   repeated PayloadCapture captures = 7 [(buf.validate.field).repeated.max_items = 2];
+  // What the dispatch's minted credential allowed (G0 M8, ADR-0021 item 5);
+  // unset for a credential placed as sealed, or none.
+  CredentialAccess credential_access = 8;
+}
+
+// CredentialAccess is what a dispatch's minted credential allowed (G0 M8,
+// ADR-0021 item 5): for a GitHub App connection, the installation token's
+// installation, repository and permissions as requested and as GitHub
+// granted them, when it expires and whether it was revoked. It never
+// carries the token.
+message CredentialAccess {
+  // The GitHub App installation id.
+  int64 installation_id = 1 [(buf.validate.field).int64.gt = 0];
+  // The repository the token was narrowed to (owner/repo).
+  string repository = 2 [(buf.validate.field).string = {
+    max_len: 140
+    pattern: "^[a-z0-9][a-z0-9-]{0,38}/[A-Za-z0-9._-]{1,100}$"
+  }];
+  // GitHub's id of that repository; 0 when GitHub did not give one.
+  int64 repository_id = 3 [(buf.validate.field).int64.gte = 0];
+  // The permissions requested, by name.
+  map<string, string> requested = 4 [(buf.validate.field).map = {
+    max_pairs: 16
+    keys: {
+      string: {pattern: "^[a-z_]{1,64}$"}
+    }
+    values: {
+      string: {
+        in: [
+          "read",
+          "write",
+          "admin"
+        ]
+      }
+    }
+  }];
+  // The permissions GitHub granted, by name.
+  map<string, string> granted = 5 [(buf.validate.field).map = {
+    max_pairs: 16
+    keys: {
+      string: {pattern: "^[a-z_]{1,64}$"}
+    }
+    values: {
+      string: {
+        in: [
+          "read",
+          "write",
+          "admin"
+        ]
+      }
+    }
+  }];
+  // When the token expires, as GitHub said.
+  google.protobuf.Timestamp expire_time = 6;
+  // "revoked", or "revoke_failed": the token then lasts until expire_time.
+  string revocation = 7 [(buf.validate.field).string = {
+    in: [
+      "revoked",
+      "revoke_failed"
+    ]
+  }];
 }
 
 // CaptureDirection is which body of a dispatch a payload capture holds.

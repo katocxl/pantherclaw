@@ -4,6 +4,7 @@
 package gateway
 
 import (
+	"bytes"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
@@ -16,6 +17,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"google.golang.org/protobuf/proto"
 
 	"github.com/katocxl/pantherclaw/internal/credentials/domain"
 	"github.com/katocxl/pantherclaw/internal/gateway/broker"
@@ -219,5 +222,29 @@ func TestHR203_ASealForAnotherInstallationMintsNothing(t *testing.T) {
 	}
 	if got := w.sim.Tokens(); len(got) != 0 {
 		t.Fatalf("minted %+v", got)
+	}
+}
+
+// TestHR203_TheExecutionRecordCarriesTheAccessNotTheToken: the gateway
+// reports what the action's token allowed with its outcome, after it was
+// revoked, for the execution receipt (ADR-0021 item 5), and never the token.
+func TestHR203_TheExecutionRecordCarriesTheAccessNotTheToken(t *testing.T) {
+	w := newGitHubWorld(t)
+	h := setup(t, withGitHubApp(t, w))
+	if r := h.do(t, http.MethodGet, "/payments/repos/acme/payments/contents/README.md", "", nil); r.code != http.StatusOK {
+		t.Fatalf("read = %d %+v", r.code, r.refusal)
+	}
+	recs := h.auth.snap().records
+	if len(recs) != 1 {
+		t.Fatalf("%d records", len(recs))
+	}
+	a, read := recs[0].GetCredentialAccess(), map[string]string{"contents": "read"}
+	if a.GetInstallationId() != 7 || a.GetRepository() != "acme/payments" || a.GetRepositoryId() <= 0 || !maps.Equal(a.GetRequested(), read) ||
+		!maps.Equal(a.GetGranted(), read) || a.GetExpireTime() == nil || a.GetRevocation() != "revoked" {
+		t.Fatalf("access %+v", a)
+	}
+	raw, err := proto.Marshal(recs[0])
+	if err != nil || bytes.Contains(raw, []byte("ghs_")) {
+		t.Fatalf("the record carries a token: %v", err)
 	}
 }

@@ -147,7 +147,7 @@ func (s *Server) mint(w http.ResponseWriter, r *http.Request, rec *Request) int 
 	rec.Token, rec.Repos, rec.Permissions = Fingerprint(t.value), slices.Clone(repos), maps.Clone(perms)
 	list := make([]map[string]any, len(repos))
 	for i, full := range repos {
-		list[i] = map[string]any{"name": full[strings.IndexByte(full, '/')+1:], "full_name": full}
+		list[i] = map[string]any{"id": accountID(full), "name": full[strings.IndexByte(full, '/')+1:], "full_name": full}
 	}
 	return reply(w, http.StatusCreated, map[string]any{
 		"token": t.value, "expires_at": t.Expires.UTC().Format(time.RFC3339), "permissions": perms,
