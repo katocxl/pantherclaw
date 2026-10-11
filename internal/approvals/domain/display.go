@@ -347,7 +347,7 @@ func formatValue(v defs.Value, spec defs.ParamSpec) string {
 		return strconv.FormatBool(v.Bool)
 	case defs.TypeIdentifierList:
 		return strings.Join(v.List, ", ")
-	case defs.TypeEnum, defs.TypeIdentifier, defs.TypeCommand, defs.TypePath, defs.TypeText:
+	case defs.TypeEnum, defs.TypeIdentifier, defs.TypeCommand, defs.TypeContent, defs.TypePath, defs.TypeText:
 		return Clean("", v.Str, 0).Text
 	}
 	return ""
