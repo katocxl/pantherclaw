@@ -32,11 +32,12 @@ WHERE org_id = sqlc.arg(org_id) AND connection_id = sqlc.arg(connection_id)
   AND (operation IS NULL OR operation = sqlc.arg(operation)::text)
 ORDER BY kind, channel NULLS FIRST, locator NULLS FIRST, id;
 
+-- An agent's routes include those of every agent of the connection.
 -- name: ListCoverageRoutesPage :many
 SELECT * FROM pc.coverage_routes
 WHERE org_id = sqlc.arg(org_id)
   AND (sqlc.narg(connection_id)::uuid IS NULL OR connection_id = sqlc.narg(connection_id)::uuid)
-  AND (sqlc.narg(agent_id)::uuid IS NULL OR agent_id = sqlc.narg(agent_id)::uuid)
+  AND (sqlc.narg(agent_id)::uuid IS NULL OR agent_id = sqlc.narg(agent_id)::uuid OR agent_id IS NULL)
   AND (sqlc.narg(after)::uuid IS NULL OR id > sqlc.narg(after)::uuid)
 ORDER BY id
 LIMIT sqlc.arg(max_rows);
@@ -51,7 +52,7 @@ VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(agent_id), sqlc.arg(connection_
     sqlc.arg(canary_passed), sqlc.arg(signing_key_jkt), sqlc.arg(server_nonce), sqlc.arg(results_sha256),
     sqlc.arg(engine_version), sqlc.arg(api_version), sqlc.arg(runtime), sqlc.arg(image_digests)::text[],
     sqlc.arg(config_sha256), sqlc.arg(gateway_id), sqlc.arg(connection_revision), sqlc.arg(package_version_id),
-    sqlc.arg(session_started_at), sqlc.arg(observed_at), sqlc.arg(observed_at)::timestamptz + sqlc.arg(ttl)::interval)
+    sqlc.arg(session_started_at), sqlc.arg(observed_at), sqlc.arg(expires_at))
 RETURNING *;
 
 -- name: GetCoverageClosure :one

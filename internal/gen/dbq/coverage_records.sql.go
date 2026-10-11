@@ -12,7 +12,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 )
 
@@ -377,7 +376,7 @@ VALUES ($1, $2, $3, $4, $5,
     $10, $11, $12, $13,
     $14, $15, $16, $17::text[],
     $18, $19, $20, $21,
-    $22, $23, $23::timestamptz + $24::interval)
+    $22, $23, $24)
 RETURNING org_id, id, agent_id, connection_id, sandbox_session_id, result, probes, positive_controls_passed, negative_controls_passed, canary_passed, signing_key_jkt, server_nonce, results_sha256, engine_version, api_version, runtime, image_digests, config_sha256, gateway_id, connection_revision, package_version_id, session_started_at, observed_at, expires_at, recorded_at
 `
 
@@ -405,7 +404,7 @@ type InsertCoverageClosureParams struct {
 	PackageVersionID       ids.UUID
 	SessionStartedAt       time.Time
 	ObservedAt             time.Time
-	Ttl                    pgtype.Interval
+	ExpiresAt              time.Time
 }
 
 func (q *Queries) InsertCoverageClosure(ctx context.Context, arg InsertCoverageClosureParams) (PcCoverageClosure, error) {
@@ -433,7 +432,7 @@ func (q *Queries) InsertCoverageClosure(ctx context.Context, arg InsertCoverageC
 		arg.PackageVersionID,
 		arg.SessionStartedAt,
 		arg.ObservedAt,
-		arg.Ttl,
+		arg.ExpiresAt,
 	)
 	var i PcCoverageClosure
 	err := row.Scan(
@@ -921,7 +920,7 @@ const listCoverageRoutesPage = `-- name: ListCoverageRoutesPage :many
 SELECT org_id, id, agent_id, connection_id, operation, kind, channel, locator, observation, source, source_ref, mode, attributes, seen_count, first_seen_at, last_seen_at FROM pc.coverage_routes
 WHERE org_id = $1
   AND ($2::uuid IS NULL OR connection_id = $2::uuid)
-  AND ($3::uuid IS NULL OR agent_id = $3::uuid)
+  AND ($3::uuid IS NULL OR agent_id = $3::uuid OR agent_id IS NULL)
   AND ($4::uuid IS NULL OR id > $4::uuid)
 ORDER BY id
 LIMIT $5
@@ -935,6 +934,7 @@ type ListCoverageRoutesPageParams struct {
 	MaxRows      int32
 }
 
+// An agent's routes include those of every agent of the connection.
 func (q *Queries) ListCoverageRoutesPage(ctx context.Context, arg ListCoverageRoutesPageParams) ([]PcCoverageRoute, error) {
 	rows, err := q.db.Query(ctx, listCoverageRoutesPage,
 		arg.OrgID,
