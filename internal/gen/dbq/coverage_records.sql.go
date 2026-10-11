@@ -15,6 +15,34 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 )
 
+const coverageAgentsOfConnection = `-- name: CoverageAgentsOfConnection :many
+SELECT DISTINCT agent_id FROM pc.coverage_snapshots
+WHERE org_id = $1 AND connection_id = $2
+ORDER BY agent_id
+LIMIT 200
+`
+
+// The agents with coverage on a connection.
+func (q *Queries) CoverageAgentsOfConnection(ctx context.Context, orgID ids.OrgID, connectionID ids.UUID) ([]ids.UUID, error) {
+	rows, err := q.db.Query(ctx, coverageAgentsOfConnection, orgID, connectionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ids.UUID{}
+	for rows.Next() {
+		var agent_id ids.UUID
+		if err := rows.Scan(&agent_id); err != nil {
+			return nil, err
+		}
+		items = append(items, agent_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const coverageBinding = `-- name: CoverageBinding :one
 SELECT c.revision, c.gateway_id, c.state, c.kind, c.access_mode, c.default_mode, p.version_id AS package_version_id,
     cr.version AS credential_version

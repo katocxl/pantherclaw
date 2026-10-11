@@ -370,3 +370,10 @@ JOIN pc.package_pins p ON p.org_id = c.org_id AND p.package_id = tp.id
 WHERE c.org_id = sqlc.arg(org_id) AND c.state <> 'RETIRED'
 ORDER BY c.id
 LIMIT 1000;
+
+-- The agents with coverage on a connection.
+-- name: CoverageAgentsOfConnection :many
+SELECT DISTINCT agent_id FROM pc.coverage_snapshots
+WHERE org_id = sqlc.arg(org_id) AND connection_id = sqlc.arg(connection_id)
+ORDER BY agent_id
+LIMIT 200;

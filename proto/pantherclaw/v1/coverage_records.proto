@@ -80,13 +80,13 @@ service CoverageService {
   rpc ListExclusions(ListExclusionsRequest) returns (ListExclusionsResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
-  // GetAccessDisclosure says where an agent gets usable authority at a
-  // connection's target and what limits it (§39.2–39.3): the access modes
-  // that apply, who holds the credential, the closure evidence of an
-  // independently constrained runtime, the routes still open, and what each
-  // mode must disclose. It never shows a secret.
+  // GetAccessDetail says where an agent gets usable authority at a
+  // connection's target and what limits it (§39.2–39.3): the custodian and
+  // modes, the scope and audience, the expiry, the issuance source, the
+  // affected agents, the verification basis, the routes still open, and
+  // what each mode must disclose. It never shows a secret.
   // permission: coverage.read
-  rpc GetAccessDisclosure(GetAccessDisclosureRequest) returns (GetAccessDisclosureResponse) {
+  rpc GetAccessDetail(GetAccessDetailRequest) returns (GetAccessDetailResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
 }
@@ -597,16 +597,16 @@ enum AccessControlMode {
   ACCESS_CONTROL_MODE_AGENT_HELD = 5;
 }
 
-// GetAccessDisclosureRequest names a connection, optionally one agent.
-message GetAccessDisclosureRequest {
+// GetAccessDetailRequest names a connection, optionally one agent.
+message GetAccessDetailRequest {
   // Connection id.
   string connection_id = 1 [(buf.validate.field).string.uuid = true];
   // Agent id; unset for the connection alone.
   optional string agent_id = 2 [(buf.validate.field).string.uuid = true];
 }
 
-// AccessDisclosure is the access detail of a connection (and agent).
-message AccessDisclosure {
+// AccessDetail is the access detail of a connection (and agent).
+message AccessDetail {
   // Connection.
   string connection_id = 1;
   // Agent, when one was named.
@@ -630,10 +630,27 @@ message AccessDisclosure {
   repeated CoverageRoute residual_routes = 10;
   // What each mode must disclose, in plain language.
   repeated string disclosures = 11;
+  // What the access reaches: the sealed credential's hosts, or the single
+  // action a token names.
+  repeated string scope = 12;
+  // Who accepts it: the target hosts.
+  repeated string audience = 13;
+  // How long it lasts, in plain language.
+  string expiry = 14;
+  // Who issued it, and when.
+  string issued_by = 15;
+  // Issuance time.
+  google.protobuf.Timestamp issue_time = 16;
+  // The agents with coverage on the connection that the caller may read.
+  repeated string agent_ids = 17;
+  // What verifies the modes.
+  repeated string verification_basis = 18;
+  // The latest passing target-verifier test.
+  google.protobuf.Timestamp verify_time = 19;
 }
 
-// GetAccessDisclosureResponse returns the disclosure.
-message GetAccessDisclosureResponse {
-  // Disclosure.
-  AccessDisclosure disclosure = 1;
+// GetAccessDetailResponse returns the disclosure.
+message GetAccessDetailResponse {
+  // Detail.
+  AccessDetail detail = 1;
 }
