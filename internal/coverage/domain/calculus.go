@@ -36,6 +36,7 @@ const (
 	ReasonOpaqueMCP      = "opaque_mcp_server"
 	ReasonAgentHeld      = "agent_held_access"
 	ReasonUnverified     = "target_not_verified"
+	ReasonWriteCapped    = "write_not_liftable_m9"
 	ReasonNoClosure      = "no_closure_evidence"
 	ReasonClosureFailed  = "closure_failed"
 	ReasonClosureExpired = "closure_expired"
@@ -142,9 +143,14 @@ type Evidence struct {
 	// closure's session started.
 	Changes    []Change
 	Exclusions []Exclusion
-	// VerifiedAt is when the connection's latest passing target-verifier
-	// test ran (M8, HR-202); nil when none passed.
+	// VerifiedAt is when the latest passing target-verifier test of the
+	// scope's own operation ran (M8, HR-202); nil when none passed. A pass
+	// for one operation never lifts another (founder decision N15).
 	VerifiedAt *time.Time
+	// ReadOnly: the scope's operation only reads (its definition's access is
+	// read). In M9 a target-verifier test lifts only a read; writes stay
+	// PARTIAL (founder decision N15).
+	ReadOnly bool
 	// Instances are the agent's active instances.
 	Instances []Instance
 }
@@ -186,17 +192,21 @@ type Result struct {
 //     invalidating change since its session started) and every route is
 //     covered: each channel is mediated in enforce mode on
 //     PantherClaw-held access, or on target-enforced access with a
-//     target-verifier test no older than TTL; a cooperative channel needs
-//     that test (HR-024) and an opaque MCP server mediated connector
-//     egress (HR-086); each containment kind, observed or not (F450), is
-//     closed by the closure unless a person excluded it (HR-212, design
-//     decision 1); and every active instance of the agent is a sandbox
+//     target-verifier test of the scope's own operation no older than
+//     TTL, and only when that operation reads (in M9 a write is never
+//     lifted, founder decision N15); a cooperative channel needs that test
+//     (HR-024) and an opaque MCP server mediated connector egress
+//     (HR-086); each containment kind, observed or not (F450), is closed
+//     by the closure; and every active instance of the agent is a sandbox
 //     instance of the closure's session (design decision 2). It expires
 //     with the closure, or sooner with the verifier test (HR-211).
 //  4. PARTIAL otherwise.
 //
 // Settings, route modes and access modes alone never yield ENFORCED
-// (F460): they only lower what the evidence supports.
+// (F460): they only lower what the evidence supports. Exclusions never
+// raise a state (HR-212, design decision 1 as the founder decided): an
+// excluded route stays open, so the scope stays PARTIAL at most, and the
+// exclusion is listed.
 func Compute(e Evidence) Result {
 	closure := e.Closure
 	if closure != nil && (closure.Agent != e.Scope.Agent || closure.Connection != e.Scope.Connection) {
@@ -227,7 +237,7 @@ func Compute(e Evidence) Result {
 			reasons = append(reasons, ReasonClosureFailed)
 		}
 		for _, rt := range r.Routes {
-			if slices.Contains(ContainmentKinds, rt.Kind) && rt.Status != StatusClosed && rt.Status != StatusExcluded {
+			if slices.Contains(ContainmentKinds, rt.Kind) && rt.Status != StatusClosed {
 				if reason := ReasonRouteOpen + ":" + string(rt.Kind); !slices.Contains(reasons, reason) {
 					reasons = append(reasons, reason)
 				}
@@ -277,21 +287,28 @@ func state(e Evidence, routes []RouteResult) (State, []string) {
 	if !slices.ContainsFunc(channels, func(s RouteStatus) bool { return s != StatusMonitored && s != StatusProposed }) {
 		return ObserveOnly, append(reasons, ReasonMonitorMode)
 	}
-	uncontrolled := ReasonAgentHeld
+	uncontrolled, cooperative := ReasonAgentHeld, ReasonCooperative
 	if e.Connection.AccessMode == AccessTargetEnforced {
 		uncontrolled = ReasonUnverified
+	}
+	if verified(e) && !e.ReadOnly {
+		// the test passed, but in M9 it lifts only a read (founder decision N15)
+		cooperative = ReasonWriteCapped
+		if e.Connection.AccessMode == AccessTargetEnforced {
+			uncontrolled = ReasonWriteCapped
+		}
 	}
 	for _, c := range []struct {
 		s      RouteStatus
 		reason string
 	}{
 		{StatusMonitored, ReasonMonitorMode},
-		{StatusCooperative, ReasonCooperative},
+		{StatusCooperative, cooperative},
 		{StatusOpaque, ReasonOpaqueMCP},
 		{StatusPossible, uncontrolled},
 		{StatusProposed, ReasonRouteOpen + ":" + string(KindChannel)},
 	} {
-		if slices.Contains(channels, c.s) {
+		if slices.Contains(channels, c.s) && !slices.Contains(reasons, c.reason) {
 			reasons = append(reasons, c.reason)
 		}
 	}
@@ -394,7 +411,7 @@ func channelStatus(e Evidence, rt Route, v Verdict) RouteStatus {
 		return StatusProposed
 	case c.State != "ACTIVE" || c.modeOf(rt.Channel) != "enforce":
 		return StatusMonitored
-	case rt.Channel.Cooperative() && !verified(e):
+	case rt.Channel.Cooperative() && !lifted(e):
 		return StatusCooperative
 	case c.Kind == "mcp" || (c.Kind == "mcp_container" && !v.EgressMediated):
 		return StatusOpaque
@@ -403,7 +420,7 @@ func channelStatus(e Evidence, rt Route, v Verdict) RouteStatus {
 	case AccessPantherClawHeld, AccessNone:
 		return StatusMediated
 	case AccessTargetEnforced:
-		if verified(e) {
+		if lifted(e) {
 			return StatusMediated
 		}
 	}
@@ -415,6 +432,10 @@ func channelStatus(e Evidence, rt Route, v Verdict) RouteStatus {
 func verified(e Evidence) bool {
 	return e.VerifiedAt != nil && !e.VerifiedAt.After(e.Now) && e.Now.Before(e.VerifiedAt.Add(e.TTL))
 }
+
+// lifted reports whether the target-verifier test lifts the scope: it
+// passed in time and the operation only reads (M9, founder decision N15).
+func lifted(e Evidence) bool { return verified(e) && e.ReadOnly }
 
 // usesVerifier reports whether a mediated channel rests on the
 // target-verifier test, so ENFORCED expires with it.
