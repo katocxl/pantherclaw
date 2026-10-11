@@ -11,8 +11,10 @@
 |---|---|
 | `jcs.ts` | `parseJSON` (strict: duplicate members, lone surrogates and invalid UTF-8 are refused), `serialize` and `canonicalize` (RFC 8785: members sorted by UTF-16 code units, numbers as ECMAScript writes them). |
 | `action.ts` | `parseAction`: ActionIR v1 checked as strictly as PantherClaw checks it (HR-100..103), with its canonical form and hex action hash. An SDK uses it to check the action a gateway decided; it never builds or sends one (HR-201). |
+| `pap.ts` | The workload key file (`parseKeyFile`, `readKeyFile`, `writeKeyFile` without overwriting, `marshalKeyFile` byte for byte), Ed25519 workload keys from WebCrypto (`WorkloadKey.fromSeed`, `thumbprint`), request proofs (`signProof`, byte for byte as PantherClaw signs them), and workload token claims read without verifying (`parseTokenClaims`). |
+| `check.ts` | `checkProof`: PantherClaw's proof checks of PAP/1 §4 steps 2–5, returning `ok` or the PAP-Error code, for fake gateways in tests and services that verify PAP/1 themselves. |
 
-Workload keys and proofs, the `/sdk` client with waits, and a target-side action-token verifier follow in later M8 pull requests.
+The `/sdk` client with waits and a target-side action-token verifier follow in later M8 pull requests.
 
 ## Tests
 

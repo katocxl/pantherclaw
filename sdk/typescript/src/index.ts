@@ -5,4 +5,6 @@
 // TypeScript. See docs/protocol/PAP-1.md in the PantherClaw repository.
 
 export { ActionError, type ParsedAction, parseAction } from "./action.ts";
+export { checkProof, type ProofRequest } from "./check.ts";
 export { canonicalize, JCSError, type JSONValue, parseJSON, serialize } from "./jcs.ts";
+export * from "./pap.ts";
