@@ -21,6 +21,7 @@ Docker's embedded DNS resolver (127.0.0.11) still answers on user-defined networ
    - `CONNECT host:443` to a host that a mapped connection lists as an agent host is intercepted with a leaf certificate from the per-session CA.
    - Every other `CONNECT` (another host, another port such as 22, an IP literal) and every plain-HTTP request is refused with 403 and recorded.
    - Intercepted requests (HTTP/1.1, or HTTP/2 over ALPN) are forwarded to the gateway's HTTP face for that connection as PAP/1 requests, signed with the run's workload key that only the edge holds. The gateway maps them through the signed package and decides exactly as for any other face.
+   - The gateway is the edge's only outbound connection. The edge never dials a destination itself, so a request fails when the gateway is down.
    - The edge drops the agent's `Authorization`, `Cookie` and `Proxy-*` headers before forwarding; the gateway re-serializes the request anyway (HR-075). A dropped credential is reported as a coverage finding (a found PAT).
 3. **Per-session CA.** The edge generates the CA when it starts (ECDSA P-256), and its private key never leaves the edge's memory. The certificate:
    - is valid for at most the session's maximum length (24 hours);
@@ -35,6 +36,7 @@ Docker's embedded DNS resolver (127.0.0.11) still answers on user-defined networ
 
    `pclaw` creates an Ed25519 key per session outside the sandbox and registers its public key with the server when it opens the session. The probe container and the canary get the private key through a read-only file mount that the agent cannot see. The server issues a single-use nonce. The probe report and the canary report are JWS over canonical JSON (`typ: pap-probe+jwt`) that bind the session, the nonce and the image digests. Unsigned, replayed or stale reports are rejected.
 5. **Controls.**
+   - A report that lacks any control promotes nothing.
    - **Positive controls must succeed**, or the run is inconclusive and promotes nothing:
      - the same probes, run on a deliberately open control network, reach the canary and the canary records them;
      - through the edge, a mapped route gets the gateway's decision.
@@ -43,7 +45,7 @@ Docker's embedded DNS resolver (127.0.0.11) still answers on user-defined networ
      - an unmapped `CONNECT` is refused.
 
      A failed negative control also records a coverage finding and drops any current `ENFORCED` claim for the scope at once.
-6. **Promotion expires** (decision 3, HR-211). Evidence that passes promotes the scope (agent × connection × operation, for the sandbox's instances) to `ENFORCED` for 24 hours by default. Any change to a connection, package, route, gateway, sandbox image or configuration, or credential drops it to `PARTIAL` at once. Reads after expiry return `PARTIAL` with the last valid record, whether or not a job has run.
+6. **Promotion expires** (decision 3, HR-211). Evidence that passes promotes the scope (agent × connection × operation, for the sandbox's instances) to `ENFORCED` for 24 hours by default. Any change to a connection, package, route, gateway, sandbox image or configuration, or credential drops it to `PARTIAL` at once. After expiry or invalidation the state is recomputed from current evidence, capped at `PARTIAL` (it may be lower), and shown with the last valid record, whether or not a job has run.
 7. **Hardening of every container** (HR-085, decision 4). Every container runs:
    - in its own namespaces, as a distinct non-root uid;
    - with a read-only root filesystem, `--cap-drop ALL` and `--security-opt no-new-privileges`;
