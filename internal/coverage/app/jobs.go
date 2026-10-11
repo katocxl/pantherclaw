@@ -179,7 +179,7 @@ func Register(reg *jobs.Registry, svc *Service) error {
 // of the freshness contract.
 func PeriodicJobs(f domain.Freshness) []*river.PeriodicJob {
 	return []*river.PeriodicJob{
-		river.NewPeriodicJob(river.PeriodicInterval(f.ReassessInterval),
+		river.NewPeriodicJob(river.PeriodicInterval(f.ReassessEvery),
 			func() (river.JobArgs, *river.InsertOpts) { return ReassessDispatchArgs{}, nil },
 			&river.PeriodicJobOpts{RunOnStart: true}),
 	}
