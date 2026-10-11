@@ -1,6 +1,6 @@
-# Runbook — Evidence verification and integrity failures
+# Runbook — Evidence verification, integrity failures and packs
 
-**Milestone:** M7 · **Owner:** the platform operator, with the org's security admins · **Status:** the reset is a tested procedure (M7 integration tests: a reset org is checkpointed again when its data is intact and fails again when it is not); the investigation steps are an outline, drilled with the restore drill in M13.
+**Milestone:** M7 · **Owner:** the platform operator, with the org's security admins; anyone with `evidence.read` verifies · **Status:** offline verification and the reset are tested procedures (M7 integration and end-to-end tests: bundles and packs from a running server verify offline and fail when tampered with; a reset org is checkpointed again when its data is intact and fails again when it is not); the investigation steps are an outline, drilled with the restore drill in M13.
 
 Every org's evidence ledger is an RFC 9162 Merkle tree over its chained entries, with a signed checkpoint per `evidence.checkpoint_interval` and a daily re-verification of the whole chain. Background: [g0/M7.md](../g0/M7.md) design decision 8; HR-194, HR-111.
 
@@ -84,6 +84,47 @@ The incident is closed when the status query shows `OK` with a `verified_at` lat
 | `a reason of 1 to 500 bytes …` | Give a one-line reason without control or bidi characters. |
 | `no such organization` | Check the org id. |
 | `… is not FAILED: nothing changed` | The org has not failed, or another operator reset it already. Check the status. |
+
+## Verify evidence offline
+
+Anyone holding `evidence.read` can check a transaction's evidence without trusting the deployment's database or API (G0 M7 design decision 13, HR-196, PN-007.4). Tested end to end against a running server, gateway and simulator by `TestE2E_M7_VerifyBundleOffline` and `TestE2E_M7_TamperDetected`.
+
+1. **Pin the keys once** (trust on first use). `pclaw evidence trust` fetches `/.well-known/pantherclaw/evidence-keys.json`, prints every key's fingerprint and writes the trust file (it refuses to overwrite one). Compare the fingerprints with ones published through another channel (the operator's own page, a signed message), then keep the file:
+
+   ```bash
+   pclaw evidence trust --out trust.json --server https://pantherclaw.example.com
+   ```
+
+2. **Export a bundle** of transactions (`--txn`, up to 50; scoped like `run.read`), or of a range of at most 1,000 ledger positions (`--from`/`--to`; needs `evidence.read` and `audit.read` at org scope). Keep a checkpoint you saved earlier, for example from an earlier bundle, and pass it as `--previous`: the bundle then also holds the proof that today's tree extends it.
+
+   ```bash
+   pclaw evidence bundle --txn <transaction id> --previous saved-checkpoint.txt --out bundle.json
+   ```
+
+3. **Verify, offline.** `pclaw verify` makes no network call and needs no login. Give it Sigstore's `trusted_root.json` to check an anchor's log entry and timestamp ([anchoring.md](anchoring.md) says where to get it):
+
+   ```bash
+   pclaw verify bundle.json --trust trust.json --previous saved-checkpoint.txt --sigstore-trusted-root trusted_root.json [--json]
+   ```
+
+The report lists every check as `passed`, `failed` or `not_available`, and exits non-zero when one failed:
+
+| Check | What it establishes |
+|---|---|
+| `bundle.origin` | the bundle belongs to the log origin and org the trust file names |
+| `checkpoint.signature`, `checkpoint.cosignature` | each checkpoint is signed by a pinned `checkpoints` key (and the ML-DSA-65 line by a pinned `checkpoints_pq` key, when present); two different trees of the same size fail as a forked history |
+| `checkpoint.consistency` | each checkpoint extends the one before it, including the one an anchor commits to |
+| `witness.previous` | the bundle's history extends the checkpoint you saved (`--previous`); not available without one |
+| `entry.link`, `entry.inclusion` | each entry's hash is recomputed from the entry and its predecessor's hash, and the entry is in the checkpoint's tree; a body removed by retention is not available, with the policy and the date |
+| `receipt.signature`, `receipt.ledger` | each decision, execution and effect receipt is signed by a pinned `receipts` key valid when it was issued, and a chained entry records it |
+| `anchor.leaf`, `anchor.root`, `anchor.signature`, `anchor.log`, `anchor.timestamp` | the org's blinded leaf is in the anchored global root, the statement is signed by a pinned `anchors` key, the transparency log includes it, and an authority timestamped the signature; `anchor` is not available when nothing is anchored yet, and the last two without `--sigstore-trusted-root` |
+
+Every report ends with its limits: what passed shows the integrity of the evidence in the bundle, issued by the holder of the keys you pinned. It does not show that the bundle is complete, that an external effect happened, or that anything is certified.
+
+**What a failure means.**
+- `entry.link` failed: a stored entry no longer matches its hash. Someone changed the database; the daily verification finds the same thing (`CHAIN_LINK`, above).
+- `witness.previous` or `checkpoint.consistency` failed: the deployment shows a history that does not extend one it showed before. A rewritten history signed again with the real `checkpoints` key verifies on its own (a signature proves who signed, not that nothing changed), so keep checkpoints from earlier bundles and anchor the root: they are what exposes it.
+- A signature by a key that is not in your trust file: either the bundle comes from another deployment, or the deployment rotated its keys. Pin again only after checking the new fingerprints through another channel ([key-rotation.md](key-rotation.md) §7).
 
 ## Evidence packs
 
