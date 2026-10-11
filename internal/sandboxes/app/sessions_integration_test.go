@@ -11,6 +11,7 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/sha256"
+	"encoding/base64"
 	"errors"
 	"testing"
 	"time"
@@ -23,6 +24,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/db/dbtest"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
+	"github.com/katocxl/pantherclaw/internal/sandbox/report"
 	"github.com/katocxl/pantherclaw/internal/sandboxes/app"
 	tenancy "github.com/katocxl/pantherclaw/internal/tenancy/app"
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
@@ -103,6 +105,17 @@ func (w *world) exec(t *testing.T, sql string, args ...any) {
 	}
 }
 
+// asAdmin runs sql with the migrator, which may change what pc_app may not.
+func (w *world) asAdmin(t *testing.T, sql string, args ...any) {
+	t.Helper()
+	if err := w.admin.InTenantTx(context.Background(), w.org, func(ctx context.Context, tx db.TenantTx) error {
+		_, err := tx.Exec(ctx, sql, args...)
+		return err
+	}); err != nil {
+		t.Fatalf("%s: %v", sql, err)
+	}
+}
+
 func (w *world) count(t *testing.T, sql string, args ...any) int {
 	t.Helper()
 	var n int
@@ -130,6 +143,146 @@ func (w *world) input() app.StartInput {
 		Agent: w.agent, Connections: []ids.UUID{w.gh}, AgentImage: digest, EdgeImage: digest, ProbeImage: digest, ConfigDigest: digest,
 		ProbeKey: w.probeKey.Public().(ed25519.PublicKey), HostKey: w.hostKey.Public().(ed25519.PublicKey), EngineVersion: "29.8.2",
 		EngineAPI: "1.56", Runtime: "runc",
+	}
+}
+
+// admit stands in for pclaw's enrollment and admission of the session's
+// sandbox instance (identity's own tests cover those).
+func (w *world) admit(t *testing.T, s app.Started) ids.UUID {
+	t.Helper()
+	id := ids.NewV7()
+	jkt := make([]byte, 32)
+	_, _ = rand.Read(jkt)
+	w.exec(t, `INSERT INTO pc.agent_instances (org_id, id, agent_id, jkt, public_jwk, state, enrolled_via, enrollment_token_id)
+		VALUES ($1, $2, $3, $4, '{}', 'ADMITTED', 'enrollment_token', $5)`,
+		w.org, id, w.agent, base64.RawURLEncoding.EncodeToString(jkt), s.Session.EnrollmentTokenID)
+	return id
+}
+
+// signed is a report of kind for the session, with the session's facts,
+// signed with the key of its kind: the probe key for the sandbox run, the
+// host key for the control run and the canary.
+func (w *world) signed(t *testing.T, s app.Started, kind, nonce string, mutate func(*report.Report)) string {
+	t.Helper()
+	key := w.hostKey
+	if kind == report.KindSandbox {
+		key = w.probeKey
+	}
+	return w.signedWith(t, key, s, kind, nonce, mutate)
+}
+
+func (w *world) signedWith(t *testing.T, key ed25519.PrivateKey, s app.Started, kind, nonce string, mutate func(*report.Report)) string {
+	t.Helper()
+	at := time.Now().UTC().Add(-time.Minute)
+	r := report.Report{
+		Format: report.Format, Session: s.Session.ID.String(), Nonce: nonce, Kind: kind, StartedAt: at, FinishedAt: at.Add(30 * time.Second),
+		Images:  report.Images{Agent: digest, Edge: digest, Probe: digest},
+		Engine:  report.Engine{Version: "29.8.2", APIVersion: "1.56", Runtime: "runc", Desktop: true},
+		Network: report.Network{Name: "pc-sbx-1", Internal: true, GatewayModeIPv4: "isolated"},
+		Config:  report.Config{Digest: digest, Checks: []report.Check{{ID: "read_only_root", OK: true}}},
+		Results: []report.Result{{Name: "ipv6", Role: report.RoleProbe, Expect: report.Blocked, Observed: report.Blocked}},
+		Canary:  report.Canary{Hits: []report.Hit{}},
+	}
+	if mutate != nil {
+		mutate(&r)
+	}
+	compact, err := report.Sign(key, r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return compact
+}
+
+func TestHR215_AReportIsAcceptedOnceWithItsSessionsKeyNonceAndFacts(t *testing.T) {
+	w := newWorld(t)
+	s, err := w.svc.StartSession(w.as(td.RoleAgentOwner), w.input())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s.AgentHosts["api.github.com"] != "github" || s.EnrollmentToken.String() == "" || s.Nonces.Sandbox == s.Nonces.Control {
+		t.Fatalf("started %+v", s)
+	}
+	ctx := w.as(td.RoleAgentOwner)
+	sandbox := w.signed(t, s, report.KindSandbox, s.Nonces.Sandbox, nil)
+	if _, err := w.svc.SubmitProbeReport(ctx, s.Session.ID, sandbox, nil); !errors.Is(err, app.ErrReport) {
+		t.Fatalf("before the instance was admitted: %v", err)
+	}
+	inst := w.admit(t, s)
+	a, err := w.svc.SubmitProbeReport(ctx, s.Session.ID, sandbox, nil)
+	if err != nil || a.Kind != app.KindSandbox || len(a.Failed) != 0 {
+		t.Fatalf("sandbox report: %+v, %v", a, err)
+	}
+	if n := w.count(t, "SELECT count(*) FROM pc.agent_instances WHERE id = $1 AND sandbox_session_id = $2", inst, s.Session.ID); n != 1 {
+		t.Fatal("the instance is not marked as the session's")
+	}
+	if _, err := w.svc.SubmitProbeReport(ctx, s.Session.ID, sandbox, nil); !errors.Is(err, app.ErrReport) {
+		t.Fatalf("a replayed report: %v", err)
+	}
+	if _, err := w.svc.SubmitProbeReport(ctx, s.Session.ID, w.signed(t, s, report.KindControl, s.Nonces.Control, nil), nil); err != nil {
+		t.Fatalf("control report: %v", err)
+	}
+	if n := w.count(t, "SELECT count(*) FROM pc.probe_runs WHERE session_id = $1", s.Session.ID); n != 2 {
+		t.Fatalf("%d reports kept", n)
+	}
+	if n := w.count(t, "SELECT count(*) FROM pc.ledger_entries WHERE kind = 'audit.sandbox.report_rejected'"); n != 2 {
+		t.Fatalf("%d rejections recorded", n)
+	}
+}
+
+// TestT087_ForgedReplayedAndStaleReportsAreRejected: every way to pass off
+// a report the session's probe did not produce is refused and recorded.
+func TestT087_ForgedReplayedAndStaleReportsAreRejected(t *testing.T) {
+	w := newWorld(t)
+	ctx := w.as(td.RoleAgentOwner)
+	s, err := w.svc.StartSession(ctx, w.input())
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.admit(t, s)
+	other, err := w.svc.StartSession(ctx, w.input())
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, stranger, _ := ed25519.GenerateKey(rand.Reader)
+	n := s.Nonces.Sandbox
+	for name, compact := range map[string]string{
+		"another key": func() string {
+			k := w.probeKey
+			w.probeKey = stranger
+			defer func() { w.probeKey = k }()
+			return w.signed(t, s, report.KindSandbox, n, nil)
+		}(),
+		"another session's nonce":           w.signed(t, s, report.KindSandbox, other.Nonces.Sandbox, nil),
+		"the control's nonce":               w.signed(t, s, report.KindSandbox, s.Nonces.Control, nil),
+		"another session":                   w.signed(t, s, report.KindSandbox, n, func(r *report.Report) { r.Session = other.Session.ID.String() }),
+		"another image":                     w.signed(t, s, report.KindSandbox, n, func(r *report.Report) { r.Images.Edge = otherDigest }),
+		"another configuration":             w.signed(t, s, report.KindSandbox, n, func(r *report.Report) { r.Config.Digest = otherDigest }),
+		"Docker 27":                         w.signed(t, s, report.KindSandbox, n, func(r *report.Report) { r.Engine.Version = "27.5.1" }),
+		"another runtime":                   w.signed(t, s, report.KindSandbox, n, func(r *report.Report) { r.Engine.Runtime = "runsc" }),
+		"an open network":                   w.signed(t, s, report.KindSandbox, n, func(r *report.Report) { r.Network.GatewayModeIPv4 = "nat" }),
+		"a failed check":                    w.signed(t, s, report.KindSandbox, n, func(r *report.Report) { r.Config.Checks[0].OK = false }),
+		"a canary report":                   w.signed(t, s, report.KindCanary, s.Nonces.Canary, nil),
+		"unsigned":                          w.signed(t, s, report.KindSandbox, n, nil)[:40] + "x.y",
+		"a sandbox report on the host key":  w.signedWith(t, w.hostKey, s, report.KindSandbox, n, nil),
+		"a control report on the probe key": w.signedWith(t, w.probeKey, s, report.KindControl, s.Nonces.Control, nil),
+	} {
+		if _, err := w.svc.SubmitProbeReport(ctx, s.Session.ID, compact, nil); !errors.Is(err, app.ErrReport) {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+	// A stale nonce: issued 20 minutes ago.
+	w.asAdmin(t, `UPDATE pc.probe_nonces SET created_at = now() - interval '20 minutes', expires_at = now() - interval '5 minutes'
+		WHERE session_id = $1`, s.Session.ID)
+	if _, err := w.svc.SubmitProbeReport(ctx, s.Session.ID, w.signed(t, s, report.KindSandbox, n, nil), nil); !errors.Is(err, app.ErrReport) {
+		t.Errorf("stale nonce: %v", err)
+	}
+	if n := w.count(t, "SELECT count(*) FROM pc.probe_runs"); n != 0 {
+		t.Fatalf("%d reports kept", n)
+	}
+	// An ended session takes nothing.
+	w.asAdmin(t, "UPDATE pc.sandbox_sessions SET state = 'ENDED', ended_at = now() WHERE id = $1", other.Session.ID)
+	if _, err := w.svc.SubmitProbeReport(ctx, other.Session.ID, w.signed(t, other, report.KindSandbox, other.Nonces.Sandbox, nil), nil); !errors.Is(err, app.ErrNotOpen) {
+		t.Errorf("ended session: %v", err)
 	}
 }
 

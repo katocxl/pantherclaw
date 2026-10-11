@@ -60,6 +60,27 @@ func (h *Handler) StartSession(ctx context.Context, r *pantherclawv1.SandboxServ
 	}, nil
 }
 
+// SubmitProbeReport implements SandboxServiceHandler.
+func (h *Handler) SubmitProbeReport(ctx context.Context, r *pantherclawv1.SubmitProbeReportRequest) (*pantherclawv1.SubmitProbeReportResponse, error) {
+	id, err := ids.ParseUUID(r.GetSessionId())
+	if err != nil {
+		return nil, app.ErrNotFound
+	}
+	var run *ids.UUID
+	if r.GetRunId() != "" {
+		u, err := ids.ParseUUID(r.GetRunId())
+		if err != nil {
+			return nil, app.ErrReport
+		}
+		run = &u
+	}
+	a, err := h.svc.SubmitProbeReport(ctx, id, r.GetReport(), run)
+	if err != nil {
+		return nil, err
+	}
+	return &pantherclawv1.SubmitProbeReportResponse{Kind: a.Kind, Failed: a.Failed}, nil
+}
+
 // GetSession implements SandboxServiceHandler.
 func (h *Handler) GetSession(ctx context.Context, r *pantherclawv1.SandboxServiceGetSessionRequest) (*pantherclawv1.SandboxServiceGetSessionResponse, error) {
 	id, err := ids.ParseUUID(r.GetSessionId())
