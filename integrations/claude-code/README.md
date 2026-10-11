@@ -33,7 +33,7 @@ The plugin adds a `PreToolUse` hook for **Bash and PowerShell** commands ([hooks
    ```
 4. Load the plugin for your own sessions only, for example `claude --plugin-dir integrations/claude-code`, or install it in your user settings.
 
-**Or let `pclaw init` install the hook (M8):**
+**Or let `pclaw init` set it up (M8):**
 
 ```bash
 pclaw init --gateway https://gateway.example.com --connection shell --key-file ~/.pantherclaw/workload.json --dry-run
@@ -45,11 +45,11 @@ pclaw init --gateway https://gateway.example.com --connection shell --key-file ~
 
 It only adds (HR-208):
 - every existing deny rule, hook and member stays, in its order;
-- the file is backed up and the diff shown before anything is written;
-- `--dry-run` writes nothing;
+- the diff is shown and nothing changes until you confirm, or pass `--yes`; `--dry-run` changes nothing;
+- each file is backed up and replaced through a temporary file;
 - no secret is written, only the gateway URL, the connection, the key file's path and the run.
 
-It fails without writing when managed settings would keep the hook from running: `allowManagedHooksOnly` without the hook in managed settings, or `disableAllHooks`. Running it again changes nothing.
+It fails without changing anything when managed settings would keep the hook from running: `allowManagedHooksOnly` without the hook in managed settings, or `disableAllHooks`. Running it again changes nothing.
 
 With the plugin loaded and PantherClaw unreachable or not configured, **every** Bash and PowerShell command is blocked. That is the point. So dogfooding on the PantherClaw repository stays opt-in per developer, and parallel sessions without a local stack keep working (decision 4).
 

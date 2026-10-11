@@ -15,7 +15,6 @@ import (
 	"runtime"
 	"slices"
 	"strings"
-	"time"
 
 	"github.com/katocxl/pantherclaw/internal/identity/workloadclient"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
@@ -31,17 +30,18 @@ import (
 //
 // It only adds: it never removes or changes an existing deny rule, hook or
 // server entry, and it never writes a secret (only the gateway's URL, the
-// connection's name, the key file's path and the run). It backs up every
-// file before it changes it, shows the diff, writes through a temporary
-// file, and writes nothing with --dry-run. It refuses when managed
+// connection's name, the key file's path and the run). It shows the diff
+// and changes nothing until the person confirms (or passed --yes); with
+// --dry-run it changes nothing. It backs up every file before it changes
+// it and writes through a temporary file. It refuses when managed
 // settings, or the target file itself, would keep the hook from running,
 // since a developer would then believe commands are decided when they are
 // not.
 
 func init() {
 	commands["init"] = command{
-		usage: "init --gateway URL --connection NAME --key-file FILE [--run ID] [--project DIR] [--scope local|project|user] " +
-			"[--dry-run] [--managed-settings FILE]",
+		usage: "init --gateway URL --connection NAME --key-file FILE [--run ID] [--project DIR] " +
+			"[--scope local|project|user] [--dry-run | --yes] [--managed-settings FILE]",
 		run: claudeInit,
 	}
 }
@@ -160,7 +160,7 @@ func counts(doc *jsonNode) string {
 // initFlags are init's options.
 type initFlags struct {
 	gateway, connection, keyFile, run, project, scope, managed string
-	dryRun                                                     bool
+	dryRun, yes                                                bool
 }
 
 func claudeInit(_ context.Context, a *app, args []string) error {
@@ -174,17 +174,19 @@ func claudeInit(_ context.Context, a *app, args []string) error {
 	fs.StringVar(&f.project, "project", "", "the project directory (default: the current one)")
 	fs.StringVar(&f.scope, "scope", "local", "where the hook goes: local (.claude/settings.local.json), project (.claude/settings.json) or user")
 	fs.StringVar(&f.managed, "managed-settings", "", "read managed settings from this file instead of the platform's")
-	fs.BoolVar(&f.dryRun, "dry-run", false, "show what would change and write nothing")
+	fs.BoolVar(&f.dryRun, "dry-run", false, "show what would change and change nothing")
+	fs.BoolVar(&f.yes, "yes", false, "make the changes without asking")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	if f.gateway == "" || f.connection == "" || f.keyFile == "" || fs.NArg() != 0 {
+	if f.gateway == "" || f.connection == "" || f.keyFile == "" || fs.NArg() != 0 || (f.dryRun && f.yes) {
 		return errUsage
 	}
 	hook, err := f.hookEntry()
 	if err != nil {
 		return err
 	}
+	p := &initPlan{}
 	home, config, err := a.claudeHome()
 	if err != nil {
 		return err
@@ -235,10 +237,11 @@ func claudeInit(_ context.Context, a *app, args []string) error {
 		return &exitError{code: 1, msg: "pclaw init: " + err.Error()}
 	}
 	if slices.ContainsFunc(managed, func(s claudeSettings) bool { return hookRuns(s.doc) }) || hookRuns(target.doc) {
-		_, err := fmt.Fprintf(a.stdout, "The PantherClaw hook is already installed; nothing to change.\n")
+		_, _ = fmt.Fprintln(a.stdout, "The PantherClaw hook is already installed.")
+	} else if err := p.addHook(target, hook); err != nil {
 		return err
 	}
-	return f.install(a, target, hook)
+	return f.apply(a, p)
 }
 
 // hookEntry is the hook to install: exec form, so no shell parses the
@@ -260,8 +263,10 @@ func (f initFlags) hookEntry() (*jsonNode, error) {
 	if err != nil {
 		return nil, err
 	}
-	if _, err := workloadclient.ReadKeyFile(key); err != nil {
+	if kf, err := workloadclient.ReadKeyFile(key); err != nil {
 		return nil, fmt.Errorf("--key-file: %w", err)
+	} else if kf.Identifier == "" {
+		return nil, errors.New("--key-file is not enrolled yet: enroll it first (pclaw workload enroll)")
 	}
 	args := append(slices.Clone(claudeHookArgs), "--gateway", strings.TrimSuffix(f.gateway, "/"), "--connection", f.connection,
 		"--key-file", key)
@@ -290,44 +295,6 @@ func hookBlocked(managed []claudeSettings, target claudeSettings) error {
 			"or choose another --scope", target.path)
 	}
 	return nil
-}
-
-// install adds the hook to the target file: back up, show the diff, write.
-func (f initFlags) install(a *app, target claudeSettings, hook *jsonNode) error {
-	hooks, ok := target.doc.object("hooks")
-	if !ok {
-		return &exitError{code: 1, msg: "pclaw init: " + target.path + ": hooks is not an object; it is left as it is"}
-	}
-	pre, ok := hooks.array("PreToolUse")
-	if !ok {
-		return &exitError{code: 1, msg: "pclaw init: " + target.path + ": hooks.PreToolUse is not a list; it is left as it is"}
-	}
-	pre.items = append(pre.items, hook)
-	after, err := target.doc.encode()
-	if err != nil {
-		return err
-	}
-	after = likeOriginal(target.raw, after)
-	if _, err := fmt.Fprint(a.stdout, lineDiff(target.path, target.raw, after)); err != nil {
-		return err
-	}
-	if f.dryRun {
-		_, err := fmt.Fprintln(a.stdout, "Dry run: nothing was written.")
-		return err
-	}
-	backup, err := backupFile(target.path, time.Now())
-	if err != nil {
-		return err
-	}
-	if err := writeAtomically(target.path, after); err != nil {
-		return err
-	}
-	if backup != "" {
-		_, _ = fmt.Fprintf(a.stdout, "Backed up %s to %s.\n", target.path, backup)
-	}
-	_, err = fmt.Fprintf(a.stdout, "Installed the PantherClaw hook in %s. Every Bash and PowerShell command now asks PantherClaw first; "+
-		"when it cannot answer, the command is blocked.\n", target.path)
-	return err
 }
 
 // report shows what init found: the settings files, the MCP servers Claude

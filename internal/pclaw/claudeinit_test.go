@@ -15,10 +15,11 @@ import (
 	"github.com/katocxl/pantherclaw/internal/identity/workloadclient"
 )
 
-// initFixture is a home, a project and an enrolled-looking key file.
+// initFixture is a home, a project, an enrolled-looking key file and the
+// answer init reads when it asks to confirm.
 type initFixture struct {
-	home, project, key, managed string
-	env                         map[string]string
+	home, project, key, managed, answer string
+	env                                 map[string]string
 }
 
 func newInitFixture(t *testing.T) *initFixture {
@@ -34,11 +35,12 @@ func newInitFixture(t *testing.T) *initFixture {
 	if err != nil {
 		t.Fatal(err)
 	}
+	kf.Identifier, kf.Server = "pc:org/o/agent/a/inst/i", "https://pantherclaw.example.test"
 	f.key = filepath.Join(root, "workload.json")
 	if err := workloadclient.WriteKeyFile(f.key, kf, false); err != nil {
 		t.Fatal(err)
 	}
-	f.env = map[string]string{"HOME": f.home}
+	f.env, f.answer = map[string]string{"HOME": f.home}, "y\n"
 	return f
 }
 
@@ -63,7 +65,7 @@ func (f *initFixture) run(t *testing.T, extra ...string) (int, string, string) {
 		"--project", f.project, "--managed-settings", f.managed,
 	}, extra...)
 	var out, errb bytes.Buffer
-	code := Run(context.Background(), args, &out, &errb, envOf(f.env), Options{})
+	code := Run(context.Background(), args, &out, &errb, envOf(f.env), Options{Stdin: strings.NewReader(f.answer)})
 	return code, out.String(), errb.String()
 }
 
@@ -241,7 +243,7 @@ func TestHR208_InitRefusesWhatWouldKeepTheHookFromRunning(t *testing.T) {
 				"hooks": [{"type": "command", "command": "pclaw", "args": ["hook", "claude-code"]}]}]}}`,
 			want: "already installed",
 		},
-		"dry run":        {local: existingLocal, args: []string{"--dry-run"}, want: "Dry run: nothing was written."},
+		"dry run":        {local: existingLocal, args: []string{"--dry-run"}, want: "Dry run: nothing was changed."},
 		"not json":       {local: `{"hooks": `, code: 1, want: "left as it is"},
 		"hooks a list":   {local: `{"hooks": []}`, code: 1, want: "hooks is not an object"},
 		"pre not a list": {local: `{"hooks": {"PreToolUse": {}}}`, code: 1, want: "PreToolUse is not a list"},
