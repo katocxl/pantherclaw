@@ -26,8 +26,8 @@ func routeProto(r dbq.PcCoverageRoute) *pantherclawv1.CoverageRoute {
 	}
 }
 
-// ListCoverageRoutes implements CoverageServiceHandler.
-func (h *Handler) ListCoverageRoutes(ctx context.Context, req *pantherclawv1.ListCoverageRoutesRequest) (*pantherclawv1.ListCoverageRoutesResponse, error) {
+// ListRoutes implements CoverageServiceHandler.
+func (h *Handler) ListRoutes(ctx context.Context, req *pantherclawv1.ListRoutesRequest) (*pantherclawv1.ListRoutesResponse, error) {
 	f, err := filterOf(req.AgentId, req.ConnectionId)
 	if err != nil {
 		return nil, err
@@ -36,15 +36,15 @@ func (h *Handler) ListCoverageRoutes(ctx context.Context, req *pantherclawv1.Lis
 	if err != nil {
 		return nil, err
 	}
-	out := &pantherclawv1.ListCoverageRoutesResponse{NextPageToken: next}
+	out := &pantherclawv1.ListRoutesResponse{NextPageToken: next}
 	for _, r := range rows {
 		out.Routes = append(out.Routes, routeProto(r))
 	}
 	return out, nil
 }
 
-// ReassessCoverage implements CoverageServiceHandler.
-func (h *Handler) ReassessCoverage(ctx context.Context, req *pantherclawv1.ReassessCoverageRequest) (*pantherclawv1.ReassessCoverageResponse, error) {
+// Reassess implements CoverageServiceHandler.
+func (h *Handler) Reassess(ctx context.Context, req *pantherclawv1.ReassessRequest) (*pantherclawv1.ReassessResponse, error) {
 	conn, err := idOf(req.GetConnectionId())
 	if err != nil {
 		return nil, err
@@ -57,5 +57,5 @@ func (h *Handler) ReassessCoverage(ctx context.Context, req *pantherclawv1.Reass
 	if err != nil {
 		return nil, err
 	}
-	return &pantherclawv1.ReassessCoverageResponse{Scopes: int32(r.Scopes), Snapshots: int32(r.Snapshots)}, nil //nolint:gosec // G115: at most 1000 scopes
+	return &pantherclawv1.ReassessResponse{Scopes: int32(r.Scopes), Snapshots: int32(r.Snapshots)}, nil //nolint:gosec // G115: at most 1000 scopes
 }

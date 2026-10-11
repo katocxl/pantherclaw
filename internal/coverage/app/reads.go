@@ -59,11 +59,12 @@ func (s *Service) read(ctx context.Context, fn func(context.Context, *readers) e
 	}, db.ReadOnly())
 }
 
-// Closure is a recorded closure with what its probes prove.
+// Closure is a recorded closure with what its probes and checks prove.
 type Closure struct {
 	dbq.PcCoverageClosure
-	Probes  []domain.ProbeResult
-	Verdict domain.Verdict
+	Probes       []domain.ProbeResult
+	ConfigChecks []domain.ConfigCheck
+	Verdict      domain.Verdict
 }
 
 func closureOf(row dbq.PcCoverageClosure) (Closure, error) {
@@ -71,7 +72,10 @@ func closureOf(row dbq.PcCoverageClosure) (Closure, error) {
 	if err := json.Unmarshal(row.Probes, &c.Probes); err != nil {
 		return Closure{}, err
 	}
-	c.Verdict = domain.Evaluate(c.Probes)
+	if err := json.Unmarshal(row.ConfigChecks, &c.ConfigChecks); err != nil {
+		return Closure{}, err
+	}
+	c.Verdict = domain.Evaluate(c.Probes, c.ConfigChecks)
 	return c, nil
 }
 
