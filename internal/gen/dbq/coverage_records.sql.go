@@ -96,6 +96,51 @@ func (q *Queries) CoverageChangesPending(ctx context.Context, orgID ids.OrgID, c
 	return items, nil
 }
 
+const coverageClaimEntries = `-- name: CoverageClaimEntries :many
+SELECT s.ledger_entry_id FROM pc.coverage_snapshots s WHERE s.org_id = $1 AND s.id = $2
+UNION ALL
+(SELECT n.ledger_entry_id
+ FROM pc.coverage_snapshots s
+ JOIN pc.coverage_snapshots n ON n.org_id = s.org_id AND n.agent_id = s.agent_id AND n.connection_id = s.connection_id
+                             AND n.operation = s.operation AND n.id > s.id
+ WHERE s.org_id = $1 AND s.id = $2
+ ORDER BY n.id
+ LIMIT 1)
+UNION ALL
+(SELECT i.ledger_entry_id
+ FROM pc.coverage_snapshots s
+ JOIN pc.coverage_invalidations i ON i.org_id = s.org_id AND i.connection_id = s.connection_id
+                                 AND (i.agent_id IS NULL OR i.agent_id = s.agent_id)
+ WHERE s.org_id = $1 AND s.id = $2 AND i.ledger_entry_id IS NOT NULL
+   AND i.occurred_at >= s.computed_at AND i.occurred_at < $3
+ ORDER BY i.occurred_at
+ LIMIT 256)
+`
+
+// The ledger entries an evidence bundle carries beside a receipt that
+// claims a coverage snapshot (HR-217): the snapshot's, the next snapshot of
+// its scope, and the scope's invalidations from the snapshot's computation
+// up to the decision.
+func (q *Queries) CoverageClaimEntries(ctx context.Context, orgID ids.OrgID, snapshotID ids.UUID, until time.Time) ([]ids.UUID, error) {
+	rows, err := q.db.Query(ctx, coverageClaimEntries, orgID, snapshotID, until)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ids.UUID{}
+	for rows.Next() {
+		var ledger_entry_id ids.UUID
+		if err := rows.Scan(&ledger_entry_id); err != nil {
+			return nil, err
+		}
+		items = append(items, ledger_entry_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const coverageExclusionsForScope = `-- name: CoverageExclusionsForScope :many
 SELECT org_id, id, agent_id, connection_id, operation, route_kind, reason, state, created_by, created_at, expires_at, revoked_by, revoked_at FROM pc.coverage_exclusions
 WHERE org_id = $1 AND connection_id = $2 AND state = 'ACTIVE' AND expires_at > now()
@@ -349,33 +394,6 @@ func (q *Queries) CoverageScopesOfConnection(ctx context.Context, orgID ids.OrgI
 			return nil, err
 		}
 		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const coverageSnapshotEntries = `-- name: CoverageSnapshotEntries :many
-SELECT ledger_entry_id FROM pc.coverage_snapshots
-WHERE org_id = $1 AND id = ANY ($2::uuid[])
-`
-
-// The ledger entries of coverage snapshots, which evidence bundles carry
-// beside the receipts that claim them (HR-217).
-func (q *Queries) CoverageSnapshotEntries(ctx context.Context, orgID ids.OrgID, snapshotIds []ids.UUID) ([]ids.UUID, error) {
-	rows, err := q.db.Query(ctx, coverageSnapshotEntries, orgID, snapshotIds)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []ids.UUID{}
-	for rows.Next() {
-		var ledger_entry_id ids.UUID
-		if err := rows.Scan(&ledger_entry_id); err != nil {
-			return nil, err
-		}
-		items = append(items, ledger_entry_id)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err

@@ -65,6 +65,8 @@ type verifier struct {
 	// snapshots are the verified coverage snapshot entries by snapshot id
 	// (HR-217).
 	snapshots map[string]snapshotEntry
+	// invalidations are the verified coverage invalidation entries.
+	invalidations []invalidationEntry
 }
 
 // Verify checks a bundle offline against the pinned keys and returns the
@@ -326,9 +328,7 @@ func (v *verifier) link(e, prev *Entry) (Status, string) {
 	if json.Unmarshal(body, &ref) == nil && ref.Receipt != "" {
 		v.digests[ref.Receipt] = e.Seq
 	}
-	if e.Kind == SnapshotKind {
-		v.noteSnapshot(e, body)
-	}
+	v.noteCoverage(e, body)
 	return Passed, "entry_hash recomputed from the entry and prev_hash"
 }
 

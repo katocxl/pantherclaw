@@ -329,8 +329,26 @@ LIMIT 64;
 UPDATE pc.coverage_invalidations SET reassessed_at = now(), ledger_entry_id = sqlc.arg(ledger_entry_id)
 WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND reassessed_at IS NULL;
 
--- The ledger entries of coverage snapshots, which evidence bundles carry
--- beside the receipts that claim them (HR-217).
--- name: CoverageSnapshotEntries :many
-SELECT ledger_entry_id FROM pc.coverage_snapshots
-WHERE org_id = sqlc.arg(org_id) AND id = ANY (sqlc.arg(snapshot_ids)::uuid[]);
+-- The ledger entries an evidence bundle carries beside a receipt that
+-- claims a coverage snapshot (HR-217): the snapshot's, the next snapshot of
+-- its scope, and the scope's invalidations from the snapshot's computation
+-- up to the decision.
+-- name: CoverageClaimEntries :many
+SELECT s.ledger_entry_id FROM pc.coverage_snapshots s WHERE s.org_id = sqlc.arg(org_id) AND s.id = sqlc.arg(snapshot_id)
+UNION ALL
+(SELECT n.ledger_entry_id
+ FROM pc.coverage_snapshots s
+ JOIN pc.coverage_snapshots n ON n.org_id = s.org_id AND n.agent_id = s.agent_id AND n.connection_id = s.connection_id
+                             AND n.operation = s.operation AND n.id > s.id
+ WHERE s.org_id = sqlc.arg(org_id) AND s.id = sqlc.arg(snapshot_id)
+ ORDER BY n.id
+ LIMIT 1)
+UNION ALL
+(SELECT i.ledger_entry_id
+ FROM pc.coverage_snapshots s
+ JOIN pc.coverage_invalidations i ON i.org_id = s.org_id AND i.connection_id = s.connection_id
+                                 AND (i.agent_id IS NULL OR i.agent_id = s.agent_id)
+ WHERE s.org_id = sqlc.arg(org_id) AND s.id = sqlc.arg(snapshot_id) AND i.ledger_entry_id IS NOT NULL
+   AND i.occurred_at >= s.computed_at AND i.occurred_at < sqlc.arg(until)
+ ORDER BY i.occurred_at
+ LIMIT 256);
