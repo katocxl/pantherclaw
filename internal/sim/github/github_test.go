@@ -74,7 +74,7 @@ func (w *world) do(method, path, auth, body string) (int, map[string]any) {
 	if auth != "" {
 		req.Header.Set("Authorization", auth)
 	}
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := w.srv.Client().Do(req)
 	if err != nil {
 		w.t.Fatal(err)
 	}
@@ -256,9 +256,9 @@ func TestContentsBranchesAndSettings(t *testing.T) {
 	if status, _ := w.do("GET", "/repos/acme/payments/contents/parser.go", auth, ""); status != http.StatusNotFound {
 		t.Fatalf("file on another branch: %d", status)
 	}
-	req, _ := http.NewRequestWithContext(t.Context(), "GET", w.srv.URL+"/repos/acme/payments/contents/.github", nil)
+	req, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, w.srv.URL+"/repos/acme/payments/contents/.github", nil)
 	req.Header.Set("Authorization", auth)
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := w.srv.Client().Do(req)
 	if err != nil {
 		t.Fatal(err)
 	}
