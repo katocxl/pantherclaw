@@ -10,7 +10,7 @@
 | Module | What it does |
 |---|---|
 | `pantherclaw.jcs` | `parse` (strict: duplicate members, lone surrogates, invalid UTF-8 and non-finite numbers are refused), `serialize` and `canonicalize` (RFC 8785: members sorted by UTF-16 code units, numbers as ECMAScript writes them). |
-| `pantherclaw.action` | `parse_action`: ActionIR v1 checked as strictly as PantherClaw checks it (HR-100..103), with its canonical form and hex action hash. An SDK uses it to check the action a gateway decided; it never builds or sends one (HR-201). |
+| `pantherclaw.action` | `parse_action`: ActionIR v1 with the structural checks PantherClaw makes (HR-100..103, `actionir.json`), with its canonical form and hex action hash. An SDK uses it to check the action a gateway decided; it never builds or sends one (HR-201). |
 
 Workload keys and proofs, the `/sdk` client with waits, and a target-side action-token verifier follow in later M8 pull requests.
 
