@@ -69,7 +69,7 @@ func validClosure(c domain.Closure, now time.Time) bool {
 	return jktPattern.MatchString(c.SigningKeyJKT) && noncePattern.MatchString(c.ServerNonce) &&
 		enginePattern.MatchString(c.Engine.Version) && apiVersionPattern.MatchString(c.Engine.APIVersion) &&
 		(c.Engine.Runtime == "runc" || c.Engine.Runtime == "runsc") && !c.Agent.IsZero() && !c.Connection.IsZero() &&
-		!c.SandboxSession.IsZero() && !c.Gateway.IsZero() && !c.SessionStartedAt.After(c.ObservedAt) &&
+		!c.SandboxSession.IsZero() && !c.Bound.Gateway.IsZero() && !c.SessionStartedAt.After(c.ObservedAt) &&
 		!c.ObservedAt.After(now.Add(time.Minute)) && c.ObservedAt.After(now.Add(-time.Hour))
 }
 
@@ -105,7 +105,7 @@ func (s *Service) RecordClosure(ctx context.Context, tx db.TenantTx, c domain.Cl
 	}) {
 		return ids.UUID{}, ErrClosureStale
 	}
-	v := domain.Evaluate(c.Probes)
+	v := domain.Evaluate(c.Probes, c.ConfigChecks)
 	probes, err := json.Marshal(c.Probes)
 	if err != nil {
 		return ids.UUID{}, err
@@ -119,7 +119,7 @@ func (s *Service) RecordClosure(ctx context.Context, tx db.TenantTx, c domain.Cl
 		Result: result, Probes: probes, PositiveControlsPassed: v.PositiveControls, NegativeControlsPassed: v.Negative,
 		CanaryPassed: v.Canary, SigningKeyJkt: c.SigningKeyJKT, ServerNonce: c.ServerNonce, ResultsSha256: c.ResultsSHA256[:],
 		EngineVersion: c.Engine.Version, ApiVersion: c.Engine.APIVersion, Runtime: c.Engine.Runtime,
-		ImageDigests: c.ImageDigests, ConfigSha256: c.ConfigSHA256[:], GatewayID: c.Gateway, ConnectionRevision: b.Revision,
+		ImageDigests: c.ImageDigests, ConfigSha256: c.ConfigSHA256[:], GatewayID: c.Bound.Gateway, ConnectionRevision: b.Revision,
 		PackageVersionID: b.PackageVersionID, SessionStartedAt: c.SessionStartedAt, ObservedAt: c.ObservedAt,
 		ExpiresAt: c.ObservedAt.Add(s.Freshness.EnforcedTTL),
 	})
