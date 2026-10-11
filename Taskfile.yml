@@ -125,6 +125,7 @@ tasks:
     desc: The SDKs' tests, each running every conformance vector (not part of task check)
     cmds:
       - go -C sdk/go test -shuffle=on -count=1 ./...
+      - cd sdk/typescript && node --test "test/**/*.test.ts"
 
   license:check:
     desc: Verify SPDX + copyright headers on every source file

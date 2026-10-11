@@ -1,0 +1,8 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 Joshua Kato
+
+// @pantherclaw/sdk: the PantherClaw Authority Protocol (PAP/1) for
+// TypeScript. See docs/protocol/PAP-1.md in the PantherClaw repository.
+
+export { ActionError, type ParsedAction, parseAction } from "./action.ts";
+export { canonicalize, JCSError, type JSONValue, parseJSON, serialize } from "./jcs.ts";

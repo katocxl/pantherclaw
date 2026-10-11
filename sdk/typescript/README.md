@@ -1,5 +1,19 @@
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- Copyright 2026 Joshua Kato -->
+
 # PantherClaw TypeScript SDK (Apache-2.0)
 
-**Status:** planned for milestone **M8** (see [docs/BUILD_GUIDE.md](../../docs/BUILD_GUIDE.md)).
+`@pantherclaw/sdk` is the TypeScript client of the PantherClaw Authority Protocol, PAP/1 ([docs/protocol/PAP-1.md](../../docs/protocol/PAP-1.md)). It has **no runtime dependencies**: Ed25519 comes from WebCrypto, SHA-256 from `node:crypto`, and RFC 8785 canonical JSON from its own strict parser. It needs Node 22.18 or later.
 
-Will provide: PAP/1 workload identity and proofs, `authorize` / `execute` / `wait`, HOLD wait handles, and integrations for the Vercel AI SDK and the MCP TypeScript client. Built with pnpm (pinned via `packageManager`, `minimumReleaseAge: 10080`, lifecycle scripts blocked), Biome, `tsc --noEmit`, Vitest; published to npm as `@pantherclaw/sdk` via trusted publishing with provenance.
+**The npm name is not reserved yet.** The founder still has to create the npm organization `@pantherclaw` and set up trusted publishing ([BUILD_GUIDE](../../docs/BUILD_GUIDE.md) Day-0 item 4). Until then the package is `private`, and no build or publish step exists. The sources are TypeScript that Node runs directly (type stripping), so the package uses only erasable syntax. A `tsc` build to JavaScript and declarations comes with the release pipeline.
+
+| Module | What it does |
+|---|---|
+| `jcs.ts` | `parseJSON` (strict: duplicate members, lone surrogates and invalid UTF-8 are refused), `serialize` and `canonicalize` (RFC 8785: members sorted by UTF-16 code units, numbers as ECMAScript writes them). |
+| `action.ts` | `parseAction`: ActionIR v1 checked as strictly as PantherClaw checks it (HR-100..103), with its canonical form and hex action hash. An SDK uses it to check the action a gateway decided; it never builds or sends one (HR-201). |
+
+Workload keys and proofs, the `/sdk` client with waits, and a target-side action-token verifier follow in later M8 pull requests.
+
+## Tests
+
+`node --test "test/**/*.test.ts"` (or `task sdk:check` from the repository root) runs every module against the shared vectors in [`sdk/conformance`](../conformance), which PantherClaw generates from its own implementation. `PANTHERCLAW_CONFORMANCE_DIR` points the tests at another copy.
