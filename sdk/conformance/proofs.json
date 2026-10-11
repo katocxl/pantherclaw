@@ -1,0 +1,283 @@
+{
+  "format": "pantherclaw.conformance/v1",
+  "group": "proofs",
+  "description": "PAP-Proof JWS (pap-proof+jwt). proofs: header {alg, jwk, typ} with jwk members crv, kty, x; claims htm, htu, iat, jti, ath (with a token), bh, nonce (once the server sent one), in that order and without whitespace; bh and ath are base64url SHA-256 of the exact body and token. checks: what PantherClaw answers a proof with a request at a time, in the order of PAP-1 §4: proof header and signature, key binding, htm, htu (scheme and host without case, path exactly), ath, bh, iat (at most 60 s ahead, 6 min behind), jti (22 to 128 printable ASCII characters), nonce shape.",
+  "source": "internal/identity/pap NewProof and VerifyRequest",
+  "key": {
+    "name": "workload",
+    "seed": "R2XSdLu4MSarUODZyVCRj6QwGGrTODWrOiWv8TgXjh4",
+    "jwk": {
+      "kty": "OKP",
+      "crv": "Ed25519",
+      "x": "NcD5byYHuq5132aE5ULIefy4XFe3TNOMVAE5w7fYfTM"
+    },
+    "jkt": "y5qXRl8nnGMFoCwpU4-jngZ4GwrIJGBCAQ8oUtd4E84"
+  },
+  "proofs": [
+    {
+      "name": "authorize through the /sdk face",
+      "method": "POST",
+      "url": "https://gateway.example.test/sdk/payments/actions",
+      "body": "{\"v\":1,\"call\":{\"kind\":\"tool\",\"name\":\"create_refund\",\"arguments\":{\"amount\":\"30.00\",\"charge\":\"ch_1\",\"currency\":\"USD\",\"reason\":\"duplicate\"}}}",
+      "token": "eyJhbGciOiJFZERTQSIsImtpZCI6Indvcmtsb2FkLXRva2Vucy12MFRhcHRSOGVWdWJRNzRfXzEwNmdQIiwidHlwIjoicGFwLXd0K2p3dCJ9.eyJpc3MiOiJodHRwczovL3BhbnRoZXJjbGF3LmV4YW1wbGUudGVzdCIsInN1YiI6InBjOm9yZy8wMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDEvYWdlbnQvMDE5MjAwMDAtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDA2L2luc3QvMDE5MjAwMDAtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDA1IiwiYXVkIjoicGFudGhlcmNsYXctZ2F0ZXdheSIsImlhdCI6MTc5MTcyMDAwMCwibmJmIjoxNzkxNzIwMDAwLCJleHAiOjE3OTE3MjA2MDAsImp0aSI6IjAwZGM2YWNmLWFjMDAtNzY1Ni04ZDczLTU2N2M4YjI1YmY4ZCIsImNuZiI6eyJqa3QiOiJ5NXFYUmw4bm5HTUZvQ3dwVTQtam5nWjRHd3JJSkdCQ0FROG9VdGQ0RTg0In0sInBhcCI6eyJ2IjoxLCJvcmciOiIwMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDEiLCJlbnYiOiIwMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDIiLCJhdHRfbHZsIjoxfX0.JbG1AZYLSwAlKkCVj462xD96Q47-5KkQUc1jnYdJndwRhZVep8VPCZXECz8JjwngrunWwtkqA11L1841VvJKDQ",
+      "nonce": "Y29uZm9ybWFuY2Utbm9uY2UtMjAyNi0xMC0xMQ",
+      "iat": 1791720060,
+      "jti": "1D6TLbu1HKlMO-l56zYa3g",
+      "bh": "E3C9TgDAWpyk9PpnykT6Y7zt69bELjkJLRTlD1gOY8s",
+      "ath": "Qc9co6w_nysh0k3WVvh2LSAmkiQCgib2d2VuNOQVZmM",
+      "header": "{\"alg\":\"EdDSA\",\"jwk\":{\"crv\":\"Ed25519\",\"kty\":\"OKP\",\"x\":\"NcD5byYHuq5132aE5ULIefy4XFe3TNOMVAE5w7fYfTM\"},\"typ\":\"pap-proof+jwt\"}",
+      "claims": "{\"htm\":\"POST\",\"htu\":\"https://gateway.example.test/sdk/payments/actions\",\"iat\":1791720060,\"jti\":\"1D6TLbu1HKlMO-l56zYa3g\",\"ath\":\"Qc9co6w_nysh0k3WVvh2LSAmkiQCgib2d2VuNOQVZmM\",\"bh\":\"E3C9TgDAWpyk9PpnykT6Y7zt69bELjkJLRTlD1gOY8s\",\"nonce\":\"Y29uZm9ybWFuY2Utbm9uY2UtMjAyNi0xMC0xMQ\"}",
+      "proof": "eyJhbGciOiJFZERTQSIsImp3ayI6eyJjcnYiOiJFZDI1NTE5Iiwia3R5IjoiT0tQIiwieCI6Ik5jRDVieVlIdXE1MTMyYUU1VUxJZWZ5NFhGZTNUTk9NVkFFNXc3ZllmVE0ifSwidHlwIjoicGFwLXByb29mK2p3dCJ9.eyJodG0iOiJQT1NUIiwiaHR1IjoiaHR0cHM6Ly9nYXRld2F5LmV4YW1wbGUudGVzdC9zZGsvcGF5bWVudHMvYWN0aW9ucyIsImlhdCI6MTc5MTcyMDA2MCwianRpIjoiMUQ2VExidTFIS2xNTy1sNTZ6WWEzZyIsImF0aCI6IlFjOWNvNndfbnlzaDBrM1dWdmgyTFNBbWtpUUNnaWIyZDJWdU5PUVZabU0iLCJiaCI6IkUzQzlUZ0RBV3B5azlQcG55a1Q2WTd6dDY5YkVMamtKTFJUbEQxZ09ZOHMiLCJub25jZSI6IlkyOXVabTl5YldGdVkyVXRibTl1WTJVdE1qQXlOaTB4TUMweE1RIn0.mOBsKLaQ6vGk8PgN1pkwHhFAZUSLT_Bj3QnYOjaRYR8sfCWnu2GMaSBOrzzt78wFCOb0WRXdYQia8pcsXRz7BQ"
+    },
+    {
+      "name": "the wait stream (GET, empty body)",
+      "method": "GET",
+      "url": "https://pantherclaw.example.test/v1/wait/01920000-0000-7000-8000-000000000004",
+      "body": "",
+      "token": "eyJhbGciOiJFZERTQSIsImtpZCI6Indvcmtsb2FkLXRva2Vucy12MFRhcHRSOGVWdWJRNzRfXzEwNmdQIiwidHlwIjoicGFwLXd0K2p3dCJ9.eyJpc3MiOiJodHRwczovL3BhbnRoZXJjbGF3LmV4YW1wbGUudGVzdCIsInN1YiI6InBjOm9yZy8wMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDEvYWdlbnQvMDE5MjAwMDAtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDA2L2luc3QvMDE5MjAwMDAtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDA1IiwiYXVkIjoicGFudGhlcmNsYXctZ2F0ZXdheSIsImlhdCI6MTc5MTcyMDAwMCwibmJmIjoxNzkxNzIwMDAwLCJleHAiOjE3OTE3MjA2MDAsImp0aSI6IjAwZGM2YWNmLWFjMDAtNzY1Ni04ZDczLTU2N2M4YjI1YmY4ZCIsImNuZiI6eyJqa3QiOiJ5NXFYUmw4bm5HTUZvQ3dwVTQtam5nWjRHd3JJSkdCQ0FROG9VdGQ0RTg0In0sInBhcCI6eyJ2IjoxLCJvcmciOiIwMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDEiLCJlbnYiOiIwMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDIiLCJhdHRfbHZsIjoxfX0.JbG1AZYLSwAlKkCVj462xD96Q47-5KkQUc1jnYdJndwRhZVep8VPCZXECz8JjwngrunWwtkqA11L1841VvJKDQ",
+      "nonce": "Y29uZm9ybWFuY2Utbm9uY2UtMjAyNi0xMC0xMQ",
+      "iat": 1791720060,
+      "jti": "a48BUPhoFh7usWxE3xe_mA",
+      "bh": "47DEQpj8HBSa-_TImW-5JCeuQeRkm5NMpJWZG3hSuFU",
+      "ath": "Qc9co6w_nysh0k3WVvh2LSAmkiQCgib2d2VuNOQVZmM",
+      "header": "{\"alg\":\"EdDSA\",\"jwk\":{\"crv\":\"Ed25519\",\"kty\":\"OKP\",\"x\":\"NcD5byYHuq5132aE5ULIefy4XFe3TNOMVAE5w7fYfTM\"},\"typ\":\"pap-proof+jwt\"}",
+      "claims": "{\"htm\":\"GET\",\"htu\":\"https://pantherclaw.example.test/v1/wait/01920000-0000-7000-8000-000000000004\",\"iat\":1791720060,\"jti\":\"a48BUPhoFh7usWxE3xe_mA\",\"ath\":\"Qc9co6w_nysh0k3WVvh2LSAmkiQCgib2d2VuNOQVZmM\",\"bh\":\"47DEQpj8HBSa-_TImW-5JCeuQeRkm5NMpJWZG3hSuFU\",\"nonce\":\"Y29uZm9ybWFuY2Utbm9uY2UtMjAyNi0xMC0xMQ\"}",
+      "proof": "eyJhbGciOiJFZERTQSIsImp3ayI6eyJjcnYiOiJFZDI1NTE5Iiwia3R5IjoiT0tQIiwieCI6Ik5jRDVieVlIdXE1MTMyYUU1VUxJZWZ5NFhGZTNUTk9NVkFFNXc3ZllmVE0ifSwidHlwIjoicGFwLXByb29mK2p3dCJ9.eyJodG0iOiJHRVQiLCJodHUiOiJodHRwczovL3BhbnRoZXJjbGF3LmV4YW1wbGUudGVzdC92MS93YWl0LzAxOTIwMDAwLTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDAwNCIsImlhdCI6MTc5MTcyMDA2MCwianRpIjoiYTQ4QlVQaG9GaDd1c1d4RTN4ZV9tQSIsImF0aCI6IlFjOWNvNndfbnlzaDBrM1dWdmgyTFNBbWtpUUNnaWIyZDJWdU5PUVZabU0iLCJiaCI6IjQ3REVRcGo4SEJTYS1fVEltVy01SkNldVFlUmttNU5NcEpXWkczaFN1RlUiLCJub25jZSI6IlkyOXVabTl5YldGdVkyVXRibTl1WTJVdE1qQXlOaTB4TUMweE1RIn0.KAfviI8o7PjRCZVgQJMpW90xWgQ3as_71ZIaVNGCuY1YMeIaBu6pUtl4x3LdO4Dyuos3qoqapOJWl3wkXkzfBQ"
+    },
+    {
+      "name": "token issuance (key-only)",
+      "method": "POST",
+      "url": "https://pantherclaw.example.test/pantherclaw.v1.WorkloadService/IssueToken",
+      "body": "{\"identifier\":\"pc:org/01920000-0000-7000-8000-000000000001/agent/01920000-0000-7000-8000-000000000006/inst/01920000-0000-7000-8000-000000000005\"}",
+      "nonce": "Y29uZm9ybWFuY2Utbm9uY2UtMjAyNi0xMC0xMQ",
+      "iat": 1791720060,
+      "jti": "UN5cLADeT9GvD1MR7Tt7jw",
+      "bh": "KTClllUmS7GSGeg6tmubUx0m-oQ2XIlj6VF_Wqfrl3g",
+      "header": "{\"alg\":\"EdDSA\",\"jwk\":{\"crv\":\"Ed25519\",\"kty\":\"OKP\",\"x\":\"NcD5byYHuq5132aE5ULIefy4XFe3TNOMVAE5w7fYfTM\"},\"typ\":\"pap-proof+jwt\"}",
+      "claims": "{\"htm\":\"POST\",\"htu\":\"https://pantherclaw.example.test/pantherclaw.v1.WorkloadService/IssueToken\",\"iat\":1791720060,\"jti\":\"UN5cLADeT9GvD1MR7Tt7jw\",\"bh\":\"KTClllUmS7GSGeg6tmubUx0m-oQ2XIlj6VF_Wqfrl3g\",\"nonce\":\"Y29uZm9ybWFuY2Utbm9uY2UtMjAyNi0xMC0xMQ\"}",
+      "proof": "eyJhbGciOiJFZERTQSIsImp3ayI6eyJjcnYiOiJFZDI1NTE5Iiwia3R5IjoiT0tQIiwieCI6Ik5jRDVieVlIdXE1MTMyYUU1VUxJZWZ5NFhGZTNUTk9NVkFFNXc3ZllmVE0ifSwidHlwIjoicGFwLXByb29mK2p3dCJ9.eyJodG0iOiJQT1NUIiwiaHR1IjoiaHR0cHM6Ly9wYW50aGVyY2xhdy5leGFtcGxlLnRlc3QvcGFudGhlcmNsYXcudjEuV29ya2xvYWRTZXJ2aWNlL0lzc3VlVG9rZW4iLCJpYXQiOjE3OTE3MjAwNjAsImp0aSI6IlVONWNMQURlVDlHdkQxTVI3VHQ3anciLCJiaCI6IktUQ2xsbFVtUzdHU0dlZzZ0bXViVXgwbS1vUTJYSWxqNlZGX1dxZnJsM2ciLCJub25jZSI6IlkyOXVabTl5YldGdVkyVXRibTl1WTJVdE1qQXlOaTB4TUMweE1RIn0.U90sJMUVRSL939xR3FExTgrTx08qlZS5hJlI7-TrOd-UyBGNQs4BkMap_QLs89jq_1gnVyaDlnDmck4s86VXAQ"
+    },
+    {
+      "name": "the first request, before any nonce",
+      "method": "POST",
+      "url": "https://gateway.example.test/sdk/payments/actions",
+      "body": "{\"v\":1,\"call\":{\"kind\":\"tool\",\"name\":\"create_refund\",\"arguments\":{\"amount\":\"30.00\",\"charge\":\"ch_1\",\"currency\":\"USD\",\"reason\":\"duplicate\"}}}",
+      "token": "eyJhbGciOiJFZERTQSIsImtpZCI6Indvcmtsb2FkLXRva2Vucy12MFRhcHRSOGVWdWJRNzRfXzEwNmdQIiwidHlwIjoicGFwLXd0K2p3dCJ9.eyJpc3MiOiJodHRwczovL3BhbnRoZXJjbGF3LmV4YW1wbGUudGVzdCIsInN1YiI6InBjOm9yZy8wMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDEvYWdlbnQvMDE5MjAwMDAtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDA2L2luc3QvMDE5MjAwMDAtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDA1IiwiYXVkIjoicGFudGhlcmNsYXctZ2F0ZXdheSIsImlhdCI6MTc5MTcyMDAwMCwibmJmIjoxNzkxNzIwMDAwLCJleHAiOjE3OTE3MjA2MDAsImp0aSI6IjAwZGM2YWNmLWFjMDAtNzY1Ni04ZDczLTU2N2M4YjI1YmY4ZCIsImNuZiI6eyJqa3QiOiJ5NXFYUmw4bm5HTUZvQ3dwVTQtam5nWjRHd3JJSkdCQ0FROG9VdGQ0RTg0In0sInBhcCI6eyJ2IjoxLCJvcmciOiIwMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDEiLCJlbnYiOiIwMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDIiLCJhdHRfbHZsIjoxfX0.JbG1AZYLSwAlKkCVj462xD96Q47-5KkQUc1jnYdJndwRhZVep8VPCZXECz8JjwngrunWwtkqA11L1841VvJKDQ",
+      "iat": 1791720060,
+      "jti": "AIfvR8dHxKPEU4v1q8jw8A",
+      "bh": "E3C9TgDAWpyk9PpnykT6Y7zt69bELjkJLRTlD1gOY8s",
+      "ath": "Qc9co6w_nysh0k3WVvh2LSAmkiQCgib2d2VuNOQVZmM",
+      "header": "{\"alg\":\"EdDSA\",\"jwk\":{\"crv\":\"Ed25519\",\"kty\":\"OKP\",\"x\":\"NcD5byYHuq5132aE5ULIefy4XFe3TNOMVAE5w7fYfTM\"},\"typ\":\"pap-proof+jwt\"}",
+      "claims": "{\"htm\":\"POST\",\"htu\":\"https://gateway.example.test/sdk/payments/actions\",\"iat\":1791720060,\"jti\":\"AIfvR8dHxKPEU4v1q8jw8A\",\"ath\":\"Qc9co6w_nysh0k3WVvh2LSAmkiQCgib2d2VuNOQVZmM\",\"bh\":\"E3C9TgDAWpyk9PpnykT6Y7zt69bELjkJLRTlD1gOY8s\"}",
+      "proof": "eyJhbGciOiJFZERTQSIsImp3ayI6eyJjcnYiOiJFZDI1NTE5Iiwia3R5IjoiT0tQIiwieCI6Ik5jRDVieVlIdXE1MTMyYUU1VUxJZWZ5NFhGZTNUTk9NVkFFNXc3ZllmVE0ifSwidHlwIjoicGFwLXByb29mK2p3dCJ9.eyJodG0iOiJQT1NUIiwiaHR1IjoiaHR0cHM6Ly9nYXRld2F5LmV4YW1wbGUudGVzdC9zZGsvcGF5bWVudHMvYWN0aW9ucyIsImlhdCI6MTc5MTcyMDA2MCwianRpIjoiQUlmdlI4ZEh4S1BFVTR2MXE4anc4QSIsImF0aCI6IlFjOWNvNndfbnlzaDBrM1dWdmgyTFNBbWtpUUNnaWIyZDJWdU5PUVZabU0iLCJiaCI6IkUzQzlUZ0RBV3B5azlQcG55a1Q2WTd6dDY5YkVMamtKTFJUbEQxZ09ZOHMifQ.swU8BKJoEqu9LOcqaeDJbFP2nJj23rqBkgHMOhme9CXECkR--apJSXVwCW-wfowzfGrfmLYsz56qHPdcP9P-Dw"
+    }
+  ],
+  "checks": [
+    {
+      "name": "the /sdk proof",
+      "proof": "eyJhbGciOiJFZERTQSIsImp3ayI6eyJjcnYiOiJFZDI1NTE5Iiwia3R5IjoiT0tQIiwieCI6Ik5jRDVieVlIdXE1MTMyYUU1VUxJZWZ5NFhGZTNUTk9NVkFFNXc3ZllmVE0ifSwidHlwIjoicGFwLXByb29mK2p3dCJ9.eyJodG0iOiJQT1NUIiwiaHR1IjoiaHR0cHM6Ly9nYXRld2F5LmV4YW1wbGUudGVzdC9zZGsvcGF5bWVudHMvYWN0aW9ucyIsImlhdCI6MTc5MTcyMDA2MCwianRpIjoiMUQ2VExidTFIS2xNTy1sNTZ6WWEzZyIsImF0aCI6IlFjOWNvNndfbnlzaDBrM1dWdmgyTFNBbWtpUUNnaWIyZDJWdU5PUVZabU0iLCJiaCI6IkUzQzlUZ0RBV3B5azlQcG55a1Q2WTd6dDY5YkVMamtKTFJUbEQxZ09ZOHMiLCJub25jZSI6IlkyOXVabTl5YldGdVkyVXRibTl1WTJVdE1qQXlOaTB4TUMweE1RIn0.mOBsKLaQ6vGk8PgN1pkwHhFAZUSLT_Bj3QnYOjaRYR8sfCWnu2GMaSBOrzzt78wFCOb0WRXdYQia8pcsXRz7BQ",
+      "method": "POST",
+      "url": "https://gateway.example.test/sdk/payments/actions",
+      "body": "{\"v\":1,\"call\":{\"kind\":\"tool\",\"name\":\"create_refund\",\"arguments\":{\"amount\":\"30.00\",\"charge\":\"ch_1\",\"currency\":\"USD\",\"reason\":\"duplicate\"}}}",
+      "token": "eyJhbGciOiJFZERTQSIsImtpZCI6Indvcmtsb2FkLXRva2Vucy12MFRhcHRSOGVWdWJRNzRfXzEwNmdQIiwidHlwIjoicGFwLXd0K2p3dCJ9.eyJpc3MiOiJodHRwczovL3BhbnRoZXJjbGF3LmV4YW1wbGUudGVzdCIsInN1YiI6InBjOm9yZy8wMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDEvYWdlbnQvMDE5MjAwMDAtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDA2L2luc3QvMDE5MjAwMDAtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDA1IiwiYXVkIjoicGFudGhlcmNsYXctZ2F0ZXdheSIsImlhdCI6MTc5MTcyMDAwMCwibmJmIjoxNzkxNzIwMDAwLCJleHAiOjE3OTE3MjA2MDAsImp0aSI6IjAwZGM2YWNmLWFjMDAtNzY1Ni04ZDczLTU2N2M4YjI1YmY4ZCIsImNuZiI6eyJqa3QiOiJ5NXFYUmw4bm5HTUZvQ3dwVTQtam5nWjRHd3JJSkdCQ0FROG9VdGQ0RTg0In0sInBhcCI6eyJ2IjoxLCJvcmciOiIwMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDEiLCJlbnYiOiIwMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDIiLCJhdHRfbHZsIjoxfX0.JbG1AZYLSwAlKkCVj462xD96Q47-5KkQUc1jnYdJndwRhZVep8VPCZXECz8JjwngrunWwtkqA11L1841VvJKDQ",
+      "now": 1791720060,
+      "answer": "ok"
+    },
+    {
+      "name": "the wait-stream proof",
+      "proof": "eyJhbGciOiJFZERTQSIsImp3ayI6eyJjcnYiOiJFZDI1NTE5Iiwia3R5IjoiT0tQIiwieCI6Ik5jRDVieVlIdXE1MTMyYUU1VUxJZWZ5NFhGZTNUTk9NVkFFNXc3ZllmVE0ifSwidHlwIjoicGFwLXByb29mK2p3dCJ9.eyJodG0iOiJHRVQiLCJodHUiOiJodHRwczovL3BhbnRoZXJjbGF3LmV4YW1wbGUudGVzdC92MS93YWl0LzAxOTIwMDAwLTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDAwNCIsImlhdCI6MTc5MTcyMDA2MCwianRpIjoiYTQ4QlVQaG9GaDd1c1d4RTN4ZV9tQSIsImF0aCI6IlFjOWNvNndfbnlzaDBrM1dWdmgyTFNBbWtpUUNnaWIyZDJWdU5PUVZabU0iLCJiaCI6IjQ3REVRcGo4SEJTYS1fVEltVy01SkNldVFlUmttNU5NcEpXWkczaFN1RlUiLCJub25jZSI6IlkyOXVabTl5YldGdVkyVXRibTl1WTJVdE1qQXlOaTB4TUMweE1RIn0.KAfviI8o7PjRCZVgQJMpW90xWgQ3as_71ZIaVNGCuY1YMeIaBu6pUtl4x3LdO4Dyuos3qoqapOJWl3wkXkzfBQ",
+      "method": "GET",
+      "url": "https://pantherclaw.example.test/v1/wait/01920000-0000-7000-8000-000000000004",
+      "body": "",
+      "token": "eyJhbGciOiJFZERTQSIsImtpZCI6Indvcmtsb2FkLXRva2Vucy12MFRhcHRSOGVWdWJRNzRfXzEwNmdQIiwidHlwIjoicGFwLXd0K2p3dCJ9.eyJpc3MiOiJodHRwczovL3BhbnRoZXJjbGF3LmV4YW1wbGUudGVzdCIsInN1YiI6InBjOm9yZy8wMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDEvYWdlbnQvMDE5MjAwMDAtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDA2L2luc3QvMDE5MjAwMDAtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDA1IiwiYXVkIjoicGFudGhlcmNsYXctZ2F0ZXdheSIsImlhdCI6MTc5MTcyMDAwMCwibmJmIjoxNzkxNzIwMDAwLCJleHAiOjE3OTE3MjA2MDAsImp0aSI6IjAwZGM2YWNmLWFjMDAtNzY1Ni04ZDczLTU2N2M4YjI1YmY4ZCIsImNuZiI6eyJqa3QiOiJ5NXFYUmw4bm5HTUZvQ3dwVTQtam5nWjRHd3JJSkdCQ0FROG9VdGQ0RTg0In0sInBhcCI6eyJ2IjoxLCJvcmciOiIwMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDEiLCJlbnYiOiIwMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDIiLCJhdHRfbHZsIjoxfX0.JbG1AZYLSwAlKkCVj462xD96Q47-5KkQUc1jnYdJndwRhZVep8VPCZXECz8JjwngrunWwtkqA11L1841VvJKDQ",
+      "now": 1791720060,
+      "answer": "ok"
+    },
+    {
+      "name": "the key-only proof",
+      "proof": "eyJhbGciOiJFZERTQSIsImp3ayI6eyJjcnYiOiJFZDI1NTE5Iiwia3R5IjoiT0tQIiwieCI6Ik5jRDVieVlIdXE1MTMyYUU1VUxJZWZ5NFhGZTNUTk9NVkFFNXc3ZllmVE0ifSwidHlwIjoicGFwLXByb29mK2p3dCJ9.eyJodG0iOiJQT1NUIiwiaHR1IjoiaHR0cHM6Ly9wYW50aGVyY2xhdy5leGFtcGxlLnRlc3QvcGFudGhlcmNsYXcudjEuV29ya2xvYWRTZXJ2aWNlL0lzc3VlVG9rZW4iLCJpYXQiOjE3OTE3MjAwNjAsImp0aSI6IlVONWNMQURlVDlHdkQxTVI3VHQ3anciLCJiaCI6IktUQ2xsbFVtUzdHU0dlZzZ0bXViVXgwbS1vUTJYSWxqNlZGX1dxZnJsM2ciLCJub25jZSI6IlkyOXVabTl5YldGdVkyVXRibTl1WTJVdE1qQXlOaTB4TUMweE1RIn0.U90sJMUVRSL939xR3FExTgrTx08qlZS5hJlI7-TrOd-UyBGNQs4BkMap_QLs89jq_1gnVyaDlnDmck4s86VXAQ",
+      "method": "POST",
+      "url": "https://pantherclaw.example.test/pantherclaw.v1.WorkloadService/IssueToken",
+      "body": "{\"identifier\":\"pc:org/01920000-0000-7000-8000-000000000001/agent/01920000-0000-7000-8000-000000000006/inst/01920000-0000-7000-8000-000000000005\"}",
+      "now": 1791720060,
+      "answer": "ok"
+    },
+    {
+      "name": "no nonce yet",
+      "proof": "eyJhbGciOiJFZERTQSIsImp3ayI6eyJjcnYiOiJFZDI1NTE5Iiwia3R5IjoiT0tQIiwieCI6Ik5jRDVieVlIdXE1MTMyYUU1VUxJZWZ5NFhGZTNUTk9NVkFFNXc3ZllmVE0ifSwidHlwIjoicGFwLXByb29mK2p3dCJ9.eyJodG0iOiJQT1NUIiwiaHR1IjoiaHR0cHM6Ly9nYXRld2F5LmV4YW1wbGUudGVzdC9zZGsvcGF5bWVudHMvYWN0aW9ucyIsImlhdCI6MTc5MTcyMDA2MCwianRpIjoiQUlmdlI4ZEh4S1BFVTR2MXE4anc4QSIsImF0aCI6IlFjOWNvNndfbnlzaDBrM1dWdmgyTFNBbWtpUUNnaWIyZDJWdU5PUVZabU0iLCJiaCI6IkUzQzlUZ0RBV3B5azlQcG55a1Q2WTd6dDY5YkVMamtKTFJUbEQxZ09ZOHMifQ.swU8BKJoEqu9LOcqaeDJbFP2nJj23rqBkgHMOhme9CXECkR--apJSXVwCW-wfowzfGrfmLYsz56qHPdcP9P-Dw",
+      "method": "POST",
+      "url": "https://gateway.example.test/sdk/payments/actions",
+      "body": "{\"v\":1,\"call\":{\"kind\":\"tool\",\"name\":\"create_refund\",\"arguments\":{\"amount\":\"30.00\",\"charge\":\"ch_1\",\"currency\":\"USD\",\"reason\":\"duplicate\"}}}",
+      "token": "eyJhbGciOiJFZERTQSIsImtpZCI6Indvcmtsb2FkLXRva2Vucy12MFRhcHRSOGVWdWJRNzRfXzEwNmdQIiwidHlwIjoicGFwLXd0K2p3dCJ9.eyJpc3MiOiJodHRwczovL3BhbnRoZXJjbGF3LmV4YW1wbGUudGVzdCIsInN1YiI6InBjOm9yZy8wMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDEvYWdlbnQvMDE5MjAwMDAtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDA2L2luc3QvMDE5MjAwMDAtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDA1IiwiYXVkIjoicGFudGhlcmNsYXctZ2F0ZXdheSIsImlhdCI6MTc5MTcyMDAwMCwibmJmIjoxNzkxNzIwMDAwLCJleHAiOjE3OTE3MjA2MDAsImp0aSI6IjAwZGM2YWNmLWFjMDAtNzY1Ni04ZDczLTU2N2M4YjI1YmY4ZCIsImNuZiI6eyJqa3QiOiJ5NXFYUmw4bm5HTUZvQ3dwVTQtam5nWjRHd3JJSkdCQ0FROG9VdGQ0RTg0In0sInBhcCI6eyJ2IjoxLCJvcmciOiIwMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDEiLCJlbnYiOiIwMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDIiLCJhdHRfbHZsIjoxfX0.JbG1AZYLSwAlKkCVj462xD96Q47-5KkQUc1jnYdJndwRhZVep8VPCZXECz8JjwngrunWwtkqA11L1841VvJKDQ",
+      "now": 1791720060,
+      "answer": "use_nonce"
+    },
+    {
+      "name": "htu with an upper-case scheme and host",
+      "proof": "eyJhbGciOiJFZERTQSIsImp3ayI6eyJjcnYiOiJFZDI1NTE5Iiwia3R5IjoiT0tQIiwieCI6Ik5jRDVieVlIdXE1MTMyYUU1VUxJZWZ5NFhGZTNUTk9NVkFFNXc3ZllmVE0ifSwidHlwIjoicGFwLXByb29mK2p3dCJ9.eyJodG0iOiJQT1NUIiwiaHR1IjoiSFRUUFM6Ly9HYXRld2F5LkV4YW1wbGUuVGVzdC9zZGsvcGF5bWVudHMvYWN0aW9ucyIsImlhdCI6MTc5MTcyMDA2MCwianRpIjoiMUQ2VExidTFIS2xNTy1sNTZ6WWEzZyIsImF0aCI6IlFjOWNvNndfbnlzaDBrM1dWdmgyTFNBbWtpUUNnaWIyZDJWdU5PUVZabU0iLCJiaCI6IkUzQzlUZ0RBV3B5azlQcG55a1Q2WTd6dDY5YkVMamtKTFJUbEQxZ09ZOHMiLCJub25jZSI6IlkyOXVabTl5YldGdVkyVXRibTl1WTJVdE1qQXlOaTB4TUMweE1RIn0.igqQhkdWfSZkTC8gosU_UN33d0_zOdL_cH6uLIqWCpM8sS23g54d4I8hXUtS16DCRwWhINSgy2A6Bjza_sZhAQ",
+      "method": "POST",
+      "url": "https://gateway.example.test/sdk/payments/actions",
+      "body": "{\"v\":1,\"call\":{\"kind\":\"tool\",\"name\":\"create_refund\",\"arguments\":{\"amount\":\"30.00\",\"charge\":\"ch_1\",\"currency\":\"USD\",\"reason\":\"duplicate\"}}}",
+      "token": "eyJhbGciOiJFZERTQSIsImtpZCI6Indvcmtsb2FkLXRva2Vucy12MFRhcHRSOGVWdWJRNzRfXzEwNmdQIiwidHlwIjoicGFwLXd0K2p3dCJ9.eyJpc3MiOiJodHRwczovL3BhbnRoZXJjbGF3LmV4YW1wbGUudGVzdCIsInN1YiI6InBjOm9yZy8wMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDEvYWdlbnQvMDE5MjAwMDAtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDA2L2luc3QvMDE5MjAwMDAtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDA1IiwiYXVkIjoicGFudGhlcmNsYXctZ2F0ZXdheSIsImlhdCI6MTc5MTcyMDAwMCwibmJmIjoxNzkxNzIwMDAwLCJleHAiOjE3OTE3MjA2MDAsImp0aSI6IjAwZGM2YWNmLWFjMDAtNzY1Ni04ZDczLTU2N2M4YjI1YmY4ZCIsImNuZiI6eyJqa3QiOiJ5NXFYUmw4bm5HTUZvQ3dwVTQtam5nWjRHd3JJSkdCQ0FROG9VdGQ0RTg0In0sInBhcCI6eyJ2IjoxLCJvcmciOiIwMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDEiLCJlbnYiOiIwMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDIiLCJhdHRfbHZsIjoxfX0.JbG1AZYLSwAlKkCVj462xD96Q47-5KkQUc1jnYdJndwRhZVep8VPCZXECz8JjwngrunWwtkqA11L1841VvJKDQ",
+      "now": 1791720060,
+      "answer": "ok"
+    },
+    {
+      "name": "another method",
+      "proof": "eyJhbGciOiJFZERTQSIsImp3ayI6eyJjcnYiOiJFZDI1NTE5Iiwia3R5IjoiT0tQIiwieCI6Ik5jRDVieVlIdXE1MTMyYUU1VUxJZWZ5NFhGZTNUTk9NVkFFNXc3ZllmVE0ifSwidHlwIjoicGFwLXByb29mK2p3dCJ9.eyJodG0iOiJQT1NUIiwiaHR1IjoiaHR0cHM6Ly9nYXRld2F5LmV4YW1wbGUudGVzdC9zZGsvcGF5bWVudHMvYWN0aW9ucyIsImlhdCI6MTc5MTcyMDA2MCwianRpIjoiMUQ2VExidTFIS2xNTy1sNTZ6WWEzZyIsImF0aCI6IlFjOWNvNndfbnlzaDBrM1dWdmgyTFNBbWtpUUNnaWIyZDJWdU5PUVZabU0iLCJiaCI6IkUzQzlUZ0RBV3B5azlQcG55a1Q2WTd6dDY5YkVMamtKTFJUbEQxZ09ZOHMiLCJub25jZSI6IlkyOXVabTl5YldGdVkyVXRibTl1WTJVdE1qQXlOaTB4TUMweE1RIn0.mOBsKLaQ6vGk8PgN1pkwHhFAZUSLT_Bj3QnYOjaRYR8sfCWnu2GMaSBOrzzt78wFCOb0WRXdYQia8pcsXRz7BQ",
+      "method": "PUT",
+      "url": "https://gateway.example.test/sdk/payments/actions",
+      "body": "{\"v\":1,\"call\":{\"kind\":\"tool\",\"name\":\"create_refund\",\"arguments\":{\"amount\":\"30.00\",\"charge\":\"ch_1\",\"currency\":\"USD\",\"reason\":\"duplicate\"}}}",
+      "token": "eyJhbGciOiJFZERTQSIsImtpZCI6Indvcmtsb2FkLXRva2Vucy12MFRhcHRSOGVWdWJRNzRfXzEwNmdQIiwidHlwIjoicGFwLXd0K2p3dCJ9.eyJpc3MiOiJodHRwczovL3BhbnRoZXJjbGF3LmV4YW1wbGUudGVzdCIsInN1YiI6InBjOm9yZy8wMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDEvYWdlbnQvMDE5MjAwMDAtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDA2L2luc3QvMDE5MjAwMDAtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDA1IiwiYXVkIjoicGFudGhlcmNsYXctZ2F0ZXdheSIsImlhdCI6MTc5MTcyMDAwMCwibmJmIjoxNzkxNzIwMDAwLCJleHAiOjE3OTE3MjA2MDAsImp0aSI6IjAwZGM2YWNmLWFjMDAtNzY1Ni04ZDczLTU2N2M4YjI1YmY4ZCIsImNuZiI6eyJqa3QiOiJ5NXFYUmw4bm5HTUZvQ3dwVTQtam5nWjRHd3JJSkdCQ0FROG9VdGQ0RTg0In0sInBhcCI6eyJ2IjoxLCJvcmciOiIwMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDEiLCJlbnYiOiIwMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDIiLCJhdHRfbHZsIjoxfX0.JbG1AZYLSwAlKkCVj462xD96Q47-5KkQUc1jnYdJndwRhZVep8VPCZXECz8JjwngrunWwtkqA11L1841VvJKDQ",
+      "now": 1791720060,
+      "answer": "invalid_proof"
+    },
+    {
+      "name": "another path",
+      "proof": "eyJhbGciOiJFZERTQSIsImp3ayI6eyJjcnYiOiJFZDI1NTE5Iiwia3R5IjoiT0tQIiwieCI6Ik5jRDVieVlIdXE1MTMyYUU1VUxJZWZ5NFhGZTNUTk9NVkFFNXc3ZllmVE0ifSwidHlwIjoicGFwLXByb29mK2p3dCJ9.eyJodG0iOiJQT1NUIiwiaHR1IjoiaHR0cHM6Ly9nYXRld2F5LmV4YW1wbGUudGVzdC9zZGsvcGF5bWVudHMvYWN0aW9ucyIsImlhdCI6MTc5MTcyMDA2MCwianRpIjoiMUQ2VExidTFIS2xNTy1sNTZ6WWEzZyIsImF0aCI6IlFjOWNvNndfbnlzaDBrM1dWdmgyTFNBbWtpUUNnaWIyZDJWdU5PUVZabU0iLCJiaCI6IkUzQzlUZ0RBV3B5azlQcG55a1Q2WTd6dDY5YkVMamtKTFJUbEQxZ09ZOHMiLCJub25jZSI6IlkyOXVabTl5YldGdVkyVXRibTl1WTJVdE1qQXlOaTB4TUMweE1RIn0.mOBsKLaQ6vGk8PgN1pkwHhFAZUSLT_Bj3QnYOjaRYR8sfCWnu2GMaSBOrzzt78wFCOb0WRXdYQia8pcsXRz7BQ",
+      "method": "POST",
+      "url": "https://gateway.example.test/sdk/other/actions",
+      "body": "{\"v\":1,\"call\":{\"kind\":\"tool\",\"name\":\"create_refund\",\"arguments\":{\"amount\":\"30.00\",\"charge\":\"ch_1\",\"currency\":\"USD\",\"reason\":\"duplicate\"}}}",
+      "token": "eyJhbGciOiJFZERTQSIsImtpZCI6Indvcmtsb2FkLXRva2Vucy12MFRhcHRSOGVWdWJRNzRfXzEwNmdQIiwidHlwIjoicGFwLXd0K2p3dCJ9.eyJpc3MiOiJodHRwczovL3BhbnRoZXJjbGF3LmV4YW1wbGUudGVzdCIsInN1YiI6InBjOm9yZy8wMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDEvYWdlbnQvMDE5MjAwMDAtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDA2L2luc3QvMDE5MjAwMDAtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDA1IiwiYXVkIjoicGFudGhlcmNsYXctZ2F0ZXdheSIsImlhdCI6MTc5MTcyMDAwMCwibmJmIjoxNzkxNzIwMDAwLCJleHAiOjE3OTE3MjA2MDAsImp0aSI6IjAwZGM2YWNmLWFjMDAtNzY1Ni04ZDczLTU2N2M4YjI1YmY4ZCIsImNuZiI6eyJqa3QiOiJ5NXFYUmw4bm5HTUZvQ3dwVTQtam5nWjRHd3JJSkdCQ0FROG9VdGQ0RTg0In0sInBhcCI6eyJ2IjoxLCJvcmciOiIwMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDEiLCJlbnYiOiIwMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDIiLCJhdHRfbHZsIjoxfX0.JbG1AZYLSwAlKkCVj462xD96Q47-5KkQUc1jnYdJndwRhZVep8VPCZXECz8JjwngrunWwtkqA11L1841VvJKDQ",
+      "now": 1791720060,
+      "answer": "invalid_proof"
+    },
+    {
+      "name": "another host",
+      "proof": "eyJhbGciOiJFZERTQSIsImp3ayI6eyJjcnYiOiJFZDI1NTE5Iiwia3R5IjoiT0tQIiwieCI6Ik5jRDVieVlIdXE1MTMyYUU1VUxJZWZ5NFhGZTNUTk9NVkFFNXc3ZllmVE0ifSwidHlwIjoicGFwLXByb29mK2p3dCJ9.eyJodG0iOiJQT1NUIiwiaHR1IjoiaHR0cHM6Ly9nYXRld2F5LmV4YW1wbGUudGVzdC9zZGsvcGF5bWVudHMvYWN0aW9ucyIsImlhdCI6MTc5MTcyMDA2MCwianRpIjoiMUQ2VExidTFIS2xNTy1sNTZ6WWEzZyIsImF0aCI6IlFjOWNvNndfbnlzaDBrM1dWdmgyTFNBbWtpUUNnaWIyZDJWdU5PUVZabU0iLCJiaCI6IkUzQzlUZ0RBV3B5azlQcG55a1Q2WTd6dDY5YkVMamtKTFJUbEQxZ09ZOHMiLCJub25jZSI6IlkyOXVabTl5YldGdVkyVXRibTl1WTJVdE1qQXlOaTB4TUMweE1RIn0.mOBsKLaQ6vGk8PgN1pkwHhFAZUSLT_Bj3QnYOjaRYR8sfCWnu2GMaSBOrzzt78wFCOb0WRXdYQia8pcsXRz7BQ",
+      "method": "POST",
+      "url": "https://evil.example.test/sdk/payments/actions",
+      "body": "{\"v\":1,\"call\":{\"kind\":\"tool\",\"name\":\"create_refund\",\"arguments\":{\"amount\":\"30.00\",\"charge\":\"ch_1\",\"currency\":\"USD\",\"reason\":\"duplicate\"}}}",
+      "token": "eyJhbGciOiJFZERTQSIsImtpZCI6Indvcmtsb2FkLXRva2Vucy12MFRhcHRSOGVWdWJRNzRfXzEwNmdQIiwidHlwIjoicGFwLXd0K2p3dCJ9.eyJpc3MiOiJodHRwczovL3BhbnRoZXJjbGF3LmV4YW1wbGUudGVzdCIsInN1YiI6InBjOm9yZy8wMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDEvYWdlbnQvMDE5MjAwMDAtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDA2L2luc3QvMDE5MjAwMDAtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDA1IiwiYXVkIjoicGFudGhlcmNsYXctZ2F0ZXdheSIsImlhdCI6MTc5MTcyMDAwMCwibmJmIjoxNzkxNzIwMDAwLCJleHAiOjE3OTE3MjA2MDAsImp0aSI6IjAwZGM2YWNmLWFjMDAtNzY1Ni04ZDczLTU2N2M4YjI1YmY4ZCIsImNuZiI6eyJqa3QiOiJ5NXFYUmw4bm5HTUZvQ3dwVTQtam5nWjRHd3JJSkdCQ0FROG9VdGQ0RTg0In0sInBhcCI6eyJ2IjoxLCJvcmciOiIwMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDEiLCJlbnYiOiIwMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDIiLCJhdHRfbHZsIjoxfX0.JbG1AZYLSwAlKkCVj462xD96Q47-5KkQUc1jnYdJndwRhZVep8VPCZXECz8JjwngrunWwtkqA11L1841VvJKDQ",
+      "now": 1791720060,
+      "answer": "invalid_proof"
+    },
+    {
+      "name": "the body changed",
+      "proof": "eyJhbGciOiJFZERTQSIsImp3ayI6eyJjcnYiOiJFZDI1NTE5Iiwia3R5IjoiT0tQIiwieCI6Ik5jRDVieVlIdXE1MTMyYUU1VUxJZWZ5NFhGZTNUTk9NVkFFNXc3ZllmVE0ifSwidHlwIjoicGFwLXByb29mK2p3dCJ9.eyJodG0iOiJQT1NUIiwiaHR1IjoiaHR0cHM6Ly9nYXRld2F5LmV4YW1wbGUudGVzdC9zZGsvcGF5bWVudHMvYWN0aW9ucyIsImlhdCI6MTc5MTcyMDA2MCwianRpIjoiMUQ2VExidTFIS2xNTy1sNTZ6WWEzZyIsImF0aCI6IlFjOWNvNndfbnlzaDBrM1dWdmgyTFNBbWtpUUNnaWIyZDJWdU5PUVZabU0iLCJiaCI6IkUzQzlUZ0RBV3B5azlQcG55a1Q2WTd6dDY5YkVMamtKTFJUbEQxZ09ZOHMiLCJub25jZSI6IlkyOXVabTl5YldGdVkyVXRibTl1WTJVdE1qQXlOaTB4TUMweE1RIn0.mOBsKLaQ6vGk8PgN1pkwHhFAZUSLT_Bj3QnYOjaRYR8sfCWnu2GMaSBOrzzt78wFCOb0WRXdYQia8pcsXRz7BQ",
+      "method": "POST",
+      "url": "https://gateway.example.test/sdk/payments/actions",
+      "body": "{\"v\":1,\"call\":{\"kind\":\"tool\",\"name\":\"create_refund\",\"arguments\":{\"amount\":\"300.00\",\"charge\":\"ch_1\",\"currency\":\"USD\",\"reason\":\"duplicate\"}}}",
+      "token": "eyJhbGciOiJFZERTQSIsImtpZCI6Indvcmtsb2FkLXRva2Vucy12MFRhcHRSOGVWdWJRNzRfXzEwNmdQIiwidHlwIjoicGFwLXd0K2p3dCJ9.eyJpc3MiOiJodHRwczovL3BhbnRoZXJjbGF3LmV4YW1wbGUudGVzdCIsInN1YiI6InBjOm9yZy8wMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDEvYWdlbnQvMDE5MjAwMDAtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDA2L2luc3QvMDE5MjAwMDAtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDA1IiwiYXVkIjoicGFudGhlcmNsYXctZ2F0ZXdheSIsImlhdCI6MTc5MTcyMDAwMCwibmJmIjoxNzkxNzIwMDAwLCJleHAiOjE3OTE3MjA2MDAsImp0aSI6IjAwZGM2YWNmLWFjMDAtNzY1Ni04ZDczLTU2N2M4YjI1YmY4ZCIsImNuZiI6eyJqa3QiOiJ5NXFYUmw4bm5HTUZvQ3dwVTQtam5nWjRHd3JJSkdCQ0FROG9VdGQ0RTg0In0sInBhcCI6eyJ2IjoxLCJvcmciOiIwMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDEiLCJlbnYiOiIwMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDIiLCJhdHRfbHZsIjoxfX0.JbG1AZYLSwAlKkCVj462xD96Q47-5KkQUc1jnYdJndwRhZVep8VPCZXECz8JjwngrunWwtkqA11L1841VvJKDQ",
+      "now": 1791720060,
+      "answer": "body_hash_mismatch"
+    },
+    {
+      "name": "sent with another token",
+      "proof": "eyJhbGciOiJFZERTQSIsImp3ayI6eyJjcnYiOiJFZDI1NTE5Iiwia3R5IjoiT0tQIiwieCI6Ik5jRDVieVlIdXE1MTMyYUU1VUxJZWZ5NFhGZTNUTk9NVkFFNXc3ZllmVE0ifSwidHlwIjoicGFwLXByb29mK2p3dCJ9.eyJodG0iOiJQT1NUIiwiaHR1IjoiaHR0cHM6Ly9nYXRld2F5LmV4YW1wbGUudGVzdC9zZGsvcGF5bWVudHMvYWN0aW9ucyIsImlhdCI6MTc5MTcyMDA2MCwianRpIjoiMUQ2VExidTFIS2xNTy1sNTZ6WWEzZyIsImF0aCI6IlFjOWNvNndfbnlzaDBrM1dWdmgyTFNBbWtpUUNnaWIyZDJWdU5PUVZabU0iLCJiaCI6IkUzQzlUZ0RBV3B5azlQcG55a1Q2WTd6dDY5YkVMamtKTFJUbEQxZ09ZOHMiLCJub25jZSI6IlkyOXVabTl5YldGdVkyVXRibTl1WTJVdE1qQXlOaTB4TUMweE1RIn0.mOBsKLaQ6vGk8PgN1pkwHhFAZUSLT_Bj3QnYOjaRYR8sfCWnu2GMaSBOrzzt78wFCOb0WRXdYQia8pcsXRz7BQ",
+      "method": "POST",
+      "url": "https://gateway.example.test/sdk/payments/actions",
+      "body": "{\"v\":1,\"call\":{\"kind\":\"tool\",\"name\":\"create_refund\",\"arguments\":{\"amount\":\"30.00\",\"charge\":\"ch_1\",\"currency\":\"USD\",\"reason\":\"duplicate\"}}}",
+      "token": "eyJhbGciOiJFZERTQSIsImtpZCI6Indvcmtsb2FkLXRva2Vucy12MFRhcHRSOGVWdWJRNzRfXzEwNmdQIiwidHlwIjoicGFwLXd0K2p3dCJ9.eyJpc3MiOiJodHRwczovL3BhbnRoZXJjbGF3LmV4YW1wbGUudGVzdCIsInN1YiI6InBjOm9yZy8wMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDEvYWdlbnQvMDE5MjAwMDAtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDA2L2luc3QvMDE5MjAwMDAtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDA1IiwiYXVkIjoicGFudGhlcmNsYXctZ2F0ZXdheSIsImlhdCI6MTc5MTcyMDAwMCwibmJmIjoxNzkxNzIwMDAwLCJleHAiOjE3OTE3MjA2MDAsImp0aSI6IjAwZGM2YWNmLWFjMDAtN2FmOS05ZTUyLTllMTcxMWQyYzBjNSIsImNuZiI6eyJqa3QiOiJ5NXFYUmw4bm5HTUZvQ3dwVTQtam5nWjRHd3JJSkdCQ0FROG9VdGQ0RTg0In0sInBhcCI6eyJ2IjoxLCJvcmciOiIwMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDEiLCJlbnYiOiIwMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDIiLCJhdHRfbHZsIjoxLCJyZWxlYXNlIjp7InN0YXRlIjoiZGVjbGFyZWQiLCJkaWdlc3QiOiJzaGEyNTY6YTRkNDUxZWMyMzQ2MzcyNmY3MmM0M2Q2NGM3MTA5NjhmNmI2MDJjZDY1M2I0ZGU4YWRlZTFiNTU2MjQwYTgyOSJ9fX0.Xh7WbhiA83J6SaYT1ARdLZ4SkHxS_sd5uMybsoe-zcL0NGpGTjiah2pThiSpMCVG85fMT6Z2XkI8rOnaYvSABg",
+      "now": 1791720060,
+      "answer": "invalid_proof"
+    },
+    {
+      "name": "a token bound to another key",
+      "proof": "eyJhbGciOiJFZERTQSIsImp3ayI6eyJjcnYiOiJFZDI1NTE5Iiwia3R5IjoiT0tQIiwieCI6Ik5jRDVieVlIdXE1MTMyYUU1VUxJZWZ5NFhGZTNUTk9NVkFFNXc3ZllmVE0ifSwidHlwIjoicGFwLXByb29mK2p3dCJ9.eyJodG0iOiJQT1NUIiwiaHR1IjoiaHR0cHM6Ly9nYXRld2F5LmV4YW1wbGUudGVzdC9zZGsvcGF5bWVudHMvYWN0aW9ucyIsImlhdCI6MTc5MTcyMDA2MCwianRpIjoiMUQ2VExidTFIS2xNTy1sNTZ6WWEzZyIsImF0aCI6IlFjOWNvNndfbnlzaDBrM1dWdmgyTFNBbWtpUUNnaWIyZDJWdU5PUVZabU0iLCJiaCI6IkUzQzlUZ0RBV3B5azlQcG55a1Q2WTd6dDY5YkVMamtKTFJUbEQxZ09ZOHMiLCJub25jZSI6IlkyOXVabTl5YldGdVkyVXRibTl1WTJVdE1qQXlOaTB4TUMweE1RIn0.mOBsKLaQ6vGk8PgN1pkwHhFAZUSLT_Bj3QnYOjaRYR8sfCWnu2GMaSBOrzzt78wFCOb0WRXdYQia8pcsXRz7BQ",
+      "method": "POST",
+      "url": "https://gateway.example.test/sdk/payments/actions",
+      "body": "{\"v\":1,\"call\":{\"kind\":\"tool\",\"name\":\"create_refund\",\"arguments\":{\"amount\":\"30.00\",\"charge\":\"ch_1\",\"currency\":\"USD\",\"reason\":\"duplicate\"}}}",
+      "token": "eyJhbGciOiJFZERTQSIsImtpZCI6Indvcmtsb2FkLXRva2Vucy12MFRhcHRSOGVWdWJRNzRfXzEwNmdQIiwidHlwIjoicGFwLXd0K2p3dCJ9.eyJpc3MiOiJodHRwczovL3BhbnRoZXJjbGF3LmV4YW1wbGUudGVzdCIsInN1YiI6InBjOm9yZy8wMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDEvYWdlbnQvMDE5MjAwMDAtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDA2L2luc3QvMDE5MjAwMDAtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDA1IiwiYXVkIjoicGFudGhlcmNsYXctZ2F0ZXdheSIsImlhdCI6MTc5MTcyMDAwMCwibmJmIjoxNzkxNzIwMDAwLCJleHAiOjE3OTE3MjA2MDAsImp0aSI6IjAwZGM2YWNmLWFjMDAtNzY3OS1iZWRmLTc3ZTNmZmRjYmZjMyIsImNuZiI6eyJqa3QiOiJTX2NHZUlQaU5SN0NVU3Vtc2tNZURtdHJ2TEdjRVh2d3Jobkk5cTdyaEprIn0sInBhcCI6eyJ2IjoxLCJvcmciOiIwMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDEiLCJlbnYiOiIwMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDIiLCJhdHRfbHZsIjoxfX0.s5KM-3TpUtbkDYNo_kWbvTFLMnzYYAIBue7D3NJGnHMVBDxURH6XiywhF75xhPsF9yuyfX4979Mi8PmWnXRzCw",
+      "now": 1791720060,
+      "answer": "key_mismatch"
+    },
+    {
+      "name": "a key-only proof sent with a token",
+      "proof": "eyJhbGciOiJFZERTQSIsImp3ayI6eyJjcnYiOiJFZDI1NTE5Iiwia3R5IjoiT0tQIiwieCI6Ik5jRDVieVlIdXE1MTMyYUU1VUxJZWZ5NFhGZTNUTk9NVkFFNXc3ZllmVE0ifSwidHlwIjoicGFwLXByb29mK2p3dCJ9.eyJodG0iOiJQT1NUIiwiaHR1IjoiaHR0cHM6Ly9wYW50aGVyY2xhdy5leGFtcGxlLnRlc3QvcGFudGhlcmNsYXcudjEuV29ya2xvYWRTZXJ2aWNlL0lzc3VlVG9rZW4iLCJpYXQiOjE3OTE3MjAwNjAsImp0aSI6IlVONWNMQURlVDlHdkQxTVI3VHQ3anciLCJiaCI6IktUQ2xsbFVtUzdHU0dlZzZ0bXViVXgwbS1vUTJYSWxqNlZGX1dxZnJsM2ciLCJub25jZSI6IlkyOXVabTl5YldGdVkyVXRibTl1WTJVdE1qQXlOaTB4TUMweE1RIn0.U90sJMUVRSL939xR3FExTgrTx08qlZS5hJlI7-TrOd-UyBGNQs4BkMap_QLs89jq_1gnVyaDlnDmck4s86VXAQ",
+      "method": "POST",
+      "url": "https://pantherclaw.example.test/pantherclaw.v1.WorkloadService/IssueToken",
+      "body": "{\"identifier\":\"pc:org/01920000-0000-7000-8000-000000000001/agent/01920000-0000-7000-8000-000000000006/inst/01920000-0000-7000-8000-000000000005\"}",
+      "token": "eyJhbGciOiJFZERTQSIsImtpZCI6Indvcmtsb2FkLXRva2Vucy12MFRhcHRSOGVWdWJRNzRfXzEwNmdQIiwidHlwIjoicGFwLXd0K2p3dCJ9.eyJpc3MiOiJodHRwczovL3BhbnRoZXJjbGF3LmV4YW1wbGUudGVzdCIsInN1YiI6InBjOm9yZy8wMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDEvYWdlbnQvMDE5MjAwMDAtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDA2L2luc3QvMDE5MjAwMDAtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDA1IiwiYXVkIjoicGFudGhlcmNsYXctZ2F0ZXdheSIsImlhdCI6MTc5MTcyMDAwMCwibmJmIjoxNzkxNzIwMDAwLCJleHAiOjE3OTE3MjA2MDAsImp0aSI6IjAwZGM2YWNmLWFjMDAtNzY1Ni04ZDczLTU2N2M4YjI1YmY4ZCIsImNuZiI6eyJqa3QiOiJ5NXFYUmw4bm5HTUZvQ3dwVTQtam5nWjRHd3JJSkdCQ0FROG9VdGQ0RTg0In0sInBhcCI6eyJ2IjoxLCJvcmciOiIwMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDEiLCJlbnYiOiIwMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDIiLCJhdHRfbHZsIjoxfX0.JbG1AZYLSwAlKkCVj462xD96Q47-5KkQUc1jnYdJndwRhZVep8VPCZXECz8JjwngrunWwtkqA11L1841VvJKDQ",
+      "now": 1791720060,
+      "answer": "invalid_proof"
+    },
+    {
+      "name": "ath without a token",
+      "proof": "eyJhbGciOiJFZERTQSIsImp3ayI6eyJjcnYiOiJFZDI1NTE5Iiwia3R5IjoiT0tQIiwieCI6Ik5jRDVieVlIdXE1MTMyYUU1VUxJZWZ5NFhGZTNUTk9NVkFFNXc3ZllmVE0ifSwidHlwIjoicGFwLXByb29mK2p3dCJ9.eyJodG0iOiJQT1NUIiwiaHR1IjoiaHR0cHM6Ly9nYXRld2F5LmV4YW1wbGUudGVzdC9zZGsvcGF5bWVudHMvYWN0aW9ucyIsImlhdCI6MTc5MTcyMDA2MCwianRpIjoiMUQ2VExidTFIS2xNTy1sNTZ6WWEzZyIsImF0aCI6IlFjOWNvNndfbnlzaDBrM1dWdmgyTFNBbWtpUUNnaWIyZDJWdU5PUVZabU0iLCJiaCI6IkUzQzlUZ0RBV3B5azlQcG55a1Q2WTd6dDY5YkVMamtKTFJUbEQxZ09ZOHMiLCJub25jZSI6IlkyOXVabTl5YldGdVkyVXRibTl1WTJVdE1qQXlOaTB4TUMweE1RIn0.mOBsKLaQ6vGk8PgN1pkwHhFAZUSLT_Bj3QnYOjaRYR8sfCWnu2GMaSBOrzzt78wFCOb0WRXdYQia8pcsXRz7BQ",
+      "method": "POST",
+      "url": "https://gateway.example.test/sdk/payments/actions",
+      "body": "{\"v\":1,\"call\":{\"kind\":\"tool\",\"name\":\"create_refund\",\"arguments\":{\"amount\":\"30.00\",\"charge\":\"ch_1\",\"currency\":\"USD\",\"reason\":\"duplicate\"}}}",
+      "now": 1791720060,
+      "answer": "invalid_proof"
+    },
+    {
+      "name": "issued 7 minutes ago",
+      "proof": "eyJhbGciOiJFZERTQSIsImp3ayI6eyJjcnYiOiJFZDI1NTE5Iiwia3R5IjoiT0tQIiwieCI6Ik5jRDVieVlIdXE1MTMyYUU1VUxJZWZ5NFhGZTNUTk9NVkFFNXc3ZllmVE0ifSwidHlwIjoicGFwLXByb29mK2p3dCJ9.eyJodG0iOiJQT1NUIiwiaHR1IjoiaHR0cHM6Ly9wYW50aGVyY2xhdy5leGFtcGxlLnRlc3QvcGFudGhlcmNsYXcudjEuV29ya2xvYWRTZXJ2aWNlL0lzc3VlVG9rZW4iLCJpYXQiOjE3OTE3MjAwNjAsImp0aSI6IlVONWNMQURlVDlHdkQxTVI3VHQ3anciLCJiaCI6IktUQ2xsbFVtUzdHU0dlZzZ0bXViVXgwbS1vUTJYSWxqNlZGX1dxZnJsM2ciLCJub25jZSI6IlkyOXVabTl5YldGdVkyVXRibTl1WTJVdE1qQXlOaTB4TUMweE1RIn0.U90sJMUVRSL939xR3FExTgrTx08qlZS5hJlI7-TrOd-UyBGNQs4BkMap_QLs89jq_1gnVyaDlnDmck4s86VXAQ",
+      "method": "POST",
+      "url": "https://pantherclaw.example.test/pantherclaw.v1.WorkloadService/IssueToken",
+      "body": "{\"identifier\":\"pc:org/01920000-0000-7000-8000-000000000001/agent/01920000-0000-7000-8000-000000000006/inst/01920000-0000-7000-8000-000000000005\"}",
+      "now": 1791720480,
+      "answer": "invalid_proof"
+    },
+    {
+      "name": "issued 2 minutes ahead",
+      "proof": "eyJhbGciOiJFZERTQSIsImp3ayI6eyJjcnYiOiJFZDI1NTE5Iiwia3R5IjoiT0tQIiwieCI6Ik5jRDVieVlIdXE1MTMyYUU1VUxJZWZ5NFhGZTNUTk9NVkFFNXc3ZllmVE0ifSwidHlwIjoicGFwLXByb29mK2p3dCJ9.eyJodG0iOiJQT1NUIiwiaHR1IjoiaHR0cHM6Ly9wYW50aGVyY2xhdy5leGFtcGxlLnRlc3QvcGFudGhlcmNsYXcudjEuV29ya2xvYWRTZXJ2aWNlL0lzc3VlVG9rZW4iLCJpYXQiOjE3OTE3MjAwNjAsImp0aSI6IlVONWNMQURlVDlHdkQxTVI3VHQ3anciLCJiaCI6IktUQ2xsbFVtUzdHU0dlZzZ0bXViVXgwbS1vUTJYSWxqNlZGX1dxZnJsM2ciLCJub25jZSI6IlkyOXVabTl5YldGdVkyVXRibTl1WTJVdE1qQXlOaTB4TUMweE1RIn0.U90sJMUVRSL939xR3FExTgrTx08qlZS5hJlI7-TrOd-UyBGNQs4BkMap_QLs89jq_1gnVyaDlnDmck4s86VXAQ",
+      "method": "POST",
+      "url": "https://pantherclaw.example.test/pantherclaw.v1.WorkloadService/IssueToken",
+      "body": "{\"identifier\":\"pc:org/01920000-0000-7000-8000-000000000001/agent/01920000-0000-7000-8000-000000000006/inst/01920000-0000-7000-8000-000000000005\"}",
+      "now": 1791719940,
+      "answer": "invalid_proof"
+    },
+    {
+      "name": "a claim changed after signing",
+      "proof": "eyJhbGciOiJFZERTQSIsImp3ayI6eyJjcnYiOiJFZDI1NTE5Iiwia3R5IjoiT0tQIiwieCI6Ik5jRDVieVlIdXE1MTMyYUU1VUxJZWZ5NFhGZTNUTk9NVkFFNXc3ZllmVE0ifSwidHlwIjoicGFwLXByb29mK2p3dCJ9.eyJodG0iOiJQVVQiLCJodHUiOiJodHRwczovL2dhdGV3YXkuZXhhbXBsZS50ZXN0L3Nkay9wYXltZW50cy9hY3Rpb25zIiwiaWF0IjoxNzkxNzIwMDYwLCJqdGkiOiIxRDZUTGJ1MUhLbE1PLWw1NnpZYTNnIiwiYXRoIjoiUWM5Y282d19ueXNoMGszV1Z2aDJMU0Fta2lRQ2dpYjJkMlZ1Tk9RVlptTSIsImJoIjoiRTNDOVRnREFXcHlrOVBwbnlrVDZZN3p0NjliRUxqa0pMUlRsRDFnT1k4cyIsIm5vbmNlIjoiWTI5dVptOXliV0Z1WTJVdGJtOXVZMlV0TWpBeU5pMHhNQzB4TVEifQ.mOBsKLaQ6vGk8PgN1pkwHhFAZUSLT_Bj3QnYOjaRYR8sfCWnu2GMaSBOrzzt78wFCOb0WRXdYQia8pcsXRz7BQ",
+      "method": "PUT",
+      "url": "https://gateway.example.test/sdk/payments/actions",
+      "body": "{\"v\":1,\"call\":{\"kind\":\"tool\",\"name\":\"create_refund\",\"arguments\":{\"amount\":\"30.00\",\"charge\":\"ch_1\",\"currency\":\"USD\",\"reason\":\"duplicate\"}}}",
+      "token": "eyJhbGciOiJFZERTQSIsImtpZCI6Indvcmtsb2FkLXRva2Vucy12MFRhcHRSOGVWdWJRNzRfXzEwNmdQIiwidHlwIjoicGFwLXd0K2p3dCJ9.eyJpc3MiOiJodHRwczovL3BhbnRoZXJjbGF3LmV4YW1wbGUudGVzdCIsInN1YiI6InBjOm9yZy8wMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDEvYWdlbnQvMDE5MjAwMDAtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDA2L2luc3QvMDE5MjAwMDAtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDA1IiwiYXVkIjoicGFudGhlcmNsYXctZ2F0ZXdheSIsImlhdCI6MTc5MTcyMDAwMCwibmJmIjoxNzkxNzIwMDAwLCJleHAiOjE3OTE3MjA2MDAsImp0aSI6IjAwZGM2YWNmLWFjMDAtNzY1Ni04ZDczLTU2N2M4YjI1YmY4ZCIsImNuZiI6eyJqa3QiOiJ5NXFYUmw4bm5HTUZvQ3dwVTQtam5nWjRHd3JJSkdCQ0FROG9VdGQ0RTg0In0sInBhcCI6eyJ2IjoxLCJvcmciOiIwMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDEiLCJlbnYiOiIwMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDIiLCJhdHRfbHZsIjoxfX0.JbG1AZYLSwAlKkCVj462xD96Q47-5KkQUc1jnYdJndwRhZVep8VPCZXECz8JjwngrunWwtkqA11L1841VvJKDQ",
+      "now": 1791720060,
+      "answer": "invalid_proof"
+    },
+    {
+      "name": "alg none",
+      "proof": "eyJhbGciOiJub25lIiwiandrIjp7ImNydiI6IkVkMjU1MTkiLCJrdHkiOiJPS1AiLCJ4IjoiTmNENWJ5WUh1cTUxMzJhRTVVTEllZnk0WEZlM1ROT01WQUU1dzdmWWZUTSJ9LCJ0eXAiOiJwYXAtcHJvb2Yrand0In0.eyJodG0iOiJQT1NUIiwiaHR1IjoiaHR0cHM6Ly9nYXRld2F5LmV4YW1wbGUudGVzdC9zZGsvcGF5bWVudHMvYWN0aW9ucyIsImlhdCI6MTc5MTcyMDA2MCwianRpIjoiMUQ2VExidTFIS2xNTy1sNTZ6WWEzZyIsImF0aCI6IlFjOWNvNndfbnlzaDBrM1dWdmgyTFNBbWtpUUNnaWIyZDJWdU5PUVZabU0iLCJiaCI6IkUzQzlUZ0RBV3B5azlQcG55a1Q2WTd6dDY5YkVMamtKTFJUbEQxZ09ZOHMiLCJub25jZSI6IlkyOXVabTl5YldGdVkyVXRibTl1WTJVdE1qQXlOaTB4TUMweE1RIn0.",
+      "method": "POST",
+      "url": "https://gateway.example.test/sdk/payments/actions",
+      "body": "{\"v\":1,\"call\":{\"kind\":\"tool\",\"name\":\"create_refund\",\"arguments\":{\"amount\":\"30.00\",\"charge\":\"ch_1\",\"currency\":\"USD\",\"reason\":\"duplicate\"}}}",
+      "token": "eyJhbGciOiJFZERTQSIsImtpZCI6Indvcmtsb2FkLXRva2Vucy12MFRhcHRSOGVWdWJRNzRfXzEwNmdQIiwidHlwIjoicGFwLXd0K2p3dCJ9.eyJpc3MiOiJodHRwczovL3BhbnRoZXJjbGF3LmV4YW1wbGUudGVzdCIsInN1YiI6InBjOm9yZy8wMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDEvYWdlbnQvMDE5MjAwMDAtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDA2L2luc3QvMDE5MjAwMDAtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDA1IiwiYXVkIjoicGFudGhlcmNsYXctZ2F0ZXdheSIsImlhdCI6MTc5MTcyMDAwMCwibmJmIjoxNzkxNzIwMDAwLCJleHAiOjE3OTE3MjA2MDAsImp0aSI6IjAwZGM2YWNmLWFjMDAtNzY1Ni04ZDczLTU2N2M4YjI1YmY4ZCIsImNuZiI6eyJqa3QiOiJ5NXFYUmw4bm5HTUZvQ3dwVTQtam5nWjRHd3JJSkdCQ0FROG9VdGQ0RTg0In0sInBhcCI6eyJ2IjoxLCJvcmciOiIwMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDEiLCJlbnYiOiIwMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDIiLCJhdHRfbHZsIjoxfX0.JbG1AZYLSwAlKkCVj462xD96Q47-5KkQUc1jnYdJndwRhZVep8VPCZXECz8JjwngrunWwtkqA11L1841VvJKDQ",
+      "now": 1791720060,
+      "answer": "invalid_proof"
+    },
+    {
+      "name": "a private key in the jwk",
+      "proof": "eyJhbGciOiJFZERTQSIsImp3ayI6eyJjcnYiOiJFZDI1NTE5IiwiZCI6IlIyWFNkTHU0TVNhclVPRFp5VkNSajZRd0dHclRPRFdyT2lXdjhUZ1hqaDQiLCJrdHkiOiJPS1AiLCJ4IjoiTmNENWJ5WUh1cTUxMzJhRTVVTEllZnk0WEZlM1ROT01WQUU1dzdmWWZUTSJ9LCJ0eXAiOiJwYXAtcHJvb2Yrand0In0.eyJodG0iOiJQT1NUIiwiaHR1IjoiaHR0cHM6Ly9nYXRld2F5LmV4YW1wbGUudGVzdC9zZGsvcGF5bWVudHMvYWN0aW9ucyIsImlhdCI6MTc5MTcyMDA2MCwianRpIjoiMUQ2VExidTFIS2xNTy1sNTZ6WWEzZyIsImF0aCI6IlFjOWNvNndfbnlzaDBrM1dWdmgyTFNBbWtpUUNnaWIyZDJWdU5PUVZabU0iLCJiaCI6IkUzQzlUZ0RBV3B5azlQcG55a1Q2WTd6dDY5YkVMamtKTFJUbEQxZ09ZOHMiLCJub25jZSI6IlkyOXVabTl5YldGdVkyVXRibTl1WTJVdE1qQXlOaTB4TUMweE1RIn0.VQw2dobsO8Y7z21I_22eH4cQx6J5yOoN3EeuA5fX9hKU-1GXto6JQafT8u_mfmVzDL3xgH2Zgg99FJXalQ7fCw",
+      "method": "POST",
+      "url": "https://gateway.example.test/sdk/payments/actions",
+      "body": "{\"v\":1,\"call\":{\"kind\":\"tool\",\"name\":\"create_refund\",\"arguments\":{\"amount\":\"30.00\",\"charge\":\"ch_1\",\"currency\":\"USD\",\"reason\":\"duplicate\"}}}",
+      "token": "eyJhbGciOiJFZERTQSIsImtpZCI6Indvcmtsb2FkLXRva2Vucy12MFRhcHRSOGVWdWJRNzRfXzEwNmdQIiwidHlwIjoicGFwLXd0K2p3dCJ9.eyJpc3MiOiJodHRwczovL3BhbnRoZXJjbGF3LmV4YW1wbGUudGVzdCIsInN1YiI6InBjOm9yZy8wMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDEvYWdlbnQvMDE5MjAwMDAtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDA2L2luc3QvMDE5MjAwMDAtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDA1IiwiYXVkIjoicGFudGhlcmNsYXctZ2F0ZXdheSIsImlhdCI6MTc5MTcyMDAwMCwibmJmIjoxNzkxNzIwMDAwLCJleHAiOjE3OTE3MjA2MDAsImp0aSI6IjAwZGM2YWNmLWFjMDAtNzY1Ni04ZDczLTU2N2M4YjI1YmY4ZCIsImNuZiI6eyJqa3QiOiJ5NXFYUmw4bm5HTUZvQ3dwVTQtam5nWjRHd3JJSkdCQ0FROG9VdGQ0RTg0In0sInBhcCI6eyJ2IjoxLCJvcmciOiIwMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDEiLCJlbnYiOiIwMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDIiLCJhdHRfbHZsIjoxfX0.JbG1AZYLSwAlKkCVj462xD96Q47-5KkQUc1jnYdJndwRhZVep8VPCZXECz8JjwngrunWwtkqA11L1841VvJKDQ",
+      "now": 1791720060,
+      "answer": "invalid_proof"
+    },
+    {
+      "name": "another typ",
+      "proof": "eyJhbGciOiJFZERTQSIsImp3ayI6eyJjcnYiOiJFZDI1NTE5Iiwia3R5IjoiT0tQIiwieCI6Ik5jRDVieVlIdXE1MTMyYUU1VUxJZWZ5NFhGZTNUTk9NVkFFNXc3ZllmVE0ifSwidHlwIjoiSldUIn0.eyJodG0iOiJQT1NUIiwiaHR1IjoiaHR0cHM6Ly9nYXRld2F5LmV4YW1wbGUudGVzdC9zZGsvcGF5bWVudHMvYWN0aW9ucyIsImlhdCI6MTc5MTcyMDA2MCwianRpIjoiMUQ2VExidTFIS2xNTy1sNTZ6WWEzZyIsImF0aCI6IlFjOWNvNndfbnlzaDBrM1dWdmgyTFNBbWtpUUNnaWIyZDJWdU5PUVZabU0iLCJiaCI6IkUzQzlUZ0RBV3B5azlQcG55a1Q2WTd6dDY5YkVMamtKTFJUbEQxZ09ZOHMiLCJub25jZSI6IlkyOXVabTl5YldGdVkyVXRibTl1WTJVdE1qQXlOaTB4TUMweE1RIn0.V5ctRBn22q1GCRkii0s8Pz4nMOvu3GU2W0V5uWqqf-Dg77TqCBxDNdXjdvcvX1PxijiVjdqDn4Fid99YLGMuDQ",
+      "method": "POST",
+      "url": "https://gateway.example.test/sdk/payments/actions",
+      "body": "{\"v\":1,\"call\":{\"kind\":\"tool\",\"name\":\"create_refund\",\"arguments\":{\"amount\":\"30.00\",\"charge\":\"ch_1\",\"currency\":\"USD\",\"reason\":\"duplicate\"}}}",
+      "token": "eyJhbGciOiJFZERTQSIsImtpZCI6Indvcmtsb2FkLXRva2Vucy12MFRhcHRSOGVWdWJRNzRfXzEwNmdQIiwidHlwIjoicGFwLXd0K2p3dCJ9.eyJpc3MiOiJodHRwczovL3BhbnRoZXJjbGF3LmV4YW1wbGUudGVzdCIsInN1YiI6InBjOm9yZy8wMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDEvYWdlbnQvMDE5MjAwMDAtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDA2L2luc3QvMDE5MjAwMDAtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDA1IiwiYXVkIjoicGFudGhlcmNsYXctZ2F0ZXdheSIsImlhdCI6MTc5MTcyMDAwMCwibmJmIjoxNzkxNzIwMDAwLCJleHAiOjE3OTE3MjA2MDAsImp0aSI6IjAwZGM2YWNmLWFjMDAtNzY1Ni04ZDczLTU2N2M4YjI1YmY4ZCIsImNuZiI6eyJqa3QiOiJ5NXFYUmw4bm5HTUZvQ3dwVTQtam5nWjRHd3JJSkdCQ0FROG9VdGQ0RTg0In0sInBhcCI6eyJ2IjoxLCJvcmciOiIwMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDEiLCJlbnYiOiIwMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDIiLCJhdHRfbHZsIjoxfX0.JbG1AZYLSwAlKkCVj462xD96Q47-5KkQUc1jnYdJndwRhZVep8VPCZXECz8JjwngrunWwtkqA11L1841VvJKDQ",
+      "now": 1791720060,
+      "answer": "invalid_proof"
+    },
+    {
+      "name": "a jti shorter than 128 bits",
+      "proof": "eyJhbGciOiJFZERTQSIsImp3ayI6eyJjcnYiOiJFZDI1NTE5Iiwia3R5IjoiT0tQIiwieCI6Ik5jRDVieVlIdXE1MTMyYUU1VUxJZWZ5NFhGZTNUTk9NVkFFNXc3ZllmVE0ifSwidHlwIjoicGFwLXByb29mK2p3dCJ9.eyJodG0iOiJQT1NUIiwiaHR1IjoiaHR0cHM6Ly9nYXRld2F5LmV4YW1wbGUudGVzdC9zZGsvcGF5bWVudHMvYWN0aW9ucyIsImlhdCI6MTc5MTcyMDA2MCwianRpIjoic2hvcnQtanRpIiwiYXRoIjoiUWM5Y282d19ueXNoMGszV1Z2aDJMU0Fta2lRQ2dpYjJkMlZ1Tk9RVlptTSIsImJoIjoiRTNDOVRnREFXcHlrOVBwbnlrVDZZN3p0NjliRUxqa0pMUlRsRDFnT1k4cyIsIm5vbmNlIjoiWTI5dVptOXliV0Z1WTJVdGJtOXVZMlV0TWpBeU5pMHhNQzB4TVEifQ.TKZBbeHeenSwhPyFwrEUJmG0eLHK2v1RFmavOM9VsUdgz21-kfp_OI8BUOyM1kT4YQprEZCb5irb-CnouWnoAw",
+      "method": "POST",
+      "url": "https://gateway.example.test/sdk/payments/actions",
+      "body": "{\"v\":1,\"call\":{\"kind\":\"tool\",\"name\":\"create_refund\",\"arguments\":{\"amount\":\"30.00\",\"charge\":\"ch_1\",\"currency\":\"USD\",\"reason\":\"duplicate\"}}}",
+      "token": "eyJhbGciOiJFZERTQSIsImtpZCI6Indvcmtsb2FkLXRva2Vucy12MFRhcHRSOGVWdWJRNzRfXzEwNmdQIiwidHlwIjoicGFwLXd0K2p3dCJ9.eyJpc3MiOiJodHRwczovL3BhbnRoZXJjbGF3LmV4YW1wbGUudGVzdCIsInN1YiI6InBjOm9yZy8wMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDEvYWdlbnQvMDE5MjAwMDAtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDA2L2luc3QvMDE5MjAwMDAtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDA1IiwiYXVkIjoicGFudGhlcmNsYXctZ2F0ZXdheSIsImlhdCI6MTc5MTcyMDAwMCwibmJmIjoxNzkxNzIwMDAwLCJleHAiOjE3OTE3MjA2MDAsImp0aSI6IjAwZGM2YWNmLWFjMDAtNzY1Ni04ZDczLTU2N2M4YjI1YmY4ZCIsImNuZiI6eyJqa3QiOiJ5NXFYUmw4bm5HTUZvQ3dwVTQtam5nWjRHd3JJSkdCQ0FROG9VdGQ0RTg0In0sInBhcCI6eyJ2IjoxLCJvcmciOiIwMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDEiLCJlbnYiOiIwMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDIiLCJhdHRfbHZsIjoxfX0.JbG1AZYLSwAlKkCVj462xD96Q47-5KkQUc1jnYdJndwRhZVep8VPCZXECz8JjwngrunWwtkqA11L1841VvJKDQ",
+      "now": 1791720060,
+      "answer": "invalid_proof"
+    },
+    {
+      "name": "a malformed nonce",
+      "proof": "eyJhbGciOiJFZERTQSIsImp3ayI6eyJjcnYiOiJFZDI1NTE5Iiwia3R5IjoiT0tQIiwieCI6Ik5jRDVieVlIdXE1MTMyYUU1VUxJZWZ5NFhGZTNUTk9NVkFFNXc3ZllmVE0ifSwidHlwIjoicGFwLXByb29mK2p3dCJ9.eyJodG0iOiJQT1NUIiwiaHR1IjoiaHR0cHM6Ly9nYXRld2F5LmV4YW1wbGUudGVzdC9zZGsvcGF5bWVudHMvYWN0aW9ucyIsImlhdCI6MTc5MTcyMDA2MCwianRpIjoiMUQ2VExidTFIS2xNTy1sNTZ6WWEzZyIsImF0aCI6IlFjOWNvNndfbnlzaDBrM1dWdmgyTFNBbWtpUUNnaWIyZDJWdU5PUVZabU0iLCJiaCI6IkUzQzlUZ0RBV3B5azlQcG55a1Q2WTd6dDY5YkVMamtKTFJUbEQxZ09ZOHMiLCJub25jZSI6InNob3J0In0.puis8TxEYuJU8rwEc6rQGlhA0wGT71XvDeXVo814Q-yTeWjWh6wtvDwY7t_tFc-bBElRIOh5LNqgdRVr-Ol5Dw",
+      "method": "POST",
+      "url": "https://gateway.example.test/sdk/payments/actions",
+      "body": "{\"v\":1,\"call\":{\"kind\":\"tool\",\"name\":\"create_refund\",\"arguments\":{\"amount\":\"30.00\",\"charge\":\"ch_1\",\"currency\":\"USD\",\"reason\":\"duplicate\"}}}",
+      "token": "eyJhbGciOiJFZERTQSIsImtpZCI6Indvcmtsb2FkLXRva2Vucy12MFRhcHRSOGVWdWJRNzRfXzEwNmdQIiwidHlwIjoicGFwLXd0K2p3dCJ9.eyJpc3MiOiJodHRwczovL3BhbnRoZXJjbGF3LmV4YW1wbGUudGVzdCIsInN1YiI6InBjOm9yZy8wMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDEvYWdlbnQvMDE5MjAwMDAtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDA2L2luc3QvMDE5MjAwMDAtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDA1IiwiYXVkIjoicGFudGhlcmNsYXctZ2F0ZXdheSIsImlhdCI6MTc5MTcyMDAwMCwibmJmIjoxNzkxNzIwMDAwLCJleHAiOjE3OTE3MjA2MDAsImp0aSI6IjAwZGM2YWNmLWFjMDAtNzY1Ni04ZDczLTU2N2M4YjI1YmY4ZCIsImNuZiI6eyJqa3QiOiJ5NXFYUmw4bm5HTUZvQ3dwVTQtam5nWjRHd3JJSkdCQ0FROG9VdGQ0RTg0In0sInBhcCI6eyJ2IjoxLCJvcmciOiIwMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDEiLCJlbnYiOiIwMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDIiLCJhdHRfbHZsIjoxfX0.JbG1AZYLSwAlKkCVj462xD96Q47-5KkQUc1jnYdJndwRhZVep8VPCZXECz8JjwngrunWwtkqA11L1841VvJKDQ",
+      "now": 1791720060,
+      "answer": "use_nonce"
+    }
+  ]
+}
