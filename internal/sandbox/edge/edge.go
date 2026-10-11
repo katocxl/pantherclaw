@@ -1,33 +1,39 @@
 // SPDX-License-Identifier: BUSL-1.1
 // Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
 
-// Package edge is the containment sandbox's trusted sidecar (G0 M9
-// decision 1, ADR-0022): the agent's only route out. The agent reaches it as
-// its HTTP(S) proxy over the sandbox's internal network. A request for a
-// host mapped to a connection goes to the gateway's face for that
-// connection, `/{connection}/…`, signed with PAP/1 by the run's workload
-// key, which only the edge holds (HR-213); a CONNECT to a mapped host is
-// intercepted with a certificate from the per-session CA, whose key exists
-// only in the edge's memory. Every other destination, CONNECT or plain, is
-// refused and recorded (HR-214). A raw `curl https://api.github.com/…` from
-// the agent therefore reaches the same action and decision as the MCP route
-// (F099), and nothing else leaves the sandbox.
+// Package edge is the containment sandbox's trusted sidecar, run as
+// `pantherclaw-edge` in its own container (G0 M9 decision 1, ADR-0022): the
+// agent's only route out. The agent reaches it as its HTTPS proxy over the
+// sandbox's internal network. A CONNECT to port 443 of an agent host of a
+// mapped connection is intercepted with a certificate from the per-session
+// CA, whose key exists only in the edge's memory, and every request inside
+// goes to the gateway's HTTP face for that connection, `/{connection}/…`,
+// signed with PAP/1 by the run's workload key, which only the edge holds
+// (HR-213). Everything else is refused with 403 and recorded: another host
+// or port, an IP literal, plain HTTP and WebSocket upgrades (HR-214). The
+// edge dials nothing but the gateway, so a raw `curl https://api.github.com/…`
+// from the agent reaches the same action and decision as the MCP route
+// (F099), and with the gateway down it reaches nothing.
 package edge
 
 import (
 	"bytes"
 	"context"
 	"crypto/ed25519"
+	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/hex"
 	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
 	"log/slog"
+	"maps"
 	"net"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -48,22 +54,26 @@ const (
 	idleTimeout    = 2 * time.Minute
 )
 
-// PAP/1 request headers the edge sets for the agent (PAP-1 §4, §5).
+// Headers the edge sets on the gateway request (PAP-1 §4, §5; G0 M9 edge
+// protocol). PC-Sandbox-Session is informational: the server binds the
+// session through the instance.
 const (
-	headerRunID    = "PAP-Run-Id"
-	headerActionID = "PC-Action-Id"
+	headerRunID   = "PAP-Run-Id"
+	headerAction  = "PC-Action-Id"
+	headerSession = "PC-Sandbox-Session"
+	// HeaderRefusedBy marks the edge's own refusals, so that a probe tells
+	// a request that never left the sandbox from the gateway's answer.
+	HeaderRefusedBy = "PC-Refused-By"
 )
 
-// Route maps a host the agent calls to the gateway connection that serves
-// it.
-type Route struct {
-	// Host is a lowercase DNS name, for example "api.github.com".
-	Host       string `json:"host"`
-	Connection string `json:"connection"`
-}
+// credentialHeaders carry a credential the agent may have found: the edge
+// strips them all and reports each (G0 M9 design decision 11).
+var credentialHeaders = []string{"Authorization", "Cookie", "X-Api-Key", "Api-Key", "Private-Token", "X-Auth-Token"}
 
 // Options are what the edge runs with.
 type Options struct {
+	// Session is the sandbox session, sent as PC-Sandbox-Session.
+	Session string
 	// GatewayURL is the gateway's public URL: proofs are signed for it
 	// (PAP-1 §4).
 	GatewayURL string
@@ -71,9 +81,12 @@ type Options struct {
 	// example host.docker.internal:8090 for a gateway on the host's
 	// loopback.
 	GatewayAddr string
-	// GatewayRoots verifies an HTTPS gateway; nil uses the system roots.
-	GatewayRoots *x509.CertPool
-	Routes       []Route
+	// GatewayCAPin ("sha256:<hex>") pins the CA of an HTTPS gateway; empty
+	// uses the system roots.
+	GatewayCAPin string
+	// Hosts maps each agent host (a lowercase DNS name) to the connection
+	// that serves it.
+	Hosts map[string]string
 	// Run is the run every request names.
 	Run string
 	// Key is the run's workload key; Token returns its current workload
@@ -88,14 +101,13 @@ type Options struct {
 
 // Edge is one session's sidecar.
 type Edge struct {
-	gateway string
-	routes  map[string]string
-	run     string
-	token   func() string
-	client  *http.Client
-	ca      *authority
-	log     *slog.Logger
-	refused atomic.Int64
+	session, gateway, run string
+	hosts                 map[string]string
+	token                 func() string
+	client                *http.Client
+	ca                    *authority
+	log                   *slog.Logger
+	refused, stripped     atomic.Int64
 }
 
 // New returns an edge with a fresh session CA.
@@ -110,23 +122,23 @@ func New(o Options) (*Edge, error) {
 	if len(o.Key) != ed25519.PrivateKeySize || o.Token == nil {
 		return nil, errors.New("edge: a workload key and token source are required")
 	}
-	routes := map[string]string{}
-	var hosts []string
-	for _, r := range o.Routes {
-		if !validHost(r.Host) || r.Connection == "" || routes[r.Host] != "" {
-			return nil, fmt.Errorf("edge: route %q → %q", r.Host, r.Connection)
-		}
-		routes[r.Host] = r.Connection
-		hosts = append(hosts, r.Host)
+	if len(o.Hosts) == 0 || len(o.Hosts) > 64 {
+		return nil, errors.New("edge: 1 to 64 agent hosts")
 	}
-	if len(routes) == 0 {
-		return nil, errors.New("edge: no routes")
+	for h, c := range o.Hosts {
+		if !validHost(h) || c == "" || strings.ContainsAny(c, "/?#%") {
+			return nil, fmt.Errorf("edge: host %q → %q", h, c)
+		}
+	}
+	tlsConf, err := gatewayTLS(o.GatewayCAPin)
+	if err != nil {
+		return nil, err
 	}
 	validity := o.CAValidity
 	if validity <= 0 {
 		validity = 24 * time.Hour
 	}
-	ca, err := newAuthority(hosts, validity, time.Now())
+	ca, err := newAuthority(slices.Sorted(maps.Keys(o.Hosts)), validity, time.Now())
 	if err != nil {
 		return nil, err
 	}
@@ -139,18 +151,18 @@ func New(o Options) (*Edge, error) {
 		Proxy: nil, // the edge never takes a proxy from its environment (HR-072)
 		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
 			if o.GatewayAddr != "" {
-				addr = o.GatewayAddr // this transport only ever reaches the gateway
+				addr = o.GatewayAddr // this transport only ever reaches the gateway (HR-213)
 			}
 			return dialer.DialContext(ctx, network, addr)
 		},
-		TLSClientConfig:       &tls.Config{MinVersion: tls.VersionTLS12, RootCAs: o.GatewayRoots},
+		TLSClientConfig:       tlsConf,
 		TLSHandshakeTimeout:   10 * time.Second,
 		ResponseHeaderTimeout: requestTimeout,
 		IdleConnTimeout:       90 * time.Second,
 		ForceAttemptHTTP2:     true,
 	}
 	return &Edge{
-		gateway: u.String(), routes: routes, run: o.Run, token: o.Token, ca: ca, log: log,
+		session: o.Session, gateway: u.String(), run: o.Run, hosts: maps.Clone(o.Hosts), token: o.Token, ca: ca, log: log,
 		client: &http.Client{
 			Transport: &workloadclient.Transport{Key: o.Key, Token: o.Token, Base: base},
 			Timeout:   requestTimeout,
@@ -161,6 +173,46 @@ func New(o Options) (*Edge, error) {
 	}, nil
 }
 
+// gatewayTLS verifies an HTTPS gateway against the system roots, or, with
+// a pin, against the pinned CA in the chain it presents.
+func gatewayTLS(pin string) (*tls.Config, error) {
+	c := &tls.Config{MinVersion: tls.VersionTLS12}
+	if pin == "" {
+		return c, nil
+	}
+	want, ok := strings.CutPrefix(pin, "sha256:")
+	if b, err := hex.DecodeString(want); !ok || err != nil || len(b) != sha256.Size {
+		return nil, fmt.Errorf("edge: gateway CA pin %q is not sha256:<hex>", pin)
+	}
+	// The pin replaces the system roots: VerifyConnection checks the chain.
+	c.InsecureSkipVerify = true //nolint:gosec // G402: VerifyConnection verifies the chain against the pinned CA
+	c.VerifyConnection = func(cs tls.ConnectionState) error {
+		if len(cs.PeerCertificates) == 0 {
+			return errors.New("edge: the gateway presented no certificate")
+		}
+		// The pinned certificate may be any in the chain the gateway
+		// presents, its leaf included (a self-signed gateway).
+		roots, inter := x509.NewCertPool(), x509.NewCertPool()
+		var pinned bool
+		for i, cert := range cs.PeerCertificates {
+			sum := sha256.Sum256(cert.Raw)
+			switch {
+			case hex.EncodeToString(sum[:]) == want:
+				roots.AddCert(cert)
+				pinned = true
+			case i > 0:
+				inter.AddCert(cert)
+			}
+		}
+		if !pinned {
+			return errors.New("edge: the gateway's chain lacks the pinned CA")
+		}
+		_, err := cs.PeerCertificates[0].Verify(x509.VerifyOptions{Roots: roots, Intermediates: inter, DNSName: cs.ServerName})
+		return err
+	}
+	return c, nil
+}
+
 // CACertificate is the session CA's certificate (PEM), which the agent
 // trusts; its key never leaves the edge (HR-213).
 func (e *Edge) CACertificate() []byte { return e.ca.pem }
@@ -169,40 +221,39 @@ func (e *Edge) CACertificate() []byte { return e.ca.pem }
 // session's evidence.
 func (e *Edge) CAFingerprint() string { return e.ca.fingerprint }
 
-// Refused counts the requests the edge refused.
-func (e *Edge) Refused() int64 { return e.refused.Load() }
+// Refused counts the requests the edge refused, Stripped the credentials
+// it removed from requests.
+func (e *Edge) Refused() int64  { return e.refused.Load() }
+func (e *Edge) Stripped() int64 { return e.stripped.Load() }
 
-// ServeHTTP serves the agent's proxy requests: CONNECT, or a request in
-// absolute form for plain HTTP.
+// ServeHTTP serves the agent's proxy requests. Only a CONNECT to port 443
+// of an agent host is served; everything else is refused.
 func (e *Edge) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if r.Method == http.MethodConnect {
-		e.connect(w, r)
+	if r.Method != http.MethodConnect {
+		dest := r.Host
+		if r.URL.IsAbs() {
+			dest = r.URL.Host
+		}
+		e.refuse(w, r, dest, "plain_http_refused")
 		return
 	}
-	if !r.URL.IsAbs() || r.URL.Scheme != "http" {
-		e.refuse(w, r, r.Host, http.StatusBadRequest, "not_a_proxy_request")
-		return
-	}
-	host, conn, ok := e.route(r.URL.Host, "80")
+	host, conn, ok := e.route(r.Host)
 	if !ok {
-		e.refuse(w, r, r.URL.Host, http.StatusForbidden, "unmapped_destination")
+		e.refuse(w, r, r.Host, "unmapped_destination")
 		return
 	}
-	e.forward(w, r, host, conn)
+	e.tunnel(w, r, host, conn)
 }
 
-// route returns the host and connection of an authority on the scheme's
-// default port, which is the only one mapped.
-func (e *Edge) route(authority, port string) (host, conn string, ok bool) {
+// route returns the host and connection of a CONNECT authority, which must
+// be an agent host on port 443.
+func (e *Edge) route(authority string) (host, conn string, ok bool) {
 	h, p, err := net.SplitHostPort(authority)
-	if err != nil {
-		h, p = authority, port
+	if err != nil || p != "443" {
+		return "", "", false
 	}
 	h = strings.ToLower(h)
-	if p != port {
-		return h, "", false
-	}
-	conn, ok = e.routes[h]
+	conn, ok = e.hosts[h]
 	return h, conn, ok
 }
 
@@ -213,14 +264,16 @@ type Refusal struct {
 	Error      string `json:"error"`
 }
 
-// HeaderRefusedBy marks the edge's own refusals, so that a probe tells a
-// request that never left the sandbox from the gateway's answer.
-const HeaderRefusedBy = "PC-Refused-By"
+// refuse answers 403 and records a refused request (HR-214): its method
+// and destination, which the session reports as an observed direct_api
+// route.
+func (e *Edge) refuse(w http.ResponseWriter, r *http.Request, dest, code string) {
+	e.answer(w, r, dest, http.StatusForbidden, code)
+}
 
-// refuse answers and records a refused request (HR-214).
-func (e *Edge) refuse(w http.ResponseWriter, r *http.Request, dest string, status int, code string) {
+func (e *Edge) answer(w http.ResponseWriter, r *http.Request, dest string, status int, code string) {
 	e.refused.Add(1)
-	e.log.WarnContext(r.Context(), "edge.refused", "method", r.Method, "destination", dest, "code", code)
+	e.log.WarnContext(r.Context(), "edge.refused", "method", r.Method, "destination", bounded(dest), "code", code)
 	w.Header().Set(HeaderRefusedBy, "edge")
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")
@@ -228,17 +281,19 @@ func (e *Edge) refuse(w http.ResponseWriter, r *http.Request, dest string, statu
 	_ = json.MarshalWrite(w, Refusal{ErrorClass: "CANNOT_AUTHORIZE", Error: code})
 }
 
-// connect intercepts a CONNECT to a mapped host with a certificate from the
-// session CA and serves the HTTP/1.1 requests inside it.
-func (e *Edge) connect(w http.ResponseWriter, r *http.Request) {
-	host, conn, ok := e.route(r.Host, "443")
-	if !ok {
-		e.refuse(w, r, r.Host, http.StatusForbidden, "unmapped_destination")
-		return
+func bounded(s string) string {
+	if len(s) > 256 {
+		return s[:256]
 	}
+	return strings.ToValidUTF8(s, "?")
+}
+
+// tunnel intercepts a CONNECT to an agent host with a certificate from the
+// session CA and serves the HTTP/1.1 requests inside it.
+func (e *Edge) tunnel(w http.ResponseWriter, r *http.Request, host, conn string) {
 	hj, ok := w.(http.Hijacker)
 	if !ok {
-		e.refuse(w, r, r.Host, http.StatusInternalServerError, "no_hijack")
+		e.answer(w, r, r.Host, http.StatusInternalServerError, "no_hijack")
 		return
 	}
 	raw, rw, err := hj.Hijack()
@@ -267,11 +322,14 @@ func (e *Edge) connect(w http.ResponseWriter, r *http.Request) {
 	})
 	srv := &http.Server{
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, in *http.Request) {
-			if h, _, ok := e.route(in.Host, "443"); !ok || h != host {
-				e.refuse(w, in, in.Host, http.StatusMisdirectedRequest, "host_differs_from_connect")
-				return
+			switch h, _, err := net.SplitHostPort(in.Host); {
+			case !strings.EqualFold(in.Host, host) && (err != nil || !strings.EqualFold(h, host)):
+				e.answer(w, in, in.Host, http.StatusMisdirectedRequest, "host_differs_from_connect")
+			case in.Header.Get("Upgrade") != "" || strings.Contains(strings.ToLower(in.Header.Get("Connection")), "upgrade"):
+				e.refuse(w, in, host, "upgrade_refused")
+			default:
+				e.forward(w, in, host, conn)
 			}
-			e.forward(w, in, host, conn)
 		}),
 		ReadHeaderTimeout: 10 * time.Second,
 		IdleTimeout:       idleTimeout,
@@ -282,17 +340,19 @@ func (e *Edge) connect(w http.ResponseWriter, r *http.Request) {
 }
 
 // forward sends one request to the gateway's face for its connection and
-// answers with the gateway's answer. Only the method, the path and query,
-// the body and its Content-Type go on: the agent's own headers, its
-// Authorization above all, never leave the sandbox.
+// answers with the gateway's answer, never retrying on its own. Only the
+// method, the path and query, the body, Content-Type and Accept go on:
+// credentials, cookies, proxy and forwarding headers never leave the
+// sandbox, and each credential stripped is reported.
 func (e *Edge) forward(w http.ResponseWriter, r *http.Request, host, conn string) {
+	e.strip(r, host)
 	body, err := io.ReadAll(io.LimitReader(r.Body, MaxBody+1))
 	if err != nil || len(body) > MaxBody {
-		e.refuse(w, r, host, http.StatusRequestEntityTooLarge, "body_too_large")
+		e.answer(w, r, host, http.StatusRequestEntityTooLarge, "body_too_large")
 		return
 	}
 	if e.token() == "" {
-		e.refuse(w, r, host, http.StatusServiceUnavailable, "edge_has_no_workload_token")
+		e.answer(w, r, host, http.StatusServiceUnavailable, "edge_has_no_workload_token")
 		return
 	}
 	target := e.gateway + "/" + url.PathEscape(conn) + r.URL.EscapedPath()
@@ -303,28 +363,30 @@ func (e *Edge) forward(w http.ResponseWriter, r *http.Request, host, conn string
 	defer cancel()
 	out, err := http.NewRequestWithContext(ctx, r.Method, target, bytes.NewReader(body)) //nolint:gosec // G704: scheme and host are the configured gateway's; the agent supplies only the path and query
 	if err != nil {
-		e.refuse(w, r, host, http.StatusBadRequest, "invalid_request")
+		e.answer(w, r, host, http.StatusBadRequest, "invalid_request")
 		return
 	}
-	if ct := r.Header.Get("Content-Type"); ct != "" {
-		out.Header.Set("Content-Type", ct)
+	for _, h := range []string{"Content-Type", "Accept"} {
+		if v := r.Header.Get(h); v != "" {
+			out.Header.Set(h, v)
+		}
 	}
 	action := ids.NewV7().String()
-	if a, err := ids.ParseUUID(r.Header.Get(headerActionID)); err == nil {
-		action = a.String() // the agent's own retry keeps its action
-	}
 	out.Header.Set(headerRunID, e.run)
-	out.Header.Set(headerActionID, action)
+	out.Header.Set(headerAction, action)
+	if e.session != "" {
+		out.Header.Set(headerSession, e.session)
+	}
 	res, err := e.client.Do(out) //nolint:gosec // G704: only the configured gateway (see above)
 	if err != nil {
 		e.log.WarnContext(r.Context(), "edge.gateway_unreachable", "connection", conn, "error", err.Error())
-		e.refuse(w, r, host, http.StatusBadGateway, "gateway_unreachable")
+		e.answer(w, r, host, http.StatusBadGateway, "gateway_unreachable")
 		return
 	}
 	defer func() { _ = res.Body.Close() }()
 	b, err := io.ReadAll(io.LimitReader(res.Body, maxResponse+1))
 	if err != nil || len(b) > maxResponse {
-		e.refuse(w, r, host, http.StatusBadGateway, "gateway_answer_too_large")
+		e.answer(w, r, host, http.StatusBadGateway, "gateway_answer_too_large")
 		return
 	}
 	for k, vs := range res.Header {
@@ -335,6 +397,48 @@ func (e *Edge) forward(w http.ResponseWriter, r *http.Request, host, conn string
 	e.log.InfoContext(r.Context(), "edge.forwarded", "method", r.Method, "connection", conn, "action", action, "status", res.StatusCode)
 	w.WriteHeader(res.StatusCode)
 	_, _ = w.Write(b)
+}
+
+// strip reports every credential header of a request: its name, kind and
+// a SHA-256 prefix, never the value. None of them is forwarded anyway.
+func (e *Edge) strip(r *http.Request, host string) {
+	for _, h := range credentialHeaders {
+		for _, v := range r.Header.Values(h) {
+			e.stripped.Add(1)
+			sum := sha256.Sum256([]byte(v))
+			e.log.WarnContext(r.Context(), "edge.credential_stripped", "header", h, "kind", credentialKind(h, v),
+				"sha256_prefix", hex.EncodeToString(sum[:6]), "destination", host)
+		}
+	}
+}
+
+// credentialKind names what a credential looks like, from its scheme and
+// well-known prefixes.
+func credentialKind(header, v string) string {
+	scheme, token, found := strings.Cut(strings.TrimSpace(v), " ")
+	if !found {
+		scheme, token = "", scheme
+	}
+	for _, p := range []struct{ prefix, kind string }{
+		{"github_pat_", "github_pat"},
+		{"ghp_", "github_pat"},
+		{"gho_", "github_oauth"},
+		{"ghu_", "github_user"},
+		{"ghs_", "github_installation"},
+		{"ghr_", "github_refresh"},
+		{"glpat-", "gitlab_pat"},
+		{"sk_live_", "stripe_live"},
+		{"xoxb-", "slack_bot"},
+		{"AKIA", "aws_access_key"},
+	} {
+		if strings.HasPrefix(token, p.prefix) {
+			return p.kind
+		}
+	}
+	if scheme != "" {
+		return strings.ToLower(header) + ":" + strings.ToLower(scheme)
+	}
+	return strings.ToLower(header)
 }
 
 func validHost(h string) bool {

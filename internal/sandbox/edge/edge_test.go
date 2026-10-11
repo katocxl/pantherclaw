@@ -13,6 +13,7 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json/v2"
 	"encoding/pem"
 	"io"
@@ -21,6 +22,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -53,6 +55,8 @@ func (r *rig) requests() []seen {
 	return slices.Clone(r.got)
 }
 
+var hosts = map[string]string{"api.github.com": "github", "payments.example": "payments"}
+
 // newRig starts a fake gateway, which answers every request with a PC-*
 // header and an internal one, and an edge in front of it.
 func newRig(t *testing.T, token string) *rig {
@@ -73,8 +77,7 @@ func newRig(t *testing.T, token string) *rig {
 	r.gateway = gw.URL
 	_, key, _ := ed25519.GenerateKey(rand.Reader)
 	e, err := New(Options{
-		GatewayURL: gw.URL + "/", Routes: []Route{{Host: "api.github.com", Connection: "github"}, {Host: "payments.example", Connection: "payments"}},
-		Run: r.run, Key: key, Token: func() string { return token },
+		Session: "0f3c", GatewayURL: gw.URL + "/", Hosts: hosts, Run: r.run, Key: key, Token: func() string { return token },
 		Log: pclog.New(r.log, pclog.Options{}),
 	})
 	if err != nil {
@@ -116,20 +119,22 @@ func claims(t *testing.T, proof string) map[string]any {
 
 func TestHR213_TheEdgeSignsMappedRequestsForTheGateway(t *testing.T) {
 	r := newRig(t, "workload-token")
-	action := ids.NewV7().String()
+	agentAction := ids.NewV7().String()
 	req, _ := http.NewRequestWithContext(t.Context(), http.MethodPut, "https://api.github.com/repos/acme/app/pulls/7/merge?x=1", strings.NewReader(`{"sha":"abc"}`))
-	req.Header.Set("Authorization", "token ghp_planted")
+	req.Header.Set("Authorization", "token ghp_planted0123456789")
+	req.Header.Set("Cookie", "session=1")
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Agent-Header", "1")
-	req.Header.Set(headerActionID, action)
+	req.Header.Set("Accept", "application/vnd.github+json")
+	req.Header.Set("X-Forwarded-For", "10.0.0.1")
+	req.Header.Set(headerAction, agentAction)
 	res, err := r.agent().Do(req)
 	if err != nil {
 		t.Fatal(err)
 	}
 	b, _ := io.ReadAll(res.Body)
 	_ = res.Body.Close()
-	if res.StatusCode != http.StatusCreated || string(b) != `{"ok":true}` || res.Header.Get("PC-Decision") != "ALLOW" || res.Header.Get("X-Gateway-Internal") != "" ||
-		res.Header.Get(HeaderRefusedBy) != "" {
+	if res.StatusCode != http.StatusCreated || string(b) != `{"ok":true}` || res.Header.Get("PC-Decision") != "ALLOW" ||
+		res.Header.Get("X-Gateway-Internal") != "" || res.Header.Get(HeaderRefusedBy) != "" {
 		t.Fatalf("agent got %d %s %v", res.StatusCode, b, res.Header)
 	}
 	got := r.requests()
@@ -140,42 +145,42 @@ func TestHR213_TheEdgeSignsMappedRequestsForTheGateway(t *testing.T) {
 	if g.method != http.MethodPut || g.path != "/github/repos/acme/app/pulls/7/merge" || g.query != "x=1" || string(g.body) != `{"sha":"abc"}` {
 		t.Fatalf("gateway got %s %s?%s %s", g.method, g.path, g.query, g.body)
 	}
-	if g.header.Get("Authorization") != "PAP workload-token" || g.header.Get(headerRunID) != r.run || g.header.Get(headerActionID) != action ||
-		g.header.Get("X-Agent-Header") != "" || g.header.Get("Content-Type") != "application/json" {
+	if g.header.Get("Authorization") != "PAP workload-token" || g.header.Get(headerRunID) != r.run || g.header.Get(headerSession) != "0f3c" ||
+		g.header.Get("Cookie") != "" || g.header.Get("X-Forwarded-For") != "" ||
+		g.header.Get("Content-Type") != "application/json" || g.header.Get("Accept") != "application/vnd.github+json" {
 		t.Fatalf("gateway headers %v", g.header)
+	}
+	// A fresh action id per request, whatever the agent sent.
+	if a := g.header.Get(headerAction); a == agentAction || a == "" {
+		t.Fatalf("action id %q (the agent sent %q)", a, agentAction)
 	}
 	c := claims(t, g.header.Get("PAP-Proof"))
 	bh := sha256.Sum256(g.body)
 	if c["htm"] != http.MethodPut || c["htu"] != r.gateway+"/github/repos/acme/app/pulls/7/merge" || c["bh"] != base64.RawURLEncoding.EncodeToString(bh[:]) {
 		t.Fatalf("proof claims %v", c)
 	}
-
-	// Plain HTTP to a mapped host takes the same path; the edge mints the
-	// action id when the agent sends none.
-	res, err = r.agent().Post("http://payments.example/v1/refunds", "application/json", strings.NewReader(`{"amount":"30.00"}`))
-	if err != nil {
-		t.Fatal(err)
-	}
-	_ = res.Body.Close()
-	got = r.requests()
-	if len(got) != 2 || got[1].path != "/payments/v1/refunds" || string(got[1].body) != `{"amount":"30.00"}` {
-		t.Fatalf("gateway got %+v", got)
-	}
-	if _, err := ids.ParseUUID(got[1].header.Get(headerActionID)); err != nil {
-		t.Fatalf("minted action id %q", got[1].header.Get(headerActionID))
+	// The found token and the cookie are reported, never logged.
+	logged := r.log.String()
+	if r.edge.Stripped() != 2 || strings.Count(logged, `"event":"edge.credential_stripped"`) != 2 ||
+		!strings.Contains(logged, `"kind":"github_pat"`) || strings.Contains(logged, "ghp_planted") || strings.Contains(logged, "session=1") {
+		t.Fatalf("stripped %d:\n%s", r.edge.Stripped(), logged)
 	}
 }
 
-func TestHR214_UnmappedDestinationsAreRefusedAndRecorded(t *testing.T) {
+func TestHR214_UnmappedDestinationsAndPlainHTTPAreRefusedAndRecorded(t *testing.T) {
 	r := newRig(t, "workload-token")
-	for _, dest := range []string{"https://github.com/acme/app.git/info/refs", "https://api.github.com:8443/x", "https://140.82.112.6/x", "https://API.GITHUB.COM.evil.example/x"} {
+	for _, dest := range []string{
+		"https://github.com/acme/app.git/info/refs", "https://api.github.com:8443/x", "https://140.82.112.6/x",
+		"https://api.github.com.evil.example/x",
+	} {
 		res, err := r.agent().Get(dest)
 		if err == nil {
 			_ = res.Body.Close()
 			t.Errorf("%s: the tunnel opened (%d)", dest, res.StatusCode)
 		}
 	}
-	for _, dest := range []string{"http://evil.example/exfil", "http://api.github.com:8080/x", "http://169.254.169.254/latest/meta-data"} {
+	// Plain HTTP is refused, a mapped host included.
+	for _, dest := range []string{"http://api.github.com/repos/acme/app", "http://evil.example/exfil", "http://169.254.169.254/latest/meta-data"} {
 		res, err := r.agent().Get(dest)
 		if err != nil {
 			t.Fatal(err)
@@ -183,31 +188,18 @@ func TestHR214_UnmappedDestinationsAreRefusedAndRecorded(t *testing.T) {
 		var ref Refusal
 		_ = json.UnmarshalRead(res.Body, &ref)
 		_ = res.Body.Close()
-		if res.StatusCode != http.StatusForbidden || ref.Error != "unmapped_destination" || res.Header.Get(HeaderRefusedBy) != "edge" {
+		if res.StatusCode != http.StatusForbidden || ref.Error != "plain_http_refused" || res.Header.Get(HeaderRefusedBy) != "edge" {
 			t.Errorf("%s: %d %+v", dest, res.StatusCode, ref)
 		}
-	}
-	// A request to the edge itself is not a proxy request.
-	req, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, r.proxy.String()+"/", nil)
-	res, err := http.DefaultTransport.RoundTrip(req)
-	if err != nil {
-		t.Fatal(err)
-	}
-	_ = res.Body.Close()
-	if res.StatusCode != http.StatusBadRequest {
-		t.Errorf("origin-form request: %d", res.StatusCode)
 	}
 	if n := len(r.requests()); n != 0 {
 		t.Fatalf("the gateway got %d requests", n)
 	}
-	if got := r.edge.Refused(); got != 8 {
-		t.Errorf("refused %d, want 8", got)
+	if got := r.edge.Refused(); got != 7 {
+		t.Errorf("refused %d, want 7", got)
 	}
-	if n := strings.Count(r.log.String(), `"event":"edge.refused"`); n != 8 {
+	if n := strings.Count(r.log.String(), `"event":"edge.refused"`); n != 7 || !strings.Contains(r.log.String(), `"destination":"github.com:443"`) {
 		t.Errorf("recorded %d refusals:\n%s", n, r.log)
-	}
-	if !strings.Contains(r.log.String(), `"destination":"github.com:443"`) {
-		t.Errorf("the record lacks the destination:\n%s", r.log)
 	}
 }
 
@@ -232,27 +224,62 @@ func tunnel(t *testing.T, r *rig, authority string) net.Conn {
 	return c
 }
 
-func TestHR214_ATunnelServesOnlyItsOwnHost(t *testing.T) {
-	r := newRig(t, "workload-token")
+// inTunnel sends one raw request through a tunnel to api.github.com.
+func inTunnel(t *testing.T, r *rig, request string) *http.Response {
+	t.Helper()
 	roots := x509.NewCertPool()
 	roots.AppendCertsFromPEM(r.edge.CACertificate())
-
-	// Another server name in the handshake: no certificate.
-	tc := tls.Client(tunnel(t, r, "api.github.com:443"), &tls.Config{ServerName: "payments.example", RootCAs: roots, MinVersion: tls.VersionTLS12})
-	if err := tc.HandshakeContext(t.Context()); err == nil {
-		t.Fatal("the edge served payments.example inside a tunnel to api.github.com")
-	}
-
-	// Another Host inside the tunnel: refused before the gateway.
-	tc = tls.Client(tunnel(t, r, "api.github.com:443"), &tls.Config{ServerName: "api.github.com", RootCAs: roots, MinVersion: tls.VersionTLS12})
-	_, _ = io.WriteString(tc, "GET /v1/refunds HTTP/1.1\r\nHost: payments.example\r\n\r\n")
+	tc := tls.Client(tunnel(t, r, "api.github.com:443"), &tls.Config{ServerName: "api.github.com", RootCAs: roots, MinVersion: tls.VersionTLS12})
+	_, _ = io.WriteString(tc, request)
 	res, err := http.ReadResponse(bufio.NewReader(tc), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	_ = res.Body.Close()
-	if res.StatusCode != http.StatusMisdirectedRequest || len(r.requests()) != 0 {
-		t.Fatalf("Host differing from the CONNECT: %d, gateway got %d", res.StatusCode, len(r.requests()))
+	return res
+}
+
+func TestHR214_ATunnelServesOnlyItsOwnHostAndNoUpgrade(t *testing.T) {
+	r := newRig(t, "workload-token")
+	roots := x509.NewCertPool()
+	roots.AppendCertsFromPEM(r.edge.CACertificate())
+	tc := tls.Client(tunnel(t, r, "api.github.com:443"), &tls.Config{ServerName: "payments.example", RootCAs: roots, MinVersion: tls.VersionTLS12})
+	if err := tc.HandshakeContext(t.Context()); err == nil {
+		t.Fatal("the edge served payments.example inside a tunnel to api.github.com")
+	}
+	if res := inTunnel(t, r, "GET /v1/refunds HTTP/1.1\r\nHost: payments.example\r\n\r\n"); res.StatusCode != http.StatusMisdirectedRequest {
+		t.Fatalf("Host differing from the CONNECT: %d", res.StatusCode)
+	}
+	if res := inTunnel(t, r, "GET /x HTTP/1.1\r\nHost: api.github.com\r\nConnection: Upgrade\r\nUpgrade: websocket\r\n\r\n"); res.StatusCode != http.StatusForbidden {
+		t.Fatalf("WebSocket upgrade: %d", res.StatusCode)
+	}
+	if res := inTunnel(t, r, "GET /x HTTP/1.1\r\nHost: api.github.com:443\r\n\r\n"); res.StatusCode != http.StatusCreated {
+		t.Fatalf("Host with its port: %d", res.StatusCode)
+	}
+	if n := len(r.requests()); n != 1 {
+		t.Fatalf("the gateway got %d requests", n)
+	}
+}
+
+// TestHR213_WithTheGatewayDownNothingLeaves: the edge dials only the
+// gateway; a mapped request then fails and reaches no target.
+func TestHR213_WithTheGatewayDownNothingLeaves(t *testing.T) {
+	target := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		t.Error("the target was reached")
+	}))
+	defer target.Close()
+	_, key, _ := ed25519.GenerateKey(rand.Reader)
+	e, err := New(Options{
+		GatewayURL: "http://127.0.0.1:1", GatewayAddr: "127.0.0.1:1", Hosts: map[string]string{"payments.example": "payments"},
+		Run: ids.NewV7().String(), Key: key, Token: func() string { return "t" },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	w := httptest.NewRecorder()
+	e.forward(w, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/v1/refunds/re_1", nil), "payments.example", "payments")
+	if w.Code != http.StatusBadGateway || w.Header().Get(HeaderRefusedBy) != "edge" {
+		t.Fatalf("gateway down: %d", w.Code)
 	}
 }
 
@@ -268,7 +295,7 @@ func TestHR213_TheSessionCAIsKeylessOnDiskAndNameConstrained(t *testing.T) {
 		blocks = append(blocks, b.Type)
 	}
 	if !slices.Equal(blocks, []string{"CERTIFICATE"}) {
-		t.Fatalf("CA file blocks %v", blocks)
+		t.Fatalf("CA blocks %v", blocks)
 	}
 	ca := r.edge.ca.cert
 	if !ca.IsCA || !ca.MaxPathLenZero || !ca.PermittedDNSDomainsCritical || len(ca.ExcludedIPRanges) != 2 ||
@@ -306,55 +333,106 @@ func TestHR213_TheSessionCAIsKeylessOnDiskAndNameConstrained(t *testing.T) {
 	}
 }
 
-func TestTheEdgeRefusesWhatItCannotSend(t *testing.T) {
-	r := newRig(t, "")
-	res, err := r.agent().Post("http://payments.example/v1/refunds", "application/json", strings.NewReader(`{}`))
+// TestTheGatewayCAPinIsEnforced: an HTTPS gateway is trusted through its
+// pinned CA only.
+func TestTheGatewayCAPinIsEnforced(t *testing.T) {
+	gw := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusTeapot) }))
+	defer gw.Close()
+	// httptest's certificate is self-signed: the pin names the only
+	// certificate in the chain.
+	ca := gw.TLS.Certificates[0]
+	issuer, err := x509.ParseCertificate(ca.Certificate[len(ca.Certificate)-1])
 	if err != nil {
 		t.Fatal(err)
 	}
-	_ = res.Body.Close()
-	if res.StatusCode != http.StatusServiceUnavailable {
-		t.Errorf("no workload token: %d", res.StatusCode)
+	sum := sha256.Sum256(issuer.Raw)
+	good := "sha256:" + hex.EncodeToString(sum[:])
+	for pin, want := range map[string]int{good: http.StatusTeapot, "sha256:" + strings.Repeat("0", 64): http.StatusBadGateway} {
+		_, key, _ := ed25519.GenerateKey(rand.Reader)
+		e, err := New(Options{
+			GatewayURL: gw.URL, GatewayCAPin: pin, Hosts: map[string]string{"payments.example": "payments"},
+			Run: ids.NewV7().String(), Key: key, Token: func() string { return "t" },
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		w := httptest.NewRecorder()
+		e.forward(w, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/v1/x", nil), "payments.example", "payments")
+		if w.Code != want {
+			t.Errorf("pin %s…: %d, want %d", pin[:12], w.Code, want)
+		}
 	}
-
-	r = newRig(t, "workload-token")
-	res, err = r.agent().Post("http://payments.example/v1/refunds", "application/json", bytes.NewReader(make([]byte, MaxBody+1)))
-	if err != nil {
-		t.Fatal(err)
-	}
-	_ = res.Body.Close()
-	if res.StatusCode != http.StatusRequestEntityTooLarge || len(r.requests()) != 0 {
-		t.Errorf("large body: %d", res.StatusCode)
-	}
-
-	_, key, _ := ed25519.GenerateKey(rand.Reader)
-	down, err := New(Options{
-		GatewayURL: "http://127.0.0.1:1", Routes: []Route{{Host: "payments.example", Connection: "payments"}},
-		Run: ids.NewV7().String(), Key: key, Token: func() string { return "t" },
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	w := httptest.NewRecorder()
-	down.ServeHTTP(w, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "http://payments.example/v1/refunds/re_1", nil))
-	if w.Code != http.StatusBadGateway {
-		t.Errorf("gateway down: %d", w.Code)
+	if _, err := gatewayTLS("md5:abc"); err == nil {
+		t.Fatal("a malformed pin was accepted")
 	}
 }
 
-func TestNewRefusesBadRoutes(t *testing.T) {
+func TestTheEdgeRefusesWhatItCannotSend(t *testing.T) {
+	r := newRig(t, "")
+	if res := inTunnel(t, r, "POST /x HTTP/1.1\r\nHost: api.github.com\r\nContent-Length: 2\r\n\r\n{}"); res.StatusCode != http.StatusServiceUnavailable {
+		t.Errorf("no workload token: %d", res.StatusCode)
+	}
+	r = newRig(t, "workload-token")
+	big := strings.Repeat("a", MaxBody+1)
+	res := inTunnel(t, r, "POST /x HTTP/1.1\r\nHost: api.github.com\r\nContent-Length: "+strconv.Itoa(len(big))+"\r\n\r\n"+big)
+	if res.StatusCode != http.StatusRequestEntityTooLarge || len(r.requests()) != 0 {
+		t.Errorf("large body: %d", res.StatusCode)
+	}
+}
+
+func TestNewRefusesBadHosts(t *testing.T) {
 	_, key, _ := ed25519.GenerateKey(rand.Reader)
-	for name, routes := range map[string][]Route{
+	for name, h := range map[string]map[string]string{
 		"none":       nil,
-		"ip":         {{Host: "140.82.112.6", Connection: "github"}},
-		"uppercase":  {{Host: "API.github.com", Connection: "github"}},
-		"port":       {{Host: "api.github.com:443", Connection: "github"}},
-		"wildcard":   {{Host: "*.github.com", Connection: "github"}},
-		"twice":      {{Host: "api.github.com", Connection: "a"}, {Host: "api.github.com", Connection: "b"}},
-		"connection": {{Host: "api.github.com"}},
+		"ip":         {"140.82.112.6": "github"},
+		"uppercase":  {"API.github.com": "github"},
+		"port":       {"api.github.com:443": "github"},
+		"wildcard":   {"*.github.com": "github"},
+		"connection": {"api.github.com": ""},
+		"path":       {"api.github.com": "github/../x"},
 	} {
-		if _, err := New(Options{GatewayURL: "http://127.0.0.1:8090", Routes: routes, Run: ids.NewV7().String(), Key: key, Token: func() string { return "t" }}); err == nil {
+		if _, err := New(Options{GatewayURL: "http://127.0.0.1:8090", Hosts: h, Run: ids.NewV7().String(), Key: key, Token: func() string { return "t" }}); err == nil {
 			t.Errorf("%s: accepted", name)
 		}
 	}
+}
+
+func TestCredentialKinds(t *testing.T) {
+	for v, want := range map[[2]string]string{
+		{"Authorization", "token ghp_x"}:          "github_pat",
+		{"Authorization", "Bearer github_pat_11"}: "github_pat",
+		{"Authorization", "Basic eDp5"}:           "authorization:basic",
+		{"X-Api-Key", "sk_live_1"}:                "stripe_live",
+		{"Cookie", "a=b"}:                         "cookie",
+	} {
+		if got := credentialKind(v[0], v[1]); got != want {
+			t.Errorf("%v: %q, want %q", v, got, want)
+		}
+	}
+}
+
+// FuzzEdgeConnect: whatever authority a CONNECT names, the edge routes only
+// an agent host on port 443, to that host's connection.
+func FuzzEdgeConnect(f *testing.F) {
+	for _, s := range []string{
+		"api.github.com:443", "API.GITHUB.COM:443", "api.github.com:8443", "api.github.com", "[::1]:443",
+		"140.82.112.6:443", "api.github.com.:443", "payments.example:0443", "api.github.com:443:443", "%61pi.github.com:443", "",
+	} {
+		f.Add(s)
+	}
+	_, key, _ := ed25519.GenerateKey(rand.Reader)
+	e, err := New(Options{GatewayURL: "http://127.0.0.1:1", Hosts: hosts, Run: ids.NewV7().String(), Key: key, Token: func() string { return "t" }})
+	if err != nil {
+		f.Fatal(err)
+	}
+	f.Fuzz(func(t *testing.T, authority string) {
+		host, conn, ok := e.route(authority)
+		if !ok {
+			return
+		}
+		h, p, err := net.SplitHostPort(authority)
+		if err != nil || p != "443" || !strings.EqualFold(h, host) || hosts[host] != conn || conn == "" {
+			t.Fatalf("%q routed to %q → %q", authority, host, conn)
+		}
+	})
 }

@@ -35,7 +35,7 @@ func TestF099_ARawCallThroughTheSandboxEdgeIsTheMCPAction(t *testing.T) {
 
 	_, key, _ := ed25519.GenerateKey(rand.Reader)
 	e, err := edge.New(edge.Options{
-		GatewayURL: h.url, Routes: []edge.Route{{Host: "payments.example", Connection: "payments"}},
+		GatewayURL: h.url, Hosts: map[string]string{"payments.example": "payments"},
 		Run: ids.NewV7().String(), Key: key, Token: testWorkloadToken,
 	})
 	if err != nil {
