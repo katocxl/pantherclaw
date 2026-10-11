@@ -185,7 +185,7 @@ func gatewayTLS(pin string) (*tls.Config, error) {
 		return nil, fmt.Errorf("edge: gateway CA pin %q is not sha256:<hex>", pin)
 	}
 	// The pin replaces the system roots: VerifyConnection checks the chain.
-	c.InsecureSkipVerify = true //nolint:gosec // G402: VerifyConnection verifies the chain against the pinned CA
+	c.InsecureSkipVerify = true
 	c.VerifyConnection = func(cs tls.ConnectionState) error {
 		if len(cs.PeerCertificates) == 0 {
 			return errors.New("edge: the gateway presented no certificate")
