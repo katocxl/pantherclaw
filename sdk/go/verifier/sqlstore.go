@@ -34,7 +34,7 @@ type SQLStore struct {
 // unknown dialect.
 func NewSQLStore(db *sql.DB, d Dialect) (*SQLStore, error) {
 	s := &SQLStore{DB: db, Dialect: d}
-	if _, err := s.statement(insertSQL); err != nil {
+	if err := s.check(); err != nil {
 		return nil, err
 	}
 	return s, nil
@@ -52,37 +52,36 @@ const Schema = "CREATE TABLE pap_action_tokens_seen (aud VARCHAR(128) NOT NULL, 
 // must outlive that by more than any clock difference.
 const PurgeGrace = MaxLifetime
 
-// The store's statements, by dialect.
-var (
-	insertSQL = map[Dialect]string{
-		PostgreSQL: "INSERT INTO pap_action_tokens_seen (aud, jti, expires_at) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING",
-		SQLite:     "INSERT INTO pap_action_tokens_seen (aud, jti, expires_at) VALUES (?, ?, ?) ON CONFLICT DO NOTHING",
-	}
-	purgeSQL = map[Dialect]string{
-		PostgreSQL: "DELETE FROM pap_action_tokens_seen WHERE expires_at < $1",
-		SQLite:     "DELETE FROM pap_action_tokens_seen WHERE expires_at < ?",
-	}
+// The store's statements, by dialect: constants, never built from input.
+const (
+	insertPostgreSQL = "INSERT INTO pap_action_tokens_seen (aud, jti, expires_at) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING"
+	insertSQLite     = "INSERT INTO pap_action_tokens_seen (aud, jti, expires_at) VALUES (?, ?, ?) ON CONFLICT DO NOTHING"
+	purgePostgreSQL  = "DELETE FROM pap_action_tokens_seen WHERE expires_at < $1"
+	purgeSQLite      = "DELETE FROM pap_action_tokens_seen WHERE expires_at < ?"
 )
 
 // Shared implements ReplayStore.
 func (*SQLStore) Shared() bool { return true }
 
-func (s *SQLStore) statement(m map[Dialect]string) (string, error) {
-	q, ok := m[s.Dialect]
+// check refuses a store without a database or a known dialect.
+func (s *SQLStore) check() error {
 	switch {
 	case s.DB == nil:
-		return "", errors.New("verifier: the SQL replay store has no database")
-	case !ok:
-		return "", errors.New("verifier: the SQL replay store has no known dialect")
+		return errors.New("verifier: the SQL replay store has no database")
+	case s.Dialect != PostgreSQL && s.Dialect != SQLite:
+		return errors.New("verifier: the SQL replay store has no known dialect")
 	}
-	return q, nil
+	return nil
 }
 
 // Use implements ReplayStore.
 func (s *SQLStore) Use(ctx context.Context, sp Spend) (bool, error) {
-	q, err := s.statement(insertSQL)
-	if err != nil {
+	if err := s.check(); err != nil {
 		return false, err
+	}
+	q := insertPostgreSQL
+	if s.Dialect == SQLite {
+		q = insertSQLite
 	}
 	res, err := s.DB.ExecContext(ctx, q, sp.Audience, sp.ID, sp.Until.Unix())
 	if err != nil {
@@ -98,9 +97,12 @@ func (s *SQLStore) Use(ctx context.Context, sp Spend) (bool, error) {
 // Purge deletes the rows whose keeping time ended more than PurgeGrace
 // before now; run it now and then.
 func (s *SQLStore) Purge(ctx context.Context, now time.Time) (int64, error) {
-	q, err := s.statement(purgeSQL)
-	if err != nil {
+	if err := s.check(); err != nil {
 		return 0, err
+	}
+	q := purgePostgreSQL
+	if s.Dialect == SQLite {
+		q = purgeSQLite
 	}
 	res, err := s.DB.ExecContext(ctx, q, now.Add(-PurgeGrace).Unix())
 	if err != nil {
