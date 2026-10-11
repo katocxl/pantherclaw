@@ -78,6 +78,7 @@ type PcAgentInstance struct {
 	CreatedAt         time.Time
 	UpdatedAt         time.Time
 	ExpiresAt         *time.Time
+	SandboxSessionID  *ids.UUID
 }
 
 type PcAnchor struct {
@@ -372,6 +373,7 @@ type PcConnection struct {
 	CreatedAt        time.Time
 	UpdatedBy        string
 	UpdatedAt        time.Time
+	AgentHosts       []string
 }
 
 type PcConnectionRoute struct {
@@ -1242,6 +1244,28 @@ type PcPolicyVersion struct {
 	PublishedAt *time.Time
 }
 
+type PcProbeNonce struct {
+	OrgID       ids.OrgID
+	ID          ids.UUID
+	SessionID   ids.UUID
+	Kind        string
+	NonceSha256 []byte
+	CreatedAt   time.Time
+	ExpiresAt   time.Time
+	UsedAt      *time.Time
+}
+
+type PcProbeRun struct {
+	OrgID        ids.OrgID
+	ID           ids.UUID
+	SessionID    ids.UUID
+	NonceID      ids.UUID
+	Kind         string
+	Report       string
+	ReportSha256 []byte
+	ReceivedAt   time.Time
+}
+
 type PcReconciliationTask struct {
 	OrgID             ids.OrgID
 	ID                ids.UUID
@@ -1334,6 +1358,35 @@ type PcRun struct {
 	CreatedAt          time.Time
 	ExpiresAt          time.Time
 	EndedAt            *time.Time
+}
+
+type PcSandboxSession struct {
+	OrgID             ids.OrgID
+	ID                ids.UUID
+	AgentID           ids.UUID
+	Launcher          string
+	EnrollmentTokenID ids.UUID
+	InstanceID        *ids.UUID
+	RunID             *ids.UUID
+	AgentImage        string
+	EdgeImage         string
+	ProbeImage        string
+	ConfigDigest      string
+	ProbeJkt          string
+	ProbePublicKey    []byte
+	EngineVersion     string
+	ApiVersion        string
+	Runtime           string
+	State             string
+	OpenedAt          time.Time
+	ExpiresAt         time.Time
+	EndedAt           *time.Time
+}
+
+type PcSandboxSessionConnection struct {
+	OrgID        ids.OrgID
+	SessionID    ids.UUID
+	ConnectionID ids.UUID
 }
 
 type PcServiceAccount struct {

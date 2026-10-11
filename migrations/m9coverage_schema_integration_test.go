@@ -57,7 +57,11 @@ func newM9cFixture(t *testing.T) m9cFixture {
 // closure inserts a closure and returns its id; the error is the insert's.
 func (f m9cFixture) closure(result string, negative bool, observedIn, expiresIn string) (string, error) {
 	id := m5ID()
-	return id, f.exec(m9cClosure, f.org, id, f.agent, f.connection, m5ID(), result, negative, m9cDigest, f.gateway,
+	session, err := f.sandboxSession()
+	if err != nil {
+		return id, err
+	}
+	return id, f.exec(m9cClosure, f.org, id, f.agent, f.connection, session, result, negative, m9cDigest, f.gateway,
 		f.version, observedIn, expiresIn)
 }
 

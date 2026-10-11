@@ -27,6 +27,8 @@ type fixture struct {
 	svc                                  *app.Service
 	org                                  ids.OrgID
 	user, agent, run, gateway, conn, pkg ids.UUID
+	// session is the sandbox session the closures come from (00090).
+	session ids.UUID
 }
 
 func newFixture(t *testing.T) *fixture {
@@ -34,10 +36,10 @@ func newFixture(t *testing.T) *fixture {
 	d := dbtest.New(t)
 	f := &fixture{
 		p: d.AppPool(t), org: ids.New[ids.Org](), user: ids.NewV7(), agent: ids.NewV7(), run: ids.NewV7(),
-		gateway: ids.NewV7(), conn: ids.NewV7(), pkg: ids.NewV7(),
+		gateway: ids.NewV7(), conn: ids.NewV7(), pkg: ids.NewV7(), session: ids.NewV7(),
 	}
 	f.svc = &app.Service{Pool: f.p, Freshness: domain.Freshness{EnforcedTTL: 24 * time.Hour, ReassessInterval: time.Minute}}
-	env, version := ids.NewV7(), ids.NewV7()
+	env, version, token := ids.NewV7(), ids.NewV7(), ids.NewV7()
 	for _, s := range []struct {
 		sql  string
 		args []any
@@ -59,6 +61,12 @@ func newFixture(t *testing.T) *fixture {
 			`INSERT INTO pc.package_pins (org_id, package_id, version_id, version, digest) VALUES ($1, $2, $3, '1.0.0', $4)`,
 			[]any{f.org, f.pkg, version, digest},
 		},
+		{`INSERT INTO pc.enrollment_tokens (org_id, id, agent_id, environment_id, token_hash, created_by, expires_at)
+			VALUES ($1, $2, $3, $4, sha256(convert_to($2::uuid::text, 'UTF8')), 'test', now() + interval '15 minutes')`, []any{f.org, token, f.agent, env}},
+		{`INSERT INTO pc.sandbox_sessions (org_id, id, agent_id, launcher, enrollment_token_id, agent_image, edge_image, probe_image,
+			config_digest, probe_jkt, probe_public_key, engine_version, api_version, runtime, expires_at) VALUES ($1, $2, $3, 'test', $4,
+			$5, $5, $5, $5, 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA', sha256(convert_to($2::uuid::text, 'UTF8')), '29.0.1', '1.51', 'runc',
+			now() + interval '1 hour')`, []any{f.org, f.session, f.agent, token, digest}},
 	} {
 		f.exec(t, s.sql, s.args...)
 	}
@@ -77,7 +85,7 @@ func (f *fixture) exec(t *testing.T, sql string, args ...any) {
 
 func (f *fixture) closure(probes []domain.ProbeResult, started time.Time) domain.Closure {
 	return domain.Closure{
-		Agent: f.agent, Connection: f.conn, SandboxSession: ids.NewV7(), SessionStartedAt: started,
+		Agent: f.agent, Connection: f.conn, SandboxSession: f.session, SessionStartedAt: started,
 		ObservedAt: started, Probes: probes, SigningKeyJKT: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
 		ServerNonce: "nonce-0123456789abcdef", Engine: domain.Engine{Version: "29.0.1", APIVersion: "1.51", Runtime: "runc"},
 		ImageDigests: []string{digest}, Gateway: f.gateway,

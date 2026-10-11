@@ -205,6 +205,7 @@ var catalog = []Permission{
 	PermEvidenceRead, PermEvidenceExport, PermEvidenceRetentionManage, PermEvidenceCaptureManage,
 	PermTransactionReconcile,
 	PermCoverageRead, PermCoverageManage, PermCoverageExclude,
+	PermSandboxRun,
 }
 
 // humanOnly permissions can never be exercised by a service account or an

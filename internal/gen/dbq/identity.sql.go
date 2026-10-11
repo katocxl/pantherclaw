@@ -19,7 +19,7 @@ const admitInstance = `-- name: AdmitInstance :one
 UPDATE pc.agent_instances
 SET state = 'ADMITTED', decided_by = $1, decided_at = now(), expires_at = NULL, updated_at = now()
 WHERE org_id = $2 AND id = $3 AND state = 'PENDING_ADMISSION' AND expires_at > now()
-RETURNING org_id, id, agent_id, jkt, public_jwk, state, enrolled_via, enrollment_token_id, issuer_revision_id, binding, att_level, attested_until, release_state, release_digest, needs_review, last_network, last_seen_at, decided_by, decided_at, revoke_reason, created_at, updated_at, expires_at
+RETURNING org_id, id, agent_id, jkt, public_jwk, state, enrolled_via, enrollment_token_id, issuer_revision_id, binding, att_level, attested_until, release_state, release_digest, needs_review, last_network, last_seen_at, decided_by, decided_at, revoke_reason, created_at, updated_at, expires_at, sandbox_session_id
 `
 
 // Admission (HR-094): only a pending instance whose admission deadline has
@@ -51,6 +51,7 @@ func (q *Queries) AdmitInstance(ctx context.Context, decidedBy *string, orgID id
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.ExpiresAt,
+		&i.SandboxSessionID,
 	)
 	return i, err
 }
@@ -58,7 +59,7 @@ func (q *Queries) AdmitInstance(ctx context.Context, decidedBy *string, orgID id
 const attestInstance = `-- name: AttestInstance :one
 UPDATE pc.agent_instances SET attested_until = $1, updated_at = now()
 WHERE org_id = $2 AND id = $3 AND state = 'ADMITTED' AND att_level = 2
-RETURNING org_id, id, agent_id, jkt, public_jwk, state, enrolled_via, enrollment_token_id, issuer_revision_id, binding, att_level, attested_until, release_state, release_digest, needs_review, last_network, last_seen_at, decided_by, decided_at, revoke_reason, created_at, updated_at, expires_at
+RETURNING org_id, id, agent_id, jkt, public_jwk, state, enrolled_via, enrollment_token_id, issuer_revision_id, binding, att_level, attested_until, release_state, release_digest, needs_review, last_network, last_seen_at, decided_by, decided_at, revoke_reason, created_at, updated_at, expires_at, sandbox_session_id
 `
 
 // Renews L2 until a fresh attestation expires (HR-143).
@@ -89,6 +90,7 @@ func (q *Queries) AttestInstance(ctx context.Context, attestedUntil *time.Time, 
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.ExpiresAt,
+		&i.SandboxSessionID,
 	)
 	return i, err
 }
@@ -98,7 +100,7 @@ UPDATE pc.agent_instances
 SET state = $1, decided_by = $2, decided_at = now(), revoke_reason = $3,
     updated_at = now()
 WHERE org_id = $4 AND id = $5 AND state = $6
-RETURNING org_id, id, agent_id, jkt, public_jwk, state, enrolled_via, enrollment_token_id, issuer_revision_id, binding, att_level, attested_until, release_state, release_digest, needs_review, last_network, last_seen_at, decided_by, decided_at, revoke_reason, created_at, updated_at, expires_at
+RETURNING org_id, id, agent_id, jkt, public_jwk, state, enrolled_via, enrollment_token_id, issuer_revision_id, binding, att_level, attested_until, release_state, release_digest, needs_review, last_network, last_seen_at, decided_by, decided_at, revoke_reason, created_at, updated_at, expires_at, sandbox_session_id
 `
 
 type CloseInstanceParams struct {
@@ -144,6 +146,7 @@ func (q *Queries) CloseInstance(ctx context.Context, arg CloseInstanceParams) (P
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.ExpiresAt,
+		&i.SandboxSessionID,
 	)
 	return i, err
 }
@@ -320,7 +323,7 @@ func (q *Queries) GetEnrollmentTokenByHash(ctx context.Context, orgID ids.OrgID,
 }
 
 const getInstance = `-- name: GetInstance :one
-SELECT org_id, id, agent_id, jkt, public_jwk, state, enrolled_via, enrollment_token_id, issuer_revision_id, binding, att_level, attested_until, release_state, release_digest, needs_review, last_network, last_seen_at, decided_by, decided_at, revoke_reason, created_at, updated_at, expires_at FROM pc.agent_instances WHERE org_id = $1 AND id = $2
+SELECT org_id, id, agent_id, jkt, public_jwk, state, enrolled_via, enrollment_token_id, issuer_revision_id, binding, att_level, attested_until, release_state, release_digest, needs_review, last_network, last_seen_at, decided_by, decided_at, revoke_reason, created_at, updated_at, expires_at, sandbox_session_id FROM pc.agent_instances WHERE org_id = $1 AND id = $2
 `
 
 func (q *Queries) GetInstance(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (PcAgentInstance, error) {
@@ -350,6 +353,7 @@ func (q *Queries) GetInstance(ctx context.Context, orgID ids.OrgID, iD ids.UUID)
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.ExpiresAt,
+		&i.SandboxSessionID,
 	)
 	return i, err
 }
@@ -466,7 +470,7 @@ VALUES ($1, $2, $3, $4, $5, $6,
     $11, $12, $13, $14, now(),
     $15, CASE WHEN $6::text = 'ADMITTED' THEN now() END,
     CASE WHEN $6::text = 'ADMITTED' THEN NULL ELSE now() + interval '7 days' END)
-RETURNING org_id, id, agent_id, jkt, public_jwk, state, enrolled_via, enrollment_token_id, issuer_revision_id, binding, att_level, attested_until, release_state, release_digest, needs_review, last_network, last_seen_at, decided_by, decided_at, revoke_reason, created_at, updated_at, expires_at
+RETURNING org_id, id, agent_id, jkt, public_jwk, state, enrolled_via, enrollment_token_id, issuer_revision_id, binding, att_level, attested_until, release_state, release_digest, needs_review, last_network, last_seen_at, decided_by, decided_at, revoke_reason, created_at, updated_at, expires_at, sandbox_session_id
 `
 
 type InsertAttestedInstanceParams struct {
@@ -532,6 +536,7 @@ func (q *Queries) InsertAttestedInstance(ctx context.Context, arg InsertAttested
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.ExpiresAt,
+		&i.SandboxSessionID,
 	)
 	return i, err
 }
@@ -637,7 +642,7 @@ INSERT INTO pc.agent_instances (org_id, id, agent_id, jkt, public_jwk, state, en
 VALUES ($1, $2, $3, $4, $5, 'PENDING_ADMISSION',
     $6, $7, $8, $9,
     $10, now(), now() + interval '7 days')
-RETURNING org_id, id, agent_id, jkt, public_jwk, state, enrolled_via, enrollment_token_id, issuer_revision_id, binding, att_level, attested_until, release_state, release_digest, needs_review, last_network, last_seen_at, decided_by, decided_at, revoke_reason, created_at, updated_at, expires_at
+RETURNING org_id, id, agent_id, jkt, public_jwk, state, enrolled_via, enrollment_token_id, issuer_revision_id, binding, att_level, attested_until, release_state, release_digest, needs_review, last_network, last_seen_at, decided_by, decided_at, revoke_reason, created_at, updated_at, expires_at, sandbox_session_id
 `
 
 type InsertInstanceParams struct {
@@ -691,6 +696,7 @@ func (q *Queries) InsertInstance(ctx context.Context, arg InsertInstanceParams) 
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.ExpiresAt,
+		&i.SandboxSessionID,
 	)
 	return i, err
 }
@@ -803,7 +809,7 @@ func (q *Queries) InstanceExistsForKey(ctx context.Context, orgID ids.OrgID, jkt
 }
 
 const listInstances = `-- name: ListInstances :many
-SELECT org_id, id, agent_id, jkt, public_jwk, state, enrolled_via, enrollment_token_id, issuer_revision_id, binding, att_level, attested_until, release_state, release_digest, needs_review, last_network, last_seen_at, decided_by, decided_at, revoke_reason, created_at, updated_at, expires_at FROM pc.agent_instances
+SELECT org_id, id, agent_id, jkt, public_jwk, state, enrolled_via, enrollment_token_id, issuer_revision_id, binding, att_level, attested_until, release_state, release_digest, needs_review, last_network, last_seen_at, decided_by, decided_at, revoke_reason, created_at, updated_at, expires_at, sandbox_session_id FROM pc.agent_instances
 WHERE org_id = $1 AND agent_id = $2
   AND id > coalesce($3::uuid, '00000000-0000-0000-0000-000000000000')
   AND (cardinality($4::text[]) = 0 OR state = ANY ($4::text[]))
@@ -858,6 +864,7 @@ func (q *Queries) ListInstances(ctx context.Context, arg ListInstancesParams) ([
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.ExpiresAt,
+			&i.SandboxSessionID,
 		); err != nil {
 			return nil, err
 		}
@@ -894,7 +901,7 @@ func (q *Queries) LockDiscoveries(ctx context.Context, orgID string) error {
 }
 
 const lockInstance = `-- name: LockInstance :one
-SELECT org_id, id, agent_id, jkt, public_jwk, state, enrolled_via, enrollment_token_id, issuer_revision_id, binding, att_level, attested_until, release_state, release_digest, needs_review, last_network, last_seen_at, decided_by, decided_at, revoke_reason, created_at, updated_at, expires_at FROM pc.agent_instances WHERE org_id = $1 AND id = $2 FOR UPDATE
+SELECT org_id, id, agent_id, jkt, public_jwk, state, enrolled_via, enrollment_token_id, issuer_revision_id, binding, att_level, attested_until, release_state, release_digest, needs_review, last_network, last_seen_at, decided_by, decided_at, revoke_reason, created_at, updated_at, expires_at, sandbox_session_id FROM pc.agent_instances WHERE org_id = $1 AND id = $2 FOR UPDATE
 `
 
 func (q *Queries) LockInstance(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (PcAgentInstance, error) {
@@ -924,6 +931,7 @@ func (q *Queries) LockInstance(ctx context.Context, orgID ids.OrgID, iD ids.UUID
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.ExpiresAt,
+		&i.SandboxSessionID,
 	)
 	return i, err
 }
@@ -966,7 +974,7 @@ UPDATE pc.agent_instances
 SET last_seen_at = now(), last_network = $1, release_state = $2,
     release_digest = $3, needs_review = needs_review OR $4::boolean, updated_at = now()
 WHERE org_id = $5 AND id = $6 AND state = 'ADMITTED'
-RETURNING org_id, id, agent_id, jkt, public_jwk, state, enrolled_via, enrollment_token_id, issuer_revision_id, binding, att_level, attested_until, release_state, release_digest, needs_review, last_network, last_seen_at, decided_by, decided_at, revoke_reason, created_at, updated_at, expires_at
+RETURNING org_id, id, agent_id, jkt, public_jwk, state, enrolled_via, enrollment_token_id, issuer_revision_id, binding, att_level, attested_until, release_state, release_digest, needs_review, last_network, last_seen_at, decided_by, decided_at, revoke_reason, created_at, updated_at, expires_at, sandbox_session_id
 `
 
 type TouchInstanceParams struct {
@@ -1012,6 +1020,7 @@ func (q *Queries) TouchInstance(ctx context.Context, arg TouchInstanceParams) (P
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.ExpiresAt,
+		&i.SandboxSessionID,
 	)
 	return i, err
 }

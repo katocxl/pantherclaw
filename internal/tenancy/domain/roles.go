@@ -105,10 +105,10 @@ var roles = []Role{
 	},
 	{
 		Name: RoleAgentOwner, Title: "Agent Owner", Scopes: anyScope,
-		Description: "Owns agents in scope and is accountable for them; sees their approval requests and can revoke their grants but not issue them.",
+		Description: "Owns agents in scope and is accountable for them; sees their approval requests, can revoke their grants but not issue them, and runs them in the containment sandbox.",
 		Permissions: with(basicReads, []Permission{
 			PermAgentRead, PermAgentManage, PermRunRead, PermRunStart, PermRunManage, PermWaitlistRead, PermAgentEnroll,
-			PermGrantRevoke, PermApprovalRead, PermEvidenceRead, PermCoverageRead,
+			PermGrantRevoke, PermApprovalRead, PermEvidenceRead, PermCoverageRead, PermSandboxRun,
 		}, authorityReads),
 	},
 	{
@@ -148,9 +148,9 @@ var roles = []Role{
 	},
 	{
 		Name: RoleDeveloper, Title: "Developer", Scopes: anyScope,
-		Description: "Builds agents in scope.",
+		Description: "Builds agents in scope and runs them in the containment sandbox.",
 		Permissions: with(basicReads, []Permission{
-			PermAgentRead, PermRunRead, PermRunStart, PermConnectionRead, PermEvidenceRead,
+			PermAgentRead, PermRunRead, PermRunStart, PermConnectionRead, PermEvidenceRead, PermSandboxRun,
 		}, authorityReads),
 	},
 	{
