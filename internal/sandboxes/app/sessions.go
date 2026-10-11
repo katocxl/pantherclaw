@@ -128,7 +128,7 @@ func (s *Service) StartSession(ctx context.Context, in StartInput) (Started, err
 	var out Started
 	err = s.Pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
 		q := dbq.New(tx)
-		a, err := agentFor(ctx, c, q, in.Agent, td.PermSandboxRun)
+		a, err := agentFor(ctx, c, q, in.Agent)
 		if err != nil {
 			return err
 		}
@@ -191,9 +191,9 @@ func (s *Service) StartSession(ctx context.Context, in StartInput) (Started, err
 	return out, err
 }
 
-// agentFor loads an agent the caller may act on with p; another org's or
-// an unreadable agent is NotFound.
-func agentFor(ctx context.Context, c tenancy.Caller, q *dbq.Queries, id ids.UUID, p td.Permission) (dbq.PcAgent, error) {
+// agentFor loads an agent the caller may run in a sandbox (sandbox.run);
+// another org's or an unreadable agent is NotFound.
+func agentFor(ctx context.Context, c tenancy.Caller, q *dbq.Queries, id ids.UUID) (dbq.PcAgent, error) {
 	a, err := q.LockAgent(ctx, c.Org, id)
 	if db.IsNoRows(err) {
 		return a, ErrNotFound
@@ -204,7 +204,7 @@ func agentFor(ctx context.Context, c tenancy.Caller, q *dbq.Queries, id ids.UUID
 	if err != nil {
 		return a, err
 	}
-	if err := c.Require(p, path); err != nil {
+	if err := c.Require(td.PermSandboxRun, path); err != nil {
 		return a, err
 	}
 	return a, nil

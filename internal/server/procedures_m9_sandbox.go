@@ -17,6 +17,7 @@ var sandboxProcedures = map[string]td.Permission{
 	pantherclawv1connect.SandboxServiceSubmitProbeReportProcedure:  td.PermSandboxRun,
 	pantherclawv1connect.SandboxServiceSubmitCanaryReportProcedure: td.PermSandboxRun,
 	pantherclawv1connect.SandboxServiceEndSessionProcedure:         td.PermSandboxRun,
+	pantherclawv1connect.SandboxServiceReportRoutesProcedure:       td.PermSandboxRun,
 	pantherclawv1connect.SandboxServiceGetSessionProcedure:         td.PermCoverageRead,
 	pantherclawv1connect.SandboxServiceListSessionsProcedure:       td.PermCoverageRead,
 }

@@ -128,6 +128,9 @@ type Sandbox struct {
 	// gateway mode.
 	bridge string
 	base   report.Report
+	// agentAddr is the agent's address on Internal while it runs, by which
+	// the edge's log tells its requests from the probe's.
+	agentAddr string
 }
 
 // Start creates the networks and the edge and waits until the edge is

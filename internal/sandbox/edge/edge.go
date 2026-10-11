@@ -66,6 +66,14 @@ const (
 	HeaderRefusedBy = "PC-Refused-By"
 )
 
+// The edge's log events a session reads back (sandbox.Routes): a refused
+// request and a stripped credential. Both name the client address, so
+// that the agent's requests are told from the probe's.
+const (
+	EventRefused            = "edge.refused"
+	EventCredentialStripped = "edge.credential_stripped" //nolint:gosec // G101: an event name, not a credential
+)
+
 // credentialHeaders carry a credential the agent may have found: the edge
 // strips them all and reports each (G0 M9 design decision 11).
 var credentialHeaders = []string{"Authorization", "Cookie", "X-Api-Key", "Api-Key", "Private-Token", "X-Auth-Token"}
@@ -273,7 +281,7 @@ func (e *Edge) refuse(w http.ResponseWriter, r *http.Request, dest, code string)
 
 func (e *Edge) answer(w http.ResponseWriter, r *http.Request, dest string, status int, code string) {
 	e.refused.Add(1)
-	e.log.WarnContext(r.Context(), "edge.refused", "method", r.Method, "destination", bounded(dest), "code", code)
+	e.log.WarnContext(r.Context(), EventRefused, "client", client(r), "method", r.Method, "destination", bounded(dest), "code", code)
 	w.Header().Set(HeaderRefusedBy, "edge")
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")
@@ -408,7 +416,7 @@ func (e *Edge) strip(r *http.Request, host string) {
 		for _, v := range r.Header.Values(h) {
 			e.stripped.Add(1)
 			sum := sha256.Sum256([]byte(v))
-			e.log.WarnContext(r.Context(), "edge.credential_stripped", "header", h, "kind", credentialKind(h, v),
+			e.log.WarnContext(r.Context(), EventCredentialStripped, "client", client(r), "header", h, "kind", credentialKind(h, v),
 				"sha256_prefix", hex.EncodeToString(sum[:6]), "destination", host)
 		}
 	}
@@ -443,7 +451,7 @@ func (e *Edge) stripQuery(r *http.Request, host string) string {
 		}
 		e.stripped.Add(1)
 		sum := sha256.Sum256([]byte(value))
-		e.log.WarnContext(r.Context(), "edge.credential_stripped", "query", bounded(name), "kind", kind,
+		e.log.WarnContext(r.Context(), EventCredentialStripped, "client", client(r), "query", bounded(name), "kind", kind,
 			"sha256_prefix", hex.EncodeToString(sum[:6]), "destination", host)
 	}
 	return strings.Join(kept, "&")
@@ -538,4 +546,12 @@ func (c *closeNotify) Close() error {
 	err := c.Conn.Close()
 	c.once.Do(func() { close(c.done) })
 	return err
+}
+
+// client is the address a request came from, without its port.
+func client(r *http.Request) string {
+	if h, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
+		return h
+	}
+	return r.RemoteAddr
 }

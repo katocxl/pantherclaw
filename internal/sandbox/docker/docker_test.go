@@ -507,3 +507,19 @@ func TestHR216_CleanupTouchesOnlyTheSessionsLabel(t *testing.T) {
 		t.Fatal("an unexpected listing reached rm")
 	}
 }
+
+// TestContainerAddressIsItsOwnOnTheNetwork: a container's address is the
+// one the engine gave it on that network; none on another network, or
+// once the engine cleared it.
+func TestContainerAddressIsItsOwnOnTheNetwork(t *testing.T) {
+	var info ContainerInfo
+	if err := json.Unmarshal([]byte(`{"NetworkSettings":{"Networks":{"pc-sbx-1":{"IPAddress":"10.89.0.3"},"pc-up-1":{"IPAddress":""}}}}`), &info); err != nil {
+		t.Fatal(err)
+	}
+	if got := info.Address("pc-sbx-1"); got != "10.89.0.3" {
+		t.Fatalf("address %q", got)
+	}
+	if info.Address("pc-up-1") != "" || info.Address("bridge") != "" {
+		t.Fatal("an address on a network without one")
+	}
+}

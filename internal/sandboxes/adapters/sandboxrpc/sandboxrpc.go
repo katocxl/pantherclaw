@@ -200,3 +200,25 @@ func (h *Handler) EndSession(ctx context.Context, r *pantherclawv1.SandboxServic
 	}
 	return &pantherclawv1.SandboxServiceEndSessionResponse{Session: session(s, nil)}, nil
 }
+
+// routeKinds are the route kinds the edge reports.
+var routeKinds = map[pantherclawv1.SandboxRouteKind]string{
+	pantherclawv1.SandboxRouteKind_SANDBOX_ROUTE_KIND_DIRECT_API: "direct_api",
+	pantherclawv1.SandboxRouteKind_SANDBOX_ROUTE_KIND_CREDENTIAL: "credential",
+}
+
+func (h *Handler) ReportRoutes(ctx context.Context, r *pantherclawv1.ReportRoutesRequest) (*pantherclawv1.ReportRoutesResponse, error) {
+	id, err := ids.ParseUUID(r.GetSessionId())
+	if err != nil {
+		return nil, app.ErrNotFound
+	}
+	routes := make([]app.Route, 0, len(r.GetRoutes()))
+	for _, rt := range r.GetRoutes() {
+		routes = append(routes, app.Route{Kind: routeKinds[rt.GetKind()], Locator: rt.GetLocator()})
+	}
+	n, err := h.svc.ReportRoutes(ctx, id, routes)
+	if err != nil {
+		return nil, err
+	}
+	return &pantherclawv1.ReportRoutesResponse{NewRoutes: int32(n)}, nil //nolint:gosec // G115: at most 64 routes × 16 connections
+}

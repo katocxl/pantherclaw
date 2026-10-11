@@ -56,7 +56,12 @@ type world struct {
 
 func newWorld(t *testing.T) *world {
 	t.Helper()
-	d := dbtest.New(t)
+	return newWorldOn(t, dbtest.New(t))
+}
+
+// newWorldOn builds a world with an org of its own in d.
+func newWorldOn(t *testing.T, d *dbtest.DB) *world {
+	t.Helper()
 	p := d.AppPool(t)
 	w := &world{
 		d: d, pool: p, admin: d.Pool(t, d.Migrator), org: ids.New[ids.Org](), team: ids.NewV7(), env: ids.NewV7(), owner: ids.NewV7(),

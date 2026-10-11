@@ -292,6 +292,18 @@ type ContainerInfo struct {
 // Runtime is the runtime the container got, for its evidence (HR-218).
 func (i ContainerInfo) Runtime() string { return i.HostConfig.Runtime }
 
+// Address is the container's IPv4 address on network, "" when it has none
+// (the engine clears it once the container stopped).
+func (i ContainerInfo) Address(network string) string {
+	var n struct {
+		IPAddress string `json:"IPAddress"`
+	}
+	if raw, ok := i.NetworkSettings.Networks[network]; !ok || json.Unmarshal(raw, &n) != nil {
+		return ""
+	}
+	return n.IPAddress
+}
+
 // CreateContainer creates c without starting it and checks what the engine
 // made of it (HR-218); a container that fails the check is removed again.
 func (c *Client) CreateContainer(ctx context.Context, ct Container) (ContainerInfo, error) {

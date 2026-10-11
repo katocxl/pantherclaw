@@ -221,7 +221,7 @@ func sandboxRun(ctx context.Context, a *app, args []string) error {
 	if err := box.PrepareAgent(ctx, sandbox.Agent{Image: f.image, Args: f.args, Workspace: f.workspace}); err != nil {
 		return err
 	}
-	if err := dc.Start(ctx, box.Agent); err != nil {
+	if err := box.StartAgent(ctx); err != nil {
 		return err
 	}
 	n := started.GetNonces()
@@ -245,6 +245,9 @@ func sandboxRun(ctx context.Context, a *app, args []string) error {
 	}
 	code, err := dc.Wait(ctx, box.Agent)
 	if err != nil {
+		return err
+	}
+	if err := reportRoutes(ctx, sb, box, session, a.stderr); err != nil {
 		return err
 	}
 	if f.out != "" {
@@ -357,4 +360,28 @@ func printClosures(w io.Writer, closures []*pantherclawv1.SandboxClosure) {
 		_, _ = fmt.Fprintf(w, "connection %s: sandbox closure FAILED (closure %s): %s\n", c.GetConnectionId(), c.GetClosureId(),
 			strings.Join(c.GetFailed(), ", "))
 	}
+}
+
+// reportRoutes sends the server the routes the edge saw the agent take
+// before the session ends: the destinations it refused and the
+// credentials it stripped (HR-214).
+func reportRoutes(ctx context.Context, sb pantherclawv1connect.SandboxServiceClient, box *sandbox.Sandbox, session string, w io.Writer) error {
+	routes, err := box.Routes(ctx)
+	if err != nil || len(routes) == 0 {
+		return err
+	}
+	req := &pantherclawv1.ReportRoutesRequest{SessionId: session}
+	for _, r := range routes {
+		kind := pantherclawv1.SandboxRouteKind_SANDBOX_ROUTE_KIND_DIRECT_API
+		if r.Kind == sandbox.RouteCredential {
+			kind = pantherclawv1.SandboxRouteKind_SANDBOX_ROUTE_KIND_CREDENTIAL
+		}
+		req.Routes = append(req.Routes, &pantherclawv1.SandboxRoute{Kind: kind, Locator: r.Locator})
+	}
+	res, err := sb.ReportRoutes(ctx, req)
+	if err != nil {
+		return fmt.Errorf("reporting the routes the edge saw: %w", err)
+	}
+	_, _ = fmt.Fprintf(w, "the edge refused or stripped %d routes of the agent (%d new to coverage)\n", len(routes), res.GetNewRoutes())
+	return nil
 }

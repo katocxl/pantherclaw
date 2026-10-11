@@ -80,6 +80,60 @@ func (SandboxSessionState) EnumDescriptor() ([]byte, []int) {
 	return file_pantherclaw_v1_sandbox_proto_rawDescGZIP(), []int{0}
 }
 
+// SandboxRouteKind is what the edge saw.
+type SandboxRouteKind int32
+
+const (
+	SandboxRouteKind_SANDBOX_ROUTE_KIND_UNSPECIFIED SandboxRouteKind = 0
+	// DIRECT_API is a destination the edge refused; the locator is its host
+	// and port.
+	SandboxRouteKind_SANDBOX_ROUTE_KIND_DIRECT_API SandboxRouteKind = 1
+	// CREDENTIAL is a credential the edge stripped; the locator is its kind
+	// and a SHA-256 prefix, never the value.
+	SandboxRouteKind_SANDBOX_ROUTE_KIND_CREDENTIAL SandboxRouteKind = 2
+)
+
+// Enum value maps for SandboxRouteKind.
+var (
+	SandboxRouteKind_name = map[int32]string{
+		0: "SANDBOX_ROUTE_KIND_UNSPECIFIED",
+		1: "SANDBOX_ROUTE_KIND_DIRECT_API",
+		2: "SANDBOX_ROUTE_KIND_CREDENTIAL",
+	}
+	SandboxRouteKind_value = map[string]int32{
+		"SANDBOX_ROUTE_KIND_UNSPECIFIED": 0,
+		"SANDBOX_ROUTE_KIND_DIRECT_API":  1,
+		"SANDBOX_ROUTE_KIND_CREDENTIAL":  2,
+	}
+)
+
+func (x SandboxRouteKind) Enum() *SandboxRouteKind {
+	p := new(SandboxRouteKind)
+	*p = x
+	return p
+}
+
+func (x SandboxRouteKind) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (SandboxRouteKind) Descriptor() protoreflect.EnumDescriptor {
+	return file_pantherclaw_v1_sandbox_proto_enumTypes[1].Descriptor()
+}
+
+func (SandboxRouteKind) Type() protoreflect.EnumType {
+	return &file_pantherclaw_v1_sandbox_proto_enumTypes[1]
+}
+
+func (x SandboxRouteKind) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use SandboxRouteKind.Descriptor instead.
+func (SandboxRouteKind) EnumDescriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_sandbox_proto_rawDescGZIP(), []int{1}
+}
+
 // SandboxImages are the digests of a session's images.
 type SandboxImages struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -1206,6 +1260,156 @@ func (x *SandboxServiceListSessionsResponse) GetNextPageToken() string {
 	return ""
 }
 
+// SandboxRoute is one route the edge saw. The locator is untrusted.
+type SandboxRoute struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Kind          SandboxRouteKind       `protobuf:"varint,1,opt,name=kind,proto3,enum=pantherclaw.v1.SandboxRouteKind" json:"kind,omitempty"`
+	Locator       string                 `protobuf:"bytes,2,opt,name=locator,proto3" json:"locator,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SandboxRoute) Reset() {
+	*x = SandboxRoute{}
+	mi := &file_pantherclaw_v1_sandbox_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SandboxRoute) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SandboxRoute) ProtoMessage() {}
+
+func (x *SandboxRoute) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_sandbox_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SandboxRoute.ProtoReflect.Descriptor instead.
+func (*SandboxRoute) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_sandbox_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *SandboxRoute) GetKind() SandboxRouteKind {
+	if x != nil {
+		return x.Kind
+	}
+	return SandboxRouteKind_SANDBOX_ROUTE_KIND_UNSPECIFIED
+}
+
+func (x *SandboxRoute) GetLocator() string {
+	if x != nil {
+		return x.Locator
+	}
+	return ""
+}
+
+type ReportRoutesRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	SessionId     string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	Routes        []*SandboxRoute        `protobuf:"bytes,2,rep,name=routes,proto3" json:"routes,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ReportRoutesRequest) Reset() {
+	*x = ReportRoutesRequest{}
+	mi := &file_pantherclaw_v1_sandbox_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ReportRoutesRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ReportRoutesRequest) ProtoMessage() {}
+
+func (x *ReportRoutesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_sandbox_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ReportRoutesRequest.ProtoReflect.Descriptor instead.
+func (*ReportRoutesRequest) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_sandbox_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *ReportRoutesRequest) GetSessionId() string {
+	if x != nil {
+		return x.SessionId
+	}
+	return ""
+}
+
+func (x *ReportRoutesRequest) GetRoutes() []*SandboxRoute {
+	if x != nil {
+		return x.Routes
+	}
+	return nil
+}
+
+type ReportRoutesResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// new_routes counts the routes seen for the first time.
+	NewRoutes     int32 `protobuf:"varint,1,opt,name=new_routes,json=newRoutes,proto3" json:"new_routes,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ReportRoutesResponse) Reset() {
+	*x = ReportRoutesResponse{}
+	mi := &file_pantherclaw_v1_sandbox_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ReportRoutesResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ReportRoutesResponse) ProtoMessage() {}
+
+func (x *ReportRoutesResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_sandbox_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ReportRoutesResponse.ProtoReflect.Descriptor instead.
+func (*ReportRoutesResponse) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_sandbox_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *ReportRoutesResponse) GetNewRoutes() int32 {
+	if x != nil {
+		return x.NewRoutes
+	}
+	return 0
+}
+
 var File_pantherclaw_v1_sandbox_proto protoreflect.FileDescriptor
 
 const file_pantherclaw_v1_sandbox_proto_rawDesc = "" +
@@ -1307,16 +1511,34 @@ const file_pantherclaw_v1_sandbox_proto_rawDesc = "" +
 	"page_token\x18\x03 \x01(\tB\x1a\xbaH\x17r\x15\x18\x80\x022\x10^[A-Za-z0-9_-]*$R\tpageToken\"\x88\x01\n" +
 	"\"SandboxServiceListSessionsResponse\x12:\n" +
 	"\bsessions\x18\x01 \x03(\v2\x1e.pantherclaw.v1.SandboxSessionR\bsessions\x12&\n" +
-	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken*\xa0\x01\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"v\n" +
+	"\fSandboxRoute\x12@\n" +
+	"\x04kind\x18\x01 \x01(\x0e2 .pantherclaw.v1.SandboxRouteKindB\n" +
+	"\xbaH\a\x82\x01\x04\x10\x01 \x00R\x04kind\x12$\n" +
+	"\alocator\x18\x02 \x01(\tB\n" +
+	"\xbaH\ar\x05\x10\x01\x18\x80\x04R\alocator\"\x80\x01\n" +
+	"\x13ReportRoutesRequest\x12'\n" +
+	"\n" +
+	"session_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\tsessionId\x12@\n" +
+	"\x06routes\x18\x02 \x03(\v2\x1c.pantherclaw.v1.SandboxRouteB\n" +
+	"\xbaH\a\x92\x01\x04\b\x01\x10@R\x06routes\"5\n" +
+	"\x14ReportRoutesResponse\x12\x1d\n" +
+	"\n" +
+	"new_routes\x18\x01 \x01(\x05R\tnewRoutes*\xa0\x01\n" +
 	"\x13SandboxSessionState\x12%\n" +
 	"!SANDBOX_SESSION_STATE_UNSPECIFIED\x10\x00\x12\x1e\n" +
 	"\x1aSANDBOX_SESSION_STATE_OPEN\x10\x01\x12\x1f\n" +
 	"\x1bSANDBOX_SESSION_STATE_ENDED\x10\x02\x12!\n" +
-	"\x1dSANDBOX_SESSION_STATE_EXPIRED\x10\x032\xc1\x05\n" +
+	"\x1dSANDBOX_SESSION_STATE_EXPIRED\x10\x03*|\n" +
+	"\x10SandboxRouteKind\x12\"\n" +
+	"\x1eSANDBOX_ROUTE_KIND_UNSPECIFIED\x10\x00\x12!\n" +
+	"\x1dSANDBOX_ROUTE_KIND_DIRECT_API\x10\x01\x12!\n" +
+	"\x1dSANDBOX_ROUTE_KIND_CREDENTIAL\x10\x022\x9c\x06\n" +
 	"\x0eSandboxService\x12u\n" +
 	"\fStartSession\x121.pantherclaw.v1.SandboxServiceStartSessionRequest\x1a2.pantherclaw.v1.SandboxServiceStartSessionResponse\x12h\n" +
 	"\x11SubmitProbeReport\x12(.pantherclaw.v1.SubmitProbeReportRequest\x1a).pantherclaw.v1.SubmitProbeReportResponse\x12k\n" +
-	"\x12SubmitCanaryReport\x12).pantherclaw.v1.SubmitCanaryReportRequest\x1a*.pantherclaw.v1.SubmitCanaryReportResponse\x12o\n" +
+	"\x12SubmitCanaryReport\x12).pantherclaw.v1.SubmitCanaryReportRequest\x1a*.pantherclaw.v1.SubmitCanaryReportResponse\x12Y\n" +
+	"\fReportRoutes\x12#.pantherclaw.v1.ReportRoutesRequest\x1a$.pantherclaw.v1.ReportRoutesResponse\x12o\n" +
 	"\n" +
 	"EndSession\x12/.pantherclaw.v1.SandboxServiceEndSessionRequest\x1a0.pantherclaw.v1.SandboxServiceEndSessionResponse\x12t\n" +
 	"\n" +
@@ -1336,68 +1558,76 @@ func file_pantherclaw_v1_sandbox_proto_rawDescGZIP() []byte {
 	return file_pantherclaw_v1_sandbox_proto_rawDescData
 }
 
-var file_pantherclaw_v1_sandbox_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_pantherclaw_v1_sandbox_proto_msgTypes = make([]protoimpl.MessageInfo, 18)
+var file_pantherclaw_v1_sandbox_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
+var file_pantherclaw_v1_sandbox_proto_msgTypes = make([]protoimpl.MessageInfo, 21)
 var file_pantherclaw_v1_sandbox_proto_goTypes = []any{
 	(SandboxSessionState)(0),                   // 0: pantherclaw.v1.SandboxSessionState
-	(*SandboxImages)(nil),                      // 1: pantherclaw.v1.SandboxImages
-	(*SandboxEngine)(nil),                      // 2: pantherclaw.v1.SandboxEngine
-	(*SandboxSession)(nil),                     // 3: pantherclaw.v1.SandboxSession
-	(*ProbeNonces)(nil),                        // 4: pantherclaw.v1.ProbeNonces
-	(*SandboxServiceStartSessionRequest)(nil),  // 5: pantherclaw.v1.SandboxServiceStartSessionRequest
-	(*SandboxServiceStartSessionResponse)(nil), // 6: pantherclaw.v1.SandboxServiceStartSessionResponse
-	(*SubmitProbeReportRequest)(nil),           // 7: pantherclaw.v1.SubmitProbeReportRequest
-	(*SubmitProbeReportResponse)(nil),          // 8: pantherclaw.v1.SubmitProbeReportResponse
-	(*SubmitCanaryReportRequest)(nil),          // 9: pantherclaw.v1.SubmitCanaryReportRequest
-	(*SandboxClosure)(nil),                     // 10: pantherclaw.v1.SandboxClosure
-	(*SubmitCanaryReportResponse)(nil),         // 11: pantherclaw.v1.SubmitCanaryReportResponse
-	(*SandboxServiceEndSessionRequest)(nil),    // 12: pantherclaw.v1.SandboxServiceEndSessionRequest
-	(*SandboxServiceEndSessionResponse)(nil),   // 13: pantherclaw.v1.SandboxServiceEndSessionResponse
-	(*SandboxServiceGetSessionRequest)(nil),    // 14: pantherclaw.v1.SandboxServiceGetSessionRequest
-	(*SandboxServiceGetSessionResponse)(nil),   // 15: pantherclaw.v1.SandboxServiceGetSessionResponse
-	(*SandboxServiceListSessionsRequest)(nil),  // 16: pantherclaw.v1.SandboxServiceListSessionsRequest
-	(*SandboxServiceListSessionsResponse)(nil), // 17: pantherclaw.v1.SandboxServiceListSessionsResponse
-	nil,                           // 18: pantherclaw.v1.SandboxServiceStartSessionResponse.AgentHostsEntry
-	(*timestamppb.Timestamp)(nil), // 19: google.protobuf.Timestamp
-	(*durationpb.Duration)(nil),   // 20: google.protobuf.Duration
+	(SandboxRouteKind)(0),                      // 1: pantherclaw.v1.SandboxRouteKind
+	(*SandboxImages)(nil),                      // 2: pantherclaw.v1.SandboxImages
+	(*SandboxEngine)(nil),                      // 3: pantherclaw.v1.SandboxEngine
+	(*SandboxSession)(nil),                     // 4: pantherclaw.v1.SandboxSession
+	(*ProbeNonces)(nil),                        // 5: pantherclaw.v1.ProbeNonces
+	(*SandboxServiceStartSessionRequest)(nil),  // 6: pantherclaw.v1.SandboxServiceStartSessionRequest
+	(*SandboxServiceStartSessionResponse)(nil), // 7: pantherclaw.v1.SandboxServiceStartSessionResponse
+	(*SubmitProbeReportRequest)(nil),           // 8: pantherclaw.v1.SubmitProbeReportRequest
+	(*SubmitProbeReportResponse)(nil),          // 9: pantherclaw.v1.SubmitProbeReportResponse
+	(*SubmitCanaryReportRequest)(nil),          // 10: pantherclaw.v1.SubmitCanaryReportRequest
+	(*SandboxClosure)(nil),                     // 11: pantherclaw.v1.SandboxClosure
+	(*SubmitCanaryReportResponse)(nil),         // 12: pantherclaw.v1.SubmitCanaryReportResponse
+	(*SandboxServiceEndSessionRequest)(nil),    // 13: pantherclaw.v1.SandboxServiceEndSessionRequest
+	(*SandboxServiceEndSessionResponse)(nil),   // 14: pantherclaw.v1.SandboxServiceEndSessionResponse
+	(*SandboxServiceGetSessionRequest)(nil),    // 15: pantherclaw.v1.SandboxServiceGetSessionRequest
+	(*SandboxServiceGetSessionResponse)(nil),   // 16: pantherclaw.v1.SandboxServiceGetSessionResponse
+	(*SandboxServiceListSessionsRequest)(nil),  // 17: pantherclaw.v1.SandboxServiceListSessionsRequest
+	(*SandboxServiceListSessionsResponse)(nil), // 18: pantherclaw.v1.SandboxServiceListSessionsResponse
+	(*SandboxRoute)(nil),                       // 19: pantherclaw.v1.SandboxRoute
+	(*ReportRoutesRequest)(nil),                // 20: pantherclaw.v1.ReportRoutesRequest
+	(*ReportRoutesResponse)(nil),               // 21: pantherclaw.v1.ReportRoutesResponse
+	nil,                                        // 22: pantherclaw.v1.SandboxServiceStartSessionResponse.AgentHostsEntry
+	(*timestamppb.Timestamp)(nil),              // 23: google.protobuf.Timestamp
+	(*durationpb.Duration)(nil),                // 24: google.protobuf.Duration
 }
 var file_pantherclaw_v1_sandbox_proto_depIdxs = []int32{
-	1,  // 0: pantherclaw.v1.SandboxSession.images:type_name -> pantherclaw.v1.SandboxImages
-	2,  // 1: pantherclaw.v1.SandboxSession.engine:type_name -> pantherclaw.v1.SandboxEngine
+	2,  // 0: pantherclaw.v1.SandboxSession.images:type_name -> pantherclaw.v1.SandboxImages
+	3,  // 1: pantherclaw.v1.SandboxSession.engine:type_name -> pantherclaw.v1.SandboxEngine
 	0,  // 2: pantherclaw.v1.SandboxSession.state:type_name -> pantherclaw.v1.SandboxSessionState
-	19, // 3: pantherclaw.v1.SandboxSession.open_time:type_name -> google.protobuf.Timestamp
-	19, // 4: pantherclaw.v1.SandboxSession.expire_time:type_name -> google.protobuf.Timestamp
-	19, // 5: pantherclaw.v1.SandboxSession.end_time:type_name -> google.protobuf.Timestamp
-	19, // 6: pantherclaw.v1.ProbeNonces.expire_time:type_name -> google.protobuf.Timestamp
-	1,  // 7: pantherclaw.v1.SandboxServiceStartSessionRequest.images:type_name -> pantherclaw.v1.SandboxImages
-	2,  // 8: pantherclaw.v1.SandboxServiceStartSessionRequest.engine:type_name -> pantherclaw.v1.SandboxEngine
-	20, // 9: pantherclaw.v1.SandboxServiceStartSessionRequest.ttl:type_name -> google.protobuf.Duration
-	3,  // 10: pantherclaw.v1.SandboxServiceStartSessionResponse.session:type_name -> pantherclaw.v1.SandboxSession
-	4,  // 11: pantherclaw.v1.SandboxServiceStartSessionResponse.nonces:type_name -> pantherclaw.v1.ProbeNonces
-	18, // 12: pantherclaw.v1.SandboxServiceStartSessionResponse.agent_hosts:type_name -> pantherclaw.v1.SandboxServiceStartSessionResponse.AgentHostsEntry
-	19, // 13: pantherclaw.v1.SandboxClosure.expire_time:type_name -> google.protobuf.Timestamp
-	10, // 14: pantherclaw.v1.SubmitCanaryReportResponse.closures:type_name -> pantherclaw.v1.SandboxClosure
-	4,  // 15: pantherclaw.v1.SubmitCanaryReportResponse.next_nonces:type_name -> pantherclaw.v1.ProbeNonces
-	3,  // 16: pantherclaw.v1.SandboxServiceEndSessionResponse.session:type_name -> pantherclaw.v1.SandboxSession
-	3,  // 17: pantherclaw.v1.SandboxServiceGetSessionResponse.session:type_name -> pantherclaw.v1.SandboxSession
-	3,  // 18: pantherclaw.v1.SandboxServiceListSessionsResponse.sessions:type_name -> pantherclaw.v1.SandboxSession
-	5,  // 19: pantherclaw.v1.SandboxService.StartSession:input_type -> pantherclaw.v1.SandboxServiceStartSessionRequest
-	7,  // 20: pantherclaw.v1.SandboxService.SubmitProbeReport:input_type -> pantherclaw.v1.SubmitProbeReportRequest
-	9,  // 21: pantherclaw.v1.SandboxService.SubmitCanaryReport:input_type -> pantherclaw.v1.SubmitCanaryReportRequest
-	12, // 22: pantherclaw.v1.SandboxService.EndSession:input_type -> pantherclaw.v1.SandboxServiceEndSessionRequest
-	14, // 23: pantherclaw.v1.SandboxService.GetSession:input_type -> pantherclaw.v1.SandboxServiceGetSessionRequest
-	16, // 24: pantherclaw.v1.SandboxService.ListSessions:input_type -> pantherclaw.v1.SandboxServiceListSessionsRequest
-	6,  // 25: pantherclaw.v1.SandboxService.StartSession:output_type -> pantherclaw.v1.SandboxServiceStartSessionResponse
-	8,  // 26: pantherclaw.v1.SandboxService.SubmitProbeReport:output_type -> pantherclaw.v1.SubmitProbeReportResponse
-	11, // 27: pantherclaw.v1.SandboxService.SubmitCanaryReport:output_type -> pantherclaw.v1.SubmitCanaryReportResponse
-	13, // 28: pantherclaw.v1.SandboxService.EndSession:output_type -> pantherclaw.v1.SandboxServiceEndSessionResponse
-	15, // 29: pantherclaw.v1.SandboxService.GetSession:output_type -> pantherclaw.v1.SandboxServiceGetSessionResponse
-	17, // 30: pantherclaw.v1.SandboxService.ListSessions:output_type -> pantherclaw.v1.SandboxServiceListSessionsResponse
-	25, // [25:31] is the sub-list for method output_type
-	19, // [19:25] is the sub-list for method input_type
-	19, // [19:19] is the sub-list for extension type_name
-	19, // [19:19] is the sub-list for extension extendee
-	0,  // [0:19] is the sub-list for field type_name
+	23, // 3: pantherclaw.v1.SandboxSession.open_time:type_name -> google.protobuf.Timestamp
+	23, // 4: pantherclaw.v1.SandboxSession.expire_time:type_name -> google.protobuf.Timestamp
+	23, // 5: pantherclaw.v1.SandboxSession.end_time:type_name -> google.protobuf.Timestamp
+	23, // 6: pantherclaw.v1.ProbeNonces.expire_time:type_name -> google.protobuf.Timestamp
+	2,  // 7: pantherclaw.v1.SandboxServiceStartSessionRequest.images:type_name -> pantherclaw.v1.SandboxImages
+	3,  // 8: pantherclaw.v1.SandboxServiceStartSessionRequest.engine:type_name -> pantherclaw.v1.SandboxEngine
+	24, // 9: pantherclaw.v1.SandboxServiceStartSessionRequest.ttl:type_name -> google.protobuf.Duration
+	4,  // 10: pantherclaw.v1.SandboxServiceStartSessionResponse.session:type_name -> pantherclaw.v1.SandboxSession
+	5,  // 11: pantherclaw.v1.SandboxServiceStartSessionResponse.nonces:type_name -> pantherclaw.v1.ProbeNonces
+	22, // 12: pantherclaw.v1.SandboxServiceStartSessionResponse.agent_hosts:type_name -> pantherclaw.v1.SandboxServiceStartSessionResponse.AgentHostsEntry
+	23, // 13: pantherclaw.v1.SandboxClosure.expire_time:type_name -> google.protobuf.Timestamp
+	11, // 14: pantherclaw.v1.SubmitCanaryReportResponse.closures:type_name -> pantherclaw.v1.SandboxClosure
+	5,  // 15: pantherclaw.v1.SubmitCanaryReportResponse.next_nonces:type_name -> pantherclaw.v1.ProbeNonces
+	4,  // 16: pantherclaw.v1.SandboxServiceEndSessionResponse.session:type_name -> pantherclaw.v1.SandboxSession
+	4,  // 17: pantherclaw.v1.SandboxServiceGetSessionResponse.session:type_name -> pantherclaw.v1.SandboxSession
+	4,  // 18: pantherclaw.v1.SandboxServiceListSessionsResponse.sessions:type_name -> pantherclaw.v1.SandboxSession
+	1,  // 19: pantherclaw.v1.SandboxRoute.kind:type_name -> pantherclaw.v1.SandboxRouteKind
+	19, // 20: pantherclaw.v1.ReportRoutesRequest.routes:type_name -> pantherclaw.v1.SandboxRoute
+	6,  // 21: pantherclaw.v1.SandboxService.StartSession:input_type -> pantherclaw.v1.SandboxServiceStartSessionRequest
+	8,  // 22: pantherclaw.v1.SandboxService.SubmitProbeReport:input_type -> pantherclaw.v1.SubmitProbeReportRequest
+	10, // 23: pantherclaw.v1.SandboxService.SubmitCanaryReport:input_type -> pantherclaw.v1.SubmitCanaryReportRequest
+	20, // 24: pantherclaw.v1.SandboxService.ReportRoutes:input_type -> pantherclaw.v1.ReportRoutesRequest
+	13, // 25: pantherclaw.v1.SandboxService.EndSession:input_type -> pantherclaw.v1.SandboxServiceEndSessionRequest
+	15, // 26: pantherclaw.v1.SandboxService.GetSession:input_type -> pantherclaw.v1.SandboxServiceGetSessionRequest
+	17, // 27: pantherclaw.v1.SandboxService.ListSessions:input_type -> pantherclaw.v1.SandboxServiceListSessionsRequest
+	7,  // 28: pantherclaw.v1.SandboxService.StartSession:output_type -> pantherclaw.v1.SandboxServiceStartSessionResponse
+	9,  // 29: pantherclaw.v1.SandboxService.SubmitProbeReport:output_type -> pantherclaw.v1.SubmitProbeReportResponse
+	12, // 30: pantherclaw.v1.SandboxService.SubmitCanaryReport:output_type -> pantherclaw.v1.SubmitCanaryReportResponse
+	21, // 31: pantherclaw.v1.SandboxService.ReportRoutes:output_type -> pantherclaw.v1.ReportRoutesResponse
+	14, // 32: pantherclaw.v1.SandboxService.EndSession:output_type -> pantherclaw.v1.SandboxServiceEndSessionResponse
+	16, // 33: pantherclaw.v1.SandboxService.GetSession:output_type -> pantherclaw.v1.SandboxServiceGetSessionResponse
+	18, // 34: pantherclaw.v1.SandboxService.ListSessions:output_type -> pantherclaw.v1.SandboxServiceListSessionsResponse
+	28, // [28:35] is the sub-list for method output_type
+	21, // [21:28] is the sub-list for method input_type
+	21, // [21:21] is the sub-list for extension type_name
+	21, // [21:21] is the sub-list for extension extendee
+	0,  // [0:21] is the sub-list for field type_name
 }
 
 func init() { file_pantherclaw_v1_sandbox_proto_init() }
@@ -1410,8 +1640,8 @@ func file_pantherclaw_v1_sandbox_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pantherclaw_v1_sandbox_proto_rawDesc), len(file_pantherclaw_v1_sandbox_proto_rawDesc)),
-			NumEnums:      1,
-			NumMessages:   18,
+			NumEnums:      2,
+			NumMessages:   21,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

@@ -40,6 +40,12 @@ service SandboxService {
   // closure of every mapped connection and returns the next nonces.
   // permission: sandbox.run
   rpc SubmitCanaryReport(SubmitCanaryReportRequest) returns (SubmitCanaryReportResponse);
+  // ReportRoutes records the routes the session's edge saw the agent take
+  // (destinations it refused, credentials it stripped) as observed routes
+  // of the agent and every mapped connection. They are untrusted and never
+  // grant anything.
+  // permission: sandbox.run
+  rpc ReportRoutes(ReportRoutesRequest) returns (ReportRoutesResponse);
   // EndSession ends a session and revokes its sandbox instance.
   // permission: sandbox.run
   rpc EndSession(SandboxServiceEndSessionRequest) returns (SandboxServiceEndSessionResponse);
@@ -232,4 +238,40 @@ message SandboxServiceListSessionsRequest {
 message SandboxServiceListSessionsResponse {
   repeated SandboxSession sessions = 1;
   string next_page_token = 2;
+}
+
+// SandboxRouteKind is what the edge saw.
+enum SandboxRouteKind {
+  SANDBOX_ROUTE_KIND_UNSPECIFIED = 0;
+  // DIRECT_API is a destination the edge refused; the locator is its host
+  // and port.
+  SANDBOX_ROUTE_KIND_DIRECT_API = 1;
+  // CREDENTIAL is a credential the edge stripped; the locator is its kind
+  // and a SHA-256 prefix, never the value.
+  SANDBOX_ROUTE_KIND_CREDENTIAL = 2;
+}
+
+// SandboxRoute is one route the edge saw. The locator is untrusted.
+message SandboxRoute {
+  SandboxRouteKind kind = 1 [(buf.validate.field).enum = {
+    defined_only: true
+    not_in: [0]
+  }];
+  string locator = 2 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 512
+  }];
+}
+
+message ReportRoutesRequest {
+  string session_id = 1 [(buf.validate.field).string.uuid = true];
+  repeated SandboxRoute routes = 2 [(buf.validate.field).repeated = {
+    min_items: 1
+    max_items: 64
+  }];
+}
+
+message ReportRoutesResponse {
+  // new_routes counts the routes seen for the first time.
+  int32 new_routes = 1;
 }

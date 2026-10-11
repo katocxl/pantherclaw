@@ -160,10 +160,12 @@ func TestHR213_TheEdgeSignsMappedRequestsForTheGateway(t *testing.T) {
 	if c["htm"] != http.MethodPut || c["htu"] != r.gateway+"/github/repos/acme/app/pulls/7/merge" || c["bh"] != base64.RawURLEncoding.EncodeToString(bh[:]) {
 		t.Fatalf("proof claims %v", c)
 	}
-	// The found token and the cookie are reported, never logged.
+	// The found token and the cookie are reported, never logged, with the
+	// client's address.
 	logged := r.log.String()
 	if r.edge.Stripped() != 2 || strings.Count(logged, `"event":"edge.credential_stripped"`) != 2 ||
-		!strings.Contains(logged, `"kind":"github_pat"`) || strings.Contains(logged, "ghp_planted") || strings.Contains(logged, "session=1") {
+		!strings.Contains(logged, `"kind":"github_pat"`) || strings.Count(logged, `"client":"127.0.0.1"`) != 2 ||
+		strings.Contains(logged, "ghp_planted") || strings.Contains(logged, "session=1") {
 		t.Fatalf("stripped %d:\n%s", r.edge.Stripped(), logged)
 	}
 }
@@ -199,7 +201,8 @@ func TestHR214_UnmappedDestinationsAndPlainHTTPAreRefusedAndRecorded(t *testing.
 	if got := r.edge.Refused(); got != 7 {
 		t.Errorf("refused %d, want 7", got)
 	}
-	if n := strings.Count(r.log.String(), `"event":"edge.refused"`); n != 7 || !strings.Contains(r.log.String(), `"destination":"github.com:443"`) {
+	if n := strings.Count(r.log.String(), `"event":"edge.refused"`); n != 7 || !strings.Contains(r.log.String(), `"destination":"github.com:443"`) ||
+		strings.Count(r.log.String(), `"client":"127.0.0.1"`) < 7 {
 		t.Errorf("recorded %d refusals:\n%s", n, r.log)
 	}
 }

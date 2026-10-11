@@ -199,7 +199,7 @@ func (s *Service) EndSession(ctx context.Context, id ids.UUID) (dbq.PcSandboxSes
 		} else if err != nil {
 			return err
 		}
-		a, err := agentFor(ctx, c, q, sess.AgentID, td.PermSandboxRun)
+		a, err := agentFor(ctx, c, q, sess.AgentID)
 		if err != nil {
 			return err
 		}

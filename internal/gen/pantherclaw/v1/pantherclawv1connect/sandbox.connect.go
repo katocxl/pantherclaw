@@ -36,6 +36,9 @@ const (
 	// SandboxServiceSubmitCanaryReportProcedure is the procedure name of the SandboxService's
 	// SubmitCanaryReport RPC.
 	SandboxServiceSubmitCanaryReportProcedure = "/pantherclaw.v1.SandboxService/SubmitCanaryReport"
+	// SandboxServiceReportRoutesProcedure is the procedure name of the SandboxService's ReportRoutes
+	// RPC.
+	SandboxServiceReportRoutesProcedure = "/pantherclaw.v1.SandboxService/ReportRoutes"
 	// SandboxServiceEndSessionProcedure is the procedure name of the SandboxService's EndSession RPC.
 	SandboxServiceEndSessionProcedure = "/pantherclaw.v1.SandboxService/EndSession"
 	// SandboxServiceGetSessionProcedure is the procedure name of the SandboxService's GetSession RPC.
@@ -65,6 +68,13 @@ var (
 			StreamType: connect.StreamTypeUnary,
 			Schema:     v1.File_pantherclaw_v1_sandbox_proto.Services().ByName("SandboxService").Methods().ByName("SubmitCanaryReport"),
 			Procedure:  SandboxServiceSubmitCanaryReportProcedure,
+		}
+	})
+	sandboxServiceReportRoutesSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_pantherclaw_v1_sandbox_proto.Services().ByName("SandboxService").Methods().ByName("ReportRoutes"),
+			Procedure:  SandboxServiceReportRoutesProcedure,
 		}
 	})
 	sandboxServiceEndSessionSpec = sync.OnceValue(func() connect.Spec {
@@ -106,6 +116,12 @@ type SandboxServiceClient interface {
 	// closure of every mapped connection and returns the next nonces.
 	// permission: sandbox.run
 	SubmitCanaryReport(context.Context, *v1.SubmitCanaryReportRequest) (*v1.SubmitCanaryReportResponse, error)
+	// ReportRoutes records the routes the session's edge saw the agent take
+	// (destinations it refused, credentials it stripped) as observed routes
+	// of the agent and every mapped connection. They are untrusted and never
+	// grant anything.
+	// permission: sandbox.run
+	ReportRoutes(context.Context, *v1.ReportRoutesRequest) (*v1.ReportRoutesResponse, error)
 	// EndSession ends a session and revokes its sandbox instance.
 	// permission: sandbox.run
 	EndSession(context.Context, *v1.SandboxServiceEndSessionRequest) (*v1.SandboxServiceEndSessionResponse, error)
@@ -137,6 +153,12 @@ type SandboxServiceHandler interface {
 	// closure of every mapped connection and returns the next nonces.
 	// permission: sandbox.run
 	SubmitCanaryReport(context.Context, *v1.SubmitCanaryReportRequest) (*v1.SubmitCanaryReportResponse, error)
+	// ReportRoutes records the routes the session's edge saw the agent take
+	// (destinations it refused, credentials it stripped) as observed routes
+	// of the agent and every mapped connection. They are untrusted and never
+	// grant anything.
+	// permission: sandbox.run
+	ReportRoutes(context.Context, *v1.ReportRoutesRequest) (*v1.ReportRoutesResponse, error)
 	// EndSession ends a session and revokes its sandbox instance.
 	// permission: sandbox.run
 	EndSession(context.Context, *v1.SandboxServiceEndSessionRequest) (*v1.SandboxServiceEndSessionResponse, error)
@@ -156,6 +178,7 @@ func RegisterSandboxServiceHandler(server *connect.Server, svc SandboxServiceHan
 		connect.Method{Spec: sandboxServiceStartSessionSpec(), Handler: adapter.startSession},
 		connect.Method{Spec: sandboxServiceSubmitProbeReportSpec(), Handler: adapter.submitProbeReport},
 		connect.Method{Spec: sandboxServiceSubmitCanaryReportSpec(), Handler: adapter.submitCanaryReport},
+		connect.Method{Spec: sandboxServiceReportRoutesSpec(), Handler: adapter.reportRoutes},
 		connect.Method{Spec: sandboxServiceEndSessionSpec(), Handler: adapter.endSession},
 		connect.Method{Spec: sandboxServiceGetSessionSpec(), Handler: adapter.getSession},
 		connect.Method{Spec: sandboxServiceListSessionsSpec(), Handler: adapter.listSessions},
@@ -175,6 +198,10 @@ func (UnimplementedSandboxServiceHandler) SubmitProbeReport(context.Context, *v1
 
 func (UnimplementedSandboxServiceHandler) SubmitCanaryReport(context.Context, *v1.SubmitCanaryReportRequest) (*v1.SubmitCanaryReportResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.SandboxService.SubmitCanaryReport is not implemented")
+}
+
+func (UnimplementedSandboxServiceHandler) ReportRoutes(context.Context, *v1.ReportRoutesRequest) (*v1.ReportRoutesResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.SandboxService.ReportRoutes is not implemented")
 }
 
 func (UnimplementedSandboxServiceHandler) EndSession(context.Context, *v1.SandboxServiceEndSessionRequest) (*v1.SandboxServiceEndSessionResponse, error) {
@@ -212,6 +239,14 @@ func (c *sandboxServiceClient) SubmitProbeReport(ctx context.Context, req *v1.Su
 func (c *sandboxServiceClient) SubmitCanaryReport(ctx context.Context, req *v1.SubmitCanaryReportRequest) (*v1.SubmitCanaryReportResponse, error) {
 	var res v1.SubmitCanaryReportResponse
 	if err := c.client.CallUnary(ctx, sandboxServiceSubmitCanaryReportSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *sandboxServiceClient) ReportRoutes(ctx context.Context, req *v1.ReportRoutesRequest) (*v1.ReportRoutesResponse, error) {
+	var res v1.ReportRoutesResponse
+	if err := c.client.CallUnary(ctx, sandboxServiceReportRoutesSpec(), req, &res); err != nil {
 		return nil, err
 	}
 	return &res, nil
@@ -273,6 +308,18 @@ func (h sandboxServiceHandler) submitCanaryReport(ctx context.Context, _ connect
 		return err
 	}
 	res, err := h.svc.SubmitCanaryReport(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h sandboxServiceHandler) reportRoutes(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ReportRoutesRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ReportRoutes(ctx, &req)
 	if err != nil {
 		return err
 	}

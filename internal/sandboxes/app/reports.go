@@ -19,7 +19,6 @@ import (
 	"github.com/katocxl/pantherclaw/internal/sandbox/docker"
 	"github.com/katocxl/pantherclaw/internal/sandbox/report"
 	tenancy "github.com/katocxl/pantherclaw/internal/tenancy/app"
-	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
 )
 
 // rejected is why a report was refused: recorded, never returned (the
@@ -75,7 +74,7 @@ func (s *Service) submit(ctx context.Context, session ids.UUID, compact string, 
 		} else if err != nil {
 			return err
 		}
-		if _, err := agentFor(ctx, c, q, sess.AgentID, td.PermSandboxRun); err != nil {
+		if _, err := agentFor(ctx, c, q, sess.AgentID); err != nil {
 			return err
 		}
 		if sess.State != "OPEN" || !s.now().Before(sess.ExpiresAt) {
