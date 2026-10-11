@@ -5,7 +5,7 @@
 // gateways in tests and for services that verify PAP/1 themselves.
 
 import { type JSONValue, parseJSON } from "./jcs.ts";
-import { ath, bodyHash, fromB64url, parseTokenClaims, thumbprint, TYPE_PROOF, verifyEd25519 } from "./pap.ts";
+import { ath, bodyHash, fromB64url, parseTokenClaims, splitURL, thumbprint, TYPE_PROOF, verifyEd25519 } from "./pap.ts";
 
 /** What a verifier knows about the request a proof came with. */
 export interface ProofRequest {
@@ -25,20 +25,16 @@ function json(bytes: Uint8Array): unknown {
   return plain(parseJSON(bytes));
 }
 
+/** htu matches when scheme and host are equal without case and the escaped paths exactly, as PantherClaw compares them. */
 function sameHTU(claimed: string, want: string): boolean {
-  let a: URL;
-  let b: URL;
+  if (claimed.includes("?") || claimed.includes("#") || want.includes("?") || want.includes("#")) return false;
   try {
-    a = new URL(claimed);
-    b = new URL(want);
+    const a = splitURL(claimed);
+    const b = splitURL(want);
+    return a.scheme === b.scheme && a.host.toLowerCase() === b.host.toLowerCase() && a.path === b.path;
   } catch {
     return false;
   }
-  for (const [u, raw] of [[a, claimed], [b, want]] as const) {
-    if (u.username || u.password || raw.includes("?") || raw.includes("#") || (u.protocol !== "https:" && u.protocol !== "http:")) return false;
-  }
-  // URL lower-cases scheme and host; the path is compared as written.
-  return a.protocol === b.protocol && a.host === b.host && a.pathname === b.pathname;
 }
 
 /**
@@ -46,7 +42,10 @@ function sameHTU(claimed: string, want: string): boolean {
  * returns "ok" or the PAP-Error code PantherClaw answers: the header (alg
  * EdDSA, typ, a public Ed25519 jwk and nothing else) and signature, the key
  * binding to the token's cnf.jkt, htm, htu, ath, bh, iat, jti and the
- * nonce's shape. The token itself is not verified here.
+ * nonce's shape. The token itself is not verified here, and neither is
+ * whether the nonce is current or the jti new: "ok" is not the whole
+ * check. The caller checks the nonce against the ones it issued and spends
+ * the jti once, or it accepts replays.
  */
 export async function checkProof(proof: string, r: ProofRequest, now: number): Promise<string> {
   const parts = proof.split(".");
@@ -60,6 +59,7 @@ export async function checkProof(proof: string, r: ProofRequest, now: number): P
   try {
     h = json(fromB64url(parts[0] ?? ""));
     c = json(fromB64url(parts[1] ?? ""));
+    if (typeof c !== "object" || c === null || Array.isArray(c)) return "invalid_proof";
     sig = fromB64url(parts[2] ?? "");
     const keys = Object.keys(h ?? {}).sort().join(",");
     const jwk = Object.keys(h?.jwk ?? {}).sort().join(",");
@@ -81,7 +81,7 @@ export async function checkProof(proof: string, r: ProofRequest, now: number): P
   if (!r.method || c.htm !== r.method || typeof c.htu !== "string" || !sameHTU(c.htu, r.url)) return "invalid_proof";
   if (r.token ? c.ath !== ath(r.token) : c.ath !== undefined && c.ath !== "") return "invalid_proof";
   if (c.bh !== bodyHash(r.body)) return "body_hash_mismatch";
-  if (typeof c.iat !== "number" || c.iat > now + 60 || c.iat < now - 360) return "invalid_proof";
+  if (!Number.isSafeInteger(c.iat) || c.iat > now + 60 || c.iat < now - 360) return "invalid_proof";
   if (typeof c.jti !== "string" || c.jti.length < 22 || c.jti.length > 128 || !/^[\x21-\x7e]+$/.test(c.jti)) return "invalid_proof";
   if (typeof c.nonce !== "string" || !noncePattern.test(c.nonce)) return "use_nonce";
   return "ok";

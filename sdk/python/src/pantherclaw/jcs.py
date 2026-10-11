@@ -4,9 +4,9 @@
 """RFC 8785 JSON Canonicalization Scheme, checked against the shared
 conformance vectors (sdk/conformance/jcs.json).
 
-Duplicate member names, lone surrogates, invalid UTF-8 and non-finite
-numbers are refused; numbers are written as ECMAScript does and members are
-sorted by UTF-16 code units.
+Duplicate member names, lone surrogates, invalid UTF-8, non-finite numbers
+and nesting deeper than 512 are refused; numbers are written as ECMAScript
+does and members are sorted by UTF-16 code units.
 """
 
 from __future__ import annotations
@@ -20,6 +20,30 @@ __all__ = ["JCSError", "canonicalize", "parse", "serialize"]
 
 class JCSError(ValueError):
     """Input that is not exactly one strict JSON value."""
+
+
+MAX_DEPTH = 512
+
+
+def _check_depth(text: str) -> None:
+    """Refuses nesting deeper than MAX_DEPTH before anything recurses."""
+    depth, in_string, escaped = 0, False, False
+    for c in text:
+        if in_string:
+            if escaped:
+                escaped = False
+            elif c == "\\":
+                escaped = True
+            elif c == '"':
+                in_string = False
+        elif c == '"':
+            in_string = True
+        elif c in "[{":
+            depth += 1
+            if depth > MAX_DEPTH:
+                raise JCSError("nesting too deep")
+        elif c in "]}":
+            depth -= 1
 
 
 def _pairs(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
@@ -57,8 +81,9 @@ def _float(literal: str) -> float:
     return f
 
 
-def parse(data: str | bytes) -> Any:
-    """Parses exactly one strict JSON value from text or UTF-8 bytes."""
+def parse(data: str | bytes, numbers: list[str] | None = None) -> Any:
+    """Parses exactly one strict JSON value from text or UTF-8 bytes.
+    `numbers`, when given, receives every number's source text in order."""
     if isinstance(data, (bytes, bytearray)):
         try:
             text = bytes(data).decode("utf-8")
@@ -67,10 +92,19 @@ def parse(data: str | bytes) -> Any:
     else:
         text = data
     _check_strings(text)
+    _check_depth(text)
+
+    def number(literal: str) -> float:
+        if numbers is not None:
+            numbers.append(literal)
+        return _float(literal)
+
     try:
-        v = json.loads(text, object_pairs_hook=_pairs, parse_constant=_reject_constant, parse_int=_float, parse_float=_float)
+        v = json.loads(text, object_pairs_hook=_pairs, parse_constant=_reject_constant, parse_int=number, parse_float=number)
     except json.JSONDecodeError as e:
         raise JCSError(f"not JSON: {e}") from e
+    except RecursionError as e:
+        raise JCSError("nesting too deep") from e
     _check_strings(v)
     return v
 
@@ -103,7 +137,13 @@ def _number(x: float) -> str:
 
 
 def serialize(v: Any) -> str:
-    """Serializes a JSON-like Python value canonically."""
+    """Serializes a JSON-like Python value canonically. Anything that is
+    not JSON (a huge integer, a non-string key, nesting deeper than
+    MAX_DEPTH, another type) is a JCSError."""
+    return _serialize(v, 0)
+
+
+def _serialize(v: Any, depth: int) -> str:
     if v is None:
         return "null"
     if v is True:
@@ -111,15 +151,27 @@ def serialize(v: Any) -> str:
     if v is False:
         return "false"
     if isinstance(v, (int, float)):
-        return _number(float(v))
+        try:
+            return _number(float(v))
+        except OverflowError as e:
+            raise JCSError("number out of range") from e
     if isinstance(v, str):
         _check_strings(v)
         return json.dumps(v, ensure_ascii=False)
+    if depth >= MAX_DEPTH:
+        raise JCSError("nesting too deep")
+    # Loops, not generator expressions: one frame per level of nesting.
+    parts: list[str] = []
     if isinstance(v, (list, tuple)):
-        return "[" + ",".join(serialize(x) for x in v) + "]"
+        for x in v:
+            parts.append(_serialize(x, depth + 1))
+        return "[" + ",".join(parts) + "]"
     if isinstance(v, dict):
-        items = sorted(v.items(), key=lambda kv: kv[0].encode("utf-16-be"))
-        return "{" + ",".join(serialize(k) + ":" + serialize(x) for k, x in items) + "}"
+        if not all(isinstance(k, str) for k in v):
+            raise JCSError("object member names must be strings")
+        for k, x in sorted(v.items(), key=lambda kv: kv[0].encode("utf-16-be", "surrogatepass")):
+            parts.append(_serialize(k, depth) + ":" + _serialize(x, depth + 1))
+        return "{" + ",".join(parts) + "}"
     raise JCSError(f"cannot serialize {type(v).__name__}")
 
 

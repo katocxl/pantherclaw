@@ -31,3 +31,17 @@ class JCSTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class Limits(unittest.TestCase):
+    def test_deep_nesting_is_a_jcs_error(self) -> None:
+        for text in ("[" * 100000 + "]" * 100000, '{"a":' * 600 + "1" + "}" * 600):
+            with self.assertRaises(jcs.JCSError):
+                jcs.parse(text)
+        self.assertEqual(jcs.canonicalize("[" * 512 + "]" * 512), "[" * 512 + "]" * 512)
+        self.assertEqual(jcs.canonicalize(r'["[[[[", "\\"]'), r'["[[[[","\\"]')
+
+    def test_serialize_refuses_what_json_cannot_hold(self) -> None:
+        for v in (10**400, {1: "one"}, {"a": object()}):
+            with self.assertRaises(jcs.JCSError):
+                jcs.serialize(v)

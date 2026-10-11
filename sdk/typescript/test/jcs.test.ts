@@ -24,3 +24,13 @@ test("nesting is bounded and numbers out of range are refused", () => {
   assert.throws(() => parseJSON("[".repeat(600) + "]".repeat(600)), JCSError);
   assert.throws(() => parseJSON("[1e400]"), JCSError);
 });
+
+test("only JSON values serialize", () => {
+  class Point {
+    x = 1;
+  }
+  for (const v of [new Date(0), /x/, new Point(), new Uint8Array(2), new Map<unknown, unknown>([[1, "one"]]), undefined, () => 0]) {
+    assert.throws(() => serialize(v), JCSError);
+  }
+  assert.equal(serialize(Object.assign(Object.create(null), { b: 1, a: [true] })), '{"a":[true],"b":1}');
+});

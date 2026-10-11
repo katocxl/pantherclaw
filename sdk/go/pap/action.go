@@ -79,11 +79,14 @@ func bad(format string, a ...any) error {
 	return fmt.Errorf("%w: "+format, append([]any{ErrAction}, a...)...)
 }
 
-// ParseAction checks ActionIR as strictly as PantherClaw does: strict JSON
-// (no duplicate or unknown members, valid UTF-8, depth at most 16, strings
-// at most 64 KiB, at most 1 MiB), no JSON numbers except the version,
-// printable-ASCII identifiers, and every required field present and well
-// formed. It returns the canonical bytes and the action hash.
+// ParseAction checks ActionIR with the structural checks PantherClaw makes
+// (PAP/1 §6, actionir.json): strict JSON (no duplicate or unknown members,
+// valid UTF-8, depth at most 16, strings and member names at most 64 KiB, at
+// most 1 MiB), no JSON numbers except the version (written 1), printable-
+// ASCII identifiers of at most 8 KiB, and every required field present and
+// well formed. It cannot apply the 8 KiB cap on material parameters, which
+// depends on the definition. It returns the canonical bytes and the action
+// hash.
 func ParseAction(raw []byte) (ParsedAction, error) {
 	if len(raw) == 0 || len(raw) > maxActionBytes {
 		return ParsedAction{}, bad("size %d", len(raw))
