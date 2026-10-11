@@ -24,6 +24,7 @@ var coverageProcedures = map[string]td.Permission{
 	pantherclawv1connect.CoverageServiceCreateExclusionProcedure:      td.PermCoverageExclude,
 	pantherclawv1connect.CoverageServiceRevokeExclusionProcedure:      td.PermCoverageExclude,
 	pantherclawv1connect.CoverageServiceListExclusionsProcedure:       td.PermCoverageRead,
+	pantherclawv1connect.CoverageServiceGetAccessDisclosureProcedure:  td.PermCoverageRead,
 }
 
 func init() { maps.Copy(procedurePermissions, coverageProcedures) }

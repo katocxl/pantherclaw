@@ -78,6 +78,15 @@ service CoverageService {
   rpc ListExclusions(ListExclusionsRequest) returns (ListExclusionsResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
+  // GetAccessDisclosure says where an agent gets usable authority at a
+  // connection's target and what limits it (§39.2–39.3): the access modes
+  // that apply, who holds the credential, the closure evidence of an
+  // independently constrained runtime, the routes still open, and what each
+  // mode must disclose. It never shows a secret.
+  // permission: coverage.read
+  rpc GetAccessDisclosure(GetAccessDisclosureRequest) returns (GetAccessDisclosureResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 }
 
 // CoverageState is the protection claim of one scope (F435–F438).
@@ -542,4 +551,63 @@ message ListExclusionsResponse {
   repeated CoverageExclusion exclusions = 1;
   // Token for the next page; empty at the end.
   string next_page_token = 2;
+}
+
+// AccessControlMode is how an actor's target access is controlled (§39.2).
+// Several may apply at once.
+enum AccessControlMode {
+  ACCESS_CONTROL_MODE_UNSPECIFIED = 0;
+  // The target validates the action boundary (action tokens).
+  ACCESS_CONTROL_MODE_TARGET_ENFORCED = 1;
+  // Access limited by destination, scope and duration, e.g. a per-action
+  // token.
+  ACCESS_CONTROL_MODE_NARROW_TEMPORARY = 2;
+  // PantherClaw performs approved work with access the agent cannot read.
+  ACCESS_CONTROL_MODE_PANTHERCLAW_HELD = 3;
+  // An approved external control (the containment sandbox) confines the
+  // actor's reach.
+  ACCESS_CONTROL_MODE_CONSTRAINED_RUNTIME = 4;
+  // The agent can exercise broader target authority directly.
+  ACCESS_CONTROL_MODE_AGENT_HELD = 5;
+}
+
+// GetAccessDisclosureRequest names a connection, optionally one agent.
+message GetAccessDisclosureRequest {
+  // Connection id.
+  string connection_id = 1 [(buf.validate.field).string.uuid = true];
+  // Agent id; unset for the connection alone.
+  optional string agent_id = 2 [(buf.validate.field).string.uuid = true];
+}
+
+// AccessDisclosure is the access detail of a connection (and agent).
+message AccessDisclosure {
+  // Connection.
+  string connection_id = 1;
+  // Agent, when one was named.
+  string agent_id = 2;
+  // The modes that apply, strongest control first.
+  repeated AccessControlMode modes = 3;
+  // Who holds usable target authority: "gateway", "agent" or "target".
+  string custodian = 4;
+  // The gateway that holds the sealed credential, when PantherClaw holds it.
+  string gateway_id = 5;
+  // The active sealed credential's version and the hosts it may reach;
+  // never its value.
+  int32 credential_version = 6;
+  // Allowed hosts.
+  repeated string credential_hosts = 7;
+  // The closure that confines the agent, and when it expires.
+  string closure_id = 8;
+  // Expiry.
+  google.protobuf.Timestamp closure_expire_time = 9;
+  // Routes of the agent's scopes on this connection that are not closed.
+  repeated CoverageRoute residual_routes = 10;
+  // What each mode must disclose, in plain language.
+  repeated string disclosures = 11;
+}
+
+// GetAccessDisclosureResponse returns the disclosure.
+message GetAccessDisclosureResponse {
+  // Disclosure.
+  AccessDisclosure disclosure = 1;
 }

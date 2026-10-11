@@ -56,6 +56,9 @@ const (
 	// CoverageServiceListExclusionsProcedure is the procedure name of the CoverageService's
 	// ListExclusions RPC.
 	CoverageServiceListExclusionsProcedure = "/pantherclaw.v1.CoverageService/ListExclusions"
+	// CoverageServiceGetAccessDisclosureProcedure is the procedure name of the CoverageService's
+	// GetAccessDisclosure RPC.
+	CoverageServiceGetAccessDisclosureProcedure = "/pantherclaw.v1.CoverageService/GetAccessDisclosure"
 )
 
 var (
@@ -136,6 +139,14 @@ var (
 			IdempotencyLevel: connect.IdempotencyNoSideEffects,
 		}
 	})
+	coverageServiceGetAccessDisclosureSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_pantherclaw_v1_coverage_records_proto.Services().ByName("CoverageService").Methods().ByName("GetAccessDisclosure"),
+			Procedure:        CoverageServiceGetAccessDisclosureProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
 )
 
 // CoverageServiceClient is a client for the pantherclaw.v1.CoverageService service.
@@ -175,6 +186,13 @@ type CoverageServiceClient interface {
 	// ListExclusions lists exclusions, newest first.
 	// permission: coverage.read
 	ListExclusions(context.Context, *v1.ListExclusionsRequest) (*v1.ListExclusionsResponse, error)
+	// GetAccessDisclosure says where an agent gets usable authority at a
+	// connection's target and what limits it (§39.2–39.3): the access modes
+	// that apply, who holds the credential, the closure evidence of an
+	// independently constrained runtime, the routes still open, and what each
+	// mode must disclose. It never shows a secret.
+	// permission: coverage.read
+	GetAccessDisclosure(context.Context, *v1.GetAccessDisclosureRequest) (*v1.GetAccessDisclosureResponse, error)
 }
 
 // NewCoverageServiceClient constructs a client for the pantherclaw.v1.CoverageService service.
@@ -220,6 +238,13 @@ type CoverageServiceHandler interface {
 	// ListExclusions lists exclusions, newest first.
 	// permission: coverage.read
 	ListExclusions(context.Context, *v1.ListExclusionsRequest) (*v1.ListExclusionsResponse, error)
+	// GetAccessDisclosure says where an agent gets usable authority at a
+	// connection's target and what limits it (§39.2–39.3): the access modes
+	// that apply, who holds the credential, the closure evidence of an
+	// independently constrained runtime, the routes still open, and what each
+	// mode must disclose. It never shows a secret.
+	// permission: coverage.read
+	GetAccessDisclosure(context.Context, *v1.GetAccessDisclosureRequest) (*v1.GetAccessDisclosureResponse, error)
 }
 
 // RegisterCoverageServiceHandler registers svc as the pantherclaw.v1.CoverageService implementation
@@ -237,6 +262,7 @@ func RegisterCoverageServiceHandler(server *connect.Server, svc CoverageServiceH
 		connect.Method{Spec: coverageServiceCreateExclusionSpec(), Handler: adapter.createExclusion},
 		connect.Method{Spec: coverageServiceRevokeExclusionSpec(), Handler: adapter.revokeExclusion},
 		connect.Method{Spec: coverageServiceListExclusionsSpec(), Handler: adapter.listExclusions},
+		connect.Method{Spec: coverageServiceGetAccessDisclosureSpec(), Handler: adapter.getAccessDisclosure},
 	)
 }
 
@@ -281,6 +307,10 @@ func (UnimplementedCoverageServiceHandler) RevokeExclusion(context.Context, *v1.
 
 func (UnimplementedCoverageServiceHandler) ListExclusions(context.Context, *v1.ListExclusionsRequest) (*v1.ListExclusionsResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.CoverageService.ListExclusions is not implemented")
+}
+
+func (UnimplementedCoverageServiceHandler) GetAccessDisclosure(context.Context, *v1.GetAccessDisclosureRequest) (*v1.GetAccessDisclosureResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.CoverageService.GetAccessDisclosure is not implemented")
 }
 
 type coverageServiceClient struct {
@@ -362,6 +392,14 @@ func (c *coverageServiceClient) RevokeExclusion(ctx context.Context, req *v1.Rev
 func (c *coverageServiceClient) ListExclusions(ctx context.Context, req *v1.ListExclusionsRequest) (*v1.ListExclusionsResponse, error) {
 	var res v1.ListExclusionsResponse
 	if err := c.client.CallUnary(ctx, coverageServiceListExclusionsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *coverageServiceClient) GetAccessDisclosure(ctx context.Context, req *v1.GetAccessDisclosureRequest) (*v1.GetAccessDisclosureResponse, error) {
+	var res v1.GetAccessDisclosureResponse
+	if err := c.client.CallUnary(ctx, coverageServiceGetAccessDisclosureSpec(), req, &res); err != nil {
 		return nil, err
 	}
 	return &res, nil
@@ -483,6 +521,18 @@ func (h coverageServiceHandler) listExclusions(ctx context.Context, _ connect.Sp
 		return err
 	}
 	res, err := h.svc.ListExclusions(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h coverageServiceHandler) getAccessDisclosure(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetAccessDisclosureRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetAccessDisclosure(ctx, &req)
 	if err != nil {
 		return err
 	}
