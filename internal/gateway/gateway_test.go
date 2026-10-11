@@ -100,6 +100,9 @@ type fakeAuthority struct {
 	// tamper edits the permit claims before signing; signWith picks the key.
 	tamper   func(*claims)
 	signWith keys.Purpose
+	// observeCode answers RecordToolObservation for a verified workload
+	// without recording it (connection_not_served).
+	observeCode string
 
 	mu        sync.Mutex
 	authorize int
