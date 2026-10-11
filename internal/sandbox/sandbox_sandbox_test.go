@@ -132,7 +132,7 @@ func TestT086_TheSandboxIsClosedAndTheReportsSayWhy(t *testing.T) {
 			twinned[r.Name] = true
 		}
 	}
-	for _, name := range []string{"dns_docker_resolver", "dns_external", "icmp", "direct_https", "direct_ssh", "ssh_push", "pat_push", "host_gateway"} {
+	for _, name := range []string{"dns_docker_resolver", "dns_external", "icmp", "direct_https", "direct_ssh", "ssh_push", "pat_push", "host_gateway", "docker_socket"} {
 		if !twinned[name] {
 			t.Errorf("no passing twin of %s", name)
 		}

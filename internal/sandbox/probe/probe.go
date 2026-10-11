@@ -245,9 +245,10 @@ func catalog(c Config) []probe {
 
 // twins is the control run's catalog: on an open network, each probe that
 // has a live target there runs again under its own name as a positive
-// control that must reach it (G0 M9 design decision 15). ipv6, metadata
-// and docker_socket have none: no IPv6, metadata service or engine API is
-// known to answer on the control network.
+// control that must reach it (G0 M9 design decision 15). ipv6 and metadata
+// have none: no IPv6 or metadata service answers on the control network.
+// docker_socket's twin is the host's engine ports, which answer with a
+// reset when nothing listens (the closure contract needs it).
 func twins(c Config) []probe {
 	ps := canaryProbes(c, report.RolePositive, report.Reachable)
 	add := func(name, target string, f func(context.Context) error) {
@@ -266,6 +267,12 @@ func twins(c Config) []probe {
 		for _, h := range hosts {
 			a := net.JoinHostPort(h, strconv.Itoa(p))
 			add("host_gateway", a, func(ctx context.Context) error { return dialTCP(ctx, "tcp", a) })
+		}
+	}
+	for _, h := range hosts {
+		for _, port := range []string{"2375", "2376"} {
+			a := net.JoinHostPort(h, port)
+			add("docker_socket", a, func(ctx context.Context) error { return dialTCP(ctx, "tcp", a) })
 		}
 	}
 	// Docker's resolver forwards names on the open network: one of the
