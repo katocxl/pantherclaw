@@ -285,8 +285,11 @@ func state(e Evidence, routes []RouteResult) (State, []string) {
 		s      RouteStatus
 		reason string
 	}{
-		{StatusMonitored, ReasonMonitorMode}, {StatusCooperative, ReasonCooperative}, {StatusOpaque, ReasonOpaqueMCP},
-		{StatusPossible, uncontrolled}, {StatusProposed, ReasonRouteOpen + ":" + string(KindChannel)},
+		{StatusMonitored, ReasonMonitorMode},
+		{StatusCooperative, ReasonCooperative},
+		{StatusOpaque, ReasonOpaqueMCP},
+		{StatusPossible, uncontrolled},
+		{StatusProposed, ReasonRouteOpen + ":" + string(KindChannel)},
 	} {
 		if slices.Contains(channels, c.s) {
 			reasons = append(reasons, c.reason)
