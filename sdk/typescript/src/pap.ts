@@ -88,7 +88,13 @@ export async function verifyEd25519(publicKey: Uint8Array, signature: Uint8Array
   return crypto.subtle.verify({ name: "Ed25519" }, key, signature, data);
 }
 
-/** The workload key file (PAP/1 §3.1). Keep it owner-only; never log it. */
+/**
+ * The workload key file (PAP/1 §3.1). Keep it owner-only; never log it.
+ * The key files parseKeyFile, readKeyFile and newKeyFile return print and
+ * stringify without their seed; an object literal, a spread copy
+ * (`{ ...kf }`) or structuredClone of one does not keep that, so pass the
+ * returned object itself around.
+ */
 export interface KeyFile {
   /** The Ed25519 seed, base64url without padding. */
   private_key: string;
