@@ -421,6 +421,7 @@ type PcCredential struct {
 	SupersededAt *time.Time
 	RevokedBy    *string
 	RevokedAt    *time.Time
+	Kind         string
 }
 
 type PcCrossOrgListAudit struct {

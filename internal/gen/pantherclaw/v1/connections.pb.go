@@ -686,7 +686,10 @@ type ConnectionCredential struct {
 	// Who stored it and when.
 	CreatedBy string `protobuf:"bytes,10,opt,name=created_by,json=createdBy,proto3" json:"created_by,omitempty"`
 	// When it was stored.
-	CreateTime    *timestamppb.Timestamp `protobuf:"bytes,11,opt,name=create_time,json=createTime,proto3" json:"create_time,omitempty"`
+	CreateTime *timestamppb.Timestamp `protobuf:"bytes,11,opt,name=create_time,json=createTime,proto3" json:"create_time,omitempty"`
+	// Kind: "static" (placed as sealed) or "github_app" (an App key from
+	// which the gateway mints an installation token per action, G0 M8).
+	Kind          string `protobuf:"bytes,12,opt,name=kind,proto3" json:"kind,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -796,6 +799,13 @@ func (x *ConnectionCredential) GetCreateTime() *timestamppb.Timestamp {
 		return x.CreateTime
 	}
 	return nil
+}
+
+func (x *ConnectionCredential) GetKind() string {
+	if x != nil {
+		return x.Kind
+	}
+	return ""
 }
 
 // CreateConnectionRequest registers a connection.
@@ -1986,7 +1996,11 @@ type PutCredentialRequest struct {
 	// Header.
 	Header string `protobuf:"bytes,6,opt,name=header,proto3" json:"header,omitempty"`
 	// Scheme.
-	Scheme        string `protobuf:"bytes,7,opt,name=scheme,proto3" json:"scheme,omitempty"`
+	Scheme string `protobuf:"bytes,7,opt,name=scheme,proto3" json:"scheme,omitempty"`
+	// Kind the seal bound: "static" (the default when empty) or "github_app"
+	// (G0 M8 decision 3), which needs the header Authorization and the
+	// scheme Bearer.
+	Kind          string `protobuf:"bytes,8,opt,name=kind,proto3" json:"kind,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2066,6 +2080,13 @@ func (x *PutCredentialRequest) GetHeader() string {
 func (x *PutCredentialRequest) GetScheme() string {
 	if x != nil {
 		return x.Scheme
+	}
+	return ""
+}
+
+func (x *PutCredentialRequest) GetKind() string {
+	if x != nil {
+		return x.Kind
 	}
 	return ""
 }
@@ -2343,7 +2364,7 @@ const file_pantherclaw_v1_connections_proto_rawDesc = "" +
 	"\n" +
 	"changed_by\x18\x03 \x01(\tR\tchangedBy\x12;\n" +
 	"\vchange_time\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"changeTime\"\xad\x03\n" +
+	"changeTime\"\xc1\x03\n" +
 	"\x14ConnectionCredential\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12#\n" +
 	"\rconnection_id\x18\x02 \x01(\tR\fconnectionId\x12\x18\n" +
@@ -2358,7 +2379,8 @@ const file_pantherclaw_v1_connections_proto_rawDesc = "" +
 	"created_by\x18\n" +
 	" \x01(\tR\tcreatedBy\x12;\n" +
 	"\vcreate_time\x18\v \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"createTime\"\xd9\x06\n" +
+	"createTime\x12\x12\n" +
+	"\x04kind\x18\f \x01(\tR\x04kind\"\xd9\x06\n" +
 	"\x17CreateConnectionRequest\x12C\n" +
 	"\x04name\x18\x01 \x01(\tB/\xbaH,r*\x10\x01\x18?2$^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$R\x04name\x12>\n" +
 	"\x04kind\x18\x02 \x01(\x0e2\x1e.pantherclaw.v1.ConnectionKindB\n" +
@@ -2473,7 +2495,7 @@ const file_pantherclaw_v1_connections_proto_rawDesc = "" +
 	"\rallowed_hosts\x18\b \x03(\tR\fallowedHosts\x12\x16\n" +
 	"\x06header\x18\t \x01(\tR\x06header\x12\x16\n" +
 	"\x06scheme\x18\n" +
-	" \x01(\tR\x06scheme\"\xeb\x02\n" +
+	" \x01(\tR\x06scheme\"\x9c\x03\n" +
 	"\x14PutCredentialRequest\x12-\n" +
 	"\rconnection_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\fconnectionId\x12!\n" +
 	"\aversion\x18\x02 \x01(\x05B\a\xbaH\x04\x1a\x02 \x00R\aversion\x12,\n" +
@@ -2481,7 +2503,9 @@ const file_pantherclaw_v1_connections_proto_rawDesc = "" +
 	"\x06sealed\x18\x04 \x01(\fB\f\xbaH\tz\a\x10\xf4\b\x18\xf0\xa2\x04R\x06sealed\x128\n" +
 	"\rallowed_hosts\x18\x05 \x03(\tB\x13\xbaH\x10\x92\x01\r\b\x01\x10\x10\"\ar\x05\x10\x01\x18\xfd\x01R\fallowedHosts\x127\n" +
 	"\x06header\x18\x06 \x01(\tB\x1f\xbaH\x1cr\x1a\x10\x01\x18@2\x14^[A-Za-z0-9-]{1,64}$R\x06header\x12:\n" +
-	"\x06scheme\x18\a \x01(\tB\"\xbaH\x1fr\x1d\x18 2\x19^([A-Za-z0-9._-]{1,32})?$R\x06scheme\"]\n" +
+	"\x06scheme\x18\a \x01(\tB\"\xbaH\x1fr\x1d\x18 2\x19^([A-Za-z0-9._-]{1,32})?$R\x06scheme\x12/\n" +
+	"\x04kind\x18\b \x01(\tB\x1b\xbaH\x18r\x16R\x00R\x06staticR\n" +
+	"github_appR\x04kind\"]\n" +
 	"\x15PutCredentialResponse\x12D\n" +
 	"\n" +
 	"credential\x18\x01 \x01(\v2$.pantherclaw.v1.ConnectionCredentialR\n" +

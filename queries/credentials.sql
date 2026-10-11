@@ -15,14 +15,14 @@ UPDATE pc.credentials SET state = 'SUPERSEDED', superseded_at = now()
 WHERE org_id = sqlc.arg(org_id) AND connection_id = sqlc.arg(connection_id) AND state = 'ACTIVE';
 
 -- name: InsertSealedCredential :one
-INSERT INTO pc.credentials (org_id, id, connection_id, version, broker_key_id, sealed, allowed_hosts, header, scheme, created_by)
+INSERT INTO pc.credentials (org_id, id, connection_id, version, broker_key_id, sealed, allowed_hosts, header, scheme, created_by, kind)
 VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(connection_id), sqlc.arg(version), sqlc.arg(broker_key_id), sqlc.arg(sealed),
-        sqlc.arg(allowed_hosts)::text[], sqlc.arg(header), sqlc.narg(scheme), sqlc.arg(created_by))
+        sqlc.arg(allowed_hosts)::text[], sqlc.arg(header), sqlc.narg(scheme), sqlc.arg(created_by), sqlc.arg(kind))
 RETURNING id, version, state, created_at;
 
 -- name: ListCredentialMetadata :many
 SELECT c.id, c.connection_id, c.version, c.broker_key_id, b.fingerprint AS broker_key_fingerprint, c.allowed_hosts, c.header,
-       c.scheme, c.state, c.created_by, c.created_at
+       c.scheme, c.state, c.created_by, c.created_at, c.kind
 FROM pc.credentials c
 JOIN pc.broker_keys b ON b.org_id = c.org_id AND b.id = c.broker_key_id
 WHERE c.org_id = sqlc.arg(org_id) AND c.connection_id = sqlc.arg(connection_id)

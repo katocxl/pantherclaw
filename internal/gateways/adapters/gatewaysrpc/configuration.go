@@ -56,7 +56,7 @@ func (h *GatewayHandler) GetConfiguration(ctx context.Context, req *pb.GetConfig
 	for _, cr := range c.Credentials {
 		out.Credentials = append(out.Credentials, &pb.SealedCredential{
 			Id: cr.ID.String(), ConnectionId: cr.ConnectionID.String(), Version: cr.Version, BrokerKeyId: cr.BrokerKeyID.String(),
-			Sealed: cr.Sealed, AllowedHosts: cr.AllowedHosts, Header: cr.Header, Scheme: deref(cr.Scheme),
+			Sealed: cr.Sealed, AllowedHosts: cr.AllowedHosts, Header: cr.Header, Scheme: deref(cr.Scheme), Kind: cr.Kind,
 		})
 	}
 	out.CaptureProfiles = captureProfiles(c)

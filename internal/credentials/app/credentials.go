@@ -41,6 +41,8 @@ var (
 	ErrBinding     = pcerr.New(pcerr.FailedPrecondition, "CREDENTIAL_BINDING_CHANGED",
 		"the connection's hosts, header or scheme changed since the sealing key was read; seal again")
 	ErrFormat = pcerr.New(pcerr.InvalidArgument, "SEALED_FORMAT", "the upload is not a sealed credential")
+	ErrKind   = pcerr.New(pcerr.InvalidArgument, "CREDENTIAL_KIND",
+		"a credential is static or github_app, and a GitHub App credential is placed as Authorization: Bearer")
 )
 
 // Notifier queues a notification in the caller's transaction (M5).
@@ -73,6 +75,8 @@ type PutInput struct {
 	Sealed                []byte
 	AllowedHosts          []string
 	Header, Scheme        string
+	// Kind is domain.KindStatic (or empty) or domain.KindGitHubApp.
+	Kind string
 }
 
 // Metadata describes a stored credential; it never carries sealed bytes.
@@ -155,6 +159,12 @@ func (s *Service) PutCredential(ctx context.Context, in PutInput) (Metadata, err
 	if domain.CheckFormat(in.Sealed) != nil {
 		return Metadata{}, ErrFormat
 	}
+	if in.Kind == "" {
+		in.Kind = domain.KindStatic
+	}
+	if !domain.ValidKind(in.Kind) || (in.Kind == domain.KindGitHubApp && (in.Header != domain.GitHubAppHeader || in.Scheme != domain.GitHubAppScheme)) {
+		return Metadata{}, ErrKind
+	}
 	var out Metadata
 	err = s.pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
 		q := dbq.New(tx)
@@ -192,7 +202,7 @@ func (s *Service) PutCredential(ctx context.Context, in PutInput) (Metadata, err
 		}
 		row, err := q.InsertSealedCredential(ctx, dbq.InsertSealedCredentialParams{
 			OrgID: c.Org, ID: ids.NewV7(), ConnectionID: conn.ID, Version: in.Version, BrokerKeyID: key.ID, Sealed: in.Sealed,
-			AllowedHosts: conn.AllowedHosts, Header: in.Header, Scheme: scheme, CreatedBy: c.Principal.String(),
+			AllowedHosts: conn.AllowedHosts, Header: in.Header, Scheme: scheme, CreatedBy: c.Principal.String(), Kind: in.Kind,
 		})
 		if err != nil {
 			return err
@@ -202,7 +212,7 @@ func (s *Service) PutCredential(ctx context.Context, in PutInput) (Metadata, err
 		}
 		details := map[string]string{
 			"version": strconv.Itoa(int(in.Version)), "broker_key_id": key.ID.String(), "broker_key_fingerprint": key.Fingerprint,
-			"allowed_hosts": strings.Join(conn.AllowedHosts, ","), "replaced": strconv.FormatInt(replaced, 10),
+			"allowed_hosts": strings.Join(conn.AllowedHosts, ","), "replaced": strconv.FormatInt(replaced, 10), "kind": in.Kind,
 		}
 		if replaced > 0 {
 			details["weakening"] = "sealed_replaced"
@@ -220,7 +230,7 @@ func (s *Service) PutCredential(ctx context.Context, in PutInput) (Metadata, err
 		out = Metadata{
 			ID: row.ID, ConnectionID: conn.ID, Version: row.Version, BrokerKeyID: key.ID, BrokerKeyFingerprint: key.Fingerprint,
 			AllowedHosts: conn.AllowedHosts, Header: in.Header, Scheme: scheme, State: row.State, CreatedBy: c.Principal.String(),
-			CreatedAt: row.CreatedAt,
+			CreatedAt: row.CreatedAt, Kind: in.Kind,
 		}
 		return nil
 	})

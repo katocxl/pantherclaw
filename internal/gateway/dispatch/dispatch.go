@@ -44,6 +44,7 @@ import (
 
 	"github.com/katocxl/pantherclaw/internal/actionir"
 	"github.com/katocxl/pantherclaw/internal/approvals/proof"
+	credentials "github.com/katocxl/pantherclaw/internal/credentials/domain"
 	defs "github.com/katocxl/pantherclaw/internal/definitions/domain"
 	"github.com/katocxl/pantherclaw/internal/gateway/broker"
 	"github.com/katocxl/pantherclaw/internal/gateway/control"
@@ -443,6 +444,9 @@ func (r Result) fail(class Class, code string) Result {
 // errUnsupported reports an obligation the gateway cannot apply.
 var errUnsupported = errors.New("dispatch: unsupported obligation")
 
+// errKind refuses to place a credential that is not static.
+var errKind = errors.New("dispatch: a GitHub App credential is never placed as sealed")
+
 // effective applies the decision's obligations to the action (F104, F107):
 // the only kind the Authority sets is count_max with clamping, before
 // execution. Any other obligation is not applied, and nothing is sent.
@@ -655,13 +659,19 @@ func (e *Engine) openCredential(conn *control.Connection) ([]byte, error) {
 	}
 	return e.broker.Open(e.org, conn.GetId(), cred.GetAllowedHosts(), broker.Sealed{
 		Version: cred.GetVersion(), BrokerKey: cred.GetBrokerKeyId(), Blob: cred.GetSealed(), Header: cred.GetHeader(), Scheme: cred.GetScheme(),
+		Kind: cred.GetKind(),
 	})
 }
 
-// placeCredential places an opened credential on req, for the
-// credential's allowed hosts only.
+// placeCredential places an opened static credential on req, for the
+// credential's allowed hosts only. A GitHub App credential is never placed:
+// it holds the App's key, from which the gateway mints a token per action
+// (HR-203, HR-204).
 func placeCredential(conn *control.Connection, req *http.Request, secret []byte) error {
 	cred := conn.Credential
+	if k := cred.GetKind(); k != "" && k != credentials.KindStatic {
+		return errKind
+	}
 	return broker.Place(req, cred.GetAllowedHosts(), cred.GetHeader(), cred.GetScheme(), secret)
 }
 
