@@ -28,51 +28,66 @@ const (
 
 // Reason codes, in the order Compute reports them.
 const (
-	ReasonConnectionRetired = "connection_retired"
-	ReasonNoTraffic         = "no_observed_traffic"
-	ReasonMonitorMode       = "monitor_mode"
-	ReasonCooperative       = "cooperative_channel"
-	ReasonOpaqueMCP         = "opaque_mcp_server"
-	ReasonNotActive         = "connection_not_active"
-	ReasonNoClosure         = "no_closure_evidence"
-	ReasonClosureFailed     = "closure_failed"
-	ReasonClosureExpired    = "closure_expired"
-	ReasonClosureRebound    = "closure_binding_changed"
-	ReasonInvalidated       = "invalidated"
-	ReasonRouteOpen         = "route_not_closed"
-	ReasonExcluded          = "excluded"
+	ReasonNoRoutes       = "no_known_routes"
+	ReasonNoChannel      = "no_gateway_channel"
+	ReasonNotActive      = "connection_not_active"
+	ReasonMonitorMode    = "monitor_mode"
+	ReasonCooperative    = "cooperative_channel"
+	ReasonOpaqueMCP      = "opaque_mcp_server"
+	ReasonAgentHeld      = "agent_held_access"
+	ReasonUnverified     = "target_not_verified"
+	ReasonNoClosure      = "no_closure_evidence"
+	ReasonClosureFailed  = "closure_failed"
+	ReasonClosureExpired = "closure_expired"
+	ReasonClosureRebound = "closure_binding_changed"
+	ReasonInvalidated    = "invalidated"
+	ReasonRouteOpen      = "route_not_closed"
+	ReasonInstance       = "instance_outside_sandbox"
+	ReasonExcluded       = "excluded"
+)
+
+// Access modes of a connection (M6), as stored.
+const (
+	AccessPantherClawHeld = "pantherclaw_held"
+	AccessAgentHeld       = "agent_held"
+	AccessTargetEnforced  = "target_enforced"
+	AccessNone            = "none"
 )
 
 // Connection is what coverage reads of a connection now. Its fields are
-// settings: they can lower a state, never raise one (HR-210, F460).
+// settings: they can lower a state, never raise one on their own (HR-210,
+// F460).
 type Connection struct {
-	// Kind is "http", "mcp" or "local"; an "mcp" connection fronts an
-	// opaque MCP server (HR-086).
+	// Kind is "http", "mcp", "mcp_container" or "local". An "mcp"
+	// connection fronts an opaque MCP server (HR-086); an "mcp_container"
+	// one runs it in a connector whose egress the edge can mediate.
 	Kind string
 	// State is "ACTIVE", "QUARANTINED" or "RETIRED".
-	State          string
-	Revision       int32
-	Gateway        ids.UUID
-	PackageVersion ids.UUID
-	// RouteMode is the operation's package route mode, "monitor" or
-	// "enforce".
+	State             string
+	Revision          int32
+	Gateway           ids.UUID
+	PackageVersion    ids.UUID
+	CredentialVersion *int32
+	AccessMode        string
+	// RouteMode is the mode, "monitor" or "enforce", of the operation's
+	// package routes on a channel without an entry in RouteModes.
 	RouteMode string
+	// RouteModes are the current modes of the operation's routes per
+	// channel.
+	RouteModes map[Channel]string
 }
 
-// Traffic is a channel the gateway observed carrying the scope's action, in
-// a route mode.
-type Traffic struct {
-	Channel Channel
-	Mode    string
-}
-
-// Route is a route inventory entry that applies to the scope.
+// Route is a route inventory entry that applies to the scope: a channel
+// route (Kind channel, from gateway traffic or the connection's declared
+// routes) or a route around PantherClaw.
 type Route struct {
 	ID      ids.UUID
 	Kind    RouteKind
 	Channel Channel
 	Locator string
-	// Observation is "observed", "declared" or "proposed".
+	// Observation is "observed", "declared" or "proposed". A proposed route
+	// is a hypothesis: it never makes a scope known and is never closed by
+	// being proposed (F455).
 	Observation string
 }
 
@@ -81,13 +96,13 @@ type ClosureRecord struct {
 	ID               ids.UUID
 	Agent            ids.UUID
 	Connection       ids.UUID
+	SandboxSession   ids.UUID
 	Probes           []ProbeResult
+	ConfigChecks     []ConfigCheck
 	SessionStartedAt time.Time
 	ObservedAt       time.Time
 	ExpiresAt        time.Time
-	Revision         int32
-	Gateway          ids.UUID
-	PackageVersion   ids.UUID
+	Bound            Bound
 }
 
 // Change is a recorded invalidation event of the scope.
@@ -104,21 +119,34 @@ type Exclusion struct {
 	Kind RouteKind
 }
 
+// Instance is an active instance of the agent; SandboxSession is set for a
+// sandbox instance (design decision 2).
+type Instance struct {
+	ID             ids.UUID
+	SandboxSession *ids.UUID
+}
+
 // Evidence is everything a scope's state is computed from, and nothing
 // else.
 type Evidence struct {
-	Scope      Scope
-	Now        time.Time
+	Scope Scope
+	Now   time.Time
+	// TTL is how long evidence supports ENFORCED (coverage.enforced_ttl).
+	TTL        time.Duration
 	Connection Connection
-	Traffic    []Traffic
 	Routes     []Route
 	// Closure is the newest closure of the agent and connection, passed or
 	// failed; nil when there is none.
 	Closure *ClosureRecord
-	// Changes are the scope's invalidation events since the closure's
-	// session started.
+	// Changes are the scope's closure-invalidating events since the
+	// closure's session started.
 	Changes    []Change
 	Exclusions []Exclusion
+	// VerifiedAt is when the connection's latest passing target-verifier
+	// test ran (M8, HR-202); nil when none passed.
+	VerifiedAt *time.Time
+	// Instances are the agent's active instances.
+	Instances []Instance
 }
 
 // RouteResult is one route of a computed record.
@@ -140,27 +168,35 @@ type Result struct {
 	// Closure and ExpiresAt are set for ENFORCED only.
 	Closure   *ids.UUID
 	ExpiresAt *time.Time
+	// Exclusions are the exclusions that applied, which the record and
+	// every claim on it list (HR-212).
+	Exclusions []ids.UUID
 	// Excluded: a whole-scope exclusion applies. It never changes State.
 	Excluded bool
 }
 
-// Compute derives a scope's coverage from its evidence (HR-210):
+// Compute derives a scope's coverage from its evidence (HR-210). The first
+// matching step wins:
 //
-//   - a retired connection, or a scope without observed traffic, is
-//     UNKNOWN: a connection setting alone yields no state (F460);
-//   - traffic observed only in monitor mode, or a route in monitor mode
-//     now, is OBSERVE_ONLY;
-//   - a cooperative channel is capped at PARTIAL unless the target is shown
-//     to verify action tokens (HR-024), an opaque MCP server unless its
-//     egress is shown mediated (HR-086);
-//   - ENFORCED needs every observed channel mediated in enforce mode and a
-//     passed, unexpired closure of the agent and connection, bound to the
-//     connection's current revision, gateway and package version, followed
-//     by no invalidating change, that closes every containment kind. It
-//     expires with the closure (HR-211);
-//   - anything else with a mediated route is PARTIAL.
+//  1. UNKNOWN: the scope has no observed or declared route.
+//  2. OBSERVE_ONLY: none of its routes is a gateway channel in enforce
+//     mode on an active connection.
+//  3. ENFORCED, only when there is a current PASSED closure of the agent
+//     and connection (unexpired, its bindings still the connection's, no
+//     invalidating change since its session started) and every route is
+//     covered: each channel is mediated in enforce mode on
+//     PantherClaw-held access, or on target-enforced access with a
+//     target-verifier test no older than TTL; a cooperative channel needs
+//     that test (HR-024) and an opaque MCP server mediated connector
+//     egress (HR-086); each containment kind, observed or not (F450), is
+//     closed by the closure unless a person excluded it (HR-212, design
+//     decision 1); and every active instance of the agent is a sandbox
+//     instance of the closure's session (design decision 2). It expires
+//     with the closure, or sooner with the verifier test (HR-211).
+//  4. PARTIAL otherwise.
 //
-// Exclusions never raise a state (HR-212).
+// Settings, route modes and access modes alone never yield ENFORCED
+// (F460): they only lower what the evidence supports.
 func Compute(e Evidence) Result {
 	closure := e.Closure
 	if closure != nil && (closure.Agent != e.Scope.Agent || closure.Connection != e.Scope.Connection) {
@@ -171,33 +207,48 @@ func Compute(e Evidence) Result {
 	if closure != nil {
 		stale = staleReasons(e, closure)
 		if len(stale) == 0 {
-			v = Evaluate(closure.Probes, nil)
+			v = Evaluate(closure.Probes, closure.ConfigChecks)
 		}
 	}
 	var r Result
+	for _, x := range e.Exclusions {
+		r.Exclusions = append(r.Exclusions, x.ID)
+	}
 	r.Routes, r.Excluded = routes(e, closure, v)
-	r.State, r.Reasons = state(e, r.Routes)
+	var reasons []string
+	r.State, reasons = state(e, r.Routes)
 	if r.State == Partial {
 		switch {
 		case closure == nil:
-			r.Reasons = append(r.Reasons, ReasonNoClosure)
+			reasons = append(reasons, ReasonNoClosure)
 		case len(stale) > 0:
-			r.Reasons = append(r.Reasons, stale...)
+			reasons = append(reasons, stale...)
 		case !v.Passed:
-			r.Reasons = append(r.Reasons, ReasonClosureFailed)
+			reasons = append(reasons, ReasonClosureFailed)
 		}
 		for _, rt := range r.Routes {
-			if slices.Contains(ContainmentKinds, rt.Kind) && rt.Status != StatusClosed {
-				r.Reasons = append(r.Reasons, ReasonRouteOpen+":"+string(rt.Kind))
+			if slices.Contains(ContainmentKinds, rt.Kind) && rt.Status != StatusClosed && rt.Status != StatusExcluded {
+				if reason := ReasonRouteOpen + ":" + string(rt.Kind); !slices.Contains(reasons, reason) {
+					reasons = append(reasons, reason)
+				}
 			}
 		}
-		if len(r.Reasons) == 0 {
+		if closure != nil && slices.ContainsFunc(e.Instances, func(i Instance) bool {
+			return i.SandboxSession == nil || *i.SandboxSession != closure.SandboxSession
+		}) {
+			reasons = append(reasons, ReasonInstance)
+		}
+		if len(reasons) == 0 {
 			r.State = Enforced
 			id, at := closure.ID, closure.ExpiresAt
+			if e.VerifiedAt != nil && usesVerifier(e, r.Routes) {
+				at = earliest(at, e.VerifiedAt.Add(e.TTL))
+			}
 			r.Closure, r.ExpiresAt = &id, &at
 		}
 	}
-	if r.Excluded {
+	r.Reasons = reasons
+	if len(r.Exclusions) > 0 {
 		r.Reasons = append(r.Reasons, ReasonExcluded)
 	}
 	return r
@@ -206,8 +257,9 @@ func Compute(e Evidence) Result {
 // state is UNKNOWN, OBSERVE_ONLY or the PARTIAL that Compute may raise to
 // ENFORCED, with the reasons from the channels and the connection.
 func state(e Evidence, routes []RouteResult) (State, []string) {
-	if e.Connection.State == "RETIRED" {
-		return Unknown, []string{ReasonConnectionRetired}
+	known := slices.ContainsFunc(e.Routes, func(r Route) bool { return r.Observation != "proposed" })
+	if !known {
+		return Unknown, []string{ReasonNoRoutes}
 	}
 	var channels []RouteStatus
 	for _, rt := range routes {
@@ -215,41 +267,50 @@ func state(e Evidence, routes []RouteResult) (State, []string) {
 			channels = append(channels, rt.Status)
 		}
 	}
-	if len(channels) == 0 {
-		return Unknown, []string{ReasonNoTraffic}
-	}
-	if !slices.ContainsFunc(channels, func(s RouteStatus) bool { return s != StatusMonitored }) {
-		return ObserveOnly, []string{ReasonMonitorMode}
-	}
 	var reasons []string
+	if e.Connection.State != "ACTIVE" {
+		reasons = append(reasons, ReasonNotActive)
+	}
+	if len(channels) == 0 {
+		return ObserveOnly, append(reasons, ReasonNoChannel)
+	}
+	if !slices.ContainsFunc(channels, func(s RouteStatus) bool { return s != StatusMonitored && s != StatusProposed }) {
+		return ObserveOnly, append(reasons, ReasonMonitorMode)
+	}
+	uncontrolled := ReasonAgentHeld
+	if e.Connection.AccessMode == AccessTargetEnforced {
+		uncontrolled = ReasonUnverified
+	}
 	for _, c := range []struct {
 		s      RouteStatus
 		reason string
-	}{{StatusMonitored, ReasonMonitorMode}, {StatusCooperative, ReasonCooperative}, {StatusOpaque, ReasonOpaqueMCP}} {
+	}{
+		{StatusMonitored, ReasonMonitorMode}, {StatusCooperative, ReasonCooperative}, {StatusOpaque, ReasonOpaqueMCP},
+		{StatusPossible, uncontrolled}, {StatusProposed, ReasonRouteOpen + ":" + string(KindChannel)},
+	} {
 		if slices.Contains(channels, c.s) {
 			reasons = append(reasons, c.reason)
 		}
-	}
-	if e.Connection.State != "ACTIVE" {
-		reasons = append(reasons, ReasonNotActive)
 	}
 	return Partial, reasons
 }
 
 // staleReasons are why a closure no longer applies, whether it passed or
-// not: it expired, the connection's revision, gateway or package version
-// changed, or an invalidating change followed its session's start.
+// not: it expired, the connection's revision, gateway, package version or
+// credential changed, or an invalidating change came at or after its
+// session's start.
 func staleReasons(e Evidence, c *ClosureRecord) []string {
+	cur := e.Connection
 	switch {
 	case !e.Now.Before(c.ExpiresAt):
 		return []string{ReasonClosureExpired}
-	case c.Revision != e.Connection.Revision || c.Gateway != e.Connection.Gateway ||
-		c.PackageVersion != e.Connection.PackageVersion:
+	case c.Bound.ConnectionRevision != cur.Revision || c.Bound.Gateway != cur.Gateway ||
+		c.Bound.PackageVersion != cur.PackageVersion || !sameVersion(c.Bound.CredentialVersion, cur.CredentialVersion):
 		return []string{ReasonClosureRebound}
 	}
 	var out []string
 	for _, ch := range e.Changes {
-		if ch.Kind.Invalidates() && ch.OccurredAt.After(c.SessionStartedAt) {
+		if ch.Kind.Invalidates() && !ch.OccurredAt.Before(c.SessionStartedAt) {
 			if reason := ReasonInvalidated + ":" + string(ch.Kind); !slices.Contains(out, reason) {
 				out = append(out, reason)
 			}
@@ -258,9 +319,9 @@ func staleReasons(e Evidence, c *ClosureRecord) []string {
 	return out
 }
 
-// routes lists the scope's channel routes from traffic, then one entry per
-// equivalent route kind: its inventory entries, or a "not observed" entry
-// when no source shows one (F450).
+// routes lists the scope's channel routes, then one entry per equivalent
+// route kind: its inventory entries, or a "not observed" entry when no
+// source shows one (F450).
 func routes(e Evidence, closure *ClosureRecord, v Verdict) (out []RouteResult, excluded bool) {
 	excludedKinds := map[RouteKind]bool{}
 	for _, x := range e.Exclusions {
@@ -270,15 +331,20 @@ func routes(e Evidence, closure *ClosureRecord, v Verdict) (out []RouteResult, e
 			excludedKinds[x.Kind] = true
 		}
 	}
-	var seen []Channel
-	for _, t := range e.Traffic {
-		if !slices.Contains(seen, t.Channel) {
-			seen = append(seen, t.Channel)
+	channels := slices.DeleteFunc(slices.Clone(e.Routes), func(r Route) bool { return r.Kind != KindChannel })
+	slices.SortStableFunc(channels, func(a, b Route) int {
+		switch {
+		case a.Channel < b.Channel:
+			return -1
+		case a.Channel > b.Channel:
+			return 1
 		}
-	}
-	slices.Sort(seen)
-	for _, ch := range seen {
-		out = append(out, RouteResult{Kind: KindChannel, Channel: ch, Status: channelStatus(e, ch, v)})
+		return 0
+	})
+	for _, rt := range channels {
+		out = append(out, RouteResult{
+			Kind: KindChannel, Channel: rt.Channel, Locator: rt.Locator, Route: rt.ID, Status: channelStatus(e, rt, v),
+		})
 	}
 	for _, k := range EquivalentKinds {
 		closed := slices.Contains(v.Closed, k)
@@ -315,35 +381,81 @@ func routes(e Evidence, closure *ClosureRecord, v Verdict) (out []RouteResult, e
 	return out, excluded
 }
 
-// channelStatus is a channel route's status: monitored unless traffic in
-// enforce mode was observed and the route is in enforce mode now; then
-// capped by the HR-024 and HR-086 rules.
-func channelStatus(e Evidence, ch Channel, v Verdict) RouteStatus {
-	enforced := e.Connection.RouteMode == "enforce" &&
-		slices.ContainsFunc(e.Traffic, func(t Traffic) bool { return t.Channel == ch && t.Mode == "enforce" })
+// channelStatus is a channel route's status: proposed or monitored unless
+// it is in enforce mode now on an active connection; then capped by the
+// access mode and the HR-024 and HR-086 rules.
+func channelStatus(e Evidence, rt Route, v Verdict) RouteStatus {
+	c := e.Connection
 	switch {
-	case !enforced:
+	case rt.Observation == "proposed":
+		return StatusProposed
+	case c.State != "ACTIVE" || c.modeOf(rt.Channel) != "enforce":
 		return StatusMonitored
-	case ch.Cooperative():
+	case rt.Channel.Cooperative() && !verified(e):
 		return StatusCooperative
-	case e.Connection.Kind == "mcp" && !v.EgressMediated:
+	case c.Kind == "mcp" || (c.Kind == "mcp_container" && !v.EgressMediated):
 		return StatusOpaque
 	}
-	return StatusMediated
+	switch c.AccessMode {
+	case AccessPantherClawHeld, AccessNone:
+		return StatusMediated
+	case AccessTargetEnforced:
+		if verified(e) {
+			return StatusMediated
+		}
+	}
+	return StatusPossible
 }
 
-// ReadAt is what a computed ENFORCED state reads as at time now, given the
-// changes after it was computed: PARTIAL once it expired or a change
-// invalidated it (HR-211). Other states read as computed.
-func ReadAt(s State, expiresAt *time.Time, changesSince int, now time.Time) (State, string) {
-	if s != Enforced {
-		return s, ""
-	}
-	if expiresAt == nil || !now.Before(*expiresAt) {
-		return StaleState, ReasonClosureExpired
-	}
-	if changesSince > 0 {
-		return StaleState, ReasonInvalidated
-	}
-	return s, ""
+// verified reports whether a target-verifier test passed no longer than
+// TTL ago (HR-210).
+func verified(e Evidence) bool {
+	return e.VerifiedAt != nil && !e.VerifiedAt.After(e.Now) && e.Now.Before(e.VerifiedAt.Add(e.TTL))
 }
+
+// usesVerifier reports whether a mediated channel rests on the
+// target-verifier test, so ENFORCED expires with it.
+func usesVerifier(e Evidence, routes []RouteResult) bool {
+	return slices.ContainsFunc(routes, func(rt RouteResult) bool {
+		return rt.Kind == KindChannel && rt.Status == StatusMediated &&
+			(rt.Channel.Cooperative() || e.Connection.AccessMode == AccessTargetEnforced)
+	})
+}
+
+// modeOf is the current route mode of channel ch.
+func (c Connection) modeOf(ch Channel) string {
+	if m, ok := c.RouteModes[ch]; ok {
+		return m
+	}
+	return c.RouteMode
+}
+
+func sameVersion(a, b *int32) bool { return (a == nil) == (b == nil) && (a == nil || *a == *b) }
+
+func earliest(a, b time.Time) time.Time {
+	if b.Before(a) {
+		return b
+	}
+	return a
+}
+
+// LapseExpired is the lapse reason of a state past its expiry.
+const LapseExpired = "expired"
+
+// Lapse reports why a stored state no longer holds at now, "" while it
+// does (HR-211): LapseExpired once its expiry passed, else the kind of the
+// first change to the scope the stored state did not see. A lapsed scope
+// is recomputed from current evidence and read through Cap.
+func Lapse(expiresAt *time.Time, unseen []Change, now time.Time) string {
+	if expiresAt != nil && !now.Before(*expiresAt) {
+		return LapseExpired
+	}
+	if len(unseen) > 0 {
+		return string(unseen[0].Kind)
+	}
+	return ""
+}
+
+// Cap is a lapsed scope's state: recomputed from current evidence and
+// capped at StaleState, so it may read lower (HR-211).
+func Cap(recomputed State) State { return min(recomputed, StaleState) }
