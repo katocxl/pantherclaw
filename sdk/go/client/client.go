@@ -52,6 +52,13 @@ type Config struct {
 	// Timeout bounds one decision or token request (default 15 seconds);
 	// a long-poll gets its wait on top. Past it, PantherClaw cannot decide.
 	Timeout time.Duration
+	// MaxWait bounds a wait on a hold whatever its deadline says (default
+	// 15 minutes).
+	MaxWait time.Duration
+	// StreamIdle is how long the SSE wait stream may stay silent,
+	// heartbeats included, before the client falls back to long-polls
+	// (default 30 seconds, twice the server's heartbeat).
+	StreamIdle time.Duration
 	// Now is the clock; nil is time.Now.
 	Now func() time.Time
 }
@@ -101,6 +108,12 @@ func New(cfg Config) (*Client, error) {
 	}
 	if cfg.Timeout <= 0 {
 		cfg.Timeout = 15 * time.Second
+	}
+	if cfg.MaxWait <= 0 {
+		cfg.MaxWait = 15 * time.Minute
+	}
+	if cfg.StreamIdle <= 0 {
+		cfg.StreamIdle = 30 * time.Second
 	}
 	hc := &http.Client{}
 	if cfg.HTTPClient != nil {
