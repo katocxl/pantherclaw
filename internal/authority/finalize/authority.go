@@ -11,6 +11,7 @@ import (
 	"time"
 
 	apdomain "github.com/katocxl/pantherclaw/internal/approvals/domain"
+	"github.com/katocxl/pantherclaw/internal/authority/consequences"
 	adomain "github.com/katocxl/pantherclaw/internal/authority/domain"
 	"github.com/katocxl/pantherclaw/internal/authority/pipeline"
 	"github.com/katocxl/pantherclaw/internal/authority/recording"
@@ -89,6 +90,9 @@ type Result struct {
 	// Wait is the wait handle of a held action, or of one its approval
 	// request ended (G0 M5 part 2); nil otherwise.
 	Wait *Wait
+	// Consequences are what the action's consequence rules said (G0 M8,
+	// HR-206); none for a stored decision.
+	Consequences []consequences.Consequence
 }
 
 // DefaultRetryAfter is how long a held agent waits before waiting again or
@@ -321,6 +325,7 @@ func (a *Authority) bind(ctx context.Context, gw Gateway, ev *pipeline.Evaluatio
 		Decision: ev.Decision, TransactionID: w.TransactionID, Evaluation: w.Evaluation, ActionHash: ev.ActionHash,
 		EffectiveHash: ev.EffectiveHash, BasisDigest: ev.Basis.Digest(), Checklist: ev.Checklist,
 		Obligations: ev.Obligations, Reasons: reasons(ev.Checklist), Mode: ev.Mode, Wait: waitOf(ev, w.TransactionID),
+		Consequences: ev.Consequences,
 	}
 	if res.Wait != nil && !w.HoldRequest.IsZero() {
 		res.Wait.RequestID = w.HoldRequest

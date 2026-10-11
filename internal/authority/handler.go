@@ -10,6 +10,7 @@ import (
 	"connectrpc.com/connect/v2"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"github.com/katocxl/pantherclaw/internal/authority/consequences"
 	"github.com/katocxl/pantherclaw/internal/authority/domain"
 	"github.com/katocxl/pantherclaw/internal/authority/pipeline"
 	pantherclawv1 "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
@@ -111,7 +112,30 @@ func (h *Handler) Authorize(ctx context.Context, req *pantherclawv1.AuthorizeReq
 		})
 	}
 	out.Obligations = gatewayObligations(res.Obligations)
+	out.Consequences = consequencesToProto(res.Consequences)
 	return out, nil
+}
+
+// consequencesToProto is what the consequence rules said; a rule that
+// could not be evaluated is in the checklist, not here.
+func consequencesToProto(cs []consequences.Consequence) []*pantherclawv1.Consequence {
+	var out []*pantherclawv1.Consequence
+	for _, c := range cs {
+		if c.Err != nil {
+			continue
+		}
+		out = append(out, &pantherclawv1.Consequence{
+			RuleId: c.Rule, Operation: c.Operation, TargetType: c.Target.Type, TargetId: c.Target.ID, Environments: c.Environments,
+			State: consequenceState[c.State], Unknown: c.Unknown, FactsDigest: c.FactsDigest,
+		})
+	}
+	return out
+}
+
+var consequenceState = map[consequences.State]pantherclawv1.ConsequenceState{
+	consequences.Predicted:    pantherclawv1.ConsequenceState_CONSEQUENCE_STATE_PREDICTED,
+	consequences.Unknown:      pantherclawv1.ConsequenceState_CONSEQUENCE_STATE_UNKNOWN,
+	consequences.NotTriggered: pantherclawv1.ConsequenceState_CONSEQUENCE_STATE_NOT_TRIGGERED,
 }
 
 // gatewayObligations are the obligations the gateway applies: all but

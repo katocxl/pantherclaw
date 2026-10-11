@@ -464,6 +464,22 @@ type PcCrossOrgListAudit struct {
 	CalledAt time.Time
 }
 
+type PcDecisionConsequence struct {
+	OrgID         ids.OrgID
+	TransactionID ids.UUID
+	Evaluation    int32
+	Position      int32
+	RuleID        string
+	Operation     string
+	TargetType    string
+	TargetID      string
+	Environments  []string
+	State         string
+	Unknown       []byte
+	FactsDigest   string
+	CreatedAt     time.Time
+}
+
 type PcDecisionReceipt struct {
 	OrgID           ids.OrgID
 	TransactionID   ids.UUID

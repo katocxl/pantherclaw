@@ -132,6 +132,43 @@ message AuthorizeResponse {
   // Access mode of the action's connection (F416), for the gateway's
   // execution record.
   string access_mode = 18;
+  // What the action's consequence rules said, in rule order (G0 M8,
+  // HR-206): each consequence predicted, not ruled out (UNKNOWN) or ruled
+  // out. A predicted consequence is a prediction, never an authorized or
+  // confirmed effect. Empty for a stored decision (repeat).
+  repeated Consequence consequences = 19;
+}
+
+// ConsequenceState is what a consequence rule said about an action
+// (HR-206).
+enum ConsequenceState {
+  CONSEQUENCE_STATE_UNSPECIFIED = 0;
+  // The rule's facts are current and its condition holds.
+  CONSEQUENCE_STATE_PREDICTED = 1;
+  // A fact the rule needs is missing, stale or unknown: the consequence
+  // is treated as predicted.
+  CONSEQUENCE_STATE_UNKNOWN = 2;
+  // The rule's facts are current and its condition does not hold.
+  CONSEQUENCE_STATE_NOT_TRIGGERED = 3;
+}
+
+// Consequence is what one consequence rule said about an action (F405).
+message Consequence {
+  // The rule, as the package names it.
+  string rule_id = 1;
+  // The consequence operation, for example github.deployment.trigger.
+  string operation = 2;
+  // The consequence's target.
+  string target_type = 3;
+  string target_id = 4;
+  // The environments a predicted consequence reaches, when the rule says.
+  repeated string environments = 5;
+  // What the rule said.
+  ConsequenceState state = 6;
+  // Why each fact an unknown consequence needed could not be used.
+  repeated string unknown = 7;
+  // Digest of the facts the rule read (F080).
+  string facts_digest = 8;
 }
 
 // WaitState is the state of a held action's approval request as a waiter

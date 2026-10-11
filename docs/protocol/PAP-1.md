@@ -215,7 +215,7 @@ Before sending any byte to the target the gateway MUST call `BeginDispatch{permi
 ## 9. Receipts and evidence
 
 ### 9.1 Decision receipt
-Signed JWS (`typ: "pap-decision+jwt"`) containing: transaction id, action hash, decision, reasons, checklist, obligations, versions (decision-basis digest, grant revision, definition digest), facts digest, identity summary (instance, att_lvl, launcher, principal), timestamps, `simulated` flag.
+Signed JWS (`typ: "pap-decision+jwt"`) containing: transaction id, action hash, decision, reasons, checklist, obligations, versions (decision-basis digest, grant revision, definition digest), facts digest, identity summary (instance, att_lvl, launcher, principal), timestamps, `simulated` flag, and the action's consequences (G0 M8): each consequence rule's state (`PREDICTED`, `UNKNOWN` or `NOT_TRIGGERED`), operation, target, environments and facts digest, as predictions apart from what the decision authorized.
 
 ### 9.2 Execution receipt
 Signed JWS (`typ: "pap-execution+jwt"`, `jti` = permit id) containing: transaction id, effective action hash (`effective`), permit id, gateway id, connection, access mode (target-enforced, narrow temporary, PantherClaw-held, constrained runtime, agent-held), attempt number, dispatch time (`dispatched_at`), outcome, target status, target response digest, `target_ref` when the target returned one, who recorded it (`recorded_by`: `gateway`, or `sweeper` for a dispatch that never reported), `monitor` when applicable, `simulated` flag.

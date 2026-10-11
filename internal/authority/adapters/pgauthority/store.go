@@ -142,6 +142,9 @@ func (s *Store) Finalize(ctx context.Context, org ids.OrgID, w finalize.Write) e
 		if err := writeReceipt(ctx, tx, org, w.TransactionID, w.Evaluation, w.GatewayID, receipt); err != nil {
 			return err
 		}
+		if err := writeConsequences(ctx, tx, org, w.TransactionID, w.Evaluation, ev.Consequences); err != nil {
+			return err
+		}
 		if w.Permit != nil {
 			rows := pgbudgets.Rows{Accounts: map[bdomain.Ref]ids.UUID{}, Counters: map[bdomain.Ref]ids.UUID{}}
 			for _, r := range w.Rows {

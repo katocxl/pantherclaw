@@ -20,6 +20,7 @@ import (
 
 	"github.com/katocxl/pantherclaw/internal/actionir"
 	adomain "github.com/katocxl/pantherclaw/internal/agents/domain"
+	"github.com/katocxl/pantherclaw/internal/authority/consequences"
 	"github.com/katocxl/pantherclaw/internal/authority/domain"
 	"github.com/katocxl/pantherclaw/internal/authority/finalize"
 	"github.com/katocxl/pantherclaw/internal/authority/pipeline"
@@ -97,6 +98,8 @@ type Result struct {
 	Mode, AccessMode string
 	// Wait is the wait handle of a held action (G0 M5 part 2).
 	Wait *finalize.Wait
+	// Consequences are what the action's consequence rules said (G0 M8).
+	Consequences []consequences.Consequence
 }
 
 // Authorize decides on raw canonical ActionIR bytes sent with the
@@ -141,6 +144,7 @@ func (s *Service) Authorize(ctx context.Context, gw Gateway, raw []byte, creds *
 		Permit: res.Permit, PermitID: res.PermitID, Epoch: res.Epoch, Receipt: res.Receipt, Nonce: s.nonce(ctx, gw),
 		Checklist: res.Checklist, Obligations: res.Obligations, EffectiveHash: res.EffectiveHash, BasisDigest: res.BasisDigest,
 		Evaluation: res.Evaluation, Repeat: res.Repeat, Mode: res.Mode, AccessMode: res.AccessMode, Wait: res.Wait,
+		Consequences: res.Consequences,
 	}, nil
 }
 
