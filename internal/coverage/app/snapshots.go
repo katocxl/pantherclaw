@@ -101,7 +101,7 @@ func (s *Service) reassess(ctx context.Context, tx db.TenantTx, sc domain.Scope,
 ) (bool, error) {
 	q := dbq.New(tx)
 	now := s.now()
-	e, err := evidence(ctx, q, tx.OrgID(), sc, now, pkgs)
+	e, err := s.evidence(ctx, tx, sc, now, pkgs)
 	if err != nil {
 		return false, err
 	}
