@@ -571,14 +571,14 @@ func (e *Engine) send(ctx context.Context, r Result, conn *control.Connection, d
 	}
 	var secret []byte
 	if conn.GetAccessMode() == "pantherclaw_held" {
-		s, err := e.credential(conn, p.req)
+		s, release, err := e.credential(ctx, conn, def, a.Action.Target, p.req, p.client)
 		if err != nil {
 			e.log.WarnContext(ctx, "gateway.credential_unavailable", slog.String("transaction_id", want.Txn),
 				slog.String("connection_id", conn.GetId()), pclog.Err(err))
 			return e.record(ctx, r, want, pb.Outcome_OUTCOME_FAILED, 0, nil, 0, EnforcementFailed, CodeCredential, t)
 		}
 		secret = s
-		defer clear(secret)
+		defer release()
 	}
 	start := time.Now()
 	res, err := p.client.Do(p.req)
@@ -634,17 +634,48 @@ func targetRef(def *defs.Definition, body, secret []byte) string {
 	return s
 }
 
-// credential opens the connection's sealed credential and places it on req.
-func (e *Engine) credential(conn *control.Connection, req *http.Request) ([]byte, error) {
-	secret, err := e.openCredential(conn)
+// credential opens the connection's sealed credential and places on req
+// what the action on target under def may use. A static credential is
+// placed as sealed. A GitHub App credential never is: the gateway mints an
+// installation token for exactly the target's repository and def's
+// declared permissions and places that (HR-203, HR-204). The caller keeps
+// secret, which it scrubs from what goes back to the agent, until it calls
+// release, which clears it and, for a minted token, revokes it at GitHub.
+func (e *Engine) credential(ctx context.Context, conn *control.Connection, def *defs.Definition, target actionir.Target,
+	req *http.Request, c broker.Sender,
+) (secret []byte, release func(), err error) {
+	plain, err := e.openCredential(conn)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	if err := placeCredential(conn, req, secret); err != nil {
-		clear(secret)
-		return nil, err
+	if conn.Credential.GetKind() != credentials.KindGitHubApp {
+		if err := placeCredential(conn, req, plain); err != nil {
+			clear(plain)
+			return nil, nil, err
+		}
+		return plain, func() { clear(plain) }, nil
 	}
-	return secret, nil
+	app, err := credentials.DecodeGitHubApp(plain)
+	clear(plain)
+	defer app.Clear()
+	if err != nil {
+		return nil, nil, err
+	}
+	owner, _ := def.Target.Part(target.ID, "owner")
+	repo, _ := def.Target.Part(target.ID, "repo")
+	tok, err := broker.MintInstallationToken(ctx, c, conn.GetBaseUrl(), conn.Credential.GetAllowedHosts(), app, owner, repo, def.Scopes(), time.Now())
+	if err != nil {
+		return nil, nil, err
+	}
+	if err := tok.Place(req); err != nil {
+		_ = tok.Revoke(ctx, c)
+		return nil, nil, err
+	}
+	return tok.Token(), func() {
+		if err := tok.Revoke(ctx, c); err != nil {
+			e.log.WarnContext(ctx, "gateway.installation_token_not_revoked", slog.String("connection_id", conn.GetId()), pclog.Err(err))
+		}
+	}, nil
 }
 
 // openCredential opens the connection's sealed credential; the caller

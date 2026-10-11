@@ -12,6 +12,9 @@
 //   - attributes whose key looks sensitive (authorization, cookie, token,
 //     secret, password, api_key, proof, private_key, …) are redacted by key;
 //   - structured values that contain a sensitive key are redacted entirely;
+//   - GitHub tokens (ghp_, gho_, ghu_, ghs_, ghr_, github_pat_) are redacted
+//     wherever they appear in a value, whatever their length (G0 M8: stateless
+//     installation tokens are about 520 characters);
 //   - string values are capped at 2 KiB, events at 128 bytes;
 //   - the JSON encoder escapes control characters and invalid UTF-8, so an
 //     attribute can never start a new log line.
@@ -24,6 +27,7 @@ import (
 	"encoding/json/v2"
 	"io"
 	"log/slog"
+	"regexp"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -60,6 +64,17 @@ var sensitiveKeyParts = []string{
 	"authorization", "cookie", "password", "passwd", "passphrase", "token",
 	"secret", "api_key", "apikey", "proof", "private_key", "privatekey",
 	"credential", "session_key", "dsn",
+}
+
+// githubToken matches a GitHub token in free text, of any length (HR-203).
+var githubToken = regexp.MustCompile(`(gh[pousr]_|github_pat_)[A-Za-z0-9_]{16,}`)
+
+// scrub redacts GitHub tokens in a value.
+func scrub(s string) string {
+	if !strings.Contains(s, "gh") && !strings.Contains(s, "github_pat_") {
+		return s
+	}
+	return githubToken.ReplaceAllString(s, Redacted)
 }
 
 // Options configures New.
@@ -149,7 +164,7 @@ func replaceAttr(groups []string, a slog.Attr) slog.Attr {
 	}
 	switch a.Value.Kind() {
 	case slog.KindString:
-		return slog.String(a.Key, capString(a.Value.String(), MaxValueBytes))
+		return slog.String(a.Key, capString(scrub(a.Value.String()), MaxValueBytes))
 	case slog.KindAny:
 		return slog.String(a.Key, renderAny(a.Value.Any()))
 	case slog.KindBool, slog.KindDuration, slog.KindFloat64, slog.KindInt64, slog.KindTime,
@@ -165,9 +180,9 @@ func replaceAttr(groups []string, a slog.Attr) slog.Attr {
 func renderAny(v any) string {
 	switch x := v.(type) {
 	case error:
-		return capString(x.Error(), MaxValueBytes)
+		return capString(scrub(x.Error()), MaxValueBytes)
 	case []byte:
-		return capString(string(x), MaxValueBytes)
+		return capString(scrub(string(x)), MaxValueBytes)
 	}
 	b, err := json.Marshal(v)
 	if err != nil {
@@ -176,7 +191,7 @@ func renderAny(v any) string {
 	if containsSensitiveKey(b) {
 		return Redacted
 	}
-	return capString(string(b), MaxValueBytes)
+	return capString(scrub(string(b)), MaxValueBytes)
 }
 
 func sensitiveKey(key string) bool {
