@@ -45,9 +45,6 @@ const (
 	reassessTimeout  = 5 * time.Minute
 )
 
-// Actor is who records the snapshots of the reassess job.
-var Actor = evdomain.Actor{Type: "system", ID: "coverage-reassess"}
-
 // ReassessOrgArgs asks for one org's reassessment.
 type ReassessOrgArgs struct {
 	Org ids.OrgID `json:"org"`

@@ -25,6 +25,9 @@ const (
 	InvalidationLedgerKind = "coverage.invalidation"
 )
 
+// Actor is who records the snapshots coverage computes itself.
+var Actor = evdomain.Actor{Type: "system", ID: "coverage-reassess"}
+
 // EntryScope is a scope as the ledger names it.
 type EntryScope struct {
 	Agent      ids.UUID `json:"agent"`
