@@ -13,68 +13,148 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 )
 
-// TestHR217_CoverageClaimsAreCheckedAgainstTheirSnapshot: a receipt's
-// coverage claim passes only against its snapshot's verified entry, with
-// the claimed digest and scope, a state no stronger than the snapshot's,
-// an ENFORCED claim inside the snapshot's validity and no newer snapshot
-// current at decision time; a claimed snapshot missing from the bundle is
-// not available, and a receipt without a claim has no such check.
-func TestHR217_CoverageClaimsAreCheckedAgainstTheirSnapshot(t *testing.T) {
-	agent, conn, op := ids.NewV7().String(), ids.NewV7().String(), "github.pulls.merge"
-	before := domain.Timestamp(bundletest.IssuedAt.Add(-time.Hour))
+// TestHR217_CoverageClaimsAreCheckedAgainstTheSnapshotLedger: a receipt's
+// coverage claim passes only against its snapshot's verified entry, of the
+// receipt's scope, with the claimed snapshot state and exclusions. One that
+// did not lapse must hold the snapshot's state, unexpired, with no change
+// and no newer snapshot before the decision; a lapsed one's reason must
+// hold and its state is never ENFORCED. Missing entries are not available.
+func TestHR217_CoverageClaimsAreCheckedAgainstTheSnapshotLedger(t *testing.T) {
+	agent, conn := ids.NewV7().String(), ids.NewV7().String()
+	sc := bundletest.Scope{Agent: agent, Connection: conn, Operation: "github.pulls.merge"}
+	at := func(d time.Duration) string { return domain.Timestamp(bundletest.IssuedAt.Add(d)) }
 	snapshot := func(state, expires string) bundletest.Snapshot {
 		return bundletest.Snapshot{
-			ID: ids.NewV7().String(), Agent: agent, Connection: conn, Operation: op, State: state,
-			ExpiresAt: expires, ComputedAt: before,
+			V: 1, Scope: sc, State: state, Snapshot: ids.NewV7().String(), ComputedAt: at(-time.Hour), ExpiresAt: expires,
+			Exclusions: []string{}, RoutesDigest: "sha256:00",
 		}
 	}
-	later := domain.Timestamp(bundletest.IssuedAt.Add(time.Hour))
-	past := domain.Timestamp(bundletest.IssuedAt.Add(-time.Minute))
+	claimOf := func(s bundletest.Snapshot) bundletest.Claim {
+		return bundletest.Claim{
+			V: 1, State: s.State, Snapshot: s.Snapshot, Scope: sc, SnapshotState: s.State, Exclusions: s.Exclusions,
+			ExpiresAt: s.ExpiresAt,
+		}
+	}
+	change := func(kind string, d time.Duration) bundletest.Invalidation {
+		return bundletest.Invalidation{V: 1, ID: ids.NewV7().String(), Connection: conn, Kind: kind, OccurredAt: at(d)}
+	}
 	cases := []struct {
 		name  string
 		build func(i *bundletest.Issuer)
 		want  bundle.Status
 	}{
-		{"an ENFORCED claim inside its snapshot's validity", func(i *bundletest.Issuer) {
-			s := snapshot("ENFORCED", later)
-			i.AppendClaim(bundletest.Claim{State: "ENFORCED", Snapshot: s.ID, Digest: i.AppendSnapshot(s), Agent: agent, Connection: conn, Operation: op}, agent, conn)
-		}, bundle.Passed},
-		{"a weaker claim than its snapshot", func(i *bundletest.Issuer) {
-			s := snapshot("ENFORCED", later)
-			i.AppendClaim(bundletest.Claim{State: "PARTIAL", Snapshot: s.ID, Digest: i.AppendSnapshot(s), Agent: agent, Connection: conn, Operation: op}, agent, conn)
-		}, bundle.Passed},
-		{"a stronger claim than its snapshot", func(i *bundletest.Issuer) {
-			s := snapshot("PARTIAL", "")
-			i.AppendClaim(bundletest.Claim{State: "ENFORCED", Snapshot: s.ID, Digest: i.AppendSnapshot(s), Agent: agent, Connection: conn, Operation: op}, agent, conn)
-		}, bundle.Failed},
-		{"ENFORCED after the snapshot expired", func(i *bundletest.Issuer) {
-			s := snapshot("ENFORCED", past)
-			i.AppendClaim(bundletest.Claim{State: "ENFORCED", Snapshot: s.ID, Digest: i.AppendSnapshot(s), Agent: agent, Connection: conn, Operation: op}, agent, conn)
-		}, bundle.Failed},
-		{"another digest", func(i *bundletest.Issuer) {
-			s := snapshot("ENFORCED", later)
+		{"a current ENFORCED claim", func(i *bundletest.Issuer) {
+			s := snapshot("ENFORCED", at(time.Hour))
 			i.AppendSnapshot(s)
-			i.AppendClaim(bundletest.Claim{State: "ENFORCED", Snapshot: s.ID, Digest: "sha256:00", Agent: agent, Connection: conn, Operation: op}, agent, conn)
+			i.AppendClaim(claimOf(s), agent, conn)
+		}, bundle.Passed},
+		{"a current claim with an exclusion", func(i *bundletest.Issuer) {
+			s := snapshot("ENFORCED", at(time.Hour))
+			s.Exclusions = []string{ids.NewV7().String()}
+			i.AppendSnapshot(s)
+			i.AppendClaim(claimOf(s), agent, conn)
+		}, bundle.Passed},
+		{"other exclusions", func(i *bundletest.Issuer) {
+			s := snapshot("ENFORCED", at(time.Hour))
+			i.AppendSnapshot(s)
+			c := claimOf(s)
+			c.Exclusions = []string{ids.NewV7().String()}
+			i.AppendClaim(c, agent, conn)
 		}, bundle.Failed},
+		{"another snapshot state", func(i *bundletest.Issuer) {
+			s := snapshot("PARTIAL", "")
+			i.AppendSnapshot(s)
+			c := claimOf(s)
+			c.State, c.SnapshotState = "ENFORCED", "ENFORCED"
+			i.AppendClaim(c, agent, conn)
+		}, bundle.Failed},
+		{"weaker than a snapshot that held", func(i *bundletest.Issuer) {
+			s := snapshot("ENFORCED", at(time.Hour))
+			i.AppendSnapshot(s)
+			c := claimOf(s)
+			c.State = "PARTIAL"
+			i.AppendClaim(c, agent, conn)
+		}, bundle.Failed},
+		{"not lapsed after the expiry", func(i *bundletest.Issuer) {
+			s := snapshot("ENFORCED", at(-time.Minute))
+			i.AppendSnapshot(s)
+			i.AppendClaim(claimOf(s), agent, conn)
+		}, bundle.Failed},
+		{"not lapsed after a change", func(i *bundletest.Issuer) {
+			s := snapshot("ENFORCED", at(time.Hour))
+			i.AppendSnapshot(s)
+			i.AppendInvalidation(change("credential", -time.Minute))
+			i.AppendClaim(claimOf(s), agent, conn)
+		}, bundle.Failed},
+		{"a change after the decision", func(i *bundletest.Issuer) {
+			s := snapshot("ENFORCED", at(time.Hour))
+			i.AppendSnapshot(s)
+			i.AppendInvalidation(change("credential", time.Minute))
+			i.AppendClaim(claimOf(s), agent, conn)
+		}, bundle.Passed},
+		{"a newer snapshot was current", func(i *bundletest.Issuer) {
+			s := snapshot("ENFORCED", at(time.Hour))
+			i.AppendSnapshot(s)
+			n := snapshot("PARTIAL", "")
+			n.ComputedAt = at(-time.Minute)
+			i.AppendSnapshot(n)
+			i.AppendClaim(claimOf(s), agent, conn)
+		}, bundle.Failed},
+		{"lapsed on its expiry", func(i *bundletest.Issuer) {
+			s := snapshot("ENFORCED", at(-time.Minute))
+			i.AppendSnapshot(s)
+			c := claimOf(s)
+			c.State, c.Lapsed, c.Reason = "PARTIAL", true, "expired"
+			i.AppendClaim(c, agent, conn)
+		}, bundle.Passed},
+		{"lapsed on an expiry still ahead", func(i *bundletest.Issuer) {
+			s := snapshot("ENFORCED", at(time.Hour))
+			i.AppendSnapshot(s)
+			c := claimOf(s)
+			c.State, c.Lapsed, c.Reason = "PARTIAL", true, "expired"
+			i.AppendClaim(c, agent, conn)
+		}, bundle.Failed},
+		{"lapsed on a change", func(i *bundletest.Issuer) {
+			s := snapshot("ENFORCED", at(time.Hour))
+			i.AppendSnapshot(s)
+			i.AppendInvalidation(change("route_mode", -time.Minute))
+			c := claimOf(s)
+			c.State, c.Lapsed, c.Reason = "OBSERVE_ONLY", true, "route_mode"
+			i.AppendClaim(c, agent, conn)
+		}, bundle.Passed},
+		{"lapsed and still ENFORCED", func(i *bundletest.Issuer) {
+			s := snapshot("ENFORCED", at(-time.Minute))
+			i.AppendSnapshot(s)
+			c := claimOf(s)
+			c.Lapsed, c.Reason = true, "expired"
+			i.AppendClaim(c, agent, conn)
+		}, bundle.Failed},
+		{"lapsed on a change not in the bundle", func(i *bundletest.Issuer) {
+			s := snapshot("ENFORCED", at(time.Hour))
+			i.AppendSnapshot(s)
+			c := claimOf(s)
+			c.State, c.Lapsed, c.Reason = "PARTIAL", true, "gateway"
+			i.AppendClaim(c, agent, conn)
+		}, bundle.NotAvailable},
 		{"another agent's snapshot", func(i *bundletest.Issuer) {
-			s := snapshot("ENFORCED", later)
-			s.Agent = ids.NewV7().String()
-			i.AppendClaim(bundletest.Claim{State: "ENFORCED", Snapshot: s.ID, Digest: i.AppendSnapshot(s), Agent: agent, Connection: conn, Operation: op}, agent, conn)
+			s := snapshot("ENFORCED", at(time.Hour))
+			s.Scope.Agent = ids.NewV7().String()
+			i.AppendSnapshot(s)
+			i.AppendClaim(claimOf(s), agent, conn)
 		}, bundle.Failed},
 		{"a receipt of another connection", func(i *bundletest.Issuer) {
-			s := snapshot("ENFORCED", later)
-			i.AppendClaim(bundletest.Claim{State: "ENFORCED", Snapshot: s.ID, Digest: i.AppendSnapshot(s), Agent: agent, Connection: conn, Operation: op}, agent, ids.NewV7().String())
+			s := snapshot("ENFORCED", at(time.Hour))
+			i.AppendSnapshot(s)
+			i.AppendClaim(claimOf(s), agent, ids.NewV7().String())
 		}, bundle.Failed},
-		{"a newer snapshot was current", func(i *bundletest.Issuer) {
-			s := snapshot("ENFORCED", later)
-			digest := i.AppendSnapshot(s)
-			n := snapshot("PARTIAL", "")
-			n.ComputedAt = domain.Timestamp(bundletest.IssuedAt.Add(-time.Minute))
-			i.AppendSnapshot(n)
-			i.AppendClaim(bundletest.Claim{State: "ENFORCED", Snapshot: s.ID, Digest: digest, Agent: agent, Connection: conn, Operation: op}, agent, conn)
+		{"computed after the decision", func(i *bundletest.Issuer) {
+			s := snapshot("PARTIAL", "")
+			s.ComputedAt = at(time.Minute)
+			i.AppendSnapshot(s)
+			i.AppendClaim(claimOf(s), agent, conn)
 		}, bundle.Failed},
 		{"a snapshot not in the bundle", func(i *bundletest.Issuer) {
-			i.AppendClaim(bundletest.Claim{State: "ENFORCED", Snapshot: ids.NewV7().String(), Digest: "sha256:00", Agent: agent, Connection: conn, Operation: op}, agent, conn)
+			i.AppendClaim(claimOf(snapshot("ENFORCED", at(time.Hour))), agent, conn)
 		}, bundle.NotAvailable},
 	}
 	for _, c := range cases {
