@@ -52,6 +52,7 @@ type step struct {
 type batch struct {
 	org    ids.OrgID
 	policy ids.UUID
+	now    time.Time
 	cutoff time.Time
 	sealed int64
 	max    int32
@@ -70,8 +71,12 @@ func ledgerStep(c Category, like, notLike string) step {
 }
 
 // steps lists what each category removes (design decision 9). Payload
-// captures (B9) join the payloads category with their table.
+// captures go when their profile's retention or the payloads period ends,
+// whichever is first.
 var steps = []step{
+	{category: Payloads, items: "payload_captures", remove: func(ctx context.Context, q *dbq.Queries, b batch) ([]time.Time, error) {
+		return q.DeletePayloadCaptures(ctx, dbq.DeletePayloadCapturesParams{OrgID: b.org, Now: b.now, Cutoff: b.cutoff, MaxRows: b.max})
+	}},
 	{category: NormalizedFacts, items: "observations", remove: func(ctx context.Context, q *dbq.Queries, b batch) ([]time.Time, error) {
 		return q.RemoveObservedValues(ctx, dbq.RemoveObservedValuesParams{PolicyID: &b.policy, OrgID: b.org, Cutoff: b.cutoff, MaxRows: b.max})
 	}},
@@ -138,6 +143,14 @@ var ErrUnavailable = errors.New("retention: the pc_retention role is not configu
 // removed and the run is recorded as failed.
 func (r *Remover) Run(ctx context.Context, org ids.OrgID) (Result, error) {
 	if err := EnsureDefaults(ctx, r.App, org); err != nil {
+		return Result{}, err
+	}
+	// Capture profiles past their expiry are marked so (gateways and the
+	// server already ignore them by their expiry time).
+	if err := r.App.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
+		_, err := dbq.New(tx).ExpireCaptureProfiles(ctx, org)
+		return err
+	}); err != nil {
 		return Result{}, err
 	}
 	var res Result
@@ -220,7 +233,7 @@ func (r *Remover) batch(ctx context.Context, org ids.OrgID, s step, size int) (i
 			return err
 		}
 		times, err := s.remove(ctx, q, batch{
-			org: org, policy: cur.ID, cutoff: now.Add(-time.Duration(cur.Days) * 24 * time.Hour), sealed: sealed,
+			org: org, policy: cur.ID, now: now, cutoff: now.Add(-time.Duration(cur.Days) * 24 * time.Hour), sealed: sealed,
 			max: int32(size), //nolint:gosec // G115: a small batch size
 		})
 		if err != nil || len(times) == 0 {

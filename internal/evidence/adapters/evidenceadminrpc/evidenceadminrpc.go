@@ -14,6 +14,7 @@ import (
 
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/capture"
 	"github.com/katocxl/pantherclaw/internal/evidence/retention"
 	pantherclawv1 "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
 	"github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1/pantherclawv1connect"
@@ -25,10 +26,11 @@ import (
 type Admin struct {
 	pantherclawv1connect.UnimplementedEvidenceAdminServiceHandler
 	retention *retention.Service
+	capture   *capture.Service
 }
 
 // New returns the EvidenceAdminService handler.
-func New(r *retention.Service) *Admin { return &Admin{retention: r} }
+func New(r *retention.Service, c *capture.Service) *Admin { return &Admin{retention: r, capture: c} }
 
 var errInvalidID = pcerr.New(pcerr.InvalidArgument, "INVALID_ID", "invalid id")
 

@@ -11,14 +11,19 @@ import (
 )
 
 // evidenceAdminProcedures are EvidenceAdminService's procedures (G0 M7
-// track B, design decision 9). Each is human only; the use cases check
-// the permission at org scope.
+// track B, design decisions 9 and 10). Each is human only; the use cases
+// check the permission at org scope, or for a capture read where the
+// transaction's agent lives.
 var evidenceAdminProcedures = map[string]td.Permission{
-	pantherclawv1connect.EvidenceAdminServiceGetRetentionPoliciesProcedure: td.PermEvidenceRetentionManage,
-	pantherclawv1connect.EvidenceAdminServiceSetRetentionPolicyProcedure:   td.PermEvidenceRetentionManage,
-	pantherclawv1connect.EvidenceAdminServiceCreateLegalHoldProcedure:      td.PermEvidenceRetentionManage,
-	pantherclawv1connect.EvidenceAdminServiceReleaseLegalHoldProcedure:     td.PermEvidenceRetentionManage,
-	pantherclawv1connect.EvidenceAdminServiceListLegalHoldsProcedure:       td.PermEvidenceRetentionManage,
+	pantherclawv1connect.EvidenceAdminServiceGetRetentionPoliciesProcedure:  td.PermEvidenceRetentionManage,
+	pantherclawv1connect.EvidenceAdminServiceSetRetentionPolicyProcedure:    td.PermEvidenceRetentionManage,
+	pantherclawv1connect.EvidenceAdminServiceCreateLegalHoldProcedure:       td.PermEvidenceRetentionManage,
+	pantherclawv1connect.EvidenceAdminServiceReleaseLegalHoldProcedure:      td.PermEvidenceRetentionManage,
+	pantherclawv1connect.EvidenceAdminServiceListLegalHoldsProcedure:        td.PermEvidenceRetentionManage,
+	pantherclawv1connect.EvidenceAdminServiceCreateCaptureProfileProcedure:  td.PermEvidenceCaptureManage,
+	pantherclawv1connect.EvidenceAdminServiceListCaptureProfilesProcedure:   td.PermEvidenceCaptureManage,
+	pantherclawv1connect.EvidenceAdminServiceDisableCaptureProfileProcedure: td.PermEvidenceCaptureManage,
+	pantherclawv1connect.EvidenceAdminServiceReadPayloadCaptureProcedure:    td.PermEvidenceReadRestricted,
 }
 
 func init() { maps.Copy(procedurePermissions, evidenceAdminProcedures) }
