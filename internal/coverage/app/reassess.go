@@ -60,14 +60,8 @@ func scopesOf(ctx context.Context, q *dbq.Queries, org ids.OrgID, connection ids
 // after reading new traffic, and records a snapshot for each that changed.
 // The caller is a person holding coverage.manage at org scope.
 func (s *Service) Reassess(ctx context.Context, connection ids.UUID, agent *ids.UUID) (Reassessed, error) {
-	c, err := tenancy.CallerFrom(ctx)
+	c, err := manager(ctx)
 	if err != nil {
-		return Reassessed{}, err
-	}
-	if !c.Human() || c.Credential == tenancy.CredAPIKey {
-		return Reassessed{}, ErrHumanOnly
-	}
-	if err := c.Require(td.PermCoverageManage, td.OrgPath(c.Org)); err != nil {
 		return Reassessed{}, err
 	}
 	var out Reassessed
@@ -85,8 +79,23 @@ func (s *Service) Reassess(ctx context.Context, connection ids.UUID, agent *ids.
 		if err != nil {
 			return err
 		}
-		out, err = s.reassessScopes(ctx, tx, scopes, nil, c.Actor(), packages{})
-		return err
+		if out, err = s.reassessScopes(ctx, tx, scopes, nil, c.Actor(), packages{}); err != nil {
+			return err
+		}
+		return s.RefreshFindings(ctx, tx, connection)
 	})
 	return out, err
+}
+
+// manager is the caller, who must be a person signed in as themselves
+// holding coverage.manage at org scope.
+func manager(ctx context.Context) (tenancy.Caller, error) {
+	c, err := tenancy.CallerFrom(ctx)
+	if err != nil {
+		return c, err
+	}
+	if !c.Human() || c.Credential == tenancy.CredAPIKey {
+		return c, ErrHumanOnly
+	}
+	return c, c.Require(td.PermCoverageManage, td.OrgPath(c.Org))
 }

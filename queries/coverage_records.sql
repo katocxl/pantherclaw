@@ -302,3 +302,21 @@ FROM pc.coverage_snapshots s
 WHERE s.org_id = sqlc.arg(org_id) AND s.agent_id = sqlc.arg(agent_id)
 ORDER BY s.connection_id, s.operation, s.id DESC
 LIMIT 1000;
+
+-- The operations the gateway carried through a connection (the route
+-- inventory's channel routes).
+-- name: CoverageCarriedOperations :many
+SELECT DISTINCT operation::text FROM pc.coverage_routes
+WHERE org_id = sqlc.arg(org_id) AND connection_id = sqlc.arg(connection_id) AND kind = 'channel'
+  AND observation = 'observed' AND operation IS NOT NULL
+ORDER BY 1;
+
+-- The credentials the org scan found for a connection, with the
+-- permissions they actually hold (G0 M8 G5: github_app findings name the
+-- connection they were scanned through). UNTRUSTED metadata.
+-- name: CoverageReachOfConnection :many
+SELECT id, observed FROM pc.discoveries
+WHERE org_id = sqlc.arg(org_id) AND source = 'scan' AND state <> 'DISMISSED'
+  AND observed ->> 'kind' = 'github_app' AND observed ->> 'connection' = sqlc.arg(connection)::text
+ORDER BY id
+LIMIT 50;

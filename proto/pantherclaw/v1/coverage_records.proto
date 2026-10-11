@@ -87,6 +87,17 @@ service CoverageService {
   rpc GetAccessDisclosure(GetAccessDisclosureRequest) returns (GetAccessDisclosureResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
+  // ListCoverageFindings lists exposure findings, starting with credential
+  // overreach (F048): reach a credential holds beyond what the operations
+  // need, shown as exposure, never as extra permission.
+  // permission: coverage.read
+  rpc ListCoverageFindings(ListCoverageFindingsRequest) returns (ListCoverageFindingsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // DismissCoverageFinding dismisses an open finding with a written
+  // reason; it is audited, and the finding stays dismissed when seen again.
+  // permission: coverage.manage
+  rpc DismissCoverageFinding(DismissCoverageFindingRequest) returns (DismissCoverageFindingResponse);
 }
 
 // CoverageState is the protection claim of one scope (F435–F438).
@@ -610,4 +621,86 @@ message AccessDisclosure {
 message GetAccessDisclosureResponse {
   // Disclosure.
   AccessDisclosure disclosure = 1;
+}
+
+// CoverageFinding is an exposure finding (F048; M10 adds kinds).
+message CoverageFinding {
+  // Finding id.
+  string id = 1;
+  // "credential_overreach".
+  string kind = 2;
+  // Connection, when the finding is about one.
+  string connection_id = 3;
+  // Agent, when the finding is about one.
+  string agent_id = 4;
+  // What holds the reach, e.g. "GitHub App pantherclaw-ci"; untrusted
+  // text.
+  string subject = 5;
+  // Permissions ("name:level") the operations declare they need.
+  repeated string declared = 6;
+  // Permissions the credential actually holds.
+  repeated string held = 7;
+  // Permissions the operations the gateway carried need.
+  repeated string used = 8;
+  // Permissions held beyond the declared need.
+  repeated string excess = 9;
+  // "low", "medium", "high" or "critical".
+  string severity = 10;
+  // "OPEN", "RESOLVED" or "DISMISSED".
+  string state = 11;
+  // First and last seen, resolved or dismissed.
+  google.protobuf.Timestamp first_seen_time = 12;
+  // Last seen.
+  google.protobuf.Timestamp last_seen_time = 13;
+  // When resolved or dismissed.
+  google.protobuf.Timestamp resolve_time = 14;
+  // The person who dismissed it and why (untrusted text).
+  string dismissed_by = 15;
+  // Reason.
+  string dismiss_reason = 16;
+}
+
+// ListCoverageFindingsRequest filters findings.
+message ListCoverageFindingsRequest {
+  // Maximum results (default 50, at most 200).
+  int32 page_size = 1 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 200
+  }];
+  // Token from a previous response.
+  string page_token = 2 [(buf.validate.field).string = {
+    max_len: 64
+    pattern: "^[A-Za-z0-9_-]*$"
+  }];
+  // Only in this state.
+  optional string state = 3 [(buf.validate.field).string = {
+    in: ["OPEN", "RESOLVED", "DISMISSED"]
+  }];
+  // Only this connection.
+  optional string connection_id = 4 [(buf.validate.field).string.uuid = true];
+}
+
+// ListCoverageFindingsResponse is one page.
+message ListCoverageFindingsResponse {
+  // Findings, newest first.
+  repeated CoverageFinding findings = 1;
+  // Token for the next page; empty at the end.
+  string next_page_token = 2;
+}
+
+// DismissCoverageFindingRequest names a finding and why it is dismissed.
+message DismissCoverageFindingRequest {
+  // Finding id.
+  string id = 1 [(buf.validate.field).string.uuid = true];
+  // A written reason (10 to 1,000 characters).
+  string reason = 2 [(buf.validate.field).string = {
+    min_len: 10
+    max_len: 1000
+  }];
+}
+
+// DismissCoverageFindingResponse returns the finding.
+message DismissCoverageFindingResponse {
+  // Finding.
+  CoverageFinding finding = 1;
 }

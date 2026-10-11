@@ -113,7 +113,9 @@ func (s *Service) ReassessOrg(ctx context.Context, org ids.OrgID) (Reassessed, e
 			add(domain.Scope{Agent: x.AgentID, Connection: x.ConnectionID, Operation: x.Operation}, nil)
 		}
 		pkgs := packages{}
+		connections := map[ids.UUID]bool{}
 		for _, sc := range order {
+			connections[sc.Connection] = true
 			recorded, err := s.reassess(ctx, tx, sc, causes[sc], Actor, pkgs)
 			if err != nil {
 				return fmt.Errorf("coverage: reassess %v: %w", sc, err)
@@ -121,6 +123,11 @@ func (s *Service) ReassessOrg(ctx context.Context, org ids.OrgID) (Reassessed, e
 			out.Scopes++
 			if recorded {
 				out.Snapshots++
+			}
+		}
+		for conn := range connections {
+			if err := s.RefreshFindings(ctx, tx, conn); err != nil {
+				return err
 			}
 		}
 		if len(done) > 0 {

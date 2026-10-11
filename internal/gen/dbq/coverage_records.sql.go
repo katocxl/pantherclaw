@@ -50,6 +50,35 @@ func (q *Queries) CoverageBinding(ctx context.Context, orgID ids.OrgID, connecti
 	return i, err
 }
 
+const coverageCarriedOperations = `-- name: CoverageCarriedOperations :many
+SELECT DISTINCT operation::text FROM pc.coverage_routes
+WHERE org_id = $1 AND connection_id = $2 AND kind = 'channel'
+  AND observation = 'observed' AND operation IS NOT NULL
+ORDER BY 1
+`
+
+// The operations the gateway carried through a connection (the route
+// inventory's channel routes).
+func (q *Queries) CoverageCarriedOperations(ctx context.Context, orgID ids.OrgID, connectionID ids.UUID) ([]string, error) {
+	rows, err := q.db.Query(ctx, coverageCarriedOperations, orgID, connectionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []string{}
+	for rows.Next() {
+		var operation string
+		if err := rows.Scan(&operation); err != nil {
+			return nil, err
+		}
+		items = append(items, operation)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const coverageClaim = `-- name: CoverageClaim :one
 SELECT s.id, s.state, s.body_sha256, s.expires_at,
     EXISTS (SELECT 1 FROM pc.coverage_invalidations i
@@ -216,6 +245,42 @@ func (q *Queries) CoverageInventoryWatermark(ctx context.Context, orgID ids.OrgI
 	var transactions_after ids.UUID
 	err := row.Scan(&transactions_after)
 	return transactions_after, err
+}
+
+const coverageReachOfConnection = `-- name: CoverageReachOfConnection :many
+SELECT id, observed FROM pc.discoveries
+WHERE org_id = $1 AND source = 'scan' AND state <> 'DISMISSED'
+  AND observed ->> 'kind' = 'github_app' AND observed ->> 'connection' = $2::text
+ORDER BY id
+LIMIT 50
+`
+
+type CoverageReachOfConnectionRow struct {
+	ID       ids.UUID
+	Observed []byte
+}
+
+// The credentials the org scan found for a connection, with the
+// permissions they actually hold (G0 M8 G5: github_app findings name the
+// connection they were scanned through). UNTRUSTED metadata.
+func (q *Queries) CoverageReachOfConnection(ctx context.Context, orgID ids.OrgID, connection string) ([]CoverageReachOfConnectionRow, error) {
+	rows, err := q.db.Query(ctx, coverageReachOfConnection, orgID, connection)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []CoverageReachOfConnectionRow{}
+	for rows.Next() {
+		var i CoverageReachOfConnectionRow
+		if err := rows.Scan(&i.ID, &i.Observed); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const coverageRoutesForScope = `-- name: CoverageRoutesForScope :many

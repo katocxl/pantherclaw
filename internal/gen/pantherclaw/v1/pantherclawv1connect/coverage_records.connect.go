@@ -59,6 +59,12 @@ const (
 	// CoverageServiceGetAccessDisclosureProcedure is the procedure name of the CoverageService's
 	// GetAccessDisclosure RPC.
 	CoverageServiceGetAccessDisclosureProcedure = "/pantherclaw.v1.CoverageService/GetAccessDisclosure"
+	// CoverageServiceListCoverageFindingsProcedure is the procedure name of the CoverageService's
+	// ListCoverageFindings RPC.
+	CoverageServiceListCoverageFindingsProcedure = "/pantherclaw.v1.CoverageService/ListCoverageFindings"
+	// CoverageServiceDismissCoverageFindingProcedure is the procedure name of the CoverageService's
+	// DismissCoverageFinding RPC.
+	CoverageServiceDismissCoverageFindingProcedure = "/pantherclaw.v1.CoverageService/DismissCoverageFinding"
 )
 
 var (
@@ -147,6 +153,21 @@ var (
 			IdempotencyLevel: connect.IdempotencyNoSideEffects,
 		}
 	})
+	coverageServiceListCoverageFindingsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_pantherclaw_v1_coverage_records_proto.Services().ByName("CoverageService").Methods().ByName("ListCoverageFindings"),
+			Procedure:        CoverageServiceListCoverageFindingsProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
+	coverageServiceDismissCoverageFindingSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_pantherclaw_v1_coverage_records_proto.Services().ByName("CoverageService").Methods().ByName("DismissCoverageFinding"),
+			Procedure:  CoverageServiceDismissCoverageFindingProcedure,
+		}
+	})
 )
 
 // CoverageServiceClient is a client for the pantherclaw.v1.CoverageService service.
@@ -193,6 +214,15 @@ type CoverageServiceClient interface {
 	// mode must disclose. It never shows a secret.
 	// permission: coverage.read
 	GetAccessDisclosure(context.Context, *v1.GetAccessDisclosureRequest) (*v1.GetAccessDisclosureResponse, error)
+	// ListCoverageFindings lists exposure findings, starting with credential
+	// overreach (F048): reach a credential holds beyond what the operations
+	// need, shown as exposure, never as extra permission.
+	// permission: coverage.read
+	ListCoverageFindings(context.Context, *v1.ListCoverageFindingsRequest) (*v1.ListCoverageFindingsResponse, error)
+	// DismissCoverageFinding dismisses an open finding with a written
+	// reason; it is audited, and the finding stays dismissed when seen again.
+	// permission: coverage.manage
+	DismissCoverageFinding(context.Context, *v1.DismissCoverageFindingRequest) (*v1.DismissCoverageFindingResponse, error)
 }
 
 // NewCoverageServiceClient constructs a client for the pantherclaw.v1.CoverageService service.
@@ -245,6 +275,15 @@ type CoverageServiceHandler interface {
 	// mode must disclose. It never shows a secret.
 	// permission: coverage.read
 	GetAccessDisclosure(context.Context, *v1.GetAccessDisclosureRequest) (*v1.GetAccessDisclosureResponse, error)
+	// ListCoverageFindings lists exposure findings, starting with credential
+	// overreach (F048): reach a credential holds beyond what the operations
+	// need, shown as exposure, never as extra permission.
+	// permission: coverage.read
+	ListCoverageFindings(context.Context, *v1.ListCoverageFindingsRequest) (*v1.ListCoverageFindingsResponse, error)
+	// DismissCoverageFinding dismisses an open finding with a written
+	// reason; it is audited, and the finding stays dismissed when seen again.
+	// permission: coverage.manage
+	DismissCoverageFinding(context.Context, *v1.DismissCoverageFindingRequest) (*v1.DismissCoverageFindingResponse, error)
 }
 
 // RegisterCoverageServiceHandler registers svc as the pantherclaw.v1.CoverageService implementation
@@ -263,6 +302,8 @@ func RegisterCoverageServiceHandler(server *connect.Server, svc CoverageServiceH
 		connect.Method{Spec: coverageServiceRevokeExclusionSpec(), Handler: adapter.revokeExclusion},
 		connect.Method{Spec: coverageServiceListExclusionsSpec(), Handler: adapter.listExclusions},
 		connect.Method{Spec: coverageServiceGetAccessDisclosureSpec(), Handler: adapter.getAccessDisclosure},
+		connect.Method{Spec: coverageServiceListCoverageFindingsSpec(), Handler: adapter.listCoverageFindings},
+		connect.Method{Spec: coverageServiceDismissCoverageFindingSpec(), Handler: adapter.dismissCoverageFinding},
 	)
 }
 
@@ -311,6 +352,14 @@ func (UnimplementedCoverageServiceHandler) ListExclusions(context.Context, *v1.L
 
 func (UnimplementedCoverageServiceHandler) GetAccessDisclosure(context.Context, *v1.GetAccessDisclosureRequest) (*v1.GetAccessDisclosureResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.CoverageService.GetAccessDisclosure is not implemented")
+}
+
+func (UnimplementedCoverageServiceHandler) ListCoverageFindings(context.Context, *v1.ListCoverageFindingsRequest) (*v1.ListCoverageFindingsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.CoverageService.ListCoverageFindings is not implemented")
+}
+
+func (UnimplementedCoverageServiceHandler) DismissCoverageFinding(context.Context, *v1.DismissCoverageFindingRequest) (*v1.DismissCoverageFindingResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.CoverageService.DismissCoverageFinding is not implemented")
 }
 
 type coverageServiceClient struct {
@@ -400,6 +449,22 @@ func (c *coverageServiceClient) ListExclusions(ctx context.Context, req *v1.List
 func (c *coverageServiceClient) GetAccessDisclosure(ctx context.Context, req *v1.GetAccessDisclosureRequest) (*v1.GetAccessDisclosureResponse, error) {
 	var res v1.GetAccessDisclosureResponse
 	if err := c.client.CallUnary(ctx, coverageServiceGetAccessDisclosureSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *coverageServiceClient) ListCoverageFindings(ctx context.Context, req *v1.ListCoverageFindingsRequest) (*v1.ListCoverageFindingsResponse, error) {
+	var res v1.ListCoverageFindingsResponse
+	if err := c.client.CallUnary(ctx, coverageServiceListCoverageFindingsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *coverageServiceClient) DismissCoverageFinding(ctx context.Context, req *v1.DismissCoverageFindingRequest) (*v1.DismissCoverageFindingResponse, error) {
+	var res v1.DismissCoverageFindingResponse
+	if err := c.client.CallUnary(ctx, coverageServiceDismissCoverageFindingSpec(), req, &res); err != nil {
 		return nil, err
 	}
 	return &res, nil
@@ -533,6 +598,30 @@ func (h coverageServiceHandler) getAccessDisclosure(ctx context.Context, _ conne
 		return err
 	}
 	res, err := h.svc.GetAccessDisclosure(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h coverageServiceHandler) listCoverageFindings(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListCoverageFindingsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListCoverageFindings(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h coverageServiceHandler) dismissCoverageFinding(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.DismissCoverageFindingRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.DismissCoverageFinding(ctx, &req)
 	if err != nil {
 		return err
 	}
