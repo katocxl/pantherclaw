@@ -220,6 +220,14 @@ func (g *Gateway) ConfigVersion() int64 {
 	return 0
 }
 
+// Contained is the containment check every dispatch makes first (HR-010):
+// nil when the gateway asks the Authority, or why it refuses every
+// dispatch on its own now (control.ErrKillSwitch, ErrRevoked, ErrStale).
+func (g *Gateway) Contained() error {
+	_, err := g.containment.Check()
+	return err
+}
+
 // WaitReady returns once the first containment snapshot and the first
 // configuration arrived: the gateway serves nothing before (HR-010,
 // decision 19).

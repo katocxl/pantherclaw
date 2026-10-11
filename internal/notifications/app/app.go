@@ -113,8 +113,12 @@ func New(pool *db.Pool, jc *jobs.Client, envelope *pccrypto.Envelope, cfg Config
 	}, nil
 }
 
-// denied is the egress deny list with the operator's allowed ranges.
-func (s *Service) denied(a netip.Addr) bool { return httpx.DeniedAddr(a, s.cfg.AllowedPrivateRanges) }
+// deniedHost is the egress guard's reading of a host as written, with the
+// operator's allowed ranges: any spelling of a denied address, or a
+// metadata service's name.
+func (s *Service) deniedHost(host string) bool {
+	return httpx.DeniedHost(host, s.cfg.AllowedPrivateRanges)
+}
 
 // Subject is what a notification is about (ids only).
 type Subject struct {
