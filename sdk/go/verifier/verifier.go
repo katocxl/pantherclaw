@@ -22,7 +22,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -125,7 +127,8 @@ type Claims struct {
 
 // Config configures a Verifier.
 type Config struct {
-	// JWKSURL is PantherClaw's /.well-known/pantherclaw/jwks.json, over TLS.
+	// JWKSURL is PantherClaw's /.well-known/pantherclaw/jwks.json: https,
+	// or http only to a loopback address.
 	JWKSURL string
 	// Issuer is the deployment's issuer (the iss of its tokens).
 	Issuer string
@@ -135,6 +138,7 @@ type Config struct {
 	// share it (SQLStore); a MemoryStore is for a single replica.
 	Store ReplayStore
 	// Client fetches the JWKS; nil uses one with a 5-second timeout.
+	// Redirects are never followed, whichever client fetches.
 	Client *http.Client
 	// Now is the clock; nil is time.Now.
 	Now func() time.Time
@@ -148,6 +152,10 @@ type Verifier struct {
 	keys    map[string]ed25519.PublicKey
 	fetched time.Time
 	tried   time.Time
+	// flight is closed when the JWKS fetch in progress ends; fetchErr is
+	// the last fetch's error.
+	flight   chan struct{}
+	fetchErr error
 }
 
 // New returns a verifier.
@@ -157,10 +165,17 @@ func New(cfg Config) (*Verifier, error) {
 		return nil, errors.New("verifier: the JWKS URL, the issuer and the audience are required")
 	case cfg.Store == nil:
 		return nil, errors.New("verifier: a replay store is required")
+	case !secureURL(cfg.JWKSURL):
+		return nil, errors.New("verifier: the JWKS URL must use https (http only on a loopback address)")
 	}
-	if cfg.Client == nil {
-		cfg.Client = &http.Client{Timeout: 5 * time.Second}
+	client := &http.Client{Timeout: 5 * time.Second}
+	if cfg.Client != nil {
+		copied := *cfg.Client
+		client = &copied
 	}
+	// A redirect could hand the keys to anyone on the way (HR-202).
+	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	cfg.Client = client
 	if cfg.Now == nil {
 		cfg.Now = time.Now
 	}
@@ -205,7 +220,7 @@ func (v *Verifier) Verify(ctx context.Context, token string, body []byte, match 
 	case match == nil || !match(c):
 		return c, refusal(OperationMismatch, "%s on %s %s", c.PAP.Op, c.PAP.Target.Type, c.PAP.Target.ID)
 	}
-	first, err := v.cfg.Store.Use(ctx, Spend{ID: c.ID, IssuedAt: iat, Now: now, Until: exp.Add(Skew)})
+	first, err := v.cfg.Store.Use(ctx, Spend{Audience: c.Audience, ID: c.ID, IssuedAt: iat, Now: now, Until: exp.Add(Skew)})
 	switch {
 	case err != nil:
 		return c, refusal(StoreUnavailable, "%v", err)
@@ -251,26 +266,67 @@ func (v *Verifier) verifySignature(ctx context.Context, token string) ([]byte, e
 
 // key returns the action-tokens key kid. The JWKS is cached at most 15
 // minutes and refetched at most once a minute for a kid it does not hold.
+// One fetch runs at a time, outside the lock: verifications that need it
+// wait for it, and the others go on with the cached keys.
 func (v *Verifier) key(ctx context.Context, kid string) (ed25519.PublicKey, error) {
 	v.mu.Lock()
-	defer v.mu.Unlock()
 	now := v.cfg.Now()
 	stale := v.keys == nil || now.Sub(v.fetched) >= jwksMaxAge
 	if (stale || v.keys[kid] == nil) && (v.tried.IsZero() || now.Sub(v.tried) >= jwksMinGap || stale) {
-		v.tried = now
-		keys, err := v.fetch(ctx)
-		switch {
-		case err == nil:
-			v.keys, v.fetched = keys, now
-		case stale:
-			v.keys = nil
-			return nil, refusal(StoreUnavailable, "JWKS: %v", err)
+		flight := v.flight
+		if flight == nil {
+			v.tried, v.flight = now, make(chan struct{})
+			flight = v.flight
+			v.mu.Unlock()
+			// The fetch outlives a caller that gives up: others wait on it.
+			fctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), jwksFetchTimeout)
+			keys, err := v.fetch(fctx)
+			cancel()
+			v.mu.Lock()
+			switch {
+			case err == nil:
+				v.keys, v.fetched = keys, now
+			case stale:
+				v.keys = nil
+			}
+			v.fetchErr, v.flight = err, nil
+			close(flight)
+		} else {
+			v.mu.Unlock()
+			select {
+			case <-flight:
+			case <-ctx.Done():
+				return nil, refusal(StoreUnavailable, "JWKS: %v", ctx.Err())
+			}
+			v.mu.Lock()
 		}
+	}
+	defer v.mu.Unlock()
+	if v.keys == nil || v.cfg.Now().Sub(v.fetched) >= jwksMaxAge {
+		return nil, refusal(StoreUnavailable, "JWKS: %v", v.fetchErr)
 	}
 	if k := v.keys[kid]; k != nil {
 		return k, nil
 	}
 	return nil, refusal(BadSignature, "unknown key %q", kid)
+}
+
+// jwksFetchTimeout bounds one JWKS fetch.
+const jwksFetchTimeout = 10 * time.Second
+
+// secureURL reports whether a URL is https, or http to a loopback address,
+// without user information.
+func secureURL(raw string) bool {
+	u, err := url.Parse(raw)
+	if err != nil || u.User != nil || u.Host == "" {
+		return false
+	}
+	if u.Scheme == "https" {
+		return true
+	}
+	host := u.Hostname()
+	ip := net.ParseIP(host)
+	return u.Scheme == "http" && (host == "localhost" || (ip != nil && ip.IsLoopback()))
 }
 
 // ActionTokenKID is the kid of an action-tokens key: "action-tokens-" and

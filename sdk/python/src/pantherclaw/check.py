@@ -7,8 +7,8 @@ gateways in tests and for services that verify PAP/1 themselves."""
 from __future__ import annotations
 
 import re
+import time
 from typing import Any
-from urllib.parse import urlsplit
 
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
@@ -22,22 +22,28 @@ _PRINTABLE = re.compile(r"^[\x21-\x7e]+\Z")
 
 
 def _same_htu(claimed: str, want: str) -> bool:
+    """htu matches when scheme and host are equal without case and the
+    escaped paths exactly, as PantherClaw compares them."""
+    if "?" in claimed + want or "#" in claimed + want:
+        return False
     try:
-        a, b = urlsplit(claimed), urlsplit(want)
+        a, b = pap.split_url(claimed), pap.split_url(want)
     except ValueError:
         return False
-    for u in (a, b):
-        if u.query or u.fragment or "?" in (claimed + want) or "@" in u.netloc or u.scheme.lower() not in ("http", "https") or not u.netloc:
-            return False
-    return a.scheme.lower() == b.scheme.lower() and a.netloc.lower() == b.netloc.lower() and a.path == b.path
+    return a[0] == b[0] and a[1].lower() == b[1].lower() and a[2] == b[2]
 
 
-def check_proof(proof: str, method: str, url: str, body: bytes | str, token: str = "", now: int = 0) -> str:
-    """Checks a PAP-Proof against its request at ``now`` (Unix seconds) and
-    returns "ok" or the PAP-Error code PantherClaw answers: the header (alg
-    EdDSA, typ, a public Ed25519 jwk and nothing else) and signature, the
-    key binding to the token's cnf.jkt, htm, htu, ath, bh, iat, jti and the
-    nonce's shape. The token itself is not verified here."""
+def check_proof(proof: str, method: str, url: str, body: bytes | str, token: str = "", now: int | None = None) -> str:
+    """Checks a PAP-Proof against its request at ``now`` (Unix seconds,
+    default the clock) and returns "ok" or the PAP-Error code PantherClaw
+    answers: the header (alg EdDSA, typ, a public Ed25519 jwk and nothing
+    else) and signature, the key binding to the token's cnf.jkt, htm, htu,
+    ath, bh, iat, jti and the nonce's shape. The token itself is not
+    verified here, and neither is whether the nonce is current or the jti
+    new: "ok" is not the whole check. The caller checks the nonce against
+    the ones it issued and spends the jti once, or it accepts replays."""
+    if now is None:
+        now = int(time.time())
     parts = proof.split(".")
     if len(proof) > 8 << 10 or re.search(r"\s", proof) or len(parts) != 3:
         return "invalid_proof"
@@ -68,7 +74,7 @@ def check_proof(proof: str, method: str, url: str, body: bytes | str, token: str
     if c.get("bh") != pap.body_hash(body):
         return "body_hash_mismatch"
     iat = c.get("iat")
-    if not isinstance(iat, float) or iat > now + 60 or iat < now - 360:
+    if not isinstance(iat, float) or not iat.is_integer() or abs(iat) > 2**53 or iat > now + 60 or iat < now - 360:
         return "invalid_proof"
     jti = c.get("jti")
     if not isinstance(jti, str) or not 22 <= len(jti) <= 128 or not _PRINTABLE.match(jti):

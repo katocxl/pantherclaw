@@ -20,12 +20,20 @@ export class JCSError extends Error {
 const maxDepth = 512;
 const numberPattern = /^-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?/;
 
+/** Options of parseJSON. */
+export interface ParseOptions {
+  /** Receives the source text of every number, in order. */
+  numbers?: string[];
+}
+
 class Parser {
   private i = 0;
   private readonly s: string;
+  private readonly numbers: string[] | undefined;
 
-  constructor(s: string) {
+  constructor(s: string, numbers?: string[]) {
     this.s = s;
+    this.numbers = numbers;
   }
 
   parse(): JSONValue {
@@ -59,6 +67,7 @@ class Parser {
     const m = numberPattern.exec(this.s.slice(this.i));
     if (m === null) throw new JCSError(`not JSON at offset ${this.i}`);
     this.i += m[0].length;
+    this.numbers?.push(m[0]);
     const n = Number(m[0]);
     if (!Number.isFinite(n)) throw new JCSError("number out of range");
     return n;
@@ -135,7 +144,7 @@ class Parser {
 }
 
 /** Parses exactly one strict JSON value from text or UTF-8 bytes. */
-export function parseJSON(input: string | Uint8Array): JSONValue {
+export function parseJSON(input: string | Uint8Array, opts: ParseOptions = {}): JSONValue {
   let text: string;
   if (typeof input === "string") {
     if (!input.isWellFormed()) throw new JCSError("invalid UTF-16");
@@ -147,13 +156,16 @@ export function parseJSON(input: string | Uint8Array): JSONValue {
       throw new JCSError("invalid UTF-8");
     }
   }
-  return new Parser(text).parse();
+  return new Parser(text, opts.numbers).parse();
 }
 
 /**
- * Serializes a value canonically. Accepts parsed values (Maps) and plain
- * JavaScript objects and arrays; members are sorted by UTF-16 code units
- * and numbers are written as ECMAScript does.
+ * Serializes a value canonically. Accepts JSON values only: parsed values
+ * (Maps with string keys), arrays, and plain JavaScript objects (whose
+ * prototype is Object.prototype or null). Anything else (a Date, a class
+ * instance, a typed array, undefined) is refused rather than written as
+ * something it is not. Members are sorted by UTF-16 code units and numbers
+ * are written as ECMAScript does.
  */
 export function serialize(v: unknown): string {
   if (v === null) return "null";
@@ -168,7 +180,15 @@ export function serialize(v: unknown): string {
   }
   if (Array.isArray(v)) return `[${v.map(serialize).join(",")}]`;
   if (typeof v !== "object") throw new JCSError(`cannot serialize ${typeof v}`);
-  const entries: [string, unknown][] = v instanceof Map ? [...v.entries()] : Object.entries(v);
+  let entries: [string, unknown][];
+  if (v instanceof Map) {
+    entries = [...v.entries()];
+    if (entries.some(([k]) => typeof k !== "string")) throw new JCSError("a Map with keys that are not strings is not JSON");
+  } else {
+    const proto = Object.getPrototypeOf(v);
+    if (proto !== Object.prototype && proto !== null) throw new JCSError(`cannot serialize ${proto?.constructor?.name ?? "this object"}`);
+    entries = Object.entries(v);
+  }
   entries.sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
   return `{${entries.map(([k, x]) => `${serialize(k)}:${serialize(x)}`).join(",")}}`;
 }

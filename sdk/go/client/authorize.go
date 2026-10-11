@@ -4,10 +4,13 @@
 package client
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/binary"
+	"encoding/hex"
 	"encoding/json/jsontext"
 	"encoding/json/v2"
 	"errors"
@@ -15,6 +18,8 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/katocxl/pantherclaw/sdk/go/pap"
@@ -24,8 +29,8 @@ import (
 // through the connection's signed package (HR-201); the SDK sends no
 // ActionIR, hash or canonical form and never changes the input.
 type ToolCall struct {
-	// Tool is the agent's name for the tool: a built-in such as Bash, or
-	// mcp__<server>__<tool>.
+	// Tool is the agent's name for the tool: mcp__<server>__<tool>, or the
+	// name of a tool the agent SDK has built in.
 	Tool string `json:"tool"`
 	// Server is the MCP server's name, for an MCP tool only.
 	Server string `json:"server,omitempty"`
@@ -33,12 +38,63 @@ type ToolCall struct {
 	Input jsontext.Value `json:"input"`
 	// ToolUseID is the agent's id of the call.
 	ToolUseID string `json:"tool_use_id"`
-	// Cwd is a shell tool's working directory (Bash, PowerShell) only.
-	Cwd string `json:"cwd,omitempty"`
+}
+
+// Class is how an SDK sends a tool call to the /sdk face.
+type Class string
+
+// Classes of tool calls.
+const (
+	// Mapped is an MCP tool, mcp__<server>__<tool>, which PantherClaw
+	// decides.
+	Mapped Class = "mapped"
+	// Builtin is a tool the agent SDK has built in: sent so PantherClaw
+	// records it, and the only kind of call an observe answer lets run.
+	Builtin Class = "builtin"
+	// Refused is any other name: never sent, never run (HR-200).
+	Refused Class = "refused"
+)
+
+// Classify sorts an agent's tool name. mcp__<server>__<tool>, with server
+// the longest of servers that fits (a server name may contain "__") and a
+// tool name after it, is Mapped with that server; a name in builtins
+// (exactly, case included) is Builtin; anything else is Refused.
+func Classify(tool string, servers, builtins []string) (server string, class Class) {
+	if rest, ok := strings.CutPrefix(tool, "mcp__"); ok {
+		for _, s := range servers {
+			if len(s) > len(server) && len(rest) > len(s)+2 && strings.HasPrefix(rest, s+"__") {
+				server = s
+			}
+		}
+		if server == "" {
+			return "", Refused
+		}
+		return server, Mapped
+	}
+	if slices.Contains(builtins, tool) {
+		return "", Builtin
+	}
+	return "", Refused
+}
+
+// classOf is the class of a call as the client sends it: an MCP tool names
+// its server, and a built-in names none and is one of the configured
+// built-ins.
+func (c *Client) classOf(call ToolCall) Class {
+	if call.Server != "" {
+		if name, ok := strings.CutPrefix(call.Tool, "mcp__"+call.Server+"__"); ok && name != "" {
+			return Mapped
+		}
+		return Refused
+	}
+	if !strings.HasPrefix(call.Tool, "mcp__") && slices.Contains(c.cfg.Builtins, call.Tool) {
+		return Builtin
+	}
+	return Refused
 }
 
 // Outcome is what the agent may do with a tool call. Only Allow, and
-// Observe for an unmapped built-in tool, let it run.
+// Observe for a built-in tool, let it run.
 type Outcome string
 
 // Outcomes.
@@ -56,6 +112,9 @@ const (
 	CoverageObserveOnly = "OBSERVE_ONLY"
 )
 
+// MaxCallBody is the largest request the /sdk face reads.
+const MaxCallBody = 64 << 10
+
 // Answer is the /sdk face's answer.
 type Answer struct {
 	// Decision is allow, hold or deny.
@@ -66,7 +125,7 @@ type Answer struct {
 	Reasons    []string `json:"reasons"`
 	// ActionID is the action's id; ActionHash the hex SHA-256 of the
 	// action the gateway mapped, and ActionIR its canonical bytes
-	// (base64url), when the gateway sends them.
+	// (base64url).
 	ActionID      string     `json:"action_id"`
 	ActionHash    string     `json:"action_hash"`
 	ActionIR      string     `json:"action_ir"`
@@ -75,6 +134,41 @@ type Answer struct {
 	Mode          string     `json:"mode"`
 	Coverage      string     `json:"coverage"`
 	Wait          *WaitState `json:"wait"`
+	// Dispatch is, for an allowed call to a target-enforced connection,
+	// the request the gateway built for the target.
+	Dispatch *Dispatch `json:"dispatch"`
+}
+
+// Dispatch is the gateway's re-serialization of an allowed action for a
+// target-enforced connection, with the action token that binds its body
+// (HR-201, HR-188).
+type Dispatch struct {
+	Method      string            `json:"method"`
+	URL         string            `json:"url"`
+	Headers     map[string]string `json:"headers"`
+	Body        string            `json:"body"`
+	ActionToken string            `json:"action_token"`
+}
+
+// Outbound is the request the agent sends to a target-enforced
+// connection's target: exactly the one the gateway built.
+type Outbound struct {
+	Method string
+	URL    string
+	Header http.Header
+	Body   []byte
+}
+
+// Request returns the outbound request. Add the application's own
+// credential for the target, when it has one, and change nothing else: the
+// target refuses any other body (HR-202).
+func (o *Outbound) Request(ctx context.Context) (*http.Request, error) {
+	req, err := http.NewRequestWithContext(ctx, o.Method, o.URL, bytes.NewReader(o.Body))
+	if err != nil {
+		return nil, err
+	}
+	req.Header = o.Header.Clone()
+	return req, nil
 }
 
 // WaitState is a held call's wait handle and state, as the /sdk answer and
@@ -97,6 +191,9 @@ type Result struct {
 	Outcome Outcome
 	// Answer is the gateway's answer, when one could be read.
 	Answer *Answer
+	// Send is, for an Allow on a target-enforced connection, the request
+	// to send the target instead of building one.
+	Send *Outbound
 	// Why says what decided the outcome, for logs and the agent.
 	Why string
 	// Err is the failure behind CannotDecide, if any.
@@ -105,13 +202,17 @@ type Result struct {
 
 func cannot(why string, err error) Result { return Result{Outcome: CannotDecide, Why: why, Err: err} }
 
-var hexHash = regexp.MustCompile(`^[0-9a-f]{64}$`)
+var (
+	hexHash   = regexp.MustCompile(`^[0-9a-f]{64}$`)
+	toolUseID = regexp.MustCompile(`^[A-Za-z0-9_-]{1,128}$`)
+)
 
-// Evaluate reads a /sdk answer for the action id the SDK sent. firstHash,
-// when set, is the action hash of an earlier answer for the same action:
-// a resubmission must map to the same action. Anything it cannot read or
-// check is CannotDecide, never Allow (HR-200, HR-201).
-func Evaluate(status int, h http.Header, body []byte, actionID, firstHash string) Result {
+// Evaluate reads a /sdk answer to a call of class, for the action id the
+// SDK sent. firstHash, when set, is the action hash of an earlier answer
+// for the same action: a resubmission must map to the same action.
+// Anything it cannot read or check is CannotDecide, never Allow (HR-200,
+// HR-201).
+func Evaluate(status int, h http.Header, body []byte, class Class, actionID, firstHash string) Result {
 	switch {
 	case status == http.StatusUnauthorized:
 		return cannot("PAP/1: "+h.Get(pap.HeaderError), nil)
@@ -129,7 +230,10 @@ func Evaluate(status int, h http.Header, body []byte, actionID, firstHash string
 		return r
 	case "allow":
 		if a.Coverage == CoverageObserveOnly {
-			if a.Mode != "monitor" || a.ActionHash != "" {
+			switch {
+			case class != Builtin:
+				return cannot("an observe answer for a call that is not a built-in tool", nil)
+			case a.Mode != "monitor" || a.ActionHash != "" || a.ActionIR != "" || a.Dispatch != nil:
 				return cannot("an observed call that is not only recorded", nil)
 			}
 			r.Outcome = Observe
@@ -140,6 +244,9 @@ func Evaluate(status int, h http.Header, body []byte, actionID, firstHash string
 		if a.Wait == nil || a.Wait.Handle == "" {
 			return cannot("a hold without a wait handle", nil)
 		}
+		if a.Dispatch != nil {
+			return cannot("a hold with a request to send", nil)
+		}
 		r.Outcome = Hold
 	default:
 		return cannot("unknown decision "+a.Decision, nil)
@@ -147,13 +254,20 @@ func Evaluate(status int, h http.Header, body []byte, actionID, firstHash string
 	if err := checkAction(a, actionID, firstHash); err != nil {
 		return cannot(err.Error(), nil)
 	}
+	if a.Dispatch != nil {
+		out, err := checkDispatch(a.Dispatch)
+		if err != nil {
+			return cannot(err.Error(), nil)
+		}
+		r.Send = out
+	}
 	return r
 }
 
 // checkAction checks what an allow or a hold says about the action: the
-// label, the action id sent, a hash the canonical action (when sent)
-// hashes to and whose action id is the one sent, and for a resubmission
-// the first answer's hash.
+// label, the action id sent, the hash, the canonical action it hashes, an
+// sdk-channel action through a connection under the action id sent, and
+// for a resubmission the first answer's hash.
 func checkAction(a Answer, actionID, firstHash string) error {
 	switch {
 	case a.Coverage != CoveragePartial:
@@ -164,9 +278,8 @@ func checkAction(a Answer, actionID, firstHash string) error {
 		return errors.New("the answer has no action hash")
 	case firstHash != "" && a.ActionHash != firstHash:
 		return errors.New("the resubmitted call mapped to another action")
-	}
-	if a.ActionIR == "" {
-		return nil
+	case a.ActionIR == "":
+		return errors.New("the answer does not carry the action it decided")
 	}
 	raw, err := base64.RawURLEncoding.Strict().DecodeString(a.ActionIR)
 	if err != nil {
@@ -180,8 +293,47 @@ func checkAction(a Answer, actionID, firstHash string) error {
 		return errors.New("the action hash does not match the action")
 	case p.Action.ActionID != actionID:
 		return errors.New("the mapped action is for another action id")
+	case p.Action.Channel != "sdk" || p.Action.Connection == "":
+		return errors.New("the mapped action did not come through an SDK connection")
 	}
 	return nil
+}
+
+// checkDispatch checks the request a target-enforced connection's allow
+// carries: its PAP-Action header is its action token, and the token's
+// pap.bh is the SHA-256 of the body. The token's signature is the target's
+// to verify.
+func checkDispatch(d *Dispatch) (*Outbound, error) {
+	body, err := base64.RawURLEncoding.Strict().DecodeString(d.Body)
+	if err != nil {
+		return nil, errors.New("the request to send has a body that is not base64url")
+	}
+	u, err := url.Parse(d.URL)
+	if err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" || d.Method == "" {
+		return nil, errors.New("the request to send has no method or absolute URL")
+	}
+	h := http.Header{}
+	for k, v := range d.Headers {
+		h.Set(k, v)
+	}
+	if d.ActionToken == "" || h.Get(pap.HeaderAction) != d.ActionToken {
+		return nil, errors.New("the request to send does not carry its action token")
+	}
+	parts := strings.Split(d.ActionToken, ".")
+	if len(parts) != 3 {
+		return nil, errors.New("the action token is not a compact JWS")
+	}
+	var claims struct {
+		PAP struct {
+			BH string `json:"bh"`
+		} `json:"pap"`
+	}
+	sum := sha256.Sum256(body)
+	payload, err := base64.RawURLEncoding.Strict().DecodeString(parts[1])
+	if err != nil || json.Unmarshal(payload, &claims) != nil || claims.PAP.BH != hex.EncodeToString(sum[:]) {
+		return nil, errors.New("the action token does not bind the body to send")
+	}
+	return &Outbound{Method: d.Method, URL: d.URL, Header: h, Body: body}, nil
 }
 
 // NewActionID returns a fresh UUIDv7 for one logical tool call. Send the
@@ -216,12 +368,19 @@ func (c *Client) authorize(ctx context.Context, connection string, call ToolCall
 	if c.cfg.Gateway == "" || c.cfg.RunID == "" {
 		return cannot("the gateway URL and the run id are required", nil)
 	}
-	if call.Tool == "" || call.ToolUseID == "" || call.Input.Kind() != '{' {
+	if call.Tool == "" || !toolUseID.MatchString(call.ToolUseID) || call.Input.Kind() != '{' {
 		return cannot("a tool call needs a tool name, its id and an input object", nil)
+	}
+	class := c.classOf(call)
+	if class == Refused {
+		return cannot("PantherClaw neither maps "+call.Tool+" as an MCP tool nor knows it as a built-in tool", nil)
 	}
 	body, err := json.Marshal(call)
 	if err != nil {
 		return cannot("the tool call cannot be encoded", err)
+	}
+	if len(body) > MaxCallBody {
+		return cannot("the tool call is larger than the /sdk face takes", nil)
 	}
 	h := http.Header{"Content-Type": {"application/json"}, "PAP-Run-Id": {c.cfg.RunID}, "PC-Action-Id": {actionID}}
 	r, err := c.do(ctx, http.MethodPost, c.cfg.Gateway+"/sdk/"+url.PathEscape(connection), body, h, 0)
@@ -231,5 +390,5 @@ func (c *Client) authorize(ctx context.Context, connection string, call ToolCall
 		}
 		return cannot("PantherClaw is unreachable", err)
 	}
-	return Evaluate(r.status, r.header, r.body, actionID, firstHash)
+	return Evaluate(r.status, r.header, r.body, class, actionID, firstHash)
 }

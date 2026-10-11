@@ -2,28 +2,53 @@
 // Copyright 2026 Joshua Kato
 
 // The PantherClaw workload client (PAP/1): a proof over every request,
-// the servers' nonces, workload token renewal, the gateway's /sdk face and
-// waits on held calls. It fails closed (HR-200): when PantherClaw cannot
-// decide, the outcome is "cannot_decide", never "allow".
+// the servers' nonces, workload token renewal, the gateway's /sdk and /hook
+// faces and waits on held calls. It fails closed (HR-200): when PantherClaw
+// cannot decide, the outcome is "cannot_decide", never "allow".
 
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { parseAction } from "./action.ts";
+import { type JSONValue, parseJSON } from "./jcs.ts";
 import { fromB64url, HEADER_ERROR, HEADER_NONCE, HEADER_PROOF, type KeyFile, keyOf, parseTokenClaims, signProof, type WorkloadKey } from "./pap.ts";
 
 /** A raw tool call as the agent made it; the gateway maps it (HR-201). */
 export interface ToolCall {
-  /** The agent's name for the tool: a built-in such as Bash, or mcp__<server>__<tool>. */
+  /** The agent's name for the tool: mcp__<server>__<tool>, or a tool the agent SDK has built in. */
   tool: string;
   /** The MCP server's name, for an MCP tool only. */
   server?: string;
   input: Record<string, unknown>;
   /** The agent's id of the call. */
   tool_use_id: string;
-  /** A shell tool's working directory (Bash, PowerShell) only. */
-  cwd?: string;
 }
 
-/** What the agent may do with a call: only allow, and observe for an unmapped built-in, let it run. */
+/**
+ * How a call goes to the /sdk face: an MCP tool PantherClaw decides
+ * ("mapped"), a built-in tool sent so PantherClaw records it ("builtin",
+ * the only kind an observe answer lets run), or neither ("refused": never
+ * sent, never run, HR-200).
+ */
+export type CallClass = "mapped" | "builtin" | "refused";
+
+/**
+ * Sorts an agent's tool name: mcp__<server>__<tool>, with server the
+ * longest of `servers` that fits (a server name may contain "__") and a
+ * tool name after it, is mapped; a name in `builtins` (exactly) is a
+ * built-in; anything else is refused.
+ */
+export function classify(tool: string, servers: readonly string[], builtins: readonly string[]): { cls: CallClass; server?: string } {
+  if (tool.startsWith("mcp__")) {
+    const rest = tool.slice(5);
+    let server = "";
+    for (const s of servers) {
+      if (s.length > server.length && rest.length > s.length + 2 && rest.startsWith(`${s}__`)) server = s;
+    }
+    return server ? { cls: "mapped", server } : { cls: "refused" };
+  }
+  return builtins.includes(tool) ? { cls: "builtin" } : { cls: "refused" };
+}
+
+/** What the agent may do with a call: only allow, and observe for a built-in, let it run. */
 export type Outcome = "allow" | "observe" | "hold" | "deny" | "cannot_decide";
 
 export interface WaitState {
@@ -34,6 +59,16 @@ export interface WaitState {
   consume_by?: string;
   approval_request_id?: string;
   retry_after_seconds?: number;
+}
+
+/** The gateway's re-serialization of an allowed action for a target-enforced connection (HR-201). */
+export interface Dispatch {
+  method: string;
+  url: string;
+  headers: Record<string, string>;
+  /** The exact body, base64url. */
+  body: string;
+  action_token: string;
 }
 
 export interface Answer {
@@ -50,15 +85,35 @@ export interface Answer {
   mode?: string;
   coverage?: string;
   wait?: WaitState;
+  dispatch?: Dispatch;
+}
+
+/** The request to send a target-enforced connection's target: exactly the gateway's. */
+export interface Outbound {
+  method: string;
+  url: string;
+  headers: Record<string, string>;
+  body: Uint8Array;
 }
 
 export interface Result {
   outcome: Outcome;
   answer?: Answer;
+  /** For an allow on a target-enforced connection: the request to send instead of building one. */
+  send?: Outbound;
   why: string;
 }
 
 const cannot = (why: string): Result => ({ outcome: "cannot_decide", why });
+
+/**
+ * The outbound request as a fetch Request. Add the application's own
+ * credential for the target, when it has one, and change nothing else: the
+ * target refuses any other body (HR-202). Redirects are refused.
+ */
+export function outboundRequest(o: Outbound): Request {
+  return new Request(o.url, { method: o.method, headers: o.headers, body: o.body.length > 0 ? o.body : undefined, redirect: "error" });
+}
 
 /** The one retry a 401 allows: with its fresh nonce, or with a renewed token. "" otherwise. */
 export function retry(status: number, headers: Headers): "retry_nonce" | "refresh_token" | "" {
@@ -69,17 +124,25 @@ export function retry(status: number, headers: Headers): "retry_nonce" | "refres
   return "";
 }
 
+/** Strict JSON (duplicate members refused) as plain values. */
+function plain(v: JSONValue): unknown {
+  if (v instanceof Map) return Object.fromEntries([...v].map(([k, x]) => [k, plain(x)]));
+  return Array.isArray(v) ? v.map(plain) : v;
+}
+
 /**
- * Reads a /sdk answer for the action id the SDK sent. `firstHash`, when
- * set, is the hash of an earlier answer for the same action. Anything it
- * cannot read or check is cannot_decide (HR-200, HR-201).
+ * Reads a /sdk answer to a call of class `cls`, for the action id the SDK
+ * sent. `firstHash`, when set, is the hash of an earlier answer for the
+ * same action. Anything it cannot read or check is cannot_decide (HR-200,
+ * HR-201).
  */
-export function evaluate(status: number, body: string, actionId: string, firstHash = ""): Result {
+export function evaluate(status: number, body: string, cls: CallClass, actionId: string, firstHash = ""): Result {
   if (status !== 200) return cannot(`the gateway answered HTTP ${status}`);
   let a: Answer;
   try {
-    a = JSON.parse(body) as Answer;
-    if (typeof a !== "object" || a === null) throw new Error("not an object");
+    const v = plain(parseJSON(body));
+    if (typeof v !== "object" || v === null || Array.isArray(v)) throw new Error("not an object");
+    a = v as Answer;
   } catch {
     return cannot("the gateway's answer is not readable");
   }
@@ -89,19 +152,28 @@ export function evaluate(status: number, body: string, actionId: string, firstHa
       return r;
     case "allow":
       if (a.coverage === "OBSERVE_ONLY") {
-        return a.mode === "monitor" && !a.action_hash ? { ...r, outcome: "observe" } : cannot("an observed call that is not only recorded");
+        if (cls !== "builtin") return cannot("an observe answer for a call that is not a built-in tool");
+        if (a.mode !== "monitor" || a.action_hash || a.action_ir || a.dispatch) return cannot("an observed call that is not only recorded");
+        return { ...r, outcome: "observe" };
       }
       r.outcome = "allow";
       break;
     case "hold":
       if (!a.wait?.handle) return cannot("a hold without a wait handle");
+      if (a.dispatch) return cannot("a hold with a request to send");
       r.outcome = "hold";
       break;
     default:
       return cannot(`unknown decision ${a.decision}`);
   }
   const problem = checkAction(a, actionId, firstHash);
-  return problem ? cannot(problem) : r;
+  if (problem) return cannot(problem);
+  if (a.dispatch) {
+    const send = checkDispatch(a.dispatch);
+    if (typeof send === "string") return cannot(send);
+    r.send = send;
+  }
+  return r;
 }
 
 function checkAction(a: Answer, actionId: string, firstHash: string): string {
@@ -109,15 +181,37 @@ function checkAction(a: Answer, actionId: string, firstHash: string): string {
   if (a.action_id !== actionId) return "the answer is for another action";
   if (!/^[0-9a-f]{64}$/.test(a.action_hash ?? "")) return "the answer has no action hash";
   if (firstHash && a.action_hash !== firstHash) return "the resubmitted call mapped to another action";
-  if (!a.action_ir) return "";
+  if (typeof a.action_ir !== "string" || a.action_ir === "") return "the answer does not carry the action it decided";
   try {
     const p = parseAction(fromB64url(a.action_ir));
     if (p.hash !== a.action_hash) return "the action hash does not match the action";
     if (p.action.get("action_id") !== actionId) return "the mapped action is for another action id";
+    const conn = p.action.get("connection");
+    if (p.action.get("channel") !== "sdk" || typeof conn !== "string" || conn === "") return "the mapped action did not come through an SDK connection";
   } catch {
     return "the canonical action is not valid ActionIR";
   }
   return "";
+}
+
+/** Checks a dispatch: its PAP-Action header is its token, whose pap.bh binds the body. The signature is the target's to verify. */
+function checkDispatch(d: Dispatch): Outbound | string {
+  try {
+    const body = fromB64url(String(d.body ?? ""));
+    const u = new URL(String(d.url));
+    if ((u.protocol !== "https:" && u.protocol !== "http:") || !d.method) return "the request to send has no method or absolute URL";
+    const headers: Record<string, string> = {};
+    for (const [k, v] of Object.entries(d.headers ?? {})) headers[k] = String(v);
+    const action = Object.entries(headers).find(([k]) => k.toLowerCase() === "pap-action")?.[1];
+    if (!d.action_token || action !== d.action_token) return "the request to send does not carry its action token";
+    const parts = d.action_token.split(".");
+    if (parts.length !== 3) return "the action token is not a compact JWS";
+    const claims = plain(parseJSON(fromB64url(parts[1] ?? ""))) as { pap?: { bh?: unknown } };
+    if (claims?.pap?.bh !== createHash("sha256").update(body).digest("hex")) return "the action token does not bind the body to send";
+    return { method: d.method, url: d.url, headers, body };
+  } catch {
+    return "the request to send is not readable";
+  }
 }
 
 /** A fresh UUIDv7 for one logical tool call; send it for every retry and resubmission. */
@@ -131,6 +225,54 @@ export function newActionId(): string {
   return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
 }
 
+/** A shell command for the local connection's /hook face (pc.shell), as `pclaw hook claude-code` sends it. */
+export interface ShellCall {
+  shell: "bash" | "powershell";
+  command: string;
+  /** The absolute, final working directory (links resolved). */
+  cwd: string;
+  /** The agent's id of the call. */
+  call: string;
+}
+
+/** The /hook face's answer: allow, or deny (held: an eligible person may approve it in PantherClaw). */
+export interface HookAnswer {
+  decision?: string;
+  reason?: string;
+  error_class?: string;
+  code?: string;
+  transaction_id?: string;
+  held?: boolean;
+  mode?: string;
+}
+
+export interface HookResult {
+  outcome: "allow" | "deny" | "cannot_decide";
+  /** The deny is a hold: once approved in PantherClaw, the same command runs. */
+  held: boolean;
+  answer?: HookAnswer;
+  why: string;
+}
+
+/** The largest request the /sdk and /hook faces read. */
+export const MAX_CALL_BODY = 64 << 10;
+
+const toolUseId = /^[A-Za-z0-9_-]{1,128}$/;
+const encoder = new TextEncoder();
+
+/** Whether a base URL may carry workload tokens and proofs: https, or http to a loopback address. */
+function secure(raw: string): boolean {
+  let u: URL;
+  try {
+    u = new URL(raw);
+  } catch {
+    return false;
+  }
+  if (u.username || u.password) return false;
+  if (u.protocol === "https:") return true;
+  return u.protocol === "http:" && (u.hostname === "localhost" || u.hostname === "[::1]" || /^127(\.[0-9]{1,3}){3}$/.test(u.hostname));
+}
+
 export interface ClientConfig {
   /** The workload key file: its identifier is required; its server and run are defaults. */
   keyFile: KeyFile;
@@ -138,6 +280,12 @@ export interface ClientConfig {
   /** The base URL of the gateway whose /sdk face decides calls. */
   gateway?: string;
   runId?: string;
+  /**
+   * The names of the tools the agent SDK has built in. Only these are
+   * sent without a server, and only for them does an observe answer let
+   * the call run. Empty: no call is a built-in.
+   */
+  builtins?: readonly string[];
   /** Milliseconds for one decision or token request (default 15 s); past it PantherClaw cannot decide. */
   timeoutMs?: number;
   fetch?: typeof fetch;
@@ -150,8 +298,13 @@ interface Sent {
   stream?: ReadableStream<Uint8Array> | null;
 }
 
+/** How long past a hold's deadline the client still waits to hear how it ended. */
+const WAIT_GRACE_MS = 5_000;
+/** How often one call is resubmitted and held again before the client gives up. */
+const MAX_RESUBMITS = 3;
+
 export class Client {
-  private readonly cfg: Required<Pick<ClientConfig, "server" | "gateway" | "runId" | "timeoutMs">> & ClientConfig;
+  private readonly cfg: Required<Pick<ClientConfig, "server" | "gateway" | "runId" | "timeoutMs" | "builtins">> & ClientConfig;
   private readonly key: Promise<WorkloadKey>;
   private token = "";
   private expiry = 0;
@@ -161,14 +314,29 @@ export class Client {
     if (!cfg.keyFile.identifier) throw new Error("the key file has no identifier: enroll the workload first");
     const server = (cfg.server ?? cfg.keyFile.server ?? "").replace(/\/$/, "");
     if (!server) throw new Error("the PantherClaw server URL is required");
+    const gateway = (cfg.gateway ?? "").replace(/\/$/, "");
+    if (!secure(server) || (gateway && !secure(gateway))) {
+      throw new Error("the server and gateway URLs must use https (http only on a loopback address) and carry no user information");
+    }
     this.cfg = {
       ...cfg,
       server,
-      gateway: (cfg.gateway ?? "").replace(/\/$/, ""),
+      gateway,
       runId: cfg.runId ?? cfg.keyFile.run_id ?? "",
       timeoutMs: cfg.timeoutMs ?? 15_000,
+      builtins: cfg.builtins ?? [],
     };
     this.key = keyOf(cfg.keyFile);
+  }
+
+  /** The gateway's base URL. */
+  get gateway(): string {
+    return this.cfg.gateway;
+  }
+
+  /** The tool names this client sends as built-ins. */
+  get builtins(): readonly string[] {
+    return this.cfg.builtins;
   }
 
   /** A workload token valid for at least another minute, renewed at the server when needed. */
@@ -226,22 +394,69 @@ export class Client {
     }
   }
 
+  /** The class of a call as the client sends it: an MCP tool names its server; a built-in names none and is configured. */
+  private classOf(call: ToolCall): CallClass {
+    if (call.server) return call.tool.startsWith(`mcp__${call.server}__`) && call.tool.length > call.server.length + 7 ? "mapped" : "refused";
+    return !call.tool.startsWith("mcp__") && this.cfg.builtins.includes(call.tool) ? "builtin" : "refused";
+  }
+
   /** Asks the gateway's /sdk face about one call through the named connection. Never throws. */
   async authorize(connection: string, call: ToolCall, actionId: string, firstHash = ""): Promise<Result> {
     if (!this.cfg.gateway || !this.cfg.runId) return cannot("the gateway URL and the run id are required");
-    if (!call.tool || !call.tool_use_id || typeof call.input !== "object" || call.input === null || Array.isArray(call.input)) {
+    if (!call.tool || !toolUseId.test(call.tool_use_id) || typeof call.input !== "object" || call.input === null || Array.isArray(call.input)) {
       return cannot("a tool call needs a tool name, its id and an input object");
     }
+    const cls = this.classOf(call);
+    if (cls === "refused") return cannot(`PantherClaw neither maps ${call.tool} as an MCP tool nor knows it as a built-in tool`);
+    const body = JSON.stringify({ tool: call.tool, server: call.server, input: call.input, tool_use_id: call.tool_use_id });
+    if (encoder.encode(body).length > MAX_CALL_BODY) return cannot("the tool call is larger than the /sdk face takes");
     try {
-      const res = await this.do("POST", `${this.cfg.gateway}/sdk/${encodeURIComponent(connection)}`, JSON.stringify(call), {
+      const res = await this.do("POST", `${this.cfg.gateway}/sdk/${encodeURIComponent(connection)}`, body, {
         "Content-Type": "application/json",
         "PAP-Run-Id": this.cfg.runId,
         "PC-Action-Id": actionId,
       });
-      return evaluate(res.status, res.body, actionId, firstHash);
+      return evaluate(res.status, res.body, cls, actionId, firstHash);
     } catch (e) {
       return cannot(`PantherClaw cannot decide: ${e instanceof Error ? e.message : String(e)}`);
     }
+  }
+
+  /**
+   * Asks the local connection's /hook face (pc.shell) about a shell
+   * command, as Claude Code's hook does. Allow only on an allow; a hold is
+   * a deny with `held`, approved in PantherClaw and never by the local user
+   * (HR-186). Never throws.
+   */
+  async hook(connection: string, call: ShellCall): Promise<HookResult> {
+    const no = (why: string): HookResult => ({ outcome: "cannot_decide", held: false, why });
+    if (!this.cfg.gateway || !this.cfg.runId) return no("the gateway URL and the run id are required");
+    if ((call.shell !== "bash" && call.shell !== "powershell") || !call.command || !call.cwd || !toolUseId.test(call.call)) {
+      return no("a shell call needs its shell, a command, a working directory and its id");
+    }
+    const body = JSON.stringify({ input: { call: call.call, command: call.command, cwd: call.cwd, shell: call.shell }, tool: "shell" });
+    if (encoder.encode(body).length > MAX_CALL_BODY) return no("the command is larger than the /hook face takes");
+    let res: Sent;
+    try {
+      res = await this.do("POST", `${this.cfg.gateway}/hook/${encodeURIComponent(connection)}`, body, {
+        "Content-Type": "application/json",
+        "PAP-Run-Id": this.cfg.runId,
+      });
+    } catch (e) {
+      return no(`PantherClaw cannot decide: ${e instanceof Error ? e.message : String(e)}`);
+    }
+    if (res.status !== 200) return no(`the gateway answered HTTP ${res.status}`);
+    let a: HookAnswer;
+    try {
+      const v = plain(parseJSON(res.body));
+      if (typeof v !== "object" || v === null || Array.isArray(v)) throw new Error("not an object");
+      a = v as HookAnswer;
+    } catch {
+      return no("the gateway's answer is not readable");
+    }
+    if (a.decision === "allow") return { outcome: "allow", held: false, answer: a, why: a.reason ?? "" };
+    if (a.decision === "deny") return { outcome: "deny", held: a.held === true, answer: a, why: a.reason ?? "" };
+    return no(`unknown decision ${a.decision}`);
   }
 
   /** Long-polls a held call at the server: answers when the state differs from `known` or after `timeoutS` (at most 30). */
@@ -274,18 +489,24 @@ export class Client {
   /**
    * Continues from an answer: while it is a hold, waits in PantherClaw and
    * resubmits the identical call with the same action id, checking that it
-   * maps to the same action. Never throws; past `deadlineMs` the call
-   * cannot be decided.
+   * maps to the same action. A wait ends at `deadlineMs` or at the hold's
+   * own deadline (plus a few seconds' grace), and a call held again after
+   * three resubmissions is not resubmitted; each is cannot_decide. Never
+   * throws.
    */
   async resume(connection: string, call: ToolCall, actionId: string, first: Result, deadlineMs = 300_000): Promise<Result> {
     const until = Date.now() + deadlineMs;
     let res = first;
-    while (res.outcome === "hold") {
+    for (let resubmits = 0; res.outcome === "hold"; resubmits++) {
+      if (resubmits === MAX_RESUBMITS) return cannot(`the call was held again after ${MAX_RESUBMITS} resubmissions`);
       const hash = res.answer?.action_hash ?? "";
+      const held = res.answer?.wait as WaitState;
+      const deadline = Date.parse(held.deadline ?? "");
+      const end = Number.isFinite(deadline) ? Math.min(until, deadline + WAIT_GRACE_MS) : until;
       let w: WaitState;
       const stop = new AbortController();
       try {
-        w = await withDeadline(this.waitReady(res.answer?.wait as WaitState, stop.signal), until);
+        w = await withDeadline(this.waitReady(held, stop.signal), end);
       } catch (e) {
         return cannot(`the wait for PantherClaw's decision ended: ${e instanceof Error ? e.message : String(e)}`);
       } finally {
@@ -351,6 +572,8 @@ export function parseWaitResponse(body: string): { state: WaitState; timedOut: b
 
 const LF = String.fromCharCode(10);
 const CR = String.fromCharCode(13);
+/** The longest line or event an SSE wait stream may send. */
+const MAX_EVENT = 64 << 10;
 
 /** Reads an SSE wait stream, calling `fn` for every state event until it returns false or the stream ends. */
 export async function readStream(stream: ReadableStream<Uint8Array>, fn: (w: WaitState) => boolean): Promise<void> {
@@ -364,7 +587,7 @@ export async function readStream(stream: ReadableStream<Uint8Array>, fn: (w: Wai
       const { done, value } = await reader.read();
       if (done) return;
       buf += decoder.decode(value, { stream: true });
-      if (buf.length > 64 << 10) throw new Error("wait event too long");
+      if (buf.length > MAX_EVENT) throw new Error("wait event too long");
       let nl = buf.indexOf(LF);
       while (nl >= 0) {
         const line = buf.slice(0, nl).endsWith(CR) ? buf.slice(0, nl - 1) : buf.slice(0, nl);
@@ -377,6 +600,7 @@ export async function readStream(stream: ReadableStream<Uint8Array>, fn: (w: Wai
           event = line.slice(6).trim();
         } else if (line.startsWith("data:")) {
           data += line.slice(5).replace(/^ /, "");
+          if (data.length > MAX_EVENT) throw new Error("wait event too long");
         }
         nl = buf.indexOf(LF);
       }
