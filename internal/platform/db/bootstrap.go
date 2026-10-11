@@ -26,6 +26,9 @@ const (
 	RoleApp      = "pc_app"
 	RoleAuditRO  = "pc_audit_ro"
 	RoleLister   = "pc_lister"
+	// RoleRetention removes expired evidence bodies; only the worker's
+	// retention job uses it (G0 M7 design decision 9, HR-198).
+	RoleRetention = "pc_retention"
 )
 
 var (
@@ -37,9 +40,10 @@ var (
 
 // RolePasswords holds the login passwords set during bootstrap.
 type RolePasswords struct {
-	Migrator pclog.Secret[[]byte]
-	App      pclog.Secret[[]byte]
-	AuditRO  pclog.Secret[[]byte]
+	Migrator  pclog.Secret[[]byte]
+	App       pclog.Secret[[]byte]
+	AuditRO   pclog.Secret[[]byte]
+	Retention pclog.Secret[[]byte]
 }
 
 // bootstrapLockKey serializes concurrent bootstraps of one cluster (taken in
@@ -52,7 +56,9 @@ const bootstrapLockKey = 0x70635f626f6f74 // "pc_boot"
 // verifiers, and statement logging is disabled for the transaction, so no
 // plaintext password reaches the server or its logs.
 func BootstrapRoles(ctx context.Context, admin *pgx.Conn, pw RolePasswords) error {
-	logins := map[string]pclog.Secret[[]byte]{RoleMigrator: pw.Migrator, RoleApp: pw.App, RoleAuditRO: pw.AuditRO}
+	logins := map[string]pclog.Secret[[]byte]{
+		RoleMigrator: pw.Migrator, RoleApp: pw.App, RoleAuditRO: pw.AuditRO, RoleRetention: pw.Retention,
+	}
 	for role, p := range logins {
 		if err := checkPassword(p.Reveal()); err != nil {
 			return fmt.Errorf("db: bootstrap: %s password: %w", role, err)
@@ -68,7 +74,7 @@ func BootstrapRoles(ctx context.Context, admin *pgx.Conn, pw RolePasswords) erro
 		if _, err := tx.Exec(ctx, bootstrapRolesSQL); err != nil {
 			return fmt.Errorf("db: bootstrap roles: %w", err)
 		}
-		for _, role := range []string{RoleMigrator, RoleApp, RoleAuditRO} {
+		for _, role := range []string{RoleMigrator, RoleApp, RoleAuditRO, RoleRetention} {
 			verifier, err := scramVerifier(logins[role].Reveal())
 			if err != nil {
 				return err

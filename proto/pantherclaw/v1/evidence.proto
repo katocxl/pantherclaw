@@ -20,7 +20,8 @@ import "pantherclaw/v1/authority.proto";
 // org and its audit events, needs evidence.read and audit.read at org scope.
 // Anchors list the org's own blinded leaves in the anchored global root
 // (HR-195). Replay runs a recorded evaluation's decision again without
-// writing anything (HR-197). Evidence packs come in a later slice.
+// writing anything (HR-197). Evidence packs are signed exports of a scope,
+// built from their creator's permissions (HR-196, Team edition).
 service EvidenceService {
   // ListCheckpoints lists the org's checkpoints, newest first, and its
   // integrity status.
@@ -68,6 +69,29 @@ service EvidenceService {
   rpc ReplayDecision(ReplayDecisionRequest) returns (ReplayDecisionResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
+  // CreateEvidencePack asks for a signed evidence pack of a scope (design
+  // decision 15, F525–F532, Team edition). A job builds it from the
+  // creator's permissions at that moment: what they cannot read is left
+  // out and counted as a gap. Human only; audited.
+  // permission: evidence.export
+  rpc CreateEvidencePack(CreateEvidencePackRequest) returns (CreateEvidencePackResponse);
+  // GetEvidencePack returns a pack's state and, when ready, its signed
+  // manifest: to its creator, or to a holder of evidence.read at org scope.
+  // permission: evidence.read
+  rpc GetEvidencePack(GetEvidencePackRequest) returns (GetEvidencePackResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // ListEvidencePacks lists the packs the caller may see, newest first.
+  // permission: evidence.read
+  rpc ListEvidencePacks(ListEvidencePacksRequest) returns (ListEvidencePacksResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // DownloadEvidencePack streams a ready pack's content (a ZIP, at most
+  // 64 MiB) to its creator, or to a holder of evidence.export and
+  // evidence.read at org scope, for 7 days after it is ready. Every
+  // download is audited before the first byte. `pclaw verify` checks it.
+  // permission: evidence.export
+  rpc DownloadEvidencePack(DownloadEvidencePackRequest) returns (stream DownloadEvidencePackResponse);
 }
 
 // LedgerIntegrityState is where the integrity of the org's evidence ledger stands.
@@ -422,4 +446,167 @@ message ReplayDecisionResponse {
   // Why inputs is empty although include_inputs was set: the missing
   // permission, or the inputs' own state (missing, truncated, unreadable).
   string inputs_withheld = 21;
+}
+
+// EvidencePackState is where a pack stands.
+enum EvidencePackState {
+  EVIDENCE_PACK_STATE_UNSPECIFIED = 0;
+  // The job is building it.
+  EVIDENCE_PACK_STATE_BUILDING = 1;
+  // Signed and downloadable until its expiry.
+  EVIDENCE_PACK_STATE_READY = 2;
+  // It could not be built; error_code says why.
+  EVIDENCE_PACK_STATE_FAILED = 3;
+  // Its 7 days are over and its content was removed.
+  EVIDENCE_PACK_STATE_EXPIRED = 4;
+}
+
+// PackTransactions names the transactions of a pack.
+message PackTransactions {
+  // Transaction ids.
+  repeated string ids = 1 [(buf.validate.field).repeated = {
+    min_items: 1
+    max_items: 1000
+    unique: true
+    items: {
+      string: {uuid: true}
+    }
+  }];
+}
+
+// PackTimeRange is a time range [start_time, end_time) of at most 366 days.
+message PackTimeRange {
+  // Start, inclusive.
+  google.protobuf.Timestamp start_time = 1 [(buf.validate.field).required = true];
+  // End, exclusive.
+  google.protobuf.Timestamp end_time = 2 [(buf.validate.field).required = true];
+
+  option (buf.validate.message).cel = {
+    id: "pack_time_range"
+    message: "end_time must be after start_time, at most 366 days later"
+    expression: "this.end_time > this.start_time && this.end_time - this.start_time <= duration('8784h')"
+  };
+}
+
+// PackContents is what a pack holds besides each transaction's states.
+message PackContents {
+  // Receipts (decision, execution, effect) and their verify bundles.
+  bool receipts = 1;
+  // The policy, definition, grant, guardrail, connection and approval
+  // revisions the decisions applied.
+  bool versions = 2;
+  // The approval requests that held the transactions, and their responses.
+  bool approvals = 3;
+  // Containment and restoration events.
+  bool containment = 4;
+  // Payload captures: only for a creator holding evidence.read_restricted.
+  bool captures = 5;
+}
+
+// CreateEvidencePackRequest names a pack's scope and contents.
+message CreateEvidencePackRequest {
+  // The scope.
+  oneof scope {
+    option (buf.validate.oneof).required = true;
+    // These transactions.
+    PackTransactions transactions = 1;
+    // Every transaction of a run.
+    string run_id = 2 [(buf.validate.field).string.uuid = true];
+    // Every transaction of an agent.
+    string agent_id = 3 [(buf.validate.field).string.uuid = true];
+    // Every transaction of the org in a time range.
+    PackTimeRange time_range = 4;
+  }
+  // For a run or an agent: only the transactions created in this range.
+  PackTimeRange within = 5;
+  // What to include.
+  PackContents include = 6 [(buf.validate.field).required = true];
+}
+
+// EvidencePack is a pack's state and, when ready, its signed manifest.
+message EvidencePack {
+  // Id.
+  string id = 1;
+  // State.
+  EvidencePackState state = 2;
+  // The scope as canonical JSON: kind, ids, range.
+  bytes scope = 3;
+  // What was asked for.
+  PackContents include = 4;
+  // The person who asked for it.
+  string created_by = 5;
+  // When it was asked for.
+  google.protobuf.Timestamp create_time = 6;
+  // When it became ready.
+  google.protobuf.Timestamp ready_time = 7;
+  // When it expires (7 days after ready).
+  google.protobuf.Timestamp expire_time = 8;
+  // Files listed in its manifest.
+  int32 items = 9;
+  // Size of its content (the ZIP).
+  int64 content_size = 10;
+  // SHA-256 of its content.
+  bytes content_sha256 = 11;
+  // The signed manifest (compact JWS, typ pap-pack+jwt), when ready.
+  string manifest = 12;
+  // For FAILED: why.
+  string error_code = 13;
+}
+
+// CreateEvidencePackResponse returns the new pack, BUILDING.
+message CreateEvidencePackResponse {
+  // The pack.
+  EvidencePack pack = 1;
+}
+
+// GetEvidencePackRequest names a pack.
+message GetEvidencePackRequest {
+  // Id.
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// GetEvidencePackResponse returns it.
+message GetEvidencePackResponse {
+  // The pack.
+  EvidencePack pack = 1;
+}
+
+// ListEvidencePacksRequest pages through packs.
+message ListEvidencePacksRequest {
+  // Maximum results (default 50, at most 200).
+  int32 page_size = 1 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 200
+  }];
+  // Token from a previous response.
+  string page_token = 2 [(buf.validate.field).string = {
+    max_len: 64
+    pattern: "^[A-Za-z0-9_-]*$"
+  }];
+}
+
+// ListEvidencePacksResponse returns a page.
+message ListEvidencePacksResponse {
+  // Packs, newest first.
+  repeated EvidencePack packs = 1;
+  // Token for the next page; empty on the last.
+  string next_page_token = 2;
+}
+
+// DownloadEvidencePackRequest names a pack.
+message DownloadEvidencePackRequest {
+  // Id.
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// DownloadEvidencePackResponse is one part of the content, in order.
+message DownloadEvidencePackResponse {
+  // Up to 1 MiB of the content.
+  bytes chunk = 1;
+  // Its offset in the content.
+  int64 offset = 2;
+  // The content's size (every message).
+  int64 total_size = 3;
+  // The content's SHA-256 (every message).
+  bytes content_sha256 = 4;
 }

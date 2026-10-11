@@ -569,6 +569,7 @@ func (e *Engine) send(ctx context.Context, r Result, conn *control.Connection, d
 	}
 	var digest []byte
 	ref := ""
+	var response *[]byte
 	if res.Status != 0 {
 		// The digest is of what the target sent; the agent gets it without
 		// the credential.
@@ -581,8 +582,13 @@ func (e *Engine) send(ctx context.Context, r Result, conn *control.Connection, d
 		res.ContentType = string(egress.Redacted([]byte(res.ContentType), secret))
 		res.RequestID = string(egress.Redacted([]byte(res.RequestID), secret))
 		r.Response = &res
+		response = &res.Body
 	}
-	return e.record(ctx, r, want, outcome, res.Status, digest, elapsed, class, code, t, ref)
+	// Bodies an active capture profile asks for, never headers (HR-199).
+	caps := captures(conn, def.Operation, r.Monitor, p.out.Body, response, secret, time.Now())
+	return e.record(ctx, r, want, outcome, res.Status, digest, elapsed, class, code, t, func(req *pb.RecordExecutionRequest) {
+		req.TargetRef, req.Captures = ref, caps
+	})
 }
 
 // maxTargetRef is the longest reference the Authority accepts.
@@ -667,14 +673,14 @@ func classify(status int, err error) (pb.Outcome, Class, string) {
 // permit DISPATCHING, which the Authority's sweeper marks UNKNOWN: the
 // reservation stays held.
 func (e *Engine) record(ctx context.Context, r Result, want permitWant, outcome pb.Outcome, status int, digest []byte,
-	elapsed time.Duration, class Class, code string, t *timer, targetRef ...string,
+	elapsed time.Duration, class Class, code string, t *timer, extra ...func(*pb.RecordExecutionRequest),
 ) Result {
 	req := &pb.RecordExecutionRequest{
 		PermitId: want.PermitID, Outcome: outcome, TargetStatus: int32(min(status, 599)), ResponseDigest: digest, //nolint:gosec // G115: clamped
 		DispatchMs: int32(min(elapsed.Milliseconds(), 600000)), //nolint:gosec // G115: clamped
 	}
-	if len(targetRef) > 0 {
-		req.TargetRef = targetRef[0]
+	for _, f := range extra {
+		f(req)
 	}
 	rec, err := e.authority.RecordExecution(ctx, req)
 	t.lap("record")
