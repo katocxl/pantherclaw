@@ -29,6 +29,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/sandbox/docker"
 	"github.com/katocxl/pantherclaw/internal/sandbox/docker/dockertest"
 	"github.com/katocxl/pantherclaw/internal/sandbox/report"
+	"github.com/katocxl/pantherclaw/internal/sandbox/workspace"
 	"github.com/katocxl/pantherclaw/internal/sim/canary"
 )
 
@@ -66,7 +67,7 @@ func newRig(t *testing.T, agent bool) *rig {
 	dir := t.TempDir()
 	gw := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		r.mu.Lock()
-		r.seen = append(r.seen, req.Clone(context.Background()))
+		r.seen = append(r.seen, req.Clone(req.Context()))
 		r.mu.Unlock()
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusNotFound)
@@ -214,14 +215,26 @@ func TestT086_TheSandboxIsClosedAndTheReportsSayWhy(t *testing.T) {
 }
 
 // TestHR213_TheAgentHasItsWorkspaceAndOnlyTheEdge: the agent runs as its
-// own non-root uid with a copy of the workspace, reaches a mapped host only
-// through the edge (to the gateway, signed by the edge), cannot connect
-// directly, holds no credential, and its work is copied back out.
+// own non-root uid with a copy of the workspace whose repository came in
+// cleaned (no host hooks or config), reaches a mapped host only through
+// the edge (to the gateway, signed by the edge), cannot connect directly,
+// holds no credential, and its work comes back as a patch only: the hook
+// and fsmonitor it planted in .git never reach the host.
 func TestHR213_TheAgentHasItsWorkspaceAndOnlyTheEdge(t *testing.T) {
 	r := newRig(t, true)
 	in := t.TempDir()
-	if err := os.WriteFile(filepath.Join(in, "in.txt"), []byte("question\n"), 0o644); err != nil {
-		t.Fatal(err)
+	for p, body := range map[string]string{
+		"in.txt": "question\n", ".git/HEAD": "ref: refs/heads/main\n", ".git/objects/ab/cdef": "blob",
+		".git/config":           "[core]\n\tfsmonitor = /tmp/host\n[remote \"origin\"]\n\turl = https://x:ghp_secret@github.com/acme/app.git\n",
+		".git/hooks/pre-commit": "#!/bin/sh\necho host hook\n",
+	} {
+		dst := filepath.Join(in, filepath.FromSlash(p))
+		if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(dst, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
 	}
 	marker := nonce()
 	if err := r.s.PrepareAgent(t.Context(), sandbox.Agent{Image: r.agentImage, Args: []string{"payments.example", marker}, Workspace: in}); err != nil {
@@ -234,13 +247,15 @@ func TestHR213_TheAgentHasItsWorkspaceAndOnlyTheEdge(t *testing.T) {
 	}
 	got := out.String()
 	t.Log(got)
-	for _, want := range []string{"read question <nil>", "write <nil>", "uid 65533", "proxied 404", "direct blocked"} {
+	for _, want := range []string{"read question <nil>", "write <nil>", "uid 65533", "proxied 404", "direct blocked", "plant <nil>"} {
 		if !strings.Contains(got, want+"\n") {
 			t.Errorf("agent output lacks %q", want)
 		}
 	}
-	if strings.Contains(got, "credential env") {
-		t.Errorf("the agent saw a credential:\n%s", got)
+	for _, bad := range []string{"credential env", "git hooks came in", "git config came in"} {
+		if strings.Contains(got, bad) {
+			t.Errorf("the agent saw %q:\n%s", bad, got)
+		}
 	}
 	var signed bool
 	for _, req := range r.requests() {
@@ -251,14 +266,26 @@ func TestHR213_TheAgentHasItsWorkspaceAndOnlyTheEdge(t *testing.T) {
 	if !signed {
 		t.Error("the agent's call never reached the gateway signed by the edge")
 	}
+	// The work comes back as a patch, never as a tree or a .git (founder
+	// decision 2026-10-11): the hook and the fsmonitor the agent planted
+	// stay in the sandbox.
 	dst := filepath.Join(t.TempDir(), "out")
-	if err := r.s.CopyOut(t.Context(), dst); err != nil {
+	changes, err := r.s.CopyOut(t.Context(), in, dst)
+	if err != nil {
 		t.Fatal(err)
 	}
-	if b, err := os.ReadFile(filepath.Join(dst, "out.txt")); err != nil || string(b) != "question\nanswered\n" {
-		t.Fatalf("copied out %q, %v", b, err)
+	patch, err := os.ReadFile(filepath.Join(dst, sandbox.PatchFile))
+	if err != nil || len(changes) != 1 || changes[0].Path != "out.txt" || changes[0].Kind != workspace.Added ||
+		!strings.Contains(string(patch), "+++ b/out.txt\n") || !strings.Contains(string(patch), "+answered\n") {
+		t.Fatalf("changes %+v, patch %q, %v", changes, patch, err)
 	}
-	if err := r.s.CopyOut(t.Context(), dst); err == nil {
+	if strings.Contains(string(patch), ".git") {
+		t.Fatalf("the patch names .git:\n%s", patch)
+	}
+	if left, _ := os.ReadDir(dst); len(left) != 2 || left[0].Name() != sandbox.PatchFile || left[1].Name() != sandbox.ManifestFile {
+		t.Fatalf("copied out %v, want the patch and the list only", left)
+	}
+	if _, err := r.s.CopyOut(t.Context(), in, dst); err == nil {
 		t.Fatal("copied into a directory that is not empty")
 	}
 }

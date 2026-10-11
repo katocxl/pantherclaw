@@ -16,6 +16,20 @@ import (
 )
 
 func main() {
+	// The repository came in cleaned: no hooks, no host config.
+	if _, err := os.Stat("/workspace/.git/hooks"); err == nil {
+		fmt.Println("git hooks came in")
+	}
+	if b, _ := os.ReadFile("/workspace/.git/config"); strings.Contains(string(b), "fsmonitor") || strings.Contains(string(b), "url") {
+		fmt.Println("git config came in")
+	}
+	// A poisoned repository to bring back (it must not reach the host).
+	_ = os.MkdirAll("/workspace/.git/hooks", 0o755)
+	fmt.Println("plant", os.WriteFile("/workspace/.git/hooks/post-checkout", []byte("#!/bin/sh\necho pwned\n"), 0o755))
+	if f, err := os.OpenFile("/workspace/.git/config", os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0o644); err == nil {
+		_, _ = fmt.Fprintln(f, "[core]\n\tfsmonitor = /tmp/pwned")
+		_ = f.Close()
+	}
 	in, err := os.ReadFile("/workspace/in.txt")
 	fmt.Println("read", strings.TrimSpace(string(in)), err)
 	fmt.Println("write", os.WriteFile("/workspace/out.txt", append(in, []byte("answered\n")...), 0o644))
