@@ -69,6 +69,14 @@ func Build(baseURL string, d *defs.Definition, a actionir.ActionIR, transaction 
 			path.WriteString(seg) // a reviewed literal ([A-Za-z0-9._~-])
 			continue
 		}
+		if ref, ok := strings.CutSuffix(seg, "*}"); ok && strings.HasPrefix(ref, "{") {
+			rest, err := r.rest(ref[1:])
+			if err != nil {
+				return Request{}, err
+			}
+			path.WriteString(rest)
+			continue
+		}
 		if len(seg) < 3 || seg[0] != '{' || seg[len(seg)-1] != '}' {
 			return Request{}, fmt.Errorf("%w: path segment %q", ErrBuild, seg)
 		}
@@ -177,6 +185,28 @@ func (r refs) segment(ref string) (string, error) {
 		return "", fmt.Errorf("%w: %s would change the path", ErrBuild, ref)
 	}
 	return s, nil
+}
+
+// rest is a reference substituted into the rest of a path: each "/"-separated
+// segment is checked as one segment is, then escaped (HR-073), so no
+// value adds an empty or dot segment, a query or another host.
+func (r refs) rest(ref string) (string, error) {
+	v, err := r.value(ref)
+	if err != nil {
+		return "", err
+	}
+	s, ok := v.(string)
+	if !ok || s == "" {
+		return "", fmt.Errorf("%w: %s is not a path", ErrBuild, ref)
+	}
+	parts := strings.Split(s, "/")
+	for i, p := range parts {
+		if p == "" || p == "." || p == ".." || strings.ContainsAny(p, unsafe) {
+			return "", fmt.Errorf("%w: %s would change the path", ErrBuild, ref)
+		}
+		parts[i] = url.PathEscape(p)
+	}
+	return strings.Join(parts, "/"), nil
 }
 
 // queryValue is a reference substituted into one query parameter: nil for
