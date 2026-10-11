@@ -12,8 +12,10 @@ import (
 
 // Spend is one token id to record as used.
 type Spend struct {
-	// ID is the token's jti.
-	ID string
+	// Audience is the token's aud, the target's connection id, and ID its
+	// jti: a store records the pair, so one store can serve several
+	// targets (HR-202).
+	Audience, ID string
 	// IssuedAt is the token's iat; Now the verifier's clock.
 	IssuedAt, Now time.Time
 	// Until is how long the id must be kept: the token's exp plus the
@@ -51,9 +53,11 @@ type MemoryStore struct {
 }
 
 // NewMemoryStore returns a store that holds at most capacity ids (100,000
-// when 0) and began recording at started: tokens issued before started
-// (less the skew) are refused, because a process that restarted has lost
-// the ids it recorded before.
+// when 0) and began recording at started (zero: at its first use). A
+// process that restarted has lost the ids it recorded before, so tokens
+// issued before started plus the skew are refused: one issued up to Skew
+// after started, by the Authority's clock, may have been spent before it.
+// The store fails closed for those few seconds.
 func NewMemoryStore(capacity int, started time.Time) *MemoryStore {
 	if capacity <= 0 {
 		capacity = 100_000
@@ -66,18 +70,22 @@ func (*MemoryStore) Shared() bool { return false }
 
 // Use implements ReplayStore.
 func (m *MemoryStore) Use(_ context.Context, s Spend) (bool, error) {
-	if s.IssuedAt.Before(m.started.Add(-Skew)) {
-		return false, ErrStoreRestarted
-	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if m.started.IsZero() {
+		m.started = s.Now
+	}
+	if s.IssuedAt.Before(m.started.Add(Skew)) {
+		return false, ErrStoreRestarted
+	}
 	if m.seen == nil {
 		m.seen = map[string]time.Time{}
 	}
 	if m.capacity <= 0 {
 		m.capacity = 100_000
 	}
-	if _, used := m.seen[s.ID]; used {
+	id := s.Audience + "\x00" + s.ID
+	if _, used := m.seen[id]; used {
 		return false, nil
 	}
 	if len(m.seen) >= m.capacity {
@@ -90,6 +98,6 @@ func (m *MemoryStore) Use(_ context.Context, s Spend) (bool, error) {
 			return false, ErrStoreFull
 		}
 	}
-	m.seen[s.ID] = s.Until
+	m.seen[id] = s.Until
 	return true, nil
 }

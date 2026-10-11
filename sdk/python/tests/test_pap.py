@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import stat
 import sys
@@ -45,3 +46,29 @@ class PapTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class Strictness(unittest.TestCase):
+    def test_a_key_file_never_prints_its_seed(self) -> None:
+        kf = pap.KeyFile.new()
+        kf.identifier = "pc:org/o/agent/a/inst/i"
+        for out in (repr(kf), str(kf), f"{kf}", f"{kf!r}"):
+            self.assertNotIn(kf.private_key, out)
+            self.assertIn(kf.identifier, out)
+
+    def test_token_claims_of_the_wrong_shape_are_value_errors(self) -> None:
+        for claims in ({"pap": [], "cnf": {"jkt": "x"}}, {"pap": {"v": 1}, "cnf": "x"}, {"pap": {"v": 1}, "cnf": {"jkt": 7}}):
+            body = {"aud": "pantherclaw-gateway", "exp": 1, **claims}
+            token = pap.b64url(b'{"alg":"EdDSA"}') + "." + pap.b64url(json.dumps(body).encode()) + "." + pap.b64url(b"sig")
+            with self.assertRaises(ValueError):
+                pap.parse_token_claims(token)
+
+    def test_a_proof_with_a_fractional_iat_is_invalid(self) -> None:
+        key = pap.KeyFile.new().key()
+        url = "https://gateway.example.test/sdk/payments"
+        header = '{"alg":"EdDSA","jwk":{"crv":"Ed25519","kty":"OKP","x":"' + pap.b64url(key.public_key) + '"},"typ":"pap-proof+jwt"}'
+        for iat in ("1791201600.5", "9007199254740993"):
+            claims = '{"htm":"POST","htu":"' + url + '","iat":' + iat + ',"jti":"abcdefghijklmnopqrstuvwx","bh":"' + pap.body_hash(b"") + '","nonce":"abcdefghijklmnopqrstuvwx"}'
+            signing = pap.b64url(header.encode()) + "." + pap.b64url(claims.encode())
+            proof = signing + "." + pap.b64url(key.sign(signing.encode()))
+            self.assertEqual(check_proof(proof, "POST", url, b"", now=1791201600), "invalid_proof", iat)

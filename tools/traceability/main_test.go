@@ -60,6 +60,8 @@ func TestCollectsSDKTests(t *testing.T) {
 		"sdk/python/tests/test_client.py":       {Data: []byte("    def test_HR200_fails_closed(self) -> None:\n    def test_T080_bypass(self):\n")},
 		"sdk/typescript/test/client.test.ts":    {Data: []byte("test(\"TestHR201_checks the hash\", async () => {});\ntest(`TestT081_replay`, () => {});\n")},
 		"sdk/python/tests/helper.py":            {Data: []byte("def test_HR199_not_a_test_file(self):")},
+		"sdk/python/tests/test_notes.py":        {Data: []byte("# def test_HR195_in_a_comment(self):\n    \"\"\"See def test_HR194_in_a_docstring.\"\"\"\n")},
+		"sdk/typescript/test/notes.test.ts":     {Data: []byte("// test(\"TestHR193_in a comment\")\nconst s = 'test(\"TestHR192_in a string\")';\n")},
 		"sdk/typescript/src/client.ts":          {Data: []byte(`test("TestHR198_not a test file")`)},
 		"sdk/typescript/test/other.test.ts":     {Data: []byte(`it("TestHR197_not node:test test()")`)},
 		"sdk/typescript/node_modules/x.test.ts": {Data: []byte(`test("TestHR196_dependency")`)},
