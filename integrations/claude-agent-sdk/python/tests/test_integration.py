@@ -201,6 +201,7 @@ class IntegrationTest(unittest.TestCase):
             "a server wildcard": ("default", {"permission_mode": "default", "allowed_tools": ["mcp__payments__*"]}),
             "a wildcard": ("default", {"permission_mode": "default", "allowed_tools": ["*"]}),
             "settings files loaded": ("default", {"permission_mode": "default", "setting_sources": ["project"]}),
+            "setting_sources omitted, so every source may be loaded": ("default", {"permission_mode": "default"}),
         }
         for name, (mode, opts) in cases.items():
             with self.subTest(name):
@@ -209,7 +210,7 @@ class IntegrationTest(unittest.TestCase):
                     p.options(**opts)
                 self.assertEqual(self.run_hook(p, refund(mode)), "deny")
         g = self.gw(hold_then_allow())
-        opts = self.pc(g).options(permission_mode="default", mcp_servers={"payments": {}}, allowed_tools=["Read", "mcp__github__*"])
+        opts = self.pc(g).options(permission_mode="default", setting_sources=[], mcp_servers={"payments": {}}, allowed_tools=["Read", "mcp__github__*"])
         hook = opts["hooks"]["PreToolUse"][-1].hooks[0]
         self.assertEqual(decision(asyncio.run(hook(refund("default", "toolu_09"), "toolu_09", None))), "ask")
         ctx = SimpleNamespace(tool_use_id="toolu_09")
@@ -234,7 +235,7 @@ class IntegrationTest(unittest.TestCase):
             return SimpleNamespace(behavior="allow", updated_input={})
 
         p = self.pc(g, wait=0.5)
-        opts = p.options(permission_mode="default", can_use_tool=app)
+        opts = p.options(permission_mode="default", setting_sources=[], can_use_tool=app)
         can = opts["can_use_tool"]
         self.assertEqual(asyncio.run(can("Write", {"file_path": "x"}, SimpleNamespace(tool_use_id="toolu_other"))).behavior, "allow")
         self.assertEqual(self.run_hook(p, refund("default", "toolu_10")), "ask")

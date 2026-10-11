@@ -36,9 +36,9 @@ __all__ = ["ASK_MODES", "BUILTIN_TOOLS", "PantherClaw", "rule_names"]
 
 BUILTIN_TOOLS: tuple[str, ...] = (
     "Agent", "AskUserQuestion", "Bash", "CronCreate", "CronDelete", "CronList", "Edit", "EnterPlanMode", "EnterWorktree",
-    "ExitPlanMode", "ExitWorktree", "Glob", "Grep", "ListMcpResourcesTool", "LSP", "Monitor", "NotebookEdit", "PowerShell", "Read",
-    "ReadMcpResourceTool", "Skill", "Task", "TaskCreate", "TaskGet", "TaskList", "TaskOutput", "TaskStop", "TaskUpdate", "TodoWrite",
-    "ToolSearch", "WaitForMcpServers", "WebFetch", "WebSearch", "Write",
+    "ExitPlanMode", "ExitWorktree", "Glob", "Grep", "ListAgents", "ListMcpResourcesTool", "LSP", "Monitor", "NotebookEdit", "PowerShell",
+    "Read", "ReadMcpResourceTool", "ReportFindings", "ScheduleWakeup", "SendMessage", "Skill", "Task", "TaskCreate", "TaskGet", "TaskList",
+    "TaskOutput", "TaskStop", "TaskUpdate", "TodoWrite", "ToolSearch", "WaitForMcpServers", "WebFetch", "WebSearch", "Workflow", "Write",
 )  # fmt: skip
 _SHELLS = {"Bash": "bash", "PowerShell": "powershell"}
 # The permission modes in which a hold is asked: those where the SDK
@@ -205,8 +205,11 @@ class PantherClaw:
         self._mode = app["permission_mode"]
         self._allowed = list(app.get("allowed_tools") or [])
         # Settings files can hold allow rules this integration cannot see, so
-        # a hold is never asked with them loaded.
-        self._settings_loaded = bool(app.get("setting_sources"))
+        # a hold is never asked with them loaded. Only an explicit empty list
+        # loads none: the TypeScript SDK loads every source when the option
+        # is omitted, so an omitted one is treated as loading them.
+        sources = app.get("setting_sources")
+        self._settings_loaded = sources is None or len(sources) > 0
         self._app_can_use_tool = app.get("can_use_tool")
         configured: Mapping[str, Any] = app.get("mcp_servers") or {}
         self._servers = list(dict.fromkeys([*self._servers, *configured]))
