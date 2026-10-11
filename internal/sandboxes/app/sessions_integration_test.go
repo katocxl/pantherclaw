@@ -253,15 +253,19 @@ func TestT087_ForgedReplayedAndStaleReportsAreRejected(t *testing.T) {
 			defer func() { w.probeKey = k }()
 			return w.signed(t, s, report.KindSandbox, n, nil)
 		}(),
-		"another session's nonce":           w.signed(t, s, report.KindSandbox, other.Nonces.Sandbox, nil),
-		"the control's nonce":               w.signed(t, s, report.KindSandbox, s.Nonces.Control, nil),
-		"another session":                   w.signed(t, s, report.KindSandbox, n, func(r *report.Report) { r.Session = other.Session.ID.String() }),
-		"another image":                     w.signed(t, s, report.KindSandbox, n, func(r *report.Report) { r.Images.Edge = otherDigest }),
-		"another configuration":             w.signed(t, s, report.KindSandbox, n, func(r *report.Report) { r.Config.Digest = otherDigest }),
-		"Docker 27":                         w.signed(t, s, report.KindSandbox, n, func(r *report.Report) { r.Engine.Version = "27.5.1" }),
-		"another runtime":                   w.signed(t, s, report.KindSandbox, n, func(r *report.Report) { r.Engine.Runtime = "runsc" }),
-		"an open network":                   w.signed(t, s, report.KindSandbox, n, func(r *report.Report) { r.Network.GatewayModeIPv4 = "nat" }),
-		"a failed check":                    w.signed(t, s, report.KindSandbox, n, func(r *report.Report) { r.Config.Checks[0].OK = false }),
+		"another session's nonce": w.signed(t, s, report.KindSandbox, other.Nonces.Sandbox, nil),
+		"the control's nonce":     w.signed(t, s, report.KindSandbox, s.Nonces.Control, nil),
+		"another session":         w.signed(t, s, report.KindSandbox, n, func(r *report.Report) { r.Session = other.Session.ID.String() }),
+		"another image":           w.signed(t, s, report.KindSandbox, n, func(r *report.Report) { r.Images.Edge = otherDigest }),
+		"another configuration":   w.signed(t, s, report.KindSandbox, n, func(r *report.Report) { r.Config.Digest = otherDigest }),
+		"Docker 27":               w.signed(t, s, report.KindSandbox, n, func(r *report.Report) { r.Engine.Version = "27.5.1" }),
+		"another runtime":         w.signed(t, s, report.KindSandbox, n, func(r *report.Report) { r.Engine.Runtime = "runsc" }),
+		"an open network":         w.signed(t, s, report.KindSandbox, n, func(r *report.Report) { r.Network.GatewayModeIPv4 = "nat" }),
+		"a failed check":          w.signed(t, s, report.KindSandbox, n, func(r *report.Report) { r.Config.Checks[0].OK = false }),
+		"a control on an open network": w.signed(t, s, report.KindControl, s.Nonces.Control, func(r *report.Report) {
+			r.Network.GatewayModeIPv4 = "nat"
+		}),
+		"a control with a failed check":     w.signed(t, s, report.KindControl, s.Nonces.Control, func(r *report.Report) { r.Config.Checks[0].OK = false }),
 		"a canary report":                   w.signed(t, s, report.KindCanary, s.Nonces.Canary, nil),
 		"unsigned":                          w.signed(t, s, report.KindSandbox, n, nil)[:40] + "x.y",
 		"a sandbox report on the host key":  w.signedWith(t, w.hostKey, s, report.KindSandbox, n, nil),
@@ -291,6 +295,9 @@ func TestStartSessionChecksTheCallerAndTheConnections(t *testing.T) {
 	w := newWorld(t)
 	if _, err := w.svc.StartSession(w.as(td.RoleViewer), w.input()); err == nil {
 		t.Fatal("a viewer opened a session")
+	}
+	if _, err := w.svc.StartSession(w.as(), w.input()); !errors.Is(err, app.ErrNotFound) {
+		t.Errorf("a caller who cannot read the agent: %v", err)
 	}
 	if _, err := w.svc.StartSession(w.as(td.RoleDeveloper), w.input()); err != nil {
 		t.Fatalf("a developer: %v", err)
