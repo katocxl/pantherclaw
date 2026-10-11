@@ -13,22 +13,31 @@
 -- coverage_closures is sandbox closure evidence (F457, PN-008.2): the
 -- signed probe results of one sandbox session for one agent and connection,
 -- recorded only by the sandbox module after it verified the signature and
--- the server nonce (HR-215). result is computed from the probes; PASSED
--- needs the positive and negative controls and the canary (HR-121). The
--- connection revision, package version and gateway it ran against are
--- bound, and it expires (24 hours by default, HR-211). The foreign key to
--- the sandbox session is added by the sandbox migration (00090+).
+-- the server nonce (HR-215), once per nonce. result is computed from the
+-- probes; PASSED needs the positive and negative controls and the canary
+-- (HR-121). The connection revision, package version, gateway and
+-- credential version it ran against are bound, and it expires (24 hours by
+-- default, HR-211). The foreign key to the sandbox session is added by the
+-- sandbox migration (00090).
 --
 -- coverage_invalidations are the changes that drop ENFORCED at once
--- (HR-211); the reassess job marks them reassessed.
+-- (HR-211); the reassess job marks them reassessed. Track A's triggers
+-- (00087) write the connection, credential, package, gateway and agent
+-- instance kinds; columns added later to those tables (00090's
+-- connections.agent_hosts and agent_instances.sandbox_session_id) are
+-- covered by them. Connector spec changes (00093, track C) need a trigger
+-- of their own.
 --
 -- coverage_snapshots are the computed states, append-only evidence: each is
 -- also a ledger entry (body_sha256 is the digest of its ledger body), and a
--- decision receipt's coverage claim names one (HR-217). A downgrade after
--- expiry or invalidation keeps the last valid record (F442).
+-- decision receipt's coverage claim names one (HR-217). An ENFORCED one
+-- rests on a PASSED closure of its own scope and expires no later than it.
+-- A downgrade after expiry or invalidation keeps the last valid record
+-- (F442).
 --
 -- coverage_exclusions are weakening changes: only a person creates one,
--- with a written reason and an expiry of at most 90 days (HR-212).
+-- with a written reason and an expiry of at most 90 days, and a revoked one
+-- never comes back (HR-212).
 --
 -- coverage_findings are exposure findings, starting with credential
 -- overreach (F048, decision 9); M10 extends the kinds.
@@ -67,6 +76,17 @@ CREATE UNIQUE INDEX coverage_routes_key ON pc.coverage_routes (org_id, connectio
     NULLS NOT DISTINCT;
 CREATE INDEX coverage_routes_agent ON pc.coverage_routes (org_id, agent_id);
 
+-- How much a sighting says: observed over declared over proposed. A route
+-- seen again keeps what its strongest sighting said.
+-- +goose StatementBegin
+CREATE FUNCTION pc.coverage_rank(observation text) RETURNS integer
+LANGUAGE sql IMMUTABLE
+SET search_path = pc, pg_temp
+AS $$
+    SELECT CASE observation WHEN 'observed' THEN 3 WHEN 'declared' THEN 2 ELSE 1 END
+$$;
+-- +goose StatementEnd
+
 CREATE TABLE pc.coverage_closures (
     org_id                  uuid        NOT NULL REFERENCES pc.orgs (id),
     id                      uuid        NOT NULL,
@@ -90,14 +110,26 @@ CREATE TABLE pc.coverage_closures (
     image_digests           text[]      NOT NULL CHECK (cardinality(image_digests) BETWEEN 1 AND 16
                                                         AND array_to_string(image_digests, ',') ~ '^sha256:[0-9a-f]{64}(,sha256:[0-9a-f]{64})*$'),
     config_sha256           bytea       NOT NULL CHECK (octet_length(config_sha256) = 32),
+    -- pclaw's configuration checks of the agent container ({"id","ok",
+    -- "detail"}): the mounts and binds no probe inside the sandbox can see.
+    config_checks           jsonb       NOT NULL DEFAULT '[]' CHECK (jsonb_typeof(config_checks) = 'array'
+                                                                    AND jsonb_array_length(config_checks) <= 64
+                                                                    AND octet_length(config_checks::text) <= 16384),
     gateway_id              uuid        NOT NULL,
     connection_revision     integer     NOT NULL CHECK (connection_revision > 0),
     package_version_id      uuid        NOT NULL,
+    -- The active sealed credential's version when the session opened; NULL
+    -- when the connection had none.
+    credential_version      integer     CHECK (credential_version > 0),
     session_started_at      timestamptz NOT NULL,
     observed_at             timestamptz NOT NULL,
     expires_at              timestamptz NOT NULL,
     recorded_at             timestamptz NOT NULL DEFAULT now(),
     PRIMARY KEY (org_id, id),
+    -- A snapshot names its closure with its scope (below).
+    UNIQUE (org_id, id, agent_id, connection_id),
+    -- A signed result set is recorded once (HR-215: replays are refused).
+    UNIQUE (org_id, agent_id, connection_id, server_nonce),
     FOREIGN KEY (org_id, agent_id) REFERENCES pc.agents (org_id, id),
     FOREIGN KEY (org_id, connection_id) REFERENCES pc.connections (org_id, id),
     FOREIGN KEY (org_id, gateway_id) REFERENCES pc.gateways (org_id, id),
@@ -114,7 +146,7 @@ CREATE TABLE pc.coverage_invalidations (
     id            uuid        NOT NULL,
     kind          text        NOT NULL CHECK (kind IN ('connection', 'package_version', 'route_mode', 'gateway', 'credential',
                                                        'sandbox_image', 'sandbox_config', 'closure_failed', 'exclusion',
-                                                       'evidence_expired')),
+                                                       'evidence_expired', 'route', 'instance')),
     -- What it affects; NULL agent_id: every agent of the connection.
     connection_id uuid        NOT NULL,
     agent_id      uuid,
@@ -153,7 +185,9 @@ CREATE TABLE pc.coverage_snapshots (
     PRIMARY KEY (org_id, id),
     FOREIGN KEY (org_id, agent_id) REFERENCES pc.agents (org_id, id),
     FOREIGN KEY (org_id, connection_id) REFERENCES pc.connections (org_id, id),
-    FOREIGN KEY (org_id, closure_id) REFERENCES pc.coverage_closures (org_id, id),
+    -- A snapshot rests only on a closure of its own agent and connection.
+    FOREIGN KEY (org_id, closure_id, agent_id, connection_id)
+        REFERENCES pc.coverage_closures (org_id, id, agent_id, connection_id),
     FOREIGN KEY (org_id, last_valid_id) REFERENCES pc.coverage_snapshots (org_id, id),
     FOREIGN KEY (org_id, invalidation_id) REFERENCES pc.coverage_invalidations (org_id, id),
     FOREIGN KEY (org_id, ledger_entry_id) REFERENCES pc.ledger_entries (org_id, id),
@@ -165,6 +199,34 @@ CREATE TABLE pc.coverage_snapshots (
 );
 CREATE INDEX coverage_snapshots_scope ON pc.coverage_snapshots (org_id, agent_id, connection_id, operation, id DESC);
 CREATE INDEX coverage_snapshots_connection ON pc.coverage_snapshots (org_id, connection_id, id DESC);
+
+-- An ENFORCED snapshot rests on a PASSED closure and expires no later than
+-- it (HR-210, HR-211). The function runs as the inserting role, under its
+-- RLS, so it reads only the tenant's own closure.
+-- +goose StatementBegin
+CREATE FUNCTION pc.coverage_snapshot_closure() RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = pc, pg_temp
+AS $$
+DECLARE
+    c pc.coverage_closures;
+BEGIN
+    IF NEW.closure_id IS NULL THEN
+        RETURN NEW;
+    END IF;
+    SELECT * INTO c FROM pc.coverage_closures WHERE org_id = NEW.org_id AND id = NEW.closure_id;
+    IF NOT FOUND OR c.result <> 'PASSED' THEN
+        RAISE EXCEPTION 'a coverage snapshot rests only on a PASSED closure' USING ERRCODE = 'check_violation';
+    END IF;
+    IF NEW.expires_at > c.expires_at THEN
+        RAISE EXCEPTION 'a coverage snapshot expires no later than its closure' USING ERRCODE = 'check_violation';
+    END IF;
+    RETURN NEW;
+END
+$$;
+-- +goose StatementEnd
+CREATE TRIGGER coverage_snapshots_closure BEFORE INSERT ON pc.coverage_snapshots
+    FOR EACH ROW EXECUTE FUNCTION pc.coverage_snapshot_closure();
 
 CREATE TABLE pc.coverage_exclusions (
     org_id        uuid        NOT NULL REFERENCES pc.orgs (id),
@@ -193,6 +255,24 @@ CREATE TABLE pc.coverage_exclusions (
     CHECK ((state = 'REVOKED') = (revoked_by IS NOT NULL AND revoked_at IS NOT NULL))
 );
 CREATE INDEX coverage_exclusions_active ON pc.coverage_exclusions (org_id, connection_id) WHERE state = 'ACTIVE';
+
+-- An exclusion is revoked once and never comes back: a new one needs a new
+-- person, reason and expiry (HR-212).
+-- +goose StatementBegin
+CREATE FUNCTION pc.coverage_exclusion_revoke() RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = pc, pg_temp
+AS $$
+BEGIN
+    IF OLD.state <> 'ACTIVE' OR NEW.state <> 'REVOKED' THEN
+        RAISE EXCEPTION 'a coverage exclusion only goes from ACTIVE to REVOKED, once' USING ERRCODE = 'check_violation';
+    END IF;
+    RETURN NEW;
+END
+$$;
+-- +goose StatementEnd
+CREATE TRIGGER coverage_exclusions_revoke BEFORE UPDATE ON pc.coverage_exclusions
+    FOR EACH ROW EXECUTE FUNCTION pc.coverage_exclusion_revoke();
 
 CREATE TABLE pc.coverage_findings (
     org_id         uuid        NOT NULL REFERENCES pc.orgs (id),
@@ -259,7 +339,10 @@ GRANT SELECT ON pc.coverage_routes, pc.coverage_closures, pc.coverage_invalidati
 -- +goose Down
 DROP TABLE pc.coverage_findings;
 DROP TABLE pc.coverage_exclusions;
+DROP FUNCTION pc.coverage_exclusion_revoke();
 DROP TABLE pc.coverage_snapshots;
+DROP FUNCTION pc.coverage_snapshot_closure();
 DROP TABLE pc.coverage_invalidations;
 DROP TABLE pc.coverage_closures;
 DROP TABLE pc.coverage_routes;
+DROP FUNCTION pc.coverage_rank(text);

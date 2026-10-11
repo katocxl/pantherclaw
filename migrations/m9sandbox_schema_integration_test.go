@@ -80,7 +80,7 @@ func TestHR215_ProbeReportsAreSingleUseEvidenceInSchema(t *testing.T) {
 	f.want(t, m5Check, "a used nonce made unused", "UPDATE pc.probe_nonces SET used_at = NULL WHERE id = $1", nonce)
 
 	f.want(t, m7bFK, "a closure of no session", m9cClosure, f.org, m5ID(), f.agent, f.connection, m5ID(), "PASSED",
-		true, m9cDigest, f.gateway, f.version, "1 minute", "1 hour")
+		true, m9cDigest, f.gateway, f.version, "1 minute", "1 hour", m5ID())
 	f.want(t, m5Check, "an ended session without its end", "UPDATE pc.sandbox_sessions SET state = 'ENDED' WHERE id = $1", session)
 	f.mustExec(t, "UPDATE pc.sandbox_sessions SET state = 'ENDED', ended_at = now() WHERE id = $1", session)
 	f.want(t, m5Denied, "a session's images never change", "UPDATE pc.sandbox_sessions SET agent_image = $1", m9cDigest)
