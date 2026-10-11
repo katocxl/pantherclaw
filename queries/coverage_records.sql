@@ -60,6 +60,8 @@ WHERE org_id = sqlc.arg(org_id)
 ORDER BY id
 LIMIT sqlc.arg(max_rows);
 
+-- A replayed result set (the same server nonce) inserts nothing, so the
+-- caller's transaction stays usable (HR-215).
 -- name: InsertCoverageClosure :one
 INSERT INTO pc.coverage_closures (org_id, id, agent_id, connection_id, sandbox_session_id, result, probes,
     positive_controls_passed, negative_controls_passed, canary_passed, signing_key_jkt, server_nonce, results_sha256,
@@ -72,6 +74,7 @@ VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(agent_id), sqlc.arg(connection_
     sqlc.arg(config_sha256), sqlc.arg(config_checks), sqlc.arg(gateway_id), sqlc.arg(connection_revision),
     sqlc.arg(package_version_id), sqlc.narg(credential_version), sqlc.arg(session_started_at), sqlc.arg(observed_at),
     sqlc.arg(expires_at))
+ON CONFLICT (org_id, agent_id, connection_id, server_nonce) DO NOTHING
 RETURNING *;
 
 -- name: GetCoverageClosure :one
@@ -94,13 +97,15 @@ WHERE org_id = sqlc.arg(org_id)
 ORDER BY id DESC
 LIMIT sqlc.arg(max_rows);
 
--- What a closure is bound to now: the connection's revision and gateway
--- and its package's pinned version.
+-- What a closure is bound to now: the connection's revision and gateway,
+-- its package's pinned version and its active credential's version.
 -- name: CoverageBinding :one
-SELECT c.revision, c.gateway_id, c.state, c.kind, c.access_mode, p.version_id AS package_version_id
+SELECT c.revision, c.gateway_id, c.state, c.kind, c.access_mode, p.version_id AS package_version_id,
+    cr.version AS credential_version
 FROM pc.connections c
 JOIN pc.tool_packages tp ON tp.org_id = c.org_id AND tp.name = c.package
 JOIN pc.package_pins p ON p.org_id = c.org_id AND p.package_id = tp.id
+LEFT JOIN pc.credentials cr ON cr.org_id = c.org_id AND cr.connection_id = c.id AND cr.state = 'ACTIVE'
 WHERE c.org_id = sqlc.arg(org_id) AND c.id = sqlc.arg(connection_id);
 
 -- name: InsertCoverageInvalidation :one
