@@ -7,6 +7,8 @@ package e2e
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/json/v2"
 	"net/http"
 	"strings"
 	"testing"
@@ -27,13 +29,34 @@ import (
 func (s *stack) row(t *testing.T, sql string, args ...any) string {
 	t.Helper()
 	var out string
-	err := s.db.AppPool(t).InTenantTx(context.Background(), s.org, func(ctx context.Context, tx db.TenantTx) error {
+	err := s.pool.InTenantTx(context.Background(), s.org, func(ctx context.Context, tx db.TenantTx) error {
 		return tx.QueryRow(ctx, sql, args...).Scan(&out)
 	})
 	if err != nil && !db.IsNoRows(err) {
 		t.Fatal(err)
 	}
 	return out
+}
+
+// papClaims decodes a receipt's pap claims; its signature is checked by
+// the tests that verify bundles, so only its content is read here.
+func papClaims(t *testing.T, jws string) map[string]any {
+	t.Helper()
+	parts := strings.Split(jws, ".")
+	if len(parts) != 3 {
+		t.Fatalf("receipt %q", jws)
+	}
+	raw, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil {
+		t.Fatal(err)
+	}
+	var c struct {
+		Pap map[string]any `json:"pap"`
+	}
+	if err := json.Unmarshal(raw, &c); err != nil {
+		t.Fatal(err)
+	}
+	return c.Pap
 }
 
 // eventually polls sql until it returns want, for at most 45 seconds.
