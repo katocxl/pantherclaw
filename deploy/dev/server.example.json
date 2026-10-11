@@ -34,5 +34,21 @@
   },
   "webauthn": { "rp_name": "PantherClaw" },
   "notifications": { "concurrency": 5 },
+  "evidence": {
+    "anchoring": {
+      "_comment": "Off by default (Team edition). When on, every interval enters one PUBLIC entry in the Rekor v2 log below and asks the timestamp authority for a token. These defaults are Sigstore's public services, which Sigstore retires and rotates: before turning this on, take the current Rekor v2 log URL, its public key and the timestamp authority's URL and certificate chain from Sigstore's trusted_root.json and signing config (https://github.com/sigstore/root-signing, targets/), write the key (PEM PUBLIC KEY) and the chain (PEM, signing certificate first) to the files below, and update the URLs. See docs/runbooks/anchoring.md.",
+      "enabled": false,
+      "interval": "1h",
+      "rekor": {
+        "url": "https://log2025-1.rekor.sigstore.dev",
+        "public_key_file": "deploy/dev/sigstore/rekor-log2025-1.pub",
+        "origin": "log2025-1.rekor.sigstore.dev"
+      },
+      "tsa": {
+        "url": "https://timestamp.sigstore.dev/api/v1/timestamp",
+        "cert_chain_file": "deploy/dev/sigstore/timestamp-chain.pem"
+      }
+    }
+  },
   "dev": { "package_key_file": "deploy/dev/secrets/package-dev.pub.json" }
 }

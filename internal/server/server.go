@@ -311,6 +311,7 @@ func cmdServe(ctx context.Context, args []string, stderr io.Writer, env Env, onS
 			m6:           m6,
 			m5p2:         m5p2,
 			verification: verification,
+			kp:           kp,
 		})
 		if err != nil {
 			return err
@@ -463,6 +464,8 @@ type apiDeps struct {
 	m5p2 *m5p2Services
 	// M7: verification signs the effect receipts people's actions append.
 	verification *txapp.Service
+	// kp opens sealed evaluation inputs for decision replay (M7 track B).
+	kp keys.KeyProvider
 }
 
 // apiHandler mounts the RPC services, health endpoints and the JWKS.

@@ -27,3 +27,10 @@ SELECT v.bundle
 FROM pc.policy_versions v
 JOIN pc.policies p ON p.org_id = v.org_id AND p.id = v.policy_id
 WHERE v.org_id = sqlc.arg(org_id) AND p.bundle_id = sqlc.arg(bundle_id) AND v.version = sqlc.arg(version);
+
+-- The latest evaluation of a transaction (0: none), which a replay of
+-- "the latest" names.
+-- name: LatestEvaluation :one
+SELECT coalesce(max(evaluation), 0)::integer AS evaluation
+FROM pc.decision_receipts
+WHERE org_id = sqlc.arg(org_id) AND transaction_id = sqlc.arg(transaction_id);

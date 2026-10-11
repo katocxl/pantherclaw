@@ -56,17 +56,24 @@ type CertOpts struct {
 	NoEKU       bool      // no extended key usage
 	NonCritical bool      // the timeStamping EKU is not critical
 	ExtraEKU    bool      // codeSigning besides timeStamping
-	NotAfter    time.Time // default: 30 days after TSANow
+	NotAfter    time.Time // default: 30 days after Now
+	// Now bases the certificates' validity on another time than TSANow
+	// (tests that timestamp with the real clock set Fault.GenTime too).
+	Now time.Time
 }
 
 // NewCA returns a test authority: an ECDSA P-384 root and a timestamping
-// certificate valid from an hour before TSANow.
+// certificate valid from an hour before TSANow (or o.Now).
 func NewCA(t testing.TB, o CertOpts) *CA {
 	t.Helper()
+	now := TSANow
+	if !o.Now.IsZero() {
+		now = o.Now
+	}
 	rootKey, _ := ecdsa.GenerateKey(elliptic.P384(), rand.Reader)
 	rootTmpl := &x509.Certificate{
 		SerialNumber: big.NewInt(1), Subject: pkix.Name{CommonName: "test tsa root"},
-		NotBefore: TSANow.Add(-24 * time.Hour), NotAfter: TSANow.Add(365 * 24 * time.Hour),
+		NotBefore: now.Add(-24 * time.Hour), NotAfter: now.Add(365 * 24 * time.Hour),
 		IsCA: true, BasicConstraintsValid: true, KeyUsage: x509.KeyUsageCertSign,
 	}
 	rootDER, err := x509.CreateCertificate(rand.Reader, rootTmpl, rootTmpl, &rootKey.PublicKey, rootKey)
@@ -83,11 +90,11 @@ func NewCA(t testing.TB, o CertOpts) *CA {
 	}
 	notAfter := o.NotAfter
 	if notAfter.IsZero() {
-		notAfter = TSANow.Add(30 * 24 * time.Hour)
+		notAfter = now.Add(30 * 24 * time.Hour)
 	}
 	tmpl := &x509.Certificate{
 		SerialNumber: big.NewInt(77), Subject: pkix.Name{CommonName: "test tsa"},
-		NotBefore: TSANow.Add(-time.Hour), NotAfter: notAfter, KeyUsage: x509.KeyUsageDigitalSignature,
+		NotBefore: now.Add(-time.Hour), NotAfter: notAfter, KeyUsage: x509.KeyUsageDigitalSignature,
 		SubjectKeyId: []byte{1, 2, 3, 4},
 	}
 	if !o.NoEKU {
