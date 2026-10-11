@@ -76,10 +76,13 @@ type Container struct {
 	// Runtime is RuntimeRunc or RuntimeRunsc (Engine.Runtime): always
 	// named, so that the engine's default never applies (HR-218).
 	Runtime string
-	// NetRaw adds NET_RAW, the one capability a container may get back:
-	// the probe container sends ICMP to prove the network drops it (G0 M9
-	// design decision 5).
-	NetRaw bool
+	// PingGID, when set, lets that group (the probe container's) open
+	// unprivileged ICMP sockets, so that the probe can send echo requests
+	// and show the network drops them; every other container gets none.
+	// No capability is ever added: NET_RAW would not reach a non-root
+	// process anyway, which Docker gives no ambient capabilities (G0 M9
+	// design decision 5, as built).
+	PingGID int
 	Limits Limits
 	Labels map[string]string
 	// Interactive keeps standard input open (stdio MCP connectors).
@@ -101,8 +104,12 @@ func (c Container) args() ([]string, error) {
 	if !imageRE.MatchString(c.Image) {
 		return nil, bad("the image is not pinned by digest")
 	}
-	if m := userRE.FindStringSubmatch(c.User); m == nil || m[1] == "0" || m[2] == "0" {
+	m := userRE.FindStringSubmatch(c.User)
+	if m == nil || m[1] == "0" || m[2] == "0" {
 		return nil, bad("the user is not a non-root uid:gid")
+	}
+	if c.PingGID != 0 && strconv.Itoa(c.PingGID) != m[2] {
+		return nil, bad("the ping group is not the container's own")
 	}
 	if len(c.Networks) == 0 {
 		return nil, bad("no network")
@@ -129,7 +136,7 @@ func (c Container) args() ([]string, error) {
 		"--runtime", c.Runtime, "--user", c.User, "--cap-drop", "ALL",
 		"--security-opt", "no-new-privileges=true", "--security-opt", "seccomp=builtin",
 		"--ipc", "private", "--cgroupns", "private",
-		"--sysctl", "net.ipv4.ping_group_range=1 0", "--sysctl", "net.ipv6.conf.all.disable_ipv6=1", "--sysctl", "net.ipv4.ip_forward=0",
+		"--sysctl", "net.ipv4.ping_group_range=" + c.pingRange(), "--sysctl", "net.ipv6.conf.all.disable_ipv6=1", "--sysctl", "net.ipv4.ip_forward=0",
 		"--pids-limit", strconv.Itoa(l.PIDs), "--memory", strconv.Itoa(l.MemoryMiB) + "m",
 		"--cpus", strconv.FormatFloat(float64(l.MilliCPUs)/1000, 'f', 3, 64),
 	}
@@ -138,9 +145,6 @@ func (c Container) args() ([]string, error) {
 			return nil, err
 		}
 		args = append(args, "--network", n)
-	}
-	if c.NetRaw {
-		args = append(args, "--cap-add", "NET_RAW")
 	}
 	for _, e := range c.Env {
 		if !envRE.MatchString(e) || strings.ContainsAny(e, "\r\n\x00") {
@@ -289,7 +293,7 @@ func VerifyContainer(ct Container, info ContainerInfo) error {
 	switch {
 	case strings.TrimPrefix(info.Name, "/") != ct.Name || info.Config.Image != ct.Image:
 		return fail("another container answered")
-	case h.Privileged || !slices.Equal(capsAdded(h.CapAdd), ct.capsAdded()) || !slices.Equal(h.CapDrop, []string{"ALL"}) || len(h.Devices) > 0:
+	case h.Privileged || len(h.CapAdd) > 0 || !slices.Equal(h.CapDrop, []string{"ALL"}) || len(h.Devices) > 0:
 		return fail("privileges")
 	case !h.ReadonlyRootfs:
 		return fail("the root file system is writable")
@@ -303,7 +307,7 @@ func VerifyContainer(ct Container, info ContainerInfo) error {
 		return fail("networks")
 	case h.NetworkMode == "host" || strings.HasPrefix(h.NetworkMode, "container:"):
 		return fail("network mode " + h.NetworkMode)
-	case h.Sysctls["net.ipv4.ping_group_range"] != "1 0" || h.Sysctls["net.ipv6.conf.all.disable_ipv6"] != "1" || h.Sysctls["net.ipv4.ip_forward"] != "0":
+	case h.Sysctls["net.ipv4.ping_group_range"] != ct.pingRange() || h.Sysctls["net.ipv6.conf.all.disable_ipv6"] != "1" || h.Sysctls["net.ipv4.ip_forward"] != "0":
 		return fail("sysctls")
 	case h.PidsLimit <= 0 || h.Memory <= 0 || h.NanoCPUs <= 0 || !h.Init:
 		return fail("limits")
@@ -373,21 +377,11 @@ func (c *Client) Pull(ctx context.Context, image string) error {
 	return err
 }
 
-// capsAdded is the capabilities a container is to get back.
-func (c Container) capsAdded() []string {
-	if c.NetRaw {
-		return []string{"NET_RAW"}
+// pingRange is the container's ping_group_range: no group, or PingGID's.
+func (c Container) pingRange() string {
+	if c.PingGID > 0 {
+		g := strconv.Itoa(c.PingGID)
+		return g + " " + g
 	}
-	return []string{}
-}
-
-// capsAdded normalises inspected capability names ("CAP_NET_RAW" and
-// "NET_RAW" are one).
-func capsAdded(caps []string) []string {
-	out := []string{}
-	for _, c := range caps {
-		out = append(out, strings.TrimPrefix(strings.ToUpper(c), "CAP_"))
-	}
-	slices.Sort(out)
-	return out
+	return "1 0"
 }
