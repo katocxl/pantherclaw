@@ -62,15 +62,24 @@ func TestHR216_AConnectorRunsHardenedOverStdioWithoutRouteOrCredential(t *testin
 			Connector: &pb.ConnectorSpec{
 				Image: image, Command: []string{"/pantherclaw-sim", "mcp", "--stdio"}, Environment: map[string]string{"LOG_LEVEL": "info"},
 				CredentialPlaceholders: []string{"GITHUB_TOKEN"}, Limits: &pb.ConnectorLimits{MemoryMib: 128, MilliCpus: 500, Pids: 64},
+				Revision: rev,
 			},
 		}
 	}
 	conf := &configuration{}
 	conf.set(conn(1))
+	var mu sync.Mutex
+	var reports []*pb.ReportConnectorStateRequest
 	sup, err := connectors.New(t.Context(), c, conf, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
+	sup.WithReporter(func(_ context.Context, r *pb.ReportConnectorStateRequest) error {
+		mu.Lock()
+		defer mu.Unlock()
+		reports = append(reports, r)
+		return nil
+	})
 	t.Cleanup(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 		defer cancel()
@@ -118,6 +127,19 @@ func TestHR216_AConnectorRunsHardenedOverStdioWithoutRouteOrCredential(t *testin
 	}
 	if _, err := again.ListTools(ctx, nil); err != nil {
 		t.Fatal(err)
+	}
+	mu.Lock()
+	var first []string
+	for _, r := range reports {
+		if r.GetInstanceId() == reports[0].GetInstanceId() {
+			first = append(first, r.GetState().String())
+		}
+	}
+	ev := reports[0]
+	mu.Unlock()
+	want := []string{"CONNECTOR_STATE_STARTING", "CONNECTOR_STATE_RUNNING", "CONNECTOR_STATE_STOPPED"}
+	if !slices.Equal(first, want) || ev.GetConnectionId() != id || ev.GetSpecRevision() != 1 || ev.GetRuntime() != e.Runtime() || ev.GetEngineVersion() == "" {
+		t.Fatalf("the first run reported %q (%+v)", first, ev)
 	}
 
 	conf.set()

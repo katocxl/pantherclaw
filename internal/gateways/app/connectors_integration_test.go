@@ -7,8 +7,10 @@ package app_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 
+	"github.com/katocxl/pantherclaw/internal/gateways/app"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	mockpayments "github.com/katocxl/pantherclaw/packages/mock-payments"
 )
@@ -57,5 +59,62 @@ func TestHR084_APantherClawHostedGatewayGetsNoConnector(t *testing.T) {
 	}
 	if len(cfg.Connectors) != 0 || !e.svc.PantherClawHosted(hosted.Gateway) || e.svc.PantherClawHosted(customer.Gateway) {
 		t.Fatalf("PantherClaw-hosted: connectors %+v", cfg.Connectors)
+	}
+}
+
+// TestHR084_AGatewayReportsOnlyItsOwnConnectorsRuns: a gateway reports the
+// runs of its own connector connections, which move only forward and run
+// a spec revision of their connection; another gateway's connector, a
+// connection that is not a connector, or any on a PantherClaw-hosted
+// gateway is not found, and a run id cannot be reused for another
+// connection (G0 M9 track C, 00094).
+func TestHR084_AGatewayReportsOnlyItsOwnConnectorsRuns(t *testing.T) {
+	e := newEnv(t)
+	e.pinMockPayments(t)
+	_, mine := e.enroll(t, "mine")
+	_, theirs := e.enroll(t, "theirs")
+	ctx := context.Background()
+	connector := func(gw ids.UUID) ids.UUID {
+		id := ids.NewV7()
+		e.exec(t, `INSERT INTO pc.connections (org_id, id, name, kind, gateway_id, package, access_mode, created_by, updated_by)
+			VALUES ($1, $2, $3, 'mcp_container', $4, $5, 'none', 'test', 'test')`, e.org, id, "c-"+id.String()[28:], gw, mockpayments.Name)
+		e.exec(t, `INSERT INTO pc.connector_specs (org_id, connection_id, revision, image, command, memory_mib, milli_cpus, pids, created_by)
+			VALUES ($1, $2, 1, $3, ARRAY['/server'], 512, 1000, 256, 'test')`, e.org, id,
+			"sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
+		return id
+	}
+	own, other := connector(mine.Gateway), connector(theirs.Gateway)
+	run := func(instance, conn ids.UUID, rev int32, state string) error {
+		_, err := e.svc.ReportConnectorState(ctx, mine, app.ConnectorRun{
+			Instance: instance, Connection: conn, SpecRevision: rev, State: state, Container: "pc-conn-0123456789abcdef",
+			EngineVersion: "29.8.2", APIVersion: "1.56", Runtime: "runc",
+		})
+		return err
+	}
+	first := ids.NewV7()
+	for _, state := range []string{"STARTING", "RUNNING", "STOPPED"} {
+		if err := run(first, own, 1, state); err != nil {
+			t.Fatalf("%s: %v", state, err)
+		}
+	}
+	if err := run(first, own, 1, "RUNNING"); !errors.Is(err, app.ErrConnectorRun) {
+		t.Fatalf("a stopped run started again: %v", err)
+	}
+	if err := run(ids.NewV7(), own, 7, "STARTING"); !errors.Is(err, app.ErrConnectorRun) {
+		t.Fatalf("a run of an unknown spec revision: %v", err)
+	}
+	if err := run(ids.NewV7(), other, 1, "STARTING"); !errors.Is(err, app.ErrConnectorNotFound) {
+		t.Fatalf("another gateway's connector: %v", err)
+	}
+	second := ids.NewV7()
+	if err := run(second, own, 1, "STARTING"); err != nil {
+		t.Fatal(err)
+	}
+	if err := run(second, connector(mine.Gateway), 1, "RUNNING"); !errors.Is(err, app.ErrConnectorRun) {
+		t.Fatalf("a run id reused for another connection: %v", err)
+	}
+	e.svc.WithPantherClawHosted([]ids.UUID{mine.Gateway})
+	if err := run(ids.NewV7(), own, 1, "STARTING"); !errors.Is(err, app.ErrConnectorNotFound) {
+		t.Fatalf("a PantherClaw-hosted gateway's connector run: %v", err)
 	}
 }

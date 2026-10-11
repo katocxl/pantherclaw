@@ -385,6 +385,23 @@ type PcConnectionRoute struct {
 	ChangedAt    time.Time
 }
 
+type PcConnectorInstance struct {
+	OrgID          ids.OrgID
+	ID             ids.UUID
+	ConnectionID   ids.UUID
+	SpecRevision   int32
+	GatewayID      ids.UUID
+	ContainerName  string
+	State          string
+	EngineVersion  string
+	ApiVersion     string
+	Runtime        string
+	LastErrorClass *string
+	StartedAt      time.Time
+	StoppedAt      *time.Time
+	UpdatedAt      time.Time
+}
+
 type PcConnectorSpec struct {
 	OrgID                  ids.OrgID
 	ConnectionID           ids.UUID

@@ -166,7 +166,10 @@ func New(ctx context.Context, cfg *Config, id *control.Identity, log *slog.Logge
 		if err != nil {
 			return nil, err
 		}
-		d.Connectors = sup
+		d.Connectors = sup.WithReporter(func(ctx context.Context, r *pb.ReportConnectorStateRequest) error {
+			_, err := ctl.Gateway.ReportConnectorState(ctx, r)
+			return err
+		})
 		d.Run = append(d.Run, sup.Run)
 	}
 	return newGateway(cfg, d, log)

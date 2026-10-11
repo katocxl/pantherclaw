@@ -77,6 +77,62 @@ func (GatewayHosting) EnumDescriptor() ([]byte, []int) {
 	return file_pantherclaw_v1_connectors_proto_rawDescGZIP(), []int{0}
 }
 
+// ConnectorState is a connector run's state; a run moves only forward.
+type ConnectorState int32
+
+const (
+	ConnectorState_CONNECTOR_STATE_UNSPECIFIED ConnectorState = 0
+	ConnectorState_CONNECTOR_STATE_STARTING    ConnectorState = 1
+	ConnectorState_CONNECTOR_STATE_RUNNING     ConnectorState = 2
+	ConnectorState_CONNECTOR_STATE_STOPPED     ConnectorState = 3
+	ConnectorState_CONNECTOR_STATE_FAILED      ConnectorState = 4
+)
+
+// Enum value maps for ConnectorState.
+var (
+	ConnectorState_name = map[int32]string{
+		0: "CONNECTOR_STATE_UNSPECIFIED",
+		1: "CONNECTOR_STATE_STARTING",
+		2: "CONNECTOR_STATE_RUNNING",
+		3: "CONNECTOR_STATE_STOPPED",
+		4: "CONNECTOR_STATE_FAILED",
+	}
+	ConnectorState_value = map[string]int32{
+		"CONNECTOR_STATE_UNSPECIFIED": 0,
+		"CONNECTOR_STATE_STARTING":    1,
+		"CONNECTOR_STATE_RUNNING":     2,
+		"CONNECTOR_STATE_STOPPED":     3,
+		"CONNECTOR_STATE_FAILED":      4,
+	}
+)
+
+func (x ConnectorState) Enum() *ConnectorState {
+	p := new(ConnectorState)
+	*p = x
+	return p
+}
+
+func (x ConnectorState) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (ConnectorState) Descriptor() protoreflect.EnumDescriptor {
+	return file_pantherclaw_v1_connectors_proto_enumTypes[1].Descriptor()
+}
+
+func (ConnectorState) Type() protoreflect.EnumType {
+	return &file_pantherclaw_v1_connectors_proto_enumTypes[1]
+}
+
+func (x ConnectorState) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use ConnectorState.Descriptor instead.
+func (ConnectorState) EnumDescriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_connectors_proto_rawDescGZIP(), []int{1}
+}
+
 // ConnectorSpec is a connector's container. Changing it weakens
 // enforcement (HR-183).
 type ConnectorSpec struct {
@@ -243,6 +299,153 @@ func (x *ConnectorLimits) GetPids() int32 {
 	return 0
 }
 
+type ReportConnectorStateRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// instance_id is the gateway's id for this run of the connector.
+	InstanceId   string `protobuf:"bytes,1,opt,name=instance_id,json=instanceId,proto3" json:"instance_id,omitempty"`
+	ConnectionId string `protobuf:"bytes,2,opt,name=connection_id,json=connectionId,proto3" json:"connection_id,omitempty"`
+	// spec_revision is the connector spec revision the run started from.
+	SpecRevision  int32          `protobuf:"varint,3,opt,name=spec_revision,json=specRevision,proto3" json:"spec_revision,omitempty"`
+	State         ConnectorState `protobuf:"varint,4,opt,name=state,proto3,enum=pantherclaw.v1.ConnectorState" json:"state,omitempty"`
+	ContainerName string         `protobuf:"bytes,5,opt,name=container_name,json=containerName,proto3" json:"container_name,omitempty"`
+	EngineVersion string         `protobuf:"bytes,6,opt,name=engine_version,json=engineVersion,proto3" json:"engine_version,omitempty"`
+	ApiVersion    string         `protobuf:"bytes,7,opt,name=api_version,json=apiVersion,proto3" json:"api_version,omitempty"`
+	Runtime       string         `protobuf:"bytes,8,opt,name=runtime,proto3" json:"runtime,omitempty"`
+	// error_class is why a run failed: a class, never a message.
+	ErrorClass    string `protobuf:"bytes,9,opt,name=error_class,json=errorClass,proto3" json:"error_class,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ReportConnectorStateRequest) Reset() {
+	*x = ReportConnectorStateRequest{}
+	mi := &file_pantherclaw_v1_connectors_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ReportConnectorStateRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ReportConnectorStateRequest) ProtoMessage() {}
+
+func (x *ReportConnectorStateRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_connectors_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ReportConnectorStateRequest.ProtoReflect.Descriptor instead.
+func (*ReportConnectorStateRequest) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_connectors_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *ReportConnectorStateRequest) GetInstanceId() string {
+	if x != nil {
+		return x.InstanceId
+	}
+	return ""
+}
+
+func (x *ReportConnectorStateRequest) GetConnectionId() string {
+	if x != nil {
+		return x.ConnectionId
+	}
+	return ""
+}
+
+func (x *ReportConnectorStateRequest) GetSpecRevision() int32 {
+	if x != nil {
+		return x.SpecRevision
+	}
+	return 0
+}
+
+func (x *ReportConnectorStateRequest) GetState() ConnectorState {
+	if x != nil {
+		return x.State
+	}
+	return ConnectorState_CONNECTOR_STATE_UNSPECIFIED
+}
+
+func (x *ReportConnectorStateRequest) GetContainerName() string {
+	if x != nil {
+		return x.ContainerName
+	}
+	return ""
+}
+
+func (x *ReportConnectorStateRequest) GetEngineVersion() string {
+	if x != nil {
+		return x.EngineVersion
+	}
+	return ""
+}
+
+func (x *ReportConnectorStateRequest) GetApiVersion() string {
+	if x != nil {
+		return x.ApiVersion
+	}
+	return ""
+}
+
+func (x *ReportConnectorStateRequest) GetRuntime() string {
+	if x != nil {
+		return x.Runtime
+	}
+	return ""
+}
+
+func (x *ReportConnectorStateRequest) GetErrorClass() string {
+	if x != nil {
+		return x.ErrorClass
+	}
+	return ""
+}
+
+type ReportConnectorStateResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ReportConnectorStateResponse) Reset() {
+	*x = ReportConnectorStateResponse{}
+	mi := &file_pantherclaw_v1_connectors_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ReportConnectorStateResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ReportConnectorStateResponse) ProtoMessage() {}
+
+func (x *ReportConnectorStateResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_connectors_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ReportConnectorStateResponse.ProtoReflect.Descriptor instead.
+func (*ReportConnectorStateResponse) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_connectors_proto_rawDescGZIP(), []int{3}
+}
+
 var File_pantherclaw_v1_connectors_proto protoreflect.FileDescriptor
 
 const file_pantherclaw_v1_connectors_proto_rawDesc = "" +
@@ -267,11 +470,32 @@ const file_pantherclaw_v1_connectors_proto_rawDesc = "" +
 	"milli_cpus\x18\x02 \x01(\x05B\n" +
 	"\xbaH\a\x1a\x05\x18\xc0>(\x00R\tmilliCpus\x12\x1e\n" +
 	"\x04pids\x18\x03 \x01(\x05B\n" +
-	"\xbaH\a\x1a\x05\x18\x80 (\x00R\x04pids*p\n" +
+	"\xbaH\a\x1a\x05\x18\x80 (\x00R\x04pids\"\xa8\x04\n" +
+	"\x1bReportConnectorStateRequest\x12)\n" +
+	"\vinstance_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\n" +
+	"instanceId\x12-\n" +
+	"\rconnection_id\x18\x02 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\fconnectionId\x12,\n" +
+	"\rspec_revision\x18\x03 \x01(\x05B\a\xbaH\x04\x1a\x02 \x00R\fspecRevision\x12@\n" +
+	"\x05state\x18\x04 \x01(\x0e2\x1e.pantherclaw.v1.ConnectorStateB\n" +
+	"\xbaH\a\x82\x01\x04\x10\x01 \x00R\x05state\x12J\n" +
+	"\x0econtainer_name\x18\x05 \x01(\tB#\xbaH r\x1e2\x1c^pc-[a-z0-9][a-z0-9-]{0,40}$R\rcontainerName\x12E\n" +
+	"\x0eengine_version\x18\x06 \x01(\tB\x1e\xbaH\x1br\x192\x17^[0-9A-Za-z.+_-]{1,64}$R\rengineVersion\x12@\n" +
+	"\vapi_version\x18\a \x01(\tB\x1f\xbaH\x1cr\x1a2\x18^[0-9]{1,3}\\.[0-9]{1,3}$R\n" +
+	"apiVersion\x12,\n" +
+	"\aruntime\x18\b \x01(\tB\x12\xbaH\x0fr\rR\x04runcR\x05runscR\aruntime\x12<\n" +
+	"\verror_class\x18\t \x01(\tB\x1b\xbaH\x18\xd8\x01\x01r\x132\x11^[a-z0-9_]{1,64}$R\n" +
+	"errorClass\"\x1e\n" +
+	"\x1cReportConnectorStateResponse*p\n" +
 	"\x0eGatewayHosting\x12\x1f\n" +
 	"\x1bGATEWAY_HOSTING_UNSPECIFIED\x10\x00\x12\x1c\n" +
 	"\x18GATEWAY_HOSTING_CUSTOMER\x10\x01\x12\x1f\n" +
-	"\x1bGATEWAY_HOSTING_PANTHERCLAW\x10\x02B\xc8\x01\n" +
+	"\x1bGATEWAY_HOSTING_PANTHERCLAW\x10\x02*\xa5\x01\n" +
+	"\x0eConnectorState\x12\x1f\n" +
+	"\x1bCONNECTOR_STATE_UNSPECIFIED\x10\x00\x12\x1c\n" +
+	"\x18CONNECTOR_STATE_STARTING\x10\x01\x12\x1b\n" +
+	"\x17CONNECTOR_STATE_RUNNING\x10\x02\x12\x1b\n" +
+	"\x17CONNECTOR_STATE_STOPPED\x10\x03\x12\x1a\n" +
+	"\x16CONNECTOR_STATE_FAILED\x10\x04B\xc8\x01\n" +
 	"\x12com.pantherclaw.v1B\x0fConnectorsProtoP\x01ZHgithub.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1;pantherclawv1\xa2\x02\x03PXX\xaa\x02\x0ePantherclaw.V1\xca\x02\x0ePantherclaw\\V1\xe2\x02\x1aPantherclaw\\V1\\GPBMetadata\xea\x02\x0fPantherclaw::V1b\x06proto3"
 
 var (
@@ -286,22 +510,26 @@ func file_pantherclaw_v1_connectors_proto_rawDescGZIP() []byte {
 	return file_pantherclaw_v1_connectors_proto_rawDescData
 }
 
-var file_pantherclaw_v1_connectors_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_pantherclaw_v1_connectors_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
+var file_pantherclaw_v1_connectors_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
+var file_pantherclaw_v1_connectors_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
 var file_pantherclaw_v1_connectors_proto_goTypes = []any{
-	(GatewayHosting)(0),     // 0: pantherclaw.v1.GatewayHosting
-	(*ConnectorSpec)(nil),   // 1: pantherclaw.v1.ConnectorSpec
-	(*ConnectorLimits)(nil), // 2: pantherclaw.v1.ConnectorLimits
-	nil,                     // 3: pantherclaw.v1.ConnectorSpec.EnvironmentEntry
+	(GatewayHosting)(0),                  // 0: pantherclaw.v1.GatewayHosting
+	(ConnectorState)(0),                  // 1: pantherclaw.v1.ConnectorState
+	(*ConnectorSpec)(nil),                // 2: pantherclaw.v1.ConnectorSpec
+	(*ConnectorLimits)(nil),              // 3: pantherclaw.v1.ConnectorLimits
+	(*ReportConnectorStateRequest)(nil),  // 4: pantherclaw.v1.ReportConnectorStateRequest
+	(*ReportConnectorStateResponse)(nil), // 5: pantherclaw.v1.ReportConnectorStateResponse
+	nil,                                  // 6: pantherclaw.v1.ConnectorSpec.EnvironmentEntry
 }
 var file_pantherclaw_v1_connectors_proto_depIdxs = []int32{
-	3, // 0: pantherclaw.v1.ConnectorSpec.environment:type_name -> pantherclaw.v1.ConnectorSpec.EnvironmentEntry
-	2, // 1: pantherclaw.v1.ConnectorSpec.limits:type_name -> pantherclaw.v1.ConnectorLimits
-	2, // [2:2] is the sub-list for method output_type
-	2, // [2:2] is the sub-list for method input_type
-	2, // [2:2] is the sub-list for extension type_name
-	2, // [2:2] is the sub-list for extension extendee
-	0, // [0:2] is the sub-list for field type_name
+	6, // 0: pantherclaw.v1.ConnectorSpec.environment:type_name -> pantherclaw.v1.ConnectorSpec.EnvironmentEntry
+	3, // 1: pantherclaw.v1.ConnectorSpec.limits:type_name -> pantherclaw.v1.ConnectorLimits
+	1, // 2: pantherclaw.v1.ReportConnectorStateRequest.state:type_name -> pantherclaw.v1.ConnectorState
+	3, // [3:3] is the sub-list for method output_type
+	3, // [3:3] is the sub-list for method input_type
+	3, // [3:3] is the sub-list for extension type_name
+	3, // [3:3] is the sub-list for extension extendee
+	0, // [0:3] is the sub-list for field type_name
 }
 
 func init() { file_pantherclaw_v1_connectors_proto_init() }
@@ -314,8 +542,8 @@ func file_pantherclaw_v1_connectors_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pantherclaw_v1_connectors_proto_rawDesc), len(file_pantherclaw_v1_connectors_proto_rawDesc)),
-			NumEnums:      1,
-			NumMessages:   3,
+			NumEnums:      2,
+			NumMessages:   5,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

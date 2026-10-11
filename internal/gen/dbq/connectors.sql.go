@@ -148,3 +148,95 @@ func (q *Queries) InsertConnectorSpec(ctx context.Context, arg InsertConnectorSp
 	)
 	return i, err
 }
+
+const latestConnectorInstance = `-- name: LatestConnectorInstance :one
+SELECT org_id, id, connection_id, spec_revision, gateway_id, container_name, state, engine_version, api_version, runtime, last_error_class, started_at, stopped_at, updated_at FROM pc.connector_instances
+WHERE org_id = $1 AND connection_id = $2
+ORDER BY id DESC
+LIMIT 1
+`
+
+// A connection's latest connector run.
+func (q *Queries) LatestConnectorInstance(ctx context.Context, orgID ids.OrgID, connectionID ids.UUID) (PcConnectorInstance, error) {
+	row := q.db.QueryRow(ctx, latestConnectorInstance, orgID, connectionID)
+	var i PcConnectorInstance
+	err := row.Scan(
+		&i.OrgID,
+		&i.ID,
+		&i.ConnectionID,
+		&i.SpecRevision,
+		&i.GatewayID,
+		&i.ContainerName,
+		&i.State,
+		&i.EngineVersion,
+		&i.ApiVersion,
+		&i.Runtime,
+		&i.LastErrorClass,
+		&i.StartedAt,
+		&i.StoppedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const reportConnectorInstance = `-- name: ReportConnectorInstance :one
+INSERT INTO pc.connector_instances (org_id, id, connection_id, spec_revision, gateway_id, container_name, state, engine_version,
+                                    api_version, runtime, last_error_class)
+VALUES ($1, $2, $3, $4, $5,
+        $6, $7, $8, $9, $10,
+        $11)
+ON CONFLICT (org_id, id) DO UPDATE SET state = EXCLUDED.state, last_error_class = EXCLUDED.last_error_class
+WHERE pc.connector_instances.gateway_id = EXCLUDED.gateway_id AND pc.connector_instances.connection_id = EXCLUDED.connection_id
+RETURNING org_id, id, connection_id, spec_revision, gateway_id, container_name, state, engine_version, api_version, runtime, last_error_class, started_at, stopped_at, updated_at
+`
+
+type ReportConnectorInstanceParams struct {
+	OrgID          ids.OrgID
+	ID             ids.UUID
+	ConnectionID   ids.UUID
+	SpecRevision   int32
+	GatewayID      ids.UUID
+	ContainerName  string
+	State          string
+	EngineVersion  string
+	ApiVersion     string
+	Runtime        string
+	LastErrorClass *string
+}
+
+// A connector's run as its gateway reports it (00094): inserted on its
+// first report, then only its state and error class change, and only for
+// the same gateway and connection.
+func (q *Queries) ReportConnectorInstance(ctx context.Context, arg ReportConnectorInstanceParams) (PcConnectorInstance, error) {
+	row := q.db.QueryRow(ctx, reportConnectorInstance,
+		arg.OrgID,
+		arg.ID,
+		arg.ConnectionID,
+		arg.SpecRevision,
+		arg.GatewayID,
+		arg.ContainerName,
+		arg.State,
+		arg.EngineVersion,
+		arg.ApiVersion,
+		arg.Runtime,
+		arg.LastErrorClass,
+	)
+	var i PcConnectorInstance
+	err := row.Scan(
+		&i.OrgID,
+		&i.ID,
+		&i.ConnectionID,
+		&i.SpecRevision,
+		&i.GatewayID,
+		&i.ContainerName,
+		&i.State,
+		&i.EngineVersion,
+		&i.ApiVersion,
+		&i.Runtime,
+		&i.LastErrorClass,
+		&i.StartedAt,
+		&i.StoppedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}

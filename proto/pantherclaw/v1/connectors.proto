@@ -87,3 +87,40 @@ enum GatewayHosting {
   GATEWAY_HOSTING_CUSTOMER = 1;
   GATEWAY_HOSTING_PANTHERCLAW = 2;
 }
+
+// ConnectorState is a connector run's state; a run moves only forward.
+enum ConnectorState {
+  CONNECTOR_STATE_UNSPECIFIED = 0;
+  CONNECTOR_STATE_STARTING = 1;
+  CONNECTOR_STATE_RUNNING = 2;
+  CONNECTOR_STATE_STOPPED = 3;
+  CONNECTOR_STATE_FAILED = 4;
+}
+
+message ReportConnectorStateRequest {
+  // instance_id is the gateway's id for this run of the connector.
+  string instance_id = 1 [(buf.validate.field).string.uuid = true];
+  string connection_id = 2 [(buf.validate.field).string.uuid = true];
+  // spec_revision is the connector spec revision the run started from.
+  int32 spec_revision = 3 [(buf.validate.field).int32.gt = 0];
+  ConnectorState state = 4 [(buf.validate.field).enum = {
+    defined_only: true
+    not_in: [0]
+  }];
+  string container_name = 5 [(buf.validate.field).string.pattern = "^pc-[a-z0-9][a-z0-9-]{0,40}$"];
+  string engine_version = 6 [(buf.validate.field).string.pattern = "^[0-9A-Za-z.+_-]{1,64}$"];
+  string api_version = 7 [(buf.validate.field).string.pattern = "^[0-9]{1,3}\\.[0-9]{1,3}$"];
+  string runtime = 8 [(buf.validate.field).string = {
+    in: [
+      "runc",
+      "runsc"
+    ]
+  }];
+  // error_class is why a run failed: a class, never a message.
+  string error_class = 9 [
+    (buf.validate.field).string.pattern = "^[a-z0-9_]{1,64}$",
+    (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE
+  ];
+}
+
+message ReportConnectorStateResponse {}

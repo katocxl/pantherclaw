@@ -25,3 +25,23 @@ SELECT DISTINCT ON (s.connection_id) s.* FROM pc.connector_specs s
 JOIN pc.connections c ON c.org_id = s.org_id AND c.id = s.connection_id
 WHERE s.org_id = sqlc.arg(org_id) AND c.gateway_id = sqlc.arg(gateway_id) AND c.state <> 'RETIRED'
 ORDER BY s.connection_id, s.revision DESC;
+
+-- A connector's run as its gateway reports it (00094): inserted on its
+-- first report, then only its state and error class change, and only for
+-- the same gateway and connection.
+-- name: ReportConnectorInstance :one
+INSERT INTO pc.connector_instances (org_id, id, connection_id, spec_revision, gateway_id, container_name, state, engine_version,
+                                    api_version, runtime, last_error_class)
+VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(connection_id), sqlc.arg(spec_revision), sqlc.arg(gateway_id),
+        sqlc.arg(container_name), sqlc.arg(state), sqlc.arg(engine_version), sqlc.arg(api_version), sqlc.arg(runtime),
+        sqlc.narg(last_error_class))
+ON CONFLICT (org_id, id) DO UPDATE SET state = EXCLUDED.state, last_error_class = EXCLUDED.last_error_class
+WHERE pc.connector_instances.gateway_id = EXCLUDED.gateway_id AND pc.connector_instances.connection_id = EXCLUDED.connection_id
+RETURNING *;
+
+-- A connection's latest connector run.
+-- name: LatestConnectorInstance :one
+SELECT * FROM pc.connector_instances
+WHERE org_id = sqlc.arg(org_id) AND connection_id = sqlc.arg(connection_id)
+ORDER BY id DESC
+LIMIT 1;

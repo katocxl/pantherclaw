@@ -9,6 +9,7 @@ import (
 	"io"
 	"os/exec"
 	"strings"
+	"time"
 )
 
 // Streamer runs a docker command with its standard input and output
@@ -23,6 +24,9 @@ func (CLI) Stream(ctx context.Context, stdin io.Reader, stdout io.Writer, args .
 	var errOut capped
 	errOut.max = maxStderr
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = stdin, stdout, &errOut
+	// A stdin that is not a file is copied by a goroutine Wait waits for:
+	// once the process ends, give it a moment, then stop waiting.
+	cmd.WaitDelay = 5 * time.Second
 	if err := cmd.Run(); err != nil {
 		e := &Error{Command: command(args), Stderr: strings.TrimSpace(errOut.String()), Err: err}
 		if x, ok := errors.AsType[*exec.ExitError](err); ok {
