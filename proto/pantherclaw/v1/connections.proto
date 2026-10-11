@@ -718,6 +718,10 @@ message ConnectionTest {
   string state = 8;
   // When it was asked for.
   google.protobuf.Timestamp create_time = 9;
+  // The operation a read or target_verifier test reached; empty for a
+  // credential test (N23: M9 lifts the cooperative cap only for the
+  // operation a passing target_verifier test reached).
+  string operation = 10;
 }
 
 // TestConnectionRequest names a connection and the kind of test.

@@ -375,9 +375,10 @@ func (q *Queries) InsertCredentialTest(ctx context.Context, arg InsertCredential
 }
 
 const insertLeasedConnectionTest = `-- name: InsertLeasedConnectionTest :one
-INSERT INTO pc.connection_tests (org_id, id, connection_id, kind, verification_id, requested_by)
-VALUES ($1, $2, $3, $4, $5, $6)
-RETURNING org_id, id, connection_id, kind, state, gateway_id, verification_id, result, checks, detail_sha256, requested_by, created_at, finished_at
+INSERT INTO pc.connection_tests (org_id, id, connection_id, kind, verification_id, operation, requested_by)
+VALUES ($1, $2, $3, $4, $5, $6,
+    $7)
+RETURNING org_id, id, connection_id, kind, operation, state, gateway_id, verification_id, result, checks, detail_sha256, requested_by, created_at, finished_at
 `
 
 type InsertLeasedConnectionTestParams struct {
@@ -386,6 +387,7 @@ type InsertLeasedConnectionTestParams struct {
 	ConnectionID   ids.UUID
 	Kind           string
 	VerificationID *ids.UUID
+	Operation      *string
 	RequestedBy    string
 }
 
@@ -397,6 +399,7 @@ func (q *Queries) InsertLeasedConnectionTest(ctx context.Context, arg InsertLeas
 		arg.ConnectionID,
 		arg.Kind,
 		arg.VerificationID,
+		arg.Operation,
 		arg.RequestedBy,
 	)
 	var i PcConnectionTest
@@ -405,6 +408,7 @@ func (q *Queries) InsertLeasedConnectionTest(ctx context.Context, arg InsertLeas
 		&i.ID,
 		&i.ConnectionID,
 		&i.Kind,
+		&i.Operation,
 		&i.State,
 		&i.GatewayID,
 		&i.VerificationID,

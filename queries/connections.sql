@@ -175,6 +175,7 @@ VALUES (sqlc.arg(org_id), sqlc.arg(id), 'connection_test', sqlc.arg(connection_i
 
 -- name: InsertLeasedConnectionTest :one
 -- A test the gateway runs, PENDING until it reports.
-INSERT INTO pc.connection_tests (org_id, id, connection_id, kind, verification_id, requested_by)
-VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(connection_id), sqlc.arg(kind), sqlc.arg(verification_id), sqlc.arg(requested_by))
+INSERT INTO pc.connection_tests (org_id, id, connection_id, kind, verification_id, operation, requested_by)
+VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(connection_id), sqlc.arg(kind), sqlc.arg(verification_id), sqlc.arg(operation),
+    sqlc.arg(requested_by))
 RETURNING *;
