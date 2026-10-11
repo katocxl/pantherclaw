@@ -130,3 +130,35 @@ func TestHR206_ARuleThatCannotBeEvaluatedIsCannotAuthorize(t *testing.T) {
 	f.payouts("ch_1", map[string]any{"environments": []any{"payroll"}}, time.Second)
 	expect(t, f.call(f.run, "create_refund", refund("ch_1", "30.00")), adomain.CannotAuthorize, consequences.ReasonEvaluation)
 }
+
+// TestHR206_PolicyMayForbidAnUnknownConsequenceButNeverClearIt: policy
+// sees the consequence it decides (§43.3): a FORBID on consequence.unknown
+// denies a refund whose payout cannot be ruled out, while a predicted
+// payout gets the rule written for it. A requirement written only for
+// predicted payouts never releases an unknown one: with no requirement
+// left for it, the refund cannot be authorized.
+func TestHR206_PolicyMayForbidAnUnknownConsequenceButNeverClearIt(t *testing.T) {
+	predictedOnly := pdomain.Rule{
+		ID: "approve-payouts", Kind: pdomain.RequireApproval, Summary: "payouts need an approver", Operations: []string{"payments.payout.trigger"},
+		When: "!consequence.unknown", Reason: "PAYOUT_APPROVAL", Approval: &pdomain.ApprovalRequirement{Role: "approver", Count: 1},
+	}
+	forbidUnknown := pdomain.Rule{
+		ID: "no-unknown-payouts", Kind: pdomain.Forbid, Summary: "no payout that cannot be ruled out",
+		Operations: []string{"payments.payout.trigger"}, When: "consequence.unknown", Reason: "UNKNOWN_PAYOUT",
+	}
+	f := newFxWith(t, payoutPackage, "")
+	f.payoutRun(false)
+	if err := f.w.SetPolicy([]pdomain.Rule{predictedOnly, forbidUnknown}, nil); err != nil {
+		t.Fatal(err)
+	}
+	expect(t, f.call(f.run, "create_refund", refund("ch_1", "30.00")), adomain.Deny, "UNKNOWN_PAYOUT")
+	f.payouts("ch_1", scheduled, time.Second)
+	expect(t, f.call(f.run, "create_refund", refund("ch_1", "30.00")), adomain.RequireApproval, "PAYOUT_APPROVAL")
+
+	f = newFxWith(t, payoutPackage, "")
+	f.payoutRun(false)
+	if err := f.w.SetPolicy([]pdomain.Rule{predictedOnly}, nil); err != nil {
+		t.Fatal(err)
+	}
+	expect(t, f.call(f.run, "create_refund", refund("ch_1", "30.00")), adomain.CannotAuthorize, consequences.ReasonUnknown)
+}

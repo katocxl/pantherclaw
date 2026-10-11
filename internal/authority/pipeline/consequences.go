@@ -18,6 +18,7 @@ import (
 	fdomain "github.com/katocxl/pantherclaw/internal/facts/domain"
 	gdomain "github.com/katocxl/pantherclaw/internal/grants/domain"
 	"github.com/katocxl/pantherclaw/internal/platform/celenv"
+	papp "github.com/katocxl/pantherclaw/internal/policy/app"
 )
 
 // Consequences (G0 M8 P1, HR-206, design decision 6): step 6 evaluates the
@@ -146,7 +147,9 @@ func (p *Pipeline) consequenceBoundaries(ctx context.Context, s *state) {
 		if s.policy == nil {
 			continue
 		}
-		out, err := s.policy.Compiled.Evaluate(ctx, k.c.Definition, k.ir, s.policyInput())
+		in := s.policyInput()
+		in.Consequence = &papp.Consequence{Rule: k.c.Rule, State: string(k.c.State), Environments: k.c.Environments}
+		out, err := s.policy.Compiled.Evaluate(ctx, k.c.Definition, k.ir, in)
 		if err != nil {
 			s.cl.add(StepBoundaries, adomain.CannotAuthorize, ReasonPolicyEvaluation, "the policy could not be evaluated"+k.label(), "")
 			continue
