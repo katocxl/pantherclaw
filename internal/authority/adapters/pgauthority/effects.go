@@ -69,6 +69,18 @@ func verifyPlan(ins *dbq.InsertPermitForTransactionParams, p *pipeline.VerifyPla
 	return nil
 }
 
+// requireLevel records on the transaction the level its permit's verify
+// plan requires, when that is above the target's acceptance (a definition's
+// verifier.required or a policy's verify obligation, G0 M7 design decision
+// 2), so that every effect receipt states it (HR-191).
+func requireLevel(ctx context.Context, q *dbq.Queries, org ids.OrgID, txn ids.UUID, p *pipeline.VerifyPlan) error {
+	if p == nil || p.Required.Rank() <= defs.LevelAcceptance.Rank() {
+		return nil
+	}
+	level := string(p.Required)
+	return q.SetEffectRequired(ctx, &level, org, txn)
+}
+
 // executed is what an execution receipt states about the permit in c.
 func executed(c dbq.ExecutionContextRow, recordedBy string) finalize.Executed {
 	x := finalize.Executed{
@@ -119,13 +131,14 @@ func definition(raw []byte) (*defs.Definition, error) {
 	return &d, nil
 }
 
-// scheduleVerification records the level the permit's definition requires
-// and schedules the verification its verifier allows for outcome o
-// (HR-190, G0 M7 design decision 1): after an accepted dispatch, a read of
-// the object the target named (ref, kept only when it matches the read's
-// target pattern) or else a lookup; after an unknown one, a lookup. It
-// returns the reference it kept. A definition without an extended verifier
-// schedules nothing: its effects are UNVERIFIABLE.
+// scheduleVerification records the level the permit's definition requires,
+// unless its decision required more (a policy's verify obligation, kept by
+// requireLevel), and schedules the verification its verifier allows for
+// outcome o (HR-190, G0 M7 design decision 1): after an accepted dispatch,
+// a read of the object the target named (ref, kept only when it matches the
+// read's target pattern) or else a lookup; after an unknown one, a lookup.
+// It returns the reference it kept. A definition without an extended
+// verifier schedules nothing: its effects are UNVERIFIABLE.
 func scheduleVerification(ctx context.Context, q *dbq.Queries, org ids.OrgID, c dbq.ExecutionContextRow, o finalize.Outcome,
 	ref string,
 ) (string, error) {
@@ -143,11 +156,15 @@ func scheduleVerification(ctx context.Context, q *dbq.Queries, org ids.OrgID, c 
 		return "", err
 	}
 	v := d.Verifier
-	level := string(defs.LevelAcceptance)
+	level := defs.LevelAcceptance
 	if v != nil && v.Extended() {
-		level = string(v.RequiredLevel())
+		level = v.RequiredLevel()
 	}
-	if err := q.SetEffectRequired(ctx, &level, org, c.TransactionID); err != nil {
+	if c.EffectLevelRequired != nil && defs.Level(*c.EffectLevelRequired).Rank() > level.Rank() {
+		level = defs.Level(*c.EffectLevelRequired)
+	}
+	required := string(level)
+	if err := q.SetEffectRequired(ctx, &required, org, c.TransactionID); err != nil {
 		return "", err
 	}
 	if v == nil || !v.Extended() || c.ConnectionID == nil || c.DispatchingAt == nil || (o != finalize.Accepted && o != finalize.Unknown) {

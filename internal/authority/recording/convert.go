@@ -468,7 +468,7 @@ func fromConnection(id ids.UUID, c pipeline.Connection, err error) Connection {
 	}
 	return Connection{
 		ID: id.String(), Gateway: uid(c.Gateway), Kind: c.Kind, Package: c.Package, State: c.State, AccessMode: c.AccessMode,
-		DefaultMode: c.DefaultMode, DestinationClass: c.DestinationClass, Modes: maps.Clone(c.Modes),
+		DefaultMode: c.DefaultMode, DestinationClass: c.DestinationClass, Modes: maps.Clone(c.Modes), Reads: slices.Clone(c.Reads),
 	}
 }
 
@@ -484,7 +484,7 @@ func (c Connection) value() (pipeline.Connection, error) {
 	}
 	return pipeline.Connection{
 		ID: id, Gateway: gw, Kind: c.Kind, Package: c.Package, State: c.State, AccessMode: c.AccessMode,
-		DefaultMode: c.DefaultMode, DestinationClass: c.DestinationClass, Modes: modes,
+		DefaultMode: c.DefaultMode, DestinationClass: c.DestinationClass, Modes: modes, Reads: slices.Clone(c.Reads),
 	}, errors.Join(err1, err2)
 }
 

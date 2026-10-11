@@ -45,6 +45,9 @@ type Containment struct {
 	config   int64
 	conns    map[string]string
 	onConfig func(version int64)
+	// waiting is signaled for every message that hints that verification
+	// tasks are due (G0 M7 design decision 1).
+	waiting chan struct{}
 }
 
 // receiver is the client side of WatchContainment.
@@ -65,8 +68,16 @@ func NewContainment(c *Client, log *slog.Logger) *Containment {
 }
 
 func newContainment(stream func(ctx context.Context) (receiver, error), log *slog.Logger) *Containment {
-	return &Containment{stream: stream, log: log, now: time.Now, ready: make(chan struct{}), conns: map[string]string{}}
+	return &Containment{
+		stream: stream, log: log, now: time.Now, ready: make(chan struct{}), conns: map[string]string{},
+		waiting: make(chan struct{}, 1),
+	}
 }
+
+// VerificationsWaiting receives when a message of the stream says that
+// verification tasks are due on the gateway's connections: a hint to claim
+// them now. It changes nothing the gateway may dispatch.
+func (k *Containment) VerificationsWaiting() <-chan struct{} { return k.waiting }
 
 // OnConfig registers a callback for configuration version changes.
 func (k *Containment) OnConfig(f func(version int64)) {
@@ -169,5 +180,11 @@ func (k *Containment) apply(m *pb.WatchContainmentResponse) {
 	}
 	if moved && f != nil {
 		f(m.GetConfigVersion())
+	}
+	if m.GetVerificationsWaiting() {
+		select {
+		case k.waiting <- struct{}{}:
+		default: // a wake-up is already pending
+		}
 	}
 }

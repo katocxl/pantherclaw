@@ -10,6 +10,8 @@ import (
 	"testing"
 
 	"pgregory.net/rapid"
+
+	defs "github.com/katocxl/pantherclaw/internal/definitions/domain"
 )
 
 func rule(id string, k Kind) *Rule {
@@ -158,6 +160,53 @@ func TestCompositionPrecedence(t *testing.T) {
 	}
 	if v := verdictOf(); v != VerdictPass {
 		t.Fatalf("no rules: %s", v)
+	}
+}
+
+// TestHR191_VerifyObligationsNeedAKnownLevelAboveAcceptance: a verify
+// constraint names a level above the target's acceptance and nothing else;
+// an unknown level, acceptance, or a level on another kind is refused at
+// publish (G0 M7 design decision 2, F497).
+func TestHR191_VerifyObligationsNeedAKnownLevelAboveAcceptance(t *testing.T) {
+	verify := func(c Constraint) error {
+		r := rule("v", Constrain)
+		r.Constraint = &c
+		return (&Bundle{ID: "refunds", Version: 1, Rules: []Rule{*r}}).Validate()
+	}
+	for _, l := range []defs.Level{defs.LevelFollowUp, defs.LevelDomainEffect, defs.LevelDownstream} {
+		if err := verify(Constraint{Kind: Verify, Level: l}); err != nil {
+			t.Errorf("verify(%s): %v", l, err)
+		}
+	}
+	for name, c := range map[string]Constraint{
+		"no level":           {Kind: Verify},
+		"an unknown level":   {Kind: Verify, Level: "settled"},
+		"acceptance":         {Kind: Verify, Level: defs.LevelAcceptance},
+		"a param":            {Kind: Verify, Level: defs.LevelFollowUp, Param: "amount"},
+		"a max":              {Kind: Verify, Level: defs.LevelFollowUp, Max: "1"},
+		"values":             {Kind: Verify, Level: defs.LevelFollowUp, Values: []string{"a"}},
+		"a level on a limit": {Kind: CountMax, Param: "limit", Max: "100", Level: defs.LevelFollowUp},
+	} {
+		if err := verify(c); !errors.Is(err, ErrInvalid) {
+			t.Errorf("%s: %v, want ErrInvalid", name, err)
+		}
+	}
+}
+
+// TestHR191_AVerifyObligationIsTheAuthoritys: a matched verify rule is an
+// obligation with its level, applied after dispatch by the Authority and
+// never by the gateway; it constrains, it does not deny.
+func TestHR191_AVerifyObligationIsTheAuthoritys(t *testing.T) {
+	r := rule("v", Constrain)
+	r.Constraint = &Constraint{Kind: Verify, Level: defs.LevelFollowUp}
+	obl := &Obligation{Rule: "v", Kind: Verify, Level: defs.LevelFollowUp, Timing: TimingAfterDispatch}
+	out := Compose([]Result{{Rule: r, Effect: Matched, Obligation: obl}})
+	if out.Verdict != VerdictConstrain || len(out.Obligations) != 1 || out.Obligations[0].Level != defs.LevelFollowUp ||
+		out.Checklist[0].Status != StatusConstrained {
+		t.Fatalf("outcome %+v", out)
+	}
+	if !out.Obligations[0].ByAuthority() || (Obligation{Kind: CountMax, Clamp: true}).ByAuthority() {
+		t.Fatal("only verify obligations are the Authority's")
 	}
 }
 

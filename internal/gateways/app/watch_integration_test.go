@@ -137,6 +137,71 @@ func TestHR010_TheServerSendsOnlyWhatItConfirmed(t *testing.T) {
 	}
 }
 
+// TestHR190_TheStreamHintsThatVerificationsAreWaiting: a gateway's view
+// says verifications are waiting exactly while a task is due on one of its
+// active connections and the kill switch is off, as ClaimVerifications
+// would lease it; the hint is not containment, so it never makes two
+// views unequal (G0 M7 design decision 1).
+func TestHR190_TheStreamHintsThatVerificationsAreWaiting(t *testing.T) {
+	e := newWatchEnv(t)
+	other := ids.NewV7()
+	e.exec(t, "INSERT INTO pc.gateways (org_id, id, name, created_by) VALUES ($1, $2, 'other', 'test')", e.org, other)
+	mine, theirs := ids.NewV7(), ids.NewV7()
+	for _, c := range []struct {
+		id, gw ids.UUID
+		name   string
+	}{{mine, e.gw, "mine"}, {theirs, other, "theirs"}} {
+		e.exec(t, `INSERT INTO pc.connections (org_id, id, name, kind, gateway_id, package, base_url, access_mode, created_by, updated_by)
+			VALUES ($1, $2, $3, 'http', $4, 'pc.mock-payments', 'https://payments.example.test', 'none', 'test', 'test')`, e.org, c.id, c.name, c.gw)
+	}
+	task := func(conn ids.UUID, due string) ids.UUID {
+		id := ids.NewV7()
+		e.exec(t, `INSERT INTO pc.verifications (org_id, id, purpose, connection_id, operation, request, next_at, deadline_at, window_start, window_end)
+			VALUES ($1, $2, 'target_log', $3, 'payments.refund.recent', '{}', now() + $4::interval, now() + interval '15 minutes',
+			        now() - interval '1 hour', now())`, e.org, id, conn, due)
+		return id
+	}
+	h := NewHub(e.pool, pclog.Discard())
+	s, err := h.Subscribe(Identity{Org: e.org, Gateway: e.gw, Cert: ids.NewV7()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	limit := 2*PollEvery + 5*time.Second
+	waitFor(t, s, limit, func(c Containment) bool { return c.GatewayActive && !c.VerificationsWaiting })
+
+	task(theirs, "0 seconds")
+	later := task(mine, "1 hour")
+	// A read that sees the new epoch sees the tasks too.
+	e.exec(t, "UPDATE pc.org_containment SET epoch = epoch + 1 WHERE org_id = $1", e.org)
+	waitFor(t, s, limit, func(c Containment) bool { return c.Epoch == 2 && len(c.Connections) == 1 })
+	if c, _ := s.State(); c.VerificationsWaiting {
+		t.Fatal("another gateway's task, or one not yet due, set the hint")
+	}
+
+	e.exec(t, "UPDATE pc.verifications SET next_at = now() WHERE id = $1", later)
+	waitFor(t, s, limit, func(c Containment) bool { return c.VerificationsWaiting })
+	if c, _ := s.State(); !c.Equal(Containment{
+		Epoch: c.Epoch, KillSwitch: c.KillSwitch, ConfigVersion: c.ConfigVersion, GatewayActive: c.GatewayActive, Connections: c.Connections,
+	}) {
+		t.Fatal("the hint made the containment view change")
+	}
+
+	e.exec(t, `UPDATE pc.org_containment SET kill_switch = true, epoch = epoch + 1, engaged_by = 'x', engaged_at = now(),
+		engage_reason = 'x' WHERE org_id = $1`, e.org)
+	waitFor(t, s, limit, func(c Containment) bool { return c.KillSwitch && !c.VerificationsWaiting })
+	e.exec(t, "UPDATE pc.org_containment SET kill_switch = false, engaged_by = NULL, engaged_at = NULL, engage_reason = NULL WHERE org_id = $1", e.org)
+	waitFor(t, s, limit, func(c Containment) bool { return !c.KillSwitch && c.VerificationsWaiting })
+
+	e.exec(t, "UPDATE pc.connections SET state = 'QUARANTINED', quarantine_reason = 'test' WHERE id = $1", mine)
+	waitFor(t, s, limit, func(c Containment) bool { return c.Connections[mine] == "QUARANTINED" && !c.VerificationsWaiting })
+	e.exec(t, "UPDATE pc.connections SET state = 'ACTIVE', quarantine_reason = NULL WHERE id = $1", mine)
+	waitFor(t, s, limit, func(c Containment) bool { return c.VerificationsWaiting })
+
+	e.exec(t, "UPDATE pc.verifications SET state = 'DONE', finished_at = now() WHERE id = $1", later)
+	waitFor(t, s, limit, func(c Containment) bool { return !c.VerificationsWaiting })
+}
+
 // TestHR010_StreamsArePerCertificateCapped: at most MaxStreamsPerCert
 // streams per certificate; closing one frees a slot.
 func TestHR010_StreamsArePerCertificateCapped(t *testing.T) {
