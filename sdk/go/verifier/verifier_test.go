@@ -244,7 +244,27 @@ func TestHR024_TheTargetVerifierMakesACooperativeRouteVerifiable(t *testing.T) {
 	if s, _ := post(h, c.Token, c.Body); s != http.StatusCreated || ran != 1 {
 		t.Fatal("PantherClaw's token was refused")
 	}
-	if !c.verifier(t, k, verifier.NewMemoryStore(0, time.Time{})).SingleReplica() || c.verifier(t, k, failing{}).SingleReplica() {
+	if !c.verifier(t, k, verifier.NewMemoryStore(0, time.Time{})).SingleReplica() || c.verifier(t, k, &verifier.SQLStore{DB: openFake(t)}).SingleReplica() {
 		t.Fatal("the replica declaration is wrong")
+	}
+}
+
+// TestT081_ReplicasSharingAStoreSpendATokenOnce: a token spent at one
+// replica is refused (409) at another that shares the SQL replay store.
+func TestT081_ReplicasSharingAStoreSpendATokenOnce(t *testing.T) {
+	f, k := load(t)
+	c := f.Cases[0]
+	db := openFake(t)
+	ran := 0
+	a := route(t, c, k, &verifier.SQLStore{DB: db}, &ran)
+	b := route(t, c, k, &verifier.SQLStore{DB: db, Dialect: verifier.SQLite}, &ran)
+	if s, _ := post(a, c.Token, c.Body); s != http.StatusCreated {
+		t.Fatalf("the first replica: HTTP %d", s)
+	}
+	if s, _ := post(b, c.Token, c.Body); s != http.StatusConflict || ran != 1 {
+		t.Fatalf("the second replica: HTTP %d, handler ran %d times", s, ran)
+	}
+	if n, err := (&verifier.SQLStore{DB: db}).Purge(context.Background(), time.Unix(c.Now+3600, 0)); err != nil || n != 1 {
+		t.Fatalf("purge: %d %v", n, err)
 	}
 }
