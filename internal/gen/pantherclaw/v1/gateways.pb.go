@@ -3570,12 +3570,12 @@ const file_pantherclaw_v1_gateways_proto_rawDesc = "" +
 	"\x10RenewCertificate\x12'.pantherclaw.v1.RenewCertificateRequest\x1a(.pantherclaw.v1.RenewCertificateResponse\x12h\n" +
 	"\x11RegisterBrokerKey\x12(.pantherclaw.v1.RegisterBrokerKeyRequest\x1a).pantherclaw.v1.RegisterBrokerKeyResponse\x12j\n" +
 	"\x10GetConfiguration\x12'.pantherclaw.v1.GetConfigurationRequest\x1a(.pantherclaw.v1.GetConfigurationResponse\"\x03\x90\x02\x01\x12g\n" +
-	"\x10WatchContainment\x12'.pantherclaw.v1.WatchContainmentRequest\x1a(.pantherclaw.v1.WatchContainmentResponse0\x01\x12\\\n" +
+	"\x10WatchContainment\x12'.pantherclaw.v1.WatchContainmentRequest\x1a(.pantherclaw.v1.WatchContainmentResponse0\x01\x12q\n" +
+	"\x14ReportConnectorState\x12+.pantherclaw.v1.ReportConnectorStateRequest\x1a,.pantherclaw.v1.ReportConnectorStateResponse\x12\\\n" +
 	"\rReportCircuit\x12$.pantherclaw.v1.ReportCircuitRequest\x1a%.pantherclaw.v1.ReportCircuitResponse\x12V\n" +
 	"\vReportDrift\x12\".pantherclaw.v1.ReportDriftRequest\x1a#.pantherclaw.v1.ReportDriftResponse\x12k\n" +
 	"\x12ClaimVerifications\x12).pantherclaw.v1.ClaimVerificationsRequest\x1a*.pantherclaw.v1.ClaimVerificationsResponse\x12h\n" +
-	"\x11ReportObservation\x12(.pantherclaw.v1.ReportObservationRequest\x1a).pantherclaw.v1.ReportObservationResponse\x12q\n" +
-	"\x14ReportConnectorState\x12+.pantherclaw.v1.ReportConnectorStateRequest\x1a,.pantherclaw.v1.ReportConnectorStateResponseB\xc6\x01\n" +
+	"\x11ReportObservation\x12(.pantherclaw.v1.ReportObservationRequest\x1a).pantherclaw.v1.ReportObservationResponseB\xc6\x01\n" +
 	"\x12com.pantherclaw.v1B\rGatewaysProtoP\x01ZHgithub.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1;pantherclawv1\xa2\x02\x03PXX\xaa\x02\x0ePantherclaw.V1\xca\x02\x0ePantherclaw\\V1\xe2\x02\x1aPantherclaw\\V1\\GPBMetadata\xea\x02\x0fPantherclaw::V1b\x06proto3"
 
 var (
@@ -3691,11 +3691,11 @@ var file_pantherclaw_v1_gateways_proto_depIdxs = []int32{
 	25, // 40: pantherclaw.v1.GatewayService.RegisterBrokerKey:input_type -> pantherclaw.v1.RegisterBrokerKeyRequest
 	27, // 41: pantherclaw.v1.GatewayService.GetConfiguration:input_type -> pantherclaw.v1.GetConfigurationRequest
 	34, // 42: pantherclaw.v1.GatewayService.WatchContainment:input_type -> pantherclaw.v1.WatchContainmentRequest
-	37, // 43: pantherclaw.v1.GatewayService.ReportCircuit:input_type -> pantherclaw.v1.ReportCircuitRequest
-	39, // 44: pantherclaw.v1.GatewayService.ReportDrift:input_type -> pantherclaw.v1.ReportDriftRequest
-	41, // 45: pantherclaw.v1.GatewayService.ClaimVerifications:input_type -> pantherclaw.v1.ClaimVerificationsRequest
-	44, // 46: pantherclaw.v1.GatewayService.ReportObservation:input_type -> pantherclaw.v1.ReportObservationRequest
-	51, // 47: pantherclaw.v1.GatewayService.ReportConnectorState:input_type -> pantherclaw.v1.ReportConnectorStateRequest
+	51, // 43: pantherclaw.v1.GatewayService.ReportConnectorState:input_type -> pantherclaw.v1.ReportConnectorStateRequest
+	37, // 44: pantherclaw.v1.GatewayService.ReportCircuit:input_type -> pantherclaw.v1.ReportCircuitRequest
+	39, // 45: pantherclaw.v1.GatewayService.ReportDrift:input_type -> pantherclaw.v1.ReportDriftRequest
+	41, // 46: pantherclaw.v1.GatewayService.ClaimVerifications:input_type -> pantherclaw.v1.ClaimVerificationsRequest
+	44, // 47: pantherclaw.v1.GatewayService.ReportObservation:input_type -> pantherclaw.v1.ReportObservationRequest
 	7,  // 48: pantherclaw.v1.GatewayAdminService.CreateGateway:output_type -> pantherclaw.v1.CreateGatewayResponse
 	9,  // 49: pantherclaw.v1.GatewayAdminService.CreateGatewayEnrollmentToken:output_type -> pantherclaw.v1.CreateGatewayEnrollmentTokenResponse
 	11, // 50: pantherclaw.v1.GatewayAdminService.ListGateways:output_type -> pantherclaw.v1.ListGatewaysResponse
@@ -3708,11 +3708,11 @@ var file_pantherclaw_v1_gateways_proto_depIdxs = []int32{
 	26, // 57: pantherclaw.v1.GatewayService.RegisterBrokerKey:output_type -> pantherclaw.v1.RegisterBrokerKeyResponse
 	28, // 58: pantherclaw.v1.GatewayService.GetConfiguration:output_type -> pantherclaw.v1.GetConfigurationResponse
 	35, // 59: pantherclaw.v1.GatewayService.WatchContainment:output_type -> pantherclaw.v1.WatchContainmentResponse
-	38, // 60: pantherclaw.v1.GatewayService.ReportCircuit:output_type -> pantherclaw.v1.ReportCircuitResponse
-	40, // 61: pantherclaw.v1.GatewayService.ReportDrift:output_type -> pantherclaw.v1.ReportDriftResponse
-	43, // 62: pantherclaw.v1.GatewayService.ClaimVerifications:output_type -> pantherclaw.v1.ClaimVerificationsResponse
-	46, // 63: pantherclaw.v1.GatewayService.ReportObservation:output_type -> pantherclaw.v1.ReportObservationResponse
-	52, // 64: pantherclaw.v1.GatewayService.ReportConnectorState:output_type -> pantherclaw.v1.ReportConnectorStateResponse
+	52, // 60: pantherclaw.v1.GatewayService.ReportConnectorState:output_type -> pantherclaw.v1.ReportConnectorStateResponse
+	38, // 61: pantherclaw.v1.GatewayService.ReportCircuit:output_type -> pantherclaw.v1.ReportCircuitResponse
+	40, // 62: pantherclaw.v1.GatewayService.ReportDrift:output_type -> pantherclaw.v1.ReportDriftResponse
+	43, // 63: pantherclaw.v1.GatewayService.ClaimVerifications:output_type -> pantherclaw.v1.ClaimVerificationsResponse
+	46, // 64: pantherclaw.v1.GatewayService.ReportObservation:output_type -> pantherclaw.v1.ReportObservationResponse
 	48, // [48:65] is the sub-list for method output_type
 	31, // [31:48] is the sub-list for method input_type
 	31, // [31:31] is the sub-list for extension type_name

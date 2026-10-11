@@ -83,6 +83,13 @@ service GatewayService {
   // dispatching.
   // permission: gateway.sync
   rpc WatchContainment(WatchContainmentRequest) returns (stream WatchContainmentResponse);
+  // ReportConnectorState reports a run of one of the calling gateway's
+  // connectors (G0 M9 track C): its spec revision, container, engine and
+  // state, which moves only forward. The org and gateway come from the
+  // certificate alone; only a connector connection that gateway serves is
+  // accepted.
+  // permission: gateway.observe
+  rpc ReportConnectorState(ReportConnectorStateRequest) returns (ReportConnectorStateResponse);
   // ReportCircuit reports that a connection's circuit breaker opened
   // (HR-078); the server quarantines the connection.
   // permission: gateway.observe
@@ -102,13 +109,6 @@ service GatewayService {
   // the verifier declares, and a digest of the answer (HR-190).
   // permission: gateway.verify
   rpc ReportObservation(ReportObservationRequest) returns (ReportObservationResponse);
-  // ReportConnectorState reports a run of one of the calling gateway's
-  // connectors (G0 M9 track C): its spec revision, container, engine and
-  // state, which moves only forward. The org and gateway come from the
-  // certificate alone; only a connector connection that gateway serves is
-  // accepted.
-  // permission: gateway.observe
-  rpc ReportConnectorState(ReportConnectorStateRequest) returns (ReportConnectorStateResponse);
 }
 
 // GatewayState is whether a gateway may act.
