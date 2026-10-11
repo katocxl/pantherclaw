@@ -7,6 +7,8 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"encoding/base64"
+	"encoding/hex"
 	"encoding/json/v2"
 	"io"
 	"net/http"
@@ -106,6 +108,12 @@ func TestHR201_TheSDKFaceMapsTheRawCallItself(t *testing.T) {
 		len(s.actions) != 1 || r.answer.ActionHash != s.actions[0].HashHex() ||
 		len(s.begins) != 1 || s.begins[0].GetOutboundMethod() != "" || s.outcome() != pb.Outcome_OUTCOME_DELEGATED || h.target.calls() != 0 {
 		t.Fatalf("allowed = %d %+v, begins %+v, outcome %s, target %d", r.code, r.answer, s.begins, s.outcome(), h.target.calls())
+	}
+	// The SDK can check the hash: action_ir is the exact canonical action
+	// the Authority received.
+	ir, err := base64.RawURLEncoding.DecodeString(r.answer.ActionIR)
+	if sum := sha256.Sum256(ir); err != nil || !bytes.Equal(ir, s.actions[0].Canonical) || hex.EncodeToString(sum[:]) != r.answer.ActionHash {
+		t.Fatalf("action_ir %q: %v", r.answer.ActionIR, err)
 	}
 	a := s.actions[0].Action
 	var p shellParams

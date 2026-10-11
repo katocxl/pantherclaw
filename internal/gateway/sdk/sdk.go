@@ -28,6 +28,7 @@
 package sdk
 
 import (
+	"encoding/base64"
 	"encoding/json/jsontext"
 	"encoding/json/v2"
 	"errors"
@@ -127,9 +128,12 @@ type Answer struct {
 	Reasons    []string `json:"reasons,omitzero"`
 	// ActionID is the action's id: send it again as PC-Action-Id to
 	// resubmit the same call. ActionHash is the hex SHA-256 of the action
-	// the gateway mapped, for the SDK to check.
+	// the gateway mapped, and ActionIR that action's canonical JSON
+	// (base64url, no padding), so the SDK can check the hash and show what
+	// was decided. Neither is ever read back from an SDK (HR-201).
 	ActionID      string `json:"action_id,omitzero"`
 	ActionHash    string `json:"action_hash,omitzero"`
+	ActionIR      string `json:"action_ir,omitzero"`
 	TransactionID string `json:"transaction_id,omitzero"`
 	Receipt       string `json:"receipt,omitzero"`
 	// Mode is "enforce", or "monitor" when the answer prevented nothing.
@@ -284,7 +288,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set(dispatch.HeaderNonce, res.Nonce)
 	}
 	a := decide(res)
-	a.ActionID, a.ActionHash = action, parsed.HashHex()
+	a.ActionID, a.ActionHash, a.ActionIR = action, parsed.HashHex(), base64.RawURLEncoding.EncodeToString(parsed.Canonical)
 	answer(w, http.StatusOK, a)
 }
 
