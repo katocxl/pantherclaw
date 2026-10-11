@@ -177,6 +177,8 @@ func (d *Definition) validateMapping(i int) error {
 				return invalid("%s: path variable %s appears twice", at, v)
 			}
 		}
+	case ChannelSDK:
+		return invalid("%s: the sdk channel maps through hook and mcp mappings and has none of its own", at)
 	default:
 		return invalid("%s: channel must be mcp, http or hook", at)
 	}
