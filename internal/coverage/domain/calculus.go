@@ -171,7 +171,7 @@ func Compute(e Evidence) Result {
 	if closure != nil {
 		stale = staleReasons(e, closure)
 		if len(stale) == 0 {
-			v = Evaluate(closure.Probes)
+			v = Evaluate(closure.Probes, nil)
 		}
 	}
 	var r Result
@@ -324,7 +324,7 @@ func channelStatus(e Evidence, ch Channel, v Verdict) RouteStatus {
 	switch {
 	case !enforced:
 		return StatusMonitored
-	case ch.Cooperative() && !v.TargetVerifiesTokens:
+	case ch.Cooperative():
 		return StatusCooperative
 	case e.Connection.Kind == "mcp" && !v.EgressMediated:
 		return StatusOpaque
@@ -347,8 +347,3 @@ func ReadAt(s State, expiresAt *time.Time, changesSince int, now time.Time) (Sta
 	}
 	return s, ""
 }
-
-// Invalidates reports whether a change of kind k drops ENFORCED at once
-// (HR-211). An exclusion or a lapsed expiry only asks for a reassessment:
-// neither raises a state, and neither makes closure evidence stale.
-func (k InvalidationKind) Invalidates() bool { return k != InvExclusion && k != InvEvidenceExpired }
