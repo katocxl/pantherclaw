@@ -47,14 +47,23 @@ type Check struct {
 // TestResult is one test of a connection.
 type TestResult struct {
 	ID, Connection ids.UUID
-	Result         string
-	Checks         []Check
-	TestedBy       string
-	TestedAt       time.Time
+	// Kind is credential, read or target_verifier; State PENDING, RUNNING,
+	// DONE or FAILED (could not run); Result PASSED or FAILED once DONE.
+	Kind, State, Result string
+	Checks              []Check
+	RequestedBy         string
+	CreatedAt           time.Time
+	FinishedAt          *time.Time
 }
 
 func testOf(r dbq.PcConnectionTest) (TestResult, error) {
-	out := TestResult{ID: r.ID, Connection: r.ConnectionID, Result: r.Result, TestedBy: r.TestedBy, TestedAt: r.TestedAt}
+	out := TestResult{
+		ID: r.ID, Connection: r.ConnectionID, Kind: r.Kind, State: r.State, RequestedBy: r.RequestedBy, CreatedAt: r.CreatedAt,
+		FinishedAt: r.FinishedAt,
+	}
+	if r.Result != nil {
+		out.Result = *r.Result
+	}
 	return out, json.Unmarshal(r.Checks, &out.Checks)
 }
 
@@ -91,8 +100,8 @@ func (s *Service) Test(ctx context.Context, id ids.UUID) (TestResult, error) {
 		if err != nil {
 			return err
 		}
-		row, err := q.InsertConnectionTest(ctx, dbq.InsertConnectionTestParams{
-			OrgID: c.Org, ID: ids.NewV7(), ConnectionID: id, Result: result, Checks: raw, TestedBy: c.By,
+		row, err := q.InsertCredentialTest(ctx, dbq.InsertCredentialTestParams{
+			OrgID: c.Org, ID: ids.NewV7(), ConnectionID: id, Result: &result, Checks: raw, RequestedBy: c.By,
 		})
 		if err != nil {
 			return err

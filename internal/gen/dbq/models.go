@@ -374,6 +374,21 @@ type PcConnection struct {
 	UpdatedAt        time.Time
 }
 
+type PcConnectionCapability struct {
+	OrgID              ids.OrgID
+	ID                 ids.UUID
+	ConnectionID       ids.UUID
+	ConnectionRevision int32
+	Declaration        []byte
+	DeclarationSha256  []byte
+	Approved           []byte
+	State              string
+	ProposedAt         time.Time
+	ApprovedBy         *string
+	ApprovedAt         *time.Time
+	SupersededAt       *time.Time
+}
+
 type PcConnectionRoute struct {
 	OrgID        ids.OrgID
 	ConnectionID ids.UUID
@@ -384,13 +399,19 @@ type PcConnectionRoute struct {
 }
 
 type PcConnectionTest struct {
-	OrgID        ids.OrgID
-	ID           ids.UUID
-	ConnectionID ids.UUID
-	Result       string
-	Checks       []byte
-	TestedBy     string
-	TestedAt     time.Time
+	OrgID          ids.OrgID
+	ID             ids.UUID
+	ConnectionID   ids.UUID
+	Kind           string
+	State          string
+	GatewayID      *ids.UUID
+	VerificationID *ids.UUID
+	Result         *string
+	Checks         []byte
+	DetailSha256   []byte
+	RequestedBy    string
+	CreatedAt      time.Time
+	FinishedAt     *time.Time
 }
 
 type PcConsequenceRule struct {
@@ -1303,6 +1324,18 @@ type PcTeam struct {
 	State          string
 	CreatedAt      time.Time
 	UpdatedAt      time.Time
+}
+
+type PcToolObservation struct {
+	OrgID        ids.OrgID
+	ID           ids.UUID
+	RunID        ids.UUID
+	InstanceID   ids.UUID
+	ConnectionID ids.UUID
+	Tool         string
+	InputSha256  []byte
+	Channel      string
+	ObservedAt   time.Time
 }
 
 type PcToolPackage struct {

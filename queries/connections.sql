@@ -107,17 +107,19 @@ FROM pc.connections c
 JOIN pc.gateways g ON g.org_id = c.org_id AND g.id = c.gateway_id
 WHERE c.org_id = sqlc.arg(org_id) AND c.id = sqlc.arg(id);
 
--- name: InsertConnectionTest :one
-INSERT INTO pc.connection_tests (org_id, id, connection_id, result, checks, tested_by)
-VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(connection_id), sqlc.arg(result), sqlc.arg(checks), sqlc.arg(tested_by))
+-- name: InsertCredentialTest :one
+-- A credential test, which runs at once without calling the target.
+INSERT INTO pc.connection_tests (org_id, id, connection_id, kind, state, result, checks, requested_by, finished_at)
+VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(connection_id), 'credential', 'DONE', sqlc.arg(result), sqlc.arg(checks),
+    sqlc.arg(requested_by), now())
 RETURNING *;
 
 -- name: LatestConnectionTest :one
--- A connection's latest test, or its latest passed one.
+-- A connection's latest finished test, or its latest passed one.
 SELECT * FROM pc.connection_tests
-WHERE org_id = sqlc.arg(org_id) AND connection_id = sqlc.arg(connection_id)
+WHERE org_id = sqlc.arg(org_id) AND connection_id = sqlc.arg(connection_id) AND state IN ('DONE', 'FAILED')
     AND (NOT sqlc.arg(passed_only)::boolean OR result = 'PASSED')
-ORDER BY tested_at DESC, id DESC
+ORDER BY finished_at DESC, id DESC
 LIMIT 1;
 
 -- name: ListConnectionCircuits :many
