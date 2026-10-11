@@ -6,9 +6,16 @@
 package migrations_test
 
 import (
+	"context"
+	"io/fs"
+	"maps"
+	"regexp"
+	"slices"
+	"strings"
 	"testing"
 
 	"github.com/katocxl/pantherclaw/internal/platform/db/dbtest"
+	"github.com/katocxl/pantherclaw/migrations"
 )
 
 // These tests check the schema's second line of defense for G0 M8 track C
@@ -84,4 +91,107 @@ func TestF353_OneCurrentCapabilityDeclarationPerConnection(t *testing.T) {
 	f.want(t, m5Denied, "DELETE connection_capabilities", "DELETE FROM pc.connection_capabilities")
 	f.want(t, m5Denied, "UPDATE tool_observations", "UPDATE pc.tool_observations SET tool = tool")
 	f.want(t, m5Denied, "DELETE tool_observations", "DELETE FROM pc.tool_observations")
+}
+
+// TestF354_ConnectionTestPurposeKeepsEveryEarlierOne (V1): 00084 adds
+// connection_test to the verification purposes, and to those that belong
+// to no transaction, under the checks' own names and keeping every purpose
+// they allowed before (00060's, and 00081's when it is there). Its Down
+// section, run as pc_migrator, restores the checks exactly and deletes
+// the connection test tasks; its Up section applies again.
+func TestF354_ConnectionTestPurposeKeepsEveryEarlierOne(t *testing.T) {
+	d := dbtest.New(t)
+	b, err := fs.ReadFile(migrations.FS, "00084_sdk_connections.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	up, down, ok := strings.Cut(string(b), "-- +goose Down")
+	if !ok {
+		t.Fatal("no Down section")
+	}
+	m := d.Pool(t, d.Migrator)
+	ctx := context.Background()
+	checks := func() map[string]string {
+		t.Helper()
+		rows, err := m.Pgx().Query(ctx, `SELECT conname, pg_get_constraintdef(oid) FROM pg_constraint
+			WHERE conrelid = 'pc.verifications'::regclass AND contype = 'c' AND pg_get_constraintdef(oid) LIKE '%purpose%'
+			  AND pg_get_constraintdef(oid) NOT LIKE '%window_start%'`)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer rows.Close()
+		out := map[string]string{}
+		for rows.Next() {
+			var name, def string
+			if err := rows.Scan(&name, &def); err != nil {
+				t.Fatal(err)
+			}
+			out[name] = def
+		}
+		if err := rows.Err(); err != nil || len(out) != 2 {
+			t.Fatalf("purpose checks %v: %v", out, err)
+		}
+		return out
+	}
+	quoted := regexp.MustCompile(`'([a-z_]+)'`)
+	purposes := func(def string) []string {
+		var out []string
+		for _, s := range quoted.FindAllStringSubmatch(def, -1) {
+			out = append(out, s[1])
+		}
+		return out
+	}
+	after := checks()
+	for name, def := range after {
+		got, want := purposes(def), []string{"target_log", "connection_test"}
+		if !strings.Contains(def, "transaction_id IS NULL") {
+			want = []string{"follow_up", "reconcile", "target_log", "connection_test"}
+		}
+		for _, p := range want {
+			if !slices.Contains(got, p) {
+				t.Errorf("%s does not allow %s: %s", name, p, def)
+			}
+		}
+		if got[len(got)-1] != "connection_test" {
+			t.Errorf("%s: connection_test is not added last: %s", name, def)
+		}
+	}
+	f := newM5Fixture(t, d.AppPool(t))
+	_, conn := m8cConnection(t, f)
+	f.mustExec(t, m7Verification, f.org, m5ID(), "connection_test", nil, conn, nil, nil)
+	exec := func(sql string) {
+		t.Helper()
+		if _, err := m.Pgx().Exec(ctx, sql); err != nil {
+			t.Fatal(err)
+		}
+	}
+	exec(down)
+	var forced int
+	if err := m.Pgx().QueryRow(ctx, `SELECT count(*) FROM pg_class WHERE oid IN ('pc.verifications'::regclass, 'pc.observations'::regclass)
+		AND relforcerowsecurity`).Scan(&forced); err != nil || forced != 2 {
+		t.Fatalf("after Down, RLS is forced on %d of 2 tables: %v", forced, err)
+	}
+	before := checks()
+	for name, def := range after {
+		earlier := slices.DeleteFunc(purposes(def), func(p string) bool { return p == "connection_test" })
+		list := "'" + strings.Join(earlier, "', '") + "'"
+		check := "CHECK (purpose IN (" + list + "))"
+		if strings.Contains(def, "transaction_id IS NULL") {
+			check = "CHECK ((purpose IN (" + list + ")) = (transaction_id IS NULL))"
+		}
+		exec("ALTER TABLE pc.verifications ADD CONSTRAINT m8c_expected " + check + " NOT VALID")
+		var want string
+		if err := m.Pgx().QueryRow(ctx, `SELECT pg_get_constraintdef(oid) FROM pg_constraint
+			WHERE conrelid = 'pc.verifications'::regclass AND conname = 'm8c_expected'`).Scan(&want); err != nil {
+			t.Fatal(err)
+		}
+		if got := strings.TrimSuffix(before[name], " NOT VALID"); got != strings.TrimSuffix(want, " NOT VALID") {
+			t.Errorf("after Down, %s is %s, want %s", name, before[name], want)
+		}
+		exec("ALTER TABLE pc.verifications DROP CONSTRAINT m8c_expected")
+	}
+	exec(up)
+	if again := checks(); !maps.Equal(again, after) {
+		t.Errorf("after Up again: %v, want %v", again, after)
+	}
 }

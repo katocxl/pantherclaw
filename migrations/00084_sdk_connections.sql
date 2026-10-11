@@ -18,11 +18,10 @@
 -- * tool_observations: the OBSERVE_ONLY records of tools an agent SDK ran
 --   without a mapping (HR-200), which M9's route inventory reads. The tool
 --   name is untrusted and only its input's digest is kept. Append-only.
--- * the verification task purpose connection_test. 00081 (track G) names
---   the two checks it changes (verifications_purpose and
---   verifications_transaction); this migration finds them by definition,
---   so it also applies on a schema without 00081, and its Down restores
---   00081's.
+-- * the verification task purpose connection_test, added to the purposes
+--   the checks already allow whatever migrations came before (00060, and
+--   00081 (track G) when it is there), under their own names; Down removes
+--   it the same way, after deleting connection test tasks.
 -- * an index on transactions by connection for connection health.
 
 -- +goose Up
@@ -119,28 +118,47 @@ GRANT UPDATE (state, gateway_id, result, checks, detail_sha256, finished_at) ON 
 GRANT SELECT ON pc.connection_capabilities, pc.connection_tests, pc.tool_observations TO pc_audit_ro;
 
 -- Connection tests reach the target as verification tasks of their own
--- purpose, which belong to no transaction.
+-- purpose, which belong to no transaction. The two checks that list the
+-- purposes are rebuilt under their own names from their own lists plus
+-- connection_test, so every purpose already allowed (00060's, and 00081's
+-- org_scan when it is there) stays allowed whatever the order the
+-- migrations came in; Down removes connection_test the same way. Any
+-- other shape of those checks fails the migration instead of being
+-- guessed at.
 -- +goose StatementBegin
 DO $$
 DECLARE
-    c record;
+    c        record;
+    purposes text;
+    n        integer := 0;
 BEGIN
-    FOR c IN SELECT conname FROM pg_constraint
+    FOR c IN SELECT conname, pg_get_constraintdef(oid) AS def FROM pg_constraint
              WHERE conrelid = 'pc.verifications'::regclass AND contype = 'c'
-               AND (pg_get_constraintdef(oid) LIKE '%follow_up%'
-                    OR (pg_get_constraintdef(oid) LIKE '%purpose%' AND pg_get_constraintdef(oid) LIKE '%transaction_id IS NULL%')) LOOP
-        EXECUTE format('ALTER TABLE pc.verifications DROP CONSTRAINT %I', c.conname);
+               AND pg_get_constraintdef(oid) LIKE '%purpose%' AND pg_get_constraintdef(oid) NOT LIKE '%window_start%' LOOP
+        SELECT string_agg(quote_literal(m.v[1]), ', ' ORDER BY m.i) INTO purposes
+          FROM regexp_matches(c.def, '''([a-z_]+)''', 'g') WITH ORDINALITY AS m (v, i);
+        IF purposes IS NULL OR purposes LIKE '%connection_test%' THEN
+            RAISE EXCEPTION '00084: unexpected check % on pc.verifications: %', c.conname, c.def;
+        END IF;
+        purposes := purposes || ', ''connection_test''';
+        IF c.def LIKE '%transaction_id IS NULL%' THEN
+            EXECUTE format('ALTER TABLE pc.verifications DROP CONSTRAINT %I, ADD CONSTRAINT %I CHECK ((purpose IN (%s)) = (transaction_id IS NULL)) NOT VALID',
+                           c.conname, c.conname, purposes);
+        ELSIF c.def LIKE '%follow_up%' THEN
+            EXECUTE format('ALTER TABLE pc.verifications DROP CONSTRAINT %I, ADD CONSTRAINT %I CHECK (purpose IN (%s)) NOT VALID',
+                           c.conname, c.conname, purposes);
+        ELSE
+            RAISE EXCEPTION '00084: unexpected check % on pc.verifications: %', c.conname, c.def;
+        END IF;
+        EXECUTE format('ALTER TABLE pc.verifications VALIDATE CONSTRAINT %I', c.conname);
+        n := n + 1;
     END LOOP;
+    IF n <> 2 THEN
+        RAISE EXCEPTION '00084: found % purpose checks on pc.verifications, not 2', n;
+    END IF;
 END
 $$;
 -- +goose StatementEnd
-ALTER TABLE pc.verifications
-    ADD CONSTRAINT verifications_purpose
-        CHECK (purpose IN ('follow_up', 'reconcile', 'target_log', 'org_scan', 'connection_test')) NOT VALID,
-    ADD CONSTRAINT verifications_transaction
-        CHECK ((purpose IN ('target_log', 'org_scan', 'connection_test')) = (transaction_id IS NULL)) NOT VALID;
-ALTER TABLE pc.verifications VALIDATE CONSTRAINT verifications_purpose;
-ALTER TABLE pc.verifications VALIDATE CONSTRAINT verifications_transaction;
 
 -- Connection health reads the recent transactions through a connection:
 -- delivery failures and the agents that depend on it.
@@ -149,10 +167,38 @@ CREATE INDEX transactions_connection ON pc.transactions (org_id, connection_id, 
 
 -- +goose Down
 DROP INDEX pc.transactions_connection;
-ALTER TABLE pc.verifications DROP CONSTRAINT verifications_purpose, DROP CONSTRAINT verifications_transaction;
-ALTER TABLE pc.verifications
-    ADD CONSTRAINT verifications_purpose CHECK (purpose IN ('follow_up', 'reconcile', 'target_log', 'org_scan')),
-    ADD CONSTRAINT verifications_transaction CHECK ((purpose IN ('target_log', 'org_scan')) = (transaction_id IS NULL));
 DROP TABLE pc.tool_observations;
 DROP TABLE pc.connection_tests;
 DROP TABLE pc.connection_capabilities;
+-- Connection test tasks go before their purpose does. RLS is forced even
+-- for the owner, so it is lifted for these two deletes only, inside this
+-- migration's transaction; no other session ever sees it lifted.
+ALTER TABLE pc.observations NO FORCE ROW LEVEL SECURITY;
+ALTER TABLE pc.verifications NO FORCE ROW LEVEL SECURITY;
+DELETE FROM pc.observations o USING pc.verifications v
+ WHERE o.org_id = v.org_id AND o.verification_id = v.id AND v.purpose = 'connection_test';
+DELETE FROM pc.verifications WHERE purpose = 'connection_test';
+ALTER TABLE pc.verifications FORCE ROW LEVEL SECURITY;
+ALTER TABLE pc.observations FORCE ROW LEVEL SECURITY;
+-- +goose StatementBegin
+DO $$
+DECLARE
+    c        record;
+    purposes text;
+BEGIN
+    FOR c IN SELECT conname, pg_get_constraintdef(oid) AS def FROM pg_constraint
+             WHERE conrelid = 'pc.verifications'::regclass AND contype = 'c' AND pg_get_constraintdef(oid) LIKE '%connection_test%' LOOP
+        SELECT string_agg(quote_literal(m.v[1]), ', ' ORDER BY m.i) INTO purposes
+          FROM regexp_matches(c.def, '''([a-z_]+)''', 'g') WITH ORDINALITY AS m (v, i)
+         WHERE m.v[1] <> 'connection_test';
+        IF c.def LIKE '%transaction_id IS NULL%' THEN
+            EXECUTE format('ALTER TABLE pc.verifications DROP CONSTRAINT %I, ADD CONSTRAINT %I CHECK ((purpose IN (%s)) = (transaction_id IS NULL))',
+                           c.conname, c.conname, purposes);
+        ELSE
+            EXECUTE format('ALTER TABLE pc.verifications DROP CONSTRAINT %I, ADD CONSTRAINT %I CHECK (purpose IN (%s))',
+                           c.conname, c.conname, purposes);
+        END IF;
+    END LOOP;
+END
+$$;
+-- +goose StatementEnd
