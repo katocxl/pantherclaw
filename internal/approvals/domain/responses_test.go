@@ -113,10 +113,16 @@ func TestHR172_RespondingLeavesThePersonAsItWas(t *testing.T) {
 		binding domain.RoleBinding
 		want    string
 	}{
-		{"a role self-granted a minute ago", approver(1, false),
-			domain.RoleBinding{Role: "approver", CreatedAt: now.Add(-time.Minute), SelfGranted: true}, domain.IneligibleSelfGrant},
-		{"a role granted an hour ago, two approvers", approver(2, false),
-			domain.RoleBinding{Role: "approver", CreatedAt: now.Add(-time.Hour)}, domain.IneligibleRoleCooldown},
+		{
+			"a role self-granted a minute ago", approver(1, false),
+			domain.RoleBinding{Role: "approver", CreatedAt: now.Add(-time.Minute), SelfGranted: true},
+			domain.IneligibleSelfGrant,
+		},
+		{
+			"a role granted an hour ago, two approvers", approver(2, false),
+			domain.RoleBinding{Role: "approver", CreatedAt: now.Add(-time.Hour)},
+			domain.IneligibleRoleCooldown,
+		},
 	} {
 		p := veteran()
 		p.Bindings = []domain.RoleBinding{tc.binding}

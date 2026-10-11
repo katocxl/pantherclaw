@@ -131,8 +131,10 @@ func TestHR157_AWebhookIsRefusedInEverySpellingOfADeniedHost(t *testing.T) {
 		}
 	}
 	operator := func(h string) bool {
-		return httpx.DeniedHost(h, []netip.Prefix{netip.MustParsePrefix("10.0.0.0/8"), netip.MustParsePrefix("169.254.0.0/16"),
-			netip.MustParsePrefix("100.64.0.0/10"), netip.MustParsePrefix("fc00::/7"), netip.MustParsePrefix("fe80::/10")})
+		return httpx.DeniedHost(h, []netip.Prefix{
+			netip.MustParsePrefix("10.0.0.0/8"), netip.MustParsePrefix("169.254.0.0/16"),
+			netip.MustParsePrefix("100.64.0.0/10"), netip.MustParsePrefix("fc00::/7"), netip.MustParsePrefix("fe80::/10"),
+		})
 	}
 	for _, u := range metadata {
 		if err := domain.CheckWebhookURL(u, "pc.example.test", operator); !errors.Is(err, domain.ErrPrivateURL) {
@@ -146,8 +148,10 @@ func TestHR157_AWebhookIsRefusedInEverySpellingOfADeniedHost(t *testing.T) {
 	}
 	// Public addresses in other spellings, and names that only look like
 	// metadata or numbers, are still accepted.
-	for _, u := range []string{"https://134744072/hook", "https://[::ffff:8.8.8.8]/hook", "https://metadata.example.com/",
-		"https://1password.example/hook", "https://metadata.google.internal.example/"} {
+	for _, u := range []string{
+		"https://134744072/hook", "https://[::ffff:8.8.8.8]/hook", "https://metadata.example.com/",
+		"https://1password.example/hook", "https://metadata.google.internal.example/",
+	} {
 		if err := domain.CheckWebhookURL(u, "pc.example.test", denied); err != nil {
 			t.Errorf("%s: %v", u, err)
 		}
