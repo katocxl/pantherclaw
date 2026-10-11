@@ -19,6 +19,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
+	tenancy "github.com/katocxl/pantherclaw/internal/tenancy/app"
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
 )
 
@@ -112,7 +113,8 @@ func TestHR211_ReassessmentRecordsChangesAndKeepsTheLastValidRecord(t *testing.T
 }
 
 // TestIntReassessNeedsCoverageReassess: a viewer or a developer cannot
-// reassess; an agent owner can, for an agent or the whole connection.
+// reassess; an agent owner can, for an agent or the whole connection. An
+// agent owner elsewhere is not told that the agent exists.
 func TestIntReassessNeedsCoverageReassess(t *testing.T) {
 	f := newFixture(t)
 	for _, r := range []td.RoleName{td.RoleViewer, td.RoleDeveloper} {
@@ -122,6 +124,16 @@ func TestIntReassessNeedsCoverageReassess(t *testing.T) {
 	}
 	if _, err := f.svc.Reassess(f.as(td.RoleAgentOwner), f.conn, &f.agent); err != nil {
 		t.Fatalf("an agent owner: %v", err)
+	}
+	elsewhere := tenancy.WithCaller(context.Background(), tenancy.Caller{
+		Subject: td.Subject{
+			Org: f.org, Principal: td.PrincipalRef{Kind: td.KindUser, ID: f.user},
+			Bindings: []td.Binding{{Role: td.RoleAgentOwner, Scope: td.Scope{Type: td.ScopeTeam, ID: ids.NewV7()}}},
+		},
+		Credential: tenancy.CredAccessToken,
+	})
+	if _, err := f.svc.Reassess(elsewhere, f.conn, &f.agent); !errors.Is(err, app.ErrNotFound) {
+		t.Fatalf("an agent owner of another team: %v", err)
 	}
 	if _, err := f.svc.Reassess(f.as(td.RoleSecurityAdmin), ids.NewV7(), nil); !errors.Is(err, app.ErrNotFound) {
 		t.Fatalf("an unknown connection: %v", err)

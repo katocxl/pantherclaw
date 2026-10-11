@@ -11,6 +11,8 @@ import (
 	"io"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"google.golang.org/protobuf/proto"
 
@@ -203,20 +205,22 @@ var reasonText = map[string]string{
 	"no_known_routes":          "no route of this scope is known yet; a connection setting alone proves nothing (F460)",
 	"no_gateway_channel":       "no route goes through a PantherClaw gateway channel",
 	"monitor_mode":             "a route is in monitor mode: actions are observed, not prevented",
-	"cooperative_channel":      "a cooperative channel (SDK or hook) the agent could skip; capped at PARTIAL unless the target verifies action tokens (HR-024)",
+	"cooperative_channel":      "a cooperative channel (SDK or hook) the agent could skip; capped at PARTIAL unless the target verifies action tokens for this read (HR-024)",
 	"opaque_mcp_server":        "an MCP server whose own egress is not mediated; capped at PARTIAL (HR-086)",
 	"connection_not_active":    "the connection is quarantined or retired",
 	"agent_held_access":        "the agent holds its own access to the target and can use it directly",
-	"target_not_verified":      "the target is meant to verify action tokens, but no current target-verifier test shows it does (HR-210)",
+	"target_not_verified":      "the target is meant to verify action tokens, but no current target-verifier test of this operation shows it does (HR-210)",
+	"write_not_liftable_m9":    "a target-verifier test passed, but in M9 it lifts only the read it tested; write operations stay PARTIAL",
 	"instance_outside_sandbox": "an instance of the agent runs outside the sandbox the closure covers",
 	"no_closure_evidence":      "no sandbox closure evidence: equivalent routes are not proven closed",
 	"closure_failed":           "the newest sandbox closure failed",
 	"closure_expired":          "the closure evidence expired",
 	"closure_binding_changed":  "the connection's revision, gateway, package or credential changed since the closure",
-	"excluded":                 "a person excluded part of this scope from the claim; see the exclusions below",
+	"excluded":                 "a person excluded part of this scope; an exclusion never raises the state, see the exclusions below",
 }
 
 func explainReason(r string) string {
+	r = safe(r)
 	if t, ok := reasonText[r]; ok {
 		return t
 	}
@@ -232,18 +236,36 @@ func explainReason(r string) string {
 	return r
 }
 
+// safe makes server-supplied text safe to print on a terminal: control,
+// format and bidi characters are dropped and line breaks become spaces, so
+// a locator, a reason or a name can neither forge lines nor reorder what
+// is shown (HR-034).
+func safe(s string) string {
+	return strings.Map(func(r rune) rune {
+		switch {
+		case r == '\n' || r == '\r' || r == '\t':
+			return ' '
+		case r == utf8.RuneError || unicode.IsControl(r) || unicode.Is(unicode.Cf, r) || unicode.Is(unicode.Bidi_Control, r) ||
+			r == 0x2028 || r == 0x2029:
+			return -1
+		}
+		return r
+	}, s)
+}
+
 func short(s string) string { return strings.ToLower(strings.TrimPrefix(s, "COVERAGE_")) }
 
 func (e *explained) write(w io.Writer) error {
 	r := e.GetRecord()
 	var b strings.Builder
 	state := strings.TrimPrefix(r.GetState().String(), "COVERAGE_STATE_")
-	fmt.Fprintf(&b, "%s  %s / %s / %s\n", state, r.GetScope().GetAgentId(), r.GetScope().GetConnectionId(), r.GetScope().GetOperation())
+	fmt.Fprintf(&b, "%s  %s / %s / %s\n", state, safe(r.GetScope().GetAgentId()), safe(r.GetScope().GetConnectionId()),
+		safe(r.GetScope().GetOperation()))
 	if r.GetComputedState() != r.GetState() {
 		fmt.Fprintf(&b, "  computed %s; reads %s now\n", strings.TrimPrefix(r.GetComputedState().String(), "COVERAGE_STATE_"), state)
 	}
 	if t := r.GetExpireTime(); t != nil && r.GetState() == pantherclawv1.CoverageState_COVERAGE_STATE_ENFORCED {
-		fmt.Fprintf(&b, "  enforced until %s (closure %s)\n", t.AsTime().UTC().Format(time.RFC3339), r.GetClosureId())
+		fmt.Fprintf(&b, "  enforced until %s (closure %s)\n", t.AsTime().UTC().Format(time.RFC3339), safe(r.GetClosureId()))
 	}
 	if len(r.GetReasons()) > 0 {
 		b.WriteString("Why:\n")
@@ -256,23 +278,24 @@ func (e *explained) write(w io.Writer) error {
 		for _, rt := range r.GetRoutes() {
 			name := strings.TrimPrefix(rt.GetKind().String(), "COVERAGE_ROUTE_KIND_")
 			if rt.GetChannel() != "" {
-				name += " " + rt.GetChannel()
+				name += " " + safe(rt.GetChannel())
 			}
 			if rt.GetLocator() != "" {
-				name += " " + rt.GetLocator()
+				name += " " + safe(rt.GetLocator())
 			}
 			fmt.Fprintf(&b, "  %-40s %s\n", strings.ToLower(name), short(strings.TrimPrefix(rt.GetStatus().String(), "COVERAGE_ROUTE_STATUS_")))
 		}
 	}
 	if lv := r.GetLastValid(); lv != nil {
-		fmt.Fprintf(&b, "Last valid record: snapshot %s (%s)\n", lv.GetSnapshotId(), explainReason(lv.GetLapseReason()))
+		fmt.Fprintf(&b, "Last valid record: snapshot %s (%s)\n", safe(lv.GetSnapshotId()), explainReason(lv.GetLapseReason()))
 	}
 	for _, x := range r.GetExclusions() {
-		fmt.Fprintf(&b, "Excluded by %s until %s: %s\n", x.GetCreatedBy(), x.GetExpireTime().AsTime().UTC().Format(time.RFC3339), x.GetReason())
+		fmt.Fprintf(&b, "Excluded by %s until %s: %s\n", safe(x.GetCreatedBy()), x.GetExpireTime().AsTime().UTC().Format(time.RFC3339),
+			safe(x.GetReason()))
 	}
 	if f := e.freshness; f != nil {
 		fmt.Fprintf(&b, "Freshness: ENFORCED holds for %s from its evidence; any of %s drops it to %s at once.\n",
-			f.GetEnforcedTtl().AsDuration(), strings.Join(f.GetInvalidationKinds(), ", "),
+			f.GetEnforcedTtl().AsDuration(), safe(strings.Join(f.GetInvalidationKinds(), ", ")),
 			strings.TrimPrefix(f.GetStaleState().String(), "COVERAGE_STATE_"))
 	}
 	_, err := io.WriteString(w, b.String())

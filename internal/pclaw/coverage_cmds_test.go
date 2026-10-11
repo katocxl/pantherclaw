@@ -14,9 +14,17 @@ import (
 	"connectrpc.com/connect/v2"
 	"connectrpc.com/connect/v2/connecthttp"
 	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	pantherclawv1 "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
 	"github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1/pantherclawv1connect"
+)
+
+// Untrusted text with a bidi override, an escape sequence and a line break,
+// which explain must not print.
+var (
+	rlo, esc, nl = string(rune(0x202e)), string(rune(0x1b)), string(rune(0x0a))
+	forged       = "ok" + nl + "ENFORCED  forged" + esc + "[2J"
 )
 
 type recordCoverage struct {
@@ -44,8 +52,13 @@ func (r *recordCoverage) GetCoverage(_ context.Context, req *pantherclawv1.GetCo
 		Routes: []*pantherclawv1.CoverageRoute{
 			{Kind: pantherclawv1.CoverageRouteKind_COVERAGE_ROUTE_KIND_CHANNEL, Channel: "http", Status: pantherclawv1.CoverageRouteStatus_COVERAGE_ROUTE_STATUS_MEDIATED},
 			{Kind: pantherclawv1.CoverageRouteKind_COVERAGE_ROUTE_KIND_GIT_SSH, Status: pantherclawv1.CoverageRouteStatus_COVERAGE_ROUTE_STATUS_NOT_OBSERVED},
+			{
+				Kind: pantherclawv1.CoverageRouteKind_COVERAGE_ROUTE_KIND_DIRECT_API, Locator: "https://evil.example" + rlo + "moc.buhtig",
+				Status: pantherclawv1.CoverageRouteStatus_COVERAGE_ROUTE_STATUS_POSSIBLE,
+			},
 		},
-		LastValid: &pantherclawv1.CoverageLastValid{SnapshotId: "s1", LapseReason: "invalidated:credential"},
+		LastValid:  &pantherclawv1.CoverageLastValid{SnapshotId: "s1", LapseReason: "invalidated:credential"},
+		Exclusions: []*pantherclawv1.CoverageExclusion{{CreatedBy: "alice" + esc + "[31m", Reason: forged, ExpireTime: timestamppb.Now()}},
 	}}, nil
 }
 
