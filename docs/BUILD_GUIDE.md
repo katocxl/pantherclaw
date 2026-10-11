@@ -222,7 +222,16 @@ Since M6 the gateway serves the routes of its connections at `/{connection}/…`
 
   With the plugin loaded and the stack down, every Bash and PowerShell command is blocked, by design ([integrations/claude-code](../integrations/claude-code/README.md)).
 
-**The SDK face (M8):** agent SDKs ask `POST /sdk/{connection}` on a `kind: local` connection before they run a tool themselves (HR-201). The body is the raw call: `{"tool", "input", "tool_use_id"}`, plus `"cwd"` for Bash and PowerShell or `"server"` for an `mcp__{server}__{tool}` tool. The gateway maps it through the connection's package (pc.shell's `shell` mapping, or the package's MCP mapping of the tool) into an `sdk` action and answers `allow` (recorded delegated), `hold` (with a wait handle: long-poll `WorkloadService.Wait`, then resend the same call with the same `PC-Action-Id`) or `deny`, labelled `PARTIAL`. A local connection serves its package's hook and MCP routes. Other built-in tools are answered `allow`, labelled `OBSERVE_ONLY` (G0 M8 decision 2).
+**The SDK face (M8):** agent SDKs ask `POST /sdk/{connection}` before they call a tool themselves (HR-201). The connection is an `http` or `mcp` one whose access mode is `agent_held` or `target_enforced`.
+- On a `pantherclaw_held` connection the answer is `use_gateway_face`: the agent goes through the gateway's MCP or HTTP face instead.
+- Shell commands go to `/hook` (HR-200).
+
+The body is the raw call: `{"tool": "mcp__{server}__{name}", "server", "input", "tool_use_id"}`, at most 64 KiB. The gateway maps it through the package's MCP mapping into an `sdk` action and answers:
+- `allow`, recorded delegated;
+- `hold`, with a wait handle: long-poll `WorkloadService.Wait`, then resend the same call with the same `PC-Action-Id`;
+- `deny`.
+
+Every answer is labelled `PARTIAL` and carries the action's id, hash and canonical form (`action_ir`). On a `target_enforced` connection, an allowed call also carries `dispatch`: the request the gateway re-serialized, with the action token that binds its body. The SDK sends it unchanged. A tool the agent SDK has built in is answered `allow`, labelled `OBSERVE_ONLY` (G0 M8 decision 2).
 
 Operator procedures are in the runbooks: [gateways](runbooks/gateway.md), [the kill switch](runbooks/kill-switch.md) and [broker keys and credentials](runbooks/key-rotation.md).
 
