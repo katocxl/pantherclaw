@@ -78,6 +78,12 @@ type Definition struct {
 	Mappings      []Mapping            `json:"mappings"`
 	// Dispatch is the outbound request template (G0 M6, HR-075).
 	Dispatch *Dispatch `json:"dispatch,omitzero"`
+	// CredentialScopes are the least privileges of the connection's
+	// credential the operation needs, in the target's terms, as
+	// name:level (G0 M8; for GitHub an App permission such as
+	// contents:write). A broker that mints a credential per action asks
+	// for exactly these (HR-203); a static credential ignores them.
+	CredentialScopes []string `json:"credential_scopes,omitzero"`
 
 	// Digest is "sha256:<hex>" of the canonical JSON of this definition,
 	// mappings included. It is what ActionIR pins (definition.digest) and
@@ -195,6 +201,10 @@ var (
 	kindRe   = regexp.MustCompile(`^[a-z][a-z0-9_]*(\.[a-z0-9_]+){0,7}$`)
 	reviewRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9 ._@-]{0,127}$`)
 	holderRe = regexp.MustCompile(`\{([^{}]*)\}`)
+	// partRe is a named group of a target id pattern, which a template
+	// references as target.id.<name>.
+	partRe  = regexp.MustCompile(`^[a-z][a-z0-9_]{0,31}$`)
+	scopeRe = regexp.MustCompile(`^([a-z][a-z0-9_]{0,63}):([a-z]{1,16})$`)
 )
 
 const (
@@ -286,7 +296,39 @@ func (d *Definition) Validate() error {
 			return err
 		}
 	}
+	if err := d.validateScopes(); err != nil {
+		return err
+	}
 	return d.validateDispatch()
+}
+
+// validateScopes checks the credential scopes: at most 16, each name:level
+// and each name once, so that no operation asks for two levels of one
+// privilege.
+func (d *Definition) validateScopes() error {
+	if len(d.CredentialScopes) > 16 {
+		return invalid("%s: at most 16 credential_scopes", d.Operation)
+	}
+	seen := map[string]bool{}
+	for _, s := range d.CredentialScopes {
+		m := scopeRe.FindStringSubmatch(s)
+		if m == nil || seen[m[1]] {
+			return invalid("%s: credential scope %q must be name:level, each name once", d.Operation, s)
+		}
+		seen[m[1]] = true
+	}
+	return nil
+}
+
+// Scopes returns the credential scopes as name to level.
+func (d *Definition) Scopes() map[string]string {
+	out := make(map[string]string, len(d.CredentialScopes))
+	for _, s := range d.CredentialScopes {
+		if name, level, ok := strings.Cut(s, ":"); ok {
+			out[name] = level
+		}
+	}
+	return out
 }
 
 func (t TargetSpec) validate(op string) error {
@@ -295,6 +337,12 @@ func (t TargetSpec) validate(op string) error {
 	}
 	if err := anchored(op+": target.id_pattern", t.IDPattern); err != nil {
 		return err
+	}
+	groups := regexp.MustCompile(t.IDPattern).SubexpNames()
+	for i, g := range groups {
+		if g != "" && (!partRe.MatchString(g) || slices.Contains(groups[:i], g)) {
+			return invalid("%s: target.id_pattern group %q must be a distinct lowercase name", op, g)
+		}
 	}
 	switch t.Account {
 	case PresenceRequired, PresenceOptional:

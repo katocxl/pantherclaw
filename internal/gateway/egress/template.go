@@ -216,6 +216,13 @@ func (r refs) value(ref string) (any, error) {
 		}
 		return r.a.Target.Account, nil
 	}
+	if group, ok := strings.CutPrefix(ref, "target.id."); ok {
+		part, ok := r.d.Target.Part(r.a.Target.ID, group)
+		if !ok {
+			return nil, fmt.Errorf("%w: the target id has no %s", ErrBuild, group)
+		}
+		return part, nil
+	}
 	rest, ok := strings.CutPrefix(ref, "params.")
 	if !ok {
 		return nil, fmt.Errorf("%w: reference %q", ErrBuild, ref)
@@ -245,7 +252,7 @@ func (r refs) value(ref string) (any, error) {
 		return v.Bool, nil
 	case defs.TypeIdentifierList:
 		return v.List, nil
-	case defs.TypeEnum, defs.TypeIdentifier, defs.TypeCommand, defs.TypePath:
+	case defs.TypeEnum, defs.TypeIdentifier, defs.TypeCommand, defs.TypeContent, defs.TypePath:
 		return v.Str, nil
 	case defs.TypeText:
 	}

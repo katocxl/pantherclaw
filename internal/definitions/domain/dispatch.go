@@ -73,8 +73,10 @@ const (
 // bodiless methods send no body.
 var bodiless = []string{"GET", "DELETE"}
 
-// reference checks one template reference against the definition. A path
-// segment takes only an identifier, an enum or an integer.
+// reference checks one template reference against the definition: the
+// target id, a named group of its pattern (target.id.<group>), the account
+// or a param. A path segment takes only an identifier, an enum or an
+// integer.
 func (d *Definition) reference(at, ref string, inPath bool) error {
 	switch ref {
 	case "target.id":
@@ -85,9 +87,15 @@ func (d *Definition) reference(at, ref string, inPath bool) error {
 		}
 		return nil
 	}
+	if group, ok := strings.CutPrefix(ref, "target.id."); ok {
+		if !d.Target.hasPart(group) {
+			return invalid("%s: %s names no group of target.id_pattern", at, ref)
+		}
+		return nil
+	}
 	rest, ok := strings.CutPrefix(ref, "params.")
 	if !ok {
-		return invalid("%s: reference %q must be target.id, target.account or params.<name>", at, ref)
+		return invalid("%s: reference %q must be target.id, target.id.<group>, target.account or params.<name>", at, ref)
 	}
 	name, part, _ := strings.Cut(rest, ".")
 	p, ok := d.Params[name]

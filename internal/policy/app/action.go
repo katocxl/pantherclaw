@@ -35,7 +35,7 @@ func celType(t defs.ParamType) *types.Type {
 		return cel.BoolType
 	case defs.TypeIdentifierList:
 		return cel.ListType(cel.StringType)
-	case defs.TypeEnum, defs.TypeIdentifier, defs.TypeCommand, defs.TypePath:
+	case defs.TypeEnum, defs.TypeIdentifier, defs.TypeCommand, defs.TypeContent, defs.TypePath:
 		return cel.StringType
 	case defs.TypeText:
 	}
@@ -123,7 +123,7 @@ func value(v defs.Value) ref.Val {
 		return types.Bool(v.Bool)
 	case defs.TypeIdentifierList:
 		return types.NewStringList(types.DefaultTypeAdapter, v.List)
-	case defs.TypeEnum, defs.TypeIdentifier, defs.TypeCommand, defs.TypePath:
+	case defs.TypeEnum, defs.TypeIdentifier, defs.TypeCommand, defs.TypeContent, defs.TypePath:
 		return types.String(v.Str)
 	case defs.TypeText:
 	}

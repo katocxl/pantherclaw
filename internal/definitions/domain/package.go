@@ -92,25 +92,54 @@ var (
 	patterns  = map[string]*regexp.Regexp{}
 )
 
-// matches reports whether s matches a validated anchored pattern. Compiled
-// patterns are cached; they come only from validated packages.
-func matches(pattern, s string) bool {
+// compiled returns a validated pattern, compiled once; patterns come only
+// from validated packages. It is nil for a pattern that does not compile.
+func compiled(pattern string) *regexp.Regexp {
 	patternMu.Lock()
+	defer patternMu.Unlock()
 	re, ok := patterns[pattern]
 	if !ok {
 		var err error
 		if re, err = regexp.Compile(pattern); err != nil {
-			patternMu.Unlock()
-			return false
+			return nil
 		}
 		patterns[pattern] = re
 	}
-	patternMu.Unlock()
-	return re.MatchString(s)
+	return re
+}
+
+// matches reports whether s matches a validated anchored pattern.
+func matches(pattern, s string) bool {
+	re := compiled(pattern)
+	return re != nil && re.MatchString(s)
 }
 
 // MatchID reports whether id is a valid target id for this definition.
 func (t TargetSpec) MatchID(id string) bool { return matches(t.IDPattern, id) }
+
+// Part returns the text a named group of the id pattern matched in id: a
+// template reference target.id.<group> (G0 M8), so that a target whose
+// stable identity has several parts, such as the GitHub pull request
+// acme/payments#7, is sent as its owner, repository and number. It returns
+// false when id does not match or the group matched nothing.
+func (t TargetSpec) Part(id, group string) (string, bool) {
+	re := compiled(t.IDPattern)
+	if re == nil {
+		return "", false
+	}
+	i := re.SubexpIndex(group)
+	m := re.FindStringSubmatch(id)
+	if i < 0 || m == nil || m[i] == "" {
+		return "", false
+	}
+	return m[i], true
+}
+
+// hasPart reports whether the id pattern has a group of that name.
+func (t TargetSpec) hasPart(group string) bool {
+	re := compiled(t.IDPattern)
+	return re != nil && re.SubexpIndex(group) >= 0
+}
 
 // MatchAccount reports whether account is valid: present exactly when the
 // spec requires or allows it, and matching its pattern.
