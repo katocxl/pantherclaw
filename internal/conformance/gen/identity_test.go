@@ -220,7 +220,8 @@ func buildWorkloadTokens(t *testing.T) any {
 		}
 		f.Cases = append(f.Cases, TokenCase{Name: c.name, Token: tok, Reject: c.name})
 	}
-	f.Cases = append(f.Cases, TokenCase{Name: "not a compact JWS", Token: "eyJhbGciOiJFZERTQSJ9.e30", Reject: "not a compact JWS"})
+	twoParts := b64([]byte(`{"alg":"EdDSA"}`)) + "." + b64([]byte(`{}`))
+	f.Cases = append(f.Cases, TokenCase{Name: "not a compact JWS", Token: twoParts, Reject: "not a compact JWS"})
 	return f
 }
 
