@@ -552,9 +552,10 @@ func dispatching(ctx context.Context, q *dbq.Queries, org ids.OrgID, permit ids.
 }
 
 // RecordExecution implements finalize.Store: the attempt, the execution
-// receipt and its ledger entry, then the settlement, in one transaction.
+// receipt and its ledger entry, the UNVERIFIABLE effect receipt of an
+// effect nothing can verify, then the settlement, in one transaction.
 func (s *Store) RecordExecution(ctx context.Context, org ids.OrgID, gatewayID string, e finalize.Execution,
-	sign func(x finalize.Executed, now time.Time) (finalize.Receipt, error),
+	sign finalize.Signing,
 ) (string, error) {
 	var receipt string
 	err := s.Pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
@@ -580,14 +581,15 @@ func (s *Store) RecordExecution(ctx context.Context, org ids.OrgID, gatewayID st
 		txn, err := q.FinishPermitForTransaction(ctx, dbq.FinishPermitForTransactionParams{ToState: to, OrgID: org, ID: permit, GatewayID: gatewayID})
 		if db.IsNoRows(err) {
 			// Too late: the sweeper may have marked it UNKNOWN (G0 M7).
-			receipt, err = lateReport(ctx, tx, q, org, gatewayID, e, pc)
+			receipt, err = lateReport(ctx, tx, q, org, gatewayID, e, sign, pc)
 			return err
 		}
 		if err != nil {
 			return err
 		}
 		x.Transaction = txn
-		if x.TargetRef, err = scheduleVerification(ctx, q, org, pc, o, e.TargetRef); err != nil {
+		var unv *unverified
+		if x.TargetRef, unv, err = scheduleVerification(ctx, q, org, pc, o, e.TargetRef); err != nil {
 			return err
 		}
 		attempt := dbq.InsertExecutionAttemptParams{
@@ -613,11 +615,14 @@ func (s *Store) RecordExecution(ctx context.Context, org ids.OrgID, gatewayID st
 		if err != nil {
 			return err
 		}
-		r, err := sign(x, now)
+		r, err := sign.Execution(x, now)
 		if err != nil {
 			return err
 		}
 		if err := keepReceipt(ctx, tx, q, org, attempt.ID, txn, permit, evdomain.Actor{Type: "gateway", ID: gatewayID}, r); err != nil {
+			return err
+		}
+		if err := unverifiable(ctx, tx, q, org, gatewayID, txn, unv, sign); err != nil {
 			return err
 		}
 		receipt = r.JWS

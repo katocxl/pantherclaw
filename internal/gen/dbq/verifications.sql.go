@@ -566,6 +566,20 @@ func (q *Queries) TargetLogConnections(ctx context.Context, orgID ids.OrgID) ([]
 	return items, nil
 }
 
+const transactionChannel = `-- name: TransactionChannel :one
+SELECT channel FROM pc.transactions WHERE org_id = $1 AND id = $2
+`
+
+// TransactionChannel is the channel a transaction came through: the
+// effect receipts of a cooperative one (hook, sdk) are labelled PARTIAL
+// coverage (HR-024, HR-186, G0 M7 design decision 2).
+func (q *Queries) TransactionChannel(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (*string, error) {
+	row := q.db.QueryRow(ctx, transactionChannel, orgID, iD)
+	var channel *string
+	err := row.Scan(&channel)
+	return channel, err
+}
+
 const transactionEffect = `-- name: TransactionEffect :one
 SELECT t.effect_state, t.effect_level_required, t.effect_level_achieved, p.definition_digest
 FROM pc.transactions t

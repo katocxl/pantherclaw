@@ -277,3 +277,35 @@ func TestHR193_LinksFollowTheOriginalAndCompensateOnlyConfirmedEffects(t *testin
 		}
 	}
 }
+
+// TestHR191_AWriteWithoutAVerifierIsUnverifiable: an accepted or delegated
+// write that no verifier reads is UNVERIFIABLE with the reason; a verifier
+// without the M7 fields cannot run; a read has no effect to verify; and a
+// write whose read was scheduled is not UNVERIFIABLE (G0 M7 design
+// decision 2, F485).
+func TestHR191_AWriteWithoutAVerifierIsUnverifiable(t *testing.T) {
+	write := func(v *defs.VerifierSpec) *defs.Definition {
+		return &defs.Definition{Access: defs.AccessWrite, Verifier: v}
+	}
+	legacy := &defs.VerifierSpec{Operation: "payments.refund.get", Establishes: "refund.exists", WithinSeconds: 600}
+	for name, c := range map[string]struct {
+		d         *defs.Definition
+		scheduled bool
+		want      string
+	}{
+		"no verifier":                     {write(nil), false, domain.ReasonNoVerifier},
+		"a verifier without M7 fields":    {write(legacy), false, domain.ReasonNoVerifier},
+		"a verifier with no read to make": {write(refundVerifier()), false, domain.ReasonVerifierCannotRead},
+		"a scheduled read":                {write(refundVerifier()), true, ""},
+		"a read":                          {&defs.Definition{Access: defs.AccessRead}, false, ""},
+	} {
+		if got := domain.UnverifiableReason(c.d, c.scheduled); got != c.want {
+			t.Errorf("%s: %q, want %q", name, got, c.want)
+		}
+	}
+	for ch, want := range map[string]bool{"hook": true, "sdk": true, "mcp": false, "http": false, "": false} {
+		if domain.Cooperative(ch) != want {
+			t.Errorf("channel %q cooperative %v", ch, !want)
+		}
+	}
+}

@@ -293,14 +293,30 @@ func deadline(ctx context.Context, tx db.TenantTx, q *dbq.Queries, org ids.OrgID
 	return appendEffect(ctx, tx, q, e, evdomain.Actor{Type: "system", ID: "verifier"}, sign)
 }
 
+// AppendEffect signs and appends one effect receipt, in the caller's
+// transaction, and makes its state the transaction's (HR-191): the
+// Authority's store uses it for an outcome whose effect cannot be verified.
+func AppendEffect(ctx context.Context, tx db.TenantTx, q *dbq.Queries, e app.Effect, actor evdomain.Actor, sign app.Sign) error {
+	return appendEffect(ctx, tx, q, e, actor, sign)
+}
+
 // appendEffect signs and appends one effect receipt and makes its state
-// the transaction's (HR-191: appended, never rewritten).
+// the transaction's (HR-191: appended, never rewritten). A cooperative
+// channel's receipts are labelled PARTIAL coverage, whatever their state
+// (G0 M7 design decision 2).
 func appendEffect(ctx context.Context, tx db.TenantTx, q *dbq.Queries, e app.Effect, actor evdomain.Actor, sign app.Sign) error {
 	seq, err := q.NextEffectSeq(ctx, e.Org, e.Transaction)
 	if err != nil {
 		return err
 	}
 	e.Seq = int(seq)
+	channel, err := q.TransactionChannel(ctx, e.Org, e.Transaction)
+	if err != nil {
+		return err
+	}
+	if channel != nil && domain.Cooperative(*channel) {
+		e.Coverage = domain.CoveragePartial
+	}
 	signed, err := sign(e)
 	if err != nil {
 		return err

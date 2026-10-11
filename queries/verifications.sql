@@ -75,6 +75,12 @@ FOR UPDATE OF t;
 SELECT (coalesce(max(seq), 0) + 1)::integer FROM pc.effect_receipts
 WHERE org_id = sqlc.arg(org_id) AND transaction_id = sqlc.arg(transaction_id);
 
+-- TransactionChannel is the channel a transaction came through: the
+-- effect receipts of a cooperative one (hook, sdk) are labelled PARTIAL
+-- coverage (HR-024, HR-186, G0 M7 design decision 2).
+-- name: TransactionChannel :one
+SELECT channel FROM pc.transactions WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id);
+
 -- name: InsertEffectReceipt :exec
 INSERT INTO pc.effect_receipts (org_id, transaction_id, seq, state, level_required, level_achieved, basis, receipt_jws,
                                 ledger_entry_id)
