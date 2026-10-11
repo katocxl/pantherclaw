@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/katocxl/pantherclaw/sdk/go/client"
+	"github.com/katocxl/pantherclaw/sdk/go/internal/vectors"
 	"github.com/katocxl/pantherclaw/sdk/go/pap"
 )
 
@@ -47,6 +48,10 @@ type fake struct {
 	requireNonce bool
 	// expireFirst refuses the first /sdk call with token_expired.
 	expireFirst atomic.Bool
+	// calls counts the /sdk requests.
+	calls atomic.Int32
+	// action is the vectors' sdk-channel action, canonical.
+	action string
 }
 
 func newFake(t *testing.T) *fake {
@@ -58,6 +63,21 @@ func newFake(t *testing.T) *fake {
 	k.Identifier = ident
 	priv, _ := k.Key()
 	f := &fake{t: t, key: k, jkt: pap.Thumbprint(priv.Public().(ed25519.PublicKey))}
+	var vs struct {
+		Cases []struct {
+			Name      string `json:"name"`
+			Canonical string `json:"canonical"`
+		} `json:"cases"`
+	}
+	vectors.Load(t, "actionir.json", &vs)
+	for _, c := range vs.Cases {
+		if c.Name == "sdk channel through a connection" {
+			f.action = c.Canonical
+		}
+	}
+	if f.action == "" {
+		t.Fatal("no sdk-channel action in the vectors")
+	}
 	f.srv = httptest.NewServer(http.HandlerFunc(f.serve))
 	t.Cleanup(f.srv.Close)
 	return f
@@ -67,7 +87,7 @@ func (f *fake) client(t *testing.T) *client.Client {
 	t.Helper()
 	k := f.key
 	k.Server = f.srv.URL
-	c, err := client.New(client.Config{Key: k, Gateway: f.srv.URL, RunID: runID})
+	c, err := client.New(client.Config{Key: k, Gateway: f.srv.URL, RunID: runID, Builtins: []string{"Bash", "Read"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -104,6 +124,7 @@ func (f *fake) serve(w http.ResponseWriter, r *http.Request) {
 		if !hasToken || r.Header.Get("PAP-Run-Id") != runID || r.Header.Get("PC-Action-Id") == "" {
 			f.t.Errorf("a /sdk call without its token, run or action id: %v", r.Header)
 		}
+		f.calls.Add(1)
 		if f.expireFirst.CompareAndSwap(true, false) {
 			w.Header().Set(pap.HeaderError, string(pap.ErrTokenExpired))
 			w.WriteHeader(http.StatusUnauthorized)
@@ -165,14 +186,23 @@ var refund = client.ToolCall{
 	Tool: "mcp__payments__create_refund", Server: "payments", Input: jsontext.Value(`{"amount":"30.00","charge":"ch_1"}`), ToolUseID: "toolu_01",
 }
 
-// allowed answers an allow for the action id the request carries.
-func allowed(w http.ResponseWriter, r *http.Request) {
+// decided answers decision ("allow" or "hold") for the action id the
+// request carries, with the canonical sdk-channel action and its hash.
+func (f *fake) decided(w http.ResponseWriter, r *http.Request, decision string, extra map[string]any) {
 	id := r.Header.Get("PC-Action-Id")
-	act := `{"action_id":"` + id + `"}`
-	answer(w, map[string]any{
-		"decision": "allow", "action_id": id, "action_hash": sha256Hex([]byte(act)), "coverage": "PARTIAL", "mode": "enforce",
-	})
+	act := strings.Replace(f.action, `"action_id":"`+actionID+`"`, `"action_id":"`+id+`"`, 1)
+	a := map[string]any{
+		"decision": decision, "action_id": id, "action_hash": sha256Hex([]byte(act)), "action_ir": b64.EncodeToString([]byte(act)),
+		"coverage": "PARTIAL", "mode": "enforce",
+	}
+	for k, v := range extra {
+		a[k] = v
+	}
+	answer(w, a)
 }
+
+// allowed answers an allow for the action id the request carries.
+func (f *fake) allowed(w http.ResponseWriter, r *http.Request) { f.decided(w, r, "allow", nil) }
 
 func sha256Hex(b []byte) string {
 	s := sha256.Sum256(b)
@@ -195,14 +225,14 @@ func TestHR200_FailsClosedWhenPantherClawCannotDecide(t *testing.T) {
 	} {
 		f.sdk = sdk
 		ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
-		res := c.Authorize(ctx, "local", refund, client.NewActionID())
+		res := c.Authorize(ctx, "payments", refund, client.NewActionID())
 		cancel()
 		if res.Outcome != client.CannotDecide {
 			t.Errorf("%s: %s (%s)", name, res.Outcome, res.Why)
 		}
 	}
 	f.srv.Close()
-	if res := c.Authorize(context.Background(), "local", refund, client.NewActionID()); res.Outcome != client.CannotDecide {
+	if res := c.Authorize(context.Background(), "payments", refund, client.NewActionID()); res.Outcome != client.CannotDecide {
 		t.Errorf("unreachable: %s", res.Outcome)
 	}
 }
@@ -218,16 +248,89 @@ func TestAuthorizeRetriesForANonceAndAnExpiredToken(t *testing.T) {
 	f.sdk = func(w http.ResponseWriter, r *http.Request, body []byte) {
 		var call client.ToolCall
 		if err := json.Unmarshal(body, &call, json.RejectUnknownMembers(true)); err != nil || call.Tool != refund.Tool || call.Server != "payments" ||
-			string(call.Input) != string(refund.Input) || call.ToolUseID != "toolu_01" || r.URL.Path != "/sdk/local" {
+			string(call.Input) != string(refund.Input) || call.ToolUseID != "toolu_01" || r.URL.Path != "/sdk/payments" {
 			t.Errorf("the call arrived as %s at %s", body, r.URL.Path)
 		}
 		sent = r.Header.Get("PC-Action-Id")
-		allowed(w, r)
+		f.allowed(w, r)
 	}
 	c := f.client(t)
 	id := client.NewActionID()
-	res := c.Authorize(context.Background(), "local", refund, id)
+	res := c.Authorize(context.Background(), "payments", refund, id)
 	if res.Outcome != client.Allow || sent != id || f.issued.Load() != 2 {
 		t.Fatalf("%s (%s, %v); action %s, tokens issued %d", res.Outcome, res.Why, res.Err, sent, f.issued.Load())
+	}
+}
+
+// TestHR200_OnlyBuiltinsAreObserved: an observe answer lets a configured
+// built-in run and nothing else, and a name that is neither an MCP tool
+// nor a built-in is never sent.
+func TestHR200_OnlyBuiltinsAreObserved(t *testing.T) {
+	f := newFake(t)
+	f.sdk = func(w http.ResponseWriter, _ *http.Request, _ []byte) {
+		answer(w, map[string]any{"decision": "allow", "mode": "monitor", "coverage": "OBSERVE_ONLY"})
+	}
+	c := f.client(t)
+	read := client.ToolCall{Tool: "Read", Input: jsontext.Value(`{"file_path":"/etc/hosts"}`), ToolUseID: "toolu_02"}
+	if res := c.Authorize(context.Background(), "payments", read, client.NewActionID()); res.Outcome != client.Observe {
+		t.Errorf("a built-in: %s (%s)", res.Outcome, res.Why)
+	}
+	if res := c.Authorize(context.Background(), "payments", refund, client.NewActionID()); res.Outcome != client.CannotDecide {
+		t.Errorf("an MCP tool answered observe: %s", res.Outcome)
+	}
+	sent := f.calls.Load()
+	for _, name := range []string{"deploy", "bash", "mcp__payments__create_refund"} {
+		call := client.ToolCall{Tool: name, Input: jsontext.Value(`{}`), ToolUseID: "toolu_03"}
+		if res := c.Authorize(context.Background(), "payments", call, client.NewActionID()); res.Outcome != client.CannotDecide {
+			t.Errorf("%s: %s", name, res.Outcome)
+		}
+	}
+	if f.calls.Load() != sent {
+		t.Errorf("sent %d calls the client cannot route", f.calls.Load()-sent)
+	}
+}
+
+// TestNewRefusesPlainHTTPOutsideLoopback: tokens and proofs travel over
+// TLS, or over http only to this machine.
+func TestNewRefusesPlainHTTPOutsideLoopback(t *testing.T) {
+	k, err := pap.NewKeyFile()
+	if err != nil {
+		t.Fatal(err)
+	}
+	k.Identifier = ident
+	for _, u := range []string{"http://pantherclaw.example.test", "http://10.0.0.1:8443", "https://user@pantherclaw.example.test", "ftp://x"} {
+		if _, err := client.New(client.Config{Key: k, Server: "https://pantherclaw.example.test", Gateway: u}); err == nil {
+			t.Errorf("gateway %s accepted", u)
+		}
+		if _, err := client.New(client.Config{Key: k, Server: u}); err == nil {
+			t.Errorf("server %s accepted", u)
+		}
+	}
+	for _, u := range []string{"https://pantherclaw.example.test", "http://127.0.0.1:8080", "http://[::1]:8080", "http://localhost:8080"} {
+		if _, err := client.New(client.Config{Key: k, Server: u, Gateway: u}); err != nil {
+			t.Errorf("%s refused: %v", u, err)
+		}
+	}
+}
+
+// TestRedirectsAreNeverFollowed: a redirect from the gateway is an answer
+// the client cannot read, even with a caller's client that follows them,
+// so the call and its proof never reach another server.
+func TestRedirectsAreNeverFollowed(t *testing.T) {
+	var reached atomic.Bool
+	elsewhere := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { reached.Store(true) }))
+	t.Cleanup(elsewhere.Close)
+	f := newFake(t)
+	f.sdk = func(w http.ResponseWriter, r *http.Request, _ []byte) {
+		http.Redirect(w, r, elsewhere.URL+"/sdk/payments", http.StatusTemporaryRedirect)
+	}
+	k := f.key
+	k.Server = f.srv.URL
+	c, err := client.New(client.Config{Key: k, Gateway: f.srv.URL, RunID: runID, HTTPClient: &http.Client{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res := c.Authorize(context.Background(), "payments", refund, client.NewActionID()); res.Outcome != client.CannotDecide || reached.Load() {
+		t.Fatalf("%s, reached the redirect target: %v", res.Outcome, reached.Load())
 	}
 }

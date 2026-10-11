@@ -19,6 +19,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -39,8 +40,14 @@ type Config struct {
 	Gateway string
 	// RunID is the run the workload acts in.
 	RunID string
-	// HTTPClient sends the requests; nil uses one that follows no
-	// redirects. Keep its Timeout zero: a wait stream lasts minutes.
+	// Builtins are the names of the tools the agent SDK has built in (for
+	// the Claude Agent SDK: Read, Edit, Bash, …). Only these are sent
+	// without a server, and only for them does an observe answer let the
+	// call run. Empty: no call is a built-in.
+	Builtins []string
+	// HTTPClient sends the requests; nil uses a default one. Redirects are
+	// never followed, whichever client sends. Keep its Timeout zero: a
+	// wait stream lasts minutes.
 	HTTPClient *http.Client
 	// Timeout bounds one decision or token request (default 15 seconds);
 	// a long-poll gets its wait on top. Past it, PantherClaw cannot decide.
@@ -86,6 +93,8 @@ func New(cfg Config) (*Client, error) {
 		return nil, errors.New("client: the key file has no identifier: enroll the workload first")
 	case cfg.Server == "":
 		return nil, errors.New("client: the PantherClaw server URL is required")
+	case !secure(cfg.Server) || (cfg.Gateway != "" && !secure(cfg.Gateway)):
+		return nil, errors.New("client: the server and gateway URLs must use https (http only on a loopback address) and carry no user information")
 	}
 	if cfg.Now == nil {
 		cfg.Now = time.Now
@@ -93,12 +102,30 @@ func New(cfg Config) (*Client, error) {
 	if cfg.Timeout <= 0 {
 		cfg.Timeout = 15 * time.Second
 	}
-	hc := cfg.HTTPClient
-	if hc == nil {
-		hc = &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	hc := &http.Client{}
+	if cfg.HTTPClient != nil {
+		copied := *cfg.HTTPClient
+		hc = &copied
 	}
+	// A redirect would resend the body and the proof elsewhere.
+	hc.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 	pub, _ := priv.Public().(ed25519.PublicKey)
 	return &Client{cfg: cfg, priv: priv, jkt: pap.Thumbprint(pub), http: hc, nonces: map[string]string{}}, nil
+}
+
+// secure reports whether a base URL may carry workload tokens and proofs:
+// https, or http to a loopback address.
+func secure(raw string) bool {
+	u, err := url.Parse(raw)
+	if err != nil || u.User != nil || u.Host == "" {
+		return false
+	}
+	if u.Scheme == "https" {
+		return true
+	}
+	host := u.Hostname()
+	ip := net.ParseIP(host)
+	return u.Scheme == "http" && (host == "localhost" || (ip != nil && ip.IsLoopback()))
 }
 
 // JKT returns the thumbprint of the workload key.
