@@ -94,7 +94,7 @@ func runGitHub(ctx context.Context, args []string, stderr io.Writer) error {
 // appKey reads the App's private key, or creates it (mode 0600) when the
 // file does not exist.
 func appKey(path string) (*rsa.PrivateKey, error) {
-	raw, err := os.ReadFile(path)
+	raw, err := os.ReadFile(path) //nolint:gosec // G304: the operator names the file
 	if errors.Is(err, fs.ErrNotExist) {
 		key, err := rsa.GenerateKey(rand.Reader, 2048)
 		if err != nil {
