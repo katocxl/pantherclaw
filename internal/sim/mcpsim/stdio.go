@@ -70,7 +70,7 @@ func (s *Server) ServeStdio(ctx context.Context, r io.Reader, w io.Writer) error
 			if err := s.askStdio(send, read); err != nil {
 				return err
 			}
-			result, rpcErr := s.call(m.Params)
+			result, rpcErr := s.call(ctx, m.Params)
 			out = reply(m.ID, result, rpcErr)
 		default:
 			out = reply(m.ID, nil, rpcError(-32601, "Method not found"))

@@ -14,6 +14,8 @@
 package mcpsim
 
 import (
+	"bytes"
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json/jsontext"
@@ -72,6 +74,11 @@ type Faults struct {
 	// specification forbids it (inside array items): a client must not
 	// call it.
 	InvalidHeaders bool
+	// Upstream, when set, is a payments API (pantherclaw-sim payments) that
+	// create_refund posts each refund to, through the proxy the environment
+	// names, as a connector reaching its API does (G0 M9 track C); the
+	// API's answer is the result.
+	Upstream string
 }
 
 // Server is the simulated MCP server.
@@ -294,7 +301,7 @@ func (s *Server) modern(w http.ResponseWriter, r *http.Request, m message) {
 			}}, nil))
 			return
 		}
-		result, rpcErr := s.call(m.Params)
+		result, rpcErr := s.call(r.Context(), m.Params)
 		if result != nil {
 			result["resultType"] = "complete"
 		}
@@ -357,7 +364,7 @@ func (s *Server) legacy(w http.ResponseWriter, r *http.Request, m message) {
 	case "tools/list":
 		writeJSON(w, http.StatusOK, reply(m.ID, s.page(m.Params), nil))
 	case "tools/call":
-		result, rpcErr := s.call(m.Params)
+		result, rpcErr := s.call(r.Context(), m.Params)
 		s.answer(w, m.ID, result, rpcErr, s.f.Ask)
 	default:
 		writeJSON(w, http.StatusOK, reply(m.ID, nil, rpcError(-32601, "Method not found")))
@@ -422,13 +429,16 @@ var (
 )
 
 // call runs a tool.
-func (s *Server) call(params jsontext.Value) (map[string]any, map[string]any) {
+func (s *Server) call(ctx context.Context, params jsontext.Value) (map[string]any, map[string]any) {
 	var p struct {
 		Name      string            `json:"name"`
 		Arguments map[string]string `json:"arguments"`
 	}
 	if json.Unmarshal(params, &p) != nil {
 		return nil, rpcError(-32602, "Invalid params")
+	}
+	if p.Name == "create_refund" && s.f.Upstream != "" {
+		return s.forward(ctx, p.Arguments), nil
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -490,4 +500,53 @@ func newID() string {
 	var b [16]byte
 	_, _ = rand.Read(b[:])
 	return hex.EncodeToString(b[:])
+}
+
+// upstreamTimeout bounds one refund sent upstream.
+const upstreamTimeout = 30 * time.Second
+
+// upstreamClient is the client of a third-party connector, which the
+// simulator stands in for: unlike PantherClaw's own hardened clients
+// (HR-072), it takes its proxy from the environment, the connector's edge.
+var upstreamClient = &http.Client{
+	Timeout: upstreamTimeout,
+	Transport: &http.Transport{
+		Proxy: http.ProxyFromEnvironment, TLSHandshakeTimeout: 10 * time.Second, ResponseHeaderTimeout: upstreamTimeout,
+	},
+	CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+}
+
+// forward posts a create_refund call's refund to the upstream payments
+// API and answers with what it answered.
+func (s *Server) forward(ctx context.Context, a map[string]string) map[string]any {
+	if !chargePattern.MatchString(a["charge"]) || a["amount"] == "" || a["currency"] == "" {
+		return toolResult(true, map[string]any{"error": "invalid_request"})
+	}
+	s.mu.Lock()
+	s.calls++
+	s.mu.Unlock()
+	body, err := json.Marshal(struct {
+		Charge   string `json:"charge"`
+		Amount   string `json:"amount"`
+		Currency string `json:"currency"`
+		Reason   string `json:"reason"`
+	}{a["charge"], a["amount"], a["currency"], a["reason"]})
+	if err != nil {
+		return toolResult(true, map[string]any{"error": "invalid_request"})
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimSuffix(s.f.Upstream, "/")+"/v1/refunds", bytes.NewReader(body))
+	if err != nil {
+		return toolResult(true, map[string]any{"error": "invalid_upstream"})
+	}
+	req.Header.Set("Content-Type", "application/json")
+	res, err := upstreamClient.Do(req)
+	if err != nil {
+		return toolResult(true, map[string]any{"error": "upstream_unreachable", "detail": err.Error()})
+	}
+	defer func() { _ = res.Body.Close() }()
+	b, err := io.ReadAll(io.LimitReader(res.Body, 1<<20))
+	if err != nil || !jsontext.Value(b).IsValid() {
+		return toolResult(true, map[string]any{"error": "upstream_answer", "status": res.StatusCode})
+	}
+	return toolResult(res.StatusCode/100 != 2, jsontext.Value(b))
 }

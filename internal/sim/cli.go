@@ -33,6 +33,7 @@ Usage:
                            [--short-rate 0] [--settle-after 0s] [--redirect-to URL]
                            [--token-file FILE] [--require-action-tokens --jwks-url URL --audience CONNECTION]
   pantherclaw-sim mcp [--addr 127.0.0.1:9091] [--legacy] [--stream] [--ask LIST] [--input-required] [--tool-error] [--description TEXT] [--token-file FILE]
+                      [--stdio] [--upstream URL]
   pantherclaw-sim load --workload-file FILE [--token-file FILE] [--run ID] [--gateway URL] [--connection payments] [--rate 1000] [--duration 30s]
                        [--warmup 5s] [--max-in-flight 2048] [--amount 1.00 | --unique] [--facts-key-file FILE] [--out FILE]
   pantherclaw-sim canary [--host 127.0.0.1] [--dns-port 18453] [--https-port 18443] [--ssh-port 18422] [--query-addr 127.0.0.1:18433]
@@ -123,10 +124,11 @@ func runMCP(ctx context.Context, args []string, stderr io.Writer) error {
 	description := fs.String("description", "", "replace get_refund's description (drift)")
 	tokenFile := fs.String("token-file", "", "file holding the bearer token every request must carry")
 	stdio := fs.Bool("stdio", false, "speak MCP 2025-11-25 over standard input and output instead of HTTP, as a connector does (G0 M9)")
+	upstream := fs.String("upstream", "", "post each create_refund to this payments API (through the environment's proxy) and answer with its answer, as a connector does (G0 M9)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	f := mcpsim.Faults{Legacy: *legacy, Stream: *stream, InputRequired: *inputRequired, ToolError: *toolError, Description: *description}
+	f := mcpsim.Faults{Legacy: *legacy, Stream: *stream, InputRequired: *inputRequired, ToolError: *toolError, Description: *description, Upstream: *upstream}
 	if *ask != "" {
 		f.Ask = strings.Split(*ask, ",")
 	}

@@ -10,6 +10,7 @@ import (
 	"encoding/json/v2"
 	"errors"
 	"fmt"
+	"net"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -126,16 +127,23 @@ func (s *Supervisor) startEdge(ctx context.Context, id, short string, egressConn
 	return m, nil
 }
 
-// egressHosts are the hosts a connector may reach through its egress
-// connection, each mapped to it: the base URL's host and its agent hosts.
+// egressHosts are the host names a connector may reach through its egress
+// connection, each mapped to it: the base URL's host unless it is an IP
+// literal, which the edge never intercepts, and the agent hosts.
 func egressHosts(conn *control.Connection) (map[string]string, error) {
 	u, err := url.Parse(conn.GetBaseUrl())
 	if err != nil || u.Hostname() == "" || conn.GetKind() != "http" {
 		return nil, fmt.Errorf("connectors: the egress connection %s is not an http connection", conn.GetName())
 	}
-	hosts := map[string]string{strings.ToLower(u.Hostname()): conn.GetName()}
+	hosts := map[string]string{}
+	if h := strings.ToLower(u.Hostname()); net.ParseIP(h) == nil {
+		hosts[h] = conn.GetName()
+	}
 	for _, h := range conn.GetAgentHosts() {
 		hosts[h] = conn.GetName()
+	}
+	if len(hosts) == 0 {
+		return nil, fmt.Errorf("connectors: the egress connection %s names no host a connector can address", conn.GetName())
 	}
 	return hosts, nil
 }

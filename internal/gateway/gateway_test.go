@@ -31,6 +31,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/definitions/manifest"
 	"github.com/katocxl/pantherclaw/internal/definitions/mapping"
 	"github.com/katocxl/pantherclaw/internal/gateway/broker"
+	"github.com/katocxl/pantherclaw/internal/gateway/connectors"
 	"github.com/katocxl/pantherclaw/internal/gateway/control"
 	"github.com/katocxl/pantherclaw/internal/gateway/dispatch"
 	"github.com/katocxl/pantherclaw/internal/gateway/httpproxy"
@@ -390,6 +391,12 @@ type harness struct {
 	url    string
 	// approverKeys is the gateway's approvals.approver_keys_file.
 	approverKeys string
+	// extra are further connections of the gateway's configuration.
+	extra []*control.Connection
+	// connectors, when set, makes the gateway's connector supervisor over
+	// its configuration (G0 M9 track C); sup is it, which the test runs.
+	connectors func(connectors.Configuration) *connectors.Supervisor
+	sup        *connectors.Supervisor
 }
 
 // compile decodes and compiles a package file (mock-payments when empty).
@@ -465,6 +472,10 @@ func setup(t *testing.T, opts ...func(*harness)) *harness {
 	if h.authorityURL == "" {
 		h.authorityURL = as.URL
 	}
+	conf := newFakeConfig(append([]*control.Connection{h.conn}, h.extra...)...)
+	if h.connectors != nil {
+		h.sup = h.connectors(conf)
+	}
 	cfg := DefaultConfig()
 	cfg.Control.IdentityDir = t.TempDir()
 	cfg.Egress.AllowedPrefixes = []string{"127.0.0.1/32"}
@@ -477,7 +488,7 @@ func setup(t *testing.T, opts ...func(*harness)) *harness {
 		Org: testOrg, GatewayID: "gw-test",
 		Authority: pantherclawv1connect.NewAuthorityServiceClient(connect.NewClient(connecthttp.NewTransport(hc, h.authorityURL))),
 		JWKSURL:   as.URL + "/.well-known/pantherclaw/jwks.json", JWKSClient: hc, Containment: h.containment,
-		Configuration: newFakeConfig(h.conn), Broker: h.broker,
+		Configuration: conf, Broker: h.broker, Connectors: h.sup,
 		ReportCircuit: func(_ context.Context, conn string, unknown, total int32) error {
 			h.circuitMu.Lock()
 			defer h.circuitMu.Unlock()
