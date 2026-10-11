@@ -9,6 +9,7 @@ import (
 	"context"
 	"encoding/json/v2"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -20,6 +21,7 @@ import (
 	capp "github.com/katocxl/pantherclaw/internal/connections/app"
 	credapp "github.com/katocxl/pantherclaw/internal/credentials/app"
 	creddomain "github.com/katocxl/pantherclaw/internal/credentials/domain"
+	"github.com/katocxl/pantherclaw/internal/gateway/control"
 	pccrypto "github.com/katocxl/pantherclaw/internal/platform/crypto"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
@@ -143,21 +145,17 @@ func TestS13_TheKillSwitchStopsDispatchWithinASecond(t *testing.T) {
 	if _, err := ks.Engage(alice.ctx, rapp.StepUp{Credential: alice.key, At: time.Now()}, "e2e incident"); err != nil {
 		t.Fatal(err)
 	}
-	engaged := time.Now()
-	for {
-		code, r := s.refund(t, ids.NewV7(), "30.00")
-		if code == http.StatusOK {
-			t.Fatalf("dispatched after the kill switch: %+v", r)
-		}
-		if r.Error == "kill_switch" {
-			if code != http.StatusForbidden || r.ErrorClass != "enforcement_failed" {
-				t.Fatalf("gateway refusal: %d %+v", code, r)
-			}
-			break
-		}
-		if time.Since(engaged) > time.Second {
-			t.Fatalf("the gateway still asks the Authority %s after the kill switch: %d %+v", time.Since(engaged), code, r)
-		}
+	learned := s.learns(t, time.Now(), control.ErrKillSwitch)
+	// A refund sent at once is never dispatched: the Authority denies it
+	// while the gateway has not learned yet, and the gateway refuses it on
+	// its own once it has.
+	if code, r := s.refund(t, ids.NewV7(), "30.00"); code == http.StatusOK {
+		t.Fatalf("dispatched after the kill switch: %+v", r)
+	}
+	learned()
+	if code, r := s.refund(t, ids.NewV7(), "30.00"); code != http.StatusForbidden || r.ErrorClass != "enforcement_failed" ||
+		r.Error != "kill_switch" {
+		t.Fatalf("the gateway refusing on its own: %d %+v", code, r)
 	}
 	if st := s.sim.Stats(); st.Refunds != 1 || s.simCalls.Load() != 1 {
 		t.Fatalf("target %+v, calls %d, want only the refund before", st, s.simCalls.Load())
@@ -169,7 +167,9 @@ func TestS13_TheKillSwitchStopsDispatchWithinASecond(t *testing.T) {
 // record look the same; here the Authority goes away while the target is
 // still working. The permit stays DISPATCHING with its reservation held,
 // nothing is retried, and once the dispatch is stale the sweeper marks it
-// UNKNOWN without releasing the money (HR-003); M7 reconciles it.
+// UNKNOWN without releasing the money (HR-003). M7 reconciles it: the
+// refund did happen, so the evidence (the verifier's lookup or the target
+// log) resolves it as occurred, which commits the held money (HR-192).
 func TestS08_AnUnrecordedDispatchIsUnknownAndHeld(t *testing.T) {
 	s := start(t, options{budget: "1000.00", faults: payments.Faults{Latency: 3 * time.Second}})
 	type result struct {
@@ -196,19 +196,29 @@ func TestS08_AnUnrecordedDispatchIsUnknownAndHeld(t *testing.T) {
 	// the 30 seconds the sweeper allows.
 	s.serve(t)
 	s.exec(t, "UPDATE pc.permits SET dispatching_at = now() - interval '1 hour' WHERE transaction_id = $1", mustUUID(t, txn))
-	deadline := time.Now().Add(20 * time.Second)
-	for {
-		reserved, spent, permit := s.budget(t, txn)
-		if permit == "UNKNOWN" {
-			if reserved != "30" || spent != "0" {
-				t.Fatalf("swept: reserved=%s spent=%s, want held", reserved, spent)
-			}
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("the sweeper left the permit %s", permit)
-		}
-		time.Sleep(200 * time.Millisecond)
+	// The sweeper marks it UNKNOWN and keeps what an unknown outcome reported
+	// by a gateway keeps: the attempt and its signed execution receipt. These
+	// records stay; the budget is checked through them below, because the
+	// reconciliation the sweeper opens may be resolved before a poll sees
+	// the money held.
+	s.eventually(t, "UNKNOWN unknown sweeper 1", `SELECT p.state || ' ' || a.outcome || ' ' || a.recorded_by || ' ' ||
+		(SELECT count(*) FROM pc.execution_receipts r WHERE r.org_id = a.org_id AND r.attempt_id = a.id)::text
+		FROM pc.permits p JOIN pc.execution_attempts a ON a.org_id = p.org_id AND a.permit_id = p.id
+		WHERE p.transaction_id = $1`, txn)
+	s.eventually(t, "OCCURRED", "SELECT state FROM pc.reconciliation_tasks WHERE transaction_id = $1 AND kind = 'unknown_outcome'", txn)
+	if via := s.row(t, "SELECT resolved_via FROM pc.reconciliation_tasks WHERE transaction_id = $1 AND kind = 'unknown_outcome'", txn); via != "verifier" && via != "target_log" {
+		t.Fatalf("resolved via %q, want evidence", via)
+	}
+	// Every reservation of the dispatch stayed held until that resolution
+	// and was committed by it, in the same transaction: a reservation is
+	// settled once, from held, so the money was never released.
+	if got := s.row(t, `SELECT string_agg(DISTINCT r.state || ' ' || (r.settled_at = k.resolved_at)::text, ',')
+		FROM pc.reservations r JOIN pc.reconciliation_tasks k ON k.org_id = r.org_id AND k.transaction_id = r.transaction_id
+		WHERE r.transaction_id = $1 AND k.kind = 'unknown_outcome'`, txn); got != "COMMITTED true" {
+		t.Fatalf("reservations %q, want committed by the resolution", got)
+	}
+	if reserved, spent, permit := s.budget(t, txn); reserved != "0" || spent != "30" || permit != "UNKNOWN" {
+		t.Fatalf("reconciled: reserved=%s spent=%s permit=%s, want committed", reserved, spent, permit)
 	}
 	if st := s.sim.Stats(); st.Refunds != 1 || s.simCalls.Load() != 1 {
 		t.Fatalf("target %+v, calls %d, want exactly one", st, s.simCalls.Load())
@@ -218,8 +228,8 @@ func TestS08_AnUnrecordedDispatchIsUnknownAndHeld(t *testing.T) {
 // TestE2E_M6_KillSwitch: the whole kill switch (G0 M6 design decision 5).
 // One emergency responder stops the org; the person who proposes a restore
 // cannot also confirm it; a second person with another security key
-// confirms, and within a second the gateway dispatches again (HR-002,
-// HR-113).
+// confirms, and within a second the gateway stops refusing on its own and
+// dispatches again (HR-002, HR-010, HR-113).
 func TestE2E_M6_KillSwitch(t *testing.T) {
 	s := start(t, options{budget: "1000.00"})
 	alice, bob := s.person(t, "alice", td.RoleEmergency), s.person(t, "bob", td.RoleEmergency)
@@ -228,7 +238,11 @@ func TestE2E_M6_KillSwitch(t *testing.T) {
 	if _, err := ks.Engage(alice.ctx, now(alice), "e2e incident"); err != nil {
 		t.Fatal(err)
 	}
-	s.waitRefund(t, func(code int, r reply) bool { return r.Error == "kill_switch" }, "the gateway refusing on its own")
+	s.learns(t, time.Now(), control.ErrKillSwitch)()
+	if code, r := s.refund(t, ids.NewV7(), "30.00"); code != http.StatusForbidden || r.ErrorClass != "enforcement_failed" ||
+		r.Error != "kill_switch" {
+		t.Fatalf("the gateway refusing on its own: %d %+v", code, r)
+	}
 
 	proposal, err := ks.ProposeRestore(alice.ctx, now(alice), "resolved")
 	if err != nil {
@@ -243,24 +257,46 @@ func TestE2E_M6_KillSwitch(t *testing.T) {
 	if _, err := ks.ConfirmRestore(bob.ctx, now(bob), proposal.ID); err != nil {
 		t.Fatal(err)
 	}
-	s.waitRefund(t, func(code int, r reply) bool { return code == http.StatusOK && r.Outcome == "ACCEPTED" }, "a refund accepted again")
+	s.learns(t, time.Now(), nil)()
+	if code, r := s.refund(t, ids.NewV7(), "30.00"); code != http.StatusOK || r.Outcome != "ACCEPTED" {
+		t.Fatalf("a refund after the restore: %d %+v, want accepted", code, r)
+	}
 	if st := s.sim.Stats(); st.Refunds != 1 {
 		t.Fatalf("target %+v, want only the refund after the restore", st)
 	}
 }
 
-// waitRefund sends refunds until one answers as ok wants, for at most a
-// second (the gateway learns of containment changes within one, HR-010).
-func (s *stack) waitRefund(t *testing.T, ok func(int, reply) bool, what string) {
+// learns watches the gateway's own containment view from since, the moment
+// a containment change was committed, until it shows want
+// (control.ErrKillSwitch, or nil once the kill switch is lifted), checking
+// every few milliseconds in the background. The returned function waits
+// for that, and fails t if a check begun more than a second after since
+// still saw the old view: the gateway learns of a change within a second
+// (HR-010). The view is what the gateway checks before each dispatch; a
+// refund's round trip also includes the Authority's and the target's work,
+// which under load can take longer than the guarantee gives the gateway.
+func (s *stack) learns(t *testing.T, since time.Time, want error) func() {
 	t.Helper()
-	start := time.Now()
-	for {
-		code, r := s.refund(t, ids.NewV7(), "30.00")
-		if ok(code, r) {
-			return
+	done := make(chan error, 1)
+	go func() {
+		for {
+			began := time.Since(since)
+			err := s.gw.Contained()
+			if errors.Is(err, want) {
+				done <- nil
+				return
+			}
+			if began > time.Second {
+				done <- fmt.Errorf("the gateway's own view %s after the change: %v, want %v", began, err, want)
+				return
+			}
+			time.Sleep(5 * time.Millisecond)
 		}
-		if time.Since(start) > time.Second {
-			t.Fatalf("no %s within a second: last %d %+v", what, code, r)
+	}()
+	return func() {
+		t.Helper()
+		if err := <-done; err != nil {
+			t.Fatal(err)
 		}
 	}
 }
