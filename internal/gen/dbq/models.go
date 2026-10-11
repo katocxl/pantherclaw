@@ -180,6 +180,7 @@ type PcApprovalRequest struct {
 	PermitID           *ids.UUID
 	EndedAt            *time.Time
 	ActionIr           []byte
+	InvalidationKey    *string
 }
 
 type PcApprovalResponse struct {
@@ -307,6 +308,23 @@ type PcCaptureProfile struct {
 	CreatedAt       time.Time
 	DisabledBy      *ids.UUID
 	DisabledAt      *time.Time
+}
+
+type PcChangeWindow struct {
+	OrgID       ids.OrgID
+	ID          ids.UUID
+	Environment string
+	Repository  *string
+	TimeZone    string
+	Weekly      []byte
+	OneOff      []byte
+	Freezes     []byte
+	Revision    int32
+	State       string
+	CreatedBy   string
+	CreatedAt   time.Time
+	RetiredBy   *string
+	RetiredAt   *time.Time
 }
 
 type PcCheckpoint struct {

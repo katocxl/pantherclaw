@@ -30,6 +30,9 @@ const (
 	RoleEmergency         RoleName = "emergency_responder"
 	RoleReconciler        RoleName = "reconciler"
 	RoleRecordsManager    RoleName = "records_manager"
+	// G0 M8 release controls (HR-207).
+	RoleCodeReviewer    RoleName = "code_reviewer"
+	RoleReleaseApprover RoleName = "release_approver"
 )
 
 // Role is a named set of permissions and the scope types it may be bound at.
@@ -93,13 +96,13 @@ var roles = []Role{
 	},
 	{
 		Name: RoleSecurityAdmin, Title: "Security Admin", Scopes: orgScope,
-		Description: "Watches and contains: reads users, roles, audit and approval requests, disables compromised users and service accounts, revokes grants, responds to incidents, sets the Agent Waitlist's escalation chains and settings, restores suspended agents with a security key, resolves unknown outcomes and exports evidence packs (human only).",
+		Description: "Watches and contains: reads users, roles, audit and approval requests, disables compromised users and service accounts, revokes grants, responds to incidents, sets the Agent Waitlist's escalation chains and settings, restores suspended agents with a security key, resolves unknown outcomes, exports evidence packs and sets the change windows (human only).",
 		Permissions: with(basicReads, []Permission{
 			PermUserRead, PermUserManage, PermRoleRead, PermInvitationRead, PermServiceAccountRead,
 			PermServiceAccountManage, PermAuditRead, PermAgentRead, PermIncidentRespond, PermRunRead, PermRunManage,
 			PermWaitlistRead, PermWaitlistManage, PermApprovalRead, PermAgentRestore, PermIssuerRead, PermGrantRevoke,
 			PermFactRead, PermNotificationRead, PermNotificationManage, PermEvidenceRead, PermTransactionReconcile,
-			PermEvidenceExport,
+			PermEvidenceExport, PermReleaseWindowManage,
 		}, authorityReads, boundaryReads),
 	},
 	{
@@ -207,6 +210,16 @@ var roles = []Role{
 		Name: RoleRecordsManager, Title: "Records Manager", Scopes: orgScope,
 		Description: "Sets what evidence is kept and captured: retention policies, legal holds and payload capture profiles (human only). Cannot read captured payloads.",
 		Permissions: with(basicReads, []Permission{PermEvidenceRetentionManage, PermEvidenceCaptureManage, PermEvidenceRead}),
+	},
+	{
+		Name: RoleCodeReviewer, Title: "Code Reviewer", Scopes: anyScope,
+		Description: "Reviews the changes agents want to merge and approves or declines them with a security key (human only). A requirement that names the role and is independent excludes the change's author and every author, committer and pusher of its commits.",
+		Permissions: with(basicReads, []Permission{PermApprovalRespond, PermApprovalRead, PermWaitlistRead}),
+	},
+	{
+		Name: RoleReleaseApprover, Title: "Release Approver", Scopes: anyScope,
+		Description: "Approves releases, the actions whose predicted or unknown consequence is a deployment, with a security key (human only); a window requirement counts the approval only inside an active change window for the environment. Never the change's reviewer.",
+		Permissions: with(basicReads, []Permission{PermApprovalRespond, PermApprovalRead, PermWaitlistRead}),
 	},
 }
 
