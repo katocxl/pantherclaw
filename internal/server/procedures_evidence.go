@@ -19,6 +19,8 @@ var evidenceProcedures = map[string]td.Permission{
 	pantherclawv1connect.EvidenceServiceGetInclusionProofProcedure:   td.PermEvidenceRead,
 	pantherclawv1connect.EvidenceServiceGetConsistencyProofProcedure: td.PermEvidenceRead,
 	pantherclawv1connect.EvidenceServiceExportBundleProcedure:        td.PermEvidenceRead,
+	pantherclawv1connect.EvidenceServiceListAnchorsProcedure:         td.PermEvidenceRead,
+	pantherclawv1connect.EvidenceServiceReplayDecisionProcedure:      td.PermEvidenceRead,
 }
 
 func init() { maps.Copy(procedurePermissions, evidenceProcedures) }

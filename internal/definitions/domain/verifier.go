@@ -337,6 +337,22 @@ func readOperation(at string, ops map[string]*Definition, op string, listing boo
 	return r, nil
 }
 
+// HTTPReads returns the package's read operations with an HTTP GET
+// dispatch template, sorted: the reads a gateway can make for a verifier
+// through a connection to this package (in M7 the verifier runner reads
+// over HTTP only, HR-190).
+func (p *Package) HTTPReads() []string {
+	var out []string
+	for i := range p.Definitions {
+		d := &p.Definitions[i]
+		if x := d.Dispatch; d.Access == AccessRead && x != nil && x.HTTP != nil && x.HTTP.Method == methods[0] {
+			out = append(out, d.Operation)
+		}
+	}
+	slices.Sort(out)
+	return out
+}
+
 // pageParam checks that a listing's page parameter is one of d's
 // identifier params.
 func (d *Definition) pageParam(l ListSpec) error {

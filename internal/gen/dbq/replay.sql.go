@@ -107,3 +107,18 @@ func (q *Queries) InsertEvaluationInputs(ctx context.Context, arg InsertEvaluati
 	)
 	return err
 }
+
+const latestEvaluation = `-- name: LatestEvaluation :one
+SELECT coalesce(max(evaluation), 0)::integer AS evaluation
+FROM pc.decision_receipts
+WHERE org_id = $1 AND transaction_id = $2
+`
+
+// The latest evaluation of a transaction (0: none), which a replay of
+// "the latest" names.
+func (q *Queries) LatestEvaluation(ctx context.Context, orgID ids.OrgID, transactionID ids.UUID) (int32, error) {
+	row := q.db.QueryRow(ctx, latestEvaluation, orgID, transactionID)
+	var evaluation int32
+	err := row.Scan(&evaluation)
+	return evaluation, err
+}

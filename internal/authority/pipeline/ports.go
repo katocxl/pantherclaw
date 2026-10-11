@@ -178,6 +178,10 @@ type Connection struct {
 	DestinationClass string
 	// Modes are the explicit route modes; other routes take DefaultMode.
 	Modes map[string]string
+	// Reads are the read operations the gateway can make through the
+	// connection for a verifier: the HTTP GET reads of the package version
+	// the org pinned for it (HR-190, G0 M7 design decision 2), sorted.
+	Reads []string
 }
 
 // Mode is a route's mode on the connection.

@@ -166,6 +166,9 @@ func (s *Store) Finalize(ctx context.Context, org ids.OrgID, w finalize.Write) e
 			if err := q.InsertPermitForTransaction(ctx, ins); err != nil {
 				return err
 			}
+			if err := requireLevel(ctx, q, org, w.TransactionID, ev.Verify); err != nil {
+				return err
+			}
 			// The permit consumes the approval it rests on, once, after every
 			// approver's eligibility is checked again (HR-031, HR-170, HR-171).
 			if h := ev.Hold; h != nil && h.Satisfied && h.Request != nil && !ev.MonitorPermit() {

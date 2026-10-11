@@ -139,3 +139,40 @@ func TestHR010_TheStreamReconnectsAndReportsConfigurationChanges(t *testing.T) {
 		t.Fatal("the stream was not opened again")
 	}
 }
+
+// TestHR190_TheVerificationsHintWakesWithoutChangingContainment: a message
+// that says verification tasks are due signals VerificationsWaiting, at
+// most one pending wake-up, whatever its kind; one without the hint does
+// not; and the hint changes nothing the gateway may dispatch (G0 M7 design
+// decision 1).
+func TestHR190_TheVerificationsHintWakesWithoutChangingContainment(t *testing.T) {
+	k := newContainment(nil, pclog.Discard())
+	pending := func() bool {
+		select {
+		case <-k.VerificationsWaiting():
+			return true
+		default:
+			return false
+		}
+	}
+	k.apply(msg(pb.ContainmentStateKind_CONTAINMENT_STATE_KIND_SNAPSHOT, 3, 1, false))
+	if pending() {
+		t.Fatal("a message without the hint woke the verifier")
+	}
+	hinted := msg(pb.ContainmentStateKind_CONTAINMENT_STATE_KIND_HEARTBEAT, 3, 1, false)
+	hinted.VerificationsWaiting = true
+	k.apply(hinted)
+	k.apply(hinted)
+	if !pending() || pending() {
+		t.Fatal("two hints must leave exactly one wake-up pending")
+	}
+	if e, err := k.Check(); err != nil || e != 3 || k.Connection("c1") != "ACTIVE" {
+		t.Fatalf("the hint changed containment: %d %v %q", e, err, k.Connection("c1"))
+	}
+	killed := msg(pb.ContainmentStateKind_CONTAINMENT_STATE_KIND_CHANGE, 4, 1, true)
+	killed.VerificationsWaiting = true
+	k.apply(killed)
+	if _, err := k.Check(); !errors.Is(err, ErrKillSwitch) {
+		t.Fatalf("a hint beside the kill switch: %v", err)
+	}
+}

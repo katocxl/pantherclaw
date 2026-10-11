@@ -185,6 +185,38 @@ $$;
 -- +goose StatementEnd
 
 -- +goose Down
+-- +goose StatementBegin
+CREATE OR REPLACE FUNCTION pc.cross_org_list(p_purpose text, p_max_rows integer)
+RETURNS TABLE (org_id uuid, id uuid)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pc, pg_temp
+AS $$
+BEGIN
+    IF p_max_rows IS NULL OR p_max_rows < 1 OR p_max_rows > 10000 THEN
+        RAISE EXCEPTION 'cross_org_list: max_rows must be between 1 and 10000';
+    END IF;
+    INSERT INTO pc.cross_org_list_audit (purpose, max_rows, caller)
+    VALUES (left(p_purpose, 64), p_max_rows, session_user);
+    CASE p_purpose
+        WHEN 'orgs' THEN
+            RETURN QUERY SELECT o.id, o.id FROM pc.orgs o WHERE o.state = 'ACTIVE' ORDER BY o.id LIMIT p_max_rows;
+        WHEN 'ledger_unchained' THEN
+            -- One row per org that has entries above its chain watermark; the
+            -- id column repeats the org id.
+            RETURN QUERY
+                SELECT DISTINCT e.org_id, e.org_id
+                FROM pc.ledger_entries e
+                LEFT JOIN pc.ledger_heads h ON h.org_id = e.org_id
+                WHERE e.xid >= coalesce(h.xid_watermark, '0'::xid8)
+                ORDER BY 1
+                LIMIT p_max_rows;
+        ELSE
+            RAISE EXCEPTION 'cross_org_list: unknown purpose';
+    END CASE;
+END;
+$$;
+-- +goose StatementEnd
 DROP TABLE pc.execution_attempts;
 DROP TABLE pc.permits;
 DROP TABLE pc.decision_receipts;
