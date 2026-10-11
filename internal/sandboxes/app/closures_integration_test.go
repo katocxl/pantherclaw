@@ -158,6 +158,41 @@ func TestHR215_ACanaryReportNeedsItsProbeRun(t *testing.T) {
 	}
 }
 
+// TestHR215_TheChecksAreTheHostsNotTheProbes: a closure's network facts
+// and configuration checks are pclaw's, as the host key signed them in the
+// control report. A probe-signed sandbox report that claims other checks
+// (here one that would close the host route) is rejected.
+func TestHR215_TheChecksAreTheHostsNotTheProbes(t *testing.T) {
+	w := newWorld(t)
+	ctx := w.as(td.RoleAgentOwner)
+	s, err := w.svc.StartSession(ctx, w.input())
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.admit(t, s)
+	n := s.Nonces
+	if _, err := w.svc.SubmitProbeReport(ctx, s.Session.ID, w.signed(t, s, report.KindSandbox, n.Sandbox, func(r *report.Report) {
+		r.Results = passing()
+		r.Config.Checks = append(r.Config.Checks, report.Check{ID: "agent_no_host_bind", OK: true})
+	}), nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := w.svc.SubmitProbeReport(ctx, s.Session.ID, w.signed(t, s, report.KindControl, n.Control, func(r *report.Report) {
+		r.Results = []report.Result{{Name: "canary_control", Role: report.RolePositive, Expect: report.Reachable, Observed: report.Reachable}}
+	}), nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := w.svc.SubmitCanaryReport(ctx, s.Session.ID, w.signed(t, s, report.KindCanary, n.Canary, func(r *report.Report) {
+		r.Results = []report.Result{}
+		r.Canary.Hits = []report.Hit{{Proto: "tcp", Port: 18443, Marker: report.Marker(n.Control), At: time.Now().UTC()}}
+	})); !errors.Is(err, app.ErrReport) {
+		t.Fatalf("a sandbox report with checks the host did not sign: %v", err)
+	}
+	if c := w.count(t, "SELECT count(*) FROM pc.coverage_closures WHERE sandbox_session_id = $1", s.Session.ID); c != 0 {
+		t.Fatalf("%d closures recorded", c)
+	}
+}
+
 // TestHR211_ANewImageInvalidatesTheLastClosure: a session that runs other
 // images than the agent's last closure invalidates its scope at once.
 func TestHR211_ANewImageInvalidatesTheLastClosure(t *testing.T) {

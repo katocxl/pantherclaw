@@ -9,6 +9,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -106,7 +107,7 @@ func (s *Service) SubmitCanaryReport(ctx context.Context, session ids.UUID, comp
 // run is the probe run a canary report closes.
 type run struct {
 	probes []covdomain.ProbeResult
-	// checks are the sandbox report's configuration checks.
+	// checks are the configuration checks, as the host signed them.
 	checks []covdomain.ConfigCheck
 	// observed is when the server received the sandbox report; nonce is
 	// its nonce.
@@ -117,8 +118,8 @@ type run struct {
 }
 
 // probeRun gathers the probe run a canary report closes: the sandbox and
-// control reports received since the canary's nonce was issued with
-// theirs, and the canary's verdicts.
+// control reports whose nonces were issued with the canary's, and the
+// canary's verdicts.
 func (s *Service) probeRun(ctx context.Context, q *dbq.Queries, sess dbq.PcSandboxSession, canary Accepted, compact string) (run, error) {
 	runs, err := q.LatestProbeRuns(ctx, sess.OrgID, sess.ID, canary.issuedAt)
 	if err != nil {
@@ -145,7 +146,13 @@ func (s *Service) probeRun(ctx context.Context, q *dbq.Queries, sess dbq.PcSandb
 	// observed is the server's time of the sandbox report, not the probe's
 	// clock: it is never before the session started.
 	out := run{observed: sb.ReceivedAt, nonce: sandbox.Nonce, digest: sha256.Sum256([]byte(sb.Report + "\n" + ctl.Report + "\n" + compact))}
-	for _, k := range sandbox.Config.Checks {
+	// The network facts and configuration checks are pclaw's, observed on the
+	// host: they count as the host key signed them, in the control report,
+	// and the probe-signed sandbox report must carry the same.
+	if sandbox.Network != control.Network || !slices.Equal(sandbox.Config.Checks, control.Config.Checks) {
+		return run{}, reject("the sandbox report's network or checks differ from the host's")
+	}
+	for _, k := range control.Config.Checks {
 		out.checks = append(out.checks, covdomain.ConfigCheck{ID: k.ID, OK: k.OK, Detail: k.Detail})
 	}
 	for _, r := range append(append([]report.Result{}, sandbox.Results...), control.Results...) {
@@ -203,7 +210,7 @@ func (s *Service) EndSession(ctx context.Context, id ids.UUID) (dbq.PcSandboxSes
 		if err != nil {
 			return err
 		}
-		if out, err = s.end(ctx, q, c, sess, a, "ENDED"); err != nil {
+		if out, err = s.end(ctx, q, sess, "ENDED", c.Principal.String(), actor(c)); err != nil {
 			return err
 		}
 		return record(ctx, tx, c, "sandbox.session_ended", sess.ID, map[string]string{"agent_id": a.ID.String()})
@@ -211,9 +218,10 @@ func (s *Service) EndSession(ctx context.Context, id ids.UUID) (dbq.PcSandboxSes
 	return out, err
 }
 
-// end closes an open session in state to and revokes its instance; a
-// closed one is returned as it is.
-func (s *Service) end(ctx context.Context, q *dbq.Queries, c tenancy.Caller, sess dbq.PcSandboxSession, a dbq.PcAgent, to string,
+// end closes an open session in state to and revokes its instance: the one
+// its enrollment token enrolled, whether or not a report bound it yet. A
+// closed session is returned as it is. by and act name who ends it.
+func (s *Service) end(ctx context.Context, q *dbq.Queries, sess dbq.PcSandboxSession, to, by string, act adomain.Actor,
 ) (dbq.PcSandboxSession, error) {
 	ended, err := q.EndSandboxSession(ctx, to, sess.OrgID, sess.ID)
 	if db.IsNoRows(err) {
@@ -221,20 +229,27 @@ func (s *Service) end(ctx context.Context, q *dbq.Queries, c tenancy.Caller, ses
 	} else if err != nil {
 		return sess, err
 	}
-	if sess.InstanceID == nil {
-		return ended, nil
+	instance := sess.InstanceID
+	if instance == nil {
+		in, err := q.SandboxSessionInstance(ctx, sess.OrgID, &sess.EnrollmentTokenID)
+		if db.IsNoRows(err) {
+			return ended, nil
+		} else if err != nil {
+			return ended, err
+		}
+		instance = &in.ID
 	}
-	by, reason := c.Principal.String(), "sandbox session "+strings.ToLower(to)
+	reason := "sandbox session " + strings.ToLower(to)
 	if _, err := q.CloseInstance(ctx, dbq.CloseInstanceParams{
-		OrgID: sess.OrgID, ID: *sess.InstanceID, FromState: "ADMITTED", ToState: "REVOKED", DecidedBy: &by, Reason: &reason,
+		OrgID: sess.OrgID, ID: *instance, FromState: "ADMITTED", ToState: "REVOKED", DecidedBy: &by, Reason: &reason,
 	}); db.IsNoRows(err) {
 		return ended, nil // already revoked
 	} else if err != nil {
 		return ended, err
 	}
-	if err := agents.RecordChange(ctx, q, sess.OrgID, a.ID, adomain.Change{
-		Kind: adomain.ChangeInstanceRevoked, Actor: actor(c), Reason: reason,
-		Details: map[string]string{"instance_id": sess.InstanceID.String(), "sandbox_session_id": sess.ID.String()},
+	if err := agents.RecordChange(ctx, q, sess.OrgID, sess.AgentID, adomain.Change{
+		Kind: adomain.ChangeInstanceRevoked, Actor: act, Reason: reason,
+		Details: map[string]string{"instance_id": instance.String(), "sandbox_session_id": sess.ID.String()},
 	}); err != nil {
 		return ended, err
 	}
