@@ -6,5 +6,20 @@
 
 export { ActionError, type ParsedAction, parseAction } from "./action.ts";
 export { checkProof, type ProofRequest } from "./check.ts";
+export {
+  type Answer,
+  Client,
+  type ClientConfig,
+  evaluate,
+  newActionId,
+  next,
+  type Outcome,
+  parseWaitResponse,
+  readStream,
+  type Result,
+  retry,
+  type ToolCall,
+  type WaitState,
+} from "./client.ts";
 export { canonicalize, JCSError, type JSONValue, parseJSON, serialize } from "./jcs.ts";
 export * from "./pap.ts";

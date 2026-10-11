@@ -13,8 +13,9 @@
 | `action.ts` | `parseAction`: ActionIR v1 checked as strictly as PantherClaw checks it (HR-100..103), with its canonical form and hex action hash. An SDK uses it to check the action a gateway decided; it never builds or sends one (HR-201). |
 | `pap.ts` | The workload key file (`parseKeyFile`, `readKeyFile`, `writeKeyFile` without overwriting, `marshalKeyFile` byte for byte), Ed25519 workload keys from WebCrypto (`WorkloadKey.fromSeed`, `thumbprint`), request proofs (`signProof`, byte for byte as PantherClaw signs them), and workload token claims read without verifying (`parseTokenClaims`). |
 | `check.ts` | `checkProof`: PantherClaw's proof checks of PAP/1 §4 steps 2–5, returning `ok` or the PAP-Error code, for fake gateways in tests and services that verify PAP/1 themselves. |
+| `client.ts` | `Client`, the workload client. It signs a proof over every request, with one retry for a fresh nonce, and renews workload tokens at the server, with one retry for an expired one. `authorize` sends an agent's raw tool call through the gateway's `/sdk/{connection}` face, and `evaluate` reads the answer, checking the action id, the PARTIAL label and the hash. `wait` long-polls, `stream` follows the SSE wait stream, and `authorizeAndWait` and `resume` wait and resubmit the identical call. It fails closed (HR-200): anything PantherClaw cannot decide is `cannot_decide`, never `allow`. |
 
-The `/sdk` client with waits and a target-side action-token verifier follow in later M8 pull requests.
+A target-side action-token verifier follows in a later M8 pull request.
 
 ## Tests
 
