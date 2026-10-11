@@ -302,7 +302,7 @@ func AppendEffect(ctx context.Context, tx db.TenantTx, q *dbq.Queries, e app.Eff
 
 // appendEffect signs and appends one effect receipt and makes its state
 // the transaction's (HR-191: appended, never rewritten). A cooperative
-// channel's receipts are labelled PARTIAL coverage, whatever their state
+// channel's receipts are labeled PARTIAL coverage, whatever their state
 // (G0 M7 design decision 2).
 func appendEffect(ctx context.Context, tx db.TenantTx, q *dbq.Queries, e app.Effect, actor evdomain.Actor, sign app.Sign) error {
 	seq, err := q.NextEffectSeq(ctx, e.Org, e.Transaction)

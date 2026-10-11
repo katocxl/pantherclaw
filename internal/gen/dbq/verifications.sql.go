@@ -571,7 +571,7 @@ SELECT channel FROM pc.transactions WHERE org_id = $1 AND id = $2
 `
 
 // TransactionChannel is the channel a transaction came through: the
-// effect receipts of a cooperative one (hook, sdk) are labelled PARTIAL
+// effect receipts of a cooperative one (hook, sdk) are labeled PARTIAL
 // coverage (HR-024, HR-186, G0 M7 design decision 2).
 func (q *Queries) TransactionChannel(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (*string, error) {
 	row := q.db.QueryRow(ctx, transactionChannel, orgID, iD)

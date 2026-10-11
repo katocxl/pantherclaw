@@ -354,10 +354,10 @@ func (w *world) sdkDispatched(run ids.UUID, charge, amount string) finalize.Resu
 // execution receipt and in the same transaction, one appended UNVERIFIABLE
 // effect receipt with the reason, basis "definition", the acceptance level
 // and every declared effect kind UNVERIFIABLE; a delegated one (the agent
-// ran it) reaches no level and is labelled PARTIAL coverage; an unknown one
+// ran it) reaches no level and is labeled PARTIAL coverage; an unknown one
 // stays an unknown effect for its reconciliation; and a delegated write
 // whose definition has a verifier is verified like any other, its receipts
-// still labelled PARTIAL.
+// still labeled PARTIAL.
 func TestHR191_AWriteNothingCanVerifyIsUnverifiable(t *testing.T) {
 	w := newWorld(t)
 	ctx := context.Background()
@@ -399,7 +399,7 @@ func TestHR191_AWriteNothingCanVerifyIsUnverifiable(t *testing.T) {
 		t.Fatalf("its transaction %q", got)
 	}
 	c := claims(t, w.str("SELECT receipt_jws FROM pc.effect_receipts WHERE transaction_id = $1", accepted.TransactionID))
-	effects, _ := json.Marshal(c["effects"])
+	effects, _ := json.Marshal(c["effects"], json.Deterministic(true))
 	if c["reason"] != tdomain.ReasonNoVerifier || c["basis"].(map[string]any)["kind"] != "definition" || c["coverage"] != nil ||
 		string(effects) != `[{"kind":"funds.transfer","state":"UNVERIFIABLE"}]` {
 		t.Fatalf("its effect receipt %v", c)

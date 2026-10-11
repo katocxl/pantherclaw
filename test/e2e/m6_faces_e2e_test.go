@@ -155,7 +155,7 @@ func TestE2E_M6_ClaudeCodeHook(t *testing.T) {
 	}
 	// The command ran on the developer's machine and pc.shell declares no
 	// verifier: its effect is UNVERIFIABLE, reaches no level, and is
-	// labelled PARTIAL coverage (G0 M7 design decision 2, HR-186).
+	// labeled PARTIAL coverage (G0 M7 design decision 2, HR-186).
 	effect := s.row(t, `SELECT e.state || ' ' || e.basis || ' ' || coalesce(e.level_achieved, '-') || ' ' || e.receipt_jws FROM pc.effect_receipts e
 		JOIN pc.execution_attempts a ON a.org_id = e.org_id AND a.transaction_id = e.transaction_id ORDER BY a.recorded_at DESC LIMIT 1`)
 	if f := strings.Fields(effect); len(f) != 4 || strings.Join(f[:3], " ") != "UNVERIFIABLE definition -" || papClaims(t, f[3])["coverage"] != "PARTIAL" {

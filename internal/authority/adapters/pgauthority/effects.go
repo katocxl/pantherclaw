@@ -253,7 +253,7 @@ func schedule(ctx context.Context, q *dbq.Queries, org ids.OrgID, c dbq.Executio
 // UNVERIFIABLE (F490's part), and the level the target's acceptance
 // reached, which a delegated outcome, where the agent ran the action
 // itself, does not reach (HR-191). The receipt of a cooperative channel's
-// transaction is labelled PARTIAL coverage. A nil u appends nothing.
+// transaction is labeled PARTIAL coverage. A nil u appends nothing.
 func unverifiable(ctx context.Context, tx db.TenantTx, q *dbq.Queries, org ids.OrgID, gatewayID string, txn ids.UUID,
 	u *unverified, sign finalize.Signing,
 ) error {

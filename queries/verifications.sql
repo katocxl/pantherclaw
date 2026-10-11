@@ -76,7 +76,7 @@ SELECT (coalesce(max(seq), 0) + 1)::integer FROM pc.effect_receipts
 WHERE org_id = sqlc.arg(org_id) AND transaction_id = sqlc.arg(transaction_id);
 
 -- TransactionChannel is the channel a transaction came through: the
--- effect receipts of a cooperative one (hook, sdk) are labelled PARTIAL
+-- effect receipts of a cooperative one (hook, sdk) are labeled PARTIAL
 -- coverage (HR-024, HR-186, G0 M7 design decision 2).
 -- name: TransactionChannel :one
 SELECT channel FROM pc.transactions WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id);

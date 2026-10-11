@@ -98,8 +98,10 @@ func TestT076_ACaptureTakenAtTheGatewayLeavesOnlyThroughAnAuditedRead(t *testing
 	}
 	packOf := func(who context.Context, captures bool) (map[string][]byte, *pack.Manifest) {
 		t.Helper()
-		pk, err := packs.CreateEvidencePack(who, evapp.PackRequest{Kind: pack.ScopeTransactions, Transactions: []ids.UUID{txn},
-			Include: pack.Include{Receipts: true, Captures: captures}})
+		pk, err := packs.CreateEvidencePack(who, evapp.PackRequest{
+			Kind: pack.ScopeTransactions, Transactions: []ids.UUID{txn},
+			Include: pack.Include{Receipts: true, Captures: captures},
+		})
 		if err != nil {
 			t.Fatal(err)
 		}
