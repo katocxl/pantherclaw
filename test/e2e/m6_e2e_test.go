@@ -197,8 +197,8 @@ func TestS08_AnUnrecordedDispatchIsUnknownAndHeld(t *testing.T) {
 	s.serve(t)
 	s.exec(t, "UPDATE pc.permits SET dispatching_at = now() - interval '1 hour' WHERE transaction_id = $1", mustUUID(t, txn))
 	// The sweeper marks it UNKNOWN and keeps what an unknown outcome reported
-	// by a gateway keeps: the attempt and its signed execution receipt. These
-	// records stay; the budget is checked through them below, because the
+	// by a gateway keeps: the attempt and its signed execution receipt. The
+	// money is checked through records that stay too, because the
 	// reconciliation the sweeper opens may be resolved before a poll sees
 	// the money held.
 	s.eventually(t, "UNKNOWN unknown sweeper 1", `SELECT p.state || ' ' || a.outcome || ' ' || a.recorded_by || ' ' ||
@@ -266,8 +266,8 @@ func TestE2E_M6_KillSwitch(t *testing.T) {
 	}
 }
 
-// learns watches the gateway's own containment view from since, the moment
-// a containment change was committed, until it shows want
+// learns watches the gateway's own containment view from since, when the
+// call that committed a containment change returned, until it shows want
 // (control.ErrKillSwitch, or nil once the kill switch is lifted), checking
 // every few milliseconds in the background. The returned function waits
 // for that, and fails t if a check begun more than a second after since

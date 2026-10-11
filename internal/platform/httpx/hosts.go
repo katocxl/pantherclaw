@@ -60,7 +60,7 @@ func MetadataHost(host string) bool {
 // egress client refuses, before any lookup: an IP address in any spelling
 // HostAddr reads that DeniedAddr denies with the allowed prefixes, or a
 // metadata service's name. Other names can only be checked when they are
-// dialled, which the egress client does (HR-071, HR-077).
+// dialed, which the egress client does (HR-071, HR-077).
 func DeniedHost(host string, allowed []netip.Prefix) bool {
 	if a, ok := HostAddr(host); ok {
 		return DeniedAddr(a, allowed)
