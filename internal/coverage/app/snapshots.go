@@ -166,7 +166,10 @@ func (s *Service) reassess(ctx context.Context, tx db.TenantTx, sc domain.Scope,
 				next.LastValid = current.LastValidID
 			}
 		}
-		if prev.same(next) {
+		// A change always records a snapshot, even an unchanged one: a claim
+		// on a snapshot computed before a change has lapsed, so a claim that
+		// did not must name one computed after it (HR-217).
+		if prev.same(next) && cause == nil {
 			return false, nil
 		}
 	case !db.IsNoRows(err):
