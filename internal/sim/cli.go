@@ -35,6 +35,7 @@ Usage:
   pantherclaw-sim mcp [--addr 127.0.0.1:9091] [--legacy] [--stream] [--ask LIST] [--input-required] [--tool-error] [--description TEXT] [--token-file FILE]
   pantherclaw-sim load --workload-file FILE [--token-file FILE] [--run ID] [--gateway URL] [--connection payments] [--rate 1000] [--duration 30s]
                        [--warmup 5s] [--max-in-flight 2048] [--amount 1.00 | --unique] [--facts-key-file FILE] [--out FILE]
+  pantherclaw-sim canary [--host 127.0.0.1] [--dns-port 18453] [--https-port 18443] [--ssh-port 18422] [--query-addr 127.0.0.1:18433]
   pantherclaw-sim version
 `
 
@@ -53,6 +54,8 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		err = runPayments(ctx, args[1:], stderr)
 	case "mcp":
 		err = runMCP(ctx, args[1:], stderr)
+	case "canary":
+		err = runCanary(ctx, args[1:], stderr)
 	case "load":
 		err = runLoad(ctx, args[1:], stdout, stderr)
 	default:
