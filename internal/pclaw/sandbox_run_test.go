@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"errors"
 	"io"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -15,6 +16,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	pantherclawv1 "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
+	"github.com/katocxl/pantherclaw/internal/sandbox/workspace"
 )
 
 func TestSandboxRunNeedsItsFlags(t *testing.T) {
@@ -74,5 +76,31 @@ func TestTheCoverageOutcomeIsPrinted(t *testing.T) {
 	if !strings.Contains(got, "c1: sandbox closure PASSED (closure x1), evidence for ENFORCED until 2026-10-12T09:00:00Z") ||
 		!strings.Contains(got, "c2: sandbox closure FAILED (closure x2): edge_unmapped_refused, external_canary") {
 		t.Fatalf("printed:\n%s", got)
+	}
+}
+
+// TestTheChangesAreListedWithTheFilesToReview: the run lists what the
+// agent changed, where the patch is, which binary files are beside it, and
+// the dotfiles and task files to review before running anything.
+func TestTheChangesAreListedWithTheFilesToReview(t *testing.T) {
+	var buf bytes.Buffer
+	printChanges(&buf, "out", []workspace.Change{
+		{Path: "main.go", Kind: workspace.Modified},
+		{Path: ".envrc", Kind: workspace.Added, Flagged: true},
+		{Path: "logo.png", Kind: workspace.Added, Binary: true},
+	})
+	got := buf.String()
+	for _, want := range []string{
+		"3 changes: apply " + filepath.Join("out", "changes.patch"), "under " + filepath.Join("out", "binary") + `: "logo.png"`,
+		`these dotfiles, editor or task files changed: ".envrc"`,
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("printed lacks %q:\n%s", want, got)
+		}
+	}
+	buf.Reset()
+	printChanges(&buf, "out", nil)
+	if !strings.Contains(buf.String(), "changed nothing") {
+		t.Errorf("no changes: %q", buf.String())
 	}
 }
