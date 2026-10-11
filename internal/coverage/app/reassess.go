@@ -47,7 +47,7 @@ func (s *Service) reassessScopes(ctx context.Context, tx db.TenantTx, scopes []d
 			out.Snapshots++
 		}
 	}
-	return out, s.deriveAgents(ctx, tx, scopes, s.now(), pkgs)
+	return out, s.deriveAgents(ctx, tx, scopeAgents(scopes), s.now(), pkgs)
 }
 
 // compareScopes orders scopes by agent, connection and operation.
