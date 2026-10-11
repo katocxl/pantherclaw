@@ -8,7 +8,6 @@
 // route out the agent could try and signs what it saw with the session's
 // probe key, which pclaw created outside every container and mounted
 // read-only here (HR-215).
-// created outside every container and mounted read-only here (HR-215).
 //
 // Probes contact only the canary, the host's own addresses and the mapped
 // hosts' real addresses (resolved on the host), never another third party.
