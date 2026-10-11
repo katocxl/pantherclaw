@@ -96,6 +96,8 @@ func New(pkg *domain.Package, limits celenv.Limits) (*Mapper, error) {
 				m.hook[mp.Tool] = c
 			case domain.ChannelHTTP:
 				m.http = append(m.http, c)
+			case domain.ChannelSDK:
+				// Never a mapping's channel: package validation refuses it.
 			}
 		}
 	}
@@ -220,6 +222,7 @@ func (m *Mapper) SDK(ctx context.Context, tc Context, via domain.Channel, tool s
 		return m.byName(ctx, tc, m.hook, tool, input, domain.ChannelSDK)
 	case domain.ChannelMCP:
 		return m.byName(ctx, tc, m.mcp, tool, input, domain.ChannelSDK)
+	case domain.ChannelHTTP, domain.ChannelSDK:
 	}
 	return actionir.Parsed{}, fmt.Errorf("%w: %s calls", ErrUnmapped, via)
 }
