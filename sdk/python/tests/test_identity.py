@@ -67,3 +67,16 @@ class Identity(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class HTU(unittest.TestCase):
+    def test_htus_vectors(self) -> None:
+        f = load("proofs.json")
+        self.assertTrue(f["htus"])
+        for c in f["htus"]:
+            with self.subTest(c["url"]):
+                if c.get("reject"):
+                    with self.assertRaises(ValueError):
+                        pap.htu(c["url"])
+                else:
+                    self.assertEqual(pap.htu(c["url"]), c["htu"])
