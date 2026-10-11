@@ -6,8 +6,10 @@
 // pc.github package, the gateway's GitHub App broker and its fact reads
 // use: one GitHub App whose installations mint installation tokens scoped
 // to repositories and permissions (an App JWT checked as GitHub checks it,
-// opaque tokens of GitHub's length, revocation), and repositories with
-// settings, branches, commits and files. Every request is authenticated,
+// opaque tokens of GitHub's length, revocation, the installation and the
+// repositories it reaches), and repositories with settings, branches,
+// commits and files, written one commit at a time under GitHub's rule that
+// a workflow file needs the workflows permission. Every request is authenticated,
 // checked against the permission GitHub documents for its endpoint, and
 // recorded with the scope of the token it used, so tests can assert who
 // did what with which token. Every response is marked SIMULATED.
@@ -186,6 +188,8 @@ func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /app/installations/{id}/access_tokens", s.accessToken)
 	mux.HandleFunc("DELETE /installation/token", s.revoke)
+	mux.HandleFunc("GET /app/installations/{id}", s.installation)
+	mux.HandleFunc("GET /installation/repositories", s.installationRepositories)
 	s.repoRoutes(mux)
 	s.pullRoutes(mux)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -254,6 +258,15 @@ func (s *Server) authenticate(r *http.Request) (*Token, int) {
 		return nil, http.StatusUnauthorized
 	}
 	return t, 0
+}
+
+// actor is who a token acts as: the person of a personal access token, or
+// the App's bot.
+func actor(t *Token) string {
+	if t.User != "" {
+		return t.User
+	}
+	return "pantherclaw-sim[bot]"
 }
 
 // fail answers an error as GitHub does and returns the status.

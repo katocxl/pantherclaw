@@ -66,15 +66,6 @@ func (s *Server) SetMergeable(fullName string, number int, ok bool) {
 	s.repos[strings.ToLower(fullName)].Pulls[number].Unmergeable = !ok
 }
 
-// actor is who a token acts as: the person of a personal access token, or
-// the App's bot.
-func actor(t *Token) string {
-	if t.User != "" {
-		return t.User
-	}
-	return "pantherclaw-sim[bot]"
-}
-
 func (s *Server) createPull(w http.ResponseWriter, req *http.Request, r *Repo, t *Token) int {
 	var b struct {
 		Title string `json:"title"`
@@ -177,7 +168,7 @@ func (s *Server) review(w http.ResponseWriter, req *http.Request, r *Repo, t *To
 
 // merge merges a pull request. A sha that is not the head answers 409, as
 // GitHub does; a closed, draft or unmergeable pull request answers 405.
-func (s *Server) merge(w http.ResponseWriter, req *http.Request, r *Repo, _ *Token) int {
+func (s *Server) merge(w http.ResponseWriter, req *http.Request, r *Repo, t *Token) int {
 	p := pull(r, req)
 	if p == nil {
 		return fail(w, http.StatusNotFound, "Not Found")
@@ -211,7 +202,7 @@ func (s *Server) merge(w http.ResponseWriter, req *http.Request, r *Repo, _ *Tok
 		parents = []string{base}
 	}
 	sha := s.commit(r, parents, tree)
-	r.Branches[p.Base] = sha
+	s.advance(r, p.Base, sha, actor(t))
 	p.State, p.Merged, p.MergeCommitSHA, p.MergeMethod = "closed", true, sha, b.MergeMethod
 	return reply(w, http.StatusOK, map[string]any{"sha": sha, "merged": true, "message": "Pull Request successfully merged", "simulated": true})
 }
