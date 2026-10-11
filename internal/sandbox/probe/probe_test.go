@@ -103,7 +103,7 @@ func TestHR121_ProbesContactNoThirdParty(t *testing.T) {
 // TestHR121_TheControlRunTwinsEveryProbeWithALiveTarget: on the open
 // network each probe with a live target there runs again under its own
 // name as a positive control, aimed only at the canary, the host and
-// Docker's resolver; ipv6, metadata and docker_socket have no twin.
+// Docker's resolver; ipv6 and metadata have no twin.
 func TestHR121_TheControlRunTwinsEveryProbeWithALiveTarget(t *testing.T) {
 	c := config()
 	sandbox := map[string]bool{}
@@ -122,7 +122,7 @@ func TestHR121_TheControlRunTwinsEveryProbeWithALiveTarget(t *testing.T) {
 		}
 	}
 	for name := range sandbox {
-		want := name != "ipv6" && name != "metadata" && name != "docker_socket"
+		want := name != "ipv6" && name != "metadata"
 		if twinned[name] != want {
 			t.Errorf("%s twinned: %v", name, twinned[name])
 		}
