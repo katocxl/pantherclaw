@@ -11,7 +11,10 @@ import (
 	"encoding/json/v2"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
+	"path/filepath"
+	"runtime"
 )
 
 // KeyFile is a workload's identity on disk (PAP/1 §3.1): its Ed25519 key,
@@ -27,6 +30,20 @@ type KeyFile struct {
 	Server string `json:"server,omitempty"`
 	// RunID is a run started for the workload.
 	RunID string `json:"run_id,omitempty"`
+}
+
+// String describes the key file without its private key, so printing or
+// logging one never shows the seed.
+func (k KeyFile) String() string {
+	return fmt.Sprintf("pap.KeyFile{identifier: %q, server: %q, run_id: %q, private_key: [redacted]}", k.Identifier, k.Server, k.RunID)
+}
+
+// GoString is String, for %#v.
+func (k KeyFile) GoString() string { return k.String() }
+
+// LogValue is the key file for log/slog, without its private key.
+func (k KeyFile) LogValue() slog.Value {
+	return slog.GroupValue(slog.String("identifier", k.Identifier), slog.String("server", k.Server), slog.String("run_id", k.RunID))
 }
 
 // ErrKeyFile reports a key file that cannot be used.
@@ -81,8 +98,18 @@ func Thumbprint(pub ed25519.PublicKey) string {
 	return b64(s[:])
 }
 
-// ReadKeyFile reads and parses a key file.
+// ReadKeyFile reads and parses a key file. Outside Windows it refuses a
+// file that its group or others may read or write, as ssh does.
 func ReadKeyFile(path string) (KeyFile, error) {
+	if runtime.GOOS != "windows" {
+		info, err := os.Stat(path)
+		if err != nil {
+			return KeyFile{}, err
+		}
+		if info.Mode().Perm()&0o077 != 0 {
+			return KeyFile{}, fmt.Errorf("%w: %s is open to other users (mode %v); run chmod 600 on it", ErrKeyFile, path, info.Mode().Perm())
+		}
+	}
 	b, err := os.ReadFile(path) //nolint:gosec // G304: the caller chooses the path
 	if err != nil {
 		return KeyFile{}, err
@@ -90,9 +117,13 @@ func ReadKeyFile(path string) (KeyFile, error) {
 	return ParseKeyFile(b)
 }
 
-// WriteKeyFile writes k to a new owner-only file. An existing file is
-// never overwritten unless replace is set.
-func WriteKeyFile(path string, k KeyFile, replace bool) error {
+// WriteKeyFile writes k to an owner-only file. It writes a temporary file
+// in the same directory, syncs it and then links it to path, so a crash
+// never leaves a partial key. An existing file is never overwritten unless
+// replace is set; then it is replaced atomically, and the new file is
+// owner-only whatever the old one's mode was. (On Windows, owner-only
+// comes from the directory's access list, not from the mode.)
+func WriteKeyFile(path string, k KeyFile, replace bool) (err error) {
 	if _, err := k.Key(); err != nil {
 		return err
 	}
@@ -100,17 +131,38 @@ func WriteKeyFile(path string, k KeyFile, replace bool) error {
 	if err != nil {
 		return err
 	}
-	flags := os.O_WRONLY | os.O_CREATE | os.O_EXCL
-	if replace {
-		flags = os.O_WRONLY | os.O_CREATE | os.O_TRUNC
-	}
-	f, err := os.OpenFile(path, flags, 0o600) //nolint:gosec // G304: the caller chooses the path
+	f, err := os.CreateTemp(filepath.Dir(path), ".pantherclaw-key-*")
 	if err != nil {
+		return err
+	}
+	tmp := f.Name()
+	defer func() {
+		if err != nil {
+			_ = os.Remove(tmp)
+		}
+	}()
+	if err := f.Chmod(0o600); err != nil && runtime.GOOS != "windows" {
+		_ = f.Close()
 		return err
 	}
 	if _, err := f.Write(b); err != nil {
 		_ = f.Close()
 		return err
 	}
-	return f.Close()
+	if err := f.Sync(); err != nil {
+		_ = f.Close()
+		return err
+	}
+	if err := f.Close(); err != nil {
+		return err
+	}
+	if replace {
+		return os.Rename(tmp, path)
+	}
+	// A link fails when path exists, so an existing key is never replaced.
+	if err := os.Link(tmp, path); err != nil {
+		return err
+	}
+	_ = os.Remove(tmp)
+	return nil
 }

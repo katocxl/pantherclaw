@@ -31,6 +31,7 @@ type tokenCase struct {
 	Now        int64  `json:"now"`
 	Store      string `json:"store"`
 	Twice      bool   `json:"twice"`
+	ThenValid  bool   `json:"then_valid"`
 	Expect     string `json:"expect"`
 }
 
@@ -68,7 +69,8 @@ func (failing) Shared() bool { return true }
 func (c tokenCase) verifier(t *testing.T, k *keys, store verifier.ReplayStore) *verifier.Verifier {
 	t.Helper()
 	if store == nil {
-		store = &verifier.MemoryStore{}
+		// A store that began recording before any vector's token.
+		store = verifier.NewMemoryStore(0, time.Unix(c.Now-3600, 0))
 	}
 	if c.Store == "unavailable" {
 		store = failing{}
@@ -91,6 +93,7 @@ func (c tokenCase) match(cl verifier.Claims) bool {
 // (internal/conformance/gen runs it over the same file).
 func TestHR202_ConformanceActionTokens(t *testing.T) {
 	f, k := load(t)
+	valid := f.Cases[0]
 	for _, c := range f.Cases {
 		v := c.verifier(t, k, nil)
 		_, err := v.Verify(context.Background(), c.Token, []byte(c.Body), c.match)
@@ -106,6 +109,12 @@ func TestHR202_ConformanceActionTokens(t *testing.T) {
 		}
 		if got != c.Expect {
 			t.Errorf("%s: %s (%v), want %s", c.Name, got, err, c.Expect)
+		}
+		if c.ThenValid {
+			// Verify before insert: the refusal left the token unspent.
+			if _, err := v.Verify(context.Background(), c.Token, []byte(valid.Body), valid.match); err != nil {
+				t.Errorf("%s: the valid request after the refusal: %v", c.Name, err)
+			}
 		}
 	}
 }
@@ -167,7 +176,7 @@ func TestHR202_StoresRefuseWhatTheyCannotRecord(t *testing.T) {
 	c := f.Cases[0]
 	ran := 0
 	iat := time.Unix(c.Now-10, 0)
-	full := verifier.NewMemoryStore(1, iat)
+	full := verifier.NewMemoryStore(1, iat.Add(-time.Minute))
 	if ok, err := full.Use(context.Background(), verifier.Spend{ID: "other", IssuedAt: iat, Now: iat, Until: iat.Add(65 * time.Second)}); !ok || err != nil {
 		t.Fatal(ok, err)
 	}
@@ -180,7 +189,7 @@ func TestHR202_StoresRefuseWhatTheyCannotRecord(t *testing.T) {
 			t.Errorf("%s store: HTTP %d, handler ran %d times", name, status, ran)
 		}
 	}
-	m := verifier.NewMemoryStore(1, iat)
+	m := verifier.NewMemoryStore(1, iat.Add(-time.Minute))
 	until := iat.Add(65 * time.Second)
 	if ok, _ := m.Use(context.Background(), verifier.Spend{ID: "a", IssuedAt: iat, Now: iat, Until: until}); !ok {
 		t.Fatal("first use refused")
@@ -266,5 +275,106 @@ func TestT081_ReplicasSharingAStoreSpendATokenOnce(t *testing.T) {
 	}
 	if n, err := (&verifier.SQLStore{DB: db}).Purge(context.Background(), time.Unix(c.Now+3600, 0)); err != nil || n != 1 {
 		t.Fatalf("purge: %d %v", n, err)
+	}
+}
+
+// TestHR202_ARestartRefusesTokensItMayHaveSpent: a memory store refuses
+// tokens issued before it began recording plus the skew, since one issued
+// by an Authority clock a little ahead may have been spent before a
+// restart; a store with no start time begins at its first use.
+func TestHR202_ARestartRefusesTokensItMayHaveSpent(t *testing.T) {
+	started := time.Unix(1_791_201_600, 0)
+	m := verifier.NewMemoryStore(0, started)
+	spend := func(s *verifier.MemoryStore, iat time.Time) error {
+		_, err := s.Use(context.Background(), verifier.Spend{Audience: "a", ID: iat.String(), IssuedAt: iat, Now: started.Add(time.Minute), Until: iat.Add(65 * time.Second)})
+		return err
+	}
+	for _, d := range []time.Duration{-time.Minute, -verifier.Skew, 0, verifier.Skew - time.Second} {
+		if err := spend(m, started.Add(d)); !errors.Is(err, verifier.ErrStoreRestarted) {
+			t.Errorf("issued %v after the start: %v", d, err)
+		}
+	}
+	if err := spend(m, started.Add(verifier.Skew)); err != nil {
+		t.Errorf("issued %v after the start: %v", verifier.Skew, err)
+	}
+	var zero verifier.MemoryStore
+	if _, err := zero.Use(context.Background(), verifier.Spend{ID: "x", IssuedAt: started, Now: started, Until: started.Add(time.Minute)}); !errors.Is(err, verifier.ErrStoreRestarted) {
+		t.Errorf("a store without a start time accepted a token issued before its first use: %v", err)
+	}
+}
+
+// TestHR202_TheReplayStoreKeysByAudienceAndID: one store can serve several
+// targets; a jti is spent once per audience.
+func TestHR202_TheReplayStoreKeysByAudienceAndID(t *testing.T) {
+	iat := time.Unix(1_791_201_600, 0)
+	m := verifier.NewMemoryStore(0, iat.Add(-time.Hour))
+	use := func(aud string) bool {
+		ok, err := m.Use(context.Background(), verifier.Spend{Audience: aud, ID: "jti", IssuedAt: iat, Now: iat, Until: iat.Add(time.Minute)})
+		return ok && err == nil
+	}
+	if !use("a") || !use("b") || use("a") {
+		t.Fatal("the store does not key by audience and id")
+	}
+}
+
+// TestHR202_TheJWKSComesOverTLSWithoutRedirects: a JWKS URL in clear text
+// to another machine is refused, and a redirect is never followed, so the
+// keys cannot come from anyone on the way.
+func TestHR202_TheJWKSComesOverTLSWithoutRedirects(t *testing.T) {
+	f, k := load(t)
+	c := f.Cases[0]
+	for _, u := range []string{"http://pantherclaw.example.test/jwks.json", "http://10.0.0.1/jwks.json", "https://user@pantherclaw.example.test/jwks.json"} {
+		if _, err := verifier.New(verifier.Config{JWKSURL: u, Issuer: c.Issuer, Audience: c.Audience, Store: failing{}}); err == nil {
+			t.Errorf("%s accepted", u)
+		}
+	}
+	redirect := httptest.NewServer(http.RedirectHandler(k.srv.URL, http.StatusFound))
+	t.Cleanup(redirect.Close)
+	v, err := verifier.New(verifier.Config{
+		JWKSURL: redirect.URL, Issuer: c.Issuer, Audience: c.Audience, Store: verifier.NewMemoryStore(0, time.Unix(c.Now-3600, 0)),
+		Client: &http.Client{}, Now: func() time.Time { return time.Unix(c.Now, 0) },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = v.Verify(context.Background(), c.Token, []byte(c.Body), c.match)
+	if verifier.CodeOf(err) != verifier.StoreUnavailable || k.fetches.Load() != 0 {
+		t.Fatalf("%v; the redirect was followed %d times", err, k.fetches.Load())
+	}
+}
+
+// TestHR202_OneJWKSFetchAtATime: verifications that find the keys stale
+// share one fetch.
+func TestHR202_OneJWKSFetchAtATime(t *testing.T) {
+	f, _ := load(t)
+	c := f.Cases[0]
+	var fetches atomic.Int32
+	slow := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		fetches.Add(1)
+		time.Sleep(100 * time.Millisecond)
+		_, _ = w.Write(f.JWKS)
+	}))
+	t.Cleanup(slow.Close)
+	v, err := verifier.New(verifier.Config{
+		JWKSURL: slow.URL, Issuer: c.Issuer, Audience: c.Audience, Store: verifier.NewMemoryStore(0, time.Unix(c.Now-3600, 0)),
+		Now: func() time.Time { return time.Unix(c.Now, 0) },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan error, 8)
+	for range 8 {
+		go func() {
+			_, err := v.Verify(context.Background(), c.Token, []byte(c.Body), func(verifier.Claims) bool { return false })
+			done <- err
+		}()
+	}
+	for range 8 {
+		if err := <-done; verifier.CodeOf(err) != verifier.OperationMismatch {
+			t.Errorf("%v", err)
+		}
+	}
+	if fetches.Load() != 1 {
+		t.Fatalf("%d fetches", fetches.Load())
 	}
 }
