@@ -96,7 +96,15 @@ func TestHR210_TheCalculusIsOrdered(t *testing.T) {
 		"no closure":               {func(e *domain.Evidence) { e.Closure = nil }, domain.Partial, domain.ReasonNoClosure},
 		"agent-held access":        {func(e *domain.Evidence) { e.Connection.AccessMode = domain.AccessAgentHeld }, domain.Partial, domain.ReasonAgentHeld},
 		"an unverified target":     {func(e *domain.Evidence) { e.Connection.AccessMode = domain.AccessTargetEnforced }, domain.Partial, domain.ReasonUnverified},
-		"a proposed channel":       {func(e *domain.Evidence) { e.Routes = append(e.Routes, channel(domain.ChannelHook, "proposed")) }, domain.Partial, "route_not_closed:channel"},
+		"a verified read": {func(e *domain.Evidence) {
+			at := t0.Add(-time.Hour)
+			e.Connection.AccessMode, e.VerifiedAt, e.ReadOnly = domain.AccessTargetEnforced, &at, true
+		}, domain.Enforced, ""},
+		"a verified write": {func(e *domain.Evidence) {
+			at := t0.Add(-time.Hour)
+			e.Connection.AccessMode, e.VerifiedAt = domain.AccessTargetEnforced, &at
+		}, domain.Partial, domain.ReasonWriteCapped},
+		"a proposed channel": {func(e *domain.Evidence) { e.Routes = append(e.Routes, channel(domain.ChannelHook, "proposed")) }, domain.Partial, "route_not_closed:channel"},
 		"a laptop instance": {func(e *domain.Evidence) {
 			e.Instances = append(e.Instances, domain.Instance{ID: ids.NewV7()})
 		}, domain.Partial, domain.ReasonInstance},
@@ -211,7 +219,8 @@ func TestHR210_StatesComeOnlyFromEvidence(t *testing.T) {
 // that is not a gateway channel in enforce mode, to a scope with a known
 // route, never raises its state; nor does removing the closure or the
 // verifier test, letting time pass, invalidating, or admitting an instance
-// outside the sandbox.
+// outside the sandbox, nor does excluding a route or the whole scope
+// (design decision 1).
 func TestHR210_MoreRoutesOrLessEvidenceNeverRaiseTheState(t *testing.T) {
 	rapid.Check(t, func(t *rapid.T) {
 		e, m := drawEvidence(t)
@@ -222,9 +231,10 @@ func TestHR210_MoreRoutesOrLessEvidenceNeverRaiseTheState(t *testing.T) {
 			at := e.Now.Add(-time.Hour)
 			e.VerifiedAt = &at
 		}
+		e.ReadOnly = rapid.Bool().Draw(t, "readOnly")
 		before := domain.Compute(e).State
 		kinds := append([]domain.RouteKind{domain.KindChannel}, domain.EquivalentKinds...)
-		switch rapid.IntRange(0, 5).Draw(t, "weaken") {
+		switch rapid.IntRange(0, 6).Draw(t, "weaken") {
 		case 0:
 			k := rapid.SampledFrom(kinds).Draw(t, "kind")
 			obs := rapid.SampledFrom([]string{"observed", "declared", "proposed"}).Draw(t, "observation")
@@ -246,6 +256,9 @@ func TestHR210_MoreRoutesOrLessEvidenceNeverRaiseTheState(t *testing.T) {
 			}
 		case 5:
 			e.Instances = append(e.Instances, domain.Instance{ID: ids.NewV7()})
+		case 6:
+			k := rapid.SampledFrom(append([]domain.RouteKind{""}, domain.EquivalentKinds...)).Draw(t, "excluded")
+			e.Exclusions = append(e.Exclusions, domain.Exclusion{ID: ids.NewV7(), Kind: k})
 		}
 		if after := domain.Compute(e).State; after > before {
 			t.Fatalf("%v rose to %v", before, after)
@@ -254,9 +267,10 @@ func TestHR210_MoreRoutesOrLessEvidenceNeverRaiseTheState(t *testing.T) {
 }
 
 // TestHR024_CooperativeChannelsAreCappedAtPartial: an SDK or hook route
-// keeps the scope at PARTIAL at most, unless a target-verifier test passed
-// no longer than the ENFORCED lifetime ago; ENFORCED then expires with
-// that test. A target_requires_token probe in the closure lifts nothing.
+// keeps the scope at PARTIAL at most, unless a target-verifier test of the
+// scope's own operation passed no longer than the ENFORCED lifetime ago
+// and that operation reads; ENFORCED then expires with that test. A
+// target_requires_token probe in the closure lifts nothing.
 func TestHR024_CooperativeChannelsAreCappedAtPartial(t *testing.T) {
 	rapid.Check(t, func(t *rapid.T) {
 		e := enforced()
@@ -271,13 +285,48 @@ func TestHR024_CooperativeChannelsAreCappedAtPartial(t *testing.T) {
 			at := t0.Add(-age)
 			e.VerifiedAt = &at
 		}
+		e.ReadOnly = rapid.Bool().Draw(t, "readOnly")
 		fresh := verified && age < e.TTL
+		lifted := fresh && e.ReadOnly
 		r := domain.Compute(e)
-		if !fresh && (r.State > domain.Partial || !slices.Contains(r.Reasons, domain.ReasonCooperative)) {
-			t.Fatalf("cooperative %s (verified %v, %v ago) gave %v %v", ch, verified, age, r.State, r.Reasons)
+		want := domain.ReasonCooperative
+		if fresh && !e.ReadOnly {
+			want = domain.ReasonWriteCapped
 		}
-		if fresh && (r.State != domain.Enforced || r.ExpiresAt.After(e.VerifiedAt.Add(e.TTL))) {
-			t.Fatalf("a target verified %v ago gave %v %v, expiring %v", age, r.State, r.Reasons, r.ExpiresAt)
+		if !lifted && (r.State > domain.Partial || !slices.Contains(r.Reasons, want)) {
+			t.Fatalf("cooperative %s (verified %v, %v ago, read %v) gave %v %v", ch, verified, age, e.ReadOnly, r.State, r.Reasons)
+		}
+		if lifted && (r.State != domain.Enforced || r.ExpiresAt.After(e.VerifiedAt.Add(e.TTL))) {
+			t.Fatalf("a read verified %v ago gave %v %v, expiring %v", age, r.State, r.Reasons, r.ExpiresAt)
+		}
+	})
+}
+
+// TestHR210_AVerifierPassNeverLiftsAWrite: in M9 a passing target-verifier
+// test lifts the cooperative and target-enforced caps only for the read
+// it tested (founder decision N15). Whatever else the evidence shows, a
+// write operation with a passing test is PARTIAL at most when its route
+// rests on that test, and says why.
+func TestHR210_AVerifierPassNeverLiftsAWrite(t *testing.T) {
+	rapid.Check(t, func(t *rapid.T) {
+		e, _ := drawEvidence(t)
+		rests := false
+		if rapid.Bool().Draw(t, "cooperative") {
+			ch := rapid.SampledFrom([]domain.Channel{domain.ChannelSDK, domain.ChannelHook}).Draw(t, "channel")
+			e.Routes, rests = append(e.Routes, channel(ch, "observed")), true
+		}
+		if rapid.Bool().Draw(t, "targetEnforced") {
+			e.Connection.AccessMode, rests = domain.AccessTargetEnforced, true
+		}
+		at := e.Now.Add(-time.Duration(rapid.Int64Range(0, int64(e.TTL)-1).Draw(t, "age")))
+		e.VerifiedAt, e.ReadOnly = &at, false
+		r := domain.Compute(e)
+		if rests && r.State == domain.Enforced {
+			t.Fatalf("a verified write was lifted: %v %v", r.State, r.Reasons)
+		}
+		e.ReadOnly = true
+		if read := domain.Compute(e); rests && read.State < r.State {
+			t.Fatalf("the same scope reading reads lower: %v, writing %v", read.State, r.State)
 		}
 	})
 }
@@ -339,48 +388,76 @@ func TestHR211_AStoredStateLapsesAndIsCappedAtPartial(t *testing.T) {
 	})
 }
 
-// TestHR212_ExclusionsNarrowOnlyWhatTheClosureMustClose: excluding a
-// route kind removes it from what ENFORCED needs closed (design decision
-// 1), and nothing else: the controls, the channels, the bindings and the
-// instances still decide. A whole-scope exclusion never changes the state,
-// and every record lists the exclusions that applied.
-func TestHR212_ExclusionsNarrowOnlyWhatTheClosureMustClose(t *testing.T) {
+// TestHR212_ExclusionsNeverRaiseTheState: an exclusion, of a route kind
+// or of the whole scope, never changes the state (design decision 1 as the
+// founder decided: the alternative, where excluding a kind removed it from
+// what ENFORCED needs closed, is rejected). An excluded kind the closure
+// left open stays open, so the scope stays PARTIAL at most with the kind
+// named, and every record lists the exclusions that applied.
+func TestHR212_ExclusionsNeverRaiseTheState(t *testing.T) {
 	rapid.Check(t, func(t *rapid.T) {
-		e, m := drawEvidence(t)
+		e, _ := drawEvidence(t)
 		// Drop a kind's probes so the closure leaves it open.
 		open := rapid.SampledFrom([]domain.RouteKind{domain.KindGitSSH, domain.KindHost}).Draw(t, "open")
 		drop := map[domain.RouteKind]string{domain.KindGitSSH: domain.ProbeDirectSSH, domain.KindHost: domain.ProbeHostGateway}[open]
-		if e.Closure != nil && rapid.Bool().Draw(t, "dropped") {
+		dropped := e.Closure != nil && rapid.Bool().Draw(t, "dropped")
+		if dropped {
 			c := *e.Closure
 			c.Probes = slices.DeleteFunc(slices.Clone(c.Probes), func(p domain.ProbeResult) bool { return p.Name == drop })
 			e.Closure = &c
 		}
 		before := domain.Compute(e)
 		var kinds []domain.RouteKind
-		for range rapid.IntRange(1, 3).Draw(t, "n") {
-			k := rapid.SampledFrom(append([]domain.RouteKind{""}, domain.EquivalentKinds...)).Draw(t, "kind")
-			kinds = append(kinds, k)
+		if dropped && rapid.Bool().Draw(t, "excludeOpen") {
+			kinds = append(kinds, open)
+		}
+		for range rapid.IntRange(0, 3).Draw(t, "n") {
+			kinds = append(kinds, rapid.SampledFrom(append([]domain.RouteKind{""}, domain.EquivalentKinds...)).Draw(t, "kind"))
+		}
+		if len(kinds) == 0 {
+			kinds = append(kinds, "")
+		}
+		for _, k := range kinds {
 			e.Exclusions = append(e.Exclusions, domain.Exclusion{ID: ids.NewV7(), Kind: k})
 		}
 		after := domain.Compute(e)
 		if len(after.Exclusions) != len(e.Exclusions) || !slices.Contains(after.Reasons, domain.ReasonExcluded) {
 			t.Fatalf("exclusions not listed: %+v", after)
 		}
-		if after.State == domain.Enforced && m.weakened() {
-			t.Fatalf("an exclusion lifted %+v", m)
-		}
 		if after.State != before.State {
-			// Only an excluded kind that the closure left open may change it.
-			for _, rt := range after.Routes {
-				if rt.Status == domain.StatusExcluded && !slices.Contains(kinds, rt.Kind) {
-					t.Fatalf("%s excluded without an exclusion", rt.Kind)
-				}
+			t.Fatalf("exclusions of %v moved %v to %v", kinds, before.State, after.State)
+		}
+		for _, rt := range after.Routes {
+			if rt.Status == domain.StatusExcluded && !slices.Contains(kinds, rt.Kind) {
+				t.Fatalf("%s excluded without an exclusion", rt.Kind)
 			}
-			if before.State != domain.Partial || after.State != domain.Enforced || !slices.Contains(kinds, open) {
-				t.Fatalf("exclusions of %v moved %v to %v", kinds, before.State, after.State)
-			}
+		}
+		if dropped && before.State == domain.Partial &&
+			!slices.Contains(after.Reasons, domain.ReasonRouteOpen+":"+string(open)) {
+			t.Fatalf("the open %s is not named: %v", open, after.Reasons)
 		}
 	})
+}
+
+// TestHR212_AnExcludedOpenRouteKeepsTheScopePartial: the case the founder
+// decided. A closure that leaves direct SSH open cannot reach ENFORCED by
+// excluding direct SSH.
+func TestHR212_AnExcludedOpenRouteKeepsTheScopePartial(t *testing.T) {
+	e := enforced()
+	e.Closure.Probes = slices.DeleteFunc(slices.Clone(e.Closure.Probes), func(p domain.ProbeResult) bool {
+		return p.Name == domain.ProbeDirectSSH
+	})
+	e.Exclusions = []domain.Exclusion{{ID: ids.NewV7(), Kind: domain.KindGitSSH}}
+	r := domain.Compute(e)
+	if r.State != domain.Partial || !slices.Contains(r.Reasons, "route_not_closed:git_ssh") ||
+		!slices.Contains(r.Reasons, domain.ReasonExcluded) {
+		t.Fatalf("excluded open SSH: %v %v", r.State, r.Reasons)
+	}
+	for _, rt := range r.Routes {
+		if rt.Kind == domain.KindGitSSH && rt.Status != domain.StatusExcluded {
+			t.Fatalf("git_ssh is %s", rt.Status)
+		}
+	}
 }
 
 // TestUnobservedRoutesAreNotAbsent: every equivalent route kind appears in a
