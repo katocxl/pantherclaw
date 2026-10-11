@@ -78,6 +78,8 @@ func Authenticator(s *gwapp.Service, perms map[string]td.Permission) rpc.Authent
 type AdminHandler struct {
 	pantherclawv1connect.UnimplementedGatewayAdminServiceHandler
 	s *gwapp.Service
+	// rpID is the WebAuthn relying party id (approverkeys.go).
+	rpID string
 }
 
 // NewAdmin returns the GatewayAdminService handler.

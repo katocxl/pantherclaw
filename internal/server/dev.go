@@ -166,6 +166,9 @@ func cmdDev(ctx context.Context, args []string, stdout, stderr io.Writer, env En
 		}
 		_, _ = fmt.Fprintf(stdout, "seeded gateway %s; within 15 minutes, start it with: pantherclaw-gateway serve --enroll-file %s\n",
 			gw, *gatewayOut)
+		if err := seedApproverKeys(ctx, cfg, pool, org, *gatewayOut, stdout); err != nil {
+			return err
+		}
 		if *targetURL != "" {
 			c, err := seedConnection(ctx, cfg, pool, org, gw, devConnectionName, *targetURL, "enforce", *access)
 			if err != nil {

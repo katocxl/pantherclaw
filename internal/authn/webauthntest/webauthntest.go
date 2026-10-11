@@ -94,6 +94,12 @@ func New(origin, rpID string, alg Alg) (*Authenticator, error) {
 // CredentialID is the credential's id.
 func (a *Authenticator) CredentialID() []byte { return slices.Clone(a.credID) }
 
+// PublicKey is the credential's public key.
+func (a *Authenticator) PublicKey() crypto.PublicKey { return a.key.Public() }
+
+// COSEKey is the credential's public key as the relying party stores it.
+func (a *Authenticator) COSEKey() ([]byte, error) { return a.coseKey() }
+
 var b64 = base64.RawURLEncoding
 
 // creationOptions is the part of PublicKeyCredentialCreationOptions used.

@@ -26,6 +26,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/katocxl/pantherclaw/internal/actionir"
+	"github.com/katocxl/pantherclaw/internal/approvals/proof"
 	"github.com/katocxl/pantherclaw/internal/credentials/domain"
 	"github.com/katocxl/pantherclaw/internal/definitions/manifest"
 	"github.com/katocxl/pantherclaw/internal/definitions/mapping"
@@ -73,6 +74,8 @@ type claims struct {
 		Txn   string `json:"txn"`
 		Act   string `json:"act"`
 		Epoch int64  `json:"epoch"`
+		// Approval is set by tamper for HR-038 (approvals_test.go).
+		Approval *proof.Approval `json:"approval,omitzero"`
 	} `json:"pap"`
 }
 
@@ -385,6 +388,8 @@ type harness struct {
 	drifts []string
 	gw     *Gateway
 	url    string
+	// approverKeys is the gateway's approvals.approver_keys_file.
+	approverKeys string
 }
 
 // compile decodes and compiles a package file (mock-payments when empty).
@@ -463,6 +468,7 @@ func setup(t *testing.T, opts ...func(*harness)) *harness {
 	cfg := DefaultConfig()
 	cfg.Control.IdentityDir = t.TempDir()
 	cfg.Egress.AllowedPrefixes = []string{"127.0.0.1/32"}
+	cfg.Approvals.ApproverKeysFile = h.approverKeys
 	// The control plane is reached over mTLS in production (internal/gateway/
 	// control and the end-to-end tests); here the fakes take plain calls,
 	// marked so that the test can tell they came from the gateway.

@@ -337,7 +337,7 @@ SELECT t.created_at, t.effect_state, t.effect_level_required, t.effect_level_ach
        p.definition_digest
 FROM pc.transactions t
 JOIN pc.runs r ON r.org_id = t.org_id AND r.id = t.run_id
-LEFT JOIN pc.permits p ON p.org_id = t.org_id AND p.transaction_id = t.id
+LEFT JOIN pc.permits p ON p.org_id = t.org_id AND p.transaction_id = t.id AND NOT p.replaced
 WHERE t.org_id = $1 AND t.id = $2
 FOR UPDATE OF t
 `
@@ -514,7 +514,7 @@ WITH x AS (
            END::text AS execution_state
     FROM pc.transactions t
     JOIN pc.runs r ON r.org_id = t.org_id AND r.id = t.run_id
-    LEFT JOIN pc.permits p ON p.org_id = t.org_id AND p.transaction_id = t.id
+    LEFT JOIN pc.permits p ON p.org_id = t.org_id AND p.transaction_id = t.id AND NOT p.replaced
     LEFT JOIN pc.execution_attempts a ON a.org_id = p.org_id AND a.permit_id = p.id
     WHERE t.org_id = $3
       AND (coalesce($4::uuid, '00000000-0000-0000-0000-000000000000') = '00000000-0000-0000-0000-000000000000'
@@ -715,7 +715,7 @@ SELECT k.id, k.transaction_id, k.kind, k.state, k.resolved_via, k.observation_id
 FROM pc.reconciliation_tasks k
 JOIN pc.transactions t ON t.org_id = k.org_id AND t.id = k.transaction_id
 JOIN pc.runs r ON r.org_id = t.org_id AND r.id = t.run_id
-LEFT JOIN pc.permits p ON p.org_id = t.org_id AND p.transaction_id = t.id
+LEFT JOIN pc.permits p ON p.org_id = t.org_id AND p.transaction_id = t.id AND NOT p.replaced
 WHERE k.org_id = $1 AND k.id = $2
 FOR UPDATE OF k
 `
@@ -896,7 +896,7 @@ SELECT t.id, t.run_id, r.agent_id, t.operation, t.connection_id, t.decision, t.r
        p.state AS permit_state, a.outcome
 FROM pc.transactions t
 JOIN pc.runs r ON r.org_id = t.org_id AND r.id = t.run_id
-LEFT JOIN pc.permits p ON p.org_id = t.org_id AND p.transaction_id = t.id
+LEFT JOIN pc.permits p ON p.org_id = t.org_id AND p.transaction_id = t.id AND NOT p.replaced
 LEFT JOIN pc.execution_attempts a ON a.org_id = p.org_id AND a.permit_id = p.id
 WHERE t.org_id = $1 AND t.id = $2
 `

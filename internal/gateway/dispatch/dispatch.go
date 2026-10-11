@@ -43,6 +43,7 @@ import (
 	"connectrpc.com/connect/v2"
 
 	"github.com/katocxl/pantherclaw/internal/actionir"
+	"github.com/katocxl/pantherclaw/internal/approvals/proof"
 	defs "github.com/katocxl/pantherclaw/internal/definitions/domain"
 	"github.com/katocxl/pantherclaw/internal/gateway/broker"
 	"github.com/katocxl/pantherclaw/internal/gateway/control"
@@ -114,7 +115,16 @@ const (
 	// An upstream MCP tool's pinned definition declares x-mcp-header
 	// parameters the specification forbids, so no client may call it.
 	CodeUpstreamInvalid = "upstream_tool_invalid"
+	// An approved action's approval does not verify against the pinned
+	// approver keys, or none are pinned (HR-038).
+	CodeApprovalUnverified = "approval_unverified"
 )
+
+// Approvers verifies the approval a permit carries against the approver
+// keys the gateway's operator pinned (proof.Pinned, HR-038).
+type Approvers interface {
+	Verify(a *proof.Approval, w proof.Want) error
+}
 
 // Containment is the gateway's containment view (control.Containment).
 type Containment interface {
@@ -152,6 +162,9 @@ type Options struct {
 	// Now is the breaker's clock; nil is time.Now.
 	Now func() time.Time
 	Log *slog.Logger
+	// Approvers verifies approvals (HR-038); nil refuses every action
+	// whose permit carries one.
+	Approvers Approvers
 }
 
 // Engine dispatches mapped actions.
@@ -166,6 +179,7 @@ type Engine struct {
 	log         *slog.Logger
 	nonces      nonces
 	onDrift     func(ctx context.Context, connection string, d Drift)
+	approvers   Approvers
 
 	mu      sync.Mutex
 	clients map[string]clientEntry
@@ -197,7 +211,7 @@ func New(o Options) (*Engine, error) {
 	return &Engine{
 		org: o.Org, authority: o.Authority, permits: newPermitVerifier(o.JWKSURL, o.JWKSClient, o.GatewayID, o.Org),
 		containment: o.Containment, broker: o.Broker, allowed: o.AllowedPrefixes, breaker: newBreaker(o.Now, o.ReportCircuit, o.Log),
-		log: o.Log, onDrift: o.OnDrift, clients: map[string]clientEntry{}, drift: map[string]driftEntry{},
+		log: o.Log, onDrift: o.OnDrift, clients: map[string]clientEntry{}, drift: map[string]driftEntry{}, approvers: o.Approvers,
 	}, nil
 }
 
@@ -352,9 +366,14 @@ func (e *Engine) dispatch(ctx context.Context, c Call, t *timer) Result {
 		bound = eff
 	}
 	want := permitWant{PermitID: ar.GetPermitId(), Txn: ar.GetTransactionId(), Act: bound.HashHex(), Epoch: ar.GetEpoch()}
-	if err := e.permits.verify(ctx, ar.GetPermit(), want); err != nil {
+	approval, err := e.permits.verify(ctx, ar.GetPermit(), want)
+	if err != nil {
 		e.log.ErrorContext(ctx, "security.permit_rejected", slog.String("transaction_id", want.Txn), pclog.Err(err))
 		return r.fail(EnforcementFailed, CodePermitInvalid)
+	}
+	if err := e.approved(approval, c.Action, bound); err != nil {
+		e.log.ErrorContext(ctx, "security.approval_unverified", slog.String("transaction_id", want.Txn), pclog.Err(err))
+		return r.fail(EnforcementFailed, CodeApprovalUnverified)
 	}
 	t.lap("verify")
 	// Containment may have changed while the Authority decided: a permit

@@ -12,16 +12,20 @@ import (
 
 // TestHR171_RequestLifecycle: final states are final, a changed binding
 // supersedes (never updates), an approved request can only be consumed,
-// fall back to PENDING after a void, expire or be invalidated, and only a
-// decline or an expiry ends the transaction as DENY.
+// fall back to PENDING after a void, expire or be invalidated, a consumed
+// one can only be restored to APPROVED (HR-011), and only a decline or an
+// expiry ends the transaction as DENY.
 func TestHR171_RequestLifecycle(t *testing.T) {
 	for _, s := range []domain.State{
-		domain.StateConsumed, domain.StateDeclined, domain.StateExpired,
-		domain.StateInvalidated, domain.StateSuperseded,
+		domain.StateDeclined, domain.StateExpired, domain.StateInvalidated, domain.StateSuperseded,
 	} {
 		if !domain.Lifecycle.Terminal(s) || s.Live() {
 			t.Errorf("%s is not final", s)
 		}
+	}
+	if next := domain.Lifecycle.Next(domain.StateConsumed); len(next) != 1 || next[0] != domain.StateApproved ||
+		domain.StateConsumed.Live() {
+		t.Errorf("a consumed request waits for nothing and may only be restored: next %v", next)
 	}
 	for _, c := range []struct {
 		from, to domain.State
@@ -35,6 +39,9 @@ func TestHR171_RequestLifecycle(t *testing.T) {
 		{domain.StateEvidenceRequested, domain.StateApproved, false},
 		{domain.StateEvidenceRequested, domain.StatePending, true},
 		{domain.StateDeclined, domain.StatePending, false},
+		{domain.StateConsumed, domain.StateApproved, true},
+		{domain.StateConsumed, domain.StatePending, false},
+		{domain.StateExpired, domain.StateApproved, false},
 	} {
 		if domain.Lifecycle.Can(c.from, c.to) != c.ok {
 			t.Errorf("%s → %s allowed=%v", c.from, c.to, !c.ok)
