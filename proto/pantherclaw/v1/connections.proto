@@ -71,7 +71,8 @@ service ConnectionService {
   // GetConnectionCapabilities returns what a connection declares it
   // supports: discovery, observation, enforcement and response, its
   // operations, permissions with reasons, limits and failure behavior
-  // (F346).
+  // (F346). It is a declared capability, never coverage: what a target
+  // declares is not evidence until a test shows it (HR-210).
   // permission: connection.read
   rpc GetConnectionCapabilities(GetConnectionCapabilitiesRequest) returns (GetConnectionCapabilitiesResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
