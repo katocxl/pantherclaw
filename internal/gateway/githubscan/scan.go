@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -227,4 +228,66 @@ func (r Result) Fields() map[string]string {
 		out["/not_scanned/"+s] = why
 	}
 	return out
+}
+
+// ListRepositories reads the repositories an installation token reaches
+// (GET /installation/repositories), at most 500.
+func ListRepositories(ctx context.Context, get Getter) ([]Repository, error) {
+	var out []Repository
+	for page := 1; page <= 5; page++ {
+		res, err := get(ctx, "/installation/repositories?per_page=100&page="+strconv.Itoa(page))
+		if err != nil {
+			return nil, err
+		}
+		var list struct {
+			Repositories []struct {
+				FullName      string `json:"full_name"`
+				DefaultBranch string `json:"default_branch"`
+			} `json:"repositories"`
+		}
+		if res.Status != http.StatusOK || json.Unmarshal(res.Body, &list) != nil {
+			return nil, fmt.Errorf("githubscan: the installation's repositories answered %d", res.Status)
+		}
+		for _, r := range list.Repositories {
+			out = append(out, Repository{FullName: strings.ToLower(r.FullName), DefaultBranch: r.DefaultBranch})
+		}
+		if len(list.Repositories) < 100 {
+			break
+		}
+	}
+	return out, nil
+}
+
+// Apps reads the other Apps installed on the organization (GET
+// /orgs/{org}/installations), each a github_app finding: its slug, id,
+// permissions and repository selection.
+func Apps(ctx context.Context, get Getter, org string) ([]Finding, error) {
+	res, err := get(ctx, "/orgs/"+url.PathEscape(org)+"/installations?per_page=100")
+	if err != nil {
+		return nil, err
+	}
+	var list struct {
+		Installations []struct {
+			AppID       int64             `json:"app_id"`
+			AppSlug     string            `json:"app_slug"`
+			Permissions map[string]string `json:"permissions"`
+			Selection   string            `json:"repository_selection"`
+		} `json:"installations"`
+	}
+	if res.Status != http.StatusOK || json.Unmarshal(res.Body, &list) != nil {
+		return nil, fmt.Errorf("githubscan: the organization's installations answered %d", res.Status)
+	}
+	var r Result
+	for _, in := range list.Installations {
+		perms := make([]string, 0, len(in.Permissions))
+		for k, v := range in.Permissions {
+			perms = append(perms, clip(k)+":"+clip(v))
+		}
+		slices.Sort(perms)
+		r.add("github_app", map[string]string{
+			"organization": org, "app": clip(in.AppSlug), "app_id": strconv.FormatInt(in.AppID, 10), "permissions": joined(perms),
+			"repository_selection": clip(in.Selection),
+		}, org, strconv.FormatInt(in.AppID, 10))
+	}
+	return r.Findings, nil
 }

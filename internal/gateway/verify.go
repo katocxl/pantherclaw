@@ -98,6 +98,10 @@ func (g *Gateway) verifyDue(ctx context.Context) {
 				slog.String("connection_id", l.Connection))
 			continue
 		}
+		if l.Purpose == "org_scan" {
+			g.orgScan(ctx, conn, l)
+			continue
+		}
 		o, err := g.engine.VerifyEffect(ctx, conn, l)
 		switch {
 		case errors.Is(err, dispatch.ErrNotReviewedRead):

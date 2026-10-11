@@ -63,6 +63,8 @@ type Gateway struct {
 	// reads (verify.go, G0 M7).
 	verifications              Verifications
 	verifyEvery, verifyHintGap time.Duration
+	// submitScan sends an organization scan's findings (orgscan.go, G0 M8).
+	submitScan ScanSubmitter
 }
 
 // Handler returns the gateway's agent-facing HTTP handler: `/mcp/{connection}`
@@ -110,6 +112,9 @@ type Deps struct {
 	// decision, as the connection's fact provider (G0 M8 decision 5); nil
 	// reads nothing.
 	ReportFacts dispatch.FactReporter
+	// SubmitScan sends an organization scan's findings to the server (G0 M8,
+	// HR-209); nil submits none.
+	SubmitScan ScanSubmitter
 	// Run is background work (certificate renewal, the containment stream,
 	// configuration sync); nil for none.
 	Run []func(ctx context.Context) error
@@ -152,6 +157,7 @@ func New(ctx context.Context, cfg *Config, id *control.Identity, log *slog.Logge
 			_, err := ctl.Gateway.ReportFacts(ctx, &pb.ReportFactsRequest{ConnectionId: conn, Observations: obs})
 			return err
 		},
+		SubmitScan: controlScans{ctl}.submit,
 	}
 	if cfg.Broker.KeyFile != "" {
 		key, err := broker.Load(ctx, cfg.Broker.KeyFile, cfg.Broker.KEKFiles)
@@ -202,6 +208,7 @@ func newGateway(cfg *Config, d Deps, log *slog.Logger) (*Gateway, error) {
 		hook: hook.New(engine, d.Configuration, cfg.PublicURL, log),
 		log:  log, reportDrift: d.ReportDrift, driftEvery: DriftEvery, driftPoll: driftPoll,
 		verifications: d.Verifications, verifyEvery: VerifyEvery, verifyHintGap: verifyHintGap,
+		submitScan: d.SubmitScan,
 	}
 	if e := cfg.Control.VerifyEvery.D(); e > 0 {
 		g.verifyEvery = e

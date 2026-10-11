@@ -78,3 +78,53 @@ func (s *Server) installationRepositories(w http.ResponseWriter, r *http.Request
 	}
 	s.requests = append(s.requests, rec)
 }
+
+// OrgApp is another App installed on an organization, as the
+// organization's installation listing shows it.
+type OrgApp struct {
+	ID          int64
+	Slug        string
+	Permissions map[string]string
+	// Selection is "all" or "selected".
+	Selection string
+}
+
+// AddOrgApp installs another App on an organization, for the org scan.
+func (s *Server) AddOrgApp(org string, a OrgApp) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.orgApps[strings.ToLower(org)] = append(s.orgApps[strings.ToLower(org)], a)
+}
+
+// orgInstallations answers GET /orgs/{org}/installations: the Apps
+// installed on the organization, for an installation token of that
+// organization holding organization_administration:read, as on GitHub.
+func (s *Server) orgInstallations(w http.ResponseWriter, r *http.Request) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	rec := Request{Method: r.Method, Path: r.URL.Path}
+	defer func() { s.requests = append(s.requests, rec) }()
+	t, status := s.authenticate(r)
+	if t == nil {
+		rec.Status = fail(w, status, "Bad credentials")
+		return
+	}
+	t.Uses++
+	rec.Token, rec.Installation, rec.Repos, rec.Permissions = Fingerprint(t.value), t.Installation, slices.Clone(t.Repos), maps.Clone(t.Permissions)
+	org := strings.ToLower(r.PathValue("org"))
+	if in := s.installs[t.Installation]; in == nil || in.Account != org {
+		rec.Status = fail(w, http.StatusNotFound, "Not Found")
+		return
+	}
+	if !covers(t.Permissions["organization_administration"], "read") {
+		rec.Status = fail(w, http.StatusForbidden, "Resource not accessible by integration")
+		return
+	}
+	list := []map[string]any{}
+	for _, a := range s.orgApps[org] {
+		list = append(list, map[string]any{
+			"id": a.ID, "app_id": a.ID, "app_slug": a.Slug, "permissions": a.Permissions, "repository_selection": a.Selection,
+		})
+	}
+	rec.Status = reply(w, http.StatusOK, map[string]any{"total_count": len(list), "installations": list, "simulated": true})
+}

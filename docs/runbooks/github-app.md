@@ -25,6 +25,7 @@ The agent never holds a GitHub credential. Tokens are never cached between actio
    | Pull requests | read | `github.pull.read` (also the merge verifier); the fact reads of a pull request, its commits, files and reviews |
    | Pull requests | write | `github.pull.create` |
    | Checks | read | the fact read of a pull request's check runs |
+   | Organization administration | read | optional: the organization scan lists the Apps installed on the organization (section 5) |
    | Administration | write | `github.repo.settings.update` only; leave it off unless you allow it |
 
    Never grant **Workflows**: no operation declares it, and `github.contents.write` refuses `.github/` paths.
@@ -78,7 +79,27 @@ pclaw github identity unlink <link id>
 
 `GET https://api.github.com/users/<login>` shows the user id. A GitHub user id links to one person, and every link and unlink is audited. A service account cannot make links, even when it holds the role. Someone who touched a pull request but is linked to no person cannot be excluded by name, so the review page shows them as "not linked".
 
-## 5. Check it
+## 5. Scan the organization (Team edition)
+
+A scan shows where agents already reach GitHub around PantherClaw: workflows that run a coding agent and what they may write, committed MCP configuration (`.mcp.json`, `.cursor/mcp.json`, `.vscode/mcp.json`), and the other Apps installed on the organization (HR-209). A Security Admin or Org Admin starts one:
+
+```bash
+pclaw github scan --connection <connection id>
+pclaw github scan get <scan id>
+pclaw github scan findings <scan id>
+```
+
+The connection's gateway runs the scan within its lease, with read-only tokens of its own:
+
+- `metadata` to list the installation's repositories;
+- `metadata` and `contents` to read their workflow and MCP configuration files at the default branch, and nothing else;
+- `organization_administration:read` for the organization's Apps, only if you granted it.
+
+The scan never calls the Actions secrets API. It keeps names only: server names, the command's base name, and the names of env variables and headers, never their values, arguments or URLs. Findings become DISCOVERED agents and grant nothing.
+
+What the scan could not read appears under `not_scanned` with the reason, never as "none found": repositories left when its time ran out, the organization's Apps without that permission, and ruleset bypass actors, which this version does not read yet.
+
+## 6. Check it
 
 - `pclaw credential list <connection id>` shows the active version with kind `github_app`, and `pclaw connection get <connection id>` shows the installation.
 - An allowed read through the gateway (`GET /github/repos/<owner>/<repo>`) answers. In the App's GitHub audit log, each action shows one token created and one revoked.
