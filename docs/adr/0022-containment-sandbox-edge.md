@@ -33,8 +33,11 @@ Docker's embedded DNS resolver (127.0.0.11) still answers on user-defined networ
    - **Configuration checks** come from `pclaw` outside the sandbox: `docker info` and `docker inspect` of the network and containers (engine and API version, runtime, mounts, capabilities, user, read-only root, security options, networks).
    - **Network probes** run in a separate container on the agent's network.
    - **The external canary** is `pantherclaw-sim canary`, on the host by default. It listens for TCP, UDP, ICMP and DNS (an authoritative name per session) and records every hit that carries the session's marker.
+     - *As built (B3a):* the canary listens on TCP for its HTTPS and SSH ports and on UDP and TCP for its DNS port, and records a hit for any connection or query that carries a session marker. It has no ICMP listener and no delegated DNS name, so it cannot see ICMP or DNS leaving through a recursive resolver. Those routes are covered by the probes' own observations (`icmp`, `dns_docker_resolver`, `dns_external`), each with a positive twin in the control run, and never by the canary.
 
    `pclaw` creates an Ed25519 key per session outside the sandbox and registers its public key with the server when it opens the session. The probe container and the canary get the private key through a read-only file mount that the agent cannot see. The server issues a single-use nonce. The probe report and the canary report are JWS over canonical JSON (`typ: pap-probe+jwt`) that bind the session, the nonce and the image digests. Unsigned, replayed or stale reports are rejected.
+
+   *As built (B3c):* two keys, both created by `pclaw` outside every container and both registered at `StartSession`. The probe key is mounted read-only into the sandbox run's probe container alone, signs only the `sandbox` report, and its file is removed as soon as that run is over. The host key never leaves `pclaw`'s process: the control run prints its report unsigned and `pclaw` signs it, and the canary's report, with the host key. The server verifies each kind with its own key, so nothing on the agent's network, the probe container included, can forge the control or the canary.
 5. **Controls.**
    - A report that lacks any control promotes nothing.
    - **Positive controls must succeed**, or the run is inconclusive and promotes nothing:

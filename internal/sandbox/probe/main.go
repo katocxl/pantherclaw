@@ -11,7 +11,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"net"
 	"net/netip"
 	"os"
 	"runtime"
@@ -29,10 +28,13 @@ const ConfigFormat = "pantherclaw.probe/v1"
 type Config struct {
 	Format string `json:"format"`
 	// Kind is report.KindSandbox (the catalog, on the sandbox network) or
-	// report.KindControl (the canary probes, on an open network).
+	// report.KindControl (its positive twins, on an open network).
 	Kind string `json:"kind"`
-	// KeyFile is the session's probe key, mounted read-only.
-	KeyFile string `json:"key_file"`
+	// KeyFile is the session's probe key, mounted read-only, with which a
+	// sandbox run signs its report. A control run has none: it prints its
+	// report unsigned and pclaw signs it with the session's host key, which
+	// never enters a container (HR-215).
+	KeyFile string `json:"key_file,omitzero"`
 	// Report carries pclaw's facts into the signed report: the session, a
 	// fresh server nonce (whose marker every canary probe carries), the
 	// images, engine, network and configuration checks.
@@ -48,7 +50,11 @@ type Config struct {
 	// HostAddrs are the host's own addresses and HostPorts the ports of
 	// its services (the gateway): only the edge may reach them.
 	HostAddrs []string `json:"host_addrs,omitzero"`
-	HostPorts []int    `json:"host_ports,omitzero"`
+	// BridgeGateway is the sandbox network's gateway address as pclaw
+	// inspected it: none in isolated gateway mode, where the subnet's first
+	// address may be a container's.
+	BridgeGateway string `json:"bridge_gateway,omitzero"`
+	HostPorts     []int  `json:"host_ports,omitzero"`
 }
 
 // ReadConfig reads a configuration file strictly.
@@ -66,8 +72,10 @@ func ReadConfig(path string) (Config, error) {
 		return Config{}, fmt.Errorf("probe: format %q, want %s", c.Format, ConfigFormat)
 	case c.Kind != report.KindSandbox && c.Kind != report.KindControl:
 		return Config{}, fmt.Errorf("probe: kind %q", c.Kind)
-	case c.KeyFile == "" || len(c.Canary.Addrs) == 0:
-		return Config{}, errors.New("probe: key_file and the canary are required")
+	case len(c.Canary.Addrs) == 0:
+		return Config{}, errors.New("probe: the canary is required")
+	case (c.Kind == report.KindSandbox) != (c.KeyFile != ""):
+		return Config{}, errors.New("probe: a sandbox run has the probe key and a control run none")
 	case c.Kind == report.KindSandbox && (c.Edge == "" || c.CAFile == "" || len(c.AgentHosts) == 0):
 		return Config{}, errors.New("probe: a sandbox run needs the edge, its CA and the agent hosts")
 	}
@@ -79,30 +87,24 @@ func ReadConfig(path string) (Config, error) {
 	return c, nil
 }
 
-// Probe runs the probes and returns the signed report. It runs only in a
+// Probe runs the probes and returns their report. It runs only in a
 // sandbox's Linux containers: anywhere else its results would mean nothing.
-func Probe(ctx context.Context, c Config) (string, error) {
+func Probe(ctx context.Context, c Config) (report.Report, error) {
 	if runtime.GOOS != "linux" {
-		return "", errors.New("probe: runs only inside a sandbox's Linux probe container")
-	}
-	kf, err := workloadclient.ReadKeyFile(c.KeyFile)
-	if err != nil {
-		return "", err
-	}
-	key, err := kf.Key()
-	if err != nil {
-		return "", err
+		return report.Report{}, errors.New("probe: runs only inside a sandbox's Linux probe container")
 	}
 	r := c.Report
 	r.Format, r.Kind, r.StartedAt = report.Format, c.Kind, time.Now().UTC()
 	r.Results = Run(ctx, c)
 	r.FinishedAt = time.Now().UTC()
 	r.Canary = report.Canary{Hits: []report.Hit{}}
-	return report.Sign(key, r)
+	return r, nil
 }
 
-// Main is `pantherclaw-probe --config FILE`: the signed report goes to
-// stdout, which pclaw reads from outside the sandbox; errors go to stderr.
+// Main is `pantherclaw-probe --config FILE`: the report goes to stdout,
+// which pclaw reads from outside the sandbox, signed with the probe key
+// for a sandbox run and as one JSON line for a control run; errors go to
+// stderr.
 func Main(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("pantherclaw-probe", flag.ContinueOnError)
 	fs.SetOutput(stderr)
@@ -112,38 +114,38 @@ func Main(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 	c, err := ReadConfig(*config)
-	var signed string
+	var out string
 	if err == nil {
-		signed, err = Probe(ctx, c)
+		out, err = run(ctx, c)
 	}
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "pantherclaw-probe: %v\n", err)
 		return 1
 	}
-	_, _ = fmt.Fprintln(stdout, signed)
+	_, _ = fmt.Fprintln(stdout, out)
 	return 0
 }
 
-// bridgeGateway is the first address of the container's IPv4 network,
-// where a bridge in NAT mode has its address: on an isolated network
-// nothing answers there.
-func bridgeGateway() string {
-	addrs, err := net.InterfaceAddrs()
+// run probes and renders the report: signed, or unsigned JSON for pclaw
+// to sign.
+func run(ctx context.Context, c Config) (string, error) {
+	r, err := Probe(ctx, c)
 	if err != nil {
-		return ""
+		return "", err
 	}
-	for _, a := range addrs {
-		n, ok := a.(*net.IPNet)
-		if !ok {
-			continue
-		}
-		p, err := netip.ParsePrefix(n.String())
-		if err != nil || !p.Addr().Is4() || p.Addr().IsLoopback() {
-			continue
-		}
-		return p.Masked().Addr().Next().String()
+	if c.KeyFile == "" {
+		b, err := json.Marshal(r)
+		return string(b), err
 	}
-	return ""
+	kf, err := workloadclient.ReadKeyFile(c.KeyFile)
+	if err != nil {
+		return "", err
+	}
+	key, err := kf.Key()
+	if err != nil {
+		return "", err
+	}
+	return report.Sign(key, r)
 }
 
 func base64Std(s string) string { return base64.StdEncoding.EncodeToString([]byte(s)) }

@@ -82,6 +82,7 @@ func TestT086_TheSandboxIsClosedAndTheReportsSayWhy(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, probeKey, _ := ed25519.GenerateKey(rand.Reader)
+	_, hostKey, _ := ed25519.GenerateKey(rand.Reader)
 	port, _ := strconv.Atoi(gport)
 	session := ids.NewV7().String()
 	s, err := sandbox.Start(t.Context(), c, e, sandbox.Options{
@@ -89,7 +90,7 @@ func TestT086_TheSandboxIsClosedAndTheReportsSayWhy(t *testing.T) {
 		GatewayURL: "http://127.0.0.1:" + gport, GatewayAddr: "host.docker.internal:" + gport,
 		Hosts: map[string]string{"payments.example": "payments"}, MappedAddrs: []string{"192.0.2.10"},
 		Run: ids.NewV7().String(), KeyFile: keyFile, TokenFile: filepath.Join(tokens, "token"),
-		ProbeKey: probeKey, Canary: cn, CanaryPorts: ports, HostPorts: []int{port}, Dir: dir,
+		ProbeKey: probeKey, HostKey: hostKey, Canary: cn, CanaryPorts: ports, HostPorts: []int{port}, Dir: dir,
 	})
 	t.Cleanup(func() {
 		cctx, cancel := context.WithTimeout(context.Background(), time.Minute)
@@ -123,13 +124,35 @@ func TestT086_TheSandboxIsClosedAndTheReportsSayWhy(t *testing.T) {
 		}
 	}
 
-	// The three reports verify with the session's key, carry their nonces
-	// and the session's facts.
-	pub := probeKey.Public().(ed25519.PublicKey)
-	for kind, tc := range map[string]struct{ compact, nonce string }{
-		report.KindSandbox: {ev.Sandbox, n.Sandbox}, report.KindControl: {ev.Control, n.Control}, report.KindCanary: {ev.Canary, n.Canary},
+	// Every probe with a live target on the open network has a passing
+	// positive twin under its own name.
+	twinned := map[string]bool{}
+	for _, r := range ev.Results {
+		if r.Role == report.RolePositive && r.Passed() {
+			twinned[r.Name] = true
+		}
+	}
+	for _, name := range []string{"dns_docker_resolver", "dns_external", "icmp", "direct_https", "direct_ssh", "ssh_push", "pat_push", "host_gateway"} {
+		if !twinned[name] {
+			t.Errorf("no passing twin of %s", name)
+		}
+	}
+
+	// The sandbox run's report verifies with the probe key and the control
+	// run's and the canary's with the host key alone; all carry their
+	// nonces and the session's facts. The probe key's file is gone.
+	probePub, hostPub := probeKey.Public().(ed25519.PublicKey), hostKey.Public().(ed25519.PublicKey)
+	for kind, tc := range map[string]struct {
+		compact, nonce string
+		key, other     ed25519.PublicKey
+	}{
+		report.KindSandbox: {ev.Sandbox, n.Sandbox, probePub, hostPub}, report.KindControl: {ev.Control, n.Control, hostPub, probePub},
+		report.KindCanary: {ev.Canary, n.Canary, hostPub, probePub},
 	} {
-		r, err := report.Verify(tc.compact, pub)
+		if _, err := report.Verify(tc.compact, tc.other); err == nil {
+			t.Errorf("the %s report verifies with the other key", kind)
+		}
+		r, err := report.Verify(tc.compact, tc.key)
 		if err != nil {
 			t.Fatalf("%s report: %v", kind, err)
 		}
@@ -138,7 +161,10 @@ func TestT086_TheSandboxIsClosedAndTheReportsSayWhy(t *testing.T) {
 			t.Errorf("%s report %+v", kind, r)
 		}
 	}
-	can, _ := report.Verify(ev.Canary, pub)
+	if keys, _ := filepath.Glob(filepath.Join(dir, "*probe-key*")); len(keys) != 0 {
+		t.Errorf("the probe key outlived its run: %v", keys)
+	}
+	can, _ := report.Verify(ev.Canary, hostPub)
 	var control, leaked int
 	for _, h := range can.Canary.Hits {
 		switch h.Marker {

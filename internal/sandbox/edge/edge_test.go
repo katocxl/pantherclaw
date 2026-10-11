@@ -20,6 +20,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/netip"
 	"net/url"
 	"slices"
 	"strconv"
@@ -436,4 +437,112 @@ func FuzzEdgeConnect(f *testing.F) {
 			t.Fatalf("%q routed to %q → %q", authority, host, conn)
 		}
 	})
+}
+
+// TestHR213_CredentialsInTheQueryAreStrippedAndReported: a token-shaped
+// query parameter, by name or by prefix, never reaches the gateway, and is
+// reported like a header; the other parameters keep their order.
+func TestHR213_CredentialsInTheQueryAreStrippedAndReported(t *testing.T) {
+	r := newRig(t, "workload-token")
+	req, _ := http.NewRequestWithContext(t.Context(), http.MethodGet,
+		"https://api.github.com/repos/acme/app?per_page=5&access_token=s3cret&q=a+b&sig=ghp_planted0123456789&page=2", nil)
+	res, err := r.agent().Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = res.Body.Close()
+	got := r.requests()
+	if len(got) != 1 || got[0].query != "per_page=5&q=a+b&page=2" {
+		t.Fatalf("gateway got %+v", got)
+	}
+	logged := r.log.String()
+	if r.edge.Stripped() != 2 || !strings.Contains(logged, `"kind":"query:access_token"`) || !strings.Contains(logged, `"kind":"github_pat"`) ||
+		strings.Contains(logged, "s3cret") || strings.Contains(logged, "ghp_planted") {
+		t.Fatalf("stripped %d:\n%s", r.edge.Stripped(), logged)
+	}
+}
+
+// TestTheSessionCAsCertificatesLiveAnHour: a host certificate lives at most
+// an hour and is issued again before it expires; the CA serves only
+// server authentication.
+func TestTheSessionCAsCertificatesLiveAnHour(t *testing.T) {
+	now := time.Date(2026, 10, 11, 12, 0, 0, 0, time.UTC)
+	a, err := newAuthority([]string{"api.github.com"}, 24*time.Hour, func() time.Time { return now })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(a.cert.ExtKeyUsage, []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}) {
+		t.Fatalf("CA key usage %v", a.cert.ExtKeyUsage)
+	}
+	first, err := a.leaf("api.github.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if life := first.Leaf.NotAfter.Sub(now); life > time.Hour {
+		t.Fatalf("a leaf lives %s", life)
+	}
+	now = now.Add(30 * time.Minute)
+	if again, _ := a.leaf("api.github.com"); again != first {
+		t.Fatal("a fresh leaf was issued again")
+	}
+	now = now.Add(26 * time.Minute)
+	renewed, _ := a.leaf("api.github.com")
+	if renewed == first || !renewed.Leaf.NotAfter.After(first.Leaf.NotAfter) {
+		t.Fatal("a leaf about to expire was not issued again")
+	}
+	if _, err := renewed.Leaf.Verify(x509.VerifyOptions{
+		DNSName: "api.github.com", Roots: certPool(a.cert), CurrentTime: now, KeyUsages: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func certPool(c *x509.Certificate) *x509.CertPool {
+	p := x509.NewCertPool()
+	p.AddCert(c)
+	return p
+}
+
+// TestHR213_TheEdgeListensOnlyOnTheSandboxNetwork: the edge listens on its
+// address in the sandbox network, and a connection that arrives on another
+// local address (its uplink's) is dropped unanswered.
+func TestHR213_TheEdgeListensOnlyOnTheSandboxNetwork(t *testing.T) {
+	ln, err := listen(t.Context(), ":0", "127.0.0.0/8")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a := ln.Addr().(*net.TCPAddr); !a.IP.IsLoopback() {
+		t.Fatalf("listening on %s", a)
+	}
+	_ = ln.Close()
+	if _, err := listen(t.Context(), ":0", "192.0.2.0/24"); err == nil {
+		t.Fatal("listened with no address in the sandbox network")
+	}
+	raw, err := (&net.ListenConfig{}).Listen(t.Context(), "tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	other := &subnetListener{Listener: raw, prefix: netip.MustParsePrefix("10.0.0.0/8")}
+	accepted := make(chan net.Conn, 1)
+	go func() {
+		c, err := other.Accept()
+		if err == nil {
+			accepted <- c
+		}
+		close(accepted)
+	}()
+	c, err := net.Dial("tcp", raw.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = c.SetReadDeadline(time.Now().Add(5 * time.Second))
+	if n, err := c.Read(make([]byte, 1)); err == nil || n != 0 {
+		t.Fatalf("the edge answered on another address: %d, %v", n, err)
+	}
+	_ = c.Close()
+	_ = other.Close()
+	if c, ok := <-accepted; ok {
+		_ = c.Close()
+		t.Fatal("a connection to another address was accepted")
+	}
 }

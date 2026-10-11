@@ -4,7 +4,10 @@
 package probe
 
 import (
+	"context"
 	"encoding/base64"
+	"errors"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
@@ -14,7 +17,9 @@ import (
 	"regexp"
 	"runtime"
 	"strings"
+	"syscall"
 	"testing"
+	"time"
 
 	"github.com/katocxl/pantherclaw/internal/sandbox/report"
 )
@@ -26,7 +31,7 @@ func config() Config {
 		Edge:   "pc-edge-1:3128", CAFile: "/pc/ca.pem", AgentHosts: []string{"api.github.com"},
 		MappedAddrs: []string{"140.82.112.6", "2606:50c0:8000::154"},
 		Canary:      Target{Addrs: []string{"192.168.65.254"}, DNS: 18453, HTTPS: 18443, SSH: 18422},
-		HostAddrs:   []string{"192.168.65.254"}, HostPorts: []int{8090},
+		HostAddrs:   []string{"192.168.65.254"}, HostPorts: []int{8090}, BridgeGateway: "172.19.0.1",
 	}
 }
 
@@ -62,7 +67,7 @@ func TestHR121_TheCatalogHasEveryProbeAndControl(t *testing.T) {
 	for _, target := range []string{
 		"dns_docker_resolver 127.0.0.11 api.github.com", "dns_external udp 192.168.65.254:18453", "dns_external tcp 192.168.65.254:18453",
 		"direct_https 140.82.112.6:443", "direct_https 192.168.65.254:18443", "direct_ssh 140.82.112.6:22", "direct_ssh 192.168.65.254:18422",
-		"ssh_push 140.82.112.6:22", "pat_push direct 192.168.65.254:18443", "ipv6 2606:50c0:8000::154", "icmp echo 140.82.112.6",
+		"ssh_push 140.82.112.6:22", "ssh_push push 192.168.65.254:18422", "pat_push direct 192.168.65.254:18443", "ipv6 an IPv6 address or default route", "ipv6 2606:50c0:8000::154", "icmp echo 140.82.112.6",
 		"icmp echo 192.168.65.254", "metadata [fd00:ec2::254]:80", "host_gateway 192.168.65.254:8090", "host_gateway host.docker.internal:8090",
 	} {
 		if !targets[target] {
@@ -76,7 +81,7 @@ func TestHR121_TheCatalogHasEveryProbeAndControl(t *testing.T) {
 // metadata or a documentation address (G0 M9 design decision 8).
 func TestHR121_ProbesContactNoThirdParty(t *testing.T) {
 	c := config()
-	allowed := map[string]bool{"127.0.0.11": true, "169.254.169.254": true, "fd00:ec2::254": true, "2001:db8::1": true, bridgeGateway(): true}
+	allowed := map[string]bool{"127.0.0.11": true, "169.254.169.254": true, "fd00:ec2::254": true, c.BridgeGateway: true}
 	for _, a := range append(append(append([]string{}, c.Canary.Addrs...), c.MappedAddrs...), c.HostAddrs...) {
 		allowed[a] = true
 	}
@@ -95,22 +100,116 @@ func TestHR121_ProbesContactNoThirdParty(t *testing.T) {
 	}
 }
 
-func TestHR121_TheControlRunAimsOnlyAtTheCanary(t *testing.T) {
+// TestHR121_TheControlRunTwinsEveryProbeWithALiveTarget: on the open
+// network each probe with a live target there runs again under its own
+// name as a positive control, aimed only at the canary, the host and
+// Docker's resolver; ipv6, metadata and docker_socket have no twin.
+func TestHR121_TheControlRunTwinsEveryProbeWithALiveTarget(t *testing.T) {
 	c := config()
-	c.Kind = report.KindControl
-	ps := catalog(c)
-	if len(ps) != 5 {
-		t.Fatalf("%d control probes", len(ps))
+	sandbox := map[string]bool{}
+	for _, p := range catalog(c) {
+		if p.role == report.RoleProbe {
+			sandbox[p.name] = true
+		}
 	}
-	for _, p := range ps {
-		if p.name != "canary_control" || p.role != report.RolePositive || p.expect != report.Reachable || !strings.Contains(p.target, "192.168.65.254") {
+	c.Kind, c.KeyFile = report.KindControl, ""
+	twinned := map[string]bool{}
+	for _, p := range catalog(c) {
+		twinned[p.name] = true
+		if !sandbox[p.name] || p.role != report.RolePositive || p.expect != report.Reachable ||
+			(!strings.Contains(p.target, "192.168.65.254") && !strings.HasPrefix(p.target, "127.0.0.11 ")) {
 			t.Errorf("control probe %+v", p)
+		}
+	}
+	for name := range sandbox {
+		want := name != "ipv6" && name != "metadata" && name != "docker_socket"
+		if twinned[name] != want {
+			t.Errorf("%s twinned: %v", name, twinned[name])
 		}
 	}
 }
 
+// TestHR121_OnlySilenceIsBlocked: anything that answered is reachable, only
+// silence is blocked, and a probe that could not run is an error.
+func TestHR121_OnlySilenceIsBlocked(t *testing.T) {
+	op := func(err error) error {
+		return &net.OpError{Op: "dial", Net: "tcp", Err: os.NewSyscallError("connect", err)}
+	}
+	for err, want := range map[error]string{
+		nil:                                      report.Reachable,
+		op(syscall.ECONNREFUSED):                 report.Reachable,
+		op(syscall.ECONNRESET):                   report.Reachable,
+		op(syscall.ENETUNREACH):                  report.Blocked,
+		op(syscall.EHOSTUNREACH):                 report.Blocked,
+		op(syscall.EADDRNOTAVAIL):                report.Blocked,
+		&net.DNSError{IsNotFound: true}:          report.Blocked,
+		&net.DNSError{IsTimeout: true}:           report.Blocked,
+		&net.DNSError{Err: "server misbehaving"}: report.Blocked,
+		context.DeadlineExceeded:                 report.Blocked,
+		closed{"refused by the edge"}:            report.Blocked,
+		failed{errors.New("no ICMP socket")}:     report.Error,
+		op(syscall.EACCES):                       report.Error,
+		errors.New("something else"):             report.Error,
+	} {
+		if got := observe(err); got != want {
+			t.Errorf("%v: %s, want %s", err, got, want)
+		}
+	}
+}
+
+// TestHR121_AnAnswerIsReachableAndSilenceBlocked: a listener that resets
+// is reachable on Linux, where the probe runs; a DNS server that answers
+// anything is reachable and one that never answers is blocked.
+func TestHR121_AnAnswerIsReachableAndSilenceBlocked(t *testing.T) {
+	answering, err := net.ListenPacket("udp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = answering.Close() }()
+	go func() {
+		b := make([]byte, 512)
+		for {
+			n, from, err := answering.ReadFrom(b)
+			if err != nil {
+				return
+			}
+			b[2] |= 0x80 // a response
+			b[3] = 3     // NXDOMAIN
+			_, _ = answering.WriteTo(b[:n], from)
+		}
+	}()
+	silent, err := net.ListenPacket("udp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = silent.Close() }()
+	marker := report.Marker("n")
+	if got := observe(answers(answering.LocalAddr().String(), "udp", marker)(t.Context())); got != report.Reachable {
+		t.Errorf("an NXDOMAIN answer: %s", got)
+	}
+	ctx, cancel := context.WithTimeout(t.Context(), 300*time.Millisecond)
+	defer cancel()
+	if got := observe(answers(silent.LocalAddr().String(), "udp", marker)(ctx)); got != report.Blocked {
+		t.Errorf("no answer: %s", got)
+	}
+	if runtime.GOOS != "linux" {
+		return
+	}
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	addr := l.Addr().String()
+	_ = l.Close()
+	if got := observe(dialTCP(t.Context(), "tcp", addr)); got != report.Reachable {
+		t.Errorf("a reset: %s", got)
+	}
+}
+
 // TestHR214_AnEdgeRefusalIsBlocked: a request the edge refused never left
-// the sandbox, whatever its status; the gateway's answer is reachable.
+// the sandbox, whatever its status, a refused CONNECT included; the
+// gateway's answer is reachable, and an edge that cannot be reached is an
+// error.
 func TestHR214_AnEdgeRefusalIsBlocked(t *testing.T) {
 	refused := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("PC-Refused-By", "edge")
@@ -122,23 +221,33 @@ func TestHR214_AnEdgeRefusalIsBlocked(t *testing.T) {
 	}))
 	defer answered.Close()
 	u, _ := url.Parse(refused.URL)
-	if err := viaEdge(u, nil, http.MethodGet, "http://unmapped.invalid/x", nil)(t.Context()); err == nil {
-		t.Fatal("an edge refusal was reachable")
+	for _, target := range []string{"http://unmapped.invalid/x", "https://unmapped.invalid/x"} {
+		if got := observe(viaEdge(u, nil, http.MethodGet, target, nil)(t.Context())); got != report.Blocked {
+			t.Errorf("an edge refusal of %s: %s", target, got)
+		}
 	}
 	u, _ = url.Parse(answered.URL)
-	if err := viaEdge(u, nil, http.MethodGet, "http://payments.example/x", nil)(t.Context()); err != nil {
-		t.Fatalf("the gateway's 404 was blocked: %v", err)
+	if got := observe(viaEdge(u, nil, http.MethodGet, "http://payments.example/x", nil)(t.Context())); got != report.Reachable {
+		t.Errorf("the gateway's 404: %s", got)
+	}
+	gone := httptest.NewServer(http.NotFoundHandler())
+	u, _ = url.Parse(gone.URL)
+	gone.Close()
+	if got := observe(viaEdge(u, nil, http.MethodGet, "http://payments.example/x", nil)(t.Context())); got != report.Error {
+		t.Errorf("an unreachable edge: %s", got)
 	}
 }
 
 func TestReadConfigIsStrict(t *testing.T) {
 	dir := t.TempDir()
 	for name, body := range map[string]string{
-		"format":        `{"format":"v0","kind":"sandbox"}`,
-		"kind":          `{"format":"pantherclaw.probe/v1","kind":"agent","key_file":"k","canary":{"addrs":["10.0.0.1"]}}`,
-		"no edge":       `{"format":"pantherclaw.probe/v1","kind":"sandbox","key_file":"k","canary":{"addrs":["10.0.0.1"]}}`,
-		"canary name":   `{"format":"pantherclaw.probe/v1","kind":"control","key_file":"k","canary":{"addrs":["canary.example"]}}`,
-		"unknown field": `{"format":"pantherclaw.probe/v1","kind":"control","key_file":"k","canary":{"addrs":["10.0.0.1"]},"shell":"sh"}`,
+		"format":         `{"format":"v0","kind":"sandbox"}`,
+		"kind":           `{"format":"pantherclaw.probe/v1","kind":"agent","key_file":"k","canary":{"addrs":["10.0.0.1"]}}`,
+		"no edge":        `{"format":"pantherclaw.probe/v1","kind":"sandbox","key_file":"k","canary":{"addrs":["10.0.0.1"]}}`,
+		"canary name":    `{"format":"pantherclaw.probe/v1","kind":"control","canary":{"addrs":["canary.example"]}}`,
+		"control key":    `{"format":"pantherclaw.probe/v1","kind":"control","key_file":"k","canary":{"addrs":["10.0.0.1"]}}`,
+		"sandbox no key": `{"format":"pantherclaw.probe/v1","kind":"sandbox","edge":"e:1","ca_file":"c","agent_hosts":["a.example"],"canary":{"addrs":["10.0.0.1"]}}`,
+		"unknown field":  `{"format":"pantherclaw.probe/v1","kind":"control","canary":{"addrs":["10.0.0.1"]},"shell":"sh"}`,
 	} {
 		p := filepath.Join(dir, "c.json")
 		if err := os.WriteFile(p, []byte(body), 0o600); err != nil {
@@ -173,4 +282,26 @@ func base64Decode(t *testing.T, s string) string {
 		t.Fatal(err)
 	}
 	return string(b)
+}
+
+// TestHR121_AnIsolatedNetworkHasNoBridgeToProbe: in isolated gateway mode
+// the network has no gateway address, and its first address may be a
+// container's, so no host probe aims there; with a gateway, they do.
+func TestHR121_AnIsolatedNetworkHasNoBridgeToProbe(t *testing.T) {
+	c := config()
+	var bridged int
+	for _, p := range catalog(c) {
+		if strings.HasPrefix(p.target, "172.19.0.1:") {
+			bridged++
+		}
+	}
+	if bridged == 0 {
+		t.Fatal("no probe of the bridge gateway")
+	}
+	c.BridgeGateway = ""
+	for _, p := range catalog(c) {
+		if strings.Contains(p.target, "172.19.0.1") {
+			t.Errorf("%s aims at %s", p.name, p.target)
+		}
+	}
 }

@@ -4,7 +4,8 @@
 // Command selfcheck runs inside a test container and prints, one per line,
 // what the container lets it do: its uid, whether the root file system and
 // /tmp are writable, whether /tmp executes, and whether each address given
-// as an argument (host:port) connects.
+// as an argument (host:port) connects. With --listen ADDR it instead
+// accepts connections on ADDR until it is stopped: a peer to reach.
 package main
 
 import (
@@ -17,6 +18,10 @@ import (
 )
 
 func main() {
+	if len(os.Args) == 3 && os.Args[1] == "--listen" {
+		listen(os.Args[2])
+		return
+	}
 	if len(os.Args) == 2 && os.Args[1] == "--exit" {
 		return
 	}
@@ -60,4 +65,20 @@ func tmpExec() error {
 		return err
 	}
 	return exec.Command("/tmp/selfcheck-exec", "--exit").Run()
+}
+
+// listen accepts and closes connections on addr until it is stopped.
+func listen(addr string) {
+	l, err := net.Listen("tcp", addr)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	for {
+		c, err := l.Accept()
+		if err != nil {
+			return
+		}
+		_ = c.Close()
+	}
 }

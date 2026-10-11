@@ -5,7 +5,11 @@ package docker
 
 import (
 	"context"
+	"encoding/json/v2"
 	"errors"
+	"net"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -152,20 +156,66 @@ func TestHR218_ANetworkTheEngineDidNotIsolateIsRemoved(t *testing.T) {
 	}
 }
 
-func agent() Container {
+// TestHR122_TheUplinkIsADefaultNATBridge: the edge's uplink may not be
+// routed or unprotected, which would expose its ports without publishing.
+func TestHR122_TheUplinkIsADefaultNATBridge(t *testing.T) {
+	up := Network{Name: "pc-up-1"}
+	for name, opts := range map[string]string{
+		"default": `{}`,
+		"nat":     `{"com.docker.network.bridge.gateway_mode_ipv4":"nat","com.docker.network.bridge.gateway_mode_ipv6":"nat"}`,
+	} {
+		f := &fake{out: map[string]string{"network create": "id\n", "network inspect": `{"Name":"pc-up-1","Driver":"bridge","Options":` + opts + `}`}}
+		if _, err := New(f).CreateNetwork(t.Context(), up); err != nil {
+			t.Errorf("%s uplink: %v", name, err)
+		}
+	}
+	for name, inspected := range map[string]string{
+		"routed":          `{"Name":"pc-up-1","Driver":"bridge","Options":{"com.docker.network.bridge.gateway_mode_ipv4":"routed"}}`,
+		"nat-unprotected": `{"Name":"pc-up-1","Driver":"bridge","Options":{"com.docker.network.bridge.gateway_mode_ipv6":"nat-unprotected"}}`,
+		"internal":        `{"Name":"pc-up-1","Driver":"bridge","Internal":true}`,
+		"IPv6 on":         `{"Name":"pc-up-1","Driver":"bridge","EnableIPv6":true}`,
+	} {
+		f := &fake{out: map[string]string{"network create": "id\n", "network inspect": inspected, "network rm": ""}}
+		if _, err := New(f).CreateNetwork(t.Context(), up); !errors.Is(err, ErrIsolation) || !f.called("network rm") {
+			t.Errorf("%s uplink: %v", name, err)
+		}
+	}
+}
+
+// agent is a container with a binary bound from a private bind root.
+func agent(t *testing.T) Container {
+	t.Helper()
+	root := bindRoot(t)
+	bin := filepath.Join(root, "agent")
+	if err := os.WriteFile(bin, []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	return Container{
 		Name: "pc-agent-1", Image: testImage, User: "65532:65532", Args: []string{"/pc/agent", "--flag"}, Runtime: RuntimeRunc,
 		Networks: []string{"pc-sbx-1"}, Env: []string{"HTTPS_PROXY=http://pc-edge-1:3128"},
 		Mounts: []Mount{
-			{Kind: Bind, Source: `C:\Users\dev\bin\agent`, Target: "/pc/agent"},
+			{Kind: Bind, Source: bin, Target: "/pc/agent"},
 			{Kind: Volume, Source: "pc-ws-1", Target: "/workspace"},
 		},
-		Labels: map[string]string{"org.pantherclaw.session": "s1"},
+		BindRoot: root,
+		Labels:   map[string]string{"org.pantherclaw.session": "s1"},
 	}
 }
 
+// bindRoot is a temporary directory as checkBinds wants it: reached
+// through no link.
+func bindRoot(t *testing.T) string {
+	t.Helper()
+	root, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return root
+}
+
 func TestHR085_EveryContainerGetsTheHardeningFlags(t *testing.T) {
-	args, err := agent().args()
+	c := agent(t)
+	args, err := c.args()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -179,7 +229,7 @@ func TestHR085_EveryContainerGetsTheHardeningFlags(t *testing.T) {
 		"--sysctl net.ipv4.ping_group_range=1 0 --sysctl net.ipv6.conf.all.disable_ipv6=1 --sysctl net.ipv4.ip_forward=0",
 		"--pids-limit 256 --memory 1024m --cpus 1.000",
 		"--network pc-sbx-1",
-		`--mount type=bind,source=C:\Users\dev\bin\agent,target=/pc/agent,readonly`,
+		"--mount type=bind,source=" + c.Mounts[0].Source + ",target=/pc/agent,readonly",
 		"--mount type=volume,source=pc-ws-1,target=/workspace",
 		"--env HTTPS_PROXY=http://pc-edge-1:3128",
 		testImage + " /pc/agent --flag",
@@ -188,7 +238,7 @@ func TestHR085_EveryContainerGetsTheHardeningFlags(t *testing.T) {
 			t.Errorf("args lack %q:\n%s", want, got)
 		}
 	}
-	for _, never := range []string{"--privileged", "--network host", "--cap-add", "unconfined", "--env-file", "-v"} {
+	for _, never := range []string{"--privileged", "--network host", "--cap-add", "unconfined", "--env-file", "-v", "--publish", "--add-host", "--dns"} {
 		if slices.Contains(args, never) || strings.Contains(got, never+" ") {
 			t.Errorf("args contain %q", never)
 		}
@@ -196,6 +246,10 @@ func TestHR085_EveryContainerGetsTheHardeningFlags(t *testing.T) {
 }
 
 func TestHR216_RefusesTheDockerSocketHostEnvironmentAndRoot(t *testing.T) {
+	outside := filepath.Join(bindRoot(t), "elsewhere")
+	if err := os.WriteFile(outside, []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	for name, mutate := range map[string]func(*Container){
 		"docker.sock bind": func(c *Container) {
 			c.Mounts = append(c.Mounts, Mount{Kind: Bind, Source: "/var/run/docker.sock", Target: "/var/run/docker.sock"})
@@ -204,12 +258,29 @@ func TestHR216_RefusesTheDockerSocketHostEnvironmentAndRoot(t *testing.T) {
 			c.Mounts = append(c.Mounts, Mount{Kind: Bind, Source: `\\.\pipe\docker_engine`, Target: "/pc/sock"})
 		},
 		"socket as target": func(c *Container) {
-			c.Mounts = append(c.Mounts, Mount{Kind: Bind, Source: "/tmp/x", Target: "/run/docker.sock"})
+			c.Mounts = append(c.Mounts, Mount{Kind: Bind, Source: c.Mounts[0].Source, Target: "/run/docker.sock"})
+		},
+		"bind outside the root": func(c *Container) { c.Mounts[0].Source = outside },
+		"bind of the root":      func(c *Container) { c.Mounts[0].Source = c.BindRoot },
+		"bind of a missing file": func(c *Container) {
+			c.Mounts[0].Source = filepath.Join(c.BindRoot, "missing")
+		},
+		"unclean bind source": func(c *Container) {
+			c.Mounts[0].Source = c.BindRoot + string(filepath.Separator) + "." + string(filepath.Separator) + "agent"
+		},
+		"no bind root":       func(c *Container) { c.BindRoot = "" },
+		"relative bind root": func(c *Container) { c.BindRoot = "bin" },
+		"the file system root as bind root": func(c *Container) {
+			c.BindRoot = filepath.VolumeName(c.BindRoot) + string(filepath.Separator)
 		},
 		"host env by name":       func(c *Container) { c.Env = append(c.Env, "GITHUB_TOKEN") },
 		"env with newline":       func(c *Container) { c.Env = append(c.Env, "A=b\nc") },
 		"root user":              func(c *Container) { c.User = "0:0" },
-		"root group":             func(c *Container) { c.User = "1000:0" },
+		"root group":             func(c *Container) { c.User = "65532:0" },
+		"root uid with zeros":    func(c *Container) { c.User = "00:65532" },
+		"root gid with zeros":    func(c *Container) { c.User = "65532:00" },
+		"leading zero":           func(c *Container) { c.User = "065532:65532" },
+		"a host account":         func(c *Container) { c.User = "1000:1000" },
 		"user name":              func(c *Container) { c.User = "nobody" },
 		"host network":           func(c *Container) { c.Networks = []string{"host"} },
 		"no network":             func(c *Container) { c.Networks = nil },
@@ -224,7 +295,7 @@ func TestHR216_RefusesTheDockerSocketHostEnvironmentAndRoot(t *testing.T) {
 		"label with a newline":   func(c *Container) { c.Labels["org.pantherclaw.x"] = "a\nb" },
 		"label key not reversed": func(c *Container) { c.Labels["session"] = "x" },
 	} {
-		c := agent()
+		c := agent(t)
 		mutate(&c)
 		f := &fake{}
 		if _, err := New(f).CreateContainer(t.Context(), c); !errors.Is(err, ErrInvalid) {
@@ -236,46 +307,108 @@ func TestHR216_RefusesTheDockerSocketHostEnvironmentAndRoot(t *testing.T) {
 	}
 }
 
-const hardenedInspect = `{"Id":"abc","Name":"/pc-agent-1","Config":{"User":"65532:65532","Image":"` + testImage + `"},` +
-	`"HostConfig":{"NetworkMode":"pc-sbx-1","Privileged":false,"ReadonlyRootfs":true,"CapAdd":null,"CapDrop":["ALL"],` +
-	`"SecurityOpt":["no-new-privileges=true","seccomp=builtin"],"IpcMode":"private","PidMode":"","UTSMode":"","UsernsMode":"","CgroupnsMode":"private",` +
-	`"Binds":null,"VolumesFrom":null,"Devices":[],"Sysctls":{"net.ipv4.ping_group_range":"1 0","net.ipv6.conf.all.disable_ipv6":"1","net.ipv4.ip_forward":"0"},` +
-	`"Tmpfs":{"/tmp":"rw,noexec,nosuid,nodev,size=64m"},"PidsLimit":256,"Memory":1073741824,"NanoCpus":1000000000,"Runtime":"runc","Init":true,` +
-	`"Mounts":[{"Type":"bind","Source":"C:\\Users\\dev\\bin\\agent","Target":"/pc/agent","ReadOnly":true},{"Type":"volume","Source":"pc-ws-1","Target":"/workspace"}]},` +
-	`"NetworkSettings":{"Networks":{"pc-sbx-1":{}}}}`
+// TestHR216_NoBindReachesTheSocketThroughALinkOrAsASocket: a link in the
+// bind root, or a socket file there, is never bound.
+func TestHR216_NoBindReachesTheSocketThroughALinkOrAsASocket(t *testing.T) {
+	c := agent(t)
+	link := filepath.Join(c.BindRoot, "link")
+	if err := os.Symlink(filepath.Dir(c.BindRoot), link); err != nil {
+		t.Logf("no symbolic links here: %v", err)
+	} else {
+		c.Mounts[0].Source = link
+		if _, err := c.args(); !errors.Is(err, ErrInvalid) {
+			t.Errorf("a linked bind source: %v", err)
+		}
+		c = agent(t)
+		c.BindRoot = link
+		c.Mounts[0].Source = filepath.Join(link, "x")
+		if _, err := c.args(); !errors.Is(err, ErrInvalid) {
+			t.Errorf("a linked bind root: %v", err)
+		}
+	}
+	c = agent(t)
+	sock := filepath.Join(c.BindRoot, "s.sock")
+	l, err := net.Listen("unix", sock)
+	if err != nil {
+		t.Skipf("no unix sockets here: %v", err)
+	}
+	defer func() { _ = l.Close() }()
+	c.Mounts[0].Source = sock
+	if _, err := c.args(); !errors.Is(err, ErrInvalid) {
+		t.Errorf("a socket file: %v", err)
+	}
+}
+
+// hardened is what the engine reports for c when it made c as asked.
+func hardened(t *testing.T, c Container) string {
+	t.Helper()
+	src, err := json.Marshal(c.Mounts[0].Source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return `{"Id":"abc","Name":"/pc-agent-1","Config":{"User":"65532:65532","Image":"` + testImage + `"},` +
+		`"HostConfig":{"NetworkMode":"pc-sbx-1","Privileged":false,"ReadonlyRootfs":true,"CapAdd":null,"CapDrop":["ALL"],` +
+		`"SecurityOpt":["no-new-privileges=true","seccomp=builtin"],"IpcMode":"private","PidMode":"","UTSMode":"","UsernsMode":"","CgroupnsMode":"private",` +
+		`"Binds":null,"VolumesFrom":null,"Devices":[],"Sysctls":{"net.ipv4.ping_group_range":"1 0","net.ipv6.conf.all.disable_ipv6":"1","net.ipv4.ip_forward":"0"},` +
+		`"Tmpfs":{"/tmp":"rw,noexec,nosuid,nodev,size=64m"},"PidsLimit":256,"Memory":1073741824,"NanoCpus":1000000000,"Runtime":"runc","Init":true,` +
+		`"MaskedPaths":["/proc/kcore","/sys/firmware"],"ReadonlyPaths":["/proc/sys"],"PortBindings":{},"PublishAllPorts":false,"ExtraHosts":null,"Dns":null,` +
+		`"Mounts":[{"Type":"bind","Source":` + string(src) + `,"Target":"/pc/agent","ReadOnly":true},{"Type":"volume","Source":"pc-ws-1","Target":"/workspace"}]},` +
+		`"Mounts":[{"Type":"bind","Source":` + string(src) + `,"Destination":"/pc/agent","RW":false},` +
+		`{"Type":"volume","Name":"pc-ws-1","Source":"/var/lib/docker/volumes/pc-ws-1/_data","Destination":"/workspace","RW":true}],` +
+		`"NetworkSettings":{"Networks":{"pc-sbx-1":{}}}}`
+}
 
 func TestHR218_AContainerTheEngineDidNotHardenIsRemoved(t *testing.T) {
-	f := &fake{out: map[string]string{"create": "abc\n", "container inspect": hardenedInspect}}
-	info, err := New(f).CreateContainer(t.Context(), agent())
+	c := agent(t)
+	ok := hardened(t, c)
+	f := &fake{out: map[string]string{"create": "abc\n", "container inspect": ok}}
+	info, err := New(f).CreateContainer(t.Context(), c)
 	if err != nil || info.Runtime() != RuntimeRunc {
 		t.Fatalf("hardened container: runtime %q, %v", info.Runtime(), err)
 	}
 	for name, inspected := range map[string]string{
-		"privileged":        strings.Replace(hardenedInspect, `"Privileged":false`, `"Privileged":true`, 1),
-		"cap added":         strings.Replace(hardenedInspect, `"CapAdd":null`, `"CapAdd":["NET_RAW"]`, 1),
-		"writable root":     strings.Replace(hardenedInspect, `"ReadonlyRootfs":true`, `"ReadonlyRootfs":false`, 1),
-		"seccomp dropped":   strings.Replace(hardenedInspect, `,"seccomp=builtin"`, ``, 1),
-		"root user":         strings.Replace(hardenedInspect, `"User":"65532:65532"`, `"User":""`, 1),
-		"host pid":          strings.Replace(hardenedInspect, `"PidMode":""`, `"PidMode":"host"`, 1),
-		"host ipc":          strings.Replace(hardenedInspect, `"IpcMode":"private"`, `"IpcMode":"host"`, 1),
-		"second network":    strings.Replace(hardenedInspect, `{"pc-sbx-1":{}}`, `{"pc-sbx-1":{},"bridge":{}}`, 1),
-		"ping allowed":      strings.Replace(hardenedInspect, `"1 0"`, `"0 2147483647"`, 1),
-		"forwarding":        strings.Replace(hardenedInspect, `ip_forward":"0"`, `ip_forward":"1"`, 1),
-		"no pids limit":     strings.Replace(hardenedInspect, `"PidsLimit":256`, `"PidsLimit":0`, 1),
-		"bind added":        strings.Replace(hardenedInspect, `"Binds":null`, `"Binds":["/var/run/docker.sock:/var/run/docker.sock"]`, 1),
-		"writable bind":     strings.Replace(hardenedInspect, `"ReadOnly":true`, `"ReadOnly":false`, 1),
-		"tmpfs added":       strings.Replace(hardenedInspect, `"Tmpfs":{`, `"Tmpfs":{"/run":"rw",`, 1),
-		"device":            strings.Replace(hardenedInspect, `"Devices":[]`, `"Devices":[{"PathOnHost":"/dev/kvm"}]`, 1),
-		"another image":     strings.Replace(hardenedInspect, `"Image":"gcr.io`, `"Image":"docker.io`, 1),
-		"another container": strings.Replace(hardenedInspect, `"/pc-agent-1"`, `"/pc-agent-2"`, 1),
+		"privileged":             strings.Replace(ok, `"Privileged":false`, `"Privileged":true`, 1),
+		"cap added":              strings.Replace(ok, `"CapAdd":null`, `"CapAdd":["NET_RAW"]`, 1),
+		"writable root":          strings.Replace(ok, `"ReadonlyRootfs":true`, `"ReadonlyRootfs":false`, 1),
+		"seccomp dropped":        strings.Replace(ok, `,"seccomp=builtin"`, ``, 1),
+		"apparmor unconfined":    strings.Replace(ok, `"seccomp=builtin"]`, `"seccomp=builtin","apparmor=unconfined"]`, 1),
+		"labels disabled":        strings.Replace(ok, `"SecurityOpt":[`, `"SecurityOpt":["label=disable",`, 1),
+		"/proc unmasked":         strings.Replace(ok, `"MaskedPaths":["/proc/kcore","/sys/firmware"]`, `"MaskedPaths":null`, 1),
+		"/proc/sys writable":     strings.Replace(ok, `"ReadonlyPaths":["/proc/sys"]`, `"ReadonlyPaths":[]`, 1),
+		"published port":         strings.Replace(ok, `"PortBindings":{}`, `"PortBindings":{"3128/tcp":[{"HostIp":"","HostPort":"3128"}]}`, 1),
+		"every port published":   strings.Replace(ok, `"PublishAllPorts":false`, `"PublishAllPorts":true`, 1),
+		"extra host":             strings.Replace(ok, `"ExtraHosts":null`, `"ExtraHosts":["api.github.com:192.0.2.1"]`, 1),
+		"dns server":             strings.Replace(ok, `"Dns":null`, `"Dns":["8.8.8.8"]`, 1),
+		"root user":              strings.Replace(ok, `"User":"65532:65532"`, `"User":""`, 1),
+		"host pid":               strings.Replace(ok, `"PidMode":""`, `"PidMode":"host"`, 1),
+		"host ipc":               strings.Replace(ok, `"IpcMode":"private"`, `"IpcMode":"host"`, 1),
+		"second network":         strings.Replace(ok, `{"pc-sbx-1":{}}`, `{"pc-sbx-1":{},"bridge":{}}`, 1),
+		"ping allowed":           strings.Replace(ok, `"1 0"`, `"0 2147483647"`, 1),
+		"forwarding":             strings.Replace(ok, `ip_forward":"0"`, `ip_forward":"1"`, 1),
+		"no pids limit":          strings.Replace(ok, `"PidsLimit":256`, `"PidsLimit":0`, 1),
+		"bind added":             strings.Replace(ok, `"Binds":null`, `"Binds":["/var/run/docker.sock:/var/run/docker.sock"]`, 1),
+		"writable bind":          strings.Replace(ok, `"ReadOnly":true`, `"ReadOnly":false`, 1),
+		"bind source changed":    strings.Replace(ok, `{"Type":"bind","Source":`, `{"Type":"bind","Source":"/var/run","Was":`, 1),
+		"bind made writable":     strings.Replace(ok, `"Destination":"/pc/agent","RW":false`, `"Destination":"/pc/agent","RW":true`, 1),
+		"another mount got":      strings.Replace(ok, `"Destination":"/workspace"`, `"Destination":"/var/run"`, 1),
+		"a mount more":           strings.Replace(ok, `"RW":true}],`, `"RW":true},{"Type":"bind","Destination":"/var/run","RW":false}],`, 1),
+		"tmpfs added":            strings.Replace(ok, `"Tmpfs":{`, `"Tmpfs":{"/run":"rw",`, 1),
+		"device":                 strings.Replace(ok, `"Devices":[]`, `"Devices":[{"PathOnHost":"/dev/kvm"}]`, 1),
+		"another image":          strings.Replace(ok, `"Image":"gcr.io`, `"Image":"docker.io`, 1),
+		"another container":      strings.Replace(ok, `"/pc-agent-1"`, `"/pc-agent-2"`, 1),
+		"volume asked read-only": strings.Replace(ok, `"Target":"/workspace"}`, `"Target":"/workspace","ReadOnly":true}`, 1),
 	} {
 		f := &fake{out: map[string]string{"create": "abc\n", "container inspect": inspected, "rm": ""}}
-		if _, err := New(f).CreateContainer(t.Context(), agent()); !errors.Is(err, ErrIsolation) {
+		if _, err := New(f).CreateContainer(t.Context(), c); !errors.Is(err, ErrIsolation) {
 			t.Errorf("%s: CreateContainer() = %v, want ErrIsolation", name, err)
 		}
 		if !f.called("rm") {
 			t.Errorf("%s: the container was not removed", name)
 		}
+	}
+	f = &fake{out: map[string]string{"rm": ""}}
+	if _, err := New(f).CreateContainer(t.Context(), c); err == nil || !f.called("rm") {
+		t.Errorf("a failed create left what the engine made: %v", err)
 	}
 }
 
@@ -299,24 +432,25 @@ func TestErrorNamesTheSubcommandNotItsValues(t *testing.T) {
 // capability back; the probe container's own group alone may open ICMP
 // sockets, and the self-check holds the engine to exactly that.
 func TestHR085_NoCapabilityIsAddedAndOnlyTheProbeMayPing(t *testing.T) {
-	plain, _ := agent().args()
+	a := agent(t)
+	plain, _ := a.args()
 	if slices.Contains(plain, "--cap-add") || !strings.Contains(strings.Join(plain, " "), "ping_group_range=1 0") {
 		t.Fatalf("agent args %q", plain)
 	}
-	p := agent()
+	p := a
 	p.PingGID = 65532
 	args, _ := p.args()
 	if j := strings.Join(args, " "); !strings.Contains(j, "--cap-drop ALL") || strings.Contains(j, "--cap-add") || !strings.Contains(j, "ping_group_range=65532 65532") {
 		t.Fatalf("probe args %q", args)
 	}
-	pinging := strings.Replace(hardenedInspect, `"1 0"`, `"65532 65532"`, 1)
+	pinging := strings.Replace(hardened(t, a), `"1 0"`, `"65532 65532"`, 1)
 	if err := verifyJSON(t, p, pinging); err != nil {
 		t.Fatalf("probe that may ping: %v", err)
 	}
-	if err := verifyJSON(t, p, hardenedInspect); !errors.Is(err, ErrIsolation) {
+	if err := verifyJSON(t, p, hardened(t, a)); !errors.Is(err, ErrIsolation) {
 		t.Fatalf("probe without its ping group: %v", err)
 	}
-	if err := verifyJSON(t, agent(), pinging); !errors.Is(err, ErrIsolation) {
+	if err := verifyJSON(t, a, pinging); !errors.Is(err, ErrIsolation) {
 		t.Fatalf("agent that may ping: %v", err)
 	}
 	if err := verifyJSON(t, p, strings.Replace(pinging, `"CapAdd":null`, `"CapAdd":["CAP_NET_RAW"]`, 1)); !errors.Is(err, ErrIsolation) {

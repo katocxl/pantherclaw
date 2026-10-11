@@ -5,11 +5,13 @@
 // engine (G0 M9 decisions 1 and 2): an internal network in isolated gateway
 // mode, an uplink bridge, and the edge on both (internal/sandbox/edge), the
 // agent's only route. Probe proves the sandbox closed. The probe container
-// runs the catalog on the internal network (internal/sandbox/probe) and a
-// control run on the uplink aims at the canary, which pclaw runs on the host
-// (internal/sim/canary). Each signs its report with the session's probe key
-// (internal/sandbox/report), which pclaw created outside every container;
-// the server verifies them (B4). Everything here runs outside the sandbox.
+// runs the catalog on the internal network (internal/sandbox/probe), a
+// control run on the uplink runs its positive twins, and the canary runs
+// on the host (internal/sim/canary). The sandbox run signs its report
+// (internal/sandbox/report) with the session's probe key; pclaw signs the
+// control run's and the canary's with the session's host key. pclaw
+// created both outside every container; the server verifies them (B4).
+// Everything here runs outside the sandbox.
 package sandbox
 
 import (
@@ -26,6 +28,7 @@ import (
 	"net/netip"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"time"
@@ -77,16 +80,22 @@ type Options struct {
 	// token file, renewed outside; only the edge mounts them. Both must be
 	// readable by EdgeUser.
 	KeyFile, TokenFile string
-	// ProbeKey is the session's probe key, created outside every container.
-	ProbeKey ed25519.PrivateKey
+	// ProbeKey is the session's probe key, created outside every container:
+	// the probe container signs the sandbox run's report with it. HostKey,
+	// also created here, never leaves this process: it signs the control
+	// run's and the canary's reports, so nothing on the agent's network can
+	// forge them (HR-215).
+	ProbeKey, HostKey ed25519.PrivateKey
 	// Canary is running on this host on CanaryPorts.
 	Canary      *canary.Canary
 	CanaryPorts canary.Ports
 	// HostPorts are the ports of the host's services (the gateway's), which
 	// only the edge may reach.
 	HostPorts []int
-	// Dir is a private directory (0700) for the files the containers mount;
-	// Docker must be able to share it.
+	// Dir is a private directory (0700) that holds KeyFile and TokenFile;
+	// the sandbox writes the other files its containers mount there, and no
+	// container gets anything from outside it (HR-216). Docker must be able
+	// to share it.
 	Dir string
 }
 
@@ -109,7 +118,10 @@ type Sandbox struct {
 	HostAddrs []string
 
 	containers, networks []string
-	base                 report.Report
+	// bridge is the internal network's gateway address: none in isolated
+	// gateway mode.
+	bridge string
+	base   report.Report
 }
 
 // Start creates the networks and the edge and waits until the edge is
@@ -118,8 +130,12 @@ func Start(ctx context.Context, c *docker.Client, e docker.Engine, o Options) (*
 	if err := e.Check(); err != nil {
 		return nil, err
 	}
-	if len(o.ProbeKey) != ed25519.PrivateKeySize || o.Canary == nil || len(o.Hosts) == 0 {
-		return nil, errors.New("sandbox: a probe key, the canary and agent hosts are required")
+	if len(o.ProbeKey) != ed25519.PrivateKeySize || len(o.HostKey) != ed25519.PrivateKeySize || o.Canary == nil || len(o.Hosts) == 0 {
+		return nil, errors.New("sandbox: the probe and host keys, the canary and agent hosts are required")
+	}
+	var err error
+	if o.Dir, o.KeyFile, o.TokenFile, err = privateFiles(o.Dir, o.KeyFile, o.TokenFile); err != nil {
+		return nil, err
 	}
 	id := strings.ToLower(o.Session)
 	s := &Sandbox{
@@ -144,12 +160,15 @@ func (s *Sandbox) start(ctx context.Context) error {
 			return err
 		}
 		s.networks = append(s.networks, n.Name)
+		if n.Internal && len(info.IPAM.Config) > 0 {
+			s.bridge = info.IPAM.Config[0].Gateway
+		}
 		if n.Internal {
 			internal = info
 		}
 	}
 	cfg := edge.Config{
-		Format: edge.ConfigFormat, Mode: edge.ModeSandbox, Session: s.o.Session, Listen: ":" + edgePort,
+		Format: edge.ConfigFormat, Mode: edge.ModeSandbox, Session: s.o.Session, Listen: ":" + edgePort, Subnet: internal.Subnet(),
 		GatewayURL: s.o.GatewayURL, GatewayAddr: s.o.GatewayAddr, GatewayCAPin: s.o.GatewayCAPin, Hosts: s.o.Hosts, Run: s.o.Run,
 		KeyFile: keyPath, TokenFile: tokenDir + "/" + filepath.Base(s.o.TokenFile),
 	}
@@ -256,7 +275,7 @@ func (s *Sandbox) configDigest() (string, error) {
 // container creates a hardened container with the sandbox's runtime and
 // labels.
 func (s *Sandbox) container(ctx context.Context, ct docker.Container) (docker.ContainerInfo, error) {
-	ct.Runtime, ct.Labels = s.runtime, s.labels
+	ct.Runtime, ct.Labels, ct.BindRoot = s.runtime, s.labels, s.o.Dir
 	info, err := s.c.CreateContainer(ctx, ct)
 	if err == nil {
 		s.containers = append(s.containers, ct.Name)
@@ -334,45 +353,75 @@ func (ev Evidence) Passed() bool {
 	return true
 }
 
-// Probe runs the catalog on the internal network and the control on the
-// uplink, then signs the canary's report of both markers.
+// Probe runs the catalog on the internal network and its positive twins on
+// the uplink, then the canary's report of both markers. The sandbox run's
+// report comes signed with the probe key, whose file is removed as soon as
+// that run is over; pclaw signs the control run's report and the canary's
+// with the host key, which never enters a container (HR-215).
 func (s *Sandbox) Probe(ctx context.Context, n Nonces) (Evidence, error) {
 	pub, _ := s.o.ProbeKey.Public().(ed25519.PublicKey)
 	keyFile, err := s.writeJSON("probe-key.json", map[string]string{"private_key": base64.RawURLEncoding.EncodeToString(s.o.ProbeKey.Seed())})
 	if err != nil {
 		return Evidence{}, err
 	}
+	defer func() { _ = os.Remove(keyFile) }()
 	ca := probe.Target{Addrs: s.HostAddrs, DNS: s.o.CanaryPorts.DNS, HTTPS: s.o.CanaryPorts.HTTPS, SSH: s.o.CanaryPorts.SSH}
+	hosts := slices.Sorted(maps.Keys(s.o.Hosts))
 	cfg := probe.Config{
 		Format: probe.ConfigFormat, Kind: report.KindSandbox, KeyFile: keyPath, Report: s.base, Edge: s.EdgeAddr, CAFile: caPath,
-		AgentHosts: slices.Sorted(maps.Keys(s.o.Hosts)), MappedAddrs: s.o.MappedAddrs, Canary: ca, HostAddrs: s.HostAddrs, HostPorts: s.o.HostPorts,
+		AgentHosts: hosts, MappedAddrs: s.o.MappedAddrs, Canary: ca, HostAddrs: s.HostAddrs, HostPorts: s.o.HostPorts, BridgeGateway: s.bridge,
 	}
 	cfg.Report.Nonce = n.Sandbox
 	var ev Evidence
-	if ev.Sandbox, err = s.probe(ctx, "probe", s.Internal, cfg, keyFile, true); err != nil {
+	if ev.Sandbox, err = s.probe(ctx, "probe", s.Internal, cfg, keyFile); err != nil {
 		return Evidence{}, err
 	}
+	_ = os.Remove(keyFile)
 	sandbox, err := report.Verify(ev.Sandbox, pub)
 	if err != nil {
 		return Evidence{}, err
 	}
-	control := probe.Config{Format: probe.ConfigFormat, Kind: report.KindControl, KeyFile: keyPath, Report: s.base, Canary: ca}
+	control := probe.Config{
+		Format: probe.ConfigFormat, Kind: report.KindControl, Report: s.base, AgentHosts: hosts, Canary: ca,
+		HostAddrs: s.HostAddrs, HostPorts: s.o.HostPorts,
+	}
 	control.Report.Nonce = n.Control
-	if ev.Control, err = s.probe(ctx, "control", s.Uplink, control, keyFile, false); err != nil {
+	out, err := s.probe(ctx, "control", s.Uplink, control, "")
+	if err != nil {
+		return Evidence{}, err
+	}
+	twins, err := s.controlReport(out, n.Control)
+	if err != nil {
+		return Evidence{}, err
+	}
+	if ev.Control, err = report.Sign(s.o.HostKey, twins); err != nil {
 		return Evidence{}, err
 	}
 	pm, cm := report.Marker(n.Sandbox), report.Marker(n.Control)
 	s.waitHits(ctx, cm)
 	base := s.base
 	base.Nonce, base.StartedAt, base.FinishedAt = n.Canary, sandbox.StartedAt, time.Now().UTC()
-	if ev.Canary, err = s.o.Canary.Report(s.o.ProbeKey, base, pm, cm); err != nil {
+	if ev.Canary, err = s.o.Canary.Report(s.o.HostKey, base, pm, cm); err != nil {
 		return Evidence{}, err
 	}
-	ev.Results = append(slices.Clone(sandbox.Results),
+	ev.Results = append(slices.Concat(sandbox.Results, twins.Results),
 		report.Result{Name: "external_canary", Role: report.RoleCanary, Expect: report.Blocked, Observed: observed(len(s.o.Canary.Hits(pm)) > 0)},
 		report.Result{Name: "canary_control", Role: report.RolePositive, Expect: report.Reachable, Observed: observed(len(s.o.Canary.Hits(cm)) > 0)},
 	)
 	return ev, nil
+}
+
+// controlReport reads the control run's unsigned report, which must be this
+// session's control run with its nonce.
+func (s *Sandbox) controlReport(out, nonce string) (report.Report, error) {
+	var r report.Report
+	if err := json.Unmarshal([]byte(out), &r, json.RejectUnknownMembers(true)); err != nil {
+		return report.Report{}, fmt.Errorf("sandbox: the control report: %w", err)
+	}
+	if r.Kind != report.KindControl || r.Session != s.o.Session || r.Nonce != nonce || len(r.Results) == 0 {
+		return report.Report{}, errors.New("sandbox: the control report is not this run's")
+	}
+	return r, r.Validate()
 }
 
 func observed(reached bool) string {
@@ -397,9 +446,10 @@ func (s *Sandbox) waitHits(ctx context.Context, marker string) {
 	}
 }
 
-// probe runs one probe container to completion and returns its signed
-// report.
-func (s *Sandbox) probe(ctx context.Context, kind, network string, cfg probe.Config, keyFile string, sandbox bool) (string, error) {
+// probe runs one probe container to completion and returns its report: a
+// compact JWS signed with the probe key mounted from keyFile, or, with no
+// key, one line of JSON for pclaw to sign.
+func (s *Sandbox) probe(ctx context.Context, kind, network string, cfg probe.Config, keyFile string) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, probeTimeout)
 	defer cancel()
 	path, err := s.writeJSON(kind+".json", cfg)
@@ -407,8 +457,11 @@ func (s *Sandbox) probe(ctx context.Context, kind, network string, cfg probe.Con
 		return "", err
 	}
 	name := "pc-" + kind + "-" + short(s.o.Session)
-	mounts := []docker.Mount{{Kind: docker.Bind, Source: path, Target: configPath}, {Kind: docker.Bind, Source: keyFile, Target: keyPath}}
-	if sandbox {
+	mounts := []docker.Mount{{Kind: docker.Bind, Source: path, Target: configPath}}
+	if keyFile != "" {
+		mounts = append(mounts, docker.Mount{Kind: docker.Bind, Source: keyFile, Target: keyPath})
+	}
+	if cfg.CAFile != "" {
 		mounts = append(mounts, docker.Mount{Kind: docker.Bind, Source: s.CAFile, Target: caPath})
 	}
 	if _, err := s.container(ctx, docker.Container{
@@ -428,11 +481,37 @@ func (s *Sandbox) probe(ctx context.Context, kind, network string, cfg probe.Con
 	if err != nil {
 		return "", err
 	}
-	signed := strings.TrimSpace(string(out))
-	if code != 0 || signed == "" || strings.ContainsAny(signed, " \n") {
+	got := strings.TrimSpace(string(out))
+	if code != 0 || got == "" || strings.Contains(got, "\n") || (keyFile != "" && strings.Contains(got, " ")) {
 		return "", fmt.Errorf("sandbox: the %s container exited %d without a report", kind, code)
 	}
-	return signed, nil
+	return got, nil
+}
+
+// privateFiles resolves the sandbox's directory, and the edge's key and
+// token files in it, to paths reached through no link, and refuses a
+// directory others may read or a file outside it (HR-216).
+func privateFiles(dir, keyFile, tokenFile string) (string, string, string, error) {
+	d, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		return "", "", "", fmt.Errorf("sandbox: %w", err)
+	}
+	if fi, err := os.Stat(d); err != nil || !fi.IsDir() || (runtime.GOOS != "windows" && fi.Mode().Perm()&0o077 != 0) {
+		return "", "", "", fmt.Errorf("sandbox: %s is not a private directory", dir)
+	}
+	var out [2]string
+	for i, f := range []string{keyFile, tokenFile} {
+		r, err := filepath.EvalSymlinks(f)
+		if err != nil {
+			return "", "", "", fmt.Errorf("sandbox: %w", err)
+		}
+		rel, err := filepath.Rel(d, filepath.Dir(r))
+		if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || filepath.IsAbs(rel) {
+			return "", "", "", fmt.Errorf("sandbox: %s is not in %s", f, dir)
+		}
+		out[i] = r
+	}
+	return d, out[0], out[1], nil
 }
 
 // Close removes everything this sandbox created, by its label, and its
