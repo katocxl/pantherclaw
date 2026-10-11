@@ -130,6 +130,7 @@ tasks:
       - cd sdk/typescript && node --test "test/**/*.test.ts"
       - cd sdk/python && PYTHONPATH=src {{.PYTHON}} -m unittest discover -s tests
       - cd integrations/claude-agent-sdk/typescript && node --test "test/**/*.test.ts"
+      - cd integrations/claude-agent-sdk/python && {{.PYTHON}} -m unittest discover -s tests
 
   license:check:
     desc: Verify SPDX + copyright headers on every source file

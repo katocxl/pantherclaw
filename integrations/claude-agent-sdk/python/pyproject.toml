@@ -1,0 +1,21 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Joshua Kato
+
+[project]
+name = "pantherclaw-claude-agent-sdk"
+version = "0.0.0"
+description = "PantherClaw enforcement for the Claude Agent SDK: a PreToolUse hook that fails closed and a can_use_tool that waits on holds"
+readme = "README.md"
+license = "Apache-2.0"
+requires-python = ">=3.11"
+dependencies = ["pantherclaw"]
+
+[project.optional-dependencies]
+agent-sdk = ["claude-agent-sdk>=0.2.165,<0.3"]
+
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/pantherclaw_claude_agent_sdk"]
