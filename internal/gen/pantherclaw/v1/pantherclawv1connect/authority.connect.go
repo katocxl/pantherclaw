@@ -133,8 +133,9 @@ type AuthorityServiceClient interface {
 	// VerifyWorkload does, and records a tool call an agent SDK runs without
 	// a mapping (G0 M8, HR-200): OBSERVE_ONLY, with the tool's name
 	// (untrusted) and its input's digest, never the input. The connection
-	// must be one this gateway serves. A workload that does not verify is an
-	// answer with its PAP-Error code, and nothing is recorded.
+	// must be one this gateway serves. A workload that does not verify, or a
+	// connection this gateway does not serve, is an answer with its code, and
+	// nothing is recorded.
 	// permission: gateway.observe
 	RecordToolObservation(context.Context, *v1.RecordToolObservationRequest) (*v1.RecordToolObservationResponse, error)
 }
@@ -178,8 +179,9 @@ type AuthorityServiceHandler interface {
 	// VerifyWorkload does, and records a tool call an agent SDK runs without
 	// a mapping (G0 M8, HR-200): OBSERVE_ONLY, with the tool's name
 	// (untrusted) and its input's digest, never the input. The connection
-	// must be one this gateway serves. A workload that does not verify is an
-	// answer with its PAP-Error code, and nothing is recorded.
+	// must be one this gateway serves. A workload that does not verify, or a
+	// connection this gateway does not serve, is an answer with its code, and
+	// nothing is recorded.
 	// permission: gateway.observe
 	RecordToolObservation(context.Context, *v1.RecordToolObservationRequest) (*v1.RecordToolObservationResponse, error)
 }

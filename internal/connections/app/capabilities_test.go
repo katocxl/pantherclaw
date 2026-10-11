@@ -16,11 +16,13 @@ import (
 )
 
 // TestF346_ConnectionsDeclareTheirCapabilities: a connection's declaration
-// follows from its kind, its access mode and its package. Only a gateway-
-// dispatched HTTP connection whose credential PantherClaw holds, or whose
-// target checks action tokens, declares enforcement SUPPORTED; an opaque
-// MCP server, an agent-held or open target and a cooperative local
-// connection declare PARTIAL with the limit that makes them so. Operations
+// follows from its kind, its access mode, its route modes and its package.
+// Only a gateway-dispatched HTTP connection whose credential PantherClaw
+// holds, with every route enforced, declares enforcement SUPPORTED; a route
+// in monitor mode, a target that only declares it checks action tokens, an
+// opaque MCP server, an agent-held or open target and a cooperative local
+// connection declare PARTIAL with the limit that makes them so, and then
+// discovery, observation and response are PARTIAL too. Operations
 // carry their route's mode; permissions are declared only for a credential
 // PantherClaw uses, each with the operations that need it; what the kind
 // cannot serve or verify is a limit.
@@ -39,6 +41,10 @@ func TestF346_ConnectionsDeclareTheirCapabilities(t *testing.T) {
 			Routes:       []dbq.PcConnectionRoute{{Route: "payments-refund", Mode: app.ModeEnforce}},
 		}
 	}
+	enforced := func(c app.Connection) app.Connection {
+		c.DefaultMode = app.ModeEnforce
+		return c
+	}
 	limits := func(c app.Capabilities) []string {
 		var out []string
 		for _, l := range c.Limits {
@@ -47,14 +53,15 @@ func TestF346_ConnectionsDeclareTheirCapabilities(t *testing.T) {
 		return out
 	}
 
-	held := app.Declare(conn(app.KindHTTP, app.AccessHeld), payments)
+	held := app.Declare(enforced(conn(app.KindHTTP, app.AccessHeld)), payments)
 	if held.Enforcement.Level != app.Supported || !strings.Contains(held.Enforcement.Detail, "HR-060") ||
-		!slices.Contains(held.ResponseActions, "revoke_credential") || len(held.Operations) != 2 || len(held.Limits) != 0 {
+		!slices.Contains(held.ResponseActions, "revoke_credential") || len(held.Operations) != 2 || len(held.Limits) != 0 ||
+		held.Discovery.Level != app.Supported || held.Observation.Level != app.Supported || held.Response.Level != app.Supported {
 		t.Fatalf("held: %+v", held)
 	}
 	create, get := held.Operations[0], held.Operations[1]
 	if create.Operation != "payments.refund.create" || create.Route != "payments-refund" || create.Mode != app.ModeEnforce || !create.Verified ||
-		create.Access != "write" || get.Route != "payments-refund-get" || get.Mode != app.ModeMonitor {
+		create.Access != "write" || get.Route != "payments-refund-get" || get.Mode != app.ModeEnforce {
 		t.Fatalf("operations %+v", held.Operations)
 	}
 	if len(held.Permissions) != 2 || held.Permissions[0].Name != "read payments.refund" || held.Permissions[1].Name != "write payments.charge" ||
@@ -64,8 +71,17 @@ func TestF346_ConnectionsDeclareTheirCapabilities(t *testing.T) {
 	if !slices.ContainsFunc(held.Failure, func(s string) bool { return strings.Contains(s, "2500 ms") }) {
 		t.Fatalf("failure behavior %q", held.Failure)
 	}
-	if tokens := app.Declare(conn(app.KindHTTP, app.AccessTargetEnforced), payments); tokens.Enforcement.Level != app.Supported ||
-		len(tokens.Permissions) != 2 || slices.Contains(tokens.ResponseActions, "revoke_credential") {
+	// A route in monitor mode is decided and recorded, not enforced.
+	if monitored := app.Declare(conn(app.KindHTTP, app.AccessHeld), payments); monitored.Enforcement.Level != app.Partial ||
+		!strings.Contains(monitored.Enforcement.Detail, "1 of 2 routes are in monitor mode") || monitored.Operations[1].Mode != app.ModeMonitor ||
+		monitored.Response.Level != app.Partial {
+		t.Fatalf("a route in monitor mode: %+v", monitored)
+	}
+	// A target that checks action tokens says so; only a passing
+	// target_verifier test would show it (HR-210).
+	if tokens := app.Declare(enforced(conn(app.KindHTTP, app.AccessTargetEnforced)), payments); tokens.Enforcement.Level != app.Partial ||
+		!slices.Equal(limits(tokens), []string{"VERIFIER_NOT_SHOWN"}) || len(tokens.Permissions) != 2 ||
+		slices.Contains(tokens.ResponseActions, "revoke_credential") || tokens.Discovery.Level != app.Partial {
 		t.Fatalf("target enforced: %+v", tokens)
 	}
 

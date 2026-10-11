@@ -71,13 +71,21 @@ const (
 
 // Codes of calls refused before the Authority decides them.
 const (
-	// CodeUnknownTool: the connection's package does not map the tool.
+	// CodeUnknownTool: the connection's package does not map the tool, or
+	// the name is neither an MCP tool nor a built-in tool.
 	CodeUnknownTool = "unknown_tool"
 	// CodeInvalidInput: the input does not fit the reviewed mapping.
 	CodeInvalidInput = "invalid_input"
 	// CodeUseGatewayFace: the gateway holds the connection's credential,
 	// so the agent calls it through the gateway's MCP or HTTP face.
 	CodeUseGatewayFace = "use_gateway_face"
+	// CodeUnknownServer: the MCP server is not the one the connection
+	// governs, the server named after the connection.
+	CodeUnknownServer = "unknown_server"
+	// CodeConnectionNotServed: the Authority does not have this gateway
+	// serving the connection (its configuration is stale), so a built-in
+	// tool call cannot be recorded.
+	CodeConnectionNotServed = "connection_not_served"
 )
 
 // Configuration is the gateway's current configuration (control.Store).
@@ -277,9 +285,23 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case errors.Is(err, errBuiltIn):
 		h.observe(w, r, conn, in, req.Tool, req.Input)
 		return
+	case errors.Is(err, errUnknown):
+		answer(w, http.StatusOK, Answer{
+			Decision: "deny", ErrorClass: string(dispatch.CannotAuthorize), Code: CodeUnknownTool,
+			Reason: "PantherClaw cannot decide this call: " + req.Tool + " is neither an MCP tool nor a tool the agent SDK has built in.",
+		})
+		return
 	case err != nil:
 		deny(w, http.StatusBadRequest, dispatch.CannotAuthorize, "invalid_request",
 			`an MCP tool is "mcp__" + server + "__" + name with that "server"; a built-in tool has no "server"`)
+		return
+	case req.Server != name:
+		// The connection governs one MCP server, named after it: a tool of
+		// another server is never decided as this connection's.
+		answer(w, http.StatusOK, Answer{
+			Decision: "deny", ErrorClass: string(dispatch.CannotAuthorize), Code: CodeUnknownServer,
+			Reason: "PantherClaw cannot decide this call: the MCP server " + req.Server + " is not the one connection " + name + " governs.",
+		})
 		return
 	}
 	action := in.Action
@@ -320,20 +342,39 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 var (
 	// errBuiltIn: a tool the agent SDK has built in (observed only).
 	errBuiltIn = errors.New("sdk: a built-in tool")
+	// errUnknown: a name that is neither an MCP tool nor a built-in tool.
+	errUnknown = errors.New("sdk: an unknown tool")
 	// errShape: the call's members do not fit its kind of tool.
 	errShape = errors.New("sdk: the call's members do not fit its tool")
 )
 
+// builtIns are the tools the Claude Agent SDK has built in, in the range the
+// integration supports, with Bash and PowerShell for an application whose
+// shell is only observed: the only names answered OBSERVE_ONLY. Any other
+// name that is not an MCP tool is unknown_tool, so a client that obeys the
+// face never runs an unmapped tool that is not built in (HR-200).
+var builtIns = map[string]bool{
+	"Agent": true, "Task": true, "Bash": true, "BashOutput": true, "KillShell": true, "KillBash": true, "PowerShell": true,
+	"Read": true, "Write": true, "Edit": true, "MultiEdit": true, "Glob": true, "Grep": true, "LS": true,
+	"NotebookRead": true, "NotebookEdit": true, "TodoWrite": true, "WebFetch": true, "WebSearch": true,
+	"ExitPlanMode": true, "ListMcpResources": true, "ReadMcpResource": true, "SlashCommand": true, "Skill": true,
+	"AskUserQuestion": true,
+}
+
 // mcpTool is the MCP tool a raw call names: mcp__{server}__{tool} with that
-// server. A call with a built-in tool's name and no server is errBuiltIn;
-// an MCP call that does not fit is never observed instead of decided.
+// server. A call with a built-in tool's name and no server is errBuiltIn,
+// one with another such name errUnknown; an MCP call that does not fit is
+// never observed instead of decided.
 func mcpTool(req Request) (string, error) {
 	rest, isMCP := strings.CutPrefix(req.Tool, "mcp__")
 	if !isMCP {
-		if req.Server == "" && builtinRe.MatchString(req.Tool) {
+		switch {
+		case req.Server != "" || !builtinRe.MatchString(req.Tool):
+			return "", errShape
+		case builtIns[req.Tool]:
 			return "", errBuiltIn
 		}
-		return "", errShape
+		return "", errUnknown
 	}
 	name, found := strings.CutPrefix(rest, req.Server+"__")
 	if !found || name == "" || !serverRe.MatchString(req.Server) {
@@ -416,6 +457,15 @@ func (h *Handler) observe(w http.ResponseWriter, r *http.Request, conn *control.
 	if err != nil {
 		h.log.ErrorContext(r.Context(), "gateway.authority_unavailable", slog.String("connection_id", conn.GetId()), pclog.Err(err))
 		deny(w, http.StatusOK, dispatch.CannotAuthorize, dispatch.CodeAuthorityUnavailable, "PantherClaw cannot verify this workload now.")
+		return
+	}
+	if !v.OK && v.Code == CodeConnectionNotServed {
+		if v.Nonce != "" {
+			w.Header().Set(dispatch.HeaderNonce, v.Nonce)
+		}
+		h.log.WarnContext(r.Context(), "gateway.sdk_connection_not_served", slog.String("connection_id", conn.GetId()))
+		deny(w, http.StatusOK, dispatch.CannotAuthorize, CodeConnectionNotServed,
+			"PantherClaw does not have this gateway serving the connection now, so the call cannot be recorded.")
 		return
 	}
 	if !v.OK {

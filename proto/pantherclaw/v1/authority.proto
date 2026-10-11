@@ -43,8 +43,9 @@ service AuthorityService {
   // VerifyWorkload does, and records a tool call an agent SDK runs without
   // a mapping (G0 M8, HR-200): OBSERVE_ONLY, with the tool's name
   // (untrusted) and its input's digest, never the input. The connection
-  // must be one this gateway serves. A workload that does not verify is an
-  // answer with its PAP-Error code, and nothing is recorded.
+  // must be one this gateway serves. A workload that does not verify, or a
+  // connection this gateway does not serve, is an answer with its code, and
+  // nothing is recorded.
   // permission: gateway.observe
   rpc RecordToolObservation(RecordToolObservationRequest) returns (RecordToolObservationResponse);
 }
@@ -471,7 +472,8 @@ message VerifyWorkloadResponse {
 message RecordToolObservationRequest {
   // The request's credentials, as for Authorize.
   WorkloadCredentials workload = 1 [(buf.validate.field).required = true];
-  // The run (PAP-Run-Id); the instance must be allowed to use it (HR-022).
+  // The run (PAP-Run-Id), never the nil UUID; the instance must be allowed
+  // to use it (HR-022).
   string run_id = 2 [(buf.validate.field).string.uuid = true];
   // The connection the call came through.
   string connection_id = 3 [(buf.validate.field).string.uuid = true];
@@ -489,7 +491,8 @@ message RecordToolObservationRequest {
 message RecordToolObservationResponse {
   // Whether the credentials verified and the observation was recorded.
   bool verified = 1;
-  // When not verified: the PAP-Error code, or `agent_unusable`.
+  // When not verified: the PAP-Error code, `agent_unusable`, or
+  // `connection_not_served` (the connection is not one this gateway serves).
   string error_code = 2;
   // The verified instance.
   string instance_id = 3;

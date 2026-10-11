@@ -78,6 +78,27 @@ CREATE TABLE pc.connection_tests (
 CREATE INDEX connection_tests_latest ON pc.connection_tests (org_id, connection_id, created_at DESC);
 CREATE UNIQUE INDEX connection_tests_verification ON pc.connection_tests (org_id, verification_id) WHERE verification_id IS NOT NULL;
 
+-- A test result is evidence (HR-210): an open test moves forward only, to
+-- RUNNING (on the gateway holding its lease, again when a retry leases it
+-- anew), DONE or FAILED, and a finished test never changes.
+-- +goose StatementBegin
+CREATE FUNCTION pc.connection_tests_forward()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = pc, pg_temp
+AS $$
+BEGIN
+    IF OLD.state NOT IN ('PENDING', 'RUNNING') OR NEW.state NOT IN ('RUNNING', 'DONE', 'FAILED') THEN
+        RAISE EXCEPTION 'connection test %: % cannot become %', OLD.id, OLD.state, NEW.state
+            USING ERRCODE = 'check_violation';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+-- +goose StatementEnd
+CREATE TRIGGER connection_tests_forward BEFORE UPDATE ON pc.connection_tests
+    FOR EACH ROW EXECUTE FUNCTION pc.connection_tests_forward();
+
 CREATE TABLE pc.tool_observations (
     org_id        uuid        NOT NULL REFERENCES pc.orgs (id),
     id            uuid        NOT NULL,
@@ -169,6 +190,7 @@ CREATE INDEX transactions_connection ON pc.transactions (org_id, connection_id, 
 DROP INDEX pc.transactions_connection;
 DROP TABLE pc.tool_observations;
 DROP TABLE pc.connection_tests;
+DROP FUNCTION pc.connection_tests_forward();
 DROP TABLE pc.connection_capabilities;
 -- Connection test tasks go before their purpose does. RLS is forced even
 -- for the owner, so it is lifted for these two deletes only, inside this
