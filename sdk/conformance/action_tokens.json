@@ -124,6 +124,19 @@
       "expect": "bad_signature"
     },
     {
+      "name": "a forged token carrying the minted token's jti leaves it unspent",
+      "token": "eyJhbGciOiJFZERTQSIsImtpZCI6ImFjdGlvbi10b2tlbnMtU21YcEVpWXRGMUlSQlYweTRycmoydSIsInR5cCI6InBhcC1hY3Rpb24rand0In0.eyJpc3MiOiJodHRwczovL3BhbnRoZXJjbGF3LmV4YW1wbGUudGVzdCIsImF1ZCI6IjAxOTIwMDAwLTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDAwNyIsImp0aSI6IjAwZGM2YWNmLWFjMDAtNzczOC05OTdhLTUzMDNkNTkxMjM1MSIsImlhdCI6MTc5MTIwMTYwMCwiZXhwIjoxNzkxMjAxNjYwLCJwYXAiOnsidiI6MSwidHhuIjoiMDBkYzZhY2YtYWMwMC03Njk3LWEyYjQtMTllMmMyMTQ4MmRhIiwiYWN0IjoiNmEyM2E2NzE1ZGFmY2YzMTJjZjg4MGFmMGU3OWFkNDE3ODQ3MGFiNmM0MThlMDAxZjA5ZjI4YzFhMDVlYmFmYSIsImJoIjoiMmIzZDUzZGY3YmMwODg0NTgyZDhjNDJjY2M2Zjc0ZTU3MzM1N2EwNDUzMzIzMDQ1MDg4YWQzYWQ0ZDU5ZDU1OCIsIm9wIjoicGF5bWVudHMucmVmdW5kLmNyZWF0ZSIsInRhcmdldCI6eyJ0eXBlIjoicGF5bWVudHMuY2hhcmdlIiwiaWQiOiJjaF8xIn19fQ.pKmb2wIsw1FbBvcm1rlgybeTNh-BQvgvaVHT_uNK3lZjR8_cU7ybOIY5c4FDbaa3nG1uDbATLxMUIHtF4TjIDg",
+      "body": "{\"amount\":\"30.00\",\"charge\":\"ch_1\",\"currency\":\"USD\",\"reason\":\"duplicate\"}",
+      "operation": "payments.refund.create",
+      "target_type": "payments.charge",
+      "target_id": "ch_1",
+      "issuer": "https://pantherclaw.example.test",
+      "audience": "01920000-0000-7000-8000-000000000007",
+      "now": 1791201610,
+      "then_valid": true,
+      "expect": "bad_signature"
+    },
+    {
       "name": "alg none",
       "token": "eyJhbGciOiJub25lIiwia2lkIjoiYWN0aW9uLXRva2Vucy1rSkhEc2hZbFlmeG5pUU1oTDdYM3N0IiwidHlwIjoicGFwLWFjdGlvbitqd3QifQ.eyJpc3MiOiJodHRwczovL3BhbnRoZXJjbGF3LmV4YW1wbGUudGVzdCIsImF1ZCI6IjAxOTIwMDAwLTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDAwNyIsImp0aSI6IjAwZGM2YWNmLWFjMDAtNzczOC05OTdhLTUzMDNkNTkxMjM1MSIsImlhdCI6MTc5MTIwMTYwMCwiZXhwIjoxNzkxMjAxNjYwLCJwYXAiOnsidiI6MSwidHhuIjoiMDBkYzZhY2YtYWMwMC03Njk3LWEyYjQtMTllMmMyMTQ4MmRhIiwiYWN0IjoiNmEyM2E2NzE1ZGFmY2YzMTJjZjg4MGFmMGU3OWFkNDE3ODQ3MGFiNmM0MThlMDAxZjA5ZjI4YzFhMDVlYmFmYSIsImJoIjoiMmIzZDUzZGY3YmMwODg0NTgyZDhjNDJjY2M2Zjc0ZTU3MzM1N2EwNDUzMzIzMDQ1MDg4YWQzYWQ0ZDU5ZDU1OCIsIm9wIjoicGF5bWVudHMucmVmdW5kLmNyZWF0ZSIsInRhcmdldCI6eyJ0eXBlIjoicGF5bWVudHMuY2hhcmdlIiwiaWQiOiJjaF8xIn19fQ.",
       "body": "{\"amount\":\"30.00\",\"charge\":\"ch_1\",\"currency\":\"USD\",\"reason\":\"duplicate\"}",
