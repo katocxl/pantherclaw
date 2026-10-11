@@ -33,7 +33,8 @@ Usage:
                            [--short-rate 0] [--settle-after 0s] [--redirect-to URL]
                            [--token-file FILE] [--require-action-tokens --jwks-url URL --audience CONNECTION]
   pantherclaw-sim mcp [--addr 127.0.0.1:9091] [--legacy] [--stream] [--ask LIST] [--input-required] [--tool-error] [--description TEXT] [--token-file FILE]
-  pantherclaw-sim load --workload-file FILE [--token-file FILE] [--run ID] [--gateway URL] [--rate 1000] [--duration 30s] [--warmup 5s] [--amount 1.00] [--out FILE]
+  pantherclaw-sim load --workload-file FILE [--token-file FILE] [--run ID] [--gateway URL] [--connection payments] [--rate 1000] [--duration 30s]
+                       [--warmup 5s] [--max-in-flight 2048] [--amount 1.00 | --unique] [--facts-key-file FILE] [--out FILE]
   pantherclaw-sim version
 `
 

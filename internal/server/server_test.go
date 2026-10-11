@@ -27,6 +27,12 @@ func TestConfigValidation(t *testing.T) {
 	if err := c.Validate(); err != nil {
 		t.Fatalf("minimal config invalid: %v", err)
 	}
+	// The M1.5 budget name is ignored since M4, so it may be left out.
+	noBudget := c
+	noBudget.Authority.BudgetName = ""
+	if err := noBudget.Validate(); err != nil {
+		t.Fatalf("config without authority.budget_name invalid: %v", err)
+	}
 	for name, mutate := range map[string]func(*Config){
 		"role":         func(c *Config) { c.Role = "admin" },
 		"log level":    func(c *Config) { c.Log.Level = "verbose" },
@@ -37,7 +43,6 @@ func TestConfigValidation(t *testing.T) {
 		"workers":      func(c *Config) { c.WorkerConcurrency = 0 },
 		"grant amount": func(c *Config) { c.Authority.GrantMaxPerAction = "-1" },
 		"grant ccy":    func(c *Config) { c.Authority.GrantCurrency = "XYZ" },
-		"budget name":  func(c *Config) { c.Authority.BudgetName = "" },
 		"permit ttl":   func(c *Config) { c.Authority.PermitTTL = 0 },
 		"long ttl":     func(c *Config) { c.Authority.PermitTTL = config.Duration(time.Hour) },
 		"stale":        func(c *Config) { c.Authority.StaleDispatch = config.Duration(5 * time.Second) },
