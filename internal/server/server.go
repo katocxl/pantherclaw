@@ -87,6 +87,7 @@ Usage:
   pantherclaw-server serve [--config FILE]            run the API and/or workers (role from config)
   pantherclaw-server migrate up|status [--config FILE] apply or show schema migrations (as pc_migrator)
   pantherclaw-server db bootstrap --admin-url-file F --app-password-file F --migrator-password-file F --audit-password-file F
+                                 --retention-password-file F
                                                      create roles and schema once, as the database owner
   pantherclaw-server keys gen-kek --out FILE          write a new key-encryption key (0600)
   pantherclaw-server keys rotate-gateway-ca --confirm [--config FILE]
@@ -100,9 +101,11 @@ Usage:
                                                      after investigating; its ledger is checked again
   pantherclaw-server dev seed [--config FILE] [--org-name N] [--budget-limit X] [--max-count N] [--gateway-out FILE
                              [--target-url URL [--access-mode M]] [--shell]] [--workload-out FILE [--facts-key-out FILE]]
+                             [--hold-over AMOUNT]
                                                      DEVELOPMENT ONLY: demo org with the reference package; a gateway
                                                      enrollment file and a payments connection; a workload with a grant,
-                                                     a run and a fact provider
+                                                     a run and a fact provider; a policy holding refunds over
+                                                     --hold-over (default 50.00, empty for none) for an approver
   pantherclaw-server dev gateway --org ID --out FILE [--config FILE] [--name NAME]
                                                      DEVELOPMENT ONLY: a gateway enrollment file for an existing org
   pantherclaw-server dev connection --org ID --target-url URL [--config FILE] [--gateway NAME] [--name N] [--mode M]
@@ -223,6 +226,8 @@ func cmdServe(ctx context.Context, args []string, stderr io.Writer, env Env, onS
 	if err != nil {
 		return err
 	}
+	captures := newCaptures(pool, kp, log)
+	svc.WithCaptures(captures.recorder)
 	m5, err := newM5(ctx, cfg, pool, kp, bill, log)
 	if err != nil {
 		return err
@@ -289,6 +294,7 @@ func cmdServe(ctx context.Context, args []string, stderr io.Writer, env Env, onS
 		}
 		m6.mountPages(web)
 		m5p2.mountPages(web, m5)
+		mountM7Pages(web, pool, verification, m5)
 		device.WithBrowserCallback(web.Callback)
 		roots, err := packageRoots(ctx, cfg, log)
 		if err != nil {
@@ -306,9 +312,11 @@ func cmdServe(ctx context.Context, args []string, stderr io.Writer, env Env, onS
 			packageRoots: roots,
 			web:          web,
 			m5:           m5,
+			captures:     captures,
 			m6:           m6,
 			m5p2:         m5p2,
 			verification: verification,
+			kp:           kp,
 		})
 		if err != nil {
 			return err
@@ -356,6 +364,12 @@ func cmdServe(ctx context.Context, args []string, stderr io.Writer, env Env, onS
 		if err != nil {
 			return err
 		}
+		retentionJobs, closeRetention, err := registerRetention(ctx, jreg, cfg, pool, log)
+		if err != nil {
+			return err
+		}
+		defer closeRetention()
+		evidenceJobs = append(evidenceJobs, retentionJobs...)
 		if err := authnapp.RegisterJanitor(jreg, pool, log); err != nil {
 			return err
 		}
@@ -461,6 +475,10 @@ type apiDeps struct {
 	m5p2 *m5p2Services
 	// M7: verification signs the effect receipts people's actions append.
 	verification *txapp.Service
+	// captures seal and open restricted payload captures (M7 B9).
+	captures *captureServices
+	// kp opens sealed evaluation inputs for decision replay (M7 track B).
+	kp keys.KeyProvider
 }
 
 // apiHandler mounts the RPC services, health endpoints and the JWKS.
@@ -510,7 +528,10 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	d.m6.registerPublic(rs)
 	d.m5p2.registerPublic(rs)
 	registerM7(rs, pool, d.verification)
-	registerEvidence(rs, d)
+	if err := registerEvidence(rs, d); err != nil {
+		return nil, err
+	}
+	registerEvidenceAdmin(rs, d)
 	mux := http.NewServeMux()
 	rpc.Mount(mux, rs)
 	d.m5p2.mount(mux, workload)
@@ -653,10 +674,11 @@ func cmdDB(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	appPW := fs.String("app-password-file", "", "password file for pc_app")
 	migPW := fs.String("migrator-password-file", "", "password file for pc_migrator")
 	auditPW := fs.String("audit-password-file", "", "password file for pc_audit_ro")
+	retentionPW := fs.String("retention-password-file", "", "password file for pc_retention (the retention job's role)")
 	if err := fs.Parse(args[1:]); err != nil {
 		return err
 	}
-	if *adminURL == "" || *appPW == "" || *migPW == "" || *auditPW == "" || fs.NArg() != 0 {
+	if *adminURL == "" || *appPW == "" || *migPW == "" || *auditPW == "" || *retentionPW == "" || fs.NArg() != 0 {
 		fs.Usage()
 		return errUsage
 	}
@@ -665,7 +687,9 @@ func cmdDB(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 		return err
 	}
 	var pw db.RolePasswords
-	for dst, path := range map[*pclog.Secret[[]byte]]string{&pw.App: *appPW, &pw.Migrator: *migPW, &pw.AuditRO: *auditPW} {
+	for dst, path := range map[*pclog.Secret[[]byte]]string{
+		&pw.App: *appPW, &pw.Migrator: *migPW, &pw.AuditRO: *auditPW, &pw.Retention: *retentionPW,
+	} {
 		s, err := config.ReadSecretFile(path)
 		if err != nil {
 			return err
@@ -687,8 +711,8 @@ func cmdDB(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	if err := db.BootstrapDatabase(ctx, conn); err != nil {
 		return err
 	}
-	_, _ = fmt.Fprintf(stdout, "bootstrapped roles %s, %s, %s, %s and schema %s in database %s\n",
-		db.RoleMigrator, db.RoleApp, db.RoleAuditRO, db.RoleLister, db.Schema, cc.Database)
+	_, _ = fmt.Fprintf(stdout, "bootstrapped roles %s, %s, %s, %s, %s and schema %s in database %s\n",
+		db.RoleMigrator, db.RoleApp, db.RoleAuditRO, db.RoleRetention, db.RoleLister, db.Schema, cc.Database)
 	return nil
 }
 

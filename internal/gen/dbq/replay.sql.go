@@ -42,11 +42,12 @@ func (q *Queries) GetEvaluationInputs(ctx context.Context, orgID ids.OrgID, tran
 }
 
 const getEvaluationReceipt = `-- name: GetEvaluationReceipt :one
-SELECT receipt_jws FROM pc.decision_receipts
+SELECT coalesce(receipt_jws, '')::text AS receipt_jws FROM pc.decision_receipts
 WHERE org_id = $1 AND transaction_id = $2 AND evaluation = $3
 `
 
-// The decision receipt of one evaluation, which a replay compares with.
+// The decision receipt of one evaluation, which a replay compares with;
+// empty when retention removed its body.
 func (q *Queries) GetEvaluationReceipt(ctx context.Context, orgID ids.OrgID, transactionID ids.UUID, evaluation int32) (string, error) {
 	row := q.db.QueryRow(ctx, getEvaluationReceipt, orgID, transactionID, evaluation)
 	var receipt_jws string
@@ -106,4 +107,19 @@ func (q *Queries) InsertEvaluationInputs(ctx context.Context, arg InsertEvaluati
 		arg.Truncated,
 	)
 	return err
+}
+
+const latestEvaluation = `-- name: LatestEvaluation :one
+SELECT coalesce(max(evaluation), 0)::integer AS evaluation
+FROM pc.decision_receipts
+WHERE org_id = $1 AND transaction_id = $2
+`
+
+// The latest evaluation of a transaction (0: none), which a replay of
+// "the latest" names.
+func (q *Queries) LatestEvaluation(ctx context.Context, orgID ids.OrgID, transactionID ids.UUID) (int32, error) {
+	row := q.db.QueryRow(ctx, latestEvaluation, orgID, transactionID)
+	var evaluation int32
+	err := row.Scan(&evaluation)
+	return evaluation, err
 }

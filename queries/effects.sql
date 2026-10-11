@@ -5,13 +5,13 @@
 
 -- name: InsertExecutionReceipt :exec
 INSERT INTO pc.execution_receipts (org_id, attempt_id, transaction_id, permit_id, receipt_jws, ledger_entry_id)
-VALUES (sqlc.arg(org_id), sqlc.arg(attempt_id), sqlc.arg(transaction_id), sqlc.arg(permit_id), sqlc.arg(receipt_jws),
+VALUES (sqlc.arg(org_id), sqlc.arg(attempt_id), sqlc.arg(transaction_id), sqlc.arg(permit_id), sqlc.arg(receipt_jws)::text,
         sqlc.arg(ledger_entry_id));
 
 -- RecordedExecution is the attempt a permit already has, for a gateway
 -- that reports after the sweeper did (PAP-1 §7.4).
 -- name: RecordedExecution :one
-SELECT p.state, p.transaction_id, a.recorded_by, a.outcome, r.receipt_jws
+SELECT p.state, p.transaction_id, a.recorded_by, a.outcome, coalesce(r.receipt_jws, '')::text AS receipt_jws
 FROM pc.permits p
 JOIN pc.execution_attempts a ON a.org_id = p.org_id AND a.permit_id = p.id
 JOIN pc.execution_receipts r ON r.org_id = a.org_id AND r.attempt_id = a.id

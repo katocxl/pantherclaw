@@ -27,7 +27,7 @@ func (h *GatewayHandler) WithHub(hub *gwapp.Hub) *GatewayHandler {
 func containmentOf(kind pantherclawv1.ContainmentStateKind, c gwapp.Containment) *pantherclawv1.WatchContainmentResponse {
 	out := &pantherclawv1.WatchContainmentResponse{
 		Kind: kind, Epoch: c.Epoch, KillSwitch: c.KillSwitch, ConfigVersion: c.ConfigVersion, GatewayActive: c.GatewayActive,
-		AsOf: timestamppb.New(c.AsOf),
+		AsOf: timestamppb.New(c.AsOf), VerificationsWaiting: c.VerificationsWaiting,
 	}
 	if kind != pantherclawv1.ContainmentStateKind_CONTAINMENT_STATE_KIND_HEARTBEAT {
 		for id, st := range c.Connections {
@@ -78,7 +78,9 @@ func (h *GatewayHandler) WatchContainment(ctx context.Context, _ *pantherclawv1.
 				kind = pantherclawv1.ContainmentStateKind_CONTAINMENT_STATE_KIND_SNAPSHOT
 			case !c.Equal(last):
 				kind = pantherclawv1.ContainmentStateKind_CONTAINMENT_STATE_KIND_CHANGE
-			case time.Since(sentAt) >= gwapp.HeartbeatEvery:
+			case time.Since(sentAt) >= gwapp.HeartbeatEvery, c.VerificationsWaiting && !last.VerificationsWaiting:
+				// Verifications that became due go out at once, on a
+				// heartbeat: containment itself did not change (G0 M7).
 				kind = pantherclawv1.ContainmentStateKind_CONTAINMENT_STATE_KIND_HEARTBEAT
 			}
 			if kind != pantherclawv1.ContainmentStateKind_CONTAINMENT_STATE_KIND_UNSPECIFIED {

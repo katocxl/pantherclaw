@@ -301,7 +301,8 @@ type Claim struct {
 	Err         string     `json:"err,omitzero"`
 }
 
-// Connection is a connection read with its route modes.
+// Connection is a connection read with its route modes and the reads a
+// verifier can make through it.
 type Connection struct {
 	ID               string            `json:"id"`
 	Gateway          string            `json:"gateway,omitzero"`
@@ -312,6 +313,7 @@ type Connection struct {
 	DefaultMode      string            `json:"default_mode,omitzero"`
 	DestinationClass string            `json:"destination_class,omitzero"`
 	Modes            map[string]string `json:"modes,omitzero"`
+	Reads            []string          `json:"reads,omitzero"`
 	Err              string            `json:"err,omitzero"`
 }
 

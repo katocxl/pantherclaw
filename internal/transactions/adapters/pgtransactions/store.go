@@ -28,6 +28,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	"github.com/katocxl/pantherclaw/internal/transactions/app"
 	"github.com/katocxl/pantherclaw/internal/transactions/domain"
+	"github.com/katocxl/pantherclaw/internal/waitlist/adapters/pgwaitlist"
 )
 
 // receiptKindEffect is the ledger kind of an effect receipt.
@@ -183,6 +184,10 @@ func (s *Store) Report(ctx context.Context, org ids.OrgID, gateway ids.UUID, r a
 					return err
 				}
 				if err := q.SettleDedupeClaim(ctx, claimSucceeded, org, txn); err != nil {
+					return err
+				}
+				if err := pgwaitlist.CloseReconciliation(ctx, tx, org, txn, pgwaitlist.ResolvedOccurred,
+					evdomain.Actor{Type: "gateway", ID: gateway.String()}); err != nil {
 					return err
 				}
 			}

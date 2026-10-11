@@ -15,6 +15,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/katocxl/pantherclaw/internal/approvals/proof"
 	adomain "github.com/katocxl/pantherclaw/internal/authority/domain"
 	"github.com/katocxl/pantherclaw/internal/authority/pipeline"
 	"github.com/katocxl/pantherclaw/internal/authority/recording"
@@ -254,6 +255,10 @@ type Store interface {
 	// are no longer eligible and returns an approved request that is no
 	// longer met to PENDING (HR-170), in its own transaction.
 	Revalidate(ctx context.Context, org ids.OrgID, request ids.UUID) error
+	// ApprovalProof returns the WebAuthn assertions of the responses that
+	// count toward an approved request, which the permit that uses it
+	// carries for the gateway to verify against its pinned keys (HR-038).
+	ApprovalProof(ctx context.Context, org ids.OrgID, request ids.UUID) ([]proof.Assertion, error)
 }
 
 // Dispatch errors: the gateway must not dispatch on any of them (HR-001).

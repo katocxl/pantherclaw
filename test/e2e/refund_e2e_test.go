@@ -76,6 +76,10 @@ type stack struct {
 	gatewayEnroll string
 	gw            *gateway.Gateway
 	conn          ids.UUID
+	// approverKeys is the gateway's approver keys file (HR-038): dev seed
+	// writes it next to the enrollment file, and approver exports it again
+	// once a person has a key.
+	approverKeys string
 
 	// The seeded PAP/1 workload: its key file and key, its workload token
 	// and its run.
@@ -246,6 +250,10 @@ func start(t *testing.T, o options) *stack {
 	// Verification tasks are claimed every second rather than every ten
 	// (G0 M7), so effects are verified within a test's patience.
 	gc.Control.VerifyEvery = config.Duration(time.Second)
+	// The approver keys file dev seed wrote next to the enrollment file
+	// (HR-038), as deploy/dev/gateway.example.json pins it.
+	s.approverKeys = filepath.Join(dir, "approver-keys.json")
+	gc.Approvals.ApproverKeysFile = s.approverKeys
 	if o.access == "pantherclaw_held" {
 		// The gateway's broker key, which only it can open credentials with
 		// (HR-061); it registers the public half when it starts.

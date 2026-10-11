@@ -8,11 +8,18 @@ package pgauthority_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/katocxl/pantherclaw/internal/authority/adapters/pgauthority"
+	adomain "github.com/katocxl/pantherclaw/internal/authority/domain"
 	"github.com/katocxl/pantherclaw/internal/authority/finalize"
+	"github.com/katocxl/pantherclaw/internal/authority/pipeline"
+	defpg "github.com/katocxl/pantherclaw/internal/definitions/adapters/pgstore"
+	defs "github.com/katocxl/pantherclaw/internal/definitions/domain"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
+	pdomain "github.com/katocxl/pantherclaw/internal/policy/domain"
 	"github.com/katocxl/pantherclaw/internal/transactions/adapters/pgtransactions"
 	tapp "github.com/katocxl/pantherclaw/internal/transactions/app"
 	tdomain "github.com/katocxl/pantherclaw/internal/transactions/domain"
@@ -215,6 +222,95 @@ func TestHR192_EvidenceResolvesAnUnknownOnlyAsOccurred(t *testing.T) {
 	}
 	if res, sp := w.budget(); res != "20" || sp != "30" {
 		t.Fatalf("absent: reserved %s spent %s, want 20 still held", res, sp)
+	}
+}
+
+// verifyRefunds is a policy rule that requires every refund's effect to be
+// verified at level (G0 M7 design decision 2).
+func verifyRefunds(level defs.Level) pdomain.Rule {
+	return pdomain.Rule{
+		ID: "verify-refunds", Kind: pdomain.Constrain, Summary: "refunds are verified", Operations: []string{"payments.refund.create"},
+		When: "true", Reason: "VERIFY_REFUNDS", Constraint: &pdomain.Constraint{Kind: pdomain.Verify, Level: level},
+	}
+}
+
+// TestHR191_APolicyRaisedLevelReachesTheEffectReceipts: in PostgreSQL, a
+// policy's verify(follow_up) is recorded on the transaction when its
+// permit is issued, survives the outcome (the definition requires only
+// acceptance), and every effect receipt states it; the decision receipt
+// lists the obligation, and the gateway is not asked to apply it.
+func TestHR191_APolicyRaisedLevelReachesTheEffectReceipts(t *testing.T) {
+	w := newWorld(t)
+	ctx := context.Background()
+	w.auth.PermitTTL = time.Hour
+	w.refundable("ch_1")
+	w.publishPolicy(1, false, verifyRefunds(defs.LevelFollowUp))
+	s := w.verifier()
+	run := w.run(w.grant("500").ID, ids.UUID{})
+
+	r := w.dispatched(run, "ch_1", "30.00")
+	if r.Decision != adomain.AllowWithObligations {
+		t.Fatalf("decision %s %s", r.Decision, decisive(r))
+	}
+	if got := w.str("SELECT effect_level_required FROM pc.transactions WHERE id = $1", r.TransactionID); got != "follow_up" {
+		t.Fatalf("required level at the permit: %q", got)
+	}
+	receipt := w.str("SELECT receipt_jws FROM pc.decision_receipts WHERE transaction_id = $1", r.TransactionID)
+	obl, _ := claims(t, receipt)["obligations"].([]any)
+	if len(obl) != 1 || obl[0].(map[string]any)["kind"] != "verify" || obl[0].(map[string]any)["level"] != "follow_up" {
+		t.Fatalf("decision receipt obligations %v", obl)
+	}
+	if _, err := w.auth.RecordExecution(ctx, w.gw, finalize.Execution{
+		Permit: r.PermitID, Outcome: finalize.Accepted, TargetStatus: 200, DispatchMS: 5, TargetRef: "re_1",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if got := w.str("SELECT effect_level_required FROM pc.transactions WHERE id = $1", r.TransactionID); got != "follow_up" {
+		t.Fatalf("the outcome lowered the required level to %q", got)
+	}
+	w.db.AdminExec(t, "UPDATE pc.verifications SET next_at = now() WHERE transaction_id = $1", r.TransactionID)
+	l := w.lease(s, r.TransactionID)
+	if a, err := s.Report(ctx, w.org, w.gwID, tapp.Report{Task: l.Task, Secret: l.Secret, HTTPStatus: 200, Found: true, Fields: refund("succeeded", "30.00")}); err != nil || a.State != tdomain.Confirmed {
+		t.Fatalf("report: %+v %v", a, err)
+	}
+	if got := w.str("SELECT string_agg(state || ' ' || level_required || ' ' || coalesce(level_achieved, '-'), ',' ORDER BY seq) FROM pc.effect_receipts WHERE transaction_id = $1",
+		r.TransactionID); got != "CONFIRMED follow_up follow_up" {
+		t.Fatalf("effect receipts %s", got)
+	}
+	jws := w.str("SELECT receipt_jws FROM pc.effect_receipts WHERE transaction_id = $1", r.TransactionID)
+	if c := claims(t, jws); c["required"] != "follow_up" || c["achieved"] != "follow_up" {
+		t.Fatalf("effect receipt claims %v", c)
+	}
+}
+
+// TestHR191_UnsupportedLevelsAreRefusedInPostgres: through PostgreSQL, a
+// level the refund verifier cannot reach, and a connection whose package
+// is not pinned (so the gateway has no reviewed read to make), are each
+// CANNOT_AUTHORIZE with VERIFIER_UNSUPPORTED; the connection's reads come
+// from its pinned package.
+func TestHR191_UnsupportedLevelsAreRefusedInPostgres(t *testing.T) {
+	w := newWorld(t)
+	w.refundable("ch_1", "ch_2")
+	run := w.run(w.grant("500").ID, ids.UUID{})
+
+	reader := &pgauthority.Reader{Pool: w.pool, Definitions: &defpg.Store{Pool: w.pool}}
+	c, err := reader.Connection(context.Background(), w.org, w.conn)
+	if err != nil || strings.Join(c.Reads, ",") != "payments.refund.get,payments.refund.list,payments.refund.recent" {
+		t.Fatalf("the connection's reads %v: %v", c.Reads, err)
+	}
+
+	w.publishPolicy(1, false, verifyRefunds(defs.LevelDomainEffect))
+	if r := w.authorize(w.request(run, ids.NewV7(), "ch_1", "30.00")); r.Decision != adomain.CannotAuthorize || decisive(r) != pipeline.ReasonVerifierUnsupported {
+		t.Fatalf("domain_effect: %s %s", r.Decision, decisive(r))
+	}
+
+	w.publishPolicy(2, false, verifyRefunds(defs.LevelFollowUp))
+	w.db.AdminExec(t, "DELETE FROM pc.package_pins WHERE org_id = $1", w.org)
+	if c, err := reader.Connection(context.Background(), w.org, w.conn); err != nil || c.Reads == nil || len(c.Reads) != 0 {
+		t.Fatalf("an unpinned package's reads %v: %v", c.Reads, err)
+	}
+	if r := w.authorize(w.request(run, ids.NewV7(), "ch_2", "30.00")); r.Decision != adomain.CannotAuthorize || decisive(r) != pipeline.ReasonVerifierUnsupported {
+		t.Fatalf("no pinned read: %s %s", r.Decision, decisive(r))
 	}
 }
 

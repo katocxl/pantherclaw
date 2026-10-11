@@ -269,10 +269,11 @@ func (s *snapshot) Run(ctx context.Context, org ids.OrgID, id ids.UUID) (pipelin
 }
 
 // Connection implements pipeline.Reader: a connection with its explicit
-// route modes (G0 M6).
+// route modes (G0 M6) and the reads a verifier can make through it, from
+// the package version the org pinned for it (G0 M7; none without a pin).
 func (s *snapshot) Connection(ctx context.Context, org ids.OrgID, id ids.UUID) (pipeline.Connection, error) {
 	q := dbq.New(s.tx)
-	c, err := q.GetConnection(ctx, org, id)
+	c, err := q.AuthorityConnection(ctx, org, id)
 	if err != nil {
 		return pipeline.Connection{}, notFound(err)
 	}
@@ -283,9 +284,17 @@ func (s *snapshot) Connection(ctx context.Context, org ids.OrgID, id ids.UUID) (
 	out := pipeline.Connection{
 		ID: c.ID, Gateway: c.GatewayID, Kind: c.Kind, Package: c.Package, State: c.State, AccessMode: c.AccessMode,
 		DefaultMode: c.DefaultMode, DestinationClass: c.DestinationClass, Modes: make(map[string]string, len(routes)),
+		Reads: []string{},
 	}
 	for _, rt := range routes {
 		out.Modes[rt.Route] = rt.Mode
+	}
+	if c.PinnedVersionID != nil {
+		p, err := s.r.Definitions.VersionInTx(ctx, s.tx, org, *c.PinnedVersionID)
+		if err != nil {
+			return pipeline.Connection{}, err
+		}
+		out.Reads = p.HTTPReads()
 	}
 	return out, nil
 }

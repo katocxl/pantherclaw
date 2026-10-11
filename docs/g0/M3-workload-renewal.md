@@ -53,3 +53,15 @@ This brief is written before implementation (G0). It plans the M3 follow-up "`pc
 - The hand-over: the file is replaced atomically, created 0600, never written through a symlink; refusal and shutdown leave it as decision 2 says.
 - `pclaw workload renew` against a fake `WorkloadService`: Kubernetes re-attestation only after rotation, and a refused attestation followed by a retry without it; GitHub re-attestation on every renewal; exit code 3 on a refusal; the token never on stdout or stderr. `pclaw mcp proxy` keeps its HR-092 tests on the shared `Renewer`.
 - Integration (`internal/identity/adapters/workloadrpc`, real server and database, a fake clock shared by server and client): one renewer keeps a valid token in the file across five token lifetimes, checked at every 30 s step; revoking the instance and suspending the agent then each end it with `instance_not_admitted`.
+
+---
+
+### Status — 2026-10-10
+
+**Delivered** in #148 (322e4a6), as designed, with the three founder decisions as answered:
+- `workloadclient.Renewer` (`internal/identity/workloadclient/renewer.go`) and the atomic token file (`tokenfile.go`); `pclaw mcp proxy` now renews through the same `Renewer`.
+- `pclaw workload renew --key-file FILE --out FILE [--github | --kubernetes-token FILE] [--declared-release sha256:…]` (`internal/pclaw/workload_renew.go`). A refusal removes the file and exits with code 3.
+- The workload-identity runbook ("Long-running services": a systemd unit and a Kubernetes sidecar) and BUILD_GUIDE §4.
+- No server, protocol, migration or proto change.
+
+**Tests:** `TestRenewerRenewsHalfwayThroughEachToken`, `TestRenewerFollowsTheTokensLifetime`, `TestRenewerBacksOffAndKeepsTheCurrentToken`, `TestRenewerStopsAtARefusal`, `TestRenewerShutsDownCleanly`, `TestTokenFileIsReplacedAtomically` (workloadclient); `TestWorkloadRenewKeepsTheTokenFileFresh`, `TestWorkloadRenewReattestsKubernetesOnlyAfterRotation`, `TestWorkloadRenewReattestsWithGitHubEveryTime`, `TestWorkloadRenewStopsCleanly` (pclaw); and the integration test `TestIntRenewerKeepsAValidTokenAcrossExpiries` (workloadrpc).

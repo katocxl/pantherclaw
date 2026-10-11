@@ -83,19 +83,25 @@ type HTTPConfig struct {
 
 // DBConfig configures PostgreSQL access.
 type DBConfig struct {
-	Host                 string          `json:"host" env:"PC_DB_HOST"`
-	Port                 int             `json:"port" env:"PC_DB_PORT"`
-	Name                 string          `json:"name" env:"PC_DB_NAME"`
-	SSLMode              string          `json:"sslmode" env:"PC_DB_SSLMODE"`
-	SSLRootCert          string          `json:"sslrootcert" env:"PC_DB_SSLROOTCERT"`
-	AppUser              string          `json:"app_user" env:"PC_DB_APP_USER"`
-	AppPasswordFile      string          `json:"app_password_file" env:"PC_DB_APP_PASSWORD_FILE"`
-	MigratorUser         string          `json:"migrator_user" env:"PC_DB_MIGRATOR_USER"`
-	MigratorPasswordFile string          `json:"migrator_password_file" env:"PC_DB_MIGRATOR_PASSWORD_FILE"`
-	MaxConns             int             `json:"max_conns" env:"PC_DB_MAX_CONNS"`
-	StatementTimeout     config.Duration `json:"statement_timeout" env:"PC_DB_STATEMENT_TIMEOUT"`
-	LockTimeout          config.Duration `json:"lock_timeout" env:"PC_DB_LOCK_TIMEOUT"`
-	IdleInTxTimeout      config.Duration `json:"idle_in_transaction_timeout" env:"PC_DB_IDLE_IN_TX_TIMEOUT"`
+	Host                 string `json:"host" env:"PC_DB_HOST"`
+	Port                 int    `json:"port" env:"PC_DB_PORT"`
+	Name                 string `json:"name" env:"PC_DB_NAME"`
+	SSLMode              string `json:"sslmode" env:"PC_DB_SSLMODE"`
+	SSLRootCert          string `json:"sslrootcert" env:"PC_DB_SSLROOTCERT"`
+	AppUser              string `json:"app_user" env:"PC_DB_APP_USER"`
+	AppPasswordFile      string `json:"app_password_file" env:"PC_DB_APP_PASSWORD_FILE"`
+	MigratorUser         string `json:"migrator_user" env:"PC_DB_MIGRATOR_USER"`
+	MigratorPasswordFile string `json:"migrator_password_file" env:"PC_DB_MIGRATOR_PASSWORD_FILE"`
+	// RetentionUser and RetentionPasswordFile are the pc_retention role's
+	// (G0 M7 design decision 9): only the worker's retention job connects
+	// with them. Without the password file nothing is removed and the job
+	// reports ROLE_UNAVAILABLE (config_retention.go).
+	RetentionUser         string          `json:"retention_user" env:"PC_DB_RETENTION_USER"`
+	RetentionPasswordFile string          `json:"retention_password_file" env:"PC_DB_RETENTION_PASSWORD_FILE"`
+	MaxConns              int             `json:"max_conns" env:"PC_DB_MAX_CONNS"`
+	StatementTimeout      config.Duration `json:"statement_timeout" env:"PC_DB_STATEMENT_TIMEOUT"`
+	LockTimeout           config.Duration `json:"lock_timeout" env:"PC_DB_LOCK_TIMEOUT"`
+	IdleInTxTimeout       config.Duration `json:"idle_in_transaction_timeout" env:"PC_DB_IDLE_IN_TX_TIMEOUT"`
 }
 
 // DefaultConfig returns safe defaults: loopback listener, TLS-verified DB.
@@ -161,6 +167,7 @@ func (c *Config) Validate() error {
 	errs = append(errs, c.validateM5p2()...)
 	errs = append(errs, c.validateM6()...)
 	errs = append(errs, c.validateEvidence()...)
+	errs = append(errs, c.validateRetention()...)
 	errs = append(errs, c.validateDev()...)
 	if _, err := c.trustedProxies(); err != nil {
 		errs = append(errs, err)
@@ -190,8 +197,8 @@ const shutdownGrace = 20 * time.Second
 // AuthorityConfig configures permit timing, and the terms of the grant
 // `dev seed` issues to its workload: at most grant_max_per_action per refund,
 // in grant_currency. budget_name named the M1.5 development budget; since
-// M4 decisions use grants and it is ignored, but still accepted so existing
-// configurations load. budget_lock_timeout is how long a decision waits for
+// M4 decisions use grants and it is ignored: it may be left out, and is still
+// accepted so existing configurations load. budget_lock_timeout is how long a decision waits for
 // a contended budget or counter row before it answers CANNOT_AUTHORIZE
 // BUDGET_BUSY (ADR-0015).
 type AuthorityConfig struct {
@@ -209,9 +216,6 @@ func (c *Config) validateAuthority() []error {
 		errs = append(errs, fmt.Errorf("authority.grant_max_per_action/currency: %w", err))
 	} else if m.Amount.Sign() <= 0 {
 		errs = append(errs, errors.New("authority.grant_max_per_action must be positive"))
-	}
-	if c.Authority.BudgetName == "" {
-		errs = append(errs, errors.New("authority.budget_name is required"))
 	}
 	if c.Authority.PermitTTL.D() < time.Second || c.Authority.PermitTTL.D() > time.Minute {
 		errs = append(errs, errors.New("authority.permit_ttl must be 1s..1m (HR-009 expects about 5s)"))

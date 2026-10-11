@@ -103,6 +103,19 @@ func TestHR196_PclawVerifyIsOffline(t *testing.T) {
 	if code, _, _ := verify(bundlePath, "--trust", bundlePath); code != 1 {
 		t.Errorf("a bundle as trust file = %d", code)
 	}
+
+	// An evidence pack is recognized and verified offline too: its signed
+	// manifest, its files and the bundle inside; a changed byte fails it.
+	raw, packTrust := iss.Pack()
+	packPath := writeFile(t, dir, "pack.zip", raw)
+	packTrustPath := writeFile(t, dir, "pack-trust.json", packTrust)
+	code, out, errs = verify(packPath, "--trust", packTrustPath)
+	if code != 0 || !strings.Contains(out, "pack.signature") || !strings.Contains(out, "entry.link") || !strings.Contains(out, "does not certify compliance") {
+		t.Fatalf("verify pack = %d\n%s\n%s", code, out, errs)
+	}
+	if code, _, _ = verify(packPath, "--trust", trustPath); code != 1 {
+		t.Fatalf("a pack whose key is not pinned = %d", code)
+	}
 	if n := nn.calls.Load(); n != 0 {
 		t.Fatalf("pclaw verify made %d network requests", n)
 	}

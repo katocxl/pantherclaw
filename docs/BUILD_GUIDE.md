@@ -170,12 +170,12 @@ Rules: tests first for security behavior; no sleeps (use clocks/conditions); no 
 ```bash
 task up                                                   # PostgreSQL 17 on 127.0.0.1:5432
 mkdir -p deploy/dev/secrets
-for r in pc_app pc_migrator pc_audit_ro; do openssl rand -hex 24 > deploy/dev/secrets/$r.pw; done
+for r in pc_app pc_migrator pc_audit_ro pc_retention; do openssl rand -hex 24 > deploy/dev/secrets/$r.pw; done
 set -a; . deploy/compose/.env; set +a                       # PC_PG_PASSWORD of the compose database
 printf 'postgres://pc_owner:%s@127.0.0.1:5432/pantherclaw?sslmode=disable' "$PC_PG_PASSWORD" > deploy/dev/secrets/admin.url
 go run ./cmd/pantherclaw-server db bootstrap --admin-url-file deploy/dev/secrets/admin.url \
   --app-password-file deploy/dev/secrets/pc_app.pw --migrator-password-file deploy/dev/secrets/pc_migrator.pw \
-  --audit-password-file deploy/dev/secrets/pc_audit_ro.pw
+  --audit-password-file deploy/dev/secrets/pc_audit_ro.pw --retention-password-file deploy/dev/secrets/pc_retention.pw
 go run ./cmd/pantherclaw-server keys gen-kek --out deploy/dev/secrets/kek
 go run ./cmd/pantherclaw-server migrate up --config deploy/dev/server.example.json
 go run ./cmd/pantherclaw-server serve --config deploy/dev/server.example.json
@@ -183,7 +183,7 @@ go run ./cmd/pantherclaw-server serve --config deploy/dev/server.example.json
 
 Then `curl http://127.0.0.1:8080/readyz`, `curl http://127.0.0.1:8080/.well-known/pantherclaw/jwks.json`, or call `pantherclaw.v1.SystemService/GetBuildInfo` with `buf curl`. The server refuses to run the application pool as a superuser or BYPASSRLS role, and plaintext HTTP only on loopback.
 
-**Gateway (M6):** gateways reach `AuthorityService` only on the server's mTLS gateway listener (`gateway_api`), with a 24-hour certificate from PantherClaw's internal CA. A gateway gets its first certificate with a single-use enrollment token and pins the CA by its SHA-256. The public API refuses every gateway call. For development, `dev seed --gateway-out` (or `dev gateway --org ID --out FILE` for an existing org) writes an enrollment file holding the API URL, the token (valid 15 minutes) and the CA pin. The gateway enrolls from it on first start, keeps its identity in `control.identity_dir`, and renews the certificate itself.
+**Gateway (M6):** gateways reach `AuthorityService` only on the server's mTLS gateway listener (`gateway_api`), with a 24-hour certificate from PantherClaw's internal CA. A gateway gets its first certificate with a single-use enrollment token and pins the CA by its SHA-256. The public API refuses every gateway call. For development, `dev seed --gateway-out` (or `dev gateway --org ID --out FILE` for an existing org) writes an enrollment file holding the API URL, the token (valid 15 minutes) and the CA pin, and, when security keys are on, the approver keys file `approver-keys.json` beside it (M5 part 2 below). The gateway enrolls from it on first start, keeps its identity in `control.identity_dir`, and renews the certificate itself.
 
 ```bash
 go run ./cmd/pantherclaw-server dev seed --config deploy/dev/server.example.json \
@@ -200,7 +200,7 @@ go run ./cmd/pantherclaw-sim load --workload-file deploy/dev/secrets/workload.js
   --unique --rate 1 --duration 2s --warmup 0s
 ```
 
-Since M4 (slice 214) `dev seed` imports and activates the reference package (signed with the development package key, see M4 below), registers a development fact provider, issues the workload a grant (refunds up to `authority.grant_max_per_action` each, a task budget of `--budget-limit`, at most `--max-count` refunds) and binds its run to it. Identical irreversible refunds are parked for the repeat window (HR-007), so without `--unique` the load driver gets one acceptance and then `RECONCILIATION_REQUIRED`. To report a fact by hand, use `pclaw fact put` with the provider's API key in `PANTHERCLAW_API_KEY`. The M4 measurements are in [docs/perf/M4.md](perf/M4.md).
+Since M4 (slice 214) `dev seed` imports and activates the reference package (signed with the development package key, see M4 below), registers a development fact provider, issues the workload a grant (refunds up to `authority.grant_max_per_action` each, a task budget of `--budget-limit`, at most `--max-count` refunds) and binds its run to it. Identical irreversible refunds are parked for the repeat window (HR-007), so without `--unique` the load driver gets one acceptance and then `RECONCILIATION_REQUIRED`. To report a fact by hand, use `pclaw fact put` with the provider's API key in `PANTHERCLAW_API_KEY`. The M4 measurements are in [docs/perf/M4.md](perf/M4.md), and M6's, with mTLS and PAP/1 through the gateway, in [docs/perf/M6.md](perf/M6.md).
 
 Since M6 the gateway serves the routes of its connections at `/{connection}/…`: `--target-url` creates the connection `payments` to the simulator, in enforce mode, so a refund is `POST /payments/v1/refunds` (`dev connection --org ID --target-url URL` adds one to an existing org). The gateway maps the request through the connection's reviewed package to ActionIR, asks the Authority, verifies the permit, builds the request from the package's dispatch template, commits it with `BeginDispatch`, sends that **re-serialized** request to the target with `Idempotency-Key: pc-<transaction id>`, and records the outcome. The agent gets the target's answer with `PC-Transaction-Id`, `PC-Outcome` and `PC-Receipt` headers, or a JSON refusal with an `error_class`. Its `Server-Timing` header breaks down where the time went. Since M3 every request is PAP/1-signed: the workload sends its workload token (`Authorization: PAP …`), a `PAP-Proof` over the method, the gateway's `public_url`, the body hash and a server nonce, its run in `PAP-Run-Id` and its action in `PC-Action-Id`; the gateway forwards them and the Authority verifies them. `curl` cannot sign, so the example uses `pantherclaw-sim load`, which reads the key file, gets a workload token from the server and signs every request.
 
@@ -261,7 +261,7 @@ go run ./cmd/pclaw workload renew --key-file workload.json --out workload.token 
 
 CI jobs and pods can attest instead of using an enrollment token: an admin proposes a trusted-issuer entry (`pclaw issuer propose-github …` or `pclaw issuer propose-kubernetes …`), a person with the Identity Publisher role activates it (`pclaw issuer activate ENTRY REVISION`), and the workload enrolls with `--github` (an Actions job with `id-token: write`) or `--kubernetes-token FILE` (a projected service-account token with audience `pantherclaw:<org id>`). Unknown keys that reach the gateway show up as discovered agents: `pclaw agent list --state discovered`, then `pclaw agent claim` or `pclaw agent retire`. `pclaw scan` looks for shadow agents on a machine: the MCP servers configured for Claude Desktop, Claude Code, Cursor, VS Code, Windsurf (now Devin Desktop), Zed, JetBrains Junie, JetBrains AI Assistant (`options/llm.mcpServers.xml` of every JetBrains IDE and version, `~/.ai/mcp/mcp.json`, and `.idea/workspace.xml` and `.ai/mcp/mcp.json` in a project), OpenAI Codex CLI (`~/.codex/config.toml` or `$CODEX_HOME`, and `.codex/config.toml` in a project) and Google Gemini CLI (`~/.gemini/settings.json` or `$GEMINI_CLI_HOME`, and `.gemini/settings.json` in a project), agent-framework projects under `--path`, and credentials in the environment and in those servers' environment values, HTTP headers and OAuth client secrets (shown redacted). Results stay local; `--submit` adds the MCP servers and agent projects to the discovered agents (credentials are never sent).
 
-The bootstrap admin token is single use and valid 24 hours; `pantherclaw-server org admin-invite --org <id>` issues a new one. Automation can skip `pclaw login`: set `PANTHERCLAW_SERVER` and `PANTHERCLAW_API_KEY` (a `pck_` key from `pclaw apikey create`). Integration tests use an in-process OpenID provider; the CI also runs the end-to-end scenario against `navikt/mock-oauth2-server` (`docker compose --profile test` starts it on 127.0.0.1:8181; set `PC_TEST_MOCK_OIDC_URL=http://127.0.0.1:8181`), and `PC_TEST_KEYCLOAK_URL=http://127.0.0.1:8180` runs the Keycloak realm test.
+The bootstrap admin token is single use and valid 24 hours; `pantherclaw-server org admin-invite --org <id>` issues a new one. Automation can skip `pclaw login`: set `PANTHERCLAW_SERVER` and `PANTHERCLAW_API_KEY` (a `pck_` key from `pclaw apikey create`). Integration tests use an in-process OpenID provider; `task test:integration` also runs the end-to-end scenarios against `navikt/mock-oauth2-server` (`task up PROFILE=test` starts it on 127.0.0.1:8181, and the task sets `PC_TEST_MOCK_OIDC_URL=http://127.0.0.1:8181` unless it is already set), and `PC_TEST_KEYCLOAK_URL=http://127.0.0.1:8180` runs the Keycloak realm test.
 
 **Authority: packages, facts, guardrails, grants and policies (M4):** a run's actions use only the grant its run is bound to, so an org needs an active tool package, the facts its definitions require, a grant, and optionally guardrails and a published policy. Each document is a JSON (or YAML package) file; the server decodes it strictly. Importing a package needs a targets document signed by a trusted package root (`pclaw-admin packages sign`); activating packages, changing guardrails, issuing grants, registering fact providers and publishing policies are human only.
 
@@ -312,6 +312,7 @@ Browser sessions last 30 idle minutes and 12 hours at most. Adding or removing a
 go run ./cmd/pantherclaw-server org admin-invite --config deploy/dev/server.local.json --org <org id>   # alice signs in with this token
 go run ./cmd/pclaw invite create --email bob@example.test --role approver                              # as alice; bob signs in with that token
 # bob: open http://localhost:8080/account?org=<org id>, sign in, add a security key
+go run ./cmd/pclaw approver-keys export --out deploy/dev/secrets/approver-keys.json                     # as alice: review the fingerprints; the gateway pins this file
 go run ./cmd/pclaw workload wait <transaction id> --key-file deploy/dev/secrets/workload.json --follow   # the agent's side: READY or how it ended
 go run ./cmd/pclaw approval list --waiting-for-me                                                      # as bob
 go run ./cmd/pclaw approval approve <request id>                                                       # opens /approvals/<id> to approve with the key
@@ -319,12 +320,15 @@ go run ./cmd/pclaw approval decline <request id> --reason too_risky --alternativ
 go run ./cmd/pclaw waitlist list --overdue && go run ./cmd/pclaw escalation get
 ```
 
+Since M6 the gateway checks every approval itself (HR-038): the permit of an approved action carries each approver's WebAuthn assertion, and the gateway dispatches it only when every assertion verifies against a key in `approvals.approver_keys_file`. `dev seed --gateway-out` writes that file (`approver-keys.json`, next to the enrollment file, empty for a new org) and `deploy/dev/gateway.example.json` pins it. After anyone adds or removes a key, export it again; the gateway reads it again when it changes ([gateway runbook](runbooks/gateway.md) §7). If a permit is refused before `BeginDispatch`, or expires unused, its approval is restored and the agent's identical resubmission uses it (HR-011).
+
 Approvals count only from people whose account is 7 days old and whose role and key are 1 day old (decision 5), so a freshly invited approver waits that long; the tests backdate their fixtures. Batch review and `pclaw waitlist metrics` need the Team edition. Each org sets its hold deadline, consume window and batch ceilings with `pclaw waitlist update-settings`; a server sets its wait limits with `waitlist.max_waits_per_instance`, `waitlist.max_waits` and `waitlist.long_poll_max`.
 
 **Measure latency (M1.5):** seed a budget large enough for the run (for example `--budget-limit 100000000.00`), start the three processes as above, then drive an open-loop constant rate. Authorize and gateway overhead come from `Server-Timing`, so the target's own latency is excluded:
 
 ```bash
-go run ./cmd/pantherclaw-sim load --workload-file deploy/dev/secrets/workload.json --rate 1000 --duration 30s --warmup 5s --out perf.json
+go run ./cmd/pantherclaw-sim load --workload-file deploy/dev/secrets/workload.json --facts-key-file deploy/dev/secrets/facts.key \
+  --unique --rate 1000 --duration 30s --warmup 5s --out perf.json
 ```
 
 Results and the machines they were measured on are recorded in `docs/perf/M1.5.md`.
@@ -337,7 +341,7 @@ Results and the machines they were measured on are recorded in `docs/perf/M1.5.m
 cmd/                     pantherclaw-server, pantherclaw-gateway, pclaw, pantherclaw-sim, pclaw-admin
 proto/pantherclaw/v1/    API contracts (buf)
 internal/gen/            generated Go (committed)
-internal/platform/       config, log, otel, db, crypto, keys, ids, clock, errors, httpx, rpc, money, extension, edition, version
+internal/platform/       config, log, db, crypto, keys, ids, clock, errors, httpx, rpc (also the OpenTelemetry spans), money, extension, edition, version
 internal/<module>/       {domain, app, adapters} — see §6
 internal/gateway/        mcp, httpproxy, sdk, dispatch, egress, broker, runtime
 migrations/  queries/    goose SQL, sqlc queries
@@ -398,7 +402,7 @@ docs/                    this guide and companions
 | M1.5 | `transactions`, `decision_receipts`, `permits`, `execution_attempts`, `budgets`, `budget_ledger`, `org_containment` |
 | M2 | `business_units`, `teams`, `environments`, `users`, `memberships`, `role_bindings`, `service_accounts`, `service_account_keys`, `api_keys`, `invitations`, `device_codes`, `cli_sessions` (CLI refresh tokens), `auth_replay` (client-assertion `jti`s) |
 | M3 | `agents` (owner and backup owner columns), `agent_changes`, `agent_instances`, `enrollment_tokens`, `trusted_issuers`, `attestations`, `dpop_nonces`, `dpop_jti` (partitioned), `runs`, `discoveries`, `waitlist_entries`; subject-token `jti`s in `auth_replay` (M2) |
-| M4 | `package_trust`, `tool_packages`, `package_versions`, `package_pins`, `package_signing_keys` (follow-up, 00026), `action_definitions`, `consequence_rules`, `policies`, `policy_versions`, `envelopes`, `envelope_revisions`, `grants`, `grant_revisions`, `grant_lineage`, `counters`, `reservations`, `fact_providers`, `facts`, `dedupe_claims`; `budgets` (M1.5) gains rule, grouping and period columns; idempotency lives in columns on `transactions` (M1.5) |
+| M4 | `package_trust`, `tool_packages`, `package_versions`, `package_pins`, `package_signing_keys` (follow-up, 00026), `action_definitions`, `consequence_rules`, `policies`, `policy_versions`, `envelopes`, `envelope_revisions`, `grants`, `grant_revisions`, `grant_lineage`, `budget_accounts` (00023: one row per rule, hashed grouping key and period; the M1.5 `budgets` table is left as it was), `counters`, `reservations`, `fact_providers`, `fact_declarations` (00024), `facts`, `dedupe_claims`; idempotency lives in columns on `transactions` (M1.5) |
 | M5 | `sessions` (browser), `login_requests` (browser sign-ins in progress), `webauthn_credentials`, `webauthn_ceremonies` (pending registrations and assertions; `BINDING` in part 2), `notifications`, `notification_channels`, `deliveries`; part 2: `approval_requests`, `approval_responses`, `approval_evidence`, `hold_slots`, `escalation_chains`, `waitlist_routes`, `waitlist_settings`, `approval_batches`; `waitlist_entries` (M3) gains the other five kinds |
 | M6 | `gateways`, `gateway_enrollment_tokens`, `gateway_certs`, `broker_keys`, `connections`, `connection_routes`, `credentials` (sealed), `circuit_states`, `kill_switch_requests`; `org_containment` gains who engaged the kill switch; `transactions` and `permits` gain mode and connection |
 | M7 | `execution_receipts`, `effect_receipts`, `verifications`, `observations`, `reconciliation_tasks`, `transaction_links`, `target_log_runs`, `unreceipted_effects`, `ledger_tiles`, `checkpoints`, `anchors` (global, blinded leaves only), `anchor_leaves`, `evaluation_inputs`, `retention_policies`, `legal_holds`, `capture_profiles`, `payload_captures`, `evidence_packs`; `transactions` gains effect state and levels; evidence tables gain body-removal columns (G0 M7 decision 4) |
@@ -430,11 +434,11 @@ Releases: `v0.0.x` pre-releases from M1; **v0.1.0 preview after M12** (coding-ag
 
 ### M1 — Platform foundation
 **Threat slice:** T-003, T-016, T-034, T-041 · **HR:** HR-004, HR-050..057, HR-062, HR-063, HR-104.
-- `platform/config` (typed, validated), `platform/log` (slog JSON, `Secret[T]`, `Sensitive[T]`, ReplaceAttr denylist, field caps), `platform/otel`, `platform/clock`, `platform/ids` (typed UUIDv7), `platform/errors` (codes), `platform/money` (decimal).
+- `platform/config` (typed, validated), `platform/log` (slog JSON, `Secret[T]`, `Sensitive[T]`, ReplaceAttr denylist, field caps), `platform/clock`, `platform/ids` (typed UUIDv7), `platform/errors` (codes), `platform/money` (decimal).
 - `platform/db`: pgx pool (AfterConnect timeouts, AfterRelease `RESET ALL`), `InTenantTx`, `InGlobalTx` (restricted), goose runner, role bootstrap migration (`pc_migrator`, `pc_app`, `pc_audit_ro`), audited cross-org lister function.
 - `platform/crypto`: AEAD envelope (AES-256-GCM, AAD builder), Ed25519 signer/verifier (go-jose JWS with allowlist), HPKE seal/open (X-Wing), hashing helpers; `platform/keys`: `KeyProvider` (file implementation), key registry, JWKS document.
 - `platform/httpx`: hardened server (timeouts, limits, headers, recovery), hardened outbound client factory (`egress` defaults: no redirects, dial-time IP check, no proxy env) — shared with the gateway.
-- `platform/rpc`: connect v2 server setup, interceptors (request id, logging, otel, protovalidate, panic recovery, auth placeholder), health (`grpchealth`).
+- `platform/rpc`: connect v2 server setup, interceptors (request id, logging, protovalidate, panic recovery, auth placeholder), health (plain `/livez` and `/readyz`; `grpchealth` is not connect-v2-ready). OpenTelemetry is API-only: `observeInterceptor` starts one server span per call, no SDK or exporter is wired and nothing is exported; there is no `platform/otel` package. The exporter is decided in M13 (G0 M1 deviation 4, answered 2026-10-10).
 - River setup (migrations imported into goose), job registry, `InsertTx` helper.
 - `evidence` (part 1): `ledger_entries` (unchained insert), per-org chainer job, platform audit API (`audit.Record(ctx, tx, event)`).
 - `billing` (part 1): licence document format, Ed25519 verification against embedded public key, edition limits (Community: 5 agents, 1 org), `cmd/pclaw-admin keygen|licence sign`.
@@ -447,7 +451,7 @@ Releases: `v0.0.x` pre-releases from M1; **v0.1.0 preview after M12** (coding-ag
 - `pantherclaw-sim payments` (refund endpoint, fault injection flags).
 - Gateway minimal: HTTP proxy for one hard-coded connection/route, static workload identity (dev only, clearly flagged), ActionIR for `payments.refund.create`, Authorize → permit → `BeginDispatch` → re-serialized dispatch → `RecordExecution`.
 - Authority minimal: hard-coded grant (max $100, one refund), budget reservation, decision receipt, permit lifecycle with epoch, sweeper.
-- k6 script: 1k rps allow path; budget race script.
+- k6 script: 1k rps allow path; budget race script. The k6 script (`test/load/refund.js`) is historical: it records how the M1.5 baseline was measured. Since M3 the gateway accepts only PAP/1-signed requests, which k6 cannot sign, so `pantherclaw-sim load --unique --facts-key-file …` is the load driver (§4, [docs/perf/M4.md](perf/M4.md)).
 - **Exit:** measured p99 vs SLOs recorded in `docs/perf/M1.5.md`; zero overspend under 1,000 concurrent reservations; crash-mid-dispatch test yields UNKNOWN (no release); ADR updated if the design must change.
 
 ### M2 — Tenancy & service authentication
@@ -455,7 +459,7 @@ Releases: `v0.0.x` pre-releases from M1; **v0.1.0 preview after M12** (coding-ag
 - Org → BU → team → environment hierarchy; users (from OIDC), memberships, invitations (single-use, expiring random tokens stored as hashes; ADR-0016), roles and permission catalog; SoD primitives.
 - OIDC RP for CLI device flow (browser sessions arrive in M5); `pclaw login`.
 - Service accounts with `private_key_jwt`; API keys (`pck_`), scopes, expiry; auth interceptor; bootstrap admin token (printed once, single use).
-- Keycloak dev realm (`deploy/keycloak`) + mock-oauth2-server for CI.
+- Keycloak dev realm (`deploy/keycloak`) + mock-oauth2-server for the integration tests.
 - **Tests:** alg `none`/HS256 rejected, wrong `aud`/`iss`, expired/revoked/substituted tokens, mix-up, replayed client assertion; permission catalog test (every RPC declares a permission); IDOR tests.
 - **Exit:** authenticated, authorized CRUD for tenancy via Connect + CLI.
 
@@ -501,18 +505,20 @@ Releases: `v0.0.x` pre-releases from M1; **v0.1.0 preview after M12** (coding-ag
 | ID | Scenario | Expected |
 |---|---|---|
 | S01 | $30 refund within grant | ALLOW → dispatched → accepted |
-| S02 | $85 refund (policy: approval > $50) | HOLD → approve (WebAuthn) → resubmit → dispatched |
+| S02 | $85 refund (policy: approval > $50) | HOLD → approve (WebAuthn) → resubmit → dispatched (with M5 part 2) |
 | S03 | $125 refund (grant max $100) | DENY even if a manager tries to approve |
-| S04 | Revoke grant while held | Pending approval invalidated; resubmit → DENY |
-| S05 | Change amount after approval | Material change → new decision; old approval unusable |
+| S04 | Revoke grant while held | Pending approval invalidated; resubmit → DENY (with M5 part 2) |
+| S05 | Change amount after approval | Material change → new decision; old approval unusable (with M5 part 2) |
 | S06 | Two concurrent refunds against one-refund budget | Exactly one succeeds |
 | S07 | Target timeout | UNKNOWN; reservation held; no auto-retry; reconciliation entry |
 | S08 | Gateway killed between BeginDispatch and Record | UNKNOWN, not released |
 | S09 | Authority unavailable | CANNOT_AUTHORIZE; nothing dispatched |
 | S10 | Child agent with narrowed grant | Child cannot exceed parent; parent revocation cascades |
-| S11 | Direct call to simulator bypassing gateway | Route labeled uncontrolled; coverage PARTIAL |
+| S11 | Direct call to simulator bypassing gateway | Refused by the target without the custody credential (and without an action token); the route is recorded as uncontrolled |
 | S12 | SSRF/rebinding/redirect payloads | Blocked by egress guards |
 | S13 | Kill switch engaged mid-run | All subsequent dispatches refused < 1 s |
+
+S07's "reconciliation entry" is the `UNKNOWN` permit and its held reservation, which M7's reconciliation queue picks up. In S11, M9 computes the `PARTIAL` coverage state; M6 shows the facts it rests on. The exit status is in [g0/M6.md](g0/M6.md), and the latency re-measurement in [docs/perf/M6.md](perf/M6.md).
 
 ### M7 — Effects, reconciliation & proof
 **Threat slice:** T-013, T-024, T-029, T-043, T-070..T-077 · **HR:** HR-003 and HR-007 (resolution), HR-110..112, HR-190..199 · **F:** F461–F532 (F500 and F533 in M11) · **PN:** PN-007 · **G0:** [g0/M7.md](g0/M7.md), built in two parallel tracks (A: effects and reconciliation; B: proof).
@@ -560,7 +566,8 @@ Releases: `v0.0.x` pre-releases from M1; **v0.1.0 preview after M12** (coding-ag
 
 ### M13 — Commercial & production hardening → v1.0
 **PN:** PN-010, PN-011, PN-012, PN-019.
-- Entitlements & metering per edition, rate limits/quotas, support access (task-bound, customer-approved, audited), data export/deletion, Helm chart, backup/restore + DR drill, FIPS build variant, k6 at SLOs, Schemathesis clean, threat-model refresh (G4), docs site.
+- Entitlements & metering per edition, rate limits/quotas, support access (task-bound, customer-approved, audited), data export/deletion, Helm chart, backup/restore + DR drill, FIPS build variant, SLOs met under load (`pantherclaw-sim load`; k6 cannot sign PAP/1), Schemathesis clean, threat-model refresh (G4), docs site.
+- The OpenTelemetry exporter (founder decision 2026-10-10, G0 M1 deviation 4): until then spans are API-only and nothing is exported. Choose between the OTLP/HTTP exporter (it pulls in gRPC and grpc-gateway), a small OTLP/HTTP-protobuf exporter of our own, or export through logs; then wire the SDK, and decide on a pgx tracer and metrics (ARCHITECTURE §14).
 
 ### M14 — Framework SDKs & business connectors (delivered after M11, before M13)
 **PN:** PN-016.3, PN-017.2, PN-017.3, PN-017.4, PN-023 · **F:** F101 · **ADR:** 0017, 0019.

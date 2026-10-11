@@ -1,12 +1,16 @@
 # SPDX-License-Identifier: BUSL-1.1
 # Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
 #
-# Local stack for development and demos. Profiles grow per milestone:
-#   core          PostgreSQL (M0) + server, gateway, simulators (M1–M6)
+# Local stack for development and demos. Profiles today (`task up PROFILE=…`):
+#   core          PostgreSQL (the default profile)
+#   test          throwaway PostgreSQL on 5433 and a mock OpenID provider,
+#                 for `task test:integration`
 #   identity      Keycloak dev realm (M2)
-#   observability grafana/otel-lgtm (M1)
-#   full-demo     everything, seeded synthetic data (M6+)
-#   sandbox       egress-locked agent containers (M9)
+#   full-demo     PostgreSQL and Keycloak
+# The server, gateway and simulators are not services here: they run with
+# `go run` (BUILD_GUIDE §4). Planned: an observability profile once the
+# OpenTelemetry exporter is decided (M13), and egress-locked agent
+# sandboxes (M9).
 # Ports bind to 127.0.0.1 only. Never use these settings in production.
 name: pantherclaw
 

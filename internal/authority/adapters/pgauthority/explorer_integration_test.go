@@ -9,10 +9,12 @@ import (
 	"context"
 	"errors"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/katocxl/pantherclaw/internal/authority/finalize"
+	"github.com/katocxl/pantherclaw/internal/evidence/ledger"
 	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	"github.com/katocxl/pantherclaw/internal/platform/page"
@@ -152,6 +154,79 @@ func TestExplorer_ShowsEveryRecordOfAnUnknownRefund(t *testing.T) {
 	if len(ev.Reconciliations) != 1 || ev.Reconciliations[0].State != txdomain.TaskOccurred || ev.Reconciliations[0].Via != txdomain.ViaVerifier ||
 		ev.Reconciliations[0].Observation == nil || *ev.Reconciliations[0].Observation != ev.Observations[0].ID {
 		t.Fatalf("reconciliations %+v", ev.Reconciliations)
+	}
+}
+
+// TestExplorer_ReportsEachItemsIntegrity: each receipt's integrity is
+// pending until the chainer links its entry, then chained, in a checkpoint
+// once a signed checkpoint's tree covers it (naming the first such
+// checkpoint), and anchored once an ANCHORED anchor covers such a
+// checkpoint; a pending or failed anchor does not count (F466–F468,
+// HR-194, HR-195). The checkpoint and anchor rows are seeded here: their
+// jobs are tested with track B.
+func TestExplorer_ReportsEachItemsIntegrity(t *testing.T) {
+	w := newWorld(t)
+	w.auth.PermitTTL = time.Hour
+	w.refundable("ch_1")
+	run := w.run(w.grant("500").ID, ids.UUID{})
+	r := w.recorded(run, "ch_1", "30.00", finalize.Accepted, "re_1")
+	e := &txapp.Explorer{Pool: w.pool}
+	reader := w.reader(tdomain.RoleReconciler, tdomain.Scope{Type: tdomain.ScopeOrg, ID: w.org.UUID()})
+	statuses := func() (txapp.Integrity, txapp.Integrity) {
+		t.Helper()
+		ev, err := e.TransactionEvidence(reader, r.TransactionID)
+		if err != nil || len(ev.Decisions) != 1 || ev.Execution == nil {
+			t.Fatalf("evidence %+v: %v", ev, err)
+		}
+		return ev.Decisions[0].Integrity, ev.Execution.Integrity
+	}
+	if d, x := statuses(); d.Status() != txapp.IntegrityPending || x.Status() != txapp.IntegrityPending {
+		t.Fatalf("before chaining: %+v %+v", d, x)
+	}
+	if _, err := ledger.ChainAll(context.Background(), w.pool, w.org, 500); err != nil {
+		t.Fatal(err)
+	}
+	d, x := statuses()
+	if d.Status() != txapp.IntegrityChained || x.Status() != txapp.IntegrityChained || d.Seq >= x.Seq {
+		t.Fatalf("chained: %+v %+v", d, x)
+	}
+
+	checkpoint := func(size int64) {
+		w.db.AdminExec(t, `INSERT INTO pc.checkpoints (org_id, tree_size, root_hash, note, kid) VALUES ($1, $2, $3, $4, 'test-checkpoints')`,
+			w.org, size, make([]byte, 32), []byte(strings.Repeat("n", 64)))
+	}
+	anchor := func(size int64, state string) {
+		id := ids.NewV7()
+		period := time.Now().Add(time.Duration(size) * time.Hour)
+		if state == "ANCHORED" {
+			w.db.AdminExec(t, `INSERT INTO pc.anchors (id, period, leaves, root, statement, signature, kid, state, rekor_entry, timestamp_token, anchored_at)
+				VALUES ($1, $2, $3, $3, '{}', $4, 'test-anchors', 'ANCHORED', '{}', $5, now())`, id, period, make([]byte, 32), make([]byte, 8), []byte{1})
+		} else {
+			w.db.AdminExec(t, `INSERT INTO pc.anchors (id, period, leaves, root, statement, signature, kid, state)
+				VALUES ($1, $2, $3, $3, '{}', $4, 'test-anchors', $5)`, id, period, make([]byte, 32), make([]byte, 8), state)
+		}
+		w.db.AdminExec(t, `INSERT INTO pc.anchor_leaves (org_id, anchor_id, leaf_index, nonce, checkpoint_size) VALUES ($1, $2, 0, $3, $4)`,
+			w.org, id, make([]byte, 32), size)
+	}
+
+	checkpoint(d.Seq)
+	anchor(d.Seq, "PENDING")
+	anchor(d.Seq, "FAILED")
+	if d, x := statuses(); d.Status() != txapp.IntegrityCheckpointed || d.Checkpoint != d.Seq || x.Status() != txapp.IntegrityChained {
+		t.Fatalf("one checkpoint, anchors not done: %+v %+v", d, x)
+	}
+	checkpoint(x.Seq)
+	anchor(d.Seq, "ANCHORED")
+	d2, x2 := statuses()
+	if d2.Status() != txapp.IntegrityAnchored || d2.Checkpoint != d.Seq || d2.Anchored != d.Seq || d2.AnchoredAt == nil {
+		t.Fatalf("the decision's checkpoint anchored: %+v", d2)
+	}
+	if x2.Status() != txapp.IntegrityCheckpointed || x2.Checkpoint != x.Seq || x2.Anchored != 0 {
+		t.Fatalf("the execution's checkpoint not anchored: %+v", x2)
+	}
+	anchor(x.Seq, "ANCHORED")
+	if _, x3 := statuses(); x3.Status() != txapp.IntegrityAnchored || x3.Anchored != x.Seq {
+		t.Fatalf("both anchored: %+v", x3)
 	}
 }
 

@@ -14,11 +14,17 @@ import (
 // use cases check scopes: a transaction bundle where each transaction's
 // agent lives, a range bundle at org scope with audit.read.
 var evidenceProcedures = map[string]td.Permission{
-	pantherclawv1connect.EvidenceServiceListCheckpointsProcedure:     td.PermEvidenceRead,
-	pantherclawv1connect.EvidenceServiceGetCheckpointProcedure:       td.PermEvidenceRead,
-	pantherclawv1connect.EvidenceServiceGetInclusionProofProcedure:   td.PermEvidenceRead,
-	pantherclawv1connect.EvidenceServiceGetConsistencyProofProcedure: td.PermEvidenceRead,
-	pantherclawv1connect.EvidenceServiceExportBundleProcedure:        td.PermEvidenceRead,
+	pantherclawv1connect.EvidenceServiceListCheckpointsProcedure:      td.PermEvidenceRead,
+	pantherclawv1connect.EvidenceServiceGetCheckpointProcedure:        td.PermEvidenceRead,
+	pantherclawv1connect.EvidenceServiceGetInclusionProofProcedure:    td.PermEvidenceRead,
+	pantherclawv1connect.EvidenceServiceGetConsistencyProofProcedure:  td.PermEvidenceRead,
+	pantherclawv1connect.EvidenceServiceExportBundleProcedure:         td.PermEvidenceRead,
+	pantherclawv1connect.EvidenceServiceListAnchorsProcedure:          td.PermEvidenceRead,
+	pantherclawv1connect.EvidenceServiceReplayDecisionProcedure:       td.PermEvidenceRead,
+	pantherclawv1connect.EvidenceServiceCreateEvidencePackProcedure:   td.PermEvidenceExport,
+	pantherclawv1connect.EvidenceServiceGetEvidencePackProcedure:      td.PermEvidenceRead,
+	pantherclawv1connect.EvidenceServiceListEvidencePacksProcedure:    td.PermEvidenceRead,
+	pantherclawv1connect.EvidenceServiceDownloadEvidencePackProcedure: td.PermEvidenceExport,
 }
 
 func init() { maps.Copy(procedurePermissions, evidenceProcedures) }

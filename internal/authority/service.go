@@ -54,6 +54,8 @@ type Service struct {
 
 	workloads Workloads
 	runs      Runs
+	// captures keeps payload captures (captures.go); nil drops them.
+	captures CaptureRecorder
 }
 
 // Config configures the Service.

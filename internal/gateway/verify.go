@@ -15,14 +15,21 @@ import (
 	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
 )
 
-// Verification (G0 M7 design decision 1, HR-190): every VerifyEvery the
-// gateway claims the verification tasks of the connections it serves,
+// Verification (G0 M7 design decision 1, HR-190): the gateway claims the
+// verification tasks of the connections it serves when the containment
+// stream hints that some are due, and every VerifyEvery in any case; it
 // makes each reviewed read and reports what it observed. A task it cannot
 // or may not read is left to its lease, which expires, so the server tries
 // again later and, when the window closes, records the effect as UNKNOWN.
 
-// VerifyEvery is how often the gateway claims due verification tasks.
+// VerifyEvery is how often the gateway claims due verification tasks
+// without a hint.
 const VerifyEvery = 10 * time.Second
+
+// verifyHintGap is the least time between two claims a hint wakes: every
+// containment message carries the hint while tasks are due, and the server
+// may still show tasks just leased for one more message.
+const verifyHintGap = time.Second
 
 // maxLeases is the most tasks one claim asks for.
 const maxLeases = 16
@@ -34,20 +41,41 @@ type Verifications interface {
 	Report(ctx context.Context, l dispatch.Lease, o dispatch.Observation) error
 }
 
-// watchVerifications claims and verifies due tasks until ctx ends.
+// VerificationHints is a containment view whose stream says when
+// verification tasks are due (control.Containment).
+type VerificationHints interface {
+	VerificationsWaiting() <-chan struct{}
+}
+
+// watchVerifications claims and verifies due tasks until ctx ends: at once,
+// then on every hint at most once per verifyHintGap, and every verifyEvery
+// whether or not a hint came.
 func (g *Gateway) watchVerifications(ctx context.Context) error {
 	if g.verifications == nil {
 		<-ctx.Done()
 		return nil
 	}
+	var hints <-chan struct{} // nil: polling only
+	if h, ok := g.containment.(VerificationHints); ok {
+		hints = h.VerificationsWaiting()
+	}
 	tick := time.NewTicker(g.verifyEvery)
 	defer tick.Stop()
 	for {
 		g.verifyDue(ctx)
-		select {
-		case <-ctx.Done():
-			return nil
-		case <-tick.C:
+		claimed := time.Now()
+	wait:
+		for {
+			select {
+			case <-ctx.Done():
+				return nil
+			case <-tick.C:
+				break wait
+			case <-hints:
+				if time.Since(claimed) >= g.verifyHintGap {
+					break wait
+				}
+			}
 		}
 	}
 }

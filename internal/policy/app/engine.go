@@ -193,6 +193,14 @@ func (c *Compiled) Evaluate(ctx context.Context, d *defs.Definition, a actionir.
 func constrain(d *defs.Definition, a actionir.ActionIR, vals defs.Values, r *domain.Rule) domain.Result {
 	c := r.Constraint
 	res := domain.Result{Rule: r, Effect: domain.Matched}
+	if c.Kind == domain.Verify {
+		// Not a limit the definition declares: the Authority raises the
+		// level the effect must be verified at, and step 8 refuses the
+		// action when the verifier cannot reach it (G0 M7 design decision 2).
+		res.Obligation = &domain.Obligation{Rule: r.ID, Kind: c.Kind, Level: c.Level, Timing: domain.TimingAfterDispatch}
+		res.Detail = "the effect must be verified at " + string(c.Level) + " level"
+		return res
+	}
 	spec, ok := d.Supports(defs.ConstraintKind(c.Kind), c.Param)
 	if !ok {
 		res.Effect, res.Detail = domain.Unsupported, fmt.Sprintf("%s does not support %s on %q", d.Operation, c.Kind, c.Param)
@@ -203,7 +211,7 @@ func constrain(d *defs.Definition, a actionir.ActionIR, vals defs.Values, r *dom
 		res.Effect, res.Detail = effect, fmt.Sprintf(format, args...)
 		return res
 	}
-	switch c.Kind {
+	switch c.Kind { //nolint:exhaustive // verify returned above
 	case domain.AmountMax:
 		if !present {
 			return fail(domain.EvalError, "params.%s is absent; the limit cannot be checked", c.Param)
@@ -233,7 +241,7 @@ func constrain(d *defs.Definition, a actionir.ActionIR, vals defs.Values, r *dom
 		if !spec.Clamp {
 			return fail(domain.Violated, "params.%s must be at most %d", c.Param, limit)
 		}
-		res.Obligation = &domain.Obligation{Rule: r.ID, Kind: c.Kind, Param: c.Param, Max: c.Max, Clamp: true, Timing: "before_execution"}
+		res.Obligation = &domain.Obligation{Rule: r.ID, Kind: c.Kind, Param: c.Param, Max: c.Max, Clamp: true, Timing: domain.TimingBeforeExecution}
 		res.Detail = fmt.Sprintf("params.%s clamped to %d before execution", c.Param, limit)
 	case domain.AllowedValues:
 		if !present {

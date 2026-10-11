@@ -53,6 +53,8 @@ func (e *Evidence) ListCheckpoints(ctx context.Context, req *pantherclawv1.ListC
 	out := &pantherclawv1.ListCheckpointsResponse{NextPageToken: p.Next, Origin: p.Origin, Integrity: &pantherclawv1.LedgerIntegrity{
 		State: pantherclawv1.LedgerIntegrityState_LEDGER_INTEGRITY_STATE_OK, VerifiedSize: p.Integrity.VerifiedSize, VerifyTime: ts(p.Integrity.VerifiedAt),
 	}}
+	out.Integrity.AnchorState, out.Integrity.AnchorPeriod = anchorStates[p.Integrity.AnchorState], ts(p.Integrity.AnchorPeriod)
+	out.Integrity.AnchorErrorCode = p.Integrity.AnchorError
 	if p.Integrity.Failed {
 		out.Integrity.State = pantherclawv1.LedgerIntegrityState_LEDGER_INTEGRITY_STATE_FAILED
 		out.Integrity.FailureCode, out.Integrity.FailedSeq, out.Integrity.FailTime = p.Integrity.Code, p.Integrity.Seq, ts(p.Integrity.FailedAt)
@@ -109,5 +111,49 @@ func (e *Evidence) ExportBundle(ctx context.Context, req *pantherclawv1.ExportBu
 	}
 	return &pantherclawv1.ExportBundleResponse{
 		Bundle: x.Bundle, Entries: int32(x.Entries), Receipts: int32(x.Receipts), CheckpointSize: x.CheckpointSize, //nolint:gosec // G115: bounded by the selection limits
+		Anchored: x.Anchored,
 	}, nil
+}
+
+var anchorStates = map[string]pantherclawv1.AnchorState{
+	"PENDING": pantherclawv1.AnchorState_ANCHOR_STATE_PENDING, "ANCHORED": pantherclawv1.AnchorState_ANCHOR_STATE_ANCHORED,
+	"FAILED": pantherclawv1.AnchorState_ANCHOR_STATE_FAILED,
+}
+
+// ListAnchors implements EvidenceServiceHandler.
+func (e *Evidence) ListAnchors(ctx context.Context, req *pantherclawv1.ListAnchorsRequest) (*pantherclawv1.ListAnchorsResponse, error) {
+	p, err := e.svc.ListAnchors(ctx, req.GetPageSize(), req.GetPageToken())
+	if err != nil {
+		return nil, err
+	}
+	out := &pantherclawv1.ListAnchorsResponse{NextPageToken: p.Next}
+	for _, a := range p.Items {
+		out.Anchors = append(out.Anchors, &pantherclawv1.Anchor{
+			Id: a.ID.String(), Period: ts(a.Period), State: anchorStates[a.State], CheckpointSize: a.CheckpointSize,
+			LeafIndex: a.LeafIndex, Leaves: a.Leaves, Root: a.Root, Kid: a.KID, Attempts: a.Attempts, ErrorCode: a.ErrorCode,
+			CreateTime: ts(a.Created), AnchorTime: ts(a.Anchored),
+		})
+	}
+	return out, nil
+}
+
+// ReplayDecision implements EvidenceServiceHandler.
+func (e *Evidence) ReplayDecision(ctx context.Context, req *pantherclawv1.ReplayDecisionRequest) (*pantherclawv1.ReplayDecisionResponse, error) {
+	txn, err := ids.ParseUUID(req.GetTransactionId())
+	if err != nil || txn.Version() != 7 {
+		return nil, errInvalidID
+	}
+	var proposed *ids.UUID
+	if s := req.GetPolicyVersionId(); s != "" {
+		id, err := ids.ParseUUID(s)
+		if err != nil {
+			return nil, errInvalidID
+		}
+		proposed = &id
+	}
+	r, err := e.svc.ReplayDecision(ctx, txn, int(req.GetEvaluation()), proposed, req.GetIncludeInputs())
+	if err != nil {
+		return nil, err
+	}
+	return replayProto(r), nil
 }

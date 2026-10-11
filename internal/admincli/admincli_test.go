@@ -91,7 +91,6 @@ func TestUsage(t *testing.T) {
 		{"keygen", "--purpose", "org-packages", "--out-dir", "."}, // an org key, not a PantherClaw root
 		{"keygen", "--purpose", "packages-dev", "--out-dir", "."}, // only dev seed makes the development key (HR-163)
 		{"packages"},
-		{"packages", "sign", "--key", "k", "--version", "1", "--out", "o", "p.yaml"},                          // no expiry
 		{"packages", "sign", "--key", "k", "--version", "0", "--expires-days", "180", "--out", "o", "p.yaml"}, // version 0
 		{"packages", "sign", "--key", "k", "--version", "1", "--expires-days", "180", "--out", "o"},           // no files
 		{"packages", "verify", "--roots", "r", "p.yaml"},
@@ -102,7 +101,7 @@ func TestUsage(t *testing.T) {
 	}
 	_, _, errs := run(t)
 	for _, want := range []string{
-		"packages sign --key FILE [--passphrase-file FILE] --version N --expires-days D --out FILE PACKAGE.yaml...",
+		"packages sign --key FILE [--passphrase-file FILE] --version N [--expires-days 180] --out FILE PACKAGE.yaml...",
 		"packages verify --roots FILE --targets FILE PACKAGE.yaml...",
 	} {
 		if !strings.Contains(errs, want) {
