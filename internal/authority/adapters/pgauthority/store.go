@@ -166,6 +166,9 @@ func (s *Store) Finalize(ctx context.Context, org ids.OrgID, w finalize.Write) e
 			if err := q.InsertPermitForTransaction(ctx, ins); err != nil {
 				return err
 			}
+			if err := requireLevel(ctx, q, org, w.TransactionID, ev.Verify); err != nil {
+				return err
+			}
 			// The permit consumes the approval it rests on, once, after every
 			// approver's eligibility is checked again (HR-031, HR-170, HR-171).
 			if h := ev.Hold; h != nil && h.Satisfied && h.Request != nil && !ev.MonitorPermit() {
@@ -555,7 +558,7 @@ func (s *Store) RecordExecution(ctx context.Context, org ids.OrgID, gatewayID st
 		txn, err := q.FinishPermitForTransaction(ctx, dbq.FinishPermitForTransactionParams{ToState: to, OrgID: org, ID: permit, GatewayID: gatewayID})
 		if db.IsNoRows(err) {
 			// Too late: the sweeper may have marked it UNKNOWN (G0 M7).
-			receipt, err = lateReport(ctx, q, org, gatewayID, e, pc)
+			receipt, err = lateReport(ctx, tx, q, org, gatewayID, e, pc)
 			return err
 		}
 		if err != nil {
@@ -611,8 +614,8 @@ func (s *Store) RecordExecution(ctx context.Context, org ids.OrgID, gatewayID st
 			if err := openReconciliation(ctx, q, org, txn); err != nil {
 				return err
 			}
-			// The waitlist entry people work it from (G0 M5 part 2); A11
-			// links it to the reconciliation.
+			// The waitlist entry people work it from (G0 M5 part 2), linked
+			// to the reconciliation (G0 M7 slice A11).
 			_, err := pgwaitlist.OpenReconciliation(ctx, tx, org, txn, evdomain.Actor{Type: "gateway", ID: gatewayID})
 			return err
 		}

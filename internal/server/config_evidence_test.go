@@ -87,3 +87,72 @@ func TestCheckpointIntervalIsOneToSixtyMinutes(t *testing.T) {
 		}
 	}
 }
+
+// anchoringOn is a complete anchoring configuration.
+func anchoringOn() AnchoringConfig {
+	return AnchoringConfig{
+		Enabled: true,
+		Rekor:   RekorConfig{URL: "https://log2025-1.rekor.sigstore.dev", PublicKeyFile: "rekor.pub"},
+		TSA:     TSAConfig{URL: "https://timestamp.sigstore.dev/api/v1/timestamp", CertChainFile: "tsa.pem"},
+	}
+}
+
+// TestHR195_CommunityLicenceRefusesAnchoring: anchoring is Team edition
+// (PN-007.3): refused at start on a Community licence, accepted on any paid
+// edition, and needs nothing when it is off (the default).
+func TestHR195_CommunityLicenceRefusesAnchoring(t *testing.T) {
+	c := Config{Evidence: EvidenceConfig{Anchoring: anchoringOn()}}
+	if err := c.checkEvidenceEdition(domain.CommunityEntitlements()); !errors.Is(err, errAnchoringEdition) {
+		t.Fatalf("Community: %v, want the edition refusal", err)
+	}
+	for _, e := range []domain.Edition{domain.Team, domain.Business, domain.Enterprise} {
+		if err := c.checkEvidenceEdition(domain.Entitlements{Edition: e}); err != nil {
+			t.Errorf("%s: %v", e, err)
+		}
+	}
+	if DefaultConfig().Evidence.Anchoring.Enabled {
+		t.Fatal("anchoring is on by default")
+	}
+}
+
+// TestAnchoringConfigIsValidated: when on, the log and the authority are
+// https URLs with their key and chain files, the log origin defaults to the
+// URL without its scheme, and the interval is 5 minutes to a day (an hour
+// by default). Off, only the interval is checked.
+func TestAnchoringConfigIsValidated(t *testing.T) {
+	base := Config{Auth: AuthConfig{PublicURL: "https://pc.example.com"}}
+	c := base
+	c.Evidence.Anchoring = anchoringOn()
+	if errs := c.validateEvidence(); len(errs) != 0 {
+		t.Fatalf("a complete configuration: %v", errs)
+	}
+	if got := c.Evidence.Anchoring.rekorOrigin(); got != "log2025-1.rekor.sigstore.dev" {
+		t.Fatalf("derived log origin %q", got)
+	}
+	if c.anchoringInterval() != time.Hour {
+		t.Fatalf("default interval %s", c.anchoringInterval())
+	}
+	for name, change := range map[string]func(*AnchoringConfig){
+		"http log":            func(a *AnchoringConfig) { a.Rekor.URL = "http://log.example" },
+		"log with a query":    func(a *AnchoringConfig) { a.Rekor.URL = "https://log.example/?x=1" },
+		"no log key":          func(a *AnchoringConfig) { a.Rekor.PublicKeyFile = "" },
+		"origin with scheme":  func(a *AnchoringConfig) { a.Rekor.Origin = "https://log.example" },
+		"no authority":        func(a *AnchoringConfig) { a.TSA.URL = "" },
+		"authority with user": func(a *AnchoringConfig) { a.TSA.URL = "https://user@tsa.example/ts" },
+		"no chain":            func(a *AnchoringConfig) { a.TSA.CertChainFile = "" },
+		"interval too short":  func(a *AnchoringConfig) { a.Interval = config.Duration(time.Minute) },
+		"interval too long":   func(a *AnchoringConfig) { a.Interval = config.Duration(25 * time.Hour) },
+	} {
+		c := base
+		c.Evidence.Anchoring = anchoringOn()
+		change(&c.Evidence.Anchoring)
+		if errs := c.validateEvidence(); len(errs) == 0 {
+			t.Errorf("%s: accepted", name)
+		}
+	}
+	off := base
+	off.Evidence.Anchoring.Interval = config.Duration(30 * time.Minute)
+	if errs := off.validateEvidence(); len(errs) != 0 || off.anchoringInterval() != 30*time.Minute {
+		t.Fatalf("anchoring off: %v", errs)
+	}
+}

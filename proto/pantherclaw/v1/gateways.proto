@@ -481,6 +481,11 @@ message WatchContainmentResponse {
   repeated ConnectionStateEntry connections = 6;
   // Database time of the confirmation.
   google.protobuf.Timestamp as_of = 7;
+  // Whether verification tasks are due on the active connections the
+  // gateway serves (G0 M7 design decision 1), in every message kind: a hint
+  // to claim them now instead of at its next poll. It never changes what
+  // the gateway may dispatch, and without it the gateway still polls.
+  bool verifications_waiting = 8;
 }
 
 // ConnectionStateEntry is one connection's state.

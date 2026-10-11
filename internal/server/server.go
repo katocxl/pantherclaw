@@ -101,9 +101,11 @@ Usage:
                                                      after investigating; its ledger is checked again
   pantherclaw-server dev seed [--config FILE] [--org-name N] [--budget-limit X] [--max-count N] [--gateway-out FILE
                              [--target-url URL [--access-mode M]] [--shell]] [--workload-out FILE [--facts-key-out FILE]]
+                             [--hold-over AMOUNT]
                                                      DEVELOPMENT ONLY: demo org with the reference package; a gateway
                                                      enrollment file and a payments connection; a workload with a grant,
-                                                     a run and a fact provider
+                                                     a run and a fact provider; a policy holding refunds over
+                                                     --hold-over (default 50.00, empty for none) for an approver
   pantherclaw-server dev gateway --org ID --out FILE [--config FILE] [--name NAME]
                                                      DEVELOPMENT ONLY: a gateway enrollment file for an existing org
   pantherclaw-server dev connection --org ID --target-url URL [--config FILE] [--gateway NAME] [--name N] [--mode M]
@@ -292,6 +294,7 @@ func cmdServe(ctx context.Context, args []string, stderr io.Writer, env Env, onS
 		}
 		m6.mountPages(web)
 		m5p2.mountPages(web, m5)
+		mountM7Pages(web, pool, verification, m5)
 		device.WithBrowserCallback(web.Callback)
 		roots, err := packageRoots(ctx, cfg, log)
 		if err != nil {
@@ -313,6 +316,7 @@ func cmdServe(ctx context.Context, args []string, stderr io.Writer, env Env, onS
 			m6:           m6,
 			m5p2:         m5p2,
 			verification: verification,
+			kp:           kp,
 		})
 		if err != nil {
 			return err
@@ -473,6 +477,8 @@ type apiDeps struct {
 	verification *txapp.Service
 	// captures seal and open restricted payload captures (M7 B9).
 	captures *captureServices
+	// kp opens sealed evaluation inputs for decision replay (M7 track B).
+	kp keys.KeyProvider
 }
 
 // apiHandler mounts the RPC services, health endpoints and the JWKS.

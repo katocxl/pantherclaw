@@ -16,6 +16,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1/pantherclawv1connect"
 	"github.com/katocxl/pantherclaw/internal/identity/pap"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
+	pdomain "github.com/katocxl/pantherclaw/internal/policy/domain"
 )
 
 type gatewayKey struct{}
@@ -109,12 +110,24 @@ func (h *Handler) Authorize(ctx context.Context, req *pantherclawv1.AuthorizeReq
 			Level: it.Level, Decisive: it.Decisive,
 		})
 	}
-	for _, o := range res.Obligations {
-		out.Obligations = append(out.Obligations, &pantherclawv1.Obligation{
+	out.Obligations = gatewayObligations(res.Obligations)
+	return out, nil
+}
+
+// gatewayObligations are the obligations the gateway applies: all but
+// those the Authority applies itself after dispatch (verify, G0 M7 design
+// decision 2), which the decision receipt states.
+func gatewayObligations(obligations []pdomain.Obligation) []*pantherclawv1.Obligation {
+	var out []*pantherclawv1.Obligation
+	for _, o := range obligations {
+		if o.ByAuthority() {
+			continue
+		}
+		out = append(out, &pantherclawv1.Obligation{
 			Rule: o.Rule, Kind: string(o.Kind), Param: o.Param, Max: o.Max, Values: o.Values, Clamp: o.Clamp, Timing: o.Timing,
 		})
 	}
-	return out, nil
+	return out
 }
 
 // BeginDispatch implements AuthorityServiceHandler.

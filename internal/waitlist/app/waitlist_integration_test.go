@@ -168,18 +168,20 @@ func TestHR177_ToolReviewsExpireAndChangeNothing(t *testing.T) {
 }
 
 // TestHR177_AssignmentShowsWhoIsWorkingAndDecidesNothing: only someone who
-// can decide the entry takes it (here a Responder, the holder of
-// incident.respond until M7); a reader who cannot decide is refused, a
+// can decide the entry takes it (here a Reconciler, a holder of
+// transaction.reconcile, G0 M7); a reader who cannot decide is refused, a
 // stranger gets "not found", and a closed entry cannot be taken.
 func TestHR177_AssignmentShowsWhoIsWorkingAndDecidesNothing(t *testing.T) {
 	f := newWFx(t)
 	entry := f.reconciliation()
-	e, err := f.w.Assign(f.as(f.ann, td.RoleResponder), entry, false)
+	e, err := f.w.Assign(f.as(f.ann, td.RoleReconciler), entry, false)
 	if err != nil || e.Assignee != f.ann || e.AssignedAt == nil || e.State != "OPEN" {
 		t.Fatalf("assign: %+v, %v", e, err)
 	}
-	if _, err := f.w.Assign(f.as(f.ben, td.RoleApprover), entry, false); !errors.Is(err, waitlist.ErrNotDecider) {
-		t.Fatalf("a reader who cannot decide: %v", err)
+	for _, reader := range []td.RoleName{td.RoleApprover, td.RoleResponder} {
+		if _, err := f.w.Assign(f.as(f.ben, reader), entry, false); !errors.Is(err, waitlist.ErrNotDecider) {
+			t.Fatalf("a %s, who reads but cannot decide: %v", reader, err)
+		}
 	}
 	if _, err := f.w.Assign(f.as(f.ben), entry, false); !errors.Is(err, waitlist.ErrEntryNotFound) {
 		t.Fatalf("a stranger: %v", err)

@@ -2182,9 +2182,14 @@ type WatchContainmentResponse struct {
 	// States of the connections the gateway serves (snapshots and changes).
 	Connections []*ConnectionStateEntry `protobuf:"bytes,6,rep,name=connections,proto3" json:"connections,omitempty"`
 	// Database time of the confirmation.
-	AsOf          *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=as_of,json=asOf,proto3" json:"as_of,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	AsOf *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=as_of,json=asOf,proto3" json:"as_of,omitempty"`
+	// Whether verification tasks are due on the active connections the
+	// gateway serves (G0 M7 design decision 1), in every message kind: a hint
+	// to claim them now instead of at its next poll. It never changes what
+	// the gateway may dispatch, and without it the gateway still polls.
+	VerificationsWaiting bool `protobuf:"varint,8,opt,name=verifications_waiting,json=verificationsWaiting,proto3" json:"verifications_waiting,omitempty"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
 }
 
 func (x *WatchContainmentResponse) Reset() {
@@ -2264,6 +2269,13 @@ func (x *WatchContainmentResponse) GetAsOf() *timestamppb.Timestamp {
 		return x.AsOf
 	}
 	return nil
+}
+
+func (x *WatchContainmentResponse) GetVerificationsWaiting() bool {
+	if x != nil {
+		return x.VerificationsWaiting
+	}
+	return false
 }
 
 // ConnectionStateEntry is one connection's state.
@@ -3151,7 +3163,7 @@ const file_pantherclaw_v1_gateways_proto_rawDesc = "" +
 	"\rallowed_hosts\x18\x06 \x03(\tR\fallowedHosts\x12\x16\n" +
 	"\x06header\x18\a \x01(\tR\x06header\x12\x16\n" +
 	"\x06scheme\x18\b \x01(\tR\x06scheme\"\x19\n" +
-	"\x17WatchContainmentRequest\"\xd2\x02\n" +
+	"\x17WatchContainmentRequest\"\x87\x03\n" +
 	"\x18WatchContainmentResponse\x128\n" +
 	"\x04kind\x18\x01 \x01(\x0e2$.pantherclaw.v1.ContainmentStateKindR\x04kind\x12\x14\n" +
 	"\x05epoch\x18\x02 \x01(\x03R\x05epoch\x12\x1f\n" +
@@ -3160,7 +3172,8 @@ const file_pantherclaw_v1_gateways_proto_rawDesc = "" +
 	"\x0econfig_version\x18\x04 \x01(\x03R\rconfigVersion\x12%\n" +
 	"\x0egateway_active\x18\x05 \x01(\bR\rgatewayActive\x12F\n" +
 	"\vconnections\x18\x06 \x03(\v2$.pantherclaw.v1.ConnectionStateEntryR\vconnections\x12/\n" +
-	"\x05as_of\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\x04asOf\"Q\n" +
+	"\x05as_of\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\x04asOf\x123\n" +
+	"\x15verifications_waiting\x18\b \x01(\bR\x14verificationsWaiting\"Q\n" +
 	"\x14ConnectionStateEntry\x12#\n" +
 	"\rconnection_id\x18\x01 \x01(\tR\fconnectionId\x12\x14\n" +
 	"\x05state\x18\x02 \x01(\tR\x05state\"\xa5\x01\n" +

@@ -1462,6 +1462,7 @@ type PcWebauthnCeremony struct {
 	ConsumedAt         *time.Time
 	ApprovalRequestID  *ids.UUID
 	BatchID            *ids.UUID
+	ReconciliationID   *ids.UUID
 }
 
 type PcWebauthnCredential struct {
