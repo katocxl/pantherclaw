@@ -193,7 +193,8 @@ class Verifier:
         if exp <= iat or exp - iat > MAX_LIFETIME or now >= exp + SKEW or iat > now + SKEW:
             raise Refusal("expired", f"iat {iat} exp {exp}")
         p = c.get("pap")
-        if not isinstance(p, dict) or p.get("v") != 1 or not isinstance(c.get("jti"), str) or not c["jti"] or len(c["jti"]) > 128:
+        # pap.v is the number 1 (the parser gives floats), never true, which equals 1 in Python.
+        if not isinstance(p, dict) or not isinstance(p.get("v"), float) or p["v"] != 1 or not isinstance(c.get("jti"), str) or not c["jti"] or len(c["jti"]) > 128:
             raise Refusal("bad_signature", "not a version 1 action token")
         if p.get("bh") != hashlib.sha256(data).hexdigest():
             raise Refusal("body_mismatch", "the body is not the one the token binds")
