@@ -3003,7 +3003,11 @@ type ConnectionTest struct {
 	// PENDING, RUNNING, DONE (with a result) or FAILED (could not run).
 	State string `protobuf:"bytes,8,opt,name=state,proto3" json:"state,omitempty"`
 	// When it was asked for.
-	CreateTime    *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=create_time,json=createTime,proto3" json:"create_time,omitempty"`
+	CreateTime *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=create_time,json=createTime,proto3" json:"create_time,omitempty"`
+	// The operation a read or target_verifier test reached; empty for a
+	// credential test (N23: M9 lifts the cooperative cap only for the
+	// operation a passing target_verifier test reached).
+	Operation     string `protobuf:"bytes,10,opt,name=operation,proto3" json:"operation,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3099,6 +3103,13 @@ func (x *ConnectionTest) GetCreateTime() *timestamppb.Timestamp {
 		return x.CreateTime
 	}
 	return nil
+}
+
+func (x *ConnectionTest) GetOperation() string {
+	if x != nil {
+		return x.Operation
+	}
+	return ""
 }
 
 // TestConnectionRequest names a connection and the kind of test.
@@ -3916,7 +3927,7 @@ const file_pantherclaw_v1_connections_proto_rawDesc = "" +
 	"\x13ConnectionTestCheck\x12\x14\n" +
 	"\x05check\x18\x01 \x01(\tR\x05check\x12\x16\n" +
 	"\x06passed\x18\x02 \x01(\bR\x06passed\x12\x16\n" +
-	"\x06detail\x18\x03 \x01(\tR\x06detail\"\x87\x03\n" +
+	"\x06detail\x18\x03 \x01(\tR\x06detail\"\xa5\x03\n" +
 	"\x0eConnectionTest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12#\n" +
 	"\rconnection_id\x18\x02 \x01(\tR\fconnectionId\x12<\n" +
@@ -3928,7 +3939,9 @@ const file_pantherclaw_v1_connections_proto_rawDesc = "" +
 	"\x04kind\x18\a \x01(\tR\x04kind\x12\x14\n" +
 	"\x05state\x18\b \x01(\tR\x05state\x12;\n" +
 	"\vcreate_time\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"createTime\"b\n" +
+	"createTime\x12\x1c\n" +
+	"\toperation\x18\n" +
+	" \x01(\tR\toperation\"b\n" +
 	"\x15TestConnectionRequest\x12\x18\n" +
 	"\x02id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x02id\x12/\n" +
 	"\x04kind\x18\x02 \x01(\tB\x1b\xbaH\x18r\x162\x14^(|credential|read)$R\x04kind\"L\n" +

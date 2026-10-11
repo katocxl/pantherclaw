@@ -27,7 +27,7 @@ import (
 func (e *env) readTest(t *testing.T, s *txapp.Service, conn ids.UUID) (app.TestResult, txapp.Lease) {
 	t.Helper()
 	r, err := e.svc.Test(e.admin, conn, app.KindReadTest)
-	if err != nil || r.Kind != app.KindReadTest || r.State != "PENDING" || r.Result != "" || r.FinishedAt != nil {
+	if err != nil || r.Kind != app.KindReadTest || r.Operation != "payments.account.read" || r.State != "PENDING" || r.Result != "" || r.FinishedAt != nil {
 		t.Fatalf("read test %+v %v", r, err)
 	}
 	leases, err := s.Claim(context.Background(), e.org, e.gateway, 16)

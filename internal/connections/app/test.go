@@ -55,6 +55,8 @@ type TestResult struct {
 	// Kind is credential, read or target_verifier; State PENDING, RUNNING,
 	// DONE or FAILED (could not run); Result PASSED or FAILED once DONE.
 	Kind, State, Result string
+	// Operation is the operation a read or target_verifier test reached.
+	Operation string
 	Checks              []Check
 	RequestedBy         string
 	CreatedAt           time.Time
@@ -65,6 +67,9 @@ func testOf(r dbq.PcConnectionTest) (TestResult, error) {
 	out := TestResult{
 		ID: r.ID, Connection: r.ConnectionID, Kind: r.Kind, State: r.State, RequestedBy: r.RequestedBy, CreatedAt: r.CreatedAt,
 		FinishedAt: r.FinishedAt,
+	}
+	if r.Operation != nil {
+		out.Operation = *r.Operation
 	}
 	if r.Result != nil {
 		out.Result = *r.Result
@@ -199,7 +204,8 @@ func readTest(ctx context.Context, q *dbq.Queries, c actor, conn dbq.PcConnectio
 		return dbq.PcConnectionTest{}, err
 	}
 	return q.InsertLeasedConnectionTest(ctx, dbq.InsertLeasedConnectionTestParams{
-		OrgID: c.Org, ID: ids.NewV7(), ConnectionID: conn.ID, Kind: KindReadTest, VerificationID: &task, RequestedBy: c.By,
+		OrgID: c.Org, ID: ids.NewV7(), ConnectionID: conn.ID, Kind: KindReadTest, VerificationID: &task, Operation: &d.Operation,
+		RequestedBy: c.By,
 	})
 }
 
