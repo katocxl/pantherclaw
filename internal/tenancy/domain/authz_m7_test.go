@@ -58,7 +58,12 @@ func TestM7_EvidencePermissionsAndRoles(t *testing.T) {
 	}) {
 		t.Errorf("Reconciler scopes %v, want any scope", rec.Scopes)
 	}
-	for _, p := range []domain.Permission{domain.PermTransactionReconcile, domain.PermEvidenceRead, domain.PermRunRead, domain.PermAgentRead} {
+	// waitlist.read lets a Reconciler see and take the RECONCILIATION
+	// entries routed to them (G0 M7 slice A11; M5 part 2: waitlist.read
+	// reaches everyone entries are routed to).
+	for _, p := range []domain.Permission{
+		domain.PermTransactionReconcile, domain.PermEvidenceRead, domain.PermRunRead, domain.PermAgentRead, domain.PermWaitlistRead,
+	} {
 		if !rec.Has(p) {
 			t.Errorf("Reconciler lacks %s", p)
 		}

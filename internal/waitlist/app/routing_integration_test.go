@@ -206,24 +206,35 @@ func TestHR173_NoEligibleDeciderTellsTheAdmins(t *testing.T) {
 }
 
 // TestHR173_OtherKindsReachTheirPermissionHolders: an unknown outcome is
-// routed to the holders of incident.respond, nearest first, with a waitlist
-// notice that names no amount or text.
+// routed to the holders of transaction.reconcile (G0 M7), nearest first,
+// with a notice that names no amount or text and links to its
+// reconciliation page; the entry is linked to the reconciliation task. A
+// Responder, who no longer decides it, is not told.
 func TestHR173_OtherKindsReachTheirPermissionHolders(t *testing.T) {
 	f := newRFx(t)
-	bu := f.person("responder", "BUSINESS_UNIT")
+	bu := f.person("reconciler", "BUSINESS_UNIT")
 	f.person("security_admin", "ORG")
+	f.person("responder", "TEAM")
+	task := ids.NewV7()
+	f.exec("INSERT INTO pc.reconciliation_tasks (org_id, id, transaction_id, kind) VALUES ($1, $2, $3, 'unknown_outcome')", f.org, task, f.txn)
 	var entry ids.UUID
 	f.tx(func(ctx context.Context, tx db.TenantTx) error {
 		var err error
 		entry, err = pgwaitlist.OpenReconciliation(ctx, tx, f.org, f.txn, pgwaitlist.System)
 		return err
 	})
+	var linked ids.UUID
+	f.d.AdminQueryRow(t, "SELECT waitlist_entry_id FROM pc.reconciliation_tasks WHERE id = $1", []any{task}, &linked)
+	if linked != entry {
+		t.Fatalf("the task names entry %s, want %s", linked, entry)
+	}
 	f.route()
 	if got := f.routes(entry); !slices.Equal(got, []string{"decider:" + bu.String()}) {
 		t.Fatalf("routes %v", got)
 	}
-	if len(f.n.sent) != 1 || f.n.sent[0].Type != "waitlist.entry_created" || f.n.sent[0].Params["kind"] != "RECONCILIATION" {
-		t.Fatalf("notice %+v", f.n.sent)
+	if len(f.n.sent) != 1 || f.n.sent[0].Type != "reconciliation.waiting" || f.n.sent[0].Params["reconciliation"] != task.String() ||
+		f.n.link[0] != "/reconciliations/"+task.String() {
+		t.Fatalf("notice %+v %v", f.n.sent, f.n.link)
 	}
 }
 
