@@ -60,11 +60,11 @@ ORDER BY up.depth;
 INSERT INTO pc.approval_requests (org_id, id, subject_kind, agent_id, transaction_id, evaluation, run_id, grant_id,
     grant_revision, variant_key, operation, previous_id, binding, binding_input, requirements, display, display_hash,
     action_ir,
-    deadline_at)
+    deadline_at, invalidation_key)
 VALUES (sqlc.arg(org_id), sqlc.arg(id), 'ACTION', sqlc.arg(agent_id), sqlc.arg(transaction_id), sqlc.arg(evaluation),
     sqlc.arg(run_id), sqlc.arg(grant_id), sqlc.arg(grant_revision), sqlc.arg(variant_key), sqlc.arg(operation),
     sqlc.narg(previous_id), sqlc.arg(binding), sqlc.arg(binding_input), sqlc.arg(requirements), sqlc.arg(display),
-    sqlc.arg(display_hash), sqlc.arg(action_ir), sqlc.arg(deadline_at));
+    sqlc.arg(display_hash), sqlc.arg(action_ir), sqlc.arg(deadline_at), sqlc.narg(invalidation_key));
 
 -- A live request whose binding no longer matches is superseded, never
 -- updated.

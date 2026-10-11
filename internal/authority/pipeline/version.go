@@ -14,5 +14,6 @@ package pipeline
 //
 // 3: step 6 evaluates the consequence rules of the action's package version
 // (Pinned.Consequences), and steps 4, 7 and 8 decide each predicted or
-// unknown consequence with the action (G0 M8, HR-206).
+// unknown consequence with the action (G0 M8, HR-206); step 6 also checks
+// the definition's fact bindings (Prerequisite.Binds, HR-205).
 const Version = 3

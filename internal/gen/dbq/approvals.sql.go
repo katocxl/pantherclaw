@@ -853,32 +853,33 @@ const insertApprovalRequest = `-- name: InsertApprovalRequest :exec
 INSERT INTO pc.approval_requests (org_id, id, subject_kind, agent_id, transaction_id, evaluation, run_id, grant_id,
     grant_revision, variant_key, operation, previous_id, binding, binding_input, requirements, display, display_hash,
     action_ir,
-    deadline_at)
+    deadline_at, invalidation_key)
 VALUES ($1, $2, 'ACTION', $3, $4, $5,
     $6, $7, $8, $9, $10,
     $11, $12, $13, $14, $15,
-    $16, $17, $18)
+    $16, $17, $18, $19)
 `
 
 type InsertApprovalRequestParams struct {
-	OrgID         ids.OrgID
-	ID            ids.UUID
-	AgentID       ids.UUID
-	TransactionID *ids.UUID
-	Evaluation    *int32
-	RunID         *ids.UUID
-	GrantID       *ids.UUID
-	GrantRevision *int32
-	VariantKey    []byte
-	Operation     string
-	PreviousID    *ids.UUID
-	Binding       []byte
-	BindingInput  []byte
-	Requirements  []byte
-	Display       []byte
-	DisplayHash   []byte
-	ActionIr      []byte
-	DeadlineAt    time.Time
+	OrgID           ids.OrgID
+	ID              ids.UUID
+	AgentID         ids.UUID
+	TransactionID   *ids.UUID
+	Evaluation      *int32
+	RunID           *ids.UUID
+	GrantID         *ids.UUID
+	GrantRevision   *int32
+	VariantKey      []byte
+	Operation       string
+	PreviousID      *ids.UUID
+	Binding         []byte
+	BindingInput    []byte
+	Requirements    []byte
+	Display         []byte
+	DisplayHash     []byte
+	ActionIr        []byte
+	DeadlineAt      time.Time
+	InvalidationKey *string
 }
 
 // The finalization records a hold (HR-171): a new request, inserted once
@@ -903,6 +904,7 @@ func (q *Queries) InsertApprovalRequest(ctx context.Context, arg InsertApprovalR
 		arg.DisplayHash,
 		arg.ActionIr,
 		arg.DeadlineAt,
+		arg.InvalidationKey,
 	)
 	return err
 }

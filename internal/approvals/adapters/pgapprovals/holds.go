@@ -61,6 +61,9 @@ type Hold struct {
 	Action []byte
 	// Actor is the gateway that asked.
 	Actor evdomain.Actor
+	// InvalidationKey names the fact and target whose change supersedes
+	// the request (G0 M8, HR-205); "" for none.
+	InvalidationKey string
 }
 
 const (
@@ -168,6 +171,7 @@ func RecordHold(ctx context.Context, tx db.TenantTx, org ids.OrgID, h Hold) erro
 		RunID: &h.RunID, GrantID: &h.GrantID, GrantRevision: ptr(int32(h.GrantRevision)), VariantKey: h.VariantKey[:], //nolint:gosec // small
 		Operation: h.Operation, PreviousID: h.Previous, Binding: h.Binding.Hash[:], BindingInput: h.Binding.Input,
 		Requirements: reqs, Display: display.Input, DisplayHash: h.DisplayHash[:], ActionIr: h.Action, DeadlineAt: h.Deadline,
+		InvalidationKey: optional(h.InvalidationKey),
 	}); err != nil {
 		return err
 	}
@@ -200,6 +204,14 @@ func RecordHold(ctx context.Context, tx db.TenantTx, org ids.OrgID, h Hold) erro
 }
 
 func ptr[T any](v T) *T { return &v }
+
+// optional is s, or nil when it is empty.
+func optional(s string) *string {
+	if s == "" {
+		return nil
+	}
+	return &s
+}
 
 // Consume uses an approved request inside the finalization that issues
 // the permit (HR-031, HR-171): every counting response's person must

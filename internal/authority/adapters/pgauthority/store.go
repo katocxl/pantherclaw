@@ -239,7 +239,7 @@ func holdOf(w finalize.Write, ev *pipeline.Evaluation, actor evdomain.Actor) pga
 		GrantID: leaf.ID.UUID(), GrantRevision: leaf.Revision, Operation: ev.Operation,
 		Reversibility: h.Display.Consequence.Reversibility, VariantKey: h.VariantKey, First: h.Request == nil,
 		Binding: h.Binding, Requirements: h.Requirements, Display: h.Display, DisplayHash: h.DisplayHash,
-		Deadline: h.Deadline, Action: h.Action, Actor: actor,
+		Deadline: h.Deadline, Action: h.Action, Actor: actor, InvalidationKey: h.InvalidationKey,
 	}
 	if r := h.Request; r != nil && r.State.Live() {
 		id := r.ID

@@ -168,6 +168,10 @@ type Hold struct {
 	// State and Code are what a waiter sees (HR-174).
 	State string
 	Code  string
+	// InvalidationKey is set when the definition names the fact whose
+	// change supersedes its unconsumed requests (approval.invalidate_on,
+	// G0 M8, HR-205): that fact and the action's target.
+	InvalidationKey string
 }
 
 // Permits reports whether the evaluation allows dispatch.
@@ -649,9 +653,42 @@ func (p *Pipeline) currentFacts(ctx context.Context, s *state) {
 			s.used = append(s.used, *c.Fact)
 		}
 	}
-	if ok {
+	if ok && s.bindings() {
 		s.cl.pass(StepFacts, ReasonFactsFresh)
 	}
+}
+
+// bindings checks the definition's bound prerequisites: each fact member
+// must equal its param (G0 M8, HR-205: a merge at the pull request's
+// current head). A mismatch is CANNOT_AUTHORIZE with the binding's reason;
+// a new decision at the current value can follow.
+func (s *state) bindings() bool {
+	ok := true
+	for _, pr := range s.def.Prerequisites {
+		b := pr.Binds
+		if b == nil {
+			continue
+		}
+		want, have := s.vals[b.Param], "(none)"
+		param := want.Str
+		if want.Type == defs.TypeInteger {
+			param = strconv.FormatInt(want.Int, 10)
+		}
+		if f := s.facts[pr.Fact]; f.Type == fdomain.TypeObject {
+			switch v := f.Object[b.Member].(type) {
+			case string:
+				have = v
+			case int64:
+				have = strconv.FormatInt(v, 10)
+			}
+		}
+		if have != param {
+			ok = false
+			s.cl.add(StepFacts, adomain.CannotAuthorize, b.Reason,
+				fmt.Sprintf("params.%s is %s, but %s.%s is %s", b.Param, param, pr.Fact, b.Member, have), "")
+		}
+	}
+	return ok
 }
 
 // Step 7: every level's limits, FORBID rules, counters and budgets (a
@@ -981,6 +1018,9 @@ func (p *Pipeline) hold(ctx context.Context, s *state, latest *HoldRequest, effe
 		return nil, err
 	}
 	h := &Hold{Requirements: reqs, VariantKey: key, Request: latest, State: apdomain.WaitPending, Action: s.req.Action.Canonical}
+	if a := s.def.Approval; a != nil && a.InvalidateOn != "" {
+		h.InvalidationKey = InvalidationKey(a.InvalidateOn, s.a.Target)
+	}
 	if latest != nil && latest.State.Live() {
 		if err := p.bind(s, h, effective, latest.Deadline, latest.Variants, latest.Context); err != nil {
 			return nil, err
@@ -1139,4 +1179,16 @@ func (s *state) effective() (string, defs.Values, bool) {
 		return "", nil, false
 	}
 	return parsed.HashHex(), vals, true
+}
+
+// InvalidationKey is the key of the approval requests that a new value of
+// fact about target supersedes (G0 M8, HR-205), for example
+// github.pull.head@github.pull_request:acme/payments#7; "" when it would
+// not fit the column.
+func InvalidationKey(fact string, target actionir.Target) string {
+	k := fact + "@" + target.Type + ":" + target.ID
+	if len(k) > 300 {
+		return ""
+	}
+	return k
 }

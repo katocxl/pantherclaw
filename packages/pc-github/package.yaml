@@ -543,6 +543,8 @@ definitions:
     prerequisites:
       - fact: github.pull.head
         max_age_seconds: 30
+        # The head the merge is bound to (HR-205).
+        binds: {member: sha, param: sha, reason: HEAD_MOVED}
       - fact: github.pull.people
         max_age_seconds: 30
       - fact: github.pull.reviews
