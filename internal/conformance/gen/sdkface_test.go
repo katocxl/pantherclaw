@@ -26,23 +26,35 @@ import (
 // FaceCall is how an Agent SDK tool call becomes a /sdk request.
 type FaceCall struct {
 	Name string `json:"name"`
-	// Tool, Input, ToolUseID and Cwd are the call as the agent made it.
+	// Tool, Input and ToolUseID are the call as the agent made it.
 	Tool      string         `json:"tool"`
 	Input     jsontext.Value `json:"input"`
 	ToolUseID string         `json:"tool_use_id"`
-	Cwd       string         `json:"cwd,omitzero"`
-	// Path and Body are the request (credentials aside: see proofs.json),
-	// or Class says why there is none: "builtin" (an unmapped built-in,
-	// still sent so PantherClaw records it), or "refused" (a name the SDK
-	// cannot route: a deny, never sent).
+	// Path and Body are the request (credentials aside: see proofs.json).
+	// Class is "mapped" (an MCP tool PantherClaw decides), "builtin" (a
+	// name on the built-in list, sent so PantherClaw records it and answered
+	// observe), or "refused" (a name the SDK cannot route: denied, never
+	// sent).
 	Path  string         `json:"path,omitzero"`
 	Body  jsontext.Value `json:"body,omitzero"`
 	Class string         `json:"class"`
 }
 
-// FaceAnswer is one gateway answer and the outcome an SDK reaches.
+// FaceSend is the request an SDK sends to a target-enforced connection's
+// target: dispatch decoded, byte for byte (HR-201).
+type FaceSend struct {
+	Method  string            `json:"method"`
+	URL     string            `json:"url"`
+	Headers map[string]string `json:"headers"`
+	Body    string            `json:"body"`
+}
+
+// FaceAnswer is one gateway answer to a call of a class, and the outcome
+// an SDK reaches.
 type FaceAnswer struct {
-	Name    string            `json:"name"`
+	Name string `json:"name"`
+	// Class is the class of the call answered: mapped or builtin.
+	Class   string            `json:"class"`
 	Status  int               `json:"status"`
 	Headers map[string]string `json:"headers,omitzero"`
 	Body    string            `json:"body"`
@@ -51,8 +63,10 @@ type FaceAnswer struct {
 	ActionID  string `json:"action_id"`
 	FirstHash string `json:"first_hash,omitzero"`
 	// Outcome: allow, observe, hold, deny, cannot_decide, retry_nonce or
-	// refresh_token.
-	Outcome string `json:"outcome"`
+	// refresh_token. Send is, for an allow with dispatch, what the SDK
+	// sends to the target.
+	Outcome string    `json:"outcome"`
+	Send    *FaceSend `json:"send,omitzero"`
 }
 
 // FaceExchange is one exchange with the PantherClaw server: token issuance
@@ -79,30 +93,36 @@ type FaceFile struct {
 	header
 	Gateway string `json:"gateway"`
 	Server  string `json:"server"`
-	// Connection is the local connection the calls go through; Servers the
-	// MCP servers the agent is configured with.
-	Connection string         `json:"connection"`
-	Servers    []string       `json:"servers"`
-	Calls      []FaceCall     `json:"calls"`
-	Answers    []FaceAnswer   `json:"answers"`
-	Exchanges  []FaceExchange `json:"exchanges"`
+	// Connection is the http or mcp connection the calls go through, and
+	// Servers the MCP servers the agent is configured with.
+	Connection string   `json:"connection"`
+	Servers    []string `json:"servers"`
+	// Builtins are the tool names the agent SDK has built in (the Claude
+	// Agent SDK's): the only names an SDK sends as built-ins, and the only
+	// calls an observe answer lets run.
+	Builtins []string `json:"builtins"`
+	// MaxBody is the largest request body the face reads.
+	MaxBody   int            `json:"max_body"`
+	Calls     []FaceCall     `json:"calls"`
+	Answers   []FaceAnswer   `json:"answers"`
+	Exchanges []FaceExchange `json:"exchanges"`
 }
 
-// faceAnswer is the gateway's answer (internal/gateway/sdk Answer), with
-// the canonical action the SDK checks the hash against.
+// faceAnswer is the gateway's answer (internal/gateway/sdk Answer).
 type faceAnswer struct {
-	Decision      string    `json:"decision"`
-	Reason        string    `json:"reason"`
-	ErrorClass    string    `json:"error_class,omitzero"`
-	Code          string    `json:"code,omitzero"`
-	Reasons       []string  `json:"reasons,omitzero"`
-	ActionID      string    `json:"action_id,omitzero"`
-	ActionHash    string    `json:"action_hash,omitzero"`
-	ActionIR      string    `json:"action_ir,omitzero"`
-	TransactionID string    `json:"transaction_id,omitzero"`
-	Mode          string    `json:"mode"`
-	Coverage      string    `json:"coverage"`
-	Wait          *faceWait `json:"wait,omitzero"`
+	Decision      string        `json:"decision"`
+	Reason        string        `json:"reason"`
+	ErrorClass    string        `json:"error_class,omitzero"`
+	Code          string        `json:"code,omitzero"`
+	Reasons       []string      `json:"reasons,omitzero"`
+	ActionID      string        `json:"action_id,omitzero"`
+	ActionHash    string        `json:"action_hash,omitzero"`
+	ActionIR      string        `json:"action_ir,omitzero"`
+	TransactionID string        `json:"transaction_id,omitzero"`
+	Mode          string        `json:"mode"`
+	Coverage      string        `json:"coverage"`
+	Wait          *faceWait     `json:"wait,omitzero"`
+	Dispatch      *faceDispatch `json:"dispatch,omitzero"`
 }
 
 type faceWait struct {
@@ -114,42 +134,70 @@ type faceWait struct {
 	Code              string `json:"code,omitzero"`
 }
 
+type faceDispatch struct {
+	Method      string            `json:"method"`
+	URL         string            `json:"url"`
+	Headers     map[string]string `json:"headers"`
+	Body        string            `json:"body"`
+	ActionToken string            `json:"action_token"`
+}
+
 const txnID = "01920000-0000-7000-8000-000000000009"
+
+// builtins are the Claude Agent SDK's built-in tools.
+var builtins = []string{
+	"Agent", "AskUserQuestion", "Bash", "CronCreate", "CronDelete", "CronList", "Edit", "EnterPlanMode", "EnterWorktree",
+	"ExitPlanMode", "ExitWorktree", "Glob", "Grep", "ListMcpResourcesTool", "LSP", "Monitor", "NotebookEdit", "PowerShell", "Read",
+	"ReadMcpResourceTool", "Skill", "Task", "TaskCreate", "TaskGet", "TaskList", "TaskOutput", "TaskStop", "TaskUpdate", "TodoWrite",
+	"ToolSearch", "WaitForMcpServers", "WebFetch", "WebSearch", "Write",
+}
 
 func buildFace(t *testing.T) any {
 	t.Helper()
 	act := sdkAction(t)
 	refund := `{"amount":"30.00","charge":"ch_1","currency":"USD","reason":"duplicate"}`
 	f := FaceFile{
-		header: head("sdk_face", "the /sdk/{connection} face of tracks S and C (internal/gateway/sdk; G0 M8, HR-200, HR-201), "+
-			"internal/actionir for hashes and internal/gen protojson for the server exchanges",
+		header: head("sdk_face", "the /sdk/{connection} face of tracks S and C (internal/gateway/sdk; G0 M8 decision 19, HR-200, HR-201), "+
+			"internal/actionir for hashes, internal/authority/finalize for the action token and internal/gen protojson for the server exchanges",
 			"How an SDK sends an agent's tool call to the gateway's /sdk face, what it concludes from each answer (only "+
-				"allow, and observe for an unmapped built-in tool, let the call run), and how it renews its token and "+
-				"waits at the server."),
-		Gateway: gatewayURL, Server: issuer, Connection: "local", Servers: []string{"payments", "git__hub"},
+				"allow, and observe for a built-in tool, let the call run), what it sends a target-enforced connection's "+
+				"target, and how it renews its token and waits at the server."),
+		Gateway: gatewayURL, Server: issuer, Connection: "payments", Servers: []string{"payments", "git__hub"}, Builtins: builtins,
+		MaxBody: 64 << 10,
 	}
-	call := func(name, tool, input, id, cwd, class, body string) FaceCall {
-		c := FaceCall{Name: name, Tool: tool, Input: jsontext.Value(input), ToolUseID: id, Cwd: cwd, Class: class}
+	call := func(name, tool, input, id, class, body string) FaceCall {
+		c := FaceCall{Name: name, Tool: tool, Input: jsontext.Value(input), ToolUseID: id, Class: class}
 		if body != "" {
-			c.Path, c.Body = "/sdk/local", jsontext.Value(body)
+			c.Path, c.Body = "/sdk/payments", jsontext.Value(body)
 		}
 		return c
 	}
 	f.Calls = []FaceCall{
-		call("an MCP tool", "mcp__payments__create_refund", refund, "toolu_01", "", "mapped",
+		call("an MCP tool", "mcp__payments__create_refund", refund, "toolu_01", "mapped",
 			`{"tool":"mcp__payments__create_refund","server":"payments","input":`+refund+`,"tool_use_id":"toolu_01"}`),
-		call("an MCP server whose name has a double underscore", "mcp__git__hub__merge_pull_request", `{"pull_number":"7"}`, "toolu_02", "", "mapped",
+		call("an MCP server whose name has a double underscore", "mcp__git__hub__merge_pull_request", `{"pull_number":"7"}`, "toolu_02", "mapped",
 			`{"tool":"mcp__git__hub__merge_pull_request","server":"git__hub","input":{"pull_number":"7"},"tool_use_id":"toolu_02"}`),
-		call("a shell tool", "Bash", `{"command":"go test ./...","description":"Run the tests"}`, "toolu_03", "/home/dev/repo", "mapped",
-			`{"tool":"Bash","input":{"command":"go test ./...","description":"Run the tests"},"tool_use_id":"toolu_03","cwd":"/home/dev/repo"}`),
-		call("PowerShell", "PowerShell", `{"command":"Get-ChildItem"}`, "toolu_04", `C:\Users\dev\repo`, "mapped",
-			`{"tool":"PowerShell","input":{"command":"Get-ChildItem"},"tool_use_id":"toolu_04","cwd":"C:\\Users\\dev\\repo"}`),
-		call("a built-in tool", "Read", `{"file_path":"/etc/hosts"}`, "toolu_05", "", "builtin",
+		call("Bash, observed as a built-in", "Bash", `{"command":"go test ./...","description":"Run the tests"}`, "toolu_03", "builtin",
+			`{"tool":"Bash","input":{"command":"go test ./...","description":"Run the tests"},"tool_use_id":"toolu_03"}`),
+		call("PowerShell, observed as a built-in", "PowerShell", `{"command":"Get-ChildItem"}`, "toolu_04", "builtin",
+			`{"tool":"PowerShell","input":{"command":"Get-ChildItem"},"tool_use_id":"toolu_04"}`),
+		call("a built-in tool", "Read", `{"file_path":"/etc/hosts"}`, "toolu_05", "builtin",
 			`{"tool":"Read","input":{"file_path":"/etc/hosts"},"tool_use_id":"toolu_05"}`),
-		call("an MCP server the agent is not configured with", "mcp__other__run", `{}`, "toolu_06", "", "refused", ""),
-		call("an MCP name without a tool", "mcp__payments__", `{}`, "toolu_07", "", "refused", ""),
+		call("an MCP server the agent is not configured with", "mcp__other__run", `{}`, "toolu_06", "refused", ""),
+		call("an MCP name without a tool", "mcp__payments__", `{}`, "toolu_07", "refused", ""),
+		call("a name neither MCP nor built in", "deploy", `{"env":"production"}`, "toolu_08", "refused", ""),
+		call("a built-in name in another case", "bash", `{"command":"ls"}`, "toolu_09", "refused", ""),
 	}
 	hash, ir := act.HashHex(), b64(act.Canonical)
+	// variant is the action changed after mapping, with its own matching
+	// hash, so only the SDK's checks of the action itself can refuse it.
+	variant := func(from, to string) (string, string) {
+		c := strings.Replace(string(act.Canonical), from, to, 1)
+		if c == string(act.Canonical) {
+			t.Fatalf("%q not in the action", from)
+		}
+		return sha256Hex([]byte(c)), b64([]byte(c))
+	}
 	base := faceAnswer{
 		ActionID: actionID, ActionHash: hash, ActionIR: ir, TransactionID: txnID, Mode: "enforce", Coverage: "PARTIAL",
 	}
@@ -157,58 +205,131 @@ func buildFace(t *testing.T) any {
 		Handle: txnID, State: "PENDING", RetryAfterSeconds: 5, Deadline: issuedAt.Add(time.Hour).Format(time.RFC3339),
 		ApprovalRequestID: "01920000-0000-7000-8000-00000000000a",
 	}
-	answer := func(name, outcome string, edit func(*faceAnswer)) FaceAnswer {
+	tok := mintActionToken(t)
+	send := &FaceSend{
+		Method: http.MethodPost, URL: "https://payments.example.test/v1/refunds", Body: refundBody,
+		Headers: map[string]string{"Content-Type": "application/json", "PAP-Action": tok},
+	}
+	dispatch := func(body string, headers map[string]string, token string) *faceDispatch {
+		return &faceDispatch{Method: send.Method, URL: send.URL, Headers: headers, Body: b64([]byte(body)), ActionToken: token}
+	}
+	answer := func(name, class, outcome string, edit func(*faceAnswer)) FaceAnswer {
 		a := base
 		edit(&a)
 		b, err := json.Marshal(a, json.Deterministic(true))
 		if err != nil {
 			t.Fatal(err)
 		}
-		return FaceAnswer{Name: name, Status: http.StatusOK, Body: string(b), ActionID: actionID, Outcome: outcome}
+		return FaceAnswer{Name: name, Class: class, Status: http.StatusOK, Body: string(b), ActionID: actionID, Outcome: outcome}
 	}
-	other := b64([]byte(strings.Replace(string(act.Canonical), `"ch_1"`, `"ch_2"`, 1)))
+	allow := func(a *faceAnswer) { a.Decision, a.Reason = "allow", "PantherClaw allowed this call." }
+	observed := faceAnswer{Decision: "allow", Mode: "monitor", Coverage: "OBSERVE_ONLY", Reason: "PantherClaw does not map the Read tool."}
+	enforced := answer("allowed on a target-enforced connection, with the request to send", "mapped", "allow", func(a *faceAnswer) {
+		allow(a)
+		a.Dispatch = dispatch(refundBody, send.Headers, tok)
+	})
+	enforced.Send = send
 	f.Answers = []FaceAnswer{
-		answer("allowed and recorded as delegated", "allow", func(a *faceAnswer) { a.Decision, a.Reason = "allow", "PantherClaw allowed this call." }),
-		answer("allowed without the action", "allow", func(a *faceAnswer) { a.Decision, a.ActionIR = "allow", "" }),
-		answer("monitor mode: recorded, not decided", "allow", func(a *faceAnswer) { a.Decision, a.Mode = "allow", "monitor" }),
-		answer("held for an approval", "hold", func(a *faceAnswer) { a.Decision, a.Wait, a.ErrorClass = "hold", held, "HELD" }),
-		answer("denied", "deny", func(a *faceAnswer) {
-			a.Decision, a.ErrorClass, a.Code, a.Reasons = "deny", "DENIED", "GRANT_AMOUNT_EXCEEDED", []string{"GRANT_AMOUNT_EXCEEDED"}
+		answer("allowed and recorded as delegated", "mapped", "allow", allow),
+		enforced,
+		answer("monitor mode: recorded, not decided", "mapped", "allow", func(a *faceAnswer) { a.Decision, a.Mode = "allow", "monitor" }),
+		answer("held for an approval", "mapped", "hold", func(a *faceAnswer) { a.Decision, a.Wait, a.ErrorClass = "hold", held, "held" }),
+		answer("denied", "mapped", "deny", func(a *faceAnswer) {
+			a.Decision, a.ErrorClass, a.Code, a.Reasons = "deny", "policy_denied", "GRANT_AMOUNT_EXCEEDED", []string{"GRANT_AMOUNT_EXCEEDED"}
 		}),
-		answer("a tool the package does not map", "deny", func(a *faceAnswer) {
-			a.Decision, a.ErrorClass, a.Code, a.ActionHash, a.ActionIR, a.TransactionID = "deny", "CANNOT_AUTHORIZE", "unknown_tool", "", "", ""
+		answer("a tool the package does not map", "mapped", "deny", func(a *faceAnswer) {
+			a.Decision, a.ErrorClass, a.Code, a.ActionHash, a.ActionIR, a.TransactionID = "deny", "cannot_authorize", "unknown_tool", "", "", ""
 		}),
-		answer("an unmapped built-in tool is observed", "observe", func(a *faceAnswer) {
-			*a = faceAnswer{Decision: "allow", Mode: "monitor", Coverage: "OBSERVE_ONLY", Reason: "PantherClaw does not map the Read tool."}
+		answer("a connection whose credential PantherClaw holds", "mapped", "deny", func(a *faceAnswer) {
+			*a = faceAnswer{Decision: "deny", ErrorClass: "cannot_authorize", Code: "use_gateway_face", Mode: "enforce", Coverage: "PARTIAL"}
 		}),
-		answer("an allow whose action does not hash to its hash", "cannot_decide", func(a *faceAnswer) { a.Decision, a.ActionIR = "allow", other }),
-		answer("an allow for another action id", "cannot_decide", func(a *faceAnswer) {
-			a.Decision, a.ActionID = "allow", "01920000-0000-7000-8000-00000000000b"
+		answer("a built-in tool is observed", "builtin", "observe", func(a *faceAnswer) { *a = observed }),
+		answer("an observe answer to an MCP tool", "mapped", "cannot_decide", func(a *faceAnswer) { *a = observed }),
+		answer("an observe answer carrying an action", "builtin", "cannot_decide", func(a *faceAnswer) {
+			*a = observed
+			a.ActionID, a.ActionHash, a.ActionIR = actionID, hash, ir
 		}),
-		answer("an allow without an action hash", "cannot_decide", func(a *faceAnswer) { a.Decision, a.ActionHash, a.ActionIR = "allow", "", "" }),
-		answer("an allow that is not labeled", "cannot_decide", func(a *faceAnswer) { a.Decision, a.Coverage = "allow", "" }),
-		answer("an observed call that is not monitored", "cannot_decide", func(a *faceAnswer) {
-			*a = faceAnswer{Decision: "allow", Mode: "enforce", Coverage: "OBSERVE_ONLY"}
+		answer("an observed call that is not monitored", "builtin", "cannot_decide", func(a *faceAnswer) {
+			*a = observed
+			a.Mode = "enforce"
 		}),
-		answer("a hold without a wait handle", "cannot_decide", func(a *faceAnswer) { a.Decision = "hold" }),
-		answer("an unknown decision", "cannot_decide", func(a *faceAnswer) { a.Decision = "maybe" }),
+		answer("a decided allow to a built-in tool", "builtin", "allow", allow),
+		answer("an allow without the action", "mapped", "cannot_decide", func(a *faceAnswer) { allow(a); a.ActionIR = "" }),
+		answer("a hold without the action", "mapped", "cannot_decide", func(a *faceAnswer) {
+			a.Decision, a.Wait, a.ErrorClass, a.ActionIR = "hold", held, "held", ""
+		}),
+		answer("an allow whose action does not hash to its hash", "mapped", "cannot_decide", func(a *faceAnswer) {
+			allow(a)
+			_, a.ActionIR = variant(`"ch_1"`, `"ch_2"`)
+		}),
+		answer("an allow for another action id", "mapped", "cannot_decide", func(a *faceAnswer) {
+			allow(a)
+			a.ActionID = "01920000-0000-7000-8000-00000000000b"
+		}),
+		answer("an allow whose action carries another action id", "mapped", "cannot_decide", func(a *faceAnswer) {
+			allow(a)
+			a.ActionHash, a.ActionIR = variant(`"action_id":"`+actionID+`"`, `"action_id":"01920000-0000-7000-8000-00000000000b"`)
+		}),
+		answer("an allow whose action came through another channel", "mapped", "cannot_decide", func(a *faceAnswer) {
+			allow(a)
+			a.ActionHash, a.ActionIR = variant(`"channel":"sdk"`, `"channel":"mcp"`)
+		}),
+		answer("an allow whose action names no connection", "mapped", "cannot_decide", func(a *faceAnswer) {
+			allow(a)
+			a.ActionHash, a.ActionIR = variant(`"connection":"01920000-0000-7000-8000-000000000007",`, ``)
+		}),
+		answer("an allow whose action is not an ActionIR", "mapped", "cannot_decide", func(a *faceAnswer) {
+			allow(a)
+			a.ActionHash, a.ActionIR = sha256Hex([]byte(`{}`)), b64([]byte(`{}`))
+		}),
+		answer("an allow without an action hash", "mapped", "cannot_decide", func(a *faceAnswer) { allow(a); a.ActionHash = "" }),
+		answer("an allow that is not labeled", "mapped", "cannot_decide", func(a *faceAnswer) { allow(a); a.Coverage = "" }),
+		answer("a dispatch whose body is not the one its token binds", "mapped", "cannot_decide", func(a *faceAnswer) {
+			allow(a)
+			a.Dispatch = dispatch(strings.Replace(refundBody, "30.00", "31.00", 1), send.Headers, tok)
+		}),
+		answer("a dispatch without its action token", "mapped", "cannot_decide", func(a *faceAnswer) {
+			allow(a)
+			a.Dispatch = dispatch(refundBody, map[string]string{"Content-Type": "application/json"}, "")
+		}),
+		answer("a dispatch whose PAP-Action header is not its token", "mapped", "cannot_decide", func(a *faceAnswer) {
+			allow(a)
+			a.Dispatch = dispatch(refundBody, map[string]string{"Content-Type": "application/json", "PAP-Action": "x"}, tok)
+		}),
+		answer("a hold carrying a dispatch", "mapped", "cannot_decide", func(a *faceAnswer) {
+			a.Decision, a.Wait, a.ErrorClass = "hold", held, "held"
+			a.Dispatch = dispatch(refundBody, send.Headers, tok)
+		}),
+		answer("a hold without a wait handle", "mapped", "cannot_decide", func(a *faceAnswer) { a.Decision = "hold" }),
+		answer("an unknown decision", "mapped", "cannot_decide", func(a *faceAnswer) { a.Decision = "maybe" }),
 	}
-	same := answer("a resubmission of the same action", "allow", func(a *faceAnswer) { a.Decision = "allow" })
+	same := answer("a resubmission of the same action", "mapped", "allow", allow)
 	same.FirstHash = hash
-	changed := answer("a resubmission that mapped to another action", "cannot_decide", func(a *faceAnswer) { a.Decision = "allow" })
+	changed := answer("a resubmission that mapped to another action", "mapped", "cannot_decide", allow)
 	changed.FirstHash = sha256Hex([]byte("the first action"))
 	deny := func(code string) string {
-		return `{"code":"` + code + `","coverage":"PARTIAL","decision":"deny","error_class":"CANNOT_AUTHORIZE","mode":"enforce","reason":"…"}`
+		return `{"code":"` + code + `","coverage":"PARTIAL","decision":"deny","error_class":"cannot_authorize","mode":"enforce","reason":"…"}`
+	}
+	authn := func(code string) string {
+		return `{"code":"` + code + `","coverage":"PARTIAL","decision":"deny","error_class":"authentication_failed","mode":"enforce","reason":"PAP/1: ` +
+			code + `"}`
 	}
 	papErr := func(code string) map[string]string { return map[string]string{"PAP-Error": code, "PAP-Nonce": nonce} }
+	plain := func(name string, status int, headers map[string]string, body, outcome string) FaceAnswer {
+		return FaceAnswer{Name: name, Class: "mapped", Status: status, Headers: headers, Body: body, ActionID: actionID, Outcome: outcome}
+	}
+	duplicate := `{"action_hash":"` + hash + `","action_id":"` + actionID + `","action_ir":"` + ir +
+		`","coverage":"PARTIAL","decision":"deny","decision":"allow","mode":"enforce","reason":"…"}`
 	f.Answers = append(f.Answers, same, changed,
-		FaceAnswer{Name: "not JSON", Status: http.StatusOK, Body: "<html>proxy error</html>", ActionID: actionID, Outcome: "cannot_decide"},
-		FaceAnswer{Name: "a gateway error", Status: http.StatusBadGateway, Body: "", ActionID: actionID, Outcome: "cannot_decide"},
-		FaceAnswer{Name: "a malformed request", Status: http.StatusBadRequest, Body: deny("invalid_request"), ActionID: actionID, Outcome: "cannot_decide"},
-		FaceAnswer{Name: "an unknown connection", Status: http.StatusNotFound, Body: deny("unknown_connection"), ActionID: actionID, Outcome: "cannot_decide"},
-		FaceAnswer{Name: "a fresh nonce", Status: http.StatusUnauthorized, Headers: papErr("use_nonce"), Body: deny("use_nonce"), ActionID: actionID, Outcome: "retry_nonce"},
-		FaceAnswer{Name: "an expired workload token", Status: http.StatusUnauthorized, Headers: papErr("token_expired"), Body: deny("token_expired"), ActionID: actionID, Outcome: "refresh_token"},
-		FaceAnswer{Name: "a replayed proof", Status: http.StatusUnauthorized, Headers: papErr("proof_replay"), Body: deny("proof_replay"), ActionID: actionID, Outcome: "cannot_decide"},
+		plain("not JSON", http.StatusOK, nil, "<html>proxy error</html>", "cannot_decide"),
+		plain("a duplicate decision member", http.StatusOK, nil, duplicate, "cannot_decide"),
+		plain("a gateway error", http.StatusBadGateway, nil, "", "cannot_decide"),
+		plain("a malformed request", http.StatusBadRequest, nil, deny("invalid_request"), "cannot_decide"),
+		plain("an unknown connection", http.StatusNotFound, nil, deny("unknown_connection"), "cannot_decide"),
+		plain("a request too large", http.StatusRequestEntityTooLarge, nil, deny("request_too_large"), "cannot_decide"),
+		plain("a fresh nonce", http.StatusUnauthorized, papErr("use_nonce"), authn("use_nonce"), "retry_nonce"),
+		plain("an expired workload token", http.StatusUnauthorized, papErr("token_expired"), authn("token_expired"), "refresh_token"),
+		plain("a replayed proof", http.StatusUnauthorized, papErr("proof_replay"), authn("proof_replay"), "cannot_decide"),
 	)
 	f.Exchanges = exchanges(t)
 	return f

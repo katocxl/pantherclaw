@@ -16,6 +16,7 @@ paths = [
   '''^sdk/conformance/workload_tokens\.json$''',
   '''^sdk/conformance/proofs\.json$''',
   '''^sdk/conformance/action_tokens\.json$''',
+  '''^sdk/conformance/sdk_face\.json$''',
 ]
 
 [[allowlists]]
