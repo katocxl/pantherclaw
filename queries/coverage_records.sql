@@ -268,3 +268,17 @@ WHERE s.org_id = sqlc.arg(org_id) AND s.state = 'ENFORCED' AND s.expires_at <= n
                     AND n.operation = s.operation AND n.id > s.id)
 ORDER BY s.id
 LIMIT sqlc.arg(max_rows);
+
+-- The scope's current snapshot for a decision receipt's coverage claim
+-- (HR-217), and whether an invalidating change followed it.
+-- name: CoverageClaim :one
+SELECT s.id, s.state, s.body_sha256, s.expires_at,
+    EXISTS (SELECT 1 FROM pc.coverage_invalidations i
+            WHERE i.org_id = s.org_id AND i.connection_id = s.connection_id
+              AND (i.agent_id IS NULL OR i.agent_id = s.agent_id) AND i.occurred_at > s.computed_at
+              AND i.kind NOT IN ('exclusion', 'evidence_expired'))::boolean AS changed
+FROM pc.coverage_snapshots s
+WHERE s.org_id = sqlc.arg(org_id) AND s.agent_id = sqlc.arg(agent_id) AND s.connection_id = sqlc.arg(connection_id)
+  AND s.operation = sqlc.arg(operation)
+ORDER BY s.id DESC
+LIMIT 1;

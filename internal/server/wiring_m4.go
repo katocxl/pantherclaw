@@ -10,6 +10,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/authority/adapters/pgauthority"
 	"github.com/katocxl/pantherclaw/internal/authority/finalize"
 	"github.com/katocxl/pantherclaw/internal/authority/pipeline"
+	covapp "github.com/katocxl/pantherclaw/internal/coverage/app"
 	defspg "github.com/katocxl/pantherclaw/internal/definitions/adapters/pgstore"
 	factspg "github.com/katocxl/pantherclaw/internal/facts/adapters/pgstore"
 	grantspg "github.com/katocxl/pantherclaw/internal/grants/adapters/pgstore"
@@ -42,7 +43,7 @@ func newAuthority(cfg *Config, pool *db.Pool, reg *keys.Registry, kp keys.KeyPro
 		Decider: &finalize.Authority{
 			Pipeline: &pipeline.Pipeline{Reader: authorityReader(pool)}, Store: &pgauthority.Store{Pool: pool, LockTimeout: cfg.Authority.BudgetLockTimeout.D()},
 			Receipts: receipts, Permits: permits, ActionTokens: actionTokens, PermitTTL: cfg.Authority.PermitTTL.D(), Log: log,
-			Inputs: replayInputs(pool, kp),
+			Inputs: replayInputs(pool, kp), Coverage: coverageClaims{svc: &covapp.Service{Pool: pool}},
 		},
 		Logger: log,
 	}), nil

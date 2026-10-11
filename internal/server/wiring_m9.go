@@ -4,14 +4,20 @@
 package server
 
 import (
+	"context"
+	"encoding/hex"
+	"time"
+
 	"connectrpc.com/connect/v2"
 	"github.com/riverqueue/river"
 
+	"github.com/katocxl/pantherclaw/internal/authority/finalize"
 	"github.com/katocxl/pantherclaw/internal/coverage/adapters/coveragerpc"
 	covapp "github.com/katocxl/pantherclaw/internal/coverage/app"
 	coverage "github.com/katocxl/pantherclaw/internal/coverage/domain"
 	"github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1/pantherclawv1connect"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
+	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	"github.com/katocxl/pantherclaw/internal/platform/jobs"
 )
 
@@ -39,4 +45,22 @@ func registerCoverageWorkers(reg *jobs.Registry, cfg *Config, pool *db.Pool) ([]
 		return nil, err
 	}
 	return covapp.PeriodicJobs(f), nil
+}
+
+// coverageClaims gives decision receipts the coverage claim of their scope
+// (HR-217).
+type coverageClaims struct{ svc *covapp.Service }
+
+func (c coverageClaims) CoverageClaim(ctx context.Context, org ids.OrgID, agent, connection ids.UUID, operation string,
+	at time.Time,
+) (*finalize.CoverageClaim, error) {
+	sc := coverage.Scope{Agent: agent, Connection: connection, Operation: operation}
+	claim, err := c.svc.ClaimAt(ctx, org, sc, at)
+	if err != nil || claim == nil {
+		return nil, err
+	}
+	return &finalize.CoverageClaim{
+		State: claim.State.String(), Snapshot: claim.Snapshot.String(), Digest: "sha256:" + hex.EncodeToString(claim.Digest),
+		Agent: agent.String(), Connection: connection.String(), Operation: operation,
+	}, nil
 }

@@ -68,8 +68,11 @@ type DecisionPAP struct {
 	DestinationClass string `json:"destination_class,omitzero"`
 	// Approval is the approval request this decision consumes and its
 	// binding (G0 M5 part 2; M6 adds the assertion to the permit, HR-038).
-	Approval  *ReceiptApproval `json:"approval,omitzero"`
-	Simulated bool             `json:"simulated"`
+	Approval *ReceiptApproval `json:"approval,omitzero"`
+	// Coverage is the coverage claim of the action's scope at decision time
+	// (G0 M9, HR-217); receipts without one stay valid.
+	Coverage  *CoverageClaim `json:"coverage,omitzero"`
+	Simulated bool           `json:"simulated"`
 }
 
 // ReceiptApproval names a consumed approval request and its binding.
@@ -79,13 +82,15 @@ type ReceiptApproval struct {
 }
 
 // receipt builds, fits and signs the decision receipt of one evaluation.
-func (a *Authority) receipt(gw Gateway, ev *pipeline.Evaluation, txn ids.UUID, evaluation int, budgets []BudgetState) (Receipt, error) {
+func (a *Authority) receipt(gw Gateway, ev *pipeline.Evaluation, txn ids.UUID, evaluation int, budgets []BudgetState,
+	claim *CoverageClaim,
+) (Receipt, error) {
 	pap := DecisionPAP{
 		V: 1, Kind: "decision", Org: gw.Org.String(), Txn: txn.String(), Evaluation: evaluation,
 		Run: ev.RunID.String(), Action: ev.ActionID.String(), Act: ev.ActionHash, Decision: ev.Decision,
 		Checklist: ev.Checklist, Obligations: ev.Obligations, Approvals: ev.Approvals, StepUps: ev.StepUps,
 		Basis: ev.Basis, BasisDigest: ev.Basis.Digest(), Identity: ev.Identity, Budgets: budgets, Gateway: gw.ID,
-		Monitor: ev.MonitorPermit(),
+		Monitor: ev.MonitorPermit(), Coverage: claim,
 	}
 	if ev.EffectiveHash != ev.ActionHash {
 		pap.Effective = ev.EffectiveHash

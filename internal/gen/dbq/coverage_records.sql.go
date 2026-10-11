@@ -50,6 +50,54 @@ func (q *Queries) CoverageBinding(ctx context.Context, orgID ids.OrgID, connecti
 	return i, err
 }
 
+const coverageClaim = `-- name: CoverageClaim :one
+SELECT s.id, s.state, s.body_sha256, s.expires_at,
+    EXISTS (SELECT 1 FROM pc.coverage_invalidations i
+            WHERE i.org_id = s.org_id AND i.connection_id = s.connection_id
+              AND (i.agent_id IS NULL OR i.agent_id = s.agent_id) AND i.occurred_at > s.computed_at
+              AND i.kind NOT IN ('exclusion', 'evidence_expired'))::boolean AS changed
+FROM pc.coverage_snapshots s
+WHERE s.org_id = $1 AND s.agent_id = $2 AND s.connection_id = $3
+  AND s.operation = $4
+ORDER BY s.id DESC
+LIMIT 1
+`
+
+type CoverageClaimParams struct {
+	OrgID        ids.OrgID
+	AgentID      ids.UUID
+	ConnectionID ids.UUID
+	Operation    string
+}
+
+type CoverageClaimRow struct {
+	ID         ids.UUID
+	State      string
+	BodySha256 []byte
+	ExpiresAt  *time.Time
+	Changed    bool
+}
+
+// The scope's current snapshot for a decision receipt's coverage claim
+// (HR-217), and whether an invalidating change followed it.
+func (q *Queries) CoverageClaim(ctx context.Context, arg CoverageClaimParams) (CoverageClaimRow, error) {
+	row := q.db.QueryRow(ctx, coverageClaim,
+		arg.OrgID,
+		arg.AgentID,
+		arg.ConnectionID,
+		arg.Operation,
+	)
+	var i CoverageClaimRow
+	err := row.Scan(
+		&i.ID,
+		&i.State,
+		&i.BodySha256,
+		&i.ExpiresAt,
+		&i.Changed,
+	)
+	return i, err
+}
+
 const coverageExclusionsForScope = `-- name: CoverageExclusionsForScope :many
 SELECT org_id, id, agent_id, connection_id, operation, route_kind, reason, state, created_by, created_at, expires_at, revoked_by, revoked_at FROM pc.coverage_exclusions
 WHERE org_id = $1 AND connection_id = $2 AND state = 'ACTIVE' AND expires_at > now()

@@ -61,6 +61,9 @@ type Authority struct {
 	// Inputs seals every evaluation's inputs for decision replay, written
 	// with its receipt (G0 M7 design decision 11); nil keeps none.
 	Inputs InputSealer
+	// Coverage gives each receipt of an action through a connection the
+	// coverage claim of its scope (G0 M9, HR-217); nil gives none.
+	Coverage CoverageClaimer
 }
 
 // Result is the answer to Authorize.
@@ -359,10 +362,11 @@ func (a *Authority) bind(ctx context.Context, gw Gateway, ev *pipeline.Evaluatio
 	if err != nil {
 		return Result{}, err
 	}
+	claim := a.coverageClaim(ctx, gw.Org, ev)
 	// The receipt Finalize records is the one Sign returned last, so it
 	// needs no second lookup.
 	w.Sign = func(budgets []BudgetState) (Receipt, error) {
-		r, err := a.receipt(gw, ev, w.TransactionID, w.Evaluation, budgets)
+		r, err := a.receipt(gw, ev, w.TransactionID, w.Evaluation, budgets, claim)
 		r.Inputs = inputs
 		res.Receipt = r.JWS
 		return r, err
@@ -463,7 +467,7 @@ func (a *Authority) tampered(ctx context.Context, gw Gateway, req pipeline.Reque
 		}
 		ev.RunID, _ = ids.ParseUUID(req.Action.Action.RunID)
 		ev.ActionID, _ = ids.ParseUUID(req.Action.Action.ActionID)
-		r, err := a.receipt(gw, ev, prev.TransactionID, prev.Evaluations+1, nil)
+		r, err := a.receipt(gw, ev, prev.TransactionID, prev.Evaluations+1, nil, nil)
 		if err != nil {
 			return Result{}, err
 		}
