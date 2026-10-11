@@ -273,7 +273,8 @@ func TestHR200_TheSDKFaceAllowsOnlyWhatWasRecordedDelegated(t *testing.T) {
 // (Read, or Bash when the application only observes the shell, HR-200) is
 // allowed and labeled OBSERVE_ONLY once the Authority verified the
 // workload in its run and recorded its name and input digest, without a
-// decision; an unverified workload is 401,
+// decision; an unverified workload is 401, a connection the Authority does
+// not have this gateway serving is denied connection_not_served,
 // and an unreachable Authority is no answer to rely on.
 func TestHR200_BuiltInToolsAreObservedOnly(t *testing.T) {
 	h := setup(t, withAgentHeld)
@@ -294,6 +295,13 @@ func TestHR200_BuiltInToolsAreObservedOnly(t *testing.T) {
 		observed[1].GetTool() != "Bash" || observed[1].GetRunId() != run || observed[1].GetConnectionId() != connID ||
 		!bytes.Equal(observed[1].GetInputSha256(), input[:]) {
 		t.Fatalf("verified %v, observed %+v", verified, observed)
+	}
+	h.auth.mu.Lock()
+	h.auth.observeCode = sdk.CodeConnectionNotServed
+	h.auth.mu.Unlock()
+	if r := h.sdk(t, `{"tool":"Read","input":{},"tool_use_id":"toolu_04"}`, map[string]string{HeaderRunID: run}); r.code != http.StatusOK ||
+		r.answer.Decision != "deny" || r.answer.Code != sdk.CodeConnectionNotServed || r.hdr.Get(HeaderError) != "" {
+		t.Fatalf("connection not served: %d %+v", r.code, r.answer)
 	}
 	h.auth.setIdentity("invalid_proof")
 	if r := h.sdk(t, `{"tool":"Write","input":{},"tool_use_id":"toolu_02"}`, nil); r.code != http.StatusUnauthorized ||
@@ -351,6 +359,9 @@ func (f *fakeAuthority) RecordToolObservation(ctx context.Context, req *pb.Recor
 	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if f.observeCode != "" {
+		return &pb.RecordToolObservationResponse{ErrorCode: f.observeCode, Nonce: v.GetNonce()}, nil
+	}
 	f.observed = append(f.observed, req)
 	return &pb.RecordToolObservationResponse{Verified: true, InstanceId: v.GetInstanceId(), Nonce: v.GetNonce(), ObservationId: ids.NewV7().String()}, nil
 }

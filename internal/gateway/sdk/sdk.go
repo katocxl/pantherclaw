@@ -82,6 +82,10 @@ const (
 	// CodeUnknownServer: the MCP server is not the one the connection
 	// governs, the server named after the connection.
 	CodeUnknownServer = "unknown_server"
+	// CodeConnectionNotServed: the Authority does not have this gateway
+	// serving the connection (its configuration is stale), so a built-in
+	// tool call cannot be recorded.
+	CodeConnectionNotServed = "connection_not_served"
 )
 
 // Configuration is the gateway's current configuration (control.Store).
@@ -449,6 +453,15 @@ func (h *Handler) observe(w http.ResponseWriter, r *http.Request, conn *control.
 	if err != nil {
 		h.log.ErrorContext(r.Context(), "gateway.authority_unavailable", slog.String("connection_id", conn.GetId()), pclog.Err(err))
 		deny(w, http.StatusOK, dispatch.CannotAuthorize, dispatch.CodeAuthorityUnavailable, "PantherClaw cannot verify this workload now.")
+		return
+	}
+	if !v.OK && v.Code == CodeConnectionNotServed {
+		if v.Nonce != "" {
+			w.Header().Set(dispatch.HeaderNonce, v.Nonce)
+		}
+		h.log.WarnContext(r.Context(), "gateway.sdk_connection_not_served", slog.String("connection_id", conn.GetId()))
+		deny(w, http.StatusOK, dispatch.CannotAuthorize, CodeConnectionNotServed,
+			"PantherClaw does not have this gateway serving the connection now, so the call cannot be recorded.")
 		return
 	}
 	if !v.OK {

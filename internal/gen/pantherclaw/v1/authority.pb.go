@@ -1919,7 +1919,8 @@ type RecordToolObservationRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The request's credentials, as for Authorize.
 	Workload *WorkloadCredentials `protobuf:"bytes,1,opt,name=workload,proto3" json:"workload,omitempty"`
-	// The run (PAP-Run-Id); the instance must be allowed to use it (HR-022).
+	// The run (PAP-Run-Id), never the nil UUID; the instance must be allowed
+	// to use it (HR-022).
 	RunId string `protobuf:"bytes,2,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
 	// The connection the call came through.
 	ConnectionId string `protobuf:"bytes,3,opt,name=connection_id,json=connectionId,proto3" json:"connection_id,omitempty"`
@@ -2002,7 +2003,8 @@ type RecordToolObservationResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Whether the credentials verified and the observation was recorded.
 	Verified bool `protobuf:"varint,1,opt,name=verified,proto3" json:"verified,omitempty"`
-	// When not verified: the PAP-Error code, or `agent_unusable`.
+	// When not verified: the PAP-Error code, `agent_unusable`, or
+	// `connection_not_served` (the connection is not one this gateway serves).
 	ErrorCode string `protobuf:"bytes,2,opt,name=error_code,json=errorCode,proto3" json:"error_code,omitempty"`
 	// The verified instance.
 	InstanceId string `protobuf:"bytes,3,opt,name=instance_id,json=instanceId,proto3" json:"instance_id,omitempty"`
