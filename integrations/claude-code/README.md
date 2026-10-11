@@ -36,11 +36,13 @@ The plugin adds a `PreToolUse` hook for **Bash and PowerShell** commands ([hooks
 **Or let `pclaw init` set it up (M8):**
 
 ```bash
-pclaw init --gateway https://gateway.example.com --connection shell --key-file ~/.pantherclaw/workload.json --dry-run
+pclaw login --server https://pantherclaw.example.com --org <org>
+pclaw init --gateway https://gateway.example.com --connection shell --key-file ~/.pantherclaw/workload.json --agent <agent id> --dry-run
 ```
 
 `pclaw init`:
 - reports the Claude Code settings it finds (user, project, local and managed), the MCP servers that go around PantherClaw, and agent-framework projects;
+- when the key file is not an enrolled workload key, creates it (mode 0600) and enrolls it as `--agent`, signed in as you: an enrollment token is issued to you and used at once, never written, and the instance is admitted with the key fingerprint it showed you (HR-094);
 - adds the same hook, in exec form with `onFailure: "block"`, to `.claude/settings.local.json`. Choose another file with `--scope project` or `--scope user`; `CLAUDE_CONFIG_DIR` moves the user one.
 
 It only adds (HR-208):

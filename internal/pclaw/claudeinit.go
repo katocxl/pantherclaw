@@ -16,7 +16,6 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/katocxl/pantherclaw/internal/identity/workloadclient"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	"github.com/katocxl/pantherclaw/internal/scan"
 )
@@ -24,23 +23,25 @@ import (
 // `pclaw init` wires a developer's Claude Code to PantherClaw (G0 M8 track
 // C, HR-208). It finds Claude Code's settings (user, project, local and
 // managed), its MCP servers and the agent-framework projects under the
-// project directory, and installs the PreToolUse hook that asks the gateway
+// project directory. It then enrolls the workload key as the signed-in
+// person when it is not enrolled yet (HR-094: admitted with the fingerprint
+// shown before), and installs the PreToolUse hook that asks the gateway
 // before every Bash and PowerShell command (`pclaw hook claude-code`) in
 // the settings file of the chosen scope.
 //
 // It only adds: it never removes or changes an existing deny rule, hook or
 // server entry, and it never writes a secret (only the gateway's URL, the
-// connection's name, the key file's path and the run). It shows the diff
-// and changes nothing until the person confirms (or passed --yes); with
-// --dry-run it changes nothing. It backs up every file before it changes
-// it and writes through a temporary file. It refuses when managed
-// settings, or the target file itself, would keep the hook from running,
-// since a developer would then believe commands are decided when they are
-// not.
+// connection's name, the key file's path and the run; the enrollment token
+// is used at once and kept nowhere). It shows the diff and changes nothing
+// until the person confirms (or passed --yes); with --dry-run it changes
+// nothing. It backs up every file before it changes it and writes through
+// a temporary file. It refuses when managed settings, or the target file
+// itself, would keep the hook from running, since a developer would then
+// believe commands are decided when they are not.
 
 func init() {
 	commands["init"] = command{
-		usage: "init --gateway URL --connection NAME --key-file FILE [--run ID] [--project DIR] " +
+		usage: "init --gateway URL --connection NAME --key-file FILE [--agent ID] [--run ID] [--project DIR] " +
 			"[--scope local|project|user] [--dry-run | --yes] [--managed-settings FILE]",
 		run: claudeInit,
 	}
@@ -159,17 +160,18 @@ func counts(doc *jsonNode) string {
 
 // initFlags are init's options.
 type initFlags struct {
-	gateway, connection, keyFile, run, project, scope, managed string
-	dryRun, yes                                                bool
+	gateway, connection, keyFile, run, project, scope, managed, agent string
+	dryRun, yes                                                       bool
 }
 
-func claudeInit(_ context.Context, a *app, args []string) error {
+func claudeInit(ctx context.Context, a *app, args []string) error {
 	fs := flag.NewFlagSet("init", flag.ContinueOnError)
 	fs.SetOutput(a.stderr)
 	var f initFlags
 	fs.StringVar(&f.gateway, "gateway", "", "the gateway's public URL")
 	fs.StringVar(&f.connection, "connection", "", "the kind-local connection serving pc.shell")
-	fs.StringVar(&f.keyFile, "key-file", "", "the enrolled desktop workload key file")
+	fs.StringVar(&f.keyFile, "key-file", "", "the desktop workload key file (created and enrolled with --agent when it is not enrolled)")
+	fs.StringVar(&f.agent, "agent", "", "the agent to enroll the key file as, signed in as yourself, when it is not enrolled yet")
 	fs.StringVar(&f.run, "run", "", "the run (default: the key file's)")
 	fs.StringVar(&f.project, "project", "", "the project directory (default: the current one)")
 	fs.StringVar(&f.scope, "scope", "local", "where the hook goes: local (.claude/settings.local.json), project (.claude/settings.json) or user")
@@ -187,6 +189,9 @@ func claudeInit(_ context.Context, a *app, args []string) error {
 		return err
 	}
 	p := &initPlan{}
+	if p.enroll, err = f.enrollment(); err != nil {
+		return err
+	}
 	home, config, err := a.claudeHome()
 	if err != nil {
 		return err
@@ -241,7 +246,7 @@ func claudeInit(_ context.Context, a *app, args []string) error {
 	} else if err := p.addHook(target, hook); err != nil {
 		return err
 	}
-	return f.apply(a, p)
+	return f.apply(ctx, a, p)
 }
 
 // hookEntry is the hook to install: exec form, so no shell parses the
@@ -262,11 +267,6 @@ func (f initFlags) hookEntry() (*jsonNode, error) {
 	key, err := filepath.Abs(f.keyFile)
 	if err != nil {
 		return nil, err
-	}
-	if kf, err := workloadclient.ReadKeyFile(key); err != nil {
-		return nil, fmt.Errorf("--key-file: %w", err)
-	} else if kf.Identifier == "" {
-		return nil, errors.New("--key-file is not enrolled yet: enroll it first (pclaw workload enroll)")
 	}
 	args := append(slices.Clone(claudeHookArgs), "--gateway", strings.TrimSuffix(f.gateway, "/"), "--connection", f.connection,
 		"--key-file", key)

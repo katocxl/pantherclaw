@@ -6,17 +6,28 @@ package pclaw
 import (
 	"bufio"
 	"bytes"
+	"context"
+	"crypto/ed25519"
+	"encoding/json/v2"
+	"errors"
 	"fmt"
 	"io"
+	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
+
+	pantherclawv1 "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
+	"github.com/katocxl/pantherclaw/internal/identity/workloadclient"
+	"github.com/katocxl/pantherclaw/internal/platform/crypto/jws"
+	"github.com/katocxl/pantherclaw/internal/platform/ids"
 )
 
 // initPlan is everything `pclaw init` would change. All of it is shown,
 // and none of it is done until the person confirms (HR-208).
 type initPlan struct {
+	enroll *enrollment
 	// edits are the files init adds to, their documents changed in place.
 	edits []*claudeSettings
 	// done is printed once the changes are made.
@@ -59,9 +70,10 @@ func samePath(a, b string) bool {
 	return a == b
 }
 
-// apply shows the plan, asks, and carries it out: each file is backed up
+// apply shows the plan, asks, and carries it out: the enrollment first, so
+// a hook never names a key that is not enrolled, then each file, backed up
 // and replaced through a temporary file.
-func (f initFlags) apply(a *app, p *initPlan) error {
+func (f initFlags) apply(ctx context.Context, a *app, p *initPlan) error {
 	type write struct {
 		path  string
 		after []byte
@@ -80,8 +92,16 @@ func (f initFlags) apply(a *app, p *initPlan) error {
 		}
 		writes = append(writes, write{s.path, after})
 	}
+	if e := p.enroll; e != nil {
+		key := "the workload key in " + e.path
+		if e.create {
+			key = "a new workload key in " + e.path + " (mode 0600)"
+		}
+		_, _ = fmt.Fprintf(a.stdout, "Enroll %s as agent %s, signed in as you, and admit it with the key's fingerprint\n  %s\n",
+			key, e.agent, e.fingerprint)
+	}
 	switch {
-	case len(writes) == 0:
+	case p.enroll == nil && len(writes) == 0:
 		_, err := fmt.Fprintln(a.stdout, "Nothing to change.")
 		return err
 	case f.dryRun:
@@ -89,6 +109,11 @@ func (f initFlags) apply(a *app, p *initPlan) error {
 		return err
 	case !f.yes && !confirm(a, "Make these changes?"):
 		return &exitError{code: 1, msg: "pclaw init: not confirmed; nothing was changed"}
+	}
+	if p.enroll != nil {
+		if err := p.enroll.run(ctx, a); err != nil {
+			return err
+		}
 	}
 	for _, w := range writes {
 		backup, err := backupFile(w.path, time.Now())
@@ -120,4 +145,102 @@ func confirm(a *app, question string) bool {
 	}
 	_, _ = fmt.Fprintln(a.stdout)
 	return false
+}
+
+// enrollment is enrolling the key file as the signed-in person: the key,
+// new or from the file, and the fingerprint shown before anything is done.
+type enrollment struct {
+	agent, path, fingerprint string
+	kf                       workloadclient.KeyFile
+	// create: the key file does not exist yet; the key is only in memory.
+	create bool
+}
+
+// enrollment returns what enrolling the key file takes, or nil when it is
+// enrolled already.
+func (f initFlags) enrollment() (*enrollment, error) {
+	path, err := filepath.Abs(f.keyFile)
+	if err != nil {
+		return nil, err
+	}
+	e := &enrollment{agent: f.agent, path: path}
+	switch kf, err := workloadclient.ReadKeyFile(path); {
+	case err == nil && kf.Identifier != "":
+		return nil, nil
+	case err == nil:
+		e.kf = kf
+	case errors.Is(err, os.ErrNotExist):
+		if e.kf, _, err = workloadclient.NewKeyFile(); err != nil {
+			return nil, err
+		}
+		e.create = true
+	default:
+		return nil, fmt.Errorf("--key-file: %w", err)
+	}
+	if f.agent == "" {
+		return nil, errors.New("--key-file is not an enrolled workload key: pass --agent AGENT_ID to enroll it as yourself (after pclaw login)")
+	}
+	if _, err := ids.ParseUUID(f.agent); err != nil {
+		return nil, errors.New("--agent must be an agent id")
+	}
+	key, err := e.kf.Key()
+	if err != nil {
+		return nil, fmt.Errorf("--key-file: %w", err)
+	}
+	pub, _ := key.Public().(ed25519.PublicKey)
+	e.fingerprint = jws.Thumbprint(pub)
+	return e, nil
+}
+
+// run enrolls the key as the signed-in person: an enrollment token for the
+// agent, used at once and kept nowhere; the workload's enrollment with it;
+// and admission with the fingerprint shown before (HR-094), which the
+// server checks against the enrolled key.
+func (e *enrollment) run(ctx context.Context, a *app) error {
+	s, err := a.session()
+	if err != nil {
+		return err
+	}
+	c, err := a.clients()
+	if err != nil {
+		return err
+	}
+	tok, err := c.identity.CreateEnrollmentToken(ctx, &pantherclawv1.CreateEnrollmentTokenRequest{AgentId: e.agent, TtlMinutes: 5})
+	if err != nil {
+		return fmt.Errorf("an enrollment token for agent %s: %w", e.agent, err)
+	}
+	if e.create {
+		if err := workloadclient.WriteKeyFile(e.path, e.kf, false); err != nil {
+			return err
+		}
+	}
+	key, _ := e.kf.Key()
+	pub, _ := key.Public().(ed25519.PublicKey)
+	jwk, err := json.Marshal(jws.PublicJWK(pub, ""))
+	if err != nil {
+		return err
+	}
+	wc, err := a.workloadClient(s.server, e.kf)
+	if err != nil {
+		return err
+	}
+	res, err := wc.Enroll(ctx, &pantherclawv1.EnrollRequest{EnrollmentToken: tok.GetToken(), PublicJwk: string(jwk)})
+	if err != nil {
+		return fmt.Errorf("enroll: %w", err)
+	}
+	e.kf.Identifier, e.kf.Server = res.GetIdentifier(), s.server
+	if err := workloadclient.WriteKeyFile(e.path, e.kf, true); err != nil {
+		return err
+	}
+	if res.GetState() != pantherclawv1.InstanceState_INSTANCE_STATE_ADMITTED {
+		if res.GetFingerprint() != e.fingerprint {
+			return fmt.Errorf("PantherClaw enrolled instance %s with the fingerprint %s, not this key's %s; it was not admitted",
+				res.GetInstanceId(), res.GetFingerprint(), e.fingerprint)
+		}
+		if _, err := c.identity.AdmitInstance(ctx, &pantherclawv1.AdmitInstanceRequest{Id: res.GetInstanceId(), Fingerprint: e.fingerprint}); err != nil {
+			return fmt.Errorf("admitting instance %s: %w", res.GetInstanceId(), err)
+		}
+	}
+	_, err = fmt.Fprintf(a.stdout, "Enrolled and admitted instance %s of agent %s; its key is in %s.\n", res.GetInstanceId(), e.agent, e.path)
+	return err
 }
