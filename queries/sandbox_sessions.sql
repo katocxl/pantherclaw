@@ -90,12 +90,13 @@ VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(session_id), sqlc.arg(nonce_id)
     sqlc.arg(report_sha256))
 RETURNING *;
 
--- The latest report of each kind since a time: one probe run is the
--- session's last SANDBOX, CONTROL and CANARY reports.
+-- The reports of one probe run: those whose nonces were issued together
+-- with the canary's (in one transaction, so at one time), one per kind.
 -- name: LatestProbeRuns :many
-SELECT DISTINCT ON (kind) * FROM pc.probe_runs
-WHERE org_id = sqlc.arg(org_id) AND session_id = sqlc.arg(session_id) AND received_at >= sqlc.arg(since)
-ORDER BY kind, id DESC;
+SELECT DISTINCT ON (r.kind) r.* FROM pc.probe_runs r
+JOIN pc.probe_nonces n ON n.org_id = r.org_id AND n.id = r.nonce_id AND n.session_id = r.session_id AND n.kind = r.kind
+WHERE r.org_id = sqlc.arg(org_id) AND r.session_id = sqlc.arg(session_id) AND n.created_at = sqlc.arg(issued_at)
+ORDER BY r.kind, r.id DESC;
 
 -- The agent's last closure for a connection: the images and configuration
 -- its evidence was taken with.
@@ -119,3 +120,11 @@ SELECT connection_id, connection_revision, gateway_id, package_version_id, crede
 FROM pc.sandbox_session_connections
 WHERE org_id = sqlc.arg(org_id) AND session_id = sqlc.arg(session_id)
 ORDER BY connection_id;
+
+-- Open sessions past their expiry, oldest first, locked for the sweep.
+-- name: ExpiredSandboxSessions :many
+SELECT * FROM pc.sandbox_sessions
+WHERE org_id = sqlc.arg(org_id) AND state = 'OPEN' AND expires_at <= now()
+ORDER BY expires_at, id
+LIMIT sqlc.arg(max_rows)
+FOR UPDATE SKIP LOCKED;
