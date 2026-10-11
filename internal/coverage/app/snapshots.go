@@ -1,0 +1,149 @@
+// SPDX-License-Identifier: BUSL-1.1
+// Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+
+package app
+
+import (
+	"context"
+	"crypto/sha256"
+	"encoding/json/v2"
+	"slices"
+	"time"
+
+	"github.com/katocxl/pantherclaw/internal/coverage/domain"
+	evdomain "github.com/katocxl/pantherclaw/internal/evidence/domain"
+	"github.com/katocxl/pantherclaw/internal/evidence/ledger"
+	"github.com/katocxl/pantherclaw/internal/gen/dbq"
+	"github.com/katocxl/pantherclaw/internal/platform/db"
+	"github.com/katocxl/pantherclaw/internal/platform/ids"
+)
+
+// LedgerKind is the ledger kind of a coverage snapshot (HR-217).
+const LedgerKind = "coverage.snapshot"
+
+// Snapshot is the ledger body of a coverage snapshot: the computed record
+// of one scope. Receipts name a snapshot by id and the SHA-256 of this
+// body (HR-217).
+type Snapshot struct {
+	V          int             `json:"v"`
+	ID         ids.UUID        `json:"id"`
+	Agent      ids.UUID        `json:"agent"`
+	Connection ids.UUID        `json:"connection"`
+	Operation  string          `json:"operation"`
+	State      string          `json:"state"`
+	Reasons    []string        `json:"reasons"`
+	Routes     []SnapshotRoute `json:"routes"`
+	Closure    *ids.UUID       `json:"closure,omitzero"`
+	ExpiresAt  string          `json:"expires_at,omitzero"`
+	Excluded   bool            `json:"excluded,omitzero"`
+	Exclusions []ids.UUID      `json:"exclusions,omitzero"`
+	// LastValid is the last ENFORCED snapshot a downgrade follows (F442);
+	// Cause the invalidation that asked for this reassessment.
+	LastValid  *ids.UUID `json:"last_valid,omitzero"`
+	Cause      *ids.UUID `json:"cause,omitzero"`
+	ComputedAt string    `json:"computed_at"`
+}
+
+// SnapshotRoute is one route of a snapshot.
+type SnapshotRoute struct {
+	Kind    string    `json:"kind"`
+	Channel string    `json:"channel,omitzero"`
+	Locator string    `json:"locator,omitzero"`
+	Route   *ids.UUID `json:"route,omitzero"`
+	Status  string    `json:"status"`
+	Closure *ids.UUID `json:"closure,omitzero"`
+}
+
+// same reports whether two snapshots record the same coverage, whatever
+// caused them and when.
+func (s Snapshot) same(o Snapshot) bool {
+	s.ID, o.ID, s.Cause, o.Cause, s.ComputedAt, o.ComputedAt = ids.UUID{}, ids.UUID{}, nil, nil, "", ""
+	a, errA := json.Marshal(s)
+	b, errB := json.Marshal(o)
+	return errA == nil && errB == nil && string(a) == string(b)
+}
+
+func optID(id ids.UUID) *ids.UUID {
+	if id.IsZero() {
+		return nil
+	}
+	return &id
+}
+
+func snapshotOf(sc domain.Scope, r domain.Result, exclusions []domain.Exclusion) Snapshot {
+	s := Snapshot{
+		V: 1, Agent: sc.Agent, Connection: sc.Connection, Operation: sc.Operation, State: r.State.String(),
+		Reasons: slices.Clone(r.Reasons), Closure: r.Closure, Excluded: r.Excluded, Routes: []SnapshotRoute{},
+	}
+	if s.Reasons == nil {
+		s.Reasons = []string{}
+	}
+	if r.ExpiresAt != nil {
+		s.ExpiresAt = evdomain.Timestamp(*r.ExpiresAt)
+	}
+	for _, x := range exclusions {
+		s.Exclusions = append(s.Exclusions, x.ID)
+	}
+	for _, rt := range r.Routes {
+		s.Routes = append(s.Routes, SnapshotRoute{
+			Kind: string(rt.Kind), Channel: string(rt.Channel), Locator: rt.Locator, Route: optID(rt.Route),
+			Status: string(rt.Status), Closure: optID(rt.Closure),
+		})
+	}
+	return s
+}
+
+// reassess computes one scope's coverage and, when it differs from the
+// scope's current snapshot, records a new snapshot: a ledger entry and its
+// row, in tx. It reports whether it recorded one.
+func (s *Service) reassess(ctx context.Context, tx db.TenantTx, sc domain.Scope, cause *ids.UUID, actor evdomain.Actor,
+	pkgs packages,
+) (bool, error) {
+	q := dbq.New(tx)
+	now := s.now()
+	e, err := evidence(ctx, q, tx.OrgID(), sc, now, pkgs)
+	if err != nil {
+		return false, err
+	}
+	r := domain.Compute(e)
+	next := snapshotOf(sc, r, e.Exclusions)
+	current, err := q.CurrentCoverageSnapshot(ctx, dbq.CurrentCoverageSnapshotParams{
+		OrgID: tx.OrgID(), AgentID: sc.Agent, ConnectionID: sc.Connection, Operation: sc.Operation,
+	})
+	switch {
+	case err == nil:
+		var prev Snapshot
+		if err := json.Unmarshal(current.Body, &prev); err != nil {
+			return false, err
+		}
+		if r.State != domain.Enforced {
+			if current.State == domain.Enforced.String() {
+				next.LastValid = &current.ID
+			} else {
+				next.LastValid = current.LastValidID
+			}
+		}
+		if prev.same(next) {
+			return false, nil
+		}
+	case !db.IsNoRows(err):
+		return false, err
+	}
+	next.ID, next.Cause, next.ComputedAt = ids.NewV7(), cause, evdomain.Timestamp(now)
+	body, err := evdomain.CanonicalBody(next)
+	if err != nil {
+		return false, err
+	}
+	entry, err := ledger.Append(ctx, tx, LedgerKind, actor, body)
+	if err != nil {
+		return false, err
+	}
+	digest := sha256.Sum256(body)
+	_, err = q.InsertCoverageSnapshot(ctx, dbq.InsertCoverageSnapshotParams{
+		OrgID: tx.OrgID(), ID: next.ID, AgentID: sc.Agent, ConnectionID: sc.Connection, Operation: sc.Operation,
+		State: r.State.String(), Reasons: next.Reasons, ClosureID: r.Closure, LastValidID: next.LastValid,
+		InvalidationID: cause, Body: body, BodySha256: digest[:], LedgerEntryID: entry.ID, ExpiresAt: r.ExpiresAt,
+		ComputedAt: now.Truncate(time.Microsecond),
+	})
+	return err == nil, err
+}

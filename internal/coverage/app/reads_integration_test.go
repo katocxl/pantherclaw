@@ -9,7 +9,6 @@ import (
 	"context"
 	"errors"
 	"testing"
-	"time"
 
 	"github.com/katocxl/pantherclaw/internal/coverage/app"
 	"github.com/katocxl/pantherclaw/internal/coverage/domain"
@@ -32,7 +31,7 @@ func (f *fixture) as(r td.RoleName) context.Context {
 // closure with what it closed; a viewer does not.
 func TestIntClosuresAreReadWithCoverageRead(t *testing.T) {
 	f := newFixture(t)
-	id, err := f.record(t, f.closure(probes(false), time.Now().Add(-time.Minute)))
+	id, err := f.record(t, f.closure(probes(false), f.dbNow(t)))
 	if err != nil {
 		t.Fatal(err)
 	}

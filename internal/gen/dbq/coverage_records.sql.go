@@ -16,10 +16,10 @@ import (
 )
 
 const coverageBinding = `-- name: CoverageBinding :one
-SELECT c.revision, c.gateway_id, c.state, c.kind, c.access_mode, p.version_id AS package_version_id
+SELECT c.revision, c.gateway_id, c.state, c.kind, c.access_mode, c.default_mode, p.version_id AS package_version_id
 FROM pc.connections c
-JOIN pc.tool_packages tp ON tp.org_id = c.org_id AND tp.name = c.package
-JOIN pc.package_pins p ON p.org_id = c.org_id AND p.package_id = tp.id
+LEFT JOIN pc.tool_packages tp ON tp.org_id = c.org_id AND tp.name = c.package
+LEFT JOIN pc.package_pins p ON p.org_id = c.org_id AND p.package_id = tp.id
 WHERE c.org_id = $1 AND c.id = $2
 `
 
@@ -29,11 +29,12 @@ type CoverageBindingRow struct {
 	State            string
 	Kind             string
 	AccessMode       string
-	PackageVersionID ids.UUID
+	DefaultMode      string
+	PackageVersionID *ids.UUID
 }
 
 // What a closure is bound to now: the connection's revision and gateway
-// and its package's pinned version.
+// and its package's pinned version (NULL when nothing is pinned).
 func (q *Queries) CoverageBinding(ctx context.Context, orgID ids.OrgID, connectionID ids.UUID) (CoverageBindingRow, error) {
 	row := q.db.QueryRow(ctx, coverageBinding, orgID, connectionID)
 	var i CoverageBindingRow
@@ -43,6 +44,7 @@ func (q *Queries) CoverageBinding(ctx context.Context, orgID ids.OrgID, connecti
 		&i.State,
 		&i.Kind,
 		&i.AccessMode,
+		&i.DefaultMode,
 		&i.PackageVersionID,
 	)
 	return i, err
@@ -106,6 +108,7 @@ func (q *Queries) CoverageExclusionsForScope(ctx context.Context, arg CoverageEx
 const coverageInvalidationsSince = `-- name: CoverageInvalidationsSince :many
 SELECT org_id, id, kind, connection_id, agent_id, subject_id, detail, occurred_at, reassessed_at FROM pc.coverage_invalidations
 WHERE org_id = $1 AND connection_id = $2
+  AND kind NOT IN ('exclusion', 'evidence_expired')
   AND (agent_id IS NULL OR agent_id = $3)
   AND occurred_at > $4
 ORDER BY occurred_at, id
@@ -119,7 +122,8 @@ type CoverageInvalidationsSinceParams struct {
 	Since        time.Time
 }
 
-// The changes to a scope after a point in time, oldest first (HR-211).
+// The invalidating changes to a scope after a point in time, oldest first
+// (HR-211): an exclusion or a lapse only asks for a reassessment.
 func (q *Queries) CoverageInvalidationsSince(ctx context.Context, arg CoverageInvalidationsSinceParams) ([]PcCoverageInvalidation, error) {
 	rows, err := q.db.Query(ctx, coverageInvalidationsSince,
 		arg.OrgID,
@@ -215,6 +219,47 @@ func (q *Queries) CoverageRoutesForScope(ctx context.Context, arg CoverageRoutes
 			&i.FirstSeenAt,
 			&i.LastSeenAt,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const coverageScopesOfConnection = `-- name: CoverageScopesOfConnection :many
+SELECT DISTINCT x.agent_id::uuid AS agent_id, x.operation::text AS operation FROM (
+    SELECT r.agent_id, r.operation FROM pc.coverage_routes r
+    WHERE r.org_id = $1 AND r.connection_id = $2 AND r.kind = 'channel'
+      AND r.agent_id IS NOT NULL AND r.operation IS NOT NULL
+    UNION
+    SELECT s.agent_id, s.operation FROM pc.coverage_snapshots s
+    WHERE s.org_id = $1 AND s.connection_id = $2
+) x
+WHERE $3::uuid IS NULL OR x.agent_id = $3::uuid
+ORDER BY 1, 2
+LIMIT 1000
+`
+
+type CoverageScopesOfConnectionRow struct {
+	AgentID   ids.UUID
+	Operation string
+}
+
+// The scopes known for a connection: the agents and operations its
+// traffic or its snapshots name.
+func (q *Queries) CoverageScopesOfConnection(ctx context.Context, orgID ids.OrgID, connectionID ids.UUID, agentID *ids.UUID) ([]CoverageScopesOfConnectionRow, error) {
+	rows, err := q.db.Query(ctx, coverageScopesOfConnection, orgID, connectionID, agentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []CoverageScopesOfConnectionRow{}
+	for rows.Next() {
+		var i CoverageScopesOfConnectionRow
+		if err := rows.Scan(&i.AgentID, &i.Operation); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -619,10 +664,10 @@ func (q *Queries) InsertCoverageInvalidation(ctx context.Context, arg InsertCove
 
 const insertCoverageSnapshot = `-- name: InsertCoverageSnapshot :one
 INSERT INTO pc.coverage_snapshots (org_id, id, agent_id, connection_id, operation, state, reasons, closure_id, last_valid_id,
-    invalidation_id, body, body_sha256, ledger_entry_id, expires_at)
+    invalidation_id, body, body_sha256, ledger_entry_id, expires_at, computed_at)
 VALUES ($1, $2, $3, $4, $5, $6,
     $7::text[], $8, $9, $10, $11,
-    $12, $13, $14)
+    $12, $13, $14, $15)
 RETURNING org_id, id, agent_id, connection_id, operation, state, reasons, closure_id, last_valid_id, invalidation_id, body, body_sha256, ledger_entry_id, computed_at, expires_at
 `
 
@@ -641,6 +686,7 @@ type InsertCoverageSnapshotParams struct {
 	BodySha256     []byte
 	LedgerEntryID  ids.UUID
 	ExpiresAt      *time.Time
+	ComputedAt     time.Time
 }
 
 func (q *Queries) InsertCoverageSnapshot(ctx context.Context, arg InsertCoverageSnapshotParams) (PcCoverageSnapshot, error) {
@@ -659,6 +705,7 @@ func (q *Queries) InsertCoverageSnapshot(ctx context.Context, arg InsertCoverage
 		arg.BodySha256,
 		arg.LedgerEntryID,
 		arg.ExpiresAt,
+		arg.ComputedAt,
 	)
 	var i PcCoverageSnapshot
 	err := row.Scan(

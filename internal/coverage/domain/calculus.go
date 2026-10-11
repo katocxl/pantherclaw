@@ -54,9 +54,12 @@ type Connection struct {
 	Revision       int32
 	Gateway        ids.UUID
 	PackageVersion ids.UUID
-	// RouteMode is the operation's package route mode, "monitor" or
-	// "enforce".
+	// RouteMode is the mode, "monitor" or "enforce", of the operation's
+	// package routes on a channel without an entry in RouteModes.
 	RouteMode string
+	// RouteModes are the current modes of the operation's routes per
+	// channel.
+	RouteModes map[Channel]string
 }
 
 // Traffic is a channel the gateway observed carrying the scope's action, in
@@ -319,7 +322,7 @@ func routes(e Evidence, closure *ClosureRecord, v Verdict) (out []RouteResult, e
 // enforce mode was observed and the route is in enforce mode now; then
 // capped by the HR-024 and HR-086 rules.
 func channelStatus(e Evidence, ch Channel, v Verdict) RouteStatus {
-	enforced := e.Connection.RouteMode == "enforce" &&
+	enforced := e.Connection.modeOf(ch) == "enforce" &&
 		slices.ContainsFunc(e.Traffic, func(t Traffic) bool { return t.Channel == ch && t.Mode == "enforce" })
 	switch {
 	case !enforced:
@@ -352,3 +355,11 @@ func ReadAt(s State, expiresAt *time.Time, changesSince int, now time.Time) (Sta
 // (HR-211). An exclusion or a lapsed expiry only asks for a reassessment:
 // neither raises a state, and neither makes closure evidence stale.
 func (k InvalidationKind) Invalidates() bool { return k != InvExclusion && k != InvEvidenceExpired }
+
+// modeOf is the current route mode of channel ch.
+func (c Connection) modeOf(ch Channel) string {
+	if m, ok := c.RouteModes[ch]; ok {
+		return m
+	}
+	return c.RouteMode
+}

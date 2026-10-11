@@ -76,12 +76,12 @@ ORDER BY id DESC
 LIMIT sqlc.arg(max_rows);
 
 -- What a closure is bound to now: the connection's revision and gateway
--- and its package's pinned version.
+-- and its package's pinned version (NULL when nothing is pinned).
 -- name: CoverageBinding :one
-SELECT c.revision, c.gateway_id, c.state, c.kind, c.access_mode, p.version_id AS package_version_id
+SELECT c.revision, c.gateway_id, c.state, c.kind, c.access_mode, c.default_mode, p.version_id AS package_version_id
 FROM pc.connections c
-JOIN pc.tool_packages tp ON tp.org_id = c.org_id AND tp.name = c.package
-JOIN pc.package_pins p ON p.org_id = c.org_id AND p.package_id = tp.id
+LEFT JOIN pc.tool_packages tp ON tp.org_id = c.org_id AND tp.name = c.package
+LEFT JOIN pc.package_pins p ON p.org_id = c.org_id AND p.package_id = tp.id
 WHERE c.org_id = sqlc.arg(org_id) AND c.id = sqlc.arg(connection_id);
 
 -- name: InsertCoverageInvalidation :one
@@ -90,10 +90,12 @@ VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(kind), sqlc.arg(connection_id),
     sqlc.narg(detail))
 RETURNING *;
 
--- The changes to a scope after a point in time, oldest first (HR-211).
+-- The invalidating changes to a scope after a point in time, oldest first
+-- (HR-211): an exclusion or a lapse only asks for a reassessment.
 -- name: CoverageInvalidationsSince :many
 SELECT * FROM pc.coverage_invalidations
 WHERE org_id = sqlc.arg(org_id) AND connection_id = sqlc.arg(connection_id)
+  AND kind NOT IN ('exclusion', 'evidence_expired')
   AND (agent_id IS NULL OR agent_id = sqlc.arg(agent_id))
   AND occurred_at > sqlc.arg(since)
 ORDER BY occurred_at, id
@@ -111,10 +113,10 @@ WHERE org_id = sqlc.arg(org_id) AND id = ANY (sqlc.arg(invalidation_ids)::uuid[]
 
 -- name: InsertCoverageSnapshot :one
 INSERT INTO pc.coverage_snapshots (org_id, id, agent_id, connection_id, operation, state, reasons, closure_id, last_valid_id,
-    invalidation_id, body, body_sha256, ledger_entry_id, expires_at)
+    invalidation_id, body, body_sha256, ledger_entry_id, expires_at, computed_at)
 VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(agent_id), sqlc.arg(connection_id), sqlc.arg(operation), sqlc.arg(state),
     sqlc.arg(reasons)::text[], sqlc.narg(closure_id), sqlc.narg(last_valid_id), sqlc.narg(invalidation_id), sqlc.arg(body),
-    sqlc.arg(body_sha256), sqlc.arg(ledger_entry_id), sqlc.narg(expires_at))
+    sqlc.arg(body_sha256), sqlc.arg(ledger_entry_id), sqlc.narg(expires_at), sqlc.arg(computed_at))
 RETURNING *;
 
 -- name: GetCoverageSnapshot :one
@@ -240,3 +242,18 @@ WHERE t.org_id = sqlc.arg(org_id) AND (sqlc.narg(after)::uuid IS NULL OR t.id > 
   AND t.created_at < now() - interval '1 minute'
 ORDER BY t.id
 LIMIT sqlc.arg(max_rows);
+
+-- The scopes known for a connection: the agents and operations its
+-- traffic or its snapshots name.
+-- name: CoverageScopesOfConnection :many
+SELECT DISTINCT x.agent_id::uuid AS agent_id, x.operation::text AS operation FROM (
+    SELECT r.agent_id, r.operation FROM pc.coverage_routes r
+    WHERE r.org_id = sqlc.arg(org_id) AND r.connection_id = sqlc.arg(connection_id) AND r.kind = 'channel'
+      AND r.agent_id IS NOT NULL AND r.operation IS NOT NULL
+    UNION
+    SELECT s.agent_id, s.operation FROM pc.coverage_snapshots s
+    WHERE s.org_id = sqlc.arg(org_id) AND s.connection_id = sqlc.arg(connection_id)
+) x
+WHERE sqlc.narg(agent_id)::uuid IS NULL OR x.agent_id = sqlc.narg(agent_id)::uuid
+ORDER BY 1, 2
+LIMIT 1000;

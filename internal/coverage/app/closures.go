@@ -89,7 +89,7 @@ func (s *Service) RecordClosure(ctx context.Context, tx db.TenantTx, c domain.Cl
 	}
 	q := dbq.New(tx)
 	b, err := q.CoverageBinding(ctx, tx.OrgID(), c.Connection)
-	if db.IsNoRows(err) || (err == nil && b.State == "RETIRED") {
+	if db.IsNoRows(err) || (err == nil && (b.State == "RETIRED" || b.PackageVersionID == nil)) {
 		return ids.UUID{}, ErrNoBinding
 	} else if err != nil {
 		return ids.UUID{}, err
@@ -120,7 +120,7 @@ func (s *Service) RecordClosure(ctx context.Context, tx db.TenantTx, c domain.Cl
 		CanaryPassed: v.Canary, SigningKeyJkt: c.SigningKeyJKT, ServerNonce: c.ServerNonce, ResultsSha256: c.ResultsSHA256[:],
 		EngineVersion: c.Engine.Version, ApiVersion: c.Engine.APIVersion, Runtime: c.Engine.Runtime,
 		ImageDigests: c.ImageDigests, ConfigSha256: c.ConfigSHA256[:], GatewayID: c.Gateway, ConnectionRevision: b.Revision,
-		PackageVersionID: b.PackageVersionID, SessionStartedAt: c.SessionStartedAt, ObservedAt: c.ObservedAt,
+		PackageVersionID: *b.PackageVersionID, SessionStartedAt: c.SessionStartedAt, ObservedAt: c.ObservedAt,
 		ExpiresAt: c.ObservedAt.Add(s.Freshness.EnforcedTTL),
 	})
 	if err != nil {

@@ -18,6 +18,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/db/dbtest"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
+	mockpayments "github.com/katocxl/pantherclaw/packages/mock-payments"
 )
 
 const digest = "sha256:0000000000000000000000000000000000000000000000000000000000000000"
@@ -50,11 +51,11 @@ func newFixture(t *testing.T) *fixture {
 			expires_at) VALUES ($1, $2, $3, $4, $5, $5, 'launcher', now() + interval '8 hours')`, []any{f.org, f.run, f.agent, env, f.user}},
 		{"INSERT INTO pc.gateways (org_id, id, name, created_by) VALUES ($1, $2, 'edge', 'test')", []any{f.org, f.gateway}},
 		{`INSERT INTO pc.connections (org_id, id, name, kind, gateway_id, package, base_url, access_mode, default_mode,
-			created_by, updated_by) VALUES ($1, $2, 'github', 'http', $3, 'pc.git', 'https://api.github.com',
+			created_by, updated_by) VALUES ($1, $2, 'payments', 'http', $3, 'pc.mock-payments', 'https://api.example.com',
 			'pantherclaw_held', 'enforce', 'test', 'test')`, []any{f.org, f.conn, f.gateway}},
-		{"INSERT INTO pc.tool_packages (org_id, id, name) VALUES ($1, $2, 'pc.git')", []any{f.org, f.pkg}},
+		{"INSERT INTO pc.tool_packages (org_id, id, name) VALUES ($1, $2, 'pc.mock-payments')", []any{f.org, f.pkg}},
 		{`INSERT INTO pc.package_versions (org_id, id, package_id, version, file_digest, raw, state)
-			VALUES ($1, $2, $3, '1.0.0', $4, '\x7b7d', 'ACTIVE')`, []any{f.org, version, f.pkg, digest}},
+			VALUES ($1, $2, $3, '1.0.0', $4, $5, 'ACTIVE')`, []any{f.org, version, f.pkg, digest, mockpayments.Package}},
 		{
 			`INSERT INTO pc.package_pins (org_id, package_id, version_id, version, digest) VALUES ($1, $2, $3, '1.0.0', $4)`,
 			[]any{f.org, f.pkg, version, digest},
@@ -120,7 +121,7 @@ func probes(failNegative bool) []domain.ProbeResult {
 // closed.
 func TestIntRecordClosureBindsAndExpires(t *testing.T) {
 	f := newFixture(t)
-	c := f.closure(probes(false), time.Now().Add(-time.Minute))
+	c := f.closure(probes(false), f.dbNow(t))
 	id, err := f.record(t, c)
 	if err != nil {
 		t.Fatal(err)
@@ -143,7 +144,7 @@ func TestIntRecordClosureBindsAndExpires(t *testing.T) {
 // failed closure is stored and invalidates the scope at once.
 func TestHR211_ClosureAfterAChangeIsRefused(t *testing.T) {
 	f := newFixture(t)
-	started := time.Now().Add(-time.Minute)
+	started := f.dbNow(t) // after the fixture's package pin
 	f.exec(t, `INSERT INTO pc.coverage_invalidations (org_id, id, kind, connection_id) VALUES ($1, $2, 'exclusion', $3)`,
 		f.org, ids.NewV7(), f.conn)
 	if _, err := f.record(t, f.closure(probes(false), started)); err != nil {
