@@ -1,0 +1,401 @@
+{
+  "format": "pantherclaw.conformance/v1",
+  "group": "sdk_face",
+  "description": "How an SDK sends an agent's tool call to the gateway's /sdk face, what it concludes from each answer (only allow, and observe for an unmapped built-in tool, let the call run), and how it renews its token and waits at the server.",
+  "source": "the /sdk/{connection} face of tracks S and C (internal/gateway/sdk; G0 M8, HR-200, HR-201), internal/actionir for hashes and internal/gen protojson for the server exchanges",
+  "gateway": "https://gateway.example.test",
+  "server": "https://pantherclaw.example.test",
+  "connection": "local",
+  "servers": [
+    "payments",
+    "git__hub"
+  ],
+  "calls": [
+    {
+      "name": "an MCP tool",
+      "tool": "mcp__payments__create_refund",
+      "input": {
+        "amount": "30.00",
+        "charge": "ch_1",
+        "currency": "USD",
+        "reason": "duplicate"
+      },
+      "tool_use_id": "toolu_01",
+      "path": "/sdk/local",
+      "body": {
+        "tool": "mcp__payments__create_refund",
+        "server": "payments",
+        "input": {
+          "amount": "30.00",
+          "charge": "ch_1",
+          "currency": "USD",
+          "reason": "duplicate"
+        },
+        "tool_use_id": "toolu_01"
+      },
+      "class": "mapped"
+    },
+    {
+      "name": "an MCP server whose name has a double underscore",
+      "tool": "mcp__git__hub__merge_pull_request",
+      "input": {
+        "pull_number": "7"
+      },
+      "tool_use_id": "toolu_02",
+      "path": "/sdk/local",
+      "body": {
+        "tool": "mcp__git__hub__merge_pull_request",
+        "server": "git__hub",
+        "input": {
+          "pull_number": "7"
+        },
+        "tool_use_id": "toolu_02"
+      },
+      "class": "mapped"
+    },
+    {
+      "name": "a shell tool",
+      "tool": "Bash",
+      "input": {
+        "command": "go test ./...",
+        "description": "Run the tests"
+      },
+      "tool_use_id": "toolu_03",
+      "cwd": "/home/dev/repo",
+      "path": "/sdk/local",
+      "body": {
+        "tool": "Bash",
+        "input": {
+          "command": "go test ./...",
+          "description": "Run the tests"
+        },
+        "tool_use_id": "toolu_03",
+        "cwd": "/home/dev/repo"
+      },
+      "class": "mapped"
+    },
+    {
+      "name": "PowerShell",
+      "tool": "PowerShell",
+      "input": {
+        "command": "Get-ChildItem"
+      },
+      "tool_use_id": "toolu_04",
+      "cwd": "C:\\Users\\dev\\repo",
+      "path": "/sdk/local",
+      "body": {
+        "tool": "PowerShell",
+        "input": {
+          "command": "Get-ChildItem"
+        },
+        "tool_use_id": "toolu_04",
+        "cwd": "C:\\Users\\dev\\repo"
+      },
+      "class": "mapped"
+    },
+    {
+      "name": "a built-in tool",
+      "tool": "Read",
+      "input": {
+        "file_path": "/etc/hosts"
+      },
+      "tool_use_id": "toolu_05",
+      "path": "/sdk/local",
+      "body": {
+        "tool": "Read",
+        "input": {
+          "file_path": "/etc/hosts"
+        },
+        "tool_use_id": "toolu_05"
+      },
+      "class": "builtin"
+    },
+    {
+      "name": "an MCP server the agent is not configured with",
+      "tool": "mcp__other__run",
+      "input": {},
+      "tool_use_id": "toolu_06",
+      "class": "refused"
+    },
+    {
+      "name": "an MCP name without a tool",
+      "tool": "mcp__payments__",
+      "input": {},
+      "tool_use_id": "toolu_07",
+      "class": "refused"
+    }
+  ],
+  "answers": [
+    {
+      "name": "allowed and recorded as delegated",
+      "status": 200,
+      "body": "{\"decision\":\"allow\",\"reason\":\"PantherClaw allowed this call.\",\"action_id\":\"01920000-0000-7000-8000-000000000004\",\"action_hash\":\"8af51c7f1532efc128eada40f6ffae64990975fc30d5aa748382635361ce4ae3\",\"action_ir\":\"eyJhY3Rpb25faWQiOiIwMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDQiLCJhZ2VudF9pbnN0YW5jZSI6IjAxOTIwMDAwLTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDAwNSIsImNoYW5uZWwiOiJzZGsiLCJjb25uZWN0aW9uIjoiMDE5MjAwMDAtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDA3IiwiZGVkdXBlX2tleSI6InNoYTI1NjozZTU4MDc0YTVlNWRjNjE2OGFhOWJiYWFkYWZmZmRkZDJmOTFjMmVmYWFlZTAwM2U1MTRkZGYyN2ZkOTljZjEwIiwiZGVmaW5pdGlvbiI6eyJkaWdlc3QiOiJzaGEyNTY6NTNiM2VmZmM1ZDZmYzExMDcwODIwZmVmZDE0ODA2YjAxY2RkNjQ4NWQwZTJhMjEzNmZmMTU5MjUwMzFmYWM0MyIsInBhY2thZ2UiOiJwYy5tb2NrLXBheW1lbnRzIiwidmVyc2lvbiI6IjEuMC4wIn0sImRlc3RpbmF0aW9ucyI6W10sImVudiI6IjAxOTIwMDAwLTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDAwMiIsIm9wZXJhdGlvbiI6InBheW1lbnRzLnJlZnVuZC5jcmVhdGUiLCJvcmciOiIwMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDEiLCJwYXJhbXMiOnsiYW1vdW50Ijp7ImN1cnJlbmN5IjoiVVNEIiwidmFsdWUiOiIzMC4wMCJ9LCJyZWFzb24iOiJkdXBsaWNhdGUifSwicm91dGUiOiJwYXltZW50cy1yZWZ1bmQiLCJydW5faWQiOiIwMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDMiLCJ0YXJnZXQiOnsiaWQiOiJjaF8xIiwidHlwZSI6InBheW1lbnRzLmNoYXJnZSJ9LCJ2IjoxfQ\",\"transaction_id\":\"01920000-0000-7000-8000-000000000009\",\"mode\":\"enforce\",\"coverage\":\"PARTIAL\"}",
+      "action_id": "01920000-0000-7000-8000-000000000004",
+      "outcome": "allow"
+    },
+    {
+      "name": "allowed without the action",
+      "status": 200,
+      "body": "{\"decision\":\"allow\",\"reason\":\"\",\"action_id\":\"01920000-0000-7000-8000-000000000004\",\"action_hash\":\"8af51c7f1532efc128eada40f6ffae64990975fc30d5aa748382635361ce4ae3\",\"transaction_id\":\"01920000-0000-7000-8000-000000000009\",\"mode\":\"enforce\",\"coverage\":\"PARTIAL\"}",
+      "action_id": "01920000-0000-7000-8000-000000000004",
+      "outcome": "allow"
+    },
+    {
+      "name": "monitor mode: recorded, not decided",
+      "status": 200,
+      "body": "{\"decision\":\"allow\",\"reason\":\"\",\"action_id\":\"01920000-0000-7000-8000-000000000004\",\"action_hash\":\"8af51c7f1532efc128eada40f6ffae64990975fc30d5aa748382635361ce4ae3\",\"action_ir\":\"eyJhY3Rpb25faWQiOiIwMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDQiLCJhZ2VudF9pbnN0YW5jZSI6IjAxOTIwMDAwLTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDAwNSIsImNoYW5uZWwiOiJzZGsiLCJjb25uZWN0aW9uIjoiMDE5MjAwMDAtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDA3IiwiZGVkdXBlX2tleSI6InNoYTI1NjozZTU4MDc0YTVlNWRjNjE2OGFhOWJiYWFkYWZmZmRkZDJmOTFjMmVmYWFlZTAwM2U1MTRkZGYyN2ZkOTljZjEwIiwiZGVmaW5pdGlvbiI6eyJkaWdlc3QiOiJzaGEyNTY6NTNiM2VmZmM1ZDZmYzExMDcwODIwZmVmZDE0ODA2YjAxY2RkNjQ4NWQwZTJhMjEzNmZmMTU5MjUwMzFmYWM0MyIsInBhY2thZ2UiOiJwYy5tb2NrLXBheW1lbnRzIiwidmVyc2lvbiI6IjEuMC4wIn0sImRlc3RpbmF0aW9ucyI6W10sImVudiI6IjAxOTIwMDAwLTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDAwMiIsIm9wZXJhdGlvbiI6InBheW1lbnRzLnJlZnVuZC5jcmVhdGUiLCJvcmciOiIwMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDEiLCJwYXJhbXMiOnsiYW1vdW50Ijp7ImN1cnJlbmN5IjoiVVNEIiwidmFsdWUiOiIzMC4wMCJ9LCJyZWFzb24iOiJkdXBsaWNhdGUifSwicm91dGUiOiJwYXltZW50cy1yZWZ1bmQiLCJydW5faWQiOiIwMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDMiLCJ0YXJnZXQiOnsiaWQiOiJjaF8xIiwidHlwZSI6InBheW1lbnRzLmNoYXJnZSJ9LCJ2IjoxfQ\",\"transaction_id\":\"01920000-0000-7000-8000-000000000009\",\"mode\":\"monitor\",\"coverage\":\"PARTIAL\"}",
+      "action_id": "01920000-0000-7000-8000-000000000004",
+      "outcome": "allow"
+    },
+    {
+      "name": "held for an approval",
+      "status": 200,
+      "body": "{\"decision\":\"hold\",\"reason\":\"\",\"error_class\":\"HELD\",\"action_id\":\"01920000-0000-7000-8000-000000000004\",\"action_hash\":\"8af51c7f1532efc128eada40f6ffae64990975fc30d5aa748382635361ce4ae3\",\"action_ir\":\"eyJhY3Rpb25faWQiOiIwMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDQiLCJhZ2VudF9pbnN0YW5jZSI6IjAxOTIwMDAwLTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDAwNSIsImNoYW5uZWwiOiJzZGsiLCJjb25uZWN0aW9uIjoiMDE5MjAwMDAtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDA3IiwiZGVkdXBlX2tleSI6InNoYTI1NjozZTU4MDc0YTVlNWRjNjE2OGFhOWJiYWFkYWZmZmRkZDJmOTFjMmVmYWFlZTAwM2U1MTRkZGYyN2ZkOTljZjEwIiwiZGVmaW5pdGlvbiI6eyJkaWdlc3QiOiJzaGEyNTY6NTNiM2VmZmM1ZDZmYzExMDcwODIwZmVmZDE0ODA2YjAxY2RkNjQ4NWQwZTJhMjEzNmZmMTU5MjUwMzFmYWM0MyIsInBhY2thZ2UiOiJwYy5tb2NrLXBheW1lbnRzIiwidmVyc2lvbiI6IjEuMC4wIn0sImRlc3RpbmF0aW9ucyI6W10sImVudiI6IjAxOTIwMDAwLTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDAwMiIsIm9wZXJhdGlvbiI6InBheW1lbnRzLnJlZnVuZC5jcmVhdGUiLCJvcmciOiIwMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDEiLCJwYXJhbXMiOnsiYW1vdW50Ijp7ImN1cnJlbmN5IjoiVVNEIiwidmFsdWUiOiIzMC4wMCJ9LCJyZWFzb24iOiJkdXBsaWNhdGUifSwicm91dGUiOiJwYXltZW50cy1yZWZ1bmQiLCJydW5faWQiOiIwMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDMiLCJ0YXJnZXQiOnsiaWQiOiJjaF8xIiwidHlwZSI6InBheW1lbnRzLmNoYXJnZSJ9LCJ2IjoxfQ\",\"transaction_id\":\"01920000-0000-7000-8000-000000000009\",\"mode\":\"enforce\",\"coverage\":\"PARTIAL\",\"wait\":{\"handle\":\"01920000-0000-7000-8000-000000000009\",\"state\":\"PENDING\",\"retry_after_seconds\":5,\"deadline\":\"2026-10-11T13:00:00Z\",\"approval_request_id\":\"01920000-0000-7000-8000-00000000000a\"}}",
+      "action_id": "01920000-0000-7000-8000-000000000004",
+      "outcome": "hold"
+    },
+    {
+      "name": "denied",
+      "status": 200,
+      "body": "{\"decision\":\"deny\",\"reason\":\"\",\"error_class\":\"DENIED\",\"code\":\"GRANT_AMOUNT_EXCEEDED\",\"reasons\":[\"GRANT_AMOUNT_EXCEEDED\"],\"action_id\":\"01920000-0000-7000-8000-000000000004\",\"action_hash\":\"8af51c7f1532efc128eada40f6ffae64990975fc30d5aa748382635361ce4ae3\",\"action_ir\":\"eyJhY3Rpb25faWQiOiIwMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDQiLCJhZ2VudF9pbnN0YW5jZSI6IjAxOTIwMDAwLTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDAwNSIsImNoYW5uZWwiOiJzZGsiLCJjb25uZWN0aW9uIjoiMDE5MjAwMDAtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDA3IiwiZGVkdXBlX2tleSI6InNoYTI1NjozZTU4MDc0YTVlNWRjNjE2OGFhOWJiYWFkYWZmZmRkZDJmOTFjMmVmYWFlZTAwM2U1MTRkZGYyN2ZkOTljZjEwIiwiZGVmaW5pdGlvbiI6eyJkaWdlc3QiOiJzaGEyNTY6NTNiM2VmZmM1ZDZmYzExMDcwODIwZmVmZDE0ODA2YjAxY2RkNjQ4NWQwZTJhMjEzNmZmMTU5MjUwMzFmYWM0MyIsInBhY2thZ2UiOiJwYy5tb2NrLXBheW1lbnRzIiwidmVyc2lvbiI6IjEuMC4wIn0sImRlc3RpbmF0aW9ucyI6W10sImVudiI6IjAxOTIwMDAwLTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDAwMiIsIm9wZXJhdGlvbiI6InBheW1lbnRzLnJlZnVuZC5jcmVhdGUiLCJvcmciOiIwMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDEiLCJwYXJhbXMiOnsiYW1vdW50Ijp7ImN1cnJlbmN5IjoiVVNEIiwidmFsdWUiOiIzMC4wMCJ9LCJyZWFzb24iOiJkdXBsaWNhdGUifSwicm91dGUiOiJwYXltZW50cy1yZWZ1bmQiLCJydW5faWQiOiIwMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDMiLCJ0YXJnZXQiOnsiaWQiOiJjaF8xIiwidHlwZSI6InBheW1lbnRzLmNoYXJnZSJ9LCJ2IjoxfQ\",\"transaction_id\":\"01920000-0000-7000-8000-000000000009\",\"mode\":\"enforce\",\"coverage\":\"PARTIAL\"}",
+      "action_id": "01920000-0000-7000-8000-000000000004",
+      "outcome": "deny"
+    },
+    {
+      "name": "a tool the package does not map",
+      "status": 200,
+      "body": "{\"decision\":\"deny\",\"reason\":\"\",\"error_class\":\"CANNOT_AUTHORIZE\",\"code\":\"unknown_tool\",\"action_id\":\"01920000-0000-7000-8000-000000000004\",\"mode\":\"enforce\",\"coverage\":\"PARTIAL\"}",
+      "action_id": "01920000-0000-7000-8000-000000000004",
+      "outcome": "deny"
+    },
+    {
+      "name": "an unmapped built-in tool is observed",
+      "status": 200,
+      "body": "{\"decision\":\"allow\",\"reason\":\"PantherClaw does not map the Read tool.\",\"mode\":\"monitor\",\"coverage\":\"OBSERVE_ONLY\"}",
+      "action_id": "01920000-0000-7000-8000-000000000004",
+      "outcome": "observe"
+    },
+    {
+      "name": "an allow whose action does not hash to its hash",
+      "status": 200,
+      "body": "{\"decision\":\"allow\",\"reason\":\"\",\"action_id\":\"01920000-0000-7000-8000-000000000004\",\"action_hash\":\"8af51c7f1532efc128eada40f6ffae64990975fc30d5aa748382635361ce4ae3\",\"action_ir\":\"eyJhY3Rpb25faWQiOiIwMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDQiLCJhZ2VudF9pbnN0YW5jZSI6IjAxOTIwMDAwLTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDAwNSIsImNoYW5uZWwiOiJzZGsiLCJjb25uZWN0aW9uIjoiMDE5MjAwMDAtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDA3IiwiZGVkdXBlX2tleSI6InNoYTI1NjozZTU4MDc0YTVlNWRjNjE2OGFhOWJiYWFkYWZmZmRkZDJmOTFjMmVmYWFlZTAwM2U1MTRkZGYyN2ZkOTljZjEwIiwiZGVmaW5pdGlvbiI6eyJkaWdlc3QiOiJzaGEyNTY6NTNiM2VmZmM1ZDZmYzExMDcwODIwZmVmZDE0ODA2YjAxY2RkNjQ4NWQwZTJhMjEzNmZmMTU5MjUwMzFmYWM0MyIsInBhY2thZ2UiOiJwYy5tb2NrLXBheW1lbnRzIiwidmVyc2lvbiI6IjEuMC4wIn0sImRlc3RpbmF0aW9ucyI6W10sImVudiI6IjAxOTIwMDAwLTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDAwMiIsIm9wZXJhdGlvbiI6InBheW1lbnRzLnJlZnVuZC5jcmVhdGUiLCJvcmciOiIwMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDEiLCJwYXJhbXMiOnsiYW1vdW50Ijp7ImN1cnJlbmN5IjoiVVNEIiwidmFsdWUiOiIzMC4wMCJ9LCJyZWFzb24iOiJkdXBsaWNhdGUifSwicm91dGUiOiJwYXltZW50cy1yZWZ1bmQiLCJydW5faWQiOiIwMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDMiLCJ0YXJnZXQiOnsiaWQiOiJjaF8yIiwidHlwZSI6InBheW1lbnRzLmNoYXJnZSJ9LCJ2IjoxfQ\",\"transaction_id\":\"01920000-0000-7000-8000-000000000009\",\"mode\":\"enforce\",\"coverage\":\"PARTIAL\"}",
+      "action_id": "01920000-0000-7000-8000-000000000004",
+      "outcome": "cannot_decide"
+    },
+    {
+      "name": "an allow for another action id",
+      "status": 200,
+      "body": "{\"decision\":\"allow\",\"reason\":\"\",\"action_id\":\"01920000-0000-7000-8000-00000000000b\",\"action_hash\":\"8af51c7f1532efc128eada40f6ffae64990975fc30d5aa748382635361ce4ae3\",\"action_ir\":\"eyJhY3Rpb25faWQiOiIwMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDQiLCJhZ2VudF9pbnN0YW5jZSI6IjAxOTIwMDAwLTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDAwNSIsImNoYW5uZWwiOiJzZGsiLCJjb25uZWN0aW9uIjoiMDE5MjAwMDAtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDA3IiwiZGVkdXBlX2tleSI6InNoYTI1NjozZTU4MDc0YTVlNWRjNjE2OGFhOWJiYWFkYWZmZmRkZDJmOTFjMmVmYWFlZTAwM2U1MTRkZGYyN2ZkOTljZjEwIiwiZGVmaW5pdGlvbiI6eyJkaWdlc3QiOiJzaGEyNTY6NTNiM2VmZmM1ZDZmYzExMDcwODIwZmVmZDE0ODA2YjAxY2RkNjQ4NWQwZTJhMjEzNmZmMTU5MjUwMzFmYWM0MyIsInBhY2thZ2UiOiJwYy5tb2NrLXBheW1lbnRzIiwidmVyc2lvbiI6IjEuMC4wIn0sImRlc3RpbmF0aW9ucyI6W10sImVudiI6IjAxOTIwMDAwLTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDAwMiIsIm9wZXJhdGlvbiI6InBheW1lbnRzLnJlZnVuZC5jcmVhdGUiLCJvcmciOiIwMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDEiLCJwYXJhbXMiOnsiYW1vdW50Ijp7ImN1cnJlbmN5IjoiVVNEIiwidmFsdWUiOiIzMC4wMCJ9LCJyZWFzb24iOiJkdXBsaWNhdGUifSwicm91dGUiOiJwYXltZW50cy1yZWZ1bmQiLCJydW5faWQiOiIwMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDMiLCJ0YXJnZXQiOnsiaWQiOiJjaF8xIiwidHlwZSI6InBheW1lbnRzLmNoYXJnZSJ9LCJ2IjoxfQ\",\"transaction_id\":\"01920000-0000-7000-8000-000000000009\",\"mode\":\"enforce\",\"coverage\":\"PARTIAL\"}",
+      "action_id": "01920000-0000-7000-8000-000000000004",
+      "outcome": "cannot_decide"
+    },
+    {
+      "name": "an allow without an action hash",
+      "status": 200,
+      "body": "{\"decision\":\"allow\",\"reason\":\"\",\"action_id\":\"01920000-0000-7000-8000-000000000004\",\"transaction_id\":\"01920000-0000-7000-8000-000000000009\",\"mode\":\"enforce\",\"coverage\":\"PARTIAL\"}",
+      "action_id": "01920000-0000-7000-8000-000000000004",
+      "outcome": "cannot_decide"
+    },
+    {
+      "name": "an allow that is not labeled",
+      "status": 200,
+      "body": "{\"decision\":\"allow\",\"reason\":\"\",\"action_id\":\"01920000-0000-7000-8000-000000000004\",\"action_hash\":\"8af51c7f1532efc128eada40f6ffae64990975fc30d5aa748382635361ce4ae3\",\"action_ir\":\"eyJhY3Rpb25faWQiOiIwMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDQiLCJhZ2VudF9pbnN0YW5jZSI6IjAxOTIwMDAwLTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDAwNSIsImNoYW5uZWwiOiJzZGsiLCJjb25uZWN0aW9uIjoiMDE5MjAwMDAtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDA3IiwiZGVkdXBlX2tleSI6InNoYTI1NjozZTU4MDc0YTVlNWRjNjE2OGFhOWJiYWFkYWZmZmRkZDJmOTFjMmVmYWFlZTAwM2U1MTRkZGYyN2ZkOTljZjEwIiwiZGVmaW5pdGlvbiI6eyJkaWdlc3QiOiJzaGEyNTY6NTNiM2VmZmM1ZDZmYzExMDcwODIwZmVmZDE0ODA2YjAxY2RkNjQ4NWQwZTJhMjEzNmZmMTU5MjUwMzFmYWM0MyIsInBhY2thZ2UiOiJwYy5tb2NrLXBheW1lbnRzIiwidmVyc2lvbiI6IjEuMC4wIn0sImRlc3RpbmF0aW9ucyI6W10sImVudiI6IjAxOTIwMDAwLTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDAwMiIsIm9wZXJhdGlvbiI6InBheW1lbnRzLnJlZnVuZC5jcmVhdGUiLCJvcmciOiIwMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDEiLCJwYXJhbXMiOnsiYW1vdW50Ijp7ImN1cnJlbmN5IjoiVVNEIiwidmFsdWUiOiIzMC4wMCJ9LCJyZWFzb24iOiJkdXBsaWNhdGUifSwicm91dGUiOiJwYXltZW50cy1yZWZ1bmQiLCJydW5faWQiOiIwMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDMiLCJ0YXJnZXQiOnsiaWQiOiJjaF8xIiwidHlwZSI6InBheW1lbnRzLmNoYXJnZSJ9LCJ2IjoxfQ\",\"transaction_id\":\"01920000-0000-7000-8000-000000000009\",\"mode\":\"enforce\",\"coverage\":\"\"}",
+      "action_id": "01920000-0000-7000-8000-000000000004",
+      "outcome": "cannot_decide"
+    },
+    {
+      "name": "an observed call that is not monitored",
+      "status": 200,
+      "body": "{\"decision\":\"allow\",\"reason\":\"\",\"mode\":\"enforce\",\"coverage\":\"OBSERVE_ONLY\"}",
+      "action_id": "01920000-0000-7000-8000-000000000004",
+      "outcome": "cannot_decide"
+    },
+    {
+      "name": "a hold without a wait handle",
+      "status": 200,
+      "body": "{\"decision\":\"hold\",\"reason\":\"\",\"action_id\":\"01920000-0000-7000-8000-000000000004\",\"action_hash\":\"8af51c7f1532efc128eada40f6ffae64990975fc30d5aa748382635361ce4ae3\",\"action_ir\":\"eyJhY3Rpb25faWQiOiIwMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDQiLCJhZ2VudF9pbnN0YW5jZSI6IjAxOTIwMDAwLTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDAwNSIsImNoYW5uZWwiOiJzZGsiLCJjb25uZWN0aW9uIjoiMDE5MjAwMDAtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDA3IiwiZGVkdXBlX2tleSI6InNoYTI1NjozZTU4MDc0YTVlNWRjNjE2OGFhOWJiYWFkYWZmZmRkZDJmOTFjMmVmYWFlZTAwM2U1MTRkZGYyN2ZkOTljZjEwIiwiZGVmaW5pdGlvbiI6eyJkaWdlc3QiOiJzaGEyNTY6NTNiM2VmZmM1ZDZmYzExMDcwODIwZmVmZDE0ODA2YjAxY2RkNjQ4NWQwZTJhMjEzNmZmMTU5MjUwMzFmYWM0MyIsInBhY2thZ2UiOiJwYy5tb2NrLXBheW1lbnRzIiwidmVyc2lvbiI6IjEuMC4wIn0sImRlc3RpbmF0aW9ucyI6W10sImVudiI6IjAxOTIwMDAwLTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDAwMiIsIm9wZXJhdGlvbiI6InBheW1lbnRzLnJlZnVuZC5jcmVhdGUiLCJvcmciOiIwMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDEiLCJwYXJhbXMiOnsiYW1vdW50Ijp7ImN1cnJlbmN5IjoiVVNEIiwidmFsdWUiOiIzMC4wMCJ9LCJyZWFzb24iOiJkdXBsaWNhdGUifSwicm91dGUiOiJwYXltZW50cy1yZWZ1bmQiLCJydW5faWQiOiIwMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDMiLCJ0YXJnZXQiOnsiaWQiOiJjaF8xIiwidHlwZSI6InBheW1lbnRzLmNoYXJnZSJ9LCJ2IjoxfQ\",\"transaction_id\":\"01920000-0000-7000-8000-000000000009\",\"mode\":\"enforce\",\"coverage\":\"PARTIAL\"}",
+      "action_id": "01920000-0000-7000-8000-000000000004",
+      "outcome": "cannot_decide"
+    },
+    {
+      "name": "an unknown decision",
+      "status": 200,
+      "body": "{\"decision\":\"maybe\",\"reason\":\"\",\"action_id\":\"01920000-0000-7000-8000-000000000004\",\"action_hash\":\"8af51c7f1532efc128eada40f6ffae64990975fc30d5aa748382635361ce4ae3\",\"action_ir\":\"eyJhY3Rpb25faWQiOiIwMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDQiLCJhZ2VudF9pbnN0YW5jZSI6IjAxOTIwMDAwLTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDAwNSIsImNoYW5uZWwiOiJzZGsiLCJjb25uZWN0aW9uIjoiMDE5MjAwMDAtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDA3IiwiZGVkdXBlX2tleSI6InNoYTI1NjozZTU4MDc0YTVlNWRjNjE2OGFhOWJiYWFkYWZmZmRkZDJmOTFjMmVmYWFlZTAwM2U1MTRkZGYyN2ZkOTljZjEwIiwiZGVmaW5pdGlvbiI6eyJkaWdlc3QiOiJzaGEyNTY6NTNiM2VmZmM1ZDZmYzExMDcwODIwZmVmZDE0ODA2YjAxY2RkNjQ4NWQwZTJhMjEzNmZmMTU5MjUwMzFmYWM0MyIsInBhY2thZ2UiOiJwYy5tb2NrLXBheW1lbnRzIiwidmVyc2lvbiI6IjEuMC4wIn0sImRlc3RpbmF0aW9ucyI6W10sImVudiI6IjAxOTIwMDAwLTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDAwMiIsIm9wZXJhdGlvbiI6InBheW1lbnRzLnJlZnVuZC5jcmVhdGUiLCJvcmciOiIwMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDEiLCJwYXJhbXMiOnsiYW1vdW50Ijp7ImN1cnJlbmN5IjoiVVNEIiwidmFsdWUiOiIzMC4wMCJ9LCJyZWFzb24iOiJkdXBsaWNhdGUifSwicm91dGUiOiJwYXltZW50cy1yZWZ1bmQiLCJydW5faWQiOiIwMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDMiLCJ0YXJnZXQiOnsiaWQiOiJjaF8xIiwidHlwZSI6InBheW1lbnRzLmNoYXJnZSJ9LCJ2IjoxfQ\",\"transaction_id\":\"01920000-0000-7000-8000-000000000009\",\"mode\":\"enforce\",\"coverage\":\"PARTIAL\"}",
+      "action_id": "01920000-0000-7000-8000-000000000004",
+      "outcome": "cannot_decide"
+    },
+    {
+      "name": "a resubmission of the same action",
+      "status": 200,
+      "body": "{\"decision\":\"allow\",\"reason\":\"\",\"action_id\":\"01920000-0000-7000-8000-000000000004\",\"action_hash\":\"8af51c7f1532efc128eada40f6ffae64990975fc30d5aa748382635361ce4ae3\",\"action_ir\":\"eyJhY3Rpb25faWQiOiIwMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDQiLCJhZ2VudF9pbnN0YW5jZSI6IjAxOTIwMDAwLTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDAwNSIsImNoYW5uZWwiOiJzZGsiLCJjb25uZWN0aW9uIjoiMDE5MjAwMDAtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDA3IiwiZGVkdXBlX2tleSI6InNoYTI1NjozZTU4MDc0YTVlNWRjNjE2OGFhOWJiYWFkYWZmZmRkZDJmOTFjMmVmYWFlZTAwM2U1MTRkZGYyN2ZkOTljZjEwIiwiZGVmaW5pdGlvbiI6eyJkaWdlc3QiOiJzaGEyNTY6NTNiM2VmZmM1ZDZmYzExMDcwODIwZmVmZDE0ODA2YjAxY2RkNjQ4NWQwZTJhMjEzNmZmMTU5MjUwMzFmYWM0MyIsInBhY2thZ2UiOiJwYy5tb2NrLXBheW1lbnRzIiwidmVyc2lvbiI6IjEuMC4wIn0sImRlc3RpbmF0aW9ucyI6W10sImVudiI6IjAxOTIwMDAwLTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDAwMiIsIm9wZXJhdGlvbiI6InBheW1lbnRzLnJlZnVuZC5jcmVhdGUiLCJvcmciOiIwMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDEiLCJwYXJhbXMiOnsiYW1vdW50Ijp7ImN1cnJlbmN5IjoiVVNEIiwidmFsdWUiOiIzMC4wMCJ9LCJyZWFzb24iOiJkdXBsaWNhdGUifSwicm91dGUiOiJwYXltZW50cy1yZWZ1bmQiLCJydW5faWQiOiIwMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDMiLCJ0YXJnZXQiOnsiaWQiOiJjaF8xIiwidHlwZSI6InBheW1lbnRzLmNoYXJnZSJ9LCJ2IjoxfQ\",\"transaction_id\":\"01920000-0000-7000-8000-000000000009\",\"mode\":\"enforce\",\"coverage\":\"PARTIAL\"}",
+      "action_id": "01920000-0000-7000-8000-000000000004",
+      "first_hash": "8af51c7f1532efc128eada40f6ffae64990975fc30d5aa748382635361ce4ae3",
+      "outcome": "allow"
+    },
+    {
+      "name": "a resubmission that mapped to another action",
+      "status": 200,
+      "body": "{\"decision\":\"allow\",\"reason\":\"\",\"action_id\":\"01920000-0000-7000-8000-000000000004\",\"action_hash\":\"8af51c7f1532efc128eada40f6ffae64990975fc30d5aa748382635361ce4ae3\",\"action_ir\":\"eyJhY3Rpb25faWQiOiIwMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDQiLCJhZ2VudF9pbnN0YW5jZSI6IjAxOTIwMDAwLTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDAwNSIsImNoYW5uZWwiOiJzZGsiLCJjb25uZWN0aW9uIjoiMDE5MjAwMDAtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDA3IiwiZGVkdXBlX2tleSI6InNoYTI1NjozZTU4MDc0YTVlNWRjNjE2OGFhOWJiYWFkYWZmZmRkZDJmOTFjMmVmYWFlZTAwM2U1MTRkZGYyN2ZkOTljZjEwIiwiZGVmaW5pdGlvbiI6eyJkaWdlc3QiOiJzaGEyNTY6NTNiM2VmZmM1ZDZmYzExMDcwODIwZmVmZDE0ODA2YjAxY2RkNjQ4NWQwZTJhMjEzNmZmMTU5MjUwMzFmYWM0MyIsInBhY2thZ2UiOiJwYy5tb2NrLXBheW1lbnRzIiwidmVyc2lvbiI6IjEuMC4wIn0sImRlc3RpbmF0aW9ucyI6W10sImVudiI6IjAxOTIwMDAwLTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDAwMiIsIm9wZXJhdGlvbiI6InBheW1lbnRzLnJlZnVuZC5jcmVhdGUiLCJvcmciOiIwMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDEiLCJwYXJhbXMiOnsiYW1vdW50Ijp7ImN1cnJlbmN5IjoiVVNEIiwidmFsdWUiOiIzMC4wMCJ9LCJyZWFzb24iOiJkdXBsaWNhdGUifSwicm91dGUiOiJwYXltZW50cy1yZWZ1bmQiLCJydW5faWQiOiIwMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDMiLCJ0YXJnZXQiOnsiaWQiOiJjaF8xIiwidHlwZSI6InBheW1lbnRzLmNoYXJnZSJ9LCJ2IjoxfQ\",\"transaction_id\":\"01920000-0000-7000-8000-000000000009\",\"mode\":\"enforce\",\"coverage\":\"PARTIAL\"}",
+      "action_id": "01920000-0000-7000-8000-000000000004",
+      "first_hash": "0a0740947be63c4a8393338ce3ee9d6ac632d880a693d7f4d63b3978b8421770",
+      "outcome": "cannot_decide"
+    },
+    {
+      "name": "not JSON",
+      "status": 200,
+      "body": "<html>proxy error</html>",
+      "action_id": "01920000-0000-7000-8000-000000000004",
+      "outcome": "cannot_decide"
+    },
+    {
+      "name": "a gateway error",
+      "status": 502,
+      "body": "",
+      "action_id": "01920000-0000-7000-8000-000000000004",
+      "outcome": "cannot_decide"
+    },
+    {
+      "name": "a malformed request",
+      "status": 400,
+      "body": "{\"code\":\"invalid_request\",\"coverage\":\"PARTIAL\",\"decision\":\"deny\",\"error_class\":\"CANNOT_AUTHORIZE\",\"mode\":\"enforce\",\"reason\":\"…\"}",
+      "action_id": "01920000-0000-7000-8000-000000000004",
+      "outcome": "cannot_decide"
+    },
+    {
+      "name": "an unknown connection",
+      "status": 404,
+      "body": "{\"code\":\"unknown_connection\",\"coverage\":\"PARTIAL\",\"decision\":\"deny\",\"error_class\":\"CANNOT_AUTHORIZE\",\"mode\":\"enforce\",\"reason\":\"…\"}",
+      "action_id": "01920000-0000-7000-8000-000000000004",
+      "outcome": "cannot_decide"
+    },
+    {
+      "name": "a fresh nonce",
+      "status": 401,
+      "headers": {
+        "PAP-Error": "use_nonce",
+        "PAP-Nonce": "Y29uZm9ybWFuY2Utbm9uY2UtMjAyNi0xMC0xMQ"
+      },
+      "body": "{\"code\":\"use_nonce\",\"coverage\":\"PARTIAL\",\"decision\":\"deny\",\"error_class\":\"CANNOT_AUTHORIZE\",\"mode\":\"enforce\",\"reason\":\"…\"}",
+      "action_id": "01920000-0000-7000-8000-000000000004",
+      "outcome": "retry_nonce"
+    },
+    {
+      "name": "an expired workload token",
+      "status": 401,
+      "headers": {
+        "PAP-Error": "token_expired",
+        "PAP-Nonce": "Y29uZm9ybWFuY2Utbm9uY2UtMjAyNi0xMC0xMQ"
+      },
+      "body": "{\"code\":\"token_expired\",\"coverage\":\"PARTIAL\",\"decision\":\"deny\",\"error_class\":\"CANNOT_AUTHORIZE\",\"mode\":\"enforce\",\"reason\":\"…\"}",
+      "action_id": "01920000-0000-7000-8000-000000000004",
+      "outcome": "refresh_token"
+    },
+    {
+      "name": "a replayed proof",
+      "status": 401,
+      "headers": {
+        "PAP-Error": "proof_replay",
+        "PAP-Nonce": "Y29uZm9ybWFuY2Utbm9uY2UtMjAyNi0xMC0xMQ"
+      },
+      "body": "{\"code\":\"proof_replay\",\"coverage\":\"PARTIAL\",\"decision\":\"deny\",\"error_class\":\"CANNOT_AUTHORIZE\",\"mode\":\"enforce\",\"reason\":\"…\"}",
+      "action_id": "01920000-0000-7000-8000-000000000004",
+      "outcome": "cannot_decide"
+    }
+  ],
+  "exchanges": [
+    {
+      "name": "token issuance",
+      "method": "POST",
+      "path": "/pantherclaw.v1.WorkloadService/IssueToken",
+      "request": {
+        "identifier": "pc:org/01920000-0000-7000-8000-000000000001/agent/01920000-0000-7000-8000-000000000006/inst/01920000-0000-7000-8000-000000000005"
+      },
+      "status": 200,
+      "body": "{\"attestationLevel\":1,\"expireTime\":\"2026-10-11T12:10:00Z\",\"workloadToken\":\"eyJhbGciOiJFZERTQSIsImtpZCI6Indvcmtsb2FkLXRva2Vucy12MFRhcHRSOGVWdWJRNzRfXzEwNmdQIiwidHlwIjoicGFwLXd0K2p3dCJ9.eyJpc3MiOiJodHRwczovL3BhbnRoZXJjbGF3LmV4YW1wbGUudGVzdCIsInN1YiI6InBjOm9yZy8wMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDEvYWdlbnQvMDE5MjAwMDAtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDA2L2luc3QvMDE5MjAwMDAtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDA1IiwiYXVkIjoicGFudGhlcmNsYXctZ2F0ZXdheSIsImlhdCI6MTc5MTcyMDAwMCwibmJmIjoxNzkxNzIwMDAwLCJleHAiOjE3OTE3MjA2MDAsImp0aSI6IjAwZGM2YWNmLWFjMDAtNzY1Ni04ZDczLTU2N2M4YjI1YmY4ZCIsImNuZiI6eyJqa3QiOiJ5NXFYUmw4bm5HTUZvQ3dwVTQtam5nWjRHd3JJSkdCQ0FROG9VdGQ0RTg0In0sInBhcCI6eyJ2IjoxLCJvcmciOiIwMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDEiLCJlbnYiOiIwMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDIiLCJhdHRfbHZsIjoxfX0.JbG1AZYLSwAlKkCVj462xD96Q47-5KkQUc1jnYdJndwRhZVep8VPCZXECz8JjwngrunWwtkqA11L1841VvJKDQ\"}",
+      "token": "eyJhbGciOiJFZERTQSIsImtpZCI6Indvcmtsb2FkLXRva2Vucy12MFRhcHRSOGVWdWJRNzRfXzEwNmdQIiwidHlwIjoicGFwLXd0K2p3dCJ9.eyJpc3MiOiJodHRwczovL3BhbnRoZXJjbGF3LmV4YW1wbGUudGVzdCIsInN1YiI6InBjOm9yZy8wMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDEvYWdlbnQvMDE5MjAwMDAtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDA2L2luc3QvMDE5MjAwMDAtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDA1IiwiYXVkIjoicGFudGhlcmNsYXctZ2F0ZXdheSIsImlhdCI6MTc5MTcyMDAwMCwibmJmIjoxNzkxNzIwMDAwLCJleHAiOjE3OTE3MjA2MDAsImp0aSI6IjAwZGM2YWNmLWFjMDAtNzY1Ni04ZDczLTU2N2M4YjI1YmY4ZCIsImNuZiI6eyJqa3QiOiJ5NXFYUmw4bm5HTUZvQ3dwVTQtam5nWjRHd3JJSkdCQ0FROG9VdGQ0RTg0In0sInBhcCI6eyJ2IjoxLCJvcmciOiIwMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDEiLCJlbnYiOiIwMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDIiLCJhdHRfbHZsIjoxfX0.JbG1AZYLSwAlKkCVj462xD96Q47-5KkQUc1jnYdJndwRhZVep8VPCZXECz8JjwngrunWwtkqA11L1841VvJKDQ",
+      "expires_at": 1791720600,
+      "outcome": "token"
+    },
+    {
+      "name": "token issuance asks for a nonce",
+      "method": "POST",
+      "path": "/pantherclaw.v1.WorkloadService/IssueToken",
+      "request": {
+        "identifier": "pc:org/01920000-0000-7000-8000-000000000001/agent/01920000-0000-7000-8000-000000000006/inst/01920000-0000-7000-8000-000000000005"
+      },
+      "status": 401,
+      "headers": {
+        "PAP-Error": "use_nonce",
+        "PAP-Nonce": "Y29uZm9ybWFuY2Utbm9uY2UtMjAyNi0xMC0xMQ"
+      },
+      "body": "{\"code\":\"unauthenticated\",\"message\":\"PAP/1: use_nonce\"}",
+      "outcome": "retry_nonce"
+    },
+    {
+      "name": "a long-poll that timed out",
+      "method": "POST",
+      "path": "/pantherclaw.v1.WorkloadService/Wait",
+      "request": {
+        "handle": "01920000-0000-7000-8000-000000000009",
+        "knownState": "WAIT_STATE_PENDING",
+        "runId": "01920000-0000-7000-8000-000000000003",
+        "timeoutSeconds": 30
+      },
+      "status": 200,
+      "body": "{\"timedOut\":true,\"wait\":{\"approvalRequestId\":\"01920000-0000-7000-8000-00000000000a\",\"deadlineTime\":\"2026-10-11T13:00:00Z\",\"handle\":\"01920000-0000-7000-8000-000000000009\",\"retryAfterSeconds\":5,\"state\":\"WAIT_STATE_PENDING\"}}",
+      "states": [
+        "PENDING"
+      ],
+      "outcome": "wait"
+    },
+    {
+      "name": "a long-poll that ends ready",
+      "method": "POST",
+      "path": "/pantherclaw.v1.WorkloadService/Wait",
+      "request": {
+        "handle": "01920000-0000-7000-8000-000000000009",
+        "knownState": "WAIT_STATE_PENDING",
+        "runId": "01920000-0000-7000-8000-000000000003",
+        "timeoutSeconds": 30
+      },
+      "status": 200,
+      "body": "{\"wait\":{\"approvalRequestId\":\"01920000-0000-7000-8000-00000000000a\",\"consumeByTime\":\"2026-10-11T12:15:00Z\",\"deadlineTime\":\"2026-10-11T13:00:00Z\",\"handle\":\"01920000-0000-7000-8000-000000000009\",\"retryAfterSeconds\":5,\"state\":\"WAIT_STATE_READY\"}}",
+      "states": [
+        "READY"
+      ],
+      "outcome": "resubmit"
+    },
+    {
+      "name": "a long-poll that ends declined",
+      "method": "POST",
+      "path": "/pantherclaw.v1.WorkloadService/Wait",
+      "request": {
+        "handle": "01920000-0000-7000-8000-000000000009",
+        "knownState": "WAIT_STATE_PENDING",
+        "runId": "01920000-0000-7000-8000-000000000003",
+        "timeoutSeconds": 30
+      },
+      "status": 200,
+      "body": "{\"wait\":{\"approvalRequestId\":\"01920000-0000-7000-8000-00000000000a\",\"code\":\"APPROVAL_DECLINED\",\"deadlineTime\":\"2026-10-11T13:00:00Z\",\"handle\":\"01920000-0000-7000-8000-000000000009\",\"retryAfterSeconds\":5,\"state\":\"WAIT_STATE_DECLINED\"}}",
+      "states": [
+        "DECLINED"
+      ],
+      "outcome": "deny"
+    },
+    {
+      "name": "the SSE stream until ready",
+      "method": "GET",
+      "path": "/v1/wait/01920000-0000-7000-8000-000000000009",
+      "status": 200,
+      "headers": {
+        "Content-Type": "text/event-stream"
+      },
+      "body": "event: state\ndata: {\"handle\":\"01920000-0000-7000-8000-000000000009\",\"state\":\"PENDING\",\"deadline\":\"2026-10-11T13:00:00Z\",\"approval_request_id\":\"01920000-0000-7000-8000-00000000000a\",\"retry_after_seconds\":5}\n\n: heartbeat\n\nevent: state\ndata: {\"handle\":\"01920000-0000-7000-8000-000000000009\",\"state\":\"READY\",\"deadline\":\"2026-10-11T13:00:00Z\",\"approval_request_id\":\"01920000-0000-7000-8000-00000000000a\",\"retry_after_seconds\":5}\n\n",
+      "states": [
+        "PENDING",
+        "READY"
+      ],
+      "outcome": "resubmit"
+    }
+  ]
+}
