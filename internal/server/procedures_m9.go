@@ -12,7 +12,7 @@ import (
 
 // coverageProcedures are CoverageService's procedures (G0 M9 track A).
 // Reads check coverage.read over each agent; reassessing needs
-// coverage.manage, which is human only.
+// coverage.manage and exclusions coverage.exclude, both human only.
 var coverageProcedures = map[string]td.Permission{
 	pantherclawv1connect.CoverageServiceGetCoverageProcedure:          td.PermCoverageRead,
 	pantherclawv1connect.CoverageServiceListCoverageProcedure:         td.PermCoverageRead,
@@ -21,6 +21,9 @@ var coverageProcedures = map[string]td.Permission{
 	pantherclawv1connect.CoverageServiceListClosuresProcedure:         td.PermCoverageRead,
 	pantherclawv1connect.CoverageServiceGetFreshnessContractProcedure: td.PermCoverageRead,
 	pantherclawv1connect.CoverageServiceReassessCoverageProcedure:     td.PermCoverageManage,
+	pantherclawv1connect.CoverageServiceCreateExclusionProcedure:      td.PermCoverageExclude,
+	pantherclawv1connect.CoverageServiceRevokeExclusionProcedure:      td.PermCoverageExclude,
+	pantherclawv1connect.CoverageServiceListExclusionsProcedure:       td.PermCoverageRead,
 }
 
 func init() { maps.Copy(procedurePermissions, coverageProcedures) }

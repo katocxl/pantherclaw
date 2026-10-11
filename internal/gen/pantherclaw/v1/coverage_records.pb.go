@@ -2035,6 +2035,355 @@ func (x *CoverageExclusion) GetRevokeTime() *timestamppb.Timestamp {
 	return nil
 }
 
+// CreateExclusionRequest describes an exclusion.
+type CreateExclusionRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Connection id.
+	ConnectionId string `protobuf:"bytes,1,opt,name=connection_id,json=connectionId,proto3" json:"connection_id,omitempty"`
+	// Agent id; unset for every agent of the connection.
+	AgentId *string `protobuf:"bytes,2,opt,name=agent_id,json=agentId,proto3,oneof" json:"agent_id,omitempty"`
+	// Operation; unset for every operation.
+	Operation *string `protobuf:"bytes,3,opt,name=operation,proto3,oneof" json:"operation,omitempty"`
+	// Route kind; unspecified excludes the whole scope. A channel is never
+	// excluded.
+	RouteKind CoverageRouteKind `protobuf:"varint,4,opt,name=route_kind,json=routeKind,proto3,enum=pantherclaw.v1.CoverageRouteKind" json:"route_kind,omitempty"`
+	// A written reason (10 to 1,000 characters).
+	Reason string `protobuf:"bytes,5,opt,name=reason,proto3" json:"reason,omitempty"`
+	// Days until it expires (1 to 90).
+	ExpiresInDays int32 `protobuf:"varint,6,opt,name=expires_in_days,json=expiresInDays,proto3" json:"expires_in_days,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CreateExclusionRequest) Reset() {
+	*x = CreateExclusionRequest{}
+	mi := &file_pantherclaw_v1_coverage_records_proto_msgTypes[22]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CreateExclusionRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CreateExclusionRequest) ProtoMessage() {}
+
+func (x *CreateExclusionRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_coverage_records_proto_msgTypes[22]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CreateExclusionRequest.ProtoReflect.Descriptor instead.
+func (*CreateExclusionRequest) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_coverage_records_proto_rawDescGZIP(), []int{22}
+}
+
+func (x *CreateExclusionRequest) GetConnectionId() string {
+	if x != nil {
+		return x.ConnectionId
+	}
+	return ""
+}
+
+func (x *CreateExclusionRequest) GetAgentId() string {
+	if x != nil && x.AgentId != nil {
+		return *x.AgentId
+	}
+	return ""
+}
+
+func (x *CreateExclusionRequest) GetOperation() string {
+	if x != nil && x.Operation != nil {
+		return *x.Operation
+	}
+	return ""
+}
+
+func (x *CreateExclusionRequest) GetRouteKind() CoverageRouteKind {
+	if x != nil {
+		return x.RouteKind
+	}
+	return CoverageRouteKind_COVERAGE_ROUTE_KIND_UNSPECIFIED
+}
+
+func (x *CreateExclusionRequest) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
+func (x *CreateExclusionRequest) GetExpiresInDays() int32 {
+	if x != nil {
+		return x.ExpiresInDays
+	}
+	return 0
+}
+
+// CreateExclusionResponse returns it.
+type CreateExclusionResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Exclusion.
+	Exclusion     *CoverageExclusion `protobuf:"bytes,1,opt,name=exclusion,proto3" json:"exclusion,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CreateExclusionResponse) Reset() {
+	*x = CreateExclusionResponse{}
+	mi := &file_pantherclaw_v1_coverage_records_proto_msgTypes[23]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CreateExclusionResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CreateExclusionResponse) ProtoMessage() {}
+
+func (x *CreateExclusionResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_coverage_records_proto_msgTypes[23]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CreateExclusionResponse.ProtoReflect.Descriptor instead.
+func (*CreateExclusionResponse) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_coverage_records_proto_rawDescGZIP(), []int{23}
+}
+
+func (x *CreateExclusionResponse) GetExclusion() *CoverageExclusion {
+	if x != nil {
+		return x.Exclusion
+	}
+	return nil
+}
+
+// RevokeExclusionRequest names an exclusion.
+type RevokeExclusionRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Exclusion id.
+	Id            string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RevokeExclusionRequest) Reset() {
+	*x = RevokeExclusionRequest{}
+	mi := &file_pantherclaw_v1_coverage_records_proto_msgTypes[24]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RevokeExclusionRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RevokeExclusionRequest) ProtoMessage() {}
+
+func (x *RevokeExclusionRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_coverage_records_proto_msgTypes[24]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RevokeExclusionRequest.ProtoReflect.Descriptor instead.
+func (*RevokeExclusionRequest) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_coverage_records_proto_rawDescGZIP(), []int{24}
+}
+
+func (x *RevokeExclusionRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+// RevokeExclusionResponse returns it.
+type RevokeExclusionResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Exclusion.
+	Exclusion     *CoverageExclusion `protobuf:"bytes,1,opt,name=exclusion,proto3" json:"exclusion,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RevokeExclusionResponse) Reset() {
+	*x = RevokeExclusionResponse{}
+	mi := &file_pantherclaw_v1_coverage_records_proto_msgTypes[25]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RevokeExclusionResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RevokeExclusionResponse) ProtoMessage() {}
+
+func (x *RevokeExclusionResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_coverage_records_proto_msgTypes[25]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RevokeExclusionResponse.ProtoReflect.Descriptor instead.
+func (*RevokeExclusionResponse) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_coverage_records_proto_rawDescGZIP(), []int{25}
+}
+
+func (x *RevokeExclusionResponse) GetExclusion() *CoverageExclusion {
+	if x != nil {
+		return x.Exclusion
+	}
+	return nil
+}
+
+// ListExclusionsRequest filters exclusions.
+type ListExclusionsRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Maximum results (default 50, at most 200).
+	PageSize int32 `protobuf:"varint,1,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
+	// Token from a previous response.
+	PageToken string `protobuf:"bytes,2,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
+	// Only this connection.
+	ConnectionId  *string `protobuf:"bytes,3,opt,name=connection_id,json=connectionId,proto3,oneof" json:"connection_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListExclusionsRequest) Reset() {
+	*x = ListExclusionsRequest{}
+	mi := &file_pantherclaw_v1_coverage_records_proto_msgTypes[26]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListExclusionsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListExclusionsRequest) ProtoMessage() {}
+
+func (x *ListExclusionsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_coverage_records_proto_msgTypes[26]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListExclusionsRequest.ProtoReflect.Descriptor instead.
+func (*ListExclusionsRequest) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_coverage_records_proto_rawDescGZIP(), []int{26}
+}
+
+func (x *ListExclusionsRequest) GetPageSize() int32 {
+	if x != nil {
+		return x.PageSize
+	}
+	return 0
+}
+
+func (x *ListExclusionsRequest) GetPageToken() string {
+	if x != nil {
+		return x.PageToken
+	}
+	return ""
+}
+
+func (x *ListExclusionsRequest) GetConnectionId() string {
+	if x != nil && x.ConnectionId != nil {
+		return *x.ConnectionId
+	}
+	return ""
+}
+
+// ListExclusionsResponse is one page.
+type ListExclusionsResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Exclusions, newest first.
+	Exclusions []*CoverageExclusion `protobuf:"bytes,1,rep,name=exclusions,proto3" json:"exclusions,omitempty"`
+	// Token for the next page; empty at the end.
+	NextPageToken string `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListExclusionsResponse) Reset() {
+	*x = ListExclusionsResponse{}
+	mi := &file_pantherclaw_v1_coverage_records_proto_msgTypes[27]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListExclusionsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListExclusionsResponse) ProtoMessage() {}
+
+func (x *ListExclusionsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_coverage_records_proto_msgTypes[27]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListExclusionsResponse.ProtoReflect.Descriptor instead.
+func (*ListExclusionsResponse) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_coverage_records_proto_rawDescGZIP(), []int{27}
+}
+
+func (x *ListExclusionsResponse) GetExclusions() []*CoverageExclusion {
+	if x != nil {
+		return x.Exclusions
+	}
+	return nil
+}
+
+func (x *ListExclusionsResponse) GetNextPageToken() string {
+	if x != nil {
+		return x.NextPageToken
+	}
+	return ""
+}
+
 var File_pantherclaw_v1_coverage_records_proto protoreflect.FileDescriptor
 
 const file_pantherclaw_v1_coverage_records_proto_rawDesc = "" +
@@ -2208,7 +2557,39 @@ const file_pantherclaw_v1_coverage_records_proto_rawDesc = "" +
 	"\n" +
 	"revoked_by\x18\v \x01(\tR\trevokedBy\x12;\n" +
 	"\vrevoke_time\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"revokeTime*\xa5\x01\n" +
+	"revokeTime\"\x84\x03\n" +
+	"\x16CreateExclusionRequest\x12-\n" +
+	"\rconnection_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\fconnectionId\x12(\n" +
+	"\bagent_id\x18\x02 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01H\x00R\aagentId\x88\x01\x01\x12Q\n" +
+	"\toperation\x18\x03 \x01(\tB.\xbaH+r)\x18\x80\x012$^[a-z][a-z0-9_]*(\\.[a-z0-9_]+){1,7}$H\x01R\toperation\x88\x01\x01\x12L\n" +
+	"\n" +
+	"route_kind\x18\x04 \x01(\x0e2!.pantherclaw.v1.CoverageRouteKindB\n" +
+	"\xbaH\a\x82\x01\x04\x10\x01 \x01R\trouteKind\x12\"\n" +
+	"\x06reason\x18\x05 \x01(\tB\n" +
+	"\xbaH\ar\x05\x10\n" +
+	"\x18\xe8\aR\x06reason\x121\n" +
+	"\x0fexpires_in_days\x18\x06 \x01(\x05B\t\xbaH\x06\x1a\x04\x18Z(\x01R\rexpiresInDaysB\v\n" +
+	"\t_agent_idB\f\n" +
+	"\n" +
+	"_operation\"Z\n" +
+	"\x17CreateExclusionResponse\x12?\n" +
+	"\texclusion\x18\x01 \x01(\v2!.pantherclaw.v1.CoverageExclusionR\texclusion\"2\n" +
+	"\x16RevokeExclusionRequest\x12\x18\n" +
+	"\x02id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x02id\"Z\n" +
+	"\x17RevokeExclusionResponse\x12?\n" +
+	"\texclusion\x18\x01 \x01(\v2!.pantherclaw.v1.CoverageExclusionR\texclusion\"\xc0\x01\n" +
+	"\x15ListExclusionsRequest\x12'\n" +
+	"\tpage_size\x18\x01 \x01(\x05B\n" +
+	"\xbaH\a\x1a\x05\x18\xc8\x01(\x00R\bpageSize\x128\n" +
+	"\n" +
+	"page_token\x18\x02 \x01(\tB\x19\xbaH\x16r\x14\x18@2\x10^[A-Za-z0-9_-]*$R\tpageToken\x122\n" +
+	"\rconnection_id\x18\x03 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01H\x00R\fconnectionId\x88\x01\x01B\x10\n" +
+	"\x0e_connection_id\"\x83\x01\n" +
+	"\x16ListExclusionsResponse\x12A\n" +
+	"\n" +
+	"exclusions\x18\x01 \x03(\v2!.pantherclaw.v1.CoverageExclusionR\n" +
+	"exclusions\x12&\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken*\xa5\x01\n" +
 	"\rCoverageState\x12\x1e\n" +
 	"\x1aCOVERAGE_STATE_UNSPECIFIED\x10\x00\x12\x1a\n" +
 	"\x16COVERAGE_STATE_UNKNOWN\x10\x01\x12\x1f\n" +
@@ -2236,7 +2617,7 @@ const file_pantherclaw_v1_coverage_records_proto_rawDesc = "" +
 	"\x1eCOVERAGE_ROUTE_STATUS_POSSIBLE\x10\x06\x12&\n" +
 	"\"COVERAGE_ROUTE_STATUS_NOT_OBSERVED\x10\a\x12\"\n" +
 	"\x1eCOVERAGE_ROUTE_STATUS_PROPOSED\x10\b\x12\"\n" +
-	"\x1eCOVERAGE_ROUTE_STATUS_EXCLUDED\x10\t2\xd9\x05\n" +
+	"\x1eCOVERAGE_ROUTE_STATUS_EXCLUDED\x10\t2\x87\b\n" +
 	"\x0fCoverageService\x12[\n" +
 	"\vGetCoverage\x12\".pantherclaw.v1.GetCoverageRequest\x1a#.pantherclaw.v1.GetCoverageResponse\"\x03\x90\x02\x01\x12^\n" +
 	"\fListCoverage\x12#.pantherclaw.v1.ListCoverageRequest\x1a$.pantherclaw.v1.ListCoverageResponse\"\x03\x90\x02\x01\x12p\n" +
@@ -2245,7 +2626,10 @@ const file_pantherclaw_v1_coverage_records_proto_rawDesc = "" +
 	"GetClosure\x12!.pantherclaw.v1.GetClosureRequest\x1a\".pantherclaw.v1.GetClosureResponse\"\x03\x90\x02\x01\x12^\n" +
 	"\fListClosures\x12#.pantherclaw.v1.ListClosuresRequest\x1a$.pantherclaw.v1.ListClosuresResponse\"\x03\x90\x02\x01\x12v\n" +
 	"\x14GetFreshnessContract\x12+.pantherclaw.v1.GetFreshnessContractRequest\x1a,.pantherclaw.v1.GetFreshnessContractResponse\"\x03\x90\x02\x01\x12e\n" +
-	"\x10ReassessCoverage\x12'.pantherclaw.v1.ReassessCoverageRequest\x1a(.pantherclaw.v1.ReassessCoverageResponseB\xcd\x01\n" +
+	"\x10ReassessCoverage\x12'.pantherclaw.v1.ReassessCoverageRequest\x1a(.pantherclaw.v1.ReassessCoverageResponse\x12b\n" +
+	"\x0fCreateExclusion\x12&.pantherclaw.v1.CreateExclusionRequest\x1a'.pantherclaw.v1.CreateExclusionResponse\x12b\n" +
+	"\x0fRevokeExclusion\x12&.pantherclaw.v1.RevokeExclusionRequest\x1a'.pantherclaw.v1.RevokeExclusionResponse\x12d\n" +
+	"\x0eListExclusions\x12%.pantherclaw.v1.ListExclusionsRequest\x1a&.pantherclaw.v1.ListExclusionsResponse\"\x03\x90\x02\x01B\xcd\x01\n" +
 	"\x12com.pantherclaw.v1B\x14CoverageRecordsProtoP\x01ZHgithub.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1;pantherclawv1\xa2\x02\x03PXX\xaa\x02\x0ePantherclaw.V1\xca\x02\x0ePantherclaw\\V1\xe2\x02\x1aPantherclaw\\V1\\GPBMetadata\xea\x02\x0fPantherclaw::V1b\x06proto3"
 
 var (
@@ -2261,7 +2645,7 @@ func file_pantherclaw_v1_coverage_records_proto_rawDescGZIP() []byte {
 }
 
 var file_pantherclaw_v1_coverage_records_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_pantherclaw_v1_coverage_records_proto_msgTypes = make([]protoimpl.MessageInfo, 22)
+var file_pantherclaw_v1_coverage_records_proto_msgTypes = make([]protoimpl.MessageInfo, 28)
 var file_pantherclaw_v1_coverage_records_proto_goTypes = []any{
 	(CoverageState)(0),                   // 0: pantherclaw.v1.CoverageState
 	(CoverageRouteKind)(0),               // 1: pantherclaw.v1.CoverageRouteKind
@@ -2288,23 +2672,29 @@ var file_pantherclaw_v1_coverage_records_proto_goTypes = []any{
 	(*ReassessCoverageRequest)(nil),      // 22: pantherclaw.v1.ReassessCoverageRequest
 	(*ReassessCoverageResponse)(nil),     // 23: pantherclaw.v1.ReassessCoverageResponse
 	(*CoverageExclusion)(nil),            // 24: pantherclaw.v1.CoverageExclusion
-	(*timestamppb.Timestamp)(nil),        // 25: google.protobuf.Timestamp
-	(*durationpb.Duration)(nil),          // 26: google.protobuf.Duration
+	(*CreateExclusionRequest)(nil),       // 25: pantherclaw.v1.CreateExclusionRequest
+	(*CreateExclusionResponse)(nil),      // 26: pantherclaw.v1.CreateExclusionResponse
+	(*RevokeExclusionRequest)(nil),       // 27: pantherclaw.v1.RevokeExclusionRequest
+	(*RevokeExclusionResponse)(nil),      // 28: pantherclaw.v1.RevokeExclusionResponse
+	(*ListExclusionsRequest)(nil),        // 29: pantherclaw.v1.ListExclusionsRequest
+	(*ListExclusionsResponse)(nil),       // 30: pantherclaw.v1.ListExclusionsResponse
+	(*timestamppb.Timestamp)(nil),        // 31: google.protobuf.Timestamp
+	(*durationpb.Duration)(nil),          // 32: google.protobuf.Duration
 }
 var file_pantherclaw_v1_coverage_records_proto_depIdxs = []int32{
 	1,  // 0: pantherclaw.v1.CoverageRoute.kind:type_name -> pantherclaw.v1.CoverageRouteKind
 	2,  // 1: pantherclaw.v1.CoverageRoute.status:type_name -> pantherclaw.v1.CoverageRouteStatus
-	25, // 2: pantherclaw.v1.CoverageRoute.first_seen_time:type_name -> google.protobuf.Timestamp
-	25, // 3: pantherclaw.v1.CoverageRoute.last_seen_time:type_name -> google.protobuf.Timestamp
-	25, // 4: pantherclaw.v1.CoverageInvalidation.occur_time:type_name -> google.protobuf.Timestamp
-	25, // 5: pantherclaw.v1.CoverageInvalidation.reassess_time:type_name -> google.protobuf.Timestamp
-	25, // 6: pantherclaw.v1.CoverageLastValid.compute_time:type_name -> google.protobuf.Timestamp
-	25, // 7: pantherclaw.v1.CoverageLastValid.expire_time:type_name -> google.protobuf.Timestamp
+	31, // 2: pantherclaw.v1.CoverageRoute.first_seen_time:type_name -> google.protobuf.Timestamp
+	31, // 3: pantherclaw.v1.CoverageRoute.last_seen_time:type_name -> google.protobuf.Timestamp
+	31, // 4: pantherclaw.v1.CoverageInvalidation.occur_time:type_name -> google.protobuf.Timestamp
+	31, // 5: pantherclaw.v1.CoverageInvalidation.reassess_time:type_name -> google.protobuf.Timestamp
+	31, // 6: pantherclaw.v1.CoverageLastValid.compute_time:type_name -> google.protobuf.Timestamp
+	31, // 7: pantherclaw.v1.CoverageLastValid.expire_time:type_name -> google.protobuf.Timestamp
 	3,  // 8: pantherclaw.v1.CoverageRecord.scope:type_name -> pantherclaw.v1.CoverageScope
 	0,  // 9: pantherclaw.v1.CoverageRecord.state:type_name -> pantherclaw.v1.CoverageState
 	0,  // 10: pantherclaw.v1.CoverageRecord.computed_state:type_name -> pantherclaw.v1.CoverageState
-	25, // 11: pantherclaw.v1.CoverageRecord.compute_time:type_name -> google.protobuf.Timestamp
-	25, // 12: pantherclaw.v1.CoverageRecord.expire_time:type_name -> google.protobuf.Timestamp
+	31, // 11: pantherclaw.v1.CoverageRecord.compute_time:type_name -> google.protobuf.Timestamp
+	31, // 12: pantherclaw.v1.CoverageRecord.expire_time:type_name -> google.protobuf.Timestamp
 	4,  // 13: pantherclaw.v1.CoverageRecord.routes:type_name -> pantherclaw.v1.CoverageRoute
 	6,  // 14: pantherclaw.v1.CoverageRecord.last_valid:type_name -> pantherclaw.v1.CoverageLastValid
 	5,  // 15: pantherclaw.v1.CoverageRecord.invalidations:type_name -> pantherclaw.v1.CoverageInvalidation
@@ -2315,37 +2705,47 @@ var file_pantherclaw_v1_coverage_records_proto_depIdxs = []int32{
 	4,  // 20: pantherclaw.v1.ListCoverageRoutesResponse.routes:type_name -> pantherclaw.v1.CoverageRoute
 	14, // 21: pantherclaw.v1.CoverageClosure.probes:type_name -> pantherclaw.v1.CoverageProbeResult
 	1,  // 22: pantherclaw.v1.CoverageClosure.closed_kinds:type_name -> pantherclaw.v1.CoverageRouteKind
-	25, // 23: pantherclaw.v1.CoverageClosure.observe_time:type_name -> google.protobuf.Timestamp
-	25, // 24: pantherclaw.v1.CoverageClosure.expire_time:type_name -> google.protobuf.Timestamp
-	25, // 25: pantherclaw.v1.CoverageClosure.record_time:type_name -> google.protobuf.Timestamp
+	31, // 23: pantherclaw.v1.CoverageClosure.observe_time:type_name -> google.protobuf.Timestamp
+	31, // 24: pantherclaw.v1.CoverageClosure.expire_time:type_name -> google.protobuf.Timestamp
+	31, // 25: pantherclaw.v1.CoverageClosure.record_time:type_name -> google.protobuf.Timestamp
 	15, // 26: pantherclaw.v1.GetClosureResponse.closure:type_name -> pantherclaw.v1.CoverageClosure
 	15, // 27: pantherclaw.v1.ListClosuresResponse.closures:type_name -> pantherclaw.v1.CoverageClosure
-	26, // 28: pantherclaw.v1.GetFreshnessContractResponse.enforced_ttl:type_name -> google.protobuf.Duration
-	26, // 29: pantherclaw.v1.GetFreshnessContractResponse.reassess_interval:type_name -> google.protobuf.Duration
+	32, // 28: pantherclaw.v1.GetFreshnessContractResponse.enforced_ttl:type_name -> google.protobuf.Duration
+	32, // 29: pantherclaw.v1.GetFreshnessContractResponse.reassess_interval:type_name -> google.protobuf.Duration
 	0,  // 30: pantherclaw.v1.GetFreshnessContractResponse.stale_state:type_name -> pantherclaw.v1.CoverageState
 	1,  // 31: pantherclaw.v1.CoverageExclusion.route_kind:type_name -> pantherclaw.v1.CoverageRouteKind
-	25, // 32: pantherclaw.v1.CoverageExclusion.create_time:type_name -> google.protobuf.Timestamp
-	25, // 33: pantherclaw.v1.CoverageExclusion.expire_time:type_name -> google.protobuf.Timestamp
-	25, // 34: pantherclaw.v1.CoverageExclusion.revoke_time:type_name -> google.protobuf.Timestamp
-	8,  // 35: pantherclaw.v1.CoverageService.GetCoverage:input_type -> pantherclaw.v1.GetCoverageRequest
-	10, // 36: pantherclaw.v1.CoverageService.ListCoverage:input_type -> pantherclaw.v1.ListCoverageRequest
-	12, // 37: pantherclaw.v1.CoverageService.ListCoverageRoutes:input_type -> pantherclaw.v1.ListCoverageRoutesRequest
-	16, // 38: pantherclaw.v1.CoverageService.GetClosure:input_type -> pantherclaw.v1.GetClosureRequest
-	18, // 39: pantherclaw.v1.CoverageService.ListClosures:input_type -> pantherclaw.v1.ListClosuresRequest
-	20, // 40: pantherclaw.v1.CoverageService.GetFreshnessContract:input_type -> pantherclaw.v1.GetFreshnessContractRequest
-	22, // 41: pantherclaw.v1.CoverageService.ReassessCoverage:input_type -> pantherclaw.v1.ReassessCoverageRequest
-	9,  // 42: pantherclaw.v1.CoverageService.GetCoverage:output_type -> pantherclaw.v1.GetCoverageResponse
-	11, // 43: pantherclaw.v1.CoverageService.ListCoverage:output_type -> pantherclaw.v1.ListCoverageResponse
-	13, // 44: pantherclaw.v1.CoverageService.ListCoverageRoutes:output_type -> pantherclaw.v1.ListCoverageRoutesResponse
-	17, // 45: pantherclaw.v1.CoverageService.GetClosure:output_type -> pantherclaw.v1.GetClosureResponse
-	19, // 46: pantherclaw.v1.CoverageService.ListClosures:output_type -> pantherclaw.v1.ListClosuresResponse
-	21, // 47: pantherclaw.v1.CoverageService.GetFreshnessContract:output_type -> pantherclaw.v1.GetFreshnessContractResponse
-	23, // 48: pantherclaw.v1.CoverageService.ReassessCoverage:output_type -> pantherclaw.v1.ReassessCoverageResponse
-	42, // [42:49] is the sub-list for method output_type
-	35, // [35:42] is the sub-list for method input_type
-	35, // [35:35] is the sub-list for extension type_name
-	35, // [35:35] is the sub-list for extension extendee
-	0,  // [0:35] is the sub-list for field type_name
+	31, // 32: pantherclaw.v1.CoverageExclusion.create_time:type_name -> google.protobuf.Timestamp
+	31, // 33: pantherclaw.v1.CoverageExclusion.expire_time:type_name -> google.protobuf.Timestamp
+	31, // 34: pantherclaw.v1.CoverageExclusion.revoke_time:type_name -> google.protobuf.Timestamp
+	1,  // 35: pantherclaw.v1.CreateExclusionRequest.route_kind:type_name -> pantherclaw.v1.CoverageRouteKind
+	24, // 36: pantherclaw.v1.CreateExclusionResponse.exclusion:type_name -> pantherclaw.v1.CoverageExclusion
+	24, // 37: pantherclaw.v1.RevokeExclusionResponse.exclusion:type_name -> pantherclaw.v1.CoverageExclusion
+	24, // 38: pantherclaw.v1.ListExclusionsResponse.exclusions:type_name -> pantherclaw.v1.CoverageExclusion
+	8,  // 39: pantherclaw.v1.CoverageService.GetCoverage:input_type -> pantherclaw.v1.GetCoverageRequest
+	10, // 40: pantherclaw.v1.CoverageService.ListCoverage:input_type -> pantherclaw.v1.ListCoverageRequest
+	12, // 41: pantherclaw.v1.CoverageService.ListCoverageRoutes:input_type -> pantherclaw.v1.ListCoverageRoutesRequest
+	16, // 42: pantherclaw.v1.CoverageService.GetClosure:input_type -> pantherclaw.v1.GetClosureRequest
+	18, // 43: pantherclaw.v1.CoverageService.ListClosures:input_type -> pantherclaw.v1.ListClosuresRequest
+	20, // 44: pantherclaw.v1.CoverageService.GetFreshnessContract:input_type -> pantherclaw.v1.GetFreshnessContractRequest
+	22, // 45: pantherclaw.v1.CoverageService.ReassessCoverage:input_type -> pantherclaw.v1.ReassessCoverageRequest
+	25, // 46: pantherclaw.v1.CoverageService.CreateExclusion:input_type -> pantherclaw.v1.CreateExclusionRequest
+	27, // 47: pantherclaw.v1.CoverageService.RevokeExclusion:input_type -> pantherclaw.v1.RevokeExclusionRequest
+	29, // 48: pantherclaw.v1.CoverageService.ListExclusions:input_type -> pantherclaw.v1.ListExclusionsRequest
+	9,  // 49: pantherclaw.v1.CoverageService.GetCoverage:output_type -> pantherclaw.v1.GetCoverageResponse
+	11, // 50: pantherclaw.v1.CoverageService.ListCoverage:output_type -> pantherclaw.v1.ListCoverageResponse
+	13, // 51: pantherclaw.v1.CoverageService.ListCoverageRoutes:output_type -> pantherclaw.v1.ListCoverageRoutesResponse
+	17, // 52: pantherclaw.v1.CoverageService.GetClosure:output_type -> pantherclaw.v1.GetClosureResponse
+	19, // 53: pantherclaw.v1.CoverageService.ListClosures:output_type -> pantherclaw.v1.ListClosuresResponse
+	21, // 54: pantherclaw.v1.CoverageService.GetFreshnessContract:output_type -> pantherclaw.v1.GetFreshnessContractResponse
+	23, // 55: pantherclaw.v1.CoverageService.ReassessCoverage:output_type -> pantherclaw.v1.ReassessCoverageResponse
+	26, // 56: pantherclaw.v1.CoverageService.CreateExclusion:output_type -> pantherclaw.v1.CreateExclusionResponse
+	28, // 57: pantherclaw.v1.CoverageService.RevokeExclusion:output_type -> pantherclaw.v1.RevokeExclusionResponse
+	30, // 58: pantherclaw.v1.CoverageService.ListExclusions:output_type -> pantherclaw.v1.ListExclusionsResponse
+	49, // [49:59] is the sub-list for method output_type
+	39, // [39:49] is the sub-list for method input_type
+	39, // [39:39] is the sub-list for extension type_name
+	39, // [39:39] is the sub-list for extension extendee
+	0,  // [0:39] is the sub-list for field type_name
 }
 
 func init() { file_pantherclaw_v1_coverage_records_proto_init() }
@@ -2357,13 +2757,15 @@ func file_pantherclaw_v1_coverage_records_proto_init() {
 	file_pantherclaw_v1_coverage_records_proto_msgTypes[9].OneofWrappers = []any{}
 	file_pantherclaw_v1_coverage_records_proto_msgTypes[15].OneofWrappers = []any{}
 	file_pantherclaw_v1_coverage_records_proto_msgTypes[19].OneofWrappers = []any{}
+	file_pantherclaw_v1_coverage_records_proto_msgTypes[22].OneofWrappers = []any{}
+	file_pantherclaw_v1_coverage_records_proto_msgTypes[26].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pantherclaw_v1_coverage_records_proto_rawDesc), len(file_pantherclaw_v1_coverage_records_proto_rawDesc)),
 			NumEnums:      3,
-			NumMessages:   22,
+			NumMessages:   28,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

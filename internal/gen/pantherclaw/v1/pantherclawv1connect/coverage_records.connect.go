@@ -47,6 +47,15 @@ const (
 	// CoverageServiceReassessCoverageProcedure is the procedure name of the CoverageService's
 	// ReassessCoverage RPC.
 	CoverageServiceReassessCoverageProcedure = "/pantherclaw.v1.CoverageService/ReassessCoverage"
+	// CoverageServiceCreateExclusionProcedure is the procedure name of the CoverageService's
+	// CreateExclusion RPC.
+	CoverageServiceCreateExclusionProcedure = "/pantherclaw.v1.CoverageService/CreateExclusion"
+	// CoverageServiceRevokeExclusionProcedure is the procedure name of the CoverageService's
+	// RevokeExclusion RPC.
+	CoverageServiceRevokeExclusionProcedure = "/pantherclaw.v1.CoverageService/RevokeExclusion"
+	// CoverageServiceListExclusionsProcedure is the procedure name of the CoverageService's
+	// ListExclusions RPC.
+	CoverageServiceListExclusionsProcedure = "/pantherclaw.v1.CoverageService/ListExclusions"
 )
 
 var (
@@ -105,6 +114,28 @@ var (
 			Procedure:  CoverageServiceReassessCoverageProcedure,
 		}
 	})
+	coverageServiceCreateExclusionSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_pantherclaw_v1_coverage_records_proto.Services().ByName("CoverageService").Methods().ByName("CreateExclusion"),
+			Procedure:  CoverageServiceCreateExclusionProcedure,
+		}
+	})
+	coverageServiceRevokeExclusionSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_pantherclaw_v1_coverage_records_proto.Services().ByName("CoverageService").Methods().ByName("RevokeExclusion"),
+			Procedure:  CoverageServiceRevokeExclusionProcedure,
+		}
+	})
+	coverageServiceListExclusionsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_pantherclaw_v1_coverage_records_proto.Services().ByName("CoverageService").Methods().ByName("ListExclusions"),
+			Procedure:        CoverageServiceListExclusionsProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
 )
 
 // CoverageServiceClient is a client for the pantherclaw.v1.CoverageService service.
@@ -133,6 +164,17 @@ type CoverageServiceClient interface {
 	// evidence, and records a snapshot for each that changed.
 	// permission: coverage.manage
 	ReassessCoverage(context.Context, *v1.ReassessCoverageRequest) (*v1.ReassessCoverageResponse, error)
+	// CreateExclusion excludes a scope or a route kind from the claim until
+	// it expires. It never raises a state; it is audited and shown with the
+	// coverage it changes.
+	// permission: coverage.exclude
+	CreateExclusion(context.Context, *v1.CreateExclusionRequest) (*v1.CreateExclusionResponse, error)
+	// RevokeExclusion ends an active exclusion at once.
+	// permission: coverage.exclude
+	RevokeExclusion(context.Context, *v1.RevokeExclusionRequest) (*v1.RevokeExclusionResponse, error)
+	// ListExclusions lists exclusions, newest first.
+	// permission: coverage.read
+	ListExclusions(context.Context, *v1.ListExclusionsRequest) (*v1.ListExclusionsResponse, error)
 }
 
 // NewCoverageServiceClient constructs a client for the pantherclaw.v1.CoverageService service.
@@ -167,6 +209,17 @@ type CoverageServiceHandler interface {
 	// evidence, and records a snapshot for each that changed.
 	// permission: coverage.manage
 	ReassessCoverage(context.Context, *v1.ReassessCoverageRequest) (*v1.ReassessCoverageResponse, error)
+	// CreateExclusion excludes a scope or a route kind from the claim until
+	// it expires. It never raises a state; it is audited and shown with the
+	// coverage it changes.
+	// permission: coverage.exclude
+	CreateExclusion(context.Context, *v1.CreateExclusionRequest) (*v1.CreateExclusionResponse, error)
+	// RevokeExclusion ends an active exclusion at once.
+	// permission: coverage.exclude
+	RevokeExclusion(context.Context, *v1.RevokeExclusionRequest) (*v1.RevokeExclusionResponse, error)
+	// ListExclusions lists exclusions, newest first.
+	// permission: coverage.read
+	ListExclusions(context.Context, *v1.ListExclusionsRequest) (*v1.ListExclusionsResponse, error)
 }
 
 // RegisterCoverageServiceHandler registers svc as the pantherclaw.v1.CoverageService implementation
@@ -181,6 +234,9 @@ func RegisterCoverageServiceHandler(server *connect.Server, svc CoverageServiceH
 		connect.Method{Spec: coverageServiceListClosuresSpec(), Handler: adapter.listClosures},
 		connect.Method{Spec: coverageServiceGetFreshnessContractSpec(), Handler: adapter.getFreshnessContract},
 		connect.Method{Spec: coverageServiceReassessCoverageSpec(), Handler: adapter.reassessCoverage},
+		connect.Method{Spec: coverageServiceCreateExclusionSpec(), Handler: adapter.createExclusion},
+		connect.Method{Spec: coverageServiceRevokeExclusionSpec(), Handler: adapter.revokeExclusion},
+		connect.Method{Spec: coverageServiceListExclusionsSpec(), Handler: adapter.listExclusions},
 	)
 }
 
@@ -213,6 +269,18 @@ func (UnimplementedCoverageServiceHandler) GetFreshnessContract(context.Context,
 
 func (UnimplementedCoverageServiceHandler) ReassessCoverage(context.Context, *v1.ReassessCoverageRequest) (*v1.ReassessCoverageResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.CoverageService.ReassessCoverage is not implemented")
+}
+
+func (UnimplementedCoverageServiceHandler) CreateExclusion(context.Context, *v1.CreateExclusionRequest) (*v1.CreateExclusionResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.CoverageService.CreateExclusion is not implemented")
+}
+
+func (UnimplementedCoverageServiceHandler) RevokeExclusion(context.Context, *v1.RevokeExclusionRequest) (*v1.RevokeExclusionResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.CoverageService.RevokeExclusion is not implemented")
+}
+
+func (UnimplementedCoverageServiceHandler) ListExclusions(context.Context, *v1.ListExclusionsRequest) (*v1.ListExclusionsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.CoverageService.ListExclusions is not implemented")
 }
 
 type coverageServiceClient struct {
@@ -270,6 +338,30 @@ func (c *coverageServiceClient) GetFreshnessContract(ctx context.Context, req *v
 func (c *coverageServiceClient) ReassessCoverage(ctx context.Context, req *v1.ReassessCoverageRequest) (*v1.ReassessCoverageResponse, error) {
 	var res v1.ReassessCoverageResponse
 	if err := c.client.CallUnary(ctx, coverageServiceReassessCoverageSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *coverageServiceClient) CreateExclusion(ctx context.Context, req *v1.CreateExclusionRequest) (*v1.CreateExclusionResponse, error) {
+	var res v1.CreateExclusionResponse
+	if err := c.client.CallUnary(ctx, coverageServiceCreateExclusionSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *coverageServiceClient) RevokeExclusion(ctx context.Context, req *v1.RevokeExclusionRequest) (*v1.RevokeExclusionResponse, error) {
+	var res v1.RevokeExclusionResponse
+	if err := c.client.CallUnary(ctx, coverageServiceRevokeExclusionSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *coverageServiceClient) ListExclusions(ctx context.Context, req *v1.ListExclusionsRequest) (*v1.ListExclusionsResponse, error) {
+	var res v1.ListExclusionsResponse
+	if err := c.client.CallUnary(ctx, coverageServiceListExclusionsSpec(), req, &res); err != nil {
 		return nil, err
 	}
 	return &res, nil
@@ -355,6 +447,42 @@ func (h coverageServiceHandler) reassessCoverage(ctx context.Context, _ connect.
 		return err
 	}
 	res, err := h.svc.ReassessCoverage(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h coverageServiceHandler) createExclusion(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.CreateExclusionRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.CreateExclusion(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h coverageServiceHandler) revokeExclusion(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.RevokeExclusionRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.RevokeExclusion(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h coverageServiceHandler) listExclusions(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListExclusionsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListExclusions(ctx, &req)
 	if err != nil {
 		return err
 	}

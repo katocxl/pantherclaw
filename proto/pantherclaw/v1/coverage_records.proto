@@ -65,6 +65,19 @@ service CoverageService {
   // evidence, and records a snapshot for each that changed.
   // permission: coverage.manage
   rpc ReassessCoverage(ReassessCoverageRequest) returns (ReassessCoverageResponse);
+  // CreateExclusion excludes a scope or a route kind from the claim until
+  // it expires. It never raises a state; it is audited and shown with the
+  // coverage it changes.
+  // permission: coverage.exclude
+  rpc CreateExclusion(CreateExclusionRequest) returns (CreateExclusionResponse);
+  // RevokeExclusion ends an active exclusion at once.
+  // permission: coverage.exclude
+  rpc RevokeExclusion(RevokeExclusionRequest) returns (RevokeExclusionResponse);
+  // ListExclusions lists exclusions, newest first.
+  // permission: coverage.read
+  rpc ListExclusions(ListExclusionsRequest) returns (ListExclusionsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 }
 
 // CoverageState is the protection claim of one scope (F435–F438).
@@ -457,4 +470,76 @@ message CoverageExclusion {
   string revoked_by = 11;
   // When it was revoked.
   google.protobuf.Timestamp revoke_time = 12;
+}
+
+
+// CreateExclusionRequest describes an exclusion.
+message CreateExclusionRequest {
+  // Connection id.
+  string connection_id = 1 [(buf.validate.field).string.uuid = true];
+  // Agent id; unset for every agent of the connection.
+  optional string agent_id = 2 [(buf.validate.field).string.uuid = true];
+  // Operation; unset for every operation.
+  optional string operation = 3 [(buf.validate.field).string = {
+    max_len: 128
+    pattern: "^[a-z][a-z0-9_]*(\\.[a-z0-9_]+){1,7}$"
+  }];
+  // Route kind; unspecified excludes the whole scope. A channel is never
+  // excluded.
+  CoverageRouteKind route_kind = 4 [(buf.validate.field).enum = {
+    defined_only: true
+    not_in: [1]
+  }];
+  // A written reason (10 to 1,000 characters).
+  string reason = 5 [(buf.validate.field).string = {
+    min_len: 10
+    max_len: 1000
+  }];
+  // Days until it expires (1 to 90).
+  int32 expires_in_days = 6 [(buf.validate.field).int32 = {
+    gte: 1
+    lte: 90
+  }];
+}
+
+// CreateExclusionResponse returns it.
+message CreateExclusionResponse {
+  // Exclusion.
+  CoverageExclusion exclusion = 1;
+}
+
+// RevokeExclusionRequest names an exclusion.
+message RevokeExclusionRequest {
+  // Exclusion id.
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// RevokeExclusionResponse returns it.
+message RevokeExclusionResponse {
+  // Exclusion.
+  CoverageExclusion exclusion = 1;
+}
+
+// ListExclusionsRequest filters exclusions.
+message ListExclusionsRequest {
+  // Maximum results (default 50, at most 200).
+  int32 page_size = 1 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 200
+  }];
+  // Token from a previous response.
+  string page_token = 2 [(buf.validate.field).string = {
+    max_len: 64
+    pattern: "^[A-Za-z0-9_-]*$"
+  }];
+  // Only this connection.
+  optional string connection_id = 3 [(buf.validate.field).string.uuid = true];
+}
+
+// ListExclusionsResponse is one page.
+message ListExclusionsResponse {
+  // Exclusions, newest first.
+  repeated CoverageExclusion exclusions = 1;
+  // Token for the next page; empty at the end.
+  string next_page_token = 2;
 }
