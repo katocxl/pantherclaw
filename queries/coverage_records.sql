@@ -406,16 +406,16 @@ WHERE org_id = sqlc.arg(org_id) AND source = 'scan' AND state <> 'DISMISSED'
 ORDER BY id
 LIMIT 50;
 
--- The org-scan findings that show a route of a connection and were seen
--- since their route was last recorded (G0 M8 G5 kinds; UNTRUSTED
--- metadata, HR-209).
+-- The org-scan findings that may show a route of a connection and were
+-- not recorded yet: each is recorded once, as the source of its route (G0
+-- M8 G5 kinds; UNTRUSTED metadata, HR-209).
 -- name: CoverageScanFindingsToRecord :many
 SELECT d.id, d.observed FROM pc.discoveries d
 WHERE d.org_id = sqlc.arg(org_id) AND d.source = 'scan' AND d.state <> 'DISMISSED'
   AND d.observed ->> 'kind' IN ('github_app', 'github_workflow', 'github_mcp_config')
   AND d.observed ->> 'connection' IS NOT NULL
   AND NOT EXISTS (SELECT 1 FROM pc.coverage_routes r
-                  WHERE r.org_id = d.org_id AND r.source = 'scan' AND r.source_ref = d.id AND r.last_seen_at >= d.last_seen_at)
+                  WHERE r.org_id = d.org_id AND r.source = 'scan' AND r.source_ref = d.id)
 ORDER BY d.id
 LIMIT 200;
 

@@ -52,6 +52,9 @@ func TestF450_ScanFindingsAreObservedRoutesOfTheirConnection(t *testing.T) {
 	if n := f.count(t, `SELECT count(*) FROM pc.coverage_routes WHERE source = 'scan' AND agent_id IS NULL AND observation = 'observed'`); n != 2 {
 		t.Fatalf("%d scan routes, want the MCP configuration and the deploying workflow", n)
 	}
+	if n := f.count(t, `SELECT count(*) FROM pc.coverage_invalidations WHERE kind = 'route' AND detail LIKE '%org scan'`); n != 2 {
+		t.Fatalf("%d route changes, want one per new scan route", n)
+	}
 	if touched := refresh(); len(touched) != 0 {
 		t.Fatalf("an unchanged scan recorded again: %v", touched)
 	}

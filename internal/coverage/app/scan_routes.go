@@ -42,9 +42,10 @@ func scanRoute(observed map[string]string) (domain.RouteKind, string, bool) {
 }
 
 // RefreshScanRoutes records, as observed routes of every agent of their
-// connection, the routes the org scan found since they were last recorded,
-// and returns the connections it touched. A finding naming no connection
-// of the org is left out.
+// connection, the routes the org-scan findings not recorded yet show, and
+// returns the connections with a new route. A finding naming no connection
+// of the org is left out. A new route writes a route change, so reads
+// recompute the scopes of its connection.
 func (s *Service) RefreshScanRoutes(ctx context.Context, tx db.TenantTx) ([]ids.UUID, error) {
 	q := dbq.New(tx)
 	rows, err := q.CoverageScanFindingsToRecord(ctx, tx.OrgID())
@@ -71,10 +72,19 @@ func (s *Service) RefreshScanRoutes(ctx context.Context, tx db.TenantTx) ([]ids.
 		if len(locator) > 512 {
 			locator = locator[:512]
 		}
-		id := r.ID
-		if _, err := q.UpsertCoverageRoute(ctx, dbq.UpsertCoverageRouteParams{
-			OrgID: tx.OrgID(), ID: ids.NewV7(), ConnectionID: conn, Kind: string(kind), Locator: &locator,
-			Observation: "observed", Source: "scan", SourceRef: &id, Attributes: []byte(`{}`),
+		ref, id := r.ID, ids.NewV7()
+		row, err := q.UpsertCoverageRoute(ctx, dbq.UpsertCoverageRouteParams{
+			OrgID: tx.OrgID(), ID: id, ConnectionID: conn, Kind: string(kind), Locator: &locator,
+			Observation: "observed", Source: "scan", SourceRef: &ref, Attributes: []byte(`{}`),
+		})
+		if err != nil {
+			return nil, err
+		}
+		if row.ID != id {
+			continue // a route another finding already showed
+		}
+		if err := s.RecordInvalidation(ctx, tx, domain.Invalidation{
+			Kind: domain.InvRoute, Connection: conn, Subject: &row.ID, Detail: string(kind) + " from the org scan",
 		}); err != nil {
 			return nil, err
 		}
