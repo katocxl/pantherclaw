@@ -385,6 +385,22 @@ type PcConnectionRoute struct {
 	ChangedAt    time.Time
 }
 
+type PcConnectorSpec struct {
+	OrgID                  ids.OrgID
+	ConnectionID           ids.UUID
+	Revision               int32
+	Image                  string
+	Command                []string
+	Environment            []byte
+	CredentialPlaceholders []string
+	EgressConnectionID     *ids.UUID
+	MemoryMib              int32
+	MilliCpus              int32
+	Pids                   int32
+	CreatedBy              string
+	CreatedAt              time.Time
+}
+
 type PcConsequenceRule struct {
 	OrgID     ids.OrgID
 	ID        ids.UUID

@@ -7,6 +7,7 @@ package pantherclaw.v1;
 
 import "buf/validate/validate.proto";
 import "google/protobuf/timestamp.proto";
+import "pantherclaw/v1/connectors.proto";
 
 // GatewayAdminService manages an org's gateways (G0 M6, HR-180): records,
 // single-use enrollment tokens, certificates and broker keys. A gateway's
@@ -141,6 +142,9 @@ message Gateway {
   google.protobuf.Timestamp revoke_time = 8;
   // Why it was revoked.
   string revoke_reason = 9;
+  // hosting says who runs the gateway; PantherClaw-hosted ones come only
+  // from the server's configuration and run no connector (HR-084).
+  GatewayHosting hosting = 15;
 }
 
 // GatewayCertificate is one certificate the internal CA issued.
@@ -472,6 +476,8 @@ message GatewayConnection {
   // agent_hosts are the host names agents use for the connection's API
   // (G0 M9).
   repeated string agent_hosts = 21;
+  // connector is an mcp_container connection's spec.
+  ConnectorSpec connector = 22;
 }
 
 // RouteModeSetting is one route's mode.

@@ -29,8 +29,12 @@ type UpdateInput struct {
 	SetAllowedHosts bool
 	// AgentHosts replaces the agent hosts when SetAgentHosts; any change
 	// weakens (HR-183).
-	AgentHosts       []string
-	SetAgentHosts    bool
+	AgentHosts    []string
+	SetAgentHosts bool
+	// Connector replaces a connector connection's spec, which weakens
+	// enforcement (HR-183); moving a connector to another gateway needs it,
+	// so its egress connection is checked on the new gateway.
+	Connector        *ConnectorSpec
 	DestinationClass *string
 	AccessMode       *string
 	DefaultMode      *string
@@ -169,6 +173,12 @@ func (s *Service) Update(ctx context.Context, in UpdateInput) (Connection, error
 			if err := activeGateway(ctx, q, c.Org, *in.Gateway); err != nil {
 				return err
 			}
+			if conn.Kind == KindMCPContainer && s.hosted[*in.Gateway] {
+				return ErrHostedGateway
+			}
+			if conn.Kind == KindMCPContainer && in.Connector == nil {
+				return ErrConnector
+			}
 			p.GatewayID = *in.Gateway
 			set("gateway_id", conn.GatewayID.String(), p.GatewayID.String(), true)
 		}
@@ -229,9 +239,28 @@ func (s *Service) Update(ctx context.Context, in UpdateInput) (Connection, error
 			p.TimeoutMs = *in.TimeoutMs
 			limits["timeout_ms"] = strconv.Itoa(int(p.TimeoutMs))
 		}
+		var spec ConnectorSpec
+		if in.Connector != nil {
+			if conn.Kind != KindMCPContainer {
+				return ErrConnector
+			}
+			if spec, err = in.Connector.check(); err != nil {
+				return err
+			}
+			cur, err := q.CurrentConnectorSpec(ctx, c.Org, conn.ID)
+			if err != nil {
+				return err
+			}
+			set("connector", connectorSummary(&cur), specSummary(spec), true)
+		}
 		after, err := s.apply(ctx, tx, c, conn, p, changes, "connection.updated", limits)
 		if err != nil {
 			return err
+		}
+		if in.Connector != nil {
+			if _, err := putConnector(ctx, q, c, after, spec); err != nil {
+				return err
+			}
 		}
 		out, err = load(ctx, q, after)
 		return err

@@ -55,6 +55,8 @@ type Config struct {
 	Evidence EvidenceConfig `json:"evidence"`
 	// Coverage is M9 track A (config_coverage.go).
 	Coverage CoverageConfig `json:"coverage"`
+	// Gateways is M9 track C (config_connectors.go).
+	Gateways GatewaysConfig `json:"gateways"`
 	// Dev holds development-only settings (config_dev.go).
 	Dev DevConfig `json:"dev"`
 }
@@ -171,6 +173,7 @@ func (c *Config) Validate() error {
 	errs = append(errs, c.validateEvidence()...)
 	errs = append(errs, c.validateRetention()...)
 	errs = append(errs, c.validateCoverage()...)
+	errs = append(errs, c.validateGateways()...)
 	errs = append(errs, c.validateDev()...)
 	if _, err := c.trustedProxies(); err != nil {
 		errs = append(errs, err)

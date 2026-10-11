@@ -37,6 +37,9 @@ const (
 	ConnectionKind_CONNECTION_KIND_MCP ConnectionKind = 2
 	// The agent's own machine (hooks); the gateway never dispatches.
 	ConnectionKind_CONNECTION_KIND_LOCAL ConnectionKind = 3
+	// A third-party stdio MCP server a customer-hosted gateway runs in a
+	// container (G0 M9; HR-084): no base URL, no credential of its own.
+	ConnectionKind_CONNECTION_KIND_MCP_CONTAINER ConnectionKind = 9
 )
 
 // Enum value maps for ConnectionKind.
@@ -46,12 +49,14 @@ var (
 		1: "CONNECTION_KIND_HTTP",
 		2: "CONNECTION_KIND_MCP",
 		3: "CONNECTION_KIND_LOCAL",
+		9: "CONNECTION_KIND_MCP_CONTAINER",
 	}
 	ConnectionKind_value = map[string]int32{
-		"CONNECTION_KIND_UNSPECIFIED": 0,
-		"CONNECTION_KIND_HTTP":        1,
-		"CONNECTION_KIND_MCP":         2,
-		"CONNECTION_KIND_LOCAL":       3,
+		"CONNECTION_KIND_UNSPECIFIED":   0,
+		"CONNECTION_KIND_HTTP":          1,
+		"CONNECTION_KIND_MCP":           2,
+		"CONNECTION_KIND_LOCAL":         3,
+		"CONNECTION_KIND_MCP_CONTAINER": 9,
 	}
 )
 
@@ -402,7 +407,9 @@ type Connection struct {
 	UpdateTime *timestamppb.Timestamp `protobuf:"bytes,22,opt,name=update_time,json=updateTime,proto3" json:"update_time,omitempty"`
 	// agent_hosts are the host names agents use for this connection's API
 	// (G0 M9): a containment sandbox's edge maps each to it (HR-183).
-	AgentHosts    []string `protobuf:"bytes,28,rep,name=agent_hosts,json=agentHosts,proto3" json:"agent_hosts,omitempty"`
+	AgentHosts []string `protobuf:"bytes,28,rep,name=agent_hosts,json=agentHosts,proto3" json:"agent_hosts,omitempty"`
+	// connector is an mcp_container connection's current spec.
+	Connector     *ConnectorSpec `protobuf:"bytes,29,opt,name=connector,proto3" json:"connector,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -594,6 +601,13 @@ func (x *Connection) GetUpdateTime() *timestamppb.Timestamp {
 func (x *Connection) GetAgentHosts() []string {
 	if x != nil {
 		return x.AgentHosts
+	}
+	return nil
+}
+
+func (x *Connection) GetConnector() *ConnectorSpec {
+	if x != nil {
+		return x.Connector
 	}
 	return nil
 }
@@ -840,7 +854,9 @@ type CreateConnectionRequest struct {
 	TimeoutMs int32 `protobuf:"varint,13,opt,name=timeout_ms,json=timeoutMs,proto3" json:"timeout_ms,omitempty"`
 	// agent_hosts are the host names agents use for the API; only for http
 	// and mcp connections.
-	AgentHosts    []string `protobuf:"bytes,19,rep,name=agent_hosts,json=agentHosts,proto3" json:"agent_hosts,omitempty"`
+	AgentHosts []string `protobuf:"bytes,19,rep,name=agent_hosts,json=agentHosts,proto3" json:"agent_hosts,omitempty"`
+	// connector is required for, and only for, an mcp_container connection.
+	Connector     *ConnectorSpec `protobuf:"bytes,20,opt,name=connector,proto3" json:"connector,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -969,6 +985,13 @@ func (x *CreateConnectionRequest) GetTimeoutMs() int32 {
 func (x *CreateConnectionRequest) GetAgentHosts() []string {
 	if x != nil {
 		return x.AgentHosts
+	}
+	return nil
+}
+
+func (x *CreateConnectionRequest) GetConnector() *ConnectorSpec {
+	if x != nil {
+		return x.Connector
 	}
 	return nil
 }
@@ -1277,8 +1300,11 @@ type UpdateConnectionRequest struct {
 	// change weakens enforcement (HR-183).
 	AgentHosts       []string `protobuf:"bytes,17,rep,name=agent_hosts,json=agentHosts,proto3" json:"agent_hosts,omitempty"`
 	UpdateAgentHosts bool     `protobuf:"varint,18,opt,name=update_agent_hosts,json=updateAgentHosts,proto3" json:"update_agent_hosts,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	// connector replaces an mcp_container connection's spec (weakens; moving
+	// one to another gateway needs it).
+	Connector     *ConnectorSpec `protobuf:"bytes,19,opt,name=connector,proto3" json:"connector,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *UpdateConnectionRequest) Reset() {
@@ -1400,6 +1426,13 @@ func (x *UpdateConnectionRequest) GetUpdateAgentHosts() bool {
 		return x.UpdateAgentHosts
 	}
 	return false
+}
+
+func (x *UpdateConnectionRequest) GetConnector() *ConnectorSpec {
+	if x != nil {
+		return x.Connector
+	}
+	return nil
 }
 
 // UpdateConnectionResponse returns the connection.
@@ -2342,7 +2375,7 @@ var File_pantherclaw_v1_connections_proto protoreflect.FileDescriptor
 
 const file_pantherclaw_v1_connections_proto_rawDesc = "" +
 	"\n" +
-	" pantherclaw/v1/connections.proto\x12\x0epantherclaw.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xe0\a\n" +
+	" pantherclaw/v1/connections.proto\x12\x0epantherclaw.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1fpantherclaw/v1/connectors.proto\"\x9d\b\n" +
 	"\n" +
 	"Connection\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
@@ -2376,7 +2409,8 @@ const file_pantherclaw_v1_connections_proto_rawDesc = "" +
 	"\vupdate_time\x18\x16 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"updateTime\x12\x1f\n" +
 	"\vagent_hosts\x18\x1c \x03(\tR\n" +
-	"agentHosts\"\xb2\x01\n" +
+	"agentHosts\x12;\n" +
+	"\tconnector\x18\x1d \x01(\v2\x1d.pantherclaw.v1.ConnectorSpecR\tconnector\"\xb2\x01\n" +
 	"\x0fConnectionRoute\x12\x14\n" +
 	"\x05route\x18\x01 \x01(\tR\x05route\x12-\n" +
 	"\x04mode\x18\x02 \x01(\x0e2\x19.pantherclaw.v1.RouteModeR\x04mode\x12\x1d\n" +
@@ -2398,7 +2432,7 @@ const file_pantherclaw_v1_connections_proto_rawDesc = "" +
 	"created_by\x18\n" +
 	" \x01(\tR\tcreatedBy\x12;\n" +
 	"\vcreate_time\x18\v \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"createTime\"\xb2\a\n" +
+	"createTime\"\xef\a\n" +
 	"\x17CreateConnectionRequest\x12C\n" +
 	"\x04name\x18\x01 \x01(\tB/\xbaH,r*\x10\x01\x18?2$^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$R\x04name\x12>\n" +
 	"\x04kind\x18\x02 \x01(\x0e2\x1e.pantherclaw.v1.ConnectionKindB\n" +
@@ -2420,7 +2454,8 @@ const file_pantherclaw_v1_connections_proto_rawDesc = "" +
 	"\n" +
 	"timeout_ms\x18\r \x01(\x05B\v\xbaH\b\x1a\x06\x18\xe0\xd4\x03(\x00R\ttimeoutMs\x12W\n" +
 	"\vagent_hosts\x18\x13 \x03(\tB6\xbaH3\x92\x010\x10\x10\x18\x01\"*r(2&^[a-z0-9]([a-z0-9.-]{0,251}[a-z0-9])?$R\n" +
-	"agentHosts\"V\n" +
+	"agentHosts\x12;\n" +
+	"\tconnector\x18\x14 \x01(\v2\x1d.pantherclaw.v1.ConnectorSpecR\tconnector\"V\n" +
 	"\x18CreateConnectionResponse\x12:\n" +
 	"\n" +
 	"connection\x18\x01 \x01(\v2\x1a.pantherclaw.v1.ConnectionR\n" +
@@ -2442,7 +2477,7 @@ const file_pantherclaw_v1_connections_proto_rawDesc = "" +
 	"\x0finclude_retired\x18\x04 \x01(\bR\x0eincludeRetired\"\x7f\n" +
 	"\x17ListConnectionsResponse\x12<\n" +
 	"\vconnections\x18\x01 \x03(\v2\x1a.pantherclaw.v1.ConnectionR\vconnections\x12&\n" +
-	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"\x8a\a\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"\xc7\a\n" +
 	"\x17UpdateConnectionRequest\x12\x18\n" +
 	"\x02id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x02id\x12#\n" +
 	"\brevision\x18\x02 \x01(\x05B\a\xbaH\x04\x1a\x02 \x00R\brevision\x12,\n" +
@@ -2465,7 +2500,8 @@ const file_pantherclaw_v1_connections_proto_rawDesc = "" +
 	"timeout_ms\x18\v \x01(\x05B\v\xbaH\b\x1a\x06\x18\xe0\xd4\x03(dH\x06R\ttimeoutMs\x88\x01\x01\x12W\n" +
 	"\vagent_hosts\x18\x11 \x03(\tB6\xbaH3\x92\x010\x10\x10\x18\x01\"*r(2&^[a-z0-9]([a-z0-9.-]{0,251}[a-z0-9])?$R\n" +
 	"agentHosts\x12,\n" +
-	"\x12update_agent_hosts\x18\x12 \x01(\bR\x10updateAgentHostsB\r\n" +
+	"\x12update_agent_hosts\x18\x12 \x01(\bR\x10updateAgentHosts\x12;\n" +
+	"\tconnector\x18\x13 \x01(\v2\x1d.pantherclaw.v1.ConnectorSpecR\tconnectorB\r\n" +
 	"\v_gateway_idB\v\n" +
 	"\t_base_urlB\x14\n" +
 	"\x12_destination_classB\x0e\n" +
@@ -2538,12 +2574,13 @@ const file_pantherclaw_v1_connections_proto_rawDesc = "" +
 	"\x17RevokeCredentialRequest\x12-\n" +
 	"\rconnection_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\fconnectionId\x12!\n" +
 	"\aversion\x18\x02 \x01(\x05B\a\xbaH\x04\x1a\x02 \x00R\aversion\"\x1a\n" +
-	"\x18RevokeCredentialResponse*\x7f\n" +
+	"\x18RevokeCredentialResponse*\xa2\x01\n" +
 	"\x0eConnectionKind\x12\x1f\n" +
 	"\x1bCONNECTION_KIND_UNSPECIFIED\x10\x00\x12\x18\n" +
 	"\x14CONNECTION_KIND_HTTP\x10\x01\x12\x17\n" +
 	"\x13CONNECTION_KIND_MCP\x10\x02\x12\x19\n" +
-	"\x15CONNECTION_KIND_LOCAL\x10\x03*\x90\x01\n" +
+	"\x15CONNECTION_KIND_LOCAL\x10\x03\x12!\n" +
+	"\x1dCONNECTION_KIND_MCP_CONTAINER\x10\t*\x90\x01\n" +
 	"\x0fConnectionState\x12 \n" +
 	"\x1cCONNECTION_STATE_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17CONNECTION_STATE_ACTIVE\x10\x01\x12 \n" +
@@ -2633,6 +2670,7 @@ var file_pantherclaw_v1_connections_proto_goTypes = []any{
 	(*RevokeCredentialRequest)(nil),      // 31: pantherclaw.v1.RevokeCredentialRequest
 	(*RevokeCredentialResponse)(nil),     // 32: pantherclaw.v1.RevokeCredentialResponse
 	(*timestamppb.Timestamp)(nil),        // 33: google.protobuf.Timestamp
+	(*ConnectorSpec)(nil),                // 34: pantherclaw.v1.ConnectorSpec
 }
 var file_pantherclaw_v1_connections_proto_depIdxs = []int32{
 	0,  // 0: pantherclaw.v1.Connection.kind:type_name -> pantherclaw.v1.ConnectionKind
@@ -2643,57 +2681,60 @@ var file_pantherclaw_v1_connections_proto_depIdxs = []int32{
 	1,  // 5: pantherclaw.v1.Connection.state:type_name -> pantherclaw.v1.ConnectionState
 	33, // 6: pantherclaw.v1.Connection.create_time:type_name -> google.protobuf.Timestamp
 	33, // 7: pantherclaw.v1.Connection.update_time:type_name -> google.protobuf.Timestamp
-	2,  // 8: pantherclaw.v1.ConnectionRoute.mode:type_name -> pantherclaw.v1.RouteMode
-	33, // 9: pantherclaw.v1.ConnectionRoute.change_time:type_name -> google.protobuf.Timestamp
-	5,  // 10: pantherclaw.v1.ConnectionCredential.state:type_name -> pantherclaw.v1.SealedCredentialState
-	33, // 11: pantherclaw.v1.ConnectionCredential.create_time:type_name -> google.protobuf.Timestamp
-	0,  // 12: pantherclaw.v1.CreateConnectionRequest.kind:type_name -> pantherclaw.v1.ConnectionKind
-	4,  // 13: pantherclaw.v1.CreateConnectionRequest.destination_class:type_name -> pantherclaw.v1.DestinationClass
-	3,  // 14: pantherclaw.v1.CreateConnectionRequest.access_mode:type_name -> pantherclaw.v1.AccessMode
-	2,  // 15: pantherclaw.v1.CreateConnectionRequest.default_mode:type_name -> pantherclaw.v1.RouteMode
-	6,  // 16: pantherclaw.v1.CreateConnectionResponse.connection:type_name -> pantherclaw.v1.Connection
-	6,  // 17: pantherclaw.v1.GetConnectionResponse.connection:type_name -> pantherclaw.v1.Connection
-	8,  // 18: pantherclaw.v1.GetConnectionResponse.active_credential:type_name -> pantherclaw.v1.ConnectionCredential
-	6,  // 19: pantherclaw.v1.ListConnectionsResponse.connections:type_name -> pantherclaw.v1.Connection
-	4,  // 20: pantherclaw.v1.UpdateConnectionRequest.destination_class:type_name -> pantherclaw.v1.DestinationClass
-	3,  // 21: pantherclaw.v1.UpdateConnectionRequest.access_mode:type_name -> pantherclaw.v1.AccessMode
-	2,  // 22: pantherclaw.v1.UpdateConnectionRequest.default_mode:type_name -> pantherclaw.v1.RouteMode
-	6,  // 23: pantherclaw.v1.UpdateConnectionResponse.connection:type_name -> pantherclaw.v1.Connection
-	2,  // 24: pantherclaw.v1.SetRouteModeRequest.mode:type_name -> pantherclaw.v1.RouteMode
-	6,  // 25: pantherclaw.v1.SetRouteModeResponse.connection:type_name -> pantherclaw.v1.Connection
-	6,  // 26: pantherclaw.v1.QuarantineConnectionResponse.connection:type_name -> pantherclaw.v1.Connection
-	6,  // 27: pantherclaw.v1.RestoreConnectionResponse.connection:type_name -> pantherclaw.v1.Connection
-	8,  // 28: pantherclaw.v1.PutCredentialResponse.credential:type_name -> pantherclaw.v1.ConnectionCredential
-	8,  // 29: pantherclaw.v1.ListCredentialsResponse.credentials:type_name -> pantherclaw.v1.ConnectionCredential
-	9,  // 30: pantherclaw.v1.ConnectionService.CreateConnection:input_type -> pantherclaw.v1.CreateConnectionRequest
-	11, // 31: pantherclaw.v1.ConnectionService.GetConnection:input_type -> pantherclaw.v1.GetConnectionRequest
-	13, // 32: pantherclaw.v1.ConnectionService.ListConnections:input_type -> pantherclaw.v1.ListConnectionsRequest
-	15, // 33: pantherclaw.v1.ConnectionService.UpdateConnection:input_type -> pantherclaw.v1.UpdateConnectionRequest
-	17, // 34: pantherclaw.v1.ConnectionService.SetRouteMode:input_type -> pantherclaw.v1.SetRouteModeRequest
-	19, // 35: pantherclaw.v1.ConnectionService.QuarantineConnection:input_type -> pantherclaw.v1.QuarantineConnectionRequest
-	21, // 36: pantherclaw.v1.ConnectionService.RestoreConnection:input_type -> pantherclaw.v1.RestoreConnectionRequest
-	23, // 37: pantherclaw.v1.ConnectionService.RetireConnection:input_type -> pantherclaw.v1.RetireConnectionRequest
-	25, // 38: pantherclaw.v1.ConnectionService.GetSealingKey:input_type -> pantherclaw.v1.GetSealingKeyRequest
-	27, // 39: pantherclaw.v1.ConnectionService.PutCredential:input_type -> pantherclaw.v1.PutCredentialRequest
-	29, // 40: pantherclaw.v1.ConnectionService.ListCredentials:input_type -> pantherclaw.v1.ListCredentialsRequest
-	31, // 41: pantherclaw.v1.ConnectionService.RevokeCredential:input_type -> pantherclaw.v1.RevokeCredentialRequest
-	10, // 42: pantherclaw.v1.ConnectionService.CreateConnection:output_type -> pantherclaw.v1.CreateConnectionResponse
-	12, // 43: pantherclaw.v1.ConnectionService.GetConnection:output_type -> pantherclaw.v1.GetConnectionResponse
-	14, // 44: pantherclaw.v1.ConnectionService.ListConnections:output_type -> pantherclaw.v1.ListConnectionsResponse
-	16, // 45: pantherclaw.v1.ConnectionService.UpdateConnection:output_type -> pantherclaw.v1.UpdateConnectionResponse
-	18, // 46: pantherclaw.v1.ConnectionService.SetRouteMode:output_type -> pantherclaw.v1.SetRouteModeResponse
-	20, // 47: pantherclaw.v1.ConnectionService.QuarantineConnection:output_type -> pantherclaw.v1.QuarantineConnectionResponse
-	22, // 48: pantherclaw.v1.ConnectionService.RestoreConnection:output_type -> pantherclaw.v1.RestoreConnectionResponse
-	24, // 49: pantherclaw.v1.ConnectionService.RetireConnection:output_type -> pantherclaw.v1.RetireConnectionResponse
-	26, // 50: pantherclaw.v1.ConnectionService.GetSealingKey:output_type -> pantherclaw.v1.GetSealingKeyResponse
-	28, // 51: pantherclaw.v1.ConnectionService.PutCredential:output_type -> pantherclaw.v1.PutCredentialResponse
-	30, // 52: pantherclaw.v1.ConnectionService.ListCredentials:output_type -> pantherclaw.v1.ListCredentialsResponse
-	32, // 53: pantherclaw.v1.ConnectionService.RevokeCredential:output_type -> pantherclaw.v1.RevokeCredentialResponse
-	42, // [42:54] is the sub-list for method output_type
-	30, // [30:42] is the sub-list for method input_type
-	30, // [30:30] is the sub-list for extension type_name
-	30, // [30:30] is the sub-list for extension extendee
-	0,  // [0:30] is the sub-list for field type_name
+	34, // 8: pantherclaw.v1.Connection.connector:type_name -> pantherclaw.v1.ConnectorSpec
+	2,  // 9: pantherclaw.v1.ConnectionRoute.mode:type_name -> pantherclaw.v1.RouteMode
+	33, // 10: pantherclaw.v1.ConnectionRoute.change_time:type_name -> google.protobuf.Timestamp
+	5,  // 11: pantherclaw.v1.ConnectionCredential.state:type_name -> pantherclaw.v1.SealedCredentialState
+	33, // 12: pantherclaw.v1.ConnectionCredential.create_time:type_name -> google.protobuf.Timestamp
+	0,  // 13: pantherclaw.v1.CreateConnectionRequest.kind:type_name -> pantherclaw.v1.ConnectionKind
+	4,  // 14: pantherclaw.v1.CreateConnectionRequest.destination_class:type_name -> pantherclaw.v1.DestinationClass
+	3,  // 15: pantherclaw.v1.CreateConnectionRequest.access_mode:type_name -> pantherclaw.v1.AccessMode
+	2,  // 16: pantherclaw.v1.CreateConnectionRequest.default_mode:type_name -> pantherclaw.v1.RouteMode
+	34, // 17: pantherclaw.v1.CreateConnectionRequest.connector:type_name -> pantherclaw.v1.ConnectorSpec
+	6,  // 18: pantherclaw.v1.CreateConnectionResponse.connection:type_name -> pantherclaw.v1.Connection
+	6,  // 19: pantherclaw.v1.GetConnectionResponse.connection:type_name -> pantherclaw.v1.Connection
+	8,  // 20: pantherclaw.v1.GetConnectionResponse.active_credential:type_name -> pantherclaw.v1.ConnectionCredential
+	6,  // 21: pantherclaw.v1.ListConnectionsResponse.connections:type_name -> pantherclaw.v1.Connection
+	4,  // 22: pantherclaw.v1.UpdateConnectionRequest.destination_class:type_name -> pantherclaw.v1.DestinationClass
+	3,  // 23: pantherclaw.v1.UpdateConnectionRequest.access_mode:type_name -> pantherclaw.v1.AccessMode
+	2,  // 24: pantherclaw.v1.UpdateConnectionRequest.default_mode:type_name -> pantherclaw.v1.RouteMode
+	34, // 25: pantherclaw.v1.UpdateConnectionRequest.connector:type_name -> pantherclaw.v1.ConnectorSpec
+	6,  // 26: pantherclaw.v1.UpdateConnectionResponse.connection:type_name -> pantherclaw.v1.Connection
+	2,  // 27: pantherclaw.v1.SetRouteModeRequest.mode:type_name -> pantherclaw.v1.RouteMode
+	6,  // 28: pantherclaw.v1.SetRouteModeResponse.connection:type_name -> pantherclaw.v1.Connection
+	6,  // 29: pantherclaw.v1.QuarantineConnectionResponse.connection:type_name -> pantherclaw.v1.Connection
+	6,  // 30: pantherclaw.v1.RestoreConnectionResponse.connection:type_name -> pantherclaw.v1.Connection
+	8,  // 31: pantherclaw.v1.PutCredentialResponse.credential:type_name -> pantherclaw.v1.ConnectionCredential
+	8,  // 32: pantherclaw.v1.ListCredentialsResponse.credentials:type_name -> pantherclaw.v1.ConnectionCredential
+	9,  // 33: pantherclaw.v1.ConnectionService.CreateConnection:input_type -> pantherclaw.v1.CreateConnectionRequest
+	11, // 34: pantherclaw.v1.ConnectionService.GetConnection:input_type -> pantherclaw.v1.GetConnectionRequest
+	13, // 35: pantherclaw.v1.ConnectionService.ListConnections:input_type -> pantherclaw.v1.ListConnectionsRequest
+	15, // 36: pantherclaw.v1.ConnectionService.UpdateConnection:input_type -> pantherclaw.v1.UpdateConnectionRequest
+	17, // 37: pantherclaw.v1.ConnectionService.SetRouteMode:input_type -> pantherclaw.v1.SetRouteModeRequest
+	19, // 38: pantherclaw.v1.ConnectionService.QuarantineConnection:input_type -> pantherclaw.v1.QuarantineConnectionRequest
+	21, // 39: pantherclaw.v1.ConnectionService.RestoreConnection:input_type -> pantherclaw.v1.RestoreConnectionRequest
+	23, // 40: pantherclaw.v1.ConnectionService.RetireConnection:input_type -> pantherclaw.v1.RetireConnectionRequest
+	25, // 41: pantherclaw.v1.ConnectionService.GetSealingKey:input_type -> pantherclaw.v1.GetSealingKeyRequest
+	27, // 42: pantherclaw.v1.ConnectionService.PutCredential:input_type -> pantherclaw.v1.PutCredentialRequest
+	29, // 43: pantherclaw.v1.ConnectionService.ListCredentials:input_type -> pantherclaw.v1.ListCredentialsRequest
+	31, // 44: pantherclaw.v1.ConnectionService.RevokeCredential:input_type -> pantherclaw.v1.RevokeCredentialRequest
+	10, // 45: pantherclaw.v1.ConnectionService.CreateConnection:output_type -> pantherclaw.v1.CreateConnectionResponse
+	12, // 46: pantherclaw.v1.ConnectionService.GetConnection:output_type -> pantherclaw.v1.GetConnectionResponse
+	14, // 47: pantherclaw.v1.ConnectionService.ListConnections:output_type -> pantherclaw.v1.ListConnectionsResponse
+	16, // 48: pantherclaw.v1.ConnectionService.UpdateConnection:output_type -> pantherclaw.v1.UpdateConnectionResponse
+	18, // 49: pantherclaw.v1.ConnectionService.SetRouteMode:output_type -> pantherclaw.v1.SetRouteModeResponse
+	20, // 50: pantherclaw.v1.ConnectionService.QuarantineConnection:output_type -> pantherclaw.v1.QuarantineConnectionResponse
+	22, // 51: pantherclaw.v1.ConnectionService.RestoreConnection:output_type -> pantherclaw.v1.RestoreConnectionResponse
+	24, // 52: pantherclaw.v1.ConnectionService.RetireConnection:output_type -> pantherclaw.v1.RetireConnectionResponse
+	26, // 53: pantherclaw.v1.ConnectionService.GetSealingKey:output_type -> pantherclaw.v1.GetSealingKeyResponse
+	28, // 54: pantherclaw.v1.ConnectionService.PutCredential:output_type -> pantherclaw.v1.PutCredentialResponse
+	30, // 55: pantherclaw.v1.ConnectionService.ListCredentials:output_type -> pantherclaw.v1.ListCredentialsResponse
+	32, // 56: pantherclaw.v1.ConnectionService.RevokeCredential:output_type -> pantherclaw.v1.RevokeCredentialResponse
+	45, // [45:57] is the sub-list for method output_type
+	33, // [33:45] is the sub-list for method input_type
+	33, // [33:33] is the sub-list for extension type_name
+	33, // [33:33] is the sub-list for extension extendee
+	0,  // [0:33] is the sub-list for field type_name
 }
 
 func init() { file_pantherclaw_v1_connections_proto_init() }
@@ -2701,6 +2742,7 @@ func file_pantherclaw_v1_connections_proto_init() {
 	if File_pantherclaw_v1_connections_proto != nil {
 		return
 	}
+	file_pantherclaw_v1_connectors_proto_init()
 	file_pantherclaw_v1_connections_proto_msgTypes[9].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{

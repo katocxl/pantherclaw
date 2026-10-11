@@ -7,6 +7,7 @@ package pantherclaw.v1;
 
 import "buf/validate/validate.proto";
 import "google/protobuf/timestamp.proto";
+import "pantherclaw/v1/connectors.proto";
 
 // ConnectionService manages connections: one target (an HTTP API, a remote
 // MCP server, or the agent's own machine for hooks) served by one gateway
@@ -79,6 +80,9 @@ enum ConnectionKind {
   CONNECTION_KIND_MCP = 2;
   // The agent's own machine (hooks); the gateway never dispatches.
   CONNECTION_KIND_LOCAL = 3;
+  // A third-party stdio MCP server a customer-hosted gateway runs in a
+  // container (G0 M9; HR-084): no base URL, no credential of its own.
+  CONNECTION_KIND_MCP_CONTAINER = 9;
 }
 
 // ConnectionState is whether actions may use a connection.
@@ -178,6 +182,8 @@ message Connection {
   // agent_hosts are the host names agents use for this connection's API
   // (G0 M9): a containment sandbox's edge maps each to it (HR-183).
   repeated string agent_hosts = 28;
+  // connector is an mcp_container connection's current spec.
+  ConnectorSpec connector = 29;
 }
 
 // ConnectionRoute is one route's explicit mode.
@@ -291,6 +297,8 @@ message CreateConnectionRequest {
       string: {pattern: "^[a-z0-9]([a-z0-9.-]{0,251}[a-z0-9])?$"}
     }
   }];
+  // connector is required for, and only for, an mcp_container connection.
+  ConnectorSpec connector = 20;
 }
 
 // CreateConnectionResponse returns the connection.
@@ -399,6 +407,9 @@ message UpdateConnectionRequest {
     }
   }];
   bool update_agent_hosts = 18;
+  // connector replaces an mcp_container connection's spec (weakens; moving
+  // one to another gateway needs it).
+  ConnectorSpec connector = 19;
 }
 
 // UpdateConnectionResponse returns the connection.

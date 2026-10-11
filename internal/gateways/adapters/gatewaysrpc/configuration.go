@@ -40,6 +40,10 @@ func (h *GatewayHandler) GetConfiguration(ctx context.Context, req *pb.GetConfig
 		k := r.ConnectionID.String()
 		routes[k] = append(routes[k], &pb.RouteModeSetting{Route: r.Route, Mode: r.Mode})
 	}
+	specs := map[string]*pb.ConnectorSpec{}
+	for _, s := range c.Connectors {
+		specs[s.ConnectionID.String()] = connectorOf(s)
+	}
 	versions := map[string]string{}
 	for _, p := range c.Packages {
 		versions[p.Name] = p.Version
@@ -51,7 +55,7 @@ func (h *GatewayHandler) GetConfiguration(ctx context.Context, req *pb.GetConfig
 			BaseUrl: deref(conn.BaseUrl), AllowedHosts: conn.AllowedHosts, DestinationClass: conn.DestinationClass,
 			AccessMode: conn.AccessMode, DefaultMode: conn.DefaultMode, Routes: routes[conn.ID.String()],
 			MaxResponseBytes: conn.MaxResponseBytes, TimeoutMs: conn.TimeoutMs, State: conn.State, Revision: conn.Revision,
-			AgentHosts: conn.AgentHosts,
+			AgentHosts: conn.AgentHosts, Connector: specs[conn.ID.String()],
 		})
 	}
 	for _, cr := range c.Credentials {

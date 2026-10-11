@@ -102,6 +102,8 @@ type Service struct {
 	pool   *db.Pool
 	notify Notifier
 	own    []endpoint
+	// hosted are the PantherClaw-hosted gateways (WithPantherClawHosted).
+	hosted map[ids.UUID]bool
 }
 
 // New returns the connection use cases. publicURL and gatewayAPIURL are
@@ -114,6 +116,8 @@ func New(pool *db.Pool, n Notifier, publicURL, gatewayAPIURL string) *Service {
 type Connection struct {
 	dbq.PcConnection
 	Routes []dbq.PcConnectionRoute
+	// Connector is a connector connection's current spec.
+	Connector *dbq.PcConnectorSpec
 }
 
 // CreateInput is a new connection. Zero values take the defaults.
@@ -124,6 +128,8 @@ type CreateInput struct {
 	DestinationClass, AccessMode                    string
 	CredentialHeader, CredentialScheme, DefaultMode string
 	MaxResponseBytes, TimeoutMs                     int32
+	// Connector is the spec of an mcp_container connection.
+	Connector *ConnectorSpec
 	// AgentHosts are the host names agents use for the API (G0 M9).
 	AgentHosts []string
 }
@@ -238,7 +244,7 @@ func routes(ctx context.Context, q *dbq.Queries, org ids.OrgID, pkg, kind string
 			switch kind {
 			case KindHTTP:
 				serves = d.Dispatch != nil && d.Dispatch.HTTP != nil && m.Channel != domain.ChannelHook
-			case KindMCP:
+			case KindMCP, KindMCPContainer:
 				serves = d.Dispatch != nil && d.Dispatch.MCP != nil && m.Channel != domain.ChannelHook
 			case KindLocal:
 				serves = m.Channel == domain.ChannelHook
@@ -265,6 +271,12 @@ func (s *Service) shape(kind, baseURL string, hosts []string, access, header, sc
 		return nil, nil, ErrShape
 	}
 	if kind == KindLocal {
+		if baseURL != "" || len(hosts) > 0 || access != AccessNone {
+			return nil, nil, ErrShape
+		}
+		return nil, []string{}, nil
+	}
+	if kind == KindMCPContainer {
 		if baseURL != "" || len(hosts) > 0 || access != AccessNone {
 			return nil, nil, ErrShape
 		}
@@ -338,6 +350,18 @@ func (s *Service) create(ctx context.Context, c actor, in CreateInput) (Connecti
 	if err != nil {
 		return Connection{}, err
 	}
+	var spec ConnectorSpec
+	if (in.Kind == KindMCPContainer) != (in.Connector != nil) {
+		return Connection{}, ErrConnector
+	}
+	if in.Connector != nil {
+		if spec, err = in.Connector.check(); err != nil {
+			return Connection{}, err
+		}
+		if s.hosted[in.Gateway] {
+			return Connection{}, ErrHostedGateway
+		}
+	}
 	var out Connection
 	err = s.pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
 		q := dbq.New(tx)
@@ -359,6 +383,14 @@ func (s *Service) create(ctx context.Context, c actor, in CreateInput) (Connecti
 		} else if err != nil {
 			return err
 		}
+		var connector string
+		if in.Connector != nil {
+			cs, err := putConnector(ctx, q, c, conn, spec)
+			if err != nil {
+				return err
+			}
+			connector = connectorSummary(&cs)
+		}
 		for _, r := range rs {
 			if err := q.InsertConnectionRoute(ctx, dbq.InsertConnectionRouteParams{
 				OrgID: c.Org, ConnectionID: conn.ID, Route: r, Mode: in.DefaultMode, ChangedBy: c.By,
@@ -373,6 +405,7 @@ func (s *Service) create(ctx context.Context, c actor, in CreateInput) (Connecti
 			"name": conn.Name, "kind": conn.Kind, "gateway_id": conn.GatewayID.String(), "package": conn.Package,
 			"base_url": deref(conn.BaseUrl), "allowed_hosts": strings.Join(conn.AllowedHosts, ","), "access_mode": conn.AccessMode,
 			"default_mode": conn.DefaultMode, "routes": strconv.Itoa(len(rs)), "agent_hosts": strings.Join(conn.AgentHosts, ","),
+			"connector": connector,
 		}); err != nil {
 			return err
 		}
@@ -391,7 +424,11 @@ func deref(p *string) string {
 
 func load(ctx context.Context, q *dbq.Queries, conn dbq.PcConnection) (Connection, error) {
 	rs, err := q.ListConnectionRoutes(ctx, conn.OrgID, conn.ID)
-	return Connection{PcConnection: conn, Routes: rs}, err
+	if err != nil || conn.Kind != KindMCPContainer {
+		return Connection{PcConnection: conn, Routes: rs}, err
+	}
+	spec, err := q.CurrentConnectorSpec(ctx, conn.OrgID, conn.ID)
+	return Connection{PcConnection: conn, Routes: rs, Connector: &spec}, err
 }
 
 // Get returns one connection (connection.read); another org's is NotFound.
