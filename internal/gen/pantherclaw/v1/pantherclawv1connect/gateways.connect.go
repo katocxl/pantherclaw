@@ -72,6 +72,9 @@ const (
 	// GatewayServiceClaimVerificationsProcedure is the procedure name of the GatewayService's
 	// ClaimVerifications RPC.
 	GatewayServiceClaimVerificationsProcedure = "/pantherclaw.v1.GatewayService/ClaimVerifications"
+	// GatewayServiceMintTestActionTokensProcedure is the procedure name of the GatewayService's
+	// MintTestActionTokens RPC.
+	GatewayServiceMintTestActionTokensProcedure = "/pantherclaw.v1.GatewayService/MintTestActionTokens"
 	// GatewayServiceReportObservationProcedure is the procedure name of the GatewayService's
 	// ReportObservation RPC.
 	GatewayServiceReportObservationProcedure = "/pantherclaw.v1.GatewayService/ReportObservation"
@@ -457,6 +460,13 @@ var (
 			Procedure:  GatewayServiceClaimVerificationsProcedure,
 		}
 	})
+	gatewayServiceMintTestActionTokensSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_pantherclaw_v1_gateways_proto.Services().ByName("GatewayService").Methods().ByName("MintTestActionTokens"),
+			Procedure:  GatewayServiceMintTestActionTokensProcedure,
+		}
+	})
 	gatewayServiceReportObservationSpec = sync.OnceValue(func() connect.Spec {
 		return connect.Spec{
 			StreamType: connect.StreamTypeUnary,
@@ -506,6 +516,12 @@ type GatewayServiceClient interface {
 	// connection's credential. Nothing is leased under containment.
 	// permission: gateway.verify
 	ClaimVerifications(context.Context, *v1.ClaimVerificationsRequest) (*v1.ClaimVerificationsResponse, error)
+	// MintTestActionTokens mints, under the calling gateway's live lease of
+	// a target_verifier connection test, test-purpose action tokens for the
+	// package's test read only (G0 M8, N15): one binding the read's empty
+	// body and one binding another body. Any other lease is refused.
+	// permission: gateway.verify
+	MintTestActionTokens(context.Context, *v1.MintTestActionTokensRequest) (*v1.MintTestActionTokensResponse, error)
 	// ReportObservation reports what a leased read observed: only the fields
 	// the verifier declares, and a digest of the answer (HR-190).
 	// permission: gateway.verify
@@ -579,6 +595,12 @@ type GatewayServiceHandler interface {
 	// connection's credential. Nothing is leased under containment.
 	// permission: gateway.verify
 	ClaimVerifications(context.Context, *v1.ClaimVerificationsRequest) (*v1.ClaimVerificationsResponse, error)
+	// MintTestActionTokens mints, under the calling gateway's live lease of
+	// a target_verifier connection test, test-purpose action tokens for the
+	// package's test read only (G0 M8, N15): one binding the read's empty
+	// body and one binding another body. Any other lease is refused.
+	// permission: gateway.verify
+	MintTestActionTokens(context.Context, *v1.MintTestActionTokensRequest) (*v1.MintTestActionTokensResponse, error)
 	// ReportObservation reports what a leased read observed: only the fields
 	// the verifier declares, and a digest of the answer (HR-190).
 	// permission: gateway.verify
@@ -598,6 +620,7 @@ func RegisterGatewayServiceHandler(server *connect.Server, svc GatewayServiceHan
 		connect.Method{Spec: gatewayServiceReportCircuitSpec(), Handler: adapter.reportCircuit},
 		connect.Method{Spec: gatewayServiceReportDriftSpec(), Handler: adapter.reportDrift},
 		connect.Method{Spec: gatewayServiceClaimVerificationsSpec(), Handler: adapter.claimVerifications},
+		connect.Method{Spec: gatewayServiceMintTestActionTokensSpec(), Handler: adapter.mintTestActionTokens},
 		connect.Method{Spec: gatewayServiceReportObservationSpec(), Handler: adapter.reportObservation},
 	)
 }
@@ -651,6 +674,10 @@ func (UnimplementedGatewayServiceHandler) ReportDrift(context.Context, *v1.Repor
 
 func (UnimplementedGatewayServiceHandler) ClaimVerifications(context.Context, *v1.ClaimVerificationsRequest) (*v1.ClaimVerificationsResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.GatewayService.ClaimVerifications is not implemented")
+}
+
+func (UnimplementedGatewayServiceHandler) MintTestActionTokens(context.Context, *v1.MintTestActionTokensRequest) (*v1.MintTestActionTokensResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.GatewayService.MintTestActionTokens is not implemented")
 }
 
 func (UnimplementedGatewayServiceHandler) ReportObservation(context.Context, *v1.ReportObservationRequest) (*v1.ReportObservationResponse, error) {
@@ -720,6 +747,14 @@ func (c *gatewayServiceClient) ReportDrift(ctx context.Context, req *v1.ReportDr
 func (c *gatewayServiceClient) ClaimVerifications(ctx context.Context, req *v1.ClaimVerificationsRequest) (*v1.ClaimVerificationsResponse, error) {
 	var res v1.ClaimVerificationsResponse
 	if err := c.client.CallUnary(ctx, gatewayServiceClaimVerificationsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *gatewayServiceClient) MintTestActionTokens(ctx context.Context, req *v1.MintTestActionTokensRequest) (*v1.MintTestActionTokensResponse, error) {
+	var res v1.MintTestActionTokensResponse
+	if err := c.client.CallUnary(ctx, gatewayServiceMintTestActionTokensSpec(), req, &res); err != nil {
 		return nil, err
 	}
 	return &res, nil
@@ -821,6 +856,18 @@ func (h gatewayServiceHandler) claimVerifications(ctx context.Context, _ connect
 		return err
 	}
 	res, err := h.svc.ClaimVerifications(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h gatewayServiceHandler) mintTestActionTokens(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.MintTestActionTokensRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.MintTestActionTokens(ctx, &req)
 	if err != nil {
 		return err
 	}

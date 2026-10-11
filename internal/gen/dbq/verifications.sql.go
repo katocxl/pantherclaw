@@ -303,7 +303,7 @@ func (q *Queries) LeaseVerification(ctx context.Context, arg LeaseVerificationPa
 }
 
 const leasedConnectionTest = `-- name: LeasedConnectionTest :one
-SELECT v.id, v.connection_id, v.operation, v.attempts, t.id AS test_id
+SELECT v.id, v.connection_id, v.operation, v.attempts, t.id AS test_id, t.kind AS test_kind
 FROM pc.verifications v
 JOIN pc.connection_tests t ON t.org_id = v.org_id AND t.verification_id = v.id
 WHERE v.org_id = $1 AND v.id = $2 AND v.purpose = 'connection_test' AND v.state = 'LEASED'
@@ -324,6 +324,7 @@ type LeasedConnectionTestRow struct {
 	Operation    string
 	Attempts     int32
 	TestID       ids.UUID
+	TestKind     string
 }
 
 // LeasedConnectionTest is a connection test's task under a live lease of
@@ -342,6 +343,7 @@ func (q *Queries) LeasedConnectionTest(ctx context.Context, arg LeasedConnection
 		&i.Operation,
 		&i.Attempts,
 		&i.TestID,
+		&i.TestKind,
 	)
 	return i, err
 }

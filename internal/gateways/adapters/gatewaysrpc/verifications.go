@@ -19,6 +19,7 @@ import (
 type Verifications interface {
 	Claim(ctx context.Context, org ids.OrgID, gateway ids.UUID, limit int) ([]txapp.Lease, error)
 	Report(ctx context.Context, org ids.OrgID, gateway ids.UUID, r txapp.Report) (txapp.Applied, error)
+	MintTestTokens(ctx context.Context, org ids.OrgID, gateway, task ids.UUID, secret []byte) (txapp.TestTokens, error)
 }
 
 // WithVerifications serves ClaimVerifications and ReportObservation from v.
@@ -84,4 +85,26 @@ func (h *GatewayHandler) ReportObservation(ctx context.Context, req *pb.ReportOb
 		return nil, err
 	}
 	return &pb.ReportObservationResponse{ObservationId: a.Observation.String(), EffectState: string(a.State), Done: a.Done}, nil
+}
+
+// MintTestActionTokens implements GatewayServiceHandler, on the mTLS
+// listener only (gateway.verify): tokens for the package's test read only,
+// under the calling gateway's live lease of a target_verifier test (N15).
+func (h *GatewayHandler) MintTestActionTokens(ctx context.Context, req *pb.MintTestActionTokensRequest) (*pb.MintTestActionTokensResponse, error) {
+	id, err := identity(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if h.verifications == nil {
+		return nil, connect.NewError(connect.CodeUnimplemented, "verifications are not served here")
+	}
+	task, err := ids.ParseUUID(req.GetTaskId())
+	if err != nil {
+		return nil, errInvalidID
+	}
+	t, err := h.verifications.MintTestTokens(ctx, id.Org, id.Gateway, task, req.GetLease())
+	if err != nil {
+		return nil, err
+	}
+	return &pb.MintTestActionTokensResponse{Token: t.Fresh, MismatchToken: t.Mismatch}, nil
 }

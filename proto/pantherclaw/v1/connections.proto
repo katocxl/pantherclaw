@@ -728,8 +728,8 @@ message ConnectionTest {
 message TestConnectionRequest {
   // Connection id.
   string id = 1 [(buf.validate.field).string.uuid = true];
-  // credential (the default) or read.
-  string kind = 2 [(buf.validate.field).string.pattern = "^(|credential|read)$"];
+  // credential (the default), read or target_verifier.
+  string kind = 2 [(buf.validate.field).string.pattern = "^(|credential|read|target_verifier)$"];
 }
 
 // TestConnectionResponse returns the recorded test.

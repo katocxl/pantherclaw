@@ -97,6 +97,12 @@ service GatewayService {
   // connection's credential. Nothing is leased under containment.
   // permission: gateway.verify
   rpc ClaimVerifications(ClaimVerificationsRequest) returns (ClaimVerificationsResponse);
+  // MintTestActionTokens mints, under the calling gateway's live lease of
+  // a target_verifier connection test, test-purpose action tokens for the
+  // package's test read only (G0 M8, N15): one binding the read's empty
+  // body and one binding another body. Any other lease is refused.
+  // permission: gateway.verify
+  rpc MintTestActionTokens(MintTestActionTokensRequest) returns (MintTestActionTokensResponse);
   // ReportObservation reports what a leased read observed: only the fields
   // the verifier declares, and a digest of the answer (HR-190).
   // permission: gateway.verify
@@ -636,6 +642,22 @@ message VerificationLease {
 message ClaimVerificationsResponse {
   // Leases.
   repeated VerificationLease leases = 1;
+}
+
+// MintTestActionTokensRequest names a leased target_verifier test.
+message MintTestActionTokensRequest {
+  // The verification task.
+  string task_id = 1 [(buf.validate.field).string.uuid = true];
+  // The lease secret.
+  bytes lease = 2 [(buf.validate.field).bytes.len = 32];
+}
+
+// MintTestActionTokensResponse carries the test's action tokens.
+message MintTestActionTokensResponse {
+  // Binds the test read's empty body: sent fresh, then again as a replay.
+  string token = 1;
+  // Binds another body: the verifier must refuse it.
+  string mismatch_token = 2;
 }
 
 // ReportObservationRequest reports one leased read.
