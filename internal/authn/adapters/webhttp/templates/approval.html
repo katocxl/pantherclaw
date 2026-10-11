@@ -16,6 +16,11 @@
 </dl>
 {{if .Clamped}}<p class="note">An obligation lowered a parameter: the fields show the action that will run, beside what the agent asked for.</p>{{end}}
 {{end}}
+{{if .Display.Consequences}}
+<h2>What it may also cause</h2>
+<p class="note">Predicted from the package's consequence rules and current facts: a prediction, not an authorized or confirmed effect. An unknown consequence could not be ruled out and is treated as predicted.</p>
+<ul>{{range .Display.Consequences}}<li>{{if eq .State "UNKNOWN"}}<strong>Unknown</strong>{{else}}Predicted{{end}}: <code>{{.Operation}}</code> on {{.Target.Type}} <code>{{.Target.ID}}</code> ({{.Rule}}){{with .Environments}}, to {{range $i, $e := .}}{{if $i}}, {{end}}<code>{{$e}}</code>{{end}}{{end}}{{with .Workflows}}, through {{range $i, $w := .}}{{if $i}}, {{end}}<code>{{$w}}</code>{{end}}{{end}}{{with .Unknown}}<br><span class="note">Why unknown: {{range $i, $u := .}}{{if $i}}; {{end}}{{$u}}{{end}}</span>{{end}}</li>{{end}}</ul>
+{{end}}
 {{if .Display.Fields}}
 <h2>Fields</h2>
 <table>
@@ -50,7 +55,7 @@
 <ul>{{range .Basis}}<li>{{.Reason}} <span class="note">({{.Level}})</span></li>{{end}}</ul>
 {{end}}
 <h2>Who can decide</h2>
-<ul>{{range .Deciders}}<li>{{if eq .Kind "step_up"}}A step-up by <code>{{.Subject}}</code>{{else if eq .Kind "restore"}}A person holding <code>agent.restore</code> where the agent lives, other than the requester{{else}}{{.Count}} × <code>{{.Role}}</code>{{if .Independent}}, independent of the agent's owners and the grant's issuer{{end}}{{with .Scope}}, {{.}}{{end}}{{end}}</li>{{end}}</ul>
+<ul>{{range .Deciders}}<li>{{if eq .Kind "step_up"}}A step-up by <code>{{.Subject}}</code>{{else if eq .Kind "restore"}}A person holding <code>agent.restore</code> where the agent lives, other than the requester{{else}}{{.Count}} × <code>{{.Role}}</code>{{if .Independent}}, independent of the agent's owners and the grant's issuer{{end}}{{with .IndependentOf}}, and of everyone <code>{{.}}</code> lists (authors, committers and pushers linked to users){{end}}{{with .Scope}}, {{.}}{{end}}{{if .Window}}; it counts only when used inside an active change window for every environment above{{end}}{{end}}</li>{{end}}</ul>
 <p class="note">The run's launcher and principal, and a restoration's requester, never decide. Eligibility is checked again at every response and when the approval is used.</p>
 {{if .Variants}}
 <h2>Earlier variants</h2>

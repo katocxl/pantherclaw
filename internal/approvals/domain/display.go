@@ -32,17 +32,20 @@ const MaxContext = 5
 // fields and system-of-record facts; agent- or requester-supplied text is
 // only in Untrusted.
 type Display struct {
-	V           int           `json:"v"`
-	Kind        string        `json:"kind"`
-	Title       string        `json:"title"`
-	Consequence Consequence   `json:"consequence"`
-	Fields      []Field       `json:"fields"`
-	Facts       []FactLine    `json:"facts"`
-	Run         *RunLine      `json:"run,omitzero"`
-	Basis       []Source      `json:"basis"`
-	Deciders    []DeciderRule `json:"deciders"`
-	Deadline    string        `json:"deadline"`
-	Variants    []VariantLine `json:"variants"`
+	V           int         `json:"v"`
+	Kind        string      `json:"kind"`
+	Title       string      `json:"title"`
+	Consequence Consequence `json:"consequence"`
+	// Consequences are the action's predicted or unknown consequences
+	// (G0 M8, F158): predictions, apart from what the action does.
+	Consequences []ConsequenceLine `json:"consequences,omitzero"`
+	Fields       []Field           `json:"fields"`
+	Facts        []FactLine        `json:"facts"`
+	Run          *RunLine          `json:"run,omitzero"`
+	Basis        []Source          `json:"basis"`
+	Deciders     []DeciderRule     `json:"deciders"`
+	Deadline     string            `json:"deadline"`
+	Variants     []VariantLine     `json:"variants"`
 	// Context lists earlier approved requests for the same operation and
 	// target: context, never precedent.
 	Context   []ContextLine  `json:"context_not_precedent"`
@@ -104,6 +107,11 @@ type DeciderRule struct {
 	Subject     string `json:"subject,omitzero"`
 	// Scope says where the role must be bound.
 	Scope string `json:"scope,omitzero"`
+	// Window: the approval counts only inside a change window, and
+	// IndependentOf names the fact listing the people it must not be
+	// (G0 M8, HR-207).
+	Window        bool   `json:"window,omitzero"`
+	IndependentOf string `json:"independent_of,omitzero"`
 }
 
 // VariantLine is an earlier request for the same grant, operation and
@@ -147,6 +155,8 @@ type ActionInput struct {
 	// Attributes are UNTRUSTED reported attributes (for example a gateway's
 	// observations), shown only in the untrusted block.
 	Attributes map[string]string
+	// Consequences are the action's predicted or unknown consequences.
+	Consequences []ConsequenceInput
 }
 
 // RenderAction renders an action's display from its template. It fails on
@@ -195,6 +205,7 @@ func RenderAction(in ActionInput) (Display, error) {
 		out.Consequence.Verifier = d.Verifier.Operation + " establishes " + d.Verifier.Establishes
 	}
 	out.Facts = factLines(in.Facts)
+	out.Consequences = consequenceLines(in.Consequences)
 	out.finish(in.Requirements, in.Variants, in.Context)
 	var untrusted []Untrusted
 	if in.TaskLabel != "" {
@@ -254,7 +265,10 @@ func (out *Display) finish(reqs []Requirement, variants []VariantLine, context [
 				out.Basis = append(out.Basis, s)
 			}
 		}
-		rule := DeciderRule{Kind: r.Kind, Role: r.Role, Count: r.Count, Independent: r.Independent, Subject: r.Subject}
+		rule := DeciderRule{
+			Kind: r.Kind, Role: r.Role, Count: r.Count, Independent: r.Independent, Subject: r.Subject, Window: r.Window,
+			IndependentOf: r.IndependentOf,
+		}
 		if r.Kind == KindApproval {
 			rule.Scope = "bound on the agent's environment, team, business unit or org"
 		}

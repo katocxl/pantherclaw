@@ -184,3 +184,17 @@ func (s *state) consequenceRequirements() {
 		}
 	}
 }
+
+// displayed are the predicted and unknown consequences an approver sees
+// (G0 M8, F158).
+func (s *state) displayed() []apdomain.ConsequenceInput {
+	var out []apdomain.ConsequenceInput
+	for _, k := range s.pending {
+		c := k.c
+		out = append(out, apdomain.ConsequenceInput{
+			Rule: c.Rule, Operation: c.Operation, State: string(c.State), Target: c.Target, Environments: c.Environments,
+			Unknown: c.Unknown, Facts: c.Used,
+		})
+	}
+	return out
+}

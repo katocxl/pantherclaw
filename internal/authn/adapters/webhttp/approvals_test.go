@@ -37,7 +37,9 @@ var (
 // actions record what the page passed and fail with err when it is set.
 type fakeApprovals struct {
 	empty, readOnly bool
-	err             error
+	// review adds a merge review's consequences and decider rules.
+	review bool
+	err    error
 
 	mu         sync.Mutex
 	responders []apapp.Responder
@@ -178,7 +180,7 @@ func (f *fakeApprovals) View(ctx context.Context, id ids.UUID) (apapp.View, erro
 	}
 	now := time.Date(2026, 10, 10, 12, 0, 0, 0, time.UTC)
 	may := !f.readOnly
-	return apapp.View{
+	v := apapp.View{
 		MayRespond: may, MayApprove: may, Params: apdomain.Untrusted{Text: `{"amount":{"value":"40.00","currency":"USD"}}`},
 		Request: apapp.Request{ID: id, SubjectKind: "ACTION", DeadlineAt: now.Add(time.Hour)},
 		Display: apdomain.Display{
@@ -199,7 +201,50 @@ func (f *fakeApprovals) View(ctx context.Context, id ids.UUID) (apapp.View, erro
 		},
 		State: "PENDING", Now: now,
 		Evidence: []apapp.EvidenceLine{{Author: "instance:x", Note: apdomain.Untrusted{Source: "evidence", Text: `"><img src=x onerror=alert(1)>`}, At: now}},
-	}, nil
+	}
+	if f.review {
+		repo := actionir.Target{Type: "github.repository", ID: "acme/payments"}
+		v.Display.Consequences = []apdomain.ConsequenceLine{
+			{
+				Rule: "merge-triggers-deployment", Operation: "github.deployment.trigger", State: "PREDICTED", Target: repo,
+				Environments: []string{"production"}, Workflows: []string{".github/workflows/deploy.yml"},
+			},
+			{
+				Rule: "write-triggers-deployment", Operation: "github.deployment.trigger", State: "UNKNOWN", Target: repo,
+				Unknown: []string{"a workflow changed"},
+			},
+		}
+		v.Display.Deciders = []apdomain.DeciderRule{
+			{Kind: "approval", Role: "code_reviewer", Count: 1, Independent: true, IndependentOf: "github.pull.people"},
+			{Kind: "approval", Role: "release_approver", Count: 1, Window: true},
+		}
+	}
+	return v, nil
+}
+
+// TestF158_TheMergeReviewShowsItsConsequencesAndDeciders (G0 M8): the page
+// shows each predicted or unknown consequence, labeled as a prediction,
+// with its environments, the workflows behind it and why it is unknown,
+// and says which approvals exclude the pull request's people and which
+// count only inside a change window.
+func TestF158_TheMergeReviewShowsItsConsequencesAndDeciders(t *testing.T) {
+	resp := getAs(t, newApprovalsHandler(t, &fakeApprovals{review: true}), authnapp.ApprovalsPath+"/"+knownRequest.String(), "good")
+	for _, want := range []string{
+		"What it may also cause", "a prediction, not an authorized or confirmed effect", "Predicted: <code>github.deployment.trigger</code>",
+		"<code>production</code>", "<code>.github/workflows/deploy.yml</code>", "<strong>Unknown</strong>", "Why unknown: a workflow changed",
+		"<code>code_reviewer</code>", "everyone <code>github.pull.people</code> lists", "<code>release_approver</code>",
+		"counts only when used inside an active change window",
+	} {
+		if !strings.Contains(resp.Body, want) {
+			t.Errorf("the page lacks %q", want)
+		}
+	}
+	if i, j := strings.Index(resp.Body, "What will happen"), strings.Index(resp.Body, "What it may also cause"); i < 0 || j < i {
+		t.Fatal("the action's own consequence must come before what it may also cause")
+	}
+	if plain := getAs(t, newApprovalsHandler(t, &fakeApprovals{}), authnapp.ApprovalsPath+"/"+knownRequest.String(), "good"); strings.Contains(plain.Body, "What it may also cause") {
+		t.Fatal("an action without consequences shows the section")
+	}
 }
 
 func newApprovalsHandler(t *testing.T, fa *fakeApprovals) http.Handler {
