@@ -51,6 +51,14 @@ Dev-tool pin exceptions in dependency review (`allow-dependencies-licenses`; the
 
 Adding a dependency: PR adds a row here (purpose, licence, maintenance status, alternatives considered, transitive count), passes dependency-review, and is called out in the G1 review.
 
+### SDK dependencies (G0 M8 decision 8)
+
+The SDKs (`sdk/`, `integrations/`) are Apache-2.0 and embedded in customers' agents and services, so they keep runtime dependencies to these. The Go SDK uses only the standard library and the TypeScript SDK has none at runtime.
+
+| Package | Where | Purpose | Licence | Justification |
+|---|---|---|---|---|
+| `cryptography` (≥ 42) | `sdk/python`, runtime | Ed25519 signing (PAP/1 proofs) and verification (proof checks, action tokens) | Apache-2.0 OR BSD-3-Clause | The Python Cryptographic Authority's library: the standard library has no Ed25519, and this is the maintained, widely deployed choice with wheels for every major platform. It adds `cffi` (MIT) and `pycparser` (BSD-3) on CPython. Alternatives: PyNaCl (libsodium through cffi; maintained, but less widely deployed), a pure-Python Ed25519 (unreviewed and slow). `uv.lock` with hashes is generated with `uv lock` once `uv` is installed (Day-0 item 5) |
+
 ## 4. Updates
 
 - Dependabot: `gomod` (root, `tools/`, `sdk/go`), `uv`, `npm`, `github-actions`, `docker`; weekly; grouped minor/patch; `cooldown: default-days: 7`; security updates immediate.
