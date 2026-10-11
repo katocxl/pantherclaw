@@ -5,7 +5,7 @@
 // engine (G0 M9 decisions 1 and 2): an internal network in isolated gateway
 // mode, an uplink bridge, and the edge on both (internal/sandbox/edge), the
 // agent's only route. Probe proves the sandbox closed. The probe container
-// runs the catalogue on the internal network (internal/sandbox/probe) and a
+// runs the catalog on the internal network (internal/sandbox/probe) and a
 // control run on the uplink aims at the canary, which pclaw runs on the host
 // (internal/sim/canary). Each signs its report with the session's probe key
 // (internal/sandbox/report), which pclaw created outside every container;
@@ -334,7 +334,7 @@ func (ev Evidence) Passed() bool {
 	return true
 }
 
-// Probe runs the catalogue on the internal network and the control on the
+// Probe runs the catalog on the internal network and the control on the
 // uplink, then signs the canary's report of both markers.
 func (s *Sandbox) Probe(ctx context.Context, n Nonces) (Evidence, error) {
 	pub, _ := s.o.ProbeKey.Public().(ed25519.PublicKey)
@@ -368,7 +368,7 @@ func (s *Sandbox) Probe(ctx context.Context, n Nonces) (Evidence, error) {
 	if ev.Canary, err = s.o.Canary.Report(s.o.ProbeKey, base, pm, cm); err != nil {
 		return Evidence{}, err
 	}
-	ev.Results = append(sandbox.Results,
+	ev.Results = append(slices.Clone(sandbox.Results),
 		report.Result{Name: "external_canary", Role: report.RoleCanary, Expect: report.Blocked, Observed: observed(len(s.o.Canary.Hits(pm)) > 0)},
 		report.Result{Name: "canary_control", Role: report.RolePositive, Expect: report.Reachable, Observed: observed(len(s.o.Canary.Hits(cm)) > 0)},
 	)
