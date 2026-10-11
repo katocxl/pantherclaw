@@ -166,6 +166,10 @@ const (
 	PermGatewayVerify           Permission = "gateway.verify" // gateways only: lease and report verifications (HR-190)
 )
 
+// PermReleaseWindowManage creates and retires change windows (G0 M8,
+// HR-207). Human only.
+const PermReleaseWindowManage Permission = "release.window.manage"
+
 // Workload permissions are held only by PAP/1-authenticated workloads
 // (WorkloadService), never by users, service accounts or roles.
 const (
@@ -204,6 +208,7 @@ var catalog = []Permission{
 	PermContainmentRead, PermContainmentKillSwitch,
 	PermEvidenceRead, PermEvidenceExport, PermEvidenceRetentionManage, PermEvidenceCaptureManage,
 	PermTransactionReconcile,
+	PermReleaseWindowManage,
 }
 
 // humanOnly permissions can never be exercised by a service account or an
@@ -214,6 +219,7 @@ var humanOnly = []Permission{
 	PermGrantIssue, PermGuardrailsManage, PermFactProviderManage, PermPackageActivate,
 	PermGatewayManage, PermConnectionManage, PermCredentialSeal, PermContainmentKillSwitch, PermAgentRestore,
 	PermTransactionReconcile, PermEvidenceExport, PermEvidenceRetentionManage, PermEvidenceCaptureManage,
+	PermReleaseWindowManage,
 }
 
 // Catalog returns every grantable permission in a stable order.

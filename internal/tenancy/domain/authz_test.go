@@ -140,10 +140,13 @@ func TestT043_OrgAdminHoldsNoApprovalPublicationOrRestrictedEvidence(t *testing.
 			}
 		}
 	}
-	// Approve and publish come from their own roles only.
+	// Approve and publish come from their own roles only: approval from the
+	// Approver and the release-control roles a requirement can name (G0 M8,
+	// HR-207).
+	approvers := []domain.RoleName{domain.RoleApprover, domain.RoleCodeReviewer, domain.RoleReleaseApprover}
 	for _, r := range domain.Roles() {
-		if r.Has(domain.PermApprovalRespond) && r.Name != domain.RoleApprover {
-			t.Errorf("role %s can approve", r.Name)
+		if r.Has(domain.PermApprovalRespond) != slices.Contains(approvers, r.Name) {
+			t.Errorf("role %s: approval.respond = %v", r.Name, r.Has(domain.PermApprovalRespond))
 		}
 		if r.Has(domain.PermPolicyPublish) && r.Name != domain.RolePolicyPublisher {
 			t.Errorf("role %s can publish policies", r.Name)
