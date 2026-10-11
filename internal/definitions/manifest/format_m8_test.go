@@ -6,6 +6,7 @@ package manifest
 import (
 	"fmt"
 	"maps"
+	"net/http"
 	"strings"
 	"testing"
 
@@ -78,7 +79,7 @@ func TestHR205_TheMergeIsBoundToTheHeadSHA(t *testing.T) {
 	sha := m.Params["sha"]
 	if !sha.Material || !sha.Required || sha.Type != domain.TypeIdentifier || m.Reversibility != domain.Irreversible ||
 		!strings.Contains(strings.Join(m.Dedupe, ","), "params.sha") || m.Dispatch.HTTP.Body["sha"] != "params.sha" ||
-		m.Dispatch.HTTP.Method != "PUT" {
+		m.Dispatch.HTTP.Method != http.MethodPut {
 		t.Fatalf("merge %+v", m)
 	}
 	c := p.Consequences[0]
