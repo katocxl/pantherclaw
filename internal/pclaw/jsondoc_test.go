@@ -76,7 +76,8 @@ func TestHR208_DiffShowsOneHunkOfWhatChanged(t *testing.T) {
 }
 
 // TestHR208_BackupsAreNeverOverwrittenAndWritesAreWhole: a backup holds
-// the original and never replaces an earlier one; a file that does not
+// the original and never replaces an earlier one, even within the same
+// second; a file that does not
 // exist needs none; a write replaces the whole file through a temporary
 // one and leaves nothing behind.
 func TestHR208_BackupsAreNeverOverwrittenAndWritesAreWhole(t *testing.T) {
@@ -96,11 +97,12 @@ func TestHR208_BackupsAreNeverOverwrittenAndWritesAreWhole(t *testing.T) {
 	if err := os.WriteFile(path, []byte("changed"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := backupFile(path, at); err == nil {
-		t.Fatal("a backup was overwritten")
+	second, err := backupFile(path, at)
+	if saved, _ := os.ReadFile(second); err != nil || second != name+"-2" || string(saved) != "changed" {
+		t.Fatalf("a second backup in the same second: %q %q %v", second, saved, err)
 	}
 	if saved, _ := os.ReadFile(name); string(saved) != "original" {
-		t.Fatalf("the backup changed: %q", saved)
+		t.Fatalf("the first backup changed: %q", saved)
 	}
 	nested := filepath.Join(dir, "new", ".claude", "settings.local.json")
 	if err := writeAtomically(nested, []byte("{}\n")); err != nil {

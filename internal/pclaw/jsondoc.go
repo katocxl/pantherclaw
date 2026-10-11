@@ -265,7 +265,8 @@ func lineDiff(name string, before, after []byte) string {
 
 // backupFile copies path, when it exists, to a new file beside it named
 // with the time, and returns that name ("" for a file that does not exist
-// yet). An existing backup is never overwritten.
+// yet). An existing backup is never overwritten: a second one in the same
+// second gets a counter.
 func backupFile(path string, now time.Time) (string, error) {
 	b, err := os.ReadFile(path) //nolint:gosec // G304: the user's own configuration
 	if errors.Is(err, os.ErrNotExist) {
@@ -273,8 +274,14 @@ func backupFile(path string, now time.Time) (string, error) {
 	} else if err != nil {
 		return "", err
 	}
-	name := path + ".pclaw-backup-" + now.UTC().Format("20060102T150405Z")
+	base := path + ".pclaw-backup-" + now.UTC().Format("20060102T150405Z")
+	name := base
 	f, err := os.OpenFile(name, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600) //nolint:gosec // G304: beside the user's file
+	for i := 2; errors.Is(err, os.ErrExist) && i <= 100; i++ {
+		// Another backup in the same second: never overwrite it.
+		name = fmt.Sprintf("%s-%d", base, i)
+		f, err = os.OpenFile(name, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600) //nolint:gosec // G304: beside the user's file
+	}
 	if err != nil {
 		return "", fmt.Errorf("backup of %s: %w", path, err)
 	}
