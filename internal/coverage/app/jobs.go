@@ -137,10 +137,9 @@ func (s *Service) ReassessOrg(ctx context.Context, org ids.OrgID) (Reassessed, e
 				out.Snapshots++
 			}
 		}
-		// An invalidation is marked, and entered in the ledger, only once
-		// every scope it touched was reassessed; a skipped one stays pending
-		// and the next job tries again.
-		var marked []ids.UUID
+		// An invalidation is entered in the ledger and marked reassessed only
+		// once every scope it touched was reassessed; a skipped one stays
+		// pending and the next job tries again.
 		for _, inv := range done {
 			if slices.ContainsFunc(touched[inv.ID], func(sc domain.Scope) bool { return failed[sc] }) {
 				continue
@@ -148,12 +147,8 @@ func (s *Service) ReassessOrg(ctx context.Context, org ids.OrgID) (Reassessed, e
 			if err := s.enterInvalidation(ctx, tx, inv); err != nil {
 				return err
 			}
-			marked = append(marked, inv.ID)
 		}
-		if len(marked) > 0 {
-			_, err = q.MarkCoverageInvalidationsReassessed(ctx, org, marked)
-		}
-		return err
+		return nil
 	})
 	return out, err
 }
@@ -181,7 +176,8 @@ func (s *Service) reassessIsolated(ctx context.Context, tx db.TenantTx, sc domai
 }
 
 // enterInvalidation appends a reassessed invalidation to the ledger as a
-// coverage.invalidation entry, which a lapsed claim names (HR-217).
+// coverage.invalidation entry, which a lapsed claim names (HR-217), and
+// marks it reassessed with that entry.
 func (s *Service) enterInvalidation(ctx context.Context, tx db.TenantTx, inv dbq.PcCoverageInvalidation) error {
 	body, err := evdomain.CanonicalBody(InvalidationEntry{
 		V: 1, ID: inv.ID, Connection: inv.ConnectionID, Agent: inv.AgentID, Kind: inv.Kind, Subject: inv.SubjectID,
@@ -190,7 +186,11 @@ func (s *Service) enterInvalidation(ctx context.Context, tx db.TenantTx, inv dbq
 	if err != nil {
 		return err
 	}
-	_, err = ledger.Append(ctx, tx, InvalidationLedgerKind, Actor, body)
+	entry, err := ledger.Append(ctx, tx, InvalidationLedgerKind, Actor, body)
+	if err != nil {
+		return err
+	}
+	_, err = dbq.New(tx).EnterCoverageInvalidation(ctx, &entry.ID, tx.OrgID(), inv.ID)
 	return err
 }
 
