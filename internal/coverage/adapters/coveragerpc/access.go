@@ -19,8 +19,8 @@ var accessModes = map[string]pantherclawv1.AccessControlMode{
 	app.ModeAgentHeld:          pantherclawv1.AccessControlMode_ACCESS_CONTROL_MODE_AGENT_HELD,
 }
 
-// GetAccessDisclosure implements CoverageServiceHandler.
-func (h *Handler) GetAccessDisclosure(ctx context.Context, req *pantherclawv1.GetAccessDisclosureRequest) (*pantherclawv1.GetAccessDisclosureResponse, error) {
+// GetAccessDetail implements CoverageServiceHandler.
+func (h *Handler) GetAccessDetail(ctx context.Context, req *pantherclawv1.GetAccessDetailRequest) (*pantherclawv1.GetAccessDetailResponse, error) {
 	conn, err := idOf(req.GetConnectionId())
 	if err != nil {
 		return nil, err
@@ -29,13 +29,18 @@ func (h *Handler) GetAccessDisclosure(ctx context.Context, req *pantherclawv1.Ge
 	if err != nil {
 		return nil, err
 	}
-	d, err := h.svc.GetAccessDisclosure(ctx, conn, agent)
+	d, err := h.svc.GetAccessDetail(ctx, conn, agent)
 	if err != nil {
 		return nil, err
 	}
-	out := &pantherclawv1.AccessDisclosure{
+	out := &pantherclawv1.AccessDetail{
 		ConnectionId: d.Connection.String(), AgentId: idText(d.Agent), Custodian: d.Custodian,
-		CredentialVersion: d.CredentialVersion, CredentialHosts: d.CredentialHosts, Disclosures: d.Disclosures,
+		CredentialVersion: d.CredentialVersion, CredentialHosts: d.Audience, Disclosures: d.Disclosures,
+		Scope: d.Scope, Audience: d.Audience, Expiry: d.Expiry, IssuedBy: d.IssuedBy, IssueTime: tsp(d.IssuedAt),
+		VerificationBasis: d.Basis, VerifyTime: tsp(d.VerifiedAt),
+	}
+	for _, a := range d.Agents {
+		out.AgentIds = append(out.AgentIds, a.String())
 	}
 	if !d.Gateway.IsZero() {
 		out.GatewayId = d.Gateway.String()
@@ -52,5 +57,5 @@ func (h *Handler) GetAccessDisclosure(ctx context.Context, req *pantherclawv1.Ge
 			Status: statuses[domain.RouteStatus(rt.Status)],
 		})
 	}
-	return &pantherclawv1.GetAccessDisclosureResponse{Disclosure: out}, nil
+	return &pantherclawv1.GetAccessDetailResponse{Detail: out}, nil
 }

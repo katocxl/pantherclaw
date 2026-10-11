@@ -8,33 +8,36 @@ package app_test
 import (
 	"context"
 	"errors"
+	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/katocxl/pantherclaw/internal/coverage/app"
 	"github.com/katocxl/pantherclaw/internal/coverage/domain"
+	napp "github.com/katocxl/pantherclaw/internal/notifications/app"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	tenancy "github.com/katocxl/pantherclaw/internal/tenancy/app"
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
 )
 
-func (f *fixture) count(t *testing.T, sql string, args ...any) int {
-	t.Helper()
-	var n int
-	if err := f.p.InTenantTx(context.Background(), f.org, func(ctx context.Context, tx db.TenantTx) error {
-		return tx.QueryRow(ctx, sql, args...).Scan(&n)
-	}); err != nil {
-		t.Fatal(err)
-	}
-	return n
+// notifier records the notifications it is asked to send.
+type notifier struct{ sent []napp.Message }
+
+func (n *notifier) Enqueue(_ context.Context, _ db.TenantTx, m napp.Message) (napp.Enqueued, error) {
+	n.sent = append(n.sent, m)
+	return napp.Enqueued{}, nil
 }
 
 // TestHR212_OnlyAPersonExcludesWithAReasonAndAnExpiryAudited: a person
-// holding coverage.exclude creates an exclusion with a written reason and
-// an expiry; it is audited and asks for a reassessment. An API key, a
-// viewer, a reason that says nothing, a channel or a 91-day expiry are
-// refused; revoking is audited too and happens once.
+// holding coverage.manage creates an exclusion with a written reason and
+// an expiry; it is audited, notified without its reason and asks for a
+// reassessment. An API key, a viewer, an org admin, a reason that says
+// nothing, a channel or a 91-day expiry are refused; revoking is audited
+// too and happens once.
 func TestHR212_OnlyAPersonExcludesWithAReasonAndAnExpiryAudited(t *testing.T) {
 	f := newFixture(t)
+	n := &notifier{}
+	f.svc.Notify = n
 	op := "payments.refund.get"
 	req := app.ExclusionRequest{
 		Connection: f.conn, Agent: &f.agent, Operation: &op, Kind: domain.KindBrowser,
@@ -51,8 +54,10 @@ func TestHR212_OnlyAPersonExcludesWithAReasonAndAnExpiryAudited(t *testing.T) {
 	if _, err := f.svc.CreateExclusion(apiKey, req); !errors.Is(err, app.ErrHumanOnly) {
 		t.Fatalf("an API key excluded: %v", err)
 	}
-	if _, err := f.svc.CreateExclusion(f.as(td.RoleViewer), req); !errors.Is(err, td.ErrPermissionDenied(td.PermCoverageExclude)) {
-		t.Fatalf("a viewer excluded: %v", err)
+	for _, r := range []td.RoleName{td.RoleViewer, td.RoleOrgAdmin} {
+		if _, err := f.svc.CreateExclusion(f.as(r), req); !errors.Is(err, td.ErrPermissionDenied(td.PermCoverageManage)) {
+			t.Fatalf("%s excluded: %v", r, err)
+		}
 	}
 	for name, mod := range map[string]func(*app.ExclusionRequest){
 		"a reason that says nothing": func(r *app.ExclusionRequest) { r.Reason = "  ok      " },
@@ -71,6 +76,11 @@ func TestHR212_OnlyAPersonExcludesWithAReasonAndAnExpiryAudited(t *testing.T) {
 	}
 	if n := f.count(t, `SELECT count(*) FROM pc.ledger_entries WHERE kind = 'audit.coverage.exclusion_created'`); n != 1 {
 		t.Fatalf("%d audited exclusions", n)
+	}
+	if len(n.sent) != 1 || n.sent[0].Type != "security.coverage_excluded" ||
+		n.sent[0].Params["scope"] != "the browser route of payments.refund.get for agent "+f.agent.String() ||
+		strings.Contains(fmt.Sprint(n.sent[0].Params), req.Reason) {
+		t.Fatalf("notifications %+v", n.sent)
 	}
 	if n := f.count(t, `SELECT count(*) FROM pc.coverage_invalidations WHERE kind = 'exclusion' AND subject_id = $1`, x.ID); n != 1 {
 		t.Fatalf("%d reassessments asked", n)
