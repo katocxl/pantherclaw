@@ -80,8 +80,13 @@ func (s *Server) Push(fullName, branch string, files map[string]string) string {
 		}
 	}
 	sha := s.commit(r, []string{parent}, tree)
-	r.Branches[branch] = sha
+	s.advance(r, branch, sha, "developer")
 	return sha
+}
+
+// advance moves branch to a commit pushed by pusher.
+func (s *Server) advance(r *Repo, branch, sha, _ string) {
+	r.Branches[branch] = sha
 }
 
 // Branch returns a branch's head commit ("" when it does not exist).
@@ -137,6 +142,7 @@ func (s *Server) repoRoutes(mux *http.ServeMux) {
 		{"GET /repos/{owner}/{repo}/contents/{path...}", "contents", "read", s.contents},
 		{"GET /repos/{owner}/{repo}/branches", "contents", "read", s.branches},
 		{"POST /repos/{owner}/{repo}/git/refs", "contents", "write", s.createRef},
+		{"PUT /repos/{owner}/{repo}/contents/{path...}", "contents", "write", s.putContents},
 	} {
 		mux.HandleFunc(rt.pattern, s.guard(rt))
 	}
@@ -263,7 +269,7 @@ func (s *Server) branches(w http.ResponseWriter, req *http.Request, r *Repo, _ *
 }
 
 // createRef creates a branch at an existing commit.
-func (s *Server) createRef(w http.ResponseWriter, req *http.Request, r *Repo, _ *Token) int {
+func (s *Server) createRef(w http.ResponseWriter, req *http.Request, r *Repo, t *Token) int {
 	var b struct {
 		Ref string `json:"ref"`
 		SHA string `json:"sha"`
@@ -280,6 +286,6 @@ func (s *Server) createRef(w http.ResponseWriter, req *http.Request, r *Repo, _ 
 	case r.Branches[name] != "":
 		return fail(w, http.StatusUnprocessableEntity, "Reference already exists")
 	}
-	r.Branches[name] = b.SHA
+	s.advance(r, name, b.SHA, actor(t))
 	return reply(w, http.StatusCreated, map[string]any{"ref": b.Ref, "object": map[string]any{"type": "commit", "sha": b.SHA}, "simulated": true})
 }
