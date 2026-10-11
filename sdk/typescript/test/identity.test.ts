@@ -10,7 +10,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { checkProof } from "../src/check.ts";
-import { ath, b64url, fromB64url, keyOf, marshalKeyFile, parseTokenClaims, readKeyFile, signProof, thumbprint, WorkloadKey, writeKeyFile } from "../src/pap.ts";
+import { ath, b64url, fromB64url, htu, keyOf, marshalKeyFile, parseTokenClaims, readKeyFile, signProof, thumbprint, WorkloadKey, writeKeyFile } from "../src/pap.ts";
 import { load } from "./vectors.ts";
 
 test("key_files.json", async () => {
@@ -59,5 +59,17 @@ test("proofs.json", async () => {
   for (const c of f.checks) {
     const got = await checkProof(c.proof, { method: c.method, url: c.url, body: c.body, token: c.token }, c.now);
     assert.equal(got, c.answer, c.name);
+  }
+});
+
+test("proofs.json htus: the htu PantherClaw's client signs for a URL", async () => {
+  const f = await load("proofs.json");
+  assert.ok(f.htus.length > 0);
+  for (const c of f.htus) {
+    if (c.reject) {
+      assert.throws(() => htu(c.url), Error, c.url);
+      continue;
+    }
+    assert.equal(htu(c.url), c.htu, c.url);
   }
 });
