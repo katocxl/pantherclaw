@@ -83,8 +83,8 @@ type Container struct {
 	// process anyway, which Docker gives no ambient capabilities (G0 M9
 	// design decision 5, as built).
 	PingGID int
-	Limits Limits
-	Labels map[string]string
+	Limits  Limits
+	Labels  map[string]string
 	// Interactive keeps standard input open (stdio MCP connectors).
 	Interactive bool
 }
