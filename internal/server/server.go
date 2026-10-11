@@ -537,6 +537,7 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	}
 	registerEvidenceAdmin(rs, d)
 	registerCoverage(rs, d)
+	registerSandbox(rs, d)
 	mux := http.NewServeMux()
 	rpc.Mount(mux, rs)
 	d.m5p2.mount(mux, workload)

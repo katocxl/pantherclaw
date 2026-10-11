@@ -96,3 +96,11 @@ RETURNING *;
 SELECT DISTINCT ON (kind) * FROM pc.probe_runs
 WHERE org_id = sqlc.arg(org_id) AND session_id = sqlc.arg(session_id) AND received_at >= sqlc.arg(since)
 ORDER BY kind, id DESC;
+
+-- The agent's last closure for a connection: the images and configuration
+-- its evidence was taken with.
+-- name: LastSandboxClosure :one
+SELECT image_digests, config_sha256 FROM pc.coverage_closures
+WHERE org_id = sqlc.arg(org_id) AND agent_id = sqlc.arg(agent_id) AND connection_id = sqlc.arg(connection_id)
+ORDER BY id DESC
+LIMIT 1;

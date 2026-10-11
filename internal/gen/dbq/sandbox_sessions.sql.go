@@ -307,6 +307,27 @@ func (q *Queries) InsertSandboxSessionConnection(ctx context.Context, arg Insert
 	return err
 }
 
+const lastSandboxClosure = `-- name: LastSandboxClosure :one
+SELECT image_digests, config_sha256 FROM pc.coverage_closures
+WHERE org_id = $1 AND agent_id = $2 AND connection_id = $3
+ORDER BY id DESC
+LIMIT 1
+`
+
+type LastSandboxClosureRow struct {
+	ImageDigests []string
+	ConfigSha256 []byte
+}
+
+// The agent's last closure for a connection: the images and configuration
+// its evidence was taken with.
+func (q *Queries) LastSandboxClosure(ctx context.Context, orgID ids.OrgID, agentID ids.UUID, connectionID ids.UUID) (LastSandboxClosureRow, error) {
+	row := q.db.QueryRow(ctx, lastSandboxClosure, orgID, agentID, connectionID)
+	var i LastSandboxClosureRow
+	err := row.Scan(&i.ImageDigests, &i.ConfigSha256)
+	return i, err
+}
+
 const latestProbeRuns = `-- name: LatestProbeRuns :many
 SELECT DISTINCT ON (kind) org_id, id, session_id, nonce_id, kind, report, report_sha256, received_at FROM pc.probe_runs
 WHERE org_id = $1 AND session_id = $2 AND received_at >= $3
