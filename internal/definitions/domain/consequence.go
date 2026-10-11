@@ -5,6 +5,7 @@ package domain
 
 import (
 	"regexp"
+	"strings"
 
 	"github.com/katocxl/pantherclaw/internal/actionir"
 )
@@ -26,9 +27,27 @@ type Consequence struct {
 	Operation   string `json:"operation"`
 	Effect      string `json:"effect"`
 	Description string `json:"description"`
+	// Target is the id of the consequence's target, a template over the
+	// action's target id (G0 M8): {target.id} or {target.id.<group>}
+	// between literal text, such as {target.id.owner}/{target.id.repo}
+	// for the repository a pull request merges into. Without one, the
+	// consequence is about the action's own target.
+	Target string `json:"target,omitzero"`
+	// Environments is a CEL expression over the rule's facts that gives
+	// the environments the consequence reaches, a list of strings,
+	// evaluated when the rule predicts it (G0 M8): change windows are per
+	// environment (HR-207).
+	Environments string `json:"environments,omitzero"`
 }
 
-var idRe = regexp.MustCompile(`^[a-z][a-z0-9-]{0,63}$`)
+var (
+	idRe = regexp.MustCompile(`^[a-z][a-z0-9-]{0,63}$`)
+	// targetTextRe is the literal text of a consequence target template.
+	targetTextRe = regexp.MustCompile(`^[A-Za-z0-9._/@#:-]*$`)
+)
+
+// maxTargetTemplate bounds a consequence target template.
+const maxTargetTemplate = 256
 
 // validateConsequences checks the consequence rules against the package's
 // operations.
@@ -65,9 +84,61 @@ func (c ConsequenceRule) validate(ops map[string]*Definition) error {
 	if err := expr("consequence "+c.ID+".when", c.When, true); err != nil {
 		return err
 	}
+	if err := expr("consequence "+c.ID+".environments", c.Consequence.Environments, false); err != nil {
+		return err
+	}
+	if err := c.validateTarget(ops[c.Operation].Target); err != nil {
+		return err
+	}
 	if err := text("consequence "+c.ID+".description", c.Consequence.Description); err != nil {
 		return err
 	}
 	_, err := parseDay("consequence "+c.ID+".valid_until", c.ValidUntil)
 	return err
+}
+
+// validateTarget checks the target template against the target of the
+// rule's operation: every reference is target.id or one of its pattern's
+// named groups.
+func (c ConsequenceRule) validateTarget(on TargetSpec) error {
+	t := c.Consequence.Target
+	if t == "" {
+		return nil
+	}
+	at := "consequence " + c.ID + ".target"
+	refs := holderRe.FindAllStringSubmatch(t, -1)
+	if len(t) > maxTargetTemplate || len(refs) == 0 || !targetTextRe.MatchString(holderRe.ReplaceAllString(t, "")) {
+		return invalid("%s: a template of at most %d bytes with at least one reference", at, maxTargetTemplate)
+	}
+	for _, r := range refs {
+		if r[1] == "target.id" {
+			continue
+		}
+		group, ok := strings.CutPrefix(r[1], "target.id.")
+		if !ok || !on.hasPart(group) {
+			return invalid("%s: %q must be target.id or a named group of %s's target.id_pattern", at, r[1], c.Operation)
+		}
+	}
+	return nil
+}
+
+// TargetID is the id of the consequence's target for an action whose
+// target, which on describes, has the given id: the template filled from
+// it, or the id itself without a template. It reports false when a group
+// the template names matched nothing.
+func (c ConsequenceRule) TargetID(on TargetSpec, id string) (string, bool) {
+	if c.Consequence.Target == "" {
+		return id, true
+	}
+	ok := true
+	out := holderRe.ReplaceAllStringFunc(c.Consequence.Target, func(h string) string {
+		ref := h[1 : len(h)-1]
+		if ref == "target.id" {
+			return id
+		}
+		part, found := on.Part(id, strings.TrimPrefix(ref, "target.id."))
+		ok = ok && found
+		return part
+	})
+	return out, ok
 }
