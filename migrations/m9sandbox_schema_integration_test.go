@@ -6,9 +6,13 @@
 package migrations_test
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/base64"
+	"slices"
 	"testing"
+
+	"github.com/katocxl/pantherclaw/internal/platform/db"
 )
 
 // These tests check the sandbox schema (G0 M9 slice B4, migrations 00090
@@ -45,6 +49,22 @@ func (f m9cFixture) sandboxSession() (string, error) {
 		return "", err
 	}
 	return id, f.exec(m9sSession, f.org, id, f.agent, token, m9cDigest, m9sBytes(32), "1 hour")
+}
+
+// one returns one text value a query reads in the fixture's org, "" for
+// NULL.
+func (f m9cFixture) one(t *testing.T, sql string, args ...any) string {
+	t.Helper()
+	var v *string
+	if err := f.p.InTenantTx(context.Background(), f.org, func(ctx context.Context, tx db.TenantTx) error {
+		return tx.QueryRow(ctx, sql, args...).Scan(&v)
+	}); err != nil {
+		t.Fatalf("%s: %v", sql, err)
+	}
+	if v == nil {
+		return ""
+	}
+	return *v
 }
 
 // TestHR215_ProbeReportsAreSingleUseEvidenceInSchema: a session lasts at
@@ -88,11 +108,16 @@ func TestHR215_ProbeReportsAreSingleUseEvidenceInSchema(t *testing.T) {
 
 // TestHR183_AgentHostsAreBoundedHostNamesInSchema: a connection names at
 // most 16 agent hosts, each a lowercase host name, none twice, no IP
-// literal, empty or NULL element.
+// literal, empty or NULL element. Changing them invalidates the
+// connection's coverage (00087 compares the whole row, HR-211).
 func TestHR183_AgentHostsAreBoundedHostNamesInSchema(t *testing.T) {
 	f := newM9cFixture(t)
 	const set = "UPDATE pc.connections SET agent_hosts = $2 WHERE id = $1"
+	before := len(f.m9iKinds(t))
 	f.mustExec(t, set, f.connection, []string{"api.github.com", "uploads.github.com"})
+	if kinds := f.m9iKinds(t)[before:]; !slices.Equal(kinds, []string{"connection"}) {
+		t.Errorf("agent hosts changed: invalidations %v, want one connection", kinds)
+	}
 	f.want(t, m5Check, "an upper-case host", set, f.connection, []string{"API.github.com"})
 	f.want(t, m5Check, "a host with a port", set, f.connection, []string{"api.github.com:443"})
 	f.want(t, m5Check, "a URL", set, f.connection, []string{"https://api.github.com"})
@@ -108,10 +133,12 @@ func TestHR183_AgentHostsAreBoundedHostNamesInSchema(t *testing.T) {
 }
 
 // TestHR215_SessionsKeysNoncesAndInstancesHoldInSchema: the probe and host
-// keys differ; pc_app sets no session or report time; a report's nonce is
-// of its own session and kind; a session changes only forward; and a
-// sandbox instance belongs only to the session whose enrollment token
-// enrolled it, once (design decision 2).
+// keys differ; pc_app sets no session or report time; a session opens
+// after what its own transaction invalidated and binds its connections as
+// they were; a report's nonce is of its own session and kind; a session
+// changes only forward; and a sandbox instance belongs only to the session
+// whose enrollment token enrolled it, from its first row (design decision
+// 2), so it never invalidates the agent's closures.
 func TestHR215_SessionsKeysNoncesAndInstancesHoldInSchema(t *testing.T) {
 	f := newM9cFixture(t)
 	token, session := m5ID(), m5ID()
@@ -149,21 +176,70 @@ func TestHR215_SessionsKeysNoncesAndInstancesHoldInSchema(t *testing.T) {
 		report, report_sha256, received_at) VALUES ($1, $2, $3, $4, 'SANDBOX', 'a.b.c', $5, now() - interval '1 day')`,
 		f.org, m5ID(), session, nonce, m9sBytes(32))
 
-	// An instance is the session's when its token enrolled it, once.
+	// A session opens at its insert's time: what its own transaction
+	// invalidates comes before it, so its own closure is not stale.
+	opening := m5ID()
+	f.mustExec(t, m9sToken, f.org, opening, f.agent, m9sBytes(32), f.run)
+	var first bool
+	if err := f.p.InTenantTx(context.Background(), f.org, func(ctx context.Context, tx db.TenantTx) error {
+		id := m5ID()
+		if _, err := tx.Exec(ctx, m9sSession, f.org, id, f.agent, opening, m9cDigest, m9sBytes(32), "1 hour"); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(ctx, `INSERT INTO pc.coverage_invalidations (org_id, id, kind, connection_id, agent_id, subject_id)
+			VALUES ($1, $2, 'sandbox_image', $3, $4, $5)`, f.org, m5ID(), f.connection, f.agent, id); err != nil {
+			return err
+		}
+		return tx.QueryRow(ctx, `SELECT i.occurred_at < s.opened_at FROM pc.coverage_invalidations i
+			JOIN pc.sandbox_sessions s ON s.org_id = i.org_id AND s.id = i.subject_id WHERE s.id = $1`, id).Scan(&first)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if !first {
+		t.Error("an invalidation the opening transaction wrote is not before the session opened")
+	}
+
+	// A session's connections carry their bindings as it opened.
+	bind := `INSERT INTO pc.sandbox_session_connections (org_id, session_id, connection_id, connection_revision, gateway_id,
+		package_version_id, credential_version) VALUES ($1, $2, $3, $4, $5, $6, $7)`
+	f.want(t, m5Check, "a connection bound at revision 0", bind, f.org, session, f.connection, 0, f.gateway, f.version, nil)
+	f.want(t, m5Check, "a credential version 0", bind, f.org, session, f.connection, 1, f.gateway, f.version, 0)
+	f.want(t, m7bFK, "a connection bound to no package version", bind, f.org, session, f.connection, 1, f.gateway, m5ID(), nil)
+	f.mustExec(t, bind, f.org, session, f.connection, 1, f.gateway, f.version, nil)
+
+	// An instance is the session's when its token enrolled it, from its
+	// first row, and only then. An instance admitted outside a sandbox
+	// invalidates the agent's closures (00087); a sandbox instance does not.
+	if _, err := f.closure("PASSED", true, "0 seconds", "24 hours"); err != nil {
+		t.Fatal(err)
+	}
+	before := len(f.m9iKinds(t))
 	instance := `INSERT INTO pc.agent_instances (org_id, id, agent_id, jkt, public_jwk, state, enrolled_via, enrollment_token_id,
 		sandbox_session_id) VALUES ($1, $2, $3, $4, '{}', 'ADMITTED', 'enrollment_token', $5, $6)`
 	jkt := func() string { return base64.RawURLEncoding.EncodeToString(m9sBytes(32)) }
 	f.want(t, m5Check, "an instance another token enrolled", instance, f.org, m5ID(), f.agent, jkt(), other, session)
 	mine := m5ID()
-	f.mustExec(t, instance, f.org, mine, f.agent, jkt(), token, session)
+	f.mustExec(t, instance, f.org, mine, f.agent, jkt(), token, nil)
+	if got := f.one(t, "SELECT sandbox_session_id::text FROM pc.agent_instances WHERE id = $1", mine); got != session {
+		t.Errorf("an instance the session's token enrolled is in session %q, want %q", got, session)
+	}
 	f.want(t, m5Check, "an instance moved to another session", "UPDATE pc.agent_instances SET sandbox_session_id = $2 WHERE id = $1",
 		mine, otherSession)
 	f.want(t, m5Check, "an instance taken out of its session", "UPDATE pc.agent_instances SET sandbox_session_id = NULL WHERE id = $1", mine)
+	if kinds := f.m9iKinds(t)[before:]; len(kinds) != 0 {
+		t.Errorf("a sandbox instance admitted: invalidations %v, want none", kinds)
+	}
+	plain := m5ID()
+	f.mustExec(t, m9sToken, f.org, plain, f.agent, m9sBytes(32), f.run)
+	outside := m5ID()
+	f.mustExec(t, instance, f.org, outside, f.agent, jkt(), plain, nil)
+	f.want(t, m5Check, "an instance joined to a session its token did not open",
+		"UPDATE pc.agent_instances SET sandbox_session_id = $2 WHERE id = $1", outside, session)
+	if kinds := f.m9iKinds(t)[before:]; !slices.Equal(kinds, []string{"instance"}) {
+		t.Errorf("an instance admitted outside a sandbox: invalidations %v, want one instance", kinds)
+	}
 	later := m5ID()
 	f.mustExec(t, instance, f.org, later, f.agent, jkt(), other, nil)
-	f.want(t, m5Check, "an instance joined to a session its token did not open",
-		"UPDATE pc.agent_instances SET sandbox_session_id = $2 WHERE id = $1", later, session)
-	f.mustExec(t, "UPDATE pc.agent_instances SET sandbox_session_id = $2 WHERE id = $1", later, otherSession)
 
 	// A session changes only forward.
 	f.mustExec(t, "UPDATE pc.sandbox_sessions SET instance_id = $2, run_id = $3 WHERE id = $1", session, mine, f.run)

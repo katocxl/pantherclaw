@@ -276,12 +276,34 @@ func (q *Queries) InsertSandboxSession(ctx context.Context, arg InsertSandboxSes
 }
 
 const insertSandboxSessionConnection = `-- name: InsertSandboxSessionConnection :exec
-INSERT INTO pc.sandbox_session_connections (org_id, session_id, connection_id)
-VALUES ($1, $2, $3)
+INSERT INTO pc.sandbox_session_connections (org_id, session_id, connection_id, connection_revision, gateway_id,
+    package_version_id, credential_version)
+VALUES ($1, $2, $3, $4, $5,
+    $6, $7)
 `
 
-func (q *Queries) InsertSandboxSessionConnection(ctx context.Context, orgID ids.OrgID, sessionID ids.UUID, connectionID ids.UUID) error {
-	_, err := q.db.Exec(ctx, insertSandboxSessionConnection, orgID, sessionID, connectionID)
+type InsertSandboxSessionConnectionParams struct {
+	OrgID              ids.OrgID
+	SessionID          ids.UUID
+	ConnectionID       ids.UUID
+	ConnectionRevision int32
+	GatewayID          ids.UUID
+	PackageVersionID   ids.UUID
+	CredentialVersion  *int32
+}
+
+// A connection the session maps, with its bindings as the session opens
+// (CoverageBinding).
+func (q *Queries) InsertSandboxSessionConnection(ctx context.Context, arg InsertSandboxSessionConnectionParams) error {
+	_, err := q.db.Exec(ctx, insertSandboxSessionConnection,
+		arg.OrgID,
+		arg.SessionID,
+		arg.ConnectionID,
+		arg.ConnectionRevision,
+		arg.GatewayID,
+		arg.PackageVersionID,
+		arg.CredentialVersion,
+	)
 	return err
 }
 

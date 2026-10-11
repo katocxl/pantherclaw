@@ -15,9 +15,13 @@ VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(agent_id), sqlc.arg(launcher), 
     now() + make_interval(secs => sqlc.arg(ttl_seconds)::integer))
 RETURNING *;
 
+-- A connection the session maps, with its bindings as the session opens
+-- (CoverageBinding).
 -- name: InsertSandboxSessionConnection :exec
-INSERT INTO pc.sandbox_session_connections (org_id, session_id, connection_id)
-VALUES (sqlc.arg(org_id), sqlc.arg(session_id), sqlc.arg(connection_id));
+INSERT INTO pc.sandbox_session_connections (org_id, session_id, connection_id, connection_revision, gateway_id,
+    package_version_id, credential_version)
+VALUES (sqlc.arg(org_id), sqlc.arg(session_id), sqlc.arg(connection_id), sqlc.arg(connection_revision), sqlc.arg(gateway_id),
+    sqlc.arg(package_version_id), sqlc.narg(credential_version));
 
 -- name: GetSandboxSession :one
 SELECT * FROM pc.sandbox_sessions WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id);

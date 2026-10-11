@@ -13,16 +13,18 @@
 -- identity the edge signs with; it can act only inside the session, which
 -- ends at its expiry (at most 24 hours, design decision 9).
 --
--- sandbox_session_connections are the connections a session maps; each
--- gets its own closure (coverage_closures, recorded through the closure
--- contract once the session's reports verified).
+-- sandbox_session_connections are the connections a session maps, with
+-- their bindings when it opened; each gets its own closure
+-- (coverage_closures, recorded through the closure contract once the
+-- session's reports verified, while those bindings still hold).
 --
 -- coverage_closures.sandbox_session_id gains its foreign key (the closure
--- contract), agent_instances gains the session of a sandbox instance (the
--- coverage calculus counts every active instance, design decision 2), and
--- connections gain agent_hosts: at most 16 host names agents use for the
--- connection's API, distinct from its dispatch base URL. The edge maps them
--- to the connection; changing them is a weakening change (HR-183).
+-- contract), agent_instances gains the session of a sandbox instance, set
+-- from its enrollment token when it enrols (the coverage calculus counts
+-- every active instance, design decision 2), and connections gain
+-- agent_hosts: at most 16 host names agents use for the connection's API,
+-- distinct from its dispatch base URL. The edge maps them to the
+-- connection; changing them is a weakening change (HR-183).
 
 -- +goose Up
 CREATE TABLE pc.sandbox_sessions (
@@ -47,7 +49,11 @@ CREATE TABLE pc.sandbox_sessions (
     api_version         text        NOT NULL CHECK (api_version ~ '^[0-9]{1,3}\.[0-9]{1,3}$'),
     runtime             text        NOT NULL CHECK (runtime IN ('runc', 'runsc')),
     state               text        NOT NULL DEFAULT 'OPEN' CHECK (state IN ('OPEN', 'ENDED', 'EXPIRED')),
-    opened_at           timestamptz NOT NULL DEFAULT now(),
+    -- The insert's own time, not the transaction's: what the opening
+    -- transaction itself invalidates (the last closure's images or
+    -- configuration) comes before it, so it never makes the session's own
+    -- closure stale.
+    opened_at           timestamptz NOT NULL DEFAULT clock_timestamp(),
     expires_at          timestamptz NOT NULL,
     ended_at            timestamptz,
     PRIMARY KEY (org_id, id),
@@ -63,13 +69,23 @@ CREATE TABLE pc.sandbox_sessions (
 CREATE INDEX sandbox_sessions_agent ON pc.sandbox_sessions (org_id, agent_id, id DESC);
 CREATE INDEX sandbox_sessions_open ON pc.sandbox_sessions (org_id, expires_at) WHERE state = 'OPEN';
 
+-- Each connection's bindings when the session opened (the closure
+-- contract's Bound): a closure is recorded only while they are still the
+-- connection's.
 CREATE TABLE pc.sandbox_session_connections (
-    org_id        uuid NOT NULL REFERENCES pc.orgs (id),
-    session_id    uuid NOT NULL,
-    connection_id uuid NOT NULL,
+    org_id              uuid    NOT NULL REFERENCES pc.orgs (id),
+    session_id          uuid    NOT NULL,
+    connection_id       uuid    NOT NULL,
+    connection_revision integer NOT NULL CHECK (connection_revision > 0),
+    gateway_id          uuid    NOT NULL,
+    package_version_id  uuid    NOT NULL,
+    -- The active sealed credential's version; NULL when there was none.
+    credential_version  integer CHECK (credential_version > 0),
     PRIMARY KEY (org_id, session_id, connection_id),
     FOREIGN KEY (org_id, session_id) REFERENCES pc.sandbox_sessions (org_id, id),
-    FOREIGN KEY (org_id, connection_id) REFERENCES pc.connections (org_id, id)
+    FOREIGN KEY (org_id, connection_id) REFERENCES pc.connections (org_id, id),
+    FOREIGN KEY (org_id, gateway_id) REFERENCES pc.gateways (org_id, id),
+    FOREIGN KEY (org_id, package_version_id) REFERENCES pc.package_versions (org_id, id)
 );
 
 ALTER TABLE pc.coverage_closures
@@ -138,6 +154,14 @@ CREATE TRIGGER sandbox_sessions_forward BEFORE UPDATE ON pc.sandbox_sessions
 CREATE FUNCTION pc.sandbox_instance_session() RETURNS trigger
     LANGUAGE plpgsql AS $$
 BEGIN
+    -- An instance enrolled with a session's token is that session's from
+    -- its first row, so it is never admitted outside a sandbox (00087's
+    -- agent_instances_coverage reads the column after this trigger).
+    IF TG_OP = 'INSERT' AND NEW.sandbox_session_id IS NULL AND NEW.enrollment_token_id IS NOT NULL THEN
+        SELECT s.id INTO NEW.sandbox_session_id FROM pc.sandbox_sessions s
+        WHERE s.org_id = NEW.org_id AND s.enrollment_token_id = NEW.enrollment_token_id;
+        RETURN NEW;
+    END IF;
     IF TG_OP = 'UPDATE' AND OLD.sandbox_session_id IS NOT DISTINCT FROM NEW.sandbox_session_id THEN
         RETURN NEW;
     END IF;

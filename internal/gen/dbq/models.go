@@ -1394,9 +1394,13 @@ type PcSandboxSession struct {
 }
 
 type PcSandboxSessionConnection struct {
-	OrgID        ids.OrgID
-	SessionID    ids.UUID
-	ConnectionID ids.UUID
+	OrgID              ids.OrgID
+	SessionID          ids.UUID
+	ConnectionID       ids.UUID
+	ConnectionRevision int32
+	GatewayID          ids.UUID
+	PackageVersionID   ids.UUID
+	CredentialVersion  *int32
 }
 
 type PcServiceAccount struct {
