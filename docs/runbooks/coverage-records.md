@@ -10,8 +10,8 @@ A coverage record answers one question for one **agent × connection × operatio
 |---|---|
 | `UNKNOWN` | No route of the scope is known (observed or declared), or the scope was never assessed. A connection setting alone never yields a state. |
 | `OBSERVE_ONLY` | Routes are known, but none is a gateway channel in enforce mode on an active connection: nothing is prevented. |
-| `PARTIAL` | A gateway channel is in enforce mode, but something short of `ENFORCED` remains: no current closure, an equivalent route not proven closed, agent-held access, an instance outside the sandbox, or lapsed evidence. Cooperative SDK or hook channels stay here unless a target-verifier test no older than the `ENFORCED` lifetime shows the target refusing calls without an action token (HR-024, HR-210). Routes through a remote MCP server stay here, and so do connector containers without mediated egress (HR-086). |
-| `ENFORCED` | Every channel is mediated in enforce mode on PantherClaw-held (or verified target-enforced) access. A passed sandbox closure for this agent and connection proves every containment route closed (direct API, host, Git/SSH, credentials, browser, delegated, intermediaries) unless a person excluded it. Every active instance of the agent runs in that closure's sandbox session. The closure must still be bound to the connection's revision, gateway, package version and credential, with no invalidating change since its session started. `ENFORCED` expires with the closure, or earlier with the target-verifier test it uses. |
+| `PARTIAL` | A gateway channel is in enforce mode, but something short of `ENFORCED` remains: no current closure, an equivalent route not proven closed, agent-held access, an instance outside the sandbox, or lapsed evidence. Cooperative SDK or hook channels stay here unless a target-verifier test of the scope's own operation, no older than the `ENFORCED` lifetime, shows the target refusing calls without an action token (HR-024, HR-210). In M9 that test lifts only the read it tested: write operations stay here whatever the test (`write_not_liftable_m9`). Routes through a remote MCP server stay here, and so do connector containers without mediated egress (HR-086). |
+| `ENFORCED` | Every channel is mediated in enforce mode on PantherClaw-held access, or on target-enforced access verified for this read. A passed sandbox closure for this agent and connection proves every containment route closed (direct API, host, Git/SSH, credentials, browser, delegated, intermediaries); an exclusion never stands in for that. Every active instance of the agent runs in that closure's sandbox session. The closure must still be bound to the connection's revision, gateway, package version and credential, with no invalidating change since its session started. `ENFORCED` expires with the closure, or earlier with the target-verifier test it uses. |
 
 Every equivalent route kind is listed in a record. A kind that no source showed is *not observed*, never *absent* (F450).
 
@@ -53,10 +53,10 @@ Each snapshot is also a `coverage.snapshot` ledger entry. A decision receipt nam
 
 ## Exclusions
 
-An exclusion weakens the claim, so only a person holding `coverage.manage` (Security Admin) creates one. It needs a written reason (10 to 1,000 characters) and an expiry (at most 90 days). Every creation and revocation is audited (`audit.coverage.exclusion_*`), and every creation is notified (`security.coverage_excluded`, without the reason). Every record and every receipt claim lists the exclusions that applied:
+An exclusion records that a person accepts a gap, so only a person holding `coverage.manage` (Security Admin) creates one. It needs a written reason (10 to 1,000 characters) and an expiry (at most 90 days). Every creation and revocation is audited (`audit.coverage.exclusion_*`), and every creation is notified (`security.coverage_excluded`, without the reason). Every record and every receipt claim lists the exclusions that applied:
 
-- An excluded route kind reads *excluded* and no longer needs to be closed for `ENFORCED` (design decision 1, pending the founder's confirmation at G0).
-- A scope excluded as a whole keeps its state, but stops counting toward the agent's protection, so an agent can be `PROTECTED` while that scope is not `ENFORCED` (F021).
+- Exclusions never raise a state (design decision 1, as the founder decided). An excluded route kind reads *excluded* but still counts as open: a scope whose closure did not close it stays `PARTIAL` at most, with the kind named and the reason `excluded`.
+- A scope excluded as a whole keeps its state. Any scope with an exclusion, of a route kind or of the whole scope, counts as not protected for the agent: an agent with one is `PARTIALLY_PROTECTED` at most (F021).
 
 Review exclusions before they expire, and revoke any whose reason no longer holds.
 
