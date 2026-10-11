@@ -40,6 +40,7 @@ export const BUILTIN_TOOLS: readonly string[] = [
   "ExitWorktree",
   "Glob",
   "Grep",
+  "ListAgents",
   "ListMcpResourcesTool",
   "LSP",
   "Monitor",
@@ -47,6 +48,9 @@ export const BUILTIN_TOOLS: readonly string[] = [
   "PowerShell",
   "Read",
   "ReadMcpResourceTool",
+  "ReportFindings",
+  "ScheduleWakeup",
+  "SendMessage",
   "Skill",
   "Task",
   "TaskCreate",
@@ -60,6 +64,7 @@ export const BUILTIN_TOOLS: readonly string[] = [
   "WaitForMcpServers",
   "WebFetch",
   "WebSearch",
+  "Workflow",
   "Write",
 ];
 
@@ -238,7 +243,8 @@ export class PantherClaw {
     this.permissionMode = app.permissionMode;
     this.allowedTools = app.allowedTools ?? [];
     // Settings files can hold allow rules this integration cannot see, so a hold is never asked with them loaded.
-    this.settingsLoaded = (app.settingSources ?? []).length > 0;
+    // The SDK loads every source when settingSources is omitted: only an explicit [] loads none.
+    this.settingsLoaded = !Array.isArray(app.settingSources) || app.settingSources.length > 0;
     this.appCanUseTool = app.canUseTool;
     const servers = Object.keys(app.mcpServers ?? {});
     if (servers.length > 0) this.o.mcpServers = [...new Set([...this.o.mcpServers, ...servers])];

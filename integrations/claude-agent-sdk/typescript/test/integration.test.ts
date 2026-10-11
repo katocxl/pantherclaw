@@ -4,86 +4,13 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { mkdtemp, realpath } from "node:fs/promises";
-import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { Client, type KeyFile, keyOf, newKeyFile, type Outbound } from "../../../../sdk/typescript/src/index.ts";
+import { Client, newKeyFile, type Outbound } from "../../../../sdk/typescript/src/index.ts";
 import { load } from "../../../../sdk/typescript/test/vectors.ts";
 import { BUILTIN_TOOLS, type HookOutput, PantherClaw, type PantherClawOptions, type PreToolUseInput, ruleNames } from "../src/index.ts";
-
-const identifier =
-  "pc:org/01920000-0000-7000-8000-000000000001/agent/01920000-0000-7000-8000-000000000006/inst/01920000-0000-7000-8000-000000000005";
-const run = "01920000-0000-7000-8000-000000000003";
-
-type Face = (call: Record<string, unknown>, actionId: string, res: ServerResponse) => void;
-type HookFace = (body: Record<string, unknown>, res: ServerResponse) => void;
-
-const sdkAction: string = (await load("actionir.json")).cases.find((c: { name: string }) => c.name === "sdk channel through a connection").canonical;
-
-/** The face's answer for an action id: the canonical sdk-channel action and its hash. */
-function decided(id: string, decision: string, extra: Record<string, unknown> = {}): string {
-  const act = sdkAction.replace('"action_id":"01920000-0000-7000-8000-000000000004"', `"action_id":"${id}"`);
-  const hash = createHash("sha256").update(act).digest("hex");
-  return JSON.stringify({ decision, action_id: id, action_hash: hash, action_ir: Buffer.from(act).toString("base64url"), coverage: "PARTIAL", mode: "enforce", ...extra });
-}
-
-/** A PantherClaw server and gateway in one: unsigned tokens, the /sdk face of connection "payments", the /hook face of "local" and the wait stream. */
-async function gateway(t: { after: (fn: () => void) => void }, face: Face, opts: { waitStates?: string[]; hook?: HookFace } = {}) {
-  const kf: KeyFile = { ...newKeyFile(), identifier };
-  const jkt = (await keyOf(kf)).jkt;
-  const calls: Record<string, unknown>[] = [];
-  const hooks: Record<string, unknown>[] = [];
-  const server = createServer((req: IncomingMessage, res: ServerResponse) => {
-    let body = "";
-    req.on("data", (c) => {
-      body += c;
-    });
-    req.on("end", () => {
-      res.setHeader("PAP-Nonce", "Y29uZm9ybWFuY2Utbm9uY2UtMjAyNi0xMC0xMQ");
-      if (req.url === "/pantherclaw.v1.WorkloadService/IssueToken") {
-        const now = Math.floor(Date.now() / 1000);
-        const claims = { aud: "pantherclaw-gateway", exp: now + 600, cnf: { jkt }, pap: { v: 1 } };
-        const header = Buffer.from('{"alg":"EdDSA"}').toString("base64url");
-        res.end(JSON.stringify({ workloadToken: `${header}.${Buffer.from(JSON.stringify(claims)).toString("base64url")}.c2ln` }));
-      } else if (req.url === "/sdk/payments") {
-        const call = JSON.parse(body);
-        calls.push(call);
-        face(call, String(req.headers["pc-action-id"]), res);
-      } else if (req.url === "/hook/local" && opts.hook) {
-        const call = JSON.parse(body);
-        hooks.push(call);
-        opts.hook(call, res);
-      } else if (req.url?.startsWith("/v1/wait/")) {
-        res.writeHead(200, { "Content-Type": "text/event-stream" });
-        for (const s of opts.waitStates ?? ["READY"]) res.write(`event: state\ndata: ${JSON.stringify({ handle: "h", state: s })}\n\n`);
-        res.end();
-      } else {
-        res.writeHead(404).end();
-      }
-    });
-  });
-  await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
-  t.after(() => {
-    server.closeAllConnections();
-    server.close();
-  });
-  const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
-  return { client: new Client({ keyFile: { ...kf, server: base }, gateway: base, runId: run, timeoutMs: 2000, builtins: BUILTIN_TOOLS }), calls, hooks, base };
-}
-
-const allow: Face = (_c, id, res) => res.end(decided(id, "allow"));
-const deny: Face = (_c, id, res) => res.end(decided(id, "deny", { error_class: "policy_denied", reason: "denied" }));
-const observe: Face = (_c, _id, res) => res.end(JSON.stringify({ decision: "allow", coverage: "OBSERVE_ONLY", mode: "monitor" }));
-const unmapped: Face = (_c, id, res) => res.end(JSON.stringify({ decision: "deny", code: "unknown_tool", action_id: id, coverage: "PARTIAL", mode: "enforce" }));
-function holdThenAllow(): Face {
-  let n = 0;
-  return (c, id, res) => {
-    if (n++ === 0) res.end(decided(id, "hold", { wait: { handle: "h", state: "PENDING" } }));
-    else allow(c, id, res);
-  };
-}
+import { allow, decided, deny, type Face, gateway, holdThenAllow, identifier, observe, run, unmapped } from "./gateway.ts";
 
 const refund = (mode = "default", id = "toolu_01"): PreToolUseInput => ({
   hook_event_name: "PreToolUse",
@@ -146,6 +73,7 @@ test("TestHR200_a hold never runs without a later allow, and is asked only in de
     ["an MCP wildcard", "default", { permissionMode: "default", allowedTools: ["mcp__*"] }],
     ["a wildcard", "default", { permissionMode: "default", allowedTools: ["*"] }],
     ["settings files loaded", "default", { permissionMode: "default", settingSources: ["project"] }],
+    ["settingSources omitted, so every source is loaded", "default", { permissionMode: "default" }],
   ];
   for (const [name, mode, app] of cases) {
     const g = await gateway(t, holdThenAllow());
@@ -155,7 +83,7 @@ test("TestHR200_a hold never runs without a later allow, and is asked only in de
   }
   // In default mode with no rule naming it, the hold is asked; canUseTool waits and allows only after PantherClaw's allow, with the original input.
   const g = await gateway(t, holdThenAllow());
-  const opts = integration(g.client).options({ permissionMode: "default", mcpServers: { payments: {} }, allowedTools: ["Read", "mcp__github__*"] });
+  const opts = integration(g.client).options({ permissionMode: "default", settingSources: [], mcpServers: { payments: {} }, allowedTools: ["Read", "mcp__github__*"] });
   const hook = opts.hooks?.PreToolUse?.at(-1)?.hooks[0];
   assert.ok(hook && opts.canUseTool);
   assert.equal(decisionOf(await hook(refund("default", "toolu_09"))), "ask");
@@ -192,7 +120,7 @@ test("TestHR200_canUseTool waits only on holds, denies at its deadline, and neve
     return { behavior: "allow" as const, updatedInput: {} };
   };
   const p = integration(g.client, { waitMs: 300 });
-  const opts = p.options({ permissionMode: "default", canUseTool: app });
+  const opts = p.options({ permissionMode: "default", settingSources: [], canUseTool: app });
   const can = opts.canUseTool;
   assert.ok(can);
   assert.equal((await can("Write", { file_path: "x" }, { signal: signal(), toolUseID: "toolu_other" })).behavior, "allow");
