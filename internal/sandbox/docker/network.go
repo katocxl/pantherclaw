@@ -121,7 +121,9 @@ func (c *Client) RemoveNetwork(ctx context.Context, name string) error {
 
 // VerifyNetwork compares what the engine reports with what was asked: a
 // bridge, IPv6 off and, for an internal network, internal in isolated
-// gateway mode for both address families (HR-122, HR-218).
+// gateway mode for both address families (HR-122, HR-218). The edge's
+// uplink must be in the default NAT mode: a routed or unprotected one
+// would expose every port of the containers on it without publishing.
 func VerifyNetwork(n Network, info NetworkInfo) error {
 	fail := func(what string) error { return fmt.Errorf("%w: network %s: %s", ErrIsolation, n.Name, what) }
 	switch {
@@ -131,6 +133,8 @@ func VerifyNetwork(n Network, info NetworkInfo) error {
 		return fail("driver " + info.Driver)
 	case info.EnableIPv6:
 		return fail("IPv6 is on")
+	case !n.Internal && (info.Internal || !natMode(info.Options[optGatewayModeV4]) || !natMode(info.Options[optGatewayModeV6])):
+		return fail("the uplink is not a NAT bridge")
 	case !n.Internal:
 		return nil
 	case !info.Internal:
@@ -140,3 +144,6 @@ func VerifyNetwork(n Network, info NetworkInfo) error {
 	}
 	return nil
 }
+
+// natMode reports a gateway mode that is the default NAT one.
+func natMode(m string) bool { return m == "" || m == "nat" }

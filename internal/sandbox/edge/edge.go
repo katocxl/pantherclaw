@@ -138,7 +138,7 @@ func New(o Options) (*Edge, error) {
 	if validity <= 0 {
 		validity = 24 * time.Hour
 	}
-	ca, err := newAuthority(slices.Sorted(maps.Keys(o.Hosts)), validity, time.Now())
+	ca, err := newAuthority(slices.Sorted(maps.Keys(o.Hosts)), validity, time.Now)
 	if err != nil {
 		return nil, err
 	}
@@ -342,10 +342,12 @@ func (e *Edge) tunnel(w http.ResponseWriter, r *http.Request, host, conn string)
 // forward sends one request to the gateway's face for its connection and
 // answers with the gateway's answer, never retrying on its own. Only the
 // method, the path and query, the body, Content-Type and Accept go on:
-// credentials, cookies, proxy and forwarding headers never leave the
-// sandbox, and each credential stripped is reported.
+// credentials in headers or in the query, cookies, proxy and forwarding
+// headers never leave the sandbox, and each credential stripped is
+// reported.
 func (e *Edge) forward(w http.ResponseWriter, r *http.Request, host, conn string) {
 	e.strip(r, host)
+	query := e.stripQuery(r, host)
 	body, err := io.ReadAll(io.LimitReader(r.Body, MaxBody+1))
 	if err != nil || len(body) > MaxBody {
 		e.answer(w, r, host, http.StatusRequestEntityTooLarge, "body_too_large")
@@ -356,8 +358,8 @@ func (e *Edge) forward(w http.ResponseWriter, r *http.Request, host, conn string
 		return
 	}
 	target := e.gateway + "/" + url.PathEscape(conn) + r.URL.EscapedPath()
-	if r.URL.RawQuery != "" {
-		target += "?" + r.URL.RawQuery
+	if query != "" {
+		target += "?" + query
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), requestTimeout)
 	defer cancel()
@@ -412,6 +414,41 @@ func (e *Edge) strip(r *http.Request, host string) {
 	}
 }
 
+// credentialParams are query parameters that carry a credential.
+var credentialParams = []string{"access_token", "auth_token", "token", "api_key", "apikey", "private_token", "client_secret", "password"}
+
+// stripQuery returns the request's query without the parameters that carry
+// a credential, by name or by a well-known prefix, and reports each like a
+// header (G0 M9 design decision 11). The other parameters keep their order
+// and encoding.
+func (e *Edge) stripQuery(r *http.Request, host string) string {
+	if r.URL.RawQuery == "" {
+		return ""
+	}
+	var kept []string
+	for _, p := range strings.Split(r.URL.RawQuery, "&") {
+		k, v, _ := strings.Cut(p, "=")
+		name, err1 := url.QueryUnescape(k)
+		value, err2 := url.QueryUnescape(v)
+		if err1 != nil || err2 != nil {
+			name, value = k, v
+		}
+		kind := tokenKind(value)
+		if kind == "" && !slices.Contains(credentialParams, strings.ToLower(name)) {
+			kept = append(kept, p)
+			continue
+		}
+		if kind == "" {
+			kind = "query:" + strings.ToLower(bounded(name))
+		}
+		e.stripped.Add(1)
+		sum := sha256.Sum256([]byte(value))
+		e.log.WarnContext(r.Context(), "edge.credential_stripped", "query", bounded(name), "kind", kind,
+			"sha256_prefix", hex.EncodeToString(sum[:6]), "destination", host)
+	}
+	return strings.Join(kept, "&")
+}
+
 // credentialKind names what a credential looks like, from its scheme and
 // well-known prefixes.
 func credentialKind(header, v string) string {
@@ -419,6 +456,17 @@ func credentialKind(header, v string) string {
 	if !found {
 		scheme, token = "", scheme
 	}
+	if k := tokenKind(token); k != "" {
+		return k
+	}
+	if scheme != "" {
+		return strings.ToLower(header) + ":" + strings.ToLower(scheme)
+	}
+	return strings.ToLower(header)
+}
+
+// tokenKind names a token by its well-known prefix, "" when it has none.
+func tokenKind(token string) string {
 	for _, p := range []struct{ prefix, kind string }{
 		{"github_pat_", "github_pat"},
 		{"ghp_", "github_pat"},
@@ -435,10 +483,7 @@ func credentialKind(header, v string) string {
 			return p.kind
 		}
 	}
-	if scheme != "" {
-		return strings.ToLower(header) + ":" + strings.ToLower(scheme)
-	}
-	return strings.ToLower(header)
+	return ""
 }
 
 func validHost(h string) bool {
