@@ -177,5 +177,10 @@ func connectionCommands() map[string]command {
 				return c.connections.TestConnection(ctx, &pb.TestConnectionRequest{Id: a[0]})
 			}
 		}),
+		"connection health": rpc("connection health ID", 1, func(*flag.FlagSet) call {
+			return func(ctx context.Context, c clients, a []string) (proto.Message, error) {
+				return c.connections.GetConnectionHealth(ctx, &pb.GetConnectionHealthRequest{Id: a[0]})
+			}
+		}),
 	}
 }

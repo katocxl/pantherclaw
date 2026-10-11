@@ -119,3 +119,34 @@ WHERE org_id = sqlc.arg(org_id) AND connection_id = sqlc.arg(connection_id)
     AND (NOT sqlc.arg(passed_only)::boolean OR result = 'PASSED')
 ORDER BY tested_at DESC, id DESC
 LIMIT 1;
+
+-- name: ListConnectionCircuits :many
+-- The circuit each gateway reported for a connection (HR-078).
+SELECT gateway_id, state, unknown_count, total_count, opened_at, reported_at
+FROM pc.circuit_states
+WHERE org_id = sqlc.arg(org_id) AND connection_id = sqlc.arg(connection_id)
+ORDER BY gateway_id;
+
+-- name: ConnectionDeliveries :one
+-- Outcomes recorded for a connection's actions since a time (F358):
+-- failures, unknown outcomes, and the latest of each kind (the epoch for
+-- none).
+SELECT count(*) FILTER (WHERE a.outcome = 'failed')::integer AS failed,
+    count(*) FILTER (WHERE a.outcome = 'unknown')::integer AS unknown,
+    coalesce(max(a.recorded_at) FILTER (WHERE a.outcome IN ('failed', 'unknown')), 'epoch')::timestamptz AS last_failure_at,
+    coalesce(max(a.recorded_at) FILTER (WHERE a.outcome IN ('accepted', 'delegated')), 'epoch')::timestamptz AS last_success_at
+FROM pc.transactions t
+JOIN pc.execution_attempts a ON a.org_id = t.org_id AND a.transaction_id = t.id
+WHERE t.org_id = sqlc.arg(org_id) AND t.connection_id = sqlc.arg(connection_id) AND t.created_at >= sqlc.arg(since)::timestamptz;
+
+-- name: ConnectionDependentAgents :many
+-- The agents whose runs used a connection since a time, latest first
+-- (F358).
+SELECT r.agent_id, g.name, max(t.created_at)::timestamptz AS last_used_at
+FROM pc.transactions t
+JOIN pc.runs r ON r.org_id = t.org_id AND r.id = t.run_id
+JOIN pc.agents g ON g.org_id = r.org_id AND g.id = r.agent_id
+WHERE t.org_id = sqlc.arg(org_id) AND t.connection_id = sqlc.arg(connection_id) AND t.created_at >= sqlc.arg(since)::timestamptz
+GROUP BY r.agent_id, g.name
+ORDER BY last_used_at DESC, r.agent_id
+LIMIT sqlc.arg(max_rows);

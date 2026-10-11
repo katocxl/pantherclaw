@@ -149,6 +149,7 @@ The gateway refuses a file for another org, with unknown members, or with a fing
 ```bash
 pclaw connection capabilities <connection-id>   # what it declares it supports, and its last successful test
 pclaw connection test <connection-id>           # test it now and record the result (connection.manage)
+pclaw connection health <connection-id>         # circuits, permissions, tests, delivery failures and dependent agents
 ```
 
 **Capabilities** follow from the connection's kind, access mode and pinned package, never from a setting (F346):
@@ -166,3 +167,5 @@ pclaw connection test <connection-id>           # test it now and record the res
 - no circuit is open.
 
 Every result is kept. A failed test names the check that failed and does not replace the last successful one.
+
+**Health** (F358) shows the connection and its active credential, each gateway's circuit, the permissions its credential is used for, its latest and last successful tests, and the failed and `UNKNOWN` outcomes of the last 24 hours with the latest failure and success. It also lists the agents whose runs used the connection in the last 30 days, at most 50, but only to readers who may read agents org-wide; for anyone else the list is marked hidden.

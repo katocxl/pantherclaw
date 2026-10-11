@@ -10,6 +10,7 @@ package dbq
 
 import (
 	"context"
+	"time"
 
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 )
@@ -26,6 +27,89 @@ func (q *Queries) CloseCircuits(ctx context.Context, orgID ids.OrgID, connection
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const connectionDeliveries = `-- name: ConnectionDeliveries :one
+SELECT count(*) FILTER (WHERE a.outcome = 'failed')::integer AS failed,
+    count(*) FILTER (WHERE a.outcome = 'unknown')::integer AS unknown,
+    coalesce(max(a.recorded_at) FILTER (WHERE a.outcome IN ('failed', 'unknown')), 'epoch')::timestamptz AS last_failure_at,
+    coalesce(max(a.recorded_at) FILTER (WHERE a.outcome IN ('accepted', 'delegated')), 'epoch')::timestamptz AS last_success_at
+FROM pc.transactions t
+JOIN pc.execution_attempts a ON a.org_id = t.org_id AND a.transaction_id = t.id
+WHERE t.org_id = $1 AND t.connection_id = $2 AND t.created_at >= $3::timestamptz
+`
+
+type ConnectionDeliveriesRow struct {
+	Failed        int32
+	Unknown       int32
+	LastFailureAt time.Time
+	LastSuccessAt time.Time
+}
+
+// Outcomes recorded for a connection's actions since a time (F358):
+// failures, unknown outcomes, and the latest of each kind (the epoch for
+// none).
+func (q *Queries) ConnectionDeliveries(ctx context.Context, orgID ids.OrgID, connectionID *ids.UUID, since time.Time) (ConnectionDeliveriesRow, error) {
+	row := q.db.QueryRow(ctx, connectionDeliveries, orgID, connectionID, since)
+	var i ConnectionDeliveriesRow
+	err := row.Scan(
+		&i.Failed,
+		&i.Unknown,
+		&i.LastFailureAt,
+		&i.LastSuccessAt,
+	)
+	return i, err
+}
+
+const connectionDependentAgents = `-- name: ConnectionDependentAgents :many
+SELECT r.agent_id, g.name, max(t.created_at)::timestamptz AS last_used_at
+FROM pc.transactions t
+JOIN pc.runs r ON r.org_id = t.org_id AND r.id = t.run_id
+JOIN pc.agents g ON g.org_id = r.org_id AND g.id = r.agent_id
+WHERE t.org_id = $1 AND t.connection_id = $2 AND t.created_at >= $3::timestamptz
+GROUP BY r.agent_id, g.name
+ORDER BY last_used_at DESC, r.agent_id
+LIMIT $4
+`
+
+type ConnectionDependentAgentsParams struct {
+	OrgID        ids.OrgID
+	ConnectionID *ids.UUID
+	Since        time.Time
+	MaxRows      int32
+}
+
+type ConnectionDependentAgentsRow struct {
+	AgentID    ids.UUID
+	Name       string
+	LastUsedAt time.Time
+}
+
+// The agents whose runs used a connection since a time, latest first
+// (F358).
+func (q *Queries) ConnectionDependentAgents(ctx context.Context, arg ConnectionDependentAgentsParams) ([]ConnectionDependentAgentsRow, error) {
+	rows, err := q.db.Query(ctx, connectionDependentAgents,
+		arg.OrgID,
+		arg.ConnectionID,
+		arg.Since,
+		arg.MaxRows,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ConnectionDependentAgentsRow{}
+	for rows.Next() {
+		var i ConnectionDependentAgentsRow
+		if err := rows.Scan(&i.AgentID, &i.Name, &i.LastUsedAt); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const connectionTestFacts = `-- name: ConnectionTestFacts :one
@@ -268,6 +352,50 @@ func (q *Queries) LatestConnectionTest(ctx context.Context, orgID ids.OrgID, con
 		&i.TestedAt,
 	)
 	return i, err
+}
+
+const listConnectionCircuits = `-- name: ListConnectionCircuits :many
+SELECT gateway_id, state, unknown_count, total_count, opened_at, reported_at
+FROM pc.circuit_states
+WHERE org_id = $1 AND connection_id = $2
+ORDER BY gateway_id
+`
+
+type ListConnectionCircuitsRow struct {
+	GatewayID    ids.UUID
+	State        string
+	UnknownCount int32
+	TotalCount   int32
+	OpenedAt     *time.Time
+	ReportedAt   time.Time
+}
+
+// The circuit each gateway reported for a connection (HR-078).
+func (q *Queries) ListConnectionCircuits(ctx context.Context, orgID ids.OrgID, connectionID ids.UUID) ([]ListConnectionCircuitsRow, error) {
+	rows, err := q.db.Query(ctx, listConnectionCircuits, orgID, connectionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListConnectionCircuitsRow{}
+	for rows.Next() {
+		var i ListConnectionCircuitsRow
+		if err := rows.Scan(
+			&i.GatewayID,
+			&i.State,
+			&i.UnknownCount,
+			&i.TotalCount,
+			&i.OpenedAt,
+			&i.ReportedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listConnectionRoutes = `-- name: ListConnectionRoutes :many
