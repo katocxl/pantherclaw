@@ -224,8 +224,9 @@ func tunnel(t *testing.T, r *rig, authority string) net.Conn {
 	return c
 }
 
-// inTunnel sends one raw request through a tunnel to api.github.com.
-func inTunnel(t *testing.T, r *rig, request string) *http.Response {
+// inTunnel sends one raw request through a tunnel to api.github.com and
+// returns the status of the answer.
+func inTunnel(t *testing.T, r *rig, request string) int {
 	t.Helper()
 	roots := x509.NewCertPool()
 	roots.AppendCertsFromPEM(r.edge.CACertificate())
@@ -236,7 +237,7 @@ func inTunnel(t *testing.T, r *rig, request string) *http.Response {
 		t.Fatal(err)
 	}
 	_ = res.Body.Close()
-	return res
+	return res.StatusCode
 }
 
 func TestHR214_ATunnelServesOnlyItsOwnHostAndNoUpgrade(t *testing.T) {
@@ -247,14 +248,14 @@ func TestHR214_ATunnelServesOnlyItsOwnHostAndNoUpgrade(t *testing.T) {
 	if err := tc.HandshakeContext(t.Context()); err == nil {
 		t.Fatal("the edge served payments.example inside a tunnel to api.github.com")
 	}
-	if res := inTunnel(t, r, "GET /v1/refunds HTTP/1.1\r\nHost: payments.example\r\n\r\n"); res.StatusCode != http.StatusMisdirectedRequest {
-		t.Fatalf("Host differing from the CONNECT: %d", res.StatusCode)
+	if code := inTunnel(t, r, "GET /v1/refunds HTTP/1.1\r\nHost: payments.example\r\n\r\n"); code != http.StatusMisdirectedRequest {
+		t.Fatalf("Host differing from the CONNECT: %d", code)
 	}
-	if res := inTunnel(t, r, "GET /x HTTP/1.1\r\nHost: api.github.com\r\nConnection: Upgrade\r\nUpgrade: websocket\r\n\r\n"); res.StatusCode != http.StatusForbidden {
-		t.Fatalf("WebSocket upgrade: %d", res.StatusCode)
+	if code := inTunnel(t, r, "GET /x HTTP/1.1\r\nHost: api.github.com\r\nConnection: Upgrade\r\nUpgrade: websocket\r\n\r\n"); code != http.StatusForbidden {
+		t.Fatalf("WebSocket upgrade: %d", code)
 	}
-	if res := inTunnel(t, r, "GET /x HTTP/1.1\r\nHost: api.github.com:443\r\n\r\n"); res.StatusCode != http.StatusCreated {
-		t.Fatalf("Host with its port: %d", res.StatusCode)
+	if code := inTunnel(t, r, "GET /x HTTP/1.1\r\nHost: api.github.com:443\r\n\r\n"); code != http.StatusCreated {
+		t.Fatalf("Host with its port: %d", code)
 	}
 	if n := len(r.requests()); n != 1 {
 		t.Fatalf("the gateway got %d requests", n)
@@ -369,14 +370,14 @@ func TestTheGatewayCAPinIsEnforced(t *testing.T) {
 
 func TestTheEdgeRefusesWhatItCannotSend(t *testing.T) {
 	r := newRig(t, "")
-	if res := inTunnel(t, r, "POST /x HTTP/1.1\r\nHost: api.github.com\r\nContent-Length: 2\r\n\r\n{}"); res.StatusCode != http.StatusServiceUnavailable {
-		t.Errorf("no workload token: %d", res.StatusCode)
+	if code := inTunnel(t, r, "POST /x HTTP/1.1\r\nHost: api.github.com\r\nContent-Length: 2\r\n\r\n{}"); code != http.StatusServiceUnavailable {
+		t.Errorf("no workload token: %d", code)
 	}
 	r = newRig(t, "workload-token")
 	big := strings.Repeat("a", MaxBody+1)
-	res := inTunnel(t, r, "POST /x HTTP/1.1\r\nHost: api.github.com\r\nContent-Length: "+strconv.Itoa(len(big))+"\r\n\r\n"+big)
-	if res.StatusCode != http.StatusRequestEntityTooLarge || len(r.requests()) != 0 {
-		t.Errorf("large body: %d", res.StatusCode)
+	code := inTunnel(t, r, "POST /x HTTP/1.1\r\nHost: api.github.com\r\nContent-Length: "+strconv.Itoa(len(big))+"\r\n\r\n"+big)
+	if code != http.StatusRequestEntityTooLarge || len(r.requests()) != 0 {
+		t.Errorf("large body: %d", code)
 	}
 }
 
