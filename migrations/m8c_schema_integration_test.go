@@ -26,8 +26,8 @@ import (
 const (
 	m8cCredentialTest = `INSERT INTO pc.connection_tests (org_id, id, connection_id, kind, state, result, checks, requested_by, finished_at)
 		VALUES ($1, $2, $3, 'credential', 'DONE', 'PASSED', '[]', 'test', now())`
-	m8cLeasedTest = `INSERT INTO pc.connection_tests (org_id, id, connection_id, kind, verification_id, requested_by)
-		VALUES ($1, $2, $3, $4, $5, 'test')`
+	m8cLeasedTest = `INSERT INTO pc.connection_tests (org_id, id, connection_id, kind, verification_id, operation, requested_by)
+		VALUES ($1, $2, $3, $4, $5, $6, 'test')`
 	m8cDeclaration = `INSERT INTO pc.connection_capabilities (org_id, id, connection_id, connection_revision, declaration, declaration_sha256)
 		VALUES ($1, $2, $3, 1, '{}', ` + m5Hash + `)`
 )
@@ -43,7 +43,8 @@ func m8cConnection(t *testing.T, f m5Fixture) (gateway, conn string) {
 
 // TestF354_ConnectionTestsAreKeptAsEvidence: pc_app records a credential
 // test with its result, and a leased test only with its verification task
-// of purpose connection_test, which belongs to no transaction. An open
+// of purpose connection_test, which belongs to no transaction, and with
+// the operation it reaches (a credential test reaches none). An open
 // test only moves forward, to RUNNING, DONE or FAILED, and a finished one
 // never changes; a finished test needs its time, a done one its
 // result. Nothing changes what a test is or deletes it.
@@ -57,10 +58,13 @@ func TestF354_ConnectionTestsAreKeptAsEvidence(t *testing.T) {
 	f.want(t, m5Check, "a connection test with a transaction", m7Verification, f.org, m5ID(), "connection_test", m5ID(), conn, nil, nil)
 	f.want(t, m5Check, "a follow-up without a transaction", m7Verification, f.org, m5ID(), "follow_up", nil, conn, nil, nil)
 	read := m5ID()
-	f.mustExec(t, m8cLeasedTest, f.org, read, conn, "read", task)
-	f.want(t, m5Check, "a leased test without its task", m8cLeasedTest, f.org, m5ID(), conn, "target_verifier", nil)
-	f.want(t, m5Check, "a credential test with a task", m8cLeasedTest, f.org, m5ID(), conn, "credential", task)
-	f.want(t, m5Check, "another kind", m8cLeasedTest, f.org, m5ID(), conn, "write", task)
+	const op = "payments.refund.get"
+	f.mustExec(t, m8cLeasedTest, f.org, read, conn, "read", task, op)
+	f.want(t, m5Check, "a leased test without its task", m8cLeasedTest, f.org, m5ID(), conn, "target_verifier", nil, op)
+	f.want(t, m5Check, "a credential test with a task", m8cLeasedTest, f.org, m5ID(), conn, "credential", task, nil)
+	f.want(t, m5Check, "another kind", m8cLeasedTest, f.org, m5ID(), conn, "write", task, op)
+	f.want(t, m5Check, "a leased test without its operation", m8cLeasedTest, f.org, m5ID(), conn, "target_verifier", m5ID(), nil)
+	f.want(t, m5Check, "a credential test naming an operation", m8cLeasedTest, f.org, m5ID(), conn, "credential", nil, op)
 	f.want(t, m5Check, "done without a result", `UPDATE pc.connection_tests SET state = 'DONE', finished_at = now() WHERE id = $1`, read)
 	f.want(t, m5Check, "finished without a time", `UPDATE pc.connection_tests SET state = 'FAILED' WHERE id = $1`, read)
 	f.mustExec(t, `UPDATE pc.connection_tests SET state = 'RUNNING', gateway_id = $2 WHERE id = $1`, read, gw)
@@ -70,6 +74,7 @@ func TestF354_ConnectionTestsAreKeptAsEvidence(t *testing.T) {
 	f.want(t, m5Check, "reopen a DONE connection_tests row", `UPDATE pc.connection_tests SET state = 'RUNNING', result = NULL, finished_at = NULL
 		WHERE id = $1`, read)
 	f.want(t, m5Denied, "change the kind", "UPDATE pc.connection_tests SET kind = kind")
+	f.want(t, m5Denied, "change the operation", "UPDATE pc.connection_tests SET operation = operation")
 	f.want(t, m5Denied, "change who asked", "UPDATE pc.connection_tests SET requested_by = requested_by")
 	f.want(t, m5Denied, "DELETE connection_tests", "DELETE FROM pc.connection_tests")
 }

@@ -12,7 +12,8 @@
 --   what the connection depends on without calling the target; a read test
 --   and a target_verifier test are leased to the gateway as verification
 --   tasks of purpose connection_test (M7's machinery) and reach the target.
---   M9 lifts the cooperative cap for an operation only on a passing
+--   A read or target_verifier test names the operation it reached. M9
+--   lifts the cooperative cap for an operation only on a passing
 --   target_verifier test (HR-210). A test result is evidence: pc_app only
 --   moves an open test to its result and never deletes one.
 -- * tool_observations: the OBSERVE_ONLY records of tools an agent SDK ran
@@ -53,6 +54,10 @@ CREATE TABLE pc.connection_tests (
     id              uuid        NOT NULL,
     connection_id   uuid        NOT NULL,
     kind            text        NOT NULL CHECK (kind IN ('credential', 'read', 'target_verifier')),
+    -- The operation a read or target_verifier test reached: M9 lifts the
+    -- cooperative cap only for an operation whose latest target_verifier
+    -- test passed (HR-210). A credential test reaches none.
+    operation       text        CHECK (operation IS NULL OR char_length(operation) BETWEEN 1 AND 200),
     -- PENDING and RUNNING are open; DONE has a result; FAILED could not run
     -- (the lease expired, the gateway never claimed it).
     state           text        NOT NULL DEFAULT 'PENDING' CHECK (state IN ('PENDING', 'RUNNING', 'DONE', 'FAILED')),
@@ -72,11 +77,15 @@ CREATE TABLE pc.connection_tests (
     FOREIGN KEY (org_id, gateway_id) REFERENCES pc.gateways (org_id, id),
     FOREIGN KEY (org_id, verification_id) REFERENCES pc.verifications (org_id, id),
     CHECK ((kind = 'credential') = (verification_id IS NULL)),
+    CHECK ((kind = 'credential') = (operation IS NULL)),
     CHECK ((state IN ('DONE', 'FAILED')) = (finished_at IS NOT NULL)),
     CHECK ((state = 'DONE') = (result IS NOT NULL))
 );
 CREATE INDEX connection_tests_latest ON pc.connection_tests (org_id, connection_id, created_at DESC);
 CREATE UNIQUE INDEX connection_tests_verification ON pc.connection_tests (org_id, verification_id) WHERE verification_id IS NOT NULL;
+-- The latest passing test of a kind for an operation (M9: LastPassed).
+CREATE INDEX connection_tests_passed ON pc.connection_tests (org_id, connection_id, kind, operation, finished_at DESC)
+    WHERE state = 'DONE' AND result = 'PASSED';
 
 -- A test result is evidence (HR-210): an open test moves forward only, to
 -- RUNNING (on the gateway holding its lease, again when a retry leases it
