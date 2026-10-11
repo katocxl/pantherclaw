@@ -22,7 +22,7 @@ for await (const message of query({
 }
 ```
 
-`options()` must see the whole query options (`permissionMode`, `allowedTools`, `settingSources`, `mcpServers`, your own `canUseTool` and hooks) to know when a hold may be asked, so pass them through it rather than taking the hook alone.
+`options()` must see the whole query options (`permissionMode`, `allowedTools`, `settingSources`, `mcpServers`, your own `canUseTool` and hooks) to know when a hold may be asked, so pass them through it rather than taking the hook alone. A hold is asked only with `settingSources: []`: when it is omitted the SDK loads every settings source, whose allow rules the integration cannot see.
 
 ## How it decides
 
@@ -51,4 +51,4 @@ A client you build yourself must know the built-ins: `new Client({ …, builtins
 ## Status
 
 - The npm names are not reserved yet (Day-0 item 4), so the package is `private`. Until the core client is published, it imports `@pantherclaw/sdk` by its path in this repository.
-- The tests (`node --test "test/**/*.test.ts"`, or `task sdk:check`) run the hook and the callback against a fake PantherClaw that serves the `/sdk` and `/hook` contracts. They do not run the Agent SDK itself, which is not installed in this repository: that `ask` reaches `canUseTool` in `default` mode, that a subagent's calls reach the hook, and how the hook's timeout behaves are what the SDK documents, not yet what a test here proves. A test against the pinned SDK version range is a follow-up that needs the package installed.
+- The tests (`task sdk:check`, or `pnpm install --frozen-lockfile` then `node --test "test/**/*.test.ts"`) run the hook and the callback against a fake PantherClaw that serves the `/sdk` and `/hook` contracts, and `test/real-sdk.test.ts` runs them inside the real Agent SDK: version 0.3.289, a dev-only install pinned in `pnpm-lock.yaml`, whose own Claude Code process talks to a fake Messages API and a stdio MCP server on 127.0.0.1, offline, in an isolated home and configuration directory. They prove, for that version, that PantherClaw's deny stops a tool in every permission mode, that a hold in `default` mode reaches `canUseTool` and runs only after PantherClaw's allow, that a hook's `ask` never runs a tool without `canUseTool`'s allow, that the application's own hook never overrides PantherClaw's deny, that a PantherClaw that does not answer is denied at the integration's deadline, that a subagent's calls reach the hook, that `Bash` goes to `/hook`, and that every built-in the SDK offers is in `BUILTIN_TOOLS`. Moving to a later SDK version means changing the pin and running them.
