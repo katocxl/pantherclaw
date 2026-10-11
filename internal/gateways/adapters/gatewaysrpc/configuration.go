@@ -51,6 +51,7 @@ func (h *GatewayHandler) GetConfiguration(ctx context.Context, req *pb.GetConfig
 			BaseUrl: deref(conn.BaseUrl), AllowedHosts: conn.AllowedHosts, DestinationClass: conn.DestinationClass,
 			AccessMode: conn.AccessMode, DefaultMode: conn.DefaultMode, Routes: routes[conn.ID.String()],
 			MaxResponseBytes: conn.MaxResponseBytes, TimeoutMs: conn.TimeoutMs, State: conn.State, Revision: conn.Revision,
+			AgentHosts: conn.AgentHosts,
 		})
 	}
 	for _, cr := range c.Credentials {

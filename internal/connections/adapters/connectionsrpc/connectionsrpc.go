@@ -84,7 +84,7 @@ func connectionOf(c capp.Connection) *pb.Connection {
 		AccessMode: accessOf[c.AccessMode], CredentialHeader: deref(c.CredentialHeader), CredentialScheme: deref(c.CredentialScheme),
 		DefaultMode: modeOf[c.DefaultMode], MaxResponseBytes: c.MaxResponseBytes, TimeoutMs: c.TimeoutMs, State: states[c.State],
 		QuarantineReason: deref(c.QuarantineReason), Revision: c.Revision, CreatedBy: c.CreatedBy,
-		CreateTime: timestamppb.New(c.CreatedAt), UpdatedBy: c.UpdatedBy, UpdateTime: timestamppb.New(c.UpdatedAt),
+		CreateTime: timestamppb.New(c.CreatedAt), UpdatedBy: c.UpdatedBy, UpdateTime: timestamppb.New(c.UpdatedAt), AgentHosts: c.AgentHosts,
 	}
 	for _, r := range c.Routes {
 		out.Routes = append(out.Routes, routeOf(r))
@@ -114,7 +114,7 @@ func (h *Handler) CreateConnection(ctx context.Context, req *pb.CreateConnection
 		Name: req.GetName(), Kind: kinds[req.GetKind()], Package: req.GetPackage(), BaseURL: req.GetBaseUrl(), Gateway: gw,
 		AllowedHosts: req.GetAllowedHosts(), DestinationClass: classes[req.GetDestinationClass()], AccessMode: access[req.GetAccessMode()],
 		CredentialHeader: req.GetCredentialHeader(), CredentialScheme: req.GetCredentialScheme(), DefaultMode: modes[req.GetDefaultMode()],
-		MaxResponseBytes: req.GetMaxResponseBytes(), TimeoutMs: req.GetTimeoutMs(),
+		MaxResponseBytes: req.GetMaxResponseBytes(), TimeoutMs: req.GetTimeoutMs(), AgentHosts: req.GetAgentHosts(),
 	})
 	if err != nil {
 		return nil, err
@@ -169,6 +169,7 @@ func (h *Handler) UpdateConnection(ctx context.Context, req *pb.UpdateConnection
 	in := capp.UpdateInput{
 		ID: id, Revision: req.GetRevision(), BaseURL: req.BaseUrl, AllowedHosts: req.GetAllowedHosts(),
 		SetAllowedHosts: req.GetUpdateAllowedHosts(), MaxResponseBytes: req.MaxResponseBytes, TimeoutMs: req.TimeoutMs,
+		AgentHosts: req.GetAgentHosts(), SetAgentHosts: req.GetUpdateAgentHosts(),
 	}
 	if req.GatewayId != nil {
 		gw, err := parseID(req.GetGatewayId())

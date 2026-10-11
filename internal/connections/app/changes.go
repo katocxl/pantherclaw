@@ -25,8 +25,12 @@ type UpdateInput struct {
 	BaseURL  *string
 	// AllowedHosts replaces the list when SetAllowedHosts (an empty list
 	// means "the base URL's host").
-	AllowedHosts     []string
-	SetAllowedHosts  bool
+	AllowedHosts    []string
+	SetAllowedHosts bool
+	// AgentHosts replaces the agent hosts when SetAgentHosts; any change
+	// weakens (HR-183).
+	AgentHosts       []string
+	SetAgentHosts    bool
 	DestinationClass *string
 	AccessMode       *string
 	DefaultMode      *string
@@ -115,7 +119,8 @@ func params(c actor, conn dbq.PcConnection) dbq.UpdateConnectionParams {
 	return dbq.UpdateConnectionParams{
 		GatewayID: conn.GatewayID, BaseUrl: conn.BaseUrl, AllowedHosts: conn.AllowedHosts, DestinationClass: conn.DestinationClass,
 		AccessMode: conn.AccessMode, DefaultMode: conn.DefaultMode, MaxResponseBytes: conn.MaxResponseBytes, TimeoutMs: conn.TimeoutMs,
-		State: conn.State, QuarantineReason: conn.QuarantineReason, UpdatedBy: c.By, OrgID: c.Org, ID: conn.ID,
+		AgentHosts: conn.AgentHosts,
+		State:      conn.State, QuarantineReason: conn.QuarantineReason, UpdatedBy: c.By, OrgID: c.Org, ID: conn.ID,
 		Revision: conn.Revision,
 	}
 }
@@ -188,6 +193,12 @@ func (s *Service) Update(ctx context.Context, in UpdateInput) (Connection, error
 			p.BaseUrl, p.AllowedHosts = nb, nh
 			set("base_url", deref(conn.BaseUrl), deref(nb), true)
 			set("allowed_hosts", strings.Join(conn.AllowedHosts, ","), strings.Join(nh, ","), true)
+		}
+		if in.SetAgentHosts {
+			if p.AgentHosts, err = checkAgentHosts(conn.Kind, in.AgentHosts); err != nil {
+				return err
+			}
+			set("agent_hosts", strings.Join(conn.AgentHosts, ","), strings.Join(p.AgentHosts, ","), true)
 		}
 		if in.DestinationClass != nil {
 			if !slices.Contains([]string{ClassPublic, ClassInternal}, *in.DestinationClass) {

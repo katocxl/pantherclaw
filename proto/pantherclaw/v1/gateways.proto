@@ -469,6 +469,9 @@ message GatewayConnection {
   string state = 14;
   // Revision.
   int32 revision = 15;
+  // agent_hosts are the host names agents use for the connection's API
+  // (G0 M9).
+  repeated string agent_hosts = 21;
 }
 
 // RouteModeSetting is one route's mode.

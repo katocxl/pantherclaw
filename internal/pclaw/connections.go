@@ -55,12 +55,13 @@ func connectionCommands() map[string]command {
 	return map[string]command{
 		"connection create": rpc("connection create NAME --kind http|mcp|local --gateway ID --package NAME [--base-url URL] "+
 			"[--allowed-host HOST...] --access pantherclaw_held|agent_held|target_enforced|none [--header NAME [--scheme S]] "+
-			"[--class public|internal] [--default-mode monitor|enforce] [--max-response-bytes N] [--timeout-ms N]", 1,
+			"[--class public|internal] [--default-mode monitor|enforce] [--max-response-bytes N] [--timeout-ms N] [--agent-host HOST...]", 1,
 			func(fs *flag.FlagSet) call {
-				var hosts list
+				var hosts, agentHosts list
 				kind, gw, pkg, base := fs.String("kind", "", "http, mcp or local"), fs.String("gateway", "", "gateway id"),
 					fs.String("package", "", "tool package name"), fs.String("base-url", "", "the target's base URL")
 				fs.Var(&hosts, "allowed-host", "host a credential may be sent to (repeatable; default: the base URL's host)")
+				fs.Var(&agentHosts, "agent-host", "a host name agents use for the API, which a sandbox maps here (repeatable)")
 				acc, header, scheme := fs.String("access", "", "access mode"), fs.String("header", "", "credential header"),
 					fs.String("scheme", "", "credential scheme, for example Bearer")
 				class, mode := fs.String("class", "", "destination class"), fs.String("default-mode", "", "monitor (default) or enforce")
@@ -77,6 +78,7 @@ func connectionCommands() map[string]command {
 						Name: a[0], Kind: k, GatewayId: *gw, Package: *pkg, BaseUrl: *base, AllowedHosts: hosts, AccessMode: am,
 						CredentialHeader: *header, CredentialScheme: *scheme, DestinationClass: dc, DefaultMode: dm,
 						MaxResponseBytes: int32(min(max(*maxBytes, 0), 8<<20)), TimeoutMs: int32(min(max(*timeout, 0), 60_000)),
+						AgentHosts: agentHosts,
 					})
 				}
 			}),
@@ -95,53 +97,57 @@ func connectionCommands() map[string]command {
 			}
 		}),
 		"connection update": rpc("connection update ID --revision N [--gateway ID] [--base-url URL] [--allowed-host HOST... | --clear-allowed-hosts] "+
-			"[--access MODE] [--class CLASS] [--default-mode MODE] [--max-response-bytes N] [--timeout-ms N]", 1, func(fs *flag.FlagSet) call {
-			var gw, base, acc, class, mode, maxBytes, timeout optional
-			var hosts list
-			rev := fs.Int("revision", 0, "the revision you read (from connection get)")
-			fs.Var(&gw, "gateway", "new gateway")
-			fs.Var(&base, "base-url", "new base URL")
-			fs.Var(&hosts, "allowed-host", "new credential hosts (repeatable; replaces the list)")
-			reset := fs.Bool("clear-allowed-hosts", false, "reset the credential hosts to the base URL's host")
-			fs.Var(&acc, "access", "new access mode")
-			fs.Var(&class, "class", "new destination class")
-			fs.Var(&mode, "default-mode", "new default route mode")
-			fs.Var(&maxBytes, "max-response-bytes", "new response cap")
-			fs.Var(&timeout, "timeout-ms", "new dispatch timeout")
-			return func(ctx context.Context, c clients, a []string) (proto.Message, error) {
-				req := &pb.UpdateConnectionRequest{
-					Id: a[0], Revision: int32(min(max(*rev, 0), 1<<30)), GatewayId: gw.ptr(), BaseUrl: base.ptr(),
-					AllowedHosts: hosts, UpdateAllowedHosts: len(hosts) > 0 || *reset,
-				}
-				var errs []error
-				if acc.set {
-					v, err := enumFlag(accessModes, "access", acc.v)
-					req.AccessMode, errs = &v, append(errs, err)
-				}
-				if class.set {
-					v, err := enumFlag(destinationClasses, "class", class.v)
-					req.DestinationClass, errs = &v, append(errs, err)
-				}
-				if mode.set {
-					v, err := enumFlag(routeModes, "default-mode", mode.v)
-					req.DefaultMode, errs = &v, append(errs, err)
-				}
-				for _, o := range []struct {
-					f   *optional
-					dst **int32
-				}{{&maxBytes, &req.MaxResponseBytes}, {&timeout, &req.TimeoutMs}} {
-					if o.f.set {
-						n, err := strconv.ParseInt(o.f.v, 10, 32)
-						v := int32(n)
-						*o.dst, errs = &v, append(errs, err)
+			"[--access MODE] [--class CLASS] [--default-mode MODE] [--max-response-bytes N] [--timeout-ms N] [--agent-host HOST... | --clear-agent-hosts]", 1,
+			func(fs *flag.FlagSet) call {
+				var gw, base, acc, class, mode, maxBytes, timeout optional
+				var hosts, agentHosts list
+				rev := fs.Int("revision", 0, "the revision you read (from connection get)")
+				fs.Var(&gw, "gateway", "new gateway")
+				fs.Var(&base, "base-url", "new base URL")
+				fs.Var(&hosts, "allowed-host", "new credential hosts (repeatable; replaces the list)")
+				reset := fs.Bool("clear-allowed-hosts", false, "reset the credential hosts to the base URL's host")
+				fs.Var(&agentHosts, "agent-host", "new agent hosts (repeatable; replaces the list; weakens enforcement)")
+				clearAgent := fs.Bool("clear-agent-hosts", false, "remove every agent host")
+				fs.Var(&acc, "access", "new access mode")
+				fs.Var(&class, "class", "new destination class")
+				fs.Var(&mode, "default-mode", "new default route mode")
+				fs.Var(&maxBytes, "max-response-bytes", "new response cap")
+				fs.Var(&timeout, "timeout-ms", "new dispatch timeout")
+				return func(ctx context.Context, c clients, a []string) (proto.Message, error) {
+					req := &pb.UpdateConnectionRequest{
+						Id: a[0], Revision: int32(min(max(*rev, 0), 1<<30)), GatewayId: gw.ptr(), BaseUrl: base.ptr(),
+						AllowedHosts: hosts, UpdateAllowedHosts: len(hosts) > 0 || *reset,
+						AgentHosts: agentHosts, UpdateAgentHosts: len(agentHosts) > 0 || *clearAgent,
 					}
+					var errs []error
+					if acc.set {
+						v, err := enumFlag(accessModes, "access", acc.v)
+						req.AccessMode, errs = &v, append(errs, err)
+					}
+					if class.set {
+						v, err := enumFlag(destinationClasses, "class", class.v)
+						req.DestinationClass, errs = &v, append(errs, err)
+					}
+					if mode.set {
+						v, err := enumFlag(routeModes, "default-mode", mode.v)
+						req.DefaultMode, errs = &v, append(errs, err)
+					}
+					for _, o := range []struct {
+						f   *optional
+						dst **int32
+					}{{&maxBytes, &req.MaxResponseBytes}, {&timeout, &req.TimeoutMs}} {
+						if o.f.set {
+							n, err := strconv.ParseInt(o.f.v, 10, 32)
+							v := int32(n)
+							*o.dst, errs = &v, append(errs, err)
+						}
+					}
+					if err := errors.Join(errs...); err != nil {
+						return nil, err
+					}
+					return c.connections.UpdateConnection(ctx, req)
 				}
-				if err := errors.Join(errs...); err != nil {
-					return nil, err
-				}
-				return c.connections.UpdateConnection(ctx, req)
-			}
-		}),
+			}),
 		"connection set-mode": rpc("connection set-mode ID ROUTE monitor|enforce", 3, func(*flag.FlagSet) call {
 			return func(ctx context.Context, c clients, a []string) (proto.Message, error) {
 				m, ok := routeModes[a[2]]

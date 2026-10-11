@@ -2015,7 +2015,10 @@ type GatewayConnection struct {
 	// "ACTIVE" or "QUARANTINED".
 	State string `protobuf:"bytes,14,opt,name=state,proto3" json:"state,omitempty"`
 	// Revision.
-	Revision      int32 `protobuf:"varint,15,opt,name=revision,proto3" json:"revision,omitempty"`
+	Revision int32 `protobuf:"varint,15,opt,name=revision,proto3" json:"revision,omitempty"`
+	// agent_hosts are the host names agents use for the connection's API
+	// (G0 M9).
+	AgentHosts    []string `protobuf:"bytes,21,rep,name=agent_hosts,json=agentHosts,proto3" json:"agent_hosts,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2153,6 +2156,13 @@ func (x *GatewayConnection) GetRevision() int32 {
 		return x.Revision
 	}
 	return 0
+}
+
+func (x *GatewayConnection) GetAgentHosts() []string {
+	if x != nil {
+		return x.AgentHosts
+	}
+	return nil
 }
 
 // RouteModeSetting is one route's mode.
@@ -3409,7 +3419,7 @@ const file_pantherclaw_v1_gateways_proto_rawDesc = "" +
 	"\bresponse\x18\x05 \x01(\bR\bresponse\x12\x19\n" +
 	"\bbyte_cap\x18\x06 \x01(\x05R\abyteCap\x12;\n" +
 	"\vexpire_time\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"expireTime\"\xf8\x03\n" +
+	"expireTime\"\x99\x04\n" +
 	"\x11GatewayConnection\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x12\n" +
@@ -3428,7 +3438,9 @@ const file_pantherclaw_v1_gateways_proto_rawDesc = "" +
 	"\n" +
 	"timeout_ms\x18\r \x01(\x05R\ttimeoutMs\x12\x14\n" +
 	"\x05state\x18\x0e \x01(\tR\x05state\x12\x1a\n" +
-	"\brevision\x18\x0f \x01(\x05R\brevision\"<\n" +
+	"\brevision\x18\x0f \x01(\x05R\brevision\x12\x1f\n" +
+	"\vagent_hosts\x18\x15 \x03(\tR\n" +
+	"agentHosts\"<\n" +
 	"\x10RouteModeSetting\x12\x14\n" +
 	"\x05route\x18\x01 \x01(\tR\x05route\x12\x12\n" +
 	"\x04mode\x18\x02 \x01(\tR\x04mode\"P\n" +

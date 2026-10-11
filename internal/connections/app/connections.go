@@ -124,6 +124,8 @@ type CreateInput struct {
 	DestinationClass, AccessMode                    string
 	CredentialHeader, CredentialScheme, DefaultMode string
 	MaxResponseBytes, TimeoutMs                     int32
+	// AgentHosts are the host names agents use for the API (G0 M9).
+	AgentHosts []string
 }
 
 // actor is who makes a change: a person holding the permission, or the
@@ -332,6 +334,10 @@ func (s *Service) create(ctx context.Context, c actor, in CreateInput) (Connecti
 	if err != nil {
 		return Connection{}, err
 	}
+	agentHosts, err := checkAgentHosts(in.Kind, in.AgentHosts)
+	if err != nil {
+		return Connection{}, err
+	}
 	var out Connection
 	err = s.pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
 		q := dbq.New(tx)
@@ -346,7 +352,7 @@ func (s *Service) create(ctx context.Context, c actor, in CreateInput) (Connecti
 			OrgID: c.Org, ID: ids.NewV7(), Name: in.Name, Kind: in.Kind, GatewayID: in.Gateway, Package: in.Package,
 			BaseUrl: base, AllowedHosts: hosts, DestinationClass: in.DestinationClass, AccessMode: in.AccessMode,
 			CredentialHeader: ptr(in.CredentialHeader), CredentialScheme: ptr(in.CredentialScheme), DefaultMode: in.DefaultMode,
-			MaxResponseBytes: in.MaxResponseBytes, TimeoutMs: in.TimeoutMs, CreatedBy: c.By,
+			MaxResponseBytes: in.MaxResponseBytes, TimeoutMs: in.TimeoutMs, AgentHosts: agentHosts, CreatedBy: c.By,
 		})
 		if db.IsUniqueViolation(err) {
 			return ErrNameTaken
@@ -366,7 +372,7 @@ func (s *Service) create(ctx context.Context, c actor, in CreateInput) (Connecti
 		if err := record(ctx, tx, c, "connection.created", conn.ID, map[string]string{
 			"name": conn.Name, "kind": conn.Kind, "gateway_id": conn.GatewayID.String(), "package": conn.Package,
 			"base_url": deref(conn.BaseUrl), "allowed_hosts": strings.Join(conn.AllowedHosts, ","), "access_mode": conn.AccessMode,
-			"default_mode": conn.DefaultMode, "routes": strconv.Itoa(len(rs)),
+			"default_mode": conn.DefaultMode, "routes": strconv.Itoa(len(rs)), "agent_hosts": strings.Join(conn.AgentHosts, ","),
 		}); err != nil {
 			return err
 		}

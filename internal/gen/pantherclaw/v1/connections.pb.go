@@ -399,7 +399,10 @@ type Connection struct {
 	// Who changed it last and when.
 	UpdatedBy string `protobuf:"bytes,21,opt,name=updated_by,json=updatedBy,proto3" json:"updated_by,omitempty"`
 	// When it was changed last.
-	UpdateTime    *timestamppb.Timestamp `protobuf:"bytes,22,opt,name=update_time,json=updateTime,proto3" json:"update_time,omitempty"`
+	UpdateTime *timestamppb.Timestamp `protobuf:"bytes,22,opt,name=update_time,json=updateTime,proto3" json:"update_time,omitempty"`
+	// agent_hosts are the host names agents use for this connection's API
+	// (G0 M9): a containment sandbox's edge maps each to it (HR-183).
+	AgentHosts    []string `protobuf:"bytes,28,rep,name=agent_hosts,json=agentHosts,proto3" json:"agent_hosts,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -584,6 +587,13 @@ func (x *Connection) GetUpdatedBy() string {
 func (x *Connection) GetUpdateTime() *timestamppb.Timestamp {
 	if x != nil {
 		return x.UpdateTime
+	}
+	return nil
+}
+
+func (x *Connection) GetAgentHosts() []string {
+	if x != nil {
+		return x.AgentHosts
 	}
 	return nil
 }
@@ -827,7 +837,10 @@ type CreateConnectionRequest struct {
 	// Response cap in bytes (default 1 MiB, at most 8 MiB).
 	MaxResponseBytes int32 `protobuf:"varint,12,opt,name=max_response_bytes,json=maxResponseBytes,proto3" json:"max_response_bytes,omitempty"`
 	// Dispatch timeout in milliseconds (default 10,000, at most 60,000).
-	TimeoutMs     int32 `protobuf:"varint,13,opt,name=timeout_ms,json=timeoutMs,proto3" json:"timeout_ms,omitempty"`
+	TimeoutMs int32 `protobuf:"varint,13,opt,name=timeout_ms,json=timeoutMs,proto3" json:"timeout_ms,omitempty"`
+	// agent_hosts are the host names agents use for the API; only for http
+	// and mcp connections.
+	AgentHosts    []string `protobuf:"bytes,19,rep,name=agent_hosts,json=agentHosts,proto3" json:"agent_hosts,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -951,6 +964,13 @@ func (x *CreateConnectionRequest) GetTimeoutMs() int32 {
 		return x.TimeoutMs
 	}
 	return 0
+}
+
+func (x *CreateConnectionRequest) GetAgentHosts() []string {
+	if x != nil {
+		return x.AgentHosts
+	}
+	return nil
 }
 
 // CreateConnectionResponse returns the connection.
@@ -1252,9 +1272,13 @@ type UpdateConnectionRequest struct {
 	// New response cap.
 	MaxResponseBytes *int32 `protobuf:"varint,10,opt,name=max_response_bytes,json=maxResponseBytes,proto3,oneof" json:"max_response_bytes,omitempty"`
 	// New timeout.
-	TimeoutMs     *int32 `protobuf:"varint,11,opt,name=timeout_ms,json=timeoutMs,proto3,oneof" json:"timeout_ms,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	TimeoutMs *int32 `protobuf:"varint,11,opt,name=timeout_ms,json=timeoutMs,proto3,oneof" json:"timeout_ms,omitempty"`
+	// agent_hosts replaces the agent hosts when update_agent_hosts; any
+	// change weakens enforcement (HR-183).
+	AgentHosts       []string `protobuf:"bytes,17,rep,name=agent_hosts,json=agentHosts,proto3" json:"agent_hosts,omitempty"`
+	UpdateAgentHosts bool     `protobuf:"varint,18,opt,name=update_agent_hosts,json=updateAgentHosts,proto3" json:"update_agent_hosts,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *UpdateConnectionRequest) Reset() {
@@ -1362,6 +1386,20 @@ func (x *UpdateConnectionRequest) GetTimeoutMs() int32 {
 		return *x.TimeoutMs
 	}
 	return 0
+}
+
+func (x *UpdateConnectionRequest) GetAgentHosts() []string {
+	if x != nil {
+		return x.AgentHosts
+	}
+	return nil
+}
+
+func (x *UpdateConnectionRequest) GetUpdateAgentHosts() bool {
+	if x != nil {
+		return x.UpdateAgentHosts
+	}
+	return false
 }
 
 // UpdateConnectionResponse returns the connection.
@@ -2304,7 +2342,7 @@ var File_pantherclaw_v1_connections_proto protoreflect.FileDescriptor
 
 const file_pantherclaw_v1_connections_proto_rawDesc = "" +
 	"\n" +
-	" pantherclaw/v1/connections.proto\x12\x0epantherclaw.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xbf\a\n" +
+	" pantherclaw/v1/connections.proto\x12\x0epantherclaw.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xe0\a\n" +
 	"\n" +
 	"Connection\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
@@ -2336,7 +2374,9 @@ const file_pantherclaw_v1_connections_proto_rawDesc = "" +
 	"\n" +
 	"updated_by\x18\x15 \x01(\tR\tupdatedBy\x12;\n" +
 	"\vupdate_time\x18\x16 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"updateTime\"\xb2\x01\n" +
+	"updateTime\x12\x1f\n" +
+	"\vagent_hosts\x18\x1c \x03(\tR\n" +
+	"agentHosts\"\xb2\x01\n" +
 	"\x0fConnectionRoute\x12\x14\n" +
 	"\x05route\x18\x01 \x01(\tR\x05route\x12-\n" +
 	"\x04mode\x18\x02 \x01(\x0e2\x19.pantherclaw.v1.RouteModeR\x04mode\x12\x1d\n" +
@@ -2358,7 +2398,7 @@ const file_pantherclaw_v1_connections_proto_rawDesc = "" +
 	"created_by\x18\n" +
 	" \x01(\tR\tcreatedBy\x12;\n" +
 	"\vcreate_time\x18\v \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"createTime\"\xd9\x06\n" +
+	"createTime\"\xb2\a\n" +
 	"\x17CreateConnectionRequest\x12C\n" +
 	"\x04name\x18\x01 \x01(\tB/\xbaH,r*\x10\x01\x18?2$^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$R\x04name\x12>\n" +
 	"\x04kind\x18\x02 \x01(\x0e2\x1e.pantherclaw.v1.ConnectionKindB\n" +
@@ -2378,7 +2418,9 @@ const file_pantherclaw_v1_connections_proto_rawDesc = "" +
 	"\fdefault_mode\x18\v \x01(\x0e2\x19.pantherclaw.v1.RouteModeB\b\xbaH\x05\x82\x01\x02\x10\x01R\vdefaultMode\x12:\n" +
 	"\x12max_response_bytes\x18\f \x01(\x05B\f\xbaH\t\x1a\a\x18\x80\x80\x80\x04(\x00R\x10maxResponseBytes\x12*\n" +
 	"\n" +
-	"timeout_ms\x18\r \x01(\x05B\v\xbaH\b\x1a\x06\x18\xe0\xd4\x03(\x00R\ttimeoutMs\"V\n" +
+	"timeout_ms\x18\r \x01(\x05B\v\xbaH\b\x1a\x06\x18\xe0\xd4\x03(\x00R\ttimeoutMs\x12W\n" +
+	"\vagent_hosts\x18\x13 \x03(\tB6\xbaH3\x92\x010\x10\x10\x18\x01\"*r(2&^[a-z0-9]([a-z0-9.-]{0,251}[a-z0-9])?$R\n" +
+	"agentHosts\"V\n" +
 	"\x18CreateConnectionResponse\x12:\n" +
 	"\n" +
 	"connection\x18\x01 \x01(\v2\x1a.pantherclaw.v1.ConnectionR\n" +
@@ -2400,7 +2442,7 @@ const file_pantherclaw_v1_connections_proto_rawDesc = "" +
 	"\x0finclude_retired\x18\x04 \x01(\bR\x0eincludeRetired\"\x7f\n" +
 	"\x17ListConnectionsResponse\x12<\n" +
 	"\vconnections\x18\x01 \x03(\v2\x1a.pantherclaw.v1.ConnectionR\vconnections\x12&\n" +
-	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"\x83\x06\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"\x8a\a\n" +
 	"\x17UpdateConnectionRequest\x12\x18\n" +
 	"\x02id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x02id\x12#\n" +
 	"\brevision\x18\x02 \x01(\x05B\a\xbaH\x04\x1a\x02 \x00R\brevision\x12,\n" +
@@ -2420,7 +2462,10 @@ const file_pantherclaw_v1_connections_proto_rawDesc = "" +
 	" \x01(\x05B\r\xbaH\n" +
 	"\x1a\b\x18\x80\x80\x80\x04(\x80\bH\x05R\x10maxResponseBytes\x88\x01\x01\x12/\n" +
 	"\n" +
-	"timeout_ms\x18\v \x01(\x05B\v\xbaH\b\x1a\x06\x18\xe0\xd4\x03(dH\x06R\ttimeoutMs\x88\x01\x01B\r\n" +
+	"timeout_ms\x18\v \x01(\x05B\v\xbaH\b\x1a\x06\x18\xe0\xd4\x03(dH\x06R\ttimeoutMs\x88\x01\x01\x12W\n" +
+	"\vagent_hosts\x18\x11 \x03(\tB6\xbaH3\x92\x010\x10\x10\x18\x01\"*r(2&^[a-z0-9]([a-z0-9.-]{0,251}[a-z0-9])?$R\n" +
+	"agentHosts\x12,\n" +
+	"\x12update_agent_hosts\x18\x12 \x01(\bR\x10updateAgentHostsB\r\n" +
 	"\v_gateway_idB\v\n" +
 	"\t_base_urlB\x14\n" +
 	"\x12_destination_classB\x0e\n" +

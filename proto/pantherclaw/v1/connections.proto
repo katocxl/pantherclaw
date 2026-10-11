@@ -175,6 +175,9 @@ message Connection {
   string updated_by = 21;
   // When it was changed last.
   google.protobuf.Timestamp update_time = 22;
+  // agent_hosts are the host names agents use for this connection's API
+  // (G0 M9): a containment sandbox's edge maps each to it (HR-183).
+  repeated string agent_hosts = 28;
 }
 
 // ConnectionRoute is one route's explicit mode.
@@ -279,6 +282,15 @@ message CreateConnectionRequest {
     gte: 0
     lte: 60000
   }];
+  // agent_hosts are the host names agents use for the API; only for http
+  // and mcp connections.
+  repeated string agent_hosts = 19 [(buf.validate.field).repeated = {
+    max_items: 16
+    unique: true
+    items: {
+      string: {pattern: "^[a-z0-9]([a-z0-9.-]{0,251}[a-z0-9])?$"}
+    }
+  }];
 }
 
 // CreateConnectionResponse returns the connection.
@@ -377,6 +389,16 @@ message UpdateConnectionRequest {
     gte: 100
     lte: 60000
   }];
+  // agent_hosts replaces the agent hosts when update_agent_hosts; any
+  // change weakens enforcement (HR-183).
+  repeated string agent_hosts = 17 [(buf.validate.field).repeated = {
+    max_items: 16
+    unique: true
+    items: {
+      string: {pattern: "^[a-z0-9]([a-z0-9.-]{0,251}[a-z0-9])?$"}
+    }
+  }];
+  bool update_agent_hosts = 18;
 }
 
 // UpdateConnectionResponse returns the connection.

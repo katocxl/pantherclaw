@@ -9,11 +9,12 @@
 -- name: InsertConnection :one
 INSERT INTO pc.connections (org_id, id, name, kind, gateway_id, package, base_url, allowed_hosts, destination_class,
                             access_mode, credential_header, credential_scheme, default_mode, max_response_bytes,
-                            timeout_ms, created_by, updated_by)
+                            timeout_ms, agent_hosts, created_by, updated_by)
 VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(name), sqlc.arg(kind), sqlc.arg(gateway_id), sqlc.arg(package),
         sqlc.narg(base_url), sqlc.arg(allowed_hosts)::text[], sqlc.arg(destination_class), sqlc.arg(access_mode),
         sqlc.narg(credential_header), sqlc.narg(credential_scheme), sqlc.arg(default_mode),
-        sqlc.arg(max_response_bytes), sqlc.arg(timeout_ms), sqlc.arg(created_by), sqlc.arg(created_by))
+        sqlc.arg(max_response_bytes), sqlc.arg(timeout_ms), sqlc.arg(agent_hosts)::text[], sqlc.arg(created_by),
+        sqlc.arg(created_by))
 RETURNING *;
 
 -- name: GetConnection :one
@@ -38,7 +39,8 @@ UPDATE pc.connections
 SET gateway_id = sqlc.arg(gateway_id), base_url = sqlc.narg(base_url), allowed_hosts = sqlc.arg(allowed_hosts)::text[],
     destination_class = sqlc.arg(destination_class), access_mode = sqlc.arg(access_mode),
     default_mode = sqlc.arg(default_mode), max_response_bytes = sqlc.arg(max_response_bytes),
-    timeout_ms = sqlc.arg(timeout_ms), state = sqlc.arg(state), quarantine_reason = sqlc.narg(quarantine_reason),
+    timeout_ms = sqlc.arg(timeout_ms), agent_hosts = sqlc.arg(agent_hosts)::text[], state = sqlc.arg(state),
+    quarantine_reason = sqlc.narg(quarantine_reason),
     revision = revision + 1, updated_by = sqlc.arg(updated_by), updated_at = now()
 WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND revision = sqlc.arg(revision)
 RETURNING *;

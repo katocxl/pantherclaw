@@ -67,11 +67,12 @@ const insertConnection = `-- name: InsertConnection :one
 
 INSERT INTO pc.connections (org_id, id, name, kind, gateway_id, package, base_url, allowed_hosts, destination_class,
                             access_mode, credential_header, credential_scheme, default_mode, max_response_bytes,
-                            timeout_ms, created_by, updated_by)
+                            timeout_ms, agent_hosts, created_by, updated_by)
 VALUES ($1, $2, $3, $4, $5, $6,
         $7, $8::text[], $9, $10,
         $11, $12, $13,
-        $14, $15, $16, $16)
+        $14, $15, $16::text[], $17,
+        $17)
 RETURNING org_id, id, name, kind, gateway_id, package, base_url, allowed_hosts, destination_class, access_mode, credential_header, credential_scheme, default_mode, max_response_bytes, timeout_ms, state, quarantine_reason, revision, created_by, created_at, updated_by, updated_at, agent_hosts
 `
 
@@ -91,6 +92,7 @@ type InsertConnectionParams struct {
 	DefaultMode      string
 	MaxResponseBytes int32
 	TimeoutMs        int32
+	AgentHosts       []string
 	CreatedBy        string
 }
 
@@ -118,6 +120,7 @@ func (q *Queries) InsertConnection(ctx context.Context, arg InsertConnectionPara
 		arg.DefaultMode,
 		arg.MaxResponseBytes,
 		arg.TimeoutMs,
+		arg.AgentHosts,
 		arg.CreatedBy,
 	)
 	var i PcConnection
@@ -424,9 +427,10 @@ UPDATE pc.connections
 SET gateway_id = $1, base_url = $2, allowed_hosts = $3::text[],
     destination_class = $4, access_mode = $5,
     default_mode = $6, max_response_bytes = $7,
-    timeout_ms = $8, state = $9, quarantine_reason = $10,
-    revision = revision + 1, updated_by = $11, updated_at = now()
-WHERE org_id = $12 AND id = $13 AND revision = $14
+    timeout_ms = $8, agent_hosts = $9::text[], state = $10,
+    quarantine_reason = $11,
+    revision = revision + 1, updated_by = $12, updated_at = now()
+WHERE org_id = $13 AND id = $14 AND revision = $15
 RETURNING org_id, id, name, kind, gateway_id, package, base_url, allowed_hosts, destination_class, access_mode, credential_header, credential_scheme, default_mode, max_response_bytes, timeout_ms, state, quarantine_reason, revision, created_by, created_at, updated_by, updated_at, agent_hosts
 `
 
@@ -439,6 +443,7 @@ type UpdateConnectionParams struct {
 	DefaultMode      string
 	MaxResponseBytes int32
 	TimeoutMs        int32
+	AgentHosts       []string
 	State            string
 	QuarantineReason *string
 	UpdatedBy        string
@@ -460,6 +465,7 @@ func (q *Queries) UpdateConnection(ctx context.Context, arg UpdateConnectionPara
 		arg.DefaultMode,
 		arg.MaxResponseBytes,
 		arg.TimeoutMs,
+		arg.AgentHosts,
 		arg.State,
 		arg.QuarantineReason,
 		arg.UpdatedBy,
