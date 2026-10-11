@@ -159,16 +159,17 @@ func base64Std(s string) string { return base64.StdEncoding.EncodeToString([]byt
 const Workspace = "/workspace"
 
 // workspaceMain is `pantherclaw-probe workspace in|out`: pclaw streams the
-// agent's workspace into its volume as a tar on stdin, and back out on
-// stdout at the end (G0 M9 design decision 10). It runs as the agent's uid
-// in a container with only the volume, and no network.
+// agent's workspace, its repository cleaned, into its volume as a tar on
+// stdin, and the volume's files, never a .git, back out on stdout at the
+// end (G0 M9 design decision 4; patch only, founder decision 2026-10-11).
+// It runs as the agent's uid in a container with only the volume.
 func workspaceMain(dir string, stdin io.Reader, stdout, stderr io.Writer) int {
 	var err error
 	switch dir {
 	case "in":
 		err = workspace.Unpack(stdin, Workspace)
 	case "out":
-		err = workspace.Pack(Workspace, stdout)
+		err = workspace.PackFiles(Workspace, stdout)
 	default:
 		_, _ = fmt.Fprintln(stderr, "usage: pantherclaw-probe workspace in|out")
 		return 2
