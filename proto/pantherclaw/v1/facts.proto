@@ -54,6 +54,9 @@ enum FactType {
   FACT_TYPE_IDENTIFIER = 5;
   // {"time": "2026-10-09T12:00:00Z"}
   FACT_TYPE_TIMESTAMP = 6;
+  // {"object": {"sha": "…", "draft": false}}: members are strings, integers,
+  // booleans, lists and objects, at most 16 KiB (G0 M8).
+  FACT_TYPE_OBJECT = 7;
 }
 
 // ProviderState is a provider's state.
@@ -167,7 +170,7 @@ message FactObservation {
   // Value as typed JSON (see FactType).
   bytes value = 4 [(buf.validate.field).bytes = {
     min_len: 2
-    max_len: 4096
+    max_len: 16640
   }];
   // When the provider observed it; neither later than the server's clock
   // nor older than the declaration's maximum lag.

@@ -47,7 +47,7 @@ func (s *Store) Taken(ctx context.Context, org ids.OrgID) (func(string) bool, er
 func (s *Store) CreateProvider(ctx context.Context, org ids.OrgID, p domain.Provider, createdBy string, ev audit.Event) error {
 	err := s.Pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
 		q := dbq.New(tx)
-		if err := q.InsertFactProvider(ctx, dbq.InsertFactProviderParams{OrgID: org, ID: p.ID, Name: p.Name, ServiceAccountID: p.ServiceAccountID, CreatedBy: createdBy}); err != nil {
+		if err := q.InsertFactProvider(ctx, dbq.InsertFactProviderParams{OrgID: org, ID: p.ID, Name: p.Name, ServiceAccountID: opt(p.ServiceAccountID), CreatedBy: createdBy}); err != nil {
 			return err
 		}
 		for _, d := range p.Facts {
@@ -101,7 +101,7 @@ func (s *Store) ProviderFor(ctx context.Context, org ids.OrgID, serviceAccount i
 		if err != nil {
 			return err
 		}
-		p = domain.Provider{ID: row.ID, Org: org, Name: row.Name, ServiceAccountID: row.ServiceAccountID, State: domain.ProviderState(row.State)}
+		p = domain.Provider{ID: row.ID, Org: org, Name: row.Name, ServiceAccountID: val(row.ServiceAccountID), State: domain.ProviderState(row.State)}
 		for _, d := range decls {
 			p.Facts = append(p.Facts, domain.Declaration{
 				Name: d.Name, Type: domain.Type(d.ValueType), SubjectType: d.SubjectType,
@@ -220,7 +220,7 @@ func (s *Store) ListProviders(ctx context.Context, org ids.OrgID, includeDisable
 			provIDs = append(provIDs, r.ID)
 			at[r.ID] = i
 			out = append(out, domain.Provider{
-				ID: r.ID, Org: org, Name: r.Name, ServiceAccountID: r.ServiceAccountID, State: domain.ProviderState(r.State),
+				ID: r.ID, Org: org, Name: r.Name, ServiceAccountID: val(r.ServiceAccountID), State: domain.ProviderState(r.State),
 			})
 		}
 		decls, err := q.ListProviderDeclarations(ctx, org, provIDs)
@@ -258,4 +258,21 @@ func (s *Store) About(ctx context.Context, org ids.OrgID, subjectType, subjectID
 		return err
 	}, db.ReadOnly())
 	return out, err
+}
+
+// opt is a nullable id: nil for the zero id. A provider's service account
+// is nullable since gateway providers (migration 00081).
+func opt(u ids.UUID) *ids.UUID {
+	if u.IsZero() {
+		return nil
+	}
+	return &u
+}
+
+// val is a nullable id's value: the zero id for nil.
+func val(u *ids.UUID) ids.UUID {
+	if u == nil {
+		return ids.UUID{}
+	}
+	return *u
 }
