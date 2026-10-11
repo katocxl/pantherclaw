@@ -99,7 +99,7 @@ ALTER TABLE pc.agent_instances
 -- no empty or NULL element, none twice, at most 16 (HR-183).
 -- +goose StatementBegin
 CREATE FUNCTION pc.agent_hosts_valid(hosts text[]) RETURNS boolean
-    LANGUAGE sql IMMUTABLE AS $$
+    LANGUAGE sql IMMUTABLE SET search_path = pc, pg_temp AS $$
     SELECT hosts IS NOT NULL AND cardinality(hosts) <= 16 AND array_position(hosts, NULL) IS NULL
         AND cardinality(hosts) = (SELECT count(DISTINCT h) FROM unnest(hosts) h)
         AND NOT EXISTS (SELECT 1 FROM unnest(hosts) h
@@ -133,7 +133,7 @@ $$;
 -- decision 2): the queries hold to this, and the database does too.
 -- +goose StatementBegin
 CREATE FUNCTION pc.sandbox_session_forward() RETURNS trigger
-    LANGUAGE plpgsql AS $$
+    LANGUAGE plpgsql SET search_path = pc, pg_temp AS $$
 BEGIN
     IF OLD.state <> 'OPEN' THEN
         RAISE EXCEPTION 'sandbox session % has ended', OLD.id USING ERRCODE = 'check_violation';
@@ -152,7 +152,7 @@ CREATE TRIGGER sandbox_sessions_forward BEFORE UPDATE ON pc.sandbox_sessions
 
 -- +goose StatementBegin
 CREATE FUNCTION pc.sandbox_instance_session() RETURNS trigger
-    LANGUAGE plpgsql AS $$
+    LANGUAGE plpgsql SET search_path = pc, pg_temp AS $$
 BEGIN
     -- An instance enrolled with a session's token is that session's from
     -- its first row, so it is never admitted outside a sandbox (00087's
@@ -176,6 +176,11 @@ $$;
 -- +goose StatementEnd
 CREATE TRIGGER agent_instances_sandbox_session BEFORE INSERT OR UPDATE OF sandbox_session_id ON pc.agent_instances
     FOR EACH ROW EXECUTE FUNCTION pc.sandbox_instance_session();
+-- An enrollment token enrolls one instance (tokens are single use): now
+-- that a session's token makes its instance a sandbox instance, the
+-- database holds to it too.
+CREATE UNIQUE INDEX agent_instances_enrollment_token ON pc.agent_instances (org_id, enrollment_token_id)
+    WHERE enrollment_token_id IS NOT NULL;
 
 -- pc_app inserts no time: opened_at is the database's, so the lifetime
 -- check holds against its clock; a session starts OPEN, unbound.
@@ -189,6 +194,7 @@ GRANT UPDATE (agent_hosts) ON pc.connections TO pc_app;
 GRANT SELECT ON pc.sandbox_sessions, pc.sandbox_session_connections TO pc_audit_ro;
 
 -- +goose Down
+DROP INDEX pc.agent_instances_enrollment_token;
 REVOKE UPDATE (agent_hosts) ON pc.connections FROM pc_app;
 ALTER TABLE pc.connections DROP COLUMN agent_hosts;
 DROP FUNCTION pc.agent_hosts_valid(text[]);

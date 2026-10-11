@@ -372,6 +372,11 @@ func cmdServe(ctx context.Context, args []string, stderr io.Writer, env Env, onS
 		}
 		defer closeRetention()
 		evidenceJobs = append(evidenceJobs, retentionJobs...)
+		sandboxJobs, err := registerSandboxJobs(jreg, pool, log)
+		if err != nil {
+			return err
+		}
+		evidenceJobs = append(evidenceJobs, sandboxJobs...)
 		if err := authnapp.RegisterJanitor(jreg, pool, log); err != nil {
 			return err
 		}
