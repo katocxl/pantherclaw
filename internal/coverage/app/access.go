@@ -5,13 +5,14 @@ package app
 
 import (
 	"context"
-	"encoding/json/v2"
+	"slices"
 	"time"
 
 	"github.com/katocxl/pantherclaw/internal/coverage/domain"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
+	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
 )
 
 // Access control modes (§39.2), strongest control first.
@@ -42,7 +43,9 @@ var disclosures = map[string]string{
 // target and what limits it (§39.2–39.3): who holds it, under which modes,
 // with what scope and audience, until when, issued by whom, for which
 // agents, verified how, and which routes remain. It never carries a
-// secret; the credential is described only by its version and hosts.
+// secret: the credential is described only by its version and hosts, and
+// those, the target hosts and the gateway only to a holder of
+// connection.read.
 type AccessDetail struct {
 	Connection ids.UUID
 	Agent      *ids.UUID
@@ -65,18 +68,29 @@ type AccessDetail struct {
 	// Agents are the agents with coverage on the connection the caller may
 	// read.
 	Agents []ids.UUID
-	// Basis is what verifies the modes; VerifiedAt is the latest passing
-	// target-verifier test.
+	// Basis is what verifies the modes. Verified lists, for each read of
+	// the scopes shown, when its latest passing target-verifier test ran:
+	// a test vouches only for the read it tested (founder decision N15).
 	Basis       []string
-	VerifiedAt  *time.Time
+	Verified    []VerifiedOperation
 	Closure     *dbq.PcCoverageClosure
 	Residual    []SnapshotRoute
 	Disclosures []string
 }
 
+// VerifiedOperation is when the latest passing target-verifier test of
+// one operation ran.
+type VerifiedOperation struct {
+	Operation string
+	At        time.Time
+}
+
+// withheld is what the detail says of a field only connection.read shows.
+const withheld = "withheld: needs connection.read"
+
 // GetAccessDetail describes a connection's access, for one agent when
 // named; the caller needs coverage.read over the agent (at org scope for
-// the connection alone).
+// the connection alone), and the agent coverage on the connection.
 func (s *Service) GetAccessDetail(ctx context.Context, connection ids.UUID, agent *ids.UUID) (AccessDetail, error) {
 	out := AccessDetail{Connection: connection, Agent: agent}
 	err := s.read(ctx, func(ctx context.Context, r *readers) error {
@@ -91,36 +105,50 @@ func (s *Service) GetAccessDetail(ctx context.Context, connection ids.UUID, agen
 		} else if err != nil {
 			return err
 		}
-		if s.Verifier != nil {
-			if out.VerifiedAt, err = s.Verifier.LastPassed(ctx, r.tx, connection); err != nil {
-				return err
-			}
+		scopes, err := scopesOf(ctx, r.q, r.c.Org, connection, agent)
+		if err != nil {
+			return err
 		}
+		if agent != nil && len(scopes) == 0 {
+			return ErrNotFound // the agent has no coverage on this connection
+		}
+		// The credential, the hosts and the gateway are the connection's
+		// configuration, which coverage.read alone does not show.
+		config := r.c.Can(td.PermConnectionRead, td.OrgPath(r.c.Org))
 		switch c.AccessMode {
 		case "target_enforced":
 			out.Modes, out.Custodian = append(out.Modes, ModeTargetEnforced), "target"
 			out.Scope = []string{"one action: its operation, target and request body"}
-			out.Audience = c.AllowedHosts
 			out.Expiry, out.IssuedBy = "each action token expires with its permit", "PantherClaw's action tokens"
-			out.Basis = append(out.Basis, "the target refuses a request without a valid action token (target-verifier test)")
-		case "pantherclaw_held":
-			out.Modes, out.Custodian, out.Gateway = append(out.Modes, ModePantherClawHeld), "gateway", c.GatewayID
-			out.Expiry, out.IssuedBy = "until the sealed credential is replaced or revoked", "no credential sealed yet"
-			out.Basis = append(out.Basis, "the credential is opened only in the gateway's memory at dispatch")
-			creds, err := r.q.ListCredentialMetadata(ctx, r.c.Org, connection)
-			if err != nil {
-				return err
+			out.Basis = append(out.Basis, "the target refuses a request without a valid action token, as a target-verifier "+
+				"test of a read shows; in M9 a test vouches only for the read it tested, and writes stay PARTIAL")
+			if config {
+				out.Audience = c.AllowedHosts
 			}
-			for _, cr := range creds {
-				if cr.State == "ACTIVE" {
-					at := cr.CreatedAt
-					out.CredentialVersion, out.Scope, out.Audience = cr.Version, cr.AllowedHosts, cr.AllowedHosts
-					out.IssuedBy, out.IssuedAt = "sealed by "+cr.CreatedBy, &at
-					break
+		case "pantherclaw_held":
+			out.Modes, out.Custodian = append(out.Modes, ModePantherClawHeld), "gateway"
+			out.Expiry, out.IssuedBy = "until the sealed credential is replaced or revoked", withheld
+			out.Basis = append(out.Basis, "the credential is opened only in the gateway's memory at dispatch")
+			if config {
+				out.Gateway, out.IssuedBy = c.GatewayID, "no credential sealed yet"
+				creds, err := r.q.ListCredentialMetadata(ctx, r.c.Org, connection)
+				if err != nil {
+					return err
+				}
+				for _, cr := range creds {
+					if cr.State == "ACTIVE" {
+						at := cr.CreatedAt
+						out.CredentialVersion, out.Scope, out.Audience = cr.Version, cr.AllowedHosts, cr.AllowedHosts
+						out.IssuedBy, out.IssuedAt = "sealed by "+cr.CreatedBy, &at
+						break
+					}
 				}
 			}
 		default:
 			out.Custodian, out.Expiry, out.IssuedBy = "agent", "unknown: the agent's own access", "unknown"
+		}
+		if out.Verified, err = s.verifiedReads(ctx, r, connection, scopes); err != nil {
+			return err
 		}
 		if out.Agents, err = r.agentsOf(ctx, connection); err != nil {
 			return err
@@ -129,12 +157,14 @@ func (s *Service) GetAccessDetail(ctx context.Context, connection ids.UUID, agen
 			if out.Closure, err = s.currentClosure(ctx, r.q, r.c.Org, *agent, connection); err != nil {
 				return err
 			}
+			var current *ids.UUID
 			if out.Closure != nil {
+				current = &out.Closure.ID
 				out.Modes = append(out.Modes, ModeConstrainedRuntime)
 				out.ExpiresAt = &out.Closure.ExpiresAt
 				out.Basis = append(out.Basis, "sandbox closure evidence "+out.Closure.ID.String())
 			}
-			if out.Residual, err = residual(ctx, r.q, r.c.Org, *agent, connection); err != nil {
+			if out.Residual, err = s.residual(ctx, r, *agent, connection, current); err != nil {
 				return err
 			}
 		}
@@ -148,6 +178,37 @@ func (s *Service) GetAccessDetail(ctx context.Context, connection ids.UUID, agen
 		return nil
 	})
 	return out, err
+}
+
+// verifiedReads lists, for each operation of scopes that the connection's
+// pinned package defines as a read, when its latest passing
+// target-verifier test ran; operations without one are left out.
+func (s *Service) verifiedReads(ctx context.Context, r *readers, connection ids.UUID, scopes []domain.Scope) ([]VerifiedOperation, error) {
+	if s.Verifier == nil || len(scopes) == 0 {
+		return nil, nil
+	}
+	b, err := r.q.CoverageBinding(ctx, r.c.Org, connection)
+	if err != nil || b.PackageVersionID == nil {
+		return nil, err
+	}
+	pkg, err := packages{}.get(ctx, r.q, r.c.Org, *b.PackageVersionID)
+	if err != nil {
+		return nil, err
+	}
+	var out []VerifiedOperation
+	for _, sc := range scopes {
+		if !readOnly(pkg, sc.Operation) || slices.ContainsFunc(out, func(v VerifiedOperation) bool { return v.Operation == sc.Operation }) {
+			continue
+		}
+		at, err := s.Verifier.LastPassed(ctx, r.tx, connection, sc.Operation)
+		if err != nil {
+			return nil, err
+		}
+		if at != nil {
+			out = append(out, VerifiedOperation{Operation: sc.Operation, At: *at})
+		}
+	}
+	return out, nil
 }
 
 // agentsOf lists the agents with coverage on a connection that the caller
@@ -203,24 +264,34 @@ func (s *Service) currentClosure(ctx context.Context, q *dbq.Queries, org ids.Or
 }
 
 // residual lists the routes of the agent's scopes on the connection that
-// are neither mediated nor closed, once each.
-func residual(ctx context.Context, q *dbq.Queries, org ids.OrgID, agent, connection ids.UUID) ([]SnapshotRoute, error) {
-	rows, err := q.ListCurrentCoverageSnapshotsPage(ctx, dbq.ListCurrentCoverageSnapshotsPageParams{
-		OrgID: org, ConnectionID: &connection, AgentID: &agent, MaxRows: 200,
+// are neither mediated nor closed by the current closure, once each. Each
+// scope reads as its record does now: a lapsed one as recomputed, so a
+// route a stale snapshot showed mediated or closed is open again, and so
+// is a route an earlier closure than the current one closed.
+func (s *Service) residual(ctx context.Context, r *readers, agent, connection ids.UUID, current *ids.UUID) ([]SnapshotRoute, error) {
+	rows, err := r.q.ListCurrentCoverageSnapshotsPage(ctx, dbq.ListCurrentCoverageSnapshotsPageParams{
+		OrgID: r.c.Org, ConnectionID: &connection, AgentID: &agent, MaxRows: 200,
 	})
 	if err != nil {
 		return nil, err
 	}
+	pkgs, now := packages{}, s.now()
 	seen := map[SnapshotRoute]bool{}
 	out := []SnapshotRoute{}
 	for _, row := range rows {
-		var b Snapshot
-		if err := json.Unmarshal(row.Body, &b); err != nil {
+		sc := domain.Scope{Agent: row.AgentID, Connection: row.ConnectionID, Operation: row.Operation}
+		rec, err := s.record(ctx, r.tx, sc, &row, false, pkgs, now)
+		if err != nil {
 			return nil, err
 		}
-		for _, rt := range b.Routes {
+		routes := rec.Body.Routes
+		if rec.Recomputed != nil {
+			routes = snapshotOf(sc, *rec.Recomputed, nil).Routes
+		}
+		for _, rt := range routes {
+			closed := rt.Status == string(domain.StatusClosed) && rt.Closure != nil && current != nil && *rt.Closure == *current
 			key := SnapshotRoute{Kind: rt.Kind, Channel: rt.Channel, Locator: rt.Locator, Status: rt.Status}
-			if rt.Status == string(domain.StatusMediated) || rt.Status == string(domain.StatusClosed) || seen[key] {
+			if rt.Status == string(domain.StatusMediated) || closed || seen[key] {
 				continue
 			}
 			seen[key] = true
