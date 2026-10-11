@@ -6,15 +6,22 @@
 -- ENFORCED at once is recorded in the same transaction as the change, by
 -- triggers, so no code path can forget one:
 --
---   - a connection that moves to another gateway ('gateway'), or whose
---     kind, package, target, hosts, destination class, access mode,
---     credential placement or state changes ('connection');
+--   - a connection that moves to another gateway ('gateway'), or any other
+--     change to a connection but its name, limits and bookkeeping
+--     ('connection'): the row is compared as a whole, so columns added
+--     later, such as 00090's agent_hosts, are covered without a change
+--     here;
 --   - a connection's default route mode, or one route's mode
 --     ('route_mode');
 --   - a sealed credential sealed, superseded or revoked ('credential');
 --   - a package's pinned version ('package_version'), for every connection
 --     of the package;
---   - a gateway's state ('gateway'), for every connection it serves.
+--   - a gateway's state ('gateway'), for every connection it serves, but
+--     not a certificate renewal: the binding is the gateway;
+--   - an agent instance admitted outside a sandbox ('instance'), for every
+--     connection the agent has closure evidence or a snapshot for. Its
+--     sandbox_session_id comes with 00090 and is read through to_jsonb, so
+--     until then every admitted instance counts as outside a sandbox.
 --
 -- The sandbox records image and configuration changes itself
 -- (sandbox_image, sandbox_config). The reassess job lists orgs through the
@@ -43,6 +50,11 @@ CREATE FUNCTION pc.coverage_connection_changed() RETURNS trigger
 LANGUAGE plpgsql
 SET search_path = pc, pg_temp
 AS $$
+DECLARE
+    -- What never changes what a connection lets an agent reach, and the two
+    -- columns with kinds of their own.
+    quiet constant text[] := ARRAY['name', 'max_response_bytes', 'timeout_ms', 'quarantine_reason', 'revision',
+                                   'created_by', 'created_at', 'updated_by', 'updated_at', 'gateway_id', 'default_mode'];
 BEGIN
     IF NEW.gateway_id IS DISTINCT FROM OLD.gateway_id THEN
         INSERT INTO pc.coverage_invalidations (org_id, id, kind, connection_id, subject_id, detail)
@@ -52,10 +64,7 @@ BEGIN
         INSERT INTO pc.coverage_invalidations (org_id, id, kind, connection_id, subject_id, detail)
         VALUES (NEW.org_id, pc.coverage_uuid_v7(), 'route_mode', NEW.id, NEW.id, 'default mode ' || NEW.default_mode);
     END IF;
-    IF (NEW.kind, NEW.package, NEW.base_url, NEW.allowed_hosts, NEW.destination_class, NEW.access_mode,
-        NEW.credential_header, NEW.credential_scheme, NEW.state)
-       IS DISTINCT FROM (OLD.kind, OLD.package, OLD.base_url, OLD.allowed_hosts, OLD.destination_class, OLD.access_mode,
-        OLD.credential_header, OLD.credential_scheme, OLD.state) THEN
+    IF (to_jsonb(NEW) - quiet) IS DISTINCT FROM (to_jsonb(OLD) - quiet) THEN
         INSERT INTO pc.coverage_invalidations (org_id, id, kind, connection_id, subject_id, detail)
         VALUES (NEW.org_id, pc.coverage_uuid_v7(), 'connection', NEW.id, NEW.id, 'connection changed');
     END IF;
@@ -138,6 +147,28 @@ $$;
 -- +goose StatementEnd
 CREATE TRIGGER gateways_coverage AFTER UPDATE OF state ON pc.gateways
     FOR EACH ROW EXECUTE FUNCTION pc.coverage_gateway_changed();
+
+-- +goose StatementBegin
+CREATE FUNCTION pc.coverage_instance_admitted() RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = pc, pg_temp
+AS $$
+BEGIN
+    IF NEW.state = 'ADMITTED' AND (TG_OP = 'INSERT' OR OLD.state IS DISTINCT FROM 'ADMITTED')
+       AND to_jsonb(NEW) ->> 'sandbox_session_id' IS NULL THEN
+        INSERT INTO pc.coverage_invalidations (org_id, id, kind, connection_id, agent_id, subject_id, detail)
+        SELECT NEW.org_id, pc.coverage_uuid_v7(), 'instance', s.connection_id, NEW.agent_id, NEW.id,
+               'instance admitted outside a sandbox'
+        FROM (SELECT c.connection_id FROM pc.coverage_closures c WHERE c.org_id = NEW.org_id AND c.agent_id = NEW.agent_id
+              UNION
+              SELECT n.connection_id FROM pc.coverage_snapshots n WHERE n.org_id = NEW.org_id AND n.agent_id = NEW.agent_id) s;
+    END IF;
+    RETURN NULL;
+END;
+$$;
+-- +goose StatementEnd
+CREATE TRIGGER agent_instances_coverage AFTER INSERT OR UPDATE OF state ON pc.agent_instances
+    FOR EACH ROW EXECUTE FUNCTION pc.coverage_instance_admitted();
 
 GRANT EXECUTE ON FUNCTION pc.coverage_uuid_v7() TO pc_app;
 
@@ -320,6 +351,8 @@ BEGIN
                 ORDER BY 1
                 LIMIT p_max_rows;
         WHEN 'checkpoints_due' THEN
+            -- Orgs whose chain grew past their latest checkpoint and whose
+            -- checkpointing has not stopped.
             RETURN QUERY
                 SELECT h.org_id, h.org_id
                 FROM pc.ledger_heads h
@@ -328,6 +361,8 @@ BEGIN
                 ORDER BY 1
                 LIMIT p_max_rows;
         WHEN 'integrity_due' THEN
+            -- Orgs with a checkpoint whose chain was not re-verified in the
+            -- last day.
             RETURN QUERY
                 SELECT h.org_id, h.org_id
                 FROM pc.ledger_heads h
@@ -344,6 +379,8 @@ BEGIN
                 ORDER BY 1
                 LIMIT p_max_rows;
         WHEN 'retention_due' THEN
+            -- Active orgs whose retention job has not run successfully in
+            -- the last day (HR-198).
             RETURN QUERY
                 SELECT o.id, o.id
                 FROM pc.orgs o
@@ -363,11 +400,13 @@ REVOKE SELECT (org_id, id, created_at) ON pc.transactions FROM pc_lister;
 REVOKE SELECT (org_id, transactions_after) ON pc.coverage_inventory FROM pc_lister;
 REVOKE SELECT (org_id, reassessed_at) ON pc.coverage_invalidations FROM pc_lister;
 DROP INDEX pc.coverage_snapshots_enforced;
+DROP TRIGGER agent_instances_coverage ON pc.agent_instances;
 DROP TRIGGER gateways_coverage ON pc.gateways;
 DROP TRIGGER package_pins_coverage ON pc.package_pins;
 DROP TRIGGER credentials_coverage ON pc.credentials;
 DROP TRIGGER connection_routes_coverage ON pc.connection_routes;
 DROP TRIGGER connections_coverage ON pc.connections;
+DROP FUNCTION pc.coverage_instance_admitted();
 DROP FUNCTION pc.coverage_gateway_changed();
 DROP FUNCTION pc.coverage_package_pinned();
 DROP FUNCTION pc.coverage_credential_changed();

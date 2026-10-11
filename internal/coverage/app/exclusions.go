@@ -14,6 +14,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/coverage/domain"
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
+	napp "github.com/katocxl/pantherclaw/internal/notifications/app"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
@@ -50,7 +51,7 @@ func (r ExclusionRequest) valid() bool {
 }
 
 // excluder is the caller, who must be a person signed in as themselves
-// holding coverage.exclude at org scope (HR-212).
+// holding coverage.manage at org scope (HR-212).
 func excluder(ctx context.Context) (tenancy.Caller, error) {
 	c, err := tenancy.CallerFrom(ctx)
 	if err != nil {
@@ -59,7 +60,7 @@ func excluder(ctx context.Context) (tenancy.Caller, error) {
 	if !c.Human() || c.Credential == tenancy.CredAPIKey {
 		return c, ErrHumanOnly
 	}
-	return c, c.Require(td.PermCoverageExclude, td.OrgPath(c.Org))
+	return c, c.Require(td.PermCoverageManage, td.OrgPath(c.Org))
 }
 
 // CreateExclusion records an exclusion (HR-212): a weakening change, so
@@ -102,7 +103,10 @@ func (s *Service) CreateExclusion(ctx context.Context, r ExclusionRequest) (dbq.
 		if err != nil {
 			return err
 		}
-		return s.excluded(ctx, tx, c, out, "coverage.exclusion_created")
+		if err := s.excluded(ctx, tx, c, out, "coverage.exclusion_created"); err != nil {
+			return err
+		}
+		return s.notifyExcluded(ctx, tx, c, out, r.ExpiresInDays)
 	})
 	return out, err
 }
@@ -132,6 +136,42 @@ func (s *Service) excluded(ctx context.Context, tx db.TenantTx, c tenancy.Caller
 	return s.RecordInvalidation(ctx, tx, domain.Invalidation{
 		Kind: domain.InvExclusion, Connection: x.ConnectionID, Agent: x.AgentID, Subject: &x.ID,
 	})
+}
+
+// Notifier enqueues notifications (M5).
+type Notifier interface {
+	Enqueue(ctx context.Context, tx db.TenantTx, m napp.Message) (napp.Enqueued, error)
+}
+
+// notifyExcluded tells the org's security recipients of a new exclusion,
+// a weakening change (HR-212), with its scope in fixed words and never its
+// reason.
+func (s *Service) notifyExcluded(ctx context.Context, tx db.TenantTx, c tenancy.Caller, x dbq.PcCoverageExclusion, days int) error {
+	if s.Notify == nil {
+		return nil
+	}
+	conn, err := dbq.New(tx).GetConnection(ctx, c.Org, x.ConnectionID)
+	if err != nil {
+		return err
+	}
+	scope := "the whole scope"
+	if x.RouteKind != nil {
+		scope = "the " + *x.RouteKind + " route"
+	}
+	if x.Operation != nil {
+		scope += " of " + *x.Operation
+	} else {
+		scope += " of every operation"
+	}
+	if x.AgentID != nil {
+		scope += " for agent " + x.AgentID.String()
+	} else {
+		scope += " for every agent"
+	}
+	_, err = s.Notify.Enqueue(ctx, tx, napp.Message{Org: c.Org, Type: "security.coverage_excluded", Params: map[string]string{
+		"user": c.Principal.String(), "connection": conn.Name, "scope": scope, "days": strconv.Itoa(days),
+	}})
+	return err
 }
 
 // RevokeExclusion ends an active exclusion at once (audited).

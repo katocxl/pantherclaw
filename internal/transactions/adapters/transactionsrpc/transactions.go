@@ -98,7 +98,7 @@ func (s *Transactions) GetTransactionEvidence(ctx context.Context, req *pantherc
 	for _, d := range e.Decisions {
 		out.DecisionReceipts = append(out.DecisionReceipts, &pantherclawv1.DecisionReceipt{
 			Evaluation: int32(d.Evaluation), ReceiptJws: d.JWS, Integrity: integrity(d.Integrity), //nolint:gosec // G115: at most 64
-			CreateTime: timestamppb.New(d.Created),
+			CreateTime: timestamppb.New(d.Created), Coverage: coverageOf(d.JWS),
 		})
 	}
 	if b := e.Basis; b != nil {

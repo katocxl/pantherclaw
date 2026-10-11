@@ -368,6 +368,11 @@ func (a *Authority) bind(ctx context.Context, gw Gateway, ev *pipeline.Evaluatio
 	w.Sign = func(budgets []BudgetState) (Receipt, error) {
 		r, err := a.receipt(gw, ev, w.TransactionID, w.Evaluation, budgets, claim)
 		r.Inputs = inputs
+		if claim != nil {
+			if id, perr := ids.ParseUUID(claim.Snapshot); perr == nil {
+				r.CoverageSnapshot = &id
+			}
+		}
 		res.Receipt = r.JWS
 		return r, err
 	}
