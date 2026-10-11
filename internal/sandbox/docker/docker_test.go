@@ -295,32 +295,39 @@ func TestErrorNamesTheSubcommandNotItsValues(t *testing.T) {
 	}
 }
 
-// TestHR085_OnlyTheProbeGetsNETRAWBack: NET_RAW is the one capability a
-// container may get back, only when asked, and the self-check holds the
-// engine to exactly that.
-func TestHR085_OnlyTheProbeGetsNETRAWBack(t *testing.T) {
+// TestHR085_NoCapabilityIsAddedAndOnlyTheProbeMayPing: no container gets a
+// capability back; the probe container's own group alone may open ICMP
+// sockets, and the self-check holds the engine to exactly that.
+func TestHR085_NoCapabilityIsAddedAndOnlyTheProbeMayPing(t *testing.T) {
 	plain, _ := agent().args()
-	if slices.Contains(plain, "--cap-add") {
-		t.Fatalf("a capability was added: %q", plain)
+	if slices.Contains(plain, "--cap-add") || !strings.Contains(strings.Join(plain, " "), "ping_group_range=1 0") {
+		t.Fatalf("agent args %q", plain)
 	}
 	p := agent()
-	p.NetRaw = true
+	p.PingGID = 65532
 	args, _ := p.args()
-	if !strings.Contains(strings.Join(args, " "), "--cap-drop ALL") || !strings.Contains(strings.Join(args, " "), "--cap-add NET_RAW") {
+	if j := strings.Join(args, " "); !strings.Contains(j, "--cap-drop ALL") || strings.Contains(j, "--cap-add") || !strings.Contains(j, "ping_group_range=65532 65532") {
 		t.Fatalf("probe args %q", args)
 	}
-	withRaw := strings.Replace(hardenedInspect, `"CapAdd":null`, `"CapAdd":["CAP_NET_RAW"]`, 1)
-	if err := verifyJSON(t, p, withRaw); err != nil {
-		t.Fatalf("probe with NET_RAW: %v", err)
+	pinging := strings.Replace(hardenedInspect, `"1 0"`, `"65532 65532"`, 1)
+	if err := verifyJSON(t, p, pinging); err != nil {
+		t.Fatalf("probe that may ping: %v", err)
 	}
 	if err := verifyJSON(t, p, hardenedInspect); !errors.Is(err, ErrIsolation) {
-		t.Fatalf("probe without NET_RAW: %v", err)
+		t.Fatalf("probe without its ping group: %v", err)
 	}
-	if err := verifyJSON(t, agent(), withRaw); !errors.Is(err, ErrIsolation) {
-		t.Fatalf("agent with NET_RAW: %v", err)
+	if err := verifyJSON(t, agent(), pinging); !errors.Is(err, ErrIsolation) {
+		t.Fatalf("agent that may ping: %v", err)
 	}
-	p.Runtime = RuntimeRunsc
-	if err := verifyJSON(t, p, withRaw); !errors.Is(err, ErrIsolation) {
+	if err := verifyJSON(t, p, strings.Replace(pinging, `"CapAdd":null`, `"CapAdd":["CAP_NET_RAW"]`, 1)); !errors.Is(err, ErrIsolation) {
+		t.Fatalf("a capability added: %v", err)
+	}
+	p.PingGID = 1000
+	if _, err := p.args(); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("another group's ping range: %v", err)
+	}
+	p.PingGID, p.Runtime = 65532, RuntimeRunsc
+	if err := verifyJSON(t, p, pinging); !errors.Is(err, ErrIsolation) {
 		t.Fatalf("runsc asked, runc got: %v", err)
 	}
 }
