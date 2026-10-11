@@ -167,3 +167,31 @@ func TestHR204_AppJWTsLiveAtMostTenMinutes(t *testing.T) {
 		t.Fatalf("another key: %v", err)
 	}
 }
+
+// TestHR203_AWiderGrantIsRevokedAndRefused: GitHub answering with more
+// repositories or permissions than asked is CREDENTIAL_SCOPE_MISMATCH: the
+// token is revoked at once and never placed (ADR-0021 item 3).
+func TestHR203_AWiderGrantIsRevokedAndRefused(t *testing.T) {
+	w := newGitHub(t)
+	var revoked int
+	fake := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodPost:
+			rw.WriteHeader(http.StatusCreated)
+			_, _ = rw.Write([]byte(`{"token":"ghs_wider","permissions":{"contents":"write"},"repositories":[{"full_name":"acme/payments"}]}`))
+		case r.Method == http.MethodDelete && r.Header.Get("Authorization") == "Bearer ghs_wider":
+			revoked++
+			rw.WriteHeader(http.StatusNoContent)
+		}
+	}))
+	t.Cleanup(fake.Close)
+	c, err := egress.NewClient(fake.URL, 5*time.Second, 0, []netip.Prefix{netip.MustParsePrefix("127.0.0.1/32")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	u, _ := url.Parse(fake.URL)
+	_, err = MintInstallationToken(context.Background(), c, fake.URL, []string{u.Host}, w.app, "acme", "payments", map[string]string{"contents": "read"}, time.Now())
+	if !errors.Is(err, ErrScopeMismatch) || revoked != 1 {
+		t.Fatalf("wider grant: %v, revoked %d", err, revoked)
+	}
+}

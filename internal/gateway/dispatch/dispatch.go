@@ -100,11 +100,14 @@ const (
 	CodeDispatchRefused       = "dispatch_refused"
 	CodeRequest               = "request_not_built"
 	CodeCredential            = "credential_unavailable" //nolint:gosec // G101: an error code, not a credential
-	CodeEgressDenied          = "egress_denied"
-	CodeTargetUnreachable     = "target_unreachable"
-	CodeTargetRefused         = "target_refused"
-	CodeTargetUncertain       = "target_uncertain"
-	CodeNotRecorded           = "outcome_not_recorded"
+	// CodeScopeMismatch: GitHub granted a wider token than requested; it
+	// was revoked and nothing was sent (ADR-0021 item 3).
+	CodeScopeMismatch     = "credential_scope_mismatch"
+	CodeEgressDenied      = "egress_denied"
+	CodeTargetUnreachable = "target_unreachable"
+	CodeTargetRefused     = "target_refused"
+	CodeTargetUncertain   = "target_uncertain"
+	CodeNotRecorded       = "outcome_not_recorded"
 	// An upstream MCP tool reported an error (isError).
 	CodeToolError = "tool_error"
 	// An upstream MCP server asked for input the gateway never gives
@@ -570,15 +573,26 @@ func (e *Engine) send(ctx context.Context, r Result, conn *control.Connection, d
 		p.req.Header.Set(HeaderAction, tok)
 	}
 	var secret []byte
+	revoke := func() {}
 	if conn.GetAccessMode() == "pantherclaw_held" {
 		s, release, err := e.credential(ctx, conn, def, a.Action.Target, p.req, p.client)
 		if err != nil {
 			e.log.WarnContext(ctx, "gateway.credential_unavailable", slog.String("transaction_id", want.Txn),
 				slog.String("connection_id", conn.GetId()), pclog.Err(err))
-			return e.record(ctx, r, want, pb.Outcome_OUTCOME_FAILED, 0, nil, 0, EnforcementFailed, CodeCredential, t)
+			code := CodeCredential
+			if errors.Is(err, broker.ErrScopeMismatch) {
+				code = CodeScopeMismatch
+			}
+			return e.record(ctx, r, want, pb.Outcome_OUTCOME_FAILED, 0, nil, 0, EnforcementFailed, code, t)
 		}
 		secret = s
-		defer release()
+		// A minted token is revoked as soon as its answer is read, before
+		// the outcome is recorded (HR-203); the deferred call covers every
+		// other path.
+		var once sync.Once
+		done := func() { once.Do(release) }
+		defer done()
+		revoke = done
 	}
 	start := time.Now()
 	res, err := p.client.Do(p.req)
@@ -609,6 +623,7 @@ func (e *Engine) send(ctx context.Context, r Result, conn *control.Connection, d
 	}
 	// Bodies an active capture profile asks for, never headers (HR-199).
 	caps := captures(conn, def.Operation, r.Monitor, p.out.Body, response, secret, time.Now())
+	revoke()
 	return e.record(ctx, r, want, outcome, res.Status, digest, elapsed, class, code, t, func(req *pb.RecordExecutionRequest) {
 		req.TargetRef, req.Captures = ref, caps
 	})

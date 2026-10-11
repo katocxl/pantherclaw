@@ -31,7 +31,9 @@ import (
 const (
 	jwtBackdate = 60 * time.Second
 	jwtLifetime = 9 * time.Minute
-	maxToken    = 1 << 10
+	// maxToken bounds an opaque token: GitHub may change its format, and
+	// egress headers allow 4 KiB (ADR-0021 item 4).
+	maxToken = 4 << 10
 )
 
 // Errors of a per-action installation token. Each fails the dispatch
@@ -39,7 +41,10 @@ const (
 var (
 	ErrScope   = errors.New("broker: the operation declares no GitHub App permissions, or its target names no repository")
 	ErrAccount = errors.New("broker: the target repository is not on the account the App is installed on")
-	ErrMint    = errors.New("broker: GitHub did not mint an installation token for exactly this repository and these permissions")
+	ErrMint    = errors.New("broker: GitHub did not mint an installation token")
+	// ErrScopeMismatch reports a token GitHub granted for more than was
+	// asked: it is revoked and nothing is dispatched (ADR-0021 item 3).
+	ErrScopeMismatch = errors.New("broker: GitHub granted a wider token than requested")
 )
 
 // Sender sends requests to the connection's host only: the connection's
@@ -116,31 +121,46 @@ func MintInstallationToken(ctx context.Context, s Sender, baseURL string, hosts 
 	}
 	if !slices.Equal(granted, []string{owner + "/" + repo}) || !maps.Equal(out.Permissions, permissions) {
 		_ = t.Revoke(ctx, s) // refused either way; an unrevoked token expires within the hour
-		return nil, fmt.Errorf("%w: GitHub granted another scope", ErrMint)
+		return nil, ErrScopeMismatch
 	}
 	return t, nil
 }
 
-// opaque accepts a token as GitHub documents it, opaque: printable ASCII
-// without spaces, at most 1 KiB (stateless tokens are about 520 bytes).
+// opaque accepts a token as GitHub documents it, opaque: it is not parsed,
+// only kept to what a header can carry (printable ASCII without spaces, at
+// most 4 KiB; stateless tokens are about 520 bytes).
 func opaque(t string) bool {
 	return t != "" && len(t) <= maxToken && !strings.ContainsFunc(t, func(r rune) bool { return r <= ' ' || r > '~' })
 }
 
 // Place sets "Authorization: Bearer <token>" on req, for the credential's
-// hosts only.
+// hosts only, with the pinned GitHub API version (ADR-0021 item 7).
 func (t *Installation) Place(req *http.Request) error {
+	apiHeaders(req)
 	return Place(req, t.hosts, domain.GitHubAppHeader, domain.GitHubAppScheme, t.token)
 }
 
-// Revoke ends the token at GitHub (DELETE /installation/token) and clears
-// it. A failed revocation leaves a token that expires within the hour; it
-// is reported, never retried with the token kept.
+// apiHeaders pins the GitHub REST API version and media type.
+func apiHeaders(req *http.Request) {
+	req.Header.Set("Accept", "application/vnd.github+json")
+	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
+}
+
+// Revoke ends the token at GitHub (DELETE /installation/token), trying a
+// second time when the first fails, and clears it. A token that could not
+// be revoked expires within the hour GitHub set; the caller reports it
+// (ADR-0021 item 6).
 func (t *Installation) Revoke(ctx context.Context, s Sender) error {
 	defer clear(t.token)
-	res, err := send(ctx, s, t.base, t.hosts, http.MethodDelete, "/installation/token", nil, t.token)
-	if err == nil && res.Status != http.StatusNoContent {
-		err = fmt.Errorf("broker: revoking the installation token answered %d", res.Status)
+	var err error
+	for range 2 {
+		var res egress.Response
+		if res, err = send(ctx, s, t.base, t.hosts, http.MethodDelete, "/installation/token", nil, t.token); err == nil && res.Status == http.StatusNoContent {
+			return nil
+		}
+		if err == nil {
+			err = fmt.Errorf("broker: revoking the installation token answered %d", res.Status)
+		}
 	}
 	return err
 }
@@ -153,8 +173,7 @@ func send(ctx context.Context, s Sender, base *url.URL, hosts []string, method, 
 	if err != nil {
 		return egress.Response{}, err
 	}
-	req.Header.Set("Accept", "application/vnd.github+json")
-	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
+	apiHeaders(req)
 	if err := Place(req, hosts, domain.GitHubAppHeader, domain.GitHubAppScheme, bearer); err != nil {
 		return egress.Response{}, err
 	}
