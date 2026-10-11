@@ -482,6 +482,12 @@ type PcCoverageInvalidation struct {
 	ReassessedAt *time.Time
 }
 
+type PcCoverageInventory struct {
+	OrgID             ids.OrgID
+	TransactionsAfter ids.UUID
+	RefreshedAt       time.Time
+}
+
 type PcCoverageRoute struct {
 	OrgID        ids.OrgID
 	ID           ids.UUID

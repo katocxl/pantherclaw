@@ -109,7 +109,7 @@ func (s *Service) ListClosures(ctx context.Context, f Filter, size int32, token 
 	var next string
 	err = s.read(ctx, func(ctx context.Context, r *readers) error {
 		rows, err := r.q.ListCoverageClosuresPage(ctx, dbq.ListCoverageClosuresPageParams{
-			OrgID: r.c.Org, ConnectionID: f.Connection, AgentID: f.Agent, Before: before(p), MaxRows: p.Limit(),
+			OrgID: r.c.Org, ConnectionID: f.Connection, AgentID: f.Agent, Before: cursor(p), MaxRows: p.Limit(),
 		})
 		if err != nil {
 			return err
@@ -131,7 +131,7 @@ func (s *Service) ListClosures(ctx context.Context, f Filter, size int32, token 
 	return out, next, err
 }
 
-func before(p page.Request) *ids.UUID {
+func cursor(p page.Request) *ids.UUID {
 	if p.After.IsZero() {
 		return nil
 	}

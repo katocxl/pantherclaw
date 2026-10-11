@@ -155,6 +155,17 @@ func (q *Queries) CoverageInvalidationsSince(ctx context.Context, arg CoverageIn
 	return items, nil
 }
 
+const coverageInventoryWatermark = `-- name: CoverageInventoryWatermark :one
+SELECT transactions_after FROM pc.coverage_inventory WHERE org_id = $1
+`
+
+func (q *Queries) CoverageInventoryWatermark(ctx context.Context, orgID ids.OrgID) (ids.UUID, error) {
+	row := q.db.QueryRow(ctx, coverageInventoryWatermark, orgID)
+	var transactions_after ids.UUID
+	err := row.Scan(&transactions_after)
+	return transactions_after, err
+}
+
 const coverageRoutesForScope = `-- name: CoverageRoutesForScope :many
 SELECT org_id, id, agent_id, connection_id, operation, kind, channel, locator, observation, source, source_ref, mode, attributes, seen_count, first_seen_at, last_seen_at FROM pc.coverage_routes
 WHERE org_id = $1 AND connection_id = $2
@@ -203,6 +214,55 @@ func (q *Queries) CoverageRoutesForScope(ctx context.Context, arg CoverageRoutes
 			&i.SeenCount,
 			&i.FirstSeenAt,
 			&i.LastSeenAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const coverageTrafficAfter = `-- name: CoverageTrafficAfter :many
+SELECT t.id, r.agent_id, t.connection_id, t.operation, t.channel, t.mode
+FROM pc.transactions t
+JOIN pc.runs r ON r.org_id = t.org_id AND r.id = t.run_id
+WHERE t.org_id = $1 AND ($2::uuid IS NULL OR t.id > $2::uuid)
+  AND t.created_at < now() - interval '1 minute'
+ORDER BY t.id
+LIMIT $3
+`
+
+type CoverageTrafficAfterRow struct {
+	ID           ids.UUID
+	AgentID      ids.UUID
+	ConnectionID *ids.UUID
+	Operation    string
+	Channel      *string
+	Mode         string
+}
+
+// The org's transactions after the watermark, in id order and a minute
+// behind the clock, with the agent of their run; connection and channel
+// are NULL for an action that did not come through a gateway.
+func (q *Queries) CoverageTrafficAfter(ctx context.Context, orgID ids.OrgID, after *ids.UUID, maxRows int32) ([]CoverageTrafficAfterRow, error) {
+	rows, err := q.db.Query(ctx, coverageTrafficAfter, orgID, after, maxRows)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []CoverageTrafficAfterRow{}
+	for rows.Next() {
+		var i CoverageTrafficAfterRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.AgentID,
+			&i.ConnectionID,
+			&i.Operation,
+			&i.Channel,
+			&i.Mode,
 		); err != nil {
 			return nil, err
 		}
@@ -1152,6 +1212,16 @@ func (q *Queries) RevokeCoverageExclusion(ctx context.Context, revokedBy *ids.UU
 		&i.RevokedAt,
 	)
 	return i, err
+}
+
+const setCoverageInventoryWatermark = `-- name: SetCoverageInventoryWatermark :exec
+INSERT INTO pc.coverage_inventory (org_id, transactions_after) VALUES ($1, $2)
+ON CONFLICT (org_id) DO UPDATE SET transactions_after = EXCLUDED.transactions_after, refreshed_at = now()
+`
+
+func (q *Queries) SetCoverageInventoryWatermark(ctx context.Context, orgID ids.OrgID, transactionsAfter ids.UUID) error {
+	_, err := q.db.Exec(ctx, setCoverageInventoryWatermark, orgID, transactionsAfter)
+	return err
 }
 
 const upsertCoverageFinding = `-- name: UpsertCoverageFinding :one
