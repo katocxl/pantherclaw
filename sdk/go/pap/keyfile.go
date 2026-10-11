@@ -11,6 +11,7 @@ import (
 	"encoding/json/v2"
 	"errors"
 	"fmt"
+	"io/fs"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -40,6 +41,18 @@ func (k KeyFile) String() string {
 
 // GoString is String, for %#v.
 func (k KeyFile) GoString() string { return k.String() }
+
+// keyFileJSON is a KeyFile without its methods: the file's own encoding.
+type keyFileJSON KeyFile
+
+// MarshalJSON encodes the key file without its private key, so a JSON
+// dump of a configuration that holds one never shows the seed. Marshal
+// and WriteKeyFile write the file itself.
+func (k KeyFile) MarshalJSON() ([]byte, error) {
+	r := keyFileJSON(k)
+	r.PrivateKey = "[redacted]"
+	return json.Marshal(r)
+}
 
 // LogValue is the key file for log/slog, without its private key.
 func (k KeyFile) LogValue() slog.Value {
@@ -84,7 +97,7 @@ func (k KeyFile) Key() (ed25519.PrivateKey, error) {
 // Marshal returns the file's bytes as PantherClaw writes them: members in
 // declaration order, empty ones left out, no whitespace, a final newline.
 func (k KeyFile) Marshal() ([]byte, error) {
-	b, err := json.Marshal(k)
+	b, err := json.Marshal(keyFileJSON(k))
 	if err != nil {
 		return nil, err
 	}
@@ -160,9 +173,30 @@ func WriteKeyFile(path string, k KeyFile, replace bool) (err error) {
 		return os.Rename(tmp, path)
 	}
 	// A link fails when path exists, so an existing key is never replaced.
-	if err := os.Link(tmp, path); err != nil {
+	err = link(tmp, path)
+	switch {
+	case err == nil:
+		_ = os.Remove(tmp)
+		return nil
+	case errors.Is(err, fs.ErrExist):
 		return err
 	}
-	_ = os.Remove(tmp)
+	// The filesystem has no hard links (FAT, exFAT, some network or FUSE
+	// mounts): claim the name with O_EXCL, then rename the key over it.
+	claim, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600) //nolint:gosec // G304: the caller chooses the path
+	if err != nil {
+		return err
+	}
+	if err := claim.Close(); err != nil {
+		return err
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		_ = os.Remove(path) // the empty file this call claimed
+		return err
+	}
 	return nil
 }
+
+// link is os.Link; tests replace it to stand for a filesystem without
+// hard links.
+var link = os.Link
