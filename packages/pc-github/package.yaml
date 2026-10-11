@@ -1,0 +1,769 @@
+# SPDX-License-Identifier: BUSL-1.1
+# Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+#
+# Reviewed tool package for GitHub repositories reached through a GitHub App
+# connection (G0 M8, track G). Each operation is mapped from the GitHub MCP
+# server's tool and from the REST route it calls, so an MCP call and a direct
+# API call for one effect reach the same action and the same decision (F099).
+# The gateway sends every operation to the REST API with an installation
+# token it mints for exactly the target repository and the operation's
+# credential_scopes (GitHub App permissions, HR-203); the agent never holds
+# a GitHub credential.
+#
+# Identities are lowercase owner/repo and owner/repo#number: GitHub compares
+# names without case, so the id patterns accept only the lowercase spelling
+# rather than normalizing it (HR-102). A merge carries the pull request's
+# head SHA, which the dispatch passes to GitHub so that any other head fails
+# with 409 (HR-205). Where the GitHub MCP server has no tool for an
+# operation (get_repository, update_repository) or takes a moving name where
+# the API needs an exact commit (create_branch takes sha, not from_branch),
+# the reviewed schema below is what MCP clients see (HR-081).
+#
+# Mappings are reviewed as code: a wrong mapping is a total bypass (HR-124),
+# so any change here needs the golden tests in internal/definitions to be
+# updated deliberately.
+format: 1
+name: pc.github
+version: 1.0.0
+publisher: pantherclaw
+summary: GitHub repositories, branches and pull requests through a GitHub App
+
+definitions:
+  - operation: github.repository.get
+    summary: Read a repository's metadata
+    access: read
+    target:
+      type: github.repository
+      id_pattern: '^(?P<owner>[a-z0-9][a-z0-9-]{0,38})/(?P<repo>\.?[a-z0-9_-][a-z0-9._-]{0,98})$'
+      account: none
+    params: {}
+    effects:
+      - kind: none
+        description: Reads only
+    reversibility: reversible
+    retry:
+      safe: true
+      on_unknown: fail
+    credential_scopes: [metadata:read]
+    assurance:
+      basis: documented
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-10-11
+    mappings:
+      - channel: http
+        method: GET
+        path: /repos/{owner}/{repo}
+        route: github-repo-get
+        extract:
+          target_id: path.owner + '/' + path.repo
+          params: {}
+      - channel: mcp
+        tool: get_repository
+        route: github-repo-get
+        description: >-
+          Read one GitHub repository's metadata: default branch, visibility
+          and merge settings. Owner and repository are written in lowercase.
+        input_schema:
+          type: object
+          additionalProperties: false
+          required: [owner, repo]
+          properties:
+            owner:
+              type: string
+              description: The account that owns the repository, in lowercase
+              pattern: '^[a-z0-9][a-z0-9-]{0,38}$'
+            repo:
+              type: string
+              description: The repository name, in lowercase
+              pattern: '^\.?[a-z0-9_-][a-z0-9._-]{0,98}$'
+        extract:
+          target_id: input.owner + '/' + input.repo
+          params: {}
+    dispatch:
+      http:
+        method: GET
+        path: /repos/{target.id.owner}/{target.id.repo}
+
+  - operation: github.contents.get
+    summary: Read a file or directory at the top of a repository
+    access: read
+    target:
+      type: github.repository
+      id_pattern: '^(?P<owner>[a-z0-9][a-z0-9-]{0,38})/(?P<repo>\.?[a-z0-9_-][a-z0-9._-]{0,98})$'
+      account: none
+    params:
+      # One path segment: a template sends each value as one segment
+      # (HR-073), so nested paths are not mapped yet.
+      path:
+        type: identifier
+        material: true
+        required: true
+        pattern: '^\.?[A-Za-z0-9_-][A-Za-z0-9._-]{0,254}$'
+      ref:
+        type: identifier
+        material: true
+        pattern: '^[A-Za-z0-9_-][A-Za-z0-9._/-]{0,254}$'
+    effects:
+      - kind: none
+        description: Reads only
+    reversibility: reversible
+    retry:
+      safe: true
+      on_unknown: fail
+    credential_scopes: [contents:read]
+    assurance:
+      basis: documented
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-10-11
+    mappings:
+      - channel: http
+        method: GET
+        path: /repos/{owner}/{repo}/contents/{path}
+        route: github-contents-get
+        extract:
+          target_id: path.owner + '/' + path.repo
+          params:
+            path: path.path
+            ref: query.?ref
+      - channel: mcp
+        tool: get_file_contents
+        route: github-contents-get
+        description: >-
+          Read a file, or list a directory, at the top level of a GitHub
+          repository, at a branch, tag or commit (the default branch when
+          ref is left out). Owner and repository are written in lowercase.
+        input_schema:
+          type: object
+          additionalProperties: false
+          required: [owner, repo, path]
+          properties:
+            owner:
+              type: string
+              description: The account that owns the repository, in lowercase
+              pattern: '^[a-z0-9][a-z0-9-]{0,38}$'
+            repo:
+              type: string
+              description: The repository name, in lowercase
+              pattern: '^\.?[a-z0-9_-][a-z0-9._-]{0,98}$'
+            path:
+              type: string
+              description: A file or directory name at the top of the repository
+              pattern: '^\.?[A-Za-z0-9_-][A-Za-z0-9._-]{0,254}$'
+            ref:
+              type: string
+              description: A branch, tag or commit SHA
+              pattern: '^[A-Za-z0-9_-][A-Za-z0-9._/-]{0,254}$'
+        extract:
+          target_id: input.owner + '/' + input.repo
+          params:
+            path: input.path
+            ref: input.?ref
+    dispatch:
+      http:
+        method: GET
+        path: /repos/{target.id.owner}/{target.id.repo}/contents/{params.path}
+        query:
+          ref: params.ref
+
+  - operation: github.branch.list
+    summary: List a repository's branches and their head commits
+    access: read
+    target:
+      type: github.repository
+      id_pattern: '^(?P<owner>[a-z0-9][a-z0-9-]{0,38})/(?P<repo>\.?[a-z0-9_-][a-z0-9._-]{0,98})$'
+      account: none
+    params:
+      page:
+        type: integer
+        unit: count
+        min: "1"
+        max: "1000"
+    effects:
+      - kind: none
+        description: Reads only
+    reversibility: reversible
+    retry:
+      safe: true
+      on_unknown: fail
+    credential_scopes: [contents:read]
+    assurance:
+      basis: documented
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-10-11
+    mappings:
+      - channel: http
+        method: GET
+        path: /repos/{owner}/{repo}/branches
+        route: github-branches-list
+        extract:
+          target_id: path.owner + '/' + path.repo
+          params:
+            page: query.?page.optMap(p, int(p))
+      - channel: mcp
+        tool: list_branches
+        route: github-branches-list
+        description: >-
+          List the branches of a GitHub repository with the commit SHA at the
+          head of each, 30 to a page. Owner and repository are written in
+          lowercase.
+        input_schema:
+          type: object
+          additionalProperties: false
+          required: [owner, repo]
+          properties:
+            owner:
+              type: string
+              description: The account that owns the repository, in lowercase
+              pattern: '^[a-z0-9][a-z0-9-]{0,38}$'
+            repo:
+              type: string
+              description: The repository name, in lowercase
+              pattern: '^\.?[a-z0-9_-][a-z0-9._-]{0,98}$'
+            page:
+              type: integer
+              description: The page, from 1
+              minimum: 1
+              maximum: 1000
+        extract:
+          target_id: input.owner + '/' + input.repo
+          params:
+            page: input.?page.optMap(p, int(p))
+    dispatch:
+      http:
+        method: GET
+        path: /repos/{target.id.owner}/{target.id.repo}/branches
+        query:
+          page: params.page
+
+  - operation: github.branch.create
+    summary: Create a branch at a commit
+    access: write
+    target:
+      type: github.repository
+      id_pattern: '^(?P<owner>[a-z0-9][a-z0-9-]{0,38})/(?P<repo>\.?[a-z0-9_-][a-z0-9._-]{0,98})$'
+      account: none
+    params:
+      ref:
+        type: identifier
+        material: true
+        required: true
+        pattern: '^refs/heads/[A-Za-z0-9_-][A-Za-z0-9._-]{0,99}(/[A-Za-z0-9_-][A-Za-z0-9._-]{0,99}){0,7}$'
+      sha:
+        type: identifier
+        material: true
+        required: true
+        pattern: '^[0-9a-f]{40}$'
+    effects:
+      - kind: repository.branch.create
+        description: Creates a branch that points at an existing commit
+    reversibility: reversible
+    retry:
+      safe: false
+      on_unknown: reconcile
+    approval:
+      title: Create {params.ref} at {params.sha} in {target.id}
+      fields: [target.id, params.ref, params.sha]
+    credential_scopes: [contents:write]
+    assurance:
+      basis: documented
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-10-11
+    mappings:
+      - channel: http
+        method: POST
+        path: /repos/{owner}/{repo}/git/refs
+        route: github-branch-create
+        extract:
+          target_id: path.owner + '/' + path.repo
+          params:
+            ref: input.ref
+            sha: input.sha
+      - channel: mcp
+        tool: create_branch
+        route: github-branch-create
+        description: >-
+          Create a branch in a GitHub repository at an exact commit. Read the
+          commit SHA first, for example with list_branches. Owner and
+          repository are written in lowercase.
+        input_schema:
+          type: object
+          additionalProperties: false
+          required: [owner, repo, branch, sha]
+          properties:
+            owner:
+              type: string
+              description: The account that owns the repository, in lowercase
+              pattern: '^[a-z0-9][a-z0-9-]{0,38}$'
+            repo:
+              type: string
+              description: The repository name, in lowercase
+              pattern: '^\.?[a-z0-9_-][a-z0-9._-]{0,98}$'
+            branch:
+              type: string
+              description: The new branch's name, such as fix/cve-2026-1234
+              pattern: '^[A-Za-z0-9_-][A-Za-z0-9._-]{0,99}(/[A-Za-z0-9_-][A-Za-z0-9._-]{0,99}){0,7}$'
+            sha:
+              type: string
+              description: The full commit SHA the branch starts at
+              pattern: '^[0-9a-f]{40}$'
+        extract:
+          target_id: input.owner + '/' + input.repo
+          params:
+            ref: "'refs/heads/' + input.branch"
+            sha: input.sha
+    dispatch:
+      http:
+        method: POST
+        path: /repos/{target.id.owner}/{target.id.repo}/git/refs
+        body:
+          ref: params.ref
+          sha: params.sha
+
+  - operation: github.pull_request.create
+    summary: Open a pull request between two branches of a repository
+    access: write
+    target:
+      type: github.repository
+      id_pattern: '^(?P<owner>[a-z0-9][a-z0-9-]{0,38})/(?P<repo>\.?[a-z0-9_-][a-z0-9._-]{0,98})$'
+      account: none
+    params:
+      title:
+        type: content
+        material: true
+        required: true
+        max_length: 256
+      body:
+        type: content
+        material: true
+        max_length: 8192
+      head:
+        type: identifier
+        material: true
+        required: true
+        pattern: '^[A-Za-z0-9_-][A-Za-z0-9._-]{0,99}(/[A-Za-z0-9_-][A-Za-z0-9._-]{0,99}){0,7}$'
+      base:
+        type: identifier
+        material: true
+        required: true
+        pattern: '^[A-Za-z0-9_-][A-Za-z0-9._-]{0,99}(/[A-Za-z0-9_-][A-Za-z0-9._-]{0,99}){0,7}$'
+      draft:
+        type: boolean
+        material: true
+    effects:
+      - kind: repository.pull_request.open
+        description: Opens a pull request that asks to merge head into base
+    reversibility: compensatable
+    retry:
+      safe: false
+      on_unknown: reconcile
+    approval:
+      title: Open a pull request from {params.head} into {params.base} in {target.id}
+      fields: [target.id, params.head, params.base, params.title, params.draft]
+    credential_scopes: [pull_requests:write]
+    assurance:
+      basis: documented
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-10-11
+    mappings:
+      - channel: http
+        method: POST
+        path: /repos/{owner}/{repo}/pulls
+        route: github-pr-create
+        extract:
+          target_id: path.owner + '/' + path.repo
+          params:
+            title: input.title
+            body: input.?body
+            head: input.head
+            base: input.base
+            draft: input.?draft
+      - channel: mcp
+        tool: create_pull_request
+        route: github-pr-create
+        description: >-
+          Open a pull request in a GitHub repository that asks to merge the
+          head branch into the base branch. Both branches are in the same
+          repository. Owner and repository are written in lowercase.
+        input_schema:
+          type: object
+          additionalProperties: false
+          required: [owner, repo, title, head, base]
+          properties:
+            owner:
+              type: string
+              description: The account that owns the repository, in lowercase
+              pattern: '^[a-z0-9][a-z0-9-]{0,38}$'
+            repo:
+              type: string
+              description: The repository name, in lowercase
+              pattern: '^\.?[a-z0-9_-][a-z0-9._-]{0,98}$'
+            title:
+              type: string
+              description: The pull request's title
+              minLength: 1
+              maxLength: 256
+            body:
+              type: string
+              description: The pull request's description
+              maxLength: 8192
+            head:
+              type: string
+              description: The branch with the changes
+              pattern: '^[A-Za-z0-9_-][A-Za-z0-9._-]{0,99}(/[A-Za-z0-9_-][A-Za-z0-9._-]{0,99}){0,7}$'
+            base:
+              type: string
+              description: The branch to merge into
+              pattern: '^[A-Za-z0-9_-][A-Za-z0-9._-]{0,99}(/[A-Za-z0-9_-][A-Za-z0-9._-]{0,99}){0,7}$'
+            draft:
+              type: boolean
+              description: Open the pull request as a draft
+        extract:
+          target_id: input.owner + '/' + input.repo
+          params:
+            title: input.title
+            body: input.?body
+            head: input.head
+            base: input.base
+            draft: input.?draft
+    dispatch:
+      http:
+        method: POST
+        path: /repos/{target.id.owner}/{target.id.repo}/pulls
+        body:
+          title: params.title
+          body: params.body
+          head: params.head
+          base: params.base
+          draft: params.draft
+
+  - operation: github.pull_request.reviews.list
+    summary: List the reviews of a pull request
+    access: read
+    target:
+      type: github.pull_request
+      id_pattern: '^(?P<owner>[a-z0-9][a-z0-9-]{0,38})/(?P<repo>\.?[a-z0-9_-][a-z0-9._-]{0,98})#(?P<number>[1-9][0-9]{0,9})$'
+      account: none
+    params: {}
+    effects:
+      - kind: none
+        description: Reads only
+    reversibility: reversible
+    retry:
+      safe: true
+      on_unknown: fail
+    credential_scopes: [pull_requests:read]
+    assurance:
+      basis: documented
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-10-11
+    mappings:
+      - channel: http
+        method: GET
+        path: /repos/{owner}/{repo}/pulls/{pull_number}/reviews
+        route: github-pr-reviews
+        extract:
+          target_id: path.owner + '/' + path.repo + '#' + path.pull_number
+          params: {}
+      # The GitHub MCP server's tool before it folded the pull request
+      # reads into pull_request_read: one tool maps to one operation.
+      - channel: mcp
+        tool: get_pull_request_reviews
+        route: github-pr-reviews
+        description: >-
+          List the reviews of a pull request in a GitHub repository, with
+          each review's state and the commit it was made on. Owner and
+          repository are written in lowercase.
+        input_schema:
+          type: object
+          additionalProperties: false
+          required: [owner, repo, pullNumber]
+          properties:
+            owner:
+              type: string
+              description: The account that owns the repository, in lowercase
+              pattern: '^[a-z0-9][a-z0-9-]{0,38}$'
+            repo:
+              type: string
+              description: The repository name, in lowercase
+              pattern: '^\.?[a-z0-9_-][a-z0-9._-]{0,98}$'
+            pullNumber:
+              type: integer
+              description: The pull request number
+              minimum: 1
+              maximum: 9999999999
+        extract:
+          target_id: input.owner + '/' + input.repo + '#' + string(input.pullNumber)
+          params: {}
+    dispatch:
+      http:
+        method: GET
+        path: /repos/{target.id.owner}/{target.id.repo}/pulls/{target.id.number}/reviews
+
+  - operation: github.pull_request.merge
+    summary: Merge a pull request at an exact head commit
+    access: write
+    target:
+      type: github.pull_request
+      id_pattern: '^(?P<owner>[a-z0-9][a-z0-9-]{0,38})/(?P<repo>\.?[a-z0-9_-][a-z0-9._-]{0,98})#(?P<number>[1-9][0-9]{0,9})$'
+      account: none
+    params:
+      # The head commit the merge is bound to (HR-205): GitHub refuses the
+      # merge with 409 when the pull request's head is any other commit.
+      sha:
+        type: identifier
+        material: true
+        required: true
+        pattern: '^[0-9a-f]{40}$'
+      merge_method:
+        type: enum
+        material: true
+        values: [merge, squash, rebase]
+    effects:
+      - kind: repository.branch.merge
+        description: Merges the pull request's head commit into its base branch
+    reversibility: irreversible
+    dedupe_key: [target.id, params.sha]
+    retry:
+      safe: false
+      on_unknown: reconcile
+    verifier:
+      operation: github.pull_request.get
+      establishes: pull_request.merged
+      within_seconds: 600
+      level: domain_effect
+      expect:
+        - field: /head/sha
+          equals: params.sha
+      states:
+        field: /merged
+        confirmed: ["true"]
+        pending: ["false"]
+      limits: >-
+        Shows that GitHub reports this pull request merged with this head
+        commit. It does not show that a workflow or deployment the merge
+        triggers ran or finished.
+    approval:
+      title: Merge pull request {target.id} at {params.sha}
+      fields: [target.id, params.sha, params.merge_method]
+    credential_scopes: [contents:write]
+    assurance:
+      basis: documented
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-10-11
+    mappings:
+      - channel: http
+        method: PUT
+        path: /repos/{owner}/{repo}/pulls/{pull_number}/merge
+        route: github-pr-merge
+        extract:
+          target_id: path.owner + '/' + path.repo + '#' + path.pull_number
+          params:
+            sha: input.sha
+            merge_method: input.?merge_method
+      - channel: mcp
+        tool: merge_pull_request
+        route: github-pr-merge
+        description: >-
+          Merge a pull request in a GitHub repository. The merge is bound to
+          the head commit you name: if the pull request's head has moved, it
+          is refused and needs a new decision. Owner and repository are
+          written in lowercase.
+        input_schema:
+          type: object
+          additionalProperties: false
+          required: [owner, repo, pullNumber, expectedHeadSha]
+          properties:
+            owner:
+              type: string
+              description: The account that owns the repository, in lowercase
+              pattern: '^[a-z0-9][a-z0-9-]{0,38}$'
+            repo:
+              type: string
+              description: The repository name, in lowercase
+              pattern: '^\.?[a-z0-9_-][a-z0-9._-]{0,98}$'
+            pullNumber:
+              type: integer
+              description: The pull request number
+              minimum: 1
+              maximum: 9999999999
+            expectedHeadSha:
+              type: string
+              description: The full SHA of the pull request's head commit
+              pattern: '^[0-9a-f]{40}$'
+            merge_method:
+              type: string
+              enum: [merge, squash, rebase]
+        extract:
+          target_id: input.owner + '/' + input.repo + '#' + string(input.pullNumber)
+          params:
+            sha: input.expectedHeadSha
+            merge_method: input.?merge_method
+    dispatch:
+      http:
+        method: PUT
+        path: /repos/{target.id.owner}/{target.id.repo}/pulls/{target.id.number}/merge
+        body:
+          sha: params.sha
+          merge_method: params.merge_method
+
+  - operation: github.repository.update
+    summary: Change a repository's default branch and merge settings
+    access: write
+    target:
+      type: github.repository
+      id_pattern: '^(?P<owner>[a-z0-9][a-z0-9-]{0,38})/(?P<repo>\.?[a-z0-9_-][a-z0-9._-]{0,98})$'
+      account: none
+    params:
+      default_branch:
+        type: identifier
+        material: true
+        pattern: '^[A-Za-z0-9_-][A-Za-z0-9._-]{0,99}(/[A-Za-z0-9_-][A-Za-z0-9._-]{0,99}){0,7}$'
+      allow_merge_commit:
+        type: boolean
+        material: true
+      allow_squash_merge:
+        type: boolean
+        material: true
+      allow_rebase_merge:
+        type: boolean
+        material: true
+      allow_auto_merge:
+        type: boolean
+        material: true
+      delete_branch_on_merge:
+        type: boolean
+        material: true
+    effects:
+      - kind: repository.settings.change
+        description: Changes the repository's default branch or how pull requests merge
+    reversibility: compensatable
+    retry:
+      safe: false
+      on_unknown: reconcile
+    approval:
+      title: Change the settings of {target.id}
+      fields:
+        - target.id
+        - params.default_branch
+        - params.allow_merge_commit
+        - params.allow_squash_merge
+        - params.allow_rebase_merge
+        - params.allow_auto_merge
+        - params.delete_branch_on_merge
+    credential_scopes: [administration:write]
+    assurance:
+      basis: documented
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-10-11
+    mappings:
+      - channel: http
+        method: PATCH
+        path: /repos/{owner}/{repo}
+        route: github-repo-update
+        extract:
+          target_id: path.owner + '/' + path.repo
+          params:
+            default_branch: input.?default_branch
+            allow_merge_commit: input.?allow_merge_commit
+            allow_squash_merge: input.?allow_squash_merge
+            allow_rebase_merge: input.?allow_rebase_merge
+            allow_auto_merge: input.?allow_auto_merge
+            delete_branch_on_merge: input.?delete_branch_on_merge
+      - channel: mcp
+        tool: update_repository
+        route: github-repo-update
+        description: >-
+          Change a GitHub repository's default branch or merge settings. Only
+          the settings you pass change. Owner and repository are written in
+          lowercase.
+        input_schema:
+          type: object
+          additionalProperties: false
+          required: [owner, repo]
+          properties:
+            owner:
+              type: string
+              description: The account that owns the repository, in lowercase
+              pattern: '^[a-z0-9][a-z0-9-]{0,38}$'
+            repo:
+              type: string
+              description: The repository name, in lowercase
+              pattern: '^\.?[a-z0-9_-][a-z0-9._-]{0,98}$'
+            default_branch:
+              type: string
+              description: The branch pull requests target by default
+              pattern: '^[A-Za-z0-9_-][A-Za-z0-9._-]{0,99}(/[A-Za-z0-9_-][A-Za-z0-9._-]{0,99}){0,7}$'
+            allow_merge_commit:
+              type: boolean
+            allow_squash_merge:
+              type: boolean
+            allow_rebase_merge:
+              type: boolean
+            allow_auto_merge:
+              type: boolean
+            delete_branch_on_merge:
+              type: boolean
+        extract:
+          target_id: input.owner + '/' + input.repo
+          params:
+            default_branch: input.?default_branch
+            allow_merge_commit: input.?allow_merge_commit
+            allow_squash_merge: input.?allow_squash_merge
+            allow_rebase_merge: input.?allow_rebase_merge
+            allow_auto_merge: input.?allow_auto_merge
+            delete_branch_on_merge: input.?delete_branch_on_merge
+    dispatch:
+      http:
+        method: PATCH
+        path: /repos/{target.id.owner}/{target.id.repo}
+        body:
+          default_branch: params.default_branch
+          allow_merge_commit: params.allow_merge_commit
+          allow_squash_merge: params.allow_squash_merge
+          allow_rebase_merge: params.allow_rebase_merge
+          allow_auto_merge: params.allow_auto_merge
+          delete_branch_on_merge: params.delete_branch_on_merge
+
+  # Internal read (no mappings): only the merge verifier uses it, through
+  # the gateway serving the connection.
+  - operation: github.pull_request.get
+    summary: Read one pull request
+    access: read
+    target:
+      type: github.pull_request
+      id_pattern: '^(?P<owner>[a-z0-9][a-z0-9-]{0,38})/(?P<repo>\.?[a-z0-9_-][a-z0-9._-]{0,98})#(?P<number>[1-9][0-9]{0,9})$'
+      account: none
+    params: {}
+    effects:
+      - kind: none
+        description: Reads only
+    reversibility: reversible
+    retry:
+      safe: true
+      on_unknown: fail
+    credential_scopes: [pull_requests:read]
+    assurance:
+      basis: documented
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-10-11
+    dispatch:
+      http:
+        method: GET
+        path: /repos/{target.id.owner}/{target.id.repo}/pulls/{target.id.number}
+
+# A merge into a branch whose workflows deploy on push is a deployment
+# (F405, §43.3). The gateway reads the base branch's workflows and
+# environments through the App and reports the fact; when it cannot, the
+# decision is HOLD "Consequence unknown", never a safe merge (HR-206).
+consequences:
+  - id: merge-deploys-on-push
+    operation: github.pull_request.merge
+    when: facts.github_pull_request_deploys_on_merge
+    requires_facts: [github.pull_request.deploys_on_merge]
+    consequence:
+      operation: github.deployment.start
+      effect: deployment.start
+      description: >-
+        Merging pushes to the base branch, where a workflow deploys to an
+        environment on every push.
+    valid_until: 2027-10-11
