@@ -105,7 +105,7 @@ func init() {
 			agent, conn := fs.String("agent", "", "only this agent's routes and those of every agent"), fs.String("connection", "", "only this connection")
 			n, tok := paging(fs)
 			return func(ctx context.Context, c pantherclawv1connect.CoverageServiceClient, _ []string) (proto.Message, error) {
-				return c.ListCoverageRoutes(ctx, &pantherclawv1.ListCoverageRoutesRequest{
+				return c.ListRoutes(ctx, &pantherclawv1.ListRoutesRequest{
 					AgentId: optString(*agent), ConnectionId: optString(*conn), PageSize: size(n), PageToken: *tok,
 				})
 			}
@@ -123,13 +123,13 @@ func init() {
 		"coverage access": coverageRPC("coverage access CONNECTION [--agent ID]", 1, func(fs *flag.FlagSet) coverageCall {
 			agent := fs.String("agent", "", "the agent whose access to describe")
 			return func(ctx context.Context, c pantherclawv1connect.CoverageServiceClient, args []string) (proto.Message, error) {
-				return c.GetAccessDisclosure(ctx, &pantherclawv1.GetAccessDisclosureRequest{ConnectionId: args[0], AgentId: optString(*agent)})
+				return c.GetAccessDetail(ctx, &pantherclawv1.GetAccessDetailRequest{ConnectionId: args[0], AgentId: optString(*agent)})
 			}
 		}),
 		"coverage reassess": coverageRPC("coverage reassess CONNECTION [--agent ID]", 1, func(fs *flag.FlagSet) coverageCall {
 			agent := fs.String("agent", "", "only this agent's scopes")
 			return func(ctx context.Context, c pantherclawv1connect.CoverageServiceClient, args []string) (proto.Message, error) {
-				return c.ReassessCoverage(ctx, &pantherclawv1.ReassessCoverageRequest{ConnectionId: args[0], AgentId: optString(*agent)})
+				return c.Reassess(ctx, &pantherclawv1.ReassessRequest{ConnectionId: args[0], AgentId: optString(*agent)})
 			}
 		}),
 		"coverage exclude": coverageRPC("coverage exclude CONNECTION --reason TEXT --expires-in-days N [--agent ID] [--operation OP] [--route KIND]", 1,
@@ -168,15 +168,15 @@ func init() {
 			state, conn := fs.String("state", "", "open, resolved or dismissed (default: all)"), fs.String("connection", "", "only this connection")
 			n, tok := paging(fs)
 			return func(ctx context.Context, c pantherclawv1connect.CoverageServiceClient, _ []string) (proto.Message, error) {
-				return c.ListCoverageFindings(ctx, &pantherclawv1.ListCoverageFindingsRequest{
+				return c.ListFindings(ctx, &pantherclawv1.ListFindingsRequest{
 					State: optString(strings.ToUpper(*state)), ConnectionId: optString(*conn), PageSize: size(n), PageToken: *tok,
 				})
 			}
 		}),
-		"coverage dismiss": coverageRPC("coverage dismiss FINDING --reason TEXT", 1, func(fs *flag.FlagSet) coverageCall {
+		"coverage acknowledge": coverageRPC("coverage acknowledge FINDING --reason TEXT", 1, func(fs *flag.FlagSet) coverageCall {
 			reason := fs.String("reason", "", "why, in writing (10 to 1,000 characters; required)")
 			return func(ctx context.Context, c pantherclawv1connect.CoverageServiceClient, args []string) (proto.Message, error) {
-				return c.DismissCoverageFinding(ctx, &pantherclawv1.DismissCoverageFindingRequest{Id: args[0], Reason: *reason})
+				return c.AcknowledgeFinding(ctx, &pantherclawv1.AcknowledgeFindingRequest{Id: args[0], Reason: *reason})
 			}
 		}),
 	} {

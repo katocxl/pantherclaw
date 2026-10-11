@@ -567,11 +567,14 @@ func (s *Service) transactions(ctx context.Context, c tenancy.Caller, q *dbq.Que
 			entryIDs = append(entryIDs, r.LedgerEntryID)
 		}
 	}
-	snapshots, err := q.CoverageSnapshotEntries(ctx, c.Org, claimedSnapshots(receipts))
-	if err != nil {
-		return nil, nil, err
+	for _, claim := range coverageClaims(receipts) {
+		// iat is truncated to the second: the second it names is included.
+		coverage, err := q.CoverageClaimEntries(ctx, c.Org, claim.Snapshot, claim.At.Add(time.Second))
+		if err != nil {
+			return nil, nil, err
+		}
+		entryIDs = append(entryIDs, coverage...)
 	}
-	entryIDs = append(entryIDs, snapshots...)
 	rows, err := q.ChainedEntriesByID(ctx, c.Org, entryIDs)
 	if err != nil {
 		return nil, nil, err

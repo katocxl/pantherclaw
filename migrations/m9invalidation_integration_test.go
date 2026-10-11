@@ -8,6 +8,7 @@ package migrations_test
 import (
 	"context"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/jackc/pgx/v5"
@@ -54,7 +55,8 @@ func (f m9cFixture) m9iKinds(t *testing.T) []string {
 // TestHR211_EveryChangeIsRecordedAsAnInvalidation: a change to a
 // connection, its gateway, route modes, credentials or package pin records
 // an invalidation in the same transaction; a change that does not affect
-// coverage records none.
+// what the connection lets an agent reach (its limits) records
+// none.
 func TestHR211_EveryChangeIsRecordedAsAnInvalidation(t *testing.T) {
 	f := newM9cFixture(t)
 	steps := []struct {
@@ -153,5 +155,34 @@ func TestIntCoverageReassessListerFindsDueOrgs(t *testing.T) {
 		f.org, m5ID(), f.agent, f.connection, closure, f.ledger(t))
 	if !listed() {
 		t.Fatal("an org with an expired ENFORCED snapshot is not listed")
+	}
+}
+
+// TestHR211_AnInstanceOutsideASandboxIsRecordedAsAnInvalidation: admitting
+// an instance of an agent with closure evidence, outside a sandbox,
+// records an instance invalidation for the agent's connection (design
+// decision 2); a pending instance, or one of an agent without coverage,
+// records none.
+func TestHR211_AnInstanceOutsideASandboxIsRecordedAsAnInvalidation(t *testing.T) {
+	f := newM9cFixture(t)
+	const instance = `INSERT INTO pc.agent_instances (org_id, id, agent_id, jkt, public_jwk, state, enrolled_via)
+		VALUES ($1, $2, $3, $4, '{}', $5, 'discovery')`
+	jkt := func(c string) string { return strings.Repeat(c, 43) }
+	f.mustExec(t, instance, f.org, m5ID(), f.agent, jkt("a"), "ADMITTED")
+	if got := f.m9iKinds(t); slices.Contains(got, "instance") {
+		t.Fatalf("an agent without coverage: %v", got)
+	}
+	if _, err := f.closure("PASSED", true, "0 seconds", "24 hours"); err != nil {
+		t.Fatal(err)
+	}
+	pending := m5ID()
+	f.mustExec(t, instance, f.org, pending, f.agent, jkt("b"), "PENDING_ADMISSION")
+	if got := f.m9iKinds(t); slices.Contains(got, "instance") {
+		t.Fatalf("a pending instance: %v", got)
+	}
+	f.mustExec(t, "UPDATE pc.agent_instances SET state = 'ADMITTED', decided_by = 'test', decided_at = now() WHERE id = $1",
+		pending)
+	if got := f.m9iKinds(t); !slices.Contains(got, "instance") {
+		t.Fatalf("an instance admitted outside a sandbox: %v", got)
 	}
 }

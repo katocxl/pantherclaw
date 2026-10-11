@@ -39,9 +39,9 @@ var states = map[domain.State]pantherclawv1.CoverageState{
 // GetFreshnessContract implements CoverageServiceHandler (F440).
 func (h *Handler) GetFreshnessContract(context.Context, *pantherclawv1.GetFreshnessContractRequest) (*pantherclawv1.GetFreshnessContractResponse, error) {
 	out := &pantherclawv1.GetFreshnessContractResponse{
-		EnforcedTtl:      durationpb.New(h.freshness.EnforcedTTL),
-		ReassessInterval: durationpb.New(h.freshness.ReassessInterval),
-		StaleState:       states[domain.StaleState],
+		EnforcedTtl:   durationpb.New(h.freshness.EnforcedTTL),
+		ReassessEvery: durationpb.New(h.freshness.ReassessEvery),
+		StaleState:    states[domain.StaleState],
 	}
 	for _, k := range domain.InvalidationKinds {
 		if !k.Invalidates() {

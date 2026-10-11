@@ -192,16 +192,18 @@ func (q *Queries) InsertDedupeClaim(ctx context.Context, orgID ids.OrgID, dedupe
 }
 
 const insertEvaluationReceipt = `-- name: InsertEvaluationReceipt :exec
-INSERT INTO pc.decision_receipts (org_id, transaction_id, evaluation, receipt_jws, ledger_entry_id)
-VALUES ($1, $2, $3, $4::text, $5)
+INSERT INTO pc.decision_receipts (org_id, transaction_id, evaluation, receipt_jws, ledger_entry_id, coverage_snapshot_id)
+VALUES ($1, $2, $3, $4::text, $5,
+    $6)
 `
 
 type InsertEvaluationReceiptParams struct {
-	OrgID         ids.OrgID
-	TransactionID ids.UUID
-	Evaluation    int32
-	ReceiptJws    string
-	LedgerEntryID ids.UUID
+	OrgID              ids.OrgID
+	TransactionID      ids.UUID
+	Evaluation         int32
+	ReceiptJws         string
+	LedgerEntryID      ids.UUID
+	CoverageSnapshotID *ids.UUID
 }
 
 func (q *Queries) InsertEvaluationReceipt(ctx context.Context, arg InsertEvaluationReceiptParams) error {
@@ -211,6 +213,7 @@ func (q *Queries) InsertEvaluationReceipt(ctx context.Context, arg InsertEvaluat
 		arg.Evaluation,
 		arg.ReceiptJws,
 		arg.LedgerEntryID,
+		arg.CoverageSnapshotID,
 	)
 	return err
 }

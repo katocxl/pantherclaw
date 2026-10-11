@@ -68,14 +68,27 @@ func routeModes(pkg *defs.Package, operation, defaultMode string, routes []dbq.P
 	return out
 }
 
+// TargetVerifier reads M8's target-verifier connection tests (HR-202,
+// HR-210). Coverage reads it through this interface until the connection
+// tests are wired in.
+type TargetVerifier interface {
+	// LastPassed returns when the connection's latest passing
+	// target-verifier test ran, or nil when none passed.
+	LastPassed(ctx context.Context, tx db.TenantTx, connection ids.UUID) (*time.Time, error)
+}
+
 // evidence loads what domain.Compute reads for one scope, at now.
-func evidence(ctx context.Context, q *dbq.Queries, org ids.OrgID, sc domain.Scope, now time.Time, pkgs packages) (domain.Evidence, error) {
-	e := domain.Evidence{Scope: sc, Now: now}
+func (s *Service) evidence(ctx context.Context, tx db.TenantTx, sc domain.Scope, now time.Time, pkgs packages) (domain.Evidence, error) {
+	q, org := dbq.New(tx), tx.OrgID()
+	e := domain.Evidence{Scope: sc, Now: now, TTL: s.Freshness.EnforcedTTL}
 	b, err := q.CoverageBinding(ctx, org, sc.Connection)
 	if err != nil {
 		return e, err
 	}
-	e.Connection = domain.Connection{Kind: b.Kind, State: b.State, Revision: b.Revision, Gateway: b.GatewayID}
+	e.Connection = domain.Connection{
+		Kind: b.Kind, State: b.State, Revision: b.Revision, Gateway: b.GatewayID, CredentialVersion: b.CredentialVersion,
+		AccessMode: b.AccessMode, RouteMode: b.DefaultMode,
+	}
 	if b.PackageVersionID != nil {
 		e.Connection.PackageVersion = *b.PackageVersionID
 		pkg, err := pkgs.get(ctx, q, org, *b.PackageVersionID)
@@ -95,39 +108,29 @@ func evidence(ctx context.Context, q *dbq.Queries, org ids.OrgID, sc domain.Scop
 		return e, err
 	}
 	for _, r := range rows {
-		if r.Kind == string(domain.KindChannel) {
-			if r.Observation == "observed" && r.Source == "gateway" && r.Channel != nil && r.Mode != nil {
-				e.Traffic = append(e.Traffic, domain.Traffic{Channel: domain.Channel(*r.Channel), Mode: *r.Mode})
-			}
-			continue
-		}
 		e.Routes = append(e.Routes, domain.Route{
-			ID: r.ID, Kind: domain.RouteKind(r.Kind), Locator: deref(r.Locator), Observation: r.Observation,
+			ID: r.ID, Kind: domain.RouteKind(r.Kind), Channel: domain.Channel(deref(r.Channel)), Locator: deref(r.Locator),
+			Observation: r.Observation,
 		})
 	}
-	since := time.Time{}
 	switch c, err := q.LatestCoverageClosure(ctx, org, sc.Agent, sc.Connection); {
 	case err == nil:
-		rec := &domain.ClosureRecord{
-			ID: c.ID, Agent: c.AgentID, Connection: c.ConnectionID, SessionStartedAt: c.SessionStartedAt,
-			ObservedAt: c.ObservedAt, ExpiresAt: c.ExpiresAt, Revision: c.ConnectionRevision, Gateway: c.GatewayID,
-			PackageVersion: c.PackageVersionID,
-		}
-		if err := json.Unmarshal(c.Probes, &rec.Probes); err != nil {
+		rec, err := closureRecord(c)
+		if err != nil {
 			return e, err
 		}
-		e.Closure, since = rec, c.SessionStartedAt
+		e.Closure = rec
+		changes, err := q.CoverageInvalidationsSince(ctx, dbq.CoverageInvalidationsSinceParams{
+			OrgID: org, ConnectionID: sc.Connection, AgentID: &sc.Agent, Since: c.SessionStartedAt,
+		})
+		if err != nil {
+			return e, err
+		}
+		for _, ch := range changes {
+			e.Changes = append(e.Changes, domain.Change{ID: ch.ID, Kind: domain.InvalidationKind(ch.Kind), OccurredAt: ch.OccurredAt})
+		}
 	case !db.IsNoRows(err):
 		return e, err
-	}
-	changes, err := q.CoverageInvalidationsSince(ctx, dbq.CoverageInvalidationsSinceParams{
-		OrgID: org, ConnectionID: sc.Connection, AgentID: &sc.Agent, Since: since,
-	})
-	if err != nil {
-		return e, err
-	}
-	for _, ch := range changes {
-		e.Changes = append(e.Changes, domain.Change{ID: ch.ID, Kind: domain.InvalidationKind(ch.Kind), OccurredAt: ch.OccurredAt})
 	}
 	exclusions, err := q.CoverageExclusionsForScope(ctx, dbq.CoverageExclusionsForScopeParams{
 		OrgID: org, ConnectionID: sc.Connection, AgentID: &sc.Agent, Operation: sc.Operation,
@@ -138,7 +141,46 @@ func evidence(ctx context.Context, q *dbq.Queries, org ids.OrgID, sc domain.Scop
 	for _, x := range exclusions {
 		e.Exclusions = append(e.Exclusions, domain.Exclusion{ID: x.ID, Kind: domain.RouteKind(deref(x.RouteKind))})
 	}
+	instances, err := q.CoverageInstancesOfAgent(ctx, org, sc.Agent)
+	if err != nil {
+		return e, err
+	}
+	for _, i := range instances {
+		inst := domain.Instance{ID: i.ID}
+		if i.SandboxSessionID != "" {
+			session, err := ids.ParseUUID(i.SandboxSessionID)
+			if err != nil {
+				return e, err
+			}
+			inst.SandboxSession = &session
+		}
+		e.Instances = append(e.Instances, inst)
+	}
+	if s.Verifier != nil {
+		if e.VerifiedAt, err = s.Verifier.LastPassed(ctx, tx, sc.Connection); err != nil {
+			return e, err
+		}
+	}
 	return e, nil
+}
+
+// closureRecord is a stored closure as the calculus reads it.
+func closureRecord(c dbq.PcCoverageClosure) (*domain.ClosureRecord, error) {
+	rec := &domain.ClosureRecord{
+		ID: c.ID, Agent: c.AgentID, Connection: c.ConnectionID, SandboxSession: c.SandboxSessionID,
+		SessionStartedAt: c.SessionStartedAt, ObservedAt: c.ObservedAt, ExpiresAt: c.ExpiresAt,
+		Bound: domain.Bound{
+			ConnectionRevision: c.ConnectionRevision, Gateway: c.GatewayID, PackageVersion: c.PackageVersionID,
+			CredentialVersion: c.CredentialVersion,
+		},
+	}
+	if err := json.Unmarshal(c.Probes, &rec.Probes); err != nil {
+		return nil, err
+	}
+	if err := json.Unmarshal(c.ConfigChecks, &rec.ConfigChecks); err != nil {
+		return nil, err
+	}
+	return rec, nil
 }
 
 func deref(s *string) string {

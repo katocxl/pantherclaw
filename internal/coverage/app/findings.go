@@ -7,6 +7,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/json/v2"
+	"slices"
 	"strings"
 	"unicode/utf8"
 
@@ -14,6 +15,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/definitions/manifest"
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
+	gdomain "github.com/katocxl/pantherclaw/internal/grants/domain"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
@@ -28,10 +30,10 @@ const KindOverreach = "credential_overreach"
 var ErrDismissal = pcerr.New(pcerr.InvalidArgument, "INVALID_DISMISSAL", "a dismissal needs a written reason of 10 to 1,000 characters")
 
 // declaredScopes reads the credential scopes the package's operations
-// declare (dispatch.credential_scope, G0 M8): all of them, and those of
-// the operations the gateway carried. A package without them declares
-// nothing.
-func declaredScopes(raw []byte, carried map[string]bool) (all, used domain.Permissions, err error) {
+// declare (dispatch.credential_scope, G0 M8): those of the operations
+// allowed says are granted, and those of the operations executed. A
+// package without them declares nothing.
+func declaredScopes(raw []byte, allowed func(string) bool, executed map[string]bool) (declared, used domain.Permissions, err error) {
 	doc, err := manifest.ToJSON(raw)
 	if err != nil {
 		return nil, nil, err
@@ -47,7 +49,7 @@ func declaredScopes(raw []byte, carried map[string]bool) (all, used domain.Permi
 	if err := json.Unmarshal(doc, &p); err != nil {
 		return nil, nil, err
 	}
-	all, used = domain.Permissions{}, domain.Permissions{}
+	declared, used = domain.Permissions{}, domain.Permissions{}
 	for _, d := range p.Definitions {
 		if d.Dispatch == nil {
 			continue
@@ -56,19 +58,43 @@ func declaredScopes(raw []byte, carried map[string]bool) (all, used domain.Permi
 		for k, v := range d.Dispatch.CredentialScope {
 			scope = scope.Merge(domain.ParsePermissions(k + ":" + v))
 		}
-		all = all.Merge(scope)
-		if carried[d.Operation] {
+		if allowed(d.Operation) {
+			declared = declared.Merge(scope)
+		}
+		if executed[d.Operation] {
 			used = used.Merge(scope)
 		}
 	}
-	return all, used, nil
+	return declared, used, nil
+}
+
+// granted reports which operations the org's active grants allow.
+func granted(ctx context.Context, q *dbq.Queries, org ids.OrgID) (func(string) bool, error) {
+	rows, err := q.CoverageGrantBoundsOfOrg(ctx, org)
+	if err != nil {
+		return nil, err
+	}
+	var bounds []gdomain.Bounds
+	for _, raw := range rows {
+		var b gdomain.Bounds
+		if err := json.Unmarshal(raw, &b); err != nil {
+			return nil, err
+		}
+		bounds = append(bounds, b)
+	}
+	return func(op string) bool {
+		return slices.ContainsFunc(bounds, func(b gdomain.Bounds) bool { return b.Operations == nil || b.Operations.Matches(op) })
+	}, nil
 }
 
 // RefreshFindings compares, for one connection, the permissions its
 // credentials actually hold (the GitHub App installations the org scan
-// found for it) with what its package declares its operations need, and
-// records the excess as credential-overreach findings (F048, decision 9).
-// A finding no longer found is resolved; a dismissed one stays dismissed.
+// found for it) with what its package declares the operations the org's
+// grants allow need, and records the excess as credential-overreach
+// findings (F048, decision 9). Used lists the scopes of the operations
+// executed through the connection in the last 30 days. A finding no longer
+// found is resolved; a dismissed one stays dismissed until its excess
+// changes, which makes it a new finding.
 func (s *Service) RefreshFindings(ctx context.Context, tx db.TenantTx, connection ids.UUID) error {
 	q := dbq.New(tx)
 	b, err := q.CoverageBinding(ctx, tx.OrgID(), connection)
@@ -79,15 +105,19 @@ func (s *Service) RefreshFindings(ctx context.Context, tx db.TenantTx, connectio
 	if err != nil {
 		return err
 	}
-	ops, err := q.CoverageCarriedOperations(ctx, tx.OrgID(), connection)
+	allowed, err := granted(ctx, q, tx.OrgID())
 	if err != nil {
 		return err
 	}
-	carried := map[string]bool{}
-	for _, op := range ops {
-		carried[op] = true
+	ops, err := q.CoverageExecutedOperations(ctx, tx.OrgID(), &connection)
+	if err != nil {
+		return err
 	}
-	declared, used, err := declaredScopes(raw, carried)
+	executed := map[string]bool{}
+	for _, op := range ops {
+		executed[op] = true
+	}
+	declared, used, err := declaredScopes(raw, allowed, executed)
 	if err != nil {
 		return err
 	}
@@ -110,7 +140,8 @@ func (s *Service) RefreshFindings(ctx context.Context, tx db.TenantTx, connectio
 		if len(subject) > 256 {
 			subject = subject[:256]
 		}
-		fp := sha256.Sum256([]byte(KindOverreach + "|" + connection.String() + "|" + r.ID.String()))
+		fp := sha256.Sum256([]byte(KindOverreach + "|" + connection.String() + "|" + r.ID.String() + "|" +
+			strings.Join(slices.Sorted(slices.Values(excess)), ",")))
 		if _, err := q.UpsertCoverageFinding(ctx, dbq.UpsertCoverageFindingParams{
 			OrgID: tx.OrgID(), ID: ids.NewV7(), Kind: KindOverreach, ConnectionID: &connection, Subject: subject,
 			Declared: declared.List(), Held: held.List(), Used: used.List(), Excess: excess, Severity: severity,
@@ -148,10 +179,10 @@ func (s *Service) ListFindings(ctx context.Context, state *string, connection *i
 	return out, next, err
 }
 
-// DismissFinding dismisses an open finding with a written reason; only a
-// person holding coverage.manage at org scope does, since a dismissal
-// hides exposure.
-func (s *Service) DismissFinding(ctx context.Context, id ids.UUID, reason string) (dbq.PcCoverageFinding, error) {
+// AcknowledgeFinding acknowledges an open finding with a written reason,
+// dismissing it; only a person holding coverage.manage at org scope does,
+// since a dismissal hides exposure.
+func (s *Service) AcknowledgeFinding(ctx context.Context, id ids.UUID, reason string) (dbq.PcCoverageFinding, error) {
 	var out dbq.PcCoverageFinding
 	reason = strings.TrimSpace(reason)
 	if n := utf8.RuneCountInString(reason); n < 10 || n > 1000 {
