@@ -294,3 +294,11 @@ FROM pc.agent_instances i
 WHERE i.org_id = sqlc.arg(org_id) AND i.agent_id = sqlc.arg(agent_id) AND i.state = 'ADMITTED'
   AND (i.expires_at IS NULL OR i.expires_at > now())
 ORDER BY i.id;
+
+-- Serializes the reassessments and closure recordings of one agent and
+-- connection until the transaction ends, so two never append snapshots
+-- from the same current one.
+-- name: LockCoverageScope :exec
+SELECT pg_advisory_xact_lock(hashtextextended(
+    (sqlc.arg(org_id)::uuid)::text || '/' || (sqlc.arg(agent_id)::uuid)::text || '/' || (sqlc.arg(connection_id)::uuid)::text,
+    85));

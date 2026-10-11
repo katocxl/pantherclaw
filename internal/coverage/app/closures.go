@@ -103,6 +103,9 @@ func (s *Service) RecordClosure(ctx context.Context, tx db.TenantTx, c domain.Cl
 		return ids.UUID{}, ErrClosure
 	}
 	q := dbq.New(tx)
+	if err := q.LockCoverageScope(ctx, tx.OrgID().UUID(), c.Agent, c.Connection); err != nil {
+		return ids.UUID{}, err
+	}
 	b, err := q.CoverageBinding(ctx, tx.OrgID(), c.Connection)
 	if db.IsNoRows(err) || (err == nil && (b.State == "RETIRED" || b.PackageVersionID == nil)) {
 		return ids.UUID{}, ErrNoBinding

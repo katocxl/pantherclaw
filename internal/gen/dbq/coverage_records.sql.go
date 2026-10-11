@@ -1227,6 +1227,20 @@ func (q *Queries) ListCurrentCoverageSnapshotsPage(ctx context.Context, arg List
 	return items, nil
 }
 
+const lockCoverageScope = `-- name: LockCoverageScope :exec
+SELECT pg_advisory_xact_lock(hashtextextended(
+    ($1::uuid)::text || '/' || ($2::uuid)::text || '/' || ($3::uuid)::text,
+    85))
+`
+
+// Serializes the reassessments and closure recordings of one agent and
+// connection until the transaction ends, so two never append snapshots
+// from the same current one.
+func (q *Queries) LockCoverageScope(ctx context.Context, orgID ids.UUID, agentID ids.UUID, connectionID ids.UUID) error {
+	_, err := q.db.Exec(ctx, lockCoverageScope, orgID, agentID, connectionID)
+	return err
+}
+
 const markCoverageInvalidationsReassessed = `-- name: MarkCoverageInvalidationsReassessed :execrows
 UPDATE pc.coverage_invalidations SET reassessed_at = now()
 WHERE org_id = $1 AND id = ANY ($2::uuid[]) AND reassessed_at IS NULL
