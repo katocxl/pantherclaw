@@ -16,7 +16,9 @@ import (
 // agentSDKSnippets prints, for each Claude Agent SDK project init found,
 // how to add PantherClaw's integration (integrations/claude-agent-sdk) to
 // its code. init prints it and never writes code (G0 M8 design decision 9).
-// The integration takes the /sdk connection for the agent's other tools,
+// The integration wraps the whole options object (it decides when "ask" is
+// safe from permissionMode, allowedTools, settingSources and mcpServers,
+// HR-200), and takes the /sdk connection for the agent's other tools,
 // which init does not know, so that one is left for the developer to fill.
 func (f initFlags) agentSDKSnippets(a *app, findings []scan.Finding) {
 	key, err := filepath.Abs(f.keyFile)
@@ -32,29 +34,30 @@ func (f initFlags) agentSDKSnippets(a *app, findings []scan.Finding) {
 		_, _ = fmt.Fprintf(a.stdout, "\nClaude Agent SDK project %s: init does not change code. To decide its tool calls, add:\n\n", at["path"])
 		q := strconv.Quote
 		if at["manifest"] == "package.json" {
-			_, _ = fmt.Fprintf(a.stdout, `  import { pantherclaw } from "@pantherclaw/claude-agent-sdk";
+			_, _ = fmt.Fprintf(a.stdout, `  import { PantherClaw } from "@pantherclaw/claude-agent-sdk";
 
-  const pc = await pantherclaw({
+  const pc = await PantherClaw.fromKeyFile(%s, {
     gateway: %s,
-    keyFile: %s,
-    shellConnection: %s,
     connection: "<the /sdk connection for its other tools>",
+    shellConnection: %s,
   });
-  // query({ prompt, options: { ...options, hooks: pc.hooks, canUseTool: pc.canUseTool } })
+  // Give the integration the whole options object, never its hooks alone:
+  for await (const m of query({ prompt, options: pc.options({ permissionMode: "default", mcpServers }) })) { /* ... */ }
 
-`, q(gateway), q(key), q(f.connection))
+`, q(key), q(gateway), q(f.connection))
 			continue
 		}
-		_, _ = fmt.Fprintf(a.stdout, `  from pantherclaw_claude_agent_sdk import pantherclaw
+		_, _ = fmt.Fprintf(a.stdout, `  from pantherclaw_claude_agent_sdk import PantherClaw
 
-  pc = await pantherclaw(
+  pc = PantherClaw.from_key_file(
+      %s,
       gateway=%s,
-      key_file=%s,
-      shell_connection=%s,
       connection="<the /sdk connection for its other tools>",
+      shell_connection=%s,
   )
-  # ClaudeAgentOptions(..., hooks=pc.hooks, can_use_tool=pc.can_use_tool)
+  # Give the integration the whole options object, never its hooks alone:
+  options = ClaudeAgentOptions(**pc.options(permission_mode="default", mcp_servers=...))
 
-`, q(gateway), q(key), q(f.connection))
+`, q(key), q(gateway), q(f.connection))
 	}
 }

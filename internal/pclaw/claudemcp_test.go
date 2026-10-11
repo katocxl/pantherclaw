@@ -186,7 +186,8 @@ func TestT084_InitPrintsTheAgentSDKSnippetAndWritesNoCode(t *testing.T) {
 	f.write(t, filepath.Join(f.project, "app", "package.json"), pkg)
 	f.write(t, filepath.Join(f.project, "bot", "requirements.txt"), req)
 	code, out, errs := f.run(t)
-	if code != 0 || !strings.Contains(out, `from "@pantherclaw/claude-agent-sdk"`) || !strings.Contains(out, "from pantherclaw_claude_agent_sdk") ||
+	if code != 0 || !strings.Contains(out, `PantherClaw.fromKeyFile(`) || !strings.Contains(out, "PantherClaw.from_key_file(") ||
+		!strings.Contains(out, "pc.options(") || strings.Contains(out, "pc.hooks") ||
 		!strings.Contains(out, `shellConnection: "shell"`) || !strings.Contains(out, `gateway="https://gw.example.test"`) {
 		t.Fatalf("init: %d %s %s", code, out, errs)
 	}
