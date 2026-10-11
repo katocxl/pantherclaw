@@ -16,24 +16,27 @@ import (
 )
 
 const coverageBinding = `-- name: CoverageBinding :one
-SELECT c.revision, c.gateway_id, c.state, c.kind, c.access_mode, p.version_id AS package_version_id
+SELECT c.revision, c.gateway_id, c.state, c.kind, c.access_mode, p.version_id AS package_version_id,
+    cr.version AS credential_version
 FROM pc.connections c
 JOIN pc.tool_packages tp ON tp.org_id = c.org_id AND tp.name = c.package
 JOIN pc.package_pins p ON p.org_id = c.org_id AND p.package_id = tp.id
+LEFT JOIN pc.credentials cr ON cr.org_id = c.org_id AND cr.connection_id = c.id AND cr.state = 'ACTIVE'
 WHERE c.org_id = $1 AND c.id = $2
 `
 
 type CoverageBindingRow struct {
-	Revision         int32
-	GatewayID        ids.UUID
-	State            string
-	Kind             string
-	AccessMode       string
-	PackageVersionID ids.UUID
+	Revision          int32
+	GatewayID         ids.UUID
+	State             string
+	Kind              string
+	AccessMode        string
+	PackageVersionID  ids.UUID
+	CredentialVersion *int32
 }
 
-// What a closure is bound to now: the connection's revision and gateway
-// and its package's pinned version.
+// What a closure is bound to now: the connection's revision and gateway,
+// its package's pinned version and its active credential's version.
 func (q *Queries) CoverageBinding(ctx context.Context, orgID ids.OrgID, connectionID ids.UUID) (CoverageBindingRow, error) {
 	row := q.db.QueryRow(ctx, coverageBinding, orgID, connectionID)
 	var i CoverageBindingRow
@@ -44,6 +47,7 @@ func (q *Queries) CoverageBinding(ctx context.Context, orgID ids.OrgID, connecti
 		&i.Kind,
 		&i.AccessMode,
 		&i.PackageVersionID,
+		&i.CredentialVersion,
 	)
 	return i, err
 }
@@ -107,7 +111,8 @@ const coverageInvalidationsSince = `-- name: CoverageInvalidationsSince :many
 SELECT org_id, id, kind, connection_id, agent_id, subject_id, detail, occurred_at, reassessed_at FROM pc.coverage_invalidations
 WHERE org_id = $1 AND connection_id = $2
   AND (agent_id IS NULL OR agent_id = $3)
-  AND occurred_at > $4
+  AND occurred_at >= $4
+  AND kind NOT IN ('route', 'exclusion', 'evidence_expired')
 ORDER BY occurred_at, id
 LIMIT 64
 `
@@ -119,7 +124,10 @@ type CoverageInvalidationsSinceParams struct {
 	Since        time.Time
 }
 
-// The changes to a scope after a point in time, oldest first (HR-211).
+// The changes to a scope at or after a point in time that invalidate a
+// closure taken before them, oldest first (HR-211). A new route, an
+// exclusion and an expiry only make the scope be recomputed: the closure
+// still closes what its probes closed.
 func (q *Queries) CoverageInvalidationsSince(ctx context.Context, arg CoverageInvalidationsSinceParams) ([]PcCoverageInvalidation, error) {
 	rows, err := q.db.Query(ctx, coverageInvalidationsSince,
 		arg.OrgID,
@@ -363,7 +371,7 @@ func (q *Queries) DismissCoverageFinding(ctx context.Context, arg DismissCoverag
 }
 
 const getCoverageClosure = `-- name: GetCoverageClosure :one
-SELECT org_id, id, agent_id, connection_id, sandbox_session_id, result, probes, positive_controls_passed, negative_controls_passed, canary_passed, signing_key_jkt, server_nonce, results_sha256, engine_version, api_version, runtime, image_digests, config_sha256, gateway_id, connection_revision, package_version_id, session_started_at, observed_at, expires_at, recorded_at FROM pc.coverage_closures WHERE org_id = $1 AND id = $2
+SELECT org_id, id, agent_id, connection_id, sandbox_session_id, result, probes, positive_controls_passed, negative_controls_passed, canary_passed, signing_key_jkt, server_nonce, results_sha256, engine_version, api_version, runtime, image_digests, config_sha256, config_checks, gateway_id, connection_revision, package_version_id, credential_version, session_started_at, observed_at, expires_at, recorded_at FROM pc.coverage_closures WHERE org_id = $1 AND id = $2
 `
 
 func (q *Queries) GetCoverageClosure(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (PcCoverageClosure, error) {
@@ -388,9 +396,11 @@ func (q *Queries) GetCoverageClosure(ctx context.Context, orgID ids.OrgID, iD id
 		&i.Runtime,
 		&i.ImageDigests,
 		&i.ConfigSha256,
+		&i.ConfigChecks,
 		&i.GatewayID,
 		&i.ConnectionRevision,
 		&i.PackageVersionID,
+		&i.CredentialVersion,
 		&i.SessionStartedAt,
 		&i.ObservedAt,
 		&i.ExpiresAt,
@@ -429,15 +439,17 @@ func (q *Queries) GetCoverageSnapshot(ctx context.Context, orgID ids.OrgID, iD i
 const insertCoverageClosure = `-- name: InsertCoverageClosure :one
 INSERT INTO pc.coverage_closures (org_id, id, agent_id, connection_id, sandbox_session_id, result, probes,
     positive_controls_passed, negative_controls_passed, canary_passed, signing_key_jkt, server_nonce, results_sha256,
-    engine_version, api_version, runtime, image_digests, config_sha256, gateway_id, connection_revision, package_version_id,
-    session_started_at, observed_at, expires_at)
+    engine_version, api_version, runtime, image_digests, config_sha256, config_checks, gateway_id, connection_revision,
+    package_version_id, credential_version, session_started_at, observed_at, expires_at)
 VALUES ($1, $2, $3, $4, $5,
     $6, $7, $8, $9,
     $10, $11, $12, $13,
     $14, $15, $16, $17::text[],
     $18, $19, $20, $21,
-    $22, $23, $24)
-RETURNING org_id, id, agent_id, connection_id, sandbox_session_id, result, probes, positive_controls_passed, negative_controls_passed, canary_passed, signing_key_jkt, server_nonce, results_sha256, engine_version, api_version, runtime, image_digests, config_sha256, gateway_id, connection_revision, package_version_id, session_started_at, observed_at, expires_at, recorded_at
+    $22, $23, $24, $25,
+    $26)
+ON CONFLICT (org_id, agent_id, connection_id, server_nonce) DO NOTHING
+RETURNING org_id, id, agent_id, connection_id, sandbox_session_id, result, probes, positive_controls_passed, negative_controls_passed, canary_passed, signing_key_jkt, server_nonce, results_sha256, engine_version, api_version, runtime, image_digests, config_sha256, config_checks, gateway_id, connection_revision, package_version_id, credential_version, session_started_at, observed_at, expires_at, recorded_at
 `
 
 type InsertCoverageClosureParams struct {
@@ -459,14 +471,18 @@ type InsertCoverageClosureParams struct {
 	Runtime                string
 	ImageDigests           []string
 	ConfigSha256           []byte
+	ConfigChecks           []byte
 	GatewayID              ids.UUID
 	ConnectionRevision     int32
 	PackageVersionID       ids.UUID
+	CredentialVersion      *int32
 	SessionStartedAt       time.Time
 	ObservedAt             time.Time
 	ExpiresAt              time.Time
 }
 
+// A replayed result set (the same server nonce) inserts nothing, so the
+// caller's transaction stays usable (HR-215).
 func (q *Queries) InsertCoverageClosure(ctx context.Context, arg InsertCoverageClosureParams) (PcCoverageClosure, error) {
 	row := q.db.QueryRow(ctx, insertCoverageClosure,
 		arg.OrgID,
@@ -487,9 +503,11 @@ func (q *Queries) InsertCoverageClosure(ctx context.Context, arg InsertCoverageC
 		arg.Runtime,
 		arg.ImageDigests,
 		arg.ConfigSha256,
+		arg.ConfigChecks,
 		arg.GatewayID,
 		arg.ConnectionRevision,
 		arg.PackageVersionID,
+		arg.CredentialVersion,
 		arg.SessionStartedAt,
 		arg.ObservedAt,
 		arg.ExpiresAt,
@@ -514,9 +532,11 @@ func (q *Queries) InsertCoverageClosure(ctx context.Context, arg InsertCoverageC
 		&i.Runtime,
 		&i.ImageDigests,
 		&i.ConfigSha256,
+		&i.ConfigChecks,
 		&i.GatewayID,
 		&i.ConnectionRevision,
 		&i.PackageVersionID,
+		&i.CredentialVersion,
 		&i.SessionStartedAt,
 		&i.ObservedAt,
 		&i.ExpiresAt,
@@ -727,7 +747,7 @@ func (q *Queries) LastEnforcedCoverageSnapshot(ctx context.Context, arg LastEnfo
 }
 
 const latestCoverageClosure = `-- name: LatestCoverageClosure :one
-SELECT org_id, id, agent_id, connection_id, sandbox_session_id, result, probes, positive_controls_passed, negative_controls_passed, canary_passed, signing_key_jkt, server_nonce, results_sha256, engine_version, api_version, runtime, image_digests, config_sha256, gateway_id, connection_revision, package_version_id, session_started_at, observed_at, expires_at, recorded_at FROM pc.coverage_closures
+SELECT org_id, id, agent_id, connection_id, sandbox_session_id, result, probes, positive_controls_passed, negative_controls_passed, canary_passed, signing_key_jkt, server_nonce, results_sha256, engine_version, api_version, runtime, image_digests, config_sha256, config_checks, gateway_id, connection_revision, package_version_id, credential_version, session_started_at, observed_at, expires_at, recorded_at FROM pc.coverage_closures
 WHERE org_id = $1 AND agent_id = $2 AND connection_id = $3
 ORDER BY id DESC
 LIMIT 1
@@ -757,9 +777,11 @@ func (q *Queries) LatestCoverageClosure(ctx context.Context, orgID ids.OrgID, ag
 		&i.Runtime,
 		&i.ImageDigests,
 		&i.ConfigSha256,
+		&i.ConfigChecks,
 		&i.GatewayID,
 		&i.ConnectionRevision,
 		&i.PackageVersionID,
+		&i.CredentialVersion,
 		&i.SessionStartedAt,
 		&i.ObservedAt,
 		&i.ExpiresAt,
@@ -769,7 +791,7 @@ func (q *Queries) LatestCoverageClosure(ctx context.Context, orgID ids.OrgID, ag
 }
 
 const listCoverageClosuresPage = `-- name: ListCoverageClosuresPage :many
-SELECT org_id, id, agent_id, connection_id, sandbox_session_id, result, probes, positive_controls_passed, negative_controls_passed, canary_passed, signing_key_jkt, server_nonce, results_sha256, engine_version, api_version, runtime, image_digests, config_sha256, gateway_id, connection_revision, package_version_id, session_started_at, observed_at, expires_at, recorded_at FROM pc.coverage_closures
+SELECT org_id, id, agent_id, connection_id, sandbox_session_id, result, probes, positive_controls_passed, negative_controls_passed, canary_passed, signing_key_jkt, server_nonce, results_sha256, engine_version, api_version, runtime, image_digests, config_sha256, config_checks, gateway_id, connection_revision, package_version_id, credential_version, session_started_at, observed_at, expires_at, recorded_at FROM pc.coverage_closures
 WHERE org_id = $1
   AND ($2::uuid IS NULL OR connection_id = $2::uuid)
   AND ($3::uuid IS NULL OR agent_id = $3::uuid)
@@ -820,9 +842,11 @@ func (q *Queries) ListCoverageClosuresPage(ctx context.Context, arg ListCoverage
 			&i.Runtime,
 			&i.ImageDigests,
 			&i.ConfigSha256,
+			&i.ConfigChecks,
 			&i.GatewayID,
 			&i.ConnectionRevision,
 			&i.PackageVersionID,
+			&i.CredentialVersion,
 			&i.SessionStartedAt,
 			&i.ObservedAt,
 			&i.ExpiresAt,
@@ -1039,18 +1063,15 @@ func (q *Queries) ListCoverageRoutesPage(ctx context.Context, arg ListCoverageRo
 }
 
 const listCurrentCoverageSnapshotsPage = `-- name: ListCurrentCoverageSnapshotsPage :many
-SELECT s.org_id, s.id, s.agent_id, s.connection_id, s.operation, s.state, s.reasons, s.closure_id, s.last_valid_id, s.invalidation_id, s.body, s.body_sha256, s.ledger_entry_id, s.computed_at, s.expires_at FROM (
-    SELECT DISTINCT ON (agent_id, connection_id, operation) org_id, id, agent_id, connection_id, operation, state, reasons, closure_id, last_valid_id, invalidation_id, body, body_sha256, ledger_entry_id, computed_at, expires_at
-    FROM pc.coverage_snapshots
-    WHERE org_id = $1
-      AND ($2::uuid IS NULL OR connection_id = $2::uuid)
-      AND ($3::uuid IS NULL OR agent_id = $3::uuid)
-    ORDER BY agent_id, connection_id, operation, id DESC
-) s
-WHERE ($4::uuid IS NULL
-       OR (s.agent_id, s.connection_id, s.operation) > ($4::uuid, $5::uuid,
-                                                       $6::text))
-ORDER BY s.agent_id, s.connection_id, s.operation
+SELECT DISTINCT ON (agent_id, connection_id, operation) org_id, id, agent_id, connection_id, operation, state, reasons, closure_id, last_valid_id, invalidation_id, body, body_sha256, ledger_entry_id, computed_at, expires_at
+FROM pc.coverage_snapshots
+WHERE org_id = $1
+  AND ($2::uuid IS NULL OR connection_id = $2::uuid)
+  AND ($3::uuid IS NULL OR agent_id = $3::uuid)
+  AND ($4::uuid IS NULL
+       OR (agent_id, connection_id, operation) > ($4::uuid, $5::uuid,
+                                                 $6::text))
+ORDER BY agent_id, connection_id, operation, id DESC
 LIMIT $7
 `
 
@@ -1064,7 +1085,8 @@ type ListCurrentCoverageSnapshotsPageParams struct {
 	MaxRows         int32
 }
 
-// The current snapshot of every scope, by scope.
+// The current snapshot of every scope, by scope. The cursor filters whole
+// scopes, so it applies before DISTINCT ON and the scan stops at the page.
 func (q *Queries) ListCurrentCoverageSnapshotsPage(ctx context.Context, arg ListCurrentCoverageSnapshotsPageParams) ([]PcCoverageSnapshot, error) {
 	rows, err := q.db.Query(ctx, listCurrentCoverageSnapshotsPage,
 		arg.OrgID,
@@ -1300,19 +1322,34 @@ func (q *Queries) UpsertCoverageFinding(ctx context.Context, arg UpsertCoverageF
 
 const upsertCoverageRoute = `-- name: UpsertCoverageRoute :one
 
-INSERT INTO pc.coverage_routes (org_id, id, agent_id, connection_id, operation, kind, channel, locator, observation, source,
+INSERT INTO pc.coverage_routes AS r (org_id, id, agent_id, connection_id, operation, kind, channel, locator, observation, source,
     source_ref, mode, attributes)
 VALUES ($1, $2, $3, $4, $5, $6,
     $7, $8, $9, $10, $11, $12,
     $13)
 ON CONFLICT (org_id, connection_id, agent_id, operation, kind, channel, locator) DO UPDATE SET
-    observation  = CASE WHEN pc.coverage_routes.observation = 'observed' THEN 'observed' ELSE EXCLUDED.observation END,
-    source       = EXCLUDED.source,
-    source_ref   = coalesce(EXCLUDED.source_ref, pc.coverage_routes.source_ref),
-    mode         = coalesce(EXCLUDED.mode, pc.coverage_routes.mode),
-    attributes   = EXCLUDED.attributes,
-    seen_count   = pc.coverage_routes.seen_count + 1,
-    last_seen_at = now()
+    observation  = CASE WHEN pc.coverage_rank(EXCLUDED.observation) > pc.coverage_rank(r.observation)
+                        THEN EXCLUDED.observation ELSE r.observation END,
+    source       = CASE WHEN pc.coverage_rank(EXCLUDED.observation) > pc.coverage_rank(r.observation)
+                          OR (EXCLUDED.observation = r.observation AND (EXCLUDED.source_ref < r.source_ref) IS NOT TRUE)
+                        THEN EXCLUDED.source ELSE r.source END,
+    source_ref   = CASE WHEN pc.coverage_rank(EXCLUDED.observation) > pc.coverage_rank(r.observation)
+                        THEN coalesce(EXCLUDED.source_ref, r.source_ref)
+                        WHEN EXCLUDED.observation = r.observation THEN greatest(r.source_ref, EXCLUDED.source_ref)
+                        ELSE r.source_ref END,
+    mode         = CASE WHEN pc.coverage_rank(EXCLUDED.observation) > pc.coverage_rank(r.observation)
+                          OR (EXCLUDED.observation = r.observation AND (EXCLUDED.source_ref < r.source_ref) IS NOT TRUE)
+                        THEN coalesce(EXCLUDED.mode, r.mode) ELSE r.mode END,
+    attributes   = CASE WHEN pc.coverage_rank(EXCLUDED.observation) > pc.coverage_rank(r.observation)
+                          OR (EXCLUDED.observation = r.observation AND (EXCLUDED.source_ref < r.source_ref) IS NOT TRUE)
+                        THEN EXCLUDED.attributes ELSE r.attributes END,
+    seen_count   = CASE WHEN EXCLUDED.observation <> 'observed' THEN r.seen_count
+                        WHEN r.observation <> 'observed' THEN 1
+                        WHEN (EXCLUDED.source_ref <= r.source_ref) IS NOT TRUE THEN r.seen_count + 1
+                        ELSE r.seen_count END,
+    last_seen_at = CASE WHEN EXCLUDED.observation = 'observed'
+                          AND (r.observation <> 'observed' OR (EXCLUDED.source_ref <= r.source_ref) IS NOT TRUE)
+                        THEN now() ELSE r.last_seen_at END
 RETURNING org_id, id, agent_id, connection_id, operation, kind, channel, locator, observation, source, source_ref, mode, attributes, seen_count, first_seen_at, last_seen_at
 `
 
@@ -1338,8 +1375,11 @@ type UpsertCoverageRouteParams struct {
 // Coverage records (G0 M9 track A; migration 00085). Everything runs as
 // pc_app in a tenant transaction. Closures and snapshots are only
 // inserted (HR-055).
-// A route seen again keeps its first sighting and counts the new one; an
-// observation never goes back to declared or proposed.
+// A route seen again keeps its first sighting. A weaker sighting (proposed
+// after declared, declared after observed) changes nothing; one as strong
+// takes over its source, mode and attributes unless its reference is older
+// (source references are UUIDv7, so a replayed sighting is ignored). Only
+// observations are counted, each source reference once.
 func (q *Queries) UpsertCoverageRoute(ctx context.Context, arg UpsertCoverageRouteParams) (PcCoverageRoute, error) {
 	row := q.db.QueryRow(ctx, upsertCoverageRoute,
 		arg.OrgID,

@@ -62,6 +62,7 @@ func closureProto(c app.Closure, probes bool) *pantherclawv1.CoverageClosure {
 		ApiVersion: c.ApiVersion, Runtime: c.Runtime, ImageDigests: c.ImageDigests, GatewayId: c.GatewayID.String(),
 		ConnectionRevision: c.ConnectionRevision, PackageVersionId: c.PackageVersionID.String(),
 		ObserveTime: ts(c.ObservedAt), ExpireTime: ts(c.ExpiresAt), RecordTime: ts(c.RecordedAt),
+		CredentialVersion: c.CredentialVersion,
 	}
 	for _, k := range c.Verdict.Closed {
 		out.ClosedKinds = append(out.ClosedKinds, kinds[k])
@@ -71,6 +72,9 @@ func closureProto(c app.Closure, probes bool) *pantherclawv1.CoverageClosure {
 			out.Probes = append(out.Probes, &pantherclawv1.CoverageProbeResult{
 				Name: p.Name, Role: p.Role, Expect: p.Expect, Observed: p.Observed, Passed: p.Passed(), Detail: p.Detail,
 			})
+		}
+		for _, k := range c.ConfigChecks {
+			out.ConfigChecks = append(out.ConfigChecks, &pantherclawv1.CoverageConfigCheck{Id: k.ID, Ok: k.OK, Detail: k.Detail})
 		}
 	}
 	return out

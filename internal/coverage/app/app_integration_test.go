@@ -9,6 +9,7 @@ import (
 	"context"
 	"errors"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -27,6 +28,7 @@ type fixture struct {
 	svc                                  *app.Service
 	org                                  ids.OrgID
 	user, agent, run, gateway, conn, pkg ids.UUID
+	version                              ids.UUID
 }
 
 func newFixture(t *testing.T) *fixture {
@@ -34,10 +36,10 @@ func newFixture(t *testing.T) *fixture {
 	d := dbtest.New(t)
 	f := &fixture{
 		p: d.AppPool(t), org: ids.New[ids.Org](), user: ids.NewV7(), agent: ids.NewV7(), run: ids.NewV7(),
-		gateway: ids.NewV7(), conn: ids.NewV7(), pkg: ids.NewV7(),
+		gateway: ids.NewV7(), conn: ids.NewV7(), pkg: ids.NewV7(), version: ids.NewV7(),
 	}
-	f.svc = &app.Service{Pool: f.p, Freshness: domain.Freshness{EnforcedTTL: 24 * time.Hour, ReassessInterval: time.Minute}}
-	env, version := ids.NewV7(), ids.NewV7()
+	f.svc = &app.Service{Pool: f.p, Freshness: domain.Freshness{EnforcedTTL: 24 * time.Hour, ReassessEvery: time.Minute}}
+	env, version := ids.NewV7(), f.version
 	for _, s := range []struct {
 		sql  string
 		args []any
@@ -79,8 +81,10 @@ func (f *fixture) closure(probes []domain.ProbeResult, started time.Time) domain
 	return domain.Closure{
 		Agent: f.agent, Connection: f.conn, SandboxSession: ids.NewV7(), SessionStartedAt: started,
 		ObservedAt: started, Probes: probes, SigningKeyJKT: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
-		ServerNonce: "nonce-0123456789abcdef", Engine: domain.Engine{Version: "29.0.1", APIVersion: "1.51", Runtime: "runc"},
-		ImageDigests: []string{digest}, Gateway: f.gateway,
+		ServerNonce:  strings.ReplaceAll(ids.NewV7().String(), "-", ""),
+		Engine:       domain.Engine{Version: "29.0.1", APIVersion: "1.51", Runtime: "runc"},
+		ImageDigests: []string{digest}, Bound: domain.Bound{ConnectionRevision: 1, Gateway: f.gateway, PackageVersion: f.version},
+		ConfigChecks: []domain.ConfigCheck{{ID: domain.CheckNoDockerSocket, OK: true}, {ID: domain.CheckNoHostBind, OK: true}},
 	}
 }
 
@@ -95,21 +99,27 @@ func (f *fixture) record(t *testing.T, c domain.Closure) (ids.UUID, error) {
 	return id, err
 }
 
+// probes is a full catalog: each probe blocked in the sandbox with its
+// positive twin from the open control network, the named controls and the
+// canary. failNegative fails the negative control.
 func probes(failNegative bool) []domain.ProbeResult {
+	pass := func(name, role, expect string) domain.ProbeResult {
+		return domain.ProbeResult{Name: name, Role: role, Expect: expect, Observed: expect}
+	}
 	out := []domain.ProbeResult{
-		{Name: "edge_mediated", Role: domain.RolePositiveControl, Expect: domain.Reachable, Observed: domain.Reachable},
-		{Name: "edge_unmapped_refused", Role: domain.RoleNegativeControl, Expect: domain.Blocked, Observed: domain.Blocked},
-		{Name: domain.ProbeExternalCanary, Role: domain.RoleCanary, Expect: domain.Blocked, Observed: domain.Blocked},
+		pass(domain.ProbeEdgeMediated, domain.RolePositiveControl, domain.Reachable),
+		pass(domain.ProbeCanaryControl, domain.RolePositiveControl, domain.Reachable),
+		pass(domain.ProbeEdgeUnmappedRefused, domain.RoleNegativeControl, domain.Blocked),
+		pass(domain.ProbeExternalCanary, domain.RoleCanary, domain.Blocked),
 	}
 	if failNegative {
-		out[1].Observed = domain.Reachable
+		out[2].Observed = domain.Reachable
 	}
 	for _, n := range []string{
 		domain.ProbeDNSExternal, domain.ProbeDNSDockerResolver, domain.ProbeIPv6, domain.ProbeICMP, domain.ProbeDirectHTTPS,
-		domain.ProbeMetadata, domain.ProbeHostGateway, domain.ProbeDockerSocket, domain.ProbeDirectSSH, domain.ProbeSSHPush,
-		domain.ProbePATPush,
+		domain.ProbeMetadata, domain.ProbeHostGateway, domain.ProbeDirectSSH, domain.ProbeSSHPush, domain.ProbePATPush,
 	} {
-		out = append(out, domain.ProbeResult{Name: n, Role: domain.RoleProbe, Expect: domain.Blocked, Observed: domain.Blocked})
+		out = append(out, pass(n, domain.RoleProbe, domain.Blocked), pass(n, domain.RolePositiveControl, domain.Reachable))
 	}
 	return out
 }
@@ -139,15 +149,17 @@ func TestIntRecordClosureBindsAndExpires(t *testing.T) {
 }
 
 // TestHR211_ClosureAfterAChangeIsRefused: a closure whose scope changed
-// after its session started is refused; an exclusion is no such change. A
-// failed closure is stored and invalidates the scope at once.
+// after its session started is refused; an exclusion, a new route or a lapse
+// is no such change. A failed closure is stored and invalidates the scope at once.
 func TestHR211_ClosureAfterAChangeIsRefused(t *testing.T) {
 	f := newFixture(t)
 	started := time.Now().Add(-time.Minute)
-	f.exec(t, `INSERT INTO pc.coverage_invalidations (org_id, id, kind, connection_id) VALUES ($1, $2, 'exclusion', $3)`,
-		f.org, ids.NewV7(), f.conn)
+	for _, kind := range []string{"exclusion", "route", "evidence_expired"} {
+		f.exec(t, `INSERT INTO pc.coverage_invalidations (org_id, id, kind, connection_id) VALUES ($1, $2, $3, $4)`,
+			f.org, ids.NewV7(), kind, f.conn)
+	}
 	if _, err := f.record(t, f.closure(probes(false), started)); err != nil {
-		t.Fatalf("an exclusion made the closure stale: %v", err)
+		t.Fatalf("an exclusion, a route or a lapse made the closure stale: %v", err)
 	}
 	f.exec(t, `INSERT INTO pc.coverage_invalidations (org_id, id, kind, connection_id) VALUES ($1, $2, 'route_mode', $3)`,
 		f.org, ids.NewV7(), f.conn)
@@ -190,4 +202,113 @@ func (f *fixture) dbNow(t *testing.T) time.Time {
 		t.Fatal(err)
 	}
 	return now
+}
+
+// TestHR211_AClosureMustMatchTheBindingsItsSessionOpenedUnder: a closure
+// taken against another gateway, connection revision, package version or
+// credential than the connection has now is refused.
+func TestHR211_AClosureMustMatchTheBindingsItsSessionOpenedUnder(t *testing.T) {
+	f := newFixture(t)
+	two := int32(2)
+	for name, change := range map[string]func(*domain.Bound){
+		"another gateway":         func(b *domain.Bound) { b.Gateway = ids.NewV7() },
+		"an older revision":       func(b *domain.Bound) { b.ConnectionRevision = 2 },
+		"another package version": func(b *domain.Bound) { b.PackageVersion = ids.NewV7() },
+		"a credential since gone": func(b *domain.Bound) { b.CredentialVersion = &two },
+	} {
+		c := f.closure(probes(false), f.dbNow(t))
+		change(&c.Bound)
+		if _, err := f.record(t, c); !errors.Is(err, app.ErrClosureStale) {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+	c := f.closure(probes(false), f.dbNow(t))
+	id, err := f.record(t, c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got dbq.PcCoverageClosure
+	if err := f.p.InTenantTx(context.Background(), f.org, func(ctx context.Context, tx db.TenantTx) error {
+		got, err = dbq.New(tx).GetCoverageClosure(ctx, f.org, id)
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if got.CredentialVersion != nil || got.PackageVersionID != f.version || !strings.Contains(string(got.ConfigChecks), domain.CheckNoHostBind) {
+		t.Fatalf("closure %+v", got)
+	}
+}
+
+// TestHR215_ASignedResultSetIsRecordedOnce: a replayed server nonce is
+// refused, and the sandbox's transaction stays usable.
+func TestHR215_ASignedResultSetIsRecordedOnce(t *testing.T) {
+	f := newFixture(t)
+	c := f.closure(probes(false), f.dbNow(t))
+	if _, err := f.record(t, c); err != nil {
+		t.Fatal(err)
+	}
+	err := f.p.InTenantTx(context.Background(), f.org, func(ctx context.Context, tx db.TenantTx) error {
+		if _, err := f.svc.RecordClosure(ctx, tx, c); !errors.Is(err, app.ErrClosureReplayed) {
+			t.Errorf("a replay: %v", err)
+		}
+		_, err := dbq.New(tx).GetCoverageClosure(ctx, f.org, ids.NewV7())
+		if !db.IsNoRows(err) {
+			t.Errorf("the transaction after a replay: %v", err)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestF443_RoutesSeenInsideTheSandboxAreObserved: a destination the edge
+// refused becomes an observed route of the agent and connection, its first
+// sighting a route change; seeing it again in the same session changes
+// nothing, and only refused destinations and found credentials are taken.
+func TestF443_RoutesSeenInsideTheSandboxAreObserved(t *testing.T) {
+	f := newFixture(t)
+	session := ids.NewV7()
+	route := func(kind domain.RouteKind, locator string) (bool, error) {
+		var added bool
+		err := f.p.InTenantTx(context.Background(), f.org, func(ctx context.Context, tx db.TenantTx) error {
+			var err error
+			added, err = f.svc.RecordRoute(ctx, tx, domain.ObservedRoute{
+				Agent: f.agent, Connection: f.conn, SandboxSession: session, Kind: kind, Locator: locator,
+			})
+			return err
+		})
+		return added, err
+	}
+	if added, err := route(domain.KindDirectAPI, "140.82.112.3:443"); err != nil || !added {
+		t.Fatalf("a refused destination: %v %v", added, err)
+	}
+	if added, err := route(domain.KindDirectAPI, "140.82.112.3:443"); err != nil || added {
+		t.Fatalf("seen again: %v %v", added, err)
+	}
+	for _, kind := range []domain.RouteKind{domain.KindHost, domain.KindChannel, "nonsense"} {
+		if _, err := route(kind, "x"); !errors.Is(err, app.ErrRoute) {
+			t.Errorf("%s: %v", kind, err)
+		}
+	}
+	if _, err := route(domain.KindCredential, strings.Repeat("k", 513)); !errors.Is(err, app.ErrRoute) {
+		t.Errorf("a long locator: %v", err)
+	}
+	err := f.p.InTenantTx(context.Background(), f.org, func(ctx context.Context, tx db.TenantTx) error {
+		q := dbq.New(tx)
+		pending, err := q.PendingCoverageInvalidations(ctx, f.org, 10)
+		if err != nil || len(pending) != 1 || pending[0].Kind != "route" {
+			t.Fatalf("route changes %+v (%v)", pending, err)
+		}
+		rows, err := q.CoverageRoutesForScope(ctx, dbq.CoverageRoutesForScopeParams{
+			OrgID: f.org, ConnectionID: f.conn, AgentID: &f.agent, Operation: "git.push",
+		})
+		if err != nil || len(rows) != 1 || rows[0].Source != "probe" || rows[0].Observation != "observed" || rows[0].SeenCount != 1 {
+			t.Fatalf("routes %+v (%v)", rows, err)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
 }

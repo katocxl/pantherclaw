@@ -26,8 +26,8 @@ func routeProto(r dbq.PcCoverageRoute) *pantherclawv1.CoverageRoute {
 	}
 }
 
-// ListCoverageRoutes implements CoverageServiceHandler.
-func (h *Handler) ListCoverageRoutes(ctx context.Context, req *pantherclawv1.ListCoverageRoutesRequest) (*pantherclawv1.ListCoverageRoutesResponse, error) {
+// ListRoutes implements CoverageServiceHandler.
+func (h *Handler) ListRoutes(ctx context.Context, req *pantherclawv1.ListRoutesRequest) (*pantherclawv1.ListRoutesResponse, error) {
 	f, err := filterOf(req.AgentId, req.ConnectionId)
 	if err != nil {
 		return nil, err
@@ -36,7 +36,7 @@ func (h *Handler) ListCoverageRoutes(ctx context.Context, req *pantherclawv1.Lis
 	if err != nil {
 		return nil, err
 	}
-	out := &pantherclawv1.ListCoverageRoutesResponse{NextPageToken: next}
+	out := &pantherclawv1.ListRoutesResponse{NextPageToken: next}
 	for _, r := range rows {
 		out.Routes = append(out.Routes, routeProto(r))
 	}
