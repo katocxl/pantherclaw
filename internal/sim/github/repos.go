@@ -4,7 +4,7 @@
 package github
 
 import (
-	"crypto/sha1" //nolint:gosec // git object names are SHA-1; nothing here relies on its strength
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json/v2"
@@ -118,12 +118,12 @@ func (s *Server) RepoSettings(fullName string) (string, Settings) {
 // sequence number, so every commit is new.
 func (s *Server) commit(r *Repo, parents []string, files map[string]string) string {
 	s.seq++
-	h := sha1.New() //nolint:gosec // see the import
+	h := sha256.New()
 	fmt.Fprintf(h, "%s %d %v", r.full(), s.seq, parents)
 	for _, p := range slices.Sorted(maps.Keys(files)) {
 		fmt.Fprintf(h, "\x00%s\x00%s", p, files[p])
 	}
-	sha := hex.EncodeToString(h.Sum(nil))
+	sha := hex.EncodeToString(h.Sum(nil)[:20]) // 40 hex digits, the shape of a git commit name
 	r.Commits[sha] = &Commit{SHA: sha, Parents: parents, Files: files}
 	return sha
 }
@@ -215,10 +215,10 @@ func (s *Server) contents(w http.ResponseWriter, req *http.Request, r *Repo, _ *
 	}
 	path := strings.Trim(req.PathValue("path"), "/")
 	if body, ok := c.Files[path]; ok {
-		sum := sha1.Sum([]byte(body)) //nolint:gosec // see the import
+		sum := sha256.Sum256([]byte(body))
 		return reply(w, http.StatusOK, map[string]any{
 			"type": "file", "name": path[strings.LastIndexByte(path, '/')+1:], "path": path, "size": len(body),
-			"sha": hex.EncodeToString(sum[:]), "encoding": "base64", "content": base64.StdEncoding.EncodeToString([]byte(body)), "simulated": true,
+			"sha": hex.EncodeToString(sum[:20]), "encoding": "base64", "content": base64.StdEncoding.EncodeToString([]byte(body)), "simulated": true,
 		})
 	}
 	seen, entries := map[string]bool{}, []map[string]any{}
