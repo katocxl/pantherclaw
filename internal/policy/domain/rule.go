@@ -17,6 +17,7 @@ import (
 	"strings"
 
 	"github.com/katocxl/pantherclaw/internal/actionir"
+	defs "github.com/katocxl/pantherclaw/internal/definitions/domain"
 	fdomain "github.com/katocxl/pantherclaw/internal/facts/domain"
 	tdomain "github.com/katocxl/pantherclaw/internal/tenancy/domain"
 )
@@ -114,7 +115,8 @@ func ApprovalRole(role string) bool {
 	return ok && r.Has(tdomain.PermApprovalRespond)
 }
 
-// ConstraintKind matches the definitions' declared constraint kinds (F100).
+// ConstraintKind matches the definitions' declared constraint kinds (F100),
+// and Verify.
 type ConstraintKind string
 
 // Constraint kinds.
@@ -124,18 +126,31 @@ const (
 	AllowedValues  ConstraintKind = "allowed_values"
 	TargetSet      ConstraintKind = "target_set"
 	DestinationSet ConstraintKind = "destination_set"
+	// Verify raises the verification level the action's effect needs
+	// (verify(level), G0 M7 design decision 2, F497). It is no limit on the
+	// action: the Authority applies it, after dispatch, and step 8 refuses
+	// the action (CANNOT_AUTHORIZE, VERIFIER_UNSUPPORTED) when the
+	// definition's verifier cannot reach the level or the connection cannot
+	// make its read.
+	Verify ConstraintKind = "verify"
 )
 
 // Constraint is the limit a CONSTRAIN rule applies. Max is a decimal string
 // (with Currency for money params); Values lists allowed values, target ids
-// or destination ids.
+// or destination ids; Level is the level a verify constraint requires.
 type Constraint struct {
 	Kind     ConstraintKind `json:"kind"`
 	Param    string         `json:"param,omitzero"`
 	Max      string         `json:"max,omitzero"`
 	Currency string         `json:"currency,omitzero"`
 	Values   []string       `json:"values,omitzero"`
+	Level    defs.Level     `json:"level,omitzero"`
 }
+
+// VerifyLevel reports whether a verify constraint may require level: a
+// level above the target's own acceptance (follow_up, domain_effect or
+// downstream), which is what every effect reaches anyway.
+func VerifyLevel(l defs.Level) bool { return l.Rank() > defs.LevelAcceptance.Rank() }
 
 // Bundle is a published set of rules for an org (versioned, immutable).
 type Bundle struct {
@@ -259,7 +274,15 @@ func (r *Rule) Validate() error {
 }
 
 func (c *Constraint) validate(id string) error {
+	if c.Level != "" && c.Kind != Verify {
+		return invalid("%s: only verify takes a level", id)
+	}
 	switch c.Kind {
+	case Verify:
+		if c.Param != "" || c.Max != "" || c.Currency != "" || len(c.Values) > 0 || !VerifyLevel(c.Level) {
+			return invalid("%s: verify needs a level of follow_up, domain_effect or downstream, and nothing else", id)
+		}
+		return nil
 	case AmountMax, CountMax:
 		if c.Param == "" || c.Max == "" || len(c.Values) > 0 {
 			return invalid("%s: %s needs a param and a max", id, c.Kind)

@@ -17,23 +17,27 @@ import (
 )
 
 // maxExpiryDays bounds --expires-days. A signed targets document stays valid
-// until it expires, so a typo must not sign one for years.
-const maxExpiryDays = 365
+// until it expires, so a typo must not sign one for years. defaultExpiryDays
+// is G0 M4 decision 1: the signed list is valid for 180 days and checked
+// only at import.
+const (
+	maxExpiryDays     = 365
+	defaultExpiryDays = 180
+)
 
 // signPackages signs a targets document listing the exact bytes of each
-// package file (HR-123). The expiry has no default until G0 M4 open
-// decision 1 settles it (recommended: 180 days).
+// package file (HR-123). The expiry defaults to 180 days (G0 M4 decision 1).
 func signPackages(args []string, stdout, stderr io.Writer, now func() time.Time) error {
 	fs := newFlags("packages sign", stderr)
 	keyFile := fs.String("key", "", "packages root private key file")
 	ppFile := fs.String("passphrase-file", "", "passphrase file for an encrypted key")
 	version := fs.Int64("version", 0, "targets version, higher than the last one published")
-	days := fs.Int("expires-days", 0, fmt.Sprintf("days until the targets expire, 1..%d (180 recommended)", maxExpiryDays))
+	days := fs.Int("expires-days", defaultExpiryDays, fmt.Sprintf("days until the targets expire, 1..%d", maxExpiryDays))
 	out := fs.String("out", "", "output targets file")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	if *keyFile == "" || *version < 1 || *days == 0 || *out == "" || fs.NArg() == 0 {
+	if *keyFile == "" || *version < 1 || *out == "" || fs.NArg() == 0 {
 		fs.Usage()
 		return errUsage
 	}

@@ -51,7 +51,7 @@ func TestHR177_DeadlinesComeFromTheKindAndOnlyShorten(t *testing.T) {
 func TestHR177_DecidersComeFromPermissions(t *testing.T) {
 	for kind, want := range map[string]td.Permission{
 		domain.KindAdmission: td.PermAgentAdmit, domain.KindAccessRequest: td.PermGrantIssue,
-		domain.KindToolReview: td.PermPackageActivate, domain.KindReconciliation: td.PermIncidentRespond,
+		domain.KindToolReview: td.PermPackageActivate, domain.KindReconciliation: td.PermTransactionReconcile,
 	} {
 		if p, ok := domain.DeciderPermission(kind); !ok || p != want {
 			t.Errorf("%s: %s %v", kind, p, ok)

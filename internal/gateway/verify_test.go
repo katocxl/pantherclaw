@@ -176,6 +176,88 @@ func (f *fakeVerifications) Report(_ context.Context, _ dispatch.Lease, o dispat
 	return nil
 }
 
+// countingVerifications counts claims and says so on claimed.
+type countingVerifications struct {
+	n       atomic.Int32
+	claimed chan int32
+}
+
+func (c *countingVerifications) Claim(context.Context, int) ([]dispatch.Lease, error) {
+	c.claimed <- c.n.Add(1)
+	return nil, nil
+}
+
+func (*countingVerifications) Report(context.Context, dispatch.Lease, dispatch.Observation) error {
+	return nil
+}
+
+// hintedContainment is the harness's containment with the stream's
+// verifications hint (control.Containment).
+type hintedContainment struct {
+	*fakeContainment
+	hints chan struct{}
+}
+
+func (h hintedContainment) VerificationsWaiting() <-chan struct{} { return h.hints }
+
+// runVerifier starts the runner with a hint channel (unbuffered: a send
+// returns once the runner took the hint) and waits for its first claim.
+func runVerifier(t *testing.T, gap time.Duration) (*countingVerifications, chan struct{}, func()) {
+	t.Helper()
+	h := setup(t)
+	v := &countingVerifications{claimed: make(chan int32, 16)}
+	hints := make(chan struct{})
+	h.gw.verifications, h.gw.verifyEvery, h.gw.verifyHintGap = v, time.Hour, gap
+	h.gw.containment = hintedContainment{h.containment, hints}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- h.gw.watchVerifications(ctx) }()
+	waitClaim(t, v, 1)
+	return v, hints, func() {
+		cancel()
+		if err := <-done; err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func waitClaim(t *testing.T, v *countingVerifications, want int32) {
+	t.Helper()
+	select {
+	case n := <-v.claimed:
+		if n != want {
+			t.Fatalf("claim %d, want %d", n, want)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatalf("no claim %d", want)
+	}
+}
+
+// TestHR190_AHintWakesTheVerifier: the runner claims at start and, on a
+// containment hint that tasks are due, again at once instead of at its
+// next poll (G0 M7 design decision 1).
+func TestHR190_AHintWakesTheVerifier(t *testing.T) {
+	v, hints, stop := runVerifier(t, 0)
+	defer stop()
+	hints <- struct{}{}
+	waitClaim(t, v, 2)
+	hints <- struct{}{}
+	waitClaim(t, v, 3)
+}
+
+// TestHR190_NoHintNoExtraClaims: without a hint the runner waits for its
+// poll, and hints that follow a claim within verifyHintGap (the server may
+// still show tasks just leased) claim nothing more.
+func TestHR190_NoHintNoExtraClaims(t *testing.T) {
+	v, hints, stop := runVerifier(t, time.Hour)
+	hints <- struct{}{}
+	hints <- struct{}{} // the runner took the first one and waits again
+	stop()
+	if n := v.n.Load(); n != 1 {
+		t.Fatalf("%d claims, want only the first", n)
+	}
+}
+
 // TestHR190_TheGatewayReportsWhatItRead: the runner claims, reads and
 // reports; a task naming a write is never read nor reported.
 func TestHR190_TheGatewayReportsWhatItRead(t *testing.T) {

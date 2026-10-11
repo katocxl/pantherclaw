@@ -6,6 +6,7 @@ package server
 import (
 	"connectrpc.com/connect/v2"
 
+	"github.com/katocxl/pantherclaw/internal/authn/adapters/webhttp"
 	"github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1/pantherclawv1connect"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/keys"
@@ -22,6 +23,20 @@ func registerM7(rs *connect.Server, pool *db.Pool, verification *txapp.Service) 
 	pantherclawv1connect.RegisterTransactionServiceHandler(rs, transactionsrpc.New(explorer))
 	reconciler := &txapp.Reconciler{Store: &pgtransactions.Store{Pool: pool}, Effects: verification}
 	pantherclawv1connect.RegisterReconciliationServiceHandler(rs, transactionsrpc.NewReconciliations(explorer, reconciler))
+}
+
+// mountM7Pages adds the reconciliation page, the only place a person
+// releases an unknown outcome, with a security key (G0 M7 design decision
+// 3): it needs security keys, like the approval page. The release signs its
+// effect receipt with verification's signer and tells org admins.
+func mountM7Pages(web *webhttp.Handler, pool *db.Pool, verification *txapp.Service, m5 *m5Services) {
+	if m5 == nil || m5.webauthn == nil {
+		return
+	}
+	releases := &txapp.Releases{
+		Store: &pgtransactions.Store{Pool: pool, Notify: m5.notifications}, Explorer: &txapp.Explorer{Pool: pool}, Effects: verification,
+	}
+	web.WithReconciliations(releases, m5.webauthn)
 }
 
 // newVerification builds the server side of verification (G0 M7 track A):

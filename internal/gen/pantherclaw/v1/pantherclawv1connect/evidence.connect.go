@@ -42,6 +42,12 @@ const (
 	// EvidenceServiceExportBundleProcedure is the procedure name of the EvidenceService's ExportBundle
 	// RPC.
 	EvidenceServiceExportBundleProcedure = "/pantherclaw.v1.EvidenceService/ExportBundle"
+	// EvidenceServiceListAnchorsProcedure is the procedure name of the EvidenceService's ListAnchors
+	// RPC.
+	EvidenceServiceListAnchorsProcedure = "/pantherclaw.v1.EvidenceService/ListAnchors"
+	// EvidenceServiceReplayDecisionProcedure is the procedure name of the EvidenceService's
+	// ReplayDecision RPC.
+	EvidenceServiceReplayDecisionProcedure = "/pantherclaw.v1.EvidenceService/ReplayDecision"
 )
 
 var (
@@ -85,6 +91,22 @@ var (
 			IdempotencyLevel: connect.IdempotencyNoSideEffects,
 		}
 	})
+	evidenceServiceListAnchorsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_pantherclaw_v1_evidence_proto.Services().ByName("EvidenceService").Methods().ByName("ListAnchors"),
+			Procedure:        EvidenceServiceListAnchorsProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
+	evidenceServiceReplayDecisionSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_pantherclaw_v1_evidence_proto.Services().ByName("EvidenceService").Methods().ByName("ReplayDecision"),
+			Procedure:        EvidenceServiceReplayDecisionProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
 )
 
 // EvidenceServiceClient is a client for the pantherclaw.v1.EvidenceService service.
@@ -107,6 +129,20 @@ type EvidenceServiceClient interface {
 	// ExportBundle builds a pantherclaw.bundle/v1 verify bundle.
 	// permission: evidence.read
 	ExportBundle(context.Context, *v1.ExportBundleRequest) (*v1.ExportBundleResponse, error)
+	// ListAnchors lists the anchors of the global root that hold one of the
+	// org's checkpoints, newest first (design decision 12, HR-195).
+	// permission: evidence.read
+	ListAnchors(context.Context, *v1.ListAnchorsRequest) (*v1.ListAnchorsResponse, error)
+	// ReplayDecision runs one evaluation of a transaction again on its
+	// recorded inputs, at the recorded time, with the recorded policy or a
+	// stored policy version (design decision 11, F504–F508). It writes no
+	// transaction, receipt, reservation, permit or audit event and calls no
+	// gateway (HR-197). It needs evidence.read where the transaction's agent
+	// lives, like run.read; the input values themselves need
+	// evidence.read_restricted there too. At most 10 replays per minute per
+	// caller.
+	// permission: evidence.read
+	ReplayDecision(context.Context, *v1.ReplayDecisionRequest) (*v1.ReplayDecisionResponse, error)
 }
 
 // NewEvidenceServiceClient constructs a client for the pantherclaw.v1.EvidenceService service.
@@ -135,6 +171,20 @@ type EvidenceServiceHandler interface {
 	// ExportBundle builds a pantherclaw.bundle/v1 verify bundle.
 	// permission: evidence.read
 	ExportBundle(context.Context, *v1.ExportBundleRequest) (*v1.ExportBundleResponse, error)
+	// ListAnchors lists the anchors of the global root that hold one of the
+	// org's checkpoints, newest first (design decision 12, HR-195).
+	// permission: evidence.read
+	ListAnchors(context.Context, *v1.ListAnchorsRequest) (*v1.ListAnchorsResponse, error)
+	// ReplayDecision runs one evaluation of a transaction again on its
+	// recorded inputs, at the recorded time, with the recorded policy or a
+	// stored policy version (design decision 11, F504–F508). It writes no
+	// transaction, receipt, reservation, permit or audit event and calls no
+	// gateway (HR-197). It needs evidence.read where the transaction's agent
+	// lives, like run.read; the input values themselves need
+	// evidence.read_restricted there too. At most 10 replays per minute per
+	// caller.
+	// permission: evidence.read
+	ReplayDecision(context.Context, *v1.ReplayDecisionRequest) (*v1.ReplayDecisionResponse, error)
 }
 
 // RegisterEvidenceServiceHandler registers svc as the pantherclaw.v1.EvidenceService implementation
@@ -147,6 +197,8 @@ func RegisterEvidenceServiceHandler(server *connect.Server, svc EvidenceServiceH
 		connect.Method{Spec: evidenceServiceGetInclusionProofSpec(), Handler: adapter.getInclusionProof},
 		connect.Method{Spec: evidenceServiceGetConsistencyProofSpec(), Handler: adapter.getConsistencyProof},
 		connect.Method{Spec: evidenceServiceExportBundleSpec(), Handler: adapter.exportBundle},
+		connect.Method{Spec: evidenceServiceListAnchorsSpec(), Handler: adapter.listAnchors},
+		connect.Method{Spec: evidenceServiceReplayDecisionSpec(), Handler: adapter.replayDecision},
 	)
 }
 
@@ -171,6 +223,14 @@ func (UnimplementedEvidenceServiceHandler) GetConsistencyProof(context.Context, 
 
 func (UnimplementedEvidenceServiceHandler) ExportBundle(context.Context, *v1.ExportBundleRequest) (*v1.ExportBundleResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.EvidenceService.ExportBundle is not implemented")
+}
+
+func (UnimplementedEvidenceServiceHandler) ListAnchors(context.Context, *v1.ListAnchorsRequest) (*v1.ListAnchorsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.EvidenceService.ListAnchors is not implemented")
+}
+
+func (UnimplementedEvidenceServiceHandler) ReplayDecision(context.Context, *v1.ReplayDecisionRequest) (*v1.ReplayDecisionResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.EvidenceService.ReplayDecision is not implemented")
 }
 
 type evidenceServiceClient struct {
@@ -212,6 +272,22 @@ func (c *evidenceServiceClient) GetConsistencyProof(ctx context.Context, req *v1
 func (c *evidenceServiceClient) ExportBundle(ctx context.Context, req *v1.ExportBundleRequest) (*v1.ExportBundleResponse, error) {
 	var res v1.ExportBundleResponse
 	if err := c.client.CallUnary(ctx, evidenceServiceExportBundleSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *evidenceServiceClient) ListAnchors(ctx context.Context, req *v1.ListAnchorsRequest) (*v1.ListAnchorsResponse, error) {
+	var res v1.ListAnchorsResponse
+	if err := c.client.CallUnary(ctx, evidenceServiceListAnchorsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *evidenceServiceClient) ReplayDecision(ctx context.Context, req *v1.ReplayDecisionRequest) (*v1.ReplayDecisionResponse, error) {
+	var res v1.ReplayDecisionResponse
+	if err := c.client.CallUnary(ctx, evidenceServiceReplayDecisionSpec(), req, &res); err != nil {
 		return nil, err
 	}
 	return &res, nil
@@ -273,6 +349,30 @@ func (h evidenceServiceHandler) exportBundle(ctx context.Context, _ connect.Spec
 		return err
 	}
 	res, err := h.svc.ExportBundle(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h evidenceServiceHandler) listAnchors(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListAnchorsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListAnchors(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h evidenceServiceHandler) replayDecision(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ReplayDecisionRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ReplayDecision(ctx, &req)
 	if err != nil {
 		return err
 	}

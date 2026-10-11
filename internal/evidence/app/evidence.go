@@ -20,6 +20,8 @@ import (
 	"encoding/binary"
 	"encoding/json/jsontext"
 	"errors"
+	"maps"
+	"slices"
 	"time"
 
 	agents "github.com/katocxl/pantherclaw/internal/agents/app"
@@ -30,6 +32,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
+	"github.com/katocxl/pantherclaw/internal/platform/httpx"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	"github.com/katocxl/pantherclaw/internal/platform/page"
 	tenancy "github.com/katocxl/pantherclaw/internal/tenancy/app"
@@ -61,6 +64,9 @@ var (
 type Service struct {
 	pool      *db.Pool
 	logOrigin string
+	// replay and its per-caller limit; nil until WithReplay.
+	replay      Replayer
+	replayLimit *httpx.Limiter
 }
 
 // New returns the service; logOrigin is evidence.log_origin.
@@ -95,6 +101,11 @@ type Integrity struct {
 	FailedAt     time.Time
 	VerifiedSize uint64
 	VerifiedAt   time.Time
+	// The org's newest anchor (HR-195: anchoring failures are visible in
+	// the integrity status); AnchorState is empty when there is none.
+	AnchorState  string
+	AnchorPeriod time.Time
+	AnchorError  string
 }
 
 // CheckpointPage is one page of checkpoints, newest first.
@@ -166,13 +177,24 @@ func (s *Service) ListCheckpoints(ctx context.Context, size int32, token string)
 		for _, r := range rows {
 			out.Items = append(out.Items, checkpointOf(r.TreeSize, r.RootHash, r.Note, r.Kid, r.PqKid, r.CreatedAt))
 		}
+		newest, err := q.ListOrgAnchorsPage(ctx, c.Org, nil, 1)
+		if err != nil {
+			return err
+		}
+		if len(newest) == 1 {
+			a := newest[0]
+			out.Integrity.AnchorState, out.Integrity.AnchorPeriod = a.State, a.Period
+			if a.ErrorCode != nil {
+				out.Integrity.AnchorError = *a.ErrorCode
+			}
+		}
 		st, err := q.GetEvidenceIntegrity(ctx, c.Org)
 		if db.IsNoRows(err) {
 			return nil
 		} else if err != nil {
 			return err
 		}
-		out.Integrity = Integrity{Failed: st.State != "OK", Seq: st.FailedSeq.Int64}
+		out.Integrity.Failed, out.Integrity.Seq = st.State != "OK", st.FailedSeq.Int64
 		if st.FailureCode != nil {
 			out.Integrity.Code = *st.FailureCode
 		}
@@ -333,6 +355,8 @@ type Export struct {
 	Entries        int
 	Receipts       int
 	CheckpointSize uint64
+	// Anchored: the bundle holds the anchor of one of its checkpoints.
+	Anchored bool
 }
 
 // chained is a chained entry as both entry queries return it.
@@ -372,9 +396,12 @@ func (e chained) bundleEntry(labels map[ids.UUID]string) bundle.Entry {
 // entries, the latest checkpoint and an inclusion proof to it for every
 // entry it covers, and, when consistencyFrom is set, the proof that the
 // latest checkpoint extends the tree of that size (with that checkpoint).
-// Entries not chained yet are left out; entries the latest checkpoint does
-// not cover yet have no proof, which `pclaw verify` reports as not
-// available.
+// When one of the org's checkpoints is anchored, the newest anchor goes in
+// too: the org's leaf and nonce, the anchor's leaves, signed statement,
+// Rekor entry and timestamp, with the anchored checkpoint and the proof
+// that the latest one extends it. Entries not chained yet are left out;
+// entries the latest checkpoint does not cover yet have no proof, which
+// `pclaw verify` reports as not available, as it reports a missing anchor.
 func (s *Service) ExportBundle(ctx context.Context, sel Selection, consistencyFrom uint64) (Export, error) {
 	c, err := reader(ctx)
 	if err != nil {
@@ -428,8 +455,11 @@ func (s *Service) ExportBundle(ctx context.Context, sel Selection, consistencyFr
 		} else if err != nil {
 			return err
 		}
+		if consistencyFrom > latest.Size {
+			return ErrBadConsistency
+		}
 		out.CheckpointSize = latest.Size
-		b.Checkpoints = []string{string(latest.Note)}
+		notes := map[uint64][]byte{latest.Size: latest.Note}
 		t := tiles{q: q, org: c.Org}
 		for _, e := range entries {
 			seq := uint64(e.seq) //nolint:gosec // G115: seq > 0
@@ -442,21 +472,42 @@ func (s *Service) ExportBundle(ctx context.Context, sel Selection, consistencyFr
 			}
 			b.Inclusion = append(b.Inclusion, bundle.Inclusion{Seq: e.seq, Size: latest.Size, Proof: hashes(proof)})
 		}
-		if consistencyFrom == 0 || consistencyFrom == latest.Size {
-			return nil
+		if consistencyFrom > 0 && consistencyFrom < latest.Size {
+			if earlier, err := checkpointAt(ctx, q, c.Org, consistencyFrom); err == nil {
+				notes[consistencyFrom] = earlier.Note
+			} else if !errors.Is(err, ErrNoCheckpoint) {
+				return err
+			}
 		}
-		if consistencyFrom > latest.Size {
-			return ErrBadConsistency
-		}
-		proof, err := merkle.ConsistencyProof(ctx, t, consistencyFrom, latest.Size)
+		// When anchored, the org's leaf in its newest anchor, with the
+		// checkpoint it commits to (HR-195, design decision 13).
+		an, err := latestAnchor(ctx, q, c.Org, latest.Size)
 		if err != nil {
 			return err
 		}
-		b.Consistency = []bundle.Consistency{{From: consistencyFrom, To: latest.Size, Proof: hashes(proof)}}
-		if earlier, err := checkpointAt(ctx, q, c.Org, consistencyFrom); err == nil {
-			b.Checkpoints = append([]string{string(earlier.Note)}, b.Checkpoints...)
-		} else if !errors.Is(err, ErrNoCheckpoint) {
-			return err
+		if an != nil {
+			notes[an.anchor.Checkpoint] = an.note
+			b.Anchor, out.Anchored = an.anchor, true
+		}
+		sizes := slices.Sorted(maps.Keys(notes))
+		for _, size := range sizes {
+			b.Checkpoints = append(b.Checkpoints, string(notes[size]))
+		}
+		// Every checkpoint extends the one before it, and the latest extends
+		// the tree the requester saved (pclaw verify --previous).
+		pairs := [][2]uint64{}
+		for i := 1; i < len(sizes); i++ {
+			pairs = append(pairs, [2]uint64{sizes[i-1], sizes[i]})
+		}
+		if consistencyFrom > 0 && consistencyFrom < latest.Size && !slices.Contains(pairs, [2]uint64{consistencyFrom, latest.Size}) {
+			pairs = append(pairs, [2]uint64{consistencyFrom, latest.Size})
+		}
+		for _, p := range pairs {
+			proof, err := merkle.ConsistencyProof(ctx, t, p[0], p[1])
+			if err != nil {
+				return err
+			}
+			b.Consistency = append(b.Consistency, bundle.Consistency{From: p[0], To: p[1], Proof: hashes(proof)})
 		}
 		return nil
 	}, db.ReadOnly(), db.RepeatableRead())

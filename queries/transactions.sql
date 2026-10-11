@@ -101,6 +101,30 @@ FROM pc.reconciliation_tasks
 WHERE org_id = sqlc.arg(org_id) AND transaction_id = sqlc.arg(transaction_id)
 ORDER BY opened_at, id;
 
+-- EntryProtection reports, for positions in the org's hash chain, the
+-- first checkpoint whose tree covers each (tree size at least the
+-- position, HR-194) and the first such checkpoint anchored publicly
+-- (HR-195): the org's anchor leaves name its checkpoints, and the global
+-- anchors only their state. 0 and NULL: none yet.
+-- name: EntryProtection :many
+SELECT s.seq::bigint AS seq, coalesce(k.tree_size, 0)::bigint AS checkpoint_size,
+       coalesce(a.checkpoint_size, 0)::bigint AS anchored_size, a.anchored_at
+FROM unnest(sqlc.arg(seqs)::bigint[]) AS s (seq)
+LEFT JOIN LATERAL (
+    SELECT c.tree_size FROM pc.checkpoints c
+    WHERE c.org_id = sqlc.arg(org_id) AND c.tree_size >= s.seq
+    ORDER BY c.tree_size
+    LIMIT 1
+) k ON true
+LEFT JOIN LATERAL (
+    SELECT l.checkpoint_size, n.anchored_at
+    FROM pc.anchor_leaves l
+    JOIN pc.anchors n ON n.id = l.anchor_id
+    WHERE l.org_id = sqlc.arg(org_id) AND l.checkpoint_size >= s.seq AND n.state = 'ANCHORED'
+    ORDER BY l.checkpoint_size, n.anchored_at
+    LIMIT 1
+) a ON true;
+
 -- name: LinksOf :many
 SELECT from_transaction_id, to_transaction_id, kind, created_by, created_at
 FROM pc.transaction_links

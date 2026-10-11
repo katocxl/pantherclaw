@@ -50,9 +50,16 @@ type Containment struct {
 	GatewayActive bool
 	Connections   map[ids.UUID]string
 	AsOf          time.Time
+	// VerificationsWaiting hints that verification tasks are due on the
+	// gateway's active connections and the kill switch is off, so that
+	// ClaimVerifications would lease them now (G0 M7 design decision 1).
+	// It is not containment: every message carries it, and it never makes
+	// a change on its own.
+	VerificationsWaiting bool
 }
 
-// Equal reports whether two views differ only in AsOf.
+// Equal reports whether two views differ only in AsOf and the
+// verifications hint, which heartbeats carry too.
 func (c Containment) Equal(o Containment) bool {
 	return c.Epoch == o.Epoch && c.KillSwitch == o.KillSwitch && c.ConfigVersion == o.ConfigVersion &&
 		c.GatewayActive == o.GatewayActive && maps.Equal(c.Connections, o.Connections)
@@ -210,6 +217,7 @@ func (h *Hub) read(ctx context.Context, org ids.OrgID, w *orgWatch) error {
 			for _, cn := range conns {
 				if cn.GatewayID == g.ID {
 					s.Connections[cn.ID] = cn.State
+					s.VerificationsWaiting = s.VerificationsWaiting || (cn.VerificationsDue && !c.KillSwitch)
 				}
 			}
 			next[g.ID] = s
