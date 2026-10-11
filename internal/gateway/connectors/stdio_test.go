@@ -4,12 +4,15 @@
 package connectors
 
 import (
+	"bufio"
 	"context"
 	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"io"
 	"net/http"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -38,7 +41,7 @@ func stdioSim(t *testing.T, f mcpsim.Faults) (*mcpsim.Server, *upstream.Client, 
 		_ = outW.Close()
 	}
 	t.Cleanup(stop)
-	return sim, upstream.New("http://connector.invalid/mcp", NewStdio(inW, outR)), stop
+	return sim, upstream.New("http://connector.invalid/mcp", NewStdio(inW, outR, 0)), stop
 }
 
 // TestHR082_AConnectorSpeaksMCPOverStdio: the gateway's MCP client lists
@@ -99,5 +102,87 @@ func TestAStoppedConnectorIsNotCalled(t *testing.T) {
 	}
 	if !errors.Is(err, ErrExited) && !errors.Is(err, io.ErrClosedPipe) {
 		t.Fatalf("a call to a stopped connector: %v", err)
+	}
+}
+
+// fakeConnector reads the gateway's lines and answers each request with
+// answer(id) when set; with read false it never reads its input.
+func fakeConnector(t *testing.T, read bool, answer func(id string) string) (*Stdio, func()) {
+	t.Helper()
+	inR, inW := io.Pipe()
+	outR, outW := io.Pipe()
+	stop := func() {
+		_ = inR.Close()
+		_ = outW.Close()
+	}
+	t.Cleanup(stop)
+	if read {
+		go func() {
+			sc := bufio.NewScanner(inR)
+			for sc.Scan() {
+				var m struct {
+					ID jsontext.Value `json:"id"`
+				}
+				if json.Unmarshal(sc.Bytes(), &m) == nil && len(m.ID) > 0 && answer != nil {
+					_, _ = io.WriteString(outW, answer(string(m.ID))+"\n")
+				}
+			}
+		}()
+	}
+	return NewStdio(inW, outR, 1024), stop
+}
+
+func post(ctx context.Context, s *Stdio, body string) error {
+	req, _ := http.NewRequestWithContext(ctx, http.MethodPost, "http://connector.invalid/mcp", strings.NewReader(body))
+	res, err := s.Open(req)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = res.Body.Close() }()
+	_, err = io.ReadAll(res.Body)
+	return err
+}
+
+const callLine = `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"create_refund","arguments":{}}}`
+
+// TestHR216_AnAbandonedExchangeLeavesTheConnectorBroken: a call that ends
+// before the connector answers (it never does), a write the connector
+// never reads, and an answer over the connection's limit each leave the
+// connector broken: it may still be working, so it takes no other call
+// until it is replaced (G0 M9 design decision 6).
+func TestHR216_AnAbandonedExchangeLeavesTheConnectorBroken(t *testing.T) {
+	for name, tc := range map[string]struct {
+		read   bool
+		answer func(string) string
+	}{
+		"never answers": {true, nil},
+		"never reads":   {false, nil},
+		"answers too big": {true, func(id string) string {
+			return `{"jsonrpc":"2.0","id":` + id + `,"result":"` + strings.Repeat("x", 4096) + `"}`
+		}},
+	} {
+		s, _ := fakeConnector(t, tc.read, tc.answer)
+		if !s.Usable() {
+			t.Fatalf("%s: unusable before any call", name)
+		}
+		ctx, cancel := context.WithTimeout(t.Context(), 300*time.Millisecond)
+		err := post(ctx, s, callLine)
+		cancel()
+		if err == nil || s.Usable() {
+			t.Fatalf("%s: call = %v, usable %v", name, err, s.Usable())
+		}
+		if err := post(t.Context(), s, callLine); !errors.Is(err, ErrBroken) {
+			t.Fatalf("%s: the next call: %v", name, err)
+		}
+	}
+
+	// An answered call leaves it usable; Close does not.
+	s, _ := fakeConnector(t, true, func(id string) string { return `{"jsonrpc":"2.0","id":` + id + `,"result":{}}` })
+	if err := post(t.Context(), s, callLine); err != nil || !s.Usable() {
+		t.Fatalf("an answered call: %v, usable %v", err, s.Usable())
+	}
+	s.Close()
+	if err := post(t.Context(), s, callLine); !errors.Is(err, ErrBroken) || s.Usable() {
+		t.Fatalf("after Close: %v", err)
 	}
 }
