@@ -6,7 +6,9 @@ package domain_test
 import (
 	"encoding/json/jsontext"
 	"errors"
+	"slices"
 	"testing"
+	"time"
 
 	"github.com/katocxl/pantherclaw/internal/approvals/domain"
 	defs "github.com/katocxl/pantherclaw/internal/definitions/domain"
@@ -96,5 +98,36 @@ func TestHR172_RespondingNeedsTheRoleButNoKey(t *testing.T) {
 	}
 	if ok, _ := domain.MayRespond(stepUp, domain.Person{UserID: ids.NewV7(), Enabled: true}, c); ok {
 		t.Fatal("someone else may decline a step-up")
+	}
+}
+
+// TestHR172_RespondingLeavesThePersonAsItWas: MayRespond relaxes the
+// cooldowns on its own copy. The person it is given, whose bindings the
+// caller's eligibility shares, is unchanged, so checking the same person
+// for approval afterwards still reports the cooldown that holds (HR-035).
+func TestHR172_RespondingLeavesThePersonAsItWas(t *testing.T) {
+	c := ctx()
+	for _, tc := range []struct {
+		name    string
+		r       domain.Requirement
+		binding domain.RoleBinding
+		want    string
+	}{
+		{"a role self-granted a minute ago", approver(1, false),
+			domain.RoleBinding{Role: "approver", CreatedAt: now.Add(-time.Minute), SelfGranted: true}, domain.IneligibleSelfGrant},
+		{"a role granted an hour ago, two approvers", approver(2, false),
+			domain.RoleBinding{Role: "approver", CreatedAt: now.Add(-time.Hour)}, domain.IneligibleRoleCooldown},
+	} {
+		p := veteran()
+		p.Bindings = []domain.RoleBinding{tc.binding}
+		people := map[ids.UUID]domain.Person{p.UserID: p}
+		if ok, code := domain.MayRespond(tc.r, people[p.UserID], c); !ok {
+			t.Fatalf("%s: may not respond: %s", tc.name, code)
+		}
+		if got := people[p.UserID].Bindings; !slices.Equal(got, []domain.RoleBinding{tc.binding}) {
+			t.Errorf("%s: MayRespond changed the bindings to %+v", tc.name, got)
+		}
+		ok, code := domain.Check(tc.r, people[p.UserID], c, ids.UUID{})
+		wantCode(t, tc.name, ok, code, tc.want)
 	}
 }
