@@ -162,10 +162,11 @@ type CoverageServiceClient interface {
 	// and records a snapshot for each that changed.
 	// permission: coverage.reassess
 	Reassess(context.Context, *v1.ReassessRequest) (*v1.ReassessResponse, error)
-	// CreateExclusion excludes a scope or a route kind from what an
-	// ENFORCED claim must cover until it expires (HR-212, design decision 1).
-	// Only a person makes one, with a written reason; it is audited,
-	// notified to org admins and listed with every claim it narrows.
+	// CreateExclusion records, until it expires, that a person accepts a scope
+	// or a route kind as outside the boundary (HR-212). It never raises a
+	// state: an excluded route still counts as open (design decision 1). Only
+	// a person makes one, with a written reason; it is audited, notified to
+	// org admins and listed with every claim on the scope.
 	// permission: coverage.manage
 	CreateExclusion(context.Context, *v1.CreateExclusionRequest) (*v1.CreateExclusionResponse, error)
 	// RevokeExclusion ends an active exclusion at once.
@@ -208,10 +209,11 @@ type CoverageServiceHandler interface {
 	// and records a snapshot for each that changed.
 	// permission: coverage.reassess
 	Reassess(context.Context, *v1.ReassessRequest) (*v1.ReassessResponse, error)
-	// CreateExclusion excludes a scope or a route kind from what an
-	// ENFORCED claim must cover until it expires (HR-212, design decision 1).
-	// Only a person makes one, with a written reason; it is audited,
-	// notified to org admins and listed with every claim it narrows.
+	// CreateExclusion records, until it expires, that a person accepts a scope
+	// or a route kind as outside the boundary (HR-212). It never raises a
+	// state: an excluded route still counts as open (design decision 1). Only
+	// a person makes one, with a written reason; it is audited, notified to
+	// org admins and listed with every claim on the scope.
 	// permission: coverage.manage
 	CreateExclusion(context.Context, *v1.CreateExclusionRequest) (*v1.CreateExclusionResponse, error)
 	// RevokeExclusion ends an active exclusion at once.
