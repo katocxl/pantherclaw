@@ -52,6 +52,10 @@ type ActionTokenCase struct {
 	// Twice: the same request twice; the first is accepted, the second
 	// gets Expect.
 	Twice bool `json:"twice,omitzero"`
+	// ThenValid: after this request is refused, the same verifier and store
+	// accept the same token with the valid request (the body, operation and
+	// target of the minted token's case), so a refusal never spends the jti.
+	ThenValid bool `json:"then_valid,omitzero"`
 	// Expect is "ok" or a refusal code: missing, bad_signature,
 	// wrong_issuer, wrong_audience, expired, body_mismatch,
 	// operation_mismatch, replayed, store_unavailable.
@@ -136,7 +140,12 @@ func buildActionTokens(t *testing.T) any {
 	}
 	ak := key(string(keys.PurposeActionTokens))
 	parts := strings.Split(tok, ".")
-	long := bytes.Replace(p, []byte(`"exp":`+strconv.FormatInt(c.Exp, 10)), []byte(`"exp":`+strconv.FormatInt(c.Iat+120, 10)), 1)
+	lifetime := func(seconds int64) string {
+		return string(bytes.Replace(p, []byte(`"exp":`+strconv.FormatInt(c.Exp, 10)), []byte(`"exp":`+strconv.FormatInt(c.Iat+seconds, 10)), 1))
+	}
+	if c.Exp-c.Iat != 60 {
+		t.Fatalf("the minted token lives %d s, want 60", c.Exp-c.Iat)
+	}
 	ok := ActionTokenCase{
 		Token: tok, Body: refundBody, Operation: "payments.refund.create", TargetType: "payments.charge", TargetID: "ch_1",
 		Issuer: issuer, Audience: connectionID, Now: c.Iat + 10, Expect: "ok",
@@ -174,11 +183,34 @@ func buildActionTokens(t *testing.T) any {
 			with("a workload token", "bad_signature", func(v *ActionTokenCase) { v.Token = issue(t, tokenSpec{level: 1}) }),
 			with("another issuer", "wrong_issuer", func(v *ActionTokenCase) { v.Issuer = "https://another.example.test" }),
 			with("another connection's audience", "wrong_audience", func(v *ActionTokenCase) { v.Audience = "01920000-0000-7000-8000-000000000008" }),
-			with("expired", "expired", func(v *ActionTokenCase) { v.Now = c.Exp + 60 }),
+			with("typ pap-permit+jwt", "bad_signature", func(v *ActionTokenCase) {
+				v.Token = craft(strings.Replace(string(h), finalize.TypeActionToken, "pap-permit+jwt", 1), string(p), ak)
+			}),
+			with("a kid that is not the key's", "bad_signature", func(v *ActionTokenCase) {
+				v.Token = craft(strings.Replace(string(h), `"kid":"action-tokens-`, `"kid":"action-tokens-x`, 1), string(p), ak)
+			}),
+			with("pap.v 2", "bad_signature", func(v *ActionTokenCase) {
+				v.Token = craft(string(h), strings.Replace(string(p), `"v":1`, `"v":2`, 1), ak)
+			}),
+			with("aud an array holding the connection", "bad_signature", func(v *ActionTokenCase) {
+				v.Token = craft(string(h), strings.Replace(string(p), `"aud":"`+connectionID+`"`, `"aud":["`+connectionID+`"]`, 1), ak)
+			}),
+			with("expired a minute ago", "expired", func(v *ActionTokenCase) { v.Now = c.Exp + 60 }),
+			with("4 seconds past exp, within the skew", "ok", func(v *ActionTokenCase) { v.Now = c.Exp + 4 }),
+			with("5 seconds past exp", "expired", func(v *ActionTokenCase) { v.Now = c.Exp + 5 }),
+			with("issued 5 seconds ahead, within the skew", "ok", func(v *ActionTokenCase) { v.Now = c.Iat - 5 }),
+			with("issued 6 seconds ahead", "expired", func(v *ActionTokenCase) { v.Now = c.Iat - 6 }),
 			with("issued a minute ahead", "expired", func(v *ActionTokenCase) { v.Now = c.Iat - 60 }),
-			with("a lifetime of 120 seconds", "expired", func(v *ActionTokenCase) { v.Token = craft(string(h), string(long), ak) }),
+			with("a lifetime of 61 seconds", "expired", func(v *ActionTokenCase) { v.Token = craft(string(h), lifetime(61), ak) }),
+			with("a lifetime of 120 seconds", "expired", func(v *ActionTokenCase) { v.Token = craft(string(h), lifetime(120), ak) }),
 			with("the body re-serialized", "body_mismatch", func(v *ActionTokenCase) { v.Body = strings.ReplaceAll(refundBody, ",", ", ") }),
+			with("a refused body leaves the token unspent", "body_mismatch", func(v *ActionTokenCase) {
+				v.Body, v.ThenValid = strings.ReplaceAll(refundBody, "30.00", "31.00"), true
+			}),
 			with("another operation", "operation_mismatch", func(v *ActionTokenCase) { v.Operation = "payments.refund.get" }),
+			with("a refused operation leaves the token unspent", "operation_mismatch", func(v *ActionTokenCase) {
+				v.Operation, v.ThenValid = "payments.refund.get", true
+			}),
 			with("another target", "operation_mismatch", func(v *ActionTokenCase) { v.TargetID = "ch_2" }),
 			with("a replay store that cannot record", "store_unavailable", func(v *ActionTokenCase) { v.Store = "unavailable" }),
 		},
