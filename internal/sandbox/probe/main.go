@@ -28,7 +28,7 @@ const ConfigFormat = "pantherclaw.probe/v1"
 // mount. Addresses are as a container sees them.
 type Config struct {
 	Format string `json:"format"`
-	// Kind is report.KindSandbox (the catalogue, on the sandbox network) or
+	// Kind is report.KindSandbox (the catalog, on the sandbox network) or
 	// report.KindControl (the canary probes, on an open network).
 	Kind string `json:"kind"`
 	// KeyFile is the session's probe key, mounted read-only.

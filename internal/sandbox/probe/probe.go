@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: BUSL-1.1
 // Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
 
-// Package probe is the containment sandbox's closure probe catalogue, run
+// Package probe is the containment sandbox's closure probe catalog, run
 // as `pantherclaw-probe` in a container of its own on the agent's network,
 // as another uid, with the hardened flags and its own group allowed to
 // ping (G0 M9 decision 2, design decisions 5 and 8; HR-121). It tries every
@@ -47,15 +47,15 @@ type Target struct {
 	SSH   int      `json:"ssh"`
 }
 
-// probe is one entry of the catalogue.
+// probe is one entry of the catalog.
 type probe struct {
 	name, role, expect, target string
 	run                        func(ctx context.Context) error
 }
 
-// Run runs the catalogue for c and returns its results in catalogue order.
+// Run runs the catalog for c and returns its results in catalog order.
 func Run(ctx context.Context, c Config) []report.Result {
-	ps := catalogue(c)
+	ps := catalog(c)
 	out := make([]report.Result, len(ps))
 	var wg sync.WaitGroup
 	sem := make(chan struct{}, 8)
@@ -84,7 +84,7 @@ func bounded(s string) string {
 	return s
 }
 
-func catalogue(c Config) []probe {
+func catalog(c Config) []probe {
 	if c.Kind == report.KindControl {
 		return canaryProbes(c, "canary_control", report.RolePositive, report.Reachable)
 	}
@@ -283,9 +283,9 @@ func sendDNS(server, network, marker string) func(context.Context) error {
 			return err
 		}
 		defer func() { _ = c.Close() }()
-		q := append([]byte{0x50, 0x43, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, byte(len(marker))}, marker+"\x06canary\x07invalid\x00\x00\x01\x00\x01"...)
+		q := append([]byte{0x50, 0x43, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, byte(len(marker))}, marker+"\x06canary\x07invalid\x00\x00\x01\x00\x01"...) //nolint:gosec // G115: a marker is 34 bytes, a DNS label at most 63
 		if network == "tcp" {
-			q = append([]byte{byte(len(q) >> 8), byte(len(q))}, q...)
+			q = append([]byte{byte(len(q) >> 8), byte(len(q))}, q...) //nolint:gosec // G115: the query is under 100 bytes
 		}
 		_, err = c.Write(q)
 		return err
