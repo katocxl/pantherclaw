@@ -1,0 +1,352 @@
+// SPDX-License-Identifier: BUSL-1.1
+// Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+
+syntax = "proto3";
+
+package pantherclaw.v1;
+
+import "buf/validate/validate.proto";
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
+
+// CoverageService answers the question coverage exists for: can this agent
+// produce this effect through another usable route without authorization
+// (G0 M9 track A; F433–F460, F021, PN-008.2; HR-210, HR-211, HR-212)?
+//
+// A coverage record is scoped to one agent, connection and operation. Its
+// state is UNKNOWN, OBSERVE_ONLY, PARTIAL or ENFORCED, computed only from
+// evidence: observed traffic, the route inventory and sandbox closure
+// evidence. A setting alone never yields a state (F460). Cooperative
+// channels (SDK, hook) are capped at PARTIAL unless the target verifies
+// action tokens (HR-024), and routes through opaque MCP servers unless
+// their egress is mediated (HR-086). ENFORCED expires (24 hours by
+// default) and every invalidating change drops it at once; a record read
+// after that is PARTIAL and keeps the last valid record (HR-211, F442).
+//
+// Closure evidence is never written through this service: the sandbox
+// records it after verifying the signed probe results (HR-215).
+// Exclusions are weakening changes that only a person makes, with a
+// written reason and an expiry (HR-212). Reads follow the caller's
+// coverage.read scope over the agent.
+service CoverageService {
+  // GetCoverage returns one scope's record as it reads now.
+  // permission: coverage.read
+  rpc GetCoverage(GetCoverageRequest) returns (GetCoverageResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // ListCoverage lists the current record of every scope, by scope.
+  // permission: coverage.read
+  rpc ListCoverage(ListCoverageRequest) returns (ListCoverageResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // ListCoverageRoutes lists the route inventory. A route kind without an
+  // entry is not observed, never absent (F450).
+  // permission: coverage.read
+  rpc ListCoverageRoutes(ListCoverageRoutesRequest) returns (ListCoverageRoutesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // GetFreshnessContract publishes when evidence stops supporting a claim
+  // and what invalidates it (F440).
+  // permission: coverage.read
+  rpc GetFreshnessContract(GetFreshnessContractRequest) returns (GetFreshnessContractResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // ReassessCoverage recomputes the scopes of one connection now, from
+  // evidence, and records a snapshot for each that changed.
+  // permission: coverage.manage
+  rpc ReassessCoverage(ReassessCoverageRequest) returns (ReassessCoverageResponse);
+}
+
+// CoverageState is the protection claim of one scope (F435–F438).
+enum CoverageState {
+  COVERAGE_STATE_UNSPECIFIED = 0;
+  // Evidence cannot establish which routes are usable or controlled.
+  COVERAGE_STATE_UNKNOWN = 1;
+  // Activity is visible; prevention is not established.
+  COVERAGE_STATE_OBSERVE_ONLY = 2;
+  // A route is controlled, but an equivalent route is possible,
+  // unverified or excluded.
+  COVERAGE_STATE_PARTIAL = 3;
+  // Every material route is mediated or proven blocked, until it expires.
+  COVERAGE_STATE_ENFORCED = 4;
+}
+
+// CoverageRouteKind is a way to produce a connection's effects (§41.4).
+enum CoverageRouteKind {
+  COVERAGE_ROUTE_KIND_UNSPECIFIED = 0;
+  // A PantherClaw channel: HTTP or MCP through the gateway, the SDK face or
+  // the hook.
+  COVERAGE_ROUTE_KIND_CHANNEL = 1;
+  // The target's API or SDK, outside the gateway (F444).
+  COVERAGE_ROUTE_KIND_DIRECT_API = 2;
+  // Shell, command-line tools, filesystem, wrappers, the host (F445).
+  COVERAGE_ROUTE_KIND_HOST = 3;
+  // Git over SSH and mounted keys (F445).
+  COVERAGE_ROUTE_KIND_GIT_SSH = 4;
+  // A retrievable or found credential (F445).
+  COVERAGE_ROUTE_KIND_CREDENTIAL = 5;
+  // An authenticated browser session (F446).
+  COVERAGE_ROUTE_KIND_BROWSER = 6;
+  // Child agents and delegated services (F447).
+  COVERAGE_ROUTE_KIND_DELEGATED = 7;
+  // CI/CD, webhooks, schedules, queues (F448).
+  COVERAGE_ROUTE_KIND_INTERMEDIARY = 8;
+  // Target-side identities and permissions beyond the connection (F449).
+  COVERAGE_ROUTE_KIND_TARGET_SIDE = 9;
+}
+
+// CoverageRouteStatus is what the evidence says about one route.
+enum CoverageRouteStatus {
+  COVERAGE_ROUTE_STATUS_UNSPECIFIED = 0;
+  // Mediated by PantherClaw in enforce mode.
+  COVERAGE_ROUTE_STATUS_MEDIATED = 1;
+  // Mediated in monitor mode: observed, not prevented.
+  COVERAGE_ROUTE_STATUS_MONITORED = 2;
+  // A cooperative channel the agent could skip (HR-024).
+  COVERAGE_ROUTE_STATUS_COOPERATIVE = 3;
+  // An opaque MCP server whose egress is not mediated (HR-086).
+  COVERAGE_ROUTE_STATUS_OPAQUE = 4;
+  // Proven blocked by current closure evidence.
+  COVERAGE_ROUTE_STATUS_CLOSED = 5;
+  // Seen or found, and not closed.
+  COVERAGE_ROUTE_STATUS_POSSIBLE = 6;
+  // No reliable source shows it; not proof that it is absent (F450).
+  COVERAGE_ROUTE_STATUS_NOT_OBSERVED = 7;
+  // A hypothesis, not evidence (F455).
+  COVERAGE_ROUTE_STATUS_PROPOSED = 8;
+  // Excluded by a person until the exclusion expires (HR-212).
+  COVERAGE_ROUTE_STATUS_EXCLUDED = 9;
+}
+
+// CoverageScope names one agent, connection and operation.
+message CoverageScope {
+  // Agent id.
+  string agent_id = 1 [(buf.validate.field).string.uuid = true];
+  // Connection id.
+  string connection_id = 2 [(buf.validate.field).string.uuid = true];
+  // Operation, e.g. "github.pulls.merge".
+  string operation = 3 [(buf.validate.field).string = {
+    max_len: 128
+    pattern: "^[a-z][a-z0-9_]*(\\.[a-z0-9_]+){1,7}$"
+  }];
+}
+
+// CoverageRoute is one route of a scope.
+message CoverageRoute {
+  // Inventory entry id; empty for a kind no source observed.
+  string id = 1;
+  // Kind.
+  CoverageRouteKind kind = 2;
+  // For a channel: "http", "mcp", "sdk" or "hook".
+  string channel = 3;
+  // Where it goes (a host, a file, an identity); untrusted text.
+  string locator = 4;
+  // "observed", "declared" or "proposed"; empty when not observed.
+  string observation = 5;
+  // Where the inventory learned of it: "gateway", "connection",
+  // "discovery", "scan", "probe" or "person".
+  string source = 6;
+  // For a channel: the route mode last observed, "monitor" or "enforce".
+  string mode = 7;
+  // What the evidence says.
+  CoverageRouteStatus status = 8;
+  // The closure that closed it, when closed.
+  string closure_id = 9;
+  // First and last sighting.
+  google.protobuf.Timestamp first_seen_time = 10;
+  // Last sighting.
+  google.protobuf.Timestamp last_seen_time = 11;
+}
+
+// CoverageInvalidation is a change that drops ENFORCED at once (HR-211).
+message CoverageInvalidation {
+  // Event id.
+  string id = 1;
+  // "connection", "package_version", "route_mode", "gateway",
+  // "credential", "sandbox_image", "sandbox_config", "closure_failed",
+  // "exclusion" or "evidence_expired".
+  string kind = 2;
+  // The connection it affects.
+  string connection_id = 3;
+  // The agent it affects; empty for every agent of the connection.
+  string agent_id = 4;
+  // The object that changed.
+  string subject_id = 5;
+  // A short description.
+  string detail = 6;
+  // When it happened.
+  google.protobuf.Timestamp occur_time = 7;
+  // When the reassess job handled it; unset while pending.
+  google.protobuf.Timestamp reassess_time = 8;
+}
+
+// CoverageLastValid is the last ENFORCED record of a scope and why it no
+// longer supports the claim (F442).
+message CoverageLastValid {
+  // Snapshot id.
+  string snapshot_id = 1;
+  // When it was computed.
+  google.protobuf.Timestamp compute_time = 2;
+  // When it expired or would have.
+  google.protobuf.Timestamp expire_time = 3;
+  // The closure it rested on.
+  string closure_id = 4;
+  // "expired", or the kind of the change that invalidated it.
+  string lapse_reason = 5;
+}
+
+// CoverageRecord is one scope's coverage as it reads now.
+message CoverageRecord {
+  // Scope.
+  CoverageScope scope = 1;
+  // The state now: the computed state, downgraded to PARTIAL when ENFORCED
+  // expired or a change since invalidated it.
+  CoverageState state = 2;
+  // The state the snapshot computed.
+  CoverageState computed_state = 3;
+  // Reason codes, most important first.
+  repeated string reasons = 4;
+  // The snapshot read; empty when none was computed yet (state UNKNOWN).
+  string snapshot_id = 5;
+  // "sha256:" and the hex digest of the snapshot's ledger body, which a
+  // receipt's coverage claim names (HR-217).
+  string snapshot_digest = 6;
+  // When it was computed.
+  google.protobuf.Timestamp compute_time = 7;
+  // For ENFORCED: when it lapses.
+  google.protobuf.Timestamp expire_time = 8;
+  // The routes, every kind included.
+  repeated CoverageRoute routes = 9;
+  // The closure an ENFORCED state rests on.
+  string closure_id = 10;
+  // The last valid record, when this one is a downgrade.
+  CoverageLastValid last_valid = 11;
+  // The changes after the snapshot that invalidate it.
+  repeated CoverageInvalidation invalidations = 12;
+  // The active exclusions that apply.
+  repeated CoverageExclusion exclusions = 13;
+}
+
+// GetCoverageRequest names a scope.
+message GetCoverageRequest {
+  // Scope.
+  CoverageScope scope = 1 [(buf.validate.field).required = true];
+}
+
+// GetCoverageResponse returns the record.
+message GetCoverageResponse {
+  // Record.
+  CoverageRecord record = 1;
+}
+
+// ListCoverageRequest filters the records.
+message ListCoverageRequest {
+  // Maximum results (default 50, at most 200).
+  int32 page_size = 1 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 200
+  }];
+  // Token from a previous response.
+  string page_token = 2 [(buf.validate.field).string = {
+    max_len: 256
+    pattern: "^[A-Za-z0-9_-]*$"
+  }];
+  // Only this agent.
+  optional string agent_id = 3 [(buf.validate.field).string.uuid = true];
+  // Only this connection.
+  optional string connection_id = 4 [(buf.validate.field).string.uuid = true];
+}
+
+// ListCoverageResponse is one page; records leave out routes,
+// invalidations and exclusions (GetCoverage has them).
+message ListCoverageResponse {
+  // Records, by agent, connection and operation.
+  repeated CoverageRecord records = 1;
+  // Token for the next page; empty at the end.
+  string next_page_token = 2;
+}
+
+// ListCoverageRoutesRequest filters the inventory.
+message ListCoverageRoutesRequest {
+  // Maximum results (default 50, at most 200).
+  int32 page_size = 1 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 200
+  }];
+  // Token from a previous response.
+  string page_token = 2 [(buf.validate.field).string = {
+    max_len: 64
+    pattern: "^[A-Za-z0-9_-]*$"
+  }];
+  // Only this agent's routes and those of every agent.
+  optional string agent_id = 3 [(buf.validate.field).string.uuid = true];
+  // Only this connection.
+  optional string connection_id = 4 [(buf.validate.field).string.uuid = true];
+}
+
+// ListCoverageRoutesResponse is one page of inventory entries; status is
+// unset (it depends on a scope's evidence: GetCoverage).
+message ListCoverageRoutesResponse {
+  // Routes, oldest first.
+  repeated CoverageRoute routes = 1;
+  // Token for the next page; empty at the end.
+  string next_page_token = 2;
+}
+// GetFreshnessContractRequest takes no parameters.
+message GetFreshnessContractRequest {}
+
+// GetFreshnessContractResponse is the published freshness contract.
+message GetFreshnessContractResponse {
+  // How long closure evidence supports ENFORCED.
+  google.protobuf.Duration enforced_ttl = 1;
+  // How often pending invalidations are reassessed at most.
+  google.protobuf.Duration reassess_interval = 2;
+  // The changes that drop ENFORCED at once.
+  repeated string invalidation_kinds = 3;
+  // The state an expired or invalidated ENFORCED record reads as.
+  CoverageState stale_state = 4;
+}
+
+// ReassessCoverageRequest names a connection.
+message ReassessCoverageRequest {
+  // Connection id.
+  string connection_id = 1 [(buf.validate.field).string.uuid = true];
+  // Only this agent.
+  optional string agent_id = 2 [(buf.validate.field).string.uuid = true];
+}
+
+// ReassessCoverageResponse counts what changed.
+message ReassessCoverageResponse {
+  // Scopes recomputed.
+  int32 scopes = 1;
+  // Snapshots recorded (scopes whose record changed).
+  int32 snapshots = 2;
+}
+
+// CoverageExclusion excludes a scope or a route kind from a claim.
+message CoverageExclusion {
+  // Exclusion id.
+  string id = 1;
+  // Agent; empty for every agent of the connection.
+  string agent_id = 2;
+  // Connection.
+  string connection_id = 3;
+  // Operation; empty for every operation.
+  string operation = 4;
+  // Route kind; unspecified for the whole scope.
+  CoverageRouteKind route_kind = 5;
+  // Why, in the creator's words (untrusted text).
+  string reason = 6;
+  // "ACTIVE", "REVOKED" or "EXPIRED".
+  string state = 7;
+  // The person who created it.
+  string created_by = 8;
+  // When it was created.
+  google.protobuf.Timestamp create_time = 9;
+  // When it expires.
+  google.protobuf.Timestamp expire_time = 10;
+  // The person who revoked it.
+  string revoked_by = 11;
+  // When it was revoked.
+  google.protobuf.Timestamp revoke_time = 12;
+}
