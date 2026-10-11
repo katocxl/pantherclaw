@@ -115,13 +115,7 @@ func approver(t *testing.T, s *stack, people *m2Stack) (*user, *browser, *webaut
 // script does.
 func approveOnPage(t *testing.T, b *browser, key *webauthntest.Authenticator, path string) string {
 	t.Helper()
-	return approveOperationOnPage(t, b, key, path, "payments.refund.create")
-}
-
-// approveOperationOnPage is approveOnPage for a page that shows operation.
-func approveOperationOnPage(t *testing.T, b *browser, key *webauthntest.Authenticator, path, operation string) string {
-	t.Helper()
-	if code, page := b.page(t, path); code != http.StatusOK || !strings.Contains(page, operation) {
+	if code, page := b.page(t, path); code != http.StatusOK || !strings.Contains(page, "payments.refund.create") {
 		t.Fatalf("approval page: %d", code)
 	}
 	base, _, _ := strings.Cut(path, "?")

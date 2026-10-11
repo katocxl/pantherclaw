@@ -136,7 +136,7 @@ Rules (MUST):
 - **No defaults:** an ambiguous target, missing material field or unsupported unit ⇒ `CANNOT_AUTHORIZE` (never a silent default).
 - **Canonical hash:** `action_hash = SHA-256(JCS(ActionIR))`.
 - **Dedupe key:** irreversible operations declare a semantic dedupe key in the tool package; an open `UNKNOWN` or recent success on the same key parks a new request in `RECONCILIATION`.
-- **Connection:** a gateway sets `connection` to the registered connection the request came through (channels `http`, `mcp` and `hook`, and `sdk` from its `/sdk` face, which maps the raw call itself and serves only `local` connections; HR-201). The Authority MUST check that the calling gateway serves that connection and that `route` is one of its routes. Because `connection` is part of the action hash, a decision or approval never carries over to another target or credential. A `local` connection serves only the cooperative channels (`hook`, `sdk`), and a `hook` action comes only through one. An `sdk` action MAY omit it, though the `/sdk` face always sets it.
+- **Connection:** a gateway sets `connection` to the registered connection the request came through (channels `http`, `mcp` and `hook`, and `sdk` from its `/sdk` face, which maps the raw call itself and serves `http` and `mcp` connections whose access mode is `agent_held` or `target_enforced`; HR-201). The Authority MUST check that the calling gateway serves that connection and that `route` is one of its routes. Because `connection` is part of the action hash, a decision or approval never carries over to another target or credential. A `hook` action comes only through a `local` connection, and nothing else does. An `sdk` action MAY omit it, though the `/sdk` face always sets it.
 
 ## 7. Authorization exchange
 
@@ -242,6 +242,19 @@ For targets that run PantherClaw verifier middleware, the gateway attaches `PAP-
 ```
 
 The verifier MUST check signature (JWKS), `aud`, expiry, `bh` against the received body, single use of `jti` in a **shared** replay store, and that the requested operation/target match. Only then may the route be counted as `ENFORCED` for cooperative (SDK) modes.
+
+Encoding as implemented since M6 (pinned by G0 M8; the conformance vectors in `sdk/conformance` fix it byte for byte):
+- **Header:** `{"alg": "EdDSA", "kid": "action-tokens-<first 22 characters of the key's RFC 7638 thumbprint>", "typ": "pap-action+jwt"}`. Verifiers accept only keys of the `action_tokens` purpose; a key of another purpose never verifies an action token. Verifiers also accept the fully-specified name `Ed25519` (RFC 9864) for the same keys; PantherClaw emits `EdDSA`.
+- **Claims:**
+  - `iss` is the deployment's issuer (`pantherclaw` unless configured).
+  - `aud` is the connection id (a UUID string).
+  - `jti` is a UUIDv7 string.
+  - `iat` and `exp` are integer seconds, with `exp − iat` ≤ 60.
+  - `pap.v` is `1`, and `pap.txn` is the transaction id.
+  - `pap.act` is the effective action hash and `pap.bh` the SHA-256 of the exact outbound body. Both are **lowercase hexadecimal**, unlike the base64url `bh` and `ath` of a request proof (§4) and the base64url hashes in an approval binding (§8).
+  - `pap.op` is the operation, and `pap.target` is `{type, id}`.
+- **Verification order:** read the body (bounded), then check the JWS, `iss`, `aud`, lifetime (5 seconds of clock skew), `pap.v`, `bh`, operation and target. Insert `jti` only after all of these pass (as §4 does for proofs). A store or JWKS that cannot be reached refuses the request.
+- **Single-replica stores:** a replay store that is not shared between all replicas of a target (an in-memory store) is valid for a single-replica target only. A target that declares such a store is never counted as target-enforced for more than one replica.
 
 ## 11. Keys and discovery
 

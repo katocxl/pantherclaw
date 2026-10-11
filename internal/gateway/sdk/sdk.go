@@ -2,28 +2,34 @@
 // Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
 
 // Package sdk is the gateway's face for agent SDKs (G0 M8 decision 1;
-// HR-201, HR-200): POST /sdk/{connection} on a kind-local connection asks
-// for a decision about a raw tool call that the agent runs itself, such as
-// one a Claude Agent SDK PreToolUse hook intercepted.
+// HR-201, HR-200): POST /sdk/{connection} asks for a decision about a raw
+// tool call that the agent runs itself, such as one a Claude Agent SDK
+// PreToolUse hook intercepted.
+//
+// It serves http and mcp connections whose access mode is agent_held or
+// target_enforced (brief design decision 9). On a pantherclaw_held
+// connection the gateway holds the credential, so the agent uses the
+// gateway's MCP or HTTP face instead (USE_GATEWAY_FACE, HR-186); shell
+// commands go to the hook face (HR-200).
 //
 // The request carries PAP/1 credentials and the raw call: the tool's name
-// as the agent sees it, its input, the MCP server's name for an MCP tool,
-// the SDK's id of the call and, for a shell tool, the working directory.
-// The gateway maps it itself through the connection's reviewed package and
-// reads nothing the SDK computed (an ActionIR, a hash, a canonical form):
-// Bash and PowerShell through the hook mapping `shell` (pc.shell), adapted
-// as `pclaw hook claude-code` adapts them, and mcp__{server}__{tool}
-// through the package's MCP mapping of the tool. The action's channel is
-// sdk, and it goes down the one dispatch path like a hook call: Authorize,
-// and for an allowed action BeginDispatch and RecordExecution with outcome
-// DELEGATED. The answer is allow only for an action the gateway recorded
-// as delegated, hold with the wait handle for a held one, and deny for
-// everything else. Every answer is labeled PARTIAL: the agent performs the
-// action with its own access (HR-024, HR-186).
+// as the agent sees it, the MCP server's name for an MCP tool, its input
+// and the SDK's id of the call. The gateway maps mcp__{server}__{tool}
+// through the connection's package's MCP mapping of the tool and reads
+// nothing the SDK computed (an ActionIR, a hash, a canonical form). The
+// action's channel is sdk, and it goes down the one dispatch path:
+// Authorize, and for an allowed action BeginDispatch and RecordExecution
+// with outcome DELEGATED. On a target-enforced connection the gateway also
+// re-serializes the outbound request and returns it with the action token
+// that binds its body, which the SDK sends unchanged (HR-201, HR-188).
 //
-// The SDK's other built-in tools (Read, Edit, WebFetch, …) have no mapping
-// (G0 M8 decision 2): the gateway verifies the workload and its run, logs
-// the call and answers allow, labeled OBSERVE_ONLY. An MCP tool or a shell
+// The answer is allow only for an action the gateway recorded as
+// delegated, hold with the wait handle for a held one, and deny for
+// everything else, each labeled PARTIAL (HR-024, HR-186), with the action's
+// id, its canonical form and hash. A tool the agent SDK has built in
+// (Read, Edit, Bash in an application that only observes the shell, …)
+// has no mapping (G0 M8 decision 2): the gateway verifies the workload and
+// its run, logs the call and answers allow, labeled OBSERVE_ONLY. An MCP
 // tool the package does not map is never allowed.
 package sdk
 
@@ -41,8 +47,6 @@ import (
 
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	"github.com/katocxl/pantherclaw/internal/actionir"
-	defs "github.com/katocxl/pantherclaw/internal/definitions/domain"
 	"github.com/katocxl/pantherclaw/internal/definitions/mapping"
 	"github.com/katocxl/pantherclaw/internal/gateway/control"
 	"github.com/katocxl/pantherclaw/internal/gateway/dispatch"
@@ -52,8 +56,8 @@ import (
 	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
 )
 
-// MaxBody is the largest request body read, as on the MCP face.
-const MaxBody = 256 << 10
+// MaxBody is the largest request body read (the brief's contract).
+const MaxBody = 64 << 10
 
 // Coverage labels of an answer (HR-024, HR-200).
 const (
@@ -70,6 +74,9 @@ const (
 	CodeUnknownTool = "unknown_tool"
 	// CodeInvalidInput: the input does not fit the reviewed mapping.
 	CodeInvalidInput = "invalid_input"
+	// CodeUseGatewayFace: the gateway holds the connection's credential,
+	// so the agent calls it through the gateway's MCP or HTTP face.
+	CodeUseGatewayFace = "use_gateway_face"
 )
 
 // Configuration is the gateway's current configuration (control.Store).
@@ -102,8 +109,8 @@ func Path(escapedPath string) (string, bool) {
 
 // Request is an SDK's raw tool call.
 type Request struct {
-	// Tool is the tool's name as the agent sees it: a built-in tool such as
-	// Bash, or mcp__{server}__{tool}.
+	// Tool is the tool's name as the agent sees it: mcp__{server}__{tool}
+	// for an MCP tool, or the name of a tool the agent SDK has built in.
 	Tool string `json:"tool"`
 	// Server is the MCP server's name, set exactly for an MCP tool.
 	Server string `json:"server,omitzero"`
@@ -111,9 +118,6 @@ type Request struct {
 	Input jsontext.Value `json:"input"`
 	// ToolUseID is the SDK's id of this call.
 	ToolUseID string `json:"tool_use_id"`
-	// Cwd is a shell tool's working directory, absolute and in its final
-	// form; set exactly for a shell tool.
-	Cwd string `json:"cwd,omitzero"`
 }
 
 // Answer is the gateway's answer.
@@ -141,6 +145,9 @@ type Answer struct {
 	Coverage string `json:"coverage"`
 	// Wait is a held call's wait handle.
 	Wait *Wait `json:"wait,omitzero"`
+	// Dispatch is, for an allowed call to a target-enforced connection,
+	// the request the SDK sends unchanged (HR-201).
+	Dispatch *Dispatch `json:"dispatch,omitzero"`
 }
 
 // Wait is a held call's wait handle (PAP-1 §8): long-poll
@@ -156,26 +163,22 @@ type Wait struct {
 	Code              string `json:"code,omitzero"`
 }
 
+// Dispatch is the gateway's re-serialization of the action for a
+// target-enforced connection (HR-075), with the action token whose bh is
+// the lowercase hex SHA-256 of the decoded body (HR-188).
+type Dispatch struct {
+	Method      string            `json:"method"`
+	URL         string            `json:"url"`
+	Headers     map[string]string `json:"headers"`
+	Body        string            `json:"body"`
+	ActionToken string            `json:"action_token"`
+}
+
 var (
-	// callRe is pc.shell's pattern of a call id.
 	callRe    = regexp.MustCompile(`^[A-Za-z0-9_-]{1,128}$`)
 	serverRe  = regexp.MustCompile(`^[A-Za-z0-9_-]{1,128}$`)
 	builtinRe = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_]{0,63}$`)
 )
-
-// shells are the built-in tools adapted to pc.shell's hook mapping, by the
-// shell each runs.
-var shells = map[string]string{"Bash": "bash", "PowerShell": "powershell"}
-
-// shellInput is a shell tool's input. Besides the command it may carry
-// only members that do not change the command that runs; any other member
-// makes the call one PantherClaw cannot decide.
-type shellInput struct {
-	Command         string   `json:"command"`
-	Description     *string  `json:"description"`
-	Timeout         *float64 `json:"timeout"`
-	RunInBackground *bool    `json:"run_in_background"`
-}
 
 func answer(w http.ResponseWriter, status int, a Answer) {
 	if a.Mode == "" {
@@ -192,6 +195,19 @@ func answer(w http.ResponseWriter, status int, a Answer) {
 
 func deny(w http.ResponseWriter, status int, class dispatch.Class, code, reason string) {
 	answer(w, status, Answer{Decision: "deny", Reason: reason, ErrorClass: string(class), Code: code})
+}
+
+// serves reports whether the face serves a connection, and when the
+// connection exists but is not one an SDK reaches directly, why.
+func serves(conn *control.Connection) (ok, useGateway bool) {
+	if conn == nil || conn.Mapper == nil || (conn.GetKind() != "http" && conn.GetKind() != "mcp") {
+		return false, false
+	}
+	switch conn.GetAccessMode() {
+	case "agent_held", "target_enforced":
+		return true, false
+	}
+	return false, true
 }
 
 // ServeHTTP serves one request.
@@ -212,8 +228,14 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if cfg != nil {
 		conn = cfg.ByName[name]
 	}
-	if conn == nil || conn.Mapper == nil || conn.GetKind() != "local" {
-		deny(w, http.StatusNotFound, dispatch.CannotAuthorize, "unknown_connection", "no cooperative connection of that name")
+	ok, useGateway := serves(conn)
+	switch {
+	case useGateway:
+		deny(w, http.StatusOK, dispatch.CannotAuthorize, CodeUseGatewayFace,
+			"PantherClaw holds this connection's credential: call it through the gateway's MCP or HTTP face.")
+		return
+	case !ok:
+		deny(w, http.StatusNotFound, dispatch.CannotAuthorize, "unknown_connection", "no connection of that name serves SDKs")
 		return
 	}
 	// The raw body is hashed before anything parses it (HR-091).
@@ -226,7 +248,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if !jsontext.Value(body).IsValid() || json.Unmarshal(body, &req, json.RejectUnknownMembers(true)) != nil || req.Tool == "" ||
 		req.Input.Kind() != '{' || !callRe.MatchString(req.ToolUseID) {
 		deny(w, http.StatusBadRequest, dispatch.CannotAuthorize, "invalid_request",
-			`the body must be {"tool": NAME, "input": {...}, "tool_use_id": ID} with "server" for an MCP tool and "cwd" for a shell tool`)
+			`the body must be {"tool": NAME, "input": {...}, "tool_use_id": ID}, with "server" for an MCP tool`)
 		return
 	}
 	in := dispatch.ReadInbound(r, body, h.publicURL+r.URL.Path)
@@ -245,30 +267,27 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		deny(w, http.StatusBadRequest, dispatch.CannotAuthorize, "run_required", "the "+dispatch.HeaderRunID+" header is required")
 		return
 	}
-	action := in.Action
-	if action == "" {
-		action = ids.NewV7().String()
-	}
-	via, tool, input, err := adapt(req)
+	tool, err := mcpTool(req)
 	switch {
 	case errors.Is(err, errBuiltIn):
 		h.observe(w, r, conn, in, req.Tool)
 		return
-	case errors.Is(err, errShape):
+	case err != nil:
 		deny(w, http.StatusBadRequest, dispatch.CannotAuthorize, "invalid_request",
-			`an MCP tool is "mcp__" + server + "__" + name with that "server" and no "cwd"; a shell tool has a "cwd" and no "server"`)
+			`an MCP tool is "mcp__" + server + "__" + name with that "server"; a built-in tool has no "server"`)
 		return
 	}
-	var parsed actionir.Parsed
-	if err == nil {
-		parsed, err = conn.Mapper.SDK(r.Context(), mapping.Context{
-			Org: cfg.Org, Env: in.Env, RunID: in.Run, ActionID: action, AgentInstance: in.Instance, Connection: conn.GetId(),
-		}, via, tool, input)
+	action := in.Action
+	if action == "" {
+		action = ids.NewV7().String()
 	}
+	parsed, err := conn.Mapper.SDK(r.Context(), mapping.Context{
+		Org: cfg.Org, Env: in.Env, RunID: in.Run, ActionID: action, AgentInstance: in.Instance, Connection: conn.GetId(),
+	}, tool, req.Input)
 	if err != nil {
 		// A tool the reviewed package does not map, or input that does not
-		// fit it (an unknown member, a device path, a control character):
-		// never allowed (HR-200, HR-201).
+		// fit it (an unknown member, a control character): never allowed
+		// (HR-200, HR-201).
 		code, why := CodeInvalidInput, "its input does not match the reviewed mapping of "+req.Tool
 		if errors.Is(err, mapping.ErrUnmapped) {
 			code, why = CodeUnknownTool, "the connection's reviewed package does not map "+req.Tool
@@ -292,51 +311,35 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	answer(w, http.StatusOK, a)
 }
 
-// Why a raw call is not adapted.
+// Why a raw call names no MCP tool.
 var (
-	// errBuiltIn: a built-in tool without a mapping (observed only).
-	errBuiltIn = errors.New("sdk: an unmapped built-in tool")
+	// errBuiltIn: a tool the agent SDK has built in (observed only).
+	errBuiltIn = errors.New("sdk: a built-in tool")
 	// errShape: the call's members do not fit its kind of tool.
 	errShape = errors.New("sdk: the call's members do not fit its tool")
-	// errInput: a shell tool's input does not fit pc.shell's mapping.
-	errInput = errors.New("sdk: the input does not fit the reviewed mapping")
 )
 
-// adapt turns a raw call into the mapping it goes through: an MCP tool
-// through the MCP mapping of its name with its input as sent, a shell tool
-// through pc.shell's hook mapping with the input `pclaw hook claude-code`
-// builds. Only a call that is neither, with a built-in tool's name and no
-// server or working directory, is errBuiltIn: a shell or MCP call that does
-// not fit is never observed instead of decided.
-func adapt(req Request) (via defs.Channel, tool string, input []byte, err error) {
-	if rest, mcp := strings.CutPrefix(req.Tool, "mcp__"); mcp {
-		name, found := strings.CutPrefix(rest, req.Server+"__")
-		if !found || name == "" || !serverRe.MatchString(req.Server) || req.Cwd != "" {
-			return "", "", nil, errShape
+// mcpTool is the MCP tool a raw call names: mcp__{server}__{tool} with that
+// server. A call with a built-in tool's name and no server is errBuiltIn;
+// an MCP call that does not fit is never observed instead of decided.
+func mcpTool(req Request) (string, error) {
+	rest, isMCP := strings.CutPrefix(req.Tool, "mcp__")
+	if !isMCP {
+		if req.Server == "" && builtinRe.MatchString(req.Tool) {
+			return "", errBuiltIn
 		}
-		return defs.ChannelMCP, name, req.Input, nil
+		return "", errShape
 	}
-	shell, ok := shells[req.Tool]
-	switch {
-	case !ok && req.Server == "" && req.Cwd == "" && builtinRe.MatchString(req.Tool):
-		return "", "", nil, errBuiltIn
-	case !ok || req.Server != "" || req.Cwd == "":
-		return "", "", nil, errShape
+	name, found := strings.CutPrefix(rest, req.Server+"__")
+	if !found || name == "" || !serverRe.MatchString(req.Server) {
+		return "", errShape
 	}
-	var s shellInput
-	if json.Unmarshal(req.Input, &s, json.RejectUnknownMembers(true)) != nil || s.Command == "" {
-		return "", "", nil, errInput
-	}
-	b, err := json.Marshal(map[string]string{"shell": shell, "command": s.Command, "cwd": req.Cwd, "call": req.ToolUseID},
-		json.Deterministic(true))
-	if err != nil {
-		return "", "", nil, errInput
-	}
-	return defs.ChannelHook, "shell", b, nil
+	return name, nil
 }
 
 // decide is the answer to a decision: allow only when the action was
-// recorded as delegated (HR-186).
+// recorded as delegated (HR-186), with the request to send for a
+// target-enforced connection.
 func decide(res dispatch.Result) Answer {
 	a := Answer{
 		TransactionID: res.TransactionID, Reasons: res.Reasons, Receipt: res.Receipt, ErrorClass: string(res.Class), Code: res.Code,
@@ -353,6 +356,12 @@ func decide(res dispatch.Result) Answer {
 		a.Decision, a.Reason = "allow", "PantherClaw allowed this call."+txn
 		if res.Monitor {
 			a.Reason = "PantherClaw is monitoring this route: the call is recorded, not decided." + txn
+		}
+		if d := res.Delegated; d != nil {
+			a.Dispatch = &Dispatch{
+				Method: d.Method, URL: d.URL, Headers: d.Headers, Body: base64.RawURLEncoding.EncodeToString(d.Body), ActionToken: d.ActionToken,
+			}
+			a.Reason += " Send the dispatch request exactly as given."
 		}
 	case res.Class == dispatch.Held:
 		a.Decision, a.Wait = "hold", wait(res)
@@ -394,9 +403,8 @@ func stamp(t *timestamppb.Timestamp) string {
 	return t.AsTime().UTC().Format(time.RFC3339)
 }
 
-// observe answers an unmapped built-in tool (G0 M8 decision 2): allowed
-// and recorded OBSERVE_ONLY, for a workload the Authority verified in its
-// run.
+// observe answers a built-in tool (G0 M8 decision 2): allowed and
+// recorded OBSERVE_ONLY, for a workload the Authority verified in its run.
 func (h *Handler) observe(w http.ResponseWriter, r *http.Request, conn *control.Connection, in dispatch.Inbound, tool string) {
 	v, err := h.engine.Verify(r.Context(), in.Creds, in.Run)
 	if err != nil {

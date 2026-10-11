@@ -319,11 +319,11 @@ func (p *Pipeline) scope(ctx context.Context, s *state) {
 }
 
 // connection checks the connection an action names (PAP-1 §6): the gateway
-// asking serves it, it uses the action's package, a local connection serves
-// only cooperative calls (hook, sdk: the agent performs them), and a hook
-// call comes through a local connection. A connection of another gateway
-// or org looks unknown. The route's mode on it decides whether the action
-// runs in monitor mode.
+// asking serves it, it uses the action's package, and a hook call comes
+// through a local connection and nothing else does (an sdk call, from the
+// /sdk face, comes through an http or mcp connection). A connection of
+// another gateway or org looks unknown. The route's mode on it decides
+// whether the action runs in monitor mode.
 func (p *Pipeline) connection(ctx context.Context, s *state, d *defs.Definition) bool {
 	unknown := func() bool {
 		s.cl.add(StepScope, adomain.CannotAuthorize, ReasonConnectionUnknown, "the connection is not one this gateway serves", "")
@@ -343,9 +343,7 @@ func (p *Pipeline) connection(ctx context.Context, s *state, d *defs.Definition)
 	case c.Gateway.String() != s.req.Gateway:
 		return unknown()
 	}
-	hook := s.a.Channel == string(defs.ChannelHook)
-	cooperative := hook || s.a.Channel == string(defs.ChannelSDK)
-	if c.Package != s.a.Definition.Package || (c.Kind == "local" && !cooperative) || (hook && c.Kind != "local") || !dispatches(c.Kind, d) {
+	if c.Package != s.a.Definition.Package || (c.Kind == "local") != (s.a.Channel == string(defs.ChannelHook)) || !dispatches(c.Kind, d) {
 		s.cl.add(StepScope, adomain.CannotAuthorize, ReasonRouteUnknown,
 			"route "+s.a.Route+" of "+d.Operation+" is not served by this connection", "")
 		return false
@@ -364,8 +362,8 @@ var gatewayChannels = []string{string(defs.ChannelHTTP), string(defs.ChannelMCP)
 
 // dispatches reports whether a connection of this kind serves the
 // definition: an HTTP or MCP connection only definitions with a dispatch
-// template of its kind, a local one (the hook and the SDK face) any,
-// because the agent's machine executes it.
+// template of its kind, a local one (the hook) any, because the agent's
+// machine executes it.
 func dispatches(kind string, d *defs.Definition) bool {
 	switch kind {
 	case "http":

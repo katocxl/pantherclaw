@@ -182,7 +182,7 @@ func declareKind(out *Capabilities, c Connection) {
 	}
 	switch c.Kind {
 	case KindLocal:
-		out.Enforcement = Support{Partial, "The agent runs each call itself after asking (the hook and SDK faces): " +
+		out.Enforcement = Support{Partial, "The agent runs each command itself after asking the hook face: " +
 			"a cooperative agent is stopped, an agent that skips the question is not (HR-024, HR-186)."}
 		out.Failure = append(out.Failure, "The agent's hook or SDK blocks every mapped call when PantherClaw cannot answer (HR-200).")
 		out.Limits = append(out.Limits, Limit{"COOPERATIVE", "Decisions bind only an agent that asks; coverage is PARTIAL at most."})
@@ -201,10 +201,11 @@ func declareKind(out *Capabilities, c Connection) {
 		out.Enforcement.Detail += " Only the gateway holds the credential, sealed to its broker key (HR-060)."
 		out.ResponseActions = append(out.ResponseActions, "revoke_credential", "rotate_credential")
 	case AccessTargetEnforced:
-		out.Enforcement.Detail += " The target refuses a call without a single-use action token (PAP-1 §10)."
+		out.Enforcement.Detail += " The target refuses a call without a single-use action token (PAP-1 §10), which the gateway mints for its own " +
+			"requests and for those it hands an agent SDK (HR-201)."
 	case AccessAgentHeld:
 		out.Enforcement = Support{Partial, out.Enforcement.Detail + " The agent holds its own credential and can call " +
-			"the target directly (F416)."}
+			"the target directly (F416); an agent SDK asks the SDK face first (HR-201)."}
 		out.Limits = append(out.Limits, Limit{"AGENT_HELD_CREDENTIAL", "The agent can bypass the gateway with its own credential."})
 	case AccessNone:
 		out.Enforcement = Support{Partial, out.Enforcement.Detail + " The target needs no credential, so anyone can " +
