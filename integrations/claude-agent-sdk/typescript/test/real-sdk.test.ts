@@ -201,6 +201,19 @@ test("TestHR200_in the real SDK, the application's own hook never overrides Pant
   assert.deepEqual(d.refunds, [], "an app deny with PantherClaw's allow");
 });
 
+test("TestHR200_in the real SDK, the application's allow never runs a call PantherClaw holds and asks about", testOptions, async (t) => {
+  const appAllow: HookCallback = async () => ({ hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "allow", permissionDecisionReason: "app" } });
+  // The hold never becomes ready: only canUseTool's allow could run the tool, and it denies at its deadline.
+  const g = await gateway(t, faceFor(holdThenAllow()), { waitStates: ["PENDING"] });
+  const start = Date.now();
+  const r = await run(t, "PC_SCENARIO=refund", (base) =>
+    integration(g.client, { waitMs: 1500 }).options({ ...base, permissionMode: "default", settingSources: [], hooks: { PreToolUse: [{ hooks: [appAllow] }] } }),
+  );
+  assert.deepEqual(r.refunds, [], "an app allow ran a held call");
+  assert.equal(g.calls.filter((c) => c.tool === "mcp__payments__create_refund").length, 1, "a held call was resubmitted without PantherClaw's ready");
+  assert.ok(Date.now() - start >= 1400, "the call was not left to canUseTool's wait");
+});
+
 test("TestHR200_in the real SDK, a PantherClaw that does not answer is denied at the integration's deadline", testOptions, async (t) => {
   const g = await gateway(t, faceFor(() => {}));
   const start = Date.now();
