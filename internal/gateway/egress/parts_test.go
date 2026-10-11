@@ -4,6 +4,7 @@
 package egress
 
 import (
+	"encoding/json/v2"
 	"errors"
 	"testing"
 
@@ -41,6 +42,32 @@ func TestHR073_TargetPartsAreSingleSegments(t *testing.T) {
 		bad.Target.ID = id
 		if r, err := Build("https://api.github.example.test", d, bad, txn); !errors.Is(err, ErrBuild) {
 			t.Errorf("target %q: %v %v", id, r.URL, err)
+		}
+	}
+}
+
+// TestHR073_RestPathsAreCheckedSegments: a {params.x*} reference sends
+// each "/"-separated part of the value as one escaped segment; an empty or
+// dot part, or one holding a separator or escape, builds nothing.
+func TestHR073_RestPathsAreCheckedSegments(t *testing.T) {
+	d := &defs.Definition{
+		Operation: "github.contents.read",
+		Target:    defs.TargetSpec{Type: "github.repository", IDPattern: `^(?P<owner>[a-z]+)/(?P<repo>[a-z]+)$`},
+		Params:    map[string]defs.ParamSpec{"path": {Type: defs.TypeIdentifier, Material: true, Required: true}},
+		Dispatch: &defs.Dispatch{HTTP: &defs.HTTPDispatch{
+			Method: "GET", Path: "/repos/{target.id.owner}/{target.id.repo}/contents/{params.path*}",
+		}},
+	}
+	a := actionir.ActionIR{Target: actionir.Target{Type: "github.repository", ID: "acme/payments"}, Params: []byte(`{"path":"src/a\"b/main.go"}`)}
+	r, err := Build("https://api.github.example.test", d, a, txn)
+	if err != nil || r.URL.EscapedPath() != "/repos/acme/payments/contents/src/a%22b/main.go" {
+		t.Fatalf("built %v %v", r.URL, err)
+	}
+	for _, path := range []string{"src//x", "../x", "src/./x", "/x", "x/", `a\b`, "a%2Fb", "a?b", "a#b"} {
+		bad := a
+		bad.Params, _ = json.Marshal(map[string]string{"path": path})
+		if r, err := Build("https://api.github.example.test", d, bad, txn); !errors.Is(err, ErrBuild) {
+			t.Errorf("path %q: %v %v", path, r.URL, err)
 		}
 	}
 }
