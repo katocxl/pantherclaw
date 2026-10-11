@@ -536,6 +536,309 @@ func (x *ListIdentitiesResponse) GetNextPageToken() string {
 	return ""
 }
 
+// OrgScan is one scan of a GitHub organization (HR-209).
+type OrgScan struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Scan id.
+	Id string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	// The connection whose App and gateway scan.
+	ConnectionId string `protobuf:"bytes,2,opt,name=connection_id,json=connectionId,proto3" json:"connection_id,omitempty"`
+	// PENDING (waiting for its gateway), RUNNING, DONE or FAILED (its lease
+	// ran out before a report).
+	State string `protobuf:"bytes,3,opt,name=state,proto3" json:"state,omitempty"`
+	// What was found, by kind (repositories, workflows, mcp_configs, ...).
+	Counts map[string]int64 `protobuf:"bytes,4,rep,name=counts,proto3" json:"counts,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"varint,2,opt,name=value"`
+	// The sources read.
+	Scanned []string `protobuf:"bytes,5,rep,name=scanned,proto3" json:"scanned,omitempty"`
+	// The sources not read, with why: never reported as "none found".
+	NotScanned map[string]string `protobuf:"bytes,6,rep,name=not_scanned,json=notScanned,proto3" json:"not_scanned,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	// Who started it.
+	StartedBy string `protobuf:"bytes,7,opt,name=started_by,json=startedBy,proto3" json:"started_by,omitempty"`
+	// When.
+	CreateTime *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=create_time,json=createTime,proto3" json:"create_time,omitempty"`
+	// When it finished.
+	FinishTime    *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=finish_time,json=finishTime,proto3" json:"finish_time,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *OrgScan) Reset() {
+	*x = OrgScan{}
+	mi := &file_pantherclaw_v1_github_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *OrgScan) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*OrgScan) ProtoMessage() {}
+
+func (x *OrgScan) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_github_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use OrgScan.ProtoReflect.Descriptor instead.
+func (*OrgScan) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_github_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *OrgScan) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *OrgScan) GetConnectionId() string {
+	if x != nil {
+		return x.ConnectionId
+	}
+	return ""
+}
+
+func (x *OrgScan) GetState() string {
+	if x != nil {
+		return x.State
+	}
+	return ""
+}
+
+func (x *OrgScan) GetCounts() map[string]int64 {
+	if x != nil {
+		return x.Counts
+	}
+	return nil
+}
+
+func (x *OrgScan) GetScanned() []string {
+	if x != nil {
+		return x.Scanned
+	}
+	return nil
+}
+
+func (x *OrgScan) GetNotScanned() map[string]string {
+	if x != nil {
+		return x.NotScanned
+	}
+	return nil
+}
+
+func (x *OrgScan) GetStartedBy() string {
+	if x != nil {
+		return x.StartedBy
+	}
+	return ""
+}
+
+func (x *OrgScan) GetCreateTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.CreateTime
+	}
+	return nil
+}
+
+func (x *OrgScan) GetFinishTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.FinishTime
+	}
+	return nil
+}
+
+// StartOrgScanRequest names the connection.
+type StartOrgScanRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// A connection holding a GitHub App credential.
+	ConnectionId  string `protobuf:"bytes,1,opt,name=connection_id,json=connectionId,proto3" json:"connection_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *StartOrgScanRequest) Reset() {
+	*x = StartOrgScanRequest{}
+	mi := &file_pantherclaw_v1_github_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *StartOrgScanRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StartOrgScanRequest) ProtoMessage() {}
+
+func (x *StartOrgScanRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_github_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StartOrgScanRequest.ProtoReflect.Descriptor instead.
+func (*StartOrgScanRequest) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_github_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *StartOrgScanRequest) GetConnectionId() string {
+	if x != nil {
+		return x.ConnectionId
+	}
+	return ""
+}
+
+// StartOrgScanResponse returns the scan.
+type StartOrgScanResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The scan, PENDING.
+	Scan          *OrgScan `protobuf:"bytes,1,opt,name=scan,proto3" json:"scan,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *StartOrgScanResponse) Reset() {
+	*x = StartOrgScanResponse{}
+	mi := &file_pantherclaw_v1_github_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *StartOrgScanResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StartOrgScanResponse) ProtoMessage() {}
+
+func (x *StartOrgScanResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_github_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StartOrgScanResponse.ProtoReflect.Descriptor instead.
+func (*StartOrgScanResponse) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_github_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *StartOrgScanResponse) GetScan() *OrgScan {
+	if x != nil {
+		return x.Scan
+	}
+	return nil
+}
+
+// GetOrgScanRequest names a scan.
+type GetOrgScanRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Scan id.
+	Id            string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetOrgScanRequest) Reset() {
+	*x = GetOrgScanRequest{}
+	mi := &file_pantherclaw_v1_github_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetOrgScanRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetOrgScanRequest) ProtoMessage() {}
+
+func (x *GetOrgScanRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_github_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetOrgScanRequest.ProtoReflect.Descriptor instead.
+func (*GetOrgScanRequest) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_github_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *GetOrgScanRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+// GetOrgScanResponse returns it.
+type GetOrgScanResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The scan.
+	Scan          *OrgScan `protobuf:"bytes,1,opt,name=scan,proto3" json:"scan,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetOrgScanResponse) Reset() {
+	*x = GetOrgScanResponse{}
+	mi := &file_pantherclaw_v1_github_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetOrgScanResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetOrgScanResponse) ProtoMessage() {}
+
+func (x *GetOrgScanResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_github_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetOrgScanResponse.ProtoReflect.Descriptor instead.
+func (*GetOrgScanResponse) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_github_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *GetOrgScanResponse) GetScan() *OrgScan {
+	if x != nil {
+		return x.Scan
+	}
+	return nil
+}
+
 var File_pantherclaw_v1_github_proto protoreflect.FileDescriptor
 
 const file_pantherclaw_v1_github_proto_rawDesc = "" +
@@ -579,11 +882,42 @@ const file_pantherclaw_v1_github_proto_rawDesc = "" +
 	"\n" +
 	"identities\x18\x01 \x03(\v2\x1e.pantherclaw.v1.GitHubIdentityR\n" +
 	"identities\x12&\n" +
-	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken2\xac\x02\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"\x88\x04\n" +
+	"\aOrgScan\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12#\n" +
+	"\rconnection_id\x18\x02 \x01(\tR\fconnectionId\x12\x14\n" +
+	"\x05state\x18\x03 \x01(\tR\x05state\x12;\n" +
+	"\x06counts\x18\x04 \x03(\v2#.pantherclaw.v1.OrgScan.CountsEntryR\x06counts\x12\x18\n" +
+	"\ascanned\x18\x05 \x03(\tR\ascanned\x12H\n" +
+	"\vnot_scanned\x18\x06 \x03(\v2'.pantherclaw.v1.OrgScan.NotScannedEntryR\n" +
+	"notScanned\x12\x1d\n" +
+	"\n" +
+	"started_by\x18\a \x01(\tR\tstartedBy\x12;\n" +
+	"\vcreate_time\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\n" +
+	"createTime\x12;\n" +
+	"\vfinish_time\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\n" +
+	"finishTime\x1a9\n" +
+	"\vCountsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\x03R\x05value:\x028\x01\x1a=\n" +
+	"\x0fNotScannedEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"D\n" +
+	"\x13StartOrgScanRequest\x12-\n" +
+	"\rconnection_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\fconnectionId\"C\n" +
+	"\x14StartOrgScanResponse\x12+\n" +
+	"\x04scan\x18\x01 \x01(\v2\x17.pantherclaw.v1.OrgScanR\x04scan\"-\n" +
+	"\x11GetOrgScanRequest\x12\x18\n" +
+	"\x02id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x02id\"A\n" +
+	"\x12GetOrgScanResponse\x12+\n" +
+	"\x04scan\x18\x01 \x01(\v2\x17.pantherclaw.v1.OrgScanR\x04scan2\xdc\x03\n" +
 	"\rGitHubService\x12Y\n" +
 	"\fLinkIdentity\x12#.pantherclaw.v1.LinkIdentityRequest\x1a$.pantherclaw.v1.LinkIdentityResponse\x12_\n" +
 	"\x0eUnlinkIdentity\x12%.pantherclaw.v1.UnlinkIdentityRequest\x1a&.pantherclaw.v1.UnlinkIdentityResponse\x12_\n" +
-	"\x0eListIdentities\x12%.pantherclaw.v1.ListIdentitiesRequest\x1a&.pantherclaw.v1.ListIdentitiesResponseB\xc4\x01\n" +
+	"\x0eListIdentities\x12%.pantherclaw.v1.ListIdentitiesRequest\x1a&.pantherclaw.v1.ListIdentitiesResponse\x12Y\n" +
+	"\fStartOrgScan\x12#.pantherclaw.v1.StartOrgScanRequest\x1a$.pantherclaw.v1.StartOrgScanResponse\x12S\n" +
+	"\n" +
+	"GetOrgScan\x12!.pantherclaw.v1.GetOrgScanRequest\x1a\".pantherclaw.v1.GetOrgScanResponseB\xc4\x01\n" +
 	"\x12com.pantherclaw.v1B\vGithubProtoP\x01ZHgithub.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1;pantherclawv1\xa2\x02\x03PXX\xaa\x02\x0ePantherclaw.V1\xca\x02\x0ePantherclaw\\V1\xe2\x02\x1aPantherclaw\\V1\\GPBMetadata\xea\x02\x0fPantherclaw::V1b\x06proto3"
 
 var (
@@ -598,7 +932,7 @@ func file_pantherclaw_v1_github_proto_rawDescGZIP() []byte {
 	return file_pantherclaw_v1_github_proto_rawDescData
 }
 
-var file_pantherclaw_v1_github_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
+var file_pantherclaw_v1_github_proto_msgTypes = make([]protoimpl.MessageInfo, 16)
 var file_pantherclaw_v1_github_proto_goTypes = []any{
 	(*GitHubInstallation)(nil),     // 0: pantherclaw.v1.GitHubInstallation
 	(*GitHubIdentity)(nil),         // 1: pantherclaw.v1.GitHubIdentity
@@ -608,26 +942,43 @@ var file_pantherclaw_v1_github_proto_goTypes = []any{
 	(*UnlinkIdentityResponse)(nil), // 5: pantherclaw.v1.UnlinkIdentityResponse
 	(*ListIdentitiesRequest)(nil),  // 6: pantherclaw.v1.ListIdentitiesRequest
 	(*ListIdentitiesResponse)(nil), // 7: pantherclaw.v1.ListIdentitiesResponse
-	nil,                            // 8: pantherclaw.v1.GitHubInstallation.PermissionsEntry
-	(*timestamppb.Timestamp)(nil),  // 9: google.protobuf.Timestamp
+	(*OrgScan)(nil),                // 8: pantherclaw.v1.OrgScan
+	(*StartOrgScanRequest)(nil),    // 9: pantherclaw.v1.StartOrgScanRequest
+	(*StartOrgScanResponse)(nil),   // 10: pantherclaw.v1.StartOrgScanResponse
+	(*GetOrgScanRequest)(nil),      // 11: pantherclaw.v1.GetOrgScanRequest
+	(*GetOrgScanResponse)(nil),     // 12: pantherclaw.v1.GetOrgScanResponse
+	nil,                            // 13: pantherclaw.v1.GitHubInstallation.PermissionsEntry
+	nil,                            // 14: pantherclaw.v1.OrgScan.CountsEntry
+	nil,                            // 15: pantherclaw.v1.OrgScan.NotScannedEntry
+	(*timestamppb.Timestamp)(nil),  // 16: google.protobuf.Timestamp
 }
 var file_pantherclaw_v1_github_proto_depIdxs = []int32{
-	8, // 0: pantherclaw.v1.GitHubInstallation.permissions:type_name -> pantherclaw.v1.GitHubInstallation.PermissionsEntry
-	9, // 1: pantherclaw.v1.GitHubInstallation.read_time:type_name -> google.protobuf.Timestamp
-	9, // 2: pantherclaw.v1.GitHubIdentity.link_time:type_name -> google.protobuf.Timestamp
-	1, // 3: pantherclaw.v1.LinkIdentityResponse.identity:type_name -> pantherclaw.v1.GitHubIdentity
-	1, // 4: pantherclaw.v1.ListIdentitiesResponse.identities:type_name -> pantherclaw.v1.GitHubIdentity
-	2, // 5: pantherclaw.v1.GitHubService.LinkIdentity:input_type -> pantherclaw.v1.LinkIdentityRequest
-	4, // 6: pantherclaw.v1.GitHubService.UnlinkIdentity:input_type -> pantherclaw.v1.UnlinkIdentityRequest
-	6, // 7: pantherclaw.v1.GitHubService.ListIdentities:input_type -> pantherclaw.v1.ListIdentitiesRequest
-	3, // 8: pantherclaw.v1.GitHubService.LinkIdentity:output_type -> pantherclaw.v1.LinkIdentityResponse
-	5, // 9: pantherclaw.v1.GitHubService.UnlinkIdentity:output_type -> pantherclaw.v1.UnlinkIdentityResponse
-	7, // 10: pantherclaw.v1.GitHubService.ListIdentities:output_type -> pantherclaw.v1.ListIdentitiesResponse
-	8, // [8:11] is the sub-list for method output_type
-	5, // [5:8] is the sub-list for method input_type
-	5, // [5:5] is the sub-list for extension type_name
-	5, // [5:5] is the sub-list for extension extendee
-	0, // [0:5] is the sub-list for field type_name
+	13, // 0: pantherclaw.v1.GitHubInstallation.permissions:type_name -> pantherclaw.v1.GitHubInstallation.PermissionsEntry
+	16, // 1: pantherclaw.v1.GitHubInstallation.read_time:type_name -> google.protobuf.Timestamp
+	16, // 2: pantherclaw.v1.GitHubIdentity.link_time:type_name -> google.protobuf.Timestamp
+	1,  // 3: pantherclaw.v1.LinkIdentityResponse.identity:type_name -> pantherclaw.v1.GitHubIdentity
+	1,  // 4: pantherclaw.v1.ListIdentitiesResponse.identities:type_name -> pantherclaw.v1.GitHubIdentity
+	14, // 5: pantherclaw.v1.OrgScan.counts:type_name -> pantherclaw.v1.OrgScan.CountsEntry
+	15, // 6: pantherclaw.v1.OrgScan.not_scanned:type_name -> pantherclaw.v1.OrgScan.NotScannedEntry
+	16, // 7: pantherclaw.v1.OrgScan.create_time:type_name -> google.protobuf.Timestamp
+	16, // 8: pantherclaw.v1.OrgScan.finish_time:type_name -> google.protobuf.Timestamp
+	8,  // 9: pantherclaw.v1.StartOrgScanResponse.scan:type_name -> pantherclaw.v1.OrgScan
+	8,  // 10: pantherclaw.v1.GetOrgScanResponse.scan:type_name -> pantherclaw.v1.OrgScan
+	2,  // 11: pantherclaw.v1.GitHubService.LinkIdentity:input_type -> pantherclaw.v1.LinkIdentityRequest
+	4,  // 12: pantherclaw.v1.GitHubService.UnlinkIdentity:input_type -> pantherclaw.v1.UnlinkIdentityRequest
+	6,  // 13: pantherclaw.v1.GitHubService.ListIdentities:input_type -> pantherclaw.v1.ListIdentitiesRequest
+	9,  // 14: pantherclaw.v1.GitHubService.StartOrgScan:input_type -> pantherclaw.v1.StartOrgScanRequest
+	11, // 15: pantherclaw.v1.GitHubService.GetOrgScan:input_type -> pantherclaw.v1.GetOrgScanRequest
+	3,  // 16: pantherclaw.v1.GitHubService.LinkIdentity:output_type -> pantherclaw.v1.LinkIdentityResponse
+	5,  // 17: pantherclaw.v1.GitHubService.UnlinkIdentity:output_type -> pantherclaw.v1.UnlinkIdentityResponse
+	7,  // 18: pantherclaw.v1.GitHubService.ListIdentities:output_type -> pantherclaw.v1.ListIdentitiesResponse
+	10, // 19: pantherclaw.v1.GitHubService.StartOrgScan:output_type -> pantherclaw.v1.StartOrgScanResponse
+	12, // 20: pantherclaw.v1.GitHubService.GetOrgScan:output_type -> pantherclaw.v1.GetOrgScanResponse
+	16, // [16:21] is the sub-list for method output_type
+	11, // [11:16] is the sub-list for method input_type
+	11, // [11:11] is the sub-list for extension type_name
+	11, // [11:11] is the sub-list for extension extendee
+	0,  // [0:11] is the sub-list for field type_name
 }
 
 func init() { file_pantherclaw_v1_github_proto_init() }
@@ -641,7 +992,7 @@ func file_pantherclaw_v1_github_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pantherclaw_v1_github_proto_rawDesc), len(file_pantherclaw_v1_github_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   9,
+			NumMessages:   16,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

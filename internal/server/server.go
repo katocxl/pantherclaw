@@ -529,7 +529,7 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	d.m6.registerPublic(rs)
 	d.m5p2.registerPublic(rs)
 	registerM7(rs, pool, d.verification)
-	registerM8G(rs, pool)
+	registerM8G(rs, pool, d.billing)
 	if err := registerEvidence(rs, d); err != nil {
 		return nil, err
 	}

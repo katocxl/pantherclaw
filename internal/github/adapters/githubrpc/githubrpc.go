@@ -22,11 +22,12 @@ var errInvalidID = pcerr.New(pcerr.InvalidArgument, "INVALID_ID", "invalid id")
 // Handler serves GitHubService.
 type Handler struct {
 	pantherclawv1connect.UnimplementedGitHubServiceHandler
-	s *app.Service
+	s     *app.Service
+	scans *app.Scans
 }
 
 // New returns the handler.
-func New(s *app.Service) *Handler { return &Handler{s: s} }
+func New(s *app.Service, scans *app.Scans) *Handler { return &Handler{s: s, scans: scans} }
 
 func identityOf(i app.Identity) *pb.GitHubIdentity {
 	return &pb.GitHubIdentity{
@@ -84,4 +85,41 @@ func (h *Handler) ListIdentities(ctx context.Context, req *pb.ListIdentitiesRequ
 		out.Identities = append(out.Identities, identityOf(i))
 	}
 	return out, nil
+}
+
+func scanOf(s app.Scan) *pb.OrgScan {
+	out := &pb.OrgScan{
+		Id: s.ID.String(), ConnectionId: s.ConnectionID.String(), State: s.State, Counts: s.Counts, Scanned: s.Scanned,
+		NotScanned: s.NotScanned, StartedBy: s.StartedBy, CreateTime: timestamppb.New(s.CreatedAt),
+	}
+	if s.FinishedAt != nil {
+		out.FinishTime = timestamppb.New(*s.FinishedAt)
+	}
+	return out
+}
+
+// StartOrgScan implements GitHubServiceHandler.
+func (h *Handler) StartOrgScan(ctx context.Context, req *pb.StartOrgScanRequest) (*pb.StartOrgScanResponse, error) {
+	conn, err := parseID(req.GetConnectionId())
+	if err != nil {
+		return nil, err
+	}
+	s, err := h.scans.Start(ctx, conn)
+	if err != nil {
+		return nil, err
+	}
+	return &pb.StartOrgScanResponse{Scan: scanOf(s)}, nil
+}
+
+// GetOrgScan implements GitHubServiceHandler.
+func (h *Handler) GetOrgScan(ctx context.Context, req *pb.GetOrgScanRequest) (*pb.GetOrgScanResponse, error) {
+	id, err := parseID(req.GetId())
+	if err != nil {
+		return nil, err
+	}
+	s, err := h.scans.Get(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	return &pb.GetOrgScanResponse{Scan: scanOf(s)}, nil
 }

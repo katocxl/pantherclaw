@@ -34,7 +34,9 @@ message GitHubInstallation {
 
 // GitHubService links the org's people to their GitHub accounts (G0 M8,
 // HR-207): independence then excludes, by GitHub user id, everyone who
-// authored, committed or pushed to a pull request from reviewing it.
+// authored, committed or pushed to a pull request from reviewing it. It
+// also scans the GitHub organization behind a GitHub App connection for
+// agents, workflows and MCP configuration (PN-001.2, HR-209).
 service GitHubService {
   // LinkIdentity links a person of the org to a GitHub user id. A GitHub
   // user id links to one person; the link is audited.
@@ -46,6 +48,16 @@ service GitHubService {
   // ListIdentities lists the links, of one person or of everyone.
   // permission: user.read
   rpc ListIdentities(ListIdentitiesRequest) returns (ListIdentitiesResponse);
+  // StartOrgScan starts a scan of the GitHub organization behind a GitHub
+  // App connection (PN-001.2, HR-209; Team edition): an org_scan lease for
+  // the connection's gateway, which reads metadata and named files only and
+  // submits what it finds. One scan of a connection runs at a time.
+  // permission: github.scan.run
+  rpc StartOrgScan(StartOrgScanRequest) returns (StartOrgScanResponse);
+  // GetOrgScan returns a scan: its state, its counts, and the sources it
+  // read and could not read.
+  // permission: github.scan.run
+  rpc GetOrgScan(GetOrgScanRequest) returns (GetOrgScanResponse);
 }
 
 // GitHubIdentity is one person's link to a GitHub account.
@@ -112,4 +124,51 @@ message ListIdentitiesResponse {
   repeated GitHubIdentity identities = 1;
   // Token of the next page; empty on the last.
   string next_page_token = 2;
+}
+
+// OrgScan is one scan of a GitHub organization (HR-209).
+message OrgScan {
+  // Scan id.
+  string id = 1;
+  // The connection whose App and gateway scan.
+  string connection_id = 2;
+  // PENDING (waiting for its gateway), RUNNING, DONE or FAILED (its lease
+  // ran out before a report).
+  string state = 3;
+  // What was found, by kind (repositories, workflows, mcp_configs, ...).
+  map<string, int64> counts = 4;
+  // The sources read.
+  repeated string scanned = 5;
+  // The sources not read, with why: never reported as "none found".
+  map<string, string> not_scanned = 6;
+  // Who started it.
+  string started_by = 7;
+  // When.
+  google.protobuf.Timestamp create_time = 8;
+  // When it finished.
+  google.protobuf.Timestamp finish_time = 9;
+}
+
+// StartOrgScanRequest names the connection.
+message StartOrgScanRequest {
+  // A connection holding a GitHub App credential.
+  string connection_id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// StartOrgScanResponse returns the scan.
+message StartOrgScanResponse {
+  // The scan, PENDING.
+  OrgScan scan = 1;
+}
+
+// GetOrgScanRequest names a scan.
+message GetOrgScanRequest {
+  // Scan id.
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// GetOrgScanResponse returns it.
+message GetOrgScanResponse {
+  // The scan.
+  OrgScan scan = 1;
 }

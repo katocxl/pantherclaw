@@ -172,6 +172,10 @@ const (
 	// Admin stays bindable to service accounts, so it is not in humanOnly:
 	// the identity service refuses any caller but a person itself.
 	PermGitHubIdentityManage Permission = "github.identity.manage"
+	// PermGitHubScanRun starts an organization scan through a GitHub App
+	// connection (G0 M8, PN-001.2, HR-209; Team edition). Like
+	// github.identity.manage, the service refuses any caller but a person.
+	PermGitHubScanRun Permission = "github.scan.run"
 )
 
 // Workload permissions are held only by PAP/1-authenticated workloads
@@ -211,7 +215,7 @@ var catalog = []Permission{
 	PermGatewayRead, PermGatewayManage, PermConnectionRead, PermConnectionManage, PermCredentialSeal,
 	PermContainmentRead, PermContainmentKillSwitch,
 	PermEvidenceRead, PermEvidenceExport, PermEvidenceRetentionManage, PermEvidenceCaptureManage,
-	PermTransactionReconcile, PermGitHubIdentityManage,
+	PermTransactionReconcile, PermGitHubIdentityManage, PermGitHubScanRun,
 }
 
 // humanOnly permissions can never be exercised by a service account or an

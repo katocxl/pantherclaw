@@ -70,7 +70,8 @@ func packageFacts(pool *db.Pool) factsapp.PackageFacts {
 }
 
 // registerM8G mounts the M8 track G services people use: the GitHub
-// identity links independence compares (HR-207).
-func registerM8G(rs *connect.Server, pool *db.Pool) {
-	pantherclawv1connect.RegisterGitHubServiceHandler(rs, githubrpc.New(&githubapp.Service{Pool: pool}))
+// identity links independence compares (HR-207), and organization scans
+// (HR-209).
+func registerM8G(rs *connect.Server, pool *db.Pool, ents githubapp.Entitlements) {
+	pantherclawv1connect.RegisterGitHubServiceHandler(rs, githubrpc.New(&githubapp.Service{Pool: pool}, &githubapp.Scans{Pool: pool, Ents: ents}))
 }

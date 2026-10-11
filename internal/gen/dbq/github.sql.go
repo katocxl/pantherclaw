@@ -10,6 +10,7 @@ package dbq
 
 import (
 	"context"
+	"time"
 
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 )
@@ -30,6 +31,76 @@ func (q *Queries) DeleteGitHubIdentity(ctx context.Context, orgID ids.OrgID, iD 
 		&i.GithubUserID,
 		&i.LinkedBy,
 		&i.LinkedAt,
+	)
+	return i, err
+}
+
+const finishGitHubScanRun = `-- name: FinishGitHubScanRun :exec
+UPDATE pc.github_scan_runs
+SET state = $1, counts = $2, scanned = $3::text[], not_scanned = $4,
+    finished_at = now()
+WHERE org_id = $5 AND id = $6 AND state IN ('PENDING', 'RUNNING')
+`
+
+type FinishGitHubScanRunParams struct {
+	State      string
+	Counts     []byte
+	Scanned    []string
+	NotScanned []byte
+	OrgID      ids.OrgID
+	ID         ids.UUID
+}
+
+func (q *Queries) FinishGitHubScanRun(ctx context.Context, arg FinishGitHubScanRunParams) error {
+	_, err := q.db.Exec(ctx, finishGitHubScanRun,
+		arg.State,
+		arg.Counts,
+		arg.Scanned,
+		arg.NotScanned,
+		arg.OrgID,
+		arg.ID,
+	)
+	return err
+}
+
+const getGitHubScanRun = `-- name: GetGitHubScanRun :one
+SELECT r.id, r.connection_id, r.counts, r.scanned, r.not_scanned, r.started_by, r.created_at, r.finished_at,
+       (CASE WHEN r.state <> 'PENDING' THEN r.state
+             WHEN v.state = 'LEASED' THEN 'RUNNING'
+             WHEN v.state IN ('EXPIRED', 'CANCELLED', 'DONE') THEN 'FAILED'
+             ELSE 'PENDING' END)::text AS state
+FROM pc.github_scan_runs r
+LEFT JOIN pc.verifications v ON v.org_id = r.org_id AND v.id = r.verification_id
+WHERE r.org_id = $1 AND r.id = $2
+`
+
+type GetGitHubScanRunRow struct {
+	ID           ids.UUID
+	ConnectionID ids.UUID
+	Counts       []byte
+	Scanned      []string
+	NotScanned   []byte
+	StartedBy    string
+	CreatedAt    time.Time
+	FinishedAt   *time.Time
+	State        string
+}
+
+// GetGitHubScanRun is a scan with its lease's state: a PENDING run whose
+// lease is held is RUNNING, and one whose lease ended unreported FAILED.
+func (q *Queries) GetGitHubScanRun(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (GetGitHubScanRunRow, error) {
+	row := q.db.QueryRow(ctx, getGitHubScanRun, orgID, iD)
+	var i GetGitHubScanRunRow
+	err := row.Scan(
+		&i.ID,
+		&i.ConnectionID,
+		&i.Counts,
+		&i.Scanned,
+		&i.NotScanned,
+		&i.StartedBy,
+		&i.CreatedAt,
+		&i.FinishedAt,
+		&i.State,
 	)
 	return i, err
 }
@@ -74,6 +145,66 @@ func (q *Queries) InsertGitHubIdentity(ctx context.Context, arg InsertGitHubIden
 		&i.LinkedBy,
 		&i.LinkedAt,
 	)
+	return i, err
+}
+
+const insertGitHubScanRun = `-- name: InsertGitHubScanRun :exec
+INSERT INTO pc.github_scan_runs (org_id, id, connection_id, verification_id, started_by)
+VALUES ($1, $2, $3, $4, $5)
+`
+
+type InsertGitHubScanRunParams struct {
+	OrgID          ids.OrgID
+	ID             ids.UUID
+	ConnectionID   ids.UUID
+	VerificationID *ids.UUID
+	StartedBy      string
+}
+
+func (q *Queries) InsertGitHubScanRun(ctx context.Context, arg InsertGitHubScanRunParams) error {
+	_, err := q.db.Exec(ctx, insertGitHubScanRun,
+		arg.OrgID,
+		arg.ID,
+		arg.ConnectionID,
+		arg.VerificationID,
+		arg.StartedBy,
+	)
+	return err
+}
+
+const leasedOrgScan = `-- name: LeasedOrgScan :one
+SELECT v.id, v.connection_id, r.id AS run_id
+FROM pc.verifications v
+JOIN pc.github_scan_runs r ON r.org_id = v.org_id AND r.verification_id = v.id
+WHERE v.org_id = $1 AND v.id = $2 AND v.purpose = 'org_scan' AND v.state = 'LEASED'
+  AND v.leased_by = $3 AND v.lease_hash = $4 AND v.lease_expires_at >= now()
+FOR UPDATE OF v
+`
+
+type LeasedOrgScanParams struct {
+	OrgID     ids.OrgID
+	ID        ids.UUID
+	GatewayID *ids.UUID
+	LeaseHash []byte
+}
+
+type LeasedOrgScanRow struct {
+	ID           ids.UUID
+	ConnectionID ids.UUID
+	RunID        ids.UUID
+}
+
+// LeasedOrgScan is an org scan task under a live lease of this gateway,
+// with its run.
+func (q *Queries) LeasedOrgScan(ctx context.Context, arg LeasedOrgScanParams) (LeasedOrgScanRow, error) {
+	row := q.db.QueryRow(ctx, leasedOrgScan,
+		arg.OrgID,
+		arg.ID,
+		arg.GatewayID,
+		arg.LeaseHash,
+	)
+	var i LeasedOrgScanRow
+	err := row.Scan(&i.ID, &i.ConnectionID, &i.RunID)
 	return i, err
 }
 
@@ -123,4 +254,72 @@ func (q *Queries) ListGitHubIdentities(ctx context.Context, arg ListGitHubIdenti
 		return nil, err
 	}
 	return items, nil
+}
+
+const openOrgScan = `-- name: OpenOrgScan :one
+SELECT EXISTS (SELECT 1 FROM pc.verifications
+               WHERE org_id = $1 AND connection_id = $2 AND purpose = 'org_scan'
+                 AND state IN ('PENDING', 'LEASED'))::boolean
+`
+
+func (q *Queries) OpenOrgScan(ctx context.Context, orgID ids.OrgID, connectionID ids.UUID) (bool, error) {
+	row := q.db.QueryRow(ctx, openOrgScan, orgID, connectionID)
+	var column_1 bool
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
+const scanConnection = `-- name: ScanConnection :one
+
+SELECT c.state, c.kind, c.package,
+       coalesce((SELECT cr.kind FROM pc.credentials cr
+                 WHERE cr.org_id = c.org_id AND cr.connection_id = c.id AND cr.state = 'ACTIVE'), '')::text AS credential_kind
+FROM pc.connections c
+WHERE c.org_id = $1 AND c.id = $2
+`
+
+type ScanConnectionRow struct {
+	State          string
+	Kind           string
+	Package        string
+	CredentialKind string
+}
+
+// Organisation scans (PN-001.2, HR-209): a github_scan_runs row and the
+// org_scan lease its gateway claims.
+// ScanConnection is what a scan needs to know of a connection: whether it
+// is active, its package, and the kind of its active credential.
+func (q *Queries) ScanConnection(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (ScanConnectionRow, error) {
+	row := q.db.QueryRow(ctx, scanConnection, orgID, iD)
+	var i ScanConnectionRow
+	err := row.Scan(
+		&i.State,
+		&i.Kind,
+		&i.Package,
+		&i.CredentialKind,
+	)
+	return i, err
+}
+
+const scheduleOrgScan = `-- name: ScheduleOrgScan :exec
+INSERT INTO pc.verifications (org_id, id, purpose, connection_id, operation, request, next_at, deadline_at)
+VALUES ($1, $2, 'org_scan', $3, 'github.org_scan', $4, now(),
+        now() + interval '30 minutes')
+`
+
+type ScheduleOrgScanParams struct {
+	OrgID        ids.OrgID
+	ID           ids.UUID
+	ConnectionID ids.UUID
+	Request      []byte
+}
+
+func (q *Queries) ScheduleOrgScan(ctx context.Context, arg ScheduleOrgScanParams) error {
+	_, err := q.db.Exec(ctx, scheduleOrgScan,
+		arg.OrgID,
+		arg.ID,
+		arg.ConnectionID,
+		arg.Request,
+	)
+	return err
 }
