@@ -13,6 +13,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/netip"
 	"os"
 	"strings"
 	"time"
@@ -38,8 +39,11 @@ type Config struct {
 	Format  string `json:"format"`
 	Mode    string `json:"mode"`
 	Session string `json:"session"`
-	// Listen is the proxy's address on the sandbox network, ":3128".
+	// Listen is the proxy's port, ":3128". The edge listens on its own
+	// address in Subnet, the sandbox network's, and nowhere else: not on
+	// its uplink (G0 M9 design decision 4).
 	Listen     string `json:"listen"`
+	Subnet     string `json:"subnet"`
 	GatewayURL string `json:"gateway_url"`
 	// GatewayAddr is the host:port dialed for the gateway URL when the
 	// gateway's public address is not reachable from the edge's uplink
@@ -75,8 +79,8 @@ func ReadConfig(path string) (Config, error) {
 		return Config{}, errors.New("edge: connector mode is not available in this build")
 	case c.Mode != ModeSandbox:
 		return Config{}, fmt.Errorf("edge: mode %q", c.Mode)
-	case c.Listen == "" || c.KeyFile == "" || c.TokenFile == "":
-		return Config{}, errors.New("edge: listen, key_file and token_file are required")
+	case c.Listen == "" || c.Subnet == "" || c.KeyFile == "" || c.TokenFile == "":
+		return Config{}, errors.New("edge: listen, subnet, key_file and token_file are required")
 	}
 	return c, nil
 }
@@ -122,7 +126,7 @@ func Run(ctx context.Context, c Config, out io.Writer, log *slog.Logger) error {
 	if err != nil {
 		return err
 	}
-	ln, err := (&net.ListenConfig{}).Listen(ctx, "tcp", c.Listen)
+	ln, err := listen(ctx, c.Listen, c.Subnet)
 	if err != nil {
 		return fmt.Errorf("edge: %w", err)
 	}
@@ -173,4 +177,60 @@ func Main(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 	return 0
+}
+
+// listen listens on port (":3128") at this container's address in subnet,
+// the sandbox network, and drops any connection that arrives on another
+// local address (G0 M9 design decision 4).
+func listen(ctx context.Context, port, subnet string) (net.Listener, error) {
+	prefix, err := netip.ParsePrefix(subnet)
+	if err != nil {
+		return nil, fmt.Errorf("edge: subnet %q", subnet)
+	}
+	_, p, err := net.SplitHostPort(port)
+	if err != nil {
+		return nil, fmt.Errorf("edge: listen %q", port)
+	}
+	addr, err := sandboxAddr(prefix)
+	if err != nil {
+		return nil, err
+	}
+	ln, err := (&net.ListenConfig{}).Listen(ctx, "tcp", net.JoinHostPort(addr.String(), p))
+	if err != nil {
+		return nil, fmt.Errorf("edge: %w", err)
+	}
+	return &subnetListener{Listener: ln, prefix: prefix}, nil
+}
+
+// sandboxAddr is this container's address in the sandbox network.
+func sandboxAddr(subnet netip.Prefix) (netip.Addr, error) {
+	addrs, err := net.InterfaceAddrs()
+	if err != nil {
+		return netip.Addr{}, fmt.Errorf("edge: %w", err)
+	}
+	for _, a := range addrs {
+		if p, err := netip.ParsePrefix(a.String()); err == nil && subnet.Contains(p.Addr()) {
+			return p.Addr(), nil
+		}
+	}
+	return netip.Addr{}, fmt.Errorf("edge: no address in the sandbox network %s", subnet)
+}
+
+// subnetListener accepts only connections to a local address in prefix.
+type subnetListener struct {
+	net.Listener
+	prefix netip.Prefix
+}
+
+func (l *subnetListener) Accept() (net.Conn, error) {
+	for {
+		c, err := l.Listener.Accept()
+		if err != nil {
+			return nil, err
+		}
+		if a, ok := c.LocalAddr().(*net.TCPAddr); ok && l.prefix.Contains(a.AddrPort().Addr().Unmap()) {
+			return c, nil
+		}
+		_ = c.Close()
+	}
 }
