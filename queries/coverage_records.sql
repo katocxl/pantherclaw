@@ -255,14 +255,15 @@ SELECT transactions_after FROM pc.coverage_inventory WHERE org_id = sqlc.arg(org
 INSERT INTO pc.coverage_inventory (org_id, transactions_after) VALUES (sqlc.arg(org_id), sqlc.arg(transactions_after))
 ON CONFLICT (org_id) DO UPDATE SET transactions_after = EXCLUDED.transactions_after, refreshed_at = now();
 
--- The org's transactions after the watermark, in id order and a minute
--- behind the clock, with the agent of their run; connection and channel
--- are NULL for an action that did not come through a gateway.
+-- The org's transactions after a point and up to another, in id order and
+-- a minute behind the clock, with the agent of their run; connection and
+-- channel are NULL for an action that did not come through a gateway.
 -- name: CoverageTrafficAfter :many
 SELECT t.id, r.agent_id, t.connection_id, t.operation, t.channel, t.mode
 FROM pc.transactions t
 JOIN pc.runs r ON r.org_id = t.org_id AND r.id = t.run_id
 WHERE t.org_id = sqlc.arg(org_id) AND (sqlc.narg(after)::uuid IS NULL OR t.id > sqlc.narg(after)::uuid)
+  AND (sqlc.narg(until)::uuid IS NULL OR t.id <= sqlc.narg(until)::uuid)
   AND t.created_at < now() - interval '1 minute'
 ORDER BY t.id
 LIMIT sqlc.arg(max_rows);

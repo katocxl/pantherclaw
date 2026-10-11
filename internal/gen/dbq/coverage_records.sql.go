@@ -238,10 +238,18 @@ SELECT t.id, r.agent_id, t.connection_id, t.operation, t.channel, t.mode
 FROM pc.transactions t
 JOIN pc.runs r ON r.org_id = t.org_id AND r.id = t.run_id
 WHERE t.org_id = $1 AND ($2::uuid IS NULL OR t.id > $2::uuid)
+  AND ($3::uuid IS NULL OR t.id <= $3::uuid)
   AND t.created_at < now() - interval '1 minute'
 ORDER BY t.id
-LIMIT $3
+LIMIT $4
 `
+
+type CoverageTrafficAfterParams struct {
+	OrgID   ids.OrgID
+	After   *ids.UUID
+	Until   *ids.UUID
+	MaxRows int32
+}
 
 type CoverageTrafficAfterRow struct {
 	ID           ids.UUID
@@ -252,11 +260,16 @@ type CoverageTrafficAfterRow struct {
 	Mode         string
 }
 
-// The org's transactions after the watermark, in id order and a minute
-// behind the clock, with the agent of their run; connection and channel
-// are NULL for an action that did not come through a gateway.
-func (q *Queries) CoverageTrafficAfter(ctx context.Context, orgID ids.OrgID, after *ids.UUID, maxRows int32) ([]CoverageTrafficAfterRow, error) {
-	rows, err := q.db.Query(ctx, coverageTrafficAfter, orgID, after, maxRows)
+// The org's transactions after a point and up to another, in id order and
+// a minute behind the clock, with the agent of their run; connection and
+// channel are NULL for an action that did not come through a gateway.
+func (q *Queries) CoverageTrafficAfter(ctx context.Context, arg CoverageTrafficAfterParams) ([]CoverageTrafficAfterRow, error) {
+	rows, err := q.db.Query(ctx, coverageTrafficAfter,
+		arg.OrgID,
+		arg.After,
+		arg.Until,
+		arg.MaxRows,
+	)
 	if err != nil {
 		return nil, err
 	}
