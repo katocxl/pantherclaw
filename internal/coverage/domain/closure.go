@@ -196,8 +196,8 @@ func twinOf(probe string) string {
 type Verdict struct {
 	// Passed: the evidence is sound. Every result and check passed, and
 	// the named controls and the canary are present (HR-121). What it proves
-	// is Closed: the calculus needs every containment kind closed that a
-	// person did not exclude.
+	// is Closed: the calculus needs every containment kind closed, and an
+	// exclusion never stands in for one (design decision 1).
 	Passed                     bool
 	PositiveControls, Negative bool
 	Canary                     bool

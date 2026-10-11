@@ -49,12 +49,15 @@ func (f *fixture) exclude(t *testing.T, op string) {
 
 // TestF021_TheAgentFollowsTheCoverageOfWhatItsGrantsAllow: the scopes that
 // count are the operations the agent's grants allow on every connection
-// that defines them, and one never assessed counts as not ENFORCED. With
-// one scope ENFORCED, one capped at PARTIAL (a cooperative SDK route,
-// HR-024) and one never assessed, the agent is PARTIALLY_PROTECTED; it is
-// PROTECTED once a person excluded the other two (HR-212), and OBSERVED
-// when a route mode change invalidates the closure (HR-211). Without a
-// grant it stays OBSERVED.
+// that defines them, and one never assessed counts as not ENFORCED. Without
+// a grant the agent stays OBSERVED; granted only an ENFORCED scope it is
+// PROTECTED once that scope is reassessed. A grant alone, which writes no
+// coverage change, lowers a protected agent at the next job. With one
+// scope ENFORCED, one capped at PARTIAL (a cooperative SDK route, HR-024)
+// and one never assessed, the agent is PARTIALLY_PROTECTED, and stays so
+// when a person excludes the other two: an excluded scope counts as not
+// protected (HR-212, design decision 1). It is OBSERVED when a route mode
+// change invalidates the closure (HR-211).
 func TestF021_TheAgentFollowsTheCoverageOfWhatItsGrantsAllow(t *testing.T) {
 	f := newFixture(t)
 	team := ids.NewV7()
@@ -73,6 +76,16 @@ func TestF021_TheAgentFollowsTheCoverageOfWhatItsGrantsAllow(t *testing.T) {
 	if s := f.agentState(t); s != "OBSERVED" {
 		t.Fatalf("without a grant: %s", s)
 	}
+	f.grant(t, "payments.refund.create")
+	f.reassess(t)
+	if s := f.agentState(t); s != "PROTECTED" {
+		t.Fatalf("granted only the enforced scope: %s", s)
+	}
+	f.grant(t, "payments.refund.list")
+	f.reassessOrg(t)
+	if s := f.agentState(t); s != "PARTIALLY_PROTECTED" {
+		t.Fatalf("after a grant of a scope never assessed: %s", s)
+	}
 	f.grant(t, "payments.refund.create", "payments.refund.get", "payments.refund.list")
 	f.exclude(t, "payments.refund.get")
 	f.reassessOrg(t)
@@ -81,7 +94,7 @@ func TestF021_TheAgentFollowsTheCoverageOfWhatItsGrantsAllow(t *testing.T) {
 	}
 	f.exclude(t, "payments.refund.list")
 	f.reassessOrg(t)
-	if s := f.agentState(t); s != "PROTECTED" {
+	if s := f.agentState(t); s != "PARTIALLY_PROTECTED" {
 		t.Fatalf("with the other scopes excluded: %s", s)
 	}
 	f.exec(t, `INSERT INTO pc.connection_routes (org_id, connection_id, route, mode, changed_by)

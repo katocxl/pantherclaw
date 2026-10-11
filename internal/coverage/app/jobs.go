@@ -117,6 +117,9 @@ func (s *Service) ReassessOrg(ctx context.Context, org ids.OrgID) (Reassessed, e
 		for _, x := range expired {
 			add(domain.Scope{Agent: x.AgentID, Connection: x.ConnectionID, Operation: x.Operation}, nil)
 		}
+		// In (agent, connection, operation) order, like every reassessment, so
+		// transactions that share scopes take their locks in the same order.
+		slices.SortFunc(order, compareScopes)
 		pkgs := packages{}
 		failed := map[domain.Scope]bool{}
 		for _, sc := range order {
@@ -168,9 +171,16 @@ func (s *Service) ReassessOrg(ctx context.Context, org ids.OrgID) (Reassessed, e
 			}
 		}
 		// With the changes they saw marked, the agents' protection is derived
-		// from their scopes as they read now.
-		return s.deriveAgents(ctx, tx, slices.DeleteFunc(slices.Clone(order), func(sc domain.Scope) bool { return failed[sc] }),
-			s.now(), pkgs)
+		// from their scopes as they read now: the agents of the scopes
+		// reassessed, and every agent held protected or partially protected, so
+		// a grant that starts, ends or changes, which writes no coverage change,
+		// lowers it within one run.
+		agents := scopeAgents(slices.DeleteFunc(slices.Clone(order), func(sc domain.Scope) bool { return failed[sc] }))
+		protected, err := q.CoverageProtectedAgents(ctx, org, maxScopesPerJob)
+		if err != nil {
+			return err
+		}
+		return s.deriveAgents(ctx, tx, append(agents, protected...), s.now(), pkgs)
 	})
 	return out, err
 }

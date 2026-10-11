@@ -44,8 +44,9 @@ var (
 type Service struct {
 	Pool      *db.Pool
 	Freshness domain.Freshness
-	// Verifier reads target-verifier tests; nil reads none, so cooperative
-	// and target-enforced channels stay capped (HR-024, HR-210).
+	// Verifier reads target-verifier tests per operation; nil reads none, so
+	// cooperative and target-enforced channels stay capped (HR-024, HR-210).
+	// In M9 a test lifts only the read it tested (founder decision N15).
 	Verifier TargetVerifier
 	// Clock checks closure times; nil is the wall clock.
 	Clock clock.Clock
