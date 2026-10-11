@@ -143,3 +143,26 @@ A person or key that should not be there is an incident: [incident-response.md](
   - `fingerprint` (`sha256:` and the hex SHA-256 of the DER).
 
 The gateway refuses a file for another org, with unknown members, or with a fingerprint, algorithm or key that do not match. For development, `dev seed --gateway-out FILE` writes `approver-keys.json` next to the enrollment file, and `deploy/dev/gateway.example.json` pins it.
+
+## 8. Check a connection (G0 M8)
+
+```bash
+pclaw connection capabilities <connection-id>   # what it declares it supports, and its last successful test
+pclaw connection test <connection-id>           # test it now and record the result (connection.manage)
+```
+
+**Capabilities** follow from the connection's kind, access mode and pinned package, never from a setting (F346):
+- discovery, observation, enforcement and response, each `SUPPORTED`, `PARTIAL` or `UNSUPPORTED`, with the reason. Only an `http` connection whose credential PantherClaw holds, or whose target checks action tokens, declares enforcement `SUPPORTED`. An `mcp` connection (opaque, HR-086), an agent-held or open target, and a `local` connection (cooperative, HR-024) declare `PARTIAL`;
+- the operations it serves, with each route's mode;
+- the permissions PantherClaw's credential is used for, each with the operations that need it;
+- its limits and failure behaviour;
+- its last successful test.
+
+**A test never calls the target.** It checks:
+- the connection is `ACTIVE`;
+- its gateway is active and holds a current certificate, renewed within 24 hours;
+- the org's pinned version of its package serves routes for its kind;
+- for `pantherclaw_held`, an active credential is sealed to the gateway's active broker key;
+- no circuit is open.
+
+Every result is kept. A failed test names the check that failed and does not replace the last successful one.

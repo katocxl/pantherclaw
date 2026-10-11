@@ -383,6 +383,16 @@ type PcConnectionRoute struct {
 	ChangedAt    time.Time
 }
 
+type PcConnectionTest struct {
+	OrgID        ids.OrgID
+	ID           ids.UUID
+	ConnectionID ids.UUID
+	Result       string
+	Checks       []byte
+	TestedBy     string
+	TestedAt     time.Time
+}
+
 type PcConsequenceRule struct {
 	OrgID     ids.OrgID
 	ID        ids.UUID

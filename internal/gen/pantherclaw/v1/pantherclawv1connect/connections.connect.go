@@ -66,6 +66,9 @@ const (
 	// ConnectionServiceGetConnectionCapabilitiesProcedure is the procedure name of the
 	// ConnectionService's GetConnectionCapabilities RPC.
 	ConnectionServiceGetConnectionCapabilitiesProcedure = "/pantherclaw.v1.ConnectionService/GetConnectionCapabilities"
+	// ConnectionServiceTestConnectionProcedure is the procedure name of the ConnectionService's
+	// TestConnection RPC.
+	ConnectionServiceTestConnectionProcedure = "/pantherclaw.v1.ConnectionService/TestConnection"
 )
 
 var (
@@ -165,6 +168,13 @@ var (
 			IdempotencyLevel: connect.IdempotencyNoSideEffects,
 		}
 	})
+	connectionServiceTestConnectionSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_pantherclaw_v1_connections_proto.Services().ByName("ConnectionService").Methods().ByName("TestConnection"),
+			Procedure:  ConnectionServiceTestConnectionProcedure,
+		}
+	})
 )
 
 // ConnectionServiceClient is a client for the pantherclaw.v1.ConnectionService service.
@@ -214,10 +224,17 @@ type ConnectionServiceClient interface {
 	RevokeCredential(context.Context, *v1.RevokeCredentialRequest) (*v1.RevokeCredentialResponse, error)
 	// GetConnectionCapabilities returns what a connection declares it
 	// supports: discovery, observation, enforcement and response, its
-	// operations, permissions with reasons, limits and failure behavior
-	// (F346).
+	// operations, permissions with reasons, limits, failure behavior and its
+	// last successful test (F346).
 	// permission: connection.read
 	GetConnectionCapabilities(context.Context, *v1.GetConnectionCapabilitiesRequest) (*v1.GetConnectionCapabilitiesResponse, error)
+	// TestConnection tests what a connection depends on (its state, its
+	// gateway and the gateway's certificate, its pinned package and routes,
+	// its credential, its circuits) without calling the target, and records
+	// the result; the latest passed one is its last successful test (F350,
+	// F354).
+	// permission: connection.manage
+	TestConnection(context.Context, *v1.TestConnectionRequest) (*v1.TestConnectionResponse, error)
 }
 
 // NewConnectionServiceClient constructs a client for the pantherclaw.v1.ConnectionService service.
@@ -273,10 +290,17 @@ type ConnectionServiceHandler interface {
 	RevokeCredential(context.Context, *v1.RevokeCredentialRequest) (*v1.RevokeCredentialResponse, error)
 	// GetConnectionCapabilities returns what a connection declares it
 	// supports: discovery, observation, enforcement and response, its
-	// operations, permissions with reasons, limits and failure behavior
-	// (F346).
+	// operations, permissions with reasons, limits, failure behavior and its
+	// last successful test (F346).
 	// permission: connection.read
 	GetConnectionCapabilities(context.Context, *v1.GetConnectionCapabilitiesRequest) (*v1.GetConnectionCapabilitiesResponse, error)
+	// TestConnection tests what a connection depends on (its state, its
+	// gateway and the gateway's certificate, its pinned package and routes,
+	// its credential, its circuits) without calling the target, and records
+	// the result; the latest passed one is its last successful test (F350,
+	// F354).
+	// permission: connection.manage
+	TestConnection(context.Context, *v1.TestConnectionRequest) (*v1.TestConnectionResponse, error)
 }
 
 // RegisterConnectionServiceHandler registers svc as the pantherclaw.v1.ConnectionService
@@ -297,6 +321,7 @@ func RegisterConnectionServiceHandler(server *connect.Server, svc ConnectionServ
 		connect.Method{Spec: connectionServiceListCredentialsSpec(), Handler: adapter.listCredentials},
 		connect.Method{Spec: connectionServiceRevokeCredentialSpec(), Handler: adapter.revokeCredential},
 		connect.Method{Spec: connectionServiceGetConnectionCapabilitiesSpec(), Handler: adapter.getConnectionCapabilities},
+		connect.Method{Spec: connectionServiceTestConnectionSpec(), Handler: adapter.testConnection},
 	)
 }
 
@@ -353,6 +378,10 @@ func (UnimplementedConnectionServiceHandler) RevokeCredential(context.Context, *
 
 func (UnimplementedConnectionServiceHandler) GetConnectionCapabilities(context.Context, *v1.GetConnectionCapabilitiesRequest) (*v1.GetConnectionCapabilitiesResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.ConnectionService.GetConnectionCapabilities is not implemented")
+}
+
+func (UnimplementedConnectionServiceHandler) TestConnection(context.Context, *v1.TestConnectionRequest) (*v1.TestConnectionResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.ConnectionService.TestConnection is not implemented")
 }
 
 type connectionServiceClient struct {
@@ -458,6 +487,14 @@ func (c *connectionServiceClient) RevokeCredential(ctx context.Context, req *v1.
 func (c *connectionServiceClient) GetConnectionCapabilities(ctx context.Context, req *v1.GetConnectionCapabilitiesRequest) (*v1.GetConnectionCapabilitiesResponse, error) {
 	var res v1.GetConnectionCapabilitiesResponse
 	if err := c.client.CallUnary(ctx, connectionServiceGetConnectionCapabilitiesSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *connectionServiceClient) TestConnection(ctx context.Context, req *v1.TestConnectionRequest) (*v1.TestConnectionResponse, error) {
+	var res v1.TestConnectionResponse
+	if err := c.client.CallUnary(ctx, connectionServiceTestConnectionSpec(), req, &res); err != nil {
 		return nil, err
 	}
 	return &res, nil
@@ -615,6 +652,18 @@ func (h connectionServiceHandler) getConnectionCapabilities(ctx context.Context,
 		return err
 	}
 	res, err := h.svc.GetConnectionCapabilities(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h connectionServiceHandler) testConnection(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.TestConnectionRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.TestConnection(ctx, &req)
 	if err != nil {
 		return err
 	}

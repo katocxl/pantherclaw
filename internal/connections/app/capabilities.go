@@ -74,6 +74,8 @@ type Capabilities struct {
 	Limits          []Limit
 	// Failure says how it behaves when something fails, one statement each.
 	Failure []string
+	// LastPassedTest is its last successful test (F350); nil when none.
+	LastPassedTest *TestResult
 }
 
 // Capabilities returns a connection's capability declaration
@@ -107,7 +109,11 @@ func (s *Service) Capabilities(ctx context.Context, id ids.UUID) (Capabilities, 
 			return ErrPackage
 		}
 		out = Declare(full, p)
-		return nil
+		last, ok, err := lastTest(ctx, q, c.Org, id, true)
+		if ok {
+			out.LastPassedTest = &last
+		}
+		return err
 	})
 	return out, err
 }

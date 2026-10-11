@@ -28,6 +28,43 @@ func (q *Queries) CloseCircuits(ctx context.Context, orgID ids.OrgID, connection
 	return result.RowsAffected(), nil
 }
 
+const connectionTestFacts = `-- name: ConnectionTestFacts :one
+SELECT g.state AS gateway_state,
+    EXISTS (SELECT 1 FROM pc.gateway_certs gc WHERE gc.org_id = c.org_id AND gc.gateway_id = c.gateway_id
+            AND gc.state = 'ACTIVE' AND gc.not_after > now()) AS certificate_current,
+    EXISTS (SELECT 1 FROM pc.credentials cr JOIN pc.broker_keys bk ON bk.org_id = cr.org_id AND bk.id = cr.broker_key_id
+            WHERE cr.org_id = c.org_id AND cr.connection_id = c.id AND cr.state = 'ACTIVE'
+            AND bk.state = 'ACTIVE' AND bk.gateway_id = c.gateway_id) AS credential_current,
+    (SELECT count(*) FROM pc.circuit_states cs WHERE cs.org_id = c.org_id AND cs.connection_id = c.id
+     AND cs.state = 'OPEN')::integer AS open_circuits
+FROM pc.connections c
+JOIN pc.gateways g ON g.org_id = c.org_id AND g.id = c.gateway_id
+WHERE c.org_id = $1 AND c.id = $2
+`
+
+type ConnectionTestFactsRow struct {
+	GatewayState       string
+	CertificateCurrent bool
+	CredentialCurrent  bool
+	OpenCircuits       int32
+}
+
+// What a connection test checks besides the connection itself (G0 M8
+// track C, F354): its gateway, the gateway's current certificate, an active
+// credential sealed to the gateway's active broker key, and open circuits.
+// Nothing here calls the target.
+func (q *Queries) ConnectionTestFacts(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (ConnectionTestFactsRow, error) {
+	row := q.db.QueryRow(ctx, connectionTestFacts, orgID, iD)
+	var i ConnectionTestFactsRow
+	err := row.Scan(
+		&i.GatewayState,
+		&i.CertificateCurrent,
+		&i.CredentialCurrent,
+		&i.OpenCircuits,
+	)
+	return i, err
+}
+
 const getConnection = `-- name: GetConnection :one
 SELECT org_id, id, name, kind, gateway_id, package, base_url, allowed_hosts, destination_class, access_mode, credential_header, credential_scheme, default_mode, max_response_bytes, timeout_ms, state, quarantine_reason, revision, created_by, created_at, updated_by, updated_at FROM pc.connections WHERE org_id = $1 AND id = $2
 `
@@ -170,6 +207,67 @@ func (q *Queries) InsertConnectionRoute(ctx context.Context, arg InsertConnectio
 		arg.ChangedBy,
 	)
 	return err
+}
+
+const insertConnectionTest = `-- name: InsertConnectionTest :one
+INSERT INTO pc.connection_tests (org_id, id, connection_id, result, checks, tested_by)
+VALUES ($1, $2, $3, $4, $5, $6)
+RETURNING org_id, id, connection_id, result, checks, tested_by, tested_at
+`
+
+type InsertConnectionTestParams struct {
+	OrgID        ids.OrgID
+	ID           ids.UUID
+	ConnectionID ids.UUID
+	Result       string
+	Checks       []byte
+	TestedBy     string
+}
+
+func (q *Queries) InsertConnectionTest(ctx context.Context, arg InsertConnectionTestParams) (PcConnectionTest, error) {
+	row := q.db.QueryRow(ctx, insertConnectionTest,
+		arg.OrgID,
+		arg.ID,
+		arg.ConnectionID,
+		arg.Result,
+		arg.Checks,
+		arg.TestedBy,
+	)
+	var i PcConnectionTest
+	err := row.Scan(
+		&i.OrgID,
+		&i.ID,
+		&i.ConnectionID,
+		&i.Result,
+		&i.Checks,
+		&i.TestedBy,
+		&i.TestedAt,
+	)
+	return i, err
+}
+
+const latestConnectionTest = `-- name: LatestConnectionTest :one
+SELECT org_id, id, connection_id, result, checks, tested_by, tested_at FROM pc.connection_tests
+WHERE org_id = $1 AND connection_id = $2
+    AND (NOT $3::boolean OR result = 'PASSED')
+ORDER BY tested_at DESC, id DESC
+LIMIT 1
+`
+
+// A connection's latest test, or its latest passed one.
+func (q *Queries) LatestConnectionTest(ctx context.Context, orgID ids.OrgID, connectionID ids.UUID, passedOnly bool) (PcConnectionTest, error) {
+	row := q.db.QueryRow(ctx, latestConnectionTest, orgID, connectionID, passedOnly)
+	var i PcConnectionTest
+	err := row.Scan(
+		&i.OrgID,
+		&i.ID,
+		&i.ConnectionID,
+		&i.Result,
+		&i.Checks,
+		&i.TestedBy,
+		&i.TestedAt,
+	)
+	return i, err
 }
 
 const listConnectionRoutes = `-- name: ListConnectionRoutes :many

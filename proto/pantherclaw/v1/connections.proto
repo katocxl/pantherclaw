@@ -70,12 +70,19 @@ service ConnectionService {
   rpc RevokeCredential(RevokeCredentialRequest) returns (RevokeCredentialResponse);
   // GetConnectionCapabilities returns what a connection declares it
   // supports: discovery, observation, enforcement and response, its
-  // operations, permissions with reasons, limits and failure behavior
-  // (F346).
+  // operations, permissions with reasons, limits, failure behavior and its
+  // last successful test (F346).
   // permission: connection.read
   rpc GetConnectionCapabilities(GetConnectionCapabilitiesRequest) returns (GetConnectionCapabilitiesResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
+  // TestConnection tests what a connection depends on (its state, its
+  // gateway and the gateway's certificate, its pinned package and routes,
+  // its credential, its circuits) without calling the target, and records
+  // the result; the latest passed one is its last successful test (F350,
+  // F354).
+  // permission: connection.manage
+  rpc TestConnection(TestConnectionRequest) returns (TestConnectionResponse);
 }
 
 // ConnectionKind is what a connection reaches.
@@ -638,6 +645,8 @@ message ConnectionCapabilities {
   repeated ConnectionLimit limits = 9;
   // How it behaves when something fails, one statement each.
   repeated string failure_behavior = 10;
+  // Its last successful test (F350); unset when it never passed one.
+  ConnectionTest last_passed_test = 11;
 }
 
 // GetConnectionCapabilitiesRequest names a connection.
@@ -650,4 +659,52 @@ message GetConnectionCapabilitiesRequest {
 message GetConnectionCapabilitiesResponse {
   // The declaration.
   ConnectionCapabilities capabilities = 1;
+}
+
+// ConnectionTestResult is the result of a connection test.
+enum ConnectionTestResult {
+  CONNECTION_TEST_RESULT_UNSPECIFIED = 0;
+  // Every check passed.
+  CONNECTION_TEST_RESULT_PASSED = 1;
+  // A check failed.
+  CONNECTION_TEST_RESULT_FAILED = 2;
+}
+
+// ConnectionTestCheck is one check of a connection test.
+message ConnectionTestCheck {
+  // CONNECTION_ACTIVE, GATEWAY_ACTIVE, GATEWAY_CERTIFICATE, PACKAGE_ROUTES,
+  // CREDENTIAL or CIRCUIT_CLOSED.
+  string check = 1;
+  // Whether it passed.
+  bool passed = 2;
+  // What it found, for people.
+  string detail = 3;
+}
+
+// ConnectionTest is one test of a connection.
+message ConnectionTest {
+  // Test id.
+  string id = 1;
+  // Connection id.
+  string connection_id = 2;
+  // Result.
+  ConnectionTestResult result = 3;
+  // The checks, in order.
+  repeated ConnectionTestCheck checks = 4;
+  // Who ran it.
+  string tested_by = 5;
+  // When.
+  google.protobuf.Timestamp test_time = 6;
+}
+
+// TestConnectionRequest names a connection.
+message TestConnectionRequest {
+  // Connection id.
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// TestConnectionResponse returns the recorded test.
+message TestConnectionResponse {
+  // The test.
+  ConnectionTest test = 1;
 }

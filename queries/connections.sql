@@ -89,3 +89,33 @@ SET state = 'OPEN', unknown_count = EXCLUDED.unknown_count, total_count = EXCLUD
 -- Restoring a connection closes its open circuits.
 UPDATE pc.circuit_states SET state = 'CLOSED', closed_at = now()
 WHERE org_id = sqlc.arg(org_id) AND connection_id = sqlc.arg(connection_id) AND state = 'OPEN';
+
+-- name: ConnectionTestFacts :one
+-- What a connection test checks besides the connection itself (G0 M8
+-- track C, F354): its gateway, the gateway's current certificate, an active
+-- credential sealed to the gateway's active broker key, and open circuits.
+-- Nothing here calls the target.
+SELECT g.state AS gateway_state,
+    EXISTS (SELECT 1 FROM pc.gateway_certs gc WHERE gc.org_id = c.org_id AND gc.gateway_id = c.gateway_id
+            AND gc.state = 'ACTIVE' AND gc.not_after > now()) AS certificate_current,
+    EXISTS (SELECT 1 FROM pc.credentials cr JOIN pc.broker_keys bk ON bk.org_id = cr.org_id AND bk.id = cr.broker_key_id
+            WHERE cr.org_id = c.org_id AND cr.connection_id = c.id AND cr.state = 'ACTIVE'
+            AND bk.state = 'ACTIVE' AND bk.gateway_id = c.gateway_id) AS credential_current,
+    (SELECT count(*) FROM pc.circuit_states cs WHERE cs.org_id = c.org_id AND cs.connection_id = c.id
+     AND cs.state = 'OPEN')::integer AS open_circuits
+FROM pc.connections c
+JOIN pc.gateways g ON g.org_id = c.org_id AND g.id = c.gateway_id
+WHERE c.org_id = sqlc.arg(org_id) AND c.id = sqlc.arg(id);
+
+-- name: InsertConnectionTest :one
+INSERT INTO pc.connection_tests (org_id, id, connection_id, result, checks, tested_by)
+VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(connection_id), sqlc.arg(result), sqlc.arg(checks), sqlc.arg(tested_by))
+RETURNING *;
+
+-- name: LatestConnectionTest :one
+-- A connection's latest test, or its latest passed one.
+SELECT * FROM pc.connection_tests
+WHERE org_id = sqlc.arg(org_id) AND connection_id = sqlc.arg(connection_id)
+    AND (NOT sqlc.arg(passed_only)::boolean OR result = 'PASSED')
+ORDER BY tested_at DESC, id DESC
+LIMIT 1;
