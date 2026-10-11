@@ -1236,6 +1236,36 @@ func (q *Queries) LiveRequestOfTransaction(ctx context.Context, orgID ids.OrgID,
 	return i, err
 }
 
+const liveRequestsByInvalidationKey = `-- name: LiveRequestsByInvalidationKey :many
+SELECT id FROM pc.approval_requests
+WHERE org_id = $1 AND invalidation_key = $2
+  AND state IN ('PENDING', 'EVIDENCE_REQUESTED', 'APPROVED')
+ORDER BY created_at, id
+FOR UPDATE
+`
+
+// The live requests a change of the fact and target in key supersedes
+// (G0 M8, HR-205), oldest first.
+func (q *Queries) LiveRequestsByInvalidationKey(ctx context.Context, orgID ids.OrgID, invalidationKey *string) ([]ids.UUID, error) {
+	rows, err := q.db.Query(ctx, liveRequestsByInvalidationKey, orgID, invalidationKey)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ids.UUID{}
+	for rows.Next() {
+		var id ids.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const liveRestoration = `-- name: LiveRestoration :one
 SELECT id FROM pc.approval_requests
 WHERE org_id = $1 AND agent_id = $2 AND subject_kind = 'RESTORATION'

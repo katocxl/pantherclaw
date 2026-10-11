@@ -1019,7 +1019,7 @@ func (p *Pipeline) hold(ctx context.Context, s *state, latest *HoldRequest, effe
 	}
 	h := &Hold{Requirements: reqs, VariantKey: key, Request: latest, State: apdomain.WaitPending, Action: s.req.Action.Canonical}
 	if a := s.def.Approval; a != nil && a.InvalidateOn != "" {
-		h.InvalidationKey = InvalidationKey(a.InvalidateOn, s.a.Target)
+		h.InvalidationKey = apdomain.InvalidationKey(a.InvalidateOn, s.a.Target.Type, s.a.Target.ID)
 	}
 	if latest != nil && latest.State.Live() {
 		if err := p.bind(s, h, effective, latest.Deadline, latest.Variants, latest.Context); err != nil {
@@ -1179,16 +1179,4 @@ func (s *state) effective() (string, defs.Values, bool) {
 		return "", nil, false
 	}
 	return parsed.HashHex(), vals, true
-}
-
-// InvalidationKey is the key of the approval requests that a new value of
-// fact about target supersedes (G0 M8, HR-205), for example
-// github.pull.head@github.pull_request:acme/payments#7; "" when it would
-// not fit the column.
-func InvalidationKey(fact string, target actionir.Target) string {
-	k := fact + "@" + target.Type + ":" + target.ID
-	if len(k) > 300 {
-		return ""
-	}
-	return k
 }

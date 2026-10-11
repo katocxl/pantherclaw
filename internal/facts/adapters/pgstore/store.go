@@ -7,12 +7,16 @@
 package pgstore
 
 import (
+	"bytes"
 	"context"
 	"encoding/json/jsontext"
 	"strings"
 	"time"
 
+	"github.com/katocxl/pantherclaw/internal/approvals/adapters/pgapprovals"
+	apdomain "github.com/katocxl/pantherclaw/internal/approvals/domain"
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
+	evdomain "github.com/katocxl/pantherclaw/internal/evidence/domain"
 	"github.com/katocxl/pantherclaw/internal/facts/app"
 	"github.com/katocxl/pantherclaw/internal/facts/domain"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
@@ -141,7 +145,10 @@ func (s *Store) Latest(ctx context.Context, org ids.OrgID, name, subjectType, su
 	return out, err
 }
 
-// Put implements app.Store.
+// Put implements app.Store. When the write changes the fact's value, it
+// supersedes in the same transaction every live approval request bound to
+// the old value (G0 M8, HR-205): a pull request's new head ends the
+// requests made at the old one.
 func (s *Store) Put(ctx context.Context, org ids.OrgID, f domain.Fact) (bool, error) {
 	raw, err := domain.EncodeValue(f.Value)
 	if err != nil {
@@ -149,11 +156,24 @@ func (s *Store) Put(ctx context.Context, org ids.OrgID, f domain.Fact) (bool, er
 	}
 	var wrote bool
 	err = s.Pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
-		tag, err := dbq.New(tx).PutFact(ctx, dbq.PutFactParams{
+		q := dbq.New(tx)
+		prev, err := q.CurrentFactValue(ctx, dbq.CurrentFactValueParams{OrgID: org, Name: f.Name, SubjectType: f.SubjectType, SubjectID: f.SubjectID})
+		if err != nil && !db.IsNoRows(err) {
+			return err
+		}
+		tag, err := q.PutFact(ctx, dbq.PutFactParams{
 			OrgID: org, ID: ids.NewV7(), Name: f.Name, SubjectType: f.SubjectType, SubjectID: f.SubjectID,
 			ProviderID: f.ProviderID, Value: raw, ObservedAt: f.ObservedAt,
 		})
+		if err != nil {
+			return err
+		}
 		wrote = tag.RowsAffected() == 1
+		key := apdomain.InvalidationKey(f.Name, f.SubjectType, f.SubjectID)
+		if !wrote || prev == nil || bytes.Equal(prev, raw) || key == "" {
+			return nil
+		}
+		_, err = pgapprovals.SupersedeByKey(ctx, tx, org, key, evdomain.Actor{Type: "fact_provider", ID: f.ProviderID.String()})
 		return err
 	})
 	return wrote, err

@@ -148,3 +148,18 @@ func WaitState(s State, endReason string) string {
 func Terminal(s State) bool {
 	return s == StateDeclined || s == StateExpired
 }
+
+// maxInvalidationKey bounds an invalidation key (00082).
+const maxInvalidationKey = 300
+
+// InvalidationKey is the key of the approval requests that a new value of
+// a fact about a subject supersedes (G0 M8, HR-205), for example
+// github.pull.head@github.pull_request:acme/payments#7; "" when it would
+// not fit.
+func InvalidationKey(fact, subjectType, subjectID string) string {
+	k := fact + "@" + subjectType + ":" + subjectID
+	if len(k) > maxInvalidationKey {
+		return ""
+	}
+	return k
+}

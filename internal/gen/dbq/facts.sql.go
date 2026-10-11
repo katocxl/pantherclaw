@@ -16,6 +16,33 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 )
 
+const currentFactValue = `-- name: CurrentFactValue :one
+SELECT value FROM pc.facts
+WHERE org_id = $1 AND name = $2 AND subject_type = $3 AND subject_id = $4
+FOR UPDATE
+`
+
+type CurrentFactValueParams struct {
+	OrgID       ids.OrgID
+	Name        string
+	SubjectType string
+	SubjectID   string
+}
+
+// The current value of a fact about a subject, locked for the write that
+// replaces it, so a change is seen once (G0 M8, HR-205).
+func (q *Queries) CurrentFactValue(ctx context.Context, arg CurrentFactValueParams) ([]byte, error) {
+	row := q.db.QueryRow(ctx, currentFactValue,
+		arg.OrgID,
+		arg.Name,
+		arg.SubjectType,
+		arg.SubjectID,
+	)
+	var value []byte
+	err := row.Scan(&value)
+	return value, err
+}
+
 const deactivateFactDeclarations = `-- name: DeactivateFactDeclarations :exec
 UPDATE pc.fact_declarations SET active = false
 WHERE org_id = $1 AND provider_id = $2

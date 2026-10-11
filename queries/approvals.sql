@@ -484,3 +484,12 @@ FOR UPDATE;
 -- name: CompleteApprovalBatch :execrows
 UPDATE pc.approval_batches SET state = 'COMPLETED', completed_at = now()
 WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state = 'PENDING';
+
+-- name: LiveRequestsByInvalidationKey :many
+-- The live requests a change of the fact and target in key supersedes
+-- (G0 M8, HR-205), oldest first.
+SELECT id FROM pc.approval_requests
+WHERE org_id = sqlc.arg(org_id) AND invalidation_key = sqlc.arg(invalidation_key)
+  AND state IN ('PENDING', 'EVIDENCE_REQUESTED', 'APPROVED')
+ORDER BY created_at, id
+FOR UPDATE;

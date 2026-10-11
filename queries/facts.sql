@@ -83,3 +83,10 @@ WHERE f.org_id = sqlc.arg(org_id) AND f.subject_type = sqlc.arg(subject_type) AN
   AND (cardinality(sqlc.arg(names)::text[]) = 0 OR f.name = ANY(sqlc.arg(names)::text[]))
 ORDER BY f.name
 LIMIT 500;
+
+-- name: CurrentFactValue :one
+-- The current value of a fact about a subject, locked for the write that
+-- replaces it, so a change is seen once (G0 M8, HR-205).
+SELECT value FROM pc.facts
+WHERE org_id = sqlc.arg(org_id) AND name = sqlc.arg(name) AND subject_type = sqlc.arg(subject_type) AND subject_id = sqlc.arg(subject_id)
+FOR UPDATE;

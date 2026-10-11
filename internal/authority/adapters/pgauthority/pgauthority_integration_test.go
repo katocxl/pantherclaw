@@ -150,6 +150,7 @@ func newWorldWith(t testing.TB, edit func(string) string) *world {
 	if _, err := w.facts.RegisterProvider(w.human, "billing.system", w.billing, []fdomain.Declaration{
 		{Name: "payments.charge.refundable", Type: fdomain.TypeBoolean, SubjectType: "payments.charge", MaxLag: 5 * time.Minute},
 		{Name: "payments.charge.payouts", Type: fdomain.TypeObject, SubjectType: "payments.charge", MaxLag: 5 * time.Minute},
+		{Name: "payments.charge.state", Type: fdomain.TypeObject, SubjectType: "payments.charge", MaxLag: 5 * time.Minute},
 	}); err != nil {
 		t.Fatal(err)
 	}
