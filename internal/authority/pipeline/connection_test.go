@@ -157,9 +157,13 @@ func TestHR201_SDKActionsComeThroughHTTPOrMCPConnections(t *testing.T) {
 	f := newFx(t)
 	gw := ids.NewV7()
 	sdkOn := func(conn ids.UUID) *pipeline.Evaluation {
+		named := ""
+		if !conn.IsZero() {
+			named = conn.String()
+		}
 		p, err := f.mapper.SDK(context.Background(), mapping.Context{
 			Org: org.String(), Env: f.env.String(), RunID: f.run.String(), ActionID: ids.NewV7().String(), AgentInstance: f.instance.String(),
-			Connection: conn.String(),
+			Connection: named,
 		}, "create_refund", jsontext.Value(refund("ch_1", "10.00")))
 		if err != nil {
 			t.Fatal(err)
@@ -186,6 +190,9 @@ func TestHR201_SDKActionsComeThroughHTTPOrMCPConnections(t *testing.T) {
 	mcp.Kind = "mcp"
 	f.w.PutConnection(mcp)
 	expect(t, sdkOn(mcp.ID), adomain.CannotAuthorize, pipeline.ReasonRouteUnknown)
+	var none ids.UUID
+	bare := sdkOn(none)
+	expect(t, bare, adomain.CannotAuthorize, pipeline.ReasonConnectionRequired)
 }
 
 // TestHR079_PoliciesSeeTheConnectionsDestinationClass: a policy decides on
