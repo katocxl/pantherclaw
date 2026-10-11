@@ -37,7 +37,6 @@ const maxHits = 10000
 // enough for a DNS label.
 var markerRE = regexp.MustCompile(`pc[0-9a-f]{32}`)
 
-
 // Ports are the canary's ports. Zero picks a free one.
 type Ports struct {
 	DNS, HTTPS, SSH int
