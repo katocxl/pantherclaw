@@ -4,12 +4,13 @@
 package domain
 
 // Coverage permissions (G0 M9 track A). coverage.read covers coverage
-// records, the route inventory, closure evidence, exclusions and findings,
-// scoped like agent.read over the agent. coverage.manage reassesses
-// coverage and dismisses findings; coverage.exclude creates and revokes
-// exclusions, a weakening change (HR-212). Both are human only.
+// records, snapshots, the route inventory, closure evidence, exclusions and
+// findings, scoped like agent.read over the agent. coverage.manage creates
+// and revokes exclusions and acknowledges findings: both weaken what a
+// claim says, so it is human only (HR-212). coverage.reassess recomputes
+// coverage from evidence now, which can only make it more current.
 const (
-	PermCoverageRead    Permission = "coverage.read"
-	PermCoverageManage  Permission = "coverage.manage"
-	PermCoverageExclude Permission = "coverage.exclude"
+	PermCoverageRead     Permission = "coverage.read"
+	PermCoverageManage   Permission = "coverage.manage"
+	PermCoverageReassess Permission = "coverage.reassess"
 )

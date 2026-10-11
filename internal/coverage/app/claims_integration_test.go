@@ -7,7 +7,6 @@ package app_test
 
 import (
 	"context"
-	"slices"
 	"testing"
 	"time"
 
@@ -16,9 +15,10 @@ import (
 )
 
 // TestHR217_AClaimIsTheCurrentSnapshotAsItReadsAtDecisionTime: no claim for
-// a scope never assessed; an ENFORCED claim names the current snapshot and
-// its digest; the same snapshot claims PARTIAL after its expiry or after
-// an invalidating change, never more than it records.
+// a scope never assessed; an ENFORCED claim names the current snapshot, its
+// state and its exclusions; after its expiry or a change it did not see,
+// the claim on the same snapshot is lapsed, says why and is the scope
+// recomputed then, capped at PARTIAL.
 func TestHR217_AClaimIsTheCurrentSnapshotAsItReadsAtDecisionTime(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
@@ -36,14 +36,17 @@ func TestHR217_AClaimIsTheCurrentSnapshotAsItReadsAtDecisionTime(t *testing.T) {
 	row, _, _ := f.current(t, sc.Operation)
 	now := time.Now()
 	c, err := f.svc.ClaimAt(ctx, f.org, sc, now)
-	if err != nil || c == nil || c.State != domain.Enforced || c.Snapshot != row.ID || !slices.Equal(c.Digest, row.BodySha256) {
+	if err != nil || c == nil || c.State != domain.Enforced || c.Snapshot != row.ID || c.SnapshotState != domain.Enforced ||
+		c.Lapsed || c.Reason != "" || len(c.Exclusions) != 0 || c.ExpiresAt == nil {
 		t.Fatalf("an ENFORCED scope: %+v (%v)", c, err)
 	}
-	if c, _ := f.svc.ClaimAt(ctx, f.org, sc, row.ExpiresAt.Add(time.Second)); c == nil || c.State != domain.Partial || c.Snapshot != row.ID {
+	if c, _ := f.svc.ClaimAt(ctx, f.org, sc, row.ExpiresAt.Add(time.Second)); c == nil || c.State != domain.Partial || c.Snapshot != row.ID ||
+		!c.Lapsed || c.Reason != domain.LapseExpired || c.SnapshotState != domain.Enforced {
 		t.Fatalf("after its expiry: %+v", c)
 	}
 	f.exec(t, `UPDATE pc.connections SET destination_class = 'internal' WHERE id = $1`, f.conn)
-	if c, _ := f.svc.ClaimAt(ctx, f.org, sc, now); c == nil || c.State != domain.Partial || c.Snapshot != row.ID {
+	if c, _ := f.svc.ClaimAt(ctx, f.org, sc, now); c == nil || c.State != domain.Partial || c.Snapshot != row.ID ||
+		!c.Lapsed || c.Reason != "connection" {
 		t.Fatalf("after a change: %+v", c)
 	}
 }

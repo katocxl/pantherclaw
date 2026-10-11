@@ -6,6 +6,7 @@ package app
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json/v2"
 	"slices"
 	"time"
@@ -18,12 +19,51 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 )
 
-// LedgerKind is the ledger kind of a coverage snapshot (HR-217).
-const LedgerKind = "coverage.snapshot"
+// Ledger kinds of coverage (HR-217, design decision 17).
+const (
+	LedgerKind             = "coverage.snapshot"
+	InvalidationLedgerKind = "coverage.invalidation"
+)
 
-// Snapshot is the ledger body of a coverage snapshot: the computed record
-// of one scope. Receipts name a snapshot by id and the SHA-256 of this
-// body (HR-217).
+// Actor is who records the snapshots coverage computes itself.
+var Actor = evdomain.Actor{Type: "system", ID: "coverage-reassess"}
+
+// EntryScope is a scope as the ledger names it.
+type EntryScope struct {
+	Agent      ids.UUID `json:"agent"`
+	Connection ids.UUID `json:"connection"`
+	Operation  string   `json:"operation"`
+}
+
+// Entry is the ledger body of a coverage snapshot: what a receipt's
+// coverage claim is checked against (HR-217). The full record stays in
+// the snapshot row; routes_digest binds its routes to the entry.
+type Entry struct {
+	V            int        `json:"v"`
+	Scope        EntryScope `json:"scope"`
+	State        string     `json:"state"`
+	Snapshot     ids.UUID   `json:"snapshot"`
+	ComputedAt   string     `json:"computed_at"`
+	ExpiresAt    string     `json:"expires_at,omitzero"`
+	Exclusions   []ids.UUID `json:"exclusions"`
+	RoutesDigest string     `json:"routes_digest"`
+	Closure      *ids.UUID  `json:"closure,omitzero"`
+}
+
+// InvalidationEntry is the ledger body of a coverage invalidation, which
+// a lapsed claim names as its reason.
+type InvalidationEntry struct {
+	V          int       `json:"v"`
+	ID         ids.UUID  `json:"id"`
+	Connection ids.UUID  `json:"connection"`
+	Agent      *ids.UUID `json:"agent,omitzero"`
+	Kind       string    `json:"kind"`
+	Subject    *ids.UUID `json:"subject,omitzero"`
+	OccurredAt string    `json:"occurred_at"`
+}
+
+// Snapshot is the computed record of one scope, kept as the snapshot
+// row's body; its ledger entry is the Entry made from it.
 type Snapshot struct {
 	V          int             `json:"v"`
 	ID         ids.UUID        `json:"id"`
@@ -100,8 +140,11 @@ func (s *Service) reassess(ctx context.Context, tx db.TenantTx, sc domain.Scope,
 	pkgs packages,
 ) (bool, error) {
 	q := dbq.New(tx)
+	if err := q.LockCoverageScope(ctx, tx.OrgID().UUID(), sc.Agent, sc.Connection); err != nil {
+		return false, err
+	}
 	now := s.now()
-	e, err := evidence(ctx, q, tx.OrgID(), sc, now, pkgs)
+	e, err := s.evidence(ctx, tx, sc, now, pkgs)
 	if err != nil {
 		return false, err
 	}
@@ -134,11 +177,15 @@ func (s *Service) reassess(ctx context.Context, tx db.TenantTx, sc domain.Scope,
 	if err != nil {
 		return false, err
 	}
-	entry, err := ledger.Append(ctx, tx, LedgerKind, actor, body)
+	entryBody, err := entryOf(next)
 	if err != nil {
 		return false, err
 	}
-	digest := sha256.Sum256(body)
+	entry, err := ledger.Append(ctx, tx, LedgerKind, actor, entryBody)
+	if err != nil {
+		return false, err
+	}
+	digest := sha256.Sum256(entryBody)
 	_, err = q.InsertCoverageSnapshot(ctx, dbq.InsertCoverageSnapshotParams{
 		OrgID: tx.OrgID(), ID: next.ID, AgentID: sc.Agent, ConnectionID: sc.Connection, Operation: sc.Operation,
 		State: r.State.String(), Reasons: next.Reasons, ClosureID: r.Closure, LastValidID: next.LastValid,
@@ -148,5 +195,27 @@ func (s *Service) reassess(ctx context.Context, tx db.TenantTx, sc domain.Scope,
 	if err != nil {
 		return false, err
 	}
-	return true, deriveLifecycle(ctx, tx, sc.Agent, now)
+	return true, nil
+}
+
+// entryOf is the canonical ledger body of a snapshot (HR-217): its scope,
+// state, times, exclusions and closure, and the SHA-256 of the canonical
+// {"routes": [...]} of its record.
+func entryOf(s Snapshot) ([]byte, error) {
+	routes, err := evdomain.CanonicalBody(struct {
+		Routes []SnapshotRoute `json:"routes"`
+	}{s.Routes})
+	if err != nil {
+		return nil, err
+	}
+	digest := sha256.Sum256(routes)
+	e := Entry{
+		V: 1, Scope: EntryScope{Agent: s.Agent, Connection: s.Connection, Operation: s.Operation}, State: s.State,
+		Snapshot: s.ID, ComputedAt: s.ComputedAt, ExpiresAt: s.ExpiresAt, Exclusions: s.Exclusions,
+		RoutesDigest: "sha256:" + hex.EncodeToString(digest[:]), Closure: s.Closure,
+	}
+	if e.Exclusions == nil {
+		e.Exclusions = []ids.UUID{}
+	}
+	return evdomain.CanonicalBody(e)
 }

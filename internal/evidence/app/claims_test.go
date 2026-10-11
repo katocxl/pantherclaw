@@ -7,22 +7,23 @@ import (
 	"encoding/base64"
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 )
 
-func TestClaimedSnapshotsAreTheReceiptsCoverageClaims(t *testing.T) {
+func TestCoverageClaimsAreTheReceiptsClaimsWithTheirDecisionTime(t *testing.T) {
 	snap := ids.NewV7()
 	jws := func(payload string) string {
 		return "e30." + base64.RawURLEncoding.EncodeToString([]byte(payload)) + ".c2ln"
 	}
-	got := claimedSnapshots([]string{
-		jws(`{"pap":{"coverage":{"state":"ENFORCED","snapshot":"` + snap.String() + `"}}}`),
+	got := coverageClaims([]string{
+		jws(`{"iat":1791720000,"pap":{"coverage":{"state":"ENFORCED","snapshot":"` + snap.String() + `"}}}`),
 		jws(`{"pap":{"decision":"ALLOW"}}`),
 		jws(`{"pap":{"coverage":{"snapshot":"not-a-uuid"}}}`),
 		"not a jws",
 	})
-	if !slices.Equal(got, []ids.UUID{snap}) {
-		t.Fatalf("claimed snapshots %v, want %v", got, snap)
+	if want := []claimRef{{Snapshot: snap, At: time.Unix(1791720000, 0).UTC()}}; !slices.Equal(got, want) {
+		t.Fatalf("claims %v, want %v", got, want)
 	}
 }
