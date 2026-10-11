@@ -31,7 +31,7 @@ func config() Config {
 		Edge:   "pc-edge-1:3128", CAFile: "/pc/ca.pem", AgentHosts: []string{"api.github.com"},
 		MappedAddrs: []string{"140.82.112.6", "2606:50c0:8000::154"},
 		Canary:      Target{Addrs: []string{"192.168.65.254"}, DNS: 18453, HTTPS: 18443, SSH: 18422},
-		HostAddrs:   []string{"192.168.65.254"}, HostPorts: []int{8090},
+		HostAddrs:   []string{"192.168.65.254"}, HostPorts: []int{8090}, BridgeGateway: "172.19.0.1",
 	}
 }
 
@@ -81,7 +81,7 @@ func TestHR121_TheCatalogHasEveryProbeAndControl(t *testing.T) {
 // metadata or a documentation address (G0 M9 design decision 8).
 func TestHR121_ProbesContactNoThirdParty(t *testing.T) {
 	c := config()
-	allowed := map[string]bool{"127.0.0.11": true, "169.254.169.254": true, "fd00:ec2::254": true, "2001:db8::1": true, bridgeGateway(): true}
+	allowed := map[string]bool{"127.0.0.11": true, "169.254.169.254": true, "fd00:ec2::254": true, c.BridgeGateway: true}
 	for _, a := range append(append(append([]string{}, c.Canary.Addrs...), c.MappedAddrs...), c.HostAddrs...) {
 		allowed[a] = true
 	}
@@ -136,19 +136,20 @@ func TestHR121_OnlySilenceIsBlocked(t *testing.T) {
 		return &net.OpError{Op: "dial", Net: "tcp", Err: os.NewSyscallError("connect", err)}
 	}
 	for err, want := range map[error]string{
-		nil:                                  report.Reachable,
-		op(syscall.ECONNREFUSED):             report.Reachable,
-		op(syscall.ECONNRESET):               report.Reachable,
-		op(syscall.ENETUNREACH):              report.Blocked,
-		op(syscall.EHOSTUNREACH):             report.Blocked,
-		op(syscall.EADDRNOTAVAIL):            report.Blocked,
-		&net.DNSError{IsNotFound: true}:      report.Blocked,
-		&net.DNSError{IsTimeout: true}:       report.Blocked,
-		context.DeadlineExceeded:             report.Blocked,
-		closed{"refused by the edge"}:        report.Blocked,
-		failed{errors.New("no ICMP socket")}: report.Error,
-		op(syscall.EACCES):                   report.Error,
-		errors.New("something else"):         report.Error,
+		nil:                                      report.Reachable,
+		op(syscall.ECONNREFUSED):                 report.Reachable,
+		op(syscall.ECONNRESET):                   report.Reachable,
+		op(syscall.ENETUNREACH):                  report.Blocked,
+		op(syscall.EHOSTUNREACH):                 report.Blocked,
+		op(syscall.EADDRNOTAVAIL):                report.Blocked,
+		&net.DNSError{IsNotFound: true}:          report.Blocked,
+		&net.DNSError{IsTimeout: true}:           report.Blocked,
+		&net.DNSError{Err: "server misbehaving"}: report.Blocked,
+		context.DeadlineExceeded:                 report.Blocked,
+		closed{"refused by the edge"}:            report.Blocked,
+		failed{errors.New("no ICMP socket")}:     report.Error,
+		op(syscall.EACCES):                       report.Error,
+		errors.New("something else"):             report.Error,
 	} {
 		if got := observe(err); got != want {
 			t.Errorf("%v: %s, want %s", err, got, want)
@@ -281,4 +282,26 @@ func base64Decode(t *testing.T, s string) string {
 		t.Fatal(err)
 	}
 	return string(b)
+}
+
+// TestHR121_AnIsolatedNetworkHasNoBridgeToProbe: in isolated gateway mode
+// the network has no gateway address, and its first address may be a
+// container's, so no host probe aims there; with a gateway, they do.
+func TestHR121_AnIsolatedNetworkHasNoBridgeToProbe(t *testing.T) {
+	c := config()
+	var bridged int
+	for _, p := range catalog(c) {
+		if strings.HasPrefix(p.target, "172.19.0.1:") {
+			bridged++
+		}
+	}
+	if bridged == 0 {
+		t.Fatal("no probe of the bridge gateway")
+	}
+	c.BridgeGateway = ""
+	for _, p := range catalog(c) {
+		if strings.Contains(p.target, "172.19.0.1") {
+			t.Errorf("%s aims at %s", p.name, p.target)
+		}
+	}
 }
