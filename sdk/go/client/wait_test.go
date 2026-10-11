@@ -74,19 +74,27 @@ func TestConformanceExchanges(t *testing.T) {
 	}
 }
 
+// held answers a hold whose deadline is an hour away for the request's
+// action.
+func (f *fake) held(w http.ResponseWriter, r *http.Request) {
+	f.heldUntil(w, r, time.Now().Add(time.Hour))
+}
+
+func (f *fake) heldUntil(w http.ResponseWriter, r *http.Request, deadline time.Time) {
+	f.decided(w, r, "hold", map[string]any{"wait": map[string]any{
+		"handle": actionID, "state": "PENDING", "retry_after_seconds": 1, "deadline": deadline.UTC().Format(time.RFC3339),
+	}})
+}
+
 // heldThenReady answers a hold first, then an allow for the same action.
 func heldThenReady(t *testing.T, f *fake, calls *atomic.Int32) {
 	t.Helper()
 	f.sdk = func(w http.ResponseWriter, r *http.Request, _ []byte) {
 		if calls.Add(1) > 1 {
-			allowed(w, r)
+			f.allowed(w, r)
 			return
 		}
-		id := r.Header.Get("PC-Action-Id")
-		answer(w, map[string]any{
-			"decision": "hold", "action_id": id, "action_hash": sha256Hex([]byte(`{"action_id":"` + id + `"}`)), "coverage": "PARTIAL",
-			"mode": "enforce", "wait": map[string]any{"handle": actionID, "state": "PENDING", "retry_after_seconds": 1},
-		})
+		f.held(w, r)
 	}
 }
 
@@ -103,7 +111,7 @@ func TestAuthorizeAndWaitResubmitsWhenReady(t *testing.T) {
 			_, _ = fmt.Fprintf(w, ": heartbeat\n\nevent: state\ndata: {\"handle\":%q,\"state\":%q,\"retry_after_seconds\":1}\n\n", handle, s)
 		}
 	}
-	res := f.client(t).AuthorizeAndWait(context.Background(), "local", refund, client.NewActionID())
+	res := f.client(t).AuthorizeAndWait(context.Background(), "payments", refund, client.NewActionID())
 	if res.Outcome != client.Allow || calls.Load() != 2 {
 		t.Fatalf("%s (%s %v) after %d calls", res.Outcome, res.Why, res.Err, calls.Load())
 	}
@@ -126,7 +134,7 @@ func TestAuthorizeAndWaitLongPollsAndDeniesADeclinedHold(t *testing.T) {
 		}
 		answer(w, map[string]any{"wait": map[string]any{"handle": actionID, "state": state, "code": "APPROVAL_DECLINED"}, "timedOut": state == "WAIT_STATE_PENDING"})
 	}
-	res := f.client(t).AuthorizeAndWait(context.Background(), "local", refund, client.NewActionID())
+	res := f.client(t).AuthorizeAndWait(context.Background(), "payments", refund, client.NewActionID())
 	if res.Outcome != client.Deny || calls.Load() != 1 || polls.Load() != 2 {
 		t.Fatalf("%s (%s) after %d calls and %d polls", res.Outcome, res.Why, calls.Load(), polls.Load())
 	}
@@ -141,7 +149,75 @@ func TestHR200_AWaitPastTheDeadlineCannotDecide(t *testing.T) {
 	f.wait = func(w http.ResponseWriter, r *http.Request) { <-r.Context().Done() }
 	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
 	defer cancel()
-	if res := f.client(t).AuthorizeAndWait(ctx, "local", refund, client.NewActionID()); res.Outcome != client.CannotDecide {
+	if res := f.client(t).AuthorizeAndWait(ctx, "payments", refund, client.NewActionID()); res.Outcome != client.CannotDecide {
 		t.Fatalf("%s (%s)", res.Outcome, res.Why)
+	}
+}
+
+// TestHR200_AWaitEndsAtTheHoldsDeadline: a hold whose deadline passes
+// cannot decide even when the caller set no deadline and the server keeps
+// the stream alive and long-polls answer PENDING.
+func TestHR200_AWaitEndsAtTheHoldsDeadline(t *testing.T) {
+	f := newFake(t)
+	f.sdk = func(w http.ResponseWriter, r *http.Request, _ []byte) {
+		f.heldUntil(w, r, time.Now().Add(-4*time.Second))
+	}
+	f.wait = func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			w.Header().Set("Content-Type", "text/event-stream")
+			for r.Context().Err() == nil {
+				_, _ = fmt.Fprint(w, ": heartbeat\n\n")
+				w.(http.Flusher).Flush()
+				time.Sleep(50 * time.Millisecond)
+			}
+			return
+		}
+		answer(w, map[string]any{"wait": map[string]any{"handle": actionID, "state": "WAIT_STATE_PENDING"}, "timedOut": true})
+	}
+	start := time.Now()
+	res := f.client(t).AuthorizeAndWait(context.Background(), "payments", refund, client.NewActionID())
+	if res.Outcome != client.CannotDecide || time.Since(start) > 10*time.Second {
+		t.Fatalf("%s (%s) after %v", res.Outcome, res.Why, time.Since(start))
+	}
+}
+
+// A silent stream is abandoned for long-polls.
+func TestASilentStreamFallsBackToLongPolls(t *testing.T) {
+	f := newFake(t)
+	var calls, polls atomic.Int32
+	heldThenReady(t, f, &calls)
+	f.wait = func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			w.Header().Set("Content-Type", "text/event-stream")
+			w.(http.Flusher).Flush()
+			<-r.Context().Done()
+			return
+		}
+		polls.Add(1)
+		answer(w, map[string]any{"wait": map[string]any{"handle": actionID, "state": "WAIT_STATE_READY"}})
+	}
+	k := f.key
+	k.Server = f.srv.URL
+	c, err := client.New(client.Config{Key: k, Gateway: f.srv.URL, RunID: runID, StreamIdle: 200 * time.Millisecond})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res := c.AuthorizeAndWait(context.Background(), "payments", refund, client.NewActionID()); res.Outcome != client.Allow || polls.Load() != 1 {
+		t.Fatalf("%s (%s) after %d polls", res.Outcome, res.Why, polls.Load())
+	}
+}
+
+// A call held again after every resubmission is resubmitted three times,
+// then cannot decide.
+func TestHR200_ResubmissionsAreBounded(t *testing.T) {
+	f := newFake(t)
+	var calls atomic.Int32
+	f.sdk = func(w http.ResponseWriter, r *http.Request, _ []byte) { calls.Add(1); f.held(w, r) }
+	f.wait = func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = fmt.Fprintf(w, "event: state\ndata: {\"handle\":%q,\"state\":\"READY\"}\n\n", actionID)
+	}
+	if res := f.client(t).AuthorizeAndWait(context.Background(), "payments", refund, client.NewActionID()); res.Outcome != client.CannotDecide || calls.Load() != 4 {
+		t.Fatalf("%s (%s) after %d calls", res.Outcome, res.Why, calls.Load())
 	}
 }

@@ -63,6 +63,7 @@ func buildJCS(t *testing.T) any {
 		{"a trailing comma", `{"a":1,}`, "not JSON"},
 		{"a leading zero", `[01]`, "not JSON"},
 		{"two values", `{} {}`, "not one JSON value"},
+		{"nesting deeper than 10000", strings.Repeat("[", 10001) + strings.Repeat("]", 10001), "nesting deeper than 10000"},
 	}
 	f := JCSFile{header: head("jcs", "encoding/json/jsontext Value.Canonicalize (actionir, approval bindings, packages)",
 		"RFC 8785 canonical JSON as PantherClaw computes it. An SDK's canonicalizer must give exactly canonical for every "+
@@ -158,6 +159,10 @@ func buildActionIR(t *testing.T) any {
 			"members reversed and whitespace added.")}
 	names, actions := goldens(t)
 	names, actions = append(names, "sdk channel through a connection"), append(actions, string(sdkAction(t).Canonical))
+	// An optional member written null is accepted and kept in the canonical
+	// form, as PantherClaw parses it.
+	withNull := strings.Replace(actions[0], `"channel":"mcp"`, `"channel":"mcp","connection":null`, 1)
+	names, actions = append(names, "an optional member written null"), append(actions, withNull)
 	for i, a := range actions {
 		p, err := actionir.Parse([]byte(scramble(t, a)))
 		if err != nil {
@@ -176,6 +181,10 @@ func buildActionIR(t *testing.T) any {
 		{"a string longer than 64 KiB", `"reason":"duplicate"`, `"reason":"` + strings.Repeat("d", 64<<10+1) + `"`, "HR-100"},
 		{"a JSON number in params", `"value":"30.00"`, `"value":30.00`, "HR-101"},
 		{"a version that is not 1", `"v":1}`, `"v":2}`, "HR-100"},
+		{"a version written 1.0", `"v":1}`, `"v":1.0}`, "HR-100"},
+		{"a version written 1e0", `"v":1}`, `"v":1e0}`, "HR-100"},
+		{"a member name longer than 64 KiB", `"reason":"duplicate"`, `"reason":"duplicate","` + strings.Repeat("k", 64<<10+1) + `":"x"`, "HR-100"},
+		{"nesting 5000 deep in params", `"reason":"duplicate"`, `"reason":"duplicate","x":` + strings.Repeat("[", 5000) + strings.Repeat("]", 5000), "HR-100"},
 		{"a non-ASCII target id", `"id":"ch_1"`, `"id":"ch_` + esc("0441") + `"`, "HR-102"},
 		{"a bidi control in the target id", `"id":"ch_1"`, `"id":"ch_1` + esc("202e") + `"`, "HR-102"},
 		{"a space in the target id", `"id":"ch_1"`, `"id":"ch 1"`, "HR-102"},
