@@ -9,10 +9,15 @@
 // opaque tokens of GitHub's length, revocation, the installation and the
 // repositories it reaches), and repositories with settings, branches,
 // commits and files, written one commit at a time under GitHub's rule that
-// a workflow file needs the workflows permission. Every request is authenticated,
-// checked against the permission GitHub documents for its endpoint, and
-// recorded with the scope of the token it used, so tests can assert who
-// did what with which token. Every response is marked SIMULATED.
+// a workflow file needs the workflows permission; and what the gateway
+// reads as facts: branch rules, check runs, workflows, environments, a pull
+// request's commits and files, who pushed which ref, and deployments that a
+// push starts and that settle after a delay. Faults make the token endpoint
+// fail, stall or grant wider than asked, and a merge lose its answer. Every
+// request is authenticated, checked against the permission GitHub documents
+// for its endpoint, and recorded with the scope of the token it used, so
+// tests can assert who did what with which token. Every response is marked
+// SIMULATED.
 package github
 
 import (
@@ -105,6 +110,7 @@ type Server struct {
 	requests []Request
 	jwts     []AppJWT
 	seq      int64
+	faults   Faults
 }
 
 // New returns a simulator with no App, installation or repository.
@@ -192,6 +198,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /installation/repositories", s.installationRepositories)
 	s.repoRoutes(mux)
 	s.pullRoutes(mux)
+	s.factRoutes(mux)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Simulated", "true")
 		mux.ServeHTTP(w, r)
@@ -216,9 +223,9 @@ func (s *Server) guard(rt route) http.HandlerFunc {
 		s.mu.Lock()
 		defer s.mu.Unlock()
 		rec := Request{Method: r.Method, Path: r.URL.Path, Write: write}
-		status := s.serveRepo(w, r, rt, &rec)
-		rec.Status = status
-		s.requests = append(s.requests, rec)
+		// Recorded even when a fault drops the answer.
+		defer func() { s.requests = append(s.requests, rec) }()
+		rec.Status = s.serveRepo(w, r, rt, &rec)
 	}
 }
 

@@ -60,8 +60,8 @@ func (s *Server) putContents(w http.ResponseWriter, req *http.Request, r *Repo, 
 	}
 	tree := maps.Clone(r.Commits[head].Files)
 	tree[path] = string(raw)
-	sha := s.commit(r, []string{head}, tree)
-	s.advance(r, b.Branch, sha, actor(t))
+	sha := s.commit(r, actor(t), []string{head}, tree)
+	s.advance(r, b.Branch, sha, actor(t), "push")
 	status := http.StatusCreated
 	if exists {
 		status = http.StatusOK

@@ -201,9 +201,12 @@ func (s *Server) merge(w http.ResponseWriter, req *http.Request, r *Repo, t *Tok
 	if b.MergeMethod != "merge" {
 		parents = []string{base}
 	}
-	sha := s.commit(r, parents, tree)
-	s.advance(r, p.Base, sha, actor(t))
+	sha := s.commit(r, actor(t), parents, tree)
+	s.advance(r, p.Base, sha, actor(t), "pr_merge")
 	p.State, p.Merged, p.MergeCommitSHA, p.MergeMethod = "closed", true, sha, b.MergeMethod
+	if s.faults.LoseMerge {
+		panic(http.ErrAbortHandler) // merged, and the answer is lost
+	}
 	return reply(w, http.StatusOK, map[string]any{"sha": sha, "merged": true, "message": "Pull Request successfully merged", "simulated": true})
 }
 
