@@ -8,6 +8,7 @@ import (
 	"crypto/sha256"
 	"encoding/json/v2"
 	"slices"
+	"strconv"
 	"strings"
 	"unicode/utf8"
 
@@ -88,8 +89,8 @@ func granted(ctx context.Context, q *dbq.Queries, org ids.OrgID) (func(string) b
 }
 
 // RefreshFindings compares, for one connection, the permissions its
-// credentials actually hold (the GitHub App installations the org scan
-// found for it) with what its package declares the operations the org's
+// credentials actually hold (the GitHub App installation behind it, as
+// last read, and the installations the org scans found for it) with what its package declares the operations the org's
 // grants allow need, and records the excess as credential-overreach
 // findings (F048, decision 9). Used lists the scopes of the operations
 // executed through the connection in the last 30 days. A finding no longer
@@ -126,27 +127,46 @@ func (s *Service) RefreshFindings(ctx context.Context, tx db.TenantTx, connectio
 		return err
 	}
 	keep := [][]byte{}
-	for _, r := range reach {
-		var observed map[string]string
-		if json.Unmarshal(r.Observed, &observed) != nil {
-			continue
-		}
-		held := domain.ParsePermissions(observed["permissions"])
+	// find records the excess of one credential's reach; source names the
+	// credential in the fingerprint.
+	find := func(source, subject string, held domain.Permissions) error {
 		excess, severity := domain.Overreach(declared, held)
 		if len(excess) == 0 {
-			continue
+			return nil
 		}
-		subject := truncate("GitHub App "+observed["app_slug"], 256)
-		fp := sha256.Sum256([]byte(KindOverreach + "|" + connection.String() + "|" + r.ID.String() + "|" +
+		fp := sha256.Sum256([]byte(KindOverreach + "|" + connection.String() + "|" + source + "|" +
 			strings.Join(slices.Sorted(slices.Values(excess)), ",")))
 		if _, err := q.UpsertCoverageFinding(ctx, dbq.UpsertCoverageFindingParams{
-			OrgID: tx.OrgID(), ID: ids.NewV7(), Kind: KindOverreach, ConnectionID: &connection, Subject: subject,
+			OrgID: tx.OrgID(), ID: ids.NewV7(), Kind: KindOverreach, ConnectionID: &connection, Subject: truncate(subject, 256),
 			Declared: declared.List(), Held: held.List(), Used: used.List(), Excess: excess, Severity: severity,
 			Fingerprint: fp[:],
 		}); err != nil {
 			return err
 		}
 		keep = append(keep, fp[:])
+		return nil
+	}
+	// The installation behind the connection's own credential, as last
+	// read (G0 M8 G3).
+	switch inst, err := q.CoverageInstallationOfConnection(ctx, tx.OrgID(), connection); {
+	case err == nil:
+		id := strconv.FormatInt(inst.InstallationID, 10)
+		if err := find("installation:"+id, "GitHub App installation "+id+" on "+inst.AccountLogin,
+			domain.ParsePermissions(string(inst.Permissions))); err != nil {
+			return err
+		}
+	case !db.IsNoRows(err):
+		return err
+	}
+	// Other installations the org scans found for the connection.
+	for _, r := range reach {
+		var observed map[string]string
+		if json.Unmarshal(r.Observed, &observed) != nil {
+			continue
+		}
+		if err := find(r.ID.String(), "GitHub App "+observed["app_slug"], domain.ParsePermissions(observed["permissions"])); err != nil {
+			return err
+		}
 	}
 	_, err = q.ResolveCoverageFindings(ctx, dbq.ResolveCoverageFindingsParams{
 		OrgID: tx.OrgID(), Kind: KindOverreach, ConnectionID: &connection, Keep: keep,

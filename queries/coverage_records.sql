@@ -412,7 +412,7 @@ ORDER BY 1;
 -- discovery still counts: dismissing it does not remove the reach.
 -- name: CoverageReachOfConnection :many
 SELECT id, observed FROM pc.discoveries
-WHERE org_id = sqlc.arg(org_id) AND source = 'scan'
+WHERE org_id = sqlc.arg(org_id) AND source IN ('scan', 'github_scan')
   AND observed ->> 'kind' = 'github_app' AND observed ->> 'connection' = sqlc.arg(connection)::text
 ORDER BY id
 LIMIT 500;
@@ -444,7 +444,7 @@ SELECT s.id, s.connection_id, s.kind::text AS kind, s.locator::text AS locator F
         END), 512) AS locator
     FROM pc.discoveries d
     JOIN pc.connections c ON c.org_id = d.org_id AND c.id::text = lower(d.observed ->> 'connection')
-    WHERE d.org_id = sqlc.arg(org_id) AND d.source = 'scan'
+    WHERE d.org_id = sqlc.arg(org_id) AND d.source IN ('scan', 'github_scan')
       AND d.observed ->> 'kind' IN ('github_app', 'github_workflow', 'github_mcp_config')
       AND (d.observed ->> 'kind' <> 'github_workflow' OR d.observed ->> 'writes' = 'true' OR d.observed ->> 'deploys' = 'true')
       AND NOT EXISTS (SELECT 1 FROM pc.coverage_routes r
@@ -462,3 +462,10 @@ WHERE org_id = sqlc.arg(org_id) AND agent_id = sqlc.arg(agent_id) AND connection
   AND (sqlc.narg(before)::uuid IS NULL OR id < sqlc.narg(before)::uuid)
 ORDER BY id DESC
 LIMIT sqlc.arg(max_rows);
+
+-- The GitHub App installation behind a connection, with the permissions it
+-- held when last read (G0 M8 G3, connection_github): the reach of the
+-- connection's own credential (F048). UNTRUSTED metadata read from GitHub.
+-- name: CoverageInstallationOfConnection :one
+SELECT app_client_id, installation_id, account_login, permissions FROM pc.connection_github
+WHERE org_id = sqlc.arg(org_id) AND connection_id = sqlc.arg(connection_id);

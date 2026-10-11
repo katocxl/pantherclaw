@@ -107,3 +107,37 @@ func TestF048_CredentialReachBeyondTheNeedIsAFinding(t *testing.T) {
 		t.Fatalf("after the discovery was dismissed: %+v", rows)
 	}
 }
+
+// TestF048_TheConnectionsOwnInstallationIsReach: the GitHub App
+// installation behind the connection, as last read (G0 M8 G3), and an
+// installation the GitHub org scan found (source github_scan) are both
+// compared with the need.
+func TestF048_TheConnectionsOwnInstallationIsReach(t *testing.T) {
+	f := newFixture(t)
+	f.grant(t, "payments.refund.create")
+	version := ids.NewV7()
+	f.exec(t, `INSERT INTO pc.package_versions (org_id, id, package_id, version, file_digest, raw, state)
+		VALUES ($1, $2, $3, '1.1.0', $4, $5, 'ACTIVE')`, f.org, version, f.pkg, digest, []byte(scopedPackage))
+	f.exec(t, `UPDATE pc.package_pins SET version_id = $2, version = '1.1.0' WHERE org_id = $1`, f.org, version)
+	f.exec(t, `INSERT INTO pc.connection_github (org_id, connection_id, app_client_id, installation_id, account_login, permissions,
+		repository_selection, read_at, updated_by) VALUES ($1, $2, 'Iv1.abc', 42, 'acme', $3, 'all', now(), 'test')`,
+		f.org, f.conn, []byte(`{"contents": "write", "metadata": "read", "administration": "write"}`))
+	scanned := ids.NewV7()
+	f.exec(t, "INSERT INTO pc.agents (org_id, id, name, state, created_by) VALUES ($1, $2, 'App other', 'DISCOVERED', 'test')", f.org, scanned)
+	f.exec(t, `INSERT INTO pc.discoveries (org_id, id, agent_id, source, scan_key, observed) VALUES ($1, $2, $3, 'github_scan', $4, $5)`,
+		f.org, ids.NewV7(), scanned, make([]byte, 32), []byte(`{"kind": "github_app", "connection": "`+f.conn.String()+
+			`", "app_slug": "other", "permissions": "contents:write,secrets:write"}`))
+	rows := f.refreshFindings(t)
+	subjects := map[string][]string{}
+	for _, r := range rows {
+		subjects[r.Subject] = r.Excess
+	}
+	if len(rows) != 2 || !slices.Equal(subjects["GitHub App installation 42 on acme"], []string{"administration:write"}) ||
+		!slices.Equal(subjects["GitHub App other"], []string{"secrets:write"}) {
+		t.Fatalf("findings %+v", rows)
+	}
+	f.exec(t, `UPDATE pc.connection_github SET permissions = '{"contents": "write"}' WHERE connection_id = $1`, f.conn)
+	if rows := f.refreshFindings(t); len(rows) != 2 || rows[0].State == rows[1].State {
+		t.Fatalf("the installation reduced to the need: %+v", rows)
+	}
+}
