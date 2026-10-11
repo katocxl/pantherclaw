@@ -159,9 +159,10 @@ func (w *world) admit(t *testing.T, s app.Started) ids.UUID {
 	return id
 }
 
-// signed is a report of kind for the session, with the session's facts,
-// signed with the key of its kind: the probe key for the sandbox run, the
-// host key for the control run and the canary.
+// signed is a report of kind for the session, with the session's facts
+// (its images and configuration), signed with the key of its kind: the
+// probe key for the sandbox run, the host key for the control run and the
+// canary.
 func (w *world) signed(t *testing.T, s app.Started, kind, nonce string, mutate func(*report.Report)) string {
 	t.Helper()
 	key := w.hostKey
@@ -176,10 +177,10 @@ func (w *world) signedWith(t *testing.T, key ed25519.PrivateKey, s app.Started, 
 	at := time.Now().UTC().Add(-time.Minute)
 	r := report.Report{
 		Format: report.Format, Session: s.Session.ID.String(), Nonce: nonce, Kind: kind, StartedAt: at, FinishedAt: at.Add(30 * time.Second),
-		Images:  report.Images{Agent: digest, Edge: digest, Probe: digest},
+		Images:  report.Images{Agent: s.Session.AgentImage, Edge: s.Session.EdgeImage, Probe: s.Session.ProbeImage},
 		Engine:  report.Engine{Version: "29.8.2", APIVersion: "1.56", Runtime: "runc", Desktop: true},
 		Network: report.Network{Name: "pc-sbx-1", Internal: true, GatewayModeIPv4: "isolated"},
-		Config:  report.Config{Digest: digest, Checks: []report.Check{{ID: "read_only_root", OK: true}}},
+		Config:  report.Config{Digest: s.Session.ConfigDigest, Checks: []report.Check{{ID: "read_only_root", OK: true}}},
 		Results: []report.Result{{Name: "ipv6", Role: report.RoleProbe, Expect: report.Blocked, Observed: report.Blocked}},
 		Canary:  report.Canary{Hits: []report.Hit{}},
 	}

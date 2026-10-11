@@ -491,6 +491,49 @@ func (q *Queries) MarkSandboxInstance(ctx context.Context, arg MarkSandboxInstan
 	return result.RowsAffected(), nil
 }
 
+const sandboxSessionBindings = `-- name: SandboxSessionBindings :many
+SELECT connection_id, connection_revision, gateway_id, package_version_id, credential_version
+FROM pc.sandbox_session_connections
+WHERE org_id = $1 AND session_id = $2
+ORDER BY connection_id
+`
+
+type SandboxSessionBindingsRow struct {
+	ConnectionID       ids.UUID
+	ConnectionRevision int32
+	GatewayID          ids.UUID
+	PackageVersionID   ids.UUID
+	CredentialVersion  *int32
+}
+
+// The connections a session maps, with their bindings as it opened (the
+// closure contract's Bound).
+func (q *Queries) SandboxSessionBindings(ctx context.Context, orgID ids.OrgID, sessionID ids.UUID) ([]SandboxSessionBindingsRow, error) {
+	rows, err := q.db.Query(ctx, sandboxSessionBindings, orgID, sessionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []SandboxSessionBindingsRow{}
+	for rows.Next() {
+		var i SandboxSessionBindingsRow
+		if err := rows.Scan(
+			&i.ConnectionID,
+			&i.ConnectionRevision,
+			&i.GatewayID,
+			&i.PackageVersionID,
+			&i.CredentialVersion,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const sandboxSessionConnections = `-- name: SandboxSessionConnections :many
 SELECT c.id, c.name, c.gateway_id, c.agent_hosts, c.state
 FROM pc.sandbox_session_connections s
@@ -551,6 +594,21 @@ func (q *Queries) SandboxSessionInstance(ctx context.Context, orgID ids.OrgID, e
 	var i SandboxSessionInstanceRow
 	err := row.Scan(&i.ID, &i.State, &i.SandboxSessionID)
 	return i, err
+}
+
+const sandboxSessionOpenForToken = `-- name: SandboxSessionOpenForToken :one
+SELECT (state = 'OPEN' AND expires_at > now())::boolean AS open FROM pc.sandbox_sessions
+WHERE org_id = $1 AND enrollment_token_id = $2
+`
+
+// Whether the session an enrollment token belongs to is open: a sandbox
+// instance acts only inside its session (design decision 9). No row: the
+// token is not a sandbox session's.
+func (q *Queries) SandboxSessionOpenForToken(ctx context.Context, orgID ids.OrgID, enrollmentTokenID ids.UUID) (bool, error) {
+	row := q.db.QueryRow(ctx, sandboxSessionOpenForToken, orgID, enrollmentTokenID)
+	var open bool
+	err := row.Scan(&open)
+	return open, err
 }
 
 const useProbeNonce = `-- name: UseProbeNonce :one

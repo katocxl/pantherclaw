@@ -44,6 +44,8 @@ type Accepted struct {
 	Report report.Report
 	// Failed names the results that were not as expected.
 	Failed []string
+	// issuedAt is when the report's nonce was issued, with its probe run's.
+	issuedAt time.Time
 }
 
 // SubmitProbeReport verifies the probe container's or the control run's
@@ -153,7 +155,7 @@ func verify(ctx context.Context, q *dbq.Queries, sess dbq.PcSandboxSession, comp
 	} else if err != nil {
 		return Accepted{}, dbq.PcProbeNonce{}, err
 	}
-	a := Accepted{Kind: kind, Report: r}
+	a := Accepted{Kind: kind, Report: r, issuedAt: n.CreatedAt}
 	for _, x := range r.Results {
 		if !x.Passed() {
 			a.Failed = append(a.Failed, x.Name)

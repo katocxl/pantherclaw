@@ -104,3 +104,18 @@ SELECT image_digests, config_sha256 FROM pc.coverage_closures
 WHERE org_id = sqlc.arg(org_id) AND agent_id = sqlc.arg(agent_id) AND connection_id = sqlc.arg(connection_id)
 ORDER BY id DESC
 LIMIT 1;
+
+-- Whether the session an enrollment token belongs to is open: a sandbox
+-- instance acts only inside its session (design decision 9). No row: the
+-- token is not a sandbox session's.
+-- name: SandboxSessionOpenForToken :one
+SELECT (state = 'OPEN' AND expires_at > now())::boolean AS open FROM pc.sandbox_sessions
+WHERE org_id = sqlc.arg(org_id) AND enrollment_token_id = sqlc.arg(enrollment_token_id);
+
+-- The connections a session maps, with their bindings as it opened (the
+-- closure contract's Bound).
+-- name: SandboxSessionBindings :many
+SELECT connection_id, connection_revision, gateway_id, package_version_id, credential_version
+FROM pc.sandbox_session_connections
+WHERE org_id = sqlc.arg(org_id) AND session_id = sqlc.arg(session_id)
+ORDER BY connection_id;

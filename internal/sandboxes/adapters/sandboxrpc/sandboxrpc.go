@@ -167,3 +167,36 @@ func session(s dbq.PcSandboxSession, conns []ids.UUID) *pantherclawv1.SandboxSes
 func nonces(n app.Nonces) *pantherclawv1.ProbeNonces {
 	return &pantherclawv1.ProbeNonces{Sandbox: n.Sandbox, Control: n.Control, Canary: n.Canary, ExpireTime: timestamppb.New(n.ExpiresAt)}
 }
+
+// SubmitCanaryReport implements SandboxServiceHandler.
+func (h *Handler) SubmitCanaryReport(ctx context.Context, r *pantherclawv1.SubmitCanaryReportRequest) (*pantherclawv1.SubmitCanaryReportResponse, error) {
+	id, err := ids.ParseUUID(r.GetSessionId())
+	if err != nil {
+		return nil, app.ErrNotFound
+	}
+	res, err := h.svc.SubmitCanaryReport(ctx, id, r.GetReport())
+	if err != nil {
+		return nil, err
+	}
+	out := &pantherclawv1.SubmitCanaryReportResponse{NextNonces: nonces(res.Next)}
+	for _, c := range res.Closures {
+		out.Closures = append(out.Closures, &pantherclawv1.SandboxClosure{
+			ConnectionId: c.Connection.String(), ClosureId: c.ID.String(), Passed: c.Passed, Failed: c.Failed,
+			ExpireTime: timestamppb.New(c.ExpiresAt),
+		})
+	}
+	return out, nil
+}
+
+// EndSession implements SandboxServiceHandler.
+func (h *Handler) EndSession(ctx context.Context, r *pantherclawv1.SandboxServiceEndSessionRequest) (*pantherclawv1.SandboxServiceEndSessionResponse, error) {
+	id, err := ids.ParseUUID(r.GetSessionId())
+	if err != nil {
+		return nil, app.ErrNotFound
+	}
+	s, err := h.svc.EndSession(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	return &pantherclawv1.SandboxServiceEndSessionResponse{Session: session(s, nil)}, nil
+}
