@@ -111,8 +111,8 @@ func TestHR202_ConformanceActionTokens(t *testing.T) {
 			t.Errorf("%s: %s (%v), want %s", c.Name, got, err, c.Expect)
 		}
 		if c.ThenValid {
-			// Verify before insert: the refusal left the token unspent.
-			if _, err := v.Verify(context.Background(), c.Token, []byte(valid.Body), valid.match); err != nil {
+			// Verify before insert: the refusal left the minted token unspent.
+			if _, err := v.Verify(context.Background(), valid.Token, []byte(valid.Body), valid.match); err != nil {
 				t.Errorf("%s: the valid request after the refusal: %v", c.Name, err)
 			}
 		}
@@ -355,6 +355,50 @@ func TestHR202_OneJWKSFetchAtATime(t *testing.T) {
 		}
 	}
 	if fetches.Load() != 1 {
+		t.Fatalf("%d fetches", fetches.Load())
+	}
+}
+
+// TestHR202_ABurstAfterAKeyRotationWaitsForTheFetch: verifications of a
+// new kid that arrive while its JWKS fetch is in flight wait for it
+// instead of refusing the key as unknown.
+func TestHR202_ABurstAfterAKeyRotationWaitsForTheFetch(t *testing.T) {
+	f, _ := load(t)
+	c := f.Cases[0]
+	var fetches atomic.Int32
+	keys := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if fetches.Add(1) == 1 {
+			_, _ = w.Write([]byte(`{"keys":[]}`)) // before the rotation
+			return
+		}
+		time.Sleep(100 * time.Millisecond)
+		_, _ = w.Write(f.JWKS)
+	}))
+	t.Cleanup(keys.Close)
+	now := time.Unix(c.Now-61, 0)
+	v, err := verifier.New(verifier.Config{
+		JWKSURL: keys.URL, Issuer: c.Issuer, Audience: c.Audience, Store: verifier.NewMemoryStore(0, time.Unix(c.Now-3600, 0)),
+		Now: func() time.Time { return now },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The first verification fetches the old keys; a minute later the key rotates.
+	_, _ = v.Verify(context.Background(), c.Token, []byte(c.Body), func(verifier.Claims) bool { return false })
+	now = time.Unix(c.Now, 0)
+	done := make(chan error, 8)
+	for range 8 {
+		go func() {
+			_, err := v.Verify(context.Background(), c.Token, []byte(c.Body), func(verifier.Claims) bool { return false })
+			done <- err
+		}()
+	}
+	for range 8 {
+		if err := <-done; verifier.CodeOf(err) != verifier.OperationMismatch {
+			t.Errorf("%v", err)
+		}
+	}
+	if fetches.Load() != 2 {
 		t.Fatalf("%d fetches", fetches.Load())
 	}
 }
