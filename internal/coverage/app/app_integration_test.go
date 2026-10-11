@@ -130,7 +130,7 @@ func probes(failNegative bool) []domain.ProbeResult {
 // closed.
 func TestIntRecordClosureBindsAndExpires(t *testing.T) {
 	f := newFixture(t)
-	c := f.closure(probes(false), time.Now().Add(-time.Minute))
+	c := f.closure(probes(false), f.dbNow(t))
 	id, err := f.record(t, c)
 	if err != nil {
 		t.Fatal(err)
@@ -153,7 +153,7 @@ func TestIntRecordClosureBindsAndExpires(t *testing.T) {
 // is no such change. A failed closure is stored and invalidates the scope at once.
 func TestHR211_ClosureAfterAChangeIsRefused(t *testing.T) {
 	f := newFixture(t)
-	started := time.Now().Add(-time.Minute)
+	started := f.dbNow(t) // after the fixture's package pin
 	for _, kind := range []string{"exclusion", "route", "evidence_expired"} {
 		f.exec(t, `INSERT INTO pc.coverage_invalidations (org_id, id, kind, connection_id) VALUES ($1, $2, $3, $4)`,
 			f.org, ids.NewV7(), kind, f.conn)
@@ -297,6 +297,7 @@ func TestF443_RoutesSeenInsideTheSandboxAreObserved(t *testing.T) {
 	err := f.p.InTenantTx(context.Background(), f.org, func(ctx context.Context, tx db.TenantTx) error {
 		q := dbq.New(tx)
 		pending, err := q.PendingCoverageInvalidations(ctx, f.org, 10)
+		pending = slices.DeleteFunc(pending, func(i dbq.PcCoverageInvalidation) bool { return i.Kind == "package_version" })
 		if err != nil || len(pending) != 1 || pending[0].Kind != "route" {
 			t.Fatalf("route changes %+v (%v)", pending, err)
 		}
