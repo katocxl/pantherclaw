@@ -361,6 +361,16 @@ JOIN pc.grant_revisions r ON r.org_id = g.org_id AND r.grant_id = g.id AND r.rev
 WHERE g.org_id = sqlc.arg(org_id) AND g.agent_id = sqlc.arg(agent_id) AND g.state = 'ACTIVE'
   AND r.not_before <= now() AND r.expires_at > now();
 
+-- The org's agents that coverage holds protected or partially protected:
+-- each reassess job derives them again, so a grant that starts, ends or
+-- changes lowers them within one run although it writes no coverage change
+-- (F021).
+-- name: CoverageProtectedAgents :many
+SELECT id FROM pc.agents
+WHERE org_id = sqlc.arg(org_id) AND state IN ('PROTECTED', 'PARTIALLY_PROTECTED')
+ORDER BY id
+LIMIT sqlc.arg(max_rows);
+
 -- The org's connections that can carry actions, with their pinned package
 -- version.
 -- name: CoverageConnectionPackages :many
@@ -398,13 +408,14 @@ ORDER BY 1;
 
 -- The credentials the org scan found for a connection, with the
 -- permissions they actually hold (G0 M8 G5: github_app findings name the
--- connection they were scanned through). UNTRUSTED metadata.
+-- connection they were scanned through). UNTRUSTED metadata. A dismissed
+-- discovery still counts: dismissing it does not remove the reach.
 -- name: CoverageReachOfConnection :many
 SELECT id, observed FROM pc.discoveries
-WHERE org_id = sqlc.arg(org_id) AND source = 'scan' AND state <> 'DISMISSED'
+WHERE org_id = sqlc.arg(org_id) AND source = 'scan'
   AND observed ->> 'kind' = 'github_app' AND observed ->> 'connection' = sqlc.arg(connection)::text
 ORDER BY id
-LIMIT 50;
+LIMIT 500;
 
 -- A scope's snapshots, newest first: its coverage history.
 -- name: ListCoverageSnapshotsPage :many

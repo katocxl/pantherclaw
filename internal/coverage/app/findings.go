@@ -136,10 +136,7 @@ func (s *Service) RefreshFindings(ctx context.Context, tx db.TenantTx, connectio
 		if len(excess) == 0 {
 			continue
 		}
-		subject := "GitHub App " + observed["app_slug"]
-		if len(subject) > 256 {
-			subject = subject[:256]
-		}
+		subject := truncate("GitHub App "+observed["app_slug"], 256)
 		fp := sha256.Sum256([]byte(KindOverreach + "|" + connection.String() + "|" + r.ID.String() + "|" +
 			strings.Join(slices.Sorted(slices.Values(excess)), ",")))
 		if _, err := q.UpsertCoverageFinding(ctx, dbq.UpsertCoverageFindingParams{
@@ -155,6 +152,17 @@ func (s *Service) RefreshFindings(ctx context.Context, tx db.TenantTx, connectio
 		OrgID: tx.OrgID(), Kind: KindOverreach, ConnectionID: &connection, Keep: keep,
 	})
 	return err
+}
+
+// truncate cuts s to at most n bytes, at a character boundary.
+func truncate(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	for n > 0 && !utf8.RuneStart(s[n]) {
+		n--
+	}
+	return s[:n]
 }
 
 // ListFindings lists the org's coverage findings newest first, optionally

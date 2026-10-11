@@ -117,6 +117,9 @@ func (s *Service) ReassessOrg(ctx context.Context, org ids.OrgID) (Reassessed, e
 		for _, x := range expired {
 			add(domain.Scope{Agent: x.AgentID, Connection: x.ConnectionID, Operation: x.Operation}, nil)
 		}
+		// In (agent, connection, operation) order, like every reassessment, so
+		// transactions that share scopes take their locks in the same order.
+		slices.SortFunc(order, compareScopes)
 		pkgs := packages{}
 		failed := map[domain.Scope]bool{}
 		for _, sc := range order {
@@ -144,9 +147,16 @@ func (s *Service) ReassessOrg(ctx context.Context, org ids.OrgID) (Reassessed, e
 				conns = append(conns, sc.Connection)
 			}
 		}
+		// A connection whose findings cannot be refreshed is rolled back alone,
+		// logged and skipped; the next job tries again.
 		for _, conn := range conns {
-			if err := s.RefreshFindings(ctx, tx, conn); err != nil {
+			skip, err := refreshIsolated(ctx, tx, func() error { return s.RefreshFindings(ctx, tx, conn) })
+			if err != nil {
 				return err
+			}
+			if skip != nil {
+				s.log().WarnContext(ctx, "coverage.reassess: findings skipped", slog.String("org", org.String()),
+					slog.String("connection", conn.String()), slog.String("error", skip.Error()))
 			}
 		}
 		// An invalidation is entered in the ledger and marked reassessed only
@@ -161,9 +171,16 @@ func (s *Service) ReassessOrg(ctx context.Context, org ids.OrgID) (Reassessed, e
 			}
 		}
 		// With the changes they saw marked, the agents' protection is derived
-		// from their scopes as they read now.
-		return s.deriveAgents(ctx, tx, slices.DeleteFunc(slices.Clone(order), func(sc domain.Scope) bool { return failed[sc] }),
-			s.now(), pkgs)
+		// from their scopes as they read now: the agents of the scopes
+		// reassessed, and every agent held protected or partially protected, so
+		// a grant that starts, ends or changes, which writes no coverage change,
+		// lowers it within one run.
+		agents := scopeAgents(slices.DeleteFunc(slices.Clone(order), func(sc domain.Scope) bool { return failed[sc] }))
+		protected, err := q.CoverageProtectedAgents(ctx, org, maxScopesPerJob)
+		if err != nil {
+			return err
+		}
+		return s.deriveAgents(ctx, tx, append(agents, protected...), s.now(), pkgs)
 	})
 	return out, err
 }
@@ -188,6 +205,26 @@ func (s *Service) reassessIsolated(ctx context.Context, tx db.TenantTx, sc domai
 	}
 	_, err = tx.Exec(ctx, "RELEASE SAVEPOINT coverage_scope")
 	return recorded, nil, err
+}
+
+// refreshIsolated runs a findings refresh inside a savepoint, so one that
+// fails is rolled back alone and reported in skip. err is a failure of the
+// transaction itself.
+func refreshIsolated(ctx context.Context, tx db.TenantTx, refresh func() error) (skip, err error) {
+	if _, err := tx.Exec(ctx, "SAVEPOINT coverage_findings"); err != nil {
+		return nil, err
+	}
+	if skip = refresh(); skip != nil {
+		if ctx.Err() != nil {
+			return nil, skip
+		}
+		if _, err := tx.Exec(ctx, "ROLLBACK TO SAVEPOINT coverage_findings"); err != nil {
+			return nil, errors.Join(skip, err)
+		}
+		return skip, nil
+	}
+	_, err = tx.Exec(ctx, "RELEASE SAVEPOINT coverage_findings")
+	return nil, err
 }
 
 // enterInvalidation appends a reassessed invalidation to the ledger as a

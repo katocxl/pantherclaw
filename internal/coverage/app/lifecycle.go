@@ -21,23 +21,21 @@ import (
 // Protection is what an agent's coverage says about it (F021, design
 // decision 11): PROTECTED only when every scope that counts is ENFORCED
 // now, PARTIALLY_PROTECTED when at least one is, OBSERVED otherwise. A
-// scope a person excluded as a whole does not count (HR-212); an agent
+// scope with an exclusion counts as not protected, whatever its state:
+// exclusions never raise (HR-212, design decision 1 as the founder
+// decided), so an agent with one is PARTIALLY_PROTECTED at most. An agent
 // with no scope that counts is OBSERVED.
 func Protection(states []domain.State, excluded []bool) adomain.State {
-	enforced, counted := 0, 0
+	enforced := 0
 	for i, s := range states {
-		if excluded[i] {
-			continue
-		}
-		counted++
-		if s == domain.Enforced {
+		if s == domain.Enforced && !excluded[i] {
 			enforced++
 		}
 	}
 	if enforced == 0 {
 		return adomain.StateObserved
 	}
-	if enforced == counted {
+	if enforced == len(states) {
 		return adomain.StateProtected
 	}
 	return adomain.StatePartiallyProtected
@@ -97,11 +95,7 @@ func (s *Service) deriveLifecycle(ctx context.Context, tx db.TenantTx, agent ids
 			OrgID: tx.OrgID(), AgentID: sc.Agent, ConnectionID: sc.Connection, Operation: sc.Operation,
 		})
 		if db.IsNoRows(err) {
-			// Never assessed: not ENFORCED, unless a person excluded it whole.
-			states[i] = domain.Unknown
-			if excluded[i], err = wholeScopeExcluded(ctx, q, tx.OrgID(), sc); err != nil {
-				return err
-			}
+			states[i] = domain.Unknown // never assessed: not ENFORCED
 			continue
 		} else if err != nil {
 			return err
@@ -110,33 +104,33 @@ func (s *Service) deriveLifecycle(ctx context.Context, tx db.TenantTx, agent ids
 		if err != nil {
 			return err
 		}
-		states[i], excluded[i] = r.State, r.Body.Excluded
+		states[i], excluded[i] = r.State, len(r.Body.Exclusions) > 0
 	}
 	return agents.MarkProtection(ctx, q, tx.OrgID(), agent, Protection(states, excluded), adomain.System)
 }
 
-// deriveAgents derives the protection of each agent of scopes once, after
-// they were reassessed (design decision 11), so a change of grants or
-// exclusions that recorded no snapshot still reaches the agent.
-func (s *Service) deriveAgents(ctx context.Context, tx db.TenantTx, scopes []domain.Scope, now time.Time, pkgs packages) error {
-	var done []ids.UUID
+// scopeAgents lists the agents of scopes.
+func scopeAgents(scopes []domain.Scope) []ids.UUID {
+	out := make([]ids.UUID, 0, len(scopes))
 	for _, sc := range scopes {
-		if slices.Contains(done, sc.Agent) {
+		out = append(out, sc.Agent)
+	}
+	return out
+}
+
+// deriveAgents derives the protection of each of agents once, after their
+// scopes were reassessed (design decision 11), so a change of grants or
+// exclusions that recorded no snapshot still reaches the agent.
+func (s *Service) deriveAgents(ctx context.Context, tx db.TenantTx, agents []ids.UUID, now time.Time, pkgs packages) error {
+	var done []ids.UUID
+	for _, a := range agents {
+		if slices.Contains(done, a) {
 			continue
 		}
-		done = append(done, sc.Agent)
-		if err := s.deriveLifecycle(ctx, tx, sc.Agent, now, pkgs); err != nil {
+		done = append(done, a)
+		if err := s.deriveLifecycle(ctx, tx, a, now, pkgs); err != nil {
 			return err
 		}
 	}
 	return nil
-}
-
-// wholeScopeExcluded reports whether an active exclusion covers the whole
-// scope.
-func wholeScopeExcluded(ctx context.Context, q *dbq.Queries, org ids.OrgID, sc domain.Scope) (bool, error) {
-	rows, err := q.CoverageExclusionsForScope(ctx, dbq.CoverageExclusionsForScopeParams{
-		OrgID: org, ConnectionID: sc.Connection, AgentID: &sc.Agent, Operation: sc.Operation,
-	})
-	return slices.ContainsFunc(rows, func(x dbq.PcCoverageExclusion) bool { return x.RouteKind == nil }), err
 }
