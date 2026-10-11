@@ -3275,7 +3275,7 @@ var File_pantherclaw_v1_gateways_proto protoreflect.FileDescriptor
 
 const file_pantherclaw_v1_gateways_proto_rawDesc = "" +
 	"\n" +
-	"\x1dpantherclaw/v1/gateways.proto\x12\x0epantherclaw.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xe5\x02\n" +
+	"\x1dpantherclaw/v1/gateways.proto\x12\x0epantherclaw.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\"pantherclaw/v1/gateway_facts.proto\"\xe5\x02\n" +
 	"\aGateway\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x122\n" +
@@ -3541,7 +3541,7 @@ const file_pantherclaw_v1_gateways_proto_rawDesc = "" +
 	"GetGateway\x12!.pantherclaw.v1.GetGatewayRequest\x1a\".pantherclaw.v1.GetGatewayResponse\"\x03\x90\x02\x01\x12\\\n" +
 	"\rRevokeGateway\x12$.pantherclaw.v1.RevokeGatewayRequest\x1a%.pantherclaw.v1.RevokeGatewayResponse\x12}\n" +
 	"\x18RevokeGatewayCertificate\x12/.pantherclaw.v1.RevokeGatewayCertificateRequest\x1a0.pantherclaw.v1.RevokeGatewayCertificateResponse\x12j\n" +
-	"\x10ListApproverKeys\x12'.pantherclaw.v1.ListApproverKeysRequest\x1a(.pantherclaw.v1.ListApproverKeysResponse\"\x03\x90\x02\x012\xa8\a\n" +
+	"\x10ListApproverKeys\x12'.pantherclaw.v1.ListApproverKeysRequest\x1a(.pantherclaw.v1.ListApproverKeysResponse\"\x03\x90\x02\x012\x80\b\n" +
 	"\x0eGatewayService\x12c\n" +
 	"\x06Enroll\x12+.pantherclaw.v1.GatewayServiceEnrollRequest\x1a,.pantherclaw.v1.GatewayServiceEnrollResponse\x12e\n" +
 	"\x10RenewCertificate\x12'.pantherclaw.v1.RenewCertificateRequest\x1a(.pantherclaw.v1.RenewCertificateResponse\x12h\n" +
@@ -3551,7 +3551,8 @@ const file_pantherclaw_v1_gateways_proto_rawDesc = "" +
 	"\rReportCircuit\x12$.pantherclaw.v1.ReportCircuitRequest\x1a%.pantherclaw.v1.ReportCircuitResponse\x12V\n" +
 	"\vReportDrift\x12\".pantherclaw.v1.ReportDriftRequest\x1a#.pantherclaw.v1.ReportDriftResponse\x12k\n" +
 	"\x12ClaimVerifications\x12).pantherclaw.v1.ClaimVerificationsRequest\x1a*.pantherclaw.v1.ClaimVerificationsResponse\x12h\n" +
-	"\x11ReportObservation\x12(.pantherclaw.v1.ReportObservationRequest\x1a).pantherclaw.v1.ReportObservationResponseB\xc6\x01\n" +
+	"\x11ReportObservation\x12(.pantherclaw.v1.ReportObservationRequest\x1a).pantherclaw.v1.ReportObservationResponse\x12V\n" +
+	"\vReportFacts\x12\".pantherclaw.v1.ReportFactsRequest\x1a#.pantherclaw.v1.ReportFactsResponseB\xc6\x01\n" +
 	"\x12com.pantherclaw.v1B\rGatewaysProtoP\x01ZHgithub.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1;pantherclawv1\xa2\x02\x03PXX\xaa\x02\x0ePantherclaw.V1\xca\x02\x0ePantherclaw\\V1\xe2\x02\x1aPantherclaw\\V1\\GPBMetadata\xea\x02\x0fPantherclaw::V1b\x06proto3"
 
 var (
@@ -3618,6 +3619,8 @@ var file_pantherclaw_v1_gateways_proto_goTypes = []any{
 	(*ReportObservationResponse)(nil),            // 46: pantherclaw.v1.ReportObservationResponse
 	nil,                                          // 47: pantherclaw.v1.ReportObservationRequest.FieldsEntry
 	(*timestamppb.Timestamp)(nil),                // 48: google.protobuf.Timestamp
+	(*ReportFactsRequest)(nil),                   // 49: pantherclaw.v1.ReportFactsRequest
+	(*ReportFactsResponse)(nil),                  // 50: pantherclaw.v1.ReportFactsResponse
 }
 var file_pantherclaw_v1_gateways_proto_depIdxs = []int32{
 	0,  // 0: pantherclaw.v1.Gateway.state:type_name -> pantherclaw.v1.GatewayState
@@ -3665,24 +3668,26 @@ var file_pantherclaw_v1_gateways_proto_depIdxs = []int32{
 	39, // 42: pantherclaw.v1.GatewayService.ReportDrift:input_type -> pantherclaw.v1.ReportDriftRequest
 	41, // 43: pantherclaw.v1.GatewayService.ClaimVerifications:input_type -> pantherclaw.v1.ClaimVerificationsRequest
 	44, // 44: pantherclaw.v1.GatewayService.ReportObservation:input_type -> pantherclaw.v1.ReportObservationRequest
-	7,  // 45: pantherclaw.v1.GatewayAdminService.CreateGateway:output_type -> pantherclaw.v1.CreateGatewayResponse
-	9,  // 46: pantherclaw.v1.GatewayAdminService.CreateGatewayEnrollmentToken:output_type -> pantherclaw.v1.CreateGatewayEnrollmentTokenResponse
-	11, // 47: pantherclaw.v1.GatewayAdminService.ListGateways:output_type -> pantherclaw.v1.ListGatewaysResponse
-	16, // 48: pantherclaw.v1.GatewayAdminService.GetGateway:output_type -> pantherclaw.v1.GetGatewayResponse
-	18, // 49: pantherclaw.v1.GatewayAdminService.RevokeGateway:output_type -> pantherclaw.v1.RevokeGatewayResponse
-	20, // 50: pantherclaw.v1.GatewayAdminService.RevokeGatewayCertificate:output_type -> pantherclaw.v1.RevokeGatewayCertificateResponse
-	13, // 51: pantherclaw.v1.GatewayAdminService.ListApproverKeys:output_type -> pantherclaw.v1.ListApproverKeysResponse
-	22, // 52: pantherclaw.v1.GatewayService.Enroll:output_type -> pantherclaw.v1.GatewayServiceEnrollResponse
-	24, // 53: pantherclaw.v1.GatewayService.RenewCertificate:output_type -> pantherclaw.v1.RenewCertificateResponse
-	26, // 54: pantherclaw.v1.GatewayService.RegisterBrokerKey:output_type -> pantherclaw.v1.RegisterBrokerKeyResponse
-	28, // 55: pantherclaw.v1.GatewayService.GetConfiguration:output_type -> pantherclaw.v1.GetConfigurationResponse
-	35, // 56: pantherclaw.v1.GatewayService.WatchContainment:output_type -> pantherclaw.v1.WatchContainmentResponse
-	38, // 57: pantherclaw.v1.GatewayService.ReportCircuit:output_type -> pantherclaw.v1.ReportCircuitResponse
-	40, // 58: pantherclaw.v1.GatewayService.ReportDrift:output_type -> pantherclaw.v1.ReportDriftResponse
-	43, // 59: pantherclaw.v1.GatewayService.ClaimVerifications:output_type -> pantherclaw.v1.ClaimVerificationsResponse
-	46, // 60: pantherclaw.v1.GatewayService.ReportObservation:output_type -> pantherclaw.v1.ReportObservationResponse
-	45, // [45:61] is the sub-list for method output_type
-	29, // [29:45] is the sub-list for method input_type
+	49, // 45: pantherclaw.v1.GatewayService.ReportFacts:input_type -> pantherclaw.v1.ReportFactsRequest
+	7,  // 46: pantherclaw.v1.GatewayAdminService.CreateGateway:output_type -> pantherclaw.v1.CreateGatewayResponse
+	9,  // 47: pantherclaw.v1.GatewayAdminService.CreateGatewayEnrollmentToken:output_type -> pantherclaw.v1.CreateGatewayEnrollmentTokenResponse
+	11, // 48: pantherclaw.v1.GatewayAdminService.ListGateways:output_type -> pantherclaw.v1.ListGatewaysResponse
+	16, // 49: pantherclaw.v1.GatewayAdminService.GetGateway:output_type -> pantherclaw.v1.GetGatewayResponse
+	18, // 50: pantherclaw.v1.GatewayAdminService.RevokeGateway:output_type -> pantherclaw.v1.RevokeGatewayResponse
+	20, // 51: pantherclaw.v1.GatewayAdminService.RevokeGatewayCertificate:output_type -> pantherclaw.v1.RevokeGatewayCertificateResponse
+	13, // 52: pantherclaw.v1.GatewayAdminService.ListApproverKeys:output_type -> pantherclaw.v1.ListApproverKeysResponse
+	22, // 53: pantherclaw.v1.GatewayService.Enroll:output_type -> pantherclaw.v1.GatewayServiceEnrollResponse
+	24, // 54: pantherclaw.v1.GatewayService.RenewCertificate:output_type -> pantherclaw.v1.RenewCertificateResponse
+	26, // 55: pantherclaw.v1.GatewayService.RegisterBrokerKey:output_type -> pantherclaw.v1.RegisterBrokerKeyResponse
+	28, // 56: pantherclaw.v1.GatewayService.GetConfiguration:output_type -> pantherclaw.v1.GetConfigurationResponse
+	35, // 57: pantherclaw.v1.GatewayService.WatchContainment:output_type -> pantherclaw.v1.WatchContainmentResponse
+	38, // 58: pantherclaw.v1.GatewayService.ReportCircuit:output_type -> pantherclaw.v1.ReportCircuitResponse
+	40, // 59: pantherclaw.v1.GatewayService.ReportDrift:output_type -> pantherclaw.v1.ReportDriftResponse
+	43, // 60: pantherclaw.v1.GatewayService.ClaimVerifications:output_type -> pantherclaw.v1.ClaimVerificationsResponse
+	46, // 61: pantherclaw.v1.GatewayService.ReportObservation:output_type -> pantherclaw.v1.ReportObservationResponse
+	50, // 62: pantherclaw.v1.GatewayService.ReportFacts:output_type -> pantherclaw.v1.ReportFactsResponse
+	46, // [46:63] is the sub-list for method output_type
+	29, // [29:46] is the sub-list for method input_type
 	29, // [29:29] is the sub-list for extension type_name
 	29, // [29:29] is the sub-list for extension extendee
 	0,  // [0:29] is the sub-list for field type_name
@@ -3693,6 +3698,7 @@ func file_pantherclaw_v1_gateways_proto_init() {
 	if File_pantherclaw_v1_gateways_proto != nil {
 		return
 	}
+	file_pantherclaw_v1_gateway_facts_proto_init()
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{

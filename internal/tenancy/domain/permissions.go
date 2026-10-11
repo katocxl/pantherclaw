@@ -164,6 +164,9 @@ const (
 	PermEvidenceCaptureManage   Permission = "evidence.capture.manage"
 	PermTransactionReconcile    Permission = "transaction.reconcile"
 	PermGatewayVerify           Permission = "gateway.verify" // gateways only: lease and report verifications (HR-190)
+	// PermGatewayFactsReport: gateways only, report a connection's facts as
+	// its registered provider (G0 M8 decision 5, HR-160).
+	PermGatewayFactsReport Permission = "gateway.facts.report"
 )
 
 // Workload permissions are held only by PAP/1-authenticated workloads
@@ -229,6 +232,7 @@ func (p Permission) HumanOnly() bool { return slices.Contains(humanOnly, p) }
 // and gateway.manage are ordinary permissions for people.
 var gatewayOnly = []Permission{
 	PermGatewayAuthorize, PermGatewayDispatch, PermGatewayObserve, PermGatewayEnroll, PermGatewaySync, PermGatewayVerify,
+	PermGatewayFactsReport,
 }
 
 // Gateway reports whether p belongs to gateways.
@@ -240,7 +244,7 @@ func (p Permission) Workload() bool { return strings.HasPrefix(string(p), "workl
 // declarableOnly are requirements an RPC may declare that no role grants.
 var declarableOnly = []Permission{
 	PermPublic, PermAuthenticated, PermGatewayAuthorize, PermGatewayDispatch, PermGatewayObserve, PermGatewayEnroll,
-	PermGatewaySync, PermGatewayVerify, PermWorkloadEnroll, PermWorkloadToken, PermWorkloadRun, PermWorkloadDelegate,
+	PermGatewaySync, PermGatewayVerify, PermGatewayFactsReport, PermWorkloadEnroll, PermWorkloadToken, PermWorkloadRun, PermWorkloadDelegate,
 }
 
 // Declarable reports whether an RPC may declare p as its requirement.

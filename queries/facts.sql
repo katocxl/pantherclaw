@@ -4,8 +4,9 @@
 -- Trusted fact providers and facts (M4 part 2, HR-160).
 
 -- name: InsertFactProvider :exec
-INSERT INTO pc.fact_providers (org_id, id, name, service_account_id, created_by)
-VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(name), sqlc.arg(service_account_id), sqlc.arg(created_by));
+INSERT INTO pc.fact_providers (org_id, id, name, service_account_id, gateway_id, connection_id, created_by)
+VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(name), sqlc.narg(service_account_id), sqlc.narg(gateway_id), sqlc.narg(connection_id),
+        sqlc.arg(created_by));
 
 -- name: InsertFactDeclaration :exec
 INSERT INTO pc.fact_declarations (org_id, provider_id, name, value_type, subject_type, max_lag_s)
@@ -16,6 +17,12 @@ SELECT id, name, service_account_id, state FROM pc.fact_providers
 WHERE org_id = sqlc.arg(org_id) AND service_account_id = sqlc.arg(service_account_id)::uuid AND state = 'ACTIVE'
 ORDER BY created_at
 LIMIT 1;
+
+-- GetFactProviderByConnection returns the active provider a gateway reports
+-- a connection's facts as (G0 M8 decision 5).
+-- name: GetFactProviderByConnection :one
+SELECT id, name, gateway_id, connection_id, state FROM pc.fact_providers
+WHERE org_id = sqlc.arg(org_id) AND connection_id = sqlc.arg(connection_id)::uuid AND state = 'ACTIVE';
 
 -- name: ListFactDeclarations :many
 SELECT name, value_type, subject_type, max_lag_s FROM pc.fact_declarations
@@ -60,7 +67,7 @@ WHERE f.org_id = sqlc.arg(org_id) AND f.subject_type = sqlc.arg(subject_type) AN
   AND f.name = ANY(sqlc.arg(names)::text[]);
 
 -- name: ListFactProviders :many
-SELECT id, name, service_account_id, state FROM pc.fact_providers
+SELECT id, name, service_account_id, gateway_id, connection_id, state FROM pc.fact_providers
 WHERE org_id = sqlc.arg(org_id) AND (sqlc.arg(include_disabled)::boolean OR state = 'ACTIVE')
 ORDER BY name, id
 LIMIT 500;

@@ -7,6 +7,7 @@ package pantherclaw.v1;
 
 import "buf/validate/validate.proto";
 import "google/protobuf/timestamp.proto";
+import "pantherclaw/v1/gateway_facts.proto";
 
 // GatewayAdminService manages an org's gateways (G0 M6, HR-180): records,
 // single-use enrollment tokens, certificates and broker keys. A gateway's
@@ -101,6 +102,12 @@ service GatewayService {
   // the verifier declares, and a digest of the answer (HR-190).
   // permission: gateway.verify
   rpc ReportObservation(ReportObservationRequest) returns (ReportObservationResponse);
+  // ReportFacts records what the gateway read from a connection's system of
+  // record before a decision, as that connection's registered fact provider:
+  // only the facts the provider declares, about the connection's targets
+  // (G0 M8 decision 5, HR-160).
+  // permission: gateway.facts.report
+  rpc ReportFacts(ReportFactsRequest) returns (ReportFactsResponse);
 }
 
 // GatewayState is whether a gateway may act.

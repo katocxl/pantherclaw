@@ -245,6 +245,7 @@ func cmdServe(ctx context.Context, args []string, stderr io.Writer, env Env, onS
 		return err
 	}
 	m6.verifications = verification
+	m6.facts = gatewayFacts(pool)
 
 	g, ctx := errgroup.WithContext(ctx)
 	if cfg.Role == RoleAPI || cfg.Role == RoleAll {
@@ -751,7 +752,7 @@ func registerAuthorityAdmin(rs *connect.Server, d apiDeps, grants *grantsapp.Ser
 	facts := &factspg.Store{Pool: d.pool}
 	pantherclawv1connect.RegisterGrantServiceHandler(rs, grantsrpc.NewGrants(grants))
 	pantherclawv1connect.RegisterGuardrailServiceHandler(rs, grantsrpc.NewGuardrails(grants))
-	pantherclawv1connect.RegisterFactServiceHandler(rs, factsrpc.New(&factsapp.Service{Store: facts, Authz: authz, Reads: facts}))
+	pantherclawv1connect.RegisterFactServiceHandler(rs, factsrpc.New(&factsapp.Service{Store: facts, Authz: authz, Reads: facts, Packages: packageFacts(d.pool)}))
 	roots := d.packageRoots
 	if roots == nil {
 		var err error
