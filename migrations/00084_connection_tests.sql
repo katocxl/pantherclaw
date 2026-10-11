@@ -9,6 +9,7 @@
 -- never changes anything there. Each result is kept: the latest PASSED one
 -- is the connection's last successful test, and connection health shows
 -- both. A test result is evidence: pc_app never updates or deletes one.
+-- An index on transactions by connection serves connection health.
 
 -- +goose Up
 CREATE TABLE pc.connection_tests (
@@ -35,5 +36,11 @@ CREATE POLICY tenant_isolation ON pc.connection_tests
 GRANT SELECT, INSERT ON pc.connection_tests TO pc_app;
 GRANT SELECT ON pc.connection_tests TO pc_audit_ro;
 
+-- Connection health reads the recent transactions through a connection:
+-- delivery failures and the agents that depend on it.
+CREATE INDEX transactions_connection ON pc.transactions (org_id, connection_id, created_at)
+    WHERE connection_id IS NOT NULL;
+
 -- +goose Down
+DROP INDEX pc.transactions_connection;
 DROP TABLE pc.connection_tests;
