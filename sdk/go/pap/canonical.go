@@ -23,7 +23,7 @@ func Canonical(raw []byte) ([]byte, error) {
 
 // ActionHash returns the action hash of ActionIR JSON (PAP/1 §6),
 // lowercase hex SHA-256 of its canonical form, after checking the action
-// as strictly as PantherClaw does (ParseAction).
+// (ParseAction).
 func ActionHash(action []byte) (string, error) {
 	p, err := ParseAction(action)
 	return p.Hash, err
