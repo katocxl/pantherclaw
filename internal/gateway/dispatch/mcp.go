@@ -117,7 +117,9 @@ func (e *Engine) sendMCP(ctx context.Context, r Result, conn *control.Connection
 		return e.record(ctx, r, want, pb.Outcome_OUTCOME_FAILED, 0, nil, 0, EnforcementFailed, CodeRequest, t)
 	}
 	start := time.Now()
+	land := e.fly(conn, a, want.Txn)
 	res, err := ce.mcp.Call(ctx, tool, args, declared, decorate)
+	land()
 	elapsed := time.Since(start)
 	t.lap("target")
 	outcome, class, code := classifyMCP(res, err)

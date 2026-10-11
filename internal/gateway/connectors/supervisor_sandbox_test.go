@@ -70,7 +70,7 @@ func TestHR216_AConnectorRunsHardenedOverStdioWithoutRouteOrCredential(t *testin
 	conf.set(conn(1))
 	var mu sync.Mutex
 	var reports []*pb.ReportConnectorStateRequest
-	sup, err := connectors.New(t.Context(), c, conf, nil)
+	sup, err := connectors.New(t.Context(), c, connectors.Config{Enabled: true}, conf, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -162,7 +162,7 @@ func New(ctx context.Context, cfg *Config, id *control.Identity, log *slog.Logge
 		d.Run = append(d.Run, d.Broker.Run)
 	}
 	if cfg.Connectors.Enabled {
-		sup, err := connectors.New(ctx, docker.New(docker.CLI{}), store, log)
+		sup, err := connectors.New(ctx, docker.New(docker.CLI{}), cfg.Connectors, store, log)
 		if err != nil {
 			return nil, err
 		}
@@ -201,6 +201,9 @@ func newGateway(cfg *Config, d Deps, log *slog.Logger) (*Gateway, error) {
 	engine, err := dispatch.New(o)
 	if err != nil {
 		return nil, err
+	}
+	if d.Connectors != nil {
+		d.Connectors.WithEgress(engine)
 	}
 	if log == nil {
 		log = pclog.Discard()

@@ -14,6 +14,8 @@ import (
 
 type fakeConnectors map[string]*upstream.Client
 
+func (f fakeConnectors) Fly(string, Flight) func() { return func() {} }
+
 func (f fakeConnectors) Client(id string) (*upstream.Client, error) {
 	if c, ok := f[id]; ok {
 		return c, nil

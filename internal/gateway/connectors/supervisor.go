@@ -6,9 +6,12 @@ package connectors
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"maps"
+	"net"
+	"net/http"
 	"os"
 	"slices"
 	"strings"
@@ -16,6 +19,7 @@ import (
 	"time"
 
 	"github.com/katocxl/pantherclaw/internal/gateway/control"
+	"github.com/katocxl/pantherclaw/internal/gateway/dispatch"
 	"github.com/katocxl/pantherclaw/internal/gateway/upstream"
 	pb "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
@@ -58,6 +62,15 @@ type Config struct {
 	// a connector connection is then never started, and calls to it fail
 	// unsent (HR-084).
 	Enabled bool `json:"enabled" env:"PC_GW_CONNECTORS_ENABLED"`
+	// EdgeImage is the edge's image (by digest, or a local id) in front of
+	// a connector with an egress connection (G0 M9 design decision 6).
+	EdgeImage string `json:"edge_image" env:"PC_GW_CONNECTORS_EDGE_IMAGE"`
+	// EgressListen is where the gateway's egress listener listens, and
+	// EgressAddr the host:port a connector's edge dials for it (for
+	// example host.docker.internal:8095 on Docker Desktop). Only requests
+	// carrying a running connector's binding token are taken.
+	EgressListen string `json:"egress_listen" env:"PC_GW_CONNECTORS_EGRESS_LISTEN"`
+	EgressAddr   string `json:"egress_addr" env:"PC_GW_CONNECTORS_EGRESS_ADDR"`
 }
 
 // Configuration is the gateway's current configuration (control.Store).
@@ -72,10 +85,12 @@ type Configuration interface {
 // host environment and no credential.
 type Supervisor struct {
 	c      *docker.Client
+	cfg    Config
 	engine docker.Engine
 	conf   Configuration
 	log    *slog.Logger
 	report Reporter
+	send   Egress
 
 	mu      sync.Mutex
 	running map[string]*instance
@@ -83,20 +98,25 @@ type Supervisor struct {
 }
 
 type instance struct {
-	id            string
-	revision      int32
-	name, network string
-	client        *upstream.Client
-	stdio         *Stdio
-	stdin         *io.PipeWriter
-	stop          context.CancelFunc
-	done          chan struct{}
+	id         string
+	connection string
+	// binding is the edge's token; egress the egress connection; dir the
+	// edge's private directory. flight is the call in flight.
+	binding, egress, dir string
+	flight               *dispatch.Flight
+	revision             int32
+	name, network        string
+	client               *upstream.Client
+	stdio                *Stdio
+	stdin                *io.PipeWriter
+	stop                 context.CancelFunc
+	done                 chan struct{}
 }
 
 // New returns a supervisor on this host's engine, which must pass the
 // sandbox's engine check (Docker 28 or later, Linux, seccomp, runc;
 // HR-218). The gateway must run as a host process, not inside a container.
-func New(ctx context.Context, c *docker.Client, conf Configuration, log *slog.Logger) (*Supervisor, error) {
+func New(ctx context.Context, c *docker.Client, cfg Config, conf Configuration, log *slog.Logger) (*Supervisor, error) {
 	if _, err := os.Stat("/.dockerenv"); err == nil {
 		return nil, errors.New("connectors: the gateway runs inside a container; connectors need a host process")
 	}
@@ -110,7 +130,7 @@ func New(ctx context.Context, c *docker.Client, conf Configuration, log *slog.Lo
 	if log == nil {
 		log = pclog.Discard()
 	}
-	return &Supervisor{c: c, engine: e, conf: conf, log: log, running: map[string]*instance{}, failed: map[string]time.Time{}}, nil
+	return &Supervisor{c: c, cfg: cfg, engine: e, conf: conf, log: log, running: map[string]*instance{}, failed: map[string]time.Time{}}, nil
 }
 
 // Client implements dispatch.Connectors.
@@ -132,6 +152,15 @@ func (s *Supervisor) Client(connection string) (*upstream.Client, error) {
 // Run keeps the connectors matched to the configuration until ctx ends,
 // then stops them all.
 func (s *Supervisor) Run(ctx context.Context) error {
+	if s.cfg.EgressListen != "" {
+		ln, err := (&net.ListenConfig{}).Listen(ctx, "tcp", s.cfg.EgressListen)
+		if err != nil {
+			return fmt.Errorf("connectors: egress listener: %w", err)
+		}
+		srv := &http.Server{Handler: s.egressHandler(), ReadHeaderTimeout: 10 * time.Second, MaxHeaderBytes: 16 << 10}
+		go func() { _ = srv.Serve(ln) }()
+		defer func() { _ = srv.Close() }()
+	}
 	t := time.NewTicker(SyncEvery)
 	defer t.Stop()
 	for {
@@ -223,6 +252,26 @@ func (s *Supervisor) start(ctx context.Context, c *control.Connection) error {
 	if _, err := s.c.CreateNetwork(ctx, docker.Network{Name: net, Internal: true, Labels: labels}); err != nil {
 		return fail("network", err)
 	}
+	var med mediated
+	egressID := spec.GetEgressConnectionId()
+	if egressID != "" {
+		var egressConn *control.Connection
+		if cfg := s.conf.Current(); cfg != nil {
+			egressConn = cfg.ByID[egressID]
+		}
+		if egressConn == nil {
+			_ = s.c.RemoveLabelled(context.WithoutCancel(ctx), id)
+			return fail("egress", errors.New("connectors: the egress connection is not served by this gateway"))
+		}
+		var err error
+		if med, err = s.startEdge(ctx, id, short, egressConn, net, labels); err != nil {
+			_ = s.c.RemoveLabelled(context.WithoutCancel(ctx), id)
+			if med.dir != "" {
+				_ = os.RemoveAll(med.dir)
+			}
+			return fail("edge", err)
+		}
+	}
 	env := make([]string, 0, len(spec.GetEnvironment())+len(spec.GetCredentialPlaceholders()))
 	for _, k := range slices.Sorted(maps.Keys(spec.GetEnvironment())) {
 		env = append(env, k+"="+spec.GetEnvironment()[k])
@@ -232,11 +281,15 @@ func (s *Supervisor) start(ctx context.Context, c *control.Connection) error {
 	}
 	l := spec.GetLimits()
 	if _, err := s.c.CreateContainer(ctx, docker.Container{
-		Name: name, Image: spec.GetImage(), User: User, Args: spec.GetCommand(), Networks: []string{net}, Env: env,
+		Name: name, Image: spec.GetImage(), User: User, Args: spec.GetCommand(), Networks: []string{net}, Env: append(env, med.env...),
+		Mounts: med.mounts, BindRoot: med.dir,
 		Runtime: s.engine.Runtime(), Labels: labels, Interactive: true,
 		Limits: docker.Limits{PIDs: int(l.GetPids()), MemoryMiB: int(l.GetMemoryMib()), MilliCPUs: int(l.GetMilliCpus())},
 	}); err != nil {
 		_ = s.c.RemoveLabelled(context.WithoutCancel(ctx), id)
+		if med.dir != "" {
+			_ = os.RemoveAll(med.dir)
+		}
 		return fail("container", err)
 	}
 	runCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
@@ -259,6 +312,7 @@ func (s *Supervisor) start(ctx context.Context, c *control.Connection) error {
 	s.mu.Lock()
 	s.running[id] = &instance{
 		id: run, revision: c.GetRevision(), name: name, network: net, stdio: stdio, stdin: inW, stop: cancel, done: done,
+		connection: id, binding: med.binding, egress: egressID, dir: med.dir,
 		client: upstream.New("http://connector.invalid/"+id, stdio),
 	}
 	delete(s.failed, id)
@@ -281,6 +335,9 @@ func (s *Supervisor) stop(ctx context.Context, id string) {
 	_ = in.stdin.Close() // os/exec waits for stdin's copy until the pipe closes
 	if err := s.c.RemoveLabelled(context.WithoutCancel(ctx), id); err != nil {
 		s.log.WarnContext(ctx, "gateway.connector_not_removed", slog.String("connection", id), pclog.Err(err))
+	}
+	if in.dir != "" {
+		_ = os.RemoveAll(in.dir)
 	}
 	select {
 	case <-in.done:
