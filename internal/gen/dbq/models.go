@@ -424,9 +424,11 @@ type PcCoverageClosure struct {
 	Runtime                string
 	ImageDigests           []string
 	ConfigSha256           []byte
+	ConfigChecks           []byte
 	GatewayID              ids.UUID
 	ConnectionRevision     int32
 	PackageVersionID       ids.UUID
+	CredentialVersion      *int32
 	SessionStartedAt       time.Time
 	ObservedAt             time.Time
 	ExpiresAt              time.Time

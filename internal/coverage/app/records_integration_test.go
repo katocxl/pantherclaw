@@ -17,10 +17,11 @@ import (
 )
 
 // TestHR211_AnEnforcedRecordReadsPartialAtOnceAfterAChange: an ENFORCED
-// record reads PARTIAL as soon as a change invalidates it, before any
-// reassessment, keeping the ENFORCED snapshot as its last valid record;
-// the reassessment then records the downgrade with the same last valid
-// record.
+// record lapses as soon as a change arrives, before any reassessment: it
+// is recomputed from current evidence and read at most PARTIAL, keeping
+// the ENFORCED snapshot as its last valid record; the reassessment then
+// records the downgrade with the same last valid record, and a later
+// change can read lower still.
 func TestHR211_AnEnforcedRecordReadsPartialAtOnceAfterAChange(t *testing.T) {
 	f := newFixture(t)
 	sc := domain.Scope{Agent: f.agent, Connection: f.conn, Operation: "payments.refund.create"}
@@ -44,7 +45,8 @@ func TestHR211_AnEnforcedRecordReadsPartialAtOnceAfterAChange(t *testing.T) {
 	f.exec(t, `UPDATE pc.connections SET allowed_hosts = '{api.example.com}' WHERE id = $1`, f.conn)
 	r, err := f.svc.GetCoverage(auditor, sc)
 	if err != nil || r.State != domain.Partial || r.Computed != domain.Enforced || len(r.Changes) != 1 ||
-		r.LastValid == nil || r.LastValid.ID != enforced.Snapshot.ID || r.Lapse != "invalidated:connection" {
+		r.LastValid == nil || r.LastValid.ID != enforced.Snapshot.ID || r.Lapse != "connection" || r.Recomputed == nil ||
+		r.Reasons[0] != app.ReasonLapsed+":connection" {
 		t.Fatalf("after the change, before reassessment: %v/%v lapse %q (%v)", r.State, r.Computed, r.Lapse, err)
 	}
 	f.reassessOrg(t)
@@ -56,6 +58,11 @@ func TestHR211_AnEnforcedRecordReadsPartialAtOnceAfterAChange(t *testing.T) {
 	list, next, err := f.svc.ListCoverage(f.as(td.RoleSecurityAdmin), app.Filter{Connection: &f.conn}, 10, "")
 	if err != nil || len(list) != 1 || list[0].State != domain.Partial || next != "" {
 		t.Fatalf("list %v %q (%v)", list, next, err)
+	}
+	f.exec(t, `INSERT INTO pc.connection_routes (org_id, connection_id, route, mode, changed_by)
+		VALUES ($1, $2, 'payments-refund', 'monitor', 'test')`, f.org, f.conn)
+	if r, err := f.svc.GetCoverage(auditor, sc); err != nil || r.State != domain.ObserveOnly || r.Lapse != "route_mode" {
+		t.Fatalf("monitor mode, before reassessment: %v lapse %q (%v)", r.State, r.Lapse, err)
 	}
 	if _, err := f.svc.GetCoverage(f.as(td.RoleViewer), sc); !errors.Is(err, td.ErrPermissionDenied(td.PermCoverageRead)) {
 		t.Fatalf("a viewer read coverage: %v", err)
