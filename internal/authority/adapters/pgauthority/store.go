@@ -445,6 +445,7 @@ func writeReceipt(ctx context.Context, tx db.TenantTx, org ids.OrgID, txn ids.UU
 	}
 	if err := dbq.New(tx).InsertEvaluationReceipt(ctx, dbq.InsertEvaluationReceiptParams{
 		OrgID: org, TransactionID: txn, Evaluation: int32(evaluation), ReceiptJws: r.JWS, LedgerEntryID: entry.ID, //nolint:gosec // ≤ 33
+		CoverageSnapshotID: r.CoverageSnapshot,
 	}); err != nil {
 		return err
 	}

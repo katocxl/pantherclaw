@@ -5,6 +5,7 @@ package finalize
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"time"
 
@@ -13,17 +14,31 @@ import (
 	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
 )
 
-// CoverageClaim is a decision receipt's coverage claim (G0 M9, HR-217):
-// the coverage snapshot that was current for the action's scope (agent,
-// connection, operation) at decision time, by id and the digest of its
-// ledger body, and its state as it read then. pclaw verify and evidence
-// packs check it against the snapshot's ledger entry: the scope matches,
-// the state is never stronger than the snapshot's, and an ENFORCED claim
-// is inside the snapshot's validity.
+// claimTimeout bounds the coverage read on the decision path: a slow read
+// drops the claim, never the decision (G0 M9 decision 3).
+const claimTimeout = 50 * time.Millisecond
+
+// CoverageClaim is a decision receipt's coverage claim (G0 M9, HR-217,
+// PAP-1 §9.1): the coverage snapshot that was current for the action's
+// scope at decision time, its state and exclusions, and the state effective
+// then. When the snapshot had lapsed, lapsed is true, reason says why
+// ("expired" or the invalidation kind) and state is the scope recomputed
+// at decision time, capped at PARTIAL. pclaw verify and evidence packs
+// check it against the snapshot ledger.
 type CoverageClaim struct {
-	State      string `json:"state"`
-	Snapshot   string `json:"snapshot"`
-	Digest     string `json:"digest"`
+	V             int                `json:"v"`
+	State         string             `json:"state"`
+	Snapshot      string             `json:"snapshot"`
+	Scope         CoverageClaimScope `json:"scope"`
+	SnapshotState string             `json:"snapshot_state"`
+	Lapsed        bool               `json:"lapsed"`
+	Reason        string             `json:"reason,omitzero"`
+	Exclusions    []string           `json:"exclusions"`
+	ExpiresAt     string             `json:"expires_at,omitzero"`
+}
+
+// CoverageClaimScope is the scope a claim is about.
+type CoverageClaimScope struct {
 	Agent      string `json:"agent"`
 	Connection string `json:"connection"`
 	Operation  string `json:"operation"`
@@ -36,8 +51,9 @@ type CoverageClaimer interface {
 }
 
 // coverageClaim is the claim of ev's scope, or nil: without a claimer or
-// a connection, or when the claim cannot be read (no claim is never a
-// stronger statement than a claim, so a failed read only drops it).
+// a connection, or when the claim cannot be read within claimTimeout (no
+// claim is never a stronger statement than a claim, so a failed read only
+// drops it, and the drop is logged).
 func (a *Authority) coverageClaim(ctx context.Context, org ids.OrgID, ev *pipeline.Evaluation) *CoverageClaim {
 	if a.Coverage == nil || ev.Connection == nil {
 		return nil
@@ -46,9 +62,16 @@ func (a *Authority) coverageClaim(ctx context.Context, org ids.OrgID, ev *pipeli
 	if err != nil {
 		return nil
 	}
-	claim, err := a.Coverage.CoverageClaim(ctx, org, agent, ev.Connection.ID, ev.Operation, ev.Now)
+	read, cancel := context.WithTimeout(ctx, claimTimeout)
+	defer cancel()
+	claim, err := a.Coverage.CoverageClaim(read, org, agent, ev.Connection.ID, ev.Operation, ev.Now)
 	if err != nil {
-		a.log(ctx).WarnContext(ctx, "coverage.claim_unavailable", slog.String("connection_id", ev.Connection.ID.String()), pclog.Err(err))
+		cause := "error"
+		if errors.Is(err, context.DeadlineExceeded) {
+			cause = "timeout"
+		}
+		a.log(ctx).WarnContext(ctx, "coverage.claim_dropped", slog.String("connection_id", ev.Connection.ID.String()),
+			slog.String("operation", ev.Operation), slog.String("cause", cause), pclog.Err(err))
 		return nil
 	}
 	return claim
