@@ -9,6 +9,7 @@ package app
 import (
 	"context"
 	"encoding/json/v2"
+	"log/slog"
 	"regexp"
 	"slices"
 	"time"
@@ -48,6 +49,15 @@ type Service struct {
 	Verifier TargetVerifier
 	// Clock checks closure times; nil is the wall clock.
 	Clock clock.Clock
+	// Log reports skipped scopes; nil is slog.Default().
+	Log *slog.Logger
+}
+
+func (s *Service) log() *slog.Logger {
+	if s.Log == nil {
+		return slog.Default()
+	}
+	return s.Log
 }
 
 func (s *Service) now() time.Time {

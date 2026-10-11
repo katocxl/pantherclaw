@@ -21,9 +21,10 @@ import (
 // themselves.
 var ErrHumanOnly = pcerr.New(pcerr.PermissionDenied, "HUMAN_ONLY", "only a person can do this")
 
-// Reassessed counts what a reassessment did.
+// Reassessed counts what a reassessment did: the scopes reassessed, the
+// snapshots recorded and the scopes skipped after an error.
 type Reassessed struct {
-	Scopes, Snapshots int
+	Scopes, Snapshots, Skipped int
 }
 
 // reassessScopes reassesses each scope in tx, in order.
