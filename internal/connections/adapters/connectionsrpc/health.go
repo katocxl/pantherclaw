@@ -35,7 +35,8 @@ func (h *Handler) GetConnectionHealth(ctx context.Context, req *pb.GetConnection
 		Connection: connectionOf(hl.Connection), DependentAgentsHidden: hl.AgentsHidden,
 		Deliveries: &pb.ConnectionDeliveries{
 			SinceTime: timestamppb.New(d.Since), FailedCount: d.Failed, UnknownCount: d.Unknown,
-			LastFailureTime: stamp(d.LastFailure), LastSuccessTime: stamp(d.LastSuccess),
+			LastFailureTime: stamp(d.LastFailure), LastSuccessTime: stamp(d.LastSuccess), DelegatedCount: d.Delegated,
+			LastDelegatedTime: stamp(d.LastDelegated),
 		},
 	}
 	if out.ActiveCredential, err = h.activeCredential(ctx, out.Connection); err != nil {

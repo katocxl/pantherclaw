@@ -164,8 +164,9 @@ func Declare(c Connection, p *domain.Package) Capabilities {
 				d.Operation + ": no verifier is declared, so its effect is recorded UNVERIFIABLE (M7).",
 			})
 		}
-		name := string(d.Access) + " " + d.Target.Type
-		permissions[name] = append(permissions[name], d.Operation+": "+d.Summary)
+		for _, name := range permissionNames(d) {
+			permissions[name] = append(permissions[name], d.Operation+": "+d.Summary)
+		}
 	}
 	if c.AccessMode != AccessHeld && c.AccessMode != AccessTargetEnforced {
 		// No credential of PantherClaw's is used for it.
@@ -175,6 +176,24 @@ func Declare(c Connection, p *domain.Package) Capabilities {
 		out.Permissions = append(out.Permissions, Permission{Name: name, Reasons: permissions[name]})
 	}
 	declareKind(&out, c)
+	monitored := 0
+	for _, o := range out.Operations {
+		if o.Mode == ModeMonitor {
+			monitored++
+		}
+	}
+	if monitored > 0 {
+		out.Enforcement.Level = Partial
+		out.Enforcement.Detail += " " + strconv.Itoa(monitored) + " of " + strconv.Itoa(len(out.Operations)) +
+			" routes are in monitor mode: decided and recorded, not enforced (HR-184)."
+	}
+	if out.Enforcement.Level != Supported {
+		// PantherClaw sees, records and stops only what comes through it.
+		for _, s := range []*Support{&out.Discovery, &out.Observation, &out.Response} {
+			s.Level = Partial
+			s.Detail += " Only for the calls that come through PantherClaw: see enforcement."
+		}
+	}
 	return out
 }
 
@@ -207,8 +226,10 @@ func declareKind(out *Capabilities, c Connection) {
 		out.Enforcement.Detail += " Only the gateway holds the credential, sealed to its broker key (HR-060)."
 		out.ResponseActions = append(out.ResponseActions, "revoke_credential", "rotate_credential")
 	case AccessTargetEnforced:
-		out.Enforcement.Detail += " The target refuses a call without a single-use action token (PAP-1 §10), which the gateway mints for its own " +
-			"requests and for those it hands an agent SDK (HR-201)."
+		out.Enforcement = Support{Partial, out.Enforcement.Detail + " The target is declared to refuse a call without a single-use " +
+			"action token (PAP-1 §10), which the gateway mints for its own requests and for those it hands an agent SDK (HR-201). " +
+			"That is a declaration, not evidence: only a passing target_verifier test shows it (HR-210)."}
+		out.Limits = append(out.Limits, Limit{"VERIFIER_NOT_SHOWN", "The target's token check is declared, not yet shown by a test."})
 	case AccessAgentHeld:
 		out.Enforcement = Support{Partial, out.Enforcement.Detail + " The agent holds its own credential and can call " +
 			"the target directly (F416); an agent SDK asks the SDK face first (HR-201)."}
@@ -218,4 +239,19 @@ func declareKind(out *Capabilities, c Connection) {
 			"call it directly."}
 		out.Limits = append(out.Limits, Limit{"OPEN_TARGET", "The target accepts calls that do not come through the gateway."})
 	}
+}
+
+// permissionNames are what definition d needs of the connection's
+// credential (F349): its credential scope, each name:level as the target
+// names it, or without one its access to its target type.
+func permissionNames(d *domain.Definition) []string {
+	scopes := d.Scopes()
+	if len(scopes) == 0 {
+		return []string{string(d.Access) + " " + d.Target.Type}
+	}
+	out := make([]string, 0, len(scopes))
+	for _, name := range slices.Sorted(maps.Keys(scopes)) {
+		out = append(out, name+":"+scopes[name])
+	}
+	return out
 }

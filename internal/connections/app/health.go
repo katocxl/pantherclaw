@@ -42,11 +42,15 @@ type Circuit struct {
 }
 
 // Deliveries are the outcomes recorded for a connection's actions since a
-// time; a zero time is none.
+// time; a zero time is none. Delegated counts the actions an agent ran
+// itself, whose result PantherClaw never learns: they are neither failures
+// nor successes (HR-024).
 type Deliveries struct {
 	Since                    time.Time
 	Failed, Unknown          int32
 	LastFailure, LastSuccess time.Time
+	Delegated                int32
+	LastDelegated            time.Time
 }
 
 // DependentAgent is an agent whose runs used a connection.
@@ -130,6 +134,7 @@ func (s *Service) Health(ctx context.Context, id ids.UUID) (Health, error) {
 		}
 		out.Deliveries.Failed, out.Deliveries.Unknown = d.Failed, d.Unknown
 		out.Deliveries.LastFailure, out.Deliveries.LastSuccess = unlessEpoch(d.LastFailureAt), unlessEpoch(d.LastSuccessAt)
+		out.Deliveries.Delegated, out.Deliveries.LastDelegated = d.Delegated, unlessEpoch(d.LastDelegatedAt)
 		if !seesAgents {
 			return nil
 		}

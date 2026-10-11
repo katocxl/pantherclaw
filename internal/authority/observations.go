@@ -52,7 +52,9 @@ func (s *Service) ObserveTool(ctx context.Context, gw Gateway, c *Credentials, r
 }
 
 // RecordToolObservation implements AuthorityServiceHandler: a workload
-// that does not verify is an answer, not an error, as for VerifyWorkload.
+// that does not verify is an answer, not an error, as for VerifyWorkload,
+// and so is a connection this gateway does not serve. A request must name
+// its run: the nil UUID would name none and skip its binding (HR-022).
 func (h *Handler) RecordToolObservation(ctx context.Context, req *pantherclawv1.RecordToolObservationRequest) (*pantherclawv1.RecordToolObservationResponse,
 	error,
 ) {
@@ -61,8 +63,8 @@ func (h *Handler) RecordToolObservation(ctx context.Context, req *pantherclawv1.
 		return nil, err
 	}
 	run, err := ids.ParseUUID(req.GetRunId())
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, "run_id must be a UUID")
+	if err != nil || run.IsZero() {
+		return nil, connect.NewError(connect.CodeInvalidArgument, "run_id must name a run")
 	}
 	conn, err := ids.ParseUUID(req.GetConnectionId())
 	if err != nil {
@@ -76,6 +78,9 @@ func (h *Handler) RecordToolObservation(ctx context.Context, req *pantherclawv1.
 		out.ErrorCode = string(pe.Code)
 	case errors.Is(err, ErrAgentUnusable):
 		out.ErrorCode = "agent_unusable"
+	case errors.Is(err, capp.ErrNotServed):
+		// The gateway's configuration is stale: nothing is recorded.
+		out.ErrorCode = "connection_not_served"
 	case err != nil:
 		return nil, err
 	default:

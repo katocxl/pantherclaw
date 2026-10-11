@@ -156,7 +156,7 @@ pclaw connection health <connection-id>         # circuits, permissions, tests, 
 **Capabilities** follow from the connection's kind, access mode and pinned package, never from a setting (F346):
 - discovery, observation, enforcement and response, each `SUPPORTED`, `PARTIAL` or `UNSUPPORTED`, with the reason. Only an `http` connection whose credential PantherClaw holds, or whose target checks action tokens, declares enforcement `SUPPORTED`. An `mcp` connection (opaque, HR-086), an agent-held or open target, and a `local` connection (cooperative, HR-024) declare `PARTIAL`;
 - the operations it serves, with each route's mode;
-- the permissions PantherClaw's credential is used for, each with the operations that need it;
+- the permissions PantherClaw's credential is used for, each with the operations that need it: the definition's `credential_scope` (`contents:write`), or without one its access to its target type (`write payments.charge`);
 - its limits and failure behaviour;
 - its last successful test.
 
@@ -176,4 +176,4 @@ Every result is kept. A failed test names the check that failed and does not rep
 
 The result shows in `pclaw connection health` and, once passed, as the last successful test.
 
-**Health** (F358) shows the connection and its active credential, each gateway's circuit, the permissions its credential is used for, its latest and last successful tests, and the failed and `UNKNOWN` outcomes of the last 24 hours with the latest failure and success. It also lists the agents whose runs used the connection in the last 30 days, and the agents whose active grants allow an operation it serves (they would stop working without it), at most 50 each, but only to readers who may read agents org-wide; for anyone else both lists are marked hidden.
+**Health** (F358) shows the connection and its active credential, each gateway's circuit, the permissions its credential is used for, its latest and last successful tests, and the failed and `UNKNOWN` outcomes of the last 24 hours with the latest failure and success. An action the agent ran itself (`delegated`) is counted apart and never as a success: PantherClaw never learns its result. A test is shown with its kind; a `credential` test checks only the configuration and never reaches the target. It also lists the agents whose runs used the connection in the last 30 days, and the agents whose active grants allow an operation it serves (they would stop working without it), at most 50 each, but only to readers who may read agents org-wide; for anyone else both lists are marked hidden.

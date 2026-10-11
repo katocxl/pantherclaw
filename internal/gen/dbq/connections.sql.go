@@ -70,31 +70,38 @@ func (q *Queries) CloseCircuits(ctx context.Context, orgID ids.OrgID, connection
 const connectionDeliveries = `-- name: ConnectionDeliveries :one
 SELECT count(*) FILTER (WHERE a.outcome = 'failed')::integer AS failed,
     count(*) FILTER (WHERE a.outcome = 'unknown')::integer AS unknown,
+    count(*) FILTER (WHERE a.outcome = 'delegated')::integer AS delegated,
     coalesce(max(a.recorded_at) FILTER (WHERE a.outcome IN ('failed', 'unknown')), 'epoch')::timestamptz AS last_failure_at,
-    coalesce(max(a.recorded_at) FILTER (WHERE a.outcome IN ('accepted', 'delegated')), 'epoch')::timestamptz AS last_success_at
+    coalesce(max(a.recorded_at) FILTER (WHERE a.outcome = 'accepted'), 'epoch')::timestamptz AS last_success_at,
+    coalesce(max(a.recorded_at) FILTER (WHERE a.outcome = 'delegated'), 'epoch')::timestamptz AS last_delegated_at
 FROM pc.transactions t
 JOIN pc.execution_attempts a ON a.org_id = t.org_id AND a.transaction_id = t.id
 WHERE t.org_id = $1 AND t.connection_id = $2 AND t.created_at >= $3::timestamptz
 `
 
 type ConnectionDeliveriesRow struct {
-	Failed        int32
-	Unknown       int32
-	LastFailureAt time.Time
-	LastSuccessAt time.Time
+	Failed          int32
+	Unknown         int32
+	Delegated       int32
+	LastFailureAt   time.Time
+	LastSuccessAt   time.Time
+	LastDelegatedAt time.Time
 }
 
 // Outcomes recorded for a connection's actions since a time (F358):
-// failures, unknown outcomes, and the latest of each kind (the epoch for
-// none).
+// failures, unknown outcomes, actions an agent ran itself (delegated:
+// PantherClaw never learns their result, so they are no evidence of
+// success), and the latest of each kind (the epoch for none).
 func (q *Queries) ConnectionDeliveries(ctx context.Context, orgID ids.OrgID, connectionID *ids.UUID, since time.Time) (ConnectionDeliveriesRow, error) {
 	row := q.db.QueryRow(ctx, connectionDeliveries, orgID, connectionID, since)
 	var i ConnectionDeliveriesRow
 	err := row.Scan(
 		&i.Failed,
 		&i.Unknown,
+		&i.Delegated,
 		&i.LastFailureAt,
 		&i.LastSuccessAt,
+		&i.LastDelegatedAt,
 	)
 	return i, err
 }
