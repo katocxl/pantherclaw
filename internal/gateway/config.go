@@ -18,6 +18,7 @@ import (
 	"regexp"
 	"time"
 
+	"github.com/katocxl/pantherclaw/internal/gateway/connectors"
 	"github.com/katocxl/pantherclaw/internal/platform/config"
 	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
 )
@@ -80,6 +81,10 @@ type Config struct {
 		// when it changes.
 		ApproverKeysFile string `json:"approver_keys_file" env:"PC_GW_APPROVALS_APPROVER_KEYS_FILE"`
 	} `json:"approvals"`
+	// Connectors runs connector connections (G0 M9 track C): off unless
+	// enabled, and only on a customer-hosted gateway that runs as a host
+	// process (HR-084).
+	Connectors connectors.Config `json:"connectors"`
 }
 
 // DefaultConfig returns development defaults.

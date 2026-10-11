@@ -86,9 +86,9 @@ tasks:
         go test -tags integration -shuffle=on -count=1 {{.PKGS | default "./..."}}
 
   test:sandbox:
-    desc: Docker sandbox tests (G0 M9; needs Docker ≥ 28; they create and remove their own uniquely named networks and containers; PKGS=./x/... narrows them)
+    desc: Docker sandbox and connector tests (G0 M9; needs Docker ≥ 28; they create and remove their own uniquely named networks and containers; PKGS=./x/... narrows them)
     cmds:
-      - PC_TEST_SANDBOX=1 go test -tags sandbox -count=1 {{.PKGS | default "./internal/sandbox/..."}}
+      - PC_TEST_SANDBOX=1 go test -tags sandbox -count=1 {{.PKGS | default "./internal/sandbox/... ./internal/gateway/connectors/..."}}
 
   sandbox:images:
     desc: Build the sandbox's edge and probe images locally (static Linux builds on the pinned distroless base) and print their ids, which pclaw's sandbox.images settings name (G0 M9)

@@ -234,8 +234,9 @@ type ContainerInfo struct {
 	ID     string `json:"Id"`
 	Name   string `json:"Name"`
 	Config struct {
-		User  string `json:"User"`
-		Image string `json:"Image"`
+		User  string   `json:"User"`
+		Image string   `json:"Image"`
+		Env   []string `json:"Env"`
 	} `json:"Config"`
 	HostConfig struct {
 		NetworkMode     string                    `json:"NetworkMode"`

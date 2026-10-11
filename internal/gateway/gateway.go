@@ -15,6 +15,7 @@ import (
 
 	"github.com/katocxl/pantherclaw/internal/approvals/proof"
 	"github.com/katocxl/pantherclaw/internal/gateway/broker"
+	"github.com/katocxl/pantherclaw/internal/gateway/connectors"
 	"github.com/katocxl/pantherclaw/internal/gateway/control"
 	"github.com/katocxl/pantherclaw/internal/gateway/dispatch"
 	"github.com/katocxl/pantherclaw/internal/gateway/hook"
@@ -23,6 +24,7 @@ import (
 	pb "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
 	"github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1/pantherclawv1connect"
 	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
+	"github.com/katocxl/pantherclaw/internal/sandbox/docker"
 )
 
 // PAP/1 request headers, for clients of the gateway (dispatch).
@@ -106,6 +108,9 @@ type Deps struct {
 	// Verifications claims and reports verification tasks (G0 M7); nil
 	// makes no verification reads.
 	Verifications Verifications
+	// Connectors runs the connector connections; nil when they are not
+	// enabled.
+	Connectors *connectors.Supervisor
 	// Run is background work (certificate renewal, the containment stream,
 	// configuration sync); nil for none.
 	Run []func(ctx context.Context) error
@@ -156,6 +161,14 @@ func New(ctx context.Context, cfg *Config, id *control.Identity, log *slog.Logge
 		}, log)
 		d.Run = append(d.Run, d.Broker.Run)
 	}
+	if cfg.Connectors.Enabled {
+		sup, err := connectors.New(ctx, docker.New(docker.CLI{}), store, log)
+		if err != nil {
+			return nil, err
+		}
+		d.Connectors = sup
+		d.Run = append(d.Run, sup.Run)
+	}
 	return newGateway(cfg, d, log)
 }
 
@@ -171,6 +184,9 @@ func newGateway(cfg *Config, d Deps, log *slog.Logger) (*Gateway, error) {
 		Org: d.Org, GatewayID: d.GatewayID, Authority: d.Authority, JWKSURL: d.JWKSURL, JWKSClient: d.JWKSClient,
 		Containment: d.Containment, AllowedPrefixes: prefixes, ReportCircuit: d.ReportCircuit, Log: log,
 		Approvers: proof.NewPinned(cfg.Approvals.ApproverKeysFile, d.Org),
+	}
+	if d.Connectors != nil {
+		o.Connectors = d.Connectors
 	}
 	if d.Broker != nil {
 		o.Broker = d.Broker
