@@ -6,6 +6,7 @@ package github
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json/jsontext"
 	"encoding/json/v2"
 	"net/http"
@@ -21,6 +22,8 @@ var MCPTools = []jsontext.Value{
 	tool("get_file_contents", "Get the contents of a file or directory.", `"owner","repo"`, `"owner":{"type":"string"},"repo":{"type":"string"},"path":{"type":"string"},"ref":{"type":"string"}`),
 	tool("list_branches", "List branches in a repository.", `"owner","repo"`, `"owner":{"type":"string"},"repo":{"type":"string"},"page":{"type":"number"}`),
 	tool("create_branch", "Create a new branch.", `"owner","repo","branch"`, `"owner":{"type":"string"},"repo":{"type":"string"},"branch":{"type":"string"},"from_branch":{"type":"string"}`),
+	tool("create_or_update_file", "Create or update a single file in a repository.", `"owner","repo","path","content","message","branch"`,
+		`"owner":{"type":"string"},"repo":{"type":"string"},"path":{"type":"string"},"content":{"type":"string"},"message":{"type":"string"},"branch":{"type":"string"},"sha":{"type":"string"}`),
 	tool("create_pull_request", "Create a new pull request.", `"owner","repo","title","head","base"`,
 		`"owner":{"type":"string"},"repo":{"type":"string"},"title":{"type":"string"},"body":{"type":"string"},"head":{"type":"string"},"base":{"type":"string"},"draft":{"type":"boolean"}`),
 	tool("pull_request_read", "Read a pull request: get or get_reviews.", `"method","owner","repo","pullNumber"`,
@@ -54,6 +57,9 @@ type toolArgs struct {
 	ExpectedHeadSHA string `json:"expectedHeadSha"`
 	CommitTitle     string `json:"commit_title"`
 	CommitMessage   string `json:"commit_message"`
+	Content         string `json:"content"`
+	Message         string `json:"message"`
+	SHA             string `json:"sha"`
 }
 
 // CallTool runs one of MCPTools as the GitHub MCP server does: it calls
@@ -84,6 +90,13 @@ func (s *Server) CallTool(ctx context.Context, token, name string, args jsontext
 			from, _ = s.RepoSettings(a.Owner + "/" + a.Repo)
 		}
 		method, path, body = http.MethodPost, repo+"/git/refs", map[string]string{"ref": "refs/heads/" + a.Branch, "sha": s.Branch(a.Owner+"/"+a.Repo, from)}
+	case "create_or_update_file":
+		// The real server takes the content as text and encodes it.
+		put := map[string]string{"message": a.Message, "content": base64.StdEncoding.EncodeToString([]byte(a.Content)), "branch": a.Branch}
+		if a.SHA != "" {
+			put["sha"] = a.SHA
+		}
+		method, path, body = http.MethodPut, repo+"/contents/"+a.Path, put
 	case "create_pull_request":
 		method, path, body = http.MethodPost, repo+"/pulls", map[string]any{"title": a.Title, "body": a.Body, "head": a.Head, "base": a.Base, "draft": a.Draft}
 	case "pull_request_read":

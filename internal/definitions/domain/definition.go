@@ -78,12 +78,10 @@ type Definition struct {
 	Mappings      []Mapping            `json:"mappings"`
 	// Dispatch is the outbound request template (G0 M6, HR-075).
 	Dispatch *Dispatch `json:"dispatch,omitzero"`
-	// CredentialScopes are the least privileges of the connection's
-	// credential the operation needs, in the target's terms, as
-	// name:level (G0 M8; for GitHub an App permission such as
-	// contents:write). A broker that mints a credential per action asks
-	// for exactly these (HR-203); a static credential ignores them.
-	CredentialScopes []string `json:"credential_scopes,omitzero"`
+	// Test marks the harmless read a connection test runs (G0 M8, C2): a
+	// read with an HTTP GET dispatch template and no required params; at
+	// most one per package.
+	Test bool `json:"test,omitzero"`
 
 	// Digest is "sha256:<hex>" of the canonical JSON of this definition,
 	// mappings included. It is what ActionIR pins (definition.digest) and
@@ -156,6 +154,10 @@ type RetrySpec struct {
 type ApprovalTemplate struct {
 	Title  string   `json:"title"`
 	Fields []string `json:"fields"`
+	// InvalidateOn names a prerequisite fact whose change supersedes every
+	// unconsumed approval request for the same target (G0 M8, HR-205: a
+	// pull request's new head, github.pull.head).
+	InvalidateOn string `json:"invalidate_on,omitzero"`
 }
 
 // Basis is where the evidence for a definition comes from (F391).
@@ -203,8 +205,7 @@ var (
 	holderRe = regexp.MustCompile(`\{([^{}]*)\}`)
 	// partRe is a named group of a target id pattern, which a template
 	// references as target.id.<name>.
-	partRe  = regexp.MustCompile(`^[a-z][a-z0-9_]{0,31}$`)
-	scopeRe = regexp.MustCompile(`^([a-z][a-z0-9_]{0,63}):([a-z]{1,16})$`)
+	partRe = regexp.MustCompile(`^[a-z][a-z0-9_]{0,31}$`)
 )
 
 const (
@@ -239,10 +240,15 @@ func (d *Definition) Validate() error {
 		return invalid("%s: 1..%d effects and at most %d side effects", op, maxItems, maxItems)
 	case len(d.Params) > maxItems || len(d.Mappings) > maxItems:
 		return invalid("%s: at most %d params and %d mappings", op, maxItems, maxItems)
-	case len(d.Mappings) == 0 && d.Access != AccessRead:
-		// A read without mappings is internal: only a verifier or a target
-		// log may use it (Package.Validate), never an agent.
-		return invalid("%s: a write needs 1..%d mappings", op, maxItems)
+	case len(d.Mappings) == 0 && d.Access != AccessRead && d.Dispatch != nil:
+		// A read without mappings is internal: only a verifier, a target
+		// log or a connection test may use it, never an agent. A write
+		// without mappings is virtual: never dispatched, it only names a
+		// consequence of this package (Package.Validate).
+		return invalid("%s: a write needs 1..%d mappings, or no dispatch when it is a consequence", op, maxItems)
+	case d.Test && (d.Access != AccessRead || d.Dispatch == nil || d.Dispatch.HTTP == nil || d.Dispatch.HTTP.Method != methods[0] ||
+		slices.ContainsFunc(slices.Collect(maps.Values(d.Params)), func(p ParamSpec) bool { return p.Required })):
+		return invalid("%s: a connection test is a read with an HTTP GET template and no required params", op)
 	}
 	if err := text(op+": summary", d.Summary); err != nil {
 		return err
@@ -296,39 +302,7 @@ func (d *Definition) Validate() error {
 			return err
 		}
 	}
-	if err := d.validateScopes(); err != nil {
-		return err
-	}
 	return d.validateDispatch()
-}
-
-// validateScopes checks the credential scopes: at most 16, each name:level
-// and each name once, so that no operation asks for two levels of one
-// privilege.
-func (d *Definition) validateScopes() error {
-	if len(d.CredentialScopes) > 16 {
-		return invalid("%s: at most 16 credential_scopes", d.Operation)
-	}
-	seen := map[string]bool{}
-	for _, s := range d.CredentialScopes {
-		m := scopeRe.FindStringSubmatch(s)
-		if m == nil || seen[m[1]] {
-			return invalid("%s: credential scope %q must be name:level, each name once", d.Operation, s)
-		}
-		seen[m[1]] = true
-	}
-	return nil
-}
-
-// Scopes returns the credential scopes as name to level.
-func (d *Definition) Scopes() map[string]string {
-	out := make(map[string]string, len(d.CredentialScopes))
-	for _, s := range d.CredentialScopes {
-		if name, level, ok := strings.Cut(s, ":"); ok {
-			out[name] = level
-		}
-	}
-	return out
 }
 
 func (t TargetSpec) validate(op string) error {
@@ -442,6 +416,9 @@ func (d *Definition) validateApproval() error {
 	}
 	if len(a.Fields) == 0 || len(a.Fields) > maxItems {
 		return invalid("%s: approval needs 1..%d fields", d.Operation, maxItems)
+	}
+	if a.InvalidateOn != "" && !d.prerequisiteField("facts."+a.InvalidateOn) {
+		return invalid("%s: approval.invalidate_on names %q, which is not a prerequisite fact", d.Operation, a.InvalidateOn)
 	}
 	refs := a.Fields
 	for _, m := range holderRe.FindAllStringSubmatch(a.Title, -1) {

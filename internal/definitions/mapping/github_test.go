@@ -16,7 +16,13 @@ import (
 	pcgithub "github.com/katocxl/pantherclaw/packages/pc-github"
 )
 
-const headSHA = "0123456789abcdef0123456789abcdef01234567"
+const (
+	headSHA = "0123456789abcdef0123456789abcdef01234567"
+	blobSHA = "89abcdef0123456789abcdef0123456789abcdef"
+	// parserGo is "package parser\n", base64-encoded as the contents API
+	// takes it.
+	parserGo = "cGFja2FnZSBwYXJzZXIK"
+)
 
 // githubCall is one effect asked for through the GitHub MCP server's tool
 // and through the REST route it calls.
@@ -26,21 +32,25 @@ type githubCall struct {
 }
 
 var githubCalls = []githubCall{
-	{"get_repository", `{"owner":"acme","repo":"payments"}`, "GET", "/repos/acme/payments", "", ""},
 	{
-		"get_file_contents", `{"owner":"acme","repo":"payments","path":"README.md","ref":"main"}`,
-		"GET", "/repos/acme/payments/contents/README.md", "ref=main", "",
+		"get_file_contents", `{"owner":"acme","repo":"payments","path":"src/parser/main.go","ref":"main"}`,
+		"GET", "/repos/acme/payments/contents/src/parser/main.go", "ref=main", "",
 	},
-	{"list_branches", `{"owner":"acme","repo":".github","page":2}`, "GET", "/repos/acme/.github/branches", "page=2", ""},
+	{"pull_request_read", `{"method":"get","owner":"acme","repo":"payments","pullNumber":7}`, "GET", "/repos/acme/payments/pulls/7", "", ""},
 	{
-		"create_branch", `{"owner":"acme","repo":"payments","branch":"fix/cve-2026-1234","sha":"` + headSHA + `"}`,
-		"POST", "/repos/acme/payments/git/refs", "", `{"ref":"refs/heads/fix/cve-2026-1234","sha":"` + headSHA + `"}`,
+		"create_branch", `{"owner":"acme","repo":".github","branch":"fix/cve-2026-1234","sha":"` + headSHA + `"}`,
+		"POST", "/repos/acme/.github/git/refs", "", `{"ref":"refs/heads/fix/cve-2026-1234","sha":"` + headSHA + `"}`,
+	},
+	{
+		"create_or_update_file",
+		`{"owner":"acme","repo":"payments","path":"src/parser.go","content":"` + parserGo + `","message":"Fix the parser\n","branch":"fix/cve-2026-1234","sha":"` + blobSHA + `"}`,
+		"PUT", "/repos/acme/payments/contents/src/parser.go", "",
+		`{"content":"` + parserGo + `","message":"Fix the parser\n","branch":"fix/cve-2026-1234","sha":"` + blobSHA + `"}`,
 	},
 	{
 		"create_pull_request", `{"owner":"acme","repo":"payments","title":"Fix CVE-2026-1234","body":"Bumps the parser.\n","head":"fix/cve-2026-1234","base":"main","draft":false}`,
 		"POST", "/repos/acme/payments/pulls", "", `{"title":"Fix CVE-2026-1234","body":"Bumps the parser.\n","head":"fix/cve-2026-1234","base":"main","draft":false}`,
 	},
-	{"get_pull_request_reviews", `{"owner":"acme","repo":"payments","pullNumber":7}`, "GET", "/repos/acme/payments/pulls/7/reviews", "", ""},
 	{
 		"merge_pull_request", `{"owner":"acme","repo":"payments","pullNumber":7,"expectedHeadSha":"` + headSHA + `","merge_method":"squash"}`,
 		"PUT", "/repos/acme/payments/pulls/7/merge", "", `{"sha":"` + headSHA + `","merge_method":"squash"}`,
@@ -148,19 +158,34 @@ func TestHR205_AGitHubMergeNeedsAnExactHead(t *testing.T) {
 	}
 }
 
-// TestGitHubContentsReadsOneSegment: a file below the top of the
-// repository is not mapped yet, on either channel, because a template
-// sends a value as one path segment (HR-073).
-func TestGitHubContentsReadsOneSegment(t *testing.T) {
+// TestGitHubContentsWritesNeverTouchGitHubDirectory: a write under .github/
+// is refused on both channels (CANNOT_AUTHORIZE), so an agent cannot
+// rewrite the workflows its merges are judged by; reads there are fine.
+func TestGitHubContentsWritesNeverTouchGitHubDirectory(t *testing.T) {
 	m := githubMapper(t)
 	ctx := context.Background()
-	if _, err := m.HTTP(ctx, tc, "GET", "/repos/acme/payments/contents/src/main.go", "", nil); !errors.Is(err, ErrUnmapped) {
-		t.Errorf("nested REST path: %v", err)
+	body := `{"content":"` + parserGo + `","message":"x","branch":"main"}`
+	for _, path := range []string{".github/workflows/deploy.yml", ".github/actions/x/action.yml", ".github", ".github/CODEOWNERS"} {
+		args := `{"owner":"acme","repo":"payments","path":"` + path + `","content":"` + parserGo + `","message":"x","branch":"main"}`
+		if _, err := m.MCP(ctx, tc, "create_or_update_file", []byte(args)); !errors.Is(err, actionir.ErrAmbiguous) {
+			t.Errorf("mcp %s: %v", path, err)
+		}
+		if _, err := m.HTTP(ctx, tc, "PUT", "/repos/acme/payments/contents/"+path, "", []byte(body)); !errors.Is(err, actionir.ErrAmbiguous) {
+			t.Errorf("http %s: %v", path, err)
+		}
 	}
-	for _, path := range []string{"src/main.go", "..", ".", "a%2Fb"} {
-		args := `{"owner":"acme","repo":"payments","path":"` + path + `"}`
-		if _, err := m.MCP(ctx, tc, "get_file_contents", []byte(args)); !errors.Is(err, actionir.ErrAmbiguous) {
-			t.Errorf("path %q: %v", path, err)
+	for _, path := range []string{".githubx/a", "docs/.github/x", ".gitignore"} {
+		args := `{"owner":"acme","repo":"payments","path":"` + path + `","content":"` + parserGo + `","message":"x","branch":"main"}`
+		if _, err := m.MCP(ctx, tc, "create_or_update_file", []byte(args)); err != nil {
+			t.Errorf("mcp %s: %v", path, err)
+		}
+	}
+	if _, err := m.HTTP(ctx, tc, "GET", "/repos/acme/payments/contents/.github/workflows/deploy.yml", "", nil); err != nil {
+		t.Fatalf("reading a workflow: %v", err)
+	}
+	for _, path := range []string{"src/../.github/x", "src//x", "src%2Fx"} {
+		if _, err := m.HTTP(ctx, tc, "PUT", "/repos/acme/payments/contents/"+path, "", []byte(body)); err == nil {
+			t.Errorf("http %s mapped", path)
 		}
 	}
 }
