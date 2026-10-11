@@ -34,3 +34,10 @@ test("conformance exchanges: token issuance, long-polls and the SSE stream", asy
     assert.deepEqual(states, e.states ?? [], e.name);
   }
 });
+
+test("a wait answer or event with a duplicate member is refused", async () => {
+  assert.throws(() => parseWaitResponse('{"wait":{"handle":"h","state":"WAIT_STATE_DECLINED","state":"WAIT_STATE_READY"}}'));
+  const LF = String.fromCharCode(10);
+  const stream = new Blob([`event: state${LF}data: {"handle":"h","state":"DECLINED","state":"READY"}${LF}${LF}`]).stream();
+  await assert.rejects(readStream(stream, () => true));
+});
