@@ -33,7 +33,7 @@ import (
 // refund the org's policy holds answers hold with the wait handle; once
 // bob approves it, the identical call with the same action id is allowed
 // and its request accepted. A built-in tool is allowed OBSERVE_ONLY
-// without a decision.
+// without a decision, and the Authority records it (HR-200).
 func TestE2E_M8_SDKFace(t *testing.T) {
 	p := inProcessIdP(t)
 	s := start(t, options{budget: "1000.00", people: &p, access: capp.AccessTargetEnforced, actionTokens: true})
@@ -88,6 +88,9 @@ func TestE2E_M8_SDKFace(t *testing.T) {
 	observed := s.sdk(t, "", `{"tool":"Read","input":{"file_path":"/etc/hosts"},"tool_use_id":"toolu_read"}`)
 	if observed.Decision != "allow" || observed.Coverage != sdk.CoverageObserveOnly || observed.TransactionID != "" {
 		t.Fatalf("built-in tool: %+v", observed)
+	}
+	if got := s.row(t, `SELECT tool || ' ' || channel FROM pc.tool_observations WHERE connection_id = $1`, s.conn); got != "Read sdk" {
+		t.Fatalf("observation recorded %q", got)
 	}
 }
 

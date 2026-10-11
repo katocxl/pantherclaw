@@ -267,7 +267,8 @@ func TestHR200_TheSDKFaceAllowsOnlyWhatWasRecordedDelegated(t *testing.T) {
 // TestHR200_BuiltInToolsAreObservedOnly: a tool the agent SDK has built in
 // (Read, or Bash when the application only observes the shell, HR-200) is
 // allowed and labeled OBSERVE_ONLY once the Authority verified the
-// workload in its run, without a decision; an unverified workload is 401,
+// workload in its run and recorded its name and input digest, without a
+// decision; an unverified workload is 401,
 // and an unreachable Authority is no answer to rely on.
 func TestHR200_BuiltInToolsAreObservedOnly(t *testing.T) {
 	h := setup(t, withAgentHeld)
@@ -281,9 +282,13 @@ func TestHR200_BuiltInToolsAreObservedOnly(t *testing.T) {
 	}
 	h.auth.mu.Lock()
 	verified := append([]string(nil), h.auth.verifiedRuns...)
+	observed := append([]*pb.RecordToolObservationRequest(nil), h.auth.observed...)
 	h.auth.mu.Unlock()
-	if h.auth.snap().authorize != 0 || len(verified) != 2 || verified[0] != run {
-		t.Fatalf("verified %v", verified)
+	input := sha256.Sum256([]byte(`{"file_path":"/etc/hosts"}`))
+	if h.auth.snap().authorize != 0 || len(verified) != 2 || verified[0] != run || len(observed) != 2 ||
+		observed[1].GetTool() != "Bash" || observed[1].GetRunId() != run || observed[1].GetConnectionId() != connID ||
+		!bytes.Equal(observed[1].GetInputSha256(), input[:]) {
+		t.Fatalf("verified %v, observed %+v", verified, observed)
 	}
 	h.auth.setIdentity("invalid_proof")
 	if r := h.sdk(t, `{"tool":"Write","input":{},"tool_use_id":"toolu_02"}`, nil); r.code != http.StatusUnauthorized ||
@@ -330,4 +335,17 @@ func TestHR201_TheSDKEndpointRefusesWhatIsNotAnSDKCall(t *testing.T) {
 	if resp.StatusCode != http.StatusMethodNotAllowed {
 		t.Fatalf("GET: %d", resp.StatusCode)
 	}
+}
+
+// RecordToolObservation verifies as VerifyWorkload does and keeps what a
+// verified workload's observation names.
+func (f *fakeAuthority) RecordToolObservation(ctx context.Context, req *pb.RecordToolObservationRequest) (*pb.RecordToolObservationResponse, error) {
+	v, err := f.VerifyWorkload(ctx, &pb.VerifyWorkloadRequest{Workload: req.GetWorkload(), RunId: req.GetRunId()})
+	if err != nil || !v.GetVerified() {
+		return &pb.RecordToolObservationResponse{ErrorCode: v.GetErrorCode(), Nonce: v.GetNonce()}, err
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.observed = append(f.observed, req)
+	return &pb.RecordToolObservationResponse{Verified: true, InstanceId: v.GetInstanceId(), Nonce: v.GetNonce(), ObservationId: ids.NewV7().String()}, nil
 }

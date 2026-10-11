@@ -1913,6 +1913,172 @@ func (x *VerifyWorkloadResponse) GetRunExpiresAt() *timestamppb.Timestamp {
 	return nil
 }
 
+// RecordToolObservationRequest is one tool call an agent SDK runs without a
+// mapping.
+type RecordToolObservationRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The request's credentials, as for Authorize.
+	Workload *WorkloadCredentials `protobuf:"bytes,1,opt,name=workload,proto3" json:"workload,omitempty"`
+	// The run (PAP-Run-Id); the instance must be allowed to use it (HR-022).
+	RunId string `protobuf:"bytes,2,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
+	// The connection the call came through.
+	ConnectionId string `protobuf:"bytes,3,opt,name=connection_id,json=connectionId,proto3" json:"connection_id,omitempty"`
+	// The tool's name as the agent SDK sent it (UNTRUSTED).
+	Tool string `protobuf:"bytes,4,opt,name=tool,proto3" json:"tool,omitempty"`
+	// SHA-256 of the tool's input as received.
+	InputSha256   []byte `protobuf:"bytes,5,opt,name=input_sha256,json=inputSha256,proto3" json:"input_sha256,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RecordToolObservationRequest) Reset() {
+	*x = RecordToolObservationRequest{}
+	mi := &file_pantherclaw_v1_authority_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RecordToolObservationRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RecordToolObservationRequest) ProtoMessage() {}
+
+func (x *RecordToolObservationRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_authority_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RecordToolObservationRequest.ProtoReflect.Descriptor instead.
+func (*RecordToolObservationRequest) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_authority_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *RecordToolObservationRequest) GetWorkload() *WorkloadCredentials {
+	if x != nil {
+		return x.Workload
+	}
+	return nil
+}
+
+func (x *RecordToolObservationRequest) GetRunId() string {
+	if x != nil {
+		return x.RunId
+	}
+	return ""
+}
+
+func (x *RecordToolObservationRequest) GetConnectionId() string {
+	if x != nil {
+		return x.ConnectionId
+	}
+	return ""
+}
+
+func (x *RecordToolObservationRequest) GetTool() string {
+	if x != nil {
+		return x.Tool
+	}
+	return ""
+}
+
+func (x *RecordToolObservationRequest) GetInputSha256() []byte {
+	if x != nil {
+		return x.InputSha256
+	}
+	return nil
+}
+
+// RecordToolObservationResponse says whether the workload verified and the
+// observation was recorded.
+type RecordToolObservationResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Whether the credentials verified and the observation was recorded.
+	Verified bool `protobuf:"varint,1,opt,name=verified,proto3" json:"verified,omitempty"`
+	// When not verified: the PAP-Error code, or `agent_unusable`.
+	ErrorCode string `protobuf:"bytes,2,opt,name=error_code,json=errorCode,proto3" json:"error_code,omitempty"`
+	// The verified instance.
+	InstanceId string `protobuf:"bytes,3,opt,name=instance_id,json=instanceId,proto3" json:"instance_id,omitempty"`
+	// Current nonce, for the PAP-Nonce response header.
+	Nonce string `protobuf:"bytes,4,opt,name=nonce,proto3" json:"nonce,omitempty"`
+	// The observation's id.
+	ObservationId string `protobuf:"bytes,5,opt,name=observation_id,json=observationId,proto3" json:"observation_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RecordToolObservationResponse) Reset() {
+	*x = RecordToolObservationResponse{}
+	mi := &file_pantherclaw_v1_authority_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RecordToolObservationResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RecordToolObservationResponse) ProtoMessage() {}
+
+func (x *RecordToolObservationResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_authority_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RecordToolObservationResponse.ProtoReflect.Descriptor instead.
+func (*RecordToolObservationResponse) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_authority_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *RecordToolObservationResponse) GetVerified() bool {
+	if x != nil {
+		return x.Verified
+	}
+	return false
+}
+
+func (x *RecordToolObservationResponse) GetErrorCode() string {
+	if x != nil {
+		return x.ErrorCode
+	}
+	return ""
+}
+
+func (x *RecordToolObservationResponse) GetInstanceId() string {
+	if x != nil {
+		return x.InstanceId
+	}
+	return ""
+}
+
+func (x *RecordToolObservationResponse) GetNonce() string {
+	if x != nil {
+		return x.Nonce
+	}
+	return ""
+}
+
+func (x *RecordToolObservationResponse) GetObservationId() string {
+	if x != nil {
+		return x.ObservationId
+	}
+	return ""
+}
+
 var File_pantherclaw_v1_authority_proto protoreflect.FileDescriptor
 
 const file_pantherclaw_v1_authority_proto_rawDesc = "" +
@@ -2042,7 +2208,22 @@ const file_pantherclaw_v1_authority_proto_rawDesc = "" +
 	"\x0eenvironment_id\x18\x04 \x01(\tR\renvironmentId\x12\x14\n" +
 	"\x05nonce\x18\x05 \x01(\tR\x05nonce\x12\x10\n" +
 	"\x03jkt\x18\x06 \x01(\tR\x03jkt\x12@\n" +
-	"\x0erun_expires_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\frunExpiresAt*\xcc\x01\n" +
+	"\x0erun_expires_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\frunExpiresAt\"\x83\x02\n" +
+	"\x1cRecordToolObservationRequest\x12G\n" +
+	"\bworkload\x18\x01 \x01(\v2#.pantherclaw.v1.WorkloadCredentialsB\x06\xbaH\x03\xc8\x01\x01R\bworkload\x12\x1f\n" +
+	"\x06run_id\x18\x02 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x05runId\x12-\n" +
+	"\rconnection_id\x18\x03 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\fconnectionId\x12\x1e\n" +
+	"\x04tool\x18\x04 \x01(\tB\n" +
+	"\xbaH\ar\x05\x10\x01(\x80\x01R\x04tool\x12*\n" +
+	"\finput_sha256\x18\x05 \x01(\fB\a\xbaH\x04z\x02h R\vinputSha256\"\xb8\x01\n" +
+	"\x1dRecordToolObservationResponse\x12\x1a\n" +
+	"\bverified\x18\x01 \x01(\bR\bverified\x12\x1d\n" +
+	"\n" +
+	"error_code\x18\x02 \x01(\tR\terrorCode\x12\x1f\n" +
+	"\vinstance_id\x18\x03 \x01(\tR\n" +
+	"instanceId\x12\x14\n" +
+	"\x05nonce\x18\x04 \x01(\tR\x05nonce\x12%\n" +
+	"\x0eobservation_id\x18\x05 \x01(\tR\robservationId*\xcc\x01\n" +
 	"\bDecision\x12\x18\n" +
 	"\x14DECISION_UNSPECIFIED\x10\x00\x12\x12\n" +
 	"\x0eDECISION_ALLOW\x10\x01\x12#\n" +
@@ -2085,14 +2266,15 @@ const file_pantherclaw_v1_authority_proto_rawDesc = "" +
 	"\x10CaptureDirection\x12!\n" +
 	"\x1dCAPTURE_DIRECTION_UNSPECIFIED\x10\x00\x12\x1d\n" +
 	"\x19CAPTURE_DIRECTION_REQUEST\x10\x01\x12\x1e\n" +
-	"\x1aCAPTURE_DIRECTION_RESPONSE\x10\x022\xcc\x04\n" +
+	"\x1aCAPTURE_DIRECTION_RESPONSE\x10\x022\xc2\x05\n" +
 	"\x10AuthorityService\x12P\n" +
 	"\tAuthorize\x12 .pantherclaw.v1.AuthorizeRequest\x1a!.pantherclaw.v1.AuthorizeResponse\x12\\\n" +
 	"\rBeginDispatch\x12$.pantherclaw.v1.BeginDispatchRequest\x1a%.pantherclaw.v1.BeginDispatchResponse\x12b\n" +
 	"\x0fRecordExecution\x12&.pantherclaw.v1.RecordExecutionRequest\x1a'.pantherclaw.v1.RecordExecutionResponse\x12M\n" +
 	"\bGetNonce\x12\x1f.pantherclaw.v1.GetNonceRequest\x1a .pantherclaw.v1.GetNonceResponse\x12t\n" +
 	"\x15ReportUnknownWorkload\x12,.pantherclaw.v1.ReportUnknownWorkloadRequest\x1a-.pantherclaw.v1.ReportUnknownWorkloadResponse\x12_\n" +
-	"\x0eVerifyWorkload\x12%.pantherclaw.v1.VerifyWorkloadRequest\x1a&.pantherclaw.v1.VerifyWorkloadResponseB\xc7\x01\n" +
+	"\x0eVerifyWorkload\x12%.pantherclaw.v1.VerifyWorkloadRequest\x1a&.pantherclaw.v1.VerifyWorkloadResponse\x12t\n" +
+	"\x15RecordToolObservation\x12,.pantherclaw.v1.RecordToolObservationRequest\x1a-.pantherclaw.v1.RecordToolObservationResponseB\xc7\x01\n" +
 	"\x12com.pantherclaw.v1B\x0eAuthorityProtoP\x01ZHgithub.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1;pantherclawv1\xa2\x02\x03PXX\xaa\x02\x0ePantherclaw.V1\xca\x02\x0ePantherclaw\\V1\xe2\x02\x1aPantherclaw\\V1\\GPBMetadata\xea\x02\x0fPantherclaw::V1b\x06proto3"
 
 var (
@@ -2108,7 +2290,7 @@ func file_pantherclaw_v1_authority_proto_rawDescGZIP() []byte {
 }
 
 var file_pantherclaw_v1_authority_proto_enumTypes = make([]protoimpl.EnumInfo, 6)
-var file_pantherclaw_v1_authority_proto_msgTypes = make([]protoimpl.MessageInfo, 18)
+var file_pantherclaw_v1_authority_proto_msgTypes = make([]protoimpl.MessageInfo, 20)
 var file_pantherclaw_v1_authority_proto_goTypes = []any{
 	(Decision)(0),                         // 0: pantherclaw.v1.Decision
 	(WaitState)(0),                        // 1: pantherclaw.v1.WaitState
@@ -2134,7 +2316,9 @@ var file_pantherclaw_v1_authority_proto_goTypes = []any{
 	(*ReportUnknownWorkloadResponse)(nil), // 21: pantherclaw.v1.ReportUnknownWorkloadResponse
 	(*VerifyWorkloadRequest)(nil),         // 22: pantherclaw.v1.VerifyWorkloadRequest
 	(*VerifyWorkloadResponse)(nil),        // 23: pantherclaw.v1.VerifyWorkloadResponse
-	(*timestamppb.Timestamp)(nil),         // 24: google.protobuf.Timestamp
+	(*RecordToolObservationRequest)(nil),  // 24: pantherclaw.v1.RecordToolObservationRequest
+	(*RecordToolObservationResponse)(nil), // 25: pantherclaw.v1.RecordToolObservationResponse
+	(*timestamppb.Timestamp)(nil),         // 26: google.protobuf.Timestamp
 }
 var file_pantherclaw_v1_authority_proto_depIdxs = []int32{
 	17, // 0: pantherclaw.v1.AuthorizeRequest.workload:type_name -> pantherclaw.v1.WorkloadCredentials
@@ -2144,35 +2328,38 @@ var file_pantherclaw_v1_authority_proto_depIdxs = []int32{
 	11, // 4: pantherclaw.v1.AuthorizeResponse.obligations:type_name -> pantherclaw.v1.Obligation
 	9,  // 5: pantherclaw.v1.AuthorizeResponse.wait:type_name -> pantherclaw.v1.WaitInfo
 	2,  // 6: pantherclaw.v1.AuthorizeResponse.mode:type_name -> pantherclaw.v1.DispatchMode
-	24, // 7: pantherclaw.v1.WaitInfo.deadline_time:type_name -> google.protobuf.Timestamp
+	26, // 7: pantherclaw.v1.WaitInfo.deadline_time:type_name -> google.protobuf.Timestamp
 	1,  // 8: pantherclaw.v1.WaitInfo.state:type_name -> pantherclaw.v1.WaitState
-	24, // 9: pantherclaw.v1.WaitInfo.consume_by_time:type_name -> google.protobuf.Timestamp
-	24, // 10: pantherclaw.v1.WaitInfo.evidence_deadline_time:type_name -> google.protobuf.Timestamp
+	26, // 9: pantherclaw.v1.WaitInfo.consume_by_time:type_name -> google.protobuf.Timestamp
+	26, // 10: pantherclaw.v1.WaitInfo.evidence_deadline_time:type_name -> google.protobuf.Timestamp
 	3,  // 11: pantherclaw.v1.ChecklistItem.status:type_name -> pantherclaw.v1.ChecklistStatus
 	4,  // 12: pantherclaw.v1.RecordExecutionRequest.outcome:type_name -> pantherclaw.v1.Outcome
 	15, // 13: pantherclaw.v1.RecordExecutionRequest.captures:type_name -> pantherclaw.v1.PayloadCapture
 	5,  // 14: pantherclaw.v1.PayloadCapture.direction:type_name -> pantherclaw.v1.CaptureDirection
-	24, // 15: pantherclaw.v1.GetNonceResponse.expire_time:type_name -> google.protobuf.Timestamp
+	26, // 15: pantherclaw.v1.GetNonceResponse.expire_time:type_name -> google.protobuf.Timestamp
 	17, // 16: pantherclaw.v1.ReportUnknownWorkloadRequest.workload:type_name -> pantherclaw.v1.WorkloadCredentials
 	17, // 17: pantherclaw.v1.VerifyWorkloadRequest.workload:type_name -> pantherclaw.v1.WorkloadCredentials
-	24, // 18: pantherclaw.v1.VerifyWorkloadResponse.run_expires_at:type_name -> google.protobuf.Timestamp
-	7,  // 19: pantherclaw.v1.AuthorityService.Authorize:input_type -> pantherclaw.v1.AuthorizeRequest
-	12, // 20: pantherclaw.v1.AuthorityService.BeginDispatch:input_type -> pantherclaw.v1.BeginDispatchRequest
-	14, // 21: pantherclaw.v1.AuthorityService.RecordExecution:input_type -> pantherclaw.v1.RecordExecutionRequest
-	18, // 22: pantherclaw.v1.AuthorityService.GetNonce:input_type -> pantherclaw.v1.GetNonceRequest
-	20, // 23: pantherclaw.v1.AuthorityService.ReportUnknownWorkload:input_type -> pantherclaw.v1.ReportUnknownWorkloadRequest
-	22, // 24: pantherclaw.v1.AuthorityService.VerifyWorkload:input_type -> pantherclaw.v1.VerifyWorkloadRequest
-	8,  // 25: pantherclaw.v1.AuthorityService.Authorize:output_type -> pantherclaw.v1.AuthorizeResponse
-	13, // 26: pantherclaw.v1.AuthorityService.BeginDispatch:output_type -> pantherclaw.v1.BeginDispatchResponse
-	16, // 27: pantherclaw.v1.AuthorityService.RecordExecution:output_type -> pantherclaw.v1.RecordExecutionResponse
-	19, // 28: pantherclaw.v1.AuthorityService.GetNonce:output_type -> pantherclaw.v1.GetNonceResponse
-	21, // 29: pantherclaw.v1.AuthorityService.ReportUnknownWorkload:output_type -> pantherclaw.v1.ReportUnknownWorkloadResponse
-	23, // 30: pantherclaw.v1.AuthorityService.VerifyWorkload:output_type -> pantherclaw.v1.VerifyWorkloadResponse
-	25, // [25:31] is the sub-list for method output_type
-	19, // [19:25] is the sub-list for method input_type
-	19, // [19:19] is the sub-list for extension type_name
-	19, // [19:19] is the sub-list for extension extendee
-	0,  // [0:19] is the sub-list for field type_name
+	26, // 18: pantherclaw.v1.VerifyWorkloadResponse.run_expires_at:type_name -> google.protobuf.Timestamp
+	17, // 19: pantherclaw.v1.RecordToolObservationRequest.workload:type_name -> pantherclaw.v1.WorkloadCredentials
+	7,  // 20: pantherclaw.v1.AuthorityService.Authorize:input_type -> pantherclaw.v1.AuthorizeRequest
+	12, // 21: pantherclaw.v1.AuthorityService.BeginDispatch:input_type -> pantherclaw.v1.BeginDispatchRequest
+	14, // 22: pantherclaw.v1.AuthorityService.RecordExecution:input_type -> pantherclaw.v1.RecordExecutionRequest
+	18, // 23: pantherclaw.v1.AuthorityService.GetNonce:input_type -> pantherclaw.v1.GetNonceRequest
+	20, // 24: pantherclaw.v1.AuthorityService.ReportUnknownWorkload:input_type -> pantherclaw.v1.ReportUnknownWorkloadRequest
+	22, // 25: pantherclaw.v1.AuthorityService.VerifyWorkload:input_type -> pantherclaw.v1.VerifyWorkloadRequest
+	24, // 26: pantherclaw.v1.AuthorityService.RecordToolObservation:input_type -> pantherclaw.v1.RecordToolObservationRequest
+	8,  // 27: pantherclaw.v1.AuthorityService.Authorize:output_type -> pantherclaw.v1.AuthorizeResponse
+	13, // 28: pantherclaw.v1.AuthorityService.BeginDispatch:output_type -> pantherclaw.v1.BeginDispatchResponse
+	16, // 29: pantherclaw.v1.AuthorityService.RecordExecution:output_type -> pantherclaw.v1.RecordExecutionResponse
+	19, // 30: pantherclaw.v1.AuthorityService.GetNonce:output_type -> pantherclaw.v1.GetNonceResponse
+	21, // 31: pantherclaw.v1.AuthorityService.ReportUnknownWorkload:output_type -> pantherclaw.v1.ReportUnknownWorkloadResponse
+	23, // 32: pantherclaw.v1.AuthorityService.VerifyWorkload:output_type -> pantherclaw.v1.VerifyWorkloadResponse
+	25, // 33: pantherclaw.v1.AuthorityService.RecordToolObservation:output_type -> pantherclaw.v1.RecordToolObservationResponse
+	27, // [27:34] is the sub-list for method output_type
+	20, // [20:27] is the sub-list for method input_type
+	20, // [20:20] is the sub-list for extension type_name
+	20, // [20:20] is the sub-list for extension extendee
+	0,  // [0:20] is the sub-list for field type_name
 }
 
 func init() { file_pantherclaw_v1_authority_proto_init() }
@@ -2186,7 +2373,7 @@ func file_pantherclaw_v1_authority_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pantherclaw_v1_authority_proto_rawDesc), len(file_pantherclaw_v1_authority_proto_rawDesc)),
 			NumEnums:      6,
-			NumMessages:   18,
+			NumMessages:   20,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

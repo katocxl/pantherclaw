@@ -338,6 +338,43 @@ func (q *Queries) InsertCredentialTest(ctx context.Context, arg InsertCredential
 	return i, err
 }
 
+const insertToolObservation = `-- name: InsertToolObservation :one
+INSERT INTO pc.tool_observations (org_id, id, run_id, instance_id, connection_id, tool, input_sha256, channel)
+SELECT c.org_id, $1, $2, $3, c.id, $4, $5, 'sdk'
+FROM pc.connections c
+WHERE c.org_id = $6 AND c.id = $7 AND c.gateway_id = $8
+RETURNING id
+`
+
+type InsertToolObservationParams struct {
+	ID           ids.UUID
+	RunID        ids.UUID
+	InstanceID   ids.UUID
+	Tool         string
+	InputSha256  []byte
+	OrgID        ids.OrgID
+	ConnectionID ids.UUID
+	GatewayID    ids.UUID
+}
+
+// An OBSERVE_ONLY record of a tool an agent SDK ran without a mapping
+// (HR-200), only through a connection the reporting gateway serves.
+func (q *Queries) InsertToolObservation(ctx context.Context, arg InsertToolObservationParams) (ids.UUID, error) {
+	row := q.db.QueryRow(ctx, insertToolObservation,
+		arg.ID,
+		arg.RunID,
+		arg.InstanceID,
+		arg.Tool,
+		arg.InputSha256,
+		arg.OrgID,
+		arg.ConnectionID,
+		arg.GatewayID,
+	)
+	var id ids.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const latestConnectionTest = `-- name: LatestConnectionTest :one
 SELECT org_id, id, connection_id, kind, state, gateway_id, verification_id, result, checks, detail_sha256, requested_by, created_at, finished_at FROM pc.connection_tests
 WHERE org_id = $1 AND connection_id = $2 AND state IN ('DONE', 'FAILED')

@@ -117,6 +117,8 @@ type fakeAuthority struct {
 	// are refused as run_mismatch.
 	verifiedRuns []string
 	endedRuns    map[string]bool
+	// observed are the tool observations reported (HR-200).
+	observed []*pb.RecordToolObservationRequest
 }
 
 // VerifyWorkload verifies every workload unless identity is set, as the

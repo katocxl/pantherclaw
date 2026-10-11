@@ -11,13 +11,15 @@ import (
 )
 
 // m8cProcedures are G0 M8 track C's procedures: connection capability
-// declarations, tests and health (F346, F354, F358). They live beside
-// procedurePermissions to keep the shared map small;
-// TestProcedurePermissionsMatchProtos checks the merged map.
+// declarations, tests and health (F346, F354, F358) and the gateway's tool
+// observations (HR-200). They live beside procedurePermissions to keep the
+// shared map small; TestProcedurePermissionsMatchProtos checks the merged
+// map.
 var m8cProcedures = map[string]td.Permission{
 	pantherclawv1connect.ConnectionServiceGetConnectionCapabilitiesProcedure: "connection.read",
 	pantherclawv1connect.ConnectionServiceTestConnectionProcedure:            "connection.manage",
 	pantherclawv1connect.ConnectionServiceGetConnectionHealthProcedure:       "connection.read",
+	pantherclawv1connect.AuthorityServiceRecordToolObservationProcedure:      "gateway.observe",
 }
 
 func init() { maps.Copy(procedurePermissions, m8cProcedures) }

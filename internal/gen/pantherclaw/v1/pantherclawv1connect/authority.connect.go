@@ -43,6 +43,9 @@ const (
 	// AuthorityServiceVerifyWorkloadProcedure is the procedure name of the AuthorityService's
 	// VerifyWorkload RPC.
 	AuthorityServiceVerifyWorkloadProcedure = "/pantherclaw.v1.AuthorityService/VerifyWorkload"
+	// AuthorityServiceRecordToolObservationProcedure is the procedure name of the AuthorityService's
+	// RecordToolObservation RPC.
+	AuthorityServiceRecordToolObservationProcedure = "/pantherclaw.v1.AuthorityService/RecordToolObservation"
 )
 
 var (
@@ -88,6 +91,13 @@ var (
 			Procedure:  AuthorityServiceVerifyWorkloadProcedure,
 		}
 	})
+	authorityServiceRecordToolObservationSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_pantherclaw_v1_authority_proto.Services().ByName("AuthorityService").Methods().ByName("RecordToolObservation"),
+			Procedure:  AuthorityServiceRecordToolObservationProcedure,
+		}
+	})
 )
 
 // AuthorityServiceClient is a client for the pantherclaw.v1.AuthorityService service.
@@ -119,6 +129,14 @@ type AuthorityServiceClient interface {
 	// consumed like any other; nothing is decided or recorded.
 	// permission: gateway.authorize
 	VerifyWorkload(context.Context, *v1.VerifyWorkloadRequest) (*v1.VerifyWorkloadResponse, error)
+	// RecordToolObservation verifies a workload's PAP/1 credentials, as
+	// VerifyWorkload does, and records a tool call an agent SDK runs without
+	// a mapping (G0 M8, HR-200): OBSERVE_ONLY, with the tool's name
+	// (untrusted) and its input's digest, never the input. The connection
+	// must be one this gateway serves. A workload that does not verify is an
+	// answer with its PAP-Error code, and nothing is recorded.
+	// permission: gateway.observe
+	RecordToolObservation(context.Context, *v1.RecordToolObservationRequest) (*v1.RecordToolObservationResponse, error)
 }
 
 // NewAuthorityServiceClient constructs a client for the pantherclaw.v1.AuthorityService service.
@@ -156,6 +174,14 @@ type AuthorityServiceHandler interface {
 	// consumed like any other; nothing is decided or recorded.
 	// permission: gateway.authorize
 	VerifyWorkload(context.Context, *v1.VerifyWorkloadRequest) (*v1.VerifyWorkloadResponse, error)
+	// RecordToolObservation verifies a workload's PAP/1 credentials, as
+	// VerifyWorkload does, and records a tool call an agent SDK runs without
+	// a mapping (G0 M8, HR-200): OBSERVE_ONLY, with the tool's name
+	// (untrusted) and its input's digest, never the input. The connection
+	// must be one this gateway serves. A workload that does not verify is an
+	// answer with its PAP-Error code, and nothing is recorded.
+	// permission: gateway.observe
+	RecordToolObservation(context.Context, *v1.RecordToolObservationRequest) (*v1.RecordToolObservationResponse, error)
 }
 
 // RegisterAuthorityServiceHandler registers svc as the pantherclaw.v1.AuthorityService
@@ -169,6 +195,7 @@ func RegisterAuthorityServiceHandler(server *connect.Server, svc AuthorityServic
 		connect.Method{Spec: authorityServiceGetNonceSpec(), Handler: adapter.getNonce},
 		connect.Method{Spec: authorityServiceReportUnknownWorkloadSpec(), Handler: adapter.reportUnknownWorkload},
 		connect.Method{Spec: authorityServiceVerifyWorkloadSpec(), Handler: adapter.verifyWorkload},
+		connect.Method{Spec: authorityServiceRecordToolObservationSpec(), Handler: adapter.recordToolObservation},
 	)
 }
 
@@ -197,6 +224,10 @@ func (UnimplementedAuthorityServiceHandler) ReportUnknownWorkload(context.Contex
 
 func (UnimplementedAuthorityServiceHandler) VerifyWorkload(context.Context, *v1.VerifyWorkloadRequest) (*v1.VerifyWorkloadResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.AuthorityService.VerifyWorkload is not implemented")
+}
+
+func (UnimplementedAuthorityServiceHandler) RecordToolObservation(context.Context, *v1.RecordToolObservationRequest) (*v1.RecordToolObservationResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.AuthorityService.RecordToolObservation is not implemented")
 }
 
 type authorityServiceClient struct {
@@ -246,6 +277,14 @@ func (c *authorityServiceClient) ReportUnknownWorkload(ctx context.Context, req 
 func (c *authorityServiceClient) VerifyWorkload(ctx context.Context, req *v1.VerifyWorkloadRequest) (*v1.VerifyWorkloadResponse, error) {
 	var res v1.VerifyWorkloadResponse
 	if err := c.client.CallUnary(ctx, authorityServiceVerifyWorkloadSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *authorityServiceClient) RecordToolObservation(ctx context.Context, req *v1.RecordToolObservationRequest) (*v1.RecordToolObservationResponse, error) {
+	var res v1.RecordToolObservationResponse
+	if err := c.client.CallUnary(ctx, authorityServiceRecordToolObservationSpec(), req, &res); err != nil {
 		return nil, err
 	}
 	return &res, nil
@@ -319,6 +358,18 @@ func (h authorityServiceHandler) verifyWorkload(ctx context.Context, _ connect.S
 		return err
 	}
 	res, err := h.svc.VerifyWorkload(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h authorityServiceHandler) recordToolObservation(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.RecordToolObservationRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.RecordToolObservation(ctx, &req)
 	if err != nil {
 		return err
 	}

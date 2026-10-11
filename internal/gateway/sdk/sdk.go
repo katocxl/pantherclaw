@@ -28,9 +28,10 @@
 // everything else, each labeled PARTIAL (HR-024, HR-186), with the action's
 // id, its canonical form and hash. A tool the agent SDK has built in
 // (Read, Edit, Bash in an application that only observes the shell, …)
-// has no mapping (G0 M8 decision 2): the gateway verifies the workload and
-// its run, logs the call and answers allow, labeled OBSERVE_ONLY. An MCP
-// tool the package does not map is never allowed.
+// has no mapping (G0 M8 decision 2): the Authority verifies the workload in
+// its run and records the call in tool_observations, and the face answers
+// allow, labeled OBSERVE_ONLY. An MCP tool the package does not map is
+// never allowed.
 package sdk
 
 import (
@@ -270,7 +271,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	tool, err := mcpTool(req)
 	switch {
 	case errors.Is(err, errBuiltIn):
-		h.observe(w, r, conn, in, req.Tool)
+		h.observe(w, r, conn, in, req.Tool, req.Input)
 		return
 	case err != nil:
 		deny(w, http.StatusBadRequest, dispatch.CannotAuthorize, "invalid_request",
@@ -404,9 +405,10 @@ func stamp(t *timestamppb.Timestamp) string {
 }
 
 // observe answers a built-in tool (G0 M8 decision 2): allowed and
-// recorded OBSERVE_ONLY, for a workload the Authority verified in its run.
-func (h *Handler) observe(w http.ResponseWriter, r *http.Request, conn *control.Connection, in dispatch.Inbound, tool string) {
-	v, err := h.engine.Verify(r.Context(), in.Creds, in.Run)
+// recorded OBSERVE_ONLY (its name and input digest) by the Authority,
+// which verified the workload in its run (HR-200, HR-021).
+func (h *Handler) observe(w http.ResponseWriter, r *http.Request, conn *control.Connection, in dispatch.Inbound, tool string, input []byte) {
+	v, err := h.engine.Observe(r.Context(), in.Creds, in.Run, conn.GetId(), tool, input)
 	if err != nil {
 		h.log.ErrorContext(r.Context(), "gateway.authority_unavailable", slog.String("connection_id", conn.GetId()), pclog.Err(err))
 		deny(w, http.StatusOK, dispatch.CannotAuthorize, dispatch.CodeAuthorityUnavailable, "PantherClaw cannot verify this workload now.")

@@ -152,3 +152,12 @@ WHERE t.org_id = sqlc.arg(org_id) AND t.connection_id = sqlc.arg(connection_id) 
 GROUP BY r.agent_id, g.name
 ORDER BY last_used_at DESC, r.agent_id
 LIMIT sqlc.arg(max_rows);
+
+-- name: InsertToolObservation :one
+-- An OBSERVE_ONLY record of a tool an agent SDK ran without a mapping
+-- (HR-200), only through a connection the reporting gateway serves.
+INSERT INTO pc.tool_observations (org_id, id, run_id, instance_id, connection_id, tool, input_sha256, channel)
+SELECT c.org_id, sqlc.arg(id), sqlc.arg(run_id), sqlc.arg(instance_id), c.id, sqlc.arg(tool), sqlc.arg(input_sha256), 'sdk'
+FROM pc.connections c
+WHERE c.org_id = sqlc.arg(org_id) AND c.id = sqlc.arg(connection_id) AND c.gateway_id = sqlc.arg(gateway_id)
+RETURNING id;

@@ -236,6 +236,7 @@ func cmdServe(ctx context.Context, args []string, stderr io.Writer, env Env, onS
 	if err != nil {
 		return err
 	}
+	svc.WithToolObservations(m6.connections)
 	m5p2, err := newM5p2(cfg, pool, bill, m5.notifications, log)
 	if err != nil {
 		return err
