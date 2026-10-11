@@ -7,8 +7,8 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { test } from "node:test";
-import { parseAction } from "../src/action.ts";
-import { canonicalize, serialize } from "../src/jcs.ts";
+import { ActionError, parseAction } from "../src/action.ts";
+import { canonicalize, JCSError, serialize } from "../src/jcs.ts";
 import { load } from "./vectors.ts";
 
 const sha256 = (s: string, enc: "hex" | "base64url") => createHash("sha256").update(s).digest(enc);
@@ -17,7 +17,7 @@ test("jcs.json", async () => {
   for (const c of (await load("jcs.json")).cases) {
     const input = c.input_hex ? new Uint8Array(Buffer.from(c.input_hex, "hex")) : c.input;
     if (c.reject) {
-      assert.throws(() => canonicalize(input), undefined, c.name);
+      assert.throws(() => canonicalize(input), JCSError, c.name);
       continue;
     }
     const got = canonicalize(input);
@@ -30,7 +30,7 @@ test("actionir.json", async () => {
   for (const c of (await load("actionir.json")).cases) {
     const input = c.input_hex ? new Uint8Array(Buffer.from(c.input_hex, "hex")) : c.input;
     if (c.reject) {
-      assert.throws(() => parseAction(input), undefined, `${c.name} (${c.reject})`);
+      assert.throws(() => parseAction(input), ActionError, `${c.name} (${c.reject})`);
       continue;
     }
     const p = parseAction(input);
