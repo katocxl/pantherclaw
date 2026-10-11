@@ -403,6 +403,7 @@ type PcConnectionTest struct {
 	ID             ids.UUID
 	ConnectionID   ids.UUID
 	Kind           string
+	Operation      *string
 	State          string
 	GatewayID      *ids.UUID
 	VerificationID *ids.UUID
