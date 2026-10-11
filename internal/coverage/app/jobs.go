@@ -117,6 +117,9 @@ func (s *Service) ReassessOrg(ctx context.Context, org ids.OrgID) (Reassessed, e
 		for _, x := range expired {
 			add(domain.Scope{Agent: x.AgentID, Connection: x.ConnectionID, Operation: x.Operation}, nil)
 		}
+		// In (agent, connection, operation) order, like every reassessment, so
+		// transactions that share scopes take their locks in the same order.
+		slices.SortFunc(order, compareScopes)
 		pkgs := packages{}
 		failed := map[domain.Scope]bool{}
 		for _, sc := range order {
