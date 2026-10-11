@@ -113,3 +113,32 @@ func TestHR200_ConformanceCalls(t *testing.T) {
 		}
 	}
 }
+
+// TestHR201_ADispatchInClearTextIsRefused: the request to send must use
+// https, or http only to this machine, as the client's own URLs must.
+func TestHR201_ADispatchInClearTextIsRefused(t *testing.T) {
+	var f faceFile
+	vectors.Load(t, "sdk_face.json", &f)
+	for _, a := range f.Answers {
+		if a.Send == nil {
+			continue
+		}
+		for u, want := range map[string]client.Outcome{
+			"http://payments.example.test/v1/refunds": client.CannotDecide,
+			"http://127.0.0.1:8080/v1/refunds":        client.Allow,
+		} {
+			var body map[string]any
+			if err := json.Unmarshal([]byte(a.Body), &body); err != nil {
+				t.Fatal(err)
+			}
+			body["dispatch"].(map[string]any)["url"] = u
+			b, err := json.Marshal(body)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := client.Evaluate(a.Status, http.Header{}, b, client.Class(a.Class), a.ActionID, a.FirstHash); got.Outcome != want {
+				t.Errorf("%s: %s (%s), want %s", u, got.Outcome, got.Why, want)
+			}
+		}
+	}
+}
