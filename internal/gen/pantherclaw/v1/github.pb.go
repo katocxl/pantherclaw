@@ -839,6 +839,217 @@ func (x *GetOrgScanResponse) GetScan() *OrgScan {
 	return nil
 }
 
+// ListOrgScanFindingsRequest pages through a scan's findings.
+type ListOrgScanFindingsRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Scan id.
+	ScanId string `protobuf:"bytes,1,opt,name=scan_id,json=scanId,proto3" json:"scan_id,omitempty"`
+	// Page size (default 50, at most 200).
+	PageSize int32 `protobuf:"varint,2,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
+	// Page token from the previous page.
+	PageToken     string `protobuf:"bytes,3,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListOrgScanFindingsRequest) Reset() {
+	*x = ListOrgScanFindingsRequest{}
+	mi := &file_pantherclaw_v1_github_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListOrgScanFindingsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListOrgScanFindingsRequest) ProtoMessage() {}
+
+func (x *ListOrgScanFindingsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_github_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListOrgScanFindingsRequest.ProtoReflect.Descriptor instead.
+func (*ListOrgScanFindingsRequest) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_github_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *ListOrgScanFindingsRequest) GetScanId() string {
+	if x != nil {
+		return x.ScanId
+	}
+	return ""
+}
+
+func (x *ListOrgScanFindingsRequest) GetPageSize() int32 {
+	if x != nil {
+		return x.PageSize
+	}
+	return 0
+}
+
+func (x *ListOrgScanFindingsRequest) GetPageToken() string {
+	if x != nil {
+		return x.PageToken
+	}
+	return ""
+}
+
+// OrgScanFinding is one thing a scan found: an UNTRUSTED observation that
+// grants nothing, recorded as a DISCOVERED agent.
+type OrgScanFinding struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The discovered agent.
+	AgentId string `protobuf:"bytes,1,opt,name=agent_id,json=agentId,proto3" json:"agent_id,omitempty"`
+	// github_app, github_workflow or github_mcp_config.
+	Kind string `protobuf:"bytes,2,opt,name=kind,proto3" json:"kind,omitempty"`
+	// UNTRUSTED attributes: names only, never values or arguments.
+	Attributes map[string]string `protobuf:"bytes,3,rep,name=attributes,proto3" json:"attributes,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	// How often scans saw it.
+	SeenCount int64 `protobuf:"varint,4,opt,name=seen_count,json=seenCount,proto3" json:"seen_count,omitempty"`
+	// When first and last seen.
+	FirstSeenTime *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=first_seen_time,json=firstSeenTime,proto3" json:"first_seen_time,omitempty"`
+	// When last seen.
+	LastSeenTime  *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=last_seen_time,json=lastSeenTime,proto3" json:"last_seen_time,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *OrgScanFinding) Reset() {
+	*x = OrgScanFinding{}
+	mi := &file_pantherclaw_v1_github_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *OrgScanFinding) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*OrgScanFinding) ProtoMessage() {}
+
+func (x *OrgScanFinding) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_github_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use OrgScanFinding.ProtoReflect.Descriptor instead.
+func (*OrgScanFinding) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_github_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *OrgScanFinding) GetAgentId() string {
+	if x != nil {
+		return x.AgentId
+	}
+	return ""
+}
+
+func (x *OrgScanFinding) GetKind() string {
+	if x != nil {
+		return x.Kind
+	}
+	return ""
+}
+
+func (x *OrgScanFinding) GetAttributes() map[string]string {
+	if x != nil {
+		return x.Attributes
+	}
+	return nil
+}
+
+func (x *OrgScanFinding) GetSeenCount() int64 {
+	if x != nil {
+		return x.SeenCount
+	}
+	return 0
+}
+
+func (x *OrgScanFinding) GetFirstSeenTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.FirstSeenTime
+	}
+	return nil
+}
+
+func (x *OrgScanFinding) GetLastSeenTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.LastSeenTime
+	}
+	return nil
+}
+
+// ListOrgScanFindingsResponse returns a page of findings.
+type ListOrgScanFindingsResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The findings this scan saw.
+	Findings []*OrgScanFinding `protobuf:"bytes,1,rep,name=findings,proto3" json:"findings,omitempty"`
+	// Token of the next page; empty on the last.
+	NextPageToken string `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListOrgScanFindingsResponse) Reset() {
+	*x = ListOrgScanFindingsResponse{}
+	mi := &file_pantherclaw_v1_github_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListOrgScanFindingsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListOrgScanFindingsResponse) ProtoMessage() {}
+
+func (x *ListOrgScanFindingsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_github_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListOrgScanFindingsResponse.ProtoReflect.Descriptor instead.
+func (*ListOrgScanFindingsResponse) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_github_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *ListOrgScanFindingsResponse) GetFindings() []*OrgScanFinding {
+	if x != nil {
+		return x.Findings
+	}
+	return nil
+}
+
+func (x *ListOrgScanFindingsResponse) GetNextPageToken() string {
+	if x != nil {
+		return x.NextPageToken
+	}
+	return ""
+}
+
 var File_pantherclaw_v1_github_proto protoreflect.FileDescriptor
 
 const file_pantherclaw_v1_github_proto_rawDesc = "" +
@@ -910,14 +1121,37 @@ const file_pantherclaw_v1_github_proto_rawDesc = "" +
 	"\x11GetOrgScanRequest\x12\x18\n" +
 	"\x02id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x02id\"A\n" +
 	"\x12GetOrgScanResponse\x12+\n" +
-	"\x04scan\x18\x01 \x01(\v2\x17.pantherclaw.v1.OrgScanR\x04scan2\xdc\x03\n" +
+	"\x04scan\x18\x01 \x01(\v2\x17.pantherclaw.v1.OrgScanR\x04scan\"\x91\x01\n" +
+	"\x1aListOrgScanFindingsRequest\x12!\n" +
+	"\ascan_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x06scanId\x12'\n" +
+	"\tpage_size\x18\x02 \x01(\x05B\n" +
+	"\xbaH\a\x1a\x05\x18\xc8\x01(\x00R\bpageSize\x12'\n" +
+	"\n" +
+	"page_token\x18\x03 \x01(\tB\b\xbaH\x05r\x03\x18\x80\x04R\tpageToken\"\xf3\x02\n" +
+	"\x0eOrgScanFinding\x12\x19\n" +
+	"\bagent_id\x18\x01 \x01(\tR\aagentId\x12\x12\n" +
+	"\x04kind\x18\x02 \x01(\tR\x04kind\x12N\n" +
+	"\n" +
+	"attributes\x18\x03 \x03(\v2..pantherclaw.v1.OrgScanFinding.AttributesEntryR\n" +
+	"attributes\x12\x1d\n" +
+	"\n" +
+	"seen_count\x18\x04 \x01(\x03R\tseenCount\x12B\n" +
+	"\x0ffirst_seen_time\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\rfirstSeenTime\x12@\n" +
+	"\x0elast_seen_time\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\flastSeenTime\x1a=\n" +
+	"\x0fAttributesEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x81\x01\n" +
+	"\x1bListOrgScanFindingsResponse\x12:\n" +
+	"\bfindings\x18\x01 \x03(\v2\x1e.pantherclaw.v1.OrgScanFindingR\bfindings\x12&\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken2\xcc\x04\n" +
 	"\rGitHubService\x12Y\n" +
 	"\fLinkIdentity\x12#.pantherclaw.v1.LinkIdentityRequest\x1a$.pantherclaw.v1.LinkIdentityResponse\x12_\n" +
 	"\x0eUnlinkIdentity\x12%.pantherclaw.v1.UnlinkIdentityRequest\x1a&.pantherclaw.v1.UnlinkIdentityResponse\x12_\n" +
 	"\x0eListIdentities\x12%.pantherclaw.v1.ListIdentitiesRequest\x1a&.pantherclaw.v1.ListIdentitiesResponse\x12Y\n" +
 	"\fStartOrgScan\x12#.pantherclaw.v1.StartOrgScanRequest\x1a$.pantherclaw.v1.StartOrgScanResponse\x12S\n" +
 	"\n" +
-	"GetOrgScan\x12!.pantherclaw.v1.GetOrgScanRequest\x1a\".pantherclaw.v1.GetOrgScanResponseB\xc4\x01\n" +
+	"GetOrgScan\x12!.pantherclaw.v1.GetOrgScanRequest\x1a\".pantherclaw.v1.GetOrgScanResponse\x12n\n" +
+	"\x13ListOrgScanFindings\x12*.pantherclaw.v1.ListOrgScanFindingsRequest\x1a+.pantherclaw.v1.ListOrgScanFindingsResponseB\xc4\x01\n" +
 	"\x12com.pantherclaw.v1B\vGithubProtoP\x01ZHgithub.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1;pantherclawv1\xa2\x02\x03PXX\xaa\x02\x0ePantherclaw.V1\xca\x02\x0ePantherclaw\\V1\xe2\x02\x1aPantherclaw\\V1\\GPBMetadata\xea\x02\x0fPantherclaw::V1b\x06proto3"
 
 var (
@@ -932,53 +1166,63 @@ func file_pantherclaw_v1_github_proto_rawDescGZIP() []byte {
 	return file_pantherclaw_v1_github_proto_rawDescData
 }
 
-var file_pantherclaw_v1_github_proto_msgTypes = make([]protoimpl.MessageInfo, 16)
+var file_pantherclaw_v1_github_proto_msgTypes = make([]protoimpl.MessageInfo, 20)
 var file_pantherclaw_v1_github_proto_goTypes = []any{
-	(*GitHubInstallation)(nil),     // 0: pantherclaw.v1.GitHubInstallation
-	(*GitHubIdentity)(nil),         // 1: pantherclaw.v1.GitHubIdentity
-	(*LinkIdentityRequest)(nil),    // 2: pantherclaw.v1.LinkIdentityRequest
-	(*LinkIdentityResponse)(nil),   // 3: pantherclaw.v1.LinkIdentityResponse
-	(*UnlinkIdentityRequest)(nil),  // 4: pantherclaw.v1.UnlinkIdentityRequest
-	(*UnlinkIdentityResponse)(nil), // 5: pantherclaw.v1.UnlinkIdentityResponse
-	(*ListIdentitiesRequest)(nil),  // 6: pantherclaw.v1.ListIdentitiesRequest
-	(*ListIdentitiesResponse)(nil), // 7: pantherclaw.v1.ListIdentitiesResponse
-	(*OrgScan)(nil),                // 8: pantherclaw.v1.OrgScan
-	(*StartOrgScanRequest)(nil),    // 9: pantherclaw.v1.StartOrgScanRequest
-	(*StartOrgScanResponse)(nil),   // 10: pantherclaw.v1.StartOrgScanResponse
-	(*GetOrgScanRequest)(nil),      // 11: pantherclaw.v1.GetOrgScanRequest
-	(*GetOrgScanResponse)(nil),     // 12: pantherclaw.v1.GetOrgScanResponse
-	nil,                            // 13: pantherclaw.v1.GitHubInstallation.PermissionsEntry
-	nil,                            // 14: pantherclaw.v1.OrgScan.CountsEntry
-	nil,                            // 15: pantherclaw.v1.OrgScan.NotScannedEntry
-	(*timestamppb.Timestamp)(nil),  // 16: google.protobuf.Timestamp
+	(*GitHubInstallation)(nil),          // 0: pantherclaw.v1.GitHubInstallation
+	(*GitHubIdentity)(nil),              // 1: pantherclaw.v1.GitHubIdentity
+	(*LinkIdentityRequest)(nil),         // 2: pantherclaw.v1.LinkIdentityRequest
+	(*LinkIdentityResponse)(nil),        // 3: pantherclaw.v1.LinkIdentityResponse
+	(*UnlinkIdentityRequest)(nil),       // 4: pantherclaw.v1.UnlinkIdentityRequest
+	(*UnlinkIdentityResponse)(nil),      // 5: pantherclaw.v1.UnlinkIdentityResponse
+	(*ListIdentitiesRequest)(nil),       // 6: pantherclaw.v1.ListIdentitiesRequest
+	(*ListIdentitiesResponse)(nil),      // 7: pantherclaw.v1.ListIdentitiesResponse
+	(*OrgScan)(nil),                     // 8: pantherclaw.v1.OrgScan
+	(*StartOrgScanRequest)(nil),         // 9: pantherclaw.v1.StartOrgScanRequest
+	(*StartOrgScanResponse)(nil),        // 10: pantherclaw.v1.StartOrgScanResponse
+	(*GetOrgScanRequest)(nil),           // 11: pantherclaw.v1.GetOrgScanRequest
+	(*GetOrgScanResponse)(nil),          // 12: pantherclaw.v1.GetOrgScanResponse
+	(*ListOrgScanFindingsRequest)(nil),  // 13: pantherclaw.v1.ListOrgScanFindingsRequest
+	(*OrgScanFinding)(nil),              // 14: pantherclaw.v1.OrgScanFinding
+	(*ListOrgScanFindingsResponse)(nil), // 15: pantherclaw.v1.ListOrgScanFindingsResponse
+	nil,                                 // 16: pantherclaw.v1.GitHubInstallation.PermissionsEntry
+	nil,                                 // 17: pantherclaw.v1.OrgScan.CountsEntry
+	nil,                                 // 18: pantherclaw.v1.OrgScan.NotScannedEntry
+	nil,                                 // 19: pantherclaw.v1.OrgScanFinding.AttributesEntry
+	(*timestamppb.Timestamp)(nil),       // 20: google.protobuf.Timestamp
 }
 var file_pantherclaw_v1_github_proto_depIdxs = []int32{
-	13, // 0: pantherclaw.v1.GitHubInstallation.permissions:type_name -> pantherclaw.v1.GitHubInstallation.PermissionsEntry
-	16, // 1: pantherclaw.v1.GitHubInstallation.read_time:type_name -> google.protobuf.Timestamp
-	16, // 2: pantherclaw.v1.GitHubIdentity.link_time:type_name -> google.protobuf.Timestamp
+	16, // 0: pantherclaw.v1.GitHubInstallation.permissions:type_name -> pantherclaw.v1.GitHubInstallation.PermissionsEntry
+	20, // 1: pantherclaw.v1.GitHubInstallation.read_time:type_name -> google.protobuf.Timestamp
+	20, // 2: pantherclaw.v1.GitHubIdentity.link_time:type_name -> google.protobuf.Timestamp
 	1,  // 3: pantherclaw.v1.LinkIdentityResponse.identity:type_name -> pantherclaw.v1.GitHubIdentity
 	1,  // 4: pantherclaw.v1.ListIdentitiesResponse.identities:type_name -> pantherclaw.v1.GitHubIdentity
-	14, // 5: pantherclaw.v1.OrgScan.counts:type_name -> pantherclaw.v1.OrgScan.CountsEntry
-	15, // 6: pantherclaw.v1.OrgScan.not_scanned:type_name -> pantherclaw.v1.OrgScan.NotScannedEntry
-	16, // 7: pantherclaw.v1.OrgScan.create_time:type_name -> google.protobuf.Timestamp
-	16, // 8: pantherclaw.v1.OrgScan.finish_time:type_name -> google.protobuf.Timestamp
+	17, // 5: pantherclaw.v1.OrgScan.counts:type_name -> pantherclaw.v1.OrgScan.CountsEntry
+	18, // 6: pantherclaw.v1.OrgScan.not_scanned:type_name -> pantherclaw.v1.OrgScan.NotScannedEntry
+	20, // 7: pantherclaw.v1.OrgScan.create_time:type_name -> google.protobuf.Timestamp
+	20, // 8: pantherclaw.v1.OrgScan.finish_time:type_name -> google.protobuf.Timestamp
 	8,  // 9: pantherclaw.v1.StartOrgScanResponse.scan:type_name -> pantherclaw.v1.OrgScan
 	8,  // 10: pantherclaw.v1.GetOrgScanResponse.scan:type_name -> pantherclaw.v1.OrgScan
-	2,  // 11: pantherclaw.v1.GitHubService.LinkIdentity:input_type -> pantherclaw.v1.LinkIdentityRequest
-	4,  // 12: pantherclaw.v1.GitHubService.UnlinkIdentity:input_type -> pantherclaw.v1.UnlinkIdentityRequest
-	6,  // 13: pantherclaw.v1.GitHubService.ListIdentities:input_type -> pantherclaw.v1.ListIdentitiesRequest
-	9,  // 14: pantherclaw.v1.GitHubService.StartOrgScan:input_type -> pantherclaw.v1.StartOrgScanRequest
-	11, // 15: pantherclaw.v1.GitHubService.GetOrgScan:input_type -> pantherclaw.v1.GetOrgScanRequest
-	3,  // 16: pantherclaw.v1.GitHubService.LinkIdentity:output_type -> pantherclaw.v1.LinkIdentityResponse
-	5,  // 17: pantherclaw.v1.GitHubService.UnlinkIdentity:output_type -> pantherclaw.v1.UnlinkIdentityResponse
-	7,  // 18: pantherclaw.v1.GitHubService.ListIdentities:output_type -> pantherclaw.v1.ListIdentitiesResponse
-	10, // 19: pantherclaw.v1.GitHubService.StartOrgScan:output_type -> pantherclaw.v1.StartOrgScanResponse
-	12, // 20: pantherclaw.v1.GitHubService.GetOrgScan:output_type -> pantherclaw.v1.GetOrgScanResponse
-	16, // [16:21] is the sub-list for method output_type
-	11, // [11:16] is the sub-list for method input_type
-	11, // [11:11] is the sub-list for extension type_name
-	11, // [11:11] is the sub-list for extension extendee
-	0,  // [0:11] is the sub-list for field type_name
+	19, // 11: pantherclaw.v1.OrgScanFinding.attributes:type_name -> pantherclaw.v1.OrgScanFinding.AttributesEntry
+	20, // 12: pantherclaw.v1.OrgScanFinding.first_seen_time:type_name -> google.protobuf.Timestamp
+	20, // 13: pantherclaw.v1.OrgScanFinding.last_seen_time:type_name -> google.protobuf.Timestamp
+	14, // 14: pantherclaw.v1.ListOrgScanFindingsResponse.findings:type_name -> pantherclaw.v1.OrgScanFinding
+	2,  // 15: pantherclaw.v1.GitHubService.LinkIdentity:input_type -> pantherclaw.v1.LinkIdentityRequest
+	4,  // 16: pantherclaw.v1.GitHubService.UnlinkIdentity:input_type -> pantherclaw.v1.UnlinkIdentityRequest
+	6,  // 17: pantherclaw.v1.GitHubService.ListIdentities:input_type -> pantherclaw.v1.ListIdentitiesRequest
+	9,  // 18: pantherclaw.v1.GitHubService.StartOrgScan:input_type -> pantherclaw.v1.StartOrgScanRequest
+	11, // 19: pantherclaw.v1.GitHubService.GetOrgScan:input_type -> pantherclaw.v1.GetOrgScanRequest
+	13, // 20: pantherclaw.v1.GitHubService.ListOrgScanFindings:input_type -> pantherclaw.v1.ListOrgScanFindingsRequest
+	3,  // 21: pantherclaw.v1.GitHubService.LinkIdentity:output_type -> pantherclaw.v1.LinkIdentityResponse
+	5,  // 22: pantherclaw.v1.GitHubService.UnlinkIdentity:output_type -> pantherclaw.v1.UnlinkIdentityResponse
+	7,  // 23: pantherclaw.v1.GitHubService.ListIdentities:output_type -> pantherclaw.v1.ListIdentitiesResponse
+	10, // 24: pantherclaw.v1.GitHubService.StartOrgScan:output_type -> pantherclaw.v1.StartOrgScanResponse
+	12, // 25: pantherclaw.v1.GitHubService.GetOrgScan:output_type -> pantherclaw.v1.GetOrgScanResponse
+	15, // 26: pantherclaw.v1.GitHubService.ListOrgScanFindings:output_type -> pantherclaw.v1.ListOrgScanFindingsResponse
+	21, // [21:27] is the sub-list for method output_type
+	15, // [15:21] is the sub-list for method input_type
+	15, // [15:15] is the sub-list for extension type_name
+	15, // [15:15] is the sub-list for extension extendee
+	0,  // [0:15] is the sub-list for field type_name
 }
 
 func init() { file_pantherclaw_v1_github_proto_init() }
@@ -992,7 +1236,7 @@ func file_pantherclaw_v1_github_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pantherclaw_v1_github_proto_rawDesc), len(file_pantherclaw_v1_github_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   16,
+			NumMessages:   20,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

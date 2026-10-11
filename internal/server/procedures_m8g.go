@@ -15,12 +15,23 @@ import (
 // identity links independence compares.
 // TestProcedurePermissionsMatchProtos checks the merged map.
 var m8gProcedures = map[string]td.Permission{
-	pantherclawv1connect.GatewayServiceReportFactsProcedure:   td.PermGatewayFactsReport,
-	pantherclawv1connect.GitHubServiceLinkIdentityProcedure:   td.PermGitHubIdentityManage,
-	pantherclawv1connect.GitHubServiceUnlinkIdentityProcedure: td.PermGitHubIdentityManage,
-	pantherclawv1connect.GitHubServiceListIdentitiesProcedure: td.PermUserRead,
-	pantherclawv1connect.GitHubServiceStartOrgScanProcedure:   td.PermGitHubScanRun,
-	pantherclawv1connect.GitHubServiceGetOrgScanProcedure:     td.PermGitHubScanRun,
+	pantherclawv1connect.GatewayServiceReportFactsProcedure:        td.PermGatewayFactsReport,
+	pantherclawv1connect.GitHubServiceLinkIdentityProcedure:        td.PermGitHubIdentityManage,
+	pantherclawv1connect.GitHubServiceUnlinkIdentityProcedure:      td.PermGitHubIdentityManage,
+	pantherclawv1connect.GitHubServiceListIdentitiesProcedure:      td.PermUserRead,
+	pantherclawv1connect.GitHubServiceStartOrgScanProcedure:        td.PermGitHubScanRun,
+	pantherclawv1connect.GitHubServiceGetOrgScanProcedure:          td.PermGitHubScanRun,
+	pantherclawv1connect.GitHubServiceListOrgScanFindingsProcedure: td.PermGitHubScanRun,
 }
 
 func init() { maps.Copy(procedurePermissions, m8gProcedures) }
+
+// gatewayListenerPermissions are what the gateway listener requires: the
+// procedures' own, except that AgentService.SubmitScanFindings, served
+// there for a gateway's organization scan, needs gateway.scan.submit
+// (G0 M8, HR-209).
+func gatewayListenerPermissions() map[string]td.Permission {
+	out := maps.Clone(procedurePermissions)
+	out[pantherclawv1connect.AgentServiceSubmitScanFindingsProcedure] = td.PermGatewayScanSubmit
+	return out
+}

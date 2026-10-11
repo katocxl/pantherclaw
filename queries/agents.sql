@@ -167,8 +167,10 @@ UPDATE pc.discoveries SET seen_count = seen_count + 1, last_seen_at = now(), obs
 WHERE org_id = sqlc.arg(org_id) AND scan_key = sqlc.arg(scan_key);
 
 -- name: InsertScanDiscovery :one
+-- A local scan's (source scan) or a gateway's organization scan's
+-- (github_scan) finding.
 INSERT INTO pc.discoveries (org_id, id, agent_id, source, scan_key, observed)
-VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(agent_id), 'scan', sqlc.arg(scan_key), sqlc.arg(observed))
+VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(agent_id), sqlc.arg(source), sqlc.arg(scan_key), sqlc.arg(observed))
 RETURNING *;
 
 -- name: CountOpenDiscoveries :one

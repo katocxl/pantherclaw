@@ -63,6 +63,22 @@ func (q *Queries) FinishGitHubScanRun(ctx context.Context, arg FinishGitHubScanR
 	return err
 }
 
+const gatewayScanRun = `-- name: GatewayScanRun :one
+SELECT r.id FROM pc.github_scan_runs r
+JOIN pc.verifications v ON v.org_id = r.org_id AND v.id = r.verification_id
+WHERE r.org_id = $1 AND r.id = $2 AND v.purpose = 'org_scan' AND v.state = 'LEASED'
+  AND v.leased_by = $3::uuid AND v.lease_expires_at >= now()
+`
+
+// GatewayScanRun is a scan whose org_scan lease this gateway holds now:
+// only then may it submit the scan's findings (HR-209).
+func (q *Queries) GatewayScanRun(ctx context.Context, orgID ids.OrgID, iD ids.UUID, gatewayID ids.UUID) (ids.UUID, error) {
+	row := q.db.QueryRow(ctx, gatewayScanRun, orgID, iD, gatewayID)
+	var id ids.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const getGitHubScanRun = `-- name: GetGitHubScanRun :one
 SELECT r.id, r.connection_id, r.counts, r.scanned, r.not_scanned, r.started_by, r.created_at, r.finished_at,
        (CASE WHEN r.state <> 'PENDING' THEN r.state
@@ -245,6 +261,64 @@ func (q *Queries) ListGitHubIdentities(ctx context.Context, arg ListGitHubIdenti
 			&i.GithubUserID,
 			&i.LinkedBy,
 			&i.LinkedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOrgScanFindings = `-- name: ListOrgScanFindings :many
+SELECT d.id, d.agent_id, d.observed, d.seen_count, d.first_seen_at, d.last_seen_at
+FROM pc.discoveries d
+WHERE d.org_id = $1 AND d.source = 'github_scan' AND d.observed ->> 'scan_run' = $2::text
+  AND d.id > coalesce($3::uuid, '00000000-0000-0000-0000-000000000000')
+ORDER BY d.id
+LIMIT $4
+`
+
+type ListOrgScanFindingsParams struct {
+	OrgID   ids.OrgID
+	ScanRun string
+	AfterID ids.UUID
+	MaxRows int32
+}
+
+type ListOrgScanFindingsRow struct {
+	ID          ids.UUID
+	AgentID     ids.UUID
+	Observed    []byte
+	SeenCount   int64
+	FirstSeenAt time.Time
+	LastSeenAt  time.Time
+}
+
+// ListOrgScanFindings are the discoveries a scan saw last.
+func (q *Queries) ListOrgScanFindings(ctx context.Context, arg ListOrgScanFindingsParams) ([]ListOrgScanFindingsRow, error) {
+	rows, err := q.db.Query(ctx, listOrgScanFindings,
+		arg.OrgID,
+		arg.ScanRun,
+		arg.AfterID,
+		arg.MaxRows,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListOrgScanFindingsRow{}
+	for rows.Next() {
+		var i ListOrgScanFindingsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.AgentID,
+			&i.Observed,
+			&i.SeenCount,
+			&i.FirstSeenAt,
+			&i.LastSeenAt,
 		); err != nil {
 			return nil, err
 		}

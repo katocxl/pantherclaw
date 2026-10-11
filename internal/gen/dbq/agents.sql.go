@@ -411,7 +411,7 @@ func (q *Queries) InsertDiscoveredAgent(ctx context.Context, arg InsertDiscovere
 
 const insertScanDiscovery = `-- name: InsertScanDiscovery :one
 INSERT INTO pc.discoveries (org_id, id, agent_id, source, scan_key, observed)
-VALUES ($1, $2, $3, 'scan', $4, $5)
+VALUES ($1, $2, $3, $4, $5, $6)
 RETURNING org_id, id, agent_id, source, key_jkt, public_jwk, scan_key, state, observed, seen_count, first_seen_at, last_seen_at
 `
 
@@ -419,15 +419,19 @@ type InsertScanDiscoveryParams struct {
 	OrgID    ids.OrgID
 	ID       ids.UUID
 	AgentID  ids.UUID
+	Source   string
 	ScanKey  []byte
 	Observed []byte
 }
 
+// A local scan's (source scan) or a gateway's organization scan's
+// (github_scan) finding.
 func (q *Queries) InsertScanDiscovery(ctx context.Context, arg InsertScanDiscoveryParams) (PcDiscovery, error) {
 	row := q.db.QueryRow(ctx, insertScanDiscovery,
 		arg.OrgID,
 		arg.ID,
 		arg.AgentID,
+		arg.Source,
 		arg.ScanKey,
 		arg.Observed,
 	)

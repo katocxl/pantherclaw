@@ -39,6 +39,9 @@ const (
 	GitHubServiceStartOrgScanProcedure = "/pantherclaw.v1.GitHubService/StartOrgScan"
 	// GitHubServiceGetOrgScanProcedure is the procedure name of the GitHubService's GetOrgScan RPC.
 	GitHubServiceGetOrgScanProcedure = "/pantherclaw.v1.GitHubService/GetOrgScan"
+	// GitHubServiceListOrgScanFindingsProcedure is the procedure name of the GitHubService's
+	// ListOrgScanFindings RPC.
+	GitHubServiceListOrgScanFindingsProcedure = "/pantherclaw.v1.GitHubService/ListOrgScanFindings"
 )
 
 var (
@@ -77,6 +80,13 @@ var (
 			Procedure:  GitHubServiceGetOrgScanProcedure,
 		}
 	})
+	gitHubServiceListOrgScanFindingsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_pantherclaw_v1_github_proto.Services().ByName("GitHubService").Methods().ByName("ListOrgScanFindings"),
+			Procedure:  GitHubServiceListOrgScanFindingsProcedure,
+		}
+	})
 )
 
 // GitHubServiceClient is a client for the pantherclaw.v1.GitHubService service.
@@ -101,6 +111,10 @@ type GitHubServiceClient interface {
 	// read and could not read.
 	// permission: github.scan.run
 	GetOrgScan(context.Context, *v1.GetOrgScanRequest) (*v1.GetOrgScanResponse, error)
+	// ListOrgScanFindings lists what a scan found: untrusted observations,
+	// recorded as DISCOVERED agents, that grant nothing.
+	// permission: github.scan.run
+	ListOrgScanFindings(context.Context, *v1.ListOrgScanFindingsRequest) (*v1.ListOrgScanFindingsResponse, error)
 }
 
 // NewGitHubServiceClient constructs a client for the pantherclaw.v1.GitHubService service. Multiple
@@ -131,6 +145,10 @@ type GitHubServiceHandler interface {
 	// read and could not read.
 	// permission: github.scan.run
 	GetOrgScan(context.Context, *v1.GetOrgScanRequest) (*v1.GetOrgScanResponse, error)
+	// ListOrgScanFindings lists what a scan found: untrusted observations,
+	// recorded as DISCOVERED agents, that grant nothing.
+	// permission: github.scan.run
+	ListOrgScanFindings(context.Context, *v1.ListOrgScanFindingsRequest) (*v1.ListOrgScanFindingsResponse, error)
 }
 
 // RegisterGitHubServiceHandler registers svc as the pantherclaw.v1.GitHubService implementation on
@@ -143,6 +161,7 @@ func RegisterGitHubServiceHandler(server *connect.Server, svc GitHubServiceHandl
 		connect.Method{Spec: gitHubServiceListIdentitiesSpec(), Handler: adapter.listIdentities},
 		connect.Method{Spec: gitHubServiceStartOrgScanSpec(), Handler: adapter.startOrgScan},
 		connect.Method{Spec: gitHubServiceGetOrgScanSpec(), Handler: adapter.getOrgScan},
+		connect.Method{Spec: gitHubServiceListOrgScanFindingsSpec(), Handler: adapter.listOrgScanFindings},
 	)
 }
 
@@ -167,6 +186,10 @@ func (UnimplementedGitHubServiceHandler) StartOrgScan(context.Context, *v1.Start
 
 func (UnimplementedGitHubServiceHandler) GetOrgScan(context.Context, *v1.GetOrgScanRequest) (*v1.GetOrgScanResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.GitHubService.GetOrgScan is not implemented")
+}
+
+func (UnimplementedGitHubServiceHandler) ListOrgScanFindings(context.Context, *v1.ListOrgScanFindingsRequest) (*v1.ListOrgScanFindingsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.GitHubService.ListOrgScanFindings is not implemented")
 }
 
 type gitHubServiceClient struct {
@@ -208,6 +231,14 @@ func (c *gitHubServiceClient) StartOrgScan(ctx context.Context, req *v1.StartOrg
 func (c *gitHubServiceClient) GetOrgScan(ctx context.Context, req *v1.GetOrgScanRequest) (*v1.GetOrgScanResponse, error) {
 	var res v1.GetOrgScanResponse
 	if err := c.client.CallUnary(ctx, gitHubServiceGetOrgScanSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *gitHubServiceClient) ListOrgScanFindings(ctx context.Context, req *v1.ListOrgScanFindingsRequest) (*v1.ListOrgScanFindingsResponse, error) {
+	var res v1.ListOrgScanFindingsResponse
+	if err := c.client.CallUnary(ctx, gitHubServiceListOrgScanFindingsSpec(), req, &res); err != nil {
 		return nil, err
 	}
 	return &res, nil
@@ -269,6 +300,18 @@ func (h gitHubServiceHandler) getOrgScan(ctx context.Context, _ connect.Spec, st
 		return err
 	}
 	res, err := h.svc.GetOrgScan(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h gitHubServiceHandler) listOrgScanFindings(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListOrgScanFindingsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListOrgScanFindings(ctx, &req)
 	if err != nil {
 		return err
 	}

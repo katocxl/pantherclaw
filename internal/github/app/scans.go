@@ -13,6 +13,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
+	"github.com/katocxl/pantherclaw/internal/platform/page"
 	tenancy "github.com/katocxl/pantherclaw/internal/tenancy/app"
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
 )
@@ -142,4 +143,47 @@ func (s *Scans) Get(ctx context.Context, id ids.UUID) (Scan, error) {
 		return nil
 	}, db.ReadOnly())
 	return out, err
+}
+
+// Finding is one thing a scan found: its discovered agent, and its
+// untrusted attributes (kind among them).
+type Finding struct {
+	dbq.ListOrgScanFindingsRow
+	Attributes map[string]string
+}
+
+// Findings pages through what a scan saw: untrusted observations recorded
+// as DISCOVERED agents, which grant nothing (HR-209).
+func (s *Scans) Findings(ctx context.Context, scan ids.UUID, size int32, token string) ([]Finding, string, error) {
+	c, err := s.scanner(ctx)
+	if err != nil {
+		return nil, "", err
+	}
+	pr, err := page.Parse(size, token)
+	if err != nil {
+		return nil, "", err
+	}
+	var out []Finding
+	var next string
+	err = s.Pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
+		q := dbq.New(tx)
+		if _, err := q.GetGitHubScanRun(ctx, c.Org, scan); db.IsNoRows(err) {
+			return ErrScanNotFound
+		} else if err != nil {
+			return err
+		}
+		rows, err := q.ListOrgScanFindings(ctx, dbq.ListOrgScanFindingsParams{OrgID: c.Org, ScanRun: scan.String(), AfterID: pr.After, MaxRows: pr.Limit()})
+		if err != nil {
+			return err
+		}
+		rows, next = page.Finish(pr, rows, func(r dbq.ListOrgScanFindingsRow) ids.UUID { return r.ID })
+		for _, r := range rows {
+			f := Finding{ListOrgScanFindingsRow: r}
+			_ = json.Unmarshal(r.Observed, &f.Attributes) // stored as an object of strings
+			delete(f.Attributes, "scan_run")
+			out = append(out, f)
+		}
+		return nil
+	}, db.ReadOnly())
+	return out, next, err
 }

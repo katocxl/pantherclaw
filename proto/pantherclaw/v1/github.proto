@@ -58,6 +58,10 @@ service GitHubService {
   // read and could not read.
   // permission: github.scan.run
   rpc GetOrgScan(GetOrgScanRequest) returns (GetOrgScanResponse);
+  // ListOrgScanFindings lists what a scan found: untrusted observations,
+  // recorded as DISCOVERED agents, that grant nothing.
+  // permission: github.scan.run
+  rpc ListOrgScanFindings(ListOrgScanFindingsRequest) returns (ListOrgScanFindingsResponse);
 }
 
 // GitHubIdentity is one person's link to a GitHub account.
@@ -171,4 +175,42 @@ message GetOrgScanRequest {
 message GetOrgScanResponse {
   // The scan.
   OrgScan scan = 1;
+}
+
+// ListOrgScanFindingsRequest pages through a scan's findings.
+message ListOrgScanFindingsRequest {
+  // Scan id.
+  string scan_id = 1 [(buf.validate.field).string.uuid = true];
+  // Page size (default 50, at most 200).
+  int32 page_size = 2 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 200
+  }];
+  // Page token from the previous page.
+  string page_token = 3 [(buf.validate.field).string.max_len = 512];
+}
+
+// OrgScanFinding is one thing a scan found: an UNTRUSTED observation that
+// grants nothing, recorded as a DISCOVERED agent.
+message OrgScanFinding {
+  // The discovered agent.
+  string agent_id = 1;
+  // github_app, github_workflow or github_mcp_config.
+  string kind = 2;
+  // UNTRUSTED attributes: names only, never values or arguments.
+  map<string, string> attributes = 3;
+  // How often scans saw it.
+  int64 seen_count = 4;
+  // When first and last seen.
+  google.protobuf.Timestamp first_seen_time = 5;
+  // When last seen.
+  google.protobuf.Timestamp last_seen_time = 6;
+}
+
+// ListOrgScanFindingsResponse returns a page of findings.
+message ListOrgScanFindingsResponse {
+  // The findings this scan saw.
+  repeated OrgScanFinding findings = 1;
+  // Token of the next page; empty on the last.
+  string next_page_token = 2;
 }

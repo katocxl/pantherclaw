@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	aapp "github.com/katocxl/pantherclaw/internal/agents/app"
 	billing "github.com/katocxl/pantherclaw/internal/billing/domain"
 	"github.com/katocxl/pantherclaw/internal/github/app"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
@@ -145,5 +146,80 @@ func TestHR209_AnOrgScanRunsAsItsGatewaysLease(t *testing.T) {
 	e.exec(t, "UPDATE pc.verifications SET state = 'EXPIRED', finished_at = now() WHERE org_id = $1 AND purpose = 'org_scan' AND state = 'PENDING'", e.org)
 	if got, _ := team.Get(admin, again.ID); got.State != "FAILED" {
 		t.Fatalf("an expired lease: %s", got.State)
+	}
+}
+
+// TestHR209_OnlyTheLeaseHoldingGatewaySubmitsFindingsAndTheyGrantNothing:
+// a gateway submits an organization scan's findings only while it holds
+// that scan's org_scan lease, and only GitHub kinds; they become
+// DISCOVERED agents tagged with the scan, are listed with the scan, are
+// counted when seen again, and grant nothing. A local scan submits no
+// GitHub kind.
+func TestHR209_OnlyTheLeaseHoldingGatewaySubmitsFindingsAndTheyGrantNothing(t *testing.T) {
+	e := newEnv(t)
+	gateway, other := ids.NewV7(), ids.NewV7()
+	for name, g := range map[string]ids.UUID{"edge": gateway, "other": other} {
+		e.exec(t, "INSERT INTO pc.gateways (org_id, id, name, created_by) VALUES ($1, $2, $3, 'test')", e.org, g, name)
+	}
+	e.exec(t, "INSERT INTO pc.org_containment (org_id) VALUES ($1) ON CONFLICT DO NOTHING", e.org)
+	conn := e.gitHubConnection(t, gateway, e.brokerKey(t, gateway), "github", false)
+	admin := e.caller(td.KindUser, td.RoleSecurityAdmin)
+	scans := &app.Scans{Pool: e.pool, Ents: edition(billing.Team)}
+	scan, err := scans.Start(admin, conn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	inv := aapp.NewInventory(e.pool, edition(billing.Team))
+	key := func(b byte) [32]byte { return [32]byte{b} }
+	findings := []aapp.ScanFinding{
+		{Kind: "github_workflow", Key: key(1), Attributes: map[string]string{"repository": "acme/payments", "path": ".github/workflows/deploy.yml", "environments": "production"}},
+		{Kind: "github_mcp_config", Key: key(2), Attributes: map[string]string{"repository": "acme/payments", "name": "github", "command": "npx"}},
+	}
+	if _, err := inv.SubmitGitHubScan(context.Background(), e.org, gateway, scan.ID, findings); !errors.Is(err, aapp.ErrNoScanLease) {
+		t.Fatalf("before the lease: %v", err)
+	}
+	store := &pgtransactions.Store{Pool: e.pool}
+	leases, err := store.Claim(context.Background(), e.org, gateway, 4, 30*time.Second)
+	if err != nil || len(leases) != 1 {
+		t.Fatalf("leases %+v %v", leases, err)
+	}
+	if _, err := inv.SubmitGitHubScan(context.Background(), e.org, other, scan.ID, findings); !errors.Is(err, aapp.ErrNoScanLease) {
+		t.Fatalf("another gateway: %v", err)
+	}
+	local := []aapp.ScanFinding{{Kind: "mcp_server", Key: key(3), Attributes: map[string]string{"name": "x"}}}
+	if _, err := inv.SubmitGitHubScan(context.Background(), e.org, gateway, scan.ID, local); !errors.Is(err, aapp.ErrScanKind) {
+		t.Fatalf("a local kind from a gateway: %v", err)
+	}
+	r, err := inv.SubmitGitHubScan(context.Background(), e.org, gateway, scan.ID, findings)
+	if err != nil || r.Created != 2 {
+		t.Fatalf("submit %+v %v", r, err)
+	}
+	if r, err := inv.SubmitGitHubScan(context.Background(), e.org, gateway, scan.ID, findings[:1]); err != nil || r.Counted != 1 || r.Created != 0 {
+		t.Fatalf("seen again %+v %v", r, err)
+	}
+	listed, _, err := scans.Findings(admin, scan.ID, 0, "")
+	if err != nil || len(listed) != 2 || listed[0].Attributes["kind"] != "github_workflow" || listed[0].Attributes["scan_run"] != "" ||
+		listed[1].Attributes["command"] != "npx" || listed[0].SeenCount != 2 {
+		t.Fatalf("findings %+v %v", listed, err)
+	}
+	if n := e.count(t, "SELECT count(*) FROM pc.agents WHERE org_id = $1 AND state = 'DISCOVERED'", e.org); n != 2 {
+		t.Fatalf("%d discovered agents", n)
+	}
+	if n := e.count(t, "SELECT count(*) FROM pc.grants WHERE org_id = $1", e.org); n != 0 {
+		t.Fatalf("findings granted something: %d grants", n)
+	}
+	// After the report, the lease is gone: nothing more is accepted.
+	if _, err := store.Report(context.Background(), e.org, gateway, tapp.Report{
+		Task: leases[0].Task, Secret: leases[0].Secret, HTTPStatus: 200, Found: true, Complete: true, Fields: map[string]string{"/counts/workflows": "1"},
+	}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := inv.SubmitGitHubScan(context.Background(), e.org, gateway, scan.ID, findings); !errors.Is(err, aapp.ErrNoScanLease) {
+		t.Fatalf("after the report: %v", err)
+	}
+	// A person's local scan submits no GitHub kind.
+	person := e.caller(td.KindUser, td.RoleOrgAdmin)
+	if _, err := inv.SubmitScan(person, "laptop", findings); !errors.Is(err, aapp.ErrScanKind) {
+		t.Fatalf("a GitHub kind from a local scan: %v", err)
 	}
 }

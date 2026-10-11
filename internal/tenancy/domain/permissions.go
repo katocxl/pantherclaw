@@ -167,6 +167,9 @@ const (
 	// PermGatewayFactsReport: gateways only, report a connection's facts as
 	// its registered provider (G0 M8 decision 5, HR-160).
 	PermGatewayFactsReport Permission = "gateway.facts.report"
+	// PermGatewayScanSubmit: gateways only, submit an organization scan's
+	// findings while holding its org_scan lease (G0 M8, HR-209).
+	PermGatewayScanSubmit Permission = "gateway.scan.submit"
 	// PermGitHubIdentityManage links people to GitHub user ids, which
 	// independence compares (G0 M8, HR-207). Org Admin holds it, and Org
 	// Admin stays bindable to service accounts, so it is not in humanOnly:
@@ -241,7 +244,7 @@ func (p Permission) HumanOnly() bool { return slices.Contains(humanOnly, p) }
 // and gateway.manage are ordinary permissions for people.
 var gatewayOnly = []Permission{
 	PermGatewayAuthorize, PermGatewayDispatch, PermGatewayObserve, PermGatewayEnroll, PermGatewaySync, PermGatewayVerify,
-	PermGatewayFactsReport,
+	PermGatewayFactsReport, PermGatewayScanSubmit,
 }
 
 // Gateway reports whether p belongs to gateways.
@@ -253,7 +256,7 @@ func (p Permission) Workload() bool { return strings.HasPrefix(string(p), "workl
 // declarableOnly are requirements an RPC may declare that no role grants.
 var declarableOnly = []Permission{
 	PermPublic, PermAuthenticated, PermGatewayAuthorize, PermGatewayDispatch, PermGatewayObserve, PermGatewayEnroll,
-	PermGatewaySync, PermGatewayVerify, PermGatewayFactsReport, PermWorkloadEnroll, PermWorkloadToken, PermWorkloadRun, PermWorkloadDelegate,
+	PermGatewaySync, PermGatewayVerify, PermGatewayFactsReport, PermGatewayScanSubmit, PermWorkloadEnroll, PermWorkloadToken, PermWorkloadRun, PermWorkloadDelegate,
 }
 
 // Declarable reports whether an RPC may declare p as its requirement.
