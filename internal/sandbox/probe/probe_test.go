@@ -30,11 +30,11 @@ func config() Config {
 	}
 }
 
-func TestHR121_TheCatalogueHasEveryProbeAndControl(t *testing.T) {
+func TestHR121_TheCatalogHasEveryProbeAndControl(t *testing.T) {
 	type key struct{ name, role, expect string }
 	have := map[key]int{}
 	targets := map[string]bool{}
-	for _, p := range catalogue(config()) {
+	for _, p := range catalog(config()) {
 		have[key{p.name, p.role, p.expect}]++
 		if targets[p.name+" "+p.target] {
 			t.Errorf("%s %s twice", p.name, p.target)
@@ -81,7 +81,7 @@ func TestHR121_ProbesContactNoThirdParty(t *testing.T) {
 		allowed[a] = true
 	}
 	ipRE := regexp.MustCompile(`\[?([0-9a-f:]*:[0-9a-f:]+|\d+\.\d+\.\d+\.\d+)\]?`)
-	for _, p := range catalogue(c) {
+	for _, p := range catalog(c) {
 		for _, m := range ipRE.FindAllStringSubmatch(p.target, -1) {
 			if a, err := netip.ParseAddr(m[1]); err == nil && !allowed[a.String()] {
 				t.Errorf("%s contacts %s", p.name, a)
@@ -98,7 +98,7 @@ func TestHR121_ProbesContactNoThirdParty(t *testing.T) {
 func TestHR121_TheControlRunAimsOnlyAtTheCanary(t *testing.T) {
 	c := config()
 	c.Kind = report.KindControl
-	ps := catalogue(c)
+	ps := catalog(c)
 	if len(ps) != 5 {
 		t.Fatalf("%d control probes", len(ps))
 	}
@@ -152,10 +152,10 @@ func TestReadConfigIsStrict(t *testing.T) {
 
 func TestProbeRunsOnlyInLinuxContainers(t *testing.T) {
 	if runtime.GOOS == "linux" {
-		t.Skip("on Linux the catalogue runs")
+		t.Skip("on Linux the catalog runs")
 	}
 	if _, err := Probe(t.Context(), config()); err == nil {
-		t.Fatal("the catalogue ran outside a Linux container")
+		t.Fatal("the catalog ran outside a Linux container")
 	}
 }
 
