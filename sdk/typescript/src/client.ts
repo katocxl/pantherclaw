@@ -335,7 +335,7 @@ export class Client {
     const body = JSON.stringify({ identifier: this.cfg.keyFile.identifier });
     const res = await this.send("POST", `${this.cfg.server}/pantherclaw.v1.WorkloadService/IssueToken`, body, connect, true, 0);
     if (res.status !== 200) throw new Error(`token issuance: HTTP ${res.status} ${res.headers.get(HEADER_ERROR) ?? ""}`);
-    const token = String((JSON.parse(res.body) as { workloadToken?: string }).workloadToken ?? "");
+    const token = String((plain(parseJSON(res.body)) as { workloadToken?: string }).workloadToken ?? "");
     const claims = parseTokenClaims(token);
     if (claims.cnf.jkt !== (await this.key).jkt) throw new Error("the server issued a token for another key");
     this.token = token;
@@ -543,7 +543,7 @@ export function next(w: WaitState): "wait" | "resubmit" | "deny" {
 
 /** Reads a WorkloadService.Wait answer (Connect JSON). */
 export function parseWaitResponse(body: string): { state: WaitState; timedOut: boolean } {
-  const r = JSON.parse(body) as { wait?: Record<string, unknown>; timedOut?: boolean };
+  const r = plain(parseJSON(body)) as { wait?: Record<string, unknown>; timedOut?: boolean };
   if (!r.wait) throw new Error("no wait state");
   const w = r.wait;
   return {
@@ -583,7 +583,7 @@ export async function readStream(stream: ReadableStream<Uint8Array>, fn: (w: Wai
         const line = buf.slice(0, nl).endsWith(CR) ? buf.slice(0, nl - 1) : buf.slice(0, nl);
         buf = buf.slice(nl + 1);
         if (line === "") {
-          if (event === "state" && data && !fn(JSON.parse(data) as WaitState)) return;
+          if (event === "state" && data && !fn(plain(parseJSON(data)) as WaitState)) return;
           event = "";
           data = "";
         } else if (line.startsWith("event:")) {
