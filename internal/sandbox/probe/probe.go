@@ -3,9 +3,11 @@
 
 // Package probe is the containment sandbox's closure probe catalogue, run
 // as `pantherclaw-probe` in a container of its own on the agent's network,
-// as another uid, with NET_RAW and the other hardened flags (G0 M9 decision
-// 2, design decisions 5 and 8; HR-121). It tries every route out the agent
-// could try and signs what it saw with the session's probe key, which pclaw
+// as another uid, with the hardened flags and its own group allowed to
+// ping (G0 M9 decision 2, design decisions 5 and 8; HR-121). It tries every
+// route out the agent could try and signs what it saw with the session's
+// probe key, which pclaw created outside every container and mounted
+// read-only here (HR-215).
 // created outside every container and mounted read-only here (HR-215).
 //
 // Probes contact only the canary, the host's own addresses and the mapped
@@ -128,7 +130,6 @@ func catalogue(c Config) []probe {
 			blocked("ipv6", a, func(ctx context.Context) error { return dialTCP(ctx, "tcp6", net.JoinHostPort(a, "443")) })
 		}
 	}
-	blocked("icmp", "ping socket", func(context.Context) error { return pingSocket() })
 	for _, a := range append(append([]string{}, c.MappedAddrs...), c.HostAddrs...) {
 		if ip := net.ParseIP(a); ip != nil && ip.To4() != nil {
 			blocked("icmp", "echo "+a, func(ctx context.Context) error { return icmpEcho(ctx, ip.To4()) })
