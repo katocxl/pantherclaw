@@ -3458,10 +3458,13 @@ type ConnectionHealth struct {
 	Deliveries *ConnectionDeliveries `protobuf:"bytes,7,opt,name=deliveries,proto3" json:"deliveries,omitempty"`
 	// Agents that used it over the last 30 days, latest first, at most 50.
 	DependentAgents []*ConnectionDependentAgent `protobuf:"bytes,8,rep,name=dependent_agents,json=dependentAgents,proto3" json:"dependent_agents,omitempty"`
-	// The caller may not read agents org-wide, so none are listed.
+	// The caller may not read agents org-wide, so neither list is shown.
 	DependentAgentsHidden bool `protobuf:"varint,9,opt,name=dependent_agents_hidden,json=dependentAgentsHidden,proto3" json:"dependent_agents_hidden,omitempty"`
-	unknownFields         protoimpl.UnknownFields
-	sizeCache             protoimpl.SizeCache
+	// Agents whose active grants allow an operation the connection serves,
+	// so they depend on it, by name, at most 50. last_use_time is unset.
+	GrantedAgents []*ConnectionDependentAgent `protobuf:"bytes,10,rep,name=granted_agents,json=grantedAgents,proto3" json:"granted_agents,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ConnectionHealth) Reset() {
@@ -3555,6 +3558,13 @@ func (x *ConnectionHealth) GetDependentAgentsHidden() bool {
 		return x.DependentAgentsHidden
 	}
 	return false
+}
+
+func (x *ConnectionHealth) GetGrantedAgents() []*ConnectionDependentAgent {
+	if x != nil {
+		return x.GrantedAgents
+	}
+	return nil
 }
 
 // GetConnectionHealthRequest names a connection.
@@ -3922,7 +3932,7 @@ const file_pantherclaw_v1_connections_proto_rawDesc = "" +
 	"\x18ConnectionDependentAgent\x12\x19\n" +
 	"\bagent_id\x18\x01 \x01(\tR\aagentId\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12>\n" +
-	"\rlast_use_time\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\vlastUseTime\"\x82\x05\n" +
+	"\rlast_use_time\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\vlastUseTime\"\xd3\x05\n" +
 	"\x10ConnectionHealth\x12:\n" +
 	"\n" +
 	"connection\x18\x01 \x01(\v2\x1a.pantherclaw.v1.ConnectionR\n" +
@@ -3936,7 +3946,9 @@ const file_pantherclaw_v1_connections_proto_rawDesc = "" +
 	"deliveries\x18\a \x01(\v2$.pantherclaw.v1.ConnectionDeliveriesR\n" +
 	"deliveries\x12S\n" +
 	"\x10dependent_agents\x18\b \x03(\v2(.pantherclaw.v1.ConnectionDependentAgentR\x0fdependentAgents\x126\n" +
-	"\x17dependent_agents_hidden\x18\t \x01(\bR\x15dependentAgentsHidden\"6\n" +
+	"\x17dependent_agents_hidden\x18\t \x01(\bR\x15dependentAgentsHidden\x12O\n" +
+	"\x0egranted_agents\x18\n" +
+	" \x03(\v2(.pantherclaw.v1.ConnectionDependentAgentR\rgrantedAgents\"6\n" +
 	"\x1aGetConnectionHealthRequest\x12\x18\n" +
 	"\x02id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x02id\"W\n" +
 	"\x1bGetConnectionHealthResponse\x128\n" +
@@ -4128,42 +4140,43 @@ var file_pantherclaw_v1_connections_proto_depIdxs = []int32{
 	43, // 57: pantherclaw.v1.ConnectionHealth.last_passed_test:type_name -> pantherclaw.v1.ConnectionTest
 	47, // 58: pantherclaw.v1.ConnectionHealth.deliveries:type_name -> pantherclaw.v1.ConnectionDeliveries
 	48, // 59: pantherclaw.v1.ConnectionHealth.dependent_agents:type_name -> pantherclaw.v1.ConnectionDependentAgent
-	49, // 60: pantherclaw.v1.GetConnectionHealthResponse.health:type_name -> pantherclaw.v1.ConnectionHealth
-	11, // 61: pantherclaw.v1.ConnectionService.CreateConnection:input_type -> pantherclaw.v1.CreateConnectionRequest
-	13, // 62: pantherclaw.v1.ConnectionService.GetConnection:input_type -> pantherclaw.v1.GetConnectionRequest
-	15, // 63: pantherclaw.v1.ConnectionService.ListConnections:input_type -> pantherclaw.v1.ListConnectionsRequest
-	17, // 64: pantherclaw.v1.ConnectionService.UpdateConnection:input_type -> pantherclaw.v1.UpdateConnectionRequest
-	19, // 65: pantherclaw.v1.ConnectionService.SetRouteMode:input_type -> pantherclaw.v1.SetRouteModeRequest
-	21, // 66: pantherclaw.v1.ConnectionService.QuarantineConnection:input_type -> pantherclaw.v1.QuarantineConnectionRequest
-	23, // 67: pantherclaw.v1.ConnectionService.RestoreConnection:input_type -> pantherclaw.v1.RestoreConnectionRequest
-	25, // 68: pantherclaw.v1.ConnectionService.RetireConnection:input_type -> pantherclaw.v1.RetireConnectionRequest
-	27, // 69: pantherclaw.v1.ConnectionService.GetSealingKey:input_type -> pantherclaw.v1.GetSealingKeyRequest
-	29, // 70: pantherclaw.v1.ConnectionService.PutCredential:input_type -> pantherclaw.v1.PutCredentialRequest
-	31, // 71: pantherclaw.v1.ConnectionService.ListCredentials:input_type -> pantherclaw.v1.ListCredentialsRequest
-	33, // 72: pantherclaw.v1.ConnectionService.RevokeCredential:input_type -> pantherclaw.v1.RevokeCredentialRequest
-	40, // 73: pantherclaw.v1.ConnectionService.GetConnectionCapabilities:input_type -> pantherclaw.v1.GetConnectionCapabilitiesRequest
-	44, // 74: pantherclaw.v1.ConnectionService.TestConnection:input_type -> pantherclaw.v1.TestConnectionRequest
-	50, // 75: pantherclaw.v1.ConnectionService.GetConnectionHealth:input_type -> pantherclaw.v1.GetConnectionHealthRequest
-	12, // 76: pantherclaw.v1.ConnectionService.CreateConnection:output_type -> pantherclaw.v1.CreateConnectionResponse
-	14, // 77: pantherclaw.v1.ConnectionService.GetConnection:output_type -> pantherclaw.v1.GetConnectionResponse
-	16, // 78: pantherclaw.v1.ConnectionService.ListConnections:output_type -> pantherclaw.v1.ListConnectionsResponse
-	18, // 79: pantherclaw.v1.ConnectionService.UpdateConnection:output_type -> pantherclaw.v1.UpdateConnectionResponse
-	20, // 80: pantherclaw.v1.ConnectionService.SetRouteMode:output_type -> pantherclaw.v1.SetRouteModeResponse
-	22, // 81: pantherclaw.v1.ConnectionService.QuarantineConnection:output_type -> pantherclaw.v1.QuarantineConnectionResponse
-	24, // 82: pantherclaw.v1.ConnectionService.RestoreConnection:output_type -> pantherclaw.v1.RestoreConnectionResponse
-	26, // 83: pantherclaw.v1.ConnectionService.RetireConnection:output_type -> pantherclaw.v1.RetireConnectionResponse
-	28, // 84: pantherclaw.v1.ConnectionService.GetSealingKey:output_type -> pantherclaw.v1.GetSealingKeyResponse
-	30, // 85: pantherclaw.v1.ConnectionService.PutCredential:output_type -> pantherclaw.v1.PutCredentialResponse
-	32, // 86: pantherclaw.v1.ConnectionService.ListCredentials:output_type -> pantherclaw.v1.ListCredentialsResponse
-	34, // 87: pantherclaw.v1.ConnectionService.RevokeCredential:output_type -> pantherclaw.v1.RevokeCredentialResponse
-	41, // 88: pantherclaw.v1.ConnectionService.GetConnectionCapabilities:output_type -> pantherclaw.v1.GetConnectionCapabilitiesResponse
-	45, // 89: pantherclaw.v1.ConnectionService.TestConnection:output_type -> pantherclaw.v1.TestConnectionResponse
-	51, // 90: pantherclaw.v1.ConnectionService.GetConnectionHealth:output_type -> pantherclaw.v1.GetConnectionHealthResponse
-	76, // [76:91] is the sub-list for method output_type
-	61, // [61:76] is the sub-list for method input_type
-	61, // [61:61] is the sub-list for extension type_name
-	61, // [61:61] is the sub-list for extension extendee
-	0,  // [0:61] is the sub-list for field type_name
+	48, // 60: pantherclaw.v1.ConnectionHealth.granted_agents:type_name -> pantherclaw.v1.ConnectionDependentAgent
+	49, // 61: pantherclaw.v1.GetConnectionHealthResponse.health:type_name -> pantherclaw.v1.ConnectionHealth
+	11, // 62: pantherclaw.v1.ConnectionService.CreateConnection:input_type -> pantherclaw.v1.CreateConnectionRequest
+	13, // 63: pantherclaw.v1.ConnectionService.GetConnection:input_type -> pantherclaw.v1.GetConnectionRequest
+	15, // 64: pantherclaw.v1.ConnectionService.ListConnections:input_type -> pantherclaw.v1.ListConnectionsRequest
+	17, // 65: pantherclaw.v1.ConnectionService.UpdateConnection:input_type -> pantherclaw.v1.UpdateConnectionRequest
+	19, // 66: pantherclaw.v1.ConnectionService.SetRouteMode:input_type -> pantherclaw.v1.SetRouteModeRequest
+	21, // 67: pantherclaw.v1.ConnectionService.QuarantineConnection:input_type -> pantherclaw.v1.QuarantineConnectionRequest
+	23, // 68: pantherclaw.v1.ConnectionService.RestoreConnection:input_type -> pantherclaw.v1.RestoreConnectionRequest
+	25, // 69: pantherclaw.v1.ConnectionService.RetireConnection:input_type -> pantherclaw.v1.RetireConnectionRequest
+	27, // 70: pantherclaw.v1.ConnectionService.GetSealingKey:input_type -> pantherclaw.v1.GetSealingKeyRequest
+	29, // 71: pantherclaw.v1.ConnectionService.PutCredential:input_type -> pantherclaw.v1.PutCredentialRequest
+	31, // 72: pantherclaw.v1.ConnectionService.ListCredentials:input_type -> pantherclaw.v1.ListCredentialsRequest
+	33, // 73: pantherclaw.v1.ConnectionService.RevokeCredential:input_type -> pantherclaw.v1.RevokeCredentialRequest
+	40, // 74: pantherclaw.v1.ConnectionService.GetConnectionCapabilities:input_type -> pantherclaw.v1.GetConnectionCapabilitiesRequest
+	44, // 75: pantherclaw.v1.ConnectionService.TestConnection:input_type -> pantherclaw.v1.TestConnectionRequest
+	50, // 76: pantherclaw.v1.ConnectionService.GetConnectionHealth:input_type -> pantherclaw.v1.GetConnectionHealthRequest
+	12, // 77: pantherclaw.v1.ConnectionService.CreateConnection:output_type -> pantherclaw.v1.CreateConnectionResponse
+	14, // 78: pantherclaw.v1.ConnectionService.GetConnection:output_type -> pantherclaw.v1.GetConnectionResponse
+	16, // 79: pantherclaw.v1.ConnectionService.ListConnections:output_type -> pantherclaw.v1.ListConnectionsResponse
+	18, // 80: pantherclaw.v1.ConnectionService.UpdateConnection:output_type -> pantherclaw.v1.UpdateConnectionResponse
+	20, // 81: pantherclaw.v1.ConnectionService.SetRouteMode:output_type -> pantherclaw.v1.SetRouteModeResponse
+	22, // 82: pantherclaw.v1.ConnectionService.QuarantineConnection:output_type -> pantherclaw.v1.QuarantineConnectionResponse
+	24, // 83: pantherclaw.v1.ConnectionService.RestoreConnection:output_type -> pantherclaw.v1.RestoreConnectionResponse
+	26, // 84: pantherclaw.v1.ConnectionService.RetireConnection:output_type -> pantherclaw.v1.RetireConnectionResponse
+	28, // 85: pantherclaw.v1.ConnectionService.GetSealingKey:output_type -> pantherclaw.v1.GetSealingKeyResponse
+	30, // 86: pantherclaw.v1.ConnectionService.PutCredential:output_type -> pantherclaw.v1.PutCredentialResponse
+	32, // 87: pantherclaw.v1.ConnectionService.ListCredentials:output_type -> pantherclaw.v1.ListCredentialsResponse
+	34, // 88: pantherclaw.v1.ConnectionService.RevokeCredential:output_type -> pantherclaw.v1.RevokeCredentialResponse
+	41, // 89: pantherclaw.v1.ConnectionService.GetConnectionCapabilities:output_type -> pantherclaw.v1.GetConnectionCapabilitiesResponse
+	45, // 90: pantherclaw.v1.ConnectionService.TestConnection:output_type -> pantherclaw.v1.TestConnectionResponse
+	51, // 91: pantherclaw.v1.ConnectionService.GetConnectionHealth:output_type -> pantherclaw.v1.GetConnectionHealthResponse
+	77, // [77:92] is the sub-list for method output_type
+	62, // [62:77] is the sub-list for method input_type
+	62, // [62:62] is the sub-list for extension type_name
+	62, // [62:62] is the sub-list for extension extendee
+	0,  // [0:62] is the sub-list for field type_name
 }
 
 func init() { file_pantherclaw_v1_connections_proto_init() }

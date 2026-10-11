@@ -175,3 +175,14 @@ VALUES (sqlc.arg(org_id), sqlc.arg(id), 'connection_test', sqlc.arg(connection_i
 INSERT INTO pc.connection_tests (org_id, id, connection_id, kind, verification_id, requested_by)
 VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(connection_id), sqlc.arg(kind), sqlc.arg(verification_id), sqlc.arg(requested_by))
 RETURNING *;
+
+-- name: ActiveGrantBounds :many
+-- The bounds of every active, unexpired grant, with its agent, to find
+-- the agents whose grants depend on a connection (F358).
+SELECT g.agent_id, a.name, r.bounds
+FROM pc.grants g
+JOIN pc.grant_revisions r ON r.org_id = g.org_id AND r.grant_id = g.id AND r.revision = g.current_revision
+JOIN pc.agents a ON a.org_id = g.org_id AND a.id = g.agent_id
+WHERE g.org_id = sqlc.arg(org_id) AND g.state = 'ACTIVE' AND r.expires_at > now()
+ORDER BY a.name, g.agent_id
+LIMIT 5000;

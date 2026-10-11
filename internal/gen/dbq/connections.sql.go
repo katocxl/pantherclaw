@@ -15,6 +15,44 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 )
 
+const activeGrantBounds = `-- name: ActiveGrantBounds :many
+SELECT g.agent_id, a.name, r.bounds
+FROM pc.grants g
+JOIN pc.grant_revisions r ON r.org_id = g.org_id AND r.grant_id = g.id AND r.revision = g.current_revision
+JOIN pc.agents a ON a.org_id = g.org_id AND a.id = g.agent_id
+WHERE g.org_id = $1 AND g.state = 'ACTIVE' AND r.expires_at > now()
+ORDER BY a.name, g.agent_id
+LIMIT 5000
+`
+
+type ActiveGrantBoundsRow struct {
+	AgentID ids.UUID
+	Name    string
+	Bounds  []byte
+}
+
+// The bounds of every active, unexpired grant, with its agent, to find
+// the agents whose grants depend on a connection (F358).
+func (q *Queries) ActiveGrantBounds(ctx context.Context, orgID ids.OrgID) ([]ActiveGrantBoundsRow, error) {
+	rows, err := q.db.Query(ctx, activeGrantBounds, orgID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ActiveGrantBoundsRow{}
+	for rows.Next() {
+		var i ActiveGrantBoundsRow
+		if err := rows.Scan(&i.AgentID, &i.Name, &i.Bounds); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const closeCircuits = `-- name: CloseCircuits :execrows
 UPDATE pc.circuit_states SET state = 'CLOSED', closed_at = now()
 WHERE org_id = $1 AND connection_id = $2 AND state = 'OPEN'

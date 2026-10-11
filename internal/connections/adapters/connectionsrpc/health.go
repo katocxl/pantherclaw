@@ -64,5 +64,8 @@ func (h *Handler) GetConnectionHealth(ctx context.Context, req *pb.GetConnection
 			AgentId: a.Agent.String(), Name: a.Name, LastUseTime: timestamppb.New(a.LastUsed),
 		})
 	}
+	for _, a := range hl.GrantedAgents {
+		out.GrantedAgents = append(out.GrantedAgents, &pb.ConnectionDependentAgent{AgentId: a.Agent.String(), Name: a.Name})
+	}
 	return &pb.GetConnectionHealthResponse{Health: out}, nil
 }

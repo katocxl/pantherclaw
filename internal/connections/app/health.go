@@ -5,10 +5,13 @@ package app
 
 import (
 	"context"
+	"errors"
+	"slices"
 	"time"
 
 	"github.com/katocxl/pantherclaw/internal/definitions/manifest"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
+	gdomain "github.com/katocxl/pantherclaw/internal/grants/domain"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	tenancy "github.com/katocxl/pantherclaw/internal/tenancy/app"
@@ -61,10 +64,13 @@ type Health struct {
 	Permissions              []Permission
 	LastTest, LastPassedTest *TestResult
 	Deliveries               Deliveries
-	// Agents depend on it; AgentsHidden: the caller may not read agents
+	// Agents used it; AgentsHidden: the caller may not read agents
 	// org-wide, so none are listed.
-	Agents       []DependentAgent
-	AgentsHidden bool
+	Agents []DependentAgent
+	// GrantedAgents hold an active grant that allows an operation the
+	// connection serves; LastUsed is unset.
+	GrantedAgents []DependentAgent
+	AgentsHidden  bool
 }
 
 // Health returns a connection's health (connection.read; the dependent
@@ -133,9 +139,54 @@ func (s *Service) Health(ctx context.Context, id ids.UUID) (Health, error) {
 		for _, a := range agents {
 			out.Agents = append(out.Agents, DependentAgent{Agent: a.AgentID, Name: a.Name, LastUsed: a.LastUsedAt})
 		}
+		if err != nil {
+			return err
+		}
+		out.GrantedAgents, err = grantedAgents(ctx, q, c.Org, conn)
 		return err
 	})
 	return out, err
+}
+
+// grantedAgents are the agents holding an active, unexpired grant whose
+// bounds allow an operation the connection serves (a grant that does not
+// bound operations allows them all), by name, at most MaxDependents.
+// Ancestors and envelopes may narrow a grant further; the list says what
+// would stop working without the connection, so it errs towards listing.
+func grantedAgents(ctx context.Context, q *dbq.Queries, org ids.OrgID, conn dbq.PcConnection) ([]DependentAgent, error) {
+	p, err := pinnedPackage(ctx, q, org, conn.Package)
+	if errors.Is(err, ErrPackage) {
+		return nil, nil
+	} else if err != nil {
+		return nil, err
+	}
+	var ops []string
+	for i := range p.Definitions {
+		if len(servedRoutes(conn.Kind, &p.Definitions[i])) > 0 {
+			ops = append(ops, p.Definitions[i].Operation)
+		}
+	}
+	rows, err := q.ActiveGrantBounds(ctx, org)
+	if err != nil {
+		return nil, err
+	}
+	var out []DependentAgent
+	for _, r := range rows {
+		if len(out) == MaxDependents {
+			break
+		}
+		if slices.ContainsFunc(out, func(a DependentAgent) bool { return a.Agent == r.AgentID }) {
+			continue
+		}
+		b, err := gdomain.DecodeBounds(r.Bounds)
+		if err != nil {
+			continue // a grant that does not decode allows nothing
+		}
+		if b.Operations == nil || slices.ContainsFunc(ops, b.Operations.Matches) {
+			out = append(out, DependentAgent{Agent: r.AgentID, Name: r.Name})
+		}
+	}
+	return out, nil
 }
 
 func latest(ctx context.Context, q *dbq.Queries, org ids.OrgID, id ids.UUID, passedOnly bool) (*TestResult, error) {
