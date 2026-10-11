@@ -329,6 +329,16 @@ export class Client {
     this.key = keyOf(cfg.keyFile);
   }
 
+  /** The gateway's base URL. */
+  get gateway(): string {
+    return this.cfg.gateway;
+  }
+
+  /** The tool names this client sends as built-ins. */
+  get builtins(): readonly string[] {
+    return this.cfg.builtins;
+  }
+
   /** A workload token valid for at least another minute, renewed at the server when needed. */
   async workloadToken(force = false): Promise<string> {
     if (!force && this.token && Date.now() / 1000 + 60 < this.expiry) return this.token;
