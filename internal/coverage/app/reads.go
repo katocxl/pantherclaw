@@ -71,7 +71,7 @@ func closureOf(row dbq.PcCoverageClosure) (Closure, error) {
 	if err := json.Unmarshal(row.Probes, &c.Probes); err != nil {
 		return Closure{}, err
 	}
-	c.Verdict = domain.Evaluate(c.Probes)
+	c.Verdict = domain.Evaluate(c.Probes, nil)
 	return c, nil
 }
 

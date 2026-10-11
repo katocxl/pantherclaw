@@ -5,22 +5,40 @@
 -- pc_app in a tenant transaction. Closures and snapshots are only
 -- inserted (HR-055).
 
--- A route seen again keeps its first sighting and counts the new one; an
--- observation never goes back to declared or proposed.
+-- A route seen again keeps its first sighting. A weaker sighting (proposed
+-- after declared, declared after observed) changes nothing; one as strong
+-- takes over its source, mode and attributes unless its reference is older
+-- (source references are UUIDv7, so a replayed sighting is ignored). Only
+-- observations are counted, each source reference once.
 -- name: UpsertCoverageRoute :one
-INSERT INTO pc.coverage_routes (org_id, id, agent_id, connection_id, operation, kind, channel, locator, observation, source,
+INSERT INTO pc.coverage_routes AS r (org_id, id, agent_id, connection_id, operation, kind, channel, locator, observation, source,
     source_ref, mode, attributes)
 VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.narg(agent_id), sqlc.arg(connection_id), sqlc.narg(operation), sqlc.arg(kind),
     sqlc.narg(channel), sqlc.narg(locator), sqlc.arg(observation), sqlc.arg(source), sqlc.narg(source_ref), sqlc.narg(mode),
     sqlc.arg(attributes))
 ON CONFLICT (org_id, connection_id, agent_id, operation, kind, channel, locator) DO UPDATE SET
-    observation  = CASE WHEN pc.coverage_routes.observation = 'observed' THEN 'observed' ELSE EXCLUDED.observation END,
-    source       = EXCLUDED.source,
-    source_ref   = coalesce(EXCLUDED.source_ref, pc.coverage_routes.source_ref),
-    mode         = coalesce(EXCLUDED.mode, pc.coverage_routes.mode),
-    attributes   = EXCLUDED.attributes,
-    seen_count   = pc.coverage_routes.seen_count + 1,
-    last_seen_at = now()
+    observation  = CASE WHEN pc.coverage_rank(EXCLUDED.observation) > pc.coverage_rank(r.observation)
+                        THEN EXCLUDED.observation ELSE r.observation END,
+    source       = CASE WHEN pc.coverage_rank(EXCLUDED.observation) > pc.coverage_rank(r.observation)
+                          OR (EXCLUDED.observation = r.observation AND (EXCLUDED.source_ref < r.source_ref) IS NOT TRUE)
+                        THEN EXCLUDED.source ELSE r.source END,
+    source_ref   = CASE WHEN pc.coverage_rank(EXCLUDED.observation) > pc.coverage_rank(r.observation)
+                        THEN coalesce(EXCLUDED.source_ref, r.source_ref)
+                        WHEN EXCLUDED.observation = r.observation THEN greatest(r.source_ref, EXCLUDED.source_ref)
+                        ELSE r.source_ref END,
+    mode         = CASE WHEN pc.coverage_rank(EXCLUDED.observation) > pc.coverage_rank(r.observation)
+                          OR (EXCLUDED.observation = r.observation AND (EXCLUDED.source_ref < r.source_ref) IS NOT TRUE)
+                        THEN coalesce(EXCLUDED.mode, r.mode) ELSE r.mode END,
+    attributes   = CASE WHEN pc.coverage_rank(EXCLUDED.observation) > pc.coverage_rank(r.observation)
+                          OR (EXCLUDED.observation = r.observation AND (EXCLUDED.source_ref < r.source_ref) IS NOT TRUE)
+                        THEN EXCLUDED.attributes ELSE r.attributes END,
+    seen_count   = CASE WHEN EXCLUDED.observation <> 'observed' THEN r.seen_count
+                        WHEN r.observation <> 'observed' THEN 1
+                        WHEN (EXCLUDED.source_ref <= r.source_ref) IS NOT TRUE THEN r.seen_count + 1
+                        ELSE r.seen_count END,
+    last_seen_at = CASE WHEN EXCLUDED.observation = 'observed'
+                          AND (r.observation <> 'observed' OR (EXCLUDED.source_ref <= r.source_ref) IS NOT TRUE)
+                        THEN now() ELSE r.last_seen_at END
 RETURNING *;
 
 -- The routes of one scope: its own rows and those that apply to every
@@ -42,17 +60,21 @@ WHERE org_id = sqlc.arg(org_id)
 ORDER BY id
 LIMIT sqlc.arg(max_rows);
 
+-- A replayed result set (the same server nonce) inserts nothing, so the
+-- caller's transaction stays usable (HR-215).
 -- name: InsertCoverageClosure :one
 INSERT INTO pc.coverage_closures (org_id, id, agent_id, connection_id, sandbox_session_id, result, probes,
     positive_controls_passed, negative_controls_passed, canary_passed, signing_key_jkt, server_nonce, results_sha256,
-    engine_version, api_version, runtime, image_digests, config_sha256, gateway_id, connection_revision, package_version_id,
-    session_started_at, observed_at, expires_at)
+    engine_version, api_version, runtime, image_digests, config_sha256, config_checks, gateway_id, connection_revision,
+    package_version_id, credential_version, session_started_at, observed_at, expires_at)
 VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(agent_id), sqlc.arg(connection_id), sqlc.arg(sandbox_session_id),
     sqlc.arg(result), sqlc.arg(probes), sqlc.arg(positive_controls_passed), sqlc.arg(negative_controls_passed),
     sqlc.arg(canary_passed), sqlc.arg(signing_key_jkt), sqlc.arg(server_nonce), sqlc.arg(results_sha256),
     sqlc.arg(engine_version), sqlc.arg(api_version), sqlc.arg(runtime), sqlc.arg(image_digests)::text[],
-    sqlc.arg(config_sha256), sqlc.arg(gateway_id), sqlc.arg(connection_revision), sqlc.arg(package_version_id),
-    sqlc.arg(session_started_at), sqlc.arg(observed_at), sqlc.arg(expires_at))
+    sqlc.arg(config_sha256), sqlc.arg(config_checks), sqlc.arg(gateway_id), sqlc.arg(connection_revision),
+    sqlc.arg(package_version_id), sqlc.narg(credential_version), sqlc.arg(session_started_at), sqlc.arg(observed_at),
+    sqlc.arg(expires_at))
+ON CONFLICT (org_id, agent_id, connection_id, server_nonce) DO NOTHING
 RETURNING *;
 
 -- name: GetCoverageClosure :one
@@ -75,13 +97,15 @@ WHERE org_id = sqlc.arg(org_id)
 ORDER BY id DESC
 LIMIT sqlc.arg(max_rows);
 
--- What a closure is bound to now: the connection's revision and gateway
--- and its package's pinned version.
+-- What a closure is bound to now: the connection's revision and gateway,
+-- its package's pinned version and its active credential's version.
 -- name: CoverageBinding :one
-SELECT c.revision, c.gateway_id, c.state, c.kind, c.access_mode, p.version_id AS package_version_id
+SELECT c.revision, c.gateway_id, c.state, c.kind, c.access_mode, p.version_id AS package_version_id,
+    cr.version AS credential_version
 FROM pc.connections c
 JOIN pc.tool_packages tp ON tp.org_id = c.org_id AND tp.name = c.package
 JOIN pc.package_pins p ON p.org_id = c.org_id AND p.package_id = tp.id
+LEFT JOIN pc.credentials cr ON cr.org_id = c.org_id AND cr.connection_id = c.id AND cr.state = 'ACTIVE'
 WHERE c.org_id = sqlc.arg(org_id) AND c.id = sqlc.arg(connection_id);
 
 -- name: InsertCoverageInvalidation :one
@@ -90,12 +114,16 @@ VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(kind), sqlc.arg(connection_id),
     sqlc.narg(detail))
 RETURNING *;
 
--- The changes to a scope after a point in time, oldest first (HR-211).
+-- The changes to a scope at or after a point in time that invalidate a
+-- closure taken before them, oldest first (HR-211). A new route, an
+-- exclusion and an expiry only make the scope be recomputed: the closure
+-- still closes what its probes closed.
 -- name: CoverageInvalidationsSince :many
 SELECT * FROM pc.coverage_invalidations
 WHERE org_id = sqlc.arg(org_id) AND connection_id = sqlc.arg(connection_id)
   AND (agent_id IS NULL OR agent_id = sqlc.arg(agent_id))
-  AND occurred_at > sqlc.arg(since)
+  AND occurred_at >= sqlc.arg(since)
+  AND kind NOT IN ('route', 'exclusion', 'evidence_expired')
 ORDER BY occurred_at, id
 LIMIT 64;
 
@@ -136,20 +164,18 @@ WHERE org_id = sqlc.arg(org_id) AND agent_id = sqlc.arg(agent_id) AND connection
 ORDER BY id DESC
 LIMIT 1;
 
--- The current snapshot of every scope, by scope.
+-- The current snapshot of every scope, by scope. The cursor filters whole
+-- scopes, so it applies before DISTINCT ON and the scan stops at the page.
 -- name: ListCurrentCoverageSnapshotsPage :many
-SELECT s.* FROM (
-    SELECT DISTINCT ON (agent_id, connection_id, operation) *
-    FROM pc.coverage_snapshots
-    WHERE org_id = sqlc.arg(org_id)
-      AND (sqlc.narg(connection_id)::uuid IS NULL OR connection_id = sqlc.narg(connection_id)::uuid)
-      AND (sqlc.narg(agent_id)::uuid IS NULL OR agent_id = sqlc.narg(agent_id)::uuid)
-    ORDER BY agent_id, connection_id, operation, id DESC
-) s
-WHERE (sqlc.narg(after_agent)::uuid IS NULL
-       OR (s.agent_id, s.connection_id, s.operation) > (sqlc.narg(after_agent)::uuid, sqlc.narg(after_connection)::uuid,
-                                                       sqlc.narg(after_operation)::text))
-ORDER BY s.agent_id, s.connection_id, s.operation
+SELECT DISTINCT ON (agent_id, connection_id, operation) *
+FROM pc.coverage_snapshots
+WHERE org_id = sqlc.arg(org_id)
+  AND (sqlc.narg(connection_id)::uuid IS NULL OR connection_id = sqlc.narg(connection_id)::uuid)
+  AND (sqlc.narg(agent_id)::uuid IS NULL OR agent_id = sqlc.narg(agent_id)::uuid)
+  AND (sqlc.narg(after_agent)::uuid IS NULL
+       OR (agent_id, connection_id, operation) > (sqlc.narg(after_agent)::uuid, sqlc.narg(after_connection)::uuid,
+                                                 sqlc.narg(after_operation)::text))
+ORDER BY agent_id, connection_id, operation, id DESC
 LIMIT sqlc.arg(max_rows);
 
 -- name: InsertCoverageExclusion :one

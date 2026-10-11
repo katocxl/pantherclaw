@@ -16,7 +16,7 @@ import (
 // (never "forever"), and a stale record reads PARTIAL (decision 3).
 func TestHR211_EnforcedExpiresAndStaleReadsPartial(t *testing.T) {
 	f, err := domain.NewFreshness(0, 0)
-	if err != nil || f.EnforcedTTL != 24*time.Hour || f.ReassessInterval != time.Minute {
+	if err != nil || f.EnforcedTTL != 24*time.Hour || f.ReassessEvery != time.Minute {
 		t.Fatalf("defaults = %+v (%v), want 24h and 1m", f, err)
 	}
 	for _, ttl := range []time.Duration{-time.Hour, time.Minute, 59 * time.Minute, 169 * time.Hour, 1 << 62} {
@@ -26,7 +26,7 @@ func TestHR211_EnforcedExpiresAndStaleReadsPartial(t *testing.T) {
 	}
 	for _, every := range []time.Duration{time.Second, 2 * time.Hour} {
 		if _, err := domain.NewFreshness(0, every); err == nil {
-			t.Errorf("reassess_interval %v accepted", every)
+			t.Errorf("reassess_every %v accepted", every)
 		}
 	}
 	if f, err := domain.NewFreshness(time.Hour, 10*time.Second); err != nil || f.EnforcedTTL != time.Hour {
