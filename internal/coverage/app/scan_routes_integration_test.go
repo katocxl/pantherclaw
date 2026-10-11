@@ -51,6 +51,11 @@ func TestF450_ScanFindingsAreObservedRoutesOfTheirConnection(t *testing.T) {
 	// A dismissed discovery still shows its route.
 	finding(`{"kind": "github_app", "connection": "` + conn + `", "app_slug": "dismissed"}`)
 	f.exec(t, `UPDATE pc.discoveries SET state = 'DISMISSED' WHERE observed ->> 'app_slug' = 'dismissed'`)
+	// The GitHub org scan's findings (G0 M8, source github_scan) count the same.
+	gh := ids.NewV7()
+	f.exec(t, "INSERT INTO pc.agents (org_id, id, name, state, created_by) VALUES ($1, $2, 'found', 'DISCOVERED', 'test')", f.org, gh)
+	f.exec(t, `INSERT INTO pc.discoveries (org_id, id, agent_id, source, scan_key, observed) VALUES ($1, $2, $3, 'github_scan', $4, $5)`,
+		f.org, ids.NewV7(), gh, make([]byte, 32), []byte(`{"kind": "github_mcp_config", "connection": "`+conn+`", "repo": "acme/web", "path": ".mcp.json"}`))
 	refresh := func() []ids.UUID {
 		var touched []ids.UUID
 		if err := f.p.InTenantTx(context.Background(), f.org, func(ctx context.Context, tx db.TenantTx) error {
@@ -65,10 +70,10 @@ func TestF450_ScanFindingsAreObservedRoutesOfTheirConnection(t *testing.T) {
 	if touched := refresh(); len(touched) != 1 || touched[0] != f.conn {
 		t.Fatalf("touched %v", touched)
 	}
-	if n := f.count(t, `SELECT count(*) FROM pc.coverage_routes WHERE source = 'scan' AND agent_id IS NULL AND observation = 'observed'`); n != 3 {
-		t.Fatalf("%d scan routes, want the MCP configuration, the deploying workflow and the dismissed app", n)
+	if n := f.count(t, `SELECT count(*) FROM pc.coverage_routes WHERE source = 'scan' AND agent_id IS NULL AND observation = 'observed'`); n != 4 {
+		t.Fatalf("%d scan routes, want the two MCP configurations, the deploying workflow and the dismissed app", n)
 	}
-	if n := f.count(t, `SELECT count(*) FROM pc.coverage_invalidations WHERE kind = 'route' AND detail LIKE '%org scan'`); n != 3 {
+	if n := f.count(t, `SELECT count(*) FROM pc.coverage_invalidations WHERE kind = 'route' AND detail LIKE '%org scan'`); n != 4 {
 		t.Fatalf("%d route changes, want one per new scan route", n)
 	}
 	if touched := refresh(); len(touched) != 0 {
