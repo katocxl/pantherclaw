@@ -11,7 +11,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"net"
 	"net/netip"
 	"os"
 	"runtime"
@@ -51,7 +50,11 @@ type Config struct {
 	// HostAddrs are the host's own addresses and HostPorts the ports of
 	// its services (the gateway): only the edge may reach them.
 	HostAddrs []string `json:"host_addrs,omitzero"`
-	HostPorts []int    `json:"host_ports,omitzero"`
+	// BridgeGateway is the sandbox network's gateway address as pclaw
+	// inspected it: none in isolated gateway mode, where the subnet's first
+	// address may be a container's.
+	BridgeGateway string `json:"bridge_gateway,omitzero"`
+	HostPorts     []int  `json:"host_ports,omitzero"`
 }
 
 // ReadConfig reads a configuration file strictly.
@@ -143,28 +146,6 @@ func run(ctx context.Context, c Config) (string, error) {
 		return "", err
 	}
 	return report.Sign(key, r)
-}
-
-// bridgeGateway is the first address of the container's IPv4 network,
-// where a bridge in NAT mode has its address: on an isolated network
-// nothing answers there.
-func bridgeGateway() string {
-	addrs, err := net.InterfaceAddrs()
-	if err != nil {
-		return ""
-	}
-	for _, a := range addrs {
-		n, ok := a.(*net.IPNet)
-		if !ok {
-			continue
-		}
-		p, err := netip.ParsePrefix(n.String())
-		if err != nil || !p.Addr().Is4() || p.Addr().IsLoopback() {
-			continue
-		}
-		return p.Masked().Addr().Next().String()
-	}
-	return ""
 }
 
 func base64Std(s string) string { return base64.StdEncoding.EncodeToString([]byte(s)) }

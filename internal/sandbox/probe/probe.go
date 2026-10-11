@@ -30,6 +30,7 @@ import (
 	"net/netip"
 	"net/url"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -92,7 +93,7 @@ func observe(err error) string {
 	case errors.Is(err, syscall.ENETUNREACH), errors.Is(err, syscall.EHOSTUNREACH), errors.Is(err, syscall.EADDRNOTAVAIL),
 		errors.Is(err, syscall.EAFNOSUPPORT):
 		return report.Blocked
-	case errors.As(err, &dns) && dns.IsNotFound:
+	case errors.As(err, &dns):
 		return report.Blocked
 	case errors.Is(err, context.DeadlineExceeded), errors.As(err, &ne) && ne.Timeout():
 		return report.Blocked
@@ -183,14 +184,15 @@ func catalog(c Config) []probe {
 		}
 	}
 	tcp("metadata", "169.254.169.254:80", "[fd00:ec2::254]:80")
-	// The host: this network's bridge address, host.docker.internal and the
-	// host's own addresses, on the ports its services use.
+	// The host: this network's bridge address (none in isolated gateway
+	// mode), host.docker.internal and the host's own addresses, on the
+	// ports its services use.
 	var hosts []string
 	ports := append([]int{80, 443}, c.HostPorts...)
 	for _, p := range ports {
 		port := strconv.Itoa(p)
 		hosts = append(hosts, net.JoinHostPort("host.docker.internal", port))
-		if gw := bridgeGateway(); gw != "" {
+		if gw := c.BridgeGateway; gw != "" {
 			hosts = append(hosts, net.JoinHostPort(gw, port))
 		}
 		for _, h := range c.HostAddrs {
@@ -203,7 +205,7 @@ func catalog(c Config) []probe {
 	// its inspect of the agent's container: this container's own file
 	// system says nothing about the agent's.
 	var daemons []string
-	for _, h := range append([]string{bridgeGateway()}, c.HostAddrs...) {
+	for _, h := range append([]string{c.BridgeGateway}, c.HostAddrs...) {
 		if h != "" {
 			daemons = append(daemons, net.JoinHostPort(h, "2375"), net.JoinHostPort(h, "2376"))
 		}
@@ -266,9 +268,20 @@ func twins(c Config) []probe {
 			add("host_gateway", a, func(ctx context.Context) error { return dialTCP(ctx, "tcp", a) })
 		}
 	}
-	for _, h := range c.AgentHosts {
-		add("dns_docker_resolver", "127.0.0.11 "+h, resolves("127.0.0.11:53", h))
-	}
+	// Docker's resolver forwards names on the open network: one of the
+	// agent hosts, or host.docker.internal, resolves.
+	names := append(slices.Clone(c.AgentHosts), "host.docker.internal")
+	add("dns_docker_resolver", "127.0.0.11 "+strings.Join(names, " or "), func(ctx context.Context) error {
+		var errs []error
+		for _, n := range names {
+			err := resolves("127.0.0.11:53", n)(ctx)
+			if err == nil {
+				return nil
+			}
+			errs = append(errs, err)
+		}
+		return errors.Join(errs...)
+	})
 	return ps
 }
 
