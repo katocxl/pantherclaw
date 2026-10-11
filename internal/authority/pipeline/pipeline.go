@@ -785,6 +785,7 @@ func input(a *pdomain.ApprovalRequirement, su *pdomain.StepUpRequirement, src ap
 	in := apdomain.Input{Source: src}
 	if a != nil {
 		in.Kind, in.Role, in.Count, in.Independent = apdomain.KindApproval, a.Role, a.Count, a.Independent
+		in.Window = a.Window
 		in.Deadline = time.Duration(a.DeadlineSeconds) * time.Second
 	}
 	if su != nil {
