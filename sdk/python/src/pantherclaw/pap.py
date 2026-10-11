@@ -14,9 +14,8 @@ import os
 import re
 import secrets
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
-from urllib.parse import urlsplit
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
@@ -82,9 +81,10 @@ class WorkloadKey:
 
 @dataclass
 class KeyFile:
-    """The workload key file (PAP/1 §3.1). Keep it owner-only; never log it."""
+    """The workload key file (PAP/1 §3.1). Keep it owner-only; never log it.
+    Its repr and str leave the private key out."""
 
-    private_key: str
+    private_key: str = field(repr=False)
     identifier: str = ""
     server: str = ""
     run_id: str = ""
@@ -129,12 +129,53 @@ class KeyFile:
             f.write(self.marshal())
 
 
-def htu(url: str) -> str:
-    """htu: scheme, host and path of a request URL."""
-    u = urlsplit(url)
-    if u.scheme not in ("https", "http") or not u.netloc or "@" in u.netloc:
+_SPLIT = re.compile(r"^([A-Za-z][A-Za-z0-9+.-]*)://([^/?#]*)([^?#]*)")
+# The characters a path may hold as written (Go's validEncoded and
+# shouldEscape for paths); anything else is escaped.
+_PATH_AS_IS = re.compile(r"^[A-Za-z0-9\-_.~$&+,/:;=@!'()*\[\]%]*\Z")
+_PATH_UNRESERVED = frozenset(b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_.~$&+,/:;=@")
+_HEX = frozenset(b"0123456789abcdefABCDEF")
+
+
+def _unescape_path(s: str) -> bytes:
+    b = s.encode("utf-8")
+    out = bytearray()
+    i = 0
+    while i < len(b):
+        if b[i] != 0x25:
+            out.append(b[i])
+            i += 1
+            continue
+        h = b[i + 1 : i + 3]
+        if len(h) != 2 or not all(c in _HEX for c in h):
+            raise ValueError("bad escape")
+        out.append(int(h, 16))
+        i += 3
+    return bytes(out)
+
+
+def split_url(url: str) -> tuple[str, str, str]:
+    """Splits an absolute http(s) URL as PantherClaw's client does for htu
+    (proofs.json, htus): the scheme in lower case, the host as written (case
+    and port kept), and the path kept as written when every character may
+    stand there and every escape is valid, else decoded and re-escaped with
+    upper-case hex; dot segments are kept, query and fragment dropped. User
+    information, a bad escape or a control character is refused."""
+    m = _SPLIT.match(url)
+    if re.search(r"[\x00-\x1f\x7f]", url) or m is None:
         raise ValueError("the request URL must be an absolute http(s) URL without user information")
-    return f"{u.scheme}://{u.netloc}{u.path}"
+    scheme, host, raw_path = m.group(1).lower(), m.group(2), m.group(3)
+    if scheme not in ("https", "http") or not host or "@" in host or re.search(r"\s", host):
+        raise ValueError("the request URL must be an absolute http(s) URL without user information")
+    decoded = _unescape_path(raw_path)
+    path = raw_path if _PATH_AS_IS.match(raw_path) else "".join(chr(c) if c in _PATH_UNRESERVED else f"%{c:02X}" for c in decoded)
+    return scheme, host, path
+
+
+def htu(url: str) -> str:
+    """htu: the scheme, host and path of a request URL (split_url)."""
+    scheme, host, path = split_url(url)
+    return f"{scheme}://{host}{path}"
 
 
 def sign_proof(
@@ -173,10 +214,14 @@ def parse_token_claims(token: str) -> dict[str, Any]:
     c = json.loads(from_b64url(parts[1]))
     if (
         not isinstance(c, dict)
-        or c.get("pap", {}).get("v") != VERSION
+        or not isinstance(c.get("pap"), dict)
+        or not isinstance(c.get("cnf"), dict)
+        or c["pap"].get("v") != VERSION
         or c.get("aud") != TOKEN_AUDIENCE
         or not isinstance(c.get("exp"), int)
-        or not c.get("cnf", {}).get("jkt")
+        or isinstance(c.get("exp"), bool)
+        or not isinstance(c["cnf"].get("jkt"), str)
+        or not c["cnf"]["jkt"]
     ):
         raise ValueError("not a PAP/1 workload token")
     return c

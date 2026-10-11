@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 Joshua Kato
 
-// ActionIR v1 (PAP/1 §6), checked as strictly as PantherClaw checks it
-// (HR-100..103). SDKs never build or send ActionIR (HR-201): they parse the
-// action a gateway returns, to check it and its hash.
+// ActionIR v1 (PAP/1 §6), with the structural checks PantherClaw makes
+// (HR-100..103, actionir.json); the 8 KiB cap on material parameters
+// depends on the definition and is PantherClaw's alone. SDKs never build or
+// send ActionIR (HR-201): they parse the action a gateway returns, to check
+// it and its hash.
 
 import { createHash } from "node:crypto";
 import { type JSONValue, JCSError, parseJSON, serialize } from "./jcs.ts";
@@ -45,13 +47,18 @@ function fail(why: string): never {
   throw new ActionError(`invalid ActionIR: ${why}`);
 }
 
-/** Walks the raw value: depth at most 16, strings at most 64 KiB (UTF-8), a number only as the version. */
+/** Walks the raw value: depth at most 16, strings and member names at most 64 KiB (UTF-8), a number only as the version. */
 function scan(v: JSONValue, depth: number, pointer: string): void {
   if ((Array.isArray(v) || v instanceof Map) && depth > 16) fail("nested deeper than 16");
   if (typeof v === "number" && pointer !== "/v") fail(`a JSON number at ${pointer}`);
   if (typeof v === "string" && encoder.encode(v).length > 64 << 10) fail("a string longer than 64 KiB");
   if (Array.isArray(v)) v.forEach((x, i) => scan(x, depth + 1, `${pointer}/${i}`));
-  if (v instanceof Map) for (const [k, x] of v) scan(x, depth + 1, `${pointer}/${k}`);
+  if (v instanceof Map) {
+    for (const [k, x] of v) {
+      if (encoder.encode(k).length > 64 << 10) fail("a member name longer than 64 KiB");
+      scan(x, depth + 1, `${pointer}/${k}`);
+    }
+  }
 }
 
 function object(v: JSONValue | undefined, name: string, allowed: string[]): Map<string, JSONValue> {
@@ -60,9 +67,10 @@ function object(v: JSONValue | undefined, name: string, allowed: string[]): Map<
   return v;
 }
 
+/** A string member; an optional one may be absent or null, as PantherClaw reads it. */
 function str(o: Map<string, JSONValue>, k: string, required = true): string {
   const v = o.get(k);
-  if (v === undefined && !required) return "";
+  if ((v === undefined || v === null) && !required) return "";
   if (typeof v !== "string") fail(`${k} must be a string`);
   return v;
 }
@@ -81,14 +89,16 @@ export function parseAction(raw: string | Uint8Array): ParsedAction {
   const bytes = typeof raw === "string" ? encoder.encode(raw) : raw;
   if (bytes.length === 0 || bytes.length > 1 << 20) fail("size");
   let v: JSONValue;
+  const numbers: string[] = [];
   try {
-    v = parseJSON(bytes);
+    v = parseJSON(bytes, { numbers });
   } catch (e) {
     fail(e instanceof JCSError ? e.message : String(e));
   }
   scan(v, 1, "");
   const a = object(v, "", members[""] ?? []);
-  if (a.get("v") !== 1) fail("version");
+  // The only number is the version, written exactly 1 (not 1.0 or 1e0).
+  if (a.get("v") !== 1 || numbers.some((n) => n !== "1")) fail("version");
   for (const k of ["org", "env", "run_id", "action_id", "agent_instance"]) if (!uuid.test(str(a, k))) fail(`${k} is not a UUID`);
   if (!patterns.operation?.test(str(a, "operation"))) fail("operation");
   const d = object(a.get("definition"), "definition", members.definition ?? []);

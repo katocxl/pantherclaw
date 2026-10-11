@@ -1,9 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Joshua Kato
 
-"""ActionIR v1 (PAP/1 §6), checked as strictly as PantherClaw checks it
-(HR-100..103). SDKs never build or send ActionIR (HR-201): they parse the
-action a gateway returns, to check it and its hash."""
+"""ActionIR v1 (PAP/1 §6), with the structural checks PantherClaw makes
+(HR-100..103, actionir.json); the 8 KiB cap on material parameters depends
+on the definition and is PantherClaw's alone. SDKs never build or send
+ActionIR (HR-201): they parse the action a gateway returns, to check it and
+its hash."""
 
 from __future__ import annotations
 
@@ -64,6 +66,8 @@ def _scan(v: Any, depth: int, pointer: str) -> None:
             _scan(x, depth + 1, f"{pointer}/{i}")
     elif isinstance(v, dict):
         for k, x in v.items():
+            if len(k.encode("utf-8")) > 64 << 10:
+                _fail("a member name longer than 64 KiB")
             _scan(x, depth + 1, f"{pointer}/{k}")
 
 
@@ -99,13 +103,15 @@ def parse_action(raw: str | bytes) -> ParsedAction:
     data = raw.encode("utf-8") if isinstance(raw, str) else bytes(raw)
     if not data or len(data) > 1 << 20:
         _fail("size")
+    numbers: list[str] = []
     try:
-        v = jcs.parse(data)
+        v = jcs.parse(data, numbers)
     except jcs.JCSError as e:
         raise ActionError(f"invalid ActionIR: {e}") from e
     _scan(v, 1, "")
     a = _object(v, "")
-    if a.get("v") != 1.0 or isinstance(a.get("v"), bool):
+    # The only number is the version, written exactly 1 (not 1.0 or 1e0).
+    if a.get("v") != 1.0 or isinstance(a.get("v"), bool) or any(n != "1" for n in numbers):
         _fail("version")
     for k in ("org", "env", "run_id", "action_id", "agent_instance"):
         if not _UUID.match(_str(a, k)):
