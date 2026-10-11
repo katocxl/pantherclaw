@@ -94,10 +94,13 @@ func TestHR211_ReassessmentRecordsChangesAndKeepsTheLastValidRecord(t *testing.T
 	if _, err := f.record(t, f.closure(probes(false), f.dbNow(t))); err != nil {
 		t.Fatal(err)
 	}
-	f.reassess(t)
+	// Recording the closure reassessed its scope at once.
 	enforced, s, _ := f.current(t, op)
 	if enforced.State != "ENFORCED" || enforced.ExpiresAt == nil || enforced.ClosureID == nil || s.ExpiresAt == "" {
 		t.Fatalf("with a passing closure: %s %v", enforced.State, s.Reasons)
+	}
+	if r := f.reassess(t); r.Snapshots != 0 {
+		t.Fatalf("a reassessment after the closure recorded %+v", r)
 	}
 	f.exec(t, `INSERT INTO pc.connection_routes (org_id, connection_id, route, mode, changed_by)
 		VALUES ($1, $2, 'payments-refund', 'monitor', 'test')`, f.org, f.conn)

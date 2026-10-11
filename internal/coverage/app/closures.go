@@ -166,6 +166,16 @@ func (s *Service) RecordClosure(ctx context.Context, tx db.TenantTx, c domain.Cl
 			return ids.UUID{}, err
 		}
 	}
+	// The scopes it covers are reassessed at once, in the sandbox's
+	// transaction: a passing closure promotes them and a failed one drops
+	// them before anyone reads them.
+	scopes, err := scopesOf(ctx, q, tx.OrgID(), c.Connection, &c.Agent)
+	if err != nil {
+		return ids.UUID{}, err
+	}
+	if _, err := s.reassessScopes(ctx, tx, scopes, nil, Actor, packages{}); err != nil {
+		return ids.UUID{}, err
+	}
 	return row.ID, nil
 }
 
