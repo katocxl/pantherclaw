@@ -122,6 +122,7 @@ func runMCP(ctx context.Context, args []string, stderr io.Writer) error {
 	toolError := fs.Bool("tool-error", false, "fail create_refund with isError")
 	description := fs.String("description", "", "replace get_refund's description (drift)")
 	tokenFile := fs.String("token-file", "", "file holding the bearer token every request must carry")
+	stdio := fs.Bool("stdio", false, "speak MCP 2025-11-25 over standard input and output instead of HTTP, as a connector does (G0 M9)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -135,6 +136,9 @@ func runMCP(ctx context.Context, args []string, stderr io.Writer) error {
 			return err
 		}
 		f.Token = strings.TrimSpace(string(b))
+	}
+	if *stdio {
+		return mcpsim.New(f).ServeStdio(ctx, os.Stdin, os.Stdout)
 	}
 	log := pclog.New(stderr, pclog.Options{Service: "pantherclaw-sim", Version: version.Get().Version})
 	return serve(ctx, *addr, mcpsim.New(f).Handler(), log, "sim.mcp_listening")
