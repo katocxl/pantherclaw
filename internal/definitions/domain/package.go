@@ -83,9 +83,11 @@ type DestinationExpr struct {
 
 var (
 	toolRe = regexp.MustCompile(`^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$`)
-	varRe  = regexp.MustCompile(`\{[a-z0-9_]+\}`)
-	// pathRe accepts reviewed templates such as /v1/charges/{charge}/refunds.
-	pathRe    = regexp.MustCompile(`^(/([A-Za-z0-9._~-]+|\{[a-z][a-z0-9_]{0,31}\}))+$`)
+	varRe  = regexp.MustCompile(`\{[a-z0-9_]+\*?\}`)
+	// pathRe accepts reviewed templates such as /v1/charges/{charge}/refunds;
+	// the last segment may be {name*}, which takes the rest of the path, one
+	// or more segments (G0 M8: a file path in a repository).
+	pathRe    = regexp.MustCompile(`^(/([A-Za-z0-9._~-]+|\{[a-z][a-z0-9_]{0,31}\}))*/([A-Za-z0-9._~-]+|\{[a-z][a-z0-9_]{0,31}\*?\})$`)
 	methods   = []string{"GET", "POST", "PUT", "PATCH", "DELETE"}
 	maxExpr   = 4 << 10
 	patternMu sync.Mutex
@@ -197,7 +199,7 @@ func (d *Definition) validateMapping(i int) error {
 				return invalid("%s: dot segments are not allowed in path templates", at)
 			}
 		}
-		vars := varRe.FindAllString(m.Path, -1)
+		vars := varRe.FindAllString(strings.ReplaceAll(m.Path, "*}", "}"), -1)
 		for j, v := range vars {
 			if slices.Contains(vars[:j], v) {
 				return invalid("%s: path variable %s appears twice", at, v)
@@ -300,10 +302,23 @@ func (p *Package) Validate() error {
 	for _, t := range p.TargetLogs {
 		internal[t.Operation] = true
 	}
+	virtual, tests := map[string]bool{}, 0
+	for _, c := range p.Consequences {
+		virtual[c.Consequence.Operation] = true
+	}
 	for _, d := range p.Definitions {
-		if len(d.Mappings) == 0 && !internal[d.Operation] {
-			return invalid("%s: a read without mappings must be used by a verifier or a target log", d.Operation)
+		switch {
+		case d.Test:
+			tests++
+		case len(d.Mappings) > 0:
+		case d.Access == AccessWrite && !virtual[d.Operation]:
+			return invalid("%s: a write without mappings must be a consequence of this package", d.Operation)
+		case d.Access == AccessRead && !internal[d.Operation]:
+			return invalid("%s: a read without mappings must be used by a verifier, a target log or a connection test", d.Operation)
 		}
+	}
+	if tests > 1 {
+		return invalid("a package has at most one connection test")
 	}
 	return p.validateConsequences(ops)
 }
