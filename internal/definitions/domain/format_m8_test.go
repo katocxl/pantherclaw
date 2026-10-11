@@ -89,7 +89,7 @@ func TestContentParams(t *testing.T) {
 	}
 	for name, in := range map[string]string{
 		"escape":   `{"title":"a\u001b[2J"}`,
-		"bidi":     `{"title":"a ‮"}`,
+		"bidi":     `{"title":"a ` + string(rune(0x202e)) + `"}`,
 		"too long": `{"title":"12345678901234567"}`,
 		"number":   `{"title":7}`,
 	} {
