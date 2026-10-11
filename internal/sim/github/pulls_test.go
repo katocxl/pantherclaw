@@ -7,6 +7,7 @@ import (
 	"encoding/json/jsontext"
 	"encoding/json/v2"
 	"net/http"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -99,13 +100,21 @@ func TestTheMCPServerToolsCallTheAPI(t *testing.T) {
 	if out, isErr := call("merge_pull_request", `{"owner":"acme","repo":"payments","pullNumber":1,"expectedHeadSha":"`+w.head+`"}`); isErr || out["merged"] != true {
 		t.Fatalf("merge: %v", out)
 	}
+	if out, isErr := call("create_or_update_file", `{"owner":"acme","repo":"payments","path":"docs/a.md","content":"# a","message":"Docs","branch":"fix/b"}`); isErr ||
+		w.sim.Files("acme/payments", w.sim.Branch("acme/payments", "fix/b"))["docs/a.md"] != "# a" {
+		t.Fatalf("create_or_update_file: %v", out)
+	}
+	if _, isErr := call("create_or_update_file", `{"owner":"acme","repo":"payments","path":".github/workflows/x.yml","content":"on: push","message":"Sneak","branch":"fix/b"}`); !isErr {
+		t.Fatal("a workflow written without the workflows permission")
+	}
 	if _, _, ok := w.sim.CallTool(t.Context(), "ghp_server", "delete_repository", jsontext.Value(`{}`)); ok {
 		t.Fatal("a tool the simulator does not serve")
 	}
 	reqs := w.sim.Requests()
-	last := reqs[len(reqs)-1]
-	if last.Method != http.MethodPut || last.Path != "/repos/acme/payments/pulls/1/merge" || last.User != "developer" ||
-		last.Token != Fingerprint("ghp_server") || last.Status != http.StatusOK {
-		t.Fatalf("recorded %+v", last)
+	i := slices.IndexFunc(reqs, func(r Request) bool {
+		return r.Path == "/repos/acme/payments/pulls/1/merge" && r.Status == http.StatusOK
+	})
+	if i < 0 || reqs[i].Method != http.MethodPut || reqs[i].User != "developer" || reqs[i].Token != Fingerprint("ghp_server") {
+		t.Fatalf("recorded %+v", reqs)
 	}
 }
