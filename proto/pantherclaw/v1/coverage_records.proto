@@ -62,6 +62,18 @@ service CoverageService {
   rpc GetFreshnessContract(GetFreshnessContractRequest) returns (GetFreshnessContractResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
+  // GetSnapshot returns one recorded coverage snapshot: the scope's
+  // computed record and the ledger entry it is bound to (HR-217).
+  // permission: coverage.read
+  rpc GetSnapshot(GetSnapshotRequest) returns (GetSnapshotResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // ListSnapshots lists a scope's recorded snapshots, newest first: its
+  // coverage history.
+  // permission: coverage.read
+  rpc ListSnapshots(ListSnapshotsRequest) returns (ListSnapshotsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
   // Reassess recomputes the scopes of one connection now, from evidence,
   // and records a snapshot for each that changed.
   // permission: coverage.reassess
@@ -747,4 +759,70 @@ message AcknowledgeFindingRequest {
 message AcknowledgeFindingResponse {
   // Finding.
   CoverageFinding finding = 1;
+}
+
+// CoverageSnapshot is one recorded computation of a scope's coverage.
+message CoverageSnapshot {
+  // Snapshot id.
+  string id = 1;
+  // The scope.
+  CoverageScope scope = 2;
+  // Its state and why.
+  CoverageState state = 3;
+  // Reason codes.
+  repeated string reasons = 4;
+  // Every route and its status when it was computed.
+  repeated CoverageRoute routes = 5;
+  // The closure an ENFORCED state rests on.
+  string closure_id = 6;
+  // The last ENFORCED snapshot a downgrade follows (F442).
+  string last_valid_id = 7;
+  // The change that caused the computation, when one did.
+  string invalidation_id = 8;
+  // The exclusions that applied.
+  repeated string exclusion_ids = 9;
+  // When it was computed, and when ENFORCED expires.
+  google.protobuf.Timestamp compute_time = 10;
+  // Expiry of an ENFORCED state.
+  google.protobuf.Timestamp expire_time = 11;
+  // Its coverage.snapshot ledger entry and that entry's SHA-256.
+  string ledger_entry_id = 12;
+  // "sha256:" and the hex digest.
+  string entry_digest = 13;
+}
+
+// GetSnapshotRequest names a snapshot.
+message GetSnapshotRequest {
+  // Snapshot id.
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// GetSnapshotResponse returns the snapshot.
+message GetSnapshotResponse {
+  // Snapshot.
+  CoverageSnapshot snapshot = 1;
+}
+
+// ListSnapshotsRequest names a scope.
+message ListSnapshotsRequest {
+  // The scope.
+  CoverageScope scope = 1 [(buf.validate.field).required = true];
+  // Maximum results (default 50, at most 200).
+  int32 page_size = 2 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 200
+  }];
+  // Token from a previous page.
+  string page_token = 3 [(buf.validate.field).string = {
+    max_len: 64
+    pattern: "^[A-Za-z0-9_-]*$"
+  }];
+}
+
+// ListSnapshotsResponse is one page of a scope's snapshots, newest first.
+message ListSnapshotsResponse {
+  // Snapshots.
+  repeated CoverageSnapshot snapshots = 1;
+  // Token for the next page; empty at the end.
+  string next_page_token = 2;
 }

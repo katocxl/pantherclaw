@@ -20,6 +20,8 @@ var coverageProcedures = map[string]td.Permission{
 	pantherclawv1connect.CoverageServiceGetClosureProcedure:           td.PermCoverageRead,
 	pantherclawv1connect.CoverageServiceListClosuresProcedure:         td.PermCoverageRead,
 	pantherclawv1connect.CoverageServiceGetFreshnessContractProcedure: td.PermCoverageRead,
+	pantherclawv1connect.CoverageServiceGetSnapshotProcedure:          td.PermCoverageRead,
+	pantherclawv1connect.CoverageServiceListSnapshotsProcedure:        td.PermCoverageRead,
 	pantherclawv1connect.CoverageServiceReassessProcedure:             td.PermCoverageReassess,
 	pantherclawv1connect.CoverageServiceCreateExclusionProcedure:      td.PermCoverageManage,
 	pantherclawv1connect.CoverageServiceRevokeExclusionProcedure:      td.PermCoverageManage,

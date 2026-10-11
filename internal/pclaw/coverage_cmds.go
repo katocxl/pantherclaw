@@ -101,6 +101,12 @@ func init() {
 				return &explained{GetCoverageResponse: r, freshness: f}, nil
 			}
 		}),
+		"coverage history": coverageRPC("coverage history AGENT CONNECTION OPERATION", 3, func(fs *flag.FlagSet) coverageCall {
+			n, tok := paging(fs)
+			return func(ctx context.Context, c pantherclawv1connect.CoverageServiceClient, args []string) (proto.Message, error) {
+				return c.ListSnapshots(ctx, &pantherclawv1.ListSnapshotsRequest{Scope: coverageScopeOf(args), PageSize: size(n), PageToken: *tok})
+			}
+		}),
 		"coverage routes": coverageRPC("coverage routes [--agent ID] [--connection ID]", 0, func(fs *flag.FlagSet) coverageCall {
 			agent, conn := fs.String("agent", "", "only this agent's routes and those of every agent"), fs.String("connection", "", "only this connection")
 			n, tok := paging(fs)
@@ -193,18 +199,21 @@ type explained struct {
 
 // reasonText says what each reason code means.
 var reasonText = map[string]string{
-	"not_assessed":            "no coverage snapshot was computed for this scope yet",
-	"connection_retired":      "the connection is retired",
-	"no_observed_traffic":     "no traffic through PantherClaw was observed; a connection setting alone proves nothing (F460)",
-	"monitor_mode":            "a route is in monitor mode: actions are observed, not prevented",
-	"cooperative_channel":     "a cooperative channel (SDK or hook) the agent could skip; capped at PARTIAL unless the target verifies action tokens (HR-024)",
-	"opaque_mcp_server":       "an MCP server whose own egress is not mediated; capped at PARTIAL (HR-086)",
-	"connection_not_active":   "the connection is quarantined",
-	"no_closure_evidence":     "no sandbox closure evidence: equivalent routes are not proven closed",
-	"closure_failed":          "the newest sandbox closure failed",
-	"closure_expired":         "the closure evidence expired",
-	"closure_binding_changed": "the connection's revision, gateway or package changed since the closure",
-	"excluded":                "a person excluded this scope from the claim",
+	"not_assessed":             "no coverage snapshot was computed for this scope yet",
+	"no_known_routes":          "no route of this scope is known yet; a connection setting alone proves nothing (F460)",
+	"no_gateway_channel":       "no route goes through a PantherClaw gateway channel",
+	"monitor_mode":             "a route is in monitor mode: actions are observed, not prevented",
+	"cooperative_channel":      "a cooperative channel (SDK or hook) the agent could skip; capped at PARTIAL unless the target verifies action tokens (HR-024)",
+	"opaque_mcp_server":        "an MCP server whose own egress is not mediated; capped at PARTIAL (HR-086)",
+	"connection_not_active":    "the connection is quarantined or retired",
+	"agent_held_access":        "the agent holds its own access to the target and can use it directly",
+	"target_not_verified":      "the target is meant to verify action tokens, but no current target-verifier test shows it does (HR-210)",
+	"instance_outside_sandbox": "an instance of the agent runs outside the sandbox the closure covers",
+	"no_closure_evidence":      "no sandbox closure evidence: equivalent routes are not proven closed",
+	"closure_failed":           "the newest sandbox closure failed",
+	"closure_expired":          "the closure evidence expired",
+	"closure_binding_changed":  "the connection's revision, gateway, package or credential changed since the closure",
+	"excluded":                 "a person excluded part of this scope from the claim; see the exclusions below",
 }
 
 func explainReason(r string) string {
@@ -216,6 +225,9 @@ func explainReason(r string) string {
 	}
 	if kind, ok := strings.CutPrefix(r, "route_not_closed:"); ok {
 		return "the " + kind + " route is not proven closed"
+	}
+	if why, ok := strings.CutPrefix(r, "lapsed:"); ok {
+		return "the recorded snapshot lapsed (" + why + "); the scope was recomputed now and reads at most PARTIAL"
 	}
 	return r
 }

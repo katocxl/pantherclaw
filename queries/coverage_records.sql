@@ -405,3 +405,12 @@ WHERE org_id = sqlc.arg(org_id) AND source = 'scan' AND state <> 'DISMISSED'
   AND observed ->> 'kind' = 'github_app' AND observed ->> 'connection' = sqlc.arg(connection)::text
 ORDER BY id
 LIMIT 50;
+
+-- A scope's snapshots, newest first: its coverage history.
+-- name: ListCoverageSnapshotsPage :many
+SELECT * FROM pc.coverage_snapshots
+WHERE org_id = sqlc.arg(org_id) AND agent_id = sqlc.arg(agent_id) AND connection_id = sqlc.arg(connection_id)
+  AND operation = sqlc.arg(operation)
+  AND (sqlc.narg(before)::uuid IS NULL OR id < sqlc.narg(before)::uuid)
+ORDER BY id DESC
+LIMIT sqlc.arg(max_rows);

@@ -43,6 +43,12 @@ const (
 	// CoverageServiceGetFreshnessContractProcedure is the procedure name of the CoverageService's
 	// GetFreshnessContract RPC.
 	CoverageServiceGetFreshnessContractProcedure = "/pantherclaw.v1.CoverageService/GetFreshnessContract"
+	// CoverageServiceGetSnapshotProcedure is the procedure name of the CoverageService's GetSnapshot
+	// RPC.
+	CoverageServiceGetSnapshotProcedure = "/pantherclaw.v1.CoverageService/GetSnapshot"
+	// CoverageServiceListSnapshotsProcedure is the procedure name of the CoverageService's
+	// ListSnapshots RPC.
+	CoverageServiceListSnapshotsProcedure = "/pantherclaw.v1.CoverageService/ListSnapshots"
 	// CoverageServiceReassessProcedure is the procedure name of the CoverageService's Reassess RPC.
 	CoverageServiceReassessProcedure = "/pantherclaw.v1.CoverageService/Reassess"
 	// CoverageServiceCreateExclusionProcedure is the procedure name of the CoverageService's
@@ -111,6 +117,22 @@ var (
 			StreamType:       connect.StreamTypeUnary,
 			Schema:           v1.File_pantherclaw_v1_coverage_records_proto.Services().ByName("CoverageService").Methods().ByName("GetFreshnessContract"),
 			Procedure:        CoverageServiceGetFreshnessContractProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
+	coverageServiceGetSnapshotSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_pantherclaw_v1_coverage_records_proto.Services().ByName("CoverageService").Methods().ByName("GetSnapshot"),
+			Procedure:        CoverageServiceGetSnapshotProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
+	coverageServiceListSnapshotsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_pantherclaw_v1_coverage_records_proto.Services().ByName("CoverageService").Methods().ByName("ListSnapshots"),
+			Procedure:        CoverageServiceListSnapshotsProcedure,
 			IdempotencyLevel: connect.IdempotencyNoSideEffects,
 		}
 	})
@@ -190,6 +212,14 @@ type CoverageServiceClient interface {
 	// and what invalidates it (F440).
 	// permission: coverage.read
 	GetFreshnessContract(context.Context, *v1.GetFreshnessContractRequest) (*v1.GetFreshnessContractResponse, error)
+	// GetSnapshot returns one recorded coverage snapshot: the scope's
+	// computed record and the ledger entry it is bound to (HR-217).
+	// permission: coverage.read
+	GetSnapshot(context.Context, *v1.GetSnapshotRequest) (*v1.GetSnapshotResponse, error)
+	// ListSnapshots lists a scope's recorded snapshots, newest first: its
+	// coverage history.
+	// permission: coverage.read
+	ListSnapshots(context.Context, *v1.ListSnapshotsRequest) (*v1.ListSnapshotsResponse, error)
 	// Reassess recomputes the scopes of one connection now, from evidence,
 	// and records a snapshot for each that changed.
 	// permission: coverage.reassess
@@ -253,6 +283,14 @@ type CoverageServiceHandler interface {
 	// and what invalidates it (F440).
 	// permission: coverage.read
 	GetFreshnessContract(context.Context, *v1.GetFreshnessContractRequest) (*v1.GetFreshnessContractResponse, error)
+	// GetSnapshot returns one recorded coverage snapshot: the scope's
+	// computed record and the ledger entry it is bound to (HR-217).
+	// permission: coverage.read
+	GetSnapshot(context.Context, *v1.GetSnapshotRequest) (*v1.GetSnapshotResponse, error)
+	// ListSnapshots lists a scope's recorded snapshots, newest first: its
+	// coverage history.
+	// permission: coverage.read
+	ListSnapshots(context.Context, *v1.ListSnapshotsRequest) (*v1.ListSnapshotsResponse, error)
 	// Reassess recomputes the scopes of one connection now, from evidence,
 	// and records a snapshot for each that changed.
 	// permission: coverage.reassess
@@ -299,6 +337,8 @@ func RegisterCoverageServiceHandler(server *connect.Server, svc CoverageServiceH
 		connect.Method{Spec: coverageServiceGetClosureSpec(), Handler: adapter.getClosure},
 		connect.Method{Spec: coverageServiceListClosuresSpec(), Handler: adapter.listClosures},
 		connect.Method{Spec: coverageServiceGetFreshnessContractSpec(), Handler: adapter.getFreshnessContract},
+		connect.Method{Spec: coverageServiceGetSnapshotSpec(), Handler: adapter.getSnapshot},
+		connect.Method{Spec: coverageServiceListSnapshotsSpec(), Handler: adapter.listSnapshots},
 		connect.Method{Spec: coverageServiceReassessSpec(), Handler: adapter.reassess},
 		connect.Method{Spec: coverageServiceCreateExclusionSpec(), Handler: adapter.createExclusion},
 		connect.Method{Spec: coverageServiceRevokeExclusionSpec(), Handler: adapter.revokeExclusion},
@@ -334,6 +374,14 @@ func (UnimplementedCoverageServiceHandler) ListClosures(context.Context, *v1.Lis
 
 func (UnimplementedCoverageServiceHandler) GetFreshnessContract(context.Context, *v1.GetFreshnessContractRequest) (*v1.GetFreshnessContractResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.CoverageService.GetFreshnessContract is not implemented")
+}
+
+func (UnimplementedCoverageServiceHandler) GetSnapshot(context.Context, *v1.GetSnapshotRequest) (*v1.GetSnapshotResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.CoverageService.GetSnapshot is not implemented")
+}
+
+func (UnimplementedCoverageServiceHandler) ListSnapshots(context.Context, *v1.ListSnapshotsRequest) (*v1.ListSnapshotsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.CoverageService.ListSnapshots is not implemented")
 }
 
 func (UnimplementedCoverageServiceHandler) Reassess(context.Context, *v1.ReassessRequest) (*v1.ReassessResponse, error) {
@@ -411,6 +459,22 @@ func (c *coverageServiceClient) ListClosures(ctx context.Context, req *v1.ListCl
 func (c *coverageServiceClient) GetFreshnessContract(ctx context.Context, req *v1.GetFreshnessContractRequest) (*v1.GetFreshnessContractResponse, error) {
 	var res v1.GetFreshnessContractResponse
 	if err := c.client.CallUnary(ctx, coverageServiceGetFreshnessContractSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *coverageServiceClient) GetSnapshot(ctx context.Context, req *v1.GetSnapshotRequest) (*v1.GetSnapshotResponse, error) {
+	var res v1.GetSnapshotResponse
+	if err := c.client.CallUnary(ctx, coverageServiceGetSnapshotSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *coverageServiceClient) ListSnapshots(ctx context.Context, req *v1.ListSnapshotsRequest) (*v1.ListSnapshotsResponse, error) {
+	var res v1.ListSnapshotsResponse
+	if err := c.client.CallUnary(ctx, coverageServiceListSnapshotsSpec(), req, &res); err != nil {
 		return nil, err
 	}
 	return &res, nil
@@ -540,6 +604,30 @@ func (h coverageServiceHandler) getFreshnessContract(ctx context.Context, _ conn
 		return err
 	}
 	res, err := h.svc.GetFreshnessContract(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h coverageServiceHandler) getSnapshot(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetSnapshotRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetSnapshot(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h coverageServiceHandler) listSnapshots(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListSnapshotsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListSnapshots(ctx, &req)
 	if err != nil {
 		return err
 	}

@@ -1488,6 +1488,68 @@ func (q *Queries) ListCoverageRoutesPage(ctx context.Context, arg ListCoverageRo
 	return items, nil
 }
 
+const listCoverageSnapshotsPage = `-- name: ListCoverageSnapshotsPage :many
+SELECT org_id, id, agent_id, connection_id, operation, state, reasons, closure_id, last_valid_id, invalidation_id, body, body_sha256, ledger_entry_id, computed_at, expires_at FROM pc.coverage_snapshots
+WHERE org_id = $1 AND agent_id = $2 AND connection_id = $3
+  AND operation = $4
+  AND ($5::uuid IS NULL OR id < $5::uuid)
+ORDER BY id DESC
+LIMIT $6
+`
+
+type ListCoverageSnapshotsPageParams struct {
+	OrgID        ids.OrgID
+	AgentID      ids.UUID
+	ConnectionID ids.UUID
+	Operation    string
+	Before       *ids.UUID
+	MaxRows      int32
+}
+
+// A scope's snapshots, newest first: its coverage history.
+func (q *Queries) ListCoverageSnapshotsPage(ctx context.Context, arg ListCoverageSnapshotsPageParams) ([]PcCoverageSnapshot, error) {
+	rows, err := q.db.Query(ctx, listCoverageSnapshotsPage,
+		arg.OrgID,
+		arg.AgentID,
+		arg.ConnectionID,
+		arg.Operation,
+		arg.Before,
+		arg.MaxRows,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []PcCoverageSnapshot{}
+	for rows.Next() {
+		var i PcCoverageSnapshot
+		if err := rows.Scan(
+			&i.OrgID,
+			&i.ID,
+			&i.AgentID,
+			&i.ConnectionID,
+			&i.Operation,
+			&i.State,
+			&i.Reasons,
+			&i.ClosureID,
+			&i.LastValidID,
+			&i.InvalidationID,
+			&i.Body,
+			&i.BodySha256,
+			&i.LedgerEntryID,
+			&i.ComputedAt,
+			&i.ExpiresAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listCurrentCoverageSnapshotsPage = `-- name: ListCurrentCoverageSnapshotsPage :many
 SELECT DISTINCT ON (agent_id, connection_id, operation) org_id, id, agent_id, connection_id, operation, state, reasons, closure_id, last_valid_id, invalidation_id, body, body_sha256, ledger_entry_id, computed_at, expires_at
 FROM pc.coverage_snapshots
