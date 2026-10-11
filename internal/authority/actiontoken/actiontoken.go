@@ -17,7 +17,7 @@ import (
 
 const (
 	// Type is the JOSE type of an action token.
-	Type = "pap-action+jwt" //nolint:gosec // G101: a JOSE type name, not a credential
+	Type = "pap-action+jwt"
 	// TTL is an action token's lifetime.
 	TTL = 60 * time.Second
 )
