@@ -62,7 +62,9 @@ type DB struct {
 	App      db.Config
 	Migrator db.Config
 	AuditRO  db.Config
-	admin    *pgx.ConnConfig
+	// Retention is pc_retention, the role of the retention job (HR-198).
+	Retention db.Config
+	admin     *pgx.ConnConfig
 }
 
 type cluster struct {
@@ -110,11 +112,12 @@ func New(t testing.TB) *DB {
 		t.Fatalf("dbtest: bootstrap database: %v", err)
 	}
 	return &DB{
-		Name:     name,
-		App:      roleConfig(shared.admin, name, db.RoleApp, shared.pw.App, true),
-		Migrator: roleConfig(shared.admin, name, db.RoleMigrator, shared.pw.Migrator, false),
-		AuditRO:  roleConfig(shared.admin, name, db.RoleAuditRO, shared.pw.AuditRO, true),
-		admin:    shared.admin,
+		Name:      name,
+		App:       roleConfig(shared.admin, name, db.RoleApp, shared.pw.App, true),
+		Migrator:  roleConfig(shared.admin, name, db.RoleMigrator, shared.pw.Migrator, false),
+		AuditRO:   roleConfig(shared.admin, name, db.RoleAuditRO, shared.pw.AuditRO, true),
+		Retention: roleConfig(shared.admin, name, db.RoleRetention, shared.pw.Retention, true),
+		admin:     shared.admin,
 	}
 }
 
@@ -173,9 +176,10 @@ func setup(url string) (*cluster, error) {
 		return nil, fmt.Errorf("%s must include a password", AdminURLEnv)
 	}
 	c := &cluster{admin: admin, pw: db.RolePasswords{
-		Migrator: derive(admin.Password, db.RoleMigrator),
-		App:      derive(admin.Password, db.RoleApp),
-		AuditRO:  derive(admin.Password, db.RoleAuditRO),
+		Migrator:  derive(admin.Password, db.RoleMigrator),
+		App:       derive(admin.Password, db.RoleApp),
+		AuditRO:   derive(admin.Password, db.RoleAuditRO),
+		Retention: derive(admin.Password, db.RoleRetention),
 	}}
 	conn, err := pgx.ConnectConfig(ctx, admin)
 	if err != nil {

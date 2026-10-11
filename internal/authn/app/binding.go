@@ -24,14 +24,15 @@ import (
 // the binding of an approval request, or the hash of a batch.
 const purposeBinding = "BINDING"
 
-// BindingSubject is what a BINDING ceremony signs: one approval request or
-// one batch.
+// BindingSubject is what a BINDING ceremony signs: one approval request,
+// one batch, or (G0 M7 slice A11) the release of one reconciliation.
 type BindingSubject struct {
-	Request ids.UUID
-	Batch   ids.UUID
+	Request        ids.UUID
+	Batch          ids.UUID
+	Reconciliation ids.UUID
 }
 
-func (b BindingSubject) params() (request, batch *ids.UUID) {
+func (b BindingSubject) params() (request, batch, reconciliation *ids.UUID) {
 	if !b.Request.IsZero() {
 		r := b.Request
 		request = &r
@@ -40,20 +41,37 @@ func (b BindingSubject) params() (request, batch *ids.UUID) {
 		x := b.Batch
 		batch = &x
 	}
-	return request, batch
+	if !b.Reconciliation.IsZero() {
+		k := b.Reconciliation
+		reconciliation = &k
+	}
+	return request, batch, reconciliation
+}
+
+// one reports whether the subject names exactly one thing.
+func (b BindingSubject) one() bool {
+	n := 0
+	for _, id := range []ids.UUID{b.Request, b.Batch, b.Reconciliation} {
+		if !id.IsZero() {
+			n++
+		}
+	}
+	return n == 1
 }
 
 // BeginBinding starts the approval ceremony (HR-033, design decision 12):
 // a WebAuthn assertion whose challenge is exactly the binding (or batch
 // hash) the approvals use case gave, with user verification required,
 // over one of the person's active keys, bound to this browser session, the
-// user and the request or batch for 5 minutes. A person's open ceremony
-// for the same request is replaced, so a reload starts afresh.
+// user and the request or batch for 5 minutes. A release (G0 M7 design
+// decision 3) uses the same ceremony over the release's binding, bound to
+// the reconciliation. A person's open ceremony for the same subject is
+// replaced, so a reload starts afresh.
 func (w *WebAuthn) BeginBinding(ctx context.Context, s BrowserSession, subject BindingSubject, challenge [32]byte) (Ceremony, error) {
-	request, batch := subject.params()
-	if (request == nil) == (batch == nil) {
+	if !subject.one() {
 		return Ceremony{}, ErrCeremonyInvalid
 	}
+	request, batch, reconciliation := subject.params()
 	var out Ceremony
 	err := w.pool.InTenantTx(ctx, s.Org, func(ctx context.Context, tx db.TenantTx) error {
 		q := dbq.New(tx)
@@ -78,7 +96,7 @@ func (w *WebAuthn) BeginBinding(ctx context.Context, s BrowserSession, subject B
 			return err
 		}
 		if err := q.DeleteOpenBindingCeremonies(ctx, dbq.DeleteOpenBindingCeremoniesParams{
-			OrgID: s.Org, UserID: s.User(), ApprovalRequestID: request, BatchID: batch,
+			OrgID: s.Org, UserID: s.User(), ApprovalRequestID: request, BatchID: batch, ReconciliationID: reconciliation,
 		}); err != nil {
 			return err
 		}
@@ -86,7 +104,7 @@ func (w *WebAuthn) BeginBinding(ctx context.Context, s BrowserSession, subject B
 		return q.InsertBindingCeremony(ctx, dbq.InsertBindingCeremonyParams{
 			OrgID: s.Org, ID: out.ID, SessionID: s.ID, UserID: s.User(), Challenge: raw,
 			AllowedCredentials: sd.AllowedCredentialIDs, ApprovalRequestID: request, BatchID: batch,
-			TtlSeconds: int32(CeremonyTTL / time.Second),
+			ReconciliationID: reconciliation, TtlSeconds: int32(CeremonyTTL / time.Second),
 		})
 	})
 	return out, err
@@ -170,6 +188,9 @@ func (w *WebAuthn) VerifyBinding(ctx context.Context, s BrowserSession, ceremony
 		}
 		if row.BatchID != nil {
 			out.Subject.Batch = *row.BatchID
+		}
+		if row.ReconciliationID != nil {
+			out.Subject.Reconciliation = *row.ReconciliationID
 		}
 		return nil
 	})

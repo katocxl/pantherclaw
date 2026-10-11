@@ -7,6 +7,7 @@ package pantherclaw.v1;
 
 import "buf/validate/validate.proto";
 import "google/protobuf/timestamp.proto";
+import "pantherclaw/v1/authority.proto";
 
 // EvidenceService reads the proof of the caller's org's evidence ledger (G0
 // M7 track B, design decisions 8 and 13; HR-194, HR-196; PAP-1 §9.4): its
@@ -17,7 +18,10 @@ import "google/protobuf/timestamp.proto";
 // transactions needs evidence.read where each transaction's agent lives,
 // like run.read, and a bundle of a sequence range, which covers the whole
 // org and its audit events, needs evidence.read and audit.read at org scope.
-// Anchors, replay and evidence packs come in later slices.
+// Anchors list the org's own blinded leaves in the anchored global root
+// (HR-195). Replay runs a recorded evaluation's decision again without
+// writing anything (HR-197). Evidence packs are signed exports of a scope,
+// built from their creator's permissions (HR-196, Team edition).
 service EvidenceService {
   // ListCheckpoints lists the org's checkpoints, newest first, and its
   // integrity status.
@@ -47,6 +51,47 @@ service EvidenceService {
   rpc ExportBundle(ExportBundleRequest) returns (ExportBundleResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
+  // ListAnchors lists the anchors of the global root that hold one of the
+  // org's checkpoints, newest first (design decision 12, HR-195).
+  // permission: evidence.read
+  rpc ListAnchors(ListAnchorsRequest) returns (ListAnchorsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // ReplayDecision runs one evaluation of a transaction again on its
+  // recorded inputs, at the recorded time, with the recorded policy or a
+  // stored policy version (design decision 11, F504–F508). It writes no
+  // transaction, receipt, reservation, permit or audit event and calls no
+  // gateway (HR-197). It needs evidence.read where the transaction's agent
+  // lives, like run.read; the input values themselves need
+  // evidence.read_restricted there too. At most 10 replays per minute per
+  // caller.
+  // permission: evidence.read
+  rpc ReplayDecision(ReplayDecisionRequest) returns (ReplayDecisionResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // CreateEvidencePack asks for a signed evidence pack of a scope (design
+  // decision 15, F525–F532, Team edition). A job builds it from the
+  // creator's permissions at that moment: what they cannot read is left
+  // out and counted as a gap. Human only; audited.
+  // permission: evidence.export
+  rpc CreateEvidencePack(CreateEvidencePackRequest) returns (CreateEvidencePackResponse);
+  // GetEvidencePack returns a pack's state and, when ready, its signed
+  // manifest: to its creator, or to a holder of evidence.read at org scope.
+  // permission: evidence.read
+  rpc GetEvidencePack(GetEvidencePackRequest) returns (GetEvidencePackResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // ListEvidencePacks lists the packs the caller may see, newest first.
+  // permission: evidence.read
+  rpc ListEvidencePacks(ListEvidencePacksRequest) returns (ListEvidencePacksResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // DownloadEvidencePack streams a ready pack's content (a ZIP, at most
+  // 64 MiB) to its creator, or to a holder of evidence.export and
+  // evidence.read at org scope, for 7 days after it is ready. Every
+  // download is audited before the first byte. `pclaw verify` checks it.
+  // permission: evidence.export
+  rpc DownloadEvidencePack(DownloadEvidencePackRequest) returns (stream DownloadEvidencePackResponse);
 }
 
 // LedgerIntegrityState is where the integrity of the org's evidence ledger stands.
@@ -73,6 +118,13 @@ message LedgerIntegrity {
   uint64 verified_size = 5;
   // When it last verified it.
   google.protobuf.Timestamp verify_time = 6;
+  // The state of the org's newest anchor (HR-195); unspecified when none
+  // holds one of its checkpoints yet (anchoring off, or not run yet).
+  AnchorState anchor_state = 7;
+  // That anchor's period.
+  google.protobuf.Timestamp anchor_period = 8;
+  // For a FAILED anchor: why its last attempt failed.
+  string anchor_error_code = 9;
 }
 
 // Checkpoint is one signed checkpoint of the org's tree.
@@ -222,4 +274,339 @@ message ExportBundleResponse {
   int32 receipts = 3;
   // The tree size of its latest checkpoint; 0 when the org has none yet.
   uint64 checkpoint_size = 4;
+  // Whether it holds the anchor of one of its checkpoints.
+  bool anchored = 5;
+}
+
+// AnchorState is where one anchor of the global root stands (HR-195).
+enum AnchorState {
+  ANCHOR_STATE_UNSPECIFIED = 0;
+  // Signed, not yet entered in the transparency log and timestamped.
+  ANCHOR_STATE_PENDING = 1;
+  // Entered in the configured transparency log and timestamped; both
+  // responses verified.
+  ANCHOR_STATE_ANCHORED = 2;
+  // The last attempt failed; it is retried with backoff until its attempts
+  // run out. Authorization never waits for an anchor.
+  ANCHOR_STATE_FAILED = 3;
+}
+
+// Anchor is one anchor of the global root as it concerns the org: the org's
+// blinded leaf in it and the checkpoint that leaf commits to.
+message Anchor {
+  // The anchor's id.
+  string id = 1;
+  // Start of its anchoring period.
+  google.protobuf.Timestamp period = 2;
+  // State.
+  AnchorState state = 3;
+  // The tree size of the org's checkpoint the leaf commits to.
+  uint64 checkpoint_size = 4;
+  // The org's leaf position in the global tree.
+  uint32 leaf_index = 5;
+  // How many leaves (orgs) the global tree has.
+  uint32 leaves = 6;
+  // The global root (32 bytes).
+  bytes root = 7;
+  // The anchors key that signed the statement.
+  string kid = 8;
+  // Attempts made to log and timestamp it.
+  int32 attempts = 9;
+  // For FAILED: why the last attempt failed, for example REKOR_FAILED.
+  string error_code = 10;
+  // When it was created.
+  google.protobuf.Timestamp create_time = 11;
+  // For ANCHORED: when both responses were verified.
+  google.protobuf.Timestamp anchor_time = 12;
+}
+
+// ListAnchorsRequest pages through the org's anchors.
+message ListAnchorsRequest {
+  // Maximum results (default 50, at most 200).
+  int32 page_size = 1 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 200
+  }];
+  // Token from a previous response.
+  string page_token = 2 [(buf.validate.field).string = {
+    max_len: 64
+    pattern: "^[A-Za-z0-9_-]*$"
+  }];
+}
+
+// ListAnchorsResponse returns a page.
+message ListAnchorsResponse {
+  // Anchors, newest period first.
+  repeated Anchor anchors = 1;
+  // Token for the next page; empty on the last.
+  string next_page_token = 2;
+}
+
+// ReplayDecisionRequest names an evaluation to replay.
+message ReplayDecisionRequest {
+  // The transaction.
+  string transaction_id = 1 [(buf.validate.field).string.uuid = true];
+  // The evaluation, from 1; 0 for the latest.
+  int32 evaluation = 2 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 64
+  }];
+  // A stored policy version of the org (a draft, the published one or an
+  // earlier one) to replay under instead of the recorded policy (F505);
+  // empty for the recorded policy.
+  string policy_version_id = 3 [
+    (buf.validate.field).string.uuid = true,
+    (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE
+  ];
+  // Also return the recorded input values. They are returned only to a
+  // caller holding evidence.read_restricted where the transaction's agent
+  // lives (design decision 11); otherwise the replay comes back without
+  // them and inputs_withheld says why.
+  bool include_inputs = 4;
+}
+
+// ReplayLimitation is why a replay is incomplete (F507).
+message ReplayLimitation {
+  // INPUTS_MISSING, INPUTS_TRUNCATED, INPUTS_UNREADABLE,
+  // FORMAT_UNSUPPORTED, PIPELINE_VERSION_UNSUPPORTED, POLICY_UNCOMPILABLE or
+  // INPUT_UNAVAILABLE.
+  string code = 1;
+  // The pipeline step it concerns; 0 for the whole replay.
+  int32 step = 2;
+  // What is missing, never an input value.
+  string detail = 3;
+}
+
+// ReplayDifference is one check whose items differ between the original and
+// the replay (F506).
+message ReplayDifference {
+  // The pipeline step.
+  int32 step = 1;
+  // The check's name.
+  string check = 2;
+  // The original's items of this check.
+  repeated ChecklistItem original = 3;
+  // The replay's items of this check.
+  repeated ChecklistItem replayed = 4;
+  // The policy rules among the differing items.
+  repeated string rules = 5;
+  // What differed in the inputs: the policy version, or reads the replay
+  // needed and could not have.
+  repeated string inputs = 6;
+}
+
+// ReplayDecisionResponse is what the replay found. Decisions and checklists
+// need evidence.read; inputs is set only for evidence.read_restricted.
+message ReplayDecisionResponse {
+  // The transaction.
+  string transaction_id = 1;
+  // The evaluation replayed.
+  int32 evaluation = 2;
+  // The policy replayed: "<bundle>@<version>", "none" (the evaluation read
+  // no policy), "unknown" or "unreadable".
+  string policy = 3;
+  // Whether a proposed policy version replaced the recorded one.
+  bool proposed = 4;
+  // Whether the replay ran exactly; when false, incomplete says why and
+  // nothing is guessed.
+  bool complete = 5;
+  // Why it is incomplete.
+  repeated ReplayLimitation incomplete = 6;
+  // The replayed decision; unspecified when the replay could not run.
+  Decision decision = 7;
+  // The replayed decisive reason code.
+  string reason = 8;
+  // The replayed decision basis digest.
+  string basis_digest = 9;
+  // The replayed checklist.
+  repeated ChecklistItem checklist = 10;
+  // The original decision, from its decision receipt.
+  Decision original_decision = 11;
+  // The original decisive reason code.
+  string original_reason = 12;
+  // The original decision basis digest.
+  string original_basis_digest = 13;
+  // The original checklist, as the receipt kept it.
+  repeated ChecklistItem original_checklist = 14;
+  // Checklist items the receipt left out to fit.
+  int32 original_omitted = 15;
+  // The decision and its decisive reason are the original's.
+  bool same_decision = 16;
+  // A complete replay with the recorded policy gave the same decision,
+  // decisive reason and decision basis.
+  bool reproduced = 17;
+  // The checks that differ, with the rules and inputs that explain them.
+  repeated ReplayDifference differences = 18;
+  // Limits of a complete replay worth knowing.
+  repeated string notes = 19;
+  // The recorded inputs as JSON: only with include_inputs, for a caller
+  // holding evidence.read_restricted. They may hold business values; never
+  // log them.
+  bytes inputs = 20;
+  // Why inputs is empty although include_inputs was set: the missing
+  // permission, or the inputs' own state (missing, truncated, unreadable).
+  string inputs_withheld = 21;
+}
+
+// EvidencePackState is where a pack stands.
+enum EvidencePackState {
+  EVIDENCE_PACK_STATE_UNSPECIFIED = 0;
+  // The job is building it.
+  EVIDENCE_PACK_STATE_BUILDING = 1;
+  // Signed and downloadable until its expiry.
+  EVIDENCE_PACK_STATE_READY = 2;
+  // It could not be built; error_code says why.
+  EVIDENCE_PACK_STATE_FAILED = 3;
+  // Its 7 days are over and its content was removed.
+  EVIDENCE_PACK_STATE_EXPIRED = 4;
+}
+
+// PackTransactions names the transactions of a pack.
+message PackTransactions {
+  // Transaction ids.
+  repeated string ids = 1 [(buf.validate.field).repeated = {
+    min_items: 1
+    max_items: 1000
+    unique: true
+    items: {
+      string: {uuid: true}
+    }
+  }];
+}
+
+// PackTimeRange is a time range [start_time, end_time) of at most 366 days.
+message PackTimeRange {
+  // Start, inclusive.
+  google.protobuf.Timestamp start_time = 1 [(buf.validate.field).required = true];
+  // End, exclusive.
+  google.protobuf.Timestamp end_time = 2 [(buf.validate.field).required = true];
+
+  option (buf.validate.message).cel = {
+    id: "pack_time_range"
+    message: "end_time must be after start_time, at most 366 days later"
+    expression: "this.end_time > this.start_time && this.end_time - this.start_time <= duration('8784h')"
+  };
+}
+
+// PackContents is what a pack holds besides each transaction's states.
+message PackContents {
+  // Receipts (decision, execution, effect) and their verify bundles.
+  bool receipts = 1;
+  // The policy, definition, grant, guardrail, connection and approval
+  // revisions the decisions applied.
+  bool versions = 2;
+  // The approval requests that held the transactions, and their responses.
+  bool approvals = 3;
+  // Containment and restoration events.
+  bool containment = 4;
+  // Payload captures: only for a creator holding evidence.read_restricted.
+  bool captures = 5;
+}
+
+// CreateEvidencePackRequest names a pack's scope and contents.
+message CreateEvidencePackRequest {
+  // The scope.
+  oneof scope {
+    option (buf.validate.oneof).required = true;
+    // These transactions.
+    PackTransactions transactions = 1;
+    // Every transaction of a run.
+    string run_id = 2 [(buf.validate.field).string.uuid = true];
+    // Every transaction of an agent.
+    string agent_id = 3 [(buf.validate.field).string.uuid = true];
+    // Every transaction of the org in a time range.
+    PackTimeRange time_range = 4;
+  }
+  // For a run or an agent: only the transactions created in this range.
+  PackTimeRange within = 5;
+  // What to include.
+  PackContents include = 6 [(buf.validate.field).required = true];
+}
+
+// EvidencePack is a pack's state and, when ready, its signed manifest.
+message EvidencePack {
+  // Id.
+  string id = 1;
+  // State.
+  EvidencePackState state = 2;
+  // The scope as canonical JSON: kind, ids, range.
+  bytes scope = 3;
+  // What was asked for.
+  PackContents include = 4;
+  // The person who asked for it.
+  string created_by = 5;
+  // When it was asked for.
+  google.protobuf.Timestamp create_time = 6;
+  // When it became ready.
+  google.protobuf.Timestamp ready_time = 7;
+  // When it expires (7 days after ready).
+  google.protobuf.Timestamp expire_time = 8;
+  // Files listed in its manifest.
+  int32 items = 9;
+  // Size of its content (the ZIP).
+  int64 content_size = 10;
+  // SHA-256 of its content.
+  bytes content_sha256 = 11;
+  // The signed manifest (compact JWS, typ pap-pack+jwt), when ready.
+  string manifest = 12;
+  // For FAILED: why.
+  string error_code = 13;
+}
+
+// CreateEvidencePackResponse returns the new pack, BUILDING.
+message CreateEvidencePackResponse {
+  // The pack.
+  EvidencePack pack = 1;
+}
+
+// GetEvidencePackRequest names a pack.
+message GetEvidencePackRequest {
+  // Id.
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// GetEvidencePackResponse returns it.
+message GetEvidencePackResponse {
+  // The pack.
+  EvidencePack pack = 1;
+}
+
+// ListEvidencePacksRequest pages through packs.
+message ListEvidencePacksRequest {
+  // Maximum results (default 50, at most 200).
+  int32 page_size = 1 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 200
+  }];
+  // Token from a previous response.
+  string page_token = 2 [(buf.validate.field).string = {
+    max_len: 64
+    pattern: "^[A-Za-z0-9_-]*$"
+  }];
+}
+
+// ListEvidencePacksResponse returns a page.
+message ListEvidencePacksResponse {
+  // Packs, newest first.
+  repeated EvidencePack packs = 1;
+  // Token for the next page; empty on the last.
+  string next_page_token = 2;
+}
+
+// DownloadEvidencePackRequest names a pack.
+message DownloadEvidencePackRequest {
+  // Id.
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// DownloadEvidencePackResponse is one part of the content, in order.
+message DownloadEvidencePackResponse {
+  // Up to 1 MiB of the content.
+  bytes chunk = 1;
+  // Its offset in the content.
+  int64 offset = 2;
+  // The content's size (every message).
+  int64 total_size = 3;
+  // The content's SHA-256 (every message).
+  bytes content_sha256 = 4;
 }

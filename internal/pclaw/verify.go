@@ -14,9 +14,10 @@ import (
 	"github.com/katocxl/pantherclaw/internal/evidence/bundle"
 )
 
-// pclaw verify (G0 M7 design decision 13, HR-196, PN-007.4) checks a verify
-// bundle offline against a trust file the user pinned, and optionally a
-// Sigstore trusted root and a checkpoint saved earlier. It makes no network
+// pclaw verify (G0 M7 design decisions 13 and 15, HR-196, PN-007.4) checks
+// a verify bundle, or an evidence pack and the bundles inside it, offline
+// against a trust file the user pinned, and optionally a Sigstore trusted
+// root and a checkpoint saved earlier. It makes no network
 // call at all: it never uses the HTTP client and needs no login. It exits
 // non-zero when any check failed.
 
@@ -24,7 +25,7 @@ const maxPreviousBytes = 64 << 10
 
 func init() {
 	commands["verify"] = command{
-		usage: "verify BUNDLE --trust FILE [--sigstore-trusted-root FILE] [--previous FILE] [--json]",
+		usage: "verify (BUNDLE|PACK) --trust FILE [--sigstore-trusted-root FILE] [--previous FILE] [--json]",
 		run:   verifyCmd,
 	}
 }
@@ -77,7 +78,11 @@ func verifyCmd(_ context.Context, a *app, args []string) error {
 		return err
 	}
 	var report *bundle.Report
-	if b, err := bundle.Decode(raw); err != nil {
+	if bundle.IsPack(raw) {
+		// An evidence pack (a ZIP with a signed manifest, HR-196): its
+		// manifest, every file and the verify bundles inside.
+		report = bundle.VerifyPack(raw, opts)
+	} else if b, err := bundle.Decode(raw); err != nil {
 		report = bundle.Invalid(err)
 	} else {
 		report = bundle.Verify(b, opts)

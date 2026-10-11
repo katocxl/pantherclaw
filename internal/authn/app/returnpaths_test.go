@@ -23,6 +23,11 @@ func TestHR152_SignInMayReturnToTheApprovalPages(t *testing.T) {
 		"/approvals/":                                             false,
 		"//approvals":                                             false,
 		"/account":                                                true,
+		// The reconciliation page (G0 M7 design decision 3).
+		"/reconciliations/0192f3a0-0000-7000-8000-000000000001":         true,
+		"/reconciliations/0192f3a0-0000-7000-8000-000000000001/release": false,
+		"/reconciliations":   false,
+		"/reconciliations/x": false,
 	} {
 		if authnapp.ValidReturnPath(p) != ok {
 			t.Errorf("ValidReturnPath(%q) = %v, want %v", p, !ok, ok)

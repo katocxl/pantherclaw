@@ -123,7 +123,7 @@ const insertEffectReceipt = `-- name: InsertEffectReceipt :exec
 INSERT INTO pc.effect_receipts (org_id, transaction_id, seq, state, level_required, level_achieved, basis, receipt_jws,
                                 ledger_entry_id)
 VALUES ($1, $2, $3, $4, $5,
-        $6, $7, $8, $9)
+        $6, $7, $8::text, $9)
 `
 
 type InsertEffectReceiptParams struct {

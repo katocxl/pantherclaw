@@ -156,6 +156,8 @@ Rules (MUST):
 }
 ```
 
+`obligations` lists only what the gateway applies. A policy's `verify` obligation (`{"kind": "verify", "level": "follow_up", "timing": "after_dispatch"}`) raises the level the effect must be verified at (§9.3); the Authority applies it, the decision receipt states it, and the gateway is never sent it. When the required level is above what the definition's verifier reaches, or the action's connection cannot make the verifier's reads, the decision is `CANNOT_AUTHORIZE` with `VERIFIER_UNSUPPORTED`.
+
 Idempotency: `(org, run_id, action_id)` is unique. Same triple + same hash ⇒ the stored decision is returned. Same triple + different hash ⇒ `DENY` with code `ACTION_TAMPERED` and a security alert. `DENY` and expired decisions are terminal for that triple; `CANNOT_AUTHORIZE` MAY be retried.
 
 One exception keeps an approval from being lost when nothing was sent (HR-011). It applies when the permit of an `ALLOW` that used an approval is released without reaching `DISPATCHING`: it expired, or `BeginDispatch` refused it because it expired or the containment epoch moved past it. While the approval can still be used, the Authority returns it to `APPROVED` and reopens the transaction. The workload's next resubmission of the same triple is then evaluated again and may get a new permit, which uses the approval. The released permit is kept, marked replaced: a transaction has at most one current permit. An outcome recorded after `BeginDispatch` never reopens a transaction. `failed` needs a new approval, and `unknown` goes to reconciliation.

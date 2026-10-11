@@ -42,9 +42,11 @@ Give the operator the token, the `ca_sha256` pin and the URLs, through a channel
    | `control.gateway_url` | — | Optional `https` override of the URL the server gave at enrollment. |
    | `control.identity_dir` | `deploy/dev/secrets/gateway` | Where the identity lives (`identity.json`, 0600, in a 0700 directory). |
    | `control.timeout` | `2s` | Control-plane call timeout. |
+   | `control.verify_every` | `10s` | How often the gateway claims the verification tasks of its connections (G0 M7), 1 s to 10 minutes. |
    | `broker.key_file`, `broker.kek_files` | — | Together. The first KEK file is current; the others are for KEK rotation. |
    | `egress.allowed_prefixes` | — | Private ranges this gateway may reach (operator only, HR-077). |
    | `approvals.approver_keys_file` | — | The reviewed approver keys file (§7). Without it, every approved action is refused. |
+   | `log.level` | `info` | `debug`, `info`, `warn` or `error`. |
 3. **Enroll**, with the token in a file readable only by you:
    ```bash
    pantherclaw-gateway enroll --config gateway.json --token-file enroll.token

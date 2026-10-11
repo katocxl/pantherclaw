@@ -127,6 +127,25 @@ func TestIntMLDSACosignNeedsEnterprise(t *testing.T) {
 	}
 }
 
+// TestHR195_ServerRefusesAnchoringOnACommunityLicence: without a Team
+// licence the server refuses to start with anchoring on, with a message
+// that says how to fix it (PN-007.3).
+func TestHR195_ServerRefusesAnchoringOnACommunityLicence(t *testing.T) {
+	d := dbtest.New(t)
+	cfgPath := testConfig(t, d, RoleWorker, func(c map[string]any) {
+		c["evidence"] = map[string]any{"anchoring": map[string]any{
+			"enabled": true,
+			"rekor":   map[string]any{"url": "https://log2025-1.rekor.sigstore.dev", "public_key_file": "rekor.pub"},
+			"tsa":     map[string]any{"url": "https://timestamp.sigstore.dev/api/v1/timestamp", "cert_chain_file": "tsa.pem"},
+		}}
+	})
+	var logs bytes.Buffer
+	err := cmdServe(context.Background(), []string{"--config", cfgPath}, &logs, noEnv, nil)
+	if !errors.Is(err, errAnchoringEdition) {
+		t.Fatalf("serve with anchoring on a Community licence: %v", err)
+	}
+}
+
 // TestHR194_WorkersCheckpointEveryOrgWithTheirPublishedKey: the worker role
 // checkpoints the platform org's chain (its key-creation audit entries),
 // and the checkpoint verifies with the key evidence-keys.json publishes.

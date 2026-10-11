@@ -198,8 +198,10 @@ var roles = []Role{
 	},
 	{
 		Name: RoleReconciler, Title: "Reconciler", Scopes: anyScope,
-		Description: "Owns unknown outcomes in scope, for the operations or finance people who know whether an effect happened: records them as occurred, releases them on the page with a security key, requests verifications and links compensating transactions (human only).",
-		Permissions: with(basicReads, []Permission{PermTransactionReconcile, PermEvidenceRead, PermRunRead, PermAgentRead}),
+		Description: "Owns unknown outcomes in scope, for the operations or finance people who know whether an effect happened: sees the reconciliation entries routed to them in the Agent Waitlist, records them as occurred, releases them on the page with a security key, requests verifications and links compensating transactions (human only).",
+		Permissions: with(basicReads, []Permission{
+			PermTransactionReconcile, PermEvidenceRead, PermRunRead, PermAgentRead, PermWaitlistRead,
+		}),
 	},
 	{
 		Name: RoleRecordsManager, Title: "Records Manager", Scopes: orgScope,

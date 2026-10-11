@@ -88,7 +88,8 @@ func newHandler(t *testing.T, publicURL string) (*webhttp.Handler, *fakeBrowser,
 	fb := &fakeBrowser{}
 	h, err := webhttp.New(fb, publicURL, nil, nil)
 	if err == nil {
-		h.WithKeys(&fakeKeys{}).WithContainment(&fakeContainment{}).WithApprovals(&fakeApprovals{}, &fakeBindings{})
+		h.WithKeys(&fakeKeys{}).WithContainment(&fakeContainment{}).WithApprovals(&fakeApprovals{}, &fakeBindings{}).
+			WithReconciliations(&fakeReconciliations{}, &fakeBindings{})
 	}
 	if err != nil {
 		t.Fatal(err)
@@ -184,7 +185,7 @@ func TestHR151_RouteTable(t *testing.T) {
 	h, _, mux := newHandler(t, origin)
 	for _, rt := range h.Routes() {
 		private := strings.HasPrefix(rt.Path, authnapp.AccountPath) || strings.HasPrefix(rt.Path, authnapp.ContainmentPath) ||
-			strings.HasPrefix(rt.Path, authnapp.ApprovalsPath) ||
+			strings.HasPrefix(rt.Path, authnapp.ApprovalsPath) || strings.HasPrefix(rt.Path, authnapp.ReconciliationsPath) ||
 			rt.Path == authnapp.LogoutPath
 		if private != rt.Session {
 			t.Errorf("%s %s: session=%v, want %v", rt.Method, rt.Path, rt.Session, private)
@@ -213,6 +214,10 @@ func TestHR151_RouteTable(t *testing.T) {
 		{Method: http.MethodPost, Path: "/approvals/{id}/decline", Session: true, CSRF: true},
 		{Method: http.MethodPost, Path: "/approvals/{id}/evidence-request", Session: true, CSRF: true},
 		{Method: http.MethodPost, Path: "/approvals/{id}/narrower", Session: true, CSRF: true},
+		// The reconciliation page (G0 M7 design decision 3).
+		{Method: http.MethodGet, Path: "/reconciliations/{id}", Session: true},
+		{Method: http.MethodPost, Path: "/reconciliations/{id}/release-options", Session: true, CSRF: true},
+		{Method: http.MethodPost, Path: "/reconciliations/{id}/release", Session: true, CSRF: true},
 	} {
 		if !slices.Contains(h.Routes(), want) {
 			t.Errorf("route %+v is not mounted", want)

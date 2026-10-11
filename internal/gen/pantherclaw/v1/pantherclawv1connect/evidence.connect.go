@@ -42,6 +42,24 @@ const (
 	// EvidenceServiceExportBundleProcedure is the procedure name of the EvidenceService's ExportBundle
 	// RPC.
 	EvidenceServiceExportBundleProcedure = "/pantherclaw.v1.EvidenceService/ExportBundle"
+	// EvidenceServiceListAnchorsProcedure is the procedure name of the EvidenceService's ListAnchors
+	// RPC.
+	EvidenceServiceListAnchorsProcedure = "/pantherclaw.v1.EvidenceService/ListAnchors"
+	// EvidenceServiceReplayDecisionProcedure is the procedure name of the EvidenceService's
+	// ReplayDecision RPC.
+	EvidenceServiceReplayDecisionProcedure = "/pantherclaw.v1.EvidenceService/ReplayDecision"
+	// EvidenceServiceCreateEvidencePackProcedure is the procedure name of the EvidenceService's
+	// CreateEvidencePack RPC.
+	EvidenceServiceCreateEvidencePackProcedure = "/pantherclaw.v1.EvidenceService/CreateEvidencePack"
+	// EvidenceServiceGetEvidencePackProcedure is the procedure name of the EvidenceService's
+	// GetEvidencePack RPC.
+	EvidenceServiceGetEvidencePackProcedure = "/pantherclaw.v1.EvidenceService/GetEvidencePack"
+	// EvidenceServiceListEvidencePacksProcedure is the procedure name of the EvidenceService's
+	// ListEvidencePacks RPC.
+	EvidenceServiceListEvidencePacksProcedure = "/pantherclaw.v1.EvidenceService/ListEvidencePacks"
+	// EvidenceServiceDownloadEvidencePackProcedure is the procedure name of the EvidenceService's
+	// DownloadEvidencePack RPC.
+	EvidenceServiceDownloadEvidencePackProcedure = "/pantherclaw.v1.EvidenceService/DownloadEvidencePack"
 )
 
 var (
@@ -85,6 +103,52 @@ var (
 			IdempotencyLevel: connect.IdempotencyNoSideEffects,
 		}
 	})
+	evidenceServiceListAnchorsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_pantherclaw_v1_evidence_proto.Services().ByName("EvidenceService").Methods().ByName("ListAnchors"),
+			Procedure:        EvidenceServiceListAnchorsProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
+	evidenceServiceReplayDecisionSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_pantherclaw_v1_evidence_proto.Services().ByName("EvidenceService").Methods().ByName("ReplayDecision"),
+			Procedure:        EvidenceServiceReplayDecisionProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
+	evidenceServiceCreateEvidencePackSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_pantherclaw_v1_evidence_proto.Services().ByName("EvidenceService").Methods().ByName("CreateEvidencePack"),
+			Procedure:  EvidenceServiceCreateEvidencePackProcedure,
+		}
+	})
+	evidenceServiceGetEvidencePackSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_pantherclaw_v1_evidence_proto.Services().ByName("EvidenceService").Methods().ByName("GetEvidencePack"),
+			Procedure:        EvidenceServiceGetEvidencePackProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
+	evidenceServiceListEvidencePacksSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_pantherclaw_v1_evidence_proto.Services().ByName("EvidenceService").Methods().ByName("ListEvidencePacks"),
+			Procedure:        EvidenceServiceListEvidencePacksProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
+	evidenceServiceDownloadEvidencePackSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeServer,
+			Schema:     v1.File_pantherclaw_v1_evidence_proto.Services().ByName("EvidenceService").Methods().ByName("DownloadEvidencePack"),
+			Procedure:  EvidenceServiceDownloadEvidencePackProcedure,
+		}
+	})
 )
 
 // EvidenceServiceClient is a client for the pantherclaw.v1.EvidenceService service.
@@ -107,12 +171,66 @@ type EvidenceServiceClient interface {
 	// ExportBundle builds a pantherclaw.bundle/v1 verify bundle.
 	// permission: evidence.read
 	ExportBundle(context.Context, *v1.ExportBundleRequest) (*v1.ExportBundleResponse, error)
+	// ListAnchors lists the anchors of the global root that hold one of the
+	// org's checkpoints, newest first (design decision 12, HR-195).
+	// permission: evidence.read
+	ListAnchors(context.Context, *v1.ListAnchorsRequest) (*v1.ListAnchorsResponse, error)
+	// ReplayDecision runs one evaluation of a transaction again on its
+	// recorded inputs, at the recorded time, with the recorded policy or a
+	// stored policy version (design decision 11, F504–F508). It writes no
+	// transaction, receipt, reservation, permit or audit event and calls no
+	// gateway (HR-197). It needs evidence.read where the transaction's agent
+	// lives, like run.read; the input values themselves need
+	// evidence.read_restricted there too. At most 10 replays per minute per
+	// caller.
+	// permission: evidence.read
+	ReplayDecision(context.Context, *v1.ReplayDecisionRequest) (*v1.ReplayDecisionResponse, error)
+	// CreateEvidencePack asks for a signed evidence pack of a scope (design
+	// decision 15, F525–F532, Team edition). A job builds it from the
+	// creator's permissions at that moment: what they cannot read is left
+	// out and counted as a gap. Human only; audited.
+	// permission: evidence.export
+	CreateEvidencePack(context.Context, *v1.CreateEvidencePackRequest) (*v1.CreateEvidencePackResponse, error)
+	// GetEvidencePack returns a pack's state and, when ready, its signed
+	// manifest: to its creator, or to a holder of evidence.read at org scope.
+	// permission: evidence.read
+	GetEvidencePack(context.Context, *v1.GetEvidencePackRequest) (*v1.GetEvidencePackResponse, error)
+	// ListEvidencePacks lists the packs the caller may see, newest first.
+	// permission: evidence.read
+	ListEvidencePacks(context.Context, *v1.ListEvidencePacksRequest) (*v1.ListEvidencePacksResponse, error)
+	// DownloadEvidencePack streams a ready pack's content (a ZIP, at most
+	// 64 MiB) to its creator, or to a holder of evidence.export and
+	// evidence.read at org scope, for 7 days after it is ready. Every
+	// download is audited before the first byte. `pclaw verify` checks it.
+	// permission: evidence.export
+	DownloadEvidencePack(context.Context, *v1.DownloadEvidencePackRequest) (EvidenceServiceDownloadEvidencePackClientStream, error)
 }
 
 // NewEvidenceServiceClient constructs a client for the pantherclaw.v1.EvidenceService service.
 // Multiple service clients may share a single connect.Client.
 func NewEvidenceServiceClient(client *connect.Client) EvidenceServiceClient {
 	return &evidenceServiceClient{client: client}
+}
+
+// EvidenceServiceDownloadEvidencePackClientStream is the client stream for the EvidenceService's
+// DownloadEvidencePack RPC.
+type EvidenceServiceDownloadEvidencePackClientStream struct {
+	stream connect.ClientStream
+}
+
+// Receive returns the next response message from the server.
+func (s EvidenceServiceDownloadEvidencePackClientStream) Receive() (*v1.DownloadEvidencePackResponse, error) {
+	var res v1.DownloadEvidencePackResponse
+	if err := s.stream.Receive(&res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+// Close releases the stream's resources. It is idempotent and is typically deferred to clean up a
+// stream abandoned before io.EOF.
+func (s EvidenceServiceDownloadEvidencePackClientStream) Close() error {
+	return s.stream.Close()
 }
 
 // EvidenceServiceHandler is an implementation of the pantherclaw.v1.EvidenceService service.
@@ -135,6 +253,39 @@ type EvidenceServiceHandler interface {
 	// ExportBundle builds a pantherclaw.bundle/v1 verify bundle.
 	// permission: evidence.read
 	ExportBundle(context.Context, *v1.ExportBundleRequest) (*v1.ExportBundleResponse, error)
+	// ListAnchors lists the anchors of the global root that hold one of the
+	// org's checkpoints, newest first (design decision 12, HR-195).
+	// permission: evidence.read
+	ListAnchors(context.Context, *v1.ListAnchorsRequest) (*v1.ListAnchorsResponse, error)
+	// ReplayDecision runs one evaluation of a transaction again on its
+	// recorded inputs, at the recorded time, with the recorded policy or a
+	// stored policy version (design decision 11, F504–F508). It writes no
+	// transaction, receipt, reservation, permit or audit event and calls no
+	// gateway (HR-197). It needs evidence.read where the transaction's agent
+	// lives, like run.read; the input values themselves need
+	// evidence.read_restricted there too. At most 10 replays per minute per
+	// caller.
+	// permission: evidence.read
+	ReplayDecision(context.Context, *v1.ReplayDecisionRequest) (*v1.ReplayDecisionResponse, error)
+	// CreateEvidencePack asks for a signed evidence pack of a scope (design
+	// decision 15, F525–F532, Team edition). A job builds it from the
+	// creator's permissions at that moment: what they cannot read is left
+	// out and counted as a gap. Human only; audited.
+	// permission: evidence.export
+	CreateEvidencePack(context.Context, *v1.CreateEvidencePackRequest) (*v1.CreateEvidencePackResponse, error)
+	// GetEvidencePack returns a pack's state and, when ready, its signed
+	// manifest: to its creator, or to a holder of evidence.read at org scope.
+	// permission: evidence.read
+	GetEvidencePack(context.Context, *v1.GetEvidencePackRequest) (*v1.GetEvidencePackResponse, error)
+	// ListEvidencePacks lists the packs the caller may see, newest first.
+	// permission: evidence.read
+	ListEvidencePacks(context.Context, *v1.ListEvidencePacksRequest) (*v1.ListEvidencePacksResponse, error)
+	// DownloadEvidencePack streams a ready pack's content (a ZIP, at most
+	// 64 MiB) to its creator, or to a holder of evidence.export and
+	// evidence.read at org scope, for 7 days after it is ready. Every
+	// download is audited before the first byte. `pclaw verify` checks it.
+	// permission: evidence.export
+	DownloadEvidencePack(context.Context, *v1.DownloadEvidencePackRequest, EvidenceServiceDownloadEvidencePackServerStream) error
 }
 
 // RegisterEvidenceServiceHandler registers svc as the pantherclaw.v1.EvidenceService implementation
@@ -147,7 +298,29 @@ func RegisterEvidenceServiceHandler(server *connect.Server, svc EvidenceServiceH
 		connect.Method{Spec: evidenceServiceGetInclusionProofSpec(), Handler: adapter.getInclusionProof},
 		connect.Method{Spec: evidenceServiceGetConsistencyProofSpec(), Handler: adapter.getConsistencyProof},
 		connect.Method{Spec: evidenceServiceExportBundleSpec(), Handler: adapter.exportBundle},
+		connect.Method{Spec: evidenceServiceListAnchorsSpec(), Handler: adapter.listAnchors},
+		connect.Method{Spec: evidenceServiceReplayDecisionSpec(), Handler: adapter.replayDecision},
+		connect.Method{Spec: evidenceServiceCreateEvidencePackSpec(), Handler: adapter.createEvidencePack},
+		connect.Method{Spec: evidenceServiceGetEvidencePackSpec(), Handler: adapter.getEvidencePack},
+		connect.Method{Spec: evidenceServiceListEvidencePacksSpec(), Handler: adapter.listEvidencePacks},
+		connect.Method{Spec: evidenceServiceDownloadEvidencePackSpec(), Handler: adapter.downloadEvidencePack},
 	)
+}
+
+// EvidenceServiceDownloadEvidencePackServerStream is the server stream for the EvidenceService's
+// DownloadEvidencePack RPC.
+type EvidenceServiceDownloadEvidencePackServerStream struct {
+	stream connect.ServerStream
+}
+
+// SendHeaders flushes the response headers without a message. The first Send does this implicitly.
+func (s EvidenceServiceDownloadEvidencePackServerStream) SendHeaders() error {
+	return s.stream.SendHeaders()
+}
+
+// Send sends a response message to the client.
+func (s EvidenceServiceDownloadEvidencePackServerStream) Send(res *v1.DownloadEvidencePackResponse) error {
+	return s.stream.Send(res)
 }
 
 // UnimplementedEvidenceServiceHandler returns CodeUnimplemented from all methods.
@@ -171,6 +344,30 @@ func (UnimplementedEvidenceServiceHandler) GetConsistencyProof(context.Context, 
 
 func (UnimplementedEvidenceServiceHandler) ExportBundle(context.Context, *v1.ExportBundleRequest) (*v1.ExportBundleResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.EvidenceService.ExportBundle is not implemented")
+}
+
+func (UnimplementedEvidenceServiceHandler) ListAnchors(context.Context, *v1.ListAnchorsRequest) (*v1.ListAnchorsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.EvidenceService.ListAnchors is not implemented")
+}
+
+func (UnimplementedEvidenceServiceHandler) ReplayDecision(context.Context, *v1.ReplayDecisionRequest) (*v1.ReplayDecisionResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.EvidenceService.ReplayDecision is not implemented")
+}
+
+func (UnimplementedEvidenceServiceHandler) CreateEvidencePack(context.Context, *v1.CreateEvidencePackRequest) (*v1.CreateEvidencePackResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.EvidenceService.CreateEvidencePack is not implemented")
+}
+
+func (UnimplementedEvidenceServiceHandler) GetEvidencePack(context.Context, *v1.GetEvidencePackRequest) (*v1.GetEvidencePackResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.EvidenceService.GetEvidencePack is not implemented")
+}
+
+func (UnimplementedEvidenceServiceHandler) ListEvidencePacks(context.Context, *v1.ListEvidencePacksRequest) (*v1.ListEvidencePacksResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.EvidenceService.ListEvidencePacks is not implemented")
+}
+
+func (UnimplementedEvidenceServiceHandler) DownloadEvidencePack(context.Context, *v1.DownloadEvidencePackRequest, EvidenceServiceDownloadEvidencePackServerStream) error {
+	return connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.EvidenceService.DownloadEvidencePack is not implemented")
 }
 
 type evidenceServiceClient struct {
@@ -215,6 +412,54 @@ func (c *evidenceServiceClient) ExportBundle(ctx context.Context, req *v1.Export
 		return nil, err
 	}
 	return &res, nil
+}
+
+func (c *evidenceServiceClient) ListAnchors(ctx context.Context, req *v1.ListAnchorsRequest) (*v1.ListAnchorsResponse, error) {
+	var res v1.ListAnchorsResponse
+	if err := c.client.CallUnary(ctx, evidenceServiceListAnchorsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *evidenceServiceClient) ReplayDecision(ctx context.Context, req *v1.ReplayDecisionRequest) (*v1.ReplayDecisionResponse, error) {
+	var res v1.ReplayDecisionResponse
+	if err := c.client.CallUnary(ctx, evidenceServiceReplayDecisionSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *evidenceServiceClient) CreateEvidencePack(ctx context.Context, req *v1.CreateEvidencePackRequest) (*v1.CreateEvidencePackResponse, error) {
+	var res v1.CreateEvidencePackResponse
+	if err := c.client.CallUnary(ctx, evidenceServiceCreateEvidencePackSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *evidenceServiceClient) GetEvidencePack(ctx context.Context, req *v1.GetEvidencePackRequest) (*v1.GetEvidencePackResponse, error) {
+	var res v1.GetEvidencePackResponse
+	if err := c.client.CallUnary(ctx, evidenceServiceGetEvidencePackSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *evidenceServiceClient) ListEvidencePacks(ctx context.Context, req *v1.ListEvidencePacksRequest) (*v1.ListEvidencePacksResponse, error) {
+	var res v1.ListEvidencePacksResponse
+	if err := c.client.CallUnary(ctx, evidenceServiceListEvidencePacksSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *evidenceServiceClient) DownloadEvidencePack(ctx context.Context, req *v1.DownloadEvidencePackRequest) (EvidenceServiceDownloadEvidencePackClientStream, error) {
+	stream, err := c.client.CallServerStream(ctx, evidenceServiceDownloadEvidencePackSpec(), req)
+	if err != nil {
+		return EvidenceServiceDownloadEvidencePackClientStream{}, err
+	}
+	return EvidenceServiceDownloadEvidencePackClientStream{stream: stream}, nil
 }
 
 type evidenceServiceHandler struct{ svc EvidenceServiceHandler }
@@ -277,4 +522,72 @@ func (h evidenceServiceHandler) exportBundle(ctx context.Context, _ connect.Spec
 		return err
 	}
 	return stream.Send(res)
+}
+
+func (h evidenceServiceHandler) listAnchors(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListAnchorsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListAnchors(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h evidenceServiceHandler) replayDecision(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ReplayDecisionRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ReplayDecision(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h evidenceServiceHandler) createEvidencePack(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.CreateEvidencePackRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.CreateEvidencePack(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h evidenceServiceHandler) getEvidencePack(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetEvidencePackRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetEvidencePack(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h evidenceServiceHandler) listEvidencePacks(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListEvidencePacksRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListEvidencePacks(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h evidenceServiceHandler) downloadEvidencePack(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.DownloadEvidencePackRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	return h.svc.DownloadEvidencePack(ctx, &req, EvidenceServiceDownloadEvidencePackServerStream{stream: stream})
 }

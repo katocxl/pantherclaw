@@ -24,6 +24,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	tdomain "github.com/katocxl/pantherclaw/internal/transactions/domain"
+	"github.com/katocxl/pantherclaw/internal/waitlist/adapters/pgwaitlist"
 )
 
 // What happens after a dispatch (G0 M7 track A, HR-190..192): every
@@ -67,6 +68,18 @@ func verifyPlan(ins *dbq.InsertPermitForTransactionParams, p *pipeline.VerifyPla
 		ins.VerifyExpect = b
 	}
 	return nil
+}
+
+// requireLevel records on the transaction the level its permit's verify
+// plan requires, when that is above the target's acceptance (a definition's
+// verifier.required or a policy's verify obligation, G0 M7 design decision
+// 2), so that every effect receipt states it (HR-191).
+func requireLevel(ctx context.Context, q *dbq.Queries, org ids.OrgID, txn ids.UUID, p *pipeline.VerifyPlan) error {
+	if p == nil || p.Required.Rank() <= defs.LevelAcceptance.Rank() {
+		return nil
+	}
+	level := string(p.Required)
+	return q.SetEffectRequired(ctx, &level, org, txn)
 }
 
 // executed is what an execution receipt states about the permit in c.
@@ -119,13 +132,14 @@ func definition(raw []byte) (*defs.Definition, error) {
 	return &d, nil
 }
 
-// scheduleVerification records the level the permit's definition requires
-// and schedules the verification its verifier allows for outcome o
-// (HR-190, G0 M7 design decision 1): after an accepted dispatch, a read of
-// the object the target named (ref, kept only when it matches the read's
-// target pattern) or else a lookup; after an unknown one, a lookup. It
-// returns the reference it kept. A definition without an extended verifier
-// schedules nothing: its effects are UNVERIFIABLE.
+// scheduleVerification records the level the permit's definition requires,
+// unless its decision required more (a policy's verify obligation, kept by
+// requireLevel), and schedules the verification its verifier allows for
+// outcome o (HR-190, G0 M7 design decision 1): after an accepted dispatch,
+// a read of the object the target named (ref, kept only when it matches the
+// read's target pattern) or else a lookup; after an unknown one, a lookup.
+// It returns the reference it kept. A definition without an extended
+// verifier schedules nothing: its effects are UNVERIFIABLE.
 func scheduleVerification(ctx context.Context, q *dbq.Queries, org ids.OrgID, c dbq.ExecutionContextRow, o finalize.Outcome,
 	ref string,
 ) (string, error) {
@@ -143,11 +157,15 @@ func scheduleVerification(ctx context.Context, q *dbq.Queries, org ids.OrgID, c 
 		return "", err
 	}
 	v := d.Verifier
-	level := string(defs.LevelAcceptance)
+	level := defs.LevelAcceptance
 	if v != nil && v.Extended() {
-		level = string(v.RequiredLevel())
+		level = v.RequiredLevel()
 	}
-	if err := q.SetEffectRequired(ctx, &level, org, c.TransactionID); err != nil {
+	if c.EffectLevelRequired != nil && defs.Level(*c.EffectLevelRequired).Rank() > level.Rank() {
+		level = defs.Level(*c.EffectLevelRequired)
+	}
+	required := string(level)
+	if err := q.SetEffectRequired(ctx, &required, org, c.TransactionID); err != nil {
 		return "", err
 	}
 	if v == nil || !v.Extended() || c.ConnectionID == nil || c.DispatchingAt == nil || (o != finalize.Accepted && o != finalize.Unknown) {
@@ -198,10 +216,11 @@ func scheduleVerification(ctx context.Context, q *dbq.Queries, org ids.OrgID, c 
 // lateReport handles a gateway's RecordExecution for a permit the sweeper
 // already marked UNKNOWN (PAP-1 §7.4): the report is kept as an
 // observation; accepted resolves the reconciliation as occurred (evidence
-// only ever resolves that way, HR-192), commits the reservations and
-// schedules the follow-up read; any other outcome resolves nothing. It
-// returns the sweeper's execution receipt.
-func lateReport(ctx context.Context, q *dbq.Queries, org ids.OrgID, gatewayID string, e finalize.Execution,
+// only ever resolves that way, HR-192), commits the reservations, closes
+// the RECONCILIATION waitlist entry and schedules the follow-up read; any
+// other outcome resolves nothing. It returns the sweeper's execution
+// receipt.
+func lateReport(ctx context.Context, tx db.TenantTx, q *dbq.Queries, org ids.OrgID, gatewayID string, e finalize.Execution,
 	c dbq.ExecutionContextRow,
 ) (string, error) {
 	rec, err := q.RecordedExecution(ctx, org, e.Permit, gatewayID)
@@ -244,6 +263,10 @@ func lateReport(ctx context.Context, q *dbq.Queries, org ids.OrgID, gatewayID st
 			return "", err
 		}
 		if err := q.SettleDedupeClaim(ctx, string(pipeline.ClaimSucceeded), org, txn); err != nil {
+			return "", err
+		}
+		if err := pgwaitlist.CloseReconciliation(ctx, tx, org, txn, pgwaitlist.ResolvedOccurred,
+			evdomain.Actor{Type: "gateway", ID: gatewayID}); err != nil {
 			return "", err
 		}
 	}
