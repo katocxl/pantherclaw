@@ -446,8 +446,23 @@ func noteOf(t *testing.T, b *bundle.Bundle, size uint64) string {
 // position, or "OK" once a verification succeeded).
 func (p *proof) integrity(t *testing.T, want string) {
 	t.Helper()
-	if _, err := p.jobs.Insert(context.Background(), checkpoints.VerifyOrgArgs{Org: p.s.org}, nil); err != nil {
-		t.Fatal(err)
+	// The verification is unique per org while one is queued or running: an
+	// earlier job River has not marked completed yet would swallow this
+	// insert, and nothing would verify after a reset. Insert until a new job
+	// is queued.
+	deadline := time.Now().Add(30 * time.Second)
+	for {
+		res, err := p.jobs.Insert(context.Background(), checkpoints.VerifyOrgArgs{Org: p.s.org}, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !res.UniqueSkippedAsDuplicate {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("an earlier verification job did not finish within 30 seconds")
+		}
+		time.Sleep(50 * time.Millisecond)
 	}
 	p.s.eventually(t, want, `SELECT CASE WHEN state = 'OK' AND verified_at IS NOT NULL THEN 'OK'
 		ELSE state || ' ' || coalesce(failure_code, '') || ' ' || coalesce(failed_seq::text, '') END FROM pc.evidence_integrity`)
