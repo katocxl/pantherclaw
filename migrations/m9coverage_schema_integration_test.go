@@ -119,6 +119,8 @@ func TestHR210_ClosuresPassOnlyOnControlsAndEnforcedNeedsOneInSchema(t *testing.
 // event is kept as it happened; the reassess job only marks it.
 func TestHR211_InvalidationsOnlyGainTheirReassessmentInSchema(t *testing.T) {
 	f := newM9cFixture(t)
+	// The fixture's package pin recorded one (migration 00087).
+	f.mustExec(t, "UPDATE pc.coverage_invalidations SET reassessed_at = now()")
 	const insert = `INSERT INTO pc.coverage_invalidations (org_id, id, kind, connection_id, subject_id)
 		VALUES ($1, $2, $3, $4, $4)`
 	f.want(t, m5Check, "an unknown kind", insert, f.org, m5ID(), "settings", f.connection)
