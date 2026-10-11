@@ -54,13 +54,13 @@ func (c fakeConn) ExecContext(_ context.Context, q string, args []driver.NamedVa
 	c.db.mu.Lock()
 	defer c.db.mu.Unlock()
 	switch q {
-	case "INSERT INTO pap_action_tokens_seen (jti, expires_at) VALUES ($1, $2) ON CONFLICT DO NOTHING",
-		"INSERT INTO pap_action_tokens_seen (jti, expires_at) VALUES (?, ?) ON CONFLICT DO NOTHING":
-		id := args[0].Value.(string)
+	case "INSERT INTO pap_action_tokens_seen (aud, jti, expires_at) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING",
+		"INSERT INTO pap_action_tokens_seen (aud, jti, expires_at) VALUES (?, ?, ?) ON CONFLICT DO NOTHING":
+		id := args[0].Value.(string) + "\x00" + args[1].Value.(string)
 		if _, dup := c.db.rows[id]; dup {
 			return driver.RowsAffected(0), nil
 		}
-		c.db.rows[id] = args[1].Value.(int64)
+		c.db.rows[id] = args[2].Value.(int64)
 		return driver.RowsAffected(1), nil
 	case "DELETE FROM pap_action_tokens_seen WHERE expires_at < $1", "DELETE FROM pap_action_tokens_seen WHERE expires_at < ?":
 		n := int64(0)

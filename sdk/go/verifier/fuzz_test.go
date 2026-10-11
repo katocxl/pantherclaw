@@ -28,7 +28,7 @@ func FuzzActionTokenVerifier(f *testing.F) {
 	}
 	f.Fuzz(func(t *testing.T, token, body string) {
 		v, err := verifier.New(verifier.Config{
-			JWKSURL: srv.URL, Issuer: good.Issuer, Audience: good.Audience, Store: &verifier.MemoryStore{},
+			JWKSURL: srv.URL, Issuer: good.Issuer, Audience: good.Audience, Store: verifier.NewMemoryStore(0, time.Unix(good.Now-3600, 0)),
 			Now: func() time.Time { return time.Unix(good.Now, 0) },
 		})
 		if err != nil {

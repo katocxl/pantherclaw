@@ -15,26 +15,40 @@ import (
 )
 
 type faceFile struct {
-	Calls []struct {
-		Name  string         `json:"name"`
-		Class string         `json:"class"`
-		Body  jsontext.Value `json:"body"`
+	Servers  []string `json:"servers"`
+	Builtins []string `json:"builtins"`
+	Calls    []struct {
+		Name      string         `json:"name"`
+		Tool      string         `json:"tool"`
+		Input     jsontext.Value `json:"input"`
+		ToolUseID string         `json:"tool_use_id"`
+		Class     string         `json:"class"`
+		Body      jsontext.Value `json:"body"`
 	} `json:"calls"`
 	Answers []struct {
 		Name      string            `json:"name"`
+		Class     string            `json:"class"`
 		Status    int               `json:"status"`
 		Headers   map[string]string `json:"headers"`
 		Body      string            `json:"body"`
 		ActionID  string            `json:"action_id"`
 		FirstHash string            `json:"first_hash"`
 		Outcome   string            `json:"outcome"`
+		Send      *struct {
+			Method  string            `json:"method"`
+			URL     string            `json:"url"`
+			Headers map[string]string `json:"headers"`
+			Body    string            `json:"body"`
+		} `json:"send"`
 	} `json:"answers"`
 }
 
 // TestHR201_ConformanceAnswers: every answer of the /sdk contract gets its
 // outcome. The SDK checks the action id, the hash against the canonical
-// action and a resubmission's hash against the first; anything unreadable
-// or unchecked is cannot_decide (HR-200).
+// sdk-channel action and a resubmission's hash against the first, lets an
+// observe answer run only a built-in, and sends a target-enforced
+// connection's request exactly; anything unreadable or unchecked is
+// cannot_decide (HR-200).
 func TestHR201_ConformanceAnswers(t *testing.T) {
 	var f faceFile
 	vectors.Load(t, "sdk_face.json", &f)
@@ -44,29 +58,51 @@ func TestHR201_ConformanceAnswers(t *testing.T) {
 			h.Set(k, v)
 		}
 		got := client.Retry(a.Status, h)
+		var res client.Result
 		if got == "" {
-			got = string(client.Evaluate(a.Status, h, []byte(a.Body), a.ActionID, a.FirstHash).Outcome)
+			res = client.Evaluate(a.Status, h, []byte(a.Body), client.Class(a.Class), a.ActionID, a.FirstHash)
+			got = string(res.Outcome)
 		}
 		if got != a.Outcome {
-			t.Errorf("%s: %s, want %s", a.Name, got, a.Outcome)
+			t.Errorf("%s: %s (%s), want %s", a.Name, got, res.Why, a.Outcome)
+			continue
+		}
+		switch {
+		case a.Send == nil && res.Send != nil:
+			t.Errorf("%s: a request to send", a.Name)
+		case a.Send != nil && res.Send == nil:
+			t.Errorf("%s: no request to send", a.Name)
+		case a.Send != nil:
+			s := res.Send
+			if s.Method != a.Send.Method || s.URL != a.Send.URL || string(s.Body) != a.Send.Body || len(s.Header) != len(a.Send.Headers) {
+				t.Errorf("%s: sends %s %s %q %v", a.Name, s.Method, s.URL, s.Body, s.Header)
+			}
+			for k, v := range a.Send.Headers {
+				if s.Header.Get(k) != v {
+					t.Errorf("%s: header %s is %q, want %q", a.Name, k, s.Header.Get(k), v)
+				}
+			}
 		}
 	}
 }
 
-// TestHR201_ConformanceCallBodies: the request body is the raw call,
-// {tool, server, input, tool_use_id, cwd}, nothing the SDK computed.
-func TestHR201_ConformanceCallBodies(t *testing.T) {
+// TestHR200_ConformanceCalls: an MCP tool of a configured server is sent
+// with its server, a built-in without one, and any other name is refused
+// without a request; the request body is the raw call, {tool, server,
+// input, tool_use_id}, nothing the SDK computed (HR-201).
+func TestHR200_ConformanceCalls(t *testing.T) {
 	var f faceFile
 	vectors.Load(t, "sdk_face.json", &f)
 	for _, c := range f.Calls {
-		if c.Class == "refused" {
+		server, class := client.Classify(c.Tool, f.Servers, f.Builtins)
+		if string(class) != c.Class {
+			t.Errorf("%s: %s, want %s", c.Name, class, c.Class)
 			continue
 		}
-		var call client.ToolCall
-		if err := json.Unmarshal(c.Body, &call, json.RejectUnknownMembers(true)); err != nil {
-			t.Fatalf("%s: %v", c.Name, err)
+		if class == client.Refused {
+			continue
 		}
-		out, err := json.Marshal(call)
+		out, err := json.Marshal(client.ToolCall{Tool: c.Tool, Server: server, Input: c.Input, ToolUseID: c.ToolUseID})
 		if err != nil {
 			t.Fatal(err)
 		}

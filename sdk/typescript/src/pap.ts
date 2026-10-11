@@ -5,6 +5,7 @@
 // workload token claims and action hashes (docs/protocol/PAP-1.md §3–§4,
 // §6), checked against sdk/conformance.
 
+import { inspect } from "node:util";
 import { createHash, randomBytes } from "node:crypto";
 import { open, readFile } from "node:fs/promises";
 import { parseAction } from "./action.ts";
@@ -98,6 +99,17 @@ export interface KeyFile {
 
 const keyFileMembers = ["private_key", "identifier", "server", "run_id"] as const;
 
+/**
+ * Marks a key file so that printing it (console.log, util.inspect) or
+ * JSON.stringify never shows its seed; marshalKeyFile writes it.
+ */
+function redacted(kf: KeyFile): KeyFile {
+  const shown = () => ({ identifier: kf.identifier, server: kf.server, run_id: kf.run_id, private_key: "[redacted]" });
+  Object.defineProperty(kf, inspect.custom, { value: shown, enumerable: false });
+  Object.defineProperty(kf, "toJSON", { value: shown, enumerable: false });
+  return kf;
+}
+
 /** Parses a key file strictly: unknown or duplicate members are refused. */
 export function parseKeyFile(text: string | Uint8Array): KeyFile {
   const v = parseJSON(text);
@@ -109,7 +121,7 @@ export function parseKeyFile(text: string | Uint8Array): KeyFile {
   }
   const kf = out as unknown as KeyFile;
   seedOf(kf);
-  return kf;
+  return redacted(kf);
 }
 
 /** Returns the key a key file holds. */
@@ -136,7 +148,11 @@ export async function readKeyFile(path: string): Promise<KeyFile> {
   return parseKeyFile(new Uint8Array(await readFile(path)));
 }
 
-/** Writes a new owner-only key file; an existing file is never replaced. */
+/**
+ * Writes a new owner-only key file; an existing file is never replaced.
+ * On Windows the mode is not enforced: the file's access comes from its
+ * directory's access list, so keep it in a directory only its owner reads.
+ */
 export async function writeKeyFile(path: string, kf: KeyFile): Promise<void> {
   seedOf(kf);
   const f = await open(path, "wx", 0o600);
@@ -149,7 +165,7 @@ export async function writeKeyFile(path: string, kf: KeyFile): Promise<void> {
 
 /** A key file with a fresh key. */
 export function newKeyFile(): KeyFile {
-  return { private_key: b64url(randomBytes(32)) };
+  return redacted({ private_key: b64url(randomBytes(32)) });
 }
 
 export interface ProofParams {
@@ -166,13 +182,78 @@ export interface ProofParams {
   jti?: string;
 }
 
-/** htu: scheme, host and path of a request URL. */
-export function htu(raw: string): string {
-  const u = new URL(raw);
-  if ((u.protocol !== "https:" && u.protocol !== "http:") || u.username || u.password) {
-    throw new Error("the request URL must be an absolute http(s) URL without user information");
+/** A request URL as Go's net/url reads it: what htu is made of. */
+export interface HTUParts {
+  /** The scheme, in lower case. */
+  scheme: string;
+  /** The host as written, port included. */
+  host: string;
+  /** The path as url.URL.EscapedPath gives it. */
+  path: string;
+}
+
+// The characters a path may hold as written (Go's validEncoded and
+// shouldEscape for paths); anything else is escaped.
+const pathAsIs = /^[A-Za-z0-9\-_.~$&+,/:;=@!'()*[\]%]*$/;
+const pathUnreserved = /[A-Za-z0-9\-_.~$&+,/:;=@]/;
+
+/**
+ * Splits an absolute http(s) URL as PantherClaw's client does for htu
+ * (proofs.json, htus): query and fragment dropped, the scheme lowered, the
+ * host as written, and the path kept as written when every character may
+ * stand there and every escape is valid, else decoded and re-escaped with
+ * upper-case hex. Dot segments are kept. User information, a bad escape or
+ * a control character is refused.
+ */
+export function splitURL(raw: string): HTUParts {
+  const bad = () => new Error("the request URL must be an absolute http(s) URL without user information");
+  if (/[\x00-\x1f\x7f]/.test(raw)) throw bad();
+  const m = /^([A-Za-z][A-Za-z0-9+.-]*):\/\/([^/?#]*)([^?#]*)/.exec(raw);
+  if (m === null) throw bad();
+  const scheme = (m[1] ?? "").toLowerCase();
+  const host = m[2] ?? "";
+  const rawPath = m[3] ?? "";
+  if ((scheme !== "https" && scheme !== "http") || host === "" || host.includes("@") || /\s/.test(host)) throw bad();
+  let decoded: Uint8Array;
+  try {
+    decoded = unescapePath(rawPath);
+  } catch {
+    throw bad();
   }
-  return `${u.protocol}//${u.host}${u.pathname}`;
+  return { scheme, host, path: pathAsIs.test(rawPath) ? rawPath : escapePath(decoded) };
+}
+
+/** The UTF-8 bytes of a path with its %XX escapes decoded; a bad escape throws. */
+function unescapePath(s: string): Uint8Array {
+  const bytes = encoder.encode(s);
+  const out: number[] = [];
+  for (let i = 0; i < bytes.length; i++) {
+    const b = bytes[i] as number;
+    if (b !== 0x25) {
+      out.push(b);
+      continue;
+    }
+    const hex = String.fromCharCode(bytes[i + 1] ?? 0, bytes[i + 2] ?? 0);
+    if (!/^[0-9A-Fa-f]{2}$/.test(hex)) throw new Error("bad escape");
+    out.push(parseInt(hex, 16));
+    i += 2;
+  }
+  return new Uint8Array(out);
+}
+
+function escapePath(bytes: Uint8Array): string {
+  let out = "";
+  for (const b of bytes) {
+    const c = String.fromCharCode(b);
+    out += b < 0x80 && pathUnreserved.test(c) ? c : `%${b.toString(16).toUpperCase().padStart(2, "0")}`;
+  }
+  return out;
+}
+
+/** htu: the scheme, host and path of a request URL (splitURL). */
+export function htu(raw: string): string {
+  const u = splitURL(raw);
+  return `${u.scheme}://${u.host}${u.path}`;
 }
 
 /** Signs a PAP-Proof JWS (PAP/1 §4) byte for byte as PantherClaw does. */
