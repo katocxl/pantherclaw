@@ -135,6 +135,9 @@ func TestCoveragePagesShowOnlyWhatTheEvidenceSays(t *testing.T) {
 		if page.Header.Get("Content-Security-Policy") != webhttp.PageCSP {
 			t.Fatalf("CSP %q", page.Header.Get("Content-Security-Policy"))
 		}
+		if page.Header.Get("Cache-Control") != "no-store" {
+			t.Fatalf("a coverage page may be cached: %q", page.Header.Get("Cache-Control"))
+		}
 	}
 	for _, bad := range []string{"/not-an-id/x/y", "/" + ids.NewV7().String() + "/" + sc.Connection.String() + "/" + sc.Operation} {
 		if resp := coverageGet(t, mux, webhttp.CoveragePath+bad, "reader"); resp.StatusCode != http.StatusNotFound {

@@ -24,7 +24,7 @@ var reasonWords = map[string]string{
 	ReasonClosureFailed:  "The newest sandbox closure failed.",
 	ReasonClosureExpired: "The closure evidence expired.",
 	ReasonClosureRebound: "The connection's revision, gateway, package or credential changed since the closure.",
-	ReasonExcluded:       "A person excluded part of this scope from the claim; the exclusions are listed.",
+	ReasonExcluded:       "A person excluded part of this scope: an exclusion never raises the state, and the exclusions are listed.",
 }
 
 // Explain says what a reason code means. Codes with a kind, such as
