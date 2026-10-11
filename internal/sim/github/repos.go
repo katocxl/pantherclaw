@@ -175,8 +175,10 @@ func (s *Server) updateRepo(w http.ResponseWriter, req *http.Request, r *Repo, _
 		v   *bool
 		dst *bool
 	}{
-		{b.AllowMergeCommit, &r.Settings.AllowMergeCommit}, {b.AllowSquashMerge, &r.Settings.AllowSquashMerge},
-		{b.AllowRebaseMerge, &r.Settings.AllowRebaseMerge}, {b.AllowAutoMerge, &r.Settings.AllowAutoMerge},
+		{b.AllowMergeCommit, &r.Settings.AllowMergeCommit},
+		{b.AllowSquashMerge, &r.Settings.AllowSquashMerge},
+		{b.AllowRebaseMerge, &r.Settings.AllowRebaseMerge},
+		{b.AllowAutoMerge, &r.Settings.AllowAutoMerge},
 		{b.DeleteBranchOnMerge, &r.Settings.DeleteBranchOnMerge},
 	} {
 		if f.v != nil {
