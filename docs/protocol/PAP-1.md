@@ -136,7 +136,7 @@ Rules (MUST):
 - **No defaults:** an ambiguous target, missing material field or unsupported unit ⇒ `CANNOT_AUTHORIZE` (never a silent default).
 - **Canonical hash:** `action_hash = SHA-256(JCS(ActionIR))`.
 - **Dedupe key:** irreversible operations declare a semantic dedupe key in the tool package; an open `UNKNOWN` or recent success on the same key parks a new request in `RECONCILIATION`.
-- **Connection:** a gateway sets `connection` to the registered connection the request came through (channels `http`, `mcp` and `hook`). The Authority MUST check that the calling gateway serves that connection and that `route` is one of its routes. Because `connection` is part of the action hash, a decision or approval never carries over to another target or credential. Actions from cooperative SDKs (`sdk`) MAY omit it.
+- **Connection:** a gateway sets `connection` to the registered connection the request came through (channels `http`, `mcp` and `hook`, and `sdk` from its `/sdk` face, which maps the raw call itself and serves only `local` connections; HR-201). The Authority MUST check that the calling gateway serves that connection and that `route` is one of its routes. Because `connection` is part of the action hash, a decision or approval never carries over to another target or credential. A `local` connection serves only the cooperative channels (`hook`, `sdk`), and a `hook` action comes only through one. An `sdk` action MAY omit it, though the `/sdk` face always sets it.
 
 ## 7. Authorization exchange
 

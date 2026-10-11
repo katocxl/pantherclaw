@@ -200,16 +200,32 @@ func (c *compiled) hasPathVar(v string) bool {
 
 // MCP maps a tools/call by tool name and JSON arguments.
 func (m *Mapper) MCP(ctx context.Context, tc Context, tool string, args []byte) (actionir.Parsed, error) {
-	return m.byName(ctx, tc, m.mcp, tool, args)
+	return m.byName(ctx, tc, m.mcp, tool, args, domain.ChannelMCP)
 }
 
 // Hook maps a cooperative client's call (the Claude Code hook) by its kind
 // and JSON input.
 func (m *Mapper) Hook(ctx context.Context, tc Context, kind string, input []byte) (actionir.Parsed, error) {
-	return m.byName(ctx, tc, m.hook, kind, input)
+	return m.byName(ctx, tc, m.hook, kind, input, domain.ChannelHook)
 }
 
-func (m *Mapper) byName(ctx context.Context, tc Context, by map[string]*compiled, tool string, args []byte) (actionir.Parsed, error) {
+// SDK maps an agent SDK's call (the gateway's /sdk face, HR-201) through a
+// hook mapping (a built-in tool the gateway adapted, such as a shell
+// command) or an MCP mapping (a tool of an MCP server the agent calls
+// itself), by tool name and JSON input. The action's channel is sdk and
+// its route the mapping's.
+func (m *Mapper) SDK(ctx context.Context, tc Context, via domain.Channel, tool string, input []byte) (actionir.Parsed, error) {
+	switch via {
+	case domain.ChannelHook:
+		return m.byName(ctx, tc, m.hook, tool, input, domain.ChannelSDK)
+	case domain.ChannelMCP:
+		return m.byName(ctx, tc, m.mcp, tool, input, domain.ChannelSDK)
+	}
+	return actionir.Parsed{}, fmt.Errorf("%w: %s calls", ErrUnmapped, via)
+}
+
+// byName maps a call by tool name into an action of the given channel.
+func (m *Mapper) byName(ctx context.Context, tc Context, by map[string]*compiled, tool string, args []byte, channel domain.Channel) (actionir.Parsed, error) {
 	c, ok := by[tool]
 	if !ok {
 		return actionir.Parsed{}, fmt.Errorf("%w: tool %q", ErrUnmapped, tool)
@@ -218,7 +234,7 @@ func (m *Mapper) byName(ctx context.Context, tc Context, by map[string]*compiled
 	if err != nil {
 		return actionir.Parsed{}, err
 	}
-	return m.run(ctx, tc, c, map[string]any{"input": input, "path": map[string]any{}, "query": map[string]any{}})
+	return m.run(ctx, tc, c, channel, map[string]any{"input": input, "path": map[string]any{}, "query": map[string]any{}})
 }
 
 // HTTP maps a request by method, raw (escaped) path, raw query and body.
@@ -248,7 +264,7 @@ func (m *Mapper) HTTP(ctx context.Context, tc Context, method, rawPath, rawQuery
 	if err != nil {
 		return actionir.Parsed{}, err
 	}
-	return m.run(ctx, tc, match, map[string]any{"input": input, "path": vars, "query": query})
+	return m.run(ctx, tc, match, domain.ChannelHTTP, map[string]any{"input": input, "path": vars, "query": query})
 }
 
 // HTTPRoute returns the route id a request's method and raw path match,
@@ -269,7 +285,7 @@ func (m *Mapper) HTTPRoute(method, rawPath string) (route string, ok bool) {
 	return route, ok
 }
 
-func (m *Mapper) run(ctx context.Context, tc Context, c *compiled, vars map[string]any) (actionir.Parsed, error) {
+func (m *Mapper) run(ctx context.Context, tc Context, c *compiled, channel domain.Channel, vars map[string]any) (actionir.Parsed, error) {
 	input, _ := vars["input"].(map[string]any)
 	for k := range input {
 		if _, found := slices.BinarySearch(c.inputs, k); !found {
@@ -325,7 +341,7 @@ func (m *Mapper) run(ctx context.Context, tc Context, c *compiled, vars map[stri
 		V: actionir.Version, Org: tc.Org, Env: tc.Env, RunID: tc.RunID, ActionID: tc.ActionID, AgentInstance: tc.AgentInstance, Connection: tc.Connection,
 		Operation:  c.def.Operation,
 		Definition: actionir.Definition{Package: m.pkg.Name, Version: m.pkg.Version, Digest: c.def.Digest},
-		Channel:    string(c.m.Channel), Route: c.m.Route, Target: target, Params: params,
+		Channel:    string(channel), Route: c.m.Route, Target: target, Params: params,
 		Destinations: dests, DedupeKey: dedupe,
 	})
 }

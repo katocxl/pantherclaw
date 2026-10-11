@@ -39,12 +39,15 @@ type Channel string
 // Channels. The hook channel is a cooperative client asking before it runs
 // a tool itself (G0 M6, the Claude Code hook): its mapping names the kind
 // of call (tool) and reads the client's JSON input like an MCP mapping. The
-// SDK channel reuses these mappings later (F099: the same effect gets the
-// same decision).
+// SDK channel is an agent SDK asking the same through the gateway's /sdk
+// face (G0 M8, HR-201). It has no mappings of its own: the gateway maps
+// its calls through the hook and MCP mappings (F099: the same effect gets
+// the same decision), so it is never a mapping's channel.
 const (
 	ChannelMCP  Channel = "mcp"
 	ChannelHTTP Channel = "http"
 	ChannelHook Channel = "hook"
+	ChannelSDK  Channel = "sdk"
 )
 
 // Mapping maps one MCP tool, HTTP route or hook call onto the definition.

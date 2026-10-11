@@ -191,9 +191,16 @@ func TestHR184_NewConnectionsStartInMonitorMode(t *testing.T) {
 	if err != nil || shell.BaseUrl != nil || len(shell.Routes) != 1 || modeOf(shell, "shell-command") != app.ModeEnforce {
 		t.Fatalf("local connection: %+v %v", shell, err)
 	}
+	// A local connection also serves a package's MCP routes, which the SDK
+	// face maps for an agent that calls the MCP server itself (HR-201).
+	sdk, err := e.svc.Create(e.admin, app.CreateInput{
+		Name: "agent-payments", Kind: app.KindLocal, Package: mockpayments.Name, Gateway: e.gateway, AccessMode: app.AccessNone,
+	})
+	if err != nil || len(sdk.Routes) != 2 || modeOf(sdk, "payments-refund") != app.ModeMonitor || modeOf(sdk, "payments-refund-get") != app.ModeMonitor {
+		t.Fatalf("local connection to MCP routes: %+v %v", sdk, err)
+	}
 	for name, in := range map[string]app.CreateInput{
 		"unpinned package": {Kind: app.KindHTTP, Package: "pc.nope", BaseURL: "https://x.test", AccessMode: app.AccessNone},
-		"no hook routes":   {Kind: app.KindLocal, Package: mockpayments.Name, AccessMode: app.AccessNone},
 		"no http dispatch": {Kind: app.KindHTTP, Package: "pc.shell", BaseURL: "https://x.test", AccessMode: app.AccessNone},
 		"no mcp dispatch":  {Kind: app.KindMCP, Package: mockpayments.Name, BaseURL: "https://x.test", AccessMode: app.AccessNone},
 	} {
