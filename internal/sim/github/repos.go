@@ -40,6 +40,8 @@ type Repo struct {
 	Settings      Settings
 	Branches      map[string]string // name to head commit
 	Commits       map[string]*Commit
+	Pulls         map[int]*Pull
+	nextPull      int
 }
 
 func (r *Repo) full() string { return r.Owner + "/" + r.Name }
@@ -52,7 +54,7 @@ func (s *Server) CreateRepo(fullName, defaultBranch string, files map[string]str
 	owner, name, _ := strings.Cut(strings.ToLower(fullName), "/")
 	r := &Repo{
 		Owner: owner, Name: name, DefaultBranch: defaultBranch, Settings: Settings{AllowMergeCommit: true, AllowSquashMerge: true, AllowRebaseMerge: true},
-		Branches: map[string]string{}, Commits: map[string]*Commit{},
+		Branches: map[string]string{}, Commits: map[string]*Commit{}, Pulls: map[int]*Pull{}, nextPull: 1,
 	}
 	s.repos[r.full()] = r
 	sha := s.commit(r, nil, files)
@@ -62,7 +64,8 @@ func (s *Server) CreateRepo(fullName, defaultBranch string, files map[string]str
 
 // Push adds a commit to branch with files changed (an empty value deletes
 // a file), creating the branch from the default branch when it does not
-// exist, and returns the new head.
+// exist, and returns the new head. A pull request from the branch moves to
+// the new head, so its earlier reviews are for another commit.
 func (s *Server) Push(fullName, branch string, files map[string]string) string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -81,6 +84,11 @@ func (s *Server) Push(fullName, branch string, files map[string]string) string {
 	}
 	sha := s.commit(r, []string{parent}, tree)
 	r.Branches[branch] = sha
+	for _, pr := range r.Pulls {
+		if pr.Head == branch && pr.State == "open" {
+			pr.HeadSHA = sha
+		}
+	}
 	return sha
 }
 
