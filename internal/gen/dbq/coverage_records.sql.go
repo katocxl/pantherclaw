@@ -407,6 +407,44 @@ func (q *Queries) DismissCoverageFinding(ctx context.Context, arg DismissCoverag
 	return i, err
 }
 
+const expiredEnforcedCoverageScopes = `-- name: ExpiredEnforcedCoverageScopes :many
+SELECT s.agent_id, s.connection_id, s.operation FROM pc.coverage_snapshots s
+WHERE s.org_id = $1 AND s.state = 'ENFORCED' AND s.expires_at <= now()
+  AND NOT EXISTS (SELECT 1 FROM pc.coverage_snapshots n
+                  WHERE n.org_id = s.org_id AND n.agent_id = s.agent_id AND n.connection_id = s.connection_id
+                    AND n.operation = s.operation AND n.id > s.id)
+ORDER BY s.id
+LIMIT $2
+`
+
+type ExpiredEnforcedCoverageScopesRow struct {
+	AgentID      ids.UUID
+	ConnectionID ids.UUID
+	Operation    string
+}
+
+// Current ENFORCED snapshots past their expiry: their scopes read PARTIAL
+// now, and the reassess job records it (F441).
+func (q *Queries) ExpiredEnforcedCoverageScopes(ctx context.Context, orgID ids.OrgID, maxRows int32) ([]ExpiredEnforcedCoverageScopesRow, error) {
+	rows, err := q.db.Query(ctx, expiredEnforcedCoverageScopes, orgID, maxRows)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ExpiredEnforcedCoverageScopesRow{}
+	for rows.Next() {
+		var i ExpiredEnforcedCoverageScopesRow
+		if err := rows.Scan(&i.AgentID, &i.ConnectionID, &i.Operation); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getCoverageClosure = `-- name: GetCoverageClosure :one
 SELECT org_id, id, agent_id, connection_id, sandbox_session_id, result, probes, positive_controls_passed, negative_controls_passed, canary_passed, signing_key_jkt, server_nonce, results_sha256, engine_version, api_version, runtime, image_digests, config_sha256, gateway_id, connection_revision, package_version_id, session_started_at, observed_at, expires_at, recorded_at FROM pc.coverage_closures WHERE org_id = $1 AND id = $2
 `

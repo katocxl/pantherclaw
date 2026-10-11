@@ -257,3 +257,14 @@ SELECT DISTINCT x.agent_id::uuid AS agent_id, x.operation::text AS operation FRO
 WHERE sqlc.narg(agent_id)::uuid IS NULL OR x.agent_id = sqlc.narg(agent_id)::uuid
 ORDER BY 1, 2
 LIMIT 1000;
+
+-- Current ENFORCED snapshots past their expiry: their scopes read PARTIAL
+-- now, and the reassess job records it (F441).
+-- name: ExpiredEnforcedCoverageScopes :many
+SELECT s.agent_id, s.connection_id, s.operation FROM pc.coverage_snapshots s
+WHERE s.org_id = sqlc.arg(org_id) AND s.state = 'ENFORCED' AND s.expires_at <= now()
+  AND NOT EXISTS (SELECT 1 FROM pc.coverage_snapshots n
+                  WHERE n.org_id = s.org_id AND n.agent_id = s.agent_id AND n.connection_id = s.connection_id
+                    AND n.operation = s.operation AND n.id > s.id)
+ORDER BY s.id
+LIMIT sqlc.arg(max_rows);

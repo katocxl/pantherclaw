@@ -5,11 +5,14 @@ package server
 
 import (
 	"connectrpc.com/connect/v2"
+	"github.com/riverqueue/river"
 
 	"github.com/katocxl/pantherclaw/internal/coverage/adapters/coveragerpc"
 	covapp "github.com/katocxl/pantherclaw/internal/coverage/app"
 	coverage "github.com/katocxl/pantherclaw/internal/coverage/domain"
 	"github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1/pantherclawv1connect"
+	"github.com/katocxl/pantherclaw/internal/platform/db"
+	"github.com/katocxl/pantherclaw/internal/platform/jobs"
 )
 
 // registerCoverage serves CoverageService on the public API (G0 M9 track
@@ -26,4 +29,14 @@ func freshnessOf(cfg *Config) coverage.Freshness {
 		f, _ = coverage.NewFreshness(0, 0)
 	}
 	return f
+}
+
+// registerCoverageWorkers adds the coverage reassess job (HR-211) and
+// returns its schedule.
+func registerCoverageWorkers(reg *jobs.Registry, cfg *Config, pool *db.Pool) ([]*river.PeriodicJob, error) {
+	f := freshnessOf(cfg)
+	if err := covapp.Register(reg, &covapp.Service{Pool: pool, Freshness: f}); err != nil {
+		return nil, err
+	}
+	return covapp.PeriodicJobs(f), nil
 }

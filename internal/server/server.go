@@ -387,6 +387,11 @@ func cmdServe(ctx context.Context, args []string, stderr io.Writer, env Env, onS
 		if err := txapp.Register(jreg, pool, verification); err != nil {
 			return err
 		}
+		coverageJobs, err := registerCoverageWorkers(jreg, cfg, pool)
+		if err != nil {
+			return err
+		}
+		evidenceJobs = append(evidenceJobs, coverageJobs...)
 		client, err := jobs.NewClient(pool, jreg, jobs.Config{
 			Queues: map[string]int{river.QueueDefault: cfg.WorkerConcurrency, napp.Queue: cfg.Notifications.Concurrency},
 			PeriodicJobs: slices.Concat(chainer.PeriodicJobs(), authority.SweeperPeriodicJobs(), authnapp.JanitorPeriodicJobs(),
