@@ -28,6 +28,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/evidence/bundle"
 	"github.com/katocxl/pantherclaw/internal/evidence/domain"
 	"github.com/katocxl/pantherclaw/internal/evidence/merkle"
+	"github.com/katocxl/pantherclaw/internal/evidence/retention"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
@@ -371,7 +372,7 @@ type chained struct {
 	policy              *ids.UUID
 }
 
-func (e chained) bundleEntry() bundle.Entry {
+func (e chained) bundleEntry(labels map[ids.UUID]string) bundle.Entry {
 	out := bundle.Entry{
 		Seq: e.seq, ID: e.id.String(), Kind: e.kind, Actor: domain.Actor{Type: e.actorType, ID: e.actorID},
 		TS: domain.Timestamp(e.occurredAt), PrevHash: e.prevHash, EntryHash: e.entryHash,
@@ -380,6 +381,9 @@ func (e chained) bundleEntry() bundle.Entry {
 		r := &bundle.Removal{At: e.removedAt.UTC().Format(time.RFC3339)}
 		if e.policy != nil {
 			r.Policy = e.policy.String()
+			if l, ok := labels[*e.policy]; ok {
+				r.Policy = l
+			}
 		}
 		out.Removed = r
 	} else {
@@ -435,8 +439,12 @@ func (s *Service) ExportBundle(ctx context.Context, sel Selection, consistencyFr
 		if len(entries) == 0 && len(b.Receipts) == 0 {
 			return ErrNothingToExport
 		}
+		labels, err := policyLabels(ctx, q, c.Org, entries)
+		if err != nil {
+			return err
+		}
 		for _, e := range entries {
-			b.Entries = append(b.Entries, e.bundleEntry())
+			b.Entries = append(b.Entries, e.bundleEntry(labels))
 		}
 		latest, err := checkpointAt(ctx, q, c.Org, 0)
 		if errors.Is(err, ErrNoCheckpoint) {
@@ -568,6 +576,30 @@ func (s *Service) transactions(ctx context.Context, c tenancy.Caller, q *dbq.Que
 		})
 	}
 	return entries, receipts, nil
+}
+
+// policyLabels names the retention revisions that removed entries' bodies,
+// for example "receipts r2" (HR-198), so `pclaw verify` reports under which
+// policy and when a body was removed.
+func policyLabels(ctx context.Context, q *dbq.Queries, org ids.OrgID, entries []chained) (map[ids.UUID]string, error) {
+	var policies []ids.UUID
+	for _, e := range entries {
+		if e.policy != nil {
+			policies = append(policies, *e.policy)
+		}
+	}
+	if len(policies) == 0 {
+		return nil, nil
+	}
+	rows, err := q.RetentionPolicyLabels(ctx, org, policies)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[ids.UUID]string, len(rows))
+	for _, r := range rows {
+		out[r.ID] = retention.Label(retention.Category(r.Category), int(r.Revision))
+	}
+	return out, nil
 }
 
 // entryRange collects the chained entries from..to and the receipts they

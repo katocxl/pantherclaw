@@ -87,6 +87,7 @@ Usage:
   pantherclaw-server serve [--config FILE]            run the API and/or workers (role from config)
   pantherclaw-server migrate up|status [--config FILE] apply or show schema migrations (as pc_migrator)
   pantherclaw-server db bootstrap --admin-url-file F --app-password-file F --migrator-password-file F --audit-password-file F
+                                 --retention-password-file F
                                                      create roles and schema once, as the database owner
   pantherclaw-server keys gen-kek --out FILE          write a new key-encryption key (0600)
   pantherclaw-server keys rotate-gateway-ca --confirm [--config FILE]
@@ -360,6 +361,12 @@ func cmdServe(ctx context.Context, args []string, stderr io.Writer, env Env, onS
 		if err != nil {
 			return err
 		}
+		retentionJobs, closeRetention, err := registerRetention(ctx, jreg, cfg, pool, log)
+		if err != nil {
+			return err
+		}
+		defer closeRetention()
+		evidenceJobs = append(evidenceJobs, retentionJobs...)
 		if err := authnapp.RegisterJanitor(jreg, pool, log); err != nil {
 			return err
 		}
@@ -517,6 +524,7 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	d.m5p2.registerPublic(rs)
 	registerM7(rs, pool, d.verification)
 	registerEvidence(rs, d)
+	registerEvidenceAdmin(rs, d)
 	mux := http.NewServeMux()
 	rpc.Mount(mux, rs)
 	d.m5p2.mount(mux, workload)
@@ -659,10 +667,11 @@ func cmdDB(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	appPW := fs.String("app-password-file", "", "password file for pc_app")
 	migPW := fs.String("migrator-password-file", "", "password file for pc_migrator")
 	auditPW := fs.String("audit-password-file", "", "password file for pc_audit_ro")
+	retentionPW := fs.String("retention-password-file", "", "password file for pc_retention (the retention job's role)")
 	if err := fs.Parse(args[1:]); err != nil {
 		return err
 	}
-	if *adminURL == "" || *appPW == "" || *migPW == "" || *auditPW == "" || fs.NArg() != 0 {
+	if *adminURL == "" || *appPW == "" || *migPW == "" || *auditPW == "" || *retentionPW == "" || fs.NArg() != 0 {
 		fs.Usage()
 		return errUsage
 	}
@@ -671,7 +680,9 @@ func cmdDB(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 		return err
 	}
 	var pw db.RolePasswords
-	for dst, path := range map[*pclog.Secret[[]byte]]string{&pw.App: *appPW, &pw.Migrator: *migPW, &pw.AuditRO: *auditPW} {
+	for dst, path := range map[*pclog.Secret[[]byte]]string{
+		&pw.App: *appPW, &pw.Migrator: *migPW, &pw.AuditRO: *auditPW, &pw.Retention: *retentionPW,
+	} {
 		s, err := config.ReadSecretFile(path)
 		if err != nil {
 			return err
@@ -693,8 +704,8 @@ func cmdDB(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	if err := db.BootstrapDatabase(ctx, conn); err != nil {
 		return err
 	}
-	_, _ = fmt.Fprintf(stdout, "bootstrapped roles %s, %s, %s, %s and schema %s in database %s\n",
-		db.RoleMigrator, db.RoleApp, db.RoleAuditRO, db.RoleLister, db.Schema, cc.Database)
+	_, _ = fmt.Fprintf(stdout, "bootstrapped roles %s, %s, %s, %s, %s and schema %s in database %s\n",
+		db.RoleMigrator, db.RoleApp, db.RoleAuditRO, db.RoleRetention, db.RoleLister, db.Schema, cc.Database)
 	return nil
 }
 

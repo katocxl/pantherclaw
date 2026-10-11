@@ -8,6 +8,8 @@
 --   pc_migrator  DDL only; owns schema pc and every object in it.
 --   pc_app       DML for the server; never superuser, never BYPASSRLS (HR-055).
 --   pc_audit_ro  read-only access to evidence.
+--   pc_retention removes expired evidence bodies; used only by the worker's
+--                retention job (G0 M7 design decision 9, HR-198).
 --   pc_lister    NOLOGIN, BYPASSRLS; owns only the audited cross-org lister.
 
 DO $$
@@ -24,6 +26,9 @@ BEGIN
     IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'pc_lister') THEN
         CREATE ROLE pc_lister;
     END IF;
+    IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'pc_retention') THEN
+        CREATE ROLE pc_retention;
+    END IF;
 END
 $$;
 
@@ -31,6 +36,7 @@ ALTER ROLE pc_migrator LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION N
 ALTER ROLE pc_app      LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS NOINHERIT;
 ALTER ROLE pc_audit_ro LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS NOINHERIT;
 ALTER ROLE pc_lister   NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION BYPASSRLS NOINHERIT;
+ALTER ROLE pc_retention LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS NOINHERIT;
 
 -- pc_migrator must be able to hand the lister function to pc_lister and
 -- replace it later. pc_migrator already owns every table, so this grants it
