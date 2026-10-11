@@ -145,4 +145,8 @@ func TestHR211_APoisonScopeIsSkippedAndItsChangesStayPending(t *testing.T) {
 	if n := f.count(t, "SELECT count(*) FROM pc.ledger_entries WHERE kind = 'coverage.invalidation'"); marked == 0 || n != marked {
 		t.Fatalf("%d invalidation entries for %d marked changes", n, marked)
 	}
+	if n := f.count(t, `SELECT count(*) FROM pc.coverage_invalidations i JOIN pc.ledger_entries e ON e.org_id = i.org_id
+		AND e.id = i.ledger_entry_id AND e.kind = 'coverage.invalidation'`); n != marked {
+		t.Fatalf("%d marked changes name their entry, want %d", n, marked)
+	}
 }

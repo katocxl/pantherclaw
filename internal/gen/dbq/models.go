@@ -473,15 +473,16 @@ type PcCoverageFinding struct {
 }
 
 type PcCoverageInvalidation struct {
-	OrgID        ids.OrgID
-	ID           ids.UUID
-	Kind         string
-	ConnectionID ids.UUID
-	AgentID      *ids.UUID
-	SubjectID    *ids.UUID
-	Detail       *string
-	OccurredAt   time.Time
-	ReassessedAt *time.Time
+	OrgID         ids.OrgID
+	ID            ids.UUID
+	Kind          string
+	ConnectionID  ids.UUID
+	AgentID       *ids.UUID
+	SubjectID     *ids.UUID
+	Detail        *string
+	OccurredAt    time.Time
+	ReassessedAt  *time.Time
+	LedgerEntryID *ids.UUID
 }
 
 type PcCoverageInventory struct {

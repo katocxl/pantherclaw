@@ -322,3 +322,9 @@ WHERE org_id = sqlc.arg(org_id) AND connection_id = sqlc.arg(connection_id)
   AND (agent_id IS NULL OR agent_id = sqlc.narg(agent_id)::uuid) AND reassessed_at IS NULL
 ORDER BY occurred_at, id
 LIMIT 64;
+
+-- Marks one invalidation reassessed with its ledger entry; a second call
+-- changes nothing.
+-- name: EnterCoverageInvalidation :execrows
+UPDATE pc.coverage_invalidations SET reassessed_at = now(), ledger_entry_id = sqlc.arg(ledger_entry_id)
+WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND reassessed_at IS NULL;
