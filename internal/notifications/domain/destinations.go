@@ -9,7 +9,6 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"errors"
-	"net/netip"
 	"net/url"
 	"strconv"
 	"strings"
@@ -32,11 +31,14 @@ var (
 
 // CheckWebhookURL validates a webhook destination when a channel is saved
 // (HR-157): https only, no userinfo or fragment, port 443 or 1024-65535,
-// never PantherClaw's own host, and an IP literal must be public unless an
-// operator-allowed range covers it (denied is the egress deny list with
-// those ranges, httpx.DeniedAddr). Names are checked again at dial time by
-// the egress client, which also blocks DNS rebinding.
-func CheckWebhookURL(raw, ownHost string, denied func(netip.Addr) bool) error {
+// never PantherClaw's own host, and not a host the egress guard denies as
+// written. denied is that guard's reading of the host (httpx.DeniedHost
+// with the operator-allowed ranges): an IP address in any spelling a
+// resolver accepts (decimal, octal or hex IPv4, IPv4-mapped IPv6) must be
+// public unless such a range covers it, and a metadata service is refused
+// by address or name even then. Names are checked again at dial time by the
+// egress client, which also blocks DNS rebinding.
+func CheckWebhookURL(raw, ownHost string, denied func(host string) bool) error {
 	u, err := url.Parse(raw)
 	if err != nil || len(raw) > MaxURL || u.Scheme != "https" || u.Host == "" || u.User != nil || u.Fragment != "" ||
 		u.Opaque != "" || strings.ContainsAny(raw, " \t\r\n\\") {
@@ -55,7 +57,7 @@ func CheckWebhookURL(raw, ownHost string, denied func(netip.Addr) bool) error {
 	if own := strings.TrimSuffix(strings.ToLower(ownHost), "."); own != "" && host == own {
 		return ErrOwnHost
 	}
-	if a, err := netip.ParseAddr(strings.Trim(host, "[]")); err == nil && denied(a) {
+	if denied(host) {
 		return ErrPrivateURL
 	}
 	return nil

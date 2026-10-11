@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"net/netip"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -15,7 +16,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/httpx"
 )
 
-func denied(a netip.Addr) bool { return httpx.DeniedAddr(a, nil) }
+func denied(host string) bool { return httpx.DeniedHost(host, nil) }
 
 // TestHR159_StandardWebhooksSignature checks the signature against the
 // Standard Webhooks reference test vector (the spec's own example).
@@ -78,8 +79,78 @@ func TestHR157_WebhookDestinations(t *testing.T) {
 	}
 	// An operator-allowed range re-allows a private address (self-hosted).
 	allowed := []netip.Prefix{netip.MustParsePrefix("10.0.0.0/8")}
-	if err := domain.CheckWebhookURL("https://10.0.0.5/hook", "pc.example.test", func(a netip.Addr) bool { return httpx.DeniedAddr(a, allowed) }); err != nil {
+	if err := domain.CheckWebhookURL("https://10.0.0.5/hook", "pc.example.test", func(h string) bool { return httpx.DeniedHost(h, allowed) }); err != nil {
 		t.Errorf("allowed private range: %v", err)
+	}
+}
+
+// TestHR157_AWebhookIsRefusedInEverySpellingOfADeniedHost (HR-077): when a
+// channel is saved, the host is read the way the egress guard reads it, so
+// the metadata address in decimal, octal, hex, short or IPv6 forms, a
+// metadata host name, and other spellings of loopback and private
+// addresses are refused then, not only when delivery dials. An operator's
+// allowed range re-allows its private addresses in any spelling, never
+// metadata.
+func TestHR157_AWebhookIsRefusedInEverySpellingOfADeniedHost(t *testing.T) {
+	metadata := []string{
+		"https://2852039166/latest/meta-data/", // decimal
+		"https://0xa9fea9fe/",                  // hex
+		"https://0XA9FEA9FE/",
+		"https://0xa9.0xfe.0xa9.0xfe/",
+		"https://0251.0376.0251.0376/", // octal
+		"https://169.254.43518/",       // a.b.cd
+		"https://169.16689662/",        // a.bcd
+		"https://169.254.169.254./",    // trailing dot
+		"https://[::ffff:169.254.169.254]/",
+		"https://[::ffff:a9fe:a9fe]/",   // IPv4-mapped
+		"https://[64:ff9b::a9fe:a9fe]/", // NAT64
+		"https://[fd00:ec2::254]/",      // AWS IMDS over IPv6
+		"https://1684301000:8443/",      // 100.100.100.200, Alibaba Cloud
+		"https://metadata.google.internal/computeMetadata/v1/",
+		"https://METADATA.Google.Internal./",
+		"https://metadata/",
+		"https://metadata.goog/",
+		"https://instance-data.ec2.internal/",
+		"https://metadata.azure.com/",
+	}
+	private := []string{
+		"https://2130706433/",   // 127.0.0.1
+		"https://017700000001/", // 127.0.0.1, octal
+		"https://0x7f.1/",
+		"https://127.1/",
+		"https://0/",
+		"https://[::ffff:7f00:1]/",
+		"https://167772165/", // 10.0.0.5
+		"https://0xa.0.0.5/",
+		"https://[::ffff:10.0.0.5]/",
+		"https://[fe80::a9fe:a9fe%25eth0]/", // zoned link-local
+	}
+	for _, u := range append(slices.Clone(metadata), private...) {
+		if err := domain.CheckWebhookURL(u, "pc.example.test", denied); !errors.Is(err, domain.ErrPrivateURL) {
+			t.Errorf("%s: %v, want %v", u, err, domain.ErrPrivateURL)
+		}
+	}
+	operator := func(h string) bool {
+		return httpx.DeniedHost(h, []netip.Prefix{netip.MustParsePrefix("10.0.0.0/8"), netip.MustParsePrefix("169.254.0.0/16"),
+			netip.MustParsePrefix("100.64.0.0/10"), netip.MustParsePrefix("fc00::/7"), netip.MustParsePrefix("fe80::/10")})
+	}
+	for _, u := range metadata {
+		if err := domain.CheckWebhookURL(u, "pc.example.test", operator); !errors.Is(err, domain.ErrPrivateURL) {
+			t.Errorf("%s inside an allowed range: %v, want %v", u, err, domain.ErrPrivateURL)
+		}
+	}
+	for _, u := range []string{"https://167772165/", "https://0xa.0.0.5/", "https://012.0.0.5:8443/"} {
+		if err := domain.CheckWebhookURL(u, "pc.example.test", operator); err != nil {
+			t.Errorf("%s inside an allowed range: %v", u, err)
+		}
+	}
+	// Public addresses in other spellings, and names that only look like
+	// metadata or numbers, are still accepted.
+	for _, u := range []string{"https://134744072/hook", "https://[::ffff:8.8.8.8]/hook", "https://metadata.example.com/",
+		"https://1password.example/hook", "https://metadata.google.internal.example/"} {
+		if err := domain.CheckWebhookURL(u, "pc.example.test", denied); err != nil {
+			t.Errorf("%s: %v", u, err)
+		}
 	}
 }
 

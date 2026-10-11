@@ -77,7 +77,7 @@ func (s *Service) CreateChannelTx(ctx context.Context, tx db.TenantTx, in NewCha
 		}
 		p.RecipientRole = &in.RecipientRole
 	case domain.KindWebhook:
-		if err := domain.CheckWebhookURL(in.URL, s.ownHost, s.denied); err != nil {
+		if err := domain.CheckWebhookURL(in.URL, s.ownHost, s.deniedHost); err != nil {
 			return CreatedChannel{}, err
 		}
 		secret, err := domain.NewSigningSecret()
