@@ -47,3 +47,12 @@ func (c *Client) RemoveImage(ctx context.Context, id string) error {
 	_, err := c.r.Run(ctx, "image", "rm", id)
 	return err
 }
+
+// ImageDigest is the sha256 digest of an image reference pinned by digest
+// (repo@sha256:…) or of a local image id (sha256:…); a tag is refused.
+func ImageDigest(ref string) (string, error) {
+	if !imageRE.MatchString(ref) {
+		return "", fmt.Errorf("%w: image %q is not pinned by digest", ErrInvalid, ref)
+	}
+	return ref[strings.LastIndex(ref, "sha256:"):], nil
+}

@@ -18,6 +18,7 @@ import (
 
 	"github.com/katocxl/pantherclaw/internal/identity/workloadclient"
 	"github.com/katocxl/pantherclaw/internal/sandbox/report"
+	"github.com/katocxl/pantherclaw/internal/sandbox/workspace"
 )
 
 // ConfigFormat names the probe's configuration format.
@@ -104,8 +105,12 @@ func Probe(ctx context.Context, c Config) (report.Report, error) {
 // Main is `pantherclaw-probe --config FILE`: the report goes to stdout,
 // which pclaw reads from outside the sandbox, signed with the probe key
 // for a sandbox run and as one JSON line for a control run; errors go to
-// stderr.
-func Main(ctx context.Context, args []string, stdout, stderr io.Writer) int {
+// stderr. `pantherclaw-probe workspace in|out` streams a workspace instead
+// (sandbox.PrepareAgent, CopyOut).
+func Main(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
+	if len(args) == 2 && args[0] == "workspace" {
+		return workspaceMain(args[1], stdin, stdout, stderr)
+	}
 	fs := flag.NewFlagSet("pantherclaw-probe", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	config := fs.String("config", "", "the probe configuration file ("+ConfigFormat+")")
@@ -149,3 +154,28 @@ func run(ctx context.Context, c Config) (string, error) {
 }
 
 func base64Std(s string) string { return base64.StdEncoding.EncodeToString([]byte(s)) }
+
+// Workspace is where the agent's workspace volume is mounted.
+const Workspace = "/workspace"
+
+// workspaceMain is `pantherclaw-probe workspace in|out`: pclaw streams the
+// agent's workspace into its volume as a tar on stdin, and back out on
+// stdout at the end (G0 M9 design decision 10). It runs as the agent's uid
+// in a container with only the volume, and no network.
+func workspaceMain(dir string, stdin io.Reader, stdout, stderr io.Writer) int {
+	var err error
+	switch dir {
+	case "in":
+		err = workspace.Unpack(stdin, Workspace)
+	case "out":
+		err = workspace.Pack(Workspace, stdout)
+	default:
+		_, _ = fmt.Fprintln(stderr, "usage: pantherclaw-probe workspace in|out")
+		return 2
+	}
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "pantherclaw-probe: workspace %s: %v\n", dir, err)
+		return 1
+	}
+	return 0
+}

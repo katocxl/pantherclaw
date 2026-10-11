@@ -73,7 +73,10 @@ type Options struct {
 	GatewayURL, GatewayAddr, GatewayCAPin string
 	// Hosts maps each agent host to its connection; MappedAddrs are the
 	// hosts' real addresses, resolved on this host, which the probes try.
-	Hosts       map[string]string
+	Hosts map[string]string
+	// Connections are the mapped connections' ids, for the configuration
+	// digest.
+	Connections []string
 	MappedAddrs []string
 	Run         string
 	// KeyFile is the sandbox instance's workload key file and TokenFile its
@@ -113,6 +116,9 @@ type Sandbox struct {
 	// CAFile is the session CA certificate on this host, CASHA256 its
 	// fingerprint.
 	CAFile, CASHA256 string
+	// Workspace and Agent are the agent's volume and container, once
+	// prepared.
+	Workspace, Agent string
 	// HostAddrs are the host's addresses as containers see them; the
 	// canary listens there.
 	HostAddrs []string
@@ -208,7 +214,7 @@ func (s *Sandbox) start(ctx context.Context) error {
 	if len(s.HostAddrs) == 0 {
 		return errors.New("sandbox: the engine has no host.docker.internal; the canary cannot be placed")
 	}
-	digest, err := s.configDigest()
+	digest, err := ConfigDigest(s.o.GatewayURL, s.o.Connections, [3]string{s.o.AgentImage, digestOf(s.o.EdgeImage), digestOf(s.o.ProbeImage)}, s.runtime)
 	if err != nil {
 		return err
 	}
@@ -252,14 +258,14 @@ func checks() []report.Check {
 	return out
 }
 
-// configDigest is the digest of what makes this sandbox's configuration,
-// not of what changes per session: the agent hosts, the gateway, the
-// images and the runtime. A session with another digest than the agent's
-// last closure invalidates it (sandbox_config).
-func (s *Sandbox) configDigest() (string, error) {
+// ConfigDigest is the digest of what makes a sandbox's configuration, not
+// of what changes per session: the mapped connections, the gateway, the
+// images (agent, edge, probe) and the runtime. pclaw sends it when it
+// opens the session and every report carries it; a session with another
+// digest than the agent's last closure invalidates it (sandbox_config).
+func ConfigDigest(gatewayURL string, connections []string, images [3]string, runtime string) (string, error) {
 	b, err := json.Marshal(map[string]any{
-		"hosts": s.o.Hosts, "gateway_url": s.o.GatewayURL, "runtime": s.runtime,
-		"images": []string{s.o.AgentImage, s.o.EdgeImage, s.o.ProbeImage},
+		"connections": slices.Sorted(slices.Values(connections)), "gateway_url": gatewayURL, "runtime": runtime, "images": images,
 	})
 	if err != nil {
 		return "", err

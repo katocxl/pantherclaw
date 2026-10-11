@@ -109,6 +109,10 @@ func BuildLinux(t testing.TB, e docker.Engine, pkg string) string {
 func Image(t testing.TB, c *docker.Client, e docker.Engine, pkg, dockerfile string) string {
 	t.Helper()
 	bin := BuildLinux(t, e, pkg)
+	// The probe image copies an empty workspace directory from its context.
+	if err := os.Mkdir(filepath.Join(filepath.Dir(bin), "workspace"), 0o750); err != nil {
+		t.Fatal(err)
+	}
 	id, err := c.BuildImage(t.Context(), filepath.Join(repoRoot(t), filepath.FromSlash(dockerfile)), filepath.Dir(bin),
 		map[string]string{"org.pantherclaw.test": t.Name()})
 	if err != nil {

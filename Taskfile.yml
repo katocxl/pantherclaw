@@ -97,6 +97,7 @@ tasks:
       GOOS: linux
     cmds:
       - go build -trimpath -o bin/sandbox/ ./cmd/pantherclaw-edge ./cmd/pantherclaw-probe
+      - mkdir -p bin/sandbox/workspace
       - echo "edge  $(docker build --quiet --pull=false --network none --file deploy/sandbox/edge.Dockerfile bin/sandbox)"
       - echo "probe $(docker build --quiet --pull=false --network none --file deploy/sandbox/probe.Dockerfile bin/sandbox)"
 

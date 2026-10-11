@@ -17,7 +17,7 @@ import (
 
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	code := probe.Main(ctx, os.Args[1:], os.Stdout, os.Stderr)
+	code := probe.Main(ctx, os.Args[1:], os.Stdin, os.Stdout, os.Stderr)
 	stop()
 	os.Exit(code)
 }
