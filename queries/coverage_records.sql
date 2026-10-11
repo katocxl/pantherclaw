@@ -313,3 +313,12 @@ ORDER BY i.id;
 SELECT pg_advisory_xact_lock(hashtextextended(
     (sqlc.arg(org_id)::uuid)::text || '/' || (sqlc.arg(agent_id)::uuid)::text || '/' || (sqlc.arg(connection_id)::uuid)::text,
     85));
+
+-- The changes to a scope no reassessment has seen yet, oldest first: a
+-- snapshot lapses while one is pending (HR-211).
+-- name: CoverageChangesPending :many
+SELECT * FROM pc.coverage_invalidations
+WHERE org_id = sqlc.arg(org_id) AND connection_id = sqlc.arg(connection_id)
+  AND (agent_id IS NULL OR agent_id = sqlc.narg(agent_id)::uuid) AND reassessed_at IS NULL
+ORDER BY occurred_at, id
+LIMIT 64;

@@ -22,6 +22,7 @@ import (
 // scope. Paths are looked up once per agent.
 type readers struct {
 	c     tenancy.Caller
+	tx    db.TenantTx
 	q     *dbq.Queries
 	paths map[ids.UUID]td.Path
 }
@@ -55,7 +56,7 @@ func (s *Service) read(ctx context.Context, fn func(context.Context, *readers) e
 		return td.ErrPermissionDenied(td.PermCoverageRead)
 	}
 	return s.Pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
-		return fn(ctx, &readers{c: c, q: dbq.New(tx), paths: map[ids.UUID]td.Path{}})
+		return fn(ctx, &readers{c: c, tx: tx, q: dbq.New(tx), paths: map[ids.UUID]td.Path{}})
 	}, db.ReadOnly())
 }
 

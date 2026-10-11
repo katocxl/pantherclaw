@@ -55,6 +55,46 @@ func (q *Queries) CoverageBinding(ctx context.Context, orgID ids.OrgID, connecti
 	return i, err
 }
 
+const coverageChangesPending = `-- name: CoverageChangesPending :many
+SELECT org_id, id, kind, connection_id, agent_id, subject_id, detail, occurred_at, reassessed_at FROM pc.coverage_invalidations
+WHERE org_id = $1 AND connection_id = $2
+  AND (agent_id IS NULL OR agent_id = $3::uuid) AND reassessed_at IS NULL
+ORDER BY occurred_at, id
+LIMIT 64
+`
+
+// The changes to a scope no reassessment has seen yet, oldest first: a
+// snapshot lapses while one is pending (HR-211).
+func (q *Queries) CoverageChangesPending(ctx context.Context, orgID ids.OrgID, connectionID ids.UUID, agentID *ids.UUID) ([]PcCoverageInvalidation, error) {
+	rows, err := q.db.Query(ctx, coverageChangesPending, orgID, connectionID, agentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []PcCoverageInvalidation{}
+	for rows.Next() {
+		var i PcCoverageInvalidation
+		if err := rows.Scan(
+			&i.OrgID,
+			&i.ID,
+			&i.Kind,
+			&i.ConnectionID,
+			&i.AgentID,
+			&i.SubjectID,
+			&i.Detail,
+			&i.OccurredAt,
+			&i.ReassessedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const coverageExclusionsForScope = `-- name: CoverageExclusionsForScope :many
 SELECT org_id, id, agent_id, connection_id, operation, route_kind, reason, state, created_by, created_at, expires_at, revoked_by, revoked_at FROM pc.coverage_exclusions
 WHERE org_id = $1 AND connection_id = $2 AND state = 'ACTIVE' AND expires_at > now()
