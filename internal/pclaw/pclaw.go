@@ -133,7 +133,6 @@ func lookup(args []string) (command, []string, bool) {
 	return c, args[1:], ok
 }
 
-// describe turns RPC errors into one readable line.
 // exitError ends a command with its own exit code and message (the Claude
 // Code hook blocks with code 2).
 type exitError struct {
@@ -143,6 +142,7 @@ type exitError struct {
 
 func (e *exitError) Error() string { return e.msg }
 
+// describe turns RPC errors into one readable line.
 func describe(err error) string {
 	var ce *connect.Error
 	if errors.As(err, &ce) {
