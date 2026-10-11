@@ -191,8 +191,9 @@ func (s *Service) StartSession(ctx context.Context, in StartInput) (Started, err
 	return out, err
 }
 
-// agentFor loads an agent the caller may act on with p; another org's or
-// an unreadable agent is NotFound.
+// agentFor loads an agent the caller may act on with p. Another org's
+// agent, or one the caller cannot read, is NotFound; a readable one the
+// caller may not act on is PermissionDenied.
 func agentFor(ctx context.Context, c tenancy.Caller, q *dbq.Queries, id ids.UUID, p td.Permission) (dbq.PcAgent, error) {
 	a, err := q.LockAgent(ctx, c.Org, id)
 	if db.IsNoRows(err) {
@@ -205,6 +206,9 @@ func agentFor(ctx context.Context, c tenancy.Caller, q *dbq.Queries, id ids.UUID
 		return a, err
 	}
 	if err := c.Require(p, path); err != nil {
+		if c.Require(td.PermAgentRead, path) != nil {
+			return a, ErrNotFound
+		}
 		return a, err
 	}
 	return a, nil

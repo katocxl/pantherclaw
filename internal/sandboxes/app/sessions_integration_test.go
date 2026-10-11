@@ -295,6 +295,9 @@ func TestStartSessionChecksTheCallerAndTheConnections(t *testing.T) {
 	if _, err := w.svc.StartSession(w.as(td.RoleViewer), w.input()); err == nil {
 		t.Fatal("a viewer opened a session")
 	}
+	if _, err := w.svc.StartSession(w.as(), w.input()); !errors.Is(err, app.ErrNotFound) {
+		t.Errorf("a caller who cannot read the agent: %v", err)
+	}
 	if _, err := w.svc.StartSession(w.as(td.RoleDeveloper), w.input()); err != nil {
 		t.Fatalf("a developer: %v", err)
 	}
