@@ -75,6 +75,9 @@ func (s *Service) Reassess(ctx context.Context, connection ids.UUID, agent *ids.
 		if _, err := s.RefreshTraffic(ctx, tx); err != nil {
 			return err
 		}
+		if _, err := s.RefreshScanRoutes(ctx, tx); err != nil {
+			return err
+		}
 		scopes, err := scopesOf(ctx, q, c.Org, connection, agent)
 		if err != nil {
 			return err

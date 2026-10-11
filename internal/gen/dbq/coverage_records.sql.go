@@ -342,6 +342,45 @@ func (q *Queries) CoverageRoutesForScope(ctx context.Context, arg CoverageRoutes
 	return items, nil
 }
 
+const coverageScanFindingsToRecord = `-- name: CoverageScanFindingsToRecord :many
+SELECT d.id, d.observed FROM pc.discoveries d
+WHERE d.org_id = $1 AND d.source = 'scan' AND d.state <> 'DISMISSED'
+  AND d.observed ->> 'kind' IN ('github_app', 'github_workflow', 'github_mcp_config')
+  AND d.observed ->> 'connection' IS NOT NULL
+  AND NOT EXISTS (SELECT 1 FROM pc.coverage_routes r
+                  WHERE r.org_id = d.org_id AND r.source = 'scan' AND r.source_ref = d.id AND r.last_seen_at >= d.last_seen_at)
+ORDER BY d.id
+LIMIT 200
+`
+
+type CoverageScanFindingsToRecordRow struct {
+	ID       ids.UUID
+	Observed []byte
+}
+
+// The org-scan findings that show a route of a connection and were seen
+// since their route was last recorded (G0 M8 G5 kinds; UNTRUSTED
+// metadata, HR-209).
+func (q *Queries) CoverageScanFindingsToRecord(ctx context.Context, orgID ids.OrgID) ([]CoverageScanFindingsToRecordRow, error) {
+	rows, err := q.db.Query(ctx, coverageScanFindingsToRecord, orgID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []CoverageScanFindingsToRecordRow{}
+	for rows.Next() {
+		var i CoverageScanFindingsToRecordRow
+		if err := rows.Scan(&i.ID, &i.Observed); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const coverageScopesOfConnection = `-- name: CoverageScopesOfConnection :many
 SELECT DISTINCT x.agent_id::uuid AS agent_id, x.operation::text AS operation FROM (
     SELECT r.agent_id, r.operation FROM pc.coverage_routes r

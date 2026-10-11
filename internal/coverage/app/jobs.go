@@ -87,6 +87,19 @@ func (s *Service) ReassessOrg(ctx context.Context, org ids.OrgID) (Reassessed, e
 		for _, sc := range traffic {
 			add(sc, nil)
 		}
+		scanned, err := s.RefreshScanRoutes(ctx, tx)
+		if err != nil {
+			return err
+		}
+		for _, conn := range scanned {
+			scopes, err := scopesOf(ctx, q, org, conn, nil)
+			if err != nil {
+				return err
+			}
+			for _, sc := range scopes {
+				add(sc, nil)
+			}
+		}
 		pending, err := q.PendingCoverageInvalidations(ctx, org, maxPendingPerJob)
 		if err != nil {
 			return err
