@@ -9,13 +9,14 @@ import json
 import threading
 import time
 import unittest
+from datetime import datetime, timedelta, timezone
 from collections.abc import Callable
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 
 from pantherclaw import pap
 from pantherclaw.check import check_proof
-from pantherclaw.client import Client, evaluate, new_action_id, next_step, parse_wait_response, read_stream, retry
+from pantherclaw.client import Client, classify, evaluate, new_action_id, next_step, parse_wait_response, read_stream, retry
 from vectors import load
 
 RUN = "01920000-0000-7000-8000-000000000003"
@@ -31,12 +32,14 @@ class Fake:
     never verifies them), every proof checked with the SDK's checker."""
 
     def __init__(
-        self, sdk: SDK, require_nonce: bool = False, expire_first: bool = False, wait: Callable[[BaseHTTPRequestHandler], None] | None = None
+        self, sdk: SDK, require_nonce: bool = False, expire_first: bool = False, wait: Callable[[BaseHTTPRequestHandler], None] | None = None,
+        hook: SDK | None = None,
     ) -> None:
         self.kf = pap.KeyFile.new()
         self.kf.identifier = IDENT
         self.jkt = self.kf.key().jkt
         self.issued = 0
+        self.calls = 0
         self.expire_first = expire_first
         fake = self
 
@@ -65,7 +68,10 @@ class Fake:
                     assert tok == "", "token issuance uses a key-only proof"
                     fake.issued += 1
                     self._json({"workloadToken": fake.token(), "attestationLevel": 1})
+                elif self.path.startswith("/hook/") and hook is not None:
+                    hook(self, body)
                 elif self.path.startswith("/sdk/"):
+                    fake.calls += 1
                     if fake.expire_first:
                         fake.expire_first = False
                         self.send_response(401)
@@ -91,7 +97,7 @@ class Fake:
         threading.Thread(target=self.server.serve_forever, daemon=True).start()
         base = f"http://127.0.0.1:{self.server.server_address[1]}"
         self.kf.server = base
-        self.client = Client(self.kf, gateway=base, run_id=RUN, timeout=1.0)
+        self.client = Client(self.kf, gateway=base, run_id=RUN, timeout=1.0, builtins=("Bash", "Read"))
 
     def token(self) -> str:
         now = int(time.time())
@@ -111,10 +117,21 @@ def reply(h: BaseHTTPRequestHandler, status: int, body: bytes) -> None:
     h.wfile.write(body)
 
 
-def allowed(h: BaseHTTPRequestHandler, _body: bytes) -> None:
+_SDK_ACTION = next(c["canonical"] for c in load("actionir.json")["cases"] if c["name"] == "sdk channel through a connection")
+
+
+def decided(h: BaseHTTPRequestHandler, decision: str, **extra: Any) -> None:
+    """Answers ``decision`` for the request's action id with the canonical
+    sdk-channel action and its hash, as the face does."""
     aid = h.headers.get("PC-Action-Id", "")
-    digest = hashlib.sha256(json.dumps({"action_id": aid}, separators=(",", ":")).encode()).hexdigest()
-    reply(h, 200, json.dumps({"decision": "allow", "action_id": aid, "action_hash": digest, "coverage": "PARTIAL", "mode": "enforce"}).encode())
+    act = _SDK_ACTION.replace('"action_id":"01920000-0000-7000-8000-000000000004"', f'"action_id":"{aid}"')
+    a = {"decision": decision, "action_id": aid, "action_hash": hashlib.sha256(act.encode()).hexdigest(), "action_ir": pap.b64url(act.encode()),
+         "coverage": "PARTIAL", "mode": "enforce", **extra}
+    reply(h, 200, json.dumps(a).encode())
+
+
+def allowed(h: BaseHTTPRequestHandler, _body: bytes) -> None:
+    decided(h, "allow")
 
 
 class ClientTest(unittest.TestCase):
@@ -129,13 +146,13 @@ class ClientTest(unittest.TestCase):
             with self.subTest(name):
                 f = Fake(sdk)
                 try:
-                    r = f.client.authorize("local", "mcp__payments__create_refund", REFUND, "toolu_01", new_action_id(), server="payments")
+                    r = f.client.authorize("payments", "mcp__payments__create_refund", REFUND, "toolu_01", new_action_id(), server="payments")
                     self.assertEqual(r.outcome, "cannot_decide", r.why)
                 finally:
                     f.close()
         kf = pap.KeyFile.new()
         kf.identifier, kf.server = IDENT, "http://127.0.0.1:9"
-        r = Client(kf, gateway="http://127.0.0.1:9", run_id=RUN, timeout=1.0).authorize("local", "Read", {}, "toolu_02", new_action_id())
+        r = Client(kf, gateway="http://127.0.0.1:9", run_id=RUN, timeout=1.0).authorize("payments", "Read", {}, "toolu_02", new_action_id())
         self.assertEqual(r.outcome, "cannot_decide")
 
     def test_retries_once_for_a_nonce_and_once_for_an_expired_token(self) -> None:
@@ -148,18 +165,92 @@ class ClientTest(unittest.TestCase):
         f = Fake(sdk, require_nonce=True, expire_first=True)
         try:
             aid = new_action_id()
-            r = f.client.authorize("local", "mcp__payments__create_refund", REFUND, "toolu_01", aid, server="payments")
+            r = f.client.authorize("payments", "mcp__payments__create_refund", REFUND, "toolu_01", aid, server="payments")
             self.assertEqual(r.outcome, "allow", r.why)
             want = {"tool": "mcp__payments__create_refund", "server": "payments", "input": REFUND, "tool_use_id": "toolu_01"}
-            self.assertEqual((seen["call"], seen["path"], seen["action"], f.issued), (want, "/sdk/local", aid, 2))
+            self.assertEqual((seen["call"], seen["path"], seen["action"], f.issued), (want, "/sdk/payments", aid, 2))
         finally:
             f.close()
 
     def test_HR201_conformance_answers(self) -> None:
         for a in load("sdk_face.json")["answers"]:
             with self.subTest(a["name"]):
-                got = retry(a["status"], a.get("headers") or {}) or evaluate(a["status"], a["body"], a["action_id"], a.get("first_hash", "")).outcome
-                self.assertEqual(got, a["outcome"])
+                r = evaluate(a["status"], a["body"], a["class"], a["action_id"], a.get("first_hash", ""))
+                got = retry(a["status"], a.get("headers") or {}) or r.outcome
+                self.assertEqual(got, a["outcome"], r.why)
+                if "send" not in a:
+                    self.assertIsNone(r.send)
+                    continue
+                assert r.send is not None
+                self.assertEqual((r.send.method, r.send.url, r.send.headers, r.send.body),
+                                 (a["send"]["method"], a["send"]["url"], a["send"]["headers"], a["send"]["body"].encode()))
+
+    def test_HR200_conformance_calls(self) -> None:
+        f = load("sdk_face.json")
+        for c in f["calls"]:
+            with self.subTest(c["name"]):
+                cls, server = classify(c["tool"], f["servers"], f["builtins"])
+                self.assertEqual(cls, c["class"])
+                if cls == "refused":
+                    continue
+                call: dict[str, Any] = {"tool": c["tool"]}
+                if server:
+                    call["server"] = server
+                call |= {"input": c["input"], "tool_use_id": c["tool_use_id"]}
+                self.assertEqual(call, c["body"])
+
+    def test_HR200_an_observe_answer_lets_only_a_configured_built_in_run(self) -> None:
+        f = Fake(lambda h, _b: reply(h, 200, json.dumps({"decision": "allow", "mode": "monitor", "coverage": "OBSERVE_ONLY"}).encode()))
+        try:
+            self.assertEqual(f.client.authorize("payments", "Read", {"file_path": "/etc/hosts"}, "toolu_02", new_action_id()).outcome, "observe")
+            self.assertEqual(f.client.authorize("payments", "mcp__payments__create_refund", REFUND, "toolu_01", new_action_id(), server="payments").outcome,
+                             "cannot_decide")
+            sent = f.calls
+            for tool in ("deploy", "bash", "mcp__payments__create_refund"):
+                self.assertEqual(f.client.authorize("payments", tool, {}, "toolu_03", new_action_id()).outcome, "cannot_decide", tool)
+            self.assertEqual(f.calls, sent)
+        finally:
+            f.close()
+
+    def test_the_client_refuses_plain_http_outside_loopback(self) -> None:
+        kf = pap.KeyFile.new()
+        kf.identifier = IDENT
+        for u in ("http://pantherclaw.example.test", "http://10.0.0.1:8443", "https://user@pantherclaw.example.test", "ftp://x"):
+            with self.assertRaises(ValueError):
+                Client(kf, server="https://pantherclaw.example.test", gateway=u)
+            with self.assertRaises(ValueError):
+                Client(kf, server=u)
+        for u in ("https://pantherclaw.example.test", "http://127.0.0.1:8080", "http://[::1]:8080", "http://localhost:8080"):
+            Client(kf, server=u, gateway=u)
+
+    def test_a_shell_command_goes_to_the_hook_face_and_a_hold_there_is_a_deny(self) -> None:
+        seen: dict[str, Any] = {"held": False}
+
+        def hook(h: BaseHTTPRequestHandler, body: bytes) -> None:
+            seen["path"], seen["body"], seen["run"] = h.path, body, h.headers.get("PAP-Run-Id")
+            a = {"decision": "deny", "held": True, "transaction_id": "t", "mode": "enforce"} if seen["held"] else {"decision": "allow", "mode": "enforce"}
+            reply(h, 200, json.dumps(a).encode())
+
+        f = Fake(lambda h, _b: reply(h, 404, b""), hook=hook)
+        try:
+            self.assertEqual(f.client.hook("local", "bash", "git push", "/repo", "toolu_04").outcome, "allow")
+            self.assertEqual((seen["path"], seen["run"]), ("/hook/local", RUN))
+            self.assertEqual(seen["body"], b'{"input":{"call":"toolu_04","command":"git push","cwd":"/repo","shell":"bash"},"tool":"shell"}')
+            seen["held"] = True
+            r = f.client.hook("local", "bash", "git push", "/repo", "toolu_04")
+            self.assertEqual((r.outcome, r.held), ("deny", True))
+        finally:
+            f.close()
+        down = Fake(lambda h, _b: reply(h, 404, b""), hook=lambda h, _b: reply(h, 502, b""))
+        try:
+            self.assertEqual(down.client.hook("local", "bash", "ls", "/repo", "toolu_05").outcome, "cannot_decide")
+        finally:
+            down.close()
+
+    def test_a_wait_event_whose_data_never_ends_is_refused(self) -> None:
+        stream = io.BytesIO(b"event: state\n" + (b"data: " + b"x" * 1000 + b"\n") * 100)
+        with self.assertRaises(ValueError):
+            read_stream(iter(stream.readline, b""), lambda _w: True)
 
     def test_conformance_exchanges(self) -> None:
         for e in load("sdk_face.json")["exchanges"]:
@@ -189,16 +280,16 @@ class ClientTest(unittest.TestCase):
                 self.assertEqual(states, e.get("states", []))
 
 
-def held_then_allowed(calls: list[int]) -> SDK:
+def held_then_allowed(calls: list[int], deadline: datetime | None = None) -> SDK:
+    if deadline is None:
+        deadline = datetime.now(timezone.utc) + timedelta(hours=1)
+
     def sdk(h: BaseHTTPRequestHandler, body: bytes) -> None:
         calls.append(1)
         if len(calls) > 1:
             allowed(h, body)
             return
-        aid = h.headers.get("PC-Action-Id", "")
-        digest = hashlib.sha256(json.dumps({"action_id": aid}, separators=(",", ":")).encode()).hexdigest()
-        a = {"decision": "hold", "action_id": aid, "action_hash": digest, "coverage": "PARTIAL", "mode": "enforce", "wait": {"handle": "h", "state": "PENDING"}}
-        reply(h, 200, json.dumps(a).encode())
+        decided(h, "hold", wait={"handle": "h", "state": "PENDING", "deadline": deadline.strftime("%Y-%m-%dT%H:%M:%SZ")})
 
     return sdk
 
@@ -212,7 +303,7 @@ class WaitTest(unittest.TestCase):
 
         f = Fake(held_then_allowed(calls), wait=stream)
         try:
-            r = f.client.authorize_and_wait("local", "mcp__payments__create_refund", REFUND, "toolu_01", new_action_id(), server="payments")
+            r = f.client.authorize_and_wait("payments", "mcp__payments__create_refund", REFUND, "toolu_01", new_action_id(), server="payments")
             self.assertEqual((r.outcome, len(calls)), ("allow", 2), r.why)
         finally:
             f.close()
@@ -231,15 +322,62 @@ class WaitTest(unittest.TestCase):
 
         f = Fake(held_then_allowed(calls), wait=wait)
         try:
-            r = f.client.authorize_and_wait("local", "mcp__payments__create_refund", REFUND, "toolu_01", new_action_id(), server="payments")
+            r = f.client.authorize_and_wait("payments", "mcp__payments__create_refund", REFUND, "toolu_01", new_action_id(), server="payments")
             self.assertEqual((r.outcome, len(calls), len(polls)), ("deny", 1, 2), r.why)
+        finally:
+            f.close()
+
+    def test_HR200_a_stream_of_heartbeats_ends_at_the_deadline(self) -> None:
+        def stream(h: BaseHTTPRequestHandler) -> None:
+            h.send_response(200)
+            h.send_header("Content-Type", "text/event-stream")
+            h.end_headers()
+            try:
+                for _ in range(100):
+                    h.wfile.write(b": heartbeat\n\n")
+                    h.wfile.flush()
+                    time.sleep(0.1)
+            except OSError:
+                pass
+
+        f = Fake(held_then_allowed([]), wait=stream)
+        try:
+            start = time.monotonic()
+            r = f.client.authorize_and_wait("payments", "mcp__payments__create_refund", REFUND, "toolu_01", new_action_id(), server="payments", deadline=1.0)
+            self.assertEqual(r.outcome, "cannot_decide", r.why)
+            self.assertLess(time.monotonic() - start, 3.0)
+        finally:
+            f.close()
+
+    def test_HR200_a_wait_ends_at_the_holds_own_deadline(self) -> None:
+        past = datetime.now(timezone.utc) - timedelta(seconds=4)
+        f = Fake(held_then_allowed([], deadline=past), wait=lambda _h: time.sleep(5))
+        try:
+            start = time.monotonic()
+            r = f.client.authorize_and_wait("payments", "mcp__payments__create_refund", REFUND, "toolu_01", new_action_id(), server="payments", deadline=60.0)
+            self.assertEqual(r.outcome, "cannot_decide", r.why)
+            self.assertLess(time.monotonic() - start, 4.0)
+        finally:
+            f.close()
+
+    def test_HR200_resubmissions_are_bounded(self) -> None:
+        calls: list[int] = []
+
+        def sdk(h: BaseHTTPRequestHandler, _b: bytes) -> None:
+            calls.append(1)
+            decided(h, "hold", wait={"handle": "h", "state": "PENDING"})
+
+        f = Fake(sdk, wait=lambda h: reply(h, 200, b'event: state\ndata: {"handle":"h","state":"READY"}\n\n'))
+        try:
+            r = f.client.authorize_and_wait("payments", "mcp__payments__create_refund", REFUND, "toolu_01", new_action_id(), server="payments")
+            self.assertEqual((r.outcome, len(calls)), ("cannot_decide", 4), r.why)
         finally:
             f.close()
 
     def test_HR200_a_wait_past_its_deadline_cannot_decide(self) -> None:
         f = Fake(held_then_allowed([]), wait=lambda _h: time.sleep(3))
         try:
-            r = f.client.authorize_and_wait("local", "mcp__payments__create_refund", REFUND, "toolu_01", new_action_id(), server="payments", deadline=1.0)
+            r = f.client.authorize_and_wait("payments", "mcp__payments__create_refund", REFUND, "toolu_01", new_action_id(), server="payments", deadline=1.0)
             self.assertEqual(r.outcome, "cannot_decide", r.why)
         finally:
             f.close()
