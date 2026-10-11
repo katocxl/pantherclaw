@@ -15,6 +15,7 @@ import (
 
 	"github.com/katocxl/pantherclaw/internal/actionir"
 	apdomain "github.com/katocxl/pantherclaw/internal/approvals/domain"
+	"github.com/katocxl/pantherclaw/internal/authority/consequences"
 	adomain "github.com/katocxl/pantherclaw/internal/authority/domain"
 	bdomain "github.com/katocxl/pantherclaw/internal/budgets/domain"
 	defs "github.com/katocxl/pantherclaw/internal/definitions/domain"
@@ -127,6 +128,9 @@ type Evaluation struct {
 	// Verify is what the effect of a permit is verified against (G0 M7,
 	// HR-191), set when step 8 knew the definition; the permit records it.
 	Verify *VerifyPlan
+	// Consequences are what step 6 found the action's consequence rules
+	// say, in rule order (G0 M8, HR-206).
+	Consequences []consequences.Consequence
 }
 
 // VerifyPlan is fixed when a permit is issued: the digest of the
@@ -214,6 +218,9 @@ type state struct {
 	facts   map[string]fdomain.Value
 	used    []fdomain.Fact
 	covered bool
+	// pending are the predicted and unknown consequences steps 4, 7 and 8
+	// decide with the action.
+	pending []pendingConsequence
 }
 
 // Snapshot calls fn with a Reader whose reads all come from one snapshot
@@ -608,17 +615,23 @@ func (p *Pipeline) currentFacts(ctx context.Context, s *state) {
 		reqs = append(reqs, pol.Compiled.FactRequirements(s.a.Operation, s.a.Env)...)
 	}
 	s.facts = map[string]fdomain.Value{}
-	if len(reqs) == 0 {
+	var rules []consequences.Rule
+	if s.pinned != nil {
+		rules = s.pinned.Consequences
+	}
+	names := factNames(reqs, rules)
+	if len(names) == 0 {
 		s.cl.note(StepFacts, StatusNotApplicable, ReasonFactsFresh, "no facts are required")
 		return
-	}
-	names := make([]string, 0, len(reqs))
-	for _, r := range fdomain.Merge(reqs) {
-		names = append(names, r.Name)
 	}
 	recorded, err := p.Reader.Facts(ctx, s.req.Org, s.a.Target.Type, s.a.Target.ID, names)
 	if err != nil {
 		s.missing(StepFacts, err, "the facts")
+		return
+	}
+	defer s.consequences(ctx, recorded, reqs)
+	if len(reqs) == 0 {
+		s.cl.note(StepFacts, StatusNotApplicable, ReasonFactsFresh, "no facts are required")
 		return
 	}
 	ok := true
@@ -654,6 +667,7 @@ func (p *Pipeline) boundaries(ctx context.Context, s *state) {
 		s.cl.add(StepBoundaries, effectOf(f), f.Reason(), f.Finding.Detail, f.Level.String())
 	}
 	p.policyRules(ctx, s)
+	p.consequenceBoundaries(ctx, s)
 	p.budgets(ctx, s)
 	p.repeats(ctx, s)
 	if !slices.ContainsFunc(s.cl.items[start:], func(it Item) bool { return it.Step == StepBoundaries && it.Status != StatusPassed }) {
@@ -667,17 +681,30 @@ func (p *Pipeline) policyRules(ctx context.Context, s *state) {
 	if s.policy == nil {
 		return
 	}
+	out, err := s.policy.Compiled.Evaluate(ctx, s.def, s.a, s.policyInput())
+	if err != nil {
+		s.cl.add(StepBoundaries, adomain.CannotAuthorize, ReasonPolicyEvaluation, "the policy could not be evaluated", "")
+		return
+	}
+	s.filePolicy(out, "")
+	s.ev.Obligations, s.ev.Labels = out.Obligations, out.Labels
+}
+
+// policyInput is what the policy is evaluated with.
+func (s *state) policyInput() papp.Input {
 	in := papp.Input{Budget: s.policy.Budget, Facts: s.facts, Now: s.cont.Now}
 	if s.conn != nil {
 		// The class comes from the connection's record, never from the
 		// gateway or the agent (HR-079).
 		in.DestinationClass = s.conn.DestinationClass
 	}
-	out, err := s.policy.Compiled.Evaluate(ctx, s.def, s.a, in)
-	if err != nil {
-		s.cl.add(StepBoundaries, adomain.CannotAuthorize, ReasonPolicyEvaluation, "the policy could not be evaluated", "")
-		return
-	}
+	return in
+}
+
+// filePolicy files a policy outcome's items, approvals, step-ups and
+// requirements, with label after each level (a consequence's), and
+// returns how many requirements it added.
+func (s *state) filePolicy(out pdomain.Outcome, label string) int {
 	notApplicable := 0
 	for _, it := range out.Checklist {
 		if it.Status == pdomain.StatusNotApplicable {
@@ -688,7 +715,7 @@ func (p *Pipeline) policyRules(ctx context.Context, s *state) {
 		if it.Kind == pdomain.Forbid || it.Status == pdomain.StatusFailed {
 			step = StepBoundaries
 		}
-		level := "policy " + s.policy.Version + " rule " + it.Rule
+		level := "policy " + s.policy.Version + " rule " + it.Rule + label
 		switch it.Status { //nolint:exhaustive // the remaining statuses only explain
 		case pdomain.StatusPassed:
 			continue // passing rules are summarized by the step's own item
@@ -703,16 +730,16 @@ func (p *Pipeline) policyRules(ctx context.Context, s *state) {
 		}
 		s.cl.add(step, verdictEffect(it.Verdict), it.Reason, it.Detail, level)
 	}
-	if notApplicable > 0 {
+	if notApplicable > 0 && label == "" {
 		s.cl.note(StepRequirements, StatusNotApplicable, ReasonRulesNotApplicable, strconv.Itoa(notApplicable)+" rules do not apply")
 	}
-	s.ev.Obligations, s.ev.Labels = out.Obligations, out.Labels
 	s.ev.Approvals = append(s.ev.Approvals, out.Approvals...)
 	s.ev.StepUps = append(s.ev.StepUps, out.StepUps...)
 	for _, r := range out.Required {
 		s.ev.Requirements = append(s.ev.Requirements, input(r.Approval, r.StepUp,
-			apdomain.Source{Level: "policy " + s.policy.Version + " rule " + r.Rule, Reason: r.Reason}))
+			apdomain.Source{Level: "policy " + s.policy.Version + " rule " + r.Rule + label, Reason: r.Reason}))
 	}
+	return len(out.Required)
 }
 
 // input turns a policy or grant requirement into an approvals input with
@@ -871,6 +898,7 @@ func (p *Pipeline) requirements(ctx context.Context, s *state) {
 		s.ev.Requirements = append(s.ev.Requirements, input(r.Requirement.Approval, r.Requirement.StepUp,
 			apdomain.Source{Level: r.Level.String(), Reason: r.Requirement.Reason}))
 	}
+	s.consequenceRequirements()
 	effective := s.vals
 	if eff, vals, ok := s.effective(); ok {
 		s.ev.EffectiveHash, effective = eff, vals

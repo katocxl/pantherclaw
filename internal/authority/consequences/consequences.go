@@ -76,6 +76,29 @@ type Rule struct {
 	Definition *defs.Definition
 }
 
+// Of returns the rules of package p for operation op, in order, each with
+// the definition of its consequence operation in p.
+func Of(p *defs.Package, op string) []Rule {
+	var out []Rule
+	for _, r := range p.Consequences {
+		if r.Operation != op {
+			continue
+		}
+		d, _ := p.Definition(r.Consequence.Operation)
+		out = append(out, Rule{ConsequenceRule: r, Definition: d})
+	}
+	return out
+}
+
+// IDs are the rules' ids, in order.
+func IDs(rules []Rule) []string {
+	out := make([]string, 0, len(rules))
+	for _, r := range rules {
+		out = append(out, r.ID)
+	}
+	return out
+}
+
 // Input is what the rules of one action are evaluated against.
 type Input struct {
 	// On is the definition of the action's operation, and TargetID the id
