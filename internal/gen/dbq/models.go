@@ -405,6 +405,120 @@ type PcCounter struct {
 	CreatedAt   time.Time
 }
 
+type PcCoverageClosure struct {
+	OrgID                  ids.OrgID
+	ID                     ids.UUID
+	AgentID                ids.UUID
+	ConnectionID           ids.UUID
+	SandboxSessionID       ids.UUID
+	Result                 string
+	Probes                 []byte
+	PositiveControlsPassed bool
+	NegativeControlsPassed bool
+	CanaryPassed           bool
+	SigningKeyJkt          string
+	ServerNonce            string
+	ResultsSha256          []byte
+	EngineVersion          string
+	ApiVersion             string
+	Runtime                string
+	ImageDigests           []string
+	ConfigSha256           []byte
+	GatewayID              ids.UUID
+	ConnectionRevision     int32
+	PackageVersionID       ids.UUID
+	SessionStartedAt       time.Time
+	ObservedAt             time.Time
+	ExpiresAt              time.Time
+	RecordedAt             time.Time
+}
+
+type PcCoverageExclusion struct {
+	OrgID        ids.OrgID
+	ID           ids.UUID
+	AgentID      *ids.UUID
+	ConnectionID ids.UUID
+	Operation    *string
+	RouteKind    *string
+	Reason       string
+	State        string
+	CreatedBy    ids.UUID
+	CreatedAt    time.Time
+	ExpiresAt    time.Time
+	RevokedBy    *ids.UUID
+	RevokedAt    *time.Time
+}
+
+type PcCoverageFinding struct {
+	OrgID         ids.OrgID
+	ID            ids.UUID
+	Kind          string
+	ConnectionID  *ids.UUID
+	AgentID       *ids.UUID
+	Subject       string
+	Declared      []string
+	Held          []string
+	Used          []string
+	Excess        []string
+	Severity      string
+	State         string
+	Fingerprint   []byte
+	FirstSeenAt   time.Time
+	LastSeenAt    time.Time
+	ResolvedAt    *time.Time
+	DismissedBy   *ids.UUID
+	DismissReason *string
+}
+
+type PcCoverageInvalidation struct {
+	OrgID        ids.OrgID
+	ID           ids.UUID
+	Kind         string
+	ConnectionID ids.UUID
+	AgentID      *ids.UUID
+	SubjectID    *ids.UUID
+	Detail       *string
+	OccurredAt   time.Time
+	ReassessedAt *time.Time
+}
+
+type PcCoverageRoute struct {
+	OrgID        ids.OrgID
+	ID           ids.UUID
+	AgentID      *ids.UUID
+	ConnectionID ids.UUID
+	Operation    *string
+	Kind         string
+	Channel      *string
+	Locator      *string
+	Observation  string
+	Source       string
+	SourceRef    *ids.UUID
+	Mode         *string
+	Attributes   []byte
+	SeenCount    int64
+	FirstSeenAt  time.Time
+	LastSeenAt   time.Time
+}
+
+type PcCoverageSnapshot struct {
+	OrgID          ids.OrgID
+	ID             ids.UUID
+	AgentID        ids.UUID
+	ConnectionID   ids.UUID
+	Operation      string
+	State          string
+	Reasons        []string
+	ClosureID      *ids.UUID
+	LastValidID    *ids.UUID
+	InvalidationID *ids.UUID
+	Body           []byte
+	BodySha256     []byte
+	LedgerEntryID  ids.UUID
+	ComputedAt     time.Time
+	ExpiresAt      *time.Time
+}
+
 type PcCredential struct {
 	OrgID        ids.OrgID
 	ID           ids.UUID
