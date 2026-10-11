@@ -295,6 +295,10 @@ func (i *Issuer) Rewrite(seq int64) *Issuer {
 	return &c
 }
 
+// PQKey returns the issuer's ML-DSA-65 key, pinned as checkpoints-pq-test-1
+// (pack manifests are co-signed with it too).
+func (i *Issuer) PQKey() *mldsa.PrivateKey { return i.pqKey }
+
 // Trust returns the trust file pinning the issuer's keys.
 func (i *Issuer) Trust() []byte {
 	nb := IssuedAt.Add(-30 * 24 * time.Hour)

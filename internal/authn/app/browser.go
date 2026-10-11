@@ -66,17 +66,27 @@ var (
 // requests waiting for the person, /approvals/{id} shows one.
 const ApprovalsPath = "/approvals"
 
+// ReconciliationsPath is the reconciliation page (G0 M7 design decision
+// 3): /reconciliations/{id} shows one reconciliation, where a person
+// releases an unknown outcome.
+const ReconciliationsPath = "/reconciliations"
+
 // returnPaths are the pages a sign-in may return to (HR-152).
 var returnPaths = []string{AccountPath, ContainmentPath, ApprovalsPath}
 
-// approvalPath is one approval request's page, matched exactly: the
-// request id in its canonical lower-case form and nothing else.
-var approvalPath = regexp.MustCompile(`^/approvals/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
+// approvalPath is one approval request's page, and reconciliationPath one
+// reconciliation's, matched exactly: the id in its canonical lower-case
+// form and nothing else.
+var (
+	approvalPath       = regexp.MustCompile(`^/approvals/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
+	reconciliationPath = regexp.MustCompile(`^/reconciliations/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
+)
 
 // ValidReturnPath reports whether p is a page a sign-in may return to: one
-// on the fixed list or one approval request's page, matched exactly.
+// on the fixed list, one approval request's page or one reconciliation's
+// page, matched exactly.
 func ValidReturnPath(p string) bool {
-	return slices.Contains(returnPaths, p) || approvalPath.MatchString(p)
+	return slices.Contains(returnPaths, p) || approvalPath.MatchString(p) || reconciliationPath.MatchString(p)
 }
 
 // Browser implements browser sign-in (OIDC authorization code with PKCE)

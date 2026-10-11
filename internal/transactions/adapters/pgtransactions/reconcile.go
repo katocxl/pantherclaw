@@ -24,6 +24,7 @@ import (
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
 	"github.com/katocxl/pantherclaw/internal/transactions/app"
 	"github.com/katocxl/pantherclaw/internal/transactions/domain"
+	"github.com/katocxl/pantherclaw/internal/waitlist/adapters/pgwaitlist"
 )
 
 var _ app.ReconcileStore = (*Store)(nil)
@@ -78,11 +79,19 @@ func (s *Store) ResolveOccurred(ctx context.Context, c tenancy.Caller, r app.Res
 		}
 		// An unknown outcome's held budget is committed and an exact repeat
 		// stays refused; a conflicting effect's budget was committed already.
-		if k.Kind == string(domain.KindUnknownOutcome) && k.PermitID != nil {
-			if err := pgbudgets.Settle(ctx, q, c.Org, *k.PermitID, bdomain.Commit); err != nil {
-				return err
+		actor := evdomain.Actor{Type: string(td.KindUser), ID: user.String()}
+		if k.Kind == string(domain.KindUnknownOutcome) {
+			if k.PermitID != nil {
+				if err := pgbudgets.Settle(ctx, q, c.Org, *k.PermitID, bdomain.Commit); err != nil {
+					return err
+				}
+				if err := q.SettleDedupeClaim(ctx, claimSucceeded, c.Org, k.TransactionID); err != nil {
+					return err
+				}
 			}
-			if err := q.SettleDedupeClaim(ctx, claimSucceeded, c.Org, k.TransactionID); err != nil {
+			// The person decided the unknown outcome's waitlist entry (G0 M7
+			// slice A11).
+			if err := pgwaitlist.CloseReconciliation(ctx, tx, c.Org, k.TransactionID, pgwaitlist.ResolvedOccurred, actor); err != nil {
 				return err
 			}
 		}
@@ -94,7 +103,6 @@ func (s *Store) ResolveOccurred(ctx context.Context, c tenancy.Caller, r app.Res
 		if err != nil {
 			return err
 		}
-		actor := evdomain.Actor{Type: string(td.KindUser), ID: user.String()}
 		if deref(te.EffectState, "") != string(domain.Confirmed) {
 			e := app.Effect{
 				Org: c.Org, Transaction: k.TransactionID, State: domain.Confirmed, Basis: "person", Person: &user,

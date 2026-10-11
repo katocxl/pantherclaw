@@ -65,11 +65,42 @@ type TransactionPage struct {
 	Next  string
 }
 
-// Integrity is an evidence item's ledger entry and its place in the org's
-// hash chain (0 while the entry waits to be chained).
+// Integrity is an evidence item's ledger entry, its place in the org's
+// hash chain (0 while the entry waits to be chained), and what protects it
+// beyond the chain: the first checkpoint whose tree covers it (HR-194) and
+// the first such checkpoint anchored publicly, with the anchor's time
+// (HR-195); 0 and nil while there is none.
 type Integrity struct {
-	Entry ids.UUID
-	Seq   int64
+	Entry      ids.UUID
+	Seq        int64
+	Checkpoint int64
+	Anchored   int64
+	AnchoredAt *time.Time
+}
+
+// IntegrityStatus is how far an evidence item is protected (F466–F468).
+type IntegrityStatus string
+
+// Integrity statuses, from the weakest.
+const (
+	IntegrityPending      IntegrityStatus = "PENDING"
+	IntegrityChained      IntegrityStatus = "CHAINED"
+	IntegrityCheckpointed IntegrityStatus = "CHECKPOINTED"
+	IntegrityAnchored     IntegrityStatus = "ANCHORED"
+)
+
+// Status is how far the item is protected: in the ledger, chained, in a
+// signed checkpoint, or in a checkpoint whose blinded root is anchored.
+func (i Integrity) Status() IntegrityStatus {
+	switch {
+	case i.Seq <= 0:
+		return IntegrityPending
+	case i.Anchored >= i.Seq:
+		return IntegrityAnchored
+	case i.Checkpoint >= i.Seq:
+		return IntegrityCheckpointed
+	}
+	return IntegrityChained
 }
 
 // DecisionRecord is one evaluation's decision receipt.
@@ -315,6 +346,9 @@ func (e *Explorer) TransactionEvidence(ctx context.Context, id ids.UUID) (Eviden
 			})
 			named = append(named, ReceiptObservations(f.ReceiptJws)...)
 		}
+		if err := protection(ctx, q, c.Org, &out); err != nil {
+			return err
+		}
 
 		obs, err := q.ObservationsOf(ctx, c.Org, &id, named)
 		if err != nil {
@@ -393,6 +427,44 @@ func reconciliation(k dbq.ReconciliationsOfRow) Reconciliation {
 		Via: domain.Via(deref(k.ResolvedVia)), Observation: k.ObservationID, User: k.UserID, Basis: deref(k.Basis),
 		Evidence: k.Evidence, WaitlistEntry: k.WaitlistEntryID, Opened: k.OpenedAt, Resolved: k.ResolvedAt,
 	}
+}
+
+// protection adds to each receipt's integrity the checkpoint and the
+// anchor that cover its chained entry, in one read (HR-194, HR-195).
+func protection(ctx context.Context, q *dbq.Queries, org ids.OrgID, out *Evidence) error {
+	var items []*Integrity
+	for i := range out.Decisions {
+		items = append(items, &out.Decisions[i].Integrity)
+	}
+	if out.Execution != nil {
+		items = append(items, &out.Execution.Integrity)
+	}
+	for i := range out.Effects {
+		items = append(items, &out.Effects[i].Integrity)
+	}
+	seqs := []int64{}
+	for _, it := range items {
+		if it.Seq > 0 {
+			seqs = append(seqs, it.Seq)
+		}
+	}
+	if len(seqs) == 0 {
+		return nil
+	}
+	rows, err := q.EntryProtection(ctx, seqs, org)
+	if err != nil {
+		return err
+	}
+	by := make(map[int64]dbq.EntryProtectionRow, len(rows))
+	for _, r := range rows {
+		by[r.Seq] = r
+	}
+	for _, it := range items {
+		if r, ok := by[it.Seq]; ok && it.Seq > 0 {
+			it.Checkpoint, it.Anchored, it.AnchoredAt = r.CheckpointSize, r.AnchoredSize, r.AnchoredAt
+		}
+	}
+	return nil
 }
 
 func integrity(entry ids.UUID, seq pgtype.Int8) Integrity {

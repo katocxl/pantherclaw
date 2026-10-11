@@ -821,7 +821,7 @@ func (q *Queries) InsertApprovalBatch(ctx context.Context, arg InsertApprovalBat
 const insertApprovalEvidence = `-- name: InsertApprovalEvidence :exec
 INSERT INTO pc.approval_evidence (org_id, id, request_id, author_kind, author_user_id, author_instance_id, note)
 VALUES ($1, $2, $3, $4, $5,
-    $6, $7)
+    $6, $7::text)
 `
 
 type InsertApprovalEvidenceParams struct {
@@ -1523,7 +1523,7 @@ func (q *Queries) ReopenHoldEntry(ctx context.Context, iD ids.UUID, orgID ids.Or
 }
 
 const requestEvidence = `-- name: RequestEvidence :many
-SELECT id, author_kind, author_user_id, author_instance_id, note, created_at
+SELECT id, author_kind, author_user_id, author_instance_id, coalesce(note, '')::text AS note, created_at
 FROM pc.approval_evidence
 WHERE org_id = $1 AND request_id = $2
 ORDER BY created_at, id

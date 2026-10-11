@@ -79,7 +79,7 @@ WHERE org_id = sqlc.arg(org_id) AND transaction_id = sqlc.arg(transaction_id);
 INSERT INTO pc.effect_receipts (org_id, transaction_id, seq, state, level_required, level_achieved, basis, receipt_jws,
                                 ledger_entry_id)
 VALUES (sqlc.arg(org_id), sqlc.arg(transaction_id), sqlc.arg(seq), sqlc.arg(state), sqlc.arg(level_required),
-        sqlc.narg(level_achieved), sqlc.arg(basis), sqlc.arg(receipt_jws), sqlc.arg(ledger_entry_id));
+        sqlc.narg(level_achieved), sqlc.arg(basis), sqlc.arg(receipt_jws)::text, sqlc.arg(ledger_entry_id));
 
 -- name: SetEffectState :exec
 UPDATE pc.transactions SET effect_state = sqlc.arg(state), effect_level_achieved = sqlc.narg(achieved)
