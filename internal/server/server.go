@@ -39,6 +39,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/authority"
 	"github.com/katocxl/pantherclaw/internal/billing"
 	"github.com/katocxl/pantherclaw/internal/billing/licence"
+	coverage "github.com/katocxl/pantherclaw/internal/coverage/domain"
 	"github.com/katocxl/pantherclaw/internal/definitions/adapters/packagesrpc"
 	defspg "github.com/katocxl/pantherclaw/internal/definitions/adapters/pgstore"
 	defsapp "github.com/katocxl/pantherclaw/internal/definitions/app"
@@ -317,6 +318,7 @@ func cmdServe(ctx context.Context, args []string, stderr io.Writer, env Env, onS
 			m5p2:         m5p2,
 			verification: verification,
 			kp:           kp,
+			freshness:    freshnessOf(cfg),
 		})
 		if err != nil {
 			return err
@@ -479,6 +481,8 @@ type apiDeps struct {
 	captures *captureServices
 	// kp opens sealed evaluation inputs for decision replay (M7 track B).
 	kp keys.KeyProvider
+	// freshness is coverage's freshness contract (M9 track A).
+	freshness coverage.Freshness
 }
 
 // apiHandler mounts the RPC services, health endpoints and the JWKS.
@@ -532,6 +536,7 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 		return nil, err
 	}
 	registerEvidenceAdmin(rs, d)
+	registerCoverage(rs, d)
 	mux := http.NewServeMux()
 	rpc.Mount(mux, rs)
 	d.m5p2.mount(mux, workload)

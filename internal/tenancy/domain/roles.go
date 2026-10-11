@@ -60,8 +60,9 @@ var (
 	// guardrails, budgets, packages and policies.
 	authorityReads = []Permission{PermGrantRead, PermGuardrailsRead, PermBudgetRead, PermPackageRead, PermPolicyRead}
 	// boundaryReads lets a principal see how actions reach targets (M6):
-	// gateways, connections and the kill switch.
-	boundaryReads = []Permission{PermGatewayRead, PermConnectionRead, PermContainmentRead}
+	// gateways, connections and the kill switch, and whether every route is
+	// covered (M9).
+	boundaryReads = []Permission{PermGatewayRead, PermConnectionRead, PermContainmentRead, PermCoverageRead}
 )
 
 func with(ps ...[]Permission) []Permission {
@@ -93,13 +94,13 @@ var roles = []Role{
 	},
 	{
 		Name: RoleSecurityAdmin, Title: "Security Admin", Scopes: orgScope,
-		Description: "Watches and contains: reads users, roles, audit and approval requests, disables compromised users and service accounts, revokes grants, responds to incidents, sets the Agent Waitlist's escalation chains and settings, restores suspended agents with a security key, resolves unknown outcomes and exports evidence packs (human only).",
+		Description: "Watches and contains: reads users, roles, audit and approval requests, disables compromised users and service accounts, revokes grants, responds to incidents, sets the Agent Waitlist's escalation chains and settings, restores suspended agents with a security key, resolves unknown outcomes, exports evidence packs, and reassesses coverage, dismisses its findings and excludes routes from it (human only).",
 		Permissions: with(basicReads, []Permission{
 			PermUserRead, PermUserManage, PermRoleRead, PermInvitationRead, PermServiceAccountRead,
 			PermServiceAccountManage, PermAuditRead, PermAgentRead, PermIncidentRespond, PermRunRead, PermRunManage,
 			PermWaitlistRead, PermWaitlistManage, PermApprovalRead, PermAgentRestore, PermIssuerRead, PermGrantRevoke,
 			PermFactRead, PermNotificationRead, PermNotificationManage, PermEvidenceRead, PermTransactionReconcile,
-			PermEvidenceExport,
+			PermEvidenceExport, PermCoverageManage, PermCoverageExclude,
 		}, authorityReads, boundaryReads),
 	},
 	{
@@ -107,7 +108,7 @@ var roles = []Role{
 		Description: "Owns agents in scope and is accountable for them; sees their approval requests and can revoke their grants but not issue them.",
 		Permissions: with(basicReads, []Permission{
 			PermAgentRead, PermAgentManage, PermRunRead, PermRunStart, PermRunManage, PermWaitlistRead, PermAgentEnroll,
-			PermGrantRevoke, PermApprovalRead, PermEvidenceRead,
+			PermGrantRevoke, PermApprovalRead, PermEvidenceRead, PermCoverageRead,
 		}, authorityReads),
 	},
 	{
@@ -186,9 +187,9 @@ var roles = []Role{
 	},
 	{
 		Name: RoleGatewayAdmin, Title: "Gateway Admin", Scopes: orgScope,
-		Description: "Enrolls and revokes gateways, registers connections and their route modes, and seals target credentials (human only). Weakening changes are audited and reported to org admins.",
+		Description: "Enrolls and revokes gateways, registers connections and their route modes, seals target credentials and reassesses coverage (human only). Weakening changes are audited and reported to org admins.",
 		Permissions: with(basicReads, []Permission{
-			PermGatewayManage, PermConnectionManage, PermCredentialSeal, PermAgentRead,
+			PermGatewayManage, PermConnectionManage, PermCredentialSeal, PermAgentRead, PermCoverageManage,
 		}, authorityReads, boundaryReads),
 	},
 	{
