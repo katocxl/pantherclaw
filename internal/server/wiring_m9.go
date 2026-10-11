@@ -11,6 +11,7 @@ import (
 	"connectrpc.com/connect/v2"
 	"github.com/riverqueue/river"
 
+	"github.com/katocxl/pantherclaw/internal/authn/adapters/webhttp"
 	"github.com/katocxl/pantherclaw/internal/authority/finalize"
 	"github.com/katocxl/pantherclaw/internal/coverage/adapters/coveragerpc"
 	covapp "github.com/katocxl/pantherclaw/internal/coverage/app"
@@ -63,4 +64,11 @@ func (c coverageClaims) CoverageClaim(ctx context.Context, org ids.OrgID, agent,
 		State: claim.State.String(), Snapshot: claim.Snapshot.String(), Digest: "sha256:" + hex.EncodeToString(claim.Digest),
 		Agent: agent.String(), Connection: connection.String(), Operation: operation,
 	}, nil
+}
+
+// mountCoveragePages adds the coverage list and card, which only read
+// (G0 M9 slice A8).
+func mountCoveragePages(web *webhttp.Handler, pool *db.Pool, cfg *Config) {
+	f := freshnessOf(cfg)
+	web.WithCoverage(&covapp.Service{Pool: pool, Freshness: f}, f)
 }

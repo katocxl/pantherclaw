@@ -30,6 +30,7 @@ import (
 	"time"
 
 	authnapp "github.com/katocxl/pantherclaw/internal/authn/app"
+	covdomain "github.com/katocxl/pantherclaw/internal/coverage/domain"
 	"github.com/katocxl/pantherclaw/internal/platform/httpx"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
@@ -90,6 +91,9 @@ type Handler struct {
 	// mounted.
 	reconciliations Reconciliations
 	releaseBindings Bindings
+	// coverage is the coverage pages (G0 M9); nil when not mounted.
+	coverage  Coverage
+	freshness covdomain.Freshness
 }
 
 // New returns the handler. publicURL is the server's public URL: its origin
@@ -122,6 +126,7 @@ func (h *Handler) Mount(mux *http.ServeMux) {
 	h.mountContainment(mux)
 	h.mountApprovals(mux)
 	h.mountReconciliations(mux)
+	h.mountCoverage(mux)
 }
 
 // Routes lists the mounted routes.

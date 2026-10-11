@@ -1,0 +1,21 @@
+{{template "head" .}}
+<h1>Coverage</h1>
+<p class="note">Each record says, for one agent, connection and operation, whether every route to the effect is mediated by PantherClaw or proven closed. Only <strong>ENFORCED</strong> means that, and only until it expires ({{.TTL}} after its sandbox evidence) or anything it rests on changes.</p>
+{{if .Rows}}
+<table>
+<thead><tr><th>State</th><th>Agent</th><th>Connection</th><th>Operation</th><th>Computed</th><th>Enforced until</th></tr></thead>
+<tbody>
+{{range .Rows}}
+<tr>
+<td class="{{.Class}}"><a href="{{.Link}}">{{.State}}</a>{{if .Computed}} <span class="note">(computed {{.Computed}})</span>{{end}}</td>
+<td><code>{{.Agent}}</code></td><td><code>{{.Connection}}</code></td><td><code>{{.Operation}}</code></td>
+<td>{{.Snapshot}}</td><td>{{.Expires}}</td>
+</tr>
+{{end}}
+</tbody>
+</table>
+{{if .Next}}<p><a href="{{.Next}}">More records</a></p>{{end}}
+{{else}}
+<p class="note">No coverage record yet. Records appear once the gateway carries an agent's actions; a connection setting alone proves nothing.</p>
+{{end}}
+{{template "foot" .}}

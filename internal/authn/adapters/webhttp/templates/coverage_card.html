@@ -1,0 +1,37 @@
+{{template "head" .}}
+<h1>Coverage card</h1>
+{{with .Card}}
+<p class="{{.Class}}">This scope is <strong>{{.State}}</strong>{{if .Computed}}: its snapshot computed {{.Computed}}, which no longer holds{{end}}.</p>
+<dl>
+<dt>Agent</dt><dd><code>{{.Agent}}</code></dd>
+<dt>Connection</dt><dd><code>{{.Connection}}</code></dd>
+<dt>Operation</dt><dd><code>{{.Operation}}</code></dd>
+{{if .Snapshot}}<dt>Computed</dt><dd>{{.Snapshot}}</dd>{{end}}
+{{if .Expires}}<dt>Enforced until</dt><dd>{{.Expires}}</dd>{{end}}
+</dl>
+{{end}}
+{{if .Reasons}}
+<h2>Why</h2>
+<ul>{{range .Reasons}}<li>{{.}}</li>{{end}}</ul>
+{{end}}
+{{if .Routes}}
+<h2>Routes</h2>
+<p class="note">Every way to produce this effect. A route no source showed is <em>not observed</em>, which is not proof that it does not exist.</p>
+<table>
+<thead><tr><th>Route</th><th>Status</th></tr></thead>
+<tbody>{{range .Routes}}<tr><td class="untrusted">{{.Name}}</td><td class="{{.Class}}">{{.Status}}</td></tr>{{end}}</tbody>
+</table>
+{{end}}
+{{if .LastValid}}
+<h2>Last valid record</h2>
+<p>The last ENFORCED snapshot was <code>{{.LastValid}}</code>. {{.Lapse}}</p>
+{{end}}
+{{if .Excluded}}
+<h2>Exclusions</h2>
+<p class="note">A person excluded these from the claim; an exclusion never makes coverage stronger.</p>
+<ul>{{range .Excluded}}<li>{{.Scope}}, by <code>{{.By}}</code> until {{.Until}}: <span class="untrusted">{{.Reason}}</span></li>{{end}}</ul>
+{{end}}
+<h2>Freshness</h2>
+<p class="note">ENFORCED holds for {{.TTL}} from its sandbox evidence. Any of these drops it to PARTIAL at once: {{.Kinds}}.</p>
+<p><a href="/coverage">All coverage records</a></p>
+{{template "foot" .}}

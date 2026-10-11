@@ -17,7 +17,7 @@ import (
 )
 
 // ReasonNotAssessed is the reason of a scope without a snapshot yet.
-const ReasonNotAssessed = "not_assessed"
+const ReasonNotAssessed = domain.ReasonNotAssessed
 
 // Record is one scope's coverage as it reads now (HR-211): the current
 // snapshot, downgraded to PARTIAL when it was ENFORCED and lapsed or a
