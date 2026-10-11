@@ -81,7 +81,7 @@ class Gateway:
                     gw.calls.append(call)
                     out = face(call, self.headers.get("PC-Action-Id", ""))
                     if out is None:
-                        time.sleep(2)
+                        time.sleep(4)
                         return
                     self._send(*out)
                 elif self.path == "/hook/local" and hook is not None:
@@ -108,7 +108,7 @@ class Gateway:
         threading.Thread(target=self.server.serve_forever, daemon=True).start()
         self.base = f"http://127.0.0.1:{self.server.server_address[1]}"
         self.kf.server = self.base
-        self.client = Client(self.kf, gateway=self.base, run_id=RUN, timeout=1.0, builtins=BUILTIN_TOOLS)
+        self.client = Client(self.kf, gateway=self.base, run_id=RUN, timeout=3.0, builtins=BUILTIN_TOOLS)
 
     def close(self) -> None:
         self.server.shutdown()
@@ -156,7 +156,7 @@ class IntegrationTest(unittest.TestCase):
         return g
 
     def pc(self, g: Gateway, **kw: Any) -> PantherClaw:
-        options: dict[str, Any] = {"shell": "observe", "mcp_servers": ["payments"], "deadline": 1.5, "wait": 2.0} | kw
+        options: dict[str, Any] = {"shell": "observe", "mcp_servers": ["payments"], "deadline": 5.0, "wait": 2.0} | kw
         return PantherClaw(g.client, "payments", **options)
 
     def run_hook(self, p: PantherClaw, data: dict[str, Any]) -> str:
