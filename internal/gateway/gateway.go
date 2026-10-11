@@ -20,6 +20,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/gateway/hook"
 	"github.com/katocxl/pantherclaw/internal/gateway/httpproxy"
 	"github.com/katocxl/pantherclaw/internal/gateway/mcp"
+	"github.com/katocxl/pantherclaw/internal/gateway/sdk"
 	pb "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
 	"github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1/pantherclawv1connect"
 	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
@@ -54,6 +55,7 @@ type Gateway struct {
 	http        *httpproxy.Handler
 	mcp         *mcp.Handler
 	hook        *hook.Handler
+	sdk         *sdk.Handler
 	log         *slog.Logger
 	// reportDrift, driftEvery and driftPoll drive the drift checks
 	// (drift.go).
@@ -66,7 +68,8 @@ type Gateway struct {
 }
 
 // Handler returns the gateway's agent-facing HTTP handler: `/mcp/{connection}`
-// (mcp), `/hook/{connection}` (hook) and `/{connection}/…` (httpproxy).
+// (mcp), `/hook/{connection}` (hook), `/sdk/{connection}` (sdk) and
+// `/{connection}/…` (httpproxy).
 func (g *Gateway) Handler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if _, ok := mcp.Path(r.URL.EscapedPath()); ok {
@@ -75,6 +78,10 @@ func (g *Gateway) Handler() http.Handler {
 		}
 		if _, ok := hook.Path(r.URL.EscapedPath()); ok {
 			g.hook.ServeHTTP(w, r)
+			return
+		}
+		if _, ok := sdk.Path(r.URL.EscapedPath()); ok {
+			g.sdk.ServeHTTP(w, r)
 			return
 		}
 		g.http.ServeHTTP(w, r)
@@ -191,6 +198,7 @@ func newGateway(cfg *Config, d Deps, log *slog.Logger) (*Gateway, error) {
 		http: httpproxy.New(engine, d.Configuration, cfg.PublicURL, log),
 		mcp:  mcp.New(engine, d.Configuration, cfg.PublicURL, log),
 		hook: hook.New(engine, d.Configuration, cfg.PublicURL, log),
+		sdk:  sdk.New(engine, d.Configuration, cfg.PublicURL, log),
 		log:  log, reportDrift: d.ReportDrift, driftEvery: DriftEvery, driftPoll: driftPoll,
 		verifications: d.Verifications, verifyEvery: VerifyEvery, verifyHintGap: verifyHintGap,
 	}

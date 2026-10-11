@@ -236,6 +236,8 @@ type Result struct {
 	// Reasons are the decision's reason codes, decisive first.
 	Reasons       []string
 	TransactionID string
+	// Wait is a held action's wait handle (PAP-1 §8); nil otherwise.
+	Wait *pb.WaitInfo
 	// Monitor: the route runs in monitor mode, so Decision is hypothetical
 	// and nothing about the action was prevented (HR-184).
 	Monitor bool
@@ -322,7 +324,7 @@ func (e *Engine) dispatch(ctx context.Context, c Call, t *timer) Result {
 	e.nonces.set(ar.GetNonce(), time.Time{})
 	r := Result{
 		Decision: ar.GetDecision(), TransactionID: ar.GetTransactionId(), Nonce: ar.GetNonce(),
-		Monitor: ar.GetMode() == pb.DispatchMode_DISPATCH_MODE_MONITOR,
+		Monitor: ar.GetMode() == pb.DispatchMode_DISPATCH_MODE_MONITOR, Wait: ar.GetWait(),
 	}
 	for _, rs := range ar.GetReasons() {
 		r.Reasons = append(r.Reasons, rs.GetCode())

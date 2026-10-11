@@ -95,6 +95,8 @@ type fakeAuthority struct {
 	// requested action) model a clamping decision.
 	obligations []*pb.Obligation
 	effective   func(actionir.Parsed) string
+	// wait is the wait handle of a held decision.
+	wait *pb.WaitInfo
 	// tamper edits the permit claims before signing; signWith picks the key.
 	tamper   func(*claims)
 	signWith keys.Purpose
@@ -175,7 +177,7 @@ func (f *fakeAuthority) Authorize(ctx context.Context, req *pb.AuthorizeRequest)
 	f.txn = ids.NewV7().String()
 	res := &pb.AuthorizeResponse{
 		Decision: f.decision, TransactionId: f.txn, ActionHash: p.HashHex(), Nonce: "nonce-1", Mode: f.mode, Repeat: f.repeat,
-		Obligations: f.obligations,
+		Obligations: f.obligations, Wait: f.wait,
 	}
 	monitor := f.mode == pb.DispatchMode_DISPATCH_MODE_MONITOR
 	if f.decision != pb.Decision_DECISION_ALLOW {

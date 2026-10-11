@@ -222,6 +222,8 @@ Since M6 the gateway serves the routes of its connections at `/{connection}/…`
 
   With the plugin loaded and the stack down, every Bash and PowerShell command is blocked, by design ([integrations/claude-code](../integrations/claude-code/README.md)).
 
+**The SDK face (M8):** agent SDKs ask `POST /sdk/{connection}` on a `kind: local` connection before they run a tool themselves (HR-201). The body is the raw call: `{"tool", "input", "tool_use_id"}`, plus `"cwd"` for Bash and PowerShell or `"server"` for an `mcp__{server}__{tool}` tool. The gateway maps it through the connection's package (pc.shell's `shell` mapping, or the package's MCP mapping of the tool) into an `sdk` action and answers `allow` (recorded delegated), `hold` (with a wait handle: long-poll `WorkloadService.Wait`, then resend the same call with the same `PC-Action-Id`) or `deny`, labelled `PARTIAL`. A local connection serves its package's hook and MCP routes. Other built-in tools are answered `allow`, labelled `OBSERVE_ONLY` (G0 M8 decision 2).
+
 Operator procedures are in the runbooks: [gateways](runbooks/gateway.md), [the kill switch](runbooks/kill-switch.md) and [broker keys and credentials](runbooks/key-rotation.md).
 
 **Sign in and administer (M2):** people sign in through an OpenID provider; locally that is the Keycloak development realm in `deploy/keycloak` (users `alice` / `alice-dev-only` and `bob` / `bob-dev-only`, development only). The server is the relying party; `pclaw` never talks to the provider.
