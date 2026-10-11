@@ -7,6 +7,7 @@ package docker_test
 
 import (
 	"net/netip"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -33,7 +34,9 @@ func TestHR218_ThisEngineRunsTheSandboxAndIsRecorded(t *testing.T) {
 // TestHR122_AnIsolatedContainerHasNoRouteOut runs a hardened container on
 // an internal network in isolated gateway mode and checks, from inside, the
 // basics B3's probes later check in full: non-root, read-only root, noexec
-// /tmp, and no route to the internet, metadata, the host or the bridge.
+// /tmp, and no route to the internet, metadata, the host or the bridge. A
+// peer on the same network must be reachable, so that a broken network
+// cannot pass for a closed one.
 func TestHR122_AnIsolatedContainerHasNoRouteOut(t *testing.T) {
 	c, e := dockertest.Client(t)
 	bin := dockertest.BuildLinux(t, e, selfcheck)
@@ -43,11 +46,21 @@ func TestHR122_AnIsolatedContainerHasNoRouteOut(t *testing.T) {
 		t.Fatalf("subnet %q: %v", net.Subnet(), err)
 	}
 	bridge := prefix.Addr().Next().String()
+	mounts := []docker.Mount{{Kind: docker.Bind, Source: bin, Target: "/pc/selfcheck"}}
+	peer := docker.NewName("test")
+	dockertest.Container(t, c, docker.Container{
+		Name: peer, Image: docker.BaseImage, User: "65532:65532", Args: []string{"/pc/selfcheck", "--listen", ":8080"},
+		Networks: []string{net.Name}, Runtime: e.Runtime(), Mounts: mounts, BindRoot: filepath.Dir(bin),
+		Limits: docker.Limits{PIDs: 32, MemoryMiB: 64, MilliCPUs: 500},
+	})
+	if err := c.Start(t.Context(), peer); err != nil {
+		t.Fatal(err)
+	}
 	targets := []string{"192.0.2.1:443", "198.51.100.1:53", "169.254.169.254:80", "host.docker.internal:80", "172.17.0.1:2375", bridge + ":53", bridge + ":2375"}
 	name := docker.NewName("test")
 	dockertest.Container(t, c, docker.Container{
-		Name: name, Image: docker.BaseImage, User: "65532:65532", Args: append([]string{"/pc/selfcheck"}, targets...),
-		Networks: []string{net.Name}, Runtime: e.Runtime(), Mounts: []docker.Mount{{Kind: docker.Bind, Source: bin, Target: "/pc/selfcheck"}},
+		Name: name, Image: docker.BaseImage, User: "65532:65532", Args: append([]string{"/pc/selfcheck", peer + ":8080"}, targets...),
+		Networks: []string{net.Name}, Runtime: e.Runtime(), Mounts: mounts, BindRoot: filepath.Dir(bin),
 		Limits: docker.Limits{PIDs: 32, MemoryMiB: 64, MilliCPUs: 500},
 	})
 	if err := c.Start(t.Context(), name); err != nil {
@@ -61,7 +74,7 @@ func TestHR122_AnIsolatedContainerHasNoRouteOut(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := string(out)
-	want := []string{"uid 65532", "root-write denied", "tmp-write allowed", "tmp-exec denied"}
+	want := []string{"uid 65532", "root-write denied", "tmp-write allowed", "tmp-exec denied", "dial " + peer + ":8080 allowed"}
 	for _, a := range targets {
 		want = append(want, "dial "+a+" denied")
 	}
