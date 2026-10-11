@@ -21,13 +21,14 @@ import "google/protobuf/timestamp.proto";
 // action tokens (HR-024), and routes through opaque MCP servers unless
 // their egress is mediated (HR-086). ENFORCED expires (24 hours by
 // default) and every invalidating change drops it at once; a record read
-// after that is PARTIAL and keeps the last valid record (HR-211, F442).
+// after that is recomputed from current evidence, reads at most PARTIAL and
+// keeps the last valid record (HR-211, F442).
 //
 // Closure evidence is never written through this service: the sandbox
 // records it after verifying the signed probe results (HR-215).
-// Exclusions are weakening changes that only a person makes, with a
-// written reason and an expiry (HR-212). Reads follow the caller's
-// coverage.read scope over the agent.
+// Exclusions are weakening changes that only a person holding
+// coverage.manage makes, with a written reason and an expiry (HR-212).
+// Reads follow the caller's coverage.read scope over the agent.
 service CoverageService {
   // GetCoverage returns one scope's record as it reads now.
   // permission: coverage.read
@@ -39,10 +40,10 @@ service CoverageService {
   rpc ListCoverage(ListCoverageRequest) returns (ListCoverageResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
-  // ListCoverageRoutes lists the route inventory. A route kind without an
+  // ListRoutes lists the route inventory. A route kind without an
   // entry is not observed, never absent (F450).
   // permission: coverage.read
-  rpc ListCoverageRoutes(ListCoverageRoutesRequest) returns (ListCoverageRoutesResponse) {
+  rpc ListRoutes(ListRoutesRequest) returns (ListRoutesResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
   // GetFreshnessContract publishes when evidence stops supporting a claim
@@ -51,10 +52,10 @@ service CoverageService {
   rpc GetFreshnessContract(GetFreshnessContractRequest) returns (GetFreshnessContractResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
-  // ReassessCoverage recomputes the scopes of one connection now, from
-  // evidence, and records a snapshot for each that changed.
-  // permission: coverage.manage
-  rpc ReassessCoverage(ReassessCoverageRequest) returns (ReassessCoverageResponse);
+  // Reassess recomputes the scopes of one connection now, from evidence,
+  // and records a snapshot for each that changed.
+  // permission: coverage.reassess
+  rpc Reassess(ReassessRequest) returns (ReassessResponse);
 }
 
 // CoverageState is the protection claim of one scope (F435–F438).
@@ -266,8 +267,8 @@ message ListCoverageResponse {
   string next_page_token = 2;
 }
 
-// ListCoverageRoutesRequest filters the inventory.
-message ListCoverageRoutesRequest {
+// ListRoutesRequest filters the inventory.
+message ListRoutesRequest {
   // Maximum results (default 50, at most 200).
   int32 page_size = 1 [(buf.validate.field).int32 = {
     gte: 0
@@ -284,9 +285,9 @@ message ListCoverageRoutesRequest {
   optional string connection_id = 4 [(buf.validate.field).string.uuid = true];
 }
 
-// ListCoverageRoutesResponse is one page of inventory entries; status is
+// ListRoutesResponse is one page of inventory entries; status is
 // unset (it depends on a scope's evidence: GetCoverage).
-message ListCoverageRoutesResponse {
+message ListRoutesResponse {
   // Routes, oldest first.
   repeated CoverageRoute routes = 1;
   // Token for the next page; empty at the end.
@@ -299,24 +300,29 @@ message GetFreshnessContractRequest {}
 message GetFreshnessContractResponse {
   // How long closure evidence supports ENFORCED.
   google.protobuf.Duration enforced_ttl = 1;
-  // How often pending invalidations are reassessed at most.
-  google.protobuf.Duration reassess_interval = 2;
-  // The changes that drop ENFORCED at once.
+  // How often pending changes are reassessed at most
+  // (coverage.reassess_every).
+  google.protobuf.Duration reassess_every = 2;
+  // The changes that invalidate closure evidence taken before them, and so
+  // drop ENFORCED at once. A new route, an exclusion and an expiry only
+  // make the scope be recomputed.
   repeated string invalidation_kinds = 3;
-  // The state an expired or invalidated ENFORCED record reads as.
+  // The highest state an expired or invalidated ENFORCED record reads as:
+  // it is recomputed from current evidence, capped at this state, and may
+  // read lower.
   CoverageState stale_state = 4;
 }
 
-// ReassessCoverageRequest names a connection.
-message ReassessCoverageRequest {
+// ReassessRequest names a connection.
+message ReassessRequest {
   // Connection id.
   string connection_id = 1 [(buf.validate.field).string.uuid = true];
   // Only this agent.
   optional string agent_id = 2 [(buf.validate.field).string.uuid = true];
 }
 
-// ReassessCoverageResponse counts what changed.
-message ReassessCoverageResponse {
+// ReassessResponse counts what changed.
+message ReassessResponse {
   // Scopes recomputed.
   int32 scopes = 1;
   // Snapshots recorded (scopes whose record changed).

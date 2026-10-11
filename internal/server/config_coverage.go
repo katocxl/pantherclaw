@@ -14,14 +14,14 @@ type CoverageConfig struct {
 	// EnforcedTTL is how long sandbox closure evidence supports ENFORCED:
 	// 1 to 168 hours, 24 hours when unset.
 	EnforcedTTL config.Duration `json:"enforced_ttl" env:"PC_COVERAGE_ENFORCED_TTL"`
-	// ReassessInterval is how often the worker reassesses the scopes that
+	// ReassessEvery is how often the worker reassesses the scopes that
 	// changed: 10 seconds to 1 hour, a minute when unset.
-	ReassessInterval config.Duration `json:"reassess_interval" env:"PC_COVERAGE_REASSESS_INTERVAL"`
+	ReassessEvery config.Duration `json:"reassess_every" env:"PC_COVERAGE_REASSESS_EVERY"`
 }
 
 // freshness returns the published freshness contract.
 func (c *Config) freshness() (coverage.Freshness, error) {
-	return coverage.NewFreshness(c.Coverage.EnforcedTTL.D(), c.Coverage.ReassessInterval.D())
+	return coverage.NewFreshness(c.Coverage.EnforcedTTL.D(), c.Coverage.ReassessEvery.D())
 }
 
 func (c *Config) validateCoverage() []error {
