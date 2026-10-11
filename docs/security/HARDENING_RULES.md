@@ -106,7 +106,7 @@
 | HR-082 | Server→client `elicitation`/`sampling` are blocked by default and policy-gated when enabled. | T-028 | M6 |
 | HR-083 | Stateful MCP sessions (2025-11-25) are bound to the workload jkt and re-verified per POST; JSON-RPC ids are remapped per session. MCP list caches are forced private. | T-009 | M6 |
 | HR-084 | Third-party MCP servers run only in customer-hosted gateways (never multi-tenant SaaS gateways in MVP). | T-015 | M9 |
-| HR-085 | Each connector runs with its own uid and mount namespace, `hidepid=2`, seccomp/landlock (gVisor when available); its only network path is the gateway egress PEP, which injects credentials. | T-015 | M9 |
+| HR-085 | Each connector runs in its own container and namespaces (PID, mount, network, IPC, UTS) as a distinct non-root uid, with a read-only root filesystem, all capabilities dropped, `no-new-privileges`, Docker's default seccomp profile and no host environment; gVisor (`runsc`) is used when available, detected and recorded, but is not required for `ENFORCED`. Its only network path is the edge on its internal network, to the gateway egress PEP, which injects credentials (G0 M9 decision 4, 2026-10-11). | T-015, T-088 | M9 |
 | HR-086 | Routes through opaque MCP servers are capped at `PARTIAL` unless their egress is mediated. | T-014 | M9 |
 
 ## Identity protocol
@@ -145,7 +145,7 @@
 |---|---|---|---|
 | HR-120 | Red-team runs are server-enforced to simulator-only environments; receipts carry `simulated: true`. | T-038 | M12 |
 | HR-121 | Sandbox closure probes run from a trusted sidecar plus an external canary, require positive and negative controls, and ENFORCED promotion expires. | T-039 | M9 |
-| HR-122 | Sandbox networks block IPv6, ICMP and DNS egress; Docker ≥ 26 required (CVE-2024-29018). | T-039 | M9 |
+| HR-122 | Sandbox networks are internal Docker networks in isolated gateway mode (`gateway_mode_ipv4=isolated`) with IPv6 off: no route to the host and no IPv6, ICMP, DNS or other egress except to the edge. Docker ≥ 28 required (isolated gateway mode; CVE-2024-29018 is fixed from 26) (G0 M9 decision 1, 2026-10-11). | T-039, T-086 | M9 |
 | HR-123 | Tool packages are signed by the offline package root, or, for an org's own packages, by a package-signing key that org registered (HR-162, ADR-0020), with TUF-style expiring metadata; per-org version pins only move forward (anti-rollback). | T-036, T-056 | M4 |
 | HR-124 | Package mappings are reviewed as code (a wrong mapping is a total bypass) and covered by golden tests. | T-036 | M4 |
 
@@ -236,3 +236,33 @@
 | HR-197 | Decision replay evaluates the stored inputs of an evaluation without the finalization: it writes no transaction, receipt, reservation or permit and calls no gateway. Missing, removed or truncated inputs make a replay incomplete, never guessed. Input values are shown only to holders of `evidence.read_restricted`. | T-074 | M7 |
 | HR-198 | Retention removes only bodies (receipt and ledger bodies, observed values, replay inputs, payload captures), through the `pc_retention` role used only by the retention job, leaving hashes, chain links, Merkle leaves and a tombstone. Items in an active legal hold are never removed. Shortening a retention period needs a person, is audited and notified, and takes effect after 7 days; `pc_app` keeps no UPDATE or DELETE on evidence (HR-055). | T-075 | M7 |
 | HR-199 | Payload capture happens only under an active capture profile that a person holding `evidence.capture.manage` created with a purpose, scope, byte cap (≤ 64 KiB), retention (≤ 30 days) and expiry (≤ 90 days). Captures are taken at the gateway after secret-echo redaction, never include headers or credentials, are sealed per row (HR-062), and are read only by a person holding `evidence.read_restricted`, with a reason, through a read that is audited before the content is returned. | T-076, T-043 | M7 |
+
+## Coding-agent integrations, GitHub and consequences (G0 M8)
+
+| ID | Rule | Threats | MS |
+|---|---|---|---|
+| HR-200 | SDK and Agent SDK integrations fail closed: when PantherClaw cannot decide (unreachable, timed out, an error or an answer it cannot parse), a mapped tool call does not run. The Agent SDK integration enforces from its `PreToolUse` hook, which runs in every permission mode including bypass, and denies there; `canUseTool` only turns a `HOLD` into a wait and never allows what the hook did not. Unmapped built-in tools run and are recorded `OBSERVE_ONLY`; every cooperative decision is labelled `PARTIAL` (HR-024, HR-186). | T-080, T-069 | M8 |
+| HR-201 | The gateway's `/sdk/{connection}` face decides only on ActionIR it maps itself, through the connection's signed package, from the raw tool call whose exact bytes the PAP/1 proof covers. An ActionIR, action hash or canonical form supplied by the SDK is never trusted; the SDK canonicaliser only checks returned hashes and resubmits an identical call. | T-080 | M8 |
+| HR-202 | Target verifier middleware refuses a request before its handler runs unless the action token's signature verifies against an `action_tokens` key from the configured JWKS (pinned algorithms, HR-095), its audience is this target's connection, it is unexpired, its `bh` equals the SHA-256 of the exact received body, its operation and target match the route, and its `jti` is inserted for the first time into a replay store shared by every replica of the target. | T-081 | M8 |
+| HR-203 | GitHub installation tokens are minted by the gateway per authorized action, scoped to exactly that action's repository and its operation's declared minimum permissions. A token is never reused for another action, never returned to the agent, logged or stored, and is revoked after dispatch. | T-082 | M8 |
+| HR-204 | A GitHub App private key exists only as a sealed credential bound to the gateway that serves the connection (HR-060, HR-182), opened only in that gateway's memory to sign App JWTs that live at most 10 minutes; no API, log, job or receipt carries the key or a JWT. | T-082 | M8 |
+| HR-205 | A merge is bound to the pull request's head SHA: the action carries it as a material parameter, the approval binding includes it, and the dispatch passes it to GitHub so that any other head fails (409). A new commit on the pull request invalidates every unconsumed approval for it. | T-083 | M8 |
+| HR-206 | Stored consequence rules (F405) are evaluated in the decision pipeline. When a fact a rule needs is missing, stale or unreadable, the result is `HOLD` with reason "Consequence unknown", never `ALLOW`. | T-083 | M8 |
+| HR-207 | The independent reviewer of a merge (`code_reviewer`) and the release approver of a deployment consequence (`release_approver`) are each a person other than the run's launcher, its represented principal, the agent's owners and, when it maps to a user, the pull request's author. A release approval counts only when it is consumed inside an active change window. | T-083 | M8 |
+| HR-208 | `pclaw init` backs up every file before it changes it and writes atomically; it never writes a secret into configuration and never removes or weakens an existing deny rule, hook or server entry; it shows the diff before writing; and it reports failure when managed settings would disable its hooks or servers. | T-084 | M8 |
+| HR-209 | The GitHub organisation scan reads metadata only: no secret values, and no file contents beyond the files it names (workflow and MCP configuration files). Its findings are candidates and never grant authority. | T-084 | M8 |
+
+## Coverage, containment sandbox and connector runtime (G0 M9)
+
+| ID | Rule | Threats | MS |
+|---|---|---|---|
+| HR-210 | Coverage states come only from evidence. `ENFORCED` needs current closure evidence for every material route in scope; a setting alone never yields a state (F460); cooperative routes are capped at `PARTIAL` (HR-024), monitor-mode routes are `OBSERVE_ONLY`, and a scope whose routes are not known is `UNKNOWN`. | T-085 | M9 |
+| HR-211 | `ENFORCED` expires (24 hours by default, configurable). Every invalidation event downgrades it at once: a change to a connection, package version, route mode, gateway, sandbox image or configuration, or credential. After expiry or invalidation, reads return `PARTIAL` with the last valid record. | T-085 | M9 |
+| HR-212 | Coverage exclusions are weakening changes: only a person creates one, with a written reason and an expiry; every exclusion is audited and shown with the coverage it changes. | T-085 | M9 |
+| HR-213 | In `pclaw sandbox run` the edge sidecar is the agent's only route: the agent is attached only to an internal network in isolated gateway mode, shared with the edge. Only the edge holds the run's workload key and the per-session CA key; the agent container holds no credential or key, only the CA certificate, mounted read-only. | T-086 | M9 |
+| HR-214 | The edge refuses every destination without a mapped connection and intercepts TLS only for mapped hosts; it refuses and records every other `CONNECT` and plain request. | T-086 | M9 |
+| HR-215 | Probe results are signed with a per-session key that `pclaw` creates outside the agent container and are bound to a server nonce; unsigned, replayed or stale results are rejected. Positive and negative controls are required, and a failed negative control blocks promotion. | T-087 | M9 |
+| HR-216 | Connector containers never receive the Docker socket, the host environment or the host network, and only customer-hosted gateways start them (HR-084), through the Docker CLI with fixed arguments. | T-088 | M9 |
+| HR-217 | A decision receipt's optional coverage claim names the coverage snapshot (state and id) that was current for the action's scope at decision time; `pclaw verify` and evidence packs check it against the snapshot ledger. Receipts without a claim stay valid. | T-089 | M9 |
+| HR-218 | Sandbox and connector runs refuse to start on a Docker engine older than 28 or when the isolation self-check fails, and record the engine version, API version and runtime (`runc` or `runsc`) in their evidence. | T-086 | M9 |
+| HR-219 | Reserved for M9 (G0 M9); not assigned. Kept so the number is not reused; it has no milestone, so the traceability check skips it. | — | — |
