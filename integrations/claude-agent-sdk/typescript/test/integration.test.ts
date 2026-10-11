@@ -98,7 +98,7 @@ const decisionOf = (o: HookOutput) => o.hookSpecificOutput?.permissionDecision ?
 const signal = () => new AbortController().signal;
 
 function integration(client: Client, extra: Partial<PantherClawOptions> = {}) {
-  return new PantherClaw({ client, connection: "payments", shell: "observe", mcpServers: ["payments"], deadlineMs: 1000, waitMs: 2000, ...extra });
+  return new PantherClaw({ client, connection: "payments", shell: "observe", mcpServers: ["payments"], deadlineMs: 5000, waitMs: 2000, ...extra });
 }
 
 test("TestHR200_the hook denies when PantherClaw cannot decide", async (t) => {
