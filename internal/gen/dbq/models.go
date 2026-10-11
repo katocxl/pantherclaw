@@ -554,14 +554,15 @@ type PcCrossOrgListAudit struct {
 }
 
 type PcDecisionReceipt struct {
-	OrgID           ids.OrgID
-	TransactionID   ids.UUID
-	ReceiptJws      *string
-	LedgerEntryID   ids.UUID
-	CreatedAt       time.Time
-	Evaluation      int32
-	BodyRemovedAt   *time.Time
-	RemovedByPolicy *ids.UUID
+	OrgID              ids.OrgID
+	TransactionID      ids.UUID
+	ReceiptJws         *string
+	LedgerEntryID      ids.UUID
+	CreatedAt          time.Time
+	Evaluation         int32
+	BodyRemovedAt      *time.Time
+	RemovedByPolicy    *ids.UUID
+	CoverageSnapshotID *ids.UUID
 }
 
 type PcDedupeClaim struct {
