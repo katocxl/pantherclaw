@@ -44,7 +44,8 @@ func m8cConnection(t *testing.T, f m5Fixture) (gateway, conn string) {
 // TestF354_ConnectionTestsAreKeptAsEvidence: pc_app records a credential
 // test with its result, and a leased test only with its verification task
 // of purpose connection_test, which belongs to no transaction. An open
-// test moves to its result; a finished test needs its time, a done one its
+// test only moves forward, to RUNNING, DONE or FAILED, and a finished one
+// never changes; a finished test needs its time, a done one its
 // result. Nothing changes what a test is or deletes it.
 func TestF354_ConnectionTestsAreKeptAsEvidence(t *testing.T) {
 	d := dbtest.New(t)
@@ -62,7 +63,12 @@ func TestF354_ConnectionTestsAreKeptAsEvidence(t *testing.T) {
 	f.want(t, m5Check, "another kind", m8cLeasedTest, f.org, m5ID(), conn, "write", task)
 	f.want(t, m5Check, "done without a result", `UPDATE pc.connection_tests SET state = 'DONE', finished_at = now() WHERE id = $1`, read)
 	f.want(t, m5Check, "finished without a time", `UPDATE pc.connection_tests SET state = 'FAILED' WHERE id = $1`, read)
+	f.mustExec(t, `UPDATE pc.connection_tests SET state = 'RUNNING', gateway_id = $2 WHERE id = $1`, read, gw)
+	f.want(t, m5Check, "a running test back to PENDING", `UPDATE pc.connection_tests SET state = 'PENDING' WHERE id = $1`, read)
 	f.mustExec(t, `UPDATE pc.connection_tests SET state = 'DONE', result = 'FAILED', gateway_id = $2, finished_at = now() WHERE id = $1`, read, gw)
+	f.want(t, m5Check, "UPDATE a DONE connection_tests row", `UPDATE pc.connection_tests SET result = 'PASSED' WHERE id = $1`, read)
+	f.want(t, m5Check, "reopen a DONE connection_tests row", `UPDATE pc.connection_tests SET state = 'RUNNING', result = NULL, finished_at = NULL
+		WHERE id = $1`, read)
 	f.want(t, m5Denied, "change the kind", "UPDATE pc.connection_tests SET kind = kind")
 	f.want(t, m5Denied, "change who asked", "UPDATE pc.connection_tests SET requested_by = requested_by")
 	f.want(t, m5Denied, "DELETE connection_tests", "DELETE FROM pc.connection_tests")

@@ -357,8 +357,9 @@ func (p *Pipeline) connection(ctx context.Context, s *state, d *defs.Definition)
 }
 
 // gatewayChannels are the channels a gateway serves, whose actions always
-// name their connection (PAP-1 §6); cooperative SDKs (sdk) may omit it.
-var gatewayChannels = []string{string(defs.ChannelHTTP), string(defs.ChannelMCP), string(defs.ChannelHook)}
+// name their connection (PAP-1 §6): the sdk channel too, since the /sdk
+// face is its only mapper (HR-201) and always names the connection.
+var gatewayChannels = []string{string(defs.ChannelHTTP), string(defs.ChannelMCP), string(defs.ChannelHook), string(defs.ChannelSDK)}
 
 // dispatches reports whether a connection of this kind serves the
 // definition: an HTTP or MCP connection only definitions with a dispatch
