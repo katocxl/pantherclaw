@@ -11,6 +11,7 @@ import (
 	"encoding/base64"
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 )
@@ -98,6 +99,10 @@ func TestHR215_ProbeReportsAreSingleUseEvidenceInSchema(t *testing.T) {
 	f.mustExec(t, "UPDATE pc.probe_nonces SET used_at = now() WHERE id = $1", nonce)
 	f.want(t, m5Check, "a nonce used twice", "UPDATE pc.probe_nonces SET used_at = now() WHERE id = $1", nonce)
 	f.want(t, m5Check, "a used nonce made unused", "UPDATE pc.probe_nonces SET used_at = NULL WHERE id = $1", nonce)
+	stale := m5ID()
+	f.mustExec(t, m9sNonce, f.org, stale, session, m9sBytes(32), "1 millisecond")
+	time.Sleep(50 * time.Millisecond)
+	f.want(t, m5Check, "a nonce used after it expired", "UPDATE pc.probe_nonces SET used_at = now() WHERE id = $1", stale)
 
 	f.want(t, m7bFK, "a closure of no session", m9cClosure, f.org, m5ID(), f.agent, f.connection, m5ID(), "PASSED",
 		true, m9cDigest, f.gateway, f.version, "1 minute", "1 hour", m5ID())
@@ -220,6 +225,7 @@ func TestHR215_SessionsKeysNoncesAndInstancesHoldInSchema(t *testing.T) {
 	f.want(t, m5Check, "an instance another token enrolled", instance, f.org, m5ID(), f.agent, jkt(), other, session)
 	mine := m5ID()
 	f.mustExec(t, instance, f.org, mine, f.agent, jkt(), token, nil)
+	f.want(t, m5Unique, "a second instance of one enrollment token", instance, f.org, m5ID(), f.agent, jkt(), token, nil)
 	if got := f.one(t, "SELECT sandbox_session_id::text FROM pc.agent_instances WHERE id = $1", mine); got != session {
 		t.Errorf("an instance the session's token enrolled is in session %q, want %q", got, session)
 	}
