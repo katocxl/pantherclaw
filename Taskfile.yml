@@ -85,6 +85,11 @@ tasks:
         PC_TEST_MOCK_OIDC_URL="${PC_TEST_MOCK_OIDC_URL:-http://127.0.0.1:8181}"
         go test -tags integration -shuffle=on -count=1 {{.PKGS | default "./..."}}
 
+  test:sandbox:
+    desc: Docker sandbox tests (G0 M9; needs Docker ≥ 28; they create and remove their own uniquely named networks and containers; PKGS=./x/... narrows them)
+    cmds:
+      - PC_TEST_REQUIRE_DOCKER=1 go test -tags sandbox -count=1 {{.PKGS | default "./internal/sandbox/..."}}
+
   test:linux:
     desc: Run race-enabled tests inside a pinned Linux container (use on Windows)
     cmds:
