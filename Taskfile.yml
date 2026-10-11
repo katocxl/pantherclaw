@@ -12,7 +12,7 @@ vars:
   GOLANGCI: go tool -modfile={{.PINS}}/golangci-lint/go.mod golangci-lint
   GITLEAKS: go tool -modfile={{.PINS}}/gitleaks/go.mod gitleaks
   GOVULNCHECK: go tool -modfile={{.PINS}}/govulncheck/go.mod govulncheck
-  GO_MODULES: ". sdk/go tools"
+  GO_MODULES: ". sdk/go sdk/go/internal/sqltest tools"
   GOLANG_IMAGE: golang:1.27.2-bookworm@sha256:5cf287a799e6b94384bad13d16b14904c531f51ba65792237e122ce42b392f61
   COMPOSE: docker compose -f deploy/compose/compose.yaml
 
@@ -122,9 +122,13 @@ tasks:
       - go test ./internal/conformance/gen -run TestConformanceVectors -count=1 -update
 
   sdk:check:
-    desc: The SDKs' tests, each running every conformance vector (not part of task check)
+    desc: The SDKs' tests, each running every conformance vector (not part of task check); the SQL replay store's PostgreSQL test runs when the test cluster is up (task up PROFILE=test)
+    dotenv: ["deploy/compose/.env"]
     cmds:
       - go -C sdk/go test -shuffle=on -count=1 ./...
+      - >-
+        PC_TEST_PG_ADMIN_URL="${PC_TEST_PG_ADMIN_URL:-${PC_PG_TEST_PASSWORD:+postgres://postgres:${PC_PG_TEST_PASSWORD}@127.0.0.1:5433/postgres?sslmode=disable}}"
+        go -C sdk/go/internal/sqltest test -count=1 ./...
       - cd sdk/typescript && node --test "test/**/*.test.ts"
 
   license:check:
