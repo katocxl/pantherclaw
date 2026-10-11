@@ -175,6 +175,24 @@ func Declare(c Connection, p *domain.Package) Capabilities {
 		out.Permissions = append(out.Permissions, Permission{Name: name, Reasons: permissions[name]})
 	}
 	declareKind(&out, c)
+	monitored := 0
+	for _, o := range out.Operations {
+		if o.Mode == ModeMonitor {
+			monitored++
+		}
+	}
+	if monitored > 0 {
+		out.Enforcement.Level = Partial
+		out.Enforcement.Detail += " " + strconv.Itoa(monitored) + " of " + strconv.Itoa(len(out.Operations)) +
+			" routes are in monitor mode: decided and recorded, not enforced (HR-184)."
+	}
+	if out.Enforcement.Level != Supported {
+		// PantherClaw sees, records and stops only what comes through it.
+		for _, s := range []*Support{&out.Discovery, &out.Observation, &out.Response} {
+			s.Level = Partial
+			s.Detail += " Only for the calls that come through PantherClaw: see enforcement."
+		}
+	}
 	return out
 }
 
@@ -207,8 +225,10 @@ func declareKind(out *Capabilities, c Connection) {
 		out.Enforcement.Detail += " Only the gateway holds the credential, sealed to its broker key (HR-060)."
 		out.ResponseActions = append(out.ResponseActions, "revoke_credential", "rotate_credential")
 	case AccessTargetEnforced:
-		out.Enforcement.Detail += " The target refuses a call without a single-use action token (PAP-1 §10), which the gateway mints for its own " +
-			"requests and for those it hands an agent SDK (HR-201)."
+		out.Enforcement = Support{Partial, out.Enforcement.Detail + " The target is declared to refuse a call without a single-use " +
+			"action token (PAP-1 §10), which the gateway mints for its own requests and for those it hands an agent SDK (HR-201). " +
+			"That is a declaration, not evidence: only a passing target_verifier test shows it (HR-210)."}
+		out.Limits = append(out.Limits, Limit{"VERIFIER_NOT_SHOWN", "The target's token check is declared, not yet shown by a test."})
 	case AccessAgentHeld:
 		out.Enforcement = Support{Partial, out.Enforcement.Detail + " The agent holds its own credential and can call " +
 			"the target directly (F416); an agent SDK asks the SDK face first (HR-201)."}

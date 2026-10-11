@@ -40,7 +40,7 @@ func withTargetEnforced(h *harness) {
 // sdkRefund is an SDK's raw call to the payments MCP server's create_refund.
 func sdkRefund(amount string) string {
 	b, _ := json.Marshal(map[string]any{
-		"tool": "mcp__pay__create_refund", "server": "pay", "tool_use_id": "toolu_01",
+		"tool": "mcp__payments__create_refund", "server": "payments", "tool_use_id": "toolu_01",
 		"input": map[string]string{"charge": "ch_1", "amount": amount, "currency": "USD", "reason": "duplicate"},
 	})
 	return string(b)
@@ -170,7 +170,9 @@ func TestHR201_TheFaceServesOnlyConnectionsAnSDKReachesItself(t *testing.T) {
 // TestHR201_NothingTheSDKComputedIsTrusted: a request that carries an
 // ActionIR, a hash or a member the contract does not name is refused, and
 // so is an MCP call the reviewed package does not map or whose input does
-// not fit it: none of them reaches the Authority, and none is allowed.
+// not fit it, a tool of another MCP server than the connection's, and a
+// name that is neither an MCP tool nor a built-in tool (bash in lowercase
+// too): none of them reaches the Authority, and none is allowed.
 func TestHR201_NothingTheSDKComputedIsTrusted(t *testing.T) {
 	refund := `"input":{"charge":"ch_1","amount":"30.00","currency":"USD","reason":"duplicate"}`
 	for name, tc := range map[string]struct {
@@ -178,18 +180,21 @@ func TestHR201_NothingTheSDKComputedIsTrusted(t *testing.T) {
 		code int
 		want string
 	}{
-		"an action":         {`{"tool":"mcp__pay__create_refund","server":"pay",` + refund + `,"tool_use_id":"t1","action_ir":{"v":1}}`, http.StatusBadRequest, "invalid_request"},
-		"a hash":            {`{"tool":"mcp__pay__create_refund","server":"pay",` + refund + `,"tool_use_id":"t1","action_hash":"ab"}`, http.StatusBadRequest, "invalid_request"},
-		"a cwd":             {`{"tool":"mcp__pay__create_refund","server":"pay",` + refund + `,"tool_use_id":"t1","cwd":"/x"}`, http.StatusBadRequest, "invalid_request"},
-		"unmapped":          {`{"tool":"mcp__pay__delete_everything","server":"pay","input":{},"tool_use_id":"t1"}`, http.StatusOK, sdk.CodeUnknownTool},
-		"extra input":       {`{"tool":"mcp__pay__get_refund","server":"pay","input":{"refund":"re_1","x":1},"tool_use_id":"t1"}`, http.StatusOK, sdk.CodeInvalidInput},
-		"server mismatch":   {`{"tool":"mcp__pay__get_refund","server":"other","input":{},"tool_use_id":"t1"}`, http.StatusBadRequest, "invalid_request"},
-		"no server":         {`{"tool":"mcp__pay__get_refund","input":{},"tool_use_id":"t1"}`, http.StatusBadRequest, "invalid_request"},
-		"a server on Read":  {`{"tool":"Read","server":"pay","input":{},"tool_use_id":"t1"}`, http.StatusBadRequest, "invalid_request"},
+		"an action":         {`{"tool":"mcp__payments__create_refund","server":"payments",` + refund + `,"tool_use_id":"t1","action_ir":{"v":1}}`, http.StatusBadRequest, "invalid_request"},
+		"a hash":            {`{"tool":"mcp__payments__create_refund","server":"payments",` + refund + `,"tool_use_id":"t1","action_hash":"ab"}`, http.StatusBadRequest, "invalid_request"},
+		"a cwd":             {`{"tool":"mcp__payments__create_refund","server":"payments",` + refund + `,"tool_use_id":"t1","cwd":"/x"}`, http.StatusBadRequest, "invalid_request"},
+		"unmapped":          {`{"tool":"mcp__payments__delete_everything","server":"payments","input":{},"tool_use_id":"t1"}`, http.StatusOK, sdk.CodeUnknownTool},
+		"extra input":       {`{"tool":"mcp__payments__get_refund","server":"payments","input":{"refund":"re_1","x":1},"tool_use_id":"t1"}`, http.StatusOK, sdk.CodeInvalidInput},
+		"server mismatch":   {`{"tool":"mcp__payments__get_refund","server":"other","input":{},"tool_use_id":"t1"}`, http.StatusBadRequest, "invalid_request"},
+		"no server":         {`{"tool":"mcp__payments__get_refund","input":{},"tool_use_id":"t1"}`, http.StatusBadRequest, "invalid_request"},
+		"a server on Read":  {`{"tool":"Read","server":"payments","input":{},"tool_use_id":"t1"}`, http.StatusBadRequest, "invalid_request"},
 		"a bad name":        {`{"tool":"rm -rf","input":{},"tool_use_id":"t1"}`, http.StatusBadRequest, "invalid_request"},
+		"another server":    {`{"tool":"mcp__evil__get_refund","server":"evil","input":{"refund":"re_1"},"tool_use_id":"t1"}`, http.StatusOK, sdk.CodeUnknownServer},
+		"an unknown tool":   {`{"tool":"merge_pr","input":{},"tool_use_id":"t1"}`, http.StatusOK, sdk.CodeUnknownTool},
+		"bash in lowercase": {`{"tool":"bash","input":{"command":"ls"},"tool_use_id":"t1"}`, http.StatusOK, sdk.CodeUnknownTool},
 		"a bad call id":     {`{"tool":"Read","input":{},"tool_use_id":"toolu 01"}`, http.StatusBadRequest, "invalid_request"},
 		"input not object":  {`{"tool":"Read","input":"x","tool_use_id":"t1"}`, http.StatusBadRequest, "invalid_request"},
-		"duplicate members": {`{"tool":"Read","tool":"mcp__pay__get_refund","input":{},"tool_use_id":"t1"}`, http.StatusBadRequest, "invalid_request"},
+		"duplicate members": {`{"tool":"Read","tool":"mcp__payments__get_refund","input":{},"tool_use_id":"t1"}`, http.StatusBadRequest, "invalid_request"},
 	} {
 		h := setup(t, withAgentHeld)
 		r := h.sdk(t, tc.body, nil)

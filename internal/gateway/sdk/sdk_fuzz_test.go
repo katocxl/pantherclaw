@@ -16,11 +16,11 @@ import (
 // HR-201): an MCP call never slips into OBSERVE_ONLY.
 func FuzzSDKCall(f *testing.F) {
 	for _, s := range []string{
-		`{"tool":"mcp__pay__create_refund","server":"pay","input":{},"tool_use_id":"t1"}`,
+		`{"tool":"mcp__payments__create_refund","server":"payments","input":{},"tool_use_id":"t1"}`,
 		`{"tool":"mcp__git__hub__merge","server":"git__hub","input":{},"tool_use_id":"t1"}`,
-		`{"tool":"mcp__pay__","server":"pay","input":{},"tool_use_id":"t1"}`,
+		`{"tool":"mcp__payments__","server":"payments","input":{},"tool_use_id":"t1"}`,
 		`{"tool":"Read","input":{},"tool_use_id":"t1"}`,
-		`{"tool":"Read","server":"pay","input":{},"tool_use_id":"t1"}`,
+		`{"tool":"Read","server":"payments","input":{},"tool_use_id":"t1"}`,
 		`{"tool":"mcp__x","input":{},"tool_use_id":"t1"}`,
 	} {
 		f.Add([]byte(s))
