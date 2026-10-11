@@ -44,6 +44,9 @@ const (
 	FactType_FACT_TYPE_IDENTIFIER FactType = 5
 	// {"time": "2026-10-09T12:00:00Z"}
 	FactType_FACT_TYPE_TIMESTAMP FactType = 6
+	// {"object": {"sha": "…", "draft": false}}: members are strings, integers,
+	// booleans, lists and objects, at most 16 KiB (G0 M8).
+	FactType_FACT_TYPE_OBJECT FactType = 7
 )
 
 // Enum value maps for FactType.
@@ -56,6 +59,7 @@ var (
 		4: "FACT_TYPE_MONEY",
 		5: "FACT_TYPE_IDENTIFIER",
 		6: "FACT_TYPE_TIMESTAMP",
+		7: "FACT_TYPE_OBJECT",
 	}
 	FactType_value = map[string]int32{
 		"FACT_TYPE_UNSPECIFIED": 0,
@@ -65,6 +69,7 @@ var (
 		"FACT_TYPE_MONEY":       4,
 		"FACT_TYPE_IDENTIFIER":  5,
 		"FACT_TYPE_TIMESTAMP":   6,
+		"FACT_TYPE_OBJECT":      7,
 	}
 )
 
@@ -1074,7 +1079,7 @@ const file_pantherclaw_v1_facts_proto_rawDesc = "" +
 	"\x14ListProvidersRequest\x12)\n" +
 	"\x10include_disabled\x18\x01 \x01(\bR\x0fincludeDisabled\"S\n" +
 	"\x15ListProvidersResponse\x12:\n" +
-	"\tproviders\x18\x01 \x03(\v2\x1c.pantherclaw.v1.FactProviderR\tproviders\"\xf4\x01\n" +
+	"\tproviders\x18\x01 \x03(\v2\x1c.pantherclaw.v1.FactProviderR\tproviders\"\xf5\x01\n" +
 	"\x0fFactObservation\x12\x1e\n" +
 	"\x04name\x18\x01 \x01(\tB\n" +
 	"\xbaH\ar\x05\x10\x01\x18\x80\x01R\x04name\x12-\n" +
@@ -1082,9 +1087,8 @@ const file_pantherclaw_v1_facts_proto_rawDesc = "" +
 	"\xbaH\ar\x05\x10\x01\x18\x80\x01R\vsubjectType\x12)\n" +
 	"\n" +
 	"subject_id\x18\x03 \x01(\tB\n" +
-	"\xbaH\ar\x05\x10\x01\x18\x80\x02R\tsubjectId\x12 \n" +
-	"\x05value\x18\x04 \x01(\fB\n" +
-	"\xbaH\az\x05\x10\x02\x18\x80 R\x05value\x12E\n" +
+	"\xbaH\ar\x05\x10\x01\x18\x80\x02R\tsubjectId\x12!\n" +
+	"\x05value\x18\x04 \x01(\fB\v\xbaH\bz\x06\x10\x02\x18\x80\x82\x01R\x05value\x12E\n" +
 	"\fobserve_time\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampB\x06\xbaH\x03\xc8\x01\x01R\vobserveTime\"b\n" +
 	"\x0fPutFactsRequest\x12O\n" +
 	"\fobservations\x18\x01 \x03(\v2\x1f.pantherclaw.v1.FactObservationB\n" +
@@ -1116,7 +1120,7 @@ const file_pantherclaw_v1_facts_proto_rawDesc = "" +
 	"\xbaH\ar\x05\x10\x01\x18\x80\x02R\tsubjectId\x12%\n" +
 	"\x05names\x18\x03 \x03(\tB\x0f\xbaH\f\x92\x01\t\x10@\"\x05r\x03\x18\x80\x01R\x05names\"?\n" +
 	"\x11ListFactsResponse\x12*\n" +
-	"\x05facts\x18\x01 \x03(\v2\x14.pantherclaw.v1.FactR\x05facts*\xb2\x01\n" +
+	"\x05facts\x18\x01 \x03(\v2\x14.pantherclaw.v1.FactR\x05facts*\xc8\x01\n" +
 	"\bFactType\x12\x19\n" +
 	"\x15FACT_TYPE_UNSPECIFIED\x10\x00\x12\x15\n" +
 	"\x11FACT_TYPE_BOOLEAN\x10\x01\x12\x15\n" +
@@ -1124,7 +1128,8 @@ const file_pantherclaw_v1_facts_proto_rawDesc = "" +
 	"\x11FACT_TYPE_DECIMAL\x10\x03\x12\x13\n" +
 	"\x0fFACT_TYPE_MONEY\x10\x04\x12\x18\n" +
 	"\x14FACT_TYPE_IDENTIFIER\x10\x05\x12\x17\n" +
-	"\x13FACT_TYPE_TIMESTAMP\x10\x06*g\n" +
+	"\x13FACT_TYPE_TIMESTAMP\x10\x06\x12\x14\n" +
+	"\x10FACT_TYPE_OBJECT\x10\a*g\n" +
 	"\rProviderState\x12\x1e\n" +
 	"\x1aPROVIDER_STATE_UNSPECIFIED\x10\x00\x12\x19\n" +
 	"\x15PROVIDER_STATE_ACTIVE\x10\x01\x12\x1b\n" +

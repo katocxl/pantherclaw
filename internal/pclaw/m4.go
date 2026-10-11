@@ -46,6 +46,7 @@ var (
 		"boolean": pantherclawv1.FactType_FACT_TYPE_BOOLEAN, "integer": pantherclawv1.FactType_FACT_TYPE_INTEGER,
 		"decimal": pantherclawv1.FactType_FACT_TYPE_DECIMAL, "money": pantherclawv1.FactType_FACT_TYPE_MONEY,
 		"identifier": pantherclawv1.FactType_FACT_TYPE_IDENTIFIER, "timestamp": pantherclawv1.FactType_FACT_TYPE_TIMESTAMP,
+		"object": pantherclawv1.FactType_FACT_TYPE_OBJECT,
 	}
 	packageStates = map[string]pantherclawv1.PackageState{
 		"draft": pantherclawv1.PackageState_PACKAGE_STATE_DRAFT, "reviewed": pantherclawv1.PackageState_PACKAGE_STATE_REVIEWED,

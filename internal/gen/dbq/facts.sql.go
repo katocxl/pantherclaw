@@ -62,7 +62,7 @@ func (q *Queries) GetFact(ctx context.Context, arg GetFactParams) (time.Time, er
 
 const getFactProviderByAccount = `-- name: GetFactProviderByAccount :one
 SELECT id, name, service_account_id, state FROM pc.fact_providers
-WHERE org_id = $1 AND service_account_id = $2 AND state = 'ACTIVE'
+WHERE org_id = $1 AND service_account_id = $2::uuid AND state = 'ACTIVE'
 ORDER BY created_at
 LIMIT 1
 `
@@ -70,7 +70,7 @@ LIMIT 1
 type GetFactProviderByAccountRow struct {
 	ID               ids.UUID
 	Name             string
-	ServiceAccountID ids.UUID
+	ServiceAccountID *ids.UUID
 	State            string
 }
 
@@ -122,7 +122,7 @@ type InsertFactProviderParams struct {
 	OrgID            ids.OrgID
 	ID               ids.UUID
 	Name             string
-	ServiceAccountID ids.UUID
+	ServiceAccountID *ids.UUID
 	CreatedBy        string
 }
 
@@ -221,7 +221,7 @@ LIMIT 500
 type ListFactProvidersRow struct {
 	ID               ids.UUID
 	Name             string
-	ServiceAccountID ids.UUID
+	ServiceAccountID *ids.UUID
 	State            string
 }
 

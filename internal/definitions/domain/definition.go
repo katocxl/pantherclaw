@@ -78,6 +78,10 @@ type Definition struct {
 	Mappings      []Mapping            `json:"mappings"`
 	// Dispatch is the outbound request template (G0 M6, HR-075).
 	Dispatch *Dispatch `json:"dispatch,omitzero"`
+	// Test marks the harmless read a connection test runs (G0 M8, C2): a
+	// read with an HTTP GET dispatch template and no required params; at
+	// most one per package.
+	Test bool `json:"test,omitzero"`
 
 	// Digest is "sha256:<hex>" of the canonical JSON of this definition,
 	// mappings included. It is what ActionIR pins (definition.digest) and
@@ -150,6 +154,10 @@ type RetrySpec struct {
 type ApprovalTemplate struct {
 	Title  string   `json:"title"`
 	Fields []string `json:"fields"`
+	// InvalidateOn names a prerequisite fact whose change supersedes every
+	// unconsumed approval request for the same target (G0 M8, HR-205: a
+	// pull request's new head, github.pull.head).
+	InvalidateOn string `json:"invalidate_on,omitzero"`
 }
 
 // Basis is where the evidence for a definition comes from (F391).
@@ -195,6 +203,9 @@ var (
 	kindRe   = regexp.MustCompile(`^[a-z][a-z0-9_]*(\.[a-z0-9_]+){0,7}$`)
 	reviewRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9 ._@-]{0,127}$`)
 	holderRe = regexp.MustCompile(`\{([^{}]*)\}`)
+	// partRe is a named group of a target id pattern, which a template
+	// references as target.id.<name>.
+	partRe = regexp.MustCompile(`^[a-z][a-z0-9_]{0,31}$`)
 )
 
 const (
@@ -229,10 +240,15 @@ func (d *Definition) Validate() error {
 		return invalid("%s: 1..%d effects and at most %d side effects", op, maxItems, maxItems)
 	case len(d.Params) > maxItems || len(d.Mappings) > maxItems:
 		return invalid("%s: at most %d params and %d mappings", op, maxItems, maxItems)
-	case len(d.Mappings) == 0 && d.Access != AccessRead:
-		// A read without mappings is internal: only a verifier or a target
-		// log may use it (Package.Validate), never an agent.
-		return invalid("%s: a write needs 1..%d mappings", op, maxItems)
+	case len(d.Mappings) == 0 && d.Access != AccessRead && d.Dispatch != nil:
+		// A read without mappings is internal: only a verifier, a target
+		// log or a connection test may use it, never an agent. A write
+		// without mappings is virtual: never dispatched, it only names a
+		// consequence of this package (Package.Validate).
+		return invalid("%s: a write needs 1..%d mappings, or no dispatch when it is a consequence", op, maxItems)
+	case d.Test && (d.Access != AccessRead || d.Dispatch == nil || d.Dispatch.HTTP == nil || d.Dispatch.HTTP.Method != methods[0] ||
+		slices.ContainsFunc(slices.Collect(maps.Values(d.Params)), func(p ParamSpec) bool { return p.Required })):
+		return invalid("%s: a connection test is a read with an HTTP GET template and no required params", op)
 	}
 	if err := text(op+": summary", d.Summary); err != nil {
 		return err
@@ -295,6 +311,12 @@ func (t TargetSpec) validate(op string) error {
 	}
 	if err := anchored(op+": target.id_pattern", t.IDPattern); err != nil {
 		return err
+	}
+	groups := regexp.MustCompile(t.IDPattern).SubexpNames()
+	for i, g := range groups {
+		if g != "" && (!partRe.MatchString(g) || slices.Contains(groups[:i], g)) {
+			return invalid("%s: target.id_pattern group %q must be a distinct lowercase name", op, g)
+		}
 	}
 	switch t.Account {
 	case PresenceRequired, PresenceOptional:
@@ -394,6 +416,9 @@ func (d *Definition) validateApproval() error {
 	}
 	if len(a.Fields) == 0 || len(a.Fields) > maxItems {
 		return invalid("%s: approval needs 1..%d fields", d.Operation, maxItems)
+	}
+	if a.InvalidateOn != "" && !d.prerequisiteField("facts."+a.InvalidateOn) {
+		return invalid("%s: approval.invalidate_on names %q, which is not a prerequisite fact", d.Operation, a.InvalidateOn)
 	}
 	refs := a.Fields
 	for _, m := range holderRe.FindAllStringSubmatch(a.Title, -1) {

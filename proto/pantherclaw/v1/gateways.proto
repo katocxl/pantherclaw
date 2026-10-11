@@ -509,6 +509,8 @@ message SealedCredential {
   string header = 7;
   // Optional scheme before it, for example "Bearer".
   string scheme = 8;
+  // Kind, bound into the seal: "static" or "github_app" (G0 M8).
+  string kind = 9;
 }
 
 // WatchContainmentRequest opens the stream.

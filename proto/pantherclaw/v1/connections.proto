@@ -214,6 +214,9 @@ message ConnectionCredential {
   string created_by = 10;
   // When it was stored.
   google.protobuf.Timestamp create_time = 11;
+  // Kind: "static" (placed as sealed) or "github_app" (an App key from
+  // which the gateway mints an installation token per action, G0 M8).
+  string kind = 12;
 }
 
 // CreateConnectionRequest registers a connection.
@@ -511,6 +514,16 @@ message PutCredentialRequest {
   string scheme = 7 [(buf.validate.field).string = {
     max_len: 32
     pattern: "^([A-Za-z0-9._-]{1,32})?$"
+  }];
+  // Kind the seal bound: "static" (the default when empty) or "github_app"
+  // (G0 M8 decision 3), which needs the header Authorization and the
+  // scheme Bearer.
+  string kind = 8 [(buf.validate.field).string = {
+    in: [
+      "",
+      "static",
+      "github_app"
+    ]
   }];
 }
 

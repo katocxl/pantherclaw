@@ -21,7 +21,7 @@ func credentialOf(m credapp.Metadata) *pb.ConnectionCredential {
 	return &pb.ConnectionCredential{
 		Id: m.ID.String(), ConnectionId: m.ConnectionID.String(), Version: m.Version, BrokerKeyId: m.BrokerKeyID.String(),
 		BrokerKeyFingerprint: m.BrokerKeyFingerprint, AllowedHosts: m.AllowedHosts, Header: m.Header, Scheme: deref(m.Scheme),
-		State: credentialStates[m.State], CreatedBy: m.CreatedBy, CreateTime: timestamppb.New(m.CreatedAt),
+		State: credentialStates[m.State], CreatedBy: m.CreatedBy, CreateTime: timestamppb.New(m.CreatedAt), Kind: m.Kind,
 	}
 }
 
@@ -54,7 +54,7 @@ func (h *Handler) PutCredential(ctx context.Context, req *pb.PutCredentialReques
 	}
 	m, err := h.creds.PutCredential(ctx, credapp.PutInput{
 		Connection: id, BrokerKey: key, Version: req.GetVersion(), Sealed: req.GetSealed(), AllowedHosts: req.GetAllowedHosts(),
-		Header: req.GetHeader(), Scheme: req.GetScheme(),
+		Header: req.GetHeader(), Scheme: req.GetScheme(), Kind: req.GetKind(),
 	})
 	if err != nil {
 		return nil, err

@@ -143,7 +143,7 @@ func (q *Queries) GatewayPackages(ctx context.Context, orgID ids.OrgID, gatewayI
 }
 
 const gatewaySealedCredentials = `-- name: GatewaySealedCredentials :many
-SELECT cr.id, cr.connection_id, cr.version, cr.broker_key_id, cr.sealed, cr.allowed_hosts, cr.header, cr.scheme
+SELECT cr.id, cr.connection_id, cr.version, cr.broker_key_id, cr.sealed, cr.allowed_hosts, cr.header, cr.scheme, cr.kind
 FROM pc.credentials cr
 JOIN pc.connections c ON c.org_id = cr.org_id AND c.id = cr.connection_id
 JOIN pc.broker_keys b ON b.org_id = cr.org_id AND b.id = cr.broker_key_id
@@ -161,6 +161,7 @@ type GatewaySealedCredentialsRow struct {
 	AllowedHosts []string
 	Header       string
 	Scheme       *string
+	Kind         string
 }
 
 func (q *Queries) GatewaySealedCredentials(ctx context.Context, orgID ids.OrgID, gatewayID ids.UUID) ([]GatewaySealedCredentialsRow, error) {
@@ -181,6 +182,7 @@ func (q *Queries) GatewaySealedCredentials(ctx context.Context, orgID ids.OrgID,
 			&i.AllowedHosts,
 			&i.Header,
 			&i.Scheme,
+			&i.Kind,
 		); err != nil {
 			return nil, err
 		}

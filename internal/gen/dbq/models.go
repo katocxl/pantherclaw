@@ -374,6 +374,20 @@ type PcConnection struct {
 	UpdatedAt        time.Time
 }
 
+type PcConnectionGithub struct {
+	OrgID               ids.OrgID
+	ConnectionID        ids.UUID
+	AppClientID         string
+	InstallationID      int64
+	AccountLogin        string
+	AccountID           pgtype.Int8
+	Permissions         []byte
+	RepositorySelection *string
+	ReadAt              *time.Time
+	UpdatedBy           string
+	UpdatedAt           time.Time
+}
+
 type PcConnectionRoute struct {
 	OrgID        ids.OrgID
 	ConnectionID ids.UUID
@@ -544,6 +558,7 @@ type PcCredential struct {
 	SupersededAt *time.Time
 	RevokedBy    *string
 	RevokedAt    *time.Time
+	Kind         string
 }
 
 type PcCrossOrgListAudit struct {
@@ -833,10 +848,12 @@ type PcFactProvider struct {
 	OrgID            ids.OrgID
 	ID               ids.UUID
 	Name             string
-	ServiceAccountID ids.UUID
+	ServiceAccountID *ids.UUID
 	State            string
 	CreatedBy        string
 	CreatedAt        time.Time
+	GatewayID        *ids.UUID
+	ConnectionID     *ids.UUID
 }
 
 type PcGateway struct {
@@ -879,6 +896,30 @@ type PcGatewayEnrollmentToken struct {
 	ExpiresAt  time.Time
 	UsedAt     *time.Time
 	UsedCertID *ids.UUID
+}
+
+type PcGithubIdentity struct {
+	OrgID        ids.OrgID
+	ID           ids.UUID
+	UserID       ids.UUID
+	GithubLogin  string
+	GithubUserID int64
+	LinkedBy     string
+	LinkedAt     time.Time
+}
+
+type PcGithubScanRun struct {
+	OrgID          ids.OrgID
+	ID             ids.UUID
+	ConnectionID   ids.UUID
+	VerificationID *ids.UUID
+	State          string
+	Counts         []byte
+	Scanned        []string
+	NotScanned     []byte
+	StartedBy      string
+	CreatedAt      time.Time
+	FinishedAt     *time.Time
 }
 
 type PcGrant struct {

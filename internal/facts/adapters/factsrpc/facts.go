@@ -45,6 +45,7 @@ var (
 		pantherclawv1.FactType_FACT_TYPE_MONEY:      domain.TypeMoney,
 		pantherclawv1.FactType_FACT_TYPE_IDENTIFIER: domain.TypeIdentifier,
 		pantherclawv1.FactType_FACT_TYPE_TIMESTAMP:  domain.TypeTimestamp,
+		pantherclawv1.FactType_FACT_TYPE_OBJECT:     domain.TypeObject,
 	}
 	typeProtos = func() map[domain.Type]pantherclawv1.FactType {
 		out := map[domain.Type]pantherclawv1.FactType{}

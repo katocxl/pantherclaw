@@ -13,7 +13,7 @@ VALUES (sqlc.arg(org_id), sqlc.arg(provider_id), sqlc.arg(name), sqlc.arg(value_
 
 -- name: GetFactProviderByAccount :one
 SELECT id, name, service_account_id, state FROM pc.fact_providers
-WHERE org_id = sqlc.arg(org_id) AND service_account_id = sqlc.arg(service_account_id) AND state = 'ACTIVE'
+WHERE org_id = sqlc.arg(org_id) AND service_account_id = sqlc.arg(service_account_id)::uuid AND state = 'ACTIVE'
 ORDER BY created_at
 LIMIT 1;
 

@@ -2294,7 +2294,9 @@ type SealedCredential struct {
 	// Header it goes in.
 	Header string `protobuf:"bytes,7,opt,name=header,proto3" json:"header,omitempty"`
 	// Optional scheme before it, for example "Bearer".
-	Scheme        string `protobuf:"bytes,8,opt,name=scheme,proto3" json:"scheme,omitempty"`
+	Scheme string `protobuf:"bytes,8,opt,name=scheme,proto3" json:"scheme,omitempty"`
+	// Kind, bound into the seal: "static" or "github_app" (G0 M8).
+	Kind          string `protobuf:"bytes,9,opt,name=kind,proto3" json:"kind,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2381,6 +2383,13 @@ func (x *SealedCredential) GetHeader() string {
 func (x *SealedCredential) GetScheme() string {
 	if x != nil {
 		return x.Scheme
+	}
+	return ""
+}
+
+func (x *SealedCredential) GetKind() string {
+	if x != nil {
+		return x.Kind
 	}
 	return ""
 }
@@ -3435,7 +3444,7 @@ const file_pantherclaw_v1_gateways_proto_rawDesc = "" +
 	"\x0eGatewayPackage\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n" +
 	"\aversion\x18\x02 \x01(\tR\aversion\x12\x10\n" +
-	"\x03raw\x18\x03 \x01(\fR\x03raw\"\xf2\x01\n" +
+	"\x03raw\x18\x03 \x01(\fR\x03raw\"\x86\x02\n" +
 	"\x10SealedCredential\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12#\n" +
 	"\rconnection_id\x18\x02 \x01(\tR\fconnectionId\x12\x18\n" +
@@ -3444,7 +3453,8 @@ const file_pantherclaw_v1_gateways_proto_rawDesc = "" +
 	"\x06sealed\x18\x05 \x01(\fR\x06sealed\x12#\n" +
 	"\rallowed_hosts\x18\x06 \x03(\tR\fallowedHosts\x12\x16\n" +
 	"\x06header\x18\a \x01(\tR\x06header\x12\x16\n" +
-	"\x06scheme\x18\b \x01(\tR\x06scheme\"\x19\n" +
+	"\x06scheme\x18\b \x01(\tR\x06scheme\x12\x12\n" +
+	"\x04kind\x18\t \x01(\tR\x04kind\"\x19\n" +
 	"\x17WatchContainmentRequest\"\x87\x03\n" +
 	"\x18WatchContainmentResponse\x128\n" +
 	"\x04kind\x18\x01 \x01(\x0e2$.pantherclaw.v1.ContainmentStateKindR\x04kind\x12\x14\n" +
