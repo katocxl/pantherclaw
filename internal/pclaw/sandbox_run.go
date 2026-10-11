@@ -31,6 +31,7 @@ import (
 	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
 	"github.com/katocxl/pantherclaw/internal/sandbox"
 	"github.com/katocxl/pantherclaw/internal/sandbox/docker"
+	"github.com/katocxl/pantherclaw/internal/sandbox/workspace"
 	"github.com/katocxl/pantherclaw/internal/sim/canary"
 )
 
@@ -76,8 +77,8 @@ func parseSandboxRun(a *app, args []string) (sandboxRunFlags, error) {
 	fs.StringVar(&f.image, "image", "", "the agent's image, pinned by digest")
 	fs.StringVar(&f.edgeImage, "edge-image", edge, "the edge image id or digest (task sandbox:images; PANTHERCLAW_SANDBOX_EDGE_IMAGE)")
 	fs.StringVar(&f.probeImage, "probe-image", probe, "the probe image id or digest (PANTHERCLAW_SANDBOX_PROBE_IMAGE)")
-	fs.StringVar(&f.workspace, "workspace", "", "a directory copied into the sandbox")
-	fs.StringVar(&f.out, "out", "", "an empty or new directory the workspace is copied back to")
+	fs.StringVar(&f.workspace, "workspace", "", "a directory copied into the sandbox (its repository cleaned: objects and refs only)")
+	fs.StringVar(&f.out, "out", "", "an empty or new directory that gets the agent's changes as a patch (changes.patch, changes.txt, binary/)")
 	fs.StringVar(&f.canaryListen, "canary-listen", "127.0.0.1", "where the canary listens on this host")
 	fs.DurationVar(&f.ttl, "ttl", 2*time.Hour, "how long the session lasts (at most 24h)")
 	if err := fs.Parse(args); err != nil {
@@ -221,8 +222,9 @@ func sandboxRun(ctx context.Context, a *app, args []string) error {
 	if err := box.PrepareAgent(ctx, sandbox.Agent{Image: f.image, Args: f.args, Workspace: f.workspace}); err != nil {
 		return err
 	}
-	if err := dc.Start(ctx, box.Agent); err != nil {
-		return err
+	if f.workspace != "" {
+		_, _ = fmt.Fprintf(a.stderr, "copied %s in: its repository without hooks, config or credentials (objects and refs only); "+
+			"everything else under it, .env files included, is within the agent's reach\n", f.workspace)
 	}
 	n := started.GetNonces()
 	evidence, err := box.Probe(ctx, sandbox.Nonces{Sandbox: n.GetSandbox(), Control: n.GetControl(), Canary: n.GetCanary()})
@@ -240,6 +242,11 @@ func sandboxRun(ctx context.Context, a *app, args []string) error {
 		return fmt.Errorf("the canary report: %w", err)
 	}
 	printClosures(a.stdout, closed.GetClosures())
+	// The agent starts once the probes have run: it never shares the
+	// sandbox network with the probe container.
+	if err := dc.Start(ctx, box.Agent); err != nil {
+		return err
+	}
 	if err := dc.Follow(ctx, box.Agent, a.stdout); err != nil {
 		return err
 	}
@@ -248,9 +255,11 @@ func sandboxRun(ctx context.Context, a *app, args []string) error {
 		return err
 	}
 	if f.out != "" {
-		if err := box.CopyOut(ctx, f.out); err != nil {
+		changes, err := box.CopyOut(ctx, f.workspace, f.out)
+		if err != nil {
 			return err
 		}
+		printChanges(a.stdout, f.out, changes)
 	}
 	if code != 0 {
 		return fmt.Errorf("the agent exited with code %d", code)
@@ -356,5 +365,33 @@ func printClosures(w io.Writer, closures []*pantherclawv1.SandboxClosure) {
 		}
 		_, _ = fmt.Fprintf(w, "connection %s: sandbox closure FAILED (closure %s): %s\n", c.GetConnectionId(), c.GetClosureId(),
 			strings.Join(c.GetFailed(), ", "))
+	}
+}
+
+// printChanges says what the agent changed and where the patch is, and
+// lists the dotfiles, editor and task files among the changes for review
+// before anything runs (founder decision 2026-10-11).
+func printChanges(w io.Writer, out string, changes []workspace.Change) {
+	if len(changes) == 0 {
+		_, _ = fmt.Fprintln(w, "the agent changed nothing in the workspace")
+		return
+	}
+	var flagged, binary []string
+	for _, c := range changes {
+		_, _ = fmt.Fprintf(w, "  %-8s %q\n", c.Kind, c.Path)
+		if c.Flagged {
+			flagged = append(flagged, strconv.Quote(c.Path))
+		}
+		if c.Binary && c.Kind != workspace.Deleted {
+			binary = append(binary, strconv.Quote(c.Path))
+		}
+	}
+	_, _ = fmt.Fprintf(w, "%d changes: apply %s to your repository with git apply\n", len(changes), filepath.Join(out, sandbox.PatchFile))
+	if len(binary) > 0 {
+		_, _ = fmt.Fprintf(w, "binary files are not in the patch; their new content is under %s: %s\n",
+			filepath.Join(out, sandbox.BinaryDir), strings.Join(binary, ", "))
+	}
+	if len(flagged) > 0 {
+		_, _ = fmt.Fprintf(w, "review before running anything, these dotfiles, editor or task files changed: %s\n", strings.Join(flagged, ", "))
 	}
 }
