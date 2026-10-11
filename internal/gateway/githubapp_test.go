@@ -179,3 +179,45 @@ func TestHR203_NoTokenNoDispatch(t *testing.T) {
 		t.Fatalf("minted %+v", got)
 	}
 }
+
+// withInstallation records the connection's GitHub App installation, as
+// the server's configuration carries it (connection_github).
+func withInstallation(app string, installation int64, account string) func(*harness) {
+	return func(h *harness) {
+		h.conn.Github = &pb.GitHubInstallation{AppClientId: app, InstallationId: installation, AccountLogin: account}
+	}
+}
+
+// TestHR203_AnotherAccountIsRefusedBeforeTheDecision: with the connection's
+// installation recorded, an action on another account's repository is
+// CANNOT_AUTHORIZE WRONG_ACCOUNT before the Authority is asked or GitHub
+// reached; the installation's own repositories go ahead as before.
+func TestHR203_AnotherAccountIsRefusedBeforeTheDecision(t *testing.T) {
+	w := newGitHubWorld(t)
+	h := setup(t, withGitHubApp(t, w), withInstallation("Iv23liGateway", 7, "acme"))
+	r := h.do(t, http.MethodGet, "/payments/repos/evil/payments/contents/README.md", "", nil)
+	if r.code != http.StatusForbidden || r.refusal.Error != "WRONG_ACCOUNT" || r.refusal.Decision != "CANNOT_AUTHORIZE" {
+		t.Fatalf("another account: %d %+v", r.code, r.refusal)
+	}
+	if n := h.auth.snap().authorize; n != 0 || len(w.sim.Requests()) != 1 { // the test's own pull request
+		t.Fatalf("%d decisions, %d GitHub requests: another account went further than the gateway", n, len(w.sim.Requests()))
+	}
+	if r := h.do(t, http.MethodGet, "/payments/repos/acme/payments/contents/README.md", "", nil); r.code != http.StatusOK {
+		t.Fatalf("the installation's own repository: %d %+v", r.code, r.refusal)
+	}
+}
+
+// TestHR203_ASealForAnotherInstallationMintsNothing: a GitHub App
+// credential whose sealed installation is not the one the connection
+// records mints no token, so nothing is sent.
+func TestHR203_ASealForAnotherInstallationMintsNothing(t *testing.T) {
+	w := newGitHubWorld(t)
+	h := setup(t, withGitHubApp(t, w), withInstallation("Iv23liGateway", 8, "acme"))
+	r := h.do(t, http.MethodGet, "/payments/repos/acme/payments/contents/README.md", "", nil)
+	if r.code != http.StatusBadGateway || r.refusal.Error != "credential_unavailable" {
+		t.Fatalf("a seal for installation 7 on a connection of installation 8: %d %+v", r.code, r.refusal)
+	}
+	if got := w.sim.Tokens(); len(got) != 0 {
+		t.Fatalf("minted %+v", got)
+	}
+}

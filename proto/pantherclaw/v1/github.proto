@@ -1,0 +1,33 @@
+// SPDX-License-Identifier: BUSL-1.1
+// Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+
+syntax = "proto3";
+
+package pantherclaw.v1;
+
+import "buf/validate/validate.proto";
+import "google/protobuf/timestamp.proto";
+
+// GitHubInstallation is the GitHub App installation behind a connection
+// (G0 M8 decision 3, ADR-0021). It is configuration, never a secret: the
+// App's key stays sealed to the gateway. An action's repository must belong
+// to the account; any other is CANNOT_AUTHORIZE WRONG_ACCOUNT. The
+// permissions and repository selection are what was last read from GitHub,
+// with when (M9 F048 compares them with what operations use).
+message GitHubInstallation {
+  // The App's client id (the App JWT's issuer).
+  string app_client_id = 1 [(buf.validate.field).string.pattern = "^[A-Za-z0-9._-]{1,64}$"];
+  // The installation id.
+  int64 installation_id = 2 [(buf.validate.field).int64.gt = 0];
+  // The account it is installed on: a lowercase GitHub login.
+  string account_login = 3 [(buf.validate.field).string.pattern = "^[a-z0-9][a-z0-9-]{0,38}$"];
+  // The account's GitHub id, once read.
+  int64 account_id = 4;
+  // The installation's permissions as last read, by name ("contents":
+  // "write").
+  map<string, string> permissions = 5;
+  // "all" or "selected", as last read; empty before the first read.
+  string repository_selection = 6;
+  // When the permissions and selection were read.
+  google.protobuf.Timestamp read_time = 7;
+}

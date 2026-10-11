@@ -134,10 +134,16 @@ func seal(ctx context.Context, a *app, args []string) error {
 	if err != nil {
 		return err
 	}
-	res, err := c.connections.PutCredential(ctx, &pb.PutCredentialRequest{
+	req := &pb.PutCredentialRequest{
 		ConnectionId: k.GetConnectionId(), Version: k.GetVersion(), BrokerKeyId: k.GetBrokerKeyId(), Sealed: sealed,
 		AllowedHosts: k.GetAllowedHosts(), Header: k.GetHeader(), Scheme: k.GetScheme(), Kind: kind,
-	})
+	}
+	if kind == domain.KindGitHubApp {
+		// The installation is configuration, recorded beside the sealed key
+		// so that another account's repository is refused (ADR-0021).
+		req.Github = &pb.GitHubInstallation{AppClientId: *app, InstallationId: *installation, AccountLogin: *account}
+	}
+	res, err := c.connections.PutCredential(ctx, req)
 	if err != nil {
 		return err
 	}

@@ -44,7 +44,7 @@ pclaw seal --connection <connection id> --github-app <client id> --installation 
   --from-file app.pem --fingerprint <broker key fingerprint from the gateway's operator>
 ```
 
-`pclaw seal` checks the key (RSA, at least 2048 bits), the account and the connection's `Authorization: Bearer` binding before it seals. It seals the App's id, installation, account and key as one GitHub App credential, bound to the connection, its hosts, the broker key and its kind. Then **delete every copy of the `.pem` file**: the sealed credential is the only one PantherClaw needs. To rotate, generate a new key on GitHub, seal it again (a new version supersedes the old one) and delete the old key on GitHub.
+`pclaw seal` checks the key (RSA, at least 2048 bits), the account and the connection's `Authorization: Bearer` binding before it seals. It seals the App's id, installation, account and key as one GitHub App credential, bound to the connection, its hosts, the broker key and its kind. It also records the App, the installation and the account as the connection's installation. These are configuration, not secrets: `pclaw connection get` shows them, and the gateway refuses a seal that holds another installation. Then **delete every copy of the `.pem` file**: the sealed credential is the only one PantherClaw needs. To rotate, generate a new key on GitHub, seal it again (a new version supersedes the old one) and delete the old key on GitHub.
 
 ## 3. Register the gateway as the connection's fact provider
 
@@ -68,9 +68,10 @@ When a fact cannot be read in time, nothing is reported for it, and the decision
 
 ## 4. Check it
 
-- `pclaw credential list <connection id>` shows the active version with kind `github_app`.
+- `pclaw credential list <connection id>` shows the active version with kind `github_app`, and `pclaw connection get <connection id>` shows the installation.
 - An allowed read through the gateway (`GET /github/repos/<owner>/<repo>`) answers. In the App's GitHub audit log, each action shows one token created and one revoked.
-- A repository on another account, or an operation whose permission the App lacks, is refused with `credential_unavailable`. Nothing reaches GitHub except the refused token request.
+- A repository on another account is refused with `CANNOT_AUTHORIZE` `WRONG_ACCOUNT` before it is decided, and nothing reaches GitHub.
+- An operation whose permission the App lacks is refused with `credential_unavailable`. Nothing reaches GitHub except the refused token request.
 
 ## Failure modes
 

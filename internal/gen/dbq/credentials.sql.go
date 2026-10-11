@@ -183,3 +183,40 @@ func (q *Queries) SupersedeCredentials(ctx context.Context, orgID ids.OrgID, con
 	}
 	return result.RowsAffected(), nil
 }
+
+const upsertConnectionGitHub = `-- name: UpsertConnectionGitHub :exec
+INSERT INTO pc.connection_github AS g (org_id, connection_id, app_client_id, installation_id, account_login, updated_by)
+VALUES ($1, $2, $3, $4, $5,
+        $6)
+ON CONFLICT (org_id, connection_id) DO UPDATE SET
+    app_client_id = EXCLUDED.app_client_id, installation_id = EXCLUDED.installation_id, account_login = EXCLUDED.account_login,
+    account_id = CASE WHEN g.installation_id = EXCLUDED.installation_id THEN g.account_id END,
+    permissions = CASE WHEN g.installation_id = EXCLUDED.installation_id THEN g.permissions ELSE '{}'::jsonb END,
+    repository_selection = CASE WHEN g.installation_id = EXCLUDED.installation_id THEN g.repository_selection END,
+    read_at = CASE WHEN g.installation_id = EXCLUDED.installation_id THEN g.read_at END,
+    updated_by = EXCLUDED.updated_by, updated_at = now()
+`
+
+type UpsertConnectionGitHubParams struct {
+	OrgID          ids.OrgID
+	ConnectionID   ids.UUID
+	AppClientID    string
+	InstallationID int64
+	AccountLogin   string
+	UpdatedBy      string
+}
+
+// UpsertConnectionGitHub records the GitHub App installation a sealed
+// github_app credential is for (connection_github; G0 M8, ADR-0021). What
+// was read from an installation is kept only while it stays the same one.
+func (q *Queries) UpsertConnectionGitHub(ctx context.Context, arg UpsertConnectionGitHubParams) error {
+	_, err := q.db.Exec(ctx, upsertConnectionGitHub,
+		arg.OrgID,
+		arg.ConnectionID,
+		arg.AppClientID,
+		arg.InstallationID,
+		arg.AccountLogin,
+		arg.UpdatedBy,
+	)
+	return err
+}

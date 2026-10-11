@@ -174,5 +174,8 @@ func (e *Engine) mint(ctx context.Context, conn *control.Connection, owner, repo
 	if err != nil {
 		return nil, err
 	}
+	if !installed(conn, app) {
+		return nil, errInstallation
+	}
 	return broker.MintInstallationToken(ctx, c, conn.GetBaseUrl(), conn.Credential.GetAllowedHosts(), app, owner, repo, scopes, time.Now())
 }
