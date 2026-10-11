@@ -11,10 +11,6 @@ VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(name), sqlc.arg(service_account
 INSERT INTO pc.fact_declarations (org_id, provider_id, name, value_type, subject_type, max_lag_s)
 VALUES (sqlc.arg(org_id), sqlc.arg(provider_id), sqlc.arg(name), sqlc.arg(value_type), sqlc.arg(subject_type), sqlc.arg(max_lag_s));
 
--- name: GetFactProvider :one
-SELECT id, name, service_account_id, state FROM pc.fact_providers
-WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id);
-
 -- name: GetFactProviderByAccount :one
 SELECT id, name, service_account_id, state FROM pc.fact_providers
 WHERE org_id = sqlc.arg(org_id) AND service_account_id = sqlc.arg(service_account_id) AND state = 'ACTIVE'

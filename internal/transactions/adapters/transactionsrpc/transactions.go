@@ -201,12 +201,24 @@ func outcome(o string) pantherclawv1.Outcome {
 	return pantherclawv1.Outcome(pantherclawv1.Outcome_value["OUTCOME_"+strings.ToUpper(o)])
 }
 
-// integrity reports how far an item is protected. Checkpoints and anchors
-// (track B) raise it further.
+var integrityStatus = map[app.IntegrityStatus]pantherclawv1.IntegrityStatus{
+	app.IntegrityPending:      pantherclawv1.IntegrityStatus_INTEGRITY_STATUS_PENDING,
+	app.IntegrityChained:      pantherclawv1.IntegrityStatus_INTEGRITY_STATUS_CHAINED,
+	app.IntegrityCheckpointed: pantherclawv1.IntegrityStatus_INTEGRITY_STATUS_CHECKPOINTED,
+	app.IntegrityAnchored:     pantherclawv1.IntegrityStatus_INTEGRITY_STATUS_ANCHORED,
+}
+
+// integrity reports how far an item is protected: chained, in a signed
+// checkpoint, or in an anchored one (F466–F468), with the checkpoint and
+// anchor that protect it.
 func integrity(i app.Integrity) *pantherclawv1.Integrity {
-	p := &pantherclawv1.Integrity{LedgerEntryId: i.Entry.String(), Sequence: i.Seq, Status: pantherclawv1.IntegrityStatus_INTEGRITY_STATUS_PENDING}
-	if i.Seq > 0 {
-		p.Status = pantherclawv1.IntegrityStatus_INTEGRITY_STATUS_CHAINED
+	s := i.Status()
+	p := &pantherclawv1.Integrity{LedgerEntryId: i.Entry.String(), Sequence: i.Seq, Status: integrityStatus[s]}
+	if s == app.IntegrityCheckpointed || s == app.IntegrityAnchored {
+		p.CheckpointSize = i.Checkpoint
+	}
+	if s == app.IntegrityAnchored {
+		p.AnchoredSize, p.AnchorTime = i.Anchored, timestamp(i.AnchoredAt)
 	}
 	return p
 }
