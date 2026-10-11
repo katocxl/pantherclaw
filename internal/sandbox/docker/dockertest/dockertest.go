@@ -85,10 +85,15 @@ func Container(t testing.TB, c *docker.Client, ct docker.Container) docker.Conta
 
 // BuildLinux builds the package pkg (an import path in this module) as a
 // static Linux binary for the engine's architecture and returns its path.
-// Containers get it as a read-only bind mount.
+// Containers get it as a read-only bind mount, with its directory as
+// their bind root.
 func BuildLinux(t testing.TB, e docker.Engine, pkg string) string {
 	t.Helper()
-	out := filepath.Join(t.TempDir(), filepath.Base(pkg))
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := filepath.Join(dir, filepath.Base(pkg))
 	cmd := exec.CommandContext(t.Context(), "go", "build", "-trimpath", "-o", out, pkg) //nolint:gosec // G204: test helper, fixed program
 	cmd.Env = append(os.Environ(), "GOOS=linux", "GOARCH="+e.Arch, "CGO_ENABLED=0")
 	if b, err := cmd.CombinedOutput(); err != nil {

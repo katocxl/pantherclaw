@@ -17,6 +17,23 @@ import (
 	"strings"
 )
 
+// MinID is the lowest uid and gid a container runs as: above every host
+// and system account (HR-085).
+const MinID = 10000
+
+// parseUser reads "uid:gid" as numbers, the way the engine does, and
+// returns the gid; ok is false below MinID. Leading zeros would make "00"
+// root, so the pattern has none.
+func parseUser(u string) (gid int, ok bool) {
+	m := userRE.FindStringSubmatch(u)
+	if m == nil {
+		return 0, false
+	}
+	uid, _ := strconv.Atoi(m[1])
+	gid, _ = strconv.Atoi(m[2])
+	return gid, uid >= MinID && gid >= MinID
+}
+
 // Default resource limits for a container.
 const (
 	DefaultPIDs      = 256
@@ -62,17 +79,24 @@ type Container struct {
 	Name string
 	// Image is pinned by digest.
 	Image string
-	// User is "uid:gid", never root.
+	// User is "uid:gid", both numeric and at least MinID: never root, and
+	// never a host or system account.
 	User string
 	// Args follow the image; distroless images have no entrypoint, so the
 	// first is the program.
 	Args []string
 	// Networks are user-defined networks the sandbox created; at least one.
 	Networks []string
-	// Env is NAME=VALUE only: a bare NAME would copy the host's value.
-	Env     []string
-	Mounts  []Mount
-	WorkDir string
+	// Env is NAME=VALUE only: a bare NAME would copy the host's value. It
+	// never carries a secret: values show on the docker command line and in
+	// inspect, and credentials are the edge's to inject (G0 M9 design
+	// decision 5).
+	Env    []string
+	Mounts []Mount
+	// BindRoot is the private directory every bind source lies in, the
+	// session's (HR-216); it is required when there is a bind mount.
+	BindRoot string
+	WorkDir  string
 	// Runtime is RuntimeRunc or RuntimeRunsc (Engine.Runtime): always
 	// named, so that the engine's default never applies (HR-218).
 	Runtime string
@@ -91,7 +115,7 @@ type Container struct {
 
 var (
 	imageRE  = regexp.MustCompile(`^[a-z0-9][a-z0-9._/:-]*@sha256:[0-9a-f]{64}$`)
-	userRE   = regexp.MustCompile(`^([0-9]{1,9}):([0-9]{1,9})$`)
+	userRE   = regexp.MustCompile(`^([1-9][0-9]{0,8}):([1-9][0-9]{0,8})$`)
 	envRE    = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]{0,127}=`)
 	targetRE = regexp.MustCompile(`^/[A-Za-z0-9._/-]+$`)
 )
@@ -104,11 +128,11 @@ func (c Container) args() ([]string, error) {
 	if !imageRE.MatchString(c.Image) {
 		return nil, bad("the image is not pinned by digest")
 	}
-	m := userRE.FindStringSubmatch(c.User)
-	if m == nil || m[1] == "0" || m[2] == "0" {
-		return nil, bad("the user is not a non-root uid:gid")
+	gid, ok := parseUser(c.User)
+	if !ok {
+		return nil, bad("the user is not a uid:gid of at least " + strconv.Itoa(MinID))
 	}
-	if c.PingGID != 0 && strconv.Itoa(c.PingGID) != m[2] {
+	if c.PingGID != 0 && c.PingGID != gid {
 		return nil, bad("the ping group is not the container's own")
 	}
 	if len(c.Networks) == 0 {
@@ -151,6 +175,9 @@ func (c Container) args() ([]string, error) {
 			return nil, bad("env entries are NAME=VALUE")
 		}
 		args = append(args, "--env", e)
+	}
+	if err := checkBinds(c.BindRoot, c.Mounts); err != nil {
+		return nil, bad(err.Error())
 	}
 	for _, m := range c.Mounts {
 		a, err := m.arg()
@@ -209,34 +236,46 @@ type ContainerInfo struct {
 		Image string `json:"Image"`
 	} `json:"Config"`
 	HostConfig struct {
-		NetworkMode    string            `json:"NetworkMode"`
-		Privileged     bool              `json:"Privileged"`
-		ReadonlyRootfs bool              `json:"ReadonlyRootfs"`
-		CapAdd         []string          `json:"CapAdd"`
-		CapDrop        []string          `json:"CapDrop"`
-		SecurityOpt    []string          `json:"SecurityOpt"`
-		IpcMode        string            `json:"IpcMode"`
-		PidMode        string            `json:"PidMode"`
-		UTSMode        string            `json:"UTSMode"`
-		UsernsMode     string            `json:"UsernsMode"`
-		CgroupnsMode   string            `json:"CgroupnsMode"`
-		Binds          []string          `json:"Binds"`
-		VolumesFrom    []string          `json:"VolumesFrom"`
-		Devices        []jsontext.Value  `json:"Devices"`
-		Sysctls        map[string]string `json:"Sysctls"`
-		Tmpfs          map[string]string `json:"Tmpfs"`
-		PidsLimit      int64             `json:"PidsLimit"`
-		Memory         int64             `json:"Memory"`
-		NanoCPUs       int64             `json:"NanoCpus"`
-		Runtime        string            `json:"Runtime"`
-		Init           bool              `json:"Init"`
-		Mounts         []struct {
+		NetworkMode     string                    `json:"NetworkMode"`
+		Privileged      bool                      `json:"Privileged"`
+		ReadonlyRootfs  bool                      `json:"ReadonlyRootfs"`
+		CapAdd          []string                  `json:"CapAdd"`
+		CapDrop         []string                  `json:"CapDrop"`
+		SecurityOpt     []string                  `json:"SecurityOpt"`
+		IpcMode         string                    `json:"IpcMode"`
+		PidMode         string                    `json:"PidMode"`
+		UTSMode         string                    `json:"UTSMode"`
+		UsernsMode      string                    `json:"UsernsMode"`
+		CgroupnsMode    string                    `json:"CgroupnsMode"`
+		Binds           []string                  `json:"Binds"`
+		VolumesFrom     []string                  `json:"VolumesFrom"`
+		Devices         []jsontext.Value          `json:"Devices"`
+		Sysctls         map[string]string         `json:"Sysctls"`
+		Tmpfs           map[string]string         `json:"Tmpfs"`
+		PidsLimit       int64                     `json:"PidsLimit"`
+		Memory          int64                     `json:"Memory"`
+		NanoCPUs        int64                     `json:"NanoCpus"`
+		Runtime         string                    `json:"Runtime"`
+		Init            bool                      `json:"Init"`
+		MaskedPaths     []string                  `json:"MaskedPaths"`
+		ReadonlyPaths   []string                  `json:"ReadonlyPaths"`
+		PortBindings    map[string]jsontext.Value `json:"PortBindings"`
+		PublishAllPorts bool                      `json:"PublishAllPorts"`
+		ExtraHosts      []string                  `json:"ExtraHosts"`
+		DNS             []string                  `json:"Dns"`
+		Mounts          []struct {
 			Type     string `json:"Type"`
 			Source   string `json:"Source"`
 			Target   string `json:"Target"`
 			ReadOnly bool   `json:"ReadOnly"`
 		} `json:"Mounts"`
 	} `json:"HostConfig"`
+	// Mounts are the mounts the container got.
+	Mounts []struct {
+		Type        string `json:"Type"`
+		Destination string `json:"Destination"`
+		RW          bool   `json:"RW"`
+	} `json:"Mounts"`
 	NetworkSettings struct {
 		Networks map[string]jsontext.Value `json:"Networks"`
 	} `json:"NetworkSettings"`
@@ -253,6 +292,9 @@ func (c *Client) CreateContainer(ctx context.Context, ct Container) (ContainerIn
 		return ContainerInfo{}, err
 	}
 	if _, err := c.r.Run(ctx, args...); err != nil {
+		// The engine may have made it before the command failed (a
+		// canceled context): remove what there may be.
+		_ = c.RemoveContainer(context.WithoutCancel(ctx), ct.Name)
 		return ContainerInfo{}, err
 	}
 	info, err := c.InspectContainer(ctx, ct.Name)
@@ -281,15 +323,18 @@ func (c *Client) InspectContainer(ctx context.Context, name string) (ContainerIn
 	return info, nil
 }
 
-// VerifyContainer compares what the engine reports with the hardening
-// every container must have (HR-085, HR-216, HR-218).
+// securityOpts are a container's security options, exactly: anything more
+// (apparmor=unconfined, label=disable, systempaths=unconfined) loosens it.
+var securityOpts = []string{"no-new-privileges=true", "seccomp=builtin"}
+
+// VerifyContainer compares what the engine reports with what was asked,
+// exactly: the hardening every container must have and nothing more, its
+// own mounts and nothing more, and no published port, extra host or DNS
+// server (HR-085, HR-216, HR-218).
 func VerifyContainer(ct Container, info ContainerInfo) error {
 	h := info.HostConfig
 	fail := func(what string) error { return fmt.Errorf("%w: container %s: %s", ErrIsolation, ct.Name, what) }
-	sec := map[string]bool{}
-	for _, o := range h.SecurityOpt {
-		sec[o] = true
-	}
+	_, userOK := parseUser(info.Config.User)
 	switch {
 	case strings.TrimPrefix(info.Name, "/") != ct.Name || info.Config.Image != ct.Image:
 		return fail("another container answered")
@@ -297,9 +342,13 @@ func VerifyContainer(ct Container, info ContainerInfo) error {
 		return fail("privileges")
 	case !h.ReadonlyRootfs:
 		return fail("the root file system is writable")
-	case !sec["no-new-privileges=true"] || !sec["seccomp=builtin"]:
+	case !slices.Equal(slices.Sorted(slices.Values(h.SecurityOpt)), securityOpts):
 		return fail("security options")
-	case info.Config.User != ct.User:
+	case len(h.MaskedPaths) == 0 || len(h.ReadonlyPaths) == 0:
+		return fail("/proc and /sys are not masked")
+	case len(h.PortBindings) > 0 || h.PublishAllPorts || len(h.ExtraHosts) > 0 || len(h.DNS) > 0:
+		return fail("ports, hosts or DNS servers")
+	case info.Config.User != ct.User || !userOK:
 		return fail("user")
 	case h.IpcMode != "private" || h.CgroupnsMode != "private" || h.PidMode != "" || h.UTSMode != "" || h.UsernsMode != "":
 		return fail("namespaces")
@@ -313,12 +362,37 @@ func VerifyContainer(ct Container, info ContainerInfo) error {
 		return fail("limits")
 	case h.Runtime != ct.Runtime:
 		return fail("runtime " + h.Runtime)
-	case len(h.Binds) > 0 || len(h.VolumesFrom) > 0 || len(h.Mounts) != len(ct.Mounts) || len(h.Tmpfs) != 1 || h.Tmpfs["/tmp"] == "":
+	case len(h.Binds) > 0 || len(h.VolumesFrom) > 0 || len(h.Tmpfs) != 1 || h.Tmpfs["/tmp"] == "":
 		return fail("mounts")
 	}
+	type mount struct {
+		kind, source, target string
+		readOnly             bool
+	}
+	cmp := func(a, b mount) int { return strings.Compare(a.target, b.target) }
+	var want, asked, got []mount
+	for _, m := range ct.Mounts {
+		w := mount{"volume", m.Source, m.Target, m.ReadOnly}
+		if m.Kind == Bind {
+			w.kind, w.readOnly = "bind", true
+		}
+		want = append(want, w)
+	}
 	for _, m := range h.Mounts {
-		if strings.Contains(strings.ToLower(m.Source), "docker.sock") || (m.Type == "bind" && !m.ReadOnly) {
-			return fail("mount " + m.Target)
+		asked = append(asked, mount{m.Type, m.Source, m.Target, m.ReadOnly})
+	}
+	for _, m := range info.Mounts {
+		got = append(got, mount{m.Type, "", m.Destination, !m.RW})
+	}
+	slices.SortFunc(want, cmp)
+	slices.SortFunc(asked, cmp)
+	slices.SortFunc(got, cmp)
+	if !slices.Equal(want, asked) || len(got) != len(want) {
+		return fail("mounts")
+	}
+	for i, m := range got {
+		if m.kind != want[i].kind || m.target != want[i].target || m.readOnly != want[i].readOnly {
+			return fail("mount " + m.target)
 		}
 	}
 	return nil
