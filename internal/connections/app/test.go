@@ -56,11 +56,11 @@ type TestResult struct {
 	// DONE or FAILED (could not run); Result PASSED or FAILED once DONE.
 	Kind, State, Result string
 	// Operation is the operation a read or target_verifier test reached.
-	Operation string
-	Checks              []Check
-	RequestedBy         string
-	CreatedAt           time.Time
-	FinishedAt          *time.Time
+	Operation   string
+	Checks      []Check
+	RequestedBy string
+	CreatedAt   time.Time
+	FinishedAt  *time.Time
 }
 
 func testOf(r dbq.PcConnectionTest) (TestResult, error) {
