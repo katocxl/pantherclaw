@@ -4,7 +4,10 @@
 package app
 
 import (
+	"bytes"
+	"cmp"
 	"context"
+	"slices"
 
 	agents "github.com/katocxl/pantherclaw/internal/agents/app"
 	"github.com/katocxl/pantherclaw/internal/coverage/domain"
@@ -26,12 +29,14 @@ type Reassessed struct {
 	Scopes, Snapshots int
 }
 
-// reassessScopes reassesses each scope in tx, in order.
+// reassessScopes reassesses each scope in tx, in (agent, connection,
+// operation) order, so transactions that share scopes take the scopes'
+// advisory locks in the same order.
 func (s *Service) reassessScopes(ctx context.Context, tx db.TenantTx, scopes []domain.Scope, cause *ids.UUID,
 	actor evdomain.Actor, pkgs packages,
 ) (Reassessed, error) {
 	var out Reassessed
-	for _, sc := range scopes {
+	for _, sc := range slices.SortedFunc(slices.Values(scopes), compareScopes) {
 		recorded, err := s.reassess(ctx, tx, sc, cause, actor, pkgs)
 		if err != nil {
 			return out, err
@@ -42,6 +47,12 @@ func (s *Service) reassessScopes(ctx context.Context, tx db.TenantTx, scopes []d
 		}
 	}
 	return out, nil
+}
+
+// compareScopes orders scopes by agent, connection and operation.
+func compareScopes(a, b domain.Scope) int {
+	return cmp.Or(bytes.Compare(a.Agent[:], b.Agent[:]), bytes.Compare(a.Connection[:], b.Connection[:]),
+		cmp.Compare(a.Operation, b.Operation))
 }
 
 // scopesOf lists the scopes known for a connection, optionally one agent's.
@@ -91,6 +102,9 @@ func (s *Service) Reassess(ctx context.Context, connection ids.UUID, agent *ids.
 			}
 		}
 		if err := c.Require(td.PermCoverageReassess, path); err != nil {
+			if agent != nil {
+				return ErrNotFound // an agent the caller may not reassess is not revealed
+			}
 			return err
 		}
 		if _, err := s.RefreshTraffic(ctx, tx); err != nil {

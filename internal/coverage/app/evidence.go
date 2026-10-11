@@ -72,9 +72,11 @@ func routeModes(pkg *defs.Package, operation, defaultMode string, routes []dbq.P
 // HR-210). Coverage reads it through this interface until the connection
 // tests are wired in.
 type TargetVerifier interface {
-	// LastPassed returns when the connection's latest passing
-	// target-verifier test ran, or nil when none passed.
-	LastPassed(ctx context.Context, tx db.TenantTx, connection ids.UUID) (*time.Time, error)
+	// LastPassed returns when the latest passing target-verifier test of
+	// operation on the connection ran, or nil when none passed. A test
+	// vouches only for the operation it ran (founder decision N15): in M9
+	// that is the package's `test: true` read.
+	LastPassed(ctx context.Context, tx db.TenantTx, connection ids.UUID, operation string) (*time.Time, error)
 }
 
 // evidence loads what domain.Compute reads for one scope, at now.
@@ -100,6 +102,7 @@ func (s *Service) evidence(ctx context.Context, tx db.TenantTx, sc domain.Scope,
 			return e, err
 		}
 		e.Connection.RouteModes = routeModes(pkg, sc.Operation, b.DefaultMode, routes)
+		e.ReadOnly = readOnly(pkg, sc.Operation)
 	}
 	rows, err := q.CoverageRoutesForScope(ctx, dbq.CoverageRoutesForScopeParams{
 		OrgID: org, ConnectionID: sc.Connection, AgentID: &sc.Agent, Operation: sc.Operation,
@@ -157,11 +160,27 @@ func (s *Service) evidence(ctx context.Context, tx db.TenantTx, sc domain.Scope,
 		e.Instances = append(e.Instances, inst)
 	}
 	if s.Verifier != nil {
-		if e.VerifiedAt, err = s.Verifier.LastPassed(ctx, tx, sc.Connection); err != nil {
+		if e.VerifiedAt, err = s.Verifier.LastPassed(ctx, tx, sc.Connection, sc.Operation); err != nil {
 			return e, err
 		}
 	}
 	return e, nil
+}
+
+// readOnly reports whether the package defines the operation, and only as a
+// read. A scope of any other operation is never lifted by a
+// target-verifier test in M9 (founder decision N15).
+func readOnly(pkg *defs.Package, operation string) bool {
+	found := false
+	for _, d := range pkg.Definitions {
+		if d.Operation == operation {
+			if d.Access != defs.AccessRead {
+				return false
+			}
+			found = true
+		}
+	}
+	return found
 }
 
 // closureRecord is a stored closure as the calculus reads it.
