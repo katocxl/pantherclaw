@@ -11,7 +11,12 @@ paths = ['''^deploy/compose/\.env$''']
 
 [[allowlists]]
 description = "SDK conformance vectors: test tokens and proofs signed with keys derived from public names (sdk/conformance/README.md, Fixed keys). They verify only against the vectors' own JWKS and grant nothing anywhere."
-paths = ['''^sdk/conformance/[a-z_]+\.json$''']
+paths = [
+  '''^sdk/conformance/key_files\.json$''',
+  '''^sdk/conformance/workload_tokens\.json$''',
+  '''^sdk/conformance/proofs\.json$''',
+  '''^sdk/conformance/action_tokens\.json$''',
+]
 
 [[allowlists]]
 description = "Development-only Keycloak realm (bound to 127.0.0.1): its client secret and user passwords are published placeholders, never used outside local development."
