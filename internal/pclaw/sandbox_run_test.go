@@ -104,3 +104,17 @@ func TestTheChangesAreListedWithTheFilesToReview(t *testing.T) {
 		t.Errorf("no changes: %q", buf.String())
 	}
 }
+
+// TestTheSandboxCommandsNeedTheirSession: sandbox get and end need the
+// session; list takes none.
+func TestTheSandboxCommandsNeedTheirSession(t *testing.T) {
+	a := &app{stderr: io.Discard}
+	for _, name := range []string{"sandbox get", "sandbox end"} {
+		if err := commands[name].run(t.Context(), a, nil); !errors.Is(err, errUsage) {
+			t.Errorf("%s without a session: %v", name, err)
+		}
+	}
+	if _, ok := commands["sandbox list"]; !ok {
+		t.Error("no sandbox list")
+	}
+}
