@@ -131,12 +131,15 @@ ORDER BY gateway_id;
 
 -- name: ConnectionDeliveries :one
 -- Outcomes recorded for a connection's actions since a time (F358):
--- failures, unknown outcomes, and the latest of each kind (the epoch for
--- none).
+-- failures, unknown outcomes, actions an agent ran itself (delegated:
+-- PantherClaw never learns their result, so they are no evidence of
+-- success), and the latest of each kind (the epoch for none).
 SELECT count(*) FILTER (WHERE a.outcome = 'failed')::integer AS failed,
     count(*) FILTER (WHERE a.outcome = 'unknown')::integer AS unknown,
+    count(*) FILTER (WHERE a.outcome = 'delegated')::integer AS delegated,
     coalesce(max(a.recorded_at) FILTER (WHERE a.outcome IN ('failed', 'unknown')), 'epoch')::timestamptz AS last_failure_at,
-    coalesce(max(a.recorded_at) FILTER (WHERE a.outcome IN ('accepted', 'delegated')), 'epoch')::timestamptz AS last_success_at
+    coalesce(max(a.recorded_at) FILTER (WHERE a.outcome = 'accepted'), 'epoch')::timestamptz AS last_success_at,
+    coalesce(max(a.recorded_at) FILTER (WHERE a.outcome = 'delegated'), 'epoch')::timestamptz AS last_delegated_at
 FROM pc.transactions t
 JOIN pc.execution_attempts a ON a.org_id = t.org_id AND a.transaction_id = t.id
 WHERE t.org_id = sqlc.arg(org_id) AND t.connection_id = sqlc.arg(connection_id) AND t.created_at >= sqlc.arg(since)::timestamptz;

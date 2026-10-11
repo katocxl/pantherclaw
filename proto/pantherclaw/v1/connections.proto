@@ -755,8 +755,14 @@ message ConnectionDeliveries {
   int32 unknown_count = 3;
   // The latest failed or UNKNOWN outcome; unset when none.
   google.protobuf.Timestamp last_failure_time = 4;
-  // The latest accepted or delegated outcome; unset when none.
+  // The latest accepted outcome; unset when none.
   google.protobuf.Timestamp last_success_time = 5;
+  // Actions an agent ran itself after the decision (delegated): PantherClaw
+  // never learns their result, so they count neither as failures nor as
+  // successes (HR-024).
+  int32 delegated_count = 6;
+  // The latest delegated outcome; unset when none.
+  google.protobuf.Timestamp last_delegated_time = 7;
 }
 
 // ConnectionDependentAgent is an agent whose runs used a connection.
@@ -779,9 +785,10 @@ message ConnectionHealth {
   repeated ConnectionCircuit circuits = 3;
   // What PantherClaw's credential for it is used for.
   repeated ConnectionPermission permissions = 4;
-  // Its latest test.
+  // Its latest test, of any kind: a credential test checks only the
+  // configuration and never reaches the target, so read its kind.
   ConnectionTest last_test = 5;
-  // Its last successful test.
+  // Its last successful test, of any kind (see last_test).
   ConnectionTest last_passed_test = 6;
   // Delivery failures over the last 24 hours.
   ConnectionDeliveries deliveries = 7;
