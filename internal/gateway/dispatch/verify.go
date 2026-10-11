@@ -87,7 +87,10 @@ func (e *Engine) VerifyEffect(ctx context.Context, conn *control.Connection, l L
 	if _, class, _ := e.contained(conn); class != "" {
 		return Observation{}, ErrContained
 	}
-	if l.Purpose == "target_log" {
+	switch l.Purpose {
+	case "connection_test":
+		return e.connectionTest(ctx, conn, l)
+	case "target_log":
 		return e.targetLog(ctx, conn, l)
 	}
 	read, v, list, err := reviewedRead(conn, l.Operation)
@@ -285,4 +288,29 @@ func fields(doc []byte, declared map[string]bool) map[string]string {
 		}
 	}
 	return out
+}
+
+// connectionTest makes a connection test's read (G0 M8 track C, F354): the
+// package's one test read, against the connection itself, with no params.
+// The format makes it a GET with no required params, and it is checked
+// again here before anything is sent: a test never writes. Only the
+// status and the digest of the answer are reported.
+func (e *Engine) connectionTest(ctx context.Context, conn *control.Connection, l Lease) (Observation, error) {
+	var req verifyRequest
+	if err := json.Unmarshal(l.Request, &req, json.RejectUnknownMembers(true)); err != nil || req.Mode != "connection_test" ||
+		conn.Package == nil || req.Target.Type != defs.ConnectionTarget || req.Target.ID != conn.GetId() || len(req.Params) != 0 ||
+		req.EffectOf != "" {
+		return Observation{}, fmt.Errorf("%w: request", ErrNotReviewedRead)
+	}
+	read, ok := conn.Package.Definition(l.Operation)
+	if !ok || !read.Test || read.Access != defs.AccessRead || read.Dispatch == nil || read.Dispatch.HTTP == nil ||
+		read.Dispatch.HTTP.Method != http.MethodGet {
+		return Observation{}, ErrNotReviewedRead
+	}
+	status, body, ok := e.read(ctx, conn, read, req.Target, nil)
+	if !ok {
+		return Observation{HTTPStatus: status}, nil // the read failed: inconclusive, retried
+	}
+	sum := sha256.Sum256(body)
+	return Observation{HTTPStatus: status, Digest: sum[:]}, nil
 }

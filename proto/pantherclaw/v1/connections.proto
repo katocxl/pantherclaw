@@ -76,12 +76,15 @@ service ConnectionService {
   rpc GetConnectionCapabilities(GetConnectionCapabilitiesRequest) returns (GetConnectionCapabilitiesResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
-  // TestConnection tests what a connection depends on (its state, its
-  // gateway and the gateway's certificate, its pinned package and routes,
-  // its credential, its circuits) without calling the target, and records
-  // the result; the latest passed one is its last successful test (F350,
-  // F354).
-  // permission: connection.manage
+  // TestConnection tests a connection and records the result; the latest
+  // passed test is its last successful test (F350, F354). A credential test
+  // checks what the connection depends on (its state, its gateway and the
+  // gateway's certificate, its pinned package and routes, its credential,
+  // its circuits) without calling the target, and finishes at once. A read
+  // test leases the package's one harmless test read (an HTTP GET with no
+  // required params) to the connection's gateway and is PENDING until the
+  // gateway reports: never a write.
+  // permission: connection.test
   rpc TestConnection(TestConnectionRequest) returns (TestConnectionResponse);
   // GetConnectionHealth returns what a person needs to judge a connection
   // (F358): its circuits, the permissions its credential is used for, its
@@ -714,10 +717,12 @@ message ConnectionTest {
   google.protobuf.Timestamp create_time = 9;
 }
 
-// TestConnectionRequest names a connection.
+// TestConnectionRequest names a connection and the kind of test.
 message TestConnectionRequest {
   // Connection id.
   string id = 1 [(buf.validate.field).string.uuid = true];
+  // credential (the default) or read.
+  string kind = 2 [(buf.validate.field).string.pattern = "^(|credential|read)$"];
 }
 
 // TestConnectionResponse returns the recorded test.

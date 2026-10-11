@@ -7,11 +7,16 @@ import (
 	"context"
 	"encoding/json/v2"
 	"errors"
+	"net/http"
+	"slices"
 	"strconv"
 	"time"
 
+	"github.com/katocxl/pantherclaw/internal/actionir"
+	"github.com/katocxl/pantherclaw/internal/definitions/domain"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
+	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
 )
@@ -67,11 +72,40 @@ func testOf(r dbq.PcConnectionTest) (TestResult, error) {
 	return out, json.Unmarshal(r.Checks, &out.Checks)
 }
 
-// Test tests a connection and records the result (connection.manage).
-func (s *Service) Test(ctx context.Context, id ids.UUID) (TestResult, error) {
-	c, err := s.caller(ctx, td.PermConnectionManage)
+// Test kinds.
+const (
+	// KindCredentialTest checks what the connection depends on, at once,
+	// without calling the target.
+	KindCredentialTest = "credential"
+	// KindReadTest leases the package's harmless test read to the
+	// connection's gateway.
+	KindReadTest = "read"
+)
+
+// CheckTestRead is a read test's one check: what the target answered.
+const CheckTestRead = "TEST_READ"
+
+var (
+	// ErrNoTestRead: the connection's package declares no test read.
+	ErrNoTestRead = pcerr.New(pcerr.FailedPrecondition, "NO_TEST_READ", "the connection's package declares no harmless test read")
+	// ErrReadTest: the connection is not one a read test can run through.
+	ErrReadTest = pcerr.New(pcerr.FailedPrecondition, "READ_TEST_NOT_POSSIBLE",
+		"a read test needs an ACTIVE http connection whose gateway holds its credential or needs none")
+)
+
+// Test tests a connection and records the test (connection.test): a
+// credential test at once, or a read test that the connection's gateway
+// runs and reports.
+func (s *Service) Test(ctx context.Context, id ids.UUID, kind string) (TestResult, error) {
+	c, err := s.caller(ctx, td.PermConnectionTest)
 	if err != nil {
 		return TestResult{}, err
+	}
+	if kind == "" {
+		kind = KindCredentialTest
+	}
+	if kind != KindCredentialTest && kind != KindReadTest {
+		return TestResult{}, ErrShape
 	}
 	var out TestResult
 	err = s.pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
@@ -82,36 +116,102 @@ func (s *Service) Test(ctx context.Context, id ids.UUID) (TestResult, error) {
 		} else if err != nil {
 			return err
 		}
-		facts, err := q.ConnectionTestFacts(ctx, c.Org, id)
-		if err != nil {
-			return err
-		}
-		checks, err := check(ctx, q, conn, facts)
-		if err != nil {
-			return err
-		}
-		result := TestPassed
-		for _, ch := range checks {
-			if !ch.Passed {
-				result = TestFailed
+		var row dbq.PcConnectionTest
+		details := map[string]string{"kind": kind}
+		if kind == KindReadTest {
+			if row, err = readTest(ctx, q, c, conn); err != nil {
+				return err
 			}
-		}
-		raw, err := json.Marshal(checks, json.Deterministic(true))
-		if err != nil {
-			return err
-		}
-		row, err := q.InsertCredentialTest(ctx, dbq.InsertCredentialTestParams{
-			OrgID: c.Org, ID: ids.NewV7(), ConnectionID: id, Result: &result, Checks: raw, RequestedBy: c.By,
-		})
-		if err != nil {
-			return err
+		} else {
+			if row, err = credentialTest(ctx, q, c, conn); err != nil {
+				return err
+			}
+			details["result"] = *row.Result
 		}
 		if out, err = testOf(row); err != nil {
 			return err
 		}
-		return record(ctx, tx, c, "connection.tested", id, map[string]string{"result": result, "test_id": row.ID.String()})
+		details["test_id"] = row.ID.String()
+		return record(ctx, tx, c, "connection.tested", id, details)
 	})
 	return out, err
+}
+
+// credentialTest checks what the connection depends on and records the
+// result.
+func credentialTest(ctx context.Context, q *dbq.Queries, c actor, conn dbq.PcConnection) (dbq.PcConnectionTest, error) {
+	facts, err := q.ConnectionTestFacts(ctx, c.Org, conn.ID)
+	if err != nil {
+		return dbq.PcConnectionTest{}, err
+	}
+	checks, err := check(ctx, q, conn, facts)
+	if err != nil {
+		return dbq.PcConnectionTest{}, err
+	}
+	result := TestPassed
+	for _, ch := range checks {
+		if !ch.Passed {
+			result = TestFailed
+		}
+	}
+	raw, err := json.Marshal(checks, json.Deterministic(true))
+	if err != nil {
+		return dbq.PcConnectionTest{}, err
+	}
+	return q.InsertCredentialTest(ctx, dbq.InsertCredentialTestParams{
+		OrgID: c.Org, ID: ids.NewV7(), ConnectionID: conn.ID, Result: &result, Checks: raw, RequestedBy: c.By,
+	})
+}
+
+// readTest leases the package's test read to the connection's gateway: a
+// verification task of purpose connection_test (M7's machinery) that the
+// gateway runs through the connection and reports; the test is PENDING
+// until then. The package format makes the test read a GET with no
+// required params, this checks it again, and the gateway checks it once
+// more before it runs it: a test never writes.
+func readTest(ctx context.Context, q *dbq.Queries, c actor, conn dbq.PcConnection) (dbq.PcConnectionTest, error) {
+	if conn.State != StateActive || conn.Kind != KindHTTP || (conn.AccessMode != AccessHeld && conn.AccessMode != AccessNone) {
+		return dbq.PcConnectionTest{}, ErrReadTest
+	}
+	p, err := pinnedPackage(ctx, q, c.Org, conn.Package)
+	if err != nil {
+		return dbq.PcConnectionTest{}, err
+	}
+	i := slices.IndexFunc(p.Definitions, func(d domain.Definition) bool { return d.Test })
+	if i < 0 {
+		return dbq.PcConnectionTest{}, ErrNoTestRead
+	}
+	d := p.Definitions[i]
+	if d.Access != domain.AccessRead || d.Dispatch == nil || d.Dispatch.HTTP == nil || d.Dispatch.HTTP.Method != http.MethodGet ||
+		d.Target.Type != domain.ConnectionTarget {
+		return dbq.PcConnectionTest{}, ErrNoTestRead
+	}
+	request, err := json.Marshal(TestReadRequest{
+		Mode: TestReadMode, Target: actionir.Target{Type: domain.ConnectionTarget, ID: conn.ID.String()}, Params: map[string]string{},
+	}, json.Deterministic(true))
+	if err != nil {
+		return dbq.PcConnectionTest{}, err
+	}
+	task := ids.NewV7()
+	if err := q.InsertConnectionTestTask(ctx, dbq.InsertConnectionTestTaskParams{
+		OrgID: c.Org, ID: task, ConnectionID: conn.ID, Operation: d.Operation, Request: request,
+	}); err != nil {
+		return dbq.PcConnectionTest{}, err
+	}
+	return q.InsertLeasedConnectionTest(ctx, dbq.InsertLeasedConnectionTestParams{
+		OrgID: c.Org, ID: ids.NewV7(), ConnectionID: conn.ID, Kind: KindReadTest, VerificationID: &task, RequestedBy: c.By,
+	})
+}
+
+// TestReadMode is the mode of a read test's task request.
+const TestReadMode = "connection_test"
+
+// TestReadRequest is a read test's task request, which the gateway reads:
+// the connection itself as the target and no params.
+type TestReadRequest struct {
+	Mode   string            `json:"mode"`
+	Target actionir.Target   `json:"target"`
+	Params map[string]string `json:"params"`
 }
 
 // check makes a test's checks.

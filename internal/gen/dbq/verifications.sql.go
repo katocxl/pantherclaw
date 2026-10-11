@@ -108,6 +108,55 @@ func (q *Queries) ExpirePastDeadline(ctx context.Context, orgID ids.OrgID) ([]Ex
 	return items, nil
 }
 
+const failExpiredConnectionTests = `-- name: FailExpiredConnectionTests :execrows
+UPDATE pc.connection_tests t
+SET state = 'FAILED', finished_at = now(),
+    checks = '[{"check":"TEST_READ","passed":false,"detail":"No gateway reported the test read before its deadline."}]'
+FROM pc.verifications v
+WHERE t.org_id = $1 AND v.org_id = t.org_id AND v.id = t.verification_id AND v.state = 'EXPIRED'
+  AND t.state IN ('PENDING', 'RUNNING')
+`
+
+// FailExpiredConnectionTests ends the tests whose task expired before a
+// gateway reported: they could not run.
+func (q *Queries) FailExpiredConnectionTests(ctx context.Context, orgID ids.OrgID) (int64, error) {
+	result, err := q.db.Exec(ctx, failExpiredConnectionTests, orgID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const finishConnectionTest = `-- name: FinishConnectionTest :exec
+UPDATE pc.connection_tests
+SET state = $1, result = $2, checks = $3, gateway_id = $4,
+    detail_sha256 = $5, finished_at = now()
+WHERE org_id = $6 AND id = $7 AND state IN ('PENDING', 'RUNNING')
+`
+
+type FinishConnectionTestParams struct {
+	State        string
+	Result       *string
+	Checks       []byte
+	GatewayID    *ids.UUID
+	DetailSha256 []byte
+	OrgID        ids.OrgID
+	ID           ids.UUID
+}
+
+func (q *Queries) FinishConnectionTest(ctx context.Context, arg FinishConnectionTestParams) error {
+	_, err := q.db.Exec(ctx, finishConnectionTest,
+		arg.State,
+		arg.Result,
+		arg.Checks,
+		arg.GatewayID,
+		arg.DetailSha256,
+		arg.OrgID,
+		arg.ID,
+	)
+	return err
+}
+
 const finishVerification = `-- name: FinishVerification :exec
 UPDATE pc.verifications
 SET state = $1, finished_at = now(), lease_hash = NULL, leased_by = NULL, leased_at = NULL, lease_expires_at = NULL
@@ -251,6 +300,50 @@ func (q *Queries) LeaseVerification(ctx context.Context, arg LeaseVerificationPa
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const leasedConnectionTest = `-- name: LeasedConnectionTest :one
+SELECT v.id, v.connection_id, v.operation, v.attempts, t.id AS test_id
+FROM pc.verifications v
+JOIN pc.connection_tests t ON t.org_id = v.org_id AND t.verification_id = v.id
+WHERE v.org_id = $1 AND v.id = $2 AND v.purpose = 'connection_test' AND v.state = 'LEASED'
+  AND v.leased_by = $3 AND v.lease_hash = $4 AND v.lease_expires_at >= now()
+FOR UPDATE OF v, t
+`
+
+type LeasedConnectionTestParams struct {
+	OrgID     ids.OrgID
+	ID        ids.UUID
+	GatewayID *ids.UUID
+	LeaseHash []byte
+}
+
+type LeasedConnectionTestRow struct {
+	ID           ids.UUID
+	ConnectionID ids.UUID
+	Operation    string
+	Attempts     int32
+	TestID       ids.UUID
+}
+
+// LeasedConnectionTest is a connection test's task under a live lease of
+// this gateway (HR-190), with its test.
+func (q *Queries) LeasedConnectionTest(ctx context.Context, arg LeasedConnectionTestParams) (LeasedConnectionTestRow, error) {
+	row := q.db.QueryRow(ctx, leasedConnectionTest,
+		arg.OrgID,
+		arg.ID,
+		arg.GatewayID,
+		arg.LeaseHash,
+	)
+	var i LeasedConnectionTestRow
+	err := row.Scan(
+		&i.ID,
+		&i.ConnectionID,
+		&i.Operation,
+		&i.Attempts,
+		&i.TestID,
+	)
+	return i, err
 }
 
 const leasedTargetLog = `-- name: LeasedTargetLog :one
@@ -509,6 +602,17 @@ func (q *Queries) SetEffectState(ctx context.Context, arg SetEffectStateParams) 
 		arg.OrgID,
 		arg.ID,
 	)
+	return err
+}
+
+const startConnectionTest = `-- name: StartConnectionTest :exec
+UPDATE pc.connection_tests SET state = 'RUNNING', gateway_id = $1
+WHERE org_id = $2 AND verification_id = $3 AND state IN ('PENDING', 'RUNNING')
+`
+
+// A leased connection test is RUNNING on the gateway that holds the lease.
+func (q *Queries) StartConnectionTest(ctx context.Context, gatewayID *ids.UUID, orgID ids.OrgID, verificationID *ids.UUID) error {
+	_, err := q.db.Exec(ctx, startConnectionTest, gatewayID, orgID, verificationID)
 	return err
 }
 

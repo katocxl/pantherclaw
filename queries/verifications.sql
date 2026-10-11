@@ -150,3 +150,34 @@ INSERT INTO pc.unreceipted_effects (org_id, id, connection_id, operation, object
 VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(connection_id), sqlc.arg(operation), sqlc.arg(object_ref),
         sqlc.narg(correlation), sqlc.narg(target_created_at), sqlc.arg(verification_id))
 ON CONFLICT (org_id, connection_id, object_ref) DO NOTHING;
+
+-- name: StartConnectionTest :exec
+-- A leased connection test is RUNNING on the gateway that holds the lease.
+UPDATE pc.connection_tests SET state = 'RUNNING', gateway_id = sqlc.arg(gateway_id)
+WHERE org_id = sqlc.arg(org_id) AND verification_id = sqlc.arg(verification_id) AND state IN ('PENDING', 'RUNNING');
+
+-- LeasedConnectionTest is a connection test's task under a live lease of
+-- this gateway (HR-190), with its test.
+-- name: LeasedConnectionTest :one
+SELECT v.id, v.connection_id, v.operation, v.attempts, t.id AS test_id
+FROM pc.verifications v
+JOIN pc.connection_tests t ON t.org_id = v.org_id AND t.verification_id = v.id
+WHERE v.org_id = sqlc.arg(org_id) AND v.id = sqlc.arg(id) AND v.purpose = 'connection_test' AND v.state = 'LEASED'
+  AND v.leased_by = sqlc.arg(gateway_id) AND v.lease_hash = sqlc.arg(lease_hash) AND v.lease_expires_at >= now()
+FOR UPDATE OF v, t;
+
+-- name: FinishConnectionTest :exec
+UPDATE pc.connection_tests
+SET state = sqlc.arg(state), result = sqlc.narg(result), checks = sqlc.arg(checks), gateway_id = sqlc.arg(gateway_id),
+    detail_sha256 = sqlc.narg(detail_sha256), finished_at = now()
+WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state IN ('PENDING', 'RUNNING');
+
+-- FailExpiredConnectionTests ends the tests whose task expired before a
+-- gateway reported: they could not run.
+-- name: FailExpiredConnectionTests :execrows
+UPDATE pc.connection_tests t
+SET state = 'FAILED', finished_at = now(),
+    checks = '[{"check":"TEST_READ","passed":false,"detail":"No gateway reported the test read before its deadline."}]'
+FROM pc.verifications v
+WHERE t.org_id = sqlc.arg(org_id) AND v.org_id = t.org_id AND v.id = t.verification_id AND v.state = 'EXPIRED'
+  AND t.state IN ('PENDING', 'RUNNING');

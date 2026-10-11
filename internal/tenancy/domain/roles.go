@@ -186,9 +186,9 @@ var roles = []Role{
 	},
 	{
 		Name: RoleGatewayAdmin, Title: "Gateway Admin", Scopes: orgScope,
-		Description: "Enrolls and revokes gateways, registers connections and their route modes, and seals target credentials (human only). Weakening changes are audited and reported to org admins.",
+		Description: "Enrolls and revokes gateways, registers and tests connections and their route modes, and seals target credentials (human only). Weakening changes are audited and reported to org admins.",
 		Permissions: with(basicReads, []Permission{
-			PermGatewayManage, PermConnectionManage, PermCredentialSeal, PermAgentRead,
+			PermGatewayManage, PermConnectionManage, PermConnectionTest, PermCredentialSeal, PermAgentRead,
 		}, authorityReads, boundaryReads),
 	},
 	{

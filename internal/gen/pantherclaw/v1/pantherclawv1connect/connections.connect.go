@@ -239,12 +239,15 @@ type ConnectionServiceClient interface {
 	// last successful test (F346).
 	// permission: connection.read
 	GetConnectionCapabilities(context.Context, *v1.GetConnectionCapabilitiesRequest) (*v1.GetConnectionCapabilitiesResponse, error)
-	// TestConnection tests what a connection depends on (its state, its
-	// gateway and the gateway's certificate, its pinned package and routes,
-	// its credential, its circuits) without calling the target, and records
-	// the result; the latest passed one is its last successful test (F350,
-	// F354).
-	// permission: connection.manage
+	// TestConnection tests a connection and records the result; the latest
+	// passed test is its last successful test (F350, F354). A credential test
+	// checks what the connection depends on (its state, its gateway and the
+	// gateway's certificate, its pinned package and routes, its credential,
+	// its circuits) without calling the target, and finishes at once. A read
+	// test leases the package's one harmless test read (an HTTP GET with no
+	// required params) to the connection's gateway and is PENDING until the
+	// gateway reports: never a write.
+	// permission: connection.test
 	TestConnection(context.Context, *v1.TestConnectionRequest) (*v1.TestConnectionResponse, error)
 	// GetConnectionHealth returns what a person needs to judge a connection
 	// (F358): its circuits, the permissions its credential is used for, its
@@ -312,12 +315,15 @@ type ConnectionServiceHandler interface {
 	// last successful test (F346).
 	// permission: connection.read
 	GetConnectionCapabilities(context.Context, *v1.GetConnectionCapabilitiesRequest) (*v1.GetConnectionCapabilitiesResponse, error)
-	// TestConnection tests what a connection depends on (its state, its
-	// gateway and the gateway's certificate, its pinned package and routes,
-	// its credential, its circuits) without calling the target, and records
-	// the result; the latest passed one is its last successful test (F350,
-	// F354).
-	// permission: connection.manage
+	// TestConnection tests a connection and records the result; the latest
+	// passed test is its last successful test (F350, F354). A credential test
+	// checks what the connection depends on (its state, its gateway and the
+	// gateway's certificate, its pinned package and routes, its credential,
+	// its circuits) without calling the target, and finishes at once. A read
+	// test leases the package's one harmless test read (an HTTP GET with no
+	// required params) to the connection's gateway and is PENDING until the
+	// gateway reports: never a write.
+	// permission: connection.test
 	TestConnection(context.Context, *v1.TestConnectionRequest) (*v1.TestConnectionResponse, error)
 	// GetConnectionHealth returns what a person needs to judge a connection
 	// (F358): its circuits, the permissions its credential is used for, its

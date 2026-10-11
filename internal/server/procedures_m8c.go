@@ -17,7 +17,7 @@ import (
 // map.
 var m8cProcedures = map[string]td.Permission{
 	pantherclawv1connect.ConnectionServiceGetConnectionCapabilitiesProcedure: "connection.read",
-	pantherclawv1connect.ConnectionServiceTestConnectionProcedure:            "connection.manage",
+	pantherclawv1connect.ConnectionServiceTestConnectionProcedure:            "connection.test",
 	pantherclawv1connect.ConnectionServiceGetConnectionHealthProcedure:       "connection.read",
 	pantherclawv1connect.AuthorityServiceRecordToolObservationProcedure:      "gateway.observe",
 }

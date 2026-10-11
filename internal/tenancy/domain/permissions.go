@@ -166,6 +166,10 @@ const (
 	PermGatewayVerify           Permission = "gateway.verify" // gateways only: lease and report verifications (HR-190)
 )
 
+// PermConnectionTest runs a connection test, including the read it leases
+// to the gateway (G0 M8 track C, F354). Human only, like connection.manage.
+const PermConnectionTest Permission = "connection.test"
+
 // Workload permissions are held only by PAP/1-authenticated workloads
 // (WorkloadService), never by users, service accounts or roles.
 const (
@@ -204,6 +208,7 @@ var catalog = []Permission{
 	PermContainmentRead, PermContainmentKillSwitch,
 	PermEvidenceRead, PermEvidenceExport, PermEvidenceRetentionManage, PermEvidenceCaptureManage,
 	PermTransactionReconcile,
+	PermConnectionTest,
 }
 
 // humanOnly permissions can never be exercised by a service account or an
@@ -214,6 +219,7 @@ var humanOnly = []Permission{
 	PermGrantIssue, PermGuardrailsManage, PermFactProviderManage, PermPackageActivate,
 	PermGatewayManage, PermConnectionManage, PermCredentialSeal, PermContainmentKillSwitch, PermAgentRestore,
 	PermTransactionReconcile, PermEvidenceExport, PermEvidenceRetentionManage, PermEvidenceCaptureManage,
+	PermConnectionTest,
 }
 
 // Catalog returns every grantable permission in a stable order.

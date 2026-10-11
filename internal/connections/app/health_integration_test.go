@@ -62,7 +62,7 @@ func TestF358_ConnectionHealthShowsWhatAPersonNeeds(t *testing.T) {
 	if _, err := e.svc.OpenCircuit(e.admin, e.org, e.gateway, c.ID, 6, 10); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := e.svc.Test(e.admin, c.ID); err != nil {
+	if _, err := e.svc.Test(e.admin, c.ID, ""); err != nil {
 		t.Fatal(err)
 	}
 

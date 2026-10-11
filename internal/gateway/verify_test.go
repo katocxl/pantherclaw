@@ -155,6 +155,39 @@ func TestHR112_TheGatewayListsTheTargetLog(t *testing.T) {
 	}
 }
 
+// TestF354_TheGatewayMakesOnlyTheTestRead: a connection test's lease makes
+// the package's test read, a GET against the connection itself with no
+// params, and reports only the status and a digest of the answer. A lease
+// that names another read, a write, another connection or params sends
+// nothing.
+func TestF354_TheGatewayMakesOnlyTheTestRead(t *testing.T) {
+	sim := payments.New(payments.Faults{}, pclog.Discard())
+	var sent atomic.Int32
+	h := setup(t, simTarget(sim, &sent))
+	request := func(conn, params string) []byte {
+		return []byte(`{"mode":"connection_test","target":{"type":"pc.connection","id":"` + conn + `"},"params":{` + params + `}}`)
+	}
+	ctx := context.Background()
+	o, err := h.gw.engine.VerifyEffect(ctx, h.conn, dispatch.Lease{Purpose: "connection_test", Operation: "payments.account.read", Request: request(connID, "")})
+	if err != nil || o.HTTPStatus != http.StatusOK || len(o.Digest) != 32 || o.Found || len(o.Fields) != 0 || len(o.Items) != 0 || sent.Load() != 1 {
+		t.Fatalf("test read %+v %v (%d requests)", o, err, sent.Load())
+	}
+	for name, l := range map[string]dispatch.Lease{
+		"another read":       {Purpose: "connection_test", Operation: "payments.refund.list", Request: request(connID, "")},
+		"a write":            {Purpose: "connection_test", Operation: "payments.refund.create", Request: request(connID, "")},
+		"another connection": {Purpose: "connection_test", Operation: "payments.account.read", Request: request("01920000-0000-7000-8000-0000000000ff", "")},
+		"params":             {Purpose: "connection_test", Operation: "payments.account.read", Request: request(connID, `"x":"1"`)},
+		"a reference":        {Purpose: "connection_test", Operation: "payments.account.read", Request: reference("re_1")},
+	} {
+		if _, err := h.gw.engine.VerifyEffect(ctx, h.conn, l); !errors.Is(err, dispatch.ErrNotReviewedRead) {
+			t.Errorf("%s: %v, want ErrNotReviewedRead", name, err)
+		}
+	}
+	if n := sent.Load(); n != 1 {
+		t.Fatalf("refused leases sent %d requests", n-1)
+	}
+}
+
 type fakeVerifications struct {
 	mu      sync.Mutex
 	leases  []dispatch.Lease

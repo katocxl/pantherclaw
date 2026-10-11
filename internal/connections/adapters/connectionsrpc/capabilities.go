@@ -78,7 +78,7 @@ func (h *Handler) TestConnection(ctx context.Context, req *pb.TestConnectionRequ
 	if err != nil {
 		return nil, err
 	}
-	t, err := h.s.Test(ctx, id)
+	t, err := h.s.Test(ctx, id, req.GetKind())
 	if err != nil {
 		return nil, err
 	}

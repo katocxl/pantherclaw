@@ -148,7 +148,8 @@ The gateway refuses a file for another org, with unknown members, or with a fing
 
 ```bash
 pclaw connection capabilities <connection-id>   # what it declares it supports, and its last successful test
-pclaw connection test <connection-id>           # test it now and record the result (connection.manage)
+pclaw connection test <connection-id>           # test what it depends on now, without calling the target (connection.test)
+pclaw connection test <connection-id> --kind read   # lease the package's test read to the gateway (connection.test)
 pclaw connection health <connection-id>         # circuits, permissions, tests, delivery failures and dependent agents
 ```
 
@@ -159,7 +160,7 @@ pclaw connection health <connection-id>         # circuits, permissions, tests, 
 - its limits and failure behaviour;
 - its last successful test.
 
-**A test never calls the target.** It checks:
+**A credential test** (the default) never calls the target. It checks:
 - the connection is `ACTIVE`;
 - its gateway is active and holds a current certificate, renewed within 24 hours;
 - the org's pinned version of its package serves routes for its kind;
@@ -167,5 +168,12 @@ pclaw connection health <connection-id>         # circuits, permissions, tests, 
 - no circuit is open.
 
 Every result is kept. A failed test names the check that failed and does not replace the last successful one.
+
+**A read test** (`--kind read`) reaches the target, but only with the package's one test read (`test: true`): a GET with no required params. The test is `PENDING` until the connection's gateway leases it, then `RUNNING`.
+- The gateway checks again that the read is the test read and a GET, and reports only the status and a digest of the answer.
+- A 2xx passes; any other status fails, naming it. A read the gateway could not make is retried; after the third attempt, or when no gateway reports within 10 minutes, the test is `FAILED` (it could not run).
+- It runs only on an `ACTIVE` `http` connection whose gateway holds its credential (`pantherclaw_held`) or that needs none (`none`). On any other connection, or with a package that has no test read, it is refused.
+
+The result shows in `pclaw connection health` and, once passed, as the last successful test.
 
 **Health** (F358) shows the connection and its active credential, each gateway's circuit, the permissions its credential is used for, its latest and last successful tests, and the failed and `UNKNOWN` outcomes of the last 24 hours with the latest failure and success. It also lists the agents whose runs used the connection in the last 30 days, at most 50, but only to readers who may read agents org-wide; for anyone else the list is marked hidden.

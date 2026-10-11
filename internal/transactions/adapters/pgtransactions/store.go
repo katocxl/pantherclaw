@@ -79,6 +79,11 @@ func (s *Store) Claim(ctx context.Context, org ids.OrgID, gateway ids.UUID, limi
 			if n != 1 {
 				continue
 			}
+			if domain.Purpose(v.Purpose) == domain.PurposeConnectionTest {
+				if err := q.StartConnectionTest(ctx, &gw, org, &v.ID); err != nil {
+					return err
+				}
+			}
 			l := app.Lease{
 				Task: v.ID, Secret: secret, Purpose: domain.Purpose(v.Purpose), Connection: v.ConnectionID, Operation: v.Operation,
 				Request: v.Request, Attempt: int(v.Attempts) + 1, Deadline: v.DeadlineAt,
@@ -104,7 +109,14 @@ func (s *Store) Report(ctx context.Context, org ids.OrgID, gateway ids.UUID, r a
 		if db.IsNoRows(err) {
 			tl, err := q.LeasedTargetLog(ctx, dbq.LeasedTargetLogParams{OrgID: org, ID: r.Task, GatewayID: &gw, LeaseHash: hash[:]})
 			if db.IsNoRows(err) {
-				return app.ErrLease
+				ct, err := q.LeasedConnectionTest(ctx, dbq.LeasedConnectionTestParams{OrgID: org, ID: r.Task, GatewayID: &gw, LeaseHash: hash[:]})
+				if db.IsNoRows(err) {
+					return app.ErrLease
+				} else if err != nil {
+					return err
+				}
+				out, err = s.connectionTest(ctx, tx, q, org, gateway, ct, r)
+				return err
 			} else if err != nil {
 				return err
 			}
@@ -245,6 +257,10 @@ func (s *Store) Expire(ctx context.Context, org ids.OrgID, sign app.Sign) (int, 
 			if r.TransactionID != nil {
 				closed = append(closed, *r.TransactionID)
 			}
+		}
+		// A connection test whose read expired could not run.
+		if _, err := q.FailExpiredConnectionTests(ctx, org); err != nil {
+			return err
 		}
 		slices.SortFunc(closed, compareUUID)
 		for _, txn := range slices.Compact(closed) {
