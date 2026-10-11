@@ -121,6 +121,11 @@ tasks:
     cmds:
       - go test ./internal/conformance/gen -run TestConformanceVectors -count=1 -update
 
+  sdk:check:
+    desc: The SDKs' tests, each running every conformance vector (not part of task check)
+    cmds:
+      - go -C sdk/go test -shuffle=on -count=1 ./...
+
   license:check:
     desc: Verify SPDX + copyright headers on every source file
     cmds:
