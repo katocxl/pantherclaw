@@ -11,6 +11,7 @@ import (
 	"encoding/json/jsontext"
 	"encoding/json/v2"
 	"net/http"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -258,12 +259,59 @@ type ProofCheck struct {
 	Answer string `json:"answer"`
 }
 
+// HTUCase is the htu a client signs for a request URL, as PantherClaw's
+// client computes it (internal/identity/workloadclient): the URL without
+// query and fragment, the scheme in lower case, the host as written and the
+// path as Go's url.URL.EscapedPath gives it. Reject: an SDK refuses to sign.
+type HTUCase struct {
+	URL    string `json:"url"`
+	HTU    string `json:"htu,omitzero"`
+	Reject bool   `json:"reject,omitzero"`
+}
+
 // ProofFile is proofs.json.
 type ProofFile struct {
 	header
 	Key    Key          `json:"key"`
 	Proofs []ProofCase  `json:"proofs"`
+	HTUs   []HTUCase    `json:"htus"`
 	Checks []ProofCheck `json:"checks"`
+}
+
+// htus are request URLs and the htu PantherClaw's client signs for them.
+func htus(t *testing.T) []HTUCase {
+	t.Helper()
+	var out []HTUCase
+	for _, raw := range []string{
+		gatewayURL + "/sdk/payments",
+		"HTTPS://Gateway.Example.TEST/sdk/payments",
+		"https://gateway.example.test:443/sdk/payments",
+		"https://gateway.example.test/sdk/../sdk/payments",
+		"https://gateway.example.test/v1/wait/a b",
+		"https://gateway.example.test/repos/a%2Fb",
+		"https://gateway.example.test/p%7eq",
+		"https://gateway.example.test/caf" + string(rune(0xe9)),
+		"https://gateway.example.test/a(b)!*'$&+,;=:@[]",
+		"https://gateway.example.test/a~%7e b",
+		"https://gateway.example.test/x?q=1#f",
+		"https://gateway.example.test",
+		"http://127.0.0.1:8080/sdk/payments",
+		"https://[::1]:8443/sdk/payments",
+		"https://user@gateway.example.test/x",
+		"ftp://gateway.example.test/x",
+		"/sdk/payments",
+		"https:///x",
+		"https://gateway.example.test/a%zz",
+	} {
+		u, err := url.Parse(raw)
+		if err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" || u.User != nil {
+			out = append(out, HTUCase{URL: raw, Reject: true})
+			continue
+		}
+		u.RawQuery, u.Fragment = "", ""
+		out = append(out, HTUCase{URL: raw, HTU: u.String()})
+	}
+	return out
 }
 
 func buildProofs(t *testing.T) any {
@@ -279,8 +327,9 @@ func buildProofs(t *testing.T) any {
 			"request at a time, in the order of PAP-1 §4: proof header and signature, key binding, htm, htu (scheme and "+
 			"host without case, path exactly), ath, bh, iat (at most 60 s ahead, 6 min behind), jti (22 to 128 printable "+
 			"ASCII characters), nonce shape."), Key: workloadKey("workload")}
-	sdkBody := `{"v":1,"call":{"kind":"tool","name":"create_refund","arguments":{"amount":"30.00","charge":"ch_1","currency":"USD","reason":"duplicate"}}}`
-	sdkURL := gatewayURL + "/sdk/payments/actions"
+	sdkBody := `{"input":{"amount":"30.00","charge":"ch_1","currency":"USD","reason":"duplicate"},"server":"payments",` +
+		`"tool":"mcp__payments__create_refund","tool_use_id":"toolu_01"}`
+	sdkURL := gatewayURL + "/sdk/payments"
 	at := issuedAt.Add(time.Minute)
 	sign := func(name, method, url, body, tok, n string) ProofCase {
 		p, err := pap.NewProof(wk, pap.ProofParams{Method: method, URL: url, Body: []byte(body), Token: tok, Nonce: n, Now: at})
@@ -306,6 +355,8 @@ func buildProofs(t *testing.T) any {
 			`{"identifier":"`+identifier()+`"}`, "", nonce),
 		sign("the first request, before any nonce", http.MethodPost, sdkURL, sdkBody, token, ""),
 	}
+	f.HTUs = htus(t)
+	slash := sign("a percent-encoded slash", http.MethodGet, gatewayURL+"/repos/a%2Fb", "", token, nonce)
 	authz, keyOnly := f.Proofs[0], f.Proofs[2]
 	check := func(name string, p ProofCase, edit func(*ProofCheck)) ProofCheck {
 		c := ProofCheck{Name: name, Proof: p.Proof, Method: p.Method, URL: p.URL, Body: p.Body, Token: p.Token, Now: at.Unix()}
@@ -325,7 +376,18 @@ func buildProofs(t *testing.T) any {
 			c.Proof = craft(hdr, claimsWith(`"htu":"https://gateway.example.test`, `"htu":"HTTPS://Gateway.Example.Test`), wk)
 		}),
 		check("another method", authz, func(c *ProofCheck) { c.Method = http.MethodPut }),
-		check("another path", authz, func(c *ProofCheck) { c.URL = gatewayURL + "/sdk/other/actions" }),
+		check("htu with the default port written", authz, func(c *ProofCheck) {
+			c.Proof = craft(hdr, claimsWith(`"htu":"https://gateway.example.test`, `"htu":"https://gateway.example.test:443`), wk)
+		}),
+		check("htu with a dot segment", authz, func(c *ProofCheck) {
+			c.Proof = craft(hdr, claimsWith(`/sdk/payments"`, `/sdk/x/../payments"`), wk)
+		}),
+		check("htu escaping an unreserved character", authz, func(c *ProofCheck) {
+			c.Proof = craft(hdr, claimsWith(`/sdk/payments"`, `/sdk/p%61yments"`), wk)
+		}),
+		check("a percent-encoded slash", slash, nil),
+		check("a percent-encoded slash checked against the decoded path", slash, func(c *ProofCheck) { c.URL = gatewayURL + "/repos/a/b" }),
+		check("another path", authz, func(c *ProofCheck) { c.URL = gatewayURL + "/sdk/other" }),
 		check("another host", authz, func(c *ProofCheck) { c.URL = "https://evil.example.test/sdk/payments/actions" }),
 		check("the body changed", authz, func(c *ProofCheck) { c.Body = strings.Replace(sdkBody, "30.00", "300.00", 1) }),
 		check("sent with another token", authz, func(c *ProofCheck) { c.Token = other }),
@@ -333,13 +395,20 @@ func buildProofs(t *testing.T) any {
 		check("a key-only proof sent with a token", keyOnly, func(c *ProofCheck) { c.Token = token }),
 		check("ath without a token", authz, func(c *ProofCheck) { c.Token = "" }),
 		check("issued 7 minutes ago", keyOnly, func(c *ProofCheck) { c.Now = at.Add(7 * time.Minute).Unix() }),
+		check("issued 6 minutes ago", keyOnly, func(c *ProofCheck) { c.Now = at.Add(6 * time.Minute).Unix() }),
+		check("issued 6 minutes and 1 second ago", keyOnly, func(c *ProofCheck) { c.Now = at.Add(6*time.Minute + time.Second).Unix() }),
 		check("issued 2 minutes ahead", keyOnly, func(c *ProofCheck) { c.Now = at.Add(-2 * time.Minute).Unix() }),
+		check("issued 60 seconds ahead", keyOnly, func(c *ProofCheck) { c.Now = at.Add(-time.Minute).Unix() }),
+		check("issued 61 seconds ahead", keyOnly, func(c *ProofCheck) { c.Now = at.Add(-time.Minute - time.Second).Unix() }),
 		check("a claim changed after signing", authz, func(c *ProofCheck) {
 			parts := strings.Split(authz.Proof, ".")
 			c.Proof = parts[0] + "." + b64([]byte(claimsWith(`"htm":"POST"`, `"htm":"PUT"`))) + "." + parts[2]
 			c.Method = http.MethodPut
 		}),
 		check("alg none", authz, func(c *ProofCheck) { c.Proof = craft(strings.Replace(hdr, `"EdDSA"`, `"none"`, 1), authz.Claims, nil) }),
+		check("alg Ed25519 (RFC 9864), not yet accepted on proofs", authz, func(c *ProofCheck) {
+			c.Proof = craft(strings.Replace(hdr, `"EdDSA"`, `"Ed25519"`, 1), authz.Claims, wk)
+		}),
 		check("a private key in the jwk", authz, func(c *ProofCheck) {
 			c.Proof = craft(strings.Replace(hdr, `"kty":"OKP",`, `"d":"`+b64(seed("workload"))+`","kty":"OKP",`, 1), authz.Claims, wk)
 		}),
@@ -350,9 +419,13 @@ func buildProofs(t *testing.T) any {
 		check("a malformed nonce", authz, func(c *ProofCheck) { c.Proof = craft(hdr, claimsWith(nonce, "short"), wk) }),
 	}
 	want := []string{
-		"ok", "ok", "ok", "use_nonce", "ok", "invalid_proof", "invalid_proof", "invalid_proof", "body_hash_mismatch", "invalid_proof",
-		"key_mismatch", "invalid_proof", "invalid_proof", "invalid_proof", "invalid_proof", "invalid_proof", "invalid_proof",
-		"invalid_proof", "invalid_proof", "invalid_proof", "use_nonce",
+		"ok", "ok", "ok", "use_nonce", "ok", "invalid_proof", "invalid_proof", "invalid_proof", "invalid_proof", "ok",
+		"invalid_proof", "invalid_proof", "invalid_proof", "body_hash_mismatch", "invalid_proof", "key_mismatch", "invalid_proof",
+		"invalid_proof", "invalid_proof", "ok", "invalid_proof", "invalid_proof", "ok", "invalid_proof", "invalid_proof",
+		"invalid_proof", "invalid_proof", "invalid_proof", "invalid_proof", "invalid_proof", "use_nonce",
+	}
+	if len(want) != len(f.Checks) {
+		t.Fatalf("%d answers for %d checks", len(want), len(f.Checks))
 	}
 	v, err := registry(t).Verifier(keys.PurposeWorkloadTokens, pap.TokenType)
 	if err != nil {

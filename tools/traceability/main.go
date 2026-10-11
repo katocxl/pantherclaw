@@ -46,8 +46,10 @@ var (
 	threatRow = regexp.MustCompile(`^\|\s*(T-\d{3})\s*\|(.*)\|\s*([^|]+?)\s*\|\s*$`)
 	hrRef     = regexp.MustCompile(`HR-(\d{3})(?:\.\.(\d{3}))?`)
 	testName  = regexp.MustCompile(`func (Test(?:HR|T)\d{3})_`)
-	pyTest    = regexp.MustCompile(`def test_((?:HR|T)\d{3})_`)
-	tsTest    = regexp.MustCompile(`\btest\(\s*["'` + "`" + `](Test(?:HR|T)\d{3})_`)
+	// A Python or TypeScript test counts only where it is declared, at the
+	// start of a line, never in a comment, a docstring or a string.
+	pyTest = regexp.MustCompile(`(?m)^[ \t]*def test_((?:HR|T)\d{3})_`)
+	tsTest = regexp.MustCompile(`(?m)^[ \t]*test\(\s*["'` + "`" + `](Test(?:HR|T)\d{3})_`)
 )
 
 // Item is a rule or threat with the milestone it is due.

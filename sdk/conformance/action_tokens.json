@@ -184,7 +184,55 @@
       "expect": "wrong_audience"
     },
     {
-      "name": "expired",
+      "name": "typ pap-permit+jwt",
+      "token": "eyJhbGciOiJFZERTQSIsImtpZCI6ImFjdGlvbi10b2tlbnMta0pIRHNoWWxZZnhuaVFNaEw3WDNzdCIsInR5cCI6InBhcC1wZXJtaXQrand0In0.eyJpc3MiOiJodHRwczovL3BhbnRoZXJjbGF3LmV4YW1wbGUudGVzdCIsImF1ZCI6IjAxOTIwMDAwLTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDAwNyIsImp0aSI6IjAwZGM2YWNmLWFjMDAtNzczOC05OTdhLTUzMDNkNTkxMjM1MSIsImlhdCI6MTc5MTIwMTYwMCwiZXhwIjoxNzkxMjAxNjYwLCJwYXAiOnsidiI6MSwidHhuIjoiMDBkYzZhY2YtYWMwMC03Njk3LWEyYjQtMTllMmMyMTQ4MmRhIiwiYWN0IjoiNmEyM2E2NzE1ZGFmY2YzMTJjZjg4MGFmMGU3OWFkNDE3ODQ3MGFiNmM0MThlMDAxZjA5ZjI4YzFhMDVlYmFmYSIsImJoIjoiMmIzZDUzZGY3YmMwODg0NTgyZDhjNDJjY2M2Zjc0ZTU3MzM1N2EwNDUzMzIzMDQ1MDg4YWQzYWQ0ZDU5ZDU1OCIsIm9wIjoicGF5bWVudHMucmVmdW5kLmNyZWF0ZSIsInRhcmdldCI6eyJ0eXBlIjoicGF5bWVudHMuY2hhcmdlIiwiaWQiOiJjaF8xIn19fQ._I3PiS9R0mHALfdlxEFb7mdhnaTKSjK739MmNgfozuauN-QC_HqispFXqOuQS7v1S1YfuZBoKSWnxssVtmxbAA",
+      "body": "{\"amount\":\"30.00\",\"charge\":\"ch_1\",\"currency\":\"USD\",\"reason\":\"duplicate\"}",
+      "operation": "payments.refund.create",
+      "target_type": "payments.charge",
+      "target_id": "ch_1",
+      "issuer": "https://pantherclaw.example.test",
+      "audience": "01920000-0000-7000-8000-000000000007",
+      "now": 1791201610,
+      "expect": "bad_signature"
+    },
+    {
+      "name": "a kid that is not the key's",
+      "token": "eyJhbGciOiJFZERTQSIsImtpZCI6ImFjdGlvbi10b2tlbnMteGtKSERzaFlsWWZ4bmlRTWhMN1gzc3QiLCJ0eXAiOiJwYXAtYWN0aW9uK2p3dCJ9.eyJpc3MiOiJodHRwczovL3BhbnRoZXJjbGF3LmV4YW1wbGUudGVzdCIsImF1ZCI6IjAxOTIwMDAwLTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDAwNyIsImp0aSI6IjAwZGM2YWNmLWFjMDAtNzczOC05OTdhLTUzMDNkNTkxMjM1MSIsImlhdCI6MTc5MTIwMTYwMCwiZXhwIjoxNzkxMjAxNjYwLCJwYXAiOnsidiI6MSwidHhuIjoiMDBkYzZhY2YtYWMwMC03Njk3LWEyYjQtMTllMmMyMTQ4MmRhIiwiYWN0IjoiNmEyM2E2NzE1ZGFmY2YzMTJjZjg4MGFmMGU3OWFkNDE3ODQ3MGFiNmM0MThlMDAxZjA5ZjI4YzFhMDVlYmFmYSIsImJoIjoiMmIzZDUzZGY3YmMwODg0NTgyZDhjNDJjY2M2Zjc0ZTU3MzM1N2EwNDUzMzIzMDQ1MDg4YWQzYWQ0ZDU5ZDU1OCIsIm9wIjoicGF5bWVudHMucmVmdW5kLmNyZWF0ZSIsInRhcmdldCI6eyJ0eXBlIjoicGF5bWVudHMuY2hhcmdlIiwiaWQiOiJjaF8xIn19fQ.GBpye9kfwF5ES39V4xtSwtIpNYIrAv142UUt01Brlv1cqPmF-tszdm-WJy6ZQe70xP3hIJvixL3N5Sa-E7peCw",
+      "body": "{\"amount\":\"30.00\",\"charge\":\"ch_1\",\"currency\":\"USD\",\"reason\":\"duplicate\"}",
+      "operation": "payments.refund.create",
+      "target_type": "payments.charge",
+      "target_id": "ch_1",
+      "issuer": "https://pantherclaw.example.test",
+      "audience": "01920000-0000-7000-8000-000000000007",
+      "now": 1791201610,
+      "expect": "bad_signature"
+    },
+    {
+      "name": "pap.v 2",
+      "token": "eyJhbGciOiJFZERTQSIsImtpZCI6ImFjdGlvbi10b2tlbnMta0pIRHNoWWxZZnhuaVFNaEw3WDNzdCIsInR5cCI6InBhcC1hY3Rpb24rand0In0.eyJpc3MiOiJodHRwczovL3BhbnRoZXJjbGF3LmV4YW1wbGUudGVzdCIsImF1ZCI6IjAxOTIwMDAwLTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDAwNyIsImp0aSI6IjAwZGM2YWNmLWFjMDAtNzczOC05OTdhLTUzMDNkNTkxMjM1MSIsImlhdCI6MTc5MTIwMTYwMCwiZXhwIjoxNzkxMjAxNjYwLCJwYXAiOnsidiI6MiwidHhuIjoiMDBkYzZhY2YtYWMwMC03Njk3LWEyYjQtMTllMmMyMTQ4MmRhIiwiYWN0IjoiNmEyM2E2NzE1ZGFmY2YzMTJjZjg4MGFmMGU3OWFkNDE3ODQ3MGFiNmM0MThlMDAxZjA5ZjI4YzFhMDVlYmFmYSIsImJoIjoiMmIzZDUzZGY3YmMwODg0NTgyZDhjNDJjY2M2Zjc0ZTU3MzM1N2EwNDUzMzIzMDQ1MDg4YWQzYWQ0ZDU5ZDU1OCIsIm9wIjoicGF5bWVudHMucmVmdW5kLmNyZWF0ZSIsInRhcmdldCI6eyJ0eXBlIjoicGF5bWVudHMuY2hhcmdlIiwiaWQiOiJjaF8xIn19fQ.IV0_U5tLQqwqsgLyfZRMk8ol5eTrc-fzRT7Ye5wAibwf1bSn8Qh3C-dOlh4XUMVKhWYUzN5mNhgTYJvCb2E3AA",
+      "body": "{\"amount\":\"30.00\",\"charge\":\"ch_1\",\"currency\":\"USD\",\"reason\":\"duplicate\"}",
+      "operation": "payments.refund.create",
+      "target_type": "payments.charge",
+      "target_id": "ch_1",
+      "issuer": "https://pantherclaw.example.test",
+      "audience": "01920000-0000-7000-8000-000000000007",
+      "now": 1791201610,
+      "expect": "bad_signature"
+    },
+    {
+      "name": "aud an array holding the connection",
+      "token": "eyJhbGciOiJFZERTQSIsImtpZCI6ImFjdGlvbi10b2tlbnMta0pIRHNoWWxZZnhuaVFNaEw3WDNzdCIsInR5cCI6InBhcC1hY3Rpb24rand0In0.eyJpc3MiOiJodHRwczovL3BhbnRoZXJjbGF3LmV4YW1wbGUudGVzdCIsImF1ZCI6WyIwMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDciXSwianRpIjoiMDBkYzZhY2YtYWMwMC03NzM4LTk5N2EtNTMwM2Q1OTEyMzUxIiwiaWF0IjoxNzkxMjAxNjAwLCJleHAiOjE3OTEyMDE2NjAsInBhcCI6eyJ2IjoxLCJ0eG4iOiIwMGRjNmFjZi1hYzAwLTc2OTctYTJiNC0xOWUyYzIxNDgyZGEiLCJhY3QiOiI2YTIzYTY3MTVkYWZjZjMxMmNmODgwYWYwZTc5YWQ0MTc4NDcwYWI2YzQxOGUwMDFmMDlmMjhjMWEwNWViYWZhIiwiYmgiOiIyYjNkNTNkZjdiYzA4ODQ1ODJkOGM0MmNjYzZmNzRlNTczMzU3YTA0NTMzMjMwNDUwODhhZDNhZDRkNTlkNTU4Iiwib3AiOiJwYXltZW50cy5yZWZ1bmQuY3JlYXRlIiwidGFyZ2V0Ijp7InR5cGUiOiJwYXltZW50cy5jaGFyZ2UiLCJpZCI6ImNoXzEifX19.vueFta_4NZyRJYHhJKMPvBq4PVQtptNmzCmUr-hLqKWOVfOO5FsK7PmAcp7OK_fxwWgSXlAeiPK-GSqAh8HrBA",
+      "body": "{\"amount\":\"30.00\",\"charge\":\"ch_1\",\"currency\":\"USD\",\"reason\":\"duplicate\"}",
+      "operation": "payments.refund.create",
+      "target_type": "payments.charge",
+      "target_id": "ch_1",
+      "issuer": "https://pantherclaw.example.test",
+      "audience": "01920000-0000-7000-8000-000000000007",
+      "now": 1791201610,
+      "expect": "bad_signature"
+    },
+    {
+      "name": "expired a minute ago",
       "token": "eyJhbGciOiJFZERTQSIsImtpZCI6ImFjdGlvbi10b2tlbnMta0pIRHNoWWxZZnhuaVFNaEw3WDNzdCIsInR5cCI6InBhcC1hY3Rpb24rand0In0.eyJpc3MiOiJodHRwczovL3BhbnRoZXJjbGF3LmV4YW1wbGUudGVzdCIsImF1ZCI6IjAxOTIwMDAwLTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDAwNyIsImp0aSI6IjAwZGM2YWNmLWFjMDAtNzczOC05OTdhLTUzMDNkNTkxMjM1MSIsImlhdCI6MTc5MTIwMTYwMCwiZXhwIjoxNzkxMjAxNjYwLCJwYXAiOnsidiI6MSwidHhuIjoiMDBkYzZhY2YtYWMwMC03Njk3LWEyYjQtMTllMmMyMTQ4MmRhIiwiYWN0IjoiNmEyM2E2NzE1ZGFmY2YzMTJjZjg4MGFmMGU3OWFkNDE3ODQ3MGFiNmM0MThlMDAxZjA5ZjI4YzFhMDVlYmFmYSIsImJoIjoiMmIzZDUzZGY3YmMwODg0NTgyZDhjNDJjY2M2Zjc0ZTU3MzM1N2EwNDUzMzIzMDQ1MDg4YWQzYWQ0ZDU5ZDU1OCIsIm9wIjoicGF5bWVudHMucmVmdW5kLmNyZWF0ZSIsInRhcmdldCI6eyJ0eXBlIjoicGF5bWVudHMuY2hhcmdlIiwiaWQiOiJjaF8xIn19fQ.X0ieCGuBzYwCJYbXAKCHru92LVdtzSgL-f9uFzh9cGuA5rXr-xXY_rnLoqYbY9a0XFJaFa_VUvq4Wj4BTzV0DQ",
       "body": "{\"amount\":\"30.00\",\"charge\":\"ch_1\",\"currency\":\"USD\",\"reason\":\"duplicate\"}",
       "operation": "payments.refund.create",
@@ -193,6 +241,54 @@
       "issuer": "https://pantherclaw.example.test",
       "audience": "01920000-0000-7000-8000-000000000007",
       "now": 1791201720,
+      "expect": "expired"
+    },
+    {
+      "name": "4 seconds past exp, within the skew",
+      "token": "eyJhbGciOiJFZERTQSIsImtpZCI6ImFjdGlvbi10b2tlbnMta0pIRHNoWWxZZnhuaVFNaEw3WDNzdCIsInR5cCI6InBhcC1hY3Rpb24rand0In0.eyJpc3MiOiJodHRwczovL3BhbnRoZXJjbGF3LmV4YW1wbGUudGVzdCIsImF1ZCI6IjAxOTIwMDAwLTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDAwNyIsImp0aSI6IjAwZGM2YWNmLWFjMDAtNzczOC05OTdhLTUzMDNkNTkxMjM1MSIsImlhdCI6MTc5MTIwMTYwMCwiZXhwIjoxNzkxMjAxNjYwLCJwYXAiOnsidiI6MSwidHhuIjoiMDBkYzZhY2YtYWMwMC03Njk3LWEyYjQtMTllMmMyMTQ4MmRhIiwiYWN0IjoiNmEyM2E2NzE1ZGFmY2YzMTJjZjg4MGFmMGU3OWFkNDE3ODQ3MGFiNmM0MThlMDAxZjA5ZjI4YzFhMDVlYmFmYSIsImJoIjoiMmIzZDUzZGY3YmMwODg0NTgyZDhjNDJjY2M2Zjc0ZTU3MzM1N2EwNDUzMzIzMDQ1MDg4YWQzYWQ0ZDU5ZDU1OCIsIm9wIjoicGF5bWVudHMucmVmdW5kLmNyZWF0ZSIsInRhcmdldCI6eyJ0eXBlIjoicGF5bWVudHMuY2hhcmdlIiwiaWQiOiJjaF8xIn19fQ.X0ieCGuBzYwCJYbXAKCHru92LVdtzSgL-f9uFzh9cGuA5rXr-xXY_rnLoqYbY9a0XFJaFa_VUvq4Wj4BTzV0DQ",
+      "body": "{\"amount\":\"30.00\",\"charge\":\"ch_1\",\"currency\":\"USD\",\"reason\":\"duplicate\"}",
+      "operation": "payments.refund.create",
+      "target_type": "payments.charge",
+      "target_id": "ch_1",
+      "issuer": "https://pantherclaw.example.test",
+      "audience": "01920000-0000-7000-8000-000000000007",
+      "now": 1791201664,
+      "expect": "ok"
+    },
+    {
+      "name": "5 seconds past exp",
+      "token": "eyJhbGciOiJFZERTQSIsImtpZCI6ImFjdGlvbi10b2tlbnMta0pIRHNoWWxZZnhuaVFNaEw3WDNzdCIsInR5cCI6InBhcC1hY3Rpb24rand0In0.eyJpc3MiOiJodHRwczovL3BhbnRoZXJjbGF3LmV4YW1wbGUudGVzdCIsImF1ZCI6IjAxOTIwMDAwLTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDAwNyIsImp0aSI6IjAwZGM2YWNmLWFjMDAtNzczOC05OTdhLTUzMDNkNTkxMjM1MSIsImlhdCI6MTc5MTIwMTYwMCwiZXhwIjoxNzkxMjAxNjYwLCJwYXAiOnsidiI6MSwidHhuIjoiMDBkYzZhY2YtYWMwMC03Njk3LWEyYjQtMTllMmMyMTQ4MmRhIiwiYWN0IjoiNmEyM2E2NzE1ZGFmY2YzMTJjZjg4MGFmMGU3OWFkNDE3ODQ3MGFiNmM0MThlMDAxZjA5ZjI4YzFhMDVlYmFmYSIsImJoIjoiMmIzZDUzZGY3YmMwODg0NTgyZDhjNDJjY2M2Zjc0ZTU3MzM1N2EwNDUzMzIzMDQ1MDg4YWQzYWQ0ZDU5ZDU1OCIsIm9wIjoicGF5bWVudHMucmVmdW5kLmNyZWF0ZSIsInRhcmdldCI6eyJ0eXBlIjoicGF5bWVudHMuY2hhcmdlIiwiaWQiOiJjaF8xIn19fQ.X0ieCGuBzYwCJYbXAKCHru92LVdtzSgL-f9uFzh9cGuA5rXr-xXY_rnLoqYbY9a0XFJaFa_VUvq4Wj4BTzV0DQ",
+      "body": "{\"amount\":\"30.00\",\"charge\":\"ch_1\",\"currency\":\"USD\",\"reason\":\"duplicate\"}",
+      "operation": "payments.refund.create",
+      "target_type": "payments.charge",
+      "target_id": "ch_1",
+      "issuer": "https://pantherclaw.example.test",
+      "audience": "01920000-0000-7000-8000-000000000007",
+      "now": 1791201665,
+      "expect": "expired"
+    },
+    {
+      "name": "issued 5 seconds ahead, within the skew",
+      "token": "eyJhbGciOiJFZERTQSIsImtpZCI6ImFjdGlvbi10b2tlbnMta0pIRHNoWWxZZnhuaVFNaEw3WDNzdCIsInR5cCI6InBhcC1hY3Rpb24rand0In0.eyJpc3MiOiJodHRwczovL3BhbnRoZXJjbGF3LmV4YW1wbGUudGVzdCIsImF1ZCI6IjAxOTIwMDAwLTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDAwNyIsImp0aSI6IjAwZGM2YWNmLWFjMDAtNzczOC05OTdhLTUzMDNkNTkxMjM1MSIsImlhdCI6MTc5MTIwMTYwMCwiZXhwIjoxNzkxMjAxNjYwLCJwYXAiOnsidiI6MSwidHhuIjoiMDBkYzZhY2YtYWMwMC03Njk3LWEyYjQtMTllMmMyMTQ4MmRhIiwiYWN0IjoiNmEyM2E2NzE1ZGFmY2YzMTJjZjg4MGFmMGU3OWFkNDE3ODQ3MGFiNmM0MThlMDAxZjA5ZjI4YzFhMDVlYmFmYSIsImJoIjoiMmIzZDUzZGY3YmMwODg0NTgyZDhjNDJjY2M2Zjc0ZTU3MzM1N2EwNDUzMzIzMDQ1MDg4YWQzYWQ0ZDU5ZDU1OCIsIm9wIjoicGF5bWVudHMucmVmdW5kLmNyZWF0ZSIsInRhcmdldCI6eyJ0eXBlIjoicGF5bWVudHMuY2hhcmdlIiwiaWQiOiJjaF8xIn19fQ.X0ieCGuBzYwCJYbXAKCHru92LVdtzSgL-f9uFzh9cGuA5rXr-xXY_rnLoqYbY9a0XFJaFa_VUvq4Wj4BTzV0DQ",
+      "body": "{\"amount\":\"30.00\",\"charge\":\"ch_1\",\"currency\":\"USD\",\"reason\":\"duplicate\"}",
+      "operation": "payments.refund.create",
+      "target_type": "payments.charge",
+      "target_id": "ch_1",
+      "issuer": "https://pantherclaw.example.test",
+      "audience": "01920000-0000-7000-8000-000000000007",
+      "now": 1791201595,
+      "expect": "ok"
+    },
+    {
+      "name": "issued 6 seconds ahead",
+      "token": "eyJhbGciOiJFZERTQSIsImtpZCI6ImFjdGlvbi10b2tlbnMta0pIRHNoWWxZZnhuaVFNaEw3WDNzdCIsInR5cCI6InBhcC1hY3Rpb24rand0In0.eyJpc3MiOiJodHRwczovL3BhbnRoZXJjbGF3LmV4YW1wbGUudGVzdCIsImF1ZCI6IjAxOTIwMDAwLTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDAwNyIsImp0aSI6IjAwZGM2YWNmLWFjMDAtNzczOC05OTdhLTUzMDNkNTkxMjM1MSIsImlhdCI6MTc5MTIwMTYwMCwiZXhwIjoxNzkxMjAxNjYwLCJwYXAiOnsidiI6MSwidHhuIjoiMDBkYzZhY2YtYWMwMC03Njk3LWEyYjQtMTllMmMyMTQ4MmRhIiwiYWN0IjoiNmEyM2E2NzE1ZGFmY2YzMTJjZjg4MGFmMGU3OWFkNDE3ODQ3MGFiNmM0MThlMDAxZjA5ZjI4YzFhMDVlYmFmYSIsImJoIjoiMmIzZDUzZGY3YmMwODg0NTgyZDhjNDJjY2M2Zjc0ZTU3MzM1N2EwNDUzMzIzMDQ1MDg4YWQzYWQ0ZDU5ZDU1OCIsIm9wIjoicGF5bWVudHMucmVmdW5kLmNyZWF0ZSIsInRhcmdldCI6eyJ0eXBlIjoicGF5bWVudHMuY2hhcmdlIiwiaWQiOiJjaF8xIn19fQ.X0ieCGuBzYwCJYbXAKCHru92LVdtzSgL-f9uFzh9cGuA5rXr-xXY_rnLoqYbY9a0XFJaFa_VUvq4Wj4BTzV0DQ",
+      "body": "{\"amount\":\"30.00\",\"charge\":\"ch_1\",\"currency\":\"USD\",\"reason\":\"duplicate\"}",
+      "operation": "payments.refund.create",
+      "target_type": "payments.charge",
+      "target_id": "ch_1",
+      "issuer": "https://pantherclaw.example.test",
+      "audience": "01920000-0000-7000-8000-000000000007",
+      "now": 1791201594,
       "expect": "expired"
     },
     {
@@ -205,6 +301,18 @@
       "issuer": "https://pantherclaw.example.test",
       "audience": "01920000-0000-7000-8000-000000000007",
       "now": 1791201540,
+      "expect": "expired"
+    },
+    {
+      "name": "a lifetime of 61 seconds",
+      "token": "eyJhbGciOiJFZERTQSIsImtpZCI6ImFjdGlvbi10b2tlbnMta0pIRHNoWWxZZnhuaVFNaEw3WDNzdCIsInR5cCI6InBhcC1hY3Rpb24rand0In0.eyJpc3MiOiJodHRwczovL3BhbnRoZXJjbGF3LmV4YW1wbGUudGVzdCIsImF1ZCI6IjAxOTIwMDAwLTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDAwNyIsImp0aSI6IjAwZGM2YWNmLWFjMDAtNzczOC05OTdhLTUzMDNkNTkxMjM1MSIsImlhdCI6MTc5MTIwMTYwMCwiZXhwIjoxNzkxMjAxNjYxLCJwYXAiOnsidiI6MSwidHhuIjoiMDBkYzZhY2YtYWMwMC03Njk3LWEyYjQtMTllMmMyMTQ4MmRhIiwiYWN0IjoiNmEyM2E2NzE1ZGFmY2YzMTJjZjg4MGFmMGU3OWFkNDE3ODQ3MGFiNmM0MThlMDAxZjA5ZjI4YzFhMDVlYmFmYSIsImJoIjoiMmIzZDUzZGY3YmMwODg0NTgyZDhjNDJjY2M2Zjc0ZTU3MzM1N2EwNDUzMzIzMDQ1MDg4YWQzYWQ0ZDU5ZDU1OCIsIm9wIjoicGF5bWVudHMucmVmdW5kLmNyZWF0ZSIsInRhcmdldCI6eyJ0eXBlIjoicGF5bWVudHMuY2hhcmdlIiwiaWQiOiJjaF8xIn19fQ.Qp25xAEejqP31RrBUSRlJBUeCyoZEGHYo5wUTNWdlE77asWWWJrtqhV_12Pzxxk6USxjNs6hsJp48CpKHAc7Cw",
+      "body": "{\"amount\":\"30.00\",\"charge\":\"ch_1\",\"currency\":\"USD\",\"reason\":\"duplicate\"}",
+      "operation": "payments.refund.create",
+      "target_type": "payments.charge",
+      "target_id": "ch_1",
+      "issuer": "https://pantherclaw.example.test",
+      "audience": "01920000-0000-7000-8000-000000000007",
+      "now": 1791201610,
       "expect": "expired"
     },
     {
@@ -232,6 +340,19 @@
       "expect": "body_mismatch"
     },
     {
+      "name": "a refused body leaves the token unspent",
+      "token": "eyJhbGciOiJFZERTQSIsImtpZCI6ImFjdGlvbi10b2tlbnMta0pIRHNoWWxZZnhuaVFNaEw3WDNzdCIsInR5cCI6InBhcC1hY3Rpb24rand0In0.eyJpc3MiOiJodHRwczovL3BhbnRoZXJjbGF3LmV4YW1wbGUudGVzdCIsImF1ZCI6IjAxOTIwMDAwLTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDAwNyIsImp0aSI6IjAwZGM2YWNmLWFjMDAtNzczOC05OTdhLTUzMDNkNTkxMjM1MSIsImlhdCI6MTc5MTIwMTYwMCwiZXhwIjoxNzkxMjAxNjYwLCJwYXAiOnsidiI6MSwidHhuIjoiMDBkYzZhY2YtYWMwMC03Njk3LWEyYjQtMTllMmMyMTQ4MmRhIiwiYWN0IjoiNmEyM2E2NzE1ZGFmY2YzMTJjZjg4MGFmMGU3OWFkNDE3ODQ3MGFiNmM0MThlMDAxZjA5ZjI4YzFhMDVlYmFmYSIsImJoIjoiMmIzZDUzZGY3YmMwODg0NTgyZDhjNDJjY2M2Zjc0ZTU3MzM1N2EwNDUzMzIzMDQ1MDg4YWQzYWQ0ZDU5ZDU1OCIsIm9wIjoicGF5bWVudHMucmVmdW5kLmNyZWF0ZSIsInRhcmdldCI6eyJ0eXBlIjoicGF5bWVudHMuY2hhcmdlIiwiaWQiOiJjaF8xIn19fQ.X0ieCGuBzYwCJYbXAKCHru92LVdtzSgL-f9uFzh9cGuA5rXr-xXY_rnLoqYbY9a0XFJaFa_VUvq4Wj4BTzV0DQ",
+      "body": "{\"amount\":\"31.00\",\"charge\":\"ch_1\",\"currency\":\"USD\",\"reason\":\"duplicate\"}",
+      "operation": "payments.refund.create",
+      "target_type": "payments.charge",
+      "target_id": "ch_1",
+      "issuer": "https://pantherclaw.example.test",
+      "audience": "01920000-0000-7000-8000-000000000007",
+      "now": 1791201610,
+      "then_valid": true,
+      "expect": "body_mismatch"
+    },
+    {
       "name": "another operation",
       "token": "eyJhbGciOiJFZERTQSIsImtpZCI6ImFjdGlvbi10b2tlbnMta0pIRHNoWWxZZnhuaVFNaEw3WDNzdCIsInR5cCI6InBhcC1hY3Rpb24rand0In0.eyJpc3MiOiJodHRwczovL3BhbnRoZXJjbGF3LmV4YW1wbGUudGVzdCIsImF1ZCI6IjAxOTIwMDAwLTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDAwNyIsImp0aSI6IjAwZGM2YWNmLWFjMDAtNzczOC05OTdhLTUzMDNkNTkxMjM1MSIsImlhdCI6MTc5MTIwMTYwMCwiZXhwIjoxNzkxMjAxNjYwLCJwYXAiOnsidiI6MSwidHhuIjoiMDBkYzZhY2YtYWMwMC03Njk3LWEyYjQtMTllMmMyMTQ4MmRhIiwiYWN0IjoiNmEyM2E2NzE1ZGFmY2YzMTJjZjg4MGFmMGU3OWFkNDE3ODQ3MGFiNmM0MThlMDAxZjA5ZjI4YzFhMDVlYmFmYSIsImJoIjoiMmIzZDUzZGY3YmMwODg0NTgyZDhjNDJjY2M2Zjc0ZTU3MzM1N2EwNDUzMzIzMDQ1MDg4YWQzYWQ0ZDU5ZDU1OCIsIm9wIjoicGF5bWVudHMucmVmdW5kLmNyZWF0ZSIsInRhcmdldCI6eyJ0eXBlIjoicGF5bWVudHMuY2hhcmdlIiwiaWQiOiJjaF8xIn19fQ.X0ieCGuBzYwCJYbXAKCHru92LVdtzSgL-f9uFzh9cGuA5rXr-xXY_rnLoqYbY9a0XFJaFa_VUvq4Wj4BTzV0DQ",
       "body": "{\"amount\":\"30.00\",\"charge\":\"ch_1\",\"currency\":\"USD\",\"reason\":\"duplicate\"}",
@@ -241,6 +362,19 @@
       "issuer": "https://pantherclaw.example.test",
       "audience": "01920000-0000-7000-8000-000000000007",
       "now": 1791201610,
+      "expect": "operation_mismatch"
+    },
+    {
+      "name": "a refused operation leaves the token unspent",
+      "token": "eyJhbGciOiJFZERTQSIsImtpZCI6ImFjdGlvbi10b2tlbnMta0pIRHNoWWxZZnhuaVFNaEw3WDNzdCIsInR5cCI6InBhcC1hY3Rpb24rand0In0.eyJpc3MiOiJodHRwczovL3BhbnRoZXJjbGF3LmV4YW1wbGUudGVzdCIsImF1ZCI6IjAxOTIwMDAwLTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDAwNyIsImp0aSI6IjAwZGM2YWNmLWFjMDAtNzczOC05OTdhLTUzMDNkNTkxMjM1MSIsImlhdCI6MTc5MTIwMTYwMCwiZXhwIjoxNzkxMjAxNjYwLCJwYXAiOnsidiI6MSwidHhuIjoiMDBkYzZhY2YtYWMwMC03Njk3LWEyYjQtMTllMmMyMTQ4MmRhIiwiYWN0IjoiNmEyM2E2NzE1ZGFmY2YzMTJjZjg4MGFmMGU3OWFkNDE3ODQ3MGFiNmM0MThlMDAxZjA5ZjI4YzFhMDVlYmFmYSIsImJoIjoiMmIzZDUzZGY3YmMwODg0NTgyZDhjNDJjY2M2Zjc0ZTU3MzM1N2EwNDUzMzIzMDQ1MDg4YWQzYWQ0ZDU5ZDU1OCIsIm9wIjoicGF5bWVudHMucmVmdW5kLmNyZWF0ZSIsInRhcmdldCI6eyJ0eXBlIjoicGF5bWVudHMuY2hhcmdlIiwiaWQiOiJjaF8xIn19fQ.X0ieCGuBzYwCJYbXAKCHru92LVdtzSgL-f9uFzh9cGuA5rXr-xXY_rnLoqYbY9a0XFJaFa_VUvq4Wj4BTzV0DQ",
+      "body": "{\"amount\":\"30.00\",\"charge\":\"ch_1\",\"currency\":\"USD\",\"reason\":\"duplicate\"}",
+      "operation": "payments.refund.get",
+      "target_type": "payments.charge",
+      "target_id": "ch_1",
+      "issuer": "https://pantherclaw.example.test",
+      "audience": "01920000-0000-7000-8000-000000000007",
+      "now": 1791201610,
+      "then_valid": true,
       "expect": "operation_mismatch"
     },
     {
