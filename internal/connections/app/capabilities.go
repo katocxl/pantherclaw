@@ -139,8 +139,10 @@ func Declare(c Connection, p *domain.Package) Capabilities {
 		served := servedRoutes(c.Kind, d)
 		if len(served) == 0 {
 			if len(d.Mappings) > 0 {
-				out.Limits = append(out.Limits, Limit{"OPERATION_NOT_SERVED",
-					d.Operation + ": a " + c.Kind + " connection cannot serve it (no " + c.Kind + " mapping or dispatch template)."})
+				out.Limits = append(out.Limits, Limit{
+					"OPERATION_NOT_SERVED",
+					d.Operation + ": a " + c.Kind + " connection cannot serve it (no " + c.Kind + " mapping or dispatch template).",
+				})
 			}
 			continue
 		}
@@ -151,8 +153,10 @@ func Declare(c Connection, p *domain.Package) Capabilities {
 			})
 		}
 		if d.Verifier == nil && d.Access != domain.AccessRead {
-			out.Limits = append(out.Limits, Limit{"EFFECT_UNVERIFIABLE",
-				d.Operation + ": no verifier is declared, so its effect is recorded UNVERIFIABLE (M7)."})
+			out.Limits = append(out.Limits, Limit{
+				"EFFECT_UNVERIFIABLE",
+				d.Operation + ": no verifier is declared, so its effect is recorded UNVERIFIABLE (M7).",
+			})
 		}
 		name := string(d.Access) + " " + d.Target.Type
 		permissions[name] = append(permissions[name], d.Operation+": "+d.Summary)
