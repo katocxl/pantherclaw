@@ -23,3 +23,14 @@ export {
 } from "./client.ts";
 export { canonicalize, JCSError, type JSONValue, parseJSON, serialize } from "./jcs.ts";
 export * from "./pap.ts";
+export {
+  type ActionClaims,
+  actionTokenKid,
+  MemoryStore,
+  Refusal,
+  type RefusalCode,
+  type ReplayStore,
+  type Spend,
+  Verifier,
+  type VerifierConfig,
+} from "./verifier.ts";
