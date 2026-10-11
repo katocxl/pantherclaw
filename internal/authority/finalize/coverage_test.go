@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json/v2"
 	"errors"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -20,12 +21,18 @@ import (
 type claimer struct {
 	claim *finalize.CoverageClaim
 	err   error
+	delay time.Duration
 	asked []string
 }
 
-func (c *claimer) CoverageClaim(_ context.Context, _ ids.OrgID, agent, connection ids.UUID, operation string, _ time.Time) (*finalize.CoverageClaim, error) {
+func (c *claimer) CoverageClaim(ctx context.Context, _ ids.OrgID, agent, connection ids.UUID, operation string, _ time.Time) (*finalize.CoverageClaim, error) {
 	c.asked = append(c.asked, agent.String()+" "+connection.String()+" "+operation)
-	return c.claim, c.err
+	select {
+	case <-time.After(c.delay):
+		return c.claim, c.err
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
 }
 
 func coverageOf(t *testing.T, receipt string) *finalize.CoverageClaim {
@@ -39,15 +46,19 @@ func coverageOf(t *testing.T, receipt string) *finalize.CoverageClaim {
 
 // TestHR217_ReceiptsCarryTheCoverageClaimOfTheirScope: a receipt of an
 // action through a connection carries the claim of its agent, connection
-// and operation; a failed claim read drops the claim, never the decision;
+// and operation; a failed or slow claim read drops the claim, never the
+// decision;
 // a scope never assessed has none, and the field is left out entirely, so
 // receipts look as they did before M9.
 func TestHR217_ReceiptsCarryTheCoverageClaimOfTheirScope(t *testing.T) {
 	s, run, conn := monitored(t)
-	c := &claimer{claim: &finalize.CoverageClaim{State: "OBSERVE_ONLY", Snapshot: ids.NewV7().String(), Digest: "sha256:00"}}
+	c := &claimer{claim: &finalize.CoverageClaim{
+		V: 1, State: "PARTIAL", Snapshot: ids.NewV7().String(), SnapshotState: "ENFORCED", Lapsed: true, Reason: "expired",
+		Exclusions: []string{ids.NewV7().String()},
+	}}
 	s.Authority.Coverage = c
 	res := s.Authorize(throughConnection(t, s, run, conn, pipelinetest.Refund("ch_1", "30.00")))
-	if got := coverageOf(t, res.Receipt); got == nil || *got != *c.claim {
+	if got := coverageOf(t, res.Receipt); got == nil || !reflect.DeepEqual(*got, *c.claim) {
 		t.Fatalf("claim %+v, want %+v", got, c.claim)
 	}
 	if len(c.asked) != 1 || c.asked[0] != s.Agent.String()+" "+conn.String()+" payments.refund.create" {
@@ -58,7 +69,12 @@ func TestHR217_ReceiptsCarryTheCoverageClaimOfTheirScope(t *testing.T) {
 	if res.Receipt == "" || coverageOf(t, res.Receipt) != nil {
 		t.Fatalf("a failed claim read: receipt %q", res.Receipt)
 	}
-	c.err = nil
+	c.claim, c.err, c.delay = &finalize.CoverageClaim{V: 1, State: "PARTIAL"}, nil, time.Second
+	res = s.Authorize(throughConnection(t, s, run, conn, pipelinetest.Refund("ch_4", "30.00")))
+	if res.Receipt == "" || coverageOf(t, res.Receipt) != nil {
+		t.Fatalf("a slow claim read: receipt %q", res.Receipt)
+	}
+	c.claim, c.delay = nil, 0
 	res = s.Authorize(throughConnection(t, s, run, conn, pipelinetest.Refund("ch_3", "30.00")))
 	if strings.Contains(string(pipelinetest.Payload(res.Receipt)), `"coverage"`) {
 		t.Fatalf("a scope never assessed: receipt %s", pipelinetest.Payload(res.Receipt))

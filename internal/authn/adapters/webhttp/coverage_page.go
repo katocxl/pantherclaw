@@ -4,9 +4,12 @@
 package webhttp
 
 import (
+	"cmp"
 	"context"
+	"maps"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 
 	authnapp "github.com/katocxl/pantherclaw/internal/authn/app"
@@ -23,6 +26,7 @@ const CoveragePath = "/coverage"
 type Coverage interface {
 	ListCoverage(ctx context.Context, f covapp.Filter, size int32, token string) ([]covapp.Record, string, error)
 	GetCoverage(ctx context.Context, sc covdomain.Scope) (covapp.Record, error)
+	ListSnapshots(ctx context.Context, sc covdomain.Scope, size int32, token string) ([]covapp.SnapshotRecord, string, error)
 }
 
 // WithCoverage adds the coverage pages, which only read; call it before
@@ -51,7 +55,12 @@ type coverageRow struct {
 }
 
 type routeRow struct {
-	Name, Status, Class string
+	Name, Status, Class, Evidence string
+}
+
+// changeRow is one difference between the last two snapshots.
+type changeRow struct {
+	What, Before, After string
 }
 
 type exclusionRow struct {
@@ -68,8 +77,12 @@ type coverageView struct {
 	LastValid string
 	Lapse     string
 	Excluded  []exclusionRow
-	TTL       string
-	Kinds     string
+	// Changes compare the last two snapshots: Before and After are when
+	// they were computed.
+	Changes       []changeRow
+	Before, After string
+	TTL           string
+	Kinds         string
 }
 
 // stateClass is the CSS class of a state: only ENFORCED reads as safe.
@@ -154,23 +167,31 @@ func (h *Handler) coverageCard(w http.ResponseWriter, r *http.Request, s authnap
 	for _, reason := range rec.Reasons {
 		v.Reasons = append(v.Reasons, covdomain.Explain(reason))
 	}
-	for _, rt := range rec.Body.Routes {
-		name := strings.ReplaceAll(rt.Kind, "_", " ")
-		if rt.Channel != "" {
-			name += " (" + rt.Channel + ")"
-		}
-		if rt.Locator != "" {
-			name += " " + rt.Locator
-		}
-		class := "note"
+	routes := rec.Body.Routes
+	if rec.Recomputed != nil {
+		routes = covapp.RoutesOf(*rec.Recomputed)
+	}
+	for _, rt := range routes {
+		class, evidence := "note", ""
 		if rt.Status == string(covdomain.StatusMediated) || rt.Status == string(covdomain.StatusClosed) {
 			class = "ok"
 		}
-		v.Routes = append(v.Routes, routeRow{Name: name, Status: strings.ReplaceAll(rt.Status, "_", " "), Class: class})
+		if rt.Closure != nil {
+			evidence = "closure " + rt.Closure.String()
+		}
+		v.Routes = append(v.Routes, routeRow{Name: routeName(rt), Status: strings.ReplaceAll(rt.Status, "_", " "), Class: class, Evidence: evidence})
+	}
+	if err := h.compare(callerContext(r, s), sc, &v); err != nil {
+		h.fail(w, r, err)
+		return
 	}
 	if lv := rec.LastValid; lv != nil {
 		v.LastValid = lv.ID.String() + ", computed " + lv.ComputedAt.UTC().Format(pageTime)
-		v.Lapse = covdomain.Explain(rec.Lapse)
+		if rec.Recomputed != nil {
+			v.Lapse = covdomain.Explain("lapsed:" + rec.Lapse)
+		} else {
+			v.Lapse = covdomain.Explain(rec.Lapse)
+		}
 	}
 	for _, x := range rec.Exclusions {
 		scope := "the whole scope"
@@ -189,4 +210,50 @@ func (h *Handler) coverageCard(w http.ResponseWriter, r *http.Request, s authnap
 	}
 	v.Kinds = strings.Join(kinds, ", ")
 	h.renderAny(w, http.StatusOK, "coverage_card.html", v)
+}
+
+func routeName(rt covapp.SnapshotRoute) string {
+	name := strings.ReplaceAll(rt.Kind, "_", " ")
+	if rt.Channel != "" {
+		name += " (" + rt.Channel + ")"
+	}
+	if rt.Locator != "" {
+		name += " " + rt.Locator
+	}
+	return name
+}
+
+// compare fills the before-and-after comparison of the scope's last two
+// snapshots: the state and every route whose status changed, appeared or
+// went away.
+func (h *Handler) compare(ctx context.Context, sc covdomain.Scope, v *coverageView) error {
+	snaps, _, err := h.coverage.ListSnapshots(ctx, sc, 2, "")
+	if err != nil || len(snaps) < 2 {
+		return err
+	}
+	after, before := snaps[0], snaps[1]
+	v.Before, v.After = before.ComputedAt.UTC().Format(pageTime), after.ComputedAt.UTC().Format(pageTime)
+	if before.State != after.State {
+		v.Changes = append(v.Changes, changeRow{What: "state", Before: before.State, After: after.State})
+	}
+	status := func(s covapp.SnapshotRecord) map[string]string {
+		m := map[string]string{}
+		for _, rt := range s.Body.Routes {
+			m[routeName(rt)] = strings.ReplaceAll(rt.Status, "_", " ")
+		}
+		return m
+	}
+	b, a := status(before), status(after)
+	names := slices.Sorted(maps.Keys(a))
+	for _, n := range slices.Sorted(maps.Keys(b)) {
+		if _, ok := a[n]; !ok {
+			names = append(names, n)
+		}
+	}
+	for _, n := range names {
+		if b[n] != a[n] {
+			v.Changes = append(v.Changes, changeRow{What: n, Before: cmp.Or(b[n], "absent"), After: cmp.Or(a[n], "absent")})
+		}
+	}
+	return nil
 }

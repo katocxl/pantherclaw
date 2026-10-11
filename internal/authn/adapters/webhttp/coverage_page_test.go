@@ -45,9 +45,22 @@ func (f *fakeCoverage) GetCoverage(ctx context.Context, sc covdomain.Scope) (cov
 	return f.rec, f.allowed(ctx)
 }
 
+func (f *fakeCoverage) ListSnapshots(ctx context.Context, sc covdomain.Scope, _ int32, _ string) ([]covapp.SnapshotRecord, string, error) {
+	at := time.Date(2026, 10, 11, 9, 0, 0, 0, time.UTC)
+	snap := func(state, gitSSH string, computed time.Time) covapp.SnapshotRecord {
+		return covapp.SnapshotRecord{
+			PcCoverageSnapshot: dbq.PcCoverageSnapshot{ID: ids.NewV7(), State: state, ComputedAt: computed},
+			Body: covapp.Snapshot{Routes: []covapp.SnapshotRoute{
+				{Kind: "channel", Channel: "http", Status: "mediated"}, {Kind: "git_ssh", Status: gitSSH},
+			}},
+		}
+	}
+	return []covapp.SnapshotRecord{snap("PARTIAL", "not_observed", at), snap("ENFORCED", "closed", at.Add(-time.Hour))}, "", f.allowed(ctx)
+}
+
 func coverageRecord() covapp.Record {
 	at := time.Date(2026, 10, 11, 9, 0, 0, 0, time.UTC)
-	kind, user := "browser", ids.NewV7()
+	kind, user, closure := "browser", ids.NewV7(), ids.NewV7()
 	return covapp.Record{
 		Scope:    covdomain.Scope{Agent: ids.NewV7(), Connection: ids.NewV7(), Operation: "github.pulls.merge"},
 		State:    covdomain.Partial,
@@ -55,7 +68,7 @@ func coverageRecord() covapp.Record {
 		Reasons:  []string{"invalidated:credential", "route_not_closed:git_ssh"},
 		Snapshot: &dbq.PcCoverageSnapshot{ID: ids.NewV7(), ComputedAt: at},
 		Body: covapp.Snapshot{Routes: []covapp.SnapshotRoute{
-			{Kind: "channel", Channel: "http", Status: "mediated"},
+			{Kind: "channel", Channel: "http", Status: "mediated", Closure: &closure},
 			{Kind: "git_ssh", Status: "not_observed"},
 			{Kind: "direct_api", Locator: `api.example.com"><script>x</script>`, Status: "possible"},
 		}},
@@ -79,7 +92,7 @@ func coverageGet(t *testing.T, mux http.Handler, path, cookie string) result {
 // coverage.read; the card says what the record reads now and why, lists
 // every route (a route no source showed as "not observed"), keeps the last
 // valid record, escapes untrusted text, and runs no script under the
-// pages' strict CSP.
+// pages' strict CSP. It compares the last two snapshots.
 func TestCoveragePagesShowOnlyWhatTheEvidenceSays(t *testing.T) {
 	h, err := webhttp.New(&fakeBrowser{}, origin, nil, nil)
 	if err != nil {
@@ -107,7 +120,9 @@ func TestCoveragePagesShowOnlyWhatTheEvidenceSays(t *testing.T) {
 		"<strong>PARTIAL</strong>: its snapshot computed ENFORCED, which no longer holds",
 		"A change since the evidence invalidated it (credential).", "The git ssh route is not proven closed.",
 		"not observed", "Last valid record", fc.rec.LastValid.ID.String(), "the browser route",
-		"Any of these drops it to PARTIAL at once: connection,",
+		"Any of these drops it to at most PARTIAL at once: connection,",
+		"Since the previous snapshot", "<td>ENFORCED</td><td>PARTIAL</td>", "<td>closed</td><td>not observed</td>",
+		"closure " + closureOf(fc.rec),
 	} {
 		if !strings.Contains(resp.Body, want) {
 			t.Errorf("the card lacks %q", want)
@@ -127,3 +142,5 @@ func TestCoveragePagesShowOnlyWhatTheEvidenceSays(t *testing.T) {
 		}
 	}
 }
+
+func closureOf(r covapp.Record) string { return r.Body.Routes[0].Closure.String() }

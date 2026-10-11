@@ -10,24 +10,26 @@ import (
 
 // Freshness contract bounds (F440, HR-211, G0 M9 decision 3).
 const (
-	DefaultEnforcedTTL      = 24 * time.Hour
-	MinEnforcedTTL          = time.Hour
-	MaxEnforcedTTL          = 7 * 24 * time.Hour
-	DefaultReassessInterval = time.Minute
-	MinReassessInterval     = 10 * time.Second
-	MaxReassessInterval     = time.Hour
+	DefaultEnforcedTTL   = 24 * time.Hour
+	MinEnforcedTTL       = time.Hour
+	MaxEnforcedTTL       = 7 * 24 * time.Hour
+	DefaultReassessEvery = time.Minute
+	MinReassessEvery     = 10 * time.Second
+	MaxReassessEvery     = time.Hour
 )
 
 // Freshness is the published freshness contract: how long closure evidence
 // supports ENFORCED, how often pending changes are reassessed at most, and
 // what an expired or invalidated ENFORCED record reads as.
 type Freshness struct {
-	EnforcedTTL      time.Duration
-	ReassessInterval time.Duration
+	EnforcedTTL   time.Duration
+	ReassessEvery time.Duration
 }
 
-// StaleState is what an ENFORCED record reads as after it expired or a
-// change invalidated it: work continues under PARTIAL (decision 3).
+// StaleState is the highest state an ENFORCED record reads as after it
+// expired or a change invalidated it: the scope is recomputed from current
+// evidence and capped here, so it may read lower. Work continues
+// (decision 3).
 const StaleState = Partial
 
 // NewFreshness applies the defaults to zero values and checks the bounds.
@@ -36,13 +38,13 @@ func NewFreshness(ttl, reassess time.Duration) (Freshness, error) {
 		ttl = DefaultEnforcedTTL
 	}
 	if reassess == 0 {
-		reassess = DefaultReassessInterval
+		reassess = DefaultReassessEvery
 	}
 	if ttl < MinEnforcedTTL || ttl > MaxEnforcedTTL {
 		return Freshness{}, errors.New("coverage.enforced_ttl must be between 1h and 168h")
 	}
-	if reassess < MinReassessInterval || reassess > MaxReassessInterval {
-		return Freshness{}, errors.New("coverage.reassess_interval must be between 10s and 1h")
+	if reassess < MinReassessEvery || reassess > MaxReassessEvery {
+		return Freshness{}, errors.New("coverage.reassess_every must be between 10s and 1h")
 	}
-	return Freshness{EnforcedTTL: ttl, ReassessInterval: reassess}, nil
+	return Freshness{EnforcedTTL: ttl, ReassessEvery: reassess}, nil
 }

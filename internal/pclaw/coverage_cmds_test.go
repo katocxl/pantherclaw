@@ -23,6 +23,12 @@ type recordCoverage struct {
 	pantherclawv1connect.UnimplementedCoverageServiceHandler
 	list    *pantherclawv1.ListCoverageRequest
 	exclude *pantherclawv1.CreateExclusionRequest
+	history *pantherclawv1.ListSnapshotsRequest
+}
+
+func (r *recordCoverage) ListSnapshots(_ context.Context, req *pantherclawv1.ListSnapshotsRequest) (*pantherclawv1.ListSnapshotsResponse, error) {
+	r.history = req
+	return &pantherclawv1.ListSnapshotsResponse{Snapshots: []*pantherclawv1.CoverageSnapshot{{Id: "s2"}, {Id: "s1"}}}, nil
 }
 
 func (r *recordCoverage) ListCoverage(_ context.Context, req *pantherclawv1.ListCoverageRequest) (*pantherclawv1.ListCoverageResponse, error) {
@@ -67,6 +73,10 @@ func TestCoverageCommands(t *testing.T) {
 	const agent, conn = "0192aaaa-bbbb-7ccc-8ddd-000000000001", "0192aaaa-bbbb-7ccc-8ddd-000000000002"
 	if code, _, errs := run(t, env, "coverage", "list", "--connection", conn); code != 0 || rc.list.GetConnectionId() != conn {
 		t.Fatalf("list: %d %s", code, errs)
+	}
+	if code, out, errs := run(t, env, "coverage", "history", agent, conn, "github.pulls.merge"); code != 0 ||
+		rc.history.GetScope().GetOperation() != "github.pulls.merge" || !strings.Contains(out, "s2") {
+		t.Fatalf("history: %d %s %s", code, out, errs)
 	}
 	code, out, errs := run(t, env, "coverage", "explain", agent, conn, "github.pulls.merge")
 	if code != 0 {

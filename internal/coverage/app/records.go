@@ -8,33 +8,42 @@ import (
 	"encoding/base64"
 	"encoding/json/v2"
 	"strings"
+	"time"
 
 	"github.com/katocxl/pantherclaw/internal/coverage/domain"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
-	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	"github.com/katocxl/pantherclaw/internal/platform/page"
 )
 
 // ReasonNotAssessed is the reason of a scope without a snapshot yet.
 const ReasonNotAssessed = domain.ReasonNotAssessed
 
-// Record is one scope's coverage as it reads now (HR-211): the current
-// snapshot, downgraded to PARTIAL when it was ENFORCED and lapsed or a
-// change since invalidated it, with the last valid record (F442).
+// ReasonLapsed prefixes the reason a lapsed record names: "expired" or
+// the kind of the change its snapshot did not see.
+const ReasonLapsed = "lapsed"
+
+// Record is one scope's coverage as it reads now (HR-211). While its
+// current snapshot holds, it reads as recorded. Once the snapshot expired
+// or a change it did not see arrived, the scope is recomputed from current
+// evidence and read at most PARTIAL, possibly lower, with the last valid
+// record (F442) and why it lapsed.
 type Record struct {
-	Scope    domain.Scope
-	State    domain.State
+	Scope domain.Scope
+	State domain.State
+	// Computed is the snapshot's state.
 	Computed domain.State
 	Reasons  []string
 	// Snapshot is nil for a scope not assessed yet.
 	Snapshot *dbq.PcCoverageSnapshot
 	Body     Snapshot
+	// Recomputed is the recomputation of a lapsed record.
+	Recomputed *domain.Result
 	// LastValid is the last ENFORCED snapshot when this record is a
-	// downgrade, and why it lapsed.
+	// downgrade, and Lapse why it lapsed.
 	LastValid *dbq.PcCoverageSnapshot
 	Lapse     string
-	// Changes are the invalidating changes after the snapshot.
+	// Changes are the changes to the scope the snapshot did not see.
 	Changes    []dbq.PcCoverageInvalidation
 	Exclusions []dbq.PcCoverageExclusion
 }
@@ -53,11 +62,12 @@ func lapseOf(reasons []string) string {
 	return "changed"
 }
 
-// record reads one scope's record from its current snapshot (nil when
-// none); full adds the exclusions that apply.
-func (s *Service) record(ctx context.Context, q *dbq.Queries, org ids.OrgID, sc domain.Scope, row *dbq.PcCoverageSnapshot,
-	full bool,
+// record reads one scope's record at now from its current snapshot (nil
+// when none); full adds the exclusions that apply.
+func (s *Service) record(ctx context.Context, tx db.TenantTx, sc domain.Scope, row *dbq.PcCoverageSnapshot, full bool,
+	pkgs packages, now time.Time,
 ) (Record, error) {
+	q, org := dbq.New(tx), tx.OrgID()
 	r := Record{Scope: sc, State: domain.Unknown, Computed: domain.Unknown, Reasons: []string{ReasonNotAssessed}, Snapshot: row}
 	if full {
 		var err error
@@ -75,27 +85,42 @@ func (s *Service) record(ctx context.Context, q *dbq.Queries, org ids.OrgID, sc 
 	}
 	r.Computed, _ = domain.ParseState(row.State)
 	var err error
-	if r.Changes, err = q.CoverageInvalidationsSince(ctx, dbq.CoverageInvalidationsSinceParams{
-		OrgID: org, ConnectionID: sc.Connection, AgentID: &sc.Agent, Since: row.ComputedAt,
-	}); err != nil {
+	if r.Changes, err = q.CoverageChangesPending(ctx, org, sc.Connection, &sc.Agent); err != nil {
 		return r, err
 	}
-	var why string
-	r.State, why = domain.ReadAt(r.Computed, row.ExpiresAt, len(r.Changes), s.now())
-	r.Reasons = r.Body.Reasons
-	switch {
-	case why != "":
-		if why == domain.ReasonInvalidated {
-			why += ":" + r.Changes[0].Kind
+	unseen := make([]domain.Change, 0, len(r.Changes))
+	for _, ch := range r.Changes {
+		unseen = append(unseen, domain.Change{ID: ch.ID, Kind: domain.InvalidationKind(ch.Kind), OccurredAt: ch.OccurredAt})
+	}
+	r.Lapse = domain.Lapse(row.ExpiresAt, unseen, now)
+	if r.Lapse == "" {
+		r.State, r.Reasons = r.Computed, r.Body.Reasons
+		if row.LastValidID != nil {
+			lv, err := q.GetCoverageSnapshot(ctx, org, *row.LastValidID)
+			if err != nil {
+				return r, err
+			}
+			r.LastValid, r.Lapse = &lv, lapseOf(r.Body.Reasons)
 		}
-		r.Reasons = append([]string{why}, r.Reasons...)
-		r.LastValid, r.Lapse = row, why
+		return r, nil
+	}
+	e, err := s.evidence(ctx, tx, sc, now, pkgs)
+	if err != nil {
+		return r, err
+	}
+	res := domain.Compute(e)
+	r.Recomputed = &res
+	r.State = domain.Cap(res.State)
+	r.Reasons = append([]string{ReasonLapsed + ":" + r.Lapse}, res.Reasons...)
+	switch {
+	case r.Computed == domain.Enforced:
+		r.LastValid = row
 	case row.LastValidID != nil:
 		lv, err := q.GetCoverageSnapshot(ctx, org, *row.LastValidID)
 		if err != nil {
 			return r, err
 		}
-		r.LastValid, r.Lapse = &lv, lapseOf(r.Body.Reasons)
+		r.LastValid = &lv
 	}
 	return r, nil
 }
@@ -119,7 +144,7 @@ func (s *Service) GetCoverage(ctx context.Context, sc domain.Scope) (Record, err
 		} else if !db.IsNoRows(err) {
 			return err
 		}
-		out, err = s.record(ctx, r.q, r.c.Org, sc, cur, true)
+		out, err = s.record(ctx, r.tx, sc, cur, true, packages{}, s.now())
 		return err
 	})
 	return out, err
@@ -159,6 +184,7 @@ func (s *Service) ListCoverage(ctx context.Context, f Filter, size int32, token 
 	}
 	var out []Record
 	var next string
+	pkgs := packages{}
 	err = s.read(ctx, func(ctx context.Context, r *readers) error {
 		params := dbq.ListCurrentCoverageSnapshotsPageParams{
 			OrgID: r.c.Org, ConnectionID: f.Connection, AgentID: f.Agent, MaxRows: p.Limit(),
@@ -183,7 +209,7 @@ func (s *Service) ListCoverage(ctx context.Context, f Filter, size int32, token 
 				continue
 			}
 			sc := domain.Scope{Agent: row.AgentID, Connection: row.ConnectionID, Operation: row.Operation}
-			rec, err := s.record(ctx, r.q, r.c.Org, sc, &row, false)
+			rec, err := s.record(ctx, r.tx, sc, &row, false, pkgs, s.now())
 			if err != nil {
 				return err
 			}

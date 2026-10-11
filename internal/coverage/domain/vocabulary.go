@@ -82,7 +82,8 @@ type Scope struct {
 	Operation  string
 }
 
-// InvalidationKind is a change that drops ENFORCED at once (HR-211).
+// InvalidationKind is a change coverage hears about (HR-211). Most drop
+// ENFORCED at once; see Invalidates.
 type InvalidationKind string
 
 // Invalidation kinds, as stored.
@@ -97,13 +98,24 @@ const (
 	InvClosureFailed   InvalidationKind = "closure_failed"
 	InvExclusion       InvalidationKind = "exclusion"
 	InvEvidenceExpired InvalidationKind = "evidence_expired"
+	InvRoute           InvalidationKind = "route"
+	InvInstance        InvalidationKind = "instance"
 )
 
 // InvalidationKinds lists every kind, in the order the freshness contract
 // publishes them.
 var InvalidationKinds = []InvalidationKind{
 	InvConnection, InvPackageVersion, InvRouteMode, InvGateway, InvCredential, InvSandboxImage, InvSandboxConfig,
-	InvClosureFailed, InvExclusion, InvEvidenceExpired,
+	InvClosureFailed, InvInstance, InvExclusion, InvEvidenceExpired, InvRoute,
+}
+
+// Invalidates reports whether a change of kind k at or after a closure's
+// session start makes the closure stale (HR-211). A new route, an exclusion
+// or a lapsed expiry only makes the scope be recomputed: the closure still
+// closes the route kinds its probes closed, and a session's own refused
+// destinations are recorded as routes after it started.
+func (k InvalidationKind) Invalidates() bool {
+	return k != InvRoute && k != InvExclusion && k != InvEvidenceExpired
 }
 
 // Invalidation is a change the sandbox or another module reports to
