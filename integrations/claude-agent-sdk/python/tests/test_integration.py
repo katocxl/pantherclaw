@@ -55,7 +55,7 @@ class Gateway:
     face of connection "payments", the /hook face of "local", and an SSE
     wait stream of ``states``."""
 
-    def __init__(self, face: Face, states: tuple[str, ...] = ("READY",), hook: HookFace | None = None) -> None:
+    def __init__(self, face: Face, states: tuple[str, ...] = ("READY",), hook: HookFace | None = None, block: float = 0) -> None:
         self.kf = pap.KeyFile.new()
         self.kf.identifier = IDENT
         jkt = self.kf.key().jkt
@@ -92,9 +92,14 @@ class Gateway:
                     stream = "".join(f"event: state\ndata: {json.dumps({'handle': 'h', 'state': s})}\n\n" for s in states).encode()
                     self.send_response(200)
                     self.send_header("Content-Type", "text/event-stream")
-                    self.send_header("Content-Length", str(len(stream)))
+                    if not block:
+                        self.send_header("Content-Length", str(len(stream)))
                     self.end_headers()
                     self.wfile.write(stream)
+                    if block:
+                        # A hold that stays pending: the stream stays open.
+                        self.wfile.flush()
+                        time.sleep(block)
                 else:
                     self._send(404, b"")
 
@@ -150,8 +155,8 @@ class IntegrationTest(unittest.TestCase):
         for g in self.gateways:
             g.close()
 
-    def gw(self, face: Face, states: tuple[str, ...] = ("READY",), hook: HookFace | None = None) -> Gateway:
-        g = Gateway(face, states, hook)
+    def gw(self, face: Face, states: tuple[str, ...] = ("READY",), hook: HookFace | None = None, block: float = 0) -> Gateway:
+        g = Gateway(face, states, hook, block)
         self.gateways.append(g)
         return g
 
@@ -243,6 +248,32 @@ class IntegrationTest(unittest.TestCase):
         self.assertEqual(asyncio.run(can("mcp__payments__create_refund", {}, SimpleNamespace(tool_use_id="toolu_10"))).behavior, "deny")
         self.assertEqual(asyncio.run(can("mcp__payments__create_refund", {}, SimpleNamespace(tool_use_id="toolu_10"))).behavior, "deny")
         self.assertEqual(app_calls, ["Write"])
+
+    def test_HR200_waits_on_holds_never_delay_a_new_decision(self) -> None:
+        def face(call: dict[str, Any], aid: str) -> tuple[int, bytes]:
+            if call["tool_use_id"].startswith("toolu_h"):
+                return decided(aid, "hold", wait={"handle": "h", "state": "PENDING"})
+            return decided(aid, "allow")
+
+        g = self.gw(face, states=("PENDING",), block=4)
+        p = self.pc(g, wait=3.0)
+        can = p.options(permission_mode="default", setting_sources=[])["can_use_tool"]
+
+        async def scenario() -> tuple[str, float, list[str]]:
+            for i in range(9):
+                self.assertEqual(decision(await p.hook(refund("default", f"toolu_h{i}"))), "ask")
+            waits = [asyncio.create_task(can("mcp__payments__create_refund", {}, SimpleNamespace(tool_use_id=f"toolu_h{i}"))) for i in range(9)]
+            await asyncio.sleep(0.5)
+            start = time.monotonic()
+            out = await p.hook(refund("default", "toolu_free"))
+            elapsed = time.monotonic() - start
+            results = await asyncio.gather(*waits)
+            return decision(out), elapsed, [r.behavior for r in results]
+
+        got, elapsed, behaviors = asyncio.run(scenario())
+        self.assertEqual(got, "allow")
+        self.assertLess(elapsed, 2.0, "a new decision waited behind the holds")
+        self.assertEqual(behaviors, ["deny"] * 9)
 
     def test_callers_must_pass_permission_mode(self) -> None:
         with self.assertRaises(ValueError):

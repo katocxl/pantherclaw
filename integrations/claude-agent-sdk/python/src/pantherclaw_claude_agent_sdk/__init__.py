@@ -180,9 +180,11 @@ class PantherClaw:
         self._asked: OrderedDict[str, None] = OrderedDict()
         self._retries: dict[str, tuple[str, float]] = {}
         self._lock = threading.Lock()
-        # PantherClaw's own bounded threads: a stuck call never takes the
-        # event loop's default executor from the application.
-        self._executor = ThreadPoolExecutor(max_workers=8, thread_name_prefix="pantherclaw")
+        # PantherClaw's own bounded threads, never the event loop's default
+        # executor: one pool for decisions and one for holds' waits, so waits
+        # of up to `wait` seconds never delay a new decision past its deadline.
+        self._decisions = ThreadPoolExecutor(max_workers=8, thread_name_prefix="pantherclaw-decide")
+        self._waits = ThreadPoolExecutor(max_workers=32, thread_name_prefix="pantherclaw-wait")
 
     @classmethod
     def from_key_file(cls, path: str, gateway: str, connection: str, server: str = "", run_id: str = "", **options: Any) -> PantherClaw:
@@ -234,9 +236,10 @@ class PantherClaw:
             return "shell", _SHELLS[tool]
         return "call", ""
 
-    async def _run(self, fn: Callable[[], Any], timeout: float) -> Any:
-        """Runs a blocking client call on PantherClaw's threads, within timeout."""
-        return await asyncio.wait_for(asyncio.get_running_loop().run_in_executor(self._executor, fn), timeout)
+    async def _run(self, fn: Callable[[], Any], timeout: float, pool: ThreadPoolExecutor | None = None) -> Any:
+        """Runs a blocking client call on PantherClaw's threads (the decision
+        pool unless another is named), within timeout."""
+        return await asyncio.wait_for(asyncio.get_running_loop().run_in_executor(pool or self._decisions, fn), timeout)
 
     async def hook(self, input_data: dict[str, Any], tool_use_id: str | None = None, context: Any = None) -> dict[str, Any]:
         """The PreToolUse hook (no matcher: every tool, a subagent's included).
@@ -371,7 +374,7 @@ class PantherClaw:
                 return PermissionResultDeny(message="no permission handler for this call")
             cancelled = threading.Event()
             try:
-                res = await self._run(lambda: self._resume(h, cancelled), self._wait)
+                res = await self._run(lambda: self._resume(h, cancelled), self._wait, self._waits)
             except Exception as e:  # noqa: BLE001 - any failure while waiting denies
                 cancelled.set()
                 return PermissionResultDeny(message=f"the wait for PantherClaw's decision ended: {e or type(e).__name__}")
