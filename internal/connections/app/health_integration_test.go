@@ -44,7 +44,8 @@ func (e *env) outcome(t *testing.T, conn, run ids.UUID, outcome, ago string) {
 // TestF358_ConnectionHealthShowsWhatAPersonNeeds: health shows the
 // connection, its circuits, the permissions its credential is used for,
 // its tests, the failed and UNKNOWN outcomes of the last 24 hours with the
-// latest failure and success, and the agents that used it in the last 30
+// latest failure and success (an action the agent ran itself is counted
+// apart, never as a success), and the agents that used it in the last 30
 // days, latest first. A reader without agent.read sees that agents are
 // hidden instead; another org's connection is NotFound.
 func TestF358_ConnectionHealthShowsWhatAPersonNeeds(t *testing.T) {
@@ -53,6 +54,7 @@ func TestF358_ConnectionHealthShowsWhatAPersonNeeds(t *testing.T) {
 	other := e.payments(t, "other")
 	coder, run := e.agentRun(t, "coder")
 	_, old := e.agentRun(t, "retired-bot")
+	e.outcome(t, c.ID, run, "delegated", "30 minutes") // the agent ran it: no evidence of success
 	e.outcome(t, c.ID, run, "accepted", "1 hour")
 	e.outcome(t, c.ID, run, "failed", "2 hours")
 	e.outcome(t, c.ID, run, "unknown", "3 hours")
@@ -73,8 +75,8 @@ func TestF358_ConnectionHealthShowsWhatAPersonNeeds(t *testing.T) {
 	d := h.Deliveries
 	if h.Connection.ID != c.ID || h.Connection.State != app.StateQuarantined || len(h.Circuits) != 1 || !h.Circuits[0].Open ||
 		h.Circuits[0].Unknown != 6 || len(h.Permissions) != 2 || h.LastTest == nil || h.LastTest.Result != app.TestFailed ||
-		h.LastPassedTest != nil || d.Failed != 1 || d.Unknown != 1 || d.LastFailure.IsZero() || d.LastSuccess.IsZero() ||
-		!d.LastSuccess.After(d.LastFailure) {
+		h.LastTest.Kind != "credential" || h.LastPassedTest != nil || d.Failed != 1 || d.Unknown != 1 || d.LastFailure.IsZero() || d.LastSuccess.IsZero() ||
+		!d.LastSuccess.After(d.LastFailure) || d.Delegated != 1 || !d.LastDelegated.After(d.LastSuccess) {
 		t.Fatalf("health %+v", h)
 	}
 	if h.AgentsHidden || len(h.Agents) != 1 || h.Agents[0].Agent != coder || h.Agents[0].Name != "coder" {
@@ -83,7 +85,8 @@ func TestF358_ConnectionHealthShowsWhatAPersonNeeds(t *testing.T) {
 
 	quiet := e.payments(t, "quiet")
 	if h, err := e.svc.Health(e.admin, quiet.ID); err != nil || h.Deliveries.Failed != 0 || !h.Deliveries.LastFailure.IsZero() ||
-		!h.Deliveries.LastSuccess.IsZero() || h.LastTest != nil || len(h.Agents) != 0 || len(h.Circuits) != 0 {
+		!h.Deliveries.LastSuccess.IsZero() || h.Deliveries.Delegated != 0 || !h.Deliveries.LastDelegated.IsZero() || h.LastTest != nil ||
+		len(h.Agents) != 0 || len(h.Circuits) != 0 {
 		t.Fatalf("a connection nothing used: %+v %v", h, err)
 	}
 	if h, err := e.svc.Health(e.caller(td.KindUser, td.RoleEmergency), c.ID); err != nil || !h.AgentsHidden || len(h.Agents) != 0 {
