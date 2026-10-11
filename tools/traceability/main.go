@@ -8,7 +8,10 @@
 // A rule is due at the first milestone in its MS column. It is covered by a
 // test whose name starts with TestHR###_. A threat is covered by a
 // TestT###_ test, or by tests for at least one hardening rule its
-// mitigations reference.
+// mitigations reference. Tests are Go functions in _test.go files, and the
+// SDKs' tests with the same names (G0 M8): Python unittest methods
+// test_HR###_… in test_*.py files and TypeScript node:test tests named
+// "TestHR###_…" in *.test.ts files.
 //
 //	go -C tools run ./traceability -root .. -through M1
 package main
@@ -20,6 +23,7 @@ import (
 	"io"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -42,6 +46,8 @@ var (
 	threatRow = regexp.MustCompile(`^\|\s*(T-\d{3})\s*\|(.*)\|\s*([^|]+?)\s*\|\s*$`)
 	hrRef     = regexp.MustCompile(`HR-(\d{3})(?:\.\.(\d{3}))?`)
 	testName  = regexp.MustCompile(`func (Test(?:HR|T)\d{3})_`)
+	pyTest    = regexp.MustCompile(`def test_((?:HR|T)\d{3})_`)
+	tsTest    = regexp.MustCompile(`\btest\(\s*["'` + "`" + `](Test(?:HR|T)\d{3})_`)
 )
 
 // Item is a rule or threat with the milestone it is due.
@@ -161,20 +167,29 @@ func collectTests(fsys fs.FS) (map[string]bool, error) {
 		}
 		if d.IsDir() {
 			switch d.Name() {
-			case ".git", "node_modules", "vendor", "testdata":
+			case ".git", "node_modules", "vendor", "testdata", ".venv", "__pycache__", "dist":
 				return fs.SkipDir
 			}
 			return nil
 		}
-		if !strings.HasSuffix(p, "_test.go") {
+		var re *regexp.Regexp
+		prefix := ""
+		switch base := path.Base(p); {
+		case strings.HasSuffix(base, "_test.go"):
+			re = testName
+		case strings.HasPrefix(base, "test_") && strings.HasSuffix(base, ".py"):
+			re, prefix = pyTest, "Test"
+		case strings.HasSuffix(base, ".test.ts"):
+			re = tsTest
+		default:
 			return nil
 		}
 		b, err := fs.ReadFile(fsys, p)
 		if err != nil {
 			return err
 		}
-		for _, m := range testName.FindAllStringSubmatch(string(b), -1) {
-			tests[m[1]] = true
+		for _, m := range re.FindAllStringSubmatch(string(b), -1) {
+			tests[prefix+m[1]] = true
 		}
 		return nil
 	})

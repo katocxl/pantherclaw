@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: BUSL-1.1
 // Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
 
-package conformance_test
+package gen_test
 
 import (
 	"bytes"
@@ -30,7 +30,7 @@ type BindingFile struct {
 
 func buildBindings(t *testing.T) any {
 	t.Helper()
-	raw, err := os.ReadFile(filepath.Join("..", "..", "internal", "approvals", "domain", "testdata", "binding_vectors.json"))
+	raw, err := os.ReadFile(filepath.Join("..", "..", "approvals", "domain", "testdata", "binding_vectors.json"))
 	if err != nil {
 		t.Fatal(err)
 	}

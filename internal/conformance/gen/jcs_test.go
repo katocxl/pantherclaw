@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: BUSL-1.1
 // Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
 
-package conformance_test
+package gen_test
 
 import (
 	"encoding/hex"
@@ -90,21 +90,18 @@ func buildJCS(t *testing.T) any {
 }
 
 // ActionCase is one ActionIR: its canonical bytes and action hash, or a
-// refusal. Level "jcs" refusals must be refused by any canonicalizer;
-// level "actionir" ones only by the strict ActionIR parser (PAP-1 §6),
-// which SDKs need not implement.
+// refusal under the rule it names (PAP-1 §6, HR-100..103) that every
+// SDK's ActionIR parser must share.
 type ActionCase struct {
-	Name       string     `json:"name"`
-	Input      string     `json:"input"`
-	Canonical  string     `json:"canonical,omitzero"`
-	ActionHash string     `json:"action_hash,omitzero"`
-	Reject     *Rejection `json:"reject,omitzero"`
-}
-
-// Rejection says who must refuse an input and why.
-type Rejection struct {
-	Level  string `json:"level"`
-	Reason string `json:"reason"`
+	Name string `json:"name"`
+	// Input is the JSON text; InputHex replaces it when the bytes are not
+	// valid UTF-8.
+	Input      string `json:"input,omitzero"`
+	InputHex   string `json:"input_hex,omitzero"`
+	Canonical  string `json:"canonical,omitzero"`
+	ActionHash string `json:"action_hash,omitzero"`
+	// Reject names the hardening rule that refuses the input.
+	Reject string `json:"reject,omitzero"`
 }
 
 // ActionFile is actionir.json.
@@ -118,7 +115,7 @@ type ActionFile struct {
 func goldens(t *testing.T) (names, actions []string) {
 	t.Helper()
 	for _, file := range []string{"mock-payments.actionir", "pc-shell.actionir"} {
-		raw, err := os.ReadFile(filepath.Join("..", "..", "internal", "definitions", "mapping", "testdata", file))
+		raw, err := os.ReadFile(filepath.Join("..", "..", "definitions", "mapping", "testdata", file))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -170,14 +167,24 @@ func buildActionIR(t *testing.T) any {
 	}
 	base := actions[0]
 	deep := `"reason":"duplicate","x":` + strings.Repeat(`{"x":`, 16) + `1` + strings.Repeat(`}`, 16)
-	for _, r := range []struct{ name, from, to, level string }{
-		{"a JSON number in params", `"value":"30.00"`, `"value":30.00`, "actionir"},
-		{"an unknown member", `{"action_id"`, `{"extra":true,"action_id"`, "actionir"},
-		{"a non-ASCII target id", `"id":"ch_1"`, `"id":"ch_` + esc("0441") + `"`, "actionir"},
-		{"nesting deeper than 16", `"reason":"duplicate"`, deep, "actionir"},
-		{"no destinations", `"destinations":[],`, ``, "actionir"},
-		{"a duplicate member", `"v":1}`, `"v":1,"v":1}`, "jcs"},
-		{"a lone surrogate in params", `"reason":"duplicate"`, `"reason":"` + esc("d800") + `"`, "jcs"},
+	for _, r := range []struct{ name, from, to, rule string }{
+		{"an unknown member", `{"action_id"`, `{"extra":true,"action_id"`, "HR-100"},
+		{"a duplicate member", `"v":1}`, `"v":1,"v":1}`, "HR-100"},
+		{"invalid UTF-8 in params", `"reason":"duplicate"`, "\"reason\":\"dup\xfflicate\"", "HR-100"},
+		{"a lone surrogate in params", `"reason":"duplicate"`, `"reason":"` + esc("d800") + `"`, "HR-100"},
+		{"nesting deeper than 16", `"reason":"duplicate"`, deep, "HR-100"},
+		{"a string longer than 64 KiB", `"reason":"duplicate"`, `"reason":"` + strings.Repeat("d", 64<<10+1) + `"`, "HR-100"},
+		{"a JSON number in params", `"value":"30.00"`, `"value":30.00`, "HR-101"},
+		{"a version that is not 1", `"v":1}`, `"v":2}`, "HR-100"},
+		{"a non-ASCII target id", `"id":"ch_1"`, `"id":"ch_` + esc("0441") + `"`, "HR-102"},
+		{"a bidi control in the target id", `"id":"ch_1"`, `"id":"ch_1` + esc("202e") + `"`, "HR-102"},
+		{"a space in the target id", `"id":"ch_1"`, `"id":"ch 1"`, "HR-102"},
+		{"an identifier longer than 8 KiB", `"id":"ch_1"`, `"id":"ch_` + strings.Repeat("1", 8<<10) + `"`, "HR-102"},
+		{"no destinations", `"destinations":[],`, ``, "HR-103"},
+		{"no target id", `"id":"ch_1",`, ``, "HR-103"},
+		{"an unknown channel", `"channel":"mcp"`, `"channel":"cli"`, "HR-103"},
+		{"a definition without its digest", `"digest":"sha256:53b3effc5d6fc11070820fefd14806b01cdd6485d0e2a2136ff15925031fac43",`, ``, "HR-103"},
+		{"a run id that is not a UUID", `"run_id":"01920000-0000-7000-8000-000000000003"`, `"run_id":"run-3"`, "HR-103"},
 	} {
 		in := strings.Replace(base, r.from, r.to, 1)
 		if in == base {
@@ -186,11 +193,11 @@ func buildActionIR(t *testing.T) any {
 		if _, err := actionir.Parse([]byte(in)); err == nil {
 			t.Fatalf("%s: parsed, want a refusal", r.name)
 		}
-		v := jsontext.Value(in)
-		if err := v.Canonicalize(); (err == nil) != (r.level == "actionir") {
-			t.Fatalf("%s: canonicalize %v, level %s", r.name, err, r.level)
+		c := ActionCase{Name: r.name, Input: in, Reject: r.rule}
+		if !utf8.ValidString(in) {
+			c.Input, c.InputHex = "", hex.EncodeToString([]byte(in))
 		}
-		f.Cases = append(f.Cases, ActionCase{Name: r.name, Input: in, Reject: &Rejection{Level: r.level, Reason: r.name}})
+		f.Cases = append(f.Cases, c)
 	}
 	return f
 }

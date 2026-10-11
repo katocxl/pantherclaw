@@ -1,16 +1,16 @@
 // SPDX-License-Identifier: BUSL-1.1
 // Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
 
-// Package conformance_test generates the cross-language SDK conformance
-// vectors in sdk/conformance from the real Go implementation (G0 M8 track
-// S, S1) and fails when the implementation and the vectors disagree.
+// Package gen_test generates the cross-language SDK conformance vectors in
+// sdk/conformance from the real Go implementation, with fixed test keys
+// (G0 M8 track S, S1), and fails when the implementation and the vectors
+// disagree. `task sdk:vectors`, which runs
 //
-//	go test ./test/conformance -run TestConformanceVectors -update
+//	go test ./internal/conformance/gen -run TestConformanceVectors -update
 //
-// rewrites the vectors. Without -update the test is the drift check:
-// each group is rebuilt and compared byte for byte, or, when it holds
-// random ids, checked by its own check function.
-package conformance_test
+// rewrites them. Without -update the test is the drift check: every group
+// is rebuilt and compared byte for byte.
+package gen_test
 
 import (
 	"bytes"
@@ -32,7 +32,7 @@ var update = flag.Bool("update", false, "rewrite the vectors in sdk/conformance"
 const Format = "pantherclaw.conformance/v1"
 
 // dir is where the vectors live.
-var dir = filepath.Join("..", "..", "sdk", "conformance")
+var dir = filepath.Join("..", "..", "..", "sdk", "conformance")
 
 // Fixed identities shared by every group (the ids of the mapping goldens).
 const (
@@ -59,12 +59,10 @@ func sha256Hex(b []byte) string {
 	return hex.EncodeToString(s[:])
 }
 
-// group is one vector file: build makes it from the implementation;
-// check, when set, replaces the byte comparison for groups with random ids.
+// group is one vector file, built from the implementation.
 type group struct {
 	file  string
 	build func(t *testing.T) any
-	check func(t *testing.T, raw []byte)
 }
 
 func groups() []group {
@@ -91,13 +89,9 @@ func TestConformanceVectors(t *testing.T) {
 			if err != nil {
 				t.Fatalf("%v (run with -update to create it)", err)
 			}
-			if g.check != nil {
-				g.check(t, raw)
-				return
-			}
 			if got := encode(t, g.build(t)); !bytes.Equal(got, raw) {
 				t.Fatalf("%s differs from what the implementation produces now; if the change is intended, run "+
-					"go test ./test/conformance -run TestConformanceVectors -update and review the diff", g.file)
+					"task sdk:vectors and review the diff", g.file)
 			}
 		})
 	}

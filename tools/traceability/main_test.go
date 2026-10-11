@@ -5,9 +5,11 @@ package main
 
 import (
 	"bytes"
+	"maps"
 	"slices"
 	"strings"
 	"testing"
+	"testing/fstest"
 )
 
 func TestExpandRefs(t *testing.T) {
@@ -47,6 +49,29 @@ func TestDeliveryOrder(t *testing.T) {
 	}
 	if milestoneIndex("M14") >= milestoneIndex("M13") {
 		t.Fatalf("M14 must come before M13")
+	}
+}
+
+// TestCollectsSDKTests: the SDKs' Python and TypeScript tests count under
+// the Go test names (G0 M8); other files and names do not.
+func TestCollectsSDKTests(t *testing.T) {
+	fsys := fstest.MapFS{
+		"sdk/go/v_test.go":                      {Data: []byte("func TestHR202_Refuses(t *testing.T) {}")},
+		"sdk/python/tests/test_client.py":       {Data: []byte("    def test_HR200_fails_closed(self) -> None:\n    def test_T080_bypass(self):\n")},
+		"sdk/typescript/test/client.test.ts":    {Data: []byte("test(\"TestHR201_checks the hash\", async () => {});\ntest(`TestT081_replay`, () => {});\n")},
+		"sdk/python/tests/helper.py":            {Data: []byte("def test_HR199_not_a_test_file(self):")},
+		"sdk/typescript/src/client.ts":          {Data: []byte(`test("TestHR198_not a test file")`)},
+		"sdk/typescript/test/other.test.ts":     {Data: []byte(`it("TestHR197_not node:test test()")`)},
+		"sdk/typescript/node_modules/x.test.ts": {Data: []byte(`test("TestHR196_dependency")`)},
+	}
+	got, err := collectTests(fsys)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"TestHR200", "TestHR201", "TestHR202", "TestT080", "TestT081"}
+	keys := slices.Sorted(maps.Keys(got))
+	if !slices.Equal(keys, want) {
+		t.Fatalf("collected %v, want %v", keys, want)
 	}
 }
 
