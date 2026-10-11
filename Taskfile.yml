@@ -122,10 +122,13 @@ tasks:
       - go test ./internal/conformance/gen -run TestConformanceVectors -count=1 -update
 
   sdk:check:
-    desc: The SDKs' tests, each running every conformance vector (not part of task check)
+    desc: The SDKs' tests, each running every conformance vector (not part of task check; PYTHON overrides the interpreter)
+    vars:
+      PYTHON: '{{.PYTHON | default "uv run python"}}'
     cmds:
       - go -C sdk/go test -shuffle=on -count=1 ./...
       - cd sdk/typescript && node --test "test/**/*.test.ts"
+      - cd sdk/python && PYTHONPATH=src {{.PYTHON}} -m unittest discover -s tests
 
   license:check:
     desc: Verify SPDX + copyright headers on every source file
