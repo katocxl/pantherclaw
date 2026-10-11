@@ -279,8 +279,7 @@ export class Verifier {
   private async fetchKeys(): Promise<Map<string, Uint8Array>> {
     const res = await (this.cfg.fetch ?? fetch)(this.cfg.jwksUrl, { redirect: "error", signal: AbortSignal.timeout(5000) });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const raw = new Uint8Array(await res.arrayBuffer());
-    if (raw.length > 64 << 10) throw new Error("the JWKS is too large");
+    const raw = await readCapped(res, 64 << 10);
     const set = plain(parseJSON(raw)) as { keys?: { kty?: string; crv?: string; x?: string; kid?: string; alg?: string }[] };
     const keys = new Map<string, Uint8Array>();
     for (const k of set.keys ?? []) {
@@ -294,6 +293,32 @@ export class Verifier {
     }
     return keys;
   }
+}
+
+/** Reads a response body, refusing one longer than max bytes before buffering more. */
+async function readCapped(res: Response, max: number): Promise<Uint8Array> {
+  const reader = res.body?.getReader();
+  if (!reader) return new Uint8Array();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.length;
+      if (size > max) throw new Error("the JWKS is too large");
+      chunks.push(value);
+    }
+  } finally {
+    await reader.cancel().catch(() => {});
+  }
+  const out = new Uint8Array(size);
+  let at = 0;
+  for (const c of chunks) {
+    out.set(c, at);
+    at += c.length;
+  }
+  return out;
 }
 
 /** The largest body the middleware reads (1 MiB). */

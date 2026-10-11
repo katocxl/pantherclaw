@@ -29,7 +29,9 @@ test("only JSON values serialize", () => {
   class Point {
     x = 1;
   }
-  for (const v of [new Date(0), /x/, new Point(), new Uint8Array(2), new Map<unknown, unknown>([[1, "one"]]), undefined, () => 0]) {
+  // biome-ignore lint/suspicious/noSparseArray: a hole, which is not JSON
+  const holey = [, 1];
+  for (const v of [new Date(0), /x/, new Point(), new Uint8Array(2), new Map<unknown, unknown>([[1, "one"]]), undefined, () => 0, holey, new Array(2)]) {
     assert.throws(() => serialize(v), JCSError);
   }
   assert.equal(serialize(Object.assign(Object.create(null), { b: 1, a: [true] })), '{"a":[true],"b":1}');

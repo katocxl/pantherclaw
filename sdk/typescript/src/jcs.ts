@@ -178,7 +178,11 @@ export function serialize(v: unknown): string {
     if (!v.isWellFormed()) throw new JCSError("a lone surrogate is not a Unicode scalar value");
     return JSON.stringify(v);
   }
-  if (Array.isArray(v)) return `[${v.map(serialize).join(",")}]`;
+  if (Array.isArray(v)) {
+    // A hole ([,1]) is not JSON; map would skip it and write "[,1]".
+    for (let i = 0; i < v.length; i++) if (!(i in v)) throw new JCSError("an array with a hole is not JSON");
+    return `[${v.map(serialize).join(",")}]`;
+  }
   if (typeof v !== "object") throw new JCSError(`cannot serialize ${typeof v}`);
   let entries: [string, unknown][];
   if (v instanceof Map) {
