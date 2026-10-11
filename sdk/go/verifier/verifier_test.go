@@ -253,7 +253,7 @@ func TestHR024_TheTargetVerifierMakesACooperativeRouteVerifiable(t *testing.T) {
 	if s, _ := post(h, c.Token, c.Body); s != http.StatusCreated || ran != 1 {
 		t.Fatal("PantherClaw's token was refused")
 	}
-	if !c.verifier(t, k, verifier.NewMemoryStore(0, time.Time{})).SingleReplica() || c.verifier(t, k, &verifier.SQLStore{DB: openFake(t)}).SingleReplica() {
+	if !c.verifier(t, k, verifier.NewMemoryStore(0, time.Time{})).SingleReplica() || c.verifier(t, k, &verifier.SQLStore{DB: openFake(t), Dialect: verifier.PostgreSQL}).SingleReplica() {
 		t.Fatal("the replica declaration is wrong")
 	}
 }
@@ -265,7 +265,7 @@ func TestT081_ReplicasSharingAStoreSpendATokenOnce(t *testing.T) {
 	c := f.Cases[0]
 	db := openFake(t)
 	ran := 0
-	a := route(t, c, k, &verifier.SQLStore{DB: db}, &ran)
+	a := route(t, c, k, &verifier.SQLStore{DB: db, Dialect: verifier.PostgreSQL}, &ran)
 	b := route(t, c, k, &verifier.SQLStore{DB: db, Dialect: verifier.SQLite}, &ran)
 	if s, _ := post(a, c.Token, c.Body); s != http.StatusCreated {
 		t.Fatalf("the first replica: HTTP %d", s)
@@ -273,7 +273,7 @@ func TestT081_ReplicasSharingAStoreSpendATokenOnce(t *testing.T) {
 	if s, _ := post(b, c.Token, c.Body); s != http.StatusConflict || ran != 1 {
 		t.Fatalf("the second replica: HTTP %d, handler ran %d times", s, ran)
 	}
-	if n, err := (&verifier.SQLStore{DB: db}).Purge(context.Background(), time.Unix(c.Now+3600, 0)); err != nil || n != 1 {
+	if n, err := (&verifier.SQLStore{DB: db, Dialect: verifier.PostgreSQL}).Purge(context.Background(), time.Unix(c.Now+3600, 0)); err != nil || n != 1 {
 		t.Fatalf("purge: %d %v", n, err)
 	}
 }
@@ -376,5 +376,48 @@ func TestHR202_OneJWKSFetchAtATime(t *testing.T) {
 	}
 	if fetches.Load() != 1 {
 		t.Fatalf("%d fetches", fetches.Load())
+	}
+}
+
+// TestHR202_TheSQLStoreKeepsRowsPastEveryReplicasKeepingTime: Purge
+// leaves a row until its keeping time (exp plus the skew) is PurgeGrace
+// behind the purging replica's clock, so a replica whose clock is behind
+// still finds it.
+func TestHR202_TheSQLStoreKeepsRowsPastEveryReplicasKeepingTime(t *testing.T) {
+	s, err := verifier.NewSQLStore(openFake(t), verifier.PostgreSQL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	until := time.Unix(1_791_201_665, 0)
+	if ok, err := s.Use(context.Background(), verifier.Spend{Audience: "a", ID: "jti", Until: until}); !ok || err != nil {
+		t.Fatal(ok, err)
+	}
+	if n, err := s.Purge(context.Background(), until.Add(verifier.PurgeGrace)); n != 0 || err != nil {
+		t.Fatalf("purged %d at the grace's end: %v", n, err)
+	}
+	if ok, _ := s.Use(context.Background(), verifier.Spend{Audience: "a", ID: "jti", Until: until}); ok {
+		t.Fatal("a replay was accepted before the purge")
+	}
+	if n, err := s.Purge(context.Background(), until.Add(verifier.PurgeGrace+time.Second)); n != 1 || err != nil {
+		t.Fatalf("purged %d after the grace: %v", n, err)
+	}
+}
+
+// TestHR202_ASQLStoreWithoutADatabaseRefuses: no database or no dialect
+// is an error, so the verifier answers 503 instead of panicking.
+func TestHR202_ASQLStoreWithoutADatabaseRefuses(t *testing.T) {
+	if _, err := verifier.NewSQLStore(nil, verifier.PostgreSQL); err == nil {
+		t.Error("a store without a database")
+	}
+	if _, err := verifier.NewSQLStore(openFake(t), 0); err == nil {
+		t.Error("a store without a dialect")
+	}
+	f, k := load(t)
+	c := f.Cases[0]
+	for name, store := range map[string]*verifier.SQLStore{"zero": {}, "no database": {Dialect: verifier.PostgreSQL}} {
+		ran := 0
+		if status, _ := post(route(t, c, k, store, &ran), c.Token, c.Body); status != http.StatusServiceUnavailable || ran != 0 {
+			t.Errorf("%s: HTTP %d, handler ran %d times", name, status, ran)
+		}
 	}
 }
