@@ -398,10 +398,11 @@ ORDER BY 1;
 
 -- The credentials the org scan found for a connection, with the
 -- permissions they actually hold (G0 M8 G5: github_app findings name the
--- connection they were scanned through). UNTRUSTED metadata.
+-- connection they were scanned through). UNTRUSTED metadata. A dismissed
+-- discovery still counts: dismissing it does not remove the reach.
 -- name: CoverageReachOfConnection :many
 SELECT id, observed FROM pc.discoveries
-WHERE org_id = sqlc.arg(org_id) AND source = 'scan' AND state <> 'DISMISSED'
+WHERE org_id = sqlc.arg(org_id) AND source = 'scan'
   AND observed ->> 'kind' = 'github_app' AND observed ->> 'connection' = sqlc.arg(connection)::text
 ORDER BY id
-LIMIT 50;
+LIMIT 500;

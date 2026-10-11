@@ -456,10 +456,10 @@ func (q *Queries) CoverageInventoryWatermark(ctx context.Context, orgID ids.OrgI
 
 const coverageReachOfConnection = `-- name: CoverageReachOfConnection :many
 SELECT id, observed FROM pc.discoveries
-WHERE org_id = $1 AND source = 'scan' AND state <> 'DISMISSED'
+WHERE org_id = $1 AND source = 'scan'
   AND observed ->> 'kind' = 'github_app' AND observed ->> 'connection' = $2::text
 ORDER BY id
-LIMIT 50
+LIMIT 500
 `
 
 type CoverageReachOfConnectionRow struct {
@@ -469,7 +469,8 @@ type CoverageReachOfConnectionRow struct {
 
 // The credentials the org scan found for a connection, with the
 // permissions they actually hold (G0 M8 G5: github_app findings name the
-// connection they were scanned through). UNTRUSTED metadata.
+// connection they were scanned through). UNTRUSTED metadata. A dismissed
+// discovery still counts: dismissing it does not remove the reach.
 func (q *Queries) CoverageReachOfConnection(ctx context.Context, orgID ids.OrgID, connection string) ([]CoverageReachOfConnectionRow, error) {
 	rows, err := q.db.Query(ctx, coverageReachOfConnection, orgID, connection)
 	if err != nil {

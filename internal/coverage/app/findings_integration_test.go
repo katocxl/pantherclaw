@@ -43,7 +43,8 @@ func (f *fixture) refreshFindings(t *testing.T) []dbq.PcCoverageFinding {
 // the excess, its severity and the scopes of the operations executed in
 // the last 30 days; reduced to the need it is resolved; another excess is
 // a new finding; a dismissal needs a person's written reason and survives
-// the next refresh until the excess changes.
+// the next refresh until the excess changes. Dismissing the discovery
+// itself hides nothing: the reach is still there.
 func TestF048_CredentialReachBeyondTheNeedIsAFinding(t *testing.T) {
 	f := newFixture(t)
 	f.grant(t, "payments.refund.create")
@@ -100,5 +101,9 @@ func TestF048_CredentialReachBeyondTheNeedIsAFinding(t *testing.T) {
 	}
 	if n := f.count(t, `SELECT count(*) FROM pc.ledger_entries WHERE kind = 'audit.coverage.finding_dismissed'`); n != 1 {
 		t.Fatalf("%d audited dismissals", n)
+	}
+	f.exec(t, "UPDATE pc.discoveries SET state = 'DISMISSED' WHERE id = $1", discovery)
+	if rows := f.refreshFindings(t); len(rows) != 3 || rows[0].State != "OPEN" {
+		t.Fatalf("after the discovery was dismissed: %+v", rows)
 	}
 }

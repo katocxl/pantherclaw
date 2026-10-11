@@ -144,9 +144,16 @@ func (s *Service) ReassessOrg(ctx context.Context, org ids.OrgID) (Reassessed, e
 				conns = append(conns, sc.Connection)
 			}
 		}
+		// A connection whose findings cannot be refreshed is rolled back alone,
+		// logged and skipped; the next job tries again.
 		for _, conn := range conns {
-			if err := s.RefreshFindings(ctx, tx, conn); err != nil {
+			skip, err := refreshIsolated(ctx, tx, func() error { return s.RefreshFindings(ctx, tx, conn) })
+			if err != nil {
 				return err
+			}
+			if skip != nil {
+				s.log().WarnContext(ctx, "coverage.reassess: findings skipped", slog.String("org", org.String()),
+					slog.String("connection", conn.String()), slog.String("error", skip.Error()))
 			}
 		}
 		// An invalidation is entered in the ledger and marked reassessed only
@@ -188,6 +195,26 @@ func (s *Service) reassessIsolated(ctx context.Context, tx db.TenantTx, sc domai
 	}
 	_, err = tx.Exec(ctx, "RELEASE SAVEPOINT coverage_scope")
 	return recorded, nil, err
+}
+
+// refreshIsolated runs a findings refresh inside a savepoint, so one that
+// fails is rolled back alone and reported in skip. err is a failure of the
+// transaction itself.
+func refreshIsolated(ctx context.Context, tx db.TenantTx, refresh func() error) (skip, err error) {
+	if _, err := tx.Exec(ctx, "SAVEPOINT coverage_findings"); err != nil {
+		return nil, err
+	}
+	if skip = refresh(); skip != nil {
+		if ctx.Err() != nil {
+			return nil, skip
+		}
+		if _, err := tx.Exec(ctx, "ROLLBACK TO SAVEPOINT coverage_findings"); err != nil {
+			return nil, errors.Join(skip, err)
+		}
+		return skip, nil
+	}
+	_, err = tx.Exec(ctx, "RELEASE SAVEPOINT coverage_findings")
+	return nil, err
 }
 
 // enterInvalidation appends a reassessed invalidation to the ledger as a
