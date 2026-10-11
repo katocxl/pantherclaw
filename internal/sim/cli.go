@@ -54,10 +54,10 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		err = runPayments(ctx, args[1:], stderr)
 	case "mcp":
 		err = runMCP(ctx, args[1:], stderr)
-	case "canary":
-		err = runCanary(ctx, args[1:], stderr)
 	case "load":
 		err = runLoad(ctx, args[1:], stdout, stderr)
+	case "canary":
+		err = runCanary(ctx, args[1:], stderr)
 	default:
 		_, _ = fmt.Fprint(stderr, usage)
 		return 2
