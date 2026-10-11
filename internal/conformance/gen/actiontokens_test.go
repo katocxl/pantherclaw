@@ -53,8 +53,9 @@ type ActionTokenCase struct {
 	// gets Expect.
 	Twice bool `json:"twice,omitzero"`
 	// ThenValid: after this request is refused, the same verifier and store
-	// accept the same token with the valid request (the body, operation and
-	// target of the minted token's case), so a refusal never spends the jti.
+	// accept the minted token's case (the first: its token, body, operation
+	// and target), so a refusal never spends its jti, even one carried by a
+	// forged token.
 	ThenValid bool `json:"then_valid,omitzero"`
 	// Expect is "ok" or a refusal code: missing, bad_signature,
 	// wrong_issuer, wrong_audience, expired, body_mismatch,
@@ -173,6 +174,9 @@ func buildActionTokens(t *testing.T) any {
 			with("no token", "missing", func(v *ActionTokenCase) { v.Token = "" }),
 			with("signed with the receipts key", "bad_signature", func(v *ActionTokenCase) { v.Token = sign(signer(t, r, keys.PurposeReceipts), p) }),
 			with("signed with an action-tokens key not in the JWKS", "bad_signature", func(v *ActionTokenCase) { v.Token = sign(strangerSigner(t), p) }),
+			with("a forged token carrying the minted token's jti leaves it unspent", "bad_signature", func(v *ActionTokenCase) {
+				v.Token, v.ThenValid = sign(strangerSigner(t), p), true
+			}),
 			with("alg none", "bad_signature", func(v *ActionTokenCase) {
 				v.Token = craft(strings.Replace(string(h), `"EdDSA"`, `"none"`, 1), string(p), nil)
 			}),
@@ -255,6 +259,11 @@ func checkWithSimulator(t *testing.T, f ActionTokenFile) {
 		}
 		if got != want {
 			t.Fatalf("%s: the simulator's verifier says %s, want %s", c.Name, got, want)
+		}
+		if c.ThenValid {
+			if then := simulator(t, v, f.Cases[0]); then != "ok" {
+				t.Fatalf("%s: the minted token after the refusal: %s", c.Name, then)
+			}
 		}
 	}
 }

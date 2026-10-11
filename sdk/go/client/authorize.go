@@ -308,9 +308,9 @@ func checkDispatch(d *Dispatch) (*Outbound, error) {
 	if err != nil {
 		return nil, errors.New("the request to send has a body that is not base64url")
 	}
-	u, err := url.Parse(d.URL)
-	if err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" || d.Method == "" {
-		return nil, errors.New("the request to send has no method or absolute URL")
+	// The token and body travel over TLS, or over http only to this machine.
+	if !secure(d.URL) || d.Method == "" {
+		return nil, errors.New("the request to send has no method, or no https URL (http only on loopback)")
 	}
 	h := http.Header{}
 	for k, v := range d.Headers {
