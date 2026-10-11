@@ -118,8 +118,11 @@ func ReadStream(r io.Reader, fn func(WaitState) bool) error {
 
 // Stream follows the server's SSE stream for a held call (GET
 // /v1/wait/{handle}), calling fn for every state until fn returns false,
-// the state is final or the server ends the stream.
+// the state is final or the server ends the stream. A stream silent for
+// Config.StreamIdle, heartbeats included, is closed with an error.
 func (c *Client) Stream(ctx context.Context, handle string, fn func(WaitState) bool) error {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 	r, err := c.do(ctx, http.MethodGet, c.cfg.Server+"/v1/wait/"+url.PathEscape(handle), nil, http.Header{"Accept": {"text/event-stream"}}, 0)
 	if err != nil {
 		return err
@@ -128,19 +131,67 @@ func (c *Client) Stream(ctx context.Context, handle string, fn func(WaitState) b
 		return fmt.Errorf("client: wait stream: HTTP %d %s", r.status, strings.TrimSpace(string(r.body)))
 	}
 	defer func() { _ = r.stream.Close() }()
-	return ReadStream(r.stream, func(w WaitState) bool { return fn(w) && w.Next() == NextWait })
+	watchdog := time.AfterFunc(c.cfg.StreamIdle, cancel)
+	defer watchdog.Stop()
+	body := &idleReader{r: r.stream, watchdog: watchdog, idle: c.cfg.StreamIdle}
+	err = ReadStream(body, func(w WaitState) bool { return fn(w) && w.Next() == NextWait })
+	if ctx.Err() != nil {
+		return fmt.Errorf("client: the wait stream was silent or ended: %w", ctx.Err())
+	}
+	return err
+}
+
+// idleReader restarts the stream's watchdog whenever bytes arrive.
+type idleReader struct {
+	r        io.Reader
+	watchdog *time.Timer
+	idle     time.Duration
+}
+
+func (r *idleReader) Read(p []byte) (int, error) {
+	n, err := r.r.Read(p)
+	if n > 0 {
+		r.watchdog.Reset(r.idle)
+	}
+	return n, err
+}
+
+// The bounds of a wait.
+const (
+	// waitGrace is how long past a hold's deadline the client still waits
+	// for the server to say how the hold ended.
+	waitGrace = 5 * time.Second
+	// maxResubmits bounds how often one call is resubmitted and held again.
+	maxResubmits = 3
+)
+
+// waitUntil is when a wait on a hold ends: its deadline plus a grace, and
+// never later than Config.MaxWait from now.
+func (c *Client) waitUntil(w WaitState) time.Time {
+	until := c.cfg.Now().Add(c.cfg.MaxWait)
+	if !w.Deadline.IsZero() && w.Deadline.Add(waitGrace).Before(until) {
+		until = w.Deadline.Add(waitGrace)
+	}
+	return until
 }
 
 // AuthorizeAndWait asks about a tool call and, while it is held, waits in
 // PantherClaw (the SSE stream, else long-polls) and resubmits the
-// identical call with the same action id once it is ready (PAP/1 §8). It
-// returns when the call is allowed, denied, cannot be decided, or ctx ends
-// (CannotDecide: the call does not run).
+// identical call with the same action id once it is ready (PAP/1 §8). A
+// wait ends at the hold's deadline (plus a few seconds' grace), at
+// Config.MaxWait, or when ctx ends, and a call held again after three
+// resubmissions is not resubmitted: each ends in CannotDecide, so the call
+// does not run (HR-200).
 func (c *Client) AuthorizeAndWait(ctx context.Context, connection string, call ToolCall, actionID string) Result {
 	res := c.authorize(ctx, connection, call, actionID, "")
-	for res.Outcome == Hold {
-		first, handle := res.Answer.ActionHash, res.Answer.Wait.Handle
-		next, err := c.waitReady(ctx, handle, res.Answer.Wait.State)
+	for resubmits := 0; res.Outcome == Hold; resubmits++ {
+		if resubmits == maxResubmits {
+			return cannot(fmt.Sprintf("the call was held again after %d resubmissions", maxResubmits), nil)
+		}
+		first, w := res.Answer.ActionHash, *res.Answer.Wait
+		wctx, cancel := context.WithTimeout(ctx, c.waitUntil(w).Sub(c.cfg.Now()))
+		next, err := c.waitReady(wctx, w.Handle, w.State)
+		cancel()
 		switch {
 		case err != nil:
 			return cannot("the wait for PantherClaw's decision ended", err)
