@@ -406,17 +406,41 @@ WHERE org_id = sqlc.arg(org_id) AND source = 'scan' AND state <> 'DISMISSED'
 ORDER BY id
 LIMIT 50;
 
--- The org-scan findings that may show a route of a connection and were
--- not recorded yet: each is recorded once, as the source of its route (G0
--- M8 G5 kinds; UNTRUSTED metadata, HR-209).
+-- The org-scan findings that show a route of one of the org's connections
+-- and were not recorded yet, with the route (G0 M8 G5 kinds; UNTRUSTED
+-- metadata, HR-209: they only describe a route, never grant or close one):
+--   - a GitHub App installation is target-side authority beyond the
+--     connection (F449);
+--   - a workflow that writes or deploys is an intermediary that can produce
+--     the effect (F448);
+--   - a committed MCP configuration is an MCP server reaching the target
+--     outside the gateway (F444).
+-- Only findings that are recorded are selected, so findings that show no
+-- route never hold back the ones after them. Each is recorded once, as the
+-- source of its route. A dismissed discovery still counts: dismissing it
+-- does not remove the route.
 -- name: CoverageScanFindingsToRecord :many
-SELECT d.id, d.observed FROM pc.discoveries d
-WHERE d.org_id = sqlc.arg(org_id) AND d.source = 'scan' AND d.state <> 'DISMISSED'
-  AND d.observed ->> 'kind' IN ('github_app', 'github_workflow', 'github_mcp_config')
-  AND d.observed ->> 'connection' IS NOT NULL
-  AND NOT EXISTS (SELECT 1 FROM pc.coverage_routes r
-                  WHERE r.org_id = d.org_id AND r.source = 'scan' AND r.source_ref = d.id)
-ORDER BY d.id
+SELECT s.id, s.connection_id, s.kind::text AS kind, s.locator::text AS locator FROM (
+    SELECT d.id, c.id AS connection_id,
+        CASE d.observed ->> 'kind'
+            WHEN 'github_app' THEN 'target_side'
+            WHEN 'github_workflow' THEN 'intermediary'
+            WHEN 'github_mcp_config' THEN 'direct_api'
+        END AS kind,
+        left(btrim(CASE d.observed ->> 'kind'
+            WHEN 'github_app' THEN 'GitHub App ' || coalesce(d.observed ->> 'app_slug', '')
+            ELSE coalesce(d.observed ->> 'repo', '') || ' ' || coalesce(d.observed ->> 'path', '')
+        END), 512) AS locator
+    FROM pc.discoveries d
+    JOIN pc.connections c ON c.org_id = d.org_id AND c.id::text = lower(d.observed ->> 'connection')
+    WHERE d.org_id = sqlc.arg(org_id) AND d.source = 'scan'
+      AND d.observed ->> 'kind' IN ('github_app', 'github_workflow', 'github_mcp_config')
+      AND (d.observed ->> 'kind' <> 'github_workflow' OR d.observed ->> 'writes' = 'true' OR d.observed ->> 'deploys' = 'true')
+      AND NOT EXISTS (SELECT 1 FROM pc.coverage_routes r
+                      WHERE r.org_id = d.org_id AND r.source = 'scan' AND r.source_ref = d.id)
+) s
+WHERE s.kind = 'target_side' OR s.locator <> ''
+ORDER BY s.id
 LIMIT 200;
 
 -- A scope's snapshots, newest first: its coverage history.
