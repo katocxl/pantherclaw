@@ -24,6 +24,7 @@ Every equivalent route kind is listed in a record. A kind that no source showed 
   - a connection change or a move to another gateway;
   - a route mode change;
   - a credential sealed, superseded or revoked;
+  - a change to the GitHub App installation behind the connection (its permissions, account or repository selection);
   - a new package pin;
   - a gateway's state;
   - an agent instance admitted outside a sandbox;
@@ -62,7 +63,7 @@ Review exclusions before they expire, and revoke any whose reason no longer hold
 
 ## Credential-overreach findings
 
-For each connection, the permissions its credentials actually hold are compared with what the package declares for the operations the org's grants allow. For GitHub, the held permissions come from the App installation the org scan found. The finding also lists what the operations executed in the last 30 days used. Reach beyond the need is an exposure finding, never extra permission:
+For each connection, the permissions its credentials actually hold are compared with what the package declares for the operations the org's grants allow. For GitHub, the held permissions come from the App installation behind the connection, as last read, and from every other installation the gateway's org scan found for it (a person's `pclaw scan` cannot report GitHub installations). The finding also lists what the operations executed in the last 30 days used. Reach beyond the need is an exposure finding, never extra permission:
 
 | Severity | Excess |
 |---|---|
