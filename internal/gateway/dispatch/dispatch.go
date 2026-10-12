@@ -27,6 +27,7 @@
 package dispatch
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"errors"
@@ -447,6 +448,11 @@ var errUnsupported = errors.New("dispatch: unsupported obligation")
 // errKind refuses to place a credential that is not static.
 var errKind = errors.New("dispatch: a GitHub App credential is never placed as sealed")
 
+// errPEM refuses to place a static credential that holds a PEM block, such
+// as an App's private key sealed without --github-app: it would go to the
+// target.
+var errPEM = errors.New("dispatch: a credential holding a PEM block is never placed")
+
 // effective applies the decision's obligations to the action (F104, F107):
 // the only kind the Authority sets is count_max with clamping, before
 // execution. Any other obligation is not applied, and nothing is sent.
@@ -636,7 +642,7 @@ func targetRef(def *defs.Definition, body, secret []byte) string {
 
 // credential opens the connection's sealed credential and places it on req.
 func (e *Engine) credential(conn *control.Connection, req *http.Request) ([]byte, error) {
-	secret, err := e.openCredential(conn)
+	secret, err := e.openStatic(conn)
 	if err != nil {
 		return nil, err
 	}
@@ -645,6 +651,16 @@ func (e *Engine) credential(conn *control.Connection, req *http.Request) ([]byte
 		return nil, err
 	}
 	return secret, nil
+}
+
+// openStatic opens the connection's sealed credential when it is static.
+// Another kind is refused before anything is decrypted, so an App's key is
+// opened only on the path that mints with it (HR-204).
+func (e *Engine) openStatic(conn *control.Connection) ([]byte, error) {
+	if k := conn.Credential.GetKind(); k != "" && k != credentials.KindStatic {
+		return nil, errKind
+	}
+	return e.openCredential(conn)
 }
 
 // openCredential opens the connection's sealed credential; the caller
@@ -666,11 +682,14 @@ func (e *Engine) openCredential(conn *control.Connection) ([]byte, error) {
 // placeCredential places an opened static credential on req, for the
 // credential's allowed hosts only. A GitHub App credential is never placed:
 // it holds the App's key, from which the gateway mints a token per action
-// (HR-203, HR-204).
+// (HR-203, HR-204). Nor is a static one holding a PEM block.
 func placeCredential(conn *control.Connection, req *http.Request, secret []byte) error {
 	cred := conn.Credential
 	if k := cred.GetKind(); k != "" && k != credentials.KindStatic {
 		return errKind
+	}
+	if bytes.Contains(secret, []byte("-----BEGIN")) {
+		return errPEM
 	}
 	return broker.Place(req, cred.GetAllowedHosts(), cred.GetHeader(), cred.GetScheme(), secret)
 }
