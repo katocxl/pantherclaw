@@ -124,10 +124,12 @@ func ReadInbound(r *http.Request, body []byte, htu string) Inbound {
 	if hasToken {
 		in.Instance, in.Env, in.JKT, in.SubjectOK = tokenSubject(token)
 	}
-	if run, err := ids.ParseUUID(r.Header.Get(HeaderRunID)); err == nil {
+	// The nil UUID names no run and no action: every face refuses a call
+	// without a run, and an action without an id gets a new one.
+	if run, err := ids.ParseUUID(r.Header.Get(HeaderRunID)); err == nil && !run.IsZero() {
 		in.Run = run.String()
 	}
-	if act, err := ids.ParseUUID(r.Header.Get(HeaderActionID)); err == nil {
+	if act, err := ids.ParseUUID(r.Header.Get(HeaderActionID)); err == nil && !act.IsZero() {
 		in.Action = act.String()
 	}
 	return in
