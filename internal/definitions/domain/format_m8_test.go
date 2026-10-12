@@ -247,3 +247,24 @@ func TestRestPaths(t *testing.T) {
 		}
 	}
 }
+
+// TestHR034_ContentIsNeverAmongTheCanonicalFields: content is agent-written
+// (a commit message, a pull request's title), so an approval template may
+// not show it among the canonical fields or in its title; the display
+// shows it in the untrusted block instead.
+func TestHR034_ContentIsNeverAmongTheCanonicalFields(t *testing.T) {
+	for name, set := range map[string]func(*domain.Definition){
+		"a field": func(d *domain.Definition) { d.Approval.Fields = append(d.Approval.Fields, "params.title") },
+		"a title": func(d *domain.Definition) { d.Approval.Title = "Open {params.title}" },
+	} {
+		d := minimal(map[string]domain.ParamSpec{"title": {Type: domain.TypeContent, Material: true, MaxLength: 16}})
+		d.Approval = &domain.ApprovalTemplate{Title: "Open {target.id}", Fields: []string{"target.id"}}
+		if err := d.Validate(); err != nil {
+			t.Fatalf("without content: %v", err)
+		}
+		set(d)
+		if err := d.Validate(); !errors.Is(err, domain.ErrInvalid) {
+			t.Errorf("content in %s: %v", name, err)
+		}
+	}
+}
