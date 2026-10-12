@@ -321,8 +321,11 @@ func TestHR201_TheSDKEndpointRefusesWhatIsNotAnSDKCall(t *testing.T) {
 	}{
 		"no run":  {call, map[string]string{HeaderRunID: ""}, http.StatusBadRequest},
 		"nil run": {call, map[string]string{HeaderRunID: nilUUID}, http.StatusBadRequest},
-		"nil run on a built-in": {`{"tool":"Read","input":{},"tool_use_id":"t1"}`, map[string]string{HeaderRunID: nilUUID},
-			http.StatusBadRequest},
+		"nil run on a built-in": {
+			`{"tool":"Read","input":{},"tool_use_id":"t1"}`,
+			map[string]string{HeaderRunID: nilUUID},
+			http.StatusBadRequest,
+		},
 		"no proof": {call, map[string]string{HeaderProof: ""}, http.StatusUnauthorized},
 		"origin":   {call, map[string]string{"Origin": "https://evil.example"}, http.StatusForbidden},
 		"not json": {"{", nil, http.StatusBadRequest},
