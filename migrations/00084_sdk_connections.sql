@@ -83,9 +83,11 @@ CREATE TABLE pc.connection_tests (
 );
 CREATE INDEX connection_tests_latest ON pc.connection_tests (org_id, connection_id, created_at DESC);
 CREATE UNIQUE INDEX connection_tests_verification ON pc.connection_tests (org_id, verification_id) WHERE verification_id IS NOT NULL;
--- The latest passing test of a kind for an operation (M9: LastPassed).
-CREATE INDEX connection_tests_passed ON pc.connection_tests (org_id, connection_id, kind, operation, finished_at DESC)
-    WHERE state = 'DONE' AND result = 'PASSED';
+-- The latest finished test of a kind for an operation (M9: LastPassed). The
+-- cap lifts only while that test is DONE and PASSED: a newer failure, or a
+-- test that could not run, drops it.
+CREATE INDEX connection_tests_finished ON pc.connection_tests (org_id, connection_id, kind, operation, finished_at DESC)
+    WHERE finished_at IS NOT NULL;
 
 -- A test result is evidence (HR-210): an open test moves forward only, to
 -- RUNNING (on the gateway holding its lease, again when a retry leases it

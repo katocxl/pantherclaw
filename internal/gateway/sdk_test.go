@@ -170,9 +170,10 @@ func TestHR201_TheFaceServesOnlyConnectionsAnSDKReachesItself(t *testing.T) {
 // TestHR201_NothingTheSDKComputedIsTrusted: a request that carries an
 // ActionIR, a hash or a member the contract does not name is refused, and
 // so is an MCP call the reviewed package does not map or whose input does
-// not fit it, a tool of another MCP server than the connection's, and a
-// name that is neither an MCP tool nor a built-in tool (bash in lowercase
-// too): none of them reaches the Authority, and none is allowed.
+// not fit it, a tool of another MCP server than the connection's, a name
+// that is neither an MCP tool nor a built-in tool (bash in lowercase, or a
+// name the SDK no longer has), and a built-in tool reading an MCP server's
+// resources: none of them reaches the Authority, and none is allowed.
 func TestHR201_NothingTheSDKComputedIsTrusted(t *testing.T) {
 	refund := `"input":{"charge":"ch_1","amount":"30.00","currency":"USD","reason":"duplicate"}`
 	for name, tc := range map[string]struct {
@@ -192,6 +193,9 @@ func TestHR201_NothingTheSDKComputedIsTrusted(t *testing.T) {
 		"another server":    {`{"tool":"mcp__evil__get_refund","server":"evil","input":{"refund":"re_1"},"tool_use_id":"t1"}`, http.StatusOK, sdk.CodeUnknownServer},
 		"an unknown tool":   {`{"tool":"merge_pr","input":{},"tool_use_id":"t1"}`, http.StatusOK, sdk.CodeUnknownTool},
 		"bash in lowercase": {`{"tool":"bash","input":{"command":"ls"},"tool_use_id":"t1"}`, http.StatusOK, sdk.CodeUnknownTool},
+		"a retired name":    {`{"tool":"MultiEdit","input":{},"tool_use_id":"t1"}`, http.StatusOK, sdk.CodeUnknownTool},
+		"a resource read":   {`{"tool":"ReadMcpResourceTool","input":{"server":"payments","uri":"pay://refunds"},"tool_use_id":"t1"}`, http.StatusOK, sdk.CodeMCPResource},
+		"a resource list":   {`{"tool":"ListMcpResourcesTool","input":{},"tool_use_id":"t1"}`, http.StatusOK, sdk.CodeMCPResource},
 		"a bad call id":     {`{"tool":"Read","input":{},"tool_use_id":"toolu 01"}`, http.StatusBadRequest, "invalid_request"},
 		"input not object":  {`{"tool":"Read","input":"x","tool_use_id":"t1"}`, http.StatusBadRequest, "invalid_request"},
 		"duplicate members": {`{"tool":"Read","tool":"mcp__payments__get_refund","input":{},"tool_use_id":"t1"}`, http.StatusBadRequest, "invalid_request"},
@@ -315,10 +319,12 @@ func TestHR200_BuiltInToolsAreObservedOnly(t *testing.T) {
 	}
 }
 
-// TestHR201_TheSDKEndpointRefusesWhatIsNotAnSDKCall: no run, no proof, a
-// browser Origin, a malformed or oversized body and a GET are refused
-// without asking the Authority to decide.
+// TestHR201_TheSDKEndpointRefusesWhatIsNotAnSDKCall: no run (or the nil
+// UUID for one), no proof, a browser Origin, a malformed or oversized body
+// and a GET are refused without asking the Authority to decide. The nil
+// UUID is no action id either: the call gets a new one.
 func TestHR201_TheSDKEndpointRefusesWhatIsNotAnSDKCall(t *testing.T) {
+	const nilUUID = "00000000-0000-0000-0000-000000000000"
 	h := setup(t, withAgentHeld)
 	call := sdkRefund("30.00")
 	for name, tc := range map[string]struct {
@@ -326,7 +332,10 @@ func TestHR201_TheSDKEndpointRefusesWhatIsNotAnSDKCall(t *testing.T) {
 		hdr  map[string]string
 		code int
 	}{
-		"no run":   {call, map[string]string{HeaderRunID: ""}, http.StatusBadRequest},
+		"no run":  {call, map[string]string{HeaderRunID: ""}, http.StatusBadRequest},
+		"nil run": {call, map[string]string{HeaderRunID: nilUUID}, http.StatusBadRequest},
+		"nil run on a built-in": {`{"tool":"Read","input":{},"tool_use_id":"t1"}`, map[string]string{HeaderRunID: nilUUID},
+			http.StatusBadRequest},
 		"no proof": {call, map[string]string{HeaderProof: ""}, http.StatusUnauthorized},
 		"origin":   {call, map[string]string{"Origin": "https://evil.example"}, http.StatusForbidden},
 		"not json": {"{", nil, http.StatusBadRequest},
@@ -336,8 +345,14 @@ func TestHR201_TheSDKEndpointRefusesWhatIsNotAnSDKCall(t *testing.T) {
 			t.Errorf("%s: %d %+v", name, r.code, r.answer)
 		}
 	}
-	if s := h.auth.snap(); s.authorize != 0 {
-		t.Fatalf("a refused request reached the Authority %d times", s.authorize)
+	h.auth.mu.Lock()
+	verified := len(h.auth.verifiedRuns)
+	h.auth.mu.Unlock()
+	if s := h.auth.snap(); s.authorize != 0 || verified != 0 {
+		t.Fatalf("a refused request reached the Authority %d times, verified %d", s.authorize, verified)
+	}
+	if r := h.sdk(t, call, map[string]string{HeaderActionID: nilUUID}); r.answer.ActionID == "" || r.answer.ActionID == nilUUID {
+		t.Fatalf("a nil action id: %+v", r.answer)
 	}
 	req, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, h.url+sdkPath, nil)
 	resp, err := (&http.Client{Timeout: 5 * time.Second}).Do(req)
