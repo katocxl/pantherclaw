@@ -8,8 +8,15 @@
   "connection": "payments",
   "servers": [
     "payments",
-    "git__hub"
+    "github",
+    "git__hub",
+    "Wiki",
+    "notes",
+    "notes__v2",
+    "sssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss",
+    "ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss"
   ],
+  "connection_name": "^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$",
   "builtins": [
     "Agent",
     "AskUserQuestion",
@@ -24,13 +31,18 @@
     "ExitWorktree",
     "Glob",
     "Grep",
+    "ListAgents",
     "ListMcpResourcesTool",
     "LSP",
     "Monitor",
     "NotebookEdit",
     "PowerShell",
     "Read",
+    "ReadMcpResourceDirTool",
     "ReadMcpResourceTool",
+    "ReportFindings",
+    "ScheduleWakeup",
+    "SendMessage",
     "Skill",
     "Task",
     "TaskCreate",
@@ -44,6 +56,7 @@
     "WaitForMcpServers",
     "WebFetch",
     "WebSearch",
+    "Workflow",
     "Write"
   ],
   "max_body": 65536,
@@ -73,16 +86,16 @@
       "class": "mapped"
     },
     {
-      "name": "an MCP server whose name has a double underscore",
-      "tool": "mcp__git__hub__merge_pull_request",
+      "name": "an MCP tool of another server goes to the connection named after that server",
+      "tool": "mcp__github__merge_pull_request",
       "input": {
         "pull_number": "7"
       },
       "tool_use_id": "toolu_02",
-      "path": "/sdk/payments",
+      "path": "/sdk/github",
       "body": {
-        "tool": "mcp__git__hub__merge_pull_request",
-        "server": "git__hub",
+        "tool": "mcp__github__merge_pull_request",
+        "server": "github",
         "input": {
           "pull_number": "7"
         },
@@ -174,6 +187,72 @@
       },
       "tool_use_id": "toolu_09",
       "class": "refused"
+    },
+    {
+      "name": "an MCP server whose name has a double underscore, which no connection's name has",
+      "tool": "mcp__git__hub__merge_pull_request",
+      "input": {
+        "pull_number": "7"
+      },
+      "tool_use_id": "toolu_10",
+      "class": "refused"
+    },
+    {
+      "name": "an MCP server whose name has capitals, which no connection's name has",
+      "tool": "mcp__Wiki__search",
+      "input": {
+        "q": "refunds"
+      },
+      "tool_use_id": "toolu_11",
+      "class": "refused"
+    },
+    {
+      "name": "an MCP server whose name is longer than a connection's",
+      "tool": "mcp__ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss__run",
+      "input": {},
+      "tool_use_id": "toolu_12",
+      "class": "refused"
+    },
+    {
+      "name": "an MCP server whose name is as long as a connection's may be",
+      "tool": "mcp__sssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss__run",
+      "input": {},
+      "tool_use_id": "toolu_13",
+      "path": "/sdk/sssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss",
+      "body": {
+        "tool": "mcp__sssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss__run",
+        "server": "sssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss",
+        "input": {},
+        "tool_use_id": "toolu_13"
+      },
+      "class": "mapped"
+    },
+    {
+      "name": "an MCP tool whose name two configured servers' names fit",
+      "tool": "mcp__notes__v2__search",
+      "input": {
+        "q": "refunds"
+      },
+      "tool_use_id": "toolu_14",
+      "class": "refused"
+    },
+    {
+      "name": "an MCP tool whose name only one of two similar servers' names fits",
+      "tool": "mcp__notes__search",
+      "input": {
+        "q": "refunds"
+      },
+      "tool_use_id": "toolu_15",
+      "path": "/sdk/notes",
+      "body": {
+        "tool": "mcp__notes__search",
+        "server": "notes",
+        "input": {
+          "q": "refunds"
+        },
+        "tool_use_id": "toolu_15"
+      },
+      "class": "mapped"
     }
   ],
   "answers": [
