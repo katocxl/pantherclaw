@@ -290,6 +290,37 @@ func TestHR200_OnlyBuiltinsAreObserved(t *testing.T) {
 	}
 }
 
+// TestHR200_AServerNamedLikeNoConnectionIsNeverSent: a connection governs
+// the one MCP server named after it, so a call naming a server that no
+// connection can be named after, or a built-in recorded at such a
+// connection, is cannot_decide without a request.
+func TestHR200_AServerNamedLikeNoConnectionIsNeverSent(t *testing.T) {
+	f := newFake(t)
+	f.sdk = func(w http.ResponseWriter, _ *http.Request, _ []byte) {
+		answer(w, map[string]any{"decision": "allow", "mode": "monitor", "coverage": "OBSERVE_ONLY"})
+	}
+	c := f.client(t)
+	for _, call := range []client.ToolCall{
+		{Tool: "mcp__git__hub__merge", Server: "git__hub", Input: jsontext.Value(`{}`), ToolUseID: "toolu_01"},
+		{Tool: "mcp__Payments__create_refund", Server: "Payments", Input: jsontext.Value(`{}`), ToolUseID: "toolu_02"},
+		{Tool: "mcp__-payments__create_refund", Server: "-payments", Input: jsontext.Value(`{}`), ToolUseID: "toolu_03"},
+		{Tool: "mcp__pay%2fments__create_refund", Server: "pay%2fments", Input: jsontext.Value(`{}`), ToolUseID: "toolu_04"},
+	} {
+		if res := c.Authorize(context.Background(), "payments", call, client.NewActionID()); res.Outcome != client.CannotDecide {
+			t.Errorf("%s: %s", call.Server, res.Outcome)
+		}
+	}
+	read := client.ToolCall{Tool: "Read", Input: jsontext.Value(`{"file_path":"/etc/hosts"}`), ToolUseID: "toolu_05"}
+	for _, conn := range []string{"Payments", "pay/ments", "", "payments-"} {
+		if res := c.Authorize(context.Background(), conn, read, client.NewActionID()); res.Outcome != client.CannotDecide {
+			t.Errorf("a built-in recorded at %q: %s", conn, res.Outcome)
+		}
+	}
+	if f.calls.Load() != 0 {
+		t.Errorf("sent %d calls", f.calls.Load())
+	}
+}
+
 // TestNewRefusesPlainHTTPOutsideLoopback: tokens and proofs travel over
 // TLS, or over http only to this machine.
 func TestNewRefusesPlainHTTPOutsideLoopback(t *testing.T) {
