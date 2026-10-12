@@ -12,8 +12,8 @@ import (
 
 // FuzzSDKCall: whatever the body, a call names an MCP tool only as
 // mcp__{server}__{tool} with that server, and is observed instead of
-// decided only when it is a plain built-in name without a server (HR-200,
-// HR-201): an MCP call never slips into OBSERVE_ONLY.
+// decided only when it is a built-in name without a server, never an MCP
+// resource tool (HR-200, HR-201): an MCP call never slips into OBSERVE_ONLY.
 func FuzzSDKCall(f *testing.F) {
 	for _, s := range []string{
 		`{"tool":"mcp__payments__create_refund","server":"payments","input":{},"tool_use_id":"t1"}`,
@@ -21,6 +21,8 @@ func FuzzSDKCall(f *testing.F) {
 		`{"tool":"mcp__payments__","server":"payments","input":{},"tool_use_id":"t1"}`,
 		`{"tool":"Read","input":{},"tool_use_id":"t1"}`,
 		`{"tool":"Read","server":"payments","input":{},"tool_use_id":"t1"}`,
+		`{"tool":"ReadMcpResourceTool","input":{"server":"payments","uri":"x"},"tool_use_id":"t1"}`,
+		`{"tool":"MultiEdit","input":{},"tool_use_id":"t1"}`,
 		`{"tool":"mcp__x","input":{},"tool_use_id":"t1"}`,
 	} {
 		f.Add([]byte(s))
@@ -37,8 +39,16 @@ func FuzzSDKCall(f *testing.F) {
 				t.Fatalf("%q mapped as MCP tool %q", body, tool)
 			}
 		case errors.Is(err, errBuiltIn):
-			if req.Server != "" || strings.HasPrefix(req.Tool, "mcp__") || !builtinRe.MatchString(req.Tool) {
+			if req.Server != "" || strings.HasPrefix(req.Tool, "mcp__") || !builtIns[req.Tool] || mcpResourceTools[req.Tool] {
 				t.Fatalf("%q observed as a built-in", body)
+			}
+		case errors.Is(err, errResource):
+			if req.Server != "" || !mcpResourceTools[req.Tool] {
+				t.Fatalf("%q denied as an MCP resource tool", body)
+			}
+		case errors.Is(err, errUnknown):
+			if req.Server != "" || strings.HasPrefix(req.Tool, "mcp__") || builtIns[req.Tool] {
+				t.Fatalf("%q denied as an unknown tool", body)
 			}
 		case !errors.Is(err, errShape):
 			t.Fatalf("%q: %v", body, err)
