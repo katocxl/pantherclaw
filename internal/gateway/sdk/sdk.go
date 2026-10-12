@@ -86,6 +86,9 @@ const (
 	// serving the connection (its configuration is stale), so a built-in
 	// tool call cannot be recorded.
 	CodeConnectionNotServed = "connection_not_served"
+	// CodeMCPResource: a built-in tool that reads an MCP server's
+	// resources, which no reviewed package maps.
+	CodeMCPResource = "mcp_resource"
 )
 
 // Configuration is the gateway's current configuration (control.Store).
@@ -285,6 +288,12 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case errors.Is(err, errBuiltIn):
 		h.observe(w, r, conn, in, req.Tool, req.Input)
 		return
+	case errors.Is(err, errResource):
+		answer(w, http.StatusOK, Answer{
+			Decision: "deny", ErrorClass: string(dispatch.CannotAuthorize), Code: CodeMCPResource,
+			Reason: "PantherClaw cannot decide this call: " + req.Tool + " reads an MCP server's resources, and no reviewed package maps them.",
+		})
+		return
 	case errors.Is(err, errUnknown):
 		answer(w, http.StatusOK, Answer{
 			Decision: "deny", ErrorClass: string(dispatch.CannotAuthorize), Code: CodeUnknownTool,
@@ -342,24 +351,36 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 var (
 	// errBuiltIn: a tool the agent SDK has built in (observed only).
 	errBuiltIn = errors.New("sdk: a built-in tool")
+	// errResource: a built-in tool that reads an MCP server's resources.
+	errResource = errors.New("sdk: an MCP resource tool")
 	// errUnknown: a name that is neither an MCP tool nor a built-in tool.
 	errUnknown = errors.New("sdk: an unknown tool")
 	// errShape: the call's members do not fit its kind of tool.
 	errShape = errors.New("sdk: the call's members do not fit its tool")
 )
 
-// builtIns are the tools the Claude Agent SDK has built in, in the range the
-// integration supports, with Bash and PowerShell for an application whose
-// shell is only observed: the only names answered OBSERVE_ONLY. Any other
-// name that is not an MCP tool is unknown_tool, so a client that obeys the
-// face never runs an unmapped tool that is not built in (HR-200).
+// builtIns are the tools the Claude Agent SDK has built in: exactly the
+// "builtins" of sdk/conformance/sdk_face.json, which track S takes from the
+// SDK the integration supports, so the face and every SDK classify a name
+// alike. Bash and PowerShell are among them for an application whose shell
+// is only observed. They are the only names answered OBSERVE_ONLY, except
+// mcpResourceTools; any other name that is not an MCP tool is unknown_tool,
+// so a client that obeys the face never runs an unmapped tool that is not
+// built in (HR-200).
 var builtIns = map[string]bool{
-	"Agent": true, "Task": true, "Bash": true, "BashOutput": true, "KillShell": true, "KillBash": true, "PowerShell": true,
-	"Read": true, "Write": true, "Edit": true, "MultiEdit": true, "Glob": true, "Grep": true, "LS": true,
-	"NotebookRead": true, "NotebookEdit": true, "TodoWrite": true, "WebFetch": true, "WebSearch": true,
-	"ExitPlanMode": true, "ListMcpResources": true, "ReadMcpResource": true, "SlashCommand": true, "Skill": true,
-	"AskUserQuestion": true,
+	"Agent": true, "AskUserQuestion": true, "Bash": true, "CronCreate": true, "CronDelete": true, "CronList": true,
+	"Edit": true, "EnterPlanMode": true, "EnterWorktree": true, "ExitPlanMode": true, "ExitWorktree": true, "Glob": true,
+	"Grep": true, "ListMcpResourcesTool": true, "LSP": true, "Monitor": true, "NotebookEdit": true, "PowerShell": true,
+	"Read": true, "ReadMcpResourceTool": true, "Skill": true, "Task": true, "TaskCreate": true, "TaskGet": true,
+	"TaskList": true, "TaskOutput": true, "TaskStop": true, "TaskUpdate": true, "TodoWrite": true, "ToolSearch": true,
+	"WaitForMcpServers": true, "WebFetch": true, "WebSearch": true, "Write": true,
 }
+
+// mcpResourceTools are the built-in tools that list or read an MCP server's
+// resources. A package maps a server's tools, never its resources, so the
+// face cannot decide them and denies them (mcp_resource): observed only, they
+// would let an agent read a governed server's data without a decision.
+var mcpResourceTools = map[string]bool{"ListMcpResourcesTool": true, "ReadMcpResourceTool": true}
 
 // mcpTool is the MCP tool a raw call names: mcp__{server}__{tool} with that
 // server. A call with a built-in tool's name and no server is errBuiltIn,
@@ -371,6 +392,8 @@ func mcpTool(req Request) (string, error) {
 		switch {
 		case req.Server != "" || !builtinRe.MatchString(req.Tool):
 			return "", errShape
+		case mcpResourceTools[req.Tool]:
+			return "", errResource
 		case builtIns[req.Tool]:
 			return "", errBuiltIn
 		}
