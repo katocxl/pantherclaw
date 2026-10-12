@@ -150,7 +150,7 @@ func (s *Server) repoRoutes(mux *http.ServeMux) {
 
 func (s *Server) getRepo(w http.ResponseWriter, _ *http.Request, r *Repo, _ *Token) int {
 	return reply(w, http.StatusOK, map[string]any{
-		"name": r.Name, "full_name": r.full(), "owner": map[string]any{"login": r.Owner}, "default_branch": r.DefaultBranch,
+		"id": accountID(r.full()), "name": r.Name, "full_name": r.full(), "owner": map[string]any{"login": r.Owner}, "default_branch": r.DefaultBranch,
 		"allow_merge_commit": r.Settings.AllowMergeCommit, "allow_squash_merge": r.Settings.AllowSquashMerge,
 		"allow_rebase_merge": r.Settings.AllowRebaseMerge, "allow_auto_merge": r.Settings.AllowAutoMerge,
 		"delete_branch_on_merge": r.Settings.DeleteBranchOnMerge, "private": true, "simulated": true,
