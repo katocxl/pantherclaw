@@ -408,11 +408,13 @@ ORDER BY 1;
 
 -- The credentials the org scan found for a connection, with the
 -- permissions they actually hold (G0 M8 G5: github_app findings name the
--- connection they were scanned through). UNTRUSTED metadata. A dismissed
--- discovery still counts: dismissing it does not remove the reach.
+-- connection they were scanned through). UNTRUSTED metadata. Only the
+-- gateway's GitHub org scan (source github_scan) reports these kinds; a
+-- person's pclaw scan (source scan) cannot (N20). A dismissed discovery
+-- still counts: dismissing it does not remove the reach.
 -- name: CoverageReachOfConnection :many
 SELECT id, observed FROM pc.discoveries
-WHERE org_id = sqlc.arg(org_id) AND source IN ('scan', 'github_scan')
+WHERE org_id = sqlc.arg(org_id) AND source = 'github_scan'
   AND observed ->> 'kind' = 'github_app' AND observed ->> 'connection' = sqlc.arg(connection)::text
 ORDER BY id
 LIMIT 500;
@@ -428,8 +430,10 @@ LIMIT 500;
 --     outside the gateway (F444).
 -- Only findings that are recorded are selected, so findings that show no
 -- route never hold back the ones after them. Each is recorded once, as the
--- source of its route. A dismissed discovery still counts: dismissing it
--- does not remove the route.
+-- source of its route. Only the gateway's GitHub org scan (source
+-- github_scan) reports these kinds; a person's pclaw scan (source scan)
+-- cannot (N20). A dismissed discovery still counts: dismissing it does not
+-- remove the route.
 -- name: CoverageScanFindingsToRecord :many
 SELECT s.id, s.connection_id, s.kind::text AS kind, s.locator::text AS locator FROM (
     SELECT d.id, c.id AS connection_id,
@@ -444,7 +448,7 @@ SELECT s.id, s.connection_id, s.kind::text AS kind, s.locator::text AS locator F
         END), 512) AS locator
     FROM pc.discoveries d
     JOIN pc.connections c ON c.org_id = d.org_id AND c.id::text = lower(d.observed ->> 'connection')
-    WHERE d.org_id = sqlc.arg(org_id) AND d.source IN ('scan', 'github_scan')
+    WHERE d.org_id = sqlc.arg(org_id) AND d.source = 'github_scan'
       AND d.observed ->> 'kind' IN ('github_app', 'github_workflow', 'github_mcp_config')
       AND (d.observed ->> 'kind' <> 'github_workflow' OR d.observed ->> 'writes' = 'true' OR d.observed ->> 'deploys' = 'true')
       AND NOT EXISTS (SELECT 1 FROM pc.coverage_routes r

@@ -57,7 +57,7 @@ func TestF048_CredentialReachBeyondTheNeedIsAFinding(t *testing.T) {
 	observed := func(perms string) []byte {
 		return []byte(`{"kind": "github_app", "connection": "` + f.conn.String() + `", "app_slug": "pantherclaw-ci", "permissions": "` + perms + `"}`)
 	}
-	f.exec(t, `INSERT INTO pc.discoveries (org_id, id, agent_id, source, scan_key, observed) VALUES ($1, $2, $3, 'scan', $4, $5)`,
+	f.exec(t, `INSERT INTO pc.discoveries (org_id, id, agent_id, source, scan_key, observed) VALUES ($1, $2, $3, 'github_scan', $4, $5)`,
 		f.org, discovery, scanned, make([]byte, 32), observed("contents:write,administration:write,metadata:read"))
 	txn, permit := ids.NewV7(), ids.NewV7()
 	f.exec(t, `INSERT INTO pc.transactions (org_id, id, run_id, action_id, action_hash, operation, decision, reason_code,
@@ -111,7 +111,8 @@ func TestF048_CredentialReachBeyondTheNeedIsAFinding(t *testing.T) {
 // TestF048_TheConnectionsOwnInstallationIsReach: the GitHub App
 // installation behind the connection, as last read (G0 M8 G3), and an
 // installation the GitHub org scan found (source github_scan) are both
-// compared with the need.
+// compared with the need; a GitHub App a person's pclaw scan
+// reports (source scan) is not (N20).
 func TestF048_TheConnectionsOwnInstallationIsReach(t *testing.T) {
 	f := newFixture(t)
 	f.grant(t, "payments.refund.create")
@@ -127,6 +128,11 @@ func TestF048_TheConnectionsOwnInstallationIsReach(t *testing.T) {
 	f.exec(t, `INSERT INTO pc.discoveries (org_id, id, agent_id, source, scan_key, observed) VALUES ($1, $2, $3, 'github_scan', $4, $5)`,
 		f.org, ids.NewV7(), scanned, make([]byte, 32), []byte(`{"kind": "github_app", "connection": "`+f.conn.String()+
 			`", "app_slug": "other", "permissions": "contents:write,secrets:write"}`))
+	forged := ids.NewV7()
+	f.exec(t, "INSERT INTO pc.agents (org_id, id, name, state, created_by) VALUES ($1, $2, 'App forged', 'DISCOVERED', 'test')", f.org, forged)
+	f.exec(t, `INSERT INTO pc.discoveries (org_id, id, agent_id, source, scan_key, observed) VALUES ($1, $2, $3, 'scan', $4, $5)`,
+		f.org, ids.NewV7(), forged, append(forged[:], make([]byte, 16)...), []byte(`{"kind": "github_app", "connection": "`+f.conn.String()+
+			`", "app_slug": "forged", "permissions": "administration:admin"}`))
 	rows := f.refreshFindings(t)
 	subjects := map[string][]string{}
 	for _, r := range rows {
