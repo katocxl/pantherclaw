@@ -73,12 +73,18 @@ func (w *world) str(sql string, args ...any) string {
 // (slice 208), and the request APPROVED. It returns bob's role binding.
 func (w *world) approve(request ids.UUID) ids.UUID {
 	w.t.Helper()
+	return w.approveAs(request, "approver")
+}
+
+// approveAs approves request as a new person holding role.
+func (w *world) approveAs(request ids.UUID, role string) ids.UUID {
+	w.t.Helper()
 	bob, cred, session, binding := ids.NewV7(), ids.NewV7(), ids.NewV7(), ids.NewV7()
 	secret := make([]byte, 32)
 	copy(secret, bob[:])
 	exec(w.t, w.pool, w.org, "INSERT INTO pc.users (org_id, id, issuer, subject) VALUES ($1, $2, 'https://idp.test', $3)", w.org, bob, bob.String())
 	exec(w.t, w.pool, w.org, `INSERT INTO pc.role_bindings (org_id, id, role, user_id, scope_type, created_by)
-		VALUES ($1, $2, 'approver', $3, 'ORG', $4)`, w.org, binding, bob, "user:"+w.alice.String())
+		VALUES ($1, $2, $3, $4, 'ORG', $5)`, w.org, binding, role, bob, "user:"+w.alice.String())
 	exec(w.t, w.pool, w.org, `INSERT INTO pc.webauthn_credentials (org_id, id, user_id, credential_id, public_key, alg, backup_eligible,
 		backup_state, attestation_fmt, name) VALUES ($1, $2, $3, $4, $5, -7, false, false, 'none', 'key')`, w.org, cred, bob, secret[:16], secret)
 	exec(w.t, w.pool, w.org, `INSERT INTO pc.sessions (org_id, id, user_id, secret_hash, provider, auth_time, roles_digest, expires_at)
@@ -103,12 +109,12 @@ func held(t *testing.T, r finalize.Result) ids.UUID {
 
 // TestHR171_AHoldIsRecordedOnceAndSupersededWhenItsBindingChanges: the
 // finalization that records a hold creates the request, its hold slots and
-// its ACTION_HOLD entry; resubmitting while waiting creates nothing; a new
-// fact changes the binding, so the request is superseded, never updated.
+// its ACTION_HOLD entry; resubmitting while waiting creates nothing, and
+// so does a fact observed again, which the approval does not bind (HR-030,
+// founder decision 2026-10-13); a new policy version changes the binding,
+// so the request is superseded, never updated.
 func TestHR171_AHoldIsRecordedOnceAndSupersededWhenItsBindingChanges(t *testing.T) {
 	w := newWorld(t)
-	// The first report is two minutes old, so the later one always changes
-	// the facts digest (it counts whole seconds).
 	w.refundableAt(time.Now().Add(-2*time.Minute), "ch_1")
 	g := w.heldGrant()
 	run := w.run(g.ID, ids.UUID{})
@@ -130,7 +136,11 @@ func TestHR171_AHoldIsRecordedOnceAndSupersededWhenItsBindingChanges(t *testing.
 		t.Fatalf("%d approval.requested events", n)
 	}
 
-	w.refundable("ch_1") // a fresh fact: a new basis, so a new binding
+	w.refundable("ch_1") // the same fact observed again: the same binding
+	if again := held(t, w.authorize(req)); again != first {
+		t.Fatalf("a re-observed fact made request %s, want %s kept", again, first)
+	}
+	w.publishPolicy(1, false, pgHoldOver50) // a new basis, so a new binding
 	second := held(t, w.authorize(req))
 	if second == first {
 		t.Fatal("a changed binding kept the old request")
