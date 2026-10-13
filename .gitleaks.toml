@@ -10,5 +10,19 @@ description = "Local, git-ignored compose secrets. Never committed: `task secret
 paths = ['''^deploy/compose/\.env$''']
 
 [[allowlists]]
+description = "SDK conformance vectors: test tokens and proofs signed with keys derived from public names (sdk/conformance/README.md, Fixed keys). They verify only against the vectors' own JWKS and grant nothing anywhere."
+paths = [
+  '''^sdk/conformance/key_files\.json$''',
+  '''^sdk/conformance/workload_tokens\.json$''',
+  '''^sdk/conformance/proofs\.json$''',
+  '''^sdk/conformance/action_tokens\.json$''',
+  '''^sdk/conformance/sdk_face\.json$''',
+]
+
+[[allowlists]]
 description = "Development-only Keycloak realm (bound to 127.0.0.1): its client secret and user passwords are published placeholders, never used outside local development."
 paths = ['''^deploy/keycloak/realm-pantherclaw\.json$''']
+
+[[allowlists]]
+description = "uv's git-ignored virtual environments (uv run in task sdk:check creates them): installed third-party packages, never committed."
+paths = ['''(^|/)\.venv/''']

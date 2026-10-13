@@ -162,14 +162,34 @@ SELECT
 
 -- Scan findings (PN-001.1, F015): a finding already submitted is only
 -- counted, with its latest observations.
+-- A finding is matched within its own source only: a person's scan never
+-- touches a finding of the gateway's org scan, nor the reverse (HR-209).
 -- name: TouchScanDiscovery :execrows
 UPDATE pc.discoveries SET seen_count = seen_count + 1, last_seen_at = now(), observed = sqlc.arg(observed)
-WHERE org_id = sqlc.arg(org_id) AND scan_key = sqlc.arg(scan_key);
+WHERE org_id = sqlc.arg(org_id) AND scan_key = sqlc.arg(scan_key) AND source = sqlc.arg(source);
 
 -- name: InsertScanDiscovery :one
+-- A local scan's (source scan) or a gateway's organization scan's
+-- (github_scan) finding.
 INSERT INTO pc.discoveries (org_id, id, agent_id, source, scan_key, observed)
-VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(agent_id), 'scan', sqlc.arg(scan_key), sqlc.arg(observed))
+VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(agent_id), sqlc.arg(source), sqlc.arg(scan_key), sqlc.arg(observed))
 RETURNING *;
 
--- name: CountOpenDiscoveries :one
-SELECT count(*)::int FROM pc.discoveries WHERE org_id = sqlc.arg(org_id) AND state = 'OPEN';
+-- CountOpenDiscoveriesOfSource counts the open discoveries of one source:
+-- the gateway's unknown keys, people's local scans and the org scans are
+-- each capped on their own, so none fills another's room (HR-148, HR-209).
+-- name: CountOpenDiscoveriesOfSource :one
+SELECT count(*)::int FROM pc.discoveries
+WHERE org_id = sqlc.arg(org_id) AND state = 'OPEN' AND source = sqlc.arg(source);
+
+-- GetScanDiscovery is a scan finding by its key within its source.
+-- name: GetScanDiscovery :one
+SELECT id, agent_id, state, observed FROM pc.discoveries
+WHERE org_id = sqlc.arg(org_id) AND source = sqlc.arg(source) AND scan_key = sqlc.arg(scan_key);
+
+-- ReopenScanDiscovery reopens a dismissed finding for a new DISCOVERED
+-- agent: what its route may do changed since it was dismissed (HR-209).
+-- name: ReopenScanDiscovery :execrows
+UPDATE pc.discoveries
+SET state = 'OPEN', agent_id = sqlc.arg(agent_id), observed = sqlc.arg(observed), seen_count = seen_count + 1, last_seen_at = now()
+WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state = 'DISMISSED';

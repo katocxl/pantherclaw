@@ -67,6 +67,13 @@ func (s *Service) PutEnvelope(ctx context.Context, req EnvelopeRequest) (domain.
 	if err := next.Validate(); err != nil {
 		return domain.Envelope{}, domain.Change{}, apiError(err)
 	}
+	lookup, err := s.lookup(ctx, c.Org, domain.Bounds{}, next.Limits)
+	if err != nil {
+		return domain.Envelope{}, domain.Change{}, err
+	}
+	if err := next.CheckDispatched(lookup); err != nil {
+		return domain.Envelope{}, domain.Change{}, apiError(err)
+	}
 	change := domain.Compare(cur, next)
 	ev := audit.Event{
 		Name: "guardrails.changed", Actor: c.Actor(), Outcome: audit.Success,
