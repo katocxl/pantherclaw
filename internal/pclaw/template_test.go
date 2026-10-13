@@ -35,7 +35,7 @@ func TestTemplateFlags(t *testing.T) {
 	if strings.Join(o.repos, ",") != "acme/api,acme/web" || o.defaults["acme/api"] != "develop" || o.defaults["acme/web"] != "trunk" {
 		t.Fatalf("repos %v, defaults %v", o.repos, o.defaults)
 	}
-	if o.environment != "production" || o.timeZone != "UTC" || o.expires.Hours() != 720 || o.shellRule {
+	if o.environment != "production" || o.timeZone != "UTC" || o.expires.Hours() != 720 {
 		t.Fatalf("defaults: %+v", o)
 	}
 	for _, bad := range [][]string{
@@ -66,16 +66,21 @@ func TestTemplateRender(t *testing.T) {
 	for _, r := range d.Rules {
 		rules[r["id"].(string)] = r
 	}
-	if _, ok := rules[shellRuleID]; ok || len(rules) != 3 {
-		t.Fatalf("rules without --shell-rule: %v", ruleIDs(d.Rules))
+	if len(rules) != 6 || len(d.Skipped) != 1 {
+		t.Fatalf("rules without an agent: %v, skipped %v", ruleIDs(d.Rules), d.Skipped)
 	}
 	for id, want := range map[string]string{
-		"c2p-merge-review":            `action.target.id.startsWith('acme/api#') || action.target.id.startsWith('acme/web#')`,
-		"c2p-release":                 `action.target.id in ['acme/api', 'acme/web']`,
-		"c2p-no-default-branch-write": `action.target.id in ['acme/api@refs/heads/develop', 'acme/web@refs/heads/main']`,
+		repoRuleID("c2p-merge-review", "acme/api"):            `action.target.id.startsWith('acme/api#')`,
+		repoRuleID("c2p-merge-review", "acme/web"):            `action.target.id.startsWith('acme/web#')`,
+		repoRuleID("c2p-release", "acme/api"):                 `action.target.id == 'acme/api'`,
+		repoRuleID("c2p-no-default-branch-write", "acme/api"): `action.target.id == 'acme/api@refs/heads/develop'`,
+		repoRuleID("c2p-no-default-branch-write", "acme/web"): `action.target.id == 'acme/web@refs/heads/main'`,
 	} {
 		if rules[id]["when"] != want {
 			t.Errorf("%s when %q, want %q", id, rules[id]["when"], want)
+		}
+		if _, ok := rules[id]["per"]; ok {
+			t.Errorf("%s keeps the template's per", id)
 		}
 	}
 	bounds := string(d.Envelope.Bounds)
@@ -110,19 +115,24 @@ func TestTemplateRender(t *testing.T) {
 // TestTemplateShellRule checks the shell rule's pattern (RE2, as CEL's
 // matches) against commands it must and must not forbid.
 func TestTemplateShellRule(t *testing.T) {
-	o, err := templateOpts(t, "--repos", "acme/web", "--shell-rule")
+	o, err := templateOpts(t, "--repos", "acme/web")
 	if err != nil {
 		t.Fatal(err)
 	}
+	const agent = "01890000-0000-7000-8000-00000000000a"
+	o.agent = agent
 	d, err := renderTemplate(o)
 	if err != nil {
 		t.Fatal(err)
 	}
 	var when string
 	for _, r := range d.Rules {
-		if r["id"] == shellRuleID {
+		if r["id"] == "c2p-no-shell-merge--"+agent {
 			when, _ = r["when"].(string)
 		}
+	}
+	if !strings.HasPrefix(when, "run.agent_id == '"+agent+"' && ") {
+		t.Fatalf("the shell rule is not the agent's: %q", when)
 	}
 	m := regexp.MustCompile(`matches\('(.*)'\)$`).FindStringSubmatch(when)
 	if m == nil {
@@ -132,12 +142,13 @@ func TestTemplateShellRule(t *testing.T) {
 	for _, c := range []string{
 		"git push", "git push origin main", "cd x && git  push", "gh pr merge 1", "true; gh pr merge --squash",
 		"gh api -X PUT repos/acme/web/pulls/1/merge", "(git push)",
+		"git -C dir push", "git -c k=v push", "git --no-pager push", "/usr/bin/git push", "env git push", "gh -R acme/web pr merge 1",
 	} {
 		if !re.MatchString(c) {
 			t.Errorf("%q is not forbidden", c)
 		}
 	}
-	for _, c := range []string{"git status", "gh pr view 1", "gh api repos/acme/web/pulls", "git pushd", "echo legit-push"} {
+	for _, c := range []string{"git status", "gh pr view 1", "gh api repos/acme/web/pulls", "git pushd", "echo legit-push", "git log --grep push", "legit push"} {
 		if re.MatchString(c) {
 			t.Errorf("%q is forbidden", c)
 		}
@@ -169,5 +180,27 @@ func TestTemplateInitChecksFirst(t *testing.T) {
 		if _, err := os.Stat(f.local()); !errors.Is(err, fs.ErrNotExist) {
 			t.Fatalf("%v: init wrote %s (%v)", bad, f.local(), err)
 		}
+	}
+}
+
+// TestRepoRuleID: repositories that differ only in case or punctuation get
+// different rule ids, every id is a valid policy rule id, and a long name
+// is cut with its hash kept.
+func TestRepoRuleID(t *testing.T) {
+	valid := regexp.MustCompile(`^[a-z][a-z0-9-]{0,63}$`)
+	seen := map[string]string{}
+	long := "acme/" + strings.Repeat("r", 100)
+	for _, repo := range []string{"acme/web", "Acme/Web", "acme/we-b", "acme/we.b", "acme/we_b", "acme-we/b", long, long + "x"} {
+		id := repoRuleID("c2p-no-default-branch-write", repo)
+		if !valid.MatchString(id) {
+			t.Errorf("%s: id %q is not a rule id", repo, id)
+		}
+		if other, ok := seen[id]; ok {
+			t.Errorf("%s and %s share the id %s", repo, other, id)
+		}
+		seen[id] = repo
+	}
+	if id := repoRuleID("c2p-release", "acme/web"); !strings.HasPrefix(id, "c2p-release--acme-web-") || len(id) != len("c2p-release--acme-web-")+6 {
+		t.Errorf("id %q", id)
 	}
 }

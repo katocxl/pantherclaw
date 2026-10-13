@@ -44,7 +44,7 @@ import (
 func init() {
 	commands["init"] = command{
 		usage: "init --gateway URL --connection NAME --key-file FILE [--agent ID] [--mcp NAME=CONNECTION...] [--run ID] [--project DIR] " +
-			"[--scope local|project|user] [--dry-run | --yes [--fingerprint FP]] [--managed-settings FILE] [--template NAME --repos OWNER/REPO[,…] [template apply options]]",
+			"[--scope local|project|user] [--dry-run | --yes [--fingerprint FP]] [--managed-settings FILE] [--template NAME --repos OWNER/REPO[,…] [--yes-template] [template apply options]]",
 		run: claudeInit,
 	}
 }
@@ -274,6 +274,7 @@ func claudeInit(ctx context.Context, a *app, args []string) error {
 	var tpl templateOptions
 	fs.StringVar(&tpl.name, "template", "", "then apply this template (coding-to-production) with the enrolled agent; see pclaw template apply")
 	fs.BoolVar(&tpl.update, "update", false, "with --template, change what exists and differs from the template")
+	yesTemplate := fs.Bool("yes-template", false, "with --template, apply the template's plan without asking; --yes alone only shows it")
 	tplCheck := templateFlags(fs, &tpl)
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -281,11 +282,16 @@ func claudeInit(ctx context.Context, a *app, args []string) error {
 	if f.gateway == "" || f.connection == "" || f.keyFile == "" || fs.NArg() != 0 || (f.dryRun && f.yes) {
 		return errUsage
 	}
+	if *yesTemplate && tpl.name == "" {
+		return errUsage
+	}
 	if tpl.name != "" {
 		if err := tplCheck(); err != nil {
 			return err
 		}
-		tpl.dryRun, tpl.yes = f.dryRun, f.yes
+		// --yes confirms init's own writes; the template's changes need
+		// their own --yes-template (the coordinator's decision Q9).
+		tpl.dryRun, tpl.yes, tpl.planOnly = f.dryRun, *yesTemplate, f.yes && !*yesTemplate
 	}
 	routes, err := parseMCPRoutes(mcp)
 	if err != nil {
