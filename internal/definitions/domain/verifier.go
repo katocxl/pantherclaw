@@ -6,6 +6,7 @@ package domain
 import (
 	"regexp"
 	"slices"
+	"strings"
 
 	"github.com/katocxl/pantherclaw/internal/actionir"
 )
@@ -219,6 +220,9 @@ func (d *Definition) validateVerifier() error {
 			return invalid("%s.expect: field %q must be a JSON pointer, once", at, e.Field)
 		}
 		seen[e.Field] = true
+		if strings.HasPrefix(e.Equals, "target.id.") {
+			return invalid("%s.expect: %s compares the whole target id, not a part of it", at, e.Field)
+		}
 		if err := d.reference(at+".expect", e.Equals, false); err != nil {
 			return err
 		}
