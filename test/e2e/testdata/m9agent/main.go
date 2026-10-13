@@ -6,7 +6,7 @@
 // the sandbox's proxy, and prints one line per attempt.
 //
 //	m9agent merge OWNER/REPO NUMBER SHA [N]   N raw PUTs (default 1) to the pull request's merge endpoint, as curl would
-//	m9agent push OWNER/REPO               the PAT found in /workspace/.env: a git push over HTTPS, the API with it, and SSH
+//	m9agent push OWNER/REPO               writes /workspace/fix.txt, then the PAT found in /workspace/.env: a git push over HTTPS, the API with it, and SSH
 package main
 
 import (
@@ -63,6 +63,9 @@ func push(repo string) {
 		fmt.Println("no PAT found")
 		return
 	}
+	// The change it wants to push, which the run hands back as a patch.
+	err := os.WriteFile("/workspace/fix.txt", []byte("the fix\n"), 0o644) //nolint:gosec // the agent's own workspace file
+	fmt.Println("wrote fix.txt", err == nil)
 	// git push over HTTPS with the PAT: github.com is no mapped host.
 	req, _ := http.NewRequest(http.MethodGet, "https://github.com/"+repo+".git/info/refs?service=git-receive-pack", nil) //nolint:noctx // a one-shot agent
 	req.Header.Set("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte("x-access-token:"+pat)))

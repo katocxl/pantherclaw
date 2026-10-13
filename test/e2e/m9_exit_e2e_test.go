@@ -51,6 +51,8 @@ type m9 struct {
 	agent, grant                 string
 	agentImage, edgeImage, probe string
 	workspace                    string
+	// out, when set, is the run's --out: the agent's changes as a patch.
+	out string
 }
 
 func startM9(t *testing.T) *m9 {
@@ -165,10 +167,14 @@ func (m *m9) revokeSeeded(t *testing.T) {
 // returns its exit code, output and errors.
 func (m *m9) sandbox(t *testing.T, opts pclaw.Options, agentArgs ...string) (int, string, string) {
 	t.Helper()
-	args := append([]string{
+	args := []string{
 		"sandbox", "run", "--agent", m.agent, "--connection", m.gh.conn.String(), "--grant", m.grant, "--gateway", m.gateway,
-		"--image", m.agentImage, "--edge-image", m.edgeImage, "--probe-image", m.probe, "--workspace", m.workspace, "--ttl", "1h", "--",
-	}, agentArgs...)
+		"--image", m.agentImage, "--edge-image", m.edgeImage, "--probe-image", m.probe, "--workspace", m.workspace, "--ttl", "1h",
+	}
+	if m.out != "" {
+		args = append(args, "--out", m.out)
+	}
+	args = append(append(args, "--"), agentArgs...)
 	var out, errb bytes.Buffer
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
@@ -361,9 +367,23 @@ func lineOf(out, prefix string) string {
 func TestE2E_M9_FoundCredentialPushFails(t *testing.T) {
 	m := startM9(t)
 	m.revokeSeeded(t)
+	m.out = filepath.Join(t.TempDir(), "out")
 	code, out, errs := m.sandbox(t, pclaw.Options{}, "push", ghRepo)
 	if code != 0 || !closurePassed.MatchString(out) {
 		t.Fatalf("sandbox run: %d\n%s\n%s", code, out, errs)
+	}
+	// The change comes back as a patch only (founder decision 2026-10-11):
+	// changes.patch adds fix.txt, and nothing of the workspace or a .git
+	// comes back beside it.
+	patch, err := os.ReadFile(filepath.Join(m.out, "changes.patch"))
+	if err != nil || !bytes.Contains(patch, []byte("+++ b/fix.txt")) || !bytes.Contains(patch, []byte("+the fix")) || bytes.Contains(patch, []byte(".env")) {
+		t.Fatalf("changes.patch: %v\n%s\n%s", err, patch, out)
+	}
+	if _, err := os.Stat(filepath.Join(m.out, ".git")); !os.IsNotExist(err) {
+		t.Fatalf("a .git came back: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(m.workspace, "fix.txt")); !os.IsNotExist(err) {
+		t.Fatalf("the agent wrote into the host's workspace: %v", err)
 	}
 	if l := lineOf(out, "https-push "); !strings.HasPrefix(l, "https-push error") && !strings.HasPrefix(l, "https-push 403") {
 		t.Fatalf("git push over HTTPS: %q", l)
@@ -392,6 +412,14 @@ func TestE2E_M9_FoundCredentialPushFails(t *testing.T) {
 	}
 	if n, _ := strconv.Atoi(mm[1]); n < 2 {
 		t.Fatalf("%d routes reported, want the refused github.com and the stripped PAT:\n%s", n, errs)
+	}
+	// Coverage recorded both on the agent's GitHub connection: the PAT as a
+	// found credential of its kind (by a hash prefix, never the token), and
+	// github.com as a direct API route.
+	routes := m.row(t, "SELECT string_agg(kind || ' ' || locator, '; ' ORDER BY kind, locator) FROM pc.coverage_routes WHERE connection_id = $1 AND kind IN ('credential', 'direct_api')", m.gh.conn)
+	if !regexp.MustCompile(`(^|; )credential github_pat:[0-9a-f]+(;|$)`).MatchString(routes) ||
+		!regexp.MustCompile(`(^|; )direct_api github\.com:443(;|$)`).MatchString(routes) || strings.Contains(routes, strings.Repeat("Q", 36)) {
+		t.Fatalf("coverage routes of the connection: %s", routes)
 	}
 }
 
@@ -447,6 +475,11 @@ func TestE2E_M9_EnforcedFromProbes(t *testing.T) {
 			txn = mustUUID(t, held.TransactionID)
 			break
 		}
+		// A receipt without a claim says it was unavailable (HR-217); it is
+		// never silently left out.
+		if !bytes.Contains(claim, []byte(`"unavailable"`)) {
+			t.Fatalf("a decision receipt neither carries a coverage claim nor says it is unavailable: %s", claim)
+		}
 	}
 	if txn.IsZero() {
 		t.Fatalf("no decision receipt of the agent's merges carries a coverage claim:\n%s", out)
@@ -495,7 +528,7 @@ func TestE2E_M9_ChangeDropsToPartial(t *testing.T) {
 	}
 	reader := m.person(t, "m9-reader", td.RoleAuditor).ctx
 	rec, err := svc.GetCoverage(reader, covdomain.Scope{Agent: mustUUID(t, m.agent), Connection: m.gh.conn, Operation: "github.pull.merge"})
-	if err != nil || rec.State == covdomain.Enforced || rec.LastValid == nil || rec.Lapse != covdomain.LapseExpired {
+	if err != nil || rec.State != covdomain.Partial || rec.LastValid == nil || rec.Lapse != covdomain.LapseExpired {
 		t.Fatalf("a day later: %s, last valid %v, lapse %q, %v", rec.State, rec.LastValid != nil, rec.Lapse, err)
 	}
 
@@ -525,6 +558,16 @@ func TestE2E_M9_AFailedNegativeControlBlocksPromotion(t *testing.T) {
 	code, out, errs := m.sandbox(t, pclaw.Options{SandboxBeforeProbe: open}, "push", ghRepo)
 	if !closureFailed.MatchString(out) || closurePassed.MatchString(out) {
 		t.Fatalf("sandbox run on an open network: %d\n%s\n%s", code, out, errs)
+	}
+	// It failed because a route that must be closed was open, the probes'
+	// negative tests, while the positive controls still passed: not a
+	// sandbox that was broken some other way.
+	failed := m.row(t, `SELECT coalesce(string_agg(DISTINCT p->>'name', ',' ORDER BY p->>'name'), '') || ' ' || bool_and(c.positive_controls_passed)::text
+		FROM pc.coverage_closures c LEFT JOIN LATERAL jsonb_array_elements(c.probes) p
+			ON p->>'role' = 'probe' AND p->>'expect' = 'blocked' AND p->>'observed' = 'reachable'
+		WHERE c.connection_id = $1 AND c.result = 'FAILED'`, m.gh.conn)
+	if names, positive, _ := strings.Cut(failed, " "); names == "" || positive != "true" || !strings.Contains(lineOf(out, "connection "), strings.Split(names, ",")[0]) {
+		t.Fatalf("the closure's open routes and positive controls: %q\n%s", failed, out)
 	}
 	if c := m.coverage(t); c.Record.State == enforced {
 		t.Fatalf("a failed closure promoted the scope: %+v", c.Record)
