@@ -87,7 +87,8 @@ func usageText() string {
 
 // Run executes pclaw and returns the exit code.
 func Run(ctx context.Context, args []string, stdout, stderr io.Writer, env Env, opts Options) int {
-	a := &app{stdin: opts.Stdin, stdout: stdout, stderr: stderr, env: env, http: opts.HTTPClient, openBrowser: opts.OpenBrowser,
+	a := &app{
+		stdin: opts.Stdin, stdout: stdout, stderr: stderr, env: env, http: opts.HTTPClient, openBrowser: opts.OpenBrowser,
 		beforeProbe: opts.SandboxBeforeProbe,
 	}
 	if a.stdin == nil {

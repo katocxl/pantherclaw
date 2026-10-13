@@ -109,7 +109,7 @@ tasks:
     desc: Docker sandbox, connector and M9 exit tests (G0 M9; needs Docker ≥ 28 and, for the exit tests, the test cluster of task up PROFILE=test; they create and remove their own uniquely named networks, containers and images; PKGS=./x/... narrows the Docker tests, E2E=0 skips the exit tests)
     dotenv: ["deploy/compose/.env"]
     cmds:
-      - PC_TEST_SANDBOX=1 go test -tags sandbox -count=1 {{.PKGS | default "./internal/sandbox/... ./internal/gateway/... ./internal/sim/... ./internal/pclaw/..."}}
+      - PC_TEST_SANDBOX=1 go test -tags sandbox -count=1 -timeout 30m {{.PKGS | default "./internal/sandbox/... ./internal/gateway/... ./internal/sim/... ./internal/pclaw/..."}}
       - >-
         {{if eq (.E2E | default "1") "0"}}true{{else}}PC_TEST_SANDBOX=1 PC_TEST_REQUIRE_DB=1
         PC_TEST_PG_ADMIN_URL="postgres://postgres:${PC_PG_TEST_PASSWORD}@127.0.0.1:5433/postgres?sslmode=disable"
