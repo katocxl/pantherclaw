@@ -62,6 +62,9 @@ type fakeEnrollment struct {
 	issued      *pantherclawv1.CreateEnrollmentTokenRequest
 	enrolled    *pantherclawv1.EnrollRequest
 	admitted    *pantherclawv1.AdmitInstanceRequest
+	// admitting, when set, runs while the instance is admitted, as Claude
+	// Code may change a settings file during init's calls.
+	admitting func()
 }
 
 // fakeEnrollmentToken is built at run time, so no token-like literal sits
@@ -100,6 +103,9 @@ func (f *fakeEnrollment) AdmitInstance(_ context.Context, req *pantherclawv1.Adm
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.admitted = req
+	if f.admitting != nil {
+		f.admitting()
+	}
 	return &pantherclawv1.AdmitInstanceResponse{}, nil
 }
 
@@ -254,7 +260,43 @@ func TestHR208_InitEnrollsNothingWhenAFileChangedMeanwhile(t *testing.T) {
 	}
 }
 
-// TestHR208_InitRefusesAKeyFileOthersCanRead: a key file that is not
+// TestHR208_InitSaysTheKeyIsEnrolledWhenAFileChangedDuringEnrollment: a
+// settings file that changed while init was enrolling is left as it is,
+// and init fails saying what is true then: the key is enrolled and
+// admitted, no settings file was written, and init should run again,
+// which writes the hook and enrolls nothing more.
+func TestHR208_InitSaysTheKeyIsEnrolledWhenAFileChangedDuringEnrollment(t *testing.T) {
+	const agent = "0192aaaa-bbbb-7ccc-8ddd-000000000001"
+	added := strings.Replace(existingLocal, `"Read(./.env)"`, "\"Read(./.env)\",\n      \"Bash(rm:*)\"", 1)
+	f := newInitFixture(t)
+	fake := &fakeEnrollment{}
+	f.enrollmentServer(t, fake)
+	f.write(t, f.local(), existingLocal)
+	fake.admitting = func() {
+		if err := os.WriteFile(f.local(), []byte(added), 0o600); err != nil {
+			t.Error(err)
+		}
+	}
+	code, out, errs := f.run(t, "--agent", agent)
+	now, _ := os.ReadFile(f.local())
+	if code != 1 || string(now) != added || len(backups(t, f.local())) != 0 || fake.admitted == nil ||
+		!strings.Contains(errs, "changed after init read it") || !strings.Contains(errs, "the key in "+f.key+" is enrolled and admitted") ||
+		!strings.Contains(errs, "no settings file was written") || !strings.Contains(errs, "run pclaw init again") ||
+		strings.Contains(errs, "nothing was changed") {
+		t.Fatalf("init: %d %s %s", code, out, errs)
+	}
+	if kf, err := workloadclient.ReadKeyFile(f.key); err != nil || kf.Identifier == "" {
+		t.Fatalf("the key is not enrolled: %+v %v", kf, err)
+	}
+	fake.issued, fake.admitting = nil, nil
+	code, out, errs = f.run(t, "--agent", agent)
+	perm, _ := readJSON(t, f.local())["permissions"].(map[string]any)
+	if deny, _ := perm["deny"].([]any); code != 0 || !hookRunsIn(t, f.local()) || len(deny) != 3 || fake.issued != nil {
+		t.Fatalf("run again: %d %s %s", code, out, errs)
+	}
+}
+
+// TestHR208_InitRefusesAKeyFileOthersCanRead:a key file that is not
 // enrolled yet is rewritten in place with its identifier, so one other
 // users can read is refused before anything is done, and keeps its mode;
 // once it is 0600 init enrolls it.
@@ -306,6 +348,7 @@ func TestHR094_InitWithYesNeedsTheFingerprintYouChecked(t *testing.T) {
 	if err := workloadclient.WriteKeyFile(f.key, kf, false); err != nil {
 		t.Fatal(err)
 	}
+	onlyTheUserReads(t, f.key)
 	fp := jws.Thumbprint(key.Public().(ed25519.PublicKey))
 	existing := f.key
 	for name, tc := range map[string]struct {

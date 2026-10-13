@@ -103,6 +103,55 @@ func TestHR208_DiffHidesEnvAndHeaderValues(t *testing.T) {
 	}
 }
 
+// TestHR208_DiffHidesSecretArgumentsAndURLCredentials: in an args list,
+// the argument after a flag whose name looks secret (--api-key VALUE, in
+// any case) and the value written into such a flag or variable
+// (--token=VALUE, GITHUB_TOKEN=VALUE) are shown as "<redacted>"; so are
+// the user information, query and fragment of any string that is an
+// absolute URL, in args or anywhere else. A flag naming a file
+// (--key-file), other arguments and other strings are shown as they are,
+// and the text itself, which init writes, is not changed.
+func TestHR208_DiffHidesSecretArgumentsAndURLCredentials(t *testing.T) {
+	token := "ghp_" + strings.Repeat("0123456789ab", 3) // built at run time: no token-like literal in the source
+	text := func(secret func(string) string) string {
+		return `{"mcpServers": {"api": {"command": "npx", "args": ["-y", "@example/mcp", "--api-key", "` + secret(token) +
+			`", "--token=` + secret(token) + `", "-e", "GITHUB_TOKEN=` + secret(token) + `", "--Client-Secret", "` + secret(token) +
+			`", "--key-file", "/home/me/key.json", "--url=https://mcp.example.test/sse` + secret("?access_token="+token) +
+			`", "--port", "8080"],
+  "url": "https://` + secret("me:"+token) + `@mcp.example.test/mcp` + secret("?key="+token) + `#` + secret(token) + `"},
+  "plain": {"url": "https://mcp.example.test/mcp", "args": ["--verbose", "8080"], "note": "a:b"}},
+  "permissions": {"deny": ["Bash(curl:*)", "--token", "x"]}}`
+	}
+	in := text(func(s string) string { return s })
+	want := text(func(s string) string {
+		if strings.HasPrefix(s, "?") {
+			return "?<redacted>"
+		}
+		return "<redacted>"
+	})
+	original := []byte(in)
+	if got := string(redactSecrets(original)); got != want {
+		t.Fatalf("redacted\n%s\nwant\n%s", got, want)
+	}
+	if string(original) != in {
+		t.Fatal("redacting changed the text")
+	}
+	got := lineDiff(".claude.json", []byte(`{}`), original)
+	for _, shown := range []string{
+		`"--api-key", "<redacted>"`, `"--token=<redacted>"`, `"GITHUB_TOKEN=<redacted>"`, `"--Client-Secret", "<redacted>"`,
+		`"--key-file", "/home/me/key.json"`, `"--url=https://mcp.example.test/sse?<redacted>"`, `"--port", "8080"`,
+		`"https://<redacted>@mcp.example.test/mcp?<redacted>#<redacted>"`, `"https://mcp.example.test/mcp"`, `["--verbose", "8080"]`,
+		`["Bash(curl:*)", "--token", "x"]`,
+	} {
+		if !strings.Contains(got, shown) {
+			t.Errorf("the diff does not show %s:\n%s", shown, got)
+		}
+	}
+	if strings.Contains(got, token[4:]) {
+		t.Fatalf("the diff shows the token:\n%s", got)
+	}
+}
+
 // TestHR208_BackupsAreNeverOverwrittenAndWritesAreWhole: a backup holds
 // the original and never replaces an earlier one, even within the same
 // second; a file that does not

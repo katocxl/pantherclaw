@@ -192,7 +192,7 @@ func TestHR208_InitBacksUpShowsTheDiffAndOnlyAdds(t *testing.T) {
 		"hook", "claude-code", "--gateway", "https://gw.example.test", "--connection", "shell", "--key-file", f.key,
 		"--run", "01920000-0000-7000-8000-0000000000f1",
 	}
-	if mine["matcher"] != "Bash|PowerShell" || entry["command"] != "pclaw" || entry["onFailure"] != "block" || len(args) != len(want) {
+	if mine["matcher"] != "Bash|PowerShell|Monitor" || entry["command"] != "pclaw" || entry["onFailure"] != "block" || len(args) != len(want) {
 		t.Fatalf("hook %v", mine)
 	}
 	for i := range want {
@@ -254,13 +254,18 @@ func TestHR208_InitRefusesWhatWouldKeepTheHookFromRunning(t *testing.T) {
 		"all hooks off":      {managed: `{"disableAllHooks": true}`, code: 1, want: "disable every hook"},
 		"local hooks off":    {local: `{"disableAllHooks": true}`, code: 1, want: "never changes that setting"},
 		"managed runs it": {
-			managed: `{"allowManagedHooksOnly": true, "hooks": {"PreToolUse": [{"matcher": "Bash|PowerShell",
+			managed: `{"allowManagedHooksOnly": true, "hooks": {"PreToolUse": [{"matcher": "Bash|PowerShell|Monitor",
 				"hooks": [{"type": "command", "command": "pclaw", "args": ["hook", "claude-code"], "onFailure": "block"}]}]}}`,
 			want: "already installed",
 		},
 		"managed runs it failing open": {
-			managed: `{"allowManagedHooksOnly": true, "hooks": {"PreToolUse": [{"matcher": "Bash|PowerShell",
+			managed: `{"allowManagedHooksOnly": true, "hooks": {"PreToolUse": [{"matcher": "Bash|PowerShell|Monitor",
 				"hooks": [{"type": "command", "command": "pclaw", "args": ["hook", "claude-code"]}]}]}}`,
+			code: 1, want: "allow only managed hooks",
+		},
+		"managed runs it without Monitor": {
+			managed: `{"allowManagedHooksOnly": true, "hooks": {"PreToolUse": [{"matcher": "Bash|PowerShell",
+				"hooks": [{"type": "command", "command": "pclaw", "args": ["hook", "claude-code"], "onFailure": "block"}]}]}}`,
 			code: 1, want: "allow only managed hooks",
 		},
 		"dry run":        {local: existingLocal, args: []string{"--dry-run"}, want: "Dry run: nothing was changed."},
@@ -289,14 +294,37 @@ func TestHR208_InitRefusesWhatWouldKeepTheHookFromRunning(t *testing.T) {
 }
 
 // TestHR208_InitCountsOnlyAFailClosedPantherClawHook: an existing hook is
-// PantherClaw's only when it runs `pclaw hook claude-code` and blocks the
-// command when it cannot run. Beside a pclaw hook that fails open or runs
-// another command, init adds its own and keeps the other as it was.
+// PantherClaw's only when it runs `pclaw hook claude-code` before Bash,
+// PowerShell and Monitor and blocks the command when it cannot run; in a
+// shell, only that command and its own flags count, since anything more
+// (|| true, ; true, && x, a redirection) can change what its exit code
+// says. Beside a pclaw hook that fails open, runs another command or more
+// than the hook's, leaves out Monitor or names BashOutput instead of Bash,
+// init adds its own and keeps the other as it was.
 func TestHR208_InitCountsOnlyAFailClosedPantherClawHook(t *testing.T) {
+	const run = "01920000-0000-7000-8000-0000000000f1"
+	shell := func(command string) string {
+		return `{"type": "command", "command": "` + command + `", "onFailure": "block"}`
+	}
+	exec := `{"type": "command", "command": "pclaw", "args": ["hook", "claude-code"], "onFailure": "block"}`
 	for name, tc := range map[string]struct {
-		hook      string
-		installed bool
+		hook, matcher string
+		installed     bool
 	}{
+		"without Monitor": {hook: exec, matcher: "Bash|PowerShell"},
+		"BashOutput":      {hook: exec, matcher: "BashOutput|PowerShell|Monitor"},
+		"shell form with its flags": {
+			hook: shell("pclaw hook claude-code --gateway=https://gw.example.test  --connection shell -run " + run), installed: true,
+		},
+		"or true":              {hook: shell("pclaw hook claude-code || true")},
+		"then true":            {hook: shell("pclaw hook claude-code; true")},
+		"and more":             {hook: shell("pclaw hook claude-code --connection shell && x")},
+		"a redirection":        {hook: shell("pclaw hook claude-code --connection shell 2>/dev/null")},
+		"a newline":            {hook: shell(`pclaw hook claude-code --run\ntrue`)},
+		"another flag":         {hook: shell("pclaw hook claude-code --yes")},
+		"a substitution":       {hook: shell("pclaw hook claude-code --connection $(x)")},
+		"a flag with no value": {hook: shell("pclaw hook claude-code --run")},
+		"not a command hook":   {hook: `{"type": "prompt", "command": "pclaw", "args": ["hook", "claude-code"], "onFailure": "block"}`},
 		"fails closed": {
 			hook: `{"type": "command", "command": "/usr/local/bin/pclaw", "args": ["hook", "claude-code"], "onFailure": "block"}`, installed: true,
 		},
@@ -309,7 +337,10 @@ func TestHR208_InitCountsOnlyAFailClosedPantherClawHook(t *testing.T) {
 		"another hook":    {hook: `{"type": "command", "command": "pclaw", "args": ["hook", "other"], "onFailure": "block"}`},
 	} {
 		f := newInitFixture(t)
-		local := `{"hooks": {"PreToolUse": [{"matcher": "Bash|PowerShell", "hooks": [` + tc.hook + `]}]}}`
+		if tc.matcher == "" {
+			tc.matcher = "Bash|PowerShell|Monitor"
+		}
+		local := `{"hooks": {"PreToolUse": [{"matcher": "` + tc.matcher + `", "hooks": [` + tc.hook + `]}]}}`
 		f.write(t, f.local(), local)
 		var before map[string]any
 		if err := json.Unmarshal([]byte(local), &before); err != nil {
@@ -337,7 +368,48 @@ func TestHR208_InitCountsOnlyAFailClosedPantherClawHook(t *testing.T) {
 	}
 }
 
-// TestHR208_InitRefusesHooksTurnedOffInAnotherScope: Claude Code takes
+// TestHR208_TheHookCoversEachShellToolByItsExactName: PantherClaw's hook
+// covers a tool only under a matcher that names it exactly among names
+// joined by |, or that matches every tool (missing, empty or *); Bash,
+// PowerShell and Monitor may be covered by different groups. A name that
+// only contains one (BashOutput), names with spaces, a regular expression
+// and a matcher that is not a string cover nothing, and a group whose
+// pclaw hook fails open covers nothing either.
+func TestHR208_TheHookCoversEachShellToolByItsExactName(t *testing.T) {
+	const closed = `[{"type": "command", "command": "pclaw", "args": ["hook", "claude-code"], "onFailure": "block"}]`
+	const open = `[{"type": "command", "command": "pclaw", "args": ["hook", "claude-code"]}]`
+	group := func(matcher, hooks string) string { return `{` + matcher + `"hooks": ` + hooks + `}` }
+	for name, tc := range map[string]struct {
+		groups []string
+		runs   bool
+	}{
+		"no matcher":       {[]string{group(``, closed)}, true},
+		"an empty matcher": {[]string{group(`"matcher": "", `, closed)}, true},
+		"every tool":       {[]string{group(`"matcher": "*", `, closed)}, true},
+		"the three":        {[]string{group(`"matcher": "Monitor|Bash|PowerShell", `, closed)}, true},
+		"in two groups":    {[]string{group(`"matcher": "Bash|PowerShell", `, closed), group(`"matcher": "Monitor", `, closed)}, true},
+		"BashOutput":       {[]string{group(`"matcher": "BashOutput|PowerShell|Monitor", `, closed)}, false},
+		"MonitorX":         {[]string{group(`"matcher": "Bash|PowerShell|MonitorX", `, closed)}, false},
+		"spaces":           {[]string{group(`"matcher": "Bash | PowerShell | Monitor", `, closed)}, false},
+		"a regular expression": {
+			[]string{group(`"matcher": "Bash|PowerShell|Monitor|mcp__.*", `, closed)}, false,
+		},
+		"not a string": {[]string{group(`"matcher": ["Bash", "PowerShell", "Monitor"], `, closed)}, false},
+		"one group fails open": {
+			[]string{group(`"matcher": "Bash|PowerShell", `, closed), group(`"matcher": "Monitor", `, open)}, false,
+		},
+	} {
+		doc, err := parseJSONDoc([]byte(`{"hooks": {"PreToolUse": [` + strings.Join(tc.groups, ", ") + `]}}`))
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		if got := hookRuns(doc); got != tc.runs {
+			t.Errorf("%s: hookRuns = %v", name, got)
+		}
+	}
+}
+
+// TestHR208_InitRefusesHooksTurnedOffInAnotherScope:Claude Code takes
 // disableAllHooks from the first settings file that sets it (managed,
 // local, project, user), so a file of another scope that turns every hook
 // off fails init and changes nothing, unless a file Claude Code prefers to
@@ -388,7 +460,46 @@ func TestHR208_InitRefusesHooksTurnedOffInAnotherScope(t *testing.T) {
 	}
 }
 
-// TestHR208_InitAlwaysReadsThePlatformsManagedSettings: --managed-settings
+// TestHR208_InitRefusesSettingsItCannotReadInAnotherScope: a settings file
+// of another scope that pclaw cannot parse fails init, which changes
+// nothing, since Claude Code may still apply it: given two members of one
+// name, it takes the last, so a file whose last disableAllHooks is true
+// turns every hook off.
+func TestHR208_InitRefusesSettingsItCannotReadInAnotherScope(t *testing.T) {
+	const twice = `{"disableAllHooks": false, "disableAllHooks": true}`
+	for name, tc := range map[string]struct{ file, content, scope string }{
+		"user, twice":                  {file: "user", content: twice},
+		"project, twice":               {file: "project", content: twice},
+		"local, for the project scope": {file: "local", content: twice, scope: "project"},
+		"user, not JSON":               {file: "user", content: `{"disableAllHooks": tr`},
+	} {
+		f := newInitFixture(t)
+		paths := map[string]string{
+			"user": filepath.Join(f.home, ".claude", "settings.json"), "project": filepath.Join(f.project, ".claude", "settings.json"),
+			"local": f.local(),
+		}
+		f.write(t, paths[tc.file], tc.content)
+		args := []string{}
+		if tc.scope != "" {
+			args = append(args, "--scope", tc.scope)
+		}
+		code, out, errs := f.run(t, args...)
+		if code != 1 || !strings.Contains(errs, paths[tc.file]) || !strings.Contains(errs, "disableAllHooks") ||
+			!strings.Contains(errs, "init changes nothing") {
+			t.Errorf("%s: %d %s %s", name, code, out, errs)
+		}
+		for scope, path := range paths {
+			if now, err := os.ReadFile(path); (scope != tc.file && err == nil) || (scope == tc.file && string(now) != tc.content) {
+				t.Errorf("%s: %s changed: %q", name, scope, now)
+			}
+			if len(backups(t, path)) != 0 {
+				t.Errorf("%s: %s backed up", name, scope)
+			}
+		}
+	}
+}
+
+// TestHR208_InitAlwaysReadsThePlatformsManagedSettings:--managed-settings
 // adds a file to the platform's managed settings and never replaces them,
 // so pointing it at the null device skips no managed check, drop-ins
 // included.
