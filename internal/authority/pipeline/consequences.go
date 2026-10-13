@@ -44,6 +44,9 @@ type pendingConsequence struct {
 	unknown int
 	// requirements counts the requirements it added.
 	requirements int
+	// facts are the current facts about its target that its definition
+	// and the policy's rules for its operation need (step 6).
+	facts map[string]fdomain.Value
 }
 
 // label names the consequence in the items and sources it adds.
@@ -107,6 +110,49 @@ func (s *state) consequences(ctx context.Context, recorded map[string]fdomain.Fa
 	}
 }
 
+// consequenceFacts reads, for each pending consequence, the facts its
+// definition and the policy's rules for its operation need, about the
+// consequence's own target (step 6): a rule scoped to the consequence
+// decides it from what it acts on, never from the action's target. A fact
+// that is missing or stale is left out, so a rule that needs it is not
+// evaluated and is CANNOT_AUTHORIZE (F096), as for the action; an unknown
+// consequence still gets every requirement that covers it. The facts read
+// join the decision basis and the approval binding.
+func (p *Pipeline) consequenceFacts(ctx context.Context, s *state) {
+	if s.policy == nil {
+		return
+	}
+	for i := range s.pending {
+		k := &s.pending[i]
+		var reqs []fdomain.Requirement
+		for _, pr := range k.c.Definition.Prerequisites {
+			reqs = append(reqs, fdomain.Requirement{Name: pr.Fact, MaxAge: time.Duration(pr.MaxAgeSeconds) * time.Second, Source: "definition"})
+		}
+		reqs = append(reqs, s.policy.Compiled.FactRequirements(k.c.Operation, s.a.Env)...)
+		if len(reqs) == 0 {
+			continue
+		}
+		recorded, err := p.Reader.Facts(ctx, s.req.Org, k.c.Target.Type, k.c.Target.ID, factNames(reqs, nil))
+		if err != nil {
+			s.missing(StepFacts, err, "the facts"+k.label())
+			continue
+		}
+		k.facts = map[string]fdomain.Value{}
+		for _, c := range fdomain.Evaluate(reqs, recorded, s.cont.Now) {
+			if c.Status != fdomain.Present {
+				continue
+			}
+			k.facts[c.Requirement.Name] = c.Fact.Value
+			f := *c.Fact
+			if !slices.ContainsFunc(s.used, func(u fdomain.Fact) bool {
+				return u.Name == f.Name && u.SubjectType == f.SubjectType && u.SubjectID == f.SubjectID
+			}) {
+				s.used = append(s.used, f)
+			}
+		}
+	}
+}
+
 // predicted describes a predicted consequence.
 func predicted(c *consequences.Consequence) string {
 	out := c.Operation + " on " + c.Target.ID
@@ -148,6 +194,7 @@ func (p *Pipeline) consequenceBoundaries(ctx context.Context, s *state) {
 			continue
 		}
 		in := s.policyInput()
+		in.Facts = k.facts
 		in.Consequence = &papp.Consequence{Rule: k.c.Rule, State: string(k.c.State), Environments: k.c.Environments}
 		out, err := s.policy.Compiled.Evaluate(ctx, k.c.Definition, k.ir, in)
 		if err != nil {

@@ -11,7 +11,10 @@ package app
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json/v2"
+	"strconv"
 	"strings"
 	"time"
 
@@ -31,6 +34,9 @@ var (
 	ErrNotFound = pcerr.New(pcerr.NotFound, "CHANGE_WINDOW_NOT_FOUND", "change window not found")
 	ErrRetired  = pcerr.New(pcerr.FailedPrecondition, "CHANGE_WINDOW_RETIRED", "the change window is retired")
 	ErrReason   = pcerr.New(pcerr.InvalidArgument, "REASON_REQUIRED", "a reason of 1 to 500 characters is required")
+	// ErrChanged: another window for the same environment and repository
+	// was created at the same time, and this one lost (HR-004).
+	ErrChanged = pcerr.New(pcerr.Aborted, "CHANGE_WINDOW_CHANGED", "the environment's change window changed concurrently; read it again")
 )
 
 // Record is a stored window.
@@ -59,12 +65,18 @@ func (s *Service) caller(ctx context.Context) (tenancy.Caller, error) {
 }
 
 // Create stores a window. It retires the environment's and repository's
-// current window, whose revision it follows.
+// current window, whose revision it follows. The environment is stored in
+// lowercase (domain.NormalizeEnvironment). Of two windows created at the
+// same time for one environment and repository, the second to commit
+// fails with ErrChanged. The audit event records how many weekly entries,
+// one-off windows and freezes the window has and their Digest, and for a
+// replacement the window it replaces and how many freezes that one had.
 func (s *Service) Create(ctx context.Context, w domain.Window) (Record, error) {
 	c, err := s.caller(ctx)
 	if err != nil {
 		return Record{}, err
 	}
+	w.Environment = domain.NormalizeEnvironment(w.Environment)
 	if err := w.Validate(); err != nil {
 		return Record{}, pcerr.Wrap(err, pcerr.InvalidArgument, "CHANGE_WINDOW_INVALID", strings.TrimPrefix(err.Error(), "releases: "))
 	}
@@ -91,10 +103,15 @@ func (s *Service) Create(ctx context.Context, w domain.Window) (Record, error) {
 		case err != nil:
 			return err
 		default:
+			replaced, err := recordOf(current)
+			if err != nil {
+				return err
+			}
 			if _, err := q.RetireChangeWindow(ctx, &by, c.Org, current.ID); err != nil {
 				return err
 			}
-			details["replaces"] = current.ID.String()
+			// A replacement that drops a freeze weakens it: say so.
+			details["replaces"], details["replaced_freezes"] = current.ID.String(), strconv.Itoa(len(replaced.Freezes))
 		}
 		last, err := q.LastChangeWindowRevision(ctx, c.Org, w.Environment, w.Repository)
 		if err != nil {
@@ -108,15 +125,45 @@ func (s *Service) Create(ctx context.Context, w domain.Window) (Record, error) {
 			p.Repository = &w.Repository
 		}
 		row, err := q.InsertChangeWindow(ctx, p)
-		if err != nil {
+		if db.IsUniqueViolation(err) {
+			// A concurrent Create for the same environment and repository
+			// committed its window, or its revision, first.
+			return ErrChanged
+		} else if err != nil {
 			return err
 		}
 		if out, err = recordOf(row); err != nil {
 			return err
 		}
+		digest, err := Digest(out.Window)
+		if err != nil {
+			return err
+		}
+		details["weekly"], details["one_off"] = strconv.Itoa(len(out.Weekly)), strconv.Itoa(len(out.OneOff))
+		details["freezes"], details["window_sha256"] = strconv.Itoa(len(out.Freezes)), digest
 		return s.audit(ctx, tx, c, "release.window.created", row.ID, details)
 	})
 	return out, err
+}
+
+// Digest is the SHA-256, in hex, of what a window allows: its time zone,
+// weekly entries, one-off windows and freezes as deterministic JSON. The
+// window-created audit event carries it with how many of each there are,
+// so the stored window, which is never changed, can be checked against
+// the audit record, and a replacement that shortens or drops a freeze
+// shows in it.
+func Digest(w domain.Window) (string, error) {
+	b, err := json.Marshal(struct {
+		TimeZone string          `json:"time_zone"`
+		Weekly   []domain.Weekly `json:"weekly"`
+		OneOff   []domain.Span   `json:"one_off"`
+		Freezes  []domain.Span   `json:"freezes"`
+	}{w.TimeZone, orEmpty(w.Weekly), orEmpty(w.OneOff), orEmpty(w.Freezes)}, json.Deterministic(true))
+	if err != nil {
+		return "", err
+	}
+	sum := sha256.Sum256(b)
+	return hex.EncodeToString(sum[:]), nil
 }
 
 // Retire retires a window; releases to its environment then need another.
@@ -151,13 +198,14 @@ func (s *Service) Retire(ctx context.Context, id ids.UUID, reason string) (Recor
 	return out, err
 }
 
-// List lists the windows, of one environment when it is not "", and the
-// retired ones too when asked.
+// List lists the windows, of one environment (in any case) when it is not
+// "", and the retired ones too when asked.
 func (s *Service) List(ctx context.Context, environment string, retired bool) ([]Record, error) {
 	c, err := s.caller(ctx)
 	if err != nil {
 		return nil, err
 	}
+	environment = domain.NormalizeEnvironment(environment)
 	var out []Record
 	err = s.Pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
 		rows, err := dbq.New(tx).ListChangeWindows(ctx, c.Org, environment, retired)
@@ -203,9 +251,11 @@ func (s *Service) Active(ctx context.Context, environment, repository string) (D
 }
 
 // Decide is what the ACTIVE windows say about a release to environment
-// and repository at the database clock (HR-171). The finalization that
-// consumes a window requirement calls it in its own transaction.
+// (in any case) and repository at the database clock (HR-171). The
+// finalization that consumes a window requirement calls it in its own
+// transaction.
 func Decide(ctx context.Context, q *dbq.Queries, org ids.OrgID, environment, repository string) (Decision, error) {
+	environment = domain.NormalizeEnvironment(environment)
 	rows, err := q.ApplicableChangeWindows(ctx, org, environment, repository)
 	if err != nil {
 		return Decision{}, err
