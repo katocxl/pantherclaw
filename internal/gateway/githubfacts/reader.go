@@ -610,3 +610,10 @@ func object(t Triggers) (map[string]any, error) {
 	var out map[string]any
 	return out, json.Unmarshal(b, &out)
 }
+
+// Unread is the value of a deploy-trigger fact that could not be read:
+// unknown, which holds the action (HR-206).
+func Unread(branch, at, why string) map[string]any {
+	v, _ := object(Triggers{Branch: branch, At: at}.unknown(why))
+	return v
+}

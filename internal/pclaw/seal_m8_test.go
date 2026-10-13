@@ -80,6 +80,11 @@ func TestHR204_SealAGitHubApp(t *testing.T) {
 	if k, err := g.Key(); err != nil || !k.Equal(app) {
 		t.Fatalf("the key did not survive sealing: %v", err)
 	}
+	// The installation travels beside the seal as configuration, the same
+	// one the seal holds, and never the key.
+	if gh := srv.put.GetGithub(); gh.GetAppClientId() != g.Issuer || gh.GetInstallationId() != g.Installation || gh.GetAccountLogin() != g.Account {
+		t.Fatalf("the installation sent with the seal: %+v", gh)
+	}
 
 	for name, args := range map[string][]string{
 		"no installation":      {"--github-app", "Iv23liExample", "--account", "acme"},

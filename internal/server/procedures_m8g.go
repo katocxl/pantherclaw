@@ -11,10 +11,14 @@ import (
 )
 
 // m8gProcedures are the procedures of M8 track G (G0 M8): the gateway
-// reporting GitHub facts as a connection's provider.
+// reporting GitHub facts as a connection's provider, and the GitHub
+// identity links independence compares.
 // TestProcedurePermissionsMatchProtos checks the merged map.
 var m8gProcedures = map[string]td.Permission{
-	pantherclawv1connect.GatewayServiceReportFactsProcedure: td.PermGatewayFactsReport,
+	pantherclawv1connect.GatewayServiceReportFactsProcedure:   td.PermGatewayFactsReport,
+	pantherclawv1connect.GitHubServiceLinkIdentityProcedure:   td.PermGitHubIdentityManage,
+	pantherclawv1connect.GitHubServiceUnlinkIdentityProcedure: td.PermGitHubIdentityManage,
+	pantherclawv1connect.GitHubServiceListIdentitiesProcedure: td.PermUserRead,
 }
 
 func init() { maps.Copy(procedurePermissions, m8gProcedures) }

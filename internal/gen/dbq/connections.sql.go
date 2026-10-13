@@ -172,6 +172,44 @@ func (q *Queries) InsertConnectionRoute(ctx context.Context, arg InsertConnectio
 	return err
 }
 
+const listConnectionGitHub = `-- name: ListConnectionGitHub :many
+SELECT org_id, connection_id, app_client_id, installation_id, account_login, account_id, permissions, repository_selection, read_at, updated_by, updated_at FROM pc.connection_github
+WHERE org_id = $1 AND connection_id = ANY($2::uuid[])
+`
+
+// The GitHub App installations behind connections (connection_github).
+func (q *Queries) ListConnectionGitHub(ctx context.Context, orgID ids.OrgID, connectionIds []ids.UUID) ([]PcConnectionGithub, error) {
+	rows, err := q.db.Query(ctx, listConnectionGitHub, orgID, connectionIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []PcConnectionGithub{}
+	for rows.Next() {
+		var i PcConnectionGithub
+		if err := rows.Scan(
+			&i.OrgID,
+			&i.ConnectionID,
+			&i.AppClientID,
+			&i.InstallationID,
+			&i.AccountLogin,
+			&i.AccountID,
+			&i.Permissions,
+			&i.RepositorySelection,
+			&i.ReadAt,
+			&i.UpdatedBy,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listConnectionRoutes = `-- name: ListConnectionRoutes :many
 SELECT org_id, connection_id, route, mode, changed_by, changed_at FROM pc.connection_routes
 WHERE org_id = $1 AND connection_id = $2

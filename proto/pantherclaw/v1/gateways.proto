@@ -8,6 +8,7 @@ package pantherclaw.v1;
 import "buf/validate/validate.proto";
 import "google/protobuf/timestamp.proto";
 import "pantherclaw/v1/gateway_facts.proto";
+import "pantherclaw/v1/github.proto";
 
 // GatewayAdminService manages an org's gateways (G0 M6, HR-180): records,
 // single-use enrollment tokens, certificates and broker keys. A gateway's
@@ -476,6 +477,10 @@ message GatewayConnection {
   string state = 14;
   // Revision.
   int32 revision = 15;
+  // The GitHub App installation behind the connection (G0 M8, ADR-0021):
+  // an action on a repository of another account is refused before it is
+  // decided (WRONG_ACCOUNT); unset without a GitHub App credential.
+  GitHubInstallation github = 17;
 }
 
 // RouteModeSetting is one route's mode.
