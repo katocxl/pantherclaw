@@ -147,9 +147,9 @@ func (r *reader) fact(ctx context.Context, name string) (map[string]any, error) 
 		if err != nil {
 			return nil, err
 		}
-		return r.triggers(ctx, base, at)
+		return r.triggers(ctx, base, at, true)
 	case BranchTriggers:
-		return r.triggers(ctx, r.s.Branch, r.s.At)
+		return r.triggers(ctx, r.s.Branch, r.s.At, false)
 	}
 	return nil, fmt.Errorf("no reader for %s", name)
 }
@@ -461,9 +461,9 @@ func EscapeRef(ref string) string {
 	return strings.Join(parts, "/")
 }
 
-// triggers reads the workflow files at a commit and decides whether a push
-// to branch deploys (DeployTriggers).
-func (r *reader) triggers(ctx context.Context, branch, at string) (map[string]any, error) {
+// triggers reads the workflow files at a commit and decides whether the
+// operation, a push to branch or a merge into it, deploys (DeployTriggers).
+func (r *reader) triggers(ctx context.Context, branch, at string, merge bool) (map[string]any, error) {
 	if branch == "" || at == "" {
 		return nil, fmt.Errorf("no branch or commit")
 	}
@@ -480,7 +480,7 @@ func (r *reader) triggers(ctx context.Context, branch, at string) (map[string]an
 		if err := r.json(ctx, r.repo+"/commits/"+url.PathEscape(at), &c); err != nil || str(c, "sha") == "" {
 			return nil, fmt.Errorf("commit %s: %w", at, err)
 		}
-		return object(DeployTriggers(nil, branch, at))
+		return object(DeployTriggers(nil, branch, at, merge))
 	case res.Status != http.StatusOK || json.Unmarshal(res.Body, &listing) != nil:
 		return nil, fmt.Errorf("workflow listing answered %d", res.Status)
 	case len(listing) >= 1000:
@@ -512,7 +512,7 @@ func (r *reader) triggers(ctx context.Context, branch, at string) (map[string]an
 		}
 		files[p] = raw
 	}
-	return object(DeployTriggers(files, branch, at))
+	return object(DeployTriggers(files, branch, at, merge))
 }
 
 // object turns triggers into fact members.
