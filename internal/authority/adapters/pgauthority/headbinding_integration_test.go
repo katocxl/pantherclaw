@@ -39,13 +39,18 @@ func boundRefunds(pkg string) string {
 // state pushes the charge's state object, as the provider.
 func (w *world) state(charge, reason string) {
 	w.t.Helper()
+	w.observe("payments.charge.state", charge, `{"object": {"reason": "`+reason+`"}}`)
+}
+
+// observe pushes a fact about the charge, as the provider.
+func (w *world) observe(name, charge, value string) {
+	w.t.Helper()
 	ctx := tapp.WithCaller(context.Background(), tapp.Caller{Subject: tdomain.Subject{Org: w.org, Principal: tdomain.PrincipalRef{Kind: tdomain.KindServiceAccount, ID: w.billing}}})
 	res, err := w.facts.PutFacts(ctx, []fdomain.Observation{{
-		Name: "payments.charge.state", SubjectType: "payments.charge", SubjectID: charge,
-		Value: jsontext.Value(`{"object": {"reason": "` + reason + `"}}`), ObservedAt: time.Now().Add(-time.Second),
+		Name: name, SubjectType: "payments.charge", SubjectID: charge, Value: jsontext.Value(value), ObservedAt: time.Now().Add(-time.Second),
 	}})
 	if err != nil || len(res) != 1 || res[0].Err != nil {
-		w.t.Fatalf("state: %v %+v", err, res)
+		w.t.Fatalf("%s: %v %+v", name, err, res)
 	}
 }
 
@@ -92,13 +97,17 @@ func TestHR205_ANewHeadSupersedesTheRequestsBoundToTheOldOne(t *testing.T) {
 		}
 		return state, key, end
 	}
-	if state, key, _ := request(held["ch_1"]); state != "PENDING" || key != "payments.charge.state@payments.charge:ch_1" {
+	if state, key, _ := request(held["ch_1"]); state != "PENDING" || key != "payments.charge.state[reason]@payments.charge:ch_1" {
 		t.Fatalf("held: %s %q", state, key)
 	}
 
 	w.state("ch_1", "duplicate") // the same value: nothing moved
 	if state, _, _ := request(held["ch_1"]); state != "PENDING" {
 		t.Fatalf("an unchanged fact superseded it: %s", state)
+	}
+	w.observe("payments.charge.state", "ch_1", `{"object": {"reason": "duplicate", "note": "re-checked"}}`) // a member nothing binds
+	if state, _, _ := request(held["ch_1"]); state != "PENDING" {
+		t.Fatalf("a change to an unbound member superseded it: %s", state)
 	}
 	w.state("ch_1", "fraudulent")
 	if state, _, end := request(held["ch_1"]); state != "SUPERSEDED" || end != "BINDING_CHANGED" {
@@ -111,7 +120,7 @@ func TestHR205_ANewHeadSupersedesTheRequestsBoundToTheOldOne(t *testing.T) {
 	if err := w.pool.InTenantTx(context.Background(), w.org, func(ctx context.Context, tx db.TenantTx) error {
 		return tx.QueryRow(ctx, `SELECT count(*) FROM pc.ledger_entries WHERE org_id = $1 AND kind = 'audit.approval.superseded'
 			AND convert_from(body, 'UTF8')::jsonb #>> '{object,id}' = $2
-			AND convert_from(body, 'UTF8')::jsonb -> 'details' ->> 'changed' = 'payments.charge.state@payments.charge:ch_1'`, w.org, held["ch_1"].String()).Scan(&audited)
+			AND convert_from(body, 'UTF8')::jsonb -> 'details' ->> 'changed' = 'payments.charge.state[reason]@payments.charge:ch_1'`, w.org, held["ch_1"].String()).Scan(&audited)
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -142,7 +151,7 @@ func TestHR205_ARequestAboutALongSubjectIsSupersededToo(t *testing.T) {
 	run := w.run(g.ID, ids.UUID{})
 	w.state(charge, "duplicate")
 	id := held(t, w.authorize(w.request(run, ids.NewV7(), charge, "85.00")))
-	sum := sha256.Sum256([]byte("payments.charge.state@payments.charge:" + charge))
+	sum := sha256.Sum256([]byte("payments.charge.state[reason]@payments.charge:" + charge))
 	key := "sha256:" + hex.EncodeToString(sum[:])
 	if s := w.str("SELECT state || ' ' || coalesce(invalidation_key, '') FROM pc.approval_requests WHERE id = $1", id); s != "PENDING "+key {
 		t.Fatalf("held: %s", s)
@@ -150,5 +159,54 @@ func TestHR205_ARequestAboutALongSubjectIsSupersededToo(t *testing.T) {
 	w.state(charge, "fraudulent")
 	if s := w.str("SELECT state || '/' || coalesce(end_reason, '') FROM pc.approval_requests WHERE id = $1", id); s != "SUPERSEDED/BINDING_CHANGED" {
 		t.Fatalf("after the change: %s", s)
+	}
+}
+
+// TestHR030_AReobservedFactKeepsTheApprovalAndAFailingCheckStillRefuses
+// (option B, founder decision 2026-10-13): an approval binds only the fact
+// members its definition binds. After a refund is approved, its facts are
+// observed again with the same values, and a member nothing binds
+// changes: the approval is still there and is used for exactly one permit.
+// Every fact is read again when an approval is used, so a second approved
+// refund whose charge stops being refundable is denied by the policy.
+func TestHR030_AReobservedFactKeepsTheApprovalAndAFailingCheckStillRefuses(t *testing.T) {
+	w := newWorldWith(t, boundRefunds)
+	w.publishPolicy(1, false, pgHoldOver50, pdomain.Rule{
+		ID: "refundable-only", Kind: pdomain.Forbid, Summary: "only refundable charges", Operations: []string{"payments.refund.create"},
+		When: `!facts.payments_charge_refundable`, Reason: "NOT_REFUNDABLE",
+		Facts: []pdomain.FactRef{{Name: "payments.charge.refundable", MaxAgeSeconds: 300}},
+	})
+	w.refundable("ch_1", "ch_2")
+	w.state("ch_1", "duplicate")
+	w.state("ch_2", "duplicate")
+	g := w.heldGrant()
+	run := w.run(g.ID, ids.UUID{})
+	state := func(id ids.UUID) string {
+		t.Helper()
+		return w.str("SELECT state FROM pc.approval_requests WHERE id = $1", id)
+	}
+
+	req := w.request(run, ids.NewV7(), "ch_1", "85.00")
+	approved := held(t, w.authorize(req))
+	w.approve(approved)
+	w.refundable("ch_1")
+	w.state("ch_1", "duplicate")
+	w.observe("payments.charge.state", "ch_1", `{"object": {"reason": "duplicate", "note": "re-checked"}}`)
+	if s := state(approved); s != "APPROVED" {
+		t.Fatalf("after the facts were observed again: %s", s)
+	}
+	if r := w.authorize(req); r.Decision != adomain.Allow || r.Permit == "" || state(approved) != "CONSUMED" {
+		t.Fatalf("the approved refund: %s %s, request %s", r.Decision, decisive(r), state(approved))
+	}
+
+	req2 := w.request(run, ids.NewV7(), "ch_2", "85.00")
+	second := held(t, w.authorize(req2))
+	w.approve(second)
+	w.observe("payments.charge.refundable", "ch_2", `{"bool": false}`)
+	if r := w.authorize(req2); r.Decision != adomain.Deny || decisive(r) != "NOT_REFUNDABLE" || r.Permit != "" {
+		t.Fatalf("an approved refund of a charge that is no longer refundable: %s %s", r.Decision, decisive(r))
+	}
+	if n := w.count("SELECT count(*) FROM pc.permits"); n != 1 {
+		t.Fatalf("%d permits", n)
 	}
 }

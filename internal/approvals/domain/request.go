@@ -168,3 +168,11 @@ func InvalidationKey(fact, subjectType, subjectID string) string {
 	}
 	return k
 }
+
+// MemberKey is the invalidation key of the approval requests bound to one
+// member of an object fact (HR-030 option B, founder decision 2026-10-13):
+// a new value of that member supersedes them, a change to any other member
+// does not. For example github.pull.head[sha]@github.pull_request:acme/payments#7.
+func MemberKey(fact, member, subjectType, subjectID string) string {
+	return InvalidationKey(fact+"["+member+"]", subjectType, subjectID)
+}

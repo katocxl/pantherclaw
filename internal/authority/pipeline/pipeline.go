@@ -169,9 +169,10 @@ type Hold struct {
 	// State and Code are what a waiter sees (HR-174).
 	State string
 	Code  string
-	// InvalidationKey is set when the definition names the fact whose
-	// change supersedes its unconsumed requests (approval.invalidate_on,
-	// G0 M8, HR-205): that fact and the action's target.
+	// InvalidationKey is set when the definition names the fact whose bound
+	// member's change supersedes its unconsumed requests
+	// (approval.invalidate_on, G0 M8, HR-205; only that member since HR-030
+	// option B): that fact's member and the action's target.
 	InvalidationKey string
 }
 
@@ -675,18 +676,10 @@ func (s *state) bindings() bool {
 		if b == nil {
 			continue
 		}
-		want, have := s.vals[b.Param], "(none)"
+		want, have := s.vals[b.Param], memberValue(s.facts[pr.Fact], b.Member)
 		param := want.Str
 		if want.Type == defs.TypeInteger {
 			param = strconv.FormatInt(want.Int, 10)
-		}
-		if f := s.facts[pr.Fact]; f.Type == fdomain.TypeObject {
-			switch v := f.Object[b.Member].(type) {
-			case string:
-				have = v
-			case int64:
-				have = strconv.FormatInt(v, 10)
-			}
 		}
 		if have != param {
 			ok = false
@@ -697,7 +690,39 @@ func (s *state) bindings() bool {
 	return ok
 }
 
-// Step 7: every level's limits, FORBID rules, counters and budgets (a
+// memberValue is a member of an object fact as a binding compares it, or
+// "(none)".
+func memberValue(f fdomain.Value, member string) string {
+	if f.Type == fdomain.TypeObject {
+		switch v := f.Object[member].(type) {
+		case string:
+			return v
+		case int64:
+			return strconv.FormatInt(v, 10)
+		}
+	}
+	return "(none)"
+}
+
+// boundFacts are the fact members an approval of the action binds (HR-030
+// as the founder amended it on 2026-10-13, option B): those the
+// definition's prerequisites declare in `binds`, by value. Every other
+// fact, and when any fact was observed, is left out: they are read again
+// and decided on by steps 6 and 7 whenever the approval is used.
+func (s *state) boundFacts() []apdomain.BoundFact {
+	var out []apdomain.BoundFact
+	for _, pr := range s.def.Prerequisites {
+		if pr.Binds != nil {
+			out = append(out, apdomain.BoundFact{
+				Fact: pr.Fact, Subject: s.a.Target.Type + ":" + s.a.Target.ID, Member: pr.Binds.Member,
+				Value: memberValue(s.facts[pr.Fact], pr.Binds.Member),
+			})
+		}
+	}
+	return out
+}
+
+// Step 7: every level's limits), FORBID rules, counters and budgets (a
 // read-only check; step 9 reserves), and repeat protection (a pre-check;
 // step 9 claims the key).
 func (p *Pipeline) boundaries(ctx context.Context, s *state) {
@@ -1038,7 +1063,11 @@ func (p *Pipeline) hold(ctx context.Context, s *state, latest *HoldRequest, effe
 	}
 	h := &Hold{Requirements: reqs, VariantKey: key, Request: latest, State: apdomain.WaitPending, Action: s.req.Action.Canonical}
 	if a := s.def.Approval; a != nil && a.InvalidateOn != "" {
-		h.InvalidationKey = apdomain.InvalidationKey(a.InvalidateOn, s.a.Target.Type, s.a.Target.ID)
+		for _, pr := range s.def.Prerequisites {
+			if pr.Fact == a.InvalidateOn && pr.Binds != nil {
+				h.InvalidationKey = apdomain.MemberKey(a.InvalidateOn, pr.Binds.Member, s.a.Target.Type, s.a.Target.ID)
+			}
+		}
 	}
 	if latest != nil && latest.State.Live() {
 		if err := p.bind(s, h, effective, latest.Deadline, latest.Variants, latest.Context); err != nil {
@@ -1066,8 +1095,9 @@ func (p *Pipeline) hold(ctx context.Context, s *state, latest *HoldRequest, effe
 func (p *Pipeline) bind(s *state, h *Hold, effective defs.Values, deadline time.Time, variants []apdomain.VariantLine,
 	approved []apdomain.ContextLine,
 ) error {
+	bound := s.boundFacts()
 	disp, err := apdomain.RenderAction(apdomain.ActionInput{
-		Definition: s.def, Target: s.a.Target, Requested: s.vals, Effective: effective, Facts: s.used,
+		Definition: s.def, Target: s.a.Target, Requested: s.vals, Effective: effective, Facts: s.used, Bound: bound,
 		Run: apdomain.RunLine{
 			Run: s.ev.RunID.String(), Agent: s.run.AgentID.String(), Instance: s.req.Identity.InstanceID.String(),
 			Launcher: s.run.Launcher.String(), Principal: s.run.Principal.String(),
@@ -1083,8 +1113,8 @@ func (p *Pipeline) bind(s *state, h *Hold, effective defs.Values, deadline time.
 	}
 	leaf, _ := s.chain.Leaf()
 	b, err := apdomain.ActionParts{
-		ActionHash: s.ev.ActionHash, EffectiveActionHash: s.ev.EffectiveHash, BasisDigest: s.basis().Digest(),
-		FactsDigest: fdomain.Digest(s.used), DefinitionDigest: s.a.Definition.Digest, GrantID: leaf.ID.UUID(),
+		ActionHash: s.ev.ActionHash, EffectiveActionHash: s.ev.EffectiveHash, BasisDigest: s.bindingBasis(bound).Digest(),
+		FactsDigest: apdomain.BoundFactsDigest(bound), DefinitionDigest: s.a.Definition.Digest, GrantID: leaf.ID.UUID(),
 		GrantRevision: leaf.Revision, RunID: s.ev.RunID, Instance: s.req.Identity.InstanceID, JKT: s.req.Identity.JKT,
 		Requirements: h.Requirements, ExpiresAt: deadline, DisplayHash: c.Hash,
 	}.Binding()
