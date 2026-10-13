@@ -84,7 +84,7 @@ func (s *Service) Delegate(ctx context.Context, w Workload, req DelegateRequest)
 	if ic.Envelopes, err = s.Repo.Envelopes(ctx, w.Org, scopesFor(agent, child.EnvironmentID, child.Principal)); err != nil {
 		return domain.Grant{}, err
 	}
-	if ic.Lookup, err = s.lookup(ctx, w.Org, child.Bounds); err != nil {
+	if ic.Lookup, err = s.lookup(ctx, w.Org, child.Bounds, child.Limits); err != nil {
 		return domain.Grant{}, err
 	}
 	if ic.ActiveChildren, ic.TotalChildren, err = s.Repo.ChildCounts(ctx, w.Org, parent.ID, now); err != nil {
