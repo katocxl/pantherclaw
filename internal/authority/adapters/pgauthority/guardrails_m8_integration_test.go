@@ -28,9 +28,9 @@ import (
 // budget or counter on an operation that is only ever a consequence (the
 // payout a refund may start) would never count, so an admin would believe
 // in a cap that is not there. The guardrail service refuses it, as grant
-// issue does, with the org's active definitions, and so it refuses a limit
-// on an operation with no active definition. A limit on the action that
-// causes the consequence, or on a prefix, stands.
+// issue does, with the org's active definitions. A limit on the action that
+// causes the consequence, on a prefix, or on an operation no package
+// defines yet, stands.
 func TestHR206_GuardrailLimitsOnAConsequenceAreRefused(t *testing.T) {
 	w := newWorldWith(t, pipelinetest.PayoutConsequence)
 	put := func(limits string) error {
@@ -52,10 +52,6 @@ func TestHR206_GuardrailLimitsOnAConsequenceAreRefused(t *testing.T) {
 			  "max_count": "3", "period": "day"}]}`,
 			"payments.payout.trigger is a consequence",
 		},
-		"a counter on an operation no package defines": {
-			`{"counters": [{"id": "x", "operations": ["payments.payout.cancel"], "key": "run", "window": "day", "max": "3"}]}`,
-			"payments.payout.cancel has no active definition",
-		},
 	} {
 		if err := put(c.limits); err == nil || !strings.Contains(err.Error(), c.want) {
 			t.Errorf("%s: %v", name, err)
@@ -65,8 +61,9 @@ func TestHR206_GuardrailLimitsOnAConsequenceAreRefused(t *testing.T) {
 		t.Fatalf("%d guardrails stored", n)
 	}
 	if err := put(`{"counters": [{"id": "refunds", "operations": ["payments.refund.create"], "key": "run", "window": "day", "max": "3"},
-	  {"id": "all", "operations": ["payments.*"], "key": "run", "window": "day", "max": "9"}]}`); err != nil {
-		t.Fatalf("limits on the action and a prefix: %v", err)
+	  {"id": "all", "operations": ["payments.*"], "key": "run", "window": "day", "max": "9"},
+	  {"id": "later", "operations": ["payments.payout.cancel"], "key": "run", "window": "day", "max": "3"}]}`); err != nil {
+		t.Fatalf("limits on the action, a prefix and an operation not defined yet: %v", err)
 	}
 }
 
