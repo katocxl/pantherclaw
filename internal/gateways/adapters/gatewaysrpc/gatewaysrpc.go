@@ -226,6 +226,7 @@ type GatewayHandler struct {
 	drifts   Drifts
 	// verifications leases and takes verification reports (G0 M7).
 	verifications Verifications
+	facts         Facts
 }
 
 // NewGateway returns the GatewayService handler.

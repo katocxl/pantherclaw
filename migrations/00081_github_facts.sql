@@ -26,7 +26,9 @@
 -- - github_scan_runs records an organisation scan: the lease it ran under,
 --   what it found and which sources it could and could not read (F450).
 -- - Discoveries gain the source github_scan, and the M7 verification tasks
---   the purpose org_scan, a lease without a transaction like target_log.
+--   the purpose org_scan, a lease without a transaction like target_log. A
+--   finding's key is unique within its source, so a person's scan never
+--   matches, overwrites or pre-seeds a finding of the gateway's org scan.
 --   The two verification checks are named so that 00084 (C2) can replace
 --   them again with connection_test.
 
@@ -99,6 +101,27 @@ CREATE TABLE pc.github_scan_runs (
 );
 CREATE INDEX github_scan_runs_recent ON pc.github_scan_runs (org_id, connection_id, created_at DESC);
 
+-- A scan run only moves forward (PENDING, RUNNING, then DONE or FAILED),
+-- a finished run never changes, and a run keeps the lease it was given.
+-- +goose StatementBegin
+CREATE FUNCTION pc.github_scan_runs_forward() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    IF OLD.state IN ('DONE', 'FAILED') THEN
+        RAISE EXCEPTION 'scan run % is finished', OLD.id USING ERRCODE = 'check_violation';
+    END IF;
+    IF NEW.state = 'PENDING' AND OLD.state <> 'PENDING' THEN
+        RAISE EXCEPTION 'scan run % only moves forward', OLD.id USING ERRCODE = 'check_violation';
+    END IF;
+    IF OLD.verification_id IS NOT NULL AND NEW.verification_id IS DISTINCT FROM OLD.verification_id THEN
+        RAISE EXCEPTION 'scan run % keeps its lease', OLD.id USING ERRCODE = 'check_violation';
+    END IF;
+    RETURN NEW;
+END
+$$;
+-- +goose StatementEnd
+CREATE TRIGGER github_scan_runs_forward BEFORE UPDATE ON pc.github_scan_runs
+    FOR EACH ROW EXECUTE FUNCTION pc.github_scan_runs_forward();
+
 -- +goose StatementBegin
 DO $$
 DECLARE
@@ -130,7 +153,9 @@ ALTER TABLE pc.discoveries
     ADD CONSTRAINT discoveries_source CHECK (source IN ('gateway', 'scan', 'github_scan')),
     ADD CONSTRAINT discoveries_source_key CHECK (
         (source = 'gateway' AND key_jkt IS NOT NULL AND public_jwk IS NOT NULL AND scan_key IS NULL)
-        OR (source IN ('scan', 'github_scan') AND scan_key IS NOT NULL AND key_jkt IS NULL AND public_jwk IS NULL));
+        OR (source IN ('scan', 'github_scan') AND scan_key IS NOT NULL AND key_jkt IS NULL AND public_jwk IS NULL)),
+    DROP CONSTRAINT discoveries_org_id_scan_key_key,
+    ADD CONSTRAINT discoveries_source_scan_key UNIQUE (org_id, source, scan_key);
 
 ALTER TABLE pc.verifications
     DROP CONSTRAINT verifications_purpose_check,
@@ -139,19 +164,51 @@ ALTER TABLE pc.verifications
     ADD CONSTRAINT verifications_transaction CHECK ((purpose IN ('target_log', 'org_scan')) = (transaction_id IS NULL));
 
 -- +goose Down
+-- Rows only this migration allows go first, so that the earlier rules hold
+-- again: org scans and their findings, gateway fact providers with their
+-- declarations and facts, and object or large facts. Row security is lifted
+-- for these deletes only.
+-- +goose StatementBegin
+DO $$
+DECLARE
+    t text;
+BEGIN
+    FOREACH t IN ARRAY ARRAY['verifications', 'discoveries', 'fact_providers', 'fact_declarations', 'facts']
+    LOOP
+        EXECUTE format('ALTER TABLE pc.%I NO FORCE ROW LEVEL SECURITY', t);
+    END LOOP;
+    DROP TABLE pc.github_scan_runs;
+    DROP FUNCTION pc.github_scan_runs_forward();
+    DELETE FROM pc.verifications WHERE purpose = 'org_scan';
+    DELETE FROM pc.discoveries WHERE source = 'github_scan';
+    DELETE FROM pc.facts f WHERE octet_length(f.value) > 1024
+        OR f.provider_id IN (SELECT id FROM pc.fact_providers WHERE gateway_id IS NOT NULL)
+        OR EXISTS (SELECT 1 FROM pc.fact_declarations d
+            WHERE d.org_id = f.org_id AND d.provider_id = f.provider_id AND d.name = f.name AND d.value_type = 'object');
+    DELETE FROM pc.fact_declarations WHERE value_type = 'object'
+        OR provider_id IN (SELECT id FROM pc.fact_providers WHERE gateway_id IS NOT NULL);
+    DELETE FROM pc.fact_providers WHERE gateway_id IS NOT NULL;
+    FOREACH t IN ARRAY ARRAY['verifications', 'discoveries', 'fact_providers', 'fact_declarations', 'facts']
+    LOOP
+        EXECUTE format('ALTER TABLE pc.%I FORCE ROW LEVEL SECURITY', t);
+    END LOOP;
+END
+$$;
+-- +goose StatementEnd
 ALTER TABLE pc.verifications
     DROP CONSTRAINT verifications_transaction,
     DROP CONSTRAINT verifications_purpose,
     ADD CONSTRAINT verifications_purpose_check CHECK (purpose IN ('follow_up', 'reconcile', 'target_log')),
     ADD CONSTRAINT verifications_check CHECK ((purpose = 'target_log') = (transaction_id IS NULL));
 ALTER TABLE pc.discoveries
+    DROP CONSTRAINT discoveries_source_scan_key,
+    ADD CONSTRAINT discoveries_org_id_scan_key_key UNIQUE (org_id, scan_key),
     DROP CONSTRAINT discoveries_source_key,
     DROP CONSTRAINT discoveries_source,
     ADD CONSTRAINT discoveries_source_check CHECK (source IN ('gateway', 'scan')),
     ADD CONSTRAINT discoveries_source_key CHECK (
         (source = 'gateway' AND key_jkt IS NOT NULL AND public_jwk IS NOT NULL AND scan_key IS NULL)
         OR (source = 'scan' AND scan_key IS NOT NULL AND key_jkt IS NULL AND public_jwk IS NULL));
-DROP TABLE pc.github_scan_runs;
 DROP TABLE pc.github_identities;
 DROP TABLE pc.connection_github;
 ALTER TABLE pc.facts

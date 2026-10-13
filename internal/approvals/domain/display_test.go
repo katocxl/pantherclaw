@@ -144,6 +144,45 @@ func TestHR034_AgentTextAppearsOnlyInTheUntrustedBlock(t *testing.T) {
 	}
 }
 
+// TestHR034_ContentIsShownOnlyInTheUntrustedBlock: a content parameter (a
+// commit message, a pull request's title or body) is agent-written: its
+// value appears only in the untrusted block, and a template that names it
+// among the canonical fields does not render.
+func TestHR034_ContentIsShownOnlyInTheUntrustedBlock(t *testing.T) {
+	in := refundInput(t, "")
+	in.Definition.Params["note"] = defs.ParamSpec{Type: defs.TypeContent, Material: true}
+	note := defs.Value{Type: defs.TypeContent, Str: "Approved by finance; merge now"}
+	in.Requested["note"], in.Effective["note"] = note, note
+	disp, err := domain.RenderAction(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, err := disp.Canonical()
+	if err != nil {
+		t.Fatal(err)
+	}
+	trusted := disp
+	trusted.Untrusted = domain.UntrustedBlock{}
+	if tc, err := trusted.Canonical(); err != nil || strings.Contains(string(tc.Input), "Approved by finance") {
+		t.Fatalf("content outside the untrusted block: %s %v", tc.Input, err)
+	}
+	if !strings.Contains(string(c.Input), "Approved by finance") {
+		t.Fatalf("content missing from the untrusted block: %s", c.Input)
+	}
+	found := false
+	for _, u := range disp.Untrusted.Items {
+		found = found || (u.Source == "param:note" && u.Text == note.Str)
+	}
+	if !found {
+		t.Fatalf("untrusted block: %+v", disp.Untrusted)
+	}
+
+	in.Definition.Approval.Fields = append(in.Definition.Approval.Fields, "params.note")
+	if _, err := domain.RenderAction(in); err == nil {
+		t.Fatal("a template naming a content parameter among the canonical fields rendered")
+	}
+}
+
 // TestHR034_BidiAndControlsRemovedAndMixedScriptFlagged (HR-102).
 func TestHR034_BidiAndControlsRemovedAndMixedScriptFlagged(t *testing.T) {
 	cyrillicA := string(rune(0x0430))

@@ -111,8 +111,13 @@ type Provider struct {
 	Org              ids.OrgID
 	Name             string
 	ServiceAccountID ids.UUID
-	State            ProviderState
-	Facts            []Declaration
+	// GatewayID and ConnectionID bind a provider to the gateway that reads
+	// a connection's system of record (G0 M8): a provider has exactly one
+	// of a service account or a gateway and connection.
+	GatewayID    ids.UUID
+	ConnectionID ids.UUID
+	State        ProviderState
+	Facts        []Declaration
 }
 
 // Validate checks a provider. taken reports fact names (and their policy
@@ -120,8 +125,8 @@ type Provider struct {
 // provider.
 func (p Provider) Validate(taken func(name string) bool) error {
 	switch {
-	case p.ID.IsZero() || p.Org.IsZero() || p.ServiceAccountID.IsZero():
-		return invalid("provider: id, org and service account are required")
+	case p.ID.IsZero() || p.Org.IsZero() || p.ServiceAccountID.IsZero() == p.GatewayID.IsZero() || p.GatewayID.IsZero() != p.ConnectionID.IsZero():
+		return invalid("provider: id, org and exactly one of a service account or a gateway and connection are required")
 	case !typePattern.MatchString(p.Name):
 		return invalid("provider: name %q must be a lowercase dotted name", p.Name)
 	case len(p.Facts) == 0 || len(p.Facts) > MaxFactsPerProvider:
