@@ -29,10 +29,12 @@ import (
 
 // `pclaw hook claude-code` is the Claude Code PreToolUse hook (G0 M6
 // design decision 16; HR-186, HR-187): the PantherClaw plugin runs it for
-// every Bash and PowerShell command. It reads the hook input, resolves the
-// working directory to its final form, signs a PAP/1 request with the
-// developer's desktop workload key (L1, HR-092) in the configured run, and
-// asks the gateway's /hook/{connection}.
+// every command a tool runs in a shell: Bash, PowerShell and Monitor, whose
+// command runs where Bash's does and is decided as a bash command (HR-186,
+// widened after review, founder decision 2026-10-13). It reads the hook
+// input, resolves the working directory to its final form, signs a PAP/1
+// request with the developer's desktop workload key (L1, HR-092) in the
+// configured run, and asks the gateway's /hook/{connection}.
 //
 // It answers allow only when PantherClaw allowed and recorded the command.
 // Everything else blocks it (exit code 2, the reason on stderr): a denial,
@@ -56,6 +58,12 @@ var hookDeadline = 8 * time.Second
 const hookMaxInput = 1 << 20
 
 var hookCallPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{1,128}$`)
+
+// shellOf is the shell that runs each tool's command (tool_input.command),
+// as the gateway's pc.shell mapping names it. Monitor runs its command
+// where Bash runs, so it is decided exactly as a bash command; a Monitor
+// call without one is not decided, and so is blocked.
+var shellOf = map[string]string{"Bash": "bash", "PowerShell": "powershell", "Monitor": "bash"}
 
 // hookInput is what the hook reads of Claude Code's PreToolUse input.
 type hookInput struct {
@@ -119,12 +127,14 @@ func (a *app) hookAsk(ctx context.Context, args []string) (hookAnswer, error) {
 	if err := json.Unmarshal(raw, &in); err != nil {
 		return hookAnswer{}, errors.New("the hook input is not Claude Code's PreToolUse JSON")
 	}
-	shell := map[string]string{"Bash": "bash", "PowerShell": "powershell"}[in.Tool]
+	shell := shellOf[in.Tool]
 	switch {
 	case in.Event != "PreToolUse":
 		return hookAnswer{}, fmt.Errorf("a %q hook event (only PreToolUse is decided)", in.Event)
 	case shell == "":
-		return hookAnswer{}, fmt.Errorf("the %q tool (only Bash and PowerShell commands are decided)", in.Tool)
+		return hookAnswer{}, fmt.Errorf("the %q tool (only the commands Bash, PowerShell and Monitor run are decided)", in.Tool)
+	case in.ToolInput.Command == "" && in.Tool == "Monitor":
+		return hookAnswer{}, errors.New("a Monitor call without a command (its WebSocket form, say) is nothing PantherClaw decides")
 	case in.ToolInput.Command == "":
 		return hookAnswer{}, errors.New("the command is empty")
 	}

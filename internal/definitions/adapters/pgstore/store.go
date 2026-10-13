@@ -251,23 +251,33 @@ func (s *Store) Pinned(ctx context.Context, org ids.OrgID, pin actionir.Definiti
 // PinnedInTx is Pinned inside the caller's transaction (the Authority's
 // one-snapshot read).
 func (s *Store) PinnedInTx(ctx context.Context, tx db.TenantTx, org ids.OrgID, pin actionir.Definition) (*domain.Definition, domain.State, error) {
+	_, d, state, err := s.PinnedPackageInTx(ctx, tx, org, pin)
+	return d, state, err
+}
+
+// PinnedPackageInTx is PinnedInTx with the package version that defines the
+// pinned definition, whose consequence rules the Authority evaluates with
+// it (G0 M8, HR-206).
+func (s *Store) PinnedPackageInTx(ctx context.Context, tx db.TenantTx, org ids.OrgID, pin actionir.Definition) (
+	*domain.Package, *domain.Definition, domain.State, error,
+) {
 	q := dbq.New(tx)
 	row, err := q.GetDefinitionVersion(ctx, dbq.GetDefinitionVersionParams{OrgID: org, Name: pin.Package, Version: pin.Version, Digest: pin.Digest})
 	if db.IsNoRows(err) {
-		return nil, "", ErrNotFound
+		return nil, nil, "", ErrNotFound
 	}
 	if err != nil {
-		return nil, "", err
+		return nil, nil, "", err
 	}
 	p, err := s.decoded(ctx, q, org, row.ID)
 	if err != nil {
-		return nil, "", err
+		return nil, nil, "", err
 	}
 	i := slices.IndexFunc(p.Definitions, func(x domain.Definition) bool { return x.Digest == pin.Digest })
 	if i < 0 {
-		return nil, "", ErrNotFound
+		return nil, nil, "", ErrNotFound
 	}
-	return &p.Definitions[i], domain.State(row.State), nil
+	return p, &p.Definitions[i], domain.State(row.State), nil
 }
 
 // Active returns the org's ACTIVE definition of an operation (the highest

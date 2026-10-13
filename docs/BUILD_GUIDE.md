@@ -222,6 +222,19 @@ Since M6 the gateway serves the routes of its connections at `/{connection}/…`
 
   With the plugin loaded and the stack down, every Bash and PowerShell command is blocked, by design ([integrations/claude-code](../integrations/claude-code/README.md)).
 
+**The SDK face (M8):** agent SDKs ask `POST /sdk/{connection}` before they call a tool themselves (HR-201). The connection is an `http` or `mcp` one whose access mode is `agent_held` or `target_enforced`.
+- On a `pantherclaw_held` connection the answer is `use_gateway_face`: the agent goes through the gateway's MCP or HTTP face instead.
+- Shell commands go to `/hook` (HR-200).
+
+The body is the raw call: `{"tool": "mcp__{server}__{name}", "server", "input", "tool_use_id"}`, at most 64 KiB. The gateway maps it through the package's MCP mapping into an `sdk` action and answers:
+- `allow`, recorded delegated;
+- `hold`, with a wait handle: long-poll `WorkloadService.Wait`, then resend the same call with the same `PC-Action-Id`;
+- `deny`.
+
+Every answer is labelled `PARTIAL` and carries the action's id, hash and canonical form (`action_ir`). On a `target_enforced` connection, an allowed call also carries `dispatch`: the request the gateway re-serialized, with the action token that binds its body. The SDK sends it unchanged. A tool the agent SDK has built in is answered `allow`, labelled `OBSERVE_ONLY` (G0 M8 decision 2).
+
+`GET /sdk/{connection}`, PAP/1-signed over the empty body, lists exactly the tools the connection's package maps, each with its operation: `{"v":1,"connection":…,"coverage":"PARTIAL","tools":[{"tool":…,"operation":…}]}`. An integration that cannot read it treats every tool it has not seen observed as mapped, so it fails closed.
+
 Operator procedures are in the runbooks: [gateways](runbooks/gateway.md), [the kill switch](runbooks/kill-switch.md) and [broker keys and credentials](runbooks/key-rotation.md).
 
 **Sign in and administer (M2):** people sign in through an OpenID provider; locally that is the Keycloak development realm in `deploy/keycloak` (users `alice` / `alice-dev-only` and `bob` / `bob-dev-only`, development only). The server is the relying party; `pclaw` never talks to the provider.
@@ -323,6 +336,15 @@ go run ./cmd/pclaw waitlist list --overdue && go run ./cmd/pclaw escalation get
 Since M6 the gateway checks every approval itself (HR-038): the permit of an approved action carries each approver's WebAuthn assertion, and the gateway dispatches it only when every assertion verifies against a key in `approvals.approver_keys_file`. `dev seed --gateway-out` writes that file (`approver-keys.json`, next to the enrollment file, empty for a new org) and `deploy/dev/gateway.example.json` pins it. After anyone adds or removes a key, export it again; the gateway reads it again when it changes ([gateway runbook](runbooks/gateway.md) §7). If a permit is refused before `BeginDispatch`, or expires unused, its approval is restored and the agent's identical resubmission uses it (HR-011).
 
 Approvals count only from people whose account is 7 days old and whose role and key are 1 day old (decision 5), so a freshly invited approver waits that long; the tests backdate their fixtures. Batch review and `pclaw waitlist metrics` need the Team edition. Each org sets its hold deadline, consume window and batch ceilings with `pclaw waitlist update-settings`; a server sets its wait limits with `waitlist.max_waits_per_instance`, `waitlist.max_waits` and `waitlist.long_poll_max`.
+
+**Change windows (M8):** a person holding `release.window.manage` (the Security Admin) says when a release approval for a deployment environment counts, optionally for one repository: weekly entries in a time zone, one-off windows and freezes. A freeze overrides every window, and no window means none. Creating a window retires the current one. The database clock decides (HR-207).
+
+```bash
+pclaw window create --environment production --time-zone Europe/London --weekly 'mon 09:00 480' --freeze 2026-12-21T00:00:00Z/2027-01-04T00:00:00Z
+pclaw window active --environment production --repository acme/payments   # OPEN, CLOSED, FROZEN or NO_WINDOW, and why
+pclaw window list --retired
+pclaw window retire <id> --reason "replaced by the new schedule"
+```
 
 **Effects, reconciliation and proof (M7):** a decision says what was allowed and an execution receipt what the gateway sent; M7 records what actually happened and makes all of it verifiable offline ([g0/M7.md](g0/M7.md)). With the stack above, nothing needs configuring: after an accepted refund the server schedules a verification read, and the gateway serving the connection leases it (every `control.verify_every`, 10 s by default), reads the refund back through the package's reviewed read with the connection's credential, and reports only the declared fields. The effect then has its own signed receipt: `CONFIRMED` at `follow_up` level with the verifier's limits, `PROPAGATION_PENDING`, `CONFLICTING` (both sides kept), `NONE_CONFIRMED`, `UNKNOWN` at the deadline, or `UNVERIFIABLE` when nothing can read it (a delegated hook command is also labelled `PARTIAL` coverage).
 

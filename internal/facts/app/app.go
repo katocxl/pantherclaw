@@ -50,6 +50,9 @@ type Store interface {
 	DisableProvider(ctx context.Context, org ids.OrgID, id ids.UUID, ev audit.Event) error
 	// ProviderFor returns the active provider bound to a service account.
 	ProviderFor(ctx context.Context, org ids.OrgID, serviceAccount ids.UUID) (domain.Provider, error)
+	// ProviderForConnection returns the active gateway provider of a
+	// connection (G0 M8).
+	ProviderForConnection(ctx context.Context, org ids.OrgID, connection ids.UUID) (domain.Provider, error)
 	// Now returns the database time.
 	Now(ctx context.Context, org ids.OrgID) (time.Time, error)
 	// Latest returns the recorded fact for (name, subject), or nil.
@@ -70,6 +73,9 @@ type Service struct {
 	Authz Authorizer
 	// Reads serves the API's listings (optional elsewhere).
 	Reads Reads
+	// Packages names the facts a connection's package uses, for gateway
+	// providers (optional elsewhere).
+	Packages PackageFacts
 }
 
 // RegisterProvider registers a provider bound to a service account. Only a
@@ -153,21 +159,26 @@ func (s *Service) PutFacts(ctx context.Context, obs []domain.Observation) ([]Res
 	if err != nil {
 		return nil, err
 	}
-	now, err := s.Store.Now(ctx, c.Org)
+	return s.put(ctx, c.Org, p, obs)
+}
+
+// put records each observation of provider p that it may make.
+func (s *Service) put(ctx context.Context, org ids.OrgID, p domain.Provider, obs []domain.Observation) ([]Result, error) {
+	now, err := s.Store.Now(ctx, org)
 	if err != nil {
 		return nil, err
 	}
 	out := make([]Result, 0, len(obs))
 	for _, o := range obs {
 		r := Result{Name: o.Name, SubjectID: o.SubjectID}
-		prev, err := s.Store.Latest(ctx, c.Org, o.Name, o.SubjectType, o.SubjectID)
+		prev, err := s.Store.Latest(ctx, org, o.Name, o.SubjectType, o.SubjectID)
 		if err != nil {
 			return nil, err
 		}
 		f, err := domain.Accept(p, o, now, prev)
 		if err == nil {
 			var wrote bool
-			if wrote, err = s.Store.Put(ctx, c.Org, f); err == nil && !wrote {
+			if wrote, err = s.Store.Put(ctx, org, f); err == nil && !wrote {
 				err = fmt.Errorf("%w: a newer observation of %s was recorded meanwhile", domain.ErrStale, o.Name)
 			}
 		}

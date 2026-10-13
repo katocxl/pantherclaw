@@ -89,3 +89,111 @@ SET state = 'OPEN', unknown_count = EXCLUDED.unknown_count, total_count = EXCLUD
 -- Restoring a connection closes its open circuits.
 UPDATE pc.circuit_states SET state = 'CLOSED', closed_at = now()
 WHERE org_id = sqlc.arg(org_id) AND connection_id = sqlc.arg(connection_id) AND state = 'OPEN';
+
+-- name: ConnectionTestFacts :one
+-- What a connection test checks besides the connection itself (G0 M8
+-- track C, F354): its gateway, the gateway's current certificate, an active
+-- credential sealed to the gateway's active broker key, and open circuits.
+-- Nothing here calls the target.
+SELECT g.state AS gateway_state,
+    EXISTS (SELECT 1 FROM pc.gateway_certs gc WHERE gc.org_id = c.org_id AND gc.gateway_id = c.gateway_id
+            AND gc.state = 'ACTIVE' AND gc.not_after > now()) AS certificate_current,
+    EXISTS (SELECT 1 FROM pc.credentials cr JOIN pc.broker_keys bk ON bk.org_id = cr.org_id AND bk.id = cr.broker_key_id
+            WHERE cr.org_id = c.org_id AND cr.connection_id = c.id AND cr.state = 'ACTIVE'
+            AND bk.state = 'ACTIVE' AND bk.gateway_id = c.gateway_id) AS credential_current,
+    (SELECT count(*) FROM pc.circuit_states cs WHERE cs.org_id = c.org_id AND cs.connection_id = c.id
+     AND cs.state = 'OPEN')::integer AS open_circuits
+FROM pc.connections c
+JOIN pc.gateways g ON g.org_id = c.org_id AND g.id = c.gateway_id
+WHERE c.org_id = sqlc.arg(org_id) AND c.id = sqlc.arg(id);
+
+-- name: InsertCredentialTest :one
+-- A credential test, which runs at once without calling the target.
+INSERT INTO pc.connection_tests (org_id, id, connection_id, kind, state, result, checks, requested_by, finished_at)
+VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(connection_id), 'credential', 'DONE', sqlc.arg(result), sqlc.arg(checks),
+    sqlc.arg(requested_by), now())
+RETURNING *;
+
+-- name: LatestConnectionTest :one
+-- A connection's latest finished test, or its latest passed one.
+SELECT * FROM pc.connection_tests
+WHERE org_id = sqlc.arg(org_id) AND connection_id = sqlc.arg(connection_id) AND state IN ('DONE', 'FAILED')
+    AND (NOT sqlc.arg(passed_only)::boolean OR result = 'PASSED')
+ORDER BY finished_at DESC, id DESC
+LIMIT 1;
+
+-- name: ListConnectionCircuits :many
+-- The circuit each gateway reported for a connection (HR-078).
+SELECT gateway_id, state, unknown_count, total_count, opened_at, reported_at
+FROM pc.circuit_states
+WHERE org_id = sqlc.arg(org_id) AND connection_id = sqlc.arg(connection_id)
+ORDER BY gateway_id;
+
+-- name: ConnectionDeliveries :one
+-- Outcomes recorded for a connection's actions since a time (F358):
+-- failures, unknown outcomes, actions an agent ran itself (delegated:
+-- PantherClaw never learns their result, so they are no evidence of
+-- success), and the latest of each kind (the epoch for none).
+SELECT count(*) FILTER (WHERE a.outcome = 'failed')::integer AS failed,
+    count(*) FILTER (WHERE a.outcome = 'unknown')::integer AS unknown,
+    count(*) FILTER (WHERE a.outcome = 'delegated')::integer AS delegated,
+    coalesce(max(a.recorded_at) FILTER (WHERE a.outcome IN ('failed', 'unknown')), 'epoch')::timestamptz AS last_failure_at,
+    coalesce(max(a.recorded_at) FILTER (WHERE a.outcome = 'accepted'), 'epoch')::timestamptz AS last_success_at,
+    coalesce(max(a.recorded_at) FILTER (WHERE a.outcome = 'delegated'), 'epoch')::timestamptz AS last_delegated_at
+FROM pc.transactions t
+JOIN pc.execution_attempts a ON a.org_id = t.org_id AND a.transaction_id = t.id
+WHERE t.org_id = sqlc.arg(org_id) AND t.connection_id = sqlc.arg(connection_id) AND t.created_at >= sqlc.arg(since)::timestamptz;
+
+-- name: ConnectionDependentAgents :many
+-- The agents whose runs used a connection since a time, latest first
+-- (F358).
+SELECT r.agent_id, g.name, max(t.created_at)::timestamptz AS last_used_at
+FROM pc.transactions t
+JOIN pc.runs r ON r.org_id = t.org_id AND r.id = t.run_id
+JOIN pc.agents g ON g.org_id = r.org_id AND g.id = r.agent_id
+WHERE t.org_id = sqlc.arg(org_id) AND t.connection_id = sqlc.arg(connection_id) AND t.created_at >= sqlc.arg(since)::timestamptz
+GROUP BY r.agent_id, g.name
+ORDER BY last_used_at DESC, r.agent_id
+LIMIT sqlc.arg(max_rows);
+
+-- name: InsertToolObservation :one
+-- An OBSERVE_ONLY record of a tool an agent SDK ran without a mapping
+-- (HR-200), only through a connection the reporting gateway serves.
+INSERT INTO pc.tool_observations (org_id, id, run_id, instance_id, connection_id, tool, input_sha256, channel)
+SELECT c.org_id, sqlc.arg(id), sqlc.arg(run_id), sqlc.arg(instance_id), c.id, sqlc.arg(tool), sqlc.arg(input_sha256), 'sdk'
+FROM pc.connections c
+WHERE c.org_id = sqlc.arg(org_id) AND c.id = sqlc.arg(connection_id) AND c.gateway_id = sqlc.arg(gateway_id)
+RETURNING id;
+
+-- name: ListConnectionGitHub :many
+-- The GitHub App installations behind connections (connection_github).
+SELECT * FROM pc.connection_github
+WHERE org_id = sqlc.arg(org_id) AND connection_id = ANY(sqlc.arg(connection_ids)::uuid[]);
+
+-- name: InsertConnectionTestTask :exec
+-- A read test's verification task (G0 M8 track C, F354): the connection's
+-- gateway leases it as it leases target-log reads. It belongs to no
+-- transaction.
+INSERT INTO pc.verifications (org_id, id, purpose, connection_id, operation, request, next_at, deadline_at)
+VALUES (sqlc.arg(org_id), sqlc.arg(id), 'connection_test', sqlc.arg(connection_id), sqlc.arg(operation), sqlc.arg(request), now(),
+    now() + interval '10 minutes');
+
+-- name: InsertLeasedConnectionTest :one
+-- A test the gateway runs, PENDING until it reports.
+INSERT INTO pc.connection_tests (org_id, id, connection_id, kind, verification_id, operation, requested_by)
+VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(connection_id), sqlc.arg(kind), sqlc.arg(verification_id), sqlc.arg(operation),
+    sqlc.arg(requested_by))
+RETURNING *;
+
+-- name: ActiveGrantBounds :many
+-- A page of the bounds of the active, unexpired grants, with their agents,
+-- after (agent name, grant id), to find the agents whose grants depend on
+-- a connection (F358). The caller reads pages until its list is full.
+SELECT g.id, g.agent_id, a.name, r.bounds
+FROM pc.grants g
+JOIN pc.grant_revisions r ON r.org_id = g.org_id AND r.grant_id = g.id AND r.revision = g.current_revision
+JOIN pc.agents a ON a.org_id = g.org_id AND a.id = g.agent_id
+WHERE g.org_id = sqlc.arg(org_id) AND g.state = 'ACTIVE' AND r.expires_at > now()
+  AND (a.name, g.id) > (sqlc.arg(after_name)::text, sqlc.arg(after_id)::uuid)
+ORDER BY a.name, g.id
+LIMIT sqlc.arg(page)::integer;
