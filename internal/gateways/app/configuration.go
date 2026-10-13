@@ -18,6 +18,9 @@ type Configuration struct {
 	Routes      []dbq.GatewayConnectionRoutesRow
 	Packages    []dbq.GatewayPackagesRow
 	Credentials []dbq.GatewaySealedCredentialsRow
+	// GitHub are the GitHub App installations behind those connections (G0
+	// M8).
+	GitHub []dbq.GatewayConnectionGitHubRow
 	// Captures are the active capture profiles covering those connections
 	// (G0 M7 design decision 10).
 	Captures []dbq.GatewayCaptureProfilesRow
@@ -62,6 +65,9 @@ func (s *Service) Configuration(ctx context.Context, id Identity, known int64) (
 			return err
 		}
 		if out.Credentials, err = q.GatewaySealedCredentials(ctx, id.Org, id.Gateway); err != nil {
+			return err
+		}
+		if out.GitHub, err = q.GatewayConnectionGitHub(ctx, id.Org, id.Gateway); err != nil {
 			return err
 		}
 		out.Captures, err = q.GatewayCaptureProfiles(ctx, id.Org, id.Gateway)
