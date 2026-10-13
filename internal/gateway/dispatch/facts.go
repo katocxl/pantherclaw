@@ -94,11 +94,17 @@ func (e *Engine) reportGitHubFacts(ctx context.Context, conn *control.Connection
 		}
 	}
 	// report sends what was read, with every fact that was not read as
-	// unread (#308 review follow-up).
+	// unread (#308 review follow-up), each with its own reason when one is
+	// known, else why (#353 review).
+	var reasons map[string]string
 	report := func(why string) {
 		for _, n := range names {
 			if !slices.ContainsFunc(obs, func(o *pb.FactObservation) bool { return o.GetName() == n }) {
-				add(n, githubfacts.UnreadFact(n, s.Branch, s.At, why))
+				reason := why
+				if r, ok := reasons[n]; ok {
+					reason = r
+				}
+				add(n, githubfacts.UnreadFact(n, s.Branch, s.At, reason))
 			}
 		}
 		if len(obs) == 0 {
@@ -142,10 +148,12 @@ func (e *Engine) reportGitHubFacts(ctx context.Context, conn *control.Connection
 			return true, unreported
 		}
 	}
-	for _, f := range githubfacts.Read(read, get, s, names) {
+	var facts []githubfacts.Fact
+	facts, reasons = githubfacts.ReadAll(read, get, s, names)
+	for _, f := range facts {
 		add(f.Name, f.Value)
 	}
-	report("the workflows were not read")
+	report("not read from GitHub")
 	return true, unreported
 }
 

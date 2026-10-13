@@ -9,6 +9,7 @@ import (
 	"maps"
 	"net/http"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/katocxl/pantherclaw/internal/gateway/githubfacts"
@@ -172,5 +173,28 @@ func TestHR160_AFactReportThatFailsAsksForNoDecision(t *testing.T) {
 	}
 	if p, _ := w.sim.PullRequest("acme/payments", 1); p.Merged {
 		t.Fatal("merged without its facts")
+	}
+}
+
+// TestHR160_EachUnreadFactSaysWhy (#353 review): a fact the gateway could
+// not read carries why it was not, from GitHub's answer for that read,
+// not one label shared by every fact.
+func TestHR160_EachUnreadFactSaysWhy(t *testing.T) {
+	w := newGitHubWorld(t)
+	h := setup(t, withGitHubApp(t, w), withFactReports)
+	h.do(t, http.MethodPut, "/payments/repos/acme/payments/pulls/99/merge", `{"sha":"`+w.head+`"}`, nil)
+	got := h.factReports()
+	if len(got) != 1 {
+		t.Fatalf("reports %+v", got)
+	}
+	for _, o := range got[0].obs {
+		d := members(t, o)
+		why, _ := d["unread"].(string)
+		if o.GetName() == githubfacts.PullHead && (!strings.HasPrefix(why, "not read: ") || !strings.Contains(why, "404")) {
+			t.Errorf("the head's reason %q", why)
+		}
+		if why == "not read from GitHub" {
+			t.Errorf("%s carries the shared label", o.GetName())
+		}
 	}
 }

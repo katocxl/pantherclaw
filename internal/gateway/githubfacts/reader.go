@@ -13,6 +13,8 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/katocxl/pantherclaw/internal/gateway/egress"
 )
@@ -53,15 +55,47 @@ type Subject struct {
 // left out, so the decision sees it missing (HR-160, HR-206); it never
 // guesses a value.
 func Read(ctx context.Context, get Getter, s Subject, names []string) []Fact {
+	out, _ := ReadAll(ctx, get, s, names)
+	return out
+}
+
+// ReadAll reads the facts as Read does, and says why each it could not
+// read was not: GitHub's answer or the error, short and printable, so an
+// unread fact carries its own reason (#353 review).
+func ReadAll(ctx context.Context, get Getter, s Subject, names []string) (read []Fact, unread map[string]string) {
 	r := &reader{get: get, s: s, repo: "/repos/" + url.PathEscape(s.Owner) + "/" + url.PathEscape(s.Repo)}
-	var out []Fact
+	unread = map[string]string{}
 	for _, name := range names {
 		v, err := r.fact(ctx, name)
-		if err == nil && v != nil {
-			out = append(out, Fact{Name: name, Value: v})
+		switch {
+		case err != nil:
+			unread[name] = notRead(err)
+		case v == nil:
+			unread[name] = "GitHub gave nothing to read"
+		default:
+			read = append(read, Fact{Name: name, Value: v})
 		}
 	}
-	return out
+	return read, unread
+}
+
+// notRead is why a fact was not read: the error, without control
+// characters and at most 160 bytes. GitHub's answers name paths and
+// statuses, never a token.
+func notRead(err error) string {
+	msg := strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) {
+			return ' '
+		}
+		return r
+	}, err.Error())
+	if len(msg) > 160 {
+		msg = msg[:160]
+		for !utf8.ValidString(msg) {
+			msg = msg[:len(msg)-1]
+		}
+	}
+	return "not read: " + msg
 }
 
 type reader struct {
