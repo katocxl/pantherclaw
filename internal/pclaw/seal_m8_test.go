@@ -13,6 +13,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"connectrpc.com/connect/v2"
@@ -27,7 +28,7 @@ import (
 // installation, account and private key as one GitHub App credential, bound
 // to its kind, so the gateway can open it only as an App key; the key never
 // leaves the machine in plaintext, and a malformed key or account seals
-// nothing.
+// nothing, nor does a private key sealed as a static credential.
 func TestHR204_SealAGitHubApp(t *testing.T) {
 	key, err := pccrypto.GenerateSealKey()
 	if err != nil {
@@ -104,5 +105,27 @@ func TestHR204_SealAGitHubApp(t *testing.T) {
 	srv.put = nil
 	if code, _, _ := run(t, env, "seal", "--connection", conn, "--from-file", weak, "--github-app", "1", "--installation", "7", "--account", "acme"); code == 0 || srv.put != nil {
 		t.Fatal("a 1024-bit App key was sealed")
+	}
+
+	// An App key (or any private key) sealed without --github-app would be
+	// a static credential sent to the target: nothing is sealed.
+	pkcs8, err := x509.MarshalPKCS8PrivateKey(app)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, content := range map[string][]byte{
+		"PKCS#1":           pemKey,
+		"PKCS#8":           pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: pkcs8}),
+		"after other text": append([]byte("token\n"), pemKey...),
+	} {
+		f := filepath.Join(t.TempDir(), "static")
+		if err := os.WriteFile(f, content, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		srv.put = nil
+		code, _, errs := run(t, env, "seal", "--connection", conn, "--from-file", f)
+		if code == 0 || srv.put != nil || !strings.Contains(errs, "--github-app") {
+			t.Errorf("%s: a private key was sealed as static: %d %q", name, code, errs)
+		}
 	}
 }

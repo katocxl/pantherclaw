@@ -25,7 +25,10 @@ import (
 // TestHR160_AGatewayReportsOnlyItsConnectionsDeclaredFacts: a person
 // registers the gateway serving a connection as the provider of facts its
 // package names; only that gateway may report them, only those facts, and
-// an object fact is stored and read back whole (G0 M8 decision 5).
+// an object fact is stored and read back whole (G0 M8 decision 5). A fact
+// may be named for several target types. Once the connection moves to
+// another gateway or is quarantined, its old gateway reports nothing, and a
+// fact the pinned package no longer names is refused.
 func TestHR160_AGatewayReportsOnlyItsConnectionsDeclaredFacts(t *testing.T) {
 	p := dbtest.New(t).AppPool(t)
 	ctx := context.Background()
@@ -51,18 +54,19 @@ func TestHR160_AGatewayReportsOnlyItsConnectionsDeclaredFacts(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	named := func(_ context.Context, _ ids.OrgID, g, c ids.UUID) (map[string]string, error) {
+	pinned := map[string][]string{"github.pull.head": {"github.repository", "github.pull_request"}}
+	named := func(_ context.Context, _ ids.OrgID, g, c ids.UUID) (map[string][]string, error) {
 		if g != gw || c != conn {
 			return nil, app.ErrConnectionUnknown
 		}
-		return map[string]string{"github.pull.head": "github.pull_request"}, nil
+		return pinned, nil
 	}
 	svc := &app.Service{Store: &pgstore.Store{Pool: p}, Authz: allow{}, Packages: named}
 	human := as(org, tdomain.KindUser, alice)
 	head := domain.Declaration{Name: "github.pull.head", Type: domain.TypeObject, SubjectType: "github.pull_request", MaxLag: time.Minute}
 	for name, d := range map[string]domain.Declaration{
 		"a fact the package does not name": {Name: "github.pull.secret", Type: domain.TypeObject, SubjectType: "github.pull_request", MaxLag: time.Minute},
-		"another subject":                  {Name: "github.pull.head", Type: domain.TypeObject, SubjectType: "github.repository", MaxLag: time.Minute},
+		"another subject":                  {Name: "github.pull.head", Type: domain.TypeObject, SubjectType: "github.branch", MaxLag: time.Minute},
 	} {
 		if _, err := svc.RegisterGatewayProvider(human, "github", gw, conn, []domain.Declaration{d}); !errors.Is(err, app.ErrNotDeclared) {
 			t.Errorf("%s: %v", name, err)
@@ -102,5 +106,32 @@ func TestHR160_AGatewayReportsOnlyItsConnectionsDeclaredFacts(t *testing.T) {
 	})
 	if f := facts["github.pull.head"]; err != nil || f.Value.Object["base"] != "main" || f.Value.Object["changed_files"] != int64(2) {
 		t.Fatalf("read back %+v %v", facts, err)
+	}
+
+	exec := func(sql string, args ...any) {
+		t.Helper()
+		if err := p.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
+			_, err := tx.Exec(ctx, sql, args...)
+			return err
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// The pin changed and no longer names the fact: refused like an
+	// undeclared one.
+	pinned = map[string][]string{"github.pull.head": {"github.repository"}}
+	if res, err := svc.PutGatewayFacts(ctx, org, gw, conn, []domain.Observation{o}); err != nil || !errors.Is(res[0].Err, domain.ErrUntrusted) {
+		t.Fatalf("a fact the pin no longer names: %v %+v", err, res)
+	}
+	pinned = map[string][]string{"github.pull.head": {"github.pull_request"}}
+	exec("UPDATE pc.connections SET state = 'QUARANTINED', quarantine_reason = 'test' WHERE id = $1", conn)
+	if _, err := svc.PutGatewayFacts(ctx, org, gw, conn, []domain.Observation{o}); !errors.Is(err, app.ErrNotProvider) {
+		t.Fatalf("a quarantined connection's gateway reported: %v", err)
+	}
+	exec("UPDATE pc.connections SET state = 'ACTIVE', quarantine_reason = NULL, gateway_id = $2 WHERE id = $1", conn, other)
+	for _, g := range []ids.UUID{gw, other} {
+		if _, err := svc.PutGatewayFacts(ctx, org, g, conn, []domain.Observation{o}); !errors.Is(err, app.ErrNotProvider) {
+			t.Fatalf("gateway %s reported for a connection that moved: %v", g, err)
+		}
 	}
 }

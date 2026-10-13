@@ -7,6 +7,7 @@ import (
 	"maps"
 	"net/http"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -16,6 +17,9 @@ type CheckRun struct {
 	Name       string
 	Status     string // queued, in_progress or completed
 	Conclusion string // success, failure, neutral, skipped, … when completed
+	// App is the slug of the App that posted it, github-actions when empty:
+	// any App with checks: write can post a run of any name.
+	App string
 }
 
 // Environment is a deployment environment and the people who must approve
@@ -141,10 +145,12 @@ func (s *Server) factRoutes(mux *http.ServeMux) {
 	for _, rt := range []route{
 		{"GET /repos/{owner}/{repo}/rules/branches/{branch...}", "metadata", "read", s.branchRules},
 		{"GET /repos/{owner}/{repo}/branches/{branch...}", "contents", "read", s.getBranch},
+		{"GET /repos/{owner}/{repo}/commits/{ref}", "contents", "read", s.getCommit},
 		{"GET /repos/{owner}/{repo}/commits/{ref}/check-runs", "checks", "read", s.checkRuns},
 		{"GET /repos/{owner}/{repo}/actions/workflows", "actions", "read", s.workflows},
 		{"GET /repos/{owner}/{repo}/environments", "actions", "read", s.environments},
 		{"GET /repos/{owner}/{repo}/deployments", "deployments", "read", s.listDeployments},
+		{"GET /repos/{owner}/{repo}/deployments/{id}/statuses", "deployments", "read", s.deploymentStatuses},
 		{"GET /repos/{owner}/{repo}/activity", "metadata", "read", s.activity},
 		{"GET /repos/{owner}/{repo}/pulls/{number}/commits", "pull_requests", "read", s.pullCommits},
 		{"GET /repos/{owner}/{repo}/pulls/{number}/files", "pull_requests", "read", s.pullFiles},
@@ -168,13 +174,20 @@ func (s *Server) checkRuns(w http.ResponseWriter, req *http.Request, r *Repo, _ 
 	}
 	runs := []map[string]any{}
 	for i, c := range r.state().checks[sha] {
-		runs = append(runs, map[string]any{"id": i + 1, "name": c.Name, "head_sha": sha, "status": c.Status, "conclusion": c.Conclusion})
+		app := c.App
+		if app == "" {
+			app = "github-actions"
+		}
+		runs = append(runs, map[string]any{
+			"id": i + 1, "name": c.Name, "head_sha": sha, "status": c.Status, "conclusion": c.Conclusion,
+			"app": map[string]any{"id": accountID(app), "slug": app},
+		})
 	}
-	return reply(w, http.StatusOK, map[string]any{"total_count": len(runs), "check_runs": runs})
+	return reply(w, http.StatusOK, map[string]any{"total_count": len(runs), "check_runs": s.paged(w, req, runs)})
 }
 
 // workflows lists the workflow files on the default branch.
-func (s *Server) workflows(w http.ResponseWriter, _ *http.Request, r *Repo, _ *Token) int {
+func (s *Server) workflows(w http.ResponseWriter, req *http.Request, r *Repo, _ *Token) int {
 	out := []map[string]any{}
 	files := r.Commits[r.Branches[r.DefaultBranch]].Files
 	for i, p := range slices.Sorted(maps.Keys(files)) {
@@ -182,10 +195,10 @@ func (s *Server) workflows(w http.ResponseWriter, _ *http.Request, r *Repo, _ *T
 			out = append(out, map[string]any{"id": i + 1, "name": p[len(".github/workflows/"):], "path": p, "state": "active"})
 		}
 	}
-	return reply(w, http.StatusOK, map[string]any{"total_count": len(out), "workflows": out})
+	return reply(w, http.StatusOK, map[string]any{"total_count": len(out), "workflows": s.paged(w, req, out)})
 }
 
-func (s *Server) environments(w http.ResponseWriter, _ *http.Request, r *Repo, _ *Token) int {
+func (s *Server) environments(w http.ResponseWriter, req *http.Request, r *Repo, _ *Token) int {
 	out := []map[string]any{}
 	for i, e := range r.state().envs {
 		var reviewers []map[string]any
@@ -198,11 +211,12 @@ func (s *Server) environments(w http.ResponseWriter, _ *http.Request, r *Repo, _
 		}
 		out = append(out, map[string]any{"id": i + 1, "name": e.Name, "protection_rules": rules})
 	}
-	return reply(w, http.StatusOK, map[string]any{"total_count": len(out), "environments": out})
+	return reply(w, http.StatusOK, map[string]any{"total_count": len(out), "environments": s.paged(w, req, out)})
 }
 
 // listDeployments lists deployments, newest first, filtered by sha, ref or
-// environment, each with its current state.
+// environment. As on GitHub, a deployment carries no state: that is in its
+// statuses.
 func (s *Server) listDeployments(w http.ResponseWriter, req *http.Request, r *Repo, _ *Token) int {
 	q := req.URL.Query()
 	out := []map[string]any{}
@@ -214,11 +228,28 @@ func (s *Server) listDeployments(w http.ResponseWriter, req *http.Request, r *Re
 			continue
 		}
 		out = append(out, map[string]any{
-			"id": d.ID, "sha": d.SHA, "ref": d.Ref, "environment": d.Environment, "state": d.state(s.now()),
+			"id": d.ID, "sha": d.SHA, "ref": d.Ref, "environment": d.Environment,
 			"created_at": d.Created.UTC().Format(time.RFC3339),
 		})
 	}
-	return reply(w, http.StatusOK, out)
+	return reply(w, http.StatusOK, s.paged(w, req, out))
+}
+
+// deploymentStatuses lists a deployment's statuses, newest first: pending
+// when it was created, then success once it settled.
+func (s *Server) deploymentStatuses(w http.ResponseWriter, req *http.Request, r *Repo, _ *Token) int {
+	id, _ := strconv.ParseInt(req.PathValue("id"), 10, 64)
+	i := slices.IndexFunc(r.state().deployments, func(d Deployment) bool { return d.ID == id })
+	if i < 0 {
+		return fail(w, http.StatusNotFound, "Not Found")
+	}
+	d := r.state().deployments[i]
+	out := []map[string]any{{"id": 2 * d.ID, "state": "pending", "environment": d.Environment, "created_at": d.Created.UTC().Format(time.RFC3339)}}
+	if d.state(s.now()) == "success" {
+		settled := d.Created.Add(d.SettleAfter)
+		out = append([]map[string]any{{"id": 2*d.ID + 1, "state": "success", "environment": d.Environment, "created_at": settled.UTC().Format(time.RFC3339)}}, out...)
+	}
+	return reply(w, http.StatusOK, s.paged(w, req, out))
 }
 
 // activity lists who moved which ref, newest first (GitHub's repository
@@ -234,15 +265,16 @@ func (s *Server) activity(w http.ResponseWriter, req *http.Request, r *Repo, _ *
 		}
 		out = append(out, map[string]any{
 			"id": a.ID, "ref": a.Ref, "before": a.Before, "after": a.After, "activity_type": a.ActivityType,
-			"timestamp": a.At.UTC().Format(time.RFC3339), "actor": map[string]any{"login": a.Pusher, "id": accountID(a.Pusher)},
+			"timestamp": a.At.UTC().Format(time.RFC3339), "actor": account(a.Pusher),
 		})
 	}
-	return reply(w, http.StatusOK, out)
+	return reply(w, http.StatusOK, s.paged(w, req, out))
 }
 
 // pullCommits lists the commits a pull request adds to its base: those
 // reachable from the head and not from the base, oldest first, each with
-// its author and committer.
+// its author and committer (null for an email linked to no account). As
+// on GitHub, the list stops at 250 commits.
 func (s *Server) pullCommits(w http.ResponseWriter, req *http.Request, r *Repo, _ *Token) int {
 	p := pull(r, req)
 	if p == nil {
@@ -263,18 +295,15 @@ func (s *Server) pullCommits(w http.ResponseWriter, req *http.Request, r *Repo, 
 	}
 	slices.Reverse(commits)
 	out := []map[string]any{}
-	for _, c := range commits {
-		out = append(out, map[string]any{
-			"sha":       c.SHA,
-			"author":    map[string]any{"login": c.Author, "id": accountID(c.Author)},
-			"committer": map[string]any{"login": c.Author, "id": accountID(c.Author)},
-		})
+	for _, c := range commits[:min(len(commits), 250)] {
+		out = append(out, map[string]any{"sha": c.SHA, "author": account(c.Author), "committer": account(c.Committer)})
 	}
-	return reply(w, http.StatusOK, out)
+	return reply(w, http.StatusOK, s.paged(w, req, out))
 }
 
 // pullFiles lists the files a pull request changes: those that differ
-// between the merge base and the head, as GitHub compares them.
+// between the merge base and the head, as GitHub compares them. As on
+// GitHub, the list stops at 3000 files.
 func (s *Server) pullFiles(w http.ResponseWriter, req *http.Request, r *Repo, _ *Token) int {
 	p := pull(r, req)
 	if p == nil {
@@ -295,7 +324,7 @@ func (s *Server) pullFiles(w http.ResponseWriter, req *http.Request, r *Repo, _ 
 			out = append(out, map[string]any{"filename": f, "status": "removed"})
 		}
 	}
-	return reply(w, http.StatusOK, out)
+	return reply(w, http.StatusOK, s.paged(w, req, out[:min(len(out), 3000)]))
 }
 
 // getBranch reads one branch and its head commit.
@@ -308,35 +337,14 @@ func (s *Server) getBranch(w http.ResponseWriter, req *http.Request, r *Repo, _ 
 	return reply(w, http.StatusOK, map[string]any{"name": name, "commit": map[string]any{"sha": sha}, "simulated": true})
 }
 
-// ancestors are the commits reachable from sha, itself included.
-func ancestors(r *Repo, sha string) map[string]bool {
-	out := map[string]bool{}
-	for stack := []string{sha}; len(stack) > 0; {
-		c := stack[len(stack)-1]
-		stack = stack[:len(stack)-1]
-		if c != "" && !out[c] {
-			out[c] = true
-			stack = append(stack, r.Commits[c].Parents...)
-		}
+// getCommit reads one commit (by SHA or branch) with its author and
+// committer.
+func (s *Server) getCommit(w http.ResponseWriter, req *http.Request, r *Repo, _ *Token) int {
+	c := r.resolve(req.PathValue("ref"))
+	if c == nil {
+		return fail(w, http.StatusUnprocessableEntity, "No commit found for SHA: "+req.PathValue("ref"))
 	}
-	return out
-}
-
-// mergeBase is the nearest commit of head's history that base's history
-// also reaches.
-func mergeBase(r *Repo, base, head string) string {
-	in := ancestors(r, base)
-	seen := map[string]bool{}
-	for queue := []string{head}; len(queue) > 0; queue = queue[1:] {
-		c := queue[0]
-		if c == "" || seen[c] {
-			continue
-		}
-		if in[c] {
-			return c
-		}
-		seen[c] = true
-		queue = append(queue, r.Commits[c].Parents...)
-	}
-	return base
+	return reply(w, http.StatusOK, map[string]any{
+		"sha": c.SHA, "author": account(c.Author), "committer": account(c.Committer), "parents": c.Parents, "simulated": true,
+	})
 }

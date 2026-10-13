@@ -126,7 +126,9 @@ func TestHR203_TheGatewayMintsATokenPerActionAndRevokesIt(t *testing.T) {
 	if len(tokens) != 2 {
 		t.Fatalf("%d tokens minted, want one per action", len(tokens))
 	}
-	want := []map[string]string{{"contents": "read"}, {"contents": "write"}}
+	// Each token has exactly the operation's declared permissions, with the
+	// metadata: read GitHub adds to every token.
+	want := []map[string]string{{"contents": "read", "metadata": "read"}, {"contents": "write", "metadata": "read"}}
 	for _, tok := range tokens {
 		if !tok.Revoked || !slices.Equal(tok.Repos, []string{"acme/payments"}) || tok.Uses != 1 { // the action; the revocation is not a use
 			t.Errorf("token %+v", tok)
@@ -144,7 +146,7 @@ func TestHR203_TheGatewayMintsATokenPerActionAndRevokesIt(t *testing.T) {
 			merge = req
 		}
 	}
-	if merge.Status != http.StatusOK || merge.Installation != 7 || !maps.Equal(merge.Permissions, map[string]string{"contents": "write"}) {
+	if merge.Status != http.StatusOK || merge.Installation != 7 || !maps.Equal(merge.Permissions, map[string]string{"contents": "write", "metadata": "read"}) {
 		t.Fatalf("the merge went out with %+v", merge)
 	}
 	if recs := h.auth.snap().records; len(recs) != 2 || recs[0].GetOutcome() != pb.Outcome_OUTCOME_ACCEPTED || recs[1].GetOutcome() != pb.Outcome_OUTCOME_ACCEPTED {
