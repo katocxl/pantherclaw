@@ -337,6 +337,23 @@ func (p *Package) Definition(op string) (*Definition, bool) {
 	return &p.Definitions[i], true
 }
 
+// TestRead returns the package's connection test read: its one `test: true`
+// definition, when that is a read of the connection itself dispatched as an
+// HTTP GET, the only request a connection test may send and the only one a
+// test-purpose action token may name (G0 M8 track C, HR-188).
+func (p *Package) TestRead() (*Definition, bool) {
+	i := slices.IndexFunc(p.Definitions, func(d Definition) bool { return d.Test })
+	if i < 0 {
+		return nil, false
+	}
+	d := &p.Definitions[i]
+	if d.Access != AccessRead || d.Dispatch == nil || d.Dispatch.HTTP == nil || d.Dispatch.HTTP.Method != methods[0] ||
+		d.Target.Type != ConnectionTarget {
+		return nil, false
+	}
+	return d, true
+}
+
 // Version is a parsed MAJOR.MINOR.PATCH package version.
 type Version [3]int
 

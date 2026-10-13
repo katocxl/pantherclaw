@@ -166,6 +166,24 @@ WHERE v.org_id = sqlc.arg(org_id) AND v.id = sqlc.arg(id) AND v.purpose = 'conne
   AND v.leased_by = sqlc.arg(gateway_id) AND v.lease_hash = sqlc.arg(lease_hash) AND v.lease_expires_at >= now()
 FOR UPDATE OF v, t;
 
+-- VerifierTestBasis is what a target_verifier test's token mint checks
+-- again on the server (HR-188's exception): its connection's state, access
+-- mode and package, and whether the kill switch is engaged.
+-- name: VerifierTestBasis :one
+SELECT c.state AS connection_state, c.access_mode, c.package, coalesce(k.kill_switch, false)::boolean AS kill_switch
+FROM pc.connection_tests t
+JOIN pc.connections c ON c.org_id = t.org_id AND c.id = t.connection_id
+LEFT JOIN pc.org_containment k ON k.org_id = t.org_id
+WHERE t.org_id = sqlc.arg(org_id) AND t.id = sqlc.arg(id);
+
+-- RecordTestTokenMint records a running target_verifier test's token mint
+-- for its lease attempt: at most one mint per attempt (HR-188's exception).
+-- name: RecordTestTokenMint :execrows
+UPDATE pc.connection_tests
+SET tokens_attempt = sqlc.arg(attempt)::integer
+WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND kind = 'target_verifier' AND state = 'RUNNING'
+  AND coalesce(tokens_attempt, 0) < sqlc.arg(attempt)::integer;
+
 -- name: FinishConnectionTest :exec
 UPDATE pc.connection_tests
 SET state = sqlc.arg(state), result = sqlc.narg(result), checks = sqlc.arg(checks), gateway_id = sqlc.arg(gateway_id),

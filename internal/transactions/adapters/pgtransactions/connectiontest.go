@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/katocxl/pantherclaw/internal/definitions/manifest"
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
 	evdomain "github.com/katocxl/pantherclaw/internal/evidence/domain"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
@@ -61,21 +62,74 @@ var verifierRequests = []verifierRequest{
 	{"/replayed", "VERIFIER_REPLAYED", "the same token again", 409, "urn:pantherclaw:action-token:replayed"},
 }
 
-// VerifierTest implements app.Store.
-func (s *Store) VerifierTest(ctx context.Context, org ids.OrgID, gateway, task ids.UUID, secret []byte) (app.VerifierTest, error) {
-	var out app.VerifierTest
+// MintTestTokens implements app.Store: HR-188's exception, checked again
+// here whatever the gateway checked.
+func (s *Store) MintTestTokens(ctx context.Context, org ids.OrgID, gateway, task ids.UUID, secret []byte,
+	mint func(app.VerifierTest) (app.MintedTokens, error),
+) (app.TestTokens, error) {
+	var out app.TestTokens
 	err := s.Pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
+		q := dbq.New(tx)
 		hash := sha256.Sum256(secret)
-		ct, err := dbq.New(tx).LeasedConnectionTest(ctx, dbq.LeasedConnectionTestParams{OrgID: org, ID: task, GatewayID: &gateway, LeaseHash: hash[:]})
+		ct, err := q.LeasedConnectionTest(ctx, dbq.LeasedConnectionTestParams{OrgID: org, ID: task, GatewayID: &gateway, LeaseHash: hash[:]})
 		if db.IsNoRows(err) || (err == nil && ct.TestKind != kindVerifierTest) {
 			return app.ErrLease
 		} else if err != nil {
 			return err
 		}
-		out = app.VerifierTest{Test: ct.TestID, Connection: ct.ConnectionID, Operation: ct.Operation}
+		if err := testTokenBasis(ctx, q, org, ct); err != nil {
+			return err
+		}
+		if n, err := q.RecordTestTokenMint(ctx, ct.Attempts, org, ct.TestID); err != nil {
+			return err
+		} else if n == 0 {
+			return app.ErrTestTokensMinted
+		}
+		m, err := mint(app.VerifierTest{Test: ct.TestID, Connection: ct.ConnectionID, Operation: ct.Operation, Attempt: ct.Attempts})
+		if err != nil {
+			return err
+		}
+		if _, err := audit.Record(ctx, tx, audit.Event{
+			Name: "connection.test_tokens_minted", Actor: evdomain.Actor{Type: "gateway", ID: gateway.String()}, Outcome: audit.Success,
+			Object: &audit.Object{Type: "connection", ID: ct.ConnectionID.String()},
+			Details: map[string]string{
+				"test_id": ct.TestID.String(), "attempt": strconv.Itoa(int(ct.Attempts)), "operation": ct.Operation,
+				"jti": m.FreshID.String(), "mismatch_jti": m.MismatchID.String(),
+			},
+		}); err != nil {
+			return err
+		}
+		out = m.TestTokens
 		return nil
 	})
 	return out, err
+}
+
+// testTokenBasis checks what a test token mint needs besides its lease: the
+// connection is ACTIVE and target_enforced, the kill switch is off, and the
+// leased operation is the test read of the connection's pinned package.
+func testTokenBasis(ctx context.Context, q *dbq.Queries, org ids.OrgID, ct dbq.LeasedConnectionTestRow) error {
+	b, err := q.VerifierTestBasis(ctx, org, ct.TestID)
+	if err != nil {
+		return err
+	}
+	if b.KillSwitch || b.ConnectionState != "ACTIVE" || b.AccessMode != "target_enforced" {
+		return app.ErrTestTokensRefused
+	}
+	pin, err := q.PinnedPackageRaw(ctx, org, b.Package)
+	if db.IsNoRows(err) {
+		return app.ErrTestTokensRefused
+	} else if err != nil {
+		return err
+	}
+	p, err := manifest.Decode(pin.Raw)
+	if err != nil || pin.State == "QUARANTINED" || pin.State == "RETIRED" {
+		return app.ErrTestTokensRefused
+	}
+	if d, ok := p.TestRead(); !ok || d.Operation != ct.Operation {
+		return app.ErrTestTokensRefused
+	}
+	return nil
 }
 
 // connectionTest applies a report under a connection_test lease.

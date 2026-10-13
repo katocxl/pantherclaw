@@ -7,8 +7,6 @@ import (
 	"context"
 	"encoding/json/v2"
 	"errors"
-	"net/http"
-	"slices"
 	"strconv"
 	"time"
 
@@ -206,13 +204,8 @@ func leasedTest(ctx context.Context, q *dbq.Queries, c actor, conn dbq.PcConnect
 	if err != nil {
 		return dbq.PcConnectionTest{}, err
 	}
-	i := slices.IndexFunc(p.Definitions, func(d domain.Definition) bool { return d.Test })
-	if i < 0 {
-		return dbq.PcConnectionTest{}, ErrNoTestRead
-	}
-	d := p.Definitions[i]
-	if d.Access != domain.AccessRead || d.Dispatch == nil || d.Dispatch.HTTP == nil || d.Dispatch.HTTP.Method != http.MethodGet ||
-		d.Target.Type != domain.ConnectionTarget {
+	d, ok := p.TestRead()
+	if !ok {
 		return dbq.PcConnectionTest{}, ErrNoTestRead
 	}
 	request, err := json.Marshal(TestReadRequest{
