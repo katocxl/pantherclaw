@@ -59,12 +59,14 @@ func (s *Service) caller(ctx context.Context) (tenancy.Caller, error) {
 }
 
 // Create stores a window. It retires the environment's and repository's
-// current window, whose revision it follows.
+// current window, whose revision it follows. The environment is stored in
+// lowercase (domain.NormalizeEnvironment).
 func (s *Service) Create(ctx context.Context, w domain.Window) (Record, error) {
 	c, err := s.caller(ctx)
 	if err != nil {
 		return Record{}, err
 	}
+	w.Environment = domain.NormalizeEnvironment(w.Environment)
 	if err := w.Validate(); err != nil {
 		return Record{}, pcerr.Wrap(err, pcerr.InvalidArgument, "CHANGE_WINDOW_INVALID", strings.TrimPrefix(err.Error(), "releases: "))
 	}
@@ -151,13 +153,14 @@ func (s *Service) Retire(ctx context.Context, id ids.UUID, reason string) (Recor
 	return out, err
 }
 
-// List lists the windows, of one environment when it is not "", and the
-// retired ones too when asked.
+// List lists the windows, of one environment (in any case) when it is not
+// "", and the retired ones too when asked.
 func (s *Service) List(ctx context.Context, environment string, retired bool) ([]Record, error) {
 	c, err := s.caller(ctx)
 	if err != nil {
 		return nil, err
 	}
+	environment = domain.NormalizeEnvironment(environment)
 	var out []Record
 	err = s.Pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
 		rows, err := dbq.New(tx).ListChangeWindows(ctx, c.Org, environment, retired)
@@ -203,9 +206,11 @@ func (s *Service) Active(ctx context.Context, environment, repository string) (D
 }
 
 // Decide is what the ACTIVE windows say about a release to environment
-// and repository at the database clock (HR-171). The finalization that
-// consumes a window requirement calls it in its own transaction.
+// (in any case) and repository at the database clock (HR-171). The
+// finalization that consumes a window requirement calls it in its own
+// transaction.
 func Decide(ctx context.Context, q *dbq.Queries, org ids.OrgID, environment, repository string) (Decision, error) {
+	environment = domain.NormalizeEnvironment(environment)
 	rows, err := q.ApplicableChangeWindows(ctx, org, environment, repository)
 	if err != nil {
 		return Decision{}, err

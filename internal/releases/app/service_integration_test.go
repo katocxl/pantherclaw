@@ -161,6 +161,33 @@ func TestHR207_ChangeWindowsAreSetByPeopleAndDecidedByTheDatabaseClock(t *testin
 	}
 }
 
+// TestHR207_AWindowsEnvironmentMatchesWhateverItsCase: GitHub's
+// environment names are case-insensitive, so a window created for
+// Production is stored for production, replaced by a window for
+// PRODUCTION, listed and decided for a release to production in any case.
+func TestHR207_AWindowsEnvironmentMatchesWhateverItsCase(t *testing.T) {
+	e := newEnv(t)
+	admin := e.caller(td.KindUser, td.RoleSecurityAdmin)
+	now := time.Now()
+	w := domain.Window{Environment: "Production", TimeZone: "UTC", OneOff: []domain.Span{{Start: now.Add(-time.Hour), End: now.Add(time.Hour)}}}
+	first, err := e.svc.Create(admin, w)
+	if err != nil || first.Environment != "production" {
+		t.Fatalf("create %+v %v", first, err)
+	}
+	w.Environment = "PRODUCTION"
+	if second, err := e.svc.Create(admin, w); err != nil || second.Revision != 2 || second.Environment != "production" {
+		t.Fatalf("a replacement in another case %+v %v", second, err)
+	}
+	if all, err := e.svc.List(admin, "Production", true); err != nil || len(all) != 2 {
+		t.Fatalf("list %+v %v", all, err)
+	}
+	for _, env := range []string{"production", "Production"} {
+		if d, err := e.svc.Active(admin, env, ""); err != nil || d.State != domain.Open || len(d.Windows) != 1 {
+			t.Errorf("%s: %+v %v", env, d, err)
+		}
+	}
+}
+
 func denied(err error) bool {
 	var pe *pcerr.Error
 	return errors.As(err, &pe) && pe.Code() == pcerr.PermissionDenied
