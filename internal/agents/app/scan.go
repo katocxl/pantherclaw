@@ -45,18 +45,17 @@ type ScanResult struct {
 func scanName(f ScanFinding) string {
 	var s string
 	switch f.Kind {
-	case "mcp_server", "github_mcp_config":
+	case "mcp_server":
 		s = "MCP server " + f.Attributes["name"]
 		if c := f.Attributes["client"]; c != "" {
 			s += " (" + c + ")"
 		}
-		if r := f.Attributes["repository"]; r != "" {
-			s += " in " + r
-		}
+	case "github_mcp_config":
+		s = "MCP configuration " + f.Attributes["repo"] + " " + f.Attributes["path"]
 	case "github_workflow":
-		s = "GitHub workflow " + f.Attributes["repository"] + " " + f.Attributes["path"]
+		s = "GitHub workflow " + f.Attributes["repo"] + " " + f.Attributes["path"]
 	case "github_app":
-		s = "GitHub App " + f.Attributes["app"]
+		s = "GitHub App " + f.Attributes["app_slug"]
 	default:
 		s = "agent project " + filepath.Base(f.Attributes["path"])
 	}
