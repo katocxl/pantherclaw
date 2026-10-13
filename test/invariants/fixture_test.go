@@ -55,11 +55,17 @@ type world struct {
 	gateway, conn ids.UUID
 }
 
-func newWorld(tb fataler) *world {
+func newWorld(tb fataler) *world { return newWorldWith(tb, nil) }
+
+// newWorldWith is newWorld with the package edited first.
+func newWorldWith(tb fataler, edit func(string) string) *world {
 	tb.Helper()
 	raw, err := os.ReadFile("../../packages/mock-payments/package.yaml")
 	if err != nil {
 		tb.Fatal(err)
+	}
+	if edit != nil {
+		raw = []byte(edit(string(raw)))
 	}
 	// An untrusted note on refunds (text is never material, HR-023).
 	raw = bytes.Replace(raw, []byte("    effects:"), []byte("      note:\n        type: text\n    effects:"), 1)

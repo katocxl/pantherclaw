@@ -45,6 +45,10 @@ type Binding struct {
 	AllowedHosts    []string
 	BrokerKey       string
 	Header, Scheme  string
+	// Kind is KindStatic (or empty) or KindGitHubApp; only a GitHub App
+	// credential adds it to the info, so every credential sealed before
+	// kinds existed still opens.
+	Kind string
 }
 
 // Info is the canonical HPKE info of a binding: one line per field, in a
@@ -62,6 +66,9 @@ func (b Binding) Info() []byte {
 	s.WriteString("broker_key=" + b.BrokerKey + "\n")
 	s.WriteString("header=" + b.Header + "\n")
 	s.WriteString("scheme=" + b.Scheme + "\n")
+	if b.Kind != "" && b.Kind != KindStatic {
+		s.WriteString("kind=" + b.Kind + "\n")
+	}
 	return []byte(s.String())
 }
 
