@@ -145,6 +145,7 @@ func (s *Server) factRoutes(mux *http.ServeMux) {
 	for _, rt := range []route{
 		{"GET /repos/{owner}/{repo}/rules/branches/{branch...}", "metadata", "read", s.branchRules},
 		{"GET /repos/{owner}/{repo}/branches/{branch...}", "contents", "read", s.getBranch},
+		{"GET /repos/{owner}/{repo}/commits/{ref}", "contents", "read", s.getCommit},
 		{"GET /repos/{owner}/{repo}/commits/{ref}/check-runs", "checks", "read", s.checkRuns},
 		{"GET /repos/{owner}/{repo}/actions/workflows", "actions", "read", s.workflows},
 		{"GET /repos/{owner}/{repo}/environments", "actions", "read", s.environments},
@@ -334,4 +335,16 @@ func (s *Server) getBranch(w http.ResponseWriter, req *http.Request, r *Repo, _ 
 		return fail(w, http.StatusNotFound, "Branch not found")
 	}
 	return reply(w, http.StatusOK, map[string]any{"name": name, "commit": map[string]any{"sha": sha}, "simulated": true})
+}
+
+// getCommit reads one commit (by SHA or branch) with its author and
+// committer.
+func (s *Server) getCommit(w http.ResponseWriter, req *http.Request, r *Repo, _ *Token) int {
+	c := r.resolve(req.PathValue("ref"))
+	if c == nil {
+		return fail(w, http.StatusUnprocessableEntity, "No commit found for SHA: "+req.PathValue("ref"))
+	}
+	return reply(w, http.StatusOK, map[string]any{
+		"sha": c.SHA, "author": account(c.Author), "committer": account(c.Committer), "parents": c.Parents, "simulated": true,
+	})
 }
