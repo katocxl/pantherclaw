@@ -239,3 +239,19 @@ func TestHR160_ChecksPassOnlyWithTheRequiredRunsFromTheirApp(t *testing.T) {
 		t.Fatalf("a required check with a successful run: %v", c)
 	}
 }
+
+// TestHR206_NoWorkflowsOnlyAtACommitThatExists: a commit without a
+// workflow directory deploys nothing; a commit GitHub does not know (it
+// answers 404 for the directory too) gives no fact at all.
+func TestHR206_NoWorkflowsOnlyAtACommitThatExists(t *testing.T) {
+	w := newGHWorld(t)
+	gone := w.sim.Push("acme/payments", "fix/c", map[string]string{".github/workflows/deploy.yml": ""})
+	got := facts(Read(context.Background(), w.get, Subject{Owner: "acme", Repo: "payments", Branch: "fix/c", At: gone}, []string{BranchTriggers}))
+	if got[BranchTriggers]["state"] != "none" {
+		t.Fatalf("no workflows: %v", got)
+	}
+	unknown := "0123456789abcdef0123456789abcdef01234567"
+	if got := facts(Read(context.Background(), w.get, Subject{Owner: "acme", Repo: "payments", Branch: "fix/c", At: unknown}, []string{BranchTriggers})); len(got) != 0 {
+		t.Fatalf("a commit GitHub does not know: %v", got)
+	}
+}
