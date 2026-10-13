@@ -34,6 +34,8 @@ export async function gateway(t: { after: (fn: () => void) => void }, face: Face
   const kf: KeyFile = { ...newKeyFile(), identifier };
   const jkt = (await keyOf(kf)).jkt;
   const calls: Record<string, unknown>[] = [];
+  /** The /sdk path of each call, in order. */
+  const paths: string[] = [];
   const hooks: Record<string, unknown>[] = [];
   const server = createServer((req: IncomingMessage, res: ServerResponse) => {
     let body = "";
@@ -47,9 +49,10 @@ export async function gateway(t: { after: (fn: () => void) => void }, face: Face
         const claims = { aud: "pantherclaw-gateway", exp: now + 600, cnf: { jkt }, pap: { v: 1 } };
         const header = Buffer.from('{"alg":"EdDSA"}').toString("base64url");
         res.end(JSON.stringify({ workloadToken: `${header}.${Buffer.from(JSON.stringify(claims)).toString("base64url")}.c2ln` }));
-      } else if (req.url === "/sdk/payments") {
+      } else if (req.url?.startsWith("/sdk/")) {
         const call = JSON.parse(body);
         calls.push(call);
+        paths.push(req.url);
         face(call, String(req.headers["pc-action-id"]), res);
       } else if (req.url === "/hook/local" && opts.hook) {
         const call = JSON.parse(body);
@@ -70,7 +73,7 @@ export async function gateway(t: { after: (fn: () => void) => void }, face: Face
     server.close();
   });
   const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
-  return { client: new Client({ keyFile: { ...kf, server: base }, gateway: base, runId: run, timeoutMs: 2000, builtins: BUILTIN_TOOLS }), calls, hooks, base };
+  return { client: new Client({ keyFile: { ...kf, server: base }, gateway: base, runId: run, timeoutMs: 2000, builtins: BUILTIN_TOOLS }), calls, paths, hooks, base };
 }
 
 export const allow: Face = (_c, id, res) => res.end(decided(id, "allow"));

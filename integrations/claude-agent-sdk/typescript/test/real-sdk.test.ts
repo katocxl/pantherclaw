@@ -10,7 +10,7 @@
 // pnpm-lock.yaml within the peer range package.json supports.
 
 import assert from "node:assert/strict";
-import { mkdtemp, readFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -35,6 +35,9 @@ const refundInput = { amount: "30.00", charge: "ch_1" };
 function model(prompt: string, tools: string[]): Turn {
   if (prompt.includes("PC_SCENARIO=refund")) return { tool: "mcp__payments__create_refund", input: refundInput };
   if (prompt.includes("PC_SCENARIO=bash")) return { tool: "Bash", input: { command: "echo ran > marker.txt", description: "Write a marker" } };
+  if (prompt.includes("PC_SCENARIO=monitor")) {
+    return { tool: "Monitor", input: { command: "echo ran > marker.txt", description: "Write a marker", timeout_ms: 60000 } };
+  }
   if (prompt.includes("PC_SCENARIO=subagent")) {
     const agent = tools.includes("Agent") ? "Agent" : "Task";
     return { tool: agent, input: { description: "Refund the charge", prompt: "PC_SCENARIO=refund", subagent_type: "general-purpose" } };
@@ -73,15 +76,23 @@ function isolatedEnv(dir: string, api: string): Record<string, string> {
  * the run needs (cwd, environment, the MCP server) and returns the query
  * options to use, usually through PantherClaw's options().
  */
-async function run(t: { after: (fn: () => void) => void }, prompt: string, options: (base: QueryOptions) => QueryOptions): Promise<Run> {
+async function run(
+  t: { after: (fn: () => void) => void },
+  prompt: string,
+  options: (base: QueryOptions) => QueryOptions,
+  features: Record<string, unknown> = {},
+): Promise<Run> {
   assert.ok(sdk, "the Agent SDK is not installed: run pnpm install --frozen-lockfile here (task sdk:check does)");
   const api = await fakeAnthropic(t, model);
   const dir = await mkdtemp(join(tmpdir(), "pc-agent-sdk-"));
   const log = join(dir, "refunds.log");
+  // The CLI's feature flags, from its own cache on disk (it never fetches them here).
+  await mkdir(join(dir, "config"), { recursive: true });
+  await writeFile(join(dir, "config", ".claude.json"), JSON.stringify({ cachedGrowthBookFeatures: features }));
   const base: QueryOptions = {
     cwd: dir,
     maxTurns: 6,
-    env: isolatedEnv(dir, api.url),
+    env: { ...isolatedEnv(dir, api.url), CLAUDE_CODE_GB_DISK_CACHE_WHEN_TELEMETRY_OFF: "1" },
     mcpServers: { payments: { type: "stdio", command: process.execPath, args: [fakeMcp, log] } },
   };
   let done!: () => void;
@@ -261,3 +272,21 @@ test("TestHR200_in the real SDK, Bash goes to the local connection's /hook face 
   assert.equal(await readFile(join(r.dir, "marker.txt"), "utf8").catch(() => ""), "", "the command ran");
 });
 
+test("TestHR186_in the real SDK, Monitor's command goes to the local connection's /hook face and its deny stops it", testOptions, async (t) => {
+  const g = await gateway(t, faceFor(deny), { hook: (_b, res) => res.end(JSON.stringify({ decision: "deny", reason: "no", mode: "enforce" })) });
+  const r = await run(t, "PC_SCENARIO=monitor", (base) =>
+    integration(g.client, { shell: undefined, shellConnection: "local" }).options({
+      ...base,
+      permissionMode: "bypassPermissions",
+      allowDangerouslySkipPermissions: true,
+      settingSources: [],
+    }),
+    // Monitor is offered only behind this flag.
+    { tengu_amber_sentinel: true },
+  );
+  assert.ok(r.tools.includes("Monitor"), `the model was offered Monitor (${r.tools.join(", ")})`);
+  assert.equal(g.hooks.length, 1, "the command went to /hook");
+  assert.equal((g.hooks[0] as { input: { shell: string; command: string } }).input.shell, "bash");
+  assert.equal(g.calls.filter((c) => c.tool === "Monitor").length, 0, "never to /sdk");
+  assert.equal(await readFile(join(r.dir, "marker.txt"), "utf8").catch(() => ""), "", "the command ran");
+});
