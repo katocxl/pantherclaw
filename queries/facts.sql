@@ -19,10 +19,14 @@ ORDER BY created_at
 LIMIT 1;
 
 -- GetFactProviderByConnection returns the active provider a gateway reports
--- a connection's facts as (G0 M8 decision 5).
+-- a connection's facts as (G0 M8 decision 5), while the connection is
+-- active and still served by the provider's gateway: a gateway the
+-- connection moved away from reports nothing more.
 -- name: GetFactProviderByConnection :one
-SELECT id, name, gateway_id, connection_id, state FROM pc.fact_providers
-WHERE org_id = sqlc.arg(org_id) AND connection_id = sqlc.arg(connection_id)::uuid AND state = 'ACTIVE';
+SELECT p.id, p.name, p.gateway_id, p.connection_id, p.state FROM pc.fact_providers p
+JOIN pc.connections c ON c.org_id = p.org_id AND c.id = p.connection_id
+WHERE p.org_id = sqlc.arg(org_id) AND p.connection_id = sqlc.arg(connection_id)::uuid AND p.state = 'ACTIVE'
+  AND c.gateway_id = p.gateway_id AND c.state = 'ACTIVE';
 
 -- name: ListFactDeclarations :many
 SELECT name, value_type, subject_type, max_lag_s FROM pc.fact_declarations
