@@ -113,6 +113,8 @@ type Server struct {
 	jwts     []AppJWT
 	seq      int64
 	faults   Faults
+	// orgApps are other Apps installed on an organization, by its login.
+	orgApps map[string][]OrgApp
 	// perPage caps a page of a paged list below GitHub's 100 (tests).
 	perPage int
 	device  deviceState // GitHub sign-in through the device flow (device.go)
@@ -122,6 +124,7 @@ type Server struct {
 func New(log *slog.Logger) *Server {
 	return &Server{
 		log: log, now: time.Now, installs: map[int64]*Installation{}, tokens: map[string]*Token{}, repos: map[string]*Repo{},
+		orgApps: map[string][]OrgApp{},
 	}
 }
 
@@ -201,6 +204,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("DELETE /installation/token", s.revoke)
 	mux.HandleFunc("GET /app/installations/{id}", s.installation)
 	mux.HandleFunc("GET /installation/repositories", s.installationRepositories)
+	mux.HandleFunc("GET /orgs/{org}/installations", s.orgInstallations)
 	s.repoRoutes(mux)
 	s.pullRoutes(mux)
 	s.factRoutes(mux)

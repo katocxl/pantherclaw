@@ -120,26 +120,81 @@ func MintInstallationToken(ctx context.Context, s Sender, baseURL string, hosts 
 	if owner != app.Account {
 		return nil, ErrAccount
 	}
-	key, err := app.Key()
+	t, granted, err := mint(ctx, s, baseURL, hosts, app, []string{repo}, permissions, now)
 	if err != nil {
 		return nil, err
+	}
+	t.access.Repository = owner + "/" + repo
+	if !slices.Equal(granted, []string{owner + "/" + repo}) {
+		return nil, t.mismatch(ctx, s)
+	}
+	return t, nil
+}
+
+// MintScanToken mints a read-only token for an organization scan (G0 M8,
+// HR-209, ADR-0021 item 2): for the named repositories of the installation,
+// or, with none named, all of them (to list them first). GitHub's grant must
+// name exactly those permissions, and repositories of the installation's
+// account only, exactly the named ones when named.
+func MintScanToken(ctx context.Context, s Sender, baseURL string, hosts []string, app domain.GitHubApp, repos []string,
+	permissions map[string]string, now time.Time,
+) (*Installation, error) {
+	if len(permissions) == 0 {
+		return nil, ErrScope
+	}
+	for _, p := range permissions {
+		if p != "read" {
+			return nil, ErrScope
+		}
+	}
+	t, granted, err := mint(ctx, s, baseURL, hosts, app, repos, permissions, now)
+	if err != nil {
+		return nil, err
+	}
+	want := make([]string, len(repos))
+	for i, r := range repos {
+		want[i] = app.Account + "/" + strings.ToLower(r)
+	}
+	slices.Sort(want)
+	slices.Sort(granted)
+	foreign := slices.ContainsFunc(granted, func(g string) bool { return !strings.HasPrefix(g, app.Account+"/") })
+	if foreign || (repos != nil && !slices.Equal(granted, want)) {
+		return nil, t.mismatch(ctx, s)
+	}
+	return t, nil
+}
+
+// mint asks GitHub for an installation token for repos (names, all of the
+// installation's when nil) and permissions, and returns it with the
+// repositories GitHub granted (lowercase full names). A grant of other
+// permissions is revoked and refused here.
+func mint(ctx context.Context, s Sender, baseURL string, hosts []string, app domain.GitHubApp, repos []string,
+	permissions map[string]string, now time.Time,
+) (*Installation, []string, error) {
+	key, err := app.Key()
+	if err != nil {
+		return nil, nil, err
 	}
 	jwt, err := appJWT(key, app.Issuer, now)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	base, err := url.Parse(strings.TrimSuffix(baseURL, "/"))
 	if err != nil {
-		return nil, fmt.Errorf("%w: %w", ErrMint, err)
+		return nil, nil, fmt.Errorf("%w: %w", ErrMint, err)
 	}
-	body, err := json.Marshal(map[string]any{"repositories": []string{repo}, "permissions": permissions}, json.Deterministic(true))
+	asked := map[string]any{"permissions": permissions}
+	if repos != nil {
+		asked["repositories"] = repos
+	}
+	body, err := json.Marshal(asked, json.Deterministic(true))
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	res, err := send(ctx, s, base, hosts, http.MethodPost, "/app/installations/"+strconv.FormatInt(app.Installation, 10)+"/access_tokens", body, jwt)
 	clear(jwt)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	var out struct {
 		Token        string            `json:"token"`
@@ -152,23 +207,26 @@ func MintInstallationToken(ctx context.Context, s Sender, baseURL string, hosts 
 	}
 	if res.Status != http.StatusCreated || json.Unmarshal(res.Body, &out) != nil || !opaque(out.Token) {
 		clear(res.Body)
-		return nil, fmt.Errorf("%w: status %d", ErrMint, res.Status)
+		return nil, nil, fmt.Errorf("%w: status %d", ErrMint, res.Status)
 	}
 	clear(res.Body)
 	t := &Installation{token: []byte(out.Token), base: base, hosts: hosts, access: Access{
-		Installation: app.Installation, Repository: owner + "/" + repo, Requested: permissions, Granted: out.Permissions, Expires: out.ExpiresAt,
+		Installation: app.Installation, Requested: permissions, Granted: out.Permissions, Expires: out.ExpiresAt,
 	}}
 	if len(out.Repositories) == 1 {
 		t.access.RepositoryID = out.Repositories[0].ID
+	}
+	if len(repos) == 1 {
+		t.access.Repository = app.Account + "/" + strings.ToLower(repos[0])
 	}
 	granted := make([]string, len(out.Repositories))
 	for i, r := range out.Repositories {
 		granted[i] = strings.ToLower(r.FullName)
 	}
-	if !slices.Equal(granted, []string{owner + "/" + repo}) || !asAsked(out.Permissions, permissions) {
-		return nil, t.mismatch(ctx, s)
+	if !asAsked(out.Permissions, permissions) {
+		return nil, nil, t.mismatch(ctx, s)
 	}
-	return t, nil
+	return t, granted, nil
 }
 
 // asAsked reports whether GitHub granted exactly the permissions asked
