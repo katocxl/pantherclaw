@@ -77,6 +77,16 @@ func TestHR123_PinsOnlyMoveForward(t *testing.T) {
 
 func consequencePackage() *Package {
 	p := refundPackage()
+	// The consequence operation is defined in the package: a virtual
+	// write, never dispatched (G0 M8).
+	p.Definitions = append(p.Definitions, Definition{
+		Operation: "finance.notification.send", Summary: "Finance is notified of a large refund", Access: AccessWrite,
+		Target:        TargetSpec{Type: "payments.charge", IDPattern: `^ch_[A-Za-z0-9]{1,64}$`, Account: PresenceNone},
+		Effects:       []Effect{{Kind: "notify", Description: "Notifies finance"}},
+		Reversibility: Compensatable, Retry: RetrySpec{OnUnknown: OnUnknownReconcile},
+		Approval:  &ApprovalTemplate{Title: "Notify finance of {target.id}", Fields: []string{"target.id"}},
+		Assurance: Assurance{Basis: BasisDocumented, ReviewedBy: []string{"Joshua Kato"}, ValidUntil: "2027-10-08"},
+	})
 	p.Consequences = []ConsequenceRule{{
 		ID: "large-refund-notifies-finance", Operation: "payments.refund.create",
 		When:          `action.params.amount > money("1000.00", "USD")`,
@@ -98,6 +108,7 @@ func TestConsequenceRules(t *testing.T) {
 		"no facts":        func(c *ConsequenceRule) { c.RequiresFacts = nil },
 		"fact name":       func(c *ConsequenceRule) { c.RequiresFacts = []string{"Finance!"} },
 		"consequence op":  func(c *ConsequenceRule) { c.Consequence.Operation = "notify" },
+		"undefined op":    func(c *ConsequenceRule) { c.Consequence.Operation = "finance.notification.page" },
 		"effect":          func(c *ConsequenceRule) { c.Consequence.Effect = "" },
 		"description":     func(c *ConsequenceRule) { c.Consequence.Description = "" },
 		"validity":        func(c *ConsequenceRule) { c.ValidUntil = "forever" },

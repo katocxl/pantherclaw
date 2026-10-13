@@ -4,6 +4,7 @@
 <p>State: <strong>{{.State}}</strong>. Deadline {{.Request.DeadlineAt.UTC.Format "2006-01-02 15:04:05 UTC"}}{{with .Request.EvidenceDeadlineAt}}; evidence is due by {{.UTC.Format "2006-01-02 15:04:05 UTC"}}{{end}}.</p>
 {{if .MayApprove}}<p class="ok">You can approve this request with your security key.</p>
 {{else if .MayRespond}}<p class="note">You can decline this request, ask for evidence or propose a narrower action, but you cannot approve it now.</p>{{end}}
+{{with .NotUntilKnown}}<p class="note"><strong>This cannot be released until its facts are known.</strong> What it may cause is not known for {{range $i, $c := .}}{{if $i}}, {{end}}<code>{{$c}}</code>{{end}}, and an approval it needs counts only inside a change window for a known environment. It stays held until the facts say where it deploys: an approval given now is kept only until its consume-by time and does not release it on its own.</p>{{end}}
 {{with .Display.Consequence}}
 <h2>What will happen</h2>
 <dl>
@@ -15,6 +16,11 @@
 {{with .Verifier}}<dt>Verified by</dt><dd>{{.}}</dd>{{end}}
 </dl>
 {{if .Clamped}}<p class="note">An obligation lowered a parameter: the fields show the action that will run, beside what the agent asked for.</p>{{end}}
+{{end}}
+{{if .Display.Consequences}}
+<h2>What it may also cause</h2>
+<p class="note">Predicted from the package's consequence rules and current facts: a prediction, not an authorized or confirmed effect. An unknown consequence could not be ruled out and is treated as predicted.</p>
+<ul>{{range .Display.Consequences}}<li>{{if eq .State "UNKNOWN"}}<strong>Unknown</strong>{{else}}Predicted{{end}}: <code>{{.Operation}}</code> on {{.Target.Type}} <code>{{.Target.ID}}</code> ({{.Rule}}){{with .Environments}}, to {{range $i, $e := .}}{{if $i}}, {{end}}<code>{{$e}}</code>{{end}}{{end}}{{range .MixedScript}} <strong>(<code>{{.}}</code> mixes writing systems: look for look-alike characters)</strong>{{end}}{{with .Workflows}}, through {{range $i, $w := .}}{{if $i}}, {{end}}<code>{{$w}}</code>{{end}}{{end}}{{with .Unknown}}<br><span class="note">Why unknown: {{range $i, $u := .}}{{if $i}}; {{end}}{{$u}}{{end}}</span>{{end}}</li>{{end}}</ul>
 {{end}}
 {{if .Display.Fields}}
 <h2>Fields</h2>
@@ -28,10 +34,13 @@
 {{if .Facts}}
 <h2>Facts used</h2>
 <table>
-<thead><tr><th>Fact</th><th>Subject</th><th>Value</th><th>Provider</th><th>Age</th></tr></thead>
+{{if .Observed}}<thead><tr><th>Fact</th><th>Subject</th><th>Value</th><th>Provider</th><th>Age</th></tr></thead>
 <tbody>
 {{range .Facts}}<tr><td>{{.Name}}</td><td><code>{{.Subject}}</code></td><td><code>{{.Value}}</code></td><td>{{.Provider}}</td><td>{{.Age}}</td></tr>
-{{end}}</tbody>
+{{end}}{{else}}<thead><tr><th>Fact</th><th>Subject</th><th>Approved value</th></tr></thead>
+<tbody>
+{{range .Facts}}<tr><td>{{.Name}}</td><td><code>{{.Subject}}</code></td><td>{{if .Value}}<code>{{.Value}}</code>{{else}}not bound: checked again when the approval is used{{end}}</td></tr>
+{{end}}{{end}}</tbody>
 </table>
 {{end}}
 {{with .Display.Run}}
@@ -50,8 +59,25 @@
 <ul>{{range .Basis}}<li>{{.Reason}} <span class="note">({{.Level}})</span></li>{{end}}</ul>
 {{end}}
 <h2>Who can decide</h2>
-<ul>{{range .Deciders}}<li>{{if eq .Kind "step_up"}}A step-up by <code>{{.Subject}}</code>{{else if eq .Kind "restore"}}A person holding <code>agent.restore</code> where the agent lives, other than the requester{{else}}{{.Count}} × <code>{{.Role}}</code>{{if .Independent}}, independent of the agent's owners and the grant's issuer{{end}}{{with .Scope}}, {{.}}{{end}}{{end}}</li>{{end}}</ul>
+<ul>{{range .Deciders}}<li>{{if eq .Kind "step_up"}}A step-up by <code>{{.Subject}}</code>{{else if eq .Kind "restore"}}A person holding <code>agent.restore</code> where the agent lives, other than the requester{{else}}{{.Count}} × <code>{{.Role}}</code>{{if .Independent}}, independent of the agent's owners and the grant's issuer{{end}}{{with .IndependentOf}}, and of everyone <code>{{.}}</code> lists (authors, committers and pushers linked to users){{end}}{{with .Scope}}, {{.}}{{end}}{{if .Window}}; it counts only when used inside an active change window for every environment above{{end}}{{end}}</li>{{end}}</ul>
 <p class="note">The run's launcher and principal, and a restoration's requester, never decide. Eligibility is checked again at every response and when the approval is used.</p>
+{{range $.People}}
+<h2>Who <code>{{.Fact}}</code> lists now</h2>
+<p class="note">No approval of this action counts from a user linked to any of them, now or before. While a person it lists is linked to nobody in the org, no approval counts at all: PantherClaw cannot tell whether the approver is that person under another account. They link their account with <code>pclaw github link</code>; an account that is not a person (a bot or a machine user) is exempted by an identity manager.</p>
+{{with .Authorship.Unlinked}}<p class="alert">Not linked to anyone: GitHub {{range $i, $id := .}}{{if $i}}, {{end}}<code>{{$id}}</code>{{end}}. Approvals are refused until they link or are exempted.</p>{{end}}
+{{with .Gaps}}<p class="alert">The list of people is incomplete: {{range $i, $g := .}}{{if $i}}; {{end}}{{$g}}{{end}}.</p>{{end}}
+{{if not .Complete}}<p class="alert">Until it can be read in full, no approval that must be independent of these people counts.</p>{{end}}
+{{if .People}}
+<table>
+<thead><tr><th>GitHub user id</th><th>Listed as</th><th>User</th></tr></thead>
+<tbody>
+{{range .People}}<tr><td><code>{{.GitHubID}}</code></td><td>{{range $i, $a := .As}}{{if $i}}, {{end}}{{$a}}{{end}}</td><td>{{if .User}}<code>user:{{.User}}</code>{{else if .Bot}}not a person (a bot, by the fact){{else if .Exempt}}not a person (exempted){{else}}<strong>not linked</strong>{{end}}</td></tr>
+{{end}}</tbody>
+</table>
+{{else}}
+<p class="note">It lists nobody.</p>
+{{end}}
+{{end}}
 {{if .Variants}}
 <h2>Earlier variants</h2>
 <p class="note">Earlier requests of this grant for the same operation and target.</p>

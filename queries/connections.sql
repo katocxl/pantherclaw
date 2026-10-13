@@ -165,6 +165,11 @@ FROM pc.connections c
 WHERE c.org_id = sqlc.arg(org_id) AND c.id = sqlc.arg(connection_id) AND c.gateway_id = sqlc.arg(gateway_id)
 RETURNING id;
 
+-- name: ListConnectionGitHub :many
+-- The GitHub App installations behind connections (connection_github).
+SELECT * FROM pc.connection_github
+WHERE org_id = sqlc.arg(org_id) AND connection_id = ANY(sqlc.arg(connection_ids)::uuid[]);
+
 -- name: InsertConnectionTestTask :exec
 -- A read test's verification task (G0 M8 track C, F354): the connection's
 -- gateway leases it as it leases target-log reads. It belongs to no

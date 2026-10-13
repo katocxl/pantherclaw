@@ -3,7 +3,12 @@
 
 package gateway
 
-import "testing"
+import (
+	"testing"
+	"time"
+
+	"github.com/katocxl/pantherclaw/internal/platform/config"
+)
 
 const (
 	testOrg   = "01920000-0000-7000-8000-0000000000a1"
@@ -30,6 +35,8 @@ func TestConfigValidation(t *testing.T) {
 		"bad prefix":                func(c *Config) { c.Egress.AllowedPrefixes = []string{"127.0.0.1"} },
 		"no public url":             func(c *Config) { c.PublicURL = "" },
 		"public url path":           func(c *Config) { c.PublicURL = "http://127.0.0.1:8090/gw" },
+		"fact timeout over 5s":      func(c *Config) { c.GitHub.FactTimeout = config.Duration(6 * time.Second) },
+		"negative fact timeout":     func(c *Config) { c.GitHub.FactTimeout = config.Duration(-time.Second) },
 	} {
 		c := base
 		mutate(&c)
