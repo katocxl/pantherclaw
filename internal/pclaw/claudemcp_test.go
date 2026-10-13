@@ -276,3 +276,26 @@ func TestHR208_InitDisablesAGovernedServerOfMCPJSON(t *testing.T) {
 		t.Fatalf("an original in ~/.claude.json: %d %s %s", code, out, errs)
 	}
 }
+
+// TestHR208_InitDiffHidesTheTokensOfAReLaidOutFile: init writes
+// ~/.claude.json in Claude Code's layout, so a file laid out otherwise
+// shows every line in the diff; the tokens in its servers' env and
+// headers are shown as "<redacted>" and stay in the file as they were.
+func TestHR208_InitDiffHidesTheTokensOfAReLaidOutFile(t *testing.T) {
+	f := newInitFixture(t)
+	bearer := "Bearer " + strings.Repeat("x9", 16) // built at run time: no token-like literal in the source
+	project, _ := json.Marshal(f.project)
+	f.write(t, f.state(), `{"projects": {`+string(project)+`: {"mcpServers": {"github": {"command": "npx", "env": {"GITHUB_PERSONAL_ACCESS_TOKEN": "`+
+		githubToken+`"}}, "api": {"type": "http", "url": "https://api.example.test/mcp", "headers": {"Authorization": "`+bearer+`"}}}}}}`)
+	code, out, errs := f.run(t, "--mcp", "github=github-sdk")
+	if code != 0 || !strings.Contains(out, `"GITHUB_PERSONAL_ACCESS_TOKEN": "<redacted>"`) || !strings.Contains(out, `"Authorization": "<redacted>"`) {
+		t.Fatalf("init: %d %s %s", code, out, errs)
+	}
+	if strings.Contains(out, githubToken[4:]) || strings.Contains(out, bearer[7:]) {
+		t.Fatalf("the diff shows a token:\n%s", out)
+	}
+	state, _ := os.ReadFile(f.state())
+	if bytes.Count(state, []byte(githubToken)) != 1 || bytes.Count(state, []byte(bearer)) != 1 {
+		t.Fatalf("the tokens did not stay in the file as they were:\n%s", state)
+	}
+}
