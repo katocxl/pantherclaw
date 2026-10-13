@@ -5,8 +5,9 @@
 // through the connection's App (G0 M8 decision 5, track G slice G4), and
 // holds the deliberately small workflow parser behind the deploy_triggers
 // facts (design decision 15): it understands push triggers, their branch
-// filters and job environments. Anything else that could change whether a
-// push deploys makes the fact unknown, which holds the action, never
+// filters and job environments, and skips the events no ref move can
+// start. Any other event, and anything else that could change whether the
+// operation deploys, makes the fact unknown, which holds the action, never
 // "none" (HR-206).
 package githubfacts
 
@@ -40,8 +41,12 @@ type Triggered struct {
 }
 
 // Triggers is the value of a deploy_triggers fact: whether a push to the
-// branch starts a workflow that deploys to an environment. Unknown, when
-// set, is why that cannot be decided; State is then "unknown" too.
+// branch starts a workflow that deploys to a GitHub environment. State is
+// "triggered" only then; a workflow the push starts that names no
+// environment (one deploying with repository secrets, say) is listed in
+// Workflows with no environments while State stays "none", so consequence
+// rules key on Workflows as well as Environments. Unknown, when set, is why
+// that cannot be decided; State is then "unknown" too.
 type Triggers struct {
 	State        string      `json:"state"` // triggered, none or unknown
 	Branch       string      `json:"branch"`
@@ -61,6 +66,10 @@ func unknownf(format string, args ...any) error { return unknownError{fmt.Sprint
 // DeployTriggers decides, from the workflow files at a commit (path to
 // content), whether a push to branch starts a workflow that deploys to an
 // environment. A file it cannot evaluate makes the whole answer unknown.
+// files must be every .github/workflows/*.yml and *.yaml file at the
+// commit the operation leaves: the caller makes the answer unknown itself
+// when it cannot list them all (a truncated or paged listing, more than
+// MaxWorkflowFiles files) or read any one of them.
 func DeployTriggers(files map[string][]byte, branch, at string) Triggers {
 	out := Triggers{State: "none", Branch: branch, At: at, Workflows: []Triggered{}, Environments: []string{}}
 	if len(files) > MaxWorkflowFiles {
@@ -115,6 +124,20 @@ func workflow(raw []byte, branch string) ([]string, bool, error) {
 	return envs, true, err
 }
 
+// unmoved are the events no ref move (a merge, a push, a branch creation,
+// a file write) can start: a workflow on only these is not started by the
+// operation. Every other event but push is unknown: a pull request closing
+// on a merge (pull_request, pull_request_target), create and delete, the
+// events chained from a push (merge_group, check_run, check_suite, status,
+// deployment, deployment_status, page_build, workflow_run), release and
+// repository_dispatch, and any event GitHub adds later.
+var unmoved = map[string]bool{
+	"schedule": true, "workflow_dispatch": true, "workflow_call": true, "issues": true, "issue_comment": true,
+	"discussion": true, "discussion_comment": true, "label": true, "milestone": true, "watch": true, "fork": true,
+	"gollum": true, "project": true, "project_card": true, "project_column": true, "public": true, "member": true,
+	"pull_request_review": true, "pull_request_review_comment": true, "registry_package": true, "branch_protection_rule": true,
+}
+
 // pushTriggers evaluates the on: key for a push to branch.
 func pushTriggers(on any, branch string) (bool, error) {
 	var events map[string]any
@@ -137,9 +160,9 @@ func pushTriggers(on any, branch string) (bool, error) {
 	default:
 		return false, unknownf("on: is not an event, a list or a mapping")
 	}
-	for _, chained := range []string{"workflow_run", "repository_dispatch"} {
-		if _, ok := events[chained]; ok {
-			return false, unknownf("%s triggers are not evaluated", chained)
+	for _, name := range slices.Sorted(maps.Keys(events)) {
+		if name != "push" && !unmoved[name] {
+			return false, unknownf("%s triggers are not evaluated", name)
 		}
 	}
 	push, ok := events["push"]

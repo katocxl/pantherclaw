@@ -102,7 +102,7 @@ func pullJSON(r *Repo, p *Pull) map[string]any {
 	return map[string]any{
 		"number": p.Number, "state": p.State, "title": p.Title, "body": p.Body, "draft": p.Draft,
 		"merged": p.Merged, "mergeable": !p.Unmergeable && p.State == "open", "merge_commit_sha": merge,
-		"user":     map[string]any{"login": p.Author, "id": accountID(p.Author)},
+		"user":     account(p.Author),
 		"head":     map[string]any{"ref": p.Head, "sha": p.HeadSHA, "repo": map[string]any{"full_name": r.full()}},
 		"base":     map[string]any{"ref": p.Base, "sha": r.Branches[p.Base]},
 		"html_url": "https://github.example.test/" + r.full() + "/pull/" + strconv.Itoa(p.Number), "simulated": true,
@@ -134,10 +134,11 @@ func (s *Server) reviews(w http.ResponseWriter, req *http.Request, r *Repo, _ *T
 	out := []map[string]any{}
 	for _, rv := range p.Reviews {
 		out = append(out, map[string]any{
-			"id": rv.ID, "user": map[string]any{"login": rv.User, "id": accountID(rv.User)}, "state": rv.State, "commit_id": rv.CommitID,
+			"id": rv.ID, "user": account(rv.User), "state": rv.State, "commit_id": rv.CommitID,
 			"submitted_at": rv.Submitted.UTC().Format(time.RFC3339),
 		})
 	}
+	out = s.paged(w, req, out)
 	return reply(w, http.StatusOK, out)
 }
 
@@ -163,11 +164,13 @@ func (s *Server) review(w http.ResponseWriter, req *http.Request, r *Repo, t *To
 	s.seq++
 	rv := Review{ID: s.seq, User: actor(t), State: states[b.Event], CommitID: b.CommitID, Submitted: s.now()}
 	p.Reviews = append(p.Reviews, rv)
-	return reply(w, http.StatusOK, map[string]any{"id": rv.ID, "state": rv.State, "commit_id": rv.CommitID, "user": map[string]any{"login": rv.User, "id": accountID(rv.User)}})
+	return reply(w, http.StatusOK, map[string]any{"id": rv.ID, "state": rv.State, "commit_id": rv.CommitID, "user": account(rv.User)})
 }
 
 // merge merges a pull request. A sha that is not the head answers 409, as
-// GitHub does; a closed, draft or unmergeable pull request answers 405.
+// GitHub does; a closed, draft or unmergeable pull request answers 405; a
+// pull request that changes a workflow file needs the workflows permission
+// (403), as a push of one does.
 func (s *Server) merge(w http.ResponseWriter, req *http.Request, r *Repo, t *Token) int {
 	p := pull(r, req)
 	if p == nil {
@@ -195,13 +198,28 @@ func (s *Server) merge(w http.ResponseWriter, req *http.Request, r *Repo, t *Tok
 		return fail(w, http.StatusConflict, "Head branch was modified. Review and try the merge again.")
 	}
 	base := r.Branches[p.Base]
+	if f := changedWorkflow(r, base, p.HeadSHA); f != "" && !covers(t.Permissions["workflows"], "write") {
+		return fail(w, http.StatusForbidden, "refusing to allow a GitHub App to create or update workflow `"+f+"` without `workflows` permission")
+	}
+	// The head's changes since the merge base, applied to the base, so a
+	// change made on the base meanwhile is kept.
+	from, to := r.Commits[mergeBase(r, base, p.HeadSHA)].Files, r.Commits[p.HeadSHA].Files
 	tree := maps.Clone(r.Commits[base].Files)
-	maps.Copy(tree, r.Commits[p.HeadSHA].Files)
+	for f, c := range to {
+		if from[f] != c {
+			tree[f] = c
+		}
+	}
+	for f := range from {
+		if _, ok := to[f]; !ok {
+			delete(tree, f)
+		}
+	}
 	parents := []string{base, p.HeadSHA}
 	if b.MergeMethod != "merge" {
 		parents = []string{base}
 	}
-	sha := s.commit(r, actor(t), parents, tree)
+	sha := s.commit(r, actor(t), actor(t), parents, tree)
 	s.advance(r, p.Base, sha, actor(t), "pr_merge")
 	p.State, p.Merged, p.MergeCommitSHA, p.MergeMethod = "closed", true, sha, b.MergeMethod
 	if s.faults.LoseMerge {
@@ -222,4 +240,54 @@ func (s *Server) pullRoutes(mux *http.ServeMux) {
 	} {
 		mux.HandleFunc(rt.pattern, s.guard(rt))
 	}
+}
+
+// changedWorkflow is a workflow file the head changes (adds, modifies or
+// removes) since its merge base with base, or "".
+func changedWorkflow(r *Repo, base, head string) string {
+	from, to := r.Commits[mergeBase(r, base, head)].Files, r.Commits[head].Files
+	for _, f := range slices.Sorted(maps.Keys(to)) {
+		if old, ok := from[f]; strings.HasPrefix(f, ".github/workflows/") && (!ok || old != to[f]) {
+			return f
+		}
+	}
+	for _, f := range slices.Sorted(maps.Keys(from)) {
+		if _, ok := to[f]; strings.HasPrefix(f, ".github/workflows/") && !ok {
+			return f
+		}
+	}
+	return ""
+}
+
+// ancestors are the commits reachable from sha, itself included.
+func ancestors(r *Repo, sha string) map[string]bool {
+	out := map[string]bool{}
+	for stack := []string{sha}; len(stack) > 0; {
+		c := stack[len(stack)-1]
+		stack = stack[:len(stack)-1]
+		if c != "" && !out[c] {
+			out[c] = true
+			stack = append(stack, r.Commits[c].Parents...)
+		}
+	}
+	return out
+}
+
+// mergeBase is the nearest commit of head's history that base's history
+// also reaches.
+func mergeBase(r *Repo, base, head string) string {
+	in := ancestors(r, base)
+	seen := map[string]bool{}
+	for queue := []string{head}; len(queue) > 0; queue = queue[1:] {
+		c := queue[0]
+		if c == "" || seen[c] {
+			continue
+		}
+		if in[c] {
+			return c
+		}
+		seen[c] = true
+		queue = append(queue, r.Commits[c].Parents...)
+	}
+	return base
 }
