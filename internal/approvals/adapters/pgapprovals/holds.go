@@ -175,6 +175,9 @@ func RecordHold(ctx context.Context, tx db.TenantTx, org ids.OrgID, h Hold) erro
 	}); err != nil {
 		return err
 	}
+	if err := snapshotLinkedPeople(ctx, q, org, h.RequestID, h.Requirements); err != nil {
+		return err
+	}
 	now, err := q.DBNow(ctx)
 	if err != nil {
 		return err

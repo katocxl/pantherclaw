@@ -183,6 +183,13 @@ type PcApprovalRequest struct {
 	InvalidationKey    *string
 }
 
+type PcApprovalRequestLinkedPerson struct {
+	OrgID     ids.OrgID
+	RequestID ids.UUID
+	Fact      string
+	UserID    ids.UUID
+}
+
 type PcApprovalResponse struct {
 	OrgID             ids.OrgID
 	ID                ids.UUID
@@ -808,6 +815,15 @@ type PcGatewayEnrollmentToken struct {
 	UsedCertID *ids.UUID
 }
 
+type PcGithubExemption struct {
+	OrgID        ids.OrgID
+	GithubUserID int64
+	GithubLogin  string
+	Reason       string
+	CreatedBy    string
+	CreatedAt    time.Time
+}
+
 type PcGithubIdentity struct {
 	OrgID        ids.OrgID
 	ID           ids.UUID
@@ -815,6 +831,14 @@ type PcGithubIdentity struct {
 	GithubLogin  string
 	GithubUserID int64
 	LinkedBy     string
+	LinkedAt     time.Time
+	VerifiedAt   *time.Time
+}
+
+type PcGithubIdentityHistory struct {
+	OrgID        ids.OrgID
+	GithubUserID int64
+	UserID       ids.UUID
 	LinkedAt     time.Time
 }
 

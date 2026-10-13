@@ -73,12 +73,18 @@ func (w *world) str(sql string, args ...any) string {
 // (slice 208), and the request APPROVED. It returns bob's role binding.
 func (w *world) approve(request ids.UUID) ids.UUID {
 	w.t.Helper()
+	return w.approveAs(request, "approver")
+}
+
+// approveAs approves request as a new person holding role.
+func (w *world) approveAs(request ids.UUID, role string) ids.UUID {
+	w.t.Helper()
 	bob, cred, session, binding := ids.NewV7(), ids.NewV7(), ids.NewV7(), ids.NewV7()
 	secret := make([]byte, 32)
 	copy(secret, bob[:])
 	exec(w.t, w.pool, w.org, "INSERT INTO pc.users (org_id, id, issuer, subject) VALUES ($1, $2, 'https://idp.test', $3)", w.org, bob, bob.String())
 	exec(w.t, w.pool, w.org, `INSERT INTO pc.role_bindings (org_id, id, role, user_id, scope_type, created_by)
-		VALUES ($1, $2, 'approver', $3, 'ORG', $4)`, w.org, binding, bob, "user:"+w.alice.String())
+		VALUES ($1, $2, $3, $4, 'ORG', $5)`, w.org, binding, role, bob, "user:"+w.alice.String())
 	exec(w.t, w.pool, w.org, `INSERT INTO pc.webauthn_credentials (org_id, id, user_id, credential_id, public_key, alg, backup_eligible,
 		backup_state, attestation_fmt, name) VALUES ($1, $2, $3, $4, $5, -7, false, false, 'none', 'key')`, w.org, cred, bob, secret[:16], secret)
 	exec(w.t, w.pool, w.org, `INSERT INTO pc.sessions (org_id, id, user_id, secret_hash, provider, auth_time, roles_digest, expires_at)

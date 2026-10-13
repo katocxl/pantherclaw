@@ -25,6 +25,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/money"
 	papp "github.com/katocxl/pantherclaw/internal/policy/app"
 	pdomain "github.com/katocxl/pantherclaw/internal/policy/domain"
+	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
 )
 
 // Reason codes of the pipeline itself (the grant, budget and fact codes
@@ -815,7 +816,19 @@ func input(a *pdomain.ApprovalRequirement, su *pdomain.StepUpRequirement, src ap
 	in := apdomain.Input{Source: src}
 	if a != nil {
 		in.Kind, in.Role, in.Count, in.Independent = apdomain.KindApproval, a.Role, a.Count, a.Independent
+		in.Window = a.Window
 		in.Deadline = time.Duration(a.DeadlineSeconds) * time.Second
+		// HR-207 is per role: a code reviewer and a release approver are
+		// independent whatever the requirement says, so no requirement can
+		// let the pull request's author or a pusher approve it.
+		if in.Role == string(td.RoleCodeReviewer) || in.Role == string(td.RoleReleaseApprover) {
+			in.Independent = true
+		}
+		// A release approval counts only inside an active change window,
+		// whether or not its requirement says `window: true`.
+		if in.Role == string(td.RoleReleaseApprover) {
+			in.Window = true
+		}
 	}
 	if su != nil {
 		in.Kind, in.Subject, in.Method = apdomain.KindStepUp, su.Subject, su.Method
@@ -966,6 +979,7 @@ func (p *Pipeline) requirements(ctx context.Context, s *state) {
 			apdomain.Source{Level: r.Level.String(), Reason: r.Requirement.Reason}))
 	}
 	s.consequenceRequirements()
+	s.independence()
 	effective := s.vals
 	if eff, vals, ok := s.effective(); ok {
 		s.ev.EffectiveHash, effective = eff, vals
@@ -1089,6 +1103,7 @@ func (p *Pipeline) bind(s *state, h *Hold, effective defs.Values, deadline time.
 			Launcher: s.run.Launcher.String(), Principal: s.run.Principal.String(),
 		},
 		TaskLabel: s.run.TaskRef, Requirements: h.Requirements, Deadline: deadline, Variants: variants, Context: approved,
+		Consequences: s.displayed(),
 	})
 	if err != nil {
 		return err
@@ -1214,4 +1229,29 @@ func (s *state) effective() (string, defs.Values, bool) {
 		return "", nil, false
 	}
 	return parsed.HashHex(), vals, true
+}
+
+// independence names, on every approval of the action and its
+// consequences, whatever its role, the fact listing the people its approver
+// must not be and must be linked apart from (approval.independent_of, G0
+// M8, HR-207, founder decision 2026-10-13). When that fact could not list
+// them all, no approver can be shown independent: the action cannot be
+// authorized until it can (design decision 18).
+func (s *state) independence() {
+	a := s.def.Approval
+	if a == nil || a.IndependentOf == "" {
+		return
+	}
+	approvals := 0
+	for i := range s.ev.Requirements {
+		if r := &s.ev.Requirements[i]; r.Kind == apdomain.KindApproval {
+			r.IndependentOf = a.IndependentOf
+			approvals++
+		}
+	}
+	f := s.facts[a.IndependentOf]
+	if _, complete := apdomain.GitHubPeople(f.Object); approvals > 0 && (f.Type != fdomain.TypeObject || !complete) {
+		s.cl.add(StepRequirements, adomain.CannotAuthorize, apdomain.IneligibleAuthorshipUnknown,
+			a.IndependentOf+" does not list every author, committer and pusher, so no approver can be shown independent", "")
+	}
 }
