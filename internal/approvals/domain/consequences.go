@@ -34,8 +34,11 @@ type ConsequenceLine struct {
 	Target       actionir.Target `json:"target"`
 	State        string          `json:"state"`
 	Environments []string        `json:"environments,omitzero"`
-	Workflows    []string        `json:"workflows,omitzero"`
-	Unknown      []string        `json:"unknown,omitzero"`
+	// MixedScript are the environments whose names mix writing systems, a
+	// sign of a look-alike name (HR-034, HR-102).
+	MixedScript []string `json:"mixed_script,omitzero"`
+	Workflows   []string `json:"workflows,omitzero"`
+	Unknown     []string `json:"unknown,omitzero"`
 }
 
 func consequenceLines(in []ConsequenceInput) []ConsequenceLine {
@@ -43,7 +46,11 @@ func consequenceLines(in []ConsequenceInput) []ConsequenceLine {
 	for _, c := range in {
 		l := ConsequenceLine{Rule: c.Rule, Operation: c.Operation, Target: c.Target, State: c.State}
 		for _, e := range c.Environments[:min(len(c.Environments), maxShown)] {
-			l.Environments = append(l.Environments, Clean("", e, 100).Text)
+			name := Clean("", e, 100)
+			l.Environments = append(l.Environments, name.Text)
+			if name.MixedScript {
+				l.MixedScript = append(l.MixedScript, name.Text)
+			}
 		}
 		for _, u := range c.Unknown[:min(len(c.Unknown), maxShown)] {
 			l.Unknown = append(l.Unknown, Clean("", u, 256).Text)

@@ -170,7 +170,7 @@ func (s *Store) Put(ctx context.Context, org ids.OrgID, f domain.Fact) (bool, er
 		}
 		wrote = tag.RowsAffected() == 1
 		key := apdomain.InvalidationKey(f.Name, f.SubjectType, f.SubjectID)
-		if !wrote || prev == nil || bytes.Equal(prev, raw) || key == "" {
+		if !wrote || prev == nil || bytes.Equal(prev, raw) {
 			return nil
 		}
 		_, err = pgapprovals.SupersedeByKey(ctx, tx, org, key, evdomain.Actor{Type: "fact_provider", ID: f.ProviderID.String()})

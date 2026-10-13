@@ -4,6 +4,7 @@
 package domain_test
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/katocxl/pantherclaw/internal/approvals/domain"
@@ -59,5 +60,63 @@ func TestHR207_TheReviewerAndTheReleaseApproverAreTwoPeople(t *testing.T) {
 	}
 	if !domain.Met(reqs, []domain.Response{both[0], {UserID: bob, CredentialID: ids.NewV7(), Requirement: 1}}) {
 		t.Fatal("two people did not meet both")
+	}
+}
+
+// TestHR207_OnlyAWellFormedPeopleFactIsComplete: a people fact counts as
+// complete only when it says so and names its author and its pushers,
+// every id a positive integer; an id given as text, a zero or negative id,
+// a missing author or pushers list, or a member that is not a list leaves
+// the authorship unknown, never someone dropped from the exclusion.
+func TestHR207_OnlyAWellFormedPeopleFactIsComplete(t *testing.T) {
+	all, ok := domain.GitHubPeople(map[string]any{
+		"complete": true, "author": int64(42), "authors": []any{int64(42), int64(7)}, "committers": []any{int64(8)},
+		"pushers": []any{int64(43), int64(7)},
+	})
+	if !ok || len(all) != 4 {
+		t.Fatalf("a full fact, each id once: %v %v", all, ok)
+	}
+	for name, people := range map[string]map[string]any{
+		"not complete":       {"complete": false, "author": int64(42), "pushers": []any{}},
+		"no author":          {"complete": true, "pushers": []any{int64(43)}},
+		"the author as text": {"complete": true, "author": "42", "pushers": []any{int64(43)}},
+		"no pushers":         {"complete": true, "author": int64(42)},
+		"a pusher as text":   {"complete": true, "author": int64(42), "pushers": []any{map[string]any{"id": int64(43)}}},
+		"a zero id":          {"complete": true, "author": int64(0), "pushers": []any{}},
+		"a negative id":      {"complete": true, "author": int64(42), "pushers": []any{int64(-1)}},
+		"authors not a list": {"complete": true, "author": int64(42), "authors": int64(7), "pushers": []any{}},
+	} {
+		if got, ok := domain.GitHubPeople(people); ok || got != nil {
+			t.Errorf("%s: %v %v", name, got, ok)
+		}
+	}
+}
+
+// TestHR207_ThePageAndTheCheckAgreeOnACompletePeopleFact: the approval
+// page's people list (F158) and the pipeline's AUTHORSHIP_UNKNOWN check
+// read a people fact by one rule: a list counts towards independence
+// exactly when GitHubPeople finds the fact complete, with the same ids.
+func TestHR207_ThePageAndTheCheckAgreeOnACompletePeopleFact(t *testing.T) {
+	for name, people := range map[string]map[string]any{
+		"full": {"complete": true, "author": int64(42), "authors": []any{int64(42), int64(7)}, "committers": []any{int64(8)},
+			"pushers": []any{int64(43)}},
+		"no pushers yet":     {"complete": true, "author": int64(42), "pushers": []any{}},
+		"not complete":       {"complete": false, "author": int64(42), "pushers": []any{int64(43)}},
+		"no author":          {"complete": true, "pushers": []any{int64(43)}},
+		"the author as text": {"complete": true, "author": "42", "pushers": []any{int64(43)}},
+		"no pushers":         {"complete": true, "author": int64(42)},
+		"a pusher object":    {"complete": true, "author": int64(42), "pushers": []any{map[string]any{"id": int64(43)}}},
+		"a negative id":      {"complete": true, "author": int64(42), "pushers": []any{int64(-1)}},
+		"authors not a list": {"complete": true, "author": int64(42), "authors": int64(7), "pushers": []any{}},
+	} {
+		want, ok := domain.GitHubPeople(people)
+		l := domain.ListPeople("github.pull.people", people)
+		counts := l.Complete && len(l.Gaps) == 0
+		if counts != ok {
+			t.Errorf("%s: the page counts it %t, the check %t (gaps %v)", name, counts, ok, l.Gaps)
+		}
+		if ok && !slices.Equal(l.GitHubIDs(), want) {
+			t.Errorf("%s: the page lists %v, the check %v", name, l.GitHubIDs(), want)
+		}
 	}
 }

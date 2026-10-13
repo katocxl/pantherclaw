@@ -242,9 +242,10 @@ func voidReason(code string) string {
 // people it lists now about the held action's target and the users linked
 // to them (G0 M8, HR-207). The fact is read as it is when a person
 // responds, so a commit pushed after the hold excludes its pusher too. A
-// fact that is not known, does not decode or says it is incomplete leaves
-// the list incomplete, and nobody counts as independent. The approval page
-// shows the same lists (F158).
+// fact that is not known, does not decode, says it is incomplete, does not
+// name its author and pushers, or holds an id that is not a positive
+// integer leaves the list incomplete, and nobody counts as independent.
+// The approval page shows the same lists (F158).
 func peopleLists(ctx context.Context, q *dbq.Queries, org ids.OrgID, request ids.UUID, reqs []apdomain.Requirement) (
 	[]apdomain.PeopleList, error,
 ) {

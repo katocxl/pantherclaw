@@ -271,8 +271,9 @@ func FuzzApprovalRender(f *testing.F) {
 // approval page lists a people fact's author, commit authors, committers
 // and pushers once each, in order, with how the fact lists them and the
 // user linked to them or none. Independence reads the same list. A list
-// the fact says is incomplete, one that holds something other than GitHub
-// user ids, and one cut short for the page each say so.
+// the fact says is incomplete, one without its author or pushers, one that
+// holds something other than GitHub user ids, and one cut short for the
+// page each say so.
 func TestF158_ThePeopleListNamesEveryoneOnceWithTheirLinkedUser(t *testing.T) {
 	bob := uid("0192f3a0-0000-7000-8000-0000000000b0")
 	l := domain.ListPeople("github.pull.people", map[string]any{
@@ -301,7 +302,7 @@ func TestF158_ThePeopleListNamesEveryoneOnceWithTheirLinkedUser(t *testing.T) {
 		t.Errorf("shown %+v, from %+v", shown, l)
 	}
 
-	incomplete := domain.ListPeople("github.pull.people", map[string]any{"complete": false, "author": int64(42)})
+	incomplete := domain.ListPeople("github.pull.people", map[string]any{"complete": false, "author": int64(42), "pushers": []any{}})
 	incomplete.Link(42, bob)
 	if incomplete.Complete || !slices.Equal(incomplete.Gaps, []string{domain.PeopleNotAll}) || len(incomplete.People) != 1 ||
 		incomplete.People[0].User == nil {
@@ -310,15 +311,64 @@ func TestF158_ThePeopleListNamesEveryoneOnceWithTheirLinkedUser(t *testing.T) {
 	if a := incomplete.Authorship(); a.Complete || len(a.Users) != 0 {
 		t.Errorf("an incomplete list counted for independence: %+v", a)
 	}
-	for name, member := range map[string]map[string]any{
-		"a login for the author":   {"author": "octocat"},
-		"a pusher that is no list": {"pushers": int64(44)},
-		"a login among authors":    {"authors": []any{int64(42), "octocat"}},
-		"a zero id":                {"committers": []any{int64(0)}},
+	// Completeness follows the decision's rule (HR-207): the fact names its
+	// author and a list of pushers, and every id is a positive integer;
+	// otherwise the list is incomplete and nobody counts as independent.
+	for name, c := range map[string]struct {
+		member map[string]any
+		gap    string
+	}{
+		"no pushers member":        {map[string]any{"author": int64(42)}, domain.PeopleUnnamed},
+		"no author":                {map[string]any{"pushers": []any{int64(44)}}, domain.PeopleUnnamed},
+		"a login for the author":   {map[string]any{"author": "octocat", "pushers": []any{}}, domain.PeopleMalformed},
+		"a pusher that is no list": {map[string]any{"author": int64(42), "pushers": int64(44)}, domain.PeopleMalformed},
+		"a login among authors":    {map[string]any{"author": int64(42), "authors": []any{int64(42), "octocat"}, "pushers": []any{}}, domain.PeopleMalformed},
+		"a zero id":                {map[string]any{"author": int64(42), "committers": []any{int64(0)}, "pushers": []any{}}, domain.PeopleMalformed},
 	} {
-		member["complete"] = true
-		if got := domain.ListPeople("github.pull.people", member); !slices.Contains(got.Gaps, domain.PeopleMalformed) {
-			t.Errorf("%s: gaps %q", name, got.Gaps)
+		c.member["complete"] = true
+		got := domain.ListPeople("github.pull.people", c.member)
+		got.Link(42, bob)
+		if got.Complete || !slices.Equal(got.Gaps, []string{c.gap}) {
+			t.Errorf("%s: complete %v, gaps %q", name, got.Complete, got.Gaps)
 		}
+		if a := got.Authorship(); a.Complete || len(a.Users) != 0 {
+			t.Errorf("%s: counted for independence: %+v", name, a)
+		}
+	}
+	// Authorship never counts a list with a gap, whatever Complete says.
+	if a := (domain.PeopleList{Complete: true, Gaps: []string{domain.PeopleMalformed}}).Authorship(); a.Complete {
+		t.Errorf("a list with a gap counted for independence: %+v", a)
+	}
+}
+
+// TestHR034_MixedScriptEnvironmentNamesAreFlagged (HR-102): an environment
+// name of a predicted consequence that mixes writing systems, a sign of a
+// look-alike such as "production" with a Cyrillic "o", is flagged in the
+// display the binding covers; a consequence without one carries no flag,
+// so its display is unchanged.
+func TestHR034_MixedScriptEnvironmentNamesAreFlagged(t *testing.T) {
+	lookAlike := "pr" + string(rune(0x043e)) + "duction"
+	in := refundInput(t, "")
+	in.Consequences = []domain.ConsequenceInput{
+		{
+			Rule: "deploys", Operation: "github.deployment.trigger", State: "PREDICTED",
+			Target: actionir.Target{Type: "github.repository", ID: "acme/payments"}, Environments: []string{"production", lookAlike},
+		},
+		{
+			Rule: "stages", Operation: "github.deployment.trigger", State: "PREDICTED",
+			Target: actionir.Target{Type: "github.repository", ID: "acme/payments"}, Environments: []string{"staging"},
+		},
+	}
+	disp, err := domain.RenderAction(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(disp.Consequences) != 2 || !slices.Equal(disp.Consequences[0].Environments, []string{"production", lookAlike}) ||
+		!slices.Equal(disp.Consequences[0].MixedScript, []string{lookAlike}) || disp.Consequences[1].MixedScript != nil {
+		t.Fatalf("consequences %+v", disp.Consequences)
+	}
+	raw, err := json.Marshal(disp.Consequences[1])
+	if err != nil || strings.Contains(string(raw), "mixed_script") {
+		t.Fatalf("a consequence without a look-alike: %s %v", raw, err)
 	}
 }

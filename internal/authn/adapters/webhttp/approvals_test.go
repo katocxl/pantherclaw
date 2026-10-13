@@ -41,7 +41,10 @@ type fakeApprovals struct {
 	review bool
 	// people are the people lists the page shows.
 	people []apdomain.PeopleList
-	err    error
+	// lookAlike adds a review consequence environment that mixes writing
+	// systems, flagged as the display flags it.
+	lookAlike string
+	err       error
 
 	mu         sync.Mutex
 	responders []apapp.Responder
@@ -221,6 +224,11 @@ func (f *fakeApprovals) View(ctx context.Context, id ids.UUID) (apapp.View, erro
 			{Kind: "approval", Role: "code_reviewer", Count: 1, Independent: true, IndependentOf: "github.pull.people"},
 			{Kind: "approval", Role: "release_approver", Count: 1, Window: true},
 		}
+		if f.lookAlike != "" {
+			c := &v.Display.Consequences[0]
+			c.Environments = append(c.Environments, f.lookAlike)
+			c.MixedScript = []string{f.lookAlike}
+		}
 	}
 	return v, nil
 }
@@ -247,6 +255,31 @@ func TestF158_TheMergeReviewShowsItsConsequencesAndDeciders(t *testing.T) {
 	}
 	if plain := getAs(t, newApprovalsHandler(t, &fakeApprovals{}), authnapp.ApprovalsPath+"/"+knownRequest.String(), "good"); strings.Contains(plain.Body, "What it may also cause") {
 		t.Fatal("an action without consequences shows the section")
+	}
+}
+
+// TestHR034_ThePageFlagsMixedScriptEnvironmentNames (HR-102): an
+// environment name that mixes writing systems carries the same warning as
+// untrusted text, naming it; the other names carry none.
+func TestHR034_ThePageFlagsMixedScriptEnvironmentNames(t *testing.T) {
+	lookAlike := "pr" + string(rune(0x043e)) + "duction"
+	path := authnapp.ApprovalsPath + "/" + knownRequest.String()
+	consequences := func(fa *fakeApprovals) string {
+		t.Helper()
+		body := getAs(t, newApprovalsHandler(t, fa), path, "good").Body
+		i, j := strings.Index(body, "What it may also cause"), strings.Index(body, "<h2>Fields</h2>")
+		if i < 0 || j < i {
+			t.Fatal("the page lacks what the action may also cause")
+		}
+		return body[i:j]
+	}
+	if strings.Contains(consequences(&fakeApprovals{review: true}), "mixes writing systems") {
+		t.Fatal("a plain environment name is flagged")
+	}
+	want := "to <code>production</code>, <code>" + lookAlike + "</code> <strong>(<code>" + lookAlike +
+		"</code> mixes writing systems: look for look-alike characters)</strong>"
+	if got := consequences(&fakeApprovals{review: true, lookAlike: lookAlike}); !strings.Contains(got, want) {
+		t.Errorf("the page lacks %q in %s", want, got)
 	}
 }
 

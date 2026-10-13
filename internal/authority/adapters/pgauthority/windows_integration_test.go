@@ -25,8 +25,17 @@ import (
 // inside an active change window for payroll, by the database clock:
 // without a window, and under a freeze, the answer is CANNOT_AUTHORIZE
 // CHANGE_WINDOW_CLOSED and the approval stays unconsumed; inside the
-// window the resubmission is allowed and consumes it.
+// window the resubmission is allowed and consumes it. A release_approver
+// requirement counts only inside a window by its role alone (HR-207), even
+// without window: true.
 func TestHR207_AReleaseApprovalCountsOnlyInsideAChangeWindow(t *testing.T) {
+	for _, req := range []pdomain.ApprovalRequirement{{Role: "approver", Count: 1, Window: true}, {Role: "release_approver", Count: 1}} {
+		t.Run(req.Role, func(t *testing.T) { releaseInsideAWindow(t, req) })
+	}
+}
+
+func releaseInsideAWindow(t *testing.T, approval pdomain.ApprovalRequirement) {
+	t.Helper()
 	w := newWorldWith(t, pipelinetest.PayoutConsequence)
 	w.refundable("ch_1")
 	w.payouts("ch_1", `{"state": "scheduled", "environments": ["payroll"]}`)
@@ -37,7 +46,7 @@ func TestHR207_AReleaseApprovalCountsOnlyInsideAChangeWindow(t *testing.T) {
 		ExpiresAt: time.Now().Add(48 * time.Hour), Bounds: b, Delegation: gdomain.Delegation{Depth: 1, MaxChildren: 5},
 		Requirements: []gdomain.Requirement{{
 			Operations: gdomain.Ops{"payments.payout.trigger"}, Reason: "PAYOUTS_NEED_A_RELEASE",
-			Approval: &pdomain.ApprovalRequirement{Role: "approver", Count: 1, Window: true},
+			Approval: &approval,
 		}},
 	})
 	if err != nil {
@@ -45,7 +54,7 @@ func TestHR207_AReleaseApprovalCountsOnlyInsideAChangeWindow(t *testing.T) {
 	}
 	req := w.request(w.run(g.ID, ids.UUID{}), ids.NewV7(), "ch_1", "30.00")
 	request := held(t, w.authorize(req))
-	w.approve(request)
+	w.approveAs(request, approval.Role)
 	closed := func(want string) {
 		t.Helper()
 		r := w.authorize(req)
