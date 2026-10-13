@@ -135,6 +135,11 @@ func (f initFlags) apply(ctx context.Context, a *app, p *initPlan) error {
 		return &exitError{code: 1, msg: "pclaw init: not confirmed; nothing was changed"}
 	}
 	if p.enroll != nil {
+		// A file that changed while the person read the plan stops
+		// everything, the enrollment (which writes the key file) too.
+		if err := unchanged(writes); err != nil {
+			return err
+		}
 		if err := p.enroll.run(ctx, a); err != nil {
 			return err
 		}

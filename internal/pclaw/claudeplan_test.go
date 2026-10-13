@@ -238,3 +238,18 @@ func TestHR208_InitWritesNothingWhenAFileChangedMeanwhile(t *testing.T) {
 		}
 	}
 }
+
+// TestHR208_InitEnrollsNothingWhenAFileChangedMeanwhile: a settings file
+// that changed while the person read the plan stops the enrollment too:
+// no enrollment token is asked for and no key file is written.
+func TestHR208_InitEnrollsNothingWhenAFileChangedMeanwhile(t *testing.T) {
+	f := newInitFixture(t)
+	fake := &fakeEnrollment{}
+	f.enrollmentServer(t, fake)
+	f.write(t, f.local(), existingLocal)
+	f.stdin = &answerAfterChanging{t: t, path: f.local(), content: existingLocal + "\n"}
+	code, out, errs := f.run(t, "--agent", "0192aaaa-bbbb-7ccc-8ddd-000000000001")
+	if _, err := os.Stat(f.key); code != 1 || err == nil || fake.issued != nil || !strings.Contains(errs, "run pclaw init again") {
+		t.Fatalf("init: %d %s %s", code, out, errs)
+	}
+}
