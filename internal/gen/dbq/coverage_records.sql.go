@@ -1717,8 +1717,8 @@ func (q *Queries) PendingCoverageInvalidations(ctx context.Context, orgID ids.Or
 }
 
 const resolveCoverageFindings = `-- name: ResolveCoverageFindings :execrows
-UPDATE pc.coverage_findings SET state = 'RESOLVED', resolved_at = now()
-WHERE org_id = $1 AND kind = $2 AND connection_id = $3 AND state = 'OPEN'
+UPDATE pc.coverage_findings SET state = 'RESOLVED', resolved_at = now(), dismissed_by = NULL, dismiss_reason = NULL
+WHERE org_id = $1 AND kind = $2 AND connection_id = $3 AND state IN ('OPEN', 'DISMISSED')
   AND NOT (fingerprint = ANY ($4::bytea[]))
 `
 
@@ -1729,8 +1729,10 @@ type ResolveCoverageFindingsParams struct {
 	Keep         [][]byte
 }
 
-// Open findings of a kind for a connection that the latest pass no longer
-// found are resolved.
+// Findings of a kind for a connection that the latest pass no longer found
+// are resolved, dismissed ones too: a dismissal covers the exposure it was
+// made for while it lasts, so the same excess found again later reopens. The
+// dismissal itself stays in the audit ledger.
 func (q *Queries) ResolveCoverageFindings(ctx context.Context, arg ResolveCoverageFindingsParams) (int64, error) {
 	result, err := q.db.Exec(ctx, resolveCoverageFindings,
 		arg.OrgID,
