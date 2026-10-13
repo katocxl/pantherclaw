@@ -7,6 +7,7 @@ import (
 	"encoding/json/v2"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -132,5 +133,95 @@ func TestFaults(t *testing.T) {
 	}
 	if p, _ := w.sim.PullRequest("acme/payments", 1); !p.Merged {
 		t.Fatal("the lost merge did not happen")
+	}
+}
+
+// factWorld is newWorld with an installation that may read every fact
+// source, and a token of it.
+func factWorld(t *testing.T) (*world, string) {
+	w := newWorld(t)
+	w.sim.Install(Installation{ID: 9, Account: "acme", Repos: []string{"payments"}, Permissions: map[string]string{
+		"metadata": "read", "contents": "write", "pull_requests": "write", "checks": "read", "actions": "read", "deployments": "read",
+	}})
+	status, out := w.do(http.MethodPost, "/app/installations/9/access_tokens", "Bearer "+w.jwt(), ``)
+	if status != http.StatusCreated {
+		t.Fatalf("mint: %d", status)
+	}
+	return w, "Bearer " + out["token"].(string)
+}
+
+// TestAuthorCommitterAndPusherAreApart: one person can push a commit whose
+// git author is another, a git email may be linked to no account (null),
+// and every account says whether it is a User or a Bot (HR-207).
+func TestAuthorCommitterAndPusherAreApart(t *testing.T) {
+	w, auth := factWorld(t)
+	w.sim.PushBy("acme/payments", "fix/a", "bob", "alice", "", map[string]string{"y.go": "package y\n"})
+	if status, _ := w.do(http.MethodPost, "/repos/acme/payments/pulls", auth, `{"title":"Fix","head":"fix/a","base":"main"}`); status != http.StatusCreated {
+		t.Fatalf("open: %d", status)
+	}
+	_, commits := w.list("/repos/acme/payments/pulls/1/commits", auth)
+	last := commits[len(commits)-1]
+	if a, _ := last["author"].(map[string]any); a["login"] != "alice" || a["type"] != "User" || last["committer"] != nil {
+		t.Fatalf("commit %v", last)
+	}
+	_, pushes := w.list("/repos/acme/payments/activity?ref=fix/a", auth)
+	if a, _ := pushes[0]["actor"].(map[string]any); a["login"] != "bob" || a["id"] != float64(accountID("bob")) {
+		t.Fatalf("pusher %v", pushes[0])
+	}
+	_, pr := w.do(http.MethodGet, "/repos/acme/payments/pulls/1", auth, "")
+	if u, _ := pr["user"].(map[string]any); u["login"] != "pantherclaw-sim[bot]" || u["type"] != "Bot" {
+		t.Fatalf("the App's pull request author: %v", pr["user"])
+	}
+}
+
+// TestListsArePagedAndRunsNameTheirApp: lists answer per_page items (30 by
+// default) with a Link header while more follow, as GitHub pages them; a
+// check run names the App that posted it.
+func TestListsArePagedAndRunsNameTheirApp(t *testing.T) {
+	w, auth := factWorld(t)
+	w.sim.SetPageSize(2)
+	w.sim.SetCheckRuns("acme/payments", w.head,
+		CheckRun{Name: "a", Status: "completed", Conclusion: "success"}, CheckRun{Name: "b", Status: "completed", Conclusion: "success"},
+		CheckRun{Name: "test", Status: "completed", Conclusion: "success", App: "spoofer"})
+	req, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, w.srv.URL+"/repos/acme/payments/commits/"+w.head+"/check-runs?per_page=100", nil)
+	req.Header.Set("Authorization", auth)
+	resp, err := w.srv.Client().Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var first map[string]any
+	raw, _ := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	_ = json.Unmarshal(raw, &first)
+	if runs, _ := first["check_runs"].([]any); len(runs) != 2 || first["total_count"] != float64(3) || !strings.Contains(resp.Header.Get("Link"), `rel="next"`) {
+		t.Fatalf("page 1: %v, Link %q", first, resp.Header.Get("Link"))
+	}
+	_, last := w.do(http.MethodGet, "/repos/acme/payments/commits/"+w.head+"/check-runs?per_page=100&page=2", auth, "")
+	runs, _ := last["check_runs"].([]any)
+	if len(runs) != 1 || runs[0].(map[string]any)["app"].(map[string]any)["slug"] != "spoofer" {
+		t.Fatalf("page 2: %v", last)
+	}
+}
+
+// TestDeploymentStatesAreInTheirStatuses: as on GitHub, a deployment
+// carries no state; its statuses say pending, then success once it
+// settled.
+func TestDeploymentStatesAreInTheirStatuses(t *testing.T) {
+	w, auth := factWorld(t)
+	now := time.Now()
+	w.sim.WithClock(func() time.Time { return now })
+	w.sim.DeployOnPush("acme/payments", "main", "production", time.Minute)
+	w.sim.Push("acme/payments", "main", map[string]string{"a.go": "package a\n"})
+	_, deps := w.list("/repos/acme/payments/deployments", auth)
+	if len(deps) != 1 || deps[0]["state"] != nil {
+		t.Fatalf("deployments %v", deps)
+	}
+	path := "/repos/acme/payments/deployments/" + strconv.FormatInt(int64(deps[0]["id"].(float64)), 10) + "/statuses"
+	if _, sts := w.list(path, auth); len(sts) != 1 || sts[0]["state"] != "pending" {
+		t.Fatalf("statuses before settling %v", sts)
+	}
+	now = now.Add(2 * time.Minute)
+	if _, sts := w.list(path, auth); len(sts) != 2 || sts[0]["state"] != "success" {
+		t.Fatalf("statuses after settling %v", sts)
 	}
 }
