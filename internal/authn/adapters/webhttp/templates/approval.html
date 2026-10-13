@@ -33,10 +33,13 @@
 {{if .Facts}}
 <h2>Facts used</h2>
 <table>
-<thead><tr><th>Fact</th><th>Subject</th><th>Value</th><th>Provider</th><th>Age</th></tr></thead>
+{{if .Observed}}<thead><tr><th>Fact</th><th>Subject</th><th>Value</th><th>Provider</th><th>Age</th></tr></thead>
 <tbody>
 {{range .Facts}}<tr><td>{{.Name}}</td><td><code>{{.Subject}}</code></td><td><code>{{.Value}}</code></td><td>{{.Provider}}</td><td>{{.Age}}</td></tr>
-{{end}}</tbody>
+{{end}}{{else}}<thead><tr><th>Fact</th><th>Subject</th><th>Approved value</th></tr></thead>
+<tbody>
+{{range .Facts}}<tr><td>{{.Name}}</td><td><code>{{.Subject}}</code></td><td>{{if .Value}}<code>{{.Value}}</code>{{else}}not bound: checked again when the approval is used{{end}}</td></tr>
+{{end}}{{end}}</tbody>
 </table>
 {{end}}
 {{with .Display.Run}}
