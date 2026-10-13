@@ -122,9 +122,8 @@ func TestHR084_ConnectorsRunOnlyOnCustomerHostedGateways(t *testing.T) {
 		t.Fatalf("a spec change: %v %v", e.notes.types, e.notes.last)
 	}
 	// A change to the environment alone changes what runs (NODE_OPTIONS):
-	// it weakens too, and its audit shows the names and the spec's hash.
-	s = spec()
-	s.Command = []string{"/server", "--stdio", "--verbose"}
+	// it weakens too, and its audit shows the names and the spec's hash. The
+	// spec is the one just stored (s), with one variable more.
 	s.Environment["NODE_OPTIONS"] = "--require /srv/hook.js"
 	_, err = e.svc.Update(e.admin, app.UpdateInput{ID: c.ID, Revision: u.Revision, Connector: s})
 	if err != nil || e.notes.count("security.connection_weakened") != weakened+2 || !strings.Contains(e.notes.last["change"], "connector") {
