@@ -35,6 +35,14 @@ JOIN pc.fact_providers p ON p.org_id = d.org_id AND p.id = d.provider_id
 WHERE d.org_id = sqlc.arg(org_id) AND d.active AND p.state = 'ACTIVE'
 ORDER BY d.name;
 
+-- ListActiveFactSubjects returns the subject type each active fact is
+-- declared about (one active provider per fact name).
+-- name: ListActiveFactSubjects :many
+SELECT d.name, d.subject_type FROM pc.fact_declarations d
+JOIN pc.fact_providers p ON p.org_id = d.org_id AND p.id = d.provider_id
+WHERE d.org_id = sqlc.arg(org_id) AND d.active AND p.state = 'ACTIVE'
+ORDER BY d.name;
+
 -- name: DisableFactProvider :execresult
 UPDATE pc.fact_providers SET state = 'DISABLED'
 WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state = 'ACTIVE';
