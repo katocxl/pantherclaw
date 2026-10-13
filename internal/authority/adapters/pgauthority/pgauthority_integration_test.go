@@ -85,7 +85,10 @@ func exec(t testing.TB, p *db.Pool, org ids.OrgID, sql string, args ...any) {
 // newWorld builds an org with the mock-payments package imported and
 // active, a fact provider, an agent with an admitted instance, and an
 // Authority over PostgreSQL.
-func newWorld(t testing.TB) *world {
+func newWorld(t testing.TB) *world { return newWorldWith(t, nil) }
+
+// newWorldWith is newWorld with the package edited first.
+func newWorldWith(t testing.TB, edit func(string) string) *world {
 	t.Helper()
 	d := dbtest.New(t)
 	p := d.AppPool(t)
@@ -110,6 +113,9 @@ func newWorld(t testing.TB) *world {
 	raw, err := os.ReadFile("../../../../packages/mock-payments/package.yaml")
 	if err != nil {
 		t.Fatal(err)
+	}
+	if edit != nil {
+		raw = []byte(edit(string(raw)))
 	}
 	priv, kid, err := rootkey.Generate(rootkey.PurposePackages)
 	if err != nil {
@@ -143,6 +149,9 @@ func newWorld(t testing.TB) *world {
 	w.facts = &factapp.Service{Store: facts, Authz: allow{}}
 	if _, err := w.facts.RegisterProvider(w.human, "billing.system", w.billing, []fdomain.Declaration{
 		{Name: "payments.charge.refundable", Type: fdomain.TypeBoolean, SubjectType: "payments.charge", MaxLag: 5 * time.Minute},
+		{Name: "payments.charge.payouts", Type: fdomain.TypeObject, SubjectType: "payments.charge", MaxLag: 5 * time.Minute},
+		{Name: "payments.charge.state", Type: fdomain.TypeObject, SubjectType: "payments.charge", MaxLag: 5 * time.Minute},
+		{Name: "payments.charge.people", Type: fdomain.TypeObject, SubjectType: "payments.charge", MaxLag: 5 * time.Minute},
 	}); err != nil {
 		t.Fatal(err)
 	}
