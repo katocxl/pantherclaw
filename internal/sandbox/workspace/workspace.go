@@ -140,9 +140,14 @@ func pack(root string, w io.Writer, git gitMode) error {
 	return tw.Close()
 }
 
-// inGit reports whether a slash path is, or is inside, a .git.
+// inGit reports whether a slash path is, or is inside, a .git as any host
+// may read the name: in any case, with trailing dots or spaces (Windows
+// drops them), or as its 8.3 short name GIT~1.
 func inGit(rel string) bool {
-	return slices.Contains(strings.Split(rel, "/"), ".git")
+	return slices.ContainsFunc(strings.Split(rel, "/"), func(s string) bool {
+		s = strings.ToLower(strings.TrimRight(s, ". "))
+		return s == ".git" || s == "git~1"
+	})
 }
 
 // keepGit reports whether copy-in keeps a path of the top-level repository.
