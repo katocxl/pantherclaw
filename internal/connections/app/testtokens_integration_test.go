@@ -10,9 +10,11 @@ import (
 	"encoding/base64"
 	"encoding/json/v2"
 	"errors"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/katocxl/pantherclaw/internal/actionir"
@@ -349,5 +351,117 @@ func TestHR188_ATestIsLeasedAndTokenedAtMostThreeTimes(t *testing.T) {
 	e.dbt.AdminExec(t, "UPDATE pc.verifications SET state = 'PENDING', finished_at = NULL, next_at = now() WHERE id = $1", l.Task)
 	if leases, err := e.s.Claim(ctx, e.org, e.gateway, 16); err != nil || len(leases) != 0 {
 		t.Fatalf("a task leased three times leased again: %d leases, %v", len(leases), err)
+	}
+}
+
+// TestHR188_TestTokensNeedTheirLeaseConnectionAndPackage: under a lease it
+// holds, the gateway gets no tokens while the connection is quarantined or
+// retired, or while the pinned package version is quarantined or retired.
+// Of several mints at once for the same attempt, exactly one gets tokens.
+// A lease whose time ran out gets none, even before it is released.
+func TestHR188_TestTokensNeedTheirLeaseConnectionAndPackage(t *testing.T) {
+	e := newTokenEnv(t)
+	ctx := context.Background()
+	_, l := e.lease(t)
+	mint := func(l txapp.Lease) error {
+		_, err := e.s.MintTestTokens(ctx, e.org, e.gateway, l.Task, l.Secret)
+		return err
+	}
+	for _, state := range []string{"QUARANTINED", "RETIRED"} {
+		e.exec(t, `UPDATE pc.connections SET state = $2, quarantine_reason = CASE WHEN $2 = 'QUARANTINED' THEN 'test' END
+			WHERE id = $1`, e.conn.ID, state)
+		if err := mint(l); !errors.Is(err, txapp.ErrTestTokensRefused) {
+			t.Errorf("a %s connection: %v", state, err)
+		}
+		e.exec(t, "UPDATE pc.connections SET state = 'ACTIVE', quarantine_reason = NULL WHERE id = $1", e.conn.ID)
+	}
+	pin := func(state string) {
+		e.exec(t, `UPDATE pc.package_versions SET state = $2 WHERE id = (SELECT p.version_id FROM pc.package_pins p
+			JOIN pc.tool_packages k ON k.org_id = p.org_id AND k.id = p.package_id WHERE k.name = $1)`, mockpayments.Name, state)
+	}
+	for _, state := range []string{"QUARANTINED", "RETIRED"} {
+		pin(state)
+		if err := mint(l); !errors.Is(err, txapp.ErrTestTokensRefused) {
+			t.Errorf("a %s package version: %v", state, err)
+		}
+		pin("ACTIVE")
+	}
+	minted := func() int64 {
+		return e.int64(t, "SELECT count(*) FROM pc.ledger_entries WHERE kind = 'audit.connection.test_tokens_minted'")
+	}
+	if n := minted(); n != 0 {
+		t.Fatalf("%d mints after the refusals", n)
+	}
+
+	errs := make([]error, 4)
+	start := make(chan struct{})
+	var wg sync.WaitGroup
+	for i := range errs {
+		wg.Go(func() {
+			<-start
+			errs[i] = mint(l)
+		})
+	}
+	close(start)
+	wg.Wait()
+	got := 0
+	for _, err := range errs {
+		switch {
+		case err == nil:
+			got++
+		case !errors.Is(err, txapp.ErrTestTokensMinted):
+			t.Errorf("a concurrent mint: %v", err)
+		}
+	}
+	if n := minted(); got != 1 || n != 1 {
+		t.Fatalf("%d of %d concurrent mints got tokens, %d audited; want 1", got, len(errs), n)
+	}
+
+	_, l2 := e.lease(t)
+	e.runOut(t, l2.Task)
+	if err := mint(l2); !errors.Is(err, txapp.ErrLease) {
+		t.Fatalf("a lease whose time ran out: %v", err)
+	}
+	if n := e.int64(t, "SELECT count(*) FROM pc.verifications WHERE id = $1 AND state = 'LEASED'", l2.Task); n != 1 {
+		t.Fatal("the lease was released; the check needs it LEASED")
+	}
+}
+
+// TestHR188_AMintsAuditEventNamesTokenIdsNeverTokens: the audit event of a
+// mint carries the test, attempt, operation and the two token ids, and no
+// part of either token.
+func TestHR188_AMintsAuditEventNamesTokenIdsNeverTokens(t *testing.T) {
+	e := newTokenEnv(t)
+	r, l := e.lease(t)
+	tk, err := e.s.MintTestTokens(context.Background(), e.org, e.gateway, l.Task, l.Secret)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var body string
+	if err := e.pool.InTenantTx(context.Background(), e.org, func(ctx context.Context, tx db.TenantTx) error {
+		return tx.QueryRow(ctx, "SELECT convert_from(body, 'UTF8') FROM pc.ledger_entries WHERE kind = 'audit.connection.test_tokens_minted'").
+			Scan(&body)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	for name, tok := range map[string]string{"fresh": tk.Fresh, "mismatch": tk.Mismatch} {
+		for _, part := range strings.Split(tok, ".") {
+			if strings.Contains(body, part) {
+				t.Errorf("the audit event carries part of the %s token", name)
+			}
+		}
+	}
+	var ev struct {
+		Details map[string]string `json:"details"`
+	}
+	if err := json.Unmarshal([]byte(body), &ev); err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]string{
+		"test_id": r.ID.String(), "attempt": "1", "operation": "payments.account.read",
+		"jti": jtiOf(t, tk.Fresh), "mismatch_jti": jtiOf(t, tk.Mismatch),
+	}
+	if !maps.Equal(ev.Details, want) {
+		t.Fatalf("details %v, want %v", ev.Details, want)
 	}
 }
