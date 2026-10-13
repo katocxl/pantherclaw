@@ -31,7 +31,9 @@ type ConnectorRun struct {
 // connectors. The org and gateway come from the verified certificate
 // alone (HR-020): a connection of another gateway, one that is not a
 // connector, or any on a PantherClaw-hosted gateway (HR-084) is not found.
-// A run moves only forward, and only within its gateway and connection.
+// A run moves only forward, and only within its gateway, connection, spec
+// revision and container. A run that starts closes its connection's
+// earlier runs still open, which a gateway that crashed left behind.
 func (s *Service) ReportConnectorState(ctx context.Context, id Identity, r ConnectorRun) (dbq.PcConnectorInstance, error) {
 	var out dbq.PcConnectorInstance
 	err := s.pool.InTenantTx(ctx, id.Org, func(ctx context.Context, tx db.TenantTx) error {
@@ -45,6 +47,11 @@ func (s *Service) ReportConnectorState(ctx context.Context, id Identity, r Conne
 			return ErrConnectorNotFound
 		} else if err != nil {
 			return err
+		}
+		if r.State == "STARTING" {
+			if _, err := q.SupersedeConnectorInstances(ctx, id.Org, r.Connection, r.Instance); err != nil {
+				return err
+			}
 		}
 		var class *string
 		if r.ErrorClass != "" {
