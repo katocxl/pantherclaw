@@ -128,3 +128,7 @@ func (s *Server) orgInstallations(w http.ResponseWriter, r *http.Request) {
 	}
 	rec.Status = reply(w, http.StatusOK, map[string]any{"total_count": len(list), "installations": list, "simulated": true})
 }
+
+// AccountID is the simulated GitHub id of a login (or of a repository's
+// full name), as every object the simulator answers carries it.
+func AccountID(login string) int64 { return accountID(login) }

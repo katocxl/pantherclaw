@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"slices"
 	"time"
 
 	"github.com/katocxl/pantherclaw/internal/authn/credential"
@@ -29,6 +30,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	"github.com/katocxl/pantherclaw/internal/platform/money"
+	pdomain "github.com/katocxl/pantherclaw/internal/policy/domain"
 )
 
 // Development fact provider: the refund definition needs a fresh
@@ -137,6 +139,11 @@ type devGrantTerms struct {
 	MaxCount     int         // 0: no count limit
 	// Shell also allows shell commands (pc.shell, the Claude Code hook).
 	Shell bool
+	// GitHub also allows the pc.github operations: a merge needs an
+	// independent code_reviewer, the deployment it may start a
+	// release_approver (inside a change window, HR-207), and a task merges
+	// once (G0 M8, §43).
+	GitHub bool
 }
 
 // seedGrant issues a root grant to the seeded agent for its owner: refunds
@@ -148,6 +155,9 @@ func seedGrant(ctx context.Context, pool *db.Pool, org ids.OrgID, w devWorkload,
 	ops := []string{"payments.refund.create", "payments.refund.get"}
 	if t.Shell {
 		ops = append(ops, shellOperation)
+	}
+	if t.GitHub {
+		ops = append(ops, githubOperations...)
 	}
 	bounds, err := json.Marshal(map[string]any{
 		"operations": ops,
@@ -165,7 +175,13 @@ func seedGrant(ctx context.Context, pool *db.Pool, org ids.OrgID, w devWorkload,
 	if t.MaxCount > 0 {
 		budget["max_count"] = fmt.Sprint(t.MaxCount)
 	}
-	limits, err := json.Marshal(map[string]any{"budgets": []any{budget}})
+	budgets := []any{budget}
+	if t.GitHub {
+		budgets = append(budgets, map[string]any{
+			"id": "merges", "grouping": "task", "operations": []string{"github.pull.merge"}, "max_count": "1", "period": "none",
+		})
+	}
+	limits, err := json.Marshal(map[string]any{"budgets": budgets})
 	if err != nil {
 		return gdomain.Grant{}, err
 	}
@@ -185,10 +201,22 @@ func seedGrant(ctx context.Context, pool *db.Pool, org ids.OrgID, w devWorkload,
 		Delegation: gdomain.Delegation{Depth: 1, MaxChildren: 5},
 		Grantor:    gdomain.Principal{Kind: gdomain.PrincipalUser, ID: w.Owner}, Basis: "issued by pantherclaw-server dev seed",
 	}
+	if t.GitHub {
+		g.Requirements = []gdomain.Requirement{
+			{
+				Operations: gdomain.Ops{"github.pull.merge"}, Reason: "MERGES_NEED_AN_INDEPENDENT_REVIEW",
+				Approval: &pdomain.ApprovalRequirement{Role: "code_reviewer", Count: 1, Independent: true},
+			},
+			{
+				Operations: gdomain.Ops{"github.deployment.trigger"}, Reason: "DEPLOYMENTS_NEED_A_RELEASE",
+				Approval: &pdomain.ApprovalRequirement{Role: "release_approver", Count: 1},
+			},
+		}
+	}
 	defsStore := &defspg.Store{Pool: pool}
 	active := map[string]*defs.Definition{}
-	for _, op := range []string{"payments.refund.create", shellOperation} {
-		if op == shellOperation && !t.Shell {
+	for _, op := range append([]string{"payments.refund.create", shellOperation}, githubOperations...) {
+		if (op == shellOperation && !t.Shell) || (slices.Contains(githubOperations, op) && !t.GitHub) {
 			continue
 		}
 		d, err := defsStore.Active(ctx, org, op)
