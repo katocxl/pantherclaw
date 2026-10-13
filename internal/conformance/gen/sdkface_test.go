@@ -150,15 +150,14 @@ type faceDispatch struct {
 
 const txnID = "01920000-0000-7000-8000-000000000009"
 
-// builtins are the Claude Agent SDK's built-in tools, by the names the
-// SDK (0.3.289) offers the model: the single list the SDKs, the
-// integrations and the face load.
+// builtins are the Claude Agent SDK's built-in tools: the one list the
+// SDKs, the integrations and the face (internal/gateway/sdk builtIns)
+// load. Any other name is never observed.
 var builtins = []string{
 	"Agent", "AskUserQuestion", "Bash", "CronCreate", "CronDelete", "CronList", "Edit", "EnterPlanMode", "EnterWorktree",
-	"ExitPlanMode", "ExitWorktree", "Glob", "Grep", "ListAgents", "ListMcpResourcesTool", "LSP", "Monitor", "NotebookEdit",
-	"PowerShell", "Read", "ReadMcpResourceDirTool", "ReadMcpResourceTool", "ReportFindings", "ScheduleWakeup", "SendMessage",
-	"Skill", "Task", "TaskCreate", "TaskGet", "TaskList", "TaskOutput", "TaskStop", "TaskUpdate", "TodoWrite", "ToolSearch",
-	"WaitForMcpServers", "WebFetch", "WebSearch", "Workflow", "Write",
+	"ExitPlanMode", "ExitWorktree", "Glob", "Grep", "ListMcpResourcesTool", "LSP", "Monitor", "NotebookEdit", "PowerShell", "Read",
+	"ReadMcpResourceTool", "Skill", "Task", "TaskCreate", "TaskGet", "TaskList", "TaskOutput", "TaskStop", "TaskUpdate", "TodoWrite",
+	"ToolSearch", "WaitForMcpServers", "WebFetch", "WebSearch", "Write",
 }
 
 // connectionName is the rule for a connection's name (migration 00041):
