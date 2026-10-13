@@ -30,6 +30,12 @@ func (e edition) Current(context.Context) (billing.Entitlements, error) {
 	return billing.Entitlements{Edition: billing.Edition(e)}, nil
 }
 
+// caller is a principal of kind holding role over the org, made up for the
+// call.
+func (e *env) caller(kind td.PrincipalKind, role td.RoleName) context.Context {
+	return e.as(ids.NewV7(), kind, role)
+}
+
 // brokerKey registers a broker key for gateway.
 func (e *env) brokerKey(t *testing.T, gateway ids.UUID) ids.UUID {
 	t.Helper()

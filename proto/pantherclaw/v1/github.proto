@@ -38,16 +38,39 @@ message GitHubInstallation {
 // also scans the GitHub organization behind a GitHub App connection for
 // agents, workflows and MCP configuration (PN-001.2, HR-209).
 service GitHubService {
-  // LinkIdentity links a person of the org to a GitHub user id. A GitHub
-  // user id links to one person; the link is audited.
-  // permission: github.identity.manage
-  rpc LinkIdentity(LinkIdentityRequest) returns (LinkIdentityResponse);
-  // UnlinkIdentity removes a link; audited.
+  // ProveIdentity links the caller's own GitHub account, or with unlink
+  // removes that link, once the server has read from GitHub which account
+  // a user access token from GitHub sign-in belongs to: the proof that the
+  // caller controls it (G0 M8 P2f, founder decision 2026-10-13). The
+  // token is never stored. A GitHub user id links to one person; every
+  // change is audited and notified.
+  // permission: github.identity.prove
+  rpc ProveIdentity(ProveIdentityRequest) returns (ProveIdentityResponse);
+  // GetSignIn says where to sign in to GitHub to prove an account: the
+  // GitHub App's client id and GitHub's web origin for its device flow
+  // (P2f). Unavailable when GitHub sign-in is off.
+  // permission: github.identity.prove
+  rpc GetSignIn(GetSignInRequest) returns (GetSignInResponse);
+  // UnlinkIdentity removes another person's link; nobody removes their own
+  // here (ProveIdentity). Audited and notified.
   // permission: github.identity.manage
   rpc UnlinkIdentity(UnlinkIdentityRequest) returns (UnlinkIdentityResponse);
   // ListIdentities lists the links, of one person or of everyone.
   // permission: user.read
   rpc ListIdentities(ListIdentitiesRequest) returns (ListIdentitiesResponse);
+  // ExemptAccount registers a GitHub account that is not a person (a bot or
+  // a machine user): linked to nobody, it does not stop the independent
+  // approvals of pull requests it worked on, as an unlinked person does
+  // (GITHUB_PEOPLE_NOT_LINKED; founder decision 2026-10-13). Audited and
+  // notified.
+  // permission: github.identity.manage
+  rpc ExemptAccount(ExemptAccountRequest) returns (ExemptAccountResponse);
+  // RemoveExemption removes an account's exemption. Audited and notified.
+  // permission: github.identity.manage
+  rpc RemoveExemption(RemoveExemptionRequest) returns (RemoveExemptionResponse);
+  // ListExemptions lists the org's exemptions (at most 500).
+  // permission: user.read
+  rpc ListExemptions(ListExemptionsRequest) returns (ListExemptionsResponse);
   // StartOrgScan starts a scan of the GitHub organization behind a GitHub
   // App connection (PN-001.2, HR-209; Team edition): an org_scan lease for
   // the connection's gateway, which reads metadata and named files only and
@@ -75,22 +98,38 @@ message GitHubIdentity {
   string linked_by = 5;
   // When.
   google.protobuf.Timestamp link_time = 6;
+  // When the person proved the account by signing in to GitHub; unset for
+  // a link made before P2f, which approves nothing.
+  google.protobuf.Timestamp verify_time = 7;
 }
 
-// LinkIdentityRequest links a person to a GitHub account.
-message LinkIdentityRequest {
-  // The person.
-  string user_id = 1 [(buf.validate.field).string.uuid = true];
-  // The GitHub login.
-  string github_login = 2 [(buf.validate.field).string.pattern = "^[A-Za-z0-9][A-Za-z0-9-]{0,38}$"];
-  // The GitHub user id.
-  int64 github_user_id = 3 [(buf.validate.field).int64.gt = 0];
+// ProveIdentityRequest carries the token of a GitHub sign-in.
+message ProveIdentityRequest {
+  // A GitHub user access token from the GitHub App's user authorization
+  // (the device flow pclaw github link runs).
+  string github_user_token = 1 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 512
+  }];
+  // Remove the link to that account instead of making it.
+  bool unlink = 2;
 }
 
-// LinkIdentityResponse returns the link.
-message LinkIdentityResponse {
+// ProveIdentityResponse returns the link made or removed.
+message ProveIdentityResponse {
   // The link.
   GitHubIdentity identity = 1;
+}
+
+// GetSignInRequest is empty.
+message GetSignInRequest {}
+
+// GetSignInResponse is the GitHub App's device flow.
+message GetSignInResponse {
+  // The GitHub App's client id.
+  string client_id = 1;
+  // GitHub's web origin, where device codes are asked for and entered.
+  string web_url = 2;
 }
 
 // UnlinkIdentityRequest names a link.
@@ -124,6 +163,60 @@ message ListIdentitiesResponse {
   repeated GitHubIdentity identities = 1;
   // Token of the next page; empty on the last.
   string next_page_token = 2;
+}
+
+// GitHubExemption is a GitHub account an admin registered as not a person.
+message GitHubExemption {
+  // The GitHub user id.
+  int64 github_user_id = 1;
+  // Its login when exempted (a bot's ends in [bot]).
+  string github_login = 2;
+  // Why it is not a person.
+  string reason = 3;
+  // Who exempted it.
+  string created_by = 4;
+  // When.
+  google.protobuf.Timestamp create_time = 5;
+}
+
+// ExemptAccountRequest names the account and why it is not a person.
+message ExemptAccountRequest {
+  // The GitHub user id.
+  int64 github_user_id = 1 [(buf.validate.field).int64.gt = 0];
+  // Its login.
+  string github_login = 2 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 44
+  }];
+  // Why it is not a person.
+  string reason = 3 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 256
+  }];
+}
+
+// ExemptAccountResponse returns the exemption.
+message ExemptAccountResponse {
+  // The exemption.
+  GitHubExemption exemption = 1;
+}
+
+// RemoveExemptionRequest names the account.
+message RemoveExemptionRequest {
+  // The GitHub user id.
+  int64 github_user_id = 1 [(buf.validate.field).int64.gt = 0];
+}
+
+// RemoveExemptionResponse is empty.
+message RemoveExemptionResponse {}
+
+// ListExemptionsRequest is empty.
+message ListExemptionsRequest {}
+
+// ListExemptionsResponse lists the exemptions by login.
+message ListExemptionsResponse {
+  // The exemptions.
+  repeated GitHubExemption exemptions = 1;
 }
 
 // OrgScan is one scan of a GitHub organization (HR-209).

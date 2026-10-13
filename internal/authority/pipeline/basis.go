@@ -9,6 +9,7 @@ import (
 	"encoding/json/jsontext"
 	"encoding/json/v2"
 
+	apdomain "github.com/katocxl/pantherclaw/internal/approvals/domain"
 	fdomain "github.com/katocxl/pantherclaw/internal/facts/domain"
 	gdomain "github.com/katocxl/pantherclaw/internal/grants/domain"
 )
@@ -45,5 +46,15 @@ func (s *state) basis() Basis {
 	if s.policy != nil {
 		b.Policy = s.policy.Version
 	}
+	return b
+}
+
+// bindingBasis is the basis an approval binds: the decision's basis with
+// its facts replaced by the members the approval binds (HR-030 option B,
+// founder decision 2026-10-13). The receipts keep the whole basis, with
+// every fact and when it was observed.
+func (s *state) bindingBasis(bound []apdomain.BoundFact) Basis {
+	b := s.basis()
+	b.Facts = apdomain.BoundFactsDigest(bound)
 	return b
 }

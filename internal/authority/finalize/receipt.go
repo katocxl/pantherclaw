@@ -64,12 +64,30 @@ type DecisionPAP struct {
 	// prevented nothing; Connection is the connection the action named.
 	Monitor    bool   `json:"monitor,omitzero"`
 	Connection string `json:"connection,omitzero"`
+	// Would is what an enforce-mode route would have decided about a
+	// monitor-mode action whose consequence is unknown, such as "HOLD:
+	// consequence unknown" (HR-206, founder decision 2026-10-13).
+	Would string `json:"would,omitzero"`
 	// DestinationClass is the connection's class, from its record (HR-079).
 	DestinationClass string `json:"destination_class,omitzero"`
 	// Approval is the approval request this decision consumes and its
 	// binding (G0 M5 part 2; M6 adds the assertion to the permit, HR-038).
 	Approval  *ReceiptApproval `json:"approval,omitzero"`
 	Simulated bool             `json:"simulated"`
+	// Consequences are what the action's consequence rules said (G0 M8,
+	// HR-206): predictions, apart from what the decision authorized.
+	Consequences []ReceiptConsequence `json:"consequences,omitzero"`
+}
+
+// ReceiptConsequence is one consequence rule's state with what it is
+// about and the digest of the facts it read.
+type ReceiptConsequence struct {
+	Rule         string   `json:"rule"`
+	State        string   `json:"state"`
+	Operation    string   `json:"op"`
+	Target       string   `json:"target"`
+	Environments []string `json:"envs,omitzero"`
+	Facts        string   `json:"facts"`
 }
 
 // ReceiptApproval names a consumed approval request and its binding.
@@ -87,11 +105,22 @@ func (a *Authority) receipt(gw Gateway, ev *pipeline.Evaluation, txn ids.UUID, e
 		Basis: ev.Basis, BasisDigest: ev.Basis.Digest(), Identity: ev.Identity, Budgets: budgets, Gateway: gw.ID,
 		Monitor: ev.MonitorPermit(),
 	}
+	if would, _, ok := ev.WouldUnknown(); ok {
+		pap.Would = would
+	}
 	if ev.EffectiveHash != ev.ActionHash {
 		pap.Effective = ev.EffectiveHash
 	}
 	if ev.Connection != nil {
 		pap.Connection, pap.DestinationClass = ev.Connection.ID.String(), ev.Connection.DestinationClass
+	}
+	for _, c := range ev.Consequences {
+		if c.Err == nil {
+			pap.Consequences = append(pap.Consequences, ReceiptConsequence{
+				Rule: c.Rule, State: string(c.State), Operation: c.Operation, Target: c.Target.Type + ":" + c.Target.ID,
+				Environments: c.Environments, Facts: c.FactsDigest,
+			})
+		}
 	}
 	if h := ev.Hold; h != nil && h.Satisfied && h.Request != nil && ev.Permits() {
 		pap.Approval = &ReceiptApproval{Request: h.Request.ID.String(), Binding: h.Binding.String()}
@@ -112,6 +141,9 @@ func (a *Authority) receipt(gw Gateway, ev *pipeline.Evaluation, txn ids.UUID, e
 	}
 	if pap.Monitor {
 		entry["monitor"] = "true"
+	}
+	if pap.Would != "" {
+		entry["would"] = pap.Would
 	}
 	body, err := evdomain.CanonicalBody(entry)
 	if err != nil {

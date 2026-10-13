@@ -5,9 +5,22 @@
 -- GitHub user id, which independence compares.
 
 -- name: InsertGitHubIdentity :one
-INSERT INTO pc.github_identities (org_id, id, user_id, github_login, github_user_id, linked_by)
-VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(user_id), sqlc.arg(github_login), sqlc.arg(github_user_id), sqlc.arg(linked_by))
+-- A link the person proved by signing in to GitHub (P2f): verified now.
+INSERT INTO pc.github_identities (org_id, id, user_id, github_login, github_user_id, linked_by, verified_at)
+VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(user_id), sqlc.arg(github_login), sqlc.arg(github_user_id), sqlc.arg(linked_by), now())
 RETURNING *;
+
+-- name: InsertGitHubIdentityHistory :exec
+-- Every link a person proved, kept for good (P2f): see 00083.
+INSERT INTO pc.github_identity_history (org_id, github_user_id, user_id)
+VALUES (sqlc.arg(org_id), sqlc.arg(github_user_id), sqlc.arg(user_id))
+ON CONFLICT DO NOTHING;
+
+-- name: GitHubIdentityByGitHubUser :one
+SELECT * FROM pc.github_identities WHERE org_id = sqlc.arg(org_id) AND github_user_id = sqlc.arg(github_user_id);
+
+-- name: GitHubIdentity :one
+SELECT * FROM pc.github_identities WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id);
 
 -- name: DeleteGitHubIdentity :one
 DELETE FROM pc.github_identities WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id)
@@ -18,6 +31,27 @@ SELECT * FROM pc.github_identities
 WHERE org_id = sqlc.arg(org_id) AND (sqlc.narg(user_id)::uuid IS NULL OR user_id = sqlc.narg(user_id)::uuid)
   AND id > coalesce(sqlc.arg(after_id)::uuid, '00000000-0000-0000-0000-000000000000')
 ORDER BY id
+LIMIT sqlc.arg(max_rows);
+
+-- name: InsertGitHubExemption :one
+-- An account an admin registers as not a person (founder decision
+-- 2026-10-13); one registered already is refused.
+INSERT INTO pc.github_exemptions (org_id, github_user_id, github_login, reason, created_by)
+VALUES (sqlc.arg(org_id), sqlc.arg(github_user_id), sqlc.arg(github_login), sqlc.arg(reason), sqlc.arg(created_by))
+RETURNING *;
+
+-- name: GitHubUserEverLinked :one
+-- Whether someone ever proved the GitHub account as their own, or holds a
+-- link to it now: then it is a person and is never exempted.
+SELECT EXISTS (SELECT 1 FROM pc.github_identity_history h WHERE h.org_id = sqlc.arg(org_id) AND h.github_user_id = sqlc.arg(github_user_id))
+    OR EXISTS (SELECT 1 FROM pc.github_identities i WHERE i.org_id = sqlc.arg(org_id) AND i.github_user_id = sqlc.arg(github_user_id));
+
+-- name: DeleteGitHubExemption :one
+DELETE FROM pc.github_exemptions WHERE org_id = sqlc.arg(org_id) AND github_user_id = sqlc.arg(github_user_id)
+RETURNING *;
+
+-- name: ListGitHubExemptions :many
+SELECT * FROM pc.github_exemptions WHERE org_id = sqlc.arg(org_id) ORDER BY github_login, github_user_id
 LIMIT sqlc.arg(max_rows);
 
 -- Organisation scans (PN-001.2, HR-209): a github_scan_runs row and the

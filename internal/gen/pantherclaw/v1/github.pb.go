@@ -147,7 +147,10 @@ type GitHubIdentity struct {
 	// Who linked it.
 	LinkedBy string `protobuf:"bytes,5,opt,name=linked_by,json=linkedBy,proto3" json:"linked_by,omitempty"`
 	// When.
-	LinkTime      *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=link_time,json=linkTime,proto3" json:"link_time,omitempty"`
+	LinkTime *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=link_time,json=linkTime,proto3" json:"link_time,omitempty"`
+	// When the person proved the account by signing in to GitHub; unset for
+	// a link made before P2f, which approves nothing.
+	VerifyTime    *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=verify_time,json=verifyTime,proto3" json:"verify_time,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -224,33 +227,39 @@ func (x *GitHubIdentity) GetLinkTime() *timestamppb.Timestamp {
 	return nil
 }
 
-// LinkIdentityRequest links a person to a GitHub account.
-type LinkIdentityRequest struct {
+func (x *GitHubIdentity) GetVerifyTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.VerifyTime
+	}
+	return nil
+}
+
+// ProveIdentityRequest carries the token of a GitHub sign-in.
+type ProveIdentityRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// The person.
-	UserId string `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
-	// The GitHub login.
-	GithubLogin string `protobuf:"bytes,2,opt,name=github_login,json=githubLogin,proto3" json:"github_login,omitempty"`
-	// The GitHub user id.
-	GithubUserId  int64 `protobuf:"varint,3,opt,name=github_user_id,json=githubUserId,proto3" json:"github_user_id,omitempty"`
+	// A GitHub user access token from the GitHub App's user authorization
+	// (the device flow pclaw github link runs).
+	GithubUserToken string `protobuf:"bytes,1,opt,name=github_user_token,json=githubUserToken,proto3" json:"github_user_token,omitempty"`
+	// Remove the link to that account instead of making it.
+	Unlink        bool `protobuf:"varint,2,opt,name=unlink,proto3" json:"unlink,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *LinkIdentityRequest) Reset() {
-	*x = LinkIdentityRequest{}
+func (x *ProveIdentityRequest) Reset() {
+	*x = ProveIdentityRequest{}
 	mi := &file_pantherclaw_v1_github_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *LinkIdentityRequest) String() string {
+func (x *ProveIdentityRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*LinkIdentityRequest) ProtoMessage() {}
+func (*ProveIdentityRequest) ProtoMessage() {}
 
-func (x *LinkIdentityRequest) ProtoReflect() protoreflect.Message {
+func (x *ProveIdentityRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_pantherclaw_v1_github_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -262,34 +271,27 @@ func (x *LinkIdentityRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use LinkIdentityRequest.ProtoReflect.Descriptor instead.
-func (*LinkIdentityRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use ProveIdentityRequest.ProtoReflect.Descriptor instead.
+func (*ProveIdentityRequest) Descriptor() ([]byte, []int) {
 	return file_pantherclaw_v1_github_proto_rawDescGZIP(), []int{2}
 }
 
-func (x *LinkIdentityRequest) GetUserId() string {
+func (x *ProveIdentityRequest) GetGithubUserToken() string {
 	if x != nil {
-		return x.UserId
+		return x.GithubUserToken
 	}
 	return ""
 }
 
-func (x *LinkIdentityRequest) GetGithubLogin() string {
+func (x *ProveIdentityRequest) GetUnlink() bool {
 	if x != nil {
-		return x.GithubLogin
+		return x.Unlink
 	}
-	return ""
+	return false
 }
 
-func (x *LinkIdentityRequest) GetGithubUserId() int64 {
-	if x != nil {
-		return x.GithubUserId
-	}
-	return 0
-}
-
-// LinkIdentityResponse returns the link.
-type LinkIdentityResponse struct {
+// ProveIdentityResponse returns the link made or removed.
+type ProveIdentityResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The link.
 	Identity      *GitHubIdentity `protobuf:"bytes,1,opt,name=identity,proto3" json:"identity,omitempty"`
@@ -297,20 +299,20 @@ type LinkIdentityResponse struct {
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *LinkIdentityResponse) Reset() {
-	*x = LinkIdentityResponse{}
+func (x *ProveIdentityResponse) Reset() {
+	*x = ProveIdentityResponse{}
 	mi := &file_pantherclaw_v1_github_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *LinkIdentityResponse) String() string {
+func (x *ProveIdentityResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*LinkIdentityResponse) ProtoMessage() {}
+func (*ProveIdentityResponse) ProtoMessage() {}
 
-func (x *LinkIdentityResponse) ProtoReflect() protoreflect.Message {
+func (x *ProveIdentityResponse) ProtoReflect() protoreflect.Message {
 	mi := &file_pantherclaw_v1_github_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -322,16 +324,108 @@ func (x *LinkIdentityResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use LinkIdentityResponse.ProtoReflect.Descriptor instead.
-func (*LinkIdentityResponse) Descriptor() ([]byte, []int) {
+// Deprecated: Use ProveIdentityResponse.ProtoReflect.Descriptor instead.
+func (*ProveIdentityResponse) Descriptor() ([]byte, []int) {
 	return file_pantherclaw_v1_github_proto_rawDescGZIP(), []int{3}
 }
 
-func (x *LinkIdentityResponse) GetIdentity() *GitHubIdentity {
+func (x *ProveIdentityResponse) GetIdentity() *GitHubIdentity {
 	if x != nil {
 		return x.Identity
 	}
 	return nil
+}
+
+// GetSignInRequest is empty.
+type GetSignInRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetSignInRequest) Reset() {
+	*x = GetSignInRequest{}
+	mi := &file_pantherclaw_v1_github_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetSignInRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetSignInRequest) ProtoMessage() {}
+
+func (x *GetSignInRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_github_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetSignInRequest.ProtoReflect.Descriptor instead.
+func (*GetSignInRequest) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_github_proto_rawDescGZIP(), []int{4}
+}
+
+// GetSignInResponse is the GitHub App's device flow.
+type GetSignInResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The GitHub App's client id.
+	ClientId string `protobuf:"bytes,1,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
+	// GitHub's web origin, where device codes are asked for and entered.
+	WebUrl        string `protobuf:"bytes,2,opt,name=web_url,json=webUrl,proto3" json:"web_url,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetSignInResponse) Reset() {
+	*x = GetSignInResponse{}
+	mi := &file_pantherclaw_v1_github_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetSignInResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetSignInResponse) ProtoMessage() {}
+
+func (x *GetSignInResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_github_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetSignInResponse.ProtoReflect.Descriptor instead.
+func (*GetSignInResponse) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_github_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *GetSignInResponse) GetClientId() string {
+	if x != nil {
+		return x.ClientId
+	}
+	return ""
+}
+
+func (x *GetSignInResponse) GetWebUrl() string {
+	if x != nil {
+		return x.WebUrl
+	}
+	return ""
 }
 
 // UnlinkIdentityRequest names a link.
@@ -345,7 +439,7 @@ type UnlinkIdentityRequest struct {
 
 func (x *UnlinkIdentityRequest) Reset() {
 	*x = UnlinkIdentityRequest{}
-	mi := &file_pantherclaw_v1_github_proto_msgTypes[4]
+	mi := &file_pantherclaw_v1_github_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -357,7 +451,7 @@ func (x *UnlinkIdentityRequest) String() string {
 func (*UnlinkIdentityRequest) ProtoMessage() {}
 
 func (x *UnlinkIdentityRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_github_proto_msgTypes[4]
+	mi := &file_pantherclaw_v1_github_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -370,7 +464,7 @@ func (x *UnlinkIdentityRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UnlinkIdentityRequest.ProtoReflect.Descriptor instead.
 func (*UnlinkIdentityRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_github_proto_rawDescGZIP(), []int{4}
+	return file_pantherclaw_v1_github_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *UnlinkIdentityRequest) GetId() string {
@@ -389,7 +483,7 @@ type UnlinkIdentityResponse struct {
 
 func (x *UnlinkIdentityResponse) Reset() {
 	*x = UnlinkIdentityResponse{}
-	mi := &file_pantherclaw_v1_github_proto_msgTypes[5]
+	mi := &file_pantherclaw_v1_github_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -401,7 +495,7 @@ func (x *UnlinkIdentityResponse) String() string {
 func (*UnlinkIdentityResponse) ProtoMessage() {}
 
 func (x *UnlinkIdentityResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_github_proto_msgTypes[5]
+	mi := &file_pantherclaw_v1_github_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -414,7 +508,7 @@ func (x *UnlinkIdentityResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UnlinkIdentityResponse.ProtoReflect.Descriptor instead.
 func (*UnlinkIdentityResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_github_proto_rawDescGZIP(), []int{5}
+	return file_pantherclaw_v1_github_proto_rawDescGZIP(), []int{7}
 }
 
 // ListIdentitiesRequest pages through the links.
@@ -432,7 +526,7 @@ type ListIdentitiesRequest struct {
 
 func (x *ListIdentitiesRequest) Reset() {
 	*x = ListIdentitiesRequest{}
-	mi := &file_pantherclaw_v1_github_proto_msgTypes[6]
+	mi := &file_pantherclaw_v1_github_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -444,7 +538,7 @@ func (x *ListIdentitiesRequest) String() string {
 func (*ListIdentitiesRequest) ProtoMessage() {}
 
 func (x *ListIdentitiesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_github_proto_msgTypes[6]
+	mi := &file_pantherclaw_v1_github_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -457,7 +551,7 @@ func (x *ListIdentitiesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListIdentitiesRequest.ProtoReflect.Descriptor instead.
 func (*ListIdentitiesRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_github_proto_rawDescGZIP(), []int{6}
+	return file_pantherclaw_v1_github_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *ListIdentitiesRequest) GetUserId() string {
@@ -494,7 +588,7 @@ type ListIdentitiesResponse struct {
 
 func (x *ListIdentitiesResponse) Reset() {
 	*x = ListIdentitiesResponse{}
-	mi := &file_pantherclaw_v1_github_proto_msgTypes[7]
+	mi := &file_pantherclaw_v1_github_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -506,7 +600,7 @@ func (x *ListIdentitiesResponse) String() string {
 func (*ListIdentitiesResponse) ProtoMessage() {}
 
 func (x *ListIdentitiesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_github_proto_msgTypes[7]
+	mi := &file_pantherclaw_v1_github_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -519,7 +613,7 @@ func (x *ListIdentitiesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListIdentitiesResponse.ProtoReflect.Descriptor instead.
 func (*ListIdentitiesResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_github_proto_rawDescGZIP(), []int{7}
+	return file_pantherclaw_v1_github_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *ListIdentitiesResponse) GetIdentities() []*GitHubIdentity {
@@ -534,6 +628,364 @@ func (x *ListIdentitiesResponse) GetNextPageToken() string {
 		return x.NextPageToken
 	}
 	return ""
+}
+
+// GitHubExemption is a GitHub account an admin registered as not a person.
+type GitHubExemption struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The GitHub user id.
+	GithubUserId int64 `protobuf:"varint,1,opt,name=github_user_id,json=githubUserId,proto3" json:"github_user_id,omitempty"`
+	// Its login when exempted (a bot's ends in [bot]).
+	GithubLogin string `protobuf:"bytes,2,opt,name=github_login,json=githubLogin,proto3" json:"github_login,omitempty"`
+	// Why it is not a person.
+	Reason string `protobuf:"bytes,3,opt,name=reason,proto3" json:"reason,omitempty"`
+	// Who exempted it.
+	CreatedBy string `protobuf:"bytes,4,opt,name=created_by,json=createdBy,proto3" json:"created_by,omitempty"`
+	// When.
+	CreateTime    *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=create_time,json=createTime,proto3" json:"create_time,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GitHubExemption) Reset() {
+	*x = GitHubExemption{}
+	mi := &file_pantherclaw_v1_github_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GitHubExemption) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GitHubExemption) ProtoMessage() {}
+
+func (x *GitHubExemption) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_github_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GitHubExemption.ProtoReflect.Descriptor instead.
+func (*GitHubExemption) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_github_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *GitHubExemption) GetGithubUserId() int64 {
+	if x != nil {
+		return x.GithubUserId
+	}
+	return 0
+}
+
+func (x *GitHubExemption) GetGithubLogin() string {
+	if x != nil {
+		return x.GithubLogin
+	}
+	return ""
+}
+
+func (x *GitHubExemption) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
+func (x *GitHubExemption) GetCreatedBy() string {
+	if x != nil {
+		return x.CreatedBy
+	}
+	return ""
+}
+
+func (x *GitHubExemption) GetCreateTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.CreateTime
+	}
+	return nil
+}
+
+// ExemptAccountRequest names the account and why it is not a person.
+type ExemptAccountRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The GitHub user id.
+	GithubUserId int64 `protobuf:"varint,1,opt,name=github_user_id,json=githubUserId,proto3" json:"github_user_id,omitempty"`
+	// Its login.
+	GithubLogin string `protobuf:"bytes,2,opt,name=github_login,json=githubLogin,proto3" json:"github_login,omitempty"`
+	// Why it is not a person.
+	Reason        string `protobuf:"bytes,3,opt,name=reason,proto3" json:"reason,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ExemptAccountRequest) Reset() {
+	*x = ExemptAccountRequest{}
+	mi := &file_pantherclaw_v1_github_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ExemptAccountRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ExemptAccountRequest) ProtoMessage() {}
+
+func (x *ExemptAccountRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_github_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ExemptAccountRequest.ProtoReflect.Descriptor instead.
+func (*ExemptAccountRequest) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_github_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *ExemptAccountRequest) GetGithubUserId() int64 {
+	if x != nil {
+		return x.GithubUserId
+	}
+	return 0
+}
+
+func (x *ExemptAccountRequest) GetGithubLogin() string {
+	if x != nil {
+		return x.GithubLogin
+	}
+	return ""
+}
+
+func (x *ExemptAccountRequest) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
+// ExemptAccountResponse returns the exemption.
+type ExemptAccountResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The exemption.
+	Exemption     *GitHubExemption `protobuf:"bytes,1,opt,name=exemption,proto3" json:"exemption,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ExemptAccountResponse) Reset() {
+	*x = ExemptAccountResponse{}
+	mi := &file_pantherclaw_v1_github_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ExemptAccountResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ExemptAccountResponse) ProtoMessage() {}
+
+func (x *ExemptAccountResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_github_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ExemptAccountResponse.ProtoReflect.Descriptor instead.
+func (*ExemptAccountResponse) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_github_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *ExemptAccountResponse) GetExemption() *GitHubExemption {
+	if x != nil {
+		return x.Exemption
+	}
+	return nil
+}
+
+// RemoveExemptionRequest names the account.
+type RemoveExemptionRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The GitHub user id.
+	GithubUserId  int64 `protobuf:"varint,1,opt,name=github_user_id,json=githubUserId,proto3" json:"github_user_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RemoveExemptionRequest) Reset() {
+	*x = RemoveExemptionRequest{}
+	mi := &file_pantherclaw_v1_github_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RemoveExemptionRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RemoveExemptionRequest) ProtoMessage() {}
+
+func (x *RemoveExemptionRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_github_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RemoveExemptionRequest.ProtoReflect.Descriptor instead.
+func (*RemoveExemptionRequest) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_github_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *RemoveExemptionRequest) GetGithubUserId() int64 {
+	if x != nil {
+		return x.GithubUserId
+	}
+	return 0
+}
+
+// RemoveExemptionResponse is empty.
+type RemoveExemptionResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RemoveExemptionResponse) Reset() {
+	*x = RemoveExemptionResponse{}
+	mi := &file_pantherclaw_v1_github_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RemoveExemptionResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RemoveExemptionResponse) ProtoMessage() {}
+
+func (x *RemoveExemptionResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_github_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RemoveExemptionResponse.ProtoReflect.Descriptor instead.
+func (*RemoveExemptionResponse) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_github_proto_rawDescGZIP(), []int{14}
+}
+
+// ListExemptionsRequest is empty.
+type ListExemptionsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListExemptionsRequest) Reset() {
+	*x = ListExemptionsRequest{}
+	mi := &file_pantherclaw_v1_github_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListExemptionsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListExemptionsRequest) ProtoMessage() {}
+
+func (x *ListExemptionsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_github_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListExemptionsRequest.ProtoReflect.Descriptor instead.
+func (*ListExemptionsRequest) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_github_proto_rawDescGZIP(), []int{15}
+}
+
+// ListExemptionsResponse lists the exemptions by login.
+type ListExemptionsResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The exemptions.
+	Exemptions    []*GitHubExemption `protobuf:"bytes,1,rep,name=exemptions,proto3" json:"exemptions,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListExemptionsResponse) Reset() {
+	*x = ListExemptionsResponse{}
+	mi := &file_pantherclaw_v1_github_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListExemptionsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListExemptionsResponse) ProtoMessage() {}
+
+func (x *ListExemptionsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_github_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListExemptionsResponse.ProtoReflect.Descriptor instead.
+func (*ListExemptionsResponse) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_github_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *ListExemptionsResponse) GetExemptions() []*GitHubExemption {
+	if x != nil {
+		return x.Exemptions
+	}
+	return nil
 }
 
 // OrgScan is one scan of a GitHub organization (HR-209).
@@ -564,7 +1016,7 @@ type OrgScan struct {
 
 func (x *OrgScan) Reset() {
 	*x = OrgScan{}
-	mi := &file_pantherclaw_v1_github_proto_msgTypes[8]
+	mi := &file_pantherclaw_v1_github_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -576,7 +1028,7 @@ func (x *OrgScan) String() string {
 func (*OrgScan) ProtoMessage() {}
 
 func (x *OrgScan) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_github_proto_msgTypes[8]
+	mi := &file_pantherclaw_v1_github_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -589,7 +1041,7 @@ func (x *OrgScan) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use OrgScan.ProtoReflect.Descriptor instead.
 func (*OrgScan) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_github_proto_rawDescGZIP(), []int{8}
+	return file_pantherclaw_v1_github_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *OrgScan) GetId() string {
@@ -666,7 +1118,7 @@ type StartOrgScanRequest struct {
 
 func (x *StartOrgScanRequest) Reset() {
 	*x = StartOrgScanRequest{}
-	mi := &file_pantherclaw_v1_github_proto_msgTypes[9]
+	mi := &file_pantherclaw_v1_github_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -678,7 +1130,7 @@ func (x *StartOrgScanRequest) String() string {
 func (*StartOrgScanRequest) ProtoMessage() {}
 
 func (x *StartOrgScanRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_github_proto_msgTypes[9]
+	mi := &file_pantherclaw_v1_github_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -691,7 +1143,7 @@ func (x *StartOrgScanRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StartOrgScanRequest.ProtoReflect.Descriptor instead.
 func (*StartOrgScanRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_github_proto_rawDescGZIP(), []int{9}
+	return file_pantherclaw_v1_github_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *StartOrgScanRequest) GetConnectionId() string {
@@ -712,7 +1164,7 @@ type StartOrgScanResponse struct {
 
 func (x *StartOrgScanResponse) Reset() {
 	*x = StartOrgScanResponse{}
-	mi := &file_pantherclaw_v1_github_proto_msgTypes[10]
+	mi := &file_pantherclaw_v1_github_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -724,7 +1176,7 @@ func (x *StartOrgScanResponse) String() string {
 func (*StartOrgScanResponse) ProtoMessage() {}
 
 func (x *StartOrgScanResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_github_proto_msgTypes[10]
+	mi := &file_pantherclaw_v1_github_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -737,7 +1189,7 @@ func (x *StartOrgScanResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StartOrgScanResponse.ProtoReflect.Descriptor instead.
 func (*StartOrgScanResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_github_proto_rawDescGZIP(), []int{10}
+	return file_pantherclaw_v1_github_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *StartOrgScanResponse) GetScan() *OrgScan {
@@ -758,7 +1210,7 @@ type GetOrgScanRequest struct {
 
 func (x *GetOrgScanRequest) Reset() {
 	*x = GetOrgScanRequest{}
-	mi := &file_pantherclaw_v1_github_proto_msgTypes[11]
+	mi := &file_pantherclaw_v1_github_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -770,7 +1222,7 @@ func (x *GetOrgScanRequest) String() string {
 func (*GetOrgScanRequest) ProtoMessage() {}
 
 func (x *GetOrgScanRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_github_proto_msgTypes[11]
+	mi := &file_pantherclaw_v1_github_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -783,7 +1235,7 @@ func (x *GetOrgScanRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetOrgScanRequest.ProtoReflect.Descriptor instead.
 func (*GetOrgScanRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_github_proto_rawDescGZIP(), []int{11}
+	return file_pantherclaw_v1_github_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *GetOrgScanRequest) GetId() string {
@@ -804,7 +1256,7 @@ type GetOrgScanResponse struct {
 
 func (x *GetOrgScanResponse) Reset() {
 	*x = GetOrgScanResponse{}
-	mi := &file_pantherclaw_v1_github_proto_msgTypes[12]
+	mi := &file_pantherclaw_v1_github_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -816,7 +1268,7 @@ func (x *GetOrgScanResponse) String() string {
 func (*GetOrgScanResponse) ProtoMessage() {}
 
 func (x *GetOrgScanResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_github_proto_msgTypes[12]
+	mi := &file_pantherclaw_v1_github_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -829,7 +1281,7 @@ func (x *GetOrgScanResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetOrgScanResponse.ProtoReflect.Descriptor instead.
 func (*GetOrgScanResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_github_proto_rawDescGZIP(), []int{12}
+	return file_pantherclaw_v1_github_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *GetOrgScanResponse) GetScan() *OrgScan {
@@ -855,20 +1307,26 @@ const file_pantherclaw_v1_github_proto_rawDesc = "" +
 	"\tread_time\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\breadTime\x1a>\n" +
 	"\x10PermissionsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xd8\x01\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x95\x02\n" +
 	"\x0eGitHubIdentity\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x17\n" +
 	"\auser_id\x18\x02 \x01(\tR\x06userId\x12!\n" +
 	"\fgithub_login\x18\x03 \x01(\tR\vgithubLogin\x12$\n" +
 	"\x0egithub_user_id\x18\x04 \x01(\x03R\fgithubUserId\x12\x1b\n" +
 	"\tlinked_by\x18\x05 \x01(\tR\blinkedBy\x127\n" +
-	"\tlink_time\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\blinkTime\"\xb2\x01\n" +
-	"\x13LinkIdentityRequest\x12!\n" +
-	"\auser_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x06userId\x12I\n" +
-	"\fgithub_login\x18\x02 \x01(\tB&\xbaH#r!2\x1f^[A-Za-z0-9][A-Za-z0-9-]{0,38}$R\vgithubLogin\x12-\n" +
-	"\x0egithub_user_id\x18\x03 \x01(\x03B\a\xbaH\x04\"\x02 \x00R\fgithubUserId\"R\n" +
-	"\x14LinkIdentityResponse\x12:\n" +
-	"\bidentity\x18\x01 \x01(\v2\x1e.pantherclaw.v1.GitHubIdentityR\bidentity\"1\n" +
+	"\tlink_time\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\blinkTime\x12;\n" +
+	"\vverify_time\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\n" +
+	"verifyTime\"f\n" +
+	"\x14ProveIdentityRequest\x126\n" +
+	"\x11github_user_token\x18\x01 \x01(\tB\n" +
+	"\xbaH\ar\x05\x10\x01\x18\x80\x04R\x0fgithubUserToken\x12\x16\n" +
+	"\x06unlink\x18\x02 \x01(\bR\x06unlink\"S\n" +
+	"\x15ProveIdentityResponse\x12:\n" +
+	"\bidentity\x18\x01 \x01(\v2\x1e.pantherclaw.v1.GitHubIdentityR\bidentity\"\x12\n" +
+	"\x10GetSignInRequest\"I\n" +
+	"\x11GetSignInResponse\x12\x1b\n" +
+	"\tclient_id\x18\x01 \x01(\tR\bclientId\x12\x17\n" +
+	"\aweb_url\x18\x02 \x01(\tR\x06webUrl\"1\n" +
 	"\x15UnlinkIdentityRequest\x12\x18\n" +
 	"\x02id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x02id\"\x18\n" +
 	"\x16UnlinkIdentityResponse\"\x8f\x01\n" +
@@ -882,7 +1340,30 @@ const file_pantherclaw_v1_github_proto_rawDesc = "" +
 	"\n" +
 	"identities\x18\x01 \x03(\v2\x1e.pantherclaw.v1.GitHubIdentityR\n" +
 	"identities\x12&\n" +
-	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"\x88\x04\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"\xce\x01\n" +
+	"\x0fGitHubExemption\x12$\n" +
+	"\x0egithub_user_id\x18\x01 \x01(\x03R\fgithubUserId\x12!\n" +
+	"\fgithub_login\x18\x02 \x01(\tR\vgithubLogin\x12\x16\n" +
+	"\x06reason\x18\x03 \x01(\tR\x06reason\x12\x1d\n" +
+	"\n" +
+	"created_by\x18\x04 \x01(\tR\tcreatedBy\x12;\n" +
+	"\vcreate_time\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
+	"createTime\"\x97\x01\n" +
+	"\x14ExemptAccountRequest\x12-\n" +
+	"\x0egithub_user_id\x18\x01 \x01(\x03B\a\xbaH\x04\"\x02 \x00R\fgithubUserId\x12,\n" +
+	"\fgithub_login\x18\x02 \x01(\tB\t\xbaH\x06r\x04\x10\x01\x18,R\vgithubLogin\x12\"\n" +
+	"\x06reason\x18\x03 \x01(\tB\n" +
+	"\xbaH\ar\x05\x10\x01\x18\x80\x02R\x06reason\"V\n" +
+	"\x15ExemptAccountResponse\x12=\n" +
+	"\texemption\x18\x01 \x01(\v2\x1f.pantherclaw.v1.GitHubExemptionR\texemption\"G\n" +
+	"\x16RemoveExemptionRequest\x12-\n" +
+	"\x0egithub_user_id\x18\x01 \x01(\x03B\a\xbaH\x04\"\x02 \x00R\fgithubUserId\"\x19\n" +
+	"\x17RemoveExemptionResponse\"\x17\n" +
+	"\x15ListExemptionsRequest\"Y\n" +
+	"\x16ListExemptionsResponse\x12?\n" +
+	"\n" +
+	"exemptions\x18\x01 \x03(\v2\x1f.pantherclaw.v1.GitHubExemptionR\n" +
+	"exemptions\"\x88\x04\n" +
 	"\aOrgScan\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12#\n" +
 	"\rconnection_id\x18\x02 \x01(\tR\fconnectionId\x12\x14\n" +
@@ -910,11 +1391,15 @@ const file_pantherclaw_v1_github_proto_rawDesc = "" +
 	"\x11GetOrgScanRequest\x12\x18\n" +
 	"\x02id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x02id\"A\n" +
 	"\x12GetOrgScanResponse\x12+\n" +
-	"\x04scan\x18\x01 \x01(\v2\x17.pantherclaw.v1.OrgScanR\x04scan2\xdc\x03\n" +
-	"\rGitHubService\x12Y\n" +
-	"\fLinkIdentity\x12#.pantherclaw.v1.LinkIdentityRequest\x1a$.pantherclaw.v1.LinkIdentityResponse\x12_\n" +
+	"\x04scan\x18\x01 \x01(\v2\x17.pantherclaw.v1.OrgScanR\x04scan2\xd4\x06\n" +
+	"\rGitHubService\x12\\\n" +
+	"\rProveIdentity\x12$.pantherclaw.v1.ProveIdentityRequest\x1a%.pantherclaw.v1.ProveIdentityResponse\x12P\n" +
+	"\tGetSignIn\x12 .pantherclaw.v1.GetSignInRequest\x1a!.pantherclaw.v1.GetSignInResponse\x12_\n" +
 	"\x0eUnlinkIdentity\x12%.pantherclaw.v1.UnlinkIdentityRequest\x1a&.pantherclaw.v1.UnlinkIdentityResponse\x12_\n" +
-	"\x0eListIdentities\x12%.pantherclaw.v1.ListIdentitiesRequest\x1a&.pantherclaw.v1.ListIdentitiesResponse\x12Y\n" +
+	"\x0eListIdentities\x12%.pantherclaw.v1.ListIdentitiesRequest\x1a&.pantherclaw.v1.ListIdentitiesResponse\x12\\\n" +
+	"\rExemptAccount\x12$.pantherclaw.v1.ExemptAccountRequest\x1a%.pantherclaw.v1.ExemptAccountResponse\x12b\n" +
+	"\x0fRemoveExemption\x12&.pantherclaw.v1.RemoveExemptionRequest\x1a'.pantherclaw.v1.RemoveExemptionResponse\x12_\n" +
+	"\x0eListExemptions\x12%.pantherclaw.v1.ListExemptionsRequest\x1a&.pantherclaw.v1.ListExemptionsResponse\x12Y\n" +
 	"\fStartOrgScan\x12#.pantherclaw.v1.StartOrgScanRequest\x1a$.pantherclaw.v1.StartOrgScanResponse\x12S\n" +
 	"\n" +
 	"GetOrgScan\x12!.pantherclaw.v1.GetOrgScanRequest\x1a\".pantherclaw.v1.GetOrgScanResponseB\xc4\x01\n" +
@@ -932,53 +1417,74 @@ func file_pantherclaw_v1_github_proto_rawDescGZIP() []byte {
 	return file_pantherclaw_v1_github_proto_rawDescData
 }
 
-var file_pantherclaw_v1_github_proto_msgTypes = make([]protoimpl.MessageInfo, 16)
+var file_pantherclaw_v1_github_proto_msgTypes = make([]protoimpl.MessageInfo, 25)
 var file_pantherclaw_v1_github_proto_goTypes = []any{
-	(*GitHubInstallation)(nil),     // 0: pantherclaw.v1.GitHubInstallation
-	(*GitHubIdentity)(nil),         // 1: pantherclaw.v1.GitHubIdentity
-	(*LinkIdentityRequest)(nil),    // 2: pantherclaw.v1.LinkIdentityRequest
-	(*LinkIdentityResponse)(nil),   // 3: pantherclaw.v1.LinkIdentityResponse
-	(*UnlinkIdentityRequest)(nil),  // 4: pantherclaw.v1.UnlinkIdentityRequest
-	(*UnlinkIdentityResponse)(nil), // 5: pantherclaw.v1.UnlinkIdentityResponse
-	(*ListIdentitiesRequest)(nil),  // 6: pantherclaw.v1.ListIdentitiesRequest
-	(*ListIdentitiesResponse)(nil), // 7: pantherclaw.v1.ListIdentitiesResponse
-	(*OrgScan)(nil),                // 8: pantherclaw.v1.OrgScan
-	(*StartOrgScanRequest)(nil),    // 9: pantherclaw.v1.StartOrgScanRequest
-	(*StartOrgScanResponse)(nil),   // 10: pantherclaw.v1.StartOrgScanResponse
-	(*GetOrgScanRequest)(nil),      // 11: pantherclaw.v1.GetOrgScanRequest
-	(*GetOrgScanResponse)(nil),     // 12: pantherclaw.v1.GetOrgScanResponse
-	nil,                            // 13: pantherclaw.v1.GitHubInstallation.PermissionsEntry
-	nil,                            // 14: pantherclaw.v1.OrgScan.CountsEntry
-	nil,                            // 15: pantherclaw.v1.OrgScan.NotScannedEntry
-	(*timestamppb.Timestamp)(nil),  // 16: google.protobuf.Timestamp
+	(*GitHubInstallation)(nil),      // 0: pantherclaw.v1.GitHubInstallation
+	(*GitHubIdentity)(nil),          // 1: pantherclaw.v1.GitHubIdentity
+	(*ProveIdentityRequest)(nil),    // 2: pantherclaw.v1.ProveIdentityRequest
+	(*ProveIdentityResponse)(nil),   // 3: pantherclaw.v1.ProveIdentityResponse
+	(*GetSignInRequest)(nil),        // 4: pantherclaw.v1.GetSignInRequest
+	(*GetSignInResponse)(nil),       // 5: pantherclaw.v1.GetSignInResponse
+	(*UnlinkIdentityRequest)(nil),   // 6: pantherclaw.v1.UnlinkIdentityRequest
+	(*UnlinkIdentityResponse)(nil),  // 7: pantherclaw.v1.UnlinkIdentityResponse
+	(*ListIdentitiesRequest)(nil),   // 8: pantherclaw.v1.ListIdentitiesRequest
+	(*ListIdentitiesResponse)(nil),  // 9: pantherclaw.v1.ListIdentitiesResponse
+	(*GitHubExemption)(nil),         // 10: pantherclaw.v1.GitHubExemption
+	(*ExemptAccountRequest)(nil),    // 11: pantherclaw.v1.ExemptAccountRequest
+	(*ExemptAccountResponse)(nil),   // 12: pantherclaw.v1.ExemptAccountResponse
+	(*RemoveExemptionRequest)(nil),  // 13: pantherclaw.v1.RemoveExemptionRequest
+	(*RemoveExemptionResponse)(nil), // 14: pantherclaw.v1.RemoveExemptionResponse
+	(*ListExemptionsRequest)(nil),   // 15: pantherclaw.v1.ListExemptionsRequest
+	(*ListExemptionsResponse)(nil),  // 16: pantherclaw.v1.ListExemptionsResponse
+	(*OrgScan)(nil),                 // 17: pantherclaw.v1.OrgScan
+	(*StartOrgScanRequest)(nil),     // 18: pantherclaw.v1.StartOrgScanRequest
+	(*StartOrgScanResponse)(nil),    // 19: pantherclaw.v1.StartOrgScanResponse
+	(*GetOrgScanRequest)(nil),       // 20: pantherclaw.v1.GetOrgScanRequest
+	(*GetOrgScanResponse)(nil),      // 21: pantherclaw.v1.GetOrgScanResponse
+	nil,                             // 22: pantherclaw.v1.GitHubInstallation.PermissionsEntry
+	nil,                             // 23: pantherclaw.v1.OrgScan.CountsEntry
+	nil,                             // 24: pantherclaw.v1.OrgScan.NotScannedEntry
+	(*timestamppb.Timestamp)(nil),   // 25: google.protobuf.Timestamp
 }
 var file_pantherclaw_v1_github_proto_depIdxs = []int32{
-	13, // 0: pantherclaw.v1.GitHubInstallation.permissions:type_name -> pantherclaw.v1.GitHubInstallation.PermissionsEntry
-	16, // 1: pantherclaw.v1.GitHubInstallation.read_time:type_name -> google.protobuf.Timestamp
-	16, // 2: pantherclaw.v1.GitHubIdentity.link_time:type_name -> google.protobuf.Timestamp
-	1,  // 3: pantherclaw.v1.LinkIdentityResponse.identity:type_name -> pantherclaw.v1.GitHubIdentity
-	1,  // 4: pantherclaw.v1.ListIdentitiesResponse.identities:type_name -> pantherclaw.v1.GitHubIdentity
-	14, // 5: pantherclaw.v1.OrgScan.counts:type_name -> pantherclaw.v1.OrgScan.CountsEntry
-	15, // 6: pantherclaw.v1.OrgScan.not_scanned:type_name -> pantherclaw.v1.OrgScan.NotScannedEntry
-	16, // 7: pantherclaw.v1.OrgScan.create_time:type_name -> google.protobuf.Timestamp
-	16, // 8: pantherclaw.v1.OrgScan.finish_time:type_name -> google.protobuf.Timestamp
-	8,  // 9: pantherclaw.v1.StartOrgScanResponse.scan:type_name -> pantherclaw.v1.OrgScan
-	8,  // 10: pantherclaw.v1.GetOrgScanResponse.scan:type_name -> pantherclaw.v1.OrgScan
-	2,  // 11: pantherclaw.v1.GitHubService.LinkIdentity:input_type -> pantherclaw.v1.LinkIdentityRequest
-	4,  // 12: pantherclaw.v1.GitHubService.UnlinkIdentity:input_type -> pantherclaw.v1.UnlinkIdentityRequest
-	6,  // 13: pantherclaw.v1.GitHubService.ListIdentities:input_type -> pantherclaw.v1.ListIdentitiesRequest
-	9,  // 14: pantherclaw.v1.GitHubService.StartOrgScan:input_type -> pantherclaw.v1.StartOrgScanRequest
-	11, // 15: pantherclaw.v1.GitHubService.GetOrgScan:input_type -> pantherclaw.v1.GetOrgScanRequest
-	3,  // 16: pantherclaw.v1.GitHubService.LinkIdentity:output_type -> pantherclaw.v1.LinkIdentityResponse
-	5,  // 17: pantherclaw.v1.GitHubService.UnlinkIdentity:output_type -> pantherclaw.v1.UnlinkIdentityResponse
-	7,  // 18: pantherclaw.v1.GitHubService.ListIdentities:output_type -> pantherclaw.v1.ListIdentitiesResponse
-	10, // 19: pantherclaw.v1.GitHubService.StartOrgScan:output_type -> pantherclaw.v1.StartOrgScanResponse
-	12, // 20: pantherclaw.v1.GitHubService.GetOrgScan:output_type -> pantherclaw.v1.GetOrgScanResponse
-	16, // [16:21] is the sub-list for method output_type
-	11, // [11:16] is the sub-list for method input_type
-	11, // [11:11] is the sub-list for extension type_name
-	11, // [11:11] is the sub-list for extension extendee
-	0,  // [0:11] is the sub-list for field type_name
+	22, // 0: pantherclaw.v1.GitHubInstallation.permissions:type_name -> pantherclaw.v1.GitHubInstallation.PermissionsEntry
+	25, // 1: pantherclaw.v1.GitHubInstallation.read_time:type_name -> google.protobuf.Timestamp
+	25, // 2: pantherclaw.v1.GitHubIdentity.link_time:type_name -> google.protobuf.Timestamp
+	25, // 3: pantherclaw.v1.GitHubIdentity.verify_time:type_name -> google.protobuf.Timestamp
+	1,  // 4: pantherclaw.v1.ProveIdentityResponse.identity:type_name -> pantherclaw.v1.GitHubIdentity
+	1,  // 5: pantherclaw.v1.ListIdentitiesResponse.identities:type_name -> pantherclaw.v1.GitHubIdentity
+	25, // 6: pantherclaw.v1.GitHubExemption.create_time:type_name -> google.protobuf.Timestamp
+	10, // 7: pantherclaw.v1.ExemptAccountResponse.exemption:type_name -> pantherclaw.v1.GitHubExemption
+	10, // 8: pantherclaw.v1.ListExemptionsResponse.exemptions:type_name -> pantherclaw.v1.GitHubExemption
+	23, // 9: pantherclaw.v1.OrgScan.counts:type_name -> pantherclaw.v1.OrgScan.CountsEntry
+	24, // 10: pantherclaw.v1.OrgScan.not_scanned:type_name -> pantherclaw.v1.OrgScan.NotScannedEntry
+	25, // 11: pantherclaw.v1.OrgScan.create_time:type_name -> google.protobuf.Timestamp
+	25, // 12: pantherclaw.v1.OrgScan.finish_time:type_name -> google.protobuf.Timestamp
+	17, // 13: pantherclaw.v1.StartOrgScanResponse.scan:type_name -> pantherclaw.v1.OrgScan
+	17, // 14: pantherclaw.v1.GetOrgScanResponse.scan:type_name -> pantherclaw.v1.OrgScan
+	2,  // 15: pantherclaw.v1.GitHubService.ProveIdentity:input_type -> pantherclaw.v1.ProveIdentityRequest
+	4,  // 16: pantherclaw.v1.GitHubService.GetSignIn:input_type -> pantherclaw.v1.GetSignInRequest
+	6,  // 17: pantherclaw.v1.GitHubService.UnlinkIdentity:input_type -> pantherclaw.v1.UnlinkIdentityRequest
+	8,  // 18: pantherclaw.v1.GitHubService.ListIdentities:input_type -> pantherclaw.v1.ListIdentitiesRequest
+	11, // 19: pantherclaw.v1.GitHubService.ExemptAccount:input_type -> pantherclaw.v1.ExemptAccountRequest
+	13, // 20: pantherclaw.v1.GitHubService.RemoveExemption:input_type -> pantherclaw.v1.RemoveExemptionRequest
+	15, // 21: pantherclaw.v1.GitHubService.ListExemptions:input_type -> pantherclaw.v1.ListExemptionsRequest
+	18, // 22: pantherclaw.v1.GitHubService.StartOrgScan:input_type -> pantherclaw.v1.StartOrgScanRequest
+	20, // 23: pantherclaw.v1.GitHubService.GetOrgScan:input_type -> pantherclaw.v1.GetOrgScanRequest
+	3,  // 24: pantherclaw.v1.GitHubService.ProveIdentity:output_type -> pantherclaw.v1.ProveIdentityResponse
+	5,  // 25: pantherclaw.v1.GitHubService.GetSignIn:output_type -> pantherclaw.v1.GetSignInResponse
+	7,  // 26: pantherclaw.v1.GitHubService.UnlinkIdentity:output_type -> pantherclaw.v1.UnlinkIdentityResponse
+	9,  // 27: pantherclaw.v1.GitHubService.ListIdentities:output_type -> pantherclaw.v1.ListIdentitiesResponse
+	12, // 28: pantherclaw.v1.GitHubService.ExemptAccount:output_type -> pantherclaw.v1.ExemptAccountResponse
+	14, // 29: pantherclaw.v1.GitHubService.RemoveExemption:output_type -> pantherclaw.v1.RemoveExemptionResponse
+	16, // 30: pantherclaw.v1.GitHubService.ListExemptions:output_type -> pantherclaw.v1.ListExemptionsResponse
+	19, // 31: pantherclaw.v1.GitHubService.StartOrgScan:output_type -> pantherclaw.v1.StartOrgScanResponse
+	21, // 32: pantherclaw.v1.GitHubService.GetOrgScan:output_type -> pantherclaw.v1.GetOrgScanResponse
+	24, // [24:33] is the sub-list for method output_type
+	15, // [15:24] is the sub-list for method input_type
+	15, // [15:15] is the sub-list for extension type_name
+	15, // [15:15] is the sub-list for extension extendee
+	0,  // [0:15] is the sub-list for field type_name
 }
 
 func init() { file_pantherclaw_v1_github_proto_init() }
@@ -992,7 +1498,7 @@ func file_pantherclaw_v1_github_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pantherclaw_v1_github_proto_rawDesc), len(file_pantherclaw_v1_github_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   16,
+			NumMessages:   25,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
