@@ -1520,9 +1520,11 @@ type CredentialAccess struct {
 	Repository string `protobuf:"bytes,2,opt,name=repository,proto3" json:"repository,omitempty"`
 	// GitHub's id of that repository; 0 when GitHub did not give one.
 	RepositoryId int64 `protobuf:"varint,3,opt,name=repository_id,json=repositoryId,proto3" json:"repository_id,omitempty"`
-	// The permissions requested, by name.
+	// The permissions requested, by name: a package's credential scope, so
+	// with its rules for names and levels.
 	Requested map[string]string `protobuf:"bytes,4,rep,name=requested,proto3" json:"requested,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	// The permissions GitHub granted, by name.
+	// The permissions GitHub granted, by name: those requested with
+	// metadata: read, or, on a refused wider grant, whatever GitHub said.
 	Granted map[string]string `protobuf:"bytes,5,rep,name=granted,proto3" json:"granted,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	// When the token expires, as GitHub said.
 	ExpireTime *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=expire_time,json=expireTime,proto3" json:"expire_time,omitempty"`
@@ -2300,15 +2302,15 @@ const file_pantherclaw_v1_authority_proto_rawDesc = "" +
 	"\n" +
 	"target_ref\x18\x06 \x01(\tB\x12\xbaH\x0fr\r\x18\x80\x022\b^[!-~]*$R\ttargetRef\x12D\n" +
 	"\bcaptures\x18\a \x03(\v2\x1e.pantherclaw.v1.PayloadCaptureB\b\xbaH\x05\x92\x01\x02\x10\x02R\bcaptures\x12M\n" +
-	"\x11credential_access\x18\b \x01(\v2 .pantherclaw.v1.CredentialAccessR\x10credentialAccess\"\xc8\x05\n" +
+	"\x11credential_access\x18\b \x01(\v2 .pantherclaw.v1.CredentialAccessR\x10credentialAccess\"\xcf\x05\n" +
 	"\x10CredentialAccess\x120\n" +
 	"\x0finstallation_id\x18\x01 \x01(\x03B\a\xbaH\x04\"\x02 \x00R\x0einstallationId\x12Y\n" +
 	"\n" +
 	"repository\x18\x02 \x01(\tB9\xbaH6r4\x18\x8c\x012/^[a-z0-9][a-z0-9-]{0,38}/[A-Za-z0-9._-]{1,100}$R\n" +
 	"repository\x12,\n" +
-	"\rrepository_id\x18\x03 \x01(\x03B\a\xbaH\x04\"\x02(\x00R\frepositoryId\x12\x83\x01\n" +
-	"\trequested\x18\x04 \x03(\v2/.pantherclaw.v1.CredentialAccess.RequestedEntryB4\xbaH1\x9a\x01.\x10\x10\"\x12r\x102\x0e^[a-z_]{1,64}$*\x16r\x14R\x04readR\x05writeR\x05adminR\trequested\x12}\n" +
-	"\agranted\x18\x05 \x03(\v2-.pantherclaw.v1.CredentialAccess.GrantedEntryB4\xbaH1\x9a\x01.\x10\x10\"\x12r\x102\x0e^[a-z_]{1,64}$*\x16r\x14R\x04readR\x05writeR\x05adminR\agranted\x12;\n" +
+	"\rrepository_id\x18\x03 \x01(\x03B\a\xbaH\x04\"\x02(\x00R\frepositoryId\x12\x86\x01\n" +
+	"\trequested\x18\x04 \x03(\v2/.pantherclaw.v1.CredentialAccess.RequestedEntryB7\xbaH4\x9a\x011\x10\x10\"\x1ar\x182\x16^[a-z][a-z0-9_]{0,63}$*\x11r\x0f2\r^[a-z]{1,16}$R\trequested\x12\x80\x01\n" +
+	"\agranted\x18\x05 \x03(\v2-.pantherclaw.v1.CredentialAccess.GrantedEntryB7\xbaH4\x9a\x011\x10 \"\x1ar\x182\x16^[a-z][a-z0-9_]{0,63}$*\x11r\x0f2\r^[a-z]{1,16}$R\agranted\x12;\n" +
 	"\vexpire_time\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"expireTime\x12=\n" +
 	"\n" +

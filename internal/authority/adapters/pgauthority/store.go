@@ -13,6 +13,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"strconv"
 	"time"
 
 	pgapprovals "github.com/katocxl/pantherclaw/internal/approvals/adapters/pgapprovals"
@@ -585,6 +586,9 @@ func (s *Store) RecordExecution(ctx context.Context, org ids.OrgID, gatewayID st
 		} else if err != nil {
 			return err
 		}
+		if err := revokeFailed(ctx, tx, gatewayID, pc.TransactionID, e.Access); err != nil {
+			return err
+		}
 		x := executed(pc, finalize.RecordedByGateway)
 		if o == finalize.Delegated {
 			if pc.Channel == nil || (*pc.Channel != "hook" && *pc.Channel != "sdk") {
@@ -667,6 +671,24 @@ func (s *Store) RecordExecution(ctx context.Context, org ids.OrgID, gatewayID st
 		return nil
 	})
 	return receipt, err
+}
+
+// revokeFailed records credential.revoke_failed when a dispatch's minted
+// token could not be revoked: it lasts until the expiry GitHub stated
+// (ADR-0021 item 6, R-18). The receipt says so too.
+func revokeFailed(ctx context.Context, tx db.TenantTx, gatewayID string, txn ids.UUID, a *finalize.Access) error {
+	if a == nil || a.Revocation != "revoke_failed" {
+		return nil
+	}
+	details := map[string]string{"installation": strconv.FormatInt(a.Installation, 10), "repository": a.Repository}
+	if !a.Expires.IsZero() {
+		details["expires_at"] = a.Expires.UTC().Format(time.RFC3339)
+	}
+	_, err := audit.Record(ctx, tx, audit.Event{
+		Name: "credential.revoke_failed", Actor: evdomain.Actor{Type: "gateway", ID: gatewayID}, Outcome: audit.Failure,
+		Object: &audit.Object{Type: "transaction", ID: txn.String()}, Details: details,
+	})
+	return err
 }
 
 // Sweep implements finalize.Store (HR-003, HR-192).

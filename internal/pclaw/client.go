@@ -123,8 +123,8 @@ type clients struct {
 	m6Clients
 	m5p2Clients
 	m7Clients
-	m8pClients
 	m8gClients
+	m8pClients
 }
 
 func (a *app) clients() (clients, error) {

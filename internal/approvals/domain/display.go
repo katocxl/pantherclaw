@@ -220,7 +220,7 @@ func RenderAction(in ActionInput) (Display, error) {
 		untrusted = append(untrusted, Clean("task_label", in.TaskLabel, 0))
 	}
 	for _, name := range slices.Sorted(maps.Keys(in.Requested)) {
-		if v := in.Requested[name]; v.Type == defs.TypeText && v.Str != "" {
+		if v := in.Requested[name]; (v.Type == defs.TypeText || v.Type == defs.TypeContent) && v.Str != "" {
 			untrusted = append(untrusted, Clean("param:"+name, v.Str, 0))
 		}
 	}
@@ -309,8 +309,9 @@ func factLines(facts []fdomain.Fact, bound []BoundFact) []FactLine {
 }
 
 // fieldValue renders one canonical field: operation, target.type,
-// target.id, target.account, params.<material param> or facts.<name of a
-// prerequisite fact>.
+// target.id, target.account, params.<material param that is not content>
+// or facts.<name of a prerequisite fact>. Content is agent-written and
+// only ever untrusted.
 func fieldValue(d *defs.Definition, name string, in ActionInput) (Field, error) {
 	f := Field{Name: name}
 	switch name {
@@ -326,8 +327,8 @@ func fieldValue(d *defs.Definition, name string, in ActionInput) (Field, error) 
 		if p, ok := strings.CutPrefix(name, "params."); ok {
 			spec, declared := d.Params[p]
 			v, present := in.Effective[p]
-			if !declared || !spec.Material {
-				return f, fmt.Errorf("approvals: template field %q is not a material parameter", name)
+			if !declared || !spec.Material || spec.Type == defs.TypeContent {
+				return f, fmt.Errorf("approvals: template field %q is not a canonical material parameter", name)
 			}
 			if present {
 				f.Value = formatValue(v, spec)

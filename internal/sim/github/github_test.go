@@ -16,6 +16,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -125,11 +126,43 @@ func TestInstallationTokensAreScoped(t *testing.T) {
 	reqs := w.sim.Requests()
 	last := reqs[len(reqs)-1]
 	if last.Token != Fingerprint(tok) || last.Installation != 7 || !slices.Equal(last.Repos, []string{"acme/payments"}) ||
-		!maps.Equal(last.Permissions, map[string]string{"contents": "read"}) || !last.Write || last.Status != http.StatusForbidden {
+		!maps.Equal(last.Permissions, map[string]string{"contents": "read", "metadata": "read"}) || !last.Write || last.Status != http.StatusForbidden {
 		t.Fatalf("recorded %+v", last)
 	}
 	if got := w.sim.Tokens(); len(got) != 1 || got[0].Uses != 6 {
 		t.Fatalf("tokens %+v", got)
+	}
+}
+
+// TestTokensListMetadataAndAcceptRepositoryIDs: as on GitHub, a token
+// request may give repositories by id, and every token lists metadata: read
+// among its permissions whatever was asked for (the gateway treats it as
+// the baseline of every grant, ADR-0021).
+func TestTokensListMetadataAndAcceptRepositoryIDs(t *testing.T) {
+	w := newWorld(t)
+	_, reader := w.mint(`{"repositories":["payments"],"permissions":{"contents":"read"}}`)
+	_, repo := w.do("GET", "/repos/acme/payments", "Bearer "+reader, "")
+	id, ok := repo["id"].(float64)
+	if !ok || int64(id) != accountID("acme/payments") {
+		t.Fatalf("repository id: %v", repo["id"])
+	}
+	status, out := w.do("POST", "/app/installations/7/access_tokens", "Bearer "+w.jwt(),
+		`{"repository_ids":[`+strconv.FormatInt(int64(id), 10)+`],"permissions":{"pull_requests":"write"}}`)
+	if status != http.StatusCreated {
+		t.Fatalf("mint by id: %d %v", status, out)
+	}
+	perms, _ := out["permissions"].(map[string]any)
+	if len(perms) != 2 || perms["pull_requests"] != "write" || perms["metadata"] != "read" {
+		t.Fatalf("granted permissions: %v", out["permissions"])
+	}
+	repos, _ := out["repositories"].([]any)
+	if len(repos) != 1 || repos[0].(map[string]any)["full_name"] != "acme/payments" {
+		t.Fatalf("granted repositories: %v", out["repositories"])
+	}
+	last := w.sim.Requests()[len(w.sim.Requests())-1]
+	if !slices.Equal(last.Repos, []string{"acme/payments"}) ||
+		!maps.Equal(last.Permissions, map[string]string{"pull_requests": "write", "metadata": "read"}) {
+		t.Fatalf("recorded %+v", last)
 	}
 }
 
@@ -141,7 +174,8 @@ func TestMintingStaysWithinTheInstallation(t *testing.T) {
 		"another repository":    `{"repositories":["secret"],"permissions":{"contents":"read"}}`,
 		"another permission":    `{"repositories":["payments"],"permissions":{"administration":"write"}}`,
 		"a higher level":        `{"repositories":["payments"],"permissions":{"metadata":"write"}}`,
-		"an unknown body field": `{"repositories":["payments"],"repository_ids":[1]}`,
+		"another repository id": `{"repository_ids":[1],"permissions":{"contents":"read"}}`,
+		"an unknown body field": `{"repositories":["payments"],"repository_names":["payments"]}`,
 	} {
 		if status, tok := w.mint(body); status != http.StatusUnprocessableEntity || tok != "" {
 			t.Errorf("%s: %d", name, status)
