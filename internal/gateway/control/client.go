@@ -69,6 +69,8 @@ type Client struct {
 	hc        *http.Client
 	Authority pantherclawv1connect.AuthorityServiceClient
 	Gateway   pantherclawv1connect.GatewayServiceClient
+	// Agents submits an organization scan's findings (G0 M8, HR-209).
+	Agents pantherclawv1connect.AgentServiceClient
 	// Stream is GatewayService for server streams (no request timeout).
 	Stream pantherclawv1connect.GatewayServiceClient
 }
@@ -91,6 +93,7 @@ func NewClient(id *Identity, dir, baseURL string, timeout time.Duration, log *sl
 	})
 	c.Authority = pantherclawv1connect.NewAuthorityServiceClient(connect.NewClient(connecthttp.NewTransport(c.hc, c.baseURL)))
 	c.Gateway = pantherclawv1connect.NewGatewayServiceClient(connect.NewClient(connecthttp.NewTransport(c.hc, c.baseURL)))
+	c.Agents = pantherclawv1connect.NewAgentServiceClient(connect.NewClient(connecthttp.NewTransport(c.hc, c.baseURL)))
 	// Streams share the transport (and so the certificate) but have no
 	// whole-request timeout: they end with their context.
 	stream := &http.Client{Transport: c.hc.Transport, CheckRedirect: c.hc.CheckRedirect}

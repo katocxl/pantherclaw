@@ -21,6 +21,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/authority"
 	"github.com/katocxl/pantherclaw/internal/authority/domain"
 	billing "github.com/katocxl/pantherclaw/internal/billing/domain"
+	capp "github.com/katocxl/pantherclaw/internal/connections/app"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	pantherclawv1 "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
 	grantspg "github.com/katocxl/pantherclaw/internal/grants/adapters/pgstore"
@@ -443,5 +444,80 @@ func TestHR022_VerifyWorkloadChecksTheRun(t *testing.T) {
 	}
 	if _, err := verify(first, "not-a-run"); connect.CodeOf(err) != connect.CodeInvalidArgument {
 		t.Errorf("malformed run id: %v", err)
+	}
+}
+
+// TestHR200_RecordToolObservationVerifiesTheWorkloadFirst: an agent SDK's
+// unmapped tool call is recorded only for a workload the Authority
+// verifies in a run it may use, against the verified instance, never one
+// the gateway names (HR-021, HR-022). A proof that does not verify, a
+// replayed proof, another agent's run, a connection another gateway serves
+// and a suspended agent are answers with their codes and record nothing; a
+// nil or malformed run id is refused, and without a recorder the call
+// fails.
+func TestHR200_RecordToolObservationVerifiesTheWorkloadFirst(t *testing.T) {
+	f := setupIdentity(t)
+	ctx := authority.WithGateway(context.Background(), f.gw)
+	digest := sha256.Sum256([]byte(`{"command":"ls"}`))
+	observe := func(h *authority.Handler, c *authority.Credentials, run, conn string) (*pantherclawv1.RecordToolObservationResponse, error) {
+		t.Helper()
+		var w *pantherclawv1.WorkloadCredentials
+		if c != nil {
+			w = &pantherclawv1.WorkloadCredentials{WorkloadToken: c.Token, Proof: c.Proof, BodySha256: c.BodySHA256[:], Htm: c.Method, Htu: c.URL}
+		}
+		return h.RecordToolObservation(ctx, &pantherclawv1.RecordToolObservationRequest{
+			Workload: w, RunId: run, ConnectionId: conn, Tool: "Bash", InputSha256: digest[:],
+		})
+	}
+	recorded := func() int { return f.count(t, "SELECT count(*) FROM pc.tool_observations WHERE org_id = $1") }
+	if _, err := observe(authority.NewHandler(f.svc), f.creds(t, f.wl, f.wl.token), f.run.String(), f.conn.String()); err == nil {
+		t.Fatal("without a recorder: no error")
+	}
+
+	f.svc.WithToolObservations(capp.New(f.pool, nil, "", ""))
+	h := authority.NewHandler(f.svc)
+	ok := f.creds(t, f.wl, f.wl.token)
+	r, err := observe(h, ok, f.run.String(), f.conn.String())
+	if err != nil || !r.GetVerified() || r.GetInstanceId() != f.wl.inst.Instance.String() || r.GetObservationId() == "" || r.GetNonce() == "" {
+		t.Fatalf("verified workload: %+v %v", r, err)
+	}
+	if n := f.count(t, "SELECT count(*) FROM pc.tool_observations WHERE org_id = $1 AND id = '"+r.GetObservationId()+
+		"' AND instance_id = '"+f.wl.inst.Instance.String()+"' AND run_id = '"+f.run.String()+"' AND tool = 'Bash'"); n != 1 {
+		t.Fatalf("the stored observation is not the verified instance's: %d", n)
+	}
+
+	elsewhere, served := ids.NewV7(), ids.NewV7()
+	f.exec(t, "INSERT INTO pc.gateways (org_id, id, name, created_by) VALUES ($1, $2, 'other-edge', 'test')", f.gw.Org, elsewhere)
+	f.exec(t, `INSERT INTO pc.connections (org_id, id, name, kind, gateway_id, package, base_url, access_mode, default_mode,
+		created_by, updated_by) VALUES ($1, $2, 'elsewhere', 'http', $3, 'pc.mock-payments', 'https://payments.example.test', 'none',
+		'enforce', 'test', 'test')`, f.gw.Org, served, elsewhere)
+	for name, tc := range map[string]struct {
+		c         *authority.Credentials
+		run, conn ids.UUID
+		code      string
+	}{
+		"replayed proof":            {ok, f.run, f.conn, string(pap.CodeProofReplay)},
+		"key-only proof":            {f.creds(t, f.wl, ""), f.run, f.conn, string(pap.CodeInvalidToken)},
+		"no credentials":            {nil, f.run, f.conn, string(pap.CodeInvalidToken)},
+		"another agent's run":       {f.creds(t, f.wl, f.wl.token), f.startRun(t, f.agent(t), nil), f.conn, string(pap.CodeRunMismatch)},
+		"another gateway's service": {f.creds(t, f.wl, f.wl.token), f.run, served, "connection_not_served"},
+	} {
+		if r, err := observe(h, tc.c, tc.run.String(), tc.conn.String()); err != nil || r.GetVerified() || r.GetErrorCode() != tc.code ||
+			r.GetObservationId() != "" || r.GetNonce() == "" {
+			t.Errorf("%s: %+v %v", name, r, err)
+		}
+	}
+	for name, run := range map[string]string{"nil run": ids.UUID{}.String(), "malformed run": "not-a-run"} {
+		if _, err := observe(h, f.creds(t, f.wl, f.wl.token), run, f.conn.String()); connect.CodeOf(err) != connect.CodeInvalidArgument {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+	f.exec(t, "UPDATE pc.agents SET suspended_from = state, state = 'SUSPENDED' WHERE org_id = $1 AND id = $2", f.gw.Org, f.wl.inst.Agent)
+	if r, err := observe(h, f.creds(t, f.wl, f.wl.token), f.run.String(), f.conn.String()); err != nil || r.GetVerified() ||
+		r.GetErrorCode() != "agent_unusable" {
+		t.Errorf("suspended agent: %+v %v", r, err)
+	}
+	if n := recorded(); n != 1 {
+		t.Errorf("%d observations recorded, want only the verified one", n)
 	}
 }

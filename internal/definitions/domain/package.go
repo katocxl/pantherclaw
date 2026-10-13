@@ -39,12 +39,15 @@ type Channel string
 // Channels. The hook channel is a cooperative client asking before it runs
 // a tool itself (G0 M6, the Claude Code hook): its mapping names the kind
 // of call (tool) and reads the client's JSON input like an MCP mapping. The
-// SDK channel reuses these mappings later (F099: the same effect gets the
-// same decision).
+// SDK channel is an agent SDK asking the same through the gateway's /sdk
+// face (G0 M8, HR-201). It has no mappings of its own: the gateway maps
+// its calls through the hook and MCP mappings (F099: the same effect gets
+// the same decision), so it is never a mapping's channel.
 const (
 	ChannelMCP  Channel = "mcp"
 	ChannelHTTP Channel = "http"
 	ChannelHook Channel = "hook"
+	ChannelSDK  Channel = "sdk"
 )
 
 // Mapping maps one MCP tool, HTTP route or hook call onto the definition.
@@ -83,34 +86,65 @@ type DestinationExpr struct {
 
 var (
 	toolRe = regexp.MustCompile(`^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$`)
-	varRe  = regexp.MustCompile(`\{[a-z0-9_]+\}`)
-	// pathRe accepts reviewed templates such as /v1/charges/{charge}/refunds.
-	pathRe    = regexp.MustCompile(`^(/([A-Za-z0-9._~-]+|\{[a-z][a-z0-9_]{0,31}\}))+$`)
+	varRe  = regexp.MustCompile(`\{[a-z0-9_]+\*?\}`)
+	// pathRe accepts reviewed templates such as /v1/charges/{charge}/refunds;
+	// the last segment may be {name*}, which takes the rest of the path, one
+	// or more segments (G0 M8: a file path in a repository).
+	pathRe    = regexp.MustCompile(`^(/([A-Za-z0-9._~-]+|\{[a-z][a-z0-9_]{0,31}\}))*/([A-Za-z0-9._~-]+|\{[a-z][a-z0-9_]{0,31}\*?\})$`)
 	methods   = []string{"GET", "POST", "PUT", "PATCH", "DELETE"}
 	maxExpr   = 4 << 10
 	patternMu sync.Mutex
 	patterns  = map[string]*regexp.Regexp{}
 )
 
-// matches reports whether s matches a validated anchored pattern. Compiled
-// patterns are cached; they come only from validated packages.
-func matches(pattern, s string) bool {
+// compiled returns a validated pattern, compiled once; patterns come only
+// from validated packages. It is nil for a pattern that does not compile.
+func compiled(pattern string) *regexp.Regexp {
 	patternMu.Lock()
+	defer patternMu.Unlock()
 	re, ok := patterns[pattern]
 	if !ok {
 		var err error
 		if re, err = regexp.Compile(pattern); err != nil {
-			patternMu.Unlock()
-			return false
+			return nil
 		}
 		patterns[pattern] = re
 	}
-	patternMu.Unlock()
-	return re.MatchString(s)
+	return re
+}
+
+// matches reports whether s matches a validated anchored pattern.
+func matches(pattern, s string) bool {
+	re := compiled(pattern)
+	return re != nil && re.MatchString(s)
 }
 
 // MatchID reports whether id is a valid target id for this definition.
 func (t TargetSpec) MatchID(id string) bool { return matches(t.IDPattern, id) }
+
+// Part returns the text a named group of the id pattern matched in id: a
+// template reference target.id.<group> (G0 M8), so that a target whose
+// stable identity has several parts, such as the GitHub pull request
+// acme/payments#7, is sent as its owner, repository and number. It returns
+// false when id does not match or the group matched nothing.
+func (t TargetSpec) Part(id, group string) (string, bool) {
+	re := compiled(t.IDPattern)
+	if re == nil {
+		return "", false
+	}
+	i := re.SubexpIndex(group)
+	m := re.FindStringSubmatch(id)
+	if i < 0 || m == nil || m[i] == "" {
+		return "", false
+	}
+	return m[i], true
+}
+
+// hasPart reports whether the id pattern has a group of that name.
+func (t TargetSpec) hasPart(group string) bool {
+	re := compiled(t.IDPattern)
+	return re != nil && re.SubexpIndex(group) >= 0
+}
 
 // MatchAccount reports whether account is valid: present exactly when the
 // spec requires or allows it, and matching its pattern.
@@ -168,12 +202,14 @@ func (d *Definition) validateMapping(i int) error {
 				return invalid("%s: dot segments are not allowed in path templates", at)
 			}
 		}
-		vars := varRe.FindAllString(m.Path, -1)
+		vars := varRe.FindAllString(strings.ReplaceAll(m.Path, "*}", "}"), -1)
 		for j, v := range vars {
 			if slices.Contains(vars[:j], v) {
 				return invalid("%s: path variable %s appears twice", at, v)
 			}
 		}
+	case ChannelSDK:
+		return invalid("%s: the sdk channel maps through hook and mcp mappings and has none of its own", at)
 	default:
 		return invalid("%s: channel must be mcp, http or hook", at)
 	}
@@ -271,10 +307,23 @@ func (p *Package) Validate() error {
 	for _, t := range p.TargetLogs {
 		internal[t.Operation] = true
 	}
+	virtual, tests := map[string]bool{}, 0
+	for _, c := range p.Consequences {
+		virtual[c.Consequence.Operation] = true
+	}
 	for _, d := range p.Definitions {
-		if len(d.Mappings) == 0 && !internal[d.Operation] {
-			return invalid("%s: a read without mappings must be used by a verifier or a target log", d.Operation)
+		switch {
+		case d.Test:
+			tests++
+		case len(d.Mappings) > 0:
+		case d.Access == AccessWrite && !virtual[d.Operation]:
+			return invalid("%s: a write without mappings must be a consequence of this package", d.Operation)
+		case d.Access == AccessRead && !internal[d.Operation]:
+			return invalid("%s: a read without mappings must be used by a verifier, a target log or a connection test", d.Operation)
 		}
+	}
+	if tests > 1 {
+		return invalid("a package has at most one connection test")
 	}
 	return p.validateConsequences(ops)
 }
@@ -286,6 +335,23 @@ func (p *Package) Definition(op string) (*Definition, bool) {
 		return nil, false
 	}
 	return &p.Definitions[i], true
+}
+
+// TestRead returns the package's connection test read: its one `test: true`
+// definition, when that is a read of the connection itself dispatched as an
+// HTTP GET, the only request a connection test may send and the only one a
+// test-purpose action token may name (G0 M8 track C, HR-188).
+func (p *Package) TestRead() (*Definition, bool) {
+	i := slices.IndexFunc(p.Definitions, func(d Definition) bool { return d.Test })
+	if i < 0 {
+		return nil, false
+	}
+	d := &p.Definitions[i]
+	if d.Access != AccessRead || d.Dispatch == nil || d.Dispatch.HTTP == nil || d.Dispatch.HTTP.Method != methods[0] ||
+		d.Target.Type != ConnectionTarget {
+		return nil, false
+	}
+	return d, true
 }
 
 // Version is a parsed MAJOR.MINOR.PATCH package version.

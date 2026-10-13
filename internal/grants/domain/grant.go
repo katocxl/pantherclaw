@@ -268,5 +268,8 @@ func (g Grant) validate(lookup func(op string) *defs.Definition) error {
 			return err
 		}
 	}
-	return g.Limits.validate(true)
+	if err := g.Limits.validate(true); err != nil {
+		return err
+	}
+	return g.Limits.checkDispatched(lookup)
 }
