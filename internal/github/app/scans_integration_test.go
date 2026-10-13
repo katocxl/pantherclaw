@@ -326,3 +326,58 @@ func TestHR209_AnOrgScanHasThreeLeasesAtMost(t *testing.T) {
 		t.Fatalf("after three unreported leases: %+v %v", got, err)
 	}
 }
+
+// TestHR209_ADismissedFindingReopensWhenItsRouteMayDoMore: a finding
+// dismissed for what its route could do is only counted while that stays
+// the same; once the scan sees it differently (it may now write, deploy
+// or read a new secret), it reopens for a new DISCOVERED agent, audited,
+// so people and coverage see the route again.
+func TestHR209_ADismissedFindingReopensWhenItsRouteMayDoMore(t *testing.T) {
+	e := newEnv(t)
+	gateway := ids.NewV7()
+	e.exec(t, "INSERT INTO pc.gateways (org_id, id, name, created_by) VALUES ($1, $2, 'edge', 'test')", e.org, gateway)
+	e.exec(t, "INSERT INTO pc.org_containment (org_id) VALUES ($1) ON CONFLICT DO NOTHING", e.org)
+	conn := e.gitHubConnection(t, gateway, e.brokerKey(t, gateway), "github", false)
+	scans := &app.Scans{Pool: e.pool, Ents: edition(billing.Team)}
+	scan, err := scans.Start(e.caller(td.KindUser, td.RoleSecurityAdmin), conn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	leases, err := (&pgtransactions.Store{Pool: e.pool}).Claim(context.Background(), e.org, gateway, 4, 30*time.Second)
+	if err != nil || len(leases) != 1 {
+		t.Fatalf("leases %+v %v", leases, err)
+	}
+	inv := aapp.NewInventory(e.pool, edition(billing.Team))
+	submit := func(attrs map[string]string) aapp.ScanResult {
+		t.Helper()
+		r, err := inv.SubmitGitHubScan(context.Background(), e.org, gateway, scan.ID, leases[0].Secret,
+			[]aapp.ScanFinding{{Kind: "github_workflow", Key: [32]byte{9}, Attributes: attrs}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return r
+	}
+	readOnly := map[string]string{"repo": "acme/payments", "path": ".github/workflows/claude.yml", "agent_actions": "anthropics/claude-code-action",
+		"permissions": "contents:read", "writes": "false", "deploys": "false"}
+	if r := submit(readOnly); r.Created != 1 {
+		t.Fatalf("first %+v", r)
+	}
+	e.exec(t, "UPDATE pc.discoveries SET state = 'DISMISSED' WHERE org_id = $1 AND source = 'github_scan'", e.org)
+	if r := submit(readOnly); r.Counted != 1 || r.Reopened != 0 {
+		t.Fatalf("the same route again %+v", r)
+	}
+	writes := maps.Clone(readOnly)
+	writes["permissions"], writes["writes"], writes["deploys"], writes["environments"] = "contents:write", "true", "true", "production"
+	if r := submit(writes); r.Created != 1 || r.Reopened != 1 {
+		t.Fatalf("a route that may now write and deploy %+v", r)
+	}
+	if n := e.count(t, "SELECT count(*) FROM pc.discoveries WHERE org_id = $1 AND source = 'github_scan' AND state = 'OPEN' AND observed->>'writes' = 'true'", e.org); n != 1 {
+		t.Fatalf("%d reopened findings", n)
+	}
+	if n := e.count(t, "SELECT count(*) FROM pc.agents WHERE org_id = $1 AND state = 'DISCOVERED'", e.org); n != 2 {
+		t.Fatalf("%d discovered agents, want the first and the reopened one's", n)
+	}
+	if n := e.count(t, "SELECT count(*) FROM pc.ledger_entries WHERE org_id = $1 AND kind = 'audit.agents.discovery_reopened'", e.org); n != 1 {
+		t.Fatalf("%d reopen events", n)
+	}
+}
