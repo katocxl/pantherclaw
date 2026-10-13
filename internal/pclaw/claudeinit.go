@@ -62,18 +62,23 @@ type claudeSettings struct {
 	raw []byte
 }
 
+// managedSettingsDir is the directory Claude Code reads managed settings
+// from on this platform (a variable, so tests can point it elsewhere).
+var managedSettingsDir = func() string {
+	switch runtime.GOOS {
+	case "windows":
+		return `C:\Program Files\ClaudeCode`
+	case "darwin":
+		return "/Library/Application Support/ClaudeCode"
+	default:
+		return "/etc/claude-code"
+	}
+}()
+
 // managedSettingsPaths are where Claude Code reads managed settings on this
 // platform, with its drop-in directory.
 func managedSettingsPaths() []string {
-	var dir string
-	switch runtime.GOOS {
-	case "windows":
-		dir = `C:\Program Files\ClaudeCode`
-	case "darwin":
-		dir = "/Library/Application Support/ClaudeCode"
-	default:
-		dir = "/etc/claude-code"
-	}
+	dir := managedSettingsDir
 	out := []string{filepath.Join(dir, "managed-settings.json")}
 	drops, _ := filepath.Glob(filepath.Join(dir, "managed-settings.d", "*.json"))
 	slices.Sort(drops)
@@ -116,8 +121,11 @@ func readSettings(scope, path string) (claudeSettings, error) {
 	return s, nil
 }
 
-// hookRuns reports whether a settings document runs `pclaw hook
-// claude-code` before Bash and PowerShell.
+// hookRuns reports whether a settings document runs PantherClaw's hook
+// before Bash and PowerShell: `pclaw hook claude-code`, failing closed
+// (onFailure "block"). A pclaw hook that lets a command through when it
+// cannot run, or that runs another pclaw command, is not PantherClaw's
+// hook, so init adds its own beside it.
 func hookRuns(doc *jsonNode) bool {
 	for _, group := range doc.get("hooks").get("PreToolUse").itemsOf() {
 		m := group.get("matcher").str()
@@ -125,14 +133,18 @@ func hookRuns(doc *jsonNode) bool {
 			continue
 		}
 		for _, h := range group.get("hooks").itemsOf() {
+			if h.get("onFailure").str() != "block" {
+				continue
+			}
 			args := h.get("args").itemsOf()
 			command := h.get("command").str()
+			shell := strings.Join(append([]string{"pclaw"}, claudeHookArgs...), " ")
 			switch {
 			case filepath.Base(command) == "pclaw" || filepath.Base(command) == "pclaw.exe":
 				if len(args) >= 2 && args[0].str() == claudeHookArgs[0] && args[1].str() == claudeHookArgs[1] {
 					return true
 				}
-			case strings.HasPrefix(command, "pclaw hook claude-code"):
+			case command == shell || strings.HasPrefix(command, shell+" "):
 				return true
 			}
 		}
@@ -175,7 +187,7 @@ func claudeInit(ctx context.Context, a *app, args []string) error {
 	fs.StringVar(&f.run, "run", "", "the run (default: the key file's)")
 	fs.StringVar(&f.project, "project", "", "the project directory (default: the current one)")
 	fs.StringVar(&f.scope, "scope", "local", "where the hook goes: local (.claude/settings.local.json), project (.claude/settings.json) or user")
-	fs.StringVar(&f.managed, "managed-settings", "", "read managed settings from this file instead of the platform's")
+	fs.StringVar(&f.managed, "managed-settings", "", "also read managed settings from this file (the platform's are always read)")
 	fs.BoolVar(&f.dryRun, "dry-run", false, "show what would change and change nothing")
 	fs.BoolVar(&f.yes, "yes", false, "make the changes without asking")
 	if err := fs.Parse(args); err != nil {
@@ -212,9 +224,11 @@ func claudeInit(ctx context.Context, a *app, args []string) error {
 	if files[f.scope] == "" {
 		return errors.New("--scope must be local, project or user")
 	}
+	// --managed-settings adds a file to the platform's, never replaces
+	// them: what Claude Code enforces is always checked.
 	managedPaths := managedSettingsPaths()
 	if f.managed != "" {
-		managedPaths = []string{f.managed}
+		managedPaths = append(managedPaths, f.managed)
 	}
 	var settings []claudeSettings
 	for _, scope := range []string{"user", "project", "local"} {
@@ -238,7 +252,7 @@ func claudeInit(ctx context.Context, a *app, args []string) error {
 	}
 	report(a, home, f.project, settings, managed)
 	target := settings[slices.IndexFunc(settings, func(s claudeSettings) bool { return s.scope == f.scope })]
-	if err := hookBlocked(managed, target); err != nil {
+	if err := hookBlocked(managed, settings, target); err != nil {
 		return &exitError{code: 1, msg: "pclaw init: " + err.Error()}
 	}
 	if slices.ContainsFunc(managed, func(s claudeSettings) bool { return hookRuns(s.doc) }) || hookRuns(target.doc) {
@@ -278,9 +292,10 @@ func (f initFlags) hookEntry() (*jsonNode, error) {
 }
 
 // hookBlocked says why the hook would not run: managed settings that allow
-// only managed hooks or disable every hook, or a target file that disables
-// its scope's hooks.
-func hookBlocked(managed []claudeSettings, target claudeSettings) error {
+// only managed hooks or disable every hook, a target file that disables
+// its scope's hooks, or another settings file that turns every hook off
+// and wins, because no file Claude Code prefers to it sets disableAllHooks.
+func hookBlocked(managed, settings []claudeSettings, target claudeSettings) error {
 	for _, m := range managed {
 		switch {
 		case m.doc.get("disableAllHooks").bool():
@@ -293,6 +308,29 @@ func hookBlocked(managed []claudeSettings, target claudeSettings) error {
 	if target.doc.get("disableAllHooks").bool() {
 		return fmt.Errorf("%s disables its hooks (disableAllHooks); pclaw init never changes that setting, so remove it yourself "+
 			"or choose another --scope", target.path)
+	}
+	if s := settingFrom("disableAllHooks", managed, settings); s != nil && s.doc.get("disableAllHooks").bool() {
+		return fmt.Errorf("%s turns every hook off (disableAllHooks), and no settings file Claude Code prefers to it turns them back on, "+
+			"so the PantherClaw hook would never run; pclaw init never changes that setting, so change it yourself", s.path)
+	}
+	return nil
+}
+
+// settingFrom is the settings file whose value of a true-or-false setting
+// Claude Code applies, or nil when none sets it. Claude Code takes such a
+// setting from the first file that sets it: managed settings, then local,
+// project and user.
+func settingFrom(name string, managed, settings []claudeSettings) *claudeSettings {
+	ordered := slices.Clone(managed)
+	for _, scope := range []string{"local", "project", "user"} {
+		if i := slices.IndexFunc(settings, func(s claudeSettings) bool { return s.scope == scope }); i >= 0 {
+			ordered = append(ordered, settings[i])
+		}
+	}
+	for i, s := range ordered {
+		if v := s.doc.get(name); v != nil && v.kind == 0 && (v.raw.Kind() == 't' || v.raw.Kind() == 'f') {
+			return &ordered[i]
+		}
 	}
 	return nil
 }

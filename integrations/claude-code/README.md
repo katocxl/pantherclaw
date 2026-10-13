@@ -47,11 +47,11 @@ pclaw init --gateway https://gateway.example.com --connection shell --key-file ~
 
 It only adds (HR-208):
 - every existing deny rule, hook and member stays, in its order;
-- the diff is shown and nothing changes until you confirm, or pass `--yes`; `--dry-run` changes nothing;
-- each file is backed up and replaced through a temporary file;
+- the diff is shown, with each value under `env` and `headers` as `<redacted>`, and nothing changes until you confirm, or pass `--yes`; `--dry-run` changes nothing;
+- each file is backed up and replaced through a temporary file (a linked file where it points, keeping the link); a file that changed after init read it (Claude Code rewrites its settings while it runs) is left as it is, and init asks you to run it again;
 - no secret is written, only the gateway URL, the connection, the key file's path and the run.
 
-It fails without changing anything when managed settings would keep the hook from running: `allowManagedHooksOnly` without the hook in managed settings, or `disableAllHooks`. Running it again changes nothing.
+It fails without changing anything when settings would keep the hook from running: managed settings with `allowManagedHooksOnly` and without the hook, or with `disableAllHooks`; or `disableAllHooks` in the file it would change, or in any other settings file whose value Claude Code applies (it takes the setting from managed, then local, project and user settings). Running it again changes nothing.
 
 With the plugin loaded and PantherClaw unreachable or not configured, **every** Bash and PowerShell command is blocked. That is the point. So dogfooding on the PantherClaw repository stays opt-in per developer, and parallel sessions without a local stack keep working (decision 4).
 

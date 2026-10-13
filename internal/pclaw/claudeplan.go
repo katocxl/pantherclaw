@@ -70,15 +70,39 @@ func samePath(a, b string) bool {
 	return a == b
 }
 
-// apply shows the plan, asks, and carries it out: the enrollment first, so
-// a hook never names a key that is not enrolled, then each file, backed up
-// and replaced through a temporary file.
-func (f initFlags) apply(ctx context.Context, a *app, p *initPlan) error {
-	type write struct {
-		path  string
-		after []byte
+// initWrite is one file init replaces: the bytes the plan was made from
+// (nil for a file that did not exist) and the new content.
+type initWrite struct {
+	path          string
+	before, after []byte
+}
+
+// unchanged fails when a file is no longer what the plan was made from.
+// Claude Code rewrites its settings and ~/.claude.json while it runs, and
+// the person may take a while to answer, so writing the plan then would
+// lose what changed meanwhile (a deny rule added, say).
+func unchanged(writes []initWrite) error {
+	for _, w := range writes {
+		now, err := os.ReadFile(w.path)
+		if errors.Is(err, os.ErrNotExist) {
+			now = nil
+		} else if err != nil {
+			return err
+		}
+		if (now == nil) != (w.before == nil) || !bytes.Equal(now, w.before) {
+			return &exitError{code: 1, msg: "pclaw init: " + w.path + " changed after init read it (Claude Code rewrites its settings " +
+				"while it runs); nothing was changed, so run pclaw init again"}
+		}
 	}
-	var writes []write
+	return nil
+}
+
+// apply shows the plan, asks, and carries it out: the enrollment first, so
+// a hook never names a key that is not enrolled, then each file, unless it
+// changed since the plan was made, backed up and replaced through a
+// temporary file.
+func (f initFlags) apply(ctx context.Context, a *app, p *initPlan) error {
+	var writes []initWrite
 	for _, s := range p.edits {
 		after, err := s.doc.encode()
 		if err != nil {
@@ -90,7 +114,7 @@ func (f initFlags) apply(ctx context.Context, a *app, p *initPlan) error {
 		if _, err := fmt.Fprint(a.stdout, lineDiff(s.path, s.raw, after)); err != nil {
 			return err
 		}
-		writes = append(writes, write{s.path, after})
+		writes = append(writes, initWrite{s.path, s.raw, after})
 	}
 	if e := p.enroll; e != nil {
 		key := "the workload key in " + e.path
@@ -114,6 +138,9 @@ func (f initFlags) apply(ctx context.Context, a *app, p *initPlan) error {
 		if err := p.enroll.run(ctx, a); err != nil {
 			return err
 		}
+	}
+	if err := unchanged(writes); err != nil {
+		return err
 	}
 	for _, w := range writes {
 		backup, err := backupFile(w.path, time.Now())
