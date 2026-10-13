@@ -16,14 +16,15 @@ import (
 )
 
 // TestDeviceFlowAnswersAsGitHubDoes (P2f): the simulator's device flow
-// gives a code to the registered App only, says authorization_pending
+// gives a code to the sign-in App only, with its own sign-in page, says authorization_pending
 // until someone signs in, access_denied when they refuse and expired_token
 // after 15 minutes, issues one user access token per code, and GET /user
 // names the account that token belongs to and refuses any other.
 func TestDeviceFlowAnswersAsGitHubDoes(t *testing.T) {
 	now := time.Date(2026, 10, 13, 12, 0, 0, 0, time.UTC)
 	s := New(log.Discard()).WithClock(func() time.Time { return now })
-	s.RegisterApp(1, "Iv1.app", nil)
+	s.RegisterApp(1, "Iv1.merges", nil)
+	s.RegisterSignInApp("Iv1.app", "secret")
 	srv := httptest.NewServer(s.Handler())
 	t.Cleanup(srv.Close)
 	client := &http.Client{Timeout: 5 * time.Second}
@@ -48,8 +49,13 @@ func TestDeviceFlowAnswersAsGitHubDoes(t *testing.T) {
 	poll := func(device string) map[string]any {
 		return post("/login/oauth/access_token", url.Values{"client_id": {"Iv1.app"}, "device_code": {device}, "grant_type": {deviceGrant}})
 	}
-	if out := post("/login/device/code", url.Values{"client_id": {"Iv1.other"}}); out["error"] != "incorrect_client_credentials" {
-		t.Fatalf("another App: %v", out)
+	for _, other := range []string{"Iv1.other", "Iv1.merges"} {
+		if out := post("/login/device/code", url.Values{"client_id": {other}}); out["error"] != "incorrect_client_credentials" {
+			t.Fatalf("%s: %v", other, out)
+		}
+	}
+	if out := post("/login/device/code", url.Values{"client_id": {"Iv1.app"}}); out["verification_uri"] != srv.URL+"/login/device" {
+		t.Fatalf("the sign-in page: %v", out)
 	}
 	device, user := start()
 	if out := poll(device); out["error"] != "authorization_pending" {
@@ -99,5 +105,71 @@ func TestDeviceFlowAnswersAsGitHubDoes(t *testing.T) {
 	}
 	if err := s.AuthorizeDevice("NOPE-0000", DeviceUser{ID: 1, Login: "x"}); err == nil {
 		t.Fatal("signed in to a code nobody asked for")
+	}
+}
+
+// TestTheSignInAppChecksAndRevokesItsTokens (P2f, review 2026-10-13):
+// with the sign-in App's secret, POST /applications/{client_id}/token
+// names the account of a token that App issued and refuses any other
+// token, and DELETE revokes it, so GET /user refuses it after. Another
+// client id or a wrong secret is refused.
+func TestTheSignInAppChecksAndRevokesItsTokens(t *testing.T) {
+	s := New(log.Discard())
+	s.RegisterSignInApp("Iv1.app", "secret")
+	s.SignInAs(DeviceUser{ID: 77, Login: "bob-gh"})
+	srv := httptest.NewServer(s.Handler())
+	t.Cleanup(srv.Close)
+	client := &http.Client{Timeout: 5 * time.Second}
+	res, err := client.PostForm(srv.URL+"/login/device/code", url.Values{"client_id": {"Iv1.app"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var start map[string]any
+	_ = json.UnmarshalRead(res.Body, &start)
+	_ = res.Body.Close()
+	res, err = client.PostForm(srv.URL+"/login/oauth/access_token", url.Values{
+		"client_id": {"Iv1.app"}, "device_code": {start["device_code"].(string)}, "grant_type": {deviceGrant},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var issued map[string]any
+	_ = json.UnmarshalRead(res.Body, &issued)
+	_ = res.Body.Close()
+	token := issued["access_token"].(string)
+	call := func(method, id, secret, token string) (int, map[string]any) {
+		t.Helper()
+		req, _ := http.NewRequest(method, srv.URL+"/applications/"+id+"/token", strings.NewReader(`{"access_token": "`+token+`"}`))
+		req.SetBasicAuth(id, secret)
+		res, err := client.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() { _ = res.Body.Close() }()
+		var body map[string]any
+		_ = json.UnmarshalRead(res.Body, &body)
+		return res.StatusCode, body
+	}
+	if code, body := call(http.MethodPost, "Iv1.app", "secret", token); code != http.StatusOK ||
+		body["user"].(map[string]any)["login"] != "bob-gh" || body["app"].(map[string]any)["client_id"] != "Iv1.app" {
+		t.Fatalf("check: %d %v", code, body)
+	}
+	for name, c := range map[string]struct {
+		id, secret, token string
+		want              int
+	}{
+		"another token":  {"Iv1.app", "secret", "ghp_personal", http.StatusNotFound},
+		"a wrong secret": {"Iv1.app", "guess", token, http.StatusUnauthorized},
+		"another client": {"Iv1.other", "secret", token, http.StatusUnauthorized},
+	} {
+		if code, _ := call(http.MethodPost, c.id, c.secret, c.token); code != c.want {
+			t.Errorf("%s: %d", name, code)
+		}
+	}
+	if code, _ := call(http.MethodDelete, "Iv1.app", "secret", token); code != http.StatusNoContent || !s.Revoked(token) {
+		t.Fatalf("revoke: %d", code)
+	}
+	if code, _ := call(http.MethodPost, "Iv1.app", "secret", token); code != http.StatusNotFound {
+		t.Fatalf("a revoked token: %d", code)
 	}
 }

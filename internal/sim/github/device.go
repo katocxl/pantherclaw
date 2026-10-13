@@ -13,11 +13,15 @@ import (
 	"time"
 )
 
-// GitHub sign-in through a GitHub App's device flow (G0 M8 P2f), as GitHub
+// GitHub sign-in through a sign-in App's device flow (G0 M8 P2f), as GitHub
 // serves it: pclaw github link asks for a device code, a person enters the
 // user code at GitHub and signs in, and pclaw polls for a user access
-// token; GET /user says which account the token belongs to. In the
-// simulator a test says who signs in with AuthorizeDevice.
+// token. The server checks the token with the App's client secret (POST
+// /applications/{client_id}/token, which names its account only if the App
+// issued it) and then revokes it (DELETE). The sign-in App is not the App
+// that merges: it has no permissions and is installed nowhere. In the
+// simulator RegisterSignInApp sets it, and a test says who signs in with
+// AuthorizeDevice.
 
 // deviceExpiry is how long a device code lives (GitHub: 15 minutes).
 const deviceExpiry = 15 * time.Minute
@@ -31,11 +35,12 @@ type DeviceUser struct {
 	Login string
 }
 
-// deviceState is the simulator's device codes and the user tokens they
+// deviceState is the sign-in App, its device codes and the user tokens they
 // became.
 type deviceState struct {
-	codes map[string]*deviceCode // by device code
-	users map[string]DeviceUser  // user access token → account
+	clientID, secret string
+	codes            map[string]*deviceCode // by device code
+	users            map[string]DeviceUser  // user access token → account
 	// auto signs every later code in as this account (SignInAs).
 	auto *DeviceUser
 }
@@ -52,6 +57,8 @@ func (s *Server) deviceRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /login/device/code", s.deviceCode)
 	mux.HandleFunc("POST /login/oauth/access_token", s.deviceToken)
 	mux.HandleFunc("GET /user", s.user)
+	mux.HandleFunc("POST /applications/{client_id}/token", s.checkToken)
+	mux.HandleFunc("DELETE /applications/{client_id}/token", s.revokeToken)
 }
 
 func random(n int) string {
@@ -66,11 +73,18 @@ func deviceJSON(w http.ResponseWriter, status int, v any) {
 	_ = json.MarshalWrite(w, v)
 }
 
-// deviceCode starts a sign-in for the registered App's client id.
+// RegisterSignInApp sets the sign-in App: its client id and secret.
+func (s *Server) RegisterSignInApp(clientID, secret string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.device.clientID, s.device.secret = clientID, secret
+}
+
+// deviceCode starts a sign-in for the sign-in App's client id.
 func (s *Server) deviceCode(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.clientID == "" || r.PostFormValue("client_id") != s.clientID {
+	if s.device.clientID == "" || r.PostFormValue("client_id") != s.device.clientID {
 		deviceJSON(w, http.StatusUnauthorized, map[string]string{"error": "incorrect_client_credentials"})
 		return
 	}
@@ -85,7 +99,7 @@ func (s *Server) deviceCode(w http.ResponseWriter, r *http.Request) {
 	}
 	s.device.codes[code] = c
 	deviceJSON(w, http.StatusOK, map[string]any{
-		"device_code": code, "user_code": user, "verification_uri": "https://github.com/login/device",
+		"device_code": code, "user_code": user, "verification_uri": origin(r) + "/login/device",
 		"expires_in": int(deviceExpiry.Seconds()), "interval": interval,
 	})
 }
@@ -97,7 +111,7 @@ func (s *Server) deviceToken(w http.ResponseWriter, r *http.Request) {
 	answer := func(errCode string) { deviceJSON(w, http.StatusOK, map[string]string{"error": errCode}) }
 	c := s.device.codes[r.PostFormValue("device_code")]
 	switch {
-	case s.clientID == "" || r.PostFormValue("client_id") != s.clientID:
+	case s.device.clientID == "" || r.PostFormValue("client_id") != s.device.clientID:
 		deviceJSON(w, http.StatusUnauthorized, map[string]string{"error": "incorrect_client_credentials"})
 	case r.PostFormValue("grant_type") != deviceGrant:
 		answer("unsupported_grant_type")
@@ -132,6 +146,76 @@ func (s *Server) user(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	deviceJSON(w, http.StatusOK, map[string]any{"id": u.ID, "login": u.Login, "type": "User"})
+}
+
+// origin is the scheme and host the request came to: the simulator's own,
+// where its sign-in page is.
+func origin(r *http.Request) string {
+	if r.TLS != nil {
+		return "https://" + r.Host
+	}
+	return "http://" + r.Host
+}
+
+// appToken reads a check or revoke of a user access token, as GitHub does:
+// the path's client id with the sign-in App's secret as Basic credentials,
+// and {"access_token"} in the body. ok is false once it has answered.
+func (s *Server) appToken(w http.ResponseWriter, r *http.Request) (token string, ok bool) {
+	id, secret, basic := r.BasicAuth()
+	if s.device.clientID == "" || !basic || id != r.PathValue("client_id") || id != s.device.clientID || secret != s.device.secret {
+		deviceJSON(w, http.StatusUnauthorized, map[string]string{"message": "Requires authentication"})
+		return "", false
+	}
+	var in struct {
+		AccessToken string `json:"access_token"`
+	}
+	if err := json.UnmarshalRead(r.Body, &in); err != nil || in.AccessToken == "" {
+		deviceJSON(w, http.StatusUnprocessableEntity, map[string]string{"message": "Invalid request"})
+		return "", false
+	}
+	if _, known := s.device.users[in.AccessToken]; !known {
+		deviceJSON(w, http.StatusNotFound, map[string]string{"message": "Not Found"})
+		return "", false
+	}
+	return in.AccessToken, true
+}
+
+// checkToken answers POST /applications/{client_id}/token: the account a
+// token the sign-in App issued belongs to. Any other token is 404.
+func (s *Server) checkToken(w http.ResponseWriter, r *http.Request) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	token, ok := s.appToken(w, r)
+	if !ok {
+		return
+	}
+	u := s.device.users[token]
+	deviceJSON(w, http.StatusOK, map[string]any{
+		"app":  map[string]any{"client_id": s.device.clientID},
+		"user": map[string]any{"id": u.ID, "login": u.Login, "type": "User"},
+	})
+}
+
+// revokeToken answers DELETE /applications/{client_id}/token: the token
+// stops working.
+func (s *Server) revokeToken(w http.ResponseWriter, r *http.Request) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	token, ok := s.appToken(w, r)
+	if !ok {
+		return
+	}
+	delete(s.device.users, token)
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// Revoked reports whether a user access token no longer works (it was
+// revoked, or never issued).
+func (s *Server) Revoked(token string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	_, known := s.device.users[token]
+	return !known
 }
 
 // ErrNoDeviceCode: no pending sign-in has that user code.
