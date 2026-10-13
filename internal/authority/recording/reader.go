@@ -16,6 +16,7 @@ import (
 
 	"github.com/katocxl/pantherclaw/internal/actionir"
 	apdomain "github.com/katocxl/pantherclaw/internal/approvals/domain"
+	"github.com/katocxl/pantherclaw/internal/authority/consequences"
 	"github.com/katocxl/pantherclaw/internal/authority/pipeline"
 	bdomain "github.com/katocxl/pantherclaw/internal/budgets/domain"
 	defs "github.com/katocxl/pantherclaw/internal/definitions/domain"
@@ -40,8 +41,10 @@ type Gap struct {
 // Served is what a replay serves by reference.
 type Served struct {
 	// Definitions are the recorded definitions, loaded again by their pins,
-	// by digest.
-	Definitions map[string]*defs.Definition
+	// by digest, and Consequences their package versions' consequence
+	// rules for their operations.
+	Definitions  map[string]*defs.Definition
+	Consequences map[string][]consequences.Rule
 	// Policy is the recorded policy, compiled again, or a proposed one (nil:
 	// none applies).
 	Policy *pipeline.Policy
@@ -130,7 +133,11 @@ func (r *Reader) Definition(_ context.Context, org ids.OrgID, pin actionir.Defin
 	if def == nil {
 		return pipeline.Pinned{}, r.gap("definition", pipeline.StepScope, "definition "+d.Digest+" no longer exists")
 	}
-	return pipeline.Pinned{Definition: def, State: defs.State(d.State)}, nil
+	rules := r.served.Consequences[d.Digest]
+	if !slices.Equal(consequences.IDs(rules), d.Consequences) {
+		return pipeline.Pinned{}, r.gap("definition", pipeline.StepScope, "the consequence rules of definition "+d.Digest+" are not the ones recorded")
+	}
+	return pipeline.Pinned{Definition: def, State: defs.State(d.State), Consequences: rules}, nil
 }
 
 // Policy implements pipeline.Reader.
