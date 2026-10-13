@@ -41,8 +41,10 @@ func peopleRefunds(pkg string) string {
 // TestHR207_TheLinkedPeopleOfTheHeldActionAreNotIndependent: when a person
 // responds, the approvals side reads the held action's people fact as it
 // is now and excludes the users linked to the GitHub users it lists (an
-// author, a pusher), never an unlinked person; a fact that says it is
-// incomplete, or lists an id that is not a positive integer, leaves nobody
+// author, a pusher). While someone it lists is linked to nobody, nobody
+// counts (GITHUB_PEOPLE_NOT_LINKED, founder decision 2026-10-13) until an
+// identity manager exempts that account as not a person. A fact that says
+// it is incomplete, or lists an id that is not a positive integer, leaves nobody
 // independent. A code_reviewer requirement is independent by its role
 // alone (HR-207), so it excludes them as an independent approver does.
 func TestHR207_TheLinkedPeopleOfTheHeldActionAreNotIndependent(t *testing.T) {
@@ -124,8 +126,14 @@ func linkedPeopleAreNotIndependent(t *testing.T, req pdomain.ApprovalRequirement
 	if ok, code := apdomain.Check(e.Requirements[0], someone(carol), e.Context, ids.UUID{}); ok || code != apdomain.IneligibleAuthor {
 		t.Fatalf("a linked pusher: %v %s", ok, code)
 	}
+	if ok, code := apdomain.Check(e.Requirements[0], someone(dave), e.Context, ids.UUID{}); ok || code != apdomain.IneligiblePeopleNotLinked {
+		t.Fatalf("an unrelated person while pusher 44 is linked to nobody: %v %s", ok, code)
+	}
+	exec(t, w.pool, w.org, `INSERT INTO pc.github_exemptions (org_id, github_user_id, github_login, reason, created_by)
+		VALUES ($1, 44, 'ci-bot[bot]', 'the CI App', 'test')`, w.org)
+	e = load()
 	if ok, code := apdomain.Check(e.Requirements[0], someone(dave), e.Context, ids.UUID{}); !ok {
-		t.Fatalf("an unrelated person: %s", code)
+		t.Fatalf("an unrelated person once 44 is exempted: %s", code)
 	}
 
 	for _, object := range []string{

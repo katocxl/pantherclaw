@@ -815,6 +815,15 @@ type PcGatewayEnrollmentToken struct {
 	UsedCertID *ids.UUID
 }
 
+type PcGithubExemption struct {
+	OrgID        ids.OrgID
+	GithubUserID int64
+	GithubLogin  string
+	Reason       string
+	CreatedBy    string
+	CreatedAt    time.Time
+}
+
 type PcGithubIdentity struct {
 	OrgID        ids.OrgID
 	ID           ids.UUID

@@ -115,6 +115,7 @@ type Server struct {
 	faults   Faults
 	// perPage caps a page of a paged list below GitHub's 100 (tests).
 	perPage int
+	device  deviceState // GitHub sign-in through the device flow (device.go)
 }
 
 // New returns a simulator with no App, installation or repository.
@@ -203,6 +204,7 @@ func (s *Server) Handler() http.Handler {
 	s.repoRoutes(mux)
 	s.pullRoutes(mux)
 	s.factRoutes(mux)
+	s.deviceRoutes(mux)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Simulated", "true")
 		mux.ServeHTTP(w, r)
