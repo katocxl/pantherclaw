@@ -543,6 +543,8 @@ definitions:
     prerequisites:
       - fact: github.pull.head
         max_age_seconds: 30
+        # The head the merge is bound to (HR-205).
+        binds: {member: sha, param: sha, reason: HEAD_MOVED}
       - fact: github.pull.people
         max_age_seconds: 30
       - fact: github.pull.reviews
@@ -581,6 +583,7 @@ definitions:
         - facts.github.pull.reviews
         - facts.github.branch.rules
       invalidate_on: github.pull.head
+      independent_of: github.pull.people
     assurance:
       basis: documented
       reviewed_by: [pantherclaw-maintainers]

@@ -25,6 +25,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/money"
 	papp "github.com/katocxl/pantherclaw/internal/policy/app"
 	pdomain "github.com/katocxl/pantherclaw/internal/policy/domain"
+	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
 )
 
 // Reason codes of the pipeline itself (the grant, budget and fact codes
@@ -168,6 +169,11 @@ type Hold struct {
 	// State and Code are what a waiter sees (HR-174).
 	State string
 	Code  string
+	// InvalidationKey is set when the definition names the fact whose bound
+	// member's change supersedes its unconsumed requests
+	// (approval.invalidate_on, G0 M8, HR-205; only that member since HR-030
+	// option B): that fact's member and the action's target.
+	InvalidationKey string
 }
 
 // Permits reports whether the evaluation allows dispatch.
@@ -654,12 +660,69 @@ func (p *Pipeline) currentFacts(ctx context.Context, s *state) {
 			s.used = append(s.used, *c.Fact)
 		}
 	}
-	if ok {
+	if ok && s.bindings() {
 		s.cl.pass(StepFacts, ReasonFactsFresh)
 	}
 }
 
-// Step 7: every level's limits, FORBID rules, counters and budgets (a
+// bindings checks the definition's bound prerequisites: each fact member
+// must equal its param (G0 M8, HR-205: a merge at the pull request's
+// current head). A mismatch is CANNOT_AUTHORIZE with the binding's reason;
+// a new decision at the current value can follow.
+func (s *state) bindings() bool {
+	ok := true
+	for _, pr := range s.def.Prerequisites {
+		b := pr.Binds
+		if b == nil {
+			continue
+		}
+		want, have := s.vals[b.Param], memberValue(s.facts[pr.Fact], b.Member)
+		param := want.Str
+		if want.Type == defs.TypeInteger {
+			param = strconv.FormatInt(want.Int, 10)
+		}
+		if have != param {
+			ok = false
+			s.cl.add(StepFacts, adomain.CannotAuthorize, b.Reason,
+				fmt.Sprintf("params.%s is %s, but %s.%s is %s", b.Param, param, pr.Fact, b.Member, have), "")
+		}
+	}
+	return ok
+}
+
+// memberValue is a member of an object fact as a binding compares it, or
+// "(none)".
+func memberValue(f fdomain.Value, member string) string {
+	if f.Type == fdomain.TypeObject {
+		switch v := f.Object[member].(type) {
+		case string:
+			return v
+		case int64:
+			return strconv.FormatInt(v, 10)
+		}
+	}
+	return "(none)"
+}
+
+// boundFacts are the fact members an approval of the action binds (HR-030
+// as the founder amended it on 2026-10-13, option B): those the
+// definition's prerequisites declare in `binds`, by value. Every other
+// fact, and when any fact was observed, is left out: they are read again
+// and decided on by steps 6 and 7 whenever the approval is used.
+func (s *state) boundFacts() []apdomain.BoundFact {
+	var out []apdomain.BoundFact
+	for _, pr := range s.def.Prerequisites {
+		if pr.Binds != nil {
+			out = append(out, apdomain.BoundFact{
+				Fact: pr.Fact, Subject: s.a.Target.Type + ":" + s.a.Target.ID, Member: pr.Binds.Member,
+				Value: memberValue(s.facts[pr.Fact], pr.Binds.Member),
+			})
+		}
+	}
+	return out
+}
+
+// Step 7: every level's limits), FORBID rules, counters and budgets (a
 // read-only check; step 9 reserves), and repeat protection (a pre-check;
 // step 9 claims the key).
 func (p *Pipeline) boundaries(ctx context.Context, s *state) {
@@ -753,7 +816,19 @@ func input(a *pdomain.ApprovalRequirement, su *pdomain.StepUpRequirement, src ap
 	in := apdomain.Input{Source: src}
 	if a != nil {
 		in.Kind, in.Role, in.Count, in.Independent = apdomain.KindApproval, a.Role, a.Count, a.Independent
+		in.Window = a.Window
 		in.Deadline = time.Duration(a.DeadlineSeconds) * time.Second
+		// HR-207 is per role: a code reviewer and a release approver are
+		// independent whatever the requirement says, so no requirement can
+		// let the pull request's author or a pusher approve it.
+		if in.Role == string(td.RoleCodeReviewer) || in.Role == string(td.RoleReleaseApprover) {
+			in.Independent = true
+		}
+		// A release approval counts only inside an active change window,
+		// whether or not its requirement says `window: true`.
+		if in.Role == string(td.RoleReleaseApprover) {
+			in.Window = true
+		}
 	}
 	if su != nil {
 		in.Kind, in.Subject, in.Method = apdomain.KindStepUp, su.Subject, su.Method
@@ -904,6 +979,7 @@ func (p *Pipeline) requirements(ctx context.Context, s *state) {
 			apdomain.Source{Level: r.Level.String(), Reason: r.Requirement.Reason}))
 	}
 	s.consequenceRequirements()
+	s.independence()
 	effective := s.vals
 	if eff, vals, ok := s.effective(); ok {
 		s.ev.EffectiveHash, effective = eff, vals
@@ -986,6 +1062,13 @@ func (p *Pipeline) hold(ctx context.Context, s *state, latest *HoldRequest, effe
 		return nil, err
 	}
 	h := &Hold{Requirements: reqs, VariantKey: key, Request: latest, State: apdomain.WaitPending, Action: s.req.Action.Canonical}
+	if a := s.def.Approval; a != nil && a.InvalidateOn != "" {
+		for _, pr := range s.def.Prerequisites {
+			if pr.Fact == a.InvalidateOn && pr.Binds != nil {
+				h.InvalidationKey = apdomain.MemberKey(a.InvalidateOn, pr.Binds.Member, s.a.Target.Type, s.a.Target.ID)
+			}
+		}
+	}
 	if latest != nil && latest.State.Live() {
 		if err := p.bind(s, h, effective, latest.Deadline, latest.Variants, latest.Context); err != nil {
 			return nil, err
@@ -1012,13 +1095,15 @@ func (p *Pipeline) hold(ctx context.Context, s *state, latest *HoldRequest, effe
 func (p *Pipeline) bind(s *state, h *Hold, effective defs.Values, deadline time.Time, variants []apdomain.VariantLine,
 	approved []apdomain.ContextLine,
 ) error {
+	bound := s.boundFacts()
 	disp, err := apdomain.RenderAction(apdomain.ActionInput{
-		Definition: s.def, Target: s.a.Target, Requested: s.vals, Effective: effective, Facts: s.used,
+		Definition: s.def, Target: s.a.Target, Requested: s.vals, Effective: effective, Facts: s.used, Bound: bound,
 		Run: apdomain.RunLine{
 			Run: s.ev.RunID.String(), Agent: s.run.AgentID.String(), Instance: s.req.Identity.InstanceID.String(),
 			Launcher: s.run.Launcher.String(), Principal: s.run.Principal.String(),
 		},
 		TaskLabel: s.run.TaskRef, Requirements: h.Requirements, Deadline: deadline, Variants: variants, Context: approved,
+		Consequences: s.displayed(),
 	})
 	if err != nil {
 		return err
@@ -1029,8 +1114,8 @@ func (p *Pipeline) bind(s *state, h *Hold, effective defs.Values, deadline time.
 	}
 	leaf, _ := s.chain.Leaf()
 	b, err := apdomain.ActionParts{
-		ActionHash: s.ev.ActionHash, EffectiveActionHash: s.ev.EffectiveHash, BasisDigest: s.basis().Digest(),
-		FactsDigest: fdomain.Digest(s.used), DefinitionDigest: s.a.Definition.Digest, GrantID: leaf.ID.UUID(),
+		ActionHash: s.ev.ActionHash, EffectiveActionHash: s.ev.EffectiveHash, BasisDigest: s.bindingBasis(bound).Digest(),
+		FactsDigest: apdomain.BoundFactsDigest(bound), DefinitionDigest: s.a.Definition.Digest, GrantID: leaf.ID.UUID(),
 		GrantRevision: leaf.Revision, RunID: s.ev.RunID, Instance: s.req.Identity.InstanceID, JKT: s.req.Identity.JKT,
 		Requirements: h.Requirements, ExpiresAt: deadline, DisplayHash: c.Hash,
 	}.Binding()
@@ -1144,4 +1229,29 @@ func (s *state) effective() (string, defs.Values, bool) {
 		return "", nil, false
 	}
 	return parsed.HashHex(), vals, true
+}
+
+// independence names, on every approval of the action and its
+// consequences, whatever its role, the fact listing the people its approver
+// must not be and must be linked apart from (approval.independent_of, G0
+// M8, HR-207, founder decision 2026-10-13). When that fact could not list
+// them all, no approver can be shown independent: the action cannot be
+// authorized until it can (design decision 18).
+func (s *state) independence() {
+	a := s.def.Approval
+	if a == nil || a.IndependentOf == "" {
+		return
+	}
+	approvals := 0
+	for i := range s.ev.Requirements {
+		if r := &s.ev.Requirements[i]; r.Kind == apdomain.KindApproval {
+			r.IndependentOf = a.IndependentOf
+			approvals++
+		}
+	}
+	f := s.facts[a.IndependentOf]
+	if _, complete := apdomain.GitHubPeople(f.Object); approvals > 0 && (f.Type != fdomain.TypeObject || !complete) {
+		s.cl.add(StepRequirements, adomain.CannotAuthorize, apdomain.IneligibleAuthorshipUnknown,
+			a.IndependentOf+" does not list every author, committer and pusher, so no approver can be shown independent", "")
+	}
 }

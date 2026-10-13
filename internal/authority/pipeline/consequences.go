@@ -231,3 +231,40 @@ func (s *state) consequenceRequirements() {
 		}
 	}
 }
+
+// displayed are the predicted and unknown consequences an approver sees
+// (G0 M8, F158).
+func (s *state) displayed() []apdomain.ConsequenceInput {
+	var out []apdomain.ConsequenceInput
+	for _, k := range s.pending {
+		c := k.c
+		out = append(out, apdomain.ConsequenceInput{
+			Rule: c.Rule, Operation: c.Operation, State: string(c.State), Target: c.Target, Environments: c.Environments,
+			Unknown: c.Unknown, Facts: c.Used,
+		})
+	}
+	return out
+}
+
+// WouldUnknown is the first unknown consequence of a monitor-mode permit
+// and what an enforce-mode route would have decided about the action
+// (G0 M8, HR-206 with HR-184, founder decision 2026-10-13): monitor mode
+// stays observe-only, so the action is still dispatched, but its decision
+// and receipt say "HOLD: consequence unknown" (or the stricter decision
+// the same reasons give), and a security notification goes out. ok is
+// false for an enforce-mode evaluation, one whose identity or containment
+// failed, and one without an unknown consequence.
+func (e *Evaluation) WouldUnknown() (would string, c *consequences.Consequence, ok bool) {
+	if !e.MonitorPermit() {
+		return "", nil, false
+	}
+	i := slices.IndexFunc(e.Consequences, func(c consequences.Consequence) bool { return c.State == consequences.Unknown && c.Err == nil })
+	if i < 0 {
+		return "", nil, false
+	}
+	would = "HOLD"
+	if e.Decision == adomain.Deny || e.Decision == adomain.CannotAuthorize {
+		would = string(e.Decision)
+	}
+	return would + ": consequence unknown", &e.Consequences[i], true
+}

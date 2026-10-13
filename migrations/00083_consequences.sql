@@ -1,7 +1,8 @@
 -- SPDX-License-Identifier: BUSL-1.1
 -- Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
 --
--- Consequences of decisions (G0 M8 track P: P1; F405, HR-206). Numbered
+-- Consequences of decisions (G0 M8 track P: P1; F405, HR-206), and verified
+-- GitHub links (P2f, at the end). Numbered
 -- after track P's 00082 (release controls), design decision 16.
 --
 -- decision_consequences keeps, for each evaluation, what the action's
@@ -49,5 +50,88 @@ CREATE POLICY tenant_isolation ON pc.decision_consequences
 GRANT SELECT, INSERT ON pc.decision_consequences TO pc_app;
 GRANT SELECT ON pc.decision_consequences TO pc_audit_ro;
 
+-- Verified GitHub links (G0 M8 P2f, founder decision 2026-10-13, HR-207).
+-- A person links their own GitHub account only by proving it through
+-- GitHub sign-in, and the link records when (verified_at); an approver of a
+-- requirement independent of a GitHub people fact needs such a link. Links
+-- made before this (none outside tests) stay unverified and approve nothing.
+-- approval_request_linked_people keeps who was linked to the people a
+-- request's fact listed when the request was created: they stay excluded
+-- from it whatever happens to their links later.
+ALTER TABLE pc.github_identities ADD COLUMN verified_at timestamptz;
+ALTER TABLE pc.github_identities ADD CONSTRAINT github_identities_verified CHECK (verified_at IS NOT NULL) NOT VALID;
+
+CREATE TABLE pc.approval_request_linked_people (
+    org_id     uuid NOT NULL REFERENCES pc.orgs (id),
+    request_id uuid NOT NULL,
+    -- The people fact the request's independent requirement names.
+    fact       text NOT NULL CHECK (char_length(fact) BETWEEN 1 AND 200),
+    user_id    uuid NOT NULL,
+    PRIMARY KEY (org_id, request_id, fact, user_id),
+    FOREIGN KEY (org_id, request_id) REFERENCES pc.approval_requests (org_id, id),
+    FOREIGN KEY (org_id, user_id) REFERENCES pc.users (org_id, id)
+);
+ALTER TABLE pc.approval_request_linked_people ENABLE ROW LEVEL SECURITY;
+ALTER TABLE pc.approval_request_linked_people FORCE ROW LEVEL SECURITY;
+CREATE POLICY tenant_isolation ON pc.approval_request_linked_people
+    USING (org_id = (SELECT NULLIF(current_setting('app.org_id', true), '')::uuid))
+    WITH CHECK (org_id = (SELECT NULLIF(current_setting('app.org_id', true), '')::uuid));
+GRANT SELECT, INSERT ON pc.approval_request_linked_people TO pc_app;
+GRANT SELECT ON pc.approval_request_linked_people TO pc_audit_ro;
+
+-- github_identity_history keeps every link a person ever proved (P2f,
+-- review 2026-10-13): whoever was linked to a GitHub user id stays excluded
+-- as independent of a pull request that lists it, after an unlink, a
+-- relink of the id to someone else or a manager's unlink. Insert only.
+CREATE TABLE pc.github_identity_history (
+    org_id         uuid        NOT NULL REFERENCES pc.orgs (id),
+    github_user_id bigint      NOT NULL CHECK (github_user_id > 0),
+    user_id        uuid        NOT NULL,
+    linked_at      timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (org_id, github_user_id, user_id),
+    FOREIGN KEY (org_id, user_id) REFERENCES pc.users (org_id, id)
+);
+-- Links made before this join the history: the owner reads them past RLS
+-- for this one statement.
+ALTER TABLE pc.github_identities NO FORCE ROW LEVEL SECURITY;
+INSERT INTO pc.github_identity_history (org_id, github_user_id, user_id, linked_at)
+SELECT org_id, github_user_id, user_id, linked_at FROM pc.github_identities
+ON CONFLICT DO NOTHING;
+ALTER TABLE pc.github_identities FORCE ROW LEVEL SECURITY;
+ALTER TABLE pc.github_identity_history ENABLE ROW LEVEL SECURITY;
+ALTER TABLE pc.github_identity_history FORCE ROW LEVEL SECURITY;
+CREATE POLICY tenant_isolation ON pc.github_identity_history
+    USING (org_id = (SELECT NULLIF(current_setting('app.org_id', true), '')::uuid))
+    WITH CHECK (org_id = (SELECT NULLIF(current_setting('app.org_id', true), '')::uuid));
+GRANT SELECT, INSERT ON pc.github_identity_history TO pc_app;
+GRANT SELECT ON pc.github_identity_history TO pc_audit_ro;
+
+-- github_exemptions are the GitHub accounts an admin registered as not a
+-- person (a bot or a machine user, founder decision 2026-10-13): linked to
+-- nobody, they do not stop the approvals of pull requests they worked on,
+-- as an unlinked person does (GITHUB_PEOPLE_NOT_LINKED). Every change is
+-- audited.
+CREATE TABLE pc.github_exemptions (
+    org_id         uuid        NOT NULL REFERENCES pc.orgs (id),
+    github_user_id bigint      NOT NULL CHECK (github_user_id > 0),
+    github_login   text        NOT NULL CHECK (github_login ~ '^[A-Za-z0-9][A-Za-z0-9-]{0,38}(\[bot\])?$'),
+    reason         text        NOT NULL CHECK (char_length(reason) BETWEEN 1 AND 256),
+    created_by     text        NOT NULL CHECK (char_length(created_by) BETWEEN 1 AND 128),
+    created_at     timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (org_id, github_user_id)
+);
+ALTER TABLE pc.github_exemptions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE pc.github_exemptions FORCE ROW LEVEL SECURITY;
+CREATE POLICY tenant_isolation ON pc.github_exemptions
+    USING (org_id = (SELECT NULLIF(current_setting('app.org_id', true), '')::uuid))
+    WITH CHECK (org_id = (SELECT NULLIF(current_setting('app.org_id', true), '')::uuid));
+GRANT SELECT, INSERT, DELETE ON pc.github_exemptions TO pc_app;
+GRANT SELECT ON pc.github_exemptions TO pc_audit_ro;
+
 -- +goose Down
+DROP TABLE pc.github_exemptions;
+DROP TABLE pc.github_identity_history;
+DROP TABLE pc.approval_request_linked_people;
+ALTER TABLE pc.github_identities DROP CONSTRAINT github_identities_verified;
+ALTER TABLE pc.github_identities DROP COLUMN verified_at;
 DROP TABLE pc.decision_consequences;

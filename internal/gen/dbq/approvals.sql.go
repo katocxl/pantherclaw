@@ -629,6 +629,37 @@ func (q *Queries) EvidenceArrived(ctx context.Context, orgID ids.OrgID, iD ids.U
 	return result.RowsAffected(), nil
 }
 
+const exemptGitHubUsers = `-- name: ExemptGitHubUsers :many
+SELECT github_user_id, created_by FROM pc.github_exemptions
+WHERE org_id = $1 AND github_user_id = ANY($2::bigint[])
+`
+
+type ExemptGitHubUsersRow struct {
+	GithubUserID int64
+	CreatedBy    string
+}
+
+// Which of GitHub user ids an admin registered as not a person, and who.
+func (q *Queries) ExemptGitHubUsers(ctx context.Context, orgID ids.OrgID, githubIds []int64) ([]ExemptGitHubUsersRow, error) {
+	rows, err := q.db.Query(ctx, exemptGitHubUsers, orgID, githubIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ExemptGitHubUsersRow{}
+	for rows.Next() {
+		var i ExemptGitHubUsersRow
+		if err := rows.Scan(&i.GithubUserID, &i.CreatedBy); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const expireApprovalRequest = `-- name: ExpireApprovalRequest :one
 UPDATE pc.approval_requests
 SET state = 'EXPIRED', end_reason = 'APPROVAL_EXPIRED', ended_at = now()
@@ -651,6 +682,38 @@ func (q *Queries) ExpireApprovalRequest(ctx context.Context, orgID ids.OrgID, iD
 	var i ExpireApprovalRequestRow
 	err := row.Scan(&i.GrantID, &i.RunID)
 	return i, err
+}
+
+const formerGitHubUsers = `-- name: FormerGitHubUsers :many
+SELECT github_user_id, user_id FROM pc.github_identity_history
+WHERE org_id = $1 AND github_user_id = ANY($2::bigint[])
+`
+
+type FormerGitHubUsersRow struct {
+	GithubUserID int64
+	UserID       ids.UUID
+}
+
+// Everyone ever linked to GitHub user ids by a proved link (P2f): they stay
+// excluded as independent of the people the ids are.
+func (q *Queries) FormerGitHubUsers(ctx context.Context, orgID ids.OrgID, githubIds []int64) ([]FormerGitHubUsersRow, error) {
+	rows, err := q.db.Query(ctx, formerGitHubUsers, orgID, githubIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []FormerGitHubUsersRow{}
+	for rows.Next() {
+		var i FormerGitHubUsersRow
+		if err := rows.Scan(&i.GithubUserID, &i.UserID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const getApprovalRequest = `-- name: GetApprovalRequest :one
@@ -853,32 +916,33 @@ const insertApprovalRequest = `-- name: InsertApprovalRequest :exec
 INSERT INTO pc.approval_requests (org_id, id, subject_kind, agent_id, transaction_id, evaluation, run_id, grant_id,
     grant_revision, variant_key, operation, previous_id, binding, binding_input, requirements, display, display_hash,
     action_ir,
-    deadline_at)
+    deadline_at, invalidation_key)
 VALUES ($1, $2, 'ACTION', $3, $4, $5,
     $6, $7, $8, $9, $10,
     $11, $12, $13, $14, $15,
-    $16, $17, $18)
+    $16, $17, $18, $19)
 `
 
 type InsertApprovalRequestParams struct {
-	OrgID         ids.OrgID
-	ID            ids.UUID
-	AgentID       ids.UUID
-	TransactionID *ids.UUID
-	Evaluation    *int32
-	RunID         *ids.UUID
-	GrantID       *ids.UUID
-	GrantRevision *int32
-	VariantKey    []byte
-	Operation     string
-	PreviousID    *ids.UUID
-	Binding       []byte
-	BindingInput  []byte
-	Requirements  []byte
-	Display       []byte
-	DisplayHash   []byte
-	ActionIr      []byte
-	DeadlineAt    time.Time
+	OrgID           ids.OrgID
+	ID              ids.UUID
+	AgentID         ids.UUID
+	TransactionID   *ids.UUID
+	Evaluation      *int32
+	RunID           *ids.UUID
+	GrantID         *ids.UUID
+	GrantRevision   *int32
+	VariantKey      []byte
+	Operation       string
+	PreviousID      *ids.UUID
+	Binding         []byte
+	BindingInput    []byte
+	Requirements    []byte
+	Display         []byte
+	DisplayHash     []byte
+	ActionIr        []byte
+	DeadlineAt      time.Time
+	InvalidationKey *string
 }
 
 // The finalization records a hold (HR-171): a new request, inserted once
@@ -903,6 +967,7 @@ func (q *Queries) InsertApprovalRequest(ctx context.Context, arg InsertApprovalR
 		arg.DisplayHash,
 		arg.ActionIr,
 		arg.DeadlineAt,
+		arg.InvalidationKey,
 	)
 	return err
 }
@@ -996,6 +1061,31 @@ func (q *Queries) InsertHoldEntry(ctx context.Context, arg InsertHoldEntryParams
 		arg.TransactionID,
 		arg.Priority,
 		arg.DeadlineAt,
+	)
+	return err
+}
+
+const insertRequestLinkedPeople = `-- name: InsertRequestLinkedPeople :exec
+INSERT INTO pc.approval_request_linked_people (org_id, request_id, fact, user_id)
+SELECT $1, $2, $3, u FROM unnest($4::uuid[]) AS u
+ON CONFLICT DO NOTHING
+`
+
+type InsertRequestLinkedPeopleParams struct {
+	OrgID     ids.OrgID
+	RequestID ids.UUID
+	Fact      string
+	UserIds   []ids.UUID
+}
+
+// The users linked, when a request is created, to the people its fact
+// lists (G0 M8 P2f, HR-207): they stay excluded from it.
+func (q *Queries) InsertRequestLinkedPeople(ctx context.Context, arg InsertRequestLinkedPeopleParams) error {
+	_, err := q.db.Exec(ctx, insertRequestLinkedPeople,
+		arg.OrgID,
+		arg.RequestID,
+		arg.Fact,
+		arg.UserIds,
 	)
 	return err
 }
@@ -1108,6 +1198,38 @@ func (q *Queries) LatestApprovalRequest(ctx context.Context, orgID ids.OrgID, ru
 		&i.Proposed,
 	)
 	return i, err
+}
+
+const linkedGitHubUsers = `-- name: LinkedGitHubUsers :many
+SELECT github_user_id, user_id FROM pc.github_identities
+WHERE org_id = $1 AND github_user_id = ANY($2::bigint[])
+`
+
+type LinkedGitHubUsersRow struct {
+	GithubUserID int64
+	UserID       ids.UUID
+}
+
+// The users linked to GitHub user ids, each with the id it is linked to
+// (HR-207, F158). An id is linked to one user at most.
+func (q *Queries) LinkedGitHubUsers(ctx context.Context, orgID ids.OrgID, githubIds []int64) ([]LinkedGitHubUsersRow, error) {
+	rows, err := q.db.Query(ctx, linkedGitHubUsers, orgID, githubIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []LinkedGitHubUsersRow{}
+	for rows.Next() {
+		var i LinkedGitHubUsersRow
+		if err := rows.Scan(&i.GithubUserID, &i.UserID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listApprovalRequests = `-- name: ListApprovalRequests :many
@@ -1232,6 +1354,36 @@ func (q *Queries) LiveRequestOfTransaction(ctx context.Context, orgID ids.OrgID,
 		&i.InvalidationKey,
 	)
 	return i, err
+}
+
+const liveRequestsByInvalidationKey = `-- name: LiveRequestsByInvalidationKey :many
+SELECT id FROM pc.approval_requests
+WHERE org_id = $1 AND invalidation_key = $2
+  AND state IN ('PENDING', 'EVIDENCE_REQUESTED', 'APPROVED')
+ORDER BY created_at, id
+FOR UPDATE
+`
+
+// The live requests a change of the fact and target in key supersedes
+// (G0 M8, HR-205), oldest first.
+func (q *Queries) LiveRequestsByInvalidationKey(ctx context.Context, orgID ids.OrgID, invalidationKey *string) ([]ids.UUID, error) {
+	rows, err := q.db.Query(ctx, liveRequestsByInvalidationKey, orgID, invalidationKey)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ids.UUID{}
+	for rows.Next() {
+		var id ids.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const liveRestoration = `-- name: LiveRestoration :one
@@ -1569,6 +1721,37 @@ func (q *Queries) RequestEvidence(ctx context.Context, orgID ids.OrgID, requestI
 	return items, nil
 }
 
+const requestLinkedPeople = `-- name: RequestLinkedPeople :many
+SELECT fact, user_id FROM pc.approval_request_linked_people
+WHERE org_id = $1 AND request_id = $2
+`
+
+type RequestLinkedPeopleRow struct {
+	Fact   string
+	UserID ids.UUID
+}
+
+// The users linked to a request's people when it was created.
+func (q *Queries) RequestLinkedPeople(ctx context.Context, orgID ids.OrgID, requestID ids.UUID) ([]RequestLinkedPeopleRow, error) {
+	rows, err := q.db.Query(ctx, requestLinkedPeople, orgID, requestID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []RequestLinkedPeopleRow{}
+	for rows.Next() {
+		var i RequestLinkedPeopleRow
+		if err := rows.Scan(&i.Fact, &i.UserID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const requestRecipients = `-- name: RequestRecipients :many
 SELECT DISTINCT x.user_id::uuid AS user_id FROM (
     SELECT r.user_id FROM pc.waitlist_routes r
@@ -1664,6 +1847,24 @@ func (q *Queries) RequestResponses(ctx context.Context, orgID ids.OrgID, request
 		return nil, err
 	}
 	return items, nil
+}
+
+const requestSubjectFact = `-- name: RequestSubjectFact :one
+SELECT f.value
+FROM pc.approval_requests r
+JOIN pc.transactions t ON t.org_id = r.org_id AND t.id = r.transaction_id
+JOIN pc.facts f ON f.org_id = t.org_id AND f.subject_type = t.target_type AND f.subject_id = t.target_id AND f.name = $1
+JOIN pc.fact_providers p ON p.org_id = f.org_id AND p.id = f.provider_id AND p.state = 'ACTIVE'
+WHERE r.org_id = $2 AND r.id = $3
+`
+
+// The current value of a fact, from an active provider, about the action a
+// request holds (G0 M8, HR-207: the people of the pull request it merges).
+func (q *Queries) RequestSubjectFact(ctx context.Context, name string, orgID ids.OrgID, requestID ids.UUID) ([]byte, error) {
+	row := q.db.QueryRow(ctx, requestSubjectFact, name, orgID, requestID)
+	var value []byte
+	err := row.Scan(&value)
+	return value, err
 }
 
 const requestsWithResponses = `-- name: RequestsWithResponses :many
@@ -1828,6 +2029,33 @@ func (q *Queries) TakeHoldSlot(ctx context.Context, arg TakeHoldSlotParams) (int
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const verifiedGitHubUsers = `-- name: VerifiedGitHubUsers :many
+SELECT DISTINCT user_id FROM pc.github_identities
+WHERE org_id = $1 AND user_id = ANY($2::uuid[]) AND verified_at IS NOT NULL
+`
+
+// Which of users hold a GitHub link they proved by signing in (P2f): only
+// they approve a requirement independent of a GitHub people fact.
+func (q *Queries) VerifiedGitHubUsers(ctx context.Context, orgID ids.OrgID, userIds []ids.UUID) ([]ids.UUID, error) {
+	rows, err := q.db.Query(ctx, verifiedGitHubUsers, orgID, userIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ids.UUID{}
+	for rows.Next() {
+		var user_id ids.UUID
+		if err := rows.Scan(&user_id); err != nil {
+			return nil, err
+		}
+		items = append(items, user_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const voidResponse = `-- name: VoidResponse :execrows
