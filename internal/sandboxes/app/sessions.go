@@ -164,14 +164,15 @@ func (s *Service) StartSession(ctx context.Context, in StartInput) (Started, err
 		// recorded only while they still hold (the closure contract's Bound).
 		for _, conn := range in.Connections {
 			b, err := q.CoverageBinding(ctx, c.Org, conn)
-			if db.IsNoRows(err) {
+			if db.IsNoRows(err) || (err == nil && b.PackageVersionID == nil) {
+				// No pinned package: nothing a closure could bind.
 				return ErrConnections
 			} else if err != nil {
 				return err
 			}
 			if err := q.InsertSandboxSessionConnection(ctx, dbq.InsertSandboxSessionConnectionParams{
 				OrgID: c.Org, SessionID: sess.ID, ConnectionID: conn, ConnectionRevision: b.Revision, GatewayID: b.GatewayID,
-				PackageVersionID: b.PackageVersionID, CredentialVersion: b.CredentialVersion,
+				PackageVersionID: *b.PackageVersionID, CredentialVersion: b.CredentialVersion,
 			}); err != nil {
 				return err
 			}

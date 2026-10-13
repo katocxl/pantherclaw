@@ -580,15 +580,16 @@ type PcCoverageFinding struct {
 }
 
 type PcCoverageInvalidation struct {
-	OrgID        ids.OrgID
-	ID           ids.UUID
-	Kind         string
-	ConnectionID ids.UUID
-	AgentID      *ids.UUID
-	SubjectID    *ids.UUID
-	Detail       *string
-	OccurredAt   time.Time
-	ReassessedAt *time.Time
+	OrgID         ids.OrgID
+	ID            ids.UUID
+	Kind          string
+	ConnectionID  ids.UUID
+	AgentID       *ids.UUID
+	SubjectID     *ids.UUID
+	Detail        *string
+	OccurredAt    time.Time
+	ReassessedAt  *time.Time
+	LedgerEntryID *ids.UUID
 }
 
 type PcCoverageInventory struct {
@@ -678,14 +679,15 @@ type PcDecisionConsequence struct {
 }
 
 type PcDecisionReceipt struct {
-	OrgID           ids.OrgID
-	TransactionID   ids.UUID
-	ReceiptJws      *string
-	LedgerEntryID   ids.UUID
-	CreatedAt       time.Time
-	Evaluation      int32
-	BodyRemovedAt   *time.Time
-	RemovedByPolicy *ids.UUID
+	OrgID              ids.OrgID
+	TransactionID      ids.UUID
+	ReceiptJws         *string
+	LedgerEntryID      ids.UUID
+	CreatedAt          time.Time
+	Evaluation         int32
+	BodyRemovedAt      *time.Time
+	RemovedByPolicy    *ids.UUID
+	CoverageSnapshotID *ids.UUID
 }
 
 type PcDedupeClaim struct {

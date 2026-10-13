@@ -62,10 +62,58 @@ service CoverageService {
   rpc GetFreshnessContract(GetFreshnessContractRequest) returns (GetFreshnessContractResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
+  // GetSnapshot returns one recorded coverage snapshot: the scope's
+  // computed record and the ledger entry it is bound to (HR-217).
+  // permission: coverage.read
+  rpc GetSnapshot(GetSnapshotRequest) returns (GetSnapshotResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // ListSnapshots lists a scope's recorded snapshots, newest first: its
+  // coverage history.
+  // permission: coverage.read
+  rpc ListSnapshots(ListSnapshotsRequest) returns (ListSnapshotsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
   // Reassess recomputes the scopes of one connection now, from evidence,
   // and records a snapshot for each that changed.
   // permission: coverage.reassess
   rpc Reassess(ReassessRequest) returns (ReassessResponse);
+  // CreateExclusion records, until it expires, that a person accepts a scope
+  // or a route kind as outside the boundary (HR-212). It never raises a
+  // state: an excluded route still counts as open (design decision 1). Only
+  // a person makes one, with a written reason; it is audited, notified to
+  // org admins and listed with every claim on the scope.
+  // permission: coverage.manage
+  rpc CreateExclusion(CreateExclusionRequest) returns (CreateExclusionResponse);
+  // RevokeExclusion ends an active exclusion at once.
+  // permission: coverage.manage
+  rpc RevokeExclusion(RevokeExclusionRequest) returns (RevokeExclusionResponse);
+  // ListExclusions lists exclusions, newest first.
+  // permission: coverage.read
+  rpc ListExclusions(ListExclusionsRequest) returns (ListExclusionsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // GetAccessDetail says where an agent gets usable authority at a
+  // connection's target and what limits it (§39.2–39.3): the custodian and
+  // modes, the scope and audience, the expiry, the issuance source, the
+  // affected agents, the verification basis, the routes still open, and
+  // what each mode must disclose. It never shows a secret.
+  // permission: coverage.read
+  rpc GetAccessDetail(GetAccessDetailRequest) returns (GetAccessDetailResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // ListFindings lists exposure findings, starting with credential
+  // overreach (F048): reach a credential holds beyond what the operations
+  // need, shown as exposure, never as extra permission.
+  // permission: coverage.read
+  rpc ListFindings(ListFindingsRequest) returns (ListFindingsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // AcknowledgeFinding acknowledges an open finding with a written reason,
+  // which dismisses it; it is audited, and the finding stays dismissed
+  // when seen again with the same excess.
+  // permission: coverage.manage
+  rpc AcknowledgeFinding(AcknowledgeFindingRequest) returns (AcknowledgeFindingResponse);
 }
 
 // CoverageState is the protection claim of one scope (F435–F438).
@@ -482,4 +530,311 @@ message CoverageExclusion {
   string revoked_by = 11;
   // When it was revoked.
   google.protobuf.Timestamp revoke_time = 12;
+}
+
+
+// CreateExclusionRequest describes an exclusion.
+message CreateExclusionRequest {
+  // Connection id.
+  string connection_id = 1 [(buf.validate.field).string.uuid = true];
+  // Agent id; unset for every agent of the connection.
+  optional string agent_id = 2 [(buf.validate.field).string.uuid = true];
+  // Operation; unset for every operation.
+  optional string operation = 3 [(buf.validate.field).string = {
+    max_len: 128
+    pattern: "^[a-z][a-z0-9_]*(\\.[a-z0-9_]+){1,7}$"
+  }];
+  // Route kind; unspecified excludes the whole scope. A channel is never
+  // excluded.
+  CoverageRouteKind route_kind = 4 [(buf.validate.field).enum = {
+    defined_only: true
+    not_in: [1]
+  }];
+  // A written reason (10 to 1,000 characters).
+  string reason = 5 [(buf.validate.field).string = {
+    min_len: 10
+    max_len: 1000
+  }];
+  // Days until it expires (1 to 90).
+  int32 expires_in_days = 6 [(buf.validate.field).int32 = {
+    gte: 1
+    lte: 90
+  }];
+}
+
+// CreateExclusionResponse returns it.
+message CreateExclusionResponse {
+  // Exclusion.
+  CoverageExclusion exclusion = 1;
+}
+
+// RevokeExclusionRequest names an exclusion.
+message RevokeExclusionRequest {
+  // Exclusion id.
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// RevokeExclusionResponse returns it.
+message RevokeExclusionResponse {
+  // Exclusion.
+  CoverageExclusion exclusion = 1;
+}
+
+// ListExclusionsRequest filters exclusions.
+message ListExclusionsRequest {
+  // Maximum results (default 50, at most 200).
+  int32 page_size = 1 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 200
+  }];
+  // Token from a previous response.
+  string page_token = 2 [(buf.validate.field).string = {
+    max_len: 64
+    pattern: "^[A-Za-z0-9_-]*$"
+  }];
+  // Only this connection.
+  optional string connection_id = 3 [(buf.validate.field).string.uuid = true];
+}
+
+// ListExclusionsResponse is one page.
+message ListExclusionsResponse {
+  // Exclusions, newest first.
+  repeated CoverageExclusion exclusions = 1;
+  // Token for the next page; empty at the end.
+  string next_page_token = 2;
+}
+
+// AccessControlMode is how an actor's target access is controlled (§39.2).
+// Several may apply at once.
+enum AccessControlMode {
+  ACCESS_CONTROL_MODE_UNSPECIFIED = 0;
+  // The target validates the action boundary (action tokens).
+  ACCESS_CONTROL_MODE_TARGET_ENFORCED = 1;
+  // Access limited by destination, scope and duration, e.g. a per-action
+  // token.
+  ACCESS_CONTROL_MODE_NARROW_TEMPORARY = 2;
+  // PantherClaw performs approved work with access the agent cannot read.
+  ACCESS_CONTROL_MODE_PANTHERCLAW_HELD = 3;
+  // An approved external control (the containment sandbox) confines the
+  // actor's reach.
+  ACCESS_CONTROL_MODE_CONSTRAINED_RUNTIME = 4;
+  // The agent can exercise broader target authority directly.
+  ACCESS_CONTROL_MODE_AGENT_HELD = 5;
+}
+
+// GetAccessDetailRequest names a connection, optionally one agent.
+message GetAccessDetailRequest {
+  // Connection id.
+  string connection_id = 1 [(buf.validate.field).string.uuid = true];
+  // Agent id; unset for the connection alone.
+  optional string agent_id = 2 [(buf.validate.field).string.uuid = true];
+}
+
+// AccessDetail is the access detail of a connection (and agent).
+message AccessDetail {
+  // Connection.
+  string connection_id = 1;
+  // Agent, when one was named.
+  string agent_id = 2;
+  // The modes that apply, strongest control first.
+  repeated AccessControlMode modes = 3;
+  // Who holds usable target authority: "gateway", "agent" or "target".
+  string custodian = 4;
+  // The gateway that holds the sealed credential, when PantherClaw holds it.
+  string gateway_id = 5;
+  // The active sealed credential's version and the hosts it may reach;
+  // never its value.
+  int32 credential_version = 6;
+  // Allowed hosts.
+  repeated string credential_hosts = 7;
+  // The closure that confines the agent, and when it expires.
+  string closure_id = 8;
+  // Expiry.
+  google.protobuf.Timestamp closure_expire_time = 9;
+  // Routes of the agent's scopes on this connection that are not closed.
+  repeated CoverageRoute residual_routes = 10;
+  // What each mode must disclose, in plain language.
+  repeated string disclosures = 11;
+  // What the access reaches: the sealed credential's hosts, or the single
+  // action a token names.
+  repeated string scope = 12;
+  // Who accepts it: the target hosts.
+  repeated string audience = 13;
+  // How long it lasts, in plain language.
+  string expiry = 14;
+  // Who issued it, and when.
+  string issued_by = 15;
+  // Issuance time.
+  google.protobuf.Timestamp issue_time = 16;
+  // The agents with coverage on the connection that the caller may read.
+  repeated string agent_ids = 17;
+  // What verifies the modes.
+  repeated string verification_basis = 18;
+  // For each read of the scopes shown, when its latest passing
+  // target-verifier test ran. A test vouches only for the read it tested;
+  // writes stay PARTIAL in M9 (founder decision N15).
+  repeated VerifiedOperation verified_operations = 19;
+}
+
+// VerifiedOperation is when the latest passing target-verifier test of one
+// operation ran.
+message VerifiedOperation {
+  // Operation.
+  string operation = 1;
+  // When the test ran.
+  google.protobuf.Timestamp verify_time = 2;
+}
+
+// GetAccessDetailResponse returns the disclosure.
+message GetAccessDetailResponse {
+  // Detail.
+  AccessDetail detail = 1;
+}
+
+// CoverageFinding is an exposure finding (F048; M10 adds kinds).
+message CoverageFinding {
+  // Finding id.
+  string id = 1;
+  // "credential_overreach".
+  string kind = 2;
+  // Connection, when the finding is about one.
+  string connection_id = 3;
+  // Agent, when the finding is about one.
+  string agent_id = 4;
+  // What holds the reach, e.g. "GitHub App pantherclaw-ci"; untrusted
+  // text.
+  string subject = 5;
+  // Permissions ("name:level") the operations declare they need.
+  repeated string declared = 6;
+  // Permissions the credential actually holds.
+  repeated string held = 7;
+  // Permissions the operations the gateway carried need.
+  repeated string used = 8;
+  // Permissions held beyond the declared need.
+  repeated string excess = 9;
+  // "low", "medium", "high" or "critical".
+  string severity = 10;
+  // "OPEN", "RESOLVED" or "DISMISSED".
+  string state = 11;
+  // First and last seen, resolved or dismissed.
+  google.protobuf.Timestamp first_seen_time = 12;
+  // Last seen.
+  google.protobuf.Timestamp last_seen_time = 13;
+  // When resolved or dismissed.
+  google.protobuf.Timestamp resolve_time = 14;
+  // The person who dismissed it and why (untrusted text).
+  string dismissed_by = 15;
+  // Reason.
+  string dismiss_reason = 16;
+}
+
+// ListFindingsRequest filters findings.
+message ListFindingsRequest {
+  // Maximum results (default 50, at most 200).
+  int32 page_size = 1 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 200
+  }];
+  // Token from a previous response.
+  string page_token = 2 [(buf.validate.field).string = {
+    max_len: 64
+    pattern: "^[A-Za-z0-9_-]*$"
+  }];
+  // Only in this state.
+  optional string state = 3 [(buf.validate.field).string = {
+    in: ["OPEN", "RESOLVED", "DISMISSED"]
+  }];
+  // Only this connection.
+  optional string connection_id = 4 [(buf.validate.field).string.uuid = true];
+}
+
+// ListFindingsResponse is one page.
+message ListFindingsResponse {
+  // Findings, newest first.
+  repeated CoverageFinding findings = 1;
+  // Token for the next page; empty at the end.
+  string next_page_token = 2;
+}
+
+// AcknowledgeFindingRequest names a finding and why it is dismissed.
+message AcknowledgeFindingRequest {
+  // Finding id.
+  string id = 1 [(buf.validate.field).string.uuid = true];
+  // A written reason (10 to 1,000 characters).
+  string reason = 2 [(buf.validate.field).string = {
+    min_len: 10
+    max_len: 1000
+  }];
+}
+
+// AcknowledgeFindingResponse returns the finding.
+message AcknowledgeFindingResponse {
+  // Finding.
+  CoverageFinding finding = 1;
+}
+
+// CoverageSnapshot is one recorded computation of a scope's coverage.
+message CoverageSnapshot {
+  // Snapshot id.
+  string id = 1;
+  // The scope.
+  CoverageScope scope = 2;
+  // Its state and why.
+  CoverageState state = 3;
+  // Reason codes.
+  repeated string reasons = 4;
+  // Every route and its status when it was computed.
+  repeated CoverageRoute routes = 5;
+  // The closure an ENFORCED state rests on.
+  string closure_id = 6;
+  // The last ENFORCED snapshot a downgrade follows (F442).
+  string last_valid_id = 7;
+  // The change that caused the computation, when one did.
+  string invalidation_id = 8;
+  // The exclusions that applied.
+  repeated string exclusion_ids = 9;
+  // When it was computed, and when ENFORCED expires.
+  google.protobuf.Timestamp compute_time = 10;
+  // Expiry of an ENFORCED state.
+  google.protobuf.Timestamp expire_time = 11;
+  // Its coverage.snapshot ledger entry and that entry's SHA-256.
+  string ledger_entry_id = 12;
+  // "sha256:" and the hex digest.
+  string entry_digest = 13;
+}
+
+// GetSnapshotRequest names a snapshot.
+message GetSnapshotRequest {
+  // Snapshot id.
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// GetSnapshotResponse returns the snapshot.
+message GetSnapshotResponse {
+  // Snapshot.
+  CoverageSnapshot snapshot = 1;
+}
+
+// ListSnapshotsRequest names a scope.
+message ListSnapshotsRequest {
+  // The scope.
+  CoverageScope scope = 1 [(buf.validate.field).required = true];
+  // Maximum results (default 50, at most 200).
+  int32 page_size = 2 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 200
+  }];
+  // Token from a previous page.
+  string page_token = 3 [(buf.validate.field).string = {
+    max_len: 64
+    pattern: "^[A-Za-z0-9_-]*$"
+  }];
+}
+
+// ListSnapshotsResponse is one page of a scope's snapshots, newest first.
+message ListSnapshotsResponse {
+  // Snapshots.
+  repeated CoverageSnapshot snapshots = 1;
+  // Token for the next page; empty at the end.
+  string next_page_token = 2;
 }

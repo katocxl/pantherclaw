@@ -98,13 +98,14 @@ ORDER BY id DESC
 LIMIT sqlc.arg(max_rows);
 
 -- What a closure is bound to now: the connection's revision and gateway,
--- its package's pinned version and its active credential's version.
+-- its package's pinned version (NULL when nothing is pinned) and its
+-- active credential's version.
 -- name: CoverageBinding :one
-SELECT c.revision, c.gateway_id, c.state, c.kind, c.access_mode, p.version_id AS package_version_id,
+SELECT c.revision, c.gateway_id, c.state, c.kind, c.access_mode, c.default_mode, p.version_id AS package_version_id,
     cr.version AS credential_version
 FROM pc.connections c
-JOIN pc.tool_packages tp ON tp.org_id = c.org_id AND tp.name = c.package
-JOIN pc.package_pins p ON p.org_id = c.org_id AND p.package_id = tp.id
+LEFT JOIN pc.tool_packages tp ON tp.org_id = c.org_id AND tp.name = c.package
+LEFT JOIN pc.package_pins p ON p.org_id = c.org_id AND p.package_id = tp.id
 LEFT JOIN pc.credentials cr ON cr.org_id = c.org_id AND cr.connection_id = c.id AND cr.state = 'ACTIVE'
 WHERE c.org_id = sqlc.arg(org_id) AND c.id = sqlc.arg(connection_id);
 
@@ -139,10 +140,10 @@ WHERE org_id = sqlc.arg(org_id) AND id = ANY (sqlc.arg(invalidation_ids)::uuid[]
 
 -- name: InsertCoverageSnapshot :one
 INSERT INTO pc.coverage_snapshots (org_id, id, agent_id, connection_id, operation, state, reasons, closure_id, last_valid_id,
-    invalidation_id, body, body_sha256, ledger_entry_id, expires_at)
+    invalidation_id, body, body_sha256, ledger_entry_id, expires_at, computed_at)
 VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(agent_id), sqlc.arg(connection_id), sqlc.arg(operation), sqlc.arg(state),
     sqlc.arg(reasons)::text[], sqlc.narg(closure_id), sqlc.narg(last_valid_id), sqlc.narg(invalidation_id), sqlc.arg(body),
-    sqlc.arg(body_sha256), sqlc.arg(ledger_entry_id), sqlc.narg(expires_at))
+    sqlc.arg(body_sha256), sqlc.arg(ledger_entry_id), sqlc.narg(expires_at), sqlc.arg(computed_at))
 RETURNING *;
 
 -- name: GetCoverageSnapshot :one
@@ -226,11 +227,22 @@ ON CONFLICT (org_id, kind, fingerprint) DO UPDATE SET
     last_seen_at = now()
 RETURNING *;
 
--- Open findings of a kind for a connection that the latest pass no longer
--- found are resolved.
+-- The dismissed findings of a kind for a connection that the latest pass
+-- no longer found, with their dismissal, which the caller audits before
+-- ResolveCoverageFindings clears it.
+-- name: DismissedCoverageFindingsGone :many
+SELECT id, excess, dismissed_by, dismiss_reason FROM pc.coverage_findings
+WHERE org_id = sqlc.arg(org_id) AND kind = sqlc.arg(kind) AND connection_id = sqlc.arg(connection_id)
+  AND state = 'DISMISSED' AND NOT (fingerprint = ANY (sqlc.arg(keep)::bytea[]))
+ORDER BY id
+FOR UPDATE;
+
+-- Findings of a kind for a connection that the latest pass no longer found
+-- are resolved, dismissed ones too: a dismissal covers the exposure it was
+-- made for while it lasts, so the same excess found again later reopens.
 -- name: ResolveCoverageFindings :execrows
-UPDATE pc.coverage_findings SET state = 'RESOLVED', resolved_at = now()
-WHERE org_id = sqlc.arg(org_id) AND kind = sqlc.arg(kind) AND connection_id = sqlc.arg(connection_id) AND state = 'OPEN'
+UPDATE pc.coverage_findings SET state = 'RESOLVED', resolved_at = now(), dismissed_by = NULL, dismiss_reason = NULL
+WHERE org_id = sqlc.arg(org_id) AND kind = sqlc.arg(kind) AND connection_id = sqlc.arg(connection_id) AND state IN ('OPEN', 'DISMISSED')
   AND NOT (fingerprint = ANY (sqlc.arg(keep)::bytea[]));
 
 -- name: DismissCoverageFinding :one
@@ -267,3 +279,220 @@ WHERE t.org_id = sqlc.arg(org_id) AND (sqlc.narg(after)::uuid IS NULL OR t.id > 
   AND t.created_at < now() - interval '1 minute'
 ORDER BY t.id
 LIMIT sqlc.arg(max_rows);
+
+-- The scopes known for a connection: the agents and operations its
+-- traffic or its snapshots name.
+-- name: CoverageScopesOfConnection :many
+SELECT DISTINCT x.agent_id::uuid AS agent_id, x.operation::text AS operation FROM (
+    SELECT r.agent_id, r.operation FROM pc.coverage_routes r
+    WHERE r.org_id = sqlc.arg(org_id) AND r.connection_id = sqlc.arg(connection_id) AND r.kind = 'channel'
+      AND r.agent_id IS NOT NULL AND r.operation IS NOT NULL
+    UNION
+    SELECT s.agent_id, s.operation FROM pc.coverage_snapshots s
+    WHERE s.org_id = sqlc.arg(org_id) AND s.connection_id = sqlc.arg(connection_id)
+) x
+WHERE sqlc.narg(agent_id)::uuid IS NULL OR x.agent_id = sqlc.narg(agent_id)::uuid
+ORDER BY 1, 2
+LIMIT 1000;
+
+-- Current ENFORCED snapshots past their expiry: their scopes read PARTIAL
+-- now, and the reassess job records it (F441).
+-- name: ExpiredEnforcedCoverageScopes :many
+SELECT s.agent_id, s.connection_id, s.operation FROM pc.coverage_snapshots s
+WHERE s.org_id = sqlc.arg(org_id) AND s.state = 'ENFORCED' AND s.expires_at <= now()
+  AND NOT EXISTS (SELECT 1 FROM pc.coverage_snapshots n
+                  WHERE n.org_id = s.org_id AND n.agent_id = s.agent_id AND n.connection_id = s.connection_id
+                    AND n.operation = s.operation AND n.id > s.id)
+ORDER BY s.id
+LIMIT sqlc.arg(max_rows);
+
+-- The agent's admitted, unexpired instances and the sandbox session of
+-- each, empty outside a sandbox (design decision 2). sandbox_session_id
+-- comes with 00090; it is read through to_jsonb, so this works before and
+-- after.
+-- name: CoverageInstancesOfAgent :many
+SELECT i.id, coalesce(to_jsonb(i) ->> 'sandbox_session_id', '')::text AS sandbox_session_id
+FROM pc.agent_instances i
+WHERE i.org_id = sqlc.arg(org_id) AND i.agent_id = sqlc.arg(agent_id) AND i.state = 'ADMITTED'
+  AND (i.expires_at IS NULL OR i.expires_at > now())
+ORDER BY i.id;
+
+-- Serializes the reassessments and closure recordings of one agent and
+-- connection until the transaction ends, so two never append snapshots
+-- from the same current one.
+-- name: LockCoverageScope :exec
+SELECT pg_advisory_xact_lock(hashtextextended(
+    (sqlc.arg(org_id)::uuid)::text || '/' || (sqlc.arg(agent_id)::uuid)::text || '/' || (sqlc.arg(connection_id)::uuid)::text,
+    85));
+
+-- The changes to a scope no reassessment has seen yet, oldest first: a
+-- snapshot lapses while one is pending (HR-211).
+-- name: CoverageChangesPending :many
+SELECT * FROM pc.coverage_invalidations
+WHERE org_id = sqlc.arg(org_id) AND connection_id = sqlc.arg(connection_id)
+  AND (agent_id IS NULL OR agent_id = sqlc.narg(agent_id)::uuid) AND reassessed_at IS NULL
+ORDER BY occurred_at, id
+LIMIT 64;
+
+-- Marks one invalidation reassessed with its ledger entry; a second call
+-- changes nothing.
+-- name: EnterCoverageInvalidation :execrows
+UPDATE pc.coverage_invalidations SET reassessed_at = now(), ledger_entry_id = sqlc.arg(ledger_entry_id)
+WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND reassessed_at IS NULL;
+
+-- The ledger entries an evidence bundle carries beside a receipt that
+-- claims a coverage snapshot (HR-217): the snapshot's, the next snapshot of
+-- its scope, and the scope's invalidations from the snapshot's computation
+-- up to the decision.
+-- name: CoverageClaimEntries :many
+SELECT s.ledger_entry_id FROM pc.coverage_snapshots s WHERE s.org_id = sqlc.arg(org_id) AND s.id = sqlc.arg(snapshot_id)
+UNION ALL
+(SELECT n.ledger_entry_id
+ FROM pc.coverage_snapshots s
+ JOIN pc.coverage_snapshots n ON n.org_id = s.org_id AND n.agent_id = s.agent_id AND n.connection_id = s.connection_id
+                             AND n.operation = s.operation AND n.id > s.id
+ WHERE s.org_id = sqlc.arg(org_id) AND s.id = sqlc.arg(snapshot_id)
+ ORDER BY n.id
+ LIMIT 1)
+UNION ALL
+(SELECT i.ledger_entry_id
+ FROM pc.coverage_snapshots s
+ JOIN pc.coverage_invalidations i ON i.org_id = s.org_id AND i.connection_id = s.connection_id
+                                 AND (i.agent_id IS NULL OR i.agent_id = s.agent_id)
+ WHERE s.org_id = sqlc.arg(org_id) AND s.id = sqlc.arg(snapshot_id) AND i.ledger_entry_id IS NOT NULL
+   AND i.occurred_at >= s.computed_at AND i.occurred_at < sqlc.arg(until)
+ ORDER BY i.occurred_at
+ LIMIT 256);
+
+-- The bounds of the agent's active grants in effect now: the operations
+-- they allow are the scopes its protection is derived from (F021).
+-- name: CoverageGrantBoundsOfAgent :many
+SELECT r.bounds FROM pc.grants g
+JOIN pc.grant_revisions r ON r.org_id = g.org_id AND r.grant_id = g.id AND r.revision = g.current_revision
+WHERE g.org_id = sqlc.arg(org_id) AND g.agent_id = sqlc.arg(agent_id) AND g.state = 'ACTIVE'
+  AND r.not_before <= now() AND r.expires_at > now();
+
+-- The org's agents that coverage holds protected or partially protected:
+-- each reassess job derives them again, so a grant that starts, ends or
+-- changes lowers them within one run although it writes no coverage change
+-- (F021).
+-- name: CoverageProtectedAgents :many
+SELECT id FROM pc.agents
+WHERE org_id = sqlc.arg(org_id) AND state IN ('PROTECTED', 'PARTIALLY_PROTECTED')
+ORDER BY id
+LIMIT sqlc.arg(max_rows);
+
+-- The org's connections that can carry actions, with their pinned package
+-- version.
+-- name: CoverageConnectionPackages :many
+SELECT c.id, p.version_id FROM pc.connections c
+JOIN pc.tool_packages tp ON tp.org_id = c.org_id AND tp.name = c.package
+JOIN pc.package_pins p ON p.org_id = c.org_id AND p.package_id = tp.id
+WHERE c.org_id = sqlc.arg(org_id) AND c.state <> 'RETIRED'
+ORDER BY c.id
+LIMIT 1000;
+
+-- The agents with coverage on a connection.
+-- name: CoverageAgentsOfConnection :many
+SELECT DISTINCT agent_id FROM pc.coverage_snapshots
+WHERE org_id = sqlc.arg(org_id) AND connection_id = sqlc.arg(connection_id)
+ORDER BY agent_id
+LIMIT 200;
+
+-- The bounds of the org's active grants in effect now: the operations
+-- they allow are what a connection's credential is declared to need
+-- (F048).
+-- name: CoverageGrantBoundsOfOrg :many
+SELECT r.bounds FROM pc.grants g
+JOIN pc.grant_revisions r ON r.org_id = g.org_id AND r.grant_id = g.id AND r.revision = g.current_revision
+WHERE g.org_id = sqlc.arg(org_id) AND g.state = 'ACTIVE' AND r.not_before <= now() AND r.expires_at > now()
+LIMIT 1000;
+
+-- The operations executed through a connection in the last 30 days: the
+-- ones a dispatch was attempted for (F048 "used").
+-- name: CoverageExecutedOperations :many
+SELECT DISTINCT t.operation::text FROM pc.transactions t
+WHERE t.org_id = sqlc.arg(org_id) AND t.connection_id = sqlc.arg(connection_id)
+  AND t.created_at > now() - interval '30 days'
+  AND EXISTS (SELECT 1 FROM pc.execution_attempts a WHERE a.org_id = t.org_id AND a.transaction_id = t.id)
+ORDER BY 1;
+
+-- The org-scan findings that show a route of one of the org's connections
+-- and were not recorded yet, with the route (G0 M8 G5 kinds; UNTRUSTED
+-- metadata, HR-209: they only describe a route, never grant or close one):
+--   - a GitHub App installation is target-side authority beyond the
+--     connection (F449);
+--   - a workflow that writes, deploys, or runs a job on the repository's
+--     default permissions (which may write) is an intermediary that can
+--     produce the effect (F448);
+--   - a committed MCP configuration is an MCP server reaching the target
+--     outside the gateway (F444).
+-- Only findings that are recorded are selected, so findings that show no
+-- route never hold back the ones after them. Each is recorded once, as the
+-- source of its route on each connection whose scan run found it. Only
+-- findings of a scan run of the connection they name count. Only the
+-- gateway's GitHub org scan (source
+-- github_scan) reports these kinds; a person's pclaw scan (source scan)
+-- cannot (N20). A dismissed discovery still counts: dismissing it does not
+-- remove the route.
+-- name: CoverageScanFindingsToRecord :many
+SELECT s.id, s.connection_id, s.kind::text AS kind, s.locator::text AS locator FROM (
+    SELECT d.id, c.id AS connection_id,
+        CASE d.observed ->> 'kind'
+            WHEN 'github_app' THEN 'target_side'
+            WHEN 'github_workflow' THEN 'intermediary'
+            WHEN 'github_mcp_config' THEN 'direct_api'
+        END AS kind,
+        left(btrim(CASE d.observed ->> 'kind'
+            WHEN 'github_app' THEN 'GitHub App ' || coalesce(d.observed ->> 'app_slug', '')
+            ELSE coalesce(d.observed ->> 'repo', '') || ' ' || coalesce(d.observed ->> 'path', '')
+        END), 512) AS locator
+    FROM pc.discoveries d
+    JOIN pc.connections c ON c.org_id = d.org_id AND c.id::text = lower(d.observed ->> 'connection')
+    -- The finding's scan run must be a scan of the connection it names.
+    JOIN pc.github_scan_runs sr ON sr.org_id = d.org_id AND sr.id::text = lower(d.observed ->> 'scan_run')
+                               AND sr.connection_id = c.id
+    WHERE d.org_id = sqlc.arg(org_id) AND d.source = 'github_scan'
+      AND d.observed ->> 'kind' IN ('github_app', 'github_workflow', 'github_mcp_config')
+      AND (d.observed ->> 'kind' <> 'github_workflow' OR d.observed ->> 'writes' = 'true' OR d.observed ->> 'deploys' = 'true'
+           OR d.observed ->> 'permissions_default' = 'true')
+      AND NOT EXISTS (SELECT 1 FROM pc.coverage_routes r
+                      WHERE r.org_id = d.org_id AND r.connection_id = c.id AND r.source = 'scan' AND r.source_ref = d.id)
+) s
+WHERE s.kind = 'target_side' OR s.locator <> ''
+ORDER BY s.id
+LIMIT 200;
+
+-- A scope's snapshots, newest first: its coverage history.
+-- name: ListCoverageSnapshotsPage :many
+SELECT * FROM pc.coverage_snapshots
+WHERE org_id = sqlc.arg(org_id) AND agent_id = sqlc.arg(agent_id) AND connection_id = sqlc.arg(connection_id)
+  AND operation = sqlc.arg(operation)
+  AND (sqlc.narg(before)::uuid IS NULL OR id < sqlc.narg(before)::uuid)
+ORDER BY id DESC
+LIMIT sqlc.arg(max_rows);
+
+-- The GitHub App installation behind a connection, with the permissions it
+-- held when last read (G0 M8 G3, connection_github): the reach of the
+-- connection's own credential (F048). UNTRUSTED metadata read from GitHub.
+-- read_at is NULL until the gateway has read the installation's permissions.
+-- name: CoverageInstallationOfConnection :one
+SELECT app_client_id, installation_id, account_login, permissions, read_at FROM pc.connection_github
+WHERE org_id = sqlc.arg(org_id) AND connection_id = sqlc.arg(connection_id);
+
+-- A scope's snapshot that was current at a decision (the latest computed
+-- before until), and the next one: pclaw verify tells from them a claim
+-- that names another snapshot (T-089).
+-- name: CoverageSnapshotBefore :one
+SELECT ledger_entry_id FROM pc.coverage_snapshots
+WHERE org_id = sqlc.arg(org_id) AND agent_id = sqlc.arg(agent_id) AND connection_id = sqlc.arg(connection_id)
+  AND operation = sqlc.arg(operation) AND computed_at < sqlc.arg(until)
+ORDER BY computed_at DESC, id DESC
+LIMIT 1;
+
+-- name: CoverageSnapshotFrom :one
+SELECT ledger_entry_id FROM pc.coverage_snapshots
+WHERE org_id = sqlc.arg(org_id) AND agent_id = sqlc.arg(agent_id) AND connection_id = sqlc.arg(connection_id)
+  AND operation = sqlc.arg(operation) AND computed_at >= sqlc.arg(until)
+ORDER BY computed_at, id
+LIMIT 1;

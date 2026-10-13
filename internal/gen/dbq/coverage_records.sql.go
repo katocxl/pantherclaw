@@ -15,12 +15,40 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 )
 
+const coverageAgentsOfConnection = `-- name: CoverageAgentsOfConnection :many
+SELECT DISTINCT agent_id FROM pc.coverage_snapshots
+WHERE org_id = $1 AND connection_id = $2
+ORDER BY agent_id
+LIMIT 200
+`
+
+// The agents with coverage on a connection.
+func (q *Queries) CoverageAgentsOfConnection(ctx context.Context, orgID ids.OrgID, connectionID ids.UUID) ([]ids.UUID, error) {
+	rows, err := q.db.Query(ctx, coverageAgentsOfConnection, orgID, connectionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ids.UUID{}
+	for rows.Next() {
+		var agent_id ids.UUID
+		if err := rows.Scan(&agent_id); err != nil {
+			return nil, err
+		}
+		items = append(items, agent_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const coverageBinding = `-- name: CoverageBinding :one
-SELECT c.revision, c.gateway_id, c.state, c.kind, c.access_mode, p.version_id AS package_version_id,
+SELECT c.revision, c.gateway_id, c.state, c.kind, c.access_mode, c.default_mode, p.version_id AS package_version_id,
     cr.version AS credential_version
 FROM pc.connections c
-JOIN pc.tool_packages tp ON tp.org_id = c.org_id AND tp.name = c.package
-JOIN pc.package_pins p ON p.org_id = c.org_id AND p.package_id = tp.id
+LEFT JOIN pc.tool_packages tp ON tp.org_id = c.org_id AND tp.name = c.package
+LEFT JOIN pc.package_pins p ON p.org_id = c.org_id AND p.package_id = tp.id
 LEFT JOIN pc.credentials cr ON cr.org_id = c.org_id AND cr.connection_id = c.id AND cr.state = 'ACTIVE'
 WHERE c.org_id = $1 AND c.id = $2
 `
@@ -31,12 +59,14 @@ type CoverageBindingRow struct {
 	State             string
 	Kind              string
 	AccessMode        string
-	PackageVersionID  ids.UUID
+	DefaultMode       string
+	PackageVersionID  *ids.UUID
 	CredentialVersion *int32
 }
 
 // What a closure is bound to now: the connection's revision and gateway,
-// its package's pinned version and its active credential's version.
+// its package's pinned version (NULL when nothing is pinned) and its
+// active credential's version.
 func (q *Queries) CoverageBinding(ctx context.Context, orgID ids.OrgID, connectionID ids.UUID) (CoverageBindingRow, error) {
 	row := q.db.QueryRow(ctx, coverageBinding, orgID, connectionID)
 	var i CoverageBindingRow
@@ -46,10 +76,133 @@ func (q *Queries) CoverageBinding(ctx context.Context, orgID ids.OrgID, connecti
 		&i.State,
 		&i.Kind,
 		&i.AccessMode,
+		&i.DefaultMode,
 		&i.PackageVersionID,
 		&i.CredentialVersion,
 	)
 	return i, err
+}
+
+const coverageChangesPending = `-- name: CoverageChangesPending :many
+SELECT org_id, id, kind, connection_id, agent_id, subject_id, detail, occurred_at, reassessed_at, ledger_entry_id FROM pc.coverage_invalidations
+WHERE org_id = $1 AND connection_id = $2
+  AND (agent_id IS NULL OR agent_id = $3::uuid) AND reassessed_at IS NULL
+ORDER BY occurred_at, id
+LIMIT 64
+`
+
+// The changes to a scope no reassessment has seen yet, oldest first: a
+// snapshot lapses while one is pending (HR-211).
+func (q *Queries) CoverageChangesPending(ctx context.Context, orgID ids.OrgID, connectionID ids.UUID, agentID *ids.UUID) ([]PcCoverageInvalidation, error) {
+	rows, err := q.db.Query(ctx, coverageChangesPending, orgID, connectionID, agentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []PcCoverageInvalidation{}
+	for rows.Next() {
+		var i PcCoverageInvalidation
+		if err := rows.Scan(
+			&i.OrgID,
+			&i.ID,
+			&i.Kind,
+			&i.ConnectionID,
+			&i.AgentID,
+			&i.SubjectID,
+			&i.Detail,
+			&i.OccurredAt,
+			&i.ReassessedAt,
+			&i.LedgerEntryID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const coverageClaimEntries = `-- name: CoverageClaimEntries :many
+SELECT s.ledger_entry_id FROM pc.coverage_snapshots s WHERE s.org_id = $1 AND s.id = $2
+UNION ALL
+(SELECT n.ledger_entry_id
+ FROM pc.coverage_snapshots s
+ JOIN pc.coverage_snapshots n ON n.org_id = s.org_id AND n.agent_id = s.agent_id AND n.connection_id = s.connection_id
+                             AND n.operation = s.operation AND n.id > s.id
+ WHERE s.org_id = $1 AND s.id = $2
+ ORDER BY n.id
+ LIMIT 1)
+UNION ALL
+(SELECT i.ledger_entry_id
+ FROM pc.coverage_snapshots s
+ JOIN pc.coverage_invalidations i ON i.org_id = s.org_id AND i.connection_id = s.connection_id
+                                 AND (i.agent_id IS NULL OR i.agent_id = s.agent_id)
+ WHERE s.org_id = $1 AND s.id = $2 AND i.ledger_entry_id IS NOT NULL
+   AND i.occurred_at >= s.computed_at AND i.occurred_at < $3
+ ORDER BY i.occurred_at
+ LIMIT 256)
+`
+
+// The ledger entries an evidence bundle carries beside a receipt that
+// claims a coverage snapshot (HR-217): the snapshot's, the next snapshot of
+// its scope, and the scope's invalidations from the snapshot's computation
+// up to the decision.
+func (q *Queries) CoverageClaimEntries(ctx context.Context, orgID ids.OrgID, snapshotID ids.UUID, until time.Time) ([]ids.UUID, error) {
+	rows, err := q.db.Query(ctx, coverageClaimEntries, orgID, snapshotID, until)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ids.UUID{}
+	for rows.Next() {
+		var ledger_entry_id ids.UUID
+		if err := rows.Scan(&ledger_entry_id); err != nil {
+			return nil, err
+		}
+		items = append(items, ledger_entry_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const coverageConnectionPackages = `-- name: CoverageConnectionPackages :many
+SELECT c.id, p.version_id FROM pc.connections c
+JOIN pc.tool_packages tp ON tp.org_id = c.org_id AND tp.name = c.package
+JOIN pc.package_pins p ON p.org_id = c.org_id AND p.package_id = tp.id
+WHERE c.org_id = $1 AND c.state <> 'RETIRED'
+ORDER BY c.id
+LIMIT 1000
+`
+
+type CoverageConnectionPackagesRow struct {
+	ID        ids.UUID
+	VersionID ids.UUID
+}
+
+// The org's connections that can carry actions, with their pinned package
+// version.
+func (q *Queries) CoverageConnectionPackages(ctx context.Context, orgID ids.OrgID) ([]CoverageConnectionPackagesRow, error) {
+	rows, err := q.db.Query(ctx, coverageConnectionPackages, orgID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []CoverageConnectionPackagesRow{}
+	for rows.Next() {
+		var i CoverageConnectionPackagesRow
+		if err := rows.Scan(&i.ID, &i.VersionID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const coverageExclusionsForScope = `-- name: CoverageExclusionsForScope :many
@@ -107,8 +260,164 @@ func (q *Queries) CoverageExclusionsForScope(ctx context.Context, arg CoverageEx
 	return items, nil
 }
 
+const coverageExecutedOperations = `-- name: CoverageExecutedOperations :many
+SELECT DISTINCT t.operation::text FROM pc.transactions t
+WHERE t.org_id = $1 AND t.connection_id = $2
+  AND t.created_at > now() - interval '30 days'
+  AND EXISTS (SELECT 1 FROM pc.execution_attempts a WHERE a.org_id = t.org_id AND a.transaction_id = t.id)
+ORDER BY 1
+`
+
+// The operations executed through a connection in the last 30 days: the
+// ones a dispatch was attempted for (F048 "used").
+func (q *Queries) CoverageExecutedOperations(ctx context.Context, orgID ids.OrgID, connectionID *ids.UUID) ([]string, error) {
+	rows, err := q.db.Query(ctx, coverageExecutedOperations, orgID, connectionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []string{}
+	for rows.Next() {
+		var t_operation string
+		if err := rows.Scan(&t_operation); err != nil {
+			return nil, err
+		}
+		items = append(items, t_operation)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const coverageGrantBoundsOfAgent = `-- name: CoverageGrantBoundsOfAgent :many
+SELECT r.bounds FROM pc.grants g
+JOIN pc.grant_revisions r ON r.org_id = g.org_id AND r.grant_id = g.id AND r.revision = g.current_revision
+WHERE g.org_id = $1 AND g.agent_id = $2 AND g.state = 'ACTIVE'
+  AND r.not_before <= now() AND r.expires_at > now()
+`
+
+// The bounds of the agent's active grants in effect now: the operations
+// they allow are the scopes its protection is derived from (F021).
+func (q *Queries) CoverageGrantBoundsOfAgent(ctx context.Context, orgID ids.OrgID, agentID ids.UUID) ([][]byte, error) {
+	rows, err := q.db.Query(ctx, coverageGrantBoundsOfAgent, orgID, agentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := [][]byte{}
+	for rows.Next() {
+		var bounds []byte
+		if err := rows.Scan(&bounds); err != nil {
+			return nil, err
+		}
+		items = append(items, bounds)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const coverageGrantBoundsOfOrg = `-- name: CoverageGrantBoundsOfOrg :many
+SELECT r.bounds FROM pc.grants g
+JOIN pc.grant_revisions r ON r.org_id = g.org_id AND r.grant_id = g.id AND r.revision = g.current_revision
+WHERE g.org_id = $1 AND g.state = 'ACTIVE' AND r.not_before <= now() AND r.expires_at > now()
+LIMIT 1000
+`
+
+// The bounds of the org's active grants in effect now: the operations
+// they allow are what a connection's credential is declared to need
+// (F048).
+func (q *Queries) CoverageGrantBoundsOfOrg(ctx context.Context, orgID ids.OrgID) ([][]byte, error) {
+	rows, err := q.db.Query(ctx, coverageGrantBoundsOfOrg, orgID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := [][]byte{}
+	for rows.Next() {
+		var bounds []byte
+		if err := rows.Scan(&bounds); err != nil {
+			return nil, err
+		}
+		items = append(items, bounds)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const coverageInstallationOfConnection = `-- name: CoverageInstallationOfConnection :one
+SELECT app_client_id, installation_id, account_login, permissions, read_at FROM pc.connection_github
+WHERE org_id = $1 AND connection_id = $2
+`
+
+type CoverageInstallationOfConnectionRow struct {
+	AppClientID    string
+	InstallationID int64
+	AccountLogin   string
+	Permissions    []byte
+	ReadAt         *time.Time
+}
+
+// The GitHub App installation behind a connection, with the permissions it
+// held when last read (G0 M8 G3, connection_github): the reach of the
+// connection's own credential (F048). UNTRUSTED metadata read from GitHub.
+// read_at is NULL until the gateway has read the installation's permissions.
+func (q *Queries) CoverageInstallationOfConnection(ctx context.Context, orgID ids.OrgID, connectionID ids.UUID) (CoverageInstallationOfConnectionRow, error) {
+	row := q.db.QueryRow(ctx, coverageInstallationOfConnection, orgID, connectionID)
+	var i CoverageInstallationOfConnectionRow
+	err := row.Scan(
+		&i.AppClientID,
+		&i.InstallationID,
+		&i.AccountLogin,
+		&i.Permissions,
+		&i.ReadAt,
+	)
+	return i, err
+}
+
+const coverageInstancesOfAgent = `-- name: CoverageInstancesOfAgent :many
+SELECT i.id, coalesce(to_jsonb(i) ->> 'sandbox_session_id', '')::text AS sandbox_session_id
+FROM pc.agent_instances i
+WHERE i.org_id = $1 AND i.agent_id = $2 AND i.state = 'ADMITTED'
+  AND (i.expires_at IS NULL OR i.expires_at > now())
+ORDER BY i.id
+`
+
+type CoverageInstancesOfAgentRow struct {
+	ID               ids.UUID
+	SandboxSessionID string
+}
+
+// The agent's admitted, unexpired instances and the sandbox session of
+// each, empty outside a sandbox (design decision 2). sandbox_session_id
+// comes with 00090; it is read through to_jsonb, so this works before and
+// after.
+func (q *Queries) CoverageInstancesOfAgent(ctx context.Context, orgID ids.OrgID, agentID ids.UUID) ([]CoverageInstancesOfAgentRow, error) {
+	rows, err := q.db.Query(ctx, coverageInstancesOfAgent, orgID, agentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []CoverageInstancesOfAgentRow{}
+	for rows.Next() {
+		var i CoverageInstancesOfAgentRow
+		if err := rows.Scan(&i.ID, &i.SandboxSessionID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const coverageInvalidationsSince = `-- name: CoverageInvalidationsSince :many
-SELECT org_id, id, kind, connection_id, agent_id, subject_id, detail, occurred_at, reassessed_at FROM pc.coverage_invalidations
+SELECT org_id, id, kind, connection_id, agent_id, subject_id, detail, occurred_at, reassessed_at, ledger_entry_id FROM pc.coverage_invalidations
 WHERE org_id = $1 AND connection_id = $2
   AND (agent_id IS NULL OR agent_id = $3)
   AND occurred_at >= $4
@@ -152,6 +461,7 @@ func (q *Queries) CoverageInvalidationsSince(ctx context.Context, arg CoverageIn
 			&i.Detail,
 			&i.OccurredAt,
 			&i.ReassessedAt,
+			&i.LedgerEntryID,
 		); err != nil {
 			return nil, err
 		}
@@ -172,6 +482,37 @@ func (q *Queries) CoverageInventoryWatermark(ctx context.Context, orgID ids.OrgI
 	var transactions_after ids.UUID
 	err := row.Scan(&transactions_after)
 	return transactions_after, err
+}
+
+const coverageProtectedAgents = `-- name: CoverageProtectedAgents :many
+SELECT id FROM pc.agents
+WHERE org_id = $1 AND state IN ('PROTECTED', 'PARTIALLY_PROTECTED')
+ORDER BY id
+LIMIT $2
+`
+
+// The org's agents that coverage holds protected or partially protected:
+// each reassess job derives them again, so a grant that starts, ends or
+// changes lowers them within one run although it writes no coverage change
+// (F021).
+func (q *Queries) CoverageProtectedAgents(ctx context.Context, orgID ids.OrgID, maxRows int32) ([]ids.UUID, error) {
+	rows, err := q.db.Query(ctx, coverageProtectedAgents, orgID, maxRows)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ids.UUID{}
+	for rows.Next() {
+		var id ids.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const coverageRoutesForScope = `-- name: CoverageRoutesForScope :many
@@ -231,6 +572,188 @@ func (q *Queries) CoverageRoutesForScope(ctx context.Context, arg CoverageRoutes
 		return nil, err
 	}
 	return items, nil
+}
+
+const coverageScanFindingsToRecord = `-- name: CoverageScanFindingsToRecord :many
+SELECT s.id, s.connection_id, s.kind::text AS kind, s.locator::text AS locator FROM (
+    SELECT d.id, c.id AS connection_id,
+        CASE d.observed ->> 'kind'
+            WHEN 'github_app' THEN 'target_side'
+            WHEN 'github_workflow' THEN 'intermediary'
+            WHEN 'github_mcp_config' THEN 'direct_api'
+        END AS kind,
+        left(btrim(CASE d.observed ->> 'kind'
+            WHEN 'github_app' THEN 'GitHub App ' || coalesce(d.observed ->> 'app_slug', '')
+            ELSE coalesce(d.observed ->> 'repo', '') || ' ' || coalesce(d.observed ->> 'path', '')
+        END), 512) AS locator
+    FROM pc.discoveries d
+    JOIN pc.connections c ON c.org_id = d.org_id AND c.id::text = lower(d.observed ->> 'connection')
+    -- The finding's scan run must be a scan of the connection it names.
+    JOIN pc.github_scan_runs sr ON sr.org_id = d.org_id AND sr.id::text = lower(d.observed ->> 'scan_run')
+                               AND sr.connection_id = c.id
+    WHERE d.org_id = $1 AND d.source = 'github_scan'
+      AND d.observed ->> 'kind' IN ('github_app', 'github_workflow', 'github_mcp_config')
+      AND (d.observed ->> 'kind' <> 'github_workflow' OR d.observed ->> 'writes' = 'true' OR d.observed ->> 'deploys' = 'true'
+           OR d.observed ->> 'permissions_default' = 'true')
+      AND NOT EXISTS (SELECT 1 FROM pc.coverage_routes r
+                      WHERE r.org_id = d.org_id AND r.connection_id = c.id AND r.source = 'scan' AND r.source_ref = d.id)
+) s
+WHERE s.kind = 'target_side' OR s.locator <> ''
+ORDER BY s.id
+LIMIT 200
+`
+
+type CoverageScanFindingsToRecordRow struct {
+	ID           ids.UUID
+	ConnectionID ids.UUID
+	Kind         string
+	Locator      string
+}
+
+// The org-scan findings that show a route of one of the org's connections
+// and were not recorded yet, with the route (G0 M8 G5 kinds; UNTRUSTED
+// metadata, HR-209: they only describe a route, never grant or close one):
+//   - a GitHub App installation is target-side authority beyond the
+//     connection (F449);
+//   - a workflow that writes, deploys, or runs a job on the repository's
+//     default permissions (which may write) is an intermediary that can
+//     produce the effect (F448);
+//   - a committed MCP configuration is an MCP server reaching the target
+//     outside the gateway (F444).
+//
+// Only findings that are recorded are selected, so findings that show no
+// route never hold back the ones after them. Each is recorded once, as the
+// source of its route on each connection whose scan run found it. Only
+// findings of a scan run of the connection they name count. Only the
+// gateway's GitHub org scan (source
+// github_scan) reports these kinds; a person's pclaw scan (source scan)
+// cannot (N20). A dismissed discovery still counts: dismissing it does not
+// remove the route.
+func (q *Queries) CoverageScanFindingsToRecord(ctx context.Context, orgID ids.OrgID) ([]CoverageScanFindingsToRecordRow, error) {
+	rows, err := q.db.Query(ctx, coverageScanFindingsToRecord, orgID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []CoverageScanFindingsToRecordRow{}
+	for rows.Next() {
+		var i CoverageScanFindingsToRecordRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ConnectionID,
+			&i.Kind,
+			&i.Locator,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const coverageScopesOfConnection = `-- name: CoverageScopesOfConnection :many
+SELECT DISTINCT x.agent_id::uuid AS agent_id, x.operation::text AS operation FROM (
+    SELECT r.agent_id, r.operation FROM pc.coverage_routes r
+    WHERE r.org_id = $1 AND r.connection_id = $2 AND r.kind = 'channel'
+      AND r.agent_id IS NOT NULL AND r.operation IS NOT NULL
+    UNION
+    SELECT s.agent_id, s.operation FROM pc.coverage_snapshots s
+    WHERE s.org_id = $1 AND s.connection_id = $2
+) x
+WHERE $3::uuid IS NULL OR x.agent_id = $3::uuid
+ORDER BY 1, 2
+LIMIT 1000
+`
+
+type CoverageScopesOfConnectionRow struct {
+	AgentID   ids.UUID
+	Operation string
+}
+
+// The scopes known for a connection: the agents and operations its
+// traffic or its snapshots name.
+func (q *Queries) CoverageScopesOfConnection(ctx context.Context, orgID ids.OrgID, connectionID ids.UUID, agentID *ids.UUID) ([]CoverageScopesOfConnectionRow, error) {
+	rows, err := q.db.Query(ctx, coverageScopesOfConnection, orgID, connectionID, agentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []CoverageScopesOfConnectionRow{}
+	for rows.Next() {
+		var i CoverageScopesOfConnectionRow
+		if err := rows.Scan(&i.AgentID, &i.Operation); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const coverageSnapshotBefore = `-- name: CoverageSnapshotBefore :one
+SELECT ledger_entry_id FROM pc.coverage_snapshots
+WHERE org_id = $1 AND agent_id = $2 AND connection_id = $3
+  AND operation = $4 AND computed_at < $5
+ORDER BY computed_at DESC, id DESC
+LIMIT 1
+`
+
+type CoverageSnapshotBeforeParams struct {
+	OrgID        ids.OrgID
+	AgentID      ids.UUID
+	ConnectionID ids.UUID
+	Operation    string
+	Until        time.Time
+}
+
+// A scope's snapshot that was current at a decision (the latest computed
+// before until), and the next one: pclaw verify tells from them a claim
+// that names another snapshot (T-089).
+func (q *Queries) CoverageSnapshotBefore(ctx context.Context, arg CoverageSnapshotBeforeParams) (ids.UUID, error) {
+	row := q.db.QueryRow(ctx, coverageSnapshotBefore,
+		arg.OrgID,
+		arg.AgentID,
+		arg.ConnectionID,
+		arg.Operation,
+		arg.Until,
+	)
+	var ledger_entry_id ids.UUID
+	err := row.Scan(&ledger_entry_id)
+	return ledger_entry_id, err
+}
+
+const coverageSnapshotFrom = `-- name: CoverageSnapshotFrom :one
+SELECT ledger_entry_id FROM pc.coverage_snapshots
+WHERE org_id = $1 AND agent_id = $2 AND connection_id = $3
+  AND operation = $4 AND computed_at >= $5
+ORDER BY computed_at, id
+LIMIT 1
+`
+
+type CoverageSnapshotFromParams struct {
+	OrgID        ids.OrgID
+	AgentID      ids.UUID
+	ConnectionID ids.UUID
+	Operation    string
+	Until        time.Time
+}
+
+func (q *Queries) CoverageSnapshotFrom(ctx context.Context, arg CoverageSnapshotFromParams) (ids.UUID, error) {
+	row := q.db.QueryRow(ctx, coverageSnapshotFrom,
+		arg.OrgID,
+		arg.AgentID,
+		arg.ConnectionID,
+		arg.Operation,
+		arg.Until,
+	)
+	var ledger_entry_id ids.UUID
+	err := row.Scan(&ledger_entry_id)
+	return ledger_entry_id, err
 }
 
 const coverageTrafficAfter = `-- name: CoverageTrafficAfter :many
@@ -381,6 +904,114 @@ func (q *Queries) DismissCoverageFinding(ctx context.Context, arg DismissCoverag
 		&i.DismissReason,
 	)
 	return i, err
+}
+
+const dismissedCoverageFindingsGone = `-- name: DismissedCoverageFindingsGone :many
+SELECT id, excess, dismissed_by, dismiss_reason FROM pc.coverage_findings
+WHERE org_id = $1 AND kind = $2 AND connection_id = $3
+  AND state = 'DISMISSED' AND NOT (fingerprint = ANY ($4::bytea[]))
+ORDER BY id
+FOR UPDATE
+`
+
+type DismissedCoverageFindingsGoneParams struct {
+	OrgID        ids.OrgID
+	Kind         string
+	ConnectionID *ids.UUID
+	Keep         [][]byte
+}
+
+type DismissedCoverageFindingsGoneRow struct {
+	ID            ids.UUID
+	Excess        []string
+	DismissedBy   *ids.UUID
+	DismissReason *string
+}
+
+// The dismissed findings of a kind for a connection that the latest pass
+// no longer found, with their dismissal, which the caller audits before
+// ResolveCoverageFindings clears it.
+func (q *Queries) DismissedCoverageFindingsGone(ctx context.Context, arg DismissedCoverageFindingsGoneParams) ([]DismissedCoverageFindingsGoneRow, error) {
+	rows, err := q.db.Query(ctx, dismissedCoverageFindingsGone,
+		arg.OrgID,
+		arg.Kind,
+		arg.ConnectionID,
+		arg.Keep,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []DismissedCoverageFindingsGoneRow{}
+	for rows.Next() {
+		var i DismissedCoverageFindingsGoneRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Excess,
+			&i.DismissedBy,
+			&i.DismissReason,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const enterCoverageInvalidation = `-- name: EnterCoverageInvalidation :execrows
+UPDATE pc.coverage_invalidations SET reassessed_at = now(), ledger_entry_id = $1
+WHERE org_id = $2 AND id = $3 AND reassessed_at IS NULL
+`
+
+// Marks one invalidation reassessed with its ledger entry; a second call
+// changes nothing.
+func (q *Queries) EnterCoverageInvalidation(ctx context.Context, ledgerEntryID *ids.UUID, orgID ids.OrgID, iD ids.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, enterCoverageInvalidation, ledgerEntryID, orgID, iD)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const expiredEnforcedCoverageScopes = `-- name: ExpiredEnforcedCoverageScopes :many
+SELECT s.agent_id, s.connection_id, s.operation FROM pc.coverage_snapshots s
+WHERE s.org_id = $1 AND s.state = 'ENFORCED' AND s.expires_at <= now()
+  AND NOT EXISTS (SELECT 1 FROM pc.coverage_snapshots n
+                  WHERE n.org_id = s.org_id AND n.agent_id = s.agent_id AND n.connection_id = s.connection_id
+                    AND n.operation = s.operation AND n.id > s.id)
+ORDER BY s.id
+LIMIT $2
+`
+
+type ExpiredEnforcedCoverageScopesRow struct {
+	AgentID      ids.UUID
+	ConnectionID ids.UUID
+	Operation    string
+}
+
+// Current ENFORCED snapshots past their expiry: their scopes read PARTIAL
+// now, and the reassess job records it (F441).
+func (q *Queries) ExpiredEnforcedCoverageScopes(ctx context.Context, orgID ids.OrgID, maxRows int32) ([]ExpiredEnforcedCoverageScopesRow, error) {
+	rows, err := q.db.Query(ctx, expiredEnforcedCoverageScopes, orgID, maxRows)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ExpiredEnforcedCoverageScopesRow{}
+	for rows.Next() {
+		var i ExpiredEnforcedCoverageScopesRow
+		if err := rows.Scan(&i.AgentID, &i.ConnectionID, &i.Operation); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const getCoverageClosure = `-- name: GetCoverageClosure :one
@@ -612,7 +1243,7 @@ const insertCoverageInvalidation = `-- name: InsertCoverageInvalidation :one
 INSERT INTO pc.coverage_invalidations (org_id, id, kind, connection_id, agent_id, subject_id, detail)
 VALUES ($1, $2, $3, $4, $5, $6,
     $7)
-RETURNING org_id, id, kind, connection_id, agent_id, subject_id, detail, occurred_at, reassessed_at
+RETURNING org_id, id, kind, connection_id, agent_id, subject_id, detail, occurred_at, reassessed_at, ledger_entry_id
 `
 
 type InsertCoverageInvalidationParams struct {
@@ -646,16 +1277,17 @@ func (q *Queries) InsertCoverageInvalidation(ctx context.Context, arg InsertCove
 		&i.Detail,
 		&i.OccurredAt,
 		&i.ReassessedAt,
+		&i.LedgerEntryID,
 	)
 	return i, err
 }
 
 const insertCoverageSnapshot = `-- name: InsertCoverageSnapshot :one
 INSERT INTO pc.coverage_snapshots (org_id, id, agent_id, connection_id, operation, state, reasons, closure_id, last_valid_id,
-    invalidation_id, body, body_sha256, ledger_entry_id, expires_at)
+    invalidation_id, body, body_sha256, ledger_entry_id, expires_at, computed_at)
 VALUES ($1, $2, $3, $4, $5, $6,
     $7::text[], $8, $9, $10, $11,
-    $12, $13, $14)
+    $12, $13, $14, $15)
 RETURNING org_id, id, agent_id, connection_id, operation, state, reasons, closure_id, last_valid_id, invalidation_id, body, body_sha256, ledger_entry_id, computed_at, expires_at
 `
 
@@ -674,6 +1306,7 @@ type InsertCoverageSnapshotParams struct {
 	BodySha256     []byte
 	LedgerEntryID  ids.UUID
 	ExpiresAt      *time.Time
+	ComputedAt     time.Time
 }
 
 func (q *Queries) InsertCoverageSnapshot(ctx context.Context, arg InsertCoverageSnapshotParams) (PcCoverageSnapshot, error) {
@@ -692,6 +1325,7 @@ func (q *Queries) InsertCoverageSnapshot(ctx context.Context, arg InsertCoverage
 		arg.BodySha256,
 		arg.LedgerEntryID,
 		arg.ExpiresAt,
+		arg.ComputedAt,
 	)
 	var i PcCoverageSnapshot
 	err := row.Scan(
@@ -1075,6 +1709,68 @@ func (q *Queries) ListCoverageRoutesPage(ctx context.Context, arg ListCoverageRo
 	return items, nil
 }
 
+const listCoverageSnapshotsPage = `-- name: ListCoverageSnapshotsPage :many
+SELECT org_id, id, agent_id, connection_id, operation, state, reasons, closure_id, last_valid_id, invalidation_id, body, body_sha256, ledger_entry_id, computed_at, expires_at FROM pc.coverage_snapshots
+WHERE org_id = $1 AND agent_id = $2 AND connection_id = $3
+  AND operation = $4
+  AND ($5::uuid IS NULL OR id < $5::uuid)
+ORDER BY id DESC
+LIMIT $6
+`
+
+type ListCoverageSnapshotsPageParams struct {
+	OrgID        ids.OrgID
+	AgentID      ids.UUID
+	ConnectionID ids.UUID
+	Operation    string
+	Before       *ids.UUID
+	MaxRows      int32
+}
+
+// A scope's snapshots, newest first: its coverage history.
+func (q *Queries) ListCoverageSnapshotsPage(ctx context.Context, arg ListCoverageSnapshotsPageParams) ([]PcCoverageSnapshot, error) {
+	rows, err := q.db.Query(ctx, listCoverageSnapshotsPage,
+		arg.OrgID,
+		arg.AgentID,
+		arg.ConnectionID,
+		arg.Operation,
+		arg.Before,
+		arg.MaxRows,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []PcCoverageSnapshot{}
+	for rows.Next() {
+		var i PcCoverageSnapshot
+		if err := rows.Scan(
+			&i.OrgID,
+			&i.ID,
+			&i.AgentID,
+			&i.ConnectionID,
+			&i.Operation,
+			&i.State,
+			&i.Reasons,
+			&i.ClosureID,
+			&i.LastValidID,
+			&i.InvalidationID,
+			&i.Body,
+			&i.BodySha256,
+			&i.LedgerEntryID,
+			&i.ComputedAt,
+			&i.ExpiresAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listCurrentCoverageSnapshotsPage = `-- name: ListCurrentCoverageSnapshotsPage :many
 SELECT DISTINCT ON (agent_id, connection_id, operation) org_id, id, agent_id, connection_id, operation, state, reasons, closure_id, last_valid_id, invalidation_id, body, body_sha256, ledger_entry_id, computed_at, expires_at
 FROM pc.coverage_snapshots
@@ -1144,6 +1840,20 @@ func (q *Queries) ListCurrentCoverageSnapshotsPage(ctx context.Context, arg List
 	return items, nil
 }
 
+const lockCoverageScope = `-- name: LockCoverageScope :exec
+SELECT pg_advisory_xact_lock(hashtextextended(
+    ($1::uuid)::text || '/' || ($2::uuid)::text || '/' || ($3::uuid)::text,
+    85))
+`
+
+// Serializes the reassessments and closure recordings of one agent and
+// connection until the transaction ends, so two never append snapshots
+// from the same current one.
+func (q *Queries) LockCoverageScope(ctx context.Context, orgID ids.UUID, agentID ids.UUID, connectionID ids.UUID) error {
+	_, err := q.db.Exec(ctx, lockCoverageScope, orgID, agentID, connectionID)
+	return err
+}
+
 const markCoverageInvalidationsReassessed = `-- name: MarkCoverageInvalidationsReassessed :execrows
 UPDATE pc.coverage_invalidations SET reassessed_at = now()
 WHERE org_id = $1 AND id = ANY ($2::uuid[]) AND reassessed_at IS NULL
@@ -1158,7 +1868,7 @@ func (q *Queries) MarkCoverageInvalidationsReassessed(ctx context.Context, orgID
 }
 
 const pendingCoverageInvalidations = `-- name: PendingCoverageInvalidations :many
-SELECT org_id, id, kind, connection_id, agent_id, subject_id, detail, occurred_at, reassessed_at FROM pc.coverage_invalidations
+SELECT org_id, id, kind, connection_id, agent_id, subject_id, detail, occurred_at, reassessed_at, ledger_entry_id FROM pc.coverage_invalidations
 WHERE org_id = $1 AND reassessed_at IS NULL
 ORDER BY id
 LIMIT $2
@@ -1183,6 +1893,7 @@ func (q *Queries) PendingCoverageInvalidations(ctx context.Context, orgID ids.Or
 			&i.Detail,
 			&i.OccurredAt,
 			&i.ReassessedAt,
+			&i.LedgerEntryID,
 		); err != nil {
 			return nil, err
 		}
@@ -1195,8 +1906,8 @@ func (q *Queries) PendingCoverageInvalidations(ctx context.Context, orgID ids.Or
 }
 
 const resolveCoverageFindings = `-- name: ResolveCoverageFindings :execrows
-UPDATE pc.coverage_findings SET state = 'RESOLVED', resolved_at = now()
-WHERE org_id = $1 AND kind = $2 AND connection_id = $3 AND state = 'OPEN'
+UPDATE pc.coverage_findings SET state = 'RESOLVED', resolved_at = now(), dismissed_by = NULL, dismiss_reason = NULL
+WHERE org_id = $1 AND kind = $2 AND connection_id = $3 AND state IN ('OPEN', 'DISMISSED')
   AND NOT (fingerprint = ANY ($4::bytea[]))
 `
 
@@ -1207,8 +1918,9 @@ type ResolveCoverageFindingsParams struct {
 	Keep         [][]byte
 }
 
-// Open findings of a kind for a connection that the latest pass no longer
-// found are resolved.
+// Findings of a kind for a connection that the latest pass no longer found
+// are resolved, dismissed ones too: a dismissal covers the exposure it was
+// made for while it lasts, so the same excess found again later reopens.
 func (q *Queries) ResolveCoverageFindings(ctx context.Context, arg ResolveCoverageFindingsParams) (int64, error) {
 	result, err := q.db.Exec(ctx, resolveCoverageFindings,
 		arg.OrgID,

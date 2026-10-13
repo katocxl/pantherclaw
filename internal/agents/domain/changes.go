@@ -23,6 +23,7 @@ const (
 	ChangeOwnershipTransferred ChangeKind = "agent.ownership_transferred"
 	ChangeVerified             ChangeKind = "agent.verified"
 	ChangeObserved             ChangeKind = "agent.observed"
+	ChangeProtection           ChangeKind = "agent.protection_changed"
 	ChangeSuspended            ChangeKind = "agent.suspended"
 	ChangeRetired              ChangeKind = "agent.retired"
 	ChangeRestored             ChangeKind = "agent.restored"

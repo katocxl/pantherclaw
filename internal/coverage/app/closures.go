@@ -9,6 +9,7 @@ package app
 import (
 	"context"
 	"encoding/json/v2"
+	"log/slog"
 	"regexp"
 	"slices"
 	"time"
@@ -43,8 +44,23 @@ var (
 type Service struct {
 	Pool      *db.Pool
 	Freshness domain.Freshness
+	// Verifier reads target-verifier tests per operation; nil reads none, so
+	// cooperative and target-enforced channels stay capped (HR-024, HR-210).
+	// In M9 a test lifts only the read it tested (founder decision N15).
+	Verifier TargetVerifier
 	// Clock checks closure times; nil is the wall clock.
 	Clock clock.Clock
+	// Log reports skipped scopes; nil is slog.Default().
+	Log *slog.Logger
+	// Notify tells the org of exclusions; nil sends none.
+	Notify Notifier
+}
+
+func (s *Service) log() *slog.Logger {
+	if s.Log == nil {
+		return slog.Default()
+	}
+	return s.Log
 }
 
 func (s *Service) now() time.Time {
@@ -100,14 +116,17 @@ func (s *Service) RecordClosure(ctx context.Context, tx db.TenantTx, c domain.Cl
 		return ids.UUID{}, ErrClosure
 	}
 	q := dbq.New(tx)
+	if err := q.LockCoverageScope(ctx, tx.OrgID().UUID(), c.Agent, c.Connection); err != nil {
+		return ids.UUID{}, err
+	}
 	b, err := q.CoverageBinding(ctx, tx.OrgID(), c.Connection)
-	if db.IsNoRows(err) || (err == nil && b.State == "RETIRED") {
+	if db.IsNoRows(err) || (err == nil && (b.State == "RETIRED" || b.PackageVersionID == nil)) {
 		return ids.UUID{}, ErrNoBinding
 	} else if err != nil {
 		return ids.UUID{}, err
 	}
 	bound := domain.Bound{
-		ConnectionRevision: b.Revision, Gateway: b.GatewayID, PackageVersion: b.PackageVersionID,
+		ConnectionRevision: b.Revision, Gateway: b.GatewayID, PackageVersion: *b.PackageVersionID,
 		CredentialVersion: b.CredentialVersion,
 	}
 	if !sameBound(c.Bound, bound) {
@@ -159,6 +178,16 @@ func (s *Service) RecordClosure(ctx context.Context, tx db.TenantTx, c domain.Cl
 		}); err != nil {
 			return ids.UUID{}, err
 		}
+	}
+	// The scopes it covers are reassessed at once, in the sandbox's
+	// transaction: a passing closure promotes them and a failed one drops
+	// them before anyone reads them.
+	scopes, err := scopesOf(ctx, q, tx.OrgID(), c.Connection, &c.Agent)
+	if err != nil {
+		return ids.UUID{}, err
+	}
+	if _, err := s.reassessScopes(ctx, tx, scopes, nil, Actor, packages{}); err != nil {
+		return ids.UUID{}, err
 	}
 	return row.ID, nil
 }

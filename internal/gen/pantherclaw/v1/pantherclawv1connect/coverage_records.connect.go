@@ -43,8 +43,32 @@ const (
 	// CoverageServiceGetFreshnessContractProcedure is the procedure name of the CoverageService's
 	// GetFreshnessContract RPC.
 	CoverageServiceGetFreshnessContractProcedure = "/pantherclaw.v1.CoverageService/GetFreshnessContract"
+	// CoverageServiceGetSnapshotProcedure is the procedure name of the CoverageService's GetSnapshot
+	// RPC.
+	CoverageServiceGetSnapshotProcedure = "/pantherclaw.v1.CoverageService/GetSnapshot"
+	// CoverageServiceListSnapshotsProcedure is the procedure name of the CoverageService's
+	// ListSnapshots RPC.
+	CoverageServiceListSnapshotsProcedure = "/pantherclaw.v1.CoverageService/ListSnapshots"
 	// CoverageServiceReassessProcedure is the procedure name of the CoverageService's Reassess RPC.
 	CoverageServiceReassessProcedure = "/pantherclaw.v1.CoverageService/Reassess"
+	// CoverageServiceCreateExclusionProcedure is the procedure name of the CoverageService's
+	// CreateExclusion RPC.
+	CoverageServiceCreateExclusionProcedure = "/pantherclaw.v1.CoverageService/CreateExclusion"
+	// CoverageServiceRevokeExclusionProcedure is the procedure name of the CoverageService's
+	// RevokeExclusion RPC.
+	CoverageServiceRevokeExclusionProcedure = "/pantherclaw.v1.CoverageService/RevokeExclusion"
+	// CoverageServiceListExclusionsProcedure is the procedure name of the CoverageService's
+	// ListExclusions RPC.
+	CoverageServiceListExclusionsProcedure = "/pantherclaw.v1.CoverageService/ListExclusions"
+	// CoverageServiceGetAccessDetailProcedure is the procedure name of the CoverageService's
+	// GetAccessDetail RPC.
+	CoverageServiceGetAccessDetailProcedure = "/pantherclaw.v1.CoverageService/GetAccessDetail"
+	// CoverageServiceListFindingsProcedure is the procedure name of the CoverageService's ListFindings
+	// RPC.
+	CoverageServiceListFindingsProcedure = "/pantherclaw.v1.CoverageService/ListFindings"
+	// CoverageServiceAcknowledgeFindingProcedure is the procedure name of the CoverageService's
+	// AcknowledgeFinding RPC.
+	CoverageServiceAcknowledgeFindingProcedure = "/pantherclaw.v1.CoverageService/AcknowledgeFinding"
 )
 
 var (
@@ -96,11 +120,72 @@ var (
 			IdempotencyLevel: connect.IdempotencyNoSideEffects,
 		}
 	})
+	coverageServiceGetSnapshotSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_pantherclaw_v1_coverage_records_proto.Services().ByName("CoverageService").Methods().ByName("GetSnapshot"),
+			Procedure:        CoverageServiceGetSnapshotProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
+	coverageServiceListSnapshotsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_pantherclaw_v1_coverage_records_proto.Services().ByName("CoverageService").Methods().ByName("ListSnapshots"),
+			Procedure:        CoverageServiceListSnapshotsProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
 	coverageServiceReassessSpec = sync.OnceValue(func() connect.Spec {
 		return connect.Spec{
 			StreamType: connect.StreamTypeUnary,
 			Schema:     v1.File_pantherclaw_v1_coverage_records_proto.Services().ByName("CoverageService").Methods().ByName("Reassess"),
 			Procedure:  CoverageServiceReassessProcedure,
+		}
+	})
+	coverageServiceCreateExclusionSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_pantherclaw_v1_coverage_records_proto.Services().ByName("CoverageService").Methods().ByName("CreateExclusion"),
+			Procedure:  CoverageServiceCreateExclusionProcedure,
+		}
+	})
+	coverageServiceRevokeExclusionSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_pantherclaw_v1_coverage_records_proto.Services().ByName("CoverageService").Methods().ByName("RevokeExclusion"),
+			Procedure:  CoverageServiceRevokeExclusionProcedure,
+		}
+	})
+	coverageServiceListExclusionsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_pantherclaw_v1_coverage_records_proto.Services().ByName("CoverageService").Methods().ByName("ListExclusions"),
+			Procedure:        CoverageServiceListExclusionsProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
+	coverageServiceGetAccessDetailSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_pantherclaw_v1_coverage_records_proto.Services().ByName("CoverageService").Methods().ByName("GetAccessDetail"),
+			Procedure:        CoverageServiceGetAccessDetailProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
+	coverageServiceListFindingsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_pantherclaw_v1_coverage_records_proto.Services().ByName("CoverageService").Methods().ByName("ListFindings"),
+			Procedure:        CoverageServiceListFindingsProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
+	coverageServiceAcknowledgeFindingSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_pantherclaw_v1_coverage_records_proto.Services().ByName("CoverageService").Methods().ByName("AcknowledgeFinding"),
+			Procedure:  CoverageServiceAcknowledgeFindingProcedure,
 		}
 	})
 )
@@ -127,10 +212,48 @@ type CoverageServiceClient interface {
 	// and what invalidates it (F440).
 	// permission: coverage.read
 	GetFreshnessContract(context.Context, *v1.GetFreshnessContractRequest) (*v1.GetFreshnessContractResponse, error)
+	// GetSnapshot returns one recorded coverage snapshot: the scope's
+	// computed record and the ledger entry it is bound to (HR-217).
+	// permission: coverage.read
+	GetSnapshot(context.Context, *v1.GetSnapshotRequest) (*v1.GetSnapshotResponse, error)
+	// ListSnapshots lists a scope's recorded snapshots, newest first: its
+	// coverage history.
+	// permission: coverage.read
+	ListSnapshots(context.Context, *v1.ListSnapshotsRequest) (*v1.ListSnapshotsResponse, error)
 	// Reassess recomputes the scopes of one connection now, from evidence,
 	// and records a snapshot for each that changed.
 	// permission: coverage.reassess
 	Reassess(context.Context, *v1.ReassessRequest) (*v1.ReassessResponse, error)
+	// CreateExclusion records, until it expires, that a person accepts a scope
+	// or a route kind as outside the boundary (HR-212). It never raises a
+	// state: an excluded route still counts as open (design decision 1). Only
+	// a person makes one, with a written reason; it is audited, notified to
+	// org admins and listed with every claim on the scope.
+	// permission: coverage.manage
+	CreateExclusion(context.Context, *v1.CreateExclusionRequest) (*v1.CreateExclusionResponse, error)
+	// RevokeExclusion ends an active exclusion at once.
+	// permission: coverage.manage
+	RevokeExclusion(context.Context, *v1.RevokeExclusionRequest) (*v1.RevokeExclusionResponse, error)
+	// ListExclusions lists exclusions, newest first.
+	// permission: coverage.read
+	ListExclusions(context.Context, *v1.ListExclusionsRequest) (*v1.ListExclusionsResponse, error)
+	// GetAccessDetail says where an agent gets usable authority at a
+	// connection's target and what limits it (§39.2–39.3): the custodian and
+	// modes, the scope and audience, the expiry, the issuance source, the
+	// affected agents, the verification basis, the routes still open, and
+	// what each mode must disclose. It never shows a secret.
+	// permission: coverage.read
+	GetAccessDetail(context.Context, *v1.GetAccessDetailRequest) (*v1.GetAccessDetailResponse, error)
+	// ListFindings lists exposure findings, starting with credential
+	// overreach (F048): reach a credential holds beyond what the operations
+	// need, shown as exposure, never as extra permission.
+	// permission: coverage.read
+	ListFindings(context.Context, *v1.ListFindingsRequest) (*v1.ListFindingsResponse, error)
+	// AcknowledgeFinding acknowledges an open finding with a written reason,
+	// which dismisses it; it is audited, and the finding stays dismissed
+	// when seen again with the same excess.
+	// permission: coverage.manage
+	AcknowledgeFinding(context.Context, *v1.AcknowledgeFindingRequest) (*v1.AcknowledgeFindingResponse, error)
 }
 
 // NewCoverageServiceClient constructs a client for the pantherclaw.v1.CoverageService service.
@@ -161,10 +284,48 @@ type CoverageServiceHandler interface {
 	// and what invalidates it (F440).
 	// permission: coverage.read
 	GetFreshnessContract(context.Context, *v1.GetFreshnessContractRequest) (*v1.GetFreshnessContractResponse, error)
+	// GetSnapshot returns one recorded coverage snapshot: the scope's
+	// computed record and the ledger entry it is bound to (HR-217).
+	// permission: coverage.read
+	GetSnapshot(context.Context, *v1.GetSnapshotRequest) (*v1.GetSnapshotResponse, error)
+	// ListSnapshots lists a scope's recorded snapshots, newest first: its
+	// coverage history.
+	// permission: coverage.read
+	ListSnapshots(context.Context, *v1.ListSnapshotsRequest) (*v1.ListSnapshotsResponse, error)
 	// Reassess recomputes the scopes of one connection now, from evidence,
 	// and records a snapshot for each that changed.
 	// permission: coverage.reassess
 	Reassess(context.Context, *v1.ReassessRequest) (*v1.ReassessResponse, error)
+	// CreateExclusion records, until it expires, that a person accepts a scope
+	// or a route kind as outside the boundary (HR-212). It never raises a
+	// state: an excluded route still counts as open (design decision 1). Only
+	// a person makes one, with a written reason; it is audited, notified to
+	// org admins and listed with every claim on the scope.
+	// permission: coverage.manage
+	CreateExclusion(context.Context, *v1.CreateExclusionRequest) (*v1.CreateExclusionResponse, error)
+	// RevokeExclusion ends an active exclusion at once.
+	// permission: coverage.manage
+	RevokeExclusion(context.Context, *v1.RevokeExclusionRequest) (*v1.RevokeExclusionResponse, error)
+	// ListExclusions lists exclusions, newest first.
+	// permission: coverage.read
+	ListExclusions(context.Context, *v1.ListExclusionsRequest) (*v1.ListExclusionsResponse, error)
+	// GetAccessDetail says where an agent gets usable authority at a
+	// connection's target and what limits it (§39.2–39.3): the custodian and
+	// modes, the scope and audience, the expiry, the issuance source, the
+	// affected agents, the verification basis, the routes still open, and
+	// what each mode must disclose. It never shows a secret.
+	// permission: coverage.read
+	GetAccessDetail(context.Context, *v1.GetAccessDetailRequest) (*v1.GetAccessDetailResponse, error)
+	// ListFindings lists exposure findings, starting with credential
+	// overreach (F048): reach a credential holds beyond what the operations
+	// need, shown as exposure, never as extra permission.
+	// permission: coverage.read
+	ListFindings(context.Context, *v1.ListFindingsRequest) (*v1.ListFindingsResponse, error)
+	// AcknowledgeFinding acknowledges an open finding with a written reason,
+	// which dismisses it; it is audited, and the finding stays dismissed
+	// when seen again with the same excess.
+	// permission: coverage.manage
+	AcknowledgeFinding(context.Context, *v1.AcknowledgeFindingRequest) (*v1.AcknowledgeFindingResponse, error)
 }
 
 // RegisterCoverageServiceHandler registers svc as the pantherclaw.v1.CoverageService implementation
@@ -178,7 +339,15 @@ func RegisterCoverageServiceHandler(server *connect.Server, svc CoverageServiceH
 		connect.Method{Spec: coverageServiceGetClosureSpec(), Handler: adapter.getClosure},
 		connect.Method{Spec: coverageServiceListClosuresSpec(), Handler: adapter.listClosures},
 		connect.Method{Spec: coverageServiceGetFreshnessContractSpec(), Handler: adapter.getFreshnessContract},
+		connect.Method{Spec: coverageServiceGetSnapshotSpec(), Handler: adapter.getSnapshot},
+		connect.Method{Spec: coverageServiceListSnapshotsSpec(), Handler: adapter.listSnapshots},
 		connect.Method{Spec: coverageServiceReassessSpec(), Handler: adapter.reassess},
+		connect.Method{Spec: coverageServiceCreateExclusionSpec(), Handler: adapter.createExclusion},
+		connect.Method{Spec: coverageServiceRevokeExclusionSpec(), Handler: adapter.revokeExclusion},
+		connect.Method{Spec: coverageServiceListExclusionsSpec(), Handler: adapter.listExclusions},
+		connect.Method{Spec: coverageServiceGetAccessDetailSpec(), Handler: adapter.getAccessDetail},
+		connect.Method{Spec: coverageServiceListFindingsSpec(), Handler: adapter.listFindings},
+		connect.Method{Spec: coverageServiceAcknowledgeFindingSpec(), Handler: adapter.acknowledgeFinding},
 	)
 }
 
@@ -209,8 +378,40 @@ func (UnimplementedCoverageServiceHandler) GetFreshnessContract(context.Context,
 	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.CoverageService.GetFreshnessContract is not implemented")
 }
 
+func (UnimplementedCoverageServiceHandler) GetSnapshot(context.Context, *v1.GetSnapshotRequest) (*v1.GetSnapshotResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.CoverageService.GetSnapshot is not implemented")
+}
+
+func (UnimplementedCoverageServiceHandler) ListSnapshots(context.Context, *v1.ListSnapshotsRequest) (*v1.ListSnapshotsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.CoverageService.ListSnapshots is not implemented")
+}
+
 func (UnimplementedCoverageServiceHandler) Reassess(context.Context, *v1.ReassessRequest) (*v1.ReassessResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.CoverageService.Reassess is not implemented")
+}
+
+func (UnimplementedCoverageServiceHandler) CreateExclusion(context.Context, *v1.CreateExclusionRequest) (*v1.CreateExclusionResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.CoverageService.CreateExclusion is not implemented")
+}
+
+func (UnimplementedCoverageServiceHandler) RevokeExclusion(context.Context, *v1.RevokeExclusionRequest) (*v1.RevokeExclusionResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.CoverageService.RevokeExclusion is not implemented")
+}
+
+func (UnimplementedCoverageServiceHandler) ListExclusions(context.Context, *v1.ListExclusionsRequest) (*v1.ListExclusionsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.CoverageService.ListExclusions is not implemented")
+}
+
+func (UnimplementedCoverageServiceHandler) GetAccessDetail(context.Context, *v1.GetAccessDetailRequest) (*v1.GetAccessDetailResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.CoverageService.GetAccessDetail is not implemented")
+}
+
+func (UnimplementedCoverageServiceHandler) ListFindings(context.Context, *v1.ListFindingsRequest) (*v1.ListFindingsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.CoverageService.ListFindings is not implemented")
+}
+
+func (UnimplementedCoverageServiceHandler) AcknowledgeFinding(context.Context, *v1.AcknowledgeFindingRequest) (*v1.AcknowledgeFindingResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.CoverageService.AcknowledgeFinding is not implemented")
 }
 
 type coverageServiceClient struct {
@@ -265,9 +466,73 @@ func (c *coverageServiceClient) GetFreshnessContract(ctx context.Context, req *v
 	return &res, nil
 }
 
+func (c *coverageServiceClient) GetSnapshot(ctx context.Context, req *v1.GetSnapshotRequest) (*v1.GetSnapshotResponse, error) {
+	var res v1.GetSnapshotResponse
+	if err := c.client.CallUnary(ctx, coverageServiceGetSnapshotSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *coverageServiceClient) ListSnapshots(ctx context.Context, req *v1.ListSnapshotsRequest) (*v1.ListSnapshotsResponse, error) {
+	var res v1.ListSnapshotsResponse
+	if err := c.client.CallUnary(ctx, coverageServiceListSnapshotsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
 func (c *coverageServiceClient) Reassess(ctx context.Context, req *v1.ReassessRequest) (*v1.ReassessResponse, error) {
 	var res v1.ReassessResponse
 	if err := c.client.CallUnary(ctx, coverageServiceReassessSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *coverageServiceClient) CreateExclusion(ctx context.Context, req *v1.CreateExclusionRequest) (*v1.CreateExclusionResponse, error) {
+	var res v1.CreateExclusionResponse
+	if err := c.client.CallUnary(ctx, coverageServiceCreateExclusionSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *coverageServiceClient) RevokeExclusion(ctx context.Context, req *v1.RevokeExclusionRequest) (*v1.RevokeExclusionResponse, error) {
+	var res v1.RevokeExclusionResponse
+	if err := c.client.CallUnary(ctx, coverageServiceRevokeExclusionSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *coverageServiceClient) ListExclusions(ctx context.Context, req *v1.ListExclusionsRequest) (*v1.ListExclusionsResponse, error) {
+	var res v1.ListExclusionsResponse
+	if err := c.client.CallUnary(ctx, coverageServiceListExclusionsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *coverageServiceClient) GetAccessDetail(ctx context.Context, req *v1.GetAccessDetailRequest) (*v1.GetAccessDetailResponse, error) {
+	var res v1.GetAccessDetailResponse
+	if err := c.client.CallUnary(ctx, coverageServiceGetAccessDetailSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *coverageServiceClient) ListFindings(ctx context.Context, req *v1.ListFindingsRequest) (*v1.ListFindingsResponse, error) {
+	var res v1.ListFindingsResponse
+	if err := c.client.CallUnary(ctx, coverageServiceListFindingsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *coverageServiceClient) AcknowledgeFinding(ctx context.Context, req *v1.AcknowledgeFindingRequest) (*v1.AcknowledgeFindingResponse, error) {
+	var res v1.AcknowledgeFindingResponse
+	if err := c.client.CallUnary(ctx, coverageServiceAcknowledgeFindingSpec(), req, &res); err != nil {
 		return nil, err
 	}
 	return &res, nil
@@ -347,12 +612,108 @@ func (h coverageServiceHandler) getFreshnessContract(ctx context.Context, _ conn
 	return stream.Send(res)
 }
 
+func (h coverageServiceHandler) getSnapshot(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetSnapshotRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetSnapshot(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h coverageServiceHandler) listSnapshots(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListSnapshotsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListSnapshots(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
 func (h coverageServiceHandler) reassess(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
 	var req v1.ReassessRequest
 	if err := stream.Receive(&req); err != nil {
 		return err
 	}
 	res, err := h.svc.Reassess(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h coverageServiceHandler) createExclusion(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.CreateExclusionRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.CreateExclusion(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h coverageServiceHandler) revokeExclusion(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.RevokeExclusionRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.RevokeExclusion(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h coverageServiceHandler) listExclusions(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListExclusionsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListExclusions(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h coverageServiceHandler) getAccessDetail(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetAccessDetailRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetAccessDetail(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h coverageServiceHandler) listFindings(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListFindingsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListFindings(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h coverageServiceHandler) acknowledgeFinding(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.AcknowledgeFindingRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.AcknowledgeFinding(ctx, &req)
 	if err != nil {
 		return err
 	}

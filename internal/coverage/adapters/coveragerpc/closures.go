@@ -118,3 +118,10 @@ func (h *Handler) ListClosures(ctx context.Context, req *pantherclawv1.ListClosu
 	}
 	return out, nil
 }
+
+func tsp(t *time.Time) *timestamppb.Timestamp {
+	if t == nil {
+		return nil
+	}
+	return ts(*t)
+}

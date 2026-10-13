@@ -42,3 +42,20 @@ func (h *Handler) ListRoutes(ctx context.Context, req *pantherclawv1.ListRoutesR
 	}
 	return out, nil
 }
+
+// Reassess implements CoverageServiceHandler.
+func (h *Handler) Reassess(ctx context.Context, req *pantherclawv1.ReassessRequest) (*pantherclawv1.ReassessResponse, error) {
+	conn, err := idOf(req.GetConnectionId())
+	if err != nil {
+		return nil, err
+	}
+	agent, err := optID(req.AgentId)
+	if err != nil {
+		return nil, err
+	}
+	r, err := h.svc.Reassess(ctx, conn, agent)
+	if err != nil {
+		return nil, err
+	}
+	return &pantherclawv1.ReassessResponse{Scopes: int32(r.Scopes), Snapshots: int32(r.Snapshots)}, nil //nolint:gosec // G115: at most 1000 scopes
+}

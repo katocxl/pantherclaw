@@ -304,6 +304,7 @@ func cmdServe(ctx context.Context, args []string, stderr io.Writer, env Env, onS
 		m6.mountPages(web)
 		m5p2.mountPages(web, m5)
 		mountM7Pages(web, pool, verification, m5)
+		mountCoveragePages(web, pool, cfg)
 		device.WithBrowserCallback(web.Callback)
 		roots, err := packageRoots(ctx, cfg, log)
 		if err != nil {
@@ -401,6 +402,11 @@ func cmdServe(ctx context.Context, args []string, stderr io.Writer, env Env, onS
 		if err := txapp.Register(jreg, pool, verification); err != nil {
 			return err
 		}
+		coverageJobs, err := registerCoverageWorkers(jreg, cfg, pool)
+		if err != nil {
+			return err
+		}
+		evidenceJobs = append(evidenceJobs, coverageJobs...)
 		client, err := jobs.NewClient(pool, jreg, jobs.Config{
 			Queues: map[string]int{river.QueueDefault: cfg.WorkerConcurrency, napp.Queue: cfg.Notifications.Concurrency},
 			PeriodicJobs: slices.Concat(chainer.PeriodicJobs(), authority.SweeperPeriodicJobs(), authnapp.JanitorPeriodicJobs(),
