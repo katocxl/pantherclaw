@@ -36,11 +36,16 @@ message GitHubInstallation {
 // HR-207): independence then excludes, by GitHub user id, everyone who
 // authored, committed or pushed to a pull request from reviewing it.
 service GitHubService {
-  // LinkIdentity links a person of the org to a GitHub user id. A GitHub
-  // user id links to one person; the link is audited.
-  // permission: github.identity.manage
-  rpc LinkIdentity(LinkIdentityRequest) returns (LinkIdentityResponse);
-  // UnlinkIdentity removes a link; audited.
+  // ProveIdentity links the caller's own GitHub account, or with unlink
+  // removes that link, once the server has read from GitHub which account
+  // a user access token from GitHub sign-in belongs to: the proof that the
+  // caller controls it (G0 M8 P2f, founder decision 2026-10-13). The
+  // token is never stored. A GitHub user id links to one person; every
+  // change is audited and notified.
+  // permission: github.identity.prove
+  rpc ProveIdentity(ProveIdentityRequest) returns (ProveIdentityResponse);
+  // UnlinkIdentity removes another person's link; nobody removes their own
+  // here (ProveIdentity). Audited and notified.
   // permission: github.identity.manage
   rpc UnlinkIdentity(UnlinkIdentityRequest) returns (UnlinkIdentityResponse);
   // ListIdentities lists the links, of one person or of everyone.
@@ -63,20 +68,25 @@ message GitHubIdentity {
   string linked_by = 5;
   // When.
   google.protobuf.Timestamp link_time = 6;
+  // When the person proved the account by signing in to GitHub; unset for
+  // a link made before P2f, which approves nothing.
+  google.protobuf.Timestamp verify_time = 7;
 }
 
-// LinkIdentityRequest links a person to a GitHub account.
-message LinkIdentityRequest {
-  // The person.
-  string user_id = 1 [(buf.validate.field).string.uuid = true];
-  // The GitHub login.
-  string github_login = 2 [(buf.validate.field).string.pattern = "^[A-Za-z0-9][A-Za-z0-9-]{0,38}$"];
-  // The GitHub user id.
-  int64 github_user_id = 3 [(buf.validate.field).int64.gt = 0];
+// ProveIdentityRequest carries the token of a GitHub sign-in.
+message ProveIdentityRequest {
+  // A GitHub user access token from the GitHub App's user authorization
+  // (the device flow pclaw github link runs).
+  string github_user_token = 1 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 512
+  }];
+  // Remove the link to that account instead of making it.
+  bool unlink = 2;
 }
 
-// LinkIdentityResponse returns the link.
-message LinkIdentityResponse {
+// ProveIdentityResponse returns the link made or removed.
+message ProveIdentityResponse {
   // The link.
   GitHubIdentity identity = 1;
 }

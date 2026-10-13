@@ -50,6 +50,7 @@ import (
 	factspg "github.com/katocxl/pantherclaw/internal/facts/adapters/pgstore"
 	factsapp "github.com/katocxl/pantherclaw/internal/facts/app"
 	"github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1/pantherclawv1connect"
+	githubapp "github.com/katocxl/pantherclaw/internal/github/app"
 	"github.com/katocxl/pantherclaw/internal/grants/adapters/grantsrpc"
 	grantspg "github.com/katocxl/pantherclaw/internal/grants/adapters/pgstore"
 	grantsapp "github.com/katocxl/pantherclaw/internal/grants/app"
@@ -533,7 +534,11 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	d.m6.registerPublic(rs)
 	d.m5p2.registerPublic(rs)
 	registerM7(rs, pool, d.verification)
-	registerM8G(rs, pool)
+	var githubNotify githubapp.Notifier
+	if d.m5 != nil {
+		githubNotify = d.m5.notifications
+	}
+	registerM8G(rs, pool, githubNotify, nil)
 	if err := registerEvidence(rs, d); err != nil {
 		return nil, err
 	}

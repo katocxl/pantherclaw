@@ -27,8 +27,9 @@ const (
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// GitHubServiceLinkIdentityProcedure is the procedure name of the GitHubService's LinkIdentity RPC.
-	GitHubServiceLinkIdentityProcedure = "/pantherclaw.v1.GitHubService/LinkIdentity"
+	// GitHubServiceProveIdentityProcedure is the procedure name of the GitHubService's ProveIdentity
+	// RPC.
+	GitHubServiceProveIdentityProcedure = "/pantherclaw.v1.GitHubService/ProveIdentity"
 	// GitHubServiceUnlinkIdentityProcedure is the procedure name of the GitHubService's UnlinkIdentity
 	// RPC.
 	GitHubServiceUnlinkIdentityProcedure = "/pantherclaw.v1.GitHubService/UnlinkIdentity"
@@ -38,11 +39,11 @@ const (
 )
 
 var (
-	gitHubServiceLinkIdentitySpec = sync.OnceValue(func() connect.Spec {
+	gitHubServiceProveIdentitySpec = sync.OnceValue(func() connect.Spec {
 		return connect.Spec{
 			StreamType: connect.StreamTypeUnary,
-			Schema:     v1.File_pantherclaw_v1_github_proto.Services().ByName("GitHubService").Methods().ByName("LinkIdentity"),
-			Procedure:  GitHubServiceLinkIdentityProcedure,
+			Schema:     v1.File_pantherclaw_v1_github_proto.Services().ByName("GitHubService").Methods().ByName("ProveIdentity"),
+			Procedure:  GitHubServiceProveIdentityProcedure,
 		}
 	})
 	gitHubServiceUnlinkIdentitySpec = sync.OnceValue(func() connect.Spec {
@@ -63,11 +64,16 @@ var (
 
 // GitHubServiceClient is a client for the pantherclaw.v1.GitHubService service.
 type GitHubServiceClient interface {
-	// LinkIdentity links a person of the org to a GitHub user id. A GitHub
-	// user id links to one person; the link is audited.
-	// permission: github.identity.manage
-	LinkIdentity(context.Context, *v1.LinkIdentityRequest) (*v1.LinkIdentityResponse, error)
-	// UnlinkIdentity removes a link; audited.
+	// ProveIdentity links the caller's own GitHub account, or with unlink
+	// removes that link, once the server has read from GitHub which account
+	// a user access token from GitHub sign-in belongs to: the proof that the
+	// caller controls it (G0 M8 P2f, founder decision 2026-10-13). The
+	// token is never stored. A GitHub user id links to one person; every
+	// change is audited and notified.
+	// permission: github.identity.prove
+	ProveIdentity(context.Context, *v1.ProveIdentityRequest) (*v1.ProveIdentityResponse, error)
+	// UnlinkIdentity removes another person's link; nobody removes their own
+	// here (ProveIdentity). Audited and notified.
 	// permission: github.identity.manage
 	UnlinkIdentity(context.Context, *v1.UnlinkIdentityRequest) (*v1.UnlinkIdentityResponse, error)
 	// ListIdentities lists the links, of one person or of everyone.
@@ -83,11 +89,16 @@ func NewGitHubServiceClient(client *connect.Client) GitHubServiceClient {
 
 // GitHubServiceHandler is an implementation of the pantherclaw.v1.GitHubService service.
 type GitHubServiceHandler interface {
-	// LinkIdentity links a person of the org to a GitHub user id. A GitHub
-	// user id links to one person; the link is audited.
-	// permission: github.identity.manage
-	LinkIdentity(context.Context, *v1.LinkIdentityRequest) (*v1.LinkIdentityResponse, error)
-	// UnlinkIdentity removes a link; audited.
+	// ProveIdentity links the caller's own GitHub account, or with unlink
+	// removes that link, once the server has read from GitHub which account
+	// a user access token from GitHub sign-in belongs to: the proof that the
+	// caller controls it (G0 M8 P2f, founder decision 2026-10-13). The
+	// token is never stored. A GitHub user id links to one person; every
+	// change is audited and notified.
+	// permission: github.identity.prove
+	ProveIdentity(context.Context, *v1.ProveIdentityRequest) (*v1.ProveIdentityResponse, error)
+	// UnlinkIdentity removes another person's link; nobody removes their own
+	// here (ProveIdentity). Audited and notified.
 	// permission: github.identity.manage
 	UnlinkIdentity(context.Context, *v1.UnlinkIdentityRequest) (*v1.UnlinkIdentityResponse, error)
 	// ListIdentities lists the links, of one person or of everyone.
@@ -100,7 +111,7 @@ type GitHubServiceHandler interface {
 func RegisterGitHubServiceHandler(server *connect.Server, svc GitHubServiceHandler) {
 	adapter := gitHubServiceHandler{svc: svc}
 	server.Register(
-		connect.Method{Spec: gitHubServiceLinkIdentitySpec(), Handler: adapter.linkIdentity},
+		connect.Method{Spec: gitHubServiceProveIdentitySpec(), Handler: adapter.proveIdentity},
 		connect.Method{Spec: gitHubServiceUnlinkIdentitySpec(), Handler: adapter.unlinkIdentity},
 		connect.Method{Spec: gitHubServiceListIdentitiesSpec(), Handler: adapter.listIdentities},
 	)
@@ -109,8 +120,8 @@ func RegisterGitHubServiceHandler(server *connect.Server, svc GitHubServiceHandl
 // UnimplementedGitHubServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedGitHubServiceHandler struct{}
 
-func (UnimplementedGitHubServiceHandler) LinkIdentity(context.Context, *v1.LinkIdentityRequest) (*v1.LinkIdentityResponse, error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.GitHubService.LinkIdentity is not implemented")
+func (UnimplementedGitHubServiceHandler) ProveIdentity(context.Context, *v1.ProveIdentityRequest) (*v1.ProveIdentityResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.GitHubService.ProveIdentity is not implemented")
 }
 
 func (UnimplementedGitHubServiceHandler) UnlinkIdentity(context.Context, *v1.UnlinkIdentityRequest) (*v1.UnlinkIdentityResponse, error) {
@@ -125,9 +136,9 @@ type gitHubServiceClient struct {
 	client *connect.Client
 }
 
-func (c *gitHubServiceClient) LinkIdentity(ctx context.Context, req *v1.LinkIdentityRequest) (*v1.LinkIdentityResponse, error) {
-	var res v1.LinkIdentityResponse
-	if err := c.client.CallUnary(ctx, gitHubServiceLinkIdentitySpec(), req, &res); err != nil {
+func (c *gitHubServiceClient) ProveIdentity(ctx context.Context, req *v1.ProveIdentityRequest) (*v1.ProveIdentityResponse, error) {
+	var res v1.ProveIdentityResponse
+	if err := c.client.CallUnary(ctx, gitHubServiceProveIdentitySpec(), req, &res); err != nil {
 		return nil, err
 	}
 	return &res, nil
@@ -151,12 +162,12 @@ func (c *gitHubServiceClient) ListIdentities(ctx context.Context, req *v1.ListId
 
 type gitHubServiceHandler struct{ svc GitHubServiceHandler }
 
-func (h gitHubServiceHandler) linkIdentity(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
-	var req v1.LinkIdentityRequest
+func (h gitHubServiceHandler) proveIdentity(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ProveIdentityRequest
 	if err := stream.Receive(&req); err != nil {
 		return err
 	}
-	res, err := h.svc.LinkIdentity(ctx, &req)
+	res, err := h.svc.ProveIdentity(ctx, &req)
 	if err != nil {
 		return err
 	}

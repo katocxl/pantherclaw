@@ -29,10 +29,14 @@ type Handler struct {
 func New(s *app.Service) *Handler { return &Handler{s: s} }
 
 func identityOf(i app.Identity) *pb.GitHubIdentity {
-	return &pb.GitHubIdentity{
+	out := &pb.GitHubIdentity{
 		Id: i.ID.String(), UserId: i.UserID.String(), GithubLogin: i.GithubLogin, GithubUserId: i.GithubUserID, LinkedBy: i.LinkedBy,
 		LinkTime: timestamppb.New(i.LinkedAt),
 	}
+	if i.VerifiedAt != nil {
+		out.VerifyTime = timestamppb.New(*i.VerifiedAt)
+	}
+	return out
 }
 
 func parseID(s string) (ids.UUID, error) {
@@ -43,17 +47,13 @@ func parseID(s string) (ids.UUID, error) {
 	return id, nil
 }
 
-// LinkIdentity implements GitHubServiceHandler.
-func (h *Handler) LinkIdentity(ctx context.Context, req *pb.LinkIdentityRequest) (*pb.LinkIdentityResponse, error) {
-	user, err := parseID(req.GetUserId())
+// ProveIdentity implements GitHubServiceHandler.
+func (h *Handler) ProveIdentity(ctx context.Context, req *pb.ProveIdentityRequest) (*pb.ProveIdentityResponse, error) {
+	i, err := h.s.Prove(ctx, req.GetGithubUserToken(), req.GetUnlink())
 	if err != nil {
 		return nil, err
 	}
-	i, err := h.s.Link(ctx, user, req.GetGithubLogin(), req.GetGithubUserId())
-	if err != nil {
-		return nil, err
-	}
-	return &pb.LinkIdentityResponse{Identity: identityOf(i)}, nil
+	return &pb.ProveIdentityResponse{Identity: identityOf(i)}, nil
 }
 
 // UnlinkIdentity implements GitHubServiceHandler.

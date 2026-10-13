@@ -183,6 +183,13 @@ type PcApprovalRequest struct {
 	InvalidationKey    *string
 }
 
+type PcApprovalRequestLinkedPerson struct {
+	OrgID     ids.OrgID
+	RequestID ids.UUID
+	Fact      string
+	UserID    ids.UUID
+}
+
 type PcApprovalResponse struct {
 	OrgID             ids.OrgID
 	ID                ids.UUID
@@ -816,6 +823,7 @@ type PcGithubIdentity struct {
 	GithubUserID int64
 	LinkedBy     string
 	LinkedAt     time.Time
+	VerifiedAt   *time.Time
 }
 
 type PcGithubScanRun struct {

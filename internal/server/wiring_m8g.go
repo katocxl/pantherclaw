@@ -70,7 +70,9 @@ func packageFacts(pool *db.Pool) factsapp.PackageFacts {
 }
 
 // registerM8G mounts the M8 track G services people use: the GitHub
-// identity links independence compares (HR-207).
-func registerM8G(rs *connect.Server, pool *db.Pool) {
-	pantherclawv1connect.RegisterGitHubServiceHandler(rs, githubrpc.New(&githubapp.Service{Pool: pool}))
+// identity links independence compares (HR-207), each change notified
+// (P2f). verifier reads the account of a GitHub sign-in; nil refuses
+// proofs.
+func registerM8G(rs *connect.Server, pool *db.Pool, notify githubapp.Notifier, verifier githubapp.Verifier) {
+	pantherclawv1connect.RegisterGitHubServiceHandler(rs, githubrpc.New(&githubapp.Service{Pool: pool, Notify: notify, Verifier: verifier}))
 }

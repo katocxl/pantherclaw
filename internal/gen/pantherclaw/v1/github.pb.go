@@ -147,7 +147,10 @@ type GitHubIdentity struct {
 	// Who linked it.
 	LinkedBy string `protobuf:"bytes,5,opt,name=linked_by,json=linkedBy,proto3" json:"linked_by,omitempty"`
 	// When.
-	LinkTime      *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=link_time,json=linkTime,proto3" json:"link_time,omitempty"`
+	LinkTime *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=link_time,json=linkTime,proto3" json:"link_time,omitempty"`
+	// When the person proved the account by signing in to GitHub; unset for
+	// a link made before P2f, which approves nothing.
+	VerifyTime    *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=verify_time,json=verifyTime,proto3" json:"verify_time,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -224,33 +227,39 @@ func (x *GitHubIdentity) GetLinkTime() *timestamppb.Timestamp {
 	return nil
 }
 
-// LinkIdentityRequest links a person to a GitHub account.
-type LinkIdentityRequest struct {
+func (x *GitHubIdentity) GetVerifyTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.VerifyTime
+	}
+	return nil
+}
+
+// ProveIdentityRequest carries the token of a GitHub sign-in.
+type ProveIdentityRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// The person.
-	UserId string `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
-	// The GitHub login.
-	GithubLogin string `protobuf:"bytes,2,opt,name=github_login,json=githubLogin,proto3" json:"github_login,omitempty"`
-	// The GitHub user id.
-	GithubUserId  int64 `protobuf:"varint,3,opt,name=github_user_id,json=githubUserId,proto3" json:"github_user_id,omitempty"`
+	// A GitHub user access token from the GitHub App's user authorization
+	// (the device flow pclaw github link runs).
+	GithubUserToken string `protobuf:"bytes,1,opt,name=github_user_token,json=githubUserToken,proto3" json:"github_user_token,omitempty"`
+	// Remove the link to that account instead of making it.
+	Unlink        bool `protobuf:"varint,2,opt,name=unlink,proto3" json:"unlink,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *LinkIdentityRequest) Reset() {
-	*x = LinkIdentityRequest{}
+func (x *ProveIdentityRequest) Reset() {
+	*x = ProveIdentityRequest{}
 	mi := &file_pantherclaw_v1_github_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *LinkIdentityRequest) String() string {
+func (x *ProveIdentityRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*LinkIdentityRequest) ProtoMessage() {}
+func (*ProveIdentityRequest) ProtoMessage() {}
 
-func (x *LinkIdentityRequest) ProtoReflect() protoreflect.Message {
+func (x *ProveIdentityRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_pantherclaw_v1_github_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -262,34 +271,27 @@ func (x *LinkIdentityRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use LinkIdentityRequest.ProtoReflect.Descriptor instead.
-func (*LinkIdentityRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use ProveIdentityRequest.ProtoReflect.Descriptor instead.
+func (*ProveIdentityRequest) Descriptor() ([]byte, []int) {
 	return file_pantherclaw_v1_github_proto_rawDescGZIP(), []int{2}
 }
 
-func (x *LinkIdentityRequest) GetUserId() string {
+func (x *ProveIdentityRequest) GetGithubUserToken() string {
 	if x != nil {
-		return x.UserId
+		return x.GithubUserToken
 	}
 	return ""
 }
 
-func (x *LinkIdentityRequest) GetGithubLogin() string {
+func (x *ProveIdentityRequest) GetUnlink() bool {
 	if x != nil {
-		return x.GithubLogin
+		return x.Unlink
 	}
-	return ""
+	return false
 }
 
-func (x *LinkIdentityRequest) GetGithubUserId() int64 {
-	if x != nil {
-		return x.GithubUserId
-	}
-	return 0
-}
-
-// LinkIdentityResponse returns the link.
-type LinkIdentityResponse struct {
+// ProveIdentityResponse returns the link made or removed.
+type ProveIdentityResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The link.
 	Identity      *GitHubIdentity `protobuf:"bytes,1,opt,name=identity,proto3" json:"identity,omitempty"`
@@ -297,20 +299,20 @@ type LinkIdentityResponse struct {
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *LinkIdentityResponse) Reset() {
-	*x = LinkIdentityResponse{}
+func (x *ProveIdentityResponse) Reset() {
+	*x = ProveIdentityResponse{}
 	mi := &file_pantherclaw_v1_github_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *LinkIdentityResponse) String() string {
+func (x *ProveIdentityResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*LinkIdentityResponse) ProtoMessage() {}
+func (*ProveIdentityResponse) ProtoMessage() {}
 
-func (x *LinkIdentityResponse) ProtoReflect() protoreflect.Message {
+func (x *ProveIdentityResponse) ProtoReflect() protoreflect.Message {
 	mi := &file_pantherclaw_v1_github_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -322,12 +324,12 @@ func (x *LinkIdentityResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use LinkIdentityResponse.ProtoReflect.Descriptor instead.
-func (*LinkIdentityResponse) Descriptor() ([]byte, []int) {
+// Deprecated: Use ProveIdentityResponse.ProtoReflect.Descriptor instead.
+func (*ProveIdentityResponse) Descriptor() ([]byte, []int) {
 	return file_pantherclaw_v1_github_proto_rawDescGZIP(), []int{3}
 }
 
-func (x *LinkIdentityResponse) GetIdentity() *GitHubIdentity {
+func (x *ProveIdentityResponse) GetIdentity() *GitHubIdentity {
 	if x != nil {
 		return x.Identity
 	}
@@ -552,19 +554,21 @@ const file_pantherclaw_v1_github_proto_rawDesc = "" +
 	"\tread_time\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\breadTime\x1a>\n" +
 	"\x10PermissionsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xd8\x01\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x95\x02\n" +
 	"\x0eGitHubIdentity\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x17\n" +
 	"\auser_id\x18\x02 \x01(\tR\x06userId\x12!\n" +
 	"\fgithub_login\x18\x03 \x01(\tR\vgithubLogin\x12$\n" +
 	"\x0egithub_user_id\x18\x04 \x01(\x03R\fgithubUserId\x12\x1b\n" +
 	"\tlinked_by\x18\x05 \x01(\tR\blinkedBy\x127\n" +
-	"\tlink_time\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\blinkTime\"\xb2\x01\n" +
-	"\x13LinkIdentityRequest\x12!\n" +
-	"\auser_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x06userId\x12I\n" +
-	"\fgithub_login\x18\x02 \x01(\tB&\xbaH#r!2\x1f^[A-Za-z0-9][A-Za-z0-9-]{0,38}$R\vgithubLogin\x12-\n" +
-	"\x0egithub_user_id\x18\x03 \x01(\x03B\a\xbaH\x04\"\x02 \x00R\fgithubUserId\"R\n" +
-	"\x14LinkIdentityResponse\x12:\n" +
+	"\tlink_time\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\blinkTime\x12;\n" +
+	"\vverify_time\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\n" +
+	"verifyTime\"f\n" +
+	"\x14ProveIdentityRequest\x126\n" +
+	"\x11github_user_token\x18\x01 \x01(\tB\n" +
+	"\xbaH\ar\x05\x10\x01\x18\x80\x04R\x0fgithubUserToken\x12\x16\n" +
+	"\x06unlink\x18\x02 \x01(\bR\x06unlink\"S\n" +
+	"\x15ProveIdentityResponse\x12:\n" +
 	"\bidentity\x18\x01 \x01(\v2\x1e.pantherclaw.v1.GitHubIdentityR\bidentity\"1\n" +
 	"\x15UnlinkIdentityRequest\x12\x18\n" +
 	"\x02id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x02id\"\x18\n" +
@@ -579,9 +583,9 @@ const file_pantherclaw_v1_github_proto_rawDesc = "" +
 	"\n" +
 	"identities\x18\x01 \x03(\v2\x1e.pantherclaw.v1.GitHubIdentityR\n" +
 	"identities\x12&\n" +
-	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken2\xac\x02\n" +
-	"\rGitHubService\x12Y\n" +
-	"\fLinkIdentity\x12#.pantherclaw.v1.LinkIdentityRequest\x1a$.pantherclaw.v1.LinkIdentityResponse\x12_\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken2\xaf\x02\n" +
+	"\rGitHubService\x12\\\n" +
+	"\rProveIdentity\x12$.pantherclaw.v1.ProveIdentityRequest\x1a%.pantherclaw.v1.ProveIdentityResponse\x12_\n" +
 	"\x0eUnlinkIdentity\x12%.pantherclaw.v1.UnlinkIdentityRequest\x1a&.pantherclaw.v1.UnlinkIdentityResponse\x12_\n" +
 	"\x0eListIdentities\x12%.pantherclaw.v1.ListIdentitiesRequest\x1a&.pantherclaw.v1.ListIdentitiesResponseB\xc4\x01\n" +
 	"\x12com.pantherclaw.v1B\vGithubProtoP\x01ZHgithub.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1;pantherclawv1\xa2\x02\x03PXX\xaa\x02\x0ePantherclaw.V1\xca\x02\x0ePantherclaw\\V1\xe2\x02\x1aPantherclaw\\V1\\GPBMetadata\xea\x02\x0fPantherclaw::V1b\x06proto3"
@@ -602,8 +606,8 @@ var file_pantherclaw_v1_github_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
 var file_pantherclaw_v1_github_proto_goTypes = []any{
 	(*GitHubInstallation)(nil),     // 0: pantherclaw.v1.GitHubInstallation
 	(*GitHubIdentity)(nil),         // 1: pantherclaw.v1.GitHubIdentity
-	(*LinkIdentityRequest)(nil),    // 2: pantherclaw.v1.LinkIdentityRequest
-	(*LinkIdentityResponse)(nil),   // 3: pantherclaw.v1.LinkIdentityResponse
+	(*ProveIdentityRequest)(nil),   // 2: pantherclaw.v1.ProveIdentityRequest
+	(*ProveIdentityResponse)(nil),  // 3: pantherclaw.v1.ProveIdentityResponse
 	(*UnlinkIdentityRequest)(nil),  // 4: pantherclaw.v1.UnlinkIdentityRequest
 	(*UnlinkIdentityResponse)(nil), // 5: pantherclaw.v1.UnlinkIdentityResponse
 	(*ListIdentitiesRequest)(nil),  // 6: pantherclaw.v1.ListIdentitiesRequest
@@ -615,19 +619,20 @@ var file_pantherclaw_v1_github_proto_depIdxs = []int32{
 	8, // 0: pantherclaw.v1.GitHubInstallation.permissions:type_name -> pantherclaw.v1.GitHubInstallation.PermissionsEntry
 	9, // 1: pantherclaw.v1.GitHubInstallation.read_time:type_name -> google.protobuf.Timestamp
 	9, // 2: pantherclaw.v1.GitHubIdentity.link_time:type_name -> google.protobuf.Timestamp
-	1, // 3: pantherclaw.v1.LinkIdentityResponse.identity:type_name -> pantherclaw.v1.GitHubIdentity
-	1, // 4: pantherclaw.v1.ListIdentitiesResponse.identities:type_name -> pantherclaw.v1.GitHubIdentity
-	2, // 5: pantherclaw.v1.GitHubService.LinkIdentity:input_type -> pantherclaw.v1.LinkIdentityRequest
-	4, // 6: pantherclaw.v1.GitHubService.UnlinkIdentity:input_type -> pantherclaw.v1.UnlinkIdentityRequest
-	6, // 7: pantherclaw.v1.GitHubService.ListIdentities:input_type -> pantherclaw.v1.ListIdentitiesRequest
-	3, // 8: pantherclaw.v1.GitHubService.LinkIdentity:output_type -> pantherclaw.v1.LinkIdentityResponse
-	5, // 9: pantherclaw.v1.GitHubService.UnlinkIdentity:output_type -> pantherclaw.v1.UnlinkIdentityResponse
-	7, // 10: pantherclaw.v1.GitHubService.ListIdentities:output_type -> pantherclaw.v1.ListIdentitiesResponse
-	8, // [8:11] is the sub-list for method output_type
-	5, // [5:8] is the sub-list for method input_type
-	5, // [5:5] is the sub-list for extension type_name
-	5, // [5:5] is the sub-list for extension extendee
-	0, // [0:5] is the sub-list for field type_name
+	9, // 3: pantherclaw.v1.GitHubIdentity.verify_time:type_name -> google.protobuf.Timestamp
+	1, // 4: pantherclaw.v1.ProveIdentityResponse.identity:type_name -> pantherclaw.v1.GitHubIdentity
+	1, // 5: pantherclaw.v1.ListIdentitiesResponse.identities:type_name -> pantherclaw.v1.GitHubIdentity
+	2, // 6: pantherclaw.v1.GitHubService.ProveIdentity:input_type -> pantherclaw.v1.ProveIdentityRequest
+	4, // 7: pantherclaw.v1.GitHubService.UnlinkIdentity:input_type -> pantherclaw.v1.UnlinkIdentityRequest
+	6, // 8: pantherclaw.v1.GitHubService.ListIdentities:input_type -> pantherclaw.v1.ListIdentitiesRequest
+	3, // 9: pantherclaw.v1.GitHubService.ProveIdentity:output_type -> pantherclaw.v1.ProveIdentityResponse
+	5, // 10: pantherclaw.v1.GitHubService.UnlinkIdentity:output_type -> pantherclaw.v1.UnlinkIdentityResponse
+	7, // 11: pantherclaw.v1.GitHubService.ListIdentities:output_type -> pantherclaw.v1.ListIdentitiesResponse
+	9, // [9:12] is the sub-list for method output_type
+	6, // [6:9] is the sub-list for method input_type
+	6, // [6:6] is the sub-list for extension type_name
+	6, // [6:6] is the sub-list for extension extendee
+	0, // [0:6] is the sub-list for field type_name
 }
 
 func init() { file_pantherclaw_v1_github_proto_init() }

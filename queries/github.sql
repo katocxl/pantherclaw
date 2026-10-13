@@ -5,9 +5,16 @@
 -- GitHub user id, which independence compares.
 
 -- name: InsertGitHubIdentity :one
-INSERT INTO pc.github_identities (org_id, id, user_id, github_login, github_user_id, linked_by)
-VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(user_id), sqlc.arg(github_login), sqlc.arg(github_user_id), sqlc.arg(linked_by))
+-- A link the person proved by signing in to GitHub (P2f): verified now.
+INSERT INTO pc.github_identities (org_id, id, user_id, github_login, github_user_id, linked_by, verified_at)
+VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(user_id), sqlc.arg(github_login), sqlc.arg(github_user_id), sqlc.arg(linked_by), now())
 RETURNING *;
+
+-- name: GitHubIdentityByGitHubUser :one
+SELECT * FROM pc.github_identities WHERE org_id = sqlc.arg(org_id) AND github_user_id = sqlc.arg(github_user_id);
+
+-- name: GitHubIdentity :one
+SELECT * FROM pc.github_identities WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id);
 
 -- name: DeleteGitHubIdentity :one
 DELETE FROM pc.github_identities WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id)

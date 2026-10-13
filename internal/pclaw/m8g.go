@@ -14,7 +14,8 @@ import (
 )
 
 // M8 track G commands: the GitHub identity links independence compares
-// (HR-207).
+// (HR-207). A person links their own account by signing in to GitHub
+// (pclaw github link, P2f); an identity manager can only unlink others.
 
 func init() {
 	for k, v := range m8gCommands() {
@@ -29,14 +30,7 @@ type m8gClients struct {
 
 func m8gCommands() map[string]command {
 	return map[string]command{
-		"github identity link": rpc("github identity link --user ID --login LOGIN --github-id N", 0, func(fs *flag.FlagSet) call {
-			user, login := fs.String("user", "", "the person"), fs.String("login", "", "their GitHub login")
-			id := fs.Int64("github-id", 0, "their GitHub user id (GET https://api.github.com/users/LOGIN shows it)")
-			return func(ctx context.Context, c clients, _ []string) (proto.Message, error) {
-				return c.github.LinkIdentity(ctx, &pantherclawv1.LinkIdentityRequest{UserId: *user, GithubLogin: *login, GithubUserId: *id})
-			}
-		}),
-		"github identity unlink": rpc("github identity unlink ID", 1, func(*flag.FlagSet) call {
+		"github identity unlink": rpc("github identity unlink ID (another person's link)", 1, func(*flag.FlagSet) call {
 			return func(ctx context.Context, c clients, a []string) (proto.Message, error) {
 				return c.github.UnlinkIdentity(ctx, &pantherclawv1.UnlinkIdentityRequest{Id: a[0]})
 			}

@@ -36,6 +36,11 @@ const (
 	// IneligibleAuthorshipUnknown: the fact could not list everyone, so
 	// nobody can count as independent (design decision 18).
 	IneligibleAuthorshipUnknown = "AUTHORSHIP_UNKNOWN"
+	// IneligibleNotLinked: the requirement is independent of a GitHub
+	// people fact, and the person holds no GitHub link proved by signing in
+	// to GitHub, so nobody can tell whether they are among those people
+	// (G0 M8 P2f, HR-207).
+	IneligibleNotLinked = "GITHUB_NOT_LINKED"
 )
 
 // ErrStepUpSubjectNotAPerson is returned when a step-up names a launcher or
@@ -98,6 +103,10 @@ type Person struct {
 	Bindings []RoleBinding
 	// Active credentials only.
 	Credentials []Credential
+	// GitHubVerified is set when the person holds a GitHub link they proved
+	// by signing in to GitHub (G0 M8 P2f): only then do they approve a
+	// requirement independent of a GitHub people fact.
+	GitHubVerified bool
 }
 
 // RunPeople are the people around a run: its launcher and represented
@@ -177,6 +186,8 @@ func Check(r Requirement, p Person, c Context, cred ids.UUID) (bool, string) {
 			return false, IneligibleAuthorshipUnknown
 		case slices.Contains(a.Users, p.UserID):
 			return false, IneligibleAuthor
+		case !p.GitHubVerified:
+			return false, IneligibleNotLinked
 		}
 	}
 	if r.Independent {

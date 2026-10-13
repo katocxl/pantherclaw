@@ -14,9 +14,10 @@ import (
 // TestHR207_IndependenceExcludesThePullRequestsPeople: an independent
 // requirement that names a people fact also excludes the users linked to
 // the GitHub users it lists (the pull request's author, committers and
-// pushers); a person who is not linked is not excluded, and when the fact
-// could not list everyone, nobody counts. A requirement that is not
-// independent is unaffected.
+// pushers); someone else counts only when they hold a GitHub link they
+// proved by signing in to GitHub (P2f), and when the fact could not list
+// everyone, nobody counts. A requirement that is not independent is
+// unaffected.
 func TestHR207_IndependenceExcludesThePullRequestsPeople(t *testing.T) {
 	r := approver(1, true)
 	r.IndependentOf = "github.pull.people"
@@ -26,7 +27,10 @@ func TestHR207_IndependenceExcludesThePullRequestsPeople(t *testing.T) {
 	ok, code := domain.Check(r, author, c, ids.UUID{})
 	wantCode(t, "a linked author", ok, code, domain.IneligibleAuthor)
 	ok, code = domain.Check(r, other, c, ids.UUID{})
-	wantCode(t, "someone else", ok, code, "")
+	wantCode(t, "someone else without a GitHub link", ok, code, domain.IneligibleNotLinked)
+	other.GitHubVerified = true
+	ok, code = domain.Check(r, other, c, ids.UUID{})
+	wantCode(t, "someone else, linked", ok, code, "")
 
 	c.Authorship = map[string]domain.Authorship{"github.pull.people": {Users: []ids.UUID{author.UserID}}}
 	ok, code = domain.Check(r, other, c, ids.UUID{})

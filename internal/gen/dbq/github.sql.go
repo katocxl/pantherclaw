@@ -16,7 +16,7 @@ import (
 
 const deleteGitHubIdentity = `-- name: DeleteGitHubIdentity :one
 DELETE FROM pc.github_identities WHERE org_id = $1 AND id = $2
-RETURNING org_id, id, user_id, github_login, github_user_id, linked_by, linked_at
+RETURNING org_id, id, user_id, github_login, github_user_id, linked_by, linked_at, verified_at
 `
 
 func (q *Queries) DeleteGitHubIdentity(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (PcGithubIdentity, error) {
@@ -30,15 +30,56 @@ func (q *Queries) DeleteGitHubIdentity(ctx context.Context, orgID ids.OrgID, iD 
 		&i.GithubUserID,
 		&i.LinkedBy,
 		&i.LinkedAt,
+		&i.VerifiedAt,
+	)
+	return i, err
+}
+
+const gitHubIdentity = `-- name: GitHubIdentity :one
+SELECT org_id, id, user_id, github_login, github_user_id, linked_by, linked_at, verified_at FROM pc.github_identities WHERE org_id = $1 AND id = $2
+`
+
+func (q *Queries) GitHubIdentity(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (PcGithubIdentity, error) {
+	row := q.db.QueryRow(ctx, gitHubIdentity, orgID, iD)
+	var i PcGithubIdentity
+	err := row.Scan(
+		&i.OrgID,
+		&i.ID,
+		&i.UserID,
+		&i.GithubLogin,
+		&i.GithubUserID,
+		&i.LinkedBy,
+		&i.LinkedAt,
+		&i.VerifiedAt,
+	)
+	return i, err
+}
+
+const gitHubIdentityByGitHubUser = `-- name: GitHubIdentityByGitHubUser :one
+SELECT org_id, id, user_id, github_login, github_user_id, linked_by, linked_at, verified_at FROM pc.github_identities WHERE org_id = $1 AND github_user_id = $2
+`
+
+func (q *Queries) GitHubIdentityByGitHubUser(ctx context.Context, orgID ids.OrgID, githubUserID int64) (PcGithubIdentity, error) {
+	row := q.db.QueryRow(ctx, gitHubIdentityByGitHubUser, orgID, githubUserID)
+	var i PcGithubIdentity
+	err := row.Scan(
+		&i.OrgID,
+		&i.ID,
+		&i.UserID,
+		&i.GithubLogin,
+		&i.GithubUserID,
+		&i.LinkedBy,
+		&i.LinkedAt,
+		&i.VerifiedAt,
 	)
 	return i, err
 }
 
 const insertGitHubIdentity = `-- name: InsertGitHubIdentity :one
 
-INSERT INTO pc.github_identities (org_id, id, user_id, github_login, github_user_id, linked_by)
-VALUES ($1, $2, $3, $4, $5, $6)
-RETURNING org_id, id, user_id, github_login, github_user_id, linked_by, linked_at
+INSERT INTO pc.github_identities (org_id, id, user_id, github_login, github_user_id, linked_by, verified_at)
+VALUES ($1, $2, $3, $4, $5, $6, now())
+RETURNING org_id, id, user_id, github_login, github_user_id, linked_by, linked_at, verified_at
 `
 
 type InsertGitHubIdentityParams struct {
@@ -55,6 +96,7 @@ type InsertGitHubIdentityParams struct {
 //
 // GitHub identities (G0 M8, HR-207): a person of the org linked to a
 // GitHub user id, which independence compares.
+// A link the person proved by signing in to GitHub (P2f): verified now.
 func (q *Queries) InsertGitHubIdentity(ctx context.Context, arg InsertGitHubIdentityParams) (PcGithubIdentity, error) {
 	row := q.db.QueryRow(ctx, insertGitHubIdentity,
 		arg.OrgID,
@@ -73,12 +115,13 @@ func (q *Queries) InsertGitHubIdentity(ctx context.Context, arg InsertGitHubIden
 		&i.GithubUserID,
 		&i.LinkedBy,
 		&i.LinkedAt,
+		&i.VerifiedAt,
 	)
 	return i, err
 }
 
 const listGitHubIdentities = `-- name: ListGitHubIdentities :many
-SELECT org_id, id, user_id, github_login, github_user_id, linked_by, linked_at FROM pc.github_identities
+SELECT org_id, id, user_id, github_login, github_user_id, linked_by, linked_at, verified_at FROM pc.github_identities
 WHERE org_id = $1 AND ($2::uuid IS NULL OR user_id = $2::uuid)
   AND id > coalesce($3::uuid, '00000000-0000-0000-0000-000000000000')
 ORDER BY id
@@ -114,6 +157,7 @@ func (q *Queries) ListGitHubIdentities(ctx context.Context, arg ListGitHubIdenti
 			&i.GithubUserID,
 			&i.LinkedBy,
 			&i.LinkedAt,
+			&i.VerifiedAt,
 		); err != nil {
 			return nil, err
 		}

@@ -68,15 +68,21 @@ When a fact cannot be read in time, nothing is reported for it, and the decision
 
 ## 4. Link people to their GitHub accounts
 
-A reviewer must be independent of a pull request: PantherClaw refuses as reviewer anyone who authored, committed or pushed to it (HR-207). It knows those people by GitHub user id, so each person who reviews or works on GitHub needs a link. An Org Admin makes the links:
+A reviewer must be independent of a pull request: PantherClaw refuses as reviewer anyone who authored, committed or pushed to it (HR-207). It knows those people by GitHub user id, so each person links their own GitHub account, by signing in to GitHub (founder decision 2026-10-13):
 
 ```bash
-pclaw github identity link --user <user id> --login <github login> --github-id <github user id>
+pclaw github link            # prints a code to enter at GitHub; links the account you sign in as
+pclaw github unlink          # removes your link, again by signing in to GitHub
 pclaw github identity list [--user <user id>]
-pclaw github identity unlink <link id>
 ```
 
-`GET https://api.github.com/users/<login>` shows the user id. A GitHub user id links to one person, and every link and unlink is audited. A service account cannot make links, even when it holds the role. Someone who touched a pull request but is linked to no person cannot be excluded by name, so the review page shows them as "not linked".
+The server asks GitHub which account the sign-in belongs to and links it to you, with the time you proved it; it never keeps the GitHub token. Nobody can link an account for someone else. A GitHub user id links to one person; signing in again renews your link.
+
+- **A reviewer of a GitHub merge needs a proved link.** A code reviewer or release approver without one is refused (`GITHUB_NOT_LINKED`), because PantherClaw could not tell whether they wrote the change.
+- **Links at the request count too.** The people linked to a pull request's author, committers and pushers when the merge was held stay excluded from that request, even if they unlink before it is decided.
+- **Unlinking someone else:** a person holding `github.identity.manage` (Org Admin) can remove another person's link with `pclaw github identity unlink <link id>`, never their own.
+- Every link and unlink is audited and sends `security.github_identity_linked` or `security.github_identity_unlinked` to the security channels. A service account cannot link or unlink, even when it holds the role.
+- Someone who touched a pull request but is linked to no person cannot be excluded by name, so the review page shows them as "not linked".
 
 ## 5. Check it
 

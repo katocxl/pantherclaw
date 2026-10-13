@@ -92,7 +92,7 @@ var roles = []Role{
 			PermServiceAccountRead, PermServiceAccountManage, PermAuditRead, PermAgentRead, PermRunRead,
 			PermWaitlistRead, PermWaitlistManage, PermIssuerRead, PermIssuerManage, PermFactRead, PermPackageImport,
 			PermPackageKeyManage, PermNotificationRead, PermNotificationManage, PermEvidenceRead,
-			PermGitHubIdentityManage,
+			PermGitHubIdentityManage, PermGitHubIdentityProve,
 		}, authorityReads, boundaryReads),
 	},
 	{
@@ -130,7 +130,7 @@ var roles = []Role{
 	{
 		Name: RoleApprover, Title: "Approver", Scopes: anyScope,
 		Description: "Approves held actions in scope with a security key, or declines them (human only); sees the approval requests and waitlist entries routed to them.",
-		Permissions: with(basicReads, []Permission{PermApprovalRespond, PermApprovalRead, PermWaitlistRead}),
+		Permissions: with(basicReads, []Permission{PermApprovalRespond, PermApprovalRead, PermWaitlistRead, PermGitHubIdentityProve}),
 	},
 	{
 		Name: RoleResponder, Title: "Responder", Scopes: anyScope,
@@ -153,7 +153,7 @@ var roles = []Role{
 		Name: RoleDeveloper, Title: "Developer", Scopes: anyScope,
 		Description: "Builds agents in scope.",
 		Permissions: with(basicReads, []Permission{
-			PermAgentRead, PermRunRead, PermRunStart, PermConnectionRead, PermEvidenceRead,
+			PermAgentRead, PermRunRead, PermRunStart, PermConnectionRead, PermEvidenceRead, PermGitHubIdentityProve,
 		}, authorityReads),
 	},
 	{
@@ -214,13 +214,13 @@ var roles = []Role{
 	},
 	{
 		Name: RoleCodeReviewer, Title: "Code Reviewer", Scopes: anyScope,
-		Description: "Reviews the changes agents want to merge and approves or declines them with a security key (human only). A requirement that names the role and is independent excludes the change's author and every author, committer and pusher of its commits.",
-		Permissions: with(basicReads, []Permission{PermApprovalRespond, PermApprovalRead, PermWaitlistRead}),
+		Description: "Reviews the changes agents want to merge and approves or declines them with a security key (human only). A requirement that names the role and is independent excludes the change's author and every author, committer and pusher of its commits. To review GitHub changes they link their own GitHub account by signing in to GitHub.",
+		Permissions: with(basicReads, []Permission{PermApprovalRespond, PermApprovalRead, PermWaitlistRead, PermGitHubIdentityProve}),
 	},
 	{
 		Name: RoleReleaseApprover, Title: "Release Approver", Scopes: anyScope,
-		Description: "Approves releases, the actions whose predicted or unknown consequence is a deployment, with a security key (human only); a window requirement counts the approval only inside an active change window for the environment. Never the change's reviewer.",
-		Permissions: with(basicReads, []Permission{PermApprovalRespond, PermApprovalRead, PermWaitlistRead}),
+		Description: "Approves releases, the actions whose predicted or unknown consequence is a deployment, with a security key (human only); a window requirement counts the approval only inside an active change window for the environment. Never the change's reviewer. To release GitHub changes they link their own GitHub account by signing in to GitHub.",
+		Permissions: with(basicReads, []Permission{PermApprovalRespond, PermApprovalRead, PermWaitlistRead, PermGitHubIdentityProve}),
 	},
 }
 

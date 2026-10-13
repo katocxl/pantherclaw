@@ -1,7 +1,8 @@
 -- SPDX-License-Identifier: BUSL-1.1
 -- Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
 --
--- Consequences of decisions (G0 M8 track P: P1; F405, HR-206). Numbered
+-- Consequences of decisions (G0 M8 track P: P1; F405, HR-206), and verified
+-- GitHub links (P2f, at the end). Numbered
 -- after track P's 00082 (release controls), design decision 16.
 --
 -- decision_consequences keeps, for each evaluation, what the action's
@@ -49,5 +50,37 @@ CREATE POLICY tenant_isolation ON pc.decision_consequences
 GRANT SELECT, INSERT ON pc.decision_consequences TO pc_app;
 GRANT SELECT ON pc.decision_consequences TO pc_audit_ro;
 
+-- Verified GitHub links (G0 M8 P2f, founder decision 2026-10-13, HR-207).
+-- A person links their own GitHub account only by proving it through
+-- GitHub sign-in, and the link records when (verified_at); an approver of a
+-- requirement independent of a GitHub people fact needs such a link. Links
+-- made before this (none outside tests) stay unverified and approve nothing.
+-- approval_request_linked_people keeps who was linked to the people a
+-- request's fact listed when the request was created: they stay excluded
+-- from it whatever happens to their links later.
+ALTER TABLE pc.github_identities ADD COLUMN verified_at timestamptz;
+ALTER TABLE pc.github_identities ADD CONSTRAINT github_identities_verified CHECK (verified_at IS NOT NULL) NOT VALID;
+
+CREATE TABLE pc.approval_request_linked_people (
+    org_id     uuid NOT NULL REFERENCES pc.orgs (id),
+    request_id uuid NOT NULL,
+    -- The people fact the request's independent requirement names.
+    fact       text NOT NULL CHECK (char_length(fact) BETWEEN 1 AND 200),
+    user_id    uuid NOT NULL,
+    PRIMARY KEY (org_id, request_id, fact, user_id),
+    FOREIGN KEY (org_id, request_id) REFERENCES pc.approval_requests (org_id, id),
+    FOREIGN KEY (org_id, user_id) REFERENCES pc.users (org_id, id)
+);
+ALTER TABLE pc.approval_request_linked_people ENABLE ROW LEVEL SECURITY;
+ALTER TABLE pc.approval_request_linked_people FORCE ROW LEVEL SECURITY;
+CREATE POLICY tenant_isolation ON pc.approval_request_linked_people
+    USING (org_id = (SELECT NULLIF(current_setting('app.org_id', true), '')::uuid))
+    WITH CHECK (org_id = (SELECT NULLIF(current_setting('app.org_id', true), '')::uuid));
+GRANT SELECT, INSERT ON pc.approval_request_linked_people TO pc_app;
+GRANT SELECT ON pc.approval_request_linked_people TO pc_audit_ro;
+
 -- +goose Down
+DROP TABLE pc.approval_request_linked_people;
+ALTER TABLE pc.github_identities DROP CONSTRAINT github_identities_verified;
+ALTER TABLE pc.github_identities DROP COLUMN verified_at;
 DROP TABLE pc.decision_consequences;

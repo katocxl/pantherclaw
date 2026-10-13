@@ -1002,6 +1002,31 @@ func (q *Queries) InsertHoldEntry(ctx context.Context, arg InsertHoldEntryParams
 	return err
 }
 
+const insertRequestLinkedPeople = `-- name: InsertRequestLinkedPeople :exec
+INSERT INTO pc.approval_request_linked_people (org_id, request_id, fact, user_id)
+SELECT $1, $2, $3, u FROM unnest($4::uuid[]) AS u
+ON CONFLICT DO NOTHING
+`
+
+type InsertRequestLinkedPeopleParams struct {
+	OrgID     ids.OrgID
+	RequestID ids.UUID
+	Fact      string
+	UserIds   []ids.UUID
+}
+
+// The users linked, when a request is created, to the people its fact
+// lists (G0 M8 P2f, HR-207): they stay excluded from it.
+func (q *Queries) InsertRequestLinkedPeople(ctx context.Context, arg InsertRequestLinkedPeopleParams) error {
+	_, err := q.db.Exec(ctx, insertRequestLinkedPeople,
+		arg.OrgID,
+		arg.RequestID,
+		arg.Fact,
+		arg.UserIds,
+	)
+	return err
+}
+
 const insertRestorationRequest = `-- name: InsertRestorationRequest :exec
 INSERT INTO pc.approval_requests (org_id, id, subject_kind, agent_id, requested_by, operation, binding, binding_input,
     requirements, display, display_hash, deadline_at)
@@ -1633,6 +1658,37 @@ func (q *Queries) RequestEvidence(ctx context.Context, orgID ids.OrgID, requestI
 	return items, nil
 }
 
+const requestLinkedPeople = `-- name: RequestLinkedPeople :many
+SELECT fact, user_id FROM pc.approval_request_linked_people
+WHERE org_id = $1 AND request_id = $2
+`
+
+type RequestLinkedPeopleRow struct {
+	Fact   string
+	UserID ids.UUID
+}
+
+// The users linked to a request's people when it was created.
+func (q *Queries) RequestLinkedPeople(ctx context.Context, orgID ids.OrgID, requestID ids.UUID) ([]RequestLinkedPeopleRow, error) {
+	rows, err := q.db.Query(ctx, requestLinkedPeople, orgID, requestID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []RequestLinkedPeopleRow{}
+	for rows.Next() {
+		var i RequestLinkedPeopleRow
+		if err := rows.Scan(&i.Fact, &i.UserID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const requestRecipients = `-- name: RequestRecipients :many
 SELECT DISTINCT x.user_id::uuid AS user_id FROM (
     SELECT r.user_id FROM pc.waitlist_routes r
@@ -1910,6 +1966,33 @@ func (q *Queries) TakeHoldSlot(ctx context.Context, arg TakeHoldSlotParams) (int
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const verifiedGitHubUsers = `-- name: VerifiedGitHubUsers :many
+SELECT DISTINCT user_id FROM pc.github_identities
+WHERE org_id = $1 AND user_id = ANY($2::uuid[]) AND verified_at IS NOT NULL
+`
+
+// Which of users hold a GitHub link they proved by signing in (P2f): only
+// they approve a requirement independent of a GitHub people fact.
+func (q *Queries) VerifiedGitHubUsers(ctx context.Context, orgID ids.OrgID, userIds []ids.UUID) ([]ids.UUID, error) {
+	rows, err := q.db.Query(ctx, verifiedGitHubUsers, orgID, userIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ids.UUID{}
+	for rows.Next() {
+		var user_id ids.UUID
+		if err := rows.Scan(&user_id); err != nil {
+			return nil, err
+		}
+		items = append(items, user_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const voidResponse = `-- name: VoidResponse :execrows
