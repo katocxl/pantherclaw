@@ -25,6 +25,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/money"
 	papp "github.com/katocxl/pantherclaw/internal/policy/app"
 	pdomain "github.com/katocxl/pantherclaw/internal/policy/domain"
+	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
 )
 
 // Reason codes of the pipeline itself (the grant, budget and fact codes
@@ -787,6 +788,12 @@ func input(a *pdomain.ApprovalRequirement, su *pdomain.StepUpRequirement, src ap
 		in.Kind, in.Role, in.Count, in.Independent = apdomain.KindApproval, a.Role, a.Count, a.Independent
 		in.Window = a.Window
 		in.Deadline = time.Duration(a.DeadlineSeconds) * time.Second
+		// HR-207 is per role: a code reviewer and a release approver are
+		// independent whatever the requirement says, so no requirement can
+		// let the pull request's author or a pusher approve it.
+		if in.Role == string(td.RoleCodeReviewer) || in.Role == string(td.RoleReleaseApprover) {
+			in.Independent = true
+		}
 	}
 	if su != nil {
 		in.Kind, in.Subject, in.Method = apdomain.KindStepUp, su.Subject, su.Method
@@ -1200,7 +1207,8 @@ func (s *state) independence() {
 			independent++
 		}
 	}
-	if f := s.facts[a.IndependentOf]; independent > 0 && (f.Type != fdomain.TypeObject || f.Object["complete"] != true) {
+	f := s.facts[a.IndependentOf]
+	if _, complete := apdomain.GitHubPeople(f.Object); independent > 0 && (f.Type != fdomain.TypeObject || !complete) {
 		s.cl.add(StepRequirements, adomain.CannotAuthorize, apdomain.IneligibleAuthorshipUnknown,
 			a.IndependentOf+" does not list every author, committer and pusher, so no approver can be shown independent", "")
 	}
