@@ -171,6 +171,20 @@ func (s *Store) Catalog(ctx context.Context, org ids.OrgID) (map[string]domain.T
 	return out, err
 }
 
+// FactSubjects returns, by fact name, the subject type the org's active
+// provider declares the fact about (policy.FactSubjects).
+func (s *Store) FactSubjects(ctx context.Context, org ids.OrgID) (map[string]string, error) {
+	out := map[string]string{}
+	err := s.Pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
+		rows, err := dbq.New(tx).ListActiveFactSubjects(ctx, org)
+		for _, r := range rows {
+			out[r.Name] = r.SubjectType
+		}
+		return err
+	})
+	return out, err
+}
+
 // CatalogInTx is Catalog inside the caller's transaction (the Authority's
 // one-snapshot read).
 func (s *Store) CatalogInTx(ctx context.Context, tx db.TenantTx, org ids.OrgID) (map[string]domain.Type, error) {
