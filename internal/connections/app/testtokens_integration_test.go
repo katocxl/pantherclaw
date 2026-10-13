@@ -214,3 +214,82 @@ func TestHR188_TestTokensAreMintedOncePerAttemptForTheTestReadOnly(t *testing.T)
 		t.Fatalf("%d mints audited after the refusals, want 2", n)
 	}
 }
+
+// tokenEnv is an org with a target_enforced connection and the
+// verification service that mints its test tokens.
+type tokenEnv struct {
+	*env
+	conn app.Connection
+	s    *txapp.Service
+}
+
+func newTokenEnv(t *testing.T) tokenEnv {
+	t.Helper()
+	e := newEnv(t)
+	e.epoch(t)
+	conn, err := e.svc.Create(e.admin, app.CreateInput{
+		Name: "tokened", Kind: app.KindHTTP, Package: mockpayments.Name, BaseURL: "https://payments.example.test/v1/", Gateway: e.gateway,
+		AccessMode: app.AccessTargetEnforced,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	k, err := keys.GenerateSigningKey(keys.PurposeActionTokens)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reg := keys.NewRegistry()
+	if err := reg.Put(k); err != nil {
+		t.Fatal(err)
+	}
+	signer, _ := reg.Signer(keys.PurposeActionTokens)
+	return tokenEnv{env: e, conn: conn, s: &txapp.Service{Store: &pgtransactions.Store{Pool: e.pool}, ActionTokens: signer}}
+}
+
+// lease asks for a target_verifier test and claims its lease.
+func (e tokenEnv) lease(t *testing.T) (app.TestResult, txapp.Lease) {
+	t.Helper()
+	r, err := e.svc.Test(e.admin, e.conn.ID, app.KindVerifierTest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	leases, err := e.s.Claim(context.Background(), e.org, e.gateway, 16)
+	if err != nil || len(leases) != 1 {
+		t.Fatalf("leases %+v %v", leases, err)
+	}
+	return r, leases[0]
+}
+
+// lifeOf is an action token's iat and exp, unverified.
+func lifeOf(t *testing.T, tok string) (iat, exp int64) {
+	t.Helper()
+	parts := strings.Split(tok, ".")
+	raw, err := base64.RawURLEncoding.DecodeString(parts[min(1, len(parts)-1)])
+	var c struct {
+		Iat int64 `json:"iat"`
+		Exp int64 `json:"exp"`
+	}
+	if err != nil || json.Unmarshal(raw, &c) != nil || c.Exp == 0 {
+		t.Fatalf("token %q", tok)
+	}
+	return c.Iat, c.Exp
+}
+
+// TestHR188_ATestTokenDoesNotOutliveItsLease: a test token expires no later
+// than the lease it was minted under, sooner than an action token's 60
+// seconds, so it is not valid after its lease ended, alongside the next
+// attempt's tokens.
+func TestHR188_ATestTokenDoesNotOutliveItsLease(t *testing.T) {
+	e := newTokenEnv(t)
+	_, l := e.lease(t)
+	tk, err := e.s.MintTestTokens(context.Background(), e.org, e.gateway, l.Task, l.Secret)
+	if err != nil {
+		t.Fatal(err)
+	}
+	leaseEnd := e.int64(t, "SELECT floor(extract(epoch FROM lease_expires_at))::bigint FROM pc.verifications WHERE id = $1", l.Task)
+	for name, tok := range map[string]string{"fresh": tk.Fresh, "mismatch": tk.Mismatch} {
+		if iat, exp := lifeOf(t, tok); exp > leaseEnd || exp >= iat+60 {
+			t.Errorf("the %s token lives from %d to %d; its lease ends at %d", name, iat, exp, leaseEnd)
+		}
+	}
+}

@@ -40,6 +40,10 @@ type Token struct {
 	Operation            string
 	TargetType, TargetID string
 	Now                  time.Time
+	// NotAfter, when set, ends the token's life before Now + TTL if it
+	// comes first: a connection test's token ends with its lease. A
+	// dispatch's token leaves it unset.
+	NotAfter time.Time
 }
 
 type claims struct {
@@ -65,12 +69,16 @@ type target struct {
 	ID   string `json:"id"`
 }
 
-// Mint signs t with a single-use id and a lifetime of TTL, and returns the
-// token and its id.
+// Mint signs t with a single-use id and a lifetime of TTL, or up to
+// t.NotAfter when that is sooner, and returns the token and its id.
 func Mint(s Signer, t Token) (string, ids.UUID, error) {
 	jti := ids.NewV7()
+	exp := t.Now.Add(TTL)
+	if !t.NotAfter.IsZero() && t.NotAfter.Before(exp) {
+		exp = t.NotAfter
+	}
 	b, err := json.Marshal(claims{
-		Iss: t.Issuer, Aud: t.Audience.String(), Jti: jti.String(), Iat: t.Now.Unix(), Exp: t.Now.Add(TTL).Unix(),
+		Iss: t.Issuer, Aud: t.Audience.String(), Jti: jti.String(), Iat: t.Now.Unix(), Exp: exp.Unix(),
 		Pap: pap{
 			V: 1, Txn: t.Transaction.String(), Act: hex.EncodeToString(t.Act), BH: hex.EncodeToString(t.BodySHA256),
 			Op: t.Operation, Target: target{Type: t.TargetType, ID: t.TargetID},

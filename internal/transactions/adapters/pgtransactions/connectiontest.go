@@ -72,7 +72,7 @@ func (s *Store) MintTestTokens(ctx context.Context, org ids.OrgID, gateway, task
 		q := dbq.New(tx)
 		hash := sha256.Sum256(secret)
 		ct, err := q.LeasedConnectionTest(ctx, dbq.LeasedConnectionTestParams{OrgID: org, ID: task, GatewayID: &gateway, LeaseHash: hash[:]})
-		if db.IsNoRows(err) || (err == nil && ct.TestKind != kindVerifierTest) {
+		if db.IsNoRows(err) || (err == nil && (ct.TestKind != kindVerifierTest || ct.LeaseExpiresAt == nil)) {
 			return app.ErrLease
 		} else if err != nil {
 			return err
@@ -85,7 +85,9 @@ func (s *Store) MintTestTokens(ctx context.Context, org ids.OrgID, gateway, task
 		} else if n == 0 {
 			return app.ErrTestTokensMinted
 		}
-		m, err := mint(app.VerifierTest{Test: ct.TestID, Connection: ct.ConnectionID, Operation: ct.Operation, Attempt: ct.Attempts})
+		m, err := mint(app.VerifierTest{
+			Test: ct.TestID, Connection: ct.ConnectionID, Operation: ct.Operation, Attempt: ct.Attempts, LeaseExpires: *ct.LeaseExpiresAt,
+		})
 		if err != nil {
 			return err
 		}

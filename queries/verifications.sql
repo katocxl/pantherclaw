@@ -157,9 +157,9 @@ UPDATE pc.connection_tests SET state = 'RUNNING', gateway_id = sqlc.arg(gateway_
 WHERE org_id = sqlc.arg(org_id) AND verification_id = sqlc.arg(verification_id) AND state IN ('PENDING', 'RUNNING');
 
 -- LeasedConnectionTest is a connection test's task under a live lease of
--- this gateway (HR-190), with its test.
+-- this gateway (HR-190), with its test and when the lease ends.
 -- name: LeasedConnectionTest :one
-SELECT v.id, v.connection_id, v.operation, v.attempts, t.id AS test_id, t.kind AS test_kind
+SELECT v.id, v.connection_id, v.operation, v.attempts, v.lease_expires_at, t.id AS test_id, t.kind AS test_kind
 FROM pc.verifications v
 JOIN pc.connection_tests t ON t.org_id = v.org_id AND t.verification_id = v.id
 WHERE v.org_id = sqlc.arg(org_id) AND v.id = sqlc.arg(id) AND v.purpose = 'connection_test' AND v.state = 'LEASED'

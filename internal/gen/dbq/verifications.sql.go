@@ -303,7 +303,7 @@ func (q *Queries) LeaseVerification(ctx context.Context, arg LeaseVerificationPa
 }
 
 const leasedConnectionTest = `-- name: LeasedConnectionTest :one
-SELECT v.id, v.connection_id, v.operation, v.attempts, t.id AS test_id, t.kind AS test_kind
+SELECT v.id, v.connection_id, v.operation, v.attempts, v.lease_expires_at, t.id AS test_id, t.kind AS test_kind
 FROM pc.verifications v
 JOIN pc.connection_tests t ON t.org_id = v.org_id AND t.verification_id = v.id
 WHERE v.org_id = $1 AND v.id = $2 AND v.purpose = 'connection_test' AND v.state = 'LEASED'
@@ -319,16 +319,17 @@ type LeasedConnectionTestParams struct {
 }
 
 type LeasedConnectionTestRow struct {
-	ID           ids.UUID
-	ConnectionID ids.UUID
-	Operation    string
-	Attempts     int32
-	TestID       ids.UUID
-	TestKind     string
+	ID             ids.UUID
+	ConnectionID   ids.UUID
+	Operation      string
+	Attempts       int32
+	LeaseExpiresAt *time.Time
+	TestID         ids.UUID
+	TestKind       string
 }
 
 // LeasedConnectionTest is a connection test's task under a live lease of
-// this gateway (HR-190), with its test.
+// this gateway (HR-190), with its test and when the lease ends.
 func (q *Queries) LeasedConnectionTest(ctx context.Context, arg LeasedConnectionTestParams) (LeasedConnectionTestRow, error) {
 	row := q.db.QueryRow(ctx, leasedConnectionTest,
 		arg.OrgID,
@@ -342,6 +343,7 @@ func (q *Queries) LeasedConnectionTest(ctx context.Context, arg LeasedConnection
 		&i.ConnectionID,
 		&i.Operation,
 		&i.Attempts,
+		&i.LeaseExpiresAt,
 		&i.TestID,
 		&i.TestKind,
 	)
