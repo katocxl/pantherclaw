@@ -118,6 +118,13 @@ func seal(ctx context.Context, a *app, args []string) error {
 	if err != nil {
 		return err
 	}
+	if *app == "" && bytes.Contains(secret, []byte("PRIVATE KEY-----")) {
+		// A static credential goes to the target in a header: a private key
+		// must never be one.
+		clear(secret)
+		return errors.New("the file holds a private key, which is never sent to a target; " +
+			"seal a GitHub App's key with --github-app, --installation and --account; nothing was sealed")
+	}
 	kind := domain.KindStatic
 	if *app != "" {
 		if secret, err = gitHubApp(k, *app, *installation, *account, secret); err != nil {

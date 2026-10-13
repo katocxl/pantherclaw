@@ -8,6 +8,7 @@ import (
 	"encoding/json/v2"
 	"net/http"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -45,6 +46,59 @@ func TestMergeIsGuardedByTheHeadSHA(t *testing.T) {
 	}
 	if status, _ := w.do("PUT", "/repos/acme/payments/pulls/1/merge", auth, `{"sha":"`+newer+`"}`); status != http.StatusMethodNotAllowed {
 		t.Fatalf("merged twice: %d", status)
+	}
+}
+
+// TestMergingAWorkflowChangeNeedsTheWorkflowsPermission: as GitHub refuses
+// an App's push of a workflow file without workflows: write, it refuses to
+// merge a pull request that changes one (403). A workflow changed on the
+// base after the branch was cut is not the pull request's change, and the
+// merge keeps it.
+func TestMergingAWorkflowChangeNeedsTheWorkflowsPermission(t *testing.T) {
+	w := newWorld(t)
+	w.sim.Install(Installation{ID: 8, Account: "acme", Repos: []string{"payments"}, Permissions: map[string]string{
+		"contents": "write", "pull_requests": "write", "workflows": "write",
+	}})
+	_, tok := w.mint(`{"repositories":["payments"],"permissions":{"contents":"write","pull_requests":"write"}}`)
+	auth := "Bearer " + tok
+	w.sim.Push("acme/payments", "main", map[string]string{".github/workflows/deploy.yml": "on: [push]\n"})
+	if status, _ := w.do("POST", "/repos/acme/payments/pulls", auth, `{"title":"Fix","head":"fix/a","base":"main"}`); status != http.StatusCreated {
+		t.Fatalf("open: %d", status)
+	}
+	if status, out := w.do("PUT", "/repos/acme/payments/pulls/1/merge", auth, `{"sha":"`+w.head+`"}`); status != http.StatusOK {
+		t.Fatalf("a pull request that changes no workflow: %d %v", status, out)
+	}
+	if got := w.sim.Files("acme/payments", w.sim.Branch("acme/payments", "main"))[".github/workflows/deploy.yml"]; got != "on: [push]\n" {
+		t.Fatalf("the merge lost the base's workflow change: %q", got)
+	}
+
+	for i, files := range []map[string]string{
+		{".github/workflows/deploy.yml": "on: workflow_dispatch\n"},
+		{".github/workflows/release.yml": "on: push\n"},
+		{".github/workflows/deploy.yml": ""},
+	} {
+		branch := "ci/" + strconv.Itoa(i)
+		head := w.sim.Push("acme/payments", branch, files)
+		num := strconv.Itoa(i + 2)
+		if status, _ := w.do("POST", "/repos/acme/payments/pulls", auth, `{"title":"CI","head":"`+branch+`","base":"main"}`); status != http.StatusCreated {
+			t.Fatalf("open %s: %d", branch, status)
+		}
+		before := w.sim.Branch("acme/payments", "main")
+		status, out := w.do("PUT", "/repos/acme/payments/pulls/"+num+"/merge", auth, `{"sha":"`+head+`"}`)
+		if msg, _ := out["message"].(string); status != http.StatusForbidden || !strings.Contains(msg, "`workflows` permission") ||
+			w.sim.Branch("acme/payments", "main") != before {
+			t.Fatalf("%v without workflows: %d %v", files, status, out)
+		}
+	}
+
+	status, out := w.do("POST", "/app/installations/8/access_tokens", "Bearer "+w.jwt(),
+		`{"repositories":["payments"],"permissions":{"contents":"write","pull_requests":"write","workflows":"write"}}`)
+	if status != http.StatusCreated {
+		t.Fatalf("mint with workflows: %d %v", status, out)
+	}
+	wf := "Bearer " + out["token"].(string)
+	if status, out := w.do("PUT", "/repos/acme/payments/pulls/2/merge", wf, `{"sha":"`+w.sim.Branch("acme/payments", "ci/0")+`"}`); status != http.StatusOK {
+		t.Fatalf("with workflows: %d %v", status, out)
 	}
 }
 

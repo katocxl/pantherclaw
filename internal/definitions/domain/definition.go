@@ -428,6 +428,11 @@ func (d *Definition) validateApproval() error {
 		if !d.canonicalField(f) && !d.prerequisiteField(f) {
 			return invalid("%s: approval may show only canonical material fields and prerequisite facts, not %q (HR-034)", d.Operation, f)
 		}
+		if name, ok := strings.CutPrefix(f, "params."); ok && d.Params[name].Type == TypeContent {
+			// Content is agent-written (a commit message, a pull request's
+			// title or body): it is shown only in the untrusted block.
+			return invalid("%s: approval may not show content parameter %q among the canonical fields; it is shown untrusted (HR-034)", d.Operation, f)
+		}
 	}
 	return nil
 }
