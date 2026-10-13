@@ -196,6 +196,10 @@ func (e Entitlements) OrgPackageKeys() bool { return e.Edition.Paid() }
 // waitlist's SLA metrics (G0 M5 part 2: F171, F169, F170; Team and above).
 func (e Entitlements) TeamWaitlist() bool { return e.Edition.Paid() }
 
+// GitHubOrgScan reports whether the edition scans GitHub organizations
+// (G0 M8, PN-001.2: Team and above).
+func (e Entitlements) GitHubOrgScan() bool { return e.Edition.Paid() }
+
 // MLDSACosign reports whether the edition includes ML-DSA-65 co-signatures
 // on checkpoints and pack manifests (G0 M7 decision 6, PN-007.5:
 // Enterprise).
