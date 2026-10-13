@@ -122,13 +122,20 @@ tasks:
       - go test ./internal/conformance/gen -run TestConformanceVectors -count=1 -update
 
   sdk:check:
-    desc: The SDKs' tests, each running every conformance vector (not part of task check); the SQL replay store's PostgreSQL test runs when the test cluster is up (task up PROFILE=test)
+    desc: The SDKs' tests, each running every conformance vector (not part of task check; PYTHON overrides the interpreter); the SQL replay store's PostgreSQL test runs when the test cluster is up (task up PROFILE=test)
     dotenv: ["deploy/compose/.env"]
+    vars:
+      PYTHON: '{{.PYTHON | default "uv run --locked python"}}'
     cmds:
       - go -C sdk/go test -shuffle=on -count=1 ./...
       - >-
         PC_TEST_PG_ADMIN_URL="${PC_TEST_PG_ADMIN_URL:-${PC_PG_TEST_PASSWORD:+postgres://postgres:${PC_PG_TEST_PASSWORD}@127.0.0.1:5433/postgres?sslmode=disable}}"
         go -C sdk/go/internal/sqltest test -count=1 ./...
+      - cd sdk/typescript && node --test "test/**/*.test.ts"
+      - cd sdk/python && PYTHONPATH=src {{.PYTHON}} -m unittest discover -s tests
+      # The integrations' tests run inside the real Agent SDKs (dev-only: pnpm-lock.yaml, uv.lock); on Windows the Python ones use the TypeScript one's CLI.
+      - cd integrations/claude-agent-sdk/typescript && COREPACK_ENABLE_DOWNLOAD_PROMPT=0 corepack pnpm install --frozen-lockfile && node --test "test/**/*.test.ts"
+      - cd integrations/claude-agent-sdk/python && {{.PYTHON}} -m unittest discover -s tests
 
   license:check:
     desc: Verify SPDX + copyright headers on every source file
