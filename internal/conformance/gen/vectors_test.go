@@ -76,6 +76,7 @@ func groups() []group {
 		{file: "workload_tokens.json", build: buildWorkloadTokens},
 		{file: "proofs.json", build: buildProofs},
 		{file: "action_tokens.json", build: buildActionTokens},
+		{file: "sdk_face.json", build: buildFace},
 	}
 }
 
