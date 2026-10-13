@@ -162,9 +162,11 @@ SELECT
 
 -- Scan findings (PN-001.1, F015): a finding already submitted is only
 -- counted, with its latest observations.
+-- A finding is matched within its own source only: a person's scan never
+-- touches a finding of the gateway's org scan, nor the reverse (HR-209).
 -- name: TouchScanDiscovery :execrows
 UPDATE pc.discoveries SET seen_count = seen_count + 1, last_seen_at = now(), observed = sqlc.arg(observed)
-WHERE org_id = sqlc.arg(org_id) AND scan_key = sqlc.arg(scan_key);
+WHERE org_id = sqlc.arg(org_id) AND scan_key = sqlc.arg(scan_key) AND source = sqlc.arg(source);
 
 -- name: InsertScanDiscovery :one
 -- A local scan's (source scan) or a gateway's organization scan's
@@ -173,5 +175,9 @@ INSERT INTO pc.discoveries (org_id, id, agent_id, source, scan_key, observed)
 VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(agent_id), sqlc.arg(source), sqlc.arg(scan_key), sqlc.arg(observed))
 RETURNING *;
 
--- name: CountOpenDiscoveries :one
-SELECT count(*)::int FROM pc.discoveries WHERE org_id = sqlc.arg(org_id) AND state = 'OPEN';
+-- CountOpenDiscoveriesFrom counts the open discoveries of the org scans
+-- (github_scan) or of everything else: each is capped on its own, so
+-- neither fills the other's room (HR-148, HR-209).
+-- name: CountOpenDiscoveriesFrom :one
+SELECT count(*)::int FROM pc.discoveries
+WHERE org_id = sqlc.arg(org_id) AND state = 'OPEN' AND (source = 'github_scan') = sqlc.arg(github_scan)::boolean;

@@ -165,12 +165,16 @@ func (q *Queries) CountGovernedAgents(ctx context.Context, orgID ids.OrgID) (int
 	return count, err
 }
 
-const countOpenDiscoveries = `-- name: CountOpenDiscoveries :one
-SELECT count(*)::int FROM pc.discoveries WHERE org_id = $1 AND state = 'OPEN'
+const countOpenDiscoveriesFrom = `-- name: CountOpenDiscoveriesFrom :one
+SELECT count(*)::int FROM pc.discoveries
+WHERE org_id = $1 AND state = 'OPEN' AND (source = 'github_scan') = $2::boolean
 `
 
-func (q *Queries) CountOpenDiscoveries(ctx context.Context, orgID ids.OrgID) (int32, error) {
-	row := q.db.QueryRow(ctx, countOpenDiscoveries, orgID)
+// CountOpenDiscoveriesFrom counts the open discoveries of the org scans
+// (github_scan) or of everything else: each is capped on its own, so
+// neither fills the other's room (HR-148, HR-209).
+func (q *Queries) CountOpenDiscoveriesFrom(ctx context.Context, orgID ids.OrgID, githubScan bool) (int32, error) {
+	row := q.db.QueryRow(ctx, countOpenDiscoveriesFrom, orgID, githubScan)
 	var column_1 int32
 	err := row.Scan(&column_1)
 	return column_1, err
@@ -743,13 +747,27 @@ func (q *Queries) SetAgentState(ctx context.Context, arg SetAgentStateParams) (P
 
 const touchScanDiscovery = `-- name: TouchScanDiscovery :execrows
 UPDATE pc.discoveries SET seen_count = seen_count + 1, last_seen_at = now(), observed = $1
-WHERE org_id = $2 AND scan_key = $3
+WHERE org_id = $2 AND scan_key = $3 AND source = $4
 `
+
+type TouchScanDiscoveryParams struct {
+	Observed []byte
+	OrgID    ids.OrgID
+	ScanKey  []byte
+	Source   string
+}
 
 // Scan findings (PN-001.1, F015): a finding already submitted is only
 // counted, with its latest observations.
-func (q *Queries) TouchScanDiscovery(ctx context.Context, observed []byte, orgID ids.OrgID, scanKey []byte) (int64, error) {
-	result, err := q.db.Exec(ctx, touchScanDiscovery, observed, orgID, scanKey)
+// A finding is matched within its own source only: a person's scan never
+// touches a finding of the gateway's org scan, nor the reverse (HR-209).
+func (q *Queries) TouchScanDiscovery(ctx context.Context, arg TouchScanDiscoveryParams) (int64, error) {
+	result, err := q.db.Exec(ctx, touchScanDiscovery,
+		arg.Observed,
+		arg.OrgID,
+		arg.ScanKey,
+		arg.Source,
+	)
 	if err != nil {
 		return 0, err
 	}

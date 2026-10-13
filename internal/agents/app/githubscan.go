@@ -45,7 +45,7 @@ func (inv *Inventory) SubmitGitHubScan(ctx context.Context, org ids.OrgID, gatew
 		if err := q.LockDiscoveries(ctx, org.String()); err != nil {
 			return err
 		}
-		open, err := q.CountOpenDiscoveries(ctx, org)
+		open, err := q.CountOpenDiscoveriesFrom(ctx, org, true)
 		if err != nil {
 			return err
 		}
@@ -63,7 +63,7 @@ func (inv *Inventory) SubmitGitHubScan(ctx context.Context, org ids.OrgID, gatew
 			if err != nil {
 				return err
 			}
-			if n, err := q.TouchScanDiscovery(ctx, obs, org, f.Key[:]); err != nil {
+			if n, err := q.TouchScanDiscovery(ctx, dbq.TouchScanDiscoveryParams{Observed: obs, OrgID: org, ScanKey: f.Key[:], Source: "github_scan"}); err != nil {
 				return err
 			} else if n > 0 {
 				res.Counted++
