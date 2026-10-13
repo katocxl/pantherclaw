@@ -101,7 +101,40 @@ $$;
 CREATE TRIGGER connector_specs_coverage AFTER INSERT ON pc.connector_specs
     FOR EACH ROW EXECUTE FUNCTION pc.coverage_connector_spec_changed();
 
+-- A connector reaches the network only through its egress connection, so
+-- what invalidates that connection's coverage invalidates the connector's
+-- too: its base URL or hosts, its credential sealed, replaced or revoked,
+-- its state (quarantine), its gateway, package or route modes. Each such
+-- invalidation of a connection is copied, in the same transaction, to
+-- every connector connection whose current spec names it as egress
+-- (HR-211). A connector is never an egress connection (it is not http),
+-- so a copy is never copied again.
+-- +goose StatementBegin
+CREATE FUNCTION pc.coverage_egress_invalidated() RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = pc, pg_temp
+AS $$
+BEGIN
+    IF NEW.kind NOT IN ('connection', 'credential', 'gateway', 'route_mode', 'package_version') THEN
+        RETURN NULL;
+    END IF;
+    INSERT INTO pc.coverage_invalidations (org_id, id, kind, connection_id, subject_id, detail)
+    SELECT NEW.org_id, pc.coverage_uuid_v7(), 'connection', s.connection_id, NEW.connection_id,
+           left('egress connection: ' || coalesce(NEW.detail, NEW.kind), 200)
+    FROM pc.connector_specs s
+    JOIN pc.connections c ON c.org_id = s.org_id AND c.id = s.connection_id
+    WHERE s.org_id = NEW.org_id AND s.egress_connection_id = NEW.connection_id AND c.kind = 'mcp_container'
+      AND s.revision = (SELECT max(l.revision) FROM pc.connector_specs l WHERE l.org_id = s.org_id AND l.connection_id = s.connection_id);
+    RETURN NULL;
+END;
+$$;
+-- +goose StatementEnd
+CREATE TRIGGER coverage_invalidations_egress AFTER INSERT ON pc.coverage_invalidations
+    FOR EACH ROW EXECUTE FUNCTION pc.coverage_egress_invalidated();
+
 -- +goose Down
+DROP TRIGGER coverage_invalidations_egress ON pc.coverage_invalidations;
+DROP FUNCTION pc.coverage_egress_invalidated();
 DROP TRIGGER connector_specs_coverage ON pc.connector_specs;
 DROP FUNCTION pc.coverage_connector_spec_changed();
 DROP TABLE pc.connector_specs;
