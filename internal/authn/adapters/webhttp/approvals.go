@@ -71,11 +71,15 @@ type inboxPage struct {
 }
 
 // approvalView is the data of approval.html: the stored display (HR-034)
-// with each fact's age at the database clock.
+// with each fact's age at the database clock. Observed is set for a
+// version 1 display, whose facts carry their provider and observation time;
+// a later one lists only the fact members the approval binds (HR-030,
+// founder decision 2026-10-13).
 type approvalView struct {
 	page
 	apapp.View
-	Facts []factRow
+	Facts    []factRow
+	Observed bool
 	// The fixed codes of the page's actions (HR-172).
 	Reasons, Alternatives, Questions []string
 }
@@ -128,7 +132,11 @@ func (h *Handler) approvalPage(w http.ResponseWriter, r *http.Request, s authnap
 		Reasons: apdomain.DeclineReasons, Alternatives: apdomain.Alternatives, Questions: apdomain.Questions,
 	}
 	for _, f := range v.Display.Facts {
-		p.Facts = append(p.Facts, factRow{FactLine: f, Age: age(f.ObservedAt, v.Now)})
+		row := factRow{FactLine: f}
+		if f.ObservedAt != "" {
+			row.Age, p.Observed = age(f.ObservedAt, v.Now), true
+		}
+		p.Facts = append(p.Facts, row)
 	}
 	h.renderAny(w, http.StatusOK, "approval.html", p)
 }
