@@ -574,6 +574,21 @@ func (s *Service) transactions(ctx context.Context, c tenancy.Caller, q *dbq.Que
 			return nil, nil, err
 		}
 		entryIDs = append(entryIDs, coverage...)
+		for _, around := range []func(context.Context, ids.OrgID, ids.UUID, ids.UUID, string, time.Time) (ids.UUID, error){
+			func(ctx context.Context, org ids.OrgID, a, cn ids.UUID, op string, until time.Time) (ids.UUID, error) {
+				return q.CoverageSnapshotBefore(ctx, dbq.CoverageSnapshotBeforeParams{OrgID: org, AgentID: a, ConnectionID: cn, Operation: op, Until: until})
+			},
+			func(ctx context.Context, org ids.OrgID, a, cn ids.UUID, op string, until time.Time) (ids.UUID, error) {
+				return q.CoverageSnapshotFrom(ctx, dbq.CoverageSnapshotFromParams{OrgID: org, AgentID: a, ConnectionID: cn, Operation: op, Until: until})
+			},
+		} {
+			id, err := around(ctx, c.Org, claim.Agent, claim.Connection, claim.Operation, claim.At.Add(time.Second))
+			if err == nil {
+				entryIDs = append(entryIDs, id)
+			} else if !db.IsNoRows(err) {
+				return nil, nil, err
+			}
+		}
 	}
 	rows, err := q.ChainedEntriesByID(ctx, c.Org, entryIDs)
 	if err != nil {
