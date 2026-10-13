@@ -124,10 +124,12 @@ func ReadInbound(r *http.Request, body []byte, htu string) Inbound {
 	if hasToken {
 		in.Instance, in.Env, in.JKT, in.SubjectOK = tokenSubject(token)
 	}
-	if run, err := ids.ParseUUID(r.Header.Get(HeaderRunID)); err == nil {
+	// The nil UUID names no run and no action: every face refuses a call
+	// without a run, and an action without an id gets a new one.
+	if run, err := ids.ParseUUID(r.Header.Get(HeaderRunID)); err == nil && !run.IsZero() {
 		in.Run = run.String()
 	}
-	if act, err := ids.ParseUUID(r.Header.Get(HeaderActionID)); err == nil {
+	if act, err := ids.ParseUUID(r.Header.Get(HeaderActionID)); err == nil && !act.IsZero() {
 		in.Action = act.String()
 	}
 	return in
@@ -238,4 +240,20 @@ func clientAddress(r *http.Request) string {
 		return ""
 	}
 	return host
+}
+
+// Observe asks the Authority to verify a workload in its run and to record
+// a tool call its agent SDK ran without a mapping (HR-200, HR-021): the
+// tool's name and the digest of its input, never the input. An error means
+// the Authority could not be asked.
+func (e *Engine) Observe(ctx context.Context, creds *pb.WorkloadCredentials, run, connection, tool string, input []byte) (Verified, error) {
+	sum := sha256.Sum256(input)
+	res, err := e.authority.RecordToolObservation(ctx, &pb.RecordToolObservationRequest{
+		Workload: creds, RunId: run, ConnectionId: connection, Tool: tool, InputSha256: sum[:],
+	})
+	if err != nil {
+		return Verified{}, err
+	}
+	e.nonces.set(res.GetNonce(), time.Time{})
+	return Verified{OK: res.GetVerified(), Code: pap.Code(res.GetErrorCode()), Instance: res.GetInstanceId(), Nonce: res.GetNonce()}, nil
 }
