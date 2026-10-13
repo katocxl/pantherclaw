@@ -18,4 +18,4 @@
 
 ## Tests
 
-From `sdk/python`, run `PYTHONPATH=src python -m unittest discover -s tests` (or `task sdk:check` from the repository root). The tests run every module against the shared vectors in [`sdk/conformance`](../conformance), which PantherClaw generates from its own implementation. `PANTHERCLAW_CONFORMANCE_DIR` points them at another copy.
+From `sdk/python`, run `PYTHONPATH=src uv run --locked python -m unittest discover -s tests` (or `task sdk:check` from the repository root): `uv.lock` pins `cryptography` and its dependencies with hashes, none uploaded less than 7 days before the lock (`exclude-newer`). The tests run every module against the shared vectors in [`sdk/conformance`](../conformance), which PantherClaw generates from its own implementation. `PANTHERCLAW_CONFORMANCE_DIR` points them at another copy.
