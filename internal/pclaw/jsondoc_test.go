@@ -119,3 +119,57 @@ func TestHR208_BackupsAreNeverOverwrittenAndWritesAreWhole(t *testing.T) {
 		t.Fatalf("temporary files left: %v", left)
 	}
 }
+
+// TestHR208_ALinkedFileIsChangedWhereItIs: a settings file that is a link
+// (kept with the person's dotfiles, say) is backed up and replaced beside
+// the file it points to, and the link stays a link; a link to nothing is
+// refused and left as it is.
+func TestHR208_ALinkedFileIsChangedWhereItIs(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "dotfiles", "settings.json")
+	link := filepath.Join(dir, "claude", "settings.json")
+	for _, d := range []string{filepath.Dir(target), filepath.Dir(link)} {
+		if err := os.MkdirAll(d, 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(target, []byte("original"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(target, link); err != nil {
+		t.Skipf("links cannot be made here: %v", err)
+	}
+	backup, err := backupFile(link, time.Date(2026, 10, 13, 9, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatal(err)
+	}
+	inDotfiles, _ := os.Stat(filepath.Dir(target))
+	if beside, _ := os.Stat(filepath.Dir(backup)); beside == nil || !os.SameFile(beside, inDotfiles) {
+		t.Fatalf("the backup %s is not beside the linked file", backup)
+	}
+	if saved, _ := os.ReadFile(backup); string(saved) != "original" {
+		t.Fatalf("backup %q", saved)
+	}
+	if err := writeAtomically(link, []byte("changed")); err != nil {
+		t.Fatal(err)
+	}
+	if info, err := os.Lstat(link); err != nil || info.Mode()&os.ModeSymlink == 0 {
+		t.Fatalf("the link was replaced: %v %v", info, err)
+	}
+	if b, _ := os.ReadFile(target); string(b) != "changed" {
+		t.Fatalf("the linked file holds %q", b)
+	}
+	if beside, _ := os.ReadDir(filepath.Dir(link)); len(beside) != 1 {
+		t.Fatalf("files were left beside the link: %v", beside)
+	}
+	dangling := filepath.Join(dir, "claude", "dangling.json")
+	if err := os.Symlink(filepath.Join(dir, "nowhere.json"), dangling); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeAtomically(dangling, []byte("{}")); err == nil {
+		t.Fatal("a link to nothing was written")
+	}
+	if info, err := os.Lstat(dangling); err != nil || info.Mode()&os.ModeSymlink == 0 {
+		t.Fatalf("the link to nothing was replaced: %v %v", info, err)
+	}
+}

@@ -263,11 +263,33 @@ func lineDiff(name string, before, after []byte) string {
 	return out.String()
 }
 
+// linkTarget is the file a path names: for a link (a settings file kept
+// with the person's dotfiles, say), the file it points to, so that the
+// file is backed up and replaced where it is and the link stays a link.
+// Any other path is itself. A link to nothing is an error: pclaw does not
+// guess where its file should be.
+func linkTarget(path string) (string, error) {
+	info, err := os.Lstat(path)
+	if err != nil || info.Mode()&os.ModeSymlink == 0 {
+		return path, nil
+	}
+	target, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		return "", fmt.Errorf("%s is a link pclaw cannot follow (%w); it is left as it is", path, err)
+	}
+	return target, nil
+}
+
 // backupFile copies path, when it exists, to a new file beside it named
 // with the time, and returns that name ("" for a file that does not exist
-// yet). An existing backup is never overwritten: a second one in the same
-// second gets a counter.
+// yet). A link is backed up beside the file it points to. An existing
+// backup is never overwritten: a second one in the same second gets a
+// counter.
 func backupFile(path string, now time.Time) (string, error) {
+	path, err := linkTarget(path)
+	if err != nil {
+		return "", err
+	}
 	b, err := os.ReadFile(path) //nolint:gosec // G304: the user's own configuration
 	if errors.Is(err, os.ErrNotExist) {
 		return "", nil
@@ -293,8 +315,14 @@ func backupFile(path string, now time.Time) (string, error) {
 }
 
 // writeAtomically replaces path with b through a temporary file in the same
-// directory, keeping the file's mode (0600 for a new file).
+// directory, keeping the file's mode (0600 for a new file). A link is
+// followed: the file it points to is replaced in its own directory, and
+// the link stays.
 func writeAtomically(path string, b []byte) error {
+	path, err := linkTarget(path)
+	if err != nil {
+		return err
+	}
 	mode := os.FileMode(0o600)
 	if info, err := os.Stat(path); err == nil {
 		mode = info.Mode().Perm()
