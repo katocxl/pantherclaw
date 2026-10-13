@@ -5,6 +5,7 @@ package server
 
 import (
 	"context"
+	"fmt"
 	"slices"
 
 	"connectrpc.com/connect/v2"
@@ -14,8 +15,10 @@ import (
 	factsapp "github.com/katocxl/pantherclaw/internal/facts/app"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1/pantherclawv1connect"
+	"github.com/katocxl/pantherclaw/internal/github/adapters/githubhttp"
 	"github.com/katocxl/pantherclaw/internal/github/adapters/githubrpc"
 	githubapp "github.com/katocxl/pantherclaw/internal/github/app"
+	"github.com/katocxl/pantherclaw/internal/platform/config"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 )
@@ -76,7 +79,20 @@ func packageFacts(pool *db.Pool) factsapp.PackageFacts {
 }
 
 // registerM8G mounts the M8 track G services people use: the GitHub
-// identity links independence compares (HR-207).
-func registerM8G(rs *connect.Server, pool *db.Pool) {
-	pantherclawv1connect.RegisterGitHubServiceHandler(rs, githubrpc.New(&githubapp.Service{Pool: pool}))
+// identity links independence compares (HR-207), each change notified and
+// each made by GitHub sign-in (P2f), which is off without github.client_id.
+// The sign-in App's client secret is read from its file here.
+func registerM8G(rs *connect.Server, pool *db.Pool, notify githubapp.Notifier, gh GitHubConfig) error {
+	s := &githubapp.Service{Pool: pool, Notify: notify}
+	if gh.ClientID != "" {
+		secret, err := config.ReadSecretFile(gh.ClientSecretFile)
+		if err != nil {
+			return fmt.Errorf("github.client_secret_file: %w", err)
+		}
+		web, api := gh.URLs()
+		s.Verifier = &githubhttp.Verifier{APIURL: api, ClientID: gh.ClientID, ClientSecret: secret}
+		s.SignIn = githubapp.SignIn{ClientID: gh.ClientID, WebURL: web}
+	}
+	pantherclawv1connect.RegisterGitHubServiceHandler(rs, githubrpc.New(s))
+	return nil
 }
