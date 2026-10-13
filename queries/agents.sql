@@ -175,9 +175,21 @@ INSERT INTO pc.discoveries (org_id, id, agent_id, source, scan_key, observed)
 VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(agent_id), sqlc.arg(source), sqlc.arg(scan_key), sqlc.arg(observed))
 RETURNING *;
 
--- CountOpenDiscoveriesFrom counts the open discoveries of the org scans
--- (github_scan) or of everything else: each is capped on its own, so
--- neither fills the other's room (HR-148, HR-209).
--- name: CountOpenDiscoveriesFrom :one
+-- CountOpenDiscoveriesOfSource counts the open discoveries of one source:
+-- the gateway's unknown keys, people's local scans and the org scans are
+-- each capped on their own, so none fills another's room (HR-148, HR-209).
+-- name: CountOpenDiscoveriesOfSource :one
 SELECT count(*)::int FROM pc.discoveries
-WHERE org_id = sqlc.arg(org_id) AND state = 'OPEN' AND (source = 'github_scan') = sqlc.arg(github_scan)::boolean;
+WHERE org_id = sqlc.arg(org_id) AND state = 'OPEN' AND source = sqlc.arg(source);
+
+-- GetScanDiscovery is a scan finding by its key within its source.
+-- name: GetScanDiscovery :one
+SELECT id, agent_id, state, observed FROM pc.discoveries
+WHERE org_id = sqlc.arg(org_id) AND source = sqlc.arg(source) AND scan_key = sqlc.arg(scan_key);
+
+-- ReopenScanDiscovery reopens a dismissed finding for a new DISCOVERED
+-- agent: what its route may do changed since it was dismissed (HR-209).
+-- name: ReopenScanDiscovery :execrows
+UPDATE pc.discoveries
+SET state = 'OPEN', agent_id = sqlc.arg(agent_id), observed = sqlc.arg(observed), seen_count = seen_count + 1, last_seen_at = now()
+WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state = 'DISMISSED';
