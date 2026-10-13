@@ -66,6 +66,11 @@ message CreatePolicyVersionRequest {
     min_len: 2
     max_len: 1048576
   }];
+  // When set, the call fails with FAILED_PRECONDITION
+  // (POLICY_PUBLISHED_CHANGED) unless the org's published version is this
+  // one, or, when empty, unless none is published: a client that edited the
+  // published bundle never replaces a version published meanwhile.
+  optional string expected_current_version = 2 [(buf.validate.field).string = {pattern: "^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})?$"}];
 }
 
 // CreatePolicyVersionResponse returns the version.
@@ -78,6 +83,11 @@ message CreatePolicyVersionResponse {
 message PublishPolicyVersionRequest {
   // Version id.
   string id = 1 [(buf.validate.field).string.uuid = true];
+  // When set, the call fails with FAILED_PRECONDITION
+  // (POLICY_PUBLISHED_CHANGED) unless the org's published version is this
+  // one, or, when empty, unless none is published: a client that edited the
+  // published bundle never replaces a version published meanwhile.
+  optional string expected_current_version = 2 [(buf.validate.field).string = {pattern: "^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})?$"}];
 }
 
 // PublishPolicyVersionResponse returns it.

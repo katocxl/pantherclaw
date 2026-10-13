@@ -379,6 +379,10 @@ type templateStep struct {
 	what, state string
 	notes       []string
 	apply       func(context.Context) (string, error)
+	// bundle and planned are the policy step's new bundle and the version
+	// it was planned from.
+	bundle  map[string]any
+	planned string
 }
 
 const (
@@ -579,7 +583,10 @@ func planPolicy(ctx context.Context, c clients, o templateOptions, d templateDat
 	}
 	bundle["rules"] = rules
 	s.notes = append(s.notes, "published as a new version of the org's policy")
-	s.apply = publishBundle(c, bundle, planned)
+	s.bundle, s.planned = bundle, planned
+	s.apply = publishBundle(c, bundle, planned, func(ctx context.Context) (string, error) {
+		return replanPolicy(ctx, c, o, d, 1)
+	})
 	return s, nil
 }
 
@@ -602,43 +609,38 @@ func publishedBundle(ctx context.Context, c clients) (map[string]any, string, er
 }
 
 // publishBundle creates the bundle as a new version and publishes it. The
-// bundle is the version published at planning time, edited: if another
-// version was published since, publishing it would silently drop that
-// version's changes, so nothing is published then.
-func publishBundle(c clients, bundle map[string]any, planned string) func(context.Context) (string, error) {
+// bundle is the version published at planning time, edited: the server
+// refuses both calls (POLICY_PUBLISHED_CHANGED) once another version is
+// published, so that version's changes are never dropped. Then retry, when
+// set, plans again from the new version; without it nothing is published.
+func publishBundle(c clients, bundle map[string]any, planned string, retry func(context.Context) (string, error)) func(context.Context) (string, error) {
 	return func(ctx context.Context) (string, error) {
-		if err := samePublished(ctx, c, planned); err != nil {
-			return "", err
-		}
 		raw, err := json.Marshal(bundle, json.Deterministic(true))
 		if err != nil {
 			return "", err
 		}
-		v, err := c.policies.CreatePolicyVersion(ctx, &pantherclawv1.CreatePolicyVersionRequest{Bundle: raw})
-		if err != nil {
-			return "", err
+		v, err := c.policies.CreatePolicyVersion(ctx, &pantherclawv1.CreatePolicyVersionRequest{Bundle: raw, ExpectedCurrentVersion: &planned})
+		if err == nil {
+			_, err = c.policies.PublishPolicyVersion(ctx, &pantherclawv1.PublishPolicyVersionRequest{Id: v.GetVersion().GetId(), ExpectedCurrentVersion: &planned})
 		}
-		if err := samePublished(ctx, c, planned); err != nil {
-			return "", err
-		}
-		if _, err := c.policies.PublishPolicyVersion(ctx, &pantherclawv1.PublishPolicyVersionRequest{Id: v.GetVersion().GetId()}); err != nil {
+		switch {
+		case publishedChanged(err) && retry != nil:
+			return retry(ctx)
+		case publishedChanged(err):
+			return "", errPublishedChanged
+		case err != nil:
 			return "", err
 		}
 		return fmt.Sprintf("policy version %d published", v.GetVersion().GetVersion()), nil
 	}
 }
 
-// samePublished fails unless the published policy version is still the one
-// the plan was made from ("" for none).
-func samePublished(ctx context.Context, c clients, planned string) error {
-	res, err := c.policies.GetPublishedPolicy(ctx, &pantherclawv1.GetPublishedPolicyRequest{})
-	if err != nil && connect.CodeOf(err) != connect.CodeNotFound {
-		return err
-	}
-	if now := res.GetVersion().GetId(); now != planned {
-		return errors.New("another policy version was published since the plan; nothing was published. Apply the template again to see the new plan")
-	}
-	return nil
+// errPublishedChanged: another policy version was published after the plan.
+var errPublishedChanged = errors.New("another policy version was published since the plan; nothing was published. Run the command again to see the new plan")
+
+// publishedChanged reports the server's POLICY_PUBLISHED_CHANGED refusal.
+func publishedChanged(err error) bool {
+	return connect.CodeOf(err) == connect.CodeFailedPrecondition && strings.Contains(err.Error(), "POLICY_PUBLISHED_CHANGED")
 }
 
 func ruleIDs(rules []map[string]any) string {
@@ -843,4 +845,32 @@ func monitorWarnings(ctx context.Context, c clients) []string {
 			return out
 		}
 	}
+}
+
+// policyRetries bounds how often the policy step plans again because
+// another version was published meanwhile.
+const policyRetries = 3
+
+// replanPolicy plans the policy step again from the version published now
+// and applies it, when that changes nothing the person did not confirm: the
+// template's rules are added as confirmed, and a rule of the template's
+// that the new version changed is replaced only with --update.
+func replanPolicy(ctx context.Context, c clients, o templateOptions, d templateData, attempt int) (string, error) {
+	if attempt > policyRetries {
+		return "", errPublishedChanged
+	}
+	s, err := planPolicy(ctx, c, o, d, "")
+	if err != nil {
+		return "", err
+	}
+	switch {
+	case s.state == stepUnchanged:
+		return "the published policy has the template's rules already", nil
+	case s.state == stepDiffers && !o.update:
+		return "", errors.New("another policy version was published since the plan, and it changes the template's rules; nothing was published. Run the command again to see the new plan")
+	}
+	// The new plan's apply retries with the next attempt.
+	return publishBundle(c, s.bundle, s.planned, func(ctx context.Context) (string, error) {
+		return replanPolicy(ctx, c, o, d, attempt+1)
+	})(ctx)
 }

@@ -134,7 +134,7 @@ func templateRemove(ctx context.Context, a *app, args []string) error {
 		return errors.New("nothing was changed")
 	}
 	bundle["rules"] = rules
-	done, err := publishBundle(c, bundle, planned)(ctx)
+	done, err := publishBundle(c, bundle, planned, nil)(ctx)
 	if err != nil {
 		return fmt.Errorf("policy: %s (nothing was changed)", describe(err))
 	}

@@ -28,6 +28,8 @@ var (
 	// ErrNotDraft reports a publication of a version that is not a draft
 	// (a lost race or a repeat, HR-004).
 	ErrNotDraft = app.ErrNotDraft
+	// ErrPublishedChanged: another version is published than expected.
+	ErrPublishedChanged = app.ErrPublishedChanged
 )
 
 // MaxBundleBytes is the largest stored bundle.
@@ -142,8 +144,28 @@ func (s *Store) Get(ctx context.Context, org ids.OrgID, id ids.UUID) (*domain.Bu
 // Publish makes a draft the org's published version, superseding the
 // previous one in the same transaction.
 func (s *Store) Publish(ctx context.Context, org ids.OrgID, id ids.UUID, publishedBy string, ev *audit.Event) error {
+	return s.PublishExpecting(ctx, org, id, publishedBy, nil, ev)
+}
+
+// PublishExpecting publishes as Publish does, and with expected set only
+// while the published version is still *expected (the zero id: none is
+// published); otherwise it returns ErrPublishedChanged. The published
+// version is locked first, so a concurrent publish is seen.
+func (s *Store) PublishExpecting(ctx context.Context, org ids.OrgID, id ids.UUID, publishedBy string, expected *ids.UUID, ev *audit.Event) error {
 	err := s.Pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
 		q := dbq.New(tx)
+		if expected != nil {
+			cur, err := q.LockPublishedPolicyVersion(ctx, org)
+			if db.IsNoRows(err) {
+				cur, err = ids.UUID{}, nil
+			}
+			if err != nil {
+				return err
+			}
+			if cur != *expected {
+				return ErrPublishedChanged
+			}
+		}
 		if _, err := q.SupersedePublishedPolicy(ctx, org, id); err != nil {
 			return err
 		}
@@ -152,6 +174,11 @@ func (s *Store) Publish(ctx context.Context, org ids.OrgID, id ids.UUID, publish
 		}
 		return record(ctx, tx, ev, map[string]string{"version_id": id.String()})
 	})
+	// Two publishes that both expected none: the second meets the first's
+	// row at the one-published index.
+	if expected != nil && db.IsUniqueViolation(err) {
+		return ErrPublishedChanged
+	}
 	if errors.Is(err, db.ErrLostRace) {
 		return ErrNotDraft
 	}
