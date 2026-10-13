@@ -48,15 +48,24 @@ type Engine struct {
 	// declarations, by fact name. A rule reading a fact no provider
 	// declares is refused at compile time.
 	Facts map[string]fdomain.Type
+	// Subjects, when set, is the subject type each fact is declared about.
+	// A rule on an operation that is only ever a consequence may then read
+	// only facts declared about that operation's target type: the
+	// Authority reads them about the consequence's own target, and a fact
+	// no one reports about it would make every action that may cause the
+	// consequence CANNOT_AUTHORIZE (G0 M8, HR-206). Policy versions set
+	// it; the Authority does not need to.
+	Subjects map[string]string
 }
 
 // Compiled is a bundle with its conditions compiled per definition digest.
 type Compiled struct {
-	Bundle *domain.Bundle
-	limits celenv.Limits
-	facts  map[string]fdomain.Type
-	mu     sync.Mutex
-	byDef  map[string]map[string]compiledRule // definition digest → rule id
+	Bundle   *domain.Bundle
+	limits   celenv.Limits
+	facts    map[string]fdomain.Type
+	subjects map[string]string
+	mu       sync.Mutex
+	byDef    map[string]map[string]compiledRule // definition digest → rule id
 }
 
 type compiledRule struct {
@@ -73,7 +82,7 @@ func (e *Engine) Compile(b *domain.Bundle, definitions []*defs.Definition) (*Com
 	if err := b.Validate(); err != nil {
 		return nil, err
 	}
-	c := &Compiled{Bundle: b, limits: e.Limits, facts: e.Facts, byDef: map[string]map[string]compiledRule{}}
+	c := &Compiled{Bundle: b, limits: e.Limits, facts: e.Facts, subjects: e.Subjects, byDef: map[string]map[string]compiledRule{}}
 	var errs []error
 	for _, d := range definitions {
 		for id, cr := range c.forDefinition(d) {
@@ -291,6 +300,10 @@ func (c *Compiled) factsFor(d *defs.Definition, r *domain.Rule) ([]string, error
 	for _, f := range r.Facts {
 		if _, ok := c.facts[f.Name]; !ok {
 			return nil, fmt.Errorf("no provider declares fact %q", f.Name)
+		}
+		if s, ok := c.subjects[f.Name]; ok && s != d.Target.Type && d.Access == defs.AccessWrite && len(d.Mappings) == 0 {
+			return nil, fmt.Errorf("%s is only ever a consequence, decided with facts about its own target, a %s, but fact %q is declared about a %s: "+
+				"a rule on a consequence may read only facts about what it acts on", d.Operation, d.Target.Type, f.Name, s)
 		}
 		needs = append(needs, f.Name)
 	}
