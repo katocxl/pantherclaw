@@ -67,10 +67,8 @@ func (c coverageClaims) CoverageClaim(ctx context.Context, org ids.OrgID, agent,
 	out := &finalize.CoverageClaim{
 		V: 1, State: claim.State.String(), Snapshot: claim.Snapshot.String(),
 		Scope:         finalize.CoverageClaimScope{Agent: agent.String(), Connection: connection.String(), Operation: operation},
-		SnapshotState: claim.SnapshotState.String(), Lapsed: claim.Lapsed, Reason: claim.Reason, Exclusions: []string{},
-	}
-	for _, x := range claim.Exclusions {
-		out.Exclusions = append(out.Exclusions, x.String())
+		SnapshotState: claim.SnapshotState.String(), Lapsed: claim.Lapsed, Reason: claim.Reason,
+		Exclusions: append([]string{}, claim.Exclusions...),
 	}
 	if claim.ExpiresAt != nil {
 		out.ExpiresAt = evdomain.Timestamp(*claim.ExpiresAt)
@@ -83,4 +81,14 @@ func (c coverageClaims) CoverageClaim(ctx context.Context, org ids.OrgID, agent,
 func mountCoveragePages(web *webhttp.Handler, pool *db.Pool, cfg *Config) {
 	f := freshnessOf(cfg)
 	web.WithCoverage(&covapp.Service{Pool: pool, Freshness: f}, f)
+}
+
+// claimTimeoutOf returns the configured claim timeout; Validate has
+// checked it, so an error only falls back to the default.
+func claimTimeoutOf(cfg *Config) time.Duration {
+	d, err := cfg.claimTimeout()
+	if err != nil {
+		return finalize.DefaultClaimTimeout
+	}
+	return d
 }

@@ -30,90 +30,94 @@ var Actor = evdomain.Actor{Type: "system", ID: "coverage-reassess"}
 
 // EntryScope is a scope as the ledger names it.
 type EntryScope struct {
-	Agent      ids.UUID `json:"agent"`
-	Connection ids.UUID `json:"connection"`
-	Operation  string   `json:"operation"`
+	Agent      string `json:"agent"`
+	Connection string `json:"connection"`
+	Operation  string `json:"operation"`
 }
 
 // Entry is the ledger body of a coverage snapshot: what a receipt's
 // coverage claim is checked against (HR-217). The full record stays in
-// the snapshot row; routes_digest binds its routes to the entry.
+// the snapshot row; routes_digest binds its routes to the entry. Ids are
+// canonical UUID strings, as receipts and pclaw verify name them.
 type Entry struct {
 	V            int        `json:"v"`
 	Scope        EntryScope `json:"scope"`
 	State        string     `json:"state"`
-	Snapshot     ids.UUID   `json:"snapshot"`
+	Snapshot     string     `json:"snapshot"`
 	ComputedAt   string     `json:"computed_at"`
 	ExpiresAt    string     `json:"expires_at,omitzero"`
-	Exclusions   []ids.UUID `json:"exclusions"`
+	Exclusions   []string   `json:"exclusions"`
 	RoutesDigest string     `json:"routes_digest"`
-	Closure      *ids.UUID  `json:"closure,omitzero"`
+	Closure      string     `json:"closure,omitzero"`
 }
 
 // InvalidationEntry is the ledger body of a coverage invalidation, which
-// a lapsed claim names as its reason.
+// a lapsed claim names as its reason; ids are canonical UUID strings.
 type InvalidationEntry struct {
-	V          int       `json:"v"`
-	ID         ids.UUID  `json:"id"`
-	Connection ids.UUID  `json:"connection"`
-	Agent      *ids.UUID `json:"agent,omitzero"`
-	Kind       string    `json:"kind"`
-	Subject    *ids.UUID `json:"subject,omitzero"`
-	OccurredAt string    `json:"occurred_at"`
+	V          int    `json:"v"`
+	ID         string `json:"id"`
+	Connection string `json:"connection"`
+	Agent      string `json:"agent,omitzero"`
+	Kind       string `json:"kind"`
+	Subject    string `json:"subject,omitzero"`
+	OccurredAt string `json:"occurred_at"`
 }
 
 // Snapshot is the computed record of one scope, kept as the snapshot
-// row's body; its ledger entry is the Entry made from it.
+// row's body; its ledger entry is the Entry made from it. Ids are
+// canonical UUID strings, like the ledger's.
 type Snapshot struct {
 	V          int             `json:"v"`
-	ID         ids.UUID        `json:"id"`
-	Agent      ids.UUID        `json:"agent"`
-	Connection ids.UUID        `json:"connection"`
+	ID         string          `json:"id"`
+	Agent      string          `json:"agent"`
+	Connection string          `json:"connection"`
 	Operation  string          `json:"operation"`
 	State      string          `json:"state"`
 	Reasons    []string        `json:"reasons"`
 	Routes     []SnapshotRoute `json:"routes"`
-	Closure    *ids.UUID       `json:"closure,omitzero"`
+	Closure    string          `json:"closure,omitzero"`
 	ExpiresAt  string          `json:"expires_at,omitzero"`
 	Excluded   bool            `json:"excluded,omitzero"`
-	Exclusions []ids.UUID      `json:"exclusions,omitzero"`
+	Exclusions []string        `json:"exclusions,omitzero"`
 	// LastValid is the last ENFORCED snapshot a downgrade follows (F442);
 	// Cause the invalidation that asked for this reassessment.
-	LastValid  *ids.UUID `json:"last_valid,omitzero"`
-	Cause      *ids.UUID `json:"cause,omitzero"`
-	ComputedAt string    `json:"computed_at"`
+	LastValid  string `json:"last_valid,omitzero"`
+	Cause      string `json:"cause,omitzero"`
+	ComputedAt string `json:"computed_at"`
 }
 
-// SnapshotRoute is one route of a snapshot.
+// SnapshotRoute is one route of a snapshot. routes_digest is the SHA-256
+// of the canonical (JCS) {"routes": [...]} of these, ids as canonical UUID
+// strings, so anyone holding the exported routes can recompute it.
 type SnapshotRoute struct {
-	Kind    string    `json:"kind"`
-	Channel string    `json:"channel,omitzero"`
-	Locator string    `json:"locator,omitzero"`
-	Route   *ids.UUID `json:"route,omitzero"`
-	Status  string    `json:"status"`
-	Closure *ids.UUID `json:"closure,omitzero"`
+	Kind    string `json:"kind"`
+	Channel string `json:"channel,omitzero"`
+	Locator string `json:"locator,omitzero"`
+	Route   string `json:"route,omitzero"`
+	Status  string `json:"status"`
+	Closure string `json:"closure,omitzero"`
 }
 
 // same reports whether two snapshots record the same coverage, whatever
 // caused them and when.
 func (s Snapshot) same(o Snapshot) bool {
-	s.ID, o.ID, s.Cause, o.Cause, s.ComputedAt, o.ComputedAt = ids.UUID{}, ids.UUID{}, nil, nil, "", ""
+	s.ID, o.ID, s.Cause, o.Cause, s.ComputedAt, o.ComputedAt = "", "", "", "", "", ""
 	a, errA := json.Marshal(s)
 	b, errB := json.Marshal(o)
 	return errA == nil && errB == nil && string(a) == string(b)
 }
 
-func optID(id ids.UUID) *ids.UUID {
+func optID(id ids.UUID) string {
 	if id.IsZero() {
-		return nil
+		return ""
 	}
-	return &id
+	return id.String()
 }
 
 func snapshotOf(sc domain.Scope, r domain.Result, exclusions []domain.Exclusion) Snapshot {
 	s := Snapshot{
-		V: 1, Agent: sc.Agent, Connection: sc.Connection, Operation: sc.Operation, State: r.State.String(),
-		Reasons: slices.Clone(r.Reasons), Closure: r.Closure, Excluded: r.Excluded, Routes: []SnapshotRoute{},
+		V: 1, Agent: sc.Agent.String(), Connection: sc.Connection.String(), Operation: sc.Operation, State: r.State.String(),
+		Reasons: slices.Clone(r.Reasons), Closure: optString(r.Closure), Excluded: r.Excluded, Routes: []SnapshotRoute{},
 	}
 	if s.Reasons == nil {
 		s.Reasons = []string{}
@@ -122,7 +126,7 @@ func snapshotOf(sc domain.Scope, r domain.Result, exclusions []domain.Exclusion)
 		s.ExpiresAt = evdomain.Timestamp(*r.ExpiresAt)
 	}
 	for _, x := range exclusions {
-		s.Exclusions = append(s.Exclusions, x.ID)
+		s.Exclusions = append(s.Exclusions, x.ID.String())
 	}
 	s.Routes = append(s.Routes, RoutesOf(r)...)
 	return s
@@ -148,6 +152,7 @@ func (s *Service) reassess(ctx context.Context, tx db.TenantTx, sc domain.Scope,
 	current, err := q.CurrentCoverageSnapshot(ctx, dbq.CurrentCoverageSnapshotParams{
 		OrgID: tx.OrgID(), AgentID: sc.Agent, ConnectionID: sc.Connection, Operation: sc.Operation,
 	})
+	var lastValid *ids.UUID
 	switch {
 	case err == nil:
 		var prev Snapshot
@@ -156,10 +161,11 @@ func (s *Service) reassess(ctx context.Context, tx db.TenantTx, sc domain.Scope,
 		}
 		if r.State != domain.Enforced {
 			if current.State == domain.Enforced.String() {
-				next.LastValid = &current.ID
+				lastValid = &current.ID
 			} else {
-				next.LastValid = current.LastValidID
+				lastValid = current.LastValidID
 			}
+			next.LastValid = optString(lastValid)
 		}
 		// A change always records a snapshot, even an unchanged one: a claim
 		// on a snapshot computed before a change has lapsed, so a claim that
@@ -170,7 +176,8 @@ func (s *Service) reassess(ctx context.Context, tx db.TenantTx, sc domain.Scope,
 	case !db.IsNoRows(err):
 		return false, err
 	}
-	next.ID, next.Cause, next.ComputedAt = ids.NewV7(), cause, evdomain.Timestamp(now)
+	id := ids.NewV7()
+	next.ID, next.Cause, next.ComputedAt = id.String(), optString(cause), evdomain.Timestamp(now)
 	body, err := evdomain.CanonicalBody(next)
 	if err != nil {
 		return false, err
@@ -185,8 +192,8 @@ func (s *Service) reassess(ctx context.Context, tx db.TenantTx, sc domain.Scope,
 	}
 	digest := sha256.Sum256(entryBody)
 	_, err = q.InsertCoverageSnapshot(ctx, dbq.InsertCoverageSnapshotParams{
-		OrgID: tx.OrgID(), ID: next.ID, AgentID: sc.Agent, ConnectionID: sc.Connection, Operation: sc.Operation,
-		State: r.State.String(), Reasons: next.Reasons, ClosureID: r.Closure, LastValidID: next.LastValid,
+		OrgID: tx.OrgID(), ID: id, AgentID: sc.Agent, ConnectionID: sc.Connection, Operation: sc.Operation,
+		State: r.State.String(), Reasons: next.Reasons, ClosureID: r.Closure, LastValidID: lastValid,
 		InvalidationID: cause, Body: body, BodySha256: digest[:], LedgerEntryID: entry.ID, ExpiresAt: r.ExpiresAt,
 		ComputedAt: now.Truncate(time.Microsecond),
 	})
@@ -213,9 +220,17 @@ func entryOf(s Snapshot) ([]byte, error) {
 		RoutesDigest: "sha256:" + hex.EncodeToString(digest[:]), Closure: s.Closure,
 	}
 	if e.Exclusions == nil {
-		e.Exclusions = []ids.UUID{}
+		e.Exclusions = []string{}
 	}
 	return evdomain.CanonicalBody(e)
+}
+
+// optString returns id as a canonical UUID string, or "" when nil.
+func optString(id *ids.UUID) string {
+	if id == nil {
+		return ""
+	}
+	return id.String()
 }
 
 // RoutesOf is a computed result's routes as a snapshot records them.

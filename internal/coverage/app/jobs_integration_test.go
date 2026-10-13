@@ -65,7 +65,7 @@ func TestHR211_TheReassessJobFollowsEveryChange(t *testing.T) {
 		t.Fatalf("after a connection change %+v", r)
 	}
 	row, s, _ := f.current(t, op)
-	if row.State != "PARTIAL" || row.InvalidationID == nil || s.Cause == nil || *s.Cause != *row.InvalidationID ||
+	if row.State != "PARTIAL" || row.InvalidationID == nil || s.Cause != row.InvalidationID.String() ||
 		row.LastValidID == nil {
 		t.Fatalf("after a connection change: %s cause %v last valid %v", row.State, row.InvalidationID, row.LastValidID)
 	}

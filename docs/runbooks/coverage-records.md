@@ -35,7 +35,7 @@ Every equivalent route kind is listed in a record. A kind that no source showed 
 - **Lapse.** A record holds while its snapshot is unexpired and no change to the scope is pending. Once it lapses, the next read recomputes the scope from current evidence and reads it at most `PARTIAL`, lower when the evidence is. It keeps the last valid `ENFORCED` snapshot and says why it lapsed (F442).
 - **Reassessment.** The reassess job runs every `coverage.reassess_every` (1 min by default). It reads new traffic, records a new snapshot for every scope that changed or that a change touched, enters each change in the ledger (`coverage.invalidation`), and derives each agent's protection. A scope whose evidence cannot be read is skipped and logged; its changes stay pending.
 
-Each snapshot is also a `coverage.snapshot` ledger entry. A decision receipt names the snapshot that was current for its scope (HR-217), and `pclaw verify` checks that claim against the snapshot ledger (`receipt.coverage` in [evidence-verification.md](evidence-verification.md)).
+Each snapshot is also a `coverage.snapshot` ledger entry. A decision receipt names the snapshot that was current for its scope (HR-217), and `pclaw verify` checks that claim against the snapshot ledger (`receipt.coverage` in [evidence-verification.md](evidence-verification.md)). The claim is read within `coverage.claim_timeout` (50 ms by default, 10 ms–2 s). A read that fails or takes longer never holds up the decision: the receipt carries `{"unavailable": "timeout"}` or `{"unavailable": "error"}`, the server logs `coverage.claim_unavailable`, and `pclaw verify` reports "claim unavailable (timeout)" as not available. Many such receipts mean the coverage tables are slow or failing; raise the timeout only after checking the database.
 
 ## Commands
 
@@ -63,7 +63,7 @@ Review exclusions before they expire, and revoke any whose reason no longer hold
 
 ## Credential-overreach findings
 
-For each connection, the permissions its credentials actually hold are compared with what the package declares for the operations the org's grants allow. For GitHub, the held permissions are those of the App installation behind the connection, as last read. Until the gateway has read them (after a re-seal, say), overreach is not observed: existing findings stay as they are, and new ones appear once the permissions are read. The org's other Apps, which the org scan reports, are routes of their own, not this credential. The finding also lists what the operations executed in the last 30 days used. Reach beyond the need is an exposure finding, never extra permission:
+For each connection, the permissions its credentials actually hold are compared with what the package declares for the operations the org's grants allow. For GitHub, the held permissions are those of the App installation behind the connection, as last read. Until the gateway has read them (after a re-seal, say), and once its last read is more than 7 days old, overreach is not observed: existing findings stay as they are, and new ones appear once the permissions are read. The org's other Apps, which the org scan reports, are routes of their own, not this credential. The finding also lists what the operations executed in the last 30 days used. Reach beyond the need is an exposure finding, never extra permission:
 
 | Severity | Excess |
 |---|---|

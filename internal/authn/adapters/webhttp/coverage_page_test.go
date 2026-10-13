@@ -68,7 +68,7 @@ func coverageRecord() covapp.Record {
 		Reasons:  []string{"invalidated:credential", "route_not_closed:git_ssh"},
 		Snapshot: &dbq.PcCoverageSnapshot{ID: ids.NewV7(), ComputedAt: at},
 		Body: covapp.Snapshot{Routes: []covapp.SnapshotRoute{
-			{Kind: "channel", Channel: "http", Status: "mediated", Closure: &closure},
+			{Kind: "channel", Channel: "http", Status: "mediated", Closure: closure.String()},
 			{Kind: "git_ssh", Status: "not_observed"},
 			{Kind: "direct_api", Locator: `api.example.com"><script>x</script>`, Status: "possible"},
 		}},
@@ -146,4 +146,4 @@ func TestCoveragePagesShowOnlyWhatTheEvidenceSays(t *testing.T) {
 	}
 }
 
-func closureOf(r covapp.Record) string { return r.Body.Routes[0].Closure.String() }
+func closureOf(r covapp.Record) string { return r.Body.Routes[0].Closure }

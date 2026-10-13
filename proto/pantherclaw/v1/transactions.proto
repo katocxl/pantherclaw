@@ -263,6 +263,10 @@ message DecisionCoverage {
   string reason = 5;
   // The exclusions the snapshot listed.
   repeated string exclusion_ids = 6;
+  // Set when the claim could not be read at decision time: "timeout" or
+  // "error". The receipt then states no coverage, and every other field is
+  // empty; an unavailable claim is never a state.
+  string unavailable = 7;
 }
 
 // Execution is the dispatch attempt and its signed execution receipt.

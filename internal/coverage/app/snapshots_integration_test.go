@@ -81,11 +81,11 @@ func TestHR211_ReassessmentRecordsChangesAndKeepsTheLastValidRecord(t *testing.T
 	if err := json.Unmarshal(body, &entry); err != nil {
 		t.Fatal(err)
 	}
-	if row.State != "PARTIAL" || s.ID != row.ID || !slices.Equal(row.BodySha256, digest[:]) ||
+	if row.State != "PARTIAL" || s.ID != row.ID.String() || !slices.Equal(row.BodySha256, digest[:]) ||
 		!slices.Contains(s.Reasons, domain.ReasonNoClosure) {
 		t.Fatalf("traffic only: %s %v (body id %v, row %v)", row.State, s.Reasons, s.ID, row.ID)
 	}
-	if entry.Snapshot != row.ID || entry.State != "PARTIAL" || entry.Scope.Operation != op || entry.Scope.Agent != f.agent ||
+	if entry.Snapshot != row.ID.String() || entry.State != "PARTIAL" || entry.Scope.Operation != op || entry.Scope.Agent != f.agent.String() ||
 		!strings.HasPrefix(entry.RoutesDigest, "sha256:") || entry.Exclusions == nil {
 		t.Fatalf("ledger entry %+v", entry)
 	}
@@ -107,7 +107,7 @@ func TestHR211_ReassessmentRecordsChangesAndKeepsTheLastValidRecord(t *testing.T
 		VALUES ($1, $2, 'payments-refund', 'monitor', 'test')`, f.org, f.conn)
 	f.reassess(t)
 	row, s, _ = f.current(t, op)
-	if row.State != "OBSERVE_ONLY" || row.LastValidID == nil || *row.LastValidID != enforced.ID || s.LastValid == nil {
+	if row.State != "OBSERVE_ONLY" || row.LastValidID == nil || *row.LastValidID != enforced.ID || s.LastValid != enforced.ID.String() {
 		t.Fatalf("after monitor mode: %s, last valid %v", row.State, row.LastValidID)
 	}
 }

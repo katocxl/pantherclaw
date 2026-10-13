@@ -68,6 +68,9 @@ type Authority struct {
 	// Coverage gives each receipt of an action through a connection the
 	// coverage claim of its scope (G0 M9, HR-217); nil gives none.
 	Coverage CoverageClaimer
+	// ClaimTimeout bounds each coverage claim read (coverage.claim_timeout);
+	// zero is DefaultClaimTimeout.
+	ClaimTimeout time.Duration
 }
 
 // Result is the answer to Authorize.

@@ -1049,7 +1049,11 @@ type DecisionCoverage struct {
 	// Why: "expired" or an invalidation kind.
 	Reason string `protobuf:"bytes,5,opt,name=reason,proto3" json:"reason,omitempty"`
 	// The exclusions the snapshot listed.
-	ExclusionIds  []string `protobuf:"bytes,6,rep,name=exclusion_ids,json=exclusionIds,proto3" json:"exclusion_ids,omitempty"`
+	ExclusionIds []string `protobuf:"bytes,6,rep,name=exclusion_ids,json=exclusionIds,proto3" json:"exclusion_ids,omitempty"`
+	// Set when the claim could not be read at decision time: "timeout" or
+	// "error". The receipt then states no coverage, and every other field is
+	// empty; an unavailable claim is never a state.
+	Unavailable   string `protobuf:"bytes,7,opt,name=unavailable,proto3" json:"unavailable,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1124,6 +1128,13 @@ func (x *DecisionCoverage) GetExclusionIds() []string {
 		return x.ExclusionIds
 	}
 	return nil
+}
+
+func (x *DecisionCoverage) GetUnavailable() string {
+	if x != nil {
+		return x.Unavailable
+	}
+	return ""
 }
 
 // Execution is the dispatch attempt and its signed execution receipt.
@@ -2641,7 +2652,7 @@ const file_pantherclaw_v1_transactions_proto_rawDesc = "" +
 	"\vcreate_time\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"createTime\x12<\n" +
 	"\bcoverage\x18\n" +
-	" \x01(\v2 .pantherclaw.v1.DecisionCoverageR\bcoverage\"\x83\x02\n" +
+	" \x01(\v2 .pantherclaw.v1.DecisionCoverageR\bcoverage\"\xa5\x02\n" +
 	"\x10DecisionCoverage\x123\n" +
 	"\x05state\x18\x01 \x01(\x0e2\x1d.pantherclaw.v1.CoverageStateR\x05state\x12\x1f\n" +
 	"\vsnapshot_id\x18\x02 \x01(\tR\n" +
@@ -2649,7 +2660,8 @@ const file_pantherclaw_v1_transactions_proto_rawDesc = "" +
 	"\x0esnapshot_state\x18\x03 \x01(\x0e2\x1d.pantherclaw.v1.CoverageStateR\rsnapshotState\x12\x16\n" +
 	"\x06lapsed\x18\x04 \x01(\bR\x06lapsed\x12\x16\n" +
 	"\x06reason\x18\x05 \x01(\tR\x06reason\x12#\n" +
-	"\rexclusion_ids\x18\x06 \x03(\tR\fexclusionIds\"\xd8\x03\n" +
+	"\rexclusion_ids\x18\x06 \x03(\tR\fexclusionIds\x12 \n" +
+	"\vunavailable\x18\a \x01(\tR\vunavailable\"\xd8\x03\n" +
 	"\tExecution\x12\x1d\n" +
 	"\n" +
 	"attempt_id\x18\x01 \x01(\tR\tattemptId\x12\x1b\n" +
