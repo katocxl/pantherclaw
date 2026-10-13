@@ -617,3 +617,18 @@ func Unread(branch, at, why string) map[string]any {
 	v, _ := object(Triggers{Branch: branch, At: at}.unknown(why))
 	return v
 }
+
+// UnreadFact is the value reported for fact name when it could not be read
+// (#308 review follow-up), so that an earlier observation, still fresh, is
+// never what the decision uses: deploy triggers are unknown; the people are
+// incomplete, which no reviewer can meet (HR-207); any other fact carries
+// none of its members, which no rule or binding accepts.
+func UnreadFact(name, branch, at, why string) map[string]any {
+	switch name {
+	case RepoTriggers, BranchTriggers:
+		return Unread(branch, at, why)
+	case PullPeople:
+		return map[string]any{"complete": false, "unread": why}
+	}
+	return map[string]any{"unread": why}
+}

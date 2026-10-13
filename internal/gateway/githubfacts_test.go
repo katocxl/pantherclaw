@@ -118,21 +118,36 @@ func TestHR160_TheGatewayReportsGitHubFactsBeforeTheDecision(t *testing.T) {
 }
 
 // TestHR160_NoFactTokenNoFacts: when the fact token cannot be minted, the
-// gateway reports no value it read, only the deploy trigger as unknown (so
-// an earlier "none" still fresh is not what decides), and the decision goes
-// ahead without the other facts (CANNOT_AUTHORIZE or "Consequence unknown"
-// there, never a guess here).
+// gateway reports no value it read, and every fact as unread (#308 review
+// follow-up), so an earlier observation still fresh is not what decides:
+// the deploy trigger unknown, the people incomplete, the others without
+// their members. The decision goes ahead and fails closed there
+// (CANNOT_AUTHORIZE or "Consequence unknown"), never a guess here.
 func TestHR160_NoFactTokenNoFacts(t *testing.T) {
 	w := newGitHubWorld(t)
 	h := setup(t, withGitHubApp(t, w), withFactReports)
 	w.sim.SetFaults(github.Faults{TokenStatus: http.StatusInternalServerError})
 	r := h.do(t, http.MethodPut, "/payments/repos/acme/payments/pulls/1/merge", `{"sha":"`+w.head+`"}`, nil)
 	got := h.factReports()
-	if len(got) != 1 || len(got[0].obs) != 1 || got[0].obs[0].GetName() != githubfacts.RepoTriggers || h.auth.snap().authorize != 1 {
+	if len(got) != 1 || len(got[0].obs) != 6 || h.auth.snap().authorize != 1 {
 		t.Fatalf("reports %+v, %d decisions", got, h.auth.snap().authorize)
 	}
-	if d := members(t, got[0].obs[0]); d["state"] != "unknown" || d["unknown"] != "no read token" {
-		t.Fatalf("an unread deploy trigger: %v", d)
+	for _, o := range got[0].obs {
+		d := members(t, o)
+		switch o.GetName() {
+		case githubfacts.RepoTriggers:
+			if d["state"] != "unknown" || d["unknown"] != "no read token" {
+				t.Errorf("an unread deploy trigger: %v", d)
+			}
+		case githubfacts.PullPeople:
+			if d["complete"] != false || d["unread"] != "no read token" {
+				t.Errorf("unread people: %v", d)
+			}
+		default:
+			if len(d) != 1 || d["unread"] != "no read token" {
+				t.Errorf("unread %s: %v", o.GetName(), d)
+			}
+		}
 	}
 	if r.code != http.StatusBadGateway || r.refusal.Error != "credential_unavailable" {
 		t.Fatalf("merge = %d %+v", r.code, r.refusal)

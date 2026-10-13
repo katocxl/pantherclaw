@@ -57,12 +57,13 @@ func githubFactNames(conn *control.Connection, def *defs.Definition) []string {
 // reportGitHubFacts reads the github.* facts an action needs with a
 // read-only installation token of its own, within the fact timeout, and
 // reports them before the decision (G0 M8 decision 5, HR-160). It reports
-// no value it could not read: the decision then sees the fact missing,
-// which is CANNOT_AUTHORIZE for a prerequisite and "Consequence unknown"
-// for a consequence (HR-206). A deploy-trigger fact it could not read is
-// reported unknown, so an earlier observation still fresh (a "none" read
-// before a deploy workflow was pushed) is never what the decision uses. It
-// never fails the call itself, and reports whether it read.
+// no value it could not read: a fact it could not read is reported unread
+// (githubfacts.UnreadFact), so an earlier observation still fresh (a
+// "none" read before a deploy workflow was pushed, people before a push)
+// is never what the decision uses, which then fails closed: CANNOT_AUTHORIZE
+// for a prerequisite, AUTHORSHIP_UNKNOWN for the people and "Consequence
+// unknown" for a consequence (HR-206, HR-207). It never fails the call
+// itself, and reports whether it read.
 func (e *Engine) reportGitHubFacts(ctx context.Context, conn *control.Connection, a actionir.ActionIR) bool {
 	if e.reportFacts == nil || conn.Credential.GetKind() != credentials.KindGitHubApp || conn.Package == nil {
 		return false
@@ -72,10 +73,10 @@ func (e *Engine) reportGitHubFacts(ctx context.Context, conn *control.Connection
 		return false
 	}
 	names := githubFactNames(conn, def)
-	s, ok := subject(def, a)
-	if len(names) == 0 || !ok {
+	if len(names) == 0 {
 		return false
 	}
+	s, ok := subject(def, a)
 	// The reads are bounded; the report is the control plane's own call.
 	read, cancel := context.WithTimeout(ctx, e.factTimeout)
 	defer cancel()
@@ -90,13 +91,12 @@ func (e *Engine) reportGitHubFacts(ctx context.Context, conn *control.Connection
 			obs = append(obs, &pb.FactObservation{Name: name, SubjectType: a.Target.Type, SubjectId: a.Target.ID, Value: raw, ObserveTime: observed})
 		}
 	}
-	// report sends what was read, with every deploy-trigger fact that was
-	// not read as unknown.
+	// report sends what was read, with every fact that was not read as
+	// unread (#308 review follow-up).
 	report := func(why string) {
 		for _, n := range names {
-			if (n == githubfacts.RepoTriggers || n == githubfacts.BranchTriggers) &&
-				!slices.ContainsFunc(obs, func(o *pb.FactObservation) bool { return o.GetName() == n }) {
-				add(n, githubfacts.Unread(s.Branch, s.At, why))
+			if !slices.ContainsFunc(obs, func(o *pb.FactObservation) bool { return o.GetName() == n }) {
+				add(n, githubfacts.UnreadFact(n, s.Branch, s.At, why))
 			}
 		}
 		if len(obs) == 0 {
@@ -105,6 +105,10 @@ func (e *Engine) reportGitHubFacts(ctx context.Context, conn *control.Connection
 		if err := e.reportFacts(ctx, conn.GetId(), obs); err != nil {
 			warn("gateway.facts_not_reported", err)
 		}
+	}
+	if !ok {
+		report("the action names no pull request or branch to read them for")
+		return true
 	}
 	c, err := e.client(conn)
 	if err != nil {
