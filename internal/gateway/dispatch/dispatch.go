@@ -90,7 +90,10 @@ const (
 // Codes the gateway sets itself (Result.Code); a decision's code is its
 // decisive reason.
 const (
-	CodeAuthorityUnavailable  = "authority_unavailable"
+	CodeAuthorityUnavailable = "authority_unavailable"
+	// CodeFactsUnreported: the facts the decision needs could not be
+	// reported to the control plane, so no decision was asked for.
+	CodeFactsUnreported       = "facts_unreported"
 	CodeContainmentStale      = "containment_stale"
 	CodeKillSwitch            = "kill_switch"
 	CodeGatewayRevoked        = "gateway_revoked"
@@ -351,8 +354,14 @@ func (e *Engine) dispatch(ctx context.Context, c Call, t *timer) Result {
 	if code := accountRefusal(conn, c.Action.Action); code != "" {
 		return Result{Class: CannotAuthorize, Code: code, Decision: pb.Decision_DECISION_CANNOT_AUTHORIZE}
 	}
-	if e.reportGitHubFacts(ctx, conn, c.Action.Action) {
+	if read, unreported := e.reportGitHubFacts(ctx, conn, c.Action.Action); read {
 		t.lap("facts")
+		if unreported != nil {
+			// The facts it read, or could not, never reached the server, which
+			// may still hold a fresh earlier observation: no decision is asked
+			// for, so that observation cannot decide (#353 review).
+			return Result{Class: CannotAuthorize, Code: CodeFactsUnreported, Decision: pb.Decision_DECISION_CANNOT_AUTHORIZE}
+		}
 	}
 	ar, err := e.authority.Authorize(ctx, &pb.AuthorizeRequest{ActionIr: c.Action.Canonical, Workload: c.Workload})
 	t.lap("authz")

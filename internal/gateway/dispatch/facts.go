@@ -60,21 +60,23 @@ func githubFactNames(conn *control.Connection, def *defs.Definition) []string {
 // no value it could not read: a fact it could not read is reported unread
 // (githubfacts.UnreadFact), so an earlier observation still fresh (a
 // "none" read before a deploy workflow was pushed, people before a push)
-// is never what the decision uses, which then fails closed: CANNOT_AUTHORIZE
-// for a prerequisite, AUTHORSHIP_UNKNOWN for the people and "Consequence
-// unknown" for a consequence (HR-206, HR-207). It never fails the call
-// itself, and reports whether it read.
-func (e *Engine) reportGitHubFacts(ctx context.Context, conn *control.Connection, a actionir.ActionIR) bool {
+// is never what the decision uses: the server counts an unread fact as
+// missing, so a prerequisite is CANNOT_AUTHORIZE and a consequence
+// "Consequence unknown" (HR-206, HR-207). It reports whether it tried, and
+// unreported when the report itself failed: then the server still holds
+// the earlier observation, so the caller asks for no decision (#353
+// review).
+func (e *Engine) reportGitHubFacts(ctx context.Context, conn *control.Connection, a actionir.ActionIR) (tried bool, unreported error) {
 	if e.reportFacts == nil || conn.Credential.GetKind() != credentials.KindGitHubApp || conn.Package == nil {
-		return false
+		return false, nil
 	}
 	def, ok := conn.Package.Definition(a.Operation)
 	if !ok {
-		return false
+		return false, nil
 	}
 	names := githubFactNames(conn, def)
 	if len(names) == 0 {
-		return false
+		return false, nil
 	}
 	s, ok := subject(def, a)
 	// The reads are bounded; the report is the control plane's own call.
@@ -104,23 +106,24 @@ func (e *Engine) reportGitHubFacts(ctx context.Context, conn *control.Connection
 		}
 		if err := e.reportFacts(ctx, conn.GetId(), obs); err != nil {
 			warn("gateway.facts_not_reported", err)
+			unreported = err
 		}
 	}
 	if !ok {
 		report("the action names no pull request or branch to read them for")
-		return true
+		return true, unreported
 	}
 	c, err := e.client(conn)
 	if err != nil {
 		warn("gateway.facts_unavailable", err)
 		report("no GitHub client")
-		return true
+		return true, unreported
 	}
 	tok, err := e.mint(read, conn, s.Owner, s.Repo, githubfacts.Scopes, c)
 	if err != nil {
 		warn("gateway.facts_unavailable", err)
 		report("no read token")
-		return true
+		return true, unreported
 	}
 	defer func() {
 		if err := tok.Revoke(context.WithoutCancel(ctx), c); err != nil {
@@ -136,14 +139,14 @@ func (e *Engine) reportGitHubFacts(ctx context.Context, conn *control.Connection
 		if s.At, err = githubfacts.BranchHead(read, get, s.Owner, s.Repo, s.Branch); err != nil {
 			warn("gateway.facts_unavailable", err)
 			report("the branch head was not read")
-			return true
+			return true, unreported
 		}
 	}
 	for _, f := range githubfacts.Read(read, get, s, names) {
 		add(f.Name, f.Value)
 	}
 	report("the workflows were not read")
-	return true
+	return true, unreported
 }
 
 // subject is what an action's facts are about, from its target's parts:

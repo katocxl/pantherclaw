@@ -5,6 +5,7 @@ package gateway
 
 import (
 	"encoding/json/v2"
+	"errors"
 	"maps"
 	"net/http"
 	"slices"
@@ -154,5 +155,22 @@ func TestHR160_NoFactTokenNoFacts(t *testing.T) {
 	}
 	if p, _ := w.sim.PullRequest("acme/payments", 1); p.Merged {
 		t.Fatal("merged without a token")
+	}
+}
+
+// TestHR160_AFactReportThatFailsAsksForNoDecision (#353 review): when the
+// facts the gateway read (or could not) do not reach the control plane, a
+// fresh earlier observation may still be there, so the gateway asks for no
+// decision: the action is CANNOT_AUTHORIZE facts_unreported, and nothing
+// is sent to GitHub.
+func TestHR160_AFactReportThatFailsAsksForNoDecision(t *testing.T) {
+	w := newGitHubWorld(t)
+	h := setup(t, withGitHubApp(t, w), withFactReports, func(h *harness) { h.factsFail = errors.New("control plane unreachable") })
+	r := h.do(t, http.MethodPut, "/payments/repos/acme/payments/pulls/1/merge", `{"sha":"`+w.head+`"}`, nil)
+	if r.code < 400 || r.refusal.Error != "facts_unreported" || h.auth.snap().authorize != 0 {
+		t.Fatalf("merge = %d %+v, %d decisions", r.code, r.refusal, h.auth.snap().authorize)
+	}
+	if p, _ := w.sim.PullRequest("acme/payments", 1); p.Merged {
+		t.Fatal("merged without its facts")
 	}
 }

@@ -399,6 +399,8 @@ type harness struct {
 	// (under circuitMu).
 	reportFacts bool
 	facts       []factReport
+	// factsFail makes every fact report fail.
+	factsFail error
 	// revocations records the tokens the gateway reported not revoked
 	// (under circuitMu): connection, purpose and repository.
 	revocations []string
@@ -498,7 +500,7 @@ func setup(t *testing.T, opts ...func(*harness)) *harness {
 			h.circuitMu.Lock()
 			defer h.circuitMu.Unlock()
 			h.facts = append(h.facts, factReport{conn: conn, obs: obs, decided: decided})
-			return nil
+			return h.factsFail
 		}
 	}
 	h.gw, err = newGateway(&cfg, Deps{
