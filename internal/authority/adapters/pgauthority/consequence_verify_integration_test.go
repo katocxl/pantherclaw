@@ -285,8 +285,10 @@ func TestHR206_APersonsOccurredOpensTheConsequenceAndNothingIsLeftSilently(t *te
 	w.payouts("ch_1", `{"state": "scheduled", "environments": ["payroll"]}`)
 	r := w.recorded(run, "ch_1", "30.00", finalize.Unknown, "")
 	l := w.lease(s, r.TransactionID)
-	if _, err := s.Report(ctx, w.org, w.gwID, txapp.Report{Task: l.Task, Secret: l.Secret, HTTPStatus: 200, Complete: true,
-		Fields: map[string]string{"/id": "re_1"}}); err != nil {
+	if _, err := s.Report(ctx, w.org, w.gwID, txapp.Report{
+		Task: l.Task, Secret: l.Secret, HTTPStatus: 200, Complete: true,
+		Fields: map[string]string{"/id": "re_1"},
+	}); err != nil {
 		t.Fatal(err)
 	}
 	if n := w.count("SELECT count(*) FROM pc.transaction_links WHERE from_transaction_id = $1", r.TransactionID); n != 0 {
