@@ -189,7 +189,7 @@ func TestHR209_OnlyTheLeaseHoldingGatewaySubmitsFindingsAndTheyGrantNothing(t *t
 		{Kind: "github_workflow", Key: key(1), Attributes: map[string]string{"repository": "acme/payments", "path": ".github/workflows/deploy.yml", "environments": "production"}},
 		{Kind: "github_mcp_config", Key: key(2), Attributes: map[string]string{"repository": "acme/payments", "name": "github", "command": "npx"}},
 	}
-	if _, err := inv.SubmitGitHubScan(context.Background(), e.org, gateway, scan.ID, findings); !errors.Is(err, aapp.ErrNoScanLease) {
+	if _, err := inv.SubmitGitHubScan(context.Background(), e.org, gateway, scan.ID, nil, findings); !errors.Is(err, aapp.ErrNoScanLease) {
 		t.Fatalf("before the lease: %v", err)
 	}
 	store := &pgtransactions.Store{Pool: e.pool}
@@ -197,18 +197,22 @@ func TestHR209_OnlyTheLeaseHoldingGatewaySubmitsFindingsAndTheyGrantNothing(t *t
 	if err != nil || len(leases) != 1 {
 		t.Fatalf("leases %+v %v", leases, err)
 	}
-	if _, err := inv.SubmitGitHubScan(context.Background(), e.org, other, scan.ID, findings); !errors.Is(err, aapp.ErrNoScanLease) {
+	lease := leases[0].Secret
+	if _, err := inv.SubmitGitHubScan(context.Background(), e.org, gateway, scan.ID, []byte("not the lease"), findings); !errors.Is(err, aapp.ErrNoScanLease) {
+		t.Fatalf("the gateway without the lease's secret: %v", err)
+	}
+	if _, err := inv.SubmitGitHubScan(context.Background(), e.org, other, scan.ID, lease, findings); !errors.Is(err, aapp.ErrNoScanLease) {
 		t.Fatalf("another gateway: %v", err)
 	}
 	local := []aapp.ScanFinding{{Kind: "mcp_server", Key: key(3), Attributes: map[string]string{"name": "x"}}}
-	if _, err := inv.SubmitGitHubScan(context.Background(), e.org, gateway, scan.ID, local); !errors.Is(err, aapp.ErrScanKind) {
+	if _, err := inv.SubmitGitHubScan(context.Background(), e.org, gateway, scan.ID, lease, local); !errors.Is(err, aapp.ErrScanKind) {
 		t.Fatalf("a local kind from a gateway: %v", err)
 	}
-	r, err := inv.SubmitGitHubScan(context.Background(), e.org, gateway, scan.ID, findings)
+	r, err := inv.SubmitGitHubScan(context.Background(), e.org, gateway, scan.ID, lease, findings)
 	if err != nil || r.Created != 2 {
 		t.Fatalf("submit %+v %v", r, err)
 	}
-	if r, err := inv.SubmitGitHubScan(context.Background(), e.org, gateway, scan.ID, findings[:1]); err != nil || r.Counted != 1 || r.Created != 0 {
+	if r, err := inv.SubmitGitHubScan(context.Background(), e.org, gateway, scan.ID, lease, findings[:1]); err != nil || r.Counted != 1 || r.Created != 0 {
 		t.Fatalf("seen again %+v %v", r, err)
 	}
 	listed, _, err := scans.Findings(admin, scan.ID, 0, "")
@@ -228,7 +232,7 @@ func TestHR209_OnlyTheLeaseHoldingGatewaySubmitsFindingsAndTheyGrantNothing(t *t
 	}, nil); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := inv.SubmitGitHubScan(context.Background(), e.org, gateway, scan.ID, findings); !errors.Is(err, aapp.ErrNoScanLease) {
+	if _, err := inv.SubmitGitHubScan(context.Background(), e.org, gateway, scan.ID, lease, findings); !errors.Is(err, aapp.ErrNoScanLease) {
 		t.Fatalf("after the report: %v", err)
 	}
 	// A person's local scan submits no GitHub kind.
@@ -254,9 +258,11 @@ func TestHR209_APersonsScanNeverTouchesTheGatewaysFindings(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if leases, err := (&pgtransactions.Store{Pool: e.pool}).Claim(context.Background(), e.org, gateway, 4, 30*time.Second); err != nil || len(leases) != 1 {
+	leases, err := (&pgtransactions.Store{Pool: e.pool}).Claim(context.Background(), e.org, gateway, 4, 30*time.Second)
+	if err != nil || len(leases) != 1 {
 		t.Fatalf("leases %+v %v", leases, err)
 	}
+	lease := leases[0].Secret
 	inv := aapp.NewInventory(e.pool, edition(billing.Team))
 	person := e.caller(td.KindUser, td.RoleAgentOwner)
 	seeded := [32]byte{7}
@@ -265,7 +271,7 @@ func TestHR209_APersonsScanNeverTouchesTheGatewaysFindings(t *testing.T) {
 		t.Fatalf("a person's finding: %+v %v", r, err)
 	}
 	workflow := []aapp.ScanFinding{{Kind: "github_workflow", Key: seeded, Attributes: map[string]string{"repository": "acme/payments", "path": ".github/workflows/deploy.yml"}}}
-	if r, err := inv.SubmitGitHubScan(context.Background(), e.org, gateway, scan.ID, workflow); err != nil || r.Created != 1 || r.Counted != 0 {
+	if r, err := inv.SubmitGitHubScan(context.Background(), e.org, gateway, scan.ID, lease, workflow); err != nil || r.Created != 1 || r.Counted != 0 {
 		t.Fatalf("the gateway's finding under a key a person submitted first: %+v %v", r, err)
 	}
 	if r, err := inv.SubmitScan(person, "laptop", pre); err != nil || r.Counted != 1 {
@@ -281,7 +287,7 @@ func TestHR209_APersonsScanNeverTouchesTheGatewaysFindings(t *testing.T) {
 		INSERT INTO pc.discoveries (org_id, id, agent_id, source, scan_key)
 		SELECT $1, gen_random_uuid(), id, 'scan', sha256(id::text::bytea) FROM a`, e.org, aapp.MaxOpenScanDiscoveries)
 	more := []aapp.ScanFinding{{Kind: "github_workflow", Key: [32]byte{8}, Attributes: map[string]string{"repository": "acme/payments", "path": ".github/workflows/release.yml"}}}
-	if r, err := inv.SubmitGitHubScan(context.Background(), e.org, gateway, scan.ID, more); err != nil || r.Created != 1 || r.Dropped != 0 {
+	if r, err := inv.SubmitGitHubScan(context.Background(), e.org, gateway, scan.ID, lease, more); err != nil || r.Created != 1 || r.Dropped != 0 {
 		t.Fatalf("an org scan finding with the people's room full: %+v %v", r, err)
 	}
 }

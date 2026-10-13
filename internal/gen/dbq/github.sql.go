@@ -88,13 +88,26 @@ const gatewayScanRun = `-- name: GatewayScanRun :one
 SELECT r.id FROM pc.github_scan_runs r
 JOIN pc.verifications v ON v.org_id = r.org_id AND v.id = r.verification_id
 WHERE r.org_id = $1 AND r.id = $2 AND v.purpose = 'org_scan' AND v.state = 'LEASED'
-  AND v.leased_by = $3::uuid AND v.lease_expires_at >= now()
+  AND v.leased_by = $3::uuid AND v.lease_hash = $4 AND v.lease_expires_at >= now()
 `
 
-// GatewayScanRun is a scan whose org_scan lease this gateway holds now:
-// only then may it submit the scan's findings (HR-209).
-func (q *Queries) GatewayScanRun(ctx context.Context, orgID ids.OrgID, iD ids.UUID, gatewayID ids.UUID) (ids.UUID, error) {
-	row := q.db.QueryRow(ctx, gatewayScanRun, orgID, iD, gatewayID)
+type GatewayScanRunParams struct {
+	OrgID     ids.OrgID
+	ID        ids.UUID
+	GatewayID ids.UUID
+	LeaseHash []byte
+}
+
+// GatewayScanRun is a scan whose org_scan lease this gateway holds now,
+// under the lease it presents: only then may it submit the scan's
+// findings (HR-209).
+func (q *Queries) GatewayScanRun(ctx context.Context, arg GatewayScanRunParams) (ids.UUID, error) {
+	row := q.db.QueryRow(ctx, gatewayScanRun,
+		arg.OrgID,
+		arg.ID,
+		arg.GatewayID,
+		arg.LeaseHash,
+	)
 	var id ids.UUID
 	err := row.Scan(&id)
 	return id, err

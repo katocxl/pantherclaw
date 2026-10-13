@@ -49,7 +49,7 @@ func (s *GatewayScans) SubmitScanFindings(ctx context.Context, req *pantherclawv
 	if err != nil {
 		return nil, err
 	}
-	r, err := s.inv.SubmitGitHubScan(ctx, gw.Org, gateway, scan, findings)
+	r, err := s.inv.SubmitGitHubScan(ctx, gw.Org, gateway, scan, req.GetLease(), findings)
 	if err != nil {
 		return nil, err
 	}
