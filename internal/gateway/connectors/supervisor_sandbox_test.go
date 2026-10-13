@@ -16,6 +16,7 @@ import (
 
 	"github.com/katocxl/pantherclaw/internal/gateway/connectors"
 	"github.com/katocxl/pantherclaw/internal/gateway/control"
+	"github.com/katocxl/pantherclaw/internal/gateway/upstream"
 	pb "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	"github.com/katocxl/pantherclaw/internal/sandbox/docker"
@@ -90,7 +91,7 @@ func TestHR216_AConnectorRunsHardenedOverStdioWithoutRouteOrCredential(t *testin
 	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Minute)
 	defer cancel()
 	sup.Sync(ctx)
-	client, err := sup.Client(id)
+	client, err := sup.Client(id, 1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -121,7 +122,7 @@ func TestHR216_AConnectorRunsHardenedOverStdioWithoutRouteOrCredential(t *testin
 
 	conf.set(conn(2))
 	sup.Sync(ctx)
-	again, err := sup.Client(id)
+	again, err := sup.Client(id, 2)
 	if err != nil || again == client {
 		t.Fatalf("a new revision kept the old connector: %v", err)
 	}
@@ -141,10 +142,40 @@ func TestHR216_AConnectorRunsHardenedOverStdioWithoutRouteOrCredential(t *testin
 	if !slices.Equal(first, want) || ev.GetConnectionId() != id || ev.GetSpecRevision() != 1 || ev.GetRuntime() != e.Runtime() || ev.GetEngineVersion() == "" {
 		t.Fatalf("the first run reported %q (%+v)", first, ev)
 	}
+	if _, err := sup.Client(id, 1); err == nil {
+		t.Fatal("the old revision's connector still takes calls")
+	}
+
+	// A connector killed from outside is seen and replaced.
+	if err := c.RemoveContainer(ctx, name); err != nil {
+		t.Fatal(err)
+	}
+	var restarted *upstream.Client
+	for deadline := time.Now().Add(time.Minute); time.Now().Before(deadline); time.Sleep(500 * time.Millisecond) {
+		sup.Sync(ctx)
+		if cl, err := sup.Client(id, 2); err == nil && cl != again {
+			restarted = cl
+			break
+		}
+	}
+	if restarted == nil {
+		t.Fatal("a killed connector was not replaced")
+	}
+	if _, err := restarted.ListTools(ctx, nil); err != nil {
+		t.Fatal(err)
+	}
+	mu.Lock()
+	exited := slices.ContainsFunc(reports, func(r *pb.ReportConnectorStateRequest) bool {
+		return r.GetState() == pb.ConnectorState_CONNECTOR_STATE_FAILED && r.GetErrorClass() == "exited"
+	})
+	mu.Unlock()
+	if !exited {
+		t.Fatal("the killed run was not reported as failed")
+	}
 
 	conf.set()
 	sup.Sync(ctx)
-	if _, err := sup.Client(id); err == nil {
+	if _, err := sup.Client(id, 2); err == nil {
 		t.Fatal("a connector no longer configured still runs")
 	}
 	if _, err := c.InspectContainer(ctx, name); err == nil {

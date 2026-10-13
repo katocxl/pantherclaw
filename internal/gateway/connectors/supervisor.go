@@ -7,7 +7,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"maps"
 	"net"
@@ -19,7 +18,6 @@ import (
 	"time"
 
 	"github.com/katocxl/pantherclaw/internal/gateway/control"
-	"github.com/katocxl/pantherclaw/internal/gateway/dispatch"
 	"github.com/katocxl/pantherclaw/internal/gateway/upstream"
 	pb "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
@@ -95,29 +93,41 @@ type Supervisor struct {
 	mu      sync.Mutex
 	running map[string]*instance
 	failed  map[string]time.Time
+	// failures counts a connector's consecutive failed starts and exits,
+	// which its next start waits for (backoff).
+	failures map[string]int
 }
 
 type instance struct {
 	id         string
 	connection string
 	// binding is the edge's token; egress the egress connection; dir the
-	// edge's private directory. flight is the call in flight.
+	// edge's private directory.
 	binding, egress, dir string
-	flight               *dispatch.Flight
 	revision             int32
-	name, network        string
-	client               *upstream.Client
-	stdio                *Stdio
-	stdin                *io.PipeWriter
-	stop                 context.CancelFunc
-	done                 chan struct{}
+	started              time.Time
+	// renew is when the edge's CA needs renewing: the connector is then
+	// replaced between calls (zero without an edge).
+	renew         time.Time
+	name, network string
+	client        *upstream.Client
+	stdio         *Stdio
+	stop          context.CancelFunc
+	done          chan struct{}
+	// pipes are the gateway's ends of the connector's input and output,
+	// closed when it stops.
+	pipes []*os.File
+	// calls holds the one call the connector runs (Fly to land); flight
+	// is that call, set while it is in flight.
+	calls  chan struct{}
+	flight *flight
 }
 
 // New returns a supervisor on this host's engine, which must pass the
 // sandbox's engine check (Docker 28 or later, Linux, seccomp, runc;
 // HR-218). The gateway must run as a host process, not inside a container.
 func New(ctx context.Context, c *docker.Client, cfg Config, conf Configuration, log *slog.Logger) (*Supervisor, error) {
-	if _, err := os.Stat("/.dockerenv"); err == nil {
+	if inContainer() {
 		return nil, errors.New("connectors: the gateway runs inside a container; connectors need a host process")
 	}
 	e, err := c.Engine(ctx)
@@ -130,15 +140,18 @@ func New(ctx context.Context, c *docker.Client, cfg Config, conf Configuration, 
 	if log == nil {
 		log = pclog.Discard()
 	}
-	return &Supervisor{c: c, cfg: cfg, engine: e, conf: conf, log: log, running: map[string]*instance{}, failed: map[string]time.Time{}}, nil
+	return &Supervisor{
+		c: c, cfg: cfg, engine: e, conf: conf, log: log, running: map[string]*instance{}, failed: map[string]time.Time{}, failures: map[string]int{},
+	}, nil
 }
 
-// Client implements dispatch.Connectors.
-func (s *Supervisor) Client(connection string) (*upstream.Client, error) {
+// Client implements dispatch.Connectors: the running connector of this
+// revision, while it can take a call.
+func (s *Supervisor) Client(connection string, revision int32) (*upstream.Client, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	in, ok := s.running[connection]
-	if !ok {
+	if !ok || in.revision != revision || !in.stdio.Usable() {
 		return nil, ErrNotRunning
 	}
 	select {
@@ -157,7 +170,10 @@ func (s *Supervisor) Run(ctx context.Context) error {
 		if err != nil {
 			return fmt.Errorf("connectors: egress listener: %w", err)
 		}
-		srv := &http.Server{Handler: s.egressHandler(), ReadHeaderTimeout: 10 * time.Second, MaxHeaderBytes: 16 << 10}
+		srv := &http.Server{
+			Handler: s.egressHandler(), ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 30 * time.Second, IdleTimeout: 2 * time.Minute,
+			MaxHeaderBytes: 16 << 10,
+		}
 		go func() { _ = srv.Serve(ln) }()
 		defer func() { _ = srv.Close() }()
 	}
@@ -182,8 +198,10 @@ func (s *Supervisor) Run(ctx context.Context) error {
 }
 
 // Sync starts the active connector connections that are not running,
-// replaces those whose revision changed or whose container stopped, and
-// stops those no longer configured.
+// replaces those whose revision changed, whose container stopped or whose
+// last exchange was abandoned (it may still be working on it), and stops
+// those no longer configured. A connector that keeps failing to start or
+// exiting waits longer each time (backoff).
 func (s *Supervisor) Sync(ctx context.Context) {
 	want := map[string]*control.Connection{}
 	if cfg := s.conf.Current(); cfg != nil {
@@ -195,14 +213,29 @@ func (s *Supervisor) Sync(ctx context.Context) {
 	}
 	s.mu.Lock()
 	var stale []string
+	crashed := map[string]time.Duration{}
 	for id, in := range s.running {
 		c, ok := want[id]
+		exited := !in.stdio.Usable()
 		select {
 		case <-in.done:
-			ok = false
+			exited = true
 		default:
 		}
-		if !ok || c.GetRevision() != in.revision {
+		// An edge whose CA nears its end is replaced between calls: the
+		// call slot is taken and kept until the connector stops.
+		renew := false
+		if !exited && !in.renew.IsZero() && time.Now().After(in.renew) {
+			select {
+			case in.calls <- struct{}{}:
+				renew = true
+			default:
+			}
+		}
+		if exited {
+			crashed[id] = time.Since(in.started)
+		}
+		if exited || !ok || renew || c.GetRevision() != in.revision {
 			stale = append(stale, id)
 		}
 	}
@@ -210,21 +243,63 @@ func (s *Supervisor) Sync(ctx context.Context) {
 	for _, id := range stale {
 		s.stop(ctx, id)
 	}
+	s.mu.Lock()
+	for id, ran := range crashed {
+		if ran >= resetAfter {
+			s.failures[id] = 0
+		}
+		s.failures[id]++
+		s.failed[id] = time.Now()
+	}
+	s.mu.Unlock()
 	for id, c := range want {
 		s.mu.Lock()
 		_, running := s.running[id]
 		last, failed := s.failed[id]
+		n := s.failures[id]
 		s.mu.Unlock()
-		if running || (failed && time.Since(last) < RetryAfter) {
+		if running || (failed && time.Since(last) < backoff(n)) {
 			continue
 		}
 		if err := s.start(ctx, c); err != nil {
 			s.log.WarnContext(ctx, "gateway.connector_failed", slog.String("connection", id), pclog.Err(err))
 			s.mu.Lock()
+			s.failures[id]++
 			s.failed[id] = time.Now()
 			s.mu.Unlock()
 		}
 	}
+}
+
+// resetAfter is how long a connector runs before its earlier failures no
+// longer count.
+const resetAfter = time.Minute
+
+// backoff is how long a connector waits after its nth consecutive failure:
+// at once the first time (a call that timed out leaves it broken, and the
+// next call should not wait), then doubling from RetryAfter/8 up to five
+// minutes.
+func backoff(n int) time.Duration {
+	if n <= 1 {
+		return 0
+	}
+	d := RetryAfter / 8
+	for i := 2; i < n && d < 5*time.Minute; i++ {
+		d *= 2
+	}
+	return min(d, 5*time.Minute)
+}
+
+// inContainer reports whether the gateway itself runs in a container
+// (Docker, Podman, Kubernetes): connectors need a host process (HR-216).
+func inContainer() bool {
+	for _, f := range []string{"/.dockerenv", "/run/.containerenv"} {
+		if _, err := os.Stat(f); err == nil {
+			return true
+		}
+	}
+	_, k8s := os.LookupEnv("KUBERNETES_SERVICE_HOST")
+	return k8s
 }
 
 // start creates the connector's network and container and attaches to its
@@ -292,15 +367,28 @@ func (s *Supervisor) start(ctx context.Context, c *control.Connection) error {
 		}
 		return fail("container", err)
 	}
+	// Operating-system pipes go to docker as they are: with an in-process
+	// pipe, docker's exit would wait for a copy of the input that only
+	// ends with the next write, and a connector killed from outside would
+	// go unseen.
+	inR, inW, err := os.Pipe()
+	if err != nil {
+		_ = s.c.RemoveLabelled(context.WithoutCancel(ctx), id)
+		return fail("pipe", err)
+	}
+	outR, outW, err := os.Pipe()
+	if err != nil {
+		_, _ = inR.Close(), inW.Close()
+		_ = s.c.RemoveLabelled(context.WithoutCancel(ctx), id)
+		return fail("pipe", err)
+	}
 	runCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
-	inR, inW := io.Pipe()
-	outR, outW := io.Pipe()
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
 		code, err := s.c.Attach(runCtx, name, inR, outW)
-		outW.CloseWithError(errors.Join(ErrExited, err))
-		_ = inR.Close()
+		// The connector's output ends and its input fails from here.
+		_, _ = outW.Close(), inR.Close()
 		s.log.InfoContext(runCtx, "gateway.connector_stopped", slog.String("connection", id), slog.Int("exit_code", code), pclog.Err(err))
 		state, class := pb.ConnectorState_CONNECTOR_STATE_STOPPED, ""
 		if runCtx.Err() == nil {
@@ -308,12 +396,12 @@ func (s *Supervisor) start(ctx context.Context, c *control.Connection) error {
 		}
 		s.tell(runCtx, run, id, rev, name, state, class)
 	}()
-	stdio := NewStdio(inW, outR)
+	stdio := NewStdio(inW, outR, int64(c.GetMaxResponseBytes()))
 	s.mu.Lock()
 	s.running[id] = &instance{
-		id: run, revision: c.GetRevision(), name: name, network: net, stdio: stdio, stdin: inW, stop: cancel, done: done,
-		connection: id, binding: med.binding, egress: egressID, dir: med.dir,
-		client: upstream.New("http://connector.invalid/"+id, stdio),
+		id: run, revision: c.GetRevision(), started: time.Now(), renew: med.renew, name: name, network: net, stdio: stdio, stop: cancel, done: done,
+		connection: id, binding: med.binding, egress: egressID, dir: med.dir, calls: make(chan struct{}, 1),
+		client: upstream.New("http://connector.invalid/"+id, stdio), pipes: []*os.File{inW, outR},
 	}
 	delete(s.failed, id)
 	s.mu.Unlock()
@@ -331,8 +419,8 @@ func (s *Supervisor) stop(ctx context.Context, id string) {
 	if !ok {
 		return
 	}
+	in.stdio.Close()
 	in.stop()
-	_ = in.stdin.Close() // os/exec waits for stdin's copy until the pipe closes
 	if err := s.c.RemoveLabelled(context.WithoutCancel(ctx), id); err != nil {
 		s.log.WarnContext(ctx, "gateway.connector_not_removed", slog.String("connection", id), pclog.Err(err))
 	}
@@ -342,6 +430,9 @@ func (s *Supervisor) stop(ctx context.Context, id string) {
 	select {
 	case <-in.done:
 	case <-time.After(stopTimeout):
+	}
+	for _, f := range in.pipes {
+		_ = f.Close()
 	}
 }
 

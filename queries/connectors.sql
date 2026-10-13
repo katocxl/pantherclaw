@@ -28,7 +28,7 @@ ORDER BY s.connection_id, s.revision DESC;
 
 -- A connector's run as its gateway reports it (00094): inserted on its
 -- first report, then only its state and error class change, and only for
--- the same gateway and connection.
+-- the same gateway and connection, spec revision and container.
 -- name: ReportConnectorInstance :one
 INSERT INTO pc.connector_instances (org_id, id, connection_id, spec_revision, gateway_id, container_name, state, engine_version,
                                     api_version, runtime, last_error_class)
@@ -37,7 +37,16 @@ VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(connection_id), sqlc.arg(spec_r
         sqlc.narg(last_error_class))
 ON CONFLICT (org_id, id) DO UPDATE SET state = EXCLUDED.state, last_error_class = EXCLUDED.last_error_class
 WHERE pc.connector_instances.gateway_id = EXCLUDED.gateway_id AND pc.connector_instances.connection_id = EXCLUDED.connection_id
+  AND pc.connector_instances.spec_revision = EXCLUDED.spec_revision AND pc.connector_instances.container_name = EXCLUDED.container_name
 RETURNING *;
+
+-- A connection runs one connector container at a time: when a new run
+-- starts, the earlier runs still open (left by a gateway that crashed or
+-- restarted, or by a stop it never reported) are closed as superseded.
+-- name: SupersedeConnectorInstances :execrows
+UPDATE pc.connector_instances SET state = 'STOPPED', last_error_class = 'superseded'
+WHERE org_id = sqlc.arg(org_id) AND connection_id = sqlc.arg(connection_id) AND id < sqlc.arg(id)
+  AND state IN ('STARTING', 'RUNNING');
 
 -- A connection's latest connector run.
 -- name: LatestConnectorInstance :one

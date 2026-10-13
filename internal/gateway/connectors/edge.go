@@ -31,6 +31,9 @@ const (
 	caPath        = "/pc/ca/ca.pem"
 	readyTimeout  = time.Minute
 	readyInterval = 250 * time.Millisecond
+	// edgeCAValidity is how long a connector edge's CA is valid; the
+	// connector is replaced an hour before it ends.
+	edgeCAValidity = 24 * time.Hour
 )
 
 // caEnv points the usual TLS clients at the edge's CA, the only root a
@@ -42,8 +45,10 @@ var caEnv = []string{"SSL_CERT_FILE", "CURL_CA_BUNDLE", "REQUESTS_CA_BUNDLE", "N
 // binding token only the edge mounts (G0 M9 design decisions 4 and 6).
 type mediated struct {
 	dir, binding string
-	env          []string
-	mounts       []docker.Mount
+	// renew is when the edge's CA nears its end.
+	renew  time.Time
+	env    []string
+	mounts []docker.Mount
 }
 
 // startEdge starts the edge of a connector with an egress connection and
@@ -88,7 +93,8 @@ func (s *Supervisor) startEdge(ctx context.Context, id, short string, egressConn
 	}
 	cfg, err := json.Marshal(edge.Config{
 		Format: edge.ConfigFormat, Mode: edge.ModeConnector, Session: id, Listen: ":" + edgePort, Subnet: info.Subnet(),
-		GatewayURL: "http://" + s.cfg.EgressAddr, Hosts: hosts, BindingFile: bindingDir + "/binding",
+		GatewayURL: "http://" + s.cfg.EgressAddr, Hosts: hosts, BindingFile: bindingDir + "/binding", Placeholder: Placeholder,
+		CAValiditySeconds: int64(edgeCAValidity / time.Second),
 	})
 	if err != nil {
 		return m, err
@@ -114,6 +120,7 @@ func (s *Supervisor) startEdge(ctx context.Context, id, short string, egressConn
 	if err != nil {
 		return m, err
 	}
+	m.renew = time.Now().Add(edgeCAValidity - time.Hour)
 	ca := filepath.Join(dir, "ca.pem")
 	if err := os.WriteFile(ca, []byte(ready.CAPEM), 0o644); err != nil { //nolint:gosec // G306: read by the connector's uid; dir is private
 		return m, err
