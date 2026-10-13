@@ -14,6 +14,46 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 )
 
+const gatewayConnectionGitHub = `-- name: GatewayConnectionGitHub :many
+SELECT g.connection_id, g.app_client_id, g.installation_id, g.account_login
+FROM pc.connection_github g
+JOIN pc.connections c ON c.org_id = g.org_id AND c.id = g.connection_id
+WHERE g.org_id = $1 AND c.gateway_id = $2 AND c.state <> 'RETIRED'
+ORDER BY g.connection_id
+`
+
+type GatewayConnectionGitHubRow struct {
+	ConnectionID   ids.UUID
+	AppClientID    string
+	InstallationID int64
+	AccountLogin   string
+}
+
+func (q *Queries) GatewayConnectionGitHub(ctx context.Context, orgID ids.OrgID, gatewayID ids.UUID) ([]GatewayConnectionGitHubRow, error) {
+	rows, err := q.db.Query(ctx, gatewayConnectionGitHub, orgID, gatewayID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GatewayConnectionGitHubRow{}
+	for rows.Next() {
+		var i GatewayConnectionGitHubRow
+		if err := rows.Scan(
+			&i.ConnectionID,
+			&i.AppClientID,
+			&i.InstallationID,
+			&i.AccountLogin,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const gatewayConnectionRoutes = `-- name: GatewayConnectionRoutes :many
 SELECT r.connection_id, r.route, r.mode
 FROM pc.connection_routes r
@@ -144,7 +184,7 @@ func (q *Queries) GatewayPackages(ctx context.Context, orgID ids.OrgID, gatewayI
 }
 
 const gatewaySealedCredentials = `-- name: GatewaySealedCredentials :many
-SELECT cr.id, cr.connection_id, cr.version, cr.broker_key_id, cr.sealed, cr.allowed_hosts, cr.header, cr.scheme
+SELECT cr.id, cr.connection_id, cr.version, cr.broker_key_id, cr.sealed, cr.allowed_hosts, cr.header, cr.scheme, cr.kind
 FROM pc.credentials cr
 JOIN pc.connections c ON c.org_id = cr.org_id AND c.id = cr.connection_id
 JOIN pc.broker_keys b ON b.org_id = cr.org_id AND b.id = cr.broker_key_id
@@ -162,6 +202,7 @@ type GatewaySealedCredentialsRow struct {
 	AllowedHosts []string
 	Header       string
 	Scheme       *string
+	Kind         string
 }
 
 func (q *Queries) GatewaySealedCredentials(ctx context.Context, orgID ids.OrgID, gatewayID ids.UUID) ([]GatewaySealedCredentialsRow, error) {
@@ -182,6 +223,7 @@ func (q *Queries) GatewaySealedCredentials(ctx context.Context, orgID ids.OrgID,
 			&i.AllowedHosts,
 			&i.Header,
 			&i.Scheme,
+			&i.Kind,
 		); err != nil {
 			return nil, err
 		}

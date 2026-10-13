@@ -11,11 +11,14 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"regexp"
 	"strconv"
+	"strings"
 
 	"github.com/katocxl/pantherclaw/internal/actionir"
 	defs "github.com/katocxl/pantherclaw/internal/definitions/domain"
 	"github.com/katocxl/pantherclaw/internal/gateway/control"
+	"github.com/katocxl/pantherclaw/internal/gateway/egress"
 	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
 )
 
@@ -38,6 +41,15 @@ type Lease struct {
 	Request []byte
 	// Correlate is the idempotency key a listing item must carry.
 	Correlate string
+	// Tokens gets a target_verifier test's action tokens under this lease
+	// (N15); nil for any other lease.
+	Tokens func(ctx context.Context) (TestTokens, error)
+}
+
+// TestTokens are a target_verifier test's action tokens: Fresh binds the
+// test read's empty body, Mismatch another body.
+type TestTokens struct {
+	Fresh, Mismatch string
 }
 
 // Observation is what a leased read observed. Items are a target log's
@@ -87,7 +99,10 @@ func (e *Engine) VerifyEffect(ctx context.Context, conn *control.Connection, l L
 	if _, class, _ := e.contained(conn); class != "" {
 		return Observation{}, ErrContained
 	}
-	if l.Purpose == "target_log" {
+	switch l.Purpose {
+	case "connection_test":
+		return e.connectionTest(ctx, conn, l)
+	case "target_log":
 		return e.targetLog(ctx, conn, l)
 	}
 	read, v, list, err := reviewedRead(conn, l.Operation)
@@ -251,29 +266,41 @@ func (e *Engine) targetLog(ctx context.Context, conn *control.Connection, l Leas
 func (e *Engine) read(ctx context.Context, conn *control.Connection, read *defs.Definition, target actionir.Target,
 	params map[string]string,
 ) (int, []byte, bool) {
+	res, ok := e.readWith(ctx, conn, read, target, params, "")
+	return res.Status, res.Body, ok
+}
+
+// readWith makes a reviewed read through the connection, with an action token
+// when token is set, and returns the whole answer.
+func (e *Engine) readWith(ctx context.Context, conn *control.Connection, read *defs.Definition, target actionir.Target,
+	params map[string]string, token string,
+) (egress.Response, bool) {
 	raw, err := json.Marshal(params, json.Deterministic(true))
 	if err != nil {
-		return 0, nil, false
+		return egress.Response{}, false
 	}
 	a := actionir.Parsed{Action: actionir.ActionIR{Operation: read.Operation, Target: target, Params: raw}}
 	p, err := e.prepare(ctx, conn, read, a, "")
 	if err != nil {
 		e.log.WarnContext(ctx, "gateway.verification_not_built", slog.String("connection_id", conn.GetId()), pclog.Err(err))
-		return 0, nil, false
+		return egress.Response{}, false
 	}
 	if conn.GetAccessMode() == "pantherclaw_held" {
-		secret, err := e.credential(conn, p.req)
+		_, release, _, err := e.credential(ctx, conn, read, target, p.req, p.client)
 		if err != nil {
 			e.log.WarnContext(ctx, "gateway.credential_unavailable", slog.String("connection_id", conn.GetId()), pclog.Err(err))
-			return 0, nil, false
+			return egress.Response{}, false
 		}
-		defer clear(secret)
+		defer release()
+	}
+	if token != "" {
+		p.req.Header.Set(HeaderAction, token)
 	}
 	res, err := p.client.Do(p.req)
 	if err != nil {
-		return res.Status, nil, false
+		return egress.Response{Status: res.Status}, false
 	}
-	return res.Status, res.Body, true
+	return res, true
 }
 
 // fields reads the declared fields of a JSON object.
@@ -285,4 +312,95 @@ func fields(doc []byte, declared map[string]bool) map[string]string {
 		}
 	}
 	return out
+}
+
+// connectionTest makes a connection test's read (G0 M8 track C, F354): the
+// package's one test read, against the connection itself, with no params.
+// The format makes it a GET with no required params, and it is checked
+// again here before anything is sent: a test never writes. Only the
+// status and the digest of the answer are reported. A target_verifier test
+// (N15) sends that read four times on a target_enforced connection; see
+// verifierTest.
+func (e *Engine) connectionTest(ctx context.Context, conn *control.Connection, l Lease) (Observation, error) {
+	var req verifyRequest
+	if err := json.Unmarshal(l.Request, &req, json.RejectUnknownMembers(true)); err != nil ||
+		(req.Mode != "connection_test" && req.Mode != modeVerifierTest) ||
+		conn.Package == nil || req.Target.Type != defs.ConnectionTarget || req.Target.ID != conn.GetId() || len(req.Params) != 0 ||
+		req.EffectOf != "" {
+		return Observation{}, fmt.Errorf("%w: request", ErrNotReviewedRead)
+	}
+	read, ok := conn.Package.Definition(l.Operation)
+	if !ok || !read.Test || read.Access != defs.AccessRead || read.Dispatch == nil || read.Dispatch.HTTP == nil ||
+		read.Dispatch.HTTP.Method != http.MethodGet {
+		return Observation{}, ErrNotReviewedRead
+	}
+	if req.Mode == modeVerifierTest {
+		return e.verifierTest(ctx, conn, read, req.Target, l)
+	}
+	status, body, ok := e.read(ctx, conn, read, req.Target, nil)
+	if !ok {
+		return Observation{HTTPStatus: status}, nil // the read failed: inconclusive, retried
+	}
+	sum := sha256.Sum256(body)
+	return Observation{HTTPStatus: status, Digest: sum[:]}, nil
+}
+
+// modeVerifierTest is a target_verifier test's request mode.
+const modeVerifierTest = "target_verifier"
+
+// problemRe is the type of a PantherClaw verifier's problem document.
+var problemRe = regexp.MustCompile(`^urn:pantherclaw:action-token:[a-z_]{1,40}$`)
+
+// verifierTest sends a target_verifier test's four requests (N15): the
+// test read without a token, with the token bound to another body, with
+// the fresh token and with the same token again. It reports each as
+// "<status> <problem type>", the type only when the answer is a
+// PantherClaw verifier's problem document; the server judges them. A
+// request the gateway could not make leaves the test inconclusive, and it
+// is tried again.
+func (e *Engine) verifierTest(ctx context.Context, conn *control.Connection, read *defs.Definition, target actionir.Target,
+	l Lease,
+) (Observation, error) {
+	if conn.GetAccessMode() != "target_enforced" || l.Tokens == nil {
+		return Observation{}, fmt.Errorf("%w: a target_verifier test needs a target_enforced connection", ErrNotReviewedRead)
+	}
+	tokens, err := l.Tokens(ctx)
+	if err != nil {
+		return Observation{}, fmt.Errorf("dispatch: test tokens: %w", err)
+	} else if tokens.Fresh == "" || tokens.Mismatch == "" {
+		return Observation{}, errors.New("dispatch: test tokens: missing")
+	}
+	out := Observation{Fields: map[string]string{}}
+	for _, step := range []struct{ field, token string }{
+		{"/missing", ""}, {"/body_mismatch", tokens.Mismatch}, {"/fresh", tokens.Fresh}, {"/replayed", tokens.Fresh},
+	} {
+		res, ok := e.readWith(ctx, conn, read, target, nil, step.token)
+		if !ok {
+			return Observation{}, nil // inconclusive, retried
+		}
+		out.Fields[step.field] = strconv.Itoa(res.Status)
+		if t := problemType(res); t != "" {
+			out.Fields[step.field] += " " + t
+		}
+		if step.field == "/fresh" {
+			sum := sha256.Sum256(res.Body)
+			out.HTTPStatus, out.Digest = res.Status, sum[:]
+		}
+	}
+	return out, nil
+}
+
+// problemType is the type of a PantherClaw verifier's problem document, or
+// "" for any other answer.
+func problemType(res egress.Response) string {
+	if !strings.HasPrefix(res.ContentType, "application/problem+json") || res.Truncated {
+		return ""
+	}
+	var doc struct {
+		Type string `json:"type"`
+	}
+	if err := json.Unmarshal(res.Body, &doc); err != nil || !problemRe.MatchString(doc.Type) {
+		return ""
+	}
+	return doc.Type
 }

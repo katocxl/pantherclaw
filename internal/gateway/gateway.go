@@ -21,6 +21,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/gateway/hook"
 	"github.com/katocxl/pantherclaw/internal/gateway/httpproxy"
 	"github.com/katocxl/pantherclaw/internal/gateway/mcp"
+	"github.com/katocxl/pantherclaw/internal/gateway/sdk"
 	pb "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
 	"github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1/pantherclawv1connect"
 	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
@@ -56,6 +57,7 @@ type Gateway struct {
 	http        *httpproxy.Handler
 	mcp         *mcp.Handler
 	hook        *hook.Handler
+	sdk         *sdk.Handler
 	log         *slog.Logger
 	// reportDrift, driftEvery and driftPoll drive the drift checks
 	// (drift.go).
@@ -65,10 +67,13 @@ type Gateway struct {
 	// reads (verify.go, G0 M7).
 	verifications              Verifications
 	verifyEvery, verifyHintGap time.Duration
+	// submitScan sends an organization scan's findings (orgscan.go, G0 M8).
+	submitScan ScanSubmitter
 }
 
 // Handler returns the gateway's agent-facing HTTP handler: `/mcp/{connection}`
-// (mcp), `/hook/{connection}` (hook) and `/{connection}/…` (httpproxy).
+// (mcp), `/hook/{connection}` (hook), `/sdk/{connection}` (sdk) and
+// `/{connection}/…` (httpproxy).
 func (g *Gateway) Handler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if _, ok := mcp.Path(r.URL.EscapedPath()); ok {
@@ -77,6 +82,10 @@ func (g *Gateway) Handler() http.Handler {
 		}
 		if _, ok := hook.Path(r.URL.EscapedPath()); ok {
 			g.hook.ServeHTTP(w, r)
+			return
+		}
+		if _, ok := sdk.Path(r.URL.EscapedPath()); ok {
+			g.sdk.ServeHTTP(w, r)
 			return
 		}
 		g.http.ServeHTTP(w, r)
@@ -111,6 +120,13 @@ type Deps struct {
 	// Connectors runs the connector connections; nil when they are not
 	// enabled.
 	Connectors *connectors.Supervisor
+	// ReportFacts reports what the gateway reads from GitHub before a
+	// decision, as the connection's fact provider (G0 M8 decision 5); nil
+	// reads nothing.
+	ReportFacts dispatch.FactReporter
+	// SubmitScan sends an organization scan's findings to the server (G0 M8,
+	// HR-209); nil submits none.
+	SubmitScan ScanSubmitter
 	// Run is background work (certificate renewal, the containment stream,
 	// configuration sync); nil for none.
 	Run []func(ctx context.Context) error
@@ -149,6 +165,11 @@ func New(ctx context.Context, cfg *Config, id *control.Identity, log *slog.Logge
 			return err
 		},
 		Verifications: controlVerifications{ctl},
+		ReportFacts: func(ctx context.Context, conn string, obs []*pb.FactObservation) error {
+			_, err := ctl.Gateway.ReportFacts(ctx, &pb.ReportFactsRequest{ConnectionId: conn, Observations: obs})
+			return err
+		},
+		SubmitScan: controlScans{ctl}.submit,
 	}
 	if cfg.Broker.KeyFile != "" {
 		key, err := broker.Load(ctx, cfg.Broker.KeyFile, cfg.Broker.KEKFiles)
@@ -186,7 +207,8 @@ func newGateway(cfg *Config, d Deps, log *slog.Logger) (*Gateway, error) {
 	o := dispatch.Options{
 		Org: d.Org, GatewayID: d.GatewayID, Authority: d.Authority, JWKSURL: d.JWKSURL, JWKSClient: d.JWKSClient,
 		Containment: d.Containment, AllowedPrefixes: prefixes, ReportCircuit: d.ReportCircuit, Log: log,
-		Approvers: proof.NewPinned(cfg.Approvals.ApproverKeysFile, d.Org),
+		Approvers:   proof.NewPinned(cfg.Approvals.ApproverKeysFile, d.Org),
+		ReportFacts: d.ReportFacts, FactTimeout: cfg.GitHub.FactTimeout.D(),
 	}
 	if d.Connectors != nil {
 		o.Connectors = d.Connectors
@@ -210,8 +232,10 @@ func newGateway(cfg *Config, d Deps, log *slog.Logger) (*Gateway, error) {
 		http: httpproxy.New(engine, d.Configuration, cfg.PublicURL, log),
 		mcp:  mcp.New(engine, d.Configuration, cfg.PublicURL, log),
 		hook: hook.New(engine, d.Configuration, cfg.PublicURL, log),
+		sdk:  sdk.New(engine, d.Configuration, cfg.PublicURL, log),
 		log:  log, reportDrift: d.ReportDrift, driftEvery: DriftEvery, driftPoll: driftPoll,
 		verifications: d.Verifications, verifyEvery: VerifyEvery, verifyHintGap: verifyHintGap,
+		submitScan: d.SubmitScan,
 	}
 	if e := cfg.Control.VerifyEvery.D(); e > 0 {
 		g.verifyEvery = e

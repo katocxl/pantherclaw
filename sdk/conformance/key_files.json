@@ -1,0 +1,58 @@
+{
+  "format": "pantherclaw.conformance/v1",
+  "group": "key_files",
+  "description": "The workload key file (PAP-1 §3.1): private_key is the base64url (no padding) Ed25519 seed; unknown or duplicate members are refused. jkt is the RFC 7638 thumbprint of the public key.",
+  "source": "internal/identity/workloadclient WriteKeyFile and ReadKeyFile",
+  "cases": [
+    {
+      "name": "a new key",
+      "file": "{\"private_key\":\"R2XSdLu4MSarUODZyVCRj6QwGGrTODWrOiWv8TgXjh4\"}\n",
+      "public_x": "NcD5byYHuq5132aE5ULIefy4XFe3TNOMVAE5w7fYfTM",
+      "jkt": "y5qXRl8nnGMFoCwpU4-jngZ4GwrIJGBCAQ8oUtd4E84"
+    },
+    {
+      "name": "an enrolled workload",
+      "file": "{\"private_key\":\"R2XSdLu4MSarUODZyVCRj6QwGGrTODWrOiWv8TgXjh4\",\"identifier\":\"pc:org/01920000-0000-7000-8000-000000000001/agent/01920000-0000-7000-8000-000000000006/inst/01920000-0000-7000-8000-000000000005\",\"server\":\"https://pantherclaw.example.test\",\"run_id\":\"01920000-0000-7000-8000-000000000003\"}\n",
+      "public_x": "NcD5byYHuq5132aE5ULIefy4XFe3TNOMVAE5w7fYfTM",
+      "jkt": "y5qXRl8nnGMFoCwpU4-jngZ4GwrIJGBCAQ8oUtd4E84",
+      "identifier": "pc:org/01920000-0000-7000-8000-000000000001/agent/01920000-0000-7000-8000-000000000006/inst/01920000-0000-7000-8000-000000000005",
+      "server": "https://pantherclaw.example.test",
+      "run_id": "01920000-0000-7000-8000-000000000003"
+    },
+    {
+      "name": "an unknown member",
+      "file": "{\"private_key\":\"R2XSdLu4MSarUODZyVCRj6QwGGrTODWrOiWv8TgXjh4\",\"public_key\":\"x\"}\n",
+      "reject": "an unknown member"
+    },
+    {
+      "name": "a duplicate member",
+      "file": "{\"private_key\":\"R2XSdLu4MSarUODZyVCRj6QwGGrTODWrOiWv8TgXjh4\",\"private_key\":\"R2XSdLu4MSarUODZyVCRj6QwGGrTODWrOiWv8TgXjh4\"}\n",
+      "reject": "a duplicate member"
+    },
+    {
+      "name": "no private key",
+      "file": "{\"identifier\":\"pc:org/01920000-0000-7000-8000-000000000001/agent/01920000-0000-7000-8000-000000000006/inst/01920000-0000-7000-8000-000000000005\"}\n",
+      "reject": "no private key"
+    },
+    {
+      "name": "a 31-byte seed",
+      "file": "{\"private_key\":\"R2XSdLu4MSarUODZyVCRj6QwGGrTODWrOiWv8TgXjg\"}\n",
+      "reject": "a 31-byte seed"
+    },
+    {
+      "name": "base64 padding",
+      "file": "{\"private_key\":\"R2XSdLu4MSarUODZyVCRj6QwGGrTODWrOiWv8TgXjh4=\"}\n",
+      "reject": "base64 padding"
+    },
+    {
+      "name": "the standard base64 alphabet",
+      "file": "{\"private_key\":\"+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/v7+/s\"}\n",
+      "reject": "the standard base64 alphabet"
+    },
+    {
+      "name": "not an object",
+      "file": "[\"R2XSdLu4MSarUODZyVCRj6QwGGrTODWrOiWv8TgXjh4\"]\n",
+      "reject": "not an object"
+    }
+  ]
+}
