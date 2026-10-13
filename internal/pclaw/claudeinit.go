@@ -115,8 +115,11 @@ func readSettings(scope, path string) (claudeSettings, error) {
 	return s, nil
 }
 
-// hookRuns reports whether a settings document runs `pclaw hook
-// claude-code` before Bash and PowerShell.
+// hookRuns reports whether a settings document runs PantherClaw's hook
+// before Bash and PowerShell: `pclaw hook claude-code`, failing closed
+// (onFailure "block"). A pclaw hook that lets a command through when it
+// cannot run, or that runs another pclaw command, is not PantherClaw's
+// hook, so init adds its own beside it.
 func hookRuns(doc *jsonNode) bool {
 	for _, group := range doc.get("hooks").get("PreToolUse").itemsOf() {
 		m := group.get("matcher").str()
@@ -124,14 +127,18 @@ func hookRuns(doc *jsonNode) bool {
 			continue
 		}
 		for _, h := range group.get("hooks").itemsOf() {
+			if h.get("onFailure").str() != "block" {
+				continue
+			}
 			args := h.get("args").itemsOf()
 			command := h.get("command").str()
+			shell := strings.Join(append([]string{"pclaw"}, claudeHookArgs...), " ")
 			switch {
 			case filepath.Base(command) == "pclaw" || filepath.Base(command) == "pclaw.exe":
 				if len(args) >= 2 && args[0].str() == claudeHookArgs[0] && args[1].str() == claudeHookArgs[1] {
 					return true
 				}
-			case strings.HasPrefix(command, "pclaw hook claude-code"):
+			case command == shell || strings.HasPrefix(command, shell+" "):
 				return true
 			}
 		}

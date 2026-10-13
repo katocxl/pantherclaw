@@ -9,6 +9,7 @@ import (
 	"encoding/json/v2"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -240,8 +241,13 @@ func TestHR208_InitRefusesWhatWouldKeepTheHookFromRunning(t *testing.T) {
 		"local hooks off":    {local: `{"disableAllHooks": true}`, code: 1, want: "never changes that setting"},
 		"managed runs it": {
 			managed: `{"allowManagedHooksOnly": true, "hooks": {"PreToolUse": [{"matcher": "Bash|PowerShell",
-				"hooks": [{"type": "command", "command": "pclaw", "args": ["hook", "claude-code"]}]}]}}`,
+				"hooks": [{"type": "command", "command": "pclaw", "args": ["hook", "claude-code"], "onFailure": "block"}]}]}}`,
 			want: "already installed",
+		},
+		"managed runs it failing open": {
+			managed: `{"allowManagedHooksOnly": true, "hooks": {"PreToolUse": [{"matcher": "Bash|PowerShell",
+				"hooks": [{"type": "command", "command": "pclaw", "args": ["hook", "claude-code"]}]}]}}`,
+			code: 1, want: "allow only managed hooks",
 		},
 		"dry run":        {local: existingLocal, args: []string{"--dry-run"}, want: "Dry run: nothing was changed."},
 		"not json":       {local: `{"hooks": `, code: 1, want: "left as it is"},
@@ -264,6 +270,55 @@ func TestHR208_InitRefusesWhatWouldKeepTheHookFromRunning(t *testing.T) {
 		}
 		if len(backups(t, f.local())) != 0 {
 			t.Errorf("%s: backed up", name)
+		}
+	}
+}
+
+// TestHR208_InitCountsOnlyAFailClosedPantherClawHook: an existing hook is
+// PantherClaw's only when it runs `pclaw hook claude-code` and blocks the
+// command when it cannot run. Beside a pclaw hook that fails open or runs
+// another command, init adds its own and keeps the other as it was.
+func TestHR208_InitCountsOnlyAFailClosedPantherClawHook(t *testing.T) {
+	for name, tc := range map[string]struct {
+		hook      string
+		installed bool
+	}{
+		"fails closed": {
+			hook: `{"type": "command", "command": "/usr/local/bin/pclaw", "args": ["hook", "claude-code"], "onFailure": "block"}`, installed: true,
+		},
+		"shell form": {
+			hook: `{"type": "command", "command": "pclaw hook claude-code --connection shell", "onFailure": "block"}`, installed: true,
+		},
+		"no onFailure":    {hook: `{"type": "command", "command": "pclaw", "args": ["hook", "claude-code"]}`},
+		"fails open":      {hook: `{"type": "command", "command": "pclaw", "args": ["hook", "claude-code"], "onFailure": "continue"}`},
+		"another command": {hook: `{"type": "command", "command": "pclaw hook claude-code-lite", "onFailure": "block"}`},
+		"another hook":    {hook: `{"type": "command", "command": "pclaw", "args": ["hook", "other"], "onFailure": "block"}`},
+	} {
+		f := newInitFixture(t)
+		local := `{"hooks": {"PreToolUse": [{"matcher": "Bash|PowerShell", "hooks": [` + tc.hook + `]}]}}`
+		f.write(t, f.local(), local)
+		var before map[string]any
+		if err := json.Unmarshal([]byte(local), &before); err != nil {
+			t.Fatal(err)
+		}
+		code, out, errs := f.run(t)
+		if code != 0 || strings.Contains(out, "already installed") != tc.installed {
+			t.Errorf("%s: %d %s %s", name, code, out, errs)
+			continue
+		}
+		now, _ := os.ReadFile(f.local())
+		if tc.installed {
+			if string(now) != local {
+				t.Errorf("%s: changed to %s", name, now)
+			}
+			continue
+		}
+		hooks, _ := readJSON(t, f.local())["hooks"].(map[string]any)
+		pre, _ := hooks["PreToolUse"].([]any)
+		hooks, _ = before["hooks"].(map[string]any)
+		kept, _ := hooks["PreToolUse"].([]any)
+		if len(pre) != 2 || !reflect.DeepEqual(pre[0], kept[0]) || !hookRunsIn(t, f.local()) {
+			t.Errorf("%s: hooks after init %v", name, pre)
 		}
 	}
 }
