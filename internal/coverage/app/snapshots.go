@@ -84,6 +84,10 @@ type Snapshot struct {
 	LastValid  string `json:"last_valid,omitzero"`
 	Cause      string `json:"cause,omitzero"`
 	ComputedAt string `json:"computed_at"`
+	// Seen are the scope's pending changes this computation read (HR-211):
+	// a claim on the snapshot lapses on a change it did not see, or on one
+	// at or after its computation, as pclaw verify checks it.
+	Seen []string `json:"seen,omitzero"`
 }
 
 // SnapshotRoute is one route of a snapshot. routes_digest is the SHA-256
@@ -101,7 +105,7 @@ type SnapshotRoute struct {
 // same reports whether two snapshots record the same coverage, whatever
 // caused them and when.
 func (s Snapshot) same(o Snapshot) bool {
-	s.ID, o.ID, s.Cause, o.Cause, s.ComputedAt, o.ComputedAt = "", "", "", "", "", ""
+	s.ID, o.ID, s.Cause, o.Cause, s.ComputedAt, o.ComputedAt, s.Seen, o.Seen = "", "", "", "", "", "", nil, nil
 	a, errA := json.Marshal(s)
 	b, errB := json.Marshal(o)
 	return errA == nil && errB == nil && string(a) == string(b)
@@ -149,6 +153,13 @@ func (s *Service) reassess(ctx context.Context, tx db.TenantTx, sc domain.Scope,
 	}
 	r := domain.Compute(e)
 	next := snapshotOf(sc, r, e.Exclusions)
+	seen, err := q.CoverageChangesPending(ctx, tx.OrgID(), sc.Connection, &sc.Agent)
+	if err != nil {
+		return false, err
+	}
+	for _, ch := range seen {
+		next.Seen = append(next.Seen, ch.ID.String())
+	}
 	current, err := q.CurrentCoverageSnapshot(ctx, dbq.CurrentCoverageSnapshotParams{
 		OrgID: tx.OrgID(), AgentID: sc.Agent, ConnectionID: sc.Connection, Operation: sc.Operation,
 	})
