@@ -764,7 +764,7 @@ func registerAuthorityAdmin(rs *connect.Server, d apiDeps, grants *grantsapp.Ser
 		Ents: d.billing,
 	}))
 	pantherclawv1connect.RegisterPolicyServiceHandler(rs, policiesrpc.New(&policyapp.Versions{
-		Store: &polpg.Store{Pool: d.pool}, Facts: facts, Definitions: defs, Authz: authz, Limits: celenv.DefaultLimits,
+		Store: &polpg.Store{Pool: d.pool}, Facts: facts, Subjects: facts, Definitions: defs, Authz: authz, Limits: celenv.DefaultLimits,
 	}))
 	return nil
 }
