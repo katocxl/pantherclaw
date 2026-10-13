@@ -164,3 +164,8 @@ SELECT c.org_id, sqlc.arg(id), sqlc.arg(run_id), sqlc.arg(instance_id), c.id, sq
 FROM pc.connections c
 WHERE c.org_id = sqlc.arg(org_id) AND c.id = sqlc.arg(connection_id) AND c.gateway_id = sqlc.arg(gateway_id)
 RETURNING id;
+
+-- name: ListConnectionGitHub :many
+-- The GitHub App installations behind connections (connection_github).
+SELECT * FROM pc.connection_github
+WHERE org_id = sqlc.arg(org_id) AND connection_id = ANY(sqlc.arg(connection_ids)::uuid[]);
