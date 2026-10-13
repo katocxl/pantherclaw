@@ -1,8 +1,8 @@
 {
   "format": "pantherclaw.conformance/v1",
   "group": "action_tokens",
-  "description": "Action tokens (pap-action+jwt, PAP-1 §10) minted for a target-enforced connection. A verifier accepts only keys whose kid is \"action-tokens-\" and the first 22 characters of their RFC 7638 thumbprint, alg EdDSA or Ed25519; it checks iss, aud (the connection id), a lifetime of at most 60 s with 5 s of skew, pap.v, pap.bh (lowercase hex SHA-256 of the exact body), operation and target, and spends each jti once after every other check passed.",
-  "source": "internal/authority/finalize BeginDispatch (dispatch.go), checked with internal/sim/payments ActionVerifier",
+  "description": "Action tokens (pap-action+jwt, PAP-1 §10) minted for a target-enforced connection, and a connection test's test tokens (pap.txn the test, pap.op its package's test read, pap.target the connection itself, bh an empty body), which pass only on that bodiless read. A verifier accepts only keys whose kid is \"action-tokens-\" and the first 22 characters of their RFC 7638 thumbprint, alg EdDSA or Ed25519; it checks iss, aud (the connection id), a lifetime of at most 60 s with 5 s of skew, pap.v, pap.bh (lowercase hex SHA-256 of the exact body), operation and target, and spends each jti once after every other check passed.",
+  "source": "internal/authority/finalize BeginDispatch (dispatch.go) and, for a connection test's tokens, internal/authority/actiontoken Mint as internal/transactions/app MintTestTokens calls it, checked with internal/sim/payments ActionVerifier",
   "jwks": {
     "keys": [
       {
@@ -162,7 +162,7 @@
     },
     {
       "name": "a workload token",
-      "token": "eyJhbGciOiJFZERTQSIsImtpZCI6Indvcmtsb2FkLXRva2Vucy12MFRhcHRSOGVWdWJRNzRfXzEwNmdQIiwidHlwIjoicGFwLXd0K2p3dCJ9.eyJpc3MiOiJodHRwczovL3BhbnRoZXJjbGF3LmV4YW1wbGUudGVzdCIsInN1YiI6InBjOm9yZy8wMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDEvYWdlbnQvMDE5MjAwMDAtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDA2L2luc3QvMDE5MjAwMDAtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDA1IiwiYXVkIjoicGFudGhlcmNsYXctZ2F0ZXdheSIsImlhdCI6MTc5MTcyMDAwMCwibmJmIjoxNzkxNzIwMDAwLCJleHAiOjE3OTE3MjA2MDAsImp0aSI6IjAwZGM2YWNmLWFjMDAtNzg5OC04NWRlLWM5YzRkY2MyZjQ1ZiIsImNuZiI6eyJqa3QiOiJ5NXFYUmw4bm5HTUZvQ3dwVTQtam5nWjRHd3JJSkdCQ0FROG9VdGQ0RTg0In0sInBhcCI6eyJ2IjoxLCJvcmciOiIwMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDEiLCJlbnYiOiIwMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDIiLCJhdHRfbHZsIjoxfX0.1HxzEfFD7Bzfkrl4_L66yBPvQT6EhV1LQT6LrC8nU9TBccOsZ7U2Sh1W8IUJq6txmkmdxXdLh32sO4jFl27uAA",
+      "token": "eyJhbGciOiJFZERTQSIsImtpZCI6Indvcmtsb2FkLXRva2Vucy12MFRhcHRSOGVWdWJRNzRfXzEwNmdQIiwidHlwIjoicGFwLXd0K2p3dCJ9.eyJpc3MiOiJodHRwczovL3BhbnRoZXJjbGF3LmV4YW1wbGUudGVzdCIsInN1YiI6InBjOm9yZy8wMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDEvYWdlbnQvMDE5MjAwMDAtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDA2L2luc3QvMDE5MjAwMDAtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDA1IiwiYXVkIjoicGFudGhlcmNsYXctZ2F0ZXdheSIsImlhdCI6MTc5MTcyMDAwMCwibmJmIjoxNzkxNzIwMDAwLCJleHAiOjE3OTE3MjA2MDAsImp0aSI6IjAwZGM2YWNmLWFjMDAtN2M4My1hNDc5LTg1YjdmZWQ1MWU2NyIsImNuZiI6eyJqa3QiOiJ5NXFYUmw4bm5HTUZvQ3dwVTQtam5nWjRHd3JJSkdCQ0FROG9VdGQ0RTg0In0sInBhcCI6eyJ2IjoxLCJvcmciOiIwMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDEiLCJlbnYiOiIwMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDIiLCJhdHRfbHZsIjoxfX0.j1UE3Oa8JWbDwzF7o4UqDMhRttJKzINH4ENzhiA7nC2sDAiHcwKTKPxV7C2N9EPoeil-OHaWt83AtuulaNPlAQ",
       "body": "{\"amount\":\"30.00\",\"charge\":\"ch_1\",\"currency\":\"USD\",\"reason\":\"duplicate\"}",
       "operation": "payments.refund.create",
       "target_type": "payments.charge",
@@ -414,6 +414,78 @@
       "now": 1791201610,
       "store": "unavailable",
       "expect": "store_unavailable"
+    },
+    {
+      "name": "a connection test's token on the test read it binds",
+      "token": "eyJhbGciOiJFZERTQSIsImtpZCI6ImFjdGlvbi10b2tlbnMta0pIRHNoWWxZZnhuaVFNaEw3WDNzdCIsInR5cCI6InBhcC1hY3Rpb24rand0In0.eyJpc3MiOiJodHRwczovL3BhbnRoZXJjbGF3LmV4YW1wbGUudGVzdCIsImF1ZCI6IjAxOTIwMDAwLTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDAwNyIsImp0aSI6IjAwZGM2YWNmLWFjMDAtNzg5OC04NWRlLWM5YzRkY2MyZjQ1ZiIsImlhdCI6MTc5MTIwMTYwMCwiZXhwIjoxNzkxMjAxNjMwLCJwYXAiOnsidiI6MSwidHhuIjoiMDE5MjAwMDAtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDBhIiwiYWN0IjoiYTA1Zjk1Y2NjODc3ODk3MzU4YmM2MGMxYTE5YzFlNjk5YmVjZTg1ZTEwMDhlM2IxNzJlODJjODA5M2M4NjhkMSIsImJoIjoiZTNiMGM0NDI5OGZjMWMxNDlhZmJmNGM4OTk2ZmI5MjQyN2FlNDFlNDY0OWI5MzRjYTQ5NTk5MWI3ODUyYjg1NSIsIm9wIjoicGF5bWVudHMuYWNjb3VudC5yZWFkIiwidGFyZ2V0Ijp7InR5cGUiOiJwYy5jb25uZWN0aW9uIiwiaWQiOiIwMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDcifX19.dxpdE_YpcOY7R3Ez3J7vw_bJhUtFqDBVANw4yMhnVB_IVBXie_r2ZlwsSymmyvGEaAPXtaAv0VbOgRestAurCQ",
+      "body": "",
+      "operation": "payments.account.read",
+      "target_type": "pc.connection",
+      "target_id": "01920000-0000-7000-8000-000000000007",
+      "issuer": "https://pantherclaw.example.test",
+      "audience": "01920000-0000-7000-8000-000000000007",
+      "now": 1791201610,
+      "expect": "ok"
+    },
+    {
+      "name": "a connection test's token on another operation of the connection",
+      "token": "eyJhbGciOiJFZERTQSIsImtpZCI6ImFjdGlvbi10b2tlbnMta0pIRHNoWWxZZnhuaVFNaEw3WDNzdCIsInR5cCI6InBhcC1hY3Rpb24rand0In0.eyJpc3MiOiJodHRwczovL3BhbnRoZXJjbGF3LmV4YW1wbGUudGVzdCIsImF1ZCI6IjAxOTIwMDAwLTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDAwNyIsImp0aSI6IjAwZGM2YWNmLWFjMDAtNzg5OC04NWRlLWM5YzRkY2MyZjQ1ZiIsImlhdCI6MTc5MTIwMTYwMCwiZXhwIjoxNzkxMjAxNjMwLCJwYXAiOnsidiI6MSwidHhuIjoiMDE5MjAwMDAtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDBhIiwiYWN0IjoiYTA1Zjk1Y2NjODc3ODk3MzU4YmM2MGMxYTE5YzFlNjk5YmVjZTg1ZTEwMDhlM2IxNzJlODJjODA5M2M4NjhkMSIsImJoIjoiZTNiMGM0NDI5OGZjMWMxNDlhZmJmNGM4OTk2ZmI5MjQyN2FlNDFlNDY0OWI5MzRjYTQ5NTk5MWI3ODUyYjg1NSIsIm9wIjoicGF5bWVudHMuYWNjb3VudC5yZWFkIiwidGFyZ2V0Ijp7InR5cGUiOiJwYy5jb25uZWN0aW9uIiwiaWQiOiIwMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDcifX19.dxpdE_YpcOY7R3Ez3J7vw_bJhUtFqDBVANw4yMhnVB_IVBXie_r2ZlwsSymmyvGEaAPXtaAv0VbOgRestAurCQ",
+      "body": "",
+      "operation": "payments.refund.recent",
+      "target_type": "pc.connection",
+      "target_id": "01920000-0000-7000-8000-000000000007",
+      "issuer": "https://pantherclaw.example.test",
+      "audience": "01920000-0000-7000-8000-000000000007",
+      "now": 1791201610,
+      "expect": "operation_mismatch"
+    },
+    {
+      "name": "a connection test's token on another connection",
+      "token": "eyJhbGciOiJFZERTQSIsImtpZCI6ImFjdGlvbi10b2tlbnMta0pIRHNoWWxZZnhuaVFNaEw3WDNzdCIsInR5cCI6InBhcC1hY3Rpb24rand0In0.eyJpc3MiOiJodHRwczovL3BhbnRoZXJjbGF3LmV4YW1wbGUudGVzdCIsImF1ZCI6IjAxOTIwMDAwLTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDAwNyIsImp0aSI6IjAwZGM2YWNmLWFjMDAtNzg5OC04NWRlLWM5YzRkY2MyZjQ1ZiIsImlhdCI6MTc5MTIwMTYwMCwiZXhwIjoxNzkxMjAxNjMwLCJwYXAiOnsidiI6MSwidHhuIjoiMDE5MjAwMDAtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDBhIiwiYWN0IjoiYTA1Zjk1Y2NjODc3ODk3MzU4YmM2MGMxYTE5YzFlNjk5YmVjZTg1ZTEwMDhlM2IxNzJlODJjODA5M2M4NjhkMSIsImJoIjoiZTNiMGM0NDI5OGZjMWMxNDlhZmJmNGM4OTk2ZmI5MjQyN2FlNDFlNDY0OWI5MzRjYTQ5NTk5MWI3ODUyYjg1NSIsIm9wIjoicGF5bWVudHMuYWNjb3VudC5yZWFkIiwidGFyZ2V0Ijp7InR5cGUiOiJwYy5jb25uZWN0aW9uIiwiaWQiOiIwMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDcifX19.dxpdE_YpcOY7R3Ez3J7vw_bJhUtFqDBVANw4yMhnVB_IVBXie_r2ZlwsSymmyvGEaAPXtaAv0VbOgRestAurCQ",
+      "body": "",
+      "operation": "payments.account.read",
+      "target_type": "pc.connection",
+      "target_id": "01920000-0000-7000-8000-000000000008",
+      "issuer": "https://pantherclaw.example.test",
+      "audience": "01920000-0000-7000-8000-000000000007",
+      "now": 1791201610,
+      "expect": "operation_mismatch"
+    },
+    {
+      "name": "a connection test's token on the refund",
+      "token": "eyJhbGciOiJFZERTQSIsImtpZCI6ImFjdGlvbi10b2tlbnMta0pIRHNoWWxZZnhuaVFNaEw3WDNzdCIsInR5cCI6InBhcC1hY3Rpb24rand0In0.eyJpc3MiOiJodHRwczovL3BhbnRoZXJjbGF3LmV4YW1wbGUudGVzdCIsImF1ZCI6IjAxOTIwMDAwLTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDAwNyIsImp0aSI6IjAwZGM2YWNmLWFjMDAtNzg5OC04NWRlLWM5YzRkY2MyZjQ1ZiIsImlhdCI6MTc5MTIwMTYwMCwiZXhwIjoxNzkxMjAxNjMwLCJwYXAiOnsidiI6MSwidHhuIjoiMDE5MjAwMDAtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDBhIiwiYWN0IjoiYTA1Zjk1Y2NjODc3ODk3MzU4YmM2MGMxYTE5YzFlNjk5YmVjZTg1ZTEwMDhlM2IxNzJlODJjODA5M2M4NjhkMSIsImJoIjoiZTNiMGM0NDI5OGZjMWMxNDlhZmJmNGM4OTk2ZmI5MjQyN2FlNDFlNDY0OWI5MzRjYTQ5NTk5MWI3ODUyYjg1NSIsIm9wIjoicGF5bWVudHMuYWNjb3VudC5yZWFkIiwidGFyZ2V0Ijp7InR5cGUiOiJwYy5jb25uZWN0aW9uIiwiaWQiOiIwMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDcifX19.dxpdE_YpcOY7R3Ez3J7vw_bJhUtFqDBVANw4yMhnVB_IVBXie_r2ZlwsSymmyvGEaAPXtaAv0VbOgRestAurCQ",
+      "body": "",
+      "operation": "payments.refund.create",
+      "target_type": "payments.charge",
+      "target_id": "ch_1",
+      "issuer": "https://pantherclaw.example.test",
+      "audience": "01920000-0000-7000-8000-000000000007",
+      "now": 1791201610,
+      "expect": "operation_mismatch"
+    },
+    {
+      "name": "a connection test's token with a body",
+      "token": "eyJhbGciOiJFZERTQSIsImtpZCI6ImFjdGlvbi10b2tlbnMta0pIRHNoWWxZZnhuaVFNaEw3WDNzdCIsInR5cCI6InBhcC1hY3Rpb24rand0In0.eyJpc3MiOiJodHRwczovL3BhbnRoZXJjbGF3LmV4YW1wbGUudGVzdCIsImF1ZCI6IjAxOTIwMDAwLTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDAwNyIsImp0aSI6IjAwZGM2YWNmLWFjMDAtNzg5OC04NWRlLWM5YzRkY2MyZjQ1ZiIsImlhdCI6MTc5MTIwMTYwMCwiZXhwIjoxNzkxMjAxNjMwLCJwYXAiOnsidiI6MSwidHhuIjoiMDE5MjAwMDAtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDBhIiwiYWN0IjoiYTA1Zjk1Y2NjODc3ODk3MzU4YmM2MGMxYTE5YzFlNjk5YmVjZTg1ZTEwMDhlM2IxNzJlODJjODA5M2M4NjhkMSIsImJoIjoiZTNiMGM0NDI5OGZjMWMxNDlhZmJmNGM4OTk2ZmI5MjQyN2FlNDFlNDY0OWI5MzRjYTQ5NTk5MWI3ODUyYjg1NSIsIm9wIjoicGF5bWVudHMuYWNjb3VudC5yZWFkIiwidGFyZ2V0Ijp7InR5cGUiOiJwYy5jb25uZWN0aW9uIiwiaWQiOiIwMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDcifX19.dxpdE_YpcOY7R3Ez3J7vw_bJhUtFqDBVANw4yMhnVB_IVBXie_r2ZlwsSymmyvGEaAPXtaAv0VbOgRestAurCQ",
+      "body": "{\"amount\":\"30.00\",\"charge\":\"ch_1\",\"currency\":\"USD\",\"reason\":\"duplicate\"}",
+      "operation": "payments.account.read",
+      "target_type": "pc.connection",
+      "target_id": "01920000-0000-7000-8000-000000000007",
+      "issuer": "https://pantherclaw.example.test",
+      "audience": "01920000-0000-7000-8000-000000000007",
+      "now": 1791201610,
+      "expect": "body_mismatch"
+    },
+    {
+      "name": "a connection test's token bound to another body",
+      "token": "eyJhbGciOiJFZERTQSIsImtpZCI6ImFjdGlvbi10b2tlbnMta0pIRHNoWWxZZnhuaVFNaEw3WDNzdCIsInR5cCI6InBhcC1hY3Rpb24rand0In0.eyJpc3MiOiJodHRwczovL3BhbnRoZXJjbGF3LmV4YW1wbGUudGVzdCIsImF1ZCI6IjAxOTIwMDAwLTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDAwNyIsImp0aSI6IjAwZGM2YWNmLWFjMDAtN2VhMC1hNjcyLTNkNGY1YTRmY2E0MyIsImlhdCI6MTc5MTIwMTYwMCwiZXhwIjoxNzkxMjAxNjMwLCJwYXAiOnsidiI6MSwidHhuIjoiMDE5MjAwMDAtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDBhIiwiYWN0IjoiYTA1Zjk1Y2NjODc3ODk3MzU4YmM2MGMxYTE5YzFlNjk5YmVjZTg1ZTEwMDhlM2IxNzJlODJjODA5M2M4NjhkMSIsImJoIjoiNmZlNTBhMmY5NzdhZWM2ODg5Mjk0YTg2NWIyMzE3NDMzZTAzNTRmZmMxNWVjZTczZGM5YTdiYzFhMjUwOTIyZSIsIm9wIjoicGF5bWVudHMuYWNjb3VudC5yZWFkIiwidGFyZ2V0Ijp7InR5cGUiOiJwYy5jb25uZWN0aW9uIiwiaWQiOiIwMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDcifX19.OsjxW21fTi42vfxolK8naiYXAFXZnxPTajTfbOAkej9AUeyj3WlM22Bzocr9rukaso0eFtM8kgSmFZImYGKRAA",
+      "body": "",
+      "operation": "payments.account.read",
+      "target_type": "pc.connection",
+      "target_id": "01920000-0000-7000-8000-000000000007",
+      "issuer": "https://pantherclaw.example.test",
+      "audience": "01920000-0000-7000-8000-000000000007",
+      "now": 1791201610,
+      "expect": "body_mismatch"
     }
   ]
 }
