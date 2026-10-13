@@ -17,6 +17,7 @@ import (
 	"encoding/pem"
 	"io"
 	"log/slog"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"slices"
@@ -461,11 +462,28 @@ func TestE2E_M8_CodingToProduction(t *testing.T) {
 		t.Fatalf("pull request %+v", p)
 	}
 	s.eventually(t, "CONFIRMED", "SELECT coalesce(effect_state, '') FROM pc.transactions WHERE id = $1", done.TransactionID)
+	// The verifier confirmed the merge commit, now the base branch's head.
+	if p, _ := gh.PullRequest(ghRepo, 1); p.MergeCommitSHA == "" || gh.Branch(ghRepo, "main") != p.MergeCommitSHA {
+		t.Fatalf("main is %s, the merge commit %s", gh.Branch(ghRepo, "main"), p.MergeCommitSHA)
+	}
+	// The merge went out with a token for exactly this repository and the
+	// merge's permissions, revoked after it.
+	var mergeToken string
+	revoked := map[string]bool{}
 	for _, r := range gh.Requests() {
-		if r.Method == http.MethodPut && strings.HasSuffix(r.Path, "/merge") && r.Status == http.StatusOK &&
-			(!slices.Equal(r.Repos, []string{ghRepo}) || r.Installation != ghInstallation || r.Permissions["contents"] != "write" || len(r.Permissions) > 2) {
-			t.Fatalf("the merge's token: %+v", r)
+		switch {
+		case r.Method == http.MethodPut && strings.HasSuffix(r.Path, "/merge") && r.Status == http.StatusOK:
+			if mergeToken != "" || !slices.Equal(r.Repos, []string{ghRepo}) || r.Installation != ghInstallation ||
+				!maps.Equal(r.Permissions, map[string]string{"contents": "write", "metadata": "read"}) {
+				t.Fatalf("the merge's token: %+v", r)
+			}
+			mergeToken = r.Token
+		case r.Method == http.MethodDelete && r.Path == "/installation/token" && r.Status == http.StatusNoContent:
+			revoked[r.Token] = true
 		}
+	}
+	if mergeToken == "" || !revoked[mergeToken] {
+		t.Fatalf("the merge's token %q was not revoked", mergeToken)
 	}
 	if d := gh.Deployments(ghRepo); len(d) != 1 || d[0].Environment != "production" || d[0].SHA != gh.Branch(ghRepo, "main") {
 		t.Fatalf("deployments after the merge: %+v", d)

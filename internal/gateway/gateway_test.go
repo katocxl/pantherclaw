@@ -4,6 +4,7 @@
 package gateway
 
 import (
+	"cmp"
 	"bytes"
 	"context"
 	"crypto/sha256"
@@ -11,6 +12,7 @@ import (
 	"encoding/json/v2"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -397,6 +399,8 @@ type harness struct {
 	// (under circuitMu).
 	reportFacts bool
 	facts       []factReport
+	// log, when set, is the gateway's logger instead of a discarding one.
+	log *slog.Logger
 	gw          *Gateway
 	url         string
 	// approverKeys is the gateway's approvals.approver_keys_file.
@@ -512,7 +516,7 @@ func setup(t *testing.T, opts ...func(*harness)) *harness {
 			h.drifts = append(h.drifts, fmt.Sprintf("%s %s %s %s", conn, d.Tool, d.Expected, d.Observed))
 			return nil
 		},
-	}, pclog.Discard())
+	}, cmp.Or(h.log, pclog.Discard()))
 	if err != nil {
 		t.Fatal(err)
 	}
