@@ -145,7 +145,10 @@ type Effect struct {
 	// an irreversible effect reads "compensated, not reversed" (HR-193).
 	Compensation  *ids.UUID
 	Reversibility defs.Reversibility
-	At            time.Time
+	// Coverage is domain.CoveragePartial for a cooperative channel's
+	// transaction (HR-024, HR-186), whatever its state; the store sets it.
+	Coverage string
+	At       time.Time
 }
 
 // EffectResult is the state of one declared effect kind.
@@ -235,10 +238,14 @@ func (s *Service) Expire(ctx context.Context, org ids.OrgID) (int, error) {
 	return s.Store.Expire(ctx, org, s.sign)
 }
 
-// sign builds and signs an effect receipt (PAP-1 §9.3). Expected and
+// sign signs an effect receipt with the service's receipts key.
+func (s *Service) sign(e Effect) (Signed, error) { return SignEffect(s.Receipts, s.Issuer, e) }
+
+// SignEffect builds an effect receipt (PAP-1 §9.3) and signs it with
+// receipts, the receipts key's signer, in the name of issuer. Expected and
 // observed values appear as digests: the values stay in observations.
-func (s *Service) sign(e Effect) (Signed, error) {
-	if s.Receipts == nil {
+func SignEffect(receipts Signer, issuer string, e Effect) (Signed, error) {
+	if receipts == nil {
 		return Signed{}, errors.New("transactions: no receipt signer")
 	}
 	basis := map[string]any{"kind": e.Basis}
@@ -284,7 +291,10 @@ func (s *Service) sign(e Effect) (Signed, error) {
 	if e.Reversibility != "" {
 		pap["reversibility"] = string(e.Reversibility)
 	}
-	iss := s.Issuer
+	if e.Coverage != "" {
+		pap["coverage"] = e.Coverage
+	}
+	iss := issuer
 	if iss == "" {
 		iss = "pantherclaw"
 	}
@@ -293,7 +303,7 @@ func (s *Service) sign(e Effect) (Signed, error) {
 	if err != nil {
 		return Signed{}, err
 	}
-	token, err := s.Receipts.Sign(TypeEffectReceipt, payload)
+	token, err := receipts.Sign(TypeEffectReceipt, payload)
 	if err != nil {
 		return Signed{}, err
 	}

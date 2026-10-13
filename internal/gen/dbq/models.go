@@ -291,6 +291,24 @@ type PcBusinessUnit struct {
 	UpdatedAt   time.Time
 }
 
+type PcCaptureProfile struct {
+	OrgID           ids.OrgID
+	ID              ids.UUID
+	Purpose         string
+	Connections     []ids.UUID
+	Operations      []string
+	CaptureRequest  bool
+	CaptureResponse bool
+	ByteCap         int32
+	RetentionDays   int32
+	ExpiresAt       time.Time
+	State           string
+	CreatedBy       ids.UUID
+	CreatedAt       time.Time
+	DisabledBy      *ids.UUID
+	DisabledAt      *time.Time
+}
+
 type PcCheckpoint struct {
 	OrgID     ids.OrgID
 	TreeSize  int64
@@ -616,6 +634,26 @@ type PcEvidenceIntegrity struct {
 	VerifiedSize pgtype.Int8
 	VerifiedAt   *time.Time
 	UpdatedAt    time.Time
+}
+
+type PcEvidencePack struct {
+	OrgID          ids.OrgID
+	ID             ids.UUID
+	CreatedBy      ids.UUID
+	ScopeKind      string
+	Scope          []byte
+	Include        []byte
+	State          string
+	ErrorCode      *string
+	Manifest       *string
+	ManifestSha256 []byte
+	Content        []byte
+	ContentSha256  []byte
+	ContentSize    pgtype.Int8
+	Items          *int32
+	CreatedAt      time.Time
+	ReadyAt        *time.Time
+	ExpiresAt      *time.Time
 }
 
 type PcExecutionAttempt struct {
@@ -1032,6 +1070,20 @@ type PcPackageVersion struct {
 	SigningKeyID *ids.UUID
 }
 
+type PcPayloadCapture struct {
+	OrgID         ids.OrgID
+	ID            ids.UUID
+	AttemptID     ids.UUID
+	TransactionID ids.UUID
+	ProfileID     ids.UUID
+	Direction     string
+	Content       []byte
+	Size          int32
+	Truncated     bool
+	CreatedAt     time.Time
+	RemoveAt      time.Time
+}
+
 type PcPermit struct {
 	OrgID              ids.OrgID
 	ID                 ids.UUID
@@ -1053,6 +1105,7 @@ type PcPermit struct {
 	ActionTokenJti     *ids.UUID
 	DefinitionDigest   *string
 	VerifyExpect       []byte
+	Replaced           bool
 }
 
 type PcPolicy struct {

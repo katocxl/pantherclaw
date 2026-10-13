@@ -174,6 +174,30 @@ func TestShortRefundsDisagreeWithTheRequest(t *testing.T) {
 	}
 }
 
+// TestChangedFaultsApplyToTheNextRefund: SetFaults changes how the next
+// refund goes and keeps the refunds recorded before, which reads still
+// list (end-to-end tests make one refund short and the next one hang).
+func TestChangedFaultsApplyToTheNextRefund(t *testing.T) {
+	s := New(Faults{}, pclog.Discard())
+	ts := httptest.NewServer(s.Handler())
+	defer ts.Close()
+	if code, _, _ := post(t, ts.URL, "pc-txn-first", okBody); code != http.StatusOK {
+		t.Fatalf("the first refund answered %d", code)
+	}
+	s.SetFaults(Faults{ShortRate: 1})
+	if code, _, _ := post(t, ts.URL, "pc-txn-second", okBody); code != http.StatusOK {
+		t.Fatalf("the short refund answered %d", code)
+	}
+	s.SetFaults(Faults{DeclineRate: 1})
+	if code, _, _ := post(t, ts.URL, "pc-txn-third", okBody); code != http.StatusPaymentRequired {
+		t.Fatalf("the declined refund answered %d", code)
+	}
+	l := list(t, ts.URL, "charge=ch_1")
+	if len(l.Data) != 2 || l.Data[0].Amount != "30.00" || l.Data[1].Amount != "29.99" {
+		t.Fatalf("listed %+v", l)
+	}
+}
+
 func mustMoney(t *testing.T, amount, currency string) money.Money {
 	t.Helper()
 	m, err := money.ParseMoney(amount, currency)

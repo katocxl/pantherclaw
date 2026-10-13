@@ -1,11 +1,12 @@
 # Runbook — Key rotation
 
-**Status:** broker keys, sealed credentials and the internal gateway CA are tested procedures (M6). The other rows are outlines for the milestones named.
+**Status:** broker keys, sealed credentials and the internal gateway CA are tested procedures (M6). The publication of the evidence keys with their validity and revocation is tested (M7, §7); their rotation, like the other rows, is an outline for the milestones named.
 
 | Key | Rotation | Procedure | In code today |
 |---|---|---|---|
 | Authority signing keys (receipts, permits, workload tokens, action tokens) | 90 days, ≥ 7-day overlap | new key published in JWKS as `next` → promote to `active` → old key `verify-only` for 7 days → retire; the ledger records each step | Key-store support only; no operator command yet |
-| Envelope DEKs (per org/purpose) | yearly or on suspicion | create a new DEK version; new writes use it; a River job re-encrypts rows in batches; destroy the old version after verification | outline |
+| Evidence signing keys (M7): `checkpoints` (Ed25519, signed checkpoints), `anchors` (ECDSA P-256, the anchored global root), `evidence_packs` (Ed25519, pack manifests), `checkpoints_pq` (ML-DSA-65, optional co-signatures, created only with `evidence.mldsa_cosign`) | 90 days, ≥ 7-day overlap, like the Authority keys | as the Authority keys, and §7 | Key-store support and publication (`evidence-keys.json`, `revoked-keys.json`); no operator command yet |
+| Envelope DEKs (per org/purpose; M7 adds `evaluation_inputs`, the sealed replay inputs, and `payload_captures`) | yearly or on suspicion | create a new DEK version; new writes use it; a River job re-encrypts rows in batches; destroy the old version after verification | outline; sealed rows name their DEK version, so old rows stay readable while their version exists |
 | KEK (key-encryption key files) | provider policy / on suspicion | rewrap all DEKs with the new KEK; verify decryption of samples; disable the old KEK | `pantherclaw-server keys gen-kek`; the gateway's `broker.kek_files` accepts old and new (§5) |
 | Gateway broker keys | on suspicion, or when a gateway host is replaced | §5 | yes (M6) |
 | Sealed connection credentials | at the provider's rotation, or on suspicion | §5.3 | yes (M6) |
@@ -75,3 +76,23 @@ Replacing the CA therefore means every gateway enrolls again. That is the M6 pro
 
    Broker keys and sealed credentials are unaffected: they belong to the gateway record, not to its certificate.
 5. **Check:** `pclaw gateway get` shows a new certificate per gateway, and agent calls succeed again.
+
+## 7. Evidence keys (M7)
+
+Four platform signing keys sign evidence, besides the `receipts` key (G0 M7 design decision 17). The server creates `checkpoints`, `anchors` and `evidence_packs` when it starts, and `checkpoints_pq` only when `evidence.mldsa_cosign` is on. Each is wrapped by the KEK like every signing key.
+
+| Purpose | Algorithm | Signs | Verified by |
+|---|---|---|---|
+| `checkpoints` | Ed25519 | each org's signed checkpoints (C2SP signed notes) | `pclaw verify` (`checkpoint.signature`, `witness.previous`) |
+| `checkpoints_pq` | ML-DSA-65 | the optional co-signature of checkpoints and pack manifests | `pclaw verify` (`checkpoint.cosignature`, `pack.cosignature`), when the trust file pins it |
+| `anchors` | ECDSA P-256 | the anchor statement over the global root, entered in the transparency log | `pclaw verify` (`anchor.signature`, `anchor.log`, `anchor.timestamp`) |
+| `evidence_packs` | Ed25519 | evidence-pack manifests (`pap-pack+jwt`) | `pclaw verify` (`pack.signature`) |
+
+**What verifiers rely on.** `/.well-known/pantherclaw/evidence-keys.json` lists every key of these purposes and of `receipts`, revoked ones included, with `not_before` (its creation), `not_after` (when it stopped signing; none while active) and its state. `/.well-known/pantherclaw/revoked-keys.json` lists the revoked ones. `pclaw evidence trust` pins the document once (trust on first use). `pclaw verify` accepts only pinned keys: a receipt's key must have been valid when the receipt was issued, an anchor's key when the timestamp was made, and a checkpoint's key must not be revoked (a signed note carries no time). So:
+
+- **Keep a retired key published** for as long as evidence it signed is kept: removing it from the keystore makes every receipt, checkpoint, anchor or pack it signed fail for anyone who pins the document again.
+- **After a rotation, users refresh their trust file.** A trust file pinned before the new key existed fails the new key's signatures (`signed by key … which is not in your trust file`). Tell them, and give them the new fingerprint through another channel than the deployment itself.
+- **Anchors stay checkable.** An anchor names the `anchors` key that signed it, and the log entry carries its public key; a rotation changes neither.
+- **On compromise**, revoke the key (it appears in `revoked-keys.json`) and treat it as an incident: a holder of the `checkpoints` key can re-sign a rewritten history, which only a checkpoint saved earlier (`pclaw verify --previous`) or an anchored root exposes ([evidence-verification.md](evidence-verification.md)).
+
+Rotation has no operator command yet, as for the Authority keys (the table above). The per-org DEKs of `evaluation_inputs` (sealed replay inputs) and `payload_captures` follow the envelope DEK row: every sealed row names its DEK version, so rows sealed before a rotation stay readable while that version exists, and retention removes them on its own schedule ([retention.md](retention.md)).

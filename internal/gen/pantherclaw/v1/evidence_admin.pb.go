@@ -210,6 +210,62 @@ func (LegalHoldState) EnumDescriptor() ([]byte, []int) {
 	return file_pantherclaw_v1_evidence_admin_proto_rawDescGZIP(), []int{2}
 }
 
+// CaptureProfileState is where a capture profile stands.
+type CaptureProfileState int32
+
+const (
+	CaptureProfileState_CAPTURE_PROFILE_STATE_UNSPECIFIED CaptureProfileState = 0
+	// Gateways capture under it.
+	CaptureProfileState_CAPTURE_PROFILE_STATE_ACTIVE CaptureProfileState = 1
+	// A person disabled it.
+	CaptureProfileState_CAPTURE_PROFILE_STATE_DISABLED CaptureProfileState = 2
+	// It passed its expiry.
+	CaptureProfileState_CAPTURE_PROFILE_STATE_EXPIRED CaptureProfileState = 3
+)
+
+// Enum value maps for CaptureProfileState.
+var (
+	CaptureProfileState_name = map[int32]string{
+		0: "CAPTURE_PROFILE_STATE_UNSPECIFIED",
+		1: "CAPTURE_PROFILE_STATE_ACTIVE",
+		2: "CAPTURE_PROFILE_STATE_DISABLED",
+		3: "CAPTURE_PROFILE_STATE_EXPIRED",
+	}
+	CaptureProfileState_value = map[string]int32{
+		"CAPTURE_PROFILE_STATE_UNSPECIFIED": 0,
+		"CAPTURE_PROFILE_STATE_ACTIVE":      1,
+		"CAPTURE_PROFILE_STATE_DISABLED":    2,
+		"CAPTURE_PROFILE_STATE_EXPIRED":     3,
+	}
+)
+
+func (x CaptureProfileState) Enum() *CaptureProfileState {
+	p := new(CaptureProfileState)
+	*p = x
+	return p
+}
+
+func (x CaptureProfileState) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (CaptureProfileState) Descriptor() protoreflect.EnumDescriptor {
+	return file_pantherclaw_v1_evidence_admin_proto_enumTypes[3].Descriptor()
+}
+
+func (CaptureProfileState) Type() protoreflect.EnumType {
+	return &file_pantherclaw_v1_evidence_admin_proto_enumTypes[3]
+}
+
+func (x CaptureProfileState) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use CaptureProfileState.Descriptor instead.
+func (CaptureProfileState) EnumDescriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_evidence_admin_proto_rawDescGZIP(), []int{3}
+}
+
 // RetentionRevision is one recorded revision of a category's retention.
 type RetentionRevision struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -1078,11 +1134,723 @@ func (x *ListLegalHoldsResponse) GetNextPageToken() string {
 	return ""
 }
 
+// CaptureProfile switches restricted payload capture on (HR-199).
+type CaptureProfile struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Profile id.
+	Id string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	// Why payloads are captured, in the creator's words (untrusted text).
+	Purpose string `protobuf:"bytes,2,opt,name=purpose,proto3" json:"purpose,omitempty"`
+	// The connections it covers.
+	ConnectionIds []string `protobuf:"bytes,3,rep,name=connection_ids,json=connectionIds,proto3" json:"connection_ids,omitempty"`
+	// The operations it covers.
+	Operations []string `protobuf:"bytes,4,rep,name=operations,proto3" json:"operations,omitempty"`
+	// Capture the outbound body.
+	CaptureRequest bool `protobuf:"varint,5,opt,name=capture_request,json=captureRequest,proto3" json:"capture_request,omitempty"`
+	// Capture the target's response (after secret-echo redaction).
+	CaptureResponse bool `protobuf:"varint,6,opt,name=capture_response,json=captureResponse,proto3" json:"capture_response,omitempty"`
+	// Bytes kept per body.
+	ByteCap int32 `protobuf:"varint,7,opt,name=byte_cap,json=byteCap,proto3" json:"byte_cap,omitempty"`
+	// Days a capture is kept.
+	RetentionDays int32 `protobuf:"varint,8,opt,name=retention_days,json=retentionDays,proto3" json:"retention_days,omitempty"`
+	// When it expires.
+	ExpireTime *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=expire_time,json=expireTime,proto3" json:"expire_time,omitempty"`
+	// State.
+	State CaptureProfileState `protobuf:"varint,10,opt,name=state,proto3,enum=pantherclaw.v1.CaptureProfileState" json:"state,omitempty"`
+	// Who created it.
+	CreatedBy string `protobuf:"bytes,11,opt,name=created_by,json=createdBy,proto3" json:"created_by,omitempty"`
+	// When.
+	CreateTime *timestamppb.Timestamp `protobuf:"bytes,12,opt,name=create_time,json=createTime,proto3" json:"create_time,omitempty"`
+	// Who disabled it.
+	DisabledBy string `protobuf:"bytes,13,opt,name=disabled_by,json=disabledBy,proto3" json:"disabled_by,omitempty"`
+	// When.
+	DisableTime   *timestamppb.Timestamp `protobuf:"bytes,14,opt,name=disable_time,json=disableTime,proto3" json:"disable_time,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CaptureProfile) Reset() {
+	*x = CaptureProfile{}
+	mi := &file_pantherclaw_v1_evidence_admin_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CaptureProfile) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CaptureProfile) ProtoMessage() {}
+
+func (x *CaptureProfile) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_evidence_admin_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CaptureProfile.ProtoReflect.Descriptor instead.
+func (*CaptureProfile) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_evidence_admin_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *CaptureProfile) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *CaptureProfile) GetPurpose() string {
+	if x != nil {
+		return x.Purpose
+	}
+	return ""
+}
+
+func (x *CaptureProfile) GetConnectionIds() []string {
+	if x != nil {
+		return x.ConnectionIds
+	}
+	return nil
+}
+
+func (x *CaptureProfile) GetOperations() []string {
+	if x != nil {
+		return x.Operations
+	}
+	return nil
+}
+
+func (x *CaptureProfile) GetCaptureRequest() bool {
+	if x != nil {
+		return x.CaptureRequest
+	}
+	return false
+}
+
+func (x *CaptureProfile) GetCaptureResponse() bool {
+	if x != nil {
+		return x.CaptureResponse
+	}
+	return false
+}
+
+func (x *CaptureProfile) GetByteCap() int32 {
+	if x != nil {
+		return x.ByteCap
+	}
+	return 0
+}
+
+func (x *CaptureProfile) GetRetentionDays() int32 {
+	if x != nil {
+		return x.RetentionDays
+	}
+	return 0
+}
+
+func (x *CaptureProfile) GetExpireTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ExpireTime
+	}
+	return nil
+}
+
+func (x *CaptureProfile) GetState() CaptureProfileState {
+	if x != nil {
+		return x.State
+	}
+	return CaptureProfileState_CAPTURE_PROFILE_STATE_UNSPECIFIED
+}
+
+func (x *CaptureProfile) GetCreatedBy() string {
+	if x != nil {
+		return x.CreatedBy
+	}
+	return ""
+}
+
+func (x *CaptureProfile) GetCreateTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.CreateTime
+	}
+	return nil
+}
+
+func (x *CaptureProfile) GetDisabledBy() string {
+	if x != nil {
+		return x.DisabledBy
+	}
+	return ""
+}
+
+func (x *CaptureProfile) GetDisableTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.DisableTime
+	}
+	return nil
+}
+
+// CreateCaptureProfileRequest creates a capture profile.
+type CreateCaptureProfileRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Why payloads are captured (required; stored as untrusted text).
+	Purpose string `protobuf:"bytes,1,opt,name=purpose,proto3" json:"purpose,omitempty"`
+	// The connections to capture on.
+	ConnectionIds []string `protobuf:"bytes,2,rep,name=connection_ids,json=connectionIds,proto3" json:"connection_ids,omitempty"`
+	// The operations to capture, for example payments.refund.create.
+	Operations []string `protobuf:"bytes,3,rep,name=operations,proto3" json:"operations,omitempty"`
+	// Capture the outbound body the gateway builds (never headers).
+	CaptureRequest bool `protobuf:"varint,4,opt,name=capture_request,json=captureRequest,proto3" json:"capture_request,omitempty"`
+	// Capture the target's response after secret-echo redaction.
+	CaptureResponse bool `protobuf:"varint,5,opt,name=capture_response,json=captureResponse,proto3" json:"capture_response,omitempty"`
+	// Bytes kept per body: 1 to 65,536.
+	ByteCap int32 `protobuf:"varint,6,opt,name=byte_cap,json=byteCap,proto3" json:"byte_cap,omitempty"`
+	// Days a capture is kept: 1 to 30.
+	RetentionDays int32 `protobuf:"varint,7,opt,name=retention_days,json=retentionDays,proto3" json:"retention_days,omitempty"`
+	// Days until the profile expires: 1 to 90.
+	ExpiresInDays int32 `protobuf:"varint,8,opt,name=expires_in_days,json=expiresInDays,proto3" json:"expires_in_days,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CreateCaptureProfileRequest) Reset() {
+	*x = CreateCaptureProfileRequest{}
+	mi := &file_pantherclaw_v1_evidence_admin_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CreateCaptureProfileRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CreateCaptureProfileRequest) ProtoMessage() {}
+
+func (x *CreateCaptureProfileRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_evidence_admin_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CreateCaptureProfileRequest.ProtoReflect.Descriptor instead.
+func (*CreateCaptureProfileRequest) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_evidence_admin_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *CreateCaptureProfileRequest) GetPurpose() string {
+	if x != nil {
+		return x.Purpose
+	}
+	return ""
+}
+
+func (x *CreateCaptureProfileRequest) GetConnectionIds() []string {
+	if x != nil {
+		return x.ConnectionIds
+	}
+	return nil
+}
+
+func (x *CreateCaptureProfileRequest) GetOperations() []string {
+	if x != nil {
+		return x.Operations
+	}
+	return nil
+}
+
+func (x *CreateCaptureProfileRequest) GetCaptureRequest() bool {
+	if x != nil {
+		return x.CaptureRequest
+	}
+	return false
+}
+
+func (x *CreateCaptureProfileRequest) GetCaptureResponse() bool {
+	if x != nil {
+		return x.CaptureResponse
+	}
+	return false
+}
+
+func (x *CreateCaptureProfileRequest) GetByteCap() int32 {
+	if x != nil {
+		return x.ByteCap
+	}
+	return 0
+}
+
+func (x *CreateCaptureProfileRequest) GetRetentionDays() int32 {
+	if x != nil {
+		return x.RetentionDays
+	}
+	return 0
+}
+
+func (x *CreateCaptureProfileRequest) GetExpiresInDays() int32 {
+	if x != nil {
+		return x.ExpiresInDays
+	}
+	return 0
+}
+
+// CreateCaptureProfileResponse returns the profile.
+type CreateCaptureProfileResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The profile.
+	Profile       *CaptureProfile `protobuf:"bytes,1,opt,name=profile,proto3" json:"profile,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CreateCaptureProfileResponse) Reset() {
+	*x = CreateCaptureProfileResponse{}
+	mi := &file_pantherclaw_v1_evidence_admin_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CreateCaptureProfileResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CreateCaptureProfileResponse) ProtoMessage() {}
+
+func (x *CreateCaptureProfileResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_evidence_admin_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CreateCaptureProfileResponse.ProtoReflect.Descriptor instead.
+func (*CreateCaptureProfileResponse) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_evidence_admin_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *CreateCaptureProfileResponse) GetProfile() *CaptureProfile {
+	if x != nil {
+		return x.Profile
+	}
+	return nil
+}
+
+// ListCaptureProfilesRequest pages through profiles, newest first.
+type ListCaptureProfilesRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Maximum results (default 50, at most 200).
+	PageSize int32 `protobuf:"varint,1,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
+	// Token from a previous response.
+	PageToken string `protobuf:"bytes,2,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
+	// Only in this state (all when unset).
+	State         CaptureProfileState `protobuf:"varint,3,opt,name=state,proto3,enum=pantherclaw.v1.CaptureProfileState" json:"state,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListCaptureProfilesRequest) Reset() {
+	*x = ListCaptureProfilesRequest{}
+	mi := &file_pantherclaw_v1_evidence_admin_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListCaptureProfilesRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListCaptureProfilesRequest) ProtoMessage() {}
+
+func (x *ListCaptureProfilesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_evidence_admin_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListCaptureProfilesRequest.ProtoReflect.Descriptor instead.
+func (*ListCaptureProfilesRequest) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_evidence_admin_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *ListCaptureProfilesRequest) GetPageSize() int32 {
+	if x != nil {
+		return x.PageSize
+	}
+	return 0
+}
+
+func (x *ListCaptureProfilesRequest) GetPageToken() string {
+	if x != nil {
+		return x.PageToken
+	}
+	return ""
+}
+
+func (x *ListCaptureProfilesRequest) GetState() CaptureProfileState {
+	if x != nil {
+		return x.State
+	}
+	return CaptureProfileState_CAPTURE_PROFILE_STATE_UNSPECIFIED
+}
+
+// ListCaptureProfilesResponse is one page.
+type ListCaptureProfilesResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Profiles, newest first.
+	Profiles []*CaptureProfile `protobuf:"bytes,1,rep,name=profiles,proto3" json:"profiles,omitempty"`
+	// Token for the next page; empty at the end.
+	NextPageToken string `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListCaptureProfilesResponse) Reset() {
+	*x = ListCaptureProfilesResponse{}
+	mi := &file_pantherclaw_v1_evidence_admin_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListCaptureProfilesResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListCaptureProfilesResponse) ProtoMessage() {}
+
+func (x *ListCaptureProfilesResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_evidence_admin_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListCaptureProfilesResponse.ProtoReflect.Descriptor instead.
+func (*ListCaptureProfilesResponse) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_evidence_admin_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *ListCaptureProfilesResponse) GetProfiles() []*CaptureProfile {
+	if x != nil {
+		return x.Profiles
+	}
+	return nil
+}
+
+func (x *ListCaptureProfilesResponse) GetNextPageToken() string {
+	if x != nil {
+		return x.NextPageToken
+	}
+	return ""
+}
+
+// DisableCaptureProfileRequest names a profile.
+type DisableCaptureProfileRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Profile id; it must be active.
+	Id            string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DisableCaptureProfileRequest) Reset() {
+	*x = DisableCaptureProfileRequest{}
+	mi := &file_pantherclaw_v1_evidence_admin_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DisableCaptureProfileRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DisableCaptureProfileRequest) ProtoMessage() {}
+
+func (x *DisableCaptureProfileRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_evidence_admin_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DisableCaptureProfileRequest.ProtoReflect.Descriptor instead.
+func (*DisableCaptureProfileRequest) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_evidence_admin_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *DisableCaptureProfileRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+// DisableCaptureProfileResponse returns the disabled profile.
+type DisableCaptureProfileResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The profile.
+	Profile       *CaptureProfile `protobuf:"bytes,1,opt,name=profile,proto3" json:"profile,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DisableCaptureProfileResponse) Reset() {
+	*x = DisableCaptureProfileResponse{}
+	mi := &file_pantherclaw_v1_evidence_admin_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DisableCaptureProfileResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DisableCaptureProfileResponse) ProtoMessage() {}
+
+func (x *DisableCaptureProfileResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_evidence_admin_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DisableCaptureProfileResponse.ProtoReflect.Descriptor instead.
+func (*DisableCaptureProfileResponse) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_evidence_admin_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *DisableCaptureProfileResponse) GetProfile() *CaptureProfile {
+	if x != nil {
+		return x.Profile
+	}
+	return nil
+}
+
+// ReadPayloadCaptureRequest names a capture: a transaction's dispatch has
+// at most one of each direction.
+type ReadPayloadCaptureRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Transaction id.
+	TransactionId string `protobuf:"bytes,1,opt,name=transaction_id,json=transactionId,proto3" json:"transaction_id,omitempty"`
+	// Which body.
+	Direction CaptureDirection `protobuf:"varint,2,opt,name=direction,proto3,enum=pantherclaw.v1.CaptureDirection" json:"direction,omitempty"`
+	// Why it is read (required; recorded in the audit ledger).
+	Reason        string `protobuf:"bytes,3,opt,name=reason,proto3" json:"reason,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ReadPayloadCaptureRequest) Reset() {
+	*x = ReadPayloadCaptureRequest{}
+	mi := &file_pantherclaw_v1_evidence_admin_proto_msgTypes[20]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ReadPayloadCaptureRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ReadPayloadCaptureRequest) ProtoMessage() {}
+
+func (x *ReadPayloadCaptureRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_evidence_admin_proto_msgTypes[20]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ReadPayloadCaptureRequest.ProtoReflect.Descriptor instead.
+func (*ReadPayloadCaptureRequest) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_evidence_admin_proto_rawDescGZIP(), []int{20}
+}
+
+func (x *ReadPayloadCaptureRequest) GetTransactionId() string {
+	if x != nil {
+		return x.TransactionId
+	}
+	return ""
+}
+
+func (x *ReadPayloadCaptureRequest) GetDirection() CaptureDirection {
+	if x != nil {
+		return x.Direction
+	}
+	return CaptureDirection_CAPTURE_DIRECTION_UNSPECIFIED
+}
+
+func (x *ReadPayloadCaptureRequest) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
+// ReadPayloadCaptureResponse returns the capture.
+type ReadPayloadCaptureResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Capture id.
+	Id string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	// The transaction.
+	TransactionId string `protobuf:"bytes,2,opt,name=transaction_id,json=transactionId,proto3" json:"transaction_id,omitempty"`
+	// The profile it was taken under.
+	ProfileId string `protobuf:"bytes,3,opt,name=profile_id,json=profileId,proto3" json:"profile_id,omitempty"`
+	// Which body.
+	Direction CaptureDirection `protobuf:"varint,4,opt,name=direction,proto3,enum=pantherclaw.v1.CaptureDirection" json:"direction,omitempty"`
+	// The body's size before truncation.
+	Size int64 `protobuf:"varint,5,opt,name=size,proto3" json:"size,omitempty"`
+	// Whether content is cut to the profile's cap.
+	Truncated bool `protobuf:"varint,6,opt,name=truncated,proto3" json:"truncated,omitempty"`
+	// When it was taken.
+	CreateTime *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=create_time,json=createTime,proto3" json:"create_time,omitempty"`
+	// When retention deletes it.
+	RemoveTime *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=remove_time,json=removeTime,proto3" json:"remove_time,omitempty"`
+	// The body.
+	Content       []byte `protobuf:"bytes,9,opt,name=content,proto3" json:"content,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ReadPayloadCaptureResponse) Reset() {
+	*x = ReadPayloadCaptureResponse{}
+	mi := &file_pantherclaw_v1_evidence_admin_proto_msgTypes[21]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ReadPayloadCaptureResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ReadPayloadCaptureResponse) ProtoMessage() {}
+
+func (x *ReadPayloadCaptureResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_evidence_admin_proto_msgTypes[21]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ReadPayloadCaptureResponse.ProtoReflect.Descriptor instead.
+func (*ReadPayloadCaptureResponse) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_evidence_admin_proto_rawDescGZIP(), []int{21}
+}
+
+func (x *ReadPayloadCaptureResponse) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *ReadPayloadCaptureResponse) GetTransactionId() string {
+	if x != nil {
+		return x.TransactionId
+	}
+	return ""
+}
+
+func (x *ReadPayloadCaptureResponse) GetProfileId() string {
+	if x != nil {
+		return x.ProfileId
+	}
+	return ""
+}
+
+func (x *ReadPayloadCaptureResponse) GetDirection() CaptureDirection {
+	if x != nil {
+		return x.Direction
+	}
+	return CaptureDirection_CAPTURE_DIRECTION_UNSPECIFIED
+}
+
+func (x *ReadPayloadCaptureResponse) GetSize() int64 {
+	if x != nil {
+		return x.Size
+	}
+	return 0
+}
+
+func (x *ReadPayloadCaptureResponse) GetTruncated() bool {
+	if x != nil {
+		return x.Truncated
+	}
+	return false
+}
+
+func (x *ReadPayloadCaptureResponse) GetCreateTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.CreateTime
+	}
+	return nil
+}
+
+func (x *ReadPayloadCaptureResponse) GetRemoveTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.RemoveTime
+	}
+	return nil
+}
+
+func (x *ReadPayloadCaptureResponse) GetContent() []byte {
+	if x != nil {
+		return x.Content
+	}
+	return nil
+}
+
 var File_pantherclaw_v1_evidence_admin_proto protoreflect.FileDescriptor
 
 const file_pantherclaw_v1_evidence_admin_proto_rawDesc = "" +
 	"\n" +
-	"#pantherclaw/v1/evidence_admin.proto\x12\x0epantherclaw.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xda\x01\n" +
+	"#pantherclaw/v1/evidence_admin.proto\x12\x0epantherclaw.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1epantherclaw/v1/authority.proto\"\xda\x01\n" +
 	"\x11RetentionRevision\x12\x1a\n" +
 	"\brevision\x18\x01 \x01(\x05R\brevision\x12\x12\n" +
 	"\x04days\x18\x02 \x01(\x05R\x04days\x12\x15\n" +
@@ -1155,7 +1923,76 @@ const file_pantherclaw_v1_evidence_admin_proto_rawDesc = "" +
 	"\x05state\x18\x03 \x01(\x0e2\x1e.pantherclaw.v1.LegalHoldStateB\b\xbaH\x05\x82\x01\x02\x10\x01R\x05state\"q\n" +
 	"\x16ListLegalHoldsResponse\x12/\n" +
 	"\x05holds\x18\x01 \x03(\v2\x19.pantherclaw.v1.LegalHoldR\x05holds\x12&\n" +
-	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken*\xeb\x01\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"\xcb\x04\n" +
+	"\x0eCaptureProfile\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x18\n" +
+	"\apurpose\x18\x02 \x01(\tR\apurpose\x12%\n" +
+	"\x0econnection_ids\x18\x03 \x03(\tR\rconnectionIds\x12\x1e\n" +
+	"\n" +
+	"operations\x18\x04 \x03(\tR\n" +
+	"operations\x12'\n" +
+	"\x0fcapture_request\x18\x05 \x01(\bR\x0ecaptureRequest\x12)\n" +
+	"\x10capture_response\x18\x06 \x01(\bR\x0fcaptureResponse\x12\x19\n" +
+	"\bbyte_cap\x18\a \x01(\x05R\abyteCap\x12%\n" +
+	"\x0eretention_days\x18\b \x01(\x05R\rretentionDays\x12;\n" +
+	"\vexpire_time\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\n" +
+	"expireTime\x129\n" +
+	"\x05state\x18\n" +
+	" \x01(\x0e2#.pantherclaw.v1.CaptureProfileStateR\x05state\x12\x1d\n" +
+	"\n" +
+	"created_by\x18\v \x01(\tR\tcreatedBy\x12;\n" +
+	"\vcreate_time\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\n" +
+	"createTime\x12\x1f\n" +
+	"\vdisabled_by\x18\r \x01(\tR\n" +
+	"disabledBy\x12=\n" +
+	"\fdisable_time\x18\x0e \x01(\v2\x1a.google.protobuf.TimestampR\vdisableTime\"\xb7\x04\n" +
+	"\x1bCreateCaptureProfileRequest\x12$\n" +
+	"\apurpose\x18\x01 \x01(\tB\n" +
+	"\xbaH\ar\x05\x10\x01\x18\xf4\x03R\apurpose\x12:\n" +
+	"\x0econnection_ids\x18\x02 \x03(\tB\x13\xbaH\x10\x92\x01\r\b\x01\x10 \x18\x01\"\x05r\x03\xb0\x01\x01R\rconnectionIds\x12Y\n" +
+	"\n" +
+	"operations\x18\x03 \x03(\tB9\xbaH6\x92\x013\b\x01\x10@\x18\x01\"+r)\x18\x80\x012$^[a-z][a-z0-9_]*(\\.[a-z0-9_]+){1,7}$R\n" +
+	"operations\x12'\n" +
+	"\x0fcapture_request\x18\x04 \x01(\bR\x0ecaptureRequest\x12)\n" +
+	"\x10capture_response\x18\x05 \x01(\bR\x0fcaptureResponse\x12&\n" +
+	"\bbyte_cap\x18\x06 \x01(\x05B\v\xbaH\b\x1a\x06\x18\x80\x80\x04(\x01R\abyteCap\x120\n" +
+	"\x0eretention_days\x18\a \x01(\x05B\t\xbaH\x06\x1a\x04\x18\x1e(\x01R\rretentionDays\x121\n" +
+	"\x0fexpires_in_days\x18\b \x01(\x05B\t\xbaH\x06\x1a\x04\x18Z(\x01R\rexpiresInDays:z\xbaHw\x1au\n" +
+	"\x19capture_profile.direction\x12)capture the request, the response or both\x1a-this.capture_request || this.capture_response\"X\n" +
+	"\x1cCreateCaptureProfileResponse\x128\n" +
+	"\aprofile\x18\x01 \x01(\v2\x1e.pantherclaw.v1.CaptureProfileR\aprofile\"\xc4\x01\n" +
+	"\x1aListCaptureProfilesRequest\x12'\n" +
+	"\tpage_size\x18\x01 \x01(\x05B\n" +
+	"\xbaH\a\x1a\x05\x18\xc8\x01(\x00R\bpageSize\x128\n" +
+	"\n" +
+	"page_token\x18\x02 \x01(\tB\x19\xbaH\x16r\x14\x18@2\x10^[A-Za-z0-9_-]*$R\tpageToken\x12C\n" +
+	"\x05state\x18\x03 \x01(\x0e2#.pantherclaw.v1.CaptureProfileStateB\b\xbaH\x05\x82\x01\x02\x10\x01R\x05state\"\x81\x01\n" +
+	"\x1bListCaptureProfilesResponse\x12:\n" +
+	"\bprofiles\x18\x01 \x03(\v2\x1e.pantherclaw.v1.CaptureProfileR\bprofiles\x12&\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"8\n" +
+	"\x1cDisableCaptureProfileRequest\x12\x18\n" +
+	"\x02id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x02id\"Y\n" +
+	"\x1dDisableCaptureProfileResponse\x128\n" +
+	"\aprofile\x18\x01 \x01(\v2\x1e.pantherclaw.v1.CaptureProfileR\aprofile\"\xbc\x01\n" +
+	"\x19ReadPayloadCaptureRequest\x12/\n" +
+	"\x0etransaction_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\rtransactionId\x12J\n" +
+	"\tdirection\x18\x02 \x01(\x0e2 .pantherclaw.v1.CaptureDirectionB\n" +
+	"\xbaH\a\x82\x01\x04\x10\x01 \x00R\tdirection\x12\"\n" +
+	"\x06reason\x18\x03 \x01(\tB\n" +
+	"\xbaH\ar\x05\x10\x01(\xf4\x03R\x06reason\"\xf8\x02\n" +
+	"\x1aReadPayloadCaptureResponse\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12%\n" +
+	"\x0etransaction_id\x18\x02 \x01(\tR\rtransactionId\x12\x1d\n" +
+	"\n" +
+	"profile_id\x18\x03 \x01(\tR\tprofileId\x12>\n" +
+	"\tdirection\x18\x04 \x01(\x0e2 .pantherclaw.v1.CaptureDirectionR\tdirection\x12\x12\n" +
+	"\x04size\x18\x05 \x01(\x03R\x04size\x12\x1c\n" +
+	"\ttruncated\x18\x06 \x01(\bR\ttruncated\x12;\n" +
+	"\vcreate_time\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\n" +
+	"createTime\x12;\n" +
+	"\vremove_time\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\n" +
+	"removeTime\x12\x18\n" +
+	"\acontent\x18\t \x01(\fR\acontent*\xeb\x01\n" +
 	"\x11RetentionCategory\x12\"\n" +
 	"\x1eRETENTION_CATEGORY_UNSPECIFIED\x10\x00\x12\x1f\n" +
 	"\x1bRETENTION_CATEGORY_PAYLOADS\x10\x01\x12'\n" +
@@ -1173,13 +2010,22 @@ const file_pantherclaw_v1_evidence_admin_proto_rawDesc = "" +
 	"\x0eLegalHoldState\x12 \n" +
 	"\x1cLEGAL_HOLD_STATE_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17LEGAL_HOLD_STATE_ACTIVE\x10\x01\x12\x1d\n" +
-	"\x19LEGAL_HOLD_STATE_RELEASED\x10\x022\xac\x04\n" +
+	"\x19LEGAL_HOLD_STATE_RELEASED\x10\x02*\xa5\x01\n" +
+	"\x13CaptureProfileState\x12%\n" +
+	"!CAPTURE_PROFILE_STATE_UNSPECIFIED\x10\x00\x12 \n" +
+	"\x1cCAPTURE_PROFILE_STATE_ACTIVE\x10\x01\x12\"\n" +
+	"\x1eCAPTURE_PROFILE_STATE_DISABLED\x10\x02\x12!\n" +
+	"\x1dCAPTURE_PROFILE_STATE_EXPIRED\x10\x032\xf7\a\n" +
 	"\x14EvidenceAdminService\x12v\n" +
 	"\x14GetRetentionPolicies\x12+.pantherclaw.v1.GetRetentionPoliciesRequest\x1a,.pantherclaw.v1.GetRetentionPoliciesResponse\"\x03\x90\x02\x01\x12k\n" +
 	"\x12SetRetentionPolicy\x12).pantherclaw.v1.SetRetentionPolicyRequest\x1a*.pantherclaw.v1.SetRetentionPolicyResponse\x12b\n" +
 	"\x0fCreateLegalHold\x12&.pantherclaw.v1.CreateLegalHoldRequest\x1a'.pantherclaw.v1.CreateLegalHoldResponse\x12e\n" +
 	"\x10ReleaseLegalHold\x12'.pantherclaw.v1.ReleaseLegalHoldRequest\x1a(.pantherclaw.v1.ReleaseLegalHoldResponse\x12d\n" +
-	"\x0eListLegalHolds\x12%.pantherclaw.v1.ListLegalHoldsRequest\x1a&.pantherclaw.v1.ListLegalHoldsResponse\"\x03\x90\x02\x01B\xcb\x01\n" +
+	"\x0eListLegalHolds\x12%.pantherclaw.v1.ListLegalHoldsRequest\x1a&.pantherclaw.v1.ListLegalHoldsResponse\"\x03\x90\x02\x01\x12q\n" +
+	"\x14CreateCaptureProfile\x12+.pantherclaw.v1.CreateCaptureProfileRequest\x1a,.pantherclaw.v1.CreateCaptureProfileResponse\x12s\n" +
+	"\x13ListCaptureProfiles\x12*.pantherclaw.v1.ListCaptureProfilesRequest\x1a+.pantherclaw.v1.ListCaptureProfilesResponse\"\x03\x90\x02\x01\x12t\n" +
+	"\x15DisableCaptureProfile\x12,.pantherclaw.v1.DisableCaptureProfileRequest\x1a-.pantherclaw.v1.DisableCaptureProfileResponse\x12k\n" +
+	"\x12ReadPayloadCapture\x12).pantherclaw.v1.ReadPayloadCaptureRequest\x1a*.pantherclaw.v1.ReadPayloadCaptureResponseB\xcb\x01\n" +
 	"\x12com.pantherclaw.v1B\x12EvidenceAdminProtoP\x01ZHgithub.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1;pantherclawv1\xa2\x02\x03PXX\xaa\x02\x0ePantherclaw.V1\xca\x02\x0ePantherclaw\\V1\xe2\x02\x1aPantherclaw\\V1\\GPBMetadata\xea\x02\x0fPantherclaw::V1b\x06proto3"
 
 var (
@@ -1194,64 +2040,95 @@ func file_pantherclaw_v1_evidence_admin_proto_rawDescGZIP() []byte {
 	return file_pantherclaw_v1_evidence_admin_proto_rawDescData
 }
 
-var file_pantherclaw_v1_evidence_admin_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_pantherclaw_v1_evidence_admin_proto_msgTypes = make([]protoimpl.MessageInfo, 13)
+var file_pantherclaw_v1_evidence_admin_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
+var file_pantherclaw_v1_evidence_admin_proto_msgTypes = make([]protoimpl.MessageInfo, 22)
 var file_pantherclaw_v1_evidence_admin_proto_goTypes = []any{
-	(RetentionCategory)(0),               // 0: pantherclaw.v1.RetentionCategory
-	(LegalHoldScope)(0),                  // 1: pantherclaw.v1.LegalHoldScope
-	(LegalHoldState)(0),                  // 2: pantherclaw.v1.LegalHoldState
-	(*RetentionRevision)(nil),            // 3: pantherclaw.v1.RetentionRevision
-	(*RetentionPolicy)(nil),              // 4: pantherclaw.v1.RetentionPolicy
-	(*GetRetentionPoliciesRequest)(nil),  // 5: pantherclaw.v1.GetRetentionPoliciesRequest
-	(*GetRetentionPoliciesResponse)(nil), // 6: pantherclaw.v1.GetRetentionPoliciesResponse
-	(*SetRetentionPolicyRequest)(nil),    // 7: pantherclaw.v1.SetRetentionPolicyRequest
-	(*SetRetentionPolicyResponse)(nil),   // 8: pantherclaw.v1.SetRetentionPolicyResponse
-	(*LegalHold)(nil),                    // 9: pantherclaw.v1.LegalHold
-	(*CreateLegalHoldRequest)(nil),       // 10: pantherclaw.v1.CreateLegalHoldRequest
-	(*CreateLegalHoldResponse)(nil),      // 11: pantherclaw.v1.CreateLegalHoldResponse
-	(*ReleaseLegalHoldRequest)(nil),      // 12: pantherclaw.v1.ReleaseLegalHoldRequest
-	(*ReleaseLegalHoldResponse)(nil),     // 13: pantherclaw.v1.ReleaseLegalHoldResponse
-	(*ListLegalHoldsRequest)(nil),        // 14: pantherclaw.v1.ListLegalHoldsRequest
-	(*ListLegalHoldsResponse)(nil),       // 15: pantherclaw.v1.ListLegalHoldsResponse
-	(*timestamppb.Timestamp)(nil),        // 16: google.protobuf.Timestamp
+	(RetentionCategory)(0),                // 0: pantherclaw.v1.RetentionCategory
+	(LegalHoldScope)(0),                   // 1: pantherclaw.v1.LegalHoldScope
+	(LegalHoldState)(0),                   // 2: pantherclaw.v1.LegalHoldState
+	(CaptureProfileState)(0),              // 3: pantherclaw.v1.CaptureProfileState
+	(*RetentionRevision)(nil),             // 4: pantherclaw.v1.RetentionRevision
+	(*RetentionPolicy)(nil),               // 5: pantherclaw.v1.RetentionPolicy
+	(*GetRetentionPoliciesRequest)(nil),   // 6: pantherclaw.v1.GetRetentionPoliciesRequest
+	(*GetRetentionPoliciesResponse)(nil),  // 7: pantherclaw.v1.GetRetentionPoliciesResponse
+	(*SetRetentionPolicyRequest)(nil),     // 8: pantherclaw.v1.SetRetentionPolicyRequest
+	(*SetRetentionPolicyResponse)(nil),    // 9: pantherclaw.v1.SetRetentionPolicyResponse
+	(*LegalHold)(nil),                     // 10: pantherclaw.v1.LegalHold
+	(*CreateLegalHoldRequest)(nil),        // 11: pantherclaw.v1.CreateLegalHoldRequest
+	(*CreateLegalHoldResponse)(nil),       // 12: pantherclaw.v1.CreateLegalHoldResponse
+	(*ReleaseLegalHoldRequest)(nil),       // 13: pantherclaw.v1.ReleaseLegalHoldRequest
+	(*ReleaseLegalHoldResponse)(nil),      // 14: pantherclaw.v1.ReleaseLegalHoldResponse
+	(*ListLegalHoldsRequest)(nil),         // 15: pantherclaw.v1.ListLegalHoldsRequest
+	(*ListLegalHoldsResponse)(nil),        // 16: pantherclaw.v1.ListLegalHoldsResponse
+	(*CaptureProfile)(nil),                // 17: pantherclaw.v1.CaptureProfile
+	(*CreateCaptureProfileRequest)(nil),   // 18: pantherclaw.v1.CreateCaptureProfileRequest
+	(*CreateCaptureProfileResponse)(nil),  // 19: pantherclaw.v1.CreateCaptureProfileResponse
+	(*ListCaptureProfilesRequest)(nil),    // 20: pantherclaw.v1.ListCaptureProfilesRequest
+	(*ListCaptureProfilesResponse)(nil),   // 21: pantherclaw.v1.ListCaptureProfilesResponse
+	(*DisableCaptureProfileRequest)(nil),  // 22: pantherclaw.v1.DisableCaptureProfileRequest
+	(*DisableCaptureProfileResponse)(nil), // 23: pantherclaw.v1.DisableCaptureProfileResponse
+	(*ReadPayloadCaptureRequest)(nil),     // 24: pantherclaw.v1.ReadPayloadCaptureRequest
+	(*ReadPayloadCaptureResponse)(nil),    // 25: pantherclaw.v1.ReadPayloadCaptureResponse
+	(*timestamppb.Timestamp)(nil),         // 26: google.protobuf.Timestamp
+	(CaptureDirection)(0),                 // 27: pantherclaw.v1.CaptureDirection
 }
 var file_pantherclaw_v1_evidence_admin_proto_depIdxs = []int32{
-	16, // 0: pantherclaw.v1.RetentionRevision.create_time:type_name -> google.protobuf.Timestamp
-	16, // 1: pantherclaw.v1.RetentionRevision.effective_time:type_name -> google.protobuf.Timestamp
+	26, // 0: pantherclaw.v1.RetentionRevision.create_time:type_name -> google.protobuf.Timestamp
+	26, // 1: pantherclaw.v1.RetentionRevision.effective_time:type_name -> google.protobuf.Timestamp
 	0,  // 2: pantherclaw.v1.RetentionPolicy.category:type_name -> pantherclaw.v1.RetentionCategory
-	3,  // 3: pantherclaw.v1.RetentionPolicy.current:type_name -> pantherclaw.v1.RetentionRevision
-	3,  // 4: pantherclaw.v1.RetentionPolicy.pending:type_name -> pantherclaw.v1.RetentionRevision
-	4,  // 5: pantherclaw.v1.GetRetentionPoliciesResponse.policies:type_name -> pantherclaw.v1.RetentionPolicy
+	4,  // 3: pantherclaw.v1.RetentionPolicy.current:type_name -> pantherclaw.v1.RetentionRevision
+	4,  // 4: pantherclaw.v1.RetentionPolicy.pending:type_name -> pantherclaw.v1.RetentionRevision
+	5,  // 5: pantherclaw.v1.GetRetentionPoliciesResponse.policies:type_name -> pantherclaw.v1.RetentionPolicy
 	0,  // 6: pantherclaw.v1.SetRetentionPolicyRequest.category:type_name -> pantherclaw.v1.RetentionCategory
-	4,  // 7: pantherclaw.v1.SetRetentionPolicyResponse.policy:type_name -> pantherclaw.v1.RetentionPolicy
+	5,  // 7: pantherclaw.v1.SetRetentionPolicyResponse.policy:type_name -> pantherclaw.v1.RetentionPolicy
 	1,  // 8: pantherclaw.v1.LegalHold.scope:type_name -> pantherclaw.v1.LegalHoldScope
-	16, // 9: pantherclaw.v1.LegalHold.start_time:type_name -> google.protobuf.Timestamp
-	16, // 10: pantherclaw.v1.LegalHold.end_time:type_name -> google.protobuf.Timestamp
+	26, // 9: pantherclaw.v1.LegalHold.start_time:type_name -> google.protobuf.Timestamp
+	26, // 10: pantherclaw.v1.LegalHold.end_time:type_name -> google.protobuf.Timestamp
 	2,  // 11: pantherclaw.v1.LegalHold.state:type_name -> pantherclaw.v1.LegalHoldState
-	16, // 12: pantherclaw.v1.LegalHold.create_time:type_name -> google.protobuf.Timestamp
-	16, // 13: pantherclaw.v1.LegalHold.release_time:type_name -> google.protobuf.Timestamp
+	26, // 12: pantherclaw.v1.LegalHold.create_time:type_name -> google.protobuf.Timestamp
+	26, // 13: pantherclaw.v1.LegalHold.release_time:type_name -> google.protobuf.Timestamp
 	1,  // 14: pantherclaw.v1.CreateLegalHoldRequest.scope:type_name -> pantherclaw.v1.LegalHoldScope
-	16, // 15: pantherclaw.v1.CreateLegalHoldRequest.start_time:type_name -> google.protobuf.Timestamp
-	16, // 16: pantherclaw.v1.CreateLegalHoldRequest.end_time:type_name -> google.protobuf.Timestamp
-	9,  // 17: pantherclaw.v1.CreateLegalHoldResponse.hold:type_name -> pantherclaw.v1.LegalHold
-	9,  // 18: pantherclaw.v1.ReleaseLegalHoldResponse.hold:type_name -> pantherclaw.v1.LegalHold
+	26, // 15: pantherclaw.v1.CreateLegalHoldRequest.start_time:type_name -> google.protobuf.Timestamp
+	26, // 16: pantherclaw.v1.CreateLegalHoldRequest.end_time:type_name -> google.protobuf.Timestamp
+	10, // 17: pantherclaw.v1.CreateLegalHoldResponse.hold:type_name -> pantherclaw.v1.LegalHold
+	10, // 18: pantherclaw.v1.ReleaseLegalHoldResponse.hold:type_name -> pantherclaw.v1.LegalHold
 	2,  // 19: pantherclaw.v1.ListLegalHoldsRequest.state:type_name -> pantherclaw.v1.LegalHoldState
-	9,  // 20: pantherclaw.v1.ListLegalHoldsResponse.holds:type_name -> pantherclaw.v1.LegalHold
-	5,  // 21: pantherclaw.v1.EvidenceAdminService.GetRetentionPolicies:input_type -> pantherclaw.v1.GetRetentionPoliciesRequest
-	7,  // 22: pantherclaw.v1.EvidenceAdminService.SetRetentionPolicy:input_type -> pantherclaw.v1.SetRetentionPolicyRequest
-	10, // 23: pantherclaw.v1.EvidenceAdminService.CreateLegalHold:input_type -> pantherclaw.v1.CreateLegalHoldRequest
-	12, // 24: pantherclaw.v1.EvidenceAdminService.ReleaseLegalHold:input_type -> pantherclaw.v1.ReleaseLegalHoldRequest
-	14, // 25: pantherclaw.v1.EvidenceAdminService.ListLegalHolds:input_type -> pantherclaw.v1.ListLegalHoldsRequest
-	6,  // 26: pantherclaw.v1.EvidenceAdminService.GetRetentionPolicies:output_type -> pantherclaw.v1.GetRetentionPoliciesResponse
-	8,  // 27: pantherclaw.v1.EvidenceAdminService.SetRetentionPolicy:output_type -> pantherclaw.v1.SetRetentionPolicyResponse
-	11, // 28: pantherclaw.v1.EvidenceAdminService.CreateLegalHold:output_type -> pantherclaw.v1.CreateLegalHoldResponse
-	13, // 29: pantherclaw.v1.EvidenceAdminService.ReleaseLegalHold:output_type -> pantherclaw.v1.ReleaseLegalHoldResponse
-	15, // 30: pantherclaw.v1.EvidenceAdminService.ListLegalHolds:output_type -> pantherclaw.v1.ListLegalHoldsResponse
-	26, // [26:31] is the sub-list for method output_type
-	21, // [21:26] is the sub-list for method input_type
-	21, // [21:21] is the sub-list for extension type_name
-	21, // [21:21] is the sub-list for extension extendee
-	0,  // [0:21] is the sub-list for field type_name
+	10, // 20: pantherclaw.v1.ListLegalHoldsResponse.holds:type_name -> pantherclaw.v1.LegalHold
+	26, // 21: pantherclaw.v1.CaptureProfile.expire_time:type_name -> google.protobuf.Timestamp
+	3,  // 22: pantherclaw.v1.CaptureProfile.state:type_name -> pantherclaw.v1.CaptureProfileState
+	26, // 23: pantherclaw.v1.CaptureProfile.create_time:type_name -> google.protobuf.Timestamp
+	26, // 24: pantherclaw.v1.CaptureProfile.disable_time:type_name -> google.protobuf.Timestamp
+	17, // 25: pantherclaw.v1.CreateCaptureProfileResponse.profile:type_name -> pantherclaw.v1.CaptureProfile
+	3,  // 26: pantherclaw.v1.ListCaptureProfilesRequest.state:type_name -> pantherclaw.v1.CaptureProfileState
+	17, // 27: pantherclaw.v1.ListCaptureProfilesResponse.profiles:type_name -> pantherclaw.v1.CaptureProfile
+	17, // 28: pantherclaw.v1.DisableCaptureProfileResponse.profile:type_name -> pantherclaw.v1.CaptureProfile
+	27, // 29: pantherclaw.v1.ReadPayloadCaptureRequest.direction:type_name -> pantherclaw.v1.CaptureDirection
+	27, // 30: pantherclaw.v1.ReadPayloadCaptureResponse.direction:type_name -> pantherclaw.v1.CaptureDirection
+	26, // 31: pantherclaw.v1.ReadPayloadCaptureResponse.create_time:type_name -> google.protobuf.Timestamp
+	26, // 32: pantherclaw.v1.ReadPayloadCaptureResponse.remove_time:type_name -> google.protobuf.Timestamp
+	6,  // 33: pantherclaw.v1.EvidenceAdminService.GetRetentionPolicies:input_type -> pantherclaw.v1.GetRetentionPoliciesRequest
+	8,  // 34: pantherclaw.v1.EvidenceAdminService.SetRetentionPolicy:input_type -> pantherclaw.v1.SetRetentionPolicyRequest
+	11, // 35: pantherclaw.v1.EvidenceAdminService.CreateLegalHold:input_type -> pantherclaw.v1.CreateLegalHoldRequest
+	13, // 36: pantherclaw.v1.EvidenceAdminService.ReleaseLegalHold:input_type -> pantherclaw.v1.ReleaseLegalHoldRequest
+	15, // 37: pantherclaw.v1.EvidenceAdminService.ListLegalHolds:input_type -> pantherclaw.v1.ListLegalHoldsRequest
+	18, // 38: pantherclaw.v1.EvidenceAdminService.CreateCaptureProfile:input_type -> pantherclaw.v1.CreateCaptureProfileRequest
+	20, // 39: pantherclaw.v1.EvidenceAdminService.ListCaptureProfiles:input_type -> pantherclaw.v1.ListCaptureProfilesRequest
+	22, // 40: pantherclaw.v1.EvidenceAdminService.DisableCaptureProfile:input_type -> pantherclaw.v1.DisableCaptureProfileRequest
+	24, // 41: pantherclaw.v1.EvidenceAdminService.ReadPayloadCapture:input_type -> pantherclaw.v1.ReadPayloadCaptureRequest
+	7,  // 42: pantherclaw.v1.EvidenceAdminService.GetRetentionPolicies:output_type -> pantherclaw.v1.GetRetentionPoliciesResponse
+	9,  // 43: pantherclaw.v1.EvidenceAdminService.SetRetentionPolicy:output_type -> pantherclaw.v1.SetRetentionPolicyResponse
+	12, // 44: pantherclaw.v1.EvidenceAdminService.CreateLegalHold:output_type -> pantherclaw.v1.CreateLegalHoldResponse
+	14, // 45: pantherclaw.v1.EvidenceAdminService.ReleaseLegalHold:output_type -> pantherclaw.v1.ReleaseLegalHoldResponse
+	16, // 46: pantherclaw.v1.EvidenceAdminService.ListLegalHolds:output_type -> pantherclaw.v1.ListLegalHoldsResponse
+	19, // 47: pantherclaw.v1.EvidenceAdminService.CreateCaptureProfile:output_type -> pantherclaw.v1.CreateCaptureProfileResponse
+	21, // 48: pantherclaw.v1.EvidenceAdminService.ListCaptureProfiles:output_type -> pantherclaw.v1.ListCaptureProfilesResponse
+	23, // 49: pantherclaw.v1.EvidenceAdminService.DisableCaptureProfile:output_type -> pantherclaw.v1.DisableCaptureProfileResponse
+	25, // 50: pantherclaw.v1.EvidenceAdminService.ReadPayloadCapture:output_type -> pantherclaw.v1.ReadPayloadCaptureResponse
+	42, // [42:51] is the sub-list for method output_type
+	33, // [33:42] is the sub-list for method input_type
+	33, // [33:33] is the sub-list for extension type_name
+	33, // [33:33] is the sub-list for extension extendee
+	0,  // [0:33] is the sub-list for field type_name
 }
 
 func init() { file_pantherclaw_v1_evidence_admin_proto_init() }
@@ -1259,14 +2136,15 @@ func file_pantherclaw_v1_evidence_admin_proto_init() {
 	if File_pantherclaw_v1_evidence_admin_proto != nil {
 		return
 	}
+	file_pantherclaw_v1_authority_proto_init()
 	file_pantherclaw_v1_evidence_admin_proto_msgTypes[7].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pantherclaw_v1_evidence_admin_proto_rawDesc), len(file_pantherclaw_v1_evidence_admin_proto_rawDesc)),
-			NumEnums:      3,
-			NumMessages:   13,
+			NumEnums:      4,
+			NumMessages:   22,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

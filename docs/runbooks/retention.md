@@ -95,6 +95,28 @@ pclaw hold release <hold id> --reason "matter closed"
 
 A hold covers an item through its transaction, the transaction's run and agent, its approval request, or the object an audit event names; a time range covers items recorded in `[start, end)`. Ids of another org are not found. Releasing is audited (`audit.evidence.legal_hold_released`) and notified to the org's admins and auditors; retention then applies again at the next daily run. The reasons people write stay in the hold; they are never logged or put in notifications.
 
+## Restricted payload capture (Records Manager, Auditor)
+
+Capture is off by default ([g0/M7.md](../g0/M7.md) design decision 10, HR-199). A person holding `evidence.capture.manage` (the Records Manager) switches it on for some connections and operations with a **capture profile**: a purpose, the request and/or the response, a byte cap of at most 64 KiB per body, a retention of at most 30 days and an expiry of at most 90 days.
+
+```bash
+pclaw capture profile create --purpose "dispute 2026-117" --connection <connection id> \
+  --operation payments.refund.create --request --response --byte-cap 8192 --retention-days 7 --expires-in-days 14
+pclaw capture profile list --state active
+pclaw capture profile disable <profile id>
+```
+
+- Creating and disabling are audited (`audit.evidence.capture_profile_created|disabled`) and notified to the org's admins and auditors. The profile reaches the gateways serving its connections with their next configuration; a gateway also stops at the expiry by its own clock.
+- The gateway captures the outbound body it built from the action (never headers, so never the credential) and the target's response after secret-echo redaction (HR-076), each cut to the cap, and sends them with the outcome. Monitor-mode dispatches and delegated outcomes capture nothing.
+- The server keeps a capture only for an enforced dispatch of the reporting gateway under an active profile covering that connection, operation and direction, seals it with the org's `payload_captures` key (AES-256-GCM, AAD `org|payload_captures|content|id`) and deletes it when the profile's retention or the `payloads` period ends, whichever is first, unless a legal hold covers its transaction. A capture that cannot be kept never fails the outcome; it is dropped and logged by ids (`evidence.capture_dropped`).
+- Only a person holding `evidence.read_restricted` where the transaction's agent lives (the Auditor) reads a capture, with a reason. The read is written to the audit ledger (`audit.evidence.payload_read`: who, which capture, the reason) and committed before the content is returned. Org Admins, Records Managers, service accounts and API keys cannot read captures.
+
+```bash
+pclaw capture read <transaction id> --direction response --reason "dispute 2026-117" --out response.json
+```
+
+Captures never appear in logs, job arguments, receipts, notifications or the evidence explorer.
+
 ## What removal does not do
 
 - It never shortens a period by itself, and never removes anything inside an active hold.

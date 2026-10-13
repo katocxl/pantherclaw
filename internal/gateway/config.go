@@ -70,6 +70,16 @@ type Config struct {
 		KeyFile  string   `json:"key_file" env:"PC_GW_BROKER_KEY_FILE"`
 		KEKFiles []string `json:"kek_files" env:"PC_GW_BROKER_KEK_FILES"`
 	} `json:"broker"`
+	// Approvals is how the gateway checks approvals itself (HR-038).
+	Approvals struct {
+		// ApproverKeysFile is the approver keys file the operator exported
+		// with `pclaw approver-keys export` and reviewed. An action whose
+		// permit carries an approval is dispatched only when every
+		// approver's WebAuthn assertion verifies against a key in it; with
+		// no file, every such action is refused. The file is read again
+		// when it changes.
+		ApproverKeysFile string `json:"approver_keys_file" env:"PC_GW_APPROVALS_APPROVER_KEYS_FILE"`
+	} `json:"approvals"`
 }
 
 // DefaultConfig returns development defaults.

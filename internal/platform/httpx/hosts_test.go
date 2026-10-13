@@ -47,3 +47,27 @@ func TestHR077_MetadataInAnySpelling(t *testing.T) {
 		t.Error("an ordinary host is a metadata host")
 	}
 }
+
+// TestHR077_DeniedHostReadsTheHostAsTheGuardDoes: a host as written is
+// denied when it spells a denied address in any form, or names a metadata
+// service; an allowed prefix re-allows a private address but never
+// metadata; other names are left to the dial-time check.
+func TestHR077_DeniedHostReadsTheHostAsTheGuardDoes(t *testing.T) {
+	private := []netip.Prefix{netip.MustParsePrefix("10.0.0.0/8"), netip.MustParsePrefix("169.254.0.0/16")}
+	for host, deniedWithPrivate := range map[string]bool{
+		"0xa9fea9fe": true, "2852039166": true, "[::ffff:a9fe:a9fe]": true, "metadata.google.internal.": true,
+		"2130706433": true, "0x7f.1": true, "0": true, "167772165": false, "0xa.0.0.5": false,
+	} {
+		if !DeniedHost(host, nil) {
+			t.Errorf("%s is not denied", host)
+		}
+		if got := DeniedHost(host, private); got != deniedWithPrivate {
+			t.Errorf("%s with allowed private ranges: denied=%v, want %v", host, got, deniedWithPrivate)
+		}
+	}
+	for _, host := range []string{"hooks.example.com", "metadata.example.com", "8.8.8.8", "134744072", "[2001:4860::8888]"} {
+		if DeniedHost(host, nil) {
+			t.Errorf("%s is denied", host)
+		}
+	}
+}

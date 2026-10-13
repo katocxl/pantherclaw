@@ -7,11 +7,17 @@ package pantherclaw.v1;
 
 import "buf/validate/validate.proto";
 import "google/protobuf/timestamp.proto";
+import "pantherclaw/v1/authority.proto";
 
-// EvidenceAdminService sets what evidence the caller's org keeps (G0 M7
-// track B, design decision 9; HR-198, T-075): retention policies per
-// category and legal holds. Every call is human only and needs
-// evidence.retention.manage at org scope (the Records Manager role).
+// EvidenceAdminService sets what evidence the caller's org keeps and
+// captures (G0 M7 track B, design decisions 9 and 10; HR-198, HR-199,
+// T-075, T-076): retention policies per category, legal holds, restricted
+// payload capture profiles, and the audited read of a capture. Every call
+// is human only. Retention and holds need evidence.retention.manage and
+// capture profiles evidence.capture.manage, at org scope (the Records
+// Manager role); reading a capture needs evidence.read_restricted where
+// the transaction's agent lives (the Auditor role), so whoever configures
+// capture is not the one who reads it.
 //
 // Retention removes only bodies: receipt and ledger entry bodies, observed
 // values, replay inputs and approval notes. Chain hashes, Merkle leaves
@@ -45,6 +51,25 @@ service EvidenceAdminService {
   rpc ListLegalHolds(ListLegalHoldsRequest) returns (ListLegalHoldsResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
+  // CreateCaptureProfile switches payload capture on for some connections
+  // and operations, with a purpose and limits. It is audited, notified to
+  // the org's admins and auditors, and reaches the gateways serving those
+  // connections in their configuration.
+  // permission: evidence.capture.manage
+  rpc CreateCaptureProfile(CreateCaptureProfileRequest) returns (CreateCaptureProfileResponse);
+  // ListCaptureProfiles lists the org's capture profiles, newest first.
+  // permission: evidence.capture.manage
+  rpc ListCaptureProfiles(ListCaptureProfilesRequest) returns (ListCaptureProfilesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // DisableCaptureProfile stops a profile at once (audited and notified).
+  // permission: evidence.capture.manage
+  rpc DisableCaptureProfile(DisableCaptureProfileRequest) returns (DisableCaptureProfileResponse);
+  // ReadPayloadCapture returns one captured body. The read (who, which
+  // capture, the reason) is written to the audit ledger before the
+  // content is returned.
+  // permission: evidence.read_restricted
+  rpc ReadPayloadCapture(ReadPayloadCaptureRequest) returns (ReadPayloadCaptureResponse);
 }
 
 // RetentionCategory is a kind of evidence kept for one period (design
@@ -256,4 +281,182 @@ message ListLegalHoldsResponse {
   repeated LegalHold holds = 1;
   // Token for the next page; empty at the end.
   string next_page_token = 2;
+}
+
+// CaptureProfileState is where a capture profile stands.
+enum CaptureProfileState {
+  CAPTURE_PROFILE_STATE_UNSPECIFIED = 0;
+  // Gateways capture under it.
+  CAPTURE_PROFILE_STATE_ACTIVE = 1;
+  // A person disabled it.
+  CAPTURE_PROFILE_STATE_DISABLED = 2;
+  // It passed its expiry.
+  CAPTURE_PROFILE_STATE_EXPIRED = 3;
+}
+
+// CaptureProfile switches restricted payload capture on (HR-199).
+message CaptureProfile {
+  // Profile id.
+  string id = 1;
+  // Why payloads are captured, in the creator's words (untrusted text).
+  string purpose = 2;
+  // The connections it covers.
+  repeated string connection_ids = 3;
+  // The operations it covers.
+  repeated string operations = 4;
+  // Capture the outbound body.
+  bool capture_request = 5;
+  // Capture the target's response (after secret-echo redaction).
+  bool capture_response = 6;
+  // Bytes kept per body.
+  int32 byte_cap = 7;
+  // Days a capture is kept.
+  int32 retention_days = 8;
+  // When it expires.
+  google.protobuf.Timestamp expire_time = 9;
+  // State.
+  CaptureProfileState state = 10;
+  // Who created it.
+  string created_by = 11;
+  // When.
+  google.protobuf.Timestamp create_time = 12;
+  // Who disabled it.
+  string disabled_by = 13;
+  // When.
+  google.protobuf.Timestamp disable_time = 14;
+}
+
+// CreateCaptureProfileRequest creates a capture profile.
+message CreateCaptureProfileRequest {
+  option (buf.validate.message).cel = {
+    id: "capture_profile.direction"
+    message: "capture the request, the response or both"
+    expression: "this.capture_request || this.capture_response"
+  };
+  // Why payloads are captured (required; stored as untrusted text).
+  string purpose = 1 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 500
+  }];
+  // The connections to capture on.
+  repeated string connection_ids = 2 [(buf.validate.field).repeated = {
+    min_items: 1
+    max_items: 32
+    unique: true
+    items: {
+      string: {uuid: true}
+    }
+  }];
+  // The operations to capture, for example payments.refund.create.
+  repeated string operations = 3 [(buf.validate.field).repeated = {
+    min_items: 1
+    max_items: 64
+    unique: true
+    items: {
+      string: {
+        max_len: 128
+        pattern: "^[a-z][a-z0-9_]*(\\.[a-z0-9_]+){1,7}$"
+      }
+    }
+  }];
+  // Capture the outbound body the gateway builds (never headers).
+  bool capture_request = 4;
+  // Capture the target's response after secret-echo redaction.
+  bool capture_response = 5;
+  // Bytes kept per body: 1 to 65,536.
+  int32 byte_cap = 6 [(buf.validate.field).int32 = {
+    gte: 1
+    lte: 65536
+  }];
+  // Days a capture is kept: 1 to 30.
+  int32 retention_days = 7 [(buf.validate.field).int32 = {
+    gte: 1
+    lte: 30
+  }];
+  // Days until the profile expires: 1 to 90.
+  int32 expires_in_days = 8 [(buf.validate.field).int32 = {
+    gte: 1
+    lte: 90
+  }];
+}
+
+// CreateCaptureProfileResponse returns the profile.
+message CreateCaptureProfileResponse {
+  // The profile.
+  CaptureProfile profile = 1;
+}
+
+// ListCaptureProfilesRequest pages through profiles, newest first.
+message ListCaptureProfilesRequest {
+  // Maximum results (default 50, at most 200).
+  int32 page_size = 1 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 200
+  }];
+  // Token from a previous response.
+  string page_token = 2 [(buf.validate.field).string = {
+    max_len: 64
+    pattern: "^[A-Za-z0-9_-]*$"
+  }];
+  // Only in this state (all when unset).
+  CaptureProfileState state = 3 [(buf.validate.field).enum.defined_only = true];
+}
+
+// ListCaptureProfilesResponse is one page.
+message ListCaptureProfilesResponse {
+  // Profiles, newest first.
+  repeated CaptureProfile profiles = 1;
+  // Token for the next page; empty at the end.
+  string next_page_token = 2;
+}
+
+// DisableCaptureProfileRequest names a profile.
+message DisableCaptureProfileRequest {
+  // Profile id; it must be active.
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// DisableCaptureProfileResponse returns the disabled profile.
+message DisableCaptureProfileResponse {
+  // The profile.
+  CaptureProfile profile = 1;
+}
+
+// ReadPayloadCaptureRequest names a capture: a transaction's dispatch has
+// at most one of each direction.
+message ReadPayloadCaptureRequest {
+  // Transaction id.
+  string transaction_id = 1 [(buf.validate.field).string.uuid = true];
+  // Which body.
+  CaptureDirection direction = 2 [(buf.validate.field).enum = {
+    defined_only: true
+    not_in: [0]
+  }];
+  // Why it is read (required; recorded in the audit ledger).
+  string reason = 3 [(buf.validate.field).string = {
+    min_len: 1
+    max_bytes: 500
+  }];
+}
+
+// ReadPayloadCaptureResponse returns the capture.
+message ReadPayloadCaptureResponse {
+  // Capture id.
+  string id = 1;
+  // The transaction.
+  string transaction_id = 2;
+  // The profile it was taken under.
+  string profile_id = 3;
+  // Which body.
+  CaptureDirection direction = 4;
+  // The body's size before truncation.
+  int64 size = 5;
+  // Whether content is cut to the profile's cap.
+  bool truncated = 6;
+  // When it was taken.
+  google.protobuf.Timestamp create_time = 7;
+  // When retention deletes it.
+  google.protobuf.Timestamp remove_time = 8;
+  // The body.
+  bytes content = 9;
 }

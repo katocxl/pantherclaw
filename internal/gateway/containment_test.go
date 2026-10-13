@@ -5,6 +5,7 @@ package gateway
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"strings"
 	"testing"
@@ -28,6 +29,9 @@ func TestHR010_TheGatewayDispatchesNothingWithoutFreshContainment(t *testing.T) 
 	} {
 		t.Run(name, func(t *testing.T) {
 			h := setup(t, func(h *harness) { h.containment.err = tc.err })
+			if err := h.gw.Contained(); !errors.Is(err, tc.err) {
+				t.Fatalf("Contained() = %v, want %v", err, tc.err)
+			}
 			r := h.post(t, inbound, nil)
 			if r.code != tc.code || r.refusal.ErrorClass != "enforcement_failed" || r.refusal.Error != tc.want ||
 				h.auth.snap().authorize != 0 || h.target.calls() != 0 {
