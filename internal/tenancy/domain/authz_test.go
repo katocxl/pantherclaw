@@ -140,10 +140,13 @@ func TestT043_OrgAdminHoldsNoApprovalPublicationOrRestrictedEvidence(t *testing.
 			}
 		}
 	}
-	// Approve and publish come from their own roles only.
+	// Approve and publish come from their own roles only: approval from the
+	// Approver and the release-control roles a requirement can name (G0 M8,
+	// HR-207).
+	approvers := []domain.RoleName{domain.RoleApprover, domain.RoleCodeReviewer, domain.RoleReleaseApprover}
 	for _, r := range domain.Roles() {
-		if r.Has(domain.PermApprovalRespond) && r.Name != domain.RoleApprover {
-			t.Errorf("role %s can approve", r.Name)
+		if r.Has(domain.PermApprovalRespond) != slices.Contains(approvers, r.Name) {
+			t.Errorf("role %s: approval.respond = %v", r.Name, r.Has(domain.PermApprovalRespond))
 		}
 		if r.Has(domain.PermPolicyPublish) && r.Name != domain.RolePolicyPublisher {
 			t.Errorf("role %s can publish policies", r.Name)
@@ -179,7 +182,9 @@ func TestT043_NonHumansNeverHoldHumanOnlyPermissions(t *testing.T) {
 		t.Fatal("approver binding does not work for a human")
 	}
 	for _, r := range domain.Roles() {
-		_, err := domain.CheckBindable(r.Name, domain.KindServiceAccount, domain.ScopeOrg)
+		// At a scope the role may be bound at, so only being human only
+		// can refuse it.
+		_, err := domain.CheckBindable(r.Name, domain.KindServiceAccount, r.Scopes[0])
 		if r.HumanOnly() != errors.Is(err, domain.ErrHumanOnlyRole) {
 			t.Errorf("CheckBindable(%s, service account) = %v", r.Name, err)
 		}

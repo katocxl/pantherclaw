@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"sync"
 	"time"
 
 	"github.com/katocxl/pantherclaw/internal/gateway/control"
@@ -39,6 +40,9 @@ const maxLeases = 16
 type Verifications interface {
 	Claim(ctx context.Context, limit int) ([]dispatch.Lease, error)
 	Report(ctx context.Context, l dispatch.Lease, o dispatch.Observation) error
+	// TestTokens gets a target_verifier test's action tokens under l
+	// (N15).
+	TestTokens(ctx context.Context, l dispatch.Lease) (dispatch.TestTokens, error)
 }
 
 // VerificationHints is a containment view whose stream says when
@@ -86,16 +90,32 @@ func (g *Gateway) verifyDue(ctx context.Context) {
 	if cfg == nil {
 		return
 	}
+	claimed := time.Now() // a lease's time runs from no later than this
 	leases, err := g.verifications.Claim(ctx, maxLeases)
 	if err != nil {
 		g.log.WarnContext(ctx, "gateway.verifications_unavailable", pclog.Err(err))
 		return
 	}
+	var scans sync.WaitGroup
+	defer scans.Wait()
 	for _, l := range leases {
+		if l.Purpose == "connection_test" {
+			l.Tokens = func(ctx context.Context) (dispatch.TestTokens, error) { return g.verifications.TestTokens(ctx, l) }
+		}
 		conn := cfg.ByID[l.Connection]
 		if conn == nil {
 			g.log.WarnContext(ctx, "gateway.verification_unknown_connection", slog.String("task_id", l.Task),
 				slog.String("connection_id", l.Connection))
+			continue
+		}
+		if l.Purpose == "org_scan" {
+			// An org scan uses most of its lease: it runs beside the other
+			// tasks, not after them.
+			scans.Add(1)
+			go func() {
+				defer scans.Done()
+				g.orgScan(ctx, conn, l, claimed)
+			}()
 			continue
 		}
 		o, err := g.engine.VerifyEffect(ctx, conn, l)
@@ -144,4 +164,13 @@ func (c controlVerifications) Report(ctx context.Context, l dispatch.Lease, o di
 	}
 	_, err := c.ctl.Gateway.ReportObservation(ctx, req)
 	return err
+}
+
+// TestTokens implements Verifications.
+func (c controlVerifications) TestTokens(ctx context.Context, l dispatch.Lease) (dispatch.TestTokens, error) {
+	res, err := c.ctl.Gateway.MintTestActionTokens(ctx, &pb.MintTestActionTokensRequest{TaskId: l.Task, Lease: l.Secret})
+	if err != nil {
+		return dispatch.TestTokens{}, err
+	}
+	return dispatch.TestTokens{Fresh: res.GetToken(), Mismatch: res.GetMismatchToken()}, nil
 }
