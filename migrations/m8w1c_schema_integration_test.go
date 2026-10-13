@@ -84,8 +84,10 @@ func TestHR206_ConsequenceVerificationRoundTrips(t *testing.T) {
 			t.Errorf("after Down, %s still allows a consequence: %s", name, def)
 		}
 	}
-	for _, name := range []string{"pc.verifications.verifications_purpose", "pc.transaction_links.transaction_links_kind_check",
-		"pc.reconciliation_tasks.reconciliation_tasks_kind_check"} {
+	for _, name := range []string{
+		"pc.verifications.verifications_purpose", "pc.transaction_links.transaction_links_kind_check",
+		"pc.reconciliation_tasks.reconciliation_tasks_kind_check",
+	} {
 		if before[name] == "" {
 			t.Errorf("after Down, %s is gone", name)
 		}
