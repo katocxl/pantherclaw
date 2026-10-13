@@ -67,7 +67,19 @@ When a fact cannot be read in time, nothing is reported for it, and the decision
 - A missing deploy-trigger fact holds the action with "Consequence unknown", which needs a release approver.
 - A workflow the gateway's parser cannot evaluate, or a pull request that changes `.github/workflows/` or `.github/actions/`, also gives "Consequence unknown".
 
-## 4. Check it
+## 4. Link people to their GitHub accounts
+
+A reviewer must be independent of a pull request: PantherClaw refuses as reviewer anyone who authored, committed or pushed to it (HR-207). It knows those people by GitHub user id, so each person who reviews or works on GitHub needs a link. An Org Admin makes the links:
+
+```bash
+pclaw github identity link --user <user id> --login <github login> --github-id <github user id>
+pclaw github identity list [--user <user id>]
+pclaw github identity unlink <link id>
+```
+
+`GET https://api.github.com/users/<login>` shows the user id. A GitHub user id links to one person, and every link and unlink is audited. A service account cannot make links, even when it holds the role. Someone who touched a pull request but is linked to no person cannot be excluded by name, so the review page shows them as "not linked".
+
+## 5. Check it
 
 - `pclaw credential list <connection id>` shows the active version with kind `github_app`, and `pclaw connection get <connection id>` shows the installation.
 - An allowed read through the gateway (`GET /github/repos/<owner>/<repo>`) answers. In the App's GitHub audit log, each action shows one token created and one revoked.

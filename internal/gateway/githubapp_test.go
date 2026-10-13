@@ -4,6 +4,7 @@
 package gateway
 
 import (
+	"bytes"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
@@ -16,6 +17,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"google.golang.org/protobuf/proto"
 
 	"github.com/katocxl/pantherclaw/internal/credentials/domain"
 	"github.com/katocxl/pantherclaw/internal/gateway/broker"
@@ -230,6 +233,30 @@ func TestHR203_ASealForAnotherInstallationMintsNothing(t *testing.T) {
 	}
 }
 
+// TestHR203_TheExecutionRecordCarriesTheAccessNotTheToken: the gateway
+// reports what the action's token allowed with its outcome, after it was
+// revoked, for the execution receipt (ADR-0021 item 5), and never the token.
+func TestHR203_TheExecutionRecordCarriesTheAccessNotTheToken(t *testing.T) {
+	w := newGitHubWorld(t)
+	h := setup(t, withGitHubApp(t, w))
+	if r := h.do(t, http.MethodGet, "/payments/repos/acme/payments/contents/README.md", "", nil); r.code != http.StatusOK {
+		t.Fatalf("read = %d %+v", r.code, r.refusal)
+	}
+	recs := h.auth.snap().records
+	if len(recs) != 1 {
+		t.Fatalf("%d records", len(recs))
+	}
+	a, read := recs[0].GetCredentialAccess(), map[string]string{"contents": "read"}
+	if a.GetInstallationId() != 7 || a.GetRepository() != "acme/payments" || a.GetRepositoryId() <= 0 || !maps.Equal(a.GetRequested(), read) ||
+		!maps.Equal(a.GetGranted(), map[string]string{"contents": "read", "metadata": "read"}) || a.GetExpireTime() == nil || a.GetRevocation() != "revoked" {
+		t.Fatalf("access %+v", a)
+	}
+	raw, err := proto.Marshal(recs[0])
+	if err != nil || bytes.Contains(raw, []byte("ghs_")) {
+		t.Fatalf("the record carries a token: %v", err)
+	}
+}
+
 // TestHR203_AnAppWithoutARecordedInstallationIsRefused: a GitHub App
 // connection whose installation is not recorded (a seal from before the
 // server recorded it) is CANNOT_AUTHORIZE INSTALLATION_UNKNOWN before the
@@ -244,5 +271,33 @@ func TestHR203_AnAppWithoutARecordedInstallationIsRefused(t *testing.T) {
 	}
 	if n := h.auth.snap().authorize; n != 0 || len(w.sim.Requests()) != 1 { // the test's own pull request
 		t.Fatalf("%d decisions, %d GitHub requests", n, len(w.sim.Requests()))
+	}
+}
+
+// TestHR203_AWiderGrantIsRefusedWithItsAccess: a token GitHub grants wider
+// than the operation declares is revoked and nothing is sent
+// (credential_scope_mismatch), and the refused dispatch's record says what
+// GitHub granted and that it was revoked (ADR-0021 items 3, 5 and 6).
+func TestHR203_AWiderGrantIsRefusedWithItsAccess(t *testing.T) {
+	w := newGitHubWorld(t)
+	h := setup(t, withGitHubApp(t, w))
+	w.sim.SetFaults(github.Faults{WiderGrant: true})
+	r := h.do(t, http.MethodGet, "/payments/repos/acme/payments/contents/README.md", "", nil)
+	if r.refusal.Error != "credential_scope_mismatch" {
+		t.Fatalf("a wider grant: %d %+v", r.code, r.refusal)
+	}
+	recs := h.auth.snap().records
+	if len(recs) != 1 || recs[0].GetOutcome() != pb.Outcome_OUTCOME_FAILED {
+		t.Fatalf("records %v", recs)
+	}
+	a := recs[0].GetCredentialAccess()
+	if a == nil || a.GetRevocation() != "revoked" || !maps.Equal(a.GetRequested(), map[string]string{"contents": "read"}) ||
+		a.GetGranted()["contents"] != "write" {
+		t.Fatalf("access of the refused grant %+v", a)
+	}
+	for _, tok := range w.sim.Tokens() {
+		if !tok.Revoked || tok.Uses != 0 {
+			t.Fatalf("token %+v", tok)
+		}
 	}
 }
