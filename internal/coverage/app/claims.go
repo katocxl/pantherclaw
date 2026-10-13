@@ -26,7 +26,7 @@ type Claim struct {
 	SnapshotState domain.State
 	Lapsed        bool
 	Reason        string
-	Exclusions    []ids.UUID
+	Exclusions    []string
 	ExpiresAt     *time.Time
 }
 

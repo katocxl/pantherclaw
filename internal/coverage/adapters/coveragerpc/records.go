@@ -69,8 +69,8 @@ func recordProto(r app.Record, full bool) *pantherclawv1.CoverageRecord {
 	}
 	for _, rt := range r.Body.Routes {
 		out.Routes = append(out.Routes, &pantherclawv1.CoverageRoute{
-			Id: idText(rt.Route), Kind: kinds[domain.RouteKind(rt.Kind)], Channel: rt.Channel, Locator: rt.Locator,
-			Status: statuses[domain.RouteStatus(rt.Status)], ClosureId: idText(rt.Closure),
+			Id: rt.Route, Kind: kinds[domain.RouteKind(rt.Kind)], Channel: rt.Channel, Locator: rt.Locator,
+			Status: statuses[domain.RouteStatus(rt.Status)], ClosureId: rt.Closure,
 		})
 	}
 	for _, c := range r.Changes {

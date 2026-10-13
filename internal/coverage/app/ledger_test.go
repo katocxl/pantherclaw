@@ -4,6 +4,8 @@
 package app
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"testing"
 	"time"
 
@@ -33,17 +35,21 @@ func TestHR217_CoverageLedgerBodiesNameIdsAsUUIDStrings(t *testing.T) {
 	closure, inv := mustID(t, "0199e2a4-1111-7000-8000-0000000000c1"), mustID(t, "0199e2a4-1111-7000-8000-0000000000f1")
 	at := func(d time.Duration) string { return evdomain.Timestamp(bundletest.IssuedAt.Add(d)) }
 	s := Snapshot{
-		V: 1, ID: snap, Agent: agent, Connection: conn, Operation: "github.pulls.merge", State: "ENFORCED",
-		Routes: []SnapshotRoute{{Kind: "sandbox", Status: "closed", Closure: &closure}}, Closure: &closure,
-		ExpiresAt: at(time.Hour), Exclusions: []ids.UUID{excl}, ComputedAt: at(-time.Hour),
+		V: 1, ID: snap.String(), Agent: agent.String(), Connection: conn.String(), Operation: "github.pulls.merge", State: "ENFORCED",
+		Routes: []SnapshotRoute{{Kind: "sandbox", Status: "closed", Closure: closure.String()}}, Closure: closure.String(),
+		ExpiresAt: at(time.Hour), Exclusions: []string{excl.String()}, ComputedAt: at(-time.Hour),
 	}
 	entry, err := entryOf(s)
 	if err != nil {
 		t.Fatal(err)
 	}
-	const golden = `{"closure":"0199e2a4-1111-7000-8000-0000000000c1","computed_at":"2026-10-10T07:30:00.000000Z",` +
+	// routes_digest is the SHA-256 of the canonical routes of the record,
+	// ids as UUID strings, so anyone holding them recomputes it.
+	const routes = `{"routes":[{"closure":"0199e2a4-1111-7000-8000-0000000000c1","kind":"sandbox","status":"closed"}]}`
+	sum := sha256.Sum256([]byte(routes))
+	golden := `{"closure":"0199e2a4-1111-7000-8000-0000000000c1","computed_at":"2026-10-10T07:30:00.000000Z",` +
 		`"exclusions":["0199e2a4-1111-7000-8000-0000000000e1"],"expires_at":"2026-10-10T09:30:00.000000Z",` +
-		`"routes_digest":"sha256:30da82a45907ca3bee7d06bc4b15ab27d45997deeac36bad1c413723f29b32eb","scope":{"agent":"0199e2a4-1111-7000-8000-00000000000a",` +
+		`"routes_digest":"sha256:` + hex.EncodeToString(sum[:]) + `","scope":{"agent":"0199e2a4-1111-7000-8000-00000000000a",` +
 		`"connection":"0199e2a4-1111-7000-8000-00000000000c","operation":"github.pulls.merge"},` +
 		`"snapshot":"0199e2a4-1111-7000-8000-000000000005","state":"ENFORCED","v":1}`
 	if string(entry) != golden {

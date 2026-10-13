@@ -67,10 +67,8 @@ func (c coverageClaims) CoverageClaim(ctx context.Context, org ids.OrgID, agent,
 	out := &finalize.CoverageClaim{
 		V: 1, State: claim.State.String(), Snapshot: claim.Snapshot.String(),
 		Scope:         finalize.CoverageClaimScope{Agent: agent.String(), Connection: connection.String(), Operation: operation},
-		SnapshotState: claim.SnapshotState.String(), Lapsed: claim.Lapsed, Reason: claim.Reason, Exclusions: []string{},
-	}
-	for _, x := range claim.Exclusions {
-		out.Exclusions = append(out.Exclusions, x.String())
+		SnapshotState: claim.SnapshotState.String(), Lapsed: claim.Lapsed, Reason: claim.Reason,
+		Exclusions: append([]string{}, claim.Exclusions...),
 	}
 	if claim.ExpiresAt != nil {
 		out.ExpiresAt = evdomain.Timestamp(*claim.ExpiresAt)

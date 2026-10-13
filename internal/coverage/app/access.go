@@ -289,7 +289,7 @@ func (s *Service) residual(ctx context.Context, r *readers, agent, connection id
 			routes = snapshotOf(sc, *rec.Recomputed, nil).Routes
 		}
 		for _, rt := range routes {
-			closed := rt.Status == string(domain.StatusClosed) && rt.Closure != nil && current != nil && *rt.Closure == *current
+			closed := rt.Status == string(domain.StatusClosed) && current != nil && rt.Closure == current.String()
 			key := SnapshotRoute{Kind: rt.Kind, Channel: rt.Channel, Locator: rt.Locator, Status: rt.Status}
 			if rt.Status == string(domain.StatusMediated) || closed || seen[key] {
 				continue

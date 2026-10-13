@@ -176,8 +176,8 @@ func (h *Handler) coverageCard(w http.ResponseWriter, r *http.Request, s authnap
 		if rt.Status == string(covdomain.StatusMediated) || rt.Status == string(covdomain.StatusClosed) {
 			class = "ok"
 		}
-		if rt.Closure != nil {
-			evidence = "closure " + rt.Closure.String()
+		if rt.Closure != "" {
+			evidence = "closure " + rt.Closure
 		}
 		v.Routes = append(v.Routes, routeRow{Name: routeName(rt), Status: strings.ReplaceAll(rt.Status, "_", " "), Class: class, Evidence: evidence})
 	}

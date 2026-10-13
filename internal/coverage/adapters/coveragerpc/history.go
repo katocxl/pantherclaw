@@ -22,12 +22,12 @@ func snapshotProto(s app.SnapshotRecord) *pantherclawv1.CoverageSnapshot {
 		EntryDigest: "sha256:" + hex.EncodeToString(s.BodySha256),
 	}
 	for _, x := range s.Body.Exclusions {
-		out.ExclusionIds = append(out.ExclusionIds, x.String())
+		out.ExclusionIds = append(out.ExclusionIds, x)
 	}
 	for _, rt := range s.Body.Routes {
 		out.Routes = append(out.Routes, &pantherclawv1.CoverageRoute{
-			Id: idText(rt.Route), Kind: kinds[domain.RouteKind(rt.Kind)], Channel: rt.Channel, Locator: rt.Locator,
-			Status: statuses[domain.RouteStatus(rt.Status)], ClosureId: idText(rt.Closure),
+			Id: rt.Route, Kind: kinds[domain.RouteKind(rt.Kind)], Channel: rt.Channel, Locator: rt.Locator,
+			Status: statuses[domain.RouteStatus(rt.Status)], ClosureId: rt.Closure,
 		})
 	}
 	return out

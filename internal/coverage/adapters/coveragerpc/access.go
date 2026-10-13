@@ -56,7 +56,7 @@ func (h *Handler) GetAccessDetail(ctx context.Context, req *pantherclawv1.GetAcc
 	}
 	for _, rt := range d.Residual {
 		out.ResidualRoutes = append(out.ResidualRoutes, &pantherclawv1.CoverageRoute{
-			Id: idText(rt.Route), Kind: kinds[domain.RouteKind(rt.Kind)], Channel: rt.Channel, Locator: rt.Locator,
+			Id: rt.Route, Kind: kinds[domain.RouteKind(rt.Kind)], Channel: rt.Channel, Locator: rt.Locator,
 			Status: statuses[domain.RouteStatus(rt.Status)],
 		})
 	}
