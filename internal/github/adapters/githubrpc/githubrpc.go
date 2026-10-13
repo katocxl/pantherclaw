@@ -7,6 +7,7 @@ package githubrpc
 
 import (
 	"context"
+	"maps"
 
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -165,4 +166,27 @@ func (h *Handler) GetOrgScan(ctx context.Context, req *pb.GetOrgScanRequest) (*p
 		return nil, err
 	}
 	return &pb.GetOrgScanResponse{Scan: scanOf(s)}, nil
+}
+
+// ListOrgScanFindings implements GitHubServiceHandler.
+func (h *Handler) ListOrgScanFindings(ctx context.Context, req *pb.ListOrgScanFindingsRequest) (*pb.ListOrgScanFindingsResponse, error) {
+	scan, err := parseID(req.GetScanId())
+	if err != nil {
+		return nil, err
+	}
+	rows, next, err := h.scans.Findings(ctx, scan, req.GetPageSize(), req.GetPageToken())
+	if err != nil {
+		return nil, err
+	}
+	out := &pb.ListOrgScanFindingsResponse{NextPageToken: next}
+	for _, f := range rows {
+		kind := f.Attributes["kind"]
+		attrs := maps.Clone(f.Attributes)
+		delete(attrs, "kind")
+		out.Findings = append(out.Findings, &pb.OrgScanFinding{
+			AgentId: f.AgentID.String(), Kind: kind, Attributes: attrs, SeenCount: f.SeenCount,
+			FirstSeenTime: timestamppb.New(f.FirstSeenAt), LastSeenTime: timestamppb.New(f.LastSeenAt),
+		})
+	}
+	return out, nil
 }

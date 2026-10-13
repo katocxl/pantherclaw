@@ -251,6 +251,7 @@ func cmdServe(ctx context.Context, args []string, stderr io.Writer, env Env, onS
 	}
 	m6.verifications = verification
 	m6.facts = gatewayFacts(pool)
+	m6.scans = agentsrpc.NewGatewayScans(aapp.NewInventory(pool, bill))
 
 	g, ctx := errgroup.WithContext(ctx)
 	if cfg.Role == RoleAPI || cfg.Role == RoleAll {

@@ -107,3 +107,21 @@ UPDATE pc.github_scan_runs
 SET state = sqlc.arg(state), counts = sqlc.arg(counts), scanned = sqlc.arg(scanned)::text[], not_scanned = sqlc.arg(not_scanned),
     finished_at = now()
 WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state IN ('PENDING', 'RUNNING');
+
+-- GatewayScanRun is a scan whose org_scan lease this gateway holds now,
+-- under the lease it presents: only then may it submit the scan's
+-- findings (HR-209).
+-- name: GatewayScanRun :one
+SELECT r.id FROM pc.github_scan_runs r
+JOIN pc.verifications v ON v.org_id = r.org_id AND v.id = r.verification_id
+WHERE r.org_id = sqlc.arg(org_id) AND r.id = sqlc.arg(id) AND v.purpose = 'org_scan' AND v.state = 'LEASED'
+  AND v.leased_by = sqlc.arg(gateway_id)::uuid AND v.lease_hash = sqlc.arg(lease_hash) AND v.lease_expires_at >= now();
+
+-- ListOrgScanFindings are the discoveries a scan saw last.
+-- name: ListOrgScanFindings :many
+SELECT d.id, d.agent_id, d.observed, d.seen_count, d.first_seen_at, d.last_seen_at
+FROM pc.discoveries d
+WHERE d.org_id = sqlc.arg(org_id) AND d.source = 'github_scan' AND d.observed ->> 'scan_run' = sqlc.arg(scan_run)::text
+  AND d.id > coalesce(sqlc.arg(after_id)::uuid, '00000000-0000-0000-0000-000000000000')
+ORDER BY d.id
+LIMIT sqlc.arg(max_rows);
