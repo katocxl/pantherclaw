@@ -145,7 +145,8 @@ func (l Limits) validate(onGrant bool) error {
 // never dispatches or reserves it, so the rule would never count anything.
 // Such an operation is a write without mappings, which a package defines
 // only as a consequence of its own rules. lookup gives the active
-// definition of an exact operation; a prefix limits the dispatched
+// definition of an exact operation; one with none is refused too, since
+// what it would count is unknown. A prefix limits the dispatched
 // operations it covers and is not resolved.
 func (l Limits) checkDispatched(lookup func(op string) *defs.Definition) error {
 	if lookup == nil {
@@ -156,7 +157,11 @@ func (l Limits) checkDispatched(lookup func(op string) *defs.Definition) error {
 			if _, prefix := opPrefix(op); prefix {
 				continue
 			}
-			if d := lookup(op); d != nil && d.Access == defs.AccessWrite && len(d.Mappings) == 0 {
+			d := lookup(op)
+			if d == nil {
+				return invalid("%s: %s has no active definition, so what it would count is unknown", name, op)
+			}
+			if d.Access == defs.AccessWrite && len(d.Mappings) == 0 {
 				return invalid("%s: %s is a consequence, which is never dispatched, so it would never be counted; limit the operation that causes it", name, op)
 			}
 		}
