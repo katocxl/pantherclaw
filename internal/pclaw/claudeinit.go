@@ -25,8 +25,9 @@ import (
 // C, HR-208). It finds Claude Code's settings (user, project, local and
 // managed), its MCP servers and the agent-framework projects under the
 // project directory, and installs the PreToolUse hook that asks the gateway
-// before every Bash and PowerShell command (`pclaw hook claude-code`) in
-// the settings file of the chosen scope.
+// before every command a tool runs in a shell (Bash, PowerShell and
+// Monitor; HR-186) with `pclaw hook claude-code`, in the settings file of
+// the chosen scope.
 //
 // It only adds: it never removes or changes an existing deny rule, hook or
 // server entry, and it never writes a secret (only the gateway's URL, the
@@ -49,6 +50,11 @@ func init() {
 // claudeHookArgs are the hook's arguments before its flags: the command
 // the hook runs is `pclaw hook claude-code`.
 var claudeHookArgs = []string{"hook", "claude-code"}
+
+// shellTools are the tools that run commands in a shell, which PantherClaw's
+// hook decides (HR-186; Monitor added after review, founder decision
+// 2026-10-13). The hook init installs matches them all.
+var shellTools = []string{"Bash", "PowerShell", "Monitor"}
 
 // connectionName is a connection name (ConnectionService).
 var connectionName = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
@@ -121,14 +127,15 @@ func readSettings(scope, path string) (claudeSettings, error) {
 }
 
 // hookRuns reports whether a settings document runs PantherClaw's hook
-// before Bash and PowerShell: `pclaw hook claude-code`, failing closed
+// before every tool in shellTools: `pclaw hook claude-code`, failing closed
 // (onFailure "block"). A pclaw hook that lets a command through when it
-// cannot run, or that runs another pclaw command, is not PantherClaw's
-// hook, so init adds its own beside it.
+// cannot run, that runs another pclaw command, or that leaves out one of
+// those tools (Monitor, say) is not PantherClaw's hook, so init adds its
+// own beside it.
 func hookRuns(doc *jsonNode) bool {
 	for _, group := range doc.get("hooks").get("PreToolUse").itemsOf() {
 		m := group.get("matcher").str()
-		if m != "" && m != "*" && (!strings.Contains(m, "Bash") || !strings.Contains(m, "PowerShell")) {
+		if m != "" && m != "*" && slices.ContainsFunc(shellTools, func(tool string) bool { return !strings.Contains(m, tool) }) {
 			continue
 		}
 		for _, h := range group.get("hooks").itemsOf() {
@@ -288,7 +295,7 @@ func (f initFlags) hookEntry() (*jsonNode, error) {
 		args = append(args, "--run", f.run)
 	}
 	entry := jsonFields("type", "command", "command", "pclaw", "args", args, "timeout", 10, "onFailure", "block")
-	return jsonFields("matcher", "Bash|PowerShell", "hooks", &jsonNode{kind: '[', items: []*jsonNode{entry}}), nil
+	return jsonFields("matcher", strings.Join(shellTools, "|"), "hooks", &jsonNode{kind: '[', items: []*jsonNode{entry}}), nil
 }
 
 // hookBlocked says why the hook would not run: managed settings that allow

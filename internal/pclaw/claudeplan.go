@@ -49,7 +49,7 @@ func (p *initPlan) addHook(target claudeSettings, hook *jsonNode) error {
 		return &exitError{code: 1, msg: "pclaw init: " + s.path + ": hooks.PreToolUse is not a list; it is left as it is"}
 	}
 	pre.items = append(pre.items, hook)
-	p.done = append(p.done, "Every Bash and PowerShell command now asks PantherClaw first; when it cannot answer, the command is blocked.")
+	p.done = append(p.done, "Every Bash, PowerShell and Monitor command now asks PantherClaw first; when it cannot answer, the command is blocked.")
 	return nil
 }
 

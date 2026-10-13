@@ -192,7 +192,7 @@ func TestHR208_InitBacksUpShowsTheDiffAndOnlyAdds(t *testing.T) {
 		"hook", "claude-code", "--gateway", "https://gw.example.test", "--connection", "shell", "--key-file", f.key,
 		"--run", "01920000-0000-7000-8000-0000000000f1",
 	}
-	if mine["matcher"] != "Bash|PowerShell" || entry["command"] != "pclaw" || entry["onFailure"] != "block" || len(args) != len(want) {
+	if mine["matcher"] != "Bash|PowerShell|Monitor" || entry["command"] != "pclaw" || entry["onFailure"] != "block" || len(args) != len(want) {
 		t.Fatalf("hook %v", mine)
 	}
 	for i := range want {
@@ -254,13 +254,18 @@ func TestHR208_InitRefusesWhatWouldKeepTheHookFromRunning(t *testing.T) {
 		"all hooks off":      {managed: `{"disableAllHooks": true}`, code: 1, want: "disable every hook"},
 		"local hooks off":    {local: `{"disableAllHooks": true}`, code: 1, want: "never changes that setting"},
 		"managed runs it": {
-			managed: `{"allowManagedHooksOnly": true, "hooks": {"PreToolUse": [{"matcher": "Bash|PowerShell",
+			managed: `{"allowManagedHooksOnly": true, "hooks": {"PreToolUse": [{"matcher": "Bash|PowerShell|Monitor",
 				"hooks": [{"type": "command", "command": "pclaw", "args": ["hook", "claude-code"], "onFailure": "block"}]}]}}`,
 			want: "already installed",
 		},
 		"managed runs it failing open": {
-			managed: `{"allowManagedHooksOnly": true, "hooks": {"PreToolUse": [{"matcher": "Bash|PowerShell",
+			managed: `{"allowManagedHooksOnly": true, "hooks": {"PreToolUse": [{"matcher": "Bash|PowerShell|Monitor",
 				"hooks": [{"type": "command", "command": "pclaw", "args": ["hook", "claude-code"]}]}]}}`,
+			code: 1, want: "allow only managed hooks",
+		},
+		"managed runs it without Monitor": {
+			managed: `{"allowManagedHooksOnly": true, "hooks": {"PreToolUse": [{"matcher": "Bash|PowerShell",
+				"hooks": [{"type": "command", "command": "pclaw", "args": ["hook", "claude-code"], "onFailure": "block"}]}]}}`,
 			code: 1, want: "allow only managed hooks",
 		},
 		"dry run":        {local: existingLocal, args: []string{"--dry-run"}, want: "Dry run: nothing was changed."},
@@ -289,14 +294,18 @@ func TestHR208_InitRefusesWhatWouldKeepTheHookFromRunning(t *testing.T) {
 }
 
 // TestHR208_InitCountsOnlyAFailClosedPantherClawHook: an existing hook is
-// PantherClaw's only when it runs `pclaw hook claude-code` and blocks the
-// command when it cannot run. Beside a pclaw hook that fails open or runs
-// another command, init adds its own and keeps the other as it was.
+// PantherClaw's only when it runs `pclaw hook claude-code` before Bash,
+// PowerShell and Monitor and blocks the command when it cannot run. Beside
+// a pclaw hook that fails open, runs another command or leaves out Monitor,
+// init adds its own and keeps the other as it was.
 func TestHR208_InitCountsOnlyAFailClosedPantherClawHook(t *testing.T) {
 	for name, tc := range map[string]struct {
-		hook      string
-		installed bool
+		hook, matcher string
+		installed     bool
 	}{
+		"without Monitor": {
+			hook: `{"type": "command", "command": "pclaw", "args": ["hook", "claude-code"], "onFailure": "block"}`, matcher: "Bash|PowerShell",
+		},
 		"fails closed": {
 			hook: `{"type": "command", "command": "/usr/local/bin/pclaw", "args": ["hook", "claude-code"], "onFailure": "block"}`, installed: true,
 		},
@@ -309,7 +318,10 @@ func TestHR208_InitCountsOnlyAFailClosedPantherClawHook(t *testing.T) {
 		"another hook":    {hook: `{"type": "command", "command": "pclaw", "args": ["hook", "other"], "onFailure": "block"}`},
 	} {
 		f := newInitFixture(t)
-		local := `{"hooks": {"PreToolUse": [{"matcher": "Bash|PowerShell", "hooks": [` + tc.hook + `]}]}}`
+		if tc.matcher == "" {
+			tc.matcher = "Bash|PowerShell|Monitor"
+		}
+		local := `{"hooks": {"PreToolUse": [{"matcher": "` + tc.matcher + `", "hooks": [` + tc.hook + `]}]}}`
 		f.write(t, f.local(), local)
 		var before map[string]any
 		if err := json.Unmarshal([]byte(local), &before); err != nil {

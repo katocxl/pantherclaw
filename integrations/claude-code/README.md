@@ -4,7 +4,7 @@
 
 ## The Claude Code plugin (M6)
 
-The plugin adds a `PreToolUse` hook for **Bash and PowerShell** commands ([hooks/hooks.json](hooks/hooks.json)). For each command, Claude Code runs `pclaw hook claude-code`, which:
+The plugin adds a `PreToolUse` hook for every command a tool runs in a shell: **Bash, PowerShell and Monitor** (matcher `Bash|PowerShell|Monitor`, [hooks/hooks.json](hooks/hooks.json); Monitor added after review, founder decision 2026-10-13, HR-186). A Monitor call without a command, such as its WebSocket form, is blocked. For each command, Claude Code runs `pclaw hook claude-code`, which:
 - signs a request with your desktop workload key;
 - asks your PantherClaw gateway's `/hook/{connection}` (G0 M6 design decision 16);
 - answers.
@@ -51,7 +51,7 @@ It only adds (HR-208):
 
 It fails without changing anything when settings would keep the hook from running: managed settings with `allowManagedHooksOnly` and without the hook, or with `disableAllHooks`; or `disableAllHooks` in the file it would change, or in any other settings file whose value Claude Code applies (it takes the setting from managed, then local, project and user settings). Running it again changes nothing.
 
-With the plugin loaded and PantherClaw unreachable or not configured, **every** Bash and PowerShell command is blocked. That is the point. So dogfooding on the PantherClaw repository stays opt-in per developer, and parallel sessions without a local stack keep working (decision 4).
+With the plugin loaded and PantherClaw unreachable or not configured, **every** Bash, PowerShell and Monitor command is blocked. That is the point. So dogfooding on the PantherClaw repository stays opt-in per developer, and parallel sessions without a local stack keep working (decision 4).
 
 ## The Claude Agent SDK (M8)
 
