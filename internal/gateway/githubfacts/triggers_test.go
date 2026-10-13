@@ -28,14 +28,16 @@ jobs:
 // is triggered with its environments; other branches are none; anything
 // the parser does not evaluate is unknown, never none.
 func TestHR206_DeployTriggers(t *testing.T) {
-	files := map[string][]byte{".github/workflows/deploy.yml": []byte(deployMain), ".github/workflows/ci.yml": []byte("on: [push]\njobs:\n  t: {runs-on: x}\n")}
+	// ci.yml runs on pushes to main only: a workflow started on any other
+	// branch could dispatch deploy.yml (workflow_dispatch).
+	files := map[string][]byte{".github/workflows/deploy.yml": []byte(deployMain), ".github/workflows/ci.yml": []byte("on: {push: {branches: [main]}}\njobs:\n  t: {runs-on: x}\n")}
 	for branch, want := range map[string]string{"main": "triggered", "release/2026/10": "triggered", "fix/a": "none", "mainline": "none"} {
-		got := DeployTriggers(files, branch, "abc")
+		got := DeployTriggers(files, branch, "abc", false)
 		if got.State != want {
 			t.Errorf("%s: %+v", branch, got)
 		}
 	}
-	got := DeployTriggers(files, "main", "abc")
+	got := DeployTriggers(files, "main", "abc", false)
 	if !slices.Equal(got.Environments, []string{"production"}) || len(got.Workflows) != 2 || got.Unknown != "" {
 		t.Fatalf("main: %+v", got)
 	}
@@ -56,8 +58,7 @@ func TestHR206_DeployTriggers(t *testing.T) {
 		"no jobs":              "on: push\n",
 		// Events a merge, a write or a branch creation can start besides
 		// push, and events chained from one (HR-206).
-		"merge deploys":        "on:\n  pull_request:\n    types: [closed]\n    branches: [main]\njobs:\n  d:\n    if: github.event.pull_request.merged == true\n    environment: production\n",
-		"pull_request_target":  "on:\n  pull_request_target: {types: [closed]}\njobs: {d: {environment: production}}\n",
+		"pull_request types":   "on:\n  pull_request: {types: {closed: x}}\njobs: {d: {environment: production}}\n",
 		"create":               "on: create\njobs: {d: {environment: preview}}\n",
 		"delete":               "on: [delete]\njobs: {d: {environment: preview}}\n",
 		"merge_group":          "on: merge_group\njobs: {d: {environment: production}}\n",
@@ -68,7 +69,7 @@ func TestHR206_DeployTriggers(t *testing.T) {
 		"page_build":           "on: page_build\njobs: {d: {runs-on: x}}\n",
 		"an event GitHub adds": "on: future_event\njobs: {d: {runs-on: x}}\n",
 	} {
-		got := DeployTriggers(map[string][]byte{".github/workflows/x.yml": []byte(wf)}, "main", "abc")
+		got := DeployTriggers(map[string][]byte{".github/workflows/x.yml": []byte(wf)}, "main", "abc", true)
 		if got.State != "unknown" || got.Unknown == "" {
 			t.Errorf("%s: %+v", name, got)
 		}
@@ -77,11 +78,11 @@ func TestHR206_DeployTriggers(t *testing.T) {
 	for i := range MaxWorkflowFiles + 1 {
 		many[".github/workflows/"+strings.Repeat("a", i+1)+".yml"] = []byte("on: pull_request\njobs: {}\n")
 	}
-	if got := DeployTriggers(many, "main", "abc"); got.State != "unknown" {
+	if got := DeployTriggers(many, "main", "abc", false); got.State != "unknown" {
 		t.Fatalf("too many files: %+v", got)
 	}
 	big := map[string][]byte{".github/workflows/x.yml": []byte("on: push\n# " + strings.Repeat("x", MaxWorkflowBytes))}
-	if got := DeployTriggers(big, "main", "abc"); got.State != "unknown" {
+	if got := DeployTriggers(big, "main", "abc", false); got.State != "unknown" {
 		t.Fatalf("a file too large: %+v", got)
 	}
 }
@@ -94,7 +95,7 @@ func TestDeployTriggerFilters(t *testing.T) {
 		"on:\n  push:\n    branches-ignore: [docs/*]\njobs: {d: {environment: prod}}\n":  {"main": "triggered", "docs/a": "none"},
 		"on:\n  push:\n    tags: [v*]\njobs: {d: {environment: prod}}\n":                 {"main": "none"},
 		"on:\n  push:\n    paths: [src/**]\njobs: {d: {environment: {name: prod}}}\n":    {"main": "triggered"},
-		"on:\n  pull_request:\n    branches: [main]\njobs: {d: {environment: prod}}\n":   {"main": "unknown"}, // it runs when the merge closes it
+		"on:\n  pull_request:\n    branches: [main]\njobs: {d: {environment: prod}}\n":   {"main": "triggered"}, // a push may synchronize a pull request from main
 		"on: [schedule, workflow_dispatch, issues]\njobs: {d: {environment: prod}}\n":    {"main": "none"},
 		"on:\n  push:\n    branches: main\njobs: {d: {environment: prod}}\n":             {"main": "triggered", "maint": "none"},
 		// ? and + apply to the character before them, as GitHub's filters do.
@@ -103,7 +104,7 @@ func TestDeployTriggerFilters(t *testing.T) {
 		"on:\n  push:\n    branches: ['*?']\njobs: {d: {environment: prod}}\n":        {"main": "unknown"},
 	} {
 		for branch, want := range cases {
-			if got := DeployTriggers(map[string][]byte{"w.yml": []byte(wf)}, branch, "abc"); got.State != want {
+			if got := DeployTriggers(map[string][]byte{"w.yml": []byte(wf)}, branch, "abc", false); got.State != want {
 				t.Errorf("%q on %s: %+v, want %s", wf, branch, got, want)
 			}
 		}
@@ -123,8 +124,10 @@ func FuzzWorkflowTriggers(f *testing.F) {
 	f.Add([]byte("on:\n  pull_request:\n    types: [closed]\njobs: {d: {if: github.event.pull_request.merged, environment: p}}\n"), "main")
 	f.Add([]byte("on: [create, schedule]\njobs: {d: {environment: p}}\n"), "feature")
 	f.Add([]byte("on: {workflow_dispatch: {}, check_run: {}}\njobs: {}\n"), "main")
+	f.Add([]byte("on:\n  pull_request_target: {types: closed, branches-ignore: [x]}\njobs: {d: {environment: p}}\n"), "main")
 	f.Fuzz(func(t *testing.T, raw []byte, branch string) {
-		got := DeployTriggers(map[string][]byte{".github/workflows/f.yml": raw}, branch, "abc")
+		merge := len(raw)%2 == 0 // both operations, by the input's parity
+		got := DeployTriggers(map[string][]byte{".github/workflows/f.yml": raw}, branch, "abc", merge)
 		if !slices.Contains([]string{"triggered", "none", "unknown"}, got.State) || (got.State == "unknown") != (got.Unknown != "") {
 			t.Fatalf("state %+v", got)
 		}
@@ -138,10 +141,59 @@ func FuzzWorkflowTriggers(f *testing.F) {
 		}
 		if on, ok := root["on"].(map[string]any); ok {
 			for name := range on {
-				if name != "push" && !unmoved[name] && got.State == "none" {
+				evaluated := name == "push" || name == "pull_request" || name == "pull_request_target" || name == "workflow_dispatch"
+				if !evaluated && !unmoved[name] && got.State == "none" {
 					t.Fatalf("a %s trigger gave none: %q", name, raw)
 				}
 			}
 		}
 	})
+}
+
+// TestHR206_AStartedWorkflowCanDispatchADeploy: a workflow the operation
+// starts can raise workflow_dispatch with GitHub's own token, so once any
+// workflow starts, every workflow_dispatch workflow counts as started, with
+// its environments; when nothing starts, nothing dispatches it.
+func TestHR206_AStartedWorkflowCanDispatchADeploy(t *testing.T) {
+	files := map[string][]byte{
+		".github/workflows/ci.yml":     []byte("on:\n  push:\n    branches: [main]\njobs:\n  ci: {runs-on: x, steps: [{run: gh workflow run deploy.yml}]}\n"),
+		".github/workflows/deploy.yml": []byte("on: workflow_dispatch\njobs:\n  d: {runs-on: x, environment: production}\n"),
+	}
+	got := DeployTriggers(files, "main", "abc", false)
+	if got.State != "triggered" || !slices.Equal(got.Environments, []string{"production"}) || len(got.Workflows) != 2 {
+		t.Fatalf("a push that can dispatch the deploy: %+v", got)
+	}
+	if got := DeployTriggers(files, "fix/a", "abc", false); got.State != "none" || len(got.Workflows) != 0 {
+		t.Fatalf("a push that starts nothing: %+v", got)
+	}
+	files[".github/workflows/deploy.yml"] = []byte("on: workflow_dispatch\njobs:\n  d: {environment: '${{ inputs.env }}'}\n")
+	if got := DeployTriggers(files, "main", "abc", false); got.State != "unknown" {
+		t.Fatalf("a dispatchable deploy whose environment is an expression: %+v", got)
+	}
+}
+
+// TestHR206_PullRequestTriggersFollowTheirTypes: a merge closes the pull
+// request, so only a pull_request (or pull_request_target) workflow whose
+// types include closed, and whose branch filters match the base branch,
+// starts; one on the default types (opened, synchronize, reopened) does
+// not. A push to a branch may synchronize a pull request from it.
+func TestHR206_PullRequestTriggersFollowTheirTypes(t *testing.T) {
+	for wf, want := range map[string]struct{ merge, mergeOther, push string }{
+		"on: pull_request\njobs: {ci: {runs-on: x}, d: {environment: preview}}\n":                                                                                       {"none", "none", "triggered"},
+		"on:\n  pull_request:\n    types: [closed]\n    branches: [main]\njobs:\n  d:\n    if: github.event.pull_request.merged == true\n    environment: production\n": {"triggered", "none", "none"},
+		"on:\n  pull_request_target: {types: closed}\njobs: {d: {environment: production}}\n":                                                                           {"triggered", "triggered", "none"},
+		"on:\n  pull_request: {types: [opened, labeled]}\njobs: {d: {environment: production}}\n":                                                                       {"none", "none", "none"},
+		"on:\n  pull_request: {types: [closed], branches-ignore: [main]}\njobs: {d: {environment: staging}}\n":                                                          {"none", "triggered", "none"},
+	} {
+		files := map[string][]byte{".github/workflows/w.yml": []byte(wf)}
+		for name, c := range map[string]struct {
+			branch string
+			merge  bool
+			want   string
+		}{"merge into main": {"main", true, want.merge}, "merge into release": {"release", true, want.mergeOther}, "push": {"fix/a", false, want.push}} {
+			if got := DeployTriggers(files, c.branch, "abc", c.merge); got.State != c.want {
+				t.Errorf("%q, %s: %+v, want %s", wf, name, got, c.want)
+			}
+		}
+	}
 }
