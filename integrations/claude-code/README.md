@@ -42,7 +42,7 @@ pclaw init --gateway https://gateway.example.com --connection shell --key-file ~
 
 `pclaw init`:
 - reports the Claude Code settings it finds (user, project, local and managed), the MCP servers that go around PantherClaw, and agent-framework projects;
-- when the key file is not an enrolled workload key, creates it (mode 0600) and enrolls it as `--agent`, signed in as you: an enrollment token is issued to you and used at once, never written, and the instance is admitted with the key fingerprint it showed you (HR-094);
+- when the key file is not an enrolled workload key, creates it (mode 0600) and enrolls it as `--agent`, signed in as you: an enrollment token is issued to you and used at once, never written, and the instance is admitted with the key fingerprint it showed you (HR-094). `--yes` asks nothing, so it also needs `--fingerprint` with the fingerprint you checked: create the key first with `pclaw workload init --key-file FILE`, which shows it. A key file other users can read is refused;
 - adds the same hook, in exec form with `onFailure: "block"`, to `.claude/settings.local.json`. Choose another file with `--scope project` or `--scope user`; `CLAUDE_CONFIG_DIR` moves the user one.
 
 It only adds (HR-208):

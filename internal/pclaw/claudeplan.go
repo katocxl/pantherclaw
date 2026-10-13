@@ -231,6 +231,20 @@ func (f initFlags) enrollment() (*enrollment, error) {
 	}
 	pub, _ := key.Public().(ed25519.PublicKey)
 	e.fingerprint = jws.Thumbprint(pub)
+	// HR-094: a person confirms the key's fingerprint before it is
+	// admitted. Without --yes they do so by confirming the plan, which
+	// shows it; with --yes no one is asked, so they name it.
+	switch {
+	case f.yes && e.create:
+		return nil, fmt.Errorf("--yes enrolls without asking, so it needs --fingerprint with the key's fingerprint, which you check (HR-094), "+
+			"and a key init would create has none yet: create it first (pclaw workload init --key-file %s shows its fingerprint), "+
+			"or run init without --yes", path)
+	case f.yes && f.fingerprint == "":
+		return nil, errors.New("--yes enrolls without asking, so it needs --fingerprint with the fingerprint of the key in --key-file, " +
+			"which you check (HR-094; --dry-run shows it)")
+	case f.fingerprint != "" && f.fingerprint != e.fingerprint:
+		return nil, fmt.Errorf("--fingerprint %s is not the fingerprint of the key in %s; nothing was changed", f.fingerprint, path)
+	}
 	return e, nil
 }
 

@@ -288,3 +288,47 @@ func TestHR208_InitRefusesAKeyFileOthersCanRead(t *testing.T) {
 		t.Fatalf("init with a 0600 key file: %d %s %s", code, out, errs)
 	}
 }
+
+// TestHR094_InitWithYesNeedsTheFingerprintYouChecked: with --yes no one is
+// asked, so enrolling needs --fingerprint, the key's own: without it, with
+// another, or for a key init would create (which has none to check yet),
+// init fails before anything is asked of the server or written; with it,
+// init enrolls and admits that key.
+func TestHR094_InitWithYesNeedsTheFingerprintYouChecked(t *testing.T) {
+	const agent = "0192aaaa-bbbb-7ccc-8ddd-000000000001"
+	f := newInitFixture(t)
+	fake := &fakeEnrollment{}
+	f.enrollmentServer(t, fake)
+	kf, key, err := workloadclient.NewKeyFile()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := workloadclient.WriteKeyFile(f.key, kf, false); err != nil {
+		t.Fatal(err)
+	}
+	fp := jws.Thumbprint(key.Public().(ed25519.PublicKey))
+	existing := f.key
+	for name, tc := range map[string]struct {
+		key  string
+		args []string
+		want string
+	}{
+		"no fingerprint":      {key: existing, want: "needs --fingerprint"},
+		"another fingerprint": {key: existing, args: []string{"--fingerprint", "someone-elses-key"}, want: "is not the fingerprint"},
+		"a key to create":     {key: filepath.Join(filepath.Dir(existing), "new.json"), args: []string{"--fingerprint", fp}, want: "create it first"},
+	} {
+		f.key = tc.key
+		code, out, errs := f.run(t, append([]string{"--agent", agent, "--yes"}, tc.args...)...)
+		if _, err := os.Stat(f.local()); code == 0 || err == nil || fake.issued != nil || !strings.Contains(errs, tc.want) {
+			t.Errorf("%s: %d %s %s", name, code, out, errs)
+		}
+		if _, err := os.Stat(filepath.Join(filepath.Dir(existing), "new.json")); err == nil {
+			t.Errorf("%s: a key file was created", name)
+		}
+	}
+	f.key = existing
+	code, out, errs := f.run(t, "--agent", agent, "--yes", "--fingerprint", fp)
+	if code != 0 || fake.admitted.GetFingerprint() != fp || !hookRunsIn(t, f.local()) || strings.Contains(out, "[y/N]") {
+		t.Fatalf("init: %d %s %s", code, out, errs)
+	}
+}

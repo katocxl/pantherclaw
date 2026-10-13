@@ -42,7 +42,7 @@ import (
 func init() {
 	commands["init"] = command{
 		usage: "init --gateway URL --connection NAME --key-file FILE [--agent ID] [--run ID] [--project DIR] " +
-			"[--scope local|project|user] [--dry-run | --yes] [--managed-settings FILE]",
+			"[--scope local|project|user] [--dry-run | --yes [--fingerprint FP]] [--managed-settings FILE]",
 		run: claudeInit,
 	}
 }
@@ -172,8 +172,8 @@ func counts(doc *jsonNode) string {
 
 // initFlags are init's options.
 type initFlags struct {
-	gateway, connection, keyFile, run, project, scope, managed, agent string
-	dryRun, yes                                                       bool
+	gateway, connection, keyFile, run, project, scope, managed, agent, fingerprint string
+	dryRun, yes                                                                    bool
 }
 
 func claudeInit(ctx context.Context, a *app, args []string) error {
@@ -190,6 +190,7 @@ func claudeInit(ctx context.Context, a *app, args []string) error {
 	fs.StringVar(&f.managed, "managed-settings", "", "also read managed settings from this file (the platform's are always read)")
 	fs.BoolVar(&f.dryRun, "dry-run", false, "show what would change and change nothing")
 	fs.BoolVar(&f.yes, "yes", false, "make the changes without asking")
+	fs.StringVar(&f.fingerprint, "fingerprint", "", "with --yes, the fingerprint of the key to enroll, which you checked (HR-094)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
