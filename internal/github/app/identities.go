@@ -16,6 +16,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"strconv"
 	"strings"
 
@@ -159,12 +160,40 @@ func (s *Service) Prove(ctx context.Context, token string, unlink bool) (Identit
 		if err != nil {
 			return err
 		}
+		if err := q.InsertGitHubIdentityHistory(ctx, c.Org, u.ID, c.Principal.ID); err != nil {
+			return err
+		}
 		return s.changed(ctx, tx, c, "github.identity_linked", out)
 	})
 	if db.IsUniqueViolation(err) {
-		return Identity{}, ErrLinked
+		err = ErrLinked
+	}
+	if errors.Is(err, ErrLinked) || errors.Is(err, ErrNotYours) {
+		return Identity{}, s.refused(ctx, c, u, unlink, err)
 	}
 	return out, err
+}
+
+// refused audits a sign-in that proved a GitHub account the caller may not
+// link or unlink, because it is linked to someone else or to no one (P2f,
+// review 2026-10-13): someone trying to take an account's link is worth a
+// security admin's look. It returns why.
+func (s *Service) refused(ctx context.Context, c tenancy.Caller, u GitHubUser, unlink bool, why error) error {
+	err := s.Pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
+		_, err := audit.Record(ctx, tx, audit.Event{
+			Name: "github.identity_link_refused", Actor: c.Actor(), Outcome: audit.Denied,
+			Object: &audit.Object{Type: "user", ID: c.Principal.ID.String()},
+			Details: map[string]string{
+				"github_login": u.Login, "github_user_id": strconv.FormatInt(u.ID, 10), "unlink": strconv.FormatBool(unlink),
+				"reason": pcerr.ReasonOf(why),
+			},
+		})
+		return err
+	})
+	if err != nil {
+		return errors.Join(why, err)
+	}
+	return why
 }
 
 // Unlink removes another person's link (github.identity.manage). Nobody

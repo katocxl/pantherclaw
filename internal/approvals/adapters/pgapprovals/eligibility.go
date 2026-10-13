@@ -299,6 +299,13 @@ func peopleLists(ctx context.Context, q *dbq.Queries, org ids.OrgID, request ids
 			for _, k := range links {
 				l.Link(k.GithubUserID, k.UserID)
 			}
+			former, err := q.FormerGitHubUsers(ctx, org, ghIDs)
+			if err != nil {
+				return nil, err
+			}
+			for _, k := range former {
+				l.Formerly(k.GithubUserID, k.UserID)
+			}
 		}
 		out = append(out, l)
 	}

@@ -826,6 +826,13 @@ type PcGithubIdentity struct {
 	VerifiedAt   *time.Time
 }
 
+type PcGithubIdentityHistory struct {
+	OrgID        ids.OrgID
+	GithubUserID int64
+	UserID       ids.UUID
+	LinkedAt     time.Time
+}
+
 type PcGithubScanRun struct {
 	OrgID          ids.OrgID
 	ID             ids.UUID

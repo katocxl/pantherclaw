@@ -79,7 +79,28 @@ CREATE POLICY tenant_isolation ON pc.approval_request_linked_people
 GRANT SELECT, INSERT ON pc.approval_request_linked_people TO pc_app;
 GRANT SELECT ON pc.approval_request_linked_people TO pc_audit_ro;
 
+-- github_identity_history keeps every link a person ever proved (P2f,
+-- review 2026-10-13): whoever was linked to a GitHub user id stays excluded
+-- as independent of a pull request that lists it, after an unlink, a
+-- relink of the id to someone else or a manager's unlink. Insert only.
+CREATE TABLE pc.github_identity_history (
+    org_id         uuid        NOT NULL REFERENCES pc.orgs (id),
+    github_user_id bigint      NOT NULL CHECK (github_user_id > 0),
+    user_id        uuid        NOT NULL,
+    linked_at      timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (org_id, github_user_id, user_id),
+    FOREIGN KEY (org_id, user_id) REFERENCES pc.users (org_id, id)
+);
+ALTER TABLE pc.github_identity_history ENABLE ROW LEVEL SECURITY;
+ALTER TABLE pc.github_identity_history FORCE ROW LEVEL SECURITY;
+CREATE POLICY tenant_isolation ON pc.github_identity_history
+    USING (org_id = (SELECT NULLIF(current_setting('app.org_id', true), '')::uuid))
+    WITH CHECK (org_id = (SELECT NULLIF(current_setting('app.org_id', true), '')::uuid));
+GRANT SELECT, INSERT ON pc.github_identity_history TO pc_app;
+GRANT SELECT ON pc.github_identity_history TO pc_audit_ro;
+
 -- +goose Down
+DROP TABLE pc.github_identity_history;
 DROP TABLE pc.approval_request_linked_people;
 ALTER TABLE pc.github_identities DROP CONSTRAINT github_identities_verified;
 ALTER TABLE pc.github_identities DROP COLUMN verified_at;

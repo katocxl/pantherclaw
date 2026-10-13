@@ -120,6 +120,18 @@ func (q *Queries) InsertGitHubIdentity(ctx context.Context, arg InsertGitHubIden
 	return i, err
 }
 
+const insertGitHubIdentityHistory = `-- name: InsertGitHubIdentityHistory :exec
+INSERT INTO pc.github_identity_history (org_id, github_user_id, user_id)
+VALUES ($1, $2, $3)
+ON CONFLICT DO NOTHING
+`
+
+// Every link a person proved, kept for good (P2f): see 00083.
+func (q *Queries) InsertGitHubIdentityHistory(ctx context.Context, orgID ids.OrgID, githubUserID int64, userID ids.UUID) error {
+	_, err := q.db.Exec(ctx, insertGitHubIdentityHistory, orgID, githubUserID, userID)
+	return err
+}
+
 const listGitHubIdentities = `-- name: ListGitHubIdentities :many
 SELECT org_id, id, user_id, github_login, github_user_id, linked_by, linked_at, verified_at FROM pc.github_identities
 WHERE org_id = $1 AND ($2::uuid IS NULL OR user_id = $2::uuid)
