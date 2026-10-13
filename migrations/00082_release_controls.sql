@@ -23,8 +23,10 @@ CREATE TABLE pc.change_windows (
     org_id      uuid        NOT NULL REFERENCES pc.orgs (id),
     id          uuid        NOT NULL,
     -- The deployment environment as a consequence names it (for example a
-    -- GitHub environment such as production).
-    environment text        NOT NULL CHECK (char_length(environment) BETWEEN 1 AND 100 AND environment !~ '[[:cntrl:]]'),
+    -- GitHub environment such as production), in lowercase: GitHub's
+    -- environment names are case-insensitive.
+    environment text        NOT NULL CHECK (char_length(environment) BETWEEN 1 AND 100 AND environment !~ '[[:cntrl:]]'
+                                            AND environment = lower(environment)),
     -- owner/name; NULL for every repository of the environment.
     repository  text        CHECK (repository IS NULL OR repository ~ '^[a-z0-9][a-z0-9-]{0,38}/[a-z0-9._-]{1,100}$'),
     time_zone   text        NOT NULL CHECK (char_length(time_zone) BETWEEN 1 AND 64),

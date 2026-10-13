@@ -39,6 +39,7 @@ func (s Span) Contains(t time.Time) bool { return !t.Before(s.Start) && t.Before
 
 // Window is a change window.
 type Window struct {
+	// Environment is stored in lowercase (NormalizeEnvironment).
 	Environment string
 	// Repository is owner/name, or "" for every repository.
 	Repository string
@@ -76,6 +77,12 @@ func invalid(format string, a ...any) error {
 func ValidEnvironment(s string) bool {
 	return s != "" && len([]rune(s)) <= 100 && !strings.ContainsFunc(s, unicode.IsControl)
 }
+
+// NormalizeEnvironment is the name an environment is stored and looked up
+// by. GitHub's environment names are case-insensitive, so a window is kept
+// under the name in lowercase and matches the environment whatever its
+// case: the window for Production is the window for production.
+func NormalizeEnvironment(s string) string { return strings.ToLower(s) }
 
 // ValidRepository reports whether s is "" or owner/name in lowercase.
 func ValidRepository(s string) bool { return s == "" || repoRe.MatchString(s) }
@@ -186,11 +193,13 @@ func (w Window) At(t time.Time) State {
 // given the ACTIVE windows: a freeze in the environment's window or the
 // repository's overrides both; otherwise the repository's own window
 // decides when it has one, and the environment's window when not.
+// Environments match whatever their case (NormalizeEnvironment).
 func Decide(windows []Window, environment, repository string, t time.Time) State {
 	var env, repo *Window
+	environment = NormalizeEnvironment(environment)
 	for i := range windows {
 		switch w := &windows[i]; {
-		case w.Environment != environment:
+		case NormalizeEnvironment(w.Environment) != environment:
 		case w.Repository == "":
 			env = w
 		case w.Repository == repository:
