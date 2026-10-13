@@ -73,6 +73,12 @@ func (c ConsequenceRule) validate(ops map[string]*Definition) error {
 		return invalid("consequence %s: operation %s is not defined in this package", c.ID, c.Operation)
 	case !actionir.ValidOperation(c.Consequence.Operation) || !kindRe.MatchString(c.Consequence.Effect):
 		return invalid("consequence %s: needs a consequence operation and effect", c.ID)
+	case ops[c.Consequence.Operation] == nil:
+		// The pipeline decides a consequence by its definition in the same
+		// package version (a virtual write such as github.deployment.trigger,
+		// or another of its operations); without one the rule could only
+		// fail when an action needs it.
+		return invalid("consequence %s: consequence operation %s is not defined in this package", c.ID, c.Consequence.Operation)
 	case len(c.RequiresFacts) == 0 || len(c.RequiresFacts) > maxItems:
 		return invalid("consequence %s: a consequence needs 1..%d verified facts (no invented causality)", c.ID, maxItems)
 	}
