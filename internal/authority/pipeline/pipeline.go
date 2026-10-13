@@ -333,9 +333,10 @@ func (p *Pipeline) scope(ctx context.Context, s *state) {
 
 // connection checks the connection an action names (PAP-1 §6): the gateway
 // asking serves it, it uses the action's package, and a hook call comes
-// through a local connection and nothing else does. A connection of another
-// gateway or org looks unknown. The route's mode on it decides whether the
-// action runs in monitor mode.
+// through a local connection and nothing else does (an sdk call, from the
+// /sdk face, comes through an http or mcp connection). A connection of
+// another gateway or org looks unknown. The route's mode on it decides
+// whether the action runs in monitor mode.
 func (p *Pipeline) connection(ctx context.Context, s *state, d *defs.Definition) bool {
 	unknown := func() bool {
 		s.cl.add(StepScope, adomain.CannotAuthorize, ReasonConnectionUnknown, "the connection is not one this gateway serves", "")
@@ -369,8 +370,9 @@ func (p *Pipeline) connection(ctx context.Context, s *state, d *defs.Definition)
 }
 
 // gatewayChannels are the channels a gateway serves, whose actions always
-// name their connection (PAP-1 §6); cooperative SDKs (sdk) may omit it.
-var gatewayChannels = []string{string(defs.ChannelHTTP), string(defs.ChannelMCP), string(defs.ChannelHook)}
+// name their connection (PAP-1 §6): the sdk channel too, since the /sdk
+// face is its only mapper (HR-201) and always names the connection.
+var gatewayChannels = []string{string(defs.ChannelHTTP), string(defs.ChannelMCP), string(defs.ChannelHook), string(defs.ChannelSDK)}
 
 // dispatches reports whether a connection of this kind serves the
 // definition: an HTTP or MCP connection only definitions with a dispatch
