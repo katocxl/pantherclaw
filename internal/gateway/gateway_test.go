@@ -4,8 +4,8 @@
 package gateway
 
 import (
-	"cmp"
 	"bytes"
+	"cmp"
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
@@ -401,8 +401,8 @@ type harness struct {
 	facts       []factReport
 	// log, when set, is the gateway's logger instead of a discarding one.
 	log *slog.Logger
-	gw          *Gateway
-	url         string
+	gw  *Gateway
+	url string
 	// approverKeys is the gateway's approvals.approver_keys_file.
 	approverKeys string
 }
