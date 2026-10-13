@@ -5,6 +5,7 @@ package app
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json/v2"
 	"maps"
 	"strconv"
@@ -27,8 +28,9 @@ var ErrNoScanLease = pcerr.New(pcerr.PermissionDenied, "SCAN_LEASE_REQUIRED",
 // PN-001.2, HR-209) as DISCOVERED agents, like a local scan's: untrusted
 // observations that grant nothing, each tagged with its scan. Only the
 // gateway holding the scan's org_scan lease submits, while it holds it;
-// the org and the gateway come from its certificate. Only github_* kinds.
-func (inv *Inventory) SubmitGitHubScan(ctx context.Context, org ids.OrgID, gateway, scan ids.UUID, findings []ScanFinding) (ScanResult, error) {
+// the org and the gateway come from its certificate, and lease is the
+// lease's secret, whose hash must match. Only github_* kinds.
+func (inv *Inventory) SubmitGitHubScan(ctx context.Context, org ids.OrgID, gateway, scan ids.UUID, lease []byte, findings []ScanFinding) (ScanResult, error) {
 	for _, f := range findings {
 		if !githubKinds[f.Kind] {
 			return ScanResult{}, ErrScanKind
@@ -37,7 +39,8 @@ func (inv *Inventory) SubmitGitHubScan(ctx context.Context, org ids.OrgID, gatew
 	var res ScanResult
 	err := inv.pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
 		q := dbq.New(tx)
-		if _, err := q.GatewayScanRun(ctx, org, scan, gateway); db.IsNoRows(err) {
+		hash := sha256.Sum256(lease)
+		if _, err := q.GatewayScanRun(ctx, dbq.GatewayScanRunParams{OrgID: org, ID: scan, GatewayID: gateway, LeaseHash: hash[:]}); db.IsNoRows(err) {
 			return ErrNoScanLease
 		} else if err != nil {
 			return err
