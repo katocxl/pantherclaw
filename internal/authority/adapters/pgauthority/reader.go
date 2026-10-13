@@ -14,6 +14,7 @@ import (
 	"sync"
 
 	"github.com/katocxl/pantherclaw/internal/actionir"
+	"github.com/katocxl/pantherclaw/internal/authority/consequences"
 	"github.com/katocxl/pantherclaw/internal/authority/finalize"
 	"github.com/katocxl/pantherclaw/internal/authority/pipeline"
 	"github.com/katocxl/pantherclaw/internal/budgets/adapters/pgbudgets"
@@ -180,11 +181,11 @@ func (s *snapshot) Containment(ctx context.Context, org ids.OrgID) (pipeline.Con
 
 // Definition implements pipeline.Reader.
 func (s *snapshot) Definition(ctx context.Context, org ids.OrgID, pin actionir.Definition) (pipeline.Pinned, error) {
-	d, state, err := s.r.Definitions.PinnedInTx(ctx, s.tx, org, pin)
+	p, d, state, err := s.r.Definitions.PinnedPackageInTx(ctx, s.tx, org, pin)
 	if err != nil {
 		return pipeline.Pinned{}, notFound(err)
 	}
-	return pipeline.Pinned{Definition: d, State: state}, nil
+	return pipeline.Pinned{Definition: d, State: state, Consequences: consequences.Of(p, d.Operation)}, nil
 }
 
 // Policy implements pipeline.Reader: the published bundle compiled against

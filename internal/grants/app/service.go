@@ -120,7 +120,7 @@ func (s *Service) Issue(ctx context.Context, req IssueRequest) (domain.Grant, er
 	if err != nil {
 		return domain.Grant{}, err
 	}
-	lookup, err := s.lookup(ctx, c.Org, g.Bounds)
+	lookup, err := s.lookup(ctx, c.Org, g.Bounds, g.Limits)
 	if err != nil {
 		return domain.Grant{}, err
 	}
@@ -193,7 +193,7 @@ func (s *Service) Revise(ctx context.Context, req ReviseRequest) (domain.Grant, 
 	if ic.Envelopes, err = s.Repo.Envelopes(ctx, c.Org, scopesFor(agent, next.EnvironmentID, next.Principal)); err != nil {
 		return domain.Grant{}, domain.Revision{}, err
 	}
-	if ic.Lookup, err = s.lookup(ctx, c.Org, next.Bounds); err != nil {
+	if ic.Lookup, err = s.lookup(ctx, c.Org, next.Bounds, next.Limits); err != nil {
 		return domain.Grant{}, domain.Revision{}, err
 	}
 	if !next.IsRoot() {
@@ -351,10 +351,22 @@ func (s *Service) grantableAgent(ctx context.Context, c tapp.Caller, id ids.UUID
 }
 
 // lookup preloads the active definitions of the operations whose
-// parameters the bounds limit.
-func (s *Service) lookup(ctx context.Context, org ids.OrgID, b domain.Bounds) (func(string) *defs.Definition, error) {
+// parameters the bounds limit, and of the exact operations the budgets and
+// counters name (a consequence that is never dispatched is refused there,
+// G0 M8).
+func (s *Service) lookup(ctx context.Context, org ids.OrgID, b domain.Bounds, l domain.Limits) (func(string) *defs.Definition, error) {
+	ops := slices.Collect(maps.Keys(b.Params))
+	for _, r := range l.Budgets {
+		ops = append(ops, r.Operations...)
+	}
+	for _, r := range l.Counters {
+		ops = append(ops, r.Operations...)
+	}
 	found := map[string]*defs.Definition{}
-	for _, op := range slices.Sorted(maps.Keys(b.Params)) {
+	for _, op := range slices.Sorted(slices.Values(ops)) {
+		if _, done := found[op]; done || strings.HasSuffix(op, "*") {
+			continue
+		}
 		d, err := s.Defs.Active(ctx, org, op)
 		if err != nil {
 			return nil, err
