@@ -8,6 +8,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"slices"
 	"strconv"
 	"time"
 
@@ -71,11 +72,20 @@ type inboxPage struct {
 }
 
 // approvalView is the data of approval.html: the stored display (HR-034)
-// with each fact's age at the database clock.
+// with each fact's age at the database clock. Observed is set for a
+// version 1 display, whose facts carry their provider and observation time;
+// a later one lists only the fact members the approval binds (HR-030,
+// founder decision 2026-10-13).
 type approvalView struct {
 	page
 	apapp.View
-	Facts []factRow
+	Facts    []factRow
+	Observed bool
+	// NotUntilKnown are the consequences an approval cannot release yet: a
+	// requirement counts only inside a change window, and they reach no
+	// known environment, so the action stays held until their facts are
+	// known (founder decision 2026-10-13). The page says so first.
+	NotUntilKnown []string
 	// The fixed codes of the page's actions (HR-172).
 	Reasons, Alternatives, Questions []string
 }
@@ -127,8 +137,19 @@ func (h *Handler) approvalPage(w http.ResponseWriter, r *http.Request, s authnap
 		page: page{Title: "Approval", Session: s}, View: v,
 		Reasons: apdomain.DeclineReasons, Alternatives: apdomain.Alternatives, Questions: apdomain.Questions,
 	}
+	if slices.ContainsFunc(v.Display.Deciders, func(d apdomain.DeciderRule) bool { return d.Window }) {
+		for _, c := range v.Display.Consequences {
+			if c.State == "UNKNOWN" || len(c.Environments) == 0 {
+				p.NotUntilKnown = append(p.NotUntilKnown, c.Operation+" on "+c.Target.ID)
+			}
+		}
+	}
 	for _, f := range v.Display.Facts {
-		p.Facts = append(p.Facts, factRow{FactLine: f, Age: age(f.ObservedAt, v.Now)})
+		row := factRow{FactLine: f}
+		if f.ObservedAt != "" {
+			row.Age, p.Observed = age(f.ObservedAt, v.Now), true
+		}
+		p.Facts = append(p.Facts, row)
 	}
 	h.renderAny(w, http.StatusOK, "approval.html", p)
 }

@@ -27,6 +27,7 @@
 package dispatch
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"errors"
@@ -41,9 +42,11 @@ import (
 	"time"
 
 	"connectrpc.com/connect/v2"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/katocxl/pantherclaw/internal/actionir"
 	"github.com/katocxl/pantherclaw/internal/approvals/proof"
+	credentials "github.com/katocxl/pantherclaw/internal/credentials/domain"
 	defs "github.com/katocxl/pantherclaw/internal/definitions/domain"
 	"github.com/katocxl/pantherclaw/internal/gateway/broker"
 	"github.com/katocxl/pantherclaw/internal/gateway/control"
@@ -99,11 +102,14 @@ const (
 	CodeDispatchRefused       = "dispatch_refused"
 	CodeRequest               = "request_not_built"
 	CodeCredential            = "credential_unavailable" //nolint:gosec // G101: an error code, not a credential
-	CodeEgressDenied          = "egress_denied"
-	CodeTargetUnreachable     = "target_unreachable"
-	CodeTargetRefused         = "target_refused"
-	CodeTargetUncertain       = "target_uncertain"
-	CodeNotRecorded           = "outcome_not_recorded"
+	// CodeScopeMismatch: GitHub granted a wider token than requested; it
+	// was revoked and nothing was sent (ADR-0021 item 3).
+	CodeScopeMismatch     = "credential_scope_mismatch"
+	CodeEgressDenied      = "egress_denied"
+	CodeTargetUnreachable = "target_unreachable"
+	CodeTargetRefused     = "target_refused"
+	CodeTargetUncertain   = "target_uncertain"
+	CodeNotRecorded       = "outcome_not_recorded"
 	// An upstream MCP tool reported an error (isError).
 	CodeToolError = "tool_error"
 	// An upstream MCP server asked for input the gateway never gives
@@ -168,6 +174,12 @@ type Options struct {
 	// Connectors are the gateway's running connectors (G0 M9 track C);
 	// nil when connectors are not enabled on it.
 	Connectors Connectors
+	// ReportFacts reports the github.* facts a GitHub App connection's
+	// action needs, read just before its decision (G0 M8 decision 5); nil
+	// reads none.
+	ReportFacts FactReporter
+	// FactTimeout bounds those reads; zero is DefaultFactTimeout.
+	FactTimeout time.Duration
 }
 
 // Engine dispatches mapped actions.
@@ -184,6 +196,8 @@ type Engine struct {
 	onDrift     func(ctx context.Context, connection string, d Drift)
 	approvers   Approvers
 	connectors  Connectors
+	reportFacts FactReporter
+	factTimeout time.Duration
 
 	mu      sync.Mutex
 	clients map[string]clientEntry
@@ -212,11 +226,15 @@ func New(o Options) (*Engine, error) {
 	if o.Now == nil {
 		o.Now = time.Now
 	}
+	if o.FactTimeout <= 0 {
+		o.FactTimeout = DefaultFactTimeout
+	}
 	return &Engine{
 		org: o.Org, authority: o.Authority, permits: newPermitVerifier(o.JWKSURL, o.JWKSClient, o.GatewayID, o.Org),
 		containment: o.Containment, broker: o.Broker, allowed: o.AllowedPrefixes, breaker: newBreaker(o.Now, o.ReportCircuit, o.Log),
 		log: o.Log, onDrift: o.OnDrift, clients: map[string]clientEntry{}, drift: map[string]driftEntry{}, approvers: o.Approvers,
-		connectors: o.Connectors,
+		connectors:  o.Connectors,
+		reportFacts: o.ReportFacts, factTimeout: o.FactTimeout,
 	}, nil
 }
 
@@ -241,6 +259,11 @@ type Result struct {
 	// Reasons are the decision's reason codes, decisive first.
 	Reasons       []string
 	TransactionID string
+	// Wait is a held action's wait handle (PAP-1 §8); nil otherwise.
+	Wait *pb.WaitInfo
+	// Delegated is the request an SDK sends itself to a target-enforced
+	// connection (HR-201); nil otherwise.
+	Delegated *Delegated
 	// Monitor: the route runs in monitor mode, so Decision is hypothetical
 	// and nothing about the action was prevented (HR-184).
 	Monitor bool
@@ -318,6 +341,12 @@ func (e *Engine) dispatch(ctx context.Context, c Call, t *timer) Result {
 	if code := e.refusedUpstream(conn, c.Action.Action.Operation); code != "" {
 		return Result{Class: EnforcementFailed, Code: code}
 	}
+	if code := accountRefusal(conn, c.Action.Action); code != "" {
+		return Result{Class: CannotAuthorize, Code: code, Decision: pb.Decision_DECISION_CANNOT_AUTHORIZE}
+	}
+	if e.reportGitHubFacts(ctx, conn, c.Action.Action) {
+		t.lap("facts")
+	}
 	ar, err := e.authority.Authorize(ctx, &pb.AuthorizeRequest{ActionIr: c.Action.Canonical, Workload: c.Workload})
 	t.lap("authz")
 	if err != nil {
@@ -327,7 +356,7 @@ func (e *Engine) dispatch(ctx context.Context, c Call, t *timer) Result {
 	e.nonces.set(ar.GetNonce(), time.Time{})
 	r := Result{
 		Decision: ar.GetDecision(), TransactionID: ar.GetTransactionId(), Nonce: ar.GetNonce(),
-		Monitor: ar.GetMode() == pb.DispatchMode_DISPATCH_MODE_MONITOR,
+		Monitor: ar.GetMode() == pb.DispatchMode_DISPATCH_MODE_MONITOR, Wait: ar.GetWait(),
 	}
 	for _, rs := range ar.GetReasons() {
 		r.Reasons = append(r.Reasons, rs.GetCode())
@@ -352,7 +381,7 @@ func (e *Engine) dispatch(ctx context.Context, c Call, t *timer) Result {
 	// obligations applied) or, in monitor mode, the requested one.
 	bound := c.Action
 	if !r.Monitor {
-		if conn.GetKind() == "local" && len(ar.GetObligations()) > 0 {
+		if (conn.GetKind() == "local" || cooperative(c)) && len(ar.GetObligations()) > 0 {
 			// A cooperative client runs the action as it asked: it can
 			// honor no obligation (HR-186).
 			return r.fail(EnforcementFailed, CodeObligation)
@@ -390,6 +419,9 @@ func (e *Engine) dispatch(ctx context.Context, c Call, t *timer) Result {
 	}
 	if want.Epoch < epoch {
 		return r.fail(EnforcementFailed, CodeEpochStale)
+	}
+	if cooperative(c) {
+		return e.delegateSDK(ctx, r, conn, def, bound, want, t)
 	}
 	switch conn.GetKind() {
 	case "mcp", "mcp_container":
@@ -447,6 +479,14 @@ func (r Result) fail(class Class, code string) Result {
 
 // errUnsupported reports an obligation the gateway cannot apply.
 var errUnsupported = errors.New("dispatch: unsupported obligation")
+
+// errKind refuses to place a credential that is not static.
+var errKind = errors.New("dispatch: a GitHub App credential is never placed as sealed")
+
+// errPEM refuses to place a static credential that holds a PEM block, such
+// as an App's private key sealed without --github-app: it would go to the
+// target.
+var errPEM = errors.New("dispatch: a credential holding a PEM block is never placed")
 
 // effective applies the decision's obligations to the action (F104, F107):
 // the only kind the Authority sets is count_max with clamping, before
@@ -574,15 +614,36 @@ func (e *Engine) send(ctx context.Context, r Result, conn *control.Connection, d
 		p.req.Header.Set(HeaderAction, tok)
 	}
 	var secret []byte
+	revoke := func() {}
+	access := func() *pb.CredentialAccess { return nil }
 	if conn.GetAccessMode() == "pantherclaw_held" {
-		s, err := e.credential(conn, p.req)
+		s, release, used, err := e.credential(ctx, conn, def, a.Action.Target, p.req, p.client)
 		if err != nil {
 			e.log.WarnContext(ctx, "gateway.credential_unavailable", slog.String("transaction_id", want.Txn),
 				slog.String("connection_id", conn.GetId()), pclog.Err(err))
-			return e.record(ctx, r, want, pb.Outcome_OUTCOME_FAILED, 0, nil, 0, EnforcementFailed, CodeCredential, t)
+			code := CodeCredential
+			var granted func(*pb.RecordExecutionRequest)
+			if sm := (*broker.ScopeMismatchError)(nil); errors.As(err, &sm) {
+				// What GitHub granted and whether it was revoked go on the
+				// refused dispatch's receipt (ADR-0021 items 3 and 6).
+				code, granted = CodeScopeMismatch, func(req *pb.RecordExecutionRequest) { req.CredentialAccess = accessOf(sm.Access) }
+			} else if errors.Is(err, broker.ErrScopeMismatch) {
+				code = CodeScopeMismatch
+			}
+			if granted != nil {
+				return e.record(ctx, r, want, pb.Outcome_OUTCOME_FAILED, 0, nil, 0, EnforcementFailed, code, t, granted)
+			}
+			return e.record(ctx, r, want, pb.Outcome_OUTCOME_FAILED, 0, nil, 0, EnforcementFailed, code, t)
 		}
 		secret = s
-		defer clear(secret)
+		access = used
+		// A minted token is revoked as soon as its answer is read, before
+		// the outcome is recorded (HR-203); the deferred call covers every
+		// other path.
+		var once sync.Once
+		done := func() { once.Do(release) }
+		defer done()
+		revoke = done
 	}
 	start := time.Now()
 	res, err := p.client.Do(p.req)
@@ -613,8 +674,9 @@ func (e *Engine) send(ctx context.Context, r Result, conn *control.Connection, d
 	}
 	// Bodies an active capture profile asks for, never headers (HR-199).
 	caps := captures(conn, def.Operation, r.Monitor, p.out.Body, response, secret, time.Now())
+	revoke()
 	return e.record(ctx, r, want, outcome, res.Status, digest, elapsed, class, code, t, func(req *pb.RecordExecutionRequest) {
-		req.TargetRef, req.Captures = ref, caps
+		req.TargetRef, req.Captures, req.CredentialAccess = ref, caps, access()
 	})
 }
 
@@ -638,17 +700,71 @@ func targetRef(def *defs.Definition, body, secret []byte) string {
 	return s
 }
 
-// credential opens the connection's sealed credential and places it on req.
-func (e *Engine) credential(conn *control.Connection, req *http.Request) ([]byte, error) {
-	secret, err := e.openCredential(conn)
+// credential opens the connection's sealed credential and places on req
+// what the action on target under def may use. A static credential is
+// placed as sealed. A GitHub App credential never is: the gateway mints an
+// installation token for exactly the target's repository and def's
+// declared permissions and places that (HR-203, HR-204). The caller keeps
+// secret, which it scrubs from what goes back to the agent, until it calls
+// release, which clears it and, for a minted token, revokes it at GitHub;
+// access then says what the minted token allowed (nil for a static
+// credential). A read (a verification or fact read included) gets a
+// read-only token.
+func (e *Engine) credential(ctx context.Context, conn *control.Connection, def *defs.Definition, target actionir.Target,
+	req *http.Request, c broker.Sender,
+) (secret []byte, release func(), access func() *pb.CredentialAccess, err error) {
+	if conn.Credential.GetKind() != credentials.KindGitHubApp {
+		plain, err := e.openStatic(conn)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		if err := placeCredential(conn, req, plain); err != nil {
+			clear(plain)
+			return nil, nil, nil, err
+		}
+		return plain, func() { clear(plain) }, func() *pb.CredentialAccess { return nil }, nil
+	}
+	if def.Access == defs.AccessRead && !broker.ReadOnly(def.Scopes()) {
+		return nil, nil, nil, broker.ErrScope // every read is read-only (HR-203)
+	}
+	owner, _ := def.Target.Part(target.ID, "owner")
+	repo, _ := def.Target.Part(target.ID, "repo")
+	tok, err := e.mint(ctx, conn, owner, repo, def.Scopes(), c)
 	if err != nil {
-		return nil, err
+		return nil, nil, nil, err
 	}
-	if err := placeCredential(conn, req, secret); err != nil {
-		clear(secret)
-		return nil, err
+	if err := tok.Place(req); err != nil {
+		_ = tok.Revoke(ctx, c)
+		return nil, nil, nil, err
 	}
-	return secret, nil
+	return tok.Token(), func() {
+		if err := tok.Revoke(ctx, c); err != nil {
+			e.log.WarnContext(ctx, "gateway.installation_token_not_revoked", slog.String("connection_id", conn.GetId()), pclog.Err(err))
+		}
+	}, func() *pb.CredentialAccess { return accessOf(tok.Access()) }, nil
+}
+
+// accessOf is what a minted token allowed, for the execution receipt
+// (ADR-0021 item 5).
+func accessOf(a broker.Access) *pb.CredentialAccess {
+	out := &pb.CredentialAccess{
+		InstallationId: a.Installation, Repository: a.Repository, RepositoryId: max(a.RepositoryID, 0), Requested: a.Requested,
+		Granted: a.Granted, Revocation: a.Revocation,
+	}
+	if !a.Expires.IsZero() {
+		out.ExpireTime = timestamppb.New(a.Expires)
+	}
+	return out
+}
+
+// openStatic opens the connection's sealed credential when it is static.
+// Another kind is refused before anything is decrypted, so an App's key is
+// opened only on the path that mints with it (HR-204).
+func (e *Engine) openStatic(conn *control.Connection) ([]byte, error) {
+	if k := conn.Credential.GetKind(); k != "" && k != credentials.KindStatic {
+		return nil, errKind
+	}
+	return e.openCredential(conn)
 }
 
 // openCredential opens the connection's sealed credential; the caller
@@ -663,13 +779,22 @@ func (e *Engine) openCredential(conn *control.Connection) ([]byte, error) {
 	}
 	return e.broker.Open(e.org, conn.GetId(), cred.GetAllowedHosts(), broker.Sealed{
 		Version: cred.GetVersion(), BrokerKey: cred.GetBrokerKeyId(), Blob: cred.GetSealed(), Header: cred.GetHeader(), Scheme: cred.GetScheme(),
+		Kind: cred.GetKind(),
 	})
 }
 
-// placeCredential places an opened credential on req, for the
-// credential's allowed hosts only.
+// placeCredential places an opened static credential on req, for the
+// credential's allowed hosts only. A GitHub App credential is never placed:
+// it holds the App's key, from which the gateway mints a token per action
+// (HR-203, HR-204). Nor is a static one holding a PEM block.
 func placeCredential(conn *control.Connection, req *http.Request, secret []byte) error {
 	cred := conn.Credential
+	if k := cred.GetKind(); k != "" && k != credentials.KindStatic {
+		return errKind
+	}
+	if bytes.Contains(secret, []byte("-----BEGIN")) {
+		return errPEM
+	}
 	return broker.Place(req, cred.GetAllowedHosts(), cred.GetHeader(), cred.GetScheme(), secret)
 }
 

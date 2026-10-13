@@ -58,7 +58,10 @@ service AgentService {
   // SubmitScanFindings records the findings of a local `pclaw scan` as
   // DISCOVERED agents with ADMISSION entries (PN-001.1, F015); a finding
   // submitted before is only counted. Findings are UNTRUSTED observations
-  // and grant nothing; credentials never leave the scanning machine.
+  // and grant nothing; credentials never leave the scanning machine. It is
+  // also served on the gateway listener, where a gateway holding an
+  // organization scan's org_scan lease submits that scan's findings and
+  // needs gateway.scan.submit instead (G0 M8, HR-209).
   // permission: agent.manage
   rpc SubmitScanFindings(SubmitScanFindingsRequest) returns (SubmitScanFindingsResponse);
   // RequestAgentRestoration asks for a suspended agent to return to the
@@ -451,11 +454,16 @@ message ListAgentChangesResponse {
 
 // ScanFinding is one finding of a local scan.
 message ScanFinding {
-  // "mcp_server" or "agent_project".
+  // "mcp_server" or "agent_project" from a local scan; from a gateway's
+  // organization scan (G0 M8, HR-209), "github_app", "github_workflow" or
+  // "github_mcp_config".
   string kind = 1 [(buf.validate.field).string = {
     in: [
       "mcp_server",
-      "agent_project"
+      "agent_project",
+      "github_app",
+      "github_workflow",
+      "github_mcp_config"
     ]
   }];
   // Stable key of the finding on the scanning machine (hex SHA-256), so a
@@ -482,6 +490,17 @@ message SubmitScanFindingsRequest {
   }];
   // UNTRUSTED name of the scanned machine.
   string host = 2 [(buf.validate.field).string.max_len = 128];
+  // The organization scan the findings are from (G0 M8, HR-209). Only a
+  // gateway sets it, on the gateway listener, while it holds that scan's
+  // org_scan lease; the org comes from its certificate (HR-020).
+  string scan_id = 3 [
+    (buf.validate.field).string.uuid = true,
+    (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE
+  ];
+  // The secret of the scan's org_scan lease the gateway holds, with
+  // scan_id: the server compares its hash, so only the holder of the lease
+  // submits, not any holder of the gateway's certificate.
+  bytes lease = 4 [(buf.validate.field).bytes.max_len = 64];
 }
 
 // SubmitScanFindingsResponse counts what was recorded.

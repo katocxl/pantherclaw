@@ -12,7 +12,7 @@ vars:
   GOLANGCI: go tool -modfile={{.PINS}}/golangci-lint/go.mod golangci-lint
   GITLEAKS: go tool -modfile={{.PINS}}/gitleaks/go.mod gitleaks
   GOVULNCHECK: go tool -modfile={{.PINS}}/govulncheck/go.mod govulncheck
-  GO_MODULES: ". sdk/go tools"
+  GO_MODULES: ". sdk/go sdk/go/internal/sqltest tools"
   GOLANG_IMAGE: golang:1.27.2-bookworm@sha256:5cf287a799e6b94384bad13d16b14904c531f51ba65792237e122ce42b392f61
   COMPOSE: docker compose -f deploy/compose/compose.yaml
 
@@ -84,6 +84,26 @@ tasks:
         PC_TEST_PG_ADMIN_URL="postgres://postgres:${PC_PG_TEST_PASSWORD}@127.0.0.1:5433/postgres?sslmode=disable"
         PC_TEST_MOCK_OIDC_URL="${PC_TEST_MOCK_OIDC_URL:-http://127.0.0.1:8181}"
         go test -tags integration -shuffle=on -count=1 {{.PKGS | default "./..."}}
+      # The Go SDK's SQL replay store on PostgreSQL (T-081: two replicas, one store), its own module.
+      - >-
+        PC_TEST_REQUIRE_DB=1
+        PC_TEST_PG_ADMIN_URL="postgres://postgres:${PC_PG_TEST_PASSWORD}@127.0.0.1:5433/postgres?sslmode=disable"
+        go -C sdk/go/internal/sqltest test -count=1 ./...
+
+  test:github-live:
+    desc: "Manual and opt-in: the M8 GitHub run against GitHub itself with your sandbox App (docs/runbooks/github-live.md); never part of check"
+    dotenv: ["deploy/compose/.env"]
+    preconditions:
+      - sh: '[ "$PC_GITHUB_LIVE" = 1 ]'
+        msg: "Set PC_GITHUB_LIVE=1 and the PC_GITHUB_LIVE_* variables first (docs/runbooks/github-live.md)"
+      - sh: '[ -n "$PC_GITHUB_LIVE_APP" ] && [ -n "$PC_GITHUB_LIVE_INSTALLATION" ] && [ -n "$PC_GITHUB_LIVE_REPO" ] && [ -f "$PC_GITHUB_LIVE_KEY_FILE" ]'
+        msg: "PC_GITHUB_LIVE_APP, PC_GITHUB_LIVE_INSTALLATION, PC_GITHUB_LIVE_REPO and PC_GITHUB_LIVE_KEY_FILE (an existing file) are required"
+    cmds:
+      - >-
+        PC_TEST_REQUIRE_DB=1
+        PC_TEST_PG_ADMIN_URL="postgres://postgres:${PC_PG_TEST_PASSWORD}@127.0.0.1:5433/postgres?sslmode=disable"
+        PC_TEST_MOCK_OIDC_URL="${PC_TEST_MOCK_OIDC_URL:-http://127.0.0.1:8181}"
+        go test -tags "integration github_live" -count=1 -v -run '^TestLive_GitHub' ./test/e2e/
 
   test:sandbox:
     desc: Docker sandbox and connector tests (G0 M9; needs Docker ≥ 28; they create and remove their own uniquely named networks and containers; PKGS=./x/... narrows them)
@@ -128,9 +148,31 @@ tasks:
       - git diff --exit-code -- internal/gen
 
   trace:
-    desc: Fail if a hardening rule or threat due by MILESTONE has no test (default M7)
+    desc: Fail if a hardening rule or threat due by MILESTONE has no test (default M8)
     cmds:
-      - go -C tools run ./traceability -root .. -through {{.MILESTONE | default "M7"}}
+      - go -C tools run ./traceability -root .. -through {{.MILESTONE | default "M8"}}
+
+  sdk:vectors:
+    desc: Regenerate the SDK conformance vectors in sdk/conformance from the Go implementation (review the diff)
+    cmds:
+      - go test ./internal/conformance/gen -run TestConformanceVectors -count=1 -update
+
+  sdk:check:
+    desc: The SDKs' tests, each running every conformance vector (not part of task check; PYTHON overrides the interpreter); the SQL replay store's PostgreSQL test (T-081) needs the test cluster (task up PROFILE=test) and fails without it
+    dotenv: ["deploy/compose/.env"]
+    vars:
+      PYTHON: '{{.PYTHON | default "uv run --locked python"}}'
+    cmds:
+      - go -C sdk/go test -shuffle=on -count=1 ./...
+      - >-
+        PC_TEST_REQUIRE_DB=1
+        PC_TEST_PG_ADMIN_URL="${PC_TEST_PG_ADMIN_URL:-${PC_PG_TEST_PASSWORD:+postgres://postgres:${PC_PG_TEST_PASSWORD}@127.0.0.1:5433/postgres?sslmode=disable}}"
+        go -C sdk/go/internal/sqltest test -count=1 ./...
+      - cd sdk/typescript && node --test "test/**/*.test.ts"
+      - cd sdk/python && PYTHONPATH=src {{.PYTHON}} -m unittest discover -s tests
+      # The integrations' tests run inside the real Agent SDKs (dev-only: pnpm-lock.yaml, uv.lock); on Windows the Python ones use the TypeScript one's CLI.
+      - cd integrations/claude-agent-sdk/typescript && COREPACK_ENABLE_DOWNLOAD_PROMPT=0 corepack pnpm install --frozen-lockfile && node --test "test/**/*.test.ts"
+      - cd integrations/claude-agent-sdk/python && {{.PYTHON}} -m unittest discover -s tests
 
   license:check:
     desc: Verify SPDX + copyright headers on every source file
