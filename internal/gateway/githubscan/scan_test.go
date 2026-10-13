@@ -6,6 +6,7 @@ package githubscan
 import (
 	"context"
 	"encoding/json/v2"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -16,6 +17,7 @@ import (
 	"time"
 
 	"github.com/katocxl/pantherclaw/internal/gateway/egress"
+	"github.com/katocxl/pantherclaw/internal/gateway/githubfacts"
 	"github.com/katocxl/pantherclaw/internal/sim/github"
 )
 
@@ -99,15 +101,18 @@ func TestHR209_TheScanReadsNamedFilesAndKeepsNamesOnly(t *testing.T) {
 			}
 		}
 	}
+	// The attributes are the ones coverage reads (N20): repo, path, and for a
+	// workflow agent_actions, permissions, writes and deploys.
 	wf := byKind["github_workflow"]
-	if len(wf) != 1 || wf[0].Attributes["actions"] != "anthropics/claude-code-action" ||
-		wf[0].Attributes["permissions"] != "contents:write,pull-requests:write" || wf[0].Attributes["path"] != ".github/workflows/claude.yml" {
+	if len(wf) != 1 || wf[0].Attributes["agent_actions"] != "anthropics/claude-code-action" || wf[0].Attributes["repo"] != "acme/payments" ||
+		wf[0].Attributes["permissions"] != "contents:write,pull-requests:write" || wf[0].Attributes["path"] != ".github/workflows/claude.yml" ||
+		wf[0].Attributes["writes"] != "true" || wf[0].Attributes["deploys"] != "false" || wf[0].Attributes["permissions_default"] != "" {
 		t.Fatalf("workflows %+v", wf)
 	}
 	mcp := byKind["github_mcp_config"]
-	if len(mcp) != 2 || mcp[0].Attributes["name"] != "github" || mcp[0].Attributes["command"] != "npx" ||
-		mcp[0].Attributes["env"] != "GITHUB_PERSONAL_ACCESS_TOKEN" || mcp[1].Attributes["transport"] != "remote" ||
-		mcp[1].Attributes["headers"] != "Authorization" {
+	if len(mcp) != 1 || mcp[0].Attributes["servers"] != "github,remote" || mcp[0].Attributes["commands"] != "npx" ||
+		mcp[0].Attributes["transports"] != "stdio,remote" || mcp[0].Attributes["env"] != "GITHUB_PERSONAL_ACCESS_TOKEN" ||
+		mcp[0].Attributes["headers"] != "Authorization" || mcp[0].Attributes["repo"] != "acme/payments" || mcp[0].Attributes["path"] != ".mcp.json" {
 		t.Fatalf("mcp %+v", mcp)
 	}
 	raw, _ := json.Marshal(r)
@@ -136,7 +141,8 @@ func TestHR209_WhatTheScanCouldNotReadIsNotScanned(t *testing.T) {
 	_, get := newWorld(t)
 	repos := []Repository{{FullName: "acme/payments", DefaultBranch: "main"}, {FullName: "acme/secret", DefaultBranch: "main"}}
 	r := ScanRepositories(context.Background(), get, repos, time.Now().Add(time.Minute))
-	if r.Counts["repositories"] != 1 || r.NotScanned["contents"] == "" {
+	if r.Counts["repositories"] != 1 || !strings.Contains(r.NotScanned["repositories"], "could not be read") ||
+		r.NotScanned["workflows"] == "" || r.NotScanned["mcp_configs"] == "" || len(r.Scanned) != 0 {
 		t.Fatalf("an unreadable repository: %+v", r)
 	}
 	r = ScanRepositories(context.Background(), get, repos, time.Now().Add(-time.Second))
@@ -164,4 +170,51 @@ func FuzzMCPConfig(f *testing.F) {
 			}
 		}
 	})
+}
+
+// TestHR209_FilesTheScanSkipsAreNotScanned: workflow files past the limit,
+// one the parser refuses and an MCP configuration with comments are not
+// read, and say so: their source is reported not scanned with why, never
+// scanned with nothing found. A list too long for one attribute says it
+// was cut; a workflow without permissions runs with the repository's
+// defaults, which may write; one that names an environment deploys.
+func TestHR209_FilesTheScanSkipsAreNotScanned(t *testing.T) {
+	sim, get := newWorld(t)
+	files := map[string]string{
+		".github/workflows/anchors.yml": "on: &x push\njobs: {}\n",
+		".vscode/mcp.json":              "{\n  // a comment\n  \"servers\": {\"x\": {\"command\": \"node\"}}\n}\n",
+		".github/workflows/deploy.yml":  "on: push\njobs:\n  d:\n    environment: production\n    steps: [{uses: openai/codex-action@v1}]\n",
+	}
+	var perms strings.Builder
+	for i := range 40 {
+		fmt.Fprintf(&perms, "      scope_%02d: write\n", i)
+	}
+	files[".github/workflows/many.yml"] = "on: push\njobs:\n  a:\n    permissions:\n" + perms.String() + "    steps: [{uses: anthropics/claude-code-action@v1}]\n"
+	for i := range githubfacts.MaxWorkflowFiles {
+		files[fmt.Sprintf(".github/workflows/w%02d.yml", i)] = "on: push\njobs: {t: {runs-on: x}}\n"
+	}
+	sim.Push("acme/payments", "main", files)
+	r := ScanRepositories(context.Background(), get, []Repository{{FullName: "acme/payments", DefaultBranch: "main"}}, time.Now().Add(time.Minute))
+	if !strings.Contains(r.NotScanned["workflows"], "over the 20-file limit") || slices.Contains(r.Scanned, "workflows") {
+		t.Fatalf("workflows past the limit: %+v %v", r.NotScanned, r.Scanned)
+	}
+	if !strings.Contains(r.NotScanned["mcp_configs"], "not strict JSON") || slices.Contains(r.Scanned, "mcp_configs") {
+		t.Fatalf("an MCP configuration with comments: %+v %v", r.NotScanned, r.Scanned)
+	}
+	read := map[string]Finding{}
+	for _, f := range r.Findings {
+		read[f.Attributes["path"]] = f
+	}
+	// Files are read in name order, so the limit leaves out the w*.yml at
+	// the end, after anchors, claude, deploy and many.
+	if !strings.Contains(r.NotScanned["workflows"], "refused by the parser") {
+		t.Fatalf("a workflow the parser refuses: %+v", r.NotScanned)
+	}
+	if d := read[".github/workflows/deploy.yml"].Attributes; d["deploys"] != "true" || d["environments"] != "production" ||
+		d["permissions_default"] != "true" || d["writes"] != "true" {
+		t.Fatalf("a deploying workflow on the default permissions: %v", d)
+	}
+	if m := read[".github/workflows/many.yml"].Attributes; m["permissions_incomplete"] != "true" || len(m["permissions"]) > 256 {
+		t.Fatalf("a permission list too long: %v", m)
+	}
 }
