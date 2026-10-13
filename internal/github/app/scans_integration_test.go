@@ -125,8 +125,15 @@ func TestHR209_AnOrgScanRunsAsItsGatewaysLease(t *testing.T) {
 		}, nil)
 		return err
 	}
-	if err := report(map[string]string{"/secrets/production": "x"}); !errors.Is(err, tapp.ErrUndeclared) {
-		t.Fatalf("a field that is no summary: %v", err)
+	for name, fields := range map[string]map[string]string{
+		"a field that is no summary":   {"/secrets/production": "x"},
+		"a source outside the catalog": {"/scanned/secrets": "true"},
+		"read and not read":            {"/scanned/workflows": "true", "/not_scanned/workflows": "time limit"},
+		"an unknown reason":            {"/not_scanned/everything_else": "x"},
+	} {
+		if err := report(fields); !errors.Is(err, tapp.ErrUndeclared) {
+			t.Fatalf("%s: %v", name, err)
+		}
 	}
 	if err := report(map[string]string{
 		"/counts/repositories": "3", "/counts/workflows": "2", "/scanned/repositories": "true", "/scanned/workflows": "true",
@@ -136,7 +143,8 @@ func TestHR209_AnOrgScanRunsAsItsGatewaysLease(t *testing.T) {
 	}
 	done, err := team.Get(admin, scan.ID)
 	if err != nil || done.State != "DONE" || done.FinishedAt == nil || !maps.Equal(done.Counts, map[string]int64{"repositories": 3, "workflows": 2}) ||
-		!slices.Equal(done.Scanned, []string{"repositories", "workflows"}) || done.NotScanned["org_installations"] == "" {
+		!slices.Equal(done.Scanned, []string{"repositories", "workflows"}) || done.NotScanned["org_installations"] == "" ||
+		done.NotScanned["mcp_configs"] != "not reported" || done.NotScanned["rulesets"] != "not reported" {
 		t.Fatalf("done %+v %v", done, err)
 	}
 	if n := e.count(t, `SELECT count(*) FROM pc.ledger_entries WHERE kind IN ('audit.github.scan_started', 'audit.github.scan_finished')`); n != 2 {
@@ -151,5 +159,40 @@ func TestHR209_AnOrgScanRunsAsItsGatewaysLease(t *testing.T) {
 	e.exec(t, "UPDATE pc.verifications SET state = 'EXPIRED', finished_at = now() WHERE org_id = $1 AND purpose = 'org_scan' AND state = 'PENDING'", e.org)
 	if got, _ := team.Get(admin, again.ID); got.State != "FAILED" {
 		t.Fatalf("an expired lease: %s", got.State)
+	}
+}
+
+// TestHR209_AnOrgScanHasThreeLeasesAtMost: a scan whose leases keep ending
+// unreported is not leased again and again, each time spending the
+// installation's API quota: its third unreported lease fails it.
+func TestHR209_AnOrgScanHasThreeLeasesAtMost(t *testing.T) {
+	e := newEnv(t)
+	gateway := ids.NewV7()
+	e.exec(t, "INSERT INTO pc.gateways (org_id, id, name, created_by) VALUES ($1, $2, 'edge', 'test')", e.org, gateway)
+	e.exec(t, "INSERT INTO pc.org_containment (org_id) VALUES ($1) ON CONFLICT DO NOTHING", e.org)
+	conn := e.gitHubConnection(t, gateway, e.brokerKey(t, gateway), "github", false)
+	admin := e.caller(td.KindUser, td.RoleSecurityAdmin)
+	team := &app.Scans{Pool: e.pool, Ents: edition(billing.Team)}
+	scan, err := team.Start(admin, conn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	store := &pgtransactions.Store{Pool: e.pool}
+	for attempt := 1; attempt <= 3; attempt++ {
+		leases, err := store.Claim(context.Background(), e.org, gateway, 4, 30*time.Second)
+		if err != nil || len(leases) != 1 {
+			t.Fatalf("lease %d: %+v %v", attempt, leases, err)
+		}
+		e.exec(t, "UPDATE pc.verifications SET leased_at = now() - interval '20 seconds', lease_expires_at = now() - interval '1 second' WHERE org_id = $1 AND purpose = 'org_scan' AND state = 'LEASED'", e.org)
+		if _, err := store.Expire(context.Background(), e.org, nil); err != nil {
+			t.Fatal(err)
+		}
+		e.exec(t, "UPDATE pc.verifications SET next_at = now() WHERE org_id = $1 AND purpose = 'org_scan' AND state = 'PENDING'", e.org)
+	}
+	if leases, err := store.Claim(context.Background(), e.org, gateway, 4, 30*time.Second); err != nil || len(leases) != 0 {
+		t.Fatalf("a fourth lease: %+v %v", leases, err)
+	}
+	if got, err := team.Get(admin, scan.ID); err != nil || got.State != "FAILED" {
+		t.Fatalf("after three unreported leases: %+v %v", got, err)
 	}
 }
