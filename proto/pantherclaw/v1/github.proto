@@ -56,6 +56,19 @@ service GitHubService {
   // ListIdentities lists the links, of one person or of everyone.
   // permission: user.read
   rpc ListIdentities(ListIdentitiesRequest) returns (ListIdentitiesResponse);
+  // ExemptAccount registers a GitHub account that is not a person (a bot or
+  // a machine user): linked to nobody, it does not stop the independent
+  // approvals of pull requests it worked on, as an unlinked person does
+  // (GITHUB_PEOPLE_NOT_LINKED; founder decision 2026-10-13). Audited and
+  // notified.
+  // permission: github.identity.manage
+  rpc ExemptAccount(ExemptAccountRequest) returns (ExemptAccountResponse);
+  // RemoveExemption removes an account's exemption. Audited and notified.
+  // permission: github.identity.manage
+  rpc RemoveExemption(RemoveExemptionRequest) returns (RemoveExemptionResponse);
+  // ListExemptions lists the org's exemptions (at most 500).
+  // permission: user.read
+  rpc ListExemptions(ListExemptionsRequest) returns (ListExemptionsResponse);
 }
 
 // GitHubIdentity is one person's link to a GitHub account.
@@ -138,4 +151,58 @@ message ListIdentitiesResponse {
   repeated GitHubIdentity identities = 1;
   // Token of the next page; empty on the last.
   string next_page_token = 2;
+}
+
+// GitHubExemption is a GitHub account an admin registered as not a person.
+message GitHubExemption {
+  // The GitHub user id.
+  int64 github_user_id = 1;
+  // Its login when exempted (a bot's ends in [bot]).
+  string github_login = 2;
+  // Why it is not a person.
+  string reason = 3;
+  // Who exempted it.
+  string created_by = 4;
+  // When.
+  google.protobuf.Timestamp create_time = 5;
+}
+
+// ExemptAccountRequest names the account and why it is not a person.
+message ExemptAccountRequest {
+  // The GitHub user id.
+  int64 github_user_id = 1 [(buf.validate.field).int64.gt = 0];
+  // Its login.
+  string github_login = 2 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 44
+  }];
+  // Why it is not a person.
+  string reason = 3 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 256
+  }];
+}
+
+// ExemptAccountResponse returns the exemption.
+message ExemptAccountResponse {
+  // The exemption.
+  GitHubExemption exemption = 1;
+}
+
+// RemoveExemptionRequest names the account.
+message RemoveExemptionRequest {
+  // The GitHub user id.
+  int64 github_user_id = 1 [(buf.validate.field).int64.gt = 0];
+}
+
+// RemoveExemptionResponse is empty.
+message RemoveExemptionResponse {}
+
+// ListExemptionsRequest is empty.
+message ListExemptionsRequest {}
+
+// ListExemptionsResponse lists the exemptions by login.
+message ListExemptionsResponse {
+  // The exemptions.
+  repeated GitHubExemption exemptions = 1;
 }

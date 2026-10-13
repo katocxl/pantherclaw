@@ -6,6 +6,7 @@ package pclaw
 import (
 	"context"
 	"flag"
+	"strconv"
 
 	"google.golang.org/protobuf/proto"
 
@@ -15,7 +16,8 @@ import (
 
 // M8 track G commands: the GitHub identity links independence compares
 // (HR-207). A person links their own account by signing in to GitHub
-// (pclaw github link, P2f); an identity manager can only unlink others.
+// (pclaw github link, P2f); an identity manager can only unlink others, and
+// registers the GitHub accounts that are not people (exemptions).
 
 func init() {
 	for k, v := range m8gCommands() {
@@ -45,6 +47,30 @@ func m8gCommands() map[string]command {
 					req.UserId = *p
 				}
 				return c.github.ListIdentities(ctx, req)
+			}
+		}),
+		"github exemption add": rpc("github exemption add GITHUB_USER_ID LOGIN REASON (a bot or machine user, not a person)", 3,
+			func(*flag.FlagSet) call {
+				return func(ctx context.Context, c clients, a []string) (proto.Message, error) {
+					id, err := strconv.ParseInt(a[0], 10, 64)
+					if err != nil {
+						return nil, errUsage
+					}
+					return c.github.ExemptAccount(ctx, &pantherclawv1.ExemptAccountRequest{GithubUserId: id, GithubLogin: a[1], Reason: a[2]})
+				}
+			}),
+		"github exemption remove": rpc("github exemption remove GITHUB_USER_ID", 1, func(*flag.FlagSet) call {
+			return func(ctx context.Context, c clients, a []string) (proto.Message, error) {
+				id, err := strconv.ParseInt(a[0], 10, 64)
+				if err != nil {
+					return nil, errUsage
+				}
+				return c.github.RemoveExemption(ctx, &pantherclawv1.RemoveExemptionRequest{GithubUserId: id})
+			}
+		}),
+		"github exemption list": rpc("github exemption list", 0, func(*flag.FlagSet) call {
+			return func(ctx context.Context, c clients, _ []string) (proto.Message, error) {
+				return c.github.ListExemptions(ctx, &pantherclawv1.ListExemptionsRequest{})
 			}
 		}),
 	}

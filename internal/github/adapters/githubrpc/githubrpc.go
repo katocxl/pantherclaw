@@ -94,3 +94,37 @@ func (h *Handler) ListIdentities(ctx context.Context, req *pb.ListIdentitiesRequ
 	}
 	return out, nil
 }
+
+func exemptionOf(e app.Exemption) *pb.GitHubExemption {
+	return &pb.GitHubExemption{
+		GithubUserId: e.GithubUserID, GithubLogin: e.GithubLogin, Reason: e.Reason, CreatedBy: e.CreatedBy,
+		CreateTime: timestamppb.New(e.CreatedAt),
+	}
+}
+
+// ExemptAccount implements GitHubServiceHandler.
+func (h *Handler) ExemptAccount(ctx context.Context, req *pb.ExemptAccountRequest) (*pb.ExemptAccountResponse, error) {
+	e, err := h.s.Exempt(ctx, req.GetGithubUserId(), req.GetGithubLogin(), req.GetReason())
+	if err != nil {
+		return nil, err
+	}
+	return &pb.ExemptAccountResponse{Exemption: exemptionOf(e)}, nil
+}
+
+// RemoveExemption implements GitHubServiceHandler.
+func (h *Handler) RemoveExemption(ctx context.Context, req *pb.RemoveExemptionRequest) (*pb.RemoveExemptionResponse, error) {
+	return &pb.RemoveExemptionResponse{}, h.s.RemoveExemption(ctx, req.GetGithubUserId())
+}
+
+// ListExemptions implements GitHubServiceHandler.
+func (h *Handler) ListExemptions(ctx context.Context, _ *pb.ListExemptionsRequest) (*pb.ListExemptionsResponse, error) {
+	rows, err := h.s.Exemptions(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := &pb.ListExemptionsResponse{}
+	for _, e := range rows {
+		out.Exemptions = append(out.Exemptions, exemptionOf(e))
+	}
+	return out, nil
+}

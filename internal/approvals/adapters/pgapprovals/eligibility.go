@@ -306,6 +306,13 @@ func peopleLists(ctx context.Context, q *dbq.Queries, org ids.OrgID, request ids
 			for _, k := range former {
 				l.Formerly(k.GithubUserID, k.UserID)
 			}
+			exempt, err := q.ExemptGitHubUsers(ctx, org, ghIDs)
+			if err != nil {
+				return nil, err
+			}
+			for _, id := range exempt {
+				l.Exempted(id)
+			}
 		}
 		out = append(out, l)
 	}

@@ -38,6 +38,15 @@ const (
 	// GitHubServiceListIdentitiesProcedure is the procedure name of the GitHubService's ListIdentities
 	// RPC.
 	GitHubServiceListIdentitiesProcedure = "/pantherclaw.v1.GitHubService/ListIdentities"
+	// GitHubServiceExemptAccountProcedure is the procedure name of the GitHubService's ExemptAccount
+	// RPC.
+	GitHubServiceExemptAccountProcedure = "/pantherclaw.v1.GitHubService/ExemptAccount"
+	// GitHubServiceRemoveExemptionProcedure is the procedure name of the GitHubService's
+	// RemoveExemption RPC.
+	GitHubServiceRemoveExemptionProcedure = "/pantherclaw.v1.GitHubService/RemoveExemption"
+	// GitHubServiceListExemptionsProcedure is the procedure name of the GitHubService's ListExemptions
+	// RPC.
+	GitHubServiceListExemptionsProcedure = "/pantherclaw.v1.GitHubService/ListExemptions"
 )
 
 var (
@@ -69,6 +78,27 @@ var (
 			Procedure:  GitHubServiceListIdentitiesProcedure,
 		}
 	})
+	gitHubServiceExemptAccountSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_pantherclaw_v1_github_proto.Services().ByName("GitHubService").Methods().ByName("ExemptAccount"),
+			Procedure:  GitHubServiceExemptAccountProcedure,
+		}
+	})
+	gitHubServiceRemoveExemptionSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_pantherclaw_v1_github_proto.Services().ByName("GitHubService").Methods().ByName("RemoveExemption"),
+			Procedure:  GitHubServiceRemoveExemptionProcedure,
+		}
+	})
+	gitHubServiceListExemptionsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_pantherclaw_v1_github_proto.Services().ByName("GitHubService").Methods().ByName("ListExemptions"),
+			Procedure:  GitHubServiceListExemptionsProcedure,
+		}
+	})
 )
 
 // GitHubServiceClient is a client for the pantherclaw.v1.GitHubService service.
@@ -93,6 +123,19 @@ type GitHubServiceClient interface {
 	// ListIdentities lists the links, of one person or of everyone.
 	// permission: user.read
 	ListIdentities(context.Context, *v1.ListIdentitiesRequest) (*v1.ListIdentitiesResponse, error)
+	// ExemptAccount registers a GitHub account that is not a person (a bot or
+	// a machine user): linked to nobody, it does not stop the independent
+	// approvals of pull requests it worked on, as an unlinked person does
+	// (GITHUB_PEOPLE_NOT_LINKED; founder decision 2026-10-13). Audited and
+	// notified.
+	// permission: github.identity.manage
+	ExemptAccount(context.Context, *v1.ExemptAccountRequest) (*v1.ExemptAccountResponse, error)
+	// RemoveExemption removes an account's exemption. Audited and notified.
+	// permission: github.identity.manage
+	RemoveExemption(context.Context, *v1.RemoveExemptionRequest) (*v1.RemoveExemptionResponse, error)
+	// ListExemptions lists the org's exemptions (at most 500).
+	// permission: user.read
+	ListExemptions(context.Context, *v1.ListExemptionsRequest) (*v1.ListExemptionsResponse, error)
 }
 
 // NewGitHubServiceClient constructs a client for the pantherclaw.v1.GitHubService service. Multiple
@@ -123,6 +166,19 @@ type GitHubServiceHandler interface {
 	// ListIdentities lists the links, of one person or of everyone.
 	// permission: user.read
 	ListIdentities(context.Context, *v1.ListIdentitiesRequest) (*v1.ListIdentitiesResponse, error)
+	// ExemptAccount registers a GitHub account that is not a person (a bot or
+	// a machine user): linked to nobody, it does not stop the independent
+	// approvals of pull requests it worked on, as an unlinked person does
+	// (GITHUB_PEOPLE_NOT_LINKED; founder decision 2026-10-13). Audited and
+	// notified.
+	// permission: github.identity.manage
+	ExemptAccount(context.Context, *v1.ExemptAccountRequest) (*v1.ExemptAccountResponse, error)
+	// RemoveExemption removes an account's exemption. Audited and notified.
+	// permission: github.identity.manage
+	RemoveExemption(context.Context, *v1.RemoveExemptionRequest) (*v1.RemoveExemptionResponse, error)
+	// ListExemptions lists the org's exemptions (at most 500).
+	// permission: user.read
+	ListExemptions(context.Context, *v1.ListExemptionsRequest) (*v1.ListExemptionsResponse, error)
 }
 
 // RegisterGitHubServiceHandler registers svc as the pantherclaw.v1.GitHubService implementation on
@@ -134,6 +190,9 @@ func RegisterGitHubServiceHandler(server *connect.Server, svc GitHubServiceHandl
 		connect.Method{Spec: gitHubServiceGetSignInSpec(), Handler: adapter.getSignIn},
 		connect.Method{Spec: gitHubServiceUnlinkIdentitySpec(), Handler: adapter.unlinkIdentity},
 		connect.Method{Spec: gitHubServiceListIdentitiesSpec(), Handler: adapter.listIdentities},
+		connect.Method{Spec: gitHubServiceExemptAccountSpec(), Handler: adapter.exemptAccount},
+		connect.Method{Spec: gitHubServiceRemoveExemptionSpec(), Handler: adapter.removeExemption},
+		connect.Method{Spec: gitHubServiceListExemptionsSpec(), Handler: adapter.listExemptions},
 	)
 }
 
@@ -154,6 +213,18 @@ func (UnimplementedGitHubServiceHandler) UnlinkIdentity(context.Context, *v1.Unl
 
 func (UnimplementedGitHubServiceHandler) ListIdentities(context.Context, *v1.ListIdentitiesRequest) (*v1.ListIdentitiesResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.GitHubService.ListIdentities is not implemented")
+}
+
+func (UnimplementedGitHubServiceHandler) ExemptAccount(context.Context, *v1.ExemptAccountRequest) (*v1.ExemptAccountResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.GitHubService.ExemptAccount is not implemented")
+}
+
+func (UnimplementedGitHubServiceHandler) RemoveExemption(context.Context, *v1.RemoveExemptionRequest) (*v1.RemoveExemptionResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.GitHubService.RemoveExemption is not implemented")
+}
+
+func (UnimplementedGitHubServiceHandler) ListExemptions(context.Context, *v1.ListExemptionsRequest) (*v1.ListExemptionsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.GitHubService.ListExemptions is not implemented")
 }
 
 type gitHubServiceClient struct {
@@ -187,6 +258,30 @@ func (c *gitHubServiceClient) UnlinkIdentity(ctx context.Context, req *v1.Unlink
 func (c *gitHubServiceClient) ListIdentities(ctx context.Context, req *v1.ListIdentitiesRequest) (*v1.ListIdentitiesResponse, error) {
 	var res v1.ListIdentitiesResponse
 	if err := c.client.CallUnary(ctx, gitHubServiceListIdentitiesSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *gitHubServiceClient) ExemptAccount(ctx context.Context, req *v1.ExemptAccountRequest) (*v1.ExemptAccountResponse, error) {
+	var res v1.ExemptAccountResponse
+	if err := c.client.CallUnary(ctx, gitHubServiceExemptAccountSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *gitHubServiceClient) RemoveExemption(ctx context.Context, req *v1.RemoveExemptionRequest) (*v1.RemoveExemptionResponse, error) {
+	var res v1.RemoveExemptionResponse
+	if err := c.client.CallUnary(ctx, gitHubServiceRemoveExemptionSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *gitHubServiceClient) ListExemptions(ctx context.Context, req *v1.ListExemptionsRequest) (*v1.ListExemptionsResponse, error) {
+	var res v1.ListExemptionsResponse
+	if err := c.client.CallUnary(ctx, gitHubServiceListExemptionsSpec(), req, &res); err != nil {
 		return nil, err
 	}
 	return &res, nil
@@ -236,6 +331,42 @@ func (h gitHubServiceHandler) listIdentities(ctx context.Context, _ connect.Spec
 		return err
 	}
 	res, err := h.svc.ListIdentities(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h gitHubServiceHandler) exemptAccount(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ExemptAccountRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ExemptAccount(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h gitHubServiceHandler) removeExemption(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.RemoveExemptionRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.RemoveExemption(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h gitHubServiceHandler) listExemptions(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListExemptionsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListExemptions(ctx, &req)
 	if err != nil {
 		return err
 	}

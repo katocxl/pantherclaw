@@ -630,6 +630,364 @@ func (x *ListIdentitiesResponse) GetNextPageToken() string {
 	return ""
 }
 
+// GitHubExemption is a GitHub account an admin registered as not a person.
+type GitHubExemption struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The GitHub user id.
+	GithubUserId int64 `protobuf:"varint,1,opt,name=github_user_id,json=githubUserId,proto3" json:"github_user_id,omitempty"`
+	// Its login when exempted (a bot's ends in [bot]).
+	GithubLogin string `protobuf:"bytes,2,opt,name=github_login,json=githubLogin,proto3" json:"github_login,omitempty"`
+	// Why it is not a person.
+	Reason string `protobuf:"bytes,3,opt,name=reason,proto3" json:"reason,omitempty"`
+	// Who exempted it.
+	CreatedBy string `protobuf:"bytes,4,opt,name=created_by,json=createdBy,proto3" json:"created_by,omitempty"`
+	// When.
+	CreateTime    *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=create_time,json=createTime,proto3" json:"create_time,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GitHubExemption) Reset() {
+	*x = GitHubExemption{}
+	mi := &file_pantherclaw_v1_github_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GitHubExemption) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GitHubExemption) ProtoMessage() {}
+
+func (x *GitHubExemption) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_github_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GitHubExemption.ProtoReflect.Descriptor instead.
+func (*GitHubExemption) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_github_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *GitHubExemption) GetGithubUserId() int64 {
+	if x != nil {
+		return x.GithubUserId
+	}
+	return 0
+}
+
+func (x *GitHubExemption) GetGithubLogin() string {
+	if x != nil {
+		return x.GithubLogin
+	}
+	return ""
+}
+
+func (x *GitHubExemption) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
+func (x *GitHubExemption) GetCreatedBy() string {
+	if x != nil {
+		return x.CreatedBy
+	}
+	return ""
+}
+
+func (x *GitHubExemption) GetCreateTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.CreateTime
+	}
+	return nil
+}
+
+// ExemptAccountRequest names the account and why it is not a person.
+type ExemptAccountRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The GitHub user id.
+	GithubUserId int64 `protobuf:"varint,1,opt,name=github_user_id,json=githubUserId,proto3" json:"github_user_id,omitempty"`
+	// Its login.
+	GithubLogin string `protobuf:"bytes,2,opt,name=github_login,json=githubLogin,proto3" json:"github_login,omitempty"`
+	// Why it is not a person.
+	Reason        string `protobuf:"bytes,3,opt,name=reason,proto3" json:"reason,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ExemptAccountRequest) Reset() {
+	*x = ExemptAccountRequest{}
+	mi := &file_pantherclaw_v1_github_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ExemptAccountRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ExemptAccountRequest) ProtoMessage() {}
+
+func (x *ExemptAccountRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_github_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ExemptAccountRequest.ProtoReflect.Descriptor instead.
+func (*ExemptAccountRequest) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_github_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *ExemptAccountRequest) GetGithubUserId() int64 {
+	if x != nil {
+		return x.GithubUserId
+	}
+	return 0
+}
+
+func (x *ExemptAccountRequest) GetGithubLogin() string {
+	if x != nil {
+		return x.GithubLogin
+	}
+	return ""
+}
+
+func (x *ExemptAccountRequest) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
+// ExemptAccountResponse returns the exemption.
+type ExemptAccountResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The exemption.
+	Exemption     *GitHubExemption `protobuf:"bytes,1,opt,name=exemption,proto3" json:"exemption,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ExemptAccountResponse) Reset() {
+	*x = ExemptAccountResponse{}
+	mi := &file_pantherclaw_v1_github_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ExemptAccountResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ExemptAccountResponse) ProtoMessage() {}
+
+func (x *ExemptAccountResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_github_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ExemptAccountResponse.ProtoReflect.Descriptor instead.
+func (*ExemptAccountResponse) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_github_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *ExemptAccountResponse) GetExemption() *GitHubExemption {
+	if x != nil {
+		return x.Exemption
+	}
+	return nil
+}
+
+// RemoveExemptionRequest names the account.
+type RemoveExemptionRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The GitHub user id.
+	GithubUserId  int64 `protobuf:"varint,1,opt,name=github_user_id,json=githubUserId,proto3" json:"github_user_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RemoveExemptionRequest) Reset() {
+	*x = RemoveExemptionRequest{}
+	mi := &file_pantherclaw_v1_github_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RemoveExemptionRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RemoveExemptionRequest) ProtoMessage() {}
+
+func (x *RemoveExemptionRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_github_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RemoveExemptionRequest.ProtoReflect.Descriptor instead.
+func (*RemoveExemptionRequest) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_github_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *RemoveExemptionRequest) GetGithubUserId() int64 {
+	if x != nil {
+		return x.GithubUserId
+	}
+	return 0
+}
+
+// RemoveExemptionResponse is empty.
+type RemoveExemptionResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RemoveExemptionResponse) Reset() {
+	*x = RemoveExemptionResponse{}
+	mi := &file_pantherclaw_v1_github_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RemoveExemptionResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RemoveExemptionResponse) ProtoMessage() {}
+
+func (x *RemoveExemptionResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_github_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RemoveExemptionResponse.ProtoReflect.Descriptor instead.
+func (*RemoveExemptionResponse) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_github_proto_rawDescGZIP(), []int{14}
+}
+
+// ListExemptionsRequest is empty.
+type ListExemptionsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListExemptionsRequest) Reset() {
+	*x = ListExemptionsRequest{}
+	mi := &file_pantherclaw_v1_github_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListExemptionsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListExemptionsRequest) ProtoMessage() {}
+
+func (x *ListExemptionsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_github_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListExemptionsRequest.ProtoReflect.Descriptor instead.
+func (*ListExemptionsRequest) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_github_proto_rawDescGZIP(), []int{15}
+}
+
+// ListExemptionsResponse lists the exemptions by login.
+type ListExemptionsResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The exemptions.
+	Exemptions    []*GitHubExemption `protobuf:"bytes,1,rep,name=exemptions,proto3" json:"exemptions,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListExemptionsResponse) Reset() {
+	*x = ListExemptionsResponse{}
+	mi := &file_pantherclaw_v1_github_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListExemptionsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListExemptionsResponse) ProtoMessage() {}
+
+func (x *ListExemptionsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_github_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListExemptionsResponse.ProtoReflect.Descriptor instead.
+func (*ListExemptionsResponse) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_github_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *ListExemptionsResponse) GetExemptions() []*GitHubExemption {
+	if x != nil {
+		return x.Exemptions
+	}
+	return nil
+}
+
 var File_pantherclaw_v1_github_proto protoreflect.FileDescriptor
 
 const file_pantherclaw_v1_github_proto_rawDesc = "" +
@@ -679,12 +1037,38 @@ const file_pantherclaw_v1_github_proto_rawDesc = "" +
 	"\n" +
 	"identities\x18\x01 \x03(\v2\x1e.pantherclaw.v1.GitHubIdentityR\n" +
 	"identities\x12&\n" +
-	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken2\x81\x03\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"\xce\x01\n" +
+	"\x0fGitHubExemption\x12$\n" +
+	"\x0egithub_user_id\x18\x01 \x01(\x03R\fgithubUserId\x12!\n" +
+	"\fgithub_login\x18\x02 \x01(\tR\vgithubLogin\x12\x16\n" +
+	"\x06reason\x18\x03 \x01(\tR\x06reason\x12\x1d\n" +
+	"\n" +
+	"created_by\x18\x04 \x01(\tR\tcreatedBy\x12;\n" +
+	"\vcreate_time\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
+	"createTime\"\x97\x01\n" +
+	"\x14ExemptAccountRequest\x12-\n" +
+	"\x0egithub_user_id\x18\x01 \x01(\x03B\a\xbaH\x04\"\x02 \x00R\fgithubUserId\x12,\n" +
+	"\fgithub_login\x18\x02 \x01(\tB\t\xbaH\x06r\x04\x10\x01\x18,R\vgithubLogin\x12\"\n" +
+	"\x06reason\x18\x03 \x01(\tB\n" +
+	"\xbaH\ar\x05\x10\x01\x18\x80\x02R\x06reason\"V\n" +
+	"\x15ExemptAccountResponse\x12=\n" +
+	"\texemption\x18\x01 \x01(\v2\x1f.pantherclaw.v1.GitHubExemptionR\texemption\"G\n" +
+	"\x16RemoveExemptionRequest\x12-\n" +
+	"\x0egithub_user_id\x18\x01 \x01(\x03B\a\xbaH\x04\"\x02 \x00R\fgithubUserId\"\x19\n" +
+	"\x17RemoveExemptionResponse\"\x17\n" +
+	"\x15ListExemptionsRequest\"Y\n" +
+	"\x16ListExemptionsResponse\x12?\n" +
+	"\n" +
+	"exemptions\x18\x01 \x03(\v2\x1f.pantherclaw.v1.GitHubExemptionR\n" +
+	"exemptions2\xa4\x05\n" +
 	"\rGitHubService\x12\\\n" +
 	"\rProveIdentity\x12$.pantherclaw.v1.ProveIdentityRequest\x1a%.pantherclaw.v1.ProveIdentityResponse\x12P\n" +
 	"\tGetSignIn\x12 .pantherclaw.v1.GetSignInRequest\x1a!.pantherclaw.v1.GetSignInResponse\x12_\n" +
 	"\x0eUnlinkIdentity\x12%.pantherclaw.v1.UnlinkIdentityRequest\x1a&.pantherclaw.v1.UnlinkIdentityResponse\x12_\n" +
-	"\x0eListIdentities\x12%.pantherclaw.v1.ListIdentitiesRequest\x1a&.pantherclaw.v1.ListIdentitiesResponseB\xc4\x01\n" +
+	"\x0eListIdentities\x12%.pantherclaw.v1.ListIdentitiesRequest\x1a&.pantherclaw.v1.ListIdentitiesResponse\x12\\\n" +
+	"\rExemptAccount\x12$.pantherclaw.v1.ExemptAccountRequest\x1a%.pantherclaw.v1.ExemptAccountResponse\x12b\n" +
+	"\x0fRemoveExemption\x12&.pantherclaw.v1.RemoveExemptionRequest\x1a'.pantherclaw.v1.RemoveExemptionResponse\x12_\n" +
+	"\x0eListExemptions\x12%.pantherclaw.v1.ListExemptionsRequest\x1a&.pantherclaw.v1.ListExemptionsResponseB\xc4\x01\n" +
 	"\x12com.pantherclaw.v1B\vGithubProtoP\x01ZHgithub.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1;pantherclawv1\xa2\x02\x03PXX\xaa\x02\x0ePantherclaw.V1\xca\x02\x0ePantherclaw\\V1\xe2\x02\x1aPantherclaw\\V1\\GPBMetadata\xea\x02\x0fPantherclaw::V1b\x06proto3"
 
 var (
@@ -699,41 +1083,57 @@ func file_pantherclaw_v1_github_proto_rawDescGZIP() []byte {
 	return file_pantherclaw_v1_github_proto_rawDescData
 }
 
-var file_pantherclaw_v1_github_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
+var file_pantherclaw_v1_github_proto_msgTypes = make([]protoimpl.MessageInfo, 18)
 var file_pantherclaw_v1_github_proto_goTypes = []any{
-	(*GitHubInstallation)(nil),     // 0: pantherclaw.v1.GitHubInstallation
-	(*GitHubIdentity)(nil),         // 1: pantherclaw.v1.GitHubIdentity
-	(*ProveIdentityRequest)(nil),   // 2: pantherclaw.v1.ProveIdentityRequest
-	(*ProveIdentityResponse)(nil),  // 3: pantherclaw.v1.ProveIdentityResponse
-	(*GetSignInRequest)(nil),       // 4: pantherclaw.v1.GetSignInRequest
-	(*GetSignInResponse)(nil),      // 5: pantherclaw.v1.GetSignInResponse
-	(*UnlinkIdentityRequest)(nil),  // 6: pantherclaw.v1.UnlinkIdentityRequest
-	(*UnlinkIdentityResponse)(nil), // 7: pantherclaw.v1.UnlinkIdentityResponse
-	(*ListIdentitiesRequest)(nil),  // 8: pantherclaw.v1.ListIdentitiesRequest
-	(*ListIdentitiesResponse)(nil), // 9: pantherclaw.v1.ListIdentitiesResponse
-	nil,                            // 10: pantherclaw.v1.GitHubInstallation.PermissionsEntry
-	(*timestamppb.Timestamp)(nil),  // 11: google.protobuf.Timestamp
+	(*GitHubInstallation)(nil),      // 0: pantherclaw.v1.GitHubInstallation
+	(*GitHubIdentity)(nil),          // 1: pantherclaw.v1.GitHubIdentity
+	(*ProveIdentityRequest)(nil),    // 2: pantherclaw.v1.ProveIdentityRequest
+	(*ProveIdentityResponse)(nil),   // 3: pantherclaw.v1.ProveIdentityResponse
+	(*GetSignInRequest)(nil),        // 4: pantherclaw.v1.GetSignInRequest
+	(*GetSignInResponse)(nil),       // 5: pantherclaw.v1.GetSignInResponse
+	(*UnlinkIdentityRequest)(nil),   // 6: pantherclaw.v1.UnlinkIdentityRequest
+	(*UnlinkIdentityResponse)(nil),  // 7: pantherclaw.v1.UnlinkIdentityResponse
+	(*ListIdentitiesRequest)(nil),   // 8: pantherclaw.v1.ListIdentitiesRequest
+	(*ListIdentitiesResponse)(nil),  // 9: pantherclaw.v1.ListIdentitiesResponse
+	(*GitHubExemption)(nil),         // 10: pantherclaw.v1.GitHubExemption
+	(*ExemptAccountRequest)(nil),    // 11: pantherclaw.v1.ExemptAccountRequest
+	(*ExemptAccountResponse)(nil),   // 12: pantherclaw.v1.ExemptAccountResponse
+	(*RemoveExemptionRequest)(nil),  // 13: pantherclaw.v1.RemoveExemptionRequest
+	(*RemoveExemptionResponse)(nil), // 14: pantherclaw.v1.RemoveExemptionResponse
+	(*ListExemptionsRequest)(nil),   // 15: pantherclaw.v1.ListExemptionsRequest
+	(*ListExemptionsResponse)(nil),  // 16: pantherclaw.v1.ListExemptionsResponse
+	nil,                             // 17: pantherclaw.v1.GitHubInstallation.PermissionsEntry
+	(*timestamppb.Timestamp)(nil),   // 18: google.protobuf.Timestamp
 }
 var file_pantherclaw_v1_github_proto_depIdxs = []int32{
-	10, // 0: pantherclaw.v1.GitHubInstallation.permissions:type_name -> pantherclaw.v1.GitHubInstallation.PermissionsEntry
-	11, // 1: pantherclaw.v1.GitHubInstallation.read_time:type_name -> google.protobuf.Timestamp
-	11, // 2: pantherclaw.v1.GitHubIdentity.link_time:type_name -> google.protobuf.Timestamp
-	11, // 3: pantherclaw.v1.GitHubIdentity.verify_time:type_name -> google.protobuf.Timestamp
+	17, // 0: pantherclaw.v1.GitHubInstallation.permissions:type_name -> pantherclaw.v1.GitHubInstallation.PermissionsEntry
+	18, // 1: pantherclaw.v1.GitHubInstallation.read_time:type_name -> google.protobuf.Timestamp
+	18, // 2: pantherclaw.v1.GitHubIdentity.link_time:type_name -> google.protobuf.Timestamp
+	18, // 3: pantherclaw.v1.GitHubIdentity.verify_time:type_name -> google.protobuf.Timestamp
 	1,  // 4: pantherclaw.v1.ProveIdentityResponse.identity:type_name -> pantherclaw.v1.GitHubIdentity
 	1,  // 5: pantherclaw.v1.ListIdentitiesResponse.identities:type_name -> pantherclaw.v1.GitHubIdentity
-	2,  // 6: pantherclaw.v1.GitHubService.ProveIdentity:input_type -> pantherclaw.v1.ProveIdentityRequest
-	4,  // 7: pantherclaw.v1.GitHubService.GetSignIn:input_type -> pantherclaw.v1.GetSignInRequest
-	6,  // 8: pantherclaw.v1.GitHubService.UnlinkIdentity:input_type -> pantherclaw.v1.UnlinkIdentityRequest
-	8,  // 9: pantherclaw.v1.GitHubService.ListIdentities:input_type -> pantherclaw.v1.ListIdentitiesRequest
-	3,  // 10: pantherclaw.v1.GitHubService.ProveIdentity:output_type -> pantherclaw.v1.ProveIdentityResponse
-	5,  // 11: pantherclaw.v1.GitHubService.GetSignIn:output_type -> pantherclaw.v1.GetSignInResponse
-	7,  // 12: pantherclaw.v1.GitHubService.UnlinkIdentity:output_type -> pantherclaw.v1.UnlinkIdentityResponse
-	9,  // 13: pantherclaw.v1.GitHubService.ListIdentities:output_type -> pantherclaw.v1.ListIdentitiesResponse
-	10, // [10:14] is the sub-list for method output_type
-	6,  // [6:10] is the sub-list for method input_type
-	6,  // [6:6] is the sub-list for extension type_name
-	6,  // [6:6] is the sub-list for extension extendee
-	0,  // [0:6] is the sub-list for field type_name
+	18, // 6: pantherclaw.v1.GitHubExemption.create_time:type_name -> google.protobuf.Timestamp
+	10, // 7: pantherclaw.v1.ExemptAccountResponse.exemption:type_name -> pantherclaw.v1.GitHubExemption
+	10, // 8: pantherclaw.v1.ListExemptionsResponse.exemptions:type_name -> pantherclaw.v1.GitHubExemption
+	2,  // 9: pantherclaw.v1.GitHubService.ProveIdentity:input_type -> pantherclaw.v1.ProveIdentityRequest
+	4,  // 10: pantherclaw.v1.GitHubService.GetSignIn:input_type -> pantherclaw.v1.GetSignInRequest
+	6,  // 11: pantherclaw.v1.GitHubService.UnlinkIdentity:input_type -> pantherclaw.v1.UnlinkIdentityRequest
+	8,  // 12: pantherclaw.v1.GitHubService.ListIdentities:input_type -> pantherclaw.v1.ListIdentitiesRequest
+	11, // 13: pantherclaw.v1.GitHubService.ExemptAccount:input_type -> pantherclaw.v1.ExemptAccountRequest
+	13, // 14: pantherclaw.v1.GitHubService.RemoveExemption:input_type -> pantherclaw.v1.RemoveExemptionRequest
+	15, // 15: pantherclaw.v1.GitHubService.ListExemptions:input_type -> pantherclaw.v1.ListExemptionsRequest
+	3,  // 16: pantherclaw.v1.GitHubService.ProveIdentity:output_type -> pantherclaw.v1.ProveIdentityResponse
+	5,  // 17: pantherclaw.v1.GitHubService.GetSignIn:output_type -> pantherclaw.v1.GetSignInResponse
+	7,  // 18: pantherclaw.v1.GitHubService.UnlinkIdentity:output_type -> pantherclaw.v1.UnlinkIdentityResponse
+	9,  // 19: pantherclaw.v1.GitHubService.ListIdentities:output_type -> pantherclaw.v1.ListIdentitiesResponse
+	12, // 20: pantherclaw.v1.GitHubService.ExemptAccount:output_type -> pantherclaw.v1.ExemptAccountResponse
+	14, // 21: pantherclaw.v1.GitHubService.RemoveExemption:output_type -> pantherclaw.v1.RemoveExemptionResponse
+	16, // 22: pantherclaw.v1.GitHubService.ListExemptions:output_type -> pantherclaw.v1.ListExemptionsResponse
+	16, // [16:23] is the sub-list for method output_type
+	9,  // [9:16] is the sub-list for method input_type
+	9,  // [9:9] is the sub-list for extension type_name
+	9,  // [9:9] is the sub-list for extension extendee
+	0,  // [0:9] is the sub-list for field type_name
 }
 
 func init() { file_pantherclaw_v1_github_proto_init() }
@@ -747,7 +1147,7 @@ func file_pantherclaw_v1_github_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pantherclaw_v1_github_proto_rawDesc), len(file_pantherclaw_v1_github_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   11,
+			NumMessages:   18,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

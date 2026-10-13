@@ -42,6 +42,11 @@ type Listed struct {
 	As []string
 	// User is the user linked to the GitHub user id; nil when none is.
 	User *ids.UUID
+	// Bot: the fact names the account as not a person (a GitHub App's bot).
+	// Exempt: an admin registered it as not a person (a bot or a machine
+	// user). Either way, being linked to nobody does not stop approvals
+	// (founder decision 2026-10-13).
+	Bot, Exempt bool
 	// Formerly are the other users who ever proved a link to the GitHub user
 	// id (github_identity_history): they stay excluded too, so unlinking or
 	// moving the link to someone else lets nobody approve their own change.
@@ -110,6 +115,24 @@ func ListPeople(fact string, value map[string]any) PeopleList {
 			}
 		}
 	}
+	if bots, ok := value["bots"]; ok {
+		list, ok := bots.([]any)
+		if !ok {
+			malformed = true
+		}
+		for _, x := range list {
+			id, ok := x.(int64)
+			if !ok || id <= 0 {
+				malformed = true
+				continue
+			}
+			for i := range l.People {
+				if l.People[i].GitHubID == id {
+					l.People[i].Bot = true
+				}
+			}
+		}
+	}
 	if malformed {
 		l.Gaps = append(l.Gaps, PeopleMalformed)
 	}
@@ -135,6 +158,16 @@ func (l *PeopleList) Link(github int64, user ids.UUID) {
 	}
 }
 
+// Exempted records that an admin registered the GitHub user id as not a
+// person.
+func (l *PeopleList) Exempted(github int64) {
+	for i := range l.People {
+		if l.People[i].GitHubID == github {
+			l.People[i].Exempt = true
+		}
+	}
+}
+
 // Formerly records that user once proved a link to the GitHub user id.
 func (l *PeopleList) Formerly(github int64, user ids.UUID) {
 	for i := range l.People {
@@ -153,7 +186,11 @@ func (l PeopleList) Authorship() Authorship {
 		return Authorship{}
 	}
 	var users []ids.UUID
+	var unlinked []int64
 	for _, p := range l.People {
+		if p.User == nil && !p.Bot && !p.Exempt {
+			unlinked = append(unlinked, p.GitHubID)
+		}
 		if p.User != nil && !slices.Contains(users, *p.User) {
 			users = append(users, *p.User)
 		}
@@ -163,7 +200,7 @@ func (l PeopleList) Authorship() Authorship {
 			}
 		}
 	}
-	return Authorship{Users: users, Complete: true}
+	return Authorship{Users: users, Complete: true, Unlinked: unlinked}
 }
 
 // Shown is the list as the page shows it: at most n people, with a gap

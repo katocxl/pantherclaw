@@ -516,6 +516,11 @@ WHERE org_id = sqlc.arg(org_id) AND github_user_id = ANY(sqlc.arg(github_ids)::b
 SELECT github_user_id, user_id FROM pc.github_identity_history
 WHERE org_id = sqlc.arg(org_id) AND github_user_id = ANY(sqlc.arg(github_ids)::bigint[]);
 
+-- name: ExemptGitHubUsers :many
+-- Which of GitHub user ids an admin registered as not a person.
+SELECT github_user_id FROM pc.github_exemptions
+WHERE org_id = sqlc.arg(org_id) AND github_user_id = ANY(sqlc.arg(github_ids)::bigint[]);
+
 -- name: InsertRequestLinkedPeople :exec
 -- The users linked, when a request is created, to the people its fact
 -- lists (G0 M8 P2f, HR-207): they stay excluded from it.
