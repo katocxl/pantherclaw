@@ -36,6 +36,8 @@ func TestHR183_AgentHostsAreCheckedAndAChangeWeakens(t *testing.T) {
 		"an upper-case host": {"API.payments.example"},
 		"a host with a port": {"api.payments.example:443"},
 		"an IP address":      {"192.0.2.10"},
+		"an IP with a zero":  {"1.2.3.04"},
+		"digits only":        {"1234"},
 		"a host twice":       {"a.example", "a.example"},
 		"an empty host":      {""},
 		"17 hosts": {

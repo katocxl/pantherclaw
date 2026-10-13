@@ -5,7 +5,9 @@ package app
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json/v2"
+	"fmt"
 	"maps"
 	"regexp"
 	"slices"
@@ -32,6 +34,10 @@ const (
 	maxConnectorPlaceholders  = 16
 	maxConnectorArgs          = 32
 	maxConnectorValue         = 1024
+	// maxConnectorEnvBytes is 00093's bound on the environment as the
+	// database writes it out (jsonb text, a space after each colon and
+	// comma).
+	maxConnectorEnvBytes = 65536
 )
 
 // Connector errors.
@@ -66,7 +72,8 @@ var (
 	// secretPrefixes are the well-known prefixes of credentials, which an
 	// environment value may never carry (HR-061, HR-216).
 	secretPrefixes = []string{
-		"github_pat_", "ghp_", "gho_", "ghu_", "ghs_", "ghr_", "glpat-", "sk_live_", "sk-", "xoxb-", "xoxp-", "AKIA", "-----BEGIN",
+		"github_pat_", "ghp_", "gho_", "ghu_", "ghs_", "ghr_", "glpat-", "sk_live_", "sk_test_", "rk_live_", "rk_test_", "sk-", "xoxb-", "xoxp-",
+		"xapp-", "npm_", "AIza", "AKIA", "ASIA", "eyJ", "-----BEGIN",
 	}
 )
 
@@ -83,7 +90,7 @@ func (c ConnectorSpec) check() (ConnectorSpec, error) {
 		return ConnectorSpec{}, ErrConnector
 	}
 	for _, a := range c.Command {
-		if a == "" || len(a) > maxConnectorValue || strings.ContainsRune(a, 0) {
+		if a == "" || len(a) > maxConnectorValue || strings.ContainsRune(a, 0) || secretLike(a) {
 			return ConnectorSpec{}, ErrConnector
 		}
 	}
@@ -91,6 +98,9 @@ func (c ConnectorSpec) check() (ConnectorSpec, error) {
 		if !connectorEnvRE.MatchString(name) || len(v) > maxConnectorValue || strings.ContainsAny(v, "\x00\r\n") || secretLike(v) {
 			return ConnectorSpec{}, ErrConnector
 		}
+	}
+	if b, err := json.Marshal(c.Environment); err != nil || len(b)+2*len(c.Environment) > maxConnectorEnvBytes {
+		return ConnectorSpec{}, ErrConnector
 	}
 	for i, name := range c.CredentialPlaceholders {
 		if _, literal := c.Environment[name]; literal || !connectorEnvRE.MatchString(name) || slices.Contains(c.CredentialPlaceholders[:i], name) {
@@ -165,21 +175,45 @@ func orEmpty(s []string) []string {
 	return s
 }
 
-// connectorSummary is how a spec appears in a change's old and new values:
-// its image, command and egress connection, never its environment.
+// connectorSummary is how a spec appears in a change's old and new values
+// (specView).
 func connectorSummary(s *dbq.PcConnectorSpec) string {
 	if s == nil {
 		return ""
 	}
-	return summary(s.Image, s.Command, s.EgressConnectionID)
+	var env map[string]string
+	_ = json.Unmarshal(s.Environment, &env)
+	return specView(ConnectorSpec{
+		Image: s.Image, Command: s.Command, Environment: env, CredentialPlaceholders: s.CredentialPlaceholders,
+		EgressConnection: s.EgressConnectionID, MemoryMiB: s.MemoryMib, MilliCPUs: s.MilliCpus, PIDs: s.Pids,
+	})
 }
 
-func specSummary(s ConnectorSpec) string { return summary(s.Image, s.Command, s.EgressConnection) }
-
-func summary(image string, command []string, egress *ids.UUID) string {
-	e := ""
-	if egress != nil {
-		e = egress.String()
+// specView is how a spec appears in a change's old and new values: what it
+// runs and may reach, the names of its environment, placeholders and its
+// limits, and the SHA-256 of the whole spec, values included, so that any
+// change to it (NODE_OPTIONS or LD_PRELOAD change what runs as much as the
+// command does) is a weakening change whose audit shows it. An
+// environment value never appears (HR-183).
+func specView(s ConnectorSpec) string {
+	if s.Environment == nil {
+		s.Environment = map[string]string{}
 	}
-	return image + " " + strings.Join(command, " ") + " egress=" + e
+	e := ""
+	if s.EgressConnection != nil {
+		e = s.EgressConnection.String()
+	}
+	canon, _ := json.Marshal(struct {
+		Image        string            `json:"image"`
+		Command      []string          `json:"command"`
+		Environment  map[string]string `json:"environment"`
+		Placeholders []string          `json:"placeholders"`
+		Egress       string            `json:"egress"`
+		Limits       [3]int32          `json:"limits"`
+	}{s.Image, s.Command, s.Environment, slices.Sorted(slices.Values(s.CredentialPlaceholders)), e, [3]int32{s.MemoryMiB, s.MilliCPUs, s.PIDs}},
+		json.Deterministic(true))
+	sum := sha256.Sum256(canon)
+	return fmt.Sprintf("%s %s egress=%s env=%s placeholders=%s limits=%d/%d/%d sha256=%x", s.Image, strings.Join(s.Command, " "), e,
+		strings.Join(slices.Sorted(maps.Keys(s.Environment)), ","), strings.Join(slices.Sorted(slices.Values(s.CredentialPlaceholders)), ","),
+		s.MemoryMiB, s.MilliCPUs, s.PIDs, sum)
 }

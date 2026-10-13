@@ -251,7 +251,7 @@ func (s *Service) Update(ctx context.Context, in UpdateInput) (Connection, error
 			if err != nil {
 				return err
 			}
-			set("connector", connectorSummary(&cur), specSummary(spec), true)
+			set("connector", connectorSummary(&cur), specView(spec), true)
 		}
 		after, err := s.apply(ctx, tx, c, conn, p, changes, "connection.updated", limits)
 		if err != nil {
