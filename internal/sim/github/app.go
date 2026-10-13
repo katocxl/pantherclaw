@@ -84,6 +84,7 @@ func decodeSegment(seg string, v any) error {
 // /app/installations/{id}/access_tokens) for the repositories and
 // permissions asked for, which must be within the installation's; with
 // neither, the token gets everything the installation has, as on GitHub.
+// Repositories are named (repositories) or given by id (repository_ids).
 func (s *Server) accessToken(w http.ResponseWriter, r *http.Request) {
 	if status := s.tokenFault(w); status != 0 {
 		s.mu.Lock()
@@ -115,23 +116,34 @@ func (s *Server) mint(w http.ResponseWriter, r *http.Request, rec *Request) int 
 	}
 	rec.Installation = id
 	var body struct {
-		Repositories []string          `json:"repositories"`
-		Permissions  map[string]string `json:"permissions"`
+		Repositories  []string          `json:"repositories"`
+		RepositoryIDs []int64           `json:"repository_ids"`
+		Permissions   map[string]string `json:"permissions"`
 	}
 	raw, _ := io.ReadAll(io.LimitReader(r.Body, 64<<10))
 	if len(raw) > 0 && json.Unmarshal(raw, &body, json.RejectUnknownMembers(true)) != nil {
 		return fail(w, http.StatusUnprocessableEntity, "Invalid request")
 	}
-	names := body.Repositories
-	if names == nil || s.faults.WiderGrant {
+	const notAccessible = "There is at least one repository that does not exist or is not accessible to the parent installation."
+	names := slices.Clone(body.Repositories)
+	for _, rid := range body.RepositoryIDs {
+		i := slices.IndexFunc(in.Repos, func(n string) bool { return accountID(in.Account+"/"+n) == rid })
+		if i < 0 {
+			return fail(w, http.StatusUnprocessableEntity, notAccessible)
+		}
+		names = append(names, in.Repos[i])
+	}
+	if (body.Repositories == nil && body.RepositoryIDs == nil) || s.faults.WiderGrant {
 		names = in.Repos
 	}
 	repos := make([]string, 0, len(names))
 	for _, n := range names {
 		if !slices.Contains(in.Repos, strings.ToLower(n)) {
-			return fail(w, http.StatusUnprocessableEntity, "There is at least one repository that does not exist or is not accessible to the parent installation.")
+			return fail(w, http.StatusUnprocessableEntity, notAccessible)
 		}
-		repos = append(repos, in.Account+"/"+strings.ToLower(n))
+		if full := in.Account + "/" + strings.ToLower(n); !slices.Contains(repos, full) {
+			repos = append(repos, full)
+		}
 	}
 	perms := body.Permissions
 	if perms == nil || s.faults.WiderGrant {
@@ -142,15 +154,24 @@ func (s *Server) mint(w http.ResponseWriter, r *http.Request, rec *Request) int 
 			return fail(w, http.StatusUnprocessableEntity, "The permissions requested are not granted to this installation.")
 		}
 	}
-	t := &Token{value: randomToken(), Installation: id, Repos: repos, Permissions: maps.Clone(perms), Expires: s.now().Add(tokenLifetime)}
+	// Every token may read metadata, and GitHub lists it among the
+	// token's permissions whatever was asked for.
+	perms = maps.Clone(perms)
+	if perms == nil {
+		perms = map[string]string{}
+	}
+	if perms["metadata"] == "" {
+		perms["metadata"] = "read"
+	}
+	t := &Token{value: randomToken(), Installation: id, Repos: repos, Permissions: perms, Expires: s.now().Add(tokenLifetime)}
 	s.tokens[t.value] = t
 	rec.Token, rec.Repos, rec.Permissions = Fingerprint(t.value), slices.Clone(repos), maps.Clone(perms)
 	list := make([]map[string]any, len(repos))
 	for i, full := range repos {
-		list[i] = map[string]any{"name": full[strings.IndexByte(full, '/')+1:], "full_name": full}
+		list[i] = map[string]any{"id": accountID(full), "name": full[strings.IndexByte(full, '/')+1:], "full_name": full}
 	}
 	return reply(w, http.StatusCreated, map[string]any{
-		"token": t.value, "expires_at": t.Expires.UTC().Format(time.RFC3339), "permissions": perms,
+		"token": t.value, "expires_at": t.Expires.UTC().Format(time.RFC3339), "permissions": maps.Clone(perms),
 		"repository_selection": "selected", "repositories": list, "simulated": true,
 	})
 }
