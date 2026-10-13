@@ -602,6 +602,9 @@ func (s *Store) RecordExecution(ctx context.Context, org ids.OrgID, gatewayID st
 			// Too late: the sweeper may have marked it UNKNOWN (G0 M7). A
 			// token left valid is audited on the first late report only (#313
 			// review): a repeated one records nothing twice.
+			if err := q.LockLateReports(ctx, pc.TransactionID.String()); err != nil {
+				return err
+			}
 			seen, err := q.LateReportSeen(ctx, org, &pc.TransactionID)
 			if err != nil {
 				return err
