@@ -17,6 +17,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/katocxl/pantherclaw/internal/authority/actiontoken"
 	"github.com/katocxl/pantherclaw/internal/authority/finalize"
 	"github.com/katocxl/pantherclaw/internal/authority/pipeline"
 	"github.com/katocxl/pantherclaw/internal/authority/pipeline/pipelinetest"
@@ -31,7 +32,40 @@ import (
 const (
 	connectionID = "01920000-0000-7000-8000-000000000007"
 	refundBody   = `{"amount":"30.00","charge":"ch_1","currency":"USD","reason":"duplicate"}`
+	// connectionTestID is the target_verifier connection test whose test
+	// tokens the vectors hold, and testRead its package's test read
+	// (pc.mock-payments, test: true): a bodiless GET of the connection.
+	connectionTestID = "01920000-0000-7000-8000-00000000000a"
+	testRead         = "payments.account.read"
 )
+
+// mintTestTokens mints a connection test's two tokens as the server does
+// (internal/transactions/app MintTestTokens, PAP-1 §10, HR-188's one
+// exception): fresh binds the test read's empty body, mismatch another
+// body, so a verifier must refuse it. Both are issued at iat and end with
+// the test's lease, 30 seconds later.
+func mintTestTokens(t *testing.T, iat int64) (fresh, mismatch string) {
+	t.Helper()
+	test := mustUUID(t, connectionTestID)
+	act := sha256.Sum256([]byte("connection_test:" + test.String()))
+	empty, other := sha256.Sum256(nil), sha256.Sum256([]byte("pantherclaw:target_verifier:body_mismatch"))
+	now := time.Unix(iat, 0)
+	tok := actiontoken.Token{
+		Issuer: issuer, Audience: mustUUID(t, connectionID), Transaction: test, Act: act[:], Operation: testRead,
+		TargetType: "pc.connection", TargetID: connectionID, Now: now, NotAfter: now.Add(30 * time.Second),
+	}
+	s := signer(t, registry(t), keys.PurposeActionTokens)
+	var err error
+	tok.BodySHA256 = empty[:]
+	if fresh, _, err = actiontoken.Mint(s, tok); err != nil {
+		t.Fatal(err)
+	}
+	tok.BodySHA256 = other[:]
+	if mismatch, _, err = actiontoken.Mint(s, tok); err != nil {
+		t.Fatal(err)
+	}
+	return fresh, mismatch
+}
 
 // ActionTokenCase is one request a target verifier (PAP-1 §10, HR-202)
 // receives: the token in PAP-Action (empty: none), the exact body, the
@@ -157,9 +191,18 @@ func buildActionTokens(t *testing.T) any {
 		edit(&v)
 		return v
 	}
+	fresh, mismatch := mintTestTokens(t, c.Iat)
+	// testRead is a request to the test read's route: a bodiless GET of the
+	// connection itself.
+	testCase := func(v *ActionTokenCase) {
+		v.Token, v.Body, v.Operation, v.TargetType, v.TargetID = fresh, "", testRead, "pc.connection", connectionID
+	}
 	f := ActionTokenFile{
-		header: head("action_tokens", "internal/authority/finalize BeginDispatch (dispatch.go), checked with internal/sim/payments ActionVerifier",
-			"Action tokens (pap-action+jwt, PAP-1 §10) minted for a target-enforced connection. A verifier accepts only "+
+		header: head("action_tokens", "internal/authority/finalize BeginDispatch (dispatch.go) and, for a connection test's tokens, "+
+			"internal/authority/actiontoken Mint as internal/transactions/app MintTestTokens calls it, checked with internal/sim/payments ActionVerifier",
+			"Action tokens (pap-action+jwt, PAP-1 §10) minted for a target-enforced connection, and a connection test's "+
+				"test tokens (pap.txn the test, pap.op its package's test read, pap.target the connection itself, bh an empty "+
+				"body), which pass only on that bodiless read. A verifier accepts only "+
 				"keys whose kid is \"action-tokens-\" and the first 22 characters of their RFC 7638 thumbprint, alg EdDSA or "+
 				"Ed25519; it checks iss, aud (the connection id), a lifetime of at most 60 s with 5 s of skew, pap.v, pap.bh "+
 				"(lowercase hex SHA-256 of the exact body), operation and target, and spends each jti once after every other "+
@@ -217,6 +260,27 @@ func buildActionTokens(t *testing.T) any {
 			}),
 			with("another target", "operation_mismatch", func(v *ActionTokenCase) { v.TargetID = "ch_2" }),
 			with("a replay store that cannot record", "store_unavailable", func(v *ActionTokenCase) { v.Store = "unavailable" }),
+			with("a connection test's token on the test read it binds", "ok", testCase),
+			with("a connection test's token on another operation of the connection", "operation_mismatch", func(v *ActionTokenCase) {
+				testCase(v)
+				v.Operation = "payments.refund.recent"
+			}),
+			with("a connection test's token on another connection", "operation_mismatch", func(v *ActionTokenCase) {
+				testCase(v)
+				v.TargetID = "01920000-0000-7000-8000-000000000008"
+			}),
+			with("a connection test's token on the refund", "operation_mismatch", func(v *ActionTokenCase) {
+				testCase(v)
+				v.Body, v.Operation, v.TargetType, v.TargetID = "", "payments.refund.create", "payments.charge", "ch_1"
+			}),
+			with("a connection test's token with a body", "body_mismatch", func(v *ActionTokenCase) {
+				testCase(v)
+				v.Body = refundBody
+			}),
+			with("a connection test's token bound to another body", "body_mismatch", func(v *ActionTokenCase) {
+				testCase(v)
+				v.Token = mismatch
+			}),
 		},
 	}
 	checkWithSimulator(t, f)
