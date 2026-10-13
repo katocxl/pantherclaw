@@ -28,6 +28,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	gpg "github.com/katocxl/pantherclaw/internal/grants/adapters/pgstore"
 	gdomain "github.com/katocxl/pantherclaw/internal/grants/domain"
+	napp "github.com/katocxl/pantherclaw/internal/notifications/app"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	pgwaitlist "github.com/katocxl/pantherclaw/internal/waitlist/adapters/pgwaitlist"
@@ -38,9 +39,17 @@ const (
 	receiptKindExecution = "receipt.execution"
 )
 
+// Notifier enqueues a notification in the caller's transaction.
+type Notifier interface {
+	Enqueue(ctx context.Context, tx db.TenantTx, m napp.Message) (napp.Enqueued, error)
+}
+
 // Store implements finalize.Store.
 type Store struct {
 	Pool *db.Pool
+	// Notify, when set, sends the security notice of a monitor-mode action
+	// dispatched with an unknown consequence (HR-206); nil sends none.
+	Notify Notifier
 	// LockTimeout bounds how long a finalization waits for a budget account
 	// or counter row (ADR-0015): past it, Finalize returns finalize.ErrBusy.
 	// Zero keeps the pool's lock timeout.
@@ -144,6 +153,9 @@ func (s *Store) Finalize(ctx context.Context, org ids.OrgID, w finalize.Write) e
 			return err
 		}
 		if err := writeConsequences(ctx, tx, org, w.TransactionID, w.Evaluation, ev.Consequences); err != nil {
+			return err
+		}
+		if err := s.notifyUnknown(ctx, tx, org, w); err != nil {
 			return err
 		}
 		if w.Permit != nil {
@@ -750,3 +762,25 @@ func expect(tag interface{ RowsAffected() int64 }, err error) error {
 }
 
 func decision(s string) adomain.Decision { return adomain.Decision(s) }
+
+// notifyUnknown sends, with the decision, the security notice of a
+// monitor-mode permit for an action whose consequence is unknown (G0 M8,
+// HR-206 with HR-184, founder decision 2026-10-13): monitor mode does not
+// hold it, so people must hear that enforce mode would have. One notice
+// per transaction: a monitor-mode decision is final, and the notice is
+// deduplicated by its transaction.
+func (s *Store) notifyUnknown(ctx context.Context, tx db.TenantTx, org ids.OrgID, w finalize.Write) error {
+	would, c, ok := w.Eval.WouldUnknown()
+	if !ok || w.Permit == nil || s.Notify == nil {
+		return nil
+	}
+	_, err := s.Notify.Enqueue(ctx, tx, napp.Message{
+		Org: org, Type: "security.consequence_unknown_dispatched",
+		Params: map[string]string{
+			"operation": w.Eval.Operation, "consequence": c.Operation + " on " + c.Target.ID, "would": would,
+			"transaction": w.TransactionID.String(),
+		},
+		DedupeKey: "consequence_unknown_dispatched:" + w.TransactionID.String(),
+	})
+	return err
+}

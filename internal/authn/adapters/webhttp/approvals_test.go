@@ -293,6 +293,8 @@ func TestHR034_ThePageFlagsMixedScriptEnvironmentNames(t *testing.T) {
 // page lists each GitHub user the people fact names, one per row, with how
 // it lists them and the user linked to them, or "not linked"; a list that
 // may not name everyone says plainly that it is incomplete.
+// (Founder decision 2026-10-13: an unlinked person is shown and blocks
+// approvals; a bot the fact names and an exempted account do not.)
 func TestF158_ThePageListsThePullRequestsPeopleAndWhoIsNotLinked(t *testing.T) {
 	bob := ids.NewV7()
 	path := authnapp.ApprovalsPath + "/" + knownRequest.String()
@@ -303,12 +305,17 @@ func TestF158_ThePageListsThePullRequestsPeopleAndWhoIsNotLinked(t *testing.T) {
 	complete := apdomain.PeopleList{Fact: "github.pull.people", Complete: true, People: []apdomain.Listed{
 		{GitHubID: 42, As: []string{"author", "commit author"}, User: &bob},
 		{GitHubID: 44, As: []string{"pusher"}},
+		{GitHubID: 45, As: []string{"pusher"}, Bot: true},
+		{GitHubID: 46, As: []string{"committer"}, Exempt: true},
 	}}
 	body := page(complete)
 	for _, want := range []string{
 		"Who <code>github.pull.people</code> lists now",
 		"<tr><td><code>42</code></td><td>author, commit author</td><td><code>user:" + bob.String() + "</code></td></tr>",
-		"<tr><td><code>44</code></td><td>pusher</td><td>not linked</td></tr>",
+		"<tr><td><code>44</code></td><td>pusher</td><td><strong>not linked</strong></td></tr>",
+		"<tr><td><code>45</code></td><td>pusher</td><td>not a person (a bot, by the fact)</td></tr>",
+		"<tr><td><code>46</code></td><td>committer</td><td>not a person (exempted)</td></tr>",
+		"Not linked to anyone: GitHub <code>44</code>. Approvals are refused until they link or are exempted.",
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("the page lacks %q", want)
@@ -325,7 +332,7 @@ func TestF158_ThePageListsThePullRequestsPeopleAndWhoIsNotLinked(t *testing.T) {
 	for _, want := range []string{
 		"The list of people is incomplete: " + apdomain.PeopleNotAll + ".",
 		"Until it can be read in full, no approval that must be independent of these people counts.",
-		"<tr><td><code>42</code></td><td>author</td><td>not linked</td></tr>",
+		"<tr><td><code>42</code></td><td>author</td><td><strong>not linked</strong></td></tr>",
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("the page lacks %q", want)

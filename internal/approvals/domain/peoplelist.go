@@ -42,6 +42,17 @@ type Listed struct {
 	As []string
 	// User is the user linked to the GitHub user id; nil when none is.
 	User *ids.UUID
+	// Bot: the fact names the account as not a person (a GitHub App's bot).
+	// Exempt: an admin registered it as not a person (a bot or a machine
+	// user). Either way, being linked to nobody does not stop approvals
+	// (founder decision 2026-10-13). ExemptedBy is the admin, who is
+	// excluded like the people the fact lists.
+	Bot, Exempt bool
+	ExemptedBy  *ids.UUID
+	// Formerly are the other users who ever proved a link to the GitHub user
+	// id (github_identity_history): they stay excluded too, so unlinking or
+	// moving the link to someone else lets nobody approve their own change.
+	Formerly []ids.UUID
 }
 
 // PeopleList is what a people fact lists now about a held action's target,
@@ -106,6 +117,24 @@ func ListPeople(fact string, value map[string]any) PeopleList {
 			}
 		}
 	}
+	if bots, ok := value["bots"]; ok {
+		list, ok := bots.([]any)
+		if !ok {
+			malformed = true
+		}
+		for _, x := range list {
+			id, ok := x.(int64)
+			if !ok || id <= 0 {
+				malformed = true
+				continue
+			}
+			for i := range l.People {
+				if l.People[i].GitHubID == id {
+					l.People[i].Bot = true
+				}
+			}
+		}
+	}
 	if malformed {
 		l.Gaps = append(l.Gaps, PeopleMalformed)
 	}
@@ -131,19 +160,55 @@ func (l *PeopleList) Link(github int64, user ids.UUID) {
 	}
 }
 
+// Exempted records that the user by (zero when not a user) registered the
+// GitHub user id as not a person.
+func (l *PeopleList) Exempted(github int64, by ids.UUID) {
+	for i := range l.People {
+		if l.People[i].GitHubID == github {
+			l.People[i].Exempt = true
+			if !by.IsZero() {
+				l.People[i].ExemptedBy = &by
+			}
+		}
+	}
+}
+
+// Formerly records that user once proved a link to the GitHub user id.
+func (l *PeopleList) Formerly(github int64, user ids.UUID) {
+	for i := range l.People {
+		p := &l.People[i]
+		if p.GitHubID == github && (p.User == nil || *p.User != user) && !slices.Contains(p.Formerly, user) {
+			p.Formerly = append(p.Formerly, user)
+		}
+	}
+}
+
 // Authorship is the list as independence reads it: the users linked to the
-// people it names, only when it is complete and has no gap.
+// people it names, now or ever, only when it is complete and has
+// no gap.
 func (l PeopleList) Authorship() Authorship {
 	if !l.Complete || len(l.Gaps) > 0 {
 		return Authorship{}
 	}
 	var users []ids.UUID
+	var unlinked []int64
 	for _, p := range l.People {
+		if p.User == nil && !p.Bot && !p.Exempt {
+			unlinked = append(unlinked, p.GitHubID)
+		}
 		if p.User != nil && !slices.Contains(users, *p.User) {
 			users = append(users, *p.User)
 		}
+		for _, u := range p.Formerly {
+			if !slices.Contains(users, u) {
+				users = append(users, u)
+			}
+		}
+		if p.ExemptedBy != nil && !slices.Contains(users, *p.ExemptedBy) {
+			users = append(users, *p.ExemptedBy)
+		}
 	}
-	return Authorship{Users: users, Complete: true}
+	return Authorship{Users: users, Complete: true, Unlinked: unlinked}
 }
 
 // Shown is the list as the page shows it: at most n people, with a gap
