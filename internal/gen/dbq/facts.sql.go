@@ -60,30 +60,6 @@ func (q *Queries) GetFact(ctx context.Context, arg GetFactParams) (time.Time, er
 	return observed_at, err
 }
 
-const getFactProvider = `-- name: GetFactProvider :one
-SELECT id, name, service_account_id, state FROM pc.fact_providers
-WHERE org_id = $1 AND id = $2
-`
-
-type GetFactProviderRow struct {
-	ID               ids.UUID
-	Name             string
-	ServiceAccountID ids.UUID
-	State            string
-}
-
-func (q *Queries) GetFactProvider(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (GetFactProviderRow, error) {
-	row := q.db.QueryRow(ctx, getFactProvider, orgID, iD)
-	var i GetFactProviderRow
-	err := row.Scan(
-		&i.ID,
-		&i.Name,
-		&i.ServiceAccountID,
-		&i.State,
-	)
-	return i, err
-}
-
 const getFactProviderByAccount = `-- name: GetFactProviderByAccount :one
 SELECT id, name, service_account_id, state FROM pc.fact_providers
 WHERE org_id = $1 AND service_account_id = $2 AND state = 'ACTIVE'

@@ -76,12 +76,13 @@ tasks:
         cmd: go -C "{{.ITEM}}" test -race -shuffle=on -count=1 ./...
 
   test:integration:
-    desc: Database integration tests (start the throwaway cluster first with `task up PROFILE=test`; PKGS=./x/... narrows them)
+    desc: Database integration tests (start the throwaway cluster and the mock OpenID provider first with `task up PROFILE=test`; PKGS=./x/... narrows them)
     dotenv: ["deploy/compose/.env"]
     cmds:
       - >-
         PC_TEST_REQUIRE_DB=1
         PC_TEST_PG_ADMIN_URL="postgres://postgres:${PC_PG_TEST_PASSWORD}@127.0.0.1:5433/postgres?sslmode=disable"
+        PC_TEST_MOCK_OIDC_URL="${PC_TEST_MOCK_OIDC_URL:-http://127.0.0.1:8181}"
         go test -tags integration -shuffle=on -count=1 {{.PKGS | default "./..."}}
 
   test:linux:

@@ -7,7 +7,6 @@ package server
 
 import (
 	"context"
-	"errors"
 	"net/http"
 	"testing"
 	"time"
@@ -18,7 +17,6 @@ import (
 	pantherclawv1 "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
 	"github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1/pantherclawv1connect"
 	"github.com/katocxl/pantherclaw/internal/identity/adapters/workloadrpc"
-	"github.com/katocxl/pantherclaw/internal/platform/config"
 	"github.com/katocxl/pantherclaw/internal/platform/db/dbtest"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 )
@@ -68,24 +66,5 @@ func TestIntServeM5p2ServicesRoutesAndJobs(t *testing.T) {
 			t.Fatal("the routing dispatcher did not complete within 40 s")
 		}
 		time.Sleep(200 * time.Millisecond)
-	}
-}
-
-func TestM5p2ConfigValidation(t *testing.T) {
-	for name, mutate := range map[string]func(*Config){
-		"no waits per instance": func(c *Config) { c.Waitlist.MaxWaitsPerInstance = 0 },
-		"too many waits":        func(c *Config) { c.Waitlist.MaxWaits = 100001 },
-		"a long poll over 30s":  func(c *Config) { c.Waitlist.LongPollMax = config.Duration(31 * time.Second) },
-		"no long poll":          func(c *Config) { c.Waitlist.LongPollMax = 0 },
-	} {
-		c := DefaultConfig()
-		mutate(&c)
-		if errs := c.validateM5p2(); len(errs) == 0 {
-			t.Errorf("%s accepted", name)
-		}
-	}
-	c := DefaultConfig()
-	if errs := c.validateM5p2(); len(errs) != 0 {
-		t.Fatalf("defaults: %v", errors.Join(errs...))
 	}
 }

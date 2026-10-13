@@ -190,8 +190,8 @@ const shutdownGrace = 20 * time.Second
 // AuthorityConfig configures permit timing, and the terms of the grant
 // `dev seed` issues to its workload: at most grant_max_per_action per refund,
 // in grant_currency. budget_name named the M1.5 development budget; since
-// M4 decisions use grants and it is ignored, but still accepted so existing
-// configurations load. budget_lock_timeout is how long a decision waits for
+// M4 decisions use grants and it is ignored: it may be left out, and is still
+// accepted so existing configurations load. budget_lock_timeout is how long a decision waits for
 // a contended budget or counter row before it answers CANNOT_AUTHORIZE
 // BUDGET_BUSY (ADR-0015).
 type AuthorityConfig struct {
@@ -209,9 +209,6 @@ func (c *Config) validateAuthority() []error {
 		errs = append(errs, fmt.Errorf("authority.grant_max_per_action/currency: %w", err))
 	} else if m.Amount.Sign() <= 0 {
 		errs = append(errs, errors.New("authority.grant_max_per_action must be positive"))
-	}
-	if c.Authority.BudgetName == "" {
-		errs = append(errs, errors.New("authority.budget_name is required"))
 	}
 	if c.Authority.PermitTTL.D() < time.Second || c.Authority.PermitTTL.D() > time.Minute {
 		errs = append(errs, errors.New("authority.permit_ttl must be 1s..1m (HR-009 expects about 5s)"))

@@ -68,6 +68,30 @@ func TestHR123_PackagesSignVerifyRoundTrip(t *testing.T) {
 	}
 }
 
+// TestPackagesSignDefaultsTo180Days: without --expires-days the targets
+// expire after 180 days (G0 M4 decision 1).
+func TestPackagesSignDefaultsTo180Days(t *testing.T) {
+	dir := t.TempDir()
+	if code, _, errs := run(t, "keygen", "--purpose", "packages", "--out-dir", dir); code != 0 {
+		t.Fatal(errs)
+	}
+	targets := filepath.Join(dir, "targets.jws")
+	if code, out, errs := run(t, "packages", "sign", "--key", filepath.Join(dir, "packages-root.key"),
+		"--version", "1", "--out", targets, mockPayments); code != 0 {
+		t.Fatalf("sign exit %d: %s%s", code, out, errs)
+	}
+	rb, _ := os.ReadFile(filepath.Join(dir, "packages-root.pub.json"))
+	r, err := trust.ParseRoots(rb)
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc, _ := os.ReadFile(targets)
+	v, err := trust.Verify(string(doc), r, time.Date(2026, 10, 8, 12, 0, 0, 0, time.UTC))
+	if err != nil || v.Expires != "2027-04-06T12:00:00Z" {
+		t.Fatalf("expires %q, %v; want 180 days after signing", v.Expires, err)
+	}
+}
+
 func TestHR063_PackagesSignRefusals(t *testing.T) {
 	dir := t.TempDir()
 	for _, p := range []string{"licence", "packages"} {
@@ -92,6 +116,7 @@ func TestHR063_PackagesSignRefusals(t *testing.T) {
 		"anchor":          {[]string{"--key", pkgKey, anchor}, "invalid package file"},
 		"listed twice":    {[]string{"--key", pkgKey, mockPayments, mockPayments}, "listed twice"},
 		"expiry too long": {[]string{"--key", pkgKey, "--expires-days", "400", mockPayments}, "between 1 and 365"},
+		"no expiry":       {[]string{"--key", pkgKey, "--expires-days", "0", mockPayments}, "between 1 and 365"},
 	}
 	for name, c := range cases {
 		args := append([]string{"packages", "sign", "--version", "1", "--expires-days", "180", "--out", out}, c.args...)
