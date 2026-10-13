@@ -816,12 +816,18 @@ func input(a *pdomain.ApprovalRequirement, su *pdomain.StepUpRequirement, src ap
 	in := apdomain.Input{Source: src}
 	if a != nil {
 		in.Kind, in.Role, in.Count, in.Independent = apdomain.KindApproval, a.Role, a.Count, a.Independent
+		in.Window = a.Window
 		in.Deadline = time.Duration(a.DeadlineSeconds) * time.Second
 		// HR-207 is per role: a code reviewer and a release approver are
 		// independent whatever the requirement says, so no requirement can
 		// let the pull request's author or a pusher approve it.
 		if in.Role == string(td.RoleCodeReviewer) || in.Role == string(td.RoleReleaseApprover) {
 			in.Independent = true
+		}
+		// A release approval counts only inside an active change window,
+		// whether or not its requirement says `window: true`.
+		if in.Role == string(td.RoleReleaseApprover) {
+			in.Window = true
 		}
 	}
 	if su != nil {
@@ -1097,6 +1103,7 @@ func (p *Pipeline) bind(s *state, h *Hold, effective defs.Values, deadline time.
 			Launcher: s.run.Launcher.String(), Principal: s.run.Principal.String(),
 		},
 		TaskLabel: s.run.TaskRef, Requirements: h.Requirements, Deadline: deadline, Variants: variants, Context: approved,
+		Consequences: s.displayed(),
 	})
 	if err != nil {
 		return err

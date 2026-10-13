@@ -177,6 +177,35 @@ func TestHR206_PolicyMayForbidAnUnknownConsequenceButNeverClearIt(t *testing.T) 
 	expect(t, f.call(f.run, "create_refund", refund("ch_1", "30.00")), adomain.CannotAuthorize, consequences.ReasonUnknown)
 }
 
+// TestF158_TheHeldActionsDisplayShowsItsConsequences (G0 M8): the display an
+// approver reads, and the binding hashes, names each predicted or unknown
+// consequence with its environments, the workflows its facts name and why
+// it is unknown; the decider rules say which approvals count only inside a
+// change window.
+func TestF158_TheHeldActionsDisplayShowsItsConsequences(t *testing.T) {
+	f := newFxWith(t, payoutPackage, "")
+	g := f.newGrant(pipelinetest.PayoutBounds)
+	g.Requirements = []gdomain.Requirement{{
+		Operations: gdomain.Ops{"payments.payout.trigger"}, Reason: "PAYOUT_NEEDS_A_RELEASE",
+		Approval: &pdomain.ApprovalRequirement{Role: "approver", Count: 1, Window: true},
+	}}
+	f.w.Grants.Put(g)
+	f.run = f.newRun(g.ID)
+	f.payouts("ch_1", map[string]any{
+		"state": "scheduled", "environments": []any{"payroll"},
+		"workflows": []any{map[string]any{"path": ".github/workflows/payouts.yml", "environments": []any{"payroll"}}},
+	}, time.Second)
+	ev := f.call(f.run, "create_refund", refund("ch_1", "30.00"))
+	if ev.Decision != adomain.RequireApproval || ev.Hold == nil || len(ev.Hold.Display.Consequences) != 1 {
+		t.Fatalf("held: %s %+v", ev.Decision, ev.Hold)
+	}
+	c := ev.Hold.Display.Consequences[0]
+	if c.State != "PREDICTED" || c.Operation != "payments.payout.trigger" || !slices.Equal(c.Environments, []string{"payroll"}) ||
+		!slices.Equal(c.Workflows, []string{".github/workflows/payouts.yml"}) || len(ev.Hold.Display.Deciders) != 1 || !ev.Hold.Display.Deciders[0].Window {
+		t.Fatalf("display %+v deciders %+v", c, ev.Hold.Display.Deciders)
+	}
+}
+
 // TestHR206_ConsequenceRulesReadTheirFactsAboutTheConsequence: a policy
 // rule scoped to a consequence's operation reads its facts about the
 // consequence's own target, which step 6 reads with the action's facts. A

@@ -34,7 +34,10 @@ const (
 	ReasonConcurrentChange = "CONCURRENT_CHANGE"
 	ReasonDuplicateRequest = "DUPLICATE_REQUEST"
 	ReasonBudgetBusy       = "BUDGET_BUSY"
-	maxAttempts            = 3
+	// ReasonWindowClosed: an approval that counts only inside a change
+	// window is not inside one now (HR-207).
+	ReasonWindowClosed = "CHANGE_WINDOW_CLOSED"
+	maxAttempts        = 3
 )
 
 // DefaultPermitTTL is the permit lifetime (HR-009).
@@ -93,6 +96,10 @@ type Result struct {
 	// Consequences are what the action's consequence rules said (G0 M8,
 	// HR-206); none for a stored decision.
 	Consequences []consequences.Consequence
+	// Would is what an enforce-mode route would have decided about a
+	// monitor-mode action whose consequence is unknown ("HOLD: consequence
+	// unknown"); its receipt says the same. The action is still dispatched.
+	Would string
 }
 
 // DefaultRetryAfter is how long a held agent waits before waiting again or
@@ -190,9 +197,12 @@ func (a *Authority) Authorize(ctx context.Context, gw Gateway, req pipeline.Requ
 			a.log(ctx).InfoContext(ctx, "authz.decision", slog.String("txn_id", res.TransactionID.String()),
 				slog.String("decision", string(res.Decision)), slog.String("reason_code", ev.Decisive().Code))
 			return res, nil
-		case errors.Is(err, ErrParked), errors.Is(err, ErrHoldLimit), errors.Is(err, ErrBusy):
+		case errors.Is(err, ErrParked), errors.Is(err, ErrHoldLimit), errors.Is(err, ErrBusy), errors.As(err, new(*WindowClosedError)):
 			code, detail := pipeline.ReasonReconciliation, "an identical irreversible action is in flight, unknown or recently succeeded"
+			var closed *WindowClosedError
 			switch {
+			case errors.As(err, &closed):
+				code, detail = ReasonWindowClosed, closed.Detail
 			case errors.Is(err, ErrHoldLimit):
 				code, detail = apdomain.ReasonHoldLimitReached, "the grant or the run already has its maximum of pending holds"
 			case errors.Is(err, ErrBusy):
@@ -327,6 +337,7 @@ func (a *Authority) bind(ctx context.Context, gw Gateway, ev *pipeline.Evaluatio
 		Obligations: ev.Obligations, Reasons: reasons(ev.Checklist), Mode: ev.Mode, Wait: waitOf(ev, w.TransactionID),
 		Consequences: ev.Consequences,
 	}
+	res.Would, _, _ = ev.WouldUnknown()
 	if res.Wait != nil && !w.HoldRequest.IsZero() {
 		res.Wait.RequestID = w.HoldRequest
 	}

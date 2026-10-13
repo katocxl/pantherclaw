@@ -4,6 +4,7 @@
 package domain_test
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/katocxl/pantherclaw/internal/approvals/domain"
@@ -13,10 +14,11 @@ import (
 // TestHR207_IndependenceExcludesThePullRequestsPeople: an independent
 // requirement that names a people fact also excludes the users linked to
 // the GitHub users it lists (the pull request's author, committers and
-// pushers); a person who is not linked is not excluded, and when the fact
-// could not list everyone, nobody counts. A requirement that names the fact
-// excludes them whether or not it is independent (founder decision
-// 2026-10-13); one that names no fact is unaffected.
+// pushers); someone else counts only when they hold a GitHub link they
+// proved by signing in to GitHub (P2f), and when the fact could not list
+// everyone, nobody counts. A requirement that names the fact excludes them
+// whether or not it is independent (founder decision 2026-10-13); one that
+// names no fact is unaffected.
 func TestHR207_IndependenceExcludesThePullRequestsPeople(t *testing.T) {
 	r := approver(1, true)
 	r.IndependentOf = "github.pull.people"
@@ -26,7 +28,10 @@ func TestHR207_IndependenceExcludesThePullRequestsPeople(t *testing.T) {
 	ok, code := domain.Check(r, author, c, ids.UUID{})
 	wantCode(t, "a linked author", ok, code, domain.IneligibleAuthor)
 	ok, code = domain.Check(r, other, c, ids.UUID{})
-	wantCode(t, "someone else", ok, code, "")
+	wantCode(t, "someone else without a GitHub link", ok, code, domain.IneligibleNotLinked)
+	other.GitHubVerified = true
+	ok, code = domain.Check(r, other, c, ids.UUID{})
+	wantCode(t, "someone else, linked", ok, code, "")
 
 	c.Authorship = map[string]domain.Authorship{"github.pull.people": {Users: []ids.UUID{author.UserID}}}
 	ok, code = domain.Check(r, other, c, ids.UUID{})
@@ -92,5 +97,80 @@ func TestHR207_OnlyAWellFormedPeopleFactIsComplete(t *testing.T) {
 		if got, ok := domain.GitHubPeople(people); ok || got != nil {
 			t.Errorf("%s: %v %v", name, got, ok)
 		}
+	}
+}
+
+// TestHR207_ThePageAndTheCheckAgreeOnACompletePeopleFact: the approval
+// page's people list (F158) and the pipeline's AUTHORSHIP_UNKNOWN check
+// read a people fact by one rule: a list counts towards independence
+// exactly when GitHubPeople finds the fact complete, with the same ids.
+func TestHR207_ThePageAndTheCheckAgreeOnACompletePeopleFact(t *testing.T) {
+	for name, people := range map[string]map[string]any{
+		"full": {
+			"complete": true, "author": int64(42), "authors": []any{int64(42), int64(7)}, "committers": []any{int64(8)},
+			"pushers": []any{int64(43)},
+		},
+		"no pushers yet":     {"complete": true, "author": int64(42), "pushers": []any{}},
+		"not complete":       {"complete": false, "author": int64(42), "pushers": []any{int64(43)}},
+		"no author":          {"complete": true, "pushers": []any{int64(43)}},
+		"the author as text": {"complete": true, "author": "42", "pushers": []any{int64(43)}},
+		"no pushers":         {"complete": true, "author": int64(42)},
+		"a pusher object":    {"complete": true, "author": int64(42), "pushers": []any{map[string]any{"id": int64(43)}}},
+		"a negative id":      {"complete": true, "author": int64(42), "pushers": []any{int64(-1)}},
+		"authors not a list": {"complete": true, "author": int64(42), "authors": int64(7), "pushers": []any{}},
+	} {
+		want, ok := domain.GitHubPeople(people)
+		l := domain.ListPeople("github.pull.people", people)
+		counts := l.Complete && len(l.Gaps) == 0
+		if counts != ok {
+			t.Errorf("%s: the page counts it %t, the check %t (gaps %v)", name, counts, ok, l.Gaps)
+		}
+		if ok && !slices.Equal(l.GitHubIDs(), want) {
+			t.Errorf("%s: the page lists %v, the check %v", name, l.GitHubIDs(), want)
+		}
+	}
+}
+
+// TestHR207_AnUnlinkedPersonStopsEveryApproval (founder decision
+// 2026-10-13): while a person a people fact lists is linked to nobody in
+// the org, no approval that names the fact counts, whoever gives it
+// (GITHUB_PEOPLE_NOT_LINKED), since the approver could be that person
+// under another account. An account the fact names as a bot, or one an
+// admin exempted, does not stop it, but the admin who exempted it is
+// excluded like the people listed; once everyone else is linked, an
+// approver who is none of them counts. A bots member that is not a list
+// of GitHub user ids leaves the list incomplete.
+func TestHR207_AnUnlinkedPersonStopsEveryApproval(t *testing.T) {
+	l := domain.ListPeople("github.pull.people", map[string]any{
+		"complete": true, "author": int64(42), "authors": []any{int64(43)}, "committers": []any{int64(44)},
+		"pushers": []any{int64(45)}, "bots": []any{int64(45)},
+	})
+	l.Link(42, ids.NewV7())
+	admin := veteran()
+	admin.GitHubVerified = true
+	l.Exempted(44, admin.UserID)
+	a := l.Authorship()
+	if !a.Complete || !slices.Equal(a.Unlinked, []int64{43}) {
+		t.Fatalf("authorship %+v", a)
+	}
+	r := approver(1, false)
+	r.IndependentOf = "github.pull.people"
+	reviewer := veteran()
+	reviewer.GitHubVerified = true
+	c := ctx()
+	c.Authorship = map[string]domain.Authorship{"github.pull.people": a}
+	ok, code := domain.Check(r, reviewer, c, ids.UUID{})
+	wantCode(t, "with a person linked to nobody", ok, code, domain.IneligiblePeopleNotLinked)
+
+	l.Link(43, ids.NewV7())
+	c.Authorship = map[string]domain.Authorship{"github.pull.people": l.Authorship()}
+	ok, code = domain.Check(r, reviewer, c, ids.UUID{})
+	wantCode(t, "with everyone linked, a bot and an exempted account", ok, code, "")
+	ok, code = domain.Check(r, admin, c, ids.UUID{})
+	wantCode(t, "the admin who exempted an account it lists", ok, code, domain.IneligibleAuthor)
+
+	bad := domain.ListPeople("github.pull.people", map[string]any{"complete": true, "author": int64(42), "pushers": []any{}, "bots": "all"})
+	if bad.Complete || !slices.Contains(bad.Gaps, domain.PeopleMalformed) {
+		t.Fatalf("a malformed bots member: %+v", bad)
 	}
 }
