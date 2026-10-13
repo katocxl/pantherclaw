@@ -1502,8 +1502,8 @@ func (x *ReplayDecisionRequest) GetIncludeInputs() bool {
 type ReplayLimitation struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// INPUTS_MISSING, INPUTS_TRUNCATED, INPUTS_UNREADABLE,
-	// FORMAT_UNSUPPORTED, PIPELINE_VERSION_UNSUPPORTED, POLICY_UNCOMPILABLE or
-	// INPUT_UNAVAILABLE.
+	// FORMAT_UNSUPPORTED, PIPELINE_VERSION_UNSUPPORTED, POLICY_UNCOMPILABLE,
+	// INPUT_UNAVAILABLE or RECEIPT_REMOVED (retention removed the receipt body).
 	Code string `protobuf:"bytes,1,opt,name=code,proto3" json:"code,omitempty"`
 	// The pipeline step it concerns; 0 for the whole replay.
 	Step int32 `protobuf:"varint,2,opt,name=step,proto3" json:"step,omitempty"`

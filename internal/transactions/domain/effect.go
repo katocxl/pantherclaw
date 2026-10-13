@@ -110,6 +110,42 @@ const (
 	ReasonFound            = "FOUND"
 )
 
+// Reasons an effect is UNVERIFIABLE (F485, G0 M7 design decision 2).
+const (
+	// ReasonNoVerifier: the definition declares no verifier, or one
+	// without the M7 fields, which cannot be run.
+	ReasonNoVerifier = "NO_VERIFIER"
+	// ReasonVerifierCannotRead: the definition's verifier has no read it
+	// can make for this outcome (no connection to read through, no
+	// reference the target named and no lookup).
+	ReasonVerifierCannotRead = "VERIFIER_CANNOT_READ"
+)
+
+// CoveragePartial is the label the effect receipts of a cooperative
+// channel's transaction carry (HR-024, HR-186): the agent performed the
+// action with its own access, so whatever a verifier later observes, the
+// route itself was only partly mediated (G0 M7 design decision 2).
+const CoveragePartial = "PARTIAL"
+
+// Cooperative reports whether a transaction's channel is a cooperative one
+// (the hook, the SDK), whose agent performs the allowed action itself.
+func Cooperative(channel string) bool { return channel == "hook" || channel == "sdk" }
+
+// UnverifiableReason says why the effect of an accepted or delegated
+// outcome of definition d is UNVERIFIABLE, or "" when it is not: a
+// verification read was scheduled for it, or d only reads, so it has no
+// effect to verify (G0 M7 design decision 2: a definition without a
+// verifier gives UNVERIFIABLE with the reason).
+func UnverifiableReason(d *defs.Definition, scheduled bool) string {
+	switch {
+	case scheduled || d.Access != defs.AccessWrite:
+		return ""
+	case d.Verifier == nil || !d.Verifier.Extended():
+		return ReasonNoVerifier
+	}
+	return ReasonVerifierCannotRead
+}
+
 // Assess applies G0 M7 design decision 2 to one observation of verifier v,
 // made for purpose p of an action dispatched at dispatched whose expected
 // field values are want. Nothing the agent or the write's own answer said

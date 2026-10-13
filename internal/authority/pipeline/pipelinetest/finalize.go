@@ -374,7 +374,7 @@ func (w *World) BeginDispatch(_ context.Context, _ ids.OrgID, gatewayID string, 
 
 // RecordExecution implements finalize.Store.
 func (w *World) RecordExecution(_ context.Context, _ ids.OrgID, gatewayID string, e finalize.Execution,
-	sign func(x finalize.Executed, now time.Time) (finalize.Receipt, error),
+	sign finalize.Signing,
 ) (string, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
@@ -392,7 +392,7 @@ func (w *World) RecordExecution(_ context.Context, _ ids.OrgID, gatewayID string
 		}
 		x.AccessMode = finalize.AccessAgentHeld
 	}
-	r, err := sign(x, w.Cont.Now)
+	r, err := sign.Execution(x, w.Cont.Now)
 	if err != nil {
 		return "", err
 	}
