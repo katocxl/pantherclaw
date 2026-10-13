@@ -7,6 +7,7 @@ import (
 	"encoding/json/jsontext"
 	"encoding/json/v2"
 	"net/http"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -31,10 +32,10 @@ type FaceCall struct {
 	Input     jsontext.Value `json:"input"`
 	ToolUseID string         `json:"tool_use_id"`
 	// Path and Body are the request (credentials aside: see proofs.json).
-	// Class is "mapped" (an MCP tool PantherClaw decides), "builtin" (a
-	// name on the built-in list, sent so PantherClaw records it and answered
-	// observe), or "refused" (a name the SDK cannot route: denied, never
-	// sent).
+	// Class is "mapped" (an MCP tool PantherClaw decides, sent to the
+	// connection named after its server), "builtin" (a name on the built-in
+	// list, sent so PantherClaw records it and answered observe), or
+	// "refused" (a name the SDK cannot route: denied, never sent).
 	Path  string         `json:"path,omitzero"`
 	Body  jsontext.Value `json:"body,omitzero"`
 	Class string         `json:"class"`
@@ -93,10 +94,15 @@ type FaceFile struct {
 	header
 	Gateway string `json:"gateway"`
 	Server  string `json:"server"`
-	// Connection is the http or mcp connection the calls go through, and
-	// Servers the MCP servers the agent is configured with.
-	Connection string   `json:"connection"`
-	Servers    []string `json:"servers"`
+	// Connection is the http or mcp connection that records the built-in
+	// tools' calls, and Servers the MCP servers the agent is configured
+	// with. A connection governs the one MCP server named after it, so an
+	// MCP tool's call goes to /sdk/<server>; a server whose name is no
+	// connection's name (ConnectionName), and a tool whose name two
+	// servers' names fit, are refused.
+	Connection     string   `json:"connection"`
+	Servers        []string `json:"servers"`
+	ConnectionName string   `json:"connection_name"`
 	// Builtins are the tool names the agent SDK has built in (the Claude
 	// Agent SDK's): the only names an SDK sends as built-ins, and the only
 	// calls an observe answer lets run.
@@ -144,13 +150,19 @@ type faceDispatch struct {
 
 const txnID = "01920000-0000-7000-8000-000000000009"
 
-// builtins are the Claude Agent SDK's built-in tools.
+// builtins are the Claude Agent SDK's built-in tools: the one list the
+// SDKs, the integrations and the face (internal/gateway/sdk builtIns)
+// load. Any other name is never observed.
 var builtins = []string{
 	"Agent", "AskUserQuestion", "Bash", "CronCreate", "CronDelete", "CronList", "Edit", "EnterPlanMode", "EnterWorktree",
 	"ExitPlanMode", "ExitWorktree", "Glob", "Grep", "ListMcpResourcesTool", "LSP", "Monitor", "NotebookEdit", "PowerShell", "Read",
 	"ReadMcpResourceTool", "Skill", "Task", "TaskCreate", "TaskGet", "TaskList", "TaskOutput", "TaskStop", "TaskUpdate", "TodoWrite",
 	"ToolSearch", "WaitForMcpServers", "WebFetch", "WebSearch", "Write",
 }
+
+// connectionName is the rule for a connection's name (migration 00041):
+// the only MCP server names an SDK routes.
+const connectionName = `^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`
 
 func buildFace(t *testing.T) any {
 	t.Helper()
@@ -162,31 +174,47 @@ func buildFace(t *testing.T) any {
 			"How an SDK sends an agent's tool call to the gateway's /sdk face, what it concludes from each answer (only "+
 				"allow, and observe for a built-in tool, let the call run), what it sends a target-enforced connection's "+
 				"target, and how it renews its token and waits at the server."),
-		Gateway: gatewayURL, Server: issuer, Connection: "payments", Servers: []string{"payments", "git__hub"}, Builtins: builtins,
+		Gateway: gatewayURL, Server: issuer, Connection: "payments", ConnectionName: connectionName, Builtins: builtins,
 		MaxBody: 64 << 10,
 	}
-	call := func(name, tool, input, id, class, body string) FaceCall {
+	long, longer := strings.Repeat("s", 63), strings.Repeat("s", 64)
+	f.Servers = []string{"payments", "github", "git__hub", "Wiki", "notes", "notes__v2", long, longer}
+	// call is a call of a class; a mapped or builtin one is sent to the
+	// connection conn.
+	call := func(name, tool, input, id, class, conn string) FaceCall {
 		c := FaceCall{Name: name, Tool: tool, Input: jsontext.Value(input), ToolUseID: id, Class: class}
-		if body != "" {
-			c.Path, c.Body = "/sdk/payments", jsontext.Value(body)
+		switch class {
+		case "mapped":
+			c.Path, c.Body = "/sdk/"+conn, jsontext.Value(`{"tool":"`+tool+`","server":"`+conn+`","input":`+input+`,"tool_use_id":"`+id+`"}`)
+		case "builtin":
+			c.Path, c.Body = "/sdk/"+conn, jsontext.Value(`{"tool":"`+tool+`","input":`+input+`,"tool_use_id":"`+id+`"}`)
 		}
 		return c
 	}
 	f.Calls = []FaceCall{
-		call("an MCP tool", "mcp__payments__create_refund", refund, "toolu_01", "mapped",
-			`{"tool":"mcp__payments__create_refund","server":"payments","input":`+refund+`,"tool_use_id":"toolu_01"}`),
-		call("an MCP server whose name has a double underscore", "mcp__git__hub__merge_pull_request", `{"pull_number":"7"}`, "toolu_02", "mapped",
-			`{"tool":"mcp__git__hub__merge_pull_request","server":"git__hub","input":{"pull_number":"7"},"tool_use_id":"toolu_02"}`),
-		call("Bash, observed as a built-in", "Bash", `{"command":"go test ./...","description":"Run the tests"}`, "toolu_03", "builtin",
-			`{"tool":"Bash","input":{"command":"go test ./...","description":"Run the tests"},"tool_use_id":"toolu_03"}`),
-		call("PowerShell, observed as a built-in", "PowerShell", `{"command":"Get-ChildItem"}`, "toolu_04", "builtin",
-			`{"tool":"PowerShell","input":{"command":"Get-ChildItem"},"tool_use_id":"toolu_04"}`),
-		call("a built-in tool", "Read", `{"file_path":"/etc/hosts"}`, "toolu_05", "builtin",
-			`{"tool":"Read","input":{"file_path":"/etc/hosts"},"tool_use_id":"toolu_05"}`),
+		call("an MCP tool", "mcp__payments__create_refund", refund, "toolu_01", "mapped", "payments"),
+		call("an MCP tool of another server goes to the connection named after that server", "mcp__github__merge_pull_request",
+			`{"pull_number":"7"}`, "toolu_02", "mapped", "github"),
+		call("Bash, observed as a built-in", "Bash", `{"command":"go test ./...","description":"Run the tests"}`, "toolu_03", "builtin", "payments"),
+		call("PowerShell, observed as a built-in", "PowerShell", `{"command":"Get-ChildItem"}`, "toolu_04", "builtin", "payments"),
+		call("a built-in tool", "Read", `{"file_path":"/etc/hosts"}`, "toolu_05", "builtin", "payments"),
 		call("an MCP server the agent is not configured with", "mcp__other__run", `{}`, "toolu_06", "refused", ""),
 		call("an MCP name without a tool", "mcp__payments__", `{}`, "toolu_07", "refused", ""),
 		call("a name neither MCP nor built in", "deploy", `{"env":"production"}`, "toolu_08", "refused", ""),
 		call("a built-in name in another case", "bash", `{"command":"ls"}`, "toolu_09", "refused", ""),
+		call("an MCP server whose name has a double underscore, which no connection's name has", "mcp__git__hub__merge_pull_request",
+			`{"pull_number":"7"}`, "toolu_10", "refused", ""),
+		call("an MCP server whose name has capitals, which no connection's name has", "mcp__Wiki__search", `{"q":"refunds"}`, "toolu_11", "refused", ""),
+		call("an MCP server whose name is longer than a connection's", "mcp__"+longer+"__run", `{}`, "toolu_12", "refused", ""),
+		call("an MCP server whose name is as long as a connection's may be", "mcp__"+long+"__run", `{}`, "toolu_13", "mapped", long),
+		call("an MCP tool whose name two configured servers' names fit", "mcp__notes__v2__search", `{"q":"refunds"}`, "toolu_14", "refused", ""),
+		call("an MCP tool whose name only one of two similar servers' names fits", "mcp__notes__search", `{"q":"refunds"}`, "toolu_15", "mapped", "notes"),
+	}
+	name := regexp.MustCompile(connectionName)
+	for _, c := range f.Calls {
+		if server := strings.TrimPrefix(c.Path, "/sdk/"); c.Class != "refused" && !name.MatchString(server) {
+			t.Fatalf("%s: %s is no connection's name", c.Name, server)
+		}
 	}
 	hash, ir := act.HashHex(), b64(act.Canonical)
 	// variant is the action changed after mapping, with its own matching
