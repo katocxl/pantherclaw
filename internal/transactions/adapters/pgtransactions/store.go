@@ -54,12 +54,16 @@ type Store struct {
 var _ app.Store = (*Store)(nil)
 
 // Claim implements app.Store (HR-190): each lease gets its own random
-// secret, of which only the SHA-256 is stored.
+// secret, of which only the SHA-256 is stored. A connection test is leased
+// at most maxTestAttempts times (HR-188).
 func (s *Store) Claim(ctx context.Context, org ids.OrgID, gateway ids.UUID, limit int, leaseFor time.Duration) ([]app.Lease, error) {
 	var out []app.Lease
 	err := s.Pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
 		q := dbq.New(tx)
-		due, err := q.DueVerifications(ctx, org, gateway, int32(min(limit, app.MaxClaim))) //nolint:gosec // G115: at most MaxClaim
+		due, err := q.DueVerifications(ctx, dbq.DueVerificationsParams{
+			OrgID: org, GatewayID: gateway, MaxTestAttempts: maxTestAttempts,
+			MaxTasks: int32(min(limit, app.MaxClaim)), //nolint:gosec // G115: at most MaxClaim
+		})
 		if err != nil {
 			return err
 		}
@@ -240,7 +244,7 @@ func (s *Store) Expire(ctx context.Context, org ids.OrgID, sign app.Sign) (int, 
 			return err
 		}
 		var closed []ids.UUID
-		released, err := q.ReleaseExpiredLeases(ctx, org)
+		released, err := q.ReleaseExpiredLeases(ctx, maxTestAttempts, org)
 		if err != nil {
 			return err
 		}
@@ -258,8 +262,9 @@ func (s *Store) Expire(ctx context.Context, org ids.OrgID, sign app.Sign) (int, 
 				closed = append(closed, *r.TransactionID)
 			}
 		}
-		// A connection test whose read expired could not run.
-		if _, err := q.FailExpiredConnectionTests(ctx, org); err != nil {
+		// A connection test whose read expired, by its deadline or after
+		// its last lease ran out, could not run.
+		if _, err := q.FailExpiredConnectionTests(ctx, maxTestAttempts, org); err != nil {
 			return err
 		}
 		slices.SortFunc(closed, compareUUID)

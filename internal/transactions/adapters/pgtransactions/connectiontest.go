@@ -26,12 +26,13 @@ import (
 // on any other answer, with the status. A target_verifier test (N15)
 // reports its four requests, and passes only when the target's verifier
 // refused the three it must refuse with its own problem documents and let
-// the fresh one through. A read the gateway could not make is tried again,
-// and after maxTestAttempts the test could not run. Nothing here touches a
-// transaction.
+// the fresh one through. A read the gateway could not make, or a lease it
+// let run out, is tried again, and after maxTestAttempts the test could not
+// run. Nothing here touches a transaction.
 
-// maxTestAttempts is how often a test read is tried before the test is
-// FAILED (could not run).
+// maxTestAttempts is how often a test read is tried, and so leased, before
+// the test is FAILED (could not run): a target_verifier test's tokens are
+// minted once per lease, so at most this often (HR-188).
 const maxTestAttempts = 3
 
 // kindVerifierTest is the connection test kind whose report carries its

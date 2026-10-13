@@ -293,3 +293,61 @@ func TestHR188_ATestTokenDoesNotOutliveItsLease(t *testing.T) {
 		}
 	}
 }
+
+// runOut makes a lease's time run out, still LEASED until it is released.
+func (e tokenEnv) runOut(t *testing.T, task ids.UUID) {
+	t.Helper()
+	e.dbt.AdminExec(t, `UPDATE pc.verifications SET leased_at = now() - interval '20 seconds', lease_expires_at = now() - interval '1 second'
+		WHERE id = $1 AND state = 'LEASED'`, task)
+}
+
+// TestHR188_ATestIsLeasedAndTokenedAtMostThreeTimes: a gateway that gets a
+// test's tokens and never reports gets a new lease, and new tokens, after
+// its lease runs out, but only three times: after the third lease runs
+// out, the test could not run, and nothing leases it again, even when its
+// task is put back.
+func TestHR188_ATestIsLeasedAndTokenedAtMostThreeTimes(t *testing.T) {
+	e := newTokenEnv(t)
+	ctx := context.Background()
+	r, l := e.lease(t)
+	for attempt := 1; ; attempt++ {
+		if l.Attempt != attempt {
+			t.Fatalf("lease %d is attempt %d", attempt, l.Attempt)
+		}
+		if _, err := e.s.MintTestTokens(ctx, e.org, e.gateway, l.Task, l.Secret); err != nil {
+			t.Fatalf("attempt %d: %v", attempt, err)
+		}
+		e.runOut(t, l.Task)
+		if _, err := e.s.Expire(ctx, e.org); err != nil {
+			t.Fatal(err)
+		}
+		leases, err := e.s.Claim(ctx, e.org, e.gateway, 16)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if attempt == 3 {
+			if len(leases) != 0 {
+				t.Fatalf("%d fourth leases", len(leases))
+			}
+			break
+		}
+		if len(leases) != 1 {
+			t.Fatalf("after attempt %d: leases %+v", attempt, leases)
+		}
+		l = leases[0]
+	}
+	if n := e.int64(t, "SELECT count(*) FROM pc.ledger_entries WHERE kind = 'audit.connection.test_tokens_minted'"); n != 3 {
+		t.Fatalf("%d mints, want 3", n)
+	}
+	if st, _, checks, _ := e.testRow(t, r.ID); st != "FAILED" || len(checks) != 1 || checks[0].Passed ||
+		checks[0].Detail != "No gateway reported the test read in 3 attempts." {
+		t.Fatalf("test %s %+v", st, checks)
+	}
+	if n := e.int64(t, "SELECT count(*) FROM pc.verifications WHERE id = $1 AND state = 'EXPIRED' AND attempts = 3", l.Task); n != 1 {
+		t.Fatal("the task did not end EXPIRED after three attempts")
+	}
+	e.dbt.AdminExec(t, "UPDATE pc.verifications SET state = 'PENDING', finished_at = NULL, next_at = now() WHERE id = $1", l.Task)
+	if leases, err := e.s.Claim(ctx, e.org, e.gateway, 16); err != nil || len(leases) != 0 {
+		t.Fatalf("a task leased three times leased again: %d leases, %v", len(leases), err)
+	}
+}
