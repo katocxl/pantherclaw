@@ -235,7 +235,12 @@ type FactProvider struct {
 	// State.
 	State ProviderState `protobuf:"varint,4,opt,name=state,proto3,enum=pantherclaw.v1.ProviderState" json:"state,omitempty"`
 	// The facts it may write.
-	Facts         []*FactDeclaration `protobuf:"bytes,5,rep,name=facts,proto3" json:"facts,omitempty"`
+	Facts []*FactDeclaration `protobuf:"bytes,5,rep,name=facts,proto3" json:"facts,omitempty"`
+	// For a gateway provider (G0 M8), the gateway that reads the connection's
+	// system of record, and that connection; service_account_id is then empty.
+	GatewayId string `protobuf:"bytes,6,opt,name=gateway_id,json=gatewayId,proto3" json:"gateway_id,omitempty"`
+	// The connection.
+	ConnectionId  string `protobuf:"bytes,7,opt,name=connection_id,json=connectionId,proto3" json:"connection_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -305,15 +310,35 @@ func (x *FactProvider) GetFacts() []*FactDeclaration {
 	return nil
 }
 
+func (x *FactProvider) GetGatewayId() string {
+	if x != nil {
+		return x.GatewayId
+	}
+	return ""
+}
+
+func (x *FactProvider) GetConnectionId() string {
+	if x != nil {
+		return x.ConnectionId
+	}
+	return ""
+}
+
 // RegisterProviderRequest registers a provider.
 type RegisterProviderRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Name.
 	Name string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	// The service account the provider authenticates as.
+	// The service account the provider authenticates as; or, for a gateway
+	// provider, empty.
 	ServiceAccountId string `protobuf:"bytes,2,opt,name=service_account_id,json=serviceAccountId,proto3" json:"service_account_id,omitempty"`
 	// The facts it may write.
-	Facts         []*FactDeclaration `protobuf:"bytes,3,rep,name=facts,proto3" json:"facts,omitempty"`
+	Facts []*FactDeclaration `protobuf:"bytes,3,rep,name=facts,proto3" json:"facts,omitempty"`
+	// For a gateway provider (G0 M8 decision 5): the gateway that reads the
+	// connection's system of record and reports its facts, and the connection.
+	GatewayId string `protobuf:"bytes,4,opt,name=gateway_id,json=gatewayId,proto3" json:"gateway_id,omitempty"`
+	// The connection.
+	ConnectionId  string `protobuf:"bytes,5,opt,name=connection_id,json=connectionId,proto3" json:"connection_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -367,6 +392,20 @@ func (x *RegisterProviderRequest) GetFacts() []*FactDeclaration {
 		return x.Facts
 	}
 	return nil
+}
+
+func (x *RegisterProviderRequest) GetGatewayId() string {
+	if x != nil {
+		return x.GatewayId
+	}
+	return ""
+}
+
+func (x *RegisterProviderRequest) GetConnectionId() string {
+	if x != nil {
+		return x.ConnectionId
+	}
+	return ""
 }
 
 // RegisterProviderResponse returns the provider.
@@ -1059,18 +1098,26 @@ const file_pantherclaw_v1_facts_proto_rawDesc = "" +
 	"\x04type\x18\x02 \x01(\x0e2\x18.pantherclaw.v1.FactTypeB\n" +
 	"\xbaH\a\x82\x01\x04\x10\x01 \x00R\x04type\x12Q\n" +
 	"\fsubject_type\x18\x03 \x01(\tB.\xbaH+r)\x18\x80\x012$^[a-z][a-z0-9_]*(\\.[a-z0-9_]+){0,7}$R\vsubjectType\x12E\n" +
-	"\amax_lag\x18\x04 \x01(\v2\x19.google.protobuf.DurationB\x11\xbaH\x0e\xc8\x01\x01\xaa\x01\b\"\x04\b\x80\xa3\x05*\x00R\x06maxLag\"\xcc\x01\n" +
+	"\amax_lag\x18\x04 \x01(\v2\x19.google.protobuf.DurationB\x11\xbaH\x0e\xc8\x01\x01\xaa\x01\b\"\x04\b\x80\xa3\x05*\x00R\x06maxLag\"\x90\x02\n" +
 	"\fFactProvider\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12,\n" +
 	"\x12service_account_id\x18\x03 \x01(\tR\x10serviceAccountId\x123\n" +
 	"\x05state\x18\x04 \x01(\x0e2\x1d.pantherclaw.v1.ProviderStateR\x05state\x125\n" +
-	"\x05facts\x18\x05 \x03(\v2\x1f.pantherclaw.v1.FactDeclarationR\x05facts\"\xcb\x01\n" +
+	"\x05facts\x18\x05 \x03(\v2\x1f.pantherclaw.v1.FactDeclarationR\x05facts\x12\x1d\n" +
+	"\n" +
+	"gateway_id\x18\x06 \x01(\tR\tgatewayId\x12#\n" +
+	"\rconnection_id\x18\a \x01(\tR\fconnectionId\"\xaa\x04\n" +
 	"\x17RegisterProviderRequest\x125\n" +
-	"\x04name\x18\x01 \x01(\tB!\xbaH\x1er\x1c\x18@2\x18^[a-z][a-z0-9_.-]{0,63}$R\x04name\x126\n" +
-	"\x12service_account_id\x18\x02 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x10serviceAccountId\x12A\n" +
+	"\x04name\x18\x01 \x01(\tB!\xbaH\x1er\x1c\x18@2\x18^[a-z][a-z0-9_.-]{0,63}$R\x04name\x129\n" +
+	"\x12service_account_id\x18\x02 \x01(\tB\v\xbaH\b\xd8\x01\x01r\x03\xb0\x01\x01R\x10serviceAccountId\x12A\n" +
 	"\x05facts\x18\x03 \x03(\v2\x1f.pantherclaw.v1.FactDeclarationB\n" +
-	"\xbaH\a\x92\x01\x04\b\x01\x10@R\x05facts\"T\n" +
+	"\xbaH\a\x92\x01\x04\b\x01\x10@R\x05facts\x12*\n" +
+	"\n" +
+	"gateway_id\x18\x04 \x01(\tB\v\xbaH\b\xd8\x01\x01r\x03\xb0\x01\x01R\tgatewayId\x120\n" +
+	"\rconnection_id\x18\x05 \x01(\tB\v\xbaH\b\xd8\x01\x01r\x03\xb0\x01\x01R\fconnectionId:\xfb\x01\xbaH\xf7\x01\x1a\xf4\x01\n" +
+	"\n" +
+	"one_source\x12Ta provider is bound to a service account, or to a gateway and one of its connections\x1a\x8f\x01(this.service_account_id != '') != (this.gateway_id != '' && this.connection_id != '') && (this.gateway_id == '') == (this.connection_id == '')\"T\n" +
 	"\x18RegisterProviderResponse\x128\n" +
 	"\bprovider\x18\x01 \x01(\v2\x1c.pantherclaw.v1.FactProviderR\bprovider\"2\n" +
 	"\x16DisableProviderRequest\x12\x18\n" +

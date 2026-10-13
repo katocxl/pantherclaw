@@ -33,3 +33,18 @@ LIMIT 50;
 UPDATE pc.credentials SET state = 'REVOKED', revoked_by = sqlc.arg(revoked_by), revoked_at = now()
 WHERE org_id = sqlc.arg(org_id) AND connection_id = sqlc.arg(connection_id) AND version = sqlc.arg(version)
   AND state <> 'REVOKED';
+
+-- UpsertConnectionGitHub records the GitHub App installation a sealed
+-- github_app credential is for (connection_github; G0 M8, ADR-0021). What
+-- was read from an installation is kept only while it stays the same one.
+-- name: UpsertConnectionGitHub :exec
+INSERT INTO pc.connection_github AS g (org_id, connection_id, app_client_id, installation_id, account_login, updated_by)
+VALUES (sqlc.arg(org_id), sqlc.arg(connection_id), sqlc.arg(app_client_id), sqlc.arg(installation_id), sqlc.arg(account_login),
+        sqlc.arg(updated_by))
+ON CONFLICT (org_id, connection_id) DO UPDATE SET
+    app_client_id = EXCLUDED.app_client_id, installation_id = EXCLUDED.installation_id, account_login = EXCLUDED.account_login,
+    account_id = CASE WHEN g.installation_id = EXCLUDED.installation_id THEN g.account_id END,
+    permissions = CASE WHEN g.installation_id = EXCLUDED.installation_id THEN g.permissions ELSE '{}'::jsonb END,
+    repository_selection = CASE WHEN g.installation_id = EXCLUDED.installation_id THEN g.repository_selection END,
+    read_at = CASE WHEN g.installation_id = EXCLUDED.installation_id THEN g.read_at END,
+    updated_by = EXCLUDED.updated_by, updated_at = now();

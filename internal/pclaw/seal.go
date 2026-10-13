@@ -118,6 +118,13 @@ func seal(ctx context.Context, a *app, args []string) error {
 	if err != nil {
 		return err
 	}
+	if *app == "" && bytes.Contains(secret, []byte("PRIVATE KEY-----")) {
+		// A static credential goes to the target in a header: a private key
+		// must never be one.
+		clear(secret)
+		return errors.New("the file holds a private key, which is never sent to a target; " +
+			"seal a GitHub App's key with --github-app, --installation and --account; nothing was sealed")
+	}
 	kind := domain.KindStatic
 	if *app != "" {
 		if secret, err = gitHubApp(k, *app, *installation, *account, secret); err != nil {
@@ -134,10 +141,16 @@ func seal(ctx context.Context, a *app, args []string) error {
 	if err != nil {
 		return err
 	}
-	res, err := c.connections.PutCredential(ctx, &pb.PutCredentialRequest{
+	req := &pb.PutCredentialRequest{
 		ConnectionId: k.GetConnectionId(), Version: k.GetVersion(), BrokerKeyId: k.GetBrokerKeyId(), Sealed: sealed,
 		AllowedHosts: k.GetAllowedHosts(), Header: k.GetHeader(), Scheme: k.GetScheme(), Kind: kind,
-	})
+	}
+	if kind == domain.KindGitHubApp {
+		// The installation is configuration, recorded beside the sealed key
+		// so that another account's repository is refused (ADR-0021).
+		req.Github = &pb.GitHubInstallation{AppClientId: *app, InstallationId: *installation, AccountLogin: *account}
+	}
+	res, err := c.connections.PutCredential(ctx, req)
 	if err != nil {
 		return err
 	}
