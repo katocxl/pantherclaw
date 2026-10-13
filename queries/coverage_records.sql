@@ -380,3 +380,20 @@ JOIN pc.package_pins p ON p.org_id = c.org_id AND p.package_id = tp.id
 WHERE c.org_id = sqlc.arg(org_id) AND c.state <> 'RETIRED'
 ORDER BY c.id
 LIMIT 1000;
+
+-- A scope's snapshot that was current at a decision (the latest computed
+-- before until), and the next one: pclaw verify tells from them a claim
+-- that names another snapshot (T-089).
+-- name: CoverageSnapshotBefore :one
+SELECT ledger_entry_id FROM pc.coverage_snapshots
+WHERE org_id = sqlc.arg(org_id) AND agent_id = sqlc.arg(agent_id) AND connection_id = sqlc.arg(connection_id)
+  AND operation = sqlc.arg(operation) AND computed_at < sqlc.arg(until)
+ORDER BY computed_at DESC, id DESC
+LIMIT 1;
+
+-- name: CoverageSnapshotFrom :one
+SELECT ledger_entry_id FROM pc.coverage_snapshots
+WHERE org_id = sqlc.arg(org_id) AND agent_id = sqlc.arg(agent_id) AND connection_id = sqlc.arg(connection_id)
+  AND operation = sqlc.arg(operation) AND computed_at >= sqlc.arg(until)
+ORDER BY computed_at, id
+LIMIT 1;
