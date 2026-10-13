@@ -187,8 +187,10 @@ func TestHR209_OnlyTheLeaseHoldingGatewaySubmitsFindingsAndTheyGrantNothing(t *t
 	inv := aapp.NewInventory(e.pool, edition(billing.Team))
 	key := func(b byte) [32]byte { return [32]byte{b} }
 	findings := []aapp.ScanFinding{
-		{Kind: "github_workflow", Key: key(1), Attributes: map[string]string{"repository": "acme/payments", "path": ".github/workflows/deploy.yml", "environments": "production",
-			"connection": conn.String()}}, // the scan's own connection, which the server checks
+		{Kind: "github_workflow", Key: key(1), Attributes: map[string]string{
+			"repository": "acme/payments", "path": ".github/workflows/deploy.yml", "environments": "production",
+			"connection": conn.String(),
+		}}, // the scan's own connection, which the server checks
 		{Kind: "github_mcp_config", Key: key(2), Attributes: map[string]string{"repository": "acme/payments", "name": "github", "command": "npx"}},
 	}
 	if _, err := inv.SubmitGitHubScan(context.Background(), e.org, gateway, scan.ID, nil, findings); !errors.Is(err, aapp.ErrNoScanLease) {

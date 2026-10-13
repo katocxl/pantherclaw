@@ -172,8 +172,10 @@ func (s *Server) AddInstallationToken(value string, installation int64, permissi
 			repos = append(repos, in.Account+"/"+r)
 		}
 	}
-	s.tokens[value] = &Token{value: value, Installation: installation, Repos: lower(repos), Permissions: maps.Clone(permissions),
-		Expires: s.now().Add(time.Hour)}
+	s.tokens[value] = &Token{
+		value: value, Installation: installation, Repos: lower(repos), Permissions: maps.Clone(permissions),
+		Expires: s.now().Add(time.Hour),
+	}
 }
 
 // Requests returns every request answered so far, in order.

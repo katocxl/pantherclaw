@@ -27,8 +27,10 @@ func TestHR160_AQuarantinedOrRetiredPinNamesNoFacts(t *testing.T) {
 	cfgPath := testConfig(t, d, RoleAPI, gatewayAt("127.0.0.1:8443"))
 	dir := t.TempDir()
 	var out, errb bytes.Buffer
-	if code := Run(context.Background(), []string{"dev", "seed", "--config", cfgPath, "--gateway-out", filepath.Join(dir, "gw.json"),
-		"--github-url", "http://127.0.0.1:9"}, &out, &errb, noEnv); code != 0 {
+	if code := Run(context.Background(), []string{
+		"dev", "seed", "--config", cfgPath, "--gateway-out", filepath.Join(dir, "gw.json"),
+		"--github-url", "http://127.0.0.1:9",
+	}, &out, &errb, noEnv); code != 0 {
 		t.Fatalf("dev seed = %d %s", code, errb.String())
 	}
 	m := seededOrg.FindStringSubmatch(out.String())
