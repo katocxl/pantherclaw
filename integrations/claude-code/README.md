@@ -37,7 +37,7 @@ The plugin adds a `PreToolUse` hook for every command a tool runs in a shell: **
 
 ```bash
 pclaw login --server https://pantherclaw.example.com --org <org>
-pclaw init --gateway https://gateway.example.com --connection shell --key-file ~/.pantherclaw/workload.json --agent <agent id> --dry-run
+pclaw init --gateway https://gateway.example.com --connection shell --key-file ~/.pantherclaw/workload.json --agent <agent id> --mcp github=github --dry-run
 ```
 
 `pclaw init`:
@@ -52,6 +52,16 @@ It only adds (HR-208):
 - no secret is written, only the gateway URL, the connection, the key file's path and the run.
 
 It fails without changing anything when settings would keep the hook from running: managed settings with `allowManagedHooksOnly` and without the hook, or with `disableAllHooks`; or `disableAllHooks` in the file it would change, or in any other settings file whose value Claude Code applies (it takes the setting from managed, then local, project and user settings); or when a settings file of any scope cannot be parsed, since Claude Code may still apply it (given a name twice, it takes the last). Running it again changes nothing.
+
+**Governing an MCP server.** `--mcp NAME=CONNECTION` (repeatable) governs Claude Code's MCP server `NAME` through the gateway connection `CONNECTION`. `NAME` must be exactly the name of a server configured for Claude Code in `~/.claude.json` or the project's `.mcp.json`, or `init` fails without changing anything:
+- the original entry stays exactly as it is;
+- a new entry, `pantherclaw-NAME`, runs `pclaw mcp proxy` to the connection, so its calls are decided like any other. It goes in `~/.claude.json` under the project for `--scope local`, `.mcp.json` for `project`, and `~/.claude.json`'s top level for `user`;
+- the deny rule `mcp__NAME__*` goes in the scope's settings, so the original cannot be used. A deny rule only strengthens.
+- for an original in the project's `.mcp.json`, its name is also added to `disabledMcpjsonServers` in the scope's settings, after the entries already there, so Claude Code does not start it with its credentials. `init` says what it leaves running, for you to remove: an original configured elsewhere (`~/.claude.json`) still starts; servers from plugins (`mcp__plugin_…`) and managed settings are not governed; and Claude Code's `ListMcpResourcesTool` and `ReadMcpResourceTool` can read the resources of any server that runs.
+
+Credentials in an MCP server's configuration (a token in its `env`, for example) are reported by name as routes around PantherClaw and never copied: give them to the gateway's connection instead. `init` fails without changing anything when `deniedMcpServers` or an `allowedMcpServers` list that applies would keep the governed server from running, or when managed settings set `allowManagedPermissionRulesOnly` without denying the original themselves.
+
+**Agent SDK projects.** For a project that depends on `@anthropic-ai/claude-agent-sdk` or `claude-agent-sdk`, `init` prints the integration snippet for its code and never writes code.
 
 With the plugin loaded and PantherClaw unreachable or not configured, **every** Bash, PowerShell and Monitor command is blocked. That is the point. So dogfooding on the PantherClaw repository stays opt-in per developer, and parallel sessions without a local stack keep working (decision 4).
 
