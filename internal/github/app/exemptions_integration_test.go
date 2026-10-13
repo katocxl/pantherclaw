@@ -18,8 +18,9 @@ import (
 // decision 2026-10-13): a person holding github.identity.manage registers
 // a bot or a machine user as not a person, with a reason, and removes it
 // again; each change is audited and notified. Nobody else may, a service
-// account may not, an account is exempted once, and a bad id, login or
-// reason is refused. Anyone who reads users lists the exemptions.
+// account may not, an account is exempted once, a bad id, login or reason
+// is refused, and so is an account someone linked as their own, now or
+// before: it is a person. Anyone who reads users lists the exemptions.
 func TestHR207_AnIdentityManagerExemptsAccountsThatAreNotPeople(t *testing.T) {
 	e := newEnv(t)
 	n := &notices{}
@@ -49,6 +50,10 @@ func TestHR207_AnIdentityManagerExemptsAccountsThatAreNotPeople(t *testing.T) {
 		if _, err := e.svc.Exempt(asAdmin, c.id, c.login, c.reason); !errors.Is(err, c.want) {
 			t.Errorf("%s: %v", name, err)
 		}
+	}
+	e.exec(t, "INSERT INTO pc.github_identity_history (org_id, github_user_id, user_id) VALUES ($1, 4200, $2)", e.org, dev)
+	if _, err := e.svc.Exempt(asAdmin, 4200, "dev-alt", "a machine user"); !errors.Is(err, app.ErrExemptPerson) {
+		t.Errorf("an account a person once linked: %v", err)
 	}
 	if _, err := e.svc.Exempt(asDev, 4102, "x", "r"); err == nil {
 		t.Error("a developer exempted an account")

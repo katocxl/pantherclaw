@@ -39,13 +39,19 @@ var (
 	ErrExemptionBad = pcerr.New(pcerr.InvalidArgument, "GITHUB_EXEMPTION_INVALID",
 		"an exemption needs the account's GitHub user id, its login and a reason of 1..256 characters")
 	ErrTooManyExemptions = pcerr.New(pcerr.ResourceExhausted, "GITHUB_EXEMPTIONS_FULL", "the org has 500 exemptions; remove one first")
+	// ErrExemptPerson: someone proved the account as their own, so it is a
+	// person; exempting it would let them review their own change.
+	ErrExemptPerson = pcerr.New(pcerr.FailedPrecondition, "GITHUB_ACCOUNT_IS_A_PERSON",
+		"someone linked that GitHub account as their own, now or before, so it is a person and cannot be exempted")
 )
 
 // exemptLoginRe is a GitHub login, or a GitHub App's bot login (name[bot]).
 var exemptLoginRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9-]{0,38}(\[bot\])?$`)
 
 // Exempt registers a GitHub account as not a person (github.identity.manage,
-// a person only).
+// a person only). An account someone ever linked is a person and is refused.
+// Whoever exempts an account cannot then approve pull requests that list
+// it (the approvals side excludes them).
 func (s *Service) Exempt(ctx context.Context, githubID int64, login, reason string) (Exemption, error) {
 	c, err := person(ctx, td.PermGitHubIdentityManage)
 	if err != nil {
@@ -59,6 +65,11 @@ func (s *Service) Exempt(ctx context.Context, githubID int64, login, reason stri
 	var out Exemption
 	err = s.Pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
 		q := dbq.New(tx)
+		if linked, err := q.GitHubUserEverLinked(ctx, c.Org, githubID); err != nil {
+			return err
+		} else if linked.Bool {
+			return ErrExemptPerson
+		}
 		all, err := q.ListGitHubExemptions(ctx, c.Org, MaxExemptions)
 		if err != nil {
 			return err

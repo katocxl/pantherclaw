@@ -11,6 +11,7 @@ package dbq
 import (
 	"context"
 
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 )
 
@@ -92,6 +93,20 @@ func (q *Queries) GitHubIdentityByGitHubUser(ctx context.Context, orgID ids.OrgI
 		&i.VerifiedAt,
 	)
 	return i, err
+}
+
+const gitHubUserEverLinked = `-- name: GitHubUserEverLinked :one
+SELECT EXISTS (SELECT 1 FROM pc.github_identity_history h WHERE h.org_id = $1 AND h.github_user_id = $2)
+    OR EXISTS (SELECT 1 FROM pc.github_identities i WHERE i.org_id = $1 AND i.github_user_id = $2)
+`
+
+// Whether someone ever proved the GitHub account as their own, or holds a
+// link to it now: then it is a person and is never exempted.
+func (q *Queries) GitHubUserEverLinked(ctx context.Context, orgID ids.OrgID, githubUserID int64) (pgtype.Bool, error) {
+	row := q.db.QueryRow(ctx, gitHubUserEverLinked, orgID, githubUserID)
+	var column_1 pgtype.Bool
+	err := row.Scan(&column_1)
+	return column_1, err
 }
 
 const insertGitHubExemption = `-- name: InsertGitHubExemption :one

@@ -136,7 +136,8 @@ func TestHR207_ThePageAndTheCheckAgreeOnACompletePeopleFact(t *testing.T) {
 // the org, no approval that names the fact counts, whoever gives it
 // (GITHUB_PEOPLE_NOT_LINKED), since the approver could be that person
 // under another account. An account the fact names as a bot, or one an
-// admin exempted, does not stop it; once everyone else is linked, an
+// admin exempted, does not stop it, but the admin who exempted it is
+// excluded like the people listed; once everyone else is linked, an
 // approver who is none of them counts. A bots member that is not a list
 // of GitHub user ids leaves the list incomplete.
 func TestHR207_AnUnlinkedPersonStopsEveryApproval(t *testing.T) {
@@ -145,7 +146,9 @@ func TestHR207_AnUnlinkedPersonStopsEveryApproval(t *testing.T) {
 		"pushers": []any{int64(45)}, "bots": []any{int64(45)},
 	})
 	l.Link(42, ids.NewV7())
-	l.Exempted(44)
+	admin := veteran()
+	admin.GitHubVerified = true
+	l.Exempted(44, admin.UserID)
 	a := l.Authorship()
 	if !a.Complete || !slices.Equal(a.Unlinked, []int64{43}) {
 		t.Fatalf("authorship %+v", a)
@@ -163,6 +166,8 @@ func TestHR207_AnUnlinkedPersonStopsEveryApproval(t *testing.T) {
 	c.Authorship = map[string]domain.Authorship{"github.pull.people": l.Authorship()}
 	ok, code = domain.Check(r, reviewer, c, ids.UUID{})
 	wantCode(t, "with everyone linked, a bot and an exempted account", ok, code, "")
+	ok, code = domain.Check(r, admin, c, ids.UUID{})
+	wantCode(t, "the admin who exempted an account it lists", ok, code, domain.IneligibleAuthor)
 
 	bad := domain.ListPeople("github.pull.people", map[string]any{"complete": true, "author": int64(42), "pushers": []any{}, "bots": "all"})
 	if bad.Complete || !slices.Contains(bad.Gaps, domain.PeopleMalformed) {

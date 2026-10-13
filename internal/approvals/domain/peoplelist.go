@@ -45,8 +45,10 @@ type Listed struct {
 	// Bot: the fact names the account as not a person (a GitHub App's bot).
 	// Exempt: an admin registered it as not a person (a bot or a machine
 	// user). Either way, being linked to nobody does not stop approvals
-	// (founder decision 2026-10-13).
+	// (founder decision 2026-10-13). ExemptedBy is the admin, who is
+	// excluded like the people the fact lists.
 	Bot, Exempt bool
+	ExemptedBy  *ids.UUID
 	// Formerly are the other users who ever proved a link to the GitHub user
 	// id (github_identity_history): they stay excluded too, so unlinking or
 	// moving the link to someone else lets nobody approve their own change.
@@ -158,12 +160,15 @@ func (l *PeopleList) Link(github int64, user ids.UUID) {
 	}
 }
 
-// Exempted records that an admin registered the GitHub user id as not a
-// person.
-func (l *PeopleList) Exempted(github int64) {
+// Exempted records that the user by (zero when not a user) registered the
+// GitHub user id as not a person.
+func (l *PeopleList) Exempted(github int64, by ids.UUID) {
 	for i := range l.People {
 		if l.People[i].GitHubID == github {
 			l.People[i].Exempt = true
+			if !by.IsZero() {
+				l.People[i].ExemptedBy = &by
+			}
 		}
 	}
 }
@@ -198,6 +203,9 @@ func (l PeopleList) Authorship() Authorship {
 			if !slices.Contains(users, u) {
 				users = append(users, u)
 			}
+		}
+		if p.ExemptedBy != nil && !slices.Contains(users, *p.ExemptedBy) {
+			users = append(users, *p.ExemptedBy)
 		}
 	}
 	return Authorship{Users: users, Complete: true, Unlinked: unlinked}

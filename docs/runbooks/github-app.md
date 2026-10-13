@@ -105,7 +105,7 @@ The server asks GitHub, as the sign-in App, which account the token belongs to. 
   pclaw github exemption remove 41898282
   ```
 
-  Find an account's user id at `https://api.github.com/users/LOGIN`. Every exemption change is audited and sent to the security channels; exempting a person's account would let them review their own change, so check before you exempt. Exempt the PantherClaw App's own bot, which pushes the agents' commits.
+  Find an account's user id at `https://api.github.com/users/LOGIN`. Every exemption change is audited and sent to the security channels. An account someone has ever linked as their own is a person and cannot be exempted, and you cannot review pull requests that list an account you exempted. Exempt the PantherClaw App's own bot, which pushes the agents' commits.
 - **Links at the request count too.** The people linked to a pull request's author, committers and pushers when the merge was held stay excluded from that request, even if they unlink before it is decided.
 - **Unlinking someone else:** a person holding `github.identity.manage` (Org Admin) can remove another person's link with `pclaw github identity unlink <link id>`, never their own.
 - Every link and unlink is audited and sends `security.github_identity_linked` or `security.github_identity_unlinked` to the security channels. A refused attempt to link someone else's account is audited as `github.identity_link_refused`. Unlinking does not undo exclusion: whoever once proved a link to a GitHub account stays excluded from reviewing pull requests that account worked on. A service account cannot link or unlink, even when it holds the role.

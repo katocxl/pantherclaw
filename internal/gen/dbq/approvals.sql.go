@@ -630,24 +630,29 @@ func (q *Queries) EvidenceArrived(ctx context.Context, orgID ids.OrgID, iD ids.U
 }
 
 const exemptGitHubUsers = `-- name: ExemptGitHubUsers :many
-SELECT github_user_id FROM pc.github_exemptions
+SELECT github_user_id, created_by FROM pc.github_exemptions
 WHERE org_id = $1 AND github_user_id = ANY($2::bigint[])
 `
 
-// Which of GitHub user ids an admin registered as not a person.
-func (q *Queries) ExemptGitHubUsers(ctx context.Context, orgID ids.OrgID, githubIds []int64) ([]int64, error) {
+type ExemptGitHubUsersRow struct {
+	GithubUserID int64
+	CreatedBy    string
+}
+
+// Which of GitHub user ids an admin registered as not a person, and who.
+func (q *Queries) ExemptGitHubUsers(ctx context.Context, orgID ids.OrgID, githubIds []int64) ([]ExemptGitHubUsersRow, error) {
 	rows, err := q.db.Query(ctx, exemptGitHubUsers, orgID, githubIds)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []int64{}
+	items := []ExemptGitHubUsersRow{}
 	for rows.Next() {
-		var github_user_id int64
-		if err := rows.Scan(&github_user_id); err != nil {
+		var i ExemptGitHubUsersRow
+		if err := rows.Scan(&i.GithubUserID, &i.CreatedBy); err != nil {
 			return nil, err
 		}
-		items = append(items, github_user_id)
+		items = append(items, i)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
