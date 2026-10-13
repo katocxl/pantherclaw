@@ -132,6 +132,80 @@ func TestHR206_ARuleThatCannotBeEvaluatedIsCannotAuthorize(t *testing.T) {
 	expect(t, f.call(f.run, "create_refund", refund("ch_1", "30.00")), adomain.CannotAuthorize, consequences.ReasonEvaluation)
 }
 
+// TestHR206_PolicyMayForbidAnUnknownConsequenceButNeverClearIt: policy
+// sees the consequence it decides (§43.3): a FORBID on consequence.unknown
+// denies a refund whose payout cannot be ruled out, while a predicted
+// payout gets the rule written for it. Nothing a requirement's condition
+// says clears an unknown payout: it holds as "Consequence unknown" with
+// every requirement a predicted payout could need (the union, M8.md:396,
+// amended 2026-10-13), and with no requirement that covers payouts at all,
+// the refund cannot be authorized.
+func TestHR206_PolicyMayForbidAnUnknownConsequenceButNeverClearIt(t *testing.T) {
+	predictedOnly := pdomain.Rule{
+		ID: "approve-payouts", Kind: pdomain.RequireApproval, Summary: "payouts need an approver", Operations: []string{"payments.payout.trigger"},
+		When: "!consequence.unknown", Reason: "PAYOUT_APPROVAL", Approval: &pdomain.ApprovalRequirement{Role: "approver", Count: 1},
+	}
+	forbidUnknown := pdomain.Rule{
+		ID: "no-unknown-payouts", Kind: pdomain.Forbid, Summary: "no payout that cannot be ruled out",
+		Operations: []string{"payments.payout.trigger"}, When: "consequence.unknown", Reason: "UNKNOWN_PAYOUT",
+	}
+	f := newFxWith(t, payoutPackage, "")
+	f.payoutRun(false)
+	if err := f.w.SetPolicy([]pdomain.Rule{predictedOnly, forbidUnknown}, nil); err != nil {
+		t.Fatal(err)
+	}
+	expect(t, f.call(f.run, "create_refund", refund("ch_1", "30.00")), adomain.Deny, "UNKNOWN_PAYOUT")
+	f.payouts("ch_1", scheduled, time.Second)
+	expect(t, f.call(f.run, "create_refund", refund("ch_1", "30.00")), adomain.RequireApproval, "PAYOUT_APPROVAL")
+
+	f = newFxWith(t, payoutPackage, "")
+	f.payoutRun(false)
+	if err := f.w.SetPolicy([]pdomain.Rule{predictedOnly}, nil); err != nil {
+		t.Fatal(err)
+	}
+	ev := f.call(f.run, "create_refund", refund("ch_1", "30.00"))
+	expect(t, ev, adomain.RequireApproval, consequences.ReasonUnknown)
+	if len(ev.Approvals) != 1 || ev.Approvals[0].Role != "approver" {
+		t.Fatalf("an unknown payout holds for %+v, want the predicted payouts' approver", ev.Approvals)
+	}
+
+	f = newFxWith(t, payoutPackage, "")
+	f.payoutRun(false)
+	if err := f.w.SetPolicy([]pdomain.Rule{approvalOver50()}, nil); err != nil {
+		t.Fatal(err)
+	}
+	expect(t, f.call(f.run, "create_refund", refund("ch_1", "30.00")), adomain.CannotAuthorize, consequences.ReasonUnknown)
+}
+
+// TestF158_TheHeldActionsDisplayShowsItsConsequences (G0 M8): the display an
+// approver reads, and the binding hashes, names each predicted or unknown
+// consequence with its environments, the workflows its facts name and why
+// it is unknown; the decider rules say which approvals count only inside a
+// change window.
+func TestF158_TheHeldActionsDisplayShowsItsConsequences(t *testing.T) {
+	f := newFxWith(t, payoutPackage, "")
+	g := f.newGrant(pipelinetest.PayoutBounds)
+	g.Requirements = []gdomain.Requirement{{
+		Operations: gdomain.Ops{"payments.payout.trigger"}, Reason: "PAYOUT_NEEDS_A_RELEASE",
+		Approval: &pdomain.ApprovalRequirement{Role: "approver", Count: 1, Window: true},
+	}}
+	f.w.Grants.Put(g)
+	f.run = f.newRun(g.ID)
+	f.payouts("ch_1", map[string]any{
+		"state": "scheduled", "environments": []any{"payroll"},
+		"workflows": []any{map[string]any{"path": ".github/workflows/payouts.yml", "environments": []any{"payroll"}}},
+	}, time.Second)
+	ev := f.call(f.run, "create_refund", refund("ch_1", "30.00"))
+	if ev.Decision != adomain.RequireApproval || ev.Hold == nil || len(ev.Hold.Display.Consequences) != 1 {
+		t.Fatalf("held: %s %+v", ev.Decision, ev.Hold)
+	}
+	c := ev.Hold.Display.Consequences[0]
+	if c.State != "PREDICTED" || c.Operation != "payments.payout.trigger" || !slices.Equal(c.Environments, []string{"payroll"}) ||
+		!slices.Equal(c.Workflows, []string{".github/workflows/payouts.yml"}) || len(ev.Hold.Display.Deciders) != 1 || !ev.Hold.Display.Deciders[0].Window {
+		t.Fatalf("display %+v deciders %+v", c, ev.Hold.Display.Deciders)
+	}
+}
+
 // TestHR206_ConsequenceRulesReadTheirFactsAboutTheConsequence: a policy
 // rule scoped to a consequence's operation reads its facts about the
 // consequence's own target, which step 6 reads with the action's facts. A
