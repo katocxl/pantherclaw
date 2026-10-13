@@ -45,8 +45,11 @@ func TestT043_OrgAdminStaysOutOfApprovalsAndRestorations(t *testing.T) {
 		return out
 	}
 	want := map[domain.Permission][]domain.RoleName{
-		domain.PermAgentRestore:   {domain.RoleResponder, domain.RoleSecurityAdmin},
-		domain.PermApprovalRead:   {domain.RoleAgentOwner, domain.RoleApprover, domain.RoleAuditor, domain.RoleSecurityAdmin},
+		domain.PermAgentRestore: {domain.RoleResponder, domain.RoleSecurityAdmin},
+		domain.PermApprovalRead: {
+			domain.RoleAgentOwner, domain.RoleApprover, domain.RoleAuditor, domain.RoleSecurityAdmin, domain.RoleCodeReviewer,
+			domain.RoleReleaseApprover,
+		},
 		domain.PermWaitlistManage: {domain.RoleOrgAdmin, domain.RoleSecurityAdmin},
 	}
 	for p, roles := range want {

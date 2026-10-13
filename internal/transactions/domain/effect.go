@@ -53,6 +53,9 @@ const (
 	PurposeReconcile Purpose = "reconcile"
 	// PurposeTargetLog lists what the target created in a window (HR-112).
 	PurposeTargetLog Purpose = "target_log"
+	// PurposeOrgScan scans the GitHub organization behind a GitHub App
+	// connection (G0 M8, HR-209).
+	PurposeOrgScan Purpose = "org_scan"
 )
 
 // Observation is what one verification read reported (HR-190): only the

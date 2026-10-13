@@ -165,12 +165,16 @@ func (q *Queries) CountGovernedAgents(ctx context.Context, orgID ids.OrgID) (int
 	return count, err
 }
 
-const countOpenDiscoveries = `-- name: CountOpenDiscoveries :one
-SELECT count(*)::int FROM pc.discoveries WHERE org_id = $1 AND state = 'OPEN'
+const countOpenDiscoveriesOfSource = `-- name: CountOpenDiscoveriesOfSource :one
+SELECT count(*)::int FROM pc.discoveries
+WHERE org_id = $1 AND state = 'OPEN' AND source = $2
 `
 
-func (q *Queries) CountOpenDiscoveries(ctx context.Context, orgID ids.OrgID) (int32, error) {
-	row := q.db.QueryRow(ctx, countOpenDiscoveries, orgID)
+// CountOpenDiscoveriesOfSource counts the open discoveries of one source:
+// the gateway's unknown keys, people's local scans and the org scans are
+// each capped on their own, so none fills another's room (HR-148, HR-209).
+func (q *Queries) CountOpenDiscoveriesOfSource(ctx context.Context, orgID ids.OrgID, source string) (int32, error) {
+	row := q.db.QueryRow(ctx, countOpenDiscoveriesOfSource, orgID, source)
 	var column_1 int32
 	err := row.Scan(&column_1)
 	return column_1, err
@@ -242,6 +246,31 @@ func (q *Queries) GetEnvironmentPlacement(ctx context.Context, orgID ids.OrgID, 
 	row := q.db.QueryRow(ctx, getEnvironmentPlacement, orgID, iD)
 	var i GetEnvironmentPlacementRow
 	err := row.Scan(&i.TeamID, &i.State)
+	return i, err
+}
+
+const getScanDiscovery = `-- name: GetScanDiscovery :one
+SELECT id, agent_id, state, observed FROM pc.discoveries
+WHERE org_id = $1 AND source = $2 AND scan_key = $3
+`
+
+type GetScanDiscoveryRow struct {
+	ID       ids.UUID
+	AgentID  ids.UUID
+	State    string
+	Observed []byte
+}
+
+// GetScanDiscovery is a scan finding by its key within its source.
+func (q *Queries) GetScanDiscovery(ctx context.Context, orgID ids.OrgID, source string, scanKey []byte) (GetScanDiscoveryRow, error) {
+	row := q.db.QueryRow(ctx, getScanDiscovery, orgID, source, scanKey)
+	var i GetScanDiscoveryRow
+	err := row.Scan(
+		&i.ID,
+		&i.AgentID,
+		&i.State,
+		&i.Observed,
+	)
 	return i, err
 }
 
@@ -411,7 +440,7 @@ func (q *Queries) InsertDiscoveredAgent(ctx context.Context, arg InsertDiscovere
 
 const insertScanDiscovery = `-- name: InsertScanDiscovery :one
 INSERT INTO pc.discoveries (org_id, id, agent_id, source, scan_key, observed)
-VALUES ($1, $2, $3, 'scan', $4, $5)
+VALUES ($1, $2, $3, $4, $5, $6)
 RETURNING org_id, id, agent_id, source, key_jkt, public_jwk, scan_key, state, observed, seen_count, first_seen_at, last_seen_at
 `
 
@@ -419,15 +448,19 @@ type InsertScanDiscoveryParams struct {
 	OrgID    ids.OrgID
 	ID       ids.UUID
 	AgentID  ids.UUID
+	Source   string
 	ScanKey  []byte
 	Observed []byte
 }
 
+// A local scan's (source scan) or a gateway's organization scan's
+// (github_scan) finding.
 func (q *Queries) InsertScanDiscovery(ctx context.Context, arg InsertScanDiscoveryParams) (PcDiscovery, error) {
 	row := q.db.QueryRow(ctx, insertScanDiscovery,
 		arg.OrgID,
 		arg.ID,
 		arg.AgentID,
+		arg.Source,
 		arg.ScanKey,
 		arg.Observed,
 	)
@@ -618,6 +651,34 @@ func (q *Queries) OrgHasAgents(ctx context.Context, orgID ids.OrgID) (bool, erro
 	return column_1, err
 }
 
+const reopenScanDiscovery = `-- name: ReopenScanDiscovery :execrows
+UPDATE pc.discoveries
+SET state = 'OPEN', agent_id = $1, observed = $2, seen_count = seen_count + 1, last_seen_at = now()
+WHERE org_id = $3 AND id = $4 AND state = 'DISMISSED'
+`
+
+type ReopenScanDiscoveryParams struct {
+	AgentID  ids.UUID
+	Observed []byte
+	OrgID    ids.OrgID
+	ID       ids.UUID
+}
+
+// ReopenScanDiscovery reopens a dismissed finding for a new DISCOVERED
+// agent: what its route may do changed since it was dismissed (HR-209).
+func (q *Queries) ReopenScanDiscovery(ctx context.Context, arg ReopenScanDiscoveryParams) (int64, error) {
+	result, err := q.db.Exec(ctx, reopenScanDiscovery,
+		arg.AgentID,
+		arg.Observed,
+		arg.OrgID,
+		arg.ID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const revokeAgentEnrollmentTokens = `-- name: RevokeAgentEnrollmentTokens :execrows
 UPDATE pc.enrollment_tokens SET state = 'REVOKED', revoked_at = now()
 WHERE org_id = $1 AND agent_id = $2 AND state = 'ACTIVE'
@@ -739,13 +800,27 @@ func (q *Queries) SetAgentState(ctx context.Context, arg SetAgentStateParams) (P
 
 const touchScanDiscovery = `-- name: TouchScanDiscovery :execrows
 UPDATE pc.discoveries SET seen_count = seen_count + 1, last_seen_at = now(), observed = $1
-WHERE org_id = $2 AND scan_key = $3
+WHERE org_id = $2 AND scan_key = $3 AND source = $4
 `
+
+type TouchScanDiscoveryParams struct {
+	Observed []byte
+	OrgID    ids.OrgID
+	ScanKey  []byte
+	Source   string
+}
 
 // Scan findings (PN-001.1, F015): a finding already submitted is only
 // counted, with its latest observations.
-func (q *Queries) TouchScanDiscovery(ctx context.Context, observed []byte, orgID ids.OrgID, scanKey []byte) (int64, error) {
-	result, err := q.db.Exec(ctx, touchScanDiscovery, observed, orgID, scanKey)
+// A finding is matched within its own source only: a person's scan never
+// touches a finding of the gateway's org scan, nor the reverse (HR-209).
+func (q *Queries) TouchScanDiscovery(ctx context.Context, arg TouchScanDiscoveryParams) (int64, error) {
+	result, err := q.db.Exec(ctx, touchScanDiscovery,
+		arg.Observed,
+		arg.OrgID,
+		arg.ScanKey,
+		arg.Source,
+	)
 	if err != nil {
 		return 0, err
 	}
