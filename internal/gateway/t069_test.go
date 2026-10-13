@@ -31,6 +31,13 @@ import (
 // exit code, stdout (what Claude Code reads as the decision) and stderr.
 func (h *harness) claudeCode(t *testing.T, command string) (int, string, string) {
 	t.Helper()
+	return h.claudeCodeTool(t, "Bash", command)
+}
+
+// claudeCodeTool is claudeCode for a command another tool runs in a shell
+// (Monitor, say).
+func (h *harness) claudeCodeTool(t *testing.T, tool, command string) (int, string, string) {
+	t.Helper()
 	dir := t.TempDir()
 	kf, _, err := workloadclient.NewKeyFile()
 	if err != nil {
@@ -45,7 +52,7 @@ func (h *harness) claudeCode(t *testing.T, command string) (int, string, string)
 		t.Fatal(err)
 	}
 	event, _ := json.Marshal(map[string]any{
-		"session_id": "t069", "hook_event_name": "PreToolUse", "tool_name": "Bash", "cwd": dir, "tool_use_id": "toolu_" + strings.ReplaceAll(ids.NewV7().String(), "-", ""),
+		"session_id": "t069", "hook_event_name": "PreToolUse", "tool_name": tool, "cwd": dir, "tool_use_id": "toolu_" + strings.ReplaceAll(ids.NewV7().String(), "-", ""),
 		"tool_input": map[string]any{"command": command, "description": "t069"},
 	})
 	env := map[string]string{"PANTHERCLAW_GATEWAY": h.url, "PANTHERCLAW_HOOK_CONNECTION": "payments", "PANTHERCLAW_WORKLOAD_KEY_FILE": keyFile}
@@ -89,8 +96,10 @@ func withUnrecorded(t *testing.T) func(*harness) {
 // reaches a target. When the commit is refused (containment moved between
 // the decision and the commit), the record cannot be written, or the
 // Authority cannot be reached, the command is blocked (exit 2, no
-// decision on stdout): the hook never fails open. In monitor mode the
-// command runs, and the developer is told it was recorded, not decided.
+// decision on stdout): the hook never fails open. A command Claude Code's
+// Monitor tool runs is decided, committed and recorded as the same bash
+// command, and blocked when denied. In monitor mode the command runs, and
+// the developer is told it was recorded, not decided.
 func TestT069_TheHookAllowsOnlyWhatTheGatewayRecordedAsDelegated(t *testing.T) {
 	h := setup(t, withShell)
 	code, out, errs := h.claudeCode(t, "go test ./...")
@@ -112,6 +121,29 @@ func TestT069_TheHookAllowsOnlyWhatTheGatewayRecordedAsDelegated(t *testing.T) {
 		if code != 2 || out != "" || !strings.Contains(errs, "PantherClaw") || strings.Contains(errs, "allowed") {
 			t.Errorf("%s: exit %d, stdout %q, stderr %q", name, code, out, errs)
 		}
+	}
+
+	// A command Claude Code's Monitor tool runs is decided and recorded as
+	// the same bash command (HR-186, widened after review, founder decision
+	// 2026-10-13), and a denial blocks it.
+	h = setup(t, withShell)
+	code, out, errs = h.claudeCodeTool(t, "Monitor", "tail -f build.log")
+	s = h.auth.snap()
+	var p struct {
+		Shell   string `json:"shell"`
+		Command string `json:"command"`
+		Cwd     string `json:"cwd"`
+		Call    string `json:"call"`
+	}
+	if code != 0 || !strings.Contains(out, `"permissionDecision":"allow"`) || len(s.begins) != 1 || s.outcome() != pb.Outcome_OUTCOME_DELEGATED ||
+		h.target.calls() != 0 || len(s.actions) != 1 || s.actions[0].Action.Operation != "shell.command.run" ||
+		s.actions[0].Action.DecodeParams(&p) != nil || p.Shell != "bash" || p.Command != "tail -f build.log" {
+		t.Fatalf("Monitor allowed: %d %q %q, begins %v, outcome %s, params %+v", code, out, errs, s.begins, s.outcome(), p)
+	}
+	h = setup(t, withShell, func(h *harness) { h.auth.decision = pb.Decision_DECISION_DENY })
+	code, out, errs = h.claudeCodeTool(t, "Monitor", "tail -f build.log")
+	if s := h.auth.snap(); code != 2 || out != "" || !strings.Contains(errs, "PantherClaw") || s.authorize != 1 || len(s.begins) != 0 {
+		t.Fatalf("Monitor denied: exit %d, stdout %q, stderr %q, authorize %d, begins %d", code, out, errs, s.authorize, len(s.begins))
 	}
 
 	h = setup(t, withShell, func(h *harness) {

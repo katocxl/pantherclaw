@@ -21,6 +21,7 @@ import (
 	"maps"
 	"reflect"
 	"slices"
+	"strings"
 
 	"cel.dev/cel-go/cel"
 	"cel.dev/cel-go/common/types"
@@ -96,6 +97,8 @@ func New(pkg *domain.Package, limits celenv.Limits) (*Mapper, error) {
 				m.hook[mp.Tool] = c
 			case domain.ChannelHTTP:
 				m.http = append(m.http, c)
+			case domain.ChannelSDK:
+				// Never a mapping's channel: package validation refuses it.
 			}
 		}
 	}
@@ -115,7 +118,7 @@ func paramType(t domain.ParamType) *types.Type {
 		return cel.BoolType
 	case domain.TypeIdentifierList:
 		return cel.ListType(cel.StringType)
-	case domain.TypeEnum, domain.TypeIdentifier, domain.TypeText, domain.TypeCommand, domain.TypePath:
+	case domain.TypeEnum, domain.TypeIdentifier, domain.TypeText, domain.TypeCommand, domain.TypeContent, domain.TypePath:
 		return cel.StringType
 	}
 	return nil
@@ -200,16 +203,42 @@ func (c *compiled) hasPathVar(v string) bool {
 
 // MCP maps a tools/call by tool name and JSON arguments.
 func (m *Mapper) MCP(ctx context.Context, tc Context, tool string, args []byte) (actionir.Parsed, error) {
-	return m.byName(ctx, tc, m.mcp, tool, args)
+	return m.byName(ctx, tc, m.mcp, tool, args, domain.ChannelMCP)
 }
 
 // Hook maps a cooperative client's call (the Claude Code hook) by its kind
 // and JSON input.
 func (m *Mapper) Hook(ctx context.Context, tc Context, kind string, input []byte) (actionir.Parsed, error) {
-	return m.byName(ctx, tc, m.hook, kind, input)
+	return m.byName(ctx, tc, m.hook, kind, input, domain.ChannelHook)
 }
 
-func (m *Mapper) byName(ctx context.Context, tc Context, by map[string]*compiled, tool string, args []byte) (actionir.Parsed, error) {
+// SDK maps an agent SDK's tool call (the gateway's /sdk face, HR-201)
+// through the package's MCP mapping of the tool, by tool name and JSON
+// input, exactly as the MCP face maps it except that the action's channel
+// is sdk (F099). Shell commands go through the hook face (HR-200).
+func (m *Mapper) SDK(ctx context.Context, tc Context, tool string, input []byte) (actionir.Parsed, error) {
+	return m.byName(ctx, tc, m.mcp, tool, input, domain.ChannelSDK)
+}
+
+// Tool is an MCP tool the package maps, with the operation it maps to.
+type Tool struct {
+	Tool      string `json:"tool"`
+	Operation string `json:"operation"`
+}
+
+// Tools lists exactly the MCP tools the package maps, which SDK calls
+// map through too, by tool name.
+func (m *Mapper) Tools() []Tool {
+	out := make([]Tool, 0, len(m.mcp))
+	for name, c := range m.mcp {
+		out = append(out, Tool{Tool: name, Operation: c.def.Operation})
+	}
+	slices.SortFunc(out, func(a, b Tool) int { return strings.Compare(a.Tool, b.Tool) })
+	return out
+}
+
+// byName maps a call by tool name into an action of the given channel.
+func (m *Mapper) byName(ctx context.Context, tc Context, by map[string]*compiled, tool string, args []byte, channel domain.Channel) (actionir.Parsed, error) {
 	c, ok := by[tool]
 	if !ok {
 		return actionir.Parsed{}, fmt.Errorf("%w: tool %q", ErrUnmapped, tool)
@@ -218,7 +247,7 @@ func (m *Mapper) byName(ctx context.Context, tc Context, by map[string]*compiled
 	if err != nil {
 		return actionir.Parsed{}, err
 	}
-	return m.run(ctx, tc, c, map[string]any{"input": input, "path": map[string]any{}, "query": map[string]any{}})
+	return m.run(ctx, tc, c, channel, map[string]any{"input": input, "path": map[string]any{}, "query": map[string]any{}})
 }
 
 // HTTP maps a request by method, raw (escaped) path, raw query and body.
@@ -248,7 +277,7 @@ func (m *Mapper) HTTP(ctx context.Context, tc Context, method, rawPath, rawQuery
 	if err != nil {
 		return actionir.Parsed{}, err
 	}
-	return m.run(ctx, tc, match, map[string]any{"input": input, "path": vars, "query": query})
+	return m.run(ctx, tc, match, domain.ChannelHTTP, map[string]any{"input": input, "path": vars, "query": query})
 }
 
 // HTTPRoute returns the route id a request's method and raw path match,
@@ -269,7 +298,7 @@ func (m *Mapper) HTTPRoute(method, rawPath string) (route string, ok bool) {
 	return route, ok
 }
 
-func (m *Mapper) run(ctx context.Context, tc Context, c *compiled, vars map[string]any) (actionir.Parsed, error) {
+func (m *Mapper) run(ctx context.Context, tc Context, c *compiled, channel domain.Channel, vars map[string]any) (actionir.Parsed, error) {
 	input, _ := vars["input"].(map[string]any)
 	for k := range input {
 		if _, found := slices.BinarySearch(c.inputs, k); !found {
@@ -325,7 +354,7 @@ func (m *Mapper) run(ctx context.Context, tc Context, c *compiled, vars map[stri
 		V: actionir.Version, Org: tc.Org, Env: tc.Env, RunID: tc.RunID, ActionID: tc.ActionID, AgentInstance: tc.AgentInstance, Connection: tc.Connection,
 		Operation:  c.def.Operation,
 		Definition: actionir.Definition{Package: m.pkg.Name, Version: m.pkg.Version, Digest: c.def.Digest},
-		Channel:    string(c.m.Channel), Route: c.m.Route, Target: target, Params: params,
+		Channel:    string(channel), Route: c.m.Route, Target: target, Params: params,
 		Destinations: dests, DedupeKey: dedupe,
 	})
 }
@@ -385,7 +414,7 @@ func evalParam(ctx context.Context, p *celenv.Program, t domain.ParamType, vars 
 		var b types.Bool
 		b, ok = v.(types.Bool)
 		out.Bool = bool(b)
-	case domain.TypeEnum, domain.TypeIdentifier, domain.TypeText, domain.TypeCommand, domain.TypePath:
+	case domain.TypeEnum, domain.TypeIdentifier, domain.TypeText, domain.TypeCommand, domain.TypeContent, domain.TypePath:
 		var s types.String
 		s, ok = v.(types.String)
 		out.Str = string(s)

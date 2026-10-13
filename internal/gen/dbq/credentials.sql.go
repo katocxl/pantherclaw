@@ -16,9 +16,9 @@ import (
 )
 
 const insertSealedCredential = `-- name: InsertSealedCredential :one
-INSERT INTO pc.credentials (org_id, id, connection_id, version, broker_key_id, sealed, allowed_hosts, header, scheme, created_by)
+INSERT INTO pc.credentials (org_id, id, connection_id, version, broker_key_id, sealed, allowed_hosts, header, scheme, created_by, kind)
 VALUES ($1, $2, $3, $4, $5, $6,
-        $7::text[], $8, $9, $10)
+        $7::text[], $8, $9, $10, $11)
 RETURNING id, version, state, created_at
 `
 
@@ -33,6 +33,7 @@ type InsertSealedCredentialParams struct {
 	Header       string
 	Scheme       *string
 	CreatedBy    string
+	Kind         string
 }
 
 type InsertSealedCredentialRow struct {
@@ -54,6 +55,7 @@ func (q *Queries) InsertSealedCredential(ctx context.Context, arg InsertSealedCr
 		arg.Header,
 		arg.Scheme,
 		arg.CreatedBy,
+		arg.Kind,
 	)
 	var i InsertSealedCredentialRow
 	err := row.Scan(
@@ -67,7 +69,7 @@ func (q *Queries) InsertSealedCredential(ctx context.Context, arg InsertSealedCr
 
 const listCredentialMetadata = `-- name: ListCredentialMetadata :many
 SELECT c.id, c.connection_id, c.version, c.broker_key_id, b.fingerprint AS broker_key_fingerprint, c.allowed_hosts, c.header,
-       c.scheme, c.state, c.created_by, c.created_at
+       c.scheme, c.state, c.created_by, c.created_at, c.kind
 FROM pc.credentials c
 JOIN pc.broker_keys b ON b.org_id = c.org_id AND b.id = c.broker_key_id
 WHERE c.org_id = $1 AND c.connection_id = $2
@@ -87,6 +89,7 @@ type ListCredentialMetadataRow struct {
 	State                string
 	CreatedBy            string
 	CreatedAt            time.Time
+	Kind                 string
 }
 
 func (q *Queries) ListCredentialMetadata(ctx context.Context, orgID ids.OrgID, connectionID ids.UUID) ([]ListCredentialMetadataRow, error) {
@@ -110,6 +113,7 @@ func (q *Queries) ListCredentialMetadata(ctx context.Context, orgID ids.OrgID, c
 			&i.State,
 			&i.CreatedBy,
 			&i.CreatedAt,
+			&i.Kind,
 		); err != nil {
 			return nil, err
 		}
@@ -178,4 +182,41 @@ func (q *Queries) SupersedeCredentials(ctx context.Context, orgID ids.OrgID, con
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const upsertConnectionGitHub = `-- name: UpsertConnectionGitHub :exec
+INSERT INTO pc.connection_github AS g (org_id, connection_id, app_client_id, installation_id, account_login, updated_by)
+VALUES ($1, $2, $3, $4, $5,
+        $6)
+ON CONFLICT (org_id, connection_id) DO UPDATE SET
+    app_client_id = EXCLUDED.app_client_id, installation_id = EXCLUDED.installation_id, account_login = EXCLUDED.account_login,
+    account_id = CASE WHEN g.installation_id = EXCLUDED.installation_id THEN g.account_id END,
+    permissions = CASE WHEN g.installation_id = EXCLUDED.installation_id THEN g.permissions ELSE '{}'::jsonb END,
+    repository_selection = CASE WHEN g.installation_id = EXCLUDED.installation_id THEN g.repository_selection END,
+    read_at = CASE WHEN g.installation_id = EXCLUDED.installation_id THEN g.read_at END,
+    updated_by = EXCLUDED.updated_by, updated_at = now()
+`
+
+type UpsertConnectionGitHubParams struct {
+	OrgID          ids.OrgID
+	ConnectionID   ids.UUID
+	AppClientID    string
+	InstallationID int64
+	AccountLogin   string
+	UpdatedBy      string
+}
+
+// UpsertConnectionGitHub records the GitHub App installation a sealed
+// github_app credential is for (connection_github; G0 M8, ADR-0021). What
+// was read from an installation is kept only while it stays the same one.
+func (q *Queries) UpsertConnectionGitHub(ctx context.Context, arg UpsertConnectionGitHubParams) error {
+	_, err := q.db.Exec(ctx, upsertConnectionGitHub,
+		arg.OrgID,
+		arg.ConnectionID,
+		arg.AppClientID,
+		arg.InstallationID,
+		arg.AccountLogin,
+		arg.UpdatedBy,
+	)
+	return err
 }
