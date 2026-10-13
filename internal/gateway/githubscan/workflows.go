@@ -123,7 +123,7 @@ func ParseWorkflow(raw []byte) (Workflow, error) {
 // to fit an attribute keeps the ones that may write.
 func permissionRank(p string) int {
 	switch {
-	case p == "write-all":
+	case p == "write-all" || strings.HasSuffix(p, ":admin"):
 		return 0
 	case strings.HasSuffix(p, ":write"):
 		return 1

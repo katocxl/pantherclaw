@@ -350,3 +350,82 @@ func (r Result) Fields() map[string]string {
 	}
 	return out
 }
+
+// maxPages bounds a listing the scan pages through: 5 pages of 100.
+const maxPages = 5
+
+// ListRepositories reads the repositories an installation token reaches
+// (GET /installation/repositories), at most 500, and whether that was all
+// of them.
+func ListRepositories(ctx context.Context, get Getter) ([]Repository, bool, error) {
+	var out []Repository
+	for page := 1; page <= maxPages; page++ {
+		res, err := get(ctx, "/installation/repositories?per_page=100&page="+strconv.Itoa(page))
+		if err != nil {
+			return nil, false, err
+		}
+		var list struct {
+			Repositories []struct {
+				FullName      string `json:"full_name"`
+				DefaultBranch string `json:"default_branch"`
+			} `json:"repositories"`
+		}
+		if res.Status != http.StatusOK || json.Unmarshal(res.Body, &list) != nil {
+			return nil, false, fmt.Errorf("githubscan: the installation's repositories answered %d", res.Status)
+		}
+		for _, r := range list.Repositories {
+			out = append(out, Repository{FullName: strings.ToLower(r.FullName), DefaultBranch: r.DefaultBranch})
+		}
+		if len(list.Repositories) < 100 {
+			return out, true, nil
+		}
+	}
+	return out, false, nil
+}
+
+// Apps reads the other Apps installed on the organization (GET
+// /orgs/{org}/installations, at most 500), each a github_app finding: its
+// app_slug, app_id, permissions (the ones that may write first) and
+// repository_selection; and whether that was all of them.
+func Apps(ctx context.Context, get Getter, org string) ([]Finding, bool, error) {
+	var r Result
+	for page := 1; page <= maxPages; page++ {
+		res, err := get(ctx, "/orgs/"+url.PathEscape(org)+"/installations?per_page=100&page="+strconv.Itoa(page))
+		if err != nil {
+			return nil, false, err
+		}
+		var list struct {
+			Installations []struct {
+				AppID       int64             `json:"app_id"`
+				AppSlug     string            `json:"app_slug"`
+				Permissions map[string]string `json:"permissions"`
+				Selection   string            `json:"repository_selection"`
+			} `json:"installations"`
+		}
+		if res.Status != http.StatusOK || json.Unmarshal(res.Body, &list) != nil {
+			return nil, false, fmt.Errorf("githubscan: the organization's installations answered %d", res.Status)
+		}
+		for _, in := range list.Installations {
+			perms := make([]string, 0, len(in.Permissions))
+			for k, v := range in.Permissions {
+				perms = append(perms, clip(k)+":"+clip(v))
+			}
+			slices.SortFunc(perms, func(a, b string) int {
+				if c := permissionRank(a) - permissionRank(b); c != 0 {
+					return c
+				}
+				return strings.Compare(a, b)
+			})
+			attrs := map[string]string{
+				"organization": org, "app_slug": clip(in.AppSlug), "app_id": strconv.FormatInt(in.AppID, 10),
+				"repository_selection": clip(in.Selection),
+			}
+			put(attrs, "permissions", perms)
+			r.add("github_app", attrs, org, strconv.FormatInt(in.AppID, 10))
+		}
+		if len(list.Installations) < 100 {
+			return r.Findings, true, nil
+		}
+	}
+	return r.Findings, false, nil
+}

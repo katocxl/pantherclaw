@@ -17,7 +17,8 @@ import (
 // M8 track G commands: the GitHub identity links independence compares
 // (HR-207). A person links their own account by signing in to GitHub
 // (pclaw github link, P2f); an identity manager can only unlink others, and
-// registers the GitHub accounts that are not people (exemptions).
+// registers the GitHub accounts that are not people (exemptions). It also
+// runs organization scans (HR-209).
 
 func init() {
 	for k, v := range m8gCommands() {
@@ -35,6 +36,23 @@ func m8gCommands() map[string]command {
 		"github identity unlink": rpc("github identity unlink ID (another person's link)", 1, func(*flag.FlagSet) call {
 			return func(ctx context.Context, c clients, a []string) (proto.Message, error) {
 				return c.github.UnlinkIdentity(ctx, &pantherclawv1.UnlinkIdentityRequest{Id: a[0]})
+			}
+		}),
+		"github scan": rpc("github scan --connection ID", 0, func(fs *flag.FlagSet) call {
+			conn := fs.String("connection", "", "the GitHub App connection whose organization to scan (Team edition)")
+			return func(ctx context.Context, c clients, _ []string) (proto.Message, error) {
+				return c.github.StartOrgScan(ctx, &pantherclawv1.StartOrgScanRequest{ConnectionId: *conn})
+			}
+		}),
+		"github scan get": rpc("github scan get ID", 1, func(*flag.FlagSet) call {
+			return func(ctx context.Context, c clients, a []string) (proto.Message, error) {
+				return c.github.GetOrgScan(ctx, &pantherclawv1.GetOrgScanRequest{Id: a[0]})
+			}
+		}),
+		"github scan findings": rpc("github scan findings ID", 1, func(fs *flag.FlagSet) call {
+			n, tok := paging(fs)
+			return func(ctx context.Context, c clients, a []string) (proto.Message, error) {
+				return c.github.ListOrgScanFindings(ctx, &pantherclawv1.ListOrgScanFindingsRequest{ScanId: a[0], PageSize: size(n), PageToken: *tok})
 			}
 		}),
 		"github identity list": rpc("github identity list [--user ID]", 0, func(fs *flag.FlagSet) call {
