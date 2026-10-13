@@ -141,6 +141,43 @@ message AuthorizeResponse {
   // Access mode of the action's connection (F416), for the gateway's
   // execution record.
   string access_mode = 18;
+  // What the action's consequence rules said, in rule order (G0 M8,
+  // HR-206): each consequence predicted, not ruled out (UNKNOWN) or ruled
+  // out. A predicted consequence is a prediction, never an authorized or
+  // confirmed effect. Empty for a stored decision (repeat).
+  repeated Consequence consequences = 19;
+}
+
+// ConsequenceState is what a consequence rule said about an action
+// (HR-206).
+enum ConsequenceState {
+  CONSEQUENCE_STATE_UNSPECIFIED = 0;
+  // The rule's facts are current and its condition holds.
+  CONSEQUENCE_STATE_PREDICTED = 1;
+  // A fact the rule needs is missing, stale or unknown: the consequence
+  // is treated as predicted.
+  CONSEQUENCE_STATE_UNKNOWN = 2;
+  // The rule's facts are current and its condition does not hold.
+  CONSEQUENCE_STATE_NOT_TRIGGERED = 3;
+}
+
+// Consequence is what one consequence rule said about an action (F405).
+message Consequence {
+  // The rule, as the package names it.
+  string rule_id = 1;
+  // The consequence operation, for example github.deployment.trigger.
+  string operation = 2;
+  // The consequence's target.
+  string target_type = 3;
+  string target_id = 4;
+  // The environments a predicted consequence reaches, when the rule says.
+  repeated string environments = 5;
+  // What the rule said.
+  ConsequenceState state = 6;
+  // Why each fact an unknown consequence needed could not be used.
+  repeated string unknown = 7;
+  // Digest of the facts the rule read (F080).
+  string facts_digest = 8;
 }
 
 // WaitState is the state of a held action's approval request as a waiter
@@ -338,6 +375,57 @@ message RecordExecutionRequest {
   // profile's cap; never headers. Empty unless a profile covers the
   // dispatch; never sent for monitor-mode or delegated outcomes.
   repeated PayloadCapture captures = 7 [(buf.validate.field).repeated.max_items = 2];
+  // What the dispatch's minted credential allowed (G0 M8, ADR-0021 item 5);
+  // unset for a credential placed as sealed, or none.
+  CredentialAccess credential_access = 8;
+}
+
+// CredentialAccess is what a dispatch's minted credential allowed (G0 M8,
+// ADR-0021 item 5): for a GitHub App connection, the installation token's
+// installation, repository and permissions as requested and as GitHub
+// granted them, when it expires and whether it was revoked. It never
+// carries the token.
+message CredentialAccess {
+  // The GitHub App installation id.
+  int64 installation_id = 1 [(buf.validate.field).int64.gt = 0];
+  // The repository the token was narrowed to (owner/repo).
+  string repository = 2 [(buf.validate.field).string = {
+    max_len: 140
+    pattern: "^[a-z0-9][a-z0-9-]{0,38}/[A-Za-z0-9._-]{1,100}$"
+  }];
+  // GitHub's id of that repository; 0 when GitHub did not give one.
+  int64 repository_id = 3 [(buf.validate.field).int64.gte = 0];
+  // The permissions requested, by name: a package's credential scope, so
+  // with its rules for names and levels.
+  map<string, string> requested = 4 [(buf.validate.field).map = {
+    max_pairs: 16
+    keys: {
+      string: {pattern: "^[a-z][a-z0-9_]{0,63}$"}
+    }
+    values: {
+      string: {pattern: "^[a-z]{1,16}$"}
+    }
+  }];
+  // The permissions GitHub granted, by name: those requested with
+  // metadata: read, or, on a refused wider grant, whatever GitHub said.
+  map<string, string> granted = 5 [(buf.validate.field).map = {
+    max_pairs: 32
+    keys: {
+      string: {pattern: "^[a-z][a-z0-9_]{0,63}$"}
+    }
+    values: {
+      string: {pattern: "^[a-z]{1,16}$"}
+    }
+  }];
+  // When the token expires, as GitHub said.
+  google.protobuf.Timestamp expire_time = 6;
+  // "revoked", or "revoke_failed": the token then lasts until expire_time.
+  string revocation = 7 [(buf.validate.field).string = {
+    in: [
+      "revoked",
+      "revoke_failed"
+    ]
+  }];
 }
 
 // CaptureDirection is which body of a dispatch a payload capture holds.

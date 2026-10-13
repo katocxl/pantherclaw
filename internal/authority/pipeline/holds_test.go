@@ -11,6 +11,7 @@ import (
 	apdomain "github.com/katocxl/pantherclaw/internal/approvals/domain"
 	adomain "github.com/katocxl/pantherclaw/internal/authority/domain"
 	"github.com/katocxl/pantherclaw/internal/authority/pipeline"
+	fdomain "github.com/katocxl/pantherclaw/internal/facts/domain"
 	gdomain "github.com/katocxl/pantherclaw/internal/grants/domain"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	pdomain "github.com/katocxl/pantherclaw/internal/policy/domain"
@@ -110,14 +111,70 @@ func TestHR031_AStricterRequirementAfterApprovalGivesANewRequest(t *testing.T) {
 	if again.Hold.Keep || again.Hold.Satisfied || again.Hold.Binding.Hash == ev.Hold.Binding.Hash {
 		t.Fatal("the approval survived a stricter requirement")
 	}
-	// A changed fact gives a new basis too (F193 scenario 6, completed).
-	f.putFact("ch_1", true, now.Add(-30*time.Second))
+	// A changed bound fact member ends the approval too (F193 scenario 6,
+	// completed; HR-030 as the founder amended it on 2026-10-13): the action
+	// no longer matches its fact.
+	b, breq, bev := boundHeldFx(t)
+	b.w.SetHold(b.run, actionOf(breq), recorded(bev, apdomain.StateApproved))
+	b.state("ch_1", map[string]any{"reason": "fraudulent"})
+	moved := b.eval(breq)
+	if moved.Hold != nil && moved.Hold.Satisfied {
+		t.Fatal("the approval survived a new bound value")
+	}
+	expect(t, moved, adomain.CannotAuthorize, "STATE_MOVED")
+}
+
+// boundHeldFx is heldFx with boundRefunds: the refund's reason is bound to
+// the charge's state, whose reason is "duplicate".
+func boundHeldFx(t *testing.T) (*fx, pipeline.Request, *pipeline.Evaluation) {
+	t.Helper()
+	f := newFxWith(t, boundRefunds, "")
+	f.state("ch_1", map[string]any{"reason": "duplicate"})
 	if err := f.w.SetPolicy([]pdomain.Rule{approvalOver50()}, nil); err != nil {
 		t.Fatal(err)
 	}
-	if b := f.eval(req); b.Hold.Satisfied || b.Hold.Binding.Hash == ev.Hold.Binding.Hash {
-		t.Fatal("the approval survived a new fact")
+	req := f.parse(f.run, ids.NewV7(), "create_refund", refund("ch_1", "85.00"))
+	ev := f.eval(req)
+	expect(t, ev, adomain.RequireApproval, "REFUND_OVER_50")
+	return f, req, ev
+}
+
+// TestHR030_AnApprovalBindsOnlyTheMembersItsDefinitionBinds (option B,
+// founder decision 2026-10-13): a fact observed again with the same value,
+// or a change to a member nothing binds, keeps the approval usable; every
+// fact is still read again when the approval is used, so a fact that now
+// fails a check refuses the action even though it was approved.
+func TestHR030_AnApprovalBindsOnlyTheMembersItsDefinitionBinds(t *testing.T) {
+	f, req, ev := heldFx(t)
+	f.w.SetHold(f.run, actionOf(req), recorded(ev, apdomain.StateApproved))
+	f.putFact("ch_1", true, now.Add(-10*time.Second))
+	again := f.eval(req)
+	expect(t, again, adomain.Allow, pipeline.ReasonGrantCovers)
+	if !again.Hold.Satisfied || again.Hold.Binding.Hash != ev.Hold.Binding.Hash {
+		t.Fatal("a re-observed fact with the same value ended the approval")
 	}
+
+	b, breq, bev := boundHeldFx(t)
+	b.w.SetHold(b.run, actionOf(breq), recorded(bev, apdomain.StateApproved))
+	b.state("ch_1", map[string]any{"reason": "duplicate", "note": "re-checked"})
+	if kept := b.eval(breq); kept.Decision != adomain.Allow || !kept.Hold.Satisfied || kept.Hold.Binding.Hash != bev.Hold.Binding.Hash {
+		t.Fatalf("an unbound member ended the approval: %s %+v", kept.Decision, kept.Hold)
+	}
+
+	refundableOnly := pdomain.Rule{
+		ID: "refundable-only", Kind: pdomain.Forbid, Summary: "only refundable charges",
+		Operations: []string{"payments.refund.create"}, When: `!facts.payments_charge_refundable`, Reason: "NOT_REFUNDABLE",
+	}
+	c := newFx(t)
+	if err := c.w.SetPolicy([]pdomain.Rule{approvalOver50(), refundableOnly}, map[string]fdomain.Type{"payments.charge.refundable": fdomain.TypeBoolean}); err != nil {
+		t.Fatal(err)
+	}
+	creq := c.parse(c.run, ids.NewV7(), "create_refund", refund("ch_1", "85.00"))
+	cev := c.eval(creq)
+	expect(t, cev, adomain.RequireApproval, "REFUND_OVER_50")
+	c.w.SetHold(c.run, actionOf(creq), recorded(cev, apdomain.StateApproved))
+	c.putFact("ch_1", false, now.Add(-10*time.Second))
+	expect(t, c.eval(creq), adomain.Deny, "NOT_REFUNDABLE")
 }
 
 // TestHR171_ADeclinedOrExpiredRequestEndsTheActionAsDeny: a decline, a

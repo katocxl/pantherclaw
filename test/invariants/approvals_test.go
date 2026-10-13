@@ -7,6 +7,8 @@ import (
 	"context"
 	"encoding/json/jsontext"
 	"fmt"
+	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -70,6 +72,31 @@ func apaRun(w *world, grant gdomain.GrantID, instance ids.UUID) ids.UUID {
 	return id
 }
 
+// apaBound binds a refund's reason to the charge's state object, as
+// pc.github binds a merge to its pull request's head (HR-205).
+func apaBound(pkg string) string {
+	pkg = strings.Replace(pkg, "      - fact: payments.charge.refundable\n        max_age_seconds: 300\n",
+		"      - fact: payments.charge.refundable\n        max_age_seconds: 300\n      - fact: payments.charge.state\n"+
+			"        max_age_seconds: 300\n        binds: {member: reason, param: reason, reason: STATE_MOVED}\n", 1)
+	return strings.Replace(pkg, "      fields: [params.amount, params.reason, target.id]\n",
+		"      fields: [params.amount, params.reason, target.id]\n      invalidate_on: payments.charge.state\n", 1)
+}
+
+// apaFacts reports every charge refundable, with the state reason given,
+// observed at.
+func apaFacts(w *world, reason string, at time.Time) {
+	for _, ch := range []string{"ch_1", "ch_2", "ch_3"} {
+		w.w.PutFact(fdomain.Fact{
+			Name: "payments.charge.refundable", SubjectType: "payments.charge", SubjectID: ch,
+			Value: fdomain.Value{Type: fdomain.TypeBoolean, Bool: true}, ObservedAt: at, ProviderID: ids.NewV7(),
+		})
+		w.w.PutFact(fdomain.Fact{
+			Name: "payments.charge.state", SubjectType: "payments.charge", SubjectID: ch,
+			Value: fdomain.Value{Type: fdomain.TypeObject, Object: map[string]any{"reason": reason}}, ObservedAt: at, ProviderID: ids.NewV7(),
+		})
+	}
+}
+
 // apaAmount draws a refund over the 50 USD threshold and within the grant,
 // other than except.
 func apaAmount(t *rapid.T, label, except string) string {
@@ -80,16 +107,21 @@ func apaAmount(t *rapid.T, label, except string) string {
 }
 
 // TestINV05_RandomChangesNeverConsumeAnApproval (M5 part 2): an approval
-// binds the exact action and its basis. After a held refund's request is
-// approved, the identical resubmission is satisfied by it; after one to
+// binds the exact action, its basis and the fact members its definition
+// binds (HR-030 as the founder amended it on 2026-10-13). After a held
+// refund's request is approved, the identical resubmission is satisfied by
+// it, and so it is after its facts are only observed again; after one to
 // three random material changes (the amount or charge under the same action
 // id, a sibling run or a run on another instance carrying the approval,
 // another workload key) or basis changes (a grant revision, a guardrail, a
-// fact, a published policy, a stricter requirement), the binding differs:
-// the action is held again, never satisfied by the approval or allowed.
+// new value of the bound fact member, a published policy, a stricter
+// requirement), the binding differs: the action is held again, or cannot
+// be authorized once its bound fact moved, never satisfied by the approval
+// or allowed.
 func TestINV05_RandomChangesNeverConsumeAnApproval(t *testing.T) {
 	rapid.Check(t, func(t *rapid.T) {
-		w := newWorld(t)
+		w := newWorldWith(t, apaBound)
+		apaFacts(w, "duplicate", now.Add(-time.Minute))
 		g := w.grant(rootBounds, w.alice)
 		reqs, err := gdomain.DecodeRequirements([]byte(apaOver50))
 		if err != nil {
@@ -113,7 +145,7 @@ func TestINV05_RandomChangesNeverConsumeAnApproval(t *testing.T) {
 		}
 
 		next := orig
-		changes := rapid.SliceOfNDistinct(rapid.IntRange(0, 9), 1, 3, func(i int) int { return i }).Draw(t, "changes")
+		changes := rapid.SliceOfNDistinct(rapid.IntRange(0, 10), 1, 3, func(i int) int { return i }).Draw(t, "changes")
 		for _, c := range changes {
 			switch c {
 			case 0: // another amount under the approved action id
@@ -141,13 +173,8 @@ func TestINV05_RandomChangesNeverConsumeAnApproval(t *testing.T) {
 				}, false, auditEvent()); err != nil {
 					t.Fatal(err)
 				}
-			case 7: // a fresh fact about every charge
-				for _, ch := range []string{"ch_1", "ch_2", "ch_3"} {
-					w.w.PutFact(fdomain.Fact{
-						Name: "payments.charge.refundable", SubjectType: "payments.charge", SubjectID: ch,
-						Value: fdomain.Value{Type: fdomain.TypeBoolean, Bool: true}, ObservedAt: now.Add(-30 * time.Second), ProviderID: ids.NewV7(),
-					})
-				}
+			case 7: // a new value of the bound fact member about every charge
+				apaFacts(w, "fraudulent", now.Add(-30*time.Second))
 			case 8: // a published policy
 				if err := w.w.SetPolicy([]pdomain.Rule{{
 					ID: "note", Kind: pdomain.Annotate, Summary: "x", Operations: []string{"payments.*"},
@@ -163,14 +190,30 @@ func TestINV05_RandomChangesNeverConsumeAnApproval(t *testing.T) {
 				}}, nil); err != nil {
 					t.Fatal(err)
 				}
+			case 10: // every fact observed again, with the same values
+				if !slices.Contains(changes, 7) {
+					apaFacts(w, "duplicate", now.Add(-20*time.Second))
+				}
 			}
 		}
 		if next.run != run {
 			w.w.SetHold(next.run, action, approval) // the approval carried to the other run
 		}
 		got := w.eval(apaRequest(w, action, next))
+		if len(changes) == 1 && changes[0] == 10 {
+			if got.Decision != adomain.Allow || got.Hold == nil || !got.Hold.Satisfied {
+				t.Fatalf("facts observed again ended the approval: %s %s", got.Decision, got.Decisive().Code)
+			}
+			return
+		}
 		if got.Hold != nil && got.Hold.Satisfied {
 			t.Fatalf("changes %v: the approval of another binding satisfied the requirement", changes)
+		}
+		if slices.Contains(changes, 7) {
+			if got.Decision != adomain.CannotAuthorize || got.Decisive().Code != "STATE_MOVED" {
+				t.Fatalf("changes %v: %s %s, want STATE_MOVED", changes, got.Decision, got.Decisive().Code)
+			}
+			return
 		}
 		if got.Decision != adomain.RequireApproval {
 			t.Fatalf("changes %v: %s %s, want the action held again", changes, got.Decision, got.Decisive().Code)

@@ -177,12 +177,19 @@ func TestConnectionTestReads(t *testing.T) {
 // prerequisite fact whose change supersedes it; a write without mappings
 // or dispatch exists only as a consequence of its package.
 func TestInvalidateOnAndVirtualConsequences(t *testing.T) {
-	merge := minimal(map[string]domain.ParamSpec{})
+	merge := minimal(map[string]domain.ParamSpec{"sha": {Type: domain.TypeIdentifier, Material: true}})
 	merge.Operation, merge.Access = "x.pull.merge", domain.AccessWrite
-	merge.Prerequisites = []domain.Prerequisite{{Fact: "x.pull.head", MaxAgeSeconds: 30}}
+	merge.Prerequisites = []domain.Prerequisite{{
+		Fact: "x.pull.head", MaxAgeSeconds: 30, Binds: &domain.FactBinding{Member: "sha", Param: "sha", Reason: "HEAD_MOVED"},
+	}}
 	merge.Approval = &domain.ApprovalTemplate{Title: "Merge {target.id}", Fields: []string{"target.id"}, InvalidateOn: "x.pull.head"}
 	if err := merge.Validate(); err != nil {
 		t.Fatal(err)
+	}
+	unbound := *merge
+	unbound.Prerequisites = []domain.Prerequisite{{Fact: "x.pull.head", MaxAgeSeconds: 30}}
+	if err := unbound.Validate(); !errors.Is(err, domain.ErrInvalid) {
+		t.Fatalf("invalidate_on a fact that binds no member (HR-030 option B): %v", err)
 	}
 	bad := *merge
 	bad.Approval = &domain.ApprovalTemplate{Title: "Merge", Fields: []string{"target.id"}, InvalidateOn: "x.pull.base"}
@@ -244,6 +251,27 @@ func TestRestPaths(t *testing.T) {
 		mutate(&c)
 		if err := c.Validate(); !errors.Is(err, domain.ErrInvalid) {
 			t.Errorf("%s: %v", name, err)
+		}
+	}
+}
+
+// TestHR034_ContentIsNeverAmongTheCanonicalFields: content is agent-written
+// (a commit message, a pull request's title), so an approval template may
+// not show it among the canonical fields or in its title; the display
+// shows it in the untrusted block instead.
+func TestHR034_ContentIsNeverAmongTheCanonicalFields(t *testing.T) {
+	for name, set := range map[string]func(*domain.Definition){
+		"a field": func(d *domain.Definition) { d.Approval.Fields = append(d.Approval.Fields, "params.title") },
+		"a title": func(d *domain.Definition) { d.Approval.Title = "Open {params.title}" },
+	} {
+		d := minimal(map[string]domain.ParamSpec{"title": {Type: domain.TypeContent, Material: true, MaxLength: 16}})
+		d.Approval = &domain.ApprovalTemplate{Title: "Open {target.id}", Fields: []string{"target.id"}}
+		if err := d.Validate(); err != nil {
+			t.Fatalf("without content: %v", err)
+		}
+		set(d)
+		if err := d.Validate(); !errors.Is(err, domain.ErrInvalid) {
+			t.Errorf("content in %s: %v", name, err)
 		}
 	}
 }

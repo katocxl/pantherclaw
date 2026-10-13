@@ -337,6 +337,15 @@ Since M6 the gateway checks every approval itself (HR-038): the permit of an app
 
 Approvals count only from people whose account is 7 days old and whose role and key are 1 day old (decision 5), so a freshly invited approver waits that long; the tests backdate their fixtures. Batch review and `pclaw waitlist metrics` need the Team edition. Each org sets its hold deadline, consume window and batch ceilings with `pclaw waitlist update-settings`; a server sets its wait limits with `waitlist.max_waits_per_instance`, `waitlist.max_waits` and `waitlist.long_poll_max`.
 
+**Change windows (M8):** a person holding `release.window.manage` (the Security Admin) says when a release approval for a deployment environment counts, optionally for one repository: weekly entries in a time zone, one-off windows and freezes. A freeze overrides every window, and no window means none. Creating a window retires the current one. The database clock decides (HR-207).
+
+```bash
+pclaw window create --environment production --time-zone Europe/London --weekly 'mon 09:00 480' --freeze 2026-12-21T00:00:00Z/2027-01-04T00:00:00Z
+pclaw window active --environment production --repository acme/payments   # OPEN, CLOSED, FROZEN or NO_WINDOW, and why
+pclaw window list --retired
+pclaw window retire <id> --reason "replaced by the new schedule"
+```
+
 **Effects, reconciliation and proof (M7):** a decision says what was allowed and an execution receipt what the gateway sent; M7 records what actually happened and makes all of it verifiable offline ([g0/M7.md](g0/M7.md)). With the stack above, nothing needs configuring: after an accepted refund the server schedules a verification read, and the gateway serving the connection leases it (every `control.verify_every`, 10 s by default), reads the refund back through the package's reviewed read with the connection's credential, and reports only the declared fields. The effect then has its own signed receipt: `CONFIRMED` at `follow_up` level with the verifier's limits, `PROPAGATION_PENDING`, `CONFLICTING` (both sides kept), `NONE_CONFIRMED`, `UNKNOWN` at the deadline, or `UNVERIFIABLE` when nothing can read it (a delegated hook command is also labelled `PARTIAL` coverage).
 
 ```bash

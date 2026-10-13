@@ -13,6 +13,7 @@ import (
 
 	"github.com/katocxl/pantherclaw/internal/actionir"
 	apdomain "github.com/katocxl/pantherclaw/internal/approvals/domain"
+	"github.com/katocxl/pantherclaw/internal/authority/consequences"
 	"github.com/katocxl/pantherclaw/internal/authority/pipeline"
 	fdomain "github.com/katocxl/pantherclaw/internal/facts/domain"
 	gdomain "github.com/katocxl/pantherclaw/internal/grants/domain"
@@ -91,7 +92,7 @@ func (r *Recorder) Definition(ctx context.Context, org ids.OrgID, pin actionir.D
 			if p.Definition == nil {
 				return errors.New("recording: a definition read returned no definition")
 			}
-			d.Digest, d.State = p.Definition.Digest, string(p.State)
+			d.Digest, d.State, d.Consequences = p.Definition.Digest, string(p.State), consequences.IDs(p.Consequences)
 		}
 		x.Definitions = append(x.Definitions, d)
 		return nil
