@@ -9,7 +9,6 @@ import (
 	"context"
 	"fmt"
 	"testing"
-	"time"
 
 	apdomain "github.com/katocxl/pantherclaw/internal/approvals/domain"
 	adomain "github.com/katocxl/pantherclaw/internal/authority/domain"
@@ -67,10 +66,10 @@ type apaHold struct {
 
 func apaApprovedRefund(t *testing.T) apaHold {
 	t.Helper()
-	w := newWorld(t)
-	// Two minutes old, so a later report always changes the facts digest.
-	w.refundableAt(time.Now().Add(-2*time.Minute), "ch_1")
-	w.refundableAt(time.Now().Add(-2*time.Minute), "ch_2")
+	w := newWorldWith(t, boundRefunds)
+	w.refundable("ch_1", "ch_2")
+	w.state("ch_1", "duplicate")
+	w.state("ch_2", "duplicate")
 	g := w.heldGrant()
 	h := apaHold{w: w, grant: g, run: w.run(g.ID, ids.UUID{}), act: ids.NewV7()}
 	h.req = w.request(h.run, h.act, "ch_1", "85.00")
@@ -171,9 +170,10 @@ func TestT005_TheApprovedActionReplayedByAnotherKeyOrInstanceGetsNoPermit(t *tes
 // TestT006_AChangeAfterApprovalNeverUsesIt: T-006 — after the 85 USD
 // refund is approved, the agent changes the amount under the approved
 // action id, sends the money to another charge as a new action, or waits
-// for a new fact, a grant revision or a new policy, or for the approval to
-// lapse. The changed action never gets the approval: it is denied, or held
-// on a request of its own while the approved one is superseded or expires;
+// for a new value of the fact the approval binds, a grant revision or a
+// new policy, or for the approval to lapse. The changed action never gets
+// the approval: it is denied, cannot be authorized, or is held on a
+// request of its own while the approved one is superseded or expires;
 // only the unchanged action under its own id may still use it. The details
 // are TestHR031_* (pipeline), TestHR171_AHoldIsRecordedOnceAndSupersededWhenItsBindingChanges
 // and TestHR039_AnExpiredHoldEndsAsDenyAtUse; delivery failure is
@@ -194,10 +194,10 @@ func TestT006_AChangeAfterApprovalNeverUsesIt(t *testing.T) {
 		{"another charge as a new action", func(_ *testing.T, h apaHold) pipeline.Request {
 			return h.w.request(h.run, ids.NewV7(), "ch_2", "85.00")
 		}, adomain.RequireApproval, "REFUND_OVER_50", "APPROVED", true},
-		{"a fresh fact", func(_ *testing.T, h apaHold) pipeline.Request {
-			h.w.refundable("ch_1")
+		{"a new value of the fact it is bound to", func(_ *testing.T, h apaHold) pipeline.Request {
+			h.w.state("ch_1", "fraudulent")
 			return h.req
-		}, adomain.RequireApproval, "REFUND_OVER_50", "SUPERSEDED", false},
+		}, adomain.CannotAuthorize, "STATE_MOVED", "SUPERSEDED", false},
 		{"a grant revision", func(t *testing.T, h apaHold) pipeline.Request {
 			g := h.grant
 			if _, _, err := h.w.grants.Revise(h.w.human, gapp.ReviseRequest{

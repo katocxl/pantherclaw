@@ -86,6 +86,10 @@ type ApprovalRequirement struct {
 	Count           int    `json:"count"`
 	Independent     bool   `json:"independent,omitzero"`
 	DeadlineSeconds int    `json:"deadline_seconds,omitzero"`
+	// Window: the approval counts only when it is consumed inside an active
+	// change window for every environment the action's consequences reach,
+	// by the database clock (G0 M8, HR-207).
+	Window bool `json:"window,omitzero"`
 }
 
 // StepUpRequirement says who must re-authenticate (enforced in M5): the
