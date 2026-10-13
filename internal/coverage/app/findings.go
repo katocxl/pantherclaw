@@ -247,7 +247,7 @@ func (s *Service) AcknowledgeFinding(ctx context.Context, id ids.UUID, reason st
 		}
 		_, err = audit.Record(ctx, tx, audit.Event{
 			Name: "coverage.finding_dismissed", Actor: c.Actor(), Outcome: audit.Success,
-			Object:  &audit.Object{Type: "coverage_finding", ID: out.ID.String()},
+			Object: &audit.Object{Type: "coverage_finding", ID: out.ID.String()},
 			Details: auditReason(map[string]string{
 				"kind": out.Kind, "severity": out.Severity, "excess": truncate(strings.Join(out.Excess, ","), 512),
 			}, reason),
