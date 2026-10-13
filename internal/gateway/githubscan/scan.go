@@ -147,7 +147,7 @@ func (r *Result) repository(ctx context.Context, get Getter, repo Repository) er
 	}
 	base := repoPath + "/contents/"
 	at := "?ref=" + url.QueryEscape(repo.DefaultBranch)
-	file := func(p string) ([]byte, fileState, error) {
+	file := func(p string, limit int) ([]byte, fileState, error) {
 		res, err := get(ctx, base+githubfacts.EscapeRef(p)+at)
 		switch {
 		case err != nil:
@@ -159,6 +159,7 @@ func (r *Result) repository(ctx context.Context, get Getter, repo Repository) er
 		}
 		var f struct {
 			Type     string `json:"type"`
+			Size     int    `json:"size"`
 			Encoding string `json:"encoding"`
 			Content  string `json:"content"`
 		}
@@ -168,8 +169,8 @@ func (r *Result) repository(ctx context.Context, get Getter, repo Repository) er
 		if err := json.Unmarshal(res.Body, &f); err != nil {
 			return nil, absent, fmt.Errorf("githubscan: %s: %w", p, err)
 		}
-		if f.Type != "file" || f.Encoding != "base64" {
-			return nil, unread, nil // a symlink, or too large to come inline
+		if f.Type != "file" || f.Encoding != "base64" || f.Size > limit {
+			return nil, unread, nil // a symlink, or too large: never decoded (G5 review follow-up)
 		}
 		raw, err := base64.StdEncoding.DecodeString(strings.ReplaceAll(f.Content, "\n", ""))
 		if err != nil {
@@ -186,6 +187,7 @@ func (r *Result) repository(ctx context.Context, get Getter, repo Repository) er
 		var listing []struct {
 			Type string `json:"type"`
 			Path string `json:"path"`
+			Size int    `json:"size"`
 		}
 		if json.Unmarshal(res.Body, &listing) != nil {
 			return fmt.Errorf("githubscan: workflow listing of %s", repo.FullName)
@@ -202,9 +204,12 @@ func (r *Result) repository(ctx context.Context, get Getter, repo Repository) er
 			case read == maxWorkflows:
 				r.skip("workflows", fmt.Sprintf("over the %d-file limit of a repository", maxWorkflows), 1)
 				continue
+			case e.Size > githubfacts.MaxWorkflowBytes:
+				r.skip("workflows", "too large or not plain files", 1) // never fetched (G5 review follow-up)
+				continue
 			}
 			read++
-			raw, state, err := file(e.Path)
+			raw, state, err := file(e.Path, githubfacts.MaxWorkflowBytes)
 			if err != nil {
 				return err
 			}
@@ -245,7 +250,7 @@ func (r *Result) repository(ctx context.Context, get Getter, repo Repository) er
 	}
 	// Committed MCP configuration, by name only: one finding per file.
 	for _, p := range MCPConfigPaths {
-		raw, state, err := file(p)
+		raw, state, err := file(p, maxMCPConfig)
 		if err != nil {
 			return err
 		}

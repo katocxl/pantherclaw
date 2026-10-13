@@ -297,3 +297,28 @@ func TestHR209_EveryMCPServerEntryIsCounted(t *testing.T) {
 		}
 	}
 }
+
+// TestHR209_ATooLargeFileIsNeverFetched (G5 review follow-up): a workflow
+// file the listing says is over the limit is skipped without being
+// fetched, and reported not scanned; one within it is read.
+func TestHR209_ATooLargeFileIsNeverFetched(t *testing.T) {
+	sim, get := newWorld(t)
+	sim.Push("acme/payments", "main", map[string]string{
+		".github/workflows/huge.yml": "on: push\njobs: {t: {runs-on: x}}\n# " + strings.Repeat("x", githubfacts.MaxWorkflowBytes) + "\n",
+		".github/workflows/ok.yml":   "on: push\njobs: {t: {runs-on: x}}\n",
+	})
+	r := ScanRepositories(context.Background(), get, []Repository{{FullName: "acme/payments", DefaultBranch: "main"}}, time.Now().Add(time.Minute))
+	if !strings.Contains(r.NotScanned["workflows"], "too large") {
+		t.Fatalf("a too large workflow: %+v", r.NotScanned)
+	}
+	okRead := false
+	for _, req := range sim.Requests() {
+		if strings.Contains(req.Path, "huge.yml") {
+			t.Fatalf("the too large file was fetched: %+v", req)
+		}
+		okRead = okRead || strings.Contains(req.Path, "ok.yml")
+	}
+	if !okRead {
+		t.Fatal("the workflow within the limit was not read")
+	}
+}

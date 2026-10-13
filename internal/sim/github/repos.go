@@ -274,7 +274,11 @@ func (s *Server) contents(w http.ResponseWriter, req *http.Request, r *Repo, _ *
 		if dir {
 			kind = "dir"
 		}
-		entries = append(entries, map[string]any{"type": kind, "name": name, "path": strings.TrimPrefix(path+"/"+name, "/")})
+		entry := map[string]any{"type": kind, "name": name, "path": strings.TrimPrefix(path+"/"+name, "/")}
+		if !dir {
+			entry["size"] = len(c.Files[p]) // as GitHub lists a file's size
+		}
+		entries = append(entries, entry)
 	}
 	if len(entries) == 0 {
 		return fail(w, http.StatusNotFound, "Not Found")
