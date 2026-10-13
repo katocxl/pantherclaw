@@ -18,13 +18,29 @@ import (
 type Dispatch struct {
 	HTTP *HTTPDispatch `json:"http,omitzero"`
 	MCP  *MCPDispatch  `json:"mcp,omitzero"`
+	// CredentialScope is the least privilege of the connection's credential
+	// the operation needs, as name to level, which the credential kind
+	// interprets (G0 M8): for a GitHub App, GitHub permission names and
+	// levels, which the per-action installation token is minted with
+	// (HR-203). A static credential ignores it.
+	CredentialScope map[string]string `json:"credential_scope,omitzero"`
+}
+
+// Scopes returns the dispatch's credential scope (nil without one).
+func (d *Definition) Scopes() map[string]string {
+	if d.Dispatch == nil {
+		return nil
+	}
+	return d.Dispatch.CredentialScope
 }
 
 // HTTPDispatch is an outbound HTTP request template.
 type HTTPDispatch struct {
 	Method string `json:"method"`
 	// Path is a template such as /v1/refunds/{target.id}: each segment is
-	// literal or exactly one reference.
+	// literal or exactly one reference, except that the last may be
+	// {params.<identifier>*}, the rest of the path from the param's value
+	// (G0 M8: a file path), one checked and escaped segment per "/".
 	Path string `json:"path"`
 	// Body maps JSON body fields to references; a money param splits into
 	// params.<name>.value and params.<name>.currency. No body when empty.
@@ -56,6 +72,8 @@ var (
 	queryRe     = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]{0,63}(\[[a-z]{1,16}\])?$`)
 	headerRe    = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9-]{0,63}$`)
 	digestRe    = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
+	scopeName   = regexp.MustCompile(`^[a-z][a-z0-9_]{0,63}$`)
+	scopeLevel  = regexp.MustCompile(`^[a-z]{1,16}$`)
 	dispatchSeg = regexp.MustCompile(`^([A-Za-z0-9._~-]+|\{[a-z][a-z0-9_.]{0,80}\})$`)
 	// reservedHeaders are set by the gateway or carry credentials; a
 	// package never names one.
@@ -73,8 +91,10 @@ const (
 // bodiless methods send no body.
 var bodiless = []string{"GET", "DELETE"}
 
-// reference checks one template reference against the definition. A path
-// segment takes only an identifier, an enum or an integer.
+// reference checks one template reference against the definition: the
+// target id, a named group of its pattern (target.id.<group>), the account
+// or a param. A path segment takes only an identifier, an enum or an
+// integer.
 func (d *Definition) reference(at, ref string, inPath bool) error {
 	switch ref {
 	case "target.id":
@@ -85,9 +105,15 @@ func (d *Definition) reference(at, ref string, inPath bool) error {
 		}
 		return nil
 	}
+	if group, ok := strings.CutPrefix(ref, "target.id."); ok {
+		if !d.Target.hasPart(group) {
+			return invalid("%s: %s names no group of target.id_pattern", at, ref)
+		}
+		return nil
+	}
 	rest, ok := strings.CutPrefix(ref, "params.")
 	if !ok {
-		return invalid("%s: reference %q must be target.id, target.account or params.<name>", at, ref)
+		return invalid("%s: reference %q must be target.id, target.id.<group>, target.account or params.<name>", at, ref)
 	}
 	name, part, _ := strings.Cut(rest, ".")
 	p, ok := d.Params[name]
@@ -132,11 +158,28 @@ func (d *Definition) validateDispatch() error {
 	if (x.HTTP == nil) == (x.MCP == nil) {
 		return invalid("%s: exactly one of http and mcp", at)
 	}
+	if len(x.CredentialScope) > 16 {
+		return invalid("%s.credential_scope: at most 16 entries", at)
+	}
+	for _, name := range slices.Sorted(maps.Keys(x.CredentialScope)) {
+		if !scopeName.MatchString(name) || !scopeLevel.MatchString(x.CredentialScope[name]) {
+			return invalid("%s.credential_scope: %q: %q must be a lowercase name and level", at, name, x.CredentialScope[name])
+		}
+	}
 	if h := x.HTTP; h != nil {
 		if !slices.Contains(methods, h.Method) || !strings.HasPrefix(h.Path, "/") || len(h.Path) > 512 {
 			return invalid("%s.http: a method %v and a path template starting with /", at, methods)
 		}
-		for _, seg := range strings.Split(h.Path[1:], "/") {
+		segs := strings.Split(h.Path[1:], "/")
+		for i, seg := range segs {
+			if ref, ok := strings.CutSuffix(seg, "*}"); ok && strings.HasPrefix(seg, "{") {
+				// The rest of the path from an identifier param, one segment
+				// per "/" in its value, each checked and escaped by the gateway.
+				if p, isParam := strings.CutPrefix(ref[1:], "params."); i != len(segs)-1 || !isParam || d.Params[p].Type != TypeIdentifier {
+					return invalid("%s.http.path: %s must be the last segment and name an identifier param", at, seg)
+				}
+				continue
+			}
 			if !dispatchSeg.MatchString(seg) || seg == "." || seg == ".." {
 				return invalid("%s.http.path: segment %q", at, seg)
 			}

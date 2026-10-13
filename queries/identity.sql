@@ -154,7 +154,8 @@ WHERE org_id = sqlc.arg(org_id) AND key_jkt = sqlc.arg(key_jkt);
 
 -- name: DiscoveryLoad :one
 SELECT
-    (SELECT count(*) FROM pc.discoveries d WHERE d.org_id = sqlc.arg(org_id) AND d.state = 'OPEN')::int AS open_discoveries,
+    -- The gateway's own: scans' findings have caps of their own (HR-148, HR-209).
+    (SELECT count(*) FROM pc.discoveries d WHERE d.org_id = sqlc.arg(org_id) AND d.state = 'OPEN' AND d.source = 'gateway')::int AS open_discoveries,
     (SELECT count(*) FROM pc.discoveries d
       WHERE d.org_id = sqlc.arg(org_id) AND d.source = 'gateway' AND d.first_seen_at > now() - interval '1 minute'
         AND d.observed->>'gateway' = sqlc.arg(gateway)::text)::int AS recent_from_gateway;
