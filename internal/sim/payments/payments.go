@@ -177,6 +177,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /v1/refunds", s.refund)
 	mux.HandleFunc("GET /v1/refunds", s.listRefunds)
 	mux.HandleFunc("GET /v1/refunds/{id}", s.getRefund)
+	mux.HandleFunc("GET /v1/account", s.account)
 	mux.HandleFunc("GET /v1/stats", s.stats)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Simulated", "true")
@@ -456,4 +457,11 @@ type refundResponse struct {
 	ID        string `json:"id"`
 	Status    string `json:"status"`
 	Simulated bool   `json:"simulated"`
+}
+
+// account answers the connection test's harmless read (payments.account.read,
+// G0 M8): the simulated account, behind the same credential check as every
+// other route.
+func (s *Server) account(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]any{"id": "acct_simulated", "simulated": true})
 }

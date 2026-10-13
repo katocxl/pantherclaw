@@ -1,0 +1,32 @@
+// SPDX-License-Identifier: BUSL-1.1
+// Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+
+syntax = "proto3";
+
+package pantherclaw.v1;
+
+import "buf/validate/validate.proto";
+import "pantherclaw/v1/facts.proto";
+
+// ReportFactsRequest carries what a gateway read from one of its
+// connections' systems of record just before a decision (G0 M8 decision 5,
+// HR-160): for GitHub, a pull request's head and people, reviews, checks,
+// branch rules and deploy triggers. The gateway is the connection's
+// registered fact provider; the org and the gateway come from its
+// certificate.
+message ReportFactsRequest {
+  // The connection whose system of record was read; it must be served by
+  // the calling gateway and bound to its provider.
+  string connection_id = 1 [(buf.validate.field).string.uuid = true];
+  // The observations (at most 32).
+  repeated FactObservation observations = 2 [(buf.validate.field).repeated = {
+    min_items: 1
+    max_items: 32
+  }];
+}
+
+// ReportFactsResponse returns one result per observation.
+message ReportFactsResponse {
+  // Results, in request order.
+  repeated FactResult results = 1;
+}
