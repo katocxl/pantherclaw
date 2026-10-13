@@ -78,6 +78,10 @@ type Definition struct {
 	Mappings      []Mapping            `json:"mappings"`
 	// Dispatch is the outbound request template (G0 M6, HR-075).
 	Dispatch *Dispatch `json:"dispatch,omitzero"`
+	// Test marks the harmless read a connection test runs (G0 M8, C2): a
+	// read with an HTTP GET dispatch template and no required params; at
+	// most one per package.
+	Test bool `json:"test,omitzero"`
 
 	// Digest is "sha256:<hex>" of the canonical JSON of this definition,
 	// mappings included. It is what ActionIR pins (definition.digest) and
@@ -126,6 +130,18 @@ type ConstraintSpec struct {
 type Prerequisite struct {
 	Fact          string `json:"fact"`
 	MaxAgeSeconds int    `json:"max_age_seconds"`
+	// Binds requires a member of the (object) fact to equal a material
+	// param of the action; a mismatch is CANNOT_AUTHORIZE with its reason
+	// (G0 M8, HR-205: a merge is bound to its pull request's head,
+	// github.pull.head.sha == params.sha, else HEAD_MOVED).
+	Binds *FactBinding `json:"binds,omitzero"`
+}
+
+// FactBinding binds a member of a fact to a param.
+type FactBinding struct {
+	Member string `json:"member"`
+	Param  string `json:"param"`
+	Reason string `json:"reason"`
 }
 
 // OnUnknown is what happens after an ambiguous outcome (F382).
@@ -150,6 +166,15 @@ type RetrySpec struct {
 type ApprovalTemplate struct {
 	Title  string   `json:"title"`
 	Fields []string `json:"fields"`
+	// InvalidateOn names a prerequisite fact whose change supersedes every
+	// unconsumed approval request for the same target (G0 M8, HR-205: a
+	// pull request's new head, github.pull.head).
+	InvalidateOn string `json:"invalidate_on,omitzero"`
+	// IndependentOf names a prerequisite fact listing, by GitHub user id,
+	// the people an independent approver must not be (G0 M8, HR-207: a
+	// pull request's author, committers and pushers, github.pull.people,
+	// with complete false when they cannot all be read).
+	IndependentOf string `json:"independent_of,omitzero"`
 }
 
 // Basis is where the evidence for a definition comes from (F391).
@@ -195,6 +220,9 @@ var (
 	kindRe   = regexp.MustCompile(`^[a-z][a-z0-9_]*(\.[a-z0-9_]+){0,7}$`)
 	reviewRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9 ._@-]{0,127}$`)
 	holderRe = regexp.MustCompile(`\{([^{}]*)\}`)
+	// partRe is a named group of a target id pattern, which a template
+	// references as target.id.<name>.
+	partRe = regexp.MustCompile(`^[a-z][a-z0-9_]{0,31}$`)
 )
 
 const (
@@ -229,10 +257,15 @@ func (d *Definition) Validate() error {
 		return invalid("%s: 1..%d effects and at most %d side effects", op, maxItems, maxItems)
 	case len(d.Params) > maxItems || len(d.Mappings) > maxItems:
 		return invalid("%s: at most %d params and %d mappings", op, maxItems, maxItems)
-	case len(d.Mappings) == 0 && d.Access != AccessRead:
-		// A read without mappings is internal: only a verifier or a target
-		// log may use it (Package.Validate), never an agent.
-		return invalid("%s: a write needs 1..%d mappings", op, maxItems)
+	case len(d.Mappings) == 0 && d.Access != AccessRead && d.Dispatch != nil:
+		// A read without mappings is internal: only a verifier, a target
+		// log or a connection test may use it, never an agent. A write
+		// without mappings is virtual: never dispatched, it only names a
+		// consequence of this package (Package.Validate).
+		return invalid("%s: a write needs 1..%d mappings, or no dispatch when it is a consequence", op, maxItems)
+	case d.Test && (d.Access != AccessRead || d.Dispatch == nil || d.Dispatch.HTTP == nil || d.Dispatch.HTTP.Method != methods[0] ||
+		slices.ContainsFunc(slices.Collect(maps.Values(d.Params)), func(p ParamSpec) bool { return p.Required })):
+		return invalid("%s: a connection test is a read with an HTTP GET template and no required params", op)
 	}
 	if err := text(op+": summary", d.Summary); err != nil {
 		return err
@@ -265,6 +298,9 @@ func (d *Definition) Validate() error {
 		if !kindRe.MatchString(p.Fact) || p.MaxAgeSeconds <= 0 || p.MaxAgeSeconds > maxSecond {
 			return invalid("%s: prerequisite %q needs a fact name and 1..%d max_age_seconds", op, p.Fact, maxSecond)
 		}
+		if err := d.validateBinding(p); err != nil {
+			return err
+		}
 	}
 	if err := d.validateRetry(); err != nil {
 		return err
@@ -295,6 +331,12 @@ func (t TargetSpec) validate(op string) error {
 	}
 	if err := anchored(op+": target.id_pattern", t.IDPattern); err != nil {
 		return err
+	}
+	groups := regexp.MustCompile(t.IDPattern).SubexpNames()
+	for i, g := range groups {
+		if g != "" && (!partRe.MatchString(g) || slices.Contains(groups[:i], g)) {
+			return invalid("%s: target.id_pattern group %q must be a distinct lowercase name", op, g)
+		}
 	}
 	switch t.Account {
 	case PresenceRequired, PresenceOptional:
@@ -395,6 +437,17 @@ func (d *Definition) validateApproval() error {
 	if len(a.Fields) == 0 || len(a.Fields) > maxItems {
 		return invalid("%s: approval needs 1..%d fields", d.Operation, maxItems)
 	}
+	if a.InvalidateOn != "" && !d.prerequisiteField("facts."+a.InvalidateOn) {
+		return invalid("%s: approval.invalidate_on names %q, which is not a prerequisite fact", d.Operation, a.InvalidateOn)
+	}
+	if a.InvalidateOn != "" && !slices.ContainsFunc(d.Prerequisites, func(p Prerequisite) bool { return p.Fact == a.InvalidateOn && p.Binds != nil }) {
+		// An approval binds only the members prerequisites declare (HR-030
+		// option B), so only a bound member's change can supersede it.
+		return invalid("%s: approval.invalidate_on names %q, whose prerequisite binds no member", d.Operation, a.InvalidateOn)
+	}
+	if a.IndependentOf != "" && !d.prerequisiteField("facts."+a.IndependentOf) {
+		return invalid("%s: approval.independent_of names %q, which is not a prerequisite fact", d.Operation, a.IndependentOf)
+	}
 	refs := a.Fields
 	for _, m := range holderRe.FindAllStringSubmatch(a.Title, -1) {
 		refs = append(refs, m[1])
@@ -402,6 +455,11 @@ func (d *Definition) validateApproval() error {
 	for _, f := range refs {
 		if !d.canonicalField(f) && !d.prerequisiteField(f) {
 			return invalid("%s: approval may show only canonical material fields and prerequisite facts, not %q (HR-034)", d.Operation, f)
+		}
+		if name, ok := strings.CutPrefix(f, "params."); ok && d.Params[name].Type == TypeContent {
+			// Content is agent-written (a commit message, a pull request's
+			// title or body): it is shown only in the untrusted block.
+			return invalid("%s: approval may not show content parameter %q among the canonical fields; it is shown untrusted (HR-034)", d.Operation, f)
 		}
 	}
 	return nil
@@ -449,6 +507,26 @@ func (d *Definition) validateDedupe() error {
 		if f == "operation" || !d.canonicalField(f) || slices.Contains(d.Dedupe[:i], f) {
 			return invalid("%s: dedupe_key field %q must be a distinct target field or material param", d.Operation, f)
 		}
+	}
+	return nil
+}
+
+// reasonRe is a reason code a definition names.
+var reasonRe = regexp.MustCompile(`^[A-Z][A-Z0-9_]{2,63}$`)
+
+// validateBinding checks a prerequisite's binding: a member name, a
+// material identifier, enum or integer param, and a reason code.
+func (d *Definition) validateBinding(p Prerequisite) error {
+	b := p.Binds
+	if b == nil {
+		return nil
+	}
+	param, ok := d.Params[b.Param]
+	switch {
+	case !nameRe.MatchString(b.Member) || !reasonRe.MatchString(b.Reason):
+		return invalid("%s: prerequisite %s binds a member name with a reason code", d.Operation, p.Fact)
+	case !ok || !param.Material || !slices.Contains([]ParamType{TypeIdentifier, TypeEnum, TypeInteger}, param.Type):
+		return invalid("%s: prerequisite %s binds %q, which is not a material identifier, enum or integer param", d.Operation, p.Fact, b.Param)
 	}
 	return nil
 }

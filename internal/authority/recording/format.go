@@ -100,13 +100,16 @@ type Containment struct {
 }
 
 // Definition is a definition read: the pin asked for, and the digest and
-// lifecycle state of the definition returned. The definition itself is kept
-// by reference: replay loads it again by its pin.
+// lifecycle state of the definition returned, with the ids of the
+// consequence rules its package version has for its operation (G0 M8). The
+// definition and the rules are kept by reference: replay loads them again
+// by the pin, and the package version never changes.
 type Definition struct {
-	Pin    actionir.Definition `json:"pin"`
-	Digest string              `json:"digest,omitzero"`
-	State  string              `json:"state,omitzero"`
-	Err    string              `json:"err,omitzero"`
+	Pin          actionir.Definition `json:"pin"`
+	Digest       string              `json:"digest,omitzero"`
+	State        string              `json:"state,omitzero"`
+	Consequences []string            `json:"consequences,omitzero"`
+	Err          string              `json:"err,omitzero"`
 }
 
 // Policy is the published policy read, by reference: the bundle and its

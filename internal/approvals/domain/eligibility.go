@@ -30,6 +30,23 @@ const (
 	IneligibleCredentialRevoked = "CREDENTIAL_NOT_ACTIVE" //nolint:gosec // G101: a reason code, not a credential
 	IneligibleNotStepUpSubject  = "NOT_STEP_UP_SUBJECT"
 	IneligibleRequester         = "REQUESTER_EXCLUDED"
+	// IneligibleAuthor: the person is linked to a GitHub user the
+	// requirement's fact lists (an author, committer or pusher, HR-207).
+	IneligibleAuthor = "AUTHOR_EXCLUDED"
+	// IneligibleAuthorshipUnknown: the fact could not list everyone, so
+	// nobody can count as independent (design decision 18).
+	IneligibleAuthorshipUnknown = "AUTHORSHIP_UNKNOWN"
+	// IneligibleNotLinked: the requirement is independent of a GitHub
+	// people fact, and the person holds no GitHub link proved by signing in
+	// to GitHub, so nobody can tell whether they are among those people
+	// (G0 M8 P2f, HR-207).
+	IneligibleNotLinked = "GITHUB_NOT_LINKED"
+	// IneligiblePeopleNotLinked: someone the people fact lists, who is a
+	// person and not exempted, is linked to nobody in the org, so the
+	// approver could be them under another account (founder decision
+	// 2026-10-13, HR-207). It lasts until they link or an admin exempts
+	// the account.
+	IneligiblePeopleNotLinked = "GITHUB_PEOPLE_NOT_LINKED"
 )
 
 // ErrStepUpSubjectNotAPerson is returned when a step-up names a launcher or
@@ -92,6 +109,10 @@ type Person struct {
 	Bindings []RoleBinding
 	// Active credentials only.
 	Credentials []Credential
+	// GitHubVerified is set when the person holds a GitHub link they proved
+	// by signing in to GitHub (G0 M8 P2f): only then do they approve a
+	// requirement independent of a GitHub people fact.
+	GitHubVerified bool
 }
 
 // RunPeople are the people around a run: its launcher and represented
@@ -113,8 +134,12 @@ type Context struct {
 	// Requester is a restoration's requester, who never decides it
 	// (decision 11).
 	Requester ids.UUID
-	Cooldowns Cooldowns
-	Now       time.Time
+	// Authorship is, for each fact an independent requirement names, the
+	// users linked to the GitHub users it lists and whether it could list
+	// them all (G0 M8, HR-207).
+	Authorship map[string]Authorship
+	Cooldowns  Cooldowns
+	Now        time.Time
 }
 
 func isUser(p gdomain.Principal, u ids.UUID) bool {
@@ -159,6 +184,22 @@ func Check(r Requirement, p Person, c Context, cred ids.UUID) (bool, string) {
 		return false, IneligiblePrincipal
 	case slices.ContainsFunc(c.Run.Ancestors, func(a gdomain.Principal) bool { return isUser(a, p.UserID) }):
 		return false, IneligibleAncestor
+	}
+	// An action whose definition names the people its approvers must not be
+	// excludes them from every approval, whatever its role (HR-207, founder
+	// decision 2026-10-13).
+	if r.IndependentOf != "" {
+		a, ok := c.Authorship[r.IndependentOf]
+		switch {
+		case !ok || !a.Complete:
+			return false, IneligibleAuthorshipUnknown
+		case slices.Contains(a.Users, p.UserID):
+			return false, IneligibleAuthor
+		case len(a.Unlinked) > 0:
+			return false, IneligiblePeopleNotLinked
+		case !p.GitHubVerified:
+			return false, IneligibleNotLinked
+		}
 	}
 	if r.Independent {
 		if slices.Contains(c.Owners, p.UserID) {
@@ -294,4 +335,18 @@ func Next(reqs []Requirement, rs []Response, eligible func(i int) bool) (int, bo
 		}
 	}
 	return -1, false
+}
+
+// Authorship is who a fact such as github.pull.people lists, as users.
+type Authorship struct {
+	// Users are the users linked to the GitHub users it lists; a person who
+	// is not linked is not among them.
+	Users []ids.UUID
+	// Complete is false when the fact could not list everyone (a fork, too
+	// many commits, an unreadable activity feed) or is not known.
+	Complete bool
+	// Unlinked are the GitHub user ids it lists that are people linked to
+	// nobody in the org: not a bot the fact names and not an account an
+	// admin exempted.
+	Unlinked []int64
 }
