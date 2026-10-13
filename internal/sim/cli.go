@@ -33,6 +33,8 @@ Usage:
                            [--short-rate 0] [--settle-after 0s] [--redirect-to URL]
                            [--token-file FILE] [--require-action-tokens --jwks-url URL --audience CONNECTION]
   pantherclaw-sim mcp [--addr 127.0.0.1:9091] [--legacy] [--stream] [--ask LIST] [--input-required] [--tool-error] [--description TEXT] [--token-file FILE]
+  pantherclaw-sim github --app-key FILE [--addr 127.0.0.1:9092] [--app-id 1] [--client-id ID] [--installation 1] [--account acme]
+                         [--repos payments] [--mcp-addr ADDR --mcp-token-file FILE]
   pantherclaw-sim load --workload-file FILE [--token-file FILE] [--run ID] [--gateway URL] [--connection payments] [--rate 1000] [--duration 30s]
                        [--warmup 5s] [--max-in-flight 2048] [--amount 1.00 | --unique] [--facts-key-file FILE] [--out FILE]
   pantherclaw-sim version
@@ -53,6 +55,8 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		err = runPayments(ctx, args[1:], stderr)
 	case "mcp":
 		err = runMCP(ctx, args[1:], stderr)
+	case "github":
+		err = runGitHub(ctx, args[1:], stderr)
 	case "load":
 		err = runLoad(ctx, args[1:], stdout, stderr)
 	default:
