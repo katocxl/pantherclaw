@@ -152,13 +152,24 @@ func (c *Compiled) Evaluate(ctx context.Context, d *defs.Definition, a actionir.
 	slices.SortStableFunc(rules, func(x, y *domain.Rule) int {
 		return slices.Index(kindOrder, x.Kind) - slices.Index(kindOrder, y.Kind)
 	})
+	// An unknown consequence could be any of its outcomes (HR-206): every
+	// requirement that covers its operation applies, whatever its condition
+	// or environment, so the hold asks for at least what each outcome would.
+	// FORBID and the other rules are evaluated as for any action.
+	unknown := in.Consequence != nil && in.Consequence.State == "UNKNOWN"
 	var spent uint64
 	results := make([]domain.Result, 0, len(rules))
 	for _, r := range rules {
 		res := domain.Result{Rule: r}
 		cr, inScope := compiled[r.ID]
 		switch {
-		case !inScope || !r.Applies(a.Operation, a.Env):
+		case !inScope || !r.CoversOperation(a.Operation):
+			res.Effect = domain.OutOfScope
+		case unknown && (r.Kind == domain.RequireApproval || r.Kind == domain.RequireStepUp) && cr.err != nil:
+			res.Effect, res.Detail = domain.EvalError, cr.err.Error()
+		case unknown && (r.Kind == domain.RequireApproval || r.Kind == domain.RequireStepUp):
+			res.Effect, res.Detail = domain.Matched, "the consequence is unknown, so this requirement applies whatever its condition"
+		case !r.Applies(a.Operation, a.Env):
 			res.Effect = domain.OutOfScope
 		case spent >= budget:
 			res.Effect, res.Detail = domain.CostExceeded, "tenant cost budget exhausted before this rule"
