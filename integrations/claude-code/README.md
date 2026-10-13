@@ -53,7 +53,7 @@ It only adds (HR-208):
 
 It fails without changing anything when settings would keep the hook from running: managed settings with `allowManagedHooksOnly` and without the hook, or with `disableAllHooks`; or `disableAllHooks` in the file it would change, or in any other settings file whose value Claude Code applies (it takes the setting from managed, then local, project and user settings). Running it again changes nothing.
 
-**Governing an MCP server.** `--mcp NAME=CONNECTION` (repeatable) governs Claude Code's MCP server `NAME` through the gateway connection `CONNECTION`:
+**Governing an MCP server.** `--mcp NAME=CONNECTION` (repeatable) governs Claude Code's MCP server `NAME` through the gateway connection `CONNECTION`. `NAME` must be exactly the name of a server configured for Claude Code in `~/.claude.json` or the project's `.mcp.json`, or `init` fails without changing anything:
 - the original entry stays exactly as it is;
 - a new entry, `pantherclaw-NAME`, runs `pclaw mcp proxy` to the connection, so its calls are decided like any other. It goes in `~/.claude.json` under the project for `--scope local`, `.mcp.json` for `project`, and `~/.claude.json`'s top level for `user`;
 - the deny rule `mcp__NAME__*` goes in the scope's settings, so the original cannot be used. A deny rule only strengthens.

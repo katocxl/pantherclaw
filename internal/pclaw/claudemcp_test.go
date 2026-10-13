@@ -110,7 +110,8 @@ func TestHR208_InitGovernsAnMCPServerWithANewEntryAndADenyRule(t *testing.T) {
 // governed name, in any scope, is a failure that changes nothing; a
 // project Claude Code has not run in gets no invented entry; --scope
 // project and user write .mcp.json and ~/.claude.json's top level; and a
-// file init only read keeps its layout.
+// file init only read keeps its layout. The originals, jira and slack, are
+// configured at ~/.claude.json's top level.
 func TestHR208_InitNeverReplacesAServerEntry(t *testing.T) {
 	f := newInitFixture(t)
 	const docs = "{\n    \"mcpServers\": {\"pantherclaw-docs\": {\"command\": \"docs-server\"}}\n}\n"
@@ -122,7 +123,7 @@ func TestHR208_InitNeverReplacesAServerEntry(t *testing.T) {
 	if _, err := os.Stat(f.state()); err == nil {
 		t.Fatal("a refused init wrote ~/.claude.json")
 	}
-	f.write(t, f.state(), `{"numStartups": 3, "projects": {}}`)
+	f.write(t, f.state(), `{"numStartups": 3, "projects": {}, "mcpServers": {"jira": {"command": "jira-server"}, "slack": {"command": "slack-server"}}}`)
 	if code, _, errs := f.run(t, "--mcp", "jira=jira-sdk"); code == 0 || !strings.Contains(errs, "no place for this project") {
 		t.Fatalf("an unknown project: %d %s", code, errs)
 	}
@@ -143,7 +144,8 @@ func TestHR208_InitNeverReplacesAServerEntry(t *testing.T) {
 // TestHR208_InitRefusesMCPServersClaudeCodeWouldNotRun: a deny list in any
 // settings, or an allowlist that leaves the governed server out (managed
 // only, when managed settings say so), and managed settings that ignore
-// every other scope's permission rules fail without writing.
+// every other scope's permission rules fail without writing. The original,
+// github, is configured at ~/.claude.json's top level.
 func TestHR208_InitRefusesMCPServersClaudeCodeWouldNotRun(t *testing.T) {
 	for name, tc := range map[string]struct {
 		managed, local string
@@ -162,6 +164,7 @@ func TestHR208_InitRefusesMCPServersClaudeCodeWouldNotRun(t *testing.T) {
 		},
 	} {
 		f := newInitFixture(t)
+		f.write(t, f.state(), `{"mcpServers": {"github": {"command": "npx"}}}`)
 		if tc.managed != "" {
 			f.write(t, f.managed, tc.managed)
 		}
@@ -172,6 +175,37 @@ func TestHR208_InitRefusesMCPServersClaudeCodeWouldNotRun(t *testing.T) {
 		_, err := os.Stat(f.mcpJSON())
 		if (code == 0) != tc.ok || (err == nil) != tc.ok {
 			t.Errorf("%s: %d, .mcp.json written %v: %s %s", name, code, err == nil, out, errs)
+		}
+	}
+}
+
+// TestHR208_InitRefusesAnMCPNameItCannotFind: an --mcp name that is not
+// exactly the name of a server configured for Claude Code (a typo, another
+// case, or a server from a plugin or managed settings) fails, even beside
+// one that is found, and nothing is written or backed up.
+func TestHR208_InitRefusesAnMCPNameItCannotFind(t *testing.T) {
+	f := newInitFixture(t)
+	project, _ := json.Marshal(f.project)
+	state := `{"projects": {` + string(project) + `: {"mcpServers": {"GitHub": {"command": "npx"}}}}}`
+	const mcp = `{"mcpServers": {"github-docs": {"command": "docs-server"}}}`
+	f.write(t, f.state(), state)
+	f.write(t, f.mcpJSON(), mcp)
+	for _, args := range [][]string{
+		{"--mcp", "github=github-sdk"},
+		{"--mcp", "GitHub=github-sdk", "--mcp", "plugin_github_github=github-sdk"},
+	} {
+		code, out, errs := f.run(t, args...)
+		if code == 0 || !strings.Contains(errs, "no MCP server named") || !strings.Contains(errs, "must match exactly") {
+			t.Errorf("%v: %d %s %s", args, code, out, errs)
+		}
+		if b, _ := os.ReadFile(f.state()); string(b) != state {
+			t.Errorf("%v: ~/.claude.json changed", args)
+		}
+		if b, _ := os.ReadFile(f.mcpJSON()); string(b) != mcp {
+			t.Errorf("%v: .mcp.json changed", args)
+		}
+		if _, err := os.Stat(f.local()); err == nil || len(backups(t, f.state())) != 0 {
+			t.Errorf("%v: settings written or backed up", args)
 		}
 	}
 }
