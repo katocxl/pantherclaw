@@ -64,6 +64,12 @@ type FactCatalog interface {
 	Catalog(ctx context.Context, org ids.OrgID) (map[string]fdomain.Type, error)
 }
 
+// FactSubjects returns, by fact name, the subject type the org's provider
+// declares it about.
+type FactSubjects interface {
+	FactSubjects(ctx context.Context, org ids.OrgID) (map[string]string, error)
+}
+
 // ActiveDefinitions returns the definitions of the org's active packages.
 type ActiveDefinitions interface {
 	ActiveDefinitions(ctx context.Context, org ids.OrgID) ([]*defs.Definition, error)
@@ -80,8 +86,11 @@ type Authorizer interface {
 // and fact catalog when it is created and again when it is published, so a
 // version that no longer compiles is never published.
 type Versions struct {
-	Store       VersionStore
-	Facts       FactCatalog
+	Store VersionStore
+	Facts FactCatalog
+	// Subjects, when set, refuses a rule on a consequence that reads a
+	// fact no provider reports about the consequence's target (Engine).
+	Subjects    FactSubjects
 	Definitions ActiveDefinitions
 	Authz       Authorizer
 	Limits      celenv.Limits
@@ -126,7 +135,13 @@ func (v *Versions) compile(ctx context.Context, org ids.OrgID, b *domain.Bundle)
 	if err != nil {
 		return err
 	}
-	if _, err := (&Engine{Limits: v.Limits, Facts: catalog}).Compile(b, ds); err != nil {
+	var subjects map[string]string
+	if v.Subjects != nil {
+		if subjects, err = v.Subjects.FactSubjects(ctx, org); err != nil {
+			return err
+		}
+	}
+	if _, err := (&Engine{Limits: v.Limits, Facts: catalog, Subjects: subjects}).Compile(b, ds); err != nil {
 		return pcerr.Wrap(err, pcerr.InvalidArgument, "POLICY_DOES_NOT_COMPILE", err.Error())
 	}
 	return nil

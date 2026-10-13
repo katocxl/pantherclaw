@@ -249,7 +249,8 @@ func (q *Queries) DeleteExpiredProofs(ctx context.Context, orgID ids.OrgID, slot
 
 const discoveryLoad = `-- name: DiscoveryLoad :one
 SELECT
-    (SELECT count(*) FROM pc.discoveries d WHERE d.org_id = $1 AND d.state = 'OPEN')::int AS open_discoveries,
+    -- The gateway's own: scans' findings have caps of their own (HR-148, HR-209).
+    (SELECT count(*) FROM pc.discoveries d WHERE d.org_id = $1 AND d.state = 'OPEN' AND d.source = 'gateway')::int AS open_discoveries,
     (SELECT count(*) FROM pc.discoveries d
       WHERE d.org_id = $1 AND d.source = 'gateway' AND d.first_seen_at > now() - interval '1 minute'
         AND d.observed->>'gateway' = $2::text)::int AS recent_from_gateway

@@ -8,6 +8,7 @@ package pantherclaw.v1;
 import "buf/validate/validate.proto";
 import "google/protobuf/timestamp.proto";
 import "pantherclaw/v1/connectors.proto";
+import "pantherclaw/v1/github.proto";
 
 // ConnectionService manages connections: one target (an HTTP API, a remote
 // MCP server, or the agent's own machine for hooks) served by one gateway
@@ -69,6 +70,35 @@ service ConnectionService {
   // RevokeCredential revokes the active credential at once.
   // permission: connection.manage
   rpc RevokeCredential(RevokeCredentialRequest) returns (RevokeCredentialResponse);
+  // GetConnectionCapabilities returns what a connection declares it
+  // supports: discovery, observation, enforcement and response, its
+  // operations, permissions with reasons, limits, failure behavior and its
+  // last successful test (F346). It is a declared capability, never
+  // coverage: what a target declares is not evidence until a test shows it
+  // (HR-210).
+  // permission: connection.read
+  rpc GetConnectionCapabilities(GetConnectionCapabilitiesRequest) returns (GetConnectionCapabilitiesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // TestConnection tests a connection and records the result; the latest
+  // passed test is its last successful test (F350, F354). A credential test
+  // checks what the connection depends on (its state, its gateway and the
+  // gateway's certificate, its pinned package and routes, its credential,
+  // its circuits) without calling the target, and finishes at once. A read
+  // test leases the package's one harmless test read (an HTTP GET with no
+  // required params) to the connection's gateway and is PENDING until the
+  // gateway reports: never a write.
+  // permission: connection.test
+  rpc TestConnection(TestConnectionRequest) returns (TestConnectionResponse);
+  // GetConnectionHealth returns what a person needs to judge a connection
+  // (F358): its circuits, the permissions its credential is used for, its
+  // latest and last successful tests, its delivery failures over the last
+  // 24 hours and, for a caller who may read agents, the agents that used it
+  // over the last 30 days.
+  // permission: connection.read
+  rpc GetConnectionHealth(GetConnectionHealthRequest) returns (GetConnectionHealthResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 }
 
 // ConnectionKind is what a connection reaches.
@@ -184,6 +214,9 @@ message Connection {
   repeated string agent_hosts = 28;
   // connector is an mcp_container connection's current spec.
   ConnectorSpec connector = 29;
+  // The GitHub App installation behind a connection holding a GitHub App
+  // credential (G0 M8, ADR-0021); unset otherwise.
+  GitHubInstallation github = 24;
 }
 
 // ConnectionRoute is one route's explicit mode.
@@ -223,6 +256,9 @@ message ConnectionCredential {
   string created_by = 10;
   // When it was stored.
   google.protobuf.Timestamp create_time = 11;
+  // Kind: "static" (placed as sealed) or "github_app" (an App key from
+  // which the gateway mints an installation token per action, G0 M8).
+  string kind = 12;
 }
 
 // CreateConnectionRequest registers a connection.
@@ -545,6 +581,20 @@ message PutCredentialRequest {
     max_len: 32
     pattern: "^([A-Za-z0-9._-]{1,32})?$"
   }];
+  // Kind the seal bound: "static" (the default when empty) or "github_app"
+  // (G0 M8 decision 3), which needs the header Authorization and the
+  // scheme Bearer.
+  string kind = 8 [(buf.validate.field).string = {
+    in: [
+      "",
+      "static",
+      "github_app"
+    ]
+  }];
+  // Required for a github_app credential, refused for a static one: the
+  // installation it was sealed for, recorded as the connection's. The
+  // gateway refuses a seal that holds another.
+  GitHubInstallation github = 9;
 }
 
 // PutCredentialResponse returns the stored metadata.
@@ -575,3 +625,254 @@ message RevokeCredentialRequest {
 
 // RevokeCredentialResponse confirms it.
 message RevokeCredentialResponse {}
+
+// Capability declarations of connections (G0 M8 track C, F346–F350). A
+// declaration follows from the connection's kind, access mode and reviewed
+// package, never from a setting; it says what the connection can do, not
+// what it was shown to do (coverage, M9).
+
+// CapabilityLevel is how far a connection supports a capability (F347).
+enum CapabilityLevel {
+  CAPABILITY_LEVEL_UNSPECIFIED = 0;
+  // The connection does it.
+  CAPABILITY_LEVEL_SUPPORTED = 1;
+  // Only as far as a cooperative agent or an opaque server lets it
+  // (HR-024, HR-086).
+  CAPABILITY_LEVEL_PARTIAL = 2;
+  // It cannot.
+  CAPABILITY_LEVEL_UNSUPPORTED = 3;
+}
+
+// CapabilitySupport is one capability's level and why.
+message CapabilitySupport {
+  // Level.
+  CapabilityLevel level = 1;
+  // Why, for people.
+  string detail = 2;
+}
+
+// ConnectionOperation is one operation a connection serves (F348).
+message ConnectionOperation {
+  // Operation, for example payments.refund.create.
+  string operation = 1;
+  // The definition's summary.
+  string summary = 2;
+  // Route of the package.
+  string route = 3;
+  // The definition's access: read or write.
+  string access = 4;
+  // Target type.
+  string target_type = 5;
+  // Reversibility: reversible, compensatable or irreversible.
+  string reversibility = 6;
+  // Whether the definition declares a verifier, so the effect can be
+  // observed after dispatch (M7).
+  bool verified = 7;
+  // The route's mode on the connection.
+  RouteMode mode = 8;
+}
+
+// ConnectionPermission is something the connection's credential is used
+// for, with the operations that need it (F349).
+message ConnectionPermission {
+  // The permission: a credential scope the definition declares
+  // (`name:level`), or without one `<access> <target type>`.
+  string name = 1;
+  // The operations that need it.
+  repeated string reasons = 2;
+}
+
+// ConnectionLimit is something the connection does not do (F350).
+message ConnectionLimit {
+  // A stable code, for example OPERATION_NOT_SERVED.
+  string code = 1;
+  // Why, for people.
+  string detail = 2;
+}
+
+// ConnectionCapabilities is a connection's declaration (F346).
+message ConnectionCapabilities {
+  // Connection id.
+  string connection_id = 1;
+  // Discovery: unknown workloads and, for MCP, upstream tools.
+  CapabilitySupport discovery = 2;
+  // Observation: decisions recorded, monitor mode.
+  CapabilitySupport observation = 3;
+  // Enforcement: whether a decision stops the call.
+  CapabilitySupport enforcement = 4;
+  // Response: quarantine, the kill switch, credential revocation.
+  CapabilitySupport response = 5;
+  // The response controls that apply: quarantine, kill_switch,
+  // revoke_credential, rotate_credential.
+  repeated string response_actions = 6;
+  // Operations it serves.
+  repeated ConnectionOperation operations = 7;
+  // What PantherClaw's credential for it is used for; empty when it holds
+  // none.
+  repeated ConnectionPermission permissions = 8;
+  // What it does not do.
+  repeated ConnectionLimit limits = 9;
+  // How it behaves when something fails, one statement each.
+  repeated string failure_behavior = 10;
+  // Its last successful test (F350); unset when it never passed one.
+  ConnectionTest last_passed_test = 11;
+}
+
+// GetConnectionCapabilitiesRequest names a connection.
+message GetConnectionCapabilitiesRequest {
+  // Connection id.
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// GetConnectionCapabilitiesResponse returns its declaration.
+message GetConnectionCapabilitiesResponse {
+  // The declaration.
+  ConnectionCapabilities capabilities = 1;
+}
+
+// ConnectionTestResult is the result of a connection test.
+enum ConnectionTestResult {
+  CONNECTION_TEST_RESULT_UNSPECIFIED = 0;
+  // Every check passed.
+  CONNECTION_TEST_RESULT_PASSED = 1;
+  // A check failed.
+  CONNECTION_TEST_RESULT_FAILED = 2;
+}
+
+// ConnectionTestCheck is one check of a connection test.
+message ConnectionTestCheck {
+  // CONNECTION_ACTIVE, GATEWAY_ACTIVE, GATEWAY_CERTIFICATE, PACKAGE_ROUTES,
+  // CREDENTIAL or CIRCUIT_CLOSED.
+  string check = 1;
+  // Whether it passed.
+  bool passed = 2;
+  // What it found, for people.
+  string detail = 3;
+}
+
+// ConnectionTest is one test of a connection.
+message ConnectionTest {
+  // Test id.
+  string id = 1;
+  // Connection id.
+  string connection_id = 2;
+  // Result, once the test is done.
+  ConnectionTestResult result = 3;
+  // The checks, in order.
+  repeated ConnectionTestCheck checks = 4;
+  // Who asked for it.
+  string requested_by = 5;
+  // When it finished; unset while it runs.
+  google.protobuf.Timestamp finish_time = 6;
+  // credential (checks what the connection depends on, without calling
+  // the target), read (a harmless read through the gateway) or
+  // target_verifier (the target refuses calls without a valid token).
+  string kind = 7;
+  // PENDING, RUNNING, DONE (with a result) or FAILED (could not run).
+  string state = 8;
+  // When it was asked for.
+  google.protobuf.Timestamp create_time = 9;
+  // The operation a read or target_verifier test reached; empty for a
+  // credential test (N23: M9 lifts the cooperative cap only for the
+  // operation a passing target_verifier test reached).
+  string operation = 10;
+}
+
+// TestConnectionRequest names a connection and the kind of test.
+message TestConnectionRequest {
+  // Connection id.
+  string id = 1 [(buf.validate.field).string.uuid = true];
+  // credential (the default), read or target_verifier.
+  string kind = 2 [(buf.validate.field).string.pattern = "^(|credential|read|target_verifier)$"];
+}
+
+// TestConnectionResponse returns the recorded test.
+message TestConnectionResponse {
+  // The test.
+  ConnectionTest test = 1;
+}
+
+// ConnectionCircuit is one gateway's circuit for a connection (HR-078).
+message ConnectionCircuit {
+  // Gateway id.
+  string gateway_id = 1;
+  // Whether it is open (the connection is then quarantined).
+  bool open = 2;
+  // UNKNOWN outcomes and all outcomes in the window the gateway reported.
+  int32 unknown_count = 3;
+  // All outcomes in that window.
+  int32 total_count = 4;
+  // When it opened; unset when closed.
+  google.protobuf.Timestamp open_time = 5;
+  // When the gateway reported it last.
+  google.protobuf.Timestamp report_time = 6;
+}
+
+// ConnectionDeliveries are the outcomes recorded for a connection's actions
+// since a time.
+message ConnectionDeliveries {
+  // The start of the window (24 hours before the read).
+  google.protobuf.Timestamp since_time = 1;
+  // Failed outcomes.
+  int32 failed_count = 2;
+  // UNKNOWN outcomes.
+  int32 unknown_count = 3;
+  // The latest failed or UNKNOWN outcome; unset when none.
+  google.protobuf.Timestamp last_failure_time = 4;
+  // The latest accepted outcome; unset when none.
+  google.protobuf.Timestamp last_success_time = 5;
+  // Actions an agent ran itself after the decision (delegated): PantherClaw
+  // never learns their result, so they count neither as failures nor as
+  // successes (HR-024).
+  int32 delegated_count = 6;
+  // The latest delegated outcome; unset when none.
+  google.protobuf.Timestamp last_delegated_time = 7;
+}
+
+// ConnectionDependentAgent is an agent whose runs used a connection.
+message ConnectionDependentAgent {
+  // Agent id.
+  string agent_id = 1;
+  // Agent name.
+  string name = 2;
+  // When it last used the connection.
+  google.protobuf.Timestamp last_use_time = 3;
+}
+
+// ConnectionHealth is a connection's health (F358).
+message ConnectionHealth {
+  // The connection.
+  Connection connection = 1;
+  // Its active credential's metadata; unset when none.
+  ConnectionCredential active_credential = 2;
+  // Each gateway's circuit.
+  repeated ConnectionCircuit circuits = 3;
+  // What PantherClaw's credential for it is used for.
+  repeated ConnectionPermission permissions = 4;
+  // Its latest test, of any kind: a credential test checks only the
+  // configuration and never reaches the target, so read its kind.
+  ConnectionTest last_test = 5;
+  // Its last successful test, of any kind (see last_test).
+  ConnectionTest last_passed_test = 6;
+  // Delivery failures over the last 24 hours.
+  ConnectionDeliveries deliveries = 7;
+  // Agents that used it over the last 30 days, latest first, at most 50.
+  repeated ConnectionDependentAgent dependent_agents = 8;
+  // The caller may not read agents org-wide, so neither list is shown.
+  bool dependent_agents_hidden = 9;
+  // Agents whose active grants allow an operation the connection serves,
+  // so they depend on it, by name, at most 50. last_use_time is unset.
+  repeated ConnectionDependentAgent granted_agents = 10;
+}
+
+// GetConnectionHealthRequest names a connection.
+message GetConnectionHealthRequest {
+  // Connection id.
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// GetConnectionHealthResponse returns its health.
+message GetConnectionHealthResponse {
+  // The health.
+  ConnectionHealth health = 1;
+}

@@ -54,6 +54,12 @@ type m6Services struct {
 	// verifications are leased to gateways over this listener (G0 M7);
 	// nil leaves the RPCs unimplemented.
 	verifications gatewaysrpc.Verifications
+	// facts takes what gateways read as connections' fact providers (G0 M8);
+	// nil leaves ReportFacts unimplemented.
+	facts gatewaysrpc.Facts
+	// scans takes a gateway's organization scan findings on the gateway
+	// listener (G0 M8, HR-209); nil leaves SubmitScanFindings unserved there.
+	scans pantherclawv1connect.AgentServiceHandler
 	// rpID is the WebAuthn relying party approver keys are exported for
 	// (HR-038); "" when security keys are off.
 	rpID string
@@ -102,10 +108,11 @@ func (m *m6Services) mountPages(web *webhttp.Handler) {
 }
 
 // gatewayHandler is the gateway listener's handler: AuthorityService and
-// GatewayService only, every call authenticated by its client certificate
-// (HR-181, HR-020).
+// GatewayService, and AgentService.SubmitScanFindings for a gateway's
+// organization scan (G0 M8), every call authenticated by its client
+// certificate (HR-181, HR-020).
 func (m *m6Services) gatewayHandler(svc *authority.Service, log *slog.Logger) (http.Handler, error) {
-	rs, err := rpc.NewServer(rpc.Options{Logger: log, Authenticate: gatewaysrpc.Authenticator(m.gateways, procedurePermissions)})
+	rs, err := rpc.NewServer(rpc.Options{Logger: log, Authenticate: gatewaysrpc.Authenticator(m.gateways, gatewayListenerPermissions())})
 	if err != nil {
 		return nil, err
 	}
@@ -114,7 +121,13 @@ func (m *m6Services) gatewayHandler(svc *authority.Service, log *slog.Logger) (h
 	if m.verifications != nil {
 		gw = gw.WithVerifications(m.verifications)
 	}
+	if m.facts != nil {
+		gw = gw.WithFacts(m.facts)
+	}
 	pantherclawv1connect.RegisterGatewayServiceHandler(rs, gw)
+	if m.scans != nil {
+		pantherclawv1connect.RegisterAgentServiceHandler(rs, m.scans)
+	}
 	mux := http.NewServeMux()
 	rpc.Mount(mux, rs)
 	// Gateways verify permits with the JWKS, fetched here over mTLS.
