@@ -67,12 +67,14 @@ func TestHR084_ConnectorsRunOnlyOnCustomerHostedGateways(t *testing.T) {
 		mutate func(*app.CreateInput)
 		want   error
 	}{
-		"a tag":                  {func(i *app.CreateInput) { i.Connector.Image = "registry.example.test/acme/mcp:latest" }, app.ErrConnector},
-		"no command":             {func(i *app.CreateInput) { i.Connector.Command = nil }, app.ErrConnector},
-		"a token in the env":     {func(i *app.CreateInput) { i.Connector.Environment["TOKEN"] = "ghp_0123456789abcdef" }, app.ErrConnector},
-		"a token in the command": {func(i *app.CreateInput) { i.Connector.Command = []string{"/server", "--token=ghp_0123456789abcdef"} }, app.ErrConnector},
-		"a JWT in the env":       {func(i *app.CreateInput) { i.Connector.Environment["SESSION"] = "eyJhbGciOiJIUzI1NiJ9.e30.x" }, app.ErrConnector},
-		"an AWS session key":     {func(i *app.CreateInput) { i.Connector.Environment["KEY"] = "ASIA0123456789ABCDEF" }, app.ErrConnector},
+		"a tag":              {func(i *app.CreateInput) { i.Connector.Image = "registry.example.test/acme/mcp:latest" }, app.ErrConnector},
+		"no command":         {func(i *app.CreateInput) { i.Connector.Command = nil }, app.ErrConnector},
+		"a token in the env": {func(i *app.CreateInput) { i.Connector.Environment["TOKEN"] = "ghp_0123456789abcdef" }, app.ErrConnector},
+		"a token in the command": {func(i *app.CreateInput) {
+			i.Connector.Command = []string{"/server", "--token=" + "ghp_" + strings.Repeat("a", 20)}
+		}, app.ErrConnector},
+		"a JWT in the env":   {func(i *app.CreateInput) { i.Connector.Environment["SESSION"] = "eyJhbGciOiJIUzI1NiJ9.e30.x" }, app.ErrConnector},
+		"an AWS session key": {func(i *app.CreateInput) { i.Connector.Environment["KEY"] = "ASIA0123456789ABCDEF" }, app.ErrConnector},
 		"an env over 64 KiB": {func(i *app.CreateInput) {
 			for n := range 64 {
 				i.Connector.Environment[fmt.Sprintf("V%d", n)] = strings.Repeat("x", 1024)
