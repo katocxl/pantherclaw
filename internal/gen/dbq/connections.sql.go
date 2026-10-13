@@ -16,25 +16,40 @@ import (
 )
 
 const activeGrantBounds = `-- name: ActiveGrantBounds :many
-SELECT g.agent_id, a.name, r.bounds
+SELECT g.id, g.agent_id, a.name, r.bounds
 FROM pc.grants g
 JOIN pc.grant_revisions r ON r.org_id = g.org_id AND r.grant_id = g.id AND r.revision = g.current_revision
 JOIN pc.agents a ON a.org_id = g.org_id AND a.id = g.agent_id
 WHERE g.org_id = $1 AND g.state = 'ACTIVE' AND r.expires_at > now()
-ORDER BY a.name, g.agent_id
-LIMIT 5000
+  AND (a.name, g.id) > ($2::text, $3::uuid)
+ORDER BY a.name, g.id
+LIMIT $4::integer
 `
 
+type ActiveGrantBoundsParams struct {
+	OrgID     ids.OrgID
+	AfterName string
+	AfterID   ids.UUID
+	Page      int32
+}
+
 type ActiveGrantBoundsRow struct {
+	ID      ids.UUID
 	AgentID ids.UUID
 	Name    string
 	Bounds  []byte
 }
 
-// The bounds of every active, unexpired grant, with its agent, to find
-// the agents whose grants depend on a connection (F358).
-func (q *Queries) ActiveGrantBounds(ctx context.Context, orgID ids.OrgID) ([]ActiveGrantBoundsRow, error) {
-	rows, err := q.db.Query(ctx, activeGrantBounds, orgID)
+// A page of the bounds of the active, unexpired grants, with their agents,
+// after (agent name, grant id), to find the agents whose grants depend on
+// a connection (F358). The caller reads pages until its list is full.
+func (q *Queries) ActiveGrantBounds(ctx context.Context, arg ActiveGrantBoundsParams) ([]ActiveGrantBoundsRow, error) {
+	rows, err := q.db.Query(ctx, activeGrantBounds,
+		arg.OrgID,
+		arg.AfterName,
+		arg.AfterID,
+		arg.Page,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -42,7 +57,12 @@ func (q *Queries) ActiveGrantBounds(ctx context.Context, orgID ids.OrgID) ([]Act
 	items := []ActiveGrantBoundsRow{}
 	for rows.Next() {
 		var i ActiveGrantBoundsRow
-		if err := rows.Scan(&i.AgentID, &i.Name, &i.Bounds); err != nil {
+		if err := rows.Scan(
+			&i.ID,
+			&i.AgentID,
+			&i.Name,
+			&i.Bounds,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

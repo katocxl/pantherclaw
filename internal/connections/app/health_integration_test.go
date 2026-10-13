@@ -133,14 +133,30 @@ func (e *env) grant(t *testing.T, name, bounds string, revoked, expired bool) id
 	return agent
 }
 
+// grants gives a new agent n active grants with bounds.
+func (e *env) grants(t *testing.T, name, bounds string, n int) {
+	t.Helper()
+	agent, _ := e.agentRun(t, name)
+	e.exec(t, `INSERT INTO pc.grants (org_id, id, agent_id, principal_user_id, environment_id, depth, state, current_revision, grantor_kind,
+		grantor_id, basis)
+		SELECT r.org_id, gen_random_uuid(), r.agent_id, r.principal_user_id, r.environment_id, 0, 'ACTIVE', 1, 'user', r.principal_user_id, 'test'
+		FROM pc.runs r, generate_series(1, $3) WHERE r.org_id = $1 AND r.agent_id = $2`, e.org, agent, n)
+	e.exec(t, `INSERT INTO pc.grant_revisions (org_id, id, grant_id, revision, not_before, expires_at, bounds, requirements, limits,
+		delegation_depth, max_children, min_attestation, widens, created_by)
+		SELECT $1, gen_random_uuid(), g.id, 1, now() - interval '2 days', now() + interval '1 day', $3, '[]', '{}', 0, 0, 0, false, 'test'
+		FROM pc.grants g WHERE g.org_id = $1 AND g.agent_id = $2`, e.org, agent, []byte(bounds))
+}
+
 // TestF358_HealthListsTheAgentsWhoseGrantsDependOnTheConnection: the
 // agents holding an active, unexpired grant that allows an operation the
 // connection serves, a grant without an operation bound included, by
-// name; never a revoked or expired grant, one for other operations, or
-// any for a reader without agent.read.
+// name, however many grants for other operations come first; never a
+// revoked or expired grant, one for other operations, or any for a reader
+// without agent.read.
 func TestF358_HealthListsTheAgentsWhoseGrantsDependOnTheConnection(t *testing.T) {
 	e := newEnv(t)
 	c := e.payments(t, "payments")
+	e.grants(t, "0-github-fleet", `{"operations":["github.*"]}`, 1201)
 	refunder := e.grant(t, "a-refunder", `{"operations":["payments.refund.*"]}`, false, false)
 	reader := e.grant(t, "b-reader", `{"operations":["payments.refund.get"]}`, false, false)
 	anything := e.grant(t, "c-anything", `{}`, false, false)
