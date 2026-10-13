@@ -178,7 +178,10 @@ type AgentServiceClient interface {
 	// SubmitScanFindings records the findings of a local `pclaw scan` as
 	// DISCOVERED agents with ADMISSION entries (PN-001.1, F015); a finding
 	// submitted before is only counted. Findings are UNTRUSTED observations
-	// and grant nothing; credentials never leave the scanning machine.
+	// and grant nothing; credentials never leave the scanning machine. It is
+	// also served on the gateway listener, where a gateway holding an
+	// organization scan's org_scan lease submits that scan's findings and
+	// needs gateway.scan.submit instead (G0 M8, HR-209).
 	// permission: agent.manage
 	SubmitScanFindings(context.Context, *v1.SubmitScanFindingsRequest) (*v1.SubmitScanFindingsResponse, error)
 	// RequestAgentRestoration asks for a suspended agent to return to the
@@ -236,7 +239,10 @@ type AgentServiceHandler interface {
 	// SubmitScanFindings records the findings of a local `pclaw scan` as
 	// DISCOVERED agents with ADMISSION entries (PN-001.1, F015); a finding
 	// submitted before is only counted. Findings are UNTRUSTED observations
-	// and grant nothing; credentials never leave the scanning machine.
+	// and grant nothing; credentials never leave the scanning machine. It is
+	// also served on the gateway listener, where a gateway holding an
+	// organization scan's org_scan lease submits that scan's findings and
+	// needs gateway.scan.submit instead (G0 M8, HR-209).
 	// permission: agent.manage
 	SubmitScanFindings(context.Context, *v1.SubmitScanFindingsRequest) (*v1.SubmitScanFindingsResponse, error)
 	// RequestAgentRestoration asks for a suspended agent to return to the

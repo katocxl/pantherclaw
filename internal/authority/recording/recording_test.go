@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/katocxl/pantherclaw/internal/authority/consequences"
 	adomain "github.com/katocxl/pantherclaw/internal/authority/domain"
 	"github.com/katocxl/pantherclaw/internal/authority/pipeline"
 	"github.com/katocxl/pantherclaw/internal/authority/pipeline/pipelinetest"
@@ -244,7 +245,7 @@ func roundTrip(t *testing.T, s *pipelinetest.Scenario, req pipeline.Request) (*p
 // the recorded reference.
 func served(t *testing.T, s *pipelinetest.Scenario, r *recording.Recording) recording.Served {
 	t.Helper()
-	out := recording.Served{Definitions: map[string]*defs.Definition{}}
+	out := recording.Served{Definitions: map[string]*defs.Definition{}, Consequences: map[string][]consequences.Rule{}}
 	for _, d := range r.Reads.Definitions {
 		if d.Err != "" {
 			continue
@@ -253,7 +254,7 @@ func served(t *testing.T, s *pipelinetest.Scenario, r *recording.Recording) reco
 		if err != nil {
 			t.Fatal(err)
 		}
-		out.Definitions[d.Digest] = p.Definition
+		out.Definitions[d.Digest], out.Consequences[d.Digest] = p.Definition, p.Consequences
 	}
 	if p := r.Reads.Policy; p != nil && p.Err == "" && !p.None {
 		s.W.Fail["Policy"] = false
@@ -283,6 +284,9 @@ func view(ev *pipeline.Evaluation) string {
 	}
 	for _, d := range ev.Plan.Counters {
 		fmt.Fprintf(&b, "counter %s %x row=%s\n", d.Ref.Rule, d.Ref.Key, ev.Rows.Counters[d.Ref])
+	}
+	for _, c := range ev.Consequences {
+		fmt.Fprintf(&b, "consequence %s %s %s %v %v %s %v\n", c.Rule, c.State, c.Target.ID, c.Environments, c.Unknown, c.FactsDigest, c.Err)
 	}
 	if ev.Amount != nil {
 		fmt.Fprintf(&b, "amount=%s\n", ev.Amount)
