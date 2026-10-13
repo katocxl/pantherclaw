@@ -177,12 +177,19 @@ func TestConnectionTestReads(t *testing.T) {
 // prerequisite fact whose change supersedes it; a write without mappings
 // or dispatch exists only as a consequence of its package.
 func TestInvalidateOnAndVirtualConsequences(t *testing.T) {
-	merge := minimal(map[string]domain.ParamSpec{})
+	merge := minimal(map[string]domain.ParamSpec{"sha": {Type: domain.TypeIdentifier, Material: true}})
 	merge.Operation, merge.Access = "x.pull.merge", domain.AccessWrite
-	merge.Prerequisites = []domain.Prerequisite{{Fact: "x.pull.head", MaxAgeSeconds: 30}}
+	merge.Prerequisites = []domain.Prerequisite{{
+		Fact: "x.pull.head", MaxAgeSeconds: 30, Binds: &domain.FactBinding{Member: "sha", Param: "sha", Reason: "HEAD_MOVED"},
+	}}
 	merge.Approval = &domain.ApprovalTemplate{Title: "Merge {target.id}", Fields: []string{"target.id"}, InvalidateOn: "x.pull.head"}
 	if err := merge.Validate(); err != nil {
 		t.Fatal(err)
+	}
+	unbound := *merge
+	unbound.Prerequisites = []domain.Prerequisite{{Fact: "x.pull.head", MaxAgeSeconds: 30}}
+	if err := unbound.Validate(); !errors.Is(err, domain.ErrInvalid) {
+		t.Fatalf("invalidate_on a fact that binds no member (HR-030 option B): %v", err)
 	}
 	bad := *merge
 	bad.Approval = &domain.ApprovalTemplate{Title: "Merge", Fields: []string{"target.id"}, InvalidateOn: "x.pull.base"}

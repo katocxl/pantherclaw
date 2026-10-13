@@ -440,6 +440,11 @@ func (d *Definition) validateApproval() error {
 	if a.InvalidateOn != "" && !d.prerequisiteField("facts."+a.InvalidateOn) {
 		return invalid("%s: approval.invalidate_on names %q, which is not a prerequisite fact", d.Operation, a.InvalidateOn)
 	}
+	if a.InvalidateOn != "" && !slices.ContainsFunc(d.Prerequisites, func(p Prerequisite) bool { return p.Fact == a.InvalidateOn && p.Binds != nil }) {
+		// An approval binds only the members prerequisites declare (HR-030
+		// option B), so only a bound member's change can supersede it.
+		return invalid("%s: approval.invalidate_on names %q, whose prerequisite binds no member", d.Operation, a.InvalidateOn)
+	}
 	if a.IndependentOf != "" && !d.prerequisiteField("facts."+a.IndependentOf) {
 		return invalid("%s: approval.independent_of names %q, which is not a prerequisite fact", d.Operation, a.IndependentOf)
 	}

@@ -19,8 +19,10 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 )
 
-// DisplayVersion is the version of the stored display's shape.
-const DisplayVersion = 1
+// DisplayVersion is the version of the stored display's shape. Version 2
+// (HR-030 option B, founder decision 2026-10-13) shows a fact's value only
+// for the members the approval binds and never when it was observed.
+const DisplayVersion = 2
 
 // MaxContext caps the earlier approved requests shown as context (decision 9).
 const MaxContext = 5
@@ -75,16 +77,19 @@ type Field struct {
 	Requested string `json:"requested,omitzero"`
 }
 
-// FactLine is one fact the decision used, with its provider and when it
-// was observed. Its age is shown from ObservedAt when the page renders: the
-// stored display holds nothing that changes with time, so a resubmission
-// recomputes the same binding.
+// FactLine is one fact the decision used. Value holds only the members the
+// approval binds (a merge's head SHA), and is empty for a fact it binds
+// nothing of: the page shows that fact's current value and provider, which
+// are read and decided on again whenever the approval is used (HR-030
+// option B, founder decision 2026-10-13). Provider and ObservedAt are set
+// only in a version 1 display: a fact observed again, by whichever
+// provider, gives a resubmission the same binding.
 type FactLine struct {
 	Name       string `json:"name"`
 	Subject    string `json:"subject"`
 	Value      string `json:"value"`
-	Provider   string `json:"provider"`
-	ObservedAt string `json:"observed_at"`
+	Provider   string `json:"provider,omitzero"`
+	ObservedAt string `json:"observed_at,omitzero"`
 }
 
 // RunLine names the run by ids (readable names come from a directory
@@ -145,7 +150,10 @@ type ActionInput struct {
 	Requested defs.Values
 	Effective defs.Values
 	Facts     []fdomain.Fact
-	Run       RunLine
+	// Bound are the fact members the approval binds; only their values are
+	// shown (HR-030 option B).
+	Bound []BoundFact
+	Run   RunLine
 	// TaskLabel is the run's UNTRUSTED task label.
 	TaskLabel    string
 	Requirements []Requirement
@@ -204,7 +212,7 @@ func RenderAction(in ActionInput) (Display, error) {
 	if d.Verifier != nil {
 		out.Consequence.Verifier = d.Verifier.Operation + " establishes " + d.Verifier.Establishes
 	}
-	out.Facts = factLines(in.Facts)
+	out.Facts = factLines(in.Facts, in.Bound)
 	out.Consequences = consequenceLines(in.Consequences)
 	out.finish(in.Requirements, in.Variants, in.Context)
 	var untrusted []Untrusted
@@ -288,13 +296,12 @@ func untrustedBlock(items []Untrusted) UntrustedBlock {
 	return UntrustedBlock{Label: UntrustedLabel, Items: items}
 }
 
-func factLines(facts []fdomain.Fact) []FactLine {
+func factLines(facts []fdomain.Fact, bound []BoundFact) []FactLine {
 	out := make([]FactLine, 0, len(facts))
 	for _, f := range facts {
 		out = append(out, FactLine{
 			Name: f.Name, Subject: f.SubjectType + ":" + Clean("", f.SubjectID, 512).Text,
-			Value: Clean("", f.Value.String(), 256).Text, Provider: f.ProviderID.String(),
-			ObservedAt: f.ObservedAt.UTC().Format(time.RFC3339),
+			Value: Clean("", boundValue(bound, f.Name, f.SubjectType+":"+f.SubjectID), 256).Text,
 		})
 	}
 	slices.SortFunc(out, func(a, b FactLine) int { return cmp.Or(cmp.Compare(a.Name, b.Name), cmp.Compare(a.Subject, b.Subject)) })
@@ -335,7 +342,8 @@ func fieldValue(d *defs.Definition, name string, in ActionInput) (Field, error) 
 			if i < 0 {
 				return f, fmt.Errorf("approvals: template field %q names a fact the decision did not use", name)
 			}
-			f.Value = Clean("", in.Facts[i].Value.String(), 256).Text
+			x := in.Facts[i]
+			f.Value = Clean("", boundValue(in.Bound, x.Name, x.SubjectType+":"+x.SubjectID), 256).Text
 			return f, nil
 		}
 		return f, fmt.Errorf("approvals: template field %q is not canonical", name)
