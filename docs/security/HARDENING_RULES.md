@@ -34,11 +34,11 @@
 
 | ID | Rule | Threats | MS |
 |---|---|---|---|
-| HR-030 | Approval binding = hash of action hash, decision-basis digest, material-facts digest, grant revision, definition digest, run, agent instance, workload jkt, approver requirements, expiry, rendered-display hash (PAP/1 §8). | T-005, T-006 | M5 |
+| HR-030 | Approval binding = hash of action hash, decision-basis digest, digest of the bound fact members, grant revision, definition digest, run, agent instance, workload jkt, approver requirements, expiry, rendered-display hash (PAP/1 §8). An approval binds only the fact members a prerequisite declares in `binds` (for a merge, the head SHA); every other fact, and when or by whom any fact was observed, is not bound but read again and decided on at finalization (pipeline steps 6 and 7), and only a change to a bound member supersedes a request. Amended with the founder's approval on 2026-10-13. | T-005, T-006 | M5 |
 | HR-031 | Finalization re-runs the full pipeline and requires the same requirement class to be satisfied. | T-006 | M5 |
 | HR-032 | Approvals are accepted only from authenticated human sessions; API keys and service accounts can never approve. | T-002 | M5 |
 | HR-033 | High-consequence approvals require WebAuthn (UV) with `challenge = binding`; Slack/email only deep-link to the authenticated approval page. | T-006, T-026 | M5 |
-| HR-034 | Approval text is rendered only from the tool package's per-operation template using canonical fields and system-of-record facts; agent text shown in a quarantined UNTRUSTED block; bidi controls stripped; mixed-script identifiers flagged. | T-026 | M5 |
+| HR-034 | Approval text is rendered only from the tool package's per-operation template using canonical fields and system-of-record facts; agent text shown in a quarantined UNTRUSTED block; bidi controls stripped; mixed-script identifiers flagged. A fact appears with the value of the members the approval binds (HR-030); a fact it binds nothing of is shown as checked again when the approval is used (founder approval 2026-10-13). | T-026 | M5 |
 | HR-035 | Two-person rules require two distinct users **and** distinct WebAuthn credentials, account-age and role-change cooldowns, and notification to org admins. | T-027 | M5 |
 | HR-036 | Initiator/launcher/represented principal cannot satisfy an independent-approval requirement for their own action. | T-002 | M5 |
 | HR-037 | Pending HOLDs per grant are capped; approvers see the variant history of the action; variant-shopping is a detection. | T-007 | M5/M10 |
