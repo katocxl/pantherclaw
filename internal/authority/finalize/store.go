@@ -53,6 +53,15 @@ var (
 	ErrBusy = errors.New("finalize: budget busy")
 )
 
+// WindowClosedError: an approval that counts only inside a change window
+// (window: true) would be consumed outside one, by the database clock
+// (G0 M8, HR-207). The Authority answers CANNOT_AUTHORIZE
+// CHANGE_WINDOW_CLOSED with Detail and leaves the approval unconsumed, so
+// a resubmission inside the window can use it.
+type WindowClosedError struct{ Detail string }
+
+func (e *WindowClosedError) Error() string { return "finalize: change window closed: " + e.Detail }
+
 // MaxEvaluations caps how often one OPEN transaction is evaluated (T-023);
 // past it the stored decision is returned without a new evaluation.
 const MaxEvaluations = 32
