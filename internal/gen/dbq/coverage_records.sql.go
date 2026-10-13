@@ -687,6 +687,67 @@ func (q *Queries) CoverageScopesOfConnection(ctx context.Context, orgID ids.OrgI
 	return items, nil
 }
 
+const coverageSnapshotBefore = `-- name: CoverageSnapshotBefore :one
+SELECT ledger_entry_id FROM pc.coverage_snapshots
+WHERE org_id = $1 AND agent_id = $2 AND connection_id = $3
+  AND operation = $4 AND computed_at < $5
+ORDER BY computed_at DESC, id DESC
+LIMIT 1
+`
+
+type CoverageSnapshotBeforeParams struct {
+	OrgID        ids.OrgID
+	AgentID      ids.UUID
+	ConnectionID ids.UUID
+	Operation    string
+	Until        time.Time
+}
+
+// A scope's snapshot that was current at a decision (the latest computed
+// before until), and the next one: pclaw verify tells from them a claim
+// that names another snapshot (T-089).
+func (q *Queries) CoverageSnapshotBefore(ctx context.Context, arg CoverageSnapshotBeforeParams) (ids.UUID, error) {
+	row := q.db.QueryRow(ctx, coverageSnapshotBefore,
+		arg.OrgID,
+		arg.AgentID,
+		arg.ConnectionID,
+		arg.Operation,
+		arg.Until,
+	)
+	var ledger_entry_id ids.UUID
+	err := row.Scan(&ledger_entry_id)
+	return ledger_entry_id, err
+}
+
+const coverageSnapshotFrom = `-- name: CoverageSnapshotFrom :one
+SELECT ledger_entry_id FROM pc.coverage_snapshots
+WHERE org_id = $1 AND agent_id = $2 AND connection_id = $3
+  AND operation = $4 AND computed_at >= $5
+ORDER BY computed_at, id
+LIMIT 1
+`
+
+type CoverageSnapshotFromParams struct {
+	OrgID        ids.OrgID
+	AgentID      ids.UUID
+	ConnectionID ids.UUID
+	Operation    string
+	Until        time.Time
+}
+
+func (q *Queries) CoverageSnapshotFrom(ctx context.Context, arg CoverageSnapshotFromParams) (ids.UUID, error) {
+	row := q.db.QueryRow(ctx, coverageSnapshotFrom,
+		arg.OrgID,
+		arg.AgentID,
+		arg.ConnectionID,
+		arg.Operation,
+		arg.Until,
+	)
+	var ledger_entry_id ids.UUID
+	err := row.Scan(&ledger_entry_id)
+	return ledger_entry_id, err
+}
+
 const coverageTrafficAfter = `-- name: CoverageTrafficAfter :many
 SELECT t.id, r.agent_id, t.connection_id, t.operation, t.channel, t.mode
 FROM pc.transactions t
@@ -835,6 +896,61 @@ func (q *Queries) DismissCoverageFinding(ctx context.Context, arg DismissCoverag
 		&i.DismissReason,
 	)
 	return i, err
+}
+
+const dismissedCoverageFindingsGone = `-- name: DismissedCoverageFindingsGone :many
+SELECT id, excess, dismissed_by, dismiss_reason FROM pc.coverage_findings
+WHERE org_id = $1 AND kind = $2 AND connection_id = $3
+  AND state = 'DISMISSED' AND NOT (fingerprint = ANY ($4::bytea[]))
+ORDER BY id
+FOR UPDATE
+`
+
+type DismissedCoverageFindingsGoneParams struct {
+	OrgID        ids.OrgID
+	Kind         string
+	ConnectionID *ids.UUID
+	Keep         [][]byte
+}
+
+type DismissedCoverageFindingsGoneRow struct {
+	ID            ids.UUID
+	Excess        []string
+	DismissedBy   *ids.UUID
+	DismissReason *string
+}
+
+// The dismissed findings of a kind for a connection that the latest pass
+// no longer found, with their dismissal, which the caller audits before
+// ResolveCoverageFindings clears it.
+func (q *Queries) DismissedCoverageFindingsGone(ctx context.Context, arg DismissedCoverageFindingsGoneParams) ([]DismissedCoverageFindingsGoneRow, error) {
+	rows, err := q.db.Query(ctx, dismissedCoverageFindingsGone,
+		arg.OrgID,
+		arg.Kind,
+		arg.ConnectionID,
+		arg.Keep,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []DismissedCoverageFindingsGoneRow{}
+	for rows.Next() {
+		var i DismissedCoverageFindingsGoneRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Excess,
+			&i.DismissedBy,
+			&i.DismissReason,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const enterCoverageInvalidation = `-- name: EnterCoverageInvalidation :execrows
@@ -1796,8 +1912,7 @@ type ResolveCoverageFindingsParams struct {
 
 // Findings of a kind for a connection that the latest pass no longer found
 // are resolved, dismissed ones too: a dismissal covers the exposure it was
-// made for while it lasts, so the same excess found again later reopens. The
-// dismissal itself stays in the audit ledger.
+// made for while it lasts, so the same excess found again later reopens.
 func (q *Queries) ResolveCoverageFindings(ctx context.Context, arg ResolveCoverageFindingsParams) (int64, error) {
 	result, err := q.db.Exec(ctx, resolveCoverageFindings,
 		arg.OrgID,

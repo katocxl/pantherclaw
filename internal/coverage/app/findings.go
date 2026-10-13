@@ -156,10 +156,44 @@ func (s *Service) RefreshFindings(ctx context.Context, tx db.TenantTx, connectio
 	case !db.IsNoRows(err):
 		return err
 	}
+	// A dismissed finding no longer found ends its dismissal; it is audited
+	// with the dismissal before the row forgets it.
+	gone, err := q.DismissedCoverageFindingsGone(ctx, dbq.DismissedCoverageFindingsGoneParams{
+		OrgID: tx.OrgID(), Kind: KindOverreach, ConnectionID: &connection, Keep: keep,
+	})
+	if err != nil {
+		return err
+	}
+	for _, g := range gone {
+		details := map[string]string{"kind": KindOverreach, "excess": truncate(strings.Join(g.Excess, ","), 512)}
+		auditReason(details, deref(g.DismissReason))
+		if g.DismissedBy != nil {
+			details["dismissed_by"] = g.DismissedBy.String()
+		}
+		if _, err := audit.Record(ctx, tx, audit.Event{
+			Name: "coverage.finding_resolved", Actor: Actor, Outcome: audit.Success,
+			Object:  &audit.Object{Type: "coverage_finding", ID: g.ID.String()},
+			Details: details,
+		}); err != nil {
+			return err
+		}
+	}
 	_, err = q.ResolveCoverageFindings(ctx, dbq.ResolveCoverageFindingsParams{
 		OrgID: tx.OrgID(), Kind: KindOverreach, ConnectionID: &connection, Keep: keep,
 	})
 	return err
+}
+
+// auditReason adds a written reason to audit details as reason_1, reason_2
+// and so on, each at most 512 bytes and cut at a character boundary, so a
+// reason of up to 1,000 characters is kept whole.
+func auditReason(details map[string]string, reason string) map[string]string {
+	for i := 1; reason != ""; i++ {
+		part := truncate(reason, 512)
+		details["reason_"+strconv.Itoa(i)] = part
+		reason = reason[len(part):]
+	}
+	return details
 }
 
 // truncate cuts s to at most n bytes, at a character boundary.
@@ -221,7 +255,9 @@ func (s *Service) AcknowledgeFinding(ctx context.Context, id ids.UUID, reason st
 		_, err = audit.Record(ctx, tx, audit.Event{
 			Name: "coverage.finding_dismissed", Actor: c.Actor(), Outcome: audit.Success,
 			Object:  &audit.Object{Type: "coverage_finding", ID: out.ID.String()},
-			Details: map[string]string{"kind": out.Kind, "severity": out.Severity, "excess": strings.Join(out.Excess, ",")},
+			Details: auditReason(map[string]string{
+				"kind": out.Kind, "severity": out.Severity, "excess": truncate(strings.Join(out.Excess, ","), 512),
+			}, reason),
 		})
 		return err
 	})

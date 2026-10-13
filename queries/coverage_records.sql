@@ -227,10 +227,19 @@ ON CONFLICT (org_id, kind, fingerprint) DO UPDATE SET
     last_seen_at = now()
 RETURNING *;
 
+-- The dismissed findings of a kind for a connection that the latest pass
+-- no longer found, with their dismissal, which the caller audits before
+-- ResolveCoverageFindings clears it.
+-- name: DismissedCoverageFindingsGone :many
+SELECT id, excess, dismissed_by, dismiss_reason FROM pc.coverage_findings
+WHERE org_id = sqlc.arg(org_id) AND kind = sqlc.arg(kind) AND connection_id = sqlc.arg(connection_id)
+  AND state = 'DISMISSED' AND NOT (fingerprint = ANY (sqlc.arg(keep)::bytea[]))
+ORDER BY id
+FOR UPDATE;
+
 -- Findings of a kind for a connection that the latest pass no longer found
 -- are resolved, dismissed ones too: a dismissal covers the exposure it was
--- made for while it lasts, so the same excess found again later reopens. The
--- dismissal itself stays in the audit ledger.
+-- made for while it lasts, so the same excess found again later reopens.
 -- name: ResolveCoverageFindings :execrows
 UPDATE pc.coverage_findings SET state = 'RESOLVED', resolved_at = now(), dismissed_by = NULL, dismiss_reason = NULL
 WHERE org_id = sqlc.arg(org_id) AND kind = sqlc.arg(kind) AND connection_id = sqlc.arg(connection_id) AND state IN ('OPEN', 'DISMISSED')
@@ -464,3 +473,20 @@ LIMIT sqlc.arg(max_rows);
 -- name: CoverageInstallationOfConnection :one
 SELECT app_client_id, installation_id, account_login, permissions FROM pc.connection_github
 WHERE org_id = sqlc.arg(org_id) AND connection_id = sqlc.arg(connection_id);
+
+-- A scope's snapshot that was current at a decision (the latest computed
+-- before until), and the next one: pclaw verify tells from them a claim
+-- that names another snapshot (T-089).
+-- name: CoverageSnapshotBefore :one
+SELECT ledger_entry_id FROM pc.coverage_snapshots
+WHERE org_id = sqlc.arg(org_id) AND agent_id = sqlc.arg(agent_id) AND connection_id = sqlc.arg(connection_id)
+  AND operation = sqlc.arg(operation) AND computed_at < sqlc.arg(until)
+ORDER BY computed_at DESC, id DESC
+LIMIT 1;
+
+-- name: CoverageSnapshotFrom :one
+SELECT ledger_entry_id FROM pc.coverage_snapshots
+WHERE org_id = sqlc.arg(org_id) AND agent_id = sqlc.arg(agent_id) AND connection_id = sqlc.arg(connection_id)
+  AND operation = sqlc.arg(operation) AND computed_at >= sqlc.arg(until)
+ORDER BY computed_at, id
+LIMIT 1;

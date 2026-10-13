@@ -367,12 +367,13 @@ func (v *verifier) receipts() {
 			continue
 		}
 		sum := sha256.Sum256([]byte(compact))
-		if seq, ok := v.digests[hex.EncodeToString(sum[:])]; ok {
+		seq, recorded := v.digests[hex.EncodeToString(sum[:])]
+		if recorded {
 			v.r.add("receipt.ledger", subject, Passed, "recorded by the chained entry at seq %d", seq)
 		} else {
 			v.r.add("receipt.ledger", subject, NotAvailable, "no verified entry in this bundle records it")
 		}
-		v.coverage(subject, payload)
+		v.coverage(subject, payload, seq, recorded)
 	}
 }
 
