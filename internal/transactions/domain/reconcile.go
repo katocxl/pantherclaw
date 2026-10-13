@@ -37,6 +37,11 @@ const (
 	// disagrees. The committed budget stays committed; the person records
 	// which observation is authoritative.
 	KindConflictingEffect TaskKind = "conflicting_effect"
+	// KindConsequenceUnconfirmed: a consequence's verifier saw a status
+	// suggesting it did not take effect, or nothing by its deadline (G0 M8
+	// W1c). A person confirms it occurred, or releases it as not occurred
+	// with a security key (HR-192).
+	KindConsequenceUnconfirmed TaskKind = "consequence_unconfirmed"
 )
 
 // Via is what resolved a task.
@@ -185,6 +190,10 @@ type LinkKind string
 const (
 	LinkCompensates LinkKind = "compensates"
 	LinkRecovers    LinkKind = "recovers"
+	// LinkConsequence links an action to a consequence the server opened
+	// for it when it was confirmed (a deployment a merge starts; G0 M8
+	// W1c). People do not create it.
+	LinkConsequence LinkKind = "consequence"
 )
 
 // CheckLink checks a link from a later transaction, decided at decided, to

@@ -311,6 +311,10 @@ const (
 	ReconciliationKind_RECONCILIATION_KIND_UNKNOWN_OUTCOME ReconciliationKind = 1
 	// Observations conflict with the target's answer.
 	ReconciliationKind_RECONCILIATION_KIND_CONFLICTING_EFFECT ReconciliationKind = 2
+	// A consequence the server opened (a deployment a merge started) shows a
+	// status suggesting it did not take effect, or nothing by its deadline:
+	// a person decides (G0 M8 W1c).
+	ReconciliationKind_RECONCILIATION_KIND_CONSEQUENCE_UNCONFIRMED ReconciliationKind = 3
 )
 
 // Enum value maps for ReconciliationKind.
@@ -319,11 +323,13 @@ var (
 		0: "RECONCILIATION_KIND_UNSPECIFIED",
 		1: "RECONCILIATION_KIND_UNKNOWN_OUTCOME",
 		2: "RECONCILIATION_KIND_CONFLICTING_EFFECT",
+		3: "RECONCILIATION_KIND_CONSEQUENCE_UNCONFIRMED",
 	}
 	ReconciliationKind_value = map[string]int32{
-		"RECONCILIATION_KIND_UNSPECIFIED":        0,
-		"RECONCILIATION_KIND_UNKNOWN_OUTCOME":    1,
-		"RECONCILIATION_KIND_CONFLICTING_EFFECT": 2,
+		"RECONCILIATION_KIND_UNSPECIFIED":             0,
+		"RECONCILIATION_KIND_UNKNOWN_OUTCOME":         1,
+		"RECONCILIATION_KIND_CONFLICTING_EFFECT":      2,
+		"RECONCILIATION_KIND_CONSEQUENCE_UNCONFIRMED": 3,
 	}
 )
 
@@ -418,6 +424,10 @@ const (
 	LinkKind_LINK_KIND_COMPENSATES LinkKind = 1
 	// It completes what the earlier one did not.
 	LinkKind_LINK_KIND_RECOVERS LinkKind = 2
+	// It is a consequence of the earlier one, opened by the server when the
+	// earlier one was confirmed (a deployment a merge started; G0 M8 W1c).
+	// People do not create it.
+	LinkKind_LINK_KIND_CONSEQUENCE LinkKind = 3
 )
 
 // Enum value maps for LinkKind.
@@ -426,11 +436,13 @@ var (
 		0: "LINK_KIND_UNSPECIFIED",
 		1: "LINK_KIND_COMPENSATES",
 		2: "LINK_KIND_RECOVERS",
+		3: "LINK_KIND_CONSEQUENCE",
 	}
 	LinkKind_value = map[string]int32{
 		"LINK_KIND_UNSPECIFIED": 0,
 		"LINK_KIND_COMPENSATES": 1,
 		"LINK_KIND_RECOVERS":    2,
+		"LINK_KIND_CONSEQUENCE": 3,
 	}
 )
 
@@ -2635,7 +2647,7 @@ const file_pantherclaw_v1_transactions_proto_rawDesc = "" +
 	"\n" +
 	"page_token\x18\x02 \x01(\tB\x19\xbaH\x16r\x14\x18@2\x10^[A-Za-z0-9_-]*$R\tpageToken\x12P\n" +
 	"\x06states\x18\x03 \x03(\x0e2#.pantherclaw.v1.ReconciliationStateB\x13\xbaH\x10\x92\x01\r\x10\x03\x18\x01\"\a\x82\x01\x04\x10\x01 \x00R\x06states\x12M\n" +
-	"\x05kinds\x18\x04 \x03(\x0e2\".pantherclaw.v1.ReconciliationKindB\x13\xbaH\x10\x92\x01\r\x10\x02\x18\x01\"\a\x82\x01\x04\x10\x01 \x00R\x05kinds\x124\n" +
+	"\x05kinds\x18\x04 \x03(\x0e2\".pantherclaw.v1.ReconciliationKindB\x13\xbaH\x10\x92\x01\r\x10\x03\x18\x01\"\a\x82\x01\x04\x10\x01 \x00R\x05kinds\x124\n" +
 	"\x0etransaction_id\x18\x05 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01H\x00R\rtransactionId\x88\x01\x01B\x11\n" +
 	"\x0f_transaction_id\"\x8f\x01\n" +
 	"\x1bListReconciliationsResponse\x12H\n" +
@@ -2658,12 +2670,11 @@ const file_pantherclaw_v1_transactions_proto_rawDesc = "" +
 	"\x1aRequestVerificationRequest\x12/\n" +
 	"\x0etransaction_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\rtransactionId\"F\n" +
 	"\x1bRequestVerificationResponse\x12'\n" +
-	"\x0fverification_id\x18\x01 \x01(\tR\x0everificationId\"\xc2\x01\n" +
+	"\x0fverification_id\x18\x01 \x01(\tR\x0everificationId\"\xc4\x01\n" +
 	"\x16LinkTransactionRequest\x128\n" +
 	"\x13from_transaction_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x11fromTransactionId\x124\n" +
-	"\x11to_transaction_id\x18\x02 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x0ftoTransactionId\x128\n" +
-	"\x04kind\x18\x03 \x01(\x0e2\x18.pantherclaw.v1.LinkKindB\n" +
-	"\xbaH\a\x82\x01\x04\x10\x01 \x00R\x04kind\"N\n" +
+	"\x11to_transaction_id\x18\x02 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x0ftoTransactionId\x12:\n" +
+	"\x04kind\x18\x03 \x01(\x0e2\x18.pantherclaw.v1.LinkKindB\f\xbaH\t\x82\x01\x06\x10\x01 \x00 \x03R\x04kind\"N\n" +
 	"\x17LinkTransactionResponse\x123\n" +
 	"\x04link\x18\x01 \x01(\v2\x1f.pantherclaw.v1.TransactionLinkR\x04link*\xa3\x02\n" +
 	"\x0eExecutionState\x12\x1f\n" +
@@ -2697,20 +2708,22 @@ const file_pantherclaw_v1_transactions_proto_rawDesc = "" +
 	"\x18INTEGRITY_STATUS_PENDING\x10\x01\x12\x1c\n" +
 	"\x18INTEGRITY_STATUS_CHAINED\x10\x02\x12!\n" +
 	"\x1dINTEGRITY_STATUS_CHECKPOINTED\x10\x03\x12\x1d\n" +
-	"\x19INTEGRITY_STATUS_ANCHORED\x10\x04*\x8e\x01\n" +
+	"\x19INTEGRITY_STATUS_ANCHORED\x10\x04*\xbf\x01\n" +
 	"\x12ReconciliationKind\x12#\n" +
 	"\x1fRECONCILIATION_KIND_UNSPECIFIED\x10\x00\x12'\n" +
 	"#RECONCILIATION_KIND_UNKNOWN_OUTCOME\x10\x01\x12*\n" +
-	"&RECONCILIATION_KIND_CONFLICTING_EFFECT\x10\x02*\xa4\x01\n" +
+	"&RECONCILIATION_KIND_CONFLICTING_EFFECT\x10\x02\x12/\n" +
+	"+RECONCILIATION_KIND_CONSEQUENCE_UNCONFIRMED\x10\x03*\xa4\x01\n" +
 	"\x13ReconciliationState\x12$\n" +
 	" RECONCILIATION_STATE_UNSPECIFIED\x10\x00\x12\x1d\n" +
 	"\x19RECONCILIATION_STATE_OPEN\x10\x01\x12!\n" +
 	"\x1dRECONCILIATION_STATE_OCCURRED\x10\x02\x12%\n" +
-	"!RECONCILIATION_STATE_NOT_OCCURRED\x10\x03*X\n" +
+	"!RECONCILIATION_STATE_NOT_OCCURRED\x10\x03*s\n" +
 	"\bLinkKind\x12\x19\n" +
 	"\x15LINK_KIND_UNSPECIFIED\x10\x00\x12\x19\n" +
 	"\x15LINK_KIND_COMPENSATES\x10\x01\x12\x16\n" +
-	"\x12LINK_KIND_RECOVERS\x10\x022\xfe\x01\n" +
+	"\x12LINK_KIND_RECOVERS\x10\x02\x12\x19\n" +
+	"\x15LINK_KIND_CONSEQUENCE\x10\x032\xfe\x01\n" +
 	"\x12TransactionService\x12j\n" +
 	"\x10ListTransactions\x12'.pantherclaw.v1.ListTransactionsRequest\x1a(.pantherclaw.v1.ListTransactionsResponse\"\x03\x90\x02\x01\x12|\n" +
 	"\x16GetTransactionEvidence\x12-.pantherclaw.v1.GetTransactionEvidenceRequest\x1a..pantherclaw.v1.GetTransactionEvidenceResponse\"\x03\x90\x02\x012\xb3\x04\n" +

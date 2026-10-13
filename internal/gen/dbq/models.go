@@ -1537,25 +1537,27 @@ type PcUser struct {
 }
 
 type PcVerification struct {
-	OrgID          ids.OrgID
-	ID             ids.UUID
-	Purpose        string
-	TransactionID  *ids.UUID
-	ConnectionID   ids.UUID
-	Operation      string
-	Request        []byte
-	State          string
-	Attempts       int32
-	NextAt         time.Time
-	DeadlineAt     time.Time
-	WindowStart    *time.Time
-	WindowEnd      *time.Time
-	LeaseHash      []byte
-	LeasedBy       *ids.UUID
-	LeasedAt       *time.Time
-	LeaseExpiresAt *time.Time
-	CreatedAt      time.Time
-	FinishedAt     *time.Time
+	OrgID            ids.OrgID
+	ID               ids.UUID
+	Purpose          string
+	TransactionID    *ids.UUID
+	ConnectionID     ids.UUID
+	Operation        string
+	Request          []byte
+	State            string
+	Attempts         int32
+	NextAt           time.Time
+	DeadlineAt       time.Time
+	WindowStart      *time.Time
+	WindowEnd        *time.Time
+	LeaseHash        []byte
+	LeasedBy         *ids.UUID
+	LeasedAt         *time.Time
+	LeaseExpiresAt   *time.Time
+	CreatedAt        time.Time
+	FinishedAt       *time.Time
+	DefinitionDigest *string
+	BasisAt          *time.Time
 }
 
 type PcWaitlistEntry struct {

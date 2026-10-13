@@ -29,12 +29,15 @@ WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state = 'PENDING';
 
 -- LeasedVerification is a task under a live lease of this gateway, with
 -- what its permit fixed (HR-190, HR-191): nothing else accepts a report.
+-- A consequence's task has no permit and carries its basis itself (G0 M8
+-- W1c).
 -- name: LeasedVerification :one
 SELECT v.id, v.purpose, v.transaction_id, v.connection_id, v.attempts, v.deadline_at,
        p.id AS permit_id, p.dispatching_at, p.definition_digest, p.verify_expect,
+       v.basis_at, v.definition_digest AS task_definition_digest,
        t.effect_state, t.effect_level_required, t.effect_level_achieved
 FROM pc.verifications v
-JOIN pc.permits p ON p.org_id = v.org_id AND p.transaction_id = v.transaction_id AND NOT p.replaced
+LEFT JOIN pc.permits p ON p.org_id = v.org_id AND p.transaction_id = v.transaction_id AND NOT p.replaced
 JOIN pc.transactions t ON t.org_id = v.org_id AND t.id = v.transaction_id
 WHERE v.org_id = sqlc.arg(org_id) AND v.id = sqlc.arg(id) AND v.state = 'LEASED' AND v.leased_by = sqlc.arg(gateway_id)
   AND v.lease_hash = sqlc.arg(lease_hash) AND v.lease_expires_at >= now()
@@ -74,12 +77,68 @@ SET state = 'EXPIRED', finished_at = now()
 WHERE org_id = sqlc.arg(org_id) AND state = 'PENDING' AND deadline_at <= now()
 RETURNING id, transaction_id;
 
+-- TransactionEffect is a transaction's effect and the definition its
+-- permit fixed, or, for a consequence, its verification task (G0 M8 W1c).
 -- name: TransactionEffect :one
-SELECT t.effect_state, t.effect_level_required, t.effect_level_achieved, p.definition_digest
+SELECT t.effect_state, t.effect_level_required, t.effect_level_achieved,
+       coalesce(p.definition_digest, (SELECT v.definition_digest FROM pc.verifications v
+                                      WHERE v.org_id = t.org_id AND v.transaction_id = t.id AND v.purpose = 'consequence'
+                                      ORDER BY v.created_at DESC LIMIT 1)) AS definition_digest
 FROM pc.transactions t
-JOIN pc.permits p ON p.org_id = t.org_id AND p.transaction_id = t.id AND NOT p.replaced
+LEFT JOIN pc.permits p ON p.org_id = t.org_id AND p.transaction_id = t.id AND NOT p.replaced
 WHERE t.org_id = sqlc.arg(org_id) AND t.id = sqlc.arg(id)
 FOR UPDATE OF t;
+
+-- Consequences (G0 M8 W1c): when an action's effect is confirmed, the
+-- server opens a transaction for each consequence its decision predicted,
+-- never dispatched, and verifies it.
+
+-- PredictedConsequences are what the transaction's latest evaluation
+-- predicted, with the environments each deploys to.
+-- name: PredictedConsequences :many
+SELECT c.position, c.operation, c.target_type, c.target_id, c.environments
+FROM pc.decision_consequences c
+WHERE c.org_id = sqlc.arg(org_id) AND c.transaction_id = sqlc.arg(transaction_id) AND c.state = 'PREDICTED'
+  AND c.evaluation = (SELECT max(d.evaluation) FROM pc.decision_consequences d
+                      WHERE d.org_id = c.org_id AND d.transaction_id = c.transaction_id)
+ORDER BY c.position;
+
+-- InsertConsequenceTransaction records a consequence of parent as its own
+-- transaction: the parent's run, gateway, connection, grant and mode,
+-- decided with it (ALLOW), never dispatched.
+-- name: InsertConsequenceTransaction :execrows
+INSERT INTO pc.transactions (org_id, id, run_id, action_id, action_hash, operation, decision, reason_code, gateway_id, state,
+                             grant_id, grant_revision, connection_id, mode, target_type, target_id, effect_level_required)
+SELECT t.org_id, sqlc.arg(id), t.run_id, sqlc.arg(action_id), sqlc.arg(action_hash), sqlc.arg(operation), 'ALLOW',
+       'CONSEQUENCE', t.gateway_id, 'FINAL', t.grant_id, t.grant_revision, t.connection_id, t.mode, sqlc.arg(target_type),
+       sqlc.arg(target_id), sqlc.arg(level_required)
+FROM pc.transactions t
+WHERE t.org_id = sqlc.arg(org_id) AND t.id = sqlc.arg(parent);
+
+-- ScheduleConsequenceVerification creates a consequence's verification
+-- task, with the definition it verifies and the start of its window.
+-- name: ScheduleConsequenceVerification :exec
+INSERT INTO pc.verifications (org_id, id, purpose, transaction_id, connection_id, operation, request, next_at, deadline_at,
+                              definition_digest, basis_at)
+VALUES (sqlc.arg(org_id), sqlc.arg(id), 'consequence', sqlc.arg(transaction_id), sqlc.arg(connection_id), sqlc.arg(operation),
+        sqlc.arg(request), now() + make_interval(secs => sqlc.arg(delay_seconds)::float8),
+        now() + make_interval(secs => sqlc.arg(within_seconds)::float8), sqlc.arg(definition_digest), now());
+
+-- SiblingDefinitionWithDigest is SiblingDefinition with the sibling's
+-- digest.
+-- name: SiblingDefinitionWithDigest :one
+SELECT s.digest, s.canonical
+FROM pc.action_definitions d
+JOIN pc.action_definitions s ON s.org_id = d.org_id AND s.version_id = d.version_id
+WHERE d.org_id = sqlc.arg(org_id) AND d.digest = sqlc.arg(digest) AND s.operation = sqlc.arg(operation)
+ORDER BY d.version_id DESC
+LIMIT 1;
+
+-- IsConsequence reports whether a transaction is a consequence the
+-- server opened for another.
+-- name: IsConsequence :one
+SELECT EXISTS (SELECT 1 FROM pc.transaction_links
+               WHERE org_id = sqlc.arg(org_id) AND to_transaction_id = sqlc.arg(id) AND kind = 'consequence');
 
 -- name: NextEffectSeq :one
 SELECT (coalesce(max(seq), 0) + 1)::integer FROM pc.effect_receipts

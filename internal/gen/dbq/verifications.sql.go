@@ -187,6 +187,49 @@ func (q *Queries) FinishVerification(ctx context.Context, state string, orgID id
 	return err
 }
 
+const insertConsequenceTransaction = `-- name: InsertConsequenceTransaction :execrows
+INSERT INTO pc.transactions (org_id, id, run_id, action_id, action_hash, operation, decision, reason_code, gateway_id, state,
+                             grant_id, grant_revision, connection_id, mode, target_type, target_id, effect_level_required)
+SELECT t.org_id, $1, t.run_id, $2, $3, $4, 'ALLOW',
+       'CONSEQUENCE', t.gateway_id, 'FINAL', t.grant_id, t.grant_revision, t.connection_id, t.mode, $5,
+       $6, $7
+FROM pc.transactions t
+WHERE t.org_id = $8 AND t.id = $9
+`
+
+type InsertConsequenceTransactionParams struct {
+	ID            ids.UUID
+	ActionID      ids.UUID
+	ActionHash    []byte
+	Operation     string
+	TargetType    *string
+	TargetID      *string
+	LevelRequired *string
+	OrgID         ids.OrgID
+	Parent        ids.UUID
+}
+
+// InsertConsequenceTransaction records a consequence of parent as its own
+// transaction: the parent's run, gateway, connection, grant and mode,
+// decided with it (ALLOW), never dispatched.
+func (q *Queries) InsertConsequenceTransaction(ctx context.Context, arg InsertConsequenceTransactionParams) (int64, error) {
+	result, err := q.db.Exec(ctx, insertConsequenceTransaction,
+		arg.ID,
+		arg.ActionID,
+		arg.ActionHash,
+		arg.Operation,
+		arg.TargetType,
+		arg.TargetID,
+		arg.LevelRequired,
+		arg.OrgID,
+		arg.Parent,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const insertEffectReceipt = `-- name: InsertEffectReceipt :exec
 INSERT INTO pc.effect_receipts (org_id, transaction_id, seq, state, level_required, level_achieved, basis, receipt_jws,
                                 ledger_entry_id)
@@ -290,6 +333,20 @@ func (q *Queries) InsertUnreceiptedEffect(ctx context.Context, arg InsertUnrecei
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const isConsequence = `-- name: IsConsequence :one
+SELECT EXISTS (SELECT 1 FROM pc.transaction_links
+               WHERE org_id = $1 AND to_transaction_id = $2 AND kind = 'consequence')
+`
+
+// IsConsequence reports whether a transaction is a consequence the
+// server opened for another.
+func (q *Queries) IsConsequence(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (bool, error) {
+	row := q.db.QueryRow(ctx, isConsequence, orgID, iD)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
 }
 
 const leaseVerification = `-- name: LeaseVerification :execrows
@@ -416,9 +473,10 @@ func (q *Queries) LeasedTargetLog(ctx context.Context, arg LeasedTargetLogParams
 const leasedVerification = `-- name: LeasedVerification :one
 SELECT v.id, v.purpose, v.transaction_id, v.connection_id, v.attempts, v.deadline_at,
        p.id AS permit_id, p.dispatching_at, p.definition_digest, p.verify_expect,
+       v.basis_at, v.definition_digest AS task_definition_digest,
        t.effect_state, t.effect_level_required, t.effect_level_achieved
 FROM pc.verifications v
-JOIN pc.permits p ON p.org_id = v.org_id AND p.transaction_id = v.transaction_id AND NOT p.replaced
+LEFT JOIN pc.permits p ON p.org_id = v.org_id AND p.transaction_id = v.transaction_id AND NOT p.replaced
 JOIN pc.transactions t ON t.org_id = v.org_id AND t.id = v.transaction_id
 WHERE v.org_id = $1 AND v.id = $2 AND v.state = 'LEASED' AND v.leased_by = $3
   AND v.lease_hash = $4 AND v.lease_expires_at >= now()
@@ -433,23 +491,27 @@ type LeasedVerificationParams struct {
 }
 
 type LeasedVerificationRow struct {
-	ID                  ids.UUID
-	Purpose             string
-	TransactionID       *ids.UUID
-	ConnectionID        ids.UUID
-	Attempts            int32
-	DeadlineAt          time.Time
-	PermitID            ids.UUID
-	DispatchingAt       *time.Time
-	DefinitionDigest    *string
-	VerifyExpect        []byte
-	EffectState         *string
-	EffectLevelRequired *string
-	EffectLevelAchieved *string
+	ID                   ids.UUID
+	Purpose              string
+	TransactionID        *ids.UUID
+	ConnectionID         ids.UUID
+	Attempts             int32
+	DeadlineAt           time.Time
+	PermitID             *ids.UUID
+	DispatchingAt        *time.Time
+	DefinitionDigest     *string
+	VerifyExpect         []byte
+	BasisAt              *time.Time
+	TaskDefinitionDigest *string
+	EffectState          *string
+	EffectLevelRequired  *string
+	EffectLevelAchieved  *string
 }
 
 // LeasedVerification is a task under a live lease of this gateway, with
 // what its permit fixed (HR-190, HR-191): nothing else accepts a report.
+// A consequence's task has no permit and carries its basis itself (G0 M8
+// W1c).
 func (q *Queries) LeasedVerification(ctx context.Context, arg LeasedVerificationParams) (LeasedVerificationRow, error) {
 	row := q.db.QueryRow(ctx, leasedVerification,
 		arg.OrgID,
@@ -469,6 +531,8 @@ func (q *Queries) LeasedVerification(ctx context.Context, arg LeasedVerification
 		&i.DispatchingAt,
 		&i.DefinitionDigest,
 		&i.VerifyExpect,
+		&i.BasisAt,
+		&i.TaskDefinitionDigest,
 		&i.EffectState,
 		&i.EffectLevelRequired,
 		&i.EffectLevelAchieved,
@@ -486,6 +550,55 @@ func (q *Queries) NextEffectSeq(ctx context.Context, orgID ids.OrgID, transactio
 	var column_1 int32
 	err := row.Scan(&column_1)
 	return column_1, err
+}
+
+const predictedConsequences = `-- name: PredictedConsequences :many
+
+SELECT c.position, c.operation, c.target_type, c.target_id, c.environments
+FROM pc.decision_consequences c
+WHERE c.org_id = $1 AND c.transaction_id = $2 AND c.state = 'PREDICTED'
+  AND c.evaluation = (SELECT max(d.evaluation) FROM pc.decision_consequences d
+                      WHERE d.org_id = c.org_id AND d.transaction_id = c.transaction_id)
+ORDER BY c.position
+`
+
+type PredictedConsequencesRow struct {
+	Position     int32
+	Operation    string
+	TargetType   string
+	TargetID     string
+	Environments []string
+}
+
+// Consequences (G0 M8 W1c): when an action's effect is confirmed, the
+// server opens a transaction for each consequence its decision predicted,
+// never dispatched, and verifies it.
+// PredictedConsequences are what the transaction's latest evaluation
+// predicted, with the environments each deploys to.
+func (q *Queries) PredictedConsequences(ctx context.Context, orgID ids.OrgID, transactionID ids.UUID) ([]PredictedConsequencesRow, error) {
+	rows, err := q.db.Query(ctx, predictedConsequences, orgID, transactionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []PredictedConsequencesRow{}
+	for rows.Next() {
+		var i PredictedConsequencesRow
+		if err := rows.Scan(
+			&i.Position,
+			&i.Operation,
+			&i.TargetType,
+			&i.TargetID,
+			&i.Environments,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const receiptOfCorrelation = `-- name: ReceiptOfCorrelation :one
@@ -600,6 +713,43 @@ func (q *Queries) RetryVerification(ctx context.Context, delaySeconds float64, o
 	return err
 }
 
+const scheduleConsequenceVerification = `-- name: ScheduleConsequenceVerification :exec
+INSERT INTO pc.verifications (org_id, id, purpose, transaction_id, connection_id, operation, request, next_at, deadline_at,
+                              definition_digest, basis_at)
+VALUES ($1, $2, 'consequence', $3, $4, $5,
+        $6, now() + make_interval(secs => $7::float8),
+        now() + make_interval(secs => $8::float8), $9, now())
+`
+
+type ScheduleConsequenceVerificationParams struct {
+	OrgID            ids.OrgID
+	ID               ids.UUID
+	TransactionID    *ids.UUID
+	ConnectionID     ids.UUID
+	Operation        string
+	Request          []byte
+	DelaySeconds     float64
+	WithinSeconds    float64
+	DefinitionDigest *string
+}
+
+// ScheduleConsequenceVerification creates a consequence's verification
+// task, with the definition it verifies and the start of its window.
+func (q *Queries) ScheduleConsequenceVerification(ctx context.Context, arg ScheduleConsequenceVerificationParams) error {
+	_, err := q.db.Exec(ctx, scheduleConsequenceVerification,
+		arg.OrgID,
+		arg.ID,
+		arg.TransactionID,
+		arg.ConnectionID,
+		arg.Operation,
+		arg.Request,
+		arg.DelaySeconds,
+		arg.WithinSeconds,
+		arg.DefinitionDigest,
+	)
+	return err
+}
+
 const scheduleTargetLog = `-- name: ScheduleTargetLog :exec
 INSERT INTO pc.verifications (org_id, id, purpose, connection_id, operation, request, next_at, deadline_at, window_start,
                               window_end)
@@ -650,6 +800,29 @@ func (q *Queries) SetEffectState(ctx context.Context, arg SetEffectStateParams) 
 		arg.ID,
 	)
 	return err
+}
+
+const siblingDefinitionWithDigest = `-- name: SiblingDefinitionWithDigest :one
+SELECT s.digest, s.canonical
+FROM pc.action_definitions d
+JOIN pc.action_definitions s ON s.org_id = d.org_id AND s.version_id = d.version_id
+WHERE d.org_id = $1 AND d.digest = $2 AND s.operation = $3
+ORDER BY d.version_id DESC
+LIMIT 1
+`
+
+type SiblingDefinitionWithDigestRow struct {
+	Digest    string
+	Canonical []byte
+}
+
+// SiblingDefinitionWithDigest is SiblingDefinition with the sibling's
+// digest.
+func (q *Queries) SiblingDefinitionWithDigest(ctx context.Context, orgID ids.OrgID, digest string, operation string) (SiblingDefinitionWithDigestRow, error) {
+	row := q.db.QueryRow(ctx, siblingDefinitionWithDigest, orgID, digest, operation)
+	var i SiblingDefinitionWithDigestRow
+	err := row.Scan(&i.Digest, &i.Canonical)
+	return i, err
 }
 
 const startConnectionTest = `-- name: StartConnectionTest :exec
@@ -732,9 +905,12 @@ func (q *Queries) TransactionChannel(ctx context.Context, orgID ids.OrgID, iD id
 }
 
 const transactionEffect = `-- name: TransactionEffect :one
-SELECT t.effect_state, t.effect_level_required, t.effect_level_achieved, p.definition_digest
+SELECT t.effect_state, t.effect_level_required, t.effect_level_achieved,
+       coalesce(p.definition_digest, (SELECT v.definition_digest FROM pc.verifications v
+                                      WHERE v.org_id = t.org_id AND v.transaction_id = t.id AND v.purpose = 'consequence'
+                                      ORDER BY v.created_at DESC LIMIT 1)) AS definition_digest
 FROM pc.transactions t
-JOIN pc.permits p ON p.org_id = t.org_id AND p.transaction_id = t.id AND NOT p.replaced
+LEFT JOIN pc.permits p ON p.org_id = t.org_id AND p.transaction_id = t.id AND NOT p.replaced
 WHERE t.org_id = $1 AND t.id = $2
 FOR UPDATE OF t
 `
@@ -746,6 +922,8 @@ type TransactionEffectRow struct {
 	DefinitionDigest    *string
 }
 
+// TransactionEffect is a transaction's effect and the definition its
+// permit fixed, or, for a consequence, its verification task (G0 M8 W1c).
 func (q *Queries) TransactionEffect(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (TransactionEffectRow, error) {
 	row := q.db.QueryRow(ctx, transactionEffect, orgID, iD)
 	var i TransactionEffectRow
