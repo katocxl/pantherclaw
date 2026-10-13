@@ -57,6 +57,11 @@ func (r Role) BindableAt(t ScopeType) bool { return slices.Contains(r.Scopes, t)
 var (
 	anyScope = []ScopeType{ScopeOrg, ScopeBusinessUnit, ScopeTeam, ScopeEnvironment}
 	orgScope = []ScopeType{ScopeOrg}
+	// teamScope is a team or one of its environments: the release roles
+	// review and release one team's changes (G0 M8, HR-207). A claimed
+	// agent always has a team and an environment, so its requests can
+	// always reach them.
+	teamScope = []ScopeType{ScopeTeam, ScopeEnvironment}
 	// basicReads lets a principal see the hierarchy it works in.
 	basicReads = []Permission{PermOrgRead, PermBusinessUnitRead, PermTeamRead, PermEnvironmentRead}
 	// authorityReads lets a principal see what agents may do (M4): grants,
@@ -213,12 +218,12 @@ var roles = []Role{
 		Permissions: with(basicReads, []Permission{PermEvidenceRetentionManage, PermEvidenceCaptureManage, PermEvidenceRead}),
 	},
 	{
-		Name: RoleCodeReviewer, Title: "Code Reviewer", Scopes: anyScope,
+		Name: RoleCodeReviewer, Title: "Code Reviewer", Scopes: teamScope,
 		Description: "Reviews the changes agents want to merge and approves or declines them with a security key (human only). A requirement that names the role and is independent excludes the change's author and every author, committer and pusher of its commits. To review GitHub changes they link their own GitHub account by signing in to GitHub.",
 		Permissions: with(basicReads, []Permission{PermApprovalRespond, PermApprovalRead, PermWaitlistRead, PermGitHubIdentityProve}),
 	},
 	{
-		Name: RoleReleaseApprover, Title: "Release Approver", Scopes: anyScope,
+		Name: RoleReleaseApprover, Title: "Release Approver", Scopes: teamScope,
 		Description: "Approves releases, the actions whose predicted or unknown consequence is a deployment, with a security key (human only); a window requirement counts the approval only inside an active change window for the environment. Never the change's reviewer. To release GitHub changes they link their own GitHub account by signing in to GitHub.",
 		Permissions: with(basicReads, []Permission{PermApprovalRespond, PermApprovalRead, PermWaitlistRead, PermGitHubIdentityProve}),
 	},

@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	apdomain "github.com/katocxl/pantherclaw/internal/approvals/domain"
 	"github.com/katocxl/pantherclaw/internal/authority/consequences"
 	adomain "github.com/katocxl/pantherclaw/internal/authority/domain"
 	"github.com/katocxl/pantherclaw/internal/authority/pipeline"
@@ -202,5 +203,70 @@ func TestF158_TheHeldActionsDisplayShowsItsConsequences(t *testing.T) {
 	if c.State != "PREDICTED" || c.Operation != "payments.payout.trigger" || !slices.Equal(c.Environments, []string{"payroll"}) ||
 		!slices.Equal(c.Workflows, []string{".github/workflows/payouts.yml"}) || len(ev.Hold.Display.Deciders) != 1 || !ev.Hold.Display.Deciders[0].Window {
 		t.Fatalf("display %+v deciders %+v", c, ev.Hold.Display.Deciders)
+	}
+}
+
+// TestHR206_ConsequenceRulesReadTheirFactsAboutTheConsequence: a policy
+// rule scoped to a consequence's operation reads its facts about the
+// consequence's own target, which step 6 reads with the action's facts. A
+// FORBID on a held payout account denies the refund and a REQUIRE holds
+// it, where both were CANNOT_AUTHORIZE for a fact never read; the same
+// fact about the action's target does not count for the consequence, and
+// the facts read join the approval's display.
+func TestHR206_ConsequenceRulesReadTheirFactsAboutTheConsequence(t *testing.T) {
+	// The payout is about charge ch_10 when the refund is about ch_1.
+	payoutElsewhere := func(raw []byte) []byte {
+		return []byte(strings.Replace(string(payoutPackage(raw)), "      effect: funds.transfer\n",
+			"      effect: funds.transfer\n      target: '{target.id}0'\n", 1))
+	}
+	held := func(f *fx, charge string, v bool) {
+		f.w.PutFact(fdomain.Fact{
+			Name: "payments.charge.held", SubjectType: "payments.charge", SubjectID: charge,
+			Value: fdomain.Value{Type: fdomain.TypeBoolean, Bool: v}, ObservedAt: now.Add(-time.Second), RecordedAt: now, ProviderID: f.provider,
+		})
+	}
+	rule := func(kind pdomain.Kind) pdomain.Rule {
+		r := pdomain.Rule{
+			ID: "held-payouts", Kind: kind, Summary: "payouts to a held account", Operations: []string{"payments.payout.trigger"},
+			When: "facts.payments_charge_held", Reason: "PAYOUT_HELD",
+			Facts: []pdomain.FactRef{{Name: "payments.charge.held", MaxAgeSeconds: 300}},
+		}
+		if kind == pdomain.RequireApproval {
+			r.Approval = &pdomain.ApprovalRequirement{Role: "approver", Count: 1}
+		}
+		return r
+	}
+	catalog := map[string]fdomain.Type{"payments.charge.held": fdomain.TypeBoolean}
+
+	f := newFxWith(t, payoutElsewhere, "")
+	f.payoutRun(false)
+	f.payouts("ch_1", scheduled, time.Second)
+	if err := f.w.SetPolicy([]pdomain.Rule{rule(pdomain.Forbid)}, catalog); err != nil {
+		t.Fatal(err)
+	}
+	held(f, "ch_1", true)
+	ev := f.call(f.run, "create_refund", refund("ch_1", "30.00"))
+	expect(t, ev, adomain.CannotAuthorize, pdomain.ReasonFactMissing)
+	if len(ev.Consequences) != 1 || ev.Consequences[0].Target.ID != "ch_10" {
+		t.Fatalf("the payout's target: %+v", ev.Consequences)
+	}
+	held(f, "ch_10", true)
+	expect(t, f.call(f.run, "create_refund", refund("ch_1", "30.00")), adomain.Deny, "PAYOUT_HELD")
+	held(f, "ch_10", false)
+	expect(t, f.call(f.run, "create_refund", refund("ch_1", "30.00")), adomain.Allow, pipeline.ReasonGrantCovers)
+
+	if err := f.w.SetPolicy([]pdomain.Rule{rule(pdomain.RequireApproval)}, catalog); err != nil {
+		t.Fatal(err)
+	}
+	held(f, "ch_10", true)
+	ev = f.call(f.run, "create_refund", refund("ch_1", "30.00"))
+	if ev.Decision != adomain.RequireApproval || len(ev.Requirements) != 1 || ev.Requirements[0].Role != "approver" ||
+		!strings.Contains(ev.Requirements[0].Source.Level, "(consequence payments.payout.trigger on ch_10)") {
+		t.Fatalf("a held payout that needs an approval: %s %+v %+v", ev.Decision, ev.Requirements, ev.Checklist)
+	}
+	if ev.Hold == nil || !slices.ContainsFunc(ev.Hold.Display.Facts, func(l apdomain.FactLine) bool {
+		return l.Name == "payments.charge.held" && l.Subject == "payments.charge:ch_10"
+	}) {
+		t.Fatalf("the payout's fact is not shown: %+v", ev.Hold)
 	}
 }
