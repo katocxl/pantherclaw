@@ -252,7 +252,7 @@ func peopleLists(ctx context.Context, q *dbq.Queries, org ids.OrgID, request ids
 	var out []apdomain.PeopleList
 	for _, r := range reqs {
 		name := r.IndependentOf
-		if !r.Independent || name == "" || slices.ContainsFunc(out, func(l apdomain.PeopleList) bool { return l.Fact == name }) {
+		if name == "" || slices.ContainsFunc(out, func(l apdomain.PeopleList) bool { return l.Fact == name }) {
 			continue
 		}
 		l := apdomain.PeopleList{Fact: name}
