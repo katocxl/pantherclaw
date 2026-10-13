@@ -607,7 +607,7 @@ func (e *Engine) send(ctx context.Context, r Result, conn *control.Connection, d
 				slog.String("connection_id", conn.GetId()), pclog.Err(err))
 			code := CodeCredential
 			var granted func(*pb.RecordExecutionRequest)
-			if sm := (*broker.ScopeMismatch)(nil); errors.As(err, &sm) {
+			if sm := (*broker.ScopeMismatchError)(nil); errors.As(err, &sm) {
 				// What GitHub granted and whether it was revoked go on the
 				// refused dispatch's receipt (ADR-0021 items 3 and 6).
 				code, granted = CodeScopeMismatch, func(req *pb.RecordExecutionRequest) { req.CredentialAccess = accessOf(sm.Access) }
