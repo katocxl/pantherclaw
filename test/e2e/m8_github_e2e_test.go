@@ -23,6 +23,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -70,6 +71,9 @@ type githubSim struct {
 	app, account string
 	installation int64
 	repo         string
+	// skew moves the simulator's clock forward (nanoseconds), so a
+	// deployment settles without waiting.
+	skew *atomic.Int64
 }
 
 // startGitHubSim starts the GitHub simulator: the App, installed on acme
@@ -80,16 +84,18 @@ func startGitHubSim(t *testing.T) *githubSim {
 	if err != nil {
 		t.Fatal(err)
 	}
-	sim := github.New(slog.New(slog.DiscardHandler))
+	skew := new(atomic.Int64)
+	sim := github.New(slog.New(slog.DiscardHandler)).WithClock(func() time.Time { return time.Now().Add(time.Duration(skew.Load())) })
 	sim.RegisterApp(42, ghAppID, &key.PublicKey)
 	sim.Install(github.Installation{ID: ghInstallation, Account: ghAccount, Repos: []string{"payments"}, Permissions: map[string]string{
 		"contents": "write", "pull_requests": "write", "metadata": "read", "checks": "read", "statuses": "read",
 	}})
 	sim.CreateRepo(ghRepo, "main", map[string]string{"README.md": "# payments\n", ".github/workflows/deploy.yml": deployOnMain})
 	sim.DeployOnPush(ghRepo, "main", "production", time.Hour)
+	sim.AddToken("ghp_e2e_deployments", "e2e", []string{ghRepo}, map[string]string{"deployments": "read"})
 	srv := httptest.NewServer(sim.Handler())
 	t.Cleanup(srv.Close)
-	return &githubSim{sim: sim, url: srv.URL, key: key, app: ghAppID, installation: ghInstallation, account: ghAccount, repo: ghRepo}
+	return &githubSim{sim: sim, url: srv.URL, key: key, app: ghAppID, installation: ghInstallation, account: ghAccount, repo: ghRepo, skew: skew}
 }
 
 // sealGitHubApp seals the App's key for the github connection, with its
@@ -158,6 +164,26 @@ func (s *stack) ghCall(t *testing.T, method, path, body string, act ids.UUID) (i
 	}
 	r.TransactionID, r.Outcome, r.Receipt = resp.Header.Get("PC-Transaction-Id"), resp.Header.Get("PC-Outcome"), resp.Header.Get("PC-Receipt")
 	return resp.StatusCode, r, string(raw)
+}
+
+// deploymentState reads a deployment's latest status from the simulator,
+// as GitHub shows it.
+func (g *githubSim) deploymentState(t *testing.T, id int64) string {
+	t.Helper()
+	req, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, g.url+"/repos/"+g.repo+"/deployments/"+strconv.FormatInt(id, 10)+"/statuses", nil)
+	req.Header.Set("Authorization", "token ghp_e2e_deployments")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	var statuses []struct {
+		State string `json:"state"`
+	}
+	if err := json.UnmarshalRead(resp.Body, &statuses); err != nil || len(statuses) == 0 {
+		t.Fatalf("deployment %d statuses: %d %v", id, resp.StatusCode, err)
+	}
+	return statuses[0].State
 }
 
 // ghMerge asks to merge pull request number at sha over the REST face.
@@ -485,8 +511,12 @@ func TestE2E_M8_CodingToProduction(t *testing.T) {
 	if mergeToken == "" || !revoked[mergeToken] {
 		t.Fatalf("the merge's token %q was not revoked", mergeToken)
 	}
-	if d := gh.Deployments(ghRepo); len(d) != 1 || d[0].Environment != "production" || d[0].SHA != gh.Branch(ghRepo, "main") {
-		t.Fatalf("deployments after the merge: %+v", d)
+	deployments := gh.Deployments(ghRepo)
+	if len(deployments) != 1 || deployments[0].Environment != "production" || deployments[0].SHA != gh.Branch(ghRepo, "main") {
+		t.Fatalf("deployments after the merge: %+v", deployments)
+	}
+	if state := s.gh.deploymentState(t, deployments[0].ID); state != "pending" {
+		t.Fatalf("the deployment right after the merge: %s", state)
 	}
 
 	// 7. The approval is consumed once: the same request again merges
@@ -542,5 +572,11 @@ func TestE2E_M8_CodingToProduction(t *testing.T) {
 	}
 	if minted < 5 || len(writes) < 4 {
 		t.Fatalf("%d tokens minted, %d writes", minted, len(writes))
+	}
+
+	// The deployment the merge started settles once its time has passed.
+	s.gh.skew.Add(int64(2 * time.Hour))
+	if state := s.gh.deploymentState(t, deployments[0].ID); state != "success" {
+		t.Fatalf("the deployment once settled: %s", state)
 	}
 }
