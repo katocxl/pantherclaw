@@ -5,7 +5,9 @@ package workloadclient
 
 import (
 	"crypto/ed25519"
+	"crypto/rand"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json/v2"
 	"errors"
 	"fmt"
@@ -60,32 +62,50 @@ func ReadKeyFile(path string) (KeyFile, error) {
 	return k, nil
 }
 
-// WriteKeyFile writes k to a new file only the person can read (0600, or on
-// Windows an access list of its own); an existing file is never
-// overwritten unless replace is set.
+// WriteKeyFile writes k to a file only the person can read (0600, or on
+// Windows an access list of its own), private from the moment it exists. An
+// existing file is never overwritten unless replace is set; then the key is
+// written to a new private file that replaces it, so nobody who could open
+// the old one reads the new key.
 func WriteKeyFile(path string, k KeyFile, replace bool) error {
 	b, err := json.Marshal(k, json.Deterministic(true))
 	if err != nil {
 		return err
 	}
-	flags := os.O_WRONLY | os.O_CREATE | os.O_EXCL
-	if replace {
-		flags = os.O_WRONLY | os.O_CREATE | os.O_TRUNC
+	b = append(b, '\n')
+	if !replace {
+		return writePrivate(path, b)
 	}
-	f, err := os.OpenFile(path, flags, 0o600) //nolint:gosec // G304: operator-chosen path
+	var suffix [8]byte
+	if _, err := rand.Read(suffix[:]); err != nil {
+		return err
+	}
+	tmp := path + ".new-" + hex.EncodeToString(suffix[:])
+	if err := writePrivate(tmp, b); err != nil {
+		return err
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		_ = os.Remove(tmp)
+		return fmt.Errorf("workload key file: %w", err)
+	}
+	return nil
+}
+
+// writePrivate writes b to a new private file, removed again if writing
+// fails.
+func writePrivate(path string, b []byte) error {
+	f, err := createPrivate(path)
 	if err != nil {
 		return fmt.Errorf("workload key file: %w", err)
 	}
-	if err := private(path); err != nil {
+	if _, err := f.Write(b); err != nil {
 		_ = f.Close()
-		if !replace {
-			_ = os.Remove(path)
-		}
+		_ = os.Remove(path)
 		return fmt.Errorf("workload key file: %w", err)
 	}
-	if _, err := f.Write(append(b, '\n')); err != nil {
-		_ = f.Close()
+	if err := f.Close(); err != nil {
+		_ = os.Remove(path)
 		return fmt.Errorf("workload key file: %w", err)
 	}
-	return f.Close()
+	return nil
 }
