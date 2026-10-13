@@ -348,6 +348,7 @@ func TestHR094_InitWithYesNeedsTheFingerprintYouChecked(t *testing.T) {
 	if err := workloadclient.WriteKeyFile(f.key, kf, false); err != nil {
 		t.Fatal(err)
 	}
+	onlyTheUserReads(t, f.key)
 	fp := jws.Thumbprint(key.Public().(ed25519.PublicKey))
 	existing := f.key
 	for name, tc := range map[string]struct {

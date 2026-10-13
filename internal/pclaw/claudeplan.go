@@ -206,14 +206,13 @@ func (f initFlags) enrollment() (*enrollment, error) {
 		return nil, nil
 	case err == nil:
 		// The file is rewritten in place with the identifier and keeps its
-		// mode, so a key other users can read (and may have read) is not
-		// enrolled.
-		if info, err := os.Stat(path); err != nil {
+		// mode (on Windows, its owner and access list), so a key other
+		// users can read (and may have read) is not enrolled.
+		if who, fix, err := keyFileReaders(path); err != nil {
 			return nil, fmt.Errorf("--key-file: %w", err)
-		} else if !isWindows() && info.Mode().Perm()&0o077 != 0 {
-			return nil, fmt.Errorf("--key-file %s holds a private key and other users can read or change it (mode %04o), so init "+
-				"does not enroll it: if no one else can have read it, run chmod 600 on it; otherwise remove it, and init makes a new key",
-				path, info.Mode().Perm())
+		} else if who != "" {
+			return nil, fmt.Errorf("--key-file %s holds a private key and other users can read or change it (%s), so init "+
+				"does not enroll it: if no one else can have read it, %s; otherwise remove it, and init makes a new key", path, who, fix)
 		}
 		e.kf = kf
 	case errors.Is(err, os.ErrNotExist):
