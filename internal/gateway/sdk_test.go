@@ -12,6 +12,7 @@ import (
 	"encoding/json/v2"
 	"io"
 	"net/http"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -321,8 +322,9 @@ func TestHR200_BuiltInToolsAreObservedOnly(t *testing.T) {
 
 // TestHR201_TheSDKEndpointRefusesWhatIsNotAnSDKCall: no run (or the nil
 // UUID for one), no proof, a browser Origin, a malformed or oversized body
-// and a GET are refused without asking the Authority to decide. The nil
-// UUID is no action id either: the call gets a new one.
+// and a method other than GET and POST are refused without asking the
+// Authority to decide. The nil UUID is no action id either: the call gets
+// a new one.
 func TestHR201_TheSDKEndpointRefusesWhatIsNotAnSDKCall(t *testing.T) {
 	const nilUUID = "00000000-0000-0000-0000-000000000000"
 	h := setup(t, withAgentHeld)
@@ -357,14 +359,14 @@ func TestHR201_TheSDKEndpointRefusesWhatIsNotAnSDKCall(t *testing.T) {
 	if r := h.sdk(t, call, map[string]string{HeaderActionID: nilUUID}); r.answer.ActionID == "" || r.answer.ActionID == nilUUID {
 		t.Fatalf("a nil action id: %+v", r.answer)
 	}
-	req, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, h.url+sdkPath, nil)
+	req, _ := http.NewRequestWithContext(context.Background(), http.MethodPut, h.url+sdkPath, nil)
 	resp, err := (&http.Client{Timeout: 5 * time.Second}).Do(req)
 	if err != nil {
 		t.Fatal(err)
 	}
 	_ = resp.Body.Close()
 	if resp.StatusCode != http.StatusMethodNotAllowed {
-		t.Fatalf("GET: %d", resp.StatusCode)
+		t.Fatalf("PUT: %d", resp.StatusCode)
 	}
 }
 
@@ -382,4 +384,78 @@ func (f *fakeAuthority) RecordToolObservation(ctx context.Context, req *pb.Recor
 	}
 	f.observed = append(f.observed, req)
 	return &pb.RecordToolObservationResponse{Verified: true, InstanceId: v.GetInstanceId(), Nonce: v.GetNonce(), ObservationId: ids.NewV7().String()}, nil
+}
+
+// sdkGet asks the SDK face for a connection's tools, with PAP/1 headers.
+func (h *harness) sdkGet(t *testing.T, path, body string, hdr map[string]string) (int, http.Header, []byte) {
+	t.Helper()
+	req, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, h.url+path, strings.NewReader(body))
+	req.Header.Set("Authorization", "PAP "+testWorkloadToken())
+	req.Header.Set(HeaderProof, "proof-not-checked-by-the-gateway")
+	for k, v := range hdr {
+		if v == "" {
+			req.Header.Del(k)
+		} else {
+			req.Header.Set(k, v)
+		}
+	}
+	resp, err := (&http.Client{Timeout: 5 * time.Second}).Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	b, _ := io.ReadAll(resp.Body)
+	return resp.StatusCode, resp.Header, b
+}
+
+// TestF346_TheSDKFaceListsExactlyTheMappedTools: GET /sdk/{connection}
+// answers, for a workload the Authority verified over the empty body,
+// exactly the tools the connection's package maps with their operations.
+// It decides nothing. A workload that does not verify, a request without a
+// proof or with a body, a connection the face does not serve and one whose
+// credential the gateway holds get no list.
+func TestF346_TheSDKFaceListsExactlyTheMappedTools(t *testing.T) {
+	h := setup(t, withAgentHeld)
+	run := ids.NewV7().String()
+	code, hdr, b := h.sdkGet(t, sdkPath, "", map[string]string{HeaderRunID: run})
+	var got sdk.Listing
+	if err := json.Unmarshal(b, &got, json.RejectUnknownMembers(true)); err != nil || code != http.StatusOK {
+		t.Fatalf("list: %d %s %v", code, b, err)
+	}
+	want := h.conn.Mapper.Tools()
+	if got.V != 1 || got.Connection != "payments" || got.Coverage != sdk.CoveragePartial || len(want) == 0 ||
+		!reflect.DeepEqual(got.Tools, want) || hdr.Get(HeaderNonce) != "nonce-4" {
+		t.Fatalf("listing %+v, want the tools %v", got, want)
+	}
+	s := h.auth.snap()
+	empty := sha256.Sum256(nil)
+	if s.authorize != 0 || s.creds.GetHtm() != http.MethodGet || !bytes.Equal(s.creds.GetBodySha256(), empty[:]) ||
+		!strings.HasSuffix(s.creds.GetHtu(), sdkPath) || h.auth.verifiedRuns[len(h.auth.verifiedRuns)-1] != run {
+		t.Fatalf("verified %+v (authorize %d)", s.creds, s.authorize)
+	}
+	for name, tc := range map[string]struct {
+		path, body string
+		hdr        map[string]string
+		code       int
+	}{
+		"no proof":           {sdkPath, "", map[string]string{HeaderProof: ""}, http.StatusUnauthorized},
+		"a body":             {sdkPath, "{}", nil, http.StatusBadRequest},
+		"another connection": {"/sdk/nowhere", "", nil, http.StatusNotFound},
+	} {
+		if code, _, b := h.sdkGet(t, tc.path, tc.body, tc.hdr); code != tc.code || bytes.Contains(b, []byte(`"tools"`)) {
+			t.Errorf("%s: %d %s", name, code, b)
+		}
+	}
+	h.auth.mu.Lock()
+	h.auth.identity = "invalid_token"
+	h.auth.mu.Unlock()
+	if code, hdr, b := h.sdkGet(t, sdkPath, "", nil); code != http.StatusUnauthorized || hdr.Get(HeaderError) != "invalid_token" ||
+		bytes.Contains(b, []byte(`"tools"`)) {
+		t.Errorf("unverified: %d %s", code, b)
+	}
+	held := setup(t)
+	if code, _, b := held.sdkGet(t, sdkPath, "", nil); code != http.StatusOK || !bytes.Contains(b, []byte(sdk.CodeUseGatewayFace)) ||
+		bytes.Contains(b, []byte(`"tools"`)) {
+		t.Errorf("a credential the gateway holds: %d %s", code, b)
+	}
 }

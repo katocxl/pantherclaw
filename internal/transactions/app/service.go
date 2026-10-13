@@ -17,6 +17,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/katocxl/pantherclaw/internal/authority/actiontoken"
 	defs "github.com/katocxl/pantherclaw/internal/definitions/domain"
 	evdomain "github.com/katocxl/pantherclaw/internal/evidence/domain"
 	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
@@ -186,6 +187,14 @@ type Store interface {
 	// open, for the window since its last complete run, minus overlap
 	// (HR-112).
 	ScheduleTargetLogs(ctx context.Context, org ids.OrgID, overlap time.Duration) (int, error)
+	// MintTestTokens runs mint for gw's live lease of a target_verifier
+	// connection test, in one transaction that checks the lease (ErrLease),
+	// that the test read is the connection package's and the connection is
+	// ACTIVE, target_enforced and not under the kill switch
+	// (ErrTestTokensRefused), records the mint for the lease's attempt
+	// (ErrTestTokensMinted for a second one) and audits it (HR-188).
+	MintTestTokens(ctx context.Context, org ids.OrgID, gateway, task ids.UUID, secret []byte,
+		mint func(VerifierTest) (MintedTokens, error)) (TestTokens, error)
 }
 
 // Signer signs a compact JWS of a JOSE type (the receipts key's signer).
@@ -199,6 +208,9 @@ type Service struct {
 	Receipts Signer
 	// Issuer names the deployment in receipts (as finalize.Authority's).
 	Issuer string
+	// ActionTokens signs a target_verifier test's action tokens (the
+	// action_tokens key's signer, N15).
+	ActionTokens actiontoken.Signer
 }
 
 // Claim leases due tasks to gw.

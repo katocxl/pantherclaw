@@ -7,10 +7,13 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"slices"
+	"strings"
 	"testing"
 
 	"github.com/katocxl/pantherclaw/internal/actionir"
 	"github.com/katocxl/pantherclaw/internal/definitions/domain"
+	"github.com/katocxl/pantherclaw/internal/definitions/manifest"
 )
 
 // TestHR201_SDKCallsMapThroughTheMCPMappings: an SDK call maps through the
@@ -55,3 +58,29 @@ func TestHR201_SDKCallsMapThroughTheMCPMappings(t *testing.T) {
 }
 
 func second(_ actionir.Parsed, err error) error { return err }
+
+// TestF346_ToolsListsExactlyTheMappedMCPTools: the SDK face's listing is
+// every MCP mapping of the package with its operation, sorted, and
+// nothing else: no hook or HTTP mapping (G0 M8 C2).
+func TestF346_ToolsListsExactlyTheMappedMCPTools(t *testing.T) {
+	raw := mockRaw(t)
+	p, err := manifest.Decode(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var want []Tool
+	for _, d := range p.Definitions {
+		for _, m := range d.Mappings {
+			if m.Channel == domain.ChannelMCP {
+				want = append(want, Tool{Tool: m.Tool, Operation: d.Operation})
+			}
+		}
+	}
+	slices.SortFunc(want, func(a, b Tool) int { return strings.Compare(a.Tool, b.Tool) })
+	if got := mapperFor(t, raw).Tools(); len(want) == 0 || !slices.Equal(got, want) {
+		t.Fatalf("tools %v, want %v", got, want)
+	}
+	if got := shellMapper(t).Tools(); len(got) != 0 {
+		t.Fatalf("the shell package lists %v", got)
+	}
+}

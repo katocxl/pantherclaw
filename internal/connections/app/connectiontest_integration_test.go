@@ -36,7 +36,7 @@ func failed(r app.TestResult) []string {
 func TestF354_ConnectionTestsCheckWhatTheConnectionDependsOn(t *testing.T) {
 	e := newEnv(t)
 	c := e.payments(t, "payments")
-	r, err := e.svc.Test(e.admin, c.ID)
+	r, err := e.svc.Test(e.admin, c.ID, "")
 	if err != nil || r.Result != app.TestFailed || len(r.Checks) != 6 ||
 		!slices.Equal(failed(r), []string{app.CheckGatewayCertificate, app.CheckCredential}) {
 		t.Fatalf("a connection without a certificate or credential: %+v %v", r, err)
@@ -52,7 +52,7 @@ func TestF354_ConnectionTestsCheckWhatTheConnectionDependsOn(t *testing.T) {
 		VALUES ($1, $2, $3, 1, $4, 'sha256:' || encode(sha256($4), 'hex'), $5)`, e.org, key, e.gateway, bytes.Repeat([]byte{7}, 1216), cert)
 	e.exec(t, `INSERT INTO pc.credentials (org_id, id, connection_id, version, broker_key_id, sealed, allowed_hosts, header, created_by)
 		VALUES ($1, $2, $3, 1, $4, $5, '{payments.example.test}', 'Authorization', 'test')`, e.org, cred, c.ID, key, bytes.Repeat([]byte{1}, 1200))
-	passed, err := e.svc.Test(e.admin, c.ID)
+	passed, err := e.svc.Test(e.admin, c.ID, "")
 	if err != nil || passed.Result != app.TestPassed || len(failed(passed)) != 0 {
 		t.Fatalf("a ready connection: %+v %v", passed, err)
 	}
@@ -60,7 +60,7 @@ func TestF354_ConnectionTestsCheckWhatTheConnectionDependsOn(t *testing.T) {
 	if _, err := e.svc.Quarantine(e.admin, c.ID, "incident"); err != nil {
 		t.Fatal(err)
 	}
-	if r, err := e.svc.Test(e.admin, c.ID); err != nil || r.Result != app.TestFailed || !slices.Equal(failed(r), []string{app.CheckConnectionActive}) {
+	if r, err := e.svc.Test(e.admin, c.ID, ""); err != nil || r.Result != app.TestFailed || !slices.Equal(failed(r), []string{app.CheckConnectionActive}) {
 		t.Fatalf("a quarantined connection: %+v %v", r, err)
 	}
 	got, err := e.svc.Capabilities(e.admin, c.ID)
@@ -78,18 +78,18 @@ func TestF354_ConnectionTestsCheckWhatTheConnectionDependsOn(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if r, err := e.svc.Test(e.admin, shell.ID); err != nil || r.Result != app.TestPassed {
+	if r, err := e.svc.Test(e.admin, shell.ID, ""); err != nil || r.Result != app.TestPassed {
 		t.Fatalf("local connection: %+v %v", r, err)
 	}
 
-	if _, err := e.svc.Test(e.caller(td.KindUser, td.RoleDeveloper), c.ID); !denied(err) {
+	if _, err := e.svc.Test(e.caller(td.KindUser, td.RoleDeveloper), c.ID, ""); !denied(err) {
 		t.Errorf("a developer tests: %v", err)
 	}
-	if _, err := e.svc.Test(e.caller(td.KindServiceAccount, td.RoleGatewayAdmin), c.ID); !denied(err) {
+	if _, err := e.svc.Test(e.caller(td.KindServiceAccount, td.RoleGatewayAdmin), c.ID, ""); !denied(err) {
 		t.Errorf("a service account tests: %v", err)
 	}
 	theirs := e.withOrg(t).payments(t, "payments")
-	if _, err := e.svc.Test(e.admin, theirs.ID); !is(err, app.ErrNotFound) {
+	if _, err := e.svc.Test(e.admin, theirs.ID, ""); !is(err, app.ErrNotFound) {
 		t.Errorf("another org's: %v", err)
 	}
 }

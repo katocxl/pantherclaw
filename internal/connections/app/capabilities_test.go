@@ -24,8 +24,9 @@ import (
 // connection declare PARTIAL with the limit that makes them so, and then
 // discovery, observation and response are PARTIAL too. Operations
 // carry their route's mode; permissions are declared only for a credential
-// PantherClaw uses, each with the operations that need it; what the kind
-// cannot serve or verify is a limit.
+// PantherClaw uses, named by the definition's credential scope when it has
+// one, each with the operations that need it; what the kind cannot serve
+// or verify is a limit.
 func TestF346_ConnectionsDeclareTheirCapabilities(t *testing.T) {
 	payments, err := manifest.Decode(mockpayments.Package)
 	if err != nil {
@@ -67,6 +68,17 @@ func TestF346_ConnectionsDeclareTheirCapabilities(t *testing.T) {
 	if len(held.Permissions) != 2 || held.Permissions[0].Name != "read payments.refund" || held.Permissions[1].Name != "write payments.charge" ||
 		len(held.Permissions[1].Reasons) != 1 || !strings.HasPrefix(held.Permissions[1].Reasons[0], "payments.refund.create: ") {
 		t.Fatalf("permissions %+v", held.Permissions)
+	}
+	// A definition's credential scope names the permissions it needs.
+	scoped, err := manifest.Decode(mockpayments.Package)
+	if err != nil {
+		t.Fatal(err)
+	}
+	scoped.Definitions[0].Dispatch.CredentialScope = map[string]string{"refunds": "write", "charges": "read"}
+	if c := app.Declare(enforced(conn(app.KindHTTP, app.AccessHeld)), scoped); len(c.Permissions) != 3 ||
+		c.Permissions[0].Name != "charges:read" || c.Permissions[2].Name != "refunds:write" || c.Permissions[1].Name != "read payments.refund" ||
+		len(c.Permissions[2].Reasons) != 1 || !strings.HasPrefix(c.Permissions[2].Reasons[0], "payments.refund.create: ") {
+		t.Fatalf("credential scope: %+v", c.Permissions)
 	}
 	if !slices.ContainsFunc(held.Failure, func(s string) bool { return strings.Contains(s, "2500 ms") }) {
 		t.Fatalf("failure behavior %q", held.Failure)
