@@ -91,7 +91,7 @@ func DeployTriggers(files map[string][]byte, branch, at string, merge bool) Trig
 	}
 	anyStarted := slices.ContainsFunc(all, func(w evaluated) bool { return w.started })
 	for _, w := range all {
-		if !w.started && !(anyStarted && w.dispatchable) {
+		if !w.started && (!anyStarted || !w.dispatchable) {
 			continue
 		}
 		if w.envErr != nil {
