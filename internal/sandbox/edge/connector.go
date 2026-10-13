@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"net/netip"
+	"regexp"
 	"strings"
 
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
@@ -89,15 +90,22 @@ func (e *Edge) egress(w http.ResponseWriter, r *http.Request, host, conn string)
 	e.relay(w, r, host, conn, action, res, err)
 }
 
-// onlyPlaceholder reports whether a credential value carries only the
-// connector's placeholder, alone or after an authorization scheme.
+// onlyPlaceholder reports whether a credential value is exactly the
+// connector's placeholder, alone or after a plain authorization scheme
+// (letters only, as Bearer, token or Basic): a real token next to it is
+// reported as any credential.
 func (e *Edge) onlyPlaceholder(v string) bool {
 	if e.placeholder == "" {
 		return false
 	}
-	f := strings.Fields(v)
-	return (len(f) == 1 || len(f) == 2) && f[len(f)-1] == e.placeholder
+	if v == e.placeholder {
+		return true
+	}
+	scheme, rest, ok := strings.Cut(v, " ")
+	return ok && rest == e.placeholder && schemeRE.MatchString(scheme)
 }
+
+var schemeRE = regexp.MustCompile(`^[A-Za-z]{1,16}$`)
 
 // nonRoutable reports whether host is an address the binding token may
 // cross in clear: a loopback, private or link-local IP address, or the

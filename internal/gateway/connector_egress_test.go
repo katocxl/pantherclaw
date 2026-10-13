@@ -73,4 +73,17 @@ func TestHR085_TheGatewayPlacesTheCredentialOnAConnectorsEgress(t *testing.T) {
 		undo()
 		h.containment.mu.Unlock()
 	}
+
+	// Five unknown outcomes open the egress connection's circuit, which
+	// stops the connector's egress as it stops any dispatch.
+	h.target.status = http.StatusBadGateway
+	for range 5 {
+		if _, err := h.gw.engine.ConnectorEgress(t.Context(), h.conn, a, f); errors.Is(err, dispatch.ErrEgressContained) {
+			t.Fatal("refused before the circuit opened")
+		}
+	}
+	sent := h.target.calls()
+	if _, err := h.gw.engine.ConnectorEgress(t.Context(), h.conn, a, f); !errors.Is(err, dispatch.ErrEgressContained) || h.target.calls() != sent {
+		t.Fatalf("an open circuit: %v, target %d", err, h.target.calls())
+	}
 }

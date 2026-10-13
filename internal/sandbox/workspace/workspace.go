@@ -142,10 +142,11 @@ func pack(root string, w io.Writer, git gitMode) error {
 
 // inGit reports whether a slash path is, or is inside, a .git as any host
 // may read the name: in any case, with trailing dots or spaces (Windows
-// drops them), or as its 8.3 short name GIT~1.
+// drops them), as its 8.3 short name GIT~1, or with code points HFS+ ignores
+// (zero-width and directional marks).
 func inGit(rel string) bool {
 	return slices.ContainsFunc(strings.Split(rel, "/"), func(s string) bool {
-		s = strings.ToLower(strings.TrimRight(s, ". "))
+		s = strings.ToLower(strings.TrimRight(strings.Map(dropIgnorable, s), ". "))
 		return s == ".git" || s == "git~1"
 	})
 }
@@ -286,4 +287,14 @@ func portable(name string) bool {
 		}
 	}
 	return true
+}
+
+// dropIgnorable drops the code points HFS+ ignores in names: the
+// zero-width and directional marks, so that ".g\u200cit" is a .git there.
+func dropIgnorable(r rune) rune {
+	switch {
+	case r >= 0x200B && r <= 0x200F, r >= 0x202A && r <= 0x202E, r >= 0x2060 && r <= 0x206F, r == 0xFEFF, r == 0x034F:
+		return -1
+	}
+	return r
 }

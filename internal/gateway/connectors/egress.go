@@ -143,7 +143,7 @@ func (s *Supervisor) egressHandler() http.Handler {
 			s.refuse(w, r, in.connection, codeUnmapped, http.StatusForbidden)
 			return
 		}
-		write, ok := admit(conn, p, fl.Action)
+		write, ok := admit(conn, req.Method, p, fl.Action)
 		code := ""
 		s.mu.Lock()
 		switch {
@@ -202,15 +202,16 @@ func (s *Supervisor) egressHandler() http.Handler {
 }
 
 // admit decides an egress request's action against the call: a reviewed
-// read is within the call when it reads the call's target; anything else
-// is a write, within the call only when it is the call's bound action
-// itself (sameAction).
-func admit(conn *control.Connection, got, call actionir.Parsed) (write, ok bool) {
+// read, over a safe method (GET or HEAD, so that a definition that marks a
+// side-effecting POST as read cannot be repeated), is within the call when
+// it reads the call's target; anything else is a write, within the call
+// only when it is the call's bound action itself (sameAction).
+func admit(conn *control.Connection, method string, got, call actionir.Parsed) (write, ok bool) {
 	def, found := conn.Package.Definition(got.Action.Operation)
 	switch {
 	case !found:
 		return false, false
-	case def.Access == domain.AccessRead:
+	case def.Access == domain.AccessRead && (method == http.MethodGet || method == http.MethodHead):
 		return false, got.Action.Target == call.Action.Target
 	}
 	return true, sameAction(got.Action, call.Action)
