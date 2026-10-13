@@ -125,7 +125,7 @@ tasks:
     desc: The SDKs' tests, each running every conformance vector (not part of task check; PYTHON overrides the interpreter); the SQL replay store's PostgreSQL test runs when the test cluster is up (task up PROFILE=test)
     dotenv: ["deploy/compose/.env"]
     vars:
-      PYTHON: '{{.PYTHON | default "uv run python"}}'
+      PYTHON: '{{.PYTHON | default "uv run --locked python"}}'
     cmds:
       - go -C sdk/go test -shuffle=on -count=1 ./...
       - >-
