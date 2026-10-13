@@ -234,8 +234,9 @@ func voidReason(code string) string {
 // people it lists now about the held action's target and the users linked
 // to them (G0 M8, HR-207). The fact is read as it is when a person
 // responds, so a commit pushed after the hold excludes its pusher too. A
-// fact that is not known, does not decode or says it is incomplete leaves
-// the authorship incomplete, and nobody counts as independent.
+// fact that is not known, does not decode, says it is incomplete or lists an
+// id that is not a positive integer (apdomain.GitHubPeople) leaves the
+// authorship incomplete, and nobody counts as independent.
 func authorship(ctx context.Context, q *dbq.Queries, org ids.OrgID, request ids.UUID, reqs []apdomain.Requirement) (
 	map[string]apdomain.Authorship, error,
 ) {
@@ -256,11 +257,11 @@ func authorship(ctx context.Context, q *dbq.Queries, org ids.OrgID, request ids.
 			return nil, err
 		}
 		v, err := fdomain.DecodeValue(fdomain.TypeObject, raw)
-		if err != nil || v.Object["complete"] != true {
+		ghIDs, ok := apdomain.GitHubPeople(v.Object)
+		if err != nil || !ok {
 			out[name] = apdomain.Authorship{}
 			continue
 		}
-		ghIDs := githubIDs(v.Object)
 		users, err := q.LinkedGitHubUsers(ctx, org, ghIDs)
 		if err != nil {
 			return nil, err
@@ -268,24 +269,4 @@ func authorship(ctx context.Context, q *dbq.Queries, org ids.OrgID, request ids.
 		out[name] = apdomain.Authorship{Users: users, Complete: true}
 	}
 	return out, nil
-}
-
-// githubIDs are the GitHub user ids a people fact lists: its author and
-// every author, committer and pusher.
-func githubIDs(people map[string]any) []int64 {
-	var out []int64
-	add := func(v any) {
-		if id, ok := v.(int64); ok && !slices.Contains(out, id) {
-			out = append(out, id)
-		}
-	}
-	add(people["author"])
-	for _, member := range []string{"authors", "committers", "pushers"} {
-		if list, ok := people[member].([]any); ok {
-			for _, v := range list {
-				add(v)
-			}
-		}
-	}
-	return out
 }

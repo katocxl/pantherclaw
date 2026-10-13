@@ -35,7 +35,7 @@ func TestHR207_AnIndependentApprovalNamesThePeopleFact(t *testing.T) {
 	people := func(complete bool) {
 		f.w.PutFact(fdomain.Fact{
 			Name: "payments.charge.people", SubjectType: "payments.charge", SubjectID: "ch_1",
-			Value:      fdomain.Value{Type: fdomain.TypeObject, Object: map[string]any{"complete": complete, "author": int64(42)}},
+			Value:      fdomain.Value{Type: fdomain.TypeObject, Object: map[string]any{"complete": complete, "author": int64(42), "pushers": []any{int64(43)}}},
 			ObservedAt: now.Add(-time.Second), RecordedAt: now, ProviderID: f.provider,
 		})
 	}
@@ -60,5 +60,45 @@ func TestHR207_AnIndependentApprovalNamesThePeopleFact(t *testing.T) {
 	requireApproval(false)
 	if ev := f.call(f.run, "create_refund", refund("ch_1", "30.00")); ev.Decision != adomain.RequireApproval || ev.Requirements[0].IndependentOf != "" {
 		t.Fatalf("not independent: %s %+v", ev.Decision, ev.Requirements)
+	}
+}
+
+// TestHR207_ReviewersAndReleaseApproversAreIndependentByRole: HR-207 holds
+// per role. A code_reviewer or release_approver requirement is independent
+// even when it does not say so: it names the people fact, and a fact that
+// could not list everyone leaves the action unauthorizable. Another role is
+// independent only when its requirement asks.
+func TestHR207_ReviewersAndReleaseApproversAreIndependentByRole(t *testing.T) {
+	for _, role := range []string{"code_reviewer", "release_approver", "approver"} {
+		f := newFxWith(t, peopleRefunds, "")
+		people := func(complete bool) {
+			f.w.PutFact(fdomain.Fact{
+				Name: "payments.charge.people", SubjectType: "payments.charge", SubjectID: "ch_1",
+				Value: fdomain.Value{Type: fdomain.TypeObject, Object: map[string]any{
+					"complete": complete, "author": int64(42), "pushers": []any{int64(43)},
+				}},
+				ObservedAt: now.Add(-time.Second), RecordedAt: now, ProviderID: f.provider,
+			})
+		}
+		g := f.newGrant(grantBounds)
+		g.Requirements = []gdomain.Requirement{{
+			Operations: gdomain.Ops{"payments.refund.create"}, Reason: "REFUNDS_NEED_REVIEW",
+			Approval: &pdomain.ApprovalRequirement{Role: role, Count: 1},
+		}}
+		f.w.Grants.Put(g)
+		f.run = f.newRun(g.ID)
+		people(true)
+		ev := f.call(f.run, "create_refund", refund("ch_1", "30.00"))
+		byRole := role != "approver"
+		if ev.Decision != adomain.RequireApproval || len(ev.Requirements) != 1 || ev.Requirements[0].Independent != byRole ||
+			(ev.Requirements[0].IndependentOf == "payments.charge.people") != byRole {
+			t.Fatalf("%s: %s %+v", role, ev.Decision, ev.Requirements)
+		}
+		people(false)
+		if ev := f.call(f.run, "create_refund", refund("ch_1", "30.00")); byRole {
+			expect(t, ev, adomain.CannotAuthorize, apdomain.IneligibleAuthorshipUnknown)
+		} else if ev.Decision != adomain.RequireApproval {
+			t.Fatalf("%s with an incomplete people fact: %s", role, ev.Decision)
+		}
 	}
 }

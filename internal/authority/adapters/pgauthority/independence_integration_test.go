@@ -41,8 +41,17 @@ func peopleRefunds(pkg string) string {
 // responds, the approvals side reads the held action's people fact as it
 // is now and excludes the users linked to the GitHub users it lists (an
 // author, a pusher), never an unlinked person; a fact that says it is
-// incomplete leaves nobody independent.
+// incomplete, or lists an id that is not a positive integer, leaves nobody
+// independent. A code_reviewer requirement is independent by its role
+// alone (HR-207), so it excludes them as an independent approver does.
 func TestHR207_TheLinkedPeopleOfTheHeldActionAreNotIndependent(t *testing.T) {
+	for _, req := range []pdomain.ApprovalRequirement{{Role: "approver", Count: 1, Independent: true}, {Role: "code_reviewer", Count: 1}} {
+		t.Run(req.Role, func(t *testing.T) { linkedPeopleAreNotIndependent(t, req) })
+	}
+}
+
+func linkedPeopleAreNotIndependent(t *testing.T, req pdomain.ApprovalRequirement) {
+	t.Helper()
 	w := newWorldWith(t, peopleRefunds)
 	w.refundable("ch_1")
 	people := func(object string) {
@@ -71,7 +80,7 @@ func TestHR207_TheLinkedPeopleOfTheHeldActionAreNotIndependent(t *testing.T) {
 		ExpiresAt: time.Now().Add(48 * time.Hour), Bounds: b, Delegation: gdomain.Delegation{Depth: 1, MaxChildren: 5},
 		Requirements: []gdomain.Requirement{{
 			Operations: gdomain.Ops{"payments.refund.create"}, Reason: "REFUNDS_NEED_APPROVAL",
-			Approval: &pdomain.ApprovalRequirement{Role: "approver", Count: 1, Independent: true},
+			Approval: &req,
 		}},
 	})
 	if err != nil {
@@ -105,7 +114,7 @@ func TestHR207_TheLinkedPeopleOfTheHeldActionAreNotIndependent(t *testing.T) {
 	someone := func(u ids.UUID) apdomain.Person {
 		return apdomain.Person{
 			UserID: u, Enabled: true, JoinedAt: time.Now().Add(-90 * 24 * time.Hour),
-			Bindings:    []apdomain.RoleBinding{{Role: "approver", CreatedAt: time.Now().Add(-90 * 24 * time.Hour)}},
+			Bindings:    []apdomain.RoleBinding{{Role: req.Role, CreatedAt: time.Now().Add(-90 * 24 * time.Hour)}},
 			Credentials: []apdomain.Credential{{ID: ids.NewV7(), CreatedAt: time.Now().Add(-90 * 24 * time.Hour)}},
 		}
 	}
@@ -116,8 +125,15 @@ func TestHR207_TheLinkedPeopleOfTheHeldActionAreNotIndependent(t *testing.T) {
 		t.Fatalf("an unrelated person: %s", code)
 	}
 
-	people(`{"complete": false, "author": 42}`)
-	if a := load().Context.Authorship["payments.charge.people"]; a.Complete {
-		t.Fatalf("incomplete authorship read as complete: %+v", a)
+	for _, object := range []string{
+		`{"complete": false, "author": 42, "pushers": [43]}`,
+		`{"complete": true, "author": "42", "pushers": [43]}`,
+		`{"complete": true, "author": 42, "pushers": [{"id": 43}]}`,
+		`{"complete": true, "author": 42}`,
+	} {
+		people(object)
+		if a := load().Context.Authorship["payments.charge.people"]; a.Complete {
+			t.Fatalf("%s read as complete: %+v", object, a)
+		}
 	}
 }
