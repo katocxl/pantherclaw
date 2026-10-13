@@ -1,0 +1,58 @@
+{{template "head" .}}
+<h1>Reconciliation of {{.Evidence.Transaction.Operation}}</h1>
+<p>State: <strong>{{.Reconciliation.State}}</strong>{{with .Reconciliation.Via}}, resolved by {{.}}{{end}}{{with .Reconciliation.Resolved}} at {{.UTC.Format "2006-01-02 15:04:05 UTC"}}{{end}}. Opened {{.Reconciliation.Opened.UTC.Format "2006-01-02 15:04:05 UTC"}} ({{.Reconciliation.Kind}}).</p>
+{{if eq .Reconciliation.Kind "unknown_outcome"}}{{if eq .Reconciliation.State "OPEN"}}
+<p class="note">Nobody knows whether this action happened: the gateway did not get the target's answer. Its budget and its repeat protection stay held. Evidence that it happened resolves it by itself; only an independent person can confirm here that it did not happen, which releases the budget so that an identical action is decided again.</p>
+{{end}}{{end}}
+<h2>The transaction</h2>
+<dl>
+<dt>Transaction</dt><dd><code>{{.Evidence.Transaction.ID}}</code></dd>
+<dt>Operation</dt><dd><code>{{.Evidence.Transaction.Operation}}</code></dd>
+<dt>Agent</dt><dd><code>{{.Evidence.Transaction.Agent}}</code></dd>
+<dt>Run</dt><dd><code>{{.Evidence.Transaction.Run}}</code></dd>
+{{with .Evidence.Transaction.Connection}}<dt>Connection</dt><dd><code>{{.}}</code></dd>{{end}}
+<dt>Decision</dt><dd>{{.Evidence.Transaction.Decision}}</dd>
+<dt>Execution</dt><dd>{{.Evidence.Transaction.Execution}}</dd>
+<dt>Effect</dt><dd>{{with .Evidence.Transaction.Effect}}{{.}}{{else}}not verified yet{{end}}</dd>
+{{with .Dispatched}}<dt>Dispatched</dt><dd>{{.}}</dd>{{end}}
+{{with .Evidence.Execution}}<dt>Recorded by</dt><dd>{{.RecordedBy}}, outcome {{.Outcome}}</dd>{{end}}
+</dl>
+<h2>The verifier's evidence</h2>
+{{if .Observations}}
+<p class="note">What PantherClaw read at the target through the gateway. Field values are the target's data.</p>
+<table>
+<thead><tr><th>Observed</th><th>Source</th><th>Read</th><th>Found</th><th>Complete listing</th><th>Fields</th></tr></thead>
+<tbody>
+{{range .Observations}}<tr data-evidence="{{.ID}}"><td>{{.Observed}}{{with .After}}<br><span class="note">{{.}}</span>{{end}}</td><td>{{.Source}}</td><td>{{.Status}}</td><td>{{.Found}}</td><td>{{.Complete}}</td><td>{{range .Fields}}<code>{{.Name}}</code> = <code class="untrusted">{{.Value}}</code><br>{{end}}</td></tr>
+{{end}}</tbody>
+</table>
+{{else}}
+<p class="alert">There is no evidence from the verifier: nothing was read at the target for this transaction. A release would rest on your basis alone.</p>
+{{end}}
+{{if .Effects}}
+<h2>Effect receipts</h2>
+<table>
+<thead><tr><th>#</th><th>State</th><th>Basis</th><th>Why</th><th>At</th></tr></thead>
+<tbody>
+{{range .Effects}}<tr><td>{{.Seq}}</td><td>{{.State}}</td><td>{{.Basis}}</td><td>{{with .Words}}{{.}}{{else}}{{.Reason}}{{end}}</td><td>{{.Created}}</td></tr>
+{{end}}</tbody>
+</table>
+{{end}}
+{{if .Reconciliation.Basis}}
+<h2>Basis</h2>
+<p class="alert">{{.BasisLabel}}</p>
+<p class="untrusted">{{.Basis.Text}}{{if .Basis.MixedScript}} <strong>(mixes writing systems: look for look-alike characters)</strong>{{end}}</p>
+{{with .Reconciliation.User}}<p class="note">Resolved by <code>{{.}}</code>.</p>{{end}}
+{{end}}
+{{if .MayRelease}}
+<h2>Confirm that it did not happen</h2>
+<p class="note">Write what you checked and where. Your security key signs this reconciliation, the outcome "did not happen", exactly the basis you write and the evidence above. The basis is kept with the release and shown as written.</p>
+<p><label for="release-basis">Basis</label></p>
+<p><textarea id="release-basis" rows="5" cols="72" maxlength="{{.MaxBasis}}" spellcheck="true"></textarea></p>
+<p><button type="button" class="danger" id="release" data-id="{{.Reconciliation.ID}}">Release with your security key</button></p>
+{{else}}{{with .RefusalText}}
+<p class="note">{{.}}</p>
+{{end}}{{end}}
+<p id="status" role="status"></p>
+<script src="/static/reconciliations.js"></script>
+{{template "foot" .}}

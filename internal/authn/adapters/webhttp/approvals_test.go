@@ -119,15 +119,17 @@ func (f *fakeApprovals) ApproveBatch(_ context.Context, _ ids.OrgID, r apapp.Res
 }
 
 // fakeBindings is the BINDING ceremony: it records the challenge and the
-// subject, and verifies any response as an assertion over names.
+// subject, and verifies any response as an assertion over names (or the
+// batch, or the reconciliation).
 type fakeBindings struct {
-	mu        sync.Mutex
-	challenge [32]byte
-	subject   authnapp.BindingSubject
-	names     ids.UUID
-	batch     ids.UUID
-	verifyErr error
-	spent     []ids.UUID
+	mu             sync.Mutex
+	challenge      [32]byte
+	subject        authnapp.BindingSubject
+	names          ids.UUID
+	batch          ids.UUID
+	reconciliation ids.UUID
+	verifyErr      error
+	spent          []ids.UUID
 }
 
 func (b *fakeBindings) BeginBinding(_ context.Context, _ authnapp.BrowserSession, subject authnapp.BindingSubject, challenge [32]byte) (authnapp.Ceremony, error) {
@@ -142,7 +144,8 @@ func (b *fakeBindings) VerifyBinding(_ context.Context, _ authnapp.BrowserSessio
 		return authnapp.BindingAssertion{}, b.verifyErr
 	}
 	return authnapp.BindingAssertion{
-		Ceremony: ceremony, Subject: authnapp.BindingSubject{Request: b.names, Batch: b.batch}, Challenge: knownBinding, Credential: responderKey,
+		Ceremony: ceremony, Subject: authnapp.BindingSubject{Request: b.names, Batch: b.batch, Reconciliation: b.reconciliation},
+		Challenge: knownBinding, Credential: responderKey,
 		AuthenticatorData: make([]byte, 37), ClientDataJSON: []byte(`{}`), Signature: []byte{1},
 	}, nil
 }

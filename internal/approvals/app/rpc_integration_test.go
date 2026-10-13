@@ -118,3 +118,29 @@ func TestHR172_TheAPIProposesAndTakesEvidence(t *testing.T) {
 		t.Fatalf("evidence: %v, %v", e, err)
 	}
 }
+
+// TestHR035_TheRequestShowsTheCooldownThatHolds: a person who granted
+// themselves Approver a minute ago may decline or ask (no cooldown guards
+// those), but GetApprovalRequest and the approval page say they may not
+// approve yet, because of the self-grant delay. Checking whether they may
+// respond relaxes the cooldowns on a copy only, never on the eligibility
+// the reason is read from next.
+func TestHR035_TheRequestShowsTheCooldownThatHolds(t *testing.T) {
+	f := newFx(t, 1)
+	req := f.request(1)
+	f.displayed(req)
+	f.exec(`INSERT INTO pc.role_bindings (org_id, id, role, user_id, scope_type, created_by, created_at)
+		VALUES ($1, $2, 'approver', $3, 'ORG', $4, now() - interval '1 minute')`, f.org, ids.NewV7(), f.carol.id, "user:"+f.carol.id.String())
+	h := approvalsrpc.NewApprovals(f.svc)
+	got, err := h.GetApprovalRequest(f.as(f.carol), &pantherclawv1.GetApprovalRequestRequest{Id: req.String()})
+	e := got.GetEligibility()
+	if err != nil || !e.GetCanRespond() || e.GetCanApprove() || len(e.GetRequirements()) != 0 ||
+		e.GetReason() != apdomain.IneligibleSelfGrant {
+		t.Fatalf("a fresh self-granted approver's eligibility: %v, %v", e, err)
+	}
+	v, err := f.svc.View(f.as(f.carol), req)
+	if err != nil || !v.MayRespond || v.MayApprove || v.Eligibility.CanApprove || len(v.Eligibility.Requirements) != 0 ||
+		v.Eligibility.Reason != apdomain.IneligibleSelfGrant {
+		t.Fatalf("the approval page: %v %v %+v, %v", v.MayRespond, v.MayApprove, v.Eligibility, err)
+	}
+}

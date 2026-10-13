@@ -16,6 +16,7 @@ import (
 
 	"connectrpc.com/connect/v2"
 	"connectrpc.com/connect/v2/connecthttp"
+	"google.golang.org/protobuf/encoding/protojson"
 
 	"github.com/katocxl/pantherclaw/internal/evidence/bundle"
 	"github.com/katocxl/pantherclaw/internal/evidence/bundle/bundletest"
@@ -103,6 +104,55 @@ type recordEvidence struct {
 	pantherclawv1connect.UnimplementedEvidenceServiceHandler
 	req    *pantherclawv1.ExportBundleRequest
 	bundle []byte
+	replay *pantherclawv1.ReplayDecisionRequest
+}
+
+func (r *recordEvidence) ReplayDecision(_ context.Context, req *pantherclawv1.ReplayDecisionRequest) (*pantherclawv1.ReplayDecisionResponse, error) {
+	r.replay = req
+	out := &pantherclawv1.ReplayDecisionResponse{
+		TransactionId: req.GetTransactionId(), Evaluation: 2, Complete: true, Reproduced: true,
+		Decision: pantherclawv1.Decision_DECISION_ALLOW, OriginalDecision: pantherclawv1.Decision_DECISION_ALLOW,
+	}
+	if req.GetIncludeInputs() {
+		out.Inputs = []byte(`{"format":1,"pipeline":1}`)
+	}
+	return out, nil
+}
+
+// TestHR197_EvidenceReplayAsksForTheEvaluationAndShowsTheOutcome: `pclaw
+// evidence replay` sends the transaction, evaluation and policy version,
+// prints the replay as JSON, and with --show-inputs embeds the recorded
+// inputs as JSON beside it.
+func TestHR197_EvidenceReplayAsksForTheEvaluationAndShowsTheOutcome(t *testing.T) {
+	rec := &recordEvidence{}
+	cs := connect.NewServer()
+	pantherclawv1connect.RegisterEvidenceServiceHandler(cs, rec)
+	mux := http.NewServeMux()
+	connecthttp.Mount(mux, cs)
+	ts := httptest.NewServer(mux)
+	t.Cleanup(ts.Close)
+	env := envOf(map[string]string{"PANTHERCLAW_SERVER": ts.URL, "PANTHERCLAW_API_KEY": "pck_test_x"})
+	const txn, policy = "0192aaaa-bbbb-7ccc-8ddd-000000000001", "0192aaaa-bbbb-7ccc-8ddd-000000000009"
+
+	code, stdout, errs := run(t, env, "evidence", "replay", "--txn", txn, "--evaluation", "2", "--policy-version", policy)
+	var printed pantherclawv1.ReplayDecisionResponse
+	// protojson varies its whitespace on purpose: decode, never compare text.
+	if code != 0 || protojson.Unmarshal([]byte(stdout), &printed) != nil || !printed.GetReproduced() || len(printed.GetInputs()) != 0 {
+		t.Fatalf("evidence replay = %d %s %s", code, stdout, errs)
+	}
+	if rec.replay.GetTransactionId() != txn || rec.replay.GetEvaluation() != 2 || rec.replay.GetPolicyVersionId() != policy ||
+		rec.replay.GetIncludeInputs() {
+		t.Fatalf("request = %v", rec.replay)
+	}
+	code, stdout, errs = run(t, env, "evidence", "replay", "--txn", txn, "--show-inputs")
+	if code != 0 || !strings.Contains(stdout, `"replay": {`) || !strings.Contains(stdout, `"pipeline": 1`) || !rec.replay.GetIncludeInputs() {
+		t.Fatalf("evidence replay --show-inputs = %d %s %s", code, stdout, errs)
+	}
+	for _, args := range [][]string{{}, {"--txn", txn, "--evaluation", "-1"}, {"--txn", txn, "extra"}} {
+		if code, _, _ := run(t, env, append([]string{"evidence", "replay"}, args...)...); code == 0 {
+			t.Errorf("evidence replay %v was accepted", args)
+		}
+	}
 }
 
 func (r *recordEvidence) ExportBundle(_ context.Context, req *pantherclawv1.ExportBundleRequest) (*pantherclawv1.ExportBundleResponse, error) {

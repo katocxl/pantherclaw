@@ -33,7 +33,7 @@ func (q *Queries) DefinitionCanonical(ctx context.Context, orgID ids.OrgID, dige
 const insertExecutionReceipt = `-- name: InsertExecutionReceipt :exec
 
 INSERT INTO pc.execution_receipts (org_id, attempt_id, transaction_id, permit_id, receipt_jws, ledger_entry_id)
-VALUES ($1, $2, $3, $4, $5,
+VALUES ($1, $2, $3, $4, $5::text,
         $6)
 `
 
@@ -131,7 +131,7 @@ func (q *Queries) OpenReconciliation(ctx context.Context, arg OpenReconciliation
 }
 
 const recordedExecution = `-- name: RecordedExecution :one
-SELECT p.state, p.transaction_id, a.recorded_by, a.outcome, r.receipt_jws
+SELECT p.state, p.transaction_id, a.recorded_by, a.outcome, coalesce(r.receipt_jws, '')::text AS receipt_jws
 FROM pc.permits p
 JOIN pc.execution_attempts a ON a.org_id = p.org_id AND a.permit_id = p.id
 JOIN pc.execution_receipts r ON r.org_id = a.org_id AND r.attempt_id = a.id

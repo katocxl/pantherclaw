@@ -49,6 +49,9 @@ type Connection struct {
 	Modes map[string]string
 	// Credential is the active sealed credential, or nil.
 	Credential *pb.SealedCredential
+	// Captures are the active capture profiles covering the connection (G0
+	// M7 design decision 10, HR-199); none when capture is off.
+	Captures []*pb.GatewayCaptureProfile
 }
 
 // Mode is a route's mode: its explicit one, or the connection's default.
@@ -206,6 +209,13 @@ func (s *Store) build(res *pb.GetConfigurationResponse) (*Config, error) {
 			c.Modes[r.GetRoute()] = r.GetMode()
 		}
 		cfg.ByName[gc.GetName()], cfg.ByID[gc.GetId()] = c, c
+	}
+	for _, p := range res.GetCaptureProfiles() {
+		for _, id := range p.GetConnectionIds() {
+			if c, ok := cfg.ByID[id]; ok {
+				c.Captures = append(c.Captures, p)
+			}
+		}
 	}
 	return cfg, nil
 }

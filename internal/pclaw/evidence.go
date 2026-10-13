@@ -7,6 +7,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json/jsontext"
 	"encoding/json/v2"
 	"errors"
 	"flag"
@@ -15,6 +16,8 @@ import (
 	"net/http"
 	"os"
 	"strings"
+
+	"google.golang.org/protobuf/encoding/protojson"
 
 	"github.com/katocxl/pantherclaw/internal/evidence/bundle"
 	"github.com/katocxl/pantherclaw/internal/evidence/keydocs"
@@ -40,6 +43,63 @@ func init() {
 		usage: "evidence bundle (--txn ID [--txn ID]… | --from SEQ --to SEQ) [--previous FILE] --out FILE",
 		run:   evidenceBundle,
 	}
+	commands["evidence replay"] = command{
+		usage: "evidence replay --txn ID [--evaluation N] [--policy-version ID] [--show-inputs]",
+		run:   evidenceReplay,
+	}
+}
+
+// evidenceReplay runs ReplayDecision (G0 M7 design decision 11, HR-197):
+// the evaluation's decision again on its recorded inputs, unchanged or
+// under a stored policy version. It writes nothing and dispatches nothing.
+// --show-inputs adds the recorded input values for a caller holding
+// evidence.read_restricted; the output is then {"replay": …, "inputs": …}.
+func evidenceReplay(ctx context.Context, a *app, args []string) error {
+	fs := flag.NewFlagSet("evidence replay", flag.ContinueOnError)
+	fs.SetOutput(a.stderr)
+	txn := fs.String("txn", "", "the transaction")
+	evaluation := fs.Int("evaluation", 0, "the evaluation to replay (default: the latest)")
+	policy := fs.String("policy-version", "", "replay under this stored policy version instead of the recorded one")
+	inputs := fs.Bool("show-inputs", false, "also show the recorded input values (needs evidence.read_restricted)")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *txn == "" || fs.NArg() != 0 || *evaluation < 0 || *evaluation > 64 {
+		return errUsage
+	}
+	s, err := a.session()
+	if err != nil {
+		return err
+	}
+	res, err := pantherclawv1connect.NewEvidenceServiceClient(s.connect()).ReplayDecision(ctx, &pantherclawv1.ReplayDecisionRequest{
+		TransactionId: *txn, Evaluation: int32(*evaluation), PolicyVersionId: *policy, IncludeInputs: *inputs,
+	})
+	if err != nil {
+		return err
+	}
+	if !*inputs {
+		return a.print(res)
+	}
+	values := res.GetInputs()
+	res.Inputs = nil
+	replay, err := protojson.MarshalOptions{Indent: "  "}.Marshal(res)
+	if err != nil {
+		return err
+	}
+	out := map[string]jsontext.Value{"replay": replay, "inputs": jsontext.Value("null")}
+	if len(values) > 0 {
+		out["inputs"] = values
+	}
+	b, err := json.Marshal(out, json.Deterministic(true))
+	if err != nil {
+		return err
+	}
+	v := jsontext.Value(b)
+	if err := v.Indent(jsontext.WithIndent("  ")); err != nil {
+		return err
+	}
+	_, err = fmt.Fprintln(a.stdout, string(v))
+	return err
 }
 
 // writeNew writes b to a file that must not exist yet.

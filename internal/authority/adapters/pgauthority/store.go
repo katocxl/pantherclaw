@@ -163,6 +163,13 @@ func (s *Store) Finalize(ctx context.Context, org ids.OrgID, w finalize.Write) e
 			if err := verifyPlan(&ins, ev.Verify); err != nil {
 				return err
 			}
+			// A transaction reopened by a restored approval replaces its
+			// released permit, so it keeps one current permit (HR-011).
+			if w.Prev != nil {
+				if _, err := q.ReplaceReleasedPermits(ctx, org, w.TransactionID); err != nil {
+					return err
+				}
+			}
 			if err := q.InsertPermitForTransaction(ctx, ins); err != nil {
 				return err
 			}
@@ -383,6 +390,11 @@ func claim(ctx context.Context, q *dbq.Queries, org ids.OrgID, w finalize.Write,
 		return err
 	}
 	if row.TransactionID == w.TransactionID {
+		if row.State == string(pipeline.ClaimReleased) {
+			// Its released permit's approval was restored (HR-011): the
+			// transaction takes its own claim again.
+			return expect(q.TakeDedupeClaim(ctx, w.TransactionID, org, w.Claim.Key))
+		}
 		return nil
 	}
 	c := &pipeline.Claim{TransactionID: row.TransactionID, State: pipeline.ClaimState(row.State), At: row.ChangedAt}
@@ -464,7 +476,9 @@ func (s *Store) Tamper(ctx context.Context, org ids.OrgID, prev finalize.Stored,
 func (s *Store) BeginDispatch(ctx context.Context, org ids.OrgID, gatewayID string, permit ids.UUID, epoch int64, out finalize.Outbound,
 	mint func(finalize.Dispatching) (*ids.UUID, error),
 ) error {
-	return s.Pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
+	var refusal error
+	err := s.Pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
+		refusal = nil
 		q := dbq.New(tx)
 		_, err := q.BeginDispatch(ctx, dbq.BeginDispatchParams{OrgID: org, ID: permit, GatewayID: gatewayID, Epoch: epoch})
 		if err == nil {
@@ -476,20 +490,28 @@ func (s *Store) BeginDispatch(ctx context.Context, org ids.OrgID, gatewayID stri
 		st, err := q.GetPermit(ctx, org, permit)
 		switch {
 		case db.IsNoRows(err):
-			return finalize.ErrPermitUnknown
+			refusal = finalize.ErrPermitUnknown
 		case err != nil:
 			return err
 		case st.GatewayID != gatewayID:
-			return finalize.ErrPermitUnknown
+			refusal = finalize.ErrPermitUnknown
 		case st.State != "ISSUED":
-			return finalize.ErrPermitUsed
+			refusal = finalize.ErrPermitUsed
 		case st.KillSwitch:
-			return finalize.ErrKillSwitch
+			refusal = finalize.ErrKillSwitch
 		case st.Expired:
-			return finalize.ErrPermitExpired
+			refusal = finalize.ErrPermitExpired
+		default:
+			refusal = finalize.ErrEpochStale
 		}
-		return finalize.ErrEpochStale
+		// The refusal commits what it settles: a permit that can never pass
+		// is released and its approval restored (HR-011).
+		return releaseRefused(ctx, tx, q, org, gatewayID, permit, refusal)
 	})
+	if err != nil {
+		return err
+	}
+	return refusal
 }
 
 // dispatching records the outbound request on a permit that just moved to
@@ -530,9 +552,10 @@ func dispatching(ctx context.Context, q *dbq.Queries, org ids.OrgID, permit ids.
 }
 
 // RecordExecution implements finalize.Store: the attempt, the execution
-// receipt and its ledger entry, then the settlement, in one transaction.
+// receipt and its ledger entry, the UNVERIFIABLE effect receipt of an
+// effect nothing can verify, then the settlement, in one transaction.
 func (s *Store) RecordExecution(ctx context.Context, org ids.OrgID, gatewayID string, e finalize.Execution,
-	sign func(x finalize.Executed, now time.Time) (finalize.Receipt, error),
+	sign finalize.Signing,
 ) (string, error) {
 	var receipt string
 	err := s.Pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
@@ -558,14 +581,15 @@ func (s *Store) RecordExecution(ctx context.Context, org ids.OrgID, gatewayID st
 		txn, err := q.FinishPermitForTransaction(ctx, dbq.FinishPermitForTransactionParams{ToState: to, OrgID: org, ID: permit, GatewayID: gatewayID})
 		if db.IsNoRows(err) {
 			// Too late: the sweeper may have marked it UNKNOWN (G0 M7).
-			receipt, err = lateReport(ctx, q, org, gatewayID, e, pc)
+			receipt, err = lateReport(ctx, tx, q, org, gatewayID, e, sign, pc)
 			return err
 		}
 		if err != nil {
 			return err
 		}
 		x.Transaction = txn
-		if x.TargetRef, err = scheduleVerification(ctx, q, org, pc, o, e.TargetRef); err != nil {
+		var unv *unverified
+		if x.TargetRef, unv, err = scheduleVerification(ctx, q, org, pc, o, e.TargetRef); err != nil {
 			return err
 		}
 		attempt := dbq.InsertExecutionAttemptParams{
@@ -591,11 +615,14 @@ func (s *Store) RecordExecution(ctx context.Context, org ids.OrgID, gatewayID st
 		if err != nil {
 			return err
 		}
-		r, err := sign(x, now)
+		r, err := sign.Execution(x, now)
 		if err != nil {
 			return err
 		}
 		if err := keepReceipt(ctx, tx, q, org, attempt.ID, txn, permit, evdomain.Actor{Type: "gateway", ID: gatewayID}, r); err != nil {
+			return err
+		}
+		if err := unverifiable(ctx, tx, q, org, gatewayID, txn, unv, sign); err != nil {
 			return err
 		}
 		receipt = r.JWS
@@ -614,8 +641,8 @@ func (s *Store) RecordExecution(ctx context.Context, org ids.OrgID, gatewayID st
 			if err := openReconciliation(ctx, q, org, txn); err != nil {
 				return err
 			}
-			// The waitlist entry people work it from (G0 M5 part 2); A11
-			// links it to the reconciliation.
+			// The waitlist entry people work it from (G0 M5 part 2), linked
+			// to the reconciliation (G0 M7 slice A11).
 			_, err := pgwaitlist.OpenReconciliation(ctx, tx, org, txn, evdomain.Actor{Type: "gateway", ID: gatewayID})
 			return err
 		}
@@ -636,10 +663,7 @@ func (s *Store) Sweep(ctx context.Context, org ids.OrgID, staleAfter time.Durati
 			return err
 		}
 		for _, p := range expired {
-			if err := pgbudgets.Settle(ctx, q, org, p.ID, bdomain.Release); err != nil {
-				return err
-			}
-			if err := q.SettleDedupeClaim(ctx, string(pipeline.ClaimReleased), org, p.TransactionID); err != nil {
+			if err := releasedUnused(ctx, tx, q, org, p.ID, p.TransactionID, sweeperActor); err != nil {
 				return err
 			}
 		}

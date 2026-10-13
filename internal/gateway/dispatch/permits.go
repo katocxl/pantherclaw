@@ -15,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/katocxl/pantherclaw/internal/approvals/proof"
 	"github.com/katocxl/pantherclaw/internal/platform/crypto/jws"
 	"github.com/katocxl/pantherclaw/internal/platform/keys"
 )
@@ -42,6 +43,9 @@ type permitClaims struct {
 		Txn   string `json:"txn"`
 		Act   string `json:"act"`
 		Epoch int64  `json:"epoch"`
+		// Approval is the approval the decision rests on (HR-038), checked
+		// against the pinned approver keys before BeginDispatch.
+		Approval *proof.Approval `json:"approval,omitzero"`
 	} `json:"pap"`
 }
 
@@ -69,38 +73,39 @@ func newPermitVerifier(jwksURL string, client *http.Client, gatewayID, org strin
 	return &permitVerifier{jwksURL: jwksURL, client: client, gatewayID: gatewayID, org: org, now: time.Now}
 }
 
-// verify checks the signature, typ, audience, expiry and every binding.
-func (pv *permitVerifier) verify(ctx context.Context, token string, want permitWant) error {
+// verify checks the signature, typ, audience, expiry and every binding,
+// and returns the approval the permit carries, if any.
+func (pv *permitVerifier) verify(ctx context.Context, token string, want permitWant) (*proof.Approval, error) {
 	v, err := pv.verifierFor(ctx, token)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	payload, _, err := v.Verify(token)
 	if err != nil {
-		return fmt.Errorf("%w: %w", ErrPermitInvalid, err)
+		return nil, fmt.Errorf("%w: %w", ErrPermitInvalid, err)
 	}
 	var c permitClaims
 	if err := json.Unmarshal(payload, &c, json.RejectUnknownMembers(true)); err != nil {
-		return fmt.Errorf("%w: claims: %w", ErrPermitInvalid, err)
+		return nil, fmt.Errorf("%w: claims: %w", ErrPermitInvalid, err)
 	}
 	now := pv.now().Unix()
 	switch {
 	case c.Aud != "gw:"+pv.gatewayID:
-		return fmt.Errorf("%w: audience %q", ErrPermitInvalid, c.Aud)
+		return nil, fmt.Errorf("%w: audience %q", ErrPermitInvalid, c.Aud)
 	case now >= c.Exp:
-		return fmt.Errorf("%w: expired", ErrPermitInvalid)
+		return nil, fmt.Errorf("%w: expired", ErrPermitInvalid)
 	case c.Iat > now+2: // small skew between gateway and Authority clocks
-		return fmt.Errorf("%w: issued in the future", ErrPermitInvalid)
+		return nil, fmt.Errorf("%w: issued in the future", ErrPermitInvalid)
 	case c.Pap.V != 1 || c.Pap.Org != pv.org:
-		return fmt.Errorf("%w: wrong version or org", ErrPermitInvalid)
+		return nil, fmt.Errorf("%w: wrong version or org", ErrPermitInvalid)
 	case c.Jti != want.PermitID || c.Pap.Txn != want.Txn:
-		return fmt.Errorf("%w: permit or transaction id mismatch", ErrPermitInvalid)
+		return nil, fmt.Errorf("%w: permit or transaction id mismatch", ErrPermitInvalid)
 	case c.Pap.Act != want.Act:
-		return fmt.Errorf("%w: action hash mismatch", ErrPermitInvalid)
+		return nil, fmt.Errorf("%w: action hash mismatch", ErrPermitInvalid)
 	case c.Pap.Epoch <= 0 || c.Pap.Epoch != want.Epoch:
-		return fmt.Errorf("%w: epoch mismatch", ErrPermitInvalid)
+		return nil, fmt.Errorf("%w: epoch mismatch", ErrPermitInvalid)
 	}
-	return nil
+	return c.Pap.Approval, nil
 }
 
 // verifierFor returns a verifier that knows the token's kid, refetching the

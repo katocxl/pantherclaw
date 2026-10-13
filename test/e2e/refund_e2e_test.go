@@ -59,6 +59,7 @@ type stack struct {
 	sim      *payments.Server
 	simURL   string
 	simCalls *atomic.Int64 // dispatches (non-GET requests) the target received
+	gwCalls  *atomic.Int64 // requests agents sent to the gateway
 	stop     context.CancelFunc
 	done     chan struct{} // closed when the server has stopped
 	apiURL   string
@@ -76,6 +77,10 @@ type stack struct {
 	gatewayEnroll string
 	gw            *gateway.Gateway
 	conn          ids.UUID
+	// approverKeys is the gateway's approver keys file (HR-038): dev seed
+	// writes it next to the enrollment file, and approver exports it again
+	// once a person has a key.
+	approverKeys string
 
 	// The seeded PAP/1 workload: its key file and key, its workload token
 	// and its run.
@@ -135,7 +140,7 @@ var (
 
 func start(t *testing.T, o options) *stack {
 	t.Helper()
-	s := &stack{db: dbtest.New(t), simCalls: &atomic.Int64{}}
+	s := &stack{db: dbtest.New(t), simCalls: &atomic.Int64{}, gwCalls: &atomic.Int64{}}
 	dir := t.TempDir()
 	kek := filepath.Join(dir, "kek")
 	s.kek = kek
@@ -246,6 +251,10 @@ func start(t *testing.T, o options) *stack {
 	// Verification tasks are claimed every second rather than every ten
 	// (G0 M7), so effects are verified within a test's patience.
 	gc.Control.VerifyEvery = config.Duration(time.Second)
+	// The approver keys file dev seed wrote next to the enrollment file
+	// (HR-038), as deploy/dev/gateway.example.json pins it.
+	s.approverKeys = filepath.Join(dir, "approver-keys.json")
+	gc.Approvals.ApproverKeysFile = s.approverKeys
 	if o.access == "pantherclaw_held" {
 		// The gateway's broker key, which only it can open credentials with
 		// (HR-061); it registers the public half when it starts.
@@ -261,7 +270,11 @@ func start(t *testing.T, o options) *stack {
 	s.gatewayCfg = gc
 	s.gatewayEnroll = enrollFile
 	s.gw = s.startGateway(t)
-	gs.Config.Handler = s.gw.Handler()
+	gw := s.gw.Handler()
+	gs.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		s.gwCalls.Add(1)
+		gw.ServeHTTP(w, r)
+	})
 	gs.Start()
 	t.Cleanup(gs.Close)
 	s.gateway = gs.URL
@@ -427,7 +440,7 @@ func (s *stack) tryRefundVia(conn string, act ids.UUID, amount string) (int, rep
 // budget and the state of txn's permit.
 func (s *stack) budget(t *testing.T, txn string) (reserved, spent, permit string) {
 	t.Helper()
-	err := s.db.AppPool(t).InTenantTx(context.Background(), s.org, func(ctx context.Context, tx db.TenantTx) error {
+	err := s.pool.InTenantTx(context.Background(), s.org, func(ctx context.Context, tx db.TenantTx) error {
 		// The account exists from the first reservation; before it, both are
 		// 0. Outcomes recorded but not yet applied to the row by the
 		// settlement job count as settled (ADR-0015).

@@ -72,7 +72,7 @@ func (q *Queries) CompensatedBy(ctx context.Context, orgID ids.OrgID, toTransact
 }
 
 const decisionReceiptsOf = `-- name: DecisionReceiptsOf :many
-SELECT d.evaluation, d.receipt_jws, d.ledger_entry_id, d.created_at, c.seq AS chain_seq
+SELECT d.evaluation, coalesce(d.receipt_jws, '')::text AS receipt_jws, d.ledger_entry_id, d.created_at, c.seq AS chain_seq
 FROM pc.decision_receipts d
 LEFT JOIN pc.ledger_chain c ON c.org_id = d.org_id AND c.entry_id = d.ledger_entry_id
 WHERE d.org_id = $1 AND d.transaction_id = $2
@@ -114,7 +114,8 @@ func (q *Queries) DecisionReceiptsOf(ctx context.Context, orgID ids.OrgID, trans
 }
 
 const effectReceiptsOf = `-- name: EffectReceiptsOf :many
-SELECT f.seq, f.state, f.level_required, f.level_achieved, f.basis, f.receipt_jws, f.ledger_entry_id, f.created_at,
+SELECT f.seq, f.state, f.level_required, f.level_achieved, f.basis, coalesce(f.receipt_jws, '')::text AS receipt_jws,
+       f.ledger_entry_id, f.created_at,
        c.seq AS chain_seq
 FROM pc.effect_receipts f
 LEFT JOIN pc.ledger_chain c ON c.org_id = f.org_id AND c.entry_id = f.ledger_entry_id
@@ -223,7 +224,8 @@ func (q *Queries) EntryProtection(ctx context.Context, seqs []int64, orgID ids.O
 
 const executionOf = `-- name: ExecutionOf :one
 SELECT a.id AS attempt_id, a.permit_id, a.outcome, a.target_status, a.recorded_by, a.target_ref, a.dispatch_ms,
-       a.recorded_at, p.dispatching_at, e.receipt_jws, e.ledger_entry_id, c.seq AS chain_seq
+       a.recorded_at, p.dispatching_at, coalesce(e.receipt_jws, '')::text AS receipt_jws, e.ledger_entry_id,
+       c.seq AS chain_seq
 FROM pc.execution_attempts a
 JOIN pc.permits p ON p.org_id = a.org_id AND p.id = a.permit_id
 JOIN pc.execution_receipts e ON e.org_id = a.org_id AND e.attempt_id = a.id
@@ -335,7 +337,7 @@ SELECT t.created_at, t.effect_state, t.effect_level_required, t.effect_level_ach
        p.definition_digest
 FROM pc.transactions t
 JOIN pc.runs r ON r.org_id = t.org_id AND r.id = t.run_id
-LEFT JOIN pc.permits p ON p.org_id = t.org_id AND p.transaction_id = t.id
+LEFT JOIN pc.permits p ON p.org_id = t.org_id AND p.transaction_id = t.id AND NOT p.replaced
 WHERE t.org_id = $1 AND t.id = $2
 FOR UPDATE OF t
 `
@@ -512,7 +514,7 @@ WITH x AS (
            END::text AS execution_state
     FROM pc.transactions t
     JOIN pc.runs r ON r.org_id = t.org_id AND r.id = t.run_id
-    LEFT JOIN pc.permits p ON p.org_id = t.org_id AND p.transaction_id = t.id
+    LEFT JOIN pc.permits p ON p.org_id = t.org_id AND p.transaction_id = t.id AND NOT p.replaced
     LEFT JOIN pc.execution_attempts a ON a.org_id = p.org_id AND a.permit_id = p.id
     WHERE t.org_id = $3
       AND (coalesce($4::uuid, '00000000-0000-0000-0000-000000000000') = '00000000-0000-0000-0000-000000000000'
@@ -713,7 +715,7 @@ SELECT k.id, k.transaction_id, k.kind, k.state, k.resolved_via, k.observation_id
 FROM pc.reconciliation_tasks k
 JOIN pc.transactions t ON t.org_id = k.org_id AND t.id = k.transaction_id
 JOIN pc.runs r ON r.org_id = t.org_id AND r.id = t.run_id
-LEFT JOIN pc.permits p ON p.org_id = t.org_id AND p.transaction_id = t.id
+LEFT JOIN pc.permits p ON p.org_id = t.org_id AND p.transaction_id = t.id AND NOT p.replaced
 WHERE k.org_id = $1 AND k.id = $2
 FOR UPDATE OF k
 `
@@ -894,7 +896,7 @@ SELECT t.id, t.run_id, r.agent_id, t.operation, t.connection_id, t.decision, t.r
        p.state AS permit_state, a.outcome
 FROM pc.transactions t
 JOIN pc.runs r ON r.org_id = t.org_id AND r.id = t.run_id
-LEFT JOIN pc.permits p ON p.org_id = t.org_id AND p.transaction_id = t.id
+LEFT JOIN pc.permits p ON p.org_id = t.org_id AND p.transaction_id = t.id AND NOT p.replaced
 LEFT JOIN pc.execution_attempts a ON a.org_id = p.org_id AND a.permit_id = p.id
 WHERE t.org_id = $1 AND t.id = $2
 `

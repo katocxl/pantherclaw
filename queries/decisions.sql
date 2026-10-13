@@ -30,7 +30,7 @@ WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state = 'OPEN' AND eva
 
 -- name: InsertEvaluationReceipt :exec
 INSERT INTO pc.decision_receipts (org_id, transaction_id, evaluation, receipt_jws, ledger_entry_id)
-VALUES (sqlc.arg(org_id), sqlc.arg(transaction_id), sqlc.arg(evaluation), sqlc.arg(receipt_jws), sqlc.arg(ledger_entry_id));
+VALUES (sqlc.arg(org_id), sqlc.arg(transaction_id), sqlc.arg(evaluation), sqlc.arg(receipt_jws)::text, sqlc.arg(ledger_entry_id));
 
 -- name: InsertDedupeClaim :exec
 INSERT INTO pc.dedupe_claims (org_id, dedupe_key, transaction_id, state)
