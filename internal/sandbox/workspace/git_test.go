@@ -133,16 +133,17 @@ func TestHR216_GitPlantedInTheSandboxNeverReachesTheHost(t *testing.T) {
 		t.Fatalf("copy-out packed a .git entry: %v", got)
 	}
 	for name, h := range map[string]*tar.Header{
-		"a hook":                   {Name: ".git/hooks/post-checkout", Typeflag: tar.TypeReg, Mode: 0o755, Size: 1},
-		"a config":                 {Name: ".git/config", Typeflag: tar.TypeReg, Size: 1},
-		"a nested hook":            {Name: "vendor/x/.git/hooks/pre-commit", Typeflag: tar.TypeReg, Mode: 0o755, Size: 1},
-		"the .git itself":          {Name: ".git/", Typeflag: tar.TypeDir},
-		"an object to run":         {Name: ".git/objects/ab/run", Typeflag: tar.TypeReg, Mode: 0o755, Size: 1},
-		"an upper-case .GIT":       {Name: ".GIT/hooks/post-checkout", Typeflag: tar.TypeReg, Mode: 0o755, Size: 1},
-		"a mixed-case nested .Git": {Name: "vendor/x/.Git/config", Typeflag: tar.TypeReg, Size: 1},
-		"a .git with a dot":        {Name: ".git./config", Typeflag: tar.TypeReg, Size: 1},
-		"a .git with a space":      {Name: ".git /config", Typeflag: tar.TypeReg, Size: 1},
-		"the 8.3 short name GIT~1": {Name: "GIT~1/config", Typeflag: tar.TypeReg, Size: 1},
+		"a hook":                              {Name: ".git/hooks/post-checkout", Typeflag: tar.TypeReg, Mode: 0o755, Size: 1},
+		"a config":                            {Name: ".git/config", Typeflag: tar.TypeReg, Size: 1},
+		"a nested hook":                       {Name: "vendor/x/.git/hooks/pre-commit", Typeflag: tar.TypeReg, Mode: 0o755, Size: 1},
+		"the .git itself":                     {Name: ".git/", Typeflag: tar.TypeDir},
+		"an object to run":                    {Name: ".git/objects/ab/run", Typeflag: tar.TypeReg, Mode: 0o755, Size: 1},
+		"an upper-case .GIT":                  {Name: ".GIT/hooks/post-checkout", Typeflag: tar.TypeReg, Mode: 0o755, Size: 1},
+		"a mixed-case nested .Git":            {Name: "vendor/x/.Git/config", Typeflag: tar.TypeReg, Size: 1},
+		"a .git with a dot":                   {Name: ".git./config", Typeflag: tar.TypeReg, Size: 1},
+		"a .git with a space":                 {Name: ".git /config", Typeflag: tar.TypeReg, Size: 1},
+		"the 8.3 short name GIT~1":            {Name: "GIT~1/config", Typeflag: tar.TypeReg, Size: 1},
+		"a .git with a zero-width non-joiner": {Name: ".g\u200Cit/config", Typeflag: tar.TypeReg, Size: 1},
 	} {
 		dst := t.TempDir()
 		if _, err := UnpackFiles(archive(t, h), dst); !errors.Is(err, ErrUnsafe) {
