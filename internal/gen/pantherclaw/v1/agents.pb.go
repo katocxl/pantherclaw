@@ -1921,7 +1921,9 @@ func (x *ListAgentChangesResponse) GetNextPageToken() string {
 // ScanFinding is one finding of a local scan.
 type ScanFinding struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// "mcp_server" or "agent_project".
+	// "mcp_server" or "agent_project" from a local scan; from a gateway's
+	// organization scan (G0 M8, HR-209), "github_app", "github_workflow" or
+	// "github_mcp_config".
 	Kind string `protobuf:"bytes,1,opt,name=kind,proto3" json:"kind,omitempty"`
 	// Stable key of the finding on the scanning machine (hex SHA-256), so a
 	// later scan of the same thing is only counted.
@@ -1989,7 +1991,15 @@ type SubmitScanFindingsRequest struct {
 	// The findings.
 	Findings []*ScanFinding `protobuf:"bytes,1,rep,name=findings,proto3" json:"findings,omitempty"`
 	// UNTRUSTED name of the scanned machine.
-	Host          string `protobuf:"bytes,2,opt,name=host,proto3" json:"host,omitempty"`
+	Host string `protobuf:"bytes,2,opt,name=host,proto3" json:"host,omitempty"`
+	// The organization scan the findings are from (G0 M8, HR-209). Only a
+	// gateway sets it, on the gateway listener, while it holds that scan's
+	// org_scan lease; the org comes from its certificate (HR-020).
+	ScanId string `protobuf:"bytes,3,opt,name=scan_id,json=scanId,proto3" json:"scan_id,omitempty"`
+	// The secret of the scan's org_scan lease the gateway holds, with
+	// scan_id: the server compares its hash, so only the holder of the lease
+	// submits, not any holder of the gateway's certificate.
+	Lease         []byte `protobuf:"bytes,4,opt,name=lease,proto3" json:"lease,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2036,6 +2046,20 @@ func (x *SubmitScanFindingsRequest) GetHost() string {
 		return x.Host
 	}
 	return ""
+}
+
+func (x *SubmitScanFindingsRequest) GetScanId() string {
+	if x != nil {
+		return x.ScanId
+	}
+	return ""
+}
+
+func (x *SubmitScanFindingsRequest) GetLease() []byte {
+	if x != nil {
+		return x.Lease
+	}
+	return nil
 }
 
 // SubmitScanFindingsResponse counts what was recorded.
@@ -2378,20 +2402,23 @@ const file_pantherclaw_v1_agents_proto_rawDesc = "" +
 	"page_token\x18\x03 \x01(\tB\x19\xbaH\x16r\x14\x18@2\x10^[A-Za-z0-9_-]*$R\tpageToken\"y\n" +
 	"\x18ListAgentChangesResponse\x125\n" +
 	"\achanges\x18\x01 \x03(\v2\x1b.pantherclaw.v1.AgentChangeR\achanges\x12&\n" +
-	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"\x9d\x02\n" +
-	"\vScanFinding\x124\n" +
-	"\x04kind\x18\x01 \x01(\tB \xbaH\x1dr\x1bR\n" +
-	"mcp_serverR\ragent_projectR\x04kind\x12'\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"\xcd\x02\n" +
+	"\vScanFinding\x12d\n" +
+	"\x04kind\x18\x01 \x01(\tBP\xbaHMrKR\n" +
+	"mcp_serverR\ragent_projectR\n" +
+	"github_appR\x0fgithub_workflowR\x11github_mcp_configR\x04kind\x12'\n" +
 	"\x03key\x18\x02 \x01(\tB\x15\xbaH\x12r\x102\x0e^[0-9a-f]{64}$R\x03key\x12p\n" +
 	"\n" +
 	"attributes\x18\x03 \x03(\v2+.pantherclaw.v1.ScanFinding.AttributesEntryB#\xbaH \x9a\x01\x1d\x10\x10\"\x12r\x102\x0e^[a-z_]{1,32}$*\x05r\x03\x18\x80\x02R\n" +
 	"attributes\x1a=\n" +
 	"\x0fAttributesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x7f\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xc4\x01\n" +
 	"\x19SubmitScanFindingsRequest\x12D\n" +
 	"\bfindings\x18\x01 \x03(\v2\x1b.pantherclaw.v1.ScanFindingB\v\xbaH\b\x92\x01\x05\b\x01\x10\xc8\x01R\bfindings\x12\x1c\n" +
-	"\x04host\x18\x02 \x01(\tB\b\xbaH\x05r\x03\x18\x80\x01R\x04host\"j\n" +
+	"\x04host\x18\x02 \x01(\tB\b\xbaH\x05r\x03\x18\x80\x01R\x04host\x12$\n" +
+	"\ascan_id\x18\x03 \x01(\tB\v\xbaH\b\xd8\x01\x01r\x03\xb0\x01\x01R\x06scanId\x12\x1d\n" +
+	"\x05lease\x18\x04 \x01(\fB\a\xbaH\x04z\x02\x18@R\x05lease\"j\n" +
 	"\x1aSubmitScanFindingsResponse\x12\x18\n" +
 	"\acreated\x18\x01 \x01(\x05R\acreated\x12\x18\n" +
 	"\acounted\x18\x02 \x01(\x05R\acounted\x12\x18\n" +
