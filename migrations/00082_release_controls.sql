@@ -8,8 +8,8 @@
 --   and freezes, for an environment and optionally one repository. A freeze
 --   overrides every window. At most one window is ACTIVE per environment
 --   and repository: a new one retires the current one and takes the next
---   revision. A window is never changed or deleted; pc_app only retires it.
---   The finalization that consumes a window requirement reads it by the
+--   revision. A window is never changed or deleted; pc_app only retires it,
+--   once: a retired window stays retired. The finalization that consumes a window requirement reads it by the
 --   database clock (HR-171).
 -- * approval_requests.invalidation_key, for example
 --   github.pull:<connection>:<owner>/<repo>#<number>: a pull request's new
@@ -57,6 +57,22 @@ GRANT SELECT, INSERT ON pc.change_windows TO pc_app;
 GRANT UPDATE (state, retired_by, retired_at) ON pc.change_windows TO pc_app;
 GRANT SELECT ON pc.change_windows TO pc_audit_ro;
 
+-- Retiring is final: a retired window never becomes ACTIVE again and
+-- keeps who retired it and when. A window is replaced by a new revision.
+-- +goose StatementBegin
+CREATE FUNCTION pc.change_windows_retired_is_final() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+    IF OLD.state = 'RETIRED' THEN
+        RAISE EXCEPTION 'change window % is retired', OLD.id USING ERRCODE = 'check_violation';
+    END IF;
+    RETURN NEW;
+END
+$$;
+-- +goose StatementEnd
+CREATE TRIGGER change_windows_retired_is_final BEFORE UPDATE ON pc.change_windows
+    FOR EACH ROW EXECUTE FUNCTION pc.change_windows_retired_is_final();
+
 ALTER TABLE pc.approval_requests
     ADD COLUMN invalidation_key text CHECK (invalidation_key IS NULL OR char_length(invalidation_key) BETWEEN 1 AND 300);
 CREATE INDEX approval_requests_invalidation ON pc.approval_requests (org_id, invalidation_key)
@@ -66,3 +82,4 @@ CREATE INDEX approval_requests_invalidation ON pc.approval_requests (org_id, inv
 DROP INDEX pc.approval_requests_invalidation;
 ALTER TABLE pc.approval_requests DROP COLUMN invalidation_key;
 DROP TABLE pc.change_windows;
+DROP FUNCTION pc.change_windows_retired_is_final();
