@@ -8,6 +8,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"slices"
 	"strconv"
 	"time"
 
@@ -80,6 +81,11 @@ type approvalView struct {
 	apapp.View
 	Facts    []factRow
 	Observed bool
+	// NotUntilKnown are the consequences an approval cannot release yet: a
+	// requirement counts only inside a change window, and they reach no
+	// known environment, so the action stays held until their facts are
+	// known (founder decision 2026-10-13). The page says so first.
+	NotUntilKnown []string
 	// The fixed codes of the page's actions (HR-172).
 	Reasons, Alternatives, Questions []string
 }
@@ -130,6 +136,13 @@ func (h *Handler) approvalPage(w http.ResponseWriter, r *http.Request, s authnap
 	p := approvalView{
 		page: page{Title: "Approval", Session: s}, View: v,
 		Reasons: apdomain.DeclineReasons, Alternatives: apdomain.Alternatives, Questions: apdomain.Questions,
+	}
+	if slices.ContainsFunc(v.Display.Deciders, func(d apdomain.DeciderRule) bool { return d.Window }) {
+		for _, c := range v.Display.Consequences {
+			if c.State == "UNKNOWN" || len(c.Environments) == 0 {
+				p.NotUntilKnown = append(p.NotUntilKnown, c.Operation+" on "+c.Target.ID)
+			}
+		}
 	}
 	for _, f := range v.Display.Facts {
 		row := factRow{FactLine: f}

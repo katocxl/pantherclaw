@@ -96,6 +96,10 @@ type Result struct {
 	// Consequences are what the action's consequence rules said (G0 M8,
 	// HR-206); none for a stored decision.
 	Consequences []consequences.Consequence
+	// Would is what an enforce-mode route would have decided about a
+	// monitor-mode action whose consequence is unknown ("HOLD: consequence
+	// unknown"); its receipt says the same. The action is still dispatched.
+	Would string
 }
 
 // DefaultRetryAfter is how long a held agent waits before waiting again or
@@ -333,6 +337,7 @@ func (a *Authority) bind(ctx context.Context, gw Gateway, ev *pipeline.Evaluatio
 		Obligations: ev.Obligations, Reasons: reasons(ev.Checklist), Mode: ev.Mode, Wait: waitOf(ev, w.TransactionID),
 		Consequences: ev.Consequences,
 	}
+	res.Would, _, _ = ev.WouldUnknown()
 	if res.Wait != nil && !w.HoldRequest.IsZero() {
 		res.Wait.RequestID = w.HoldRequest
 	}

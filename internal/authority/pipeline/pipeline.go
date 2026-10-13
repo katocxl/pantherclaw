@@ -1103,6 +1103,7 @@ func (p *Pipeline) bind(s *state, h *Hold, effective defs.Values, deadline time.
 			Launcher: s.run.Launcher.String(), Principal: s.run.Principal.String(),
 		},
 		TaskLabel: s.run.TaskRef, Requirements: h.Requirements, Deadline: deadline, Variants: variants, Context: approved,
+		Consequences: s.displayed(),
 	})
 	if err != nil {
 		return err
