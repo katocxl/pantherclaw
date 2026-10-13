@@ -4,6 +4,11 @@
 package dispatch
 
 import (
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
+	"encoding/base64"
+	"encoding/pem"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -37,10 +42,19 @@ func TestHR204_AnAppKeyIsNeverPlaced(t *testing.T) {
 	}
 
 	begin := "-----" + "BEGIN"
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatal(err)
+	}
+	der := x509.MarshalPKCS1PrivateKey(key)
+	file := pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: der})
 	for _, secret := range []string{
 		begin + " RSA PRIVATE KEY-----\nMIIEow\n-----END RSA PRIVATE KEY-----",
 		"Iv23li " + begin + " PRIVATE KEY----- x",
 		begin + " OPENSSH PRIVATE KEY-----",
+		base64.StdEncoding.EncodeToString(file), // an environment variable's form (#257)
+		base64.StdEncoding.EncodeToString(der),  // a PEM block's bare body
+		string(der),
 	} {
 		req := httptest.NewRequest(http.MethodGet, "https://api.github.com/repos/acme/payments", nil)
 		if err := placeCredential(static, req, []byte(secret)); !errors.Is(err, errPEM) || req.Header.Get("Authorization") != "" {

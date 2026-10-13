@@ -27,7 +27,6 @@
 package dispatch
 
 import (
-	"bytes"
 	"context"
 	"crypto/sha256"
 	"errors"
@@ -478,10 +477,10 @@ var errUnsupported = errors.New("dispatch: unsupported obligation")
 // errKind refuses to place a credential that is not static.
 var errKind = errors.New("dispatch: a GitHub App credential is never placed as sealed")
 
-// errPEM refuses to place a static credential that holds a PEM block, such
-// as an App's private key sealed without --github-app: it would go to the
-// target.
-var errPEM = errors.New("dispatch: a credential holding a PEM block is never placed")
+// errPEM refuses to place a static credential that holds a private key in
+// any common form (a PEM block, base64 PEM, a bare PEM body, DER), such as an
+// App's private key sealed without --github-app: it would go to the target.
+var errPEM = errors.New("dispatch: a credential holding a private key is never placed")
 
 // effective applies the decision's obligations to the action (F104, F107):
 // the only kind the Authority sets is count_max with clamping, before
@@ -778,13 +777,13 @@ func (e *Engine) openCredential(conn *control.Connection) ([]byte, error) {
 // placeCredential places an opened static credential on req, for the
 // credential's allowed hosts only. A GitHub App credential is never placed:
 // it holds the App's key, from which the gateway mints a token per action
-// (HR-203, HR-204). Nor is a static one holding a PEM block.
+// (HR-203, HR-204). Nor is a static one holding a private key.
 func placeCredential(conn *control.Connection, req *http.Request, secret []byte) error {
 	cred := conn.Credential
 	if k := cred.GetKind(); k != "" && k != credentials.KindStatic {
 		return errKind
 	}
-	if bytes.Contains(secret, []byte("-----BEGIN")) {
+	if credentials.HoldsPrivateKey(secret) {
 		return errPEM
 	}
 	return broker.Place(req, cred.GetAllowedHosts(), cred.GetHeader(), cred.GetScheme(), secret)
