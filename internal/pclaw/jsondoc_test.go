@@ -89,7 +89,7 @@ func TestHR208_DiffHidesEnvAndHeaderValues(t *testing.T) {
 		t.Fatalf("redacted\n%s\nwant\n%s", got, want)
 	}
 	after := "{\n  \"env\": {\n    \"GITHUB_TOKEN\": \"" + token + "\",\n    \"N\": 1\n  },\n  \"model\": \"opus\"\n}\n"
-	got := lineDiff("f", []byte(before), []byte(after))
+	got := lineDiff("settings.json", []byte(before), []byte(after))
 	for _, shown := range []string{
 		`-{"env": {"GITHUB_TOKEN": "<redacted>"}`, `"Authorization" :  "<redacted>"`, `"args": ["--env", "x"]`,
 		`+    "GITHUB_TOKEN": "<redacted>",`, `+    "N": 1`, `+  "model": "opus"`,

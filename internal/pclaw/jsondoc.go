@@ -342,11 +342,16 @@ func findSecrets(d *jsontext.Decoder, b []byte, secret bool, spans *[][2]int64) 
 // linkTarget is the file a path names: for a link (a settings file kept
 // with the person's dotfiles, say), the file it points to, so that the
 // file is backed up and replaced where it is and the link stays a link.
-// Any other path is itself. A link to nothing is an error: pclaw does not
-// guess where its file should be.
+// Any other path, including one that does not exist yet, is itself. A link
+// to nothing is an error: pclaw does not guess where its file should be.
 func linkTarget(path string) (string, error) {
 	info, err := os.Lstat(path)
-	if err != nil || info.Mode()&os.ModeSymlink == 0 {
+	switch {
+	case errors.Is(err, os.ErrNotExist):
+		return path, nil
+	case err != nil:
+		return "", err
+	case info.Mode()&os.ModeSymlink == 0:
 		return path, nil
 	}
 	target, err := filepath.EvalSymlinks(path)
