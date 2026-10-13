@@ -7,6 +7,7 @@ import (
 	"net/netip"
 	"regexp"
 	"slices"
+	"strings"
 
 	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
 )
@@ -32,7 +33,9 @@ func checkAgentHosts(kind string, hosts []string) ([]string, error) {
 		return nil, ErrAgentHosts
 	}
 	for i, h := range hosts {
-		if _, err := netip.ParseAddr(h); err == nil || !agentHostRE.MatchString(h) || slices.Contains(hosts[:i], h) {
+		// Digits and dots only is no DNS name, an address or not (1.2.3.04).
+		numeric := strings.Trim(h, "0123456789.") == ""
+		if _, err := netip.ParseAddr(h); err == nil || numeric || !agentHostRE.MatchString(h) || slices.Contains(hosts[:i], h) {
 			return nil, ErrAgentHosts
 		}
 	}

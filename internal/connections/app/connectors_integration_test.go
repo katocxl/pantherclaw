@@ -6,6 +6,7 @@
 package app_test
 
 import (
+	"fmt"
 	"slices"
 	"strings"
 	"testing"
@@ -33,7 +34,7 @@ func TestHR084_ConnectorsRunOnlyOnCustomerHostedGateways(t *testing.T) {
 	egress := e.payments(t, "payments")
 	spec := func() *app.ConnectorSpec {
 		return &app.ConnectorSpec{
-			Image: connectorImage, Command: []string{"/server", "--stdio"}, Environment: map[string]string{"LOG_LEVEL": "info"},
+			Image: connectorImage, Command: []string{"/server", "--stdio"}, Environment: map[string]string{"LOG_LEVEL": "info-7f3a9c"},
 			CredentialPlaceholders: []string{"GITHUB_TOKEN"}, EgressConnection: &egress.ID,
 		}
 	}
@@ -66,9 +67,17 @@ func TestHR084_ConnectorsRunOnlyOnCustomerHostedGateways(t *testing.T) {
 		mutate func(*app.CreateInput)
 		want   error
 	}{
-		"a tag":                     {func(i *app.CreateInput) { i.Connector.Image = "registry.example.test/acme/mcp:latest" }, app.ErrConnector},
-		"no command":                {func(i *app.CreateInput) { i.Connector.Command = nil }, app.ErrConnector},
-		"a token in the env":        {func(i *app.CreateInput) { i.Connector.Environment["TOKEN"] = "ghp_0123456789abcdef" }, app.ErrConnector},
+		"a tag":                  {func(i *app.CreateInput) { i.Connector.Image = "registry.example.test/acme/mcp:latest" }, app.ErrConnector},
+		"no command":             {func(i *app.CreateInput) { i.Connector.Command = nil }, app.ErrConnector},
+		"a token in the env":     {func(i *app.CreateInput) { i.Connector.Environment["TOKEN"] = "ghp_0123456789abcdef" }, app.ErrConnector},
+		"a token in the command": {func(i *app.CreateInput) { i.Connector.Command = []string{"/server", "--token=ghp_0123456789abcdef"} }, app.ErrConnector},
+		"a JWT in the env":       {func(i *app.CreateInput) { i.Connector.Environment["SESSION"] = "eyJhbGciOiJIUzI1NiJ9.e30.x" }, app.ErrConnector},
+		"an AWS session key":     {func(i *app.CreateInput) { i.Connector.Environment["KEY"] = "ASIA0123456789ABCDEF" }, app.ErrConnector},
+		"an env over 64 KiB": {func(i *app.CreateInput) {
+			for n := range 64 {
+				i.Connector.Environment[fmt.Sprintf("V%d", n)] = strings.Repeat("x", 1024)
+			}
+		}, app.ErrConnector},
 		"a lower-case env name":     {func(i *app.CreateInput) { i.Connector.Environment["token"] = "x" }, app.ErrConnector},
 		"a placeholder with value":  {func(i *app.CreateInput) { i.Connector.Environment["GITHUB_TOKEN"] = "x" }, app.ErrConnector},
 		"egress over mcp":           {func(i *app.CreateInput) { i.Connector.EgressConnection = &mcp.ID }, app.ErrConnector},
@@ -110,16 +119,29 @@ func TestHR084_ConnectorsRunOnlyOnCustomerHostedGateways(t *testing.T) {
 	if e.notes.count("security.connection_weakened") != weakened+1 || !strings.Contains(e.notes.last["change"], "connector") {
 		t.Fatalf("a spec change: %v %v", e.notes.types, e.notes.last)
 	}
-	if n := e.int64(t, "SELECT count(*) FROM pc.connector_specs WHERE connection_id = $1", c.ID); n != 2 {
-		t.Fatalf("%d specs kept, want 2", n)
+	// A change to the environment alone changes what runs (NODE_OPTIONS):
+	// it weakens too, and its audit shows the names and the spec's hash.
+	s = spec()
+	s.Command = []string{"/server", "--stdio", "--verbose"}
+	s.Environment["NODE_OPTIONS"] = "--require /srv/hook.js"
+	u, err = e.svc.Update(e.admin, app.UpdateInput{ID: c.ID, Revision: u.Revision, Connector: s})
+	if err != nil || e.notes.count("security.connection_weakened") != weakened+2 || !strings.Contains(e.notes.last["change"], "connector") {
+		t.Fatalf("an environment-only change: %v %v %v", err, e.notes.types, e.notes.last)
+	}
+	if n := e.int64(t, "SELECT count(*) FROM pc.connector_specs WHERE connection_id = $1", c.ID); n != 3 {
+		t.Fatalf("%d specs kept, want 3", n)
 	}
 	// Each spec invalidates the connector's coverage (HR-211).
 	if n := e.int64(t, `SELECT count(*) FROM pc.coverage_invalidations WHERE connection_id = $1 AND kind = 'connection'
-		AND detail = 'connector spec changed'`, c.ID); n != 2 {
-		t.Fatalf("%d spec invalidations, want 2", n)
+		AND detail = 'connector spec changed'`, c.ID); n != 3 {
+		t.Fatalf("%d spec invalidations, want 3", n)
 	}
 	if n := e.int64(t, `SELECT count(*) FROM pc.ledger_entries WHERE kind LIKE 'audit.connection.%'
-		AND convert_from(body, 'UTF8') LIKE '%LOG_LEVEL%'`); n != 0 {
-		t.Fatal("an audit entry carries the environment")
+		AND convert_from(body, 'UTF8') LIKE '%info-7f3a9c%'`); n != 0 {
+		t.Fatal("an audit entry carries an environment value")
+	}
+	if n := e.int64(t, `SELECT count(*) FROM pc.ledger_entries WHERE kind LIKE 'audit.connection.%'
+		AND convert_from(body, 'UTF8') LIKE '%NODE_OPTIONS%sha256=%'`); n == 0 {
+		t.Fatal("no audit entry shows the environment's names and the spec's hash")
 	}
 }

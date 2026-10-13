@@ -4,6 +4,7 @@
 package docker
 
 import (
+	"bytes"
 	"context"
 	"encoding/json/jsontext"
 	"encoding/json/v2"
@@ -172,7 +173,8 @@ func (c Container) args() ([]string, error) {
 		}
 		args = append(args, "--network", n)
 	}
-	for _, e := range c.Env {
+	args = append(args, "--log-driver", logDriver, "--log-opt", "max-size="+logMaxSize, "--log-opt", "max-file="+logMaxFiles)
+	for _, e := range c.env() {
 		if !envRE.MatchString(e) || strings.ContainsAny(e, "\r\n\x00") {
 			return nil, bad("env entries are NAME=VALUE")
 		}
@@ -264,9 +266,13 @@ type ContainerInfo struct {
 		ReadonlyPaths   []string                  `json:"ReadonlyPaths"`
 		PortBindings    map[string]jsontext.Value `json:"PortBindings"`
 		PublishAllPorts bool                      `json:"PublishAllPorts"`
-		ExtraHosts      []string                  `json:"ExtraHosts"`
-		DNS             []string                  `json:"Dns"`
-		Mounts          []struct {
+		LogConfig       struct {
+			Type   string            `json:"Type"`
+			Config map[string]string `json:"Config"`
+		} `json:"LogConfig"`
+		ExtraHosts []string `json:"ExtraHosts"`
+		DNS        []string `json:"Dns"`
+		Mounts     []struct {
 			Type     string `json:"Type"`
 			Source   string `json:"Source"`
 			Target   string `json:"Target"`
@@ -319,8 +325,12 @@ func (c *Client) CreateContainer(ctx context.Context, ct Container) (ContainerIn
 		return ContainerInfo{}, err
 	}
 	info, err := c.InspectContainer(ctx, ct.Name)
+	var imageEnv []string
 	if err == nil {
-		err = VerifyContainer(ct, info)
+		imageEnv, err = c.imageEnv(ctx, ct.Image)
+	}
+	if err == nil {
+		err = VerifyContainer(ct, info, imageEnv)
 	}
 	if err != nil {
 		return ContainerInfo{}, errors.Join(err, c.RemoveContainer(context.WithoutCancel(ctx), ct.Name))
@@ -350,9 +360,11 @@ var securityOpts = []string{"no-new-privileges=true", "seccomp=builtin"}
 
 // VerifyContainer compares what the engine reports with what was asked,
 // exactly: the hardening every container must have and nothing more, its
-// own mounts and nothing more, and no published port, extra host or DNS
-// server (HR-085, HR-216, HR-218).
-func VerifyContainer(ct Container, info ContainerInfo) error {
+// own mounts and nothing more, its image's environment with what it asked
+// for over it and nothing more (no proxy or other variable of the host's),
+// the bounded log driver, and no published port, extra host or DNS server
+// (HR-085, HR-216, HR-218).
+func VerifyContainer(ct Container, info ContainerInfo, imageEnv []string) error {
 	h := info.HostConfig
 	fail := func(what string) error { return fmt.Errorf("%w: container %s: %s", ErrIsolation, ct.Name, what) }
 	_, userOK := parseUser(info.Config.User)
@@ -385,6 +397,10 @@ func VerifyContainer(ct Container, info ContainerInfo) error {
 		return fail("runtime " + h.Runtime)
 	case len(h.Binds) > 0 || len(h.VolumesFrom) > 0 || len(h.Tmpfs) != 1 || h.Tmpfs["/tmp"] == "":
 		return fail("mounts")
+	case !slices.Equal(slices.Sorted(slices.Values(info.Config.Env)), wantEnv(imageEnv, ct.env())):
+		return fail("environment")
+	case h.LogConfig.Type != logDriver || h.LogConfig.Config["max-size"] != logMaxSize || h.LogConfig.Config["max-file"] != logMaxFiles:
+		return fail("log driver")
 	}
 	type mount struct {
 		kind, source, target string
@@ -479,4 +495,57 @@ func (c Container) pingRange() string {
 		return g + " " + g
 	}
 	return "1 0"
+}
+
+// Logs: an untrusted container's standard output (every MCP answer of a
+// connector) goes to the engine's local log driver, rotated, never to an
+// unbounded json-file log. docker logs still reads it.
+const (
+	logDriver   = "local"
+	logMaxSize  = "8m"
+	logMaxFiles = "2"
+)
+
+// proxyKeys are the variables the Docker CLI fills from the user's
+// ~/.docker/config.json proxies when a container does not set them; they
+// can carry proxy credentials. Every container sets each, empty unless
+// asked (HR-213, HR-216).
+var proxyKeys = []string{
+	"HTTP_PROXY", "http_proxy", "HTTPS_PROXY", "https_proxy", "NO_PROXY", "no_proxy", "FTP_PROXY", "ftp_proxy", "ALL_PROXY", "all_proxy",
+}
+
+// env is the container's environment as asked, with every proxy variable
+// it does not set set empty.
+func (c Container) env() []string {
+	env := slices.Clone(c.Env)
+	for _, k := range proxyKeys {
+		if !slices.ContainsFunc(c.Env, func(e string) bool { return strings.HasPrefix(e, k+"=") }) {
+			env = append(env, k+"=")
+		}
+	}
+	return env
+}
+
+// imageEnv is an image's own environment, which a container starts from.
+func (c *Client) imageEnv(ctx context.Context, image string) ([]string, error) {
+	out, err := c.r.Run(ctx, "image", "inspect", "--format", "{{json .Config.Env}}", image)
+	if err != nil {
+		return nil, err
+	}
+	var env []string
+	if err := json.Unmarshal(bytes.TrimSpace(out), &env); err != nil {
+		return nil, fmt.Errorf("docker: unreadable image %s: %w", image, err)
+	}
+	return env, nil
+}
+
+// wantEnv is the environment a container must have: its image's, with
+// what it asked for set over it.
+func wantEnv(imageEnv, asked []string) []string {
+	byKey := map[string]string{}
+	for _, e := range append(slices.Clone(imageEnv), asked...) {
+		k, _, _ := strings.Cut(e, "=")
+		byKey[k] = e
+	}
+	return slices.Sorted(maps.Values(byKey))
 }
