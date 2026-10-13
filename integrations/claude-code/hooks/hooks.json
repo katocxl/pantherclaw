@@ -1,9 +1,9 @@
 {
-  "description": "PantherClaw decides every Bash and PowerShell command; anything it did not allow is blocked, including when it cannot be reached.",
+  "description": "PantherClaw decides every command a tool runs in a shell (Bash, PowerShell and Monitor); anything it did not allow is blocked, including when it cannot be reached.",
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "Bash|PowerShell",
+        "matcher": "Bash|PowerShell|Monitor",
         "hooks": [
           {
             "type": "command",

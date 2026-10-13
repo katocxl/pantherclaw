@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"path/filepath"
 	"slices"
@@ -237,9 +238,8 @@ func likeOriginal(original, encoded []byte) []byte {
 // lineDiff shows what changed between two texts as one hunk: the lines
 // they share at the start and end are left out. pclaw init only adds, so
 // one hunk is what a person needs to review. The diff goes to a terminal,
-// a dry run's output or a CI log, so in JSON texts the values under env
-// and headers (where tokens live) are shown as "<redacted>"; the file
-// itself keeps them.
+// a dry run's output or a CI log, so in JSON texts what may be a
+// credential is shown redacted (redactSecrets); the file itself keeps it.
 func lineDiff(name string, before, after []byte) string {
 	a, b := strings.Split(string(redactSecrets(before)), "\n"), strings.Split(string(redactSecrets(after)), "\n")
 	if len(before) == 0 {
@@ -272,28 +272,47 @@ func lineDiff(name string, before, after []byte) string {
 // and HTTP headers (MCP servers).
 var secretMembers = []string{"env", "headers"}
 
-// redactSecrets is a JSON text with every string inside an env or headers
-// member replaced by "<redacted>", and everything else byte for byte, so a
-// diff of two redacted texts lines up as the diff of the texts does. Text
-// that is not JSON is returned as it is.
+// secretWords mark a flag or a variable whose value is a credential in an
+// MCP server's arguments: --api-key VALUE, --token=VALUE, GITHUB_TOKEN=VALUE.
+var secretWords = []string{"token", "key", "secret", "password", "passwd", "auth", "credential", "bearer"}
+
+// redaction is a string in a JSON text, from start to end, and the JSON
+// string the diff shows instead.
+type redaction struct {
+	start, end int64
+	with       []byte
+}
+
+// redacted is what the diff shows for a whole string it hides.
+var redacted = []byte(`"<redacted>"`)
+
+// redactSecrets is a JSON text with what may be a credential redacted and
+// everything else byte for byte, so a diff of two redacted texts lines up
+// as the diff of the texts does. It hides every string inside an env or
+// headers member; in an args list, the argument after a flag whose name
+// looks secret (--api-key VALUE) and the value written into such a flag or
+// variable (--token=VALUE, GITHUB_TOKEN=VALUE); and in any string that is
+// an absolute URL, its user information, query and fragment. Text that is
+// not JSON is returned as it is, and b itself is never changed.
 func redactSecrets(b []byte) []byte {
-	var spans [][2]int64
+	var found []redaction
 	d := jsontext.NewDecoder(bytes.NewReader(b))
-	if err := findSecrets(d, b, false, &spans); err != nil || len(spans) == 0 {
+	if err := findSecrets(d, b, "", false, &found); err != nil || len(found) == 0 {
 		return b
 	}
 	out := make([]byte, 0, len(b))
 	at := int64(0)
-	for _, s := range spans {
-		out = append(append(out, b[at:s[0]]...), `"<redacted>"`...)
-		at = s[1]
+	for _, r := range found {
+		out = append(append(out, b[at:r.start]...), r.with...)
+		at = r.end
 	}
 	return append(out, b[at:]...)
 }
 
-// findSecrets reads one value and adds the byte span of each string in it
-// that is inside an env or headers member (secret).
-func findSecrets(d *jsontext.Decoder, b []byte, secret bool, spans *[][2]int64) error {
+// findSecrets reads one value, the value of the member named member, and
+// adds each string in it that redactSecrets hides; secret is set inside an
+// env or headers member.
+func findSecrets(d *jsontext.Decoder, b []byte, member string, secret bool, found *[]redaction) error {
 	kind := d.PeekKind()
 	if kind == jsontext.KindBeginObject {
 		if _, err := d.ReadToken(); err != nil {
@@ -304,7 +323,8 @@ func findSecrets(d *jsontext.Decoder, b []byte, secret bool, spans *[][2]int64) 
 			if err != nil {
 				return err
 			}
-			if err := findSecrets(d, b, secret || slices.Contains(secretMembers, t.String()), spans); err != nil {
+			name := t.String() // a token is valid only until the next read
+			if err := findSecrets(d, b, name, secret || slices.Contains(secretMembers, name), found); err != nil {
 				return err
 			}
 		}
@@ -315,28 +335,130 @@ func findSecrets(d *jsontext.Decoder, b []byte, secret bool, spans *[][2]int64) 
 		if _, err := d.ReadToken(); err != nil {
 			return err
 		}
+		// In an args list, a flag whose name looks secret makes the next
+		// argument its value.
+		afterFlag := false
 		for d.PeekKind() != jsontext.KindEndArray {
-			if err := findSecrets(d, b, secret, spans); err != nil {
+			if member != "args" || secret || d.PeekKind() != jsontext.KindString {
+				afterFlag = false
+				if err := findSecrets(d, b, "", secret, found); err != nil {
+					return err
+				}
+				continue
+			}
+			start, s, err := readString(d, b)
+			if err != nil {
 				return err
 			}
+			if with, ok := redactArg(s); afterFlag {
+				*found = append(*found, redaction{start, d.InputOffset(), redacted})
+			} else if ok {
+				*found = append(*found, redaction{start, d.InputOffset(), quoted(with)})
+			}
+			afterFlag = secretFlag(s)
 		}
 		_, err := d.ReadToken()
 		return err
 	}
-	if !secret || kind != jsontext.KindString {
-		return d.SkipValue()
+	if kind == jsontext.KindString {
+		start, s, err := readString(d, b)
+		if err != nil {
+			return err
+		}
+		if with, ok := redactURL(s); secret {
+			*found = append(*found, redaction{start, d.InputOffset(), redacted})
+		} else if ok {
+			*found = append(*found, redaction{start, d.InputOffset(), quoted(with)})
+		}
+		return nil
 	}
-	// The offset is just after the last token; the string starts after the
-	// white space and the separator that follow it.
+	return d.SkipValue()
+}
+
+// readString reads a string value: where it starts in b and what it holds.
+// The decoder's offset is just after the last token, so the string starts
+// after the white space and the separator that follow it.
+func readString(d *jsontext.Decoder, b []byte) (int64, string, error) {
 	start := d.InputOffset()
 	for start < int64(len(b)) && b[start] != '"' {
 		start++
 	}
-	if err := d.SkipValue(); err != nil {
-		return err
+	v, err := d.ReadValue()
+	if err != nil {
+		return 0, "", err
 	}
-	*spans = append(*spans, [2]int64{start, d.InputOffset()})
-	return nil
+	s, err := jsontext.AppendUnquote(nil, v)
+	return start, string(s), err
+}
+
+// quoted is s as a JSON string, or "<redacted>" should it not quote.
+func quoted(s string) []byte {
+	q, err := jsontext.AppendQuote(nil, s)
+	if err != nil {
+		return redacted
+	}
+	return q
+}
+
+// redactArg is an argument with the secret written into it redacted: the
+// value of a flag or variable whose name looks secret (--token=<redacted>,
+// GITHUB_TOKEN=<redacted>), and the credentials of a URL, alone or as a
+// flag's value (--url=https://host/mcp?<redacted>).
+func redactArg(s string) (string, bool) {
+	if with, ok := redactURL(s); ok {
+		return with, true
+	}
+	name, value, ok := strings.Cut(s, "=")
+	switch {
+	case !ok || value == "":
+		return s, false
+	case secretName(strings.TrimLeft(name, "-")):
+		return name + "=<redacted>", true
+	}
+	if with, ok := redactURL(value); ok {
+		return name + "=" + with, true
+	}
+	return s, false
+}
+
+// secretFlag is whether an argument is a flag whose name looks secret and
+// whose value is the next argument: --api-key, -token.
+func secretFlag(s string) bool {
+	return strings.HasPrefix(s, "-") && !strings.Contains(s, "=") && secretName(strings.TrimLeft(s, "-"))
+}
+
+// secretName is whether a flag or variable name holds one of secretWords,
+// in any case. A name ending in file, path or dir names where a secret is
+// kept (--key-file, --token-path), not the secret, and the diff shows it.
+func secretName(name string) bool {
+	n := strings.ToLower(name)
+	if strings.HasSuffix(n, "file") || strings.HasSuffix(n, "path") || strings.HasSuffix(n, "dir") {
+		return false
+	}
+	return slices.ContainsFunc(secretWords, func(w string) bool { return strings.Contains(n, w) })
+}
+
+// redactURL is an absolute URL with its user information, query and
+// fragment, where tokens travel, shown as <redacted>
+// (https://<redacted>@host/mcp?<redacted>), and whether it had any.
+func redactURL(s string) (string, bool) {
+	u, err := url.Parse(s)
+	if err != nil || !u.IsAbs() || (u.User == nil && u.RawQuery == "" && u.Fragment == "") {
+		return s, false
+	}
+	bare := *u
+	bare.User, bare.RawQuery, bare.ForceQuery, bare.Fragment, bare.RawFragment = nil, "", false, "", ""
+	out := bare.String()
+	if u.User != nil {
+		out = strings.Replace(out, "://", "://<redacted>@", 1)
+	}
+	if u.RawQuery != "" {
+		out += "?<redacted>"
+	}
+	if u.Fragment != "" {
+		out += "#<redacted>"
+	}
+	return out, true
 }
 
 // linkTarget is the file a path names: for a link (a settings file kept
