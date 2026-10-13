@@ -45,6 +45,9 @@ __all__ = [
 CONNECT = {"Content-Type": "application/json", "Connect-Protocol-Version": "1"}
 _HEX = re.compile(r"^[0-9a-f]{64}\Z")
 _TOOL_USE_ID = re.compile(r"^[A-Za-z0-9_-]{1,128}\Z")
+# The rule for a connection's name (migration 00041). A connection governs
+# the one MCP server named after it, so no other server name is routed.
+_CONNECTION_NAME = re.compile(r"^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\Z")
 # The largest request the /sdk and /hook faces read.
 MAX_CALL_BODY = 64 << 10
 # The longest line or event an SSE wait stream may send.
@@ -98,17 +101,21 @@ def _cannot(why: str) -> Result:
 
 
 def classify(tool: str, servers: Iterable[str], builtins: Iterable[str]) -> tuple[str, str]:
-    """Sorts an agent's tool name into (class, server): mcp__<server>__<tool>,
-    with server the longest of ``servers`` that fits (a server name may
-    contain "__") and a tool name after it, is "mapped"; a name in
-    ``builtins`` (exactly) is "builtin"; anything else is "refused", never
-    sent and never run (HR-200)."""
+    """Sorts an agent's tool name into (class, server): mcp__<server>__<tool>
+    is "mapped" with that server when exactly one of ``servers`` fits it
+    with a tool name after it and that server's name is a connection's name
+    (the call goes to the connection named after it). A tool whose name two
+    servers' names fit ("notes" and "notes__v2" both fit
+    mcp__notes__v2__search) is "refused", since either server might run it.
+    A name in ``builtins`` (exactly) is "builtin"; anything else is
+    "refused", never sent and never run (HR-200)."""
     if tool.startswith("mcp__"):
-        rest, server = tool[5:], ""
-        for s in servers:
-            if len(s) > len(server) and len(rest) > len(s) + 2 and rest.startswith(s + "__"):
-                server = s
-        return ("mapped", server) if server else ("refused", "")
+        rest = tool[5:]
+        fits = {s for s in servers if len(rest) > len(s) + 2 and rest.startswith(s + "__")}
+        if len(fits) != 1:
+            return ("refused", "")
+        (server,) = fits
+        return ("mapped", server) if _CONNECTION_NAME.match(server) else ("refused", "")
     return ("builtin", "") if tool in set(builtins) else ("refused", "")
 
 
@@ -443,15 +450,17 @@ class Client:
 
     def _class(self, tool: str, server: str) -> str:
         if server:
-            return "mapped" if tool.startswith(f"mcp__{server}__") and len(tool) > len(server) + 7 else "refused"
+            fits = tool.startswith(f"mcp__{server}__") and len(tool) > len(server) + 7
+            return "mapped" if fits and _CONNECTION_NAME.match(server) else "refused"
         return "builtin" if not tool.startswith("mcp__") and tool in self._builtins else "refused"
 
     def authorize(self, connection: str, tool: str, tool_input: dict[str, Any], tool_use_id: str, action_id: str,
                   server: str = "", first_hash: str = "") -> Result:
-        """Asks the gateway's /sdk face about one raw call through the named
-        connection: an MCP tool with its server, or a configured built-in;
-        any other name is never sent. Never raises: every failure is
-        cannot_decide."""
+        """Asks the gateway's /sdk face about one raw call: an MCP tool with
+        its server, sent to the connection named after that server (the one
+        connection that governs it), or a configured built-in, sent to
+        ``connection``, which records it; any other name is never sent.
+        Never raises: every failure is cannot_decide."""
         if not self._gateway or not self._run:
             return _cannot("the gateway URL and the run id are required")
         if not tool or not isinstance(tool_use_id, str) or not _TOOL_USE_ID.match(tool_use_id) or not isinstance(tool_input, dict):
@@ -459,6 +468,9 @@ class Client:
         cls = self._class(tool, server)
         if cls == "refused":
             return _cannot(f"PantherClaw neither maps {tool} as an MCP tool nor knows it as a built-in tool")
+        target = server if cls == "mapped" else connection
+        if not isinstance(target, str) or not _CONNECTION_NAME.match(target):
+            return _cannot(f"no connection is named {target}")
         call: dict[str, Any] = {"tool": tool}
         if server:
             call["server"] = server
@@ -468,7 +480,7 @@ class Client:
             body = json.dumps(call, separators=(",", ":"), ensure_ascii=False).encode()
             if len(body) > MAX_CALL_BODY:
                 return _cannot("the tool call is larger than the /sdk face takes")
-            res = self._do("POST", f"{self._gateway}/sdk/{urllib.parse.quote(connection, safe='')}", body, headers)
+            res = self._do("POST", f"{self._gateway}/sdk/{target}", body, headers)
         except Exception as e:  # noqa: BLE001 - every failure is "cannot decide" (HR-200)
             return _cannot(f"PantherClaw cannot decide: {e}")
         return evaluate(res.status, res.body, cls, action_id, first_hash)

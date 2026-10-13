@@ -5,10 +5,12 @@
 // decision 8, HR-200). A PreToolUse hook sorts every tool call into three
 // classes before it runs, in every permission mode, and denies when
 // PantherClaw cannot decide: tools of MCP servers served by the gateway's
-// /mcp face pass (the gateway enforces them); Bash and PowerShell go to the
-// local connection's /hook face (pc.shell); every other tool goes to the
-// /sdk face. A canUseTool callback only turns a PantherClaw hold into a
-// wait. Every decision is cooperative and labeled PARTIAL: the agent runs
+// /mcp face pass (the gateway enforces them); Bash, PowerShell and Monitor,
+// every tool that runs shell commands, go to the local connection's /hook
+// face (pc.shell, HR-186); an MCP tool goes to the /sdk face of the
+// connection named after its server, and a built-in to the /sdk face of the
+// connection that records it. A canUseTool callback only turns a PantherClaw
+// hold into a wait. Every decision is cooperative and labeled PARTIAL: the agent runs
 // the tool with its own access (HR-024, HR-186).
 
 import { randomBytes } from "node:crypto";
@@ -25,7 +27,11 @@ import {
   type WaitState,
 } from "../../../../sdk/typescript/src/index.ts";
 
-/** The Agent SDK's built-in tools: run when PantherClaw does not map them, and recorded OBSERVE_ONLY. */
+/**
+ * The Agent SDK's built-in tools that PantherClaw records OBSERVE_ONLY and
+ * lets run under the application's own permissions: exactly the face's list,
+ * sdk_face.json's `builtins`.
+ */
 export const BUILTIN_TOOLS: readonly string[] = [
   "Agent",
   "AskUserQuestion",
@@ -40,7 +46,6 @@ export const BUILTIN_TOOLS: readonly string[] = [
   "ExitWorktree",
   "Glob",
   "Grep",
-  "ListAgents",
   "ListMcpResourcesTool",
   "LSP",
   "Monitor",
@@ -48,9 +53,6 @@ export const BUILTIN_TOOLS: readonly string[] = [
   "PowerShell",
   "Read",
   "ReadMcpResourceTool",
-  "ReportFindings",
-  "ScheduleWakeup",
-  "SendMessage",
   "Skill",
   "Task",
   "TaskCreate",
@@ -64,11 +66,21 @@ export const BUILTIN_TOOLS: readonly string[] = [
   "WaitForMcpServers",
   "WebFetch",
   "WebSearch",
-  "Workflow",
   "Write",
 ];
 
-const SHELLS: Record<string, "bash" | "powershell"> = { Bash: "bash", PowerShell: "powershell" };
+/**
+ * Built-in tools of the supported Agent SDK that are not on BUILTIN_TOOLS:
+ * PantherClaw can neither decide nor record them, so options() disallows
+ * them and the model is never offered them (a call would be denied).
+ */
+export const UNDECIDED_TOOLS: readonly string[] = ["ListAgents", "ReadMcpResourceDirTool", "ReportFindings", "ScheduleWakeup", "SendMessage", "Workflow"];
+
+/** The tools that run shell commands (HR-186), and the shell /hook decides each one's command in. */
+const SHELLS: Record<string, "bash" | "powershell"> = { Bash: "bash", PowerShell: "powershell", Monitor: "bash" };
+
+/** The rule for a connection's name (migration 00041): a governed MCP server is named after its connection. */
+const CONNECTION_NAME = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/;
 
 /**
  * The permission modes in which a hold is asked: those where the SDK
@@ -85,9 +97,18 @@ const MAX_ASKED = 10_000;
 export interface PantherClawOptions {
   /** The PantherClaw client: key file, gateway and run, built with `builtins: BUILTIN_TOOLS` (fromKeyFile does). */
   client: Client;
-  /** The http or mcp connection whose /sdk face decides the calls. */
+  /**
+   * The http or mcp connection whose /sdk face records the built-in tools'
+   * calls. An MCP tool's call goes to the connection named after its server,
+   * the one connection that governs it: name each governed MCP server after
+   * its connection.
+   */
   connection: string;
-  /** The local connection whose /hook face decides Bash and PowerShell (pc.shell). Required unless `shell` is "observe". */
+  /**
+   * The local connection whose /hook face decides every shell command:
+   * Bash's, PowerShell's and Monitor's (pc.shell, HR-186). Required unless
+   * `shell` is "observe".
+   */
   shellConnection?: string;
   /**
    * "observe": there is no local connection, and the application accepts
@@ -160,6 +181,7 @@ export interface QueryOptions {
   permissionMode?: string;
   allowedTools?: string[];
   settingSources?: string[];
+  disallowedTools?: string[];
   mcpServers?: Record<string, unknown>;
   canUseTool?: CanUseTool;
   hooks?: Record<string, { matcher?: string; hooks: HookCallback[]; timeout?: number }[]>;
@@ -215,7 +237,7 @@ export class PantherClaw {
   constructor(options: PantherClawOptions) {
     if (!options.client || !options.connection) throw new Error("PantherClaw: a client and a connection are required");
     if (!options.shellConnection && options.shell !== "observe") {
-      throw new Error('PantherClaw: Bash and PowerShell are decided through a local connection\'s /hook face: set shellConnection, or shell: "observe" to only record them');
+      throw new Error('PantherClaw: shell commands (Bash, PowerShell, Monitor) are decided through a local connection\'s /hook face: set shellConnection, or shell: "observe" to only record them');
     }
     this.o = { mcpServers: [], gatewayMcpServers: [], builtinTools: BUILTIN_TOOLS, observeUnmapped: false, deadlineMs: 10_000, waitMs: 300_000, ...options };
     const known = new Set(this.o.client.builtins);
@@ -256,7 +278,8 @@ export class PantherClaw {
       }),
     );
     const pre = [...(app.hooks?.PreToolUse ?? []), { hooks: [this.hook()], timeout: Math.ceil(this.o.deadlineMs / 1000) + 5 }];
-    return { ...app, hooks: { ...(app.hooks ?? {}), PreToolUse: pre }, canUseTool: this.canUseTool() };
+    const disallowedTools = [...new Set([...(app.disallowedTools ?? []), ...UNDECIDED_TOOLS.filter((t) => !this.o.builtinTools.includes(t))])];
+    return { ...app, disallowedTools, hooks: { ...(app.hooks ?? {}), PreToolUse: pre }, canUseTool: this.canUseTool() };
   }
 
   /** The PreToolUse hook (no matcher: every tool, a subagent's included). */
@@ -264,15 +287,27 @@ export class PantherClaw {
     return (input) => this.preToolUse(input);
   }
 
-  /** Which kind of call a tool is, and its MCP server. */
+  /**
+   * Which kind of call a tool is, and its MCP server: the server the SDK
+   * names, or else the one configured server whose name fits the tool's. A
+   * tool whose name two servers' names fit is refused, and so is a server
+   * not named after a connection, unless the gateway's /mcp face serves it.
+   */
   route(input: PreToolUseInput): Route {
     const tool = input.tool_name;
     if (tool.startsWith("mcp__")) {
       const rest = tool.slice(5);
+      const fits = (s: string) => rest.length > s.length + 2 && rest.startsWith(`${s}__`);
       const named = input.mcp_server?.name;
-      const server = named && rest.startsWith(`${named}__`) ? named : [...this.o.mcpServers].sort((a, b) => b.length - a.length).find((s) => rest.startsWith(`${s}__`));
-      if (!server || rest.length <= server.length + 2) return { kind: "refuse", why: `the MCP server of ${tool} is not configured` };
-      return this.trustedGatewayServers.has(server) ? { kind: "skip" } : { kind: "call", server };
+      const servers = named && fits(named) ? [named] : [...new Set(this.o.mcpServers)].filter(fits);
+      if (servers.length === 0) return { kind: "refuse", why: `the MCP server of ${tool} is not configured` };
+      if (servers.length > 1) return { kind: "refuse", why: `the names of the MCP servers ${servers.join(" and ")} both fit ${tool}` };
+      const server = servers[0] as string;
+      if (this.trustedGatewayServers.has(server)) return { kind: "skip" };
+      if (!CONNECTION_NAME.test(server)) {
+        return { kind: "refuse", why: `the MCP server ${server} is not named after a connection (name a governed MCP server after its connection)` };
+      }
+      return { kind: "call", server };
     }
     const shell = SHELLS[tool];
     if (shell && this.o.shellConnection) return { kind: "shell", shell };
@@ -308,10 +343,16 @@ export class PantherClaw {
     return this.answer(res, input, call, actionId, key, builtin);
   }
 
-  /** A shell command, decided through the local connection's /hook face (pc.shell) in its final working directory. */
+  /**
+   * A shell command, decided through the local connection's /hook face
+   * (pc.shell) in its final working directory. A Monitor without a command
+   * (a WebSocket watch) is denied: only commands are decided there.
+   */
   private async shell(input: PreToolUseInput, shell: "bash" | "powershell", args: Record<string, unknown>): Promise<HookOutput> {
     const command = args.command;
-    if (typeof command !== "string" || command === "") return decision("deny", "PantherClaw cannot decide this call: the command is empty");
+    if (typeof command !== "string" || command === "") {
+      return decision("deny", `PantherClaw cannot decide this call: ${input.tool_name} has no command, and only commands are decided while the shell is governed`);
+    }
     if (!input.cwd) return decision("deny", "PantherClaw cannot decide this call: no working directory");
     const cwd = await realpath(input.cwd);
     const res: HookResult = await withDeadline(

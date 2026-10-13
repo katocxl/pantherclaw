@@ -16,7 +16,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"net/url"
 	"regexp"
 	"slices"
 	"strings"
@@ -55,18 +54,27 @@ const (
 	Refused Class = "refused"
 )
 
-// Classify sorts an agent's tool name. mcp__<server>__<tool>, with server
-// the longest of servers that fits (a server name may contain "__") and a
-// tool name after it, is Mapped with that server; a name in builtins
-// (exactly, case included) is Builtin; anything else is Refused.
+// connectionName is the rule for a connection's name (migration 00041). A
+// connection governs the one MCP server named after it, so no other server
+// name is ever routed.
+var connectionName = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
+
+// Classify sorts an agent's tool name. mcp__<server>__<tool> is Mapped with
+// that server when exactly one of servers fits it with a tool name after it
+// and that server's name is a connection's name: the call goes to the
+// connection named after it. A tool whose name two servers' names fit
+// ("notes" and "notes__v2" both fit mcp__notes__v2__search) is Refused, since
+// either server might run it. A name in builtins (exactly, case included) is
+// Builtin; anything else is Refused.
 func Classify(tool string, servers, builtins []string) (server string, class Class) {
 	if rest, ok := strings.CutPrefix(tool, "mcp__"); ok {
+		fits := 0
 		for _, s := range servers {
-			if len(s) > len(server) && len(rest) > len(s)+2 && strings.HasPrefix(rest, s+"__") {
-				server = s
+			if s != server && len(rest) > len(s)+2 && strings.HasPrefix(rest, s+"__") {
+				server, fits = s, fits+1
 			}
 		}
-		if server == "" {
+		if fits != 1 || !connectionName.MatchString(server) {
 			return "", Refused
 		}
 		return server, Mapped
@@ -78,11 +86,11 @@ func Classify(tool string, servers, builtins []string) (server string, class Cla
 }
 
 // classOf is the class of a call as the client sends it: an MCP tool names
-// its server, and a built-in names none and is one of the configured
-// built-ins.
+// its server, whose name is a connection's, and a built-in names none and
+// is one of the configured built-ins.
 func (c *Client) classOf(call ToolCall) Class {
 	if call.Server != "" {
-		if name, ok := strings.CutPrefix(call.Tool, "mcp__"+call.Server+"__"); ok && name != "" {
+		if name, ok := strings.CutPrefix(call.Tool, "mcp__"+call.Server+"__"); ok && name != "" && connectionName.MatchString(call.Server) {
 			return Mapped
 		}
 		return Refused
@@ -357,8 +365,10 @@ func NewActionID() string {
 	return string(out)
 }
 
-// Authorize asks the gateway's /sdk face about one tool call through the
-// named connection, as action actionID. It never returns an error: every
+// Authorize asks the gateway's /sdk face about one tool call, as action
+// actionID. An MCP tool's call goes to the connection named after its
+// server, the one connection that governs it; a built-in tool's call goes
+// to connection, which records it. It never returns an error: every
 // failure is a CannotDecide result.
 func (c *Client) Authorize(ctx context.Context, connection string, call ToolCall, actionID string) Result {
 	return c.authorize(ctx, connection, call, actionID, "")
@@ -375,6 +385,12 @@ func (c *Client) authorize(ctx context.Context, connection string, call ToolCall
 	if class == Refused {
 		return cannot("PantherClaw neither maps "+call.Tool+" as an MCP tool nor knows it as a built-in tool", nil)
 	}
+	if class == Mapped {
+		connection = call.Server
+	}
+	if !connectionName.MatchString(connection) {
+		return cannot("no connection is named "+connection, nil)
+	}
 	body, err := json.Marshal(call)
 	if err != nil {
 		return cannot("the tool call cannot be encoded", err)
@@ -383,7 +399,7 @@ func (c *Client) authorize(ctx context.Context, connection string, call ToolCall
 		return cannot("the tool call is larger than the /sdk face takes", nil)
 	}
 	h := http.Header{"Content-Type": {"application/json"}, "PAP-Run-Id": {c.cfg.RunID}, "PC-Action-Id": {actionID}}
-	r, err := c.do(ctx, http.MethodPost, c.cfg.Gateway+"/sdk/"+url.PathEscape(connection), body, h, 0)
+	r, err := c.do(ctx, http.MethodPost, c.cfg.Gateway+"/sdk/"+connection, body, h, 0)
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
 			return cannot("PantherClaw did not answer in time", err)
