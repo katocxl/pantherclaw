@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/katocxl/pantherclaw/internal/actionir"
+	"github.com/katocxl/pantherclaw/internal/authority/consequences"
 	"github.com/katocxl/pantherclaw/internal/authority/pipeline"
 	bdomain "github.com/katocxl/pantherclaw/internal/budgets/domain"
 	defs "github.com/katocxl/pantherclaw/internal/definitions/domain"
@@ -171,7 +172,7 @@ func (w *World) Definition(_ context.Context, org ids.OrgID, pin actionir.Defini
 	}
 	for i := range w.pkg.Definitions {
 		if d := &w.pkg.Definitions[i]; d.Digest == pin.Digest {
-			return pipeline.Pinned{Definition: d, State: w.states[d.Operation]}, nil
+			return pipeline.Pinned{Definition: d, State: w.states[d.Operation], Consequences: consequences.Of(w.pkg, d.Operation)}, nil
 		}
 	}
 	return pipeline.Pinned{}, pipeline.ErrNotFound

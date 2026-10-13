@@ -1,0 +1,152 @@
+{
+  "format": "pantherclaw.conformance/v1",
+  "group": "workload_tokens",
+  "description": "Workload tokens (pap-wt+jwt, PAP-1 §3.4) signed with the workload-token key in jwks. SDKs read them without verifying: exp to renew, cnf.jkt to check the token is bound to their key, ath for proofs. A token that is not a compact JWS, not version 1, for another audience or without exp or cnf.jkt is refused.",
+  "source": "internal/identity/pap Issue and VerifyToken",
+  "issuer": "https://pantherclaw.example.test",
+  "jwks": {
+    "keys": [
+      {
+        "kty": "OKP",
+        "crv": "Ed25519",
+        "x": "8bC9uNCuWH1Xa0ZZaajf2H2QLl75tHkgMvV6i-owtYc",
+        "kid": "action-tokens-kJHDshYlYfxniQMhL7X3st",
+        "alg": "EdDSA",
+        "use": "sig"
+      },
+      {
+        "kty": "OKP",
+        "crv": "Ed25519",
+        "x": "2XHV2yay5E2raj2QW3Gox-W9IrP89ruTu5HNINYzh8A",
+        "kid": "receipts-o7H_quw19Vi7wD_CIuUVRy",
+        "alg": "EdDSA",
+        "use": "sig"
+      },
+      {
+        "kty": "OKP",
+        "crv": "Ed25519",
+        "x": "0iK1ycbPxYLIQvARJuxhVz0yWPVCaQOMv6HNkLhFs1Q",
+        "kid": "workload-tokens-v0TaptR8eVubQ74__106gP",
+        "alg": "EdDSA",
+        "use": "sig"
+      }
+    ]
+  },
+  "workload_key": {
+    "name": "workload",
+    "seed": "R2XSdLu4MSarUODZyVCRj6QwGGrTODWrOiWv8TgXjh4",
+    "jwk": {
+      "kty": "OKP",
+      "crv": "Ed25519",
+      "x": "NcD5byYHuq5132aE5ULIefy4XFe3TNOMVAE5w7fYfTM"
+    },
+    "jkt": "y5qXRl8nnGMFoCwpU4-jngZ4GwrIJGBCAQ8oUtd4E84"
+  },
+  "cases": [
+    {
+      "name": "level 1, no release identity",
+      "token": "eyJhbGciOiJFZERTQSIsImtpZCI6Indvcmtsb2FkLXRva2Vucy12MFRhcHRSOGVWdWJRNzRfXzEwNmdQIiwidHlwIjoicGFwLXd0K2p3dCJ9.eyJpc3MiOiJodHRwczovL3BhbnRoZXJjbGF3LmV4YW1wbGUudGVzdCIsInN1YiI6InBjOm9yZy8wMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDEvYWdlbnQvMDE5MjAwMDAtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDA2L2luc3QvMDE5MjAwMDAtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDA1IiwiYXVkIjoicGFudGhlcmNsYXctZ2F0ZXdheSIsImlhdCI6MTc5MTcyMDAwMCwibmJmIjoxNzkxNzIwMDAwLCJleHAiOjE3OTE3MjA2MDAsImp0aSI6IjAwZGM2YWNmLWFjMDAtNzY1Ni04ZDczLTU2N2M4YjI1YmY4ZCIsImNuZiI6eyJqa3QiOiJ5NXFYUmw4bm5HTUZvQ3dwVTQtam5nWjRHd3JJSkdCQ0FROG9VdGQ0RTg0In0sInBhcCI6eyJ2IjoxLCJvcmciOiIwMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDEiLCJlbnYiOiIwMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDIiLCJhdHRfbHZsIjoxfX0.JbG1AZYLSwAlKkCVj462xD96Q47-5KkQUc1jnYdJndwRhZVep8VPCZXECz8JjwngrunWwtkqA11L1841VvJKDQ",
+      "claims": {
+        "iss": "https://pantherclaw.example.test",
+        "sub": "pc:org/01920000-0000-7000-8000-000000000001/agent/01920000-0000-7000-8000-000000000006/inst/01920000-0000-7000-8000-000000000005",
+        "aud": "pantherclaw-gateway",
+        "iat": 1791720000,
+        "nbf": 1791720000,
+        "exp": 1791720600,
+        "jti": "00dc6acf-ac00-7656-8d73-567c8b25bf8d",
+        "cnf": {
+          "jkt": "y5qXRl8nnGMFoCwpU4-jngZ4GwrIJGBCAQ8oUtd4E84"
+        },
+        "pap": {
+          "v": 1,
+          "org": "01920000-0000-7000-8000-000000000001",
+          "env": "01920000-0000-7000-8000-000000000002",
+          "att_lvl": 1
+        }
+      },
+      "ath": "Qc9co6w_nysh0k3WVvh2LSAmkiQCgib2d2VuNOQVZmM",
+      "valid_at": 1791720060
+    },
+    {
+      "name": "level 1, declared release",
+      "token": "eyJhbGciOiJFZERTQSIsImtpZCI6Indvcmtsb2FkLXRva2Vucy12MFRhcHRSOGVWdWJRNzRfXzEwNmdQIiwidHlwIjoicGFwLXd0K2p3dCJ9.eyJpc3MiOiJodHRwczovL3BhbnRoZXJjbGF3LmV4YW1wbGUudGVzdCIsInN1YiI6InBjOm9yZy8wMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDEvYWdlbnQvMDE5MjAwMDAtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDA2L2luc3QvMDE5MjAwMDAtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDA1IiwiYXVkIjoicGFudGhlcmNsYXctZ2F0ZXdheSIsImlhdCI6MTc5MTcyMDAwMCwibmJmIjoxNzkxNzIwMDAwLCJleHAiOjE3OTE3MjA2MDAsImp0aSI6IjAwZGM2YWNmLWFjMDAtN2FmOS05ZTUyLTllMTcxMWQyYzBjNSIsImNuZiI6eyJqa3QiOiJ5NXFYUmw4bm5HTUZvQ3dwVTQtam5nWjRHd3JJSkdCQ0FROG9VdGQ0RTg0In0sInBhcCI6eyJ2IjoxLCJvcmciOiIwMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDEiLCJlbnYiOiIwMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDIiLCJhdHRfbHZsIjoxLCJyZWxlYXNlIjp7InN0YXRlIjoiZGVjbGFyZWQiLCJkaWdlc3QiOiJzaGEyNTY6YTRkNDUxZWMyMzQ2MzcyNmY3MmM0M2Q2NGM3MTA5NjhmNmI2MDJjZDY1M2I0ZGU4YWRlZTFiNTU2MjQwYTgyOSJ9fX0.Xh7WbhiA83J6SaYT1ARdLZ4SkHxS_sd5uMybsoe-zcL0NGpGTjiah2pThiSpMCVG85fMT6Z2XkI8rOnaYvSABg",
+      "claims": {
+        "iss": "https://pantherclaw.example.test",
+        "sub": "pc:org/01920000-0000-7000-8000-000000000001/agent/01920000-0000-7000-8000-000000000006/inst/01920000-0000-7000-8000-000000000005",
+        "aud": "pantherclaw-gateway",
+        "iat": 1791720000,
+        "nbf": 1791720000,
+        "exp": 1791720600,
+        "jti": "00dc6acf-ac00-7af9-9e52-9e1711d2c0c5",
+        "cnf": {
+          "jkt": "y5qXRl8nnGMFoCwpU4-jngZ4GwrIJGBCAQ8oUtd4E84"
+        },
+        "pap": {
+          "v": 1,
+          "org": "01920000-0000-7000-8000-000000000001",
+          "env": "01920000-0000-7000-8000-000000000002",
+          "att_lvl": 1,
+          "release": {
+            "state": "declared",
+            "digest": "sha256:a4d451ec23463726f72c43d64c710968f6b602cd653b4de8adee1b556240a829"
+          }
+        }
+      },
+      "ath": "BI7i0tzeiHLW9DHRIw5U4xeuZQFCgkXW61b9M4J1tMg",
+      "valid_at": 1791720060
+    },
+    {
+      "name": "level 2 until its attestation expires",
+      "token": "eyJhbGciOiJFZERTQSIsImtpZCI6Indvcmtsb2FkLXRva2Vucy12MFRhcHRSOGVWdWJRNzRfXzEwNmdQIiwidHlwIjoicGFwLXd0K2p3dCJ9.eyJpc3MiOiJodHRwczovL3BhbnRoZXJjbGF3LmV4YW1wbGUudGVzdCIsInN1YiI6InBjOm9yZy8wMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDEvYWdlbnQvMDE5MjAwMDAtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDA2L2luc3QvMDE5MjAwMDAtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDA1IiwiYXVkIjoicGFudGhlcmNsYXctZ2F0ZXdheSIsImlhdCI6MTc5MTcyMDAwMCwibmJmIjoxNzkxNzIwMDAwLCJleHAiOjE3OTE3MjAyNDAsImp0aSI6IjAwZGM2YWNmLWFjMDAtNzY3OS1iZWRmLTc3ZTNmZmRjYmZjMyIsImNuZiI6eyJqa3QiOiJ5NXFYUmw4bm5HTUZvQ3dwVTQtam5nWjRHd3JJSkdCQ0FROG9VdGQ0RTg0In0sInBhcCI6eyJ2IjoxLCJvcmciOiIwMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDEiLCJlbnYiOiIwMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDIiLCJhdHRfbHZsIjoyLCJyZWxlYXNlIjp7InN0YXRlIjoiYXR0ZXN0ZWQiLCJkaWdlc3QiOiJzaGEyNTY6YTRkNDUxZWMyMzQ2MzcyNmY3MmM0M2Q2NGM3MTA5NjhmNmI2MDJjZDY1M2I0ZGU4YWRlZTFiNTU2MjQwYTgyOSJ9fX0.-ApzrD4uiI3sr8ifG1DWodGmiZjMzYDlT2OZQSCNEVq-tYe2kWLfNUzMCH728-BRJBIZ7tqDy_rZEA_0fZz3Bw",
+      "claims": {
+        "iss": "https://pantherclaw.example.test",
+        "sub": "pc:org/01920000-0000-7000-8000-000000000001/agent/01920000-0000-7000-8000-000000000006/inst/01920000-0000-7000-8000-000000000005",
+        "aud": "pantherclaw-gateway",
+        "iat": 1791720000,
+        "nbf": 1791720000,
+        "exp": 1791720240,
+        "jti": "00dc6acf-ac00-7679-bedf-77e3ffdcbfc3",
+        "cnf": {
+          "jkt": "y5qXRl8nnGMFoCwpU4-jngZ4GwrIJGBCAQ8oUtd4E84"
+        },
+        "pap": {
+          "v": 1,
+          "org": "01920000-0000-7000-8000-000000000001",
+          "env": "01920000-0000-7000-8000-000000000002",
+          "att_lvl": 2,
+          "release": {
+            "state": "attested",
+            "digest": "sha256:a4d451ec23463726f72c43d64c710968f6b602cd653b4de8adee1b556240a829"
+          }
+        }
+      },
+      "ath": "ggnIZSUv14NlgMOQohRC_VttrGFHFtKgSNcZrXOgUGs",
+      "valid_at": 1791720060
+    },
+    {
+      "name": "version 2",
+      "token": "eyJhbGciOiJFZERTQSIsImtpZCI6Indvcmtsb2FkLXRva2Vucy12MFRhcHRSOGVWdWJRNzRfXzEwNmdQIiwidHlwIjoicGFwLXd0K2p3dCJ9.eyJpc3MiOiJodHRwczovL3BhbnRoZXJjbGF3LmV4YW1wbGUudGVzdCIsInN1YiI6InBjOm9yZy8wMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDEvYWdlbnQvMDE5MjAwMDAtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDA2L2luc3QvMDE5MjAwMDAtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDA1IiwiYXVkIjoicGFudGhlcmNsYXctZ2F0ZXdheSIsImlhdCI6MTc5MTcyMDAwMCwibmJmIjoxNzkxNzIwMDAwLCJleHAiOjE3OTE3MjA2MDAsImp0aSI6IjAwZGM2YWNmLWFjMDAtNzQzZS05MzJkLWJiYjUxY2E5NGMzYiIsImNuZiI6eyJqa3QiOiJ5NXFYUmw4bm5HTUZvQ3dwVTQtam5nWjRHd3JJSkdCQ0FROG9VdGQ0RTg0In0sInBhcCI6eyJ2IjoyLCJvcmciOiIwMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDEiLCJlbnYiOiIwMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDIiLCJhdHRfbHZsIjoxfX0.lV94wfvgMj8WECsiCF8OUW2fizBqYUVHJYNT0CPQ0K3ELMU39SiF9EuMFRsgFo01tyLdr6t2mVzjV-SrlVzSAg",
+      "reject": "version 2"
+    },
+    {
+      "name": "another audience",
+      "token": "eyJhbGciOiJFZERTQSIsImtpZCI6Indvcmtsb2FkLXRva2Vucy12MFRhcHRSOGVWdWJRNzRfXzEwNmdQIiwidHlwIjoicGFwLXd0K2p3dCJ9.eyJpc3MiOiJodHRwczovL3BhbnRoZXJjbGF3LmV4YW1wbGUudGVzdCIsInN1YiI6InBjOm9yZy8wMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDEvYWdlbnQvMDE5MjAwMDAtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDA2L2luc3QvMDE5MjAwMDAtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDA1IiwiYXVkIjoiYW5vdGhlci1zZXJ2aWNlIiwiaWF0IjoxNzkxNzIwMDAwLCJuYmYiOjE3OTE3MjAwMDAsImV4cCI6MTc5MTcyMDYwMCwianRpIjoiMDBkYzZhY2YtYWMwMC03NDNlLTkzMmQtYmJiNTFjYTk0YzNiIiwiY25mIjp7ImprdCI6Ink1cVhSbDhubkdNRm9Dd3BVNC1qbmdaNEd3cklKR0JDQVE4b1V0ZDRFODQifSwicGFwIjp7InYiOjEsIm9yZyI6IjAxOTIwMDAwLTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDAwMSIsImVudiI6IjAxOTIwMDAwLTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDAwMiIsImF0dF9sdmwiOjF9fQ.3vtUYKdyJkNvvG5UMCUOPFdKcvPmW5g_5QAndGC9SxExkd8qIOjcfDNGh4MHQMdgUYk-_nteYibdMBMjpgmFCA",
+      "reject": "another audience"
+    },
+    {
+      "name": "no expiry",
+      "token": "eyJhbGciOiJFZERTQSIsImtpZCI6Indvcmtsb2FkLXRva2Vucy12MFRhcHRSOGVWdWJRNzRfXzEwNmdQIiwidHlwIjoicGFwLXd0K2p3dCJ9.eyJpc3MiOiJodHRwczovL3BhbnRoZXJjbGF3LmV4YW1wbGUudGVzdCIsInN1YiI6InBjOm9yZy8wMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDEvYWdlbnQvMDE5MjAwMDAtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDA2L2luc3QvMDE5MjAwMDAtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDA1IiwiYXVkIjoicGFudGhlcmNsYXctZ2F0ZXdheSIsImlhdCI6MTc5MTcyMDAwMCwibmJmIjoxNzkxNzIwMDAwLCJqdGkiOiIwMGRjNmFjZi1hYzAwLTc0M2UtOTMyZC1iYmI1MWNhOTRjM2IiLCJjbmYiOnsiamt0IjoieTVxWFJsOG5uR01Gb0N3cFU0LWpuZ1o0R3dySUpHQkNBUThvVXRkNEU4NCJ9LCJwYXAiOnsidiI6MSwib3JnIjoiMDE5MjAwMDAtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDAxIiwiZW52IjoiMDE5MjAwMDAtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDAyIiwiYXR0X2x2bCI6MX19.3ujeCNSivF9U3RLPwQugSoO3OfzCzNJOAbdObNe25uFssS0a4Fb_L6oPsGYFyHfk3-yVar6nhwR3DDKQMrC4CQ",
+      "reject": "no expiry"
+    },
+    {
+      "name": "no key binding",
+      "token": "eyJhbGciOiJFZERTQSIsImtpZCI6Indvcmtsb2FkLXRva2Vucy12MFRhcHRSOGVWdWJRNzRfXzEwNmdQIiwidHlwIjoicGFwLXd0K2p3dCJ9.eyJpc3MiOiJodHRwczovL3BhbnRoZXJjbGF3LmV4YW1wbGUudGVzdCIsInN1YiI6InBjOm9yZy8wMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDEvYWdlbnQvMDE5MjAwMDAtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDA2L2luc3QvMDE5MjAwMDAtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDA1IiwiYXVkIjoicGFudGhlcmNsYXctZ2F0ZXdheSIsImlhdCI6MTc5MTcyMDAwMCwibmJmIjoxNzkxNzIwMDAwLCJleHAiOjE3OTE3MjA2MDAsImp0aSI6IjAwZGM2YWNmLWFjMDAtNzQzZS05MzJkLWJiYjUxY2E5NGMzYiIsInBhcCI6eyJ2IjoxLCJvcmciOiIwMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDEiLCJlbnYiOiIwMTkyMDAwMC0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDIiLCJhdHRfbHZsIjoxfX0.5W20M2pBgkU9lF3kR31VR0xhiavBkbadsJatZm1D1y8pR6adGMWIicjcinZksEWDeFpZGJp5KbsNGPpd4PjdCg",
+      "reject": "no key binding"
+    },
+    {
+      "name": "not a compact JWS",
+      "token": "eyJhbGciOiJFZERTQSJ9.e30",
+      "reject": "not a compact JWS"
+    }
+  ]
+}

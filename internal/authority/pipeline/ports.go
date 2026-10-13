@@ -17,6 +17,7 @@ import (
 
 	"github.com/katocxl/pantherclaw/internal/actionir"
 	apdomain "github.com/katocxl/pantherclaw/internal/approvals/domain"
+	"github.com/katocxl/pantherclaw/internal/authority/consequences"
 	bdomain "github.com/katocxl/pantherclaw/internal/budgets/domain"
 	defs "github.com/katocxl/pantherclaw/internal/definitions/domain"
 	fdomain "github.com/katocxl/pantherclaw/internal/facts/domain"
@@ -50,10 +51,13 @@ type Request struct {
 	Gateway  string
 }
 
-// Pinned is an org's pinned definition with its lifecycle state.
+// Pinned is an org's pinned definition with its lifecycle state, and the
+// consequence rules its package version has for its operation (G0 M8,
+// HR-206).
 type Pinned struct {
-	Definition *defs.Definition
-	State      defs.State
+	Definition   *defs.Definition
+	State        defs.State
+	Consequences []consequences.Rule
 }
 
 // Policy is an org's published, compiled policy.
