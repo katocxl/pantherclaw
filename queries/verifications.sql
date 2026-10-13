@@ -120,7 +120,8 @@ WHERE t.org_id = sqlc.arg(org_id) AND t.id = sqlc.arg(parent);
 -- name: ScheduleConsequenceVerification :exec
 INSERT INTO pc.verifications (org_id, id, purpose, transaction_id, connection_id, operation, request, next_at, deadline_at,
                               definition_digest, basis_at)
-VALUES (sqlc.arg(org_id), sqlc.arg(id), 'consequence', sqlc.arg(transaction_id), sqlc.arg(connection_id), sqlc.arg(operation),
+VALUES (sqlc.arg(org_id), sqlc.arg(id), 'consequence', sqlc.arg(transaction_id),
+        (SELECT t.connection_id FROM pc.transactions t WHERE t.org_id = sqlc.arg(org_id) AND t.id = sqlc.arg(transaction_id)), sqlc.arg(operation),
         sqlc.arg(request), now() + make_interval(secs => sqlc.arg(delay_seconds)::float8),
         now() + make_interval(secs => sqlc.arg(within_seconds)::float8), sqlc.arg(definition_digest), now());
 

@@ -716,16 +716,16 @@ func (q *Queries) RetryVerification(ctx context.Context, delaySeconds float64, o
 const scheduleConsequenceVerification = `-- name: ScheduleConsequenceVerification :exec
 INSERT INTO pc.verifications (org_id, id, purpose, transaction_id, connection_id, operation, request, next_at, deadline_at,
                               definition_digest, basis_at)
-VALUES ($1, $2, 'consequence', $3, $4, $5,
-        $6, now() + make_interval(secs => $7::float8),
-        now() + make_interval(secs => $8::float8), $9, now())
+VALUES ($1, $2, 'consequence', $3,
+        (SELECT t.connection_id FROM pc.transactions t WHERE t.org_id = $1 AND t.id = $3), $4,
+        $5, now() + make_interval(secs => $6::float8),
+        now() + make_interval(secs => $7::float8), $8, now())
 `
 
 type ScheduleConsequenceVerificationParams struct {
 	OrgID            ids.OrgID
 	ID               ids.UUID
 	TransactionID    *ids.UUID
-	ConnectionID     ids.UUID
 	Operation        string
 	Request          []byte
 	DelaySeconds     float64
@@ -740,7 +740,6 @@ func (q *Queries) ScheduleConsequenceVerification(ctx context.Context, arg Sched
 		arg.OrgID,
 		arg.ID,
 		arg.TransactionID,
-		arg.ConnectionID,
 		arg.Operation,
 		arg.Request,
 		arg.DelaySeconds,

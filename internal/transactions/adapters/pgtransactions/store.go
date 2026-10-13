@@ -198,7 +198,7 @@ func (s *Store) Report(ctx context.Context, org ids.OrgID, gateway ids.UUID, r a
 			// A confirmed action opens the consequences its decision
 			// predicted (G0 M8 W1c).
 			if a.State == domain.Confirmed {
-				if err := openConsequences(ctx, tx, q, org, txn, task.ConnectionID, *task.DefinitionDigest, v, r.Fields, gateway); err != nil {
+				if err := openConsequences(ctx, tx, q, org, txn, *task.DefinitionDigest, v, r.Fields, evdomain.Actor{Type: "gateway", ID: gateway.String()}); err != nil {
 					return err
 				}
 			}

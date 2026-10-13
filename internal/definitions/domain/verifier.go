@@ -105,12 +105,50 @@ type VerifierReference struct {
 // idempotency key), and IDParam names the verifier read's identifier param
 // that the found item's id fills: the gateway then reads the verifier for
 // that item in the same lease, and its fields are the observation.
+//
+// Creator (G0 M8 W1c, coordinator decision D13) names who may have made a
+// matched item and its statuses: an item or a status from anyone else
+// does not count (the gateway reports how many items it set aside, as
+// evidence, under OthersField). Statuses says how the verifier read's
+// answer lists statuses, newest first: the latest counted status of each
+// matched item is its verdict, a status that Earlier lists counts only
+// after one of the statuses it names (a manual "inactive" proves nothing),
+// and is otherwise VerdictUnproven; matched items whose verdicts differ
+// give VerdictDisagreement. Both verdicts go to a person (states.reconcile).
 type VerifierLookup struct {
 	Operation string        `json:"operation"`
 	List      ListSpec      `json:"list"`
 	Match     []Expectation `json:"match,omitzero"`
 	IDParam   string        `json:"id_param,omitzero"`
+	Creator   *CreatorSpec  `json:"creator,omitzero"`
+	Statuses  *StatusList   `json:"statuses,omitzero"`
 }
+
+// CreatorSpec is where an item or a status names its creator, and the
+// reviewed creators that count.
+type CreatorSpec struct {
+	Field string   `json:"field"`
+	OneOf []string `json:"one_of"`
+}
+
+// StatusList is how a verifier read lists an item's statuses.
+type StatusList struct {
+	Items   string              `json:"items"`
+	Field   string              `json:"field"`
+	Earlier map[string][]string `json:"earlier,omitzero"`
+}
+
+// Verdicts the gateway reports for a matched lookup with statuses, besides
+// the statuses themselves; a package lists both under states.reconcile.
+const (
+	VerdictDisagreement = "disagreement"
+	VerdictUnproven     = "unproven"
+)
+
+// OthersField is the field under which the gateway reports how many listed
+// items matched but were made by someone the lookup's creator does not
+// name.
+const OthersField = "/others"
 
 // ListSpec says how a listing response is read. Every field is a JSON
 // pointer (RFC 6901) except PageParam, the read's identifier parameter the
@@ -172,6 +210,9 @@ var (
 	// pointerRe is an RFC 6901 JSON pointer of 1..8 tokens, each 1..64
 	// characters of a conservative alphabet (escapes ~0 and ~1 only).
 	pointerRe = regexp.MustCompile(`^(/([A-Za-z0-9_.-]|~[01]){1,64}){1,8}$`)
+	// creatorRe is a GitHub login, an App's bot name (name[bot]) or an
+	// App's slug.
+	creatorRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9-]{0,38}(\[bot\])?$`)
 	statusRe  = regexp.MustCompile(`^[A-Za-z0-9_.-]{1,64}$`)
 )
 
@@ -249,6 +290,34 @@ func (d *Definition) validateVerifier() error {
 		}
 		if err := l.List.validate(at+".lookup.list", matched); err != nil {
 			return err
+		}
+		if c := l.Creator; c != nil {
+			if !matched || !pointerRe.MatchString(c.Field) || len(c.OneOf) == 0 || len(c.OneOf) > maxExpect {
+				return invalid("%s.lookup.creator needs match, a field pointer and 1..%d creators", at, maxExpect)
+			}
+			for _, who := range c.OneOf {
+				if !creatorRe.MatchString(who) {
+					return invalid("%s.lookup.creator: %q is not a login or App name", at, who)
+				}
+			}
+		}
+		if s := l.Statuses; s != nil {
+			if l.IDParam == "" || (s.Items != "" && !pointerRe.MatchString(s.Items)) || !pointerRe.MatchString(s.Field) ||
+				v.States == nil || v.States.Field != s.Field ||
+				!slices.Contains(v.States.Reconcile, VerdictDisagreement) || !slices.Contains(v.States.Reconcile, VerdictUnproven) {
+				return invalid("%s.lookup.statuses needs id_param, a field that states.field names, and states.reconcile with %s and %s",
+					at, VerdictDisagreement, VerdictUnproven)
+			}
+			for state, after := range s.Earlier {
+				if !statusRe.MatchString(state) || len(after) == 0 {
+					return invalid("%s.lookup.statuses.earlier: %q needs the statuses it follows", at, state)
+				}
+				for _, a := range after {
+					if !statusRe.MatchString(a) {
+						return invalid("%s.lookup.statuses.earlier: %q is not a status", at, a)
+					}
+				}
+			}
 		}
 	}
 	seen := map[string]bool{}

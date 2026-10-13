@@ -266,3 +266,62 @@ func TestHR206_AConfirmedActionsConsequenceIsVerifiedOnItsOwn(t *testing.T) {
 		t.Fatalf("a failed read: %+v %s", a, effect(cons))
 	}
 }
+
+// TestHR206_APersonsOccurredOpensTheConsequenceAndNothingIsLeftSilently
+// (#349 review): a refund a person records as occurred opens the payout
+// its decision predicted, from the refund id an earlier read observed; a
+// predicted payout that names no environment is audited as not verified,
+// with why, rather than left without a word.
+func TestHR206_APersonsOccurredOpensTheConsequenceAndNothingIsLeftSilently(t *testing.T) {
+	w := newWorldWith(t, verifiedPayouts)
+	w.refundable("ch_1", "ch_2")
+	g := w.heldRefunds([]string{"payments.refund.create", "payments.refund.get", "payments.payout.trigger"})
+	run := w.run(g.ID, ids.UUID{})
+	s := w.verifier()
+	ctx := context.Background()
+
+	// An unknown refund, whose listing read saw its id before it was found
+	// (nothing resolved), and that a person then records as occurred.
+	w.payouts("ch_1", `{"state": "scheduled", "environments": ["payroll"]}`)
+	r := w.recorded(run, "ch_1", "30.00", finalize.Unknown, "")
+	l := w.lease(s, r.TransactionID)
+	if _, err := s.Report(ctx, w.org, w.gwID, txapp.Report{Task: l.Task, Secret: l.Secret, HTTPStatus: 200, Complete: true,
+		Fields: map[string]string{"/id": "re_1"}}); err != nil {
+		t.Fatal(err)
+	}
+	if n := w.count("SELECT count(*) FROM pc.transaction_links WHERE from_transaction_id = $1", r.TransactionID); n != 0 {
+		t.Fatalf("%d consequences before anyone confirmed", n)
+	}
+	rctx, _ := w.reconciler("rita")
+	task, err := ids.ParseUUID(w.str(`SELECT id::text FROM pc.reconciliation_tasks WHERE transaction_id = $1 AND kind = 'unknown_outcome'`, r.TransactionID))
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec := &txapp.Reconciler{Store: &pgtransactions.Store{Pool: w.pool}, Effects: s}
+	if _, err := rec.ResolveOccurred(rctx, txapp.Resolution{Reconciliation: task, Basis: "the bank shows the refund"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := w.str(`SELECT coalesce((SELECT v.request -> 'params' ->> 'refund' FROM pc.transaction_links k
+		JOIN pc.verifications v ON v.transaction_id = k.to_transaction_id AND v.purpose = 'consequence'
+		WHERE k.from_transaction_id = $1 AND k.kind = 'consequence'), '')`, r.TransactionID); got != "re_1" {
+		t.Fatalf("the payout a person's occurred opened: %q", got)
+	}
+
+	// A payout predicted to no environment: audited, not opened.
+	w.payouts("ch_2", `{"state": "scheduled", "environments": []}`)
+	r = w.recorded(run, "ch_2", "30.00", finalize.Accepted, "re_2")
+	l = w.lease(s, r.TransactionID)
+	fields := refundOf("ch_2", "succeeded", "30.00")
+	fields["/id"] = "re_2"
+	if _, err := s.Report(ctx, w.org, w.gwID, txapp.Report{Task: l.Task, Secret: l.Secret, HTTPStatus: 200, Found: true, Fields: fields}); err != nil {
+		t.Fatal(err)
+	}
+	if n := w.count("SELECT count(*) FROM pc.transaction_links WHERE from_transaction_id = $1", r.TransactionID); n != 0 {
+		t.Fatalf("%d consequences opened for no environment", n)
+	}
+	if n := w.count(`SELECT count(*) FROM pc.ledger_entries WHERE org_id = $1 AND kind = 'audit.transaction.consequence_not_verified'
+		AND convert_from(body, 'UTF8')::jsonb #>> '{object,id}' = $2 AND convert_from(body, 'UTF8')::jsonb ->> 'reason_code' = 'NO_ENVIRONMENT'`,
+		w.org, r.TransactionID.String()); n != 1 {
+		t.Fatalf("%d audit events", n)
+	}
+}

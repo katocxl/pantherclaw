@@ -10,8 +10,10 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"net/http"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -124,8 +126,13 @@ func (e *Engine) VerifyEffect(ctx context.Context, conn *control.Connection, l L
 	for _, ptr := range v.Capture {
 		declared[ptr] = true
 	}
+	if v.Lookup != nil && v.Lookup.Creator != nil {
+		declared[defs.OthersField] = true
+	}
 	params := req.Params
 	var out Observation
+	var matched [][]byte // a matched lookup's items, from every page (G0 M8 W1c)
+	others := 0
 	for range maxPages {
 		status, body, ok := e.read(ctx, conn, read, req.Target, params)
 		if !ok {
@@ -147,8 +154,12 @@ func (e *Engine) VerifyEffect(ctx context.Context, conn *control.Connection, l L
 		last := ""
 		for _, it := range items {
 			if len(v.Lookup.Match) > 0 {
-				if matches(it, v.Lookup.Match, req.Params) {
-					return e.readFound(ctx, conn, v, req.Target, it, list.ID, declared)
+				switch {
+				case !matches(it, v.Lookup.Match, req.Params):
+				case createdBy(it, v.Lookup.Creator):
+					matched = append(matched, it)
+				default:
+					others++ // made by someone else: evidence, not the outcome
 				}
 			} else if c, ok := defs.PointerValue(it, list.Correlate); ok && c == l.Correlate {
 				out.Found, out.Complete, out.Fields = true, true, fields(it, declared)
@@ -159,6 +170,9 @@ func (e *Engine) VerifyEffect(ctx context.Context, conn *control.Connection, l L
 		more, _ := defs.PointerValue(body, list.More)
 		if list.More == "" || more != "true" {
 			out.Complete = true
+			if len(v.Lookup.Match) > 0 {
+				return e.judge(ctx, conn, v, req.Target, matched, others, list.ID, declared, out)
+			}
 			return out, nil
 		}
 		if list.PageParam == "" || last == "" {
@@ -185,29 +199,104 @@ func matches(item []byte, match []defs.Expectation, params map[string]string) bo
 	return true
 }
 
-// readFound reads the verifier for the item a matched lookup found: its
-// id fills the verifier read's id_param, and that read's fields are the
-// observation (G0 M8 W1c). A failed read is inconclusive and retried.
-func (e *Engine) readFound(ctx context.Context, conn *control.Connection, v *defs.VerifierSpec, target actionir.Target, item []byte,
-	idPtr string, declared map[string]bool,
+// maxMatched is the most matched items a lookup reads the statuses of.
+const maxMatched = 10
+
+// createdBy reports whether an item or a status was made by a creator the
+// lookup names; any is, when it names none.
+func createdBy(item []byte, c *defs.CreatorSpec) bool {
+	if c == nil {
+		return true
+	}
+	who, ok := defs.PointerValue(item, c.Field)
+	return ok && slices.Contains(c.OneOf, who)
+}
+
+// judge reads the verifier for the items a matched lookup found, each by
+// its id in the verifier read's id_param (G0 M8 W1c, coordinator decision
+// D13). With statuses declared, each item's verdict is its latest status
+// from a named creator, unproven when it needs an earlier one that is not
+// there; items whose verdicts differ give a disagreement, and the newest
+// never wins. Without, the first item's read is the observation. Items
+// made by others are only counted, as evidence. A failed read is
+// inconclusive and retried.
+func (e *Engine) judge(ctx context.Context, conn *control.Connection, v *defs.VerifierSpec, target actionir.Target, matched [][]byte,
+	others int, idPtr string, declared map[string]bool, out Observation,
 ) (Observation, error) {
-	id, ok := defs.PointerValue(item, idPtr)
-	read, found := conn.Package.Definition(v.Operation)
-	if !ok || id == "" || !found || read.Access != defs.AccessRead || read.Dispatch == nil || read.Dispatch.HTTP == nil ||
-		read.Dispatch.HTTP.Method != http.MethodGet {
-		return Observation{}, fmt.Errorf("%w: lookup read", ErrNotReviewedRead)
+	l := v.Lookup
+	if l.Creator != nil {
+		out.Fields = map[string]string{defs.OthersField: strconv.Itoa(others)}
 	}
-	status, body, ok := e.read(ctx, conn, read, target, map[string]string{v.Lookup.IDParam: id})
-	if !ok {
-		return Observation{HTTPStatus: status}, nil
-	}
-	sum := sha256.Sum256(body)
-	out := Observation{HTTPStatus: status, Digest: sum[:]}
-	if status < 200 || status > 299 {
+	if len(matched) == 0 {
 		return out, nil
 	}
-	out.Found, out.Complete, out.Fields = true, true, fields(body, declared)
+	read, found := conn.Package.Definition(v.Operation)
+	if !found || read.Access != defs.AccessRead || read.Dispatch == nil || read.Dispatch.HTTP == nil || read.Dispatch.HTTP.Method != http.MethodGet {
+		return Observation{}, fmt.Errorf("%w: lookup read", ErrNotReviewedRead)
+	}
+	verdicts := map[string]bool{}
+	for _, it := range matched[:min(len(matched), maxMatched)] {
+		id, ok := defs.PointerValue(it, idPtr)
+		if !ok || id == "" {
+			return Observation{}, fmt.Errorf("%w: lookup item without an id", ErrNotReviewedRead)
+		}
+		status, body, ok := e.read(ctx, conn, read, target, map[string]string{l.IDParam: id})
+		if !ok || status < 200 || status > 299 {
+			return Observation{HTTPStatus: status}, nil
+		}
+		sum := sha256.Sum256(body)
+		out.HTTPStatus, out.Digest, out.Found = status, sum[:], true
+		if l.Statuses == nil {
+			fs := fields(body, declared)
+			if out.Fields != nil {
+				maps.Copy(fs, out.Fields)
+			}
+			out.Fields = fs
+			return out, nil
+		}
+		verdicts[verdict(body, l)] = true
+	}
+	delete(verdicts, "") // nothing counted yet: read again
+	if out.Fields == nil {
+		out.Fields = map[string]string{}
+	}
+	switch len(verdicts) {
+	case 0:
+	case 1:
+		for state := range verdicts {
+			out.Fields[l.Statuses.Field] = state
+		}
+	default:
+		out.Fields[l.Statuses.Field] = defs.VerdictDisagreement
+	}
 	return out, nil
+}
+
+// verdict is an item's latest status from a creator the lookup names,
+// newest first as the read lists them; a status that needs an earlier one
+// it does not have is unproven; "" when none counts.
+func verdict(body []byte, l *defs.VerifierLookup) string {
+	items, ok := defs.PointerItems(body, l.Statuses.Items, 1000)
+	if !ok {
+		return ""
+	}
+	var counted []string
+	for _, it := range items {
+		if !createdBy(it, l.Creator) {
+			continue
+		}
+		if st, ok := defs.PointerValue(it, l.Statuses.Field); ok && st != "" {
+			counted = append(counted, st)
+		}
+	}
+	if len(counted) == 0 {
+		return ""
+	}
+	latest := counted[0]
+	if need, ok := l.Statuses.Earlier[latest]; ok && !slices.ContainsFunc(counted[1:], func(s string) bool { return slices.Contains(need, s) }) {
+		return defs.VerdictUnproven
+	}
+	return latest
 }
 
 // reviewedRead returns the GET read definition op of the connection's

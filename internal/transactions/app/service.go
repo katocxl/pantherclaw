@@ -364,6 +364,9 @@ func Declared(v *defs.VerifierSpec) map[string]bool {
 	for _, ptr := range v.Capture {
 		out[ptr] = true
 	}
+	if v.Lookup != nil && v.Lookup.Creator != nil {
+		out[defs.OthersField] = true
+	}
 	return out
 }
 

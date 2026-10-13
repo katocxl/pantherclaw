@@ -17,8 +17,10 @@ import (
 // reads GitHub's latest status. Success and inactive (it deployed, then
 // was replaced) confirm it; queued, pending and in progress are pending; a
 // failure or an error only asks a person, since evidence never shows that
-// something did not happen (HR-192); so does nothing found by the window's
-// end; a failed read is inconclusive and read again. A person may release
+// something did not happen (HR-192); so do matching deployments whose
+// statuses disagree, an "inactive" never preceded by a success (D13), and
+// nothing found by the window's end; a deployment with no status yet, and a
+// failed read, are read again. A person may release
 // the question as not occurred with a security key.
 func TestHR206_EachDeploymentStatusMeansWhatTheCoordinatorDecided(t *testing.T) {
 	p, err := manifest.Decode(pcgithub.Package)
@@ -36,13 +38,17 @@ func TestHR206_EachDeploymentStatusMeansWhatTheCoordinatorDecided(t *testing.T) 
 		final, ask bool
 		occurred   bool
 	}{
-		{"success", domain.Observation{HTTPStatus: 200, Found: true, Complete: true, Fields: map[string]string{"/0/state": "success"}, At: within}, domain.Confirmed, true, false, true},
-		{"inactive", domain.Observation{HTTPStatus: 200, Found: true, Complete: true, Fields: map[string]string{"/0/state": "inactive"}, At: within}, domain.Confirmed, true, false, true},
-		{"queued", domain.Observation{HTTPStatus: 200, Found: true, Complete: true, Fields: map[string]string{"/0/state": "queued"}, At: within}, domain.PropagationPending, false, false, true},
-		{"pending", domain.Observation{HTTPStatus: 200, Found: true, Complete: true, Fields: map[string]string{"/0/state": "pending"}, At: within}, domain.PropagationPending, false, false, true},
-		{"in_progress", domain.Observation{HTTPStatus: 200, Found: true, Complete: true, Fields: map[string]string{"/0/state": "in_progress"}, At: within}, domain.PropagationPending, false, false, true},
-		{"failure", domain.Observation{HTTPStatus: 200, Found: true, Complete: true, Fields: map[string]string{"/0/state": "failure"}, At: within}, "", true, true, false},
-		{"error", domain.Observation{HTTPStatus: 200, Found: true, Complete: true, Fields: map[string]string{"/0/state": "error"}, At: within}, "", true, true, false},
+		{"success", domain.Observation{HTTPStatus: 200, Found: true, Complete: true, Fields: map[string]string{"/state": "success"}, At: within}, domain.Confirmed, true, false, true},
+		{"inactive", domain.Observation{HTTPStatus: 200, Found: true, Complete: true, Fields: map[string]string{"/state": "inactive"}, At: within}, domain.Confirmed, true, false, true},
+		{"queued", domain.Observation{HTTPStatus: 200, Found: true, Complete: true, Fields: map[string]string{"/state": "queued"}, At: within}, domain.PropagationPending, false, false, true},
+		{"pending", domain.Observation{HTTPStatus: 200, Found: true, Complete: true, Fields: map[string]string{"/state": "pending"}, At: within}, domain.PropagationPending, false, false, true},
+		{"in_progress", domain.Observation{HTTPStatus: 200, Found: true, Complete: true, Fields: map[string]string{"/state": "in_progress"}, At: within}, domain.PropagationPending, false, false, true},
+		{"failure", domain.Observation{HTTPStatus: 200, Found: true, Complete: true, Fields: map[string]string{"/state": "failure"}, At: within}, "", true, true, false},
+		{"error", domain.Observation{HTTPStatus: 200, Found: true, Complete: true, Fields: map[string]string{"/state": "error"}, At: within}, "", true, true, false},
+		{"waiting", domain.Observation{HTTPStatus: 200, Found: true, Complete: true, Fields: map[string]string{"/state": "waiting"}, At: within}, domain.PropagationPending, false, false, true},
+		{"matching deployments that disagree", domain.Observation{HTTPStatus: 200, Found: true, Complete: true, Fields: map[string]string{"/state": "disagreement"}, At: within}, "", true, true, false},
+		{"an inactive never preceded by a success", domain.Observation{HTTPStatus: 200, Found: true, Complete: true, Fields: map[string]string{"/state": "unproven"}, At: within}, "", true, true, false},
+		{"a deployment with no status yet", domain.Observation{HTTPStatus: 200, Found: true, Complete: true, Fields: map[string]string{"/others": "0"}, At: within}, "", false, false, true},
 		{"none yet", domain.Observation{HTTPStatus: 200, Complete: true, At: within}, domain.PropagationPending, false, false, false},
 		{"none by the deadline", domain.Observation{HTTPStatus: 200, Complete: true, At: after}, "", true, true, false},
 		{"a cut listing", domain.Observation{HTTPStatus: 200, At: after}, "", false, false, false},

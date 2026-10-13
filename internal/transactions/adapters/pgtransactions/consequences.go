@@ -35,29 +35,41 @@ import (
 const consequenceDelay = 5
 
 // openConsequences opens the consequences of transaction parent, whose
-// effect the verifier v of definition digest just confirmed with the
-// captured fields.
-func openConsequences(ctx context.Context, tx db.TenantTx, q *dbq.Queries, org ids.OrgID, parent, conn ids.UUID, digest string,
-	v *defs.VerifierSpec, fields map[string]string, gateway ids.UUID,
+// effect was just confirmed (by the verifier v of definition digest, with
+// the fields of what it observed, or by a person, with those of the
+// transaction's newest observation that holds them). A predicted
+// consequence that cannot be verified is audited as such, never left
+// silently (#349 review): nothing captured to find it by, no environment,
+// no verifier that finds it.
+func openConsequences(ctx context.Context, tx db.TenantTx, q *dbq.Queries, org ids.OrgID, parent ids.UUID, digest string,
+	v *defs.VerifierSpec, fields map[string]string, actor evdomain.Actor,
 ) error {
 	if len(v.Capture) == 0 {
 		return nil
+	}
+	rows, err := q.PredictedConsequences(ctx, org, parent)
+	if err != nil || len(rows) == 0 {
+		return err
 	}
 	captured := map[string]string{}
 	for name, ptr := range v.Capture {
 		val, ok := fields[ptr]
 		if !ok || val == "" {
-			return nil // nothing to find the consequence by
+			for _, c := range rows {
+				if err := notVerified(ctx, tx, parent, c.Operation, "NOTHING_CAPTURED", actor); err != nil {
+					return err
+				}
+			}
+			return nil
 		}
 		captured[name] = val
-	}
-	rows, err := q.PredictedConsequences(ctx, org, parent)
-	if err != nil {
-		return err
 	}
 	for _, c := range rows {
 		sib, err := q.SiblingDefinitionWithDigest(ctx, org, digest, c.Operation)
 		if db.IsNoRows(err) {
+			if err := notVerified(ctx, tx, parent, c.Operation, "NO_DEFINITION", actor); err != nil {
+				return err
+			}
 			continue
 		} else if err != nil {
 			return err
@@ -68,19 +80,27 @@ func openConsequences(ctx context.Context, tx db.TenantTx, q *dbq.Queries, org i
 		}
 		cv := d.Verifier
 		if cv == nil || !cv.Extended() || cv.Lookup == nil || len(cv.Lookup.Match) == 0 {
-			continue // nothing finds it: it stays the parent's predicted consequence
+			if err := notVerified(ctx, tx, parent, c.Operation, "NO_VERIFIER", actor); err != nil {
+				return err
+			}
+			continue
 		}
 		envs := c.Environments
 		if _, ok := d.Params["environment"]; !ok {
 			envs = []string{""}
+		} else if len(envs) == 0 {
+			if err := notVerified(ctx, tx, parent, c.Operation, "NO_ENVIRONMENT", actor); err != nil {
+				return err
+			}
+			continue
 		}
 		for _, env := range envs {
 			params := maps.Clone(captured)
 			if env != "" {
 				params["environment"] = env
 			}
-			if err := openConsequence(ctx, tx, q, org, parent, conn, sib.Digest, d, actionir.Target{Type: c.TargetType, ID: c.TargetID},
-				params, gateway); err != nil {
+			if err := openConsequence(ctx, tx, q, org, parent, sib.Digest, d, actionir.Target{Type: c.TargetType, ID: c.TargetID},
+				params, actor); err != nil {
 				return err
 			}
 		}
@@ -88,9 +108,42 @@ func openConsequences(ctx context.Context, tx db.TenantTx, q *dbq.Queries, org i
 	return nil
 }
 
+// notVerified audits a predicted consequence of parent that is not
+// verified on its own, and why.
+func notVerified(ctx context.Context, tx db.TenantTx, parent ids.UUID, operation, reason string, actor evdomain.Actor) error {
+	_, err := audit.Record(ctx, tx, audit.Event{
+		Name: "transaction.consequence_not_verified", Actor: actor, Outcome: audit.Failure, ReasonCode: reason,
+		Object: &audit.Object{Type: "transaction", ID: parent.String()}, Details: map[string]string{"operation": operation},
+	})
+	return err
+}
+
+// capturedOf is the fields of transaction txn's newest observation that
+// holds every field v captures, for a confirmation by a person.
+func capturedOf(ctx context.Context, q *dbq.Queries, org ids.OrgID, txn ids.UUID, v *defs.VerifierSpec) (map[string]string, error) {
+	rows, err := q.ObservationsOf(ctx, org, &txn, []ids.UUID{})
+	if err != nil {
+		return nil, err
+	}
+	for i := len(rows) - 1; i >= 0; i-- {
+		var fields map[string]string
+		if len(rows[i].Fields) == 0 || json.Unmarshal(rows[i].Fields, &fields) != nil {
+			continue
+		}
+		all := true
+		for _, ptr := range v.Capture {
+			all = all && fields[ptr] != ""
+		}
+		if all {
+			return fields, nil
+		}
+	}
+	return nil, nil
+}
+
 // openConsequence opens one consequence transaction and its verification.
-func openConsequence(ctx context.Context, tx db.TenantTx, q *dbq.Queries, org ids.OrgID, parent, conn ids.UUID, digest string,
-	d *defs.Definition, target actionir.Target, params map[string]string, gateway ids.UUID,
+func openConsequence(ctx context.Context, tx db.TenantTx, q *dbq.Queries, org ids.OrgID, parent ids.UUID, digest string,
+	d *defs.Definition, target actionir.Target, params map[string]string, actor evdomain.Actor,
 ) error {
 	canonical, err := json.Marshal(map[string]any{"operation": d.Operation, "target": target, "params": params, "consequence_of": parent},
 		json.Deterministic(true))
@@ -120,7 +173,7 @@ func openConsequence(ctx context.Context, tx db.TenantTx, q *dbq.Queries, org id
 		return err
 	}
 	if err := q.ScheduleConsequenceVerification(ctx, dbq.ScheduleConsequenceVerificationParams{
-		OrgID: org, ID: ids.NewV7(), TransactionID: &id, ConnectionID: conn, Operation: d.Verifier.Lookup.Operation, Request: req,
+		OrgID: org, ID: ids.NewV7(), TransactionID: &id, Operation: d.Verifier.Lookup.Operation, Request: req,
 		DelaySeconds: consequenceDelay, WithinSeconds: float64(d.Verifier.WithinSeconds), DefinitionDigest: &digest,
 	}); err != nil {
 		return err
@@ -131,7 +184,7 @@ func openConsequence(ctx context.Context, tx db.TenantTx, q *dbq.Queries, org id
 	}
 	details["params"] = strconv.Itoa(len(params))
 	_, err = audit.Record(ctx, tx, audit.Event{
-		Name: "transaction.consequence_opened", Actor: evdomain.Actor{Type: "gateway", ID: gateway.String()}, Outcome: audit.Success,
+		Name: "transaction.consequence_opened", Actor: actor, Outcome: audit.Success,
 		Object: &audit.Object{Type: "transaction", ID: id.String()}, Details: details,
 	})
 	return err

@@ -799,10 +799,13 @@ definitions:
     retry:
       safe: false
       on_unknown: reconcile
-    # The deployment's own effect (G0 M8 W1c): GitHub's deployment for the
-    # merge commit and the environment, and its latest status. A failure or
-    # an error suggests it did not take effect without showing it, so a
-    # person decides (HR-192); so does no deployment within the hour.
+    # The deployment's own effect (G0 M8 W1c, coordinator decision D13):
+    # GitHub's deployments of the merge commit to the environment that the
+    # Actions workflow made (github-actions[bot]), and their latest status
+    # from it. Deployments and statuses from anyone else are set aside and
+    # counted as evidence. A failure or an error, matching deployments
+    # whose statuses disagree, an "inactive" never preceded by a success or
+    # progress, or no deployment within the hour: a person decides (HR-192).
     verifier:
       operation: github.deployment.statuses
       establishes: deployment.succeeded
@@ -818,16 +821,26 @@ definitions:
             equals: params.sha
           - field: /environment
             equals: params.environment
+        creator:
+          field: /creator/login
+          one_of: ['github-actions[bot]']
         id_param: deployment_id
+        statuses:
+          items: ''
+          field: /state
+          earlier:
+            inactive: [success, in_progress]
       states:
-        field: /0/state
+        field: /state
         confirmed: [success, inactive]
-        pending: [queued, pending, in_progress]
-        reconcile: [failure, error]
+        pending: [queued, pending, in_progress, waiting]
+        reconcile: [failure, error, disagreement, unproven]
       limits: >-
-        Shows GitHub's latest status of the deployment that this merge
-        commit started in this environment. It does not show what the
-        deployed workflow did beyond the status it reported.
+        Shows the latest status the Actions workflow reported on each
+        deployment it made of this merge commit to this environment, and
+        that they agree. It does not show what the deployed workflow did
+        beyond that status, and it does not count deployments made by
+        anyone else, such as through another token.
     approval:
       title: Release a deployment from {target.id}
       fields: [target.id]

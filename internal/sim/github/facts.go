@@ -29,17 +29,55 @@ type Environment struct {
 	Reviewers []string
 }
 
-// Deployment is a deployment a push to a branch started. It is pending
-// until SettleAfter has passed, then success, unless SetDeploymentStatus
-// gave it another latest status.
+// Deployment is a deployment a push to a branch started (its creator
+// github-actions[bot]), or that someone created (AddDeployment). It is
+// pending until SettleAfter has passed, then success, unless
+// SetDeploymentStatus gave it another latest status; Statuses are the ones
+// posted after those, oldest first, by whoever posted them.
 type Deployment struct {
 	ID          int64
 	SHA, Ref    string
 	Environment string
+	Creator     string
 	Created     time.Time
 	SettleAfter time.Duration
 	// Status, when set, is its latest status whatever the time.
-	Status string
+	Status   string
+	Statuses []DeploymentStatus
+}
+
+// DeploymentStatus is a status someone posted on a deployment.
+type DeploymentStatus struct {
+	State, Creator string
+}
+
+// actionsBot is the creator of what a workflow does with GITHUB_TOKEN.
+const actionsBot = "github-actions[bot]"
+
+// AddDeployment records a deployment that creator made of sha on ref to
+// environment, as anyone with deployments: write may, and returns its id.
+// It stays pending until a status is posted on it.
+func (s *Server) AddDeployment(fullName, sha, ref, environment, creator string) int64 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.seq++
+	f := s.repos[strings.ToLower(fullName)].state()
+	f.deployments = append(f.deployments, Deployment{
+		ID: s.seq, SHA: sha, Ref: ref, Environment: environment, Creator: creator, Created: s.now(), SettleAfter: 1 << 62,
+	})
+	return s.seq
+}
+
+// AddDeploymentStatus posts a status on deployment id as creator.
+func (s *Server) AddDeploymentStatus(fullName string, id int64, state, creator string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	deps := s.repos[strings.ToLower(fullName)].state().deployments
+	for i := range deps {
+		if deps[i].ID == id {
+			deps[i].Statuses = append(deps[i].Statuses, DeploymentStatus{State: state, Creator: creator})
+		}
+	}
 }
 
 // state is the deployment's state at now.
@@ -180,7 +218,7 @@ func (s *Server) pushed(r *Repo, branch, before, after, pusher, kind string) {
 	if d, ok := f.deployOn[branch]; ok {
 		s.seq++
 		f.deployments = append(f.deployments, Deployment{
-			ID: s.seq, SHA: after, Ref: branch, Environment: d.environment, Created: s.now(), SettleAfter: d.settle,
+			ID: s.seq, SHA: after, Ref: branch, Environment: d.environment, Creator: actionsBot, Created: s.now(), SettleAfter: d.settle,
 		})
 	}
 }
@@ -275,7 +313,7 @@ func (s *Server) listDeployments(w http.ResponseWriter, req *http.Request, r *Re
 			continue
 		}
 		out = append(out, map[string]any{
-			"id": d.ID, "sha": d.SHA, "ref": d.Ref, "environment": d.Environment,
+			"id": d.ID, "sha": d.SHA, "ref": d.Ref, "environment": d.Environment, "creator": map[string]any{"login": d.Creator},
 			"created_at": d.Created.UTC().Format(time.RFC3339),
 		})
 	}
@@ -291,10 +329,15 @@ func (s *Server) deploymentStatuses(w http.ResponseWriter, req *http.Request, r 
 		return fail(w, http.StatusNotFound, "Not Found")
 	}
 	d := r.state().deployments[i]
-	out := []map[string]any{{"id": 2 * d.ID, "state": "pending", "environment": d.Environment, "created_at": d.Created.UTC().Format(time.RFC3339)}}
+	status := func(n int64, state, creator string) map[string]any {
+		return map[string]any{"id": n, "state": state, "environment": d.Environment, "creator": map[string]any{"login": creator}}
+	}
+	out := []map[string]any{status(1000*d.ID, "pending", d.Creator)}
 	if st := d.state(s.now()); st != "pending" {
-		settled := d.Created.Add(d.SettleAfter)
-		out = append([]map[string]any{{"id": 2*d.ID + 1, "state": st, "environment": d.Environment, "created_at": settled.UTC().Format(time.RFC3339)}}, out...)
+		out = append([]map[string]any{status(1000*d.ID+1, st, d.Creator)}, out...)
+	}
+	for j, st := range d.Statuses { // newest first, as GitHub lists them
+		out = append([]map[string]any{status(1000*d.ID+2+int64(j), st.State, st.Creator)}, out...)
 	}
 	return reply(w, http.StatusOK, s.paged(w, req, out))
 }
