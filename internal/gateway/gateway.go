@@ -106,6 +106,10 @@ type Deps struct {
 	// Verifications claims and reports verification tasks (G0 M7); nil
 	// makes no verification reads.
 	Verifications Verifications
+	// ReportFacts reports what the gateway reads from GitHub before a
+	// decision, as the connection's fact provider (G0 M8 decision 5); nil
+	// reads nothing.
+	ReportFacts dispatch.FactReporter
 	// Run is background work (certificate renewal, the containment stream,
 	// configuration sync); nil for none.
 	Run []func(ctx context.Context) error
@@ -144,6 +148,10 @@ func New(ctx context.Context, cfg *Config, id *control.Identity, log *slog.Logge
 			return err
 		},
 		Verifications: controlVerifications{ctl},
+		ReportFacts: func(ctx context.Context, conn string, obs []*pb.FactObservation) error {
+			_, err := ctl.Gateway.ReportFacts(ctx, &pb.ReportFactsRequest{ConnectionId: conn, Observations: obs})
+			return err
+		},
 	}
 	if cfg.Broker.KeyFile != "" {
 		key, err := broker.Load(ctx, cfg.Broker.KeyFile, cfg.Broker.KEKFiles)
@@ -170,7 +178,8 @@ func newGateway(cfg *Config, d Deps, log *slog.Logger) (*Gateway, error) {
 	o := dispatch.Options{
 		Org: d.Org, GatewayID: d.GatewayID, Authority: d.Authority, JWKSURL: d.JWKSURL, JWKSClient: d.JWKSClient,
 		Containment: d.Containment, AllowedPrefixes: prefixes, ReportCircuit: d.ReportCircuit, Log: log,
-		Approvers: proof.NewPinned(cfg.Approvals.ApproverKeysFile, d.Org),
+		Approvers:   proof.NewPinned(cfg.Approvals.ApproverKeysFile, d.Org),
+		ReportFacts: d.ReportFacts, FactTimeout: cfg.GitHub.FactTimeout.D(),
 	}
 	if d.Broker != nil {
 		o.Broker = d.Broker
