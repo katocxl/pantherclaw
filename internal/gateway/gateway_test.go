@@ -509,7 +509,7 @@ func setup(t *testing.T, opts ...func(*harness)) *harness {
 			h.revocations = append(h.revocations, conn+" "+purpose+" "+a.Repository)
 			return nil
 		},
-		Org:         testOrg, GatewayID: "gw-test",
+		Org: testOrg, GatewayID: "gw-test",
 		Authority: pantherclawv1connect.NewAuthorityServiceClient(connect.NewClient(connecthttp.NewTransport(hc, h.authorityURL))),
 		JWKSURL:   as.URL + "/.well-known/pantherclaw/jwks.json", JWKSClient: hc, Containment: h.containment,
 		Configuration: newFakeConfig(h.conn), Broker: h.broker,
