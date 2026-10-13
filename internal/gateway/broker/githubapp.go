@@ -51,21 +51,21 @@ var (
 	ErrScopeMismatch = errors.New("broker: GitHub granted a wider token than requested")
 )
 
-// ScopeMismatch is the error of a wider grant (errors.Is ErrScopeMismatch).
+// ScopeMismatchError is the error of a wider grant (errors.Is ErrScopeMismatch).
 // It carries what GitHub granted and whether the token was revoked, for
 // the execution receipt of the refused dispatch.
-type ScopeMismatch struct{ Access Access }
+type ScopeMismatchError struct{ Access Access }
 
-func (e *ScopeMismatch) Error() string { return ErrScopeMismatch.Error() }
+func (e *ScopeMismatchError) Error() string { return ErrScopeMismatch.Error() }
 
 // Is makes errors.Is(err, ErrScopeMismatch) hold.
-func (e *ScopeMismatch) Is(target error) bool { return target == ErrScopeMismatch }
+func (e *ScopeMismatchError) Is(target error) bool { return target == ErrScopeMismatch }
 
 // mismatch revokes a token GitHub granted too widely and returns the
 // error that carries its access.
 func (t *Installation) mismatch(ctx context.Context, s Sender) error {
 	_ = t.Revoke(ctx, s) // the receipt says whether it was; it expires within the hour anyway
-	return &ScopeMismatch{Access: t.access}
+	return &ScopeMismatchError{Access: t.access}
 }
 
 // Sender sends requests to the connection's host only: the connection's
