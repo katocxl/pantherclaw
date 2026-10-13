@@ -45,11 +45,11 @@ func (s *Server) describe(w http.ResponseWriter, r *http.Request) int {
 
 // accountID is a stable simulated GitHub id for an account login.
 func accountID(login string) int64 {
-	var n int64 = 1000
-	for _, c := range login {
-		n = n*31 + int64(c)
+	var n uint64 = 1000
+	for _, c := range []byte(login) {
+		n = n*31 + uint64(c)
 	}
-	return n%1_000_000_000 + 1
+	return int64(n%1_000_000_000) + 1 // positive, as GitHub's ids are
 }
 
 // installationRepositories answers GET /installation/repositories: the

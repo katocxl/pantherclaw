@@ -9,10 +9,15 @@
 // opaque tokens of GitHub's length, revocation, the installation and the
 // repositories it reaches), and repositories with settings, branches,
 // commits and files, written one commit at a time under GitHub's rule that
-// a workflow file needs the workflows permission. Every request is authenticated,
-// checked against the permission GitHub documents for its endpoint, and
-// recorded with the scope of the token it used, so tests can assert who
-// did what with which token. Every response is marked SIMULATED.
+// a workflow file needs the workflows permission; and what the gateway
+// reads as facts: branch rules, check runs, workflows, environments, a pull
+// request's commits and files, who pushed which ref, and deployments that a
+// push starts and that settle after a delay. Faults make the token endpoint
+// fail, stall or grant wider than asked, and a merge lose its answer. Every
+// request is authenticated, checked against the permission GitHub documents
+// for its endpoint, and recorded with the scope of the token it used, so
+// tests can assert who did what with which token. Every response is marked
+// SIMULATED.
 package github
 
 import (
@@ -24,7 +29,9 @@ import (
 	"log/slog"
 	"maps"
 	"net/http"
+	"net/url"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -105,6 +112,9 @@ type Server struct {
 	requests []Request
 	jwts     []AppJWT
 	seq      int64
+	faults   Faults
+	// perPage caps a page of a paged list below GitHub's 100 (tests).
+	perPage int
 }
 
 // New returns a simulator with no App, installation or repository.
@@ -191,6 +201,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /app/installations/{id}", s.installation)
 	mux.HandleFunc("GET /installation/repositories", s.installationRepositories)
 	s.repoRoutes(mux)
+	s.pullRoutes(mux)
+	s.factRoutes(mux)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Simulated", "true")
 		mux.ServeHTTP(w, r)
@@ -215,9 +227,9 @@ func (s *Server) guard(rt route) http.HandlerFunc {
 		s.mu.Lock()
 		defer s.mu.Unlock()
 		rec := Request{Method: r.Method, Path: r.URL.Path, Write: write}
-		status := s.serveRepo(w, r, rt, &rec)
-		rec.Status = status
-		s.requests = append(s.requests, rec)
+		// Recorded even when a fault drops the answer.
+		defer func() { s.requests = append(s.requests, rec) }()
+		rec.Status = s.serveRepo(w, r, rt, &rec)
 	}
 }
 
@@ -266,6 +278,59 @@ func actor(t *Token) string {
 		return t.User
 	}
 	return "pantherclaw-sim[bot]"
+}
+
+// account is a user object as GitHub answers it: login, id and type,
+// "Bot" for an App's [bot] account and "User" otherwise; null for "",
+// an email linked to no account.
+func account(login string) any {
+	if login == "" {
+		return nil
+	}
+	typ := "User"
+	if strings.HasSuffix(login, "[bot]") {
+		typ = "Bot"
+	}
+	return map[string]any{"login": login, "id": accountID(login), "type": typ}
+}
+
+// SetPageSize caps every page of a paged list at n items (n > 0), below
+// GitHub's maximum of 100, so tests can make a list run past one page.
+func (s *Server) SetPageSize(n int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.perPage = n
+}
+
+// paged answers the page of items that per_page (30 by default, at most
+// 100) and page ask for, as GitHub pages a list, and sets a Link header
+// naming the next and last pages while there are more.
+func (s *Server) paged(w http.ResponseWriter, req *http.Request, items []map[string]any) []map[string]any {
+	q := req.URL.Query()
+	per := 30
+	if n, err := strconv.Atoi(q.Get("per_page")); err == nil && n > 0 {
+		per = min(n, 100)
+	}
+	if s.perPage > 0 {
+		per = min(per, s.perPage)
+	}
+	page := 1
+	if n, err := strconv.Atoi(q.Get("page")); err == nil && n > 0 {
+		page = n
+	}
+	last := max((len(items)+per-1)/per, 1)
+	if page < last {
+		link := func(p int) string {
+			u := url.URL{Scheme: "http", Host: req.Host, Path: req.URL.Path}
+			v := maps.Clone(q)
+			v.Set("page", strconv.Itoa(p))
+			u.RawQuery = v.Encode()
+			return "<" + u.String() + ">"
+		}
+		w.Header().Set("Link", link(page+1)+`; rel="next", `+link(last)+`; rel="last"`)
+	}
+	from := min((page-1)*per, len(items))
+	return items[from:min(from+per, len(items))]
 }
 
 // fail answers an error as GitHub does and returns the status.
