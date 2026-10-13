@@ -102,11 +102,21 @@ func (inv *Inventory) SubmitScan(ctx context.Context, host string, findings []Sc
 			if err != nil {
 				return err
 			}
-			n, err := q.TouchScanDiscovery(ctx, dbq.TouchScanDiscoveryParams{Observed: obs, OrgID: c.Org, ScanKey: f.Key[:], Source: "scan"})
-			if err != nil {
+			// A finding dismissed for what it could do then reopens when that
+			// changes, as an org scan's does (#336 review); otherwise it is
+			// counted again.
+			var reopen ids.UUID
+			prior, err := q.GetScanDiscovery(ctx, c.Org, "scan", f.Key[:])
+			switch {
+			case db.IsNoRows(err):
+			case err != nil:
 				return err
-			}
-			if n > 0 {
+			case prior.State == "DISMISSED" && riskChanged(f.Kind, prior.Observed, observed):
+				reopen = prior.ID
+			default:
+				if _, err := q.TouchScanDiscovery(ctx, dbq.TouchScanDiscoveryParams{Observed: obs, OrgID: c.Org, ScanKey: f.Key[:], Source: "scan"}); err != nil {
+					return err
+				}
 				res.Counted++
 				continue
 			}
@@ -114,14 +124,23 @@ func (inv *Inventory) SubmitScan(ctx context.Context, host string, findings []Sc
 				res.Dropped++
 				continue
 			}
-			if err := insertFinding(ctx, q, c.Org, discoverer{by: c.Principal.String(), actor: actor(c), source: "scan"}, f, obs, observed, ids.UUID{}); err != nil {
+			if err := insertFinding(ctx, q, c.Org, discoverer{by: c.Principal.String(), actor: actor(c), source: "scan"}, f, obs, observed, reopen); err != nil {
 				return err
 			}
 			open++
 			res.Created++
+			if !reopen.IsZero() {
+				res.Reopened++
+				if err := record(ctx, tx, c, "agents.discovery_reopened", prior.AgentID, map[string]string{
+					"discovery": reopen.String(), "kind": f.Kind, "source": "scan",
+				}); err != nil {
+					return err
+				}
+			}
 		}
 		return record(ctx, tx, c, "agents.scan_submitted", ids.UUID{}, map[string]string{
 			"created": strconv.Itoa(res.Created), "counted": strconv.Itoa(res.Counted), "dropped": strconv.Itoa(res.Dropped),
+			"reopened": strconv.Itoa(res.Reopened),
 		})
 	})
 	if err != nil {

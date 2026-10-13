@@ -442,3 +442,40 @@ func TestHR209_ScansStartOneAtATimeAndAnExpiredOneIsStoredFailed(t *testing.T) {
 		t.Fatalf("%d scan runs stored FAILED", got)
 	}
 }
+
+// TestHR209_ADismissedLocalFindingReopensToo (#336 review): a person's
+// local scan finding dismissed for what it was reopens when what it may
+// do changes (a new command, env or header names), audited, as an org
+// scan finding does; seen again unchanged, it is only counted.
+func TestHR209_ADismissedLocalFindingReopensToo(t *testing.T) {
+	e := newEnv(t)
+	inv := aapp.NewInventory(e.pool, edition(billing.Team))
+	person := e.caller(td.KindUser, td.RoleAgentOwner)
+	submit := func(attrs map[string]string) aapp.ScanResult {
+		t.Helper()
+		r, err := inv.SubmitScan(person, "laptop", []aapp.ScanFinding{{Kind: "mcp_server", Key: [32]byte{7}, Attributes: attrs}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return r
+	}
+	before := map[string]string{"client": "claude", "config": ".mcp.json", "name": "github", "transport": "stdio", "command": "npx"}
+	if r := submit(before); r.Created != 1 {
+		t.Fatalf("first %+v", r)
+	}
+	e.exec(t, "UPDATE pc.discoveries SET state = 'DISMISSED' WHERE org_id = $1 AND source = 'scan'", e.org)
+	if r := submit(before); r.Counted != 1 || r.Reopened != 0 {
+		t.Fatalf("the same server again %+v", r)
+	}
+	after := maps.Clone(before)
+	after["env_names"] = "GITHUB_TOKEN"
+	if r := submit(after); r.Created != 1 || r.Reopened != 1 {
+		t.Fatalf("a server that now reads a token %+v", r)
+	}
+	if n := e.count(t, "SELECT count(*) FROM pc.discoveries WHERE org_id = $1 AND source = 'scan' AND state = 'OPEN'", e.org); n != 1 {
+		t.Fatalf("%d reopened findings", n)
+	}
+	if n := e.count(t, "SELECT count(*) FROM pc.ledger_entries WHERE org_id = $1 AND kind = 'audit.agents.discovery_reopened'", e.org); n != 1 {
+		t.Fatalf("%d reopen events", n)
+	}
+}

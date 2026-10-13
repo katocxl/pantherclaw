@@ -134,6 +134,9 @@ var materialKeys = map[string][]string{
 		"headers_incomplete",
 	},
 	"github_app": {"permissions", "permissions_incomplete", "repository_selection"},
+	// A person's local scan (#336 review).
+	"mcp_server":    {"transport", "command", "url_host", "env_names", "header_names"},
+	"agent_project": {"frameworks", "manifest"},
 }
 
 // riskChanged reports whether a finding's material attributes differ from
