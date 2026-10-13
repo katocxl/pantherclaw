@@ -13,11 +13,13 @@ import (
 
 // TestHR203_GitHubTokensNeverReachALog: a GitHub token anywhere in a
 // string, an error or a structured value is redacted, including a
-// stateless installation token of about 520 characters, under keys that
-// do not look sensitive.
+// stateless installation token of about 520 characters and one with
+// structure, whole, under keys that do not look sensitive.
 func TestHR203_GitHubTokensNeverReachALog(t *testing.T) {
 	installation := "ghs_" + strings.Repeat("Ab9_", 129) // 520 characters
-	tokens := []string{installation, "ghp_" + strings.Repeat("x", 36), "github_pat_" + strings.Repeat("Y1", 40), "gho_" + strings.Repeat("z", 36)}
+	// A token with structure: base64url, base64 and JWT characters inside.
+	structured := "ghs_" + strings.Repeat("Ab9_", 8) + "." + strings.Repeat("c-D+", 8) + "/e=" + strings.Repeat("F", 20)
+	tokens := []string{installation, structured, "ghp_" + strings.Repeat("x", 36), "github_pat_" + strings.Repeat("Y1", 40), "gho_" + strings.Repeat("z", 36)}
 	var buf bytes.Buffer
 	l := newTestLogger(&buf)
 	for _, tok := range tokens {
@@ -30,7 +32,7 @@ func TestHR203_GitHubTokensNeverReachALog(t *testing.T) {
 	}
 	out := buf.String()
 	for _, tok := range tokens {
-		if strings.Contains(out, tok[:20]) {
+		if strings.Contains(out, tok[:20]) || strings.Contains(out, tok[len(tok)-20:]) {
 			t.Fatalf("a token reached the log: %s", out)
 		}
 	}

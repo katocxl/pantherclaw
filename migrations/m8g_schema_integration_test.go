@@ -81,3 +81,37 @@ func TestHR203_ConnectionGitHubIsOnePerConnection(t *testing.T) {
 	f.want(t, m5Unique, "a second installation for the connection", ins, f.org, f.connection, "acme", nil, nil)
 	f.want(t, m5Denied, "DELETE connection_github", "DELETE FROM pc.connection_github")
 }
+
+// TestHR209_FindingsAreKeyedWithinTheirSource: a person's scan and the
+// gateway's org scan may report the same key without sharing a row, so
+// neither can overwrite or pre-seed the other's finding; within one source
+// a key is one finding.
+func TestHR209_FindingsAreKeyedWithinTheirSource(t *testing.T) {
+	d := dbtest.New(t)
+	f := newM7Fixture(t, d.AppPool(t))
+	const insert = `INSERT INTO pc.discoveries (org_id, id, agent_id, source, scan_key) VALUES ($1, $2, $3, $4, $5)`
+	key := m5Secret(11)
+	f.mustExec(t, insert, f.org, m5ID(), f.agent, "scan", key)
+	f.mustExec(t, insert, f.org, m5ID(), f.agent, "github_scan", key)
+	f.want(t, m5Unique, "one gateway finding twice", insert, f.org, m5ID(), f.agent, "github_scan", key)
+	f.want(t, m5Unique, "one person finding twice", insert, f.org, m5ID(), f.agent, "scan", key)
+}
+
+// TestHR209_ScanRunsOnlyMoveForward: a running scan does not go back to
+// pending, a finished one never changes, and a run keeps its lease.
+func TestHR209_ScanRunsOnlyMoveForward(t *testing.T) {
+	d := dbtest.New(t)
+	f := newM7Fixture(t, d.AppPool(t))
+	lease := m5ID()
+	f.mustExec(t, m7Verification, f.org, lease, "org_scan", nil, f.connection, nil, nil)
+	run := m5ID()
+	f.mustExec(t, `INSERT INTO pc.github_scan_runs (org_id, id, connection_id, started_by) VALUES ($1, $2, $3, 'test')`, f.org, run, f.connection)
+	f.mustExec(t, `UPDATE pc.github_scan_runs SET state = 'RUNNING', verification_id = $2 WHERE id = $1`, run, lease)
+	f.want(t, m5Check, "back to pending", `UPDATE pc.github_scan_runs SET state = 'PENDING' WHERE id = $1`, run)
+	other := m5ID()
+	f.mustExec(t, m7Verification, f.org, other, "org_scan", nil, f.connection, nil, nil)
+	f.want(t, m5Check, "another lease", `UPDATE pc.github_scan_runs SET verification_id = $2 WHERE id = $1`, run, other)
+	f.mustExec(t, `UPDATE pc.github_scan_runs SET state = 'FAILED', finished_at = now() WHERE id = $1`, run)
+	f.want(t, m5Check, "a failed run reported done", `UPDATE pc.github_scan_runs SET state = 'DONE' WHERE id = $1`, run)
+	f.want(t, m5Check, "a finished run's counts", `UPDATE pc.github_scan_runs SET counts = '{"x":1}' WHERE id = $1`, run)
+}
