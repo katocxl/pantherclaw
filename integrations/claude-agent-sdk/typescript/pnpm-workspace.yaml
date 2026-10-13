@@ -1,0 +1,9 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Joshua Kato
+
+# pnpm settings for this package's development install (DEPENDENCY_POLICY §2).
+# Releases younger than 7 days are never resolved, and no dependency's
+# lifecycle scripts run.
+minimumReleaseAge: 10080
+onlyBuiltDependencies: []
+strictDepBuilds: false

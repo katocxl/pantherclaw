@@ -22,3 +22,7 @@ paths = [
 [[allowlists]]
 description = "Development-only Keycloak realm (bound to 127.0.0.1): its client secret and user passwords are published placeholders, never used outside local development."
 paths = ['''^deploy/keycloak/realm-pantherclaw\.json$''']
+
+[[allowlists]]
+description = "uv's git-ignored virtual environments (uv run in task sdk:check creates them): installed third-party packages, never committed."
+paths = ['''(^|/)\.venv/''']
