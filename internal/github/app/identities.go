@@ -45,6 +45,8 @@ var (
 	ErrProof = pcerr.New(pcerr.InvalidArgument, "GITHUB_SIGN_IN_REFUSED", "GitHub did not accept the sign-in")
 	// ErrNoSignIn: the server cannot ask GitHub who signed in.
 	ErrNoSignIn = pcerr.New(pcerr.Unavailable, "GITHUB_SIGN_IN_UNAVAILABLE", "GitHub sign-in is not configured on this server")
+	// ErrGitHubUnavailable: GitHub did not say who signed in.
+	ErrGitHubUnavailable = pcerr.New(pcerr.Unavailable, "GITHUB_UNAVAILABLE", "GitHub could not be asked who signed in; try again")
 )
 
 // Identity is one link.
@@ -75,6 +77,26 @@ type Service struct {
 	Verifier Verifier
 	// Notify sends the notice of each link change; nil sends none.
 	Notify Notifier
+	// SignIn is where pclaw sends people to sign in to GitHub.
+	SignIn SignIn
+}
+
+// SignIn is the GitHub App's device flow: its client id and GitHub's web
+// origin. An empty client id means GitHub sign-in is off.
+type SignIn struct {
+	ClientID, WebURL string
+}
+
+// SignInConfig returns where to sign in to GitHub to link an account, to a
+// person who may (github.identity.prove).
+func (s *Service) SignInConfig(ctx context.Context) (SignIn, error) {
+	if _, err := person(ctx, td.PermGitHubIdentityProve); err != nil {
+		return SignIn{}, err
+	}
+	if s.SignIn.ClientID == "" || s.Verifier == nil {
+		return SignIn{}, ErrNoSignIn
+	}
+	return s.SignIn, nil
 }
 
 // person is the caller, when a person holding perm.

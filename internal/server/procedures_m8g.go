@@ -15,10 +15,14 @@ import (
 // identity links independence compares.
 // TestProcedurePermissionsMatchProtos checks the merged map.
 var m8gProcedures = map[string]td.Permission{
-	pantherclawv1connect.GatewayServiceReportFactsProcedure:   td.PermGatewayFactsReport,
-	pantherclawv1connect.GitHubServiceProveIdentityProcedure:  td.PermGitHubIdentityProve,
-	pantherclawv1connect.GitHubServiceUnlinkIdentityProcedure: td.PermGitHubIdentityManage,
-	pantherclawv1connect.GitHubServiceListIdentitiesProcedure: td.PermUserRead,
+	pantherclawv1connect.GatewayServiceReportFactsProcedure:    td.PermGatewayFactsReport,
+	pantherclawv1connect.GitHubServiceProveIdentityProcedure:   td.PermGitHubIdentityProve,
+	pantherclawv1connect.GitHubServiceGetSignInProcedure:       td.PermGitHubIdentityProve,
+	pantherclawv1connect.GitHubServiceUnlinkIdentityProcedure:  td.PermGitHubIdentityManage,
+	pantherclawv1connect.GitHubServiceListIdentitiesProcedure:  td.PermUserRead,
+	pantherclawv1connect.GitHubServiceExemptAccountProcedure:   td.PermGitHubIdentityManage,
+	pantherclawv1connect.GitHubServiceRemoveExemptionProcedure: td.PermGitHubIdentityManage,
+	pantherclawv1connect.GitHubServiceListExemptionsProcedure:  td.PermUserRead,
 }
 
 func init() { maps.Copy(procedurePermissions, m8gProcedures) }

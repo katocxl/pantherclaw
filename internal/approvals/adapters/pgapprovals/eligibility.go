@@ -14,6 +14,7 @@ import (
 	"encoding/json/v2"
 	"fmt"
 	"slices"
+	"strings"
 	"time"
 
 	apdomain "github.com/katocxl/pantherclaw/internal/approvals/domain"
@@ -306,6 +307,13 @@ func peopleLists(ctx context.Context, q *dbq.Queries, org ids.OrgID, request ids
 			for _, k := range former {
 				l.Formerly(k.GithubUserID, k.UserID)
 			}
+			exempt, err := q.ExemptGitHubUsers(ctx, org, ghIDs)
+			if err != nil {
+				return nil, err
+			}
+			for _, x := range exempt {
+				l.Exempted(x.GithubUserID, userOf(x.CreatedBy))
+			}
 		}
 		out = append(out, l)
 	}
@@ -338,4 +346,14 @@ func snapshotLinkedPeople(ctx context.Context, q *dbq.Queries, org ids.OrgID, re
 		}
 	}
 	return nil
+}
+
+// userOf is the user a principal string ("user:<id>") names; the zero id
+// for anything else.
+func userOf(principal string) ids.UUID {
+	id, err := ids.ParseUUID(strings.TrimPrefix(principal, "user:"))
+	if err != nil || !strings.HasPrefix(principal, "user:") {
+		return ids.UUID{}
+	}
+	return id
 }

@@ -106,7 +106,30 @@ CREATE POLICY tenant_isolation ON pc.github_identity_history
 GRANT SELECT, INSERT ON pc.github_identity_history TO pc_app;
 GRANT SELECT ON pc.github_identity_history TO pc_audit_ro;
 
+-- github_exemptions are the GitHub accounts an admin registered as not a
+-- person (a bot or a machine user, founder decision 2026-10-13): linked to
+-- nobody, they do not stop the approvals of pull requests they worked on,
+-- as an unlinked person does (GITHUB_PEOPLE_NOT_LINKED). Every change is
+-- audited.
+CREATE TABLE pc.github_exemptions (
+    org_id         uuid        NOT NULL REFERENCES pc.orgs (id),
+    github_user_id bigint      NOT NULL CHECK (github_user_id > 0),
+    github_login   text        NOT NULL CHECK (github_login ~ '^[A-Za-z0-9][A-Za-z0-9-]{0,38}(\[bot\])?$'),
+    reason         text        NOT NULL CHECK (char_length(reason) BETWEEN 1 AND 256),
+    created_by     text        NOT NULL CHECK (char_length(created_by) BETWEEN 1 AND 128),
+    created_at     timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (org_id, github_user_id)
+);
+ALTER TABLE pc.github_exemptions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE pc.github_exemptions FORCE ROW LEVEL SECURITY;
+CREATE POLICY tenant_isolation ON pc.github_exemptions
+    USING (org_id = (SELECT NULLIF(current_setting('app.org_id', true), '')::uuid))
+    WITH CHECK (org_id = (SELECT NULLIF(current_setting('app.org_id', true), '')::uuid));
+GRANT SELECT, INSERT, DELETE ON pc.github_exemptions TO pc_app;
+GRANT SELECT ON pc.github_exemptions TO pc_audit_ro;
+
 -- +goose Down
+DROP TABLE pc.github_exemptions;
 DROP TABLE pc.github_identity_history;
 DROP TABLE pc.approval_request_linked_people;
 ALTER TABLE pc.github_identities DROP CONSTRAINT github_identities_verified;

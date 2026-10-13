@@ -131,10 +131,12 @@ func TestHR207_AGitHubReviewerNeedsAProvenLinkAndStaysExcluded(t *testing.T) {
 	if got := check(bob); got != apdomain.IneligibleAuthor {
 		t.Fatalf("the author, linked to another account: %q", got)
 	}
-	// frank links an account the fact does not list: now he may review.
+	// frank links an account the fact does not list. While the author's
+	// account 42 is linked to nobody, nobody counts (founder decision
+	// 2026-10-13): it could be frank's too.
 	link(frank, 46)
-	if got := check(frank); got != "" {
-		t.Fatalf("frank, linked: %q", got)
+	if got := check(frank); got != apdomain.IneligiblePeopleNotLinked {
+		t.Fatalf("frank, linked, while 42 is linked to nobody: %q", got)
 	}
 
 	// grace now holds the author's account. On a request held after that, the
@@ -147,10 +149,14 @@ func TestHR207_AGitHubReviewerNeedsAProvenLinkAndStaysExcluded(t *testing.T) {
 			t.Errorf("%s: %q", name, got)
 		}
 	}
+	if got := check(frank); got != "" {
+		t.Fatalf("frank, with everyone the fact lists linked: %q", got)
+	}
 	exec(t, w.pool, w.org, "DELETE FROM pc.github_identities WHERE user_id = $1", grace)
 	if got := check(grace); got != apdomain.IneligibleAuthor {
 		t.Fatalf("grace, unlinked by a manager: %q", got)
 	}
+	link(grace, 42) // so that nobody the fact lists is linked to nobody
 
 	// Through the Authority (review 2026-10-13): an approval by a code reviewer
 	// without a GitHub link is voided when it is used (NOT_ELIGIBLE), the

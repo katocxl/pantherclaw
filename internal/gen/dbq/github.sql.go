@@ -11,8 +11,28 @@ package dbq
 import (
 	"context"
 
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 )
+
+const deleteGitHubExemption = `-- name: DeleteGitHubExemption :one
+DELETE FROM pc.github_exemptions WHERE org_id = $1 AND github_user_id = $2
+RETURNING org_id, github_user_id, github_login, reason, created_by, created_at
+`
+
+func (q *Queries) DeleteGitHubExemption(ctx context.Context, orgID ids.OrgID, githubUserID int64) (PcGithubExemption, error) {
+	row := q.db.QueryRow(ctx, deleteGitHubExemption, orgID, githubUserID)
+	var i PcGithubExemption
+	err := row.Scan(
+		&i.OrgID,
+		&i.GithubUserID,
+		&i.GithubLogin,
+		&i.Reason,
+		&i.CreatedBy,
+		&i.CreatedAt,
+	)
+	return i, err
+}
 
 const deleteGitHubIdentity = `-- name: DeleteGitHubIdentity :one
 DELETE FROM pc.github_identities WHERE org_id = $1 AND id = $2
@@ -75,6 +95,56 @@ func (q *Queries) GitHubIdentityByGitHubUser(ctx context.Context, orgID ids.OrgI
 	return i, err
 }
 
+const gitHubUserEverLinked = `-- name: GitHubUserEverLinked :one
+SELECT EXISTS (SELECT 1 FROM pc.github_identity_history h WHERE h.org_id = $1 AND h.github_user_id = $2)
+    OR EXISTS (SELECT 1 FROM pc.github_identities i WHERE i.org_id = $1 AND i.github_user_id = $2)
+`
+
+// Whether someone ever proved the GitHub account as their own, or holds a
+// link to it now: then it is a person and is never exempted.
+func (q *Queries) GitHubUserEverLinked(ctx context.Context, orgID ids.OrgID, githubUserID int64) (pgtype.Bool, error) {
+	row := q.db.QueryRow(ctx, gitHubUserEverLinked, orgID, githubUserID)
+	var column_1 pgtype.Bool
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
+const insertGitHubExemption = `-- name: InsertGitHubExemption :one
+INSERT INTO pc.github_exemptions (org_id, github_user_id, github_login, reason, created_by)
+VALUES ($1, $2, $3, $4, $5)
+RETURNING org_id, github_user_id, github_login, reason, created_by, created_at
+`
+
+type InsertGitHubExemptionParams struct {
+	OrgID        ids.OrgID
+	GithubUserID int64
+	GithubLogin  string
+	Reason       string
+	CreatedBy    string
+}
+
+// An account an admin registers as not a person (founder decision
+// 2026-10-13); one registered already is refused.
+func (q *Queries) InsertGitHubExemption(ctx context.Context, arg InsertGitHubExemptionParams) (PcGithubExemption, error) {
+	row := q.db.QueryRow(ctx, insertGitHubExemption,
+		arg.OrgID,
+		arg.GithubUserID,
+		arg.GithubLogin,
+		arg.Reason,
+		arg.CreatedBy,
+	)
+	var i PcGithubExemption
+	err := row.Scan(
+		&i.OrgID,
+		&i.GithubUserID,
+		&i.GithubLogin,
+		&i.Reason,
+		&i.CreatedBy,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const insertGitHubIdentity = `-- name: InsertGitHubIdentity :one
 
 INSERT INTO pc.github_identities (org_id, id, user_id, github_login, github_user_id, linked_by, verified_at)
@@ -130,6 +200,38 @@ ON CONFLICT DO NOTHING
 func (q *Queries) InsertGitHubIdentityHistory(ctx context.Context, orgID ids.OrgID, githubUserID int64, userID ids.UUID) error {
 	_, err := q.db.Exec(ctx, insertGitHubIdentityHistory, orgID, githubUserID, userID)
 	return err
+}
+
+const listGitHubExemptions = `-- name: ListGitHubExemptions :many
+SELECT org_id, github_user_id, github_login, reason, created_by, created_at FROM pc.github_exemptions WHERE org_id = $1 ORDER BY github_login, github_user_id
+LIMIT $2
+`
+
+func (q *Queries) ListGitHubExemptions(ctx context.Context, orgID ids.OrgID, maxRows int32) ([]PcGithubExemption, error) {
+	rows, err := q.db.Query(ctx, listGitHubExemptions, orgID, maxRows)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []PcGithubExemption{}
+	for rows.Next() {
+		var i PcGithubExemption
+		if err := rows.Scan(
+			&i.OrgID,
+			&i.GithubUserID,
+			&i.GithubLogin,
+			&i.Reason,
+			&i.CreatedBy,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listGitHubIdentities = `-- name: ListGitHubIdentities :many
