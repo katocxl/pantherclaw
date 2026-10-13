@@ -247,7 +247,7 @@ func claudeInit(_ context.Context, a *app, args []string) error {
 	}
 	report(a, home, f.project, settings, managed)
 	target := settings[slices.IndexFunc(settings, func(s claudeSettings) bool { return s.scope == f.scope })]
-	if err := hookBlocked(managed, target); err != nil {
+	if err := hookBlocked(managed, settings, target); err != nil {
 		return &exitError{code: 1, msg: "pclaw init: " + err.Error()}
 	}
 	if slices.ContainsFunc(managed, func(s claudeSettings) bool { return hookRuns(s.doc) }) || hookRuns(target.doc) {
@@ -292,9 +292,10 @@ func (f initFlags) hookEntry() (*jsonNode, error) {
 }
 
 // hookBlocked says why the hook would not run: managed settings that allow
-// only managed hooks or disable every hook, or a target file that disables
-// its scope's hooks.
-func hookBlocked(managed []claudeSettings, target claudeSettings) error {
+// only managed hooks or disable every hook, a target file that disables
+// its scope's hooks, or another settings file that turns every hook off
+// and wins, because no file Claude Code prefers to it sets disableAllHooks.
+func hookBlocked(managed, settings []claudeSettings, target claudeSettings) error {
 	for _, m := range managed {
 		switch {
 		case m.doc.get("disableAllHooks").bool():
@@ -307,6 +308,29 @@ func hookBlocked(managed []claudeSettings, target claudeSettings) error {
 	if target.doc.get("disableAllHooks").bool() {
 		return fmt.Errorf("%s disables its hooks (disableAllHooks); pclaw init never changes that setting, so remove it yourself "+
 			"or choose another --scope", target.path)
+	}
+	if s := settingFrom("disableAllHooks", managed, settings); s != nil && s.doc.get("disableAllHooks").bool() {
+		return fmt.Errorf("%s turns every hook off (disableAllHooks), and no settings file Claude Code prefers to it turns them back on, "+
+			"so the PantherClaw hook would never run; pclaw init never changes that setting, so change it yourself", s.path)
+	}
+	return nil
+}
+
+// settingFrom is the settings file whose value of a true-or-false setting
+// Claude Code applies, or nil when none sets it. Claude Code takes such a
+// setting from the first file that sets it: managed settings, then local,
+// project and user.
+func settingFrom(name string, managed, settings []claudeSettings) *claudeSettings {
+	ordered := slices.Clone(managed)
+	for _, scope := range []string{"local", "project", "user"} {
+		if i := slices.IndexFunc(settings, func(s claudeSettings) bool { return s.scope == scope }); i >= 0 {
+			ordered = append(ordered, settings[i])
+		}
+	}
+	for i, s := range ordered {
+		if v := s.doc.get(name); v != nil && v.kind == 0 && (v.raw.Kind() == 't' || v.raw.Kind() == 'f') {
+			return &ordered[i]
+		}
 	}
 	return nil
 }

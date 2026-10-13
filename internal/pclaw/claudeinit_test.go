@@ -331,6 +331,57 @@ func TestHR208_InitCountsOnlyAFailClosedPantherClawHook(t *testing.T) {
 	}
 }
 
+// TestHR208_InitRefusesHooksTurnedOffInAnotherScope: Claude Code takes
+// disableAllHooks from the first settings file that sets it (managed,
+// local, project, user), so a file of another scope that turns every hook
+// off fails init and changes nothing, unless a file Claude Code prefers to
+// it turns them back on.
+func TestHR208_InitRefusesHooksTurnedOffInAnotherScope(t *testing.T) {
+	const off, on = `{"disableAllHooks": true}`, `{"disableAllHooks": false}`
+	for name, tc := range map[string]struct {
+		user, project, local, managed, scope, offIn string
+	}{
+		"user turns them off":          {user: off, offIn: "user"},
+		"project turns them off":       {project: off, offIn: "project"},
+		"local, for the project scope": {local: off, scope: "project", offIn: "local"},
+		"local turns them back on":     {user: off, local: on},
+		"project turns them back on":   {user: off, project: on},
+		"managed turns them back on":   {project: off, managed: on},
+		"user, for the project scope":  {user: off, scope: "project", offIn: "user"},
+	} {
+		f := newInitFixture(t)
+		paths := map[string]string{
+			"user": filepath.Join(f.home, ".claude", "settings.json"), "project": filepath.Join(f.project, ".claude", "settings.json"),
+			"local": f.local(), "managed": f.managed,
+		}
+		written := map[string]string{"user": tc.user, "project": tc.project, "local": tc.local, "managed": tc.managed}
+		for scope, content := range written {
+			if content != "" {
+				f.write(t, paths[scope], content)
+			}
+		}
+		args := []string{}
+		if tc.scope != "" {
+			args = append(args, "--scope", tc.scope)
+		}
+		code, out, errs := f.run(t, args...)
+		if tc.offIn == "" {
+			if code != 0 {
+				t.Errorf("%s: %d %s %s", name, code, out, errs)
+			}
+			continue
+		}
+		if code != 1 || !strings.Contains(errs, paths[tc.offIn]+" turns every hook off") {
+			t.Errorf("%s: %d %s %s", name, code, out, errs)
+		}
+		for scope, path := range paths {
+			if now, err := os.ReadFile(path); (written[scope] == "" && err == nil) || (written[scope] != "" && string(now) != written[scope]) {
+				t.Errorf("%s: %s changed: %q", name, scope, now)
+			}
+		}
+	}
+}
+
 // TestHR208_InitAlwaysReadsThePlatformsManagedSettings: --managed-settings
 // adds a file to the platform's managed settings and never replaces them,
 // so pointing it at the null device skips no managed check, drop-ins
