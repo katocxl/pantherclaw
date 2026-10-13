@@ -172,5 +172,16 @@ func connectionCommands() map[string]command {
 				return c.connections.GetConnectionCapabilities(ctx, &pb.GetConnectionCapabilitiesRequest{Id: a[0]})
 			}
 		}),
+		"connection test": rpc("connection test ID [--kind credential|read|target_verifier]", 1, func(fs *flag.FlagSet) call {
+			kind := fs.String("kind", "credential", "credential (at once, without calling the target), read (the package's test read, run by the gateway) or target_verifier (that read, refused without a valid action token)")
+			return func(ctx context.Context, c clients, a []string) (proto.Message, error) {
+				return c.connections.TestConnection(ctx, &pb.TestConnectionRequest{Id: a[0], Kind: *kind})
+			}
+		}),
+		"connection health": rpc("connection health ID", 1, func(*flag.FlagSet) call {
+			return func(ctx context.Context, c clients, a []string) (proto.Message, error) {
+				return c.connections.GetConnectionHealth(ctx, &pb.GetConnectionHealthRequest{Id: a[0]})
+			}
+		}),
 	}
 }

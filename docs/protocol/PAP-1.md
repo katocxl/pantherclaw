@@ -234,7 +234,7 @@ Receipts are Ed25519-signed; the format reserves `sigs[]` for an additional ML-D
 
 ## 10. Target-enforced mode (action tokens)
 
-For targets that run PantherClaw verifier middleware, the gateway attaches `PAP-Action: <JWS>`. The Authority mints it at `BeginDispatch` (§7.3) with its `action_tokens` key, published in the JWKS, over the outbound body hash the gateway reported; the audience is the connection the target is registered as:
+For targets that run PantherClaw verifier middleware, the gateway attaches `PAP-Action: <JWS>`. The Authority mints it at `BeginDispatch` (§7.3), and nowhere else except for the test tokens below, with its `action_tokens` key, published in the JWKS, over the outbound body hash the gateway reported; the audience is the connection the target is registered as:
 
 ```json
 {"iss": "…", "aud": "<connection id>", "jti": "<single use>", "iat": …, "exp": "≤ 60 s",
@@ -244,6 +244,8 @@ For targets that run PantherClaw verifier middleware, the gateway attaches `PAP-
 
 The verifier MUST check signature (JWKS), `aud`, expiry, `bh` against the received body, single use of `jti` in a **shared** replay store, and that the requested operation/target match. Only then may the route be counted as `ENFORCED` for cooperative (SDK) modes.
 
+**Test tokens** (HR-188's one exception, G0 M8 N15). For a `target_verifier` connection test, the server also mints test-purpose tokens: only under the calling gateway's live lease of that test, once per lease attempt (at most three per test), and expiring no later than the lease. In a test token, `pap.txn` is the connection test id, not a transaction id. `pap.op` is the connection package's `test: true` read, `pap.target` is the connection itself (`{"type": "pc.connection", "id": "<connection id>"}`), and `bh` binds an empty body (a second token binds another body, which the verifier must refuse). Verifiers MUST match operation and target for these tokens as for any other, so a test token never authorizes another operation or target, and SHOULD refuse a test token on anything but the bodiless `GET` it binds.
+
 Encoding as implemented since M6 (pinned by G0 M8; the conformance vectors in `sdk/conformance` fix it byte for byte):
 - **Header:** `{"alg": "EdDSA", "kid": "action-tokens-<first 22 characters of the key's RFC 7638 thumbprint>", "typ": "pap-action+jwt"}`. Verifiers accept only keys of the `action_tokens` purpose; a key of another purpose never verifies an action token. Verifiers also accept the fully-specified name `Ed25519` (RFC 9864) for the same keys; PantherClaw emits `EdDSA`.
 - **Claims:**
@@ -251,7 +253,7 @@ Encoding as implemented since M6 (pinned by G0 M8; the conformance vectors in `s
   - `aud` is the connection id (a UUID string).
   - `jti` is a UUIDv7 string.
   - `iat` and `exp` are integer seconds, with `exp − iat` ≤ 60.
-  - `pap.v` is `1`, and `pap.txn` is the transaction id.
+  - `pap.v` is `1`, and `pap.txn` is the transaction id (a test token's is the connection test id).
   - `pap.act` is the effective action hash and `pap.bh` the SHA-256 of the exact outbound body. Both are **lowercase hexadecimal**, unlike the base64url `bh` and `ath` of a request proof (§4) and the base64url hashes in an approval binding (§8).
   - `pap.op` is the operation, and `pap.target` is `{type, id}`.
 - **Verification order:** read the body (bounded), then check the JWS, `iss`, `aud`, lifetime (5 seconds of clock skew), `pap.v`, `bh`, operation and target. Insert `jti` only after all of these pass (as §4 does for proofs). A store or JWKS that cannot be reached refuses the request.
