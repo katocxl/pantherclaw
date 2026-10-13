@@ -57,12 +57,18 @@ const (
 const deployOnMain = "name: deploy\non:\n  push:\n    branches: [main]\njobs:\n  deploy:\n    runs-on: ubuntu-latest\n" +
 	"    environment: production\n    steps: [{run: make deploy}]\n"
 
-// githubSim is the GitHub simulator of a stack (options.github).
+// githubSim is the GitHub a stack's connection "github" calls
+// (options.github): the simulator, or, for task test:github-live, GitHub
+// itself, with sim nil. app, installation and account name its App; repo
+// is the repository the agent works in.
 type githubSim struct {
-	sim  *github.Server
-	url  string
-	conn ids.UUID
-	key  *rsa.PrivateKey
+	sim          *github.Server
+	url          string
+	conn         ids.UUID
+	key          *rsa.PrivateKey
+	app, account string
+	installation int64
+	repo         string
 }
 
 // startGitHubSim starts the GitHub simulator: the App, installed on acme
@@ -81,7 +87,7 @@ func startGitHubSim(t *testing.T) *githubSim {
 	sim.CreateRepo(ghRepo, "main", map[string]string{"README.md": "# payments\n", ".github/workflows/deploy.yml": deployOnMain})
 	srv := httptest.NewServer(sim.Handler())
 	t.Cleanup(srv.Close)
-	return &githubSim{sim: sim, url: srv.URL, key: key}
+	return &githubSim{sim: sim, url: srv.URL, key: key, app: ghAppID, installation: ghInstallation, account: ghAccount, repo: ghRepo}
 }
 
 // sealGitHubApp seals the App's key for the github connection, with its
@@ -100,7 +106,7 @@ func (s *stack) sealGitHubApp(t *testing.T) int64 {
 		t.Fatal(err)
 	}
 	pemKey := pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(s.gh.key)})
-	plain, err := creddomain.GitHubApp{V: 1, Issuer: ghAppID, Installation: ghInstallation, Account: ghAccount, PrivateKey: pemKey}.Encode()
+	plain, err := creddomain.GitHubApp{V: 1, Issuer: s.gh.app, Installation: s.gh.installation, Account: s.gh.account, PrivateKey: pemKey}.Encode()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -114,7 +120,7 @@ func (s *stack) sealGitHubApp(t *testing.T) int64 {
 	if _, err := svc.PutCredential(admin.ctx, credapp.PutInput{
 		Connection: s.gh.conn, BrokerKey: mustUUID(t, b.BrokerKey), Version: b.Version, Sealed: sealed, AllowedHosts: b.AllowedHosts,
 		Header: b.Header, Scheme: b.Scheme, Kind: creddomain.KindGitHubApp,
-		GitHub: &creddomain.Installation{AppClientID: ghAppID, ID: ghInstallation, Account: ghAccount},
+		GitHub: &creddomain.Installation{AppClientID: s.gh.app, ID: s.gh.installation, Account: s.gh.account},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -155,7 +161,7 @@ func (s *stack) ghCall(t *testing.T, method, path, body string, act ids.UUID) (i
 // ghMerge asks to merge pull request number at sha over the REST face.
 func (s *stack) ghMerge(t *testing.T, act ids.UUID, number int, sha string) (int, reply) {
 	t.Helper()
-	code, r, _ := s.ghCall(t, http.MethodPut, "/repos/"+ghRepo+"/pulls/"+strconv.Itoa(number)+"/merge",
+	code, r, _ := s.ghCall(t, http.MethodPut, "/repos/"+s.gh.repo+"/pulls/"+strconv.Itoa(number)+"/merge",
 		`{"sha":"`+sha+`","merge_method":"squash"}`, act)
 	return code, r
 }
@@ -165,8 +171,9 @@ func (s *stack) ghMerge(t *testing.T, act ids.UUID, number int, sha string) (int
 // answer: io.pantherclaw/error for a tool error, nil when it ran.
 func (s *stack) ghMergeMCP(t *testing.T, number int, sha string) map[string]jsontext.Value {
 	t.Helper()
-	body := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"merge_pull_request","arguments":{"owner":"acme",` +
-		`"repo":"payments","pullNumber":` + strconv.Itoa(number) + `,"expectedHeadSha":"` + sha + `","merge_method":"squash"},` +
+	owner, repo, _ := strings.Cut(s.gh.repo, "/")
+	body := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"merge_pull_request","arguments":{"owner":"` + owner + `",` +
+		`"repo":"` + repo + `","pullNumber":` + strconv.Itoa(number) + `,"expectedHeadSha":"` + sha + `","merge_method":"squash"},` +
 		`"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28"}}}`
 	req, _ := http.NewRequestWithContext(context.Background(), http.MethodPost, s.gateway+"/mcp/github", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")

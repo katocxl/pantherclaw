@@ -119,6 +119,9 @@ type options struct {
 	// connection "github" to it, held by the gateway with a GitHub App
 	// credential (dev seed --github-url, G0 M8).
 	github bool
+	// githubAt, with github, is the GitHub to call instead of the
+	// simulator (task test:github-live).
+	githubAt *githubSim
 }
 
 func freeAddr(t *testing.T) string {
@@ -205,7 +208,10 @@ func start(t *testing.T, o options) *stack {
 		args = append(args, "--shell")
 	}
 	if o.github {
-		s.gh = startGitHubSim(t)
+		s.gh = o.githubAt
+		if s.gh == nil {
+			s.gh = startGitHubSim(t)
+		}
 		args = append(args, "--github-url", s.gh.url)
 	}
 	var out, errb bytes.Buffer

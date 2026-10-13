@@ -85,6 +85,21 @@ tasks:
         PC_TEST_MOCK_OIDC_URL="${PC_TEST_MOCK_OIDC_URL:-http://127.0.0.1:8181}"
         go test -tags integration -shuffle=on -count=1 {{.PKGS | default "./..."}}
 
+  test:github-live:
+    desc: "Manual and opt-in: the M8 GitHub run against GitHub itself with your sandbox App (docs/runbooks/github-live.md); never part of check"
+    dotenv: ["deploy/compose/.env"]
+    preconditions:
+      - sh: '[ "$PC_GITHUB_LIVE" = 1 ]'
+        msg: "Set PC_GITHUB_LIVE=1 and the PC_GITHUB_LIVE_* variables first (docs/runbooks/github-live.md)"
+      - sh: '[ -n "$PC_GITHUB_LIVE_APP" ] && [ -n "$PC_GITHUB_LIVE_INSTALLATION" ] && [ -n "$PC_GITHUB_LIVE_REPO" ] && [ -f "$PC_GITHUB_LIVE_KEY_FILE" ]'
+        msg: "PC_GITHUB_LIVE_APP, PC_GITHUB_LIVE_INSTALLATION, PC_GITHUB_LIVE_REPO and PC_GITHUB_LIVE_KEY_FILE (an existing file) are required"
+    cmds:
+      - >-
+        PC_TEST_REQUIRE_DB=1
+        PC_TEST_PG_ADMIN_URL="postgres://postgres:${PC_PG_TEST_PASSWORD}@127.0.0.1:5433/postgres?sslmode=disable"
+        PC_TEST_MOCK_OIDC_URL="${PC_TEST_MOCK_OIDC_URL:-http://127.0.0.1:8181}"
+        go test -tags "integration github_live" -count=1 -v -run '^TestLive_GitHub' ./test/e2e/
+
   test:linux:
     desc: Run race-enabled tests inside a pinned Linux container (use on Windows)
     cmds:
@@ -112,9 +127,9 @@ tasks:
       - git diff --exit-code -- internal/gen
 
   trace:
-    desc: Fail if a hardening rule or threat due by MILESTONE has no test (default M7)
+    desc: Fail if a hardening rule or threat due by MILESTONE has no test (default M8)
     cmds:
-      - go -C tools run ./traceability -root .. -through {{.MILESTONE | default "M7"}}
+      - go -C tools run ./traceability -root .. -through {{.MILESTONE | default "M8"}}
 
   sdk:vectors:
     desc: Regenerate the SDK conformance vectors in sdk/conformance from the Go implementation (review the diff)
