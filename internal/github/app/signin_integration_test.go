@@ -23,18 +23,21 @@ import (
 func noWait(context.Context, time.Duration) error { return nil }
 
 // TestHR207_ADeviceFlowSignInProvesTheAccount (P2f): against the GitHub
-// simulator, a person runs the GitHub App's device flow, signs in at GitHub
-// as their account, and the server links that account, the one GitHub says
-// the token belongs to, with the time it was proved. A token GitHub never
-// issued, a sign-in refused at GitHub, another App's client id and a
-// server without GitHub sign-in link nothing.
+// simulator, a person runs the sign-in App's device flow, signs in at
+// GitHub as their account, and the server links that account, the one
+// GitHub tells the sign-in App the token belongs to, with the time it was
+// proved, and revokes the token. A token the sign-in App never issued (a
+// personal access token, say), a sign-in refused at GitHub, the client id
+// of the App that merges or another App, and a server without GitHub
+// sign-in link nothing.
 func TestHR207_ADeviceFlowSignInProvesTheAccount(t *testing.T) {
 	e := newEnv(t)
 	sim := simgithub.New(log.Discard())
-	sim.RegisterApp(1, "Iv1.pantherclaw", nil)
+	sim.RegisterApp(1, "Iv1.merges", nil)
+	sim.RegisterSignInApp("Iv1.pantherclaw", "s3cret")
 	gh := httptest.NewServer(sim.Handler())
 	t.Cleanup(gh.Close)
-	e.svc.Verifier = &githubhttp.Verifier{APIURL: gh.URL}
+	e.svc.Verifier = &githubhttp.Verifier{APIURL: gh.URL, ClientID: "Iv1.pantherclaw", ClientSecret: log.NewSecret([]byte("s3cret"))}
 	e.svc.SignIn = app.SignIn{ClientID: "Iv1.pantherclaw", WebURL: gh.URL}
 	alice := e.person(t, "alice")
 	asAlice := e.as(alice, td.KindUser, td.RoleCodeReviewer)
@@ -62,15 +65,22 @@ func TestHR207_ADeviceFlowSignInProvesTheAccount(t *testing.T) {
 	if err != nil || link.UserID != alice || link.GithubUserID != 4242 || link.GithubLogin != "alice-gh" || link.VerifiedAt == nil {
 		t.Fatalf("link %+v %v", link, err)
 	}
+	if !sim.Revoked(token) {
+		t.Fatal("the sign-in token still works after the link")
+	}
 
-	if _, err := e.svc.Prove(asAlice, "ghu_never_issued", false); !errors.Is(err, app.ErrProof) {
-		t.Fatalf("a token GitHub never issued: %v", err)
+	for _, tok := range []string{"ghu_never_issued", "ghp_personal", token} {
+		if _, err := e.svc.Prove(asAlice, tok, false); !errors.Is(err, app.ErrProof) {
+			t.Fatalf("%s, which the sign-in App did not issue or revoked: %v", tok, err)
+		}
 	}
 	if _, err := signIn(sim.DenyDevice); !errors.Is(err, deviceflow.ErrDenied) {
 		t.Fatalf("a sign-in refused at GitHub: %v", err)
 	}
-	if _, err := (&deviceflow.Flow{WebURL: gh.URL, ClientID: "Iv1.another", Wait: noWait}).Token(ctx, func(deviceflow.Code) {}); err == nil {
-		t.Fatal("another App's client id got a device code")
+	for _, other := range []string{"Iv1.another", "Iv1.merges"} {
+		if _, err := (&deviceflow.Flow{WebURL: gh.URL, ClientID: other, Wait: noWait}).Token(ctx, func(deviceflow.Code) {}); err == nil {
+			t.Fatalf("%s got a device code", other)
+		}
 	}
 	if _, err := (&app.Service{Pool: e.pool}).SignInConfig(asAlice); !errors.Is(err, app.ErrNoSignIn) {
 		t.Fatalf("a server without GitHub sign-in: %v", err)

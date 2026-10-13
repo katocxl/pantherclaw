@@ -70,16 +70,18 @@ When a fact cannot be read in time, nothing is reported for it, and the decision
 
 A reviewer must be independent of a pull request: PantherClaw refuses as reviewer anyone who authored, committed or pushed to it (HR-207). It knows those people by GitHub user id, so each person links their own GitHub account, by signing in to GitHub (founder decision 2026-10-13).
 
-First turn GitHub sign-in on, once:
+First turn GitHub sign-in on, once. Sign-in uses its own GitHub App, never the App that merges: a sign-in gives a user access token that can do whatever its App may do, so the sign-in App has no permissions and is installed nowhere.
 
-1. In the App's settings on GitHub, under *Identifying and authorizing users*, tick **Enable Device Flow**. The App needs no user permissions: the sign-in only tells PantherClaw which account you are.
-2. Put the App's **Client ID** (from its settings page, not the App ID) in the server configuration and restart the server:
+1. Create a second GitHub App, for example "PantherClaw sign-in", under the same owner. Leave every repository, organization and account permission at **No access**. Untick **Webhook → Active**. Do not install it anywhere.
+2. In its settings, under *Identifying and authorizing users*, tick **Enable Device Flow**.
+3. Generate a **client secret** and save it in a file only the server can read, for example `/etc/pantherclaw/github-signin-secret` (mode 0400).
+4. Put the sign-in App's **Client ID** (from its settings page, not the App ID) and the secret's file in the server configuration, then restart the server:
 
    ```json
-   "github": { "client_id": "Iv23li…" }
+   "github": { "client_id": "Iv23li…", "client_secret_file": "/etc/pantherclaw/github-signin-secret" }
    ```
 
-   `github.web_url` and `github.api_url` default to `https://github.com` and `https://api.github.com`; set them only for the GitHub simulator (plain `http` is accepted for a loopback address only). Without `client_id`, nobody can link an account, so nobody can review GitHub merges.
+   `github.web_url` and `github.api_url` default to `https://github.com` and `https://api.github.com`. For GitHub Enterprise Server, set them to `https://HOST` and `https://HOST/api/v3`. Plain `http` is accepted only for a loopback address (the GitHub simulator). Without `client_id`, nobody can link an account, so nobody can review GitHub merges.
 
 Then each person runs:
 
@@ -89,7 +91,10 @@ pclaw github unlink          # removes your link, again by signing in to GitHub
 pclaw github identity list [--user <user id>]
 ```
 
-The server asks GitHub which account the sign-in belongs to and links it to you, with the time you proved it; it never keeps the GitHub token. Nobody can link an account for someone else. A GitHub user id links to one person; signing in again renews your link.
+pclaw shows the code only with a sign-in page on the configured GitHub address. Enter it only at that address, and only when you ran `pclaw github link` or `unlink` yourself. An agent that asks you to enter a code is asking you to sign in for it.
+
+The server asks GitHub, as the sign-in App, which account the token belongs to. GitHub answers only for a token the sign-in App issued, so a personal access token or a `gh` token proves nothing. The server then links the account to you, with the time you proved it, and revokes the token, so it works nowhere afterwards; PantherClaw never keeps it. Nobody can link an account for someone else. A GitHub user id links to one person; signing in again renews your link.
+
 
 - **A reviewer of a GitHub merge needs a proved link.** A code reviewer or release approver without one is refused (`GITHUB_NOT_LINKED`), because PantherClaw could not tell whether they wrote the change.
 - **Links at the request count too.** The people linked to a pull request's author, committers and pushers when the merge was held stay excluded from that request, even if they unlink before it is decided.

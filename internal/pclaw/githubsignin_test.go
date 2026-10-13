@@ -33,7 +33,7 @@ func (p *proveService) GetSignIn(context.Context, *pantherclawv1.GetSignInReques
 }
 
 func (p *proveService) ProveIdentity(ctx context.Context, req *pantherclawv1.ProveIdentityRequest) (*pantherclawv1.ProveIdentityResponse, error) {
-	u, err := (&githubhttp.Verifier{APIURL: p.web}).User(ctx, req.GetGithubUserToken())
+	u, err := (&githubhttp.Verifier{APIURL: p.web, ClientID: "Iv1.pantherclaw", ClientSecret: log.NewSecret([]byte("s3cret"))}).User(ctx, req.GetGithubUserToken())
 	if err != nil {
 		return nil, err
 	}
@@ -45,10 +45,11 @@ func (p *proveService) ProveIdentity(ctx context.Context, req *pantherclawv1.Pro
 // GitHub App's device flow, shows the code to enter at GitHub, and hands
 // the user access token of the account signed in to the server, which
 // links it; pclaw github unlink proves the account the same way to remove
-// the link. Neither writes the token anywhere.
+// the link. Neither writes the token anywhere, and neither signs in at a
+// GitHub address that is not https (plain http only on this machine).
 func TestHR207_GitHubLinkSignsInToGitHub(t *testing.T) {
 	sim := simgithub.New(log.Discard())
-	sim.RegisterApp(1, "Iv1.pantherclaw", nil)
+	sim.RegisterSignInApp("Iv1.pantherclaw", "s3cret")
 	sim.SignInAs(simgithub.DeviceUser{ID: 101, Login: "alice-gh"})
 	gh := httptest.NewServer(sim.Handler())
 	t.Cleanup(gh.Close)
@@ -77,5 +78,11 @@ func TestHR207_GitHubLinkSignsInToGitHub(t *testing.T) {
 	}
 	if code, _, _ := run(t, env, "github", "link", "extra"); code == 0 {
 		t.Fatal("github link took an argument")
+	}
+	for _, web := range []string{"http://github.example.com", "ftp://github.com", "https://u:p@github.com"} {
+		svc.web = web
+		if code, _, errs := run(t, env, "github", "link"); code == 0 || !strings.Contains(errs, "not https") {
+			t.Errorf("%s: %d %s", web, code, errs)
+		}
 	}
 }

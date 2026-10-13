@@ -6,6 +6,8 @@ package pclaw
 import (
 	"context"
 	"fmt"
+	"net"
+	"net/url"
 	"time"
 
 	pantherclawv1 "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
@@ -37,6 +39,9 @@ func githubSignIn(unlink bool) func(context.Context, *app, []string) error {
 		if err != nil {
 			return err
 		}
+		if !githubWeb(cfg.GetWebUrl()) {
+			return fmt.Errorf("the server's GitHub sign-in address %q is not https (plain http only on this machine)", cfg.GetWebUrl())
+		}
 		verb := "link"
 		if unlink {
 			verb = "unlink"
@@ -55,4 +60,15 @@ func githubSignIn(unlink bool) func(context.Context, *app, []string) error {
 		}
 		return a.print(res)
 	}
+}
+
+// githubWeb reports whether GitHub's web origin, where the code is entered,
+// is https, or plain http on this machine (the GitHub simulator).
+func githubWeb(raw string) bool {
+	u, err := url.Parse(raw)
+	if err != nil || u.Host == "" || u.User != nil {
+		return false
+	}
+	ip := net.ParseIP(u.Hostname())
+	return u.Scheme == "https" || (u.Scheme == "http" && (u.Hostname() == "localhost" || (ip != nil && ip.IsLoopback())))
 }

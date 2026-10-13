@@ -541,7 +541,9 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	if d.m5 != nil {
 		githubNotify = d.m5.notifications
 	}
-	registerM8G(rs, pool, githubNotify, d.github)
+	if err := registerM8G(rs, pool, githubNotify, d.github); err != nil {
+		return nil, err
+	}
 	if err := registerEvidence(rs, d); err != nil {
 		return nil, err
 	}
