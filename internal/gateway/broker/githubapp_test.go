@@ -231,3 +231,37 @@ func TestHR203_RevocationOutlivesTheDispatch(t *testing.T) {
 		t.Fatalf("tokens %+v", got)
 	}
 }
+
+// TestHR203_ATokenSaysWhatItAllowedAndWhetherItWasRevoked: a minted token
+// carries, for the execution receipt, its installation, repository and
+// that repository's id, the permissions requested and granted, and the
+// expiry GitHub stated; after Revoke, whether the revocation reached
+// GitHub (ADR-0021 items 5 and 6). It never carries the token.
+func TestHR203_ATokenSaysWhatItAllowedAndWhetherItWasRevoked(t *testing.T) {
+	w := newGitHub(t)
+	ctx := context.Background()
+	perms := map[string]string{"contents": "read"}
+	tok, err := MintInstallationToken(ctx, w.client, w.srv.URL, w.hosts, w.app, "acme", "payments", perms, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := tok.Access()
+	if a.Installation != 7 || a.Repository != "acme/payments" || a.RepositoryID <= 0 || !maps.Equal(a.Requested, perms) ||
+		!maps.Equal(a.Granted, map[string]string{"contents": "read", "metadata": "read"}) || time.Until(a.Expires) < 50*time.Minute || a.Revocation != "" {
+		t.Fatalf("access %+v", a)
+	}
+	if err := tok.Revoke(ctx, w.client); err != nil || tok.Access().Revocation != "revoked" {
+		t.Fatalf("revoked: %v %+v", err, tok.Access())
+	}
+	// A revocation that cannot reach GitHub says so (a dispatch's ended
+	// context does not stop it, so GitHub is gone here); the token then
+	// expires at the time GitHub stated.
+	tok, err = MintInstallationToken(ctx, w.client, w.srv.URL, w.hosts, w.app, "acme", "payments", perms, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.srv.Close()
+	if err := tok.Revoke(ctx, w.client); err == nil || tok.Access().Revocation != "revoke_failed" {
+		t.Fatalf("an unreachable revocation: %v %+v", err, tok.Access())
+	}
+}

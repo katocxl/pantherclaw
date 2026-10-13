@@ -69,6 +69,8 @@ type deployOn struct {
 type facts struct {
 	rules       map[string][]map[string]any // branch → rules as GitHub returns them
 	checks      map[string][]CheckRun       // commit → check runs
+	statuses    map[string][]Status         // commit → commit statuses
+	protection  map[string][]string         // branch → classic protection's required contexts
 	envs        []Environment
 	deployOn    map[string]deployOn // branch → deployment started by a push
 	deployments []Deployment
@@ -77,7 +79,10 @@ type facts struct {
 
 func (r *Repo) state() *facts {
 	if r.facts == nil {
-		r.facts = &facts{rules: map[string][]map[string]any{}, checks: map[string][]CheckRun{}, deployOn: map[string]deployOn{}}
+		r.facts = &facts{
+			rules: map[string][]map[string]any{}, checks: map[string][]CheckRun{}, statuses: map[string][]Status{},
+			protection: map[string][]string{}, deployOn: map[string]deployOn{},
+		}
 	}
 	return r.facts
 }
@@ -88,6 +93,27 @@ func (s *Server) SetBranchRules(fullName, branch string, rules ...map[string]any
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.repos[strings.ToLower(fullName)].state().rules[branch] = rules
+}
+
+// Status is a commit status (the older statuses API): a context and its
+// state, success, pending, failure or error.
+type Status struct {
+	Context, State string
+}
+
+// SetStatuses sets the commit statuses of a commit.
+func (s *Server) SetStatuses(fullName, sha string, statuses ...Status) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.repos[strings.ToLower(fullName)].state().statuses[sha] = statuses
+}
+
+// Protect turns on classic branch protection for branch, requiring the
+// status checks contexts (none: protection without required checks).
+func (s *Server) Protect(fullName, branch string, contexts ...string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.repos[strings.ToLower(fullName)].state().protection[branch] = append([]string{}, contexts...)
 }
 
 // SetCheckRuns sets the check runs of a commit.
@@ -145,7 +171,9 @@ func (s *Server) factRoutes(mux *http.ServeMux) {
 	for _, rt := range []route{
 		{"GET /repos/{owner}/{repo}/rules/branches/{branch...}", "metadata", "read", s.branchRules},
 		{"GET /repos/{owner}/{repo}/branches/{branch...}", "contents", "read", s.getBranch},
+		{"GET /repos/{owner}/{repo}/commits/{ref}", "contents", "read", s.getCommit},
 		{"GET /repos/{owner}/{repo}/commits/{ref}/check-runs", "checks", "read", s.checkRuns},
+		{"GET /repos/{owner}/{repo}/commits/{ref}/status", "statuses", "read", s.combinedStatus},
 		{"GET /repos/{owner}/{repo}/actions/workflows", "actions", "read", s.workflows},
 		{"GET /repos/{owner}/{repo}/environments", "actions", "read", s.environments},
 		{"GET /repos/{owner}/{repo}/deployments", "deployments", "read", s.listDeployments},
@@ -279,15 +307,7 @@ func (s *Server) pullCommits(w http.ResponseWriter, req *http.Request, r *Repo, 
 	if p == nil {
 		return fail(w, http.StatusNotFound, "Not Found")
 	}
-	base := map[string]bool{}
-	for stack := []string{r.Branches[p.Base]}; len(stack) > 0; {
-		c := stack[len(stack)-1]
-		stack = stack[:len(stack)-1]
-		if c != "" && !base[c] {
-			base[c] = true
-			stack = append(stack, r.Commits[c].Parents...)
-		}
-	}
+	base := ancestors(r, r.Branches[p.Base])
 	var commits []*Commit
 	seen := map[string]bool{}
 	for stack := []string{p.HeadSHA}; len(stack) > 0; {
@@ -341,5 +361,51 @@ func (s *Server) getBranch(w http.ResponseWriter, req *http.Request, r *Repo, _ 
 	if sha == "" {
 		return fail(w, http.StatusNotFound, "Branch not found")
 	}
-	return reply(w, http.StatusOK, map[string]any{"name": name, "commit": map[string]any{"sha": sha}, "simulated": true})
+	out := map[string]any{"name": name, "commit": map[string]any{"sha": sha}, "protected": false, "simulated": true}
+	if contexts, ok := r.state().protection[name]; ok {
+		checks := make([]map[string]any, len(contexts))
+		for i, c := range contexts {
+			checks[i] = map[string]any{"context": c, "app_id": nil}
+		}
+		out["protected"], out["protection"] = true, map[string]any{
+			"enabled": true, "required_status_checks": map[string]any{"enforcement_level": "non_admins", "contexts": contexts, "checks": checks},
+		}
+	}
+	return reply(w, http.StatusOK, out)
+}
+
+// combinedStatus answers a commit's combined status: its statuses, paged,
+// and their overall state.
+func (s *Server) combinedStatus(w http.ResponseWriter, req *http.Request, r *Repo, _ *Token) int {
+	sha := req.PathValue("ref")
+	if c := r.resolve(sha); c != nil {
+		sha = c.SHA
+	}
+	list := []map[string]any{}
+	state := "success"
+	for i, st := range r.state().statuses[sha] {
+		list = append(list, map[string]any{"id": i + 1, "context": st.Context, "state": st.State})
+		switch {
+		case st.State == "failure" || st.State == "error":
+			state = "failure"
+		case st.State == "pending" && state == "success":
+			state = "pending"
+		}
+	}
+	if len(list) == 0 {
+		state = "pending" // as GitHub answers a commit without statuses
+	}
+	return reply(w, http.StatusOK, map[string]any{"sha": sha, "state": state, "total_count": len(list), "statuses": s.paged(w, req, list)})
+}
+
+// getCommit reads one commit (by SHA or branch) with its author and
+// committer.
+func (s *Server) getCommit(w http.ResponseWriter, req *http.Request, r *Repo, _ *Token) int {
+	c := r.resolve(req.PathValue("ref"))
+	if c == nil {
+		return fail(w, http.StatusUnprocessableEntity, "No commit found for SHA: "+req.PathValue("ref"))
+	}
+	return reply(w, http.StatusOK, map[string]any{
+		"sha": c.SHA, "author": account(c.Author), "committer": account(c.Committer), "parents": c.Parents, "simulated": true,
+	})
 }

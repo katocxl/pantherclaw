@@ -103,7 +103,7 @@ func pullJSON(r *Repo, p *Pull) map[string]any {
 		"number": p.Number, "state": p.State, "title": p.Title, "body": p.Body, "draft": p.Draft,
 		"merged": p.Merged, "mergeable": !p.Unmergeable && p.State == "open", "merge_commit_sha": merge,
 		"user":     account(p.Author),
-		"head":     map[string]any{"ref": p.Head, "sha": p.HeadSHA},
+		"head":     map[string]any{"ref": p.Head, "sha": p.HeadSHA, "repo": map[string]any{"full_name": r.full()}},
 		"base":     map[string]any{"ref": p.Base, "sha": r.Branches[p.Base]},
 		"html_url": "https://github.example.test/" + r.full() + "/pull/" + strconv.Itoa(p.Number), "simulated": true,
 	}
