@@ -7,6 +7,8 @@ package pgauthority_test
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json/jsontext"
 	"strings"
 	"testing"
@@ -119,5 +121,34 @@ func TestHR205_ANewHeadSupersedesTheRequestsBoundToTheOldOne(t *testing.T) {
 	r := w.authorize(w.request(run, ids.NewV7(), "ch_1", "30.00"))
 	if r.Decision != adomain.CannotAuthorize || decisive(r) != "STATE_MOVED" {
 		t.Fatalf("at the old value: %s %s", r.Decision, decisive(r))
+	}
+}
+
+// longCharges is boundRefunds with charge ids of up to 300 characters, so
+// an invalidation key can be longer than its column.
+func longCharges(pkg string) string {
+	return strings.ReplaceAll(boundRefunds(pkg), "'^ch_[A-Za-z0-9]{1,64}$'", "'^ch_[A-Za-z0-9]{1,300}$'")
+}
+
+// TestHR205_ARequestAboutALongSubjectIsSupersededToo: a key too long for
+// the column is recorded as its SHA-256, never left out, so the fact's new
+// value supersedes the request about a long subject id as it does any
+// other.
+func TestHR205_ARequestAboutALongSubjectIsSupersededToo(t *testing.T) {
+	w := newWorldWith(t, longCharges)
+	charge := "ch_" + strings.Repeat("a", 280)
+	w.refundable(charge)
+	g := w.heldGrant()
+	run := w.run(g.ID, ids.UUID{})
+	w.state(charge, "duplicate")
+	id := held(t, w.authorize(w.request(run, ids.NewV7(), charge, "85.00")))
+	sum := sha256.Sum256([]byte("payments.charge.state@payments.charge:" + charge))
+	key := "sha256:" + hex.EncodeToString(sum[:])
+	if s := w.str("SELECT state || ' ' || coalesce(invalidation_key, '') FROM pc.approval_requests WHERE id = $1", id); s != "PENDING "+key {
+		t.Fatalf("held: %s", s)
+	}
+	w.state(charge, "fraudulent")
+	if s := w.str("SELECT state || '/' || coalesce(end_reason, '') FROM pc.approval_requests WHERE id = $1", id); s != "SUPERSEDED/BINDING_CHANGED" {
+		t.Fatalf("after the change: %s", s)
 	}
 }
