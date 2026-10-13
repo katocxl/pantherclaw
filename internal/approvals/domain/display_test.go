@@ -322,3 +322,35 @@ func TestF158_ThePeopleListNamesEveryoneOnceWithTheirLinkedUser(t *testing.T) {
 		}
 	}
 }
+
+// TestHR034_MixedScriptEnvironmentNamesAreFlagged (HR-102): an environment
+// name of a predicted consequence that mixes writing systems, a sign of a
+// look-alike such as "production" with a Cyrillic "o", is flagged in the
+// display the binding covers; a consequence without one carries no flag,
+// so its display is unchanged.
+func TestHR034_MixedScriptEnvironmentNamesAreFlagged(t *testing.T) {
+	lookAlike := "pr" + string(rune(0x043e)) + "duction"
+	in := refundInput(t, "")
+	in.Consequences = []domain.ConsequenceInput{
+		{
+			Rule: "deploys", Operation: "github.deployment.trigger", State: "PREDICTED",
+			Target: actionir.Target{Type: "github.repository", ID: "acme/payments"}, Environments: []string{"production", lookAlike},
+		},
+		{
+			Rule: "stages", Operation: "github.deployment.trigger", State: "PREDICTED",
+			Target: actionir.Target{Type: "github.repository", ID: "acme/payments"}, Environments: []string{"staging"},
+		},
+	}
+	disp, err := domain.RenderAction(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(disp.Consequences) != 2 || !slices.Equal(disp.Consequences[0].Environments, []string{"production", lookAlike}) ||
+		!slices.Equal(disp.Consequences[0].MixedScript, []string{lookAlike}) || disp.Consequences[1].MixedScript != nil {
+		t.Fatalf("consequences %+v", disp.Consequences)
+	}
+	raw, err := json.Marshal(disp.Consequences[1])
+	if err != nil || strings.Contains(string(raw), "mixed_script") {
+		t.Fatalf("a consequence without a look-alike: %s %v", raw, err)
+	}
+}
