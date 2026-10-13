@@ -333,6 +333,17 @@ func (s *Store) ActiveDefinitionsInTx(ctx context.Context, tx db.TenantTx, org i
 	return out, nil
 }
 
+// VersionInTx returns the decoded package of an imported version, by its
+// id, inside the caller's transaction (the Authority's one-snapshot read).
+// The returned package is shared: callers must not change it.
+func (s *Store) VersionInTx(ctx context.Context, tx db.TenantTx, org ids.OrgID, version ids.UUID) (*domain.Package, error) {
+	p, err := s.decoded(ctx, dbq.New(tx), org, version)
+	if db.IsNoRows(err) {
+		return nil, ErrNotFound
+	}
+	return p, err
+}
+
 // decoded returns the decoded package of a version, from the cache or by
 // decoding its signed bytes (which recomputes every digest).
 func (s *Store) decoded(ctx context.Context, q *dbq.Queries, org ids.OrgID, version ids.UUID) (*domain.Package, error) {

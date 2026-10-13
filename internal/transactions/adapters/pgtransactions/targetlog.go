@@ -27,6 +27,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	"github.com/katocxl/pantherclaw/internal/transactions/app"
 	"github.com/katocxl/pantherclaw/internal/transactions/domain"
+	"github.com/katocxl/pantherclaw/internal/waitlist/adapters/pgwaitlist"
 )
 
 // Target-log reconciliation (HR-112, G0 M7 design decision 6): the gateway
@@ -188,7 +189,11 @@ func matchItem(ctx context.Context, tx db.TenantTx, q *dbq.Queries, org ids.OrgI
 		if err := pgbudgets.Settle(ctx, q, org, rec.PermitID, bdomain.Commit); err != nil {
 			return true, err
 		}
-		return true, q.SettleDedupeClaim(ctx, claimSucceeded, org, txn)
+		if err := q.SettleDedupeClaim(ctx, claimSucceeded, org, txn); err != nil {
+			return true, err
+		}
+		return true, pgwaitlist.CloseReconciliation(ctx, tx, org, txn, pgwaitlist.ResolvedOccurred,
+			evdomain.Actor{Type: "system", ID: "target_log"})
 	case rec.Outcome != nil && *rec.Outcome == "failed" && deref(rec.EffectState, "") != string(domain.Conflicting):
 		// The target refused, yet the object exists.
 		e := app.Effect{

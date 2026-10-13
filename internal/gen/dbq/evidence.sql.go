@@ -150,7 +150,7 @@ func (q *Queries) ListCheckpointsPage(ctx context.Context, orgID ids.OrgID, befo
 }
 
 const receiptsOfEntries = `-- name: ReceiptsOfEntries :many
-SELECT receipt_jws, ledger_entry_id, body_removed_at, created_at
+SELECT coalesce(receipt_jws, '')::text AS receipt_jws, ledger_entry_id, body_removed_at, created_at
 FROM (
     SELECT d.receipt_jws, d.ledger_entry_id, d.body_removed_at, d.created_at
     FROM pc.decision_receipts d WHERE d.org_id = $1 AND d.ledger_entry_id = ANY($2::uuid[])
@@ -212,7 +212,7 @@ func (q *Queries) TransactionAgent(ctx context.Context, orgID ids.OrgID, transac
 }
 
 const transactionReceipts = `-- name: TransactionReceipts :many
-SELECT receipt_jws, ledger_entry_id, body_removed_at, created_at
+SELECT coalesce(receipt_jws, '')::text AS receipt_jws, ledger_entry_id, body_removed_at, created_at
 FROM (
     SELECT d.receipt_jws, d.ledger_entry_id, d.body_removed_at, d.created_at
     FROM pc.decision_receipts d WHERE d.org_id = $1 AND d.transaction_id = $2

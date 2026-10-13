@@ -110,6 +110,16 @@ message Integrity {
   int64 sequence = 2;
   // Status.
   IntegrityStatus status = 3;
+  // For CHECKPOINTED and ANCHORED: the tree size of the first checkpoint
+  // that covers the entry, against which an inclusion proof can be asked
+  // for (EvidenceService.GetInclusionProof); 0 otherwise.
+  int64 checkpoint_size = 4;
+  // For ANCHORED: the tree size of the first anchored checkpoint that
+  // covers the entry; 0 otherwise.
+  int64 anchored_size = 5;
+  // For ANCHORED: when that checkpoint's anchor was entered in the
+  // transparency log.
+  google.protobuf.Timestamp anchor_time = 6;
 }
 
 // Transaction is one agent action.

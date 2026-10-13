@@ -25,9 +25,14 @@ const MaxPath = 4 << 10
 //   - POSIX paths ("/x") get "/" separators, and "." and ".." collapsed.
 //
 // Refused, as ambiguous: relative and drive-relative paths ("x", "C:x"),
-// device paths ("\\?\", "\\.\"), alternate data streams (a ":" after the
-// drive), Windows segments ending in a dot or a space, and control, format
-// or bidi characters.
+// device paths ("\\?\", "\\.\", also after extra separators), alternate
+// data streams (a ":" after the drive), Windows segments ending in a dot or
+// a space, POSIX paths whose first segment, once "." and ".." are
+// collapsed, starts with "\" ("/./\x", which would read as UNC), and
+// control, format or bidi characters.
+//
+// The result is a fixed point: NormalizePath accepts it and returns it
+// unchanged.
 func NormalizePath(p string) (string, error) {
 	if p == "" || len(p) > MaxPath || !utf8.ValidString(p) {
 		return "", ambiguous("path must be 1..%d bytes of UTF-8", MaxPath)
@@ -48,11 +53,12 @@ func NormalizePath(p string) (string, error) {
 		}
 		return strings.ToUpper(p[:1]) + `:\` + strings.Join(segs, `\`), nil
 	case strings.HasPrefix(p, `\\`) || strings.HasPrefix(p, "//") || strings.HasPrefix(p, `\/`) || strings.HasPrefix(p, `/\`):
-		rest := p[2:]
-		if strings.HasPrefix(rest, "?") || strings.HasPrefix(rest, ".") {
+		// A server starting with "?" or "." would make the result a device
+		// path, however many separators lead to it.
+		parts := strings.FieldsFunc(p[2:], isSep)
+		if len(parts) > 0 && (strings.HasPrefix(parts[0], "?") || strings.HasPrefix(parts[0], ".")) {
 			return "", ambiguous("device paths are not supported")
 		}
-		parts := strings.FieldsFunc(rest, isSep)
 		if len(parts) < 2 {
 			return "", ambiguous("a UNC path names a server and a share")
 		}
@@ -82,6 +88,12 @@ func NormalizePath(p string) (string, error) {
 			default:
 				segs = append(segs, s)
 			}
+		}
+		// "/" followed by a backslash reads as UNC, as in "/\x" above: a
+		// first segment starting with one, left by a collapsed "." or "..",
+		// has no single spelling.
+		if len(segs) > 0 && strings.HasPrefix(segs[0], `\`) {
+			return "", ambiguous("POSIX path %q starts like a UNC path", p)
 		}
 		return "/" + strings.Join(segs, "/"), nil
 	default:

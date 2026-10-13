@@ -103,6 +103,11 @@ func approver(t *testing.T, s *stack, people *m2Stack) (*user, *browser, *webaut
 	} {
 		s.db.AdminExec(t, q, s.org)
 	}
+	// alice exports the org's keys, now bob's, for the gateway to verify
+	// approvals against (HR-038); the gateway reads the file again.
+	if code, out, errs := alice.pclaw(t, "approver-keys", "export", "--out", s.approverKeys); code != 0 || !strings.Contains(out, "1 key(s)") {
+		t.Fatalf("approver-keys export: %d %s %s", code, out, errs)
+	}
 	return alice, b, key
 }
 

@@ -13,6 +13,7 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
+	"github.com/katocxl/pantherclaw/internal/approvals/proof"
 	"github.com/katocxl/pantherclaw/internal/gateway/broker"
 	"github.com/katocxl/pantherclaw/internal/gateway/control"
 	"github.com/katocxl/pantherclaw/internal/gateway/dispatch"
@@ -58,10 +59,10 @@ type Gateway struct {
 	// (drift.go).
 	reportDrift           DriftReporter
 	driftEvery, driftPoll time.Duration
-	// verifications and verifyEvery drive the verification reads
-	// (verify.go, G0 M7).
-	verifications Verifications
-	verifyEvery   time.Duration
+	// verifications, verifyEvery and verifyHintGap drive the verification
+	// reads (verify.go, G0 M7).
+	verifications              Verifications
+	verifyEvery, verifyHintGap time.Duration
 }
 
 // Handler returns the gateway's agent-facing HTTP handler: `/mcp/{connection}`
@@ -169,6 +170,7 @@ func newGateway(cfg *Config, d Deps, log *slog.Logger) (*Gateway, error) {
 	o := dispatch.Options{
 		Org: d.Org, GatewayID: d.GatewayID, Authority: d.Authority, JWKSURL: d.JWKSURL, JWKSClient: d.JWKSClient,
 		Containment: d.Containment, AllowedPrefixes: prefixes, ReportCircuit: d.ReportCircuit, Log: log,
+		Approvers: proof.NewPinned(cfg.Approvals.ApproverKeysFile, d.Org),
 	}
 	if d.Broker != nil {
 		o.Broker = d.Broker
@@ -190,7 +192,7 @@ func newGateway(cfg *Config, d Deps, log *slog.Logger) (*Gateway, error) {
 		mcp:  mcp.New(engine, d.Configuration, cfg.PublicURL, log),
 		hook: hook.New(engine, d.Configuration, cfg.PublicURL, log),
 		log:  log, reportDrift: d.ReportDrift, driftEvery: DriftEvery, driftPoll: driftPoll,
-		verifications: d.Verifications, verifyEvery: VerifyEvery,
+		verifications: d.Verifications, verifyEvery: VerifyEvery, verifyHintGap: verifyHintGap,
 	}
 	if e := cfg.Control.VerifyEvery.D(); e > 0 {
 		g.verifyEvery = e
@@ -218,6 +220,14 @@ func (g *Gateway) ConfigVersion() int64 {
 		return c.Version
 	}
 	return 0
+}
+
+// Contained is the containment check every dispatch makes first (HR-010):
+// nil when the gateway asks the Authority, or why it refuses every
+// dispatch on its own now (control.ErrKillSwitch, ErrRevoked, ErrStale).
+func (g *Gateway) Contained() error {
+	_, err := g.containment.Check()
+	return err
 }
 
 // WaitReady returns once the first containment snapshot and the first

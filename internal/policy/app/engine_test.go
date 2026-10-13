@@ -311,6 +311,39 @@ func TestCountMaxClampsOnlyWhenDeclared(t *testing.T) {
 	}
 }
 
+// TestHR191_AVerifyRuleRaisesTheRequiredLevel: a matched verify rule needs
+// no declared support from the definition: it is an obligation with its
+// level, applied after dispatch (step 8 decides whether the verifier can
+// reach it); an unmatched one adds nothing, and an unknown level is
+// refused when the bundle compiles.
+func TestHR191_AVerifyRuleRaisesTheRequiredLevel(t *testing.T) {
+	f := newFixture(t)
+	r := refundRule("verify-large", domain.Constrain, `action.params.amount > money("50.00", "USD")`)
+	r.Constraint = &domain.Constraint{Kind: domain.Verify, Level: defs.LevelFollowUp}
+	c, err := f.compile(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := f.eval(c, f.refund("80.00", "duplicate"), DefaultBudget)
+	if out.Verdict != domain.VerdictConstrain || len(out.Obligations) != 1 {
+		t.Fatalf("a large refund: %+v", out)
+	}
+	if o := out.Obligations[0]; o.Kind != domain.Verify || o.Level != defs.LevelFollowUp || o.Timing != domain.TimingAfterDispatch ||
+		o.Rule != "verify-large" || o.Clamp || !o.ByAuthority() {
+		t.Fatalf("obligation %+v", o)
+	}
+	if d, _ := out.Decisive(); d.Status != domain.StatusConstrained || d.Detail != "the effect must be verified at follow_up level" {
+		t.Fatalf("checklist %+v", out.Checklist)
+	}
+	if out := f.eval(c, f.refund("30.00", "duplicate"), DefaultBudget); out.Verdict != domain.VerdictPass || len(out.Obligations) != 0 {
+		t.Fatalf("a small refund: %+v", out)
+	}
+	r.Constraint.Level = "settled"
+	if _, err := f.compile(r); !errors.Is(err, domain.ErrInvalid) {
+		t.Fatalf("an unknown level compiled: %v", err)
+	}
+}
+
 func TestDefinitionsCompiledLaterFailClosed(t *testing.T) {
 	f := newFixture(t)
 	wide := []domain.Rule{

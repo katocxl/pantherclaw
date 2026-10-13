@@ -6,6 +6,8 @@ package domain
 import (
 	"maps"
 	"slices"
+
+	defs "github.com/katocxl/pantherclaw/internal/definitions/domain"
 )
 
 // Verdict is the policy's contribution to a decision. PASS means no rule
@@ -66,7 +68,7 @@ const (
 )
 
 // Obligation is a constraint the gateway or connector must enforce, with its
-// timing (F071).
+// timing (F071), or, for verify, one the Authority applies after dispatch.
 type Obligation struct {
 	Rule   string         `json:"rule"`
 	Kind   ConstraintKind `json:"kind"`
@@ -74,8 +76,21 @@ type Obligation struct {
 	Max    string         `json:"max,omitzero"`
 	Values []string       `json:"values,omitzero"`
 	Clamp  bool           `json:"clamp,omitzero"`
-	Timing string         `json:"timing"`
+	// Level is the verification level a verify obligation requires.
+	Level  defs.Level `json:"level,omitzero"`
+	Timing string     `json:"timing"`
 }
+
+// Obligation timings (F071).
+const (
+	TimingBeforeExecution = "before_execution"
+	TimingAfterDispatch   = "after_dispatch"
+)
+
+// ByAuthority reports whether the Authority itself applies the obligation:
+// verify raises the level the effect is verified at (G0 M7 design decision
+// 2). The gateway never applies, and is never sent, such an obligation.
+func (o Obligation) ByAuthority() bool { return o.Kind == Verify }
 
 // Result is the evaluation of one rule, produced by the policy engine.
 type Result struct {

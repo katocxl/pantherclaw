@@ -5,6 +5,7 @@ package transactionsrpc
 
 import (
 	"testing"
+	"time"
 
 	defs "github.com/katocxl/pantherclaw/internal/definitions/domain"
 	pantherclawv1 "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
@@ -83,5 +84,34 @@ func TestEveryStateHasItsProtoValue(t *testing.T) {
 	}
 	if s := integrity(app.Integrity{Seq: 7}).GetStatus(); s != pantherclawv1.IntegrityStatus_INTEGRITY_STATUS_CHAINED {
 		t.Errorf("a chained entry: %v", s)
+	}
+}
+
+// TestExplorer_IntegrityStatesItsCheckpointAndAnchor: an item's integrity
+// is chained, in a checkpoint (with the first one that covers it), or
+// anchored (with the first anchored checkpoint and the anchor's time); a
+// checkpoint or anchor that does not reach its position does not count
+// (F466–F468, HR-194, HR-195).
+func TestExplorer_IntegrityStatesItsCheckpointAndAnchor(t *testing.T) {
+	at := time.Date(2026, 10, 10, 12, 0, 0, 0, time.UTC)
+	for name, c := range map[string]struct {
+		in                 app.Integrity
+		status             pantherclawv1.IntegrityStatus
+		checkpoint, anchor int64
+		anchored           bool
+	}{
+		"pending":          {app.Integrity{Checkpoint: 9}, pantherclawv1.IntegrityStatus_INTEGRITY_STATUS_PENDING, 0, 0, false},
+		"chained":          {app.Integrity{Seq: 7}, pantherclawv1.IntegrityStatus_INTEGRITY_STATUS_CHAINED, 0, 0, false},
+		"a smaller tree":   {app.Integrity{Seq: 7, Checkpoint: 6}, pantherclawv1.IntegrityStatus_INTEGRITY_STATUS_CHAINED, 0, 0, false},
+		"checkpointed":     {app.Integrity{Seq: 7, Checkpoint: 7}, pantherclawv1.IntegrityStatus_INTEGRITY_STATUS_CHECKPOINTED, 7, 0, false},
+		"anchored below":   {app.Integrity{Seq: 7, Checkpoint: 8, Anchored: 6, AnchoredAt: &at}, pantherclawv1.IntegrityStatus_INTEGRITY_STATUS_CHECKPOINTED, 8, 0, false},
+		"anchored":         {app.Integrity{Seq: 7, Checkpoint: 8, Anchored: 9, AnchoredAt: &at}, pantherclawv1.IntegrityStatus_INTEGRITY_STATUS_ANCHORED, 8, 9, true},
+		"anchored exactly": {app.Integrity{Seq: 9, Checkpoint: 9, Anchored: 9, AnchoredAt: &at}, pantherclawv1.IntegrityStatus_INTEGRITY_STATUS_ANCHORED, 9, 9, true},
+	} {
+		p := integrity(c.in)
+		if p.GetStatus() != c.status || p.GetCheckpointSize() != c.checkpoint || p.GetAnchoredSize() != c.anchor ||
+			(p.GetAnchorTime() != nil) != c.anchored || (c.anchored && !p.GetAnchorTime().AsTime().Equal(at)) {
+			t.Errorf("%s: %v", name, p)
+		}
 	}
 }

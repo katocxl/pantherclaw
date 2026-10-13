@@ -31,6 +31,8 @@ func init() {
 type m7Clients struct {
 	transactions    pantherclawv1connect.TransactionServiceClient
 	reconciliations pantherclawv1connect.ReconciliationServiceClient
+	// evidence serves the M7 track B commands (pclaw pack).
+	evidence pantherclawv1connect.EvidenceServiceClient
 }
 
 // enumOf maps a lower-case flag value to the proto enum value

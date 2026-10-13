@@ -9,8 +9,17 @@
 -- name: WatchedGateways :many
 SELECT id, state, config_version FROM pc.gateways WHERE org_id = sqlc.arg(org_id);
 
+-- WatchedConnections also says whether an active connection has a
+-- verification task due, as DueVerifications would lease it (G0 M7 design
+-- decision 1): one probe of verifications_due per connection.
 -- name: WatchedConnections :many
-SELECT id, gateway_id, state FROM pc.connections WHERE org_id = sqlc.arg(org_id) AND state <> 'RETIRED';
+SELECT c.id, c.gateway_id, c.state,
+       (c.state = 'ACTIVE' AND EXISTS (
+           SELECT 1 FROM pc.verifications v
+           WHERE v.org_id = c.org_id AND v.connection_id = c.id AND v.state = 'PENDING' AND v.next_at <= now()
+             AND v.deadline_at > now()))::boolean AS verifications_due
+FROM pc.connections c
+WHERE c.org_id = sqlc.arg(org_id) AND c.state <> 'RETIRED';
 
 -- name: GetKillSwitch :one
 SELECT epoch, kill_switch, engaged_by, engaged_at, engage_reason, now()::timestamptz AS now

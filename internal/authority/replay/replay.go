@@ -78,6 +78,9 @@ const (
 	IncompletePipelineVersion    = "PIPELINE_VERSION_UNSUPPORTED"
 	IncompletePolicyUncompilable = "POLICY_UNCOMPILABLE"
 	IncompleteInputUnavailable   = "INPUT_UNAVAILABLE"
+	// IncompleteReceiptRemoved: retention removed the decision receipt's
+	// body (HR-198), so there is no original decision to reproduce.
+	IncompleteReceiptRemoved = "RECEIPT_REMOVED"
 )
 
 // Outcome is what a replay found. It carries decisions and checklists,
@@ -153,6 +156,13 @@ func (e *Engine) Replay(ctx context.Context, org ids.OrgID, txn ids.UUID, evalua
 	jws, err := e.Source.Receipt(ctx, org, txn, evaluation)
 	if err != nil {
 		return nil, fmt.Errorf("replay: the decision receipt: %w", err)
+	}
+	if jws == "" {
+		// The receipt exists but retention removed its body: an incomplete
+		// replay, never a guessed original (HR-197).
+		return (&Outcome{Transaction: txn, Evaluation: evaluation, Proposed: proposed != nil}).incomplete(Limitation{
+			Code: IncompleteReceiptRemoved, Detail: "retention removed the decision receipt's body: there is no original decision to replay",
+		}), nil
 	}
 	orig, err := original(jws)
 	if err != nil {

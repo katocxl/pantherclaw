@@ -305,5 +305,10 @@ func (w *World) Connection(_ context.Context, _ ids.OrgID, id ids.UUID) (pipelin
 	if !ok {
 		return pipeline.Connection{}, pipeline.ErrNotFound
 	}
+	if c.Reads == nil && c.Package == w.pkg.Name {
+		// As PostgreSQL reads them: the pinned package's reads (a
+		// connection put with Reads keeps its own).
+		c.Reads = w.pkg.HTTPReads()
+	}
 	return c, nil
 }

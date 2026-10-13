@@ -55,8 +55,10 @@ const (
 	ReasonConnectionUnknown    = "CONNECTION_UNKNOWN"
 	ReasonConnectionRequired   = "CONNECTION_REQUIRED"
 	ReasonConnectionContained  = "CONNECTION_QUARANTINED"
-	// ReasonVerifierUnsupported: the definition requires a verification
-	// level its verifier cannot reach for this action (F497, HR-191).
+	// ReasonVerifierUnsupported: the effect must be verified at a level
+	// (the definition's verifier.required, or a policy's verify obligation)
+	// that its verifier cannot reach, or through a connection that cannot
+	// make the verifier's reads (F497, HR-191).
 	ReasonVerifierUnsupported = "VERIFIER_UNSUPPORTED"
 )
 
@@ -1006,33 +1008,79 @@ func (p *Pipeline) bind(s *state, h *Hold, effective defs.Values, deadline time.
 	return nil
 }
 
-// effective applies clamping obligations to the action and returns the
-// effective action's hash and parameters (F104, F107).
 // verification fixes the verify plan of the effective action (G0 M7 design
-// decision 2): the definition's digest and required level, and an extended
-// verifier's expected values. When the definition requires more than the
-// target's acceptance and the values cannot be computed, nothing could
-// ever show the effect, so the action cannot be authorized (F497).
+// decision 2): the definition's digest, the level its effect must be
+// verified at, and an extended verifier's expected values. The level is the
+// definition's verifier.required, raised by any verify obligation of the
+// policy. A level above the target's acceptance needs a verifier that
+// reaches it, a connection through which the gateway can make the
+// verifier's reads, and the values it must observe; without them nothing
+// could ever show the effect at that level, so the action cannot be
+// authorized (F497, HR-191).
 func (s *state) verification(effective defs.Values) {
 	if s.def == nil || s.pinned == nil {
 		return
 	}
 	plan := &VerifyPlan{DefinitionDigest: s.pinned.Definition.Digest, Required: defs.LevelAcceptance}
-	if v := s.def.Verifier; v != nil && v.Extended() {
+	v := s.def.Verifier
+	if v != nil && v.Extended() {
 		plan.Required = v.RequiredLevel()
-		if len(v.Expect) > 0 {
-			exp, ok := v.Expected(s.a.Target, effective)
-			if !ok && plan.Required != defs.LevelAcceptance {
-				s.cl.add(StepRequirements, adomain.CannotAuthorize, ReasonVerifierUnsupported,
-					"the verifier cannot compute what it must observe, and the definition requires "+string(plan.Required), "")
-				return
-			}
-			plan.Expected = exp
+	}
+	source := "" // the definition
+	for _, o := range s.ev.Obligations {
+		if o.Kind == pdomain.Verify && o.Level.Rank() > plan.Required.Rank() && s.policy != nil {
+			plan.Required, source = o.Level, "policy "+s.policy.Version+" rule "+o.Rule
 		}
+	}
+	if plan.Required != defs.LevelAcceptance {
+		if why := s.unverifiable(plan.Required); why != "" {
+			s.cl.add(StepRequirements, adomain.CannotAuthorize, ReasonVerifierUnsupported, why, source)
+			return
+		}
+	}
+	if v != nil && v.Extended() && len(v.Expect) > 0 {
+		exp, ok := v.Expected(s.a.Target, effective)
+		if !ok && plan.Required != defs.LevelAcceptance {
+			s.cl.add(StepRequirements, adomain.CannotAuthorize, ReasonVerifierUnsupported,
+				"the verifier cannot compute what it must observe, and the effect must be verified at "+string(plan.Required)+" level", source)
+			return
+		}
+		plan.Expected = exp
 	}
 	s.ev.Verify = plan
 }
 
+// unverifiable says why no verification of this action can reach level, or
+// "" when one can: the definition's verifier reaches the level, and the
+// action came through an HTTP connection whose pinned package serves every
+// read the verifier names, which only the gateway serving it makes
+// (HR-190).
+func (s *state) unverifiable(level defs.Level) string {
+	v, op := s.def.Verifier, s.def.Operation
+	switch {
+	case v == nil || !v.Extended():
+		return op + " has no verifier that can run, and its effect must be verified at " + string(level) + " level"
+	case v.Reaches().Rank() < level.Rank():
+		return fmt.Sprintf("the verifier of %s reaches %s; the effect must be verified at %s level", op, v.Reaches(), level)
+	case s.conn == nil:
+		return "the action names no connection, so no gateway can read its effect at the target"
+	case s.conn.Kind != "http":
+		return "the verifier reads over HTTP, and the action's connection is " + s.conn.Kind
+	}
+	reads := []string{v.Operation}
+	if v.Lookup != nil {
+		reads = append(reads, v.Lookup.Operation)
+	}
+	for _, r := range reads {
+		if !slices.Contains(s.conn.Reads, r) {
+			return "the connection's pinned package does not serve the verifier's read " + r
+		}
+	}
+	return ""
+}
+
+// effective applies clamping obligations to the action and returns the
+// effective action's hash and parameters (F104, F107).
 func (s *state) effective() (string, defs.Values, bool) {
 	vals := maps.Clone(s.vals)
 	changed := false

@@ -7,12 +7,21 @@ package pgauthority_test
 
 import (
 	"context"
+	"encoding/json/v2"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/katocxl/pantherclaw/internal/actionir"
+	"github.com/katocxl/pantherclaw/internal/authority/adapters/pgauthority"
+	adomain "github.com/katocxl/pantherclaw/internal/authority/domain"
 	"github.com/katocxl/pantherclaw/internal/authority/finalize"
+	"github.com/katocxl/pantherclaw/internal/authority/pipeline"
+	defpg "github.com/katocxl/pantherclaw/internal/definitions/adapters/pgstore"
+	defs "github.com/katocxl/pantherclaw/internal/definitions/domain"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
+	pdomain "github.com/katocxl/pantherclaw/internal/policy/domain"
 	"github.com/katocxl/pantherclaw/internal/transactions/adapters/pgtransactions"
 	tapp "github.com/katocxl/pantherclaw/internal/transactions/app"
 	tdomain "github.com/katocxl/pantherclaw/internal/transactions/domain"
@@ -215,6 +224,216 @@ func TestHR192_EvidenceResolvesAnUnknownOnlyAsOccurred(t *testing.T) {
 	}
 	if res, sp := w.budget(); res != "20" || sp != "30" {
 		t.Fatalf("absent: reserved %s spent %s, want 20 still held", res, sp)
+	}
+}
+
+// verifyRefunds is a policy rule that requires every refund's effect to be
+// verified at level (G0 M7 design decision 2).
+func verifyRefunds(level defs.Level) pdomain.Rule {
+	return pdomain.Rule{
+		ID: "verify-refunds", Kind: pdomain.Constrain, Summary: "refunds are verified", Operations: []string{"payments.refund.create"},
+		When: "true", Reason: "VERIFY_REFUNDS", Constraint: &pdomain.Constraint{Kind: pdomain.Verify, Level: level},
+	}
+}
+
+// TestHR191_APolicyRaisedLevelReachesTheEffectReceipts: in PostgreSQL, a
+// policy's verify(follow_up) is recorded on the transaction when its
+// permit is issued, survives the outcome (the definition requires only
+// acceptance), and every effect receipt states it; the decision receipt
+// lists the obligation, and the gateway is not asked to apply it.
+func TestHR191_APolicyRaisedLevelReachesTheEffectReceipts(t *testing.T) {
+	w := newWorld(t)
+	ctx := context.Background()
+	w.auth.PermitTTL = time.Hour
+	w.refundable("ch_1")
+	w.publishPolicy(1, false, verifyRefunds(defs.LevelFollowUp))
+	s := w.verifier()
+	run := w.run(w.grant("500").ID, ids.UUID{})
+
+	r := w.dispatched(run, "ch_1", "30.00")
+	if r.Decision != adomain.AllowWithObligations {
+		t.Fatalf("decision %s %s", r.Decision, decisive(r))
+	}
+	if got := w.str("SELECT effect_level_required FROM pc.transactions WHERE id = $1", r.TransactionID); got != "follow_up" {
+		t.Fatalf("required level at the permit: %q", got)
+	}
+	receipt := w.str("SELECT receipt_jws FROM pc.decision_receipts WHERE transaction_id = $1", r.TransactionID)
+	obl, _ := claims(t, receipt)["obligations"].([]any)
+	if len(obl) != 1 || obl[0].(map[string]any)["kind"] != "verify" || obl[0].(map[string]any)["level"] != "follow_up" {
+		t.Fatalf("decision receipt obligations %v", obl)
+	}
+	if _, err := w.auth.RecordExecution(ctx, w.gw, finalize.Execution{
+		Permit: r.PermitID, Outcome: finalize.Accepted, TargetStatus: 200, DispatchMS: 5, TargetRef: "re_1",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if got := w.str("SELECT effect_level_required FROM pc.transactions WHERE id = $1", r.TransactionID); got != "follow_up" {
+		t.Fatalf("the outcome lowered the required level to %q", got)
+	}
+	w.db.AdminExec(t, "UPDATE pc.verifications SET next_at = now() WHERE transaction_id = $1", r.TransactionID)
+	l := w.lease(s, r.TransactionID)
+	if a, err := s.Report(ctx, w.org, w.gwID, tapp.Report{Task: l.Task, Secret: l.Secret, HTTPStatus: 200, Found: true, Fields: refund("succeeded", "30.00")}); err != nil || a.State != tdomain.Confirmed {
+		t.Fatalf("report: %+v %v", a, err)
+	}
+	if got := w.str("SELECT string_agg(state || ' ' || level_required || ' ' || coalesce(level_achieved, '-'), ',' ORDER BY seq) FROM pc.effect_receipts WHERE transaction_id = $1",
+		r.TransactionID); got != "CONFIRMED follow_up follow_up" {
+		t.Fatalf("effect receipts %s", got)
+	}
+	jws := w.str("SELECT receipt_jws FROM pc.effect_receipts WHERE transaction_id = $1", r.TransactionID)
+	if c := claims(t, jws); c["required"] != "follow_up" || c["achieved"] != "follow_up" {
+		t.Fatalf("effect receipt claims %v", c)
+	}
+}
+
+// TestHR191_UnsupportedLevelsAreRefusedInPostgres: through PostgreSQL, a
+// level the refund verifier cannot reach, and a connection whose package
+// is not pinned (so the gateway has no reviewed read to make), are each
+// CANNOT_AUTHORIZE with VERIFIER_UNSUPPORTED; the connection's reads come
+// from its pinned package.
+func TestHR191_UnsupportedLevelsAreRefusedInPostgres(t *testing.T) {
+	w := newWorld(t)
+	w.refundable("ch_1", "ch_2")
+	run := w.run(w.grant("500").ID, ids.UUID{})
+
+	reader := &pgauthority.Reader{Pool: w.pool, Definitions: &defpg.Store{Pool: w.pool}}
+	c, err := reader.Connection(context.Background(), w.org, w.conn)
+	if err != nil || strings.Join(c.Reads, ",") != "payments.refund.get,payments.refund.list,payments.refund.recent" {
+		t.Fatalf("the connection's reads %v: %v", c.Reads, err)
+	}
+
+	w.publishPolicy(1, false, verifyRefunds(defs.LevelDomainEffect))
+	if r := w.authorize(w.request(run, ids.NewV7(), "ch_1", "30.00")); r.Decision != adomain.CannotAuthorize || decisive(r) != pipeline.ReasonVerifierUnsupported {
+		t.Fatalf("domain_effect: %s %s", r.Decision, decisive(r))
+	}
+
+	w.publishPolicy(2, false, verifyRefunds(defs.LevelFollowUp))
+	w.db.AdminExec(t, "DELETE FROM pc.package_pins WHERE org_id = $1", w.org)
+	if c, err := reader.Connection(context.Background(), w.org, w.conn); err != nil || c.Reads == nil || len(c.Reads) != 0 {
+		t.Fatalf("an unpinned package's reads %v: %v", c.Reads, err)
+	}
+	if r := w.authorize(w.request(run, ids.NewV7(), "ch_2", "30.00")); r.Decision != adomain.CannotAuthorize || decisive(r) != pipeline.ReasonVerifierUnsupported {
+		t.Fatalf("no pinned read: %s %s", r.Decision, decisive(r))
+	}
+}
+
+// withoutVerifier rewrites the stored refund definition as a package that
+// declares no verifier would have stored it (mock-payments' only write has
+// one): what RecordExecution reads at the permit's digest.
+func (w *world) withoutVerifier() {
+	w.t.Helper()
+	w.db.AdminExec(w.t, `UPDATE pc.action_definitions
+		SET canonical = convert_to(((convert_from(canonical, 'UTF8')::jsonb) - 'verifier')::text, 'UTF8')
+		WHERE org_id = $1 AND operation = 'payments.refund.create'`, w.org)
+}
+
+// sdkDispatched authorizes a refund on the sdk channel, a cooperative one
+// whose agent performs the action itself (HR-186), and moves its permit to
+// DISPATCHING.
+func (w *world) sdkDispatched(run ids.UUID, charge, amount string) finalize.Result {
+	w.t.Helper()
+	req := w.request(run, ids.NewV7(), charge, amount)
+	a := req.Action.Action
+	a.Channel = "sdk"
+	p, err := actionir.Encode(a)
+	if err != nil {
+		w.t.Fatal(err)
+	}
+	req.Action = p
+	r := w.authorize(req)
+	if r.Permit == "" {
+		w.t.Fatalf("no permit: %s %s", r.Decision, decisive(r))
+	}
+	if _, err := w.auth.BeginDispatch(context.Background(), w.gw, r.PermitID, r.Epoch, finalize.Outbound{}); err != nil {
+		w.t.Fatal(err)
+	}
+	return r
+}
+
+// TestHR191_AWriteNothingCanVerifyIsUnverifiable (G0 M7 design decision
+// 2): an accepted write whose definition has no verifier gets, after its
+// execution receipt and in the same transaction, one appended UNVERIFIABLE
+// effect receipt with the reason, basis "definition", the acceptance level
+// and every declared effect kind UNVERIFIABLE; a delegated one (the agent
+// ran it) reaches no level and is labeled PARTIAL coverage; an unknown one
+// stays an unknown effect for its reconciliation; and a delegated write
+// whose definition has a verifier is verified like any other, its receipts
+// still labeled PARTIAL.
+func TestHR191_AWriteNothingCanVerifyIsUnverifiable(t *testing.T) {
+	w := newWorld(t)
+	ctx := context.Background()
+	w.auth.PermitTTL = time.Hour
+	w.refundable("ch_1", "ch_2", "ch_3", "ch_4")
+	s := w.verifier()
+	run := w.run(w.grant("500").ID, ids.UUID{})
+
+	// A delegated refund whose definition has a verifier is verified.
+	verified := w.sdkDispatched(run, "ch_1", "10.00")
+	if _, err := w.auth.RecordExecution(ctx, w.gw, finalize.Execution{Permit: verified.PermitID, Outcome: finalize.Delegated, DispatchMS: -1}); err != nil {
+		t.Fatal(err)
+	}
+	if n := w.count("SELECT count(*) FROM pc.effect_receipts WHERE transaction_id = $1", verified.TransactionID); n != 0 {
+		t.Fatalf("a delegated refund with a verifier got %d receipts before any read", n)
+	}
+	w.db.AdminExec(t, "UPDATE pc.verifications SET next_at = now() WHERE transaction_id = $1", verified.TransactionID)
+	l := w.lease(s, verified.TransactionID)
+	if l.Purpose != tdomain.PurposeFollowUp || l.Operation != "payments.refund.list" {
+		t.Fatalf("a delegated refund's read %+v", l)
+	}
+	if a, err := s.Report(ctx, w.org, w.gwID, tapp.Report{Task: l.Task, Secret: l.Secret, HTTPStatus: 200, Found: true, Complete: true, Fields: refund("succeeded", "10.00")}); err != nil || a.State != tdomain.Confirmed {
+		t.Fatalf("a delegated refund's report: %+v %v", a, err)
+	}
+	if c := claims(t, w.str("SELECT receipt_jws FROM pc.effect_receipts WHERE transaction_id = $1", verified.TransactionID)); c["state"] != "CONFIRMED" || c["coverage"] != "PARTIAL" {
+		t.Fatalf("a verified delegated refund's receipt %v", c)
+	}
+
+	w.withoutVerifier()
+	accepted := w.dispatched(run, "ch_4", "30.00")
+	if _, err := w.auth.RecordExecution(ctx, w.gw, finalize.Execution{Permit: accepted.PermitID, Outcome: finalize.Accepted, TargetStatus: 200, DispatchMS: 5, TargetRef: "re_1"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := w.str(`SELECT string_agg(state || '/' || basis || '/' || level_required || '/' || coalesce(level_achieved, '-'), ',' ORDER BY seq)
+		FROM pc.effect_receipts WHERE transaction_id = $1`, accepted.TransactionID); got != "UNVERIFIABLE/definition/acceptance/acceptance" {
+		t.Fatalf("an accepted refund nothing verifies: %q", got)
+	}
+	if got := w.str("SELECT effect_state || ' ' || effect_level_achieved FROM pc.transactions WHERE id = $1", accepted.TransactionID); got != "UNVERIFIABLE acceptance" {
+		t.Fatalf("its transaction %q", got)
+	}
+	c := claims(t, w.str("SELECT receipt_jws FROM pc.effect_receipts WHERE transaction_id = $1", accepted.TransactionID))
+	effects, _ := json.Marshal(c["effects"], json.Deterministic(true))
+	if c["reason"] != tdomain.ReasonNoVerifier || c["basis"].(map[string]any)["kind"] != "definition" || c["coverage"] != nil ||
+		string(effects) != `[{"kind":"funds.transfer","state":"UNVERIFIABLE"}]` {
+		t.Fatalf("its effect receipt %v", c)
+	}
+	if n := w.count(`SELECT count(*) FROM pc.verifications WHERE transaction_id = $1`, accepted.TransactionID); n != 0 {
+		t.Fatal("a refund nothing can verify scheduled a read")
+	}
+	// Both receipts reached the ledger in the outcome's own transaction.
+	if got := w.str(`SELECT string_agg(l.kind, ',' ORDER BY l.kind) || ' ' || count(DISTINCT l.xid) FROM pc.ledger_entries l
+		WHERE l.id IN (SELECT ledger_entry_id FROM pc.execution_receipts WHERE transaction_id = $1
+		               UNION ALL SELECT ledger_entry_id FROM pc.effect_receipts WHERE transaction_id = $1)`, accepted.TransactionID); got != "receipt.effect,receipt.execution 1" {
+		t.Fatalf("ledger entries %q", got)
+	}
+
+	delegated := w.sdkDispatched(run, "ch_2", "20.00")
+	if _, err := w.auth.RecordExecution(ctx, w.gw, finalize.Execution{Permit: delegated.PermitID, Outcome: finalize.Delegated, DispatchMS: -1}); err != nil {
+		t.Fatal(err)
+	}
+	if got := w.str(`SELECT state || '/' || coalesce(level_achieved, '-') FROM pc.effect_receipts WHERE transaction_id = $1`, delegated.TransactionID); got != "UNVERIFIABLE/-" {
+		t.Fatalf("a delegated refund nothing verifies: %q", got)
+	}
+	if c := claims(t, w.str("SELECT receipt_jws FROM pc.effect_receipts WHERE transaction_id = $1", delegated.TransactionID)); c["coverage"] != "PARTIAL" || c["achieved"] != nil {
+		t.Fatalf("a delegated refund's receipt %v", c)
+	}
+
+	unknown := w.dispatched(run, "ch_3", "15.00")
+	if _, err := w.auth.RecordExecution(ctx, w.gw, finalize.Execution{Permit: unknown.PermitID, Outcome: finalize.Unknown, DispatchMS: -1}); err != nil {
+		t.Fatal(err)
+	}
+	if n := w.count("SELECT count(*) FROM pc.effect_receipts WHERE transaction_id = $1", unknown.TransactionID); n != 0 {
+		t.Fatal("an unknown outcome was called UNVERIFIABLE instead of being reconciled")
+	}
+	if n := w.count("SELECT count(*) FROM pc.reconciliation_tasks WHERE transaction_id = $1 AND state = 'OPEN'", unknown.TransactionID); n != 1 {
+		t.Fatal("an unknown outcome nothing can verify has no open reconciliation")
 	}
 }
 

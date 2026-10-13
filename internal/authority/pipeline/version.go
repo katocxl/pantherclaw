@@ -8,4 +8,7 @@ package pipeline
 // replay of inputs recorded by another version is incomplete (F507). Raise
 // it with any change that could decide the same recorded reads differently,
 // or that reads something the recording does not hold.
-const Version = 1
+//
+// 2: step 8 applies the policy's verify obligation and checks that the
+// connection can make the verifier's reads (Connection.Reads, F497).
+const Version = 2

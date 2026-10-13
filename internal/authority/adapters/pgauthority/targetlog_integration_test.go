@@ -81,6 +81,9 @@ func TestHR112_TargetLogsFindEffectsWithoutReceipts(t *testing.T) {
 	if got := w.str("SELECT state || ' ' || resolved_via FROM pc.reconciliation_tasks WHERE transaction_id = $1 AND kind = 'unknown_outcome'", unknown.TransactionID); got != "OCCURRED target_log" {
 		t.Fatalf("the unknown refund: %s", got)
 	}
+	if got := w.entry(unknown.TransactionID); got != "CANCELLED OCCURRED system:target_log" { // G0 M7 slice A11
+		t.Fatalf("the unknown refund's waitlist entry: %q", got)
+	}
 	if got := w.str("SELECT state || ' ' || basis FROM pc.effect_receipts WHERE transaction_id = $1 ORDER BY seq DESC LIMIT 1", failed.TransactionID); got != "CONFLICTING target_log" {
 		t.Fatalf("the refused refund: %s", got)
 	}

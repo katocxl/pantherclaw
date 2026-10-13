@@ -92,7 +92,7 @@ func newWant() permitWant {
 func TestHR009_PermitVerification(t *testing.T) {
 	pv, j := verifierFixture(t)
 	want := newWant()
-	if err := pv.verify(context.Background(), j.sign(t, keys.PurposePermits, permitType, validClaims(want)), want); err != nil {
+	if _, err := pv.verify(context.Background(), j.sign(t, keys.PurposePermits, permitType, validClaims(want)), want); err != nil {
 		t.Fatalf("valid permit refused: %v", err)
 	}
 	for name, tc := range map[string]struct {
@@ -123,12 +123,12 @@ func TestHR009_PermitVerification(t *testing.T) {
 		if tc.typ != "" {
 			typ = tc.typ
 		}
-		if err := pv.verify(context.Background(), j.sign(t, p, typ, c), want); !errors.Is(err, ErrPermitInvalid) {
+		if _, err := pv.verify(context.Background(), j.sign(t, p, typ, c), want); !errors.Is(err, ErrPermitInvalid) {
 			t.Errorf("%s: %v, want ErrPermitInvalid", name, err)
 		}
 	}
 	for _, garbage := range []string{"", "a.b.c", "not a token"} {
-		if err := pv.verify(context.Background(), garbage, want); !errors.Is(err, ErrPermitInvalid) {
+		if _, err := pv.verify(context.Background(), garbage, want); !errors.Is(err, ErrPermitInvalid) {
 			t.Errorf("token %q: %v", garbage, err)
 		}
 	}
@@ -137,7 +137,7 @@ func TestHR009_PermitVerification(t *testing.T) {
 func TestPermitKeyRotationRefetchesJWKS(t *testing.T) {
 	pv, j := verifierFixture(t)
 	want := newWant()
-	if err := pv.verify(context.Background(), j.sign(t, keys.PurposePermits, permitType, validClaims(want)), want); err != nil {
+	if _, err := pv.verify(context.Background(), j.sign(t, keys.PurposePermits, permitType, validClaims(want)), want); err != nil {
 		t.Fatal(err)
 	}
 	rotated := newRegistry(t)
@@ -146,13 +146,13 @@ func TestPermitKeyRotationRefetchesJWKS(t *testing.T) {
 	j.mu.Unlock()
 	tok := j.sign(t, keys.PurposePermits, permitType, validClaims(want))
 	// Within the refresh interval an unknown kid does not refetch.
-	if err := pv.verify(context.Background(), tok, want); err == nil {
+	if _, err := pv.verify(context.Background(), tok, want); err == nil {
 		t.Fatal("new key accepted without a JWKS refetch")
 	}
 	pv.mu.Lock()
 	pv.fetched = time.Now().Add(-2 * jwksRefreshEvery)
 	pv.mu.Unlock()
-	if err := pv.verify(context.Background(), tok, want); err != nil {
+	if _, err := pv.verify(context.Background(), tok, want); err != nil {
 		t.Fatalf("rotated key refused after refetch: %v", err)
 	}
 	j.mu.Lock()
@@ -168,7 +168,7 @@ func TestJWKSUnavailableFailsClosed(t *testing.T) {
 	j.status = http.StatusInternalServerError
 	j.mu.Unlock()
 	want := newWant()
-	if err := pv.verify(context.Background(), j.sign(t, keys.PurposePermits, permitType, validClaims(want)), want); err == nil {
+	if _, err := pv.verify(context.Background(), j.sign(t, keys.PurposePermits, permitType, validClaims(want)), want); err == nil {
 		t.Fatal("permit accepted without a JWKS")
 	}
 }

@@ -76,9 +76,12 @@ const (
 	GlobalJobs         GlobalPurpose = "jobs"           // River tables
 	GlobalCrossOrgList GlobalPurpose = "cross_org_list" // pc.cross_org_list only
 	GlobalHealth       GlobalPurpose = "health"         // readiness probes
+	// GlobalAnchors is the anchoring job's pc.anchors (G0 M7 design decision
+	// 12): the one global evidence table, blinded leaves and roots only.
+	GlobalAnchors GlobalPurpose = "anchors"
 )
 
-var globalPurposes = []GlobalPurpose{GlobalLicence, GlobalJobs, GlobalCrossOrgList, GlobalHealth}
+var globalPurposes = []GlobalPurpose{GlobalLicence, GlobalJobs, GlobalCrossOrgList, GlobalHealth, GlobalAnchors}
 
 // TxOption customizes a transaction.
 type TxOption func(*pgx.TxOptions)

@@ -152,6 +152,30 @@ var scenarios = []replayable{
 		s.W.Fail["Policy"] = true
 		return refund(s, run, "ch_1", "70.00")
 	}, adomain.CannotAuthorize, pipeline.ReasonEvidenceUnavailable},
+	// Step 8's verification checks (G0 M7, F497): the connection's reads
+	// are recorded with it.
+	{"a verify obligation", func(t *testing.T, s *pipelinetest.Scenario, run ids.UUID) pipeline.Request {
+		policy(t, s, verifyAt(defs.LevelFollowUp))
+		return refund(s, run, "ch_1", "30.00")
+	}, adomain.AllowWithObligations, "VERIFY_REFUNDS"},
+	{"a level no verifier reaches", func(t *testing.T, s *pipelinetest.Scenario, run ids.UUID) pipeline.Request {
+		policy(t, s, verifyAt(defs.LevelDomainEffect))
+		return refund(s, run, "ch_1", "30.00")
+	}, adomain.CannotAuthorize, pipeline.ReasonVerifierUnsupported},
+	{"a connection that cannot make the read", func(t *testing.T, s *pipelinetest.Scenario, run ids.UUID) pipeline.Request {
+		policy(t, s, verifyAt(defs.LevelFollowUp))
+		c, _ := s.W.Connection(context.Background(), s.Org, s.Connection)
+		c.Reads = []string{"payments.refund.recent"}
+		s.W.PutConnection(c)
+		return refund(s, run, "ch_1", "30.00")
+	}, adomain.CannotAuthorize, pipeline.ReasonVerifierUnsupported},
+}
+
+func verifyAt(level defs.Level) pdomain.Rule {
+	return pdomain.Rule{
+		ID: "verify", Kind: pdomain.Constrain, Summary: "refunds are verified", Operations: []string{"payments.refund.create"},
+		When: "true", Reason: "VERIFY_REFUNDS", Constraint: &pdomain.Constraint{Kind: pdomain.Verify, Level: level},
+	}
 }
 
 // TestRecordingReplaysEveryScenarioExactly records each scenario's

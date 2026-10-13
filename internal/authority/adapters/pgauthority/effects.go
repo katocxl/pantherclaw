@@ -23,7 +23,10 @@ import (
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
+	"github.com/katocxl/pantherclaw/internal/transactions/adapters/pgtransactions"
+	tapp "github.com/katocxl/pantherclaw/internal/transactions/app"
 	tdomain "github.com/katocxl/pantherclaw/internal/transactions/domain"
+	"github.com/katocxl/pantherclaw/internal/waitlist/adapters/pgwaitlist"
 )
 
 // What happens after a dispatch (G0 M7 track A, HR-190..192): every
@@ -67,6 +70,18 @@ func verifyPlan(ins *dbq.InsertPermitForTransactionParams, p *pipeline.VerifyPla
 		ins.VerifyExpect = b
 	}
 	return nil
+}
+
+// requireLevel records on the transaction the level its permit's verify
+// plan requires, when that is above the target's acceptance (a definition's
+// verifier.required or a policy's verify obligation, G0 M7 design decision
+// 2), so that every effect receipt states it (HR-191).
+func requireLevel(ctx context.Context, q *dbq.Queries, org ids.OrgID, txn ids.UUID, p *pipeline.VerifyPlan) error {
+	if p == nil || p.Required.Rank() <= defs.LevelAcceptance.Rank() {
+		return nil
+	}
+	level := string(p.Required)
+	return q.SetEffectRequired(ctx, &level, org, txn)
 }
 
 // executed is what an execution receipt states about the permit in c.
@@ -119,49 +134,87 @@ func definition(raw []byte) (*defs.Definition, error) {
 	return &d, nil
 }
 
-// scheduleVerification records the level the permit's definition requires
-// and schedules the verification its verifier allows for outcome o
-// (HR-190, G0 M7 design decision 1): after an accepted dispatch, a read of
-// the object the target named (ref, kept only when it matches the read's
-// target pattern) or else a lookup; after an unknown one, a lookup. It
-// returns the reference it kept. A definition without an extended verifier
-// schedules nothing: its effects are UNVERIFIABLE.
+// scheduleVerification records the level the permit's definition requires,
+// unless its decision required more (a policy's verify obligation, kept by
+// requireLevel), and schedules the verification its verifier allows for
+// outcome o (HR-190, G0 M7 design decision 1): after an accepted (or
+// delegated) dispatch, a read of the object the target named (ref, kept
+// only when it matches the read's target pattern) or else a lookup; after
+// an unknown one, a lookup. It returns the reference it kept.
+//
+// An accepted or delegated write that nothing can verify (a definition
+// without a verifier, or a verifier with no read to make for this outcome)
+// is UNVERIFIABLE (HR-191, G0 M7 design decision 2): scheduleVerification
+// returns what the caller appends, after the execution receipt and in the
+// same transaction, with unverifiable. An unknown outcome is never
+// UNVERIFIABLE: it stays an unknown effect, owned by its reconciliation,
+// until evidence or a person resolves it.
 func scheduleVerification(ctx context.Context, q *dbq.Queries, org ids.OrgID, c dbq.ExecutionContextRow, o finalize.Outcome,
 	ref string,
-) (string, error) {
+) (string, *unverified, error) {
 	if c.DefinitionDigest == nil {
-		return "", nil // a permit issued before M7
+		return "", nil, nil // a permit issued before M7
 	}
 	raw, err := q.DefinitionCanonical(ctx, org, *c.DefinitionDigest)
 	if db.IsNoRows(err) {
-		return "", nil
+		return "", nil, nil
 	} else if err != nil {
-		return "", err
+		return "", nil, err
 	}
 	d, err := definition(raw)
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
 	v := d.Verifier
-	level := string(defs.LevelAcceptance)
+	level := defs.LevelAcceptance
 	if v != nil && v.Extended() {
-		level = string(v.RequiredLevel())
+		level = v.RequiredLevel()
 	}
-	if err := q.SetEffectRequired(ctx, &level, org, c.TransactionID); err != nil {
-		return "", err
+	if c.EffectLevelRequired != nil && defs.Level(*c.EffectLevelRequired).Rank() > level.Rank() {
+		level = defs.Level(*c.EffectLevelRequired)
 	}
-	if v == nil || !v.Extended() || c.ConnectionID == nil || c.DispatchingAt == nil || (o != finalize.Accepted && o != finalize.Unknown) {
-		return "", nil
+	required := string(level)
+	if err := q.SetEffectRequired(ctx, &required, org, c.TransactionID); err != nil {
+		return "", nil, err
+	}
+	kept, scheduled, err := schedule(ctx, q, org, c, d, o, ref)
+	if err != nil || (o != finalize.Accepted && o != finalize.Delegated) {
+		return kept, nil, err
+	}
+	reason := tdomain.UnverifiableReason(d, scheduled)
+	if reason == "" {
+		return kept, nil, nil
+	}
+	return kept, &unverified{definition: d, outcome: o, required: level, reason: reason}, nil
+}
+
+// unverified is an outcome whose effect nothing can verify.
+type unverified struct {
+	definition *defs.Definition
+	outcome    finalize.Outcome
+	required   defs.Level
+	reason     string
+}
+
+// schedule creates the verification task d's verifier allows for outcome
+// o, and reports whether it did.
+func schedule(ctx context.Context, q *dbq.Queries, org ids.OrgID, c dbq.ExecutionContextRow, d *defs.Definition,
+	o finalize.Outcome, ref string,
+) (string, bool, error) {
+	v := d.Verifier
+	if v == nil || !v.Extended() || c.ConnectionID == nil || c.DispatchingAt == nil ||
+		(o != finalize.Accepted && o != finalize.Delegated && o != finalize.Unknown) {
+		return "", false, nil
 	}
 	readRaw, err := q.SiblingDefinition(ctx, org, *c.DefinitionDigest, v.Operation)
 	if err != nil && !db.IsNoRows(err) {
-		return "", err
+		return "", false, err
 	}
 	kept := ""
 	var read *defs.Definition
 	if err == nil {
 		if read, err = definition(readRaw); err != nil {
-			return "", err
+			return "", false, err
 		}
 		switch {
 		case ref != "" && v.Reference != nil && read.Target.MatchID(ref):
@@ -173,7 +226,7 @@ func scheduleVerification(ctx context.Context, q *dbq.Queries, org ids.OrgID, c 
 	req := verifyRequest{Params: map[string]string{}}
 	purpose, op := tdomain.PurposeFollowUp, v.Operation
 	switch {
-	case o == finalize.Accepted && kept != "":
+	case o != finalize.Unknown && kept != "":
 		req.Mode, req.Target = modeReference, actionir.Target{Type: read.Target.Type, ID: kept}
 	case v.Lookup != nil && c.TargetType != nil && c.TargetID != nil:
 		req.Mode, req.Target, op = modeLookup, actionir.Target{Type: *c.TargetType, ID: *c.TargetID}, v.Lookup.Operation
@@ -181,27 +234,64 @@ func scheduleVerification(ctx context.Context, q *dbq.Queries, org ids.OrgID, c 
 			purpose = tdomain.PurposeReconcile
 		}
 	default:
-		return kept, nil
+		return kept, false, nil
 	}
 	body, err := json.Marshal(req, json.Deterministic(true))
 	if err != nil {
-		return "", err
+		return "", false, err
 	}
 	txn := c.TransactionID
-	return kept, q.ScheduleVerification(ctx, dbq.ScheduleVerificationParams{
+	return kept, true, q.ScheduleVerification(ctx, dbq.ScheduleVerificationParams{
 		OrgID: org, ID: ids.NewV7(), Purpose: string(purpose), TransactionID: &txn, ConnectionID: *c.ConnectionID,
 		Operation: op, Request: body, DelaySeconds: verifyDelay.Seconds(),
 		DeadlineAt: c.DispatchingAt.Add(time.Duration(v.WithinSeconds) * time.Second),
 	})
 }
 
+// unverifiable appends u's UNVERIFIABLE effect receipt for transaction txn
+// (F485): basis "definition", the reason, every declared effect kind
+// UNVERIFIABLE (F490's part), and the level the target's acceptance
+// reached, which a delegated outcome, where the agent ran the action
+// itself, does not reach (HR-191). The receipt of a cooperative channel's
+// transaction is labeled PARTIAL coverage. A nil u appends nothing.
+func unverifiable(ctx context.Context, tx db.TenantTx, q *dbq.Queries, org ids.OrgID, gatewayID string, txn ids.UUID,
+	u *unverified, sign finalize.Signing,
+) error {
+	if u == nil {
+		return nil
+	}
+	now, err := q.DBNow(ctx)
+	if err != nil {
+		return err
+	}
+	d := u.definition
+	e := tapp.Effect{
+		Org: org, Transaction: txn, State: tdomain.Unverifiable, Required: u.required, Basis: basisDefinition,
+		Effects: tapp.Effects(d, tdomain.Unverifiable), Reason: u.reason, At: now,
+	}
+	if u.outcome == finalize.Accepted {
+		e.Achieved = defs.LevelAcceptance
+	}
+	if v := d.Verifier; v != nil {
+		e.Verifier, e.Limits = &tapp.VerifierRef{Operation: v.Operation, Establishes: v.Establishes}, v.Limits
+	}
+	return pgtransactions.AppendEffect(ctx, tx, q, e, evdomain.Actor{Type: "gateway", ID: gatewayID}, func(e tapp.Effect) (tapp.Signed, error) {
+		return tapp.SignEffect(sign.Receipts, sign.Issuer, e)
+	})
+}
+
+// basisDefinition is the basis of an effect receipt the definition alone
+// decides: nothing can verify the effect.
+const basisDefinition = "definition"
+
 // lateReport handles a gateway's RecordExecution for a permit the sweeper
 // already marked UNKNOWN (PAP-1 §7.4): the report is kept as an
 // observation; accepted resolves the reconciliation as occurred (evidence
-// only ever resolves that way, HR-192), commits the reservations and
-// schedules the follow-up read; any other outcome resolves nothing. It
-// returns the sweeper's execution receipt.
-func lateReport(ctx context.Context, q *dbq.Queries, org ids.OrgID, gatewayID string, e finalize.Execution,
+// only ever resolves that way, HR-192), commits the reservations, closes
+// the RECONCILIATION waitlist entry and schedules the follow-up read; any
+// other outcome resolves nothing. It returns the sweeper's execution
+// receipt.
+func lateReport(ctx context.Context, tx db.TenantTx, q *dbq.Queries, org ids.OrgID, gatewayID string, e finalize.Execution, sign finalize.Signing,
 	c dbq.ExecutionContextRow,
 ) (string, error) {
 	rec, err := q.RecordedExecution(ctx, org, e.Permit, gatewayID)
@@ -246,8 +336,16 @@ func lateReport(ctx context.Context, q *dbq.Queries, org ids.OrgID, gatewayID st
 		if err := q.SettleDedupeClaim(ctx, string(pipeline.ClaimSucceeded), org, txn); err != nil {
 			return "", err
 		}
+		if err := pgwaitlist.CloseReconciliation(ctx, tx, org, txn, pgwaitlist.ResolvedOccurred,
+			evdomain.Actor{Type: "gateway", ID: gatewayID}); err != nil {
+			return "", err
+		}
 	}
-	if _, err := scheduleVerification(ctx, q, org, c, finalize.Accepted, e.TargetRef); err != nil {
+	_, u, err := scheduleVerification(ctx, q, org, c, finalize.Accepted, e.TargetRef)
+	if err != nil {
+		return "", err
+	}
+	if err := unverifiable(ctx, tx, q, org, gatewayID, txn, u, sign); err != nil {
 		return "", err
 	}
 	return rec.ReceiptJws, nil
@@ -286,6 +384,6 @@ func sweptEvidence(ctx context.Context, tx db.TenantTx, q *dbq.Queries, org ids.
 	if err := openReconciliation(ctx, q, org, p.TransactionID); err != nil {
 		return err
 	}
-	_, err = scheduleVerification(ctx, q, org, c, finalize.Unknown, "")
+	_, _, err = scheduleVerification(ctx, q, org, c, finalize.Unknown, "") // an unknown outcome is never UNVERIFIABLE
 	return err
 }

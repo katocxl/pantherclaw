@@ -18,6 +18,9 @@ type Configuration struct {
 	Routes      []dbq.GatewayConnectionRoutesRow
 	Packages    []dbq.GatewayPackagesRow
 	Credentials []dbq.GatewaySealedCredentialsRow
+	// Captures are the active capture profiles covering those connections
+	// (G0 M7 design decision 10).
+	Captures []dbq.GatewayCaptureProfilesRow
 }
 
 // Configuration returns the calling gateway's configuration: its
@@ -48,7 +51,10 @@ func (s *Service) Configuration(ctx context.Context, id Identity, known int64) (
 		if out.Packages, err = q.GatewayPackages(ctx, id.Org, id.Gateway); err != nil {
 			return err
 		}
-		out.Credentials, err = q.GatewaySealedCredentials(ctx, id.Org, id.Gateway)
+		if out.Credentials, err = q.GatewaySealedCredentials(ctx, id.Org, id.Gateway); err != nil {
+			return err
+		}
+		out.Captures, err = q.GatewayCaptureProfiles(ctx, id.Org, id.Gateway)
 		return err
 	})
 	return out, err

@@ -86,6 +86,26 @@ func TestHR124_PackagesBeforeM7StayValid(t *testing.T) {
 	}
 }
 
+// TestHR190_APackagesHTTPReadsAreTheReadsAGatewayCanMake: a connection to
+// a package serves, for a verifier, exactly its reads with an HTTP GET
+// template, never a write (G0 M7 design decision 2, F497).
+func TestHR190_APackagesHTTPReadsAreTheReadsAGatewayCanMake(t *testing.T) {
+	p, err := Decode(readMock(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := p.HTTPReads()
+	want := []string{"payments.refund.get", "payments.refund.list", "payments.refund.recent"}
+	if len(got) != len(want) {
+		t.Fatalf("reads %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("reads %v, want %v", got, want)
+		}
+	}
+}
+
 func indexOf(t *testing.T, raw []byte, s string) int {
 	t.Helper()
 	for i := 0; i+len(s) <= len(raw); i++ {
