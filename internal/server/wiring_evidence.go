@@ -21,12 +21,15 @@ import (
 	evapp "github.com/katocxl/pantherclaw/internal/evidence/app"
 	"github.com/katocxl/pantherclaw/internal/evidence/checkpoints"
 	"github.com/katocxl/pantherclaw/internal/evidence/keydocs"
+	"github.com/katocxl/pantherclaw/internal/evidence/packbuild"
 	"github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1/pantherclawv1connect"
 	"github.com/katocxl/pantherclaw/internal/keystore"
 	"github.com/katocxl/pantherclaw/internal/platform/clock"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
+	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	"github.com/katocxl/pantherclaw/internal/platform/jobs"
 	"github.com/katocxl/pantherclaw/internal/platform/keys"
+	txapp "github.com/katocxl/pantherclaw/internal/transactions/app"
 )
 
 // mountEvidenceKeys serves evidence-keys.json and revoked-keys.json
@@ -49,7 +52,10 @@ func registerEvidenceWorkers(reg *jobs.Registry, cfg *Config, pool *db.Pool, key
 	if err := checkpoints.Register(reg, svc); err != nil {
 		return nil, err
 	}
-	periodic := checkpoints.PeriodicJobs(cfg.checkpointInterval())
+	if err := packbuild.Register(reg, newPackBuilder(cfg, pool, keyReg, log)); err != nil {
+		return nil, err
+	}
+	periodic := append(checkpoints.PeriodicJobs(cfg.checkpointInterval()), packbuild.PeriodicJobs()...)
 	if !cfg.Evidence.Anchoring.Enabled {
 		return periodic, nil
 	}
@@ -120,11 +126,38 @@ func newAnchoring(cfg *Config, pool *db.Pool, keyReg *keys.Registry, log *slog.L
 }
 
 // registerEvidence serves EvidenceService on the public API, with decision
-// replay when the server can open sealed inputs.
-func registerEvidence(rs *connect.Server, d apiDeps) {
+// replay when the server can open sealed inputs, and evidence packs (their
+// build job is enqueued in the creating transaction and runs in the worker).
+func registerEvidence(rs *connect.Server, d apiDeps) error {
 	svc := evapp.New(d.pool, d.logOrigin)
 	if d.kp != nil {
 		svc.WithReplay(replayEngine(d.pool, d.kp), clock.System{})
 	}
+	if d.billing != nil {
+		insert, err := jobs.NewClient(d.pool, nil, jobs.Config{Logger: d.log}) // insert-only: enqueue in the creating transaction
+		if err != nil {
+			return err
+		}
+		svc.WithPacks(func(ctx context.Context, tx db.TenantTx, org ids.OrgID, pack ids.UUID) error {
+			args, err := packbuild.NewBuildArgs(org, pack)
+			if err != nil {
+				return err
+			}
+			return jobs.InsertTx(ctx, insert, tx, args, nil)
+		}, d.billing)
+	}
 	pantherclawv1connect.RegisterEvidenceServiceHandler(rs, evidencerpc.New(svc))
+	return nil
+}
+
+// newPackBuilder builds evidence packs in the worker (design decision 15):
+// signed with the evidence_packs key, co-signed with ML-DSA-65 when
+// evidence.mldsa_cosign is on. Payload captures plug in when capture
+// (migration 00073) is in; until then a pack that asks for them records the
+// gap.
+func newPackBuilder(cfg *Config, pool *db.Pool, keyReg *keys.Registry, log *slog.Logger) *packbuild.Service {
+	return &packbuild.Service{
+		Pool: pool, Keys: keyReg, LogOrigin: cfg.logOrigin(), Cosign: cfg.Evidence.MLDSACosign,
+		Explorer: &txapp.Explorer{Pool: pool}, Bundles: evapp.New(pool, cfg.logOrigin()), Log: log,
+	}
 }

@@ -1,0 +1,462 @@
+// SPDX-License-Identifier: BUSL-1.1
+// Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+
+syntax = "proto3";
+
+package pantherclaw.v1;
+
+import "buf/validate/validate.proto";
+import "google/protobuf/timestamp.proto";
+import "pantherclaw/v1/authority.proto";
+
+// EvidenceAdminService sets what evidence the caller's org keeps and
+// captures (G0 M7 track B, design decisions 9 and 10; HR-198, HR-199,
+// T-075, T-076): retention policies per category, legal holds, restricted
+// payload capture profiles, and the audited read of a capture. Every call
+// is human only. Retention and holds need evidence.retention.manage and
+// capture profiles evidence.capture.manage, at org scope (the Records
+// Manager role); reading a capture needs evidence.read_restricted where
+// the transaction's agent lives (the Auditor role), so whoever configures
+// capture is not the one who reads it.
+//
+// Retention removes only bodies: receipt and ledger entry bodies, observed
+// values, replay inputs and approval notes. Chain hashes, Merkle leaves
+// and checkpoints stay, so the chain and every checkpoint still verify and
+// `pclaw verify` reports a removed body as not available. Lengthening a
+// period applies at once; shortening one takes effect 7 days later, is
+// audited and is notified to the org's admins and auditors, so a hold can
+// still be placed. A hold applies at once and blocks every removal inside
+// it until it is released; releasing one is audited and notified.
+service EvidenceAdminService {
+  // GetRetentionPolicies returns each category's current retention, its
+  // bounds, and a shortening that has not taken effect yet.
+  // permission: evidence.retention.manage
+  rpc GetRetentionPolicies(GetRetentionPoliciesRequest) returns (GetRetentionPoliciesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // SetRetentionPolicy records a new revision of one category's retention.
+  // A longer period applies at once; a shorter one 7 days later.
+  // permission: evidence.retention.manage
+  rpc SetRetentionPolicy(SetRetentionPolicyRequest) returns (SetRetentionPolicyResponse);
+  // CreateLegalHold places a hold that blocks every removal inside its
+  // scope, at once.
+  // permission: evidence.retention.manage
+  rpc CreateLegalHold(CreateLegalHoldRequest) returns (CreateLegalHoldResponse);
+  // ReleaseLegalHold releases an active hold; retention then applies to
+  // what it held.
+  // permission: evidence.retention.manage
+  rpc ReleaseLegalHold(ReleaseLegalHoldRequest) returns (ReleaseLegalHoldResponse);
+  // ListLegalHolds lists the org's holds, newest first.
+  // permission: evidence.retention.manage
+  rpc ListLegalHolds(ListLegalHoldsRequest) returns (ListLegalHoldsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // CreateCaptureProfile switches payload capture on for some connections
+  // and operations, with a purpose and limits. It is audited, notified to
+  // the org's admins and auditors, and reaches the gateways serving those
+  // connections in their configuration.
+  // permission: evidence.capture.manage
+  rpc CreateCaptureProfile(CreateCaptureProfileRequest) returns (CreateCaptureProfileResponse);
+  // ListCaptureProfiles lists the org's capture profiles, newest first.
+  // permission: evidence.capture.manage
+  rpc ListCaptureProfiles(ListCaptureProfilesRequest) returns (ListCaptureProfilesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // DisableCaptureProfile stops a profile at once (audited and notified).
+  // permission: evidence.capture.manage
+  rpc DisableCaptureProfile(DisableCaptureProfileRequest) returns (DisableCaptureProfileResponse);
+  // ReadPayloadCapture returns one captured body. The read (who, which
+  // capture, the reason) is written to the audit ledger before the
+  // content is returned.
+  // permission: evidence.read_restricted
+  rpc ReadPayloadCapture(ReadPayloadCaptureRequest) returns (ReadPayloadCaptureResponse);
+}
+
+// RetentionCategory is a kind of evidence kept for one period (design
+// decision 9). Grant, policy, package and connection revisions are kept
+// while any retained receipt references them and have no category.
+enum RetentionCategory {
+  RETENTION_CATEGORY_UNSPECIFIED = 0;
+  // Restricted payload captures: 1 to 30 days, 7 by default.
+  RETENTION_CATEGORY_PAYLOADS = 1;
+  // Replay inputs and observed values: 7 to 730 days, 90 by default.
+  RETENTION_CATEGORY_NORMALIZED_FACTS = 2;
+  // Receipt bodies and receipt ledger entries: 30 to 3,650 days, 365 by
+  // default.
+  RETENTION_CATEGORY_RECEIPTS = 3;
+  // Approval ledger entries and approval notes: 365 to 3,650 days, 365 by
+  // default.
+  RETENTION_CATEGORY_APPROVALS = 4;
+  // Every other audit ledger entry: 365 to 3,650 days, 365 by default.
+  RETENTION_CATEGORY_SECURITY_AUDIT = 5;
+}
+
+// RetentionRevision is one recorded revision of a category's retention.
+message RetentionRevision {
+  // Revision number; 1 is the default the system recorded.
+  int32 revision = 1;
+  // Days a body is kept.
+  int32 days = 2;
+  // The person who set it; empty for the default.
+  string set_by = 3;
+  // When it was recorded.
+  google.protobuf.Timestamp create_time = 4;
+  // When it takes effect: at once, or 7 days after a shortening.
+  google.protobuf.Timestamp effective_time = 5;
+}
+
+// RetentionPolicy is one category's retention.
+message RetentionPolicy {
+  // Category.
+  RetentionCategory category = 1;
+  // The revision in effect now.
+  RetentionRevision current = 2;
+  // A shortening recorded and not in effect yet, if any.
+  RetentionRevision pending = 3;
+  // The bounds a revision must stay within, and the default.
+  int32 min_days = 4;
+  // Maximum days.
+  int32 max_days = 5;
+  // Default days.
+  int32 default_days = 6;
+}
+
+// GetRetentionPoliciesRequest takes no parameters.
+message GetRetentionPoliciesRequest {}
+
+// GetRetentionPoliciesResponse lists every category.
+message GetRetentionPoliciesResponse {
+  // One policy per category.
+  repeated RetentionPolicy policies = 1;
+}
+
+// SetRetentionPolicyRequest sets one category's retention.
+message SetRetentionPolicyRequest {
+  // Category.
+  RetentionCategory category = 1 [(buf.validate.field).enum = {
+    defined_only: true
+    not_in: [0]
+  }];
+  // Days a body is kept; within the category's bounds.
+  int32 days = 2 [(buf.validate.field).int32 = {
+    gte: 1
+    lte: 3650
+  }];
+}
+
+// SetRetentionPolicyResponse returns the category after the change.
+message SetRetentionPolicyResponse {
+  // The category's policy.
+  RetentionPolicy policy = 1;
+  // Whether a new revision was recorded (false when nothing changed).
+  bool changed = 2;
+  // Whether it shortens the period; it then takes effect 7 days later.
+  bool shortened = 3;
+}
+
+// LegalHoldScope is what a hold covers.
+enum LegalHoldScope {
+  LEGAL_HOLD_SCOPE_UNSPECIFIED = 0;
+  // Everything of the org.
+  LEGAL_HOLD_SCOPE_ORG = 1;
+  // Everything of one agent's runs.
+  LEGAL_HOLD_SCOPE_AGENT = 2;
+  // Everything of one run.
+  LEGAL_HOLD_SCOPE_RUN = 3;
+  // Everything of one transaction.
+  LEGAL_HOLD_SCOPE_TRANSACTION = 4;
+  // Everything recorded in a time range.
+  LEGAL_HOLD_SCOPE_TIME_RANGE = 5;
+}
+
+// LegalHoldState is where a hold stands.
+enum LegalHoldState {
+  LEGAL_HOLD_STATE_UNSPECIFIED = 0;
+  // It blocks removal.
+  LEGAL_HOLD_STATE_ACTIVE = 1;
+  // It was released.
+  LEGAL_HOLD_STATE_RELEASED = 2;
+}
+
+// LegalHold blocks retention inside its scope while it is active.
+message LegalHold {
+  // Hold id.
+  string id = 1;
+  // Scope.
+  LegalHoldScope scope = 2;
+  // The agent, run or transaction it covers.
+  string scope_id = 3;
+  // For a time range: the start (inclusive).
+  google.protobuf.Timestamp start_time = 4;
+  // For a time range: the end (exclusive).
+  google.protobuf.Timestamp end_time = 5;
+  // Why it was placed, in the creator's words (untrusted text).
+  string reason = 6;
+  // State.
+  LegalHoldState state = 7;
+  // Who placed it.
+  string created_by = 8;
+  // When it was placed.
+  google.protobuf.Timestamp create_time = 9;
+  // Who released it.
+  string released_by = 10;
+  // When it was released.
+  google.protobuf.Timestamp release_time = 11;
+  // Why it was released (untrusted text).
+  string release_reason = 12;
+}
+
+// CreateLegalHoldRequest places a hold.
+message CreateLegalHoldRequest {
+  option (buf.validate.message).cel = {
+    id: "legal_hold.scope_id"
+    message: "scope_id is required for agent, run and transaction holds, and only for them"
+    expression: "(this.scope in [2, 3, 4]) == has(this.scope_id)"
+  };
+  option (buf.validate.message).cel = {
+    id: "legal_hold.time_range"
+    message: "start_time and end_time are required for a time range, and only for it"
+    expression: "(this.scope == 5) == has(this.start_time) && (this.scope == 5) == has(this.end_time)"
+  };
+  // Scope.
+  LegalHoldScope scope = 1 [(buf.validate.field).enum = {
+    defined_only: true
+    not_in: [0]
+  }];
+  // The agent, run or transaction to hold.
+  optional string scope_id = 2 [(buf.validate.field).string.uuid = true];
+  // For a time range: the start (inclusive).
+  google.protobuf.Timestamp start_time = 3;
+  // For a time range: the end (exclusive), after the start.
+  google.protobuf.Timestamp end_time = 4;
+  // Why (stored and shown as untrusted text, never logged).
+  string reason = 5 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 2000
+  }];
+}
+
+// CreateLegalHoldResponse returns the hold.
+message CreateLegalHoldResponse {
+  // The hold.
+  LegalHold hold = 1;
+}
+
+// ReleaseLegalHoldRequest releases a hold.
+message ReleaseLegalHoldRequest {
+  // Hold id; it must be active.
+  string id = 1 [(buf.validate.field).string.uuid = true];
+  // Why (stored and shown as untrusted text, never logged).
+  string reason = 2 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 2000
+  }];
+}
+
+// ReleaseLegalHoldResponse returns the released hold.
+message ReleaseLegalHoldResponse {
+  // The hold.
+  LegalHold hold = 1;
+}
+
+// ListLegalHoldsRequest pages through holds, newest first.
+message ListLegalHoldsRequest {
+  // Maximum results (default 50, at most 200).
+  int32 page_size = 1 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 200
+  }];
+  // Token from a previous response.
+  string page_token = 2 [(buf.validate.field).string = {
+    max_len: 64
+    pattern: "^[A-Za-z0-9_-]*$"
+  }];
+  // Only in this state (all when unset).
+  LegalHoldState state = 3 [(buf.validate.field).enum.defined_only = true];
+}
+
+// ListLegalHoldsResponse is one page.
+message ListLegalHoldsResponse {
+  // Holds, newest first.
+  repeated LegalHold holds = 1;
+  // Token for the next page; empty at the end.
+  string next_page_token = 2;
+}
+
+// CaptureProfileState is where a capture profile stands.
+enum CaptureProfileState {
+  CAPTURE_PROFILE_STATE_UNSPECIFIED = 0;
+  // Gateways capture under it.
+  CAPTURE_PROFILE_STATE_ACTIVE = 1;
+  // A person disabled it.
+  CAPTURE_PROFILE_STATE_DISABLED = 2;
+  // It passed its expiry.
+  CAPTURE_PROFILE_STATE_EXPIRED = 3;
+}
+
+// CaptureProfile switches restricted payload capture on (HR-199).
+message CaptureProfile {
+  // Profile id.
+  string id = 1;
+  // Why payloads are captured, in the creator's words (untrusted text).
+  string purpose = 2;
+  // The connections it covers.
+  repeated string connection_ids = 3;
+  // The operations it covers.
+  repeated string operations = 4;
+  // Capture the outbound body.
+  bool capture_request = 5;
+  // Capture the target's response (after secret-echo redaction).
+  bool capture_response = 6;
+  // Bytes kept per body.
+  int32 byte_cap = 7;
+  // Days a capture is kept.
+  int32 retention_days = 8;
+  // When it expires.
+  google.protobuf.Timestamp expire_time = 9;
+  // State.
+  CaptureProfileState state = 10;
+  // Who created it.
+  string created_by = 11;
+  // When.
+  google.protobuf.Timestamp create_time = 12;
+  // Who disabled it.
+  string disabled_by = 13;
+  // When.
+  google.protobuf.Timestamp disable_time = 14;
+}
+
+// CreateCaptureProfileRequest creates a capture profile.
+message CreateCaptureProfileRequest {
+  option (buf.validate.message).cel = {
+    id: "capture_profile.direction"
+    message: "capture the request, the response or both"
+    expression: "this.capture_request || this.capture_response"
+  };
+  // Why payloads are captured (required; stored as untrusted text).
+  string purpose = 1 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 500
+  }];
+  // The connections to capture on.
+  repeated string connection_ids = 2 [(buf.validate.field).repeated = {
+    min_items: 1
+    max_items: 32
+    unique: true
+    items: {
+      string: {uuid: true}
+    }
+  }];
+  // The operations to capture, for example payments.refund.create.
+  repeated string operations = 3 [(buf.validate.field).repeated = {
+    min_items: 1
+    max_items: 64
+    unique: true
+    items: {
+      string: {
+        max_len: 128
+        pattern: "^[a-z][a-z0-9_]*(\\.[a-z0-9_]+){1,7}$"
+      }
+    }
+  }];
+  // Capture the outbound body the gateway builds (never headers).
+  bool capture_request = 4;
+  // Capture the target's response after secret-echo redaction.
+  bool capture_response = 5;
+  // Bytes kept per body: 1 to 65,536.
+  int32 byte_cap = 6 [(buf.validate.field).int32 = {
+    gte: 1
+    lte: 65536
+  }];
+  // Days a capture is kept: 1 to 30.
+  int32 retention_days = 7 [(buf.validate.field).int32 = {
+    gte: 1
+    lte: 30
+  }];
+  // Days until the profile expires: 1 to 90.
+  int32 expires_in_days = 8 [(buf.validate.field).int32 = {
+    gte: 1
+    lte: 90
+  }];
+}
+
+// CreateCaptureProfileResponse returns the profile.
+message CreateCaptureProfileResponse {
+  // The profile.
+  CaptureProfile profile = 1;
+}
+
+// ListCaptureProfilesRequest pages through profiles, newest first.
+message ListCaptureProfilesRequest {
+  // Maximum results (default 50, at most 200).
+  int32 page_size = 1 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 200
+  }];
+  // Token from a previous response.
+  string page_token = 2 [(buf.validate.field).string = {
+    max_len: 64
+    pattern: "^[A-Za-z0-9_-]*$"
+  }];
+  // Only in this state (all when unset).
+  CaptureProfileState state = 3 [(buf.validate.field).enum.defined_only = true];
+}
+
+// ListCaptureProfilesResponse is one page.
+message ListCaptureProfilesResponse {
+  // Profiles, newest first.
+  repeated CaptureProfile profiles = 1;
+  // Token for the next page; empty at the end.
+  string next_page_token = 2;
+}
+
+// DisableCaptureProfileRequest names a profile.
+message DisableCaptureProfileRequest {
+  // Profile id; it must be active.
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// DisableCaptureProfileResponse returns the disabled profile.
+message DisableCaptureProfileResponse {
+  // The profile.
+  CaptureProfile profile = 1;
+}
+
+// ReadPayloadCaptureRequest names a capture: a transaction's dispatch has
+// at most one of each direction.
+message ReadPayloadCaptureRequest {
+  // Transaction id.
+  string transaction_id = 1 [(buf.validate.field).string.uuid = true];
+  // Which body.
+  CaptureDirection direction = 2 [(buf.validate.field).enum = {
+    defined_only: true
+    not_in: [0]
+  }];
+  // Why it is read (required; recorded in the audit ledger).
+  string reason = 3 [(buf.validate.field).string = {
+    min_len: 1
+    max_bytes: 500
+  }];
+}
+
+// ReadPayloadCaptureResponse returns the capture.
+message ReadPayloadCaptureResponse {
+  // Capture id.
+  string id = 1;
+  // The transaction.
+  string transaction_id = 2;
+  // The profile it was taken under.
+  string profile_id = 3;
+  // Which body.
+  CaptureDirection direction = 4;
+  // The body's size before truncation.
+  int64 size = 5;
+  // Whether content is cut to the profile's cap.
+  bool truncated = 6;
+  // When it was taken.
+  google.protobuf.Timestamp create_time = 7;
+  // When retention deletes it.
+  google.protobuf.Timestamp remove_time = 8;
+  // The body.
+  bytes content = 9;
+}

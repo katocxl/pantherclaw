@@ -22,6 +22,7 @@ var m6Procedures = map[string]td.Permission{
 	pantherclawv1connect.GatewayAdminServiceGetGatewayProcedure:                   "gateway.read",
 	pantherclawv1connect.GatewayAdminServiceRevokeGatewayProcedure:                "gateway.manage",
 	pantherclawv1connect.GatewayAdminServiceRevokeGatewayCertificateProcedure:     "gateway.manage",
+	pantherclawv1connect.GatewayAdminServiceListApproverKeysProcedure:             "gateway.read",
 	pantherclawv1connect.GatewayServiceEnrollProcedure:                            "gateway.enroll",
 	pantherclawv1connect.GatewayServiceRenewCertificateProcedure:                  "gateway.sync",
 	pantherclawv1connect.GatewayServiceRegisterBrokerKeyProcedure:                 "gateway.sync",

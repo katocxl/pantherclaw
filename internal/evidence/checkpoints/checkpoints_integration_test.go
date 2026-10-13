@@ -468,7 +468,7 @@ func TestHR194_AnInconsistentTreeIsNeverSigned(t *testing.T) {
 func TestHR194_RemovedBodiesStayInTheTree(t *testing.T) {
 	f := newFixture(t)
 	f.grow(t, 5)
-	f.adminAt(t, `UPDATE pc.ledger_entries SET body_removed_at = now(), removed_by_policy = $2 WHERE id = $1`, 3, ids.NewV7())
+	f.adminAt(t, `UPDATE pc.ledger_entries SET body = NULL, body_removed_at = now(), removed_by_policy = $2 WHERE id = $1`, 3, ids.NewV7())
 	if res := f.checkpoint(t); !res.Signed || res.Size != 5 {
 		t.Fatalf("checkpoint = %+v", res)
 	}
