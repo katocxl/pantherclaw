@@ -5,6 +5,7 @@ package dispatch
 
 import (
 	"errors"
+	"net/http"
 	"net/http/httptest"
 	"testing"
 
@@ -41,12 +42,12 @@ func TestHR204_AnAppKeyIsNeverPlaced(t *testing.T) {
 		"Iv23li " + begin + " PRIVATE KEY----- x",
 		begin + " OPENSSH PRIVATE KEY-----",
 	} {
-		req := httptest.NewRequest("GET", "https://api.github.com/repos/acme/payments", nil)
+		req := httptest.NewRequest(http.MethodGet, "https://api.github.com/repos/acme/payments", nil)
 		if err := placeCredential(static, req, []byte(secret)); !errors.Is(err, errPEM) || req.Header.Get("Authorization") != "" {
 			t.Fatalf("a PEM block was placed: %v %q", err, req.Header.Get("Authorization"))
 		}
 	}
-	req := httptest.NewRequest("GET", "https://api.github.com/repos/acme/payments", nil)
+	req := httptest.NewRequest(http.MethodGet, "https://api.github.com/repos/acme/payments", nil)
 	if err := placeCredential(app, req, []byte("x")); !errors.Is(err, errKind) || req.Header.Get("Authorization") != "" {
 		t.Fatalf("an App credential was placed: %v", err)
 	}
@@ -66,7 +67,7 @@ func TestHR203_AReadGetsAReadOnlyToken(t *testing.T) {
 	read := func(scope map[string]string) *defs.Definition {
 		return &defs.Definition{Operation: "github.contents.read", Access: defs.AccessRead, Dispatch: &defs.Dispatch{CredentialScope: scope}}
 	}
-	req := httptest.NewRequest("GET", "https://api.github.com/repos/acme/payments/contents/README.md", nil)
+	req := httptest.NewRequest(http.MethodGet, "https://api.github.com/repos/acme/payments/contents/README.md", nil)
 	target := actionir.Target{Type: "github.repository", ID: "acme/payments"}
 	for _, scope := range []map[string]string{{"contents": "write"}, {"contents": "read", "pull_requests": "admin"}} {
 		if _, _, err := e.credential(t.Context(), conn, read(scope), target, req, nil); !errors.Is(err, broker.ErrScope) {
