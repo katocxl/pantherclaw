@@ -48,5 +48,9 @@ func newVerification(pool *db.Pool, reg *keys.Registry, notify pgtransactions.No
 	if err != nil {
 		return nil, err
 	}
-	return &txapp.Service{Store: &pgtransactions.Store{Pool: pool, Notify: notify}, Receipts: receipts}, nil
+	actionTokens, err := reg.Signer(keys.PurposeActionTokens)
+	if err != nil {
+		return nil, err
+	}
+	return &txapp.Service{Store: &pgtransactions.Store{Pool: pool, Notify: notify}, Receipts: receipts, ActionTokens: actionTokens}, nil
 }
