@@ -25,6 +25,7 @@ const (
 	PeopleUnreadable = "the fact's value cannot be read"
 	PeopleNotAll     = "the fact says it does not list everyone (for example a fork, more than 250 commits or an unreadable activity feed)"
 	PeopleMalformed  = "the fact holds something that is not a GitHub user id"
+	PeopleUnnamed    = "the fact does not name both its author and its pushers"
 )
 
 // peopleMembers are the members of a people fact that list GitHub user
@@ -49,9 +50,11 @@ type PeopleList struct {
 	// Fact is the fact's name, such as github.pull.people.
 	Fact   string
 	People []Listed
-	// Complete is set when the fact is known, can be read and says it lists
-	// everyone: only then can anyone count as independent of it (design
-	// decision 18).
+	// Complete is set only when the fact is known, can be read, says it
+	// lists everyone, names its author and a list of pushers, and every id
+	// it holds is a positive integer: only then can anyone count as
+	// independent of it (design decision 18), by the rule the decision
+	// applies to the same fact (HR-207).
 	Complete bool
 	// Gaps say why the list may not name everyone; empty when it does.
 	Gaps []string
@@ -59,11 +62,17 @@ type PeopleList struct {
 
 // ListPeople reads the people a people fact's value lists. A member that
 // is not a GitHub user id (author) or a list of them (authors, committers,
-// pushers) is a gap, never skipped in silence.
+// pushers) is a gap, never skipped in silence, and so is a missing author
+// or pushers list.
 func ListPeople(fact string, value map[string]any) PeopleList {
-	l := PeopleList{Fact: fact, Complete: value["complete"] == true}
-	if !l.Complete {
+	l := PeopleList{Fact: fact}
+	if value["complete"] != true {
 		l.Gaps = append(l.Gaps, PeopleNotAll)
+	}
+	_, author := value["author"]
+	_, pushers := value["pushers"]
+	if !author || !pushers {
+		l.Gaps = append(l.Gaps, PeopleUnnamed)
 	}
 	malformed := false
 	add := func(v any, as string) {
@@ -100,6 +109,7 @@ func ListPeople(fact string, value map[string]any) PeopleList {
 	if malformed {
 		l.Gaps = append(l.Gaps, PeopleMalformed)
 	}
+	l.Complete = len(l.Gaps) == 0
 	return l
 }
 
@@ -122,9 +132,9 @@ func (l *PeopleList) Link(github int64, user ids.UUID) {
 }
 
 // Authorship is the list as independence reads it: the users linked to the
-// people it names, when it lists everyone.
+// people it names, only when it is complete and has no gap.
 func (l PeopleList) Authorship() Authorship {
-	if !l.Complete {
+	if !l.Complete || len(l.Gaps) > 0 {
 		return Authorship{}
 	}
 	var users []ids.UUID

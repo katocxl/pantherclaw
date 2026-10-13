@@ -127,7 +127,7 @@ func TestHR207_TheLinkedPeopleOfTheHeldActionAreNotIndependent(t *testing.T) {
 // the approval page lists, from the read the independence check makes,
 // every GitHub user the held action's people fact names now, with how it
 // names them and the user linked to them or none, and says so when the
-// fact does not list everyone.
+// fact does not list everyone or does not name its pushers.
 func TestF158_TheApprovalPageListsThePeopleTheIndependenceCheckReads(t *testing.T) {
 	w := newWorldWith(t, peopleRefunds)
 	w.refundable("ch_1")
@@ -194,8 +194,13 @@ func TestF158_TheApprovalPageListsThePeopleTheIndependenceCheckReads(t *testing.
 		t.Fatalf("complete list: %+v", l)
 	}
 
-	people(`{"complete": false, "author": 42}`)
-	if l := page(); l.Complete || !slices.Equal(l.Gaps, []string{apdomain.PeopleNotAll}) || !slices.Equal(rows(l), []row{{42, "author", true}}) {
+	people(`{"complete": false, "author": 42, "pushers": [44]}`)
+	if l := page(); l.Complete || !slices.Equal(l.Gaps, []string{apdomain.PeopleNotAll}) ||
+		!slices.Equal(rows(l), []row{{42, "author", true}, {44, "pusher", false}}) {
 		t.Fatalf("incomplete list: %+v", l)
+	}
+	people(`{"complete": true, "author": 42}`)
+	if l := page(); l.Complete || !slices.Equal(l.Gaps, []string{apdomain.PeopleUnnamed}) || !slices.Equal(rows(l), []row{{42, "author", true}}) {
+		t.Fatalf("a list without its pushers: %+v", l)
 	}
 }
