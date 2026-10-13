@@ -102,6 +102,9 @@ type Service struct {
 	pool   *db.Pool
 	notify Notifier
 	own    []endpoint
+	// grantsPage is how many grants Health reads at a time; zero is
+	// grantPage. Tests set it smaller to read past the first page.
+	grantsPage int32
 }
 
 // New returns the connection use cases. publicURL and gatewayAPIURL are

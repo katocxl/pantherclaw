@@ -23,10 +23,18 @@ JOIN pc.connections c ON c.org_id = v.org_id AND c.id = v.connection_id
 JOIN pc.org_containment o ON o.org_id = v.org_id
 WHERE v.org_id = $1 AND v.state = 'PENDING' AND v.next_at <= now() AND v.deadline_at > now()
   AND c.gateway_id = $2 AND c.state = 'ACTIVE' AND NOT o.kill_switch
+  AND (v.purpose <> 'connection_test' OR v.attempts < $3::integer)
 ORDER BY v.next_at
-LIMIT $3
+LIMIT $4
 FOR UPDATE OF v SKIP LOCKED
 `
+
+type DueVerificationsParams struct {
+	OrgID           ids.OrgID
+	GatewayID       ids.UUID
+	MaxTestAttempts int32
+	MaxTasks        int32
+}
 
 type DueVerificationsRow struct {
 	ID            ids.UUID
@@ -46,9 +54,16 @@ type DueVerificationsRow struct {
 // decisions 1-3, HR-190..192).
 // DueVerifications are the due tasks of the connections a gateway serves.
 // Reads stop when the kill switch is on or the connection is quarantined
-// or retired, as dispatches do (HR-190).
-func (q *Queries) DueVerifications(ctx context.Context, orgID ids.OrgID, gatewayID ids.UUID, maxTasks int32) ([]DueVerificationsRow, error) {
-	rows, err := q.db.Query(ctx, dueVerifications, orgID, gatewayID, maxTasks)
+// or retired, as dispatches do (HR-190). A connection test is leased at
+// most max_test_attempts times, so a target_verifier test's tokens are
+// minted at most that often (HR-188).
+func (q *Queries) DueVerifications(ctx context.Context, arg DueVerificationsParams) ([]DueVerificationsRow, error) {
+	rows, err := q.db.Query(ctx, dueVerifications,
+		arg.OrgID,
+		arg.GatewayID,
+		arg.MaxTestAttempts,
+		arg.MaxTasks,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -111,16 +126,20 @@ func (q *Queries) ExpirePastDeadline(ctx context.Context, orgID ids.OrgID) ([]Ex
 const failExpiredConnectionTests = `-- name: FailExpiredConnectionTests :execrows
 UPDATE pc.connection_tests t
 SET state = 'FAILED', finished_at = now(),
-    checks = '[{"check":"TEST_READ","passed":false,"detail":"No gateway reported the test read before its deadline."}]'
+    checks = jsonb_build_array(jsonb_build_object('check', 'TEST_READ', 'passed', false, 'detail',
+        CASE WHEN v.attempts >= $1::integer
+             THEN format('No gateway reported the test read in %s attempts.', v.attempts)
+             ELSE 'No gateway reported the test read before its deadline.' END))
 FROM pc.verifications v
-WHERE t.org_id = $1 AND v.org_id = t.org_id AND v.id = t.verification_id AND v.state = 'EXPIRED'
+WHERE t.org_id = $2 AND v.org_id = t.org_id AND v.id = t.verification_id AND v.state = 'EXPIRED'
   AND t.state IN ('PENDING', 'RUNNING')
 `
 
 // FailExpiredConnectionTests ends the tests whose task expired before a
-// gateway reported: they could not run.
-func (q *Queries) FailExpiredConnectionTests(ctx context.Context, orgID ids.OrgID) (int64, error) {
-	result, err := q.db.Exec(ctx, failExpiredConnectionTests, orgID)
+// gateway reported, by its deadline or after max_test_attempts leases:
+// they could not run.
+func (q *Queries) FailExpiredConnectionTests(ctx context.Context, maxTestAttempts int32, orgID ids.OrgID) (int64, error) {
+	result, err := q.db.Exec(ctx, failExpiredConnectionTests, maxTestAttempts, orgID)
 	if err != nil {
 		return 0, err
 	}
@@ -303,7 +322,7 @@ func (q *Queries) LeaseVerification(ctx context.Context, arg LeaseVerificationPa
 }
 
 const leasedConnectionTest = `-- name: LeasedConnectionTest :one
-SELECT v.id, v.connection_id, v.operation, v.attempts, t.id AS test_id
+SELECT v.id, v.connection_id, v.operation, v.attempts, v.lease_expires_at, t.id AS test_id, t.kind AS test_kind
 FROM pc.verifications v
 JOIN pc.connection_tests t ON t.org_id = v.org_id AND t.verification_id = v.id
 WHERE v.org_id = $1 AND v.id = $2 AND v.purpose = 'connection_test' AND v.state = 'LEASED'
@@ -319,15 +338,17 @@ type LeasedConnectionTestParams struct {
 }
 
 type LeasedConnectionTestRow struct {
-	ID           ids.UUID
-	ConnectionID ids.UUID
-	Operation    string
-	Attempts     int32
-	TestID       ids.UUID
+	ID             ids.UUID
+	ConnectionID   ids.UUID
+	Operation      string
+	Attempts       int32
+	LeaseExpiresAt *time.Time
+	TestID         ids.UUID
+	TestKind       string
 }
 
 // LeasedConnectionTest is a connection test's task under a live lease of
-// this gateway (HR-190), with its test.
+// this gateway (HR-190), with its test and when the lease ends.
 func (q *Queries) LeasedConnectionTest(ctx context.Context, arg LeasedConnectionTestParams) (LeasedConnectionTestRow, error) {
 	row := q.db.QueryRow(ctx, leasedConnectionTest,
 		arg.OrgID,
@@ -341,7 +362,9 @@ func (q *Queries) LeasedConnectionTest(ctx context.Context, arg LeasedConnection
 		&i.ConnectionID,
 		&i.Operation,
 		&i.Attempts,
+		&i.LeaseExpiresAt,
 		&i.TestID,
+		&i.TestKind,
 	)
 	return i, err
 }
@@ -504,12 +527,33 @@ func (q *Queries) ReceiptOfCorrelation(ctx context.Context, orgID ids.OrgID, tra
 	return i, err
 }
 
+const recordTestTokenMint = `-- name: RecordTestTokenMint :execrows
+UPDATE pc.connection_tests
+SET tokens_attempt = $1::integer
+WHERE org_id = $2 AND id = $3 AND kind = 'target_verifier' AND state = 'RUNNING'
+  AND coalesce(tokens_attempt, 0) < $1::integer
+`
+
+// RecordTestTokenMint records a running target_verifier test's token mint
+// for its lease attempt: at most one mint per attempt (HR-188's exception).
+func (q *Queries) RecordTestTokenMint(ctx context.Context, attempt int32, orgID ids.OrgID, iD ids.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, recordTestTokenMint, attempt, orgID, iD)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const releaseExpiredLeases = `-- name: ReleaseExpiredLeases :many
 UPDATE pc.verifications
-SET state = CASE WHEN deadline_at <= now() OR (purpose = 'org_scan' AND attempts >= 3) THEN 'EXPIRED' ELSE 'PENDING' END,
-    finished_at = CASE WHEN deadline_at <= now() OR (purpose = 'org_scan' AND attempts >= 3) THEN now() END,
+SET state = CASE WHEN deadline_at <= now() OR (purpose = 'connection_test' AND attempts >= $1::integer)
+                      OR (purpose = 'org_scan' AND attempts >= 3)
+                 THEN 'EXPIRED' ELSE 'PENDING' END,
+    finished_at = CASE WHEN deadline_at <= now() OR (purpose = 'connection_test' AND attempts >= $1::integer)
+                            OR (purpose = 'org_scan' AND attempts >= 3)
+                       THEN now() END,
     lease_hash = NULL, leased_by = NULL, leased_at = NULL, lease_expires_at = NULL
-WHERE org_id = $1 AND state = 'LEASED' AND lease_expires_at < now()
+WHERE org_id = $2 AND state = 'LEASED' AND lease_expires_at < now()
 RETURNING id, state, transaction_id
 `
 
@@ -520,11 +564,12 @@ type ReleaseExpiredLeasesRow struct {
 }
 
 // ReleaseExpiredLeases returns leases nobody reported in time to PENDING,
-// or ends them when the task's deadline passed too. An organization scan
-// has three leases at most, each a whole scan's worth of the installation's
-// API quota: its third unreported lease ends it (HR-209).
-func (q *Queries) ReleaseExpiredLeases(ctx context.Context, orgID ids.OrgID) ([]ReleaseExpiredLeasesRow, error) {
-	rows, err := q.db.Query(ctx, releaseExpiredLeases, orgID)
+// or ends them when the task's deadline passed too, when it is a
+// connection test leased max_test_attempts times (HR-188), or when it is an
+// organization scan leased three times, each a whole scan's worth of the
+// installation's API quota (HR-209).
+func (q *Queries) ReleaseExpiredLeases(ctx context.Context, maxTestAttempts int32, orgID ids.OrgID) ([]ReleaseExpiredLeasesRow, error) {
+	rows, err := q.db.Query(ctx, releaseExpiredLeases, maxTestAttempts, orgID)
 	if err != nil {
 		return nil, err
 	}
@@ -709,6 +754,37 @@ func (q *Queries) TransactionEffect(ctx context.Context, orgID ids.OrgID, iD ids
 		&i.EffectLevelRequired,
 		&i.EffectLevelAchieved,
 		&i.DefinitionDigest,
+	)
+	return i, err
+}
+
+const verifierTestBasis = `-- name: VerifierTestBasis :one
+SELECT c.state AS connection_state, c.access_mode, c.package, k.kill_switch
+FROM pc.connection_tests t
+JOIN pc.connections c ON c.org_id = t.org_id AND c.id = t.connection_id
+JOIN pc.org_containment k ON k.org_id = t.org_id
+WHERE t.org_id = $1 AND t.id = $2
+`
+
+type VerifierTestBasisRow struct {
+	ConnectionState string
+	AccessMode      string
+	Package         string
+	KillSwitch      bool
+}
+
+// VerifierTestBasis is what a target_verifier test's token mint checks
+// again on the server (HR-188's exception): its connection's state, access
+// mode and package, and whether the kill switch is engaged. Without the
+// org's containment row there is no row, and no mint.
+func (q *Queries) VerifierTestBasis(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (VerifierTestBasisRow, error) {
+	row := q.db.QueryRow(ctx, verifierTestBasis, orgID, iD)
+	var i VerifierTestBasisRow
+	err := row.Scan(
+		&i.ConnectionState,
+		&i.AccessMode,
+		&i.Package,
+		&i.KillSwitch,
 	)
 	return i, err
 }

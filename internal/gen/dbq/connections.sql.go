@@ -15,6 +15,64 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 )
 
+const activeGrantBounds = `-- name: ActiveGrantBounds :many
+SELECT g.id, g.agent_id, a.name, r.bounds
+FROM pc.grants g
+JOIN pc.grant_revisions r ON r.org_id = g.org_id AND r.grant_id = g.id AND r.revision = g.current_revision
+JOIN pc.agents a ON a.org_id = g.org_id AND a.id = g.agent_id
+WHERE g.org_id = $1 AND g.state = 'ACTIVE' AND r.expires_at > now()
+  AND (a.name, g.id) > ($2::text, $3::uuid)
+ORDER BY a.name, g.id
+LIMIT $4::integer
+`
+
+type ActiveGrantBoundsParams struct {
+	OrgID     ids.OrgID
+	AfterName string
+	AfterID   ids.UUID
+	Page      int32
+}
+
+type ActiveGrantBoundsRow struct {
+	ID      ids.UUID
+	AgentID ids.UUID
+	Name    string
+	Bounds  []byte
+}
+
+// A page of the bounds of the active, unexpired grants, with their agents,
+// after (agent name, grant id), to find the agents whose grants depend on
+// a connection (F358). The caller reads pages until its list is full.
+func (q *Queries) ActiveGrantBounds(ctx context.Context, arg ActiveGrantBoundsParams) ([]ActiveGrantBoundsRow, error) {
+	rows, err := q.db.Query(ctx, activeGrantBounds,
+		arg.OrgID,
+		arg.AfterName,
+		arg.AfterID,
+		arg.Page,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ActiveGrantBoundsRow{}
+	for rows.Next() {
+		var i ActiveGrantBoundsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.AgentID,
+			&i.Name,
+			&i.Bounds,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const closeCircuits = `-- name: CloseCircuits :execrows
 UPDATE pc.circuit_states SET state = 'CLOSED', closed_at = now()
 WHERE org_id = $1 AND connection_id = $2 AND state = 'OPEN'
@@ -332,7 +390,7 @@ const insertCredentialTest = `-- name: InsertCredentialTest :one
 INSERT INTO pc.connection_tests (org_id, id, connection_id, kind, state, result, checks, requested_by, finished_at)
 VALUES ($1, $2, $3, 'credential', 'DONE', $4, $5,
     $6, now())
-RETURNING org_id, id, connection_id, kind, operation, state, gateway_id, verification_id, result, checks, detail_sha256, requested_by, created_at, finished_at
+RETURNING org_id, id, connection_id, kind, operation, state, gateway_id, verification_id, tokens_attempt, result, checks, detail_sha256, requested_by, created_at, finished_at
 `
 
 type InsertCredentialTestParams struct {
@@ -364,6 +422,7 @@ func (q *Queries) InsertCredentialTest(ctx context.Context, arg InsertCredential
 		&i.State,
 		&i.GatewayID,
 		&i.VerificationID,
+		&i.TokensAttempt,
 		&i.Result,
 		&i.Checks,
 		&i.DetailSha256,
@@ -378,7 +437,7 @@ const insertLeasedConnectionTest = `-- name: InsertLeasedConnectionTest :one
 INSERT INTO pc.connection_tests (org_id, id, connection_id, kind, verification_id, operation, requested_by)
 VALUES ($1, $2, $3, $4, $5, $6,
     $7)
-RETURNING org_id, id, connection_id, kind, operation, state, gateway_id, verification_id, result, checks, detail_sha256, requested_by, created_at, finished_at
+RETURNING org_id, id, connection_id, kind, operation, state, gateway_id, verification_id, tokens_attempt, result, checks, detail_sha256, requested_by, created_at, finished_at
 `
 
 type InsertLeasedConnectionTestParams struct {
@@ -412,6 +471,7 @@ func (q *Queries) InsertLeasedConnectionTest(ctx context.Context, arg InsertLeas
 		&i.State,
 		&i.GatewayID,
 		&i.VerificationID,
+		&i.TokensAttempt,
 		&i.Result,
 		&i.Checks,
 		&i.DetailSha256,
@@ -460,7 +520,7 @@ func (q *Queries) InsertToolObservation(ctx context.Context, arg InsertToolObser
 }
 
 const latestConnectionTest = `-- name: LatestConnectionTest :one
-SELECT org_id, id, connection_id, kind, operation, state, gateway_id, verification_id, result, checks, detail_sha256, requested_by, created_at, finished_at FROM pc.connection_tests
+SELECT org_id, id, connection_id, kind, operation, state, gateway_id, verification_id, tokens_attempt, result, checks, detail_sha256, requested_by, created_at, finished_at FROM pc.connection_tests
 WHERE org_id = $1 AND connection_id = $2 AND state IN ('DONE', 'FAILED')
     AND (NOT $3::boolean OR result = 'PASSED')
 ORDER BY finished_at DESC, id DESC
@@ -480,6 +540,7 @@ func (q *Queries) LatestConnectionTest(ctx context.Context, orgID ids.OrgID, con
 		&i.State,
 		&i.GatewayID,
 		&i.VerificationID,
+		&i.TokensAttempt,
 		&i.Result,
 		&i.Checks,
 		&i.DetailSha256,

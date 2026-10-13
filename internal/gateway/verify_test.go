@@ -209,6 +209,10 @@ func (f *fakeVerifications) Report(_ context.Context, _ dispatch.Lease, o dispat
 	return nil
 }
 
+func (*fakeVerifications) TestTokens(context.Context, dispatch.Lease) (dispatch.TestTokens, error) {
+	return dispatch.TestTokens{}, errors.New("no tokens")
+}
+
 // countingVerifications counts claims and says so on claimed.
 type countingVerifications struct {
 	n       atomic.Int32
@@ -222,6 +226,10 @@ func (c *countingVerifications) Claim(context.Context, int) ([]dispatch.Lease, e
 
 func (*countingVerifications) Report(context.Context, dispatch.Lease, dispatch.Observation) error {
 	return nil
+}
+
+func (*countingVerifications) TestTokens(context.Context, dispatch.Lease) (dispatch.TestTokens, error) {
+	return dispatch.TestTokens{}, errors.New("no tokens")
 }
 
 // hintedContainment is the harness's containment with the stream's
