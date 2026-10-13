@@ -330,8 +330,8 @@ func (e *Engine) dispatch(ctx context.Context, c Call, t *timer) Result {
 	if code := e.refusedUpstream(conn, c.Action.Action.Operation); code != "" {
 		return Result{Class: EnforcementFailed, Code: code}
 	}
-	if wrongAccount(conn, c.Action.Action) {
-		return Result{Class: CannotAuthorize, Code: CodeWrongAccount, Decision: pb.Decision_DECISION_CANNOT_AUTHORIZE}
+	if code := accountRefusal(conn, c.Action.Action); code != "" {
+		return Result{Class: CannotAuthorize, Code: code, Decision: pb.Decision_DECISION_CANNOT_AUTHORIZE}
 	}
 	if e.reportGitHubFacts(ctx, conn, c.Action.Action) {
 		t.lap("facts")
