@@ -10,15 +10,18 @@ import (
 	"testing"
 
 	"github.com/katocxl/pantherclaw/internal/definitions/mapping"
+	"github.com/katocxl/pantherclaw/internal/gateway/control"
 	"github.com/katocxl/pantherclaw/internal/gateway/dispatch"
+	pb "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
 )
 
 // TestHR085_TheGatewayPlacesTheCredentialOnAConnectorsEgress: a request a
 // connector made, mapped through its egress connection, is rebuilt from
 // the reviewed definition, carries the credential the gateway places and
-// the call's idempotency key, and comes back without the credential. A
-// quarantined egress connection sends nothing (G0 M9 design decisions 6
-// and 18).
+// the call's idempotency key, and comes back without the credential.
+// Nothing is sent once the containment epoch moved past the call's, under
+// the kill switch, or while the egress connection or the connector
+// connection is quarantined (G0 M9 design decisions 6 and 18, HR-002).
 func TestHR085_TheGatewayPlacesTheCredentialOnAConnectorsEgress(t *testing.T) {
 	h := setup(t, withCredential(t, []string{"127.0.0.1"}), func(h *harness) { h.target.echo = "Authorization" })
 	ctx := mapping.Context{
@@ -30,7 +33,10 @@ func TestHR085_TheGatewayPlacesTheCredentialOnAConnectorsEgress(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	res, err := h.gw.engine.ConnectorEgress(t.Context(), h.conn, a, "txn-1")
+	const connectorID = "01920000-0000-7000-8000-0000000000c1"
+	connector := &control.Connection{GatewayConnection: &pb.GatewayConnection{Id: connectorID, Kind: "mcp_container", State: "ACTIVE"}}
+	f := dispatch.Flight{Txn: "txn-1", Action: a, Epoch: 1, Connector: connector}
+	res, err := h.gw.engine.ConnectorEgress(t.Context(), h.conn, a, f)
 	if err != nil || res.Status != http.StatusOK {
 		t.Fatalf("egress = %d %v", res.Status, err)
 	}
@@ -45,10 +51,26 @@ func TestHR085_TheGatewayPlacesTheCredentialOnAConnectorsEgress(t *testing.T) {
 		t.Fatalf("the credential came back: %q", res.Body)
 	}
 
-	h.containment.mu.Lock()
-	h.containment.conns[connID] = "QUARANTINED"
-	h.containment.mu.Unlock()
-	if _, err := h.gw.engine.ConnectorEgress(t.Context(), h.conn, a, "txn-1"); !errors.Is(err, dispatch.ErrEgressContained) || h.target.calls() != 1 {
-		t.Fatalf("quarantined: %v, target %d", err, h.target.calls())
+	for name, contain := range map[string]func(c *fakeContainment) func(){
+		"the epoch moved past the call's": func(c *fakeContainment) func() { c.epoch = 2; return func() { c.epoch = 1 } },
+		"the kill switch":                 func(c *fakeContainment) func() { c.err = control.ErrKillSwitch; return func() { c.err = nil } },
+		"the egress connection quarantined": func(c *fakeContainment) func() {
+			c.conns[connID] = "QUARANTINED"
+			return func() { delete(c.conns, connID) }
+		},
+		"the connector quarantined": func(c *fakeContainment) func() {
+			c.conns[connectorID] = "QUARANTINED"
+			return func() { delete(c.conns, connectorID) }
+		},
+	} {
+		h.containment.mu.Lock()
+		undo := contain(h.containment)
+		h.containment.mu.Unlock()
+		if _, err := h.gw.engine.ConnectorEgress(t.Context(), h.conn, a, f); !errors.Is(err, dispatch.ErrEgressContained) || h.target.calls() != 1 {
+			t.Errorf("%s: %v, target %d", name, err, h.target.calls())
+		}
+		h.containment.mu.Lock()
+		undo()
+		h.containment.mu.Unlock()
 	}
 }
