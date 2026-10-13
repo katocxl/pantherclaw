@@ -45,7 +45,7 @@ pclaw init --gateway https://gateway.example.com --connection shell --key-file ~
 
 It only adds (HR-208):
 - every existing deny rule, hook and member stays, in its order;
-- the diff is shown, with each value under `env` and `headers` as `<redacted>`, and nothing changes until you confirm, or pass `--yes`; `--dry-run` changes nothing;
+- the diff is shown with what may be a credential as `<redacted>` (each value under `env` and `headers`; in `args`, the value of a flag or variable whose name looks secret, as in `--api-key VALUE`, `--token=VALUE` or `GITHUB_TOKEN=VALUE`; and a URL's user information, query and fragment), and nothing changes until you confirm, or pass `--yes`; `--dry-run` changes nothing;
 - each file is backed up and replaced through a temporary file (a linked file where it points, keeping the link); a file that changed after init read it (Claude Code rewrites its settings while it runs) is left as it is, and init asks you to run it again;
 - no secret is written, only the gateway URL, the connection, the key file's path and the run.
 
