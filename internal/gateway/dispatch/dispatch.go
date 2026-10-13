@@ -662,19 +662,27 @@ func targetRef(def *defs.Definition, body, secret []byte) string {
 // declared permissions and places that (HR-203, HR-204). The caller keeps
 // secret, which it scrubs from what goes back to the agent, until it calls
 // release, which clears it and, for a minted token, revokes it at GitHub.
+// A read (a verification or fact read included) gets a read-only token.
 func (e *Engine) credential(ctx context.Context, conn *control.Connection, def *defs.Definition, target actionir.Target,
 	req *http.Request, c broker.Sender,
 ) (secret []byte, release func(), err error) {
-	plain, err := e.openCredential(conn)
-	if err != nil {
-		return nil, nil, err
-	}
 	if conn.Credential.GetKind() != credentials.KindGitHubApp {
+		plain, err := e.openStatic(conn)
+		if err != nil {
+			return nil, nil, err
+		}
 		if err := placeCredential(conn, req, plain); err != nil {
 			clear(plain)
 			return nil, nil, err
 		}
 		return plain, func() { clear(plain) }, nil
+	}
+	if def.Access == defs.AccessRead && !broker.ReadOnly(def.Scopes()) {
+		return nil, nil, broker.ErrScope // every read is read-only (HR-203)
+	}
+	plain, err := e.openCredential(conn)
+	if err != nil {
+		return nil, nil, err
 	}
 	app, err := credentials.DecodeGitHubApp(plain)
 	clear(plain)

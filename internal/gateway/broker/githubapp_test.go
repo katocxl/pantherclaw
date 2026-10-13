@@ -104,7 +104,7 @@ func TestHR203_EachActionGetsATokenForOneRepositoryAndItsPermissions(t *testing.
 	}
 	tokens := w.sim.Tokens()
 	if len(tokens) != 1 || !tokens[0].Revoked || !slices.Equal(tokens[0].Repos, []string{"acme/payments"}) ||
-		!maps.Equal(tokens[0].Permissions, map[string]string{"contents": "read"}) {
+		!maps.Equal(tokens[0].Permissions, map[string]string{"contents": "read", "metadata": "read"}) {
 		t.Fatalf("minted %+v", tokens)
 	}
 	mint := w.sim.Requests()[0]
@@ -170,28 +170,64 @@ func TestHR204_AppJWTsLiveAtMostTenMinutes(t *testing.T) {
 
 // TestHR203_AWiderGrantIsRevokedAndRefused: GitHub answering with more
 // repositories or permissions than asked is CREDENTIAL_SCOPE_MISMATCH: the
-// token is revoked at once and never placed (ADR-0021 item 3).
+// token is revoked at once and never placed (ADR-0021 item 3). The one
+// permission GitHub adds to every token, metadata: read, is the baseline,
+// not a wider grant.
 func TestHR203_AWiderGrantIsRevokedAndRefused(t *testing.T) {
 	w := newGitHub(t)
-	var revoked int
-	fake := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
-		switch {
-		case r.Method == http.MethodPost:
-			rw.WriteHeader(http.StatusCreated)
-			_, _ = rw.Write([]byte(`{"token":"ghs_wider","permissions":{"contents":"write"},"repositories":[{"full_name":"acme/payments"}]}`))
-		case r.Method == http.MethodDelete && r.Header.Get("Authorization") == "Bearer ghs_wider":
-			revoked++
-			rw.WriteHeader(http.StatusNoContent)
+	for _, c := range []struct {
+		granted string
+		ok      bool
+	}{
+		{`{"contents":"read"}`, true},
+		{`{"contents":"read","metadata":"read"}`, true},
+		{`{"contents":"write"}`, false},
+		{`{"contents":"read","metadata":"write"}`, false},
+		{`{"contents":"read","metadata":"read","issues":"read"}`, false},
+		{`{"metadata":"read"}`, false},
+	} {
+		var revoked int
+		fake := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+			switch {
+			case r.Method == http.MethodPost:
+				rw.WriteHeader(http.StatusCreated)
+				_, _ = rw.Write([]byte(`{"token":"ghs_granted","permissions":` + c.granted + `,"repositories":[{"full_name":"acme/payments"}]}`))
+			case r.Method == http.MethodDelete && r.Header.Get("Authorization") == "Bearer ghs_granted":
+				revoked++
+				rw.WriteHeader(http.StatusNoContent)
+			}
+		}))
+		cl, err := egress.NewClient(fake.URL, 5*time.Second, 0, []netip.Prefix{netip.MustParsePrefix("127.0.0.1/32")})
+		if err != nil {
+			t.Fatal(err)
 		}
-	}))
-	t.Cleanup(fake.Close)
-	c, err := egress.NewClient(fake.URL, 5*time.Second, 0, []netip.Prefix{netip.MustParsePrefix("127.0.0.1/32")})
+		u, _ := url.Parse(fake.URL)
+		tok, err := MintInstallationToken(context.Background(), cl, fake.URL, []string{u.Host}, w.app, "acme", "payments", map[string]string{"contents": "read"}, time.Now())
+		switch {
+		case c.ok && (err != nil || revoked != 0):
+			t.Errorf("%s: %v, revoked %d", c.granted, err, revoked)
+		case !c.ok && (!errors.Is(err, ErrScopeMismatch) || tok != nil || revoked != 1):
+			t.Errorf("wider grant %s: %v, revoked %d", c.granted, err, revoked)
+		}
+		fake.Close()
+	}
+}
+
+// TestHR203_RevocationOutlivesTheDispatch: a token is revoked even when the
+// dispatch's context has ended (a long target call, an agent that went
+// away), on the revocation's own deadline.
+func TestHR203_RevocationOutlivesTheDispatch(t *testing.T) {
+	w := newGitHub(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	tok, err := MintInstallationToken(ctx, w.client, w.srv.URL, w.hosts, w.app, "acme", "payments", map[string]string{"contents": "read"}, time.Now())
 	if err != nil {
 		t.Fatal(err)
 	}
-	u, _ := url.Parse(fake.URL)
-	_, err = MintInstallationToken(context.Background(), c, fake.URL, []string{u.Host}, w.app, "acme", "payments", map[string]string{"contents": "read"}, time.Now())
-	if !errors.Is(err, ErrScopeMismatch) || revoked != 1 {
-		t.Fatalf("wider grant: %v, revoked %d", err, revoked)
+	cancel()
+	if err := tok.Revoke(ctx, w.client); err != nil {
+		t.Fatalf("revoke after the dispatch ended: %v", err)
+	}
+	if got := w.sim.Tokens(); len(got) != 1 || !got[0].Revoked {
+		t.Fatalf("tokens %+v", got)
 	}
 }
