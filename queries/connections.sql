@@ -181,12 +181,14 @@ VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(connection_id), sqlc.arg(kind),
 RETURNING *;
 
 -- name: ActiveGrantBounds :many
--- The bounds of every active, unexpired grant, with its agent, to find
--- the agents whose grants depend on a connection (F358).
-SELECT g.agent_id, a.name, r.bounds
+-- A page of the bounds of the active, unexpired grants, with their agents,
+-- after (agent name, grant id), to find the agents whose grants depend on
+-- a connection (F358). The caller reads pages until its list is full.
+SELECT g.id, g.agent_id, a.name, r.bounds
 FROM pc.grants g
 JOIN pc.grant_revisions r ON r.org_id = g.org_id AND r.grant_id = g.id AND r.revision = g.current_revision
 JOIN pc.agents a ON a.org_id = g.org_id AND a.id = g.agent_id
 WHERE g.org_id = sqlc.arg(org_id) AND g.state = 'ACTIVE' AND r.expires_at > now()
-ORDER BY a.name, g.agent_id
-LIMIT 5000;
+  AND (a.name, g.id) > (sqlc.arg(after_name)::text, sqlc.arg(after_id)::uuid)
+ORDER BY a.name, g.id
+LIMIT sqlc.arg(page)::integer;

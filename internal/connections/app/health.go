@@ -171,28 +171,40 @@ func grantedAgents(ctx context.Context, q *dbq.Queries, org ids.OrgID, conn dbq.
 			ops = append(ops, p.Definitions[i].Operation)
 		}
 	}
-	rows, err := q.ActiveGrantBounds(ctx, org)
-	if err != nil {
-		return nil, err
-	}
 	var out []DependentAgent
-	for _, r := range rows {
-		if len(out) == MaxDependents {
+	page := dbq.ActiveGrantBoundsParams{OrgID: org, Page: grantPage}
+	for len(out) < MaxDependents {
+		rows, err := q.ActiveGrantBounds(ctx, page)
+		if err != nil {
+			return nil, err
+		}
+		for _, r := range rows {
+			if len(out) == MaxDependents {
+				break
+			}
+			if slices.ContainsFunc(out, func(a DependentAgent) bool { return a.Agent == r.AgentID }) {
+				continue
+			}
+			b, err := gdomain.DecodeBounds(r.Bounds)
+			if err != nil {
+				continue // a grant that does not decode allows nothing
+			}
+			if b.Operations == nil || slices.ContainsFunc(ops, b.Operations.Matches) {
+				out = append(out, DependentAgent{Agent: r.AgentID, Name: r.Name})
+			}
+		}
+		if len(rows) < grantPage {
 			break
 		}
-		if slices.ContainsFunc(out, func(a DependentAgent) bool { return a.Agent == r.AgentID }) {
-			continue
-		}
-		b, err := gdomain.DecodeBounds(r.Bounds)
-		if err != nil {
-			continue // a grant that does not decode allows nothing
-		}
-		if b.Operations == nil || slices.ContainsFunc(ops, b.Operations.Matches) {
-			out = append(out, DependentAgent{Agent: r.AgentID, Name: r.Name})
-		}
+		last := rows[len(rows)-1]
+		page.AfterName, page.AfterID = last.Name, last.ID
 	}
 	return out, nil
 }
+
+// grantPage is how many grants grantedAgents reads at a time: it reads on
+// until its list is full, so no dependent agent is left out unseen.
+const grantPage = 500
 
 func latest(ctx context.Context, q *dbq.Queries, org ids.OrgID, id ids.UUID, passedOnly bool) (*TestResult, error) {
 	t, ok, err := lastTest(ctx, q, org, id, passedOnly)
