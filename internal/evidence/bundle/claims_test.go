@@ -175,3 +175,72 @@ func TestHR217_CoverageClaimsAreCheckedAgainstTheSnapshotLedger(t *testing.T) {
 		})
 	}
 }
+
+// TestT089_AForgedCoverageClaimIsRejected: pclaw verify fails a receipt's
+// coverage claim on a snapshot of another scope, or ENFORCED after a change
+// to the scope that came before the decision, lapsed or not; a claim on a
+// snapshot the ledger does not hold is not available, never passed
+// (HR-217).
+func TestT089_AForgedCoverageClaimIsRejected(t *testing.T) {
+	agent, conn := ids.NewV7().String(), ids.NewV7().String()
+	sc := bundletest.Scope{Agent: agent, Connection: conn, Operation: "github.pulls.merge"}
+	at := func(d time.Duration) string { return domain.Timestamp(bundletest.IssuedAt.Add(d)) }
+	enforced := func() bundletest.Snapshot {
+		return bundletest.Snapshot{
+			V: 1, Scope: sc, State: "ENFORCED", Snapshot: ids.NewV7().String(), ComputedAt: at(-time.Hour),
+			ExpiresAt: at(time.Hour), Exclusions: []string{}, RoutesDigest: "sha256:00",
+		}
+	}
+	claimOf := func(s bundletest.Snapshot) bundletest.Claim {
+		return bundletest.Claim{
+			V: 1, State: s.State, Snapshot: s.Snapshot, Scope: sc, SnapshotState: s.State, Exclusions: s.Exclusions,
+			ExpiresAt: s.ExpiresAt,
+		}
+	}
+	changed := bundletest.Invalidation{V: 1, ID: ids.NewV7().String(), Connection: conn, Kind: "gateway", OccurredAt: at(-time.Minute)}
+	for name, build := range map[string]func(i *bundletest.Issuer){
+		"a forged snapshot id": func(i *bundletest.Issuer) {
+			s := enforced()
+			i.AppendSnapshot(s)
+			c := claimOf(s)
+			c.Snapshot = ids.NewV7().String()
+			i.AppendClaim(c, agent, conn)
+		},
+		"another scope's snapshot": func(i *bundletest.Issuer) {
+			s := enforced()
+			s.Scope.Operation = "github.contents.write"
+			i.AppendSnapshot(s)
+			i.AppendClaim(claimOf(s), agent, conn)
+		},
+		"ENFORCED after an invalidation": func(i *bundletest.Issuer) {
+			s := enforced()
+			i.AppendSnapshot(s)
+			i.AppendInvalidation(changed)
+			i.AppendClaim(claimOf(s), agent, conn)
+		},
+		"ENFORCED after an invalidation, claimed lapsed": func(i *bundletest.Issuer) {
+			s := enforced()
+			i.AppendSnapshot(s)
+			i.AppendInvalidation(changed)
+			c := claimOf(s)
+			c.Lapsed, c.Reason = true, "gateway"
+			i.AppendClaim(c, agent, conn)
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			iss := bundletest.NewIssuer(t)
+			iss.Append(1)
+			build(iss)
+			iss.Checkpoint()
+			trust, err := bundle.ParseTrust(iss.Trust())
+			if err != nil {
+				t.Fatal(err)
+			}
+			r := bundle.Verify(iss.Bundle(), bundle.Options{Trust: trust})
+			if count(r, "receipt.coverage", bundle.Passed) > 0 || count(r, "receipt.coverage", bundle.Failed)+
+				count(r, "receipt.coverage", bundle.NotAvailable) == 0 {
+				t.Fatalf("a forged claim was not rejected:\n%s", r.Text())
+			}
+		})
+	}
+}
