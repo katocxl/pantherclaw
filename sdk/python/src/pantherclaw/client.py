@@ -383,6 +383,16 @@ class Client:
         self._lock = threading.Lock()
         self._opener = urllib.request.build_opener(_NoRedirect)
 
+    @property
+    def gateway(self) -> str:
+        """The gateway's base URL."""
+        return self._gateway
+
+    @property
+    def builtins(self) -> frozenset[str]:
+        """The tool names this client sends as built-ins."""
+        return self._builtins
+
     def workload_token(self, force: bool = False) -> str:
         """A workload token valid for at least another minute, renewed at the server when needed."""
         with self._lock:
