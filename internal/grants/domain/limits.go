@@ -139,6 +139,42 @@ func (l Limits) validate(onGrant bool) error {
 	return nil
 }
 
+// checkDispatched refuses a budget or counter that names an operation
+// which is only ever a consequence (G0 M8, HR-206): the pipeline decides a
+// predicted or unknown consequence with the action that may cause it, but
+// never dispatches or reserves it, so the rule would never count anything.
+// Such an operation is a write without mappings, which a package defines
+// only as a consequence of its own rules. lookup gives the active
+// definition of an exact operation; a prefix limits the dispatched
+// operations it covers and is not resolved.
+func (l Limits) checkDispatched(lookup func(op string) *defs.Definition) error {
+	if lookup == nil {
+		return nil
+	}
+	check := func(name string, ops Ops) error {
+		for _, op := range ops {
+			if _, prefix := opPrefix(op); prefix {
+				continue
+			}
+			if d := lookup(op); d != nil && d.Access == defs.AccessWrite && len(d.Mappings) == 0 {
+				return invalid("%s: %s is a consequence, which is never dispatched, so it would never be counted; limit the operation that causes it", name, op)
+			}
+		}
+		return nil
+	}
+	for _, r := range l.Budgets {
+		if err := check("budgets."+r.ID, r.Operations); err != nil {
+			return err
+		}
+	}
+	for _, r := range l.Counters {
+		if err := check("counters."+r.ID, r.Operations); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // DecodeLimits strictly decodes a limits document, like DecodeBounds.
 func DecodeLimits(raw []byte) (Limits, error) {
 	if len(raw) == 0 || len(raw) > MaxBoundsBytes {
