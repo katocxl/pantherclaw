@@ -42,8 +42,10 @@ type fake struct {
 	key    pap.KeyFile
 	jkt    string
 	issued atomic.Int32
-	// sdk answers the /sdk face once the proof checked out.
-	sdk func(w http.ResponseWriter, r *http.Request, body []byte)
+	// sdk answers the /sdk face once the proof checked out; wait answers
+	// the server's long-poll and SSE wait routes.
+	sdk  func(w http.ResponseWriter, r *http.Request, body []byte)
+	wait func(w http.ResponseWriter, r *http.Request)
 	// requireNonce refuses proofs without the fake's nonce (use_nonce).
 	requireNonce bool
 	// expireFirst refuses the first /sdk call with token_expired.
@@ -131,6 +133,8 @@ func (f *fake) serve(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		f.sdk(w, r, body)
+	case f.wait != nil && (r.URL.Path == "/pantherclaw.v1.WorkloadService/Wait" || strings.HasPrefix(r.URL.Path, "/v1/wait/")):
+		f.wait(w, r)
 	default:
 		http.NotFound(w, r)
 	}
