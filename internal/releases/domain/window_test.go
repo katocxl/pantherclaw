@@ -116,6 +116,30 @@ func TestHR207_TheRepositoryWindowDecidesAndAnyFreezeHolds(t *testing.T) {
 	}
 }
 
+// TestHR207_EnvironmentsMatchWhateverTheirCase: GitHub's environment names
+// are case-insensitive, so a window is stored under its environment in
+// lowercase and decides a release to that environment in any case, from
+// either side.
+func TestHR207_EnvironmentsMatchWhateverTheirCase(t *testing.T) {
+	if got := NormalizeEnvironment("Production"); got != "production" {
+		t.Fatalf("normalized %q", got)
+	}
+	const zone = "UTC"
+	tuesday := at(t, zone, "2026-10-13 10:30")
+	env := Window{Environment: "production", TimeZone: zone, Weekly: []Weekly{{Day: "tue", Start: "10:00", Minutes: 60}}}
+	for _, name := range []string{"production", "Production", "PRODUCTION"} {
+		if got := Decide([]Window{env}, name, "", tuesday); got != Open {
+			t.Errorf("%s: %s", name, got)
+		}
+	}
+	upper := env
+	upper.Environment = "Production"
+	upper.Freezes = []Span{{Start: tuesday.Add(-time.Hour), End: tuesday.Add(time.Hour)}}
+	if got := Decide([]Window{upper}, "production", "", tuesday); got != Frozen {
+		t.Errorf("a window named in another case: %s", got)
+	}
+}
+
 func TestHR207_WindowsAreValidated(t *testing.T) {
 	ok := Window{Environment: "production", TimeZone: "UTC", Weekly: []Weekly{{Day: "mon", Start: "09:00", Minutes: 60}}}
 	start := time.Date(2026, 10, 12, 9, 0, 0, 0, time.UTC)

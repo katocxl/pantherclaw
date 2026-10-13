@@ -182,7 +182,9 @@ func TestT043_NonHumansNeverHoldHumanOnlyPermissions(t *testing.T) {
 		t.Fatal("approver binding does not work for a human")
 	}
 	for _, r := range domain.Roles() {
-		_, err := domain.CheckBindable(r.Name, domain.KindServiceAccount, domain.ScopeOrg)
+		// At a scope the role may be bound at, so only being human only
+		// can refuse it.
+		_, err := domain.CheckBindable(r.Name, domain.KindServiceAccount, r.Scopes[0])
 		if r.HumanOnly() != errors.Is(err, domain.ErrHumanOnlyRole) {
 			t.Errorf("CheckBindable(%s, service account) = %v", r.Name, err)
 		}
