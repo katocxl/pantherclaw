@@ -21,9 +21,7 @@ func snapshotProto(s app.SnapshotRecord) *pantherclawv1.CoverageSnapshot {
 		ExpireTime: tsp(s.ExpiresAt), LedgerEntryId: s.LedgerEntryID.String(),
 		EntryDigest: "sha256:" + hex.EncodeToString(s.BodySha256),
 	}
-	for _, x := range s.Body.Exclusions {
-		out.ExclusionIds = append(out.ExclusionIds, x)
-	}
+	out.ExclusionIds = append(out.ExclusionIds, s.Body.Exclusions...)
 	for _, rt := range s.Body.Routes {
 		out.Routes = append(out.Routes, &pantherclawv1.CoverageRoute{
 			Id: rt.Route, Kind: kinds[domain.RouteKind(rt.Kind)], Channel: rt.Channel, Locator: rt.Locator,
