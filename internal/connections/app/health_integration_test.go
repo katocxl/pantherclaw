@@ -133,8 +133,9 @@ func (e *env) grant(t *testing.T, name, bounds string, revoked, expired bool) id
 	return agent
 }
 
-// grants gives a new agent n active grants with bounds.
-func (e *env) grants(t *testing.T, name, bounds string, n int) {
+// grants gives a new agent n active grants with bounds, and returns the
+// agent.
+func (e *env) grants(t *testing.T, name, bounds string, n int) ids.UUID {
 	t.Helper()
 	agent, _ := e.agentRun(t, name)
 	e.exec(t, `INSERT INTO pc.grants (org_id, id, agent_id, principal_user_id, environment_id, depth, state, current_revision, grantor_kind,
@@ -145,6 +146,7 @@ func (e *env) grants(t *testing.T, name, bounds string, n int) {
 		delegation_depth, max_children, min_attestation, widens, created_by)
 		SELECT $1, gen_random_uuid(), g.id, 1, now() - interval '2 days', now() + interval '1 day', $3, '[]', '{}', 0, 0, 0, false, 'test'
 		FROM pc.grants g WHERE g.org_id = $1 AND g.agent_id = $2`, e.org, agent, []byte(bounds))
+	return agent
 }
 
 // TestF358_HealthListsTheAgentsWhoseGrantsDependOnTheConnection: the
@@ -176,5 +178,29 @@ func TestF358_HealthListsTheAgentsWhoseGrantsDependOnTheConnection(t *testing.T)
 	}
 	if h, err := e.svc.Health(e.caller(td.KindUser, td.RoleEmergency), c.ID); err != nil || !h.AgentsHidden || len(h.GrantedAgents) != 0 {
 		t.Fatalf("without agent.read: %+v %v", h.GrantedAgents, err)
+	}
+}
+
+// TestF358_HealthReadsGrantsPastTheFirstPage: health reads the grants a
+// page at a time until its list is full, so with pages of two grants, after
+// five grants for other operations, an agent whose grants start on the
+// third page and span two pages is listed once, and one whose grant is on
+// the fifth page is listed too.
+func TestF358_HealthReadsGrantsPastTheFirstPage(t *testing.T) {
+	e := newEnv(t)
+	c := e.payments(t, "payments")
+	e.grants(t, "0-github-fleet", `{"operations":["github.*"]}`, 5)
+	refunder := e.grants(t, "a-refunder", `{"operations":["payments.refund.*"]}`, 3)
+	reader := e.grant(t, "b-reader", `{"operations":["payments.refund.get"]}`, false, false)
+	h, err := e.svc.WithGrantPage(2).Health(e.admin, c.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []ids.UUID
+	for _, a := range h.GrantedAgents {
+		got = append(got, a.Agent)
+	}
+	if want := []ids.UUID{refunder, reader}; !slices.Equal(got, want) {
+		t.Fatalf("granted agents %+v, want %v", h.GrantedAgents, want)
 	}
 }
