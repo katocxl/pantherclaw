@@ -14,6 +14,7 @@ import (
 	"encoding/json/v2"
 	"fmt"
 	"slices"
+	"strings"
 	"time"
 
 	apdomain "github.com/katocxl/pantherclaw/internal/approvals/domain"
@@ -136,6 +137,18 @@ func LoadEligibility(ctx context.Context, q *dbq.Queries, org ids.OrgID, request
 	for _, l := range out.PeopleLists {
 		c.Authorship[l.Fact] = l.Authorship()
 	}
+	// Whoever was linked to those people when the request was created stays
+	// excluded, whatever happened to their links since (G0 M8 P2f).
+	linked, err := q.RequestLinkedPeople(ctx, org, request)
+	if err != nil {
+		return Eligibility{}, err
+	}
+	for _, r := range linked {
+		if a, ok := c.Authorship[r.Fact]; ok && !slices.Contains(a.Users, r.UserID) {
+			a.Users = append(a.Users, r.UserID)
+			c.Authorship[r.Fact] = a
+		}
+	}
 	out.Context = c
 	if len(users) == 0 {
 		return out, nil
@@ -172,6 +185,16 @@ func LoadEligibility(ctx context.Context, q *dbq.Queries, org ids.OrgID, request
 		if p, ok := out.People[k.UserID]; ok {
 			p.Credentials = append(p.Credentials, apdomain.Credential{ID: k.ID, CreatedAt: k.CreatedAt})
 			out.People[k.UserID] = p
+		}
+	}
+	verified, err := q.VerifiedGitHubUsers(ctx, org, users)
+	if err != nil {
+		return Eligibility{}, err
+	}
+	for _, u := range verified {
+		if p, ok := out.People[u]; ok {
+			p.GitHubVerified = true
+			out.People[u] = p
 		}
 	}
 	return out, nil
@@ -277,8 +300,60 @@ func peopleLists(ctx context.Context, q *dbq.Queries, org ids.OrgID, request ids
 			for _, k := range links {
 				l.Link(k.GithubUserID, k.UserID)
 			}
+			former, err := q.FormerGitHubUsers(ctx, org, ghIDs)
+			if err != nil {
+				return nil, err
+			}
+			for _, k := range former {
+				l.Formerly(k.GithubUserID, k.UserID)
+			}
+			exempt, err := q.ExemptGitHubUsers(ctx, org, ghIDs)
+			if err != nil {
+				return nil, err
+			}
+			for _, x := range exempt {
+				l.Exempted(x.GithubUserID, userOf(x.CreatedBy))
+			}
 		}
 		out = append(out, l)
 	}
 	return out, nil
+}
+
+// snapshotLinkedPeople keeps, for each people fact an independent
+// requirement of a new request names, the users linked now to the people
+// it lists (G0 M8 P2f, HR-207): they stay excluded from the request even
+// if they unlink before it is decided.
+func snapshotLinkedPeople(ctx context.Context, q *dbq.Queries, org ids.OrgID, request ids.UUID, reqs []apdomain.Requirement) error {
+	lists, err := peopleLists(ctx, q, org, request, reqs)
+	if err != nil {
+		return err
+	}
+	for _, l := range lists {
+		var users []ids.UUID
+		for _, p := range l.People {
+			if p.User != nil && !slices.Contains(users, *p.User) {
+				users = append(users, *p.User)
+			}
+		}
+		if len(users) == 0 {
+			continue
+		}
+		if err := q.InsertRequestLinkedPeople(ctx, dbq.InsertRequestLinkedPeopleParams{
+			OrgID: org, RequestID: request, Fact: l.Fact, UserIds: users,
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// userOf is the user a principal string ("user:<id>") names; the zero id
+// for anything else.
+func userOf(principal string) ids.UUID {
+	id, err := ids.ParseUUID(strings.TrimPrefix(principal, "user:"))
+	if err != nil || !strings.HasPrefix(principal, "user:") {
+		return ids.UUID{}
+	}
+	return id
 }

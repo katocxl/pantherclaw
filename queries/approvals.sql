@@ -509,3 +509,32 @@ WHERE r.org_id = sqlc.arg(org_id) AND r.id = sqlc.arg(request_id);
 -- (HR-207, F158). An id is linked to one user at most.
 SELECT github_user_id, user_id FROM pc.github_identities
 WHERE org_id = sqlc.arg(org_id) AND github_user_id = ANY(sqlc.arg(github_ids)::bigint[]);
+
+-- name: FormerGitHubUsers :many
+-- Everyone ever linked to GitHub user ids by a proved link (P2f): they stay
+-- excluded as independent of the people the ids are.
+SELECT github_user_id, user_id FROM pc.github_identity_history
+WHERE org_id = sqlc.arg(org_id) AND github_user_id = ANY(sqlc.arg(github_ids)::bigint[]);
+
+-- name: ExemptGitHubUsers :many
+-- Which of GitHub user ids an admin registered as not a person, and who.
+SELECT github_user_id, created_by FROM pc.github_exemptions
+WHERE org_id = sqlc.arg(org_id) AND github_user_id = ANY(sqlc.arg(github_ids)::bigint[]);
+
+-- name: InsertRequestLinkedPeople :exec
+-- The users linked, when a request is created, to the people its fact
+-- lists (G0 M8 P2f, HR-207): they stay excluded from it.
+INSERT INTO pc.approval_request_linked_people (org_id, request_id, fact, user_id)
+SELECT sqlc.arg(org_id), sqlc.arg(request_id), sqlc.arg(fact), u FROM unnest(sqlc.arg(user_ids)::uuid[]) AS u
+ON CONFLICT DO NOTHING;
+
+-- name: RequestLinkedPeople :many
+-- The users linked to a request's people when it was created.
+SELECT fact, user_id FROM pc.approval_request_linked_people
+WHERE org_id = sqlc.arg(org_id) AND request_id = sqlc.arg(request_id);
+
+-- name: VerifiedGitHubUsers :many
+-- Which of users hold a GitHub link they proved by signing in (P2f): only
+-- they approve a requirement independent of a GitHub people fact.
+SELECT DISTINCT user_id FROM pc.github_identities
+WHERE org_id = sqlc.arg(org_id) AND user_id = ANY(sqlc.arg(user_ids)::uuid[]) AND verified_at IS NOT NULL;

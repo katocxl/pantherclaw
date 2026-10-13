@@ -36,6 +36,17 @@ const (
 	// IneligibleAuthorshipUnknown: the fact could not list everyone, so
 	// nobody can count as independent (design decision 18).
 	IneligibleAuthorshipUnknown = "AUTHORSHIP_UNKNOWN"
+	// IneligibleNotLinked: the requirement is independent of a GitHub
+	// people fact, and the person holds no GitHub link proved by signing in
+	// to GitHub, so nobody can tell whether they are among those people
+	// (G0 M8 P2f, HR-207).
+	IneligibleNotLinked = "GITHUB_NOT_LINKED"
+	// IneligiblePeopleNotLinked: someone the people fact lists, who is a
+	// person and not exempted, is linked to nobody in the org, so the
+	// approver could be them under another account (founder decision
+	// 2026-10-13, HR-207). It lasts until they link or an admin exempts
+	// the account.
+	IneligiblePeopleNotLinked = "GITHUB_PEOPLE_NOT_LINKED"
 )
 
 // ErrStepUpSubjectNotAPerson is returned when a step-up names a launcher or
@@ -98,6 +109,10 @@ type Person struct {
 	Bindings []RoleBinding
 	// Active credentials only.
 	Credentials []Credential
+	// GitHubVerified is set when the person holds a GitHub link they proved
+	// by signing in to GitHub (G0 M8 P2f): only then do they approve a
+	// requirement independent of a GitHub people fact.
+	GitHubVerified bool
 }
 
 // RunPeople are the people around a run: its launcher and represented
@@ -180,6 +195,10 @@ func Check(r Requirement, p Person, c Context, cred ids.UUID) (bool, string) {
 			return false, IneligibleAuthorshipUnknown
 		case slices.Contains(a.Users, p.UserID):
 			return false, IneligibleAuthor
+		case len(a.Unlinked) > 0:
+			return false, IneligiblePeopleNotLinked
+		case !p.GitHubVerified:
+			return false, IneligibleNotLinked
 		}
 	}
 	if r.Independent {
@@ -326,4 +345,8 @@ type Authorship struct {
 	// Complete is false when the fact could not list everyone (a fork, too
 	// many commits, an unreadable activity feed) or is not known.
 	Complete bool
+	// Unlinked are the GitHub user ids it lists that are people linked to
+	// nobody in the org: not a bot the fact names and not an account an
+	// admin exempted.
+	Unlinked []int64
 }

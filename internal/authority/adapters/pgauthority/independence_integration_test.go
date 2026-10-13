@@ -41,8 +41,10 @@ func peopleRefunds(pkg string) string {
 // TestHR207_TheLinkedPeopleOfTheHeldActionAreNotIndependent: when a person
 // responds, the approvals side reads the held action's people fact as it
 // is now and excludes the users linked to the GitHub users it lists (an
-// author, a pusher), never an unlinked person; a fact that says it is
-// incomplete, or lists an id that is not a positive integer, leaves nobody
+// author, a pusher). While someone it lists is linked to nobody, nobody
+// counts (GITHUB_PEOPLE_NOT_LINKED, founder decision 2026-10-13) until an
+// identity manager exempts that account as not a person. A fact that says
+// it is incomplete, or lists an id that is not a positive integer, leaves nobody
 // independent. A code_reviewer requirement is independent by its role
 // alone (HR-207), so it excludes them as an independent approver does.
 func TestHR207_TheLinkedPeopleOfTheHeldActionAreNotIndependent(t *testing.T) {
@@ -70,9 +72,11 @@ func linkedPeopleAreNotIndependent(t *testing.T, req pdomain.ApprovalRequirement
 	for i, u := range []ids.UUID{bob, carol, dave} {
 		exec(t, w.pool, w.org, "INSERT INTO pc.users (org_id, id, issuer, subject) VALUES ($1, $2, 'https://idp.test', $3)", w.org, u, "u"+string(rune('a'+i)))
 	}
-	for gh, u := range map[int64]ids.UUID{42: bob, 43: carol} {
-		exec(t, w.pool, w.org, `INSERT INTO pc.github_identities (org_id, id, user_id, github_login, github_user_id, linked_by)
-			VALUES ($1, $2, $3, $4, $5, 'test')`, w.org, ids.NewV7(), u, "gh"+strings.Repeat("x", int(gh-41)), gh)
+	// dave is linked too, to a GitHub user the fact does not list: only a
+	// proved link lets a person approve (P2f).
+	for gh, u := range map[int64]ids.UUID{42: bob, 43: carol, 45: dave} {
+		exec(t, w.pool, w.org, `INSERT INTO pc.github_identities (org_id, id, user_id, github_login, github_user_id, linked_by, verified_at)
+			VALUES ($1, $2, $3, $4, $5, 'test', now())`, w.org, ids.NewV7(), u, "gh"+strings.Repeat("x", int(gh-41)), gh)
 	}
 	b, _ := gdomain.DecodeBounds([]byte(`{"operations": ["payments.refund.create"],
 	  "params": {"payments.refund.create": {"amount": {"max": {"USD": "100.00"}}}}}`))
@@ -114,7 +118,7 @@ func linkedPeopleAreNotIndependent(t *testing.T, req pdomain.ApprovalRequirement
 	}
 	someone := func(u ids.UUID) apdomain.Person {
 		return apdomain.Person{
-			UserID: u, Enabled: true, JoinedAt: time.Now().Add(-90 * 24 * time.Hour),
+			UserID: u, Enabled: true, JoinedAt: time.Now().Add(-90 * 24 * time.Hour), GitHubVerified: e.People[u].GitHubVerified,
 			Bindings:    []apdomain.RoleBinding{{Role: req.Role, CreatedAt: time.Now().Add(-90 * 24 * time.Hour)}},
 			Credentials: []apdomain.Credential{{ID: ids.NewV7(), CreatedAt: time.Now().Add(-90 * 24 * time.Hour)}},
 		}
@@ -122,8 +126,14 @@ func linkedPeopleAreNotIndependent(t *testing.T, req pdomain.ApprovalRequirement
 	if ok, code := apdomain.Check(e.Requirements[0], someone(carol), e.Context, ids.UUID{}); ok || code != apdomain.IneligibleAuthor {
 		t.Fatalf("a linked pusher: %v %s", ok, code)
 	}
+	if ok, code := apdomain.Check(e.Requirements[0], someone(dave), e.Context, ids.UUID{}); ok || code != apdomain.IneligiblePeopleNotLinked {
+		t.Fatalf("an unrelated person while pusher 44 is linked to nobody: %v %s", ok, code)
+	}
+	exec(t, w.pool, w.org, `INSERT INTO pc.github_exemptions (org_id, github_user_id, github_login, reason, created_by)
+		VALUES ($1, 44, 'ci-bot[bot]', 'the CI App', 'test')`, w.org)
+	e = load()
 	if ok, code := apdomain.Check(e.Requirements[0], someone(dave), e.Context, ids.UUID{}); !ok {
-		t.Fatalf("an unrelated person: %s", code)
+		t.Fatalf("an unrelated person once 44 is exempted: %s", code)
 	}
 
 	for _, object := range []string{
@@ -160,8 +170,8 @@ func TestF158_TheApprovalPageListsThePeopleTheIndependenceCheckReads(t *testing.
 	}
 	bob := ids.NewV7()
 	exec(t, w.pool, w.org, "INSERT INTO pc.users (org_id, id, issuer, subject) VALUES ($1, $2, 'https://idp.test', 'bob')", w.org, bob)
-	exec(t, w.pool, w.org, `INSERT INTO pc.github_identities (org_id, id, user_id, github_login, github_user_id, linked_by)
-		VALUES ($1, $2, $3, 'bob', 42, 'test')`, w.org, ids.NewV7(), bob)
+	exec(t, w.pool, w.org, `INSERT INTO pc.github_identities (org_id, id, user_id, github_login, github_user_id, linked_by, verified_at)
+		VALUES ($1, $2, $3, 'bob', 42, 'test', now())`, w.org, ids.NewV7(), bob)
 	b, _ := gdomain.DecodeBounds([]byte(`{"operations": ["payments.refund.create"],
 	  "params": {"payments.refund.create": {"amount": {"max": {"USD": "100.00"}}}}}`))
 	g, err := w.grants.Issue(w.human, gapp.IssueRequest{

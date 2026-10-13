@@ -63,14 +63,15 @@
 <p class="note">The run's launcher and principal, and a restoration's requester, never decide. Eligibility is checked again at every response and when the approval is used.</p>
 {{range $.People}}
 <h2>Who <code>{{.Fact}}</code> lists now</h2>
-<p class="note">An approval that must be independent of these people does not count from a user linked to any of them. A person shown as not linked is not excluded: PantherClaw does not know which user they are.</p>
+<p class="note">No approval of this action counts from a user linked to any of them, now or before. While a person it lists is linked to nobody in the org, no approval counts at all: PantherClaw cannot tell whether the approver is that person under another account. They link their account with <code>pclaw github link</code>; an account that is not a person (a bot or a machine user) is exempted by an identity manager.</p>
+{{with .Authorship.Unlinked}}<p class="alert">Not linked to anyone: GitHub {{range $i, $id := .}}{{if $i}}, {{end}}<code>{{$id}}</code>{{end}}. Approvals are refused until they link or are exempted.</p>{{end}}
 {{with .Gaps}}<p class="alert">The list of people is incomplete: {{range $i, $g := .}}{{if $i}}; {{end}}{{$g}}{{end}}.</p>{{end}}
 {{if not .Complete}}<p class="alert">Until it can be read in full, no approval that must be independent of these people counts.</p>{{end}}
 {{if .People}}
 <table>
 <thead><tr><th>GitHub user id</th><th>Listed as</th><th>User</th></tr></thead>
 <tbody>
-{{range .People}}<tr><td><code>{{.GitHubID}}</code></td><td>{{range $i, $a := .As}}{{if $i}}, {{end}}{{$a}}{{end}}</td><td>{{with .User}}<code>user:{{.}}</code>{{else}}not linked{{end}}</td></tr>
+{{range .People}}<tr><td><code>{{.GitHubID}}</code></td><td>{{range $i, $a := .As}}{{if $i}}, {{end}}{{$a}}{{end}}</td><td>{{if .User}}<code>user:{{.User}}</code>{{else if .Bot}}not a person (a bot, by the fact){{else if .Exempt}}not a person (exempted){{else}}<strong>not linked</strong>{{end}}</td></tr>
 {{end}}</tbody>
 </table>
 {{else}}
