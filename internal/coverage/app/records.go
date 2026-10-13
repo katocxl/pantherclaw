@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json/v2"
+	"slices"
 	"strings"
 	"time"
 
@@ -90,6 +91,10 @@ func (s *Service) record(ctx context.Context, tx db.TenantTx, sc domain.Scope, r
 	}
 	unseen := make([]domain.Change, 0, len(r.Changes))
 	for _, ch := range r.Changes {
+		// A change the computation read, made before it, is in the snapshot.
+		if ch.OccurredAt.Before(row.ComputedAt) && slices.Contains(r.Body.Seen, ch.ID.String()) {
+			continue
+		}
 		unseen = append(unseen, domain.Change{ID: ch.ID, Kind: domain.InvalidationKind(ch.Kind), OccurredAt: ch.OccurredAt})
 	}
 	r.Lapse = domain.Lapse(row.ExpiresAt, unseen, now)
