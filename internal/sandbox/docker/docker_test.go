@@ -29,6 +29,9 @@ func (f *fake) Run(_ context.Context, args ...string) ([]byte, error) {
 	if out, ok := f.out[command(args)]; ok {
 		return []byte(out), nil
 	}
+	if command(args) == "image inspect" {
+		return []byte(testImageEnv), nil
+	}
 	return nil, &Error{Command: command(args), ExitCode: 1, Err: errors.New("exit status 1")}
 }
 
@@ -346,12 +349,16 @@ func hardened(t *testing.T, c Container) string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return `{"Id":"abc","Name":"/pc-agent-1","Config":{"User":"65532:65532","Image":"` + testImage + `"},` +
+	env, err := json.Marshal(wantEnv([]string{testImagePath}, c.env()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return `{"Id":"abc","Name":"/pc-agent-1","Config":{"User":"65532:65532","Image":"` + testImage + `","Env":` + string(env) + `},` +
 		`"HostConfig":{"NetworkMode":"pc-sbx-1","Privileged":false,"ReadonlyRootfs":true,"CapAdd":null,"CapDrop":["ALL"],` +
 		`"SecurityOpt":["no-new-privileges=true","seccomp=builtin"],"IpcMode":"private","PidMode":"","UTSMode":"","UsernsMode":"","CgroupnsMode":"private",` +
 		`"Binds":null,"VolumesFrom":null,"Devices":[],"Sysctls":{"net.ipv4.ping_group_range":"1 0","net.ipv6.conf.all.disable_ipv6":"1","net.ipv4.ip_forward":"0"},` +
 		`"Tmpfs":{"/tmp":"rw,noexec,nosuid,nodev,size=64m"},"PidsLimit":256,"Memory":1073741824,"NanoCpus":1000000000,"Runtime":"runc","Init":true,` +
-		`"MaskedPaths":["/proc/kcore","/sys/firmware"],"ReadonlyPaths":["/proc/sys"],"PortBindings":{},"PublishAllPorts":false,"ExtraHosts":null,"Dns":null,` +
+		`"MaskedPaths":["/proc/kcore","/sys/firmware"],"ReadonlyPaths":["/proc/sys"],"PortBindings":{},"PublishAllPorts":false,"LogConfig":{"Type":"local","Config":{"max-file":"2","max-size":"8m"}},"ExtraHosts":null,"Dns":null,` +
 		`"Mounts":[{"Type":"bind","Source":` + string(src) + `,"Target":"/pc/agent","ReadOnly":true},{"Type":"volume","Source":"pc-ws-1","Target":"/workspace"}]},` +
 		`"Mounts":[{"Type":"bind","Source":` + string(src) + `,"Destination":"/pc/agent","RW":false},` +
 		`{"Type":"volume","Name":"pc-ws-1","Source":"/var/lib/docker/volumes/pc-ws-1/_data","Destination":"/workspace","RW":true}],` +
@@ -397,6 +404,11 @@ func TestHR218_AContainerTheEngineDidNotHardenIsRemoved(t *testing.T) {
 		"another image":          strings.Replace(ok, `"Image":"gcr.io`, `"Image":"docker.io`, 1),
 		"another container":      strings.Replace(ok, `"/pc-agent-1"`, `"/pc-agent-2"`, 1),
 		"volume asked read-only": strings.Replace(ok, `"Target":"/workspace"}`, `"Target":"/workspace","ReadOnly":true}`, 1),
+		"a host proxy added":     strings.Replace(ok, `"ALL_PROXY=",`, `"ALL_PROXY=http://user:pw@proxy.corp:3128",`, 1),
+		"a variable more":        strings.Replace(ok, `"Env":[`, `"Env":["AWS_SECRET_ACCESS_KEY=x",`, 1),
+		"the image env lost":     strings.Replace(ok, `"`+testImagePath+`",`, ``, 1),
+		"json-file logs":         strings.Replace(ok, `"Type":"local"`, `"Type":"json-file"`, 1),
+		"unbounded logs":         strings.Replace(ok, `"max-size":"8m"`, `"max-size":""`, 1),
 	} {
 		f := &fake{out: map[string]string{"create": "abc\n", "container inspect": inspected, "rm": ""}}
 		if _, err := New(f).CreateContainer(t.Context(), c); !errors.Is(err, ErrIsolation) {
@@ -473,7 +485,7 @@ func verifyJSON(t *testing.T, c Container, inspected string) error {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return VerifyContainer(c, info)
+	return VerifyContainer(c, info, []string{testImagePath})
 }
 
 // TestHR216_CleanupTouchesOnlyTheSessionsLabel: removal lists by the exact
@@ -521,5 +533,36 @@ func TestContainerAddressIsItsOwnOnTheNetwork(t *testing.T) {
 	}
 	if info.Address("pc-up-1") != "" || info.Address("bridge") != "" {
 		t.Fatal("an address on a network without one")
+	}
+}
+
+// testImagePath is the test image's own environment.
+const (
+	testImagePath = "PATH=/usr/local/bin:/usr/bin:/bin"
+	testImageEnv  = `["` + testImagePath + `"]`
+)
+
+// TestHR216_NoProxyOfTheHostsReachesAContainer: the Docker CLI fills the
+// proxy variables a container leaves unset from the user's
+// ~/.docker/config.json, proxy credentials included; every container sets
+// each one, empty unless asked, and logs to the bounded local driver.
+func TestHR216_NoProxyOfTheHostsReachesAContainer(t *testing.T) {
+	args, err := agent(t).args()
+	if err != nil {
+		t.Fatal(err)
+	}
+	j := strings.Join(args, " ")
+	for _, k := range proxyKeys {
+		want := "--env " + k + "="
+		if k == "HTTPS_PROXY" {
+			want += "http://pc-edge-1:3128"
+		}
+		if !strings.Contains(j+" ", want+" ") {
+			t.Errorf("%s is not set: %q", k, args)
+		}
+	}
+	if strings.Count(j, "--env HTTPS_PROXY=") != 1 ||
+		!strings.Contains(j, "--log-driver local --log-opt max-size=8m --log-opt max-file=2") {
+		t.Fatalf("args %q", args)
 	}
 }
