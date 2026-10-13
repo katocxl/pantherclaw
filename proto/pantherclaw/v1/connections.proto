@@ -7,6 +7,7 @@ package pantherclaw.v1;
 
 import "buf/validate/validate.proto";
 import "google/protobuf/timestamp.proto";
+import "pantherclaw/v1/github.proto";
 
 // ConnectionService manages connections: one target (an HTTP API, a remote
 // MCP server, or the agent's own machine for hooks) served by one gateway
@@ -175,6 +176,9 @@ message Connection {
   string updated_by = 21;
   // When it was changed last.
   google.protobuf.Timestamp update_time = 22;
+  // The GitHub App installation behind a connection holding a GitHub App
+  // credential (G0 M8, ADR-0021); unset otherwise.
+  GitHubInstallation github = 24;
 }
 
 // ConnectionRoute is one route's explicit mode.
@@ -525,6 +529,10 @@ message PutCredentialRequest {
       "github_app"
     ]
   }];
+  // Required for a github_app credential, refused for a static one: the
+  // installation it was sealed for, recorded as the connection's. The
+  // gateway refuses a seal that holds another.
+  GitHubInstallation github = 9;
 }
 
 // PutCredentialResponse returns the stored metadata.

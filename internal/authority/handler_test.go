@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	defs "github.com/katocxl/pantherclaw/internal/definitions/domain"
+	pantherclawv1 "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
 	pdomain "github.com/katocxl/pantherclaw/internal/policy/domain"
 )
 
@@ -24,5 +25,14 @@ func TestHR191_TheGatewayIsNotSentVerifyObligations(t *testing.T) {
 	}
 	if out := gatewayObligations([]pdomain.Obligation{{Kind: pdomain.Verify, Level: defs.LevelFollowUp}}); len(out) != 0 {
 		t.Fatalf("a verify obligation reached the gateway: %v", out)
+	}
+}
+
+// TestHR203_AnAccessWithoutAnExpiryHasNone: a reported access without an
+// expiry is recorded without one, never as the Unix epoch.
+func TestHR203_AnAccessWithoutAnExpiryHasNone(t *testing.T) {
+	a := accessOf(&pantherclawv1.CredentialAccess{InstallationId: 7, Repository: "acme/payments", Revocation: "revoked"})
+	if a == nil || !a.Expires.IsZero() {
+		t.Fatalf("access %+v", a)
 	}
 }
