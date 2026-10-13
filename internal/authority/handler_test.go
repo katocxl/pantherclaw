@@ -47,3 +47,12 @@ func TestHR206_TheAnswerStatesTheConsequences(t *testing.T) {
 		t.Fatalf("consequences %v", out)
 	}
 }
+
+// TestHR203_AnAccessWithoutAnExpiryHasNone: a reported access without an
+// expiry is recorded without one, never as the Unix epoch.
+func TestHR203_AnAccessWithoutAnExpiryHasNone(t *testing.T) {
+	a := accessOf(&pantherclawv1.CredentialAccess{InstallationId: 7, Repository: "acme/payments", Revocation: "revoked"})
+	if a == nil || !a.Expires.IsZero() {
+		t.Fatalf("access %+v", a)
+	}
+}

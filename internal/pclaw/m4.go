@@ -318,12 +318,14 @@ func authorityCommands() map[string]command {
 			}
 		}),
 
-		"fact-provider register": rpc("fact-provider register --name NAME --sa ID --fact NAME:TYPE:SUBJECT_TYPE:MAX_LAG ...", 0, func(fs *flag.FlagSet) call {
+		"fact-provider register": rpc("fact-provider register --name NAME (--sa ID | --gateway ID --connection ID) --fact NAME:TYPE:SUBJECT_TYPE:MAX_LAG ...", 0, func(fs *flag.FlagSet) call {
 			name, sa := fs.String("name", "", "provider name"), fs.String("sa", "", "the service account that reports its facts")
+			gw := fs.String("gateway", "", "the gateway that reads the connection's system of record and reports its facts (G0 M8)")
+			conn := fs.String("connection", "", "with --gateway: the connection")
 			var facts list
 			fs.Var(&facts, "fact", "a fact it reports, for example payments.charge.refundable:boolean:payments.charge:5m (repeatable)")
 			return func(ctx context.Context, c clients, _ []string) (proto.Message, error) {
-				req := &pantherclawv1.RegisterProviderRequest{Name: *name, ServiceAccountId: *sa}
+				req := &pantherclawv1.RegisterProviderRequest{Name: *name, ServiceAccountId: *sa, GatewayId: *gw, ConnectionId: *conn}
 				for _, f := range facts {
 					d, err := declarationOf(f)
 					if err != nil {
