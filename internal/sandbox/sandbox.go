@@ -100,6 +100,11 @@ type Options struct {
 	// container gets anything from outside it (HR-216). Docker must be able
 	// to share it.
 	Dir string
+	// BeforeProbe, a test seam only, runs once the sandbox run's probe
+	// container exists and before it starts: the M9 exit test attaches it to
+	// an open network to show that a failed negative control blocks
+	// promotion. pclaw passes it from its Options, which only tests set.
+	BeforeProbe func(ctx context.Context, container string) error
 }
 
 // Sandbox is a running sandbox: its networks and edge.
@@ -478,6 +483,11 @@ func (s *Sandbox) probe(ctx context.Context, kind, network string, cfg probe.Con
 		Mounts: mounts, PingGID: probeGID, Limits: docker.Limits{PIDs: 128, MemoryMiB: 256, MilliCPUs: 1000},
 	}); err != nil {
 		return "", err
+	}
+	if kind == "probe" && s.o.BeforeProbe != nil {
+		if err := s.o.BeforeProbe(ctx, name); err != nil {
+			return "", err
+		}
 	}
 	if err := s.c.Start(ctx, name); err != nil {
 		return "", err

@@ -187,7 +187,7 @@ func sandboxRun(ctx context.Context, a *app, args []string) error {
 	}
 	run, err := runs.StartRun(ctx, &pantherclawv1.StartRunRequest{AgentId: f.agent, InstanceId: &inst, GrantId: &f.grant, TaskRef: "sandbox " + session})
 	if err != nil {
-		return err
+		return fmt.Errorf("starting the run: %w", err)
 	}
 	renewCtx, stopRenew := context.WithCancel(ctx)
 	defer stopRenew()
@@ -201,7 +201,7 @@ func sandboxRun(ctx context.Context, a *app, args []string) error {
 	defer stopCanary()
 	ports, err := cn.Listen(canaryCtx, f.canaryListen, canary.Ports{})
 	if err != nil {
-		return err
+		return fmt.Errorf("starting the canary: %w", err)
 	}
 	mapped := resolveHosts(ctx, started.GetAgentHosts())
 	gwPort, _ := strconv.Atoi(gwAddr[strings.LastIndex(gwAddr, ":")+1:])
@@ -209,7 +209,7 @@ func sandboxRun(ctx context.Context, a *app, args []string) error {
 		Session: session, EdgeImage: f.edgeImage, ProbeImage: f.probeImage, AgentImage: images[0],
 		GatewayURL: f.gateway, GatewayAddr: gwAddr, Hosts: started.GetAgentHosts(), Connections: f.connections, MappedAddrs: mapped,
 		Run: run.GetRun().GetId(), KeyFile: kf, TokenFile: tokenFile, ProbeKey: probeKey, HostKey: hostKey, Canary: cn, CanaryPorts: ports,
-		HostPorts: []int{gwPort}, Dir: dir,
+		HostPorts: []int{gwPort}, Dir: dir, BeforeProbe: a.beforeProbe,
 	})
 	defer func() {
 		if err := box.Close(context.WithoutCancel(ctx)); err != nil {
@@ -217,10 +217,10 @@ func sandboxRun(ctx context.Context, a *app, args []string) error {
 		}
 	}()
 	if err != nil {
-		return err
+		return fmt.Errorf("starting the sandbox: %w", err)
 	}
 	if err := box.PrepareAgent(ctx, sandbox.Agent{Image: f.image, Args: f.args, Workspace: f.workspace}); err != nil {
-		return err
+		return fmt.Errorf("preparing the agent: %w", err)
 	}
 	if f.workspace != "" {
 		_, _ = fmt.Fprintf(a.stderr, "copied %s in: its repository without hooks, config or credentials (objects and refs only); "+
@@ -229,7 +229,7 @@ func sandboxRun(ctx context.Context, a *app, args []string) error {
 	n := started.GetNonces()
 	evidence, err := box.Probe(ctx, sandbox.Nonces{Sandbox: n.GetSandbox(), Control: n.GetControl(), Canary: n.GetCanary()})
 	if err != nil {
-		return err
+		return fmt.Errorf("running the probes: %w", err)
 	}
 	runID := run.GetRun().GetId()
 	for _, r := range []struct{ kind, compact string }{{"sandbox", evidence.Sandbox}, {"control", evidence.Control}} {
