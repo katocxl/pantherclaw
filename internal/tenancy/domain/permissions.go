@@ -172,7 +172,16 @@ const (
 	// Admin stays bindable to service accounts, so it is not in humanOnly:
 	// the identity service refuses any caller but a person itself.
 	PermGitHubIdentityManage Permission = "github.identity.manage"
+	// PermGitHubIdentityProve links or unlinks the caller's own GitHub account
+	// by signing in to GitHub (G0 M8 P2f, HR-207). Like
+	// github.identity.manage it is not in humanOnly, because Org Admin holds
+	// it; the identity service refuses any caller but a person.
+	PermGitHubIdentityProve Permission = "github.identity.prove"
 )
+
+// PermReleaseWindowManage creates and retires change windows (G0 M8,
+// HR-207). Human only.
+const PermReleaseWindowManage Permission = "release.window.manage"
 
 // Workload permissions are held only by PAP/1-authenticated workloads
 // (WorkloadService), never by users, service accounts or roles.
@@ -211,7 +220,8 @@ var catalog = []Permission{
 	PermGatewayRead, PermGatewayManage, PermConnectionRead, PermConnectionManage, PermCredentialSeal,
 	PermContainmentRead, PermContainmentKillSwitch,
 	PermEvidenceRead, PermEvidenceExport, PermEvidenceRetentionManage, PermEvidenceCaptureManage,
-	PermTransactionReconcile, PermGitHubIdentityManage,
+	PermTransactionReconcile, PermGitHubIdentityManage, PermGitHubIdentityProve,
+	PermReleaseWindowManage,
 }
 
 // humanOnly permissions can never be exercised by a service account or an
@@ -222,6 +232,7 @@ var humanOnly = []Permission{
 	PermGrantIssue, PermGuardrailsManage, PermFactProviderManage, PermPackageActivate,
 	PermGatewayManage, PermConnectionManage, PermCredentialSeal, PermContainmentKillSwitch, PermAgentRestore,
 	PermTransactionReconcile, PermEvidenceExport, PermEvidenceRetentionManage, PermEvidenceCaptureManage,
+	PermReleaseWindowManage,
 }
 
 // Catalog returns every grantable permission in a stable order.

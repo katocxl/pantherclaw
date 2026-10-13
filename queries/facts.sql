@@ -39,6 +39,14 @@ JOIN pc.fact_providers p ON p.org_id = d.org_id AND p.id = d.provider_id
 WHERE d.org_id = sqlc.arg(org_id) AND d.active AND p.state = 'ACTIVE'
 ORDER BY d.name;
 
+-- ListActiveFactSubjects returns the subject type each active fact is
+-- declared about (one active provider per fact name).
+-- name: ListActiveFactSubjects :many
+SELECT d.name, d.subject_type FROM pc.fact_declarations d
+JOIN pc.fact_providers p ON p.org_id = d.org_id AND p.id = d.provider_id
+WHERE d.org_id = sqlc.arg(org_id) AND d.active AND p.state = 'ACTIVE'
+ORDER BY d.name;
+
 -- name: DisableFactProvider :execresult
 UPDATE pc.fact_providers SET state = 'DISABLED'
 WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state = 'ACTIVE';
@@ -94,3 +102,10 @@ WHERE f.org_id = sqlc.arg(org_id) AND f.subject_type = sqlc.arg(subject_type) AN
   AND (cardinality(sqlc.arg(names)::text[]) = 0 OR f.name = ANY(sqlc.arg(names)::text[]))
 ORDER BY f.name
 LIMIT 500;
+
+-- name: CurrentFactValue :one
+-- The current value of a fact about a subject, locked for the write that
+-- replaces it, so a change is seen once (G0 M8, HR-205).
+SELECT value FROM pc.facts
+WHERE org_id = sqlc.arg(org_id) AND name = sqlc.arg(name) AND subject_type = sqlc.arg(subject_type) AND subject_id = sqlc.arg(subject_id)
+FOR UPDATE;
