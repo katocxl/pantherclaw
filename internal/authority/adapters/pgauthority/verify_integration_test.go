@@ -297,7 +297,7 @@ func TestHR191_UnsupportedLevelsAreRefusedInPostgres(t *testing.T) {
 
 	reader := &pgauthority.Reader{Pool: w.pool, Definitions: &defpg.Store{Pool: w.pool}}
 	c, err := reader.Connection(context.Background(), w.org, w.conn)
-	if err != nil || strings.Join(c.Reads, ",") != "payments.refund.get,payments.refund.list,payments.refund.recent" {
+	if err != nil || strings.Join(c.Reads, ",") != "payments.account.read,payments.refund.get,payments.refund.list,payments.refund.recent" {
 		t.Fatalf("the connection's reads %v: %v", c.Reads, err)
 	}
 
