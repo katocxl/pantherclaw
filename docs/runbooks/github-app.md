@@ -98,6 +98,15 @@ The server asks GitHub, as the sign-in App, which account the token belongs to. 
 
 
 - **A reviewer of a GitHub merge needs a proved link.** A code reviewer or release approver without one is refused (`GITHUB_NOT_LINKED`), because PantherClaw could not tell whether they wrote the change.
+- **Everyone who worked on the pull request must be linked, or exempted.** While its author, a commit author or committer, or a pusher is a person linked to nobody in the org, every approval of the merge is refused (`GITHUB_PEOPLE_NOT_LINKED`), because the approver could be that person under another account. Ask them to run `pclaw github link`. Accounts that are not people, a GitHub App's bot (`name[bot]`) or a machine user, are exempted by an identity manager:
+
+  ```bash
+  pclaw github exemption add 41898282 github-actions[bot] "GitHub Actions"
+  pclaw github exemption list
+  pclaw github exemption remove 41898282
+  ```
+
+  Find an account's user id at `https://api.github.com/users/LOGIN`. Every exemption change is audited and sent to the security channels. An account someone has ever linked as their own is a person and cannot be exempted, and you cannot review pull requests that list an account you exempted. Exempt the PantherClaw App's own bot, which pushes the agents' commits.
 - **Links at the request count too.** The people linked to a pull request's author, committers and pushers when the merge was held stay excluded from that request, even if they unlink before it is decided.
 - **Unlinking someone else:** a person holding `github.identity.manage` (Org Admin) can remove another person's link with `pclaw github identity unlink <link id>`, never their own.
 - Every link and unlink is audited and sends `security.github_identity_linked` or `security.github_identity_unlinked` to the security channels. A refused attempt to link someone else's account is audited as `github.identity_link_refused`. Unlinking does not undo exclusion: whoever once proved a link to a GitHub account stays excluded from reviewing pull requests that account worked on. A service account cannot link or unlink, even when it holds the role.

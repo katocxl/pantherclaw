@@ -130,3 +130,47 @@ func TestHR207_ThePageAndTheCheckAgreeOnACompletePeopleFact(t *testing.T) {
 		}
 	}
 }
+
+// TestHR207_AnUnlinkedPersonStopsEveryApproval (founder decision
+// 2026-10-13): while a person a people fact lists is linked to nobody in
+// the org, no approval that names the fact counts, whoever gives it
+// (GITHUB_PEOPLE_NOT_LINKED), since the approver could be that person
+// under another account. An account the fact names as a bot, or one an
+// admin exempted, does not stop it, but the admin who exempted it is
+// excluded like the people listed; once everyone else is linked, an
+// approver who is none of them counts. A bots member that is not a list
+// of GitHub user ids leaves the list incomplete.
+func TestHR207_AnUnlinkedPersonStopsEveryApproval(t *testing.T) {
+	l := domain.ListPeople("github.pull.people", map[string]any{
+		"complete": true, "author": int64(42), "authors": []any{int64(43)}, "committers": []any{int64(44)},
+		"pushers": []any{int64(45)}, "bots": []any{int64(45)},
+	})
+	l.Link(42, ids.NewV7())
+	admin := veteran()
+	admin.GitHubVerified = true
+	l.Exempted(44, admin.UserID)
+	a := l.Authorship()
+	if !a.Complete || !slices.Equal(a.Unlinked, []int64{43}) {
+		t.Fatalf("authorship %+v", a)
+	}
+	r := approver(1, false)
+	r.IndependentOf = "github.pull.people"
+	reviewer := veteran()
+	reviewer.GitHubVerified = true
+	c := ctx()
+	c.Authorship = map[string]domain.Authorship{"github.pull.people": a}
+	ok, code := domain.Check(r, reviewer, c, ids.UUID{})
+	wantCode(t, "with a person linked to nobody", ok, code, domain.IneligiblePeopleNotLinked)
+
+	l.Link(43, ids.NewV7())
+	c.Authorship = map[string]domain.Authorship{"github.pull.people": l.Authorship()}
+	ok, code = domain.Check(r, reviewer, c, ids.UUID{})
+	wantCode(t, "with everyone linked, a bot and an exempted account", ok, code, "")
+	ok, code = domain.Check(r, admin, c, ids.UUID{})
+	wantCode(t, "the admin who exempted an account it lists", ok, code, domain.IneligibleAuthor)
+
+	bad := domain.ListPeople("github.pull.people", map[string]any{"complete": true, "author": int64(42), "pushers": []any{}, "bots": "all"})
+	if bad.Complete || !slices.Contains(bad.Gaps, domain.PeopleMalformed) {
+		t.Fatalf("a malformed bots member: %+v", bad)
+	}
+}

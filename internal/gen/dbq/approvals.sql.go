@@ -629,6 +629,37 @@ func (q *Queries) EvidenceArrived(ctx context.Context, orgID ids.OrgID, iD ids.U
 	return result.RowsAffected(), nil
 }
 
+const exemptGitHubUsers = `-- name: ExemptGitHubUsers :many
+SELECT github_user_id, created_by FROM pc.github_exemptions
+WHERE org_id = $1 AND github_user_id = ANY($2::bigint[])
+`
+
+type ExemptGitHubUsersRow struct {
+	GithubUserID int64
+	CreatedBy    string
+}
+
+// Which of GitHub user ids an admin registered as not a person, and who.
+func (q *Queries) ExemptGitHubUsers(ctx context.Context, orgID ids.OrgID, githubIds []int64) ([]ExemptGitHubUsersRow, error) {
+	rows, err := q.db.Query(ctx, exemptGitHubUsers, orgID, githubIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ExemptGitHubUsersRow{}
+	for rows.Next() {
+		var i ExemptGitHubUsersRow
+		if err := rows.Scan(&i.GithubUserID, &i.CreatedBy); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const expireApprovalRequest = `-- name: ExpireApprovalRequest :one
 UPDATE pc.approval_requests
 SET state = 'EXPIRED', end_reason = 'APPROVAL_EXPIRED', ended_at = now()

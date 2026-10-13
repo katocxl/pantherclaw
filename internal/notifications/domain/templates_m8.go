@@ -33,6 +33,22 @@ var m8Templates = []Template{
 			"Until they link an account again by signing in to GitHub, they cannot review GitHub merges, and requests created " +
 			"while they were linked still exclude them.",
 	},
+	// An exempted account no longer holds up the reviews of pull requests it
+	// worked on (founder decision 2026-10-13), so exemptions are announced
+	// too.
+	{
+		Type: "security.github_account_exempted", Severity: Warning, Params: []string{"github_login", "github_user_id", "reason", "by"},
+		Title: "A GitHub account was exempted as not a person",
+		Body: "{by} registered the GitHub account {github_login} (GitHub user {github_user_id}) as a bot or a machine user: " +
+			"{reason}. Reviews of pull requests it worked on no longer wait for it to be linked to someone. If it is a " +
+			"person's account, remove the exemption.",
+	},
+	{
+		Type: "security.github_exemption_removed", Severity: Warning, Params: []string{"github_login", "github_user_id", "reason", "by"},
+		Title: "A GitHub account's exemption was removed",
+		Body: "{by} removed the exemption of the GitHub account {github_login} (GitHub user {github_user_id}), given as " +
+			"\"{reason}\". Reviews of pull requests it worked on wait again until it is linked to someone.",
+	},
 }
 
 func init() { templates = append(templates, m8Templates...) }

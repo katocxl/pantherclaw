@@ -32,3 +32,24 @@ WHERE org_id = sqlc.arg(org_id) AND (sqlc.narg(user_id)::uuid IS NULL OR user_id
   AND id > coalesce(sqlc.arg(after_id)::uuid, '00000000-0000-0000-0000-000000000000')
 ORDER BY id
 LIMIT sqlc.arg(max_rows);
+
+-- name: InsertGitHubExemption :one
+-- An account an admin registers as not a person (founder decision
+-- 2026-10-13); one registered already is refused.
+INSERT INTO pc.github_exemptions (org_id, github_user_id, github_login, reason, created_by)
+VALUES (sqlc.arg(org_id), sqlc.arg(github_user_id), sqlc.arg(github_login), sqlc.arg(reason), sqlc.arg(created_by))
+RETURNING *;
+
+-- name: GitHubUserEverLinked :one
+-- Whether someone ever proved the GitHub account as their own, or holds a
+-- link to it now: then it is a person and is never exempted.
+SELECT EXISTS (SELECT 1 FROM pc.github_identity_history h WHERE h.org_id = sqlc.arg(org_id) AND h.github_user_id = sqlc.arg(github_user_id))
+    OR EXISTS (SELECT 1 FROM pc.github_identities i WHERE i.org_id = sqlc.arg(org_id) AND i.github_user_id = sqlc.arg(github_user_id));
+
+-- name: DeleteGitHubExemption :one
+DELETE FROM pc.github_exemptions WHERE org_id = sqlc.arg(org_id) AND github_user_id = sqlc.arg(github_user_id)
+RETURNING *;
+
+-- name: ListGitHubExemptions :many
+SELECT * FROM pc.github_exemptions WHERE org_id = sqlc.arg(org_id) ORDER BY github_login, github_user_id
+LIMIT sqlc.arg(max_rows);
