@@ -241,3 +241,19 @@ func clientAddress(r *http.Request) string {
 	}
 	return host
 }
+
+// Observe asks the Authority to verify a workload in its run and to record
+// a tool call its agent SDK ran without a mapping (HR-200, HR-021): the
+// tool's name and the digest of its input, never the input. An error means
+// the Authority could not be asked.
+func (e *Engine) Observe(ctx context.Context, creds *pb.WorkloadCredentials, run, connection, tool string, input []byte) (Verified, error) {
+	sum := sha256.Sum256(input)
+	res, err := e.authority.RecordToolObservation(ctx, &pb.RecordToolObservationRequest{
+		Workload: creds, RunId: run, ConnectionId: connection, Tool: tool, InputSha256: sum[:],
+	})
+	if err != nil {
+		return Verified{}, err
+	}
+	e.nonces.set(res.GetNonce(), time.Time{})
+	return Verified{OK: res.GetVerified(), Code: pap.Code(res.GetErrorCode()), Instance: res.GetInstanceId(), Nonce: res.GetNonce()}, nil
+}
