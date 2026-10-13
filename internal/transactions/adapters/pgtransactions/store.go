@@ -104,7 +104,15 @@ func (s *Store) Report(ctx context.Context, org ids.OrgID, gateway ids.UUID, r a
 		if db.IsNoRows(err) {
 			tl, err := q.LeasedTargetLog(ctx, dbq.LeasedTargetLogParams{OrgID: org, ID: r.Task, GatewayID: &gw, LeaseHash: hash[:]})
 			if db.IsNoRows(err) {
-				return app.ErrLease
+				// An organization scan (G0 M8, HR-209).
+				scan, err := q.LeasedOrgScan(ctx, dbq.LeasedOrgScanParams{OrgID: org, ID: r.Task, GatewayID: &gw, LeaseHash: hash[:]})
+				if db.IsNoRows(err) {
+					return app.ErrLease
+				} else if err != nil {
+					return err
+				}
+				out, err = orgScan(ctx, tx, q, org, gateway, scan, r)
+				return err
 			} else if err != nil {
 				return err
 			}

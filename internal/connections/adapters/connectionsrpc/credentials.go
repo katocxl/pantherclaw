@@ -9,6 +9,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	credapp "github.com/katocxl/pantherclaw/internal/credentials/app"
+	creddomain "github.com/katocxl/pantherclaw/internal/credentials/domain"
 	pb "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
 )
 
@@ -21,7 +22,7 @@ func credentialOf(m credapp.Metadata) *pb.ConnectionCredential {
 	return &pb.ConnectionCredential{
 		Id: m.ID.String(), ConnectionId: m.ConnectionID.String(), Version: m.Version, BrokerKeyId: m.BrokerKeyID.String(),
 		BrokerKeyFingerprint: m.BrokerKeyFingerprint, AllowedHosts: m.AllowedHosts, Header: m.Header, Scheme: deref(m.Scheme),
-		State: credentialStates[m.State], CreatedBy: m.CreatedBy, CreateTime: timestamppb.New(m.CreatedAt),
+		State: credentialStates[m.State], CreatedBy: m.CreatedBy, CreateTime: timestamppb.New(m.CreatedAt), Kind: m.Kind,
 	}
 }
 
@@ -52,10 +53,14 @@ func (h *Handler) PutCredential(ctx context.Context, req *pb.PutCredentialReques
 	if err != nil {
 		return nil, err
 	}
-	m, err := h.creds.PutCredential(ctx, credapp.PutInput{
+	in := credapp.PutInput{
 		Connection: id, BrokerKey: key, Version: req.GetVersion(), Sealed: req.GetSealed(), AllowedHosts: req.GetAllowedHosts(),
-		Header: req.GetHeader(), Scheme: req.GetScheme(),
-	})
+		Header: req.GetHeader(), Scheme: req.GetScheme(), Kind: req.GetKind(),
+	}
+	if gh := req.GetGithub(); gh != nil {
+		in.GitHub = &creddomain.Installation{AppClientID: gh.GetAppClientId(), ID: gh.GetInstallationId(), Account: gh.GetAccountLogin()}
+	}
+	m, err := h.creds.PutCredential(ctx, in)
 	if err != nil {
 		return nil, err
 	}
