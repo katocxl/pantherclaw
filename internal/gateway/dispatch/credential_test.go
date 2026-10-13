@@ -5,6 +5,7 @@ package dispatch
 
 import (
 	"errors"
+	"net/http"
 	"net/http/httptest"
 	"testing"
 
@@ -39,12 +40,12 @@ func TestHR204_AnAppKeyIsNeverPlaced(t *testing.T) {
 		"Iv23li " + begin + " PRIVATE KEY----- x",
 		begin + " OPENSSH PRIVATE KEY-----",
 	} {
-		req := httptest.NewRequest("GET", "https://api.github.com/repos/acme/payments", nil)
+		req := httptest.NewRequest(http.MethodGet, "https://api.github.com/repos/acme/payments", nil)
 		if err := placeCredential(static, req, []byte(secret)); !errors.Is(err, errPEM) || req.Header.Get("Authorization") != "" {
 			t.Fatalf("a PEM block was placed: %v %q", err, req.Header.Get("Authorization"))
 		}
 	}
-	req := httptest.NewRequest("GET", "https://api.github.com/repos/acme/payments", nil)
+	req := httptest.NewRequest(http.MethodGet, "https://api.github.com/repos/acme/payments", nil)
 	if err := placeCredential(app, req, []byte("x")); !errors.Is(err, errKind) || req.Header.Get("Authorization") != "" {
 		t.Fatalf("an App credential was placed: %v", err)
 	}
