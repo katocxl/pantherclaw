@@ -91,6 +91,13 @@ CREATE TABLE pc.github_identity_history (
     PRIMARY KEY (org_id, github_user_id, user_id),
     FOREIGN KEY (org_id, user_id) REFERENCES pc.users (org_id, id)
 );
+-- Links made before this join the history: the owner reads them past RLS
+-- for this one statement.
+ALTER TABLE pc.github_identities NO FORCE ROW LEVEL SECURITY;
+INSERT INTO pc.github_identity_history (org_id, github_user_id, user_id, linked_at)
+SELECT org_id, github_user_id, user_id, linked_at FROM pc.github_identities
+ON CONFLICT DO NOTHING;
+ALTER TABLE pc.github_identities FORCE ROW LEVEL SECURITY;
 ALTER TABLE pc.github_identity_history ENABLE ROW LEVEL SECURITY;
 ALTER TABLE pc.github_identity_history FORCE ROW LEVEL SECURITY;
 CREATE POLICY tenant_isolation ON pc.github_identity_history
