@@ -133,7 +133,8 @@ func TestF048_CredentialReachBeyondTheNeedIsAFinding(t *testing.T) {
 // github_scan, one finding per App on the organization) are routes of their
 // own, not this credential, and a GitHub App a person's pclaw scan reports
 // (source scan) counts for nothing (N20). Permissions not read yet
-// (read_at NULL) are not observed: they resolve nothing.
+// (read_at NULL), or read more than 7 days ago, are not observed: they
+// resolve nothing.
 func TestF048_TheConnectionsOwnInstallationIsReach(t *testing.T) {
 	f := newFixture(t)
 	f.grant(t, "payments.refund.create")
@@ -171,7 +172,14 @@ func TestF048_TheConnectionsOwnInstallationIsReach(t *testing.T) {
 	}
 	f.exec(t, `UPDATE pc.connection_github SET permissions = '{"contents": "write", "administration": "write"}', read_at = now(),
 		repository_selection = 'all' WHERE connection_id = $1`, f.conn)
-	f.exec(t, `UPDATE pc.connection_github SET permissions = '{"contents": "write"}' WHERE connection_id = $1`, f.conn)
+	// A read more than a week old is not observed either, never current:
+	// even one showing less reach resolves nothing (D7).
+	f.exec(t, `UPDATE pc.connection_github SET permissions = '{"contents": "write"}', read_at = now() - interval '8 days'
+		WHERE connection_id = $1`, f.conn)
+	if rows := f.refreshFindings(t); len(rows) != 1 || rows[0].State != "OPEN" {
+		t.Fatalf("with a read 8 days old: %+v", rows)
+	}
+	f.exec(t, `UPDATE pc.connection_github SET read_at = now() WHERE connection_id = $1`, f.conn)
 	if rows := f.refreshFindings(t); len(rows) != 1 || rows[0].State != "RESOLVED" {
 		t.Fatalf("the installation reduced to the need: %+v", rows)
 	}

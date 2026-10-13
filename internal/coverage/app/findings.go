@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/katocxl/pantherclaw/internal/coverage/domain"
@@ -147,11 +148,12 @@ func (s *Service) RefreshFindings(ctx context.Context, tx db.TenantTx, connectio
 	// The installation behind the connection's own credential, as last
 	// read (G0 M8 G3).
 	switch inst, err := q.CoverageInstallationOfConnection(ctx, tx.OrgID(), connection); {
-	case err == nil && inst.ReadAt == nil:
-		// The gateway has not read the installation's permissions yet: its
-		// reach is not observed, which is never "no overreach". The findings
-		// stay as they are until it is read (G0 M8 follow-up; coordinator
-		// decision D7).
+	case err == nil && (inst.ReadAt == nil || s.now().Sub(*inst.ReadAt) > InstallationReadTTL):
+		// The installation's permissions were never read, or were last read
+		// more than a week ago: its reach is not observed, which is never "no
+		// overreach" and never current. The findings stay as they are until a
+		// scan reads it again (coordinator decision D7; the org scans run
+		// daily).
 		return nil
 	case err == nil:
 		id := strconv.FormatInt(inst.InstallationID, 10)
@@ -201,6 +203,11 @@ func auditReason(details map[string]string, reason string) map[string]string {
 	}
 	return details
 }
+
+// InstallationReadTTL is how long a read of an installation's permissions
+// counts as observed (D7): the org scans read it daily, and a read older
+// than this is "not observed".
+const InstallationReadTTL = 7 * 24 * time.Hour
 
 // truncate cuts s to at most n bytes, at a character boundary.
 func truncate(s string, n int) string {
