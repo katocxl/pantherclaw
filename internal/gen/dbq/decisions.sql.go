@@ -180,6 +180,47 @@ func (q *Queries) InsertDecision(ctx context.Context, arg InsertDecisionParams) 
 	return err
 }
 
+const insertDecisionConsequence = `-- name: InsertDecisionConsequence :exec
+INSERT INTO pc.decision_consequences (org_id, transaction_id, evaluation, position, rule_id, operation, target_type, target_id,
+    environments, state, unknown, facts_digest)
+VALUES ($1, $2, $3, $4, $5, $6,
+    $7, $8, $9::text[], $10, $11, $12)
+`
+
+type InsertDecisionConsequenceParams struct {
+	OrgID         ids.OrgID
+	TransactionID ids.UUID
+	Evaluation    int32
+	Position      int32
+	RuleID        string
+	Operation     string
+	TargetType    string
+	TargetID      string
+	Environments  []string
+	State         string
+	Unknown       []byte
+	FactsDigest   string
+}
+
+// What one consequence rule said in an evaluation (G0 M8, HR-206).
+func (q *Queries) InsertDecisionConsequence(ctx context.Context, arg InsertDecisionConsequenceParams) error {
+	_, err := q.db.Exec(ctx, insertDecisionConsequence,
+		arg.OrgID,
+		arg.TransactionID,
+		arg.Evaluation,
+		arg.Position,
+		arg.RuleID,
+		arg.Operation,
+		arg.TargetType,
+		arg.TargetID,
+		arg.Environments,
+		arg.State,
+		arg.Unknown,
+		arg.FactsDigest,
+	)
+	return err
+}
+
 const insertDedupeClaim = `-- name: InsertDedupeClaim :exec
 INSERT INTO pc.dedupe_claims (org_id, dedupe_key, transaction_id, state)
 VALUES ($1, $2, $3, 'HELD')
@@ -252,6 +293,56 @@ func (q *Queries) InsertPermitForTransaction(ctx context.Context, arg InsertPerm
 		arg.VerifyExpect,
 	)
 	return err
+}
+
+const listDecisionConsequences = `-- name: ListDecisionConsequences :many
+SELECT position, rule_id, operation, target_type, target_id, environments, state, unknown, facts_digest
+FROM pc.decision_consequences
+WHERE org_id = $1 AND transaction_id = $2 AND evaluation = $3
+ORDER BY position
+`
+
+type ListDecisionConsequencesRow struct {
+	Position     int32
+	RuleID       string
+	Operation    string
+	TargetType   string
+	TargetID     string
+	Environments []string
+	State        string
+	Unknown      []byte
+	FactsDigest  string
+}
+
+// The consequences of an evaluation, in rule order.
+func (q *Queries) ListDecisionConsequences(ctx context.Context, orgID ids.OrgID, transactionID ids.UUID, evaluation int32) ([]ListDecisionConsequencesRow, error) {
+	rows, err := q.db.Query(ctx, listDecisionConsequences, orgID, transactionID, evaluation)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListDecisionConsequencesRow{}
+	for rows.Next() {
+		var i ListDecisionConsequencesRow
+		if err := rows.Scan(
+			&i.Position,
+			&i.RuleID,
+			&i.Operation,
+			&i.TargetType,
+			&i.TargetID,
+			&i.Environments,
+			&i.State,
+			&i.Unknown,
+			&i.FactsDigest,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const lockDedupeClaim = `-- name: LockDedupeClaim :one

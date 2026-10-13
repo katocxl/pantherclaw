@@ -22,6 +22,7 @@ their own agents and target systems:
   sdk/python/              Python SDK and framework integrations
   sdk/typescript/          TypeScript SDK and framework integrations
   integrations/claude-code/ Claude Code plugin and Agent SDK integration
+  integrations/claude-agent-sdk/ Claude Agent SDK integrations (TypeScript, Python)
   docs/protocol/           PantherClaw Authority Protocol (PAP/1) specification
 
 Reference documents

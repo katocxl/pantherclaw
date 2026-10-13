@@ -158,3 +158,20 @@ func TestHR090_JanitorEmptiesExpiredReplaySlots(t *testing.T) {
 		t.Errorf("run not recorded EXPIRED")
 	}
 }
+
+// TestT050_ScanFindingsNeverFillTheGatewaysRoom: the org cap on open
+// discoveries counts the gateway's own; findings of people's scans and of
+// org scans have caps of their own, so a full room of them never stops an
+// unknown key from being recorded (HR-148, HR-209).
+func TestT050_ScanFindingsNeverFillTheGatewaysRoom(t *testing.T) {
+	w := newWorld(t)
+	for i, source := range []string{"scan", "github_scan"} {
+		w.exec(t, `WITH a AS (INSERT INTO pc.agents (org_id, id, name, state, created_by)
+			SELECT $1, gen_random_uuid(), 'f' || $3::int || '-' || g, 'DISCOVERED', 'test' FROM generate_series(1, $2::int) g RETURNING id)
+			INSERT INTO pc.discoveries (org_id, id, agent_id, source, scan_key)
+			SELECT $1, gen_random_uuid(), id, $4, sha256(id::text::bytea) FROM a`, w.org, app.MaxOpenDiscoveries, i, source)
+	}
+	if id, err := w.svc.Discover(context.Background(), w.org, w.report(t, newWorkload(), "gw-1", []byte(`{}`))); err != nil || id.IsZero() {
+		t.Fatalf("an unknown key with the scans' rooms full: %v, %v", id, err)
+	}
+}
