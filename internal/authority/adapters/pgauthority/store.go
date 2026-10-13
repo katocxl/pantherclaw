@@ -13,6 +13,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"strconv"
 	"time"
 
 	pgapprovals "github.com/katocxl/pantherclaw/internal/approvals/adapters/pgapprovals"
@@ -27,6 +28,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	gpg "github.com/katocxl/pantherclaw/internal/grants/adapters/pgstore"
 	gdomain "github.com/katocxl/pantherclaw/internal/grants/domain"
+	napp "github.com/katocxl/pantherclaw/internal/notifications/app"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	pgwaitlist "github.com/katocxl/pantherclaw/internal/waitlist/adapters/pgwaitlist"
@@ -37,9 +39,17 @@ const (
 	receiptKindExecution = "receipt.execution"
 )
 
+// Notifier enqueues a notification in the caller's transaction.
+type Notifier interface {
+	Enqueue(ctx context.Context, tx db.TenantTx, m napp.Message) (napp.Enqueued, error)
+}
+
 // Store implements finalize.Store.
 type Store struct {
 	Pool *db.Pool
+	// Notify, when set, sends the security notice of a monitor-mode action
+	// dispatched with an unknown consequence (HR-206); nil sends none.
+	Notify Notifier
 	// LockTimeout bounds how long a finalization waits for a budget account
 	// or counter row (ADR-0015): past it, Finalize returns finalize.ErrBusy.
 	// Zero keeps the pool's lock timeout.
@@ -142,6 +152,12 @@ func (s *Store) Finalize(ctx context.Context, org ids.OrgID, w finalize.Write) e
 		if err := writeReceipt(ctx, tx, org, w.TransactionID, w.Evaluation, w.GatewayID, receipt); err != nil {
 			return err
 		}
+		if err := writeConsequences(ctx, tx, org, w.TransactionID, w.Evaluation, ev.Consequences); err != nil {
+			return err
+		}
+		if err := s.notifyUnknown(ctx, tx, org, w); err != nil {
+			return err
+		}
 		if w.Permit != nil {
 			rows := pgbudgets.Rows{Accounts: map[bdomain.Ref]ids.UUID{}, Counters: map[bdomain.Ref]ids.UUID{}}
 			for _, r := range w.Rows {
@@ -179,6 +195,9 @@ func (s *Store) Finalize(ctx context.Context, org ids.OrgID, w finalize.Write) e
 			// The permit consumes the approval it rests on, once, after every
 			// approver's eligibility is checked again (HR-031, HR-170, HR-171).
 			if h := ev.Hold; h != nil && h.Satisfied && h.Request != nil && !ev.MonitorPermit() {
+				if err := windows(ctx, q, org, ev); err != nil {
+					return err
+				}
 				if err := approvals(pgapprovals.Consume(ctx, tx, org, h.Request.ID, h.Binding.Hash, w.Permit.ID, actor)); err != nil {
 					return err
 				}
@@ -236,7 +255,7 @@ func holdOf(w finalize.Write, ev *pipeline.Evaluation, actor evdomain.Actor) pga
 		GrantID: leaf.ID.UUID(), GrantRevision: leaf.Revision, Operation: ev.Operation,
 		Reversibility: h.Display.Consequence.Reversibility, VariantKey: h.VariantKey, First: h.Request == nil,
 		Binding: h.Binding, Requirements: h.Requirements, Display: h.Display, DisplayHash: h.DisplayHash,
-		Deadline: h.Deadline, Action: h.Action, Actor: actor,
+		Deadline: h.Deadline, Action: h.Action, Actor: actor, InvalidationKey: h.InvalidationKey,
 	}
 	if r := h.Request; r != nil && r.State.Live() {
 		id := r.ID
@@ -567,6 +586,9 @@ func (s *Store) RecordExecution(ctx context.Context, org ids.OrgID, gatewayID st
 		} else if err != nil {
 			return err
 		}
+		if err := revokeFailed(ctx, tx, gatewayID, pc.TransactionID, e.Access); err != nil {
+			return err
+		}
 		x := executed(pc, finalize.RecordedByGateway)
 		if o == finalize.Delegated {
 			if pc.Channel == nil || (*pc.Channel != "hook" && *pc.Channel != "sdk") {
@@ -651,6 +673,24 @@ func (s *Store) RecordExecution(ctx context.Context, org ids.OrgID, gatewayID st
 	return receipt, err
 }
 
+// revokeFailed records credential.revoke_failed when a dispatch's minted
+// token could not be revoked: it lasts until the expiry GitHub stated
+// (ADR-0021 item 6, R-18). The receipt says so too.
+func revokeFailed(ctx context.Context, tx db.TenantTx, gatewayID string, txn ids.UUID, a *finalize.Access) error {
+	if a == nil || a.Revocation != "revoke_failed" {
+		return nil
+	}
+	details := map[string]string{"installation": strconv.FormatInt(a.Installation, 10), "repository": a.Repository}
+	if !a.Expires.IsZero() {
+		details["expires_at"] = a.Expires.UTC().Format(time.RFC3339)
+	}
+	_, err := audit.Record(ctx, tx, audit.Event{
+		Name: "credential.revoke_failed", Actor: evdomain.Actor{Type: "gateway", ID: gatewayID}, Outcome: audit.Failure,
+		Object: &audit.Object{Type: "transaction", ID: txn.String()}, Details: details,
+	})
+	return err
+}
+
 // Sweep implements finalize.Store (HR-003, HR-192).
 func (s *Store) Sweep(ctx context.Context, org ids.OrgID, staleAfter time.Duration,
 	sign func(gatewayID string, e finalize.Execution, x finalize.Executed, now time.Time) (finalize.Receipt, error),
@@ -722,3 +762,25 @@ func expect(tag interface{ RowsAffected() int64 }, err error) error {
 }
 
 func decision(s string) adomain.Decision { return adomain.Decision(s) }
+
+// notifyUnknown sends, with the decision, the security notice of a
+// monitor-mode permit for an action whose consequence is unknown (G0 M8,
+// HR-206 with HR-184, founder decision 2026-10-13): monitor mode does not
+// hold it, so people must hear that enforce mode would have. One notice
+// per transaction: a monitor-mode decision is final, and the notice is
+// deduplicated by its transaction.
+func (s *Store) notifyUnknown(ctx context.Context, tx db.TenantTx, org ids.OrgID, w finalize.Write) error {
+	would, c, ok := w.Eval.WouldUnknown()
+	if !ok || w.Permit == nil || s.Notify == nil {
+		return nil
+	}
+	_, err := s.Notify.Enqueue(ctx, tx, napp.Message{
+		Org: org, Type: "security.consequence_unknown_dispatched",
+		Params: map[string]string{
+			"operation": w.Eval.Operation, "consequence": c.Operation + " on " + c.Target.ID, "would": would,
+			"transaction": w.TransactionID.String(),
+		},
+		DedupeKey: "consequence_unknown_dispatched:" + w.TransactionID.String(),
+	})
+	return err
+}

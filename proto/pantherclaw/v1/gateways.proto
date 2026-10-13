@@ -7,6 +7,8 @@ package pantherclaw.v1;
 
 import "buf/validate/validate.proto";
 import "google/protobuf/timestamp.proto";
+import "pantherclaw/v1/gateway_facts.proto";
+import "pantherclaw/v1/github.proto";
 
 // GatewayAdminService manages an org's gateways (G0 M6, HR-180): records,
 // single-use enrollment tokens, certificates and broker keys. A gateway's
@@ -101,6 +103,12 @@ service GatewayService {
   // the verifier declares, and a digest of the answer (HR-190).
   // permission: gateway.verify
   rpc ReportObservation(ReportObservationRequest) returns (ReportObservationResponse);
+  // ReportFacts records what the gateway read from a connection's system of
+  // record before a decision, as that connection's registered fact provider:
+  // only the facts the provider declares, about the connection's targets
+  // (G0 M8 decision 5, HR-160).
+  // permission: gateway.facts.report
+  rpc ReportFacts(ReportFactsRequest) returns (ReportFactsResponse);
 }
 
 // GatewayState is whether a gateway may act.
@@ -469,6 +477,10 @@ message GatewayConnection {
   string state = 14;
   // Revision.
   int32 revision = 15;
+  // The GitHub App installation behind the connection (G0 M8, ADR-0021):
+  // an action on a repository of another account is refused before it is
+  // decided (WRONG_ACCOUNT); unset without a GitHub App credential.
+  GitHubInstallation github = 17;
 }
 
 // RouteModeSetting is one route's mode.
@@ -509,6 +521,8 @@ message SealedCredential {
   string header = 7;
   // Optional scheme before it, for example "Bearer".
   string scheme = 8;
+  // Kind, bound into the seal: "static" or "github_app" (G0 M8).
+  string kind = 9;
 }
 
 // WatchContainmentRequest opens the stream.

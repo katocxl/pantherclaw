@@ -121,3 +121,8 @@ WHERE org_id = sqlc.arg(org_id) AND connection_id = sqlc.arg(connection_id) AND 
     AND (NOT sqlc.arg(passed_only)::boolean OR result = 'PASSED')
 ORDER BY finished_at DESC, id DESC
 LIMIT 1;
+
+-- name: ListConnectionGitHub :many
+-- The GitHub App installations behind connections (connection_github).
+SELECT * FROM pc.connection_github
+WHERE org_id = sqlc.arg(org_id) AND connection_id = ANY(sqlc.arg(connection_ids)::uuid[]);

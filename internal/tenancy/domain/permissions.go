@@ -164,7 +164,31 @@ const (
 	PermEvidenceCaptureManage   Permission = "evidence.capture.manage"
 	PermTransactionReconcile    Permission = "transaction.reconcile"
 	PermGatewayVerify           Permission = "gateway.verify" // gateways only: lease and report verifications (HR-190)
+	// PermGatewayFactsReport: gateways only, report a connection's facts as
+	// its registered provider (G0 M8 decision 5, HR-160).
+	PermGatewayFactsReport Permission = "gateway.facts.report"
+	// PermGatewayScanSubmit: gateways only, submit an organization scan's
+	// findings while holding its org_scan lease (G0 M8, HR-209).
+	PermGatewayScanSubmit Permission = "gateway.scan.submit"
+	// PermGitHubIdentityManage links people to GitHub user ids, which
+	// independence compares (G0 M8, HR-207). Org Admin holds it, and Org
+	// Admin stays bindable to service accounts, so it is not in humanOnly:
+	// the identity service refuses any caller but a person itself.
+	PermGitHubIdentityManage Permission = "github.identity.manage"
+	// PermGitHubIdentityProve links or unlinks the caller's own GitHub account
+	// by signing in to GitHub (G0 M8 P2f, HR-207). Like
+	// github.identity.manage it is not in humanOnly, because Org Admin holds
+	// it; the identity service refuses any caller but a person.
+	PermGitHubIdentityProve Permission = "github.identity.prove"
+	// PermGitHubScanRun starts an organization scan through a GitHub App
+	// connection (G0 M8, PN-001.2, HR-209; Team edition). Like
+	// github.identity.manage, the service refuses any caller but a person.
+	PermGitHubScanRun Permission = "github.scan.run"
 )
+
+// PermReleaseWindowManage creates and retires change windows (G0 M8,
+// HR-207). Human only.
+const PermReleaseWindowManage Permission = "release.window.manage"
 
 // Workload permissions are held only by PAP/1-authenticated workloads
 // (WorkloadService), never by users, service accounts or roles.
@@ -203,7 +227,8 @@ var catalog = []Permission{
 	PermGatewayRead, PermGatewayManage, PermConnectionRead, PermConnectionManage, PermCredentialSeal,
 	PermContainmentRead, PermContainmentKillSwitch,
 	PermEvidenceRead, PermEvidenceExport, PermEvidenceRetentionManage, PermEvidenceCaptureManage,
-	PermTransactionReconcile,
+	PermTransactionReconcile, PermGitHubIdentityManage, PermGitHubIdentityProve, PermGitHubScanRun,
+	PermReleaseWindowManage,
 }
 
 // humanOnly permissions can never be exercised by a service account or an
@@ -214,6 +239,7 @@ var humanOnly = []Permission{
 	PermGrantIssue, PermGuardrailsManage, PermFactProviderManage, PermPackageActivate,
 	PermGatewayManage, PermConnectionManage, PermCredentialSeal, PermContainmentKillSwitch, PermAgentRestore,
 	PermTransactionReconcile, PermEvidenceExport, PermEvidenceRetentionManage, PermEvidenceCaptureManage,
+	PermReleaseWindowManage,
 }
 
 // Catalog returns every grantable permission in a stable order.
@@ -229,6 +255,7 @@ func (p Permission) HumanOnly() bool { return slices.Contains(humanOnly, p) }
 // and gateway.manage are ordinary permissions for people.
 var gatewayOnly = []Permission{
 	PermGatewayAuthorize, PermGatewayDispatch, PermGatewayObserve, PermGatewayEnroll, PermGatewaySync, PermGatewayVerify,
+	PermGatewayFactsReport, PermGatewayScanSubmit,
 }
 
 // Gateway reports whether p belongs to gateways.
@@ -240,7 +267,7 @@ func (p Permission) Workload() bool { return strings.HasPrefix(string(p), "workl
 // declarableOnly are requirements an RPC may declare that no role grants.
 var declarableOnly = []Permission{
 	PermPublic, PermAuthenticated, PermGatewayAuthorize, PermGatewayDispatch, PermGatewayObserve, PermGatewayEnroll,
-	PermGatewaySync, PermGatewayVerify, PermWorkloadEnroll, PermWorkloadToken, PermWorkloadRun, PermWorkloadDelegate,
+	PermGatewaySync, PermGatewayVerify, PermGatewayFactsReport, PermGatewayScanSubmit, PermWorkloadEnroll, PermWorkloadToken, PermWorkloadRun, PermWorkloadDelegate,
 }
 
 // Declarable reports whether an RPC may declare p as its requirement.
