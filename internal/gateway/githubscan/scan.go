@@ -262,7 +262,7 @@ func (r *Result) repository(ctx context.Context, get Getter, repo Repository) er
 			continue
 		case present:
 		}
-		servers, err := ParseMCPConfig(raw)
+		servers, incomplete, err := ParseMCPConfig(raw)
 		clear(raw)
 		if err != nil {
 			r.skip("mcp_configs", "not strict JSON (comments, trailing commas) or not a configuration", 1)
@@ -287,6 +287,13 @@ func (r *Result) repository(ctx context.Context, get Getter, repo Repository) er
 		put(attrs, "transports", transports)
 		put(attrs, "env", env)
 		put(attrs, "headers", headers)
+		if incomplete {
+			// Servers that did not decode, or a name under both keys: the
+			// file names more than the finding, so the source is not scanned
+			// in full (#336 review).
+			attrs["servers_incomplete"] = "true"
+			r.skip("mcp_configs", "with servers that did not decode or are named twice", 1)
+		}
 		r.add("github_mcp_config", attrs, repo.FullName, p)
 	}
 	return nil

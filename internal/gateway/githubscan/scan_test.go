@@ -159,7 +159,7 @@ func FuzzMCPConfig(f *testing.F) {
 	f.Add([]byte(strings.ReplaceAll(mcpConfig, "PLANTED", planted)))
 	f.Add([]byte(`{"servers": {"x": {"command": "/usr/bin/` + planted + ` arg"}}}`))
 	f.Fuzz(func(t *testing.T, raw []byte) {
-		servers, err := ParseMCPConfig(raw)
+		servers, _, err := ParseMCPConfig(raw)
 		if err != nil {
 			return
 		}
@@ -233,7 +233,7 @@ func TestHR209_ACommandKeepsOnlyItsProgramName(t *testing.T) {
 		"$(cat key) run":                            "",
 	} {
 		raw := []byte(`{"mcpServers": {"s": {"command": ` + strconv.Quote(command) + `}}}`)
-		servers, err := ParseMCPConfig(raw)
+		servers, _, err := ParseMCPConfig(raw)
 		if err != nil || len(servers) != 1 || servers[0].Command != want {
 			t.Errorf("%q: %+v %v, want %q", command, servers, err, want)
 		}
@@ -267,34 +267,6 @@ func TestHR209_AgentUseTheScanCannotCheckIsReported(t *testing.T) {
 	raw, _ := json.Marshal(r)
 	if strings.Contains(string(raw), planted) || strings.Contains(string(raw), "fix ") {
 		t.Fatal("a run step's text reached the result")
-	}
-}
-
-// TestHR209_EveryMCPServerEntryIsCounted (G5 review follow-up): a file
-// holding both mcpServers and servers gives both, and an entry that is not
-// an object the parser understands is kept as unknown, by its name only,
-// so no server is missed.
-func TestHR209_EveryMCPServerEntryIsCounted(t *testing.T) {
-	servers, err := ParseMCPConfig([]byte(`{"mcpServers": {"github": {"command": "npx gh-mcp"}, "odd": ["not", "an", "object"]},
-		"servers": {"remote": {"url": "https://mcp.example.test"}, "weird": {"command": 42}}}`))
-	if err != nil {
-		t.Fatal(err)
-	}
-	got := map[string]string{}
-	for _, s := range servers {
-		got[s.Name] = s.Transport
-		if s.Transport == "unknown" && (s.Command != "" || len(s.Env) != 0 || len(s.Headers) != 0) {
-			t.Errorf("an unknown entry kept more than its name: %+v", s)
-		}
-	}
-	want := map[string]string{"github": "stdio", "odd": "unknown", "remote": "remote", "weird": "unknown"}
-	if len(got) != len(want) {
-		t.Fatalf("servers %v, want %v", got, want)
-	}
-	for name, transport := range want {
-		if got[name] != transport {
-			t.Errorf("%s: %q, want %q", name, got[name], transport)
-		}
 	}
 }
 
@@ -364,5 +336,38 @@ func TestHR209_ListingsAreReadPastOnePageUpToTheirLimit(t *testing.T) {
 			t.Errorf("%d Apps: %d read, complete %v, %v", c.apps, len(apps), all, err)
 		}
 		srv.Close()
+	}
+}
+
+// TestHR209_AnMCPConfigurationIsReadWhole (#336 review): a file with both
+// mcpServers and servers is read from both; a server entry that does not
+// decode, or a name under both keys, keeps the servers that did and marks
+// the file's finding incomplete, and the source not scanned in full.
+func TestHR209_AnMCPConfigurationIsReadWhole(t *testing.T) {
+	servers, incomplete, err := ParseMCPConfig([]byte(`{"mcpServers": {"a": {"command": "npx"}}, "servers": {"b": {"url": "https://x"}}}`))
+	if err != nil || incomplete || len(servers) != 2 || servers[0].Name != "a" || servers[1].Transport != "remote" {
+		t.Fatalf("both keys: %+v %v %v", servers, incomplete, err)
+	}
+	for name, raw := range map[string]string{
+		"an entry that does not decode": `{"mcpServers": {"a": {"command": "npx"}, "bad": {"env": "x"}}}`,
+		"a name under both keys":        `{"mcpServers": {"a": {"command": "npx"}}, "servers": {"a": {"command": "node"}}}`,
+	} {
+		servers, incomplete, err := ParseMCPConfig([]byte(raw))
+		if err != nil || !incomplete || len(servers) != 1 || servers[0].Command != "npx" {
+			t.Errorf("%s: %+v %v %v", name, servers, incomplete, err)
+		}
+	}
+	sim, get := newWorld(t)
+	sim.Push("acme/payments", "main", map[string]string{".cursor/mcp.json": `{"mcpServers": {"a": {"command": "npx"}, "bad": {"env": "x"}}}`})
+	r := ScanRepositories(context.Background(), get, []Repository{{FullName: "acme/payments", DefaultBranch: "main"}}, time.Now().Add(time.Minute))
+	var cursor map[string]string
+	for _, f := range r.Findings {
+		if f.Attributes["path"] == ".cursor/mcp.json" {
+			cursor = f.Attributes
+		}
+	}
+	if cursor["servers"] != "a" || cursor["servers_incomplete"] != "true" || !strings.Contains(r.NotScanned["mcp_configs"], "did not decode") ||
+		slices.Contains(r.Scanned, "mcp_configs") {
+		t.Fatalf("finding %v, not scanned %v", cursor, r.NotScanned)
 	}
 }
