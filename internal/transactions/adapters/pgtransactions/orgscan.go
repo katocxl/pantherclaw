@@ -122,15 +122,8 @@ func orgScan(ctx context.Context, tx db.TenantTx, q *dbq.Queries, org ids.OrgID,
 func recordInstallation(ctx context.Context, q *dbq.Queries, org ids.OrgID, gateway ids.UUID, task dbq.LeasedOrgScanRow,
 	in *app.InstallationRead,
 ) (bool, error) {
-	// The installation is the one the lease was scheduled for.
-	var req struct {
-		Installation string `json:"installation"`
-	}
-	if in == nil || json.Unmarshal(task.Request, &req) != nil {
-		return false, nil
-	}
-	id, err := strconv.ParseInt(req.Installation, 10, 64)
-	if err != nil || id <= 0 || len(in.Permissions) > maxInstallationPermissions ||
+	id := leaseInstallation(task.Request)
+	if in == nil || id <= 0 || len(in.Permissions) > maxInstallationPermissions ||
 		(in.RepositorySelection != "all" && in.RepositorySelection != "selected") {
 		return false, nil
 	}
@@ -148,6 +141,22 @@ func recordInstallation(ctx context.Context, q *dbq.Queries, org ids.OrgID, gate
 		OrgID: org, ConnectionID: task.ConnectionID, InstallationID: id,
 	})
 	return n == 1, err
+}
+
+// leaseInstallation is the installation an org-scan lease was scheduled
+// for, or 0 when its request names none.
+func leaseInstallation(request []byte) int64 {
+	var req struct {
+		Installation string `json:"installation"`
+	}
+	if json.Unmarshal(request, &req) != nil {
+		return 0
+	}
+	id, err := strconv.ParseInt(req.Installation, 10, 64)
+	if err != nil {
+		return 0
+	}
+	return id
 }
 
 // maxInstallationPermissions bounds an installation report's permissions.
