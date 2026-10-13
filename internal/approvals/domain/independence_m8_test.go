@@ -98,8 +98,10 @@ func TestHR207_OnlyAWellFormedPeopleFactIsComplete(t *testing.T) {
 // exactly when GitHubPeople finds the fact complete, with the same ids.
 func TestHR207_ThePageAndTheCheckAgreeOnACompletePeopleFact(t *testing.T) {
 	for name, people := range map[string]map[string]any{
-		"full": {"complete": true, "author": int64(42), "authors": []any{int64(42), int64(7)}, "committers": []any{int64(8)},
-			"pushers": []any{int64(43)}},
+		"full": {
+			"complete": true, "author": int64(42), "authors": []any{int64(42), int64(7)}, "committers": []any{int64(8)},
+			"pushers": []any{int64(43)},
+		},
 		"no pushers yet":     {"complete": true, "author": int64(42), "pushers": []any{}},
 		"not complete":       {"complete": false, "author": int64(42), "pushers": []any{int64(43)}},
 		"no author":          {"complete": true, "pushers": []any{int64(43)}},
