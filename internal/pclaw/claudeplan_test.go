@@ -8,6 +8,7 @@ import (
 	"crypto/ed25519"
 	"encoding/base64"
 	"encoding/json/v2"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -181,6 +182,153 @@ func TestHR208_InitAdmitsOnlyTheKeyItShowed(t *testing.T) {
 	f.enrollmentServer(t, fake)
 	code, out, errs := f.run(t, "--agent", "0192aaaa-bbbb-7ccc-8ddd-000000000001")
 	if _, err := os.Stat(f.local()); code == 0 || fake.admitted != nil || err == nil || !strings.Contains(errs, "not admitted") {
+		t.Fatalf("init: %d %s %s", code, out, errs)
+	}
+}
+
+// answerAfterChanging answers yes at init's prompt after writing a file,
+// as Claude Code may while the person reads the diff.
+type answerAfterChanging struct {
+	t             *testing.T
+	path, content string
+	answered      bool
+}
+
+func (r *answerAfterChanging) Read(p []byte) (int, error) {
+	if r.answered {
+		return 0, io.EOF
+	}
+	r.answered = true
+	if err := os.MkdirAll(filepath.Dir(r.path), 0o700); err != nil {
+		r.t.Error(err)
+	}
+	if err := os.WriteFile(r.path, []byte(r.content), 0o600); err != nil {
+		r.t.Error(err)
+	}
+	return copy(p, "y\n"), nil
+}
+
+// TestHR208_InitWritesNothingWhenAFileChangedMeanwhile: a settings file
+// that changed between init reading it and the person confirming (Claude
+// Code added a deny rule to it, or created it) is not overwritten: init
+// fails, writes and backs up nothing, and says to run it again, which
+// keeps the change.
+func TestHR208_InitWritesNothingWhenAFileChangedMeanwhile(t *testing.T) {
+	added := strings.Replace(existingLocal, `"Read(./.env)"`, "\"Read(./.env)\",\n      \"Bash(rm:*)\"", 1)
+	for name, before := range map[string]string{"changed": existingLocal, "created": ""} {
+		f := newInitFixture(t)
+		if before != "" {
+			f.write(t, f.local(), before)
+		}
+		f.stdin = &answerAfterChanging{t: t, path: f.local(), content: added}
+		code, out, errs := f.run(t)
+		if now, _ := os.ReadFile(f.local()); code != 1 || string(now) != added || !strings.Contains(out, "[y/N]") ||
+			!strings.Contains(errs, "changed after init read it") || !strings.Contains(errs, "run pclaw init again") {
+			t.Errorf("%s: %d %s %s", name, code, out, errs)
+		}
+		if len(backups(t, f.local())) != 0 {
+			t.Errorf("%s: backed up", name)
+		}
+		f.stdin = nil
+		code, out, errs = f.run(t)
+		perm, _ := readJSON(t, f.local())["permissions"].(map[string]any)
+		deny, _ := perm["deny"].([]any)
+		if code != 0 || !hookRunsIn(t, f.local()) || len(deny) != 3 || deny[2] != "Bash(rm:*)" {
+			t.Errorf("%s, run again: %d %s %s", name, code, out, errs)
+		}
+	}
+}
+
+// TestHR208_InitEnrollsNothingWhenAFileChangedMeanwhile: a settings file
+// that changed while the person read the plan stops the enrollment too:
+// no enrollment token is asked for and no key file is written.
+func TestHR208_InitEnrollsNothingWhenAFileChangedMeanwhile(t *testing.T) {
+	f := newInitFixture(t)
+	fake := &fakeEnrollment{}
+	f.enrollmentServer(t, fake)
+	f.write(t, f.local(), existingLocal)
+	f.stdin = &answerAfterChanging{t: t, path: f.local(), content: existingLocal + "\n"}
+	code, out, errs := f.run(t, "--agent", "0192aaaa-bbbb-7ccc-8ddd-000000000001")
+	if _, err := os.Stat(f.key); code != 1 || err == nil || fake.issued != nil || !strings.Contains(errs, "run pclaw init again") {
+		t.Fatalf("init: %d %s %s", code, out, errs)
+	}
+}
+
+// TestHR208_InitRefusesAKeyFileOthersCanRead: a key file that is not
+// enrolled yet is rewritten in place with its identifier, so one other
+// users can read is refused before anything is done, and keeps its mode;
+// once it is 0600 init enrolls it.
+func TestHR208_InitRefusesAKeyFileOthersCanRead(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("file modes are POSIX")
+	}
+	f := newInitFixture(t)
+	fake := &fakeEnrollment{}
+	f.enrollmentServer(t, fake)
+	kf, _, err := workloadclient.NewKeyFile()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := workloadclient.WriteKeyFile(f.key, kf, false); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(f.key, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	code, out, errs := f.run(t, "--agent", "0192aaaa-bbbb-7ccc-8ddd-000000000001")
+	st, _ := os.Stat(f.key)
+	if _, err := os.Stat(f.local()); code == 0 || err == nil || fake.issued != nil || !strings.Contains(errs, "other users can read") ||
+		st == nil || st.Mode().Perm() != 0o644 {
+		t.Fatalf("init: %d %s %s", code, out, errs)
+	}
+	if err := os.Chmod(f.key, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if code, out, errs := f.run(t, "--agent", "0192aaaa-bbbb-7ccc-8ddd-000000000001"); code != 0 || fake.admitted == nil {
+		t.Fatalf("init with a 0600 key file: %d %s %s", code, out, errs)
+	}
+}
+
+// TestHR094_InitWithYesNeedsTheFingerprintYouChecked: with --yes no one is
+// asked, so enrolling needs --fingerprint, the key's own: without it, with
+// another, or for a key init would create (which has none to check yet),
+// init fails before anything is asked of the server or written; with it,
+// init enrolls and admits that key.
+func TestHR094_InitWithYesNeedsTheFingerprintYouChecked(t *testing.T) {
+	const agent = "0192aaaa-bbbb-7ccc-8ddd-000000000001"
+	f := newInitFixture(t)
+	fake := &fakeEnrollment{}
+	f.enrollmentServer(t, fake)
+	kf, key, err := workloadclient.NewKeyFile()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := workloadclient.WriteKeyFile(f.key, kf, false); err != nil {
+		t.Fatal(err)
+	}
+	fp := jws.Thumbprint(key.Public().(ed25519.PublicKey))
+	existing := f.key
+	for name, tc := range map[string]struct {
+		key  string
+		args []string
+		want string
+	}{
+		"no fingerprint":      {key: existing, want: "needs --fingerprint"},
+		"another fingerprint": {key: existing, args: []string{"--fingerprint", "someone-elses-key"}, want: "is not the fingerprint"},
+		"a key to create":     {key: filepath.Join(filepath.Dir(existing), "new.json"), args: []string{"--fingerprint", fp}, want: "create it first"},
+	} {
+		f.key = tc.key
+		code, out, errs := f.run(t, append([]string{"--agent", agent, "--yes"}, tc.args...)...)
+		if _, err := os.Stat(f.local()); code == 0 || err == nil || fake.issued != nil || !strings.Contains(errs, tc.want) {
+			t.Errorf("%s: %d %s %s", name, code, out, errs)
+		}
+		if _, err := os.Stat(filepath.Join(filepath.Dir(existing), "new.json")); err == nil {
+			t.Errorf("%s: a key file was created", name)
+		}
+	}
+	f.key = existing
+	code, out, errs := f.run(t, "--agent", agent, "--yes", "--fingerprint", fp)
+	if code != 0 || fake.admitted.GetFingerprint() != fp || !hookRunsIn(t, f.local()) || strings.Contains(out, "[y/N]") {
 		t.Fatalf("init: %d %s %s", code, out, errs)
 	}
 }
