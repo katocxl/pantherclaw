@@ -34,6 +34,7 @@ func TestHR203_TheExecutionReceiptCarriesTheAccess(t *testing.T) {
 		Granted      map[string]string `json:"granted"`
 		ExpiresAt    string            `json:"expires_at"`
 		Revocation   string            `json:"revocation"`
+		Incomplete   bool              `json:"granted_incomplete"`
 	}
 	record := func(a *authority.Access) *access {
 		t.Helper()
@@ -67,11 +68,15 @@ func TestHR203_TheExecutionReceiptCarriesTheAccess(t *testing.T) {
 		Installation: 7, Repository: "acme/payments", RepositoryID: 42, Requested: perms, Granted: perms, Expires: expires, Revocation: "revoked",
 	})
 	if got == nil || got.Installation != 7 || got.Repository != "acme/payments" || got.RepositoryID != 42 || !maps.Equal(got.Requested, perms) ||
-		!maps.Equal(got.Granted, perms) || got.ExpiresAt != "2026-10-11T13:00:00Z" || got.Revocation != "revoked" {
+		!maps.Equal(got.Granted, perms) || got.ExpiresAt != "2026-10-11T13:00:00Z" || got.Revocation != "revoked" || got.Incomplete {
 		t.Fatalf("access in the receipt: %+v", got)
 	}
 	if got := record(nil); got != nil {
 		t.Fatalf("a static credential's receipt carries access %+v", got)
+	}
+	// A grant cut to what a receipt holds says so (#353 review).
+	if got := record(&authority.Access{Installation: 7, Repository: "acme/payments", Requested: perms, Granted: perms, Revocation: "revoked", GrantedIncomplete: true}); got == nil || !got.Incomplete {
+		t.Fatalf("a cut grant's receipt: %+v", got)
 	}
 	// A token that could not be revoked: the receipt and an audit event
 	// say so (ADR-0021 item 6); with no expiry stated, none is recorded.

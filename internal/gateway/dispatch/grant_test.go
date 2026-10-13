@@ -33,7 +33,27 @@ func TestHR203_AWiderGrantIsRecordedWithinTheReceiptsSchema(t *testing.T) {
 	if len(g) != maxGrant || g["contents"] != "write" || g["Bad-Name"] != "" || g["issues"] != "" || g["x"] != "" {
 		t.Fatalf("granted %v", g)
 	}
-	if small := map[string]string{"contents": "write", "metadata": "read"}; !maps.Equal(clampGrant(small), small) {
+	if !a.GetGrantedIncomplete() {
+		t.Fatal("a cut grant is not marked incomplete")
+	}
+	if small := map[string]string{"contents": "write", "metadata": "read"}; !maps.Equal(must(clampGrant(small, nil)), small) {
 		t.Fatal("a well-formed grant changed")
 	}
+
+	// What made the grant wider is kept, however it sorts (#353 review):
+	// forty permissions as requested, and workflows:write beyond them.
+	requested, wide := map[string]string{}, map[string]string{"workflows": "write"}
+	for i := range 40 {
+		n := fmt.Sprintf("perm_%02d", i)
+		requested[n], wide[n] = "read", "read"
+	}
+	b := accessOf(broker.Access{Installation: 7, Repository: "acme/payments", Requested: requested, Granted: wide, Revocation: "revoked"})
+	if b.GetGranted()["workflows"] != "write" || len(b.GetGranted()) != maxGrant || !b.GetGrantedIncomplete() {
+		t.Fatalf("the widening permission was dropped: %v %v", b.GetGranted(), b.GetGrantedIncomplete())
+	}
+	if c := accessOf(broker.Access{Installation: 7, Repository: "acme/payments", Granted: map[string]string{"contents": "read"}}); c.GetGrantedIncomplete() {
+		t.Fatal("a whole grant is marked incomplete")
+	}
 }
+
+func must(m map[string]string, _ bool) map[string]string { return m }

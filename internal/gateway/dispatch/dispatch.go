@@ -775,21 +775,37 @@ var (
 )
 
 // clampGrant keeps the well-formed permissions of a grant, at most
-// maxGrant of them, by name.
-func clampGrant(g map[string]string) map[string]string {
+// maxGrant of them: first those that made it wider than requested (not
+// requested, or at another level), so the receipt shows why it was
+// refused, then the rest, each by name (#353 review). incomplete reports
+// that some were left out.
+func clampGrant(g, requested map[string]string) (out map[string]string, incomplete bool) {
 	if len(g) == 0 {
-		return g
+		return g, false
 	}
-	out := map[string]string{}
-	for _, k := range slices.Sorted(maps.Keys(g)) {
-		if len(out) == maxGrant {
-			break
+	wider := func(k string) bool { r, ok := requested[k]; return !ok || r != g[k] }
+	names := slices.Sorted(maps.Keys(g))
+	slices.SortStableFunc(names, func(x, y string) int {
+		switch wx, wy := wider(x), wider(y); {
+		case wx && !wy:
+			return -1
+		case wy && !wx:
+			return 1
 		}
-		if grantName.MatchString(k) && grantLevel.MatchString(g[k]) {
+		return 0
+	})
+	out = map[string]string{}
+	for _, k := range names {
+		switch {
+		case !grantName.MatchString(k) || !grantLevel.MatchString(g[k]):
+			incomplete = true
+		case len(out) == maxGrant:
+			incomplete = true
+		default:
 			out[k] = g[k]
 		}
 	}
-	return out
+	return out, incomplete
 }
 
 // accessOf is what a minted token allowed, for the execution receipt
@@ -802,8 +818,9 @@ func clampGrant(g map[string]string) map[string]string {
 func accessOf(a broker.Access) *pb.CredentialAccess {
 	out := &pb.CredentialAccess{
 		InstallationId: a.Installation, Repository: a.Repository, RepositoryId: max(a.RepositoryID, 0), Requested: a.Requested,
-		Granted: clampGrant(a.Granted), Revocation: a.Revocation,
+		Revocation: a.Revocation,
 	}
+	out.Granted, out.GrantedIncomplete = clampGrant(a.Granted, a.Requested)
 	if !a.Expires.IsZero() {
 		out.ExpireTime = timestamppb.New(a.Expires)
 	}
