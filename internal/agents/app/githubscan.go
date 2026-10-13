@@ -24,6 +24,11 @@ import (
 var ErrNoScanLease = pcerr.New(pcerr.PermissionDenied, "SCAN_LEASE_REQUIRED",
 	"only the gateway holding the scan's org_scan lease submits its findings, while it holds it")
 
+// ErrScanConnection refuses a finding that names another connection than
+// its scan's.
+var ErrScanConnection = pcerr.New(pcerr.InvalidArgument, "SCAN_CONNECTION",
+	"a finding names another connection than its scan's; the server records the scan's connection")
+
 // SubmitGitHubScan records a gateway's organization scan findings (G0 M8,
 // PN-001.2, HR-209) as DISCOVERED agents, like a local scan's: untrusted
 // observations that grant nothing, each tagged with its scan. Only the
@@ -46,6 +51,13 @@ func (inv *Inventory) SubmitGitHubScan(ctx context.Context, org ids.OrgID, gatew
 		} else if err != nil {
 			return err
 		}
+		// A finding naming another connection than the lease's is refused
+		// (the coordinator's decision Q16).
+		for _, f := range findings {
+			if c, ok := f.Attributes["connection"]; ok && c != run.ConnectionID.String() {
+				return ErrScanConnection
+			}
+		}
 		if err := q.LockDiscoveries(ctx, org.String()); err != nil {
 			return err
 		}
@@ -63,8 +75,8 @@ func (inv *Inventory) SubmitGitHubScan(ctx context.Context, org ids.OrgID, gatew
 				observed = map[string]string{}
 			}
 			observed["kind"], observed["submitted_by"], observed["scan_run"] = f.Kind, w.by, scan.String()
-			// The scan's connection, from its lease, whatever the gateway
-			// said (G5 review follow-up).
+			// The scan's connection, from its lease (G5 review follow-up).
+			// A finding naming another was refused above.
 			observed["connection"] = run.ConnectionID.String()
 			obs, err := json.Marshal(observed)
 			if err != nil {

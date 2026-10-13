@@ -188,7 +188,7 @@ func TestHR209_OnlyTheLeaseHoldingGatewaySubmitsFindingsAndTheyGrantNothing(t *t
 	key := func(b byte) [32]byte { return [32]byte{b} }
 	findings := []aapp.ScanFinding{
 		{Kind: "github_workflow", Key: key(1), Attributes: map[string]string{"repository": "acme/payments", "path": ".github/workflows/deploy.yml", "environments": "production",
-			"connection": ids.NewV7().String()}}, // another connection, which the server replaces with the scan's (G5 review follow-up)
+			"connection": conn.String()}}, // the scan's own connection, which the server checks
 		{Kind: "github_mcp_config", Key: key(2), Attributes: map[string]string{"repository": "acme/payments", "name": "github", "command": "npx"}},
 	}
 	if _, err := inv.SubmitGitHubScan(context.Background(), e.org, gateway, scan.ID, nil, findings); !errors.Is(err, aapp.ErrNoScanLease) {
@@ -209,6 +209,12 @@ func TestHR209_OnlyTheLeaseHoldingGatewaySubmitsFindingsAndTheyGrantNothing(t *t
 	local := []aapp.ScanFinding{{Kind: "mcp_server", Key: key(3), Attributes: map[string]string{"name": "x"}}}
 	if _, err := inv.SubmitGitHubScan(context.Background(), e.org, gateway, scan.ID, lease, local); !errors.Is(err, aapp.ErrScanKind) {
 		t.Fatalf("a local kind from a gateway: %v", err)
+	}
+	// A finding naming another connection is refused (the coordinator's
+	// decision Q16); the server records the scan's on every finding.
+	wrong := []aapp.ScanFinding{{Kind: "github_workflow", Key: key(4), Attributes: map[string]string{"repository": "acme/x", "connection": ids.NewV7().String()}}}
+	if _, err := inv.SubmitGitHubScan(context.Background(), e.org, gateway, scan.ID, lease, wrong); !errors.Is(err, aapp.ErrScanConnection) {
+		t.Fatalf("a finding naming another connection: %v", err)
 	}
 	r, err := inv.SubmitGitHubScan(context.Background(), e.org, gateway, scan.ID, lease, findings)
 	if err != nil || r.Created != 2 {
