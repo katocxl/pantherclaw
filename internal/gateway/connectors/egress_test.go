@@ -286,3 +286,21 @@ func TestHR086_AConnectorsReadsAreBounded(t *testing.T) {
 		t.Fatalf("read %d: %d %s", maxReads+1, w.Code, w.Body)
 	}
 }
+
+// TestHR086_AReadIsOnlyASafeMethod: a reviewed access: read operation is a
+// read of the call's target only over GET or HEAD; over another method it
+// is judged as a write, so it goes out only if it is the call's action.
+func TestHR086_AReadIsOnlyASafeMethod(t *testing.T) {
+	r := newEgressRig(t)
+	call := r.call(t, "30.00")
+	read, err := r.m.HTTP(t.Context(), r.ids, http.MethodGet, "/v1/refunds", "charge=ch_1", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	payments := r.s.conf.Current().ByID[egressID]
+	for method, want := range map[string]bool{http.MethodGet: true, http.MethodHead: true, http.MethodPost: false, http.MethodDelete: false} {
+		if write, ok := admit(payments, method, read, call); ok != want || (method == http.MethodGet && write) {
+			t.Errorf("a read over %s: write %v, within %v", method, write, ok)
+		}
+	}
+}
