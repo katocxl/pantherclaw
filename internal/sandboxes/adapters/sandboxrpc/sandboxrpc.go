@@ -54,10 +54,17 @@ func (h *Handler) StartSession(ctx context.Context, r *pantherclawv1.SandboxServ
 	if err != nil {
 		return nil, err
 	}
+	return started(s), nil
+}
+
+// started is an opened session's answer. It reveals the enrollment
+// token, shown this once, so that pclaw can enroll the sandbox instance:
+// the token's String is redacted, for logs.
+func started(s app.Started) *pantherclawv1.SandboxServiceStartSessionResponse {
 	return &pantherclawv1.SandboxServiceStartSessionResponse{
-		Session: session(s.Session, s.Connections), EnrollmentToken: s.EnrollmentToken.String(), Nonces: nonces(s.Nonces),
+		Session: session(s.Session, s.Connections), EnrollmentToken: s.EnrollmentToken.Reveal(), Nonces: nonces(s.Nonces),
 		AgentHosts: s.AgentHosts,
-	}, nil
+	}
 }
 
 // GetSession implements SandboxServiceHandler.
