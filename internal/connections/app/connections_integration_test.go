@@ -57,6 +57,7 @@ const (
 
 type env struct {
 	pool    *db.Pool
+	dbt     *dbtest.DB
 	svc     *app.Service
 	notes   *notes
 	org     ids.OrgID
@@ -67,7 +68,7 @@ type env struct {
 func newEnv(t *testing.T) *env {
 	t.Helper()
 	d := dbtest.New(t)
-	e := &env{pool: d.AppPool(t), notes: &notes{}}
+	e := &env{pool: d.AppPool(t), dbt: d, notes: &notes{}}
 	e.svc = app.New(e.pool, e.notes, publicURL, gatewayURL)
 	return e.withOrg(t)
 }
@@ -76,7 +77,7 @@ func newEnv(t *testing.T) *env {
 // reference packages pinned.
 func (e *env) withOrg(t *testing.T) *env {
 	t.Helper()
-	o := &env{pool: e.pool, svc: e.svc, notes: e.notes, org: ids.New[ids.Org](), gateway: ids.NewV7()}
+	o := &env{pool: e.pool, dbt: e.dbt, svc: e.svc, notes: e.notes, org: ids.New[ids.Org](), gateway: ids.NewV7()}
 	o.exec(t, "INSERT INTO pc.orgs (id, name) VALUES ($1, 'connections')", o.org)
 	o.exec(t, "INSERT INTO pc.gateways (org_id, id, name, created_by) VALUES ($1, $2, 'edge', 'test')", o.org, o.gateway)
 	o.pin(t, mockpayments.Name, mockpayments.Version, mockpayments.Package)
