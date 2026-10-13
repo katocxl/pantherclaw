@@ -74,7 +74,7 @@ func (s *Server) installationRepositories(w http.ResponseWriter, r *http.Request
 				repos = append(repos, map[string]any{"name": repo.Name, "full_name": repo.full(), "default_branch": repo.DefaultBranch})
 			}
 		}
-		rec.Status = reply(w, http.StatusOK, map[string]any{"total_count": len(repos), "repositories": repos, "simulated": true})
+		rec.Status = reply(w, http.StatusOK, map[string]any{"total_count": len(repos), "repositories": s.paged(w, r, repos), "simulated": true})
 	}
 	s.requests = append(s.requests, rec)
 }
@@ -126,7 +126,7 @@ func (s *Server) orgInstallations(w http.ResponseWriter, r *http.Request) {
 			"id": a.ID, "app_id": a.ID, "app_slug": a.Slug, "permissions": a.Permissions, "repository_selection": a.Selection,
 		})
 	}
-	rec.Status = reply(w, http.StatusOK, map[string]any{"total_count": len(list), "installations": list, "simulated": true})
+	rec.Status = reply(w, http.StatusOK, map[string]any{"total_count": len(list), "installations": s.paged(w, r, list), "simulated": true})
 }
 
 // AccountID is the simulated GitHub id of a login (or of a repository's
