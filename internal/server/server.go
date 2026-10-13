@@ -316,6 +316,7 @@ func cmdServe(ctx context.Context, args []string, stderr io.Writer, env Env, onS
 			publicURL: cfg.Auth.PublicURL, clientIP: limiter.ClientIP, clusters: clusters, subjects: subjects,
 			logOrigin:    cfg.logOrigin(),
 			packageRoots: roots,
+			github:       cfg.GitHub,
 			web:          web,
 			m5:           m5,
 			captures:     captures,
@@ -481,6 +482,8 @@ type apiDeps struct {
 	m5p2 *m5p2Services
 	// M7: verification signs the effect receipts people's actions append.
 	verification *txapp.Service
+	// M8: GitHub sign-in (P2f).
+	github GitHubConfig
 	// captures seal and open restricted payload captures (M7 B9).
 	captures *captureServices
 	// kp opens sealed evaluation inputs for decision replay (M7 track B).
@@ -538,7 +541,7 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	if d.m5 != nil {
 		githubNotify = d.m5.notifications
 	}
-	registerM8G(rs, pool, githubNotify, nil)
+	registerM8G(rs, pool, githubNotify, d.github)
 	if err := registerEvidence(rs, d); err != nil {
 		return nil, err
 	}

@@ -68,7 +68,20 @@ When a fact cannot be read in time, nothing is reported for it, and the decision
 
 ## 4. Link people to their GitHub accounts
 
-A reviewer must be independent of a pull request: PantherClaw refuses as reviewer anyone who authored, committed or pushed to it (HR-207). It knows those people by GitHub user id, so each person links their own GitHub account, by signing in to GitHub (founder decision 2026-10-13):
+A reviewer must be independent of a pull request: PantherClaw refuses as reviewer anyone who authored, committed or pushed to it (HR-207). It knows those people by GitHub user id, so each person links their own GitHub account, by signing in to GitHub (founder decision 2026-10-13).
+
+First turn GitHub sign-in on, once:
+
+1. In the App's settings on GitHub, under *Identifying and authorizing users*, tick **Enable Device Flow**. The App needs no user permissions: the sign-in only tells PantherClaw which account you are.
+2. Put the App's **Client ID** (from its settings page, not the App ID) in the server configuration and restart the server:
+
+   ```json
+   "github": { "client_id": "Iv23li…" }
+   ```
+
+   `github.web_url` and `github.api_url` default to `https://github.com` and `https://api.github.com`; set them only for the GitHub simulator (plain `http` is accepted for a loopback address only). Without `client_id`, nobody can link an account, so nobody can review GitHub merges.
+
+Then each person runs:
 
 ```bash
 pclaw github link            # prints a code to enter at GitHub; links the account you sign in as

@@ -56,6 +56,15 @@ func (h *Handler) ProveIdentity(ctx context.Context, req *pb.ProveIdentityReques
 	return &pb.ProveIdentityResponse{Identity: identityOf(i)}, nil
 }
 
+// GetSignIn implements GitHubServiceHandler.
+func (h *Handler) GetSignIn(ctx context.Context, _ *pb.GetSignInRequest) (*pb.GetSignInResponse, error) {
+	c, err := h.s.SignInConfig(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return &pb.GetSignInResponse{ClientId: c.ClientID, WebUrl: c.WebURL}, nil
+}
+
 // UnlinkIdentity implements GitHubServiceHandler.
 func (h *Handler) UnlinkIdentity(ctx context.Context, req *pb.UnlinkIdentityRequest) (*pb.UnlinkIdentityResponse, error) {
 	id, err := parseID(req.GetId())

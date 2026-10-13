@@ -30,6 +30,8 @@ const (
 	// GitHubServiceProveIdentityProcedure is the procedure name of the GitHubService's ProveIdentity
 	// RPC.
 	GitHubServiceProveIdentityProcedure = "/pantherclaw.v1.GitHubService/ProveIdentity"
+	// GitHubServiceGetSignInProcedure is the procedure name of the GitHubService's GetSignIn RPC.
+	GitHubServiceGetSignInProcedure = "/pantherclaw.v1.GitHubService/GetSignIn"
 	// GitHubServiceUnlinkIdentityProcedure is the procedure name of the GitHubService's UnlinkIdentity
 	// RPC.
 	GitHubServiceUnlinkIdentityProcedure = "/pantherclaw.v1.GitHubService/UnlinkIdentity"
@@ -44,6 +46,13 @@ var (
 			StreamType: connect.StreamTypeUnary,
 			Schema:     v1.File_pantherclaw_v1_github_proto.Services().ByName("GitHubService").Methods().ByName("ProveIdentity"),
 			Procedure:  GitHubServiceProveIdentityProcedure,
+		}
+	})
+	gitHubServiceGetSignInSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_pantherclaw_v1_github_proto.Services().ByName("GitHubService").Methods().ByName("GetSignIn"),
+			Procedure:  GitHubServiceGetSignInProcedure,
 		}
 	})
 	gitHubServiceUnlinkIdentitySpec = sync.OnceValue(func() connect.Spec {
@@ -72,6 +81,11 @@ type GitHubServiceClient interface {
 	// change is audited and notified.
 	// permission: github.identity.prove
 	ProveIdentity(context.Context, *v1.ProveIdentityRequest) (*v1.ProveIdentityResponse, error)
+	// GetSignIn says where to sign in to GitHub to prove an account: the
+	// GitHub App's client id and GitHub's web origin for its device flow
+	// (P2f). Unavailable when GitHub sign-in is off.
+	// permission: github.identity.prove
+	GetSignIn(context.Context, *v1.GetSignInRequest) (*v1.GetSignInResponse, error)
 	// UnlinkIdentity removes another person's link; nobody removes their own
 	// here (ProveIdentity). Audited and notified.
 	// permission: github.identity.manage
@@ -97,6 +111,11 @@ type GitHubServiceHandler interface {
 	// change is audited and notified.
 	// permission: github.identity.prove
 	ProveIdentity(context.Context, *v1.ProveIdentityRequest) (*v1.ProveIdentityResponse, error)
+	// GetSignIn says where to sign in to GitHub to prove an account: the
+	// GitHub App's client id and GitHub's web origin for its device flow
+	// (P2f). Unavailable when GitHub sign-in is off.
+	// permission: github.identity.prove
+	GetSignIn(context.Context, *v1.GetSignInRequest) (*v1.GetSignInResponse, error)
 	// UnlinkIdentity removes another person's link; nobody removes their own
 	// here (ProveIdentity). Audited and notified.
 	// permission: github.identity.manage
@@ -112,6 +131,7 @@ func RegisterGitHubServiceHandler(server *connect.Server, svc GitHubServiceHandl
 	adapter := gitHubServiceHandler{svc: svc}
 	server.Register(
 		connect.Method{Spec: gitHubServiceProveIdentitySpec(), Handler: adapter.proveIdentity},
+		connect.Method{Spec: gitHubServiceGetSignInSpec(), Handler: adapter.getSignIn},
 		connect.Method{Spec: gitHubServiceUnlinkIdentitySpec(), Handler: adapter.unlinkIdentity},
 		connect.Method{Spec: gitHubServiceListIdentitiesSpec(), Handler: adapter.listIdentities},
 	)
@@ -122,6 +142,10 @@ type UnimplementedGitHubServiceHandler struct{}
 
 func (UnimplementedGitHubServiceHandler) ProveIdentity(context.Context, *v1.ProveIdentityRequest) (*v1.ProveIdentityResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.GitHubService.ProveIdentity is not implemented")
+}
+
+func (UnimplementedGitHubServiceHandler) GetSignIn(context.Context, *v1.GetSignInRequest) (*v1.GetSignInResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.GitHubService.GetSignIn is not implemented")
 }
 
 func (UnimplementedGitHubServiceHandler) UnlinkIdentity(context.Context, *v1.UnlinkIdentityRequest) (*v1.UnlinkIdentityResponse, error) {
@@ -139,6 +163,14 @@ type gitHubServiceClient struct {
 func (c *gitHubServiceClient) ProveIdentity(ctx context.Context, req *v1.ProveIdentityRequest) (*v1.ProveIdentityResponse, error) {
 	var res v1.ProveIdentityResponse
 	if err := c.client.CallUnary(ctx, gitHubServiceProveIdentitySpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *gitHubServiceClient) GetSignIn(ctx context.Context, req *v1.GetSignInRequest) (*v1.GetSignInResponse, error) {
+	var res v1.GetSignInResponse
+	if err := c.client.CallUnary(ctx, gitHubServiceGetSignInSpec(), req, &res); err != nil {
 		return nil, err
 	}
 	return &res, nil
@@ -168,6 +200,18 @@ func (h gitHubServiceHandler) proveIdentity(ctx context.Context, _ connect.Spec,
 		return err
 	}
 	res, err := h.svc.ProveIdentity(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h gitHubServiceHandler) getSignIn(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetSignInRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetSignIn(ctx, &req)
 	if err != nil {
 		return err
 	}

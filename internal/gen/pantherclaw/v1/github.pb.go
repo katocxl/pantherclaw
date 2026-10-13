@@ -336,6 +336,98 @@ func (x *ProveIdentityResponse) GetIdentity() *GitHubIdentity {
 	return nil
 }
 
+// GetSignInRequest is empty.
+type GetSignInRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetSignInRequest) Reset() {
+	*x = GetSignInRequest{}
+	mi := &file_pantherclaw_v1_github_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetSignInRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetSignInRequest) ProtoMessage() {}
+
+func (x *GetSignInRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_github_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetSignInRequest.ProtoReflect.Descriptor instead.
+func (*GetSignInRequest) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_github_proto_rawDescGZIP(), []int{4}
+}
+
+// GetSignInResponse is the GitHub App's device flow.
+type GetSignInResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The GitHub App's client id.
+	ClientId string `protobuf:"bytes,1,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
+	// GitHub's web origin, where device codes are asked for and entered.
+	WebUrl        string `protobuf:"bytes,2,opt,name=web_url,json=webUrl,proto3" json:"web_url,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetSignInResponse) Reset() {
+	*x = GetSignInResponse{}
+	mi := &file_pantherclaw_v1_github_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetSignInResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetSignInResponse) ProtoMessage() {}
+
+func (x *GetSignInResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_github_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetSignInResponse.ProtoReflect.Descriptor instead.
+func (*GetSignInResponse) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_github_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *GetSignInResponse) GetClientId() string {
+	if x != nil {
+		return x.ClientId
+	}
+	return ""
+}
+
+func (x *GetSignInResponse) GetWebUrl() string {
+	if x != nil {
+		return x.WebUrl
+	}
+	return ""
+}
+
 // UnlinkIdentityRequest names a link.
 type UnlinkIdentityRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -347,7 +439,7 @@ type UnlinkIdentityRequest struct {
 
 func (x *UnlinkIdentityRequest) Reset() {
 	*x = UnlinkIdentityRequest{}
-	mi := &file_pantherclaw_v1_github_proto_msgTypes[4]
+	mi := &file_pantherclaw_v1_github_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -359,7 +451,7 @@ func (x *UnlinkIdentityRequest) String() string {
 func (*UnlinkIdentityRequest) ProtoMessage() {}
 
 func (x *UnlinkIdentityRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_github_proto_msgTypes[4]
+	mi := &file_pantherclaw_v1_github_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -372,7 +464,7 @@ func (x *UnlinkIdentityRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UnlinkIdentityRequest.ProtoReflect.Descriptor instead.
 func (*UnlinkIdentityRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_github_proto_rawDescGZIP(), []int{4}
+	return file_pantherclaw_v1_github_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *UnlinkIdentityRequest) GetId() string {
@@ -391,7 +483,7 @@ type UnlinkIdentityResponse struct {
 
 func (x *UnlinkIdentityResponse) Reset() {
 	*x = UnlinkIdentityResponse{}
-	mi := &file_pantherclaw_v1_github_proto_msgTypes[5]
+	mi := &file_pantherclaw_v1_github_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -403,7 +495,7 @@ func (x *UnlinkIdentityResponse) String() string {
 func (*UnlinkIdentityResponse) ProtoMessage() {}
 
 func (x *UnlinkIdentityResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_github_proto_msgTypes[5]
+	mi := &file_pantherclaw_v1_github_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -416,7 +508,7 @@ func (x *UnlinkIdentityResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UnlinkIdentityResponse.ProtoReflect.Descriptor instead.
 func (*UnlinkIdentityResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_github_proto_rawDescGZIP(), []int{5}
+	return file_pantherclaw_v1_github_proto_rawDescGZIP(), []int{7}
 }
 
 // ListIdentitiesRequest pages through the links.
@@ -434,7 +526,7 @@ type ListIdentitiesRequest struct {
 
 func (x *ListIdentitiesRequest) Reset() {
 	*x = ListIdentitiesRequest{}
-	mi := &file_pantherclaw_v1_github_proto_msgTypes[6]
+	mi := &file_pantherclaw_v1_github_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -446,7 +538,7 @@ func (x *ListIdentitiesRequest) String() string {
 func (*ListIdentitiesRequest) ProtoMessage() {}
 
 func (x *ListIdentitiesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_github_proto_msgTypes[6]
+	mi := &file_pantherclaw_v1_github_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -459,7 +551,7 @@ func (x *ListIdentitiesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListIdentitiesRequest.ProtoReflect.Descriptor instead.
 func (*ListIdentitiesRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_github_proto_rawDescGZIP(), []int{6}
+	return file_pantherclaw_v1_github_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *ListIdentitiesRequest) GetUserId() string {
@@ -496,7 +588,7 @@ type ListIdentitiesResponse struct {
 
 func (x *ListIdentitiesResponse) Reset() {
 	*x = ListIdentitiesResponse{}
-	mi := &file_pantherclaw_v1_github_proto_msgTypes[7]
+	mi := &file_pantherclaw_v1_github_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -508,7 +600,7 @@ func (x *ListIdentitiesResponse) String() string {
 func (*ListIdentitiesResponse) ProtoMessage() {}
 
 func (x *ListIdentitiesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_github_proto_msgTypes[7]
+	mi := &file_pantherclaw_v1_github_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -521,7 +613,7 @@ func (x *ListIdentitiesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListIdentitiesResponse.ProtoReflect.Descriptor instead.
 func (*ListIdentitiesResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_github_proto_rawDescGZIP(), []int{7}
+	return file_pantherclaw_v1_github_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *ListIdentitiesResponse) GetIdentities() []*GitHubIdentity {
@@ -569,7 +661,11 @@ const file_pantherclaw_v1_github_proto_rawDesc = "" +
 	"\xbaH\ar\x05\x10\x01\x18\x80\x04R\x0fgithubUserToken\x12\x16\n" +
 	"\x06unlink\x18\x02 \x01(\bR\x06unlink\"S\n" +
 	"\x15ProveIdentityResponse\x12:\n" +
-	"\bidentity\x18\x01 \x01(\v2\x1e.pantherclaw.v1.GitHubIdentityR\bidentity\"1\n" +
+	"\bidentity\x18\x01 \x01(\v2\x1e.pantherclaw.v1.GitHubIdentityR\bidentity\"\x12\n" +
+	"\x10GetSignInRequest\"I\n" +
+	"\x11GetSignInResponse\x12\x1b\n" +
+	"\tclient_id\x18\x01 \x01(\tR\bclientId\x12\x17\n" +
+	"\aweb_url\x18\x02 \x01(\tR\x06webUrl\"1\n" +
 	"\x15UnlinkIdentityRequest\x12\x18\n" +
 	"\x02id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x02id\"\x18\n" +
 	"\x16UnlinkIdentityResponse\"\x8f\x01\n" +
@@ -583,9 +679,10 @@ const file_pantherclaw_v1_github_proto_rawDesc = "" +
 	"\n" +
 	"identities\x18\x01 \x03(\v2\x1e.pantherclaw.v1.GitHubIdentityR\n" +
 	"identities\x12&\n" +
-	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken2\xaf\x02\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken2\x81\x03\n" +
 	"\rGitHubService\x12\\\n" +
-	"\rProveIdentity\x12$.pantherclaw.v1.ProveIdentityRequest\x1a%.pantherclaw.v1.ProveIdentityResponse\x12_\n" +
+	"\rProveIdentity\x12$.pantherclaw.v1.ProveIdentityRequest\x1a%.pantherclaw.v1.ProveIdentityResponse\x12P\n" +
+	"\tGetSignIn\x12 .pantherclaw.v1.GetSignInRequest\x1a!.pantherclaw.v1.GetSignInResponse\x12_\n" +
 	"\x0eUnlinkIdentity\x12%.pantherclaw.v1.UnlinkIdentityRequest\x1a&.pantherclaw.v1.UnlinkIdentityResponse\x12_\n" +
 	"\x0eListIdentities\x12%.pantherclaw.v1.ListIdentitiesRequest\x1a&.pantherclaw.v1.ListIdentitiesResponseB\xc4\x01\n" +
 	"\x12com.pantherclaw.v1B\vGithubProtoP\x01ZHgithub.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1;pantherclawv1\xa2\x02\x03PXX\xaa\x02\x0ePantherclaw.V1\xca\x02\x0ePantherclaw\\V1\xe2\x02\x1aPantherclaw\\V1\\GPBMetadata\xea\x02\x0fPantherclaw::V1b\x06proto3"
@@ -602,37 +699,41 @@ func file_pantherclaw_v1_github_proto_rawDescGZIP() []byte {
 	return file_pantherclaw_v1_github_proto_rawDescData
 }
 
-var file_pantherclaw_v1_github_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
+var file_pantherclaw_v1_github_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
 var file_pantherclaw_v1_github_proto_goTypes = []any{
 	(*GitHubInstallation)(nil),     // 0: pantherclaw.v1.GitHubInstallation
 	(*GitHubIdentity)(nil),         // 1: pantherclaw.v1.GitHubIdentity
 	(*ProveIdentityRequest)(nil),   // 2: pantherclaw.v1.ProveIdentityRequest
 	(*ProveIdentityResponse)(nil),  // 3: pantherclaw.v1.ProveIdentityResponse
-	(*UnlinkIdentityRequest)(nil),  // 4: pantherclaw.v1.UnlinkIdentityRequest
-	(*UnlinkIdentityResponse)(nil), // 5: pantherclaw.v1.UnlinkIdentityResponse
-	(*ListIdentitiesRequest)(nil),  // 6: pantherclaw.v1.ListIdentitiesRequest
-	(*ListIdentitiesResponse)(nil), // 7: pantherclaw.v1.ListIdentitiesResponse
-	nil,                            // 8: pantherclaw.v1.GitHubInstallation.PermissionsEntry
-	(*timestamppb.Timestamp)(nil),  // 9: google.protobuf.Timestamp
+	(*GetSignInRequest)(nil),       // 4: pantherclaw.v1.GetSignInRequest
+	(*GetSignInResponse)(nil),      // 5: pantherclaw.v1.GetSignInResponse
+	(*UnlinkIdentityRequest)(nil),  // 6: pantherclaw.v1.UnlinkIdentityRequest
+	(*UnlinkIdentityResponse)(nil), // 7: pantherclaw.v1.UnlinkIdentityResponse
+	(*ListIdentitiesRequest)(nil),  // 8: pantherclaw.v1.ListIdentitiesRequest
+	(*ListIdentitiesResponse)(nil), // 9: pantherclaw.v1.ListIdentitiesResponse
+	nil,                            // 10: pantherclaw.v1.GitHubInstallation.PermissionsEntry
+	(*timestamppb.Timestamp)(nil),  // 11: google.protobuf.Timestamp
 }
 var file_pantherclaw_v1_github_proto_depIdxs = []int32{
-	8, // 0: pantherclaw.v1.GitHubInstallation.permissions:type_name -> pantherclaw.v1.GitHubInstallation.PermissionsEntry
-	9, // 1: pantherclaw.v1.GitHubInstallation.read_time:type_name -> google.protobuf.Timestamp
-	9, // 2: pantherclaw.v1.GitHubIdentity.link_time:type_name -> google.protobuf.Timestamp
-	9, // 3: pantherclaw.v1.GitHubIdentity.verify_time:type_name -> google.protobuf.Timestamp
-	1, // 4: pantherclaw.v1.ProveIdentityResponse.identity:type_name -> pantherclaw.v1.GitHubIdentity
-	1, // 5: pantherclaw.v1.ListIdentitiesResponse.identities:type_name -> pantherclaw.v1.GitHubIdentity
-	2, // 6: pantherclaw.v1.GitHubService.ProveIdentity:input_type -> pantherclaw.v1.ProveIdentityRequest
-	4, // 7: pantherclaw.v1.GitHubService.UnlinkIdentity:input_type -> pantherclaw.v1.UnlinkIdentityRequest
-	6, // 8: pantherclaw.v1.GitHubService.ListIdentities:input_type -> pantherclaw.v1.ListIdentitiesRequest
-	3, // 9: pantherclaw.v1.GitHubService.ProveIdentity:output_type -> pantherclaw.v1.ProveIdentityResponse
-	5, // 10: pantherclaw.v1.GitHubService.UnlinkIdentity:output_type -> pantherclaw.v1.UnlinkIdentityResponse
-	7, // 11: pantherclaw.v1.GitHubService.ListIdentities:output_type -> pantherclaw.v1.ListIdentitiesResponse
-	9, // [9:12] is the sub-list for method output_type
-	6, // [6:9] is the sub-list for method input_type
-	6, // [6:6] is the sub-list for extension type_name
-	6, // [6:6] is the sub-list for extension extendee
-	0, // [0:6] is the sub-list for field type_name
+	10, // 0: pantherclaw.v1.GitHubInstallation.permissions:type_name -> pantherclaw.v1.GitHubInstallation.PermissionsEntry
+	11, // 1: pantherclaw.v1.GitHubInstallation.read_time:type_name -> google.protobuf.Timestamp
+	11, // 2: pantherclaw.v1.GitHubIdentity.link_time:type_name -> google.protobuf.Timestamp
+	11, // 3: pantherclaw.v1.GitHubIdentity.verify_time:type_name -> google.protobuf.Timestamp
+	1,  // 4: pantherclaw.v1.ProveIdentityResponse.identity:type_name -> pantherclaw.v1.GitHubIdentity
+	1,  // 5: pantherclaw.v1.ListIdentitiesResponse.identities:type_name -> pantherclaw.v1.GitHubIdentity
+	2,  // 6: pantherclaw.v1.GitHubService.ProveIdentity:input_type -> pantherclaw.v1.ProveIdentityRequest
+	4,  // 7: pantherclaw.v1.GitHubService.GetSignIn:input_type -> pantherclaw.v1.GetSignInRequest
+	6,  // 8: pantherclaw.v1.GitHubService.UnlinkIdentity:input_type -> pantherclaw.v1.UnlinkIdentityRequest
+	8,  // 9: pantherclaw.v1.GitHubService.ListIdentities:input_type -> pantherclaw.v1.ListIdentitiesRequest
+	3,  // 10: pantherclaw.v1.GitHubService.ProveIdentity:output_type -> pantherclaw.v1.ProveIdentityResponse
+	5,  // 11: pantherclaw.v1.GitHubService.GetSignIn:output_type -> pantherclaw.v1.GetSignInResponse
+	7,  // 12: pantherclaw.v1.GitHubService.UnlinkIdentity:output_type -> pantherclaw.v1.UnlinkIdentityResponse
+	9,  // 13: pantherclaw.v1.GitHubService.ListIdentities:output_type -> pantherclaw.v1.ListIdentitiesResponse
+	10, // [10:14] is the sub-list for method output_type
+	6,  // [6:10] is the sub-list for method input_type
+	6,  // [6:6] is the sub-list for extension type_name
+	6,  // [6:6] is the sub-list for extension extendee
+	0,  // [0:6] is the sub-list for field type_name
 }
 
 func init() { file_pantherclaw_v1_github_proto_init() }
@@ -646,7 +747,7 @@ func file_pantherclaw_v1_github_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pantherclaw_v1_github_proto_rawDesc), len(file_pantherclaw_v1_github_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   9,
+			NumMessages:   11,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

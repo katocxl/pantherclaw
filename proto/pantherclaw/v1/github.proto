@@ -44,6 +44,11 @@ service GitHubService {
   // change is audited and notified.
   // permission: github.identity.prove
   rpc ProveIdentity(ProveIdentityRequest) returns (ProveIdentityResponse);
+  // GetSignIn says where to sign in to GitHub to prove an account: the
+  // GitHub App's client id and GitHub's web origin for its device flow
+  // (P2f). Unavailable when GitHub sign-in is off.
+  // permission: github.identity.prove
+  rpc GetSignIn(GetSignInRequest) returns (GetSignInResponse);
   // UnlinkIdentity removes another person's link; nobody removes their own
   // here (ProveIdentity). Audited and notified.
   // permission: github.identity.manage
@@ -89,6 +94,17 @@ message ProveIdentityRequest {
 message ProveIdentityResponse {
   // The link.
   GitHubIdentity identity = 1;
+}
+
+// GetSignInRequest is empty.
+message GetSignInRequest {}
+
+// GetSignInResponse is the GitHub App's device flow.
+message GetSignInResponse {
+  // The GitHub App's client id.
+  string client_id = 1;
+  // GitHub's web origin, where device codes are asked for and entered.
+  string web_url = 2;
 }
 
 // UnlinkIdentityRequest names a link.

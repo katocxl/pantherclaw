@@ -13,6 +13,7 @@ import (
 	factsapp "github.com/katocxl/pantherclaw/internal/facts/app"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1/pantherclawv1connect"
+	"github.com/katocxl/pantherclaw/internal/github/adapters/githubhttp"
 	"github.com/katocxl/pantherclaw/internal/github/adapters/githubrpc"
 	githubapp "github.com/katocxl/pantherclaw/internal/github/app"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
@@ -70,9 +71,13 @@ func packageFacts(pool *db.Pool) factsapp.PackageFacts {
 }
 
 // registerM8G mounts the M8 track G services people use: the GitHub
-// identity links independence compares (HR-207), each change notified
-// (P2f). verifier reads the account of a GitHub sign-in; nil refuses
-// proofs.
-func registerM8G(rs *connect.Server, pool *db.Pool, notify githubapp.Notifier, verifier githubapp.Verifier) {
-	pantherclawv1connect.RegisterGitHubServiceHandler(rs, githubrpc.New(&githubapp.Service{Pool: pool, Notify: notify, Verifier: verifier}))
+// identity links independence compares (HR-207), each change notified and
+// each made by GitHub sign-in (P2f), which is off without github.client_id.
+func registerM8G(rs *connect.Server, pool *db.Pool, notify githubapp.Notifier, gh GitHubConfig) {
+	s := &githubapp.Service{Pool: pool, Notify: notify}
+	if gh.ClientID != "" {
+		web, api := gh.URLs()
+		s.Verifier, s.SignIn = &githubhttp.Verifier{APIURL: api}, githubapp.SignIn{ClientID: gh.ClientID, WebURL: web}
+	}
+	pantherclawv1connect.RegisterGitHubServiceHandler(rs, githubrpc.New(s))
 }
