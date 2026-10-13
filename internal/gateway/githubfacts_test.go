@@ -118,15 +118,21 @@ func TestHR160_TheGatewayReportsGitHubFactsBeforeTheDecision(t *testing.T) {
 }
 
 // TestHR160_NoFactTokenNoFacts: when the fact token cannot be minted, the
-// gateway reports nothing and the decision goes ahead without the facts
-// (CANNOT_AUTHORIZE or "Consequence unknown" there, never a guess here).
+// gateway reports no value it read, only the deploy trigger as unknown (so
+// an earlier "none" still fresh is not what decides), and the decision goes
+// ahead without the other facts (CANNOT_AUTHORIZE or "Consequence unknown"
+// there, never a guess here).
 func TestHR160_NoFactTokenNoFacts(t *testing.T) {
 	w := newGitHubWorld(t)
 	h := setup(t, withGitHubApp(t, w), withFactReports)
 	w.sim.SetFaults(github.Faults{TokenStatus: http.StatusInternalServerError})
 	r := h.do(t, http.MethodPut, "/payments/repos/acme/payments/pulls/1/merge", `{"sha":"`+w.head+`"}`, nil)
-	if got := h.factReports(); len(got) != 0 || h.auth.snap().authorize != 1 {
+	got := h.factReports()
+	if len(got) != 1 || len(got[0].obs) != 1 || got[0].obs[0].GetName() != githubfacts.RepoTriggers || h.auth.snap().authorize != 1 {
 		t.Fatalf("reports %+v, %d decisions", got, h.auth.snap().authorize)
+	}
+	if d := members(t, got[0].obs[0]); d["state"] != "unknown" || d["unknown"] != "no read token" {
+		t.Fatalf("an unread deploy trigger: %v", d)
 	}
 	if r.code != http.StatusBadGateway || r.refusal.Error != "credential_unavailable" {
 		t.Fatalf("merge = %d %+v", r.code, r.refusal)

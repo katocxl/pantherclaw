@@ -67,7 +67,9 @@ var sensitiveKeyParts = []string{
 }
 
 // githubToken matches a GitHub token in free text, of any length (HR-203).
-var githubToken = regexp.MustCompile(`(gh[pousr]_|github_pat_)[A-Za-z0-9_]{16,}`)
+// An installation token is opaque and may carry structure (ADR-0021), so
+// the run after the prefix takes base64url, base64 and JWT characters too.
+var githubToken = regexp.MustCompile(`(gh[pousr]_|github_pat_)[A-Za-z0-9_.+/=-]{16,}`)
 
 // scrub redacts GitHub tokens in a value.
 func scrub(s string) string {

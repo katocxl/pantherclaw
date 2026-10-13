@@ -386,36 +386,26 @@ message CredentialAccess {
   }];
   // GitHub's id of that repository; 0 when GitHub did not give one.
   int64 repository_id = 3 [(buf.validate.field).int64.gte = 0];
-  // The permissions requested, by name.
+  // The permissions requested, by name: a package's credential scope, so
+  // with its rules for names and levels.
   map<string, string> requested = 4 [(buf.validate.field).map = {
     max_pairs: 16
     keys: {
-      string: {pattern: "^[a-z_]{1,64}$"}
+      string: {pattern: "^[a-z][a-z0-9_]{0,63}$"}
     }
     values: {
-      string: {
-        in: [
-          "read",
-          "write",
-          "admin"
-        ]
-      }
+      string: {pattern: "^[a-z]{1,16}$"}
     }
   }];
-  // The permissions GitHub granted, by name.
+  // The permissions GitHub granted, by name: those requested with
+  // metadata: read, or, on a refused wider grant, whatever GitHub said.
   map<string, string> granted = 5 [(buf.validate.field).map = {
-    max_pairs: 16
+    max_pairs: 32
     keys: {
-      string: {pattern: "^[a-z_]{1,64}$"}
+      string: {pattern: "^[a-z][a-z0-9_]{0,63}$"}
     }
     values: {
-      string: {
-        in: [
-          "read",
-          "write",
-          "admin"
-        ]
-      }
+      string: {pattern: "^[a-z]{1,16}$"}
     }
   }];
   // When the token expires, as GitHub said.
