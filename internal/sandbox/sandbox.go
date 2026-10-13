@@ -136,6 +136,9 @@ type Sandbox struct {
 	// agentAddr is the agent's address on Internal while it runs, by which
 	// the edge's log tells its requests from the probe's.
 	agentAddr string
+	// edgeMark is the edge log's length when the agent started.
+	edgeMark     int
+	agentStarted bool
 }
 
 // Start creates the networks and the edge and waits until the edge is
