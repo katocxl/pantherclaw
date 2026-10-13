@@ -58,10 +58,27 @@ type Sender interface {
 // it at GitHub and clears it. It lives for one action and is never cached
 // or returned to the agent (HR-203).
 type Installation struct {
-	token []byte
-	base  *url.URL
-	hosts []string
+	token  []byte
+	base   *url.URL
+	hosts  []string
+	access Access
 }
+
+// Access is what an installation token allowed, for the execution receipt
+// (ADR-0021 item 5): never the token.
+type Access struct {
+	Installation       int64
+	Repository         string
+	RepositoryID       int64
+	Requested, Granted map[string]string
+	Expires            time.Time
+	// Revocation is "revoked" or "revoke_failed" once Revoke ran; empty
+	// before.
+	Revocation string
+}
+
+// Access is what the token allowed, and whether it was revoked.
+func (t *Installation) Access() Access { return t.access }
 
 // Token is the token's bytes, which a caller scrubs from what goes back to
 // the agent; they are cleared by Revoke.
@@ -105,7 +122,9 @@ func MintInstallationToken(ctx context.Context, s Sender, baseURL string, hosts 
 	var out struct {
 		Token        string            `json:"token"`
 		Permissions  map[string]string `json:"permissions"`
+		ExpiresAt    time.Time         `json:"expires_at"`
 		Repositories []struct {
+			ID       int64  `json:"id"`
 			FullName string `json:"full_name"`
 		} `json:"repositories"`
 	}
@@ -114,7 +133,12 @@ func MintInstallationToken(ctx context.Context, s Sender, baseURL string, hosts 
 		return nil, fmt.Errorf("%w: status %d", ErrMint, res.Status)
 	}
 	clear(res.Body)
-	t := &Installation{token: []byte(out.Token), base: base, hosts: hosts}
+	t := &Installation{token: []byte(out.Token), base: base, hosts: hosts, access: Access{
+		Installation: app.Installation, Repository: owner + "/" + repo, Requested: permissions, Granted: out.Permissions, Expires: out.ExpiresAt,
+	}}
+	if len(out.Repositories) == 1 {
+		t.access.RepositoryID = out.Repositories[0].ID
+	}
 	granted := make([]string, len(out.Repositories))
 	for i, r := range out.Repositories {
 		granted[i] = strings.ToLower(r.FullName)
@@ -152,10 +176,12 @@ func apiHeaders(req *http.Request) {
 // (ADR-0021 item 6).
 func (t *Installation) Revoke(ctx context.Context, s Sender) error {
 	defer clear(t.token)
+	t.access.Revocation = "revoke_failed"
 	var err error
 	for range 2 {
 		var res egress.Response
 		if res, err = send(ctx, s, t.base, t.hosts, http.MethodDelete, "/installation/token", nil, t.token); err == nil && res.Status == http.StatusNoContent {
+			t.access.Revocation = "revoked"
 			return nil
 		}
 		if err == nil {

@@ -248,15 +248,7 @@ func (s *Server) pullCommits(w http.ResponseWriter, req *http.Request, r *Repo, 
 	if p == nil {
 		return fail(w, http.StatusNotFound, "Not Found")
 	}
-	base := map[string]bool{}
-	for stack := []string{r.Branches[p.Base]}; len(stack) > 0; {
-		c := stack[len(stack)-1]
-		stack = stack[:len(stack)-1]
-		if c != "" && !base[c] {
-			base[c] = true
-			stack = append(stack, r.Commits[c].Parents...)
-		}
-	}
+	base := ancestors(r, r.Branches[p.Base])
 	var commits []*Commit
 	seen := map[string]bool{}
 	for stack := []string{p.HeadSHA}; len(stack) > 0; {
@@ -282,13 +274,13 @@ func (s *Server) pullCommits(w http.ResponseWriter, req *http.Request, r *Repo, 
 }
 
 // pullFiles lists the files a pull request changes: those that differ
-// between the merge base (the base branch's head) and the head.
+// between the merge base and the head, as GitHub compares them.
 func (s *Server) pullFiles(w http.ResponseWriter, req *http.Request, r *Repo, _ *Token) int {
 	p := pull(r, req)
 	if p == nil {
 		return fail(w, http.StatusNotFound, "Not Found")
 	}
-	base, head := r.Commits[r.Branches[p.Base]].Files, r.Commits[p.HeadSHA].Files
+	base, head := r.Commits[mergeBase(r, r.Branches[p.Base], p.HeadSHA)].Files, r.Commits[p.HeadSHA].Files
 	out := []map[string]any{}
 	for _, f := range slices.Sorted(maps.Keys(head)) {
 		switch old, ok := base[f]; {
@@ -314,4 +306,37 @@ func (s *Server) getBranch(w http.ResponseWriter, req *http.Request, r *Repo, _ 
 		return fail(w, http.StatusNotFound, "Branch not found")
 	}
 	return reply(w, http.StatusOK, map[string]any{"name": name, "commit": map[string]any{"sha": sha}, "simulated": true})
+}
+
+// ancestors are the commits reachable from sha, itself included.
+func ancestors(r *Repo, sha string) map[string]bool {
+	out := map[string]bool{}
+	for stack := []string{sha}; len(stack) > 0; {
+		c := stack[len(stack)-1]
+		stack = stack[:len(stack)-1]
+		if c != "" && !out[c] {
+			out[c] = true
+			stack = append(stack, r.Commits[c].Parents...)
+		}
+	}
+	return out
+}
+
+// mergeBase is the nearest commit of head's history that base's history
+// also reaches.
+func mergeBase(r *Repo, base, head string) string {
+	in := ancestors(r, base)
+	seen := map[string]bool{}
+	for queue := []string{head}; len(queue) > 0; queue = queue[1:] {
+		c := queue[0]
+		if c == "" || seen[c] {
+			continue
+		}
+		if in[c] {
+			return c
+		}
+		seen[c] = true
+		queue = append(queue, r.Commits[c].Parents...)
+	}
+	return base
 }

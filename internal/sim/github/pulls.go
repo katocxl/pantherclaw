@@ -102,8 +102,8 @@ func pullJSON(r *Repo, p *Pull) map[string]any {
 	return map[string]any{
 		"number": p.Number, "state": p.State, "title": p.Title, "body": p.Body, "draft": p.Draft,
 		"merged": p.Merged, "mergeable": !p.Unmergeable && p.State == "open", "merge_commit_sha": merge,
-		"user":     map[string]any{"login": p.Author},
-		"head":     map[string]any{"ref": p.Head, "sha": p.HeadSHA},
+		"user":     map[string]any{"login": p.Author, "id": accountID(p.Author)},
+		"head":     map[string]any{"ref": p.Head, "sha": p.HeadSHA, "repo": map[string]any{"full_name": r.full()}},
 		"base":     map[string]any{"ref": p.Base, "sha": r.Branches[p.Base]},
 		"html_url": "https://github.example.test/" + r.full() + "/pull/" + strconv.Itoa(p.Number), "simulated": true,
 	}
@@ -134,7 +134,7 @@ func (s *Server) reviews(w http.ResponseWriter, req *http.Request, r *Repo, _ *T
 	out := []map[string]any{}
 	for _, rv := range p.Reviews {
 		out = append(out, map[string]any{
-			"id": rv.ID, "user": map[string]any{"login": rv.User}, "state": rv.State, "commit_id": rv.CommitID,
+			"id": rv.ID, "user": map[string]any{"login": rv.User, "id": accountID(rv.User)}, "state": rv.State, "commit_id": rv.CommitID,
 			"submitted_at": rv.Submitted.UTC().Format(time.RFC3339),
 		})
 	}
@@ -163,7 +163,7 @@ func (s *Server) review(w http.ResponseWriter, req *http.Request, r *Repo, t *To
 	s.seq++
 	rv := Review{ID: s.seq, User: actor(t), State: states[b.Event], CommitID: b.CommitID, Submitted: s.now()}
 	p.Reviews = append(p.Reviews, rv)
-	return reply(w, http.StatusOK, map[string]any{"id": rv.ID, "state": rv.State, "commit_id": rv.CommitID, "user": map[string]any{"login": rv.User}})
+	return reply(w, http.StatusOK, map[string]any{"id": rv.ID, "state": rv.State, "commit_id": rv.CommitID, "user": map[string]any{"login": rv.User, "id": accountID(rv.User)}})
 }
 
 // merge merges a pull request. A sha that is not the head answers 409, as
