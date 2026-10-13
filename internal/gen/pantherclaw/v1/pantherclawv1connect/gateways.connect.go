@@ -75,6 +75,8 @@ const (
 	// GatewayServiceReportObservationProcedure is the procedure name of the GatewayService's
 	// ReportObservation RPC.
 	GatewayServiceReportObservationProcedure = "/pantherclaw.v1.GatewayService/ReportObservation"
+	// GatewayServiceReportFactsProcedure is the procedure name of the GatewayService's ReportFacts RPC.
+	GatewayServiceReportFactsProcedure = "/pantherclaw.v1.GatewayService/ReportFacts"
 )
 
 var (
@@ -464,6 +466,13 @@ var (
 			Procedure:  GatewayServiceReportObservationProcedure,
 		}
 	})
+	gatewayServiceReportFactsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_pantherclaw_v1_gateways_proto.Services().ByName("GatewayService").Methods().ByName("ReportFacts"),
+			Procedure:  GatewayServiceReportFactsProcedure,
+		}
+	})
 )
 
 // GatewayServiceClient is a client for the pantherclaw.v1.GatewayService service.
@@ -510,6 +519,12 @@ type GatewayServiceClient interface {
 	// the verifier declares, and a digest of the answer (HR-190).
 	// permission: gateway.verify
 	ReportObservation(context.Context, *v1.ReportObservationRequest) (*v1.ReportObservationResponse, error)
+	// ReportFacts records what the gateway read from a connection's system of
+	// record before a decision, as that connection's registered fact provider:
+	// only the facts the provider declares, about the connection's targets
+	// (G0 M8 decision 5, HR-160).
+	// permission: gateway.facts.report
+	ReportFacts(context.Context, *v1.ReportFactsRequest) (*v1.ReportFactsResponse, error)
 }
 
 // NewGatewayServiceClient constructs a client for the pantherclaw.v1.GatewayService service.
@@ -583,6 +598,12 @@ type GatewayServiceHandler interface {
 	// the verifier declares, and a digest of the answer (HR-190).
 	// permission: gateway.verify
 	ReportObservation(context.Context, *v1.ReportObservationRequest) (*v1.ReportObservationResponse, error)
+	// ReportFacts records what the gateway read from a connection's system of
+	// record before a decision, as that connection's registered fact provider:
+	// only the facts the provider declares, about the connection's targets
+	// (G0 M8 decision 5, HR-160).
+	// permission: gateway.facts.report
+	ReportFacts(context.Context, *v1.ReportFactsRequest) (*v1.ReportFactsResponse, error)
 }
 
 // RegisterGatewayServiceHandler registers svc as the pantherclaw.v1.GatewayService implementation
@@ -599,6 +620,7 @@ func RegisterGatewayServiceHandler(server *connect.Server, svc GatewayServiceHan
 		connect.Method{Spec: gatewayServiceReportDriftSpec(), Handler: adapter.reportDrift},
 		connect.Method{Spec: gatewayServiceClaimVerificationsSpec(), Handler: adapter.claimVerifications},
 		connect.Method{Spec: gatewayServiceReportObservationSpec(), Handler: adapter.reportObservation},
+		connect.Method{Spec: gatewayServiceReportFactsSpec(), Handler: adapter.reportFacts},
 	)
 }
 
@@ -655,6 +677,10 @@ func (UnimplementedGatewayServiceHandler) ClaimVerifications(context.Context, *v
 
 func (UnimplementedGatewayServiceHandler) ReportObservation(context.Context, *v1.ReportObservationRequest) (*v1.ReportObservationResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.GatewayService.ReportObservation is not implemented")
+}
+
+func (UnimplementedGatewayServiceHandler) ReportFacts(context.Context, *v1.ReportFactsRequest) (*v1.ReportFactsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.GatewayService.ReportFacts is not implemented")
 }
 
 type gatewayServiceClient struct {
@@ -728,6 +754,14 @@ func (c *gatewayServiceClient) ClaimVerifications(ctx context.Context, req *v1.C
 func (c *gatewayServiceClient) ReportObservation(ctx context.Context, req *v1.ReportObservationRequest) (*v1.ReportObservationResponse, error) {
 	var res v1.ReportObservationResponse
 	if err := c.client.CallUnary(ctx, gatewayServiceReportObservationSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *gatewayServiceClient) ReportFacts(ctx context.Context, req *v1.ReportFactsRequest) (*v1.ReportFactsResponse, error) {
+	var res v1.ReportFactsResponse
+	if err := c.client.CallUnary(ctx, gatewayServiceReportFactsSpec(), req, &res); err != nil {
 		return nil, err
 	}
 	return &res, nil
@@ -833,6 +867,18 @@ func (h gatewayServiceHandler) reportObservation(ctx context.Context, _ connect.
 		return err
 	}
 	res, err := h.svc.ReportObservation(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h gatewayServiceHandler) reportFacts(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ReportFactsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ReportFacts(ctx, &req)
 	if err != nil {
 		return err
 	}

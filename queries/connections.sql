@@ -89,3 +89,8 @@ SET state = 'OPEN', unknown_count = EXCLUDED.unknown_count, total_count = EXCLUD
 -- Restoring a connection closes its open circuits.
 UPDATE pc.circuit_states SET state = 'CLOSED', closed_at = now()
 WHERE org_id = sqlc.arg(org_id) AND connection_id = sqlc.arg(connection_id) AND state = 'OPEN';
+
+-- name: ListConnectionGitHub :many
+-- The GitHub App installations behind connections (connection_github).
+SELECT * FROM pc.connection_github
+WHERE org_id = sqlc.arg(org_id) AND connection_id = ANY(sqlc.arg(connection_ids)::uuid[]);

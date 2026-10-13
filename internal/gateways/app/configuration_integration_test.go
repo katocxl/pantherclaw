@@ -110,6 +110,17 @@ func TestHR182_TheConfigurationCarriesOnlyThisGatewaysConnectionsAndCredentials(
 		t.Fatalf("a credential sealed to another gateway was sent: %+v %v", cfg.Credentials, err)
 	}
 
+	// The GitHub App installations of its own connections, and only those
+	// (G0 M8).
+	for _, c := range []capp.Connection{a, b} {
+		e.exec(t, `INSERT INTO pc.connection_github (org_id, connection_id, app_client_id, installation_id, account_login, updated_by)
+			VALUES ($1, $2, 'Iv23liApp', 7, $3, 'test')`, e.org, c.ID, c.Name)
+	}
+	cfg, err = e.svc.Configuration(ctx, mine, 0)
+	if err != nil || len(cfg.GitHub) != 1 || cfg.GitHub[0].ConnectionID != a.ID || cfg.GitHub[0].AccountLogin != "a" {
+		t.Fatalf("installations sent to this gateway: %+v %v", cfg.GitHub, err)
+	}
+
 	if _, err := e.svc.RevokeGateway(e.caller(td.KindUser, td.RoleGatewayAdmin), mine.Gateway, "test"); err != nil {
 		t.Fatal(err)
 	}
