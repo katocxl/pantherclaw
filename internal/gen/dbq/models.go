@@ -180,6 +180,14 @@ type PcApprovalRequest struct {
 	PermitID           *ids.UUID
 	EndedAt            *time.Time
 	ActionIr           []byte
+	InvalidationKey    *string
+}
+
+type PcApprovalRequestLinkedPerson struct {
+	OrgID     ids.OrgID
+	RequestID ids.UUID
+	Fact      string
+	UserID    ids.UUID
 }
 
 type PcApprovalResponse struct {
@@ -309,6 +317,23 @@ type PcCaptureProfile struct {
 	DisabledAt      *time.Time
 }
 
+type PcChangeWindow struct {
+	OrgID       ids.OrgID
+	ID          ids.UUID
+	Environment string
+	Repository  *string
+	TimeZone    string
+	Weekly      []byte
+	OneOff      []byte
+	Freezes     []byte
+	Revision    int32
+	State       string
+	CreatedBy   string
+	CreatedAt   time.Time
+	RetiredBy   *string
+	RetiredAt   *time.Time
+}
+
 type PcCheckpoint struct {
 	OrgID     ids.OrgID
 	TreeSize  int64
@@ -389,6 +414,20 @@ type PcConnectionCapability struct {
 	SupersededAt       *time.Time
 }
 
+type PcConnectionGithub struct {
+	OrgID               ids.OrgID
+	ConnectionID        ids.UUID
+	AppClientID         string
+	InstallationID      int64
+	AccountLogin        string
+	AccountID           pgtype.Int8
+	Permissions         []byte
+	RepositorySelection *string
+	ReadAt              *time.Time
+	UpdatedBy           string
+	UpdatedAt           time.Time
+}
+
 type PcConnectionRoute struct {
 	OrgID        ids.OrgID
 	ConnectionID ids.UUID
@@ -454,6 +493,7 @@ type PcCredential struct {
 	SupersededAt *time.Time
 	RevokedBy    *string
 	RevokedAt    *time.Time
+	Kind         string
 }
 
 type PcCrossOrgListAudit struct {
@@ -462,6 +502,22 @@ type PcCrossOrgListAudit struct {
 	MaxRows  int32
 	Caller   string
 	CalledAt time.Time
+}
+
+type PcDecisionConsequence struct {
+	OrgID         ids.OrgID
+	TransactionID ids.UUID
+	Evaluation    int32
+	Position      int32
+	RuleID        string
+	Operation     string
+	TargetType    string
+	TargetID      string
+	Environments  []string
+	State         string
+	Unknown       []byte
+	FactsDigest   string
+	CreatedAt     time.Time
 }
 
 type PcDecisionReceipt struct {
@@ -742,10 +798,12 @@ type PcFactProvider struct {
 	OrgID            ids.OrgID
 	ID               ids.UUID
 	Name             string
-	ServiceAccountID ids.UUID
+	ServiceAccountID *ids.UUID
 	State            string
 	CreatedBy        string
 	CreatedAt        time.Time
+	GatewayID        *ids.UUID
+	ConnectionID     *ids.UUID
 }
 
 type PcGateway struct {
@@ -788,6 +846,47 @@ type PcGatewayEnrollmentToken struct {
 	ExpiresAt  time.Time
 	UsedAt     *time.Time
 	UsedCertID *ids.UUID
+}
+
+type PcGithubExemption struct {
+	OrgID        ids.OrgID
+	GithubUserID int64
+	GithubLogin  string
+	Reason       string
+	CreatedBy    string
+	CreatedAt    time.Time
+}
+
+type PcGithubIdentity struct {
+	OrgID        ids.OrgID
+	ID           ids.UUID
+	UserID       ids.UUID
+	GithubLogin  string
+	GithubUserID int64
+	LinkedBy     string
+	LinkedAt     time.Time
+	VerifiedAt   *time.Time
+}
+
+type PcGithubIdentityHistory struct {
+	OrgID        ids.OrgID
+	GithubUserID int64
+	UserID       ids.UUID
+	LinkedAt     time.Time
+}
+
+type PcGithubScanRun struct {
+	OrgID          ids.OrgID
+	ID             ids.UUID
+	ConnectionID   ids.UUID
+	VerificationID *ids.UUID
+	State          string
+	Counts         []byte
+	Scanned        []string
+	NotScanned     []byte
+	StartedBy      string
+	CreatedAt      time.Time
+	FinishedAt     *time.Time
 }
 
 type PcGrant struct {

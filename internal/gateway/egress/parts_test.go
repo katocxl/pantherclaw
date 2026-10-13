@@ -10,6 +10,10 @@ import (
 
 	"github.com/katocxl/pantherclaw/internal/actionir"
 	defs "github.com/katocxl/pantherclaw/internal/definitions/domain"
+	"github.com/katocxl/pantherclaw/internal/definitions/manifest"
+	"github.com/katocxl/pantherclaw/internal/definitions/mapping"
+	"github.com/katocxl/pantherclaw/internal/platform/celenv"
+	pcgithub "github.com/katocxl/pantherclaw/packages/pc-github"
 )
 
 // TestHR073_TargetPartsAreSingleSegments: target.id.<group> sends one
@@ -68,6 +72,68 @@ func TestHR073_RestPathsAreCheckedSegments(t *testing.T) {
 		bad.Params, _ = json.Marshal(map[string]string{"path": path})
 		if r, err := Build("https://api.github.example.test", d, bad, txn); !errors.Is(err, ErrBuild) {
 			t.Errorf("path %q: %v %v", path, r.URL, err)
+		}
+	}
+}
+
+// TestHR075_GitHubRequestsComeFromTheBoundAction: every pc.github
+// operation's dispatch template builds its REST request from the mapped
+// action alone, with the target's parts in their own segments.
+func TestHR075_GitHubRequestsComeFromTheBoundAction(t *testing.T) {
+	p, err := manifest.Decode(pcgithub.Package)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m, err := mapping.New(p, celenv.DefaultLimits)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const sha = "0123456789abcdef0123456789abcdef01234567"
+	for _, c := range []struct{ tool, args, method, url, body string }{
+		{
+			"get_file_contents", `{"owner":"acme","repo":"payments","path":".github/workflows/deploy.yml","ref":"fix/a"}`,
+			"GET", "/repos/acme/payments/contents/.github/workflows/deploy.yml?ref=fix%2Fa", "",
+		},
+		{"pull_request_read", `{"method":"get","owner":"acme","repo":"payments","pullNumber":7}`, "GET", "/repos/acme/payments/pulls/7", ""},
+		{
+			"create_branch", `{"owner":"acme","repo":"payments","branch":"fix/a","sha":"` + sha + `"}`,
+			"POST", "/repos/acme/payments/git/refs", `{"ref":"refs/heads/fix/a","sha":"` + sha + `"}`,
+		},
+		{
+			"create_or_update_file", `{"owner":"acme","repo":"payments","path":"src/a.go","content":"YQo=","message":"Fix a","branch":"fix/a"}`,
+			"PUT", "/repos/acme/payments/contents/src/a.go", `{"branch":"fix/a","content":"YQo=","message":"Fix a"}`,
+		},
+		{
+			"create_pull_request", `{"owner":"acme","repo":"payments","title":"Fix \"a\"","head":"fix/a","base":"main"}`,
+			"POST", "/repos/acme/payments/pulls", `{"base":"main","head":"fix/a","title":"Fix \"a\""}`,
+		},
+		{
+			"merge_pull_request", `{"owner":"acme","repo":"payments","pullNumber":7,"expectedHeadSha":"` + sha + `"}`,
+			"PUT", "/repos/acme/payments/pulls/7/merge", `{"sha":"` + sha + `"}`,
+		},
+		{"update_repository", `{"owner":"acme","repo":"payments","allow_merge_commit":false}`, "PATCH", "/repos/acme/payments", `{"allow_merge_commit":false}`},
+	} {
+		a := mapped(t, m, c.tool, c.args)
+		d, _ := p.Definition(a.Operation)
+		r, err := Build("https://api.github.example.test", d, a, txn)
+		if err != nil || r.Method != c.method || r.URL.String() != "https://api.github.example.test"+c.url || string(r.Body) != c.body ||
+			r.IdempotencyHeader != "" {
+			t.Errorf("%s: built %s %v %s %v", c.tool, r.Method, r.URL, r.Body, err)
+		}
+	}
+	// The merge verifier and the connection test read from the target alone.
+	for op, want := range map[string]actionir.Target{
+		"/repos/acme/payments/pulls/7": {Type: "github.pull_request", ID: "acme/payments#7"},
+		"/installation/repositories":   {Type: "pc.connection", ID: "01920000-0000-7000-8000-0000000000d1"},
+	} {
+		def := "github.pull.read"
+		if want.Type == "pc.connection" {
+			def = "github.installation.repositories"
+		}
+		read, _ := p.Definition(def)
+		r, err := Build("https://api.github.example.test", read, actionir.ActionIR{Target: want, Params: []byte(`{}`)}, txn)
+		if err != nil || r.URL.Path != op {
+			t.Errorf("%s: %v %v", def, r.URL, err)
 		}
 	}
 }

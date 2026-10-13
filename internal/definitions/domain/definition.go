@@ -130,6 +130,18 @@ type ConstraintSpec struct {
 type Prerequisite struct {
 	Fact          string `json:"fact"`
 	MaxAgeSeconds int    `json:"max_age_seconds"`
+	// Binds requires a member of the (object) fact to equal a material
+	// param of the action; a mismatch is CANNOT_AUTHORIZE with its reason
+	// (G0 M8, HR-205: a merge is bound to its pull request's head,
+	// github.pull.head.sha == params.sha, else HEAD_MOVED).
+	Binds *FactBinding `json:"binds,omitzero"`
+}
+
+// FactBinding binds a member of a fact to a param.
+type FactBinding struct {
+	Member string `json:"member"`
+	Param  string `json:"param"`
+	Reason string `json:"reason"`
 }
 
 // OnUnknown is what happens after an ambiguous outcome (F382).
@@ -158,6 +170,11 @@ type ApprovalTemplate struct {
 	// unconsumed approval request for the same target (G0 M8, HR-205: a
 	// pull request's new head, github.pull.head).
 	InvalidateOn string `json:"invalidate_on,omitzero"`
+	// IndependentOf names a prerequisite fact listing, by GitHub user id,
+	// the people an independent approver must not be (G0 M8, HR-207: a
+	// pull request's author, committers and pushers, github.pull.people,
+	// with complete false when they cannot all be read).
+	IndependentOf string `json:"independent_of,omitzero"`
 }
 
 // Basis is where the evidence for a definition comes from (F391).
@@ -280,6 +297,9 @@ func (d *Definition) Validate() error {
 	for _, p := range d.Prerequisites {
 		if !kindRe.MatchString(p.Fact) || p.MaxAgeSeconds <= 0 || p.MaxAgeSeconds > maxSecond {
 			return invalid("%s: prerequisite %q needs a fact name and 1..%d max_age_seconds", op, p.Fact, maxSecond)
+		}
+		if err := d.validateBinding(p); err != nil {
+			return err
 		}
 	}
 	if err := d.validateRetry(); err != nil {
@@ -420,6 +440,14 @@ func (d *Definition) validateApproval() error {
 	if a.InvalidateOn != "" && !d.prerequisiteField("facts."+a.InvalidateOn) {
 		return invalid("%s: approval.invalidate_on names %q, which is not a prerequisite fact", d.Operation, a.InvalidateOn)
 	}
+	if a.InvalidateOn != "" && !slices.ContainsFunc(d.Prerequisites, func(p Prerequisite) bool { return p.Fact == a.InvalidateOn && p.Binds != nil }) {
+		// An approval binds only the members prerequisites declare (HR-030
+		// option B), so only a bound member's change can supersede it.
+		return invalid("%s: approval.invalidate_on names %q, whose prerequisite binds no member", d.Operation, a.InvalidateOn)
+	}
+	if a.IndependentOf != "" && !d.prerequisiteField("facts."+a.IndependentOf) {
+		return invalid("%s: approval.independent_of names %q, which is not a prerequisite fact", d.Operation, a.IndependentOf)
+	}
 	refs := a.Fields
 	for _, m := range holderRe.FindAllStringSubmatch(a.Title, -1) {
 		refs = append(refs, m[1])
@@ -427,6 +455,11 @@ func (d *Definition) validateApproval() error {
 	for _, f := range refs {
 		if !d.canonicalField(f) && !d.prerequisiteField(f) {
 			return invalid("%s: approval may show only canonical material fields and prerequisite facts, not %q (HR-034)", d.Operation, f)
+		}
+		if name, ok := strings.CutPrefix(f, "params."); ok && d.Params[name].Type == TypeContent {
+			// Content is agent-written (a commit message, a pull request's
+			// title or body): it is shown only in the untrusted block.
+			return invalid("%s: approval may not show content parameter %q among the canonical fields; it is shown untrusted (HR-034)", d.Operation, f)
 		}
 	}
 	return nil
@@ -474,6 +507,26 @@ func (d *Definition) validateDedupe() error {
 		if f == "operation" || !d.canonicalField(f) || slices.Contains(d.Dedupe[:i], f) {
 			return invalid("%s: dedupe_key field %q must be a distinct target field or material param", d.Operation, f)
 		}
+	}
+	return nil
+}
+
+// reasonRe is a reason code a definition names.
+var reasonRe = regexp.MustCompile(`^[A-Z][A-Z0-9_]{2,63}$`)
+
+// validateBinding checks a prerequisite's binding: a member name, a
+// material identifier, enum or integer param, and a reason code.
+func (d *Definition) validateBinding(p Prerequisite) error {
+	b := p.Binds
+	if b == nil {
+		return nil
+	}
+	param, ok := d.Params[b.Param]
+	switch {
+	case !nameRe.MatchString(b.Member) || !reasonRe.MatchString(b.Reason):
+		return invalid("%s: prerequisite %s binds a member name with a reason code", d.Operation, p.Fact)
+	case !ok || !param.Material || !slices.Contains([]ParamType{TypeIdentifier, TypeEnum, TypeInteger}, param.Type):
+		return invalid("%s: prerequisite %s binds %q, which is not a material identifier, enum or integer param", d.Operation, p.Fact, b.Param)
 	}
 	return nil
 }

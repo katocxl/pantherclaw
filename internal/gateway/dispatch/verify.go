@@ -286,12 +286,12 @@ func (e *Engine) readWith(ctx context.Context, conn *control.Connection, read *d
 		return egress.Response{}, false
 	}
 	if conn.GetAccessMode() == "pantherclaw_held" {
-		secret, err := e.credential(conn, p.req)
+		_, release, _, err := e.credential(ctx, conn, read, target, p.req, p.client)
 		if err != nil {
 			e.log.WarnContext(ctx, "gateway.credential_unavailable", slog.String("connection_id", conn.GetId()), pclog.Err(err))
 			return egress.Response{}, false
 		}
-		defer clear(secret)
+		defer release()
 	}
 	if token != "" {
 		p.req.Header.Set(HeaderAction, token)

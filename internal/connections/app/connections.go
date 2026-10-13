@@ -117,6 +117,9 @@ func New(pool *db.Pool, n Notifier, publicURL, gatewayAPIURL string) *Service {
 type Connection struct {
 	dbq.PcConnection
 	Routes []dbq.PcConnectionRoute
+	// GitHub is the GitHub App installation behind it (G0 M8); nil without
+	// one.
+	GitHub *dbq.PcConnectionGithub
 }
 
 // CreateInput is a new connection. Zero values take the defaults.
@@ -410,7 +413,15 @@ func deref(p *string) string {
 
 func load(ctx context.Context, q *dbq.Queries, conn dbq.PcConnection) (Connection, error) {
 	rs, err := q.ListConnectionRoutes(ctx, conn.OrgID, conn.ID)
-	return Connection{PcConnection: conn, Routes: rs}, err
+	if err != nil {
+		return Connection{}, err
+	}
+	out := Connection{PcConnection: conn, Routes: rs}
+	gh, err := q.ListConnectionGitHub(ctx, conn.OrgID, []ids.UUID{conn.ID})
+	if len(gh) == 1 {
+		out.GitHub = &gh[0]
+	}
+	return out, err
 }
 
 // Get returns one connection (connection.read); another org's is NotFound.

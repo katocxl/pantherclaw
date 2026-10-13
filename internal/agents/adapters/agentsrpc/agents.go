@@ -314,6 +314,23 @@ func (s *Agents) ListAgentChanges(ctx context.Context, req *pantherclawv1.ListAg
 
 // SubmitScanFindings implements AgentServiceHandler.
 func (s *Agents) SubmitScanFindings(ctx context.Context, req *pantherclawv1.SubmitScanFindingsRequest) (*pantherclawv1.SubmitScanFindingsResponse, error) {
+	if req.GetScanId() != "" {
+		return nil, errScanID
+	}
+	findings, err := findingsOf(req)
+	if err != nil {
+		return nil, err
+	}
+	r, err := s.inv.SubmitScan(ctx, req.GetHost(), findings)
+	if err != nil {
+		return nil, err
+	}
+	return scanResult(r), nil
+}
+
+var errScanID = pcerr.New(pcerr.InvalidArgument, "SCAN_ID", "only a gateway sets scan_id, on the gateway listener")
+
+func findingsOf(req *pantherclawv1.SubmitScanFindingsRequest) ([]app.ScanFinding, error) {
 	findings := make([]app.ScanFinding, 0, len(req.GetFindings()))
 	for _, f := range req.GetFindings() {
 		k, err := hex.DecodeString(f.GetKey())
@@ -322,11 +339,11 @@ func (s *Agents) SubmitScanFindings(ctx context.Context, req *pantherclawv1.Subm
 		}
 		findings = append(findings, app.ScanFinding{Kind: f.GetKind(), Key: [32]byte(k), Attributes: f.GetAttributes()})
 	}
-	r, err := s.inv.SubmitScan(ctx, req.GetHost(), findings)
-	if err != nil {
-		return nil, err
-	}
+	return findings, nil
+}
+
+func scanResult(r app.ScanResult) *pantherclawv1.SubmitScanFindingsResponse {
 	return &pantherclawv1.SubmitScanFindingsResponse{
 		Created: int32(r.Created), Counted: int32(r.Counted), Dropped: int32(r.Dropped), //nolint:gosec // G115: at most 200
-	}, nil
+	}
 }

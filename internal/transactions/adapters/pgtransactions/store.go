@@ -113,13 +113,22 @@ func (s *Store) Report(ctx context.Context, org ids.OrgID, gateway ids.UUID, r a
 		if db.IsNoRows(err) {
 			tl, err := q.LeasedTargetLog(ctx, dbq.LeasedTargetLogParams{OrgID: org, ID: r.Task, GatewayID: &gw, LeaseHash: hash[:]})
 			if db.IsNoRows(err) {
-				ct, err := q.LeasedConnectionTest(ctx, dbq.LeasedConnectionTestParams{OrgID: org, ID: r.Task, GatewayID: &gw, LeaseHash: hash[:]})
+				// An organization scan (G0 M8, HR-209).
+				scan, err := q.LeasedOrgScan(ctx, dbq.LeasedOrgScanParams{OrgID: org, ID: r.Task, GatewayID: &gw, LeaseHash: hash[:]})
 				if db.IsNoRows(err) {
-					return app.ErrLease
+					// A connection test's read (G0 M8 track C, F354).
+					ct, err := q.LeasedConnectionTest(ctx, dbq.LeasedConnectionTestParams{OrgID: org, ID: r.Task, GatewayID: &gw, LeaseHash: hash[:]})
+					if db.IsNoRows(err) {
+						return app.ErrLease
+					} else if err != nil {
+						return err
+					}
+					out, err = s.connectionTest(ctx, tx, q, org, gateway, ct, r)
+					return err
 				} else if err != nil {
 					return err
 				}
-				out, err = s.connectionTest(ctx, tx, q, org, gateway, ct, r)
+				out, err = orgScan(ctx, tx, q, org, gateway, scan, r)
 				return err
 			} else if err != nil {
 				return err
