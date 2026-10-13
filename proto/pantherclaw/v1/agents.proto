@@ -497,6 +497,10 @@ message SubmitScanFindingsRequest {
     (buf.validate.field).string.uuid = true,
     (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE
   ];
+  // The secret of the scan's org_scan lease the gateway holds, with
+  // scan_id: the server compares its hash, so only the holder of the lease
+  // submits, not any holder of the gateway's certificate.
+  bytes lease = 4 [(buf.validate.field).bytes.max_len = 64];
 }
 
 // SubmitScanFindingsResponse counts what was recorded.

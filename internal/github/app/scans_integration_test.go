@@ -126,8 +126,15 @@ func TestHR209_AnOrgScanRunsAsItsGatewaysLease(t *testing.T) {
 		}, nil)
 		return err
 	}
-	if err := report(map[string]string{"/secrets/production": "x"}); !errors.Is(err, tapp.ErrUndeclared) {
-		t.Fatalf("a field that is no summary: %v", err)
+	for name, fields := range map[string]map[string]string{
+		"a field that is no summary":   {"/secrets/production": "x"},
+		"a source outside the catalog": {"/scanned/secrets": "true"},
+		"read and not read":            {"/scanned/workflows": "true", "/not_scanned/workflows": "time limit"},
+		"an unknown reason":            {"/not_scanned/everything_else": "x"},
+	} {
+		if err := report(fields); !errors.Is(err, tapp.ErrUndeclared) {
+			t.Fatalf("%s: %v", name, err)
+		}
 	}
 	if err := report(map[string]string{
 		"/counts/repositories": "3", "/counts/workflows": "2", "/scanned/repositories": "true", "/scanned/workflows": "true",
@@ -137,7 +144,8 @@ func TestHR209_AnOrgScanRunsAsItsGatewaysLease(t *testing.T) {
 	}
 	done, err := team.Get(admin, scan.ID)
 	if err != nil || done.State != "DONE" || done.FinishedAt == nil || !maps.Equal(done.Counts, map[string]int64{"repositories": 3, "workflows": 2}) ||
-		!slices.Equal(done.Scanned, []string{"repositories", "workflows"}) || done.NotScanned["org_installations"] == "" {
+		!slices.Equal(done.Scanned, []string{"repositories", "workflows"}) || done.NotScanned["org_installations"] == "" ||
+		done.NotScanned["mcp_configs"] != "not reported" || done.NotScanned["rulesets"] != "not reported" {
 		t.Fatalf("done %+v %v", done, err)
 	}
 	if n := e.count(t, `SELECT count(*) FROM pc.ledger_entries WHERE kind IN ('audit.github.scan_started', 'audit.github.scan_finished')`); n != 2 {
@@ -181,7 +189,7 @@ func TestHR209_OnlyTheLeaseHoldingGatewaySubmitsFindingsAndTheyGrantNothing(t *t
 		{Kind: "github_workflow", Key: key(1), Attributes: map[string]string{"repository": "acme/payments", "path": ".github/workflows/deploy.yml", "environments": "production"}},
 		{Kind: "github_mcp_config", Key: key(2), Attributes: map[string]string{"repository": "acme/payments", "name": "github", "command": "npx"}},
 	}
-	if _, err := inv.SubmitGitHubScan(context.Background(), e.org, gateway, scan.ID, findings); !errors.Is(err, aapp.ErrNoScanLease) {
+	if _, err := inv.SubmitGitHubScan(context.Background(), e.org, gateway, scan.ID, nil, findings); !errors.Is(err, aapp.ErrNoScanLease) {
 		t.Fatalf("before the lease: %v", err)
 	}
 	store := &pgtransactions.Store{Pool: e.pool}
@@ -189,18 +197,22 @@ func TestHR209_OnlyTheLeaseHoldingGatewaySubmitsFindingsAndTheyGrantNothing(t *t
 	if err != nil || len(leases) != 1 {
 		t.Fatalf("leases %+v %v", leases, err)
 	}
-	if _, err := inv.SubmitGitHubScan(context.Background(), e.org, other, scan.ID, findings); !errors.Is(err, aapp.ErrNoScanLease) {
+	lease := leases[0].Secret
+	if _, err := inv.SubmitGitHubScan(context.Background(), e.org, gateway, scan.ID, []byte("not the lease"), findings); !errors.Is(err, aapp.ErrNoScanLease) {
+		t.Fatalf("the gateway without the lease's secret: %v", err)
+	}
+	if _, err := inv.SubmitGitHubScan(context.Background(), e.org, other, scan.ID, lease, findings); !errors.Is(err, aapp.ErrNoScanLease) {
 		t.Fatalf("another gateway: %v", err)
 	}
 	local := []aapp.ScanFinding{{Kind: "mcp_server", Key: key(3), Attributes: map[string]string{"name": "x"}}}
-	if _, err := inv.SubmitGitHubScan(context.Background(), e.org, gateway, scan.ID, local); !errors.Is(err, aapp.ErrScanKind) {
+	if _, err := inv.SubmitGitHubScan(context.Background(), e.org, gateway, scan.ID, lease, local); !errors.Is(err, aapp.ErrScanKind) {
 		t.Fatalf("a local kind from a gateway: %v", err)
 	}
-	r, err := inv.SubmitGitHubScan(context.Background(), e.org, gateway, scan.ID, findings)
+	r, err := inv.SubmitGitHubScan(context.Background(), e.org, gateway, scan.ID, lease, findings)
 	if err != nil || r.Created != 2 {
 		t.Fatalf("submit %+v %v", r, err)
 	}
-	if r, err := inv.SubmitGitHubScan(context.Background(), e.org, gateway, scan.ID, findings[:1]); err != nil || r.Counted != 1 || r.Created != 0 {
+	if r, err := inv.SubmitGitHubScan(context.Background(), e.org, gateway, scan.ID, lease, findings[:1]); err != nil || r.Counted != 1 || r.Created != 0 {
 		t.Fatalf("seen again %+v %v", r, err)
 	}
 	listed, _, err := scans.Findings(admin, scan.ID, 0, "")
@@ -220,7 +232,7 @@ func TestHR209_OnlyTheLeaseHoldingGatewaySubmitsFindingsAndTheyGrantNothing(t *t
 	}, nil); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := inv.SubmitGitHubScan(context.Background(), e.org, gateway, scan.ID, findings); !errors.Is(err, aapp.ErrNoScanLease) {
+	if _, err := inv.SubmitGitHubScan(context.Background(), e.org, gateway, scan.ID, lease, findings); !errors.Is(err, aapp.ErrNoScanLease) {
 		t.Fatalf("after the report: %v", err)
 	}
 	// A person's local scan submits no GitHub kind.
@@ -246,9 +258,11 @@ func TestHR209_APersonsScanNeverTouchesTheGatewaysFindings(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if leases, err := (&pgtransactions.Store{Pool: e.pool}).Claim(context.Background(), e.org, gateway, 4, 30*time.Second); err != nil || len(leases) != 1 {
+	leases, err := (&pgtransactions.Store{Pool: e.pool}).Claim(context.Background(), e.org, gateway, 4, 30*time.Second)
+	if err != nil || len(leases) != 1 {
 		t.Fatalf("leases %+v %v", leases, err)
 	}
+	lease := leases[0].Secret
 	inv := aapp.NewInventory(e.pool, edition(billing.Team))
 	person := e.caller(td.KindUser, td.RoleAgentOwner)
 	seeded := [32]byte{7}
@@ -257,7 +271,7 @@ func TestHR209_APersonsScanNeverTouchesTheGatewaysFindings(t *testing.T) {
 		t.Fatalf("a person's finding: %+v %v", r, err)
 	}
 	workflow := []aapp.ScanFinding{{Kind: "github_workflow", Key: seeded, Attributes: map[string]string{"repository": "acme/payments", "path": ".github/workflows/deploy.yml"}}}
-	if r, err := inv.SubmitGitHubScan(context.Background(), e.org, gateway, scan.ID, workflow); err != nil || r.Created != 1 || r.Counted != 0 {
+	if r, err := inv.SubmitGitHubScan(context.Background(), e.org, gateway, scan.ID, lease, workflow); err != nil || r.Created != 1 || r.Counted != 0 {
 		t.Fatalf("the gateway's finding under a key a person submitted first: %+v %v", r, err)
 	}
 	if r, err := inv.SubmitScan(person, "laptop", pre); err != nil || r.Counted != 1 {
@@ -273,7 +287,42 @@ func TestHR209_APersonsScanNeverTouchesTheGatewaysFindings(t *testing.T) {
 		INSERT INTO pc.discoveries (org_id, id, agent_id, source, scan_key)
 		SELECT $1, gen_random_uuid(), id, 'scan', sha256(id::text::bytea) FROM a`, e.org, aapp.MaxOpenScanDiscoveries)
 	more := []aapp.ScanFinding{{Kind: "github_workflow", Key: [32]byte{8}, Attributes: map[string]string{"repository": "acme/payments", "path": ".github/workflows/release.yml"}}}
-	if r, err := inv.SubmitGitHubScan(context.Background(), e.org, gateway, scan.ID, more); err != nil || r.Created != 1 || r.Dropped != 0 {
+	if r, err := inv.SubmitGitHubScan(context.Background(), e.org, gateway, scan.ID, lease, more); err != nil || r.Created != 1 || r.Dropped != 0 {
 		t.Fatalf("an org scan finding with the people's room full: %+v %v", r, err)
+	}
+}
+
+// TestHR209_AnOrgScanHasThreeLeasesAtMost: a scan whose leases keep ending
+// unreported is not leased again and again, each time spending the
+// installation's API quota: its third unreported lease fails it.
+func TestHR209_AnOrgScanHasThreeLeasesAtMost(t *testing.T) {
+	e := newEnv(t)
+	gateway := ids.NewV7()
+	e.exec(t, "INSERT INTO pc.gateways (org_id, id, name, created_by) VALUES ($1, $2, 'edge', 'test')", e.org, gateway)
+	e.exec(t, "INSERT INTO pc.org_containment (org_id) VALUES ($1) ON CONFLICT DO NOTHING", e.org)
+	conn := e.gitHubConnection(t, gateway, e.brokerKey(t, gateway), "github", false)
+	admin := e.caller(td.KindUser, td.RoleSecurityAdmin)
+	team := &app.Scans{Pool: e.pool, Ents: edition(billing.Team)}
+	scan, err := team.Start(admin, conn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	store := &pgtransactions.Store{Pool: e.pool}
+	for attempt := 1; attempt <= 3; attempt++ {
+		leases, err := store.Claim(context.Background(), e.org, gateway, 4, 30*time.Second)
+		if err != nil || len(leases) != 1 {
+			t.Fatalf("lease %d: %+v %v", attempt, leases, err)
+		}
+		e.exec(t, "UPDATE pc.verifications SET leased_at = now() - interval '20 seconds', lease_expires_at = now() - interval '1 second' WHERE org_id = $1 AND purpose = 'org_scan' AND state = 'LEASED'", e.org)
+		if _, err := store.Expire(context.Background(), e.org, nil); err != nil {
+			t.Fatal(err)
+		}
+		e.exec(t, "UPDATE pc.verifications SET next_at = now() WHERE org_id = $1 AND purpose = 'org_scan' AND state = 'PENDING'", e.org)
+	}
+	if leases, err := store.Claim(context.Background(), e.org, gateway, 4, 30*time.Second); err != nil || len(leases) != 0 {
+		t.Fatalf("a fourth lease: %+v %v", leases, err)
+	}
+	if got, err := team.Get(admin, scan.ID); err != nil || got.State != "FAILED" {
+		t.Fatalf("after three unreported leases: %+v %v", got, err)
 	}
 }

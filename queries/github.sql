@@ -108,13 +108,14 @@ SET state = sqlc.arg(state), counts = sqlc.arg(counts), scanned = sqlc.arg(scann
     finished_at = now()
 WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state IN ('PENDING', 'RUNNING');
 
--- GatewayScanRun is a scan whose org_scan lease this gateway holds now:
--- only then may it submit the scan's findings (HR-209).
+-- GatewayScanRun is a scan whose org_scan lease this gateway holds now,
+-- under the lease it presents: only then may it submit the scan's
+-- findings (HR-209).
 -- name: GatewayScanRun :one
 SELECT r.id FROM pc.github_scan_runs r
 JOIN pc.verifications v ON v.org_id = r.org_id AND v.id = r.verification_id
 WHERE r.org_id = sqlc.arg(org_id) AND r.id = sqlc.arg(id) AND v.purpose = 'org_scan' AND v.state = 'LEASED'
-  AND v.leased_by = sqlc.arg(gateway_id)::uuid AND v.lease_expires_at >= now();
+  AND v.leased_by = sqlc.arg(gateway_id)::uuid AND v.lease_hash = sqlc.arg(lease_hash) AND v.lease_expires_at >= now();
 
 -- ListOrgScanFindings are the discoveries a scan saw last.
 -- name: ListOrgScanFindings :many

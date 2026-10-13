@@ -1995,7 +1995,11 @@ type SubmitScanFindingsRequest struct {
 	// The organization scan the findings are from (G0 M8, HR-209). Only a
 	// gateway sets it, on the gateway listener, while it holds that scan's
 	// org_scan lease; the org comes from its certificate (HR-020).
-	ScanId        string `protobuf:"bytes,3,opt,name=scan_id,json=scanId,proto3" json:"scan_id,omitempty"`
+	ScanId string `protobuf:"bytes,3,opt,name=scan_id,json=scanId,proto3" json:"scan_id,omitempty"`
+	// The secret of the scan's org_scan lease the gateway holds, with
+	// scan_id: the server compares its hash, so only the holder of the lease
+	// submits, not any holder of the gateway's certificate.
+	Lease         []byte `protobuf:"bytes,4,opt,name=lease,proto3" json:"lease,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2049,6 +2053,13 @@ func (x *SubmitScanFindingsRequest) GetScanId() string {
 		return x.ScanId
 	}
 	return ""
+}
+
+func (x *SubmitScanFindingsRequest) GetLease() []byte {
+	if x != nil {
+		return x.Lease
+	}
+	return nil
 }
 
 // SubmitScanFindingsResponse counts what was recorded.
@@ -2402,11 +2413,12 @@ const file_pantherclaw_v1_agents_proto_rawDesc = "" +
 	"attributes\x1a=\n" +
 	"\x0fAttributesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xa5\x01\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xc4\x01\n" +
 	"\x19SubmitScanFindingsRequest\x12D\n" +
 	"\bfindings\x18\x01 \x03(\v2\x1b.pantherclaw.v1.ScanFindingB\v\xbaH\b\x92\x01\x05\b\x01\x10\xc8\x01R\bfindings\x12\x1c\n" +
 	"\x04host\x18\x02 \x01(\tB\b\xbaH\x05r\x03\x18\x80\x01R\x04host\x12$\n" +
-	"\ascan_id\x18\x03 \x01(\tB\v\xbaH\b\xd8\x01\x01r\x03\xb0\x01\x01R\x06scanId\"j\n" +
+	"\ascan_id\x18\x03 \x01(\tB\v\xbaH\b\xd8\x01\x01r\x03\xb0\x01\x01R\x06scanId\x12\x1d\n" +
+	"\x05lease\x18\x04 \x01(\fB\a\xbaH\x04z\x02\x18@R\x05lease\"j\n" +
 	"\x1aSubmitScanFindingsResponse\x12\x18\n" +
 	"\acreated\x18\x01 \x01(\x05R\acreated\x12\x18\n" +
 	"\acounted\x18\x02 \x01(\x05R\acounted\x12\x18\n" +
