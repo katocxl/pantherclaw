@@ -10,10 +10,11 @@ import (
 	"fmt"
 
 	"github.com/katocxl/pantherclaw/internal/actionir"
+	"github.com/katocxl/pantherclaw/internal/authority/consequences"
+	"github.com/katocxl/pantherclaw/internal/authority/pipeline"
 	"github.com/katocxl/pantherclaw/internal/authority/recording"
 	"github.com/katocxl/pantherclaw/internal/authority/replay"
 	defpg "github.com/katocxl/pantherclaw/internal/definitions/adapters/pgstore"
-	defs "github.com/katocxl/pantherclaw/internal/definitions/domain"
 	factpg "github.com/katocxl/pantherclaw/internal/facts/adapters/pgstore"
 	fdomain "github.com/katocxl/pantherclaw/internal/facts/domain"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
@@ -70,11 +71,13 @@ func (s *ReplaySource) Inputs(ctx context.Context, org ids.OrgID, txn ids.UUID, 
 }
 
 // Definition implements replay.Source.
-func (s *ReplaySource) Definition(ctx context.Context, org ids.OrgID, pin actionir.Definition) (*defs.Definition, error) {
-	var out *defs.Definition
+func (s *ReplaySource) Definition(ctx context.Context, org ids.OrgID, pin actionir.Definition) (pipeline.Pinned, error) {
+	var out pipeline.Pinned
 	err := s.read(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
-		var err error
-		out, _, err = s.Definitions.PinnedInTx(ctx, tx, org, pin)
+		p, d, _, err := s.Definitions.PinnedPackageInTx(ctx, tx, org, pin)
+		if err == nil {
+			out = pipeline.Pinned{Definition: d, Consequences: consequences.Of(p, d.Operation)}
+		}
 		return err
 	})
 	return out, err

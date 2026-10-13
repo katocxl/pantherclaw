@@ -83,5 +83,9 @@ func (h *GatewayHandler) ReportObservation(ctx context.Context, req *pb.ReportOb
 	if err != nil {
 		return nil, err
 	}
-	return &pb.ReportObservationResponse{ObservationId: a.Observation.String(), EffectState: string(a.State), Done: a.Done}, nil
+	out := &pb.ReportObservationResponse{EffectState: string(a.State), Done: a.Done}
+	if !a.Observation.IsZero() { // an organization scan records its run, not an observation
+		out.ObservationId = a.Observation.String()
+	}
+	return out, nil
 }

@@ -37,6 +37,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/authn/credential"
 	"github.com/katocxl/pantherclaw/internal/authn/token"
 	"github.com/katocxl/pantherclaw/internal/authority"
+	"github.com/katocxl/pantherclaw/internal/authority/adapters/pgauthority"
 	"github.com/katocxl/pantherclaw/internal/billing"
 	"github.com/katocxl/pantherclaw/internal/billing/licence"
 	"github.com/katocxl/pantherclaw/internal/definitions/adapters/packagesrpc"
@@ -49,6 +50,7 @@ import (
 	factspg "github.com/katocxl/pantherclaw/internal/facts/adapters/pgstore"
 	factsapp "github.com/katocxl/pantherclaw/internal/facts/app"
 	"github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1/pantherclawv1connect"
+	githubapp "github.com/katocxl/pantherclaw/internal/github/app"
 	"github.com/katocxl/pantherclaw/internal/grants/adapters/grantsrpc"
 	grantspg "github.com/katocxl/pantherclaw/internal/grants/adapters/pgstore"
 	grantsapp "github.com/katocxl/pantherclaw/internal/grants/app"
@@ -222,7 +224,8 @@ func cmdServe(ctx context.Context, args []string, stderr io.Writer, env Env, onS
 		return err
 	}
 
-	svc, err := newAuthority(cfg, pool, reg, kp, log)
+	authorityStore := &pgauthority.Store{Pool: pool, LockTimeout: cfg.Authority.BudgetLockTimeout.D()}
+	svc, err := newAuthority(cfg, pool, reg, kp, authorityStore, log)
 	if err != nil {
 		return err
 	}
@@ -232,6 +235,8 @@ func cmdServe(ctx context.Context, args []string, stderr io.Writer, env Env, onS
 	if err != nil {
 		return err
 	}
+	// A monitor-mode action with an unknown consequence notifies (HR-206).
+	authorityStore.Notify = m5.notifications
 	m6, err := newM6(cfg, pool, reg, m5.notifications, log)
 	if err != nil {
 		return err
@@ -245,6 +250,8 @@ func cmdServe(ctx context.Context, args []string, stderr io.Writer, env Env, onS
 		return err
 	}
 	m6.verifications = verification
+	m6.facts = gatewayFacts(pool)
+	m6.scans = agentsrpc.NewGatewayScans(aapp.NewInventory(pool, bill))
 
 	g, ctx := errgroup.WithContext(ctx)
 	if cfg.Role == RoleAPI || cfg.Role == RoleAll {
@@ -310,6 +317,7 @@ func cmdServe(ctx context.Context, args []string, stderr io.Writer, env Env, onS
 			publicURL: cfg.Auth.PublicURL, clientIP: limiter.ClientIP, clusters: clusters, subjects: subjects,
 			logOrigin:    cfg.logOrigin(),
 			packageRoots: roots,
+			github:       cfg.GitHub,
 			web:          web,
 			m5:           m5,
 			captures:     captures,
@@ -475,6 +483,8 @@ type apiDeps struct {
 	m5p2 *m5p2Services
 	// M7: verification signs the effect receipts people's actions append.
 	verification *txapp.Service
+	// M8: GitHub sign-in (P2f).
+	github GitHubConfig
 	// captures seal and open restricted payload captures (M7 B9).
 	captures *captureServices
 	// kp opens sealed evaluation inputs for decision replay (M7 track B).
@@ -528,10 +538,18 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	d.m6.registerPublic(rs)
 	d.m5p2.registerPublic(rs)
 	registerM7(rs, pool, d.verification)
+	var githubNotify githubapp.Notifier
+	if d.m5 != nil {
+		githubNotify = d.m5.notifications
+	}
+	if err := registerM8G(rs, pool, githubNotify, d.github, d.billing); err != nil {
+		return nil, err
+	}
 	if err := registerEvidence(rs, d); err != nil {
 		return nil, err
 	}
 	registerEvidenceAdmin(rs, d)
+	registerReleases(rs, pool)
 	mux := http.NewServeMux()
 	rpc.Mount(mux, rs)
 	d.m5p2.mount(mux, workload)
@@ -751,7 +769,7 @@ func registerAuthorityAdmin(rs *connect.Server, d apiDeps, grants *grantsapp.Ser
 	facts := &factspg.Store{Pool: d.pool}
 	pantherclawv1connect.RegisterGrantServiceHandler(rs, grantsrpc.NewGrants(grants))
 	pantherclawv1connect.RegisterGuardrailServiceHandler(rs, grantsrpc.NewGuardrails(grants))
-	pantherclawv1connect.RegisterFactServiceHandler(rs, factsrpc.New(&factsapp.Service{Store: facts, Authz: authz, Reads: facts}))
+	pantherclawv1connect.RegisterFactServiceHandler(rs, factsrpc.New(&factsapp.Service{Store: facts, Authz: authz, Reads: facts, Packages: packageFacts(d.pool)}))
 	roots := d.packageRoots
 	if roots == nil {
 		var err error
@@ -764,7 +782,7 @@ func registerAuthorityAdmin(rs *connect.Server, d apiDeps, grants *grantsapp.Ser
 		Ents: d.billing,
 	}))
 	pantherclawv1connect.RegisterPolicyServiceHandler(rs, policiesrpc.New(&policyapp.Versions{
-		Store: &polpg.Store{Pool: d.pool}, Facts: facts, Definitions: defs, Authz: authz, Limits: celenv.DefaultLimits,
+		Store: &polpg.Store{Pool: d.pool}, Facts: facts, Subjects: facts, Definitions: defs, Authz: authz, Limits: celenv.DefaultLimits,
 	}))
 	return nil
 }
