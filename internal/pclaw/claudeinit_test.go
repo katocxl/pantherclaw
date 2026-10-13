@@ -16,17 +16,25 @@ import (
 	"github.com/katocxl/pantherclaw/internal/identity/workloadclient"
 )
 
-// initFixture is a home, a project, an enrolled-looking key file and the
-// answer init reads when it asks to confirm.
+// initFixture is a home, a project, an enrolled-looking key file, the
+// platform's managed settings directory (empty unless a test writes to
+// it, so the machine's own are never read) and the answer init reads when
+// it asks to confirm.
 type initFixture struct {
-	home, project, key, managed, answer string
-	env                                 map[string]string
+	home, project, key, managed, platform, answer string
+	env                                           map[string]string
 }
 
 func newInitFixture(t *testing.T) *initFixture {
 	t.Helper()
 	root := t.TempDir()
-	f := &initFixture{home: filepath.Join(root, "home"), project: filepath.Join(root, "proj"), managed: filepath.Join(root, "managed.json")}
+	f := &initFixture{
+		home: filepath.Join(root, "home"), project: filepath.Join(root, "proj"), managed: filepath.Join(root, "managed.json"),
+		platform: filepath.Join(root, "platform"),
+	}
+	old := managedSettingsDir
+	managedSettingsDir = f.platform
+	t.Cleanup(func() { managedSettingsDir = old })
 	for _, d := range []string{f.home, f.project} {
 		if err := os.MkdirAll(d, 0o700); err != nil {
 			t.Fatal(err)
@@ -319,6 +327,28 @@ func TestHR208_InitCountsOnlyAFailClosedPantherClawHook(t *testing.T) {
 		kept, _ := hooks["PreToolUse"].([]any)
 		if len(pre) != 2 || !reflect.DeepEqual(pre[0], kept[0]) || !hookRunsIn(t, f.local()) {
 			t.Errorf("%s: hooks after init %v", name, pre)
+		}
+	}
+}
+
+// TestHR208_InitAlwaysReadsThePlatformsManagedSettings: --managed-settings
+// adds a file to the platform's managed settings and never replaces them,
+// so pointing it at the null device skips no managed check, drop-ins
+// included.
+func TestHR208_InitAlwaysReadsThePlatformsManagedSettings(t *testing.T) {
+	for name, tc := range map[string]struct{ file, content, want string }{
+		"the platform's file": {file: "managed-settings.json", content: `{"disableAllHooks": true}`, want: "disable every hook"},
+		"a drop-in": {
+			file: filepath.Join("managed-settings.d", "50-hooks.json"), content: `{"allowManagedHooksOnly": true}`, want: "allow only managed hooks",
+		},
+	} {
+		f := newInitFixture(t)
+		f.write(t, filepath.Join(f.platform, tc.file), tc.content)
+		f.managed = os.DevNull
+		code, out, errs := f.run(t)
+		if _, err := os.Stat(f.local()); code != 1 || err == nil || !strings.Contains(errs, tc.want) ||
+			!strings.Contains(out, filepath.Join(f.platform, tc.file)) {
+			t.Errorf("%s: %d %s %s", name, code, out, errs)
 		}
 	}
 }

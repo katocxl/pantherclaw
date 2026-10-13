@@ -61,18 +61,23 @@ type claudeSettings struct {
 	raw []byte
 }
 
+// managedSettingsDir is the directory Claude Code reads managed settings
+// from on this platform (a variable, so tests can point it elsewhere).
+var managedSettingsDir = func() string {
+	switch runtime.GOOS {
+	case "windows":
+		return `C:\Program Files\ClaudeCode`
+	case "darwin":
+		return "/Library/Application Support/ClaudeCode"
+	default:
+		return "/etc/claude-code"
+	}
+}()
+
 // managedSettingsPaths are where Claude Code reads managed settings on this
 // platform, with its drop-in directory.
 func managedSettingsPaths() []string {
-	var dir string
-	switch runtime.GOOS {
-	case "windows":
-		dir = `C:\Program Files\ClaudeCode`
-	case "darwin":
-		dir = "/Library/Application Support/ClaudeCode"
-	default:
-		dir = "/etc/claude-code"
-	}
+	dir := managedSettingsDir
 	out := []string{filepath.Join(dir, "managed-settings.json")}
 	drops, _ := filepath.Glob(filepath.Join(dir, "managed-settings.d", "*.json"))
 	slices.Sort(drops)
@@ -180,7 +185,7 @@ func claudeInit(_ context.Context, a *app, args []string) error {
 	fs.StringVar(&f.run, "run", "", "the run (default: the key file's)")
 	fs.StringVar(&f.project, "project", "", "the project directory (default: the current one)")
 	fs.StringVar(&f.scope, "scope", "local", "where the hook goes: local (.claude/settings.local.json), project (.claude/settings.json) or user")
-	fs.StringVar(&f.managed, "managed-settings", "", "read managed settings from this file instead of the platform's")
+	fs.StringVar(&f.managed, "managed-settings", "", "also read managed settings from this file (the platform's are always read)")
 	fs.BoolVar(&f.dryRun, "dry-run", false, "show what would change and change nothing")
 	fs.BoolVar(&f.yes, "yes", false, "make the changes without asking")
 	if err := fs.Parse(args); err != nil {
@@ -214,9 +219,11 @@ func claudeInit(_ context.Context, a *app, args []string) error {
 	if files[f.scope] == "" {
 		return errors.New("--scope must be local, project or user")
 	}
+	// --managed-settings adds a file to the platform's, never replaces
+	// them: what Claude Code enforces is always checked.
 	managedPaths := managedSettingsPaths()
 	if f.managed != "" {
-		managedPaths = []string{f.managed}
+		managedPaths = append(managedPaths, f.managed)
 	}
 	var settings []claudeSettings
 	for _, scope := range []string{"user", "project", "local"} {
