@@ -512,45 +512,6 @@ func (q *Queries) CoverageProtectedAgents(ctx context.Context, orgID ids.OrgID, 
 	return items, nil
 }
 
-const coverageReachOfConnection = `-- name: CoverageReachOfConnection :many
-SELECT id, observed FROM pc.discoveries
-WHERE org_id = $1 AND source = 'github_scan'
-  AND observed ->> 'kind' = 'github_app' AND observed ->> 'connection' = $2::text
-ORDER BY id
-LIMIT 500
-`
-
-type CoverageReachOfConnectionRow struct {
-	ID       ids.UUID
-	Observed []byte
-}
-
-// The credentials the org scan found for a connection, with the
-// permissions they actually hold (G0 M8 G5: github_app findings name the
-// connection they were scanned through). UNTRUSTED metadata. Only the
-// gateway's GitHub org scan (source github_scan) reports these kinds; a
-// person's pclaw scan (source scan) cannot (N20). A dismissed discovery
-// still counts: dismissing it does not remove the reach.
-func (q *Queries) CoverageReachOfConnection(ctx context.Context, orgID ids.OrgID, connection string) ([]CoverageReachOfConnectionRow, error) {
-	rows, err := q.db.Query(ctx, coverageReachOfConnection, orgID, connection)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []CoverageReachOfConnectionRow{}
-	for rows.Next() {
-		var i CoverageReachOfConnectionRow
-		if err := rows.Scan(&i.ID, &i.Observed); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const coverageRoutesForScope = `-- name: CoverageRoutesForScope :many
 SELECT org_id, id, agent_id, connection_id, operation, kind, channel, locator, observation, source, source_ref, mode, attributes, seen_count, first_seen_at, last_seen_at FROM pc.coverage_routes
 WHERE org_id = $1 AND connection_id = $2
@@ -626,7 +587,8 @@ SELECT s.id, s.connection_id, s.kind::text AS kind, s.locator::text AS locator F
     JOIN pc.connections c ON c.org_id = d.org_id AND c.id::text = lower(d.observed ->> 'connection')
     WHERE d.org_id = $1 AND d.source = 'github_scan'
       AND d.observed ->> 'kind' IN ('github_app', 'github_workflow', 'github_mcp_config')
-      AND (d.observed ->> 'kind' <> 'github_workflow' OR d.observed ->> 'writes' = 'true' OR d.observed ->> 'deploys' = 'true')
+      AND (d.observed ->> 'kind' <> 'github_workflow' OR d.observed ->> 'writes' = 'true' OR d.observed ->> 'deploys' = 'true'
+           OR d.observed ->> 'permissions_default' = 'true')
       AND NOT EXISTS (SELECT 1 FROM pc.coverage_routes r
                       WHERE r.org_id = d.org_id AND r.source = 'scan' AND r.source_ref = d.id)
 ) s
@@ -647,8 +609,9 @@ type CoverageScanFindingsToRecordRow struct {
 // metadata, HR-209: they only describe a route, never grant or close one):
 //   - a GitHub App installation is target-side authority beyond the
 //     connection (F449);
-//   - a workflow that writes or deploys is an intermediary that can produce
-//     the effect (F448);
+//   - a workflow that writes, deploys, or runs a job on the repository's
+//     default permissions (which may write) is an intermediary that can
+//     produce the effect (F448);
 //   - a committed MCP configuration is an MCP server reaching the target
 //     outside the gateway (F444).
 //

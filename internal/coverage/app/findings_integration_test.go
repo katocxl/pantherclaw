@@ -7,8 +7,10 @@ package app_test
 
 import (
 	"context"
+	"encoding/json/v2"
 	"errors"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/katocxl/pantherclaw/internal/coverage/app"
@@ -37,15 +39,15 @@ func (f *fixture) refreshFindings(t *testing.T) []dbq.PcCoverageFinding {
 	return rows
 }
 
-// TestF048_CredentialReachBeyondTheNeedIsAFinding: a GitHub App
-// installation the scan found for the connection, holding permissions the
+// TestF048_CredentialReachBeyondTheNeedIsAFinding: the GitHub App
+// installation behind the connection, as last read, holding permissions the
 // operations the org's grants allow do not declare, is an open finding with
 // the excess, its severity and the scopes of the operations executed in
 // the last 30 days; reduced to the need it is resolved; another excess is
 // a new finding; a dismissal needs a person's written reason and survives
 // the next refresh until the excess changes, and a dismissed exposure found
-// again after it went away is open again. Dismissing the discovery
-// itself hides nothing: the reach is still there.
+// again after it went away is open again. (G0 M8 G3,
+// connection_github).
 func TestF048_CredentialReachBeyondTheNeedIsAFinding(t *testing.T) {
 	f := newFixture(t)
 	f.grant(t, "payments.refund.create")
@@ -53,13 +55,21 @@ func TestF048_CredentialReachBeyondTheNeedIsAFinding(t *testing.T) {
 	f.exec(t, `INSERT INTO pc.package_versions (org_id, id, package_id, version, file_digest, raw, state)
 		VALUES ($1, $2, $3, '1.1.0', $4, $5, 'ACTIVE')`, f.org, version, f.pkg, digest, []byte(scopedPackage))
 	f.exec(t, `UPDATE pc.package_pins SET version_id = $2, version = '1.1.0' WHERE org_id = $1`, f.org, version)
-	scanned, discovery := ids.NewV7(), ids.NewV7()
-	f.exec(t, "INSERT INTO pc.agents (org_id, id, name, state, created_by) VALUES ($1, $2, 'App pantherclaw-ci', 'DISCOVERED', 'test')", f.org, scanned)
-	observed := func(perms string) []byte {
-		return []byte(`{"kind": "github_app", "connection": "` + f.conn.String() + `", "app_slug": "pantherclaw-ci", "permissions": "` + perms + `"}`)
+	installed := func(perms string) []byte {
+		m := map[string]string{}
+		for _, p := range strings.Split(perms, ",") {
+			k, v, _ := strings.Cut(p, ":")
+			m[k] = v
+		}
+		b, err := json.Marshal(m)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return b
 	}
-	f.exec(t, `INSERT INTO pc.discoveries (org_id, id, agent_id, source, scan_key, observed) VALUES ($1, $2, $3, 'github_scan', $4, $5)`,
-		f.org, discovery, scanned, make([]byte, 32), observed("contents:write,administration:write,metadata:read"))
+	f.exec(t, `INSERT INTO pc.connection_github (org_id, connection_id, app_client_id, installation_id, account_login, permissions,
+		repository_selection, read_at, updated_by) VALUES ($1, $2, 'Iv1.ci', 7, 'acme', $3, 'all', now(), 'test')`,
+		f.org, f.conn, installed("contents:write,administration:write,metadata:read"))
 	txn, permit := ids.NewV7(), ids.NewV7()
 	f.exec(t, `INSERT INTO pc.transactions (org_id, id, run_id, action_id, action_hash, operation, decision, reason_code,
 		gateway_id, connection_id, channel, mode) VALUES ($1, $2, $3, $4, $5, 'payments.refund.create', 'ALLOW', 'OK', 'gw', $6,
@@ -74,11 +84,11 @@ func TestF048_CredentialReachBeyondTheNeedIsAFinding(t *testing.T) {
 		!slices.Equal(rows[0].Used, rows[0].Declared) {
 		t.Fatalf("findings %+v", rows)
 	}
-	f.exec(t, "UPDATE pc.discoveries SET observed = $2 WHERE id = $1", discovery, observed("contents:write,metadata:read"))
+	f.exec(t, "UPDATE pc.connection_github SET permissions = $2 WHERE connection_id = $1", f.conn, installed("contents:write,metadata:read"))
 	if rows := f.refreshFindings(t); len(rows) != 1 || rows[0].State != "RESOLVED" {
 		t.Fatalf("reduced to the need: %+v", rows)
 	}
-	f.exec(t, "UPDATE pc.discoveries SET observed = $2 WHERE id = $1", discovery, observed("contents:write,workflows:write"))
+	f.exec(t, "UPDATE pc.connection_github SET permissions = $2 WHERE connection_id = $1", f.conn, installed("contents:write,workflows:write"))
 	rows = f.refreshFindings(t)
 	if len(rows) != 2 || rows[0].State != "OPEN" || rows[0].Severity != "high" ||
 		!slices.Equal(rows[0].Excess, []string{"workflows:write"}) || rows[1].State != "RESOLVED" {
@@ -96,29 +106,26 @@ func TestF048_CredentialReachBeyondTheNeedIsAFinding(t *testing.T) {
 	if rows := f.refreshFindings(t); len(rows) != 2 || rows[0].State != "DISMISSED" {
 		t.Fatalf("after a refresh: %+v", rows)
 	}
-	f.exec(t, "UPDATE pc.discoveries SET observed = $2 WHERE id = $1", discovery, observed("contents:write,workflows:write,administration:write"))
+	f.exec(t, "UPDATE pc.connection_github SET permissions = $2 WHERE connection_id = $1", f.conn, installed("contents:write,workflows:write,administration:write"))
 	if rows := f.refreshFindings(t); len(rows) != 3 || rows[0].State != "OPEN" || rows[1].State != "RESOLVED" {
 		t.Fatalf("a dismissed finding whose excess grew: %+v", rows)
 	}
 	// The dismissed exposure went away; found again later, it is open again.
-	f.exec(t, "UPDATE pc.discoveries SET observed = $2 WHERE id = $1", discovery, observed("contents:write,workflows:write"))
+	f.exec(t, "UPDATE pc.connection_github SET permissions = $2 WHERE connection_id = $1", f.conn, installed("contents:write,workflows:write"))
 	if rows := f.refreshFindings(t); len(rows) != 3 || rows[1].State != "OPEN" || rows[0].State != "RESOLVED" {
 		t.Fatalf("a dismissed exposure found again: %+v", rows)
 	}
 	if n := f.count(t, `SELECT count(*) FROM pc.ledger_entries WHERE kind = 'audit.coverage.finding_dismissed'`); n != 1 {
 		t.Fatalf("%d audited dismissals", n)
 	}
-	f.exec(t, "UPDATE pc.discoveries SET state = 'DISMISSED' WHERE id = $1", discovery)
-	if rows := f.refreshFindings(t); len(rows) != 3 || rows[1].State != "OPEN" {
-		t.Fatalf("after the discovery was dismissed: %+v", rows)
-	}
 }
 
-// TestF048_TheConnectionsOwnInstallationIsReach: the GitHub App
-// installation behind the connection, as last read (G0 M8 G3), and an
-// installation the GitHub org scan found (source github_scan) are both
-// compared with the need; a GitHub App a person's pclaw scan
-// reports (source scan) is not (N20).
+// TestF048_TheConnectionsOwnInstallationIsReach: only the GitHub App
+// installation behind the connection, as last read (G0 M8 G3), is compared
+// with the need. The org's other Apps that the org scan found (source
+// github_scan, one finding per App on the organization) are routes of their
+// own, not this credential, and a GitHub App a person's pclaw scan reports
+// (source scan) counts for nothing (N20).
 func TestF048_TheConnectionsOwnInstallationIsReach(t *testing.T) {
 	f := newFixture(t)
 	f.grant(t, "payments.refund.create")
@@ -144,12 +151,11 @@ func TestF048_TheConnectionsOwnInstallationIsReach(t *testing.T) {
 	for _, r := range rows {
 		subjects[r.Subject] = r.Excess
 	}
-	if len(rows) != 2 || !slices.Equal(subjects["GitHub App installation 42 on acme"], []string{"administration:write"}) ||
-		!slices.Equal(subjects["GitHub App other"], []string{"secrets:write"}) {
+	if len(rows) != 1 || !slices.Equal(subjects["GitHub App installation 42 on acme"], []string{"administration:write"}) {
 		t.Fatalf("findings %+v", rows)
 	}
 	f.exec(t, `UPDATE pc.connection_github SET permissions = '{"contents": "write"}' WHERE connection_id = $1`, f.conn)
-	if rows := f.refreshFindings(t); len(rows) != 2 || rows[0].State == rows[1].State {
+	if rows := f.refreshFindings(t); len(rows) != 1 || rows[0].State != "RESOLVED" {
 		t.Fatalf("the installation reduced to the need: %+v", rows)
 	}
 }

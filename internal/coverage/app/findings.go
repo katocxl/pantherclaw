@@ -89,13 +89,15 @@ func granted(ctx context.Context, q *dbq.Queries, org ids.OrgID) (func(string) b
 }
 
 // RefreshFindings compares, for one connection, the permissions its
-// credentials actually hold (the GitHub App installation behind it, as
-// last read, and the installations the org scans found for it) with what its package declares the operations the org's
-// grants allow need, and records the excess as credential-overreach
-// findings (F048, decision 9). Used lists the scopes of the operations
-// executed through the connection in the last 30 days. A finding no longer
-// found is resolved; a dismissed one stays dismissed until its excess
-// changes, which makes it a new finding.
+// credential actually holds (the GitHub App installation behind it, as
+// last read into connection_github) with what its package declares the
+// operations the org's grants allow need, and records the excess as
+// credential-overreach findings (F048, decision 9). The org scan's
+// github_app findings are the org's other Apps: routes of their own, never
+// this credential. Used lists the scopes of the operations executed
+// through the connection in the last 30 days. A finding no longer found is
+// resolved, a dismissed one too; a dismissed one stays dismissed while its
+// excess is unchanged.
 func (s *Service) RefreshFindings(ctx context.Context, tx db.TenantTx, connection ids.UUID) error {
 	q := dbq.New(tx)
 	b, err := q.CoverageBinding(ctx, tx.OrgID(), connection)
@@ -119,10 +121,6 @@ func (s *Service) RefreshFindings(ctx context.Context, tx db.TenantTx, connectio
 		executed[op] = true
 	}
 	declared, used, err := declaredScopes(raw, allowed, executed)
-	if err != nil {
-		return err
-	}
-	reach, err := q.CoverageReachOfConnection(ctx, tx.OrgID(), connection.String())
 	if err != nil {
 		return err
 	}
@@ -157,16 +155,6 @@ func (s *Service) RefreshFindings(ctx context.Context, tx db.TenantTx, connectio
 		}
 	case !db.IsNoRows(err):
 		return err
-	}
-	// Other installations the org scans found for the connection.
-	for _, r := range reach {
-		var observed map[string]string
-		if json.Unmarshal(r.Observed, &observed) != nil {
-			continue
-		}
-		if err := find(r.ID.String(), "GitHub App "+observed["app_slug"], domain.ParsePermissions(observed["permissions"])); err != nil {
-			return err
-		}
 	}
 	_, err = q.ResolveCoverageFindings(ctx, dbq.ResolveCoverageFindingsParams{
 		OrgID: tx.OrgID(), Kind: KindOverreach, ConnectionID: &connection, Keep: keep,

@@ -17,7 +17,8 @@ import (
 // TestF450_ScanFindingsAreObservedRoutesOfTheirConnection: an org-scan
 // finding that names one of the org's connections becomes an observed route
 // of every agent of it, once, until it is seen again; a finding naming no
-// connection of the org, or showing no route, is left out; a route no
+// connection of the org, or showing no route, is left out (a workflow
+// shows one when it writes, deploys or runs on default permissions); a route no
 // source showed stays "not observed" in the record. Findings that
 // show no route never hold back the ones after them, however many there
 // are.
@@ -45,6 +46,8 @@ func TestF450_ScanFindingsAreObservedRoutesOfTheirConnection(t *testing.T) {
 		[]byte(`{"kind": "github_workflow", "connection": "`+conn+`", "repo": "acme/app", "path": ".github/workflows/lint.yml"}`))
 	finding(`{"kind": "github_mcp_config", "connection": "` + conn + `", "repo": "acme/app", "path": ".mcp.json"}`)
 	finding(`{"kind": "github_workflow", "connection": "` + conn + `", "repo": "acme/app", "path": ".github/workflows/deploy.yml", "deploys": "true"}`)
+	// A job on the repository's default permissions may write.
+	finding(`{"kind": "github_workflow", "connection": "` + conn + `", "repo": "acme/app", "path": ".github/workflows/agent.yml", "writes": "false", "deploys": "false", "permissions_default": "true"}`)
 	finding(`{"kind": "github_workflow", "connection": "` + conn + `", "repo": "acme/app", "path": ".github/workflows/lint.yml"}`)
 	finding(`{"kind": "github_app", "connection": "` + ids.NewV7().String() + `", "app_slug": "elsewhere"}`)
 	finding(`{"kind": "mcp_server", "name": "local"}`)
@@ -71,10 +74,10 @@ func TestF450_ScanFindingsAreObservedRoutesOfTheirConnection(t *testing.T) {
 	if touched := refresh(); len(touched) != 1 || touched[0] != f.conn {
 		t.Fatalf("touched %v", touched)
 	}
-	if n := f.count(t, `SELECT count(*) FROM pc.coverage_routes WHERE source = 'scan' AND agent_id IS NULL AND observation = 'observed'`); n != 3 {
-		t.Fatalf("%d scan routes, want the MCP configuration, the deploying workflow and the dismissed app", n)
+	if n := f.count(t, `SELECT count(*) FROM pc.coverage_routes WHERE source = 'scan' AND agent_id IS NULL AND observation = 'observed'`); n != 4 {
+		t.Fatalf("%d scan routes, want the MCP configuration, the deploying workflow, the one on default permissions and the dismissed app", n)
 	}
-	if n := f.count(t, `SELECT count(*) FROM pc.coverage_invalidations WHERE kind = 'route' AND detail LIKE '%org scan'`); n != 3 {
+	if n := f.count(t, `SELECT count(*) FROM pc.coverage_invalidations WHERE kind = 'route' AND detail LIKE '%org scan'`); n != 4 {
 		t.Fatalf("%d route changes, want one per new scan route", n)
 	}
 	if touched := refresh(); len(touched) != 0 {

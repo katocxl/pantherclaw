@@ -408,26 +408,14 @@ WHERE t.org_id = sqlc.arg(org_id) AND t.connection_id = sqlc.arg(connection_id)
   AND EXISTS (SELECT 1 FROM pc.execution_attempts a WHERE a.org_id = t.org_id AND a.transaction_id = t.id)
 ORDER BY 1;
 
--- The credentials the org scan found for a connection, with the
--- permissions they actually hold (G0 M8 G5: github_app findings name the
--- connection they were scanned through). UNTRUSTED metadata. Only the
--- gateway's GitHub org scan (source github_scan) reports these kinds; a
--- person's pclaw scan (source scan) cannot (N20). A dismissed discovery
--- still counts: dismissing it does not remove the reach.
--- name: CoverageReachOfConnection :many
-SELECT id, observed FROM pc.discoveries
-WHERE org_id = sqlc.arg(org_id) AND source = 'github_scan'
-  AND observed ->> 'kind' = 'github_app' AND observed ->> 'connection' = sqlc.arg(connection)::text
-ORDER BY id
-LIMIT 500;
-
 -- The org-scan findings that show a route of one of the org's connections
 -- and were not recorded yet, with the route (G0 M8 G5 kinds; UNTRUSTED
 -- metadata, HR-209: they only describe a route, never grant or close one):
 --   - a GitHub App installation is target-side authority beyond the
 --     connection (F449);
---   - a workflow that writes or deploys is an intermediary that can produce
---     the effect (F448);
+--   - a workflow that writes, deploys, or runs a job on the repository's
+--     default permissions (which may write) is an intermediary that can
+--     produce the effect (F448);
 --   - a committed MCP configuration is an MCP server reaching the target
 --     outside the gateway (F444).
 -- Only findings that are recorded are selected, so findings that show no
@@ -452,7 +440,8 @@ SELECT s.id, s.connection_id, s.kind::text AS kind, s.locator::text AS locator F
     JOIN pc.connections c ON c.org_id = d.org_id AND c.id::text = lower(d.observed ->> 'connection')
     WHERE d.org_id = sqlc.arg(org_id) AND d.source = 'github_scan'
       AND d.observed ->> 'kind' IN ('github_app', 'github_workflow', 'github_mcp_config')
-      AND (d.observed ->> 'kind' <> 'github_workflow' OR d.observed ->> 'writes' = 'true' OR d.observed ->> 'deploys' = 'true')
+      AND (d.observed ->> 'kind' <> 'github_workflow' OR d.observed ->> 'writes' = 'true' OR d.observed ->> 'deploys' = 'true'
+           OR d.observed ->> 'permissions_default' = 'true')
       AND NOT EXISTS (SELECT 1 FROM pc.coverage_routes r
                       WHERE r.org_id = d.org_id AND r.source = 'scan' AND r.source_ref = d.id)
 ) s
