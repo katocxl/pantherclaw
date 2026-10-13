@@ -37,6 +37,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/authn/credential"
 	"github.com/katocxl/pantherclaw/internal/authn/token"
 	"github.com/katocxl/pantherclaw/internal/authority"
+	"github.com/katocxl/pantherclaw/internal/authority/adapters/pgauthority"
 	"github.com/katocxl/pantherclaw/internal/billing"
 	"github.com/katocxl/pantherclaw/internal/billing/licence"
 	"github.com/katocxl/pantherclaw/internal/definitions/adapters/packagesrpc"
@@ -222,7 +223,8 @@ func cmdServe(ctx context.Context, args []string, stderr io.Writer, env Env, onS
 		return err
 	}
 
-	svc, err := newAuthority(cfg, pool, reg, kp, log)
+	authorityStore := &pgauthority.Store{Pool: pool, LockTimeout: cfg.Authority.BudgetLockTimeout.D()}
+	svc, err := newAuthority(cfg, pool, reg, kp, authorityStore, log)
 	if err != nil {
 		return err
 	}
@@ -232,6 +234,8 @@ func cmdServe(ctx context.Context, args []string, stderr io.Writer, env Env, onS
 	if err != nil {
 		return err
 	}
+	// A monitor-mode action with an unknown consequence notifies (HR-206).
+	authorityStore.Notify = m5.notifications
 	m6, err := newM6(cfg, pool, reg, m5.notifications, log)
 	if err != nil {
 		return err

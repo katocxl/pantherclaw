@@ -64,6 +64,10 @@ type DecisionPAP struct {
 	// prevented nothing; Connection is the connection the action named.
 	Monitor    bool   `json:"monitor,omitzero"`
 	Connection string `json:"connection,omitzero"`
+	// Would is what an enforce-mode route would have decided about a
+	// monitor-mode action whose consequence is unknown, such as "HOLD:
+	// consequence unknown" (HR-206, founder decision 2026-10-13).
+	Would string `json:"would,omitzero"`
 	// DestinationClass is the connection's class, from its record (HR-079).
 	DestinationClass string `json:"destination_class,omitzero"`
 	// Approval is the approval request this decision consumes and its
@@ -101,6 +105,9 @@ func (a *Authority) receipt(gw Gateway, ev *pipeline.Evaluation, txn ids.UUID, e
 		Basis: ev.Basis, BasisDigest: ev.Basis.Digest(), Identity: ev.Identity, Budgets: budgets, Gateway: gw.ID,
 		Monitor: ev.MonitorPermit(),
 	}
+	if would, _, ok := ev.WouldUnknown(); ok {
+		pap.Would = would
+	}
 	if ev.EffectiveHash != ev.ActionHash {
 		pap.Effective = ev.EffectiveHash
 	}
@@ -134,6 +141,9 @@ func (a *Authority) receipt(gw Gateway, ev *pipeline.Evaluation, txn ids.UUID, e
 	}
 	if pap.Monitor {
 		entry["monitor"] = "true"
+	}
+	if pap.Would != "" {
+		entry["would"] = pap.Would
 	}
 	body, err := evdomain.CanonicalBody(entry)
 	if err != nil {
