@@ -26,8 +26,9 @@ import (
 // project directory. It then enrolls the workload key as the signed-in
 // person when it is not enrolled yet (HR-094: admitted with the fingerprint
 // shown before), and installs the PreToolUse hook that asks the gateway
-// before every Bash and PowerShell command (`pclaw hook claude-code`) in
-// the settings file of the chosen scope.
+// before every command a tool runs in a shell (Bash, PowerShell and
+// Monitor; HR-186) with `pclaw hook claude-code`, in the settings file of
+// the chosen scope.
 //
 // It only adds: it never removes or changes an existing deny rule, hook or
 // server entry, and it never writes a secret (only the gateway's URL, the
@@ -50,6 +51,11 @@ func init() {
 // claudeHookArgs are the hook's arguments before its flags: the command
 // the hook runs is `pclaw hook claude-code`.
 var claudeHookArgs = []string{"hook", "claude-code"}
+
+// shellTools are the tools that run commands in a shell, which PantherClaw's
+// hook decides (HR-186; Monitor added after review, founder decision
+// 2026-10-13). The hook init installs matches them all.
+var shellTools = []string{"Bash", "PowerShell", "Monitor"}
 
 // connectionName is a connection name (ConnectionService).
 var connectionName = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
@@ -122,34 +128,105 @@ func readSettings(scope, path string) (claudeSettings, error) {
 }
 
 // hookRuns reports whether a settings document runs PantherClaw's hook
-// before Bash and PowerShell: `pclaw hook claude-code`, failing closed
-// (onFailure "block"). A pclaw hook that lets a command through when it
-// cannot run, or that runs another pclaw command, is not PantherClaw's
-// hook, so init adds its own beside it.
+// (pantherClawHook) before every tool in shellTools, in hook groups whose
+// matchers name those tools exactly or match every tool. A pclaw hook that
+// lets a command through when it cannot run, that runs another pclaw
+// command or more than the hook's in a shell, or that leaves out one of
+// those tools (Monitor, or Bash under a matcher naming BashOutput) is not
+// PantherClaw's hook, so init adds its own beside it.
 func hookRuns(doc *jsonNode) bool {
+	covered := map[string]bool{}
 	for _, group := range doc.get("hooks").get("PreToolUse").itemsOf() {
-		m := group.get("matcher").str()
-		if m != "" && m != "*" && (!strings.Contains(m, "Bash") || !strings.Contains(m, "PowerShell")) {
+		if !slices.ContainsFunc(group.get("hooks").itemsOf(), pantherClawHook) {
 			continue
 		}
-		for _, h := range group.get("hooks").itemsOf() {
-			if h.get("onFailure").str() != "block" {
-				continue
-			}
-			args := h.get("args").itemsOf()
-			command := h.get("command").str()
-			shell := strings.Join(append([]string{"pclaw"}, claudeHookArgs...), " ")
-			switch {
-			case filepath.Base(command) == "pclaw" || filepath.Base(command) == "pclaw.exe":
-				if len(args) >= 2 && args[0].str() == claudeHookArgs[0] && args[1].str() == claudeHookArgs[1] {
-					return true
-				}
-			case command == shell || strings.HasPrefix(command, shell+" "):
-				return true
-			}
+		tools, all := matched(group.get("matcher"))
+		if all {
+			return true
+		}
+		for _, tool := range tools {
+			covered[tool] = true
 		}
 	}
-	return false
+	return !slices.ContainsFunc(shellTools, func(tool string) bool { return !covered[tool] })
+}
+
+// toolNames is a matcher Claude Code compares with tool names as they are,
+// not as a regular expression: names joined by |, nothing else.
+var toolNames = regexp.MustCompile(`^[A-Za-z0-9_]+(\|[A-Za-z0-9_]+)*$`)
+
+// matched is what a hook group's matcher matches: every tool when it is
+// missing, empty or *, or the tools it names. A matcher init cannot read
+// for certain (not a string, or a regular expression, where " Bash" is
+// not Bash) matches nothing here, so init adds its own hook beside it.
+func matched(m *jsonNode) (tools []string, all bool) {
+	if m == nil {
+		return nil, true
+	}
+	if m.kind != 0 || m.raw.Kind() != '"' {
+		return nil, false
+	}
+	switch s := m.str(); {
+	case s == "" || s == "*":
+		return nil, true
+	case toolNames.MatchString(s):
+		return strings.Split(s, "|"), false
+	}
+	return nil, false
+}
+
+// pantherClawHook reports whether a hook runs `pclaw hook claude-code` and
+// blocks the call when it cannot run (onFailure "block"): in exec form
+// (command pclaw, args hook claude-code and its flags), or as a shell
+// command that is the hook's command and flags and nothing else, so that
+// nothing in it (|| true, ; true, a redirection) can change what the
+// hook's exit code says.
+func pantherClawHook(h *jsonNode) bool {
+	if h.get("type").str() != "command" || h.get("onFailure").str() != "block" {
+		return false
+	}
+	command, args := h.get("command").str(), h.get("args").itemsOf()
+	if base := filepath.Base(command); base == "pclaw" || base == "pclaw.exe" {
+		return len(args) >= 2 && args[0].str() == claudeHookArgs[0] && args[1].str() == claudeHookArgs[1]
+	}
+	return hookShellCommand(command)
+}
+
+// hookFlags are the flags `pclaw hook claude-code` defines; each takes a
+// value.
+var hookFlags = []string{"gateway", "connection", "key-file", "run", "token-file"}
+
+// shellWord is a word no shell splits, expands or reads as an operator,
+// redirection or quote. A path with a backslash is not one, so a Windows
+// path in a shell-form hook makes init add its own hook, in exec form.
+var shellWord = regexp.MustCompile(`^[A-Za-z0-9_./:@+,=-]+$`)
+
+// hookShellCommand reports whether a shell command is exactly
+// `pclaw hook claude-code`, optionally followed by the hook's flags with
+// their values (--connection shell, --run=ID), words separated by spaces.
+func hookShellCommand(command string) bool {
+	words := slices.DeleteFunc(strings.Split(command, " "), func(w string) bool { return w == "" })
+	head := append([]string{"pclaw"}, claudeHookArgs...)
+	if len(words) < len(head) || !slices.Equal(words[:len(head)], head) {
+		return false
+	}
+	for rest := words[len(head):]; len(rest) > 0; {
+		word := rest[0]
+		name, value, inline := strings.Cut(strings.TrimPrefix(strings.TrimPrefix(word, "-"), "-"), "=")
+		if !strings.HasPrefix(word, "-") || !slices.Contains(hookFlags, name) {
+			return false
+		}
+		if rest = rest[1:]; !inline {
+			if len(rest) == 0 {
+				return false
+			}
+			value, rest = rest[0], rest[1:]
+		}
+		if !shellWord.MatchString(value) {
+			return false
+		}
+	}
+	return true
 }
 
 // counts summarizes a settings document for the report.
@@ -234,10 +311,15 @@ func claudeInit(ctx context.Context, a *app, args []string) error {
 	var settings []claudeSettings
 	for _, scope := range []string{"user", "project", "local"} {
 		s, err := readSettings(scope, files[scope])
-		if err != nil && scope == f.scope {
+		switch {
+		case err != nil && scope == f.scope:
 			return err
-		} else if err != nil {
-			_, _ = fmt.Fprintf(a.stdout, "warning: %v\n", err)
+		case err != nil:
+			// Claude Code may read what pclaw does not (with two members of
+			// one name it takes the last), so this file's disableAllHooks
+			// could keep the hook from running, and init cannot tell.
+			return &exitError{code: 1, msg: "pclaw init: " + err.Error() + ". Claude Code may still apply that file's settings, disableAllHooks " +
+				"among them, which would keep the hook from running, so init changes nothing: fix the file and run pclaw init again"}
 		}
 		settings = append(settings, s)
 	}
@@ -289,7 +371,7 @@ func (f initFlags) hookEntry() (*jsonNode, error) {
 		args = append(args, "--run", f.run)
 	}
 	entry := jsonFields("type", "command", "command", "pclaw", "args", args, "timeout", 10, "onFailure", "block")
-	return jsonFields("matcher", "Bash|PowerShell", "hooks", &jsonNode{kind: '[', items: []*jsonNode{entry}}), nil
+	return jsonFields("matcher", strings.Join(shellTools, "|"), "hooks", &jsonNode{kind: '[', items: []*jsonNode{entry}}), nil
 }
 
 // hookBlocked says why the hook would not run: managed settings that allow
