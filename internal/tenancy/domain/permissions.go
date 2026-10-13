@@ -167,6 +167,11 @@ const (
 	// PermGatewayFactsReport: gateways only, report a connection's facts as
 	// its registered provider (G0 M8 decision 5, HR-160).
 	PermGatewayFactsReport Permission = "gateway.facts.report"
+	// PermGitHubIdentityManage links people to GitHub user ids, which
+	// independence compares (G0 M8, HR-207). Org Admin holds it, and Org
+	// Admin stays bindable to service accounts, so it is not in humanOnly:
+	// the identity service refuses any caller but a person itself.
+	PermGitHubIdentityManage Permission = "github.identity.manage"
 )
 
 // Workload permissions are held only by PAP/1-authenticated workloads
@@ -206,7 +211,7 @@ var catalog = []Permission{
 	PermGatewayRead, PermGatewayManage, PermConnectionRead, PermConnectionManage, PermCredentialSeal,
 	PermContainmentRead, PermContainmentKillSwitch,
 	PermEvidenceRead, PermEvidenceExport, PermEvidenceRetentionManage, PermEvidenceCaptureManage,
-	PermTransactionReconcile,
+	PermTransactionReconcile, PermGitHubIdentityManage,
 }
 
 // humanOnly permissions can never be exercised by a service account or an

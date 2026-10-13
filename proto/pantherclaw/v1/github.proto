@@ -31,3 +31,85 @@ message GitHubInstallation {
   // When the permissions and selection were read.
   google.protobuf.Timestamp read_time = 7;
 }
+
+// GitHubService links the org's people to their GitHub accounts (G0 M8,
+// HR-207): independence then excludes, by GitHub user id, everyone who
+// authored, committed or pushed to a pull request from reviewing it.
+service GitHubService {
+  // LinkIdentity links a person of the org to a GitHub user id. A GitHub
+  // user id links to one person; the link is audited.
+  // permission: github.identity.manage
+  rpc LinkIdentity(LinkIdentityRequest) returns (LinkIdentityResponse);
+  // UnlinkIdentity removes a link; audited.
+  // permission: github.identity.manage
+  rpc UnlinkIdentity(UnlinkIdentityRequest) returns (UnlinkIdentityResponse);
+  // ListIdentities lists the links, of one person or of everyone.
+  // permission: user.read
+  rpc ListIdentities(ListIdentitiesRequest) returns (ListIdentitiesResponse);
+}
+
+// GitHubIdentity is one person's link to a GitHub account.
+message GitHubIdentity {
+  // Link id.
+  string id = 1;
+  // The person.
+  string user_id = 2;
+  // The GitHub login, as it was when linked (logins can change; the id
+  // cannot).
+  string github_login = 3;
+  // The GitHub user id: what independence compares.
+  int64 github_user_id = 4;
+  // Who linked it.
+  string linked_by = 5;
+  // When.
+  google.protobuf.Timestamp link_time = 6;
+}
+
+// LinkIdentityRequest links a person to a GitHub account.
+message LinkIdentityRequest {
+  // The person.
+  string user_id = 1 [(buf.validate.field).string.uuid = true];
+  // The GitHub login.
+  string github_login = 2 [(buf.validate.field).string.pattern = "^[A-Za-z0-9][A-Za-z0-9-]{0,38}$"];
+  // The GitHub user id.
+  int64 github_user_id = 3 [(buf.validate.field).int64.gt = 0];
+}
+
+// LinkIdentityResponse returns the link.
+message LinkIdentityResponse {
+  // The link.
+  GitHubIdentity identity = 1;
+}
+
+// UnlinkIdentityRequest names a link.
+message UnlinkIdentityRequest {
+  // Link id.
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// UnlinkIdentityResponse is empty.
+message UnlinkIdentityResponse {}
+
+// ListIdentitiesRequest pages through the links.
+message ListIdentitiesRequest {
+  // Only this person's, when set.
+  string user_id = 1 [
+    (buf.validate.field).string.uuid = true,
+    (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE
+  ];
+  // Page size (default 50, at most 200).
+  int32 page_size = 2 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 200
+  }];
+  // Page token from the previous page.
+  string page_token = 3 [(buf.validate.field).string.max_len = 512];
+}
+
+// ListIdentitiesResponse returns a page of links.
+message ListIdentitiesResponse {
+  // The links, oldest first.
+  repeated GitHubIdentity identities = 1;
+  // Token of the next page; empty on the last.
+  string next_page_token = 2;
+}
