@@ -8,6 +8,8 @@ import (
 	"errors"
 	"strings"
 	"testing"
+
+	"github.com/katocxl/pantherclaw/internal/platform/ids"
 )
 
 // TestObjectFacts: an object fact keeps its members (strings, integers,
@@ -46,5 +48,32 @@ func TestObjectFacts(t *testing.T) {
 	// A scalar fact keeps the 1 KiB limit.
 	if _, err := DecodeValue(TypeIdentifier, jsontext.Value(`{"id":"`+strings.Repeat("a", 2000)+`"}`)); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("a long identifier: %v", err)
+	}
+}
+
+// TestProviderSources: a provider is bound to exactly one of a service
+// account or a gateway and one of its connections.
+func TestProviderSources(t *testing.T) {
+	base := Provider{
+		ID: ids.NewV7(), Org: ids.New[ids.Org](), Name: "github", State: ProviderActive,
+		Facts: []Declaration{{Name: "github.pull.head", Type: TypeObject, SubjectType: "github.pull_request", MaxLag: 30e9}},
+	}
+	sa, gw, conn := ids.NewV7(), ids.NewV7(), ids.NewV7()
+	for name, c := range map[string]struct {
+		sa, gw, conn ids.UUID
+		ok           bool
+	}{
+		"service account":            {sa: sa, ok: true},
+		"gateway and connection":     {gw: gw, conn: conn, ok: true},
+		"neither":                    {},
+		"both":                       {sa: sa, gw: gw, conn: conn},
+		"gateway without connection": {gw: gw},
+		"connection without gateway": {conn: conn},
+	} {
+		p := base
+		p.ServiceAccountID, p.GatewayID, p.ConnectionID = c.sa, c.gw, c.conn
+		if err := p.Validate(nil); (err == nil) != c.ok {
+			t.Errorf("%s: %v", name, err)
+		}
 	}
 }

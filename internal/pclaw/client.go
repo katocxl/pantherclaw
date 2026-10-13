@@ -123,6 +123,7 @@ type clients struct {
 	m6Clients
 	m5p2Clients
 	m7Clients
+	m8gClients
 	m8pClients
 }
 
@@ -159,6 +160,7 @@ func (a *app) clients() (clients, error) {
 			reconciliations: pantherclawv1connect.NewReconciliationServiceClient(c),
 			evidence:        pantherclawv1connect.NewEvidenceServiceClient(c),
 		},
+		m8gClients: m8gClients{github: pantherclawv1connect.NewGitHubServiceClient(c)},
 	}, nil
 }
 

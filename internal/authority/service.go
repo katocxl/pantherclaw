@@ -184,6 +184,9 @@ const (
 // Execution describes one dispatch attempt.
 type Execution = finalize.Execution
 
+// Access is what a dispatch's minted credential allowed (ADR-0021 item 5).
+type Access = finalize.Access
+
 // RecordExecution records the outcome of a DISPATCHING permit: accepted
 // commits every reservation, failed releases them, unknown keeps them held
 // and leaves the permit UNKNOWN for reconciliation (HR-003). It returns the

@@ -243,6 +243,20 @@ type Execution struct {
 	// empty when there was none. The store keeps it only when it matches
 	// the verifier read's target pattern.
 	TargetRef string
+	// Access is what the dispatch's minted credential allowed (G0 M8,
+	// ADR-0021 item 5); nil for a credential placed as sealed, or none.
+	Access *Access
+}
+
+// Access is what a GitHub App installation token allowed: the
+// installation, the repository, the permissions requested and granted,
+// when it expires and whether it was revoked. Never the token.
+type Access struct {
+	Installation, RepositoryID int64
+	Repository                 string
+	Requested, Granted         map[string]string
+	Expires                    time.Time
+	Revocation                 string
 }
 
 // executionReceipt signs what the gateway (or, for a dispatch that never
@@ -273,6 +287,19 @@ func (a *Authority) executionReceipt(gw Gateway, e Execution, x Executed, now ti
 	}
 	if x.TargetRef != "" {
 		pap["target_ref"] = x.TargetRef
+	}
+	if a := e.Access; a != nil {
+		access := map[string]any{
+			"installation": a.Installation, "repository": a.Repository, "requested": a.Requested, "granted": a.Granted,
+			"revocation": a.Revocation,
+		}
+		if a.RepositoryID > 0 {
+			access["repository_id"] = a.RepositoryID
+		}
+		if !a.Expires.IsZero() {
+			access["expires_at"] = a.Expires.UTC().Format(time.RFC3339)
+		}
+		pap["access"] = access
 	}
 	payload, err := json.Marshal(map[string]any{"iss": a.issuer(), "jti": e.Permit.String(), "iat": now.Unix(), "pap": pap}, json.Deterministic(true))
 	if err != nil {

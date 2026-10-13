@@ -197,6 +197,7 @@ func (h *Handler) RecordExecution(ctx context.Context, req *pantherclawv1.Record
 	receipt, err := h.svc.RecordExecution(ctx, gw, Execution{
 		Permit: id, Outcome: outcome, TargetStatus: req.GetTargetStatus(),
 		ResponseDigest: req.GetResponseDigest(), DispatchMS: req.GetDispatchMs(), TargetRef: req.GetTargetRef(),
+		Access: accessOf(req.GetCredentialAccess()),
 	})
 	if err != nil {
 		return nil, err
@@ -289,4 +290,20 @@ func (h *Handler) ReportUnknownWorkload(ctx context.Context, req *pantherclawv1.
 		out.DiscoveryId = id.String()
 	}
 	return out, nil
+}
+
+// accessOf is what a dispatch's minted credential allowed, as the gateway
+// reported it (ADR-0021 item 5); nil when it reported none.
+func accessOf(a *pantherclawv1.CredentialAccess) *Access {
+	if a == nil {
+		return nil
+	}
+	out := &Access{
+		Installation: a.GetInstallationId(), RepositoryID: a.GetRepositoryId(), Repository: a.GetRepository(),
+		Requested: a.GetRequested(), Granted: a.GetGranted(), Revocation: a.GetRevocation(),
+	}
+	if a.GetExpireTime() != nil { // never the Unix epoch for a missing expiry
+		out.Expires = a.GetExpireTime().AsTime()
+	}
+	return out
 }

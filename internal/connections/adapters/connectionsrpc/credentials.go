@@ -9,6 +9,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	credapp "github.com/katocxl/pantherclaw/internal/credentials/app"
+	creddomain "github.com/katocxl/pantherclaw/internal/credentials/domain"
 	pb "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
 )
 
@@ -52,10 +53,14 @@ func (h *Handler) PutCredential(ctx context.Context, req *pb.PutCredentialReques
 	if err != nil {
 		return nil, err
 	}
-	m, err := h.creds.PutCredential(ctx, credapp.PutInput{
+	in := credapp.PutInput{
 		Connection: id, BrokerKey: key, Version: req.GetVersion(), Sealed: req.GetSealed(), AllowedHosts: req.GetAllowedHosts(),
 		Header: req.GetHeader(), Scheme: req.GetScheme(), Kind: req.GetKind(),
-	})
+	}
+	if gh := req.GetGithub(); gh != nil {
+		in.GitHub = &creddomain.Installation{AppClientID: gh.GetAppClientId(), ID: gh.GetInstallationId(), Account: gh.GetAccountLogin()}
+	}
+	m, err := h.creds.PutCredential(ctx, in)
 	if err != nil {
 		return nil, err
 	}
