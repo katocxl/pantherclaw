@@ -85,6 +85,7 @@ func startGitHubSim(t *testing.T) *githubSim {
 		"contents": "write", "pull_requests": "write", "metadata": "read", "checks": "read", "statuses": "read",
 	}})
 	sim.CreateRepo(ghRepo, "main", map[string]string{"README.md": "# payments\n", ".github/workflows/deploy.yml": deployOnMain})
+	sim.DeployOnPush(ghRepo, "main", "production", time.Hour)
 	srv := httptest.NewServer(sim.Handler())
 	t.Cleanup(srv.Close)
 	return &githubSim{sim: sim, url: srv.URL, key: key, app: ghAppID, installation: ghInstallation, account: ghAccount, repo: ghRepo}
@@ -439,6 +440,15 @@ func TestE2E_M8_CodingToProduction(t *testing.T) {
 		t.Fatalf("pull request %+v", p)
 	}
 	s.eventually(t, "CONFIRMED", "SELECT coalesce(effect_state, '') FROM pc.transactions WHERE id = $1", done.TransactionID)
+	for _, r := range gh.Requests() {
+		if r.Method == http.MethodPut && strings.HasSuffix(r.Path, "/merge") && r.Status == http.StatusOK &&
+			(!slices.Equal(r.Repos, []string{ghRepo}) || r.Installation != ghInstallation || r.Permissions["contents"] != "write" || len(r.Permissions) > 2) {
+			t.Fatalf("the merge's token: %+v", r)
+		}
+	}
+	if d := gh.Deployments(ghRepo); len(d) != 1 || d[0].Environment != "production" || d[0].SHA != gh.Branch(ghRepo, "main") {
+		t.Fatalf("deployments after the merge: %+v", d)
+	}
 
 	// 7. The approval is consumed once: the same request again merges
 	// nothing more, and the task's one merge is spent.
@@ -483,5 +493,13 @@ func TestE2E_M8_CodingToProduction(t *testing.T) {
 	}
 	if p, _ := gh.PullRequest(ghRepo, 3); p.Merged || merges() != 1 {
 		t.Fatal("merged twice in one task")
+	}
+
+	// Every token the gateway minted, for actions and for fact reads, was
+	// revoked after its use (HR-203).
+	for _, tok := range gh.Tokens() {
+		if tok.Installation == ghInstallation && !tok.Revoked {
+			t.Fatalf("a token left valid: %+v", tok)
+		}
 	}
 }
