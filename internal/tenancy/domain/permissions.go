@@ -227,11 +227,10 @@ var catalog = []Permission{
 	PermGatewayRead, PermGatewayManage, PermConnectionRead, PermConnectionManage, PermConnectionTest, PermCredentialSeal,
 	PermContainmentRead, PermContainmentKillSwitch,
 	PermEvidenceRead, PermEvidenceExport, PermEvidenceRetentionManage, PermEvidenceCaptureManage,
-	PermTransactionReconcile,
-	PermCoverageRead, PermCoverageManage, PermCoverageReassess,
-	PermSandboxRun,
 	PermTransactionReconcile, PermGitHubIdentityManage, PermGitHubIdentityProve, PermGitHubScanRun,
 	PermReleaseWindowManage,
+	PermCoverageRead, PermCoverageManage, PermCoverageReassess,
+	PermSandboxRun,
 }
 
 // humanOnly permissions can never be exercised by a service account or an
@@ -242,8 +241,7 @@ var humanOnly = []Permission{
 	PermGrantIssue, PermGuardrailsManage, PermFactProviderManage, PermPackageActivate,
 	PermGatewayManage, PermConnectionManage, PermConnectionTest, PermCredentialSeal, PermContainmentKillSwitch, PermAgentRestore,
 	PermTransactionReconcile, PermEvidenceExport, PermEvidenceRetentionManage, PermEvidenceCaptureManage,
-	PermCoverageManage,
-	PermReleaseWindowManage,
+	PermReleaseWindowManage, PermCoverageManage,
 }
 
 // Catalog returns every grantable permission in a stable order.

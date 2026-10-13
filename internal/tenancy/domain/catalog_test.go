@@ -43,3 +43,15 @@ func TestEveryDeclaredPermissionIsInTheCatalog(t *testing.T) {
 		t.Fatalf("found %d M2 procedures, want ≥ 40", m2)
 	}
 }
+
+// TestTheCatalogNamesEachPermissionOnce: merged permission lists keep no
+// duplicate.
+func TestTheCatalogNamesEachPermissionOnce(t *testing.T) {
+	seen := map[domain.Permission]bool{}
+	for _, p := range domain.Catalog() {
+		if seen[p] {
+			t.Errorf("%s is in the catalog twice", p)
+		}
+		seen[p] = true
+	}
+}
