@@ -295,17 +295,36 @@ func TestHR208_InitRefusesWhatWouldKeepTheHookFromRunning(t *testing.T) {
 
 // TestHR208_InitCountsOnlyAFailClosedPantherClawHook: an existing hook is
 // PantherClaw's only when it runs `pclaw hook claude-code` before Bash,
-// PowerShell and Monitor and blocks the command when it cannot run. Beside
-// a pclaw hook that fails open, runs another command or leaves out Monitor,
+// PowerShell and Monitor and blocks the command when it cannot run; in a
+// shell, only that command and its own flags count, since anything more
+// (|| true, ; true, && x, a redirection) can change what its exit code
+// says. Beside a pclaw hook that fails open, runs another command or more
+// than the hook's, leaves out Monitor or names BashOutput instead of Bash,
 // init adds its own and keeps the other as it was.
 func TestHR208_InitCountsOnlyAFailClosedPantherClawHook(t *testing.T) {
+	const run = "01920000-0000-7000-8000-0000000000f1"
+	shell := func(command string) string {
+		return `{"type": "command", "command": "` + command + `", "onFailure": "block"}`
+	}
+	exec := `{"type": "command", "command": "pclaw", "args": ["hook", "claude-code"], "onFailure": "block"}`
 	for name, tc := range map[string]struct {
 		hook, matcher string
 		installed     bool
 	}{
-		"without Monitor": {
-			hook: `{"type": "command", "command": "pclaw", "args": ["hook", "claude-code"], "onFailure": "block"}`, matcher: "Bash|PowerShell",
+		"without Monitor": {hook: exec, matcher: "Bash|PowerShell"},
+		"BashOutput":      {hook: exec, matcher: "BashOutput|PowerShell|Monitor"},
+		"shell form with its flags": {
+			hook: shell("pclaw hook claude-code --gateway=https://gw.example.test  --connection shell -run " + run), installed: true,
 		},
+		"or true":              {hook: shell("pclaw hook claude-code || true")},
+		"then true":            {hook: shell("pclaw hook claude-code; true")},
+		"and more":             {hook: shell("pclaw hook claude-code --connection shell && x")},
+		"a redirection":        {hook: shell("pclaw hook claude-code --connection shell 2>/dev/null")},
+		"a newline":            {hook: shell(`pclaw hook claude-code --run\ntrue`)},
+		"another flag":         {hook: shell("pclaw hook claude-code --yes")},
+		"a substitution":       {hook: shell("pclaw hook claude-code --connection $(x)")},
+		"a flag with no value": {hook: shell("pclaw hook claude-code --run")},
+		"not a command hook":   {hook: `{"type": "prompt", "command": "pclaw", "args": ["hook", "claude-code"], "onFailure": "block"}`},
 		"fails closed": {
 			hook: `{"type": "command", "command": "/usr/local/bin/pclaw", "args": ["hook", "claude-code"], "onFailure": "block"}`, installed: true,
 		},
@@ -349,7 +368,48 @@ func TestHR208_InitCountsOnlyAFailClosedPantherClawHook(t *testing.T) {
 	}
 }
 
-// TestHR208_InitRefusesHooksTurnedOffInAnotherScope: Claude Code takes
+// TestHR208_TheHookCoversEachShellToolByItsExactName: PantherClaw's hook
+// covers a tool only under a matcher that names it exactly among names
+// joined by |, or that matches every tool (missing, empty or *); Bash,
+// PowerShell and Monitor may be covered by different groups. A name that
+// only contains one (BashOutput), names with spaces, a regular expression
+// and a matcher that is not a string cover nothing, and a group whose
+// pclaw hook fails open covers nothing either.
+func TestHR208_TheHookCoversEachShellToolByItsExactName(t *testing.T) {
+	const closed = `[{"type": "command", "command": "pclaw", "args": ["hook", "claude-code"], "onFailure": "block"}]`
+	const open = `[{"type": "command", "command": "pclaw", "args": ["hook", "claude-code"]}]`
+	group := func(matcher, hooks string) string { return `{` + matcher + `"hooks": ` + hooks + `}` }
+	for name, tc := range map[string]struct {
+		groups []string
+		runs   bool
+	}{
+		"no matcher":       {[]string{group(``, closed)}, true},
+		"an empty matcher": {[]string{group(`"matcher": "", `, closed)}, true},
+		"every tool":       {[]string{group(`"matcher": "*", `, closed)}, true},
+		"the three":        {[]string{group(`"matcher": "Monitor|Bash|PowerShell", `, closed)}, true},
+		"in two groups":    {[]string{group(`"matcher": "Bash|PowerShell", `, closed), group(`"matcher": "Monitor", `, closed)}, true},
+		"BashOutput":       {[]string{group(`"matcher": "BashOutput|PowerShell|Monitor", `, closed)}, false},
+		"MonitorX":         {[]string{group(`"matcher": "Bash|PowerShell|MonitorX", `, closed)}, false},
+		"spaces":           {[]string{group(`"matcher": "Bash | PowerShell | Monitor", `, closed)}, false},
+		"a regular expression": {
+			[]string{group(`"matcher": "Bash|PowerShell|Monitor|mcp__.*", `, closed)}, false,
+		},
+		"not a string": {[]string{group(`"matcher": ["Bash", "PowerShell", "Monitor"], `, closed)}, false},
+		"one group fails open": {
+			[]string{group(`"matcher": "Bash|PowerShell", `, closed), group(`"matcher": "Monitor", `, open)}, false,
+		},
+	} {
+		doc, err := parseJSONDoc([]byte(`{"hooks": {"PreToolUse": [` + strings.Join(tc.groups, ", ") + `]}}`))
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		if got := hookRuns(doc); got != tc.runs {
+			t.Errorf("%s: hookRuns = %v", name, got)
+		}
+	}
+}
+
+// TestHR208_InitRefusesHooksTurnedOffInAnotherScope:Claude Code takes
 // disableAllHooks from the first settings file that sets it (managed,
 // local, project, user), so a file of another scope that turns every hook
 // off fails init and changes nothing, unless a file Claude Code prefers to
