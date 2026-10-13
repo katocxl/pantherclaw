@@ -274,8 +274,12 @@ func accessOf(a *pantherclawv1.CredentialAccess) *Access {
 	if a == nil {
 		return nil
 	}
-	return &Access{
+	out := &Access{
 		Installation: a.GetInstallationId(), RepositoryID: a.GetRepositoryId(), Repository: a.GetRepository(),
-		Requested: a.GetRequested(), Granted: a.GetGranted(), Expires: a.GetExpireTime().AsTime(), Revocation: a.GetRevocation(),
+		Requested: a.GetRequested(), Granted: a.GetGranted(), Revocation: a.GetRevocation(),
 	}
+	if a.GetExpireTime() != nil { // never the Unix epoch for a missing expiry
+		out.Expires = a.GetExpireTime().AsTime()
+	}
+	return out
 }

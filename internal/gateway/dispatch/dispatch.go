@@ -606,8 +606,16 @@ func (e *Engine) send(ctx context.Context, r Result, conn *control.Connection, d
 			e.log.WarnContext(ctx, "gateway.credential_unavailable", slog.String("transaction_id", want.Txn),
 				slog.String("connection_id", conn.GetId()), pclog.Err(err))
 			code := CodeCredential
-			if errors.Is(err, broker.ErrScopeMismatch) {
+			var granted func(*pb.RecordExecutionRequest)
+			if sm := (*broker.ScopeMismatch)(nil); errors.As(err, &sm) {
+				// What GitHub granted and whether it was revoked go on the
+				// refused dispatch's receipt (ADR-0021 items 3 and 6).
+				code, granted = CodeScopeMismatch, func(req *pb.RecordExecutionRequest) { req.CredentialAccess = accessOf(sm.Access) }
+			} else if errors.Is(err, broker.ErrScopeMismatch) {
 				code = CodeScopeMismatch
+			}
+			if granted != nil {
+				return e.record(ctx, r, want, pb.Outcome_OUTCOME_FAILED, 0, nil, 0, EnforcementFailed, code, t, granted)
 			}
 			return e.record(ctx, r, want, pb.Outcome_OUTCOME_FAILED, 0, nil, 0, EnforcementFailed, code, t)
 		}

@@ -273,3 +273,31 @@ func TestHR203_AnAppWithoutARecordedInstallationIsRefused(t *testing.T) {
 		t.Fatalf("%d decisions, %d GitHub requests", n, len(w.sim.Requests()))
 	}
 }
+
+// TestHR203_AWiderGrantIsRefusedWithItsAccess: a token GitHub grants wider
+// than the operation declares is revoked and nothing is sent
+// (credential_scope_mismatch), and the refused dispatch's record says what
+// GitHub granted and that it was revoked (ADR-0021 items 3, 5 and 6).
+func TestHR203_AWiderGrantIsRefusedWithItsAccess(t *testing.T) {
+	w := newGitHubWorld(t)
+	h := setup(t, withGitHubApp(t, w))
+	w.sim.SetFaults(github.Faults{WiderGrant: true})
+	r := h.do(t, http.MethodGet, "/payments/repos/acme/payments/contents/README.md", "", nil)
+	if r.refusal.Error != "credential_scope_mismatch" {
+		t.Fatalf("a wider grant: %d %+v", r.code, r.refusal)
+	}
+	recs := h.auth.snap().records
+	if len(recs) != 1 || recs[0].GetOutcome() != pb.Outcome_OUTCOME_FAILED {
+		t.Fatalf("records %v", recs)
+	}
+	a := recs[0].GetCredentialAccess()
+	if a == nil || a.GetRevocation() != "revoked" || !maps.Equal(a.GetRequested(), map[string]string{"contents": "read"}) ||
+		a.GetGranted()["contents"] != "write" {
+		t.Fatalf("access of the refused grant %+v", a)
+	}
+	for _, tok := range w.sim.Tokens() {
+		if !tok.Revoked || tok.Uses != 0 {
+			t.Fatalf("token %+v", tok)
+		}
+	}
+}
