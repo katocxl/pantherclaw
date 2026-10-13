@@ -4,7 +4,7 @@
 
 ## The Claude Code plugin (M6)
 
-The plugin adds a `PreToolUse` hook for **Bash and PowerShell** commands ([hooks/hooks.json](hooks/hooks.json)). For each command, Claude Code runs `pclaw hook claude-code`, which:
+The plugin adds a `PreToolUse` hook for every command a tool runs in a shell: **Bash, PowerShell and Monitor** (matcher `Bash|PowerShell|Monitor`, [hooks/hooks.json](hooks/hooks.json); Monitor added after review, founder decision 2026-10-13, HR-186). A Monitor call without a command, such as its WebSocket form, is blocked. For each command, Claude Code runs `pclaw hook claude-code`, which:
 - signs a request with your desktop workload key;
 - asks your PantherClaw gateway's `/hook/{connection}` (G0 M6 design decision 16);
 - answers.
@@ -42,16 +42,16 @@ pclaw init --gateway https://gateway.example.com --connection shell --key-file ~
 
 `pclaw init`:
 - reports the Claude Code settings it finds (user, project, local and managed), the MCP servers that go around PantherClaw, and agent-framework projects;
-- when the key file is not an enrolled workload key, creates it (mode 0600) and enrolls it as `--agent`, signed in as you: an enrollment token is issued to you and used at once, never written, and the instance is admitted with the key fingerprint it showed you (HR-094). `--yes` asks nothing, so it also needs `--fingerprint` with the fingerprint you checked: create the key first with `pclaw workload init --key-file FILE`, which shows it. A key file other users can read is refused;
+- when the key file is not an enrolled workload key, creates it (mode 0600) and enrolls it as `--agent`, signed in as you: an enrollment token is issued to you and used at once, never written, and the instance is admitted with the key fingerprint it showed you (HR-094). `--yes` asks nothing, so it also needs `--fingerprint` with the fingerprint you checked: create the key first with `pclaw workload init --key-file FILE`, which shows it. A key file other users can read is refused: on Windows, one whose owner or permissions let in anyone but you, SYSTEM and Administrators, including through entries inherited from its folder (init says how to remove them);
 - adds the same hook, in exec form with `onFailure: "block"`, to `.claude/settings.local.json`. Choose another file with `--scope project` or `--scope user`; `CLAUDE_CONFIG_DIR` moves the user one.
 
 It only adds (HR-208):
 - every existing deny rule, hook and member stays, in its order;
-- the diff is shown, with each value under `env` and `headers` as `<redacted>`, and nothing changes until you confirm, or pass `--yes`; `--dry-run` changes nothing;
+- the diff is shown with what may be a credential as `<redacted>` (each value under `env` and `headers`; in `args`, the value of a flag or variable whose name looks secret, as in `--api-key VALUE`, `--token=VALUE` or `GITHUB_TOKEN=VALUE`; and a URL's user information, query and fragment), and nothing changes until you confirm, or pass `--yes`; `--dry-run` changes nothing;
 - each file is backed up and replaced through a temporary file (a linked file where it points, keeping the link); a file that changed after init read it (Claude Code rewrites its settings while it runs) is left as it is, and init asks you to run it again;
 - no secret is written, only the gateway URL, the connection, the key file's path and the run.
 
-It fails without changing anything when settings would keep the hook from running: managed settings with `allowManagedHooksOnly` and without the hook, or with `disableAllHooks`; or `disableAllHooks` in the file it would change, or in any other settings file whose value Claude Code applies (it takes the setting from managed, then local, project and user settings). Running it again changes nothing.
+It fails without changing anything when settings would keep the hook from running: managed settings with `allowManagedHooksOnly` and without the hook, or with `disableAllHooks`; or `disableAllHooks` in the file it would change, or in any other settings file whose value Claude Code applies (it takes the setting from managed, then local, project and user settings); or when a settings file of any scope cannot be parsed, since Claude Code may still apply it (given a name twice, it takes the last). Running it again changes nothing.
 
 **Governing an MCP server.** `--mcp NAME=CONNECTION` (repeatable) governs Claude Code's MCP server `NAME` through the gateway connection `CONNECTION`. `NAME` must be exactly the name of a server configured for Claude Code in `~/.claude.json` or the project's `.mcp.json`, or `init` fails without changing anything:
 - the original entry stays exactly as it is;
@@ -63,7 +63,7 @@ Credentials in an MCP server's configuration (a token in its `env`, for example)
 
 **Agent SDK projects.** For a project that depends on `@anthropic-ai/claude-agent-sdk` or `claude-agent-sdk`, `init` prints the integration snippet for its code and never writes code.
 
-With the plugin loaded and PantherClaw unreachable or not configured, **every** Bash and PowerShell command is blocked. That is the point. So dogfooding on the PantherClaw repository stays opt-in per developer, and parallel sessions without a local stack keep working (decision 4).
+With the plugin loaded and PantherClaw unreachable or not configured, **every** Bash, PowerShell and Monitor command is blocked. That is the point. So dogfooding on the PantherClaw repository stays opt-in per developer, and parallel sessions without a local stack keep working (decision 4).
 
 ## The Claude Agent SDK (M8)
 
