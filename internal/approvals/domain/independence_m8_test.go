@@ -16,8 +16,9 @@ import (
 // the GitHub users it lists (the pull request's author, committers and
 // pushers); someone else counts only when they hold a GitHub link they
 // proved by signing in to GitHub (P2f), and when the fact could not list
-// everyone, nobody counts. A requirement that is not independent is
-// unaffected.
+// everyone, nobody counts. A requirement that names the fact excludes them
+// whether or not it is independent (founder decision 2026-10-13); one that
+// names no fact is unaffected.
 func TestHR207_IndependenceExcludesThePullRequestsPeople(t *testing.T) {
 	r := approver(1, true)
 	r.IndependentOf = "github.pull.people"
@@ -39,10 +40,13 @@ func TestHR207_IndependenceExcludesThePullRequestsPeople(t *testing.T) {
 	ok, code = domain.Check(r, other, c, ids.UUID{})
 	wantCode(t, "authorship not read", ok, code, domain.IneligibleAuthorshipUnknown)
 
+	c.Authorship = map[string]domain.Authorship{"github.pull.people": {Users: []ids.UUID{author.UserID}, Complete: true}}
 	plain := approver(1, false)
 	plain.IndependentOf = "github.pull.people"
 	ok, code = domain.Check(plain, author, c, ids.UUID{})
-	wantCode(t, "a requirement that is not independent", ok, code, "")
+	wantCode(t, "a requirement that is not independent but names the fact", ok, code, domain.IneligibleAuthor)
+	ok, code = domain.Check(approver(1, false), author, c, ids.UUID{})
+	wantCode(t, "a requirement that names no fact", ok, code, "")
 }
 
 // TestHR207_TheReviewerAndTheReleaseApproverAreTwoPeople (design decision
