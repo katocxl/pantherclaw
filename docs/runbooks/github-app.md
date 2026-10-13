@@ -25,6 +25,7 @@ The agent never holds a GitHub credential. Tokens are never cached between actio
    | Pull requests | read | `github.pull.read` (also the merge verifier); the fact reads of a pull request, its commits, files and reviews |
    | Pull requests | write | `github.pull.create` |
    | Checks | read | the fact read of a pull request's check runs |
+   | Commit statuses | read | the fact read of a pull request's commit statuses |
    | Administration | write | `github.repo.settings.update` only; leave it off unless you allow it |
 
    Never grant **Workflows**: no operation declares it, and `github.contents.write` refuses `.github/` paths.
@@ -48,7 +49,7 @@ pclaw seal --connection <connection id> --github-app <client id> --installation 
 
 ## 3. Register the gateway as the connection's fact provider
 
-Before it decides a merge, a contents write or a branch creation, PantherClaw needs facts that only GitHub knows. These are the pull request's head, its people, reviews and checks, the base branch's rules, and whether the push would start a deployment ([G0 M8](../g0/M8.md) decision 5, HR-160, HR-206). The gateway that holds the App reads them just before each such decision, with a read-only token of its own (`metadata`, `contents`, `pull_requests` and `checks`, all `read`). The token is revoked after the read, and the gateway reports the facts as the connection's provider. Register it once:
+Before it decides a merge, a contents write or a branch creation, PantherClaw needs facts that only GitHub knows. These are the pull request's head, its people, reviews and checks, the base branch's rules, and whether the push would start a deployment ([G0 M8](../g0/M8.md) decision 5, HR-160, HR-206). The gateway that holds the App reads them just before each such decision, with a read-only token of its own (`metadata`, `contents`, `pull_requests`, `checks` and `statuses`, all `read`). The token is revoked after the read, and the gateway reports the facts as the connection's provider. Register it once:
 
 ```bash
 pclaw fact-provider register --name github --gateway <gateway id> --connection <connection id> \
@@ -92,6 +93,6 @@ pclaw github identity unlink <link id>
 | Every action `credential_unavailable` | The App was uninstalled, the key was deleted on GitHub, or the gateway cannot reach `api.github.com` | Check the installation; seal a new key; check the gateway's egress allow-list |
 | One operation refused | The App lacks the permission its definition declares | Grant it on GitHub (the owner approves the new permission), or leave the operation refused |
 | `gateway.installation_token_not_revoked` in the gateway log | Revocation failed after a dispatch or a fact read | The token expires within an hour. Look for GitHub availability problems; nothing else is needed |
-| Merges `CANNOT_AUTHORIZE`, `gateway.facts_unavailable` in the gateway log | The fact token was refused: the App lacks Checks, Contents or Pull requests read | Grant the read permissions in section 1 |
+| Merges `CANNOT_AUTHORIZE`, `gateway.facts_unavailable` in the gateway log | The fact token was refused: the App lacks Checks, Commit statuses, Contents or Pull requests read | Grant the read permissions in section 1 |
 | `gateway.facts_not_reported` in the gateway log | The gateway is not the connection's registered fact provider, or a fact is not declared | Register it as in section 3 |
 | Merges `AUTHORSHIP_UNKNOWN` | `github.pull.people` is incomplete: a fork, more than 100 commits or pushes, or the activity feed could not be read | Expected for forks. Otherwise check that the App can read the repository's activity (Metadata read) |
