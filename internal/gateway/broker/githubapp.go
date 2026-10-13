@@ -51,6 +51,23 @@ var (
 	ErrScopeMismatch = errors.New("broker: GitHub granted a wider token than requested")
 )
 
+// ScopeMismatchError is the error of a wider grant (errors.Is ErrScopeMismatch).
+// It carries what GitHub granted and whether the token was revoked, for
+// the execution receipt of the refused dispatch.
+type ScopeMismatchError struct{ Access Access }
+
+func (e *ScopeMismatchError) Error() string { return ErrScopeMismatch.Error() }
+
+// Is makes errors.Is(err, ErrScopeMismatch) hold.
+func (e *ScopeMismatchError) Is(target error) bool { return target == ErrScopeMismatch }
+
+// mismatch revokes a token GitHub granted too widely and returns the
+// error that carries its access.
+func (t *Installation) mismatch(ctx context.Context, s Sender) error {
+	_ = t.Revoke(ctx, s) // the receipt says whether it was; it expires within the hour anyway
+	return &ScopeMismatchError{Access: t.access}
+}
+
 // Sender sends requests to the connection's host only: the connection's
 // egress client (HR-070..074).
 type Sender interface {
@@ -62,10 +79,27 @@ type Sender interface {
 // it at GitHub and clears it. It lives for one action and is never cached
 // or returned to the agent (HR-203).
 type Installation struct {
-	token []byte
-	base  *url.URL
-	hosts []string
+	token  []byte
+	base   *url.URL
+	hosts  []string
+	access Access
 }
+
+// Access is what an installation token allowed, for the execution receipt
+// (ADR-0021 item 5): never the token.
+type Access struct {
+	Installation       int64
+	Repository         string
+	RepositoryID       int64
+	Requested, Granted map[string]string
+	Expires            time.Time
+	// Revocation is "revoked" or "revoke_failed" once Revoke ran; empty
+	// before.
+	Revocation string
+}
+
+// Access is what the token allowed, and whether it was revoked.
+func (t *Installation) Access() Access { return t.access }
 
 // Token is the token's bytes, which a caller scrubs from what goes back to
 // the agent; they are cleared by Revoke.
@@ -110,7 +144,9 @@ func MintInstallationToken(ctx context.Context, s Sender, baseURL string, hosts 
 	var out struct {
 		Token        string            `json:"token"`
 		Permissions  map[string]string `json:"permissions"`
+		ExpiresAt    time.Time         `json:"expires_at"`
 		Repositories []struct {
+			ID       int64  `json:"id"`
 			FullName string `json:"full_name"`
 		} `json:"repositories"`
 	}
@@ -119,14 +155,18 @@ func MintInstallationToken(ctx context.Context, s Sender, baseURL string, hosts 
 		return nil, fmt.Errorf("%w: status %d", ErrMint, res.Status)
 	}
 	clear(res.Body)
-	t := &Installation{token: []byte(out.Token), base: base, hosts: hosts}
+	t := &Installation{token: []byte(out.Token), base: base, hosts: hosts, access: Access{
+		Installation: app.Installation, Repository: owner + "/" + repo, Requested: permissions, Granted: out.Permissions, Expires: out.ExpiresAt,
+	}}
+	if len(out.Repositories) == 1 {
+		t.access.RepositoryID = out.Repositories[0].ID
+	}
 	granted := make([]string, len(out.Repositories))
 	for i, r := range out.Repositories {
 		granted[i] = strings.ToLower(r.FullName)
 	}
 	if !slices.Equal(granted, []string{owner + "/" + repo}) || !asAsked(out.Permissions, permissions) {
-		_ = t.Revoke(ctx, s) // refused either way; an unrevoked token expires within the hour
-		return nil, ErrScopeMismatch
+		return nil, t.mismatch(ctx, s)
 	}
 	return t, nil
 }
@@ -173,12 +213,14 @@ func apiHeaders(req *http.Request) {
 // within the hour GitHub set; the caller reports it (ADR-0021 item 6).
 func (t *Installation) Revoke(ctx context.Context, s Sender) error {
 	defer clear(t.token)
+	t.access.Revocation = "revoke_failed"
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), revokeTimeout)
 	defer cancel()
 	var err error
 	for range 2 {
 		var res egress.Response
 		if res, err = send(ctx, s, t.base, t.hosts, http.MethodDelete, "/installation/token", nil, t.token); err == nil && res.Status == http.StatusNoContent {
+			t.access.Revocation = "revoked"
 			return nil
 		}
 		if err == nil {
