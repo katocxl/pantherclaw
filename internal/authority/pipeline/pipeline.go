@@ -600,7 +600,9 @@ func moneyValue(vals defs.Values) (*money.Money, error) {
 }
 
 // Step 6: the facts the definition and the policy need are present, from
-// their providers, and fresh (HR-160). Facts are about the action's target.
+// their providers, and fresh (HR-160). Facts are about the action's target;
+// those a consequence's definition and policy rules need are about the
+// consequence's target (consequenceFacts).
 func (p *Pipeline) currentFacts(ctx context.Context, s *state) {
 	if s.gAction == nil {
 		s.cl.skip(StepFacts, "the meaning is not known")
@@ -634,7 +636,10 @@ func (p *Pipeline) currentFacts(ctx context.Context, s *state) {
 		s.missing(StepFacts, err, "the facts")
 		return
 	}
-	defer s.consequences(ctx, recorded, reqs)
+	defer func() {
+		s.consequences(ctx, recorded, reqs)
+		p.consequenceFacts(ctx, s)
+	}()
 	if len(reqs) == 0 {
 		s.cl.note(StepFacts, StatusNotApplicable, ReasonFactsFresh, "no facts are required")
 		return
