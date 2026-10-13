@@ -132,7 +132,8 @@ func TestF048_CredentialReachBeyondTheNeedIsAFinding(t *testing.T) {
 // with the need. The org's other Apps that the org scan found (source
 // github_scan, one finding per App on the organization) are routes of their
 // own, not this credential, and a GitHub App a person's pclaw scan reports
-// (source scan) counts for nothing (N20).
+// (source scan) counts for nothing (N20). Permissions not read yet
+// (read_at NULL) are not observed: they resolve nothing.
 func TestF048_TheConnectionsOwnInstallationIsReach(t *testing.T) {
 	f := newFixture(t)
 	f.grant(t, "payments.refund.create")
@@ -161,6 +162,15 @@ func TestF048_TheConnectionsOwnInstallationIsReach(t *testing.T) {
 	if len(rows) != 1 || !slices.Equal(subjects["GitHub App installation 42 on acme"], []string{"administration:write"}) {
 		t.Fatalf("findings %+v", rows)
 	}
+	// Re-sealing resets the installation to unread: its reach is not
+	// observed, never "no overreach", so the finding stays open (D7).
+	f.exec(t, `UPDATE pc.connection_github SET permissions = '{}', read_at = NULL, repository_selection = NULL
+		WHERE connection_id = $1`, f.conn)
+	if rows := f.refreshFindings(t); len(rows) != 1 || rows[0].State != "OPEN" {
+		t.Fatalf("with the permissions unread: %+v", rows)
+	}
+	f.exec(t, `UPDATE pc.connection_github SET permissions = '{"contents": "write", "administration": "write"}', read_at = now(),
+		repository_selection = 'all' WHERE connection_id = $1`, f.conn)
 	f.exec(t, `UPDATE pc.connection_github SET permissions = '{"contents": "write"}' WHERE connection_id = $1`, f.conn)
 	if rows := f.refreshFindings(t); len(rows) != 1 || rows[0].State != "RESOLVED" {
 		t.Fatalf("the installation reduced to the need: %+v", rows)

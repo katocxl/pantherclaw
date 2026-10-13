@@ -350,7 +350,7 @@ func (q *Queries) CoverageGrantBoundsOfOrg(ctx context.Context, orgID ids.OrgID)
 }
 
 const coverageInstallationOfConnection = `-- name: CoverageInstallationOfConnection :one
-SELECT app_client_id, installation_id, account_login, permissions FROM pc.connection_github
+SELECT app_client_id, installation_id, account_login, permissions, read_at FROM pc.connection_github
 WHERE org_id = $1 AND connection_id = $2
 `
 
@@ -359,11 +359,13 @@ type CoverageInstallationOfConnectionRow struct {
 	InstallationID int64
 	AccountLogin   string
 	Permissions    []byte
+	ReadAt         *time.Time
 }
 
 // The GitHub App installation behind a connection, with the permissions it
 // held when last read (G0 M8 G3, connection_github): the reach of the
 // connection's own credential (F048). UNTRUSTED metadata read from GitHub.
+// read_at is NULL until the gateway has read the installation's permissions.
 func (q *Queries) CoverageInstallationOfConnection(ctx context.Context, orgID ids.OrgID, connectionID ids.UUID) (CoverageInstallationOfConnectionRow, error) {
 	row := q.db.QueryRow(ctx, coverageInstallationOfConnection, orgID, connectionID)
 	var i CoverageInstallationOfConnectionRow
@@ -372,6 +374,7 @@ func (q *Queries) CoverageInstallationOfConnection(ctx context.Context, orgID id
 		&i.InstallationID,
 		&i.AccountLogin,
 		&i.Permissions,
+		&i.ReadAt,
 	)
 	return i, err
 }
@@ -585,12 +588,15 @@ SELECT s.id, s.connection_id, s.kind::text AS kind, s.locator::text AS locator F
         END), 512) AS locator
     FROM pc.discoveries d
     JOIN pc.connections c ON c.org_id = d.org_id AND c.id::text = lower(d.observed ->> 'connection')
+    -- The finding's scan run must be a scan of the connection it names.
+    JOIN pc.github_scan_runs sr ON sr.org_id = d.org_id AND sr.id::text = lower(d.observed ->> 'scan_run')
+                               AND sr.connection_id = c.id
     WHERE d.org_id = $1 AND d.source = 'github_scan'
       AND d.observed ->> 'kind' IN ('github_app', 'github_workflow', 'github_mcp_config')
       AND (d.observed ->> 'kind' <> 'github_workflow' OR d.observed ->> 'writes' = 'true' OR d.observed ->> 'deploys' = 'true'
            OR d.observed ->> 'permissions_default' = 'true')
       AND NOT EXISTS (SELECT 1 FROM pc.coverage_routes r
-                      WHERE r.org_id = d.org_id AND r.source = 'scan' AND r.source_ref = d.id)
+                      WHERE r.org_id = d.org_id AND r.connection_id = c.id AND r.source = 'scan' AND r.source_ref = d.id)
 ) s
 WHERE s.kind = 'target_side' OR s.locator <> ''
 ORDER BY s.id
@@ -617,7 +623,9 @@ type CoverageScanFindingsToRecordRow struct {
 //
 // Only findings that are recorded are selected, so findings that show no
 // route never hold back the ones after them. Each is recorded once, as the
-// source of its route. Only the gateway's GitHub org scan (source
+// source of its route on each connection whose scan run found it. Only
+// findings of a scan run of the connection they name count. Only the
+// gateway's GitHub org scan (source
 // github_scan) reports these kinds; a person's pclaw scan (source scan)
 // cannot (N20). A dismissed discovery still counts: dismissing it does not
 // remove the route.

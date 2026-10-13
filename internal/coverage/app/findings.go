@@ -147,6 +147,12 @@ func (s *Service) RefreshFindings(ctx context.Context, tx db.TenantTx, connectio
 	// The installation behind the connection's own credential, as last
 	// read (G0 M8 G3).
 	switch inst, err := q.CoverageInstallationOfConnection(ctx, tx.OrgID(), connection); {
+	case err == nil && inst.ReadAt == nil:
+		// The gateway has not read the installation's permissions yet: its
+		// reach is not observed, which is never "no overreach". The findings
+		// stay as they are until it is read (G0 M8 follow-up; coordinator
+		// decision D7).
+		return nil
 	case err == nil:
 		id := strconv.FormatInt(inst.InstallationID, 10)
 		if err := find("installation:"+id, "GitHub App installation "+id+" on "+inst.AccountLogin,

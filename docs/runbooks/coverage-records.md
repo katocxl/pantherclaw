@@ -63,7 +63,7 @@ Review exclusions before they expire, and revoke any whose reason no longer hold
 
 ## Credential-overreach findings
 
-For each connection, the permissions its credentials actually hold are compared with what the package declares for the operations the org's grants allow. For GitHub, the held permissions are those of the App installation behind the connection, as last read. The org's other Apps, which the org scan reports, are routes of their own, not this credential. The finding also lists what the operations executed in the last 30 days used. Reach beyond the need is an exposure finding, never extra permission:
+For each connection, the permissions its credentials actually hold are compared with what the package declares for the operations the org's grants allow. For GitHub, the held permissions are those of the App installation behind the connection, as last read. Until the gateway has read them (after a re-seal, say), overreach is not observed: existing findings stay as they are, and new ones appear once the permissions are read. The org's other Apps, which the org scan reports, are routes of their own, not this credential. The finding also lists what the operations executed in the last 30 days used. Reach beyond the need is an exposure finding, never extra permission:
 
 | Severity | Excess |
 |---|---|
