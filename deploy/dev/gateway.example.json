@@ -9,5 +9,8 @@
   },
   "egress": {
     "allowed_prefixes": ["127.0.0.1/32"]
+  },
+  "approvals": {
+    "approver_keys_file": "deploy/dev/secrets/approver-keys.json"
   }
 }

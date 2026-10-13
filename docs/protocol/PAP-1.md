@@ -160,6 +160,8 @@ Rules (MUST):
 
 Idempotency: `(org, run_id, action_id)` is unique. Same triple + same hash ⇒ the stored decision is returned. Same triple + different hash ⇒ `DENY` with code `ACTION_TAMPERED` and a security alert. `DENY` and expired decisions are terminal for that triple; `CANNOT_AUTHORIZE` MAY be retried.
 
+One exception keeps an approval from being lost when nothing was sent (HR-011). It applies when the permit of an `ALLOW` that used an approval is released without reaching `DISPATCHING`: it expired, or `BeginDispatch` refused it because it expired or the containment epoch moved past it. While the approval can still be used, the Authority returns it to `APPROVED` and reopens the transaction. The workload's next resubmission of the same triple is then evaluated again and may get a new permit, which uses the approval. The released permit is kept, marked replaced: a transaction has at most one current permit. An outcome recorded after `BeginDispatch` never reopens a transaction. `failed` needs a new approval, and `unknown` goes to reconciliation.
+
 **Monitor mode.** When the action's route runs in `monitor` mode, the response carries `"mode": "monitor"` and `decision` is hypothetical: the Authority records it, reserves nothing, and returns a permit whatever the decision, unless the identity or containment checks failed. In monitor mode the presence of a permit, not the decision, tells the gateway to dispatch; the permit still goes through `BeginDispatch`. Nothing about a monitor-mode action may be reported as prevented.
 
 ### 7.2 Dispatch permit
@@ -167,9 +169,26 @@ JWS, `typ: "pap-permit+jwt"`, TTL ≈ 5 s:
 
 ```json
 {"iss": "…", "aud": "gw:<gateway_id>", "jti": "<permit_id>", "iat": …, "exp": …,
- "pap": {"v": 1, "org": "…", "txn": "<transaction_id>", "act": "<action_hash>",
-         "epoch": 42, "approval": {"binding": "…", "assertion": "<WebAuthn assertion, high-consequence only>"}}}
+ "pap": {"v": 1, "org": "…", "txn": "<transaction_id>", "act": "<action_hash>", "epoch": 42,
+         "approval": {"binding": "…", "input": "<canonical binding input>",
+                      "assertions": [{"requirement": 0, "credential_id": "…", "authenticator_data": "…",
+                                      "client_data_json": "…", "signature": "…", "batch": ["<binding>", "…"]}]}}}
 ```
+
+`approval` is present only when the decision rests on an approval (§8). All of its byte strings are base64url without padding.
+- `binding` is the approval's binding, and `input` the canonical binding input whose SHA-256 it is.
+- `assertions` holds the WebAuthn assertion of every approver who counted, as the approval page verified it:
+  - `requirement` is the index of the requirement in the input's `approver_requirements` it counts toward;
+  - `batch`, present when the approver signed a batch hash, lists that batch's sorted bindings.
+
+A customer-hosted gateway MUST verify `approval` before `BeginDispatch`, against approver keys its operator installed and never against keys the Authority supplies (HR-038):
+- the binding is the SHA-256 of the input, and the input's `action_hash` and `effective_action_hash` are those of the requested action and of `act`;
+- every assertion is a `webauthn.get` whose challenge is the binding, or the batch hash of a `batch` that contains it;
+- its authenticator data carries the SHA-256 of the pinned relying party id, with user presence and user verification;
+- its signature verifies with a pinned key;
+- no person or key counts twice, and every requirement has as many people as it asks for.
+
+Otherwise, and when no keys are pinned, the gateway MUST NOT dispatch (`enforcement_failed` / `approval_unverified`). A permit without `approval` is not checked.
 
 ### 7.3 BeginDispatch (commit point)
 Before sending any byte to the target the gateway MUST call `BeginDispatch{permit_id, epoch, outbound_method, outbound_url, outbound_body_hash}`, after building the outbound request and before sending it. The Authority atomically transitions the permit `ISSUED → DISPATCHING` only if not expired (database clock) and `epoch` equals the org's current containment epoch. Any failure ⇒ the gateway MUST NOT dispatch. A permit that was `DISPATCHING` without a recorded outcome becomes `UNKNOWN` (never released automatically). For a target-enforced connection the response carries the action token (§10), minted over `outbound_body_hash`.
@@ -202,7 +221,7 @@ Signed JWS (`typ: "pap-decision+jwt"`) containing: transaction id, action hash, 
 Signed JWS (`typ: "pap-execution+jwt"`, `jti` = permit id) containing: transaction id, effective action hash (`effective`), permit id, gateway id, connection, access mode (target-enforced, narrow temporary, PantherClaw-held, constrained runtime, agent-held), attempt number, dispatch time (`dispatched_at`), outcome, target status, target response digest, `target_ref` when the target returned one, who recorded it (`recorded_by`: `gateway`, or `sweeper` for a dispatch that never reported), `monitor` when applicable, `simulated` flag.
 
 ### 9.3 Effect receipt
-Signed JWS (`typ: "pap-effect+jwt"`, `jti` = transaction id and sequence) appended for every change of a transaction's effect state, never rewritten. It contains: transaction id, sequence, the verifier (read operation, gateway, connection, what it `establishes`), the verification level required and achieved (`acceptance` · `follow_up` · `domain_effect` · `downstream`), the expected and observed values as digests, the result state (`CONFIRMED`, `NONE_CONFIRMED`, `PARTIAL`, `PROPAGATION_PENDING`, `CONFLICTING`, `UNVERIFIABLE`, `UNKNOWN`, `COMPENSATED`; ARCHITECTURE §6.2), one result per declared effect kind, the basis (observation ids, or the person who resolved a reconciliation), the definition's limits text, timestamps and the `simulated` flag. A target's acceptance, the executor's report and anything the agent says are never observations: on their own they reach only the `acceptance` level. An `unknown` outcome stays unresolved, with its reservations held, until an observation shows the effect happened (resolved automatically) or an independent person releases it with a WebAuthn assertion bound to the resolution.
+Signed JWS (`typ: "pap-effect+jwt"`, `jti` = transaction id and sequence) appended for every change of a transaction's effect state, never rewritten. It contains: transaction id, sequence, the verifier (read operation, gateway, connection, what it `establishes`), the verification level required and achieved (`acceptance` · `follow_up` · `domain_effect` · `downstream`), the expected and observed values as digests, the result state (`CONFIRMED`, `NONE_CONFIRMED`, `PARTIAL`, `PROPAGATION_PENDING`, `CONFLICTING`, `UNVERIFIABLE`, `UNKNOWN`, `COMPENSATED`; ARCHITECTURE §6.2), one result per declared effect kind, the basis (observation ids, or the person who resolved a reconciliation), the definition's limits text, timestamps and the `simulated` flag. An accepted or delegated write that nothing can verify (its definition has no verifier, or the verifier has no read to make for that outcome) gets one `UNVERIFIABLE` receipt with basis `definition` and a `reason` (`NO_VERIFIER`, `VERIFIER_CANNOT_READ`), in the transaction that records the outcome; an `unknown` outcome never does. The receipts of a cooperative channel's transaction (hook, sdk) carry `coverage: "PARTIAL"` whatever their state, because the agent performed the action with its own access. A target's acceptance, the executor's report and anything the agent says are never observations: on their own they reach only the `acceptance` level, and a delegated outcome reaches none. An `unknown` outcome stays unresolved, with its reservations held, until an observation shows the effect happened (resolved automatically) or an independent person releases it with a WebAuthn assertion bound to the resolution.
 
 ### 9.4 Signatures and chaining
 Receipts are Ed25519-signed; the format reserves `sigs[]` for an additional ML-DSA-65 signature. Receipts are linked into a per-org hash chain (`entry_hash = SHA-256(prev_hash ‖ JCS(entry))`) and summarized in signed Merkle checkpoints. A global root over all orgs MAY be anchored in a public transparency log.
@@ -223,6 +242,19 @@ For targets that run PantherClaw verifier middleware, the gateway attaches `PAP-
 ```
 
 The verifier MUST check signature (JWKS), `aud`, expiry, `bh` against the received body, single use of `jti` in a **shared** replay store, and that the requested operation/target match. Only then may the route be counted as `ENFORCED` for cooperative (SDK) modes.
+
+Encoding as implemented since M6 (pinned by G0 M8; the conformance vectors in `sdk/conformance` fix it byte for byte):
+- **Header:** `{"alg": "EdDSA", "kid": "action-tokens-<first 22 characters of the key's RFC 7638 thumbprint>", "typ": "pap-action+jwt"}`. Verifiers accept only keys of the `action_tokens` purpose; a key of another purpose never verifies an action token. Verifiers also accept the fully-specified name `Ed25519` (RFC 9864) for the same keys; PantherClaw emits `EdDSA`.
+- **Claims:**
+  - `iss` is the deployment's issuer (`pantherclaw` unless configured).
+  - `aud` is the connection id (a UUID string).
+  - `jti` is a UUIDv7 string.
+  - `iat` and `exp` are integer seconds, with `exp − iat` ≤ 60.
+  - `pap.v` is `1`, and `pap.txn` is the transaction id.
+  - `pap.act` is the effective action hash and `pap.bh` the SHA-256 of the exact outbound body. Both are **lowercase hexadecimal**, unlike the base64url `bh` and `ath` of a request proof (§4) and the base64url hashes in an approval binding (§8).
+  - `pap.op` is the operation, and `pap.target` is `{type, id}`.
+- **Verification order:** read the body (bounded), then check the JWS, `iss`, `aud`, lifetime (5 seconds of clock skew), `pap.v`, `bh`, operation and target. Insert `jti` only after all of these pass (as §4 does for proofs). A store or JWKS that cannot be reached refuses the request.
+- **Single-replica stores:** a replay store that is not shared between all replicas of a target (an in-memory store) is valid for a single-replica target only. A target that declares such a store is never counted as target-enforced for more than one replica.
 
 ## 11. Keys and discovery
 

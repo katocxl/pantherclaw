@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/katocxl/pantherclaw/internal/approvals/proof"
 	adomain "github.com/katocxl/pantherclaw/internal/authority/domain"
 	"github.com/katocxl/pantherclaw/internal/authority/pipeline"
 	evdomain "github.com/katocxl/pantherclaw/internal/evidence/domain"
@@ -162,13 +163,17 @@ type permitPAP struct {
 	Txn   string `json:"txn"`
 	Act   string `json:"act"`
 	Epoch int64  `json:"epoch"`
+	// Approval is the approval the decision rests on, with every counted
+	// approver's assertion (HR-038, PAP-1 §7.2).
+	Approval *proof.Approval `json:"approval,omitzero"`
 }
 
 // permit signs the single-use permit (HR-009). It binds the effective
 // action: what the gateway may dispatch after any clamping (F107). A
 // monitor-mode permit binds the requested action, which monitor mode
-// dispatches unchanged (HR-184).
-func (a *Authority) permit(gw Gateway, ev *pipeline.Evaluation, txn ids.UUID) (*PermitWrite, error) {
+// dispatches unchanged (HR-184). A permit that uses an approval carries it
+// (HR-038).
+func (a *Authority) permit(gw Gateway, ev *pipeline.Evaluation, txn ids.UUID, approval *proof.Approval) (*PermitWrite, error) {
 	id := ids.NewV7()
 	exp := ev.Now.Add(a.ttl())
 	act := ev.EffectiveHash
@@ -177,7 +182,7 @@ func (a *Authority) permit(gw Gateway, ev *pipeline.Evaluation, txn ids.UUID) (*
 	}
 	b, err := json.Marshal(permitClaims{
 		Iss: a.issuer(), Aud: "gw:" + gw.ID, Jti: id.String(), Iat: ev.Now.Unix(), Exp: exp.Unix(),
-		Pap: permitPAP{V: 1, Org: gw.Org.String(), Txn: txn.String(), Act: act, Epoch: ev.Epoch},
+		Pap: permitPAP{V: 1, Org: gw.Org.String(), Txn: txn.String(), Act: act, Epoch: ev.Epoch, Approval: approval},
 	})
 	if err != nil {
 		return nil, err
