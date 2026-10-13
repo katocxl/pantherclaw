@@ -67,7 +67,7 @@ func TestHR203_AReadGetsAReadOnlyToken(t *testing.T) {
 	read := func(scope map[string]string) *defs.Definition {
 		return &defs.Definition{Operation: "github.contents.read", Access: defs.AccessRead, Dispatch: &defs.Dispatch{CredentialScope: scope}}
 	}
-	req := httptest.NewRequest("GET", "https://api.github.com/repos/acme/payments/contents/README.md", nil)
+	req := httptest.NewRequest(http.MethodGet, "https://api.github.com/repos/acme/payments/contents/README.md", nil)
 	target := actionir.Target{Type: "github.repository", ID: "acme/payments"}
 	for _, scope := range []map[string]string{{"contents": "write"}, {"contents": "read", "pull_requests": "admin"}} {
 		if _, _, err := e.credential(t.Context(), conn, read(scope), target, req, nil); !errors.Is(err, broker.ErrScope) {
