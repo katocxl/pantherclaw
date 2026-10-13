@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -216,5 +217,55 @@ func TestHR209_FilesTheScanSkipsAreNotScanned(t *testing.T) {
 	}
 	if m := read[".github/workflows/many.yml"].Attributes; m["permissions_incomplete"] != "true" || len(m["permissions"]) > 256 {
 		t.Fatalf("a permission list too long: %v", m)
+	}
+}
+
+// TestHR209_ACommandKeepsOnlyItsProgramName: an MCP server's command keeps
+// the base name of the program it runs and nothing else: a leading
+// NAME=value assignment is skipped like an argument, so a secret in it is
+// never kept (HR-209).
+func TestHR209_ACommandKeepsOnlyItsProgramName(t *testing.T) {
+	for command, want := range map[string]string{
+		"PGPASSWORD=hunter2 psql -h db":             "psql",
+		"FOO=a BAR=b /usr/local/bin/node server.js": "node",
+		`C:\tools\server.exe --key hunter2`:         "server.exe",
+		"API_KEY=hunter2":                           "",
+		"$(cat key) run":                            "",
+	} {
+		raw := []byte(`{"mcpServers": {"s": {"command": ` + strconv.Quote(command) + `}}}`)
+		servers, err := ParseMCPConfig(raw)
+		if err != nil || len(servers) != 1 || servers[0].Command != want {
+			t.Errorf("%q: %+v %v, want %q", command, servers, err, want)
+		}
+		if strings.Contains(servers[0].Command, "hunter2") {
+			t.Fatalf("%q kept a secret", command)
+		}
+	}
+}
+
+// TestHR209_AgentUseTheScanCannotCheckIsReported: the scan recognizes agent
+// actions only; a workflow that calls a reusable workflow, a local or
+// Docker action, or runs an agent's CLI directly may run an agent it
+// cannot see, so it is counted and workflows are reported not scanned
+// with why, never as "no agent here". The step's text is never kept.
+func TestHR209_AgentUseTheScanCannotCheckIsReported(t *testing.T) {
+	sim, get := newWorld(t)
+	sim.Push("acme/payments", "main", map[string]string{
+		".github/workflows/reuse.yml": "on: push\njobs: {r: {uses: acme/ci/.github/workflows/agent.yml@main}}\n",
+		".github/workflows/cli.yml":   "on: push\njobs:\n  a:\n    runs-on: x\n    steps: [{run: 'npx @anthropic-ai/claude-code -p \"fix ` + planted + `\"'}, {uses: ./.github/actions/review}]\n",
+	})
+	r := ScanRepositories(context.Background(), get, []Repository{{FullName: "acme/payments", DefaultBranch: "main"}}, time.Now().Add(time.Minute))
+	why := r.NotScanned["workflows"]
+	for _, how := range []string{"a reusable workflow", "an agent CLI run directly", "a local action"} {
+		if !strings.Contains(why, "agent use not checked ("+how+")") {
+			t.Errorf("%s not reported: %q", how, why)
+		}
+	}
+	if r.Counts["workflows_agent_unchecked"] != 3 || slices.Contains(r.Scanned, "workflows") {
+		t.Fatalf("counts %v, scanned %v", r.Counts, r.Scanned)
+	}
+	raw, _ := json.Marshal(r)
+	if strings.Contains(string(raw), planted) || strings.Contains(string(raw), "fix ") {
+		t.Fatal("a run step's text reached the result")
 	}
 }

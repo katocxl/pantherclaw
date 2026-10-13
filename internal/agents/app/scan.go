@@ -6,6 +6,7 @@ package app
 import (
 	"context"
 	"encoding/json/v2"
+	"fmt"
 	"maps"
 	"path/filepath"
 	"strconv"
@@ -35,6 +36,8 @@ type ScanFinding struct {
 // ScanResult counts what a submission did.
 type ScanResult struct {
 	Created, Counted, Dropped int
+	// Reopened counts the created that reopened a dismissed finding.
+	Reopened int
 }
 
 // scanName is a readable name for a discovered agent; nothing binds to it
@@ -42,18 +45,17 @@ type ScanResult struct {
 func scanName(f ScanFinding) string {
 	var s string
 	switch f.Kind {
-	case "mcp_server", "github_mcp_config":
+	case "mcp_server":
 		s = "MCP server " + f.Attributes["name"]
 		if c := f.Attributes["client"]; c != "" {
 			s += " (" + c + ")"
 		}
-		if r := f.Attributes["repository"]; r != "" {
-			s += " in " + r
-		}
+	case "github_mcp_config":
+		s = "MCP configuration " + f.Attributes["repo"] + " " + f.Attributes["path"]
 	case "github_workflow":
-		s = "GitHub workflow " + f.Attributes["repository"] + " " + f.Attributes["path"]
+		s = "GitHub workflow " + f.Attributes["repo"] + " " + f.Attributes["path"]
 	case "github_app":
-		s = "GitHub App " + f.Attributes["app"]
+		s = "GitHub App " + f.Attributes["app_slug"]
 	default:
 		s = "agent project " + filepath.Base(f.Attributes["path"])
 	}
@@ -82,7 +84,7 @@ func (inv *Inventory) SubmitScan(ctx context.Context, host string, findings []Sc
 		if err := q.LockDiscoveries(ctx, c.Org.String()); err != nil {
 			return err
 		}
-		open, err := q.CountOpenDiscoveriesFrom(ctx, c.Org, false)
+		open, err := q.CountOpenDiscoveriesOfSource(ctx, c.Org, "scan")
 		if err != nil {
 			return err
 		}
@@ -112,7 +114,7 @@ func (inv *Inventory) SubmitScan(ctx context.Context, host string, findings []Sc
 				res.Dropped++
 				continue
 			}
-			if err := insertFinding(ctx, q, c.Org, discoverer{by: c.Principal.String(), actor: actor(c), source: "scan"}, f, obs, observed); err != nil {
+			if err := insertFinding(ctx, q, c.Org, discoverer{by: c.Principal.String(), actor: actor(c), source: "scan"}, f, obs, observed, ids.UUID{}); err != nil {
 				return err
 			}
 			open++
@@ -140,19 +142,28 @@ type discoverer struct {
 }
 
 // insertFinding records a new finding as a DISCOVERED agent with its
-// discovery, an ADMISSION entry and a history entry.
-func insertFinding(ctx context.Context, q *dbq.Queries, org ids.OrgID, w discoverer, f ScanFinding, obs []byte, observed map[string]string) error {
+// discovery, an ADMISSION entry and a history entry. With reopen, the
+// finding was dismissed: that discovery reopens for the new agent instead.
+func insertFinding(ctx context.Context, q *dbq.Queries, org ids.OrgID, w discoverer, f ScanFinding, obs []byte, observed map[string]string,
+	reopen ids.UUID,
+) error {
 	a, err := q.InsertDiscoveredAgent(ctx, dbq.InsertDiscoveredAgentParams{
 		OrgID: org, ID: ids.NewV7(), Name: scanName(f), CreatedBy: w.by,
 	})
 	if err != nil {
 		return err
 	}
-	d, err := q.InsertScanDiscovery(ctx, dbq.InsertScanDiscoveryParams{
-		OrgID: org, ID: ids.NewV7(), AgentID: a.ID, Source: w.source, ScanKey: f.Key[:], Observed: obs,
-	})
-	if err != nil {
+	d := dbq.PcDiscovery{ID: reopen}
+	if reopen.IsZero() {
+		if d, err = q.InsertScanDiscovery(ctx, dbq.InsertScanDiscoveryParams{
+			OrgID: org, ID: ids.NewV7(), AgentID: a.ID, Source: w.source, ScanKey: f.Key[:], Observed: obs,
+		}); err != nil {
+			return err
+		}
+	} else if n, err := q.ReopenScanDiscovery(ctx, dbq.ReopenScanDiscoveryParams{AgentID: a.ID, Observed: obs, OrgID: org, ID: reopen}); err != nil {
 		return err
+	} else if n != 1 {
+		return fmt.Errorf("agents: discovery %s was not dismissed", reopen)
 	}
 	trusted := maps.Clone(w.trusted)
 	if trusted == nil {
@@ -168,9 +179,11 @@ func insertFinding(ctx context.Context, q *dbq.Queries, org ids.OrgID, w discove
 	}); err != nil {
 		return err
 	}
-	return RecordChange(ctx, q, org, a.ID, domain.Change{
-		Kind: domain.ChangeDiscovered, Actor: w.actor, Details: map[string]string{"discovery_id": d.ID.String(), "source": w.source},
-	})
+	details := map[string]string{"discovery_id": d.ID.String(), "source": w.source}
+	if !reopen.IsZero() {
+		details["reopened"] = "true"
+	}
+	return RecordChange(ctx, q, org, a.ID, domain.Change{Kind: domain.ChangeDiscovered, Actor: w.actor, Details: details})
 }
 
 // Kinds of findings: a local `pclaw scan` reports MCP servers and agent

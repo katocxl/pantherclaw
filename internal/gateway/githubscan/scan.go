@@ -218,6 +218,12 @@ func (r *Result) repository(ctx context.Context, get Getter, repo Repository) er
 				r.skip("workflows", "refused by the parser", 1)
 				continue
 			}
+			for _, how := range w.Unchecked {
+				// Reported, not guessed: the scan recognizes agent actions
+				// only, so these may run an agent it cannot see.
+				r.Counts["workflows_agent_unchecked"]++
+				r.skip("workflows", "with agent use not checked ("+how+")", 1)
+			}
 			if len(w.Actions) == 0 {
 				continue
 			}

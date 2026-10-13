@@ -48,7 +48,7 @@ func (inv *Inventory) SubmitGitHubScan(ctx context.Context, org ids.OrgID, gatew
 		if err := q.LockDiscoveries(ctx, org.String()); err != nil {
 			return err
 		}
-		open, err := q.CountOpenDiscoveriesFrom(ctx, org, true)
+		open, err := q.CountOpenDiscoveriesOfSource(ctx, org, "github_scan")
 		if err != nil {
 			return err
 		}
@@ -66,9 +66,18 @@ func (inv *Inventory) SubmitGitHubScan(ctx context.Context, org ids.OrgID, gatew
 			if err != nil {
 				return err
 			}
-			if n, err := q.TouchScanDiscovery(ctx, dbq.TouchScanDiscoveryParams{Observed: obs, OrgID: org, ScanKey: f.Key[:], Source: "github_scan"}); err != nil {
+			var reopen ids.UUID
+			prior, err := q.GetScanDiscovery(ctx, org, "github_scan", f.Key[:])
+			switch {
+			case db.IsNoRows(err):
+			case err != nil:
 				return err
-			} else if n > 0 {
+			case prior.State == "DISMISSED" && riskChanged(f.Kind, prior.Observed, observed):
+				reopen = prior.ID // dismissed for what it could do then: people judge it again
+			default:
+				if _, err := q.TouchScanDiscovery(ctx, dbq.TouchScanDiscoveryParams{Observed: obs, OrgID: org, ScanKey: f.Key[:], Source: "github_scan"}); err != nil {
+					return err
+				}
 				res.Counted++
 				continue
 			}
@@ -76,16 +85,27 @@ func (inv *Inventory) SubmitGitHubScan(ctx context.Context, org ids.OrgID, gatew
 				res.Dropped++
 				continue
 			}
-			if err := insertFinding(ctx, q, org, w, f, obs, observed); err != nil {
+			if err := insertFinding(ctx, q, org, w, f, obs, observed, reopen); err != nil {
 				return err
 			}
 			open++
 			res.Created++
+			if !reopen.IsZero() {
+				res.Reopened++
+				if _, err := audit.Record(ctx, tx, audit.Event{
+					Name: "agents.discovery_reopened", Actor: evdomain.Actor{Type: "gateway", ID: gateway.String()}, Outcome: audit.Success,
+					Object:  &audit.Object{Type: "discovery", ID: reopen.String()},
+					Details: map[string]string{"scan": scan.String(), "kind": f.Kind, "previous_agent": prior.AgentID.String()},
+				}); err != nil {
+					return err
+				}
+			}
 		}
 		_, err = audit.Record(ctx, tx, audit.Event{
 			Name: "agents.github_scan_submitted", Actor: evdomain.Actor{Type: "gateway", ID: gateway.String()}, Outcome: audit.Success,
 			Details: map[string]string{
 				"scan": scan.String(), "created": strconv.Itoa(res.Created), "counted": strconv.Itoa(res.Counted), "dropped": strconv.Itoa(res.Dropped),
+				"reopened": strconv.Itoa(res.Reopened),
 			},
 		})
 		return err
@@ -94,4 +114,35 @@ func (inv *Inventory) SubmitGitHubScan(ctx context.Context, org ids.OrgID, gatew
 		return ScanResult{}, err
 	}
 	return res, nil
+}
+
+// materialKeys are the attributes of an org-scan finding that say what its
+// route may do. A finding dismissed for what it could do then reopens when
+// any of them changes: newly writable permissions, a new environment, a
+// new secret source (HR-209).
+var materialKeys = map[string][]string{
+	"github_workflow": {
+		"agent_actions", "permissions", "permissions_incomplete", "permissions_default", "writes", "deploys", "environments",
+		"environments_incomplete",
+	},
+	"github_mcp_config": {
+		"servers", "commands", "transports", "env", "headers", "servers_incomplete", "commands_incomplete", "env_incomplete",
+		"headers_incomplete",
+	},
+	"github_app": {"permissions", "permissions_incomplete", "repository_selection"},
+}
+
+// riskChanged reports whether a finding's material attributes differ from
+// those recorded when it was dismissed.
+func riskChanged(kind string, recorded []byte, now map[string]string) bool {
+	var before map[string]string
+	if json.Unmarshal(recorded, &before) != nil {
+		return true
+	}
+	for _, k := range materialKeys[kind] {
+		if before[k] != now[k] {
+			return true
+		}
+	}
+	return false
 }

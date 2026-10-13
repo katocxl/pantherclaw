@@ -71,10 +71,7 @@ func ParseMCPConfig(raw []byte) ([]MCPServer, error) {
 		m := MCPServer{Name: clip(name), Transport: "stdio", Env: names(s.Env), Headers: names(s.Headers)}
 		switch {
 		case s.Command != "":
-			// The base name of the first word only: arguments may carry
-			// secrets, and so may a path.
-			first, _, _ := strings.Cut(strings.TrimSpace(s.Command), " ")
-			m.Command = clip(path.Base(strings.ReplaceAll(first, `\`, "/")))
+			m.Command = commandName(s.Command)
 		case s.URL != "":
 			m.Transport = "remote"
 		}
@@ -82,6 +79,27 @@ func ParseMCPConfig(raw []byte) ([]MCPServer, error) {
 	}
 	return out, nil
 }
+
+// commandName is the base name of the program a command runs, and nothing
+// else: arguments may carry secrets, and so may a path or a leading
+// NAME=value assignment (PGPASSWORD=… psql), which is skipped like an
+// argument. A word that is not a plain program name gives "".
+func commandName(command string) string {
+	for _, word := range strings.Fields(command) {
+		if strings.Contains(word, "=") {
+			continue // an environment assignment: its value is never kept
+		}
+		name := path.Base(strings.ReplaceAll(word, `\`, "/"))
+		if !programName.MatchString(name) || secretShaped.MatchString(name) {
+			return ""
+		}
+		return name
+	}
+	return ""
+}
+
+// programName is what a program's base name may be.
+var programName = regexp.MustCompile(`^[A-Za-z0-9._+-]{1,64}$`)
 
 func names(m map[string]jsontext.Value) []string {
 	out := make([]string, 0, len(m))

@@ -6,6 +6,7 @@ package githubscan
 import (
 	"errors"
 	"maps"
+	"regexp"
 	"slices"
 	"strings"
 
@@ -37,7 +38,15 @@ type Workflow struct {
 	// Environments are the environments its jobs deploy to, "(expression)"
 	// for one an expression chooses.
 	Environments []string
+	// Unchecked are the ways it could run an agent that the scan does not
+	// look into: a reusable workflow, a local or Docker action, an agent
+	// CLI run directly. Only the agent actions above are recognized.
+	Unchecked []string
 }
+
+// agentCLI matches a run step that seems to start a coding agent's command
+// line; the step's text is never kept.
+var agentCLI = regexp.MustCompile(`(^|[\s/@'"])(claude|codex|gemini|aider|goose|copilot|cursor-agent)(\s|$|['"@-])|@anthropic-ai/claude-code`)
 
 // Writes reports whether the workflow's token may write: a write
 // permission, write-all, or the repository's defaults.
@@ -58,13 +67,16 @@ func ParseWorkflow(raw []byte) (Workflow, error) {
 		return Workflow{}, err
 	}
 	root, _ := doc.(map[string]any)
-	actions, perms, envs := map[string]bool{}, map[string]bool{}, map[string]bool{}
+	actions, perms, envs, unchecked := map[string]bool{}, map[string]bool{}, map[string]bool{}, map[string]bool{}
 	_, workflowPerms := root["permissions"]
 	permissions(root["permissions"], perms)
 	var w Workflow
 	jobs, _ := root["jobs"].(map[string]any)
 	for _, j := range jobs {
 		job, _ := j.(map[string]any)
+		if _, reusable := job["uses"]; reusable {
+			unchecked["a reusable workflow"] = true
+		}
 		if _, set := job["permissions"]; !set && !workflowPerms {
 			w.DefaultPermissions = true
 		}
@@ -82,8 +94,16 @@ func ParseWorkflow(raw []byte) (Workflow, error) {
 			step, _ := s.(map[string]any)
 			uses, _ := step["uses"].(string)
 			ref, _, _ := strings.Cut(strings.ToLower(strings.TrimSpace(uses)), "@")
-			if slices.Contains(agentActions, ref) {
+			switch {
+			case slices.Contains(agentActions, ref):
 				actions[ref] = true
+			case strings.HasPrefix(ref, "./"):
+				unchecked["a local action"] = true
+			case strings.HasPrefix(ref, "docker://"):
+				unchecked["a Docker action"] = true
+			}
+			if run, _ := step["run"].(string); agentCLI.MatchString(strings.ToLower(run)) {
+				unchecked["an agent CLI run directly"] = true
 			}
 		}
 	}
@@ -95,6 +115,7 @@ func ParseWorkflow(raw []byte) (Workflow, error) {
 		return strings.Compare(a, b)
 	})
 	w.Environments = slices.Sorted(maps.Keys(envs))
+	w.Unchecked = slices.Sorted(maps.Keys(unchecked))
 	return w, nil
 }
 
