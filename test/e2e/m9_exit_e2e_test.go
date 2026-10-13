@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/katocxl/pantherclaw/internal/actionir"
+	apdomain "github.com/katocxl/pantherclaw/internal/approvals/domain"
 	covapp "github.com/katocxl/pantherclaw/internal/coverage/app"
 	covdomain "github.com/katocxl/pantherclaw/internal/coverage/domain"
 	evapp "github.com/katocxl/pantherclaw/internal/evidence/app"
@@ -61,7 +62,9 @@ func startM9(t *testing.T) *m9 {
 		probe:      dockertest.Image(t, c, e, "github.com/katocxl/pantherclaw/cmd/pantherclaw-probe", "deploy/sandbox/probe.Dockerfile"),
 	}
 	p := inProcessIdP(t)
-	m.stack = start(t, options{budget: "1000.00", people: &p, github: true})
+	// A coverage claim gets a second on this shared test machine; the
+	// default (50 ms) is for a server sized for its load.
+	m.stack = start(t, options{budget: "1000.00", people: &p, github: true, claimTimeout: time.Second})
 	people := &m2Stack{url: m.apiURL, cfg: m.serverCfg, idp: p}
 	var out, errb bytes.Buffer
 	if code := server.Run(context.Background(), []string{"org", "admin-invite", "--config", m.serverCfg, "--org", m.org.String()}, &out, &errb, noEnv); code != 0 {
@@ -275,7 +278,45 @@ func TestE2E_M9_RawCurlSameDecision(t *testing.T) {
 	if a, b := normalized(t, raw, viaMCP), normalized(t, viaMCP, viaMCP); a != b {
 		t.Fatalf("the raw merge is another action:\n%s\n%s", a, b)
 	}
+	if raw.DedupeKey == "" || raw.DedupeKey != viaMCP.DedupeKey {
+		t.Fatalf("dedupe keys %q and %q", raw.DedupeKey, viaMCP.DedupeKey)
+	}
+	// The same hold: the same requirements, and the digests of the
+	// definition and the material facts the approver is shown, none of
+	// which depend on the channel.
+	rawHold, mcpHold := m.heldBinding(t, curl.TransactionID), m.heldBinding(t, mcpTxn)
+	if rawHold != mcpHold {
+		t.Fatalf("the holds differ:\nraw %+v\nMCP %+v", rawHold, mcpHold)
+	}
 }
+
+// hold is what a held action's approval request binds that the channel
+// does not change (PAP-1 §8).
+type hold struct {
+	requirements, approvers, definition, facts string
+}
+
+func (m *m9) heldBinding(t *testing.T, txn string) hold {
+	t.Helper()
+	var requirements, input []byte
+	m.query(t, "SELECT requirements, binding_input FROM pc.approval_requests WHERE transaction_id = $1 ORDER BY created_at DESC LIMIT 1", []any{txn}, &requirements, &input)
+	var b apdomain.ActionBinding
+	if err := json.Unmarshal(input, &b); err != nil {
+		t.Fatal(err)
+	}
+	approvers, err := json.Marshal(b.ApproverRequirements)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Each instance acts under its own grant, which the requirements' sources
+	// name; the rest must be equal.
+	return hold{
+		requirements: sourceGrant.ReplaceAllString(string(requirements), "grant <id>"),
+		approvers:    string(approvers), definition: b.DefinitionDigest, facts: b.MaterialFactsDigest,
+	}
+}
+
+var sourceGrant = regexp.MustCompile(`grant ` + uuidRE)
 
 // normalized is a's action hash with b's channel and per-call ids: what is
 // left is the action itself.
@@ -383,8 +424,9 @@ func TestE2E_M9_EnforcedFromProbes(t *testing.T) {
 	}
 
 	// The agent asked three times, a second apart. A claim is computed
-	// within 50 ms of the decision or left out (design decision 7: a slow
-	// coverage read never delays a decision); the first receipt that
+	// within coverage.claim_timeout of the decision (1 s here, 50 ms by
+	// default), or the receipt says it is unavailable (design decision 7: a
+	// slow coverage read never delays a decision); the first receipt that
 	// carries one is checked.
 	var txn ids.UUID
 	for l := range strings.Lines(out) {
