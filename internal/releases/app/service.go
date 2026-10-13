@@ -11,7 +11,10 @@ package app
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json/v2"
+	"strconv"
 	"strings"
 	"time"
 
@@ -65,7 +68,9 @@ func (s *Service) caller(ctx context.Context) (tenancy.Caller, error) {
 // current window, whose revision it follows. The environment is stored in
 // lowercase (domain.NormalizeEnvironment). Of two windows created at the
 // same time for one environment and repository, the second to commit
-// fails with ErrChanged.
+// fails with ErrChanged. The audit event records how many weekly entries,
+// one-off windows and freezes the window has and their Digest, and for a
+// replacement the window it replaces and how many freezes that one had.
 func (s *Service) Create(ctx context.Context, w domain.Window) (Record, error) {
 	c, err := s.caller(ctx)
 	if err != nil {
@@ -98,10 +103,15 @@ func (s *Service) Create(ctx context.Context, w domain.Window) (Record, error) {
 		case err != nil:
 			return err
 		default:
+			replaced, err := recordOf(current)
+			if err != nil {
+				return err
+			}
 			if _, err := q.RetireChangeWindow(ctx, &by, c.Org, current.ID); err != nil {
 				return err
 			}
-			details["replaces"] = current.ID.String()
+			// A replacement that drops a freeze weakens it: say so.
+			details["replaces"], details["replaced_freezes"] = current.ID.String(), strconv.Itoa(len(replaced.Freezes))
 		}
 		last, err := q.LastChangeWindowRevision(ctx, c.Org, w.Environment, w.Repository)
 		if err != nil {
@@ -125,9 +135,35 @@ func (s *Service) Create(ctx context.Context, w domain.Window) (Record, error) {
 		if out, err = recordOf(row); err != nil {
 			return err
 		}
+		digest, err := Digest(out.Window)
+		if err != nil {
+			return err
+		}
+		details["weekly"], details["one_off"] = strconv.Itoa(len(out.Weekly)), strconv.Itoa(len(out.OneOff))
+		details["freezes"], details["window_sha256"] = strconv.Itoa(len(out.Freezes)), digest
 		return s.audit(ctx, tx, c, "release.window.created", row.ID, details)
 	})
 	return out, err
+}
+
+// Digest is the SHA-256, in hex, of what a window allows: its time zone,
+// weekly entries, one-off windows and freezes as deterministic JSON. The
+// window-created audit event carries it with how many of each there are,
+// so the stored window, which is never changed, can be checked against
+// the audit record, and a replacement that shortens or drops a freeze
+// shows in it.
+func Digest(w domain.Window) (string, error) {
+	b, err := json.Marshal(struct {
+		TimeZone string          `json:"time_zone"`
+		Weekly   []domain.Weekly `json:"weekly"`
+		OneOff   []domain.Span   `json:"one_off"`
+		Freezes  []domain.Span   `json:"freezes"`
+	}{w.TimeZone, orEmpty(w.Weekly), orEmpty(w.OneOff), orEmpty(w.Freezes)}, json.Deterministic(true))
+	if err != nil {
+		return "", err
+	}
+	sum := sha256.Sum256(b)
+	return hex.EncodeToString(sum[:]), nil
 }
 
 // Retire retires a window; releases to its environment then need another.
