@@ -44,7 +44,7 @@ func newGitHubWorld(t *testing.T) *gitHubWorld {
 	sim := github.New(slog.New(slog.DiscardHandler))
 	sim.RegisterApp(42, "Iv23liGateway", &key.PublicKey)
 	sim.Install(github.Installation{ID: 7, Account: "acme", Repos: []string{"payments"}, Permissions: map[string]string{
-		"contents": "write", "pull_requests": "write", "metadata": "read", "checks": "read",
+		"contents": "write", "pull_requests": "write", "metadata": "read", "checks": "read", "statuses": "read",
 	}})
 	sim.CreateRepo("acme/payments", "main", map[string]string{"README.md": "# payments\n"})
 	head := sim.Push("acme/payments", "fix/a", map[string]string{"parser.go": "package parser\n"})
