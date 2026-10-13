@@ -58,7 +58,7 @@ const (
 	TypeTimestamp  Type = "timestamp"
 )
 
-var types = []Type{TypeBoolean, TypeInteger, TypeDecimal, TypeMoney, TypeIdentifier, TypeTimestamp}
+var types = []Type{TypeBoolean, TypeInteger, TypeDecimal, TypeMoney, TypeIdentifier, TypeTimestamp, TypeObject}
 
 // Limits.
 const (
@@ -111,8 +111,13 @@ type Provider struct {
 	Org              ids.OrgID
 	Name             string
 	ServiceAccountID ids.UUID
-	State            ProviderState
-	Facts            []Declaration
+	// GatewayID and ConnectionID bind a provider to the gateway that reads
+	// a connection's system of record (G0 M8): a provider has exactly one
+	// of a service account or a gateway and connection.
+	GatewayID    ids.UUID
+	ConnectionID ids.UUID
+	State        ProviderState
+	Facts        []Declaration
 }
 
 // Validate checks a provider. taken reports fact names (and their policy
@@ -120,8 +125,8 @@ type Provider struct {
 // provider.
 func (p Provider) Validate(taken func(name string) bool) error {
 	switch {
-	case p.ID.IsZero() || p.Org.IsZero() || p.ServiceAccountID.IsZero():
-		return invalid("provider: id, org and service account are required")
+	case p.ID.IsZero() || p.Org.IsZero() || p.ServiceAccountID.IsZero() == p.GatewayID.IsZero() || p.GatewayID.IsZero() != p.ConnectionID.IsZero():
+		return invalid("provider: id, org and exactly one of a service account or a gateway and connection are required")
 	case !typePattern.MatchString(p.Name):
 		return invalid("provider: name %q must be a lowercase dotted name", p.Name)
 	case len(p.Facts) == 0 || len(p.Facts) > MaxFactsPerProvider:
@@ -167,25 +172,33 @@ type Value struct {
 	Decimal money.Decimal
 	Money   money.Money
 	Str     string // identifier
+	// Object holds an object fact's members (strings, int64, bool, []any,
+	// map[string]any).
+	Object map[string]any
 }
 
 // valueJSON is the wire form: amounts and integers are strings (HR-101).
 type valueJSON struct {
-	Bool     *bool  `json:"bool,omitzero"`
-	Int      string `json:"int,omitzero"`
-	Decimal  string `json:"decimal,omitzero"`
-	Amount   string `json:"amount,omitzero"`
-	Currency string `json:"currency,omitzero"`
-	ID       string `json:"id,omitzero"`
-	Time     string `json:"time,omitzero"`
+	Bool     *bool          `json:"bool,omitzero"`
+	Int      string         `json:"int,omitzero"`
+	Decimal  string         `json:"decimal,omitzero"`
+	Amount   string         `json:"amount,omitzero"`
+	Currency string         `json:"currency,omitzero"`
+	ID       string         `json:"id,omitzero"`
+	Time     string         `json:"time,omitzero"`
+	Object   jsontext.Value `json:"object,omitzero"`
 }
 
 var intPattern = regexp.MustCompile(`^-?(0|[1-9][0-9]{0,17})$`)
 
 // DecodeValue strictly decodes a value of type t.
 func DecodeValue(t Type, raw jsontext.Value) (Value, error) {
-	if len(raw) == 0 || len(raw) > maxValueBytes {
-		return Value{}, invalid("value: size %d outside 1..%d bytes", len(raw), maxValueBytes)
+	limit := maxValueBytes
+	if t == TypeObject {
+		limit = maxObjectBytes + 64
+	}
+	if len(raw) == 0 || len(raw) > limit {
+		return Value{}, invalid("value: size %d outside 1..%d bytes", len(raw), limit)
 	}
 	var w valueJSON
 	if err := json.Unmarshal(raw, &w, json.RejectUnknownMembers(true)); err != nil {
@@ -194,7 +207,7 @@ func DecodeValue(t Type, raw jsontext.Value) (Value, error) {
 	v := Value{Type: t}
 	only := func(set bool) error {
 		n := 0
-		for _, f := range []bool{w.Bool != nil, w.Int != "", w.Decimal != "", w.Amount != "" || w.Currency != "", w.ID != "", w.Time != ""} {
+		for _, f := range []bool{w.Bool != nil, w.Int != "", w.Decimal != "", w.Amount != "" || w.Currency != "", w.ID != "", w.Time != "", len(w.Object) > 0} {
 			if f {
 				n++
 			}
@@ -239,6 +252,15 @@ func DecodeValue(t Type, raw jsontext.Value) (Value, error) {
 			return Value{}, err
 		}
 		v.Int = ts.Unix()
+	case TypeObject:
+		if err := only(len(w.Object) > 0); err != nil {
+			return Value{}, err
+		}
+		obj, err := decodeObject(w.Object)
+		if err != nil {
+			return Value{}, err
+		}
+		v.Object = obj
 	default:
 		return Value{}, invalid("value: unknown type %q", t)
 	}
@@ -260,6 +282,9 @@ func (v Value) String() string {
 		return v.Money.String()
 	case TypeIdentifier:
 		return v.Str
+	case TypeObject:
+		b, _ := json.Marshal(v.Object, json.Deterministic(true))
+		return string(b)
 	}
 	return ""
 }
@@ -430,6 +455,12 @@ func EncodeValue(v Value) ([]byte, error) {
 		w.ID = v.Str
 	case TypeTimestamp:
 		w.Time = time.Unix(v.Int, 0).UTC().Format(time.RFC3339)
+	case TypeObject:
+		b, err := json.Marshal(v.Object, json.Deterministic(true))
+		if err != nil {
+			return nil, invalid("value: %v", err)
+		}
+		w.Object = b
 	default:
 		return nil, invalid("value: unknown type %q", v.Type)
 	}

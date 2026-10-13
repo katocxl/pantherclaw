@@ -54,12 +54,16 @@ type Store struct {
 var _ app.Store = (*Store)(nil)
 
 // Claim implements app.Store (HR-190): each lease gets its own random
-// secret, of which only the SHA-256 is stored.
+// secret, of which only the SHA-256 is stored. A connection test is leased
+// at most maxTestAttempts times (HR-188).
 func (s *Store) Claim(ctx context.Context, org ids.OrgID, gateway ids.UUID, limit int, leaseFor time.Duration) ([]app.Lease, error) {
 	var out []app.Lease
 	err := s.Pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
 		q := dbq.New(tx)
-		due, err := q.DueVerifications(ctx, org, gateway, int32(min(limit, app.MaxClaim))) //nolint:gosec // G115: at most MaxClaim
+		due, err := q.DueVerifications(ctx, dbq.DueVerificationsParams{
+			OrgID: org, GatewayID: gateway, MaxTestAttempts: maxTestAttempts,
+			MaxTasks: int32(min(limit, app.MaxClaim)), //nolint:gosec // G115: at most MaxClaim
+		})
 		if err != nil {
 			return err
 		}
@@ -78,6 +82,11 @@ func (s *Store) Claim(ctx context.Context, org ids.OrgID, gateway ids.UUID, limi
 			}
 			if n != 1 {
 				continue
+			}
+			if domain.Purpose(v.Purpose) == domain.PurposeConnectionTest {
+				if err := q.StartConnectionTest(ctx, &gw, org, &v.ID); err != nil {
+					return err
+				}
 			}
 			l := app.Lease{
 				Task: v.ID, Secret: secret, Purpose: domain.Purpose(v.Purpose), Connection: v.ConnectionID, Operation: v.Operation,
@@ -104,7 +113,23 @@ func (s *Store) Report(ctx context.Context, org ids.OrgID, gateway ids.UUID, r a
 		if db.IsNoRows(err) {
 			tl, err := q.LeasedTargetLog(ctx, dbq.LeasedTargetLogParams{OrgID: org, ID: r.Task, GatewayID: &gw, LeaseHash: hash[:]})
 			if db.IsNoRows(err) {
-				return app.ErrLease
+				// An organization scan (G0 M8, HR-209).
+				scan, err := q.LeasedOrgScan(ctx, dbq.LeasedOrgScanParams{OrgID: org, ID: r.Task, GatewayID: &gw, LeaseHash: hash[:]})
+				if db.IsNoRows(err) {
+					// A connection test's read (G0 M8 track C, F354).
+					ct, err := q.LeasedConnectionTest(ctx, dbq.LeasedConnectionTestParams{OrgID: org, ID: r.Task, GatewayID: &gw, LeaseHash: hash[:]})
+					if db.IsNoRows(err) {
+						return app.ErrLease
+					} else if err != nil {
+						return err
+					}
+					out, err = s.connectionTest(ctx, tx, q, org, gateway, ct, r)
+					return err
+				} else if err != nil {
+					return err
+				}
+				out, err = orgScan(ctx, tx, q, org, gateway, scan, r)
+				return err
 			} else if err != nil {
 				return err
 			}
@@ -228,7 +253,7 @@ func (s *Store) Expire(ctx context.Context, org ids.OrgID, sign app.Sign) (int, 
 			return err
 		}
 		var closed []ids.UUID
-		released, err := q.ReleaseExpiredLeases(ctx, org)
+		released, err := q.ReleaseExpiredLeases(ctx, maxTestAttempts, org)
 		if err != nil {
 			return err
 		}
@@ -245,6 +270,11 @@ func (s *Store) Expire(ctx context.Context, org ids.OrgID, sign app.Sign) (int, 
 			if r.TransactionID != nil {
 				closed = append(closed, *r.TransactionID)
 			}
+		}
+		// A connection test whose read expired, by its deadline or after
+		// its last lease ran out, could not run.
+		if _, err := q.FailExpiredConnectionTests(ctx, maxTestAttempts, org); err != nil {
+			return err
 		}
 		slices.SortFunc(closed, compareUUID)
 		for _, txn := range slices.Compact(closed) {
