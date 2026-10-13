@@ -315,7 +315,7 @@ definitions:
       on_unknown: reconcile
     approval:
       title: Write {params.path} on {target.id}
-      fields: [target.id, params.path, params.message, params.sha]
+      fields: [target.id, params.path, params.sha]
     assurance:
       basis: documented
       reviewed_by: [pantherclaw-maintainers]
@@ -433,7 +433,7 @@ definitions:
       on_unknown: reconcile
     approval:
       title: Open a pull request from {params.head} into {params.base} in {target.id}
-      fields: [target.id, params.head, params.base, params.title, params.draft]
+      fields: [target.id, params.head, params.base, params.draft]
     assurance:
       basis: documented
       reviewed_by: [pantherclaw-maintainers]

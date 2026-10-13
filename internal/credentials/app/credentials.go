@@ -43,6 +43,8 @@ var (
 	ErrFormat = pcerr.New(pcerr.InvalidArgument, "SEALED_FORMAT", "the upload is not a sealed credential")
 	ErrKind   = pcerr.New(pcerr.InvalidArgument, "CREDENTIAL_KIND",
 		"a credential is static or github_app, and a GitHub App credential is placed as Authorization: Bearer")
+	ErrInstallation = pcerr.New(pcerr.InvalidArgument, "GITHUB_INSTALLATION",
+		"a GitHub App credential names its App, installation and account (lowercase), and a static one names none")
 )
 
 // Notifier queues a notification in the caller's transaction (M5).
@@ -77,6 +79,9 @@ type PutInput struct {
 	Header, Scheme        string
 	// Kind is domain.KindStatic (or empty) or domain.KindGitHubApp.
 	Kind string
+	// GitHub is the installation a GitHub App credential was sealed for;
+	// nil for a static credential.
+	GitHub *domain.Installation
 }
 
 // Metadata describes a stored credential; it never carries sealed bytes.
@@ -165,6 +170,9 @@ func (s *Service) PutCredential(ctx context.Context, in PutInput) (Metadata, err
 	if !domain.ValidKind(in.Kind) || (in.Kind == domain.KindGitHubApp && (in.Header != domain.GitHubAppHeader || in.Scheme != domain.GitHubAppScheme)) {
 		return Metadata{}, ErrKind
 	}
+	if (in.Kind == domain.KindGitHubApp) != (in.GitHub != nil) || (in.GitHub != nil && in.GitHub.Validate() != nil) {
+		return Metadata{}, ErrInstallation
+	}
 	var out Metadata
 	err = s.pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
 		q := dbq.New(tx)
@@ -207,12 +215,23 @@ func (s *Service) PutCredential(ctx context.Context, in PutInput) (Metadata, err
 		if err != nil {
 			return err
 		}
-		if _, err := q.BumpGatewayConfig(ctx, c.Org, conn.GatewayID); err != nil {
-			return err
-		}
 		details := map[string]string{
 			"version": strconv.Itoa(int(in.Version)), "broker_key_id": key.ID.String(), "broker_key_fingerprint": key.Fingerprint,
 			"allowed_hosts": strings.Join(conn.AllowedHosts, ","), "replaced": strconv.FormatInt(replaced, 10), "kind": in.Kind,
+		}
+		if gh := in.GitHub; gh != nil {
+			// The installation is configuration, not a secret: the gateway
+			// refuses another account's repository with it (ADR-0021).
+			if err := q.UpsertConnectionGitHub(ctx, dbq.UpsertConnectionGitHubParams{
+				OrgID: c.Org, ConnectionID: conn.ID, AppClientID: gh.AppClientID, InstallationID: gh.ID, AccountLogin: gh.Account,
+				UpdatedBy: c.Principal.String(),
+			}); err != nil {
+				return err
+			}
+			details["github_app"], details["github_installation"], details["github_account"] = gh.AppClientID, strconv.FormatInt(gh.ID, 10), gh.Account
+		}
+		if _, err := q.BumpGatewayConfig(ctx, c.Org, conn.GatewayID); err != nil {
+			return err
 		}
 		if replaced > 0 {
 			details["weakening"] = "sealed_replaced"

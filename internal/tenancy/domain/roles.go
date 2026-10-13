@@ -97,6 +97,7 @@ var roles = []Role{
 			PermServiceAccountRead, PermServiceAccountManage, PermAuditRead, PermAgentRead, PermRunRead,
 			PermWaitlistRead, PermWaitlistManage, PermIssuerRead, PermIssuerManage, PermFactRead, PermPackageImport,
 			PermPackageKeyManage, PermNotificationRead, PermNotificationManage, PermEvidenceRead,
+			PermGitHubIdentityManage,
 		}, authorityReads, boundaryReads),
 	},
 	{

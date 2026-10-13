@@ -53,7 +53,10 @@ func (s *Store) Taken(ctx context.Context, org ids.OrgID) (func(string) bool, er
 func (s *Store) CreateProvider(ctx context.Context, org ids.OrgID, p domain.Provider, createdBy string, ev audit.Event) error {
 	err := s.Pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
 		q := dbq.New(tx)
-		if err := q.InsertFactProvider(ctx, dbq.InsertFactProviderParams{OrgID: org, ID: p.ID, Name: p.Name, ServiceAccountID: opt(p.ServiceAccountID), CreatedBy: createdBy}); err != nil {
+		if err := q.InsertFactProvider(ctx, dbq.InsertFactProviderParams{
+			OrgID: org, ID: p.ID, Name: p.Name, ServiceAccountID: opt(p.ServiceAccountID), GatewayID: opt(p.GatewayID),
+			ConnectionID: opt(p.ConnectionID), CreatedBy: createdBy,
+		}); err != nil {
 			return err
 		}
 		for _, d := range p.Facts {
@@ -293,7 +296,8 @@ func (s *Store) ListProviders(ctx context.Context, org ids.OrgID, includeDisable
 			provIDs = append(provIDs, r.ID)
 			at[r.ID] = i
 			out = append(out, domain.Provider{
-				ID: r.ID, Org: org, Name: r.Name, ServiceAccountID: val(r.ServiceAccountID), State: domain.ProviderState(r.State),
+				ID: r.ID, Org: org, Name: r.Name, ServiceAccountID: val(r.ServiceAccountID), GatewayID: val(r.GatewayID),
+				ConnectionID: val(r.ConnectionID), State: domain.ProviderState(r.State),
 			})
 		}
 		decls, err := q.ListProviderDeclarations(ctx, org, provIDs)
@@ -333,8 +337,7 @@ func (s *Store) About(ctx context.Context, org ids.OrgID, subjectType, subjectID
 	return out, err
 }
 
-// opt is a nullable id: nil for the zero id. A provider's service account
-// is nullable since gateway providers (migration 00081).
+// opt is a nullable id: nil for the zero id.
 func opt(u ids.UUID) *ids.UUID {
 	if u.IsZero() {
 		return nil
@@ -348,4 +351,35 @@ func val(u *ids.UUID) ids.UUID {
 		return ids.UUID{}
 	}
 	return *u
+}
+
+// ProviderForConnection implements app.Store: the active provider a
+// gateway reports a connection's facts as (G0 M8 decision 5).
+func (s *Store) ProviderForConnection(ctx context.Context, org ids.OrgID, connection ids.UUID) (domain.Provider, error) {
+	var p domain.Provider
+	err := s.Pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
+		q := dbq.New(tx)
+		row, err := q.GetFactProviderByConnection(ctx, org, connection)
+		if db.IsNoRows(err) {
+			return app.ErrNotFound
+		}
+		if err != nil {
+			return err
+		}
+		decls, err := q.ListFactDeclarations(ctx, org, row.ID)
+		if err != nil {
+			return err
+		}
+		p = domain.Provider{
+			ID: row.ID, Org: org, Name: row.Name, GatewayID: val(row.GatewayID), ConnectionID: val(row.ConnectionID),
+			State: domain.ProviderState(row.State),
+		}
+		for _, d := range decls {
+			p.Facts = append(p.Facts, domain.Declaration{
+				Name: d.Name, Type: domain.Type(d.ValueType), SubjectType: d.SubjectType, MaxLag: time.Duration(d.MaxLagS) * time.Second,
+			})
+		}
+		return nil
+	}, db.ReadOnly())
+	return p, err
 }

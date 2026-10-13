@@ -31,8 +31,10 @@ type Commit struct {
 	SHA     string
 	Parents []string
 	Files   map[string]string
-	// Author is the login that made it (author and committer alike).
-	Author string
+	// Author and Committer are the GitHub accounts git's author and
+	// committer emails are linked to, "" for an email linked to no account
+	// (null on the wire). Who pushed it is in the activity feed, apart.
+	Author, Committer string
 }
 
 // Repo is a simulated repository.
@@ -60,7 +62,7 @@ func (s *Server) CreateRepo(fullName, defaultBranch string, files map[string]str
 		Branches: map[string]string{}, Commits: map[string]*Commit{}, Pulls: map[int]*Pull{}, nextPull: 1,
 	}
 	s.repos[r.full()] = r
-	sha := s.commit(r, "developer", nil, files)
+	sha := s.commit(r, "developer", "developer", nil, files)
 	r.Branches[defaultBranch] = sha
 	return sha
 }
@@ -74,8 +76,15 @@ func (s *Server) Push(fullName, branch string, files map[string]string) string {
 	return s.PushAs(fullName, branch, "developer", files)
 }
 
-// PushAs is Push by pusher, who also authors the commit.
+// PushAs is Push by pusher, who also authors and commits the commit.
 func (s *Server) PushAs(fullName, branch, pusher string, files map[string]string) string {
+	return s.PushBy(fullName, branch, pusher, pusher, pusher, files)
+}
+
+// PushBy is Push by pusher of a commit whose git author and committer are
+// linked to the accounts author and committer, either "" for an email
+// linked to no account: on GitHub one person can push another's commit.
+func (s *Server) PushBy(fullName, branch, pusher, author, committer string, files map[string]string) string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	r := s.repos[strings.ToLower(fullName)]
@@ -91,7 +100,7 @@ func (s *Server) PushAs(fullName, branch, pusher string, files map[string]string
 			tree[p] = c
 		}
 	}
-	sha := s.commit(r, pusher, []string{parent}, tree)
+	sha := s.commit(r, author, committer, []string{parent}, tree)
 	s.advance(r, branch, sha, pusher, "push")
 	return sha
 }
@@ -141,7 +150,7 @@ func (s *Server) RepoSettings(fullName string) (string, Settings) {
 
 // commit records a commit; its name is derived from its content and a
 // sequence number, so every commit is new.
-func (s *Server) commit(r *Repo, author string, parents []string, files map[string]string) string {
+func (s *Server) commit(r *Repo, author, committer string, parents []string, files map[string]string) string {
 	s.seq++
 	h := sha256.New()
 	fmt.Fprintf(h, "%s %d %v", r.full(), s.seq, parents)
@@ -149,7 +158,7 @@ func (s *Server) commit(r *Repo, author string, parents []string, files map[stri
 		fmt.Fprintf(h, "\x00%s\x00%s", p, files[p])
 	}
 	sha := hex.EncodeToString(h.Sum(nil)[:20]) // 40 hex digits, the shape of a git commit name
-	r.Commits[sha] = &Commit{SHA: sha, Parents: parents, Files: files, Author: author}
+	r.Commits[sha] = &Commit{SHA: sha, Parents: parents, Files: files, Author: author, Committer: committer}
 	return sha
 }
 
@@ -170,7 +179,7 @@ func (s *Server) repoRoutes(mux *http.ServeMux) {
 
 func (s *Server) getRepo(w http.ResponseWriter, _ *http.Request, r *Repo, _ *Token) int {
 	return reply(w, http.StatusOK, map[string]any{
-		"name": r.Name, "full_name": r.full(), "owner": map[string]any{"login": r.Owner}, "default_branch": r.DefaultBranch,
+		"id": accountID(r.full()), "name": r.Name, "full_name": r.full(), "owner": map[string]any{"login": r.Owner}, "default_branch": r.DefaultBranch,
 		"allow_merge_commit": r.Settings.AllowMergeCommit, "allow_squash_merge": r.Settings.AllowSquashMerge,
 		"allow_rebase_merge": r.Settings.AllowRebaseMerge, "allow_auto_merge": r.Settings.AllowAutoMerge,
 		"delete_branch_on_merge": r.Settings.DeleteBranchOnMerge, "private": true, "simulated": true,
