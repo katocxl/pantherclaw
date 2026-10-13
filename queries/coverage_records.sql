@@ -227,11 +227,13 @@ ON CONFLICT (org_id, kind, fingerprint) DO UPDATE SET
     last_seen_at = now()
 RETURNING *;
 
--- Open findings of a kind for a connection that the latest pass no longer
--- found are resolved.
+-- Findings of a kind for a connection that the latest pass no longer found
+-- are resolved, dismissed ones too: a dismissal covers the exposure it was
+-- made for while it lasts, so the same excess found again later reopens. The
+-- dismissal itself stays in the audit ledger.
 -- name: ResolveCoverageFindings :execrows
-UPDATE pc.coverage_findings SET state = 'RESOLVED', resolved_at = now()
-WHERE org_id = sqlc.arg(org_id) AND kind = sqlc.arg(kind) AND connection_id = sqlc.arg(connection_id) AND state = 'OPEN'
+UPDATE pc.coverage_findings SET state = 'RESOLVED', resolved_at = now(), dismissed_by = NULL, dismiss_reason = NULL
+WHERE org_id = sqlc.arg(org_id) AND kind = sqlc.arg(kind) AND connection_id = sqlc.arg(connection_id) AND state IN ('OPEN', 'DISMISSED')
   AND NOT (fingerprint = ANY (sqlc.arg(keep)::bytea[]));
 
 -- name: DismissCoverageFinding :one

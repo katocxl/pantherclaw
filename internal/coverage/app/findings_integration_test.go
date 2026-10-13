@@ -43,7 +43,8 @@ func (f *fixture) refreshFindings(t *testing.T) []dbq.PcCoverageFinding {
 // the excess, its severity and the scopes of the operations executed in
 // the last 30 days; reduced to the need it is resolved; another excess is
 // a new finding; a dismissal needs a person's written reason and survives
-// the next refresh until the excess changes. Dismissing the discovery
+// the next refresh until the excess changes, and a dismissed exposure found
+// again after it went away is open again. Dismissing the discovery
 // itself hides nothing: the reach is still there.
 func TestF048_CredentialReachBeyondTheNeedIsAFinding(t *testing.T) {
 	f := newFixture(t)
@@ -96,14 +97,19 @@ func TestF048_CredentialReachBeyondTheNeedIsAFinding(t *testing.T) {
 		t.Fatalf("after a refresh: %+v", rows)
 	}
 	f.exec(t, "UPDATE pc.discoveries SET observed = $2 WHERE id = $1", discovery, observed("contents:write,workflows:write,administration:write"))
-	if rows := f.refreshFindings(t); len(rows) != 3 || rows[0].State != "OPEN" || rows[1].State != "DISMISSED" {
+	if rows := f.refreshFindings(t); len(rows) != 3 || rows[0].State != "OPEN" || rows[1].State != "RESOLVED" {
 		t.Fatalf("a dismissed finding whose excess grew: %+v", rows)
+	}
+	// The dismissed exposure went away; found again later, it is open again.
+	f.exec(t, "UPDATE pc.discoveries SET observed = $2 WHERE id = $1", discovery, observed("contents:write,workflows:write"))
+	if rows := f.refreshFindings(t); len(rows) != 3 || rows[1].State != "OPEN" || rows[0].State != "RESOLVED" {
+		t.Fatalf("a dismissed exposure found again: %+v", rows)
 	}
 	if n := f.count(t, `SELECT count(*) FROM pc.ledger_entries WHERE kind = 'audit.coverage.finding_dismissed'`); n != 1 {
 		t.Fatalf("%d audited dismissals", n)
 	}
 	f.exec(t, "UPDATE pc.discoveries SET state = 'DISMISSED' WHERE id = $1", discovery)
-	if rows := f.refreshFindings(t); len(rows) != 3 || rows[0].State != "OPEN" {
+	if rows := f.refreshFindings(t); len(rows) != 3 || rows[1].State != "OPEN" {
 		t.Fatalf("after the discovery was dismissed: %+v", rows)
 	}
 }
