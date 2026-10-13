@@ -95,7 +95,7 @@ type claim struct {
 // lapsed claim's reason must hold (an expiry before iat, or an
 // invalidation of that kind in that interval), and its state is never
 // ENFORCED. Missing entries are not available; anything else fails.
-func (v *verifier) coverage(subject string, payload []byte) {
+func (v *verifier) coverage(subject string, payload []byte, seq int64, recorded bool) {
 	var r struct {
 		Iat int64 `json:"iat"`
 		Pap struct {
@@ -113,6 +113,13 @@ func (v *verifier) coverage(subject string, payload []byte) {
 	until := at.Add(time.Second) // iat is truncated to the second
 	s, ok := v.snapshots[c.Snapshot]
 	if !ok {
+		// The scope's snapshots on both sides of the receipt's entry show which
+		// one was current: a claim naming another is forged (T-089).
+		if cur, ok := v.currentAt(c.Scope, seq, recorded); ok {
+			v.r.add("receipt.coverage", subject, Failed, "the claimed snapshot %s is not the scope's snapshot %s current at decision time (seq %d)",
+				truncate(c.Snapshot), truncate(cur.body.Snapshot), cur.seq)
+			return
+		}
 		v.r.add("receipt.coverage", subject, NotAvailable, "the claimed snapshot %s is not in this bundle", truncate(c.Snapshot))
 		return
 	}
@@ -163,6 +170,28 @@ func (v *verifier) coverage(subject string, payload []byte) {
 	default:
 		v.r.add("receipt.coverage", subject, Passed, "%s, lapsed (%s) from the snapshot at seq %d", c.State, truncate(c.Reason), s.seq)
 	}
+}
+
+// currentAt returns the scope's snapshot current at the receipt's ledger
+// entry (seq): the latest of the scope's entries before it, when the bundle
+// also holds the scope's next entry after it, so that no entry of the scope
+// lies between them. ok is false when the bundle cannot tell.
+func (v *verifier) currentAt(sc scope, seq int64, recorded bool) (cur snapshotEntry, ok bool) {
+	if !recorded {
+		return cur, false
+	}
+	var before, after bool
+	var next snapshotEntry
+	for _, s := range v.snapshots {
+		switch {
+		case s.body.Scope != sc:
+		case s.seq < seq && (!before || s.seq > cur.seq):
+			cur, before = s, true
+		case s.seq > seq && (!after || s.seq < next.seq):
+			next, after = s, true
+		}
+	}
+	return cur, before && after
 }
 
 // coverageStates are the states a claim may say.

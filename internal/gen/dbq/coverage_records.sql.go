@@ -401,6 +401,67 @@ func (q *Queries) CoverageScopesOfConnection(ctx context.Context, orgID ids.OrgI
 	return items, nil
 }
 
+const coverageSnapshotBefore = `-- name: CoverageSnapshotBefore :one
+SELECT ledger_entry_id FROM pc.coverage_snapshots
+WHERE org_id = $1 AND agent_id = $2 AND connection_id = $3
+  AND operation = $4 AND computed_at < $5
+ORDER BY computed_at DESC, id DESC
+LIMIT 1
+`
+
+type CoverageSnapshotBeforeParams struct {
+	OrgID        ids.OrgID
+	AgentID      ids.UUID
+	ConnectionID ids.UUID
+	Operation    string
+	Until        time.Time
+}
+
+// A scope's snapshot that was current at a decision (the latest computed
+// before until), and the next one: pclaw verify tells from them a claim
+// that names another snapshot (T-089).
+func (q *Queries) CoverageSnapshotBefore(ctx context.Context, arg CoverageSnapshotBeforeParams) (ids.UUID, error) {
+	row := q.db.QueryRow(ctx, coverageSnapshotBefore,
+		arg.OrgID,
+		arg.AgentID,
+		arg.ConnectionID,
+		arg.Operation,
+		arg.Until,
+	)
+	var ledger_entry_id ids.UUID
+	err := row.Scan(&ledger_entry_id)
+	return ledger_entry_id, err
+}
+
+const coverageSnapshotFrom = `-- name: CoverageSnapshotFrom :one
+SELECT ledger_entry_id FROM pc.coverage_snapshots
+WHERE org_id = $1 AND agent_id = $2 AND connection_id = $3
+  AND operation = $4 AND computed_at >= $5
+ORDER BY computed_at, id
+LIMIT 1
+`
+
+type CoverageSnapshotFromParams struct {
+	OrgID        ids.OrgID
+	AgentID      ids.UUID
+	ConnectionID ids.UUID
+	Operation    string
+	Until        time.Time
+}
+
+func (q *Queries) CoverageSnapshotFrom(ctx context.Context, arg CoverageSnapshotFromParams) (ids.UUID, error) {
+	row := q.db.QueryRow(ctx, coverageSnapshotFrom,
+		arg.OrgID,
+		arg.AgentID,
+		arg.ConnectionID,
+		arg.Operation,
+		arg.Until,
+	)
+	var ledger_entry_id ids.UUID
+	err := row.Scan(&ledger_entry_id)
+	return ledger_entry_id, err
+}
+
 const coverageTrafficAfter = `-- name: CoverageTrafficAfter :many
 SELECT t.id, r.agent_id, t.connection_id, t.operation, t.channel, t.mode
 FROM pc.transactions t
