@@ -201,7 +201,7 @@ func TestT089_AForgedCoverageClaimIsRejected(t *testing.T) {
 	}
 	changed := bundletest.Invalidation{V: 1, ID: ids.NewV7().String(), Connection: conn, Kind: "gateway", OccurredAt: at(-time.Minute)}
 	for name, build := range map[string]func(i *bundletest.Issuer){
-		"a forged snapshot id, the neighbours present": func(i *bundletest.Issuer) {
+		"a forged snapshot id, the neighbors present": func(i *bundletest.Issuer) {
 			s := enforced()
 			i.AppendSnapshot(s)
 			c := claimOf(s)
@@ -218,7 +218,7 @@ func TestT089_AForgedCoverageClaimIsRejected(t *testing.T) {
 			c.Snapshot = ids.NewV7().String()
 			i.AppendClaim(c, agent, conn)
 		},
-		"an honest claim, the neighbours present": func(i *bundletest.Issuer) {
+		"an honest claim, the neighbors present": func(i *bundletest.Issuer) {
 			s := enforced()
 			i.AppendSnapshot(s)
 			i.AppendClaim(claimOf(s), agent, conn)
@@ -261,7 +261,7 @@ func TestT089_AForgedCoverageClaimIsRejected(t *testing.T) {
 			case "a forged snapshot id, a partial bundle":
 				// Without the scope's next snapshot the bundle cannot tell.
 				expect(t, r, "receipt.coverage", bundle.NotAvailable)
-			case "an honest claim, the neighbours present":
+			case "an honest claim, the neighbors present":
 				expect(t, r, "receipt.coverage", bundle.Passed)
 			default:
 				expect(t, r, "receipt.coverage", bundle.Failed)
