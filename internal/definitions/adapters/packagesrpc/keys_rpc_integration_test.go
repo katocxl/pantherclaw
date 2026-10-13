@@ -38,6 +38,7 @@ func orgSigned(t *testing.T, raw []byte, key *jws.Signer, version int64, ownOps 
 	pkg := bytes.Replace(raw, []byte("name: pc.mock-payments"), []byte("name: acme.payments"), 1)
 	if ownOps {
 		pkg = bytes.ReplaceAll(pkg, []byte("payments.refund."), []byte("acmepay.refund."))
+		pkg = bytes.ReplaceAll(pkg, []byte("payments.account."), []byte("acmepay.account."))
 	}
 	sum := sha256.Sum256(pkg)
 	doc, err := trust.Sign(trust.Targets{
