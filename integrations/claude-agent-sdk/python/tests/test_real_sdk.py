@@ -64,6 +64,8 @@ def model(prompt: str, tools: list[str]) -> dict[str, Any]:
         return {"tool": "mcp__payments__create_refund", "input": REFUND}
     if "PC_SCENARIO=bash" in prompt:
         return {"tool": "Bash", "input": {"command": "echo ran > marker.txt", "description": "Write a marker"}}
+    if "PC_SCENARIO=skill" in prompt:
+        return {"tool": "Skill", "input": {"skill": "pcskill"}}
     if "PC_SCENARIO=monitor" in prompt:
         return {"tool": "Monitor", "input": {"command": "echo ran > marker.txt", "description": "Write a marker", "timeout_ms": 60000}}
     if "PC_SCENARIO=subagent" in prompt:
@@ -156,6 +158,9 @@ def face_for(mcp: Face) -> Face:
 
 DENY: Face = lambda _c, aid: decided(aid, "deny", error_class="policy_denied", reason="denied")  # noqa: E731
 ALLOW: Face = lambda _c, aid: decided(aid, "allow")  # noqa: E731
+HOOK_ALLOW = lambda _c: (200, json.dumps({"decision": "allow", "mode": "enforce"}).encode())  # noqa: E731
+# A user skill whose `!` line makes a directory, pre-approved by its own allowed-tools.
+SKILL = {"config/skills/pcskill/SKILL.md": "---\nname: pcskill\ndescription: Makes a marker\nallowed-tools: Bash(mkdir:*)\n---\nMarker: !`mkdir ranmarker`\n"}
 HOOK_DENY = lambda _c: (200, json.dumps({"decision": "deny", "reason": "no", "mode": "enforce"}).encode())  # noqa: E731
 
 
@@ -184,7 +189,8 @@ class RealSDKTest(unittest.TestCase):
     def integration(self, g: Gateway, **kw: Any) -> PantherClaw:
         return PantherClaw(g.client, "payments", **({"shell": "observe", "deadline": 5.0, "wait": 5.0} | kw))
 
-    def run_sdk(self, prompt: str, options: Callable[[dict[str, Any]], dict[str, Any]], features: dict[str, Any] | None = None) -> Run:
+    def run_sdk(self, prompt: str, options: Callable[[dict[str, Any]], dict[str, Any]], features: dict[str, Any] | None = None,
+                files: dict[str, str] | None = None) -> Run:
         """Runs one scenario through the real SDK. `options` gets the options
         the run needs (cwd, environment, CLI, the MCP server) and returns the
         ClaudeAgentOptions arguments, usually through PantherClaw's options()."""
@@ -196,6 +202,9 @@ class RealSDKTest(unittest.TestCase):
         # The CLI's feature flags, from its own cache on disk (it never fetches them here).
         os.makedirs(os.path.join(d, "config"))
         Path(d, "config", ".claude.json").write_text(json.dumps({"cachedGrowthBookFeatures": features or {}}), encoding="utf-8")
+        for name, text in (files or {}).items():
+            Path(d, name).parent.mkdir(parents=True, exist_ok=True)
+            Path(d, name).write_text(text, encoding="utf-8")
         # The SDK hands the CLI this process's whole environment, so the run has only these variables.
         env = {k: v for k, v in os.environ.items() if k.upper() in _KEEP} | {
             "HOME": d, "USERPROFILE": d, "APPDATA": os.path.join(d, "appdata"), "LOCALAPPDATA": os.path.join(d, "localappdata"),
@@ -355,6 +364,33 @@ class RealSDKTest(unittest.TestCase):
         self.assertEqual(g.hooks[0]["input"]["shell"], "bash")
         self.assertEqual([c for c in g.calls if c["tool"] == "Monitor"], [], "never to /sdk")
         self.assertFalse(os.path.exists(os.path.join(r.dir, "marker.txt")), "the command ran")
+
+    def test_HR200_in_the_real_sdk_a_skills_allowed_tools_runs_its_line_past_pre_tool_use_so_a_governed_shell_refuses_user_settings(self) -> None:
+        # Without PantherClaw, in default mode: the line runs, and no hook sees a shell call.
+        seen: list[str] = []
+
+        async def record(data: Any, _id: Any, _ctx: Any) -> dict[str, Any]:
+            seen.append(data.get("tool_name", ""))
+            return {}
+
+        r = self.run_sdk("PC_SCENARIO=skill", lambda base: base | {"permission_mode": "default", "setting_sources": ["user"], "skills": "all",
+                                                                 "hooks": {"PreToolUse": [sdk.HookMatcher(hooks=[record])]}},
+                         files=SKILL)  # fmt: skip
+        self.assertTrue(os.path.isdir(os.path.join(r.dir, "ranmarker")), "the skill's ! line ran")
+        self.assertEqual(seen, ["Skill"], "only the Skill call reached PreToolUse")
+        # With a governed shell, PantherClaw refuses before the query starts.
+        p = self.integration(self.gateway(face_for(DENY), hook=HOOK_ALLOW), shell="", shell_connection="local")
+        with self.assertRaisesRegex(ValueError, "allowed-tools"):
+            p.options(permission_mode="default", setting_sources=["user"], skills="all")
+        with self.assertRaisesRegex(ValueError, "tool_aliases"):
+            p.options(permission_mode="default", setting_sources=[], tool_aliases={"Read": "Bash"})
+
+    def test_HR200_in_the_real_sdk_a_governed_shell_in_default_mode_with_no_settings_runs_an_allowed_command(self) -> None:
+        g = self.gateway(face_for(DENY), hook=HOOK_ALLOW)
+        r = self.run_sdk("PC_SCENARIO=bash", lambda base: self.integration(g, shell="", shell_connection="local").options(
+            **base, permission_mode="default", setting_sources=[]))
+        self.assertEqual(len(g.hooks), 1, "the command went to /hook")
+        self.assertTrue(os.path.exists(os.path.join(r.dir, "marker.txt")), "the allowed command ran")
 
 
 if __name__ == "__main__":

@@ -203,6 +203,32 @@ const decision = (permissionDecision: "allow" | "deny" | "ask", reason: string):
   hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision, permissionDecisionReason: `${reason} (PantherClaw, PARTIAL)` },
 });
 
+/**
+ * With a governed shell, refuses what could run a shell command past the
+ * PreToolUse hook (HR-200; founder decision 2026-10-13: no skills while the shell is
+ * governed). A skill's `!` lines run when it loads, never through the
+ * hook, and its `allowed-tools` frontmatter pre-approves them in every
+ * permission mode, so no skill may load: no user or project settings
+ * (omitted settingSources loads them all), no `skills`, no `plugins`. Tool
+ * aliases rename a call before it is resolved, so they are refused too.
+ */
+function refuseUngovernedShells(app: QueryOptions): void {
+  const why = "a skill's `!` lines run past PreToolUse, and its allowed-tools pre-approves them";
+  const sources = app.settingSources;
+  if (!Array.isArray(sources) || sources.some((s) => s === "user" || s === "project")) {
+    throw new Error(`PantherClaw: with a governed shell, pass settingSources without "user" and "project" (${why})`);
+  }
+  if (app.skills !== undefined && !(Array.isArray(app.skills) && app.skills.length === 0)) {
+    throw new Error(`PantherClaw: with a governed shell, skills cannot be enabled (${why})`);
+  }
+  if (Array.isArray(app.plugins) ? app.plugins.length > 0 : app.plugins !== undefined) {
+    throw new Error(`PantherClaw: with a governed shell, plugins cannot be loaded (they bring skills: ${why})`);
+  }
+  if (app.toolAliases !== undefined && Object.keys(app.toolAliases as object).length > 0) {
+    throw new Error("PantherClaw: with a governed shell, toolAliases cannot be set (an alias renames a call before PantherClaw sees it)");
+  }
+}
+
 /** Whether an allow rule names a tool: the tool itself (with any specifier), its MCP server, or a wildcard that matches it. */
 export function ruleNames(rule: string, tool: string, server = ""): boolean {
   const base = (rule.split("(")[0] ?? "").trim();
@@ -262,6 +288,7 @@ export class PantherClaw {
    */
   options(app: QueryOptions): QueryOptions {
     if (!app.permissionMode) throw new Error("PantherClaw: pass permissionMode explicitly in the query options");
+    if (this.o.shellConnection) refuseUngovernedShells(app);
     this.permissionMode = app.permissionMode;
     this.allowedTools = app.allowedTools ?? [];
     // Settings files can hold allow rules this integration cannot see, so a hold is never asked with them loaded.

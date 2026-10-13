@@ -10,7 +10,7 @@
 // pnpm-lock.yaml within the peer range package.json supports.
 
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -35,6 +35,7 @@ const refundInput = { amount: "30.00", charge: "ch_1" };
 function model(prompt: string, tools: string[]): Turn {
   if (prompt.includes("PC_SCENARIO=refund")) return { tool: "mcp__payments__create_refund", input: refundInput };
   if (prompt.includes("PC_SCENARIO=bash")) return { tool: "Bash", input: { command: "echo ran > marker.txt", description: "Write a marker" } };
+  if (prompt.includes("PC_SCENARIO=skill")) return { tool: "Skill", input: { skill: "pcskill" } };
   if (prompt.includes("PC_SCENARIO=monitor")) {
     return { tool: "Monitor", input: { command: "echo ran > marker.txt", description: "Write a marker", timeout_ms: 60000 } };
   }
@@ -81,6 +82,7 @@ async function run(
   prompt: string,
   options: (base: QueryOptions) => QueryOptions,
   features: Record<string, unknown> = {},
+  files: Record<string, string> = {},
 ): Promise<Run> {
   assert.ok(sdk, "the Agent SDK is not installed: run pnpm install --frozen-lockfile here (task sdk:check does)");
   const api = await fakeAnthropic(t, model);
@@ -89,6 +91,10 @@ async function run(
   // The CLI's feature flags, from its own cache on disk (it never fetches them here).
   await mkdir(join(dir, "config"), { recursive: true });
   await writeFile(join(dir, "config", ".claude.json"), JSON.stringify({ cachedGrowthBookFeatures: features }));
+  for (const [name, text] of Object.entries(files)) {
+    await mkdir(join(dir, name, ".."), { recursive: true });
+    await writeFile(join(dir, name), text);
+  }
   const base: QueryOptions = {
     cwd: dir,
     maxTurns: 6,
@@ -289,4 +295,43 @@ test("TestHR186_in the real SDK, Monitor's command goes to the local connection'
   assert.equal((g.hooks[0] as { input: { shell: string; command: string } }).input.shell, "bash");
   assert.equal(g.calls.filter((c) => c.tool === "Monitor").length, 0, "never to /sdk");
   assert.equal(await readFile(join(r.dir, "marker.txt"), "utf8").catch(() => ""), "", "the command ran");
+});
+
+/** A user skill whose `!` line makes a directory, pre-approved by its own allowed-tools. */
+const skill = {
+  "config/skills/pcskill/SKILL.md": ["---", "name: pcskill", "description: Makes a marker", "allowed-tools: Bash(mkdir:*)", "---", "Marker: !`mkdir ranmarker`", ""].join(
+    String.fromCharCode(10),
+  ),
+};
+
+test("TestHR200_in the real SDK, a skill's allowed-tools runs its ! line past PreToolUse, so a governed shell refuses user settings", testOptions, async (t) => {
+  // Without PantherClaw, in default mode: the line runs, and no hook sees a shell call.
+  const seen: string[] = [];
+  const record: HookCallback = async (input) => {
+    seen.push(input.tool_name);
+    return {} as HookOutput;
+  };
+  const r = await run(
+    t,
+    "PC_SCENARIO=skill",
+    (base) => ({ ...base, permissionMode: "default", settingSources: ["user"], skills: "all", hooks: { PreToolUse: [{ hooks: [record] }] } }),
+    {},
+    skill,
+  );
+  assert.ok(await stat(join(r.dir, "ranmarker")).then(() => true, () => false), "the skill's ! line ran");
+  assert.deepEqual(seen, ["Skill"], "only the Skill call reached PreToolUse");
+  // With a governed shell, PantherClaw refuses before the query starts.
+  const g = await gateway(t, faceFor(deny), { hook: (_b, res) => res.end(JSON.stringify({ decision: "allow", mode: "enforce" })) });
+  const p = integration(g.client, { shell: undefined, shellConnection: "local" });
+  assert.throws(() => p.options({ permissionMode: "default", settingSources: ["user"], skills: "all" }), /allowed-tools/);
+  assert.throws(() => p.options({ permissionMode: "default", toolAliases: { Read: "Bash" }, settingSources: [] }), /toolAliases/);
+});
+
+test("TestHR200_in the real SDK, a governed shell in default mode with no settings runs an allowed command", testOptions, async (t) => {
+  const g = await gateway(t, faceFor(deny), { hook: (_b, res) => res.end(JSON.stringify({ decision: "allow", mode: "enforce" })) });
+  const r = await run(t, "PC_SCENARIO=bash", (base) =>
+    integration(g.client, { shell: undefined, shellConnection: "local" }).options({ ...base, permissionMode: "default", settingSources: [] }),
+  );
+  assert.equal(g.hooks.length, 1, "the command went to /hook");
+  assert.match(await readFile(join(r.dir, "marker.txt"), "utf8").catch(() => ""), /ran/, "the allowed command ran");
 });
