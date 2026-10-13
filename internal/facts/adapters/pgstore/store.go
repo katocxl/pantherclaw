@@ -7,12 +7,18 @@
 package pgstore
 
 import (
+	"bytes"
 	"context"
 	"encoding/json/jsontext"
+	"encoding/json/v2"
+	"slices"
 	"strings"
 	"time"
 
+	"github.com/katocxl/pantherclaw/internal/approvals/adapters/pgapprovals"
+	apdomain "github.com/katocxl/pantherclaw/internal/approvals/domain"
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
+	evdomain "github.com/katocxl/pantherclaw/internal/evidence/domain"
 	"github.com/katocxl/pantherclaw/internal/facts/app"
 	"github.com/katocxl/pantherclaw/internal/facts/domain"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
@@ -47,7 +53,10 @@ func (s *Store) Taken(ctx context.Context, org ids.OrgID) (func(string) bool, er
 func (s *Store) CreateProvider(ctx context.Context, org ids.OrgID, p domain.Provider, createdBy string, ev audit.Event) error {
 	err := s.Pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
 		q := dbq.New(tx)
-		if err := q.InsertFactProvider(ctx, dbq.InsertFactProviderParams{OrgID: org, ID: p.ID, Name: p.Name, ServiceAccountID: p.ServiceAccountID, CreatedBy: createdBy}); err != nil {
+		if err := q.InsertFactProvider(ctx, dbq.InsertFactProviderParams{
+			OrgID: org, ID: p.ID, Name: p.Name, ServiceAccountID: opt(p.ServiceAccountID), GatewayID: opt(p.GatewayID),
+			ConnectionID: opt(p.ConnectionID), CreatedBy: createdBy,
+		}); err != nil {
 			return err
 		}
 		for _, d := range p.Facts {
@@ -101,7 +110,7 @@ func (s *Store) ProviderFor(ctx context.Context, org ids.OrgID, serviceAccount i
 		if err != nil {
 			return err
 		}
-		p = domain.Provider{ID: row.ID, Org: org, Name: row.Name, ServiceAccountID: row.ServiceAccountID, State: domain.ProviderState(row.State)}
+		p = domain.Provider{ID: row.ID, Org: org, Name: row.Name, ServiceAccountID: val(row.ServiceAccountID), State: domain.ProviderState(row.State)}
 		for _, d := range decls {
 			p.Facts = append(p.Facts, domain.Declaration{
 				Name: d.Name, Type: domain.Type(d.ValueType), SubjectType: d.SubjectType,
@@ -141,7 +150,11 @@ func (s *Store) Latest(ctx context.Context, org ids.OrgID, name, subjectType, su
 	return out, err
 }
 
-// Put implements app.Store.
+// Put implements app.Store. When the write changes a member of the fact
+// that approvals bind, it supersedes in the same transaction every live
+// approval request bound to that member (G0 M8, HR-205, HR-030): a pull
+// request's new head ends the requests made at the old one; a re-observed
+// fact with the same bound values ends none.
 func (s *Store) Put(ctx context.Context, org ids.OrgID, f domain.Fact) (bool, error) {
 	raw, err := domain.EncodeValue(f.Value)
 	if err != nil {
@@ -149,14 +162,63 @@ func (s *Store) Put(ctx context.Context, org ids.OrgID, f domain.Fact) (bool, er
 	}
 	var wrote bool
 	err = s.Pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
-		tag, err := dbq.New(tx).PutFact(ctx, dbq.PutFactParams{
+		q := dbq.New(tx)
+		prev, err := q.CurrentFactValue(ctx, dbq.CurrentFactValueParams{OrgID: org, Name: f.Name, SubjectType: f.SubjectType, SubjectID: f.SubjectID})
+		if err != nil && !db.IsNoRows(err) {
+			return err
+		}
+		tag, err := q.PutFact(ctx, dbq.PutFactParams{
 			OrgID: org, ID: ids.NewV7(), Name: f.Name, SubjectType: f.SubjectType, SubjectID: f.SubjectID,
 			ProviderID: f.ProviderID, Value: raw, ObservedAt: f.ObservedAt,
 		})
+		if err != nil {
+			return err
+		}
 		wrote = tag.RowsAffected() == 1
-		return err
+		if !wrote || prev == nil || bytes.Equal(prev, raw) {
+			return nil
+		}
+		for _, member := range changedMembers(f.Value, prev) {
+			key := apdomain.MemberKey(f.Name, member, f.SubjectType, f.SubjectID)
+			if _, err := pgapprovals.SupersedeByKey(ctx, tx, org, key, evdomain.Actor{Type: "fact_provider", ID: f.ProviderID.String()}); err != nil {
+				return err
+			}
+		}
+		return nil
 	})
 	return wrote, err
+}
+
+// changedMembers are the members of an object fact whose value differs from
+// the previous one (raw): an approval binds members, not the whole fact
+// (HR-030 option B, founder decision 2026-10-13), so only those supersede
+// the requests bound to them. A fact that is not an object, or a previous
+// value that does not decode, binds no member.
+func changedMembers(now domain.Value, raw []byte) []string {
+	if now.Type != domain.TypeObject {
+		return nil
+	}
+	was, err := domain.DecodeValue(domain.TypeObject, raw)
+	if err != nil {
+		return nil
+	}
+	var out []string
+	for _, side := range []map[string]any{now.Object, was.Object} {
+		for m := range side {
+			if !slices.Contains(out, m) && !sameMember(now.Object[m], was.Object[m]) {
+				out = append(out, m)
+			}
+		}
+	}
+	slices.Sort(out)
+	return out
+}
+
+// sameMember reports whether two object members hold the same value.
+func sameMember(a, b any) bool {
+	x, errA := json.Marshal(a, json.Deterministic(true))
+	y, errB := json.Marshal(b, json.Deterministic(true))
+	return errA == nil && errB == nil && bytes.Equal(x, y)
 }
 
 // Catalog returns the active fact names and their types (what policies
@@ -166,6 +228,20 @@ func (s *Store) Catalog(ctx context.Context, org ids.OrgID) (map[string]domain.T
 	err := s.Pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
 		var err error
 		out, err = s.CatalogInTx(ctx, tx, org)
+		return err
+	})
+	return out, err
+}
+
+// FactSubjects returns, by fact name, the subject type the org's active
+// provider declares the fact about (policy.FactSubjects).
+func (s *Store) FactSubjects(ctx context.Context, org ids.OrgID) (map[string]string, error) {
+	out := map[string]string{}
+	err := s.Pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
+		rows, err := dbq.New(tx).ListActiveFactSubjects(ctx, org)
+		for _, r := range rows {
+			out[r.Name] = r.SubjectType
+		}
 		return err
 	})
 	return out, err
@@ -220,7 +296,8 @@ func (s *Store) ListProviders(ctx context.Context, org ids.OrgID, includeDisable
 			provIDs = append(provIDs, r.ID)
 			at[r.ID] = i
 			out = append(out, domain.Provider{
-				ID: r.ID, Org: org, Name: r.Name, ServiceAccountID: r.ServiceAccountID, State: domain.ProviderState(r.State),
+				ID: r.ID, Org: org, Name: r.Name, ServiceAccountID: val(r.ServiceAccountID), GatewayID: val(r.GatewayID),
+				ConnectionID: val(r.ConnectionID), State: domain.ProviderState(r.State),
 			})
 		}
 		decls, err := q.ListProviderDeclarations(ctx, org, provIDs)
@@ -258,4 +335,51 @@ func (s *Store) About(ctx context.Context, org ids.OrgID, subjectType, subjectID
 		return err
 	}, db.ReadOnly())
 	return out, err
+}
+
+// opt is a nullable id: nil for the zero id.
+func opt(u ids.UUID) *ids.UUID {
+	if u.IsZero() {
+		return nil
+	}
+	return &u
+}
+
+// val is a nullable id's value: the zero id for nil.
+func val(u *ids.UUID) ids.UUID {
+	if u == nil {
+		return ids.UUID{}
+	}
+	return *u
+}
+
+// ProviderForConnection implements app.Store: the active provider a
+// gateway reports a connection's facts as (G0 M8 decision 5).
+func (s *Store) ProviderForConnection(ctx context.Context, org ids.OrgID, connection ids.UUID) (domain.Provider, error) {
+	var p domain.Provider
+	err := s.Pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
+		q := dbq.New(tx)
+		row, err := q.GetFactProviderByConnection(ctx, org, connection)
+		if db.IsNoRows(err) {
+			return app.ErrNotFound
+		}
+		if err != nil {
+			return err
+		}
+		decls, err := q.ListFactDeclarations(ctx, org, row.ID)
+		if err != nil {
+			return err
+		}
+		p = domain.Provider{
+			ID: row.ID, Org: org, Name: row.Name, GatewayID: val(row.GatewayID), ConnectionID: val(row.ConnectionID),
+			State: domain.ProviderState(row.State),
+		}
+		for _, d := range decls {
+			p.Facts = append(p.Facts, domain.Declaration{
+				Name: d.Name, Type: domain.Type(d.ValueType), SubjectType: d.SubjectType, MaxLag: time.Duration(d.MaxLagS) * time.Second,
+			})
+		}
+		return nil
+	}, db.ReadOnly())
+	return p, err
 }

@@ -22,7 +22,12 @@ type ParamType string
 // pc.shell): it may be material, policies see it as sent, and control
 // characters other than tab and newline, and format and bidi characters,
 // are refused (HR-102). Path is an absolute file-system path in its one
-// normalized spelling (actionir.NormalizePath, HR-187).
+// normalized spelling (actionir.NormalizePath, HR-187). Content is text the
+// target stores or shows exactly as written, such as a pull request's title
+// (G0 M8): unlike text it is sent from a dispatch template, so it is always
+// material (bound by the permit and any approval, and visible to policy),
+// and it is refused like a command when it holds control, format or bidi
+// characters.
 const (
 	TypeMoney          ParamType = "money"
 	TypeDecimal        ParamType = "decimal"
@@ -33,6 +38,7 @@ const (
 	TypeBoolean        ParamType = "boolean"
 	TypeText           ParamType = "text"
 	TypeCommand        ParamType = "command"
+	TypeContent        ParamType = "content"
 	TypePath           ParamType = "path"
 )
 
@@ -68,6 +74,8 @@ func (p ParamSpec) validate(name string) error {
 	switch {
 	case p.Type == TypeText && p.Material:
 		return invalid("%s: text is untrusted and can never be material (HR-023)", name)
+	case p.Type == TypeContent && !p.Material:
+		return invalid("%s: content is sent to the target, so it must be material", name)
 	case (p.Unit != "") != (p.Type == TypeDecimal || p.Type == TypeInteger):
 		return invalid("%s: decimal and integer params need a unit; other types take none", name)
 	case p.Unit != "" && !slices.Contains(Units, p.Unit):
@@ -106,7 +114,7 @@ func (p ParamSpec) validate(name string) error {
 		if p.MaxLength > actionir.MaxPath {
 			return invalid("%s: max_length of a path is at most %d", name, actionir.MaxPath)
 		}
-	case TypeDecimal, TypeInteger, TypeBoolean, TypeText, TypeCommand:
+	case TypeDecimal, TypeInteger, TypeBoolean, TypeText, TypeCommand, TypeContent:
 	default:
 		return invalid("%s: unknown type %q", name, p.Type)
 	}

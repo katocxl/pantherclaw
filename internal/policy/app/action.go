@@ -35,7 +35,7 @@ func celType(t defs.ParamType) *types.Type {
 		return cel.BoolType
 	case defs.TypeIdentifierList:
 		return cel.ListType(cel.StringType)
-	case defs.TypeEnum, defs.TypeIdentifier, defs.TypeCommand, defs.TypePath:
+	case defs.TypeEnum, defs.TypeIdentifier, defs.TypeCommand, defs.TypeContent, defs.TypePath:
 		return cel.StringType
 	case defs.TypeText:
 	}
@@ -123,7 +123,7 @@ func value(v defs.Value) ref.Val {
 		return types.Bool(v.Bool)
 	case defs.TypeIdentifierList:
 		return types.NewStringList(types.DefaultTypeAdapter, v.List)
-	case defs.TypeEnum, defs.TypeIdentifier, defs.TypeCommand, defs.TypePath:
+	case defs.TypeEnum, defs.TypeIdentifier, defs.TypeCommand, defs.TypeContent, defs.TypePath:
 		return types.String(v.Str)
 	case defs.TypeText:
 	}
@@ -146,6 +146,10 @@ func factCELType(t fdomain.Type) *types.Type {
 		return celenv.MoneyType
 	case fdomain.TypeIdentifier:
 		return cel.StringType
+	case fdomain.TypeObject:
+		// An object fact's members are read by name (facts.github_pull_head.sha);
+		// a missing member is an evaluation error, which fails closed (HR-040).
+		return cel.MapType(cel.StringType, cel.DynType)
 	}
 	return nil
 }
@@ -191,6 +195,8 @@ func FactsRecord(names []string, have map[string]fdomain.Value) *celenv.Record {
 			val = celenv.Money{M: v.Money}
 		case fdomain.TypeIdentifier:
 			val = types.String(v.Str)
+		case fdomain.TypeObject:
+			val = types.DefaultTypeAdapter.NativeToValue(v.Object)
 		}
 		if val != nil {
 			fields[fdomain.CELName(n)] = val
