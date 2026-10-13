@@ -7,10 +7,12 @@ package app_test
 
 import (
 	"context"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/katocxl/pantherclaw/internal/coverage/domain"
+	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 )
 
@@ -112,5 +114,70 @@ func TestHR217_AClaimDoesNotLapseOnAChangeItsSnapshotSaw(t *testing.T) {
 		f.org, ids.NewV7(), f.conn)
 	if c, _ := f.svc.ClaimAt(ctx, f.org, sc, time.Now()); c == nil || !c.Lapsed || c.Reason != "route" || c.Snapshot != row.ID {
 		t.Fatalf("after a change it did not see: %+v", c)
+	}
+}
+
+// hookVerifier runs hook at its first read, the last read of a scope's
+// evidence, and reports no passing test.
+type hookVerifier struct {
+	once sync.Once
+	hook func()
+}
+
+func (h *hookVerifier) LastPassed(context.Context, db.TenantTx, ids.UUID, string) (*time.Time, error) {
+	h.once.Do(h.hook)
+	return nil, nil
+}
+
+// TestHR217_AChangeCommittedDuringTheComputationLapsesTheClaim: a change
+// whose transaction began before the scope was computed, but committed
+// only after its evidence was read, is not in the snapshot: the claim
+// made on it lapses, although the change occurred before the computation.
+func TestHR217_AChangeCommittedDuringTheComputationLapsesTheClaim(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	sc := domain.Scope{Agent: f.agent, Connection: f.conn, Operation: "payments.refund.create"}
+	f.exec(t, `INSERT INTO pc.transactions (org_id, id, run_id, action_id, action_hash, operation, decision, reason_code,
+		gateway_id, connection_id, channel, mode, created_at) VALUES ($1, $2, $3, $4, $5, $6, 'ALLOW', 'OK', 'gw', $7, 'http',
+		'enforce', now() - interval '2 minutes')`, f.org, ids.NewV7(), f.run, ids.NewV7(), make([]byte, 32), sc.Operation, f.conn)
+	f.reassessOrg(t)
+
+	// A concurrent change: inserted, held open, committed at the last
+	// evidence read of the closure's reassessment.
+	inserted, commit, done := make(chan struct{}), make(chan struct{}), make(chan error, 1)
+	go func() {
+		done <- f.p.InTenantTx(ctx, f.org, func(ctx context.Context, tx db.TenantTx) error {
+			if _, err := tx.Exec(ctx, `INSERT INTO pc.coverage_invalidations (org_id, id, kind, connection_id, agent_id, detail)
+				VALUES ($1, $2, 'route', $3, $4, 'credential')`, f.org, ids.NewV7(), f.conn, f.agent); err != nil {
+				return err
+			}
+			close(inserted)
+			<-commit
+			return nil
+		})
+	}()
+	select {
+	case <-inserted:
+	case err := <-done:
+		t.Fatal(err)
+	}
+	f.svc.Verifier = &hookVerifier{hook: func() {
+		close(commit)
+		if err := <-done; err != nil {
+			t.Error(err)
+		}
+	}}
+	defer func() { f.svc.Verifier = nil }()
+	if _, err := f.record(t, f.closure(probes(false), f.dbNow(t))); err != nil {
+		t.Fatal(err)
+	}
+	f.svc.Verifier = nil
+	row, s, _ := f.current(t, sc.Operation)
+	if row.State != "ENFORCED" || len(s.Seen) != 0 {
+		t.Fatalf("after the closure: %s, seen %v", row.State, s.Seen)
+	}
+	if c, err := f.svc.ClaimAt(ctx, f.org, sc, time.Now()); err != nil || c == nil || !c.Lapsed || c.Reason != "route" ||
+		c.Snapshot != row.ID {
+		t.Fatalf("a claim on a snapshot that did not see the change: %+v (%v)", c, err)
 	}
 }
