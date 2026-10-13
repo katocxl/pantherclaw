@@ -105,6 +105,22 @@ func (q *Queries) InsertObservation(ctx context.Context, arg InsertObservationPa
 	return err
 }
 
+const lateReportSeen = `-- name: LateReportSeen :one
+SELECT EXISTS (
+    SELECT 1 FROM pc.observations
+    WHERE org_id = $1 AND transaction_id = $2 AND source = 'late_report'
+)
+`
+
+// Whether the gateway reported the transaction after the sweeper already:
+// a repeated report records nothing twice.
+func (q *Queries) LateReportSeen(ctx context.Context, orgID ids.OrgID, transactionID *ids.UUID) (bool, error) {
+	row := q.db.QueryRow(ctx, lateReportSeen, orgID, transactionID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const openReconciliation = `-- name: OpenReconciliation :exec
 INSERT INTO pc.reconciliation_tasks (org_id, id, transaction_id, kind)
 VALUES ($1, $2, $3, $4)

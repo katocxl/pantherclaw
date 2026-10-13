@@ -599,8 +599,14 @@ func (s *Store) RecordExecution(ctx context.Context, org ids.OrgID, gatewayID st
 		}
 		txn, err := q.FinishPermitForTransaction(ctx, dbq.FinishPermitForTransactionParams{ToState: to, OrgID: org, ID: permit, GatewayID: gatewayID})
 		if db.IsNoRows(err) {
-			// Too late: the sweeper may have marked it UNKNOWN (G0 M7).
-			if receipt, err = lateReport(ctx, tx, q, org, gatewayID, e, sign, pc); err != nil {
+			// Too late: the sweeper may have marked it UNKNOWN (G0 M7). A
+			// token left valid is audited on the first late report only (#313
+			// review): a repeated one records nothing twice.
+			seen, err := q.LateReportSeen(ctx, org, &pc.TransactionID)
+			if err != nil {
+				return err
+			}
+			if receipt, err = lateReport(ctx, tx, q, org, gatewayID, e, sign, pc); err != nil || seen {
 				return err
 			}
 			return revokeFailed(ctx, tx, gatewayID, pc.TransactionID, e.Access)
