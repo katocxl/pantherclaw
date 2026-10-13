@@ -15,6 +15,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/katocxl/pantherclaw/internal/approvals/proof"
 	adomain "github.com/katocxl/pantherclaw/internal/authority/domain"
 	"github.com/katocxl/pantherclaw/internal/authority/pipeline"
 	"github.com/katocxl/pantherclaw/internal/authority/recording"
@@ -201,6 +202,16 @@ type Executed struct {
 	TargetRef string
 }
 
+// Signing is how the Authority signs what RecordExecution records: the
+// execution receipt (Execution) and, with its receipts key named Issuer,
+// the effect receipt of an outcome whose effect cannot be verified (HR-191,
+// PAP-1 §9.3).
+type Signing struct {
+	Execution func(x Executed, now time.Time) (Receipt, error)
+	Receipts  Signer
+	Issuer    string
+}
+
 // Who recorded an attempt.
 const (
 	RecordedByGateway = "gateway"
@@ -235,9 +246,11 @@ type Store interface {
 	// releases (claim RELEASED), unknown keeps both held (HR-003, F115).
 	// Delegated is refused (ErrNotCooperative) unless the transaction's
 	// channel is hook or sdk. It records the attempt with its access mode
-	// and, in the same transaction, the execution receipt sign returns at
-	// the database time.
-	RecordExecution(ctx context.Context, org ids.OrgID, gatewayID string, e Execution, sign func(x Executed, now time.Time) (Receipt, error)) (string, error)
+	// and, in the same transaction, the execution receipt sign.Execution
+	// returns at the database time and, for an accepted or delegated write
+	// whose effect its definition cannot verify, an UNVERIFIABLE effect
+	// receipt signed with sign.Receipts (HR-191).
+	RecordExecution(ctx context.Context, org ids.OrgID, gatewayID string, e Execution, sign Signing) (string, error)
 	// Sweep releases expired ISSUED permits (and their claims) and marks
 	// stale DISPATCHING ones UNKNOWN, never releasing them (HR-003). Each
 	// swept permit gets, in the same transaction, the attempt, the
@@ -254,6 +267,10 @@ type Store interface {
 	// are no longer eligible and returns an approved request that is no
 	// longer met to PENDING (HR-170), in its own transaction.
 	Revalidate(ctx context.Context, org ids.OrgID, request ids.UUID) error
+	// ApprovalProof returns the WebAuthn assertions of the responses that
+	// count toward an approved request, which the permit that uses it
+	// carries for the gateway to verify against its pinned keys (HR-038).
+	ApprovalProof(ctx context.Context, org ids.OrgID, request ids.UUID) ([]proof.Assertion, error)
 }
 
 // Dispatch errors: the gateway must not dispatch on any of them (HR-001).

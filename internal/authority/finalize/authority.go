@@ -329,7 +329,7 @@ func (a *Authority) bind(ctx context.Context, gw Gateway, ev *pipeline.Evaluatio
 		res.AccessMode = ev.Connection.AccessMode
 	}
 	if monitor {
-		p, err := a.permit(gw, ev, w.TransactionID)
+		p, err := a.permit(gw, ev, w.TransactionID, nil)
 		if err != nil {
 			return Result{}, err
 		}
@@ -344,7 +344,11 @@ func (a *Authority) bind(ctx context.Context, gw Gateway, ev *pipeline.Evaluatio
 		if ev.DedupeKey != "" {
 			w.Claim = &ClaimWrite{Key: ev.DedupeKey, TransactionID: w.TransactionID}
 		}
-		p, err := a.permit(gw, ev, w.TransactionID)
+		approval, err := a.approval(ctx, gw, ev)
+		if err != nil {
+			return Result{}, err
+		}
+		p, err := a.permit(gw, ev, w.TransactionID, approval)
 		if err != nil {
 			return Result{}, err
 		}
@@ -502,8 +506,9 @@ func (a *Authority) RecordExecution(ctx context.Context, gw Gateway, e Execution
 	if e.Outcome != Accepted && e.Outcome != Failed && e.Outcome != Unknown && e.Outcome != Delegated {
 		return "", ErrOutcomeInvalid
 	}
-	return a.Store.RecordExecution(ctx, gw.Org, gw.ID, e, func(x Executed, now time.Time) (Receipt, error) {
-		return a.executionReceipt(gw, e, x, now)
+	return a.Store.RecordExecution(ctx, gw.Org, gw.ID, e, Signing{
+		Execution: func(x Executed, now time.Time) (Receipt, error) { return a.executionReceipt(gw, e, x, now) },
+		Receipts:  a.Receipts, Issuer: a.issuer(),
 	})
 }
 

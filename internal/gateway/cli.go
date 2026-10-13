@@ -216,6 +216,7 @@ func serve(ctx context.Context, args []string, stderr io.Writer, env config.Look
 	}
 	log.InfoContext(ctx, "gateway.listening", slog.String("addr", ln.Addr().String()), slog.String("gateway_id", id.Gateway.String()),
 		slog.String("org_id", id.Org.String()))
+	warnApproverKeys(ctx, &cfg, id.Org.String(), log)
 	if onStart != nil {
 		onStart(ln.Addr().String())
 	}

@@ -193,7 +193,7 @@ func (q *Queries) InsertDedupeClaim(ctx context.Context, orgID ids.OrgID, dedupe
 
 const insertEvaluationReceipt = `-- name: InsertEvaluationReceipt :exec
 INSERT INTO pc.decision_receipts (org_id, transaction_id, evaluation, receipt_jws, ledger_entry_id)
-VALUES ($1, $2, $3, $4, $5)
+VALUES ($1, $2, $3, $4::text, $5)
 `
 
 type InsertEvaluationReceiptParams struct {

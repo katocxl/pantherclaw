@@ -251,7 +251,7 @@ WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state = 'EVIDENCE_REQU
 -- name: InsertApprovalEvidence :exec
 INSERT INTO pc.approval_evidence (org_id, id, request_id, author_kind, author_user_id, author_instance_id, note)
 VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(request_id), sqlc.arg(author_kind), sqlc.narg(author_user_id),
-    sqlc.narg(author_instance_id), sqlc.arg(note));
+    sqlc.narg(author_instance_id), sqlc.arg(note)::text);
 
 -- name: CountApprovalEvidence :one
 SELECT count(*)::integer FROM pc.approval_evidence WHERE org_id = sqlc.arg(org_id) AND request_id = sqlc.arg(request_id);
@@ -364,7 +364,7 @@ WHERE org_id = sqlc.arg(org_id) AND request_id = sqlc.arg(request_id)
 ORDER BY created_at, id;
 
 -- name: RequestEvidence :many
-SELECT id, author_kind, author_user_id, author_instance_id, note, created_at
+SELECT id, author_kind, author_user_id, author_instance_id, coalesce(note, '')::text AS note, created_at
 FROM pc.approval_evidence
 WHERE org_id = sqlc.arg(org_id) AND request_id = sqlc.arg(request_id)
 ORDER BY created_at, id;

@@ -42,11 +42,12 @@ func (q *Queries) GetEvaluationInputs(ctx context.Context, orgID ids.OrgID, tran
 }
 
 const getEvaluationReceipt = `-- name: GetEvaluationReceipt :one
-SELECT receipt_jws FROM pc.decision_receipts
+SELECT coalesce(receipt_jws, '')::text AS receipt_jws FROM pc.decision_receipts
 WHERE org_id = $1 AND transaction_id = $2 AND evaluation = $3
 `
 
-// The decision receipt of one evaluation, which a replay compares with.
+// The decision receipt of one evaluation, which a replay compares with;
+// empty when retention removed its body.
 func (q *Queries) GetEvaluationReceipt(ctx context.Context, orgID ids.OrgID, transactionID ids.UUID, evaluation int32) (string, error) {
 	row := q.db.QueryRow(ctx, getEvaluationReceipt, orgID, transactionID, evaluation)
 	var receipt_jws string

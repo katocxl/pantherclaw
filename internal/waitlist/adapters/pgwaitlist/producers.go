@@ -130,19 +130,26 @@ func CloseToolReview(ctx context.Context, tx db.TenantTx, org ids.OrgID, version
 }
 
 // OpenReconciliation opens the RECONCILIATION entry of a transaction whose
-// outcome became UNKNOWN (HR-003), in the transaction that recorded it. It
-// returns the transaction's open entry when there is one. The entry never
-// resolves by itself: M7 resolves it, and until then it escalates.
+// outcome became UNKNOWN (HR-003), in the transaction that recorded it, and
+// links it to the transaction's open unknown-outcome reconciliation task
+// (G0 M7 slice A11). It returns the transaction's open entry when there is
+// one. The entry never resolves by itself: M7 closes it when the task is
+// resolved (CloseReconciliation), and until then it escalates.
 func OpenReconciliation(ctx context.Context, tx db.TenantTx, org ids.OrgID, transaction ids.UUID, actor evdomain.Actor) (ids.UUID, error) {
-	t, err := dbq.New(tx).TransactionOfRun(ctx, org, transaction)
+	q := dbq.New(tx)
+	t, err := q.TransactionOfRun(ctx, org, transaction)
 	if err != nil {
 		return ids.UUID{}, err
 	}
-	return open(ctx, tx, org, entry{
+	id, err := open(ctx, tx, org, entry{
 		kind: wdomain.KindReconciliation, subjectType: "transaction", subject: transaction,
 		agent: &t.AgentID, run: &t.RunID, txn: &transaction,
 		trusted: map[string]string{"operation": t.Operation, "outcome": "UNKNOWN"},
 	}, actor)
+	if err != nil {
+		return ids.UUID{}, err
+	}
+	return id, q.LinkReconciliationEntry(ctx, &id, org, transaction)
 }
 
 // ExpireEntries ends the open entries past their deadline whose kind ends

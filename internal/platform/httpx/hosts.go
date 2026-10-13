@@ -56,6 +56,18 @@ func MetadataHost(host string) bool {
 	return false
 }
 
+// DeniedHost reports whether a URL's host, as written, is a destination the
+// egress client refuses, before any lookup: an IP address in any spelling
+// HostAddr reads that DeniedAddr denies with the allowed prefixes, or a
+// metadata service's name. Other names can only be checked when they are
+// dialed, which the egress client does (HR-071, HR-077).
+func DeniedHost(host string, allowed []netip.Prefix) bool {
+	if a, ok := HostAddr(host); ok {
+		return DeniedAddr(a, allowed)
+	}
+	return MetadataHost(host)
+}
+
 // HostAddr parses host as an IP address in any spelling a resolver might
 // accept: dotted quads, IPv6 (with or without brackets), and the inet_aton
 // forms of IPv4 (one to four parts, each decimal, octal with a leading 0 or

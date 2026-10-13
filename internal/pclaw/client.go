@@ -155,6 +155,7 @@ func (a *app) clients() (clients, error) {
 		m7Clients: m7Clients{
 			transactions:    pantherclawv1connect.NewTransactionServiceClient(c),
 			reconciliations: pantherclawv1connect.NewReconciliationServiceClient(c),
+			evidence:        pantherclawv1connect.NewEvidenceServiceClient(c),
 		},
 	}, nil
 }

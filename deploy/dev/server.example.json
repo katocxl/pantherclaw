@@ -10,7 +10,9 @@
     "app_user": "pc_app",
     "app_password_file": "deploy/dev/secrets/pc_app.pw",
     "migrator_user": "pc_migrator",
-    "migrator_password_file": "deploy/dev/secrets/pc_migrator.pw"
+    "migrator_password_file": "deploy/dev/secrets/pc_migrator.pw",
+    "retention_user": "pc_retention",
+    "retention_password_file": "deploy/dev/secrets/pc_retention.pw"
   },
   "kek_files": ["deploy/dev/secrets/kek"],
   "worker_concurrency": 4,

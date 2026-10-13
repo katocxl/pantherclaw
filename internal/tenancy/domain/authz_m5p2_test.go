@@ -57,7 +57,7 @@ func TestT043_OrgAdminStaysOutOfApprovalsAndRestorations(t *testing.T) {
 	}
 	// waitlist.read reaches everyone entries are routed to.
 	for _, r := range []domain.RoleName{
-		domain.RoleApprover, domain.RoleGrantIssuer, domain.RolePolicyPublisher, domain.RoleResponder,
+		domain.RoleApprover, domain.RoleGrantIssuer, domain.RolePolicyPublisher, domain.RoleResponder, domain.RoleReconciler,
 	} {
 		role, _ := domain.LookupRole(r)
 		if !role.Has(domain.PermWaitlistRead) {

@@ -132,11 +132,11 @@ func Render(typ string, params map[string]string) (Rendered, error) {
 	if utf8.RuneCountInString(r.Title) > MaxTitle || utf8.RuneCountInString(r.Body) > MaxBody {
 		return Rendered{}, ErrBadParams
 	}
-	// A link holds at most the request id placeholder (G0 M5 part 2), and
-	// only a canonical id fills it, so a link always opens a PantherClaw
-	// page.
+	// A link holds at most an id placeholder (the request's, G0 M5 part 2;
+	// the reconciliation's, G0 M7), and only a canonical id fills it, so a
+	// link always opens a PantherClaw page.
 	for _, m := range placeholder.FindAllStringSubmatch(t.Link, -1) {
-		if m[1] != linkParam || !idValue.MatchString(params[linkParam]) {
+		if !slices.Contains(linkParams, m[1]) || !idValue.MatchString(params[m[1]]) {
 			return Rendered{}, fmt.Errorf("%w: link %s", ErrBadParams, m[1])
 		}
 	}
@@ -144,8 +144,8 @@ func Render(typ string, params map[string]string) (Rendered, error) {
 	return r, nil
 }
 
-// linkParam is the one placeholder a link may hold.
-const linkParam = "request"
+// linkParams are the placeholders a link may hold.
+var linkParams = []string{"request", "reconciliation"}
 
 var idValue = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 
