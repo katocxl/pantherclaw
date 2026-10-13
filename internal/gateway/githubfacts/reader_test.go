@@ -5,6 +5,7 @@ package githubfacts
 
 import (
 	"context"
+	"encoding/json/v2"
 	"io"
 	"log/slog"
 	"net/http"
@@ -34,7 +35,7 @@ func newGHWorld(t *testing.T) *ghWorld {
 	sim.PushAs("acme/payments", "fix/a", "alice", map[string]string{"a.go": "package a\n"})
 	head := sim.PushAs("acme/payments", "fix/a", "mallory", map[string]string{"b.go": "package b\n"})
 	sim.AddToken("ghp_reader", "reader", []string{"acme/payments"}, map[string]string{
-		"metadata": "read", "contents": "read", "pull_requests": "write", "checks": "read",
+		"metadata": "read", "contents": "read", "pull_requests": "write", "checks": "read", "statuses": "read",
 	})
 	srv := httptest.NewServer(sim.Handler())
 	t.Cleanup(srv.Close)
@@ -111,10 +112,11 @@ func TestHR160_PullRequestFacts(t *testing.T) {
 	if d := got[RepoTriggers]; d["state"] != "triggered" || !slices.Contains(d["environments"].([]any), any("production")) {
 		t.Errorf("triggers %v", d)
 	}
-	// A new commit moves the head: the approval is for another commit.
+	// A new commit moves the head: the approval is for another commit, and
+	// the new head has no check run yet, which is not a pass.
 	w.sim.PushAs("acme/payments", "fix/a", "mallory", map[string]string{"c.go": "package c\n"})
 	got = facts(Read(context.Background(), w.get, pr, []string{PullReviews, PullChecks}))
-	if len(got[PullReviews]["approved"].([]any)) != 0 || got[PullChecks]["passed"] != true {
+	if len(got[PullReviews]["approved"].([]any)) != 0 || got[PullChecks]["passed"] != false || got[PullChecks]["total"] != int64(0) {
 		t.Fatalf("after a push: %v", got)
 	}
 }
@@ -167,5 +169,176 @@ func TestHR206_AMergeDeploysWhatTheBaseBranchDeploys(t *testing.T) {
 	d := got[RepoTriggers]
 	if d["state"] != "triggered" || d["at"] != w.sim.Branch("acme/payments", "main") || !slices.Contains(d["environments"].([]any), any("staging")) {
 		t.Fatalf("triggers %v", d)
+	}
+}
+
+// TestHR207_PeopleAreIncompleteWhenWhoPushedIsUnknown: a commit whose
+// author GitHub links to no account, or a branch created at a commit its
+// creator did not make (someone pushed it first, elsewhere), makes the
+// people incomplete; accounts that are not people are listed as bots, and
+// author and pushers are always there.
+func TestHR207_PeopleAreIncompleteWhenWhoPushedIsUnknown(t *testing.T) {
+	w := newGHWorld(t)
+	pr := Subject{Owner: "acme", Repo: "payments", Number: 1}
+	people := facts(Read(context.Background(), w.get, pr, []string{PullPeople}))[PullPeople]
+	if people["complete"] != true || people["author"] == nil || len(people["bots"].([]any)) != 0 {
+		t.Fatalf("people of a plain pull request: %v", people)
+	}
+	w.sim.PushBy("acme/payments", "fix/a", "mallory", "", "mallory", map[string]string{"d.go": "package d\n"})
+	if people := facts(Read(context.Background(), w.get, pr, []string{PullPeople}))[PullPeople]; people["complete"] != false {
+		t.Fatalf("a commit whose author is linked to no account: %v", people)
+	}
+
+	// Rachel pushes a commit authored as alice to r/tmp; an App creates a
+	// branch at it and opens the pull request. Rachel pushed it, but the
+	// head branch's activity shows only the App.
+	sha := w.sim.PushBy("acme/payments", "r/tmp", "rachel", "alice", "alice", map[string]string{"e.go": "package e\n"})
+	w.sim.AddToken("ghs_app", "agent[bot]", []string{"acme/payments"}, map[string]string{"contents": "write", "pull_requests": "write"})
+	for _, c := range [][2]string{
+		{"/repos/acme/payments/git/refs", `{"ref":"refs/heads/fix/r","sha":"` + sha + `"}`},
+		{"/repos/acme/payments/pulls", `{"title":"Fix","head":"fix/r","base":"main"}`},
+	} {
+		path, body := c[0], c[1]
+		req, _ := http.NewRequestWithContext(t.Context(), http.MethodPost, w.srv.URL+path, strings.NewReader(body))
+		req.Header.Set("Authorization", "token ghs_app")
+		res, err := w.srv.Client().Do(req)
+		if err != nil || res.StatusCode != http.StatusCreated {
+			t.Fatalf("%s: %v %v", path, res, err)
+		}
+		_ = res.Body.Close()
+	}
+	people = facts(Read(context.Background(), w.get, Subject{Owner: "acme", Repo: "payments", Number: 2}, []string{PullPeople}))[PullPeople]
+	if people["complete"] != false || len(people["bots"].([]any)) != 1 || len(people["pushers"].([]any)) != 1 {
+		t.Fatalf("a branch created at a commit someone else pushed: %v", people)
+	}
+}
+
+// TestHR160_ChecksPassOnlyWithTheRequiredRunsFromTheirApp: no run is no
+// pass; a check the base branch requires passes only with a successful run
+// from the App the rule names, so a run of that name from another App does
+// not count.
+func TestHR160_ChecksPassOnlyWithTheRequiredRunsFromTheirApp(t *testing.T) {
+	w := newGHWorld(t)
+	pr := Subject{Owner: "acme", Repo: "payments", Number: 1}
+	if c := facts(Read(context.Background(), w.get, pr, []string{PullChecks}))[PullChecks]; c["passed"] != false {
+		t.Fatalf("no run: %v", c)
+	}
+	w.sim.SetBranchRules("acme/payments", "main", map[string]any{"type": "required_status_checks", "parameters": map[string]any{
+		"required_status_checks": []any{map[string]any{"context": "test", "integration_id": 15368}},
+	}})
+	w.sim.SetCheckRuns("acme/payments", w.head,
+		github.CheckRun{Name: "lint", Status: "completed", Conclusion: "success"},
+		github.CheckRun{Name: "test", Status: "completed", Conclusion: "success", App: "spoofer"})
+	c := facts(Read(context.Background(), w.get, pr, []string{PullChecks}))[PullChecks]
+	if c["passed"] != false || len(c["missing"].([]any)) != 1 || len(c["runs"].([]any)) != 2 {
+		t.Fatalf("a required check run by another App: %v", c)
+	}
+	w.sim.SetBranchRules("acme/payments", "main", map[string]any{"type": "required_status_checks", "parameters": map[string]any{
+		"required_status_checks": []any{map[string]any{"context": "lint"}},
+	}})
+	if c := facts(Read(context.Background(), w.get, pr, []string{PullChecks}))[PullChecks]; c["passed"] != true {
+		t.Fatalf("a required check with a successful run: %v", c)
+	}
+}
+
+// TestHR206_NoWorkflowsOnlyAtACommitThatExists: a commit without a
+// workflow directory deploys nothing; a commit GitHub does not know (it
+// answers 404 for the directory too) gives no fact at all.
+func TestHR206_NoWorkflowsOnlyAtACommitThatExists(t *testing.T) {
+	w := newGHWorld(t)
+	gone := w.sim.Push("acme/payments", "fix/c", map[string]string{".github/workflows/deploy.yml": ""})
+	got := facts(Read(context.Background(), w.get, Subject{Owner: "acme", Repo: "payments", Branch: "fix/c", At: gone}, []string{BranchTriggers}))
+	if got[BranchTriggers]["state"] != "none" {
+		t.Fatalf("no workflows: %v", got)
+	}
+	unknown := "0123456789abcdef0123456789abcdef01234567"
+	if got := facts(Read(context.Background(), w.get, Subject{Owner: "acme", Repo: "payments", Branch: "fix/c", At: unknown}, []string{BranchTriggers})); len(got) != 0 {
+		t.Fatalf("a commit GitHub does not know: %v", got)
+	}
+}
+
+// rewrite is w.get with the JSON answer for paths containing part passed
+// through edit.
+func (w *ghWorld) rewrite(part string, edit func(v any) any) Getter {
+	return func(ctx context.Context, path string) (egress.Response, error) {
+		res, err := w.get(ctx, path)
+		if err != nil || !strings.Contains(path, part) {
+			return res, err
+		}
+		var v any
+		if err := json.Unmarshal(res.Body, &v); err != nil {
+			return res, err
+		}
+		res.Body, err = json.Marshal(edit(v))
+		return res, err
+	}
+}
+
+// TestHR207_PeopleAreIncompleteWhenTheFeedMissesAPush: unless the activity
+// feed shows the head being pushed and a push bringing every commit, who
+// pushed is not known, and the people are incomplete.
+func TestHR207_PeopleAreIncompleteWhenTheFeedMissesAPush(t *testing.T) {
+	w := newGHWorld(t)
+	pr := Subject{Owner: "acme", Repo: "payments", Number: 1}
+	for name, edit := range map[string]func(v any) any{
+		"an empty feed":           func(any) any { return []any{} },
+		"without the first push":  func(v any) any { l := v.([]any); return l[:len(l)-1] }, // newest first
+		"without the latest push": func(v any) any { return v.([]any)[1:] },
+	} {
+		people := facts(Read(context.Background(), w.rewrite("/activity", edit), pr, []string{PullPeople}))[PullPeople]
+		if people["complete"] != false {
+			t.Errorf("%s: %v", name, people)
+		}
+	}
+}
+
+// TestHR207_OnlyBotAccountsAreBots: an organization or a mannequin (an
+// imported placeholder for a real person) is not a bot, so it is never
+// left out of the people a reviewer must be independent of.
+func TestHR207_OnlyBotAccountsAreBots(t *testing.T) {
+	w := newGHWorld(t)
+	pr := Subject{Owner: "acme", Repo: "payments", Number: 1}
+	for _, typ := range []string{"Mannequin", "Organization", "Bot"} {
+		get := w.rewrite("/pulls/1", func(v any) any {
+			if m, ok := v.(map[string]any); ok && m["user"] != nil {
+				m["user"].(map[string]any)["type"] = typ
+			}
+			return v
+		})
+		people := facts(Read(context.Background(), get, pr, []string{PullPeople}))[PullPeople]
+		if bots := people["bots"].([]any); (typ == "Bot") != (len(bots) == 1) {
+			t.Errorf("%s author: bots %v", typ, bots)
+		}
+	}
+}
+
+// TestHR160_ChecksReadStatusesAndClassicProtection: commit statuses count:
+// a failing one fails the checks, and a check that classic branch
+// protection requires passes with a successful status. Protection that is
+// on but unreadable fails them.
+func TestHR160_ChecksReadStatusesAndClassicProtection(t *testing.T) {
+	w := newGHWorld(t)
+	pr := Subject{Owner: "acme", Repo: "payments", Number: 1}
+	w.sim.SetCheckRuns("acme/payments", w.head, github.CheckRun{Name: "test", Status: "completed", Conclusion: "success"})
+	w.sim.SetStatuses("acme/payments", w.head, github.Status{Context: "ci/legacy", State: "failure"})
+	if c := facts(Read(context.Background(), w.get, pr, []string{PullChecks}))[PullChecks]; c["passed"] != false || len(c["failing"].([]any)) != 1 {
+		t.Fatalf("a failing status: %v", c)
+	}
+	w.sim.Protect("acme/payments", "main", "ci/legacy", "ci/other")
+	w.sim.SetStatuses("acme/payments", w.head, github.Status{Context: "ci/legacy", State: "success"})
+	got := facts(Read(context.Background(), w.get, pr, []string{PullChecks, BranchRules}))
+	if c := got[PullChecks]; c["passed"] != false || c["classic"] != "read" || len(c["missing"].([]any)) != 1 || c["missing"].([]any)[0] != "ci/other" {
+		t.Fatalf("a required check classic protection names: %v", c)
+	}
+	if r := got[BranchRules]; r["protection"] != "read" || len(r["required_checks"].([]any)) != 2 {
+		t.Fatalf("rules with classic protection: %v", r)
+	}
+	w.sim.SetStatuses("acme/payments", w.head, github.Status{Context: "ci/legacy", State: "success"}, github.Status{Context: "ci/other", State: "success"})
+	if c := facts(Read(context.Background(), w.get, pr, []string{PullChecks}))[PullChecks]; c["passed"] != true {
+		t.Fatalf("every required check passed: %v", c)
+	}
+	hidden := w.rewrite("payments/branches/main", func(v any) any { delete(v.(map[string]any), "protection"); return v })
+	if c := facts(Read(context.Background(), hidden, pr, []string{PullChecks}))[PullChecks]; c["passed"] != false || c["classic"] != "unread" {
+		t.Fatalf("protection on but unreadable: %v", c)
 	}
 }

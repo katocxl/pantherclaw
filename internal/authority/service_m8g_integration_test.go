@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/katocxl/pantherclaw/internal/authority"
+	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/keys"
 )
 
@@ -71,5 +72,17 @@ func TestHR203_TheExecutionReceiptCarriesTheAccess(t *testing.T) {
 	}
 	if got := record(nil); got != nil {
 		t.Fatalf("a static credential's receipt carries access %+v", got)
+	}
+	// A token that could not be revoked: the receipt and an audit event
+	// say so (ADR-0021 item 6); with no expiry stated, none is recorded.
+	got = record(&authority.Access{Installation: 7, Repository: "acme/payments", Requested: perms, Granted: perms, Revocation: "revoke_failed"})
+	if got == nil || got.Revocation != "revoke_failed" || got.ExpiresAt != "" {
+		t.Fatalf("an unrevoked token's access: %+v", got)
+	}
+	var events int
+	if err := f.pool.InTenantTx(ctx, f.gw.Org, func(ctx context.Context, tx db.TenantTx) error {
+		return tx.QueryRow(ctx, "SELECT count(*) FROM pc.ledger_entries WHERE kind = 'audit.credential.revoke_failed'").Scan(&events)
+	}); err != nil || events != 1 {
+		t.Fatalf("%d credential.revoke_failed events: %v", events, err)
 	}
 }
