@@ -505,6 +505,7 @@ JOIN pc.fact_providers p ON p.org_id = f.org_id AND p.id = f.provider_id AND p.s
 WHERE r.org_id = sqlc.arg(org_id) AND r.id = sqlc.arg(request_id);
 
 -- name: LinkedGitHubUsers :many
--- The users linked to GitHub user ids (HR-207).
-SELECT DISTINCT user_id FROM pc.github_identities
+-- The users linked to GitHub user ids, each with the id it is linked to
+-- (HR-207, F158). An id is linked to one user at most.
+SELECT github_user_id, user_id FROM pc.github_identities
 WHERE org_id = sqlc.arg(org_id) AND github_user_id = ANY(sqlc.arg(github_ids)::bigint[]);

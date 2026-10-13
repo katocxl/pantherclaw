@@ -34,6 +34,10 @@ type Eligibility struct {
 	People       map[ids.UUID]apdomain.Person
 	// RequestedBy is a restoration's requester.
 	RequestedBy ids.UUID
+	// PeopleLists are, for each fact an independent requirement names, the
+	// people it lists now and the users linked to them; Context.Authorship
+	// is read from them (G0 M8, HR-207, F158).
+	PeopleLists []apdomain.PeopleList
 }
 
 // deciderRoles are the default roles that decide a request of kind: those
@@ -125,8 +129,12 @@ func LoadEligibility(ctx context.Context, q *dbq.Queries, org ids.OrgID, request
 		}
 	}
 	c.Requester = out.RequestedBy
-	if c.Authorship, err = authorship(ctx, q, org, request, out.Requirements); err != nil {
+	if out.PeopleLists, err = peopleLists(ctx, q, org, request, out.Requirements); err != nil {
 		return Eligibility{}, err
+	}
+	c.Authorship = map[string]apdomain.Authorship{}
+	for _, l := range out.PeopleLists {
+		c.Authorship[l.Fact] = l.Authorship()
 	}
 	out.Context = c
 	if len(users) == 0 {
@@ -230,62 +238,46 @@ func voidReason(code string) string {
 	return "NOT_ELIGIBLE"
 }
 
-// authorship reads, for each fact an independent requirement names, the
+// peopleLists reads, for each fact an independent requirement names, the
 // people it lists now about the held action's target and the users linked
 // to them (G0 M8, HR-207). The fact is read as it is when a person
 // responds, so a commit pushed after the hold excludes its pusher too. A
 // fact that is not known, does not decode or says it is incomplete leaves
-// the authorship incomplete, and nobody counts as independent.
-func authorship(ctx context.Context, q *dbq.Queries, org ids.OrgID, request ids.UUID, reqs []apdomain.Requirement) (
-	map[string]apdomain.Authorship, error,
+// the list incomplete, and nobody counts as independent. The approval page
+// shows the same lists (F158).
+func peopleLists(ctx context.Context, q *dbq.Queries, org ids.OrgID, request ids.UUID, reqs []apdomain.Requirement) (
+	[]apdomain.PeopleList, error,
 ) {
-	out := map[string]apdomain.Authorship{}
+	var out []apdomain.PeopleList
 	for _, r := range reqs {
 		name := r.IndependentOf
-		if !r.Independent || name == "" {
+		if !r.Independent || name == "" || slices.ContainsFunc(out, func(l apdomain.PeopleList) bool { return l.Fact == name }) {
 			continue
 		}
-		if _, done := out[name]; done {
-			continue
-		}
+		l := apdomain.PeopleList{Fact: name}
 		raw, err := q.RequestSubjectFact(ctx, name, org, request)
-		if db.IsNoRows(err) {
-			out[name] = apdomain.Authorship{}
-			continue
-		} else if err != nil {
+		switch {
+		case db.IsNoRows(err):
+			l.Gaps = []string{apdomain.PeopleNotKnown}
+		case err != nil:
 			return nil, err
-		}
-		v, err := fdomain.DecodeValue(fdomain.TypeObject, raw)
-		if err != nil || v.Object["complete"] != true {
-			out[name] = apdomain.Authorship{}
-			continue
-		}
-		ghIDs := githubIDs(v.Object)
-		users, err := q.LinkedGitHubUsers(ctx, org, ghIDs)
-		if err != nil {
-			return nil, err
-		}
-		out[name] = apdomain.Authorship{Users: users, Complete: true}
-	}
-	return out, nil
-}
-
-// githubIDs are the GitHub user ids a people fact lists: its author and
-// every author, committer and pusher.
-func githubIDs(people map[string]any) []int64 {
-	var out []int64
-	add := func(v any) {
-		if id, ok := v.(int64); ok && !slices.Contains(out, id) {
-			out = append(out, id)
-		}
-	}
-	add(people["author"])
-	for _, member := range []string{"authors", "committers", "pushers"} {
-		if list, ok := people[member].([]any); ok {
-			for _, v := range list {
-				add(v)
+		default:
+			if v, err := fdomain.DecodeValue(fdomain.TypeObject, raw); err != nil {
+				l.Gaps = []string{apdomain.PeopleUnreadable}
+			} else {
+				l = apdomain.ListPeople(name, v.Object)
 			}
 		}
+		if ghIDs := l.GitHubIDs(); len(ghIDs) > 0 {
+			links, err := q.LinkedGitHubUsers(ctx, org, ghIDs)
+			if err != nil {
+				return nil, err
+			}
+			for _, k := range links {
+				l.Link(k.GithubUserID, k.UserID)
+			}
+		}
+		out = append(out, l)
 	}
-	return out
+	return out, nil
 }

@@ -39,6 +39,8 @@ type fakeApprovals struct {
 	empty, readOnly bool
 	// review adds a merge review's consequences and decider rules.
 	review bool
+	// people are the people lists the page shows.
+	people []apdomain.PeopleList
 	err    error
 
 	mu         sync.Mutex
@@ -201,6 +203,7 @@ func (f *fakeApprovals) View(ctx context.Context, id ids.UUID) (apapp.View, erro
 		},
 		State: "PENDING", Now: now,
 		Evidence: []apapp.EvidenceLine{{Author: "instance:x", Note: apdomain.Untrusted{Source: "evidence", Text: `"><img src=x onerror=alert(1)>`}, At: now}},
+		People:   f.people,
 	}
 	if f.review {
 		repo := actionir.Target{Type: "github.repository", ID: "acme/payments"}
@@ -244,6 +247,58 @@ func TestF158_TheMergeReviewShowsItsConsequencesAndDeciders(t *testing.T) {
 	}
 	if plain := getAs(t, newApprovalsHandler(t, &fakeApprovals{}), authnapp.ApprovalsPath+"/"+knownRequest.String(), "good"); strings.Contains(plain.Body, "What it may also cause") {
 		t.Fatal("an action without consequences shows the section")
+	}
+}
+
+// TestF158_ThePageListsThePullRequestsPeopleAndWhoIsNotLinked (HR-207): the
+// page lists each GitHub user the people fact names, one per row, with how
+// it lists them and the user linked to them, or "not linked"; a list that
+// may not name everyone says plainly that it is incomplete.
+func TestF158_ThePageListsThePullRequestsPeopleAndWhoIsNotLinked(t *testing.T) {
+	bob := ids.NewV7()
+	path := authnapp.ApprovalsPath + "/" + knownRequest.String()
+	page := func(lists ...apdomain.PeopleList) string {
+		t.Helper()
+		return getAs(t, newApprovalsHandler(t, &fakeApprovals{review: true, people: lists}), path, "good").Body
+	}
+	complete := apdomain.PeopleList{Fact: "github.pull.people", Complete: true, People: []apdomain.Listed{
+		{GitHubID: 42, As: []string{"author", "commit author"}, User: &bob},
+		{GitHubID: 44, As: []string{"pusher"}},
+	}}
+	body := page(complete)
+	for _, want := range []string{
+		"Who <code>github.pull.people</code> lists now",
+		"<tr><td><code>42</code></td><td>author, commit author</td><td><code>user:" + bob.String() + "</code></td></tr>",
+		"<tr><td><code>44</code></td><td>pusher</td><td>not linked</td></tr>",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("the page lacks %q", want)
+		}
+	}
+	if strings.Contains(body, "list of people is incomplete") {
+		t.Error("a complete list is called incomplete")
+	}
+
+	incomplete := apdomain.PeopleList{Fact: "github.pull.people", Gaps: []string{apdomain.PeopleNotAll}, People: []apdomain.Listed{
+		{GitHubID: 42, As: []string{"author"}},
+	}}
+	body = page(incomplete)
+	for _, want := range []string{
+		"The list of people is incomplete: " + apdomain.PeopleNotAll + ".",
+		"Until it can be read in full, no approval that must be independent of these people counts.",
+		"<tr><td><code>42</code></td><td>author</td><td>not linked</td></tr>",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("the page lacks %q", want)
+		}
+	}
+	malformed := complete
+	malformed.Gaps = []string{apdomain.PeopleMalformed}
+	if !strings.Contains(page(malformed), "The list of people is incomplete: "+apdomain.PeopleMalformed+".") {
+		t.Error("a list holding something other than GitHub user ids is not called incomplete")
+	}
+	if strings.Contains(page(), "lists now") {
+		t.Error("a request without a people fact lists people")
 	}
 }
 

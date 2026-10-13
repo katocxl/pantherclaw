@@ -9,6 +9,7 @@ import (
 	"encoding/json/v2"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -20,6 +21,7 @@ import (
 	defs "github.com/katocxl/pantherclaw/internal/definitions/domain"
 	"github.com/katocxl/pantherclaw/internal/definitions/manifest"
 	fdomain "github.com/katocxl/pantherclaw/internal/facts/domain"
+	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	mockpayments "github.com/katocxl/pantherclaw/packages/mock-payments"
 )
 
@@ -263,4 +265,60 @@ func FuzzApprovalRender(f *testing.F) {
 			t.Fatalf("agent text changed the trusted part: %q", a.Title)
 		}
 	})
+}
+
+// TestF158_ThePeopleListNamesEveryoneOnceWithTheirLinkedUser (HR-207): the
+// approval page lists a people fact's author, commit authors, committers
+// and pushers once each, in order, with how the fact lists them and the
+// user linked to them or none. Independence reads the same list. A list
+// the fact says is incomplete, one that holds something other than GitHub
+// user ids, and one cut short for the page each say so.
+func TestF158_ThePeopleListNamesEveryoneOnceWithTheirLinkedUser(t *testing.T) {
+	bob := uid("0192f3a0-0000-7000-8000-0000000000b0")
+	l := domain.ListPeople("github.pull.people", map[string]any{
+		"complete": true, "author": int64(42), "authors": []any{int64(42), int64(43)}, "committers": []any{int64(43)},
+		"pushers": []any{int64(44)},
+	})
+	l.Link(42, bob)
+	if l.Fact != "github.pull.people" || !l.Complete || len(l.Gaps) != 0 || len(l.People) != 3 {
+		t.Fatalf("list %+v", l)
+	}
+	for i, want := range []struct {
+		id     int64
+		as     string
+		linked bool
+	}{{42, "author, commit author", true}, {43, "commit author, committer", false}, {44, "pusher", false}} {
+		p := l.People[i]
+		if p.GitHubID != want.id || strings.Join(p.As, ", ") != want.as || (p.User != nil) != want.linked || (p.User != nil && *p.User != bob) {
+			t.Errorf("person %d = %+v, want %+v", i, p, want)
+		}
+	}
+	if a := l.Authorship(); !a.Complete || !slices.Equal(a.Users, []ids.UUID{bob}) {
+		t.Errorf("authorship %+v", a)
+	}
+	if shown := l.Shown(2); len(shown.People) != 2 || !slices.Equal(shown.Gaps, []string{"only the first 2 of the 3 people it lists are shown"}) ||
+		len(l.People) != 3 || len(l.Gaps) != 0 {
+		t.Errorf("shown %+v, from %+v", shown, l)
+	}
+
+	incomplete := domain.ListPeople("github.pull.people", map[string]any{"complete": false, "author": int64(42)})
+	incomplete.Link(42, bob)
+	if incomplete.Complete || !slices.Equal(incomplete.Gaps, []string{domain.PeopleNotAll}) || len(incomplete.People) != 1 ||
+		incomplete.People[0].User == nil {
+		t.Errorf("incomplete %+v", incomplete)
+	}
+	if a := incomplete.Authorship(); a.Complete || len(a.Users) != 0 {
+		t.Errorf("an incomplete list counted for independence: %+v", a)
+	}
+	for name, member := range map[string]map[string]any{
+		"a login for the author":   {"author": "octocat"},
+		"a pusher that is no list": {"pushers": int64(44)},
+		"a login among authors":    {"authors": []any{int64(42), "octocat"}},
+		"a zero id":                {"committers": []any{int64(0)}},
+	} {
+		member["complete"] = true
+		if got := domain.ListPeople("github.pull.people", member); !slices.Contains(got.Gaps, domain.PeopleMalformed) {
+			t.Errorf("%s: gaps %q", name, got.Gaps)
+		}
+	}
 }

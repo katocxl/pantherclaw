@@ -1113,24 +1113,30 @@ func (q *Queries) LatestApprovalRequest(ctx context.Context, orgID ids.OrgID, ru
 }
 
 const linkedGitHubUsers = `-- name: LinkedGitHubUsers :many
-SELECT DISTINCT user_id FROM pc.github_identities
+SELECT github_user_id, user_id FROM pc.github_identities
 WHERE org_id = $1 AND github_user_id = ANY($2::bigint[])
 `
 
-// The users linked to GitHub user ids (HR-207).
-func (q *Queries) LinkedGitHubUsers(ctx context.Context, orgID ids.OrgID, githubIds []int64) ([]ids.UUID, error) {
+type LinkedGitHubUsersRow struct {
+	GithubUserID int64
+	UserID       ids.UUID
+}
+
+// The users linked to GitHub user ids, each with the id it is linked to
+// (HR-207, F158). An id is linked to one user at most.
+func (q *Queries) LinkedGitHubUsers(ctx context.Context, orgID ids.OrgID, githubIds []int64) ([]LinkedGitHubUsersRow, error) {
 	rows, err := q.db.Query(ctx, linkedGitHubUsers, orgID, githubIds)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []ids.UUID{}
+	items := []LinkedGitHubUsersRow{}
 	for rows.Next() {
-		var user_id ids.UUID
-		if err := rows.Scan(&user_id); err != nil {
+		var i LinkedGitHubUsersRow
+		if err := rows.Scan(&i.GithubUserID, &i.UserID); err != nil {
 			return nil, err
 		}
-		items = append(items, user_id)
+		items = append(items, i)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
