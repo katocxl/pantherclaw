@@ -28,8 +28,9 @@ func peopleRefunds(raw []byte) []byte {
 // TestHR207_AnIndependentApprovalNamesThePeopleFact: the independent
 // approval a refund needs carries the people fact its approver must not be
 // in, so the approvals side excludes them; when the fact says it could not
-// list everyone, the refund cannot be authorized (AUTHORSHIP_UNKNOWN), and
-// an approval that is not independent is not held up by it.
+// list everyone, the refund cannot be authorized (AUTHORSHIP_UNKNOWN). An
+// approval that is not independent names the fact too, and is held up the
+// same way (founder decision 2026-10-13).
 func TestHR207_AnIndependentApprovalNamesThePeopleFact(t *testing.T) {
 	f := newFxWith(t, peopleRefunds, "")
 	people := func(complete bool) {
@@ -58,16 +59,20 @@ func TestHR207_AnIndependentApprovalNamesThePeopleFact(t *testing.T) {
 	people(false)
 	expect(t, f.call(f.run, "create_refund", refund("ch_1", "30.00")), adomain.CannotAuthorize, apdomain.IneligibleAuthorshipUnknown)
 	requireApproval(false)
-	if ev := f.call(f.run, "create_refund", refund("ch_1", "30.00")); ev.Decision != adomain.RequireApproval || ev.Requirements[0].IndependentOf != "" {
+	expect(t, f.call(f.run, "create_refund", refund("ch_1", "30.00")), adomain.CannotAuthorize, apdomain.IneligibleAuthorshipUnknown)
+	people(true)
+	if ev := f.call(f.run, "create_refund", refund("ch_1", "30.00")); ev.Decision != adomain.RequireApproval ||
+		ev.Requirements[0].Independent || ev.Requirements[0].IndependentOf != "payments.charge.people" {
 		t.Fatalf("not independent: %s %+v", ev.Decision, ev.Requirements)
 	}
 }
 
 // TestHR207_ReviewersAndReleaseApproversAreIndependentByRole: HR-207 holds
 // per role. A code_reviewer or release_approver requirement is independent
-// even when it does not say so: it names the people fact, and a fact that
-// could not list everyone leaves the action unauthorizable. Another role is
-// independent only when its requirement asks.
+// even when it does not say so; another role is independent only when its
+// requirement asks. Every role names the people fact (founder decision
+// 2026-10-13), so a fact that could not list everyone leaves the action
+// unauthorizable whatever role it asks for.
 func TestHR207_ReviewersAndReleaseApproversAreIndependentByRole(t *testing.T) {
 	for _, role := range []string{"code_reviewer", "release_approver", "approver"} {
 		f := newFxWith(t, peopleRefunds, "")
@@ -91,14 +96,10 @@ func TestHR207_ReviewersAndReleaseApproversAreIndependentByRole(t *testing.T) {
 		ev := f.call(f.run, "create_refund", refund("ch_1", "30.00"))
 		byRole := role != "approver"
 		if ev.Decision != adomain.RequireApproval || len(ev.Requirements) != 1 || ev.Requirements[0].Independent != byRole ||
-			(ev.Requirements[0].IndependentOf == "payments.charge.people") != byRole {
+			ev.Requirements[0].IndependentOf != "payments.charge.people" {
 			t.Fatalf("%s: %s %+v", role, ev.Decision, ev.Requirements)
 		}
 		people(false)
-		if ev := f.call(f.run, "create_refund", refund("ch_1", "30.00")); byRole {
-			expect(t, ev, adomain.CannotAuthorize, apdomain.IneligibleAuthorshipUnknown)
-		} else if ev.Decision != adomain.RequireApproval {
-			t.Fatalf("%s with an incomplete people fact: %s", role, ev.Decision)
-		}
+		expect(t, f.call(f.run, "create_refund", refund("ch_1", "30.00")), adomain.CannotAuthorize, apdomain.IneligibleAuthorshipUnknown)
 	}
 }
