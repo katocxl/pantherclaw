@@ -12,6 +12,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 )
@@ -235,9 +236,12 @@ func likeOriginal(original, encoded []byte) []byte {
 
 // lineDiff shows what changed between two texts as one hunk: the lines
 // they share at the start and end are left out. pclaw init only adds, so
-// one hunk is what a person needs to review.
+// one hunk is what a person needs to review. The diff goes to a terminal,
+// a dry run's output or a CI log, so in JSON texts the values under env
+// and headers (where tokens live) are shown as "<redacted>"; the file
+// itself keeps them.
 func lineDiff(name string, before, after []byte) string {
-	a, b := strings.Split(string(before), "\n"), strings.Split(string(after), "\n")
+	a, b := strings.Split(string(redactSecrets(before)), "\n"), strings.Split(string(redactSecrets(after)), "\n")
 	if len(before) == 0 {
 		a = nil
 	}
@@ -261,6 +265,78 @@ func lineDiff(name string, before, after []byte) string {
 		fmt.Fprintf(&out, "+%s\n", l)
 	}
 	return out.String()
+}
+
+// secretMembers are the members whose values hold credentials in Claude
+// Code's configuration: environment variables (settings and MCP servers)
+// and HTTP headers (MCP servers).
+var secretMembers = []string{"env", "headers"}
+
+// redactSecrets is a JSON text with every string inside an env or headers
+// member replaced by "<redacted>", and everything else byte for byte, so a
+// diff of two redacted texts lines up as the diff of the texts does. Text
+// that is not JSON is returned as it is.
+func redactSecrets(b []byte) []byte {
+	var spans [][2]int64
+	d := jsontext.NewDecoder(bytes.NewReader(b))
+	if err := findSecrets(d, b, false, &spans); err != nil || len(spans) == 0 {
+		return b
+	}
+	out := make([]byte, 0, len(b))
+	at := int64(0)
+	for _, s := range spans {
+		out = append(append(out, b[at:s[0]]...), `"<redacted>"`...)
+		at = s[1]
+	}
+	return append(out, b[at:]...)
+}
+
+// findSecrets reads one value and adds the byte span of each string in it
+// that is inside an env or headers member (secret).
+func findSecrets(d *jsontext.Decoder, b []byte, secret bool, spans *[][2]int64) error {
+	kind := d.PeekKind()
+	if kind == jsontext.KindBeginObject {
+		if _, err := d.ReadToken(); err != nil {
+			return err
+		}
+		for d.PeekKind() != jsontext.KindEndObject {
+			t, err := d.ReadToken()
+			if err != nil {
+				return err
+			}
+			if err := findSecrets(d, b, secret || slices.Contains(secretMembers, t.String()), spans); err != nil {
+				return err
+			}
+		}
+		_, err := d.ReadToken()
+		return err
+	}
+	if kind == jsontext.KindBeginArray {
+		if _, err := d.ReadToken(); err != nil {
+			return err
+		}
+		for d.PeekKind() != jsontext.KindEndArray {
+			if err := findSecrets(d, b, secret, spans); err != nil {
+				return err
+			}
+		}
+		_, err := d.ReadToken()
+		return err
+	}
+	if !secret || kind != jsontext.KindString {
+		return d.SkipValue()
+	}
+	// The offset is just after the last token; the string starts after the
+	// white space and the separator that follow it.
+	start := d.InputOffset()
+	for start < int64(len(b)) && b[start] != '"' {
+		start++
+	}
+	if err := d.SkipValue(); err != nil {
+		return err
+	}
+	*spans = append(*spans, [2]int64{start, d.InputOffset()})
+	return nil
 }
 
 // linkTarget is the file a path names: for a link (a settings file kept
