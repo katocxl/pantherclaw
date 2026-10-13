@@ -652,7 +652,11 @@ func (p *Pipeline) currentFacts(ctx context.Context, s *state) {
 		switch c.Status {
 		case fdomain.Missing:
 			ok = false
-			s.cl.add(StepFacts, adomain.CannotAuthorize, fdomain.ReasonFactMissing, c.Requirement.Name+" is not known (needed by "+c.Requirement.Source+")", "")
+			detail := c.Requirement.Name + " is not known (needed by " + c.Requirement.Source + ")"
+			if c.Unread != "" {
+				detail = c.Requirement.Name + " could not be read (needed by " + c.Requirement.Source + ")"
+			}
+			s.cl.add(StepFacts, adomain.CannotAuthorize, fdomain.ReasonFactMissing, detail, "")
 		case fdomain.Stale:
 			ok = false
 			s.cl.add(StepFacts, adomain.CannotAuthorize, fdomain.ReasonFactStale,
