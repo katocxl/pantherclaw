@@ -21,6 +21,7 @@ import (
 )
 
 type env struct {
+	d    *dbtest.DB
 	pool *db.Pool
 	org  ids.OrgID
 	svc  *app.Service
@@ -28,7 +29,8 @@ type env struct {
 
 func newEnv(t *testing.T) *env {
 	t.Helper()
-	e := &env{pool: dbtest.New(t).AppPool(t), org: ids.New[ids.Org]()}
+	d := dbtest.New(t)
+	e := &env{d: d, pool: d.AppPool(t), org: ids.New[ids.Org]()}
 	e.svc = &app.Service{Pool: e.pool}
 	e.exec(t, "INSERT INTO pc.orgs (id, name) VALUES ($1, 'github')", e.org)
 	return e

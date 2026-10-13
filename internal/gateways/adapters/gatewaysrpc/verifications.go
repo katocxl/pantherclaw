@@ -73,10 +73,8 @@ func (h *GatewayHandler) ReportObservation(ctx context.Context, req *pb.ReportOb
 		Task: task, Secret: req.GetLease(), HTTPStatus: int(req.GetHttpStatus()), Found: req.GetFound(), Complete: req.GetComplete(),
 		Fields: req.GetFields(), ResponseDigest: req.GetResponseDigest(),
 	}
-	if id := req.GetInstallationId(); id > 0 && req.GetInstallationRepositorySelection() != "" {
-		r.Installation = &txapp.InstallationRead{
-			ID: id, Permissions: req.GetInstallationPermissions(), RepositorySelection: req.GetInstallationRepositorySelection(),
-		}
+	if sel := req.GetInstallationRepositorySelection(); sel != "" {
+		r.Installation = &txapp.InstallationRead{Permissions: req.GetInstallationPermissions(), RepositorySelection: sel}
 	}
 	for _, it := range req.GetItems() {
 		item := txapp.TargetLogItem{ObjectRef: it.GetObjectRef(), Correlation: it.GetCorrelation()}

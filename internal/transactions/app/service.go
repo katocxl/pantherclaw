@@ -86,9 +86,9 @@ type Report struct {
 }
 
 // InstallationRead is a GitHub App installation's permissions (name to
-// level) and repository selection, as a gateway read them.
+// level) and repository selection, as a gateway read them: those of the
+// installation its org-scan lease names.
 type InstallationRead struct {
-	ID                  int64
 	Permissions         map[string]string
 	RepositorySelection string
 }

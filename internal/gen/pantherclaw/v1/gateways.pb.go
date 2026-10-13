@@ -3173,15 +3173,14 @@ type ReportObservationRequest struct {
 	// For a target-log task (HR-112): the objects the target created in the
 	// window, as listed. Empty for every other task.
 	Items []*TargetLogItem `protobuf:"bytes,8,rep,name=items,proto3" json:"items,omitempty"`
-	// For an org-scan task (G0 M8, F048): the connection's own GitHub App
-	// installation as the scan read it with the App's JWT, which mints no
-	// token. Unset when it was not read: the server then keeps what it had,
-	// so unread permissions stay "not observed".
-	InstallationId int64 `protobuf:"varint,9,opt,name=installation_id,json=installationId,proto3" json:"installation_id,omitempty"`
-	// The permissions its owner granted, name to level.
-	InstallationPermissions map[string]string `protobuf:"bytes,10,rep,name=installation_permissions,json=installationPermissions,proto3" json:"installation_permissions,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	// For an org-scan task (G0 M8, F048): the permissions of the GitHub App
+	// installation the lease names, as the scan read them with the App's JWT
+	// (which mints no token), name to level. Unset when it was not read: the
+	// server then keeps what it had, so unread permissions stay "not
+	// observed".
+	InstallationPermissions map[string]string `protobuf:"bytes,9,rep,name=installation_permissions,json=installationPermissions,proto3" json:"installation_permissions,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	// Its repository selection: "all" or "selected"; empty when not read.
-	InstallationRepositorySelection string `protobuf:"bytes,11,opt,name=installation_repository_selection,json=installationRepositorySelection,proto3" json:"installation_repository_selection,omitempty"`
+	InstallationRepositorySelection string `protobuf:"bytes,10,opt,name=installation_repository_selection,json=installationRepositorySelection,proto3" json:"installation_repository_selection,omitempty"`
 	unknownFields                   protoimpl.UnknownFields
 	sizeCache                       protoimpl.SizeCache
 }
@@ -3270,13 +3269,6 @@ func (x *ReportObservationRequest) GetItems() []*TargetLogItem {
 		return x.Items
 	}
 	return nil
-}
-
-func (x *ReportObservationRequest) GetInstallationId() int64 {
-	if x != nil {
-		return x.InstallationId
-	}
-	return 0
 }
 
 func (x *ReportObservationRequest) GetInstallationPermissions() map[string]string {
@@ -3653,7 +3645,7 @@ const file_pantherclaw_v1_gateways_proto_rawDesc = "" +
 	"\x05lease\x18\x02 \x01(\fB\a\xbaH\x04z\x02h R\x05lease\"[\n" +
 	"\x1cMintTestActionTokensResponse\x12\x14\n" +
 	"\x05token\x18\x01 \x01(\tR\x05token\x12%\n" +
-	"\x0emismatch_token\x18\x02 \x01(\tR\rmismatchToken\"\x96\a\n" +
+	"\x0emismatch_token\x18\x02 \x01(\tR\rmismatchToken\"\xe4\x06\n" +
 	"\x18ReportObservationRequest\x12!\n" +
 	"\atask_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x06taskId\x12\x1d\n" +
 	"\x05lease\x18\x02 \x01(\fB\a\xbaH\x04z\x02h R\x05lease\x12+\n" +
@@ -3664,11 +3656,10 @@ const file_pantherclaw_v1_gateways_proto_rawDesc = "" +
 	"\bcomplete\x18\x05 \x01(\bR\bcomplete\x12\x8c\x01\n" +
 	"\x06fields\x18\x06 \x03(\v24.pantherclaw.v1.ReportObservationRequest.FieldsEntryB>\xbaH;\x9a\x018\x10\x10\"-r+\x18\x88\x042&^(/([A-Za-z0-9_.-]|~[01]){1,64}){1,8}$*\x05r\x03\x18\x80\x02R\x06fields\x120\n" +
 	"\x0fresponse_digest\x18\a \x01(\fB\a\xbaH\x04z\x02\x18 R\x0eresponseDigest\x12>\n" +
-	"\x05items\x18\b \x03(\v2\x1d.pantherclaw.v1.TargetLogItemB\t\xbaH\x06\x92\x01\x03\x10\xe8\aR\x05items\x120\n" +
-	"\x0finstallation_id\x18\t \x01(\x03B\a\xbaH\x04\"\x02(\x00R\x0einstallationId\x12\xba\x01\n" +
-	"\x18installation_permissions\x18\n" +
-	" \x03(\v2E.pantherclaw.v1.ReportObservationRequest.InstallationPermissionsEntryB8\xbaH5\x9a\x012\x10\x80\x01\"\x1ar\x182\x16^[a-z][a-z0-9_]{0,63}$*\x11r\x0f2\r^[a-z]{1,16}$R\x17installationPermissions\x12b\n" +
-	"!installation_repository_selection\x18\v \x01(\tB\x16\xbaH\x13r\x11R\x00R\x03allR\bselectedR\x1finstallationRepositorySelection\x1a9\n" +
+	"\x05items\x18\b \x03(\v2\x1d.pantherclaw.v1.TargetLogItemB\t\xbaH\x06\x92\x01\x03\x10\xe8\aR\x05items\x12\xba\x01\n" +
+	"\x18installation_permissions\x18\t \x03(\v2E.pantherclaw.v1.ReportObservationRequest.InstallationPermissionsEntryB8\xbaH5\x9a\x012\x10\x80\x01\"\x1ar\x182\x16^[a-z][a-z0-9_]{0,63}$*\x11r\x0f2\r^[a-z]{1,16}$R\x17installationPermissions\x12b\n" +
+	"!installation_repository_selection\x18\n" +
+	" \x01(\tB\x16\xbaH\x13r\x11R\x00R\x03allR\bselectedR\x1finstallationRepositorySelection\x1a9\n" +
 	"\vFieldsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\x1aJ\n" +

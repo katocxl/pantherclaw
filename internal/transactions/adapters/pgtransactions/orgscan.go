@@ -95,7 +95,7 @@ func orgScan(ctx context.Context, tx db.TenantTx, q *dbq.Queries, org ids.OrgID,
 	}); err != nil {
 		return app.Applied{}, err
 	}
-	read, err := recordInstallation(ctx, q, org, gateway, task.ConnectionID, r.Installation)
+	read, err := recordInstallation(ctx, q, org, gateway, task, r.Installation)
 	if err != nil {
 		return app.Applied{}, err
 	}
@@ -114,13 +114,23 @@ func orgScan(ctx context.Context, tx db.TenantTx, q *dbq.Queries, org ids.OrgID,
 
 // recordInstallation records the permissions and repository selection of
 // the installation behind the scanned connection, as the scan read them
-// (G0 M8, F048), and reports whether it did. Nothing is recorded when the
-// scan did not read it, when the report is out of bounds, or when the
-// connection records another installation by now: what was there stays,
+// (G0 M8, F048), and reports whether it did. They are the installation the
+// lease was scheduled for. Nothing is recorded when the scan did not read
+// it, when the report is out of bounds, or when the connection records
+// another installation by now: what was there stays,
 // so unread permissions remain "not observed", never "none".
-func recordInstallation(ctx context.Context, q *dbq.Queries, org ids.OrgID, gateway, connection ids.UUID, in *app.InstallationRead,
+func recordInstallation(ctx context.Context, q *dbq.Queries, org ids.OrgID, gateway ids.UUID, task dbq.LeasedOrgScanRow,
+	in *app.InstallationRead,
 ) (bool, error) {
-	if in == nil || in.ID <= 0 || len(in.Permissions) > maxInstallationPermissions ||
+	// The installation is the one the lease was scheduled for.
+	var req struct {
+		Installation string `json:"installation"`
+	}
+	if in == nil || json.Unmarshal(task.Request, &req) != nil {
+		return false, nil
+	}
+	id, err := strconv.ParseInt(req.Installation, 10, 64)
+	if err != nil || id <= 0 || len(in.Permissions) > maxInstallationPermissions ||
 		(in.RepositorySelection != "all" && in.RepositorySelection != "selected") {
 		return false, nil
 	}
@@ -135,7 +145,7 @@ func recordInstallation(ctx context.Context, q *dbq.Queries, org ids.OrgID, gate
 	sel := in.RepositorySelection
 	n, err := q.RecordInstallationPermissions(ctx, dbq.RecordInstallationPermissionsParams{
 		Permissions: b, RepositorySelection: &sel, UpdatedBy: "gateway:" + gateway.String(),
-		OrgID: org, ConnectionID: connection, InstallationID: in.ID,
+		OrgID: org, ConnectionID: task.ConnectionID, InstallationID: id,
 	})
 	return n == 1, err
 }

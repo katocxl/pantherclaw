@@ -160,7 +160,7 @@ func (c controlVerifications) Report(ctx context.Context, l dispatch.Lease, o di
 		Complete: o.Complete, Fields: o.Fields, ResponseDigest: o.Digest,
 	}
 	if in := o.Installation; in != nil {
-		req.InstallationId, req.InstallationPermissions, req.InstallationRepositorySelection = in.ID, in.Permissions, in.RepositorySelection
+		req.InstallationPermissions, req.InstallationRepositorySelection = in.Permissions, in.RepositorySelection
 	}
 	for _, it := range o.Items {
 		req.Items = append(req.Items, &pb.TargetLogItem{ObjectRef: it.ObjectRef, Correlation: it.Correlation, Created: it.Created})

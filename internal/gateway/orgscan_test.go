@@ -39,7 +39,7 @@ func (s *scanSubmissions) submit(_ context.Context, scan string, lease []byte, f
 func orgScanLease(run string) dispatch.Lease {
 	return dispatch.Lease{
 		Purpose: "org_scan", Connection: connID, Task: "01920000-0000-7000-8000-00000000ab01", Operation: "github.org_scan",
-		Request: []byte(`{"run":"` + run + `"}`), Secret: []byte("the lease's secret"),
+		Request: []byte(`{"installation":"7","run":"` + run + `"}`), Secret: []byte("the lease's secret"),
 	}
 }
 
@@ -248,6 +248,15 @@ func TestF048_TheScanReportsItsOwnInstallation(t *testing.T) {
 				t.Errorf("a token with %s:%s was minted", p, level)
 			}
 		}
+	}
+	// A lease scheduled for another installation (a re-seal since) carries
+	// none of it.
+	fv := &fakeVerifications{leases: []dispatch.Lease{orgScanLease("01920000-0000-7000-8000-00000000ab09")}}
+	fv.leases[0].Request = []byte(`{"installation":"8","run":"01920000-0000-7000-8000-00000000ab09"}`)
+	h.gw.verifications, h.gw.submitScan = fv, (&scanSubmissions{}).submit
+	h.gw.verifyDue(context.Background())
+	if len(fv.reports) != 1 || fv.reports[0].Installation != nil {
+		t.Fatalf("a lease for another installation: %+v", fv.reports)
 	}
 	w.sim.SetFaults(github.Faults{InstallationStatus: http.StatusInternalServerError})
 	_, o = runOrgScan(t, h, "01920000-0000-7000-8000-00000000ab08")

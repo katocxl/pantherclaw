@@ -95,7 +95,7 @@ WHERE r.org_id = sqlc.arg(org_id) AND r.id = sqlc.arg(id);
 -- LeasedOrgScan is an org scan task under a live lease of this gateway,
 -- with its run.
 -- name: LeasedOrgScan :one
-SELECT v.id, v.connection_id, r.id AS run_id
+SELECT v.id, v.connection_id, r.id AS run_id, v.request
 FROM pc.verifications v
 JOIN pc.github_scan_runs r ON r.org_id = v.org_id AND r.verification_id = v.id
 WHERE v.org_id = sqlc.arg(org_id) AND v.id = sqlc.arg(id) AND v.purpose = 'org_scan' AND v.state = 'LEASED'
@@ -135,3 +135,21 @@ UPDATE pc.connection_github
 SET permissions = sqlc.arg(permissions), repository_selection = sqlc.arg(repository_selection), read_at = now(),
     updated_by = sqlc.arg(updated_by), updated_at = now()
 WHERE org_id = sqlc.arg(org_id) AND connection_id = sqlc.arg(connection_id) AND installation_id = sqlc.arg(installation_id);
+
+-- GitHubAppConnectionsDue are the org's active GitHub App connections with
+-- no org scan open and none started in the last day: the daily scan keeps
+-- what coverage reads of their installation fresh (F048).
+-- name: GitHubAppConnectionsDue :many
+SELECT c.id FROM pc.connections c
+WHERE c.org_id = sqlc.arg(org_id) AND c.state = 'ACTIVE' AND c.kind = 'http' AND c.package = 'pc.github'
+  AND EXISTS (SELECT 1 FROM pc.credentials cr
+              WHERE cr.org_id = c.org_id AND cr.connection_id = c.id AND cr.state = 'ACTIVE' AND cr.kind = 'github_app')
+  AND NOT EXISTS (SELECT 1 FROM pc.verifications v
+                  WHERE v.org_id = c.org_id AND v.connection_id = c.id AND v.purpose = 'org_scan' AND v.state IN ('PENDING', 'LEASED'))
+  AND NOT EXISTS (SELECT 1 FROM pc.github_scan_runs r
+                  WHERE r.org_id = c.org_id AND r.connection_id = c.id AND r.created_at > now() - interval '1 day')
+ORDER BY c.id
+LIMIT 100;
+
+-- name: ConnectionGitHubInstallation :one
+SELECT installation_id FROM pc.connection_github WHERE org_id = sqlc.arg(org_id) AND connection_id = sqlc.arg(connection_id);

@@ -9,6 +9,7 @@ import (
 	"encoding/json/v2"
 	"fmt"
 	"log/slog"
+	"strconv"
 	"time"
 
 	"github.com/katocxl/pantherclaw/internal/gateway/control"
@@ -34,7 +35,8 @@ const maxSubmission = 200
 // the server dropped, is reported as not scanned.
 func (g *Gateway) orgScan(ctx context.Context, conn *control.Connection, l dispatch.Lease, claimed time.Time) {
 	var req struct {
-		Run string `json:"run"`
+		Run          string `json:"run"`
+		Installation string `json:"installation"`
 	}
 	if json.Unmarshal(l.Request, &req) != nil || req.Run == "" {
 		g.log.ErrorContext(ctx, "gateway.org_scan_refused", slog.String("task_id", l.Task))
@@ -82,7 +84,11 @@ func (g *Gateway) orgScan(ctx context.Context, conn *control.Connection, l dispa
 	}
 	o.Complete = err == nil && len(r.NotScanned) == 0
 	o.Fields = r.Fields()
-	o.Installation = r.Installation
+	// The installation's permissions go only with the lease of that
+	// installation, so a scan scheduled before a re-seal records nothing.
+	if in := r.Installation; in != nil && strconv.FormatInt(in.ID, 10) == req.Installation {
+		o.Installation = in
+	}
 	if err := g.verifications.Report(ctx, l, o); err != nil {
 		g.log.WarnContext(ctx, "gateway.org_scan_not_reported", slog.String("task_id", l.Task), pclog.Err(err))
 	}
