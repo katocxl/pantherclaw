@@ -104,6 +104,16 @@ func TestHR216_AConnectorsEdgeSendsOnlyToTheEgressListener(t *testing.T) {
 	if e.Stripped() != 2 {
 		t.Fatalf("the placeholder was reported: %d", e.Stripped())
 	}
+	// A real token next to the placeholder is reported as any credential.
+	req, _ = http.NewRequestWithContext(t.Context(), http.MethodGet, "https://api.github.com/user", nil)
+	req.Header.Set("Authorization", "ghp_"+strings.Repeat("a", 20)+" pantherclaw-placeholder")
+	if res, err = client.Do(req); err != nil {
+		t.Fatal(err)
+	}
+	_ = res.Body.Close()
+	if e.Stripped() != 3 {
+		t.Fatalf("a token beside the placeholder was not reported: %d", e.Stripped())
+	}
 
 	binding = ""
 	req, _ = http.NewRequestWithContext(t.Context(), http.MethodGet, "https://api.github.com/user", nil)
@@ -117,7 +127,7 @@ func TestHR216_AConnectorsEdgeSendsOnlyToTheEgressListener(t *testing.T) {
 	}
 	mu.Lock()
 	defer mu.Unlock()
-	if len(got) != 2 {
+	if len(got) != 3 {
 		t.Fatal("a request without a binding reached the egress listener")
 	}
 }
