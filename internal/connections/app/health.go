@@ -4,11 +4,15 @@
 package app
 
 import (
+	"cmp"
 	"context"
+	"errors"
+	"slices"
 	"time"
 
 	"github.com/katocxl/pantherclaw/internal/definitions/manifest"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
+	gdomain "github.com/katocxl/pantherclaw/internal/grants/domain"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	tenancy "github.com/katocxl/pantherclaw/internal/tenancy/app"
@@ -65,10 +69,13 @@ type Health struct {
 	Permissions              []Permission
 	LastTest, LastPassedTest *TestResult
 	Deliveries               Deliveries
-	// Agents depend on it; AgentsHidden: the caller may not read agents
+	// Agents used it; AgentsHidden: the caller may not read agents
 	// org-wide, so none are listed.
-	Agents       []DependentAgent
-	AgentsHidden bool
+	Agents []DependentAgent
+	// GrantedAgents hold an active grant that allows an operation the
+	// connection serves; LastUsed is unset.
+	GrantedAgents []DependentAgent
+	AgentsHidden  bool
 }
 
 // Health returns a connection's health (connection.read; the dependent
@@ -138,10 +145,69 @@ func (s *Service) Health(ctx context.Context, id ids.UUID) (Health, error) {
 		for _, a := range agents {
 			out.Agents = append(out.Agents, DependentAgent{Agent: a.AgentID, Name: a.Name, LastUsed: a.LastUsedAt})
 		}
+		if err != nil {
+			return err
+		}
+		out.GrantedAgents, err = grantedAgents(ctx, q, c.Org, conn, cmp.Or(s.grantsPage, grantPage))
 		return err
 	})
 	return out, err
 }
+
+// grantedAgents are the agents holding an active, unexpired grant whose
+// bounds allow an operation the connection serves (a grant that does not
+// bound operations allows them all), by name, at most MaxDependents.
+// Ancestors and envelopes may narrow a grant further; the list says what
+// would stop working without the connection, so it errs towards listing.
+// It reads size grants at a time.
+func grantedAgents(ctx context.Context, q *dbq.Queries, org ids.OrgID, conn dbq.PcConnection, size int32) ([]DependentAgent, error) {
+	p, err := pinnedPackage(ctx, q, org, conn.Package)
+	if errors.Is(err, ErrPackage) {
+		return nil, nil
+	} else if err != nil {
+		return nil, err
+	}
+	var ops []string
+	for i := range p.Definitions {
+		if len(servedRoutes(conn.Kind, &p.Definitions[i])) > 0 {
+			ops = append(ops, p.Definitions[i].Operation)
+		}
+	}
+	var out []DependentAgent
+	page := dbq.ActiveGrantBoundsParams{OrgID: org, Page: size}
+	for len(out) < MaxDependents {
+		rows, err := q.ActiveGrantBounds(ctx, page)
+		if err != nil {
+			return nil, err
+		}
+		for _, r := range rows {
+			if len(out) == MaxDependents {
+				break
+			}
+			if slices.ContainsFunc(out, func(a DependentAgent) bool { return a.Agent == r.AgentID }) {
+				continue
+			}
+			b, err := gdomain.DecodeBounds(r.Bounds)
+			if err != nil {
+				continue // a grant that does not decode allows nothing
+			}
+			if b.Operations == nil || slices.ContainsFunc(ops, b.Operations.Matches) {
+				out = append(out, DependentAgent{Agent: r.AgentID, Name: r.Name})
+			}
+		}
+		if len(rows) < int(size) {
+			break
+		}
+		last := rows[len(rows)-1]
+		page.AfterName, page.AfterID = last.Name, last.ID
+	}
+	return out, nil
+}
+
+// grantPage is how many grants grantedAgents reads at a time, unless the
+// Service says otherwise: it reads on until its list is full, so no
+// dependent agent is left out unseen.
+const grantPage = 500
 
 func latest(ctx context.Context, q *dbq.Queries, org ids.OrgID, id ids.UUID, passedOnly bool) (*TestResult, error) {
 	t, ok, err := lastTest(ctx, q, org, id, passedOnly)

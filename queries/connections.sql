@@ -169,3 +169,31 @@ RETURNING id;
 -- The GitHub App installations behind connections (connection_github).
 SELECT * FROM pc.connection_github
 WHERE org_id = sqlc.arg(org_id) AND connection_id = ANY(sqlc.arg(connection_ids)::uuid[]);
+
+-- name: InsertConnectionTestTask :exec
+-- A read test's verification task (G0 M8 track C, F354): the connection's
+-- gateway leases it as it leases target-log reads. It belongs to no
+-- transaction.
+INSERT INTO pc.verifications (org_id, id, purpose, connection_id, operation, request, next_at, deadline_at)
+VALUES (sqlc.arg(org_id), sqlc.arg(id), 'connection_test', sqlc.arg(connection_id), sqlc.arg(operation), sqlc.arg(request), now(),
+    now() + interval '10 minutes');
+
+-- name: InsertLeasedConnectionTest :one
+-- A test the gateway runs, PENDING until it reports.
+INSERT INTO pc.connection_tests (org_id, id, connection_id, kind, verification_id, operation, requested_by)
+VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(connection_id), sqlc.arg(kind), sqlc.arg(verification_id), sqlc.arg(operation),
+    sqlc.arg(requested_by))
+RETURNING *;
+
+-- name: ActiveGrantBounds :many
+-- A page of the bounds of the active, unexpired grants, with their agents,
+-- after (agent name, grant id), to find the agents whose grants depend on
+-- a connection (F358). The caller reads pages until its list is full.
+SELECT g.id, g.agent_id, a.name, r.bounds
+FROM pc.grants g
+JOIN pc.grant_revisions r ON r.org_id = g.org_id AND r.grant_id = g.id AND r.revision = g.current_revision
+JOIN pc.agents a ON a.org_id = g.org_id AND a.id = g.agent_id
+WHERE g.org_id = sqlc.arg(org_id) AND g.state = 'ACTIVE' AND r.expires_at > now()
+  AND (a.name, g.id) > (sqlc.arg(after_name)::text, sqlc.arg(after_id)::uuid)
+ORDER BY a.name, g.id
+LIMIT sqlc.arg(page)::integer;

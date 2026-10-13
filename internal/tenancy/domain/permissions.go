@@ -224,7 +224,7 @@ var catalog = []Permission{
 	PermFactRead, PermFactProviderManage, PermFactWrite,
 	PermPackageRead, PermPackageImport, PermPackageActivate, PermPackageKeyManage,
 	PermApprovalRespond, PermIncidentRespond, PermEvidenceReadRestricted,
-	PermGatewayRead, PermGatewayManage, PermConnectionRead, PermConnectionManage, PermCredentialSeal,
+	PermGatewayRead, PermGatewayManage, PermConnectionRead, PermConnectionManage, PermConnectionTest, PermCredentialSeal,
 	PermContainmentRead, PermContainmentKillSwitch,
 	PermEvidenceRead, PermEvidenceExport, PermEvidenceRetentionManage, PermEvidenceCaptureManage,
 	PermTransactionReconcile, PermGitHubIdentityManage, PermGitHubIdentityProve, PermGitHubScanRun,
@@ -237,7 +237,7 @@ var catalog = []Permission{
 var humanOnly = []Permission{
 	PermApprovalRespond, PermPolicyPublish, PermEvidenceReadRestricted, PermAgentAdmit, PermIssuerActivate,
 	PermGrantIssue, PermGuardrailsManage, PermFactProviderManage, PermPackageActivate,
-	PermGatewayManage, PermConnectionManage, PermCredentialSeal, PermContainmentKillSwitch, PermAgentRestore,
+	PermGatewayManage, PermConnectionManage, PermConnectionTest, PermCredentialSeal, PermContainmentKillSwitch, PermAgentRestore,
 	PermTransactionReconcile, PermEvidenceExport, PermEvidenceRetentionManage, PermEvidenceCaptureManage,
 	PermReleaseWindowManage,
 }

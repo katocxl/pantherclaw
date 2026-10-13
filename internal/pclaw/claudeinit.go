@@ -16,7 +16,6 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/katocxl/pantherclaw/internal/identity/workloadclient"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	"github.com/katocxl/pantherclaw/internal/scan"
 )
@@ -24,25 +23,27 @@ import (
 // `pclaw init` wires a developer's Claude Code to PantherClaw (G0 M8 track
 // C, HR-208). It finds Claude Code's settings (user, project, local and
 // managed), its MCP servers and the agent-framework projects under the
-// project directory, and installs the PreToolUse hook that asks the gateway
+// project directory. It then enrolls the workload key as the signed-in
+// person when it is not enrolled yet (HR-094: admitted with the fingerprint
+// shown before), and installs the PreToolUse hook that asks the gateway
 // before every command a tool runs in a shell (Bash, PowerShell and
 // Monitor; HR-186) with `pclaw hook claude-code`, in the settings file of
 // the chosen scope.
 //
 // It only adds: it never removes or changes an existing deny rule, hook or
 // server entry, and it never writes a secret (only the gateway's URL, the
-// connection's name, the key file's path and the run). It shows the diff
-// and changes nothing until the person confirms (or passed --yes); with
-// --dry-run it changes nothing. It backs up every file before it changes
-// it and writes through a temporary file. It refuses when managed
-// settings, or the target file itself, would keep the hook from running,
-// since a developer would then believe commands are decided when they are
-// not.
+// connection's name, the key file's path and the run; the enrollment token
+// is used at once and kept nowhere). It shows the diff and changes nothing
+// until the person confirms (or passed --yes); with --dry-run it changes
+// nothing. It backs up every file before it changes it and writes through
+// a temporary file. It refuses when managed settings, or the target file
+// itself, would keep the hook from running, since a developer would then
+// believe commands are decided when they are not.
 
 func init() {
 	commands["init"] = command{
-		usage: "init --gateway URL --connection NAME --key-file FILE [--run ID] [--project DIR] " +
-			"[--scope local|project|user] [--dry-run | --yes] [--managed-settings FILE]",
+		usage: "init --gateway URL --connection NAME --key-file FILE [--agent ID] [--mcp NAME=CONNECTION...] [--run ID] [--project DIR] " +
+			"[--scope local|project|user] [--dry-run | --yes [--fingerprint FP]] [--managed-settings FILE]",
 		run: claudeInit,
 	}
 }
@@ -248,34 +249,45 @@ func counts(doc *jsonNode) string {
 
 // initFlags are init's options.
 type initFlags struct {
-	gateway, connection, keyFile, run, project, scope, managed string
-	dryRun, yes                                                bool
+	gateway, connection, keyFile, run, project, scope, managed, agent, fingerprint string
+	dryRun, yes                                                                    bool
 }
 
-func claudeInit(_ context.Context, a *app, args []string) error {
+func claudeInit(ctx context.Context, a *app, args []string) error {
 	fs := flag.NewFlagSet("init", flag.ContinueOnError)
 	fs.SetOutput(a.stderr)
 	var f initFlags
 	fs.StringVar(&f.gateway, "gateway", "", "the gateway's public URL")
 	fs.StringVar(&f.connection, "connection", "", "the kind-local connection serving pc.shell")
-	fs.StringVar(&f.keyFile, "key-file", "", "the enrolled desktop workload key file")
+	fs.StringVar(&f.keyFile, "key-file", "", "the desktop workload key file (created and enrolled with --agent when it is not enrolled)")
+	fs.StringVar(&f.agent, "agent", "", "the agent to enroll the key file as, signed in as yourself, when it is not enrolled yet")
 	fs.StringVar(&f.run, "run", "", "the run (default: the key file's)")
 	fs.StringVar(&f.project, "project", "", "the project directory (default: the current one)")
 	fs.StringVar(&f.scope, "scope", "local", "where the hook goes: local (.claude/settings.local.json), project (.claude/settings.json) or user")
 	fs.StringVar(&f.managed, "managed-settings", "", "also read managed settings from this file (the platform's are always read)")
 	fs.BoolVar(&f.dryRun, "dry-run", false, "show what would change and change nothing")
 	fs.BoolVar(&f.yes, "yes", false, "make the changes without asking")
+	fs.StringVar(&f.fingerprint, "fingerprint", "", "with --yes, the fingerprint of the key to enroll, which you checked (HR-094)")
+	var mcp list
+	fs.Var(&mcp, "mcp", "NAME=CONNECTION: govern the MCP server NAME through pclaw mcp proxy to CONNECTION (repeatable)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	if f.gateway == "" || f.connection == "" || f.keyFile == "" || fs.NArg() != 0 || (f.dryRun && f.yes) {
 		return errUsage
 	}
+	routes, err := parseMCPRoutes(mcp)
+	if err != nil {
+		return err
+	}
 	hook, err := f.hookEntry()
 	if err != nil {
 		return err
 	}
 	p := &initPlan{}
+	if p.enroll, err = f.enrollment(); err != nil {
+		return err
+	}
 	home, config, err := a.claudeHome()
 	if err != nil {
 		return err
@@ -327,7 +339,7 @@ func claudeInit(_ context.Context, a *app, args []string) error {
 			managed = append(managed, s)
 		}
 	}
-	report(a, home, f.project, settings, managed)
+	findings := report(a, a.scanOptions(home, f.project), settings, managed)
 	target := settings[slices.IndexFunc(settings, func(s claudeSettings) bool { return s.scope == f.scope })]
 	if err := hookBlocked(managed, settings, target); err != nil {
 		return &exitError{code: 1, msg: "pclaw init: " + err.Error()}
@@ -337,7 +349,11 @@ func claudeInit(_ context.Context, a *app, args []string) error {
 	} else if err := p.addHook(target, hook); err != nil {
 		return err
 	}
-	return f.apply(a, p)
+	if err := f.governMCP(a, p, routes, home, config, managed, settings, target); err != nil {
+		return err
+	}
+	f.agentSDKSnippets(a, findings)
+	return f.apply(ctx, a, p)
 }
 
 // hookEntry is the hook to install: exec form, so no shell parses the
@@ -358,11 +374,6 @@ func (f initFlags) hookEntry() (*jsonNode, error) {
 	key, err := filepath.Abs(f.keyFile)
 	if err != nil {
 		return nil, err
-	}
-	if kf, err := workloadclient.ReadKeyFile(key); err != nil {
-		return nil, fmt.Errorf("--key-file: %w", err)
-	} else if kf.Identifier == "" {
-		return nil, errors.New("--key-file is not enrolled yet: enroll it first (pclaw workload enroll)")
 	}
 	args := append(slices.Clone(claudeHookArgs), "--gateway", strings.TrimSuffix(f.gateway, "/"), "--connection", f.connection,
 		"--key-file", key)
@@ -417,10 +428,12 @@ func settingFrom(name string, managed, settings []claudeSettings) *claudeSetting
 	return nil
 }
 
-// report shows what init found: the settings files, the MCP servers Claude
-// Code runs (which go around PantherClaw unless they use pclaw mcp proxy),
-// and agent-framework projects.
-func report(a *app, home, project string, settings, managed []claudeSettings) {
+// report shows what init found: the settings files, the MCP servers of
+// Claude Code and the other clients pclaw scan knows (which go around
+// PantherClaw unless they use pclaw mcp proxy), the credentials their
+// configuration holds, by name only (each is a route around PantherClaw;
+// init never copies one), and agent-framework projects.
+func report(a *app, opts scan.Options, settings, managed []claudeSettings) []scan.Finding {
 	w := a.stdout
 	_, _ = fmt.Fprintln(w, "Claude Code settings:")
 	for _, s := range append(slices.Clone(settings), managed...) {
@@ -436,21 +449,44 @@ func report(a *app, home, project string, settings, managed []claudeSettings) {
 	if len(managed) == 0 {
 		_, _ = fmt.Fprintln(w, "  managed  none found in the platform's file (registry, MDM and server-managed settings are not read)")
 	}
-	findings := scan.Run(scan.Options{Home: home, Paths: []string{project}})
+	findings := scan.Run(opts)
 	for _, f := range findings {
 		at := f.Attributes
 		switch f.Kind {
 		case scan.KindMCPServer:
-			if at["client"] != "claude_code" && at["client"] != "project" {
-				continue
-			}
 			routed := "goes around PantherClaw"
 			if at["command"] == "pclaw" || at["command"] == "pclaw.exe" {
 				routed = "through pclaw mcp proxy"
+			} else if at["client"] != "claude_code" && at["client"] != "project" {
+				routed += " (pclaw init changes only Claude Code's configuration)"
 			}
-			_, _ = fmt.Fprintf(w, "MCP server %q in %s (%s): %s\n", at["name"], at["config"], at["transport"], routed)
+			_, _ = fmt.Fprintf(w, "MCP server %q of %s in %s (%s): %s\n", at["name"], at["client"], at["config"], at["transport"], routed)
+		case scan.KindEnvSecret:
+			_, _ = fmt.Fprintf(w, "Credential %s (%s) in %s's configuration: a route around PantherClaw; init never copies it, "+
+				"so give it to the gateway's connection instead\n", at["name"], at["secret_kind"], at["where"])
 		case scan.KindAgentProject:
 			_, _ = fmt.Fprintf(w, "Agent framework project: %s (%s)\n", at["path"], at["frameworks"])
 		}
 	}
+	return findings
+}
+
+// scanOptions are where init looks: the person's configuration, as pclaw
+// scan does, read from init's own environment, and the project.
+func (a *app) scanOptions(home, project string) scan.Options {
+	o := scan.Options{Home: home, Paths: []string{project}}
+	switch runtime.GOOS {
+	case "windows":
+		o.ConfigDir, _ = a.env("APPDATA")
+	case "darwin":
+		o.ConfigDir = filepath.Join(home, "Library", "Application Support")
+	default:
+		o.ConfigDir = filepath.Join(home, ".config")
+		if v, ok := a.env("XDG_CONFIG_HOME"); ok && v != "" {
+			o.ConfigDir = v
+		}
+	}
+	o.CodexHome, _ = a.env("CODEX_HOME")
+	o.GeminiCLIHome, _ = a.env("GEMINI_CLI_HOME")
+	return o
 }
