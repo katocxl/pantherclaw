@@ -83,7 +83,7 @@ func (p ParamSpec) decode(name string, raw jsontext.Value) (Value, error) {
 		if err = json.Unmarshal(raw, &v.List); err == nil {
 			err = p.list(v.List)
 		}
-	case TypeEnum, TypeIdentifier, TypeText, TypeCommand, TypePath:
+	case TypeEnum, TypeIdentifier, TypeText, TypeCommand, TypeContent, TypePath:
 		if err = json.Unmarshal(raw, &v.Str); err == nil {
 			err = p.str(v.Str)
 		}
@@ -157,7 +157,7 @@ func (p ParamSpec) str(s string) error {
 			return fmt.Errorf("not a normalized absolute path (HR-187)")
 		}
 		return nil
-	case TypeText, TypeCommand:
+	case TypeText, TypeCommand, TypeContent:
 	case TypeMoney, TypeDecimal, TypeInteger, TypeIdentifierList, TypeBoolean:
 		return fmt.Errorf("not a string type")
 	}
@@ -229,7 +229,7 @@ func (v Value) wire() any {
 		return v.Bool
 	case TypeIdentifierList:
 		return v.List
-	case TypeEnum, TypeIdentifier, TypeText, TypeCommand, TypePath:
+	case TypeEnum, TypeIdentifier, TypeText, TypeCommand, TypeContent, TypePath:
 		return v.Str
 	}
 	return nil

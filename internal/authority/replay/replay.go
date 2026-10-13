@@ -23,6 +23,7 @@ import (
 	"strings"
 
 	"github.com/katocxl/pantherclaw/internal/actionir"
+	"github.com/katocxl/pantherclaw/internal/authority/consequences"
 	adomain "github.com/katocxl/pantherclaw/internal/authority/domain"
 	"github.com/katocxl/pantherclaw/internal/authority/finalize"
 	"github.com/katocxl/pantherclaw/internal/authority/pipeline"
@@ -47,8 +48,9 @@ type Source interface {
 	// Inputs returns the sealed inputs of an evaluation.
 	Inputs(ctx context.Context, org ids.OrgID, txn ids.UUID, evaluation int) (recording.Sealed, error)
 	// Definition returns a definition of a package version the org
-	// imported, by its pin, whatever its state now.
-	Definition(ctx context.Context, org ids.OrgID, pin actionir.Definition) (*defs.Definition, error)
+	// imported, by its pin, whatever its state now, with the consequence
+	// rules that version has for its operation (its state is not read).
+	Definition(ctx context.Context, org ids.OrgID, pin actionir.Definition) (pipeline.Pinned, error)
 	// Bundle returns a stored policy bundle by its id and version number.
 	Bundle(ctx context.Context, org ids.OrgID, bundle string, version int) (*pdomain.Bundle, error)
 	// PolicyVersion returns a stored policy version (a draft, the published
@@ -255,19 +257,21 @@ func (e *Engine) open(ctx context.Context, org ids.OrgID, txn ids.UUID, evaluati
 func (e *Engine) served(ctx context.Context, org ids.OrgID, rec *recording.Recording, proposed *pdomain.Bundle, out *Outcome) (
 	recording.Served, []Limitation, error,
 ) {
-	s := recording.Served{Definitions: map[string]*defs.Definition{}, Proposed: proposed != nil}
+	s := recording.Served{
+		Definitions: map[string]*defs.Definition{}, Consequences: map[string][]consequences.Rule{}, Proposed: proposed != nil,
+	}
 	for _, d := range rec.Reads.Definitions {
 		if d.Err != "" {
 			continue
 		}
-		def, err := e.Source.Definition(ctx, org, d.Pin)
+		pinned, err := e.Source.Definition(ctx, org, d.Pin)
 		switch {
 		case errors.Is(err, ErrNotFound):
 			continue // the reader reports it as a gap
 		case err != nil:
 			return s, nil, fmt.Errorf("replay: definition %s: %w", d.Digest, err)
 		}
-		s.Definitions[d.Digest] = def
+		s.Definitions[d.Digest], s.Consequences[d.Digest] = pinned.Definition, pinned.Consequences
 	}
 	p := rec.Reads.Policy
 	if proposed != nil {
