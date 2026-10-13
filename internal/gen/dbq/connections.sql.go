@@ -10,9 +10,68 @@ package dbq
 
 import (
 	"context"
+	"time"
 
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 )
+
+const activeGrantBounds = `-- name: ActiveGrantBounds :many
+SELECT g.id, g.agent_id, a.name, r.bounds
+FROM pc.grants g
+JOIN pc.grant_revisions r ON r.org_id = g.org_id AND r.grant_id = g.id AND r.revision = g.current_revision
+JOIN pc.agents a ON a.org_id = g.org_id AND a.id = g.agent_id
+WHERE g.org_id = $1 AND g.state = 'ACTIVE' AND r.expires_at > now()
+  AND (a.name, g.id) > ($2::text, $3::uuid)
+ORDER BY a.name, g.id
+LIMIT $4::integer
+`
+
+type ActiveGrantBoundsParams struct {
+	OrgID     ids.OrgID
+	AfterName string
+	AfterID   ids.UUID
+	Page      int32
+}
+
+type ActiveGrantBoundsRow struct {
+	ID      ids.UUID
+	AgentID ids.UUID
+	Name    string
+	Bounds  []byte
+}
+
+// A page of the bounds of the active, unexpired grants, with their agents,
+// after (agent name, grant id), to find the agents whose grants depend on
+// a connection (F358). The caller reads pages until its list is full.
+func (q *Queries) ActiveGrantBounds(ctx context.Context, arg ActiveGrantBoundsParams) ([]ActiveGrantBoundsRow, error) {
+	rows, err := q.db.Query(ctx, activeGrantBounds,
+		arg.OrgID,
+		arg.AfterName,
+		arg.AfterID,
+		arg.Page,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ActiveGrantBoundsRow{}
+	for rows.Next() {
+		var i ActiveGrantBoundsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.AgentID,
+			&i.Name,
+			&i.Bounds,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
 
 const closeCircuits = `-- name: CloseCircuits :execrows
 UPDATE pc.circuit_states SET state = 'CLOSED', closed_at = now()
@@ -26,6 +85,96 @@ func (q *Queries) CloseCircuits(ctx context.Context, orgID ids.OrgID, connection
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const connectionDeliveries = `-- name: ConnectionDeliveries :one
+SELECT count(*) FILTER (WHERE a.outcome = 'failed')::integer AS failed,
+    count(*) FILTER (WHERE a.outcome = 'unknown')::integer AS unknown,
+    count(*) FILTER (WHERE a.outcome = 'delegated')::integer AS delegated,
+    coalesce(max(a.recorded_at) FILTER (WHERE a.outcome IN ('failed', 'unknown')), 'epoch')::timestamptz AS last_failure_at,
+    coalesce(max(a.recorded_at) FILTER (WHERE a.outcome = 'accepted'), 'epoch')::timestamptz AS last_success_at,
+    coalesce(max(a.recorded_at) FILTER (WHERE a.outcome = 'delegated'), 'epoch')::timestamptz AS last_delegated_at
+FROM pc.transactions t
+JOIN pc.execution_attempts a ON a.org_id = t.org_id AND a.transaction_id = t.id
+WHERE t.org_id = $1 AND t.connection_id = $2 AND t.created_at >= $3::timestamptz
+`
+
+type ConnectionDeliveriesRow struct {
+	Failed          int32
+	Unknown         int32
+	Delegated       int32
+	LastFailureAt   time.Time
+	LastSuccessAt   time.Time
+	LastDelegatedAt time.Time
+}
+
+// Outcomes recorded for a connection's actions since a time (F358):
+// failures, unknown outcomes, actions an agent ran itself (delegated:
+// PantherClaw never learns their result, so they are no evidence of
+// success), and the latest of each kind (the epoch for none).
+func (q *Queries) ConnectionDeliveries(ctx context.Context, orgID ids.OrgID, connectionID *ids.UUID, since time.Time) (ConnectionDeliveriesRow, error) {
+	row := q.db.QueryRow(ctx, connectionDeliveries, orgID, connectionID, since)
+	var i ConnectionDeliveriesRow
+	err := row.Scan(
+		&i.Failed,
+		&i.Unknown,
+		&i.Delegated,
+		&i.LastFailureAt,
+		&i.LastSuccessAt,
+		&i.LastDelegatedAt,
+	)
+	return i, err
+}
+
+const connectionDependentAgents = `-- name: ConnectionDependentAgents :many
+SELECT r.agent_id, g.name, max(t.created_at)::timestamptz AS last_used_at
+FROM pc.transactions t
+JOIN pc.runs r ON r.org_id = t.org_id AND r.id = t.run_id
+JOIN pc.agents g ON g.org_id = r.org_id AND g.id = r.agent_id
+WHERE t.org_id = $1 AND t.connection_id = $2 AND t.created_at >= $3::timestamptz
+GROUP BY r.agent_id, g.name
+ORDER BY last_used_at DESC, r.agent_id
+LIMIT $4
+`
+
+type ConnectionDependentAgentsParams struct {
+	OrgID        ids.OrgID
+	ConnectionID *ids.UUID
+	Since        time.Time
+	MaxRows      int32
+}
+
+type ConnectionDependentAgentsRow struct {
+	AgentID    ids.UUID
+	Name       string
+	LastUsedAt time.Time
+}
+
+// The agents whose runs used a connection since a time, latest first
+// (F358).
+func (q *Queries) ConnectionDependentAgents(ctx context.Context, arg ConnectionDependentAgentsParams) ([]ConnectionDependentAgentsRow, error) {
+	rows, err := q.db.Query(ctx, connectionDependentAgents,
+		arg.OrgID,
+		arg.ConnectionID,
+		arg.Since,
+		arg.MaxRows,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ConnectionDependentAgentsRow{}
+	for rows.Next() {
+		var i ConnectionDependentAgentsRow
+		if err := rows.Scan(&i.AgentID, &i.Name, &i.LastUsedAt); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const connectionTestFacts = `-- name: ConnectionTestFacts :one
@@ -209,11 +358,39 @@ func (q *Queries) InsertConnectionRoute(ctx context.Context, arg InsertConnectio
 	return err
 }
 
+const insertConnectionTestTask = `-- name: InsertConnectionTestTask :exec
+INSERT INTO pc.verifications (org_id, id, purpose, connection_id, operation, request, next_at, deadline_at)
+VALUES ($1, $2, 'connection_test', $3, $4, $5, now(),
+    now() + interval '10 minutes')
+`
+
+type InsertConnectionTestTaskParams struct {
+	OrgID        ids.OrgID
+	ID           ids.UUID
+	ConnectionID ids.UUID
+	Operation    string
+	Request      []byte
+}
+
+// A read test's verification task (G0 M8 track C, F354): the connection's
+// gateway leases it as it leases target-log reads. It belongs to no
+// transaction.
+func (q *Queries) InsertConnectionTestTask(ctx context.Context, arg InsertConnectionTestTaskParams) error {
+	_, err := q.db.Exec(ctx, insertConnectionTestTask,
+		arg.OrgID,
+		arg.ID,
+		arg.ConnectionID,
+		arg.Operation,
+		arg.Request,
+	)
+	return err
+}
+
 const insertCredentialTest = `-- name: InsertCredentialTest :one
 INSERT INTO pc.connection_tests (org_id, id, connection_id, kind, state, result, checks, requested_by, finished_at)
 VALUES ($1, $2, $3, 'credential', 'DONE', $4, $5,
     $6, now())
-RETURNING org_id, id, connection_id, kind, operation, state, gateway_id, verification_id, result, checks, detail_sha256, requested_by, created_at, finished_at
+RETURNING org_id, id, connection_id, kind, operation, state, gateway_id, verification_id, tokens_attempt, result, checks, detail_sha256, requested_by, created_at, finished_at
 `
 
 type InsertCredentialTestParams struct {
@@ -245,6 +422,7 @@ func (q *Queries) InsertCredentialTest(ctx context.Context, arg InsertCredential
 		&i.State,
 		&i.GatewayID,
 		&i.VerificationID,
+		&i.TokensAttempt,
 		&i.Result,
 		&i.Checks,
 		&i.DetailSha256,
@@ -255,8 +433,94 @@ func (q *Queries) InsertCredentialTest(ctx context.Context, arg InsertCredential
 	return i, err
 }
 
+const insertLeasedConnectionTest = `-- name: InsertLeasedConnectionTest :one
+INSERT INTO pc.connection_tests (org_id, id, connection_id, kind, verification_id, operation, requested_by)
+VALUES ($1, $2, $3, $4, $5, $6,
+    $7)
+RETURNING org_id, id, connection_id, kind, operation, state, gateway_id, verification_id, tokens_attempt, result, checks, detail_sha256, requested_by, created_at, finished_at
+`
+
+type InsertLeasedConnectionTestParams struct {
+	OrgID          ids.OrgID
+	ID             ids.UUID
+	ConnectionID   ids.UUID
+	Kind           string
+	VerificationID *ids.UUID
+	Operation      *string
+	RequestedBy    string
+}
+
+// A test the gateway runs, PENDING until it reports.
+func (q *Queries) InsertLeasedConnectionTest(ctx context.Context, arg InsertLeasedConnectionTestParams) (PcConnectionTest, error) {
+	row := q.db.QueryRow(ctx, insertLeasedConnectionTest,
+		arg.OrgID,
+		arg.ID,
+		arg.ConnectionID,
+		arg.Kind,
+		arg.VerificationID,
+		arg.Operation,
+		arg.RequestedBy,
+	)
+	var i PcConnectionTest
+	err := row.Scan(
+		&i.OrgID,
+		&i.ID,
+		&i.ConnectionID,
+		&i.Kind,
+		&i.Operation,
+		&i.State,
+		&i.GatewayID,
+		&i.VerificationID,
+		&i.TokensAttempt,
+		&i.Result,
+		&i.Checks,
+		&i.DetailSha256,
+		&i.RequestedBy,
+		&i.CreatedAt,
+		&i.FinishedAt,
+	)
+	return i, err
+}
+
+const insertToolObservation = `-- name: InsertToolObservation :one
+INSERT INTO pc.tool_observations (org_id, id, run_id, instance_id, connection_id, tool, input_sha256, channel)
+SELECT c.org_id, $1, $2, $3, c.id, $4, $5, 'sdk'
+FROM pc.connections c
+WHERE c.org_id = $6 AND c.id = $7 AND c.gateway_id = $8
+RETURNING id
+`
+
+type InsertToolObservationParams struct {
+	ID           ids.UUID
+	RunID        ids.UUID
+	InstanceID   ids.UUID
+	Tool         string
+	InputSha256  []byte
+	OrgID        ids.OrgID
+	ConnectionID ids.UUID
+	GatewayID    ids.UUID
+}
+
+// An OBSERVE_ONLY record of a tool an agent SDK ran without a mapping
+// (HR-200), only through a connection the reporting gateway serves.
+func (q *Queries) InsertToolObservation(ctx context.Context, arg InsertToolObservationParams) (ids.UUID, error) {
+	row := q.db.QueryRow(ctx, insertToolObservation,
+		arg.ID,
+		arg.RunID,
+		arg.InstanceID,
+		arg.Tool,
+		arg.InputSha256,
+		arg.OrgID,
+		arg.ConnectionID,
+		arg.GatewayID,
+	)
+	var id ids.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const latestConnectionTest = `-- name: LatestConnectionTest :one
-SELECT org_id, id, connection_id, kind, operation, state, gateway_id, verification_id, result, checks, detail_sha256, requested_by, created_at, finished_at FROM pc.connection_tests
+SELECT org_id, id, connection_id, kind, operation, state, gateway_id, verification_id, tokens_attempt, result, checks, detail_sha256, requested_by, created_at, finished_at FROM pc.connection_tests
 WHERE org_id = $1 AND connection_id = $2 AND state IN ('DONE', 'FAILED')
     AND (NOT $3::boolean OR result = 'PASSED')
 ORDER BY finished_at DESC, id DESC
@@ -276,6 +540,7 @@ func (q *Queries) LatestConnectionTest(ctx context.Context, orgID ids.OrgID, con
 		&i.State,
 		&i.GatewayID,
 		&i.VerificationID,
+		&i.TokensAttempt,
 		&i.Result,
 		&i.Checks,
 		&i.DetailSha256,
@@ -284,6 +549,50 @@ func (q *Queries) LatestConnectionTest(ctx context.Context, orgID ids.OrgID, con
 		&i.FinishedAt,
 	)
 	return i, err
+}
+
+const listConnectionCircuits = `-- name: ListConnectionCircuits :many
+SELECT gateway_id, state, unknown_count, total_count, opened_at, reported_at
+FROM pc.circuit_states
+WHERE org_id = $1 AND connection_id = $2
+ORDER BY gateway_id
+`
+
+type ListConnectionCircuitsRow struct {
+	GatewayID    ids.UUID
+	State        string
+	UnknownCount int32
+	TotalCount   int32
+	OpenedAt     *time.Time
+	ReportedAt   time.Time
+}
+
+// The circuit each gateway reported for a connection (HR-078).
+func (q *Queries) ListConnectionCircuits(ctx context.Context, orgID ids.OrgID, connectionID ids.UUID) ([]ListConnectionCircuitsRow, error) {
+	rows, err := q.db.Query(ctx, listConnectionCircuits, orgID, connectionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListConnectionCircuitsRow{}
+	for rows.Next() {
+		var i ListConnectionCircuitsRow
+		if err := rows.Scan(
+			&i.GatewayID,
+			&i.State,
+			&i.UnknownCount,
+			&i.TotalCount,
+			&i.OpenedAt,
+			&i.ReportedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listConnectionGitHub = `-- name: ListConnectionGitHub :many

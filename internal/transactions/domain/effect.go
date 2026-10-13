@@ -56,6 +56,9 @@ const (
 	// PurposeOrgScan scans the GitHub organization behind a GitHub App
 	// connection (G0 M8, HR-209).
 	PurposeOrgScan Purpose = "org_scan"
+	// PurposeConnectionTest makes a connection's harmless test read (G0 M8
+	// track C, F354). It belongs to no transaction.
+	PurposeConnectionTest Purpose = "connection_test"
 )
 
 // Observation is what one verification read reported (HR-190): only the

@@ -12,11 +12,13 @@ import (
 	"encoding/json/v2"
 	"io"
 	"net/http"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 
 	capp "github.com/katocxl/pantherclaw/internal/connections/app"
+	"github.com/katocxl/pantherclaw/internal/definitions/mapping"
 	"github.com/katocxl/pantherclaw/internal/gateway"
 	"github.com/katocxl/pantherclaw/internal/gateway/sdk"
 	pantherclawv1 "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
@@ -33,7 +35,7 @@ import (
 // refund the org's policy holds answers hold with the wait handle; once
 // bob approves it, the identical call with the same action id is allowed
 // and its request accepted. A built-in tool is allowed OBSERVE_ONLY
-// without a decision.
+// without a decision, and the Authority records it (HR-200).
 func TestE2E_M8_SDKFace(t *testing.T) {
 	p := inProcessIdP(t)
 	s := start(t, options{budget: "1000.00", people: &p, access: capp.AccessTargetEnforced, actionTokens: true})
@@ -89,6 +91,16 @@ func TestE2E_M8_SDKFace(t *testing.T) {
 	if observed.Decision != "allow" || observed.Coverage != sdk.CoverageObserveOnly || observed.TransactionID != "" {
 		t.Fatalf("built-in tool: %+v", observed)
 	}
+	if got := s.row(t, `SELECT tool || ' ' || channel FROM pc.tool_observations WHERE connection_id = $1`, s.conn); got != "Read sdk" {
+		t.Fatalf("observation recorded %q", got)
+	}
+
+	// The face lists the package's mapped tools to the verified workload,
+	// whose proof covers the empty GET body (C2).
+	tools := s.sdkTools(t)
+	if tools.V != 1 || tools.Connection != "payments" || !slices.Contains(tools.Tools, mapping.Tool{Tool: "create_refund", Operation: "payments.refund.create"}) {
+		t.Fatalf("tools %+v", tools)
+	}
 }
 
 // sdk sends one PAP/1-signed call to the payments connection's SDK face as
@@ -141,4 +153,25 @@ func (s *stack) send(t *testing.T, d *sdk.Dispatch, edit func([]byte) []byte) in
 	}
 	_ = resp.Body.Close()
 	return resp.StatusCode
+}
+
+// sdkTools reads the payments connection's tools from the SDK face as the
+// seeded workload: PAP/1 over a GET with an empty body.
+func (s *stack) sdkTools(t *testing.T) sdk.Listing {
+	t.Helper()
+	req, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, s.gateway+"/sdk/payments", nil)
+	client := &http.Client{Timeout: 30 * time.Second, Transport: &workloadclient.Transport{
+		Key: s.key, Token: func() string { return s.token }, Base: http.DefaultTransport,
+	}}
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	raw, _ := io.ReadAll(resp.Body)
+	var l sdk.Listing
+	if err := json.Unmarshal(raw, &l); err != nil || resp.StatusCode != http.StatusOK {
+		t.Fatalf("SDK tools: %d %s %v", resp.StatusCode, raw, err)
+	}
+	return l
 }

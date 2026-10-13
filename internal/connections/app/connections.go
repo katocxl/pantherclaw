@@ -102,6 +102,9 @@ type Service struct {
 	pool   *db.Pool
 	notify Notifier
 	own    []endpoint
+	// grantsPage is how many grants Health reads at a time; zero is
+	// grantPage. Tests set it smaller to read past the first page.
+	grantsPage int32
 }
 
 // New returns the connection use cases. publicURL and gatewayAPIURL are
@@ -219,18 +222,9 @@ func activeGateway(ctx context.Context, q *dbq.Queries, org ids.OrgID, id ids.UU
 // definitions with a dispatch template of that kind; for local, the hook
 // mappings.
 func routes(ctx context.Context, q *dbq.Queries, org ids.OrgID, pkg, kind string) ([]string, error) {
-	pin, err := q.PinnedPackageRaw(ctx, org, pkg)
-	if db.IsNoRows(err) {
-		return nil, ErrPackage
-	} else if err != nil {
-		return nil, err
-	}
-	if slices.Contains([]string{"QUARANTINED", "RETIRED"}, pin.State) {
-		return nil, ErrPackage
-	}
-	p, err := manifest.Decode(pin.Raw)
+	p, err := pinnedPackage(ctx, q, org, pkg)
 	if err != nil {
-		return nil, ErrPackage
+		return nil, err
 	}
 	var out []string
 	for i := range p.Definitions {
@@ -245,6 +239,25 @@ func routes(ctx context.Context, q *dbq.Queries, org ids.OrgID, pkg, kind string
 	}
 	slices.Sort(out)
 	return out, nil
+}
+
+// pinnedPackage is the org's usable pinned version of a package, decoded
+// (ErrPackage when there is none).
+func pinnedPackage(ctx context.Context, q *dbq.Queries, org ids.OrgID, pkg string) (*domain.Package, error) {
+	pin, err := q.PinnedPackageRaw(ctx, org, pkg)
+	if db.IsNoRows(err) {
+		return nil, ErrPackage
+	} else if err != nil {
+		return nil, err
+	}
+	if slices.Contains([]string{"QUARANTINED", "RETIRED"}, pin.State) {
+		return nil, ErrPackage
+	}
+	p, err := manifest.Decode(pin.Raw)
+	if err != nil {
+		return nil, ErrPackage
+	}
+	return p, nil
 }
 
 // servedRoutes are the routes of d a connection of this kind serves, in

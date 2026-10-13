@@ -148,17 +148,19 @@ The gateway refuses a file for another org, with unknown members, or with a fing
 
 ```bash
 pclaw connection capabilities <connection-id>   # what it declares it supports, and its last successful test
-pclaw connection test <connection-id>           # test it now and record the result (connection.manage)
+pclaw connection test <connection-id>           # test what it depends on now, without calling the target (connection.test)
+pclaw connection test <connection-id> --kind read   # lease the package's test read to the gateway (connection.test)
+pclaw connection health <connection-id>         # circuits, permissions, tests, delivery failures and dependent agents
 ```
 
 **Capabilities** follow from the connection's kind, access mode and pinned package, never from a setting (F346):
 - discovery, observation, enforcement and response, each `SUPPORTED`, `PARTIAL` or `UNSUPPORTED`, with the reason. Only an `http` connection whose credential PantherClaw holds, or whose target checks action tokens, declares enforcement `SUPPORTED`. An `mcp` connection (opaque, HR-086), an agent-held or open target, and a `local` connection (cooperative, HR-024) declare `PARTIAL`;
 - the operations it serves, with each route's mode;
-- the permissions PantherClaw's credential is used for, each with the operations that need it;
+- the permissions PantherClaw's credential is used for, each with the operations that need it: the definition's `credential_scope` (`contents:write`), or without one its access to its target type (`write payments.charge`);
 - its limits and failure behaviour;
 - its last successful test.
 
-**A test never calls the target.** It checks:
+**A credential test** (the default) never calls the target. It checks:
 - the connection is `ACTIVE`;
 - its gateway is active and holds a current certificate, renewed within 24 hours;
 - the org's pinned version of its package serves routes for its kind;
@@ -166,3 +168,17 @@ pclaw connection test <connection-id>           # test it now and record the res
 - no circuit is open.
 
 Every result is kept. A failed test names the check that failed and does not replace the last successful one.
+
+**A read test** (`--kind read`) reaches the target, but only with the package's one test read (`test: true`): a GET with no required params. The test is `PENDING` until the connection's gateway leases it, then `RUNNING`.
+- The gateway checks again that the read is the test read and a GET, and reports only the status and a digest of the answer.
+- A 2xx passes; any other status fails, naming it. A read the gateway could not make is retried; after the third attempt, or when no gateway reports within 10 minutes, the test is `FAILED` (it could not run).
+- It runs only on an `ACTIVE` `http` connection whose gateway holds its credential (`pantherclaw_held`) or that needs none (`none`). On any other connection, or with a package that has no test read, it is refused.
+
+The result shows in `pclaw connection health` and, once passed, as the last successful test.
+
+**A target_verifier test** (`--kind target_verifier`) runs on an `ACTIVE` `http` connection in `target_enforced` access mode. It shows that the target's verifier refuses the package's test read without a valid action token (N15).
+- Under its lease, the gateway asks for test-purpose action tokens, which the server mints for that read only. It then sends the read four times: without a token, with a token bound to another body, with a fresh token, and with the same token again.
+- It passes only on 401, 401, 2xx and 409, each refusal with the verifier's own problem document (`urn:pantherclaw:action-token:<code>`). Each request is a check, with what the target answered.
+- It records the read's operation. A pass is evidence for that operation only, never for the other routes the verifier protects. Write routes stay `PARTIAL`.
+
+**Health** (F358) shows the connection and its active credential, each gateway's circuit, the permissions its credential is used for, its latest and last successful tests, and the failed and `UNKNOWN` outcomes of the last 24 hours with the latest failure and success. An action the agent ran itself (`delegated`) is counted apart and never as a success: PantherClaw never learns its result. A test is shown with its kind; a `credential` test checks only the configuration and never reaches the target. It also lists the agents whose runs used the connection in the last 30 days, and the agents whose active grants allow an operation it serves (they would stop working without it), at most 50 each, but only to readers who may read agents org-wide; for anyone else both lists are marked hidden.
