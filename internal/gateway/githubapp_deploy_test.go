@@ -94,6 +94,32 @@ func TestHR206_TheGatewayFindsADeploymentByItsCommitAndEnvironment(t *testing.T)
 		}
 	}
 
+	// More matches than are read, or a page that may be cut, never give a
+	// verdict from some of them (#349 review): newer successes could hide a
+	// failure.
+	flood := strings.Repeat("7", 40)
+	failed := w.sim.AddDeployment("acme/payments", flood, "main", "flood", actionsBot)
+	w.sim.AddDeploymentStatus("acme/payments", failed, "failure", actionsBot)
+	for range 10 {
+		id := w.sim.AddDeployment("acme/payments", flood, "main", "flood", actionsBot)
+		w.sim.AddDeploymentStatus("acme/payments", id, "success", actionsBot)
+	}
+	if o := read(flood, "flood"); o.Fields["/state"] != "disagreement" {
+		t.Errorf("eleven matches: %+v", o)
+	}
+	crowd := strings.Repeat("8", 40)
+	for i := range 30 {
+		who := "mallory"
+		if i < 5 {
+			who = actionsBot
+		}
+		id := w.sim.AddDeployment("acme/payments", crowd, "main", "crowd", who)
+		w.sim.AddDeploymentStatus("acme/payments", id, "success", who)
+	}
+	if o := read(crowd, "crowd"); o.Fields["/state"] != "disagreement" || o.Fields["/others"] != "25" {
+		t.Errorf("a full page: %+v", o)
+	}
+
 	for name, o := range map[string]dispatch.Observation{
 		"another environment": read(p.MergeCommitSHA, "qa"),
 		"another commit":      read(strings.Repeat("9", 40), "production"),

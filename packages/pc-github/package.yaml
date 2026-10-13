@@ -840,7 +840,10 @@ definitions:
         deployment it made of this merge commit to this environment, and
         that they agree. It does not show what the deployed workflow did
         beyond that status, and it does not count deployments made by
-        anyone else, such as through another token.
+        anyone else, such as through another token. Any workflow of the
+        repository acts as github-actions[bot], including one added on
+        another branch, so it trusts every workflow there, not only the
+        deploy workflow.
     approval:
       title: Release a deployment from {target.id}
       fields: [target.id]

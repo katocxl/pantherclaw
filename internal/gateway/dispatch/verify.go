@@ -132,7 +132,7 @@ func (e *Engine) VerifyEffect(ctx context.Context, conn *control.Connection, l L
 	params := req.Params
 	var out Observation
 	var matched [][]byte // a matched lookup's items, from every page (G0 M8 W1c)
-	others := 0
+	others, crowded := 0, false
 	for range maxPages {
 		status, body, ok := e.read(ctx, conn, read, req.Target, params)
 		if !ok {
@@ -152,6 +152,9 @@ func (e *Engine) VerifyEffect(ctx context.Context, conn *control.Connection, l L
 			return Observation{HTTPStatus: status, Digest: out.Digest}, nil
 		}
 		last := ""
+		// A page as full as GitHub's default, with no way to ask for more,
+		// may have cut the listing: the matches read are not all of them.
+		crowded = crowded || (len(v.Lookup.Match) > 0 && list.More == "" && len(items) >= defaultPage)
 		for _, it := range items {
 			if len(v.Lookup.Match) > 0 {
 				switch {
@@ -171,7 +174,7 @@ func (e *Engine) VerifyEffect(ctx context.Context, conn *control.Connection, l L
 		if list.More == "" || more != "true" {
 			out.Complete = true
 			if len(v.Lookup.Match) > 0 {
-				return e.judge(ctx, conn, v, req.Target, matched, others, list.ID, declared, out)
+				return e.judge(ctx, conn, v, req.Target, matched, others, crowded, list.ID, declared, out)
 			}
 			return out, nil
 		}
@@ -199,8 +202,14 @@ func matches(item []byte, match []defs.Expectation, params map[string]string) bo
 	return true
 }
 
-// maxMatched is the most matched items a lookup reads the statuses of.
-const maxMatched = 10
+// maxMatched is the most matched items a lookup reads the statuses of;
+// more is a disagreement, never a verdict from some of them (#349 review).
+// defaultPage is GitHub's default page size: a listing that fills it
+// without saying there is more may be cut, and is treated alike.
+const (
+	maxMatched  = 10
+	defaultPage = 30
+)
 
 // createdBy reports whether an item or a status was made by a creator the
 // lookup names; any is, when it names none.
@@ -221,7 +230,7 @@ func createdBy(item []byte, c *defs.CreatorSpec) bool {
 // made by others are only counted, as evidence. A failed read is
 // inconclusive and retried.
 func (e *Engine) judge(ctx context.Context, conn *control.Connection, v *defs.VerifierSpec, target actionir.Target, matched [][]byte,
-	others int, idPtr string, declared map[string]bool, out Observation,
+	others int, crowded bool, idPtr string, declared map[string]bool, out Observation,
 ) (Observation, error) {
 	l := v.Lookup
 	if l.Creator != nil {
@@ -233,6 +242,16 @@ func (e *Engine) judge(ctx context.Context, conn *control.Connection, v *defs.Ve
 	read, found := conn.Package.Definition(v.Operation)
 	if !found || read.Access != defs.AccessRead || read.Dispatch == nil || read.Dispatch.HTTP == nil || read.Dispatch.HTTP.Method != http.MethodGet {
 		return Observation{}, fmt.Errorf("%w: lookup read", ErrNotReviewedRead)
+	}
+	if l.Statuses != nil && (len(matched) > maxMatched || crowded) {
+		// Too many to read them all: a person decides, as for matches that
+		// disagree; reading some would let newer ones hide the rest.
+		out.Found = true
+		if out.Fields == nil {
+			out.Fields = map[string]string{}
+		}
+		out.Fields[l.Statuses.Field] = defs.VerdictDisagreement
+		return out, nil
 	}
 	verdicts := map[string]bool{}
 	for _, it := range matched[:min(len(matched), maxMatched)] {
