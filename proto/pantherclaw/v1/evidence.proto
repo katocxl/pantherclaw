@@ -368,8 +368,8 @@ message ReplayDecisionRequest {
 // ReplayLimitation is why a replay is incomplete (F507).
 message ReplayLimitation {
   // INPUTS_MISSING, INPUTS_TRUNCATED, INPUTS_UNREADABLE,
-  // FORMAT_UNSUPPORTED, PIPELINE_VERSION_UNSUPPORTED, POLICY_UNCOMPILABLE or
-  // INPUT_UNAVAILABLE.
+  // FORMAT_UNSUPPORTED, PIPELINE_VERSION_UNSUPPORTED, POLICY_UNCOMPILABLE,
+  // INPUT_UNAVAILABLE or RECEIPT_REMOVED (retention removed the receipt body).
   string code = 1;
   // The pipeline step it concerns; 0 for the whole replay.
   int32 step = 2;

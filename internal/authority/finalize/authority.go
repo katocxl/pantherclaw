@@ -506,8 +506,9 @@ func (a *Authority) RecordExecution(ctx context.Context, gw Gateway, e Execution
 	if e.Outcome != Accepted && e.Outcome != Failed && e.Outcome != Unknown && e.Outcome != Delegated {
 		return "", ErrOutcomeInvalid
 	}
-	return a.Store.RecordExecution(ctx, gw.Org, gw.ID, e, func(x Executed, now time.Time) (Receipt, error) {
-		return a.executionReceipt(gw, e, x, now)
+	return a.Store.RecordExecution(ctx, gw.Org, gw.ID, e, Signing{
+		Execution: func(x Executed, now time.Time) (Receipt, error) { return a.executionReceipt(gw, e, x, now) },
+		Receipts:  a.Receipts, Issuer: a.issuer(),
 	})
 }
 
