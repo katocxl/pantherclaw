@@ -22,6 +22,20 @@ import (
 // original. A deny rule only strengthens. The original's credentials are
 // never copied: the governed entry holds only the gateway's URL, the
 // connection's name and the key file's path.
+//
+// NAME must be a server configured for Claude Code (in ~/.claude.json or
+// the project's .mcp.json) under exactly that name, or init fails: a typo,
+// another case, or a server from a plugin or managed settings would
+// otherwise leave the original usable while init reported success.
+//
+// An original from the project's .mcp.json is also added to
+// disabledMcpjsonServers in the scope's settings, so Claude Code does not
+// start it with its credentials. What init cannot close, it says: an
+// original configured outside .mcp.json (in ~/.claude.json) still starts,
+// Claude Code's own ListMcpResourcesTool and ReadMcpResourceTool reach the
+// resources of every server that runs (the gateway's /sdk face denies MCP
+// resources, Claude Code does not), and servers from plugins
+// (mcp__plugin_…) or managed settings are not init's to change.
 
 // mcpNameRe is a server name Claude Code's allowlists accept, short enough
 // for its governed name.
@@ -211,15 +225,23 @@ func (f initFlags) governMCP(a *app, p *initPlan, routes []mcpRoute, home, confi
 				"its original entry would go around PantherClaw; ask your administrator to deny %s in managed settings", m, r.name, denyRule(r.name))
 		}
 		entry := jsonFields("type", "stdio", "command", "pclaw", "args", args)
-		original, present := "", false
+		present := false
+		// Where the original is: the project's .mcp.json, which Claude Code
+		// can be told not to start, or elsewhere (~/.claude.json), which it
+		// starts anyway.
+		inMCPJSON, elsewhere := "", ""
 		for _, m := range files {
 			s, err := readSettings(m.scope, m.path)
 			if err != nil {
 				return err
 			}
 			servers := m.servers(p.file(s).doc, f.project, false)
-			if servers.get(r.name) != nil && original == "" {
-				original = m.path
+			switch {
+			case servers.get(r.name) == nil:
+			case m.scope == "project":
+				inMCPJSON = m.path
+			case elsewhere == "":
+				elsewhere = m.path
 			}
 			if have := servers.get(governed); have != nil {
 				if addServer(servers, governed, entry) != nil {
@@ -227,6 +249,17 @@ func (f initFlags) governMCP(a *app, p *initPlan, routes []mcpRoute, home, confi
 				}
 				present = true
 			}
+		}
+		if inMCPJSON == "" && elsewhere == "" {
+			var where []string
+			for _, m := range files {
+				if !slices.ContainsFunc(where, func(w string) bool { return samePath(w, m.path) }) {
+					where = append(where, m.path)
+				}
+			}
+			return fail("no MCP server named %q is configured for Claude Code in %s (the name must match exactly, case "+
+				"included), so there is no original to govern and deny; servers from plugins or managed settings are not "+
+				"init's to govern: remove them yourself", r.name, strings.Join(where, " or "))
 		}
 		if !present {
 			s, err := readSettings(files[0].scope, files[0].path)
@@ -245,14 +278,42 @@ func (f initFlags) governMCP(a *app, p *initPlan, routes []mcpRoute, home, confi
 				return fail("%s: %v; it is left as it is", target.path, err)
 			}
 		}
-		switch {
-		case original != "":
-			p.done = append(p.done, fmt.Sprintf("The MCP server %q in %s is left as it is, and denied; Claude Code reaches it as %q, "+
-				"through PantherClaw.", r.name, original, governed))
-		default:
-			_, _ = fmt.Fprintf(a.stdout, "No MCP server named %q is configured for Claude Code; the deny rule keeps one added later "+
-				"from going around PantherClaw.\n", r.name)
+		if inMCPJSON != "" {
+			if err := addDisabled(p.file(target).doc, r.name); err != nil {
+				return fail("%s: %v; it is left as it is", target.path, err)
+			}
 		}
+		done := fmt.Sprintf("The MCP server %q is left as it is, and denied; Claude Code reaches it as %q, through PantherClaw.",
+			r.name, governed)
+		if inMCPJSON != "" {
+			done += fmt.Sprintf(" Its entry in %s is also disabled (disabledMcpjsonServers), so Claude Code does not start it.", inMCPJSON)
+		}
+		if elsewhere != "" {
+			done += fmt.Sprintf(" Its entry in %s still starts, with its credentials, and Claude Code's ListMcpResourcesTool and "+
+				"ReadMcpResourceTool can read its resources: remove that entry yourself (claude mcp remove %s) to close the route.",
+				elsewhere, r.name)
+		}
+		p.done = append(p.done, done)
+	}
+	if len(routes) > 0 {
+		_, _ = fmt.Fprintln(a.stdout, "pclaw init does not govern MCP servers from plugins (their tools are named mcp__plugin_…) or "+
+			"from managed settings, or stop servers configured outside .mcp.json: they keep running, with their credentials, "+
+			"until you remove them. Claude Code's ListMcpResourcesTool and ReadMcpResourceTool read the resources of every "+
+			"server that runs (the gateway's /sdk face denies MCP resources, Claude Code does not), so only a disabled or "+
+			"removed server's resources are out of their reach.")
+	}
+	return nil
+}
+
+// addDisabled adds a server to disabledMcpjsonServers unless the document
+// lists it, so Claude Code does not start that server of .mcp.json.
+func addDisabled(doc *jsonNode, server string) error {
+	list, ok := doc.array("disabledMcpjsonServers")
+	if !ok {
+		return errors.New("disabledMcpjsonServers is not a list")
+	}
+	if !slices.ContainsFunc(list.items, func(n *jsonNode) bool { return n.str() == server }) {
+		list.items = append(list.items, jsonOf(server))
 	}
 	return nil
 }

@@ -78,15 +78,39 @@ func samePath(a, b string) bool {
 	return a == b
 }
 
-// apply shows the plan, asks, and carries it out: the enrollment first, so
-// a hook never names a key that is not enrolled, then each file, backed up
-// and replaced through a temporary file.
-func (f initFlags) apply(ctx context.Context, a *app, p *initPlan) error {
-	type write struct {
-		path  string
-		after []byte
+// initWrite is one file init replaces: the bytes the plan was made from
+// (nil for a file that did not exist) and the new content.
+type initWrite struct {
+	path          string
+	before, after []byte
+}
+
+// unchanged fails when a file is no longer what the plan was made from.
+// Claude Code rewrites its settings and ~/.claude.json while it runs, and
+// the person may take a while to answer, so writing the plan then would
+// lose what changed meanwhile (a deny rule added, say).
+func unchanged(writes []initWrite) error {
+	for _, w := range writes {
+		now, err := os.ReadFile(w.path)
+		if errors.Is(err, os.ErrNotExist) {
+			now = nil
+		} else if err != nil {
+			return err
+		}
+		if (now == nil) != (w.before == nil) || !bytes.Equal(now, w.before) {
+			return &exitError{code: 1, msg: "pclaw init: " + w.path + " changed after init read it (Claude Code rewrites its settings " +
+				"while it runs); nothing was changed, so run pclaw init again"}
+		}
 	}
-	var writes []write
+	return nil
+}
+
+// apply shows the plan, asks, and carries it out: the enrollment first, so
+// a hook never names a key that is not enrolled, then each file, unless it
+// changed since the plan was made, backed up and replaced through a
+// temporary file.
+func (f initFlags) apply(ctx context.Context, a *app, p *initPlan) error {
+	var writes []initWrite
 	for _, s := range p.edits {
 		// A file the plan read but did not add to stays as it is, even
 		// when its layout is not the one init writes.
@@ -113,7 +137,7 @@ func (f initFlags) apply(ctx context.Context, a *app, p *initPlan) error {
 		if _, err := fmt.Fprint(a.stdout, lineDiff(s.path, s.raw, after)); err != nil {
 			return err
 		}
-		writes = append(writes, write{s.path, after})
+		writes = append(writes, initWrite{s.path, s.raw, after})
 	}
 	if e := p.enroll; e != nil {
 		key := "the workload key in " + e.path
@@ -134,9 +158,17 @@ func (f initFlags) apply(ctx context.Context, a *app, p *initPlan) error {
 		return &exitError{code: 1, msg: "pclaw init: not confirmed; nothing was changed"}
 	}
 	if p.enroll != nil {
+		// A file that changed while the person read the plan stops
+		// everything, the enrollment (which writes the key file) too.
+		if err := unchanged(writes); err != nil {
+			return err
+		}
 		if err := p.enroll.run(ctx, a); err != nil {
 			return err
 		}
+	}
+	if err := unchanged(writes); err != nil {
+		return err
 	}
 	for _, w := range writes {
 		backup, err := backupFile(w.path, time.Now())
@@ -191,6 +223,16 @@ func (f initFlags) enrollment() (*enrollment, error) {
 	case err == nil && kf.Identifier != "":
 		return nil, nil
 	case err == nil:
+		// The file is rewritten in place with the identifier and keeps its
+		// mode, so a key other users can read (and may have read) is not
+		// enrolled.
+		if info, err := os.Stat(path); err != nil {
+			return nil, fmt.Errorf("--key-file: %w", err)
+		} else if !isWindows() && info.Mode().Perm()&0o077 != 0 {
+			return nil, fmt.Errorf("--key-file %s holds a private key and other users can read or change it (mode %04o), so init "+
+				"does not enroll it: if no one else can have read it, run chmod 600 on it; otherwise remove it, and init makes a new key",
+				path, info.Mode().Perm())
+		}
 		e.kf = kf
 	case errors.Is(err, os.ErrNotExist):
 		if e.kf, _, err = workloadclient.NewKeyFile(); err != nil {
@@ -212,6 +254,20 @@ func (f initFlags) enrollment() (*enrollment, error) {
 	}
 	pub, _ := key.Public().(ed25519.PublicKey)
 	e.fingerprint = jws.Thumbprint(pub)
+	// HR-094: a person confirms the key's fingerprint before it is
+	// admitted. Without --yes they do so by confirming the plan, which
+	// shows it; with --yes no one is asked, so they name it.
+	switch {
+	case f.yes && e.create:
+		return nil, fmt.Errorf("--yes enrolls without asking, so it needs --fingerprint with the key's fingerprint, which you check (HR-094), "+
+			"and a key init would create has none yet: create it first (pclaw workload init --key-file %s shows its fingerprint), "+
+			"or run init without --yes", path)
+	case f.yes && f.fingerprint == "":
+		return nil, errors.New("--yes enrolls without asking, so it needs --fingerprint with the fingerprint of the key in --key-file, " +
+			"which you check (HR-094; --dry-run shows it)")
+	case f.fingerprint != "" && f.fingerprint != e.fingerprint:
+		return nil, fmt.Errorf("--fingerprint %s is not the fingerprint of the key in %s; nothing was changed", f.fingerprint, path)
+	}
 	return e, nil
 }
 

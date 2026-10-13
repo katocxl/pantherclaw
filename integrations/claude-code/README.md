@@ -42,21 +42,22 @@ pclaw init --gateway https://gateway.example.com --connection shell --key-file ~
 
 `pclaw init`:
 - reports the Claude Code settings it finds (user, project, local and managed), the MCP servers that go around PantherClaw, and agent-framework projects;
-- when the key file is not an enrolled workload key, creates it (mode 0600) and enrolls it as `--agent`, signed in as you: an enrollment token is issued to you and used at once, never written, and the instance is admitted with the key fingerprint it showed you (HR-094);
+- when the key file is not an enrolled workload key, creates it (mode 0600) and enrolls it as `--agent`, signed in as you: an enrollment token is issued to you and used at once, never written, and the instance is admitted with the key fingerprint it showed you (HR-094). `--yes` asks nothing, so it also needs `--fingerprint` with the fingerprint you checked: create the key first with `pclaw workload init --key-file FILE`, which shows it. A key file other users can read is refused;
 - adds the same hook, in exec form with `onFailure: "block"`, to `.claude/settings.local.json`. Choose another file with `--scope project` or `--scope user`; `CLAUDE_CONFIG_DIR` moves the user one.
 
 It only adds (HR-208):
 - every existing deny rule, hook and member stays, in its order;
-- the diff is shown and nothing changes until you confirm, or pass `--yes`; `--dry-run` changes nothing;
-- each file is backed up and replaced through a temporary file;
+- the diff is shown, with each value under `env` and `headers` as `<redacted>`, and nothing changes until you confirm, or pass `--yes`; `--dry-run` changes nothing;
+- each file is backed up and replaced through a temporary file (a linked file where it points, keeping the link); a file that changed after init read it (Claude Code rewrites its settings while it runs) is left as it is, and init asks you to run it again;
 - no secret is written, only the gateway URL, the connection, the key file's path and the run.
 
-It fails without changing anything when managed settings would keep the hook from running: `allowManagedHooksOnly` without the hook in managed settings, or `disableAllHooks`. Running it again changes nothing.
+It fails without changing anything when settings would keep the hook from running: managed settings with `allowManagedHooksOnly` and without the hook, or with `disableAllHooks`; or `disableAllHooks` in the file it would change, or in any other settings file whose value Claude Code applies (it takes the setting from managed, then local, project and user settings). Running it again changes nothing.
 
-**Governing an MCP server.** `--mcp NAME=CONNECTION` (repeatable) governs Claude Code's MCP server `NAME` through the gateway connection `CONNECTION`:
+**Governing an MCP server.** `--mcp NAME=CONNECTION` (repeatable) governs Claude Code's MCP server `NAME` through the gateway connection `CONNECTION`. `NAME` must be exactly the name of a server configured for Claude Code in `~/.claude.json` or the project's `.mcp.json`, or `init` fails without changing anything:
 - the original entry stays exactly as it is;
 - a new entry, `pantherclaw-NAME`, runs `pclaw mcp proxy` to the connection, so its calls are decided like any other. It goes in `~/.claude.json` under the project for `--scope local`, `.mcp.json` for `project`, and `~/.claude.json`'s top level for `user`;
 - the deny rule `mcp__NAME__*` goes in the scope's settings, so the original cannot be used. A deny rule only strengthens.
+- for an original in the project's `.mcp.json`, its name is also added to `disabledMcpjsonServers` in the scope's settings, after the entries already there, so Claude Code does not start it with its credentials. `init` says what it leaves running, for you to remove: an original configured elsewhere (`~/.claude.json`) still starts; servers from plugins (`mcp__plugin_…`) and managed settings are not governed; and Claude Code's `ListMcpResourcesTool` and `ReadMcpResourceTool` can read the resources of any server that runs.
 
 Credentials in an MCP server's configuration (a token in its `env`, for example) are reported by name as routes around PantherClaw and never copied: give them to the gateway's connection instead. `init` fails without changing anything when `deniedMcpServers` or an `allowedMcpServers` list that applies would keep the governed server from running, or when managed settings set `allowManagedPermissionRulesOnly` without denying the original themselves.
 

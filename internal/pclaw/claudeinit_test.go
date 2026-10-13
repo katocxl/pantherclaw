@@ -7,25 +7,36 @@ import (
 	"bytes"
 	"context"
 	"encoding/json/v2"
+	"io"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
 	"github.com/katocxl/pantherclaw/internal/identity/workloadclient"
 )
 
-// initFixture is a home, a project, an enrolled-looking key file and the
-// answer init reads when it asks to confirm.
+// initFixture is a home, a project, an enrolled-looking key file, the
+// platform's managed settings directory (empty unless a test writes to
+// it, so the machine's own are never read) and the answer init reads when
+// it asks to confirm (from stdin, when a test sets it).
 type initFixture struct {
-	home, project, key, managed, answer string
-	env                                 map[string]string
+	home, project, key, managed, platform, answer string
+	env                                           map[string]string
+	stdin                                         io.Reader
 }
 
 func newInitFixture(t *testing.T) *initFixture {
 	t.Helper()
 	root := t.TempDir()
-	f := &initFixture{home: filepath.Join(root, "home"), project: filepath.Join(root, "proj"), managed: filepath.Join(root, "managed.json")}
+	f := &initFixture{
+		home: filepath.Join(root, "home"), project: filepath.Join(root, "proj"), managed: filepath.Join(root, "managed.json"),
+		platform: filepath.Join(root, "platform"),
+	}
+	old := managedSettingsDir
+	managedSettingsDir = f.platform
+	t.Cleanup(func() { managedSettingsDir = old })
 	for _, d := range []string{f.home, f.project} {
 		if err := os.MkdirAll(d, 0o700); err != nil {
 			t.Fatal(err)
@@ -64,8 +75,12 @@ func (f *initFixture) run(t *testing.T, extra ...string) (int, string, string) {
 		"init", "--gateway", "https://gw.example.test", "--connection", "shell", "--key-file", f.key,
 		"--project", f.project, "--managed-settings", f.managed,
 	}, extra...)
+	stdin := f.stdin
+	if stdin == nil {
+		stdin = strings.NewReader(f.answer)
+	}
 	var out, errb bytes.Buffer
-	code := Run(context.Background(), args, &out, &errb, envOf(f.env), Options{Stdin: strings.NewReader(f.answer)})
+	code := Run(context.Background(), args, &out, &errb, envOf(f.env), Options{Stdin: stdin})
 	return code, out.String(), errb.String()
 }
 
@@ -240,8 +255,13 @@ func TestHR208_InitRefusesWhatWouldKeepTheHookFromRunning(t *testing.T) {
 		"local hooks off":    {local: `{"disableAllHooks": true}`, code: 1, want: "never changes that setting"},
 		"managed runs it": {
 			managed: `{"allowManagedHooksOnly": true, "hooks": {"PreToolUse": [{"matcher": "Bash|PowerShell",
-				"hooks": [{"type": "command", "command": "pclaw", "args": ["hook", "claude-code"]}]}]}}`,
+				"hooks": [{"type": "command", "command": "pclaw", "args": ["hook", "claude-code"], "onFailure": "block"}]}]}}`,
 			want: "already installed",
+		},
+		"managed runs it failing open": {
+			managed: `{"allowManagedHooksOnly": true, "hooks": {"PreToolUse": [{"matcher": "Bash|PowerShell",
+				"hooks": [{"type": "command", "command": "pclaw", "args": ["hook", "claude-code"]}]}]}}`,
+			code: 1, want: "allow only managed hooks",
 		},
 		"dry run":        {local: existingLocal, args: []string{"--dry-run"}, want: "Dry run: nothing was changed."},
 		"not json":       {local: `{"hooks": `, code: 1, want: "left as it is"},
@@ -264,6 +284,128 @@ func TestHR208_InitRefusesWhatWouldKeepTheHookFromRunning(t *testing.T) {
 		}
 		if len(backups(t, f.local())) != 0 {
 			t.Errorf("%s: backed up", name)
+		}
+	}
+}
+
+// TestHR208_InitCountsOnlyAFailClosedPantherClawHook: an existing hook is
+// PantherClaw's only when it runs `pclaw hook claude-code` and blocks the
+// command when it cannot run. Beside a pclaw hook that fails open or runs
+// another command, init adds its own and keeps the other as it was.
+func TestHR208_InitCountsOnlyAFailClosedPantherClawHook(t *testing.T) {
+	for name, tc := range map[string]struct {
+		hook      string
+		installed bool
+	}{
+		"fails closed": {
+			hook: `{"type": "command", "command": "/usr/local/bin/pclaw", "args": ["hook", "claude-code"], "onFailure": "block"}`, installed: true,
+		},
+		"shell form": {
+			hook: `{"type": "command", "command": "pclaw hook claude-code --connection shell", "onFailure": "block"}`, installed: true,
+		},
+		"no onFailure":    {hook: `{"type": "command", "command": "pclaw", "args": ["hook", "claude-code"]}`},
+		"fails open":      {hook: `{"type": "command", "command": "pclaw", "args": ["hook", "claude-code"], "onFailure": "continue"}`},
+		"another command": {hook: `{"type": "command", "command": "pclaw hook claude-code-lite", "onFailure": "block"}`},
+		"another hook":    {hook: `{"type": "command", "command": "pclaw", "args": ["hook", "other"], "onFailure": "block"}`},
+	} {
+		f := newInitFixture(t)
+		local := `{"hooks": {"PreToolUse": [{"matcher": "Bash|PowerShell", "hooks": [` + tc.hook + `]}]}}`
+		f.write(t, f.local(), local)
+		var before map[string]any
+		if err := json.Unmarshal([]byte(local), &before); err != nil {
+			t.Fatal(err)
+		}
+		code, out, errs := f.run(t)
+		if code != 0 || strings.Contains(out, "already installed") != tc.installed {
+			t.Errorf("%s: %d %s %s", name, code, out, errs)
+			continue
+		}
+		now, _ := os.ReadFile(f.local())
+		if tc.installed {
+			if string(now) != local {
+				t.Errorf("%s: changed to %s", name, now)
+			}
+			continue
+		}
+		hooks, _ := readJSON(t, f.local())["hooks"].(map[string]any)
+		pre, _ := hooks["PreToolUse"].([]any)
+		hooks, _ = before["hooks"].(map[string]any)
+		kept, _ := hooks["PreToolUse"].([]any)
+		if len(pre) != 2 || !reflect.DeepEqual(pre[0], kept[0]) || !hookRunsIn(t, f.local()) {
+			t.Errorf("%s: hooks after init %v", name, pre)
+		}
+	}
+}
+
+// TestHR208_InitRefusesHooksTurnedOffInAnotherScope: Claude Code takes
+// disableAllHooks from the first settings file that sets it (managed,
+// local, project, user), so a file of another scope that turns every hook
+// off fails init and changes nothing, unless a file Claude Code prefers to
+// it turns them back on.
+func TestHR208_InitRefusesHooksTurnedOffInAnotherScope(t *testing.T) {
+	const off, on = `{"disableAllHooks": true}`, `{"disableAllHooks": false}`
+	for name, tc := range map[string]struct {
+		user, project, local, managed, scope, offIn string
+	}{
+		"user turns them off":          {user: off, offIn: "user"},
+		"project turns them off":       {project: off, offIn: "project"},
+		"local, for the project scope": {local: off, scope: "project", offIn: "local"},
+		"local turns them back on":     {user: off, local: on},
+		"project turns them back on":   {user: off, project: on},
+		"managed turns them back on":   {project: off, managed: on},
+		"user, for the project scope":  {user: off, scope: "project", offIn: "user"},
+	} {
+		f := newInitFixture(t)
+		paths := map[string]string{
+			"user": filepath.Join(f.home, ".claude", "settings.json"), "project": filepath.Join(f.project, ".claude", "settings.json"),
+			"local": f.local(), "managed": f.managed,
+		}
+		written := map[string]string{"user": tc.user, "project": tc.project, "local": tc.local, "managed": tc.managed}
+		for scope, content := range written {
+			if content != "" {
+				f.write(t, paths[scope], content)
+			}
+		}
+		args := []string{}
+		if tc.scope != "" {
+			args = append(args, "--scope", tc.scope)
+		}
+		code, out, errs := f.run(t, args...)
+		if tc.offIn == "" {
+			if code != 0 {
+				t.Errorf("%s: %d %s %s", name, code, out, errs)
+			}
+			continue
+		}
+		if code != 1 || !strings.Contains(errs, paths[tc.offIn]+" turns every hook off") {
+			t.Errorf("%s: %d %s %s", name, code, out, errs)
+		}
+		for scope, path := range paths {
+			if now, err := os.ReadFile(path); (written[scope] == "" && err == nil) || (written[scope] != "" && string(now) != written[scope]) {
+				t.Errorf("%s: %s changed: %q", name, scope, now)
+			}
+		}
+	}
+}
+
+// TestHR208_InitAlwaysReadsThePlatformsManagedSettings: --managed-settings
+// adds a file to the platform's managed settings and never replaces them,
+// so pointing it at the null device skips no managed check, drop-ins
+// included.
+func TestHR208_InitAlwaysReadsThePlatformsManagedSettings(t *testing.T) {
+	for name, tc := range map[string]struct{ file, content, want string }{
+		"the platform's file": {file: "managed-settings.json", content: `{"disableAllHooks": true}`, want: "disable every hook"},
+		"a drop-in": {
+			file: filepath.Join("managed-settings.d", "50-hooks.json"), content: `{"allowManagedHooksOnly": true}`, want: "allow only managed hooks",
+		},
+	} {
+		f := newInitFixture(t)
+		f.write(t, filepath.Join(f.platform, tc.file), tc.content)
+		f.managed = os.DevNull
+		code, out, errs := f.run(t)
+		if _, err := os.Stat(f.local()); code != 1 || err == nil || !strings.Contains(errs, tc.want) ||
+			!strings.Contains(out, filepath.Join(f.platform, tc.file)) {
+			t.Errorf("%s: %d %s %s", name, code, out, errs)
 		}
 	}
 }
