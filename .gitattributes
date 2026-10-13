@@ -3,6 +3,7 @@
 
 # Byte-exact fixtures: never convert.
 **/testdata/** -text
+sdk/conformance/*.json -text
 *.golden -text
 # Signed tool packages: the targets metadata hashes the exact bytes.
 packages/** -text

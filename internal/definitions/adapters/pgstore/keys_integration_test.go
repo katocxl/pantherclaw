@@ -61,6 +61,7 @@ func (f *fixture) orgPackage(version string, ownOps bool) []byte {
 	raw = bytes.Replace(raw, []byte("version: 1.0.0"), []byte("version: "+version), 1)
 	if ownOps {
 		raw = bytes.ReplaceAll(raw, []byte("payments.refund."), []byte("acmepay.refund."))
+		raw = bytes.ReplaceAll(raw, []byte("payments.account."), []byte("acmepay.account."))
 	}
 	return raw
 }
