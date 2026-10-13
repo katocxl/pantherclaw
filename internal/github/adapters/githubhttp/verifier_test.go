@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"testing"
 	"time"
 
@@ -25,8 +26,9 @@ import (
 // sign-in App with its secret, says that App issued it to a person's
 // account; the token is then revoked. A personal access token or another
 // App's token, a bot or organization, an answer for another App or one
-// that is not an account is no proof. GitHub failing to answer, refusing
-// the App's secret or failing to revoke is unavailable, never a proof.
+// that is not an account is no proof, and a token the sign-in App issued is
+// revoked whatever its account. GitHub failing to answer, refusing the
+// App's secret or failing to revoke is unavailable, never a proof.
 func TestHR207_OnlyGitHubsAnswerForAPersonsTokenProvesAnAccount(t *testing.T) {
 	sim := simgithub.New(pclog.Discard())
 	sim.RegisterSignInApp("Iv1.signin", "s3cret")
@@ -68,6 +70,7 @@ func TestHR207_OnlyGitHubsAnswerForAPersonsTokenProvesAnAccount(t *testing.T) {
 		"kept":    {http.StatusOK, http.StatusInternalServerError, `{"app": {"client_id": "Iv1.signin"}, "user": {"id": 7, "login": "alice-gh", "type": "User"}}`},
 		"revoked": {http.StatusOK, http.StatusNotFound, `{"app": {"client_id": "Iv1.signin"}, "user": {"id": 7, "login": "alice-gh", "type": "User"}}`},
 	}
+	var revoked []string
 	fake := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var in struct {
 			AccessToken string `json:"access_token"`
@@ -79,6 +82,7 @@ func TestHR207_OnlyGitHubsAnswerForAPersonsTokenProvesAnAccount(t *testing.T) {
 			return
 		}
 		if r.Method == http.MethodDelete {
+			revoked = append(revoked, in.AccessToken)
 			w.WriteHeader(a.revoke)
 			return
 		}
@@ -91,6 +95,9 @@ func TestHR207_OnlyGitHubsAnswerForAPersonsTokenProvesAnAccount(t *testing.T) {
 		if _, err := v.User(ctx, tok); !errors.Is(err, app.ErrProof) {
 			t.Errorf("%q: %v", tok, err)
 		}
+	}
+	if !slices.Equal(revoked, []string{"bot", "org", "junk"}) {
+		t.Errorf("revoked %v, want every token the sign-in App issued", revoked)
 	}
 	for _, tok := range []string{"down", "kept"} {
 		if _, err := v.User(ctx, tok); !errors.Is(err, app.ErrGitHubUnavailable) || errors.Is(err, app.ErrProof) {

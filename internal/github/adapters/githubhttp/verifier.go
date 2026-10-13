@@ -78,17 +78,27 @@ func (v *Verifier) User(ctx context.Context, token string) (app.GitHubUser, erro
 	if err := json.Unmarshal(body, &t); err != nil || t.App.ClientID != v.ClientID {
 		return app.GitHubUser{}, app.ErrProof
 	}
+	// The token is the sign-in App's: it is revoked whatever its account.
+	if err := v.revoke(ctx, token); err != nil {
+		return app.GitHubUser{}, err
+	}
 	u := t.User
 	if u.ID <= 0 || !loginRe.MatchString(u.Login) || u.Type != "User" {
 		return app.GitHubUser{}, app.ErrProof
 	}
+	return app.GitHubUser{ID: u.ID, Login: u.Login}, nil
+}
+
+// revoke makes the sign-in App's token stop working; one already revoked
+// is fine.
+func (v *Verifier) revoke(ctx context.Context, token string) error {
 	switch status, _, err := v.call(ctx, http.MethodDelete, token); {
 	case err != nil:
-		return app.GitHubUser{}, err
+		return err
 	case status != http.StatusNoContent && status != http.StatusNotFound:
-		return app.GitHubUser{}, fmt.Errorf("%w: revoking the sign-in token answered HTTP %d", app.ErrGitHubUnavailable, status)
+		return fmt.Errorf("%w: revoking the sign-in token answered HTTP %d", app.ErrGitHubUnavailable, status)
 	}
-	return app.GitHubUser{ID: u.ID, Login: u.Login}, nil
+	return nil
 }
 
 // call sends {"access_token": token} to /applications/{client_id}/token as
