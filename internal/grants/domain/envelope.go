@@ -10,6 +10,7 @@ import (
 	"regexp"
 	"time"
 
+	defs "github.com/katocxl/pantherclaw/internal/definitions/domain"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 )
 
@@ -172,6 +173,14 @@ func (e Envelope) Validate() error {
 		return err
 	}
 	return e.Bounds.Validate()
+}
+
+// CheckDispatched refuses a guardrail budget or counter that names an
+// operation which is only ever a consequence, as a grant's are (G0 M8, HR-206): it would never count
+// anything, so an admin would believe a cap that is not there. lookup is
+// the service's preloaded active definitions.
+func (e Envelope) CheckDispatched(lookup func(op string) *defs.Definition) error {
+	return e.Limits.checkDispatched(lookup)
 }
 
 // EffectiveCaps combines the caps of the applicable envelopes: the org

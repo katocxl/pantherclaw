@@ -20,7 +20,6 @@ import (
 	"github.com/katocxl/pantherclaw/internal/authority/pipeline/pipelinetest"
 	"github.com/katocxl/pantherclaw/internal/authority/recording"
 	"github.com/katocxl/pantherclaw/internal/authority/replay"
-	defs "github.com/katocxl/pantherclaw/internal/definitions/domain"
 	fdomain "github.com/katocxl/pantherclaw/internal/facts/domain"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	pdomain "github.com/katocxl/pantherclaw/internal/policy/domain"
@@ -59,13 +58,13 @@ func (x *source) Inputs(_ context.Context, org ids.OrgID, txn ids.UUID, evaluati
 	return recording.Sealed{}, replay.ErrNotFound
 }
 
-func (x *source) Definition(ctx context.Context, org ids.OrgID, pin actionir.Definition) (*defs.Definition, error) {
+func (x *source) Definition(ctx context.Context, org ids.OrgID, pin actionir.Definition) (pipeline.Pinned, error) {
 	x.reads++
 	p, err := x.s.W.Definition(ctx, org, pin)
 	if err != nil || x.missing["definition"] {
-		return nil, replay.ErrNotFound
+		return pipeline.Pinned{}, replay.ErrNotFound
 	}
-	return p.Definition, nil
+	return p, nil
 }
 
 func (x *source) Bundle(_ context.Context, _ ids.OrgID, bundle string, version int) (*pdomain.Bundle, error) {

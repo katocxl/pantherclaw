@@ -1,0 +1,151 @@
+// SPDX-License-Identifier: BUSL-1.1
+// Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+
+syntax = "proto3";
+
+package pantherclaw.v1;
+
+import "buf/validate/validate.proto";
+import "google/protobuf/timestamp.proto";
+
+// ChangeWindowService manages change windows (G0 M8, HR-207): when a
+// release approval for a deployment environment counts. A window has
+// weekly entries in its time zone, one-off windows and freezes, for an
+// environment and optionally one repository; a freeze overrides every
+// window, and no configured window means no window. Creating a window
+// retires the environment's and repository's current one. Windows are
+// decided by the database clock.
+service ChangeWindowService {
+  // CreateChangeWindow stores a window, retiring the current one of its
+  // environment and repository.
+  // permission: release.window.manage
+  rpc CreateChangeWindow(CreateChangeWindowRequest) returns (CreateChangeWindowResponse);
+  // ListChangeWindows lists the active windows, of one environment when it
+  // is named, and the retired ones too when asked.
+  // permission: release.window.manage
+  rpc ListChangeWindows(ListChangeWindowsRequest) returns (ListChangeWindowsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // RetireChangeWindow retires a window with a reason.
+  // permission: release.window.manage
+  rpc RetireChangeWindow(RetireChangeWindowRequest) returns (RetireChangeWindowResponse);
+  // GetActiveWindows says whether a release to an environment and
+  // repository may be approved now, and which windows decide it.
+  // permission: release.window.manage
+  rpc GetActiveWindows(GetActiveWindowsRequest) returns (GetActiveWindowsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+}
+
+// WeeklyEntry opens a window every week on a day, from a local start time,
+// for a number of minutes (possibly past midnight).
+message WeeklyEntry {
+  // mon, tue, wed, thu, fri, sat or sun.
+  string day = 1 [(buf.validate.field).string.pattern = "^(mon|tue|wed|thu|fri|sat|sun)$"];
+  // HH:MM in the window's time zone.
+  string start = 2 [(buf.validate.field).string.pattern = "^([01][0-9]|2[0-3]):[0-5][0-9]$"];
+  // 1 to 1440.
+  int32 minutes = 3 [(buf.validate.field).int32 = {
+    gte: 1
+    lte: 1440
+  }];
+}
+
+// TimeSpan is a one-off window or a freeze, from its start up to its end.
+message TimeSpan {
+  google.protobuf.Timestamp start_time = 1 [(buf.validate.field).required = true];
+  google.protobuf.Timestamp end_time = 2 [(buf.validate.field).required = true];
+}
+
+// ChangeWindow is a stored window.
+message ChangeWindow {
+  string id = 1;
+  // The deployment environment, as a consequence names it.
+  string environment = 2;
+  // owner/name; empty for every repository of the environment.
+  string repository = 3;
+  // IANA time zone of the weekly entries.
+  string time_zone = 4;
+  repeated WeeklyEntry weekly = 5;
+  repeated TimeSpan one_off = 6;
+  repeated TimeSpan freezes = 7;
+  // 1 for an environment's and repository's first window, then one more
+  // for each that replaces it.
+  int32 revision = 8;
+  // ACTIVE or RETIRED.
+  string state = 9;
+  string created_by = 10;
+  google.protobuf.Timestamp create_time = 11;
+  string retired_by = 12;
+  google.protobuf.Timestamp retire_time = 13;
+}
+
+// CreateChangeWindowRequest is a window to store.
+message CreateChangeWindowRequest {
+  string environment = 1 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 100
+  }];
+  // owner/name in lowercase; empty for every repository.
+  string repository = 2 [(buf.validate.field).string.max_len = 140];
+  string time_zone = 3 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 64
+  }];
+  repeated WeeklyEntry weekly = 4 [(buf.validate.field).repeated.max_items = 32];
+  repeated TimeSpan one_off = 5 [(buf.validate.field).repeated.max_items = 32];
+  repeated TimeSpan freezes = 6 [(buf.validate.field).repeated.max_items = 32];
+}
+
+// CreateChangeWindowResponse returns the stored window.
+message CreateChangeWindowResponse {
+  ChangeWindow window = 1;
+}
+
+// ListChangeWindowsRequest filters the list.
+message ListChangeWindowsRequest {
+  // Only this environment's windows when set.
+  string environment = 1 [(buf.validate.field).string.max_len = 100];
+  // The retired windows too.
+  bool include_retired = 2;
+}
+
+// ListChangeWindowsResponse lists windows, by environment, repository and
+// newest revision first; at most 500.
+message ListChangeWindowsResponse {
+  repeated ChangeWindow windows = 1;
+}
+
+// RetireChangeWindowRequest names a window and why it is retired.
+message RetireChangeWindowRequest {
+  string id = 1 [(buf.validate.field).string.uuid = true];
+  string reason = 2 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 500
+  }];
+}
+
+// RetireChangeWindowResponse returns the retired window.
+message RetireChangeWindowResponse {
+  ChangeWindow window = 1;
+}
+
+// GetActiveWindowsRequest names a release's environment and repository.
+message GetActiveWindowsRequest {
+  string environment = 1 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 100
+  }];
+  string repository = 2 [(buf.validate.field).string.max_len = 140];
+}
+
+// GetActiveWindowsResponse says what the windows allow now.
+message GetActiveWindowsResponse {
+  // OPEN (a release approval counts now), CLOSED (outside the window),
+  // FROZEN (a freeze holds) or NO_WINDOW (none is configured).
+  string state = 1;
+  // The database clock that decided.
+  google.protobuf.Timestamp decide_time = 2;
+  // The active windows that apply: the environment's and the repository's.
+  repeated ChangeWindow windows = 3;
+}

@@ -8,6 +8,7 @@ package connectionsrpc
 
 import (
 	"context"
+	"encoding/json/v2"
 
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -90,6 +91,23 @@ func connectionOf(c capp.Connection) *pb.Connection {
 	for _, r := range c.Routes {
 		out.Routes = append(out.Routes, routeOf(r))
 	}
+	if c.GitHub != nil {
+		out.Github = githubOf(*c.GitHub)
+	}
+	return out
+}
+
+// githubOf renders a connection's GitHub App installation; what was read
+// from GitHub comes with the time it was read.
+func githubOf(g dbq.PcConnectionGithub) *pb.GitHubInstallation {
+	out := &pb.GitHubInstallation{
+		AppClientId: g.AppClientID, InstallationId: g.InstallationID, AccountLogin: g.AccountLogin, AccountId: g.AccountID.Int64,
+		RepositorySelection: deref(g.RepositorySelection),
+	}
+	if g.ReadAt != nil {
+		out.ReadTime = timestamppb.New(*g.ReadAt)
+	}
+	_ = json.Unmarshal(g.Permissions, &out.Permissions) // a jsonb object of strings; anything else reads as none
 	return out
 }
 
