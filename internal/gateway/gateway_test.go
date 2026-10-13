@@ -388,8 +388,12 @@ type harness struct {
 	circuits  []string
 	// drifts records the gateway's drift reports (under circuitMu).
 	drifts []string
-	gw     *Gateway
-	url    string
+	// reportFacts makes the gateway report GitHub facts, recorded in facts
+	// (under circuitMu).
+	reportFacts bool
+	facts       []factReport
+	gw          *Gateway
+	url         string
 	// approverKeys is the gateway's approvals.approver_keys_file.
 	approverKeys string
 }
@@ -475,8 +479,19 @@ func setup(t *testing.T, opts ...func(*harness)) *harness {
 	// control and the end-to-end tests); here the fakes take plain calls,
 	// marked so that the test can tell they came from the gateway.
 	hc := &http.Client{Timeout: 5 * time.Second, Transport: marked{http.DefaultTransport}}
+	var reportFacts dispatch.FactReporter
+	if h.reportFacts {
+		reportFacts = func(_ context.Context, conn string, obs []*pb.FactObservation) error {
+			decided := h.auth.snap().authorize
+			h.circuitMu.Lock()
+			defer h.circuitMu.Unlock()
+			h.facts = append(h.facts, factReport{conn: conn, obs: obs, decided: decided})
+			return nil
+		}
+	}
 	h.gw, err = newGateway(&cfg, Deps{
-		Org: testOrg, GatewayID: "gw-test",
+		ReportFacts: reportFacts,
+		Org:         testOrg, GatewayID: "gw-test",
 		Authority: pantherclawv1connect.NewAuthorityServiceClient(connect.NewClient(connecthttp.NewTransport(hc, h.authorityURL))),
 		JWKSURL:   as.URL + "/.well-known/pantherclaw/jwks.json", JWKSClient: hc, Containment: h.containment,
 		Configuration: newFakeConfig(h.conn), Broker: h.broker,

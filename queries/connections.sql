@@ -155,3 +155,8 @@ WHERE t.org_id = sqlc.arg(org_id) AND t.connection_id = sqlc.arg(connection_id) 
 GROUP BY r.agent_id, g.name
 ORDER BY last_used_at DESC, r.agent_id
 LIMIT sqlc.arg(max_rows);
+
+-- name: ListConnectionGitHub :many
+-- The GitHub App installations behind connections (connection_github).
+SELECT * FROM pc.connection_github
+WHERE org_id = sqlc.arg(org_id) AND connection_id = ANY(sqlc.arg(connection_ids)::uuid[]);
