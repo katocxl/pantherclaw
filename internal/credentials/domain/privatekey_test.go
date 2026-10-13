@@ -50,6 +50,12 @@ func TestHR204_APrivateKeyIsRecognizedInEveryCommonForm(t *testing.T) {
 		"SEC 1 DER":               sec1,
 		"PKCS #8 DER in base64":   []byte(base64.StdEncoding.EncodeToString(pkcs8)),
 		"an OpenSSH key":          []byte("-----" + "BEGIN OPENSSH PRIVATE KEY-----\nb3BlbnNzaC1rZXktdjE=\n"),
+		// #353 review: an OpenSSH key without its armour, and a key behind a
+		// scheme, as a header value carries one.
+		"a bare OpenSSH key body":      []byte(base64.StdEncoding.EncodeToString(append([]byte("openssh-key-v1\x00"), pkcs1[:64]...))),
+		"an OpenSSH key body in bytes": append([]byte("openssh-key-v1\x00"), pkcs1[:64]...),
+		"a PEM file behind Bearer":     []byte("Bearer " + base64.StdEncoding.EncodeToString(file)),
+		"DER behind Bearer":            []byte("Bearer " + base64.StdEncoding.EncodeToString(pkcs8)),
 	} {
 		if !HoldsPrivateKey(b) {
 			t.Errorf("%s was not recognized", name)

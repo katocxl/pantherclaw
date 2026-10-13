@@ -17,7 +17,8 @@ import (
 // to the target in a header, so such bytes are never sealed as one nor
 // placed on a request (HR-204): an App's key is sealed with --github-app.
 func HoldsPrivateKey(b []byte) bool {
-	if bytes.Contains(b, []byte("-----BEGIN")) || bytes.Contains(b, []byte("LS0tLS1CRUdJTi")) || derPrivateKey(b) {
+	if bytes.Contains(b, []byte("-----BEGIN")) || bytes.Contains(b, []byte("LS0tLS1CRUdJTi")) || bytes.Contains(b, []byte(opensshBase64)) ||
+		derPrivateKey(b) || bytes.HasPrefix(b, []byte(opensshMagic)) {
 		return true
 	}
 	compact := bytes.Map(func(r rune) rune {
@@ -26,15 +27,35 @@ func HoldsPrivateKey(b []byte) bool {
 		}
 		return r
 	}, b)
-	if len(compact) < 64 {
-		return false // shorter than any key's encoding
+	// The whole value, wrapped over lines, or any word of it: a key behind
+	// a prefix ("Bearer <base64>") is found too (#353 review).
+	candidates := [][]byte{compact}
+	if words := bytes.Fields(b); len(words) > 1 {
+		candidates = append(candidates, words...)
 	}
-	for _, enc := range []*base64.Encoding{base64.StdEncoding, base64.RawStdEncoding, base64.URLEncoding, base64.RawURLEncoding} {
-		if d, err := enc.DecodeString(string(compact)); err == nil && (bytes.Contains(d, []byte("-----BEGIN")) || derPrivateKey(d)) {
-			return true
+	for _, c := range candidates {
+		if len(c) < 64 {
+			continue // shorter than any key's encoding
+		}
+		for _, enc := range []*base64.Encoding{base64.StdEncoding, base64.RawStdEncoding, base64.URLEncoding, base64.RawURLEncoding} {
+			if d, err := enc.DecodeString(string(c)); err == nil && keyBytes(d) {
+				return true
+			}
 		}
 	}
 	return false
+}
+
+// The magic an OpenSSH private key's body starts with, and its base64.
+const (
+	opensshMagic  = "openssh-key-v1\x00"
+	opensshBase64 = "b3BlbnNzaC1rZXktdjE"
+)
+
+// keyBytes reports whether decoded bytes are a private key: PEM, DER, or
+// an OpenSSH key body without its armour (#353 review).
+func keyBytes(d []byte) bool {
+	return bytes.Contains(d, []byte("-----BEGIN")) || derPrivateKey(d) || bytes.HasPrefix(d, []byte(opensshMagic))
 }
 
 // derPrivateKey reports whether b is a DER-encoded private key.
