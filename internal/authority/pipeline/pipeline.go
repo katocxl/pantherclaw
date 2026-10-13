@@ -794,6 +794,11 @@ func input(a *pdomain.ApprovalRequirement, su *pdomain.StepUpRequirement, src ap
 		if in.Role == string(td.RoleCodeReviewer) || in.Role == string(td.RoleReleaseApprover) {
 			in.Independent = true
 		}
+		// A release approval counts only inside an active change window,
+		// whether or not its requirement says `window: true`.
+		if in.Role == string(td.RoleReleaseApprover) {
+			in.Window = true
+		}
 	}
 	if su != nil {
 		in.Kind, in.Subject, in.Method = apdomain.KindStepUp, su.Subject, su.Method
