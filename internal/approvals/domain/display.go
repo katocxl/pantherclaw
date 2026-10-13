@@ -19,8 +19,10 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 )
 
-// DisplayVersion is the version of the stored display's shape.
-const DisplayVersion = 1
+// DisplayVersion is the version of the stored display's shape. Version 2
+// (HR-030 option B, founder decision 2026-10-13) shows a fact's value only
+// for the members the approval binds and never when it was observed.
+const DisplayVersion = 2
 
 // MaxContext caps the earlier approved requests shown as context (decision 9).
 const MaxContext = 5
@@ -32,17 +34,20 @@ const MaxContext = 5
 // fields and system-of-record facts; agent- or requester-supplied text is
 // only in Untrusted.
 type Display struct {
-	V           int           `json:"v"`
-	Kind        string        `json:"kind"`
-	Title       string        `json:"title"`
-	Consequence Consequence   `json:"consequence"`
-	Fields      []Field       `json:"fields"`
-	Facts       []FactLine    `json:"facts"`
-	Run         *RunLine      `json:"run,omitzero"`
-	Basis       []Source      `json:"basis"`
-	Deciders    []DeciderRule `json:"deciders"`
-	Deadline    string        `json:"deadline"`
-	Variants    []VariantLine `json:"variants"`
+	V           int         `json:"v"`
+	Kind        string      `json:"kind"`
+	Title       string      `json:"title"`
+	Consequence Consequence `json:"consequence"`
+	// Consequences are the action's predicted or unknown consequences
+	// (G0 M8, F158): predictions, apart from what the action does.
+	Consequences []ConsequenceLine `json:"consequences,omitzero"`
+	Fields       []Field           `json:"fields"`
+	Facts        []FactLine        `json:"facts"`
+	Run          *RunLine          `json:"run,omitzero"`
+	Basis        []Source          `json:"basis"`
+	Deciders     []DeciderRule     `json:"deciders"`
+	Deadline     string            `json:"deadline"`
+	Variants     []VariantLine     `json:"variants"`
 	// Context lists earlier approved requests for the same operation and
 	// target: context, never precedent.
 	Context   []ContextLine  `json:"context_not_precedent"`
@@ -72,16 +77,19 @@ type Field struct {
 	Requested string `json:"requested,omitzero"`
 }
 
-// FactLine is one fact the decision used, with its provider and when it
-// was observed. Its age is shown from ObservedAt when the page renders: the
-// stored display holds nothing that changes with time, so a resubmission
-// recomputes the same binding.
+// FactLine is one fact the decision used. Value holds only the members the
+// approval binds (a merge's head SHA), and is empty for a fact it binds
+// nothing of: the page shows that fact's current value and provider, which
+// are read and decided on again whenever the approval is used (HR-030
+// option B, founder decision 2026-10-13). Provider and ObservedAt are set
+// only in a version 1 display: a fact observed again, by whichever
+// provider, gives a resubmission the same binding.
 type FactLine struct {
 	Name       string `json:"name"`
 	Subject    string `json:"subject"`
 	Value      string `json:"value"`
-	Provider   string `json:"provider"`
-	ObservedAt string `json:"observed_at"`
+	Provider   string `json:"provider,omitzero"`
+	ObservedAt string `json:"observed_at,omitzero"`
 }
 
 // RunLine names the run by ids (readable names come from a directory
@@ -104,6 +112,11 @@ type DeciderRule struct {
 	Subject     string `json:"subject,omitzero"`
 	// Scope says where the role must be bound.
 	Scope string `json:"scope,omitzero"`
+	// Window: the approval counts only inside a change window, and
+	// IndependentOf names the fact listing the people it must not be
+	// (G0 M8, HR-207).
+	Window        bool   `json:"window,omitzero"`
+	IndependentOf string `json:"independent_of,omitzero"`
 }
 
 // VariantLine is an earlier request for the same grant, operation and
@@ -137,7 +150,10 @@ type ActionInput struct {
 	Requested defs.Values
 	Effective defs.Values
 	Facts     []fdomain.Fact
-	Run       RunLine
+	// Bound are the fact members the approval binds; only their values are
+	// shown (HR-030 option B).
+	Bound []BoundFact
+	Run   RunLine
 	// TaskLabel is the run's UNTRUSTED task label.
 	TaskLabel    string
 	Requirements []Requirement
@@ -147,6 +163,8 @@ type ActionInput struct {
 	// Attributes are UNTRUSTED reported attributes (for example a gateway's
 	// observations), shown only in the untrusted block.
 	Attributes map[string]string
+	// Consequences are the action's predicted or unknown consequences.
+	Consequences []ConsequenceInput
 }
 
 // RenderAction renders an action's display from its template. It fails on
@@ -194,14 +212,15 @@ func RenderAction(in ActionInput) (Display, error) {
 	if d.Verifier != nil {
 		out.Consequence.Verifier = d.Verifier.Operation + " establishes " + d.Verifier.Establishes
 	}
-	out.Facts = factLines(in.Facts)
+	out.Facts = factLines(in.Facts, in.Bound)
+	out.Consequences = consequenceLines(in.Consequences)
 	out.finish(in.Requirements, in.Variants, in.Context)
 	var untrusted []Untrusted
 	if in.TaskLabel != "" {
 		untrusted = append(untrusted, Clean("task_label", in.TaskLabel, 0))
 	}
 	for _, name := range slices.Sorted(maps.Keys(in.Requested)) {
-		if v := in.Requested[name]; v.Type == defs.TypeText && v.Str != "" {
+		if v := in.Requested[name]; (v.Type == defs.TypeText || v.Type == defs.TypeContent) && v.Str != "" {
 			untrusted = append(untrusted, Clean("param:"+name, v.Str, 0))
 		}
 	}
@@ -254,7 +273,10 @@ func (out *Display) finish(reqs []Requirement, variants []VariantLine, context [
 				out.Basis = append(out.Basis, s)
 			}
 		}
-		rule := DeciderRule{Kind: r.Kind, Role: r.Role, Count: r.Count, Independent: r.Independent, Subject: r.Subject}
+		rule := DeciderRule{
+			Kind: r.Kind, Role: r.Role, Count: r.Count, Independent: r.Independent, Subject: r.Subject, Window: r.Window,
+			IndependentOf: r.IndependentOf,
+		}
 		if r.Kind == KindApproval {
 			rule.Scope = "bound on the agent's environment, team, business unit or org"
 		}
@@ -274,13 +296,12 @@ func untrustedBlock(items []Untrusted) UntrustedBlock {
 	return UntrustedBlock{Label: UntrustedLabel, Items: items}
 }
 
-func factLines(facts []fdomain.Fact) []FactLine {
+func factLines(facts []fdomain.Fact, bound []BoundFact) []FactLine {
 	out := make([]FactLine, 0, len(facts))
 	for _, f := range facts {
 		out = append(out, FactLine{
 			Name: f.Name, Subject: f.SubjectType + ":" + Clean("", f.SubjectID, 512).Text,
-			Value: Clean("", f.Value.String(), 256).Text, Provider: f.ProviderID.String(),
-			ObservedAt: f.ObservedAt.UTC().Format(time.RFC3339),
+			Value: Clean("", boundValue(bound, f.Name, f.SubjectType+":"+f.SubjectID), 256).Text,
 		})
 	}
 	slices.SortFunc(out, func(a, b FactLine) int { return cmp.Or(cmp.Compare(a.Name, b.Name), cmp.Compare(a.Subject, b.Subject)) })
@@ -288,8 +309,9 @@ func factLines(facts []fdomain.Fact) []FactLine {
 }
 
 // fieldValue renders one canonical field: operation, target.type,
-// target.id, target.account, params.<material param> or facts.<name of a
-// prerequisite fact>.
+// target.id, target.account, params.<material param that is not content>
+// or facts.<name of a prerequisite fact>. Content is agent-written and
+// only ever untrusted.
 func fieldValue(d *defs.Definition, name string, in ActionInput) (Field, error) {
 	f := Field{Name: name}
 	switch name {
@@ -305,8 +327,8 @@ func fieldValue(d *defs.Definition, name string, in ActionInput) (Field, error) 
 		if p, ok := strings.CutPrefix(name, "params."); ok {
 			spec, declared := d.Params[p]
 			v, present := in.Effective[p]
-			if !declared || !spec.Material {
-				return f, fmt.Errorf("approvals: template field %q is not a material parameter", name)
+			if !declared || !spec.Material || spec.Type == defs.TypeContent {
+				return f, fmt.Errorf("approvals: template field %q is not a canonical material parameter", name)
 			}
 			if present {
 				f.Value = formatValue(v, spec)
@@ -321,7 +343,8 @@ func fieldValue(d *defs.Definition, name string, in ActionInput) (Field, error) 
 			if i < 0 {
 				return f, fmt.Errorf("approvals: template field %q names a fact the decision did not use", name)
 			}
-			f.Value = Clean("", in.Facts[i].Value.String(), 256).Text
+			x := in.Facts[i]
+			f.Value = Clean("", boundValue(in.Bound, x.Name, x.SubjectType+":"+x.SubjectID), 256).Text
 			return f, nil
 		}
 		return f, fmt.Errorf("approvals: template field %q is not canonical", name)
@@ -347,7 +370,7 @@ func formatValue(v defs.Value, spec defs.ParamSpec) string {
 		return strconv.FormatBool(v.Bool)
 	case defs.TypeIdentifierList:
 		return strings.Join(v.List, ", ")
-	case defs.TypeEnum, defs.TypeIdentifier, defs.TypeCommand, defs.TypePath, defs.TypeText:
+	case defs.TypeEnum, defs.TypeIdentifier, defs.TypeCommand, defs.TypeContent, defs.TypePath, defs.TypeText:
 		return Clean("", v.Str, 0).Text
 	}
 	return ""

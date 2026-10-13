@@ -139,6 +139,9 @@ type Sealed struct {
 	Blob      []byte
 	Header    string
 	Scheme    string
+	// Kind is the credential kind the seal bound (empty or static, or
+	// github_app).
+	Kind string
 }
 
 // Open opens a sealed credential with the binding rebuilt from the
@@ -155,7 +158,7 @@ func (k *Key) Open(org, connection string, allowedHosts []string, ownKey string,
 	}
 	b := domain.Binding{
 		Org: org, Connection: connection, Version: s.Version, AllowedHosts: allowedHosts, BrokerKey: ownKey,
-		Header: s.Header, Scheme: s.Scheme,
+		Header: s.Header, Scheme: s.Scheme, Kind: s.Kind,
 	}
 	pt, err := pccrypto.Open(k.priv, b.Info(), domain.AAD, s.Blob)
 	if err != nil {

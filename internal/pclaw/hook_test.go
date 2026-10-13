@@ -13,6 +13,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -123,7 +124,7 @@ func TestHR186_TheHookAllowsOnlyWhatPantherClawAllowed(t *testing.T) {
 	for name, tc := range map[string]struct{ tool, command, want string }{
 		"denied":     {"PowerShell", "rm -Recurse x", "SHELL_DESTRUCTIVE"},
 		"held":       {"Bash", "deploy prod", "not by you"},
-		"other tool": {"Write", "ls", "only Bash and PowerShell"},
+		"other tool": {"Write", "ls", "only the commands Bash, PowerShell and Monitor run"},
 		"empty":      {"Bash", "", "empty"},
 	} {
 		code, out, errs := runHook(t, env, hookEvent(tc.tool, tc.command, dir, "toolu_02"))
@@ -142,6 +143,58 @@ func TestHR186_TheHookAllowsOnlyWhatPantherClawAllowed(t *testing.T) {
 	f.mu.Unlock()
 	if ps != "powershell" {
 		t.Fatalf("PowerShell sent as %q", ps)
+	}
+}
+
+// TestHR186_TheHookDecidesMonitorCommandsAsBashCommands: Monitor runs its
+// command where Bash runs, so the hook sends a Monitor command to the
+// gateway exactly as the same Bash command, and follows the answer: an
+// allow is answered allow, a denial and a hold block it. A Monitor call
+// without a command (its WebSocket form) is blocked without asking.
+func TestHR186_TheHookDecidesMonitorCommandsAsBashCommands(t *testing.T) {
+	f := newFakeHook(t)
+	env := hookEnv(t, f.URL)
+	dir := t.TempDir()
+	sent := func() map[string]any {
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		return f.body[len(f.body)-1]
+	}
+	if code, out, errs := runHook(t, env, hookEvent("Bash", "ls -la", dir, "toolu_same")); code != 0 || !strings.Contains(out, `"allow"`) {
+		t.Fatalf("bash: %d %q %q", code, out, errs)
+	}
+	bash := sent()
+	code, out, errs := runHook(t, env, hookEvent("Monitor", "ls -la", dir, "toolu_same"))
+	if code != 0 || !strings.Contains(out, `"permissionDecision":"allow"`) || !strings.Contains(out, "t-1") {
+		t.Fatalf("monitor, allowed: %d %q %q", code, out, errs)
+	}
+	if monitor := sent(); !reflect.DeepEqual(monitor, bash) {
+		t.Fatalf("Monitor sent %v, Bash %v", monitor, bash)
+	}
+	for name, tc := range map[string]struct{ command, want string }{
+		"denied": {"rm -rf build", "SHELL_DESTRUCTIVE"},
+		"held":   {"deploy prod", "not by you"},
+	} {
+		code, out, errs := runHook(t, env, hookEvent("Monitor", tc.command, dir, "toolu_m"))
+		if in := sent()["input"].(map[string]string); code != 2 || out != "" || !strings.Contains(errs, tc.want) || in["shell"] != "bash" ||
+			in["command"] != tc.command {
+			t.Errorf("%s: %d %q %q, sent %v", name, code, out, errs, in)
+		}
+	}
+	f.mu.Lock()
+	asked := len(f.body)
+	f.mu.Unlock()
+	websocket, _ := json.Marshal(map[string]any{
+		"session_id": "s", "hook_event_name": "PreToolUse", "tool_name": "Monitor", "cwd": dir, "tool_use_id": "toolu_ws",
+		"tool_input": map[string]any{"url": "wss://feed.example.test/events", "description": "d"},
+	})
+	code, out, errs = runHook(t, env, string(websocket))
+	f.mu.Lock()
+	now := len(f.body)
+	f.mu.Unlock()
+	if code != 2 || out != "" || !strings.Contains(errs, "PantherClaw could not decide this command, so it is blocked") ||
+		!strings.Contains(errs, "without a command") || now != asked {
+		t.Fatalf("monitor without a command: %d %q %q, %d requests", code, out, errs, now-asked)
 	}
 }
 
@@ -177,9 +230,9 @@ func TestHR186_TheHookFailsClosed(t *testing.T) {
 	}
 }
 
-// TestHR186_ThePluginBlocksOnFailure: the plugin runs the hook for Bash
-// and PowerShell, with a timeout longer than the hook's own deadline, and
-// blocks the call if the hook fails or times out anyway.
+// TestHR186_ThePluginBlocksOnFailure: the plugin runs the hook for Bash,
+// PowerShell and Monitor, with a timeout longer than the hook's own
+// deadline, and blocks the call if the hook fails or times out anyway.
 func TestHR186_ThePluginBlocksOnFailure(t *testing.T) {
 	b, err := os.ReadFile("../../integrations/claude-code/hooks/hooks.json")
 	if err != nil {
@@ -201,7 +254,7 @@ func TestHR186_ThePluginBlocksOnFailure(t *testing.T) {
 		t.Fatal(err)
 	}
 	pre := cfg.Hooks["PreToolUse"]
-	if len(cfg.Hooks) != 1 || len(pre) != 1 || pre[0].Matcher != "Bash|PowerShell" || len(pre[0].Hooks) != 1 {
+	if len(cfg.Hooks) != 1 || len(pre) != 1 || pre[0].Matcher != "Bash|PowerShell|Monitor" || len(pre[0].Hooks) != 1 {
 		t.Fatalf("hooks %+v", cfg.Hooks)
 	}
 	h := pre[0].Hooks[0]
