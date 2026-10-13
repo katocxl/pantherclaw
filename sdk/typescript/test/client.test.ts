@@ -50,6 +50,7 @@ async function fake(
     wait?: (req: IncomingMessage, res: ServerResponse) => void;
     hook?: Handler;
     calls?: { n: number };
+    builtins?: string[];
   } = {},
 ) {
   const kf: KeyFile = { ...newKeyFile(), identifier };
@@ -105,7 +106,7 @@ async function fake(
   });
   const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
   return {
-    client: new Client({ keyFile: { ...kf, server: base }, gateway: base, runId, timeoutMs: 1000, builtins: ["Bash", "Read"] }),
+    client: new Client({ keyFile: { ...kf, server: base }, gateway: base, runId, timeoutMs: 1000, builtins: opts.builtins ?? ["Bash", "Read"] }),
     issued: () => issued,
   };
 }
@@ -174,15 +175,43 @@ test("TestHR201_conformance answers of the /sdk contract", async () => {
   }
 });
 
-test("TestHR200_conformance calls: MCP tools, built-ins, and names never sent", async () => {
+test("TestHR200_conformance calls: MCP tools to the connection named after their server, built-ins, and names never sent", async (t) => {
   const f = await load("sdk_face.json");
+  let got: { path: string; body: unknown } | undefined;
+  const g = await fake(
+    t,
+    (req, body, res) => {
+      got = { path: String(req.url), body: JSON.parse(body) };
+      res.end(JSON.stringify({ decision: "deny", reason: "recorded", mode: "enforce", coverage: "PARTIAL" }));
+    },
+    { builtins: f.builtins },
+  );
   for (const c of f.calls) {
     const { cls, server } = classify(c.tool, f.servers, f.builtins);
     assert.equal(cls, c.class, c.name);
-    if (cls === "refused") continue;
-    const sent = JSON.stringify({ tool: c.tool, server, input: c.input, tool_use_id: c.tool_use_id });
-    assert.deepEqual(JSON.parse(sent), c.body, c.name);
+    got = undefined;
+    const r = await g.client.authorize(f.connection, { tool: c.tool, server, input: c.input, tool_use_id: c.tool_use_id }, newActionId());
+    if (cls === "refused") {
+      assert.equal(got, undefined, c.name);
+      assert.equal(r.outcome, "cannot_decide", c.name);
+      continue;
+    }
+    assert.deepEqual(got, { path: c.path, body: c.body }, c.name);
   }
+});
+
+test("TestHR200_a server named like no connection is never sent", async (t) => {
+  const calls = { n: 0 };
+  const f = await fake(t, (_q, _b, res) => res.end(JSON.stringify({ decision: "allow", mode: "monitor", coverage: "OBSERVE_ONLY" })), { calls });
+  for (const server of ["git__hub", "Payments", "-payments", "pay%2fments"]) {
+    const call: ToolCall = { tool: `mcp__${server}__create_refund`, server, input: {}, tool_use_id: "toolu_01" };
+    assert.equal((await f.client.authorize("payments", call, newActionId())).outcome, "cannot_decide", server);
+  }
+  const read: ToolCall = { tool: "Read", input: { file_path: "/etc/hosts" }, tool_use_id: "toolu_02" };
+  for (const connection of ["Payments", "pay/ments", "", "payments-"]) {
+    assert.equal((await f.client.authorize(connection, read, newActionId())).outcome, "cannot_decide", `a built-in recorded at "${connection}"`);
+  }
+  assert.equal(calls.n, 0);
 });
 
 test("TestHR200_an observe answer lets only a configured built-in run, and other names are never sent", async (t) => {
