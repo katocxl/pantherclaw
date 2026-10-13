@@ -4,6 +4,8 @@
 package domain
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"time"
 
 	"github.com/katocxl/pantherclaw/internal/platform/statemachine"
@@ -154,12 +156,15 @@ const maxInvalidationKey = 300
 
 // InvalidationKey is the key of the approval requests that a new value of
 // a fact about a subject supersedes (G0 M8, HR-205), for example
-// github.pull.head@github.pull_request:acme/payments#7; "" when it would
-// not fit.
+// github.pull.head@github.pull_request:acme/payments#7. A key longer than
+// the column holds is written as "sha256:" and the SHA-256 of the key in
+// hex, so the requests about a long subject id are superseded too. Such a
+// key never equals a written-out one, which always has an "@".
 func InvalidationKey(fact, subjectType, subjectID string) string {
 	k := fact + "@" + subjectType + ":" + subjectID
 	if len(k) > maxInvalidationKey {
-		return ""
+		sum := sha256.Sum256([]byte(k))
+		return "sha256:" + hex.EncodeToString(sum[:])
 	}
 	return k
 }
