@@ -15,7 +15,8 @@ import (
 // credential it stripped from the agent's requests (kind and SHA-256
 // prefix), once each and at most MaxRoutes. The probe's own refused
 // requests, from another address, and lines that are not edge events are
-// left out.
+// left out; an agent whose address was not read (it exited at once) is
+// told by the log after its start.
 func TestHR214_TheEdgeLogGivesTheAgentsRoutesOnly(t *testing.T) {
 	const agent, probe = "10.89.0.3", "10.89.0.4"
 	log := strings.Join([]string{
@@ -34,8 +35,10 @@ func TestHR214_TheEdgeLogGivesTheAgentsRoutesOnly(t *testing.T) {
 	if !slices.Equal(got, want) {
 		t.Fatalf("routes %v, want %v", got, want)
 	}
-	if got := edgeRoutes([]byte(log), ""); len(got) != 0 {
-		t.Fatalf("routes of no client: %v", got)
+	// From the agent's start on, every client's request is the agent's: an
+	// agent that exited before its address was read is still told.
+	if got := edgeRoutes([]byte(log), ""); len(got) != 4 {
+		t.Fatalf("routes of every client: %v", got)
 	}
 
 	var many []string
