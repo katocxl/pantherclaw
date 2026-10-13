@@ -188,6 +188,11 @@ type View struct {
 	Requirements []apdomain.Requirement
 	Variants     []Variant
 	Eligibility  Eligibility
+	// People are, for each fact an independent requirement names (such as
+	// github.pull.people), the people it lists now, each with the user
+	// linked to them or none, as the independence check reads them when a
+	// person responds (G0 M8, F158, HR-207).
+	People []apdomain.PeopleList
 }
 
 // maxParams caps the held parameters shown for a narrower proposal.
@@ -257,6 +262,9 @@ func (s *Service) View(ctx context.Context, id ids.UUID) (View, error) {
 			return err
 		}
 		out.Requirements = e.Requirements
+		for _, people := range e.PeopleLists {
+			out.People = append(out.People, people.Shown(apdomain.MaxPeopleShown))
+		}
 		if out.Eligibility, err = eligibility(ctx, q, c, l, out.State); err != nil {
 			return err
 		}
