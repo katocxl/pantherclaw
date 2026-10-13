@@ -134,9 +134,11 @@ func TestHR206_ARuleThatCannotBeEvaluatedIsCannotAuthorize(t *testing.T) {
 // TestHR206_PolicyMayForbidAnUnknownConsequenceButNeverClearIt: policy
 // sees the consequence it decides (§43.3): a FORBID on consequence.unknown
 // denies a refund whose payout cannot be ruled out, while a predicted
-// payout gets the rule written for it. A requirement written only for
-// predicted payouts never releases an unknown one: with no requirement
-// left for it, the refund cannot be authorized.
+// payout gets the rule written for it. Nothing a requirement's condition
+// says clears an unknown payout: it holds as "Consequence unknown" with
+// every requirement a predicted payout could need (the union, M8.md:396,
+// amended 2026-10-13), and with no requirement that covers payouts at all,
+// the refund cannot be authorized.
 func TestHR206_PolicyMayForbidAnUnknownConsequenceButNeverClearIt(t *testing.T) {
 	predictedOnly := pdomain.Rule{
 		ID: "approve-payouts", Kind: pdomain.RequireApproval, Summary: "payouts need an approver", Operations: []string{"payments.payout.trigger"},
@@ -158,6 +160,17 @@ func TestHR206_PolicyMayForbidAnUnknownConsequenceButNeverClearIt(t *testing.T) 
 	f = newFxWith(t, payoutPackage, "")
 	f.payoutRun(false)
 	if err := f.w.SetPolicy([]pdomain.Rule{predictedOnly}, nil); err != nil {
+		t.Fatal(err)
+	}
+	ev := f.call(f.run, "create_refund", refund("ch_1", "30.00"))
+	expect(t, ev, adomain.RequireApproval, consequences.ReasonUnknown)
+	if len(ev.Approvals) != 1 || ev.Approvals[0].Role != "approver" {
+		t.Fatalf("an unknown payout holds for %+v, want the predicted payouts' approver", ev.Approvals)
+	}
+
+	f = newFxWith(t, payoutPackage, "")
+	f.payoutRun(false)
+	if err := f.w.SetPolicy([]pdomain.Rule{approvalOver50()}, nil); err != nil {
 		t.Fatal(err)
 	}
 	expect(t, f.call(f.run, "create_refund", refund("ch_1", "30.00")), adomain.CannotAuthorize, consequences.ReasonUnknown)
