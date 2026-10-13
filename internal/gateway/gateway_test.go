@@ -320,6 +320,9 @@ type fakeContainment struct {
 	// after, when set, applies once the first check passed (containment
 	// changing while the Authority decides).
 	after func(*fakeContainment)
+	// checks counts the checks; from the killAt-th on, when set, the kill
+	// switch is engaged (containment changing mid-call).
+	checks, killAt int
 }
 
 func newFakeContainment() *fakeContainment {
@@ -331,6 +334,10 @@ func newFakeContainment() *fakeContainment {
 func (f *fakeContainment) Check() (int64, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	f.checks++
+	if f.killAt > 0 && f.checks >= f.killAt {
+		f.err = control.ErrKillSwitch
+	}
 	e, err := f.epoch, f.err
 	if f.after != nil && err == nil {
 		f.after(f)
