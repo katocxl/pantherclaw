@@ -653,6 +653,38 @@ func (q *Queries) ExpireApprovalRequest(ctx context.Context, orgID ids.OrgID, iD
 	return i, err
 }
 
+const formerGitHubUsers = `-- name: FormerGitHubUsers :many
+SELECT github_user_id, user_id FROM pc.github_identity_history
+WHERE org_id = $1 AND github_user_id = ANY($2::bigint[])
+`
+
+type FormerGitHubUsersRow struct {
+	GithubUserID int64
+	UserID       ids.UUID
+}
+
+// Everyone ever linked to GitHub user ids by a proved link (P2f): they stay
+// excluded as independent of the people the ids are.
+func (q *Queries) FormerGitHubUsers(ctx context.Context, orgID ids.OrgID, githubIds []int64) ([]FormerGitHubUsersRow, error) {
+	rows, err := q.db.Query(ctx, formerGitHubUsers, orgID, githubIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []FormerGitHubUsersRow{}
+	for rows.Next() {
+		var i FormerGitHubUsersRow
+		if err := rows.Scan(&i.GithubUserID, &i.UserID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getApprovalRequest = `-- name: GetApprovalRequest :one
 SELECT org_id, id, subject_kind, agent_id, transaction_id, evaluation, run_id, grant_id, grant_revision, variant_key, requested_by, operation, previous_id, binding, binding_input, requirements, display, display_hash, state, end_reason, created_at, deadline_at, evidence_deadline_at, approved_at, consume_by, consumed_at, permit_id, ended_at, action_ir, invalidation_key FROM pc.approval_requests WHERE org_id = $1 AND id = $2
 `

@@ -510,6 +510,12 @@ WHERE r.org_id = sqlc.arg(org_id) AND r.id = sqlc.arg(request_id);
 SELECT github_user_id, user_id FROM pc.github_identities
 WHERE org_id = sqlc.arg(org_id) AND github_user_id = ANY(sqlc.arg(github_ids)::bigint[]);
 
+-- name: FormerGitHubUsers :many
+-- Everyone ever linked to GitHub user ids by a proved link (P2f): they stay
+-- excluded as independent of the people the ids are.
+SELECT github_user_id, user_id FROM pc.github_identity_history
+WHERE org_id = sqlc.arg(org_id) AND github_user_id = ANY(sqlc.arg(github_ids)::bigint[]);
+
 -- name: InsertRequestLinkedPeople :exec
 -- The users linked, when a request is created, to the people its fact
 -- lists (G0 M8 P2f, HR-207): they stay excluded from it.

@@ -81,7 +81,7 @@ The server asks GitHub which account the sign-in belongs to and links it to you,
 - **A reviewer of a GitHub merge needs a proved link.** A code reviewer or release approver without one is refused (`GITHUB_NOT_LINKED`), because PantherClaw could not tell whether they wrote the change.
 - **Links at the request count too.** The people linked to a pull request's author, committers and pushers when the merge was held stay excluded from that request, even if they unlink before it is decided.
 - **Unlinking someone else:** a person holding `github.identity.manage` (Org Admin) can remove another person's link with `pclaw github identity unlink <link id>`, never their own.
-- Every link and unlink is audited and sends `security.github_identity_linked` or `security.github_identity_unlinked` to the security channels. A service account cannot link or unlink, even when it holds the role.
+- Every link and unlink is audited and sends `security.github_identity_linked` or `security.github_identity_unlinked` to the security channels. A refused attempt to link someone else's account is audited as `github.identity_link_refused`. Unlinking does not undo exclusion: whoever once proved a link to a GitHub account stays excluded from reviewing pull requests that account worked on. A service account cannot link or unlink, even when it holds the role.
 - Someone who touched a pull request but is linked to no person cannot be excluded by name, so the review page shows them as "not linked".
 
 ## 5. Check it
