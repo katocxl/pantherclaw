@@ -9,9 +9,12 @@ package dockertest
 
 import (
 	"context"
+	"crypto/rand"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -114,14 +117,14 @@ func Image(t testing.TB, c *docker.Client, e docker.Engine, pkg, dockerfile stri
 		t.Fatal(err)
 	}
 	id, err := c.BuildImage(t.Context(), filepath.Join(repoRoot(t), filepath.FromSlash(dockerfile)), filepath.Dir(bin),
-		map[string]string{"org.pantherclaw.test": t.Name()})
+		map[string]string{"org.pantherclaw.test": t.Name(), "org.pantherclaw.test.build": rand.Text()})
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), cleanupTimeout)
 		defer cancel()
-		if err := c.RemoveImage(ctx, id); err != nil {
+		if err := removeImage(ctx, c, id); err != nil {
 			t.Errorf("remove image %s: %v", id, err)
 		}
 	})
@@ -144,5 +147,27 @@ func repoRoot(t testing.TB) string {
 			t.Fatal("no go.mod above the test")
 		}
 		dir = parent
+	}
+}
+
+// removeImage removes a test's image. Its build label is the test's own,
+// so no other test shares it, but a container of the test may still be
+// releasing it: removal is retried until the cleanup's end, and an image
+// already gone is clean.
+func removeImage(ctx context.Context, c *docker.Client, id string) error {
+	for {
+		err := c.RemoveImage(ctx, id)
+		var de *docker.Error
+		switch {
+		case err == nil:
+			return nil
+		case errors.As(err, &de) && strings.Contains(de.Stderr, "No such image"):
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return err
+		case <-time.After(500 * time.Millisecond):
+		}
 	}
 }
