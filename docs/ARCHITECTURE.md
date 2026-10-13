@@ -79,8 +79,8 @@ cmd/*                       wiring only (flags, config, DI)
 internal/<module>/adapters  sqlc repositories, Connect handlers, external clients
 internal/<module>/app       use cases, transaction boundaries, caller authorization, events
 internal/<module>/domain    pure types, invariants, state machines — no I/O, no time.Now(), no randomness
-internal/platform/*         config, log (slog + redaction), otel, db, crypto, keys, ids, clock, errors,
-                            httpx (hardened servers/clients), extension, edition, version
+internal/platform/*         config, log (slog + redaction), db, crypto, keys, ids, clock, errors,
+                            httpx (hardened servers/clients), rpc (also OpenTelemetry spans), extension, edition, version
 ```
 
 Enforced by golangci-lint `depguard` + an architecture test:
@@ -229,7 +229,11 @@ Images: distroless, non-root, read-only rootfs, pinned by digest, multi-arch, si
 
 ## 14. Observability
 
-`log/slog` JSON with mandatory fields and redaction; OpenTelemetry traces/metrics (otelconnect, pgx tracer) → OTLP → `grafana/otel-lgtm` in dev; Prometheus metrics; pprof on an admin-only listener. Request id, trace id and transaction id correlate every hop.
+`log/slog` JSON with mandatory fields and redaction. Logs carry the request id and, on the action path, the transaction id. The gateway's `Server-Timing` header breaks down where a request's time went.
+
+**Today (M1–M7), OpenTelemetry is API-only.** There is no `internal/platform/otel` package, no `otelconnect` and no pgx tracer. `observeInterceptor` in `internal/platform/rpc/rpc.go` starts one server span per RPC, and the waitlist observer records two histograms (`pantherclaw.waitlist.*`) on the global meter provider. No SDK or exporter is wired, so no span or metric leaves the process. There is no Prometheus endpoint and no pprof listener yet.
+
+**Planned (M13, production hardening):** the exporter is chosen there (founder decision 2026-10-10; G0 M1 deviation 4): OTLP, possibly through a small exporter of our own, to `grafana/otel-lgtm` in development; then a pgx tracer, trace ids in every log line, metrics, and pprof on an admin-only listener.
 
 ## 15. Performance SLOs
 
