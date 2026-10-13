@@ -237,7 +237,9 @@ func (f *fakeApprovals) View(ctx context.Context, id ids.UUID) (apapp.View, erro
 // shows each predicted or unknown consequence, labeled as a prediction,
 // with its environments, the workflows behind it and why it is unknown,
 // and says which approvals exclude the pull request's people and which
-// count only inside a change window.
+// count only inside a change window. When such an approval meets an unknown
+// consequence, the page says first, before any button, that it cannot be
+// released until the facts are known (founder decision 2026-10-13).
 func TestF158_TheMergeReviewShowsItsConsequencesAndDeciders(t *testing.T) {
 	resp := getAs(t, newApprovalsHandler(t, &fakeApprovals{review: true}), authnapp.ApprovalsPath+"/"+knownRequest.String(), "good")
 	for _, want := range []string{
@@ -252,6 +254,10 @@ func TestF158_TheMergeReviewShowsItsConsequencesAndDeciders(t *testing.T) {
 	}
 	if i, j := strings.Index(resp.Body, "What will happen"), strings.Index(resp.Body, "What it may also cause"); i < 0 || j < i {
 		t.Fatal("the action's own consequence must come before what it may also cause")
+	}
+	if i, j := strings.Index(resp.Body, "This cannot be released until its facts are known."), strings.Index(resp.Body, "id=\"approve\""); i < 0 || j < i ||
+		!strings.Contains(resp.Body[i:j], "<code>github.deployment.trigger on acme/payments</code>") {
+		t.Fatalf("the warning before the approve button: %d %d", i, j)
 	}
 	if plain := getAs(t, newApprovalsHandler(t, &fakeApprovals{}), authnapp.ApprovalsPath+"/"+knownRequest.String(), "good"); strings.Contains(plain.Body, "What it may also cause") {
 		t.Fatal("an action without consequences shows the section")
