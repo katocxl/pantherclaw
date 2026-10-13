@@ -31,10 +31,14 @@ type Handler struct {
 func New(s *app.Service, scans *app.Scans) *Handler { return &Handler{s: s, scans: scans} }
 
 func identityOf(i app.Identity) *pb.GitHubIdentity {
-	return &pb.GitHubIdentity{
+	out := &pb.GitHubIdentity{
 		Id: i.ID.String(), UserId: i.UserID.String(), GithubLogin: i.GithubLogin, GithubUserId: i.GithubUserID, LinkedBy: i.LinkedBy,
 		LinkTime: timestamppb.New(i.LinkedAt),
 	}
+	if i.VerifiedAt != nil {
+		out.VerifyTime = timestamppb.New(*i.VerifiedAt)
+	}
+	return out
 }
 
 func parseID(s string) (ids.UUID, error) {
@@ -45,17 +49,22 @@ func parseID(s string) (ids.UUID, error) {
 	return id, nil
 }
 
-// LinkIdentity implements GitHubServiceHandler.
-func (h *Handler) LinkIdentity(ctx context.Context, req *pb.LinkIdentityRequest) (*pb.LinkIdentityResponse, error) {
-	user, err := parseID(req.GetUserId())
+// ProveIdentity implements GitHubServiceHandler.
+func (h *Handler) ProveIdentity(ctx context.Context, req *pb.ProveIdentityRequest) (*pb.ProveIdentityResponse, error) {
+	i, err := h.s.Prove(ctx, req.GetGithubUserToken(), req.GetUnlink())
 	if err != nil {
 		return nil, err
 	}
-	i, err := h.s.Link(ctx, user, req.GetGithubLogin(), req.GetGithubUserId())
+	return &pb.ProveIdentityResponse{Identity: identityOf(i)}, nil
+}
+
+// GetSignIn implements GitHubServiceHandler.
+func (h *Handler) GetSignIn(ctx context.Context, _ *pb.GetSignInRequest) (*pb.GetSignInResponse, error) {
+	c, err := h.s.SignInConfig(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return &pb.LinkIdentityResponse{Identity: identityOf(i)}, nil
+	return &pb.GetSignInResponse{ClientId: c.ClientID, WebUrl: c.WebURL}, nil
 }
 
 // UnlinkIdentity implements GitHubServiceHandler.
@@ -84,6 +93,40 @@ func (h *Handler) ListIdentities(ctx context.Context, req *pb.ListIdentitiesRequ
 	out := &pb.ListIdentitiesResponse{NextPageToken: next}
 	for _, i := range rows {
 		out.Identities = append(out.Identities, identityOf(i))
+	}
+	return out, nil
+}
+
+func exemptionOf(e app.Exemption) *pb.GitHubExemption {
+	return &pb.GitHubExemption{
+		GithubUserId: e.GithubUserID, GithubLogin: e.GithubLogin, Reason: e.Reason, CreatedBy: e.CreatedBy,
+		CreateTime: timestamppb.New(e.CreatedAt),
+	}
+}
+
+// ExemptAccount implements GitHubServiceHandler.
+func (h *Handler) ExemptAccount(ctx context.Context, req *pb.ExemptAccountRequest) (*pb.ExemptAccountResponse, error) {
+	e, err := h.s.Exempt(ctx, req.GetGithubUserId(), req.GetGithubLogin(), req.GetReason())
+	if err != nil {
+		return nil, err
+	}
+	return &pb.ExemptAccountResponse{Exemption: exemptionOf(e)}, nil
+}
+
+// RemoveExemption implements GitHubServiceHandler.
+func (h *Handler) RemoveExemption(ctx context.Context, req *pb.RemoveExemptionRequest) (*pb.RemoveExemptionResponse, error) {
+	return &pb.RemoveExemptionResponse{}, h.s.RemoveExemption(ctx, req.GetGithubUserId())
+}
+
+// ListExemptions implements GitHubServiceHandler.
+func (h *Handler) ListExemptions(ctx context.Context, _ *pb.ListExemptionsRequest) (*pb.ListExemptionsResponse, error) {
+	rows, err := h.s.Exemptions(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := &pb.ListExemptionsResponse{}
+	for _, e := range rows {
+		out.Exemptions = append(out.Exemptions, exemptionOf(e))
 	}
 	return out, nil
 }

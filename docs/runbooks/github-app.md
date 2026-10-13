@@ -70,15 +70,48 @@ When a fact cannot be read in time, nothing is reported for it, and the decision
 
 ## 4. Link people to their GitHub accounts
 
-A reviewer must be independent of a pull request: PantherClaw refuses as reviewer anyone who authored, committed or pushed to it (HR-207). It knows those people by GitHub user id, so each person who reviews or works on GitHub needs a link. An Org Admin makes the links:
+A reviewer must be independent of a pull request: PantherClaw refuses as reviewer anyone who authored, committed or pushed to it (HR-207). It knows those people by GitHub user id, so each person links their own GitHub account, by signing in to GitHub (founder decision 2026-10-13).
+
+First turn GitHub sign-in on, once. Sign-in uses its own GitHub App, never the App that merges: a sign-in gives a user access token that can do whatever its App may do, so the sign-in App has no permissions and is installed nowhere.
+
+1. Create a second GitHub App, for example "PantherClaw sign-in", under the same owner. Leave every repository, organization and account permission at **No access**. Untick **Webhook → Active**. Do not install it anywhere.
+2. In its settings, under *Identifying and authorizing users*, tick **Enable Device Flow**.
+3. Generate a **client secret** and save it in a file only the server can read, for example `/etc/pantherclaw/github-signin-secret` (mode 0400).
+4. Put the sign-in App's **Client ID** (from its settings page, not the App ID) and the secret's file in the server configuration, then restart the server:
+
+   ```json
+   "github": { "client_id": "Iv23li…", "client_secret_file": "/etc/pantherclaw/github-signin-secret" }
+   ```
+
+   `github.web_url` and `github.api_url` default to `https://github.com` and `https://api.github.com`. For GitHub Enterprise Server, set them to `https://HOST` and `https://HOST/api/v3`. Plain `http` is accepted only for a loopback address (the GitHub simulator). Without `client_id`, nobody can link an account, so nobody can review GitHub merges.
+
+Then each person runs:
 
 ```bash
-pclaw github identity link --user <user id> --login <github login> --github-id <github user id>
+pclaw github link            # prints a code to enter at GitHub; links the account you sign in as
+pclaw github unlink          # removes your link, again by signing in to GitHub
 pclaw github identity list [--user <user id>]
-pclaw github identity unlink <link id>
 ```
 
-`GET https://api.github.com/users/<login>` shows the user id. A GitHub user id links to one person, and every link and unlink is audited. A service account cannot make links, even when it holds the role. Someone who touched a pull request but is linked to no person cannot be excluded by name, so the review page shows them as "not linked".
+pclaw shows the code only with a sign-in page on the configured GitHub address. Enter it only at that address, and only when you ran `pclaw github link` or `unlink` yourself. An agent that asks you to enter a code is asking you to sign in for it.
+
+The server asks GitHub, as the sign-in App, which account the token belongs to. GitHub answers only for a token the sign-in App issued, so a personal access token or a `gh` token proves nothing. The server then links the account to you, with the time you proved it, and revokes the token, so it works nowhere afterwards; PantherClaw never keeps it. Nobody can link an account for someone else. A GitHub user id links to one person; signing in again renews your link.
+
+
+- **A reviewer of a GitHub merge needs a proved link.** A code reviewer or release approver without one is refused (`GITHUB_NOT_LINKED`), because PantherClaw could not tell whether they wrote the change.
+- **Everyone who worked on the pull request must be linked, or exempted.** While its author, a commit author or committer, or a pusher is a person linked to nobody in the org, every approval of the merge is refused (`GITHUB_PEOPLE_NOT_LINKED`), because the approver could be that person under another account. Ask them to run `pclaw github link`. Accounts that are not people, a GitHub App's bot (`name[bot]`) or a machine user, are exempted by an identity manager:
+
+  ```bash
+  pclaw github exemption add 41898282 github-actions[bot] "GitHub Actions"
+  pclaw github exemption list
+  pclaw github exemption remove 41898282
+  ```
+
+  Find an account's user id at `https://api.github.com/users/LOGIN`. Every exemption change is audited and sent to the security channels. An account someone has ever linked as their own is a person and cannot be exempted, and you cannot review pull requests that list an account you exempted. Exempt the PantherClaw App's own bot, which pushes the agents' commits.
+- **Links at the request count too.** The people linked to a pull request's author, committers and pushers when the merge was held stay excluded from that request, even if they unlink before it is decided.
+- **Unlinking someone else:** a person holding `github.identity.manage` (Org Admin) can remove another person's link with `pclaw github identity unlink <link id>`, never their own.
+- Every link and unlink is audited and sends `security.github_identity_linked` or `security.github_identity_unlinked` to the security channels. A refused attempt to link someone else's account is audited as `github.identity_link_refused`. Unlinking does not undo exclusion: whoever once proved a link to a GitHub account stays excluded from reviewing pull requests that account worked on. A service account cannot link or unlink, even when it holds the role.
+- Someone who touched a pull request but is linked to no person cannot be excluded by name, so the review page shows them as "not linked".
 
 ## 5. Scan the organization (Team edition)
 
