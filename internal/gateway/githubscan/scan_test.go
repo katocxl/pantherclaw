@@ -269,3 +269,31 @@ func TestHR209_AgentUseTheScanCannotCheckIsReported(t *testing.T) {
 		t.Fatal("a run step's text reached the result")
 	}
 }
+
+// TestHR209_EveryMCPServerEntryIsCounted (G5 review follow-up): a file
+// holding both mcpServers and servers gives both, and an entry that is not
+// an object the parser understands is kept as unknown, by its name only,
+// so no server is missed.
+func TestHR209_EveryMCPServerEntryIsCounted(t *testing.T) {
+	servers, err := ParseMCPConfig([]byte(`{"mcpServers": {"github": {"command": "npx gh-mcp"}, "odd": ["not", "an", "object"]},
+		"servers": {"remote": {"url": "https://mcp.example.test"}, "weird": {"command": 42}}}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]string{}
+	for _, s := range servers {
+		got[s.Name] = s.Transport
+		if s.Transport == "unknown" && (s.Command != "" || len(s.Env) != 0 || len(s.Headers) != 0) {
+			t.Errorf("an unknown entry kept more than its name: %+v", s)
+		}
+	}
+	want := map[string]string{"github": "stdio", "odd": "unknown", "remote": "remote", "weird": "unknown"}
+	if len(got) != len(want) {
+		t.Fatalf("servers %v, want %v", got, want)
+	}
+	for name, transport := range want {
+		if got[name] != transport {
+			t.Errorf("%s: %q, want %q", name, got[name], transport)
+		}
+	}
+}
