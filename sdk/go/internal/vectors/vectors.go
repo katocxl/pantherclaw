@@ -28,7 +28,7 @@ func Dir() string {
 
 // Load decodes the vector file name into v, failing the test when it is
 // missing, not this format or not the group it names.
-func Load(t *testing.T, name string, v any) {
+func Load(t testing.TB, name string, v any) {
 	t.Helper()
 	raw, err := os.ReadFile(filepath.Join(Dir(), name)) //nolint:gosec // G304: the vector directory
 	if err != nil {
