@@ -188,6 +188,82 @@ func TestHR207_AWindowsEnvironmentMatchesWhateverItsCase(t *testing.T) {
 	}
 }
 
+// TestHR207_ConcurrentWindowsForOneEnvironmentConflict: two windows
+// created at once for the same environment cannot both be ACTIVE or take
+// the same revision. The Create that commits second fails with
+// CHANGE_WINDOW_CHANGED, never an internal error, whether the environment
+// had a window to replace or not, and leaves one ACTIVE window.
+func TestHR207_ConcurrentWindowsForOneEnvironmentConflict(t *testing.T) {
+	e := newEnv(t)
+	admin := e.caller(td.KindUser, td.RoleSecurityAdmin)
+	w := domain.Window{Environment: "production", TimeZone: "UTC", Weekly: []domain.Weekly{{Day: "mon", Start: "09:00", Minutes: 60}}}
+	// competing creates the next window the way Create does and holds its
+	// transaction open until release is closed.
+	competing := func(inserted, release chan struct{}) error {
+		return e.pool.InTenantTx(context.Background(), e.org, func(ctx context.Context, tx db.TenantTx) error {
+			var revision int
+			if err := tx.QueryRow(ctx, `SELECT coalesce(max(revision), 0) FROM pc.change_windows WHERE environment = 'production'`).Scan(&revision); err != nil {
+				return err
+			}
+			if _, err := tx.Exec(ctx, `UPDATE pc.change_windows SET state = 'RETIRED', retired_by = 'test', retired_at = now()
+				WHERE environment = 'production' AND state = 'ACTIVE'`); err != nil {
+				return err
+			}
+			if _, err := tx.Exec(ctx, `INSERT INTO pc.change_windows (org_id, id, environment, time_zone, weekly, revision, created_by)
+				VALUES ($1, $2, 'production', 'UTC', '[{"day":"tue","start":"09:00","minutes":60}]', $3, 'test')`,
+				e.org, ids.NewV7(), revision+1); err != nil {
+				return err
+			}
+			close(inserted)
+			<-release
+			return nil
+		})
+	}
+	for _, replacing := range []bool{false, true} {
+		inserted, release, done := make(chan struct{}), make(chan struct{}), make(chan error, 1)
+		go func() { done <- competing(inserted, release) }()
+		<-inserted
+		created := make(chan error, 1)
+		go func() {
+			_, err := e.svc.Create(admin, w)
+			created <- err
+		}()
+		e.waitingForALock(t)
+		close(release)
+		if err := <-done; err != nil {
+			t.Fatal(err)
+		}
+		if err := <-created; !errors.Is(err, app.ErrChanged) || reason(err) != "aborted CHANGE_WINDOW_CHANGED" {
+			t.Fatalf("replacing %v: the second Create: %v", replacing, err)
+		}
+		if active, err := e.svc.List(admin, "production", false); err != nil || len(active) != 1 {
+			t.Fatalf("replacing %v: active windows %+v %v", replacing, active, err)
+		}
+	}
+	if r, err := e.svc.Create(admin, w); err != nil || r.Revision != 3 {
+		t.Fatalf("a Create after the race %+v %v", r, err)
+	}
+}
+
+// waitingForALock waits until a session of the test's database waits for
+// a lock.
+func (e *env) waitingForALock(t *testing.T) {
+	t.Helper()
+	for deadline := time.Now().Add(10 * time.Second); time.Now().Before(deadline); time.Sleep(10 * time.Millisecond) {
+		var n int
+		if err := e.pool.InTenantTx(context.Background(), e.org, func(ctx context.Context, tx db.TenantTx) error {
+			return tx.QueryRow(ctx, `SELECT count(*) FROM pg_stat_activity
+				WHERE datname = current_database() AND wait_event_type = 'Lock'`).Scan(&n)
+		}); err != nil {
+			t.Fatal(err)
+		}
+		if n > 0 {
+			return
+		}
+	}
+	t.Fatal("no session waits for a lock")
+}
+
 func denied(err error) bool {
 	var pe *pcerr.Error
 	return errors.As(err, &pe) && pe.Code() == pcerr.PermissionDenied

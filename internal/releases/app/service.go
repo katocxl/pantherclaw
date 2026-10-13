@@ -31,6 +31,9 @@ var (
 	ErrNotFound = pcerr.New(pcerr.NotFound, "CHANGE_WINDOW_NOT_FOUND", "change window not found")
 	ErrRetired  = pcerr.New(pcerr.FailedPrecondition, "CHANGE_WINDOW_RETIRED", "the change window is retired")
 	ErrReason   = pcerr.New(pcerr.InvalidArgument, "REASON_REQUIRED", "a reason of 1 to 500 characters is required")
+	// ErrChanged: another window for the same environment and repository
+	// was created at the same time, and this one lost (HR-004).
+	ErrChanged = pcerr.New(pcerr.Aborted, "CHANGE_WINDOW_CHANGED", "the environment's change window changed concurrently; read it again")
 )
 
 // Record is a stored window.
@@ -60,7 +63,9 @@ func (s *Service) caller(ctx context.Context) (tenancy.Caller, error) {
 
 // Create stores a window. It retires the environment's and repository's
 // current window, whose revision it follows. The environment is stored in
-// lowercase (domain.NormalizeEnvironment).
+// lowercase (domain.NormalizeEnvironment). Of two windows created at the
+// same time for one environment and repository, the second to commit
+// fails with ErrChanged.
 func (s *Service) Create(ctx context.Context, w domain.Window) (Record, error) {
 	c, err := s.caller(ctx)
 	if err != nil {
@@ -110,7 +115,11 @@ func (s *Service) Create(ctx context.Context, w domain.Window) (Record, error) {
 			p.Repository = &w.Repository
 		}
 		row, err := q.InsertChangeWindow(ctx, p)
-		if err != nil {
+		if db.IsUniqueViolation(err) {
+			// A concurrent Create for the same environment and repository
+			// committed its window, or its revision, first.
+			return ErrChanged
+		} else if err != nil {
 			return err
 		}
 		if out, err = recordOf(row); err != nil {
