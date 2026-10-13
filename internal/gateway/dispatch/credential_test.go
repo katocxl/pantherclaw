@@ -70,11 +70,11 @@ func TestHR203_AReadGetsAReadOnlyToken(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "https://api.github.com/repos/acme/payments/contents/README.md", nil)
 	target := actionir.Target{Type: "github.repository", ID: "acme/payments"}
 	for _, scope := range []map[string]string{{"contents": "write"}, {"contents": "read", "pull_requests": "admin"}} {
-		if _, _, err := e.credential(t.Context(), conn, read(scope), target, req, nil); !errors.Is(err, broker.ErrScope) {
+		if _, _, _, err := e.credential(t.Context(), conn, read(scope), target, req, nil); !errors.Is(err, broker.ErrScope) {
 			t.Errorf("%v: %v", scope, err)
 		}
 	}
-	if _, _, err := e.credential(t.Context(), conn, read(map[string]string{"contents": "read"}), target, req, nil); !errors.Is(err, broker.ErrNoBroker) {
+	if _, _, _, err := e.credential(t.Context(), conn, read(map[string]string{"contents": "read"}), target, req, nil); !errors.Is(err, broker.ErrNoBroker) {
 		t.Fatalf("a read-only read was refused before opening: %v", err)
 	}
 }
