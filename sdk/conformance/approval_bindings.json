@@ -1,0 +1,136 @@
+{
+  "format": "pantherclaw.conformance/v1",
+  "group": "approval_bindings",
+  "description": "Approval bindings: canonical is the RFC 8785 form of input and binding is base64url (no padding) of its SHA-256. The last case is a batch challenge over two bindings.",
+  "source": "internal/approvals/domain (testdata/binding_vectors.json)",
+  "cases": [
+    {
+      "name": "one approver",
+      "input": {
+        "v": 1,
+        "run_id": "0192f3a0-0000-7000-8000-000000000002",
+        "material_facts_digest": "MzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzM",
+        "jkt": "NzbLsXh8uDCcd-6MNwXF4W_7noWXFZAfHkxZsRGC9Xs",
+        "grant": {
+          "revision": 2,
+          "id": "0192f3a0-0000-7000-8000-000000000001"
+        },
+        "expires_at": "2026-10-10T12:00:00Z",
+        "effective_action_hash": "ERERERERERERERERERERERERERERERERERERERERERE",
+        "display_hash": "1kjP7Ef1lQMLZufr9Jp6P0VskWqxC-HfQMkW-6Q4uJs",
+        "definition_digest": "REREREREREREREREREREREREREREREREREREREREREQ",
+        "decision_basis_digest": "IiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiI",
+        "approver_requirements": [
+          {
+            "role": "approver",
+            "kind": "approval",
+            "count": 1
+          }
+        ],
+        "agent_instance": "0192f3a0-0000-7000-8000-000000000003",
+        "action_hash": "ERERERERERERERERERERERERERERERERERERERERERE"
+      },
+      "canonical": "{\"action_hash\":\"ERERERERERERERERERERERERERERERERERERERERERE\",\"agent_instance\":\"0192f3a0-0000-7000-8000-000000000003\",\"approver_requirements\":[{\"count\":1,\"kind\":\"approval\",\"role\":\"approver\"}],\"decision_basis_digest\":\"IiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiI\",\"definition_digest\":\"REREREREREREREREREREREREREREREREREREREREREQ\",\"display_hash\":\"1kjP7Ef1lQMLZufr9Jp6P0VskWqxC-HfQMkW-6Q4uJs\",\"effective_action_hash\":\"ERERERERERERERERERERERERERERERERERERERERERE\",\"expires_at\":\"2026-10-10T12:00:00Z\",\"grant\":{\"id\":\"0192f3a0-0000-7000-8000-000000000001\",\"revision\":2},\"jkt\":\"NzbLsXh8uDCcd-6MNwXF4W_7noWXFZAfHkxZsRGC9Xs\",\"material_facts_digest\":\"MzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzM\",\"run_id\":\"0192f3a0-0000-7000-8000-000000000002\",\"v\":1}",
+      "binding": "iEJ_qMd-PALe24A-doPDqioDOiaL3L1Zt-FW0PRCdCc"
+    },
+    {
+      "name": "two independent approvers and a principal step-up",
+      "input": {
+        "v": 1,
+        "run_id": "0192f3a0-0000-7000-8000-000000000002",
+        "material_facts_digest": "MzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzM",
+        "jkt": "NzbLsXh8uDCcd-6MNwXF4W_7noWXFZAfHkxZsRGC9Xs",
+        "grant": {
+          "revision": 2,
+          "id": "0192f3a0-0000-7000-8000-000000000001"
+        },
+        "expires_at": "2026-10-10T12:00:00Z",
+        "effective_action_hash": "ERERERERERERERERERERERERERERERERERERERERERE",
+        "display_hash": "1kjP7Ef1lQMLZufr9Jp6P0VskWqxC-HfQMkW-6Q4uJs",
+        "definition_digest": "REREREREREREREREREREREREREREREREREREREREREQ",
+        "decision_basis_digest": "IiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiI",
+        "approver_requirements": [
+          {
+            "role": "approver",
+            "kind": "approval",
+            "independent": true,
+            "count": 2
+          },
+          {
+            "subject": "principal",
+            "method": "webauthn",
+            "kind": "step_up"
+          }
+        ],
+        "agent_instance": "0192f3a0-0000-7000-8000-000000000003",
+        "action_hash": "ERERERERERERERERERERERERERERERERERERERERERE"
+      },
+      "canonical": "{\"action_hash\":\"ERERERERERERERERERERERERERERERERERERERERERE\",\"agent_instance\":\"0192f3a0-0000-7000-8000-000000000003\",\"approver_requirements\":[{\"count\":2,\"independent\":true,\"kind\":\"approval\",\"role\":\"approver\"},{\"kind\":\"step_up\",\"method\":\"webauthn\",\"subject\":\"principal\"}],\"decision_basis_digest\":\"IiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiI\",\"definition_digest\":\"REREREREREREREREREREREREREREREREREREREREREQ\",\"display_hash\":\"1kjP7Ef1lQMLZufr9Jp6P0VskWqxC-HfQMkW-6Q4uJs\",\"effective_action_hash\":\"ERERERERERERERERERERERERERERERERERERERERERE\",\"expires_at\":\"2026-10-10T12:00:00Z\",\"grant\":{\"id\":\"0192f3a0-0000-7000-8000-000000000001\",\"revision\":2},\"jkt\":\"NzbLsXh8uDCcd-6MNwXF4W_7noWXFZAfHkxZsRGC9Xs\",\"material_facts_digest\":\"MzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzM\",\"run_id\":\"0192f3a0-0000-7000-8000-000000000002\",\"v\":1}",
+      "binding": "UTKfQThK5FSoWdFhnZP6ZSWLDOzRQ1agnWyfKIrSJKw"
+    },
+    {
+      "name": "an obligation clamps the action",
+      "input": {
+        "v": 1,
+        "run_id": "0192f3a0-0000-7000-8000-000000000002",
+        "material_facts_digest": "MzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzM",
+        "jkt": "NzbLsXh8uDCcd-6MNwXF4W_7noWXFZAfHkxZsRGC9Xs",
+        "grant": {
+          "revision": 2,
+          "id": "0192f3a0-0000-7000-8000-000000000001"
+        },
+        "expires_at": "2026-10-10T12:00:00Z",
+        "effective_action_hash": "VVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVU",
+        "display_hash": "1kjP7Ef1lQMLZufr9Jp6P0VskWqxC-HfQMkW-6Q4uJs",
+        "definition_digest": "REREREREREREREREREREREREREREREREREREREREREQ",
+        "decision_basis_digest": "IiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiI",
+        "approver_requirements": [
+          {
+            "role": "approver",
+            "kind": "approval",
+            "count": 1
+          }
+        ],
+        "agent_instance": "0192f3a0-0000-7000-8000-000000000003",
+        "action_hash": "ERERERERERERERERERERERERERERERERERERERERERE"
+      },
+      "canonical": "{\"action_hash\":\"ERERERERERERERERERERERERERERERERERERERERERE\",\"agent_instance\":\"0192f3a0-0000-7000-8000-000000000003\",\"approver_requirements\":[{\"count\":1,\"kind\":\"approval\",\"role\":\"approver\"}],\"decision_basis_digest\":\"IiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiI\",\"definition_digest\":\"REREREREREREREREREREREREREREREREREREREREREQ\",\"display_hash\":\"1kjP7Ef1lQMLZufr9Jp6P0VskWqxC-HfQMkW-6Q4uJs\",\"effective_action_hash\":\"VVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVU\",\"expires_at\":\"2026-10-10T12:00:00Z\",\"grant\":{\"id\":\"0192f3a0-0000-7000-8000-000000000001\",\"revision\":2},\"jkt\":\"NzbLsXh8uDCcd-6MNwXF4W_7noWXFZAfHkxZsRGC9Xs\",\"material_facts_digest\":\"MzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzM\",\"run_id\":\"0192f3a0-0000-7000-8000-000000000002\",\"v\":1}",
+      "binding": "mI_KdIgr6-8Ht_wa0_435R-qB4dNleSi8rObWb-bg7g"
+    },
+    {
+      "name": "a restoration",
+      "input": {
+        "v": 1,
+        "subject": "agent.restore",
+        "requested_state": "PROTECTED",
+        "requested_by": "user:0192f3a0-0000-7000-8000-000000000005",
+        "reason_hash": "TJHO0KayDSSagtfoajphsPOA9cRQfM2jiAXn5OtD9g0",
+        "expires_at": "2026-10-11T12:00:00Z",
+        "display_hash": "RBNvo1WzZ4oRRq0W9-hknpT7T8If536DEMBg9hyq_4o",
+        "approver_requirements": [
+          {
+            "role": "approver",
+            "kind": "approval",
+            "count": 1
+          }
+        ],
+        "agent_id": "0192f3a0-0000-7000-8000-000000000004",
+        "agent_change_seq": 7
+      },
+      "canonical": "{\"agent_change_seq\":7,\"agent_id\":\"0192f3a0-0000-7000-8000-000000000004\",\"approver_requirements\":[{\"count\":1,\"kind\":\"approval\",\"role\":\"approver\"}],\"display_hash\":\"RBNvo1WzZ4oRRq0W9-hknpT7T8If536DEMBg9hyq_4o\",\"expires_at\":\"2026-10-11T12:00:00Z\",\"reason_hash\":\"TJHO0KayDSSagtfoajphsPOA9cRQfM2jiAXn5OtD9g0\",\"requested_by\":\"user:0192f3a0-0000-7000-8000-000000000005\",\"requested_state\":\"PROTECTED\",\"subject\":\"agent.restore\",\"v\":1}",
+      "binding": "Ct4leUi5iJxM0AWMH7s43HJunmcWC_iXszuZXId5S8s"
+    },
+    {
+      "name": "a batch of two",
+      "input": {
+        "v": 1,
+        "batch": [
+          "UTKfQThK5FSoWdFhnZP6ZSWLDOzRQ1agnWyfKIrSJKw",
+          "iEJ_qMd-PALe24A-doPDqioDOiaL3L1Zt-FW0PRCdCc"
+        ]
+      },
+      "canonical": "{\"batch\":[\"UTKfQThK5FSoWdFhnZP6ZSWLDOzRQ1agnWyfKIrSJKw\",\"iEJ_qMd-PALe24A-doPDqioDOiaL3L1Zt-FW0PRCdCc\"],\"v\":1}",
+      "binding": "sTO1utfA_QFvoLBIiqQEnom2kvORtiUFa9ATz1akJII"
+    }
+  ]
+}
