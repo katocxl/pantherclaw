@@ -20,7 +20,8 @@ import (
 )
 
 // MaxOpenScanDiscoveries is the cap on open discoveries per org, the same
-// as for gateway discoveries (HR-148).
+// as for gateway discoveries (HR-148): the org scans' (github_scan) and
+// all others' each have their own, so neither fills the other's room.
 const MaxOpenScanDiscoveries = 200
 
 // ScanFinding is one finding of a local `pclaw scan` (PN-001.1). Its
@@ -81,7 +82,7 @@ func (inv *Inventory) SubmitScan(ctx context.Context, host string, findings []Sc
 		if err := q.LockDiscoveries(ctx, c.Org.String()); err != nil {
 			return err
 		}
-		open, err := q.CountOpenDiscoveries(ctx, c.Org)
+		open, err := q.CountOpenDiscoveriesFrom(ctx, c.Org, false)
 		if err != nil {
 			return err
 		}
@@ -99,7 +100,7 @@ func (inv *Inventory) SubmitScan(ctx context.Context, host string, findings []Sc
 			if err != nil {
 				return err
 			}
-			n, err := q.TouchScanDiscovery(ctx, obs, c.Org, f.Key[:])
+			n, err := q.TouchScanDiscovery(ctx, dbq.TouchScanDiscoveryParams{Observed: obs, OrgID: c.Org, ScanKey: f.Key[:], Source: "scan"})
 			if err != nil {
 				return err
 			}

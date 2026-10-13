@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
 	"github.com/katocxl/pantherclaw/internal/facts/domain"
@@ -24,8 +25,8 @@ var (
 )
 
 // PackageFacts are the facts a connection's pinned package names: each
-// prerequisite and consequence fact, with the target type it is about.
-type PackageFacts func(ctx context.Context, org ids.OrgID, gateway, connection ids.UUID) (map[string]string, error)
+// prerequisite and consequence fact, with the target types it is about.
+type PackageFacts func(ctx context.Context, org ids.OrgID, gateway, connection ids.UUID) (map[string][]string, error)
 
 // RegisterGatewayProvider registers the gateway that serves a connection as
 // the provider of facts its package names (G0 M8 decision 5, HR-160). Only
@@ -50,7 +51,7 @@ func (s *Service) RegisterGatewayProvider(ctx context.Context, name string, gate
 		return domain.Provider{}, err
 	}
 	for _, d := range decls {
-		if subject, ok := named[d.Name]; !ok || subject != d.SubjectType {
+		if !slices.Contains(named[d.Name], d.SubjectType) {
 			return domain.Provider{}, fmt.Errorf("%w: %s about %s", ErrNotDeclared, d.Name, d.SubjectType)
 		}
 	}
@@ -77,7 +78,9 @@ func (s *Service) RegisterGatewayProvider(ctx context.Context, name string, gate
 // system of record before a decision (G0 M8 decision 5). The org and the
 // gateway come from its mTLS certificate; the provider must be the one
 // bound to that gateway and connection, and each observation must be a
-// fact it declares, about its declared target type (HR-160).
+// fact it declares, about its declared target type, that the package
+// pinned now still names (HR-160): a declaration the pin no longer names
+// is refused like an undeclared fact.
 func (s *Service) PutGatewayFacts(ctx context.Context, org ids.OrgID, gateway, connection ids.UUID, obs []domain.Observation) ([]Result, error) {
 	if len(obs) == 0 || len(obs) > MaxObservations {
 		return nil, pcerr.New(pcerr.InvalidArgument, "OBSERVATIONS_INVALID", fmt.Sprintf("send 1..%d observations", MaxObservations))
@@ -88,6 +91,15 @@ func (s *Service) PutGatewayFacts(ctx context.Context, org ids.OrgID, gateway, c
 	}
 	if err != nil {
 		return nil, err
+	}
+	if s.Packages != nil {
+		named, err := s.Packages(ctx, org, gateway, connection)
+		if errors.Is(err, ErrConnectionUnknown) {
+			return nil, ErrNotProvider
+		} else if err != nil {
+			return nil, err
+		}
+		p.Facts = slices.DeleteFunc(p.Facts, func(d domain.Declaration) bool { return !slices.Contains(named[d.Name], d.SubjectType) })
 	}
 	return s.put(ctx, org, p, obs)
 }
