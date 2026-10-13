@@ -119,7 +119,7 @@ func (e *Engine) sendMCP(ctx context.Context, r Result, conn *control.Connection
 		return e.record(ctx, r, want, pb.Outcome_OUTCOME_FAILED, 0, nil, 0, EnforcementFailed, CodeRequest, t)
 	}
 	start := time.Now()
-	land, err := e.fly(callCtx, conn, a, want)
+	land, access, err := e.fly(callCtx, conn, a, want)
 	if err != nil {
 		// The connector took no call: nothing was sent.
 		outcome, class, code := classifyMCP(upstream.Result{}, fmt.Errorf("%w: %w", upstream.ErrNotSent, err))
@@ -154,7 +154,11 @@ func (e *Engine) sendMCP(ctx context.Context, r Result, conn *control.Connection
 		}
 		r.ToolResult = res.Error == nil && !res.InputRequired
 	}
-	return e.record(ctx, r, want, outcome, res.Status, digest, elapsed, class, code, t)
+	return e.record(ctx, r, want, outcome, res.Status, digest, elapsed, class, code, t, func(req *pb.RecordExecutionRequest) {
+		// A connector's write went out with a credential placed here: what it
+		// was given is on the call's receipt, as on a dispatch (ADR-0021).
+		req.CredentialAccess = access()
+	})
 }
 
 // Drift is an upstream tool that no longer matches the definition the

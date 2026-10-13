@@ -8,12 +8,15 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"sync"
 	"time"
 
 	"github.com/katocxl/pantherclaw/internal/actionir"
+	"github.com/katocxl/pantherclaw/internal/gateway/broker"
 	"github.com/katocxl/pantherclaw/internal/gateway/control"
 	"github.com/katocxl/pantherclaw/internal/gateway/egress"
 	"github.com/katocxl/pantherclaw/internal/gateway/upstream"
+	pb "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
 )
 
 // Connectors are a customer-hosted gateway's running connectors (G0 M9
@@ -45,6 +48,35 @@ type Flight struct {
 	Action    actionir.Parsed
 	Epoch     int64
 	Connector *control.Connection
+	// access keeps what the egress connection's credential gave the call's
+	// write, for the call's receipt (ADR-0021); nil keeps nothing.
+	access *flightAccess
+}
+
+// flightAccess is the credential access of a call's egress: what was
+// minted, granted and revoked, or what was granted when the scope did not
+// match. The last request that placed a credential wins.
+type flightAccess struct {
+	mu  sync.Mutex
+	got *pb.CredentialAccess
+}
+
+func (f *flightAccess) set(a *pb.CredentialAccess) {
+	if f == nil || a == nil {
+		return
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.got = a
+}
+
+func (f *flightAccess) get() *pb.CredentialAccess {
+	if f == nil {
+		return nil
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.got
 }
 
 // ErrNoConnectors reports a connector connection on a gateway that runs no
@@ -86,12 +118,16 @@ func callWindow(ctx context.Context, conn *control.Connection) (context.Context,
 }
 
 // fly binds a connector connection's egress to the call it is about to
-// run; it does nothing for any other connection.
-func (e *Engine) fly(ctx context.Context, conn *control.Connection, a actionir.Parsed, want permitWant) (land func(), err error) {
+// run; it does nothing for any other connection. access returns what the
+// call's egress credential gave, for its receipt (nil when none was
+// placed).
+func (e *Engine) fly(ctx context.Context, conn *control.Connection, a actionir.Parsed, want permitWant) (land func(), access func() *pb.CredentialAccess, err error) {
 	if conn.GetKind() != "mcp_container" || e.connectors == nil {
-		return func() {}, nil
+		return func() {}, func() *pb.CredentialAccess { return nil }, nil
 	}
-	return e.connectors.Fly(ctx, conn.GetId(), Flight{Txn: want.Txn, Action: a, Epoch: want.Epoch, Connector: conn})
+	got := &flightAccess{}
+	land, err = e.connectors.Fly(ctx, conn.GetId(), Flight{Txn: want.Txn, Action: a, Epoch: want.Epoch, Connector: conn, access: got})
+	return land, got.get, err
 }
 
 // ConnectorEgress sends one request a connector made while running a call,
@@ -123,11 +159,19 @@ func (e *Engine) ConnectorEgress(ctx context.Context, conn *control.Connection, 
 	if conn.GetAccessMode() == "pantherclaw_held" {
 		// A GitHub App connection gets a token minted for this action alone,
 		// revoked once it is sent (HR-203, HR-204).
-		s, release, _, err := e.credential(ctx, conn, def, a.Action.Target, p.req, p.client)
+		s, release, used, err := e.credential(ctx, conn, def, a.Action.Target, p.req, p.client)
 		if err != nil {
+			// What GitHub granted when the scope did not match goes on the
+			// call's receipt (ADR-0021 items 3 and 6).
+			if sm := (*broker.ScopeMismatchError)(nil); errors.As(err, &sm) {
+				f.access.set(accessOf(sm.Access))
+			}
 			return egress.Response{}, err
 		}
-		defer release()
+		defer func() {
+			release()
+			f.access.set(used())
+		}()
 		secret = s
 	}
 	res, err := p.client.Do(p.req)
