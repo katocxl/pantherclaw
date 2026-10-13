@@ -833,6 +833,61 @@ func (q *Queries) DismissCoverageFinding(ctx context.Context, arg DismissCoverag
 	return i, err
 }
 
+const dismissedCoverageFindingsGone = `-- name: DismissedCoverageFindingsGone :many
+SELECT id, excess, dismissed_by, dismiss_reason FROM pc.coverage_findings
+WHERE org_id = $1 AND kind = $2 AND connection_id = $3
+  AND state = 'DISMISSED' AND NOT (fingerprint = ANY ($4::bytea[]))
+ORDER BY id
+FOR UPDATE
+`
+
+type DismissedCoverageFindingsGoneParams struct {
+	OrgID        ids.OrgID
+	Kind         string
+	ConnectionID *ids.UUID
+	Keep         [][]byte
+}
+
+type DismissedCoverageFindingsGoneRow struct {
+	ID            ids.UUID
+	Excess        []string
+	DismissedBy   *ids.UUID
+	DismissReason *string
+}
+
+// The dismissed findings of a kind for a connection that the latest pass
+// no longer found, with their dismissal, which the caller audits before
+// ResolveCoverageFindings clears it.
+func (q *Queries) DismissedCoverageFindingsGone(ctx context.Context, arg DismissedCoverageFindingsGoneParams) ([]DismissedCoverageFindingsGoneRow, error) {
+	rows, err := q.db.Query(ctx, dismissedCoverageFindingsGone,
+		arg.OrgID,
+		arg.Kind,
+		arg.ConnectionID,
+		arg.Keep,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []DismissedCoverageFindingsGoneRow{}
+	for rows.Next() {
+		var i DismissedCoverageFindingsGoneRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Excess,
+			&i.DismissedBy,
+			&i.DismissReason,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const enterCoverageInvalidation = `-- name: EnterCoverageInvalidation :execrows
 UPDATE pc.coverage_invalidations SET reassessed_at = now(), ledger_entry_id = $1
 WHERE org_id = $2 AND id = $3 AND reassessed_at IS NULL
@@ -1730,8 +1785,7 @@ type ResolveCoverageFindingsParams struct {
 
 // Findings of a kind for a connection that the latest pass no longer found
 // are resolved, dismissed ones too: a dismissal covers the exposure it was
-// made for while it lasts, so the same excess found again later reopens. The
-// dismissal itself stays in the audit ledger.
+// made for while it lasts, so the same excess found again later reopens.
 func (q *Queries) ResolveCoverageFindings(ctx context.Context, arg ResolveCoverageFindingsParams) (int64, error) {
 	result, err := q.db.Exec(ctx, resolveCoverageFindings,
 		arg.OrgID,

@@ -105,8 +105,15 @@ func TestF048_CredentialReachBeyondTheNeedIsAFinding(t *testing.T) {
 	if rows := f.refreshFindings(t); len(rows) != 3 || rows[1].State != "OPEN" || rows[0].State != "RESOLVED" {
 		t.Fatalf("a dismissed exposure found again: %+v", rows)
 	}
-	if n := f.count(t, `SELECT count(*) FROM pc.ledger_entries WHERE kind = 'audit.coverage.finding_dismissed'`); n != 1 {
-		t.Fatalf("%d audited dismissals", n)
+	if n := f.count(t, `SELECT count(*) FROM pc.ledger_entries WHERE kind = 'audit.coverage.finding_dismissed'
+		AND convert_from(body, 'UTF8') LIKE '%Accepted for the pilot by the CISO.%'`); n != 1 {
+		t.Fatalf("%d audited dismissals with their reason", n)
+	}
+	// The dismissed finding resolved when its excess grew; that is audited
+	// with the dismissal it ended.
+	if n := f.count(t, `SELECT count(*) FROM pc.ledger_entries WHERE kind = 'audit.coverage.finding_resolved'
+		AND convert_from(body, 'UTF8') LIKE '%Accepted for the pilot by the CISO.%'`); n != 1 {
+		t.Fatalf("%d audited resolutions of a dismissed finding", n)
 	}
 	f.exec(t, "UPDATE pc.discoveries SET state = 'DISMISSED' WHERE id = $1", discovery)
 	if rows := f.refreshFindings(t); len(rows) != 3 || rows[1].State != "OPEN" {
