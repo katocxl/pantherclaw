@@ -52,7 +52,7 @@ func (p *initPlan) addHook(target claudeSettings, hook *jsonNode) error {
 	if err := addHook(s.doc, hook); err != nil {
 		return &exitError{code: 1, msg: "pclaw init: " + s.path + ": " + err.Error() + "; it is left as it is"}
 	}
-	p.done = append(p.done, "Every Bash and PowerShell command now asks PantherClaw first; when it cannot answer, the command is blocked.")
+	p.done = append(p.done, "Every Bash, PowerShell and Monitor command now asks PantherClaw first; when it cannot answer, the command is blocked.")
 	return nil
 }
 
@@ -88,8 +88,9 @@ type initWrite struct {
 // unchanged fails when a file is no longer what the plan was made from.
 // Claude Code rewrites its settings and ~/.claude.json while it runs, and
 // the person may take a while to answer, so writing the plan then would
-// lose what changed meanwhile (a deny rule added, say).
-func unchanged(writes []initWrite) error {
+// lose what changed meanwhile (a deny rule added, say). done says what
+// init has done by then.
+func unchanged(writes []initWrite, done string) error {
 	for _, w := range writes {
 		now, err := os.ReadFile(w.path)
 		if errors.Is(err, os.ErrNotExist) {
@@ -99,7 +100,7 @@ func unchanged(writes []initWrite) error {
 		}
 		if (now == nil) != (w.before == nil) || !bytes.Equal(now, w.before) {
 			return &exitError{code: 1, msg: "pclaw init: " + w.path + " changed after init read it (Claude Code rewrites its settings " +
-				"while it runs); nothing was changed, so run pclaw init again"}
+				"while it runs); " + done + ", so run pclaw init again"}
 		}
 	}
 	return nil
@@ -157,17 +158,21 @@ func (f initFlags) apply(ctx context.Context, a *app, p *initPlan) error {
 	case !f.yes && !confirm(a, "Make these changes?"):
 		return &exitError{code: 1, msg: "pclaw init: not confirmed; nothing was changed"}
 	}
+	done := "nothing was changed"
 	if p.enroll != nil {
 		// A file that changed while the person read the plan stops
 		// everything, the enrollment (which writes the key file) too.
-		if err := unchanged(writes); err != nil {
+		if err := unchanged(writes, done); err != nil {
 			return err
 		}
 		if err := p.enroll.run(ctx, a); err != nil {
 			return err
 		}
+		// A file that changed during the enrollment's calls is still left
+		// as it is, but the key is enrolled by then.
+		done = "the key in " + p.enroll.path + " is enrolled and admitted, but no settings file was written"
 	}
-	if err := unchanged(writes); err != nil {
+	if err := unchanged(writes, done); err != nil {
 		return err
 	}
 	for _, w := range writes {
@@ -224,14 +229,13 @@ func (f initFlags) enrollment() (*enrollment, error) {
 		return nil, nil
 	case err == nil:
 		// The file is rewritten in place with the identifier and keeps its
-		// mode, so a key other users can read (and may have read) is not
-		// enrolled.
-		if info, err := os.Stat(path); err != nil {
+		// mode (on Windows, its owner and access list), so a key other
+		// users can read (and may have read) is not enrolled.
+		if who, fix, err := keyFileReaders(path); err != nil {
 			return nil, fmt.Errorf("--key-file: %w", err)
-		} else if !isWindows() && info.Mode().Perm()&0o077 != 0 {
-			return nil, fmt.Errorf("--key-file %s holds a private key and other users can read or change it (mode %04o), so init "+
-				"does not enroll it: if no one else can have read it, run chmod 600 on it; otherwise remove it, and init makes a new key",
-				path, info.Mode().Perm())
+		} else if who != "" {
+			return nil, fmt.Errorf("--key-file %s holds a private key and other users can read or change it (%s), so init "+
+				"does not enroll it: if no one else can have read it, %s; otherwise remove it, and init makes a new key", path, who, fix)
 		}
 		e.kf = kf
 	case errors.Is(err, os.ErrNotExist):

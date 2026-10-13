@@ -60,7 +60,8 @@ func ReadKeyFile(path string) (KeyFile, error) {
 	return k, nil
 }
 
-// WriteKeyFile writes k to a new 0600 file; an existing file is never
+// WriteKeyFile writes k to a new file only the person can read (0600, or on
+// Windows an access list of its own); an existing file is never
 // overwritten unless replace is set.
 func WriteKeyFile(path string, k KeyFile, replace bool) error {
 	b, err := json.Marshal(k, json.Deterministic(true))
@@ -73,6 +74,13 @@ func WriteKeyFile(path string, k KeyFile, replace bool) error {
 	}
 	f, err := os.OpenFile(path, flags, 0o600) //nolint:gosec // G304: operator-chosen path
 	if err != nil {
+		return fmt.Errorf("workload key file: %w", err)
+	}
+	if err := private(path); err != nil {
+		_ = f.Close()
+		if !replace {
+			_ = os.Remove(path)
+		}
 		return fmt.Errorf("workload key file: %w", err)
 	}
 	if _, err := f.Write(append(b, '\n')); err != nil {

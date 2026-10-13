@@ -1,7 +1,7 @@
 {
   "name": "pantherclaw",
   "version": "0.1.0",
-  "description": "Asks PantherClaw before Claude Code runs a Bash or PowerShell command, and blocks it unless PantherClaw allowed it (fails closed).",
+  "description": "Asks PantherClaw before Claude Code runs a command in a shell (Bash, PowerShell or Monitor), and blocks it unless PantherClaw allowed it (fails closed).",
   "author": {
     "name": "PantherClaw"
   },
