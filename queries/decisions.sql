@@ -91,3 +91,17 @@ RETURNING id, transaction_id, gateway_id;
 SELECT epoch, kill_switch, now()::timestamptz AS now
 FROM pc.org_containment
 WHERE org_id = sqlc.arg(org_id);
+
+-- name: InsertDecisionConsequence :exec
+-- What one consequence rule said in an evaluation (G0 M8, HR-206).
+INSERT INTO pc.decision_consequences (org_id, transaction_id, evaluation, position, rule_id, operation, target_type, target_id,
+    environments, state, unknown, facts_digest)
+VALUES (sqlc.arg(org_id), sqlc.arg(transaction_id), sqlc.arg(evaluation), sqlc.arg(position), sqlc.arg(rule_id), sqlc.arg(operation),
+    sqlc.arg(target_type), sqlc.arg(target_id), sqlc.arg(environments)::text[], sqlc.arg(state), sqlc.arg(unknown), sqlc.arg(facts_digest));
+
+-- name: ListDecisionConsequences :many
+-- The consequences of an evaluation, in rule order.
+SELECT position, rule_id, operation, target_type, target_id, environments, state, unknown, facts_digest
+FROM pc.decision_consequences
+WHERE org_id = sqlc.arg(org_id) AND transaction_id = sqlc.arg(transaction_id) AND evaluation = sqlc.arg(evaluation)
+ORDER BY position;

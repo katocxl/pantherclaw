@@ -16,6 +16,33 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 )
 
+const currentFactValue = `-- name: CurrentFactValue :one
+SELECT value FROM pc.facts
+WHERE org_id = $1 AND name = $2 AND subject_type = $3 AND subject_id = $4
+FOR UPDATE
+`
+
+type CurrentFactValueParams struct {
+	OrgID       ids.OrgID
+	Name        string
+	SubjectType string
+	SubjectID   string
+}
+
+// The current value of a fact about a subject, locked for the write that
+// replaces it, so a change is seen once (G0 M8, HR-205).
+func (q *Queries) CurrentFactValue(ctx context.Context, arg CurrentFactValueParams) ([]byte, error) {
+	row := q.db.QueryRow(ctx, currentFactValue,
+		arg.OrgID,
+		arg.Name,
+		arg.SubjectType,
+		arg.SubjectID,
+	)
+	var value []byte
+	err := row.Scan(&value)
+	return value, err
+}
+
 const deactivateFactDeclarations = `-- name: DeactivateFactDeclarations :exec
 UPDATE pc.fact_declarations SET active = false
 WHERE org_id = $1 AND provider_id = $2
@@ -86,6 +113,38 @@ func (q *Queries) GetFactProviderByAccount(ctx context.Context, orgID ids.OrgID,
 	return i, err
 }
 
+const getFactProviderByConnection = `-- name: GetFactProviderByConnection :one
+SELECT p.id, p.name, p.gateway_id, p.connection_id, p.state FROM pc.fact_providers p
+JOIN pc.connections c ON c.org_id = p.org_id AND c.id = p.connection_id
+WHERE p.org_id = $1 AND p.connection_id = $2::uuid AND p.state = 'ACTIVE'
+  AND c.gateway_id = p.gateway_id AND c.state = 'ACTIVE'
+`
+
+type GetFactProviderByConnectionRow struct {
+	ID           ids.UUID
+	Name         string
+	GatewayID    *ids.UUID
+	ConnectionID *ids.UUID
+	State        string
+}
+
+// GetFactProviderByConnection returns the active provider a gateway reports
+// a connection's facts as (G0 M8 decision 5), while the connection is
+// active and still served by the provider's gateway: a gateway the
+// connection moved away from reports nothing more.
+func (q *Queries) GetFactProviderByConnection(ctx context.Context, orgID ids.OrgID, connectionID ids.UUID) (GetFactProviderByConnectionRow, error) {
+	row := q.db.QueryRow(ctx, getFactProviderByConnection, orgID, connectionID)
+	var i GetFactProviderByConnectionRow
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.GatewayID,
+		&i.ConnectionID,
+		&i.State,
+	)
+	return i, err
+}
+
 const insertFactDeclaration = `-- name: InsertFactDeclaration :exec
 INSERT INTO pc.fact_declarations (org_id, provider_id, name, value_type, subject_type, max_lag_s)
 VALUES ($1, $2, $3, $4, $5, $6)
@@ -114,8 +173,9 @@ func (q *Queries) InsertFactDeclaration(ctx context.Context, arg InsertFactDecla
 
 const insertFactProvider = `-- name: InsertFactProvider :exec
 
-INSERT INTO pc.fact_providers (org_id, id, name, service_account_id, created_by)
-VALUES ($1, $2, $3, $4, $5)
+INSERT INTO pc.fact_providers (org_id, id, name, service_account_id, gateway_id, connection_id, created_by)
+VALUES ($1, $2, $3, $4, $5, $6,
+        $7)
 `
 
 type InsertFactProviderParams struct {
@@ -123,6 +183,8 @@ type InsertFactProviderParams struct {
 	ID               ids.UUID
 	Name             string
 	ServiceAccountID *ids.UUID
+	GatewayID        *ids.UUID
+	ConnectionID     *ids.UUID
 	CreatedBy        string
 }
 
@@ -136,6 +198,8 @@ func (q *Queries) InsertFactProvider(ctx context.Context, arg InsertFactProvider
 		arg.ID,
 		arg.Name,
 		arg.ServiceAccountID,
+		arg.GatewayID,
+		arg.ConnectionID,
 		arg.CreatedBy,
 	)
 	return err
@@ -163,6 +227,40 @@ func (q *Queries) ListActiveFactCatalog(ctx context.Context, orgID ids.OrgID) ([
 	for rows.Next() {
 		var i ListActiveFactCatalogRow
 		if err := rows.Scan(&i.Name, &i.ValueType); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listActiveFactSubjects = `-- name: ListActiveFactSubjects :many
+SELECT d.name, d.subject_type FROM pc.fact_declarations d
+JOIN pc.fact_providers p ON p.org_id = d.org_id AND p.id = d.provider_id
+WHERE d.org_id = $1 AND d.active AND p.state = 'ACTIVE'
+ORDER BY d.name
+`
+
+type ListActiveFactSubjectsRow struct {
+	Name        string
+	SubjectType string
+}
+
+// ListActiveFactSubjects returns the subject type each active fact is
+// declared about (one active provider per fact name).
+func (q *Queries) ListActiveFactSubjects(ctx context.Context, orgID ids.OrgID) ([]ListActiveFactSubjectsRow, error) {
+	rows, err := q.db.Query(ctx, listActiveFactSubjects, orgID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListActiveFactSubjectsRow{}
+	for rows.Next() {
+		var i ListActiveFactSubjectsRow
+		if err := rows.Scan(&i.Name, &i.SubjectType); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -212,7 +310,7 @@ func (q *Queries) ListFactDeclarations(ctx context.Context, orgID ids.OrgID, pro
 }
 
 const listFactProviders = `-- name: ListFactProviders :many
-SELECT id, name, service_account_id, state FROM pc.fact_providers
+SELECT id, name, service_account_id, gateway_id, connection_id, state FROM pc.fact_providers
 WHERE org_id = $1 AND ($2::boolean OR state = 'ACTIVE')
 ORDER BY name, id
 LIMIT 500
@@ -222,6 +320,8 @@ type ListFactProvidersRow struct {
 	ID               ids.UUID
 	Name             string
 	ServiceAccountID *ids.UUID
+	GatewayID        *ids.UUID
+	ConnectionID     *ids.UUID
 	State            string
 }
 
@@ -238,6 +338,8 @@ func (q *Queries) ListFactProviders(ctx context.Context, orgID ids.OrgID, includ
 			&i.ID,
 			&i.Name,
 			&i.ServiceAccountID,
+			&i.GatewayID,
+			&i.ConnectionID,
 			&i.State,
 		); err != nil {
 			return nil, err

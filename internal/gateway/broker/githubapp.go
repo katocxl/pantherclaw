@@ -34,6 +34,10 @@ const (
 	// maxToken bounds an opaque token: GitHub may change its format, and
 	// egress headers allow 4 KiB (ADR-0021 item 4).
 	maxToken = 4 << 10
+	// revokeTimeout bounds a revocation, which runs on its own deadline
+	// whatever the dispatch's context: a dispatch that ran long, or whose
+	// agent went away, still revokes (ADR-0021 item 6).
+	revokeTimeout = 10 * time.Second
 )
 
 // Errors of a per-action installation token. Each fails the dispatch
@@ -47,6 +51,23 @@ var (
 	ErrScopeMismatch = errors.New("broker: GitHub granted a wider token than requested")
 )
 
+// ScopeMismatchError is the error of a wider grant (errors.Is ErrScopeMismatch).
+// It carries what GitHub granted and whether the token was revoked, for
+// the execution receipt of the refused dispatch.
+type ScopeMismatchError struct{ Access Access }
+
+func (e *ScopeMismatchError) Error() string { return ErrScopeMismatch.Error() }
+
+// Is makes errors.Is(err, ErrScopeMismatch) hold.
+func (e *ScopeMismatchError) Is(target error) bool { return target == ErrScopeMismatch }
+
+// mismatch revokes a token GitHub granted too widely and returns the
+// error that carries its access.
+func (t *Installation) mismatch(ctx context.Context, s Sender) error {
+	_ = t.Revoke(ctx, s) // the receipt says whether it was; it expires within the hour anyway
+	return &ScopeMismatchError{Access: t.access}
+}
+
 // Sender sends requests to the connection's host only: the connection's
 // egress client (HR-070..074).
 type Sender interface {
@@ -58,10 +79,27 @@ type Sender interface {
 // it at GitHub and clears it. It lives for one action and is never cached
 // or returned to the agent (HR-203).
 type Installation struct {
-	token []byte
-	base  *url.URL
-	hosts []string
+	token  []byte
+	base   *url.URL
+	hosts  []string
+	access Access
 }
+
+// Access is what an installation token allowed, for the execution receipt
+// (ADR-0021 item 5): never the token.
+type Access struct {
+	Installation       int64
+	Repository         string
+	RepositoryID       int64
+	Requested, Granted map[string]string
+	Expires            time.Time
+	// Revocation is "revoked" or "revoke_failed" once Revoke ran; empty
+	// before.
+	Revocation string
+}
+
+// Access is what the token allowed, and whether it was revoked.
+func (t *Installation) Access() Access { return t.access }
 
 // Token is the token's bytes, which a caller scrubs from what goes back to
 // the agent; they are cleared by Revoke.
@@ -71,7 +109,8 @@ func (t *Installation) Token() []byte { return t.token }
 // and asks GitHub, through the connection's own client and hosts, for an
 // installation token for exactly owner/repo and the operation's declared
 // permissions (HR-203, HR-204). GitHub's answer must name exactly that
-// repository and those permissions; anything else is revoked and refused.
+// repository and those permissions, with metadata: read, which every
+// installation token carries; anything else is revoked and refused.
 func MintInstallationToken(ctx context.Context, s Sender, baseURL string, hosts []string, app domain.GitHubApp,
 	owner, repo string, permissions map[string]string, now time.Time,
 ) (*Installation, error) {
@@ -81,49 +120,129 @@ func MintInstallationToken(ctx context.Context, s Sender, baseURL string, hosts 
 	if owner != app.Account {
 		return nil, ErrAccount
 	}
-	key, err := app.Key()
+	t, granted, err := mint(ctx, s, baseURL, hosts, app, []string{repo}, permissions, now)
 	if err != nil {
 		return nil, err
+	}
+	t.access.Repository = owner + "/" + repo
+	if !slices.Equal(granted, []string{owner + "/" + repo}) {
+		return nil, t.mismatch(ctx, s)
+	}
+	return t, nil
+}
+
+// MintScanToken mints a read-only token for an organization scan (G0 M8,
+// HR-209, ADR-0021 item 2): for the named repositories of the installation,
+// or, with none named, all of them (to list them first). GitHub's grant must
+// name exactly those permissions, and repositories of the installation's
+// account only, exactly the named ones when named.
+func MintScanToken(ctx context.Context, s Sender, baseURL string, hosts []string, app domain.GitHubApp, repos []string,
+	permissions map[string]string, now time.Time,
+) (*Installation, error) {
+	if len(permissions) == 0 {
+		return nil, ErrScope
+	}
+	for _, p := range permissions {
+		if p != "read" {
+			return nil, ErrScope
+		}
+	}
+	t, granted, err := mint(ctx, s, baseURL, hosts, app, repos, permissions, now)
+	if err != nil {
+		return nil, err
+	}
+	want := make([]string, len(repos))
+	for i, r := range repos {
+		want[i] = app.Account + "/" + strings.ToLower(r)
+	}
+	slices.Sort(want)
+	slices.Sort(granted)
+	foreign := slices.ContainsFunc(granted, func(g string) bool { return !strings.HasPrefix(g, app.Account+"/") })
+	if foreign || (repos != nil && !slices.Equal(granted, want)) {
+		return nil, t.mismatch(ctx, s)
+	}
+	return t, nil
+}
+
+// mint asks GitHub for an installation token for repos (names, all of the
+// installation's when nil) and permissions, and returns it with the
+// repositories GitHub granted (lowercase full names). A grant of other
+// permissions is revoked and refused here.
+func mint(ctx context.Context, s Sender, baseURL string, hosts []string, app domain.GitHubApp, repos []string,
+	permissions map[string]string, now time.Time,
+) (*Installation, []string, error) {
+	key, err := app.Key()
+	if err != nil {
+		return nil, nil, err
 	}
 	jwt, err := appJWT(key, app.Issuer, now)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	base, err := url.Parse(strings.TrimSuffix(baseURL, "/"))
 	if err != nil {
-		return nil, fmt.Errorf("%w: %w", ErrMint, err)
+		return nil, nil, fmt.Errorf("%w: %w", ErrMint, err)
 	}
-	body, err := json.Marshal(map[string]any{"repositories": []string{repo}, "permissions": permissions}, json.Deterministic(true))
+	asked := map[string]any{"permissions": permissions}
+	if repos != nil {
+		asked["repositories"] = repos
+	}
+	body, err := json.Marshal(asked, json.Deterministic(true))
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	res, err := send(ctx, s, base, hosts, http.MethodPost, "/app/installations/"+strconv.FormatInt(app.Installation, 10)+"/access_tokens", body, jwt)
 	clear(jwt)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	var out struct {
 		Token        string            `json:"token"`
 		Permissions  map[string]string `json:"permissions"`
+		ExpiresAt    time.Time         `json:"expires_at"`
 		Repositories []struct {
+			ID       int64  `json:"id"`
 			FullName string `json:"full_name"`
 		} `json:"repositories"`
 	}
 	if res.Status != http.StatusCreated || json.Unmarshal(res.Body, &out) != nil || !opaque(out.Token) {
 		clear(res.Body)
-		return nil, fmt.Errorf("%w: status %d", ErrMint, res.Status)
+		return nil, nil, fmt.Errorf("%w: status %d", ErrMint, res.Status)
 	}
 	clear(res.Body)
-	t := &Installation{token: []byte(out.Token), base: base, hosts: hosts}
+	t := &Installation{token: []byte(out.Token), base: base, hosts: hosts, access: Access{
+		Installation: app.Installation, Requested: permissions, Granted: out.Permissions, Expires: out.ExpiresAt,
+	}}
+	if len(out.Repositories) == 1 {
+		t.access.RepositoryID = out.Repositories[0].ID
+	}
+	if len(repos) == 1 {
+		t.access.Repository = app.Account + "/" + strings.ToLower(repos[0])
+	}
 	granted := make([]string, len(out.Repositories))
 	for i, r := range out.Repositories {
 		granted[i] = strings.ToLower(r.FullName)
 	}
-	if !slices.Equal(granted, []string{owner + "/" + repo}) || !maps.Equal(out.Permissions, permissions) {
-		_ = t.Revoke(ctx, s) // refused either way; an unrevoked token expires within the hour
-		return nil, ErrScopeMismatch
+	if !asAsked(out.Permissions, permissions) {
+		return nil, nil, t.mismatch(ctx, s)
 	}
-	return t, nil
+	return t, granted, nil
+}
+
+// asAsked reports whether GitHub granted exactly the permissions asked
+// for, allowing metadata: read, which every installation token carries and
+// which GitHub lists whatever was asked (ADR-0021 item 3). Anything more is
+// a wider grant.
+func asAsked(granted, asked map[string]string) bool {
+	if maps.Equal(granted, asked) {
+		return true
+	}
+	if _, ok := asked["metadata"]; ok || granted["metadata"] != "read" {
+		return false
+	}
+	g := maps.Clone(granted)
+	delete(g, "metadata")
+	return maps.Equal(g, asked)
 }
 
 // opaque accepts a token as GitHub documents it, opaque: it is not parsed,
@@ -147,15 +266,19 @@ func apiHeaders(req *http.Request) {
 }
 
 // Revoke ends the token at GitHub (DELETE /installation/token), trying a
-// second time when the first fails, and clears it. A token that could not
-// be revoked expires within the hour GitHub set; the caller reports it
-// (ADR-0021 item 6).
+// second time when the first fails, and clears it. It runs on its own
+// deadline, whatever ctx's. A token that could not be revoked expires
+// within the hour GitHub set; the caller reports it (ADR-0021 item 6).
 func (t *Installation) Revoke(ctx context.Context, s Sender) error {
 	defer clear(t.token)
+	t.access.Revocation = "revoke_failed"
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), revokeTimeout)
+	defer cancel()
 	var err error
 	for range 2 {
 		var res egress.Response
 		if res, err = send(ctx, s, t.base, t.hosts, http.MethodDelete, "/installation/token", nil, t.token); err == nil && res.Status == http.StatusNoContent {
+			t.access.Revocation = "revoked"
 			return nil
 		}
 		if err == nil {
@@ -197,4 +320,15 @@ func appJWT(key *rsa.PrivateKey, issuer string, now time.Time) ([]byte, error) {
 		return nil, err
 	}
 	return []byte(signing + "." + base64.RawURLEncoding.EncodeToString(sig)), nil
+}
+
+// ReadOnly reports whether every permission is read: all that a read, a
+// verification read or a fact read may be minted with (HR-203).
+func ReadOnly(permissions map[string]string) bool {
+	for _, level := range permissions {
+		if level != "read" {
+			return false
+		}
+	}
+	return true
 }

@@ -19,8 +19,8 @@ import (
 const (
 	m8gProvider = `INSERT INTO pc.fact_providers (org_id, id, name, service_account_id, gateway_id, connection_id, created_by)
 		VALUES ($1, $2, $3, $4, $5, $6, 'test')`
-	m8gIdentity = `INSERT INTO pc.github_identities (org_id, id, user_id, github_login, github_user_id, linked_by)
-		VALUES ($1, $2, $3, $4, $5, 'test')`
+	m8gIdentity = `INSERT INTO pc.github_identities (org_id, id, user_id, github_login, github_user_id, linked_by, verified_at)
+		VALUES ($1, $2, $3, $4, $5, 'test', now())`
 )
 
 // TestHR160_GatewayProvidersAndObjectFacts: a provider has exactly one
@@ -49,6 +49,21 @@ func TestHR207_GitHubIdentitiesAreOnePerGitHubUser(t *testing.T) {
 	f.want(t, m5Unique, "one GitHub user linked twice", m8gIdentity, f.org, m5ID(), f.user, "alice2", 101)
 	f.want(t, m5Check, "a login GitHub would not issue", m8gIdentity, f.org, m5ID(), f.user, "-bad-", 102)
 	f.want(t, m7pForeignKey, "someone who is no person of the org", m8gIdentity, f.org, m5ID(), m5ID(), "bob", 103)
+}
+
+// TestHR207_LinksAreProvedAndARequestKeepsItsLinkedPeople (P2f, migration
+// 00083): a link records when the person proved it by signing in to GitHub,
+// and one nobody proved is refused; the people linked when a request was
+// created are kept for that request only, and never changed or removed.
+func TestHR207_LinksAreProvedAndARequestKeepsItsLinkedPeople(t *testing.T) {
+	d := dbtest.New(t)
+	f := newM7Fixture(t, d.AppPool(t))
+	f.want(t, m5Check, "a link nobody proved", `INSERT INTO pc.github_identities (org_id, id, user_id, github_login, github_user_id, linked_by)
+		VALUES ($1, $2, $3, 'alice', 101, 'test')`, f.org, m5ID(), f.user)
+	const kept = `INSERT INTO pc.approval_request_linked_people (org_id, request_id, fact, user_id) VALUES ($1, $2, 'github.pull.people', $3)`
+	f.want(t, m7pForeignKey, "people of a request that does not exist", kept, f.org, m5ID(), f.user)
+	f.want(t, m5Denied, "UPDATE approval_request_linked_people", "UPDATE pc.approval_request_linked_people SET fact = fact")
+	f.want(t, m5Denied, "DELETE approval_request_linked_people", "DELETE FROM pc.approval_request_linked_people")
 }
 
 // TestHR209_ScanRunsAndOrgScanLeases: a scan run finishes with a time, a
@@ -80,4 +95,38 @@ func TestHR203_ConnectionGitHubIsOnePerConnection(t *testing.T) {
 	f.mustExec(t, ins, f.org, f.connection, "acme", nil, nil)
 	f.want(t, m5Unique, "a second installation for the connection", ins, f.org, f.connection, "acme", nil, nil)
 	f.want(t, m5Denied, "DELETE connection_github", "DELETE FROM pc.connection_github")
+}
+
+// TestHR209_FindingsAreKeyedWithinTheirSource: a person's scan and the
+// gateway's org scan may report the same key without sharing a row, so
+// neither can overwrite or pre-seed the other's finding; within one source
+// a key is one finding.
+func TestHR209_FindingsAreKeyedWithinTheirSource(t *testing.T) {
+	d := dbtest.New(t)
+	f := newM7Fixture(t, d.AppPool(t))
+	const insert = `INSERT INTO pc.discoveries (org_id, id, agent_id, source, scan_key) VALUES ($1, $2, $3, $4, $5)`
+	key := m5Secret(11)
+	f.mustExec(t, insert, f.org, m5ID(), f.agent, "scan", key)
+	f.mustExec(t, insert, f.org, m5ID(), f.agent, "github_scan", key)
+	f.want(t, m5Unique, "one gateway finding twice", insert, f.org, m5ID(), f.agent, "github_scan", key)
+	f.want(t, m5Unique, "one person finding twice", insert, f.org, m5ID(), f.agent, "scan", key)
+}
+
+// TestHR209_ScanRunsOnlyMoveForward: a running scan does not go back to
+// pending, a finished one never changes, and a run keeps its lease.
+func TestHR209_ScanRunsOnlyMoveForward(t *testing.T) {
+	d := dbtest.New(t)
+	f := newM7Fixture(t, d.AppPool(t))
+	lease := m5ID()
+	f.mustExec(t, m7Verification, f.org, lease, "org_scan", nil, f.connection, nil, nil)
+	run := m5ID()
+	f.mustExec(t, `INSERT INTO pc.github_scan_runs (org_id, id, connection_id, started_by) VALUES ($1, $2, $3, 'test')`, f.org, run, f.connection)
+	f.mustExec(t, `UPDATE pc.github_scan_runs SET state = 'RUNNING', verification_id = $2 WHERE id = $1`, run, lease)
+	f.want(t, m5Check, "back to pending", `UPDATE pc.github_scan_runs SET state = 'PENDING' WHERE id = $1`, run)
+	other := m5ID()
+	f.mustExec(t, m7Verification, f.org, other, "org_scan", nil, f.connection, nil, nil)
+	f.want(t, m5Check, "another lease", `UPDATE pc.github_scan_runs SET verification_id = $2 WHERE id = $1`, run, other)
+	f.mustExec(t, `UPDATE pc.github_scan_runs SET state = 'FAILED', finished_at = now() WHERE id = $1`, run)
+	f.want(t, m5Check, "a failed run reported done", `UPDATE pc.github_scan_runs SET state = 'DONE' WHERE id = $1`, run)
+	f.want(t, m5Check, "a finished run's counts", `UPDATE pc.github_scan_runs SET counts = '{"x":1}' WHERE id = $1`, run)
 }

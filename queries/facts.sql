@@ -4,8 +4,9 @@
 -- Trusted fact providers and facts (M4 part 2, HR-160).
 
 -- name: InsertFactProvider :exec
-INSERT INTO pc.fact_providers (org_id, id, name, service_account_id, created_by)
-VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(name), sqlc.arg(service_account_id), sqlc.arg(created_by));
+INSERT INTO pc.fact_providers (org_id, id, name, service_account_id, gateway_id, connection_id, created_by)
+VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(name), sqlc.narg(service_account_id), sqlc.narg(gateway_id), sqlc.narg(connection_id),
+        sqlc.arg(created_by));
 
 -- name: InsertFactDeclaration :exec
 INSERT INTO pc.fact_declarations (org_id, provider_id, name, value_type, subject_type, max_lag_s)
@@ -17,6 +18,16 @@ WHERE org_id = sqlc.arg(org_id) AND service_account_id = sqlc.arg(service_accoun
 ORDER BY created_at
 LIMIT 1;
 
+-- GetFactProviderByConnection returns the active provider a gateway reports
+-- a connection's facts as (G0 M8 decision 5), while the connection is
+-- active and still served by the provider's gateway: a gateway the
+-- connection moved away from reports nothing more.
+-- name: GetFactProviderByConnection :one
+SELECT p.id, p.name, p.gateway_id, p.connection_id, p.state FROM pc.fact_providers p
+JOIN pc.connections c ON c.org_id = p.org_id AND c.id = p.connection_id
+WHERE p.org_id = sqlc.arg(org_id) AND p.connection_id = sqlc.arg(connection_id)::uuid AND p.state = 'ACTIVE'
+  AND c.gateway_id = p.gateway_id AND c.state = 'ACTIVE';
+
 -- name: ListFactDeclarations :many
 SELECT name, value_type, subject_type, max_lag_s FROM pc.fact_declarations
 WHERE org_id = sqlc.arg(org_id) AND provider_id = sqlc.arg(provider_id) AND active
@@ -24,6 +35,14 @@ ORDER BY name;
 
 -- name: ListActiveFactCatalog :many
 SELECT d.name, d.value_type FROM pc.fact_declarations d
+JOIN pc.fact_providers p ON p.org_id = d.org_id AND p.id = d.provider_id
+WHERE d.org_id = sqlc.arg(org_id) AND d.active AND p.state = 'ACTIVE'
+ORDER BY d.name;
+
+-- ListActiveFactSubjects returns the subject type each active fact is
+-- declared about (one active provider per fact name).
+-- name: ListActiveFactSubjects :many
+SELECT d.name, d.subject_type FROM pc.fact_declarations d
 JOIN pc.fact_providers p ON p.org_id = d.org_id AND p.id = d.provider_id
 WHERE d.org_id = sqlc.arg(org_id) AND d.active AND p.state = 'ACTIVE'
 ORDER BY d.name;
@@ -60,7 +79,7 @@ WHERE f.org_id = sqlc.arg(org_id) AND f.subject_type = sqlc.arg(subject_type) AN
   AND f.name = ANY(sqlc.arg(names)::text[]);
 
 -- name: ListFactProviders :many
-SELECT id, name, service_account_id, state FROM pc.fact_providers
+SELECT id, name, service_account_id, gateway_id, connection_id, state FROM pc.fact_providers
 WHERE org_id = sqlc.arg(org_id) AND (sqlc.arg(include_disabled)::boolean OR state = 'ACTIVE')
 ORDER BY name, id
 LIMIT 500;
@@ -83,3 +102,10 @@ WHERE f.org_id = sqlc.arg(org_id) AND f.subject_type = sqlc.arg(subject_type) AN
   AND (cardinality(sqlc.arg(names)::text[]) = 0 OR f.name = ANY(sqlc.arg(names)::text[]))
 ORDER BY f.name
 LIMIT 500;
+
+-- name: CurrentFactValue :one
+-- The current value of a fact about a subject, locked for the write that
+-- replaces it, so a change is seen once (G0 M8, HR-205).
+SELECT value FROM pc.facts
+WHERE org_id = sqlc.arg(org_id) AND name = sqlc.arg(name) AND subject_type = sqlc.arg(subject_type) AND subject_id = sqlc.arg(subject_id)
+FOR UPDATE;

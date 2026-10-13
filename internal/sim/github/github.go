@@ -29,7 +29,9 @@ import (
 	"log/slog"
 	"maps"
 	"net/http"
+	"net/url"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -111,12 +113,18 @@ type Server struct {
 	jwts     []AppJWT
 	seq      int64
 	faults   Faults
+	// orgApps are other Apps installed on an organization, by its login.
+	orgApps map[string][]OrgApp
+	// perPage caps a page of a paged list below GitHub's 100 (tests).
+	perPage int
+	device  deviceState // GitHub sign-in through the device flow (device.go)
 }
 
 // New returns a simulator with no App, installation or repository.
 func New(log *slog.Logger) *Server {
 	return &Server{
 		log: log, now: time.Now, installs: map[int64]*Installation{}, tokens: map[string]*Token{}, repos: map[string]*Repo{},
+		orgApps: map[string][]OrgApp{},
 	}
 }
 
@@ -196,9 +204,11 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("DELETE /installation/token", s.revoke)
 	mux.HandleFunc("GET /app/installations/{id}", s.installation)
 	mux.HandleFunc("GET /installation/repositories", s.installationRepositories)
+	mux.HandleFunc("GET /orgs/{org}/installations", s.orgInstallations)
 	s.repoRoutes(mux)
 	s.pullRoutes(mux)
 	s.factRoutes(mux)
+	s.deviceRoutes(mux)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Simulated", "true")
 		mux.ServeHTTP(w, r)
@@ -274,6 +284,59 @@ func actor(t *Token) string {
 		return t.User
 	}
 	return "pantherclaw-sim[bot]"
+}
+
+// account is a user object as GitHub answers it: login, id and type,
+// "Bot" for an App's [bot] account and "User" otherwise; null for "",
+// an email linked to no account.
+func account(login string) any {
+	if login == "" {
+		return nil
+	}
+	typ := "User"
+	if strings.HasSuffix(login, "[bot]") {
+		typ = "Bot"
+	}
+	return map[string]any{"login": login, "id": accountID(login), "type": typ}
+}
+
+// SetPageSize caps every page of a paged list at n items (n > 0), below
+// GitHub's maximum of 100, so tests can make a list run past one page.
+func (s *Server) SetPageSize(n int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.perPage = n
+}
+
+// paged answers the page of items that per_page (30 by default, at most
+// 100) and page ask for, as GitHub pages a list, and sets a Link header
+// naming the next and last pages while there are more.
+func (s *Server) paged(w http.ResponseWriter, req *http.Request, items []map[string]any) []map[string]any {
+	q := req.URL.Query()
+	per := 30
+	if n, err := strconv.Atoi(q.Get("per_page")); err == nil && n > 0 {
+		per = min(n, 100)
+	}
+	if s.perPage > 0 {
+		per = min(per, s.perPage)
+	}
+	page := 1
+	if n, err := strconv.Atoi(q.Get("page")); err == nil && n > 0 {
+		page = n
+	}
+	last := max((len(items)+per-1)/per, 1)
+	if page < last {
+		link := func(p int) string {
+			u := url.URL{Scheme: "http", Host: req.Host, Path: req.URL.Path}
+			v := maps.Clone(q)
+			v.Set("page", strconv.Itoa(p))
+			u.RawQuery = v.Encode()
+			return "<" + u.String() + ">"
+		}
+		w.Header().Set("Link", link(page+1)+`; rel="next", `+link(last)+`; rel="last"`)
+	}
+	from := min((page-1)*per, len(items))
+	return items[from:min(from+per, len(items))]
 }
 
 // fail answers an error as GitHub does and returns the status.

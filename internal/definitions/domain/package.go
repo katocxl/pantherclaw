@@ -39,12 +39,15 @@ type Channel string
 // Channels. The hook channel is a cooperative client asking before it runs
 // a tool itself (G0 M6, the Claude Code hook): its mapping names the kind
 // of call (tool) and reads the client's JSON input like an MCP mapping. The
-// SDK channel reuses these mappings later (F099: the same effect gets the
-// same decision).
+// SDK channel is an agent SDK asking the same through the gateway's /sdk
+// face (G0 M8, HR-201). It has no mappings of its own: the gateway maps
+// its calls through the hook and MCP mappings (F099: the same effect gets
+// the same decision), so it is never a mapping's channel.
 const (
 	ChannelMCP  Channel = "mcp"
 	ChannelHTTP Channel = "http"
 	ChannelHook Channel = "hook"
+	ChannelSDK  Channel = "sdk"
 )
 
 // Mapping maps one MCP tool, HTTP route or hook call onto the definition.
@@ -205,6 +208,8 @@ func (d *Definition) validateMapping(i int) error {
 				return invalid("%s: path variable %s appears twice", at, v)
 			}
 		}
+	case ChannelSDK:
+		return invalid("%s: the sdk channel maps through hook and mcp mappings and has none of its own", at)
 	default:
 		return invalid("%s: channel must be mcp, http or hook", at)
 	}
@@ -330,6 +335,23 @@ func (p *Package) Definition(op string) (*Definition, bool) {
 		return nil, false
 	}
 	return &p.Definitions[i], true
+}
+
+// TestRead returns the package's connection test read: its one `test: true`
+// definition, when that is a read of the connection itself dispatched as an
+// HTTP GET, the only request a connection test may send and the only one a
+// test-purpose action token may name (G0 M8 track C, HR-188).
+func (p *Package) TestRead() (*Definition, bool) {
+	i := slices.IndexFunc(p.Definitions, func(d Definition) bool { return d.Test })
+	if i < 0 {
+		return nil, false
+	}
+	d := &p.Definitions[i]
+	if d.Access != AccessRead || d.Dispatch == nil || d.Dispatch.HTTP == nil || d.Dispatch.HTTP.Method != methods[0] ||
+		d.Target.Type != ConnectionTarget {
+		return nil, false
+	}
+	return d, true
 }
 
 // Version is a parsed MAJOR.MINOR.PATCH package version.

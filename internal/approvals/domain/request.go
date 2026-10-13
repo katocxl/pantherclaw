@@ -4,6 +4,8 @@
 package domain
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"time"
 
 	"github.com/katocxl/pantherclaw/internal/platform/statemachine"
@@ -147,4 +149,30 @@ func WaitState(s State, endReason string) string {
 // or invalidated request does not, and the next evaluation decides again.
 func Terminal(s State) bool {
 	return s == StateDeclined || s == StateExpired
+}
+
+// maxInvalidationKey bounds an invalidation key (00082).
+const maxInvalidationKey = 300
+
+// InvalidationKey is the key of the approval requests that a new value of
+// a fact about a subject supersedes (G0 M8, HR-205), for example
+// github.pull.head@github.pull_request:acme/payments#7. A key longer than
+// the column holds is written as "sha256:" and the SHA-256 of the key in
+// hex, so the requests about a long subject id are superseded too. Such a
+// key never equals a written-out one, which always has an "@".
+func InvalidationKey(fact, subjectType, subjectID string) string {
+	k := fact + "@" + subjectType + ":" + subjectID
+	if len(k) > maxInvalidationKey {
+		sum := sha256.Sum256([]byte(k))
+		return "sha256:" + hex.EncodeToString(sum[:])
+	}
+	return k
+}
+
+// MemberKey is the invalidation key of the approval requests bound to one
+// member of an object fact (HR-030 option B, founder decision 2026-10-13):
+// a new value of that member supersedes them, a change to any other member
+// does not. For example github.pull.head[sha]@github.pull_request:acme/payments#7.
+func MemberKey(fact, member, subjectType, subjectID string) string {
+	return InvalidationKey(fact+"["+member+"]", subjectType, subjectID)
 }
