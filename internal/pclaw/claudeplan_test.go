@@ -253,3 +253,38 @@ func TestHR208_InitEnrollsNothingWhenAFileChangedMeanwhile(t *testing.T) {
 		t.Fatalf("init: %d %s %s", code, out, errs)
 	}
 }
+
+// TestHR208_InitRefusesAKeyFileOthersCanRead: a key file that is not
+// enrolled yet is rewritten in place with its identifier, so one other
+// users can read is refused before anything is done, and keeps its mode;
+// once it is 0600 init enrolls it.
+func TestHR208_InitRefusesAKeyFileOthersCanRead(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("file modes are POSIX")
+	}
+	f := newInitFixture(t)
+	fake := &fakeEnrollment{}
+	f.enrollmentServer(t, fake)
+	kf, _, err := workloadclient.NewKeyFile()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := workloadclient.WriteKeyFile(f.key, kf, false); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(f.key, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	code, out, errs := f.run(t, "--agent", "0192aaaa-bbbb-7ccc-8ddd-000000000001")
+	st, _ := os.Stat(f.key)
+	if _, err := os.Stat(f.local()); code == 0 || err == nil || fake.issued != nil || !strings.Contains(errs, "other users can read") ||
+		st == nil || st.Mode().Perm() != 0o644 {
+		t.Fatalf("init: %d %s %s", code, out, errs)
+	}
+	if err := os.Chmod(f.key, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if code, out, errs := f.run(t, "--agent", "0192aaaa-bbbb-7ccc-8ddd-000000000001"); code != 0 || fake.admitted == nil {
+		t.Fatalf("init with a 0600 key file: %d %s %s", code, out, errs)
+	}
+}
