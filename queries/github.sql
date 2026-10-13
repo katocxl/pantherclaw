@@ -124,7 +124,7 @@ WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state IN ('PENDING', '
 -- under the lease it presents: only then may it submit the scan's
 -- findings (HR-209).
 -- name: GatewayScanRun :one
-SELECT r.id FROM pc.github_scan_runs r
+SELECT r.id, r.connection_id FROM pc.github_scan_runs r
 JOIN pc.verifications v ON v.org_id = r.org_id AND v.id = r.verification_id
 WHERE r.org_id = sqlc.arg(org_id) AND r.id = sqlc.arg(id) AND v.purpose = 'org_scan' AND v.state = 'LEASED'
   AND v.leased_by = sqlc.arg(gateway_id)::uuid AND v.lease_hash = sqlc.arg(lease_hash) AND v.lease_expires_at >= now();

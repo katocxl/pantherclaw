@@ -40,7 +40,8 @@ func (inv *Inventory) SubmitGitHubScan(ctx context.Context, org ids.OrgID, gatew
 	err := inv.pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
 		q := dbq.New(tx)
 		hash := sha256.Sum256(lease)
-		if _, err := q.GatewayScanRun(ctx, dbq.GatewayScanRunParams{OrgID: org, ID: scan, GatewayID: gateway, LeaseHash: hash[:]}); db.IsNoRows(err) {
+		run, err := q.GatewayScanRun(ctx, dbq.GatewayScanRunParams{OrgID: org, ID: scan, GatewayID: gateway, LeaseHash: hash[:]})
+		if db.IsNoRows(err) {
 			return ErrNoScanLease
 		} else if err != nil {
 			return err
@@ -62,6 +63,9 @@ func (inv *Inventory) SubmitGitHubScan(ctx context.Context, org ids.OrgID, gatew
 				observed = map[string]string{}
 			}
 			observed["kind"], observed["submitted_by"], observed["scan_run"] = f.Kind, w.by, scan.String()
+			// The scan's connection, from its lease, whatever the gateway
+			// said (G5 review follow-up).
+			observed["connection"] = run.ConnectionID.String()
 			obs, err := json.Marshal(observed)
 			if err != nil {
 				return err

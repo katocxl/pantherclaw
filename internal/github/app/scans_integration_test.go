@@ -187,7 +187,8 @@ func TestHR209_OnlyTheLeaseHoldingGatewaySubmitsFindingsAndTheyGrantNothing(t *t
 	inv := aapp.NewInventory(e.pool, edition(billing.Team))
 	key := func(b byte) [32]byte { return [32]byte{b} }
 	findings := []aapp.ScanFinding{
-		{Kind: "github_workflow", Key: key(1), Attributes: map[string]string{"repository": "acme/payments", "path": ".github/workflows/deploy.yml", "environments": "production"}},
+		{Kind: "github_workflow", Key: key(1), Attributes: map[string]string{"repository": "acme/payments", "path": ".github/workflows/deploy.yml", "environments": "production",
+			"connection": ids.NewV7().String()}}, // another connection, which the server replaces with the scan's (G5 review follow-up)
 		{Kind: "github_mcp_config", Key: key(2), Attributes: map[string]string{"repository": "acme/payments", "name": "github", "command": "npx"}},
 	}
 	if _, err := inv.SubmitGitHubScan(context.Background(), e.org, gateway, scan.ID, nil, findings); !errors.Is(err, aapp.ErrNoScanLease) {
@@ -223,6 +224,10 @@ func TestHR209_OnlyTheLeaseHoldingGatewaySubmitsFindingsAndTheyGrantNothing(t *t
 	}
 	if n := e.count(t, "SELECT count(*) FROM pc.agents WHERE org_id = $1 AND state = 'DISCOVERED'", e.org); n != 2 {
 		t.Fatalf("%d discovered agents", n)
+	}
+	if n := e.count(t, "SELECT count(*) FROM pc.discoveries WHERE org_id = $1 AND source = 'github_scan' AND observed ->> 'connection' = $2",
+		e.org, conn.String()); n != 2 {
+		t.Fatalf("%d findings name the scan's connection", n)
 	}
 	if n := e.count(t, "SELECT count(*) FROM pc.grants WHERE org_id = $1", e.org); n != 0 {
 		t.Fatalf("findings granted something: %d grants", n)
