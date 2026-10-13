@@ -16,3 +16,7 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/pantherclaw"]
+
+[tool.uv]
+# DEPENDENCY_POLICY: nothing uploaded in the last 7 days is locked (the cooldown).
+exclude-newer = "7 days"
