@@ -72,8 +72,9 @@ func refundInput(t testing.TB, taskLabel string) domain.ActionInput {
 
 // TestHR034_DisplayHashIsGoldenForMockPayments pins the display of a held
 // mock-payments refund and its hash: the template title filled with
-// canonical values, the consequence first, the fact with its provider and
-// age, and the task label only in the untrusted block.
+// canonical values, the consequence first, the fact it binds nothing of
+// without a value, provider or age (HR-030 option B), and the task label
+// only in the untrusted block.
 func TestHR034_DisplayHashIsGoldenForMockPayments(t *testing.T) {
 	disp, err := domain.RenderAction(refundInput(t, "refund ch_1 for ticket 77"))
 	if err != nil {
