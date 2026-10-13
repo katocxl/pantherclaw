@@ -71,6 +71,9 @@ func (f *Flow) Token(ctx context.Context, show func(Code)) (string, error) {
 	if start.DeviceCode == "" || start.UserCode == "" {
 		return "", fmt.Errorf("deviceflow: GitHub gave no device code (%q): is the App's device flow enabled?", start.Error)
 	}
+	if !sameOrigin(start.VerificationURI, f.WebURL) {
+		return "", fmt.Errorf("deviceflow: the sign-in page %q is not on %s", start.VerificationURI, f.WebURL)
+	}
 	interval := time.Duration(max(start.Interval, 1)) * time.Second
 	life := min(time.Duration(start.ExpiresIn)*time.Second, maxWait)
 	if life <= 0 {
@@ -110,6 +113,14 @@ func (f *Flow) Token(ctx context.Context, show func(Code)) (string, error) {
 		}
 	}
 	return "", ErrExpired
+}
+
+// sameOrigin reports whether a sign-in page is on GitHub's web origin, so
+// the code a person is shown is entered at GitHub and nowhere else.
+func sameOrigin(page, web string) bool {
+	p, err := url.Parse(page)
+	w, werr := url.Parse(web)
+	return err == nil && werr == nil && p.User == nil && p.Scheme == w.Scheme && strings.EqualFold(p.Host, w.Host) && p.Host != ""
 }
 
 func (f *Flow) wait(ctx context.Context, d time.Duration) error {
