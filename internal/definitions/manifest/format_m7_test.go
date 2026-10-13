@@ -95,7 +95,7 @@ func TestHR190_APackagesHTTPReadsAreTheReadsAGatewayCanMake(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := p.HTTPReads()
-	want := []string{"payments.refund.get", "payments.refund.list", "payments.refund.recent"}
+	want := []string{"payments.account.read", "payments.refund.get", "payments.refund.list", "payments.refund.recent"}
 	if len(got) != len(want) {
 		t.Fatalf("reads %v, want %v", got, want)
 	}

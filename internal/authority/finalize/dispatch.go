@@ -4,12 +4,11 @@
 package finalize
 
 import (
-	"encoding/hex"
-	"encoding/json/v2"
 	"net/url"
 	"regexp"
 	"time"
 
+	"github.com/katocxl/pantherclaw/internal/authority/actiontoken"
 	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 )
@@ -17,9 +16,9 @@ import (
 // Action tokens (G0 M6 design decision 17, PAP-1 §10, HR-188).
 const (
 	// TypeActionToken is the JOSE type of an action token.
-	TypeActionToken = "pap-action+jwt" //nolint:gosec // G101: a JOSE type name, not a credential
+	TypeActionToken = actiontoken.Type
 	// ActionTokenTTL is an action token's lifetime.
-	ActionTokenTTL = 60 * time.Second
+	ActionTokenTTL = actiontoken.TTL
 	// AccessTargetEnforced is the access mode whose dispatches carry an
 	// action token.
 	AccessTargetEnforced = "target_enforced"
@@ -71,29 +70,6 @@ type Dispatching struct {
 	Now           time.Time
 }
 
-type actionClaims struct {
-	Iss string    `json:"iss"`
-	Aud string    `json:"aud"`
-	Jti string    `json:"jti"`
-	Iat int64     `json:"iat"`
-	Exp int64     `json:"exp"`
-	Pap actionPAP `json:"pap"`
-}
-
-type actionPAP struct {
-	V      int          `json:"v"`
-	Txn    string       `json:"txn"`
-	Act    string       `json:"act"`
-	BH     string       `json:"bh"`
-	Op     string       `json:"op"`
-	Target actionTarget `json:"target"`
-}
-
-type actionTarget struct {
-	Type string `json:"type"`
-	ID   string `json:"id"`
-}
-
 // actionToken mints the action token of a target-enforced dispatch (HR-188):
 // audience the connection, at most 60 seconds, a single-use id, and the
 // transaction, effective action hash, body hash, operation and target. It
@@ -108,18 +84,10 @@ func (a *Authority) actionToken(d Dispatching, out Outbound) (string, *ids.UUID,
 	if a.ActionTokens == nil {
 		return "", nil, pcerr.New(pcerr.Unavailable, "ACTION_TOKENS_UNAVAILABLE", "action tokens are not configured")
 	}
-	jti := ids.NewV7()
-	b, err := json.Marshal(actionClaims{
-		Iss: a.issuer(), Aud: d.Connection.String(), Jti: jti.String(), Iat: d.Now.Unix(), Exp: d.Now.Add(ActionTokenTTL).Unix(),
-		Pap: actionPAP{
-			V: 1, Txn: d.Transaction.String(), Act: hex.EncodeToString(d.EffectiveHash), BH: hex.EncodeToString(out.BodySHA256),
-			Op: d.Operation, Target: actionTarget{Type: d.TargetType, ID: d.TargetID},
-		},
+	tok, jti, err := actiontoken.Mint(a.ActionTokens, actiontoken.Token{
+		Issuer: a.issuer(), Audience: *d.Connection, Transaction: d.Transaction, Act: d.EffectiveHash, BodySHA256: out.BodySHA256,
+		Operation: d.Operation, TargetType: d.TargetType, TargetID: d.TargetID, Now: d.Now,
 	})
-	if err != nil {
-		return "", nil, err
-	}
-	tok, err := a.ActionTokens.Sign(TypeActionToken, b)
 	if err != nil {
 		return "", nil, err
 	}

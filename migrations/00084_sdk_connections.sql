@@ -14,8 +14,10 @@
 --   tasks of purpose connection_test (M7's machinery) and reach the target.
 --   A read or target_verifier test names the operation it reached. M9
 --   lifts the cooperative cap for an operation only on a passing
---   target_verifier test (HR-210). A test result is evidence: pc_app only
---   moves an open test to its result and never deletes one.
+--   target_verifier test (HR-210). Its gateway gets test-purpose action
+--   tokens once per lease attempt (HR-188's exception), recorded in
+--   tokens_attempt. A test result is evidence: pc_app only moves an open
+--   test to its result and never deletes one.
 -- * tool_observations: the OBSERVE_ONLY records of tools an agent SDK ran
 --   without a mapping (HR-200), which M9's route inventory reads. The tool
 --   name is untrusted and only its input's digest is kept. Append-only.
@@ -64,6 +66,9 @@ CREATE TABLE pc.connection_tests (
     -- The gateway that ran a leased test, and its lease.
     gateway_id      uuid,
     verification_id uuid,
+    -- The lease attempt whose test-purpose action tokens were minted: a
+    -- target_verifier test gets one mint per attempt (HR-188's exception).
+    tokens_attempt  integer     CHECK (tokens_attempt IS NULL OR tokens_attempt >= 1),
     result          text        CHECK (result IS NULL OR result IN ('PASSED', 'FAILED')),
     -- One {check, passed, detail} object per check, in order.
     checks          jsonb       NOT NULL DEFAULT '[]' CHECK (jsonb_typeof(checks) = 'array' AND octet_length(checks::text) <= 16384),
@@ -78,6 +83,7 @@ CREATE TABLE pc.connection_tests (
     FOREIGN KEY (org_id, verification_id) REFERENCES pc.verifications (org_id, id),
     CHECK ((kind = 'credential') = (verification_id IS NULL)),
     CHECK ((kind = 'credential') = (operation IS NULL)),
+    CHECK (tokens_attempt IS NULL OR kind = 'target_verifier'),
     CHECK ((state IN ('DONE', 'FAILED')) = (finished_at IS NOT NULL)),
     CHECK ((state = 'DONE') = (result IS NOT NULL))
 );
@@ -102,6 +108,12 @@ BEGIN
     IF OLD.state NOT IN ('PENDING', 'RUNNING') OR NEW.state NOT IN ('RUNNING', 'DONE', 'FAILED') THEN
         RAISE EXCEPTION 'connection test %: % cannot become %', OLD.id, OLD.state, NEW.state
             USING ERRCODE = 'check_violation';
+    END IF;
+    -- A token mint is recorded once per attempt and never taken back.
+    IF NEW.tokens_attempt IS DISTINCT FROM OLD.tokens_attempt
+        AND NOT (coalesce(NEW.tokens_attempt, 0) > coalesce(OLD.tokens_attempt, 0)) THEN
+        RAISE EXCEPTION 'connection test %: its token mint for attempt % cannot change to %', OLD.id, OLD.tokens_attempt,
+            NEW.tokens_attempt USING ERRCODE = 'check_violation';
     END IF;
     RETURN NEW;
 END;
@@ -146,7 +158,7 @@ $$;
 
 GRANT SELECT, INSERT ON pc.connection_capabilities, pc.connection_tests, pc.tool_observations TO pc_app;
 GRANT UPDATE (approved, state, approved_by, approved_at, superseded_at) ON pc.connection_capabilities TO pc_app;
-GRANT UPDATE (state, gateway_id, result, checks, detail_sha256, finished_at) ON pc.connection_tests TO pc_app;
+GRANT UPDATE (state, gateway_id, tokens_attempt, result, checks, detail_sha256, finished_at) ON pc.connection_tests TO pc_app;
 GRANT SELECT ON pc.connection_capabilities, pc.connection_tests, pc.tool_observations TO pc_audit_ro;
 
 -- Connection tests reach the target as verification tasks of their own
