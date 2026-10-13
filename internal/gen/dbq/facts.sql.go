@@ -62,6 +62,41 @@ func (q *Queries) DisableFactProvider(ctx context.Context, orgID ids.OrgID, iD i
 	return q.db.Exec(ctx, disableFactProvider, orgID, iD)
 }
 
+const disableMovedGatewayProviders = `-- name: DisableMovedGatewayProviders :many
+UPDATE pc.fact_providers SET state = 'DISABLED'
+WHERE org_id = $1 AND connection_id = $2 AND gateway_id IS NOT NULL
+  AND gateway_id <> $3 AND state = 'ACTIVE'
+RETURNING id, gateway_id
+`
+
+type DisableMovedGatewayProvidersRow struct {
+	ID        ids.UUID
+	GatewayID *ids.UUID
+}
+
+// DisableMovedGatewayProviders disables the active providers of a
+// connection that are bound to a gateway other than the one now serving
+// it, and their declarations (#299 review follow-up).
+func (q *Queries) DisableMovedGatewayProviders(ctx context.Context, orgID ids.OrgID, connectionID *ids.UUID, gatewayID *ids.UUID) ([]DisableMovedGatewayProvidersRow, error) {
+	rows, err := q.db.Query(ctx, disableMovedGatewayProviders, orgID, connectionID, gatewayID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []DisableMovedGatewayProvidersRow{}
+	for rows.Next() {
+		var i DisableMovedGatewayProvidersRow
+		if err := rows.Scan(&i.ID, &i.GatewayID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getFact = `-- name: GetFact :one
 SELECT observed_at FROM pc.facts
 WHERE org_id = $1 AND name = $2 AND subject_type = $3
@@ -203,6 +238,18 @@ func (q *Queries) InsertFactProvider(ctx context.Context, arg InsertFactProvider
 		arg.CreatedBy,
 	)
 	return err
+}
+
+const isGatewayProvider = `-- name: IsGatewayProvider :one
+SELECT (gateway_id IS NOT NULL)::boolean AS gateway FROM pc.fact_providers WHERE org_id = $1 AND id = $2
+`
+
+// IsGatewayProvider reports whether a provider is a gateway's.
+func (q *Queries) IsGatewayProvider(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (bool, error) {
+	row := q.db.QueryRow(ctx, isGatewayProvider, orgID, iD)
+	var gateway bool
+	err := row.Scan(&gateway)
+	return gateway, err
 }
 
 const listActiveFactCatalog = `-- name: ListActiveFactCatalog :many
@@ -458,8 +505,10 @@ SELECT f.name, f.value, f.observed_at, f.recorded_at, f.provider_id, d.value_typ
 FROM pc.facts f
 JOIN pc.fact_providers p ON p.org_id = f.org_id AND p.id = f.provider_id AND p.state = 'ACTIVE'
 JOIN pc.fact_declarations d ON d.org_id = f.org_id AND d.provider_id = f.provider_id AND d.name = f.name AND d.active
+LEFT JOIN pc.connections c ON c.org_id = p.org_id AND c.id = p.connection_id
 WHERE f.org_id = $1 AND f.subject_type = $2 AND f.subject_id = $3
   AND f.name = ANY($4::text[])
+  AND (p.gateway_id IS NULL OR (c.gateway_id = p.gateway_id AND c.state = 'ACTIVE'))
 `
 
 type ListSubjectFactsParams struct {
@@ -479,6 +528,8 @@ type ListSubjectFactsRow struct {
 }
 
 // ListSubjectFacts returns the facts of active providers about one subject.
+// A gateway provider's facts count only while its gateway still serves
+// its connection and the connection is active (#299 review follow-up).
 func (q *Queries) ListSubjectFacts(ctx context.Context, arg ListSubjectFactsParams) ([]ListSubjectFactsRow, error) {
 	rows, err := q.db.Query(ctx, listSubjectFacts,
 		arg.OrgID,
@@ -509,6 +560,24 @@ func (q *Queries) ListSubjectFacts(ctx context.Context, arg ListSubjectFactsPara
 		return nil, err
 	}
 	return items, nil
+}
+
+const lockServedConnection = `-- name: LockServedConnection :one
+SELECT c.id
+FROM pc.fact_providers p
+JOIN pc.connections c ON c.org_id = p.org_id AND c.id = p.connection_id AND c.gateway_id = p.gateway_id AND c.state = 'ACTIVE'
+WHERE p.org_id = $1 AND p.id = $2 AND p.state = 'ACTIVE'
+FOR SHARE OF c
+`
+
+// LockServedConnection locks, for the fact write's transaction, the
+// connection a gateway provider reports for, while its gateway still
+// serves it and it is active; no row otherwise (#299 review follow-up).
+func (q *Queries) LockServedConnection(ctx context.Context, orgID ids.OrgID, providerID ids.UUID) (ids.UUID, error) {
+	row := q.db.QueryRow(ctx, lockServedConnection, orgID, providerID)
+	var id ids.UUID
+	err := row.Scan(&id)
+	return id, err
 }
 
 const putFact = `-- name: PutFact :execresult
