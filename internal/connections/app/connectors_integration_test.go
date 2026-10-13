@@ -126,7 +126,7 @@ func TestHR084_ConnectorsRunOnlyOnCustomerHostedGateways(t *testing.T) {
 	s = spec()
 	s.Command = []string{"/server", "--stdio", "--verbose"}
 	s.Environment["NODE_OPTIONS"] = "--require /srv/hook.js"
-	u, err = e.svc.Update(e.admin, app.UpdateInput{ID: c.ID, Revision: u.Revision, Connector: s})
+	_, err = e.svc.Update(e.admin, app.UpdateInput{ID: c.ID, Revision: u.Revision, Connector: s})
 	if err != nil || e.notes.count("security.connection_weakened") != weakened+2 || !strings.Contains(e.notes.last["change"], "connector") {
 		t.Fatalf("an environment-only change: %v %v %v", err, e.notes.types, e.notes.last)
 	}
