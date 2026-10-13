@@ -48,15 +48,24 @@ type Engine struct {
 	// declarations, by fact name. A rule reading a fact no provider
 	// declares is refused at compile time.
 	Facts map[string]fdomain.Type
+	// Subjects, when set, is the subject type each fact is declared about.
+	// A rule on an operation that is only ever a consequence may then read
+	// only facts declared about that operation's target type: the
+	// Authority reads them about the consequence's own target, and a fact
+	// no one reports about it would make every action that may cause the
+	// consequence CANNOT_AUTHORIZE (G0 M8, HR-206). Policy versions set
+	// it; the Authority does not need to.
+	Subjects map[string]string
 }
 
 // Compiled is a bundle with its conditions compiled per definition digest.
 type Compiled struct {
-	Bundle *domain.Bundle
-	limits celenv.Limits
-	facts  map[string]fdomain.Type
-	mu     sync.Mutex
-	byDef  map[string]map[string]compiledRule // definition digest → rule id
+	Bundle   *domain.Bundle
+	limits   celenv.Limits
+	facts    map[string]fdomain.Type
+	subjects map[string]string
+	mu       sync.Mutex
+	byDef    map[string]map[string]compiledRule // definition digest → rule id
 }
 
 type compiledRule struct {
@@ -73,7 +82,7 @@ func (e *Engine) Compile(b *domain.Bundle, definitions []*defs.Definition) (*Com
 	if err := b.Validate(); err != nil {
 		return nil, err
 	}
-	c := &Compiled{Bundle: b, limits: e.Limits, facts: e.Facts, byDef: map[string]map[string]compiledRule{}}
+	c := &Compiled{Bundle: b, limits: e.Limits, facts: e.Facts, subjects: e.Subjects, byDef: map[string]map[string]compiledRule{}}
 	var errs []error
 	for _, d := range definitions {
 		for id, cr := range c.forDefinition(d) {
@@ -110,7 +119,8 @@ func (c *Compiled) forDefinition(d *defs.Definition) map[string]compiledRule {
 		}
 		schema := ActionSchema(d)
 		maps.Copy(schema, FactsSchema(needs, c.facts))
-		env, err := celenv.New(c.limits, schema, ActionVariable, FactsVariable, NowVariable)
+		maps.Copy(schema, ConsequenceSchema)
+		env, err := celenv.New(c.limits, schema, ActionVariable, FactsVariable, NowVariable, ConsequenceVariable)
 		if err != nil {
 			rules[r.ID] = compiledRule{err: err}
 			continue
@@ -141,6 +151,7 @@ func (c *Compiled) Evaluate(ctx context.Context, d *defs.Definition, a actionir.
 		return domain.Outcome{}, err
 	}
 	action := ActionRecord(d, a, vals, in.DestinationClass)
+	consequence := ConsequenceRecord(in.Consequence)
 	now := in.Now.Unix()
 	compiled := c.forDefinition(d)
 	rules := make([]*domain.Rule, 0, len(c.Bundle.Rules))
@@ -150,13 +161,24 @@ func (c *Compiled) Evaluate(ctx context.Context, d *defs.Definition, a actionir.
 	slices.SortStableFunc(rules, func(x, y *domain.Rule) int {
 		return slices.Index(kindOrder, x.Kind) - slices.Index(kindOrder, y.Kind)
 	})
+	// An unknown consequence could be any of its outcomes (HR-206): every
+	// requirement that covers its operation applies, whatever its condition
+	// or environment, so the hold asks for at least what each outcome would.
+	// FORBID and the other rules are evaluated as for any action.
+	unknown := in.Consequence != nil && in.Consequence.State == "UNKNOWN"
 	var spent uint64
 	results := make([]domain.Result, 0, len(rules))
 	for _, r := range rules {
 		res := domain.Result{Rule: r}
 		cr, inScope := compiled[r.ID]
 		switch {
-		case !inScope || !r.Applies(a.Operation, a.Env):
+		case !inScope || !r.CoversOperation(a.Operation):
+			res.Effect = domain.OutOfScope
+		case unknown && (r.Kind == domain.RequireApproval || r.Kind == domain.RequireStepUp) && cr.err != nil:
+			res.Effect, res.Detail = domain.EvalError, cr.err.Error()
+		case unknown && (r.Kind == domain.RequireApproval || r.Kind == domain.RequireStepUp):
+			res.Effect, res.Detail = domain.Matched, "the consequence is unknown, so this requirement applies whatever its condition"
+		case !r.Applies(a.Operation, a.Env):
 			res.Effect = domain.OutOfScope
 		case spent >= budget:
 			res.Effect, res.Detail = domain.CostExceeded, "tenant cost budget exhausted before this rule"
@@ -165,7 +187,7 @@ func (c *Compiled) Evaluate(ctx context.Context, d *defs.Definition, a actionir.
 		case missingFact(cr.needs, in.Facts) != "":
 			res.Effect, res.Detail = domain.FactsMissing, "fact "+missingFact(cr.needs, in.Facts)+" is missing or stale"
 		default:
-			vars := map[string]any{"action": action, "facts": FactsRecord(cr.needs, in.Facts), "now": now}
+			vars := map[string]any{"action": action, "facts": FactsRecord(cr.needs, in.Facts), "now": now, "consequence": consequence}
 			matched, cost, err := cr.prog.EvalBool(ctx, vars)
 			spent += cost
 			switch {
@@ -279,6 +301,10 @@ func (c *Compiled) factsFor(d *defs.Definition, r *domain.Rule) ([]string, error
 		if _, ok := c.facts[f.Name]; !ok {
 			return nil, fmt.Errorf("no provider declares fact %q", f.Name)
 		}
+		if s, ok := c.subjects[f.Name]; ok && s != d.Target.Type && d.Access == defs.AccessWrite && len(d.Mappings) == 0 {
+			return nil, fmt.Errorf("%s is only ever a consequence, decided with facts about its own target, a %s, but fact %q is declared about a %s: "+
+				"a rule on a consequence may read only facts about what it acts on", d.Operation, d.Target.Type, f.Name, s)
+		}
 		needs = append(needs, f.Name)
 	}
 	for _, p := range d.Prerequisites {
@@ -301,6 +327,9 @@ type Input struct {
 	// through, from the Authority's own records ("public" or "internal";
 	// "" for an action without a connection, HR-079).
 	DestinationClass string
+	// Consequence is the consequence being decided, when the action is one
+	// (G0 M8, HR-206); nil for the action itself.
+	Consequence *Consequence
 }
 
 func missingFact(needs []string, have map[string]fdomain.Value) string {

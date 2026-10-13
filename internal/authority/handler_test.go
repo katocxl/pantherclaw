@@ -6,6 +6,8 @@ package authority
 import (
 	"testing"
 
+	"github.com/katocxl/pantherclaw/internal/actionir"
+	"github.com/katocxl/pantherclaw/internal/authority/consequences"
 	defs "github.com/katocxl/pantherclaw/internal/definitions/domain"
 	pantherclawv1 "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
 	pdomain "github.com/katocxl/pantherclaw/internal/policy/domain"
@@ -25,6 +27,24 @@ func TestHR191_TheGatewayIsNotSentVerifyObligations(t *testing.T) {
 	}
 	if out := gatewayObligations([]pdomain.Obligation{{Kind: pdomain.Verify, Level: defs.LevelFollowUp}}); len(out) != 0 {
 		t.Fatalf("a verify obligation reached the gateway: %v", out)
+	}
+}
+
+// TestHR206_TheAnswerStatesTheConsequences: the gateway is told each
+// consequence a rule predicted, could not rule out or ruled out, with why;
+// a rule that could not be evaluated is in the checklist instead.
+func TestHR206_TheAnswerStatesTheConsequences(t *testing.T) {
+	out := consequencesToProto([]consequences.Consequence{
+		{Rule: "a", Operation: "x.deploy", Target: actionir.Target{Type: "x.repo", ID: "acme/pay"}, State: consequences.Predicted, Environments: []string{"prod"}},
+		{Rule: "b", Operation: "x.deploy", State: consequences.Unknown, Unknown: []string{"x.fact is not known"}},
+		{Rule: "c", Operation: "x.deploy", Err: consequences.ErrRule},
+		{Rule: "d", Operation: "x.deploy", State: consequences.NotTriggered},
+	})
+	if len(out) != 3 || out[0].GetState() != pantherclawv1.ConsequenceState_CONSEQUENCE_STATE_PREDICTED || out[0].GetTargetId() != "acme/pay" ||
+		out[0].GetEnvironments()[0] != "prod" || out[1].GetState() != pantherclawv1.ConsequenceState_CONSEQUENCE_STATE_UNKNOWN ||
+		out[1].GetUnknown()[0] != "x.fact is not known" || out[2].GetRuleId() != "d" ||
+		out[2].GetState() != pantherclawv1.ConsequenceState_CONSEQUENCE_STATE_NOT_TRIGGERED {
+		t.Fatalf("consequences %v", out)
 	}
 }
 
