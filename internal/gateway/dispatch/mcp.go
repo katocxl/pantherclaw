@@ -83,7 +83,7 @@ func (e *Engine) sendMCP(ctx context.Context, r Result, conn *control.Connection
 	}
 	var secret []byte
 	if conn.GetAccessMode() == "pantherclaw_held" {
-		if secret, err = e.openCredential(conn); err != nil {
+		if secret, err = e.openStatic(conn); err != nil {
 			e.log.WarnContext(ctx, "gateway.credential_unavailable", slog.String("transaction_id", want.Txn),
 				slog.String("connection_id", conn.GetId()), pclog.Err(err))
 			return e.record(ctx, r, want, pb.Outcome_OUTCOME_FAILED, 0, nil, 0, EnforcementFailed, CodeCredential, t)
@@ -172,7 +172,7 @@ func (e *Engine) CheckDrift(ctx context.Context, conn *control.Connection) ([]Dr
 	}
 	var secret []byte
 	if conn.GetAccessMode() == "pantherclaw_held" {
-		if secret, err = e.openCredential(conn); err != nil {
+		if secret, err = e.openStatic(conn); err != nil {
 			return nil, err
 		}
 		defer clear(secret)

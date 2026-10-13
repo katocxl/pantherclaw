@@ -4,6 +4,9 @@
 package domain_test
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"strings"
 	"testing"
 	"time"
 
@@ -99,5 +102,34 @@ func TestHR174_WaitersSeeStatesOnly(t *testing.T) {
 		if got := domain.WaitState(c.s, c.reason); got != c.want {
 			t.Errorf("%s/%s: %s, want %s", c.s, c.reason, got, c.want)
 		}
+	}
+}
+
+// TestHR205_ALongInvalidationKeyIsHashedNotDropped: a key that fits the
+// column (00082, 300 characters) is written out; a longer one is its
+// SHA-256, so the requests about a long subject id are still superseded
+// when the fact changes. The two forms never meet, and each subject keeps
+// its own key.
+func TestHR205_ALongInvalidationKeyIsHashedNotDropped(t *testing.T) {
+	if k := domain.InvalidationKey("github.pull.head", "github.pull_request", "acme/payments#7"); k != "github.pull.head@github.pull_request:acme/payments#7" {
+		t.Fatalf("short key %q", k)
+	}
+	id := "ch_" + strings.Repeat("a", 300)
+	long := "payments.charge.state@payments.charge:" + id
+	sum := sha256.Sum256([]byte(long))
+	k := domain.InvalidationKey("payments.charge.state", "payments.charge", id)
+	if k != "sha256:"+hex.EncodeToString(sum[:]) || len(k) > 300 || strings.Contains(k, "@") {
+		t.Fatalf("long key %q", k)
+	}
+	if again := domain.InvalidationKey("payments.charge.state", "payments.charge", id); again != k {
+		t.Fatalf("not stable: %q, %q", k, again)
+	}
+	if other := domain.InvalidationKey("payments.charge.state", "payments.charge", id+"b"); other == k {
+		t.Fatal("two long subjects share a key")
+	}
+	// Exactly at the limit is still written out.
+	edge := "ch_" + strings.Repeat("a", 300-len("payments.charge.state@payments.charge:")-3)
+	if k := domain.InvalidationKey("payments.charge.state", "payments.charge", edge); len(k) != 300 || !strings.Contains(k, "@") {
+		t.Fatalf("a 300-byte key: %d %q", len(k), k)
 	}
 }

@@ -122,11 +122,22 @@ func TestHR188_OnlyTargetEnforcedConnectionsGetActionTokens(t *testing.T) {
 	}
 }
 
-// cooperative maps a refund as a cooperative SDK call would report it.
+// cooperative maps a refund as the /sdk face does for an SDK's call: through
+// an agent-held http connection, on the sdk channel (HR-201).
 func cooperative(t *testing.T, s *pipelinetest.Scenario, run ids.UUID) pipeline.Request {
 	t.Helper()
+	base, err := s.W.Connection(context.Background(), s.Org, s.Connection)
+	if err != nil {
+		t.Fatal(err)
+	}
+	held := ids.NewV7()
+	s.W.PutConnection(pipeline.Connection{
+		ID: held, Gateway: base.Gateway, Kind: "http", Package: base.Package, State: "ACTIVE", AccessMode: "agent_held",
+		DefaultMode: pipeline.ModeEnforce, Modes: map[string]string{},
+	})
 	p, err := s.Mapper.MCP(context.Background(), mapping.Context{
 		Org: s.Org.String(), Env: s.Env.String(), RunID: run.String(), ActionID: ids.NewV7().String(), AgentInstance: s.Instance.String(),
+		Connection: held.String(),
 	}, "create_refund", jsontext.Value(pipelinetest.Refund("ch_1", "30.00")))
 	if err != nil {
 		t.Fatal(err)
