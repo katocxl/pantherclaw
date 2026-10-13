@@ -124,3 +124,45 @@ func onlyTheUserReads(t *testing.T, path string) {
 	}
 	setAccess(t, path, access(user.User.Sid, windows.GRANT_ACCESS, windows.GENERIC_ALL))
 }
+
+// TestHR208_AKeyFilePclawWritesIsItsOwnOnWindows: a key file pclaw writes
+// gets an access list of its own, so init accepts it even in a folder that
+// lets everyone read what it holds, where any other new file is refused.
+func TestHR208_AKeyFilePclawWritesIsItsOwnOnWindows(t *testing.T) {
+	user, err := windows.GetCurrentProcessToken().GetTokenUser()
+	if err != nil {
+		t.Fatal(err)
+	}
+	everyone := wellKnown(t, windows.WinWorldSid)
+	dir := t.TempDir()
+	inherited := func(e windows.EXPLICIT_ACCESS) windows.EXPLICIT_ACCESS {
+		e.Inheritance = windows.SUB_CONTAINERS_AND_OBJECTS_INHERIT
+		return e
+	}
+	setAccess(t, dir, inherited(access(user.User.Sid, windows.GRANT_ACCESS, windows.GENERIC_ALL)),
+		inherited(access(everyone, windows.GRANT_ACCESS, windows.GENERIC_READ)))
+
+	other := dir + `\other.json`
+	if err := os.WriteFile(other, []byte("{}"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if who, _, err := keyFileReaders(other); err != nil || !strings.Contains(who, account(everyone)) {
+		t.Fatalf("a file the folder lets everyone read: %q %v", who, err)
+	}
+	kf, _, err := workloadclient.NewKeyFile()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, replace := range []bool{false, true} {
+		key := dir + `\key.json`
+		if replace {
+			key = other
+		}
+		if err := workloadclient.WriteKeyFile(key, kf, replace); err != nil {
+			t.Fatal(err)
+		}
+		if who, _, err := keyFileReaders(key); who != "" || err != nil {
+			t.Fatalf("a key file pclaw wrote (replace %v): %q %v", replace, who, err)
+		}
+	}
+}
