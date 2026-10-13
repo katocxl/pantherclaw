@@ -89,6 +89,11 @@ type Input struct {
 	// Deadline is the hold deadline the requirement sets (0: none).
 	Deadline time.Duration
 	Source   Source
+	// IndependentOf names, for an independent approval, the fact listing
+	// the people the approver must not be (G0 M8, HR-207).
+	IndependentOf string
+	// Window: the approval is consumed only inside a change window.
+	Window bool
 }
 
 // Requirement is one merged requirement of a request.
@@ -100,6 +105,12 @@ type Requirement struct {
 	Subject     string   `json:"subject,omitzero"`
 	Method      string   `json:"method,omitzero"`
 	Sources     []Source `json:"sources"`
+	// IndependentOf names the fact listing, by GitHub user id, the people
+	// an independent approver must not be (G0 M8, HR-207).
+	IndependentOf string `json:"independent_of,omitzero"`
+	// Window: the approval is consumed only inside an active change window
+	// for the consequences' environments (G0 M8, HR-207).
+	Window bool `json:"window,omitzero"`
 }
 
 // Needed is how many distinct people must respond.
@@ -113,12 +124,14 @@ func (r Requirement) Needed() int {
 // BoundRequirement is what the binding covers of a requirement: who must
 // act, not where the requirement came from (that is in the decision basis).
 type BoundRequirement struct {
-	Kind        string `json:"kind"`
-	Role        string `json:"role,omitzero"`
-	Count       int    `json:"count,omitzero"`
-	Independent bool   `json:"independent,omitzero"`
-	Subject     string `json:"subject,omitzero"`
-	Method      string `json:"method,omitzero"`
+	Kind          string `json:"kind"`
+	Role          string `json:"role,omitzero"`
+	Count         int    `json:"count,omitzero"`
+	Independent   bool   `json:"independent,omitzero"`
+	Subject       string `json:"subject,omitzero"`
+	Method        string `json:"method,omitzero"`
+	IndependentOf string `json:"independent_of,omitzero"`
+	Window        bool   `json:"window,omitzero"`
 }
 
 // Bound returns the bound part of a merged list.
@@ -127,6 +140,8 @@ func Bound(rs []Requirement) []BoundRequirement {
 	for _, r := range rs {
 		out = append(out, BoundRequirement{
 			Kind: r.Kind, Role: r.Role, Count: r.Count, Independent: r.Independent, Subject: r.Subject, Method: r.Method,
+			IndependentOf: r.IndependentOf,
+			Window:        r.Window,
 		})
 	}
 	return out
@@ -195,6 +210,10 @@ func Merge(ins []Input) ([]Requirement, time.Duration, error) {
 		if in.Kind == KindApproval {
 			r.Count = max(r.Count, in.Count)
 			r.Independent = r.Independent || in.Independent
+			if in.IndependentOf != "" && r.IndependentOf == "" {
+				r.IndependentOf = in.IndependentOf
+			}
+			r.Window = r.Window || in.Window
 		}
 		if !slices.Contains(r.Sources, in.Source) {
 			r.Sources = append(r.Sources, in.Source)
