@@ -36,3 +36,10 @@ JOIN pc.broker_keys b ON b.org_id = cr.org_id AND b.id = cr.broker_key_id
 WHERE cr.org_id = sqlc.arg(org_id) AND c.gateway_id = sqlc.arg(gateway_id) AND b.gateway_id = sqlc.arg(gateway_id)
   AND cr.state = 'ACTIVE' AND c.state <> 'RETIRED'
 ORDER BY cr.connection_id;
+
+-- name: GatewayConnectionGitHub :many
+SELECT g.connection_id, g.app_client_id, g.installation_id, g.account_login
+FROM pc.connection_github g
+JOIN pc.connections c ON c.org_id = g.org_id AND c.id = g.connection_id
+WHERE g.org_id = sqlc.arg(org_id) AND c.gateway_id = sqlc.arg(gateway_id) AND c.state <> 'RETIRED'
+ORDER BY g.connection_id;

@@ -86,6 +86,12 @@ func decodeSegment(seg string, v any) error {
 // neither, the token gets everything the installation has, as on GitHub.
 // Repositories are named (repositories) or given by id (repository_ids).
 func (s *Server) accessToken(w http.ResponseWriter, r *http.Request) {
+	if status := s.tokenFault(w); status != 0 {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		s.requests = append(s.requests, Request{Method: r.Method, Path: r.URL.Path, Write: true, Status: status})
+		return
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	rec := Request{Method: r.Method, Path: r.URL.Path, Write: true}
@@ -127,7 +133,7 @@ func (s *Server) mint(w http.ResponseWriter, r *http.Request, rec *Request) int 
 		}
 		names = append(names, in.Repos[i])
 	}
-	if body.Repositories == nil && body.RepositoryIDs == nil {
+	if (body.Repositories == nil && body.RepositoryIDs == nil) || s.faults.WiderGrant {
 		names = in.Repos
 	}
 	repos := make([]string, 0, len(names))
@@ -140,7 +146,7 @@ func (s *Server) mint(w http.ResponseWriter, r *http.Request, rec *Request) int 
 		}
 	}
 	perms := body.Permissions
-	if perms == nil {
+	if perms == nil || s.faults.WiderGrant {
 		perms = in.Permissions
 	}
 	for name, level := range perms {
