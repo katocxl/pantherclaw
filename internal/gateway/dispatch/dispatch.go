@@ -32,9 +32,12 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"net"
 	"net/http"
 	"net/netip"
+	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -763,12 +766,43 @@ func (e *Engine) revokeFailed(ctx context.Context, conn *control.Connection, pur
 	}
 }
 
+// maxGrant is the most permissions a receipt's access names.
+const maxGrant = 32
+
+var (
+	grantName  = regexp.MustCompile(`^[a-z][a-z0-9_]{0,63}$`)
+	grantLevel = regexp.MustCompile(`^[a-z]{1,16}$`)
+)
+
+// clampGrant keeps the well-formed permissions of a grant, at most
+// maxGrant of them, by name.
+func clampGrant(g map[string]string) map[string]string {
+	if len(g) == 0 {
+		return g
+	}
+	out := map[string]string{}
+	for _, k := range slices.Sorted(maps.Keys(g)) {
+		if len(out) == maxGrant {
+			break
+		}
+		if grantName.MatchString(k) && grantLevel.MatchString(g[k]) {
+			out[k] = g[k]
+		}
+	}
+	return out
+}
+
 // accessOf is what a minted token allowed, for the execution receipt
 // (ADR-0021 item 5).
+//
+// GitHub's grant is clamped to what the receipt's schema allows (#313
+// review follow-up): a refused wider grant may name anything, and a grant
+// the schema refused would leave a transaction UNKNOWN although nothing was
+// sent.
 func accessOf(a broker.Access) *pb.CredentialAccess {
 	out := &pb.CredentialAccess{
 		InstallationId: a.Installation, Repository: a.Repository, RepositoryId: max(a.RepositoryID, 0), Requested: a.Requested,
-		Granted: a.Granted, Revocation: a.Revocation,
+		Granted: clampGrant(a.Granted), Revocation: a.Revocation,
 	}
 	if !a.Expires.IsZero() {
 		out.ExpireTime = timestamppb.New(a.Expires)
