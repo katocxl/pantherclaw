@@ -1,0 +1,28 @@
+{
+  "rules": [
+    {
+      "id": "c2p-merge-review", "kind": "REQUIRE_APPROVAL",
+      "summary": "an independent code reviewer approves every merge into a chosen repository, bound to the head SHA",
+      "operations": ["github.pull.merge"], "when": "{{pull_requests}}", "reason": "MERGE_NEEDS_REVIEW",
+      "approval": {"role": "code_reviewer", "count": 1, "independent": true}
+    },
+    {
+      "id": "c2p-release", "kind": "REQUIRE_APPROVAL",
+      "summary": "a release approver releases a deployment of a chosen repository inside a change window",
+      "operations": ["github.deployment.trigger"], "when": "{{repositories}}", "reason": "DEPLOYMENT_NEEDS_RELEASE",
+      "approval": {"role": "release_approver", "count": 1, "independent": true, "window": true}
+    },
+    {
+      "id": "c2p-no-default-branch-write", "kind": "FORBID",
+      "summary": "no branch creation or contents write on a chosen repository's default branch",
+      "operations": ["github.contents.write", "github.branch.create"], "when": "{{default_refs}}", "reason": "DEFAULT_BRANCH_WRITE"
+    },
+    {
+      "id": "c2p-no-shell-merge", "kind": "FORBID",
+      "summary": "no merge or push from the shell, a quieter route to the same effect; a heuristic over the command text, for every shell command",
+      "operations": ["shell.command.run"],
+      "when": "action.params.command.matches('(^|[;&|(`]|\\s)(git\\s+push\\b|gh\\s+pr\\s+merge\\b|gh\\s+api\\b[^;&|]*merge)')",
+      "reason": "SHELL_MERGE_OR_PUSH"
+    }
+  ]
+}

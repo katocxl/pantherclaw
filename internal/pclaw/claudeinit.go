@@ -16,6 +16,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/katocxl/pantherclaw/internal/identity/workloadclient"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	"github.com/katocxl/pantherclaw/internal/scan"
 )
@@ -43,7 +44,7 @@ import (
 func init() {
 	commands["init"] = command{
 		usage: "init --gateway URL --connection NAME --key-file FILE [--agent ID] [--mcp NAME=CONNECTION...] [--run ID] [--project DIR] " +
-			"[--scope local|project|user] [--dry-run | --yes [--fingerprint FP]] [--managed-settings FILE]",
+			"[--scope local|project|user] [--dry-run | --yes [--fingerprint FP]] [--managed-settings FILE] [--template NAME --repos OWNER/REPO[,…] [template apply options]]",
 		run: claudeInit,
 	}
 }
@@ -270,11 +271,21 @@ func claudeInit(ctx context.Context, a *app, args []string) error {
 	fs.StringVar(&f.fingerprint, "fingerprint", "", "with --yes, the fingerprint of the key to enroll, which you checked (HR-094)")
 	var mcp list
 	fs.Var(&mcp, "mcp", "NAME=CONNECTION: govern the MCP server NAME through pclaw mcp proxy to CONNECTION (repeatable)")
+	var tpl templateOptions
+	fs.StringVar(&tpl.name, "template", "", "then apply this template (coding-to-production) with the enrolled agent; see pclaw template apply")
+	fs.BoolVar(&tpl.update, "update", false, "with --template, change what exists and differs from the template")
+	tplCheck := templateFlags(fs, &tpl)
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	if f.gateway == "" || f.connection == "" || f.keyFile == "" || fs.NArg() != 0 || (f.dryRun && f.yes) {
 		return errUsage
+	}
+	if tpl.name != "" {
+		if err := tplCheck(); err != nil {
+			return err
+		}
+		tpl.dryRun, tpl.yes = f.dryRun, f.yes
 	}
 	routes, err := parseMCPRoutes(mcp)
 	if err != nil {
@@ -353,7 +364,30 @@ func claudeInit(ctx context.Context, a *app, args []string) error {
 		return err
 	}
 	f.agentSDKSnippets(a, findings)
-	return f.apply(ctx, a, p)
+	if err := f.apply(ctx, a, p); err != nil || tpl.name == "" {
+		return err
+	}
+	// The template's grant goes to the agent the key file is enrolled as.
+	if tpl.agent = f.agent; tpl.agent == "" {
+		kf, err := workloadclient.ReadKeyFile(f.keyFile)
+		if err != nil {
+			return err
+		}
+		tpl.agent = agentOfIdentifier(kf.Identifier)
+	}
+	return applyTemplate(ctx, a, tpl)
+}
+
+// agentOfIdentifier is the agent id in a workload identifier
+// (pc:org/<org>/agent/<agent>/inst/<instance>), or "".
+func agentOfIdentifier(id string) string {
+	parts := strings.Split(id, "/")
+	for i := 0; i+1 < len(parts); i++ {
+		if parts[i] == "agent" {
+			return parts[i+1]
+		}
+	}
+	return ""
 }
 
 // hookEntry is the hook to install: exec form, so no shell parses the

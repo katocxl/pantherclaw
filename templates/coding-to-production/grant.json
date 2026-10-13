@@ -1,0 +1,13 @@
+{
+  "bounds": {
+    "operations": ["github.contents.read", "github.pull.read", "github.branch.create", "github.contents.write", "github.pull.create", "github.pull.merge", "github.deployment.trigger"],
+    "targets": {
+      "github.repository": {"ids": ["{{repo}}"]},
+      "github.pull_request": {"prefixes": ["{{repo}}#"]},
+      "github.branch": {"prefixes": ["{{repo}}@"]}
+    }
+  },
+  "limits": {
+    "counters": [{"id": "one_merge_per_run", "operations": ["github.pull.merge"], "key": "run", "window": "none", "max": "1"}]
+  }
+}
