@@ -4,6 +4,7 @@
 package app
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"slices"
@@ -147,7 +148,7 @@ func (s *Service) Health(ctx context.Context, id ids.UUID) (Health, error) {
 		if err != nil {
 			return err
 		}
-		out.GrantedAgents, err = grantedAgents(ctx, q, c.Org, conn)
+		out.GrantedAgents, err = grantedAgents(ctx, q, c.Org, conn, cmp.Or(s.grantsPage, grantPage))
 		return err
 	})
 	return out, err
@@ -158,7 +159,8 @@ func (s *Service) Health(ctx context.Context, id ids.UUID) (Health, error) {
 // bound operations allows them all), by name, at most MaxDependents.
 // Ancestors and envelopes may narrow a grant further; the list says what
 // would stop working without the connection, so it errs towards listing.
-func grantedAgents(ctx context.Context, q *dbq.Queries, org ids.OrgID, conn dbq.PcConnection) ([]DependentAgent, error) {
+// It reads size grants at a time.
+func grantedAgents(ctx context.Context, q *dbq.Queries, org ids.OrgID, conn dbq.PcConnection, size int32) ([]DependentAgent, error) {
 	p, err := pinnedPackage(ctx, q, org, conn.Package)
 	if errors.Is(err, ErrPackage) {
 		return nil, nil
@@ -172,7 +174,7 @@ func grantedAgents(ctx context.Context, q *dbq.Queries, org ids.OrgID, conn dbq.
 		}
 	}
 	var out []DependentAgent
-	page := dbq.ActiveGrantBoundsParams{OrgID: org, Page: grantPage}
+	page := dbq.ActiveGrantBoundsParams{OrgID: org, Page: size}
 	for len(out) < MaxDependents {
 		rows, err := q.ActiveGrantBounds(ctx, page)
 		if err != nil {
@@ -193,7 +195,7 @@ func grantedAgents(ctx context.Context, q *dbq.Queries, org ids.OrgID, conn dbq.
 				out = append(out, DependentAgent{Agent: r.AgentID, Name: r.Name})
 			}
 		}
-		if len(rows) < grantPage {
+		if len(rows) < int(size) {
 			break
 		}
 		last := rows[len(rows)-1]
@@ -202,8 +204,9 @@ func grantedAgents(ctx context.Context, q *dbq.Queries, org ids.OrgID, conn dbq.
 	return out, nil
 }
 
-// grantPage is how many grants grantedAgents reads at a time: it reads on
-// until its list is full, so no dependent agent is left out unseen.
+// grantPage is how many grants grantedAgents reads at a time, unless the
+// Service says otherwise: it reads on until its list is full, so no
+// dependent agent is left out unseen.
 const grantPage = 500
 
 func latest(ctx context.Context, q *dbq.Queries, org ids.OrgID, id ids.UUID, passedOnly bool) (*TestResult, error) {
