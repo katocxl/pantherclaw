@@ -246,7 +246,7 @@ func refreshIsolated(ctx context.Context, tx db.TenantTx, refresh func() error) 
 func (s *Service) enterInvalidation(ctx context.Context, tx db.TenantTx, inv dbq.PcCoverageInvalidation) error {
 	body, err := evdomain.CanonicalBody(InvalidationEntry{
 		V: 1, ID: inv.ID.String(), Connection: inv.ConnectionID.String(), Agent: optString(inv.AgentID), Kind: inv.Kind,
-		Subject: optString(inv.SubjectID),
+		Subject:    optString(inv.SubjectID),
 		OccurredAt: evdomain.Timestamp(inv.OccurredAt),
 	})
 	if err != nil {
