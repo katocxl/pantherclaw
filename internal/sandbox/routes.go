@@ -6,7 +6,6 @@ package sandbox
 import (
 	"context"
 	"encoding/json/v2"
-	"errors"
 	"strings"
 	"unicode/utf8"
 
@@ -36,18 +35,22 @@ const (
 	maxLocator = 512
 )
 
-// StartAgent starts the agent's container and notes its address while it
-// runs: the engine clears it once the container stopped.
+// StartAgent starts the agent's container. It first marks the edge's log:
+// the probes ran and ended before, so what the edge logs from then on is
+// the agent's. It also notes the agent's address while it runs, which
+// narrows that further; an agent that already exited has none (the
+// engine clears it), and the mark alone tells its requests.
 func (s *Sandbox) StartAgent(ctx context.Context) error {
-	if err := s.c.Start(ctx, s.Agent); err != nil {
-		return err
-	}
-	info, err := s.c.InspectContainer(ctx, s.Agent)
+	log, err := s.c.Logs(ctx, s.Edge)
 	if err != nil {
 		return err
 	}
-	if s.agentAddr = info.Address(s.Internal); s.agentAddr == "" {
-		return errors.New("sandbox: the agent has no address on the sandbox network")
+	s.edgeMark, s.agentStarted = len(log), true
+	if err := s.c.Start(ctx, s.Agent); err != nil {
+		return err
+	}
+	if info, err := s.c.InspectContainer(ctx, s.Agent); err == nil {
+		s.agentAddr = info.Address(s.Internal)
 	}
 	return nil
 }
@@ -57,17 +60,21 @@ func (s *Sandbox) StartAgent(ctx context.Context) error {
 // controls and the planted push) come from another address and are left
 // out. Without a started agent there are none.
 func (s *Sandbox) Routes(ctx context.Context) ([]Route, error) {
-	if s.agentAddr == "" {
+	if !s.agentStarted {
 		return nil, nil
 	}
 	log, err := s.c.Logs(ctx, s.Edge)
 	if err != nil {
 		return nil, err
 	}
+	if s.edgeMark <= len(log) {
+		log = log[s.edgeMark:]
+	}
 	return edgeRoutes(log, s.agentAddr), nil
 }
 
-// edgeRoutes are the routes in an edge log that client took.
+// edgeRoutes are the routes in an edge log that client took; every
+// client's when client is empty (the log from the agent's start on).
 func edgeRoutes(log []byte, client string) []Route {
 	var routes []Route
 	seen := map[Route]bool{}
@@ -79,7 +86,7 @@ func edgeRoutes(log []byte, client string) []Route {
 			Kind        string `json:"kind"`
 			Prefix      string `json:"sha256_prefix"`
 		}
-		if json.Unmarshal([]byte(line), &e) != nil || e.Client != client {
+		if json.Unmarshal([]byte(line), &e) != nil || (client != "" && e.Client != client) {
 			continue
 		}
 		var r Route
