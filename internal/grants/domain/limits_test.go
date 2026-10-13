@@ -5,6 +5,7 @@ package domain
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	bdomain "github.com/katocxl/pantherclaw/internal/budgets/domain"
@@ -146,5 +147,43 @@ func TestRemovingALimitWidens(t *testing.T) {
 	next.Limits.Counters = []CountRule{{ID: "one_merge", Operations: Ops{"git.merge"}, Key: "task", Window: bdomain.WindowNone, Max: "1"}}
 	if r, err := CompareRevision(cur, next); err != nil || r.Widens {
 		t.Fatalf("adding a counter narrows: %+v %v", r, err)
+	}
+}
+
+// TestHR206_GrantLimitsOnAConsequenceAreRefused: a budget or counter that
+// names an operation which is only ever a consequence (a write without
+// mappings, such as a payout or a deployment) would never count: the
+// pipeline decides a consequence with the action that may cause it but
+// never dispatches it. Such a limit is refused at issue. A limit on the
+// action that causes it stands, and so does a prefix, which limits the
+// dispatched operations it covers.
+func TestHR206_GrantLimitsOnAConsequenceAreRefused(t *testing.T) {
+	payout := &defs.Definition{Operation: "payments.payout.trigger", Access: defs.AccessWrite}
+	lookup := func(op string) *defs.Definition {
+		if op == payout.Operation {
+			return payout
+		}
+		return lookupRefund(op)
+	}
+	g := rootGrant(t, refundBounds)
+	for name, limits := range map[string]string{
+		"a counter": `{"counters": [{"id": "payouts", "operations": ["payments.payout.trigger"], "key": "run", "window": "day", "max": "1"}]}`,
+		"a budget": `{"budgets": [{"id": "payouts", "grouping": "task", "operations": ["payments.refund.create", "payments.payout.trigger"],
+		  "max_count": "3", "period": "day"}]}`,
+	} {
+		g.Limits = mustLimits(t, limits)
+		err := g.ValidateIssue(IssueContext{Now: issueTime, Lookup: lookup})
+		if !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "payments.payout.trigger is a consequence") {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+	for name, limits := range map[string]string{
+		"the action": `{"counters": [{"id": "refunds", "operations": ["payments.refund.create"], "key": "run", "window": "day", "max": "1"}]}`,
+		"a prefix":   `{"counters": [{"id": "payments", "operations": ["payments.*"], "key": "run", "window": "day", "max": "1"}]}`,
+	} {
+		g.Limits = mustLimits(t, limits)
+		if err := g.ValidateIssue(IssueContext{Now: issueTime, Lookup: lookup}); err != nil {
+			t.Errorf("%s: %v", name, err)
+		}
 	}
 }
