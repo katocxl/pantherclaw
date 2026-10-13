@@ -44,6 +44,10 @@ func (h *GatewayHandler) GetConfiguration(ctx context.Context, req *pb.GetConfig
 	for _, s := range c.Connectors {
 		specs[s.ConnectionID.String()] = connectorOf(s)
 	}
+	github := map[string]*pb.GitHubInstallation{}
+	for _, g := range c.GitHub {
+		github[g.ConnectionID.String()] = &pb.GitHubInstallation{AppClientId: g.AppClientID, InstallationId: g.InstallationID, AccountLogin: g.AccountLogin}
+	}
 	versions := map[string]string{}
 	for _, p := range c.Packages {
 		versions[p.Name] = p.Version
@@ -56,12 +60,13 @@ func (h *GatewayHandler) GetConfiguration(ctx context.Context, req *pb.GetConfig
 			AccessMode: conn.AccessMode, DefaultMode: conn.DefaultMode, Routes: routes[conn.ID.String()],
 			MaxResponseBytes: conn.MaxResponseBytes, TimeoutMs: conn.TimeoutMs, State: conn.State, Revision: conn.Revision,
 			AgentHosts: conn.AgentHosts, Connector: specs[conn.ID.String()],
+			Github: github[conn.ID.String()],
 		})
 	}
 	for _, cr := range c.Credentials {
 		out.Credentials = append(out.Credentials, &pb.SealedCredential{
 			Id: cr.ID.String(), ConnectionId: cr.ConnectionID.String(), Version: cr.Version, BrokerKeyId: cr.BrokerKeyID.String(),
-			Sealed: cr.Sealed, AllowedHosts: cr.AllowedHosts, Header: cr.Header, Scheme: deref(cr.Scheme),
+			Sealed: cr.Sealed, AllowedHosts: cr.AllowedHosts, Header: cr.Header, Scheme: deref(cr.Scheme), Kind: cr.Kind,
 		})
 	}
 	out.CaptureProfiles = captureProfiles(c)
