@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/katocxl/pantherclaw/internal/gateway/dispatch"
 	"github.com/katocxl/pantherclaw/internal/gateway/githubscan"
@@ -20,26 +21,37 @@ import (
 type scanSubmissions struct {
 	mu       sync.Mutex
 	scans    []string
+	leases   []string
 	findings []githubscan.Finding
+	// drop is how many findings the server drops per submission.
+	drop int32
 }
 
-func (s *scanSubmissions) submit(_ context.Context, scan string, findings []githubscan.Finding) error {
+func (s *scanSubmissions) submit(_ context.Context, scan string, lease []byte, findings []githubscan.Finding) (int32, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.scans = append(s.scans, scan)
+	s.scans, s.leases = append(s.scans, scan), append(s.leases, string(lease))
 	s.findings = append(s.findings, findings...)
-	return nil
+	return s.drop, nil
+}
+
+// orgScanLease is the org_scan lease of run the tests give the gateway.
+func orgScanLease(run string) dispatch.Lease {
+	return dispatch.Lease{
+		Purpose: "org_scan", Connection: connID, Task: "01920000-0000-7000-8000-00000000ab01", Operation: "github.org_scan",
+		Request: []byte(`{"run":"` + run + `"}`), Secret: []byte("the lease's secret"),
+	}
 }
 
 // runOrgScan gives the gateway one org_scan lease of run and returns what
 // it submitted and reported.
-func runOrgScan(t *testing.T, h *harness, run string) (*scanSubmissions, dispatch.Observation) {
+func runOrgScan(t *testing.T, h *harness, run string, drop ...int32) (*scanSubmissions, dispatch.Observation) {
 	t.Helper()
-	fv := &fakeVerifications{leases: []dispatch.Lease{{
-		Purpose: "org_scan", Connection: connID, Task: "01920000-0000-7000-8000-00000000ab01", Operation: "github.org_scan",
-		Request: []byte(`{"run":"` + run + `"}`),
-	}}}
+	fv := &fakeVerifications{leases: []dispatch.Lease{orgScanLease(run)}}
 	subs := &scanSubmissions{}
+	if len(drop) > 0 {
+		subs.drop = drop[0]
+	}
 	h.gw.verifications, h.gw.submitScan = fv, subs.submit
 	h.gw.verifyDue(context.Background())
 	if len(fv.reports) != 1 {
@@ -125,7 +137,8 @@ func TestHR209_AnAppThatMayReadTheOrganizationListsItsApps(t *testing.T) {
 			app = &subs.findings[i]
 		}
 	}
-	if app == nil || app.Attributes["app"] != "deploy-bot" || app.Attributes["permissions"] != "contents:write" || app.Attributes["repository_selection"] != "all" {
+	if app == nil || app.Attributes["app_slug"] != "deploy-bot" || app.Attributes["permissions"] != "contents:write" ||
+		app.Attributes["repository_selection"] != "all" || app.Attributes["connection"] != connID {
 		t.Fatalf("apps %+v", subs.findings)
 	}
 }
@@ -147,7 +160,7 @@ func TestT084_APlantedTokenNeverLeavesTheScan(t *testing.T) {
 	var logs strings.Builder
 	h.gw.log = slog.New(slog.NewJSONHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug}))
 	subs, o := runOrgScan(t, h, "01920000-0000-7000-8000-00000000ab04")
-	if len(subs.findings) != 3 {
+	if len(subs.findings) != 2 { // the workflow, and the MCP configuration (one finding per file)
 		t.Fatalf("%d findings", len(subs.findings))
 	}
 	everything := logs.String()
@@ -161,5 +174,49 @@ func TestT084_APlantedTokenNeverLeavesTheScan(t *testing.T) {
 	}
 	if strings.Contains(everything, planted) || strings.Contains(everything, "XXXXXXXXXXXXXXXX") {
 		t.Fatalf("the planted token left the scan:\n%s", everything)
+	}
+}
+
+// TestHR209_FindingsNameTheirConnectionAndGoUnderTheLease: every finding
+// names the connection it was scanned through (coverage keys on it, N20),
+// each submission carries the lease's secret, and findings the server
+// dropped are reported as not scanned, never as complete.
+func TestHR209_FindingsNameTheirConnectionAndGoUnderTheLease(t *testing.T) {
+	w := newGitHubWorld(t)
+	w.sim.Push("acme/payments", "main", map[string]string{
+		".github/workflows/claude.yml": "on: [issue_comment]\njobs:\n  c:\n    environment: production\n    steps: [{uses: anthropics/claude-code-action@v1}]\n",
+	})
+	h := setup(t, withGitHubApp(t, w))
+	subs, o := runOrgScan(t, h, "01920000-0000-7000-8000-00000000ab05", 1)
+	if len(subs.findings) == 0 || !slices.Equal(subs.leases, []string{"the lease's secret"}) {
+		t.Fatalf("submitted %+v under %q", subs.findings, subs.leases)
+	}
+	for _, f := range subs.findings {
+		if f.Attributes["connection"] != connID || f.Attributes["repo"] != "acme/payments" {
+			t.Fatalf("finding %+v", f)
+		}
+	}
+	if !strings.Contains(o.Fields["/not_scanned/findings"], "1 findings dropped") || o.Complete {
+		t.Fatalf("report with a dropped finding %+v", o)
+	}
+}
+
+// TestHR209_TheScanFitsItsLeaseFromTheClaim: the scan's reads end
+// OrgScanTime after the lease was claimed, not after the scan started, so
+// a scan that starts late still submits and reports within its lease; what
+// it had no time to read is not scanned.
+func TestHR209_TheScanFitsItsLeaseFromTheClaim(t *testing.T) {
+	w := newGitHubWorld(t)
+	h := setup(t, withGitHubApp(t, w))
+	fv := &fakeVerifications{}
+	subs := &scanSubmissions{}
+	h.gw.verifications, h.gw.submitScan = fv, subs.submit
+	conn := h.gw.config.Current().ByID[connID]
+	h.gw.orgScan(context.Background(), conn, orgScanLease("01920000-0000-7000-8000-00000000ab06"), time.Now().Add(-dispatch.OrgScanTime))
+	if len(fv.reports) != 1 {
+		t.Fatalf("%d reports", len(fv.reports))
+	}
+	if o := fv.reports[0]; o.Fields["/not_scanned/repositories"] == "" || o.Fields["/scanned/repositories"] != "" || o.Complete {
+		t.Fatalf("a scan past its time %+v", o)
 	}
 }

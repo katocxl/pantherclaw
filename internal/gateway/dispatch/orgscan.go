@@ -6,9 +6,11 @@ package dispatch
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"time"
 
@@ -20,8 +22,10 @@ import (
 	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
 )
 
-// OrgScanTime bounds an organization scan within its lease (a lease lasts
-// at most 30 seconds, HR-190): what is left is reported as not scanned.
+// OrgScanTime bounds an organization scan's reads, from the moment its
+// lease was claimed: a lease lasts at most 30 seconds (HR-190), and the
+// rest is for submitting the findings and reporting. What is left is
+// reported as not scanned.
 const OrgScanTime = 20 * time.Second
 
 var errNotGitHubApp = errors.New("dispatch: an organization scan needs a GitHub App connection")
@@ -32,7 +36,8 @@ var errNotGitHubApp = errors.New("dispatch: an organization scan needs a GitHub 
 // to list them; metadata and contents of those for their workflow and MCP
 // configuration files; and, when the App may read them, the organization's
 // App installations. Ruleset bypass actors are not read yet, and say so.
-// An error means the App could not be used at all.
+// Every finding names the connection it was scanned through. An error
+// means the App could not be used at all.
 func (e *Engine) ScanOrg(ctx context.Context, conn *control.Connection, deadline time.Time) (githubscan.Result, error) {
 	if conn.Credential.GetKind() != credentials.KindGitHubApp {
 		return githubscan.Result{}, errNotGitHubApp
@@ -60,7 +65,8 @@ func (e *Engine) ScanOrg(ctx context.Context, conn *control.Connection, deadline
 		return githubscan.Result{}, err
 	}
 	var repos []githubscan.Repository
-	use(list, func(get githubscan.Getter) { repos, err = githubscan.ListRepositories(ctx, get) })
+	all := true
+	use(list, func(get githubscan.Getter) { repos, all, err = githubscan.ListRepositories(ctx, get) })
 	if err != nil {
 		return githubscan.Result{}, err
 	}
@@ -76,21 +82,39 @@ func (e *Engine) ScanOrg(ctx context.Context, conn *control.Connection, deadline
 		}
 		use(contents, func(get githubscan.Getter) { r = githubscan.ScanRepositories(ctx, get, repos, deadline) })
 	}
+	if !all {
+		// Repositories past the first 500 are not read, nor their files.
+		for _, s := range []string{"repositories", "workflows", "mcp_configs"} {
+			why := fmt.Sprintf("the installation reaches more than %d repositories: only the first %d were read", len(repos), len(repos))
+			if r.NotScanned[s] != "" {
+				why = r.NotScanned[s] + "; " + why
+			}
+			r.NotScanned[s] = why
+		}
+		r.Scanned = slices.DeleteFunc(r.Scanned, func(s string) bool { return r.NotScanned[s] != "" })
+	}
 	if org, err := mint(nil, map[string]string{"organization_administration": "read"}); err != nil {
 		r.NotScanned["org_installations"] = "the App may not read the organization's installations (organization_administration:read)"
 	} else {
 		use(org, func(get githubscan.Getter) {
-			apps, err := githubscan.Apps(ctx, get, app.Account)
+			apps, every, err := githubscan.Apps(ctx, get, app.Account)
 			if err != nil {
 				r.NotScanned["org_installations"] = "the organization's installations could not be read"
 				return
 			}
 			r.Findings = append(r.Findings, apps...)
 			r.Counts["apps"] = int64(len(apps))
+			if !every {
+				r.NotScanned["org_installations"] = fmt.Sprintf("more than %d installations: only the first %d were read", len(apps), len(apps))
+				return
+			}
 			r.Scanned = append(r.Scanned, "org_installations")
 		})
 	}
 	r.NotScanned["rulesets"] = "ruleset bypass actors are not read by this gateway version"
+	for i := range r.Findings {
+		r.Findings[i].Attributes["connection"] = conn.GetId()
+	}
 	return r, nil
 }
 

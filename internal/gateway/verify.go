@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"sync"
 	"time"
 
 	"github.com/katocxl/pantherclaw/internal/gateway/control"
@@ -86,11 +87,14 @@ func (g *Gateway) verifyDue(ctx context.Context) {
 	if cfg == nil {
 		return
 	}
+	claimed := time.Now() // a lease's time runs from no later than this
 	leases, err := g.verifications.Claim(ctx, maxLeases)
 	if err != nil {
 		g.log.WarnContext(ctx, "gateway.verifications_unavailable", pclog.Err(err))
 		return
 	}
+	var scans sync.WaitGroup
+	defer scans.Wait()
 	for _, l := range leases {
 		conn := cfg.ByID[l.Connection]
 		if conn == nil {
@@ -99,7 +103,13 @@ func (g *Gateway) verifyDue(ctx context.Context) {
 			continue
 		}
 		if l.Purpose == "org_scan" {
-			g.orgScan(ctx, conn, l)
+			// An org scan uses most of its lease: it runs beside the other
+			// tasks, not after them.
+			scans.Add(1)
+			go func() {
+				defer scans.Done()
+				g.orgScan(ctx, conn, l, claimed)
+			}()
 			continue
 		}
 		o, err := g.engine.VerifyEffect(ctx, conn, l)
