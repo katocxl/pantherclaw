@@ -249,6 +249,7 @@ func (r *Result) repository(ctx context.Context, get Getter, repo Repository) er
 		case unread:
 			r.skip("mcp_configs", "too large or not plain files", 1)
 			continue
+		case present:
 		}
 		servers, err := ParseMCPConfig(raw)
 		clear(raw)
