@@ -7,8 +7,10 @@ decision 8, HR-200).
 A PreToolUse hook sorts every tool call into three classes before it runs,
 in every permission mode, and denies when PantherClaw cannot decide: tools of
 MCP servers served by the gateway's /mcp face pass (the gateway enforces
-them); Bash and PowerShell go to the local connection's /hook face
-(pc.shell); every other tool goes to the /sdk face. A can_use_tool callback
+them); Bash, PowerShell and Monitor, every tool that runs shell commands, go
+to the local connection's /hook face (pc.shell, HR-186); an MCP tool goes to
+the /sdk face of the connection named after its server, and a built-in to
+the /sdk face of the connection that records it. A can_use_tool callback
 only turns a PantherClaw hold into a wait. Every decision is cooperative and
 labeled PARTIAL: the agent runs the tool with its own access (HR-024,
 HR-186).
@@ -32,15 +34,27 @@ from typing import Any
 from pantherclaw import pap
 from pantherclaw.client import Client, Outbound, Result, new_action_id
 
-__all__ = ["ASK_MODES", "BUILTIN_TOOLS", "PantherClaw", "rule_names"]
+__all__ = ["ASK_MODES", "BUILTIN_TOOLS", "UNDECIDED_TOOLS", "PantherClaw", "rule_names"]
 
+# The Agent SDK's built-in tools that PantherClaw records OBSERVE_ONLY and
+# lets run under the application's own permissions: exactly the face's list,
+# sdk_face.json's "builtins".
 BUILTIN_TOOLS: tuple[str, ...] = (
     "Agent", "AskUserQuestion", "Bash", "CronCreate", "CronDelete", "CronList", "Edit", "EnterPlanMode", "EnterWorktree",
-    "ExitPlanMode", "ExitWorktree", "Glob", "Grep", "ListAgents", "ListMcpResourcesTool", "LSP", "Monitor", "NotebookEdit", "PowerShell",
-    "Read", "ReadMcpResourceTool", "ReportFindings", "ScheduleWakeup", "SendMessage", "Skill", "Task", "TaskCreate", "TaskGet", "TaskList",
-    "TaskOutput", "TaskStop", "TaskUpdate", "TodoWrite", "ToolSearch", "WaitForMcpServers", "WebFetch", "WebSearch", "Workflow", "Write",
+    "ExitPlanMode", "ExitWorktree", "Glob", "Grep", "ListMcpResourcesTool", "LSP", "Monitor", "NotebookEdit", "PowerShell", "Read",
+    "ReadMcpResourceTool", "Skill", "Task", "TaskCreate", "TaskGet", "TaskList", "TaskOutput", "TaskStop", "TaskUpdate", "TodoWrite",
+    "ToolSearch", "WaitForMcpServers", "WebFetch", "WebSearch", "Write",
 )  # fmt: skip
-_SHELLS = {"Bash": "bash", "PowerShell": "powershell"}
+# Built-in tools of the supported Agent SDK that are not on BUILTIN_TOOLS:
+# PantherClaw can neither decide nor record them, so options() disallows them
+# and the model is never offered them (a call would be denied).
+UNDECIDED_TOOLS: tuple[str, ...] = ("ListAgents", "ReadMcpResourceDirTool", "ReportFindings", "ScheduleWakeup", "SendMessage", "Workflow")
+# The tools that run shell commands (HR-186), and the shell /hook decides
+# each one's command in.
+_SHELLS = {"Bash": "bash", "PowerShell": "powershell", "Monitor": "bash"}
+# The rule for a connection's name (migration 00041): a governed MCP server
+# is named after its connection.
+_CONNECTION_NAME = re.compile(r"^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\Z")
 # The permission modes in which a hold is asked: those where the SDK
 # documents, and the pinned tests prove, that can_use_tool is called after a
 # hook's "ask" (HR-200). In every other mode a hold is denied.
@@ -132,10 +146,15 @@ class PantherClaw:
     """The PantherClaw integration; ``options(...)`` adds its hook and
     can_use_tool to the application's ClaudeAgentOptions arguments.
 
-    ``shell_connection`` is the local connection whose /hook face decides
-    Bash and PowerShell (pc.shell); without one the integration refuses to
-    start unless ``shell="observe"``, which only records shell calls
-    (OBSERVE_ONLY) under the application's own permissions. The client must
+    ``connection`` is the http or mcp connection whose /sdk face records
+    the built-in tools' calls. An MCP tool's call goes to the connection
+    named after its server, the one connection that governs it: name each
+    governed MCP server after its connection. ``shell_connection`` is the
+    local connection whose /hook face decides every shell command, Bash's,
+    PowerShell's and Monitor's (pc.shell, HR-186); without one the
+    integration refuses to start unless ``shell="observe"``, which only
+    records shell calls (OBSERVE_ONLY) under the application's own
+    permissions. The client must
     know the built-ins (``Client(builtins=BUILTIN_TOOLS)``; from_key_file
     does), and its timeout should not exceed ``deadline``."""
 
@@ -157,7 +176,7 @@ class PantherClaw:
             raise ValueError("PantherClaw: a client and a connection are required")
         if not shell_connection and shell != "observe":
             raise ValueError(
-                "PantherClaw: Bash and PowerShell are decided through a local connection's /hook face: "
+                "PantherClaw: shell commands (Bash, PowerShell, Monitor) are decided through a local connection's /hook face: "
                 'set shell_connection, or shell="observe" to only record them'
             )
         missing = [t for t in builtin_tools if t not in client.builtins]
@@ -222,16 +241,33 @@ class PantherClaw:
         }  # fmt: skip
         hooks = dict(app.get("hooks") or {})
         hooks["PreToolUse"] = [*hooks.get("PreToolUse", []), HookMatcher(hooks=[self.hook], timeout=self._deadline + 5)]
-        return {**app, "hooks": hooks, "can_use_tool": self.can_use_tool()}
+        undecided = [t for t in UNDECIDED_TOOLS if t not in self._builtins]
+        disallowed = list(dict.fromkeys([*(app.get("disallowed_tools") or []), *undecided]))
+        return {**app, "disallowed_tools": disallowed, "hooks": hooks, "can_use_tool": self.can_use_tool()}
 
-    def _route(self, tool: str) -> tuple[str, str]:
-        """("call", server), ("shell", shell), ("skip", "") or ("refuse", why)."""
+    def _route(self, tool: str, named: str = "") -> tuple[str, str]:
+        """("call", server), ("shell", shell), ("skip", "") or ("refuse", why).
+        An MCP tool's server is the one the SDK names, or else the one
+        configured server whose name fits the tool's. A tool whose name two
+        servers' names fit is refused, and so is a server not named after a
+        connection, unless the gateway's /mcp face serves it."""
         if tool.startswith("mcp__"):
             rest = tool[5:]
-            server = next((s for s in sorted(self._servers, key=len, reverse=True) if rest.startswith(s + "__")), "")
-            if not server or len(rest) <= len(server) + 2:
+
+            def fits(s: str) -> bool:
+                return len(rest) > len(s) + 2 and rest.startswith(s + "__")
+
+            servers = [named] if named and fits(named) else [s for s in dict.fromkeys(self._servers) if fits(s)]
+            if not servers:
                 return "refuse", f"the MCP server of {tool} is not configured"
-            return ("skip", "") if server in self._trusted else ("call", server)
+            if len(servers) > 1:
+                return "refuse", f"the names of the MCP servers {' and '.join(servers)} both fit {tool}"
+            server = servers[0]
+            if server in self._trusted:
+                return "skip", ""
+            if not _CONNECTION_NAME.match(server):
+                return "refuse", f"the MCP server {server} is not named after a connection (name a governed MCP server after its connection)"
+            return "call", server
         if tool in _SHELLS and self._shell_connection:
             return "shell", _SHELLS[tool]
         return "call", ""
@@ -253,7 +289,8 @@ class PantherClaw:
         tool, args = data.get("tool_name", ""), data.get("tool_input")
         if not isinstance(args, dict):
             return _decision("deny", "the tool input is not an object")
-        kind, detail = self._route(tool)
+        named = data.get("mcp_server")
+        kind, detail = self._route(tool, str(named.get("name") or "") if isinstance(named, dict) else "")
         if kind == "skip":
             return {}
         if kind == "refuse":
@@ -274,10 +311,13 @@ class PantherClaw:
 
     async def _shell(self, data: dict[str, Any], shell: str, args: dict[str, Any], use_id: str) -> dict[str, Any]:
         """A shell command, decided through the local connection's /hook face
-        (pc.shell) in its final working directory."""
+        (pc.shell) in its final working directory. A Monitor without a
+        command (a WebSocket watch) is denied: only commands are decided
+        there."""
         command = args.get("command")
         if not isinstance(command, str) or not command:
-            return _decision("deny", "PantherClaw cannot decide this call: the command is empty")
+            tool = data.get("tool_name", "")
+            return _decision("deny", f"PantherClaw cannot decide this call: {tool} has no command, and only commands are decided while the shell is governed")
         if not data.get("cwd"):
             return _decision("deny", "PantherClaw cannot decide this call: no working directory")
         cwd = os.path.realpath(str(data["cwd"]), strict=True)

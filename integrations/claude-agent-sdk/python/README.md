@@ -12,8 +12,8 @@ from pantherclaw_claude_agent_sdk import PantherClaw
 pc = PantherClaw.from_key_file(
     "agent.key.json",
     gateway="https://gateway.example.com",
-    connection="github",        # an http or mcp connection: the /sdk face decides its tools
-    shell_connection="laptop",  # a local connection: the /hook face decides Bash and PowerShell (pc.shell)
+    connection="github",        # the http or mcp connection that records built-in tools' calls
+    shell_connection="laptop",  # a local connection: the /hook face decides Bash, PowerShell and Monitor (pc.shell)
 )
 options = ClaudeAgentOptions(**pc.options(permission_mode="default", mcp_servers={"github": github_server}))
 
@@ -28,7 +28,7 @@ async with ClaudeSDKClient(options=options) as agent:
 
 It decides exactly as the TypeScript integration does ([its README](../typescript/README.md)):
 
-- **The `PreToolUse` hook** sees every tool call, a subagent's included, in every permission mode. A tool of an MCP server listed in `gateway_mcp_servers` and configured with a URL under the gateway's `/mcp/` path passes (the gateway enforces it). `Bash` and `PowerShell` go to the local connection's `/hook` face (`shell_connection`) in their final working directory; without one the integration refuses to start unless `shell="observe"`, which only records them. Every other tool goes to the `/sdk` face.
+- **The `PreToolUse` hook** sees every tool call, a subagent's included, in every permission mode. A tool of an MCP server listed in `gateway_mcp_servers` and configured with a URL under the gateway's `/mcp/` path passes (the gateway enforces it). `Bash`, `PowerShell` and `Monitor`, every tool that runs shell commands (HR-186), go to the local connection's `/hook` face (`shell_connection`) in their final working directory: a `Monitor` command as a `bash` command, and a `Monitor` without one (a WebSocket watch) is denied. Without a local connection the integration refuses to start unless `shell="observe"`, which only records them. Every other tool goes to the `/sdk` face. A connection governs the one MCP server named after it, so name each governed MCP server after its connection: an MCP tool goes to the connection named after its server, and a built-in to `connection`, which records it. A server whose name no connection can have (lowercase letters, digits and hyphens, at most 63 characters), and a tool whose name two configured servers' names fit, are denied without a request. `BUILTIN_TOOLS` is exactly the face's list (`sdk/conformance/sdk_face.json`); the SDK's other built-ins (`UNDECIDED_TOOLS`) can be neither decided nor recorded, so `options()` adds them to `disallowed_tools` and the model is never offered them.
 - It answers `allow` on PantherClaw's allow (on a target-enforced connection, only with `on_dispatch` to send PantherClaw's own request), and `deny` on a deny or whenever PantherClaw cannot decide (unreachable, timed out, an error, an answer it cannot read or check). The hook body never raises, and its deadline (`deadline`, 10 s) is shorter than the timeout it registers.
 - **Built-in tools** are recorded `OBSERVE_ONLY` and get no decision. **Other unmapped tools** are denied unless `observe_unmapped=True`.
 - **A hold** never runs without PantherClaw's later allow:
