@@ -170,7 +170,10 @@ func Check(r Requirement, p Person, c Context, cred ids.UUID) (bool, string) {
 	case slices.ContainsFunc(c.Run.Ancestors, func(a gdomain.Principal) bool { return isUser(a, p.UserID) }):
 		return false, IneligibleAncestor
 	}
-	if r.Independent && r.IndependentOf != "" {
+	// An action whose definition names the people its approvers must not be
+	// excludes them from every approval, whatever its role (HR-207, founder
+	// decision 2026-10-13).
+	if r.IndependentOf != "" {
 		a, ok := c.Authorship[r.IndependentOf]
 		switch {
 		case !ok || !a.Complete:

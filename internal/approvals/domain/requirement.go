@@ -210,7 +210,7 @@ func Merge(ins []Input) ([]Requirement, time.Duration, error) {
 		if in.Kind == KindApproval {
 			r.Count = max(r.Count, in.Count)
 			r.Independent = r.Independent || in.Independent
-			if in.Independent && r.IndependentOf == "" {
+			if in.IndependentOf != "" && r.IndependentOf == "" {
 				r.IndependentOf = in.IndependentOf
 			}
 			r.Window = r.Window || in.Window

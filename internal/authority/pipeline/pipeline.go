@@ -1230,9 +1230,10 @@ func (s *state) effective() (string, defs.Values, bool) {
 	return parsed.HashHex(), vals, true
 }
 
-// independence names, on every independent approval of the action and its
-// consequences, the fact listing the people its approver must not be
-// (approval.independent_of, G0 M8, HR-207). When that fact could not list
+// independence names, on every approval of the action and its
+// consequences, whatever its role, the fact listing the people its approver
+// must not be and must be linked apart from (approval.independent_of, G0
+// M8, HR-207, founder decision 2026-10-13). When that fact could not list
 // them all, no approver can be shown independent: the action cannot be
 // authorized until it can (design decision 18).
 func (s *state) independence() {
@@ -1240,15 +1241,15 @@ func (s *state) independence() {
 	if a == nil || a.IndependentOf == "" {
 		return
 	}
-	independent := 0
+	approvals := 0
 	for i := range s.ev.Requirements {
-		if r := &s.ev.Requirements[i]; r.Kind == apdomain.KindApproval && r.Independent {
+		if r := &s.ev.Requirements[i]; r.Kind == apdomain.KindApproval {
 			r.IndependentOf = a.IndependentOf
-			independent++
+			approvals++
 		}
 	}
 	f := s.facts[a.IndependentOf]
-	if _, complete := apdomain.GitHubPeople(f.Object); independent > 0 && (f.Type != fdomain.TypeObject || !complete) {
+	if _, complete := apdomain.GitHubPeople(f.Object); approvals > 0 && (f.Type != fdomain.TypeObject || !complete) {
 		s.cl.add(StepRequirements, adomain.CannotAuthorize, apdomain.IneligibleAuthorshipUnknown,
 			a.IndependentOf+" does not list every author, committer and pusher, so no approver can be shown independent", "")
 	}
