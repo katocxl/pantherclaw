@@ -254,6 +254,32 @@ definitions:
           created_gte: params.created_gte
           starting_after: params.starting_after
 
+  # The connection test's read (G0 M8 track C, F354): harmless, with no
+  # params and no mappings, so only a connection test leases it.
+  - operation: payments.account.read
+    summary: Read the simulated payments account (the connection test)
+    access: read
+    test: true
+    target:
+      type: pc.connection
+      id_pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+      account: none
+    effects:
+      - kind: none
+        description: Reads only
+    reversibility: reversible
+    retry:
+      safe: true
+      on_unknown: fail
+    assurance:
+      basis: declared
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-10-08
+    dispatch:
+      http:
+        method: GET
+        path: /v1/account
+
 # What the simulated API created, matched against execution receipts by the
 # idempotency key pc-<transaction id> (HR-112).
 target_logs:
