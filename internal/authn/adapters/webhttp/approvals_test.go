@@ -37,7 +37,14 @@ var (
 // actions record what the page passed and fail with err when it is set.
 type fakeApprovals struct {
 	empty, readOnly bool
-	err             error
+	// review adds a merge review's consequences and decider rules.
+	review bool
+	// people are the people lists the page shows.
+	people []apdomain.PeopleList
+	// lookAlike adds a review consequence environment that mixes writing
+	// systems, flagged as the display flags it.
+	lookAlike string
+	err       error
 
 	mu         sync.Mutex
 	responders []apapp.Responder
@@ -178,7 +185,7 @@ func (f *fakeApprovals) View(ctx context.Context, id ids.UUID) (apapp.View, erro
 	}
 	now := time.Date(2026, 10, 10, 12, 0, 0, 0, time.UTC)
 	may := !f.readOnly
-	return apapp.View{
+	v := apapp.View{
 		MayRespond: may, MayApprove: may, Params: apdomain.Untrusted{Text: `{"amount":{"value":"40.00","currency":"USD"}}`},
 		Request: apapp.Request{ID: id, SubjectKind: "ACTION", DeadlineAt: now.Add(time.Hour)},
 		Display: apdomain.Display{
@@ -199,7 +206,146 @@ func (f *fakeApprovals) View(ctx context.Context, id ids.UUID) (apapp.View, erro
 		},
 		State: "PENDING", Now: now,
 		Evidence: []apapp.EvidenceLine{{Author: "instance:x", Note: apdomain.Untrusted{Source: "evidence", Text: `"><img src=x onerror=alert(1)>`}, At: now}},
-	}, nil
+		People:   f.people,
+	}
+	if f.review {
+		repo := actionir.Target{Type: "github.repository", ID: "acme/payments"}
+		v.Display.Consequences = []apdomain.ConsequenceLine{
+			{
+				Rule: "merge-triggers-deployment", Operation: "github.deployment.trigger", State: "PREDICTED", Target: repo,
+				Environments: []string{"production"}, Workflows: []string{".github/workflows/deploy.yml"},
+			},
+			{
+				Rule: "write-triggers-deployment", Operation: "github.deployment.trigger", State: "UNKNOWN", Target: repo,
+				Unknown: []string{"a workflow changed"},
+			},
+		}
+		v.Display.Deciders = []apdomain.DeciderRule{
+			{Kind: "approval", Role: "code_reviewer", Count: 1, Independent: true, IndependentOf: "github.pull.people"},
+			{Kind: "approval", Role: "release_approver", Count: 1, Window: true},
+		}
+		if f.lookAlike != "" {
+			c := &v.Display.Consequences[0]
+			c.Environments = append(c.Environments, f.lookAlike)
+			c.MixedScript = []string{f.lookAlike}
+		}
+	}
+	return v, nil
+}
+
+// TestF158_TheMergeReviewShowsItsConsequencesAndDeciders (G0 M8): the page
+// shows each predicted or unknown consequence, labeled as a prediction,
+// with its environments, the workflows behind it and why it is unknown,
+// and says which approvals exclude the pull request's people and which
+// count only inside a change window. When such an approval meets an unknown
+// consequence, the page says first, before any button, that it cannot be
+// released until the facts are known (founder decision 2026-10-13).
+func TestF158_TheMergeReviewShowsItsConsequencesAndDeciders(t *testing.T) {
+	resp := getAs(t, newApprovalsHandler(t, &fakeApprovals{review: true}), authnapp.ApprovalsPath+"/"+knownRequest.String(), "good")
+	for _, want := range []string{
+		"What it may also cause", "a prediction, not an authorized or confirmed effect", "Predicted: <code>github.deployment.trigger</code>",
+		"<code>production</code>", "<code>.github/workflows/deploy.yml</code>", "<strong>Unknown</strong>", "Why unknown: a workflow changed",
+		"<code>code_reviewer</code>", "everyone <code>github.pull.people</code> lists", "<code>release_approver</code>",
+		"counts only when used inside an active change window",
+	} {
+		if !strings.Contains(resp.Body, want) {
+			t.Errorf("the page lacks %q", want)
+		}
+	}
+	if i, j := strings.Index(resp.Body, "What will happen"), strings.Index(resp.Body, "What it may also cause"); i < 0 || j < i {
+		t.Fatal("the action's own consequence must come before what it may also cause")
+	}
+	if i, j := strings.Index(resp.Body, "This cannot be released until its facts are known."), strings.Index(resp.Body, "id=\"approve\""); i < 0 || j < i ||
+		!strings.Contains(resp.Body[i:j], "<code>github.deployment.trigger on acme/payments</code>") {
+		t.Fatalf("the warning before the approve button: %d %d", i, j)
+	}
+	if plain := getAs(t, newApprovalsHandler(t, &fakeApprovals{}), authnapp.ApprovalsPath+"/"+knownRequest.String(), "good"); strings.Contains(plain.Body, "What it may also cause") {
+		t.Fatal("an action without consequences shows the section")
+	}
+}
+
+// TestHR034_ThePageFlagsMixedScriptEnvironmentNames (HR-102): an
+// environment name that mixes writing systems carries the same warning as
+// untrusted text, naming it; the other names carry none.
+func TestHR034_ThePageFlagsMixedScriptEnvironmentNames(t *testing.T) {
+	lookAlike := "pr" + string(rune(0x043e)) + "duction"
+	path := authnapp.ApprovalsPath + "/" + knownRequest.String()
+	consequences := func(fa *fakeApprovals) string {
+		t.Helper()
+		body := getAs(t, newApprovalsHandler(t, fa), path, "good").Body
+		i, j := strings.Index(body, "What it may also cause"), strings.Index(body, "<h2>Fields</h2>")
+		if i < 0 || j < i {
+			t.Fatal("the page lacks what the action may also cause")
+		}
+		return body[i:j]
+	}
+	if strings.Contains(consequences(&fakeApprovals{review: true}), "mixes writing systems") {
+		t.Fatal("a plain environment name is flagged")
+	}
+	want := "to <code>production</code>, <code>" + lookAlike + "</code> <strong>(<code>" + lookAlike +
+		"</code> mixes writing systems: look for look-alike characters)</strong>"
+	if got := consequences(&fakeApprovals{review: true, lookAlike: lookAlike}); !strings.Contains(got, want) {
+		t.Errorf("the page lacks %q in %s", want, got)
+	}
+}
+
+// TestF158_ThePageListsThePullRequestsPeopleAndWhoIsNotLinked (HR-207): the
+// page lists each GitHub user the people fact names, one per row, with how
+// it lists them and the user linked to them, or "not linked"; a list that
+// may not name everyone says plainly that it is incomplete.
+// (Founder decision 2026-10-13: an unlinked person is shown and blocks
+// approvals; a bot the fact names and an exempted account do not.)
+func TestF158_ThePageListsThePullRequestsPeopleAndWhoIsNotLinked(t *testing.T) {
+	bob := ids.NewV7()
+	path := authnapp.ApprovalsPath + "/" + knownRequest.String()
+	page := func(lists ...apdomain.PeopleList) string {
+		t.Helper()
+		return getAs(t, newApprovalsHandler(t, &fakeApprovals{review: true, people: lists}), path, "good").Body
+	}
+	complete := apdomain.PeopleList{Fact: "github.pull.people", Complete: true, People: []apdomain.Listed{
+		{GitHubID: 42, As: []string{"author", "commit author"}, User: &bob},
+		{GitHubID: 44, As: []string{"pusher"}},
+		{GitHubID: 45, As: []string{"pusher"}, Bot: true},
+		{GitHubID: 46, As: []string{"committer"}, Exempt: true},
+	}}
+	body := page(complete)
+	for _, want := range []string{
+		"Who <code>github.pull.people</code> lists now",
+		"<tr><td><code>42</code></td><td>author, commit author</td><td><code>user:" + bob.String() + "</code></td></tr>",
+		"<tr><td><code>44</code></td><td>pusher</td><td><strong>not linked</strong></td></tr>",
+		"<tr><td><code>45</code></td><td>pusher</td><td>not a person (a bot, by the fact)</td></tr>",
+		"<tr><td><code>46</code></td><td>committer</td><td>not a person (exempted)</td></tr>",
+		"Not linked to anyone: GitHub <code>44</code>. Approvals are refused until they link or are exempted.",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("the page lacks %q", want)
+		}
+	}
+	if strings.Contains(body, "list of people is incomplete") {
+		t.Error("a complete list is called incomplete")
+	}
+
+	incomplete := apdomain.PeopleList{Fact: "github.pull.people", Gaps: []string{apdomain.PeopleNotAll}, People: []apdomain.Listed{
+		{GitHubID: 42, As: []string{"author"}},
+	}}
+	body = page(incomplete)
+	for _, want := range []string{
+		"The list of people is incomplete: " + apdomain.PeopleNotAll + ".",
+		"Until it can be read in full, no approval that must be independent of these people counts.",
+		"<tr><td><code>42</code></td><td>author</td><td><strong>not linked</strong></td></tr>",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("the page lacks %q", want)
+		}
+	}
+	malformed := complete
+	malformed.Gaps = []string{apdomain.PeopleMalformed}
+	if !strings.Contains(page(malformed), "The list of people is incomplete: "+apdomain.PeopleMalformed+".") {
+		t.Error("a list holding something other than GitHub user ids is not called incomplete")
+	}
+	if strings.Contains(page(), "lists now") {
+		t.Error("a request without a people fact lists people")
+	}
 }
 
 func newApprovalsHandler(t *testing.T, fa *fakeApprovals) http.Handler {
