@@ -15,6 +15,7 @@ import (
 	"io/fs"
 	"os"
 	"strings"
+	"time"
 
 	"golang.org/x/sync/errgroup"
 
@@ -75,6 +76,8 @@ func runGitHub(ctx context.Context, args []string, stderr io.Writer) error {
 	for i, n := range names {
 		full[i] = *account + "/" + n
 		sim.CreateRepo(full[i], "main", map[string]string{"README.md": "# " + n + " (SIMULATED)\n", ".github/workflows/deploy.yml": demoWorkflow})
+		sim.DeployOnPush(full[i], "main", "production", 2*time.Minute)
+		sim.SetEnvironments(full[i], github.Environment{Name: "production"})
 	}
 	g, ctx := errgroup.WithContext(ctx)
 	g.Go(func() error { return serve(ctx, *addr, sim.Handler(), log, "sim.github_listening") })

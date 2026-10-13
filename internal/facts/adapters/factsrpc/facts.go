@@ -45,6 +45,7 @@ var (
 		pantherclawv1.FactType_FACT_TYPE_MONEY:      domain.TypeMoney,
 		pantherclawv1.FactType_FACT_TYPE_IDENTIFIER: domain.TypeIdentifier,
 		pantherclawv1.FactType_FACT_TYPE_TIMESTAMP:  domain.TypeTimestamp,
+		pantherclawv1.FactType_FACT_TYPE_OBJECT:     domain.TypeObject,
 	}
 	typeProtos = func() map[domain.Type]pantherclawv1.FactType {
 		out := map[domain.Type]pantherclawv1.FactType{}
@@ -69,8 +70,11 @@ func parseID(s string) (ids.UUID, error) {
 
 // ProviderProto renders a provider.
 func ProviderProto(p domain.Provider) *pantherclawv1.FactProvider {
-	out := &pantherclawv1.FactProvider{
-		Id: p.ID.String(), Name: p.Name, ServiceAccountId: p.ServiceAccountID.String(), State: states[p.State],
+	out := &pantherclawv1.FactProvider{Id: p.ID.String(), Name: p.Name, State: states[p.State]}
+	if p.GatewayID.IsZero() {
+		out.ServiceAccountId = p.ServiceAccountID.String()
+	} else {
+		out.GatewayId, out.ConnectionId = p.GatewayID.String(), p.ConnectionID.String()
 	}
 	for _, d := range p.Facts {
 		out.Facts = append(out.Facts, &pantherclawv1.FactDeclaration{
@@ -82,18 +86,33 @@ func ProviderProto(p domain.Provider) *pantherclawv1.FactProvider {
 
 // RegisterProvider implements FactServiceHandler.
 func (s *Facts) RegisterProvider(ctx context.Context, req *pantherclawv1.RegisterProviderRequest) (*pantherclawv1.RegisterProviderResponse, error) {
-	sa, err := parseID(req.GetServiceAccountId())
-	if err != nil {
-		return nil, err
-	}
 	decls := make([]domain.Declaration, 0, len(req.GetFacts()))
 	for _, d := range req.GetFacts() {
 		decls = append(decls, domain.Declaration{
 			Name: d.GetName(), Type: types[d.GetType()], SubjectType: d.GetSubjectType(), MaxLag: d.GetMaxLag().AsDuration(),
 		})
 	}
-	p, err := s.svc.RegisterProvider(ctx, req.GetName(), sa, decls)
+	var p domain.Provider
+	if req.GetGatewayId() != "" {
+		// A gateway provider of one of its connections (G0 M8 decision 5).
+		gw, err := parseID(req.GetGatewayId())
+		if err != nil {
+			return nil, err
+		}
+		conn, err := parseID(req.GetConnectionId())
+		if err != nil {
+			return nil, err
+		}
+		if p, err = s.svc.RegisterGatewayProvider(ctx, req.GetName(), gw, conn, decls); err != nil {
+			return nil, err
+		}
+		return &pantherclawv1.RegisterProviderResponse{Provider: ProviderProto(p)}, nil
+	}
+	sa, err := parseID(req.GetServiceAccountId())
 	if err != nil {
+		return nil, err
+	}
+	if p, err = s.svc.RegisterProvider(ctx, req.GetName(), sa, decls); err != nil {
 		return nil, err
 	}
 	return &pantherclawv1.RegisterProviderResponse{Provider: ProviderProto(p)}, nil
@@ -147,26 +166,36 @@ func resultCode(err error) (string, string) {
 // PutFacts implements FactServiceHandler. Each observation gets its own
 // result; one refusal does not stop the others.
 func (s *Facts) PutFacts(ctx context.Context, req *pantherclawv1.PutFactsRequest) (*pantherclawv1.PutFactsResponse, error) {
-	obs := make([]domain.Observation, 0, len(req.GetObservations()))
-	for _, o := range req.GetObservations() {
+	results, err := s.svc.PutFacts(ctx, ObservationsOf(req.GetObservations()))
+	if err != nil {
+		return nil, err
+	}
+	return &pantherclawv1.PutFactsResponse{Results: ResultsOf(results)}, nil
+}
+
+// ObservationsOf converts observations from the wire.
+func ObservationsOf(list []*pantherclawv1.FactObservation) []domain.Observation {
+	obs := make([]domain.Observation, 0, len(list))
+	for _, o := range list {
 		obs = append(obs, domain.Observation{
 			Name: o.GetName(), SubjectType: o.GetSubjectType(), SubjectID: o.GetSubjectId(),
 			Value: jsontext.Value(o.GetValue()), ObservedAt: o.GetObserveTime().AsTime(),
 		})
 	}
-	results, err := s.svc.PutFacts(ctx, obs)
-	if err != nil {
-		return nil, err
-	}
-	out := &pantherclawv1.PutFactsResponse{}
+	return obs
+}
+
+// ResultsOf converts results to the wire, never echoing a value.
+func ResultsOf(results []app.Result) []*pantherclawv1.FactResult {
+	out := make([]*pantherclawv1.FactResult, 0, len(results))
 	for i, r := range results {
-		fr := &pantherclawv1.FactResult{Index: int32(i), Accepted: r.Err == nil}
+		fr := &pantherclawv1.FactResult{Index: int32(min(i, 1000)), Accepted: r.Err == nil}
 		if r.Err != nil {
 			fr.Code, fr.Detail = resultCode(r.Err)
 		}
-		out.Results = append(out.Results, fr)
+		out = append(out, fr)
 	}
-	return out, nil
+	return out
 }
 
 func ts(t time.Time) *timestamppb.Timestamp {
