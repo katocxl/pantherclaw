@@ -4,8 +4,18 @@
 package server
 
 import (
+	"errors"
+	"time"
+
+	"github.com/katocxl/pantherclaw/internal/authority/finalize"
 	coverage "github.com/katocxl/pantherclaw/internal/coverage/domain"
 	"github.com/katocxl/pantherclaw/internal/platform/config"
+)
+
+// Bounds of coverage.claim_timeout.
+const (
+	minClaimTimeout = 10 * time.Millisecond
+	maxClaimTimeout = 2 * time.Second
 )
 
 // CoverageConfig is coverage's freshness contract (G0 M9 track A, decision
@@ -17,6 +27,10 @@ type CoverageConfig struct {
 	// ReassessEvery is how often the worker reassesses the scopes that
 	// changed: 10 seconds to 1 hour, a minute when unset.
 	ReassessEvery config.Duration `json:"reassess_every" env:"PC_COVERAGE_REASSESS_EVERY"`
+	// ClaimTimeout bounds the coverage claim read on the decision path; a
+	// receipt whose claim takes longer says it is unavailable (HR-217):
+	// 10 milliseconds to 2 seconds, 50 milliseconds when unset.
+	ClaimTimeout config.Duration `json:"claim_timeout" env:"PC_COVERAGE_CLAIM_TIMEOUT"`
 }
 
 // freshness returns the published freshness contract.
@@ -24,9 +38,25 @@ func (c *Config) freshness() (coverage.Freshness, error) {
 	return coverage.NewFreshness(c.Coverage.EnforcedTTL.D(), c.Coverage.ReassessEvery.D())
 }
 
-func (c *Config) validateCoverage() []error {
-	if _, err := c.freshness(); err != nil {
-		return []error{err}
+// claimTimeout returns the coverage claim timeout.
+func (c *Config) claimTimeout() (time.Duration, error) {
+	d := c.Coverage.ClaimTimeout.D()
+	if d == 0 {
+		return finalize.DefaultClaimTimeout, nil
 	}
-	return nil
+	if d < minClaimTimeout || d > maxClaimTimeout {
+		return 0, errors.New("coverage.claim_timeout must be between 10ms and 2s")
+	}
+	return d, nil
+}
+
+func (c *Config) validateCoverage() []error {
+	var errs []error
+	if _, err := c.freshness(); err != nil {
+		errs = append(errs, err)
+	}
+	if _, err := c.claimTimeout(); err != nil {
+		errs = append(errs, err)
+	}
+	return errs
 }

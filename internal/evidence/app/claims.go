@@ -28,6 +28,8 @@ type claimRef struct {
 // decision, and the scope's snapshot current at decision time with the one
 // after it (T-089), so `pclaw verify` checks each claim offline. The receipts are
 // the server's own records; only the bundle's verifier checks signatures.
+// A claim the receipt says was unavailable names no snapshot, so it needs
+// no entries.
 func coverageClaims(receipts []string) []claimRef {
 	var out []claimRef
 	for _, r := range receipts {
@@ -43,8 +45,9 @@ func coverageClaims(receipts []string) []claimRef {
 			Iat int64 `json:"iat"`
 			Pap struct {
 				Coverage *struct {
-					Snapshot string `json:"snapshot"`
-					Scope    struct {
+					Unavailable string `json:"unavailable"`
+					Snapshot    string `json:"snapshot"`
+					Scope       struct {
 						Agent      string `json:"agent"`
 						Connection string `json:"connection"`
 						Operation  string `json:"operation"`
@@ -52,7 +55,7 @@ func coverageClaims(receipts []string) []claimRef {
 				} `json:"coverage"`
 			} `json:"pap"`
 		}
-		if json.Unmarshal(raw, &c) != nil || c.Pap.Coverage == nil {
+		if json.Unmarshal(raw, &c) != nil || c.Pap.Coverage == nil || c.Pap.Coverage.Unavailable != "" {
 			continue
 		}
 		ref := claimRef{At: time.Unix(c.Iat, 0).UTC(), Operation: c.Pap.Coverage.Scope.Operation}

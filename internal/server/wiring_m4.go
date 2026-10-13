@@ -46,6 +46,7 @@ func newAuthority(cfg *Config, pool *db.Pool, reg *keys.Registry, kp keys.KeyPro
 			Pipeline: &pipeline.Pipeline{Reader: authorityReader(pool)}, Store: store,
 			Receipts: receipts, Permits: permits, ActionTokens: actionTokens, PermitTTL: cfg.Authority.PermitTTL.D(), Log: log,
 			Inputs: replayInputs(pool, kp), Coverage: coverageClaims{svc: &covapp.Service{Pool: pool}},
+			ClaimTimeout: claimTimeoutOf(cfg),
 		},
 		Logger: log,
 	}), nil

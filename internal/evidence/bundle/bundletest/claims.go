@@ -81,8 +81,9 @@ func (i *Issuer) appendCoverage(kind string, v any) {
 }
 
 // AppendClaim chains a decision receipt of agent through connection that
-// carries claim c, and its decision entry.
-func (i *Issuer) AppendClaim(c Claim, agent, connection string) {
+// carries claim c (a Claim, or any other coverage value), and its
+// decision entry.
+func (i *Issuer) AppendClaim(c any, agent, connection string) {
 	seq := int64(len(i.Entries)) + 1
 	txn := ids.NewV7().String()
 	payload, _ := json.Marshal(map[string]any{

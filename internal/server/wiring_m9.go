@@ -84,3 +84,13 @@ func mountCoveragePages(web *webhttp.Handler, pool *db.Pool, cfg *Config) {
 	f := freshnessOf(cfg)
 	web.WithCoverage(&covapp.Service{Pool: pool, Freshness: f}, f)
 }
+
+// claimTimeoutOf returns the configured claim timeout; Validate has
+// checked it, so an error only falls back to the default.
+func claimTimeoutOf(cfg *Config) time.Duration {
+	d, err := cfg.claimTimeout()
+	if err != nil {
+		return finalize.DefaultClaimTimeout
+	}
+	return d
+}

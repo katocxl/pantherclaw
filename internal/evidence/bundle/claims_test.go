@@ -4,6 +4,7 @@
 package bundle_test
 
 import (
+	"slices"
 	"testing"
 	"time"
 
@@ -265,6 +266,50 @@ func TestT089_AForgedCoverageClaimIsRejected(t *testing.T) {
 				expect(t, r, "receipt.coverage", bundle.Passed)
 			default:
 				expect(t, r, "receipt.coverage", bundle.Failed)
+			}
+		})
+	}
+}
+
+// TestHR217_AnUnavailableClaimIsReportedAsUnavailable: a receipt whose
+// claim could not be read at decision time says so, and why; pclaw verify
+// reports it as "claim unavailable (reason)", never as passed or as a
+// state. A marker with an unknown reason, or that states coverage too,
+// fails, and a receipt with no claim, as before M9, still verifies.
+func TestHR217_AnUnavailableClaimIsReportedAsUnavailable(t *testing.T) {
+	agent, conn := ids.NewV7().String(), ids.NewV7().String()
+	cases := []struct {
+		name   string
+		claim  any
+		want   []bundle.Status
+		detail string
+	}{
+		{"a timeout", map[string]string{"unavailable": "timeout"}, []bundle.Status{bundle.NotAvailable}, "claim unavailable (timeout)"},
+		{"an error", map[string]string{"unavailable": "error"}, []bundle.Status{bundle.NotAvailable}, "claim unavailable (error)"},
+		{"an unknown reason", map[string]string{"unavailable": "busy"}, []bundle.Status{bundle.Failed}, ""},
+		{"a marker that states ENFORCED", map[string]any{"unavailable": "timeout", "state": "ENFORCED"}, []bundle.Status{bundle.Failed}, ""},
+		{"a marker with a snapshot", map[string]any{"unavailable": "error", "snapshot": ids.NewV7().String()}, []bundle.Status{bundle.Failed}, ""},
+		{"no claim", nil, nil, ""},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			iss := bundletest.NewIssuer(t)
+			iss.Append(1)
+			iss.AppendClaim(c.claim, agent, conn)
+			iss.Checkpoint()
+			trust, err := bundle.ParseTrust(iss.Trust())
+			if err != nil {
+				t.Fatal(err)
+			}
+			r := bundle.Verify(iss.Bundle(), bundle.Options{Trust: trust})
+			expect(t, r, "receipt.coverage", c.want...)
+			for _, ch := range r.Checks {
+				if ch.Name == "receipt.coverage" && c.detail != "" && ch.Detail != c.detail {
+					t.Fatalf("detail %q, want %q", ch.Detail, c.detail)
+				}
+			}
+			if failed := r.Failed(); failed != slices.Contains(c.want, bundle.Failed) {
+				t.Fatalf("result %s:\n%s", r.Result, r.Text())
 			}
 		})
 	}

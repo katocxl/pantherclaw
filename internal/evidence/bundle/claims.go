@@ -84,7 +84,13 @@ type claim struct {
 	Lapsed        bool     `json:"lapsed"`
 	Reason        string   `json:"reason"`
 	Exclusions    []string `json:"exclusions"`
+	// Unavailable says the claim could not be read at decision time, and
+	// why; such a claim states nothing else.
+	Unavailable string `json:"unavailable"`
 }
+
+// unavailableReasons are why a claim may be unavailable.
+var unavailableReasons = map[string]bool{"timeout": true, "error": true}
 
 // coverage checks a decision receipt's coverage claim against the snapshot
 // ledger (HR-217). The claimed snapshot's entry must be in the bundle, of
@@ -94,7 +100,9 @@ type claim struct {
 // the scope and no newer snapshot between its computation and iat. A
 // lapsed claim's reason must hold (an expiry before iat, or an
 // invalidation of that kind in that interval), and its state is never
-// ENFORCED. Missing entries are not available; anything else fails.
+// ENFORCED. Missing entries are not available, and so is a claim the
+// receipt says was unavailable (its reason, with nothing else); anything
+// else fails.
 func (v *verifier) coverage(subject string, payload []byte, seq int64, recorded bool) {
 	var r struct {
 		Iat int64 `json:"iat"`
@@ -107,6 +115,18 @@ func (v *verifier) coverage(subject string, payload []byte, seq int64, recorded 
 		} `json:"pap"`
 	}
 	if json.Unmarshal(payload, &r) != nil || r.Pap.Coverage == nil {
+		return
+	}
+	if c := r.Pap.Coverage; c.Unavailable != "" {
+		switch {
+		case !unavailableReasons[c.Unavailable]:
+			v.r.add("receipt.coverage", subject, Failed, "the claim is unavailable for an unknown reason %q", truncate(c.Unavailable))
+		case c.V != 0 || c.State != "" || c.Snapshot != "" || c.Scope != (scope{}) || c.SnapshotState != "" || c.Lapsed ||
+			c.Reason != "" || c.Exclusions != nil:
+			v.r.add("receipt.coverage", subject, Failed, "an unavailable claim states coverage too")
+		default:
+			v.r.add("receipt.coverage", subject, NotAvailable, "claim unavailable (%s)", c.Unavailable)
+		}
 		return
 	}
 	c, at := r.Pap.Coverage, time.Unix(r.Iat, 0).UTC()

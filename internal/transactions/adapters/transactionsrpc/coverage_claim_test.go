@@ -12,8 +12,8 @@ import (
 )
 
 // TestHR217_TheReceiptsCoverageClaimIsShown: a decision receipt's claim is
-// read from its payload; a receipt without one, or whose body retention
-// removed, shows none.
+// read from its payload, an unavailable one with its reason only; a receipt
+// without one, or whose body retention removed, shows none.
 func TestHR217_TheReceiptsCoverageClaimIsShown(t *testing.T) {
 	jws := func(payload string) string {
 		return "h." + base64.RawURLEncoding.EncodeToString([]byte(payload)) + ".s"
@@ -24,6 +24,11 @@ func TestHR217_TheReceiptsCoverageClaimIsShown(t *testing.T) {
 		c.GetSnapshotState() != pantherclawv1.CoverageState_COVERAGE_STATE_ENFORCED || !c.GetLapsed() ||
 		c.GetReason() != "expired" || !slices.Equal(c.GetExclusionIds(), []string{"x1"}) {
 		t.Fatalf("claim %v", c)
+	}
+	// An unavailable claim shows its reason and no state.
+	if c := coverageOf(jws(`{"pap":{"coverage":{"unavailable":"timeout"}}}`)); c == nil || c.GetUnavailable() != "timeout" ||
+		c.GetState() != pantherclawv1.CoverageState_COVERAGE_STATE_UNSPECIFIED || c.GetSnapshotId() != "" {
+		t.Fatalf("unavailable claim %v", c)
 	}
 	for _, s := range []string{jws(`{"pap":{}}`), "removed", "a.!!.c"} {
 		if c := coverageOf(s); c != nil {

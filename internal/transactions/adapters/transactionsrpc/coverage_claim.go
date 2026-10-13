@@ -18,7 +18,8 @@ var coverageStates = map[string]pantherclawv1.CoverageState{
 
 // coverageOf reads the coverage claim from a decision receipt's signed
 // payload (HR-217, PAP-1 §9.1); nil when it has none, or its body was
-// removed by retention. It is shown, not trusted: verifiers check the
+// removed by retention. A claim the receipt says was unavailable has
+// only its reason. It is shown, not trusted: verifiers check the
 // receipt's signature and the snapshot ledger.
 func coverageOf(jws string) *pantherclawv1.DecisionCoverage {
 	parts := strings.Split(jws, ".")
@@ -32,6 +33,7 @@ func coverageOf(jws string) *pantherclawv1.DecisionCoverage {
 	var r struct {
 		Pap struct {
 			Coverage *struct {
+				Unavailable   string   `json:"unavailable"`
 				State         string   `json:"state"`
 				Snapshot      string   `json:"snapshot"`
 				SnapshotState string   `json:"snapshot_state"`
@@ -45,6 +47,9 @@ func coverageOf(jws string) *pantherclawv1.DecisionCoverage {
 		return nil
 	}
 	c := r.Pap.Coverage
+	if c.Unavailable != "" {
+		return &pantherclawv1.DecisionCoverage{Unavailable: c.Unavailable}
+	}
 	return &pantherclawv1.DecisionCoverage{
 		State: coverageStates[c.State], SnapshotId: c.Snapshot, SnapshotState: coverageStates[c.SnapshotState],
 		Lapsed: c.Lapsed, Reason: c.Reason, ExclusionIds: c.Exclusions,
