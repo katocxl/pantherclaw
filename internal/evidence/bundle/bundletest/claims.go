@@ -67,6 +67,12 @@ func (i *Issuer) AppendInvalidation(x Invalidation) {
 	i.appendCoverage(bundle.InvalidationKind, x)
 }
 
+// AppendCoverageBody chains a coverage entry of kind with the ledger body
+// the server wrote, as it is.
+func (i *Issuer) AppendCoverageBody(kind string, body []byte) {
+	i.appendCoverage(kind, jsontext.Value(body))
+}
+
 func (i *Issuer) appendCoverage(kind string, v any) {
 	body, err := domain.CanonicalBody(v)
 	if err != nil {

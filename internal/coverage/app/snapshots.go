@@ -30,36 +30,37 @@ var Actor = evdomain.Actor{Type: "system", ID: "coverage-reassess"}
 
 // EntryScope is a scope as the ledger names it.
 type EntryScope struct {
-	Agent      ids.UUID `json:"agent"`
-	Connection ids.UUID `json:"connection"`
-	Operation  string   `json:"operation"`
+	Agent      string `json:"agent"`
+	Connection string `json:"connection"`
+	Operation  string `json:"operation"`
 }
 
 // Entry is the ledger body of a coverage snapshot: what a receipt's
 // coverage claim is checked against (HR-217). The full record stays in
-// the snapshot row; routes_digest binds its routes to the entry.
+// the snapshot row; routes_digest binds its routes to the entry. Ids are
+// canonical UUID strings, as receipts and pclaw verify name them.
 type Entry struct {
 	V            int        `json:"v"`
 	Scope        EntryScope `json:"scope"`
 	State        string     `json:"state"`
-	Snapshot     ids.UUID   `json:"snapshot"`
+	Snapshot     string     `json:"snapshot"`
 	ComputedAt   string     `json:"computed_at"`
 	ExpiresAt    string     `json:"expires_at,omitzero"`
-	Exclusions   []ids.UUID `json:"exclusions"`
+	Exclusions   []string   `json:"exclusions"`
 	RoutesDigest string     `json:"routes_digest"`
-	Closure      *ids.UUID  `json:"closure,omitzero"`
+	Closure      string     `json:"closure,omitzero"`
 }
 
 // InvalidationEntry is the ledger body of a coverage invalidation, which
-// a lapsed claim names as its reason.
+// a lapsed claim names as its reason; ids are canonical UUID strings.
 type InvalidationEntry struct {
-	V          int       `json:"v"`
-	ID         ids.UUID  `json:"id"`
-	Connection ids.UUID  `json:"connection"`
-	Agent      *ids.UUID `json:"agent,omitzero"`
-	Kind       string    `json:"kind"`
-	Subject    *ids.UUID `json:"subject,omitzero"`
-	OccurredAt string    `json:"occurred_at"`
+	V          int    `json:"v"`
+	ID         string `json:"id"`
+	Connection string `json:"connection"`
+	Agent      string `json:"agent,omitzero"`
+	Kind       string `json:"kind"`
+	Subject    string `json:"subject,omitzero"`
+	OccurredAt string `json:"occurred_at"`
 }
 
 // Snapshot is the computed record of one scope, kept as the snapshot
@@ -208,14 +209,28 @@ func entryOf(s Snapshot) ([]byte, error) {
 	}
 	digest := sha256.Sum256(routes)
 	e := Entry{
-		V: 1, Scope: EntryScope{Agent: s.Agent, Connection: s.Connection, Operation: s.Operation}, State: s.State,
-		Snapshot: s.ID, ComputedAt: s.ComputedAt, ExpiresAt: s.ExpiresAt, Exclusions: s.Exclusions,
-		RoutesDigest: "sha256:" + hex.EncodeToString(digest[:]), Closure: s.Closure,
-	}
-	if e.Exclusions == nil {
-		e.Exclusions = []ids.UUID{}
+		V: 1, Scope: EntryScope{Agent: s.Agent.String(), Connection: s.Connection.String(), Operation: s.Operation}, State: s.State,
+		Snapshot: s.ID.String(), ComputedAt: s.ComputedAt, ExpiresAt: s.ExpiresAt, Exclusions: idStrings(s.Exclusions),
+		RoutesDigest: "sha256:" + hex.EncodeToString(digest[:]), Closure: optString(s.Closure),
 	}
 	return evdomain.CanonicalBody(e)
+}
+
+// idStrings returns ids as canonical UUID strings, never nil.
+func idStrings(in []ids.UUID) []string {
+	out := make([]string, 0, len(in))
+	for _, id := range in {
+		out = append(out, id.String())
+	}
+	return out
+}
+
+// optString returns id as a canonical UUID string, or "" when nil.
+func optString(id *ids.UUID) string {
+	if id == nil {
+		return ""
+	}
+	return id.String()
 }
 
 // RoutesOf is a computed result's routes as a snapshot records them.

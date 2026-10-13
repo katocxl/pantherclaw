@@ -85,7 +85,7 @@ func TestHR211_ReassessmentRecordsChangesAndKeepsTheLastValidRecord(t *testing.T
 		!slices.Contains(s.Reasons, domain.ReasonNoClosure) {
 		t.Fatalf("traffic only: %s %v (body id %v, row %v)", row.State, s.Reasons, s.ID, row.ID)
 	}
-	if entry.Snapshot != row.ID || entry.State != "PARTIAL" || entry.Scope.Operation != op || entry.Scope.Agent != f.agent ||
+	if entry.Snapshot != row.ID.String() || entry.State != "PARTIAL" || entry.Scope.Operation != op || entry.Scope.Agent != f.agent.String() ||
 		!strings.HasPrefix(entry.RoutesDigest, "sha256:") || entry.Exclusions == nil {
 		t.Fatalf("ledger entry %+v", entry)
 	}
