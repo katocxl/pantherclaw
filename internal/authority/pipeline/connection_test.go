@@ -148,6 +148,53 @@ func TestPAP1_AConnectionMustBeTheCallingGatewaysOwn(t *testing.T) {
 	expect(t, f.on(gw, c.ID, "create_refund", refund("ch_1", "10.00")), adomain.CannotAuthorize, pipeline.ReasonEvidenceUnavailable)
 }
 
+// TestHR201_SDKActionsComeThroughHTTPOrMCPConnections: an action the
+// gateway's /sdk face mapped (channel sdk) is decided through the http
+// connection serving its package, as the gateway's other channels are, and
+// never through a local connection, which serves the hook alone; nor
+// through a connection whose kind cannot serve its definition.
+func TestHR201_SDKActionsComeThroughHTTPOrMCPConnections(t *testing.T) {
+	f := newFx(t)
+	gw := ids.NewV7()
+	sdkOn := func(conn ids.UUID) *pipeline.Evaluation {
+		named := ""
+		if !conn.IsZero() {
+			named = conn.String()
+		}
+		p, err := f.mapper.SDK(context.Background(), mapping.Context{
+			Org: org.String(), Env: f.env.String(), RunID: f.run.String(), ActionID: ids.NewV7().String(), AgentInstance: f.instance.String(),
+			Connection: named,
+		}, "create_refund", jsontext.Value(refund("ch_1", "10.00")))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return f.eval(pipeline.Request{
+			Org: org, Action: p, Identity: pipeline.Identity{InstanceID: f.instance, AgentID: f.agent, AttestationLevel: 1, JKT: "NzbLsXh8uDCcd-6MNwXF4W_7noWXFZAfHkxZsRGC9Xs"},
+			Gateway: gw.String(),
+		})
+	}
+	agentHeld := connection(gw)
+	agentHeld.AccessMode = "agent_held"
+	f.w.PutConnection(agentHeld)
+	ev := sdkOn(agentHeld.ID)
+	expect(t, ev, adomain.Allow, pipeline.ReasonGrantCovers)
+	if ev.Connection == nil || ev.Connection.ID != agentHeld.ID {
+		t.Fatalf("evaluated connection %+v", ev.Connection)
+	}
+	local := connection(gw)
+	local.Kind, local.AccessMode = "local", "none"
+	f.w.PutConnection(local)
+	expect(t, sdkOn(local.ID), adomain.CannotAuthorize, pipeline.ReasonRouteUnknown)
+	// The mock payments package has no MCP dispatch template.
+	mcp := connection(gw)
+	mcp.Kind = "mcp"
+	f.w.PutConnection(mcp)
+	expect(t, sdkOn(mcp.ID), adomain.CannotAuthorize, pipeline.ReasonRouteUnknown)
+	var none ids.UUID
+	bare := sdkOn(none)
+	expect(t, bare, adomain.CannotAuthorize, pipeline.ReasonConnectionRequired)
+}
+
 // TestHR079_PoliciesSeeTheConnectionsDestinationClass: a policy decides on
 // action.destination_class, which the Authority takes from the record of
 // the connection the action came through.
