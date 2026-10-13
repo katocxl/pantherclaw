@@ -176,8 +176,7 @@ func (e Envelope) Validate() error {
 }
 
 // CheckDispatched refuses a guardrail budget or counter that names an
-// operation which is only ever a consequence, or one with no active
-// definition, as a grant's are (G0 M8, HR-206): it would never count
+// operation which is only ever a consequence, as a grant's are (G0 M8, HR-206): it would never count
 // anything, so an admin would believe a cap that is not there. lookup is
 // the service's preloaded active definitions.
 func (e Envelope) CheckDispatched(lookup func(op string) *defs.Definition) error {

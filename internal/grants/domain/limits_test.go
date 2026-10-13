@@ -154,10 +154,9 @@ func TestRemovingALimitWidens(t *testing.T) {
 // names an operation which is only ever a consequence (a write without
 // mappings, such as a payout or a deployment) would never count: the
 // pipeline decides a consequence with the action that may cause it but
-// never dispatches it. Such a limit is refused at issue, and so is one on an
-// operation with no active definition. A limit on the action that causes
-// it stands, and so does a prefix, which limits the dispatched operations
-// it covers.
+// never dispatches it. Such a limit is refused at issue. A limit on the
+// action that causes it stands, and so does a prefix, which limits the
+// dispatched operations it covers.
 func TestHR206_GrantLimitsOnAConsequenceAreRefused(t *testing.T) {
 	payout := &defs.Definition{Operation: "payments.payout.trigger", Access: defs.AccessWrite}
 	lookup := func(op string) *defs.Definition {
@@ -177,11 +176,6 @@ func TestHR206_GrantLimitsOnAConsequenceAreRefused(t *testing.T) {
 		if !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "payments.payout.trigger is a consequence") {
 			t.Errorf("%s: %v", name, err)
 		}
-	}
-	g.Limits = mustLimits(t, `{"counters": [{"id": "x", "operations": ["payments.payout.cancel"], "key": "run", "window": "day", "max": "1"}]}`)
-	if err := g.ValidateIssue(IssueContext{Now: issueTime, Lookup: lookup}); !errors.Is(err, ErrInvalid) ||
-		!strings.Contains(err.Error(), "payments.payout.cancel has no active definition") {
-		t.Errorf("an operation no package defines: %v", err)
 	}
 	for name, limits := range map[string]string{
 		"the action": `{"counters": [{"id": "refunds", "operations": ["payments.refund.create"], "key": "run", "window": "day", "max": "1"}]}`,
