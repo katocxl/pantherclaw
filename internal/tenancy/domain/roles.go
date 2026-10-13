@@ -97,7 +97,7 @@ var roles = []Role{
 			PermServiceAccountRead, PermServiceAccountManage, PermAuditRead, PermAgentRead, PermRunRead,
 			PermWaitlistRead, PermWaitlistManage, PermIssuerRead, PermIssuerManage, PermFactRead, PermPackageImport,
 			PermPackageKeyManage, PermNotificationRead, PermNotificationManage, PermEvidenceRead,
-			PermGitHubIdentityManage, PermGitHubIdentityProve,
+			PermGitHubIdentityManage, PermGitHubIdentityProve, PermGitHubScanRun,
 		}, authorityReads, boundaryReads),
 	},
 	{
@@ -108,7 +108,7 @@ var roles = []Role{
 			PermServiceAccountManage, PermAuditRead, PermAgentRead, PermIncidentRespond, PermRunRead, PermRunManage,
 			PermWaitlistRead, PermWaitlistManage, PermApprovalRead, PermAgentRestore, PermIssuerRead, PermGrantRevoke,
 			PermFactRead, PermNotificationRead, PermNotificationManage, PermEvidenceRead, PermTransactionReconcile,
-			PermEvidenceExport, PermReleaseWindowManage,
+			PermEvidenceExport, PermReleaseWindowManage, PermGitHubScanRun,
 		}, authorityReads, boundaryReads),
 	},
 	{

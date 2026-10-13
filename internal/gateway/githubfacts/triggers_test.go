@@ -131,7 +131,7 @@ func FuzzWorkflowTriggers(f *testing.F) {
 		if !slices.Contains([]string{"triggered", "none", "unknown"}, got.State) || (got.State == "unknown") != (got.Unknown != "") {
 			t.Fatalf("state %+v", got)
 		}
-		doc, err := parseYAML(raw)
+		doc, err := ParseWorkflowYAML(raw)
 		if err != nil && got.State != "unknown" {
 			t.Fatalf("an unreadable file gave %s: %q", got.State, raw)
 		}

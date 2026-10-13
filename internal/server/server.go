@@ -251,6 +251,7 @@ func cmdServe(ctx context.Context, args []string, stderr io.Writer, env Env, onS
 	}
 	m6.verifications = verification
 	m6.facts = gatewayFacts(pool)
+	m6.scans = agentsrpc.NewGatewayScans(aapp.NewInventory(pool, bill))
 
 	g, ctx := errgroup.WithContext(ctx)
 	if cfg.Role == RoleAPI || cfg.Role == RoleAll {
@@ -541,7 +542,7 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	if d.m5 != nil {
 		githubNotify = d.m5.notifications
 	}
-	if err := registerM8G(rs, pool, githubNotify, d.github); err != nil {
+	if err := registerM8G(rs, pool, githubNotify, d.github, d.billing); err != nil {
 		return nil, err
 	}
 	if err := registerEvidence(rs, d); err != nil {

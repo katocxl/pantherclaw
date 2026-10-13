@@ -34,7 +34,9 @@ message GitHubInstallation {
 
 // GitHubService links the org's people to their GitHub accounts (G0 M8,
 // HR-207): independence then excludes, by GitHub user id, everyone who
-// authored, committed or pushed to a pull request from reviewing it.
+// authored, committed or pushed to a pull request from reviewing it. It
+// also scans the GitHub organization behind a GitHub App connection for
+// agents, workflows and MCP configuration (PN-001.2, HR-209).
 service GitHubService {
   // ProveIdentity links the caller's own GitHub account, or with unlink
   // removes that link, once the server has read from GitHub which account
@@ -69,6 +71,20 @@ service GitHubService {
   // ListExemptions lists the org's exemptions (at most 500).
   // permission: user.read
   rpc ListExemptions(ListExemptionsRequest) returns (ListExemptionsResponse);
+  // StartOrgScan starts a scan of the GitHub organization behind a GitHub
+  // App connection (PN-001.2, HR-209; Team edition): an org_scan lease for
+  // the connection's gateway, which reads metadata and named files only and
+  // submits what it finds. One scan of a connection runs at a time.
+  // permission: github.scan.run
+  rpc StartOrgScan(StartOrgScanRequest) returns (StartOrgScanResponse);
+  // GetOrgScan returns a scan: its state, its counts, and the sources it
+  // read and could not read.
+  // permission: github.scan.run
+  rpc GetOrgScan(GetOrgScanRequest) returns (GetOrgScanResponse);
+  // ListOrgScanFindings lists what a scan found: untrusted observations,
+  // recorded as DISCOVERED agents, that grant nothing.
+  // permission: github.scan.run
+  rpc ListOrgScanFindings(ListOrgScanFindingsRequest) returns (ListOrgScanFindingsResponse);
 }
 
 // GitHubIdentity is one person's link to a GitHub account.
@@ -205,4 +221,89 @@ message ListExemptionsRequest {}
 message ListExemptionsResponse {
   // The exemptions.
   repeated GitHubExemption exemptions = 1;
+}
+
+// OrgScan is one scan of a GitHub organization (HR-209).
+message OrgScan {
+  // Scan id.
+  string id = 1;
+  // The connection whose App and gateway scan.
+  string connection_id = 2;
+  // PENDING (waiting for its gateway), RUNNING, DONE or FAILED (its lease
+  // ran out before a report).
+  string state = 3;
+  // What was found, by kind (repositories, workflows, mcp_configs, ...).
+  map<string, int64> counts = 4;
+  // The sources read.
+  repeated string scanned = 5;
+  // The sources not read, with why: never reported as "none found".
+  map<string, string> not_scanned = 6;
+  // Who started it.
+  string started_by = 7;
+  // When.
+  google.protobuf.Timestamp create_time = 8;
+  // When it finished.
+  google.protobuf.Timestamp finish_time = 9;
+}
+
+// StartOrgScanRequest names the connection.
+message StartOrgScanRequest {
+  // A connection holding a GitHub App credential.
+  string connection_id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// StartOrgScanResponse returns the scan.
+message StartOrgScanResponse {
+  // The scan, PENDING.
+  OrgScan scan = 1;
+}
+
+// GetOrgScanRequest names a scan.
+message GetOrgScanRequest {
+  // Scan id.
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// GetOrgScanResponse returns it.
+message GetOrgScanResponse {
+  // The scan.
+  OrgScan scan = 1;
+}
+
+// ListOrgScanFindingsRequest pages through a scan's findings.
+message ListOrgScanFindingsRequest {
+  // Scan id.
+  string scan_id = 1 [(buf.validate.field).string.uuid = true];
+  // Page size (default 50, at most 200).
+  int32 page_size = 2 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 200
+  }];
+  // Page token from the previous page.
+  string page_token = 3 [(buf.validate.field).string.max_len = 512];
+}
+
+// OrgScanFinding is one thing a scan found: an UNTRUSTED observation that
+// grants nothing, recorded as a DISCOVERED agent.
+message OrgScanFinding {
+  // The discovered agent.
+  string agent_id = 1;
+  // github_app, github_workflow or github_mcp_config.
+  string kind = 2;
+  // UNTRUSTED attributes: names only, never values or arguments.
+  map<string, string> attributes = 3;
+  // How often scans saw it.
+  int64 seen_count = 4;
+  // When first and last seen.
+  google.protobuf.Timestamp first_seen_time = 5;
+  // When last seen.
+  google.protobuf.Timestamp last_seen_time = 6;
+}
+
+// ListOrgScanFindingsResponse returns a page of findings.
+message ListOrgScanFindingsResponse {
+  // The findings this scan saw.
+  repeated OrgScanFinding findings = 1;
+  // Token of the next page; empty on the last.
+  string next_page_token = 2;
 }

@@ -131,7 +131,7 @@ func workflow(raw []byte, branch string, merge bool) (evaluated, error) {
 	if len(raw) > MaxWorkflowBytes {
 		return evaluated{}, unknownf("larger than %d bytes", MaxWorkflowBytes)
 	}
-	doc, err := parseYAML(raw)
+	doc, err := ParseWorkflowYAML(raw)
 	if err != nil {
 		return evaluated{}, err
 	}
@@ -419,10 +419,11 @@ func environments(jobs any) ([]string, error) {
 	return out, nil
 }
 
-// parseYAML reads one YAML document with the M4 restrictions (HR-100): no
-// anchors, aliases, merge keys or explicit tags, string keys, no duplicate
-// keys, bounded depth. Scalars stay strings; null is nil.
-func parseYAML(raw []byte) (any, error) {
+// ParseWorkflowYAML reads one YAML document with the M4 restrictions
+// (HR-100): no anchors, aliases, merge keys or explicit tags, string keys,
+// no duplicate keys, bounded depth. Scalars stay strings; null is nil. The
+// organization scan reads workflow files with it too.
+func ParseWorkflowYAML(raw []byte) (any, error) {
 	dec := yaml.NewDecoder(bytes.NewReader(raw))
 	var doc yaml.Node
 	if err := dec.Decode(&doc); err != nil {

@@ -7,8 +7,6 @@ import (
 	"context"
 	"encoding/json/v2"
 	"log/slog"
-	"net/http"
-	"net/url"
 	"slices"
 	"strconv"
 	"strings"
@@ -21,7 +19,6 @@ import (
 	defs "github.com/katocxl/pantherclaw/internal/definitions/domain"
 	"github.com/katocxl/pantherclaw/internal/gateway/broker"
 	"github.com/katocxl/pantherclaw/internal/gateway/control"
-	"github.com/katocxl/pantherclaw/internal/gateway/egress"
 	"github.com/katocxl/pantherclaw/internal/gateway/githubfacts"
 	pb "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
 	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
@@ -126,21 +123,7 @@ func (e *Engine) reportGitHubFacts(ctx context.Context, conn *control.Connection
 			warn("gateway.installation_token_not_revoked", err)
 		}
 	}()
-	base := strings.TrimSuffix(conn.GetBaseUrl(), "/")
-	get := func(ctx context.Context, path string) (egress.Response, error) {
-		u, err := url.Parse(base + path)
-		if err != nil {
-			return egress.Response{}, err
-		}
-		req, err := c.HTTPRequest(ctx, egress.Request{Method: http.MethodGet, URL: u})
-		if err != nil {
-			return egress.Response{}, err
-		}
-		if err := tok.Place(req); err != nil {
-			return egress.Response{}, err
-		}
-		return c.Do(req)
-	}
+	get := tokenGetter(conn, c, tok)
 	if s.Branch != "" && s.At == "" {
 		// A contents write: its files are the branch's with the write
 		// applied, and it never writes under .github/, so the workflows
@@ -182,18 +165,10 @@ func subject(def *defs.Definition, a actionir.ActionIR) (githubfacts.Subject, bo
 // mint opens the connection's GitHub App credential and mints a token for
 // owner/repo with scopes.
 func (e *Engine) mint(ctx context.Context, conn *control.Connection, owner, repo string, scopes map[string]string, c broker.Sender) (*broker.Installation, error) {
-	plain, err := e.openCredential(conn)
+	app, err := e.openApp(conn)
 	if err != nil {
 		return nil, err
 	}
-	app, err := credentials.DecodeGitHubApp(plain)
-	clear(plain)
 	defer app.Clear()
-	if err != nil {
-		return nil, err
-	}
-	if !installed(conn, app) {
-		return nil, errInstallation
-	}
 	return broker.MintInstallationToken(ctx, c, conn.GetBaseUrl(), conn.Credential.GetAllowedHosts(), app, owner, repo, scopes, time.Now())
 }
