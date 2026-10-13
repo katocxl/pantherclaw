@@ -4,6 +4,7 @@
 <p>State: <strong>{{.State}}</strong>. Deadline {{.Request.DeadlineAt.UTC.Format "2006-01-02 15:04:05 UTC"}}{{with .Request.EvidenceDeadlineAt}}; evidence is due by {{.UTC.Format "2006-01-02 15:04:05 UTC"}}{{end}}.</p>
 {{if .MayApprove}}<p class="ok">You can approve this request with your security key.</p>
 {{else if .MayRespond}}<p class="note">You can decline this request, ask for evidence or propose a narrower action, but you cannot approve it now.</p>{{end}}
+{{with .NotUntilKnown}}<p class="note"><strong>This cannot be released until its facts are known.</strong> What it may cause is not known for {{range $i, $c := .}}{{if $i}}, {{end}}<code>{{$c}}</code>{{end}}, and an approval it needs counts only inside a change window for a known environment. It stays held until the facts say where it deploys: an approval given now is kept only until its consume-by time and does not release it on its own.</p>{{end}}
 {{with .Display.Consequence}}
 <h2>What will happen</h2>
 <dl>
