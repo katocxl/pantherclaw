@@ -102,7 +102,9 @@ func (n *notices) Enqueue(_ context.Context, _ db.TenantTx, m napp.Message) (nap
 // without github.identity.prove and a server without GitHub sign-in link
 // nothing. A person removes their own link only the same way; a person
 // holding github.identity.manage unlinks other people only. Every change is
-// audited and notified, and anyone who reads users lists the links.
+// audited and notified, a refused attempt on someone else's account is
+// audited, every proved link stays in the history after it is removed,
+// and anyone who reads users lists the links.
 func TestHR207_PeopleLinkTheirOwnGitHubAccountsBySigningIn(t *testing.T) {
 	e := newEnv(t)
 	n := &notices{}
@@ -183,5 +185,18 @@ func TestHR207_PeopleLinkTheirOwnGitHubAccountsBySigningIn(t *testing.T) {
 	}
 	if m := n.got[len(n.got)-1]; m.Type != "security.github_identity_unlinked" || m.Params["github_login"] != "bob-gh" {
 		t.Fatalf("last notice %+v", m)
+	}
+	if r := e.count(t, `SELECT count(*) FROM pc.ledger_entries WHERE kind = 'audit.github.identity_link_refused'
+		AND convert_from(body, 'UTF8')::jsonb -> 'details' ->> 'github_user_id' = '101'`); r != 2 {
+		t.Fatalf("%d refused attempts on alice's account audited, want 2", r)
+	}
+	if h := e.count(t, "SELECT count(*) FROM pc.github_identity_history"); h != 3 {
+		t.Fatalf("%d links in the history, want alice's, bob's and the admin's", h)
+	}
+	if err := e.pool.InTenantTx(context.Background(), e.org, func(ctx context.Context, tx db.TenantTx) error {
+		_, err := tx.Exec(ctx, "DELETE FROM pc.github_identity_history")
+		return err
+	}); err == nil {
+		t.Fatal("the link history could be deleted")
 	}
 }

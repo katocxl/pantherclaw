@@ -10,6 +10,12 @@ INSERT INTO pc.github_identities (org_id, id, user_id, github_login, github_user
 VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(user_id), sqlc.arg(github_login), sqlc.arg(github_user_id), sqlc.arg(linked_by), now())
 RETURNING *;
 
+-- name: InsertGitHubIdentityHistory :exec
+-- Every link a person proved, kept for good (P2f): see 00083.
+INSERT INTO pc.github_identity_history (org_id, github_user_id, user_id)
+VALUES (sqlc.arg(org_id), sqlc.arg(github_user_id), sqlc.arg(user_id))
+ON CONFLICT DO NOTHING;
+
 -- name: GitHubIdentityByGitHubUser :one
 SELECT * FROM pc.github_identities WHERE org_id = sqlc.arg(org_id) AND github_user_id = sqlc.arg(github_user_id);
 

@@ -42,6 +42,10 @@ type Listed struct {
 	As []string
 	// User is the user linked to the GitHub user id; nil when none is.
 	User *ids.UUID
+	// Formerly are the other users who ever proved a link to the GitHub user
+	// id (github_identity_history): they stay excluded too, so unlinking or
+	// moving the link to someone else lets nobody approve their own change.
+	Formerly []ids.UUID
 }
 
 // PeopleList is what a people fact lists now about a held action's target,
@@ -131,8 +135,19 @@ func (l *PeopleList) Link(github int64, user ids.UUID) {
 	}
 }
 
+// Formerly records that user once proved a link to the GitHub user id.
+func (l *PeopleList) Formerly(github int64, user ids.UUID) {
+	for i := range l.People {
+		p := &l.People[i]
+		if p.GitHubID == github && (p.User == nil || *p.User != user) && !slices.Contains(p.Formerly, user) {
+			p.Formerly = append(p.Formerly, user)
+		}
+	}
+}
+
 // Authorship is the list as independence reads it: the users linked to the
-// people it names, only when it is complete and has no gap.
+// people it names, now or ever, only when it is complete and has
+// no gap.
 func (l PeopleList) Authorship() Authorship {
 	if !l.Complete || len(l.Gaps) > 0 {
 		return Authorship{}
@@ -141,6 +156,11 @@ func (l PeopleList) Authorship() Authorship {
 	for _, p := range l.People {
 		if p.User != nil && !slices.Contains(users, *p.User) {
 			users = append(users, *p.User)
+		}
+		for _, u := range p.Formerly {
+			if !slices.Contains(users, u) {
+				users = append(users, u)
+			}
 		}
 	}
 	return Authorship{Users: users, Complete: true}
