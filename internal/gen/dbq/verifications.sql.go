@@ -506,6 +506,23 @@ func (q *Queries) ReceiptOfCorrelation(ctx context.Context, orgID ids.OrgID, tra
 	return i, err
 }
 
+const recordTestTokenMint = `-- name: RecordTestTokenMint :execrows
+UPDATE pc.connection_tests
+SET tokens_attempt = $1::integer
+WHERE org_id = $2 AND id = $3 AND kind = 'target_verifier' AND state = 'RUNNING'
+  AND coalesce(tokens_attempt, 0) < $1::integer
+`
+
+// RecordTestTokenMint records a running target_verifier test's token mint
+// for its lease attempt: at most one mint per attempt (HR-188's exception).
+func (q *Queries) RecordTestTokenMint(ctx context.Context, attempt int32, orgID ids.OrgID, iD ids.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, recordTestTokenMint, attempt, orgID, iD)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const releaseExpiredLeases = `-- name: ReleaseExpiredLeases :many
 UPDATE pc.verifications
 SET state = CASE WHEN deadline_at <= now() THEN 'EXPIRED' ELSE 'PENDING' END,
@@ -709,6 +726,36 @@ func (q *Queries) TransactionEffect(ctx context.Context, orgID ids.OrgID, iD ids
 		&i.EffectLevelRequired,
 		&i.EffectLevelAchieved,
 		&i.DefinitionDigest,
+	)
+	return i, err
+}
+
+const verifierTestBasis = `-- name: VerifierTestBasis :one
+SELECT c.state AS connection_state, c.access_mode, c.package, coalesce(k.kill_switch, false)::boolean AS kill_switch
+FROM pc.connection_tests t
+JOIN pc.connections c ON c.org_id = t.org_id AND c.id = t.connection_id
+LEFT JOIN pc.org_containment k ON k.org_id = t.org_id
+WHERE t.org_id = $1 AND t.id = $2
+`
+
+type VerifierTestBasisRow struct {
+	ConnectionState string
+	AccessMode      string
+	Package         string
+	KillSwitch      bool
+}
+
+// VerifierTestBasis is what a target_verifier test's token mint checks
+// again on the server (HR-188's exception): its connection's state, access
+// mode and package, and whether the kill switch is engaged.
+func (q *Queries) VerifierTestBasis(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (VerifierTestBasisRow, error) {
+	row := q.db.QueryRow(ctx, verifierTestBasis, orgID, iD)
+	var i VerifierTestBasisRow
+	err := row.Scan(
+		&i.ConnectionState,
+		&i.AccessMode,
+		&i.Package,
+		&i.KillSwitch,
 	)
 	return i, err
 }

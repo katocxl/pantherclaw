@@ -187,9 +187,14 @@ type Store interface {
 	// open, for the window since its last complete run, minus overlap
 	// (HR-112).
 	ScheduleTargetLogs(ctx context.Context, org ids.OrgID, overlap time.Duration) (int, error)
-	// VerifierTest returns gw's live lease of a target_verifier connection
-	// test, or ErrLease.
-	VerifierTest(ctx context.Context, org ids.OrgID, gateway, task ids.UUID, secret []byte) (VerifierTest, error)
+	// MintTestTokens runs mint for gw's live lease of a target_verifier
+	// connection test, in one transaction that checks the lease (ErrLease),
+	// that the test read is the connection package's and the connection is
+	// ACTIVE, target_enforced and not under the kill switch
+	// (ErrTestTokensRefused), records the mint for the lease's attempt
+	// (ErrTestTokensMinted for a second one) and audits it (HR-188).
+	MintTestTokens(ctx context.Context, org ids.OrgID, gateway, task ids.UUID, secret []byte,
+		mint func(VerifierTest) (MintedTokens, error)) (TestTokens, error)
 }
 
 // Signer signs a compact JWS of a JOSE type (the receipts key's signer).
