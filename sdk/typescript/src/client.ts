@@ -31,19 +31,26 @@ export interface ToolCall {
 export type CallClass = "mapped" | "builtin" | "refused";
 
 /**
- * Sorts an agent's tool name: mcp__<server>__<tool>, with server the
- * longest of `servers` that fits (a server name may contain "__") and a
- * tool name after it, is mapped; a name in `builtins` (exactly) is a
+ * The rule for a connection's name (migration 00041). A connection governs
+ * the one MCP server named after it, so no other server name is routed.
+ */
+const connectionName = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/;
+
+/**
+ * Sorts an agent's tool name: mcp__<server>__<tool> is mapped with that
+ * server when exactly one of `servers` fits it with a tool name after it
+ * and that server's name is a connection's name (the call goes to the
+ * connection named after it). A tool whose name two servers' names fit
+ * ("notes" and "notes__v2" both fit mcp__notes__v2__search) is refused,
+ * since either server might run it. A name in `builtins` (exactly) is a
  * built-in; anything else is refused.
  */
 export function classify(tool: string, servers: readonly string[], builtins: readonly string[]): { cls: CallClass; server?: string } {
   if (tool.startsWith("mcp__")) {
     const rest = tool.slice(5);
-    let server = "";
-    for (const s of servers) {
-      if (s.length > server.length && rest.length > s.length + 2 && rest.startsWith(`${s}__`)) server = s;
-    }
-    return server ? { cls: "mapped", server } : { cls: "refused" };
+    const fits = new Set(servers.filter((s) => rest.length > s.length + 2 && rest.startsWith(`${s}__`)));
+    const [server] = fits;
+    return fits.size === 1 && connectionName.test(server) ? { cls: "mapped", server } : { cls: "refused" };
   }
   return builtins.includes(tool) ? { cls: "builtin" } : { cls: "refused" };
 }
@@ -384,13 +391,25 @@ export class Client {
     }
   }
 
-  /** The class of a call as the client sends it: an MCP tool names its server; a built-in names none and is configured. */
+  /**
+   * The class of a call as the client sends it: an MCP tool names its
+   * server, whose name is a connection's; a built-in names none and is
+   * configured.
+   */
   private classOf(call: ToolCall): CallClass {
-    if (call.server) return call.tool.startsWith(`mcp__${call.server}__`) && call.tool.length > call.server.length + 7 ? "mapped" : "refused";
+    if (call.server) {
+      const fits = call.tool.startsWith(`mcp__${call.server}__`) && call.tool.length > call.server.length + 7;
+      return fits && connectionName.test(call.server) ? "mapped" : "refused";
+    }
     return !call.tool.startsWith("mcp__") && this.cfg.builtins.includes(call.tool) ? "builtin" : "refused";
   }
 
-  /** Asks the gateway's /sdk face about one call through the named connection. Never throws. */
+  /**
+   * Asks the gateway's /sdk face about one call. An MCP tool's call goes to
+   * the connection named after its server, the one connection that governs
+   * it; a built-in tool's call goes to `connection`, which records it.
+   * Never throws.
+   */
   async authorize(connection: string, call: ToolCall, actionId: string, firstHash = ""): Promise<Result> {
     if (!this.cfg.gateway || !this.cfg.runId) return cannot("the gateway URL and the run id are required");
     if (!call.tool || !toolUseId.test(call.tool_use_id) || typeof call.input !== "object" || call.input === null || Array.isArray(call.input)) {
@@ -398,10 +417,12 @@ export class Client {
     }
     const cls = this.classOf(call);
     if (cls === "refused") return cannot(`PantherClaw neither maps ${call.tool} as an MCP tool nor knows it as a built-in tool`);
+    const target = cls === "mapped" ? (call.server as string) : connection;
+    if (!connectionName.test(target)) return cannot(`no connection is named ${target}`);
     const body = JSON.stringify({ tool: call.tool, server: call.server, input: call.input, tool_use_id: call.tool_use_id });
     if (encoder.encode(body).length > MAX_CALL_BODY) return cannot("the tool call is larger than the /sdk face takes");
     try {
-      const res = await this.do("POST", `${this.cfg.gateway}/sdk/${encodeURIComponent(connection)}`, body, {
+      const res = await this.do("POST", `${this.cfg.gateway}/sdk/${target}`, body, {
         "Content-Type": "application/json",
         "PAP-Run-Id": this.cfg.runId,
         "PC-Action-Id": actionId,
