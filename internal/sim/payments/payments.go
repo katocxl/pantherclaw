@@ -113,6 +113,25 @@ func New(f Faults, log *slog.Logger) *Server {
 	return &Server{faults: f, log: log, byKey: map[string]Refund{}, byID: map[string]Refund{}, now: time.Now}
 }
 
+// SetFaults replaces the simulator's faults from the next request on,
+// keeping every refund recorded so far: a test makes one refund lose its
+// answer and the next one short, through the same target.
+func (s *Server) SetFaults(f Faults) {
+	if f.HangFor == 0 {
+		f.HangFor = 30 * time.Second
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.faults = f
+}
+
+// fault returns the current faults.
+func (s *Server) fault() Faults {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.faults
+}
+
 // WithClock replaces the simulator's clock (tests), and returns it.
 func (s *Server) WithClock(now func() time.Time) *Server {
 	s.now = now
@@ -187,7 +206,7 @@ func (s *Server) getRefund(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "refund_not_found"})
 		return
 	}
-	writeJSON(w, http.StatusOK, s.object(ref))
+	writeJSON(w, http.StatusOK, s.object(ref, s.fault().SettleAfter))
 }
 
 // amountText writes an amount with exactly its currency's minor-unit
@@ -201,11 +220,12 @@ func amountText(m money.Money) string {
 	return m.Amount.String()
 }
 
-// object is a refund as the API shows it.
-func (s *Server) object(ref Refund) map[string]any {
+// object is a refund as the API shows it, settled settleAfter after it was
+// created.
+func (s *Server) object(ref Refund, settleAfter time.Duration) map[string]any {
 	return map[string]any{
 		"id": ref.ID, "charge": ref.Charge, "amount": amountText(ref.Amount), "currency": string(ref.Amount.Currency),
-		"reason": ref.Reason, "status": ref.status(s.now(), s.faults.SettleAfter), "idempotency_key": ref.Key,
+		"reason": ref.Reason, "status": ref.status(s.now(), settleAfter), "idempotency_key": ref.Key,
 		"created": ref.Created.Unix(), "simulated": true,
 	}
 }
@@ -257,8 +277,9 @@ func (s *Server) listRefunds(w http.ResponseWriter, r *http.Request) {
 	}
 	s.mu.Unlock()
 	data := make([]map[string]any, len(page))
+	settleAfter := s.fault().SettleAfter
 	for i, ref := range page {
-		data[i] = s.object(ref)
+		data[i] = s.object(ref, settleAfter)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"data": data, "has_more": more, "simulated": true})
 }
@@ -298,29 +319,30 @@ func (s *Server) refund(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	hash := sha256.Sum256(body)
-	if s.faults.RedirectTo != "" {
+	f := s.fault()
+	if f.RedirectTo != "" {
 		s.mu.Lock()
 		s.redirects++
 		s.mu.Unlock()
-		w.Header().Set("Location", s.faults.RedirectTo)
+		w.Header().Set("Location", f.RedirectTo)
 		w.WriteHeader(http.StatusTemporaryRedirect)
 		return
 	}
 
-	if s.faults.Latency > 0 {
+	if f.Latency > 0 {
 		select {
-		case <-time.After(s.faults.Latency):
+		case <-time.After(f.Latency):
 		case <-r.Context().Done():
 			return
 		}
 	}
-	if chance(s.faults.HangRate) {
-		s.hang(r)
+	if chance(f.HangRate) {
+		hang(r, f.HangFor)
 	}
 
 	status, resp, replayed := s.apply(key, req, amount, hash)
-	if status == http.StatusOK && !replayed && chance(s.faults.LoseRate) {
-		s.hang(r) // the refund happened; its answer never arrives
+	if status == http.StatusOK && !replayed && chance(f.LoseRate) {
+		hang(r, f.HangFor) // the refund happened; its answer never arrives
 	}
 	if replayed {
 		w.Header().Set("Idempotent-Replayed", "true")
@@ -328,12 +350,11 @@ func (s *Server) refund(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, status, resp)
 }
 
-// hang waits for HangFor or the client to give up, then drops the
-// connection without a response: an empty 200 would look like success to
-// the caller.
-func (s *Server) hang(r *http.Request) {
+// hang waits for d or the client to give up, then drops the connection
+// without a response: an empty 200 would look like success to the caller.
+func hang(r *http.Request, d time.Duration) {
 	select {
-	case <-time.After(s.faults.HangFor):
+	case <-time.After(d):
 	case <-r.Context().Done():
 	}
 	panic(http.ErrAbortHandler)

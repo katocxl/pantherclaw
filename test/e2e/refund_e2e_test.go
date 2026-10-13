@@ -59,6 +59,7 @@ type stack struct {
 	sim      *payments.Server
 	simURL   string
 	simCalls *atomic.Int64 // dispatches (non-GET requests) the target received
+	gwCalls  *atomic.Int64 // requests agents sent to the gateway
 	stop     context.CancelFunc
 	done     chan struct{} // closed when the server has stopped
 	apiURL   string
@@ -139,7 +140,7 @@ var (
 
 func start(t *testing.T, o options) *stack {
 	t.Helper()
-	s := &stack{db: dbtest.New(t), simCalls: &atomic.Int64{}}
+	s := &stack{db: dbtest.New(t), simCalls: &atomic.Int64{}, gwCalls: &atomic.Int64{}}
 	dir := t.TempDir()
 	kek := filepath.Join(dir, "kek")
 	s.kek = kek
@@ -269,7 +270,11 @@ func start(t *testing.T, o options) *stack {
 	s.gatewayCfg = gc
 	s.gatewayEnroll = enrollFile
 	s.gw = s.startGateway(t)
-	gs.Config.Handler = s.gw.Handler()
+	gw := s.gw.Handler()
+	gs.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		s.gwCalls.Add(1)
+		gw.ServeHTTP(w, r)
+	})
 	gs.Start()
 	t.Cleanup(gs.Close)
 	s.gateway = gs.URL
@@ -435,7 +440,7 @@ func (s *stack) tryRefundVia(conn string, act ids.UUID, amount string) (int, rep
 // budget and the state of txn's permit.
 func (s *stack) budget(t *testing.T, txn string) (reserved, spent, permit string) {
 	t.Helper()
-	err := s.db.AppPool(t).InTenantTx(context.Background(), s.org, func(ctx context.Context, tx db.TenantTx) error {
+	err := s.pool.InTenantTx(context.Background(), s.org, func(ctx context.Context, tx db.TenantTx) error {
 		// The account exists from the first reservation; before it, both are
 		// 0. Outcomes recorded but not yet applied to the row by the
 		// settlement job count as settled (ADR-0015).

@@ -482,3 +482,82 @@ func TestIntRetentionJobRunsThroughTheLister(t *testing.T) {
 		t.Fatal("the lister call was not audited")
 	}
 }
+
+// TestT075_AShorteningMeantToEraseAnIncidentIsHeldInItsWindow is T-075's
+// attack through the real services: an insider holding
+// evidence.retention.manage shortens the receipts period to its minimum so
+// that a 100-day-old incident's receipts go. The change cannot be quiet
+// (audited under the insider's name, notified to the org's admins and
+// auditors, not to the insider) and cannot be immediate (7 days), so a
+// second Records Manager places a legal hold over the incident in the
+// window. When the shortening applies, only the unrelated older receipts
+// lose their bodies; the incident's keep theirs. Nothing beyond bodies
+// goes: every chain link, tile and checkpoint stays, the chain and the
+// daily verification still pass, and each removed body leaves a tombstone
+// (when, under which policy revision) and an audit entry, so the removal
+// is never presented as evidence that never existed.
+func TestT075_AShorteningMeantToEraseAnIncidentIsHeldInItsWindow(t *testing.T) {
+	f := newFixture(t)
+	incident := time.Now().Add(-100 * 24 * time.Hour).UTC().Truncate(time.Microsecond)
+	unrelated := incident.Add(-100 * 24 * time.Hour)
+	f.entries(t, "receipt.decision", incident, 3, "incident-42")
+	f.entries(t, "receipt.decision", unrelated, 2, "unrelated")
+	f.seal(t)
+	links := func() [3]int {
+		return [3]int{
+			f.count(t, "SELECT count(*) FROM pc.ledger_chain"), f.count(t, "SELECT count(*) FROM pc.ledger_tiles"),
+			f.count(t, "SELECT count(*) FROM pc.checkpoints"),
+		}
+	}
+	before := links()
+
+	insider := f.records()
+	ch, err := f.svc.SetPolicy(insider, retention.Receipts, 30)
+	if err != nil || !ch.Shortened || ch.Policy.Pending == nil {
+		t.Fatalf("the shortening = %+v, %v", ch, err)
+	}
+	sent := f.notify.all()
+	if len(sent) != 1 || sent[0].Type != "evidence.retention_shortened" || !slices.Contains(sent[0].Personal, f.admin) ||
+		!slices.Contains(sent[0].Personal, f.auditor) || slices.Contains(sent[0].Personal, f.manager) {
+		t.Fatalf("the shortening was not told to the admins and auditors: %+v", sent)
+	}
+	if n := f.count(t, "SELECT count(*) FROM pc.ledger_entries WHERE kind = 'audit.evidence.retention_changed' AND actor_id = $1", f.manager.String()); n != 1 {
+		t.Fatalf("%d audit entries name the insider", n)
+	}
+	// The window: nothing goes yet, and another Records Manager holds the
+	// incident.
+	f.remover.Shift = 6 * 24 * time.Hour
+	if res, err := f.remover.Run(context.Background(), f.org); err != nil || res.Total() != 0 {
+		t.Fatalf("removed %d inside the window (%v)", res.Total(), err)
+	}
+	second := ids.NewV7()
+	f.exec(t, "INSERT INTO pc.users (org_id, id, issuer, subject) VALUES ($1, $2, 'https://idp.test', 'second-records-manager')", f.org, second)
+	f.exec(t, `INSERT INTO pc.role_bindings (org_id, id, role, user_id, scope_type, created_by) VALUES ($1, $2, $3, $4, 'ORG', 'test')`,
+		f.org, ids.NewV7(), string(td.RoleRecordsManager), second)
+	start, end := incident.Add(-time.Hour), incident.Add(time.Hour)
+	if _, err := f.svc.CreateHold(f.as(td.KindUser, second, tenancy.CredAccessToken, td.RoleRecordsManager), retention.HoldRequest{
+		Scope: retention.ScopeTimeRange, Start: &start, End: &end, Reason: "incident 42",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	f.remover.Shift = 7*24*time.Hour + time.Minute
+	res, err := f.remover.Run(context.Background(), f.org)
+	if err != nil || res.Total() != 2 {
+		t.Fatalf("after the window: removed %d, want the 2 unrelated receipts (%v)", res.Total(), err)
+	}
+	if n := f.count(t, "SELECT count(*) FROM pc.ledger_entries WHERE body IS NULL AND occurred_at = $1", incident); n != 0 {
+		t.Fatalf("%d of the held incident's receipts lost their bodies", n)
+	}
+	if n := f.count(t, `SELECT count(*) FROM pc.ledger_entries e JOIN pc.retention_policies p ON p.org_id = e.org_id AND p.id = e.removed_by_policy
+		WHERE e.body IS NULL AND e.body_removed_at IS NOT NULL AND e.occurred_at = $1 AND p.days = 30`, unrelated); n != 2 {
+		t.Fatalf("%d removed receipts carry their tombstone", n)
+	}
+	if n := f.count(t, "SELECT count(*) FROM pc.ledger_entries WHERE kind = 'audit.evidence.retention_removed'"); n != 1 {
+		t.Fatalf("%d removal audit entries", n)
+	}
+	if after := links(); after != before {
+		t.Fatalf("chain links, tiles and checkpoints %v before the removal, %v after", before, after)
+	}
+	f.verify(t)
+}

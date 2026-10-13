@@ -200,7 +200,7 @@ go run ./cmd/pantherclaw-sim load --workload-file deploy/dev/secrets/workload.js
   --unique --rate 1 --duration 2s --warmup 0s
 ```
 
-Since M4 (slice 214) `dev seed` imports and activates the reference package (signed with the development package key, see M4 below), registers a development fact provider, issues the workload a grant (refunds up to `authority.grant_max_per_action` each, a task budget of `--budget-limit`, at most `--max-count` refunds) and binds its run to it. Identical irreversible refunds are parked for the repeat window (HR-007), so without `--unique` the load driver gets one acceptance and then `RECONCILIATION_REQUIRED`. To report a fact by hand, use `pclaw fact put` with the provider's API key in `PANTHERCLAW_API_KEY`. The M4 measurements are in [docs/perf/M4.md](perf/M4.md).
+Since M4 (slice 214) `dev seed` imports and activates the reference package (signed with the development package key, see M4 below), registers a development fact provider, issues the workload a grant (refunds up to `authority.grant_max_per_action` each, a task budget of `--budget-limit`, at most `--max-count` refunds) and binds its run to it. Identical irreversible refunds are parked for the repeat window (HR-007), so without `--unique` the load driver gets one acceptance and then `RECONCILIATION_REQUIRED`. To report a fact by hand, use `pclaw fact put` with the provider's API key in `PANTHERCLAW_API_KEY`. The M4 measurements are in [docs/perf/M4.md](perf/M4.md), and M6's, with mTLS and PAP/1 through the gateway, in [docs/perf/M6.md](perf/M6.md).
 
 Since M6 the gateway serves the routes of its connections at `/{connection}/…`: `--target-url` creates the connection `payments` to the simulator, in enforce mode, so a refund is `POST /payments/v1/refunds` (`dev connection --org ID --target-url URL` adds one to an existing org). The gateway maps the request through the connection's reviewed package to ActionIR, asks the Authority, verifies the permit, builds the request from the package's dispatch template, commits it with `BeginDispatch`, sends that **re-serialized** request to the target with `Idempotency-Key: pc-<transaction id>`, and records the outcome. The agent gets the target's answer with `PC-Transaction-Id`, `PC-Outcome` and `PC-Receipt` headers, or a JSON refusal with an `error_class`. Its `Server-Timing` header breaks down where the time went. Since M3 every request is PAP/1-signed: the workload sends its workload token (`Authorization: PAP …`), a `PAP-Proof` over the method, the gateway's `public_url`, the body hash and a server nonce, its run in `PAP-Run-Id` and its action in `PC-Action-Id`; the gateway forwards them and the Authority verifies them. `curl` cannot sign, so the example uses `pantherclaw-sim load`, which reads the key file, gets a workload token from the server and signs every request.
 
@@ -324,6 +324,47 @@ Since M6 the gateway checks every approval itself (HR-038): the permit of an app
 
 Approvals count only from people whose account is 7 days old and whose role and key are 1 day old (decision 5), so a freshly invited approver waits that long; the tests backdate their fixtures. Batch review and `pclaw waitlist metrics` need the Team edition. Each org sets its hold deadline, consume window and batch ceilings with `pclaw waitlist update-settings`; a server sets its wait limits with `waitlist.max_waits_per_instance`, `waitlist.max_waits` and `waitlist.long_poll_max`.
 
+**Effects, reconciliation and proof (M7):** a decision says what was allowed and an execution receipt what the gateway sent; M7 records what actually happened and makes all of it verifiable offline ([g0/M7.md](g0/M7.md)). With the stack above, nothing needs configuring: after an accepted refund the server schedules a verification read, and the gateway serving the connection leases it (every `control.verify_every`, 10 s by default), reads the refund back through the package's reviewed read with the connection's credential, and reports only the declared fields. The effect then has its own signed receipt: `CONFIRMED` at `follow_up` level with the verifier's limits, `PROPAGATION_PENDING`, `CONFLICTING` (both sides kept), `NONE_CONFIRMED`, `UNKNOWN` at the deadline, or `UNVERIFIABLE` when nothing can read it (a delegated hook command is also labelled `PARTIAL` coverage).
+
+```bash
+go run ./cmd/pclaw txn list --since 24h --effect unknown --effect conflicting      # execution and effect states side by side
+go run ./cmd/pclaw txn show <transaction id>             # the explorer: every receipt, observation, link and its integrity (chained, checkpointed, anchored)
+go run ./cmd/pclaw reconcile list --state open           # unknown outcomes and conflicting effects; their budget stays held
+go run ./cmd/pclaw reconcile verify <transaction id>     # schedule a verification read now
+go run ./cmd/pclaw reconcile occurred <reconciliation id> --basis "the processor's dashboard shows the refund"   # only commits
+go run ./cmd/pclaw reconcile link <later txn> <earlier txn> --kind compensates   # a new, separately authorized transaction
+```
+
+"It did not happen" releases the budget only on the page `/reconciliations/<id>`, with a security key bound to the resolution and a written basis, by a person with the Reconciler role who is not the run's launcher, its represented principal or the agent's owner (`pclaw invite create --email … --role reconciler`; security keys need `auth.public_url` `http://localhost:8080`, as in M5 above). `pclaw` has no release command. A refund made at the target without PantherClaw shows up as an effect without a receipt: every 15 minutes the server has the gateway list the target log of each connection whose package declares one (the reference package does), audits `security.effect_without_receipt` and notifies org and security admins; it never quarantines anything by itself.
+
+**Offline verification.** The worker chains every org's ledger, signs a checkpoint every `evidence.checkpoint_interval` (5 minutes by default) and re-verifies each chain daily. Pin the deployment's evidence keys once, export a bundle, and check it without the network:
+
+```bash
+go run ./cmd/pclaw evidence trust --out deploy/dev/secrets/trust.json --server http://127.0.0.1:8080   # compare the printed fingerprints out of band
+go run ./cmd/pclaw evidence bundle --txn <transaction id> --out bundle.json [--previous saved-checkpoint.txt]
+go run ./cmd/pclaw verify bundle.json --trust deploy/dev/secrets/trust.json [--previous saved-checkpoint.txt] [--sigstore-trusted-root trusted_root.json] [--json]
+go run ./cmd/pclaw evidence replay --txn <transaction id> [--policy-version <draft version id>] [--show-inputs]   # never writes or dispatches
+```
+
+Every check is `passed`, `failed` or `not_available`, and the report ends with its limits: integrity, not completeness or an external effect. Anchoring the global root in a Rekor v2 log with an RFC 3161 timestamp is off by default and Team edition; it publishes a public entry every interval, so turn it on only as [docs/runbooks/anchoring.md](runbooks/anchoring.md) says. Integrity failures and the reset are in [docs/runbooks/evidence-verification.md](runbooks/evidence-verification.md).
+
+**Packs, retention and capture (M7).** An Auditor (or a Security Admin) exports a signed evidence pack (Team edition): every effect state of the scope, the versions that applied, approvals, containment, and its gaps with their reasons. A Records Manager (`--role records_manager`) sets retention periods and legal holds, and creates payload-capture profiles, which only a person holding `evidence.read_restricted` (the Auditor) reads, with a reason and audited:
+
+```bash
+go run ./cmd/pclaw pack create --run <run id> [--include receipts,versions,approvals,containment,captures]
+go run ./cmd/pclaw pack get <pack id> && go run ./cmd/pclaw pack download <pack id> --out pack.zip
+go run ./cmd/pclaw verify pack.zip --trust deploy/dev/secrets/trust.json
+go run ./cmd/pclaw retention get
+go run ./cmd/pclaw retention set receipts --days 400        # longer: at once; shorter: 7 days later, audited and notified
+go run ./cmd/pclaw hold create --scope transaction --id <transaction id> --reason "dispute 2026-117"
+go run ./cmd/pclaw hold list --state active && go run ./cmd/pclaw hold release <hold id> --reason "settled"
+go run ./cmd/pclaw capture profile create --purpose "dispute investigation" --connection <connection id> \
+  --operation payments.refund.create --request --response --byte-cap 4096 --retention-days 7 --expires-in-days 30
+go run ./cmd/pclaw capture read <transaction id> --direction request --reason "dispute 2026-117" --out request.json
+```
+
+The retention job runs in the worker as the separate `pc_retention` role (`db bootstrap --retention-password-file` above, and `database.retention_password_file` in the server configuration); it removes only bodies and leaves hashes, chain links, Merkle leaves and a tombstone, so verification still passes ([docs/runbooks/retention.md](runbooks/retention.md)). Keys and their rotation: [docs/runbooks/key-rotation.md](runbooks/key-rotation.md) §7. The cost of the replay inputs and receipt bodies on `Authorize` is in [docs/perf/M7.md](perf/M7.md).
+
 **Measure latency (M1.5):** seed a budget large enough for the run (for example `--budget-limit 100000000.00`), start the three processes as above, then drive an open-loop constant rate. Authorize and gateway overhead come from `Server-Timing`, so the target's own latency is excluded:
 
 ```bash
@@ -405,8 +446,9 @@ docs/                    this guide and companions
 | M4 | `package_trust`, `tool_packages`, `package_versions`, `package_pins`, `package_signing_keys` (follow-up, 00026), `action_definitions`, `consequence_rules`, `policies`, `policy_versions`, `envelopes`, `envelope_revisions`, `grants`, `grant_revisions`, `grant_lineage`, `budget_accounts` (00023: one row per rule, hashed grouping key and period; the M1.5 `budgets` table is left as it was), `counters`, `reservations`, `fact_providers`, `fact_declarations` (00024), `facts`, `dedupe_claims`; idempotency lives in columns on `transactions` (M1.5) |
 | M5 | `sessions` (browser), `login_requests` (browser sign-ins in progress), `webauthn_credentials`, `webauthn_ceremonies` (pending registrations and assertions; `BINDING` in part 2), `notifications`, `notification_channels`, `deliveries`; part 2: `approval_requests`, `approval_responses`, `approval_evidence`, `hold_slots`, `escalation_chains`, `waitlist_routes`, `waitlist_settings`, `approval_batches`; `waitlist_entries` (M3) gains the other five kinds |
 | M6 | `gateways`, `gateway_enrollment_tokens`, `gateway_certs`, `broker_keys`, `connections`, `connection_routes`, `credentials` (sealed), `circuit_states`, `kill_switch_requests`; `org_containment` gains who engaged the kill switch; `transactions` and `permits` gain mode and connection |
-| M7 | `execution_receipts`, `effect_receipts`, `verifications`, `observations`, `reconciliation_tasks`, `transaction_links`, `target_log_runs`, `unreceipted_effects`, `ledger_tiles`, `checkpoints`, `anchors` (global, blinded leaves only), `anchor_leaves`, `evaluation_inputs`, `retention_policies`, `legal_holds`, `capture_profiles`, `payload_captures`, `evidence_packs`; `transactions` gains effect state and levels; evidence tables gain body-removal columns (G0 M7 decision 4) |
-| M9 | `coverage_snapshots`, `coverage_routes`, `probes`, `probe_results`, `sandbox_sessions` |
+| M7 | `execution_receipts`, `effect_receipts`, `verifications`, `observations`, `reconciliation_tasks`, `transaction_links`, `target_log_runs`, `unreceipted_effects`, `ledger_tiles`, `checkpoints`, `evidence_integrity` (per-org integrity status), `anchors` (global, blinded leaves only), `anchor_leaves`, `evaluation_inputs`, `retention_policies`, `retention_status`, `legal_holds`, `capture_profiles`, `payload_captures`, `evidence_packs`; `transactions` gains effect state and levels; `permits` gain the verify plan (definition digest and expected values); `execution_attempts` gain `recorded_by` and `target_ref`; `webauthn_ceremonies` can bind a reconciliation's release; `keys` widen to ES256 and ML-DSA-65 (purposes `anchors`, `evidence_packs`, `checkpoints_pq`); evidence tables gain body-removal columns, removed only by the `pc_retention` role (G0 M7 decision 4). Migrations `00060`–`00062`, `00065`, `00066` and `00071`–`00074` (`00070` is ADR-0015's budget settlement, `00075` M6 slice 23) |
+| M8 | `connection_github`, `github_identities`, `github_scan_runs`, `decision_consequences`, `change_windows`, `connection_capabilities`, `connection_tests`, `tool_observations`; `credentials` gain `kind` (`static`, `github_app`); `fact_providers` gain gateway providers; `approval_requests` gain `invalidation_key`; `discoveries.source` widens to `github_scan`; the verification task purposes widen to `connection_test` and `org_scan`. Migrations `00080`–`00084` ([g0/M8.md](g0/M8.md)) |
+| M9 | `coverage_routes`, `coverage_closures`, `coverage_invalidations`, `coverage_snapshots`, `coverage_exclusions`, `coverage_findings` (F048; extended by M10), `sandbox_sessions`, `probe_nonces`, `probe_runs`, `connector_specs`, `connector_instances`; `decision_receipts` gain `coverage_snapshot_id`; `agent_instances` gain `sandbox_session_id`; `connections` gain `agent_hosts`; `gateways` gain `hosting`. Migrations `00085`–`00095` ([g0/M9.md](g0/M9.md)) |
 | M10 | `detection_rules`, `detection_state`, `alerts`, `incidents`, `cases`, `case_notes`, `findings`, `suppressions`, `containment_actions`, `export_destinations`, `saved_queries` |
 | M11 | `policy_tests`, `policy_simulations`, `policy_rollouts`, `exceptions`, `automations`, `automation_versions`, `schedules`, `triggers`, `executions`, `step_executions` |
 | M12 | `redteam_runs`, `redteam_results` |
@@ -505,18 +547,20 @@ Releases: `v0.0.x` pre-releases from M1; **v0.1.0 preview after M12** (coding-ag
 | ID | Scenario | Expected |
 |---|---|---|
 | S01 | $30 refund within grant | ALLOW → dispatched → accepted |
-| S02 | $85 refund (policy: approval > $50) | HOLD → approve (WebAuthn) → resubmit → dispatched |
+| S02 | $85 refund (policy: approval > $50) | HOLD → approve (WebAuthn) → resubmit → dispatched (with M5 part 2) |
 | S03 | $125 refund (grant max $100) | DENY even if a manager tries to approve |
-| S04 | Revoke grant while held | Pending approval invalidated; resubmit → DENY |
-| S05 | Change amount after approval | Material change → new decision; old approval unusable |
+| S04 | Revoke grant while held | Pending approval invalidated; resubmit → DENY (with M5 part 2) |
+| S05 | Change amount after approval | Material change → new decision; old approval unusable (with M5 part 2) |
 | S06 | Two concurrent refunds against one-refund budget | Exactly one succeeds |
 | S07 | Target timeout | UNKNOWN; reservation held; no auto-retry; reconciliation entry |
 | S08 | Gateway killed between BeginDispatch and Record | UNKNOWN, not released |
 | S09 | Authority unavailable | CANNOT_AUTHORIZE; nothing dispatched |
 | S10 | Child agent with narrowed grant | Child cannot exceed parent; parent revocation cascades |
-| S11 | Direct call to simulator bypassing gateway | Route labeled uncontrolled; coverage PARTIAL |
+| S11 | Direct call to simulator bypassing gateway | Refused by the target without the custody credential (and without an action token); the route is recorded as uncontrolled |
 | S12 | SSRF/rebinding/redirect payloads | Blocked by egress guards |
 | S13 | Kill switch engaged mid-run | All subsequent dispatches refused < 1 s |
+
+S07's "reconciliation entry" is the `UNKNOWN` permit and its held reservation, which M7's reconciliation queue picks up. In S11, M9 computes the `PARTIAL` coverage state; M6 shows the facts it rests on. The exit status is in [g0/M6.md](g0/M6.md), and the latency re-measurement in [docs/perf/M6.md](perf/M6.md).
 
 ### M7 — Effects, reconciliation & proof
 **Threat slice:** T-013, T-024, T-029, T-043, T-070..T-077 · **HR:** HR-003 and HR-007 (resolution), HR-110..112, HR-190..199 · **F:** F461–F532 (F500 and F533 in M11) · **PN:** PN-007 · **G0:** [g0/M7.md](g0/M7.md), built in two parallel tracks (A: effects and reconciliation; B: proof).
@@ -524,15 +568,17 @@ Releases: `v0.0.x` pre-releases from M1; **v0.1.0 preview after M12** (coding-ag
 - Execution/effect receipts, Merkle tiles, signed checkpoints, Rekor v2 anchoring (blinded global root, RFC 3161; configured endpoints), `pclaw verify` (offline), decision replay (non-executing; proposed-policy replay; difference explanation), evidence packs (signed), retention categories (bodies removed, hashes kept), restricted payload capture profile, optional ML-DSA co-signing of checkpoints and pack manifests.
 - **Tests:** tampering detected (row edit, deletion, re-signing without witness), replay never dispatches, pack completeness incl. uncertain states.
 
+The exit status is in [g0/M7.md](g0/M7.md), the latency re-measurement in [docs/perf/M7.md](perf/M7.md), and the walkthrough in §4. One exit item waits for the founder: the live anchoring run against Sigstore's public services, which publishes an entry.
+
 ### M8 — Coding-agent integrations
-**PN:** PN-001.2, PN-014, PN-016.1, PN-016.2, PN-017.1 · **F:** F158, F346, F351 · **ADR:** 0017.
+**PN:** PN-001.2, PN-014, PN-016.1, PN-016.2, PN-017.1 · **F:** F158, F346, F351 · **ADR:** 0017 · **G0:** [g0/M8.md](g0/M8.md).
 - `sdk/go` (client + target verifier middleware); core `sdk/python` and `sdk/typescript` clients (PAP/1, DPoP, ActionIR canonicalizer, wait handles), which the Agent SDK callback needs; cross-language conformance fixtures. Framework wrappers wait for M14.
 - Claude Agent SDK `canUseTool` integration; `pclaw init` (detect Claude Code, MCP and framework config, enroll, rewrite config with backup, apply the "coding to production" template).
 - GitHub App connector (per-action installation tokens, PR/merge, branch protection facts) and GitHub organisation scan.
 - §43 coding-agent scenario on a sandbox GitHub repo: merge requires independent reviewer; deployment consequence requires release approver.
 
 ### M9 — Coverage & containment sandbox
-**HR:** HR-024, HR-084..086, HR-121, HR-122 · **F:** F433–F460 · **PN:** PN-008.
+**HR:** HR-024, HR-084..086, HR-121, HR-122 · **F:** F433–F460 · **PN:** PN-008 · **G0:** [g0/M9.md](g0/M9.md).
 - Routes inventory, coverage snapshots (UNKNOWN/OBSERVE_ONLY/PARTIAL/ENFORCED), invalidation events, freshness contract, closure evidence, access-mode disclosure, credential-overreach findings.
 - `pclaw sandbox run`: egress-locked Docker network (gateway only; IPv6/ICMP/DNS blocked), no creds, read-only FS, non-root, optional gVisor; trusted sidecar probes + external canary; expiring ENFORCED promotion.
 - Connector runtime for third-party MCP servers run as local processes (moved from M6, G0 M6 decision 3): each in its own locked-down container on the same sandbox machinery, customer-hosted gateways only, egress only through the gateway, which injects credentials (HR-084, HR-085).
