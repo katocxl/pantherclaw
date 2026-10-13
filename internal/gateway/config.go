@@ -18,6 +18,7 @@ import (
 	"regexp"
 	"time"
 
+	"github.com/katocxl/pantherclaw/internal/gateway/dispatch"
 	"github.com/katocxl/pantherclaw/internal/platform/config"
 	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
 )
@@ -80,6 +81,14 @@ type Config struct {
 		// when it changes.
 		ApproverKeysFile string `json:"approver_keys_file" env:"PC_GW_APPROVALS_APPROVER_KEYS_FILE"`
 	} `json:"approvals"`
+	// GitHub is how the gateway reads GitHub for its GitHub App
+	// connections (G0 M8).
+	GitHub struct {
+		// FactTimeout bounds the reads of the github.* facts before a
+		// decision: at most 5 seconds, default 2. A fact not read in time
+		// is not reported, so the decision sees it missing.
+		FactTimeout config.Duration `json:"fact_timeout" env:"PC_GW_GITHUB_FACT_TIMEOUT"`
+	} `json:"github"`
 }
 
 // DefaultConfig returns development defaults.
@@ -92,6 +101,7 @@ func DefaultConfig() Config {
 	c.Control.IdentityDir = "deploy/dev/secrets/gateway"
 	c.Control.Timeout = config.Duration(2 * time.Second)
 	c.Control.VerifyEvery = config.Duration(VerifyEvery)
+	c.GitHub.FactTimeout = config.Duration(dispatch.DefaultFactTimeout)
 	return c
 }
 
@@ -114,6 +124,9 @@ func (c *Config) Validate() error {
 	}
 	if d := c.Control.VerifyEvery.D(); d != 0 && (d < time.Second || d > 10*time.Minute) {
 		errs = append(errs, errors.New("control.verify_every must be between 1s and 10m"))
+	}
+	if d := c.GitHub.FactTimeout.D(); d < 0 || d > 5*time.Second {
+		errs = append(errs, errors.New("github.fact_timeout must be at most 5s"))
 	}
 	if c.Control.CASHA256 != "" && !pinPattern.MatchString(c.Control.CASHA256) {
 		errs = append(errs, errors.New("control.ca_sha256 must be sha256: and 64 hex digits"))

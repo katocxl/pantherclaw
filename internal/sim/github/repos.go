@@ -31,6 +31,10 @@ type Commit struct {
 	SHA     string
 	Parents []string
 	Files   map[string]string
+	// Author and Committer are the GitHub accounts git's author and
+	// committer emails are linked to, "" for an email linked to no account
+	// (null on the wire). Who pushed it is in the activity feed, apart.
+	Author, Committer string
 }
 
 // Repo is a simulated repository.
@@ -42,6 +46,7 @@ type Repo struct {
 	Commits       map[string]*Commit
 	Pulls         map[int]*Pull
 	nextPull      int
+	facts         *facts
 }
 
 func (r *Repo) full() string { return r.Owner + "/" + r.Name }
@@ -57,7 +62,7 @@ func (s *Server) CreateRepo(fullName, defaultBranch string, files map[string]str
 		Branches: map[string]string{}, Commits: map[string]*Commit{}, Pulls: map[int]*Pull{}, nextPull: 1,
 	}
 	s.repos[r.full()] = r
-	sha := s.commit(r, nil, files)
+	sha := s.commit(r, "developer", "developer", nil, files)
 	r.Branches[defaultBranch] = sha
 	return sha
 }
@@ -65,8 +70,21 @@ func (s *Server) CreateRepo(fullName, defaultBranch string, files map[string]str
 // Push adds a commit to branch with files changed (an empty value deletes
 // a file), creating the branch from the default branch when it does not
 // exist, and returns the new head. A pull request from the branch moves to
-// the new head, so its earlier reviews are for another commit.
+// the new head, so its earlier reviews are for another commit. The push is
+// by "developer"; PushAs names the pusher.
 func (s *Server) Push(fullName, branch string, files map[string]string) string {
+	return s.PushAs(fullName, branch, "developer", files)
+}
+
+// PushAs is Push by pusher, who also authors and commits the commit.
+func (s *Server) PushAs(fullName, branch, pusher string, files map[string]string) string {
+	return s.PushBy(fullName, branch, pusher, pusher, pusher, files)
+}
+
+// PushBy is Push by pusher of a commit whose git author and committer are
+// linked to the accounts author and committer, either "" for an email
+// linked to no account: on GitHub one person can push another's commit.
+func (s *Server) PushBy(fullName, branch, pusher, author, committer string, files map[string]string) string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	r := s.repos[strings.ToLower(fullName)]
@@ -82,15 +100,16 @@ func (s *Server) Push(fullName, branch string, files map[string]string) string {
 			tree[p] = c
 		}
 	}
-	sha := s.commit(r, []string{parent}, tree)
-	s.advance(r, branch, sha, "developer")
+	sha := s.commit(r, author, committer, []string{parent}, tree)
+	s.advance(r, branch, sha, pusher, "push")
 	return sha
 }
 
 // advance moves branch to a commit pushed by pusher. An open pull request
 // from the branch moves with it, so its earlier reviews are for another
 // commit.
-func (s *Server) advance(r *Repo, branch, sha, _ string) {
+func (s *Server) advance(r *Repo, branch, sha, pusher, kind string) {
+	s.pushed(r, branch, r.Branches[branch], sha, pusher, kind)
 	r.Branches[branch] = sha
 	for _, pr := range r.Pulls {
 		if pr.Head == branch && pr.State == "open" {
@@ -131,7 +150,7 @@ func (s *Server) RepoSettings(fullName string) (string, Settings) {
 
 // commit records a commit; its name is derived from its content and a
 // sequence number, so every commit is new.
-func (s *Server) commit(r *Repo, parents []string, files map[string]string) string {
+func (s *Server) commit(r *Repo, author, committer string, parents []string, files map[string]string) string {
 	s.seq++
 	h := sha256.New()
 	fmt.Fprintf(h, "%s %d %v", r.full(), s.seq, parents)
@@ -139,7 +158,7 @@ func (s *Server) commit(r *Repo, parents []string, files map[string]string) stri
 		fmt.Fprintf(h, "\x00%s\x00%s", p, files[p])
 	}
 	sha := hex.EncodeToString(h.Sum(nil)[:20]) // 40 hex digits, the shape of a git commit name
-	r.Commits[sha] = &Commit{SHA: sha, Parents: parents, Files: files}
+	r.Commits[sha] = &Commit{SHA: sha, Parents: parents, Files: files, Author: author, Committer: committer}
 	return sha
 }
 
@@ -296,6 +315,6 @@ func (s *Server) createRef(w http.ResponseWriter, req *http.Request, r *Repo, t 
 	case r.Branches[name] != "":
 		return fail(w, http.StatusUnprocessableEntity, "Reference already exists")
 	}
-	s.advance(r, name, b.SHA, actor(t))
+	s.advance(r, name, b.SHA, actor(t), "branch_creation")
 	return reply(w, http.StatusCreated, map[string]any{"ref": b.Ref, "object": map[string]any{"type": "commit", "sha": b.SHA}, "simulated": true})
 }
