@@ -116,6 +116,11 @@ tasks:
     cmds:
       - go -C tools run ./traceability -root .. -through {{.MILESTONE | default "M7"}}
 
+  sdk:vectors:
+    desc: Regenerate the SDK conformance vectors in sdk/conformance from the Go implementation (review the diff)
+    cmds:
+      - go test ./internal/conformance/gen -run TestConformanceVectors -count=1 -update
+
   license:check:
     desc: Verify SPDX + copyright headers on every source file
     cmds:
