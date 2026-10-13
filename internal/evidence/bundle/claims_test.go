@@ -177,10 +177,12 @@ func TestHR217_CoverageClaimsAreCheckedAgainstTheSnapshotLedger(t *testing.T) {
 }
 
 // TestT089_AForgedCoverageClaimIsRejected: pclaw verify fails a receipt's
-// coverage claim on a snapshot of another scope, or ENFORCED after a change
-// to the scope that came before the decision, lapsed or not; a claim on a
-// snapshot the ledger does not hold is not available, never passed
-// (HR-217).
+// coverage claim on a snapshot of another scope, ENFORCED after a change to
+// the scope that came before the decision (lapsed or not), or a snapshot id
+// that is not the scope's snapshot current at decision time when the bundle
+// holds the scope's snapshots on both sides of the receipt. Without the
+// next one the forged id is not available; an honest claim passes (HR-217,
+// coordinator decision on T-089).
 func TestT089_AForgedCoverageClaimIsRejected(t *testing.T) {
 	agent, conn := ids.NewV7().String(), ids.NewV7().String()
 	sc := bundletest.Scope{Agent: agent, Connection: conn, Operation: "github.pulls.merge"}
@@ -199,12 +201,30 @@ func TestT089_AForgedCoverageClaimIsRejected(t *testing.T) {
 	}
 	changed := bundletest.Invalidation{V: 1, ID: ids.NewV7().String(), Connection: conn, Kind: "gateway", OccurredAt: at(-time.Minute)}
 	for name, build := range map[string]func(i *bundletest.Issuer){
-		"a forged snapshot id": func(i *bundletest.Issuer) {
+		"a forged snapshot id, the neighbours present": func(i *bundletest.Issuer) {
 			s := enforced()
 			i.AppendSnapshot(s)
 			c := claimOf(s)
 			c.Snapshot = ids.NewV7().String()
 			i.AppendClaim(c, agent, conn)
+			n := enforced()
+			n.ComputedAt = at(time.Minute)
+			i.AppendSnapshot(n)
+		},
+		"a forged snapshot id, a partial bundle": func(i *bundletest.Issuer) {
+			s := enforced()
+			i.AppendSnapshot(s)
+			c := claimOf(s)
+			c.Snapshot = ids.NewV7().String()
+			i.AppendClaim(c, agent, conn)
+		},
+		"an honest claim, the neighbours present": func(i *bundletest.Issuer) {
+			s := enforced()
+			i.AppendSnapshot(s)
+			i.AppendClaim(claimOf(s), agent, conn)
+			n := enforced()
+			n.ComputedAt = at(time.Minute)
+			i.AppendSnapshot(n)
 		},
 		"another scope's snapshot": func(i *bundletest.Issuer) {
 			s := enforced()
@@ -237,9 +257,14 @@ func TestT089_AForgedCoverageClaimIsRejected(t *testing.T) {
 				t.Fatal(err)
 			}
 			r := bundle.Verify(iss.Bundle(), bundle.Options{Trust: trust})
-			if count(r, "receipt.coverage", bundle.Passed) > 0 || count(r, "receipt.coverage", bundle.Failed)+
-				count(r, "receipt.coverage", bundle.NotAvailable) == 0 {
-				t.Fatalf("a forged claim was not rejected:\n%s", r.Text())
+			switch name {
+			case "a forged snapshot id, a partial bundle":
+				// Without the scope's next snapshot the bundle cannot tell.
+				expect(t, r, "receipt.coverage", bundle.NotAvailable)
+			case "an honest claim, the neighbours present":
+				expect(t, r, "receipt.coverage", bundle.Passed)
+			default:
+				expect(t, r, "receipt.coverage", bundle.Failed)
 			}
 		})
 	}
