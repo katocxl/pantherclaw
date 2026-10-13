@@ -82,6 +82,7 @@ func (g *Gateway) orgScan(ctx context.Context, conn *control.Connection, l dispa
 	}
 	o.Complete = err == nil && len(r.NotScanned) == 0
 	o.Fields = r.Fields()
+	o.Installation = r.Installation
 	if err := g.verifications.Report(ctx, l, o); err != nil {
 		g.log.WarnContext(ctx, "gateway.org_scan_not_reported", slog.String("task_id", l.Task), pclog.Err(err))
 	}

@@ -125,3 +125,13 @@ WHERE d.org_id = sqlc.arg(org_id) AND d.source = 'github_scan' AND d.observed ->
   AND d.id > coalesce(sqlc.arg(after_id)::uuid, '00000000-0000-0000-0000-000000000000')
 ORDER BY d.id
 LIMIT sqlc.arg(max_rows);
+
+-- RecordInstallationPermissions records what a gateway read of the
+-- installation behind a connection during its org scan (G0 M8, F048), only
+-- while the connection still records that installation: a re-seal to
+-- another one keeps it unread.
+-- name: RecordInstallationPermissions :execrows
+UPDATE pc.connection_github
+SET permissions = sqlc.arg(permissions), repository_selection = sqlc.arg(repository_selection), read_at = now(),
+    updated_by = sqlc.arg(updated_by), updated_at = now()
+WHERE org_id = sqlc.arg(org_id) AND connection_id = sqlc.arg(connection_id) AND installation_id = sqlc.arg(installation_id);

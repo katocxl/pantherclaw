@@ -514,6 +514,41 @@ func (q *Queries) OpenOrgScan(ctx context.Context, orgID ids.OrgID, connectionID
 	return column_1, err
 }
 
+const recordInstallationPermissions = `-- name: RecordInstallationPermissions :execrows
+UPDATE pc.connection_github
+SET permissions = $1, repository_selection = $2, read_at = now(),
+    updated_by = $3, updated_at = now()
+WHERE org_id = $4 AND connection_id = $5 AND installation_id = $6
+`
+
+type RecordInstallationPermissionsParams struct {
+	Permissions         []byte
+	RepositorySelection *string
+	UpdatedBy           string
+	OrgID               ids.OrgID
+	ConnectionID        ids.UUID
+	InstallationID      int64
+}
+
+// RecordInstallationPermissions records what a gateway read of the
+// installation behind a connection during its org scan (G0 M8, F048), only
+// while the connection still records that installation: a re-seal to
+// another one keeps it unread.
+func (q *Queries) RecordInstallationPermissions(ctx context.Context, arg RecordInstallationPermissionsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, recordInstallationPermissions,
+		arg.Permissions,
+		arg.RepositorySelection,
+		arg.UpdatedBy,
+		arg.OrgID,
+		arg.ConnectionID,
+		arg.InstallationID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const scanConnection = `-- name: ScanConnection :one
 
 SELECT c.state, c.kind, c.package,

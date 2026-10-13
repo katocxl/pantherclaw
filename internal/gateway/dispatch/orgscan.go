@@ -51,6 +51,14 @@ func (e *Engine) ScanOrg(ctx context.Context, conn *control.Connection, deadline
 		return githubscan.Result{}, err
 	}
 	defer app.Clear()
+	// The installation's own permissions, with the App's JWT and no token
+	// (F048). A failed read leaves the installation unread on the server.
+	var installation *githubscan.Installation
+	if in, err := broker.ReadInstallation(ctx, c, conn.GetBaseUrl(), conn.Credential.GetAllowedHosts(), app, time.Now()); err != nil {
+		e.log.WarnContext(ctx, "gateway.installation_not_read", slog.String("connection_id", conn.GetId()), pclog.Err(err))
+	} else {
+		installation = &githubscan.Installation{ID: app.Installation, Permissions: in.Permissions, RepositorySelection: in.RepositorySelection}
+	}
 	mint := func(repos []string, perms map[string]string) (*broker.Installation, error) {
 		return broker.MintScanToken(ctx, c, conn.GetBaseUrl(), conn.Credential.GetAllowedHosts(), app, repos, perms, time.Now())
 	}
@@ -112,6 +120,7 @@ func (e *Engine) ScanOrg(ctx context.Context, conn *control.Connection, deadline
 		})
 	}
 	r.NotScanned["rulesets"] = "ruleset bypass actors are not read by this gateway version"
+	r.Installation = installation
 	for i := range r.Findings {
 		r.Findings[i].Attributes["connection"] = conn.GetId()
 	}

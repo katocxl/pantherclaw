@@ -55,6 +55,15 @@ func (e *env) count(t *testing.T, sql string, args ...any) int {
 	return n
 }
 
+func (e *env) queryRow(t *testing.T, sql string, args []any, dest ...any) {
+	t.Helper()
+	if err := e.pool.InTenantTx(context.Background(), e.org, func(ctx context.Context, tx db.TenantTx) error {
+		return tx.QueryRow(ctx, sql, args...).Scan(dest...)
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func (e *env) person(t *testing.T, subject string) ids.UUID {
 	t.Helper()
 	id := ids.NewV7()

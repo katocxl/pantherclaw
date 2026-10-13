@@ -220,3 +220,38 @@ func TestHR209_TheScanFitsItsLeaseFromTheClaim(t *testing.T) {
 		t.Fatalf("a scan past its time %+v", o)
 	}
 }
+
+// TestF048_TheScanReportsItsOwnInstallation: an org scan reads the
+// connection's own GitHub App installation with the App's JWT, minting no
+// token for it, and reports its permissions and repository selection with
+// the run. When the read fails, the report says nothing about it, so the
+// server keeps the installation unread ("not observed"), and the scan
+// still runs.
+func TestF048_TheScanReportsItsOwnInstallation(t *testing.T) {
+	w := newGitHubWorld(t)
+	h := setup(t, withGitHubApp(t, w))
+	_, o := runOrgScan(t, h, "01920000-0000-7000-8000-00000000ab07")
+	in := o.Installation
+	if in == nil || in.ID != 7 || in.RepositorySelection != "selected" || in.Permissions["contents"] != "write" ||
+		in.Permissions["metadata"] != "read" || len(in.Permissions) != 5 {
+		t.Fatalf("installation %+v", in)
+	}
+	read := slices.ContainsFunc(w.sim.Requests(), func(r github.Request) bool {
+		return r.Method == http.MethodGet && r.Path == "/app/installations/7" && r.Status == http.StatusOK
+	})
+	if !read {
+		t.Fatal("the installation was not read with the App's JWT")
+	}
+	for _, tok := range w.sim.Tokens() {
+		for p, level := range tok.Permissions {
+			if level != "read" {
+				t.Errorf("a token with %s:%s was minted", p, level)
+			}
+		}
+	}
+	w.sim.SetFaults(github.Faults{InstallationStatus: http.StatusInternalServerError})
+	_, o = runOrgScan(t, h, "01920000-0000-7000-8000-00000000ab08")
+	if o.Installation != nil || !o.Found {
+		t.Fatalf("after a failed read: installation %+v, found %v", o.Installation, o.Found)
+	}
+}

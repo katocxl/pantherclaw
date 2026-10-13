@@ -19,6 +19,7 @@ import (
 	defs "github.com/katocxl/pantherclaw/internal/definitions/domain"
 	"github.com/katocxl/pantherclaw/internal/gateway/control"
 	"github.com/katocxl/pantherclaw/internal/gateway/egress"
+	"github.com/katocxl/pantherclaw/internal/gateway/githubscan"
 	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
 )
 
@@ -61,6 +62,9 @@ type Observation struct {
 	Fields     map[string]string
 	Digest     []byte
 	Items      []TargetLogItem
+	// Installation is, for an org scan, the connection's own GitHub App
+	// installation as read; nil when it was not.
+	Installation *githubscan.Installation
 }
 
 // TargetLogItem is one object a target log lists.

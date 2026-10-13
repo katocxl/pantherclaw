@@ -383,3 +383,57 @@ func TestHR209_ADismissedFindingReopensWhenItsRouteMayDoMore(t *testing.T) {
 		t.Fatalf("%d reopen events", n)
 	}
 }
+
+// TestF048_AnOrgScanRecordsTheInstallationItRead: the gateway's report of
+// an org scan carries the connection's own installation as it read it; the
+// server records its permissions, repository selection and when it was
+// read. A report without it, or about an installation the connection no
+// longer records, changes nothing, so unread permissions stay "not
+// observed".
+func TestF048_AnOrgScanRecordsTheInstallationItRead(t *testing.T) {
+	e := newEnv(t)
+	gateway := ids.NewV7()
+	e.exec(t, "INSERT INTO pc.gateways (org_id, id, name, created_by) VALUES ($1, $2, 'edge', 'test')", e.org, gateway)
+	e.exec(t, "INSERT INTO pc.org_containment (org_id) VALUES ($1) ON CONFLICT DO NOTHING", e.org)
+	conn := e.gitHubConnection(t, gateway, e.brokerKey(t, gateway), "github", false)
+	e.exec(t, `INSERT INTO pc.connection_github (org_id, connection_id, app_client_id, installation_id, account_login, updated_by)
+		VALUES ($1, $2, 'Iv23liGateway', 7, 'acme', 'test')`, e.org, conn)
+	admin := e.caller(td.KindUser, td.RoleSecurityAdmin)
+	team := &app.Scans{Pool: e.pool, Ents: edition(billing.Team)}
+	store := &pgtransactions.Store{Pool: e.pool}
+	scan := func(in *tapp.InstallationRead) {
+		t.Helper()
+		if _, err := team.Start(admin, conn); err != nil {
+			t.Fatal(err)
+		}
+		leases, err := store.Claim(context.Background(), e.org, gateway, 4, 30*time.Second)
+		if err != nil || len(leases) != 1 {
+			t.Fatalf("leases %+v %v", leases, err)
+		}
+		if _, err := store.Report(context.Background(), e.org, gateway, tapp.Report{
+			Task: leases[0].Task, Secret: leases[0].Secret, HTTPStatus: 200, Found: true, Complete: true,
+			Fields: map[string]string{"/counts/repositories": "1"}, Installation: in,
+		}, nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+	read := func() (perms, selection string, readAt *time.Time) {
+		t.Helper()
+		e.queryRow(t, `SELECT permissions::text, coalesce(repository_selection, ''), read_at FROM pc.connection_github
+			WHERE org_id = $1 AND connection_id = $2`, []any{e.org, conn}, &perms, &selection, &readAt)
+		return perms, selection, readAt
+	}
+	if p, _, at := read(); p != "{}" || at != nil {
+		t.Fatalf("before any scan: %s %v", p, at)
+	}
+	scan(&tapp.InstallationRead{ID: 7, Permissions: map[string]string{"contents": "write", "metadata": "read"}, RepositorySelection: "all"})
+	p, sel, at := read()
+	if p != `{"contents": "write", "metadata": "read"}` || sel != "all" || at == nil {
+		t.Fatalf("after the scan: %s %q %v", p, sel, at)
+	}
+	scan(nil) // the installation could not be read
+	scan(&tapp.InstallationRead{ID: 8, Permissions: map[string]string{"administration": "admin"}, RepositorySelection: "all"})
+	if p2, sel2, at2 := read(); p2 != p || sel2 != sel || at2 == nil || !at2.Equal(*at) {
+		t.Fatalf("after an unread or foreign installation: %s %q %v", p2, sel2, at2)
+	}
+}
