@@ -20,6 +20,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -117,6 +118,10 @@ func (d *direct) do(t *testing.T, method, path, body string, want int, out any) 
 	}
 }
 
+// tokenValue matches an installation token in an answer, which an error
+// never shows.
+var tokenValue = regexp.MustCompile(`"token"\s*:\s*"[^"]*"`)
+
 // call is do for a cleanup, which reports instead of failing.
 func (d *direct) call(method, path, body string, want int, out any) error {
 	req, _ := http.NewRequestWithContext(context.Background(), method, d.api+path, strings.NewReader(body))
@@ -130,7 +135,7 @@ func (d *direct) call(method, path, body string, want int, out any) error {
 	defer func() { _ = resp.Body.Close() }()
 	raw, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != want {
-		return fmt.Errorf("GitHub %s %s: %d %s", method, path, resp.StatusCode, raw)
+		return fmt.Errorf("GitHub %s %s: %d %s", method, path, resp.StatusCode, tokenValue.ReplaceAll(raw, []byte(`"token":"[redacted]"`)))
 	}
 	if out != nil {
 		if err := json.Unmarshal(raw, out); err != nil {

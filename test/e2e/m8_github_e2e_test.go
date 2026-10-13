@@ -379,6 +379,23 @@ func TestE2E_M8_CodingToProduction(t *testing.T) {
 		t.Fatal("merged while held")
 	}
 
+	var unknown reply
+	// A pull request that changes a workflow: what merging it deploys
+	// cannot be read, so the consequence is unknown and the merge holds,
+	// whoever approves the review alone.
+	gh.PushAs(ghRepo, "ci/x", "rachel-gh", map[string]string{".github/workflows/deploy.yml": deployOnMain + "# changed\n"})
+	if code, r, _ := s.ghCall(t, http.MethodPost, "/repos/"+ghRepo+"/pulls", `{"title":"CI","head":"ci/x","base":"main"}`, ids.NewV7()); code != http.StatusCreated {
+		t.Fatalf("open 2: %d %+v", code, r)
+	}
+	pr2, _ := gh.PullRequest(ghRepo, 2)
+	code, unknown = s.ghMerge(t, ids.NewV7(), 2, pr2.HeadSHA)
+	if code != http.StatusForbidden || unknown.Decision != "REQUIRE_APPROVAL" || !slices.Contains(unknown.Reasons, "CONSEQUENCE_UNKNOWN") {
+		t.Fatalf("a merge whose deployment cannot be read: %d %+v", code, unknown)
+	}
+	if p, _ := gh.PullRequest(ghRepo, 2); p.Merged {
+		t.Fatal("merged with an unknown consequence")
+	}
+
 	// 3. Both approve with their security keys; outside a change window
 	// for production the release approval cannot be used.
 	if code, state := s.approveMerge(t, carolB, carolKey, held.TransactionID); code != http.StatusOK {
@@ -392,10 +409,17 @@ func TestE2E_M8_CodingToProduction(t *testing.T) {
 	}
 
 	// 4. A new commit voids the approval: the merge was bound to the head.
+	// A change window for production opens first, so only the moved head
+	// stops the merge.
+	s.exec(t, `INSERT INTO pc.change_windows (org_id, id, environment, time_zone, one_off, freezes, revision, created_by)
+		VALUES ($1, $2, 'production', 'UTC', jsonb_build_array(jsonb_build_object('start', now() - interval '1 hour', 'end', now() + interval '1 hour')),
+		'[]'::jsonb, 1, 'e2e')`, s.org, ids.NewV7())
+	first := s.requestOf(t, held.TransactionID)
 	gh.PushAs(ghRepo, "fix/cve", "dave", map[string]string{"src/extra.go": "package parser\n"})
-	if code, r := s.ghMerge(t, act, 1, head); code == http.StatusOK {
+	if code, r := s.ghMerge(t, act, 1, head); code == http.StatusOK || !slices.Contains(r.Reasons, "HEAD_MOVED") {
 		t.Fatalf("a merge at the old head: %d %+v", code, r)
 	}
+	s.eventually(t, "SUPERSEDED BINDING_CHANGED", "SELECT state || ' ' || coalesce(end_reason, '') FROM pc.approval_requests WHERE id = $1", first)
 	if p, _ := gh.PullRequest(ghRepo, 1); p.Merged {
 		t.Fatal("merged at a moved head")
 	}
@@ -427,11 +451,8 @@ func TestE2E_M8_CodingToProduction(t *testing.T) {
 		t.Fatalf("rachel approves again: %d %s", code, state)
 	}
 
-	// 6. Inside a change window for production the merge runs once, at the
-	// approved head; GitHub accepted it, and its effect is confirmed apart.
-	s.exec(t, `INSERT INTO pc.change_windows (org_id, id, environment, time_zone, one_off, freezes, revision, created_by)
-		VALUES ($1, $2, 'production', 'UTC', jsonb_build_array(jsonb_build_object('start', now() - interval '1 hour', 'end', now() + interval '1 hour')),
-		'[]'::jsonb, 1, 'e2e')`, s.org, ids.NewV7())
+	// 6. Inside the change window the merge runs once, at the approved
+	// head; GitHub accepted it, and its effect is confirmed apart.
 	code, done := s.ghMerge(t, act, 1, head)
 	if code != http.StatusOK || done.Outcome != "ACCEPTED" || done.TransactionID != held.TransactionID {
 		t.Fatalf("the approved merge: %d %+v", code, done)
@@ -461,26 +482,11 @@ func TestE2E_M8_CodingToProduction(t *testing.T) {
 		}
 		return n
 	}
-	if again, _ := s.ghMerge(t, act, 1, head); merges() != 1 {
-		t.Fatalf("the same merge again: %d, %d merges", again, merges())
+	if again, r := s.ghMerge(t, act, 1, head); again != http.StatusConflict || r.Error != "duplicate_action" || merges() != 1 {
+		t.Fatalf("the same merge again: %d %+v, %d merges", again, r, merges())
 	}
 
-	// 8. A pull request that changes a workflow: what merging deploys
-	// cannot be read, so the consequence is unknown and the merge holds.
-	gh.PushAs(ghRepo, "ci/x", "rachel-gh", map[string]string{".github/workflows/deploy.yml": deployOnMain + "# changed\n"})
-	if code, r, _ := s.ghCall(t, http.MethodPost, "/repos/"+ghRepo+"/pulls", `{"title":"CI","head":"ci/x","base":"main"}`, ids.NewV7()); code != http.StatusCreated {
-		t.Fatalf("open 2: %d %+v", code, r)
-	}
-	pr2, _ := gh.PullRequest(ghRepo, 2)
-	code, unknown := s.ghMerge(t, ids.NewV7(), 2, pr2.HeadSHA)
-	if code == http.StatusOK || !slices.Contains(unknown.Reasons, "CONSEQUENCE_UNKNOWN") {
-		t.Fatalf("a merge whose deployment cannot be read: %d %+v", code, unknown)
-	}
-	if p, _ := gh.PullRequest(ghRepo, 2); p.Merged || merges() != 1 {
-		t.Fatal("merged with an unknown consequence")
-	}
-
-	// 9. The task merges once: a clean pull request is refused, its one
+	// 8. The task merges once: a clean pull request is refused, its one
 	// merge spent.
 	gh.PushAs(ghRepo, "fix/more", "rachel-gh", map[string]string{"src/more.go": "package parser\n"})
 	if code, r, _ := s.ghCall(t, http.MethodPost, "/repos/"+ghRepo+"/pulls", `{"title":"More","head":"fix/more","base":"main"}`, ids.NewV7()); code != http.StatusCreated {
@@ -497,9 +503,26 @@ func TestE2E_M8_CodingToProduction(t *testing.T) {
 
 	// Every token the gateway minted, for actions and for fact reads, was
 	// revoked after its use (HR-203).
+	minted := 0
 	for _, tok := range gh.Tokens() {
-		if tok.Installation == ghInstallation && !tok.Revoked {
-			t.Fatalf("a token left valid: %+v", tok)
+		if tok.Installation == ghInstallation {
+			minted++
+			if !tok.Revoked {
+				t.Fatalf("a token left valid: %+v", tok)
+			}
 		}
+	}
+	// Each write ran with a token of its own (one per action, HR-203).
+	writes := map[string]bool{}
+	for _, r := range gh.Requests() {
+		if r.Write && r.Installation == ghInstallation && r.Status < 300 && strings.HasPrefix(r.Path, "/repos/") {
+			if writes[r.Token] {
+				t.Fatalf("a token used for two writes: %+v", r)
+			}
+			writes[r.Token] = true
+		}
+	}
+	if minted < 5 || len(writes) < 4 {
+		t.Fatalf("%d tokens minted, %d writes", minted, len(writes))
 	}
 }
