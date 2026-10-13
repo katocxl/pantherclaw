@@ -65,10 +65,11 @@ func Read(ctx context.Context, get Getter, s Subject, names []string) []Fact {
 }
 
 type reader struct {
-	get  Getter
-	s    Subject
-	repo string
-	pull map[string]any
+	get       Getter
+	s         Subject
+	repo      string
+	pull      map[string]any
+	rulesRead []map[string]any
 }
 
 func (r *reader) json(ctx context.Context, path string, v any) error {
@@ -184,16 +185,32 @@ func (r *reader) head(ctx context.Context) (map[string]any, error) {
 
 // people lists, by GitHub user id, the pull request's author, its commits'
 // authors and committers, and every authenticated pusher of its head
-// branch. It is incomplete for a fork, more commits or pushes than one page
-// of 100, or a read that failed (design decision 18).
+// branch, and among them the accounts that are not people (bots: GitHub's
+// account type is not User, such as an App's [bot] or an organization).
+// author and pushers are always there. It is incomplete (design decision
+// 18, HR-207) for a fork, a commit whose author or committer GitHub links
+// to no account, a push or branch creation that brought a commit its actor
+// neither authored nor committed (someone else may have pushed it first,
+// to another ref), more commits or pushes than one page of 100, or a read
+// that failed.
 func (r *reader) people(ctx context.Context) (map[string]any, error) {
 	p, err := r.pullRequest(ctx)
 	if err != nil {
 		return nil, err
 	}
-	out := map[string]any{"complete": true, "author": num(mapOf(p["user"])["id"])}
+	var bots []int64
+	id := func(account any) int64 {
+		m := mapOf(account)
+		n := num(m["id"])
+		if t := str(m, "type"); n > 0 && t != "" && t != "User" {
+			bots = appendID(bots, n)
+		}
+		return n
+	}
+	author := id(p["user"])
+	out := map[string]any{"complete": true, "author": author}
 	incomplete := func() { out["complete"] = false }
-	if out["author"] == int64(0) || !strings.EqualFold(str(p, "head", "repo", "full_name"), r.s.Owner+"/"+r.s.Repo) {
+	if author <= 0 || !strings.EqualFold(str(p, "head", "repo", "full_name"), r.s.Owner+"/"+r.s.Repo) {
 		incomplete() // no author, or a fork (perhaps since deleted)
 	}
 	var commits []map[string]any
@@ -201,9 +218,14 @@ func (r *reader) people(ctx context.Context) (map[string]any, error) {
 		incomplete()
 	}
 	var authors, committers, pushers []int64
-	for _, c := range commits {
-		authors = appendID(authors, num(mapOf(c["author"])["id"]))
-		committers = appendID(committers, num(mapOf(c["committer"])["id"]))
+	at := map[string]int{}
+	for i, c := range commits {
+		a, cm := id(c["author"]), id(c["committer"])
+		if a <= 0 || cm <= 0 {
+			incomplete() // an email linked to no account: who it is is unknown
+		}
+		authors, committers = appendID(authors, a), appendID(committers, cm)
+		at[str(c, "sha")] = i
 	}
 	var acts []map[string]any
 	ref := "refs/heads/" + str(p, "head", "ref")
@@ -211,9 +233,26 @@ func (r *reader) people(ctx context.Context) (map[string]any, error) {
 		incomplete()
 	}
 	for _, a := range acts {
-		pushers = appendID(pushers, num(mapOf(a["actor"])["id"]))
+		actor := id(a["actor"])
+		if actor <= 0 {
+			incomplete()
+		}
+		pushers = appendID(pushers, actor)
+		to, ok := at[str(a, "after")]
+		if !ok {
+			continue
+		}
+		from := 0
+		if i, ok := at[str(a, "before")]; ok && i < to {
+			from = i + 1
+		}
+		for _, c := range commits[from : to+1] {
+			if actor != num(mapOf(c["author"])["id"]) && actor != num(mapOf(c["committer"])["id"]) {
+				incomplete() // it brought a commit it did not make: the first pusher is unknown
+			}
+		}
 	}
-	out["authors"], out["committers"], out["pushers"] = ids(authors), ids(committers), ids(pushers)
+	out["authors"], out["committers"], out["pushers"], out["bots"] = ids(authors), ids(committers), ids(pushers), ids(bots)
 	return out, nil
 }
 
@@ -249,6 +288,8 @@ func (r *reader) reviews(ctx context.Context) (map[string]any, error) {
 	var list []map[string]any
 	if err := r.json(ctx, r.repo+"/pulls/"+strconv.Itoa(r.s.Number)+"/reviews?per_page=100", &list); err != nil {
 		return nil, err
+	} else if len(list) >= 100 {
+		return nil, fmt.Errorf("more reviews than one page") // a later review may change the latest
 	}
 	latest := map[int64]map[string]any{}
 	for _, rv := range list {
@@ -271,10 +312,18 @@ func (r *reader) reviews(ctx context.Context) (map[string]any, error) {
 	return map[string]any{"head": head, "approved": ids(approved), "changes_requested": ids(changes)}, nil
 }
 
-// checks reports the head's check runs: passed only when every run
-// completed with success, neutral or skipped.
+// checks reports the head's check runs, each with the App that posted it.
+// It passed only when there is a run, every run completed with success,
+// neutral or skipped, and every check the base branch's rules require has a
+// successful run, from the App the rule names when it names one; missing
+// lists the required checks without one. Commit statuses are not read, so a
+// check required as a status is missing, which fails closed.
 func (r *reader) checks(ctx context.Context) (map[string]any, error) {
 	p, err := r.pullRequest(ctx)
+	if err != nil {
+		return nil, err
+	}
+	required, err := r.requiredChecks(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -286,28 +335,77 @@ func (r *reader) checks(ctx context.Context) (map[string]any, error) {
 	if err := r.json(ctx, r.repo+"/commits/"+url.PathEscape(head)+"/check-runs?per_page=100", &res); err != nil || res.Total > len(res.Runs) {
 		return nil, fmt.Errorf("check runs: %w", err)
 	}
-	var failing []any
+	ok := func(c map[string]any) bool {
+		return str(c, "status") == "completed" && slices.Contains([]string{"success", "neutral", "skipped"}, str(c, "conclusion"))
+	}
+	failing, missing, runs := []any{}, []any{}, []any{}
 	for _, c := range res.Runs {
-		if str(c, "status") != "completed" || !slices.Contains([]string{"success", "neutral", "skipped"}, str(c, "conclusion")) {
+		runs = append(runs, map[string]any{"name": str(c, "name"), "app_id": num(mapOf(c["app"])["id"])})
+		if !ok(c) {
 			failing = append(failing, str(c, "name"))
 		}
 	}
-	if failing == nil {
-		failing = []any{}
+	for _, q := range required {
+		if !slices.ContainsFunc(res.Runs, func(c map[string]any) bool {
+			return str(c, "name") == q.context && ok(c) && (q.app == 0 || num(mapOf(c["app"])["id"]) == q.app)
+		}) {
+			missing = append(missing, q.context)
+		}
 	}
-	return map[string]any{"head": head, "passed": len(failing) == 0, "total": int64(len(res.Runs)), "failing": failing}, nil
+	passed := len(res.Runs) > 0 && len(failing) == 0 && len(missing) == 0
+	return map[string]any{"head": head, "passed": passed, "total": int64(len(res.Runs)), "failing": failing, "missing": missing, "runs": runs}, nil
 }
 
-// rules reads the base branch's rules: the approvals a pull request needs
-// and the status checks that must pass.
-func (r *reader) rules(ctx context.Context) (map[string]any, error) {
+// required is a status check a branch rule requires, with the App that
+// must post it (0 for any).
+type required struct {
+	context string
+	app     int64
+}
+
+// branchRules reads the rules on the pull request's base branch once per
+// Read: at most one page of 100; more is an error.
+func (r *reader) branchRules(ctx context.Context) (string, []map[string]any, error) {
 	p, err := r.pullRequest(ctx)
+	if err != nil {
+		return "", nil, err
+	}
+	base := str(p, "base", "ref")
+	if r.rulesRead == nil {
+		var rules []map[string]any
+		if err := r.json(ctx, r.repo+"/rules/branches/"+EscapeRef(base)+"?per_page=100", &rules); err != nil {
+			return "", nil, err
+		} else if len(rules) >= 100 {
+			return "", nil, fmt.Errorf("more branch rules than one page")
+		}
+		r.rulesRead = rules
+	}
+	return base, r.rulesRead, nil
+}
+
+// requiredChecks are the status checks the base branch's rules require.
+func (r *reader) requiredChecks(ctx context.Context) ([]required, error) {
+	_, rules, err := r.branchRules(ctx)
 	if err != nil {
 		return nil, err
 	}
-	base := str(p, "base", "ref")
-	var rules []map[string]any
-	if err := r.json(ctx, r.repo+"/rules/branches/"+EscapeRef(base), &rules); err != nil {
+	var out []required
+	for _, rule := range rules {
+		if str(rule, "type") == "required_status_checks" {
+			for _, c := range listOf(mapOf(rule["parameters"])["required_status_checks"]) {
+				out = append(out, required{context: str(mapOf(c), "context"), app: num(mapOf(c)["integration_id"])})
+			}
+		}
+	}
+	return out, nil
+}
+
+// rules reads the base branch's rules: the approvals a pull request needs
+// and the status checks that must pass. Classic branch protection is not
+// read (it needs administration permission): protection says so.
+func (r *reader) rules(ctx context.Context) (map[string]any, error) {
+	base, rules, err := r.branchRules(ctx)
+	if err != nil {
 		return nil, err
 	}
 	approvals := int64(0)
@@ -329,7 +427,7 @@ func (r *reader) rules(ctx context.Context) (map[string]any, error) {
 	if kinds == nil {
 		kinds = []any{}
 	}
-	return map[string]any{"branch": base, "required_approvals": approvals, "required_checks": checks, "rules": kinds}, nil
+	return map[string]any{"branch": base, "required_approvals": approvals, "required_checks": checks, "rules": kinds, "protection": "unread"}, nil
 }
 
 func listOf(v any) []any {
@@ -376,9 +474,17 @@ func (r *reader) triggers(ctx context.Context, branch, at string) (map[string]an
 	case err != nil:
 		return nil, err
 	case res.Status == http.StatusNotFound:
-		return object(DeployTriggers(nil, branch, at)) // no workflows
+		// No workflows only if the commit exists: GitHub answers 404 for an
+		// unknown ref too.
+		var c map[string]any
+		if err := r.json(ctx, r.repo+"/commits/"+url.PathEscape(at), &c); err != nil || str(c, "sha") == "" {
+			return nil, fmt.Errorf("commit %s: %w", at, err)
+		}
+		return object(DeployTriggers(nil, branch, at))
 	case res.Status != http.StatusOK || json.Unmarshal(res.Body, &listing) != nil:
 		return nil, fmt.Errorf("workflow listing answered %d", res.Status)
+	case len(listing) >= 1000:
+		return object(t.unknown("the workflow directory lists 1000 entries or more")) // GitHub's cap on a listing
 	}
 	files := map[string][]byte{}
 	for _, e := range listing {
@@ -417,4 +523,11 @@ func object(t Triggers) (map[string]any, error) {
 	}
 	var out map[string]any
 	return out, json.Unmarshal(b, &out)
+}
+
+// Unread is the value of a deploy-trigger fact that could not be read:
+// unknown, which holds the action (HR-206).
+func Unread(branch, at, why string) map[string]any {
+	v, _ := object(Triggers{Branch: branch, At: at}.unknown(why))
+	return v
 }

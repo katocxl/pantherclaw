@@ -70,7 +70,7 @@ When a fact cannot be read in time, nothing is reported for it, and the decision
 
 - `pclaw credential list <connection id>` shows the active version with kind `github_app`, and `pclaw connection get <connection id>` shows the installation.
 - An allowed read through the gateway (`GET /github/repos/<owner>/<repo>`) answers. In the App's GitHub audit log, each action shows one token created and one revoked.
-- A repository on another account is refused with `CANNOT_AUTHORIZE` `WRONG_ACCOUNT` before it is decided, and nothing reaches GitHub.
+- A repository on another account is refused with `CANNOT_AUTHORIZE` `WRONG_ACCOUNT` before it is decided, and nothing reaches GitHub. A GitHub App connection whose installation is not recorded (a credential sealed before the server recorded installations) is refused the same way with `INSTALLATION_UNKNOWN`: seal it again with `pclaw seal --github-app`.
 - An operation whose permission the App lacks is refused with `credential_unavailable`. Nothing reaches GitHub except the refused token request.
 
 ## Failure modes

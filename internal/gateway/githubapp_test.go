@@ -107,6 +107,8 @@ func withGitHubApp(t *testing.T, w *gitHubWorld) func(*harness) {
 			Id: ids.NewV7().String(), ConnectionId: connID, Version: 1, BrokerKeyId: "bk-1", Sealed: blob, AllowedHosts: hosts,
 			Header: "Authorization", Scheme: "Bearer", Kind: domain.KindGitHubApp,
 		}
+		// The installation the server recorded with the seal (G3c).
+		h.conn.Github = &pb.GitHubInstallation{AppClientId: "Iv23liGateway", InstallationId: 7, AccountLogin: "acme"}
 	}
 }
 
@@ -129,7 +131,9 @@ func TestHR203_TheGatewayMintsATokenPerActionAndRevokesIt(t *testing.T) {
 	if len(tokens) != 2 {
 		t.Fatalf("%d tokens minted, want one per action", len(tokens))
 	}
-	want := []map[string]string{{"contents": "read"}, {"contents": "write"}}
+	// Each token has exactly the operation's declared permissions, with the
+	// metadata: read GitHub adds to every token.
+	want := []map[string]string{{"contents": "read", "metadata": "read"}, {"contents": "write", "metadata": "read"}}
 	for _, tok := range tokens {
 		if !tok.Revoked || !slices.Equal(tok.Repos, []string{"acme/payments"}) || tok.Uses != 1 { // the action; the revocation is not a use
 			t.Errorf("token %+v", tok)
@@ -147,7 +151,7 @@ func TestHR203_TheGatewayMintsATokenPerActionAndRevokesIt(t *testing.T) {
 			merge = req
 		}
 	}
-	if merge.Status != http.StatusOK || merge.Installation != 7 || !maps.Equal(merge.Permissions, map[string]string{"contents": "write"}) {
+	if merge.Status != http.StatusOK || merge.Installation != 7 || !maps.Equal(merge.Permissions, map[string]string{"contents": "write", "metadata": "read"}) {
 		t.Fatalf("the merge went out with %+v", merge)
 	}
 	if recs := h.auth.snap().records; len(recs) != 2 || recs[0].GetOutcome() != pb.Outcome_OUTCOME_ACCEPTED || recs[1].GetOutcome() != pb.Outcome_OUTCOME_ACCEPTED {
@@ -156,17 +160,21 @@ func TestHR203_TheGatewayMintsATokenPerActionAndRevokesIt(t *testing.T) {
 }
 
 // TestHR203_NoTokenNoDispatch: an operation outside the App's installed
-// permissions, or a repository on another account, gets no token, and
-// nothing is sent to it.
+// permissions gets no token, a repository on another account is refused
+// before that (WRONG_ACCOUNT), and nothing is sent to either.
 func TestHR203_NoTokenNoDispatch(t *testing.T) {
 	w := newGitHubWorld(t)
 	h := setup(t, withGitHubApp(t, w))
-	for name, c := range map[string]struct{ method, path, body string }{
-		"a permission the App lacks": {http.MethodPatch, "/payments/repos/acme/payments", `{"delete_branch_on_merge":true}`},
-		"another account":            {http.MethodGet, "/payments/repos/evil/payments/contents/README.md", ""},
+	for name, c := range map[string]struct {
+		method, path, body string
+		code               int
+		want               string
+	}{
+		"a permission the App lacks": {http.MethodPatch, "/payments/repos/acme/payments", `{"delete_branch_on_merge":true}`, http.StatusBadGateway, "credential_unavailable"},
+		"another account":            {http.MethodGet, "/payments/repos/evil/payments/contents/README.md", "", http.StatusForbidden, "WRONG_ACCOUNT"},
 	} {
 		r := h.do(t, c.method, c.path, c.body, nil)
-		if r.code != http.StatusBadGateway || r.refusal.Error != "credential_unavailable" {
+		if r.code != c.code || r.refusal.Error != c.want {
 			t.Errorf("%s: %d %+v", name, r.code, r.refusal)
 		}
 	}
@@ -240,11 +248,28 @@ func TestHR203_TheExecutionRecordCarriesTheAccessNotTheToken(t *testing.T) {
 	}
 	a, read := recs[0].GetCredentialAccess(), map[string]string{"contents": "read"}
 	if a.GetInstallationId() != 7 || a.GetRepository() != "acme/payments" || a.GetRepositoryId() <= 0 || !maps.Equal(a.GetRequested(), read) ||
-		!maps.Equal(a.GetGranted(), read) || a.GetExpireTime() == nil || a.GetRevocation() != "revoked" {
+		!maps.Equal(a.GetGranted(), map[string]string{"contents": "read", "metadata": "read"}) || a.GetExpireTime() == nil || a.GetRevocation() != "revoked" {
 		t.Fatalf("access %+v", a)
 	}
 	raw, err := proto.Marshal(recs[0])
 	if err != nil || bytes.Contains(raw, []byte("ghs_")) {
 		t.Fatalf("the record carries a token: %v", err)
+	}
+}
+
+// TestHR203_AnAppWithoutARecordedInstallationIsRefused: a GitHub App
+// connection whose installation is not recorded (a seal from before the
+// server recorded it) is CANNOT_AUTHORIZE INSTALLATION_UNKNOWN before the
+// Authority is asked or GitHub reached: the account it may act on is
+// unknown.
+func TestHR203_AnAppWithoutARecordedInstallationIsRefused(t *testing.T) {
+	w := newGitHubWorld(t)
+	h := setup(t, withGitHubApp(t, w), func(h *harness) { h.conn.Github = nil })
+	r := h.do(t, http.MethodGet, "/payments/repos/acme/payments/contents/README.md", "", nil)
+	if r.code != http.StatusForbidden || r.refusal.Error != "INSTALLATION_UNKNOWN" || r.refusal.Decision != "CANNOT_AUTHORIZE" {
+		t.Fatalf("no recorded installation: %d %+v", r.code, r.refusal)
+	}
+	if n := h.auth.snap().authorize; n != 0 || len(w.sim.Requests()) != 1 { // the test's own pull request
+		t.Fatalf("%d decisions, %d GitHub requests", n, len(w.sim.Requests()))
 	}
 }
