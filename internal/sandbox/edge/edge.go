@@ -111,6 +111,10 @@ type Options struct {
 	// GatewayURL instead of its HTTP face, unsigned: the gateway maps it
 	// to the call in flight and places the credential (connector.go).
 	Binding func() string
+	// Placeholder, in connector mode, is the value the connector's credential
+	// variables hold: a header or query parameter carrying only it is
+	// dropped like any credential but not reported, since it is no secret.
+	Placeholder string
 }
 
 // Edge is one session's sidecar.
@@ -119,6 +123,7 @@ type Edge struct {
 	hosts                 map[string]string
 	token                 func() string
 	binding               func() string
+	placeholder           string
 	client                *http.Client
 	ca                    *authority
 	log                   *slog.Logger
@@ -130,6 +135,15 @@ func New(o Options) (*Edge, error) {
 	u, err := url.Parse(strings.TrimSuffix(o.GatewayURL, "/"))
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || u.RawQuery != "" {
 		return nil, fmt.Errorf("edge: gateway URL %q", o.GatewayURL)
+	}
+	if o.Binding != nil && u.Scheme == "http" {
+		host := u.Hostname()
+		if o.GatewayAddr != "" {
+			host, _, _ = net.SplitHostPort(o.GatewayAddr)
+		}
+		if !nonRoutable(host) {
+			return nil, fmt.Errorf("edge: the binding token goes in clear over http only to a non-routable address, not %q", host)
+		}
 	}
 	if o.Binding == nil {
 		if _, err := ids.ParseUUID(o.Run); err != nil {
@@ -183,7 +197,7 @@ func New(o Options) (*Edge, error) {
 		transport = base // the egress listener checks the binding token
 	}
 	return &Edge{
-		session: o.Session, gateway: u.String(), run: o.Run, hosts: maps.Clone(o.Hosts), token: o.Token, binding: o.Binding, ca: ca, log: log,
+		session: o.Session, gateway: u.String(), run: o.Run, hosts: maps.Clone(o.Hosts), token: o.Token, binding: o.Binding, placeholder: o.Placeholder, ca: ca, log: log,
 		client: &http.Client{
 			Transport: transport,
 			Timeout:   requestTimeout,
@@ -437,6 +451,9 @@ func (e *Edge) relay(w http.ResponseWriter, r *http.Request, host, conn, action 
 func (e *Edge) strip(r *http.Request, host string) {
 	for _, h := range credentialHeaders {
 		for _, v := range r.Header.Values(h) {
+			if e.onlyPlaceholder(v) {
+				continue
+			}
 			e.stripped.Add(1)
 			sum := sha256.Sum256([]byte(v))
 			e.log.WarnContext(r.Context(), EventCredentialStripped, "client", client(r), "header", h, "kind", credentialKind(h, v),
@@ -467,6 +484,9 @@ func (e *Edge) stripQuery(r *http.Request, host string) string {
 		kind := tokenKind(value)
 		if kind == "" && !slices.Contains(credentialParams, strings.ToLower(name)) {
 			kept = append(kept, p)
+			continue
+		}
+		if e.onlyPlaceholder(value) {
 			continue
 		}
 		if kind == "" {

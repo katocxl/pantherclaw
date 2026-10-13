@@ -64,6 +64,9 @@ type Config struct {
 	// BindingFile holds the connector's binding token (connector mode),
 	// read for every request.
 	BindingFile string `json:"binding_file,omitzero"`
+	// Placeholder is the value of the connector's credential variables
+	// (connector mode): not reported when stripped.
+	Placeholder string `json:"placeholder,omitzero"`
 }
 
 // ReadConfig reads a configuration file strictly.
@@ -128,6 +131,7 @@ func Run(ctx context.Context, c Config, out io.Writer, log *slog.Logger) error {
 	}
 	if c.Mode == ModeConnector {
 		o.Binding = read(c.BindingFile)
+		o.Placeholder = c.Placeholder
 	} else {
 		kf, err := workloadclient.ReadKeyFile(c.KeyFile)
 		if err != nil {

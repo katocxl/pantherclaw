@@ -9,6 +9,8 @@ import (
 	"encoding/json/v2"
 	"io"
 	"net/http"
+	"net/netip"
+	"strings"
 
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 )
@@ -85,4 +87,25 @@ func (e *Edge) egress(w http.ResponseWriter, r *http.Request, host, conn string)
 	out.Header.Set(headerAction, action)
 	res, err := e.client.Do(out) //nolint:bodyclose // relay closes the body
 	e.relay(w, r, host, conn, action, res, err)
+}
+
+// onlyPlaceholder reports whether a credential value carries only the
+// connector's placeholder, alone or after an authorization scheme.
+func (e *Edge) onlyPlaceholder(v string) bool {
+	if e.placeholder == "" {
+		return false
+	}
+	f := strings.Fields(v)
+	return (len(f) == 1 || len(f) == 2) && f[len(f)-1] == e.placeholder
+}
+
+// nonRoutable reports whether host is an address the binding token may
+// cross in clear: a loopback, private or link-local IP address, or the
+// name Docker gives the host.
+func nonRoutable(host string) bool {
+	if host == "host.docker.internal" {
+		return true
+	}
+	ip, err := netip.ParseAddr(host)
+	return err == nil && (ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast())
 }

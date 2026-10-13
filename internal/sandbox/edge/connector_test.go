@@ -48,7 +48,7 @@ func TestHR216_AConnectorsEdgeSendsOnlyToTheEgressListener(t *testing.T) {
 	var log bytes.Buffer
 	e, err := New(Options{
 		GatewayURL: egress.URL, Hosts: map[string]string{"api.github.com": "github"}, Binding: func() string { return binding },
-		Log: pclog.New(&log, pclog.Options{}),
+		Placeholder: "pantherclaw-placeholder", Log: pclog.New(&log, pclog.Options{}),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -88,6 +88,23 @@ func TestHR216_AConnectorsEdgeSendsOnlyToTheEgressListener(t *testing.T) {
 		t.Fatalf("stripped %d:\n%s", e.Stripped(), log.String())
 	}
 
+	// The placeholder is dropped like a credential, but it is no secret and
+	// is not reported.
+	req, _ = http.NewRequestWithContext(t.Context(), http.MethodGet, "https://api.github.com/user?token=pantherclaw-placeholder", nil)
+	req.Header.Set("Authorization", "Bearer pantherclaw-placeholder")
+	if res, err = client.Do(req); err != nil {
+		t.Fatal(err)
+	}
+	_ = res.Body.Close()
+	mu.Lock()
+	if len(got) != 2 || got[1].Query != "" || len(got[1].Headers) != 0 {
+		t.Fatalf("egress got %+v", got)
+	}
+	mu.Unlock()
+	if e.Stripped() != 2 {
+		t.Fatalf("the placeholder was reported: %d", e.Stripped())
+	}
+
 	binding = ""
 	req, _ = http.NewRequestWithContext(t.Context(), http.MethodGet, "https://api.github.com/user", nil)
 	res, err = client.Do(req)
@@ -100,7 +117,33 @@ func TestHR216_AConnectorsEdgeSendsOnlyToTheEgressListener(t *testing.T) {
 	}
 	mu.Lock()
 	defer mu.Unlock()
-	if len(got) != 1 {
+	if len(got) != 2 {
 		t.Fatal("a request without a binding reached the egress listener")
+	}
+}
+
+// TestHR216_TheBindingTokenGoesInClearOnlyToANonRoutableAddress: a
+// connector's edge refuses a plain-HTTP egress listener on a routable
+// address, which would carry the binding token in clear.
+func TestHR216_TheBindingTokenGoesInClearOnlyToANonRoutableAddress(t *testing.T) {
+	hosts := map[string]string{"api.github.com": "github"}
+	binding := func() string { return "b" }
+	for _, c := range []struct {
+		url, addr string
+		ok        bool
+	}{
+		{"http://203.0.113.7:8095", "", false},
+		{"http://gateway.example.com:8095", "", false},
+		{"http://gateway.example.com:8095", "198.51.100.1:8095", false},
+		{"http://127.0.0.1:8095", "", true},
+		{"http://10.20.0.1:8095", "", true},
+		{"http://host.docker.internal:8095", "", true},
+		{"http://gateway.example.com:8095", "172.17.0.1:8095", true},
+		{"https://gateway.example.com", "", true},
+	} {
+		_, err := New(Options{GatewayURL: c.url, GatewayAddr: c.addr, Hosts: hosts, Binding: binding})
+		if (err == nil) != c.ok {
+			t.Errorf("%s via %q: %v", c.url, c.addr, err)
+		}
 	}
 }
