@@ -54,6 +54,9 @@ type m6Services struct {
 	// verifications are leased to gateways over this listener (G0 M7);
 	// nil leaves the RPCs unimplemented.
 	verifications gatewaysrpc.Verifications
+	// facts takes what gateways read as connections' fact providers (G0 M8);
+	// nil leaves ReportFacts unimplemented.
+	facts gatewaysrpc.Facts
 	// rpID is the WebAuthn relying party approver keys are exported for
 	// (HR-038); "" when security keys are off.
 	rpID string
@@ -108,6 +111,9 @@ func (m *m6Services) gatewayHandler(svc *authority.Service, log *slog.Logger) (h
 	gw := gatewaysrpc.NewGateway(m.gateways).WithHub(m.hub).WithCircuits(m.connections).WithDrifts(m.connections)
 	if m.verifications != nil {
 		gw = gw.WithVerifications(m.verifications)
+	}
+	if m.facts != nil {
+		gw = gw.WithFacts(m.facts)
 	}
 	pantherclawv1connect.RegisterGatewayServiceHandler(rs, gw)
 	mux := http.NewServeMux()
