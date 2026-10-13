@@ -187,6 +187,7 @@ VALUES ($1, $2, $3, $4, $5,
         $11)
 ON CONFLICT (org_id, id) DO UPDATE SET state = EXCLUDED.state, last_error_class = EXCLUDED.last_error_class
 WHERE pc.connector_instances.gateway_id = EXCLUDED.gateway_id AND pc.connector_instances.connection_id = EXCLUDED.connection_id
+  AND pc.connector_instances.spec_revision = EXCLUDED.spec_revision AND pc.connector_instances.container_name = EXCLUDED.container_name
 RETURNING org_id, id, connection_id, spec_revision, gateway_id, container_name, state, engine_version, api_version, runtime, last_error_class, started_at, stopped_at, updated_at
 `
 
@@ -206,7 +207,7 @@ type ReportConnectorInstanceParams struct {
 
 // A connector's run as its gateway reports it (00094): inserted on its
 // first report, then only its state and error class change, and only for
-// the same gateway and connection.
+// the same gateway and connection, spec revision and container.
 func (q *Queries) ReportConnectorInstance(ctx context.Context, arg ReportConnectorInstanceParams) (PcConnectorInstance, error) {
 	row := q.db.QueryRow(ctx, reportConnectorInstance,
 		arg.OrgID,
@@ -239,4 +240,21 @@ func (q *Queries) ReportConnectorInstance(ctx context.Context, arg ReportConnect
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const supersedeConnectorInstances = `-- name: SupersedeConnectorInstances :execrows
+UPDATE pc.connector_instances SET state = 'STOPPED', last_error_class = 'superseded'
+WHERE org_id = $1 AND connection_id = $2 AND id < $3
+  AND state IN ('STARTING', 'RUNNING')
+`
+
+// A connection runs one connector container at a time: when a new run
+// starts, the earlier runs still open (left by a gateway that crashed or
+// restarted, or by a stop it never reported) are closed as superseded.
+func (q *Queries) SupersedeConnectorInstances(ctx context.Context, orgID ids.OrgID, connectionID ids.UUID, iD ids.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, supersedeConnectorInstances, orgID, connectionID, iD)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }

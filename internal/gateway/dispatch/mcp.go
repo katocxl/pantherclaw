@@ -100,7 +100,9 @@ func (e *Engine) sendMCP(ctx context.Context, r Result, conn *control.Connection
 		}
 		return nil
 	}
-	declared, refusal, err := e.pinnedParams(ctx, conn, ce, tool, secret)
+	callCtx, cancel := callWindow(ctx, conn)
+	defer cancel()
+	declared, refusal, err := e.pinnedParams(callCtx, conn, ce, tool, secret)
 	switch {
 	case err != nil:
 		// The server could not be listed: the call was never sent.
@@ -117,7 +119,7 @@ func (e *Engine) sendMCP(ctx context.Context, r Result, conn *control.Connection
 		return e.record(ctx, r, want, pb.Outcome_OUTCOME_FAILED, 0, nil, 0, EnforcementFailed, CodeRequest, t)
 	}
 	start := time.Now()
-	res, err := ce.mcp.Call(ctx, tool, args, declared, decorate)
+	res, err := ce.mcp.Call(callCtx, tool, args, declared, decorate)
 	elapsed := time.Since(start)
 	t.lap("target")
 	outcome, class, code := classifyMCP(res, err)

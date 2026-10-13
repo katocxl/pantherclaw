@@ -113,6 +113,23 @@ func TestHR084_AGatewayReportsOnlyItsOwnConnectorsRuns(t *testing.T) {
 	if err := run(second, connector(mine.Gateway), 1, "RUNNING"); !errors.Is(err, app.ErrConnectorRun) {
 		t.Fatalf("a run id reused for another connection: %v", err)
 	}
+	e.exec(t, `INSERT INTO pc.connector_specs (org_id, connection_id, revision, image, command, memory_mib, milli_cpus, pids, created_by)
+		VALUES ($1, $2, 2, $3, ARRAY['/server'], 512, 1000, 256, 'test')`, e.org, own,
+		"sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
+	if err := run(second, own, 2, "RUNNING"); !errors.Is(err, app.ErrConnectorRun) {
+		t.Fatalf("a run moved to another spec revision: %v", err)
+	}
+	// The gateway crashes with second open; its next run closes it.
+	if err := run(ids.NewV7(), own, 2, "STARTING"); err != nil {
+		t.Fatal(err)
+	}
+	if n := e.count(t, `SELECT count(*) FROM pc.connector_instances WHERE org_id = $1 AND id = $2 AND state = 'STOPPED'
+		AND last_error_class = 'superseded' AND stopped_at IS NOT NULL`, e.org, second); n != 1 {
+		t.Fatal("a run a crashed gateway left open was not closed")
+	}
+	if err := run(second, own, 1, "RUNNING"); !errors.Is(err, app.ErrConnectorRun) {
+		t.Fatalf("a superseded run reported running: %v", err)
+	}
 	e.svc.WithPantherClawHosted([]ids.UUID{mine.Gateway})
 	if err := run(ids.NewV7(), own, 1, "STARTING"); !errors.Is(err, app.ErrConnectorNotFound) {
 		t.Fatalf("a PantherClaw-hosted gateway's connector run: %v", err)
