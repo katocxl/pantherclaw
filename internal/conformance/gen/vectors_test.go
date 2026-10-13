@@ -24,6 +24,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"testing/cryptotest"
+	"testing/synctest"
 )
 
 var update = flag.Bool("update", false, "rewrite the vectors in sdk/conformance")
@@ -71,6 +73,10 @@ func groups() []group {
 		{file: "actionir.json", build: buildActionIR},
 		{file: "approval_bindings.json", build: buildBindings},
 		{file: "key_files.json", build: buildKeyFiles},
+		{file: "workload_tokens.json", build: buildWorkloadTokens},
+		{file: "proofs.json", build: buildProofs},
+		{file: "action_tokens.json", build: buildActionTokens},
+		{file: "sdk_face.json", build: buildFace},
 	}
 }
 
@@ -78,21 +84,29 @@ func groups() []group {
 // implementation still agrees with them.
 func TestConformanceVectors(t *testing.T) {
 	for _, g := range groups() {
+		// Tokens and proofs carry UUIDv7s and random ids: each group is built
+		// once, in a bubble whose clock starts at the same instant, with
+		// crypto/rand seeded, so a rewrite is byte for byte the same.
 		t.Run(g.file, func(t *testing.T) {
-			path := filepath.Join(dir, g.file)
-			if *update {
-				if err := os.WriteFile(path, encode(t, g.build(t)), 0o644); err != nil {
-					t.Fatal(err)
+			synctest.Test(t, func(t *testing.T) {
+				cryptotest.SetGlobalRandom(t, 20261011)
+				path := filepath.Join(dir, g.file)
+				got := encode(t, g.build(t))
+				if *update {
+					if err := os.WriteFile(path, got, 0o644); err != nil {
+						t.Fatal(err)
+					}
+					return
 				}
-			}
-			raw, err := os.ReadFile(path)
-			if err != nil {
-				t.Fatalf("%v (run with -update to create it)", err)
-			}
-			if got := encode(t, g.build(t)); !bytes.Equal(got, raw) {
-				t.Fatalf("%s differs from what the implementation produces now; if the change is intended, run "+
-					"task sdk:vectors and review the diff", g.file)
-			}
+				raw, err := os.ReadFile(path)
+				if err != nil {
+					t.Fatalf("%v (run task sdk:vectors to create it)", err)
+				}
+				if !bytes.Equal(got, raw) {
+					t.Fatalf("%s differs from what the implementation produces now; if the change is intended, run "+
+						"task sdk:vectors and review the diff", g.file)
+				}
+			})
 		})
 	}
 }

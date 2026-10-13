@@ -26,13 +26,14 @@ func TestExpectedLicense(t *testing.T) {
 	t.Parallel()
 
 	cases := map[string]string{
-		"internal/platform/version/version.go": spdxBUSL,
-		"cmd/pclaw/main.go":                    spdxBUSL,
-		"sdk/go/pap/pap.go":                    spdxApache,
-		"sdk/python/pantherclaw/__init__.py":   spdxApache,
-		"integrations/claude-code/hook.ts":     spdxApache,
-		"docs/protocol/example.go":             spdxApache,
-		"sdkx/other.go":                        spdxBUSL,
+		"internal/platform/version/version.go":                  spdxBUSL,
+		"cmd/pclaw/main.go":                                     spdxBUSL,
+		"sdk/go/pap/pap.go":                                     spdxApache,
+		"sdk/python/pantherclaw/__init__.py":                    spdxApache,
+		"integrations/claude-code/hook.ts":                      spdxApache,
+		"integrations/claude-agent-sdk/typescript/src/index.ts": spdxApache,
+		"docs/protocol/example.go":                              spdxApache,
+		"sdkx/other.go":                                         spdxBUSL,
 	}
 	for p, want := range cases {
 		if got := ExpectedLicense(p); got != want {
