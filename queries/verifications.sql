@@ -49,11 +49,13 @@ SET state = 'PENDING', next_at = now() + make_interval(secs => sqlc.arg(delay_se
 WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state = 'LEASED';
 
 -- ReleaseExpiredLeases returns leases nobody reported in time to PENDING,
--- or ends them when the task's deadline passed too.
+-- or ends them when the task's deadline passed too. An organization scan
+-- has three leases at most, each a whole scan's worth of the installation's
+-- API quota: its third unreported lease ends it (HR-209).
 -- name: ReleaseExpiredLeases :many
 UPDATE pc.verifications
-SET state = CASE WHEN deadline_at <= now() THEN 'EXPIRED' ELSE 'PENDING' END,
-    finished_at = CASE WHEN deadline_at <= now() THEN now() END,
+SET state = CASE WHEN deadline_at <= now() OR (purpose = 'org_scan' AND attempts >= 3) THEN 'EXPIRED' ELSE 'PENDING' END,
+    finished_at = CASE WHEN deadline_at <= now() OR (purpose = 'org_scan' AND attempts >= 3) THEN now() END,
     lease_hash = NULL, leased_by = NULL, leased_at = NULL, lease_expires_at = NULL
 WHERE org_id = sqlc.arg(org_id) AND state = 'LEASED' AND lease_expires_at < now()
 RETURNING id, state, transaction_id;
