@@ -5,6 +5,10 @@
 
 package workloadclient
 
-// private does nothing: the 0600 mode already keeps the key file the
-// person's own.
-func private(string) error { return nil }
+import "os"
+
+// createPrivate creates a new file, never an existing one, that only the
+// person can read or write (0600).
+func createPrivate(path string) (*os.File, error) {
+	return os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600) //nolint:gosec // G304: operator-chosen path
+}

@@ -5,36 +5,37 @@
 
 package workloadclient
 
-import "golang.org/x/sys/windows"
+import (
+	"os"
+	"unsafe"
 
-// private gives a key file an access list of its own instead of its
-// folder's: full control for the person, SYSTEM and Administrators, and
-// nothing for anyone else. Windows ignores the 0600 mode, and a home or
-// temp folder often lets other accounts read what it holds (HR-208).
-func private(path string) error {
+	"golang.org/x/sys/windows"
+)
+
+// createPrivate creates a new file, never an existing one, with an access
+// list of its own from the start: full control for the person, SYSTEM and
+// Administrators, nothing for anyone else and nothing inherited from its
+// folder. Windows ignores the 0600 mode, a home or temp folder often lets
+// other accounts read what it holds, and a file made private only after it
+// was created could be opened by one of them in between (HR-208).
+func createPrivate(path string) (*os.File, error) {
 	user, err := windows.GetCurrentProcessToken().GetTokenUser()
 	if err != nil {
-		return err
+		return nil, err
 	}
-	system, err := windows.CreateWellKnownSid(windows.WinLocalSystemSid)
+	// P: protected, so nothing is inherited; FA: full access.
+	sd, err := windows.SecurityDescriptorFromString("D:P(A;;FA;;;" + user.User.Sid.String() + ")(A;;FA;;;SY)(A;;FA;;;BA)")
 	if err != nil {
-		return err
+		return nil, err
 	}
-	admins, err := windows.CreateWellKnownSid(windows.WinBuiltinAdministratorsSid)
+	name, err := windows.UTF16PtrFromString(path)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	var entries []windows.EXPLICIT_ACCESS
-	for _, sid := range []*windows.SID{user.User.Sid, system, admins} {
-		entries = append(entries, windows.EXPLICIT_ACCESS{
-			AccessPermissions: windows.GENERIC_ALL, AccessMode: windows.GRANT_ACCESS, Inheritance: windows.NO_INHERITANCE,
-			Trustee: windows.TRUSTEE{TrusteeForm: windows.TRUSTEE_IS_SID, TrusteeValue: windows.TrusteeValueFromSID(sid)},
-		})
-	}
-	acl, err := windows.ACLFromEntries(entries, nil)
+	sa := &windows.SecurityAttributes{Length: uint32(unsafe.Sizeof(windows.SecurityAttributes{})), SecurityDescriptor: sd}
+	h, err := windows.CreateFile(name, windows.GENERIC_WRITE, 0, sa, windows.CREATE_NEW, windows.FILE_ATTRIBUTE_NORMAL, 0)
 	if err != nil {
-		return err
+		return nil, &os.PathError{Op: "open", Path: path, Err: err}
 	}
-	return windows.SetNamedSecurityInfo(path, windows.SE_FILE_OBJECT,
-		windows.DACL_SECURITY_INFORMATION|windows.PROTECTED_DACL_SECURITY_INFORMATION, nil, nil, acl, nil)
+	return os.NewFile(uintptr(h), path), nil
 }
