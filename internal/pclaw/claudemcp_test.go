@@ -299,3 +299,27 @@ func TestHR208_InitDiffHidesTheTokensOfAReLaidOutFile(t *testing.T) {
 		t.Fatalf("the tokens did not stay in the file as they were:\n%s", state)
 	}
 }
+
+// TestHR208_InitDiffHidesSecretArgumentsAndURLCredentials: in the diff of
+// a re-laid-out ~/.claude.json, the value of a secret-looking flag in a
+// server's args and a URL's user information and query are shown as
+// "<redacted>"; the file keeps them as they were.
+func TestHR208_InitDiffHidesSecretArgumentsAndURLCredentials(t *testing.T) {
+	f := newInitFixture(t)
+	key := strings.Repeat("k7", 16) // built at run time: no token-like literal in the source
+	project, _ := json.Marshal(f.project)
+	f.write(t, f.state(), `{"projects": {`+string(project)+`: {"mcpServers": {"github": {"command": "npx"}, "search": {"command": "npx",
+	  "args": ["-y", "search-mcp", "--api-key", "`+key+`", "--endpoint=https://search.example.test/v1?key=`+key+`"]},
+	  "api": {"type": "http", "url": "https://me:`+key+`@api.example.test/mcp?token=`+key+`"}}}}}`)
+	code, out, errs := f.run(t, "--mcp", "github=github-sdk")
+	if code != 0 || !strings.Contains(out, `"--endpoint=https://search.example.test/v1?<redacted>"`) ||
+		!strings.Contains(out, `"url": "https://<redacted>@api.example.test/mcp?<redacted>"`) || !strings.Contains(out, `"--api-key",`) {
+		t.Fatalf("init: %d %s %s", code, out, errs)
+	}
+	if strings.Contains(out, key) {
+		t.Fatalf("the diff shows a secret:\n%s", out)
+	}
+	if state, _ := os.ReadFile(f.state()); bytes.Count(state, []byte(key)) != 4 {
+		t.Fatalf("the secrets did not stay in the file as they were:\n%s", state)
+	}
+}

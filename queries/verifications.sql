@@ -6,7 +6,9 @@
 
 -- DueVerifications are the due tasks of the connections a gateway serves.
 -- Reads stop when the kill switch is on or the connection is quarantined
--- or retired, as dispatches do (HR-190).
+-- or retired, as dispatches do (HR-190). A connection test is leased at
+-- most max_test_attempts times, so a target_verifier test's tokens are
+-- minted at most that often (HR-188).
 -- name: DueVerifications :many
 SELECT v.id, v.purpose, v.transaction_id, v.connection_id, v.operation, v.request, v.attempts, v.deadline_at
 FROM pc.verifications v
@@ -14,6 +16,7 @@ JOIN pc.connections c ON c.org_id = v.org_id AND c.id = v.connection_id
 JOIN pc.org_containment o ON o.org_id = v.org_id
 WHERE v.org_id = sqlc.arg(org_id) AND v.state = 'PENDING' AND v.next_at <= now() AND v.deadline_at > now()
   AND c.gateway_id = sqlc.arg(gateway_id) AND c.state = 'ACTIVE' AND NOT o.kill_switch
+  AND (v.purpose <> 'connection_test' OR v.attempts < sqlc.arg(max_test_attempts)::integer)
 ORDER BY v.next_at
 LIMIT sqlc.arg(max_tasks)
 FOR UPDATE OF v SKIP LOCKED;
@@ -49,11 +52,14 @@ SET state = 'PENDING', next_at = now() + make_interval(secs => sqlc.arg(delay_se
 WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state = 'LEASED';
 
 -- ReleaseExpiredLeases returns leases nobody reported in time to PENDING,
--- or ends them when the task's deadline passed too.
+-- or ends them when the task's deadline passed too, or when it is a
+-- connection test leased max_test_attempts times (HR-188).
 -- name: ReleaseExpiredLeases :many
 UPDATE pc.verifications
-SET state = CASE WHEN deadline_at <= now() THEN 'EXPIRED' ELSE 'PENDING' END,
-    finished_at = CASE WHEN deadline_at <= now() THEN now() END,
+SET state = CASE WHEN deadline_at <= now() OR (purpose = 'connection_test' AND attempts >= sqlc.arg(max_test_attempts)::integer)
+                 THEN 'EXPIRED' ELSE 'PENDING' END,
+    finished_at = CASE WHEN deadline_at <= now() OR (purpose = 'connection_test' AND attempts >= sqlc.arg(max_test_attempts)::integer)
+                       THEN now() END,
     lease_hash = NULL, leased_by = NULL, leased_at = NULL, lease_expires_at = NULL
 WHERE org_id = sqlc.arg(org_id) AND state = 'LEASED' AND lease_expires_at < now()
 RETURNING id, state, transaction_id;
@@ -157,9 +163,9 @@ UPDATE pc.connection_tests SET state = 'RUNNING', gateway_id = sqlc.arg(gateway_
 WHERE org_id = sqlc.arg(org_id) AND verification_id = sqlc.arg(verification_id) AND state IN ('PENDING', 'RUNNING');
 
 -- LeasedConnectionTest is a connection test's task under a live lease of
--- this gateway (HR-190), with its test.
+-- this gateway (HR-190), with its test and when the lease ends.
 -- name: LeasedConnectionTest :one
-SELECT v.id, v.connection_id, v.operation, v.attempts, t.id AS test_id, t.kind AS test_kind
+SELECT v.id, v.connection_id, v.operation, v.attempts, v.lease_expires_at, t.id AS test_id, t.kind AS test_kind
 FROM pc.verifications v
 JOIN pc.connection_tests t ON t.org_id = v.org_id AND t.verification_id = v.id
 WHERE v.org_id = sqlc.arg(org_id) AND v.id = sqlc.arg(id) AND v.purpose = 'connection_test' AND v.state = 'LEASED'
@@ -168,12 +174,13 @@ FOR UPDATE OF v, t;
 
 -- VerifierTestBasis is what a target_verifier test's token mint checks
 -- again on the server (HR-188's exception): its connection's state, access
--- mode and package, and whether the kill switch is engaged.
+-- mode and package, and whether the kill switch is engaged. Without the
+-- org's containment row there is no row, and no mint.
 -- name: VerifierTestBasis :one
-SELECT c.state AS connection_state, c.access_mode, c.package, coalesce(k.kill_switch, false)::boolean AS kill_switch
+SELECT c.state AS connection_state, c.access_mode, c.package, k.kill_switch
 FROM pc.connection_tests t
 JOIN pc.connections c ON c.org_id = t.org_id AND c.id = t.connection_id
-LEFT JOIN pc.org_containment k ON k.org_id = t.org_id
+JOIN pc.org_containment k ON k.org_id = t.org_id
 WHERE t.org_id = sqlc.arg(org_id) AND t.id = sqlc.arg(id);
 
 -- RecordTestTokenMint records a running target_verifier test's token mint
@@ -191,11 +198,15 @@ SET state = sqlc.arg(state), result = sqlc.narg(result), checks = sqlc.arg(check
 WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state IN ('PENDING', 'RUNNING');
 
 -- FailExpiredConnectionTests ends the tests whose task expired before a
--- gateway reported: they could not run.
+-- gateway reported, by its deadline or after max_test_attempts leases:
+-- they could not run.
 -- name: FailExpiredConnectionTests :execrows
 UPDATE pc.connection_tests t
 SET state = 'FAILED', finished_at = now(),
-    checks = '[{"check":"TEST_READ","passed":false,"detail":"No gateway reported the test read before its deadline."}]'
+    checks = jsonb_build_array(jsonb_build_object('check', 'TEST_READ', 'passed', false, 'detail',
+        CASE WHEN v.attempts >= sqlc.arg(max_test_attempts)::integer
+             THEN format('No gateway reported the test read in %s attempts.', v.attempts)
+             ELSE 'No gateway reported the test read before its deadline.' END))
 FROM pc.verifications v
 WHERE t.org_id = sqlc.arg(org_id) AND v.org_id = t.org_id AND v.id = t.verification_id AND v.state = 'EXPIRED'
   AND t.state IN ('PENDING', 'RUNNING');

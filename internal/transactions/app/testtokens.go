@@ -22,7 +22,8 @@ import (
 // ever tokened, so a test never writes. This is HR-188's one exception to
 // "minted only at BeginDispatch" (founder decision 2026-10-13): one mint of
 // the two tokens per lease attempt, each mint recorded on the test and
-// audited.
+// audited. The tokens expire no later than the lease they were minted
+// under.
 
 // TestTokens are a target_verifier test's action tokens: Fresh binds the
 // test read's empty body, Mismatch another body, so a verifier must refuse
@@ -39,11 +40,13 @@ type MintedTokens struct {
 }
 
 // VerifierTest is a live target_verifier test lease: the test, its
-// connection, the test read's operation and the lease's attempt.
+// connection, the test read's operation, the lease's attempt and when the
+// lease ends, which its tokens do not outlive.
 type VerifierTest struct {
 	Test, Connection ids.UUID
 	Operation        string
 	Attempt          int32
+	LeaseExpires     time.Time
 }
 
 // mismatchedBody is what the Mismatch token binds instead of the read's
@@ -81,7 +84,7 @@ func (s *Service) MintTestTokens(ctx context.Context, org ids.OrgID, gateway, ta
 		empty, other := sha256.Sum256(nil), sha256.Sum256([]byte(mismatchedBody))
 		tok := actiontoken.Token{
 			Issuer: issuer, Audience: t.Connection, Transaction: t.Test, Act: act[:], Operation: t.Operation,
-			TargetType: defs.ConnectionTarget, TargetID: t.Connection.String(), Now: time.Now(),
+			TargetType: defs.ConnectionTarget, TargetID: t.Connection.String(), Now: time.Now(), NotAfter: t.LeaseExpires,
 		}
 		var out MintedTokens
 		var err error
