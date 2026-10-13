@@ -101,7 +101,7 @@ func orgScan(ctx context.Context, tx db.TenantTx, q *dbq.Queries, org ids.OrgID,
 	}
 	if _, err := audit.Record(ctx, tx, audit.Event{
 		Name: "github.scan_finished", Actor: evdomain.Actor{Type: "gateway", ID: gateway.String()}, Outcome: audit.Success,
-		Object:  &audit.Object{Type: "connection", ID: task.ConnectionID.String()},
+		Object: &audit.Object{Type: "connection", ID: task.ConnectionID.String()},
 		Details: map[string]string{
 			"scan": task.RunID.String(), "state": state, "not_scanned": strconv.Itoa(len(notScanned)),
 			"installation_read": strconv.FormatBool(read),
