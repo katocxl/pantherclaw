@@ -7,8 +7,6 @@ import (
 	"context"
 	"encoding/json/v2"
 	"errors"
-	"net/http"
-	"slices"
 	"strconv"
 	"time"
 
@@ -85,6 +83,10 @@ const (
 	// KindReadTest leases the package's harmless test read to the
 	// connection's gateway.
 	KindReadTest = "read"
+	// KindVerifierTest leases the same read to the gateway of a
+	// target_enforced connection, which sends it four times to show the
+	// target's verifier refuses it without a valid action token (N15).
+	KindVerifierTest = "target_verifier"
 )
 
 // CheckTestRead is a read test's one check: what the target answered.
@@ -96,6 +98,10 @@ var (
 	// ErrReadTest: the connection is not one a read test can run through.
 	ErrReadTest = pcerr.New(pcerr.FailedPrecondition, "READ_TEST_NOT_POSSIBLE",
 		"a read test needs an ACTIVE http connection whose gateway holds its credential or needs none")
+	// ErrVerifierTest: the connection is not one a target_verifier test can
+	// run through.
+	ErrVerifierTest = pcerr.New(pcerr.FailedPrecondition, "VERIFIER_TEST_NOT_POSSIBLE",
+		"a target_verifier test needs an ACTIVE http connection in target_enforced access mode")
 )
 
 // Test tests a connection and records the test (connection.test): a
@@ -109,7 +115,7 @@ func (s *Service) Test(ctx context.Context, id ids.UUID, kind string) (TestResul
 	if kind == "" {
 		kind = KindCredentialTest
 	}
-	if kind != KindCredentialTest && kind != KindReadTest {
+	if kind != KindCredentialTest && kind != KindReadTest && kind != KindVerifierTest {
 		return TestResult{}, ErrShape
 	}
 	var out TestResult
@@ -123,8 +129,8 @@ func (s *Service) Test(ctx context.Context, id ids.UUID, kind string) (TestResul
 		}
 		var row dbq.PcConnectionTest
 		details := map[string]string{"kind": kind}
-		if kind == KindReadTest {
-			if row, err = readTest(ctx, q, c, conn); err != nil {
+		if kind != KindCredentialTest {
+			if row, err = leasedTest(ctx, q, c, conn, kind); err != nil {
 				return err
 			}
 		} else {
@@ -168,31 +174,42 @@ func credentialTest(ctx context.Context, q *dbq.Queries, c actor, conn dbq.PcCon
 	})
 }
 
-// readTest leases the package's test read to the connection's gateway: a
+// leasedTest leases the package's test read to the connection's gateway: a
 // verification task of purpose connection_test (M7's machinery) that the
 // gateway runs through the connection and reports; the test is PENDING
 // until then. The package format makes the test read a GET with no
 // required params, this checks it again, and the gateway checks it once
 // more before it runs it: a test never writes.
-func readTest(ctx context.Context, q *dbq.Queries, c actor, conn dbq.PcConnection) (dbq.PcConnectionTest, error) {
-	if conn.State != StateActive || conn.Kind != KindHTTP || (conn.AccessMode != AccessHeld && conn.AccessMode != AccessNone) {
+// A read test runs it once, through a connection whose gateway holds its
+// credential or needs none. A target_verifier test runs it through a
+// target_enforced connection, whose gateway asks for test-purpose action
+// tokens for this read only.
+func leasedTest(ctx context.Context, q *dbq.Queries, c actor, conn dbq.PcConnection, kind string) (dbq.PcConnectionTest, error) {
+	mode := TestReadMode
+	switch {
+	case conn.State != StateActive || conn.Kind != KindHTTP:
+		if kind == KindVerifierTest {
+			return dbq.PcConnectionTest{}, ErrVerifierTest
+		}
+		return dbq.PcConnectionTest{}, ErrReadTest
+	case kind == KindVerifierTest:
+		if conn.AccessMode != AccessTargetEnforced {
+			return dbq.PcConnectionTest{}, ErrVerifierTest
+		}
+		mode = VerifierTestMode
+	case conn.AccessMode != AccessHeld && conn.AccessMode != AccessNone:
 		return dbq.PcConnectionTest{}, ErrReadTest
 	}
 	p, err := pinnedPackage(ctx, q, c.Org, conn.Package)
 	if err != nil {
 		return dbq.PcConnectionTest{}, err
 	}
-	i := slices.IndexFunc(p.Definitions, func(d domain.Definition) bool { return d.Test })
-	if i < 0 {
-		return dbq.PcConnectionTest{}, ErrNoTestRead
-	}
-	d := p.Definitions[i]
-	if d.Access != domain.AccessRead || d.Dispatch == nil || d.Dispatch.HTTP == nil || d.Dispatch.HTTP.Method != http.MethodGet ||
-		d.Target.Type != domain.ConnectionTarget {
+	d, ok := p.TestRead()
+	if !ok {
 		return dbq.PcConnectionTest{}, ErrNoTestRead
 	}
 	request, err := json.Marshal(TestReadRequest{
-		Mode: TestReadMode, Target: actionir.Target{Type: domain.ConnectionTarget, ID: conn.ID.String()}, Params: map[string]string{},
+		Mode: mode, Target: actionir.Target{Type: domain.ConnectionTarget, ID: conn.ID.String()}, Params: map[string]string{},
 	}, json.Deterministic(true))
 	if err != nil {
 		return dbq.PcConnectionTest{}, err
@@ -204,13 +221,16 @@ func readTest(ctx context.Context, q *dbq.Queries, c actor, conn dbq.PcConnectio
 		return dbq.PcConnectionTest{}, err
 	}
 	return q.InsertLeasedConnectionTest(ctx, dbq.InsertLeasedConnectionTestParams{
-		OrgID: c.Org, ID: ids.NewV7(), ConnectionID: conn.ID, Kind: KindReadTest, VerificationID: &task, Operation: &d.Operation,
+		OrgID: c.Org, ID: ids.NewV7(), ConnectionID: conn.ID, Kind: kind, VerificationID: &task, Operation: &d.Operation,
 		RequestedBy: c.By,
 	})
 }
 
 // TestReadMode is the mode of a read test's task request.
 const TestReadMode = "connection_test"
+
+// VerifierTestMode is a target_verifier test's request mode (N15).
+const VerifierTestMode = "target_verifier"
 
 // TestReadRequest is a read test's task request, which the gateway reads:
 // the connection itself as the target and no params.

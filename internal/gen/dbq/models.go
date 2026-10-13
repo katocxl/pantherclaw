@@ -446,6 +446,7 @@ type PcConnectionTest struct {
 	State          string
 	GatewayID      *ids.UUID
 	VerificationID *ids.UUID
+	TokensAttempt  *int32
 	Result         *string
 	Checks         []byte
 	DetailSha256   []byte

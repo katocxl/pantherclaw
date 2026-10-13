@@ -47,7 +47,9 @@ func m8cConnection(t *testing.T, f m5Fixture) (gateway, conn string) {
 // the operation it reaches (a credential test reaches none). An open
 // test only moves forward, to RUNNING, DONE or FAILED, and a finished one
 // never changes; a finished test needs its time, a done one its
-// result. Nothing changes what a test is or deletes it.
+// result. Only a target_verifier test records a token mint, whose attempt
+// only moves forward (HR-188). Nothing changes what a test is or deletes
+// it.
 func TestF354_ConnectionTestsAreKeptAsEvidence(t *testing.T) {
 	d := dbtest.New(t)
 	f := newM5Fixture(t, d.AppPool(t))
@@ -69,6 +71,14 @@ func TestF354_ConnectionTestsAreKeptAsEvidence(t *testing.T) {
 	f.want(t, m5Check, "finished without a time", `UPDATE pc.connection_tests SET state = 'FAILED' WHERE id = $1`, read)
 	f.mustExec(t, `UPDATE pc.connection_tests SET state = 'RUNNING', gateway_id = $2 WHERE id = $1`, read, gw)
 	f.want(t, m5Check, "a running test back to PENDING", `UPDATE pc.connection_tests SET state = 'PENDING' WHERE id = $1`, read)
+	f.want(t, m5Check, "test tokens for a read test", `UPDATE pc.connection_tests SET tokens_attempt = 1 WHERE id = $1`, read)
+	verifier, verifierTask := m5ID(), m5ID()
+	f.mustExec(t, m7Verification, f.org, verifierTask, "connection_test", nil, conn, nil, nil)
+	f.mustExec(t, m8cLeasedTest, f.org, verifier, conn, "target_verifier", verifierTask, op)
+	f.mustExec(t, `UPDATE pc.connection_tests SET state = 'RUNNING', gateway_id = $2, tokens_attempt = 1 WHERE id = $1`, verifier, gw)
+	f.mustExec(t, `UPDATE pc.connection_tests SET tokens_attempt = 2 WHERE id = $1`, verifier)
+	f.want(t, m5Check, "a token mint taken back", `UPDATE pc.connection_tests SET tokens_attempt = 1 WHERE id = $1`, verifier)
+	f.want(t, m5Check, "a token mint erased", `UPDATE pc.connection_tests SET tokens_attempt = NULL WHERE id = $1`, verifier)
 	f.mustExec(t, `UPDATE pc.connection_tests SET state = 'DONE', result = 'FAILED', gateway_id = $2, finished_at = now() WHERE id = $1`, read, gw)
 	f.want(t, m5Check, "UPDATE a DONE connection_tests row", `UPDATE pc.connection_tests SET result = 'PASSED' WHERE id = $1`, read)
 	f.want(t, m5Check, "reopen a DONE connection_tests row", `UPDATE pc.connection_tests SET state = 'RUNNING', result = NULL, finished_at = NULL

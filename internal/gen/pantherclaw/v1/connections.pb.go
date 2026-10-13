@@ -3159,7 +3159,7 @@ type TestConnectionRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Connection id.
 	Id string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	// credential (the default) or read.
+	// credential (the default), read or target_verifier.
 	Kind          string `protobuf:"bytes,2,opt,name=kind,proto3" json:"kind,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -3988,10 +3988,10 @@ const file_pantherclaw_v1_connections_proto_rawDesc = "" +
 	"\vcreate_time\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"createTime\x12\x1c\n" +
 	"\toperation\x18\n" +
-	" \x01(\tR\toperation\"b\n" +
+	" \x01(\tR\toperation\"r\n" +
 	"\x15TestConnectionRequest\x12\x18\n" +
-	"\x02id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x02id\x12/\n" +
-	"\x04kind\x18\x02 \x01(\tB\x1b\xbaH\x18r\x162\x14^(|credential|read)$R\x04kind\"L\n" +
+	"\x02id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x02id\x12?\n" +
+	"\x04kind\x18\x02 \x01(\tB+\xbaH(r&2$^(|credential|read|target_verifier)$R\x04kind\"L\n" +
 	"\x16TestConnectionResponse\x122\n" +
 	"\x04test\x18\x01 \x01(\v2\x1e.pantherclaw.v1.ConnectionTestR\x04test\"\x82\x02\n" +
 	"\x11ConnectionCircuit\x12\x1d\n" +

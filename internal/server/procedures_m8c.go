@@ -20,6 +20,7 @@ var m8cProcedures = map[string]td.Permission{
 	pantherclawv1connect.ConnectionServiceTestConnectionProcedure:            "connection.test",
 	pantherclawv1connect.ConnectionServiceGetConnectionHealthProcedure:       "connection.read",
 	pantherclawv1connect.AuthorityServiceRecordToolObservationProcedure:      "gateway.observe",
+	pantherclawv1connect.GatewayServiceMintTestActionTokensProcedure:         "gateway.verify",
 }
 
 func init() { maps.Copy(procedurePermissions, m8cProcedures) }

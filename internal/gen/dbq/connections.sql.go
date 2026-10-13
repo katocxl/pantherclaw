@@ -390,7 +390,7 @@ const insertCredentialTest = `-- name: InsertCredentialTest :one
 INSERT INTO pc.connection_tests (org_id, id, connection_id, kind, state, result, checks, requested_by, finished_at)
 VALUES ($1, $2, $3, 'credential', 'DONE', $4, $5,
     $6, now())
-RETURNING org_id, id, connection_id, kind, operation, state, gateway_id, verification_id, result, checks, detail_sha256, requested_by, created_at, finished_at
+RETURNING org_id, id, connection_id, kind, operation, state, gateway_id, verification_id, tokens_attempt, result, checks, detail_sha256, requested_by, created_at, finished_at
 `
 
 type InsertCredentialTestParams struct {
@@ -422,6 +422,7 @@ func (q *Queries) InsertCredentialTest(ctx context.Context, arg InsertCredential
 		&i.State,
 		&i.GatewayID,
 		&i.VerificationID,
+		&i.TokensAttempt,
 		&i.Result,
 		&i.Checks,
 		&i.DetailSha256,
@@ -436,7 +437,7 @@ const insertLeasedConnectionTest = `-- name: InsertLeasedConnectionTest :one
 INSERT INTO pc.connection_tests (org_id, id, connection_id, kind, verification_id, operation, requested_by)
 VALUES ($1, $2, $3, $4, $5, $6,
     $7)
-RETURNING org_id, id, connection_id, kind, operation, state, gateway_id, verification_id, result, checks, detail_sha256, requested_by, created_at, finished_at
+RETURNING org_id, id, connection_id, kind, operation, state, gateway_id, verification_id, tokens_attempt, result, checks, detail_sha256, requested_by, created_at, finished_at
 `
 
 type InsertLeasedConnectionTestParams struct {
@@ -470,6 +471,7 @@ func (q *Queries) InsertLeasedConnectionTest(ctx context.Context, arg InsertLeas
 		&i.State,
 		&i.GatewayID,
 		&i.VerificationID,
+		&i.TokensAttempt,
 		&i.Result,
 		&i.Checks,
 		&i.DetailSha256,
@@ -518,7 +520,7 @@ func (q *Queries) InsertToolObservation(ctx context.Context, arg InsertToolObser
 }
 
 const latestConnectionTest = `-- name: LatestConnectionTest :one
-SELECT org_id, id, connection_id, kind, operation, state, gateway_id, verification_id, result, checks, detail_sha256, requested_by, created_at, finished_at FROM pc.connection_tests
+SELECT org_id, id, connection_id, kind, operation, state, gateway_id, verification_id, tokens_attempt, result, checks, detail_sha256, requested_by, created_at, finished_at FROM pc.connection_tests
 WHERE org_id = $1 AND connection_id = $2 AND state IN ('DONE', 'FAILED')
     AND (NOT $3::boolean OR result = 'PASSED')
 ORDER BY finished_at DESC, id DESC
@@ -538,6 +540,7 @@ func (q *Queries) LatestConnectionTest(ctx context.Context, orgID ids.OrgID, con
 		&i.State,
 		&i.GatewayID,
 		&i.VerificationID,
+		&i.TokensAttempt,
 		&i.Result,
 		&i.Checks,
 		&i.DetailSha256,
