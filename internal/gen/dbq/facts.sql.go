@@ -16,6 +16,33 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 )
 
+const currentFactValue = `-- name: CurrentFactValue :one
+SELECT value FROM pc.facts
+WHERE org_id = $1 AND name = $2 AND subject_type = $3 AND subject_id = $4
+FOR UPDATE
+`
+
+type CurrentFactValueParams struct {
+	OrgID       ids.OrgID
+	Name        string
+	SubjectType string
+	SubjectID   string
+}
+
+// The current value of a fact about a subject, locked for the write that
+// replaces it, so a change is seen once (G0 M8, HR-205).
+func (q *Queries) CurrentFactValue(ctx context.Context, arg CurrentFactValueParams) ([]byte, error) {
+	row := q.db.QueryRow(ctx, currentFactValue,
+		arg.OrgID,
+		arg.Name,
+		arg.SubjectType,
+		arg.SubjectID,
+	)
+	var value []byte
+	err := row.Scan(&value)
+	return value, err
+}
+
 const deactivateFactDeclarations = `-- name: DeactivateFactDeclarations :exec
 UPDATE pc.fact_declarations SET active = false
 WHERE org_id = $1 AND provider_id = $2
@@ -200,6 +227,40 @@ func (q *Queries) ListActiveFactCatalog(ctx context.Context, orgID ids.OrgID) ([
 	for rows.Next() {
 		var i ListActiveFactCatalogRow
 		if err := rows.Scan(&i.Name, &i.ValueType); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listActiveFactSubjects = `-- name: ListActiveFactSubjects :many
+SELECT d.name, d.subject_type FROM pc.fact_declarations d
+JOIN pc.fact_providers p ON p.org_id = d.org_id AND p.id = d.provider_id
+WHERE d.org_id = $1 AND d.active AND p.state = 'ACTIVE'
+ORDER BY d.name
+`
+
+type ListActiveFactSubjectsRow struct {
+	Name        string
+	SubjectType string
+}
+
+// ListActiveFactSubjects returns the subject type each active fact is
+// declared about (one active provider per fact name).
+func (q *Queries) ListActiveFactSubjects(ctx context.Context, orgID ids.OrgID) ([]ListActiveFactSubjectsRow, error) {
+	rows, err := q.db.Query(ctx, listActiveFactSubjects, orgID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListActiveFactSubjectsRow{}
+	for rows.Next() {
+		var i ListActiveFactSubjectsRow
+		if err := rows.Scan(&i.Name, &i.SubjectType); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

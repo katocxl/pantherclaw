@@ -180,6 +180,14 @@ type PcApprovalRequest struct {
 	PermitID           *ids.UUID
 	EndedAt            *time.Time
 	ActionIr           []byte
+	InvalidationKey    *string
+}
+
+type PcApprovalRequestLinkedPerson struct {
+	OrgID     ids.OrgID
+	RequestID ids.UUID
+	Fact      string
+	UserID    ids.UUID
 }
 
 type PcApprovalResponse struct {
@@ -307,6 +315,23 @@ type PcCaptureProfile struct {
 	CreatedAt       time.Time
 	DisabledBy      *ids.UUID
 	DisabledAt      *time.Time
+}
+
+type PcChangeWindow struct {
+	OrgID       ids.OrgID
+	ID          ids.UUID
+	Environment string
+	Repository  *string
+	TimeZone    string
+	Weekly      []byte
+	OneOff      []byte
+	Freezes     []byte
+	Revision    int32
+	State       string
+	CreatedBy   string
+	CreatedAt   time.Time
+	RetiredBy   *string
+	RetiredAt   *time.Time
 }
 
 type PcCheckpoint struct {
@@ -444,6 +469,22 @@ type PcCrossOrgListAudit struct {
 	MaxRows  int32
 	Caller   string
 	CalledAt time.Time
+}
+
+type PcDecisionConsequence struct {
+	OrgID         ids.OrgID
+	TransactionID ids.UUID
+	Evaluation    int32
+	Position      int32
+	RuleID        string
+	Operation     string
+	TargetType    string
+	TargetID      string
+	Environments  []string
+	State         string
+	Unknown       []byte
+	FactsDigest   string
+	CreatedAt     time.Time
 }
 
 type PcDecisionReceipt struct {
@@ -774,6 +815,15 @@ type PcGatewayEnrollmentToken struct {
 	UsedCertID *ids.UUID
 }
 
+type PcGithubExemption struct {
+	OrgID        ids.OrgID
+	GithubUserID int64
+	GithubLogin  string
+	Reason       string
+	CreatedBy    string
+	CreatedAt    time.Time
+}
+
 type PcGithubIdentity struct {
 	OrgID        ids.OrgID
 	ID           ids.UUID
@@ -781,6 +831,14 @@ type PcGithubIdentity struct {
 	GithubLogin  string
 	GithubUserID int64
 	LinkedBy     string
+	LinkedAt     time.Time
+	VerifiedAt   *time.Time
+}
+
+type PcGithubIdentityHistory struct {
+	OrgID        ids.OrgID
+	GithubUserID int64
+	UserID       ids.UUID
 	LinkedAt     time.Time
 }
 
