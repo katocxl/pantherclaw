@@ -119,7 +119,9 @@ func TestF353_OneCurrentCapabilityDeclarationPerConnection(t *testing.T) {
 // to no transaction, under the checks' own names and keeping every purpose
 // they allowed before (00060's, and 00081's when it is there). Its Down
 // section, run as pc_migrator, restores the checks exactly and deletes
-// the connection test tasks; its Up section applies again.
+// the connection test tasks; its Up section applies again. 00095, which
+// adds the consequence purpose after it, is stepped back first, so the
+// checks are 00084's own, and applied again at the end.
 func TestF354_ConnectionTestPurposeKeepsEveryEarlierOne(t *testing.T) {
 	d := dbtest.New(t)
 	b, err := fs.ReadFile(migrations.FS, "00084_sdk_connections.sql")
@@ -132,6 +134,17 @@ func TestF354_ConnectionTestPurposeKeepsEveryEarlierOne(t *testing.T) {
 	}
 	m := d.Pool(t, d.Migrator)
 	ctx := context.Background()
+	b95, err := fs.ReadFile(migrations.FS, "00095_consequence_verification.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	up95, down95, ok := strings.Cut(string(b95), "-- +goose Down")
+	if !ok {
+		t.Fatal("00095 has no Down section")
+	}
+	if _, err := m.Pgx().Exec(ctx, down95); err != nil {
+		t.Fatal(err)
+	}
 	checks := func() map[string]string {
 		t.Helper()
 		rows, err := m.Pgx().Query(ctx, `SELECT conname, pg_get_constraintdef(oid) FROM pg_constraint
@@ -215,4 +228,5 @@ func TestF354_ConnectionTestPurposeKeepsEveryEarlierOne(t *testing.T) {
 	if again := checks(); !maps.Equal(again, after) {
 		t.Errorf("after Up again: %v, want %v", again, after)
 	}
+	exec(up95)
 }
