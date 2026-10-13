@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json/v2"
+	"io"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -19,10 +20,11 @@ import (
 // initFixture is a home, a project, an enrolled-looking key file, the
 // platform's managed settings directory (empty unless a test writes to
 // it, so the machine's own are never read) and the answer init reads when
-// it asks to confirm.
+// it asks to confirm (from stdin, when a test sets it).
 type initFixture struct {
 	home, project, key, managed, platform, answer string
 	env                                           map[string]string
+	stdin                                         io.Reader
 }
 
 func newInitFixture(t *testing.T) *initFixture {
@@ -73,8 +75,12 @@ func (f *initFixture) run(t *testing.T, extra ...string) (int, string, string) {
 		"init", "--gateway", "https://gw.example.test", "--connection", "shell", "--key-file", f.key,
 		"--project", f.project, "--managed-settings", f.managed,
 	}, extra...)
+	stdin := f.stdin
+	if stdin == nil {
+		stdin = strings.NewReader(f.answer)
+	}
 	var out, errb bytes.Buffer
-	code := Run(context.Background(), args, &out, &errb, envOf(f.env), Options{Stdin: strings.NewReader(f.answer)})
+	code := Run(context.Background(), args, &out, &errb, envOf(f.env), Options{Stdin: stdin})
 	return code, out.String(), errb.String()
 }
 
