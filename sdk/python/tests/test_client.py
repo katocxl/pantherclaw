@@ -33,7 +33,7 @@ class Fake:
 
     def __init__(
         self, sdk: SDK, require_nonce: bool = False, expire_first: bool = False, wait: Callable[[BaseHTTPRequestHandler], None] | None = None,
-        hook: SDK | None = None,
+        hook: SDK | None = None, builtins: tuple[str, ...] = ("Bash", "Read"),
     ) -> None:
         self.kf = pap.KeyFile.new()
         self.kf.identifier = IDENT
@@ -97,7 +97,7 @@ class Fake:
         threading.Thread(target=self.server.serve_forever, daemon=True).start()
         base = f"http://127.0.0.1:{self.server.server_address[1]}"
         self.kf.server = base
-        self.client = Client(self.kf, gateway=base, run_id=RUN, timeout=1.0, builtins=("Bash", "Read"))
+        self.client = Client(self.kf, gateway=base, run_id=RUN, timeout=1.0, builtins=builtins)
 
     def token(self) -> str:
         now = int(time.time())
@@ -186,18 +186,42 @@ class ClientTest(unittest.TestCase):
                                  (a["send"]["method"], a["send"]["url"], a["send"]["headers"], a["send"]["body"].encode()))
 
     def test_HR200_conformance_calls(self) -> None:
+        """An MCP tool goes to the connection named after its server, a
+        built-in to the connection given, and other names are never sent."""
         f = load("sdk_face.json")
-        for c in f["calls"]:
-            with self.subTest(c["name"]):
-                cls, server = classify(c["tool"], f["servers"], f["builtins"])
-                self.assertEqual(cls, c["class"])
-                if cls == "refused":
-                    continue
-                call: dict[str, Any] = {"tool": c["tool"]}
-                if server:
-                    call["server"] = server
-                call |= {"input": c["input"], "tool_use_id": c["tool_use_id"]}
-                self.assertEqual(call, c["body"])
+        got: list[tuple[str, Any]] = []
+
+        def record(h: BaseHTTPRequestHandler, body: bytes) -> None:
+            got.append((h.path, json.loads(body)))
+            reply(h, 200, json.dumps({"decision": "deny", "reason": "recorded", "mode": "enforce", "coverage": "PARTIAL"}).encode())
+
+        fake = Fake(record, builtins=tuple(f["builtins"]))
+        try:
+            for c in f["calls"]:
+                with self.subTest(c["name"]):
+                    cls, server = classify(c["tool"], f["servers"], f["builtins"])
+                    self.assertEqual(cls, c["class"])
+                    got.clear()
+                    r = fake.client.authorize(f["connection"], c["tool"], c["input"], c["tool_use_id"], new_action_id(), server=server)
+                    if cls == "refused":
+                        self.assertEqual((got, r.outcome), ([], "cannot_decide"))
+                        continue
+                    self.assertEqual(got, [(c["path"], c["body"])])
+        finally:
+            fake.close()
+
+    def test_HR200_a_server_named_like_no_connection_is_never_sent(self) -> None:
+        f = Fake(lambda h, _b: reply(h, 200, json.dumps({"decision": "allow", "mode": "monitor", "coverage": "OBSERVE_ONLY"}).encode()))
+        try:
+            for server in ("git__hub", "Payments", "-payments", "pay%2fments"):
+                r = f.client.authorize("payments", f"mcp__{server}__create_refund", {}, "toolu_01", new_action_id(), server=server)
+                self.assertEqual(r.outcome, "cannot_decide", server)
+            for connection in ("Payments", "pay/ments", "", "payments-"):
+                r = f.client.authorize(connection, "Read", {"file_path": "/etc/hosts"}, "toolu_02", new_action_id())
+                self.assertEqual(r.outcome, "cannot_decide", f"a built-in recorded at {connection!r}")
+            self.assertEqual(f.calls, 0)
+        finally:
+            f.close()
 
     def test_HR200_an_observe_answer_lets_only_a_configured_built_in_run(self) -> None:
         f = Fake(lambda h, _b: reply(h, 200, json.dumps({"decision": "allow", "mode": "monitor", "coverage": "OBSERVE_ONLY"}).encode()))
