@@ -112,17 +112,21 @@ func wrap(err error) error {
 	return nil
 }
 
-// segment is one segment of a reviewed path template.
+// segment is one segment of a reviewed path template. A rest segment, the
+// last one written {name*}, takes one or more segments, joined with "/".
 type segment struct {
 	literal string
 	param   string
+	rest    bool
 }
 
 func parseTemplate(t string) []segment {
 	parts := strings.Split(t[1:], "/")
 	out := make([]segment, len(parts))
 	for i, p := range parts {
-		if strings.HasPrefix(p, "{") {
+		if name, ok := strings.CutSuffix(strings.TrimPrefix(p, "{"), "*}"); ok && strings.HasPrefix(p, "{") {
+			out[i] = segment{param: name, rest: true}
+		} else if strings.HasPrefix(p, "{") {
 			out[i] = segment{param: p[1 : len(p)-1]}
 		} else {
 			out[i] = segment{literal: p}
@@ -142,7 +146,8 @@ func matchPath(tmpl []segment, raw string) (map[string]any, bool) {
 		return nil, false
 	}
 	parts := strings.Split(raw[1:], "/")
-	if len(parts) != len(tmpl) {
+	rest := len(tmpl) > 0 && tmpl[len(tmpl)-1].rest
+	if len(parts) != len(tmpl) && (!rest || len(parts) < len(tmpl)) {
 		return nil, false
 	}
 	vars := map[string]any{}
@@ -151,6 +156,8 @@ func matchPath(tmpl []segment, raw string) (map[string]any, bool) {
 			return nil, false
 		}
 		switch {
+		case i >= len(tmpl)-1 && rest:
+			vars[tmpl[len(tmpl)-1].param] = strings.Join(parts[len(tmpl)-1:], "/")
 		case tmpl[i].param != "":
 			vars[tmpl[i].param] = p
 		case tmpl[i].literal != p:
