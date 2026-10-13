@@ -30,21 +30,41 @@ type Environment struct {
 }
 
 // Deployment is a deployment a push to a branch started. It is pending
-// until SettleAfter has passed, then success.
+// until SettleAfter has passed, then success, unless SetDeploymentStatus
+// gave it another latest status.
 type Deployment struct {
 	ID          int64
 	SHA, Ref    string
 	Environment string
 	Created     time.Time
 	SettleAfter time.Duration
+	// Status, when set, is its latest status whatever the time.
+	Status string
 }
 
 // state is the deployment's state at now.
 func (d Deployment) state(now time.Time) string {
-	if now.Before(d.Created.Add(d.SettleAfter)) {
+	switch {
+	case d.Status != "":
+		return d.Status
+	case now.Before(d.Created.Add(d.SettleAfter)):
 		return "pending"
 	}
 	return "success"
+}
+
+// SetDeploymentStatus gives a repository's deployment id a latest status
+// (queued, in_progress, failure, error, inactive and so on), as its
+// workflow would report it.
+func (s *Server) SetDeploymentStatus(fullName string, id int64, status string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	deps := s.repos[strings.ToLower(fullName)].state().deployments
+	for i := range deps {
+		if deps[i].ID == id {
+			deps[i].Status = status
+		}
+	}
 }
 
 // Push is one entry of a repository's activity feed: who moved which ref.
@@ -272,9 +292,9 @@ func (s *Server) deploymentStatuses(w http.ResponseWriter, req *http.Request, r 
 	}
 	d := r.state().deployments[i]
 	out := []map[string]any{{"id": 2 * d.ID, "state": "pending", "environment": d.Environment, "created_at": d.Created.UTC().Format(time.RFC3339)}}
-	if d.state(s.now()) == "success" {
+	if st := d.state(s.now()); st != "pending" {
 		settled := d.Created.Add(d.SettleAfter)
-		out = append([]map[string]any{{"id": 2*d.ID + 1, "state": "success", "environment": d.Environment, "created_at": settled.UTC().Format(time.RFC3339)}}, out...)
+		out = append([]map[string]any{{"id": 2*d.ID + 1, "state": st, "environment": d.Environment, "created_at": settled.UTC().Format(time.RFC3339)}}, out...)
 	}
 	return reply(w, http.StatusOK, s.paged(w, req, out))
 }

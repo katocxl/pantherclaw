@@ -121,6 +121,9 @@ func (e *Engine) VerifyEffect(ctx context.Context, conn *control.Connection, l L
 	if v.States != nil {
 		declared[v.States.Field] = true
 	}
+	for _, ptr := range v.Capture {
+		declared[ptr] = true
+	}
 	params := req.Params
 	var out Observation
 	for range maxPages {
@@ -143,7 +146,11 @@ func (e *Engine) VerifyEffect(ctx context.Context, conn *control.Connection, l L
 		}
 		last := ""
 		for _, it := range items {
-			if c, ok := defs.PointerValue(it, list.Correlate); ok && c == l.Correlate {
+			if len(v.Lookup.Match) > 0 {
+				if matches(it, v.Lookup.Match, req.Params) {
+					return e.readFound(ctx, conn, v, req.Target, it, list.ID, declared)
+				}
+			} else if c, ok := defs.PointerValue(it, list.Correlate); ok && c == l.Correlate {
 				out.Found, out.Complete, out.Fields = true, true, fields(it, declared)
 				return out, nil
 			}
@@ -164,6 +171,43 @@ func (e *Engine) VerifyEffect(ctx context.Context, conn *control.Connection, l L
 		params[list.PageParam] = last
 	}
 	return out, nil // more pages than one lookup reads: incomplete
+}
+
+// matches reports whether a listed item's fields equal the request's
+// params, as a matched lookup names them (G0 M8 W1c).
+func matches(item []byte, match []defs.Expectation, params map[string]string) bool {
+	for _, m := range match {
+		want, ok := params[strings.TrimPrefix(m.Equals, "params.")]
+		if got, found := defs.PointerValue(item, m.Field); !ok || !found || got != want {
+			return false
+		}
+	}
+	return true
+}
+
+// readFound reads the verifier for the item a matched lookup found: its
+// id fills the verifier read's id_param, and that read's fields are the
+// observation (G0 M8 W1c). A failed read is inconclusive and retried.
+func (e *Engine) readFound(ctx context.Context, conn *control.Connection, v *defs.VerifierSpec, target actionir.Target, item []byte,
+	idPtr string, declared map[string]bool,
+) (Observation, error) {
+	id, ok := defs.PointerValue(item, idPtr)
+	read, found := conn.Package.Definition(v.Operation)
+	if !ok || id == "" || !found || read.Access != defs.AccessRead || read.Dispatch == nil || read.Dispatch.HTTP == nil ||
+		read.Dispatch.HTTP.Method != http.MethodGet {
+		return Observation{}, fmt.Errorf("%w: lookup read", ErrNotReviewedRead)
+	}
+	status, body, ok := e.read(ctx, conn, read, target, map[string]string{v.Lookup.IDParam: id})
+	if !ok {
+		return Observation{HTTPStatus: status}, nil
+	}
+	sum := sha256.Sum256(body)
+	out := Observation{HTTPStatus: status, Digest: sum[:]}
+	if status < 200 || status > 299 {
+		return out, nil
+	}
+	out.Found, out.Complete, out.Fields = true, true, fields(body, declared)
+	return out, nil
 }
 
 // reviewedRead returns the GET read definition op of the connection's

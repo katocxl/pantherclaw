@@ -568,6 +568,10 @@ definitions:
         field: /merged
         confirmed: ["true"]
         pending: ["false"]
+      # The merge commit fills the sha of the deployments the merge starts,
+      # which their own verifier then finds (G0 M8 W1c).
+      capture:
+        sha: /merge_commit_sha
       limits: >-
         Shows that GitHub reports this pull request merged with this head
         commit and names its merge commit. It does not show that a workflow
@@ -775,7 +779,19 @@ definitions:
       type: github.repository
       id_pattern: '^(?P<owner>[a-z0-9][a-z0-9-]{0,38})/(?P<repo>\.?[a-z0-9_-][a-z0-9._-]{0,98})$'
       account: none
-    params: {}
+    # Filled when the merge that starts it is confirmed: the merge commit
+    # (captured by the merge's verifier) and one environment the
+    # consequence names. A consequence is decided without them.
+    params:
+      sha:
+        type: identifier
+        material: true
+        pattern: '^[0-9a-f]{40}$'
+      environment:
+        type: identifier
+        material: true
+        max_length: 255
+        pattern: '^[A-Za-z0-9_.-][A-Za-z0-9 _./-]{0,254}$'
     effects:
       - kind: deployment.trigger
         description: Starts a workflow that deploys to an environment
@@ -783,6 +799,35 @@ definitions:
     retry:
       safe: false
       on_unknown: reconcile
+    # The deployment's own effect (G0 M8 W1c): GitHub's deployment for the
+    # merge commit and the environment, and its latest status. A failure or
+    # an error suggests it did not take effect without showing it, so a
+    # person decides (HR-192); so does no deployment within the hour.
+    verifier:
+      operation: github.deployment.statuses
+      establishes: deployment.succeeded
+      within_seconds: 3600
+      level: domain_effect
+      lookup:
+        operation: github.deployment.list
+        list:
+          items: ''
+          id: /id
+        match:
+          - field: /sha
+            equals: params.sha
+          - field: /environment
+            equals: params.environment
+        id_param: deployment_id
+      states:
+        field: /0/state
+        confirmed: [success, inactive]
+        pending: [queued, pending, in_progress]
+        reconcile: [failure, error]
+      limits: >-
+        Shows GitHub's latest status of the deployment that this merge
+        commit started in this environment. It does not show what the
+        deployed workflow did beyond the status it reported.
     approval:
       title: Release a deployment from {target.id}
       fields: [target.id]
@@ -791,6 +836,77 @@ definitions:
       reviewed_by: [pantherclaw-maintainers]
       valid_until: 2027-10-11
 
+
+  # The deployment verifier's reads (G0 M8 W1c): the deployments of a
+  # commit in an environment, and one deployment's statuses, newest first.
+  # Agents do not call them.
+  - operation: github.deployment.list
+    summary: List the deployments of a commit to an environment
+    access: read
+    target:
+      type: github.repository
+      id_pattern: '^(?P<owner>[a-z0-9][a-z0-9-]{0,38})/(?P<repo>\.?[a-z0-9_-][a-z0-9._-]{0,98})$'
+      account: none
+    params:
+      sha:
+        type: identifier
+        required: true
+        pattern: '^[0-9a-f]{40}$'
+      environment:
+        type: identifier
+        required: true
+        max_length: 255
+        pattern: '^[A-Za-z0-9_.-][A-Za-z0-9 _./-]{0,254}$'
+    effects:
+      - kind: none
+        description: Reads only
+    reversibility: reversible
+    retry:
+      safe: true
+      on_unknown: fail
+    assurance:
+      basis: documented
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-10-11
+    dispatch:
+      http:
+        method: GET
+        path: /repos/{target.id.owner}/{target.id.repo}/deployments
+        query:
+          sha: params.sha
+          environment: params.environment
+      credential_scope:
+        deployments: read
+
+  - operation: github.deployment.statuses
+    summary: Read a deployment's statuses, newest first
+    access: read
+    target:
+      type: github.repository
+      id_pattern: '^(?P<owner>[a-z0-9][a-z0-9-]{0,38})/(?P<repo>\.?[a-z0-9_-][a-z0-9._-]{0,98})$'
+      account: none
+    params:
+      deployment_id:
+        type: identifier
+        required: true
+        pattern: '^[1-9][0-9]{0,18}$'
+    effects:
+      - kind: none
+        description: Reads only
+    reversibility: reversible
+    retry:
+      safe: true
+      on_unknown: fail
+    assurance:
+      basis: documented
+      reviewed_by: [pantherclaw-maintainers]
+      valid_until: 2027-10-11
+    dispatch:
+      http:
+        method: GET
+        path: /repos/{target.id.owner}/{target.id.repo}/deployments/{params.deployment_id}/statuses
+      credential_scope:
+        deployments: read
 
   # The connection test (C2): a harmless read that needs no input.
   - operation: github.installation.repositories

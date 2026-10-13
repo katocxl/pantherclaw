@@ -55,6 +55,10 @@ type VerifierSpec struct {
 	Expect    []Expectation      `json:"expect,omitzero"`
 	States    *StateMap          `json:"states,omitzero"`
 	Limits    string             `json:"limits,omitzero"`
+	// Capture names fields a confirming read also reports, by the param
+	// of a consequence they fill: a merge's verifier captures the merge
+	// commit for the deployment it starts (G0 M8 W1c, HR-206).
+	Capture map[string]string `json:"capture,omitzero"`
 }
 
 // Extended reports whether the verifier uses the G0 M7 fields. Only such a
@@ -65,7 +69,7 @@ type VerifierSpec struct {
 // UNVERIFIABLE.
 func (v *VerifierSpec) Extended() bool {
 	return v.Level != "" || v.Required != "" || v.Reference != nil || v.Lookup != nil || len(v.Expect) > 0 ||
-		v.States != nil || v.Limits != ""
+		v.States != nil || v.Limits != "" || len(v.Capture) > 0
 }
 
 // Reaches returns the level a confirming read of this verifier reaches.
@@ -95,9 +99,17 @@ type VerifierReference struct {
 // when the outcome was unknown and no reference came back: an item whose
 // correlation field equals the dispatch's idempotency key pc-<transaction>
 // is the write's effect (HR-008).
+//
+// From G0 M8 (W1c, additive), Match finds the item instead by fields equal
+// to the action's own (a consequence that was never dispatched carries no
+// idempotency key), and IDParam names the verifier read's identifier param
+// that the found item's id fills: the gateway then reads the verifier for
+// that item in the same lease, and its fields are the observation.
 type VerifierLookup struct {
-	Operation string   `json:"operation"`
-	List      ListSpec `json:"list"`
+	Operation string        `json:"operation"`
+	List      ListSpec      `json:"list"`
+	Match     []Expectation `json:"match,omitzero"`
+	IDParam   string        `json:"id_param,omitzero"`
 }
 
 // ListSpec says how a listing response is read. Every field is a JSON
@@ -122,12 +134,16 @@ type Expectation struct {
 }
 
 // StateMap maps the target's status field to effect states: confirmed,
-// pending (propagation) and none (the effect did not happen).
+// pending (propagation) and none (the effect did not happen). Reconcile
+// (G0 M8 W1c) lists statuses that suggest the effect did not happen
+// without showing it: evidence resolves only towards occurred (HR-192), so
+// a person decides.
 type StateMap struct {
 	Field     string   `json:"field"`
 	Confirmed []string `json:"confirmed"`
 	Pending   []string `json:"pending,omitzero"`
 	None      []string `json:"none,omitzero"`
+	Reconcile []string `json:"reconcile,omitzero"`
 }
 
 // TargetLog is a package-level, reviewed read that lists the objects the
@@ -162,8 +178,11 @@ var (
 // ValidPointer reports whether p is a JSON pointer a package may use.
 func ValidPointer(p string) bool { return pointerRe.MatchString(p) }
 
-func (l ListSpec) validate(at string) error {
+func (l ListSpec) validate(at string, matched bool) error {
 	for name, p := range map[string]string{"items": l.Items, "id": l.ID, "correlate": l.Correlate} {
+		if (name == "correlate" && matched && p == "") || (name == "items" && p == "") {
+			continue // a matched lookup needs no idempotency key; items "" is a listing that is the whole answer
+		}
 		if !pointerRe.MatchString(p) {
 			return invalid("%s.%s must be a JSON pointer", at, name)
 		}
@@ -207,10 +226,28 @@ func (d *Definition) validateVerifier() error {
 		if !actionir.ValidOperation(l.Operation) {
 			return invalid("%s.lookup.operation %q", at, l.Operation)
 		}
-		if !d.Retry.TargetIdempotency {
+		matched := len(l.Match) > 0
+		switch {
+		case !matched && !d.Retry.TargetIdempotency:
 			return invalid("%s.lookup correlates by the idempotency key, so it needs target_idempotency", at)
+		case !matched && l.IDParam != "":
+			return invalid("%s.lookup.id_param needs match", at)
+		case matched && (l.List.Correlate != "" || !nameRe.MatchString(l.IDParam)):
+			return invalid("%s.lookup.match replaces correlate and needs id_param", at)
+		case len(l.Match) > maxExpect:
+			return invalid("%s.lookup: at most %d matches", at, maxExpect)
 		}
-		if err := l.List.validate(at + ".lookup.list"); err != nil {
+		seen := map[string]bool{}
+		for _, m := range l.Match {
+			if !pointerRe.MatchString(m.Field) || seen[m.Field] || !strings.HasPrefix(m.Equals, "params.") {
+				return invalid("%s.lookup.match: field %q must be a JSON pointer, once, equal to a param", at, m.Field)
+			}
+			seen[m.Field] = true
+			if err := d.reference(at+".lookup.match", m.Equals, false); err != nil {
+				return err
+			}
+		}
+		if err := l.List.validate(at+".lookup.list", matched); err != nil {
 			return err
 		}
 	}
@@ -231,7 +268,7 @@ func (d *Definition) validateVerifier() error {
 		if !pointerRe.MatchString(s.Field) || len(s.Confirmed) == 0 {
 			return invalid("%s.states needs a field pointer and confirmed values", at)
 		}
-		all := slices.Concat(s.Confirmed, s.Pending, s.None)
+		all := slices.Concat(s.Confirmed, s.Pending, s.None, s.Reconcile)
 		if len(all) > maxStates {
 			return invalid("%s.states: at most %d values", at, maxStates)
 		}
@@ -239,6 +276,14 @@ func (d *Definition) validateVerifier() error {
 			if !statusRe.MatchString(x) || slices.Contains(all[:i], x) {
 				return invalid("%s.states: value %q must be a status name, listed once", at, x)
 			}
+		}
+	}
+	if len(v.Capture) > maxExpect {
+		return invalid("%s: at most %d captures", at, maxExpect)
+	}
+	for name, ptr := range v.Capture {
+		if !nameRe.MatchString(name) || !pointerRe.MatchString(ptr) {
+			return invalid("%s.capture: %q must name a param and a JSON pointer", at, name)
 		}
 	}
 	if v.Limits != "" {
@@ -281,6 +326,17 @@ func (d *Definition) validateVerifierRefs(ops map[string]*Definition) error {
 		if err := list.pageParam(l.List); err != nil {
 			return err
 		}
+		if l.IDParam != "" {
+			if p, ok := read.Params[l.IDParam]; !ok || (p.Type != TypeIdentifier && p.Type != TypeInteger) || !p.Required {
+				return invalid("%s: lookup.id_param %q must be a required identifier or integer param of %s", d.Operation, l.IDParam, v.Operation)
+			}
+			for _, m := range l.Match {
+				name, _, _ := strings.Cut(strings.TrimPrefix(m.Equals, "params."), ".")
+				if _, ok := list.Params[name]; !ok {
+					return invalid("%s: lookup.match %s must be a param %s takes", d.Operation, m.Equals, l.Operation)
+				}
+			}
+		}
 	}
 	return nil
 }
@@ -310,7 +366,7 @@ func (p *Package) validateTargetLogs(ops map[string]*Definition) error {
 			return invalid("%s: listed twice for %s", at, t.EffectOf)
 		}
 		seen[t.Operation+" "+t.EffectOf] = true
-		if err := t.List.validate(at + ".list"); err != nil {
+		if err := t.List.validate(at+".list", false); err != nil {
 			return err
 		}
 		if err := read.pageParam(t.List); err != nil {

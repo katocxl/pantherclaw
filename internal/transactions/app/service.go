@@ -361,6 +361,9 @@ func Declared(v *defs.VerifierSpec) map[string]bool {
 	if v.States != nil {
 		out[v.States.Field] = true
 	}
+	for _, ptr := range v.Capture {
+		out[ptr] = true
+	}
 	return out
 }
 

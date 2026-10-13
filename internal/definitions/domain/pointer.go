@@ -45,11 +45,11 @@ func PointerValue(doc []byte, ptr string) (string, bool) {
 // items), at most limit elements; it returns false for anything that is
 // not an array there, or for more than limit elements.
 func PointerItems(doc []byte, ptr string, limit int) ([]jsontext.Value, bool) {
-	if !ValidPointer(ptr) {
+	if ptr != "" && !ValidPointer(ptr) {
 		return nil, false
 	}
 	v := jsontext.Value(doc)
-	for _, tok := range strings.Split(ptr[1:], "/") {
+	for _, tok := range strings.Split(ptr, "/")[1:] { // "" is the whole document
 		tok = strings.ReplaceAll(strings.ReplaceAll(tok, "~1", "/"), "~0", "~")
 		next, ok := member(v, tok)
 		if !ok {
