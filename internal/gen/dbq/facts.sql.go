@@ -87,8 +87,10 @@ func (q *Queries) GetFactProviderByAccount(ctx context.Context, orgID ids.OrgID,
 }
 
 const getFactProviderByConnection = `-- name: GetFactProviderByConnection :one
-SELECT id, name, gateway_id, connection_id, state FROM pc.fact_providers
-WHERE org_id = $1 AND connection_id = $2::uuid AND state = 'ACTIVE'
+SELECT p.id, p.name, p.gateway_id, p.connection_id, p.state FROM pc.fact_providers p
+JOIN pc.connections c ON c.org_id = p.org_id AND c.id = p.connection_id
+WHERE p.org_id = $1 AND p.connection_id = $2::uuid AND p.state = 'ACTIVE'
+  AND c.gateway_id = p.gateway_id AND c.state = 'ACTIVE'
 `
 
 type GetFactProviderByConnectionRow struct {
@@ -100,7 +102,9 @@ type GetFactProviderByConnectionRow struct {
 }
 
 // GetFactProviderByConnection returns the active provider a gateway reports
-// a connection's facts as (G0 M8 decision 5).
+// a connection's facts as (G0 M8 decision 5), while the connection is
+// active and still served by the provider's gateway: a gateway the
+// connection moved away from reports nothing more.
 func (q *Queries) GetFactProviderByConnection(ctx context.Context, orgID ids.OrgID, connectionID ids.UUID) (GetFactProviderByConnectionRow, error) {
 	row := q.db.QueryRow(ctx, getFactProviderByConnection, orgID, connectionID)
 	var i GetFactProviderByConnectionRow

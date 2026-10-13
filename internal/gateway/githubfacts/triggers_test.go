@@ -54,6 +54,19 @@ func TestHR206_DeployTriggers(t *testing.T) {
 		"environment, no name": "on: push\njobs: {d: {environment: {url: x}}}\n",
 		"branches and ignore":  "on:\n  push:\n    branches: [main]\n    branches-ignore: [x]\njobs: {d: {runs-on: x}}\n",
 		"no jobs":              "on: push\n",
+		// Events a merge, a write or a branch creation can start besides
+		// push, and events chained from one (HR-206).
+		"merge deploys":        "on:\n  pull_request:\n    types: [closed]\n    branches: [main]\njobs:\n  d:\n    if: github.event.pull_request.merged == true\n    environment: production\n",
+		"pull_request_target":  "on:\n  pull_request_target: {types: [closed]}\njobs: {d: {environment: production}}\n",
+		"create":               "on: create\njobs: {d: {environment: preview}}\n",
+		"delete":               "on: [delete]\njobs: {d: {environment: preview}}\n",
+		"merge_group":          "on: merge_group\njobs: {d: {environment: production}}\n",
+		"check_suite":          "on: {check_suite: {types: [completed]}}\njobs: {d: {environment: production}}\n",
+		"status":               "on: status\njobs: {d: {environment: production}}\n",
+		"deployment":           "on: [deployment, deployment_status]\njobs: {d: {runs-on: x}}\n",
+		"release":              "on: {release: {types: [published]}}\njobs: {d: {environment: production}}\n",
+		"page_build":           "on: page_build\njobs: {d: {runs-on: x}}\n",
+		"an event GitHub adds": "on: future_event\njobs: {d: {runs-on: x}}\n",
 	} {
 		got := DeployTriggers(map[string][]byte{".github/workflows/x.yml": []byte(wf)}, "main", "abc")
 		if got.State != "unknown" || got.Unknown == "" {
@@ -81,7 +94,8 @@ func TestDeployTriggerFilters(t *testing.T) {
 		"on:\n  push:\n    branches-ignore: [docs/*]\njobs: {d: {environment: prod}}\n":  {"main": "triggered", "docs/a": "none"},
 		"on:\n  push:\n    tags: [v*]\njobs: {d: {environment: prod}}\n":                 {"main": "none"},
 		"on:\n  push:\n    paths: [src/**]\njobs: {d: {environment: {name: prod}}}\n":    {"main": "triggered"},
-		"on:\n  pull_request:\n    branches: [main]\njobs: {d: {environment: prod}}\n":   {"main": "none"},
+		"on:\n  pull_request:\n    branches: [main]\njobs: {d: {environment: prod}}\n":   {"main": "unknown"}, // it runs when the merge closes it
+		"on: [schedule, workflow_dispatch, issues]\njobs: {d: {environment: prod}}\n":    {"main": "none"},
 		"on:\n  push:\n    branches: main\njobs: {d: {environment: prod}}\n":             {"main": "triggered", "maint": "none"},
 		// ? and + apply to the character before them, as GitHub's filters do.
 		"on:\n  push:\n    branches: ['release-?']\njobs: {d: {environment: prod}}\n": {"release": "triggered", "release-": "triggered", "release-1": "none"},
@@ -98,13 +112,17 @@ func TestDeployTriggerFilters(t *testing.T) {
 
 // FuzzWorkflowTriggers: whatever the files hold, the parser never panics
 // and answers one of its three states; a file it cannot read, or one
-// naming a chained trigger, is never "none" (HR-206).
+// naming an event other than push that a ref move can start, is never
+// "none" (HR-206).
 func FuzzWorkflowTriggers(f *testing.F) {
 	f.Add([]byte(deployMain), "main")
 	f.Add([]byte("on: [push, workflow_run]\njobs: {}\n"), "main")
 	f.Add([]byte("on: push\njobs: {d: {uses: a/b/c.yml@v1}}\n"), "x")
 	f.Add([]byte("on: &a push\njobs: {}\n"), "main")
 	f.Add([]byte("on:\n  push:\n    branches: ['re?l+', '!x*']\njobs: {d: {environment: p}}\n"), "rel")
+	f.Add([]byte("on:\n  pull_request:\n    types: [closed]\njobs: {d: {if: github.event.pull_request.merged, environment: p}}\n"), "main")
+	f.Add([]byte("on: [create, schedule]\njobs: {d: {environment: p}}\n"), "feature")
+	f.Add([]byte("on: {workflow_dispatch: {}, check_run: {}}\njobs: {}\n"), "main")
 	f.Fuzz(func(t *testing.T, raw []byte, branch string) {
 		got := DeployTriggers(map[string][]byte{".github/workflows/f.yml": raw}, branch, "abc")
 		if !slices.Contains([]string{"triggered", "none", "unknown"}, got.State) || (got.State == "unknown") != (got.Unknown != "") {
@@ -119,10 +137,10 @@ func FuzzWorkflowTriggers(f *testing.F) {
 			return
 		}
 		if on, ok := root["on"].(map[string]any); ok {
-			_, run := on["workflow_run"]
-			_, dispatch := on["repository_dispatch"]
-			if (run || dispatch) && got.State == "none" {
-				t.Fatalf("a chained trigger gave none: %q", raw)
+			for name := range on {
+				if name != "push" && !unmoved[name] && got.State == "none" {
+					t.Fatalf("a %s trigger gave none: %q", name, raw)
+				}
 			}
 		}
 	})

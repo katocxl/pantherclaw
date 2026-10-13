@@ -57,10 +57,12 @@ func githubFactNames(conn *control.Connection, def *defs.Definition) []string {
 // reportGitHubFacts reads the github.* facts an action needs with a
 // read-only installation token of its own, within the fact timeout, and
 // reports them before the decision (G0 M8 decision 5, HR-160). It reports
-// nothing it could not read: the decision then sees the fact missing,
+// no value it could not read: the decision then sees the fact missing,
 // which is CANNOT_AUTHORIZE for a prerequisite and "Consequence unknown"
-// for a consequence (HR-206). It never fails the call itself, and
-// reports whether it read.
+// for a consequence (HR-206). A deploy-trigger fact it could not read is
+// reported unknown, so an earlier observation still fresh (a "none" read
+// before a deploy workflow was pushed) is never what the decision uses. It
+// never fails the call itself, and reports whether it read.
 func (e *Engine) reportGitHubFacts(ctx context.Context, conn *control.Connection, a actionir.ActionIR) bool {
 	if e.reportFacts == nil || conn.Credential.GetKind() != credentials.KindGitHubApp || conn.Package == nil {
 		return false
@@ -81,14 +83,39 @@ func (e *Engine) reportGitHubFacts(ctx context.Context, conn *control.Connection
 	warn := func(event string, err error) {
 		e.log.WarnContext(ctx, event, slog.String("connection_id", conn.GetId()), slog.String("operation", a.Operation), pclog.Err(err))
 	}
+	var obs []*pb.FactObservation
+	add := func(name string, value map[string]any) {
+		raw, err := json.Marshal(map[string]any{"object": value}, json.Deterministic(true))
+		if err == nil {
+			obs = append(obs, &pb.FactObservation{Name: name, SubjectType: a.Target.Type, SubjectId: a.Target.ID, Value: raw, ObserveTime: observed})
+		}
+	}
+	// report sends what was read, with every deploy-trigger fact that was
+	// not read as unknown.
+	report := func(why string) {
+		for _, n := range names {
+			if (n == githubfacts.RepoTriggers || n == githubfacts.BranchTriggers) &&
+				!slices.ContainsFunc(obs, func(o *pb.FactObservation) bool { return o.GetName() == n }) {
+				add(n, githubfacts.Unread(s.Branch, s.At, why))
+			}
+		}
+		if len(obs) == 0 {
+			return
+		}
+		if err := e.reportFacts(ctx, conn.GetId(), obs); err != nil {
+			warn("gateway.facts_not_reported", err)
+		}
+	}
 	c, err := e.client(conn)
 	if err != nil {
 		warn("gateway.facts_unavailable", err)
+		report("no GitHub client")
 		return true
 	}
 	tok, err := e.mint(read, conn, s.Owner, s.Repo, githubfacts.Scopes, c)
 	if err != nil {
 		warn("gateway.facts_unavailable", err)
+		report("no read token")
 		return true
 	}
 	defer func() {
@@ -103,23 +130,14 @@ func (e *Engine) reportGitHubFacts(ctx context.Context, conn *control.Connection
 		// are the branch head's.
 		if s.At, err = githubfacts.BranchHead(read, get, s.Owner, s.Repo, s.Branch); err != nil {
 			warn("gateway.facts_unavailable", err)
+			report("the branch head was not read")
 			return true
 		}
 	}
-	var obs []*pb.FactObservation
 	for _, f := range githubfacts.Read(read, get, s, names) {
-		raw, err := json.Marshal(map[string]any{"object": f.Value}, json.Deterministic(true))
-		if err != nil {
-			continue
-		}
-		obs = append(obs, &pb.FactObservation{Name: f.Name, SubjectType: a.Target.Type, SubjectId: a.Target.ID, Value: raw, ObserveTime: observed})
+		add(f.Name, f.Value)
 	}
-	if len(obs) == 0 {
-		return true
-	}
-	if err := e.reportFacts(ctx, conn.GetId(), obs); err != nil {
-		warn("gateway.facts_not_reported", err)
-	}
+	report("the workflows were not read")
 	return true
 }
 

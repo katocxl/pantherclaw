@@ -223,3 +223,51 @@ func TestHR209_OnlyTheLeaseHoldingGatewaySubmitsFindingsAndTheyGrantNothing(t *t
 		t.Fatalf("a GitHub kind from a local scan: %v", err)
 	}
 }
+
+// TestHR209_APersonsScanNeverTouchesTheGatewaysFindings: a person's local
+// scan and the gateway's org scan keep their findings apart, even under
+// the same key: a person cannot pre-seed or overwrite a gateway finding,
+// nor fill its room, since each source has its own cap.
+func TestHR209_APersonsScanNeverTouchesTheGatewaysFindings(t *testing.T) {
+	e := newEnv(t)
+	gateway := ids.NewV7()
+	e.exec(t, "INSERT INTO pc.gateways (org_id, id, name, created_by) VALUES ($1, $2, 'edge', 'test')", e.org, gateway)
+	e.exec(t, "INSERT INTO pc.org_containment (org_id) VALUES ($1) ON CONFLICT DO NOTHING", e.org)
+	conn := e.gitHubConnection(t, gateway, e.brokerKey(t, gateway), "github", false)
+	admin := e.caller(td.KindUser, td.RoleSecurityAdmin)
+	scans := &app.Scans{Pool: e.pool, Ents: edition(billing.Team)}
+	scan, err := scans.Start(admin, conn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if leases, err := (&pgtransactions.Store{Pool: e.pool}).Claim(context.Background(), e.org, gateway, 4, 30*time.Second); err != nil || len(leases) != 1 {
+		t.Fatalf("leases %+v %v", leases, err)
+	}
+	inv := aapp.NewInventory(e.pool, edition(billing.Team))
+	person := e.caller(td.KindUser, td.RoleAgentOwner)
+	seeded := [32]byte{7}
+	pre := []aapp.ScanFinding{{Kind: "mcp_server", Key: seeded, Attributes: map[string]string{"name": "decoy"}}}
+	if r, err := inv.SubmitScan(person, "laptop", pre); err != nil || r.Created != 1 {
+		t.Fatalf("a person's finding: %+v %v", r, err)
+	}
+	workflow := []aapp.ScanFinding{{Kind: "github_workflow", Key: seeded, Attributes: map[string]string{"repository": "acme/payments", "path": ".github/workflows/deploy.yml"}}}
+	if r, err := inv.SubmitGitHubScan(context.Background(), e.org, gateway, scan.ID, workflow); err != nil || r.Created != 1 || r.Counted != 0 {
+		t.Fatalf("the gateway's finding under a key a person submitted first: %+v %v", r, err)
+	}
+	if r, err := inv.SubmitScan(person, "laptop", pre); err != nil || r.Counted != 1 {
+		t.Fatalf("the person's finding again: %+v %v", r, err)
+	}
+	listed, _, err := scans.Findings(admin, scan.ID, 0, "")
+	if err != nil || len(listed) != 1 || listed[0].Attributes["kind"] != "github_workflow" || listed[0].SeenCount != 1 {
+		t.Fatalf("the gateway's finding after the person's resubmission: %+v %v", listed, err)
+	}
+	// A person's scan filling its cap leaves the org scan's room.
+	e.exec(t, `WITH a AS (INSERT INTO pc.agents (org_id, id, name, state, created_by)
+		SELECT $1, gen_random_uuid(), 'd' || g, 'DISCOVERED', 'test' FROM generate_series(1, $2::int) g RETURNING id)
+		INSERT INTO pc.discoveries (org_id, id, agent_id, source, scan_key)
+		SELECT $1, gen_random_uuid(), id, 'scan', sha256(id::text::bytea) FROM a`, e.org, aapp.MaxOpenScanDiscoveries)
+	more := []aapp.ScanFinding{{Kind: "github_workflow", Key: [32]byte{8}, Attributes: map[string]string{"repository": "acme/payments", "path": ".github/workflows/release.yml"}}}
+	if r, err := inv.SubmitGitHubScan(context.Background(), e.org, gateway, scan.ID, more); err != nil || r.Created != 1 || r.Dropped != 0 {
+		t.Fatalf("an org scan finding with the people's room full: %+v %v", r, err)
+	}
+}
