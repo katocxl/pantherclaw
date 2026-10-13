@@ -198,3 +198,47 @@ func TestT084_InitPrintsTheAgentSDKSnippetAndWritesNoCode(t *testing.T) {
 		t.Error("requirements.txt changed")
 	}
 }
+
+// TestHR208_InitDisablesAGovernedServerOfMCPJSON: an original from the
+// project's .mcp.json is also added to disabledMcpjsonServers in the
+// scope's settings, after the entries already there and leaving
+// enabledMcpjsonServers as it is, so Claude Code does not start it with its
+// credentials; .mcp.json itself is unchanged and a second run changes
+// nothing. An original in ~/.claude.json gets no such entry, and init says
+// it still starts, as it says what it never governs.
+func TestHR208_InitDisablesAGovernedServerOfMCPJSON(t *testing.T) {
+	f := newInitFixture(t)
+	mcp := `{"mcpServers": {"github": {"command": "npx", "args": ["-y", "@modelcontextprotocol/server-github"],
+  "env": {"GITHUB_PERSONAL_ACCESS_TOKEN": "` + githubToken + `"}}}}`
+	f.write(t, f.mcpJSON(), mcp)
+	project, _ := json.Marshal(f.project)
+	f.write(t, f.state(), `{"projects": {`+string(project)+`: {}}}`)
+	f.write(t, f.local(), `{"disabledMcpjsonServers": ["legacy"], "enabledMcpjsonServers": ["github"]}`)
+	code, out, errs := f.run(t, "--mcp", "github=github-sdk")
+	if code != 0 || !strings.Contains(out, "is also disabled (disabledMcpjsonServers)") || strings.Contains(out, "still starts") ||
+		!strings.Contains(out, "mcp__plugin_") || !strings.Contains(out, "ListMcpResourcesTool") {
+		t.Fatalf("init: %d %s %s", code, out, errs)
+	}
+	if got, _ := member(t, f.local(), "disabledMcpjsonServers").([]any); !slices.Equal(got, []any{"legacy", "github"}) {
+		t.Fatalf("disabledMcpjsonServers %v", got)
+	}
+	if got, _ := member(t, f.local(), "enabledMcpjsonServers").([]any); !slices.Equal(got, []any{"github"}) {
+		t.Fatalf("enabledMcpjsonServers %v", got)
+	}
+	if deny, _ := member(t, f.local(), "permissions", "deny").([]any); !slices.Equal(deny, []any{"mcp__github__*"}) {
+		t.Fatalf("deny rules %v", deny)
+	}
+	if b, _ := os.ReadFile(f.mcpJSON()); string(b) != mcp {
+		t.Fatalf(".mcp.json changed: %s", b)
+	}
+	if code, out, _ := f.run(t, "--mcp", "github=github-sdk"); code != 0 || !strings.Contains(out, "Nothing to change.") {
+		t.Fatalf("second run: %d %s", code, out)
+	}
+
+	f = newInitFixture(t)
+	f.write(t, f.state(), f.claudeState())
+	code, out, errs = f.run(t, "--mcp", "github=github-sdk")
+	if code != 0 || !strings.Contains(out, "still starts") || member(t, f.local(), "disabledMcpjsonServers") != nil {
+		t.Fatalf("an original in ~/.claude.json: %d %s %s", code, out, errs)
+	}
+}
