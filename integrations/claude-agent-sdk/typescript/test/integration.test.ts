@@ -285,3 +285,25 @@ test("TestT080_a forged answer or a changed resubmission never runs the tool", a
   const u = await gateway(t, unlabeled);
   assert.equal(decisionOf(await integration(u.client).preToolUse(refund())), "deny");
 });
+
+test("TestHR200_with a governed shell, options() refuses what loads skills and tool aliases", async (t) => {
+  const g = await gateway(t, observe);
+  const p = integration(g.client, { shell: undefined, shellConnection: "local" });
+  const ok = { permissionMode: "default", settingSources: [] as string[] };
+  assert.ok(p.options(ok).hooks, "no settings, skills, plugins or aliases");
+  assert.ok(p.options({ ...ok, settingSources: ["local"], skills: [], plugins: [], toolAliases: {} }).hooks);
+  for (const [name, bad] of [
+    ["settingSources omitted", { settingSources: undefined }],
+    ["user settings", { settingSources: ["user"] }],
+    ["project settings", { settingSources: ["local", "project"] }],
+    ["skills", { skills: "all" }],
+    ["named skills", { skills: ["pdf"] }],
+    ["plugins", { plugins: [{ type: "local", path: "/p" }] }],
+    ["toolAliases", { toolAliases: { Read: "Bash" } }],
+  ] as const) {
+    assert.throws(() => p.options({ ...ok, ...bad }), /governed shell/, name);
+  }
+  const observed = integration(g.client);
+  assert.ok(observed.options({ permissionMode: "default", settingSources: ["user", "project"], skills: "all", toolAliases: { Read: "Bash" } }).hooks,
+    "an ungoverned shell is unchanged");
+});
