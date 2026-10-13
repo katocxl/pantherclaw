@@ -147,16 +147,19 @@ func (s *Service) reassess(ctx context.Context, tx db.TenantTx, sc domain.Scope,
 		return false, err
 	}
 	now := s.now()
+	// The pending changes are read before the evidence: each was committed
+	// before the evidence reads ran, so the computation reflects it. One
+	// committed later is not seen, and lapses a claim on the snapshot.
+	seen, err := q.CoverageChangesPending(ctx, tx.OrgID(), sc.Connection, &sc.Agent)
+	if err != nil {
+		return false, err
+	}
 	e, err := s.evidence(ctx, tx, sc, now, pkgs)
 	if err != nil {
 		return false, err
 	}
 	r := domain.Compute(e)
 	next := snapshotOf(sc, r, e.Exclusions)
-	seen, err := q.CoverageChangesPending(ctx, tx.OrgID(), sc.Connection, &sc.Agent)
-	if err != nil {
-		return false, err
-	}
 	for _, ch := range seen {
 		next.Seen = append(next.Seen, ch.ID.String())
 	}
