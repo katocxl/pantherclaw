@@ -59,12 +59,24 @@ LIMIT sqlc.arg(max_rows);
 
 -- ScanConnection is what a scan needs to know of a connection: whether it
 -- is active, its package, and the kind of its active credential.
+-- ScanConnection locks the connection, so that concurrent starts of its
+-- scan take turns and only one finds no scan open (G5 review follow-up).
 -- name: ScanConnection :one
 SELECT c.state, c.kind, c.package,
        coalesce((SELECT cr.kind FROM pc.credentials cr
                  WHERE cr.org_id = c.org_id AND cr.connection_id = c.id AND cr.state = 'ACTIVE'), '')::text AS credential_kind
 FROM pc.connections c
-WHERE c.org_id = sqlc.arg(org_id) AND c.id = sqlc.arg(id);
+WHERE c.org_id = sqlc.arg(org_id) AND c.id = sqlc.arg(id)
+FOR NO KEY UPDATE OF c;
+
+-- FailExpiredOrgScans ends the scan runs whose lease task expired, after
+-- its deadline or its last lease (G5 review follow-up).
+-- name: FailExpiredOrgScans :execrows
+UPDATE pc.github_scan_runs r
+SET state = 'FAILED', finished_at = now()
+FROM pc.verifications v
+WHERE r.org_id = sqlc.arg(org_id) AND v.org_id = r.org_id AND v.id = r.verification_id AND v.purpose = 'org_scan'
+  AND v.state = 'EXPIRED' AND r.state IN ('PENDING', 'RUNNING');
 
 -- name: OpenOrgScan :one
 SELECT EXISTS (SELECT 1 FROM pc.verifications

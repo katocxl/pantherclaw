@@ -12,6 +12,7 @@ import (
 	"maps"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -381,5 +382,58 @@ func TestHR209_ADismissedFindingReopensWhenItsRouteMayDoMore(t *testing.T) {
 	}
 	if n := e.count(t, "SELECT count(*) FROM pc.ledger_entries WHERE org_id = $1 AND kind = 'audit.agents.discovery_reopened'", e.org); n != 1 {
 		t.Fatalf("%d reopen events", n)
+	}
+}
+
+// TestHR209_ScansStartOneAtATimeAndAnExpiredOneIsStoredFailed (G5 review
+// follow-up): concurrent starts of a connection's scan take turns on the
+// connection, so exactly one starts and the others find it running; a
+// scan whose lease expired is stored FAILED, not only read as such.
+func TestHR209_ScansStartOneAtATimeAndAnExpiredOneIsStoredFailed(t *testing.T) {
+	e := newEnv(t)
+	gateway := ids.NewV7()
+	e.exec(t, "INSERT INTO pc.gateways (org_id, id, name, created_by) VALUES ($1, $2, 'edge', 'test')", e.org, gateway)
+	e.exec(t, "INSERT INTO pc.org_containment (org_id) VALUES ($1) ON CONFLICT DO NOTHING", e.org)
+	conn := e.gitHubConnection(t, gateway, e.brokerKey(t, gateway), "github", false)
+	admin := e.caller(td.KindUser, td.RoleSecurityAdmin)
+	team := &app.Scans{Pool: e.pool, Ents: edition(billing.Team)}
+	const n = 8
+	errs := make(chan error, n)
+	var wg sync.WaitGroup
+	for range n {
+		wg.Go(func() {
+			_, err := team.Start(admin, conn)
+			errs <- err
+		})
+	}
+	wg.Wait()
+	close(errs)
+	started, running := 0, 0
+	for err := range errs {
+		switch {
+		case err == nil:
+			started++
+		case errors.Is(err, app.ErrScanRunning):
+			running++
+		default:
+			t.Errorf("a start: %v", err)
+		}
+	}
+	if started != 1 || running != n-1 {
+		t.Fatalf("%d started, %d found one running", started, running)
+	}
+	store := &pgtransactions.Store{Pool: e.pool}
+	for range 3 { // three unreported leases end the scan
+		if _, err := store.Claim(context.Background(), e.org, gateway, 4, 30*time.Second); err != nil {
+			t.Fatal(err)
+		}
+		e.exec(t, "UPDATE pc.verifications SET leased_at = now() - interval '20 seconds', lease_expires_at = now() - interval '1 second' WHERE org_id = $1 AND purpose = 'org_scan' AND state = 'LEASED'", e.org)
+		if _, err := store.Expire(context.Background(), e.org, nil); err != nil {
+			t.Fatal(err)
+		}
+		e.exec(t, "UPDATE pc.verifications SET next_at = now() WHERE org_id = $1 AND purpose = 'org_scan' AND state = 'PENDING'", e.org)
+	}
+	if got := e.count(t, `SELECT count(*) FROM pc.github_scan_runs WHERE org_id = $1 AND state = 'FAILED' AND finished_at IS NOT NULL`, e.org); got != 1 {
+		t.Fatalf("%d scan runs stored FAILED", got)
 	}
 }

@@ -56,6 +56,24 @@ func (q *Queries) DeleteGitHubIdentity(ctx context.Context, orgID ids.OrgID, iD 
 	return i, err
 }
 
+const failExpiredOrgScans = `-- name: FailExpiredOrgScans :execrows
+UPDATE pc.github_scan_runs r
+SET state = 'FAILED', finished_at = now()
+FROM pc.verifications v
+WHERE r.org_id = $1 AND v.org_id = r.org_id AND v.id = r.verification_id AND v.purpose = 'org_scan'
+  AND v.state = 'EXPIRED' AND r.state IN ('PENDING', 'RUNNING')
+`
+
+// FailExpiredOrgScans ends the scan runs whose lease task expired, after
+// its deadline or its last lease (G5 review follow-up).
+func (q *Queries) FailExpiredOrgScans(ctx context.Context, orgID ids.OrgID) (int64, error) {
+	result, err := q.db.Exec(ctx, failExpiredOrgScans, orgID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const finishGitHubScanRun = `-- name: FinishGitHubScanRun :exec
 UPDATE pc.github_scan_runs
 SET state = $1, counts = $2, scanned = $3::text[], not_scanned = $4,
@@ -521,6 +539,7 @@ SELECT c.state, c.kind, c.package,
                  WHERE cr.org_id = c.org_id AND cr.connection_id = c.id AND cr.state = 'ACTIVE'), '')::text AS credential_kind
 FROM pc.connections c
 WHERE c.org_id = $1 AND c.id = $2
+FOR NO KEY UPDATE OF c
 `
 
 type ScanConnectionRow struct {
@@ -534,6 +553,8 @@ type ScanConnectionRow struct {
 // org_scan lease its gateway claims.
 // ScanConnection is what a scan needs to know of a connection: whether it
 // is active, its package, and the kind of its active credential.
+// ScanConnection locks the connection, so that concurrent starts of its
+// scan take turns and only one finds no scan open (G5 review follow-up).
 func (q *Queries) ScanConnection(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (ScanConnectionRow, error) {
 	row := q.db.QueryRow(ctx, scanConnection, orgID, iD)
 	var i ScanConnectionRow
