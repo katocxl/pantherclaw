@@ -13,6 +13,7 @@ import (
 	"os"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -39,6 +40,8 @@ type connectorRig struct {
 	*harness
 	c      *docker.Client
 	listen string
+	// log is the supervisor's log: its egress refusals.
+	log *syncBuffer
 }
 
 func startConnector(t *testing.T, misbehave bool) *connectorRig {
@@ -94,6 +97,7 @@ func startConnector(t *testing.T, misbehave bool) *connectorRig {
 	}
 	connector.Modes = map[string]string{}
 
+	log := &syncBuffer{}
 	h := setup(t, withCredential(t, []string{"127.0.0.1"}), func(h *harness) {
 		// The connector names the payments API by an agent host: the edge
 		// maps names only, never the base URL's IP literal.
@@ -102,7 +106,7 @@ func startConnector(t *testing.T, misbehave bool) *connectorRig {
 		h.connectors = func(conf connectors.Configuration) *connectors.Supervisor {
 			sup, err := connectors.New(t.Context(), c, connectors.Config{
 				Enabled: true, EdgeImage: edgeImage, EgressListen: listen, EgressAddr: "host.docker.internal:" + port,
-			}, conf, pclog.Discard())
+			}, conf, pclog.New(log, pclog.Options{}))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -132,7 +136,7 @@ func startConnector(t *testing.T, misbehave bool) *connectorRig {
 		}
 		time.Sleep(time.Second)
 	}
-	return &connectorRig{harness: h, c: c, listen: listen}
+	return &connectorRig{harness: h, c: c, listen: listen, log: log}
 }
 
 // refund calls the connector's create_refund for 30.00 on charge.
@@ -204,6 +208,9 @@ func TestE2E_M9_ConnectorOverStdio(t *testing.T) {
 	if res := r.refund(t, "ch_3").body.Result; !res.IsError || !strings.Contains(res.Content[0].Text, "contained") || r.target.calls() != 3 {
 		t.Fatalf("under the kill switch: %+v, target %d", res, r.target.calls())
 	}
+	if n := r.refusals("contained"); n != 1 {
+		t.Fatalf("the gateway logged %d contained refusals of the connector's egress, want 1", n)
+	}
 }
 
 // TestT088_AConnectorCannotBreakOutOrTakeACredential: a connector gets no
@@ -264,9 +271,12 @@ func TestT088_AConnectorCannotBreakOutOrTakeACredential(t *testing.T) {
 	if res := r.refund(t, mcpsim.ChargeLate).body.Result; res.IsError || r.target.calls() != 2 {
 		t.Fatalf("the late connector's call: %+v, target %d", res, r.target.calls())
 	}
-	time.Sleep(mcpsim.LateAfter + 3*time.Second)
-	if r.target.calls() != 2 {
-		t.Fatalf("a refund sent after the call reached the target (%d requests)", r.target.calls())
+	// The late request must be seen and refused, not merely absent.
+	for deadline := time.Now().Add(mcpsim.LateAfter + 10*time.Second); r.refusals("no_call_in_flight") == 0 && time.Now().Before(deadline); {
+		time.Sleep(200 * time.Millisecond)
+	}
+	if n := r.refusals("no_call_in_flight"); n != 1 || r.target.calls() != 2 {
+		t.Fatalf("the refund sent after the call: %d no_call_in_flight refusals, target %d", n, r.target.calls())
 	}
 	// Nothing reaches the egress listener without the edge's binding.
 	req, _ := http.NewRequestWithContext(t.Context(), http.MethodPost, "http://"+r.listen+edge.EgressPath,
@@ -279,4 +289,30 @@ func TestT088_AConnectorCannotBreakOutOrTakeACredential(t *testing.T) {
 	if res.StatusCode != http.StatusForbidden || res.Header.Get(edge.HeaderRefusedBy) != "gateway" || r.target.calls() != 2 {
 		t.Fatalf("without a binding: %d", res.StatusCode)
 	}
+}
+
+// syncBuffer is a log the supervisor's goroutines write to while the test
+// reads it.
+type syncBuffer struct {
+	mu sync.Mutex
+	b  bytes.Buffer
+}
+
+func (s *syncBuffer) Write(p []byte) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.b.Write(p)
+}
+
+// refusals counts the egress refusals the supervisor logged with code.
+func (r *connectorRig) refusals(code string) int {
+	r.log.mu.Lock()
+	defer r.log.mu.Unlock()
+	n := 0
+	for line := range strings.Lines(r.log.b.String()) {
+		if strings.Contains(line, `"gateway.connector_egress_refused"`) && strings.Contains(line, `"code":"`+code+`"`) {
+			n++
+		}
+	}
+	return n
 }
