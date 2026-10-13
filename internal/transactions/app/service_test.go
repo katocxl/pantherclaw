@@ -109,3 +109,32 @@ func TestHR191_EffectReceiptsStateLevelBasisAndLimits(t *testing.T) {
 		t.Fatal("an observed value is in the receipt; only its digest belongs there")
 	}
 }
+
+// TestHR191_ACooperativeChannelsReceiptsAreLabelledPartial: an effect
+// receipt of a cooperative channel's transaction carries the PARTIAL
+// coverage label beside its state (HR-024, HR-186, G0 M7 design decision
+// 2); others carry no label; nothing is signed without a signer.
+func TestHR191_ACooperativeChannelsReceiptsAreLabelledPartial(t *testing.T) {
+	for _, coverage := range []string{domain.CoveragePartial, ""} {
+		sg := &signer{}
+		if _, err := SignEffect(sg, "", Effect{
+			Org: ids.New[ids.Org](), Transaction: ids.NewV7(), Seq: 1, State: domain.Unverifiable, Required: defs.LevelAcceptance,
+			Basis: "definition", Reason: domain.ReasonNoVerifier, Coverage: coverage, At: time.Unix(1_760_097_600, 0),
+		}); err != nil {
+			t.Fatal(err)
+		}
+		var c struct {
+			Iss string         `json:"iss"`
+			Pap map[string]any `json:"pap"`
+		}
+		if err := json.Unmarshal(sg.payload, &c); err != nil {
+			t.Fatal(err)
+		}
+		if got, _ := c.Pap["coverage"].(string); got != coverage || c.Pap["state"] != "UNVERIFIABLE" || c.Pap["reason"] != "NO_VERIFIER" || c.Iss != "pantherclaw" {
+			t.Fatalf("coverage %q: claims %v", coverage, c)
+		}
+	}
+	if _, err := SignEffect(nil, "", Effect{}); err == nil {
+		t.Fatal("an effect receipt was signed without a signer")
+	}
+}

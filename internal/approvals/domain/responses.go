@@ -41,7 +41,9 @@ var ErrNotNarrower = pcerr.New(pcerr.InvalidArgument, "NOT_NARROWER",
 // agent's scope path and is not excluded (the run's launcher and principal
 // and their ancestors; owners and grant issuers when independent). These
 // responses grant nothing, so neither a security key nor the cooldowns are
-// needed (decision 1, HR-172).
+// needed (decision 1, HR-172). It relaxes a copy: p, and the bindings it
+// shares with the caller, stay as they were, so a later Check of the same
+// person still reports the cooldown that holds.
 func MayRespond(r Requirement, p Person, c Context) (bool, string) {
 	if !p.Enabled {
 		return false, IneligibleDisabled
@@ -58,6 +60,7 @@ func MayRespond(r Requirement, p Person, c Context) (bool, string) {
 	q := p
 	q.Credentials = []Credential{{CreatedAt: c.Now.Add(-minCooldowns.CredentialAge)}}
 	q.JoinedAt = c.Now.Add(-minCooldowns.AccountAge)
+	q.Bindings = slices.Clone(p.Bindings)
 	for i := range q.Bindings {
 		q.Bindings[i].SelfGranted = false
 		q.Bindings[i].CreatedAt = c.Now.Add(-minCooldowns.RoleAge)

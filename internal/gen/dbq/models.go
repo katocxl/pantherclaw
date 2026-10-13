@@ -1105,6 +1105,7 @@ type PcPermit struct {
 	ActionTokenJti     *ids.UUID
 	DefinitionDigest   *string
 	VerifyExpect       []byte
+	Replaced           bool
 }
 
 type PcPolicy struct {
