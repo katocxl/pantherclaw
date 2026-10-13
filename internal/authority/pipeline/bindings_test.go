@@ -59,7 +59,7 @@ func TestHR205_ABoundParamMustMatchItsFact(t *testing.T) {
 		t.Fatal(err)
 	}
 	ev = f.call(f.run, "create_refund", refund("ch_1", "70.00"))
-	if ev.Decision != adomain.RequireApproval || ev.Hold == nil || ev.Hold.InvalidationKey != "payments.charge.state@payments.charge:ch_1" {
+	if ev.Decision != adomain.RequireApproval || ev.Hold == nil || ev.Hold.InvalidationKey != "payments.charge.state[reason]@payments.charge:ch_1" {
 		t.Fatalf("hold %s %+v", ev.Decision, ev.Hold)
 	}
 }

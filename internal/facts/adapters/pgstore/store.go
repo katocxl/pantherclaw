@@ -10,6 +10,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/json/jsontext"
+	"encoding/json/v2"
+	"slices"
 	"strings"
 	"time"
 
@@ -148,10 +150,11 @@ func (s *Store) Latest(ctx context.Context, org ids.OrgID, name, subjectType, su
 	return out, err
 }
 
-// Put implements app.Store. When the write changes the fact's value, it
-// supersedes in the same transaction every live approval request bound to
-// the old value (G0 M8, HR-205): a pull request's new head ends the
-// requests made at the old one.
+// Put implements app.Store. When the write changes a member of the fact
+// that approvals bind, it supersedes in the same transaction every live
+// approval request bound to that member (G0 M8, HR-205, HR-030): a pull
+// request's new head ends the requests made at the old one; a re-observed
+// fact with the same bound values ends none.
 func (s *Store) Put(ctx context.Context, org ids.OrgID, f domain.Fact) (bool, error) {
 	raw, err := domain.EncodeValue(f.Value)
 	if err != nil {
@@ -172,14 +175,50 @@ func (s *Store) Put(ctx context.Context, org ids.OrgID, f domain.Fact) (bool, er
 			return err
 		}
 		wrote = tag.RowsAffected() == 1
-		key := apdomain.InvalidationKey(f.Name, f.SubjectType, f.SubjectID)
 		if !wrote || prev == nil || bytes.Equal(prev, raw) {
 			return nil
 		}
-		_, err = pgapprovals.SupersedeByKey(ctx, tx, org, key, evdomain.Actor{Type: "fact_provider", ID: f.ProviderID.String()})
-		return err
+		for _, member := range changedMembers(f.Value, prev) {
+			key := apdomain.MemberKey(f.Name, member, f.SubjectType, f.SubjectID)
+			if _, err := pgapprovals.SupersedeByKey(ctx, tx, org, key, evdomain.Actor{Type: "fact_provider", ID: f.ProviderID.String()}); err != nil {
+				return err
+			}
+		}
+		return nil
 	})
 	return wrote, err
+}
+
+// changedMembers are the members of an object fact whose value differs from
+// the previous one (raw): an approval binds members, not the whole fact
+// (HR-030 option B, founder decision 2026-10-13), so only those supersede
+// the requests bound to them. A fact that is not an object, or a previous
+// value that does not decode, binds no member.
+func changedMembers(now domain.Value, raw []byte) []string {
+	if now.Type != domain.TypeObject {
+		return nil
+	}
+	was, err := domain.DecodeValue(domain.TypeObject, raw)
+	if err != nil {
+		return nil
+	}
+	var out []string
+	for _, side := range []map[string]any{now.Object, was.Object} {
+		for m := range side {
+			if !slices.Contains(out, m) && !sameMember(now.Object[m], was.Object[m]) {
+				out = append(out, m)
+			}
+		}
+	}
+	slices.Sort(out)
+	return out
+}
+
+// sameMember reports whether two object members hold the same value.
+func sameMember(a, b any) bool {
+	x, errA := json.Marshal(a, json.Deterministic(true))
+	y, errB := json.Marshal(b, json.Deterministic(true))
+	return errA == nil && errB == nil && bytes.Equal(x, y)
 }
 
 // Catalog returns the active fact names and their types (what policies
