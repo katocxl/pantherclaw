@@ -254,6 +254,11 @@ type Result struct {
 	// Reasons are the decision's reason codes, decisive first.
 	Reasons       []string
 	TransactionID string
+	// Wait is a held action's wait handle (PAP-1 §8); nil otherwise.
+	Wait *pb.WaitInfo
+	// Delegated is the request an SDK sends itself to a target-enforced
+	// connection (HR-201); nil otherwise.
+	Delegated *Delegated
 	// Monitor: the route runs in monitor mode, so Decision is hypothetical
 	// and nothing about the action was prevented (HR-184).
 	Monitor bool
@@ -346,7 +351,7 @@ func (e *Engine) dispatch(ctx context.Context, c Call, t *timer) Result {
 	e.nonces.set(ar.GetNonce(), time.Time{})
 	r := Result{
 		Decision: ar.GetDecision(), TransactionID: ar.GetTransactionId(), Nonce: ar.GetNonce(),
-		Monitor: ar.GetMode() == pb.DispatchMode_DISPATCH_MODE_MONITOR,
+		Monitor: ar.GetMode() == pb.DispatchMode_DISPATCH_MODE_MONITOR, Wait: ar.GetWait(),
 	}
 	for _, rs := range ar.GetReasons() {
 		r.Reasons = append(r.Reasons, rs.GetCode())
@@ -371,7 +376,7 @@ func (e *Engine) dispatch(ctx context.Context, c Call, t *timer) Result {
 	// obligations applied) or, in monitor mode, the requested one.
 	bound := c.Action
 	if !r.Monitor {
-		if conn.GetKind() == "local" && len(ar.GetObligations()) > 0 {
+		if (conn.GetKind() == "local" || cooperative(c)) && len(ar.GetObligations()) > 0 {
 			// A cooperative client runs the action as it asked: it can
 			// honor no obligation (HR-186).
 			return r.fail(EnforcementFailed, CodeObligation)
@@ -409,6 +414,9 @@ func (e *Engine) dispatch(ctx context.Context, c Call, t *timer) Result {
 	}
 	if want.Epoch < epoch {
 		return r.fail(EnforcementFailed, CodeEpochStale)
+	}
+	if cooperative(c) {
+		return e.delegateSDK(ctx, r, conn, def, bound, want, t)
 	}
 	switch conn.GetKind() {
 	case "mcp":

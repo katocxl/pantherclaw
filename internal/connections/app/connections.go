@@ -102,6 +102,9 @@ type Service struct {
 	pool   *db.Pool
 	notify Notifier
 	own    []endpoint
+	// grantsPage is how many grants Health reads at a time; zero is
+	// grantPage. Tests set it smaller to read past the first page.
+	grantsPage int32
 }
 
 // New returns the connection use cases. publicURL and gatewayAPIURL are
@@ -219,6 +222,28 @@ func activeGateway(ctx context.Context, q *dbq.Queries, org ids.OrgID, id ids.UU
 // definitions with a dispatch template of that kind; for local, the hook
 // mappings.
 func routes(ctx context.Context, q *dbq.Queries, org ids.OrgID, pkg, kind string) ([]string, error) {
+	p, err := pinnedPackage(ctx, q, org, pkg)
+	if err != nil {
+		return nil, err
+	}
+	var out []string
+	for i := range p.Definitions {
+		for _, r := range servedRoutes(kind, &p.Definitions[i]) {
+			if !slices.Contains(out, r) {
+				out = append(out, r)
+			}
+		}
+	}
+	if len(out) == 0 {
+		return nil, ErrNoRoutes
+	}
+	slices.Sort(out)
+	return out, nil
+}
+
+// pinnedPackage is the org's usable pinned version of a package, decoded
+// (ErrPackage when there is none).
+func pinnedPackage(ctx context.Context, q *dbq.Queries, org ids.OrgID, pkg string) (*domain.Package, error) {
 	pin, err := q.PinnedPackageRaw(ctx, org, pkg)
 	if db.IsNoRows(err) {
 		return nil, ErrPackage
@@ -232,28 +257,28 @@ func routes(ctx context.Context, q *dbq.Queries, org ids.OrgID, pkg, kind string
 	if err != nil {
 		return nil, ErrPackage
 	}
+	return p, nil
+}
+
+// servedRoutes are the routes of d a connection of this kind serves, in
+// mapping order.
+func servedRoutes(kind string, d *domain.Definition) []string {
 	var out []string
-	for _, d := range p.Definitions {
-		for _, m := range d.Mappings {
-			serves := false
-			switch kind {
-			case KindHTTP:
-				serves = d.Dispatch != nil && d.Dispatch.HTTP != nil && m.Channel != domain.ChannelHook
-			case KindMCP:
-				serves = d.Dispatch != nil && d.Dispatch.MCP != nil && m.Channel != domain.ChannelHook
-			case KindLocal:
-				serves = m.Channel == domain.ChannelHook
-			}
-			if serves && !slices.Contains(out, m.Route) {
-				out = append(out, m.Route)
-			}
+	for _, m := range d.Mappings {
+		serves := false
+		switch kind {
+		case KindHTTP:
+			serves = d.Dispatch != nil && d.Dispatch.HTTP != nil && m.Channel != domain.ChannelHook
+		case KindMCP:
+			serves = d.Dispatch != nil && d.Dispatch.MCP != nil && m.Channel != domain.ChannelHook
+		case KindLocal:
+			serves = m.Channel == domain.ChannelHook
+		}
+		if serves && !slices.Contains(out, m.Route) {
+			out = append(out, m.Route)
 		}
 	}
-	if len(out) == 0 {
-		return nil, ErrNoRoutes
-	}
-	slices.Sort(out)
-	return out, nil
+	return out
 }
 
 // shape checks the fields that depend on the kind and access mode, and
