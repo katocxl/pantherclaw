@@ -64,27 +64,41 @@ func (e unknownError) Error() string { return e.reason }
 func unknownf(format string, args ...any) error { return unknownError{fmt.Sprintf(format, args...)} }
 
 // DeployTriggers decides, from the workflow files at a commit (path to
-// content), whether a push to branch starts a workflow that deploys to an
-// environment. A file it cannot evaluate makes the whole answer unknown.
-// files must be every .github/workflows/*.yml and *.yaml file at the
-// commit the operation leaves: the caller makes the answer unknown itself
-// when it cannot list them all (a truncated or paged listing, more than
-// MaxWorkflowFiles files) or read any one of them.
-func DeployTriggers(files map[string][]byte, branch, at string) Triggers {
+// content), whether the operation starts a workflow that deploys to an
+// environment. The operation is a push to branch (a file write, a branch
+// creation) or, with merge, a pull request merged into branch, which closes
+// the pull request and pushes the merge to branch. A workflow the operation
+// starts can start every workflow_dispatch workflow (GitHub lets a workflow
+// raise it with its own token), so when the operation starts any workflow,
+// those count as started too. A file it cannot evaluate makes the whole
+// answer unknown. files must be every .github/workflows/*.yml and *.yaml
+// file at the commit the operation leaves: the caller makes the answer
+// unknown itself when it cannot list them all (a truncated or paged
+// listing, more than MaxWorkflowFiles files) or read any one of them.
+func DeployTriggers(files map[string][]byte, branch, at string, merge bool) Triggers {
 	out := Triggers{State: "none", Branch: branch, At: at, Workflows: []Triggered{}, Environments: []string{}}
 	if len(files) > MaxWorkflowFiles {
 		return out.unknown(fmt.Sprintf("more than %d workflow files", MaxWorkflowFiles))
 	}
+	var all []evaluated
 	for _, p := range slices.Sorted(maps.Keys(files)) {
-		envs, triggered, err := workflow(files[p], branch)
+		w, err := workflow(files[p], branch, merge)
 		if err != nil {
 			return out.unknown(p + ": " + err.Error())
 		}
-		if !triggered {
+		w.path = p
+		all = append(all, w)
+	}
+	anyStarted := slices.ContainsFunc(all, func(w evaluated) bool { return w.started })
+	for _, w := range all {
+		if !w.started && !(anyStarted && w.dispatchable) {
 			continue
 		}
-		out.Workflows = append(out.Workflows, Triggered{Path: p, Environments: envs})
-		for _, e := range envs {
+		if w.envErr != nil {
+			return out.unknown(w.path + ": " + w.envErr.Error())
+		}
+		out.Workflows = append(out.Workflows, Triggered{Path: w.path, Environments: w.envs})
+		for _, e := range w.envs {
 			if !slices.Contains(out.Environments, e) {
 				out.Environments = append(out.Environments, e)
 			}
@@ -102,48 +116,63 @@ func (t Triggers) unknown(reason string) Triggers {
 	return t
 }
 
-// workflow reports whether a push to branch starts the workflow, and the
-// environments its jobs deploy to.
-func workflow(raw []byte, branch string) ([]string, bool, error) {
+// evaluated is one workflow file: whether the operation starts it, whether
+// a started workflow can (workflow_dispatch), and the environments its
+// jobs deploy to, or why those cannot be read.
+type evaluated struct {
+	path                  string
+	started, dispatchable bool
+	envs                  []string
+	envErr                error
+}
+
+// workflow evaluates one workflow file for the operation.
+func workflow(raw []byte, branch string, merge bool) (evaluated, error) {
 	if len(raw) > MaxWorkflowBytes {
-		return nil, false, unknownf("larger than %d bytes", MaxWorkflowBytes)
+		return evaluated{}, unknownf("larger than %d bytes", MaxWorkflowBytes)
 	}
 	doc, err := parseYAML(raw)
 	if err != nil {
-		return nil, false, err
+		return evaluated{}, err
 	}
 	root, ok := doc.(map[string]any)
 	if !ok {
-		return nil, false, unknownf("not a mapping")
+		return evaluated{}, unknownf("not a mapping")
 	}
-	triggered, err := pushTriggers(root["on"], branch)
-	if err != nil || !triggered {
-		return nil, false, err
+	var w evaluated
+	if w.started, w.dispatchable, err = moveTriggers(root["on"], branch, merge); err != nil {
+		return evaluated{}, err
 	}
-	envs, err := environments(root["jobs"])
-	return envs, true, err
+	if w.started || w.dispatchable {
+		w.envs, w.envErr = environments(root["jobs"])
+	}
+	return w, nil
 }
 
 // unmoved are the events no ref move (a merge, a push, a branch creation,
-// a file write) can start: a workflow on only these is not started by the
-// operation. Every other event but push is unknown: a pull request closing
-// on a merge (pull_request, pull_request_target), create and delete, the
-// events chained from a push (merge_group, check_run, check_suite, status,
-// deployment, deployment_status, page_build, workflow_run), release and
-// repository_dispatch, and any event GitHub adds later.
+// a file write) can start, nor a workflow it starts with GitHub's own
+// token: a workflow on only these is not started by the operation. Push,
+// pull_request and pull_request_target are evaluated, and workflow_dispatch
+// counts once the operation starts any workflow. Every other event is
+// unknown: create and delete, the events chained from a push (merge_group,
+// check_run, check_suite, status, deployment, deployment_status,
+// page_build, workflow_run), release, repository_dispatch, and any event
+// GitHub adds later. A workflow holding another token (a personal access
+// token, an App's) can raise even these: that chain is not predicted (R-19).
 var unmoved = map[string]bool{
-	"schedule": true, "workflow_dispatch": true, "workflow_call": true, "issues": true, "issue_comment": true,
+	"schedule": true, "workflow_call": true, "issues": true, "issue_comment": true,
 	"discussion": true, "discussion_comment": true, "label": true, "milestone": true, "watch": true, "fork": true,
 	"gollum": true, "project": true, "project_card": true, "project_column": true, "public": true, "member": true,
 	"pull_request_review": true, "pull_request_review_comment": true, "registry_package": true, "branch_protection_rule": true,
 }
 
-// pushTriggers evaluates the on: key for a push to branch.
-func pushTriggers(on any, branch string) (bool, error) {
+// moveTriggers evaluates the on: key for the operation: whether it starts
+// the workflow, and whether a started workflow can dispatch it.
+func moveTriggers(on any, branch string, merge bool) (started, dispatchable bool, err error) {
 	var events map[string]any
 	switch v := on.(type) {
 	case nil:
-		return false, unknownf("no on: key")
+		return false, false, unknownf("no on: key")
 	case string:
 		events = map[string]any{v: nil}
 	case []any:
@@ -151,24 +180,42 @@ func pushTriggers(on any, branch string) (bool, error) {
 		for _, e := range v {
 			s, ok := e.(string)
 			if !ok {
-				return false, unknownf("an event that is not a name")
+				return false, false, unknownf("an event that is not a name")
 			}
 			events[s] = nil
 		}
 	case map[string]any:
 		events = v
 	default:
-		return false, unknownf("on: is not an event, a list or a mapping")
+		return false, false, unknownf("on: is not an event, a list or a mapping")
 	}
 	for _, name := range slices.Sorted(maps.Keys(events)) {
-		if name != "push" && !unmoved[name] {
-			return false, unknownf("%s triggers are not evaluated", name)
+		switch {
+		case name == "push" || name == "pull_request" || name == "pull_request_target" || unmoved[name]:
+		case name == "workflow_dispatch":
+			dispatchable = true
+		default:
+			return false, false, unknownf("%s triggers are not evaluated", name)
 		}
 	}
-	push, ok := events["push"]
-	if !ok {
-		return false, nil
+	if push, ok := events["push"]; ok {
+		if started, err = pushStarts(push, branch); err != nil {
+			return false, false, err
+		}
 	}
+	for _, name := range []string{"pull_request", "pull_request_target"} {
+		if pr, ok := events[name]; ok && !started {
+			if started, err = pullRequestStarts(name, pr, branch, merge); err != nil {
+				return false, false, err
+			}
+		}
+	}
+	return started, dispatchable, nil
+}
+
+// pushStarts evaluates a push trigger for a push to branch (a merge pushes
+// to its base branch too).
+func pushStarts(push any, branch string) (bool, error) {
 	if push == nil {
 		return true, nil // every push
 	}
@@ -176,10 +223,55 @@ func pushTriggers(on any, branch string) (bool, error) {
 	if !ok {
 		return false, unknownf("push: is not a mapping")
 	}
-	branches, hasBranches := filters["branches"]
-	ignore, hasIgnore := filters["branches-ignore"]
+	_, hasBranches := filters["branches"]
+	_, hasIgnore := filters["branches-ignore"]
 	_, hasTags := filters["tags"]
 	_, hasTagsIgnore := filters["tags-ignore"]
+	if !hasBranches && !hasIgnore && (hasTags || hasTagsIgnore) {
+		return false, nil // only tags: branch pushes do not run it
+	}
+	return branchFilter(filters, branch) // paths filters and the like are not evaluated: assume it runs
+}
+
+// pullRequestStarts evaluates a pull_request (or pull_request_target)
+// trigger. A merge closes the pull request: it starts the workflow only
+// when its types include closed and its branch filters, which name the
+// pull request's base branch, match branch. A push to branch may
+// synchronize a pull request from it: it starts the workflow when its types
+// include synchronize (the default types do); that pull request's base
+// branch is not known here, so the branch filters are not evaluated and it
+// is assumed to run.
+func pullRequestStarts(name string, pr any, branch string, merge bool) (bool, error) {
+	types := []string{"opened", "synchronize", "reopened"} // GitHub's default
+	var filters map[string]any
+	switch v := pr.(type) {
+	case nil:
+	case map[string]any:
+		filters = v
+		if t, ok := v["types"]; ok {
+			list, err := names(t)
+			if err != nil {
+				return false, unknownf("%s types: %v", name, err)
+			}
+			types = list
+		}
+	default:
+		return false, unknownf("%s: is not a mapping", name)
+	}
+	if !merge {
+		return slices.Contains(types, "synchronize"), nil
+	}
+	if !slices.Contains(types, "closed") {
+		return false, nil
+	}
+	return branchFilter(filters, branch)
+}
+
+// branchFilter applies a trigger's branches or branches-ignore filter to
+// branch; with neither, it matches.
+func branchFilter(filters map[string]any, branch string) (bool, error) {
+	branches, hasBranches := filters["branches"]
+	ignore, hasIgnore := filters["branches-ignore"]
 	switch {
 	case hasBranches && hasIgnore:
 		return false, unknownf("branches and branches-ignore together")
@@ -187,10 +279,27 @@ func pushTriggers(on any, branch string) (bool, error) {
 		return matchList(branches, branch, false)
 	case hasIgnore:
 		return matchList(ignore, branch, true)
-	case hasTags || hasTagsIgnore:
-		return false, nil // only tags: branch pushes do not run it
 	}
-	return true, nil // paths filters and the like are not evaluated: assume it runs
+	return true, nil
+}
+
+// names reads a string or a list of strings.
+func names(v any) ([]string, error) {
+	switch v := v.(type) {
+	case string:
+		return []string{v}, nil
+	case []any:
+		out := make([]string, 0, len(v))
+		for _, e := range v {
+			s, ok := e.(string)
+			if !ok {
+				return nil, errors.New("a name that is not a string")
+			}
+			out = append(out, s)
+		}
+		return out, nil
+	}
+	return nil, errors.New("not a name or a list")
 }
 
 // matchList applies a branches (or branches-ignore) filter to branch, in
