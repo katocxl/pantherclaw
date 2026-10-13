@@ -33,7 +33,7 @@ const maxCredential = 64 << 10
 
 func init() {
 	commands["seal"] = command{
-		usage: "seal --connection ID --from-file FILE [--fingerprint sha256:HEX]",
+		usage: "seal --connection ID --from-file FILE [--fingerprint sha256:HEX] [--github-app ID --installation N --account LOGIN]",
 		run:   seal,
 	}
 	commands["credential list"] = rpc("credential list CONNECTION", 1, func(*flag.FlagSet) call {
@@ -81,10 +81,13 @@ func seal(ctx context.Context, a *app, args []string) error {
 	conn := fs.String("connection", "", "connection id")
 	from := fs.String("from-file", "", "file holding the credential (never pass it on the command line)")
 	expect := fs.String("fingerprint", "", "the broker key fingerprint the gateway's operator gave you; sealing stops if it differs")
+	app := fs.String("github-app", "", "seal a GitHub App: its client id (Iv…) or numeric id; --from-file is then the App's private key (.pem)")
+	installation := fs.Int64("installation", 0, "with --github-app: the installation id")
+	account := fs.String("account", "", "with --github-app: the account the App is installed on, in lowercase")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	if fs.NArg() != 0 || *conn == "" || *from == "" {
+	if fs.NArg() != 0 || *conn == "" || *from == "" || (*app == "") != (*installation == 0 && *account == "") {
 		return errUsage
 	}
 	c, err := a.clients()
@@ -115,21 +118,58 @@ func seal(ctx context.Context, a *app, args []string) error {
 	if err != nil {
 		return err
 	}
+	if *app == "" && bytes.Contains(secret, []byte("PRIVATE KEY-----")) {
+		// A static credential goes to the target in a header: a private key
+		// must never be one.
+		clear(secret)
+		return errors.New("the file holds a private key, which is never sent to a target; " +
+			"seal a GitHub App's key with --github-app, --installation and --account; nothing was sealed")
+	}
+	kind := domain.KindStatic
+	if *app != "" {
+		if secret, err = gitHubApp(k, *app, *installation, *account, secret); err != nil {
+			return err
+		}
+		kind = domain.KindGitHubApp
+	}
 	b := domain.Binding{
 		Org: k.GetOrgId(), Connection: k.GetConnectionId(), Version: k.GetVersion(), AllowedHosts: k.GetAllowedHosts(),
-		BrokerKey: k.GetBrokerKeyId(), Header: k.GetHeader(), Scheme: k.GetScheme(),
+		BrokerKey: k.GetBrokerKeyId(), Header: k.GetHeader(), Scheme: k.GetScheme(), Kind: kind,
 	}
 	sealed, err := pccrypto.Seal(pub, b.Info(), domain.AAD, secret)
 	clear(secret)
 	if err != nil {
 		return err
 	}
-	res, err := c.connections.PutCredential(ctx, &pb.PutCredentialRequest{
+	req := &pb.PutCredentialRequest{
 		ConnectionId: k.GetConnectionId(), Version: k.GetVersion(), BrokerKeyId: k.GetBrokerKeyId(), Sealed: sealed,
-		AllowedHosts: k.GetAllowedHosts(), Header: k.GetHeader(), Scheme: k.GetScheme(),
-	})
+		AllowedHosts: k.GetAllowedHosts(), Header: k.GetHeader(), Scheme: k.GetScheme(), Kind: kind,
+	}
+	if kind == domain.KindGitHubApp {
+		// The installation is configuration, recorded beside the sealed key
+		// so that another account's repository is refused (ADR-0021).
+		req.Github = &pb.GitHubInstallation{AppClientId: *app, InstallationId: *installation, AccountLogin: *account}
+	}
+	res, err := c.connections.PutCredential(ctx, req)
 	if err != nil {
 		return err
 	}
 	return a.print(res)
+}
+
+// gitHubApp turns the App's private key into the content of a GitHub App
+// credential (G0 M8 decision 3) and clears the key. The gateway places the
+// tokens it mints as Authorization: Bearer, so the connection must already
+// use that header and scheme.
+func gitHubApp(k *pb.GetSealingKeyResponse, app string, installation int64, account string, key []byte) ([]byte, error) {
+	defer clear(key)
+	if k.GetHeader() != domain.GitHubAppHeader || k.GetScheme() != domain.GitHubAppScheme {
+		return nil, errors.New("a GitHub App's tokens go in Authorization: Bearer; set the connection's credential header and scheme to that first")
+	}
+	plain, err := domain.GitHubApp{V: 1, Issuer: app, Installation: installation, Account: account, PrivateKey: key}.Encode()
+	if err != nil {
+		return nil, errors.New("--github-app needs the App's client id or id, --installation, a lowercase --account, " +
+			"and the App's RSA private key (at least 2048 bits, PEM) in --from-file")
+	}
+	return plain, nil
 }

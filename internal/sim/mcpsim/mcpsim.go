@@ -10,7 +10,9 @@
 // definition under a reviewed package (drift). It can declare x-mcp-header
 // parameters, valid or not; it then checks each 2026-07-28 call's
 // Mcp-Param-* headers against the body, as a conforming server must.
-// Every response is marked SIMULATED; nothing here moves real money.
+// Given a GitHub simulator (internal/sim/github), it also serves the GitHub
+// MCP server's tools over that simulator's repositories. Every response is
+// marked SIMULATED; nothing here moves real money.
 package mcpsim
 
 import (
@@ -31,6 +33,7 @@ import (
 	"time"
 
 	"github.com/katocxl/pantherclaw/internal/platform/mcpheader"
+	"github.com/katocxl/pantherclaw/internal/sim/github"
 )
 
 // Protocol versions.
@@ -65,6 +68,11 @@ type Faults struct {
 	PageSize int
 	// Token, when set, is the bearer token every request must carry.
 	Token string
+	// GitHub, when set, also serves the GitHub MCP server's tools
+	// (github.MCPTools) over that simulator's repositories, calling its API
+	// with GitHubToken as the real server calls GitHub with its token.
+	GitHub      *github.Server
+	GitHubToken string
 	// ParamHeaders makes create_refund declare x-mcp-header on its
 	// currency (Mcp-Param-Currency) and reason (Mcp-Param-Reason); a
 	// 2026-07-28 call whose Mcp-Param-* headers do not match the body is
@@ -189,13 +197,17 @@ func (s *Server) tools() []jsontext.Value {
 	if s.f.InvalidHeaders {
 		refundProps += `,"expand":{"type":"array","items":{"type":"string","x-mcp-header":"Expand"}}`
 	}
-	return []jsontext.Value{
+	out := []jsontext.Value{
 		jsontext.Value(`{"name":"create_refund","description":"Refund a simulated charge.","inputSchema":{"type":"object",` +
 			`"properties":{"charge":{"type":"string"},"amount":{"type":"string"},"currency":` + currency + `,"reason":` + reason + `},` +
 			`"required":["charge","amount","currency"]}}`),
 		jsontext.Value(`{"name":"get_refund","description":` + strconv.Quote(get) + `,"inputSchema":{"type":"object",` +
 			`"properties":{` + refundProps + `},"required":["refund"]}}`),
 	}
+	if s.f.GitHub != nil {
+		out = append(out, github.MCPTools...)
+	}
+	return out
 }
 
 // declared are the x-mcp-header parameters of a tool as the server lists
@@ -433,11 +445,26 @@ var (
 
 // call runs a tool.
 func (s *Server) call(ctx context.Context, params jsontext.Value) (map[string]any, map[string]any) {
-	var p struct {
-		Name      string            `json:"name"`
-		Arguments map[string]string `json:"arguments"`
+	var raw struct {
+		Name      string         `json:"name"`
+		Arguments jsontext.Value `json:"arguments"`
 	}
-	if json.Unmarshal(params, &p) != nil {
+	if json.Unmarshal(params, &raw) != nil {
+		return nil, rpcError(-32602, "Invalid params")
+	}
+	if g := s.f.GitHub; g != nil {
+		if res, isErr, ok := g.CallTool(ctx, s.f.GitHubToken, raw.Name, raw.Arguments); ok {
+			s.mu.Lock()
+			s.calls++
+			s.mu.Unlock()
+			return toolResult(isErr, res), nil
+		}
+	}
+	p := struct {
+		Name      string
+		Arguments map[string]string
+	}{Name: raw.Name}
+	if len(raw.Arguments) > 0 && json.Unmarshal(raw.Arguments, &p.Arguments) != nil {
 		return nil, rpcError(-32602, "Invalid params")
 	}
 	if p.Name == "create_refund" && s.f.Upstream != "" {

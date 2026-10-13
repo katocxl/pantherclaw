@@ -121,10 +121,14 @@ func (e *Engine) ConnectorEgress(ctx context.Context, conn *control.Connection, 
 	}
 	var secret []byte
 	if conn.GetAccessMode() == "pantherclaw_held" {
-		if secret, err = e.credential(conn, p.req); err != nil {
+		// A GitHub App connection gets a token minted for this action alone,
+		// revoked once it is sent (HR-203, HR-204).
+		s, release, _, err := e.credential(ctx, conn, def, a.Action.Target, p.req, p.client)
+		if err != nil {
 			return egress.Response{}, err
 		}
-		defer clear(secret)
+		defer release()
+		secret = s
 	}
 	res, err := p.client.Do(p.req)
 	outcome, _, _ := classify(res.Status, err)
