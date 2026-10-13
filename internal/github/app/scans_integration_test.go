@@ -357,8 +357,10 @@ func TestHR209_ADismissedFindingReopensWhenItsRouteMayDoMore(t *testing.T) {
 		}
 		return r
 	}
-	readOnly := map[string]string{"repo": "acme/payments", "path": ".github/workflows/claude.yml", "agent_actions": "anthropics/claude-code-action",
-		"permissions": "contents:read", "writes": "false", "deploys": "false"}
+	readOnly := map[string]string{
+		"repo": "acme/payments", "path": ".github/workflows/claude.yml", "agent_actions": "anthropics/claude-code-action",
+		"permissions": "contents:read", "writes": "false", "deploys": "false",
+	}
 	if r := submit(readOnly); r.Created != 1 {
 		t.Fatalf("first %+v", r)
 	}
