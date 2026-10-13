@@ -399,6 +399,9 @@ type harness struct {
 	// (under circuitMu).
 	reportFacts bool
 	facts       []factReport
+	// revocations records the tokens the gateway reported not revoked
+	// (under circuitMu): connection, purpose and repository.
+	revocations []string
 	// log, when set, is the gateway's logger instead of a discarding one.
 	log *slog.Logger
 	gw  *Gateway
@@ -500,6 +503,12 @@ func setup(t *testing.T, opts ...func(*harness)) *harness {
 	}
 	h.gw, err = newGateway(&cfg, Deps{
 		ReportFacts: reportFacts,
+		ReportRevocation: func(_ context.Context, conn, purpose string, a broker.Access) error {
+			h.circuitMu.Lock()
+			defer h.circuitMu.Unlock()
+			h.revocations = append(h.revocations, conn+" "+purpose+" "+a.Repository)
+			return nil
+		},
 		Org:         testOrg, GatewayID: "gw-test",
 		Authority: pantherclawv1connect.NewAuthorityServiceClient(connect.NewClient(connecthttp.NewTransport(hc, h.authorityURL))),
 		JWKSURL:   as.URL + "/.well-known/pantherclaw/jwks.json", JWKSClient: hc, Containment: h.containment,

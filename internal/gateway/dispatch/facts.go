@@ -121,6 +121,7 @@ func (e *Engine) reportGitHubFacts(ctx context.Context, conn *control.Connection
 	defer func() {
 		if err := tok.Revoke(context.WithoutCancel(ctx), c); err != nil {
 			warn("gateway.installation_token_not_revoked", err)
+			e.revokeFailed(ctx, conn, "facts", tok)
 		}
 	}()
 	get := tokenGetter(conn, c, tok)

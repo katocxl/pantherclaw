@@ -58,6 +58,7 @@ func (e *Engine) ScanOrg(ctx context.Context, conn *control.Connection, deadline
 		read(tokenGetter(conn, c, tok))
 		if err := tok.Revoke(context.WithoutCancel(ctx), c); err != nil {
 			e.log.WarnContext(ctx, "gateway.installation_token_not_revoked", slog.String("connection_id", conn.GetId()), pclog.Err(err))
+			e.revokeFailed(ctx, conn, "org_scan", tok)
 		}
 	}
 	list, err := mint(nil, map[string]string{"metadata": "read"})

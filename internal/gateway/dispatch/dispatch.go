@@ -176,7 +176,16 @@ type Options struct {
 	ReportFacts FactReporter
 	// FactTimeout bounds those reads; zero is DefaultFactTimeout.
 	FactTimeout time.Duration
+	// ReportRevocation tells the server that a token minted for a fact
+	// read, a verification read or a scan could not be revoked (ADR-0021
+	// item 6, R-18); nil only logs it. A dispatch's is reported with its
+	// outcome.
+	ReportRevocation RevocationReporter
 }
+
+// RevocationReporter reports an installation token that was not revoked,
+// with what it was for: facts, verification or org_scan.
+type RevocationReporter func(ctx context.Context, connection, purpose string, a broker.Access) error
 
 // Engine dispatches mapped actions.
 type Engine struct {
@@ -193,6 +202,7 @@ type Engine struct {
 	approvers   Approvers
 	reportFacts FactReporter
 	factTimeout time.Duration
+	revocations RevocationReporter
 
 	mu      sync.Mutex
 	clients map[string]clientEntry
@@ -228,7 +238,7 @@ func New(o Options) (*Engine, error) {
 		org: o.Org, authority: o.Authority, permits: newPermitVerifier(o.JWKSURL, o.JWKSClient, o.GatewayID, o.Org),
 		containment: o.Containment, broker: o.Broker, allowed: o.AllowedPrefixes, breaker: newBreaker(o.Now, o.ReportCircuit, o.Log),
 		log: o.Log, onDrift: o.OnDrift, clients: map[string]clientEntry{}, drift: map[string]driftEntry{}, approvers: o.Approvers,
-		reportFacts: o.ReportFacts, factTimeout: o.FactTimeout,
+		reportFacts: o.ReportFacts, factTimeout: o.FactTimeout, revocations: o.ReportRevocation,
 	}, nil
 }
 
@@ -608,7 +618,7 @@ func (e *Engine) send(ctx context.Context, r Result, conn *control.Connection, d
 	revoke := func() {}
 	access := func() *pb.CredentialAccess { return nil }
 	if conn.GetAccessMode() == "pantherclaw_held" {
-		s, release, used, err := e.credential(ctx, conn, def, a.Action.Target, p.req, p.client)
+		s, release, used, err := e.credential(ctx, conn, def, a.Action.Target, p.req, p.client, "")
 		if err != nil {
 			e.log.WarnContext(ctx, "gateway.credential_unavailable", slog.String("transaction_id", want.Txn),
 				slog.String("connection_id", conn.GetId()), pclog.Err(err))
@@ -701,8 +711,12 @@ func targetRef(def *defs.Definition, body, secret []byte) string {
 // access then says what the minted token allowed (nil for a static
 // credential). A read (a verification or fact read included) gets a
 // read-only token.
+//
+// purpose is what a read's token is for (verification), whose revocation
+// failure is reported here; a dispatch's (empty) is reported with its
+// outcome.
 func (e *Engine) credential(ctx context.Context, conn *control.Connection, def *defs.Definition, target actionir.Target,
-	req *http.Request, c broker.Sender,
+	req *http.Request, c broker.Sender, purpose string,
 ) (secret []byte, release func(), access func() *pb.CredentialAccess, err error) {
 	if conn.Credential.GetKind() != credentials.KindGitHubApp {
 		plain, err := e.openStatic(conn)
@@ -731,8 +745,22 @@ func (e *Engine) credential(ctx context.Context, conn *control.Connection, def *
 	return tok.Token(), func() {
 		if err := tok.Revoke(ctx, c); err != nil {
 			e.log.WarnContext(ctx, "gateway.installation_token_not_revoked", slog.String("connection_id", conn.GetId()), pclog.Err(err))
+			if purpose != "" {
+				e.revokeFailed(ctx, conn, purpose, tok)
+			}
 		}
 	}, func() *pb.CredentialAccess { return accessOf(tok.Access()) }, nil
+}
+
+// revokeFailed reports a token minted for purpose that could not be
+// revoked; a report that fails is only logged.
+func (e *Engine) revokeFailed(ctx context.Context, conn *control.Connection, purpose string, tok *broker.Installation) {
+	if e.revocations == nil {
+		return
+	}
+	if err := e.revocations(context.WithoutCancel(ctx), conn.GetId(), purpose, tok.Access()); err != nil {
+		e.log.WarnContext(ctx, "gateway.revocation_failure_not_reported", slog.String("connection_id", conn.GetId()), pclog.Err(err))
+	}
 }
 
 // accessOf is what a minted token allowed, for the execution receipt

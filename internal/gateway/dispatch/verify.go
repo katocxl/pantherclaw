@@ -286,7 +286,7 @@ func (e *Engine) readWith(ctx context.Context, conn *control.Connection, read *d
 		return egress.Response{}, false
 	}
 	if conn.GetAccessMode() == "pantherclaw_held" {
-		_, release, _, err := e.credential(ctx, conn, read, target, p.req, p.client)
+		_, release, _, err := e.credential(ctx, conn, read, target, p.req, p.client, "verification")
 		if err != nil {
 			e.log.WarnContext(ctx, "gateway.credential_unavailable", slog.String("connection_id", conn.GetId()), pclog.Err(err))
 			return egress.Response{}, false

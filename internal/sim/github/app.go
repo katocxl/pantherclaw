@@ -188,6 +188,8 @@ func (s *Server) revoke(w http.ResponseWriter, r *http.Request) {
 		rec.Status = fail(w, http.StatusUnauthorized, "Bad credentials")
 	case t.Installation == 0:
 		rec.Status = fail(w, http.StatusForbidden, "Only installation tokens can be revoked here")
+	case s.faults.RevokeStatus != 0:
+		rec.Status = fail(w, s.faults.RevokeStatus, "Revocation failed")
 	default:
 		t.Revoked = true
 		rec.Token, rec.Installation, rec.Repos, rec.Permissions = Fingerprint(t.value), t.Installation, slices.Clone(t.Repos), maps.Clone(t.Permissions)
