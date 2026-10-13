@@ -465,3 +465,20 @@ func TestHR188_AMintsAuditEventNamesTokenIdsNeverTokens(t *testing.T) {
 		t.Fatalf("details %v, want %v", ev.Details, want)
 	}
 }
+
+// TestHR188_WithoutAContainmentRowNoTestTokens: without the org's
+// containment row, whether the kill switch is on is unknown, and the mint
+// is refused; with the row back, it is not.
+func TestHR188_WithoutAContainmentRowNoTestTokens(t *testing.T) {
+	e := newTokenEnv(t)
+	ctx := context.Background()
+	_, l := e.lease(t)
+	e.dbt.AdminExec(t, "DELETE FROM pc.org_containment WHERE org_id = $1", e.org)
+	if _, err := e.s.MintTestTokens(ctx, e.org, e.gateway, l.Task, l.Secret); !errors.Is(err, txapp.ErrTestTokensRefused) {
+		t.Fatalf("a mint without a containment row: %v", err)
+	}
+	e.epoch(t)
+	if _, err := e.s.MintTestTokens(ctx, e.org, e.gateway, l.Task, l.Secret); err != nil {
+		t.Fatalf("a mint with the row back: %v", err)
+	}
+}

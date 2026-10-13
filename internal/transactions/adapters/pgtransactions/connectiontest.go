@@ -64,11 +64,12 @@ var verifierRequests = []verifierRequest{
 }
 
 // MintTestTokens implements app.Store: HR-188's exception, checked again
-// here whatever the gateway checked.
+// here whatever the gateway checked. The tokens are returned only once the
+// mint's record and audit event are committed.
 func (s *Store) MintTestTokens(ctx context.Context, org ids.OrgID, gateway, task ids.UUID, secret []byte,
 	mint func(app.VerifierTest) (app.MintedTokens, error),
 ) (app.TestTokens, error) {
-	var out app.TestTokens
+	var minted app.TestTokens
 	err := s.Pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
 		q := dbq.New(tx)
 		hash := sha256.Sum256(secret)
@@ -102,18 +103,24 @@ func (s *Store) MintTestTokens(ctx context.Context, org ids.OrgID, gateway, task
 		}); err != nil {
 			return err
 		}
-		out = m.TestTokens
+		minted = m.TestTokens
 		return nil
 	})
-	return out, err
+	if err != nil {
+		return app.TestTokens{}, err
+	}
+	return minted, nil
 }
 
 // testTokenBasis checks what a test token mint needs besides its lease: the
-// connection is ACTIVE and target_enforced, the kill switch is off, and the
-// leased operation is the test read of the connection's pinned package.
+// connection is ACTIVE and target_enforced, the kill switch is known to be
+// off, and the leased operation is the test read of the connection's pinned
+// package.
 func testTokenBasis(ctx context.Context, q *dbq.Queries, org ids.OrgID, ct dbq.LeasedConnectionTestRow) error {
 	b, err := q.VerifierTestBasis(ctx, org, ct.TestID)
-	if err != nil {
+	if db.IsNoRows(err) {
+		return app.ErrTestTokensRefused // no containment row: the kill switch is unknown
+	} else if err != nil {
 		return err
 	}
 	if b.KillSwitch || b.ConnectionState != "ACTIVE" || b.AccessMode != "target_enforced" {

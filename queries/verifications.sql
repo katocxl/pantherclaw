@@ -174,12 +174,13 @@ FOR UPDATE OF v, t;
 
 -- VerifierTestBasis is what a target_verifier test's token mint checks
 -- again on the server (HR-188's exception): its connection's state, access
--- mode and package, and whether the kill switch is engaged.
+-- mode and package, and whether the kill switch is engaged. Without the
+-- org's containment row there is no row, and no mint.
 -- name: VerifierTestBasis :one
-SELECT c.state AS connection_state, c.access_mode, c.package, coalesce(k.kill_switch, false)::boolean AS kill_switch
+SELECT c.state AS connection_state, c.access_mode, c.package, k.kill_switch
 FROM pc.connection_tests t
 JOIN pc.connections c ON c.org_id = t.org_id AND c.id = t.connection_id
-LEFT JOIN pc.org_containment k ON k.org_id = t.org_id
+JOIN pc.org_containment k ON k.org_id = t.org_id
 WHERE t.org_id = sqlc.arg(org_id) AND t.id = sqlc.arg(id);
 
 -- RecordTestTokenMint records a running target_verifier test's token mint
