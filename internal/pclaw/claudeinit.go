@@ -305,10 +305,15 @@ func claudeInit(_ context.Context, a *app, args []string) error {
 	var settings []claudeSettings
 	for _, scope := range []string{"user", "project", "local"} {
 		s, err := readSettings(scope, files[scope])
-		if err != nil && scope == f.scope {
+		switch {
+		case err != nil && scope == f.scope:
 			return err
-		} else if err != nil {
-			_, _ = fmt.Fprintf(a.stdout, "warning: %v\n", err)
+		case err != nil:
+			// Claude Code may read what pclaw does not (with two members of
+			// one name it takes the last), so this file's disableAllHooks
+			// could keep the hook from running, and init cannot tell.
+			return &exitError{code: 1, msg: "pclaw init: " + err.Error() + ". Claude Code may still apply that file's settings, disableAllHooks " +
+				"among them, which would keep the hook from running, so init changes nothing: fix the file and run pclaw init again"}
 		}
 		settings = append(settings, s)
 	}

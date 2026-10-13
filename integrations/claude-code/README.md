@@ -49,7 +49,7 @@ It only adds (HR-208):
 - each file is backed up and replaced through a temporary file (a linked file where it points, keeping the link); a file that changed after init read it (Claude Code rewrites its settings while it runs) is left as it is, and init asks you to run it again;
 - no secret is written, only the gateway URL, the connection, the key file's path and the run.
 
-It fails without changing anything when settings would keep the hook from running: managed settings with `allowManagedHooksOnly` and without the hook, or with `disableAllHooks`; or `disableAllHooks` in the file it would change, or in any other settings file whose value Claude Code applies (it takes the setting from managed, then local, project and user settings). Running it again changes nothing.
+It fails without changing anything when settings would keep the hook from running: managed settings with `allowManagedHooksOnly` and without the hook, or with `disableAllHooks`; or `disableAllHooks` in the file it would change, or in any other settings file whose value Claude Code applies (it takes the setting from managed, then local, project and user settings); or when a settings file of any scope cannot be parsed, since Claude Code may still apply it (given a name twice, it takes the last). Running it again changes nothing.
 
 With the plugin loaded and PantherClaw unreachable or not configured, **every** Bash, PowerShell and Monitor command is blocked. That is the point. So dogfooding on the PantherClaw repository stays opt-in per developer, and parallel sessions without a local stack keep working (decision 4).
 

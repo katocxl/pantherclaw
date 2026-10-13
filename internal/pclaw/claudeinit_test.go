@@ -460,7 +460,46 @@ func TestHR208_InitRefusesHooksTurnedOffInAnotherScope(t *testing.T) {
 	}
 }
 
-// TestHR208_InitAlwaysReadsThePlatformsManagedSettings: --managed-settings
+// TestHR208_InitRefusesSettingsItCannotReadInAnotherScope: a settings file
+// of another scope that pclaw cannot parse fails init, which changes
+// nothing, since Claude Code may still apply it: given two members of one
+// name, it takes the last, so a file whose last disableAllHooks is true
+// turns every hook off.
+func TestHR208_InitRefusesSettingsItCannotReadInAnotherScope(t *testing.T) {
+	const twice = `{"disableAllHooks": false, "disableAllHooks": true}`
+	for name, tc := range map[string]struct{ file, content, scope string }{
+		"user, twice":                  {file: "user", content: twice},
+		"project, twice":               {file: "project", content: twice},
+		"local, for the project scope": {file: "local", content: twice, scope: "project"},
+		"user, not JSON":               {file: "user", content: `{"disableAllHooks": tr`},
+	} {
+		f := newInitFixture(t)
+		paths := map[string]string{
+			"user": filepath.Join(f.home, ".claude", "settings.json"), "project": filepath.Join(f.project, ".claude", "settings.json"),
+			"local": f.local(),
+		}
+		f.write(t, paths[tc.file], tc.content)
+		args := []string{}
+		if tc.scope != "" {
+			args = append(args, "--scope", tc.scope)
+		}
+		code, out, errs := f.run(t, args...)
+		if code != 1 || !strings.Contains(errs, paths[tc.file]) || !strings.Contains(errs, "disableAllHooks") ||
+			!strings.Contains(errs, "init changes nothing") {
+			t.Errorf("%s: %d %s %s", name, code, out, errs)
+		}
+		for scope, path := range paths {
+			if now, err := os.ReadFile(path); (scope != tc.file && err == nil) || (scope == tc.file && string(now) != tc.content) {
+				t.Errorf("%s: %s changed: %q", name, scope, now)
+			}
+			if len(backups(t, path)) != 0 {
+				t.Errorf("%s: %s backed up", name, scope)
+			}
+		}
+	}
+}
+
+// TestHR208_InitAlwaysReadsThePlatformsManagedSettings:--managed-settings
 // adds a file to the platform's managed settings and never replaces them,
 // so pointing it at the null device skips no managed check, drop-ins
 // included.
