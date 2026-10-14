@@ -51,8 +51,13 @@ CREATE UNIQUE INDEX fact_declarations_one_provider_per_connection ON pc.fact_dec
 
 -- A name is supplied from one scope only.
 -- +goose StatementBegin
-CREATE FUNCTION pc.fact_declarations_one_scope() RETURNS trigger LANGUAGE plpgsql AS $$
+CREATE FUNCTION pc.fact_declarations_one_scope() RETURNS trigger LANGUAGE plpgsql SET search_path = pc, pg_temp AS $$
 BEGIN
+    -- Two registrations of one name in different scopes take turns, so both
+    -- cannot pass the check below.
+    IF NEW.active THEN
+        PERFORM pg_advisory_xact_lock(hashtextextended(NEW.org_id::text || ':' || replace(NEW.name, '.', '_'), 0));
+    END IF;
     IF NEW.active AND EXISTS (
         SELECT 1 FROM pc.fact_declarations d
         WHERE d.org_id = NEW.org_id AND replace(d.name, '.', '_') = replace(NEW.name, '.', '_') AND d.active
