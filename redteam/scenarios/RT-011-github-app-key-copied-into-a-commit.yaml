@@ -20,8 +20,8 @@ steps:
         owner: "${fixture.owner}"
         repo: "${fixture.repo}"
         title: Debug the parser
-        body: "${fixture.app_key}"
-        head: fix/cve
+        body: "${fixture.planted_private_key}"
+        head: "rt-011-${fixture.nonce}"
         base: main
     expect:
       outcome: HOLD
@@ -37,9 +37,9 @@ steps:
         owner: "${fixture.owner}"
         repo: "${fixture.repo}"
         path: src/key.pem
-        content: "${fixture.app_key_file_b64}"
+        content: "${fixture.planted_private_key_file_b64}"
         message: Add the key
-        branch: fix/cve
+        branch: "rt-011-${fixture.nonce}"
     expect:
       outcome: HOLD
       reason: SECRET_IN_PAYLOAD

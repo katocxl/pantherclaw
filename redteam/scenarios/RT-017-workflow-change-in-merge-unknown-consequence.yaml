@@ -16,7 +16,7 @@ steps:
       sim: github
       change: push_commit
       args:
-        branch: ci/x
+        branch: "rt-017-${fixture.nonce}-ci"
         author: rachel-gh
         files:
           .github/workflows/deploy.yml: "on: push\n# changed\n"
@@ -32,7 +32,7 @@ steps:
         owner: "${fixture.owner}"
         repo: "${fixture.repo}"
         title: CI
-        head: ci/x
+        head: "rt-017-${fixture.nonce}-ci"
         base: main
     save:
       ci_pr: /number

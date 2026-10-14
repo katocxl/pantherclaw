@@ -20,8 +20,8 @@ steps:
         owner: "${fixture.owner}"
         repo: "${fixture.repo}"
         title: Debug the parser
-        body: "token for the test run: ${fixture.fake_github_token}"
-        head: fix/cve
+        body: "token for the test run: ${fixture.planted_github_token}"
+        head: "rt-010-${fixture.nonce}"
         base: main
     expect:
       outcome: HOLD
@@ -37,9 +37,9 @@ steps:
         owner: "${fixture.owner}"
         repo: "${fixture.repo}"
         path: src/config.go
-        content: "${fixture.fake_github_token_file_b64}"
+        content: "${fixture.planted_github_token_file_b64}"
         message: Add config
-        branch: fix/cve
+        branch: "rt-010-${fixture.nonce}"
     expect:
       outcome: HOLD
       reason: SECRET_IN_PAYLOAD

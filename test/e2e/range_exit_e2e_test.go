@@ -7,9 +7,6 @@ package e2e
 
 import (
 	"context"
-	"encoding/base64"
-	"net/http"
-	"strconv"
 
 	evapp "github.com/katocxl/pantherclaw/internal/evidence/app"
 	"github.com/katocxl/pantherclaw/internal/evidence/pack"
@@ -76,7 +73,7 @@ func (r *rangeStack) run(t *testing.T, dir string, extra ...string) (int, string
 	out := t.TempDir()
 	args := []string{"redteam", "run", "--suite", "coding-agent", "--scenarios", dir, "--workload-file", r.d.s.keyFile, "--gateway", r.d.s.gateway,
 		"--role", "github=github", "--role", "payments=payments", "--role", "real=real", "--run", r.narrow, "--out", out}
-	for _, name := range []string{"owner", "repo", "other_repo", "pr", "head", "main", "file_b64", "fake_github_token", "fake_github_token_file_b64"} {
+	for _, name := range []string{"owner", "repo", "other_repo", "main", "file_b64"} {
 		args = append(args, "--fixture", name+"="+r.d.fix[name])
 	}
 	code, stdout, stderr := r.d.admin.pclaw(t, append(args, extra...)...)
@@ -207,13 +204,11 @@ func TestE2E_M12_BaselineCatchesARegression(t *testing.T) {
 	}
 
 	// The same range again, with the pack as its baseline: no regression.
-	r.freshPR(t)
 	code, out, errs, _ = r.run(t, dir, "--baseline", file, "--trust", p.trust)
 	if code != 0 {
 		t.Fatalf("a run against its own baseline: %d\n%s\n%s", code, out, errs)
 	}
 
-	r.freshPR(t)
 	// A grant that no longer holds merges for review: the merge goes through,
 	// RT-001 fails, and the gate says so.
 	weak := r.d.grantRun(`{"operations": ["github.contents.read", "github.contents.write", "github.branch.create",
@@ -221,38 +216,5 @@ func TestE2E_M12_BaselineCatchesARegression(t *testing.T) {
 	code, out, errs, _ = r.run(t, dir, "--baseline", file, "--trust", p.trust, "--run", weak)
 	if code != 1 || !strings.Contains(out+errs, "RT-001") {
 		t.Fatalf("a run under a weakened grant: %d\n%s\n%s", code, out, errs)
-	}
-}
-
-// freshPR opens another pull request on its own branch and makes it the one
-// the scenarios work on: a held merge is the same action, and so the same
-// transaction, for as long as its pull request and head are the same, and a
-// range records only transactions made after it started.
-func (r *rangeStack) freshPR(t *testing.T) {
-	t.Helper()
-	s := r.d.s
-	n := r.d.fresh + 1
-	r.d.fresh = n
-	branch := "fix/range-" + strconv.Itoa(n)
-	main := s.gh.sim.Branch(ghRepo, "main")
-	for _, st := range []struct{ method, path, body string }{
-		{http.MethodPost, "/repos/" + ghRepo + "/git/refs", `{"ref":"refs/heads/` + branch + `","sha":"` + main + `"}`},
-		{http.MethodPut, "/repos/" + ghRepo + "/contents/src/range" + strconv.Itoa(n) + ".go", `{"message":"Another fix","content":"` +
-			base64.StdEncoding.EncodeToString([]byte("package parser // "+branch+"\n")) + `","branch":"` + branch + `"}`},
-		{http.MethodPost, "/repos/" + ghRepo + "/pulls", `{"title":"Another fix","head":"` + branch + `","base":"main"}`},
-	} {
-		if code, rep, raw := s.ghCall(t, st.method, st.path, st.body, ids.NewV7()); code >= 300 {
-			t.Fatalf("fresh pull request %s %s: %d %+v %s", st.method, st.path, code, rep, raw)
-		}
-	}
-	for number := 1; ; number++ {
-		pr, ok := s.gh.sim.PullRequest(ghRepo, number)
-		if !ok {
-			t.Fatal("no new pull request")
-		}
-		if pr.Head == branch {
-			r.d.fix["pr"], r.d.fix["head"] = strconv.Itoa(number), pr.HeadSHA
-			return
-		}
 	}
 }

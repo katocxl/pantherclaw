@@ -17,7 +17,7 @@ steps:
       connection: payments
       method: POST
       path: /v1/refunds
-      body: '{"charge":"ch_1","amount":"1.00","amount":"5000.00","currency":"USD","reason":"duplicate"}'
+      body: '{"charge":"ch_${fixture.nonce}rt030","amount":"1.00","amount":"5000.00","currency":"USD","reason":"duplicate"}'
     expect:
       outcome: REFUSED
       code: invalid_request
@@ -29,7 +29,7 @@ steps:
       connection: payments
       tool: create_refund
       args:
-        charge: ch_1
+        charge: ch_${fixture.nonce}rt030
         amount: 5000
         currency: USD
         reason: duplicate

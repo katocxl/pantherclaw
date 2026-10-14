@@ -9,9 +9,13 @@ import (
 	"bytes"
 	"context"
 	"crypto/ed25519"
+	"crypto/rand"
+	"crypto/x509"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json/jsontext"
 	"encoding/json/v2"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"io"
@@ -131,6 +135,7 @@ func (d *rangeDriver) Setup(_ context.Context, sc domain.Scenario) (app.Fixture,
 		d.s = start(t, o)
 	}
 	d.fix = app.Fixture{}
+	d.plant()
 	if o.people != nil {
 		d.people = &m2Stack{url: d.s.apiURL, cfg: d.s.serverCfg, idp: p}
 	}
@@ -170,41 +175,53 @@ func (d *rangeDriver) Setup(_ context.Context, sc domain.Scenario) (app.Fixture,
 
 // setupPayments makes the charges the scenarios refund refundable.
 func (d *rangeDriver) setupPayments() {
-	for i := 2; i <= 50; i++ {
-		refundableMore(d.t, d.s, "ch_"+strconv.Itoa(i))
-	}
-}
-
-// setupGitHub opens the pull request the scenarios work on: a branch with a
-// fix and a pull request for it, as an agent would, and fills the fixtures.
-func (d *rangeDriver) setupGitHub() {
-	t, s := d.t, d.s
-	gh := s.gh.sim
-	main := gh.Branch(ghRepo, "main")
-	steps := []struct{ method, path, body string }{
-		{http.MethodPost, "/repos/" + ghRepo + "/git/refs", `{"ref":"refs/heads/fix/cve","sha":"` + main + `"}`},
-		{http.MethodPut, "/repos/" + ghRepo + "/contents/src/parser.go", `{"message":"Fix the parser","content":"` +
-			base64.StdEncoding.EncodeToString([]byte("package parser // fixed\n")) + `","branch":"fix/cve"}`},
-		{http.MethodPost, "/repos/" + ghRepo + "/pulls", `{"title":"Fix the parser","head":"fix/cve","base":"main"}`},
-	}
-	for _, st := range steps {
-		if code, r, raw := s.ghCall(t, st.method, st.path, st.body, ids.NewV7()); code >= 300 {
-			t.Fatalf("setup %s %s: %d %+v %s", st.method, st.path, code, r, raw)
+	// The charges a scenario refunds are its own: ch_<nonce>rt<NNN>, with a
+	// letter or n<k> after it for more than one (D38).
+	num := strings.TrimPrefix(d.sc.ID, "RT-")
+	var charges []string
+	for _, base := range []string{"ch_" + d.fix["nonce"] + "rt" + num} {
+		charges = append(charges, base)
+		for _, suf := range []string{"a", "b", "c", "d", "e", "f", "g", "h"} {
+			charges = append(charges, base+suf)
+		}
+		for k := 1; k <= 20; k++ {
+			charges = append(charges, base+"n"+strconv.Itoa(k))
 		}
 	}
-	pr, ok := gh.PullRequest(ghRepo, 1)
-	if !ok {
-		t.Fatal("setup: no pull request 1")
-	}
+	refundableMore(d.t, d.s, charges...)
+}
+
+// setupGitHub fills the read-only context the scenarios work in; every
+// scenario makes the branch, file and pull request it acts on (D38).
+func (d *rangeDriver) setupGitHub() {
 	owner, repo, _ := strings.Cut(ghRepo, "/")
-	token := "ghp_" + strings.Repeat("a1B2", 9)
 	d.fix["owner"], d.fix["repo"], d.fix["other_repo"] = owner, repo, "secrets"
-	d.fix["pr"], d.fix["head"], d.fix["main"] = "1", pr.HeadSHA, main
+	d.fix["main"] = d.s.gh.sim.Branch(ghRepo, "main")
 	d.fix["file_b64"] = base64.StdEncoding.EncodeToString([]byte("package notes\n"))
-	d.fix["fake_github_token"] = token
-	d.fix["fake_github_token_file_b64"] = base64.StdEncoding.EncodeToString([]byte("package config\n\nconst token = \"" + token + "\"\n"))
-	d.fix["app_key"] = d.custodySecret()
-	d.fix["app_key_file_b64"] = base64.StdEncoding.EncodeToString([]byte(d.custodySecret()))
+}
+
+// plant makes the throwaway secrets of this range run (D39): a GitHub token
+// nothing issued and a private key nothing uses, each also as the contents
+// of a file.
+func (d *rangeDriver) plant() {
+	var b [12]byte
+	_, _ = rand.Read(b[:])
+	const letters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	tok := make([]byte, 36)
+	for i := range tok {
+		var x [1]byte
+		_, _ = rand.Read(x[:])
+		tok[i] = letters[int(x[0])%len(letters)]
+	}
+	d.fix["nonce"] = hex.EncodeToString(b[:6])
+	token := "ghp_" + string(tok)
+	_, priv, _ := ed25519.GenerateKey(rand.Reader)
+	der, _ := x509.MarshalPKCS8PrivateKey(priv)
+	pemKey := string(pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: der}))
+	d.fix["planted_github_token"] = token
+	d.fix["planted_github_token_file_b64"] = base64.StdEncoding.EncodeToString([]byte("package config\n\nconst token = \"" + token + "\"\n"))
+	d.fix["planted_private_key"] = pemKey
+	d.fix["planted_private_key_file_b64"] = base64.StdEncoding.EncodeToString([]byte(pemKey))
 }
 
 // custodySecret is a secret the gateway holds for the GitHub connection: the
@@ -273,7 +290,7 @@ func (d *rangeDriver) Do(ctx context.Context, sc domain.Scenario, st domain.Step
 	case "operator.kill_switch":
 		return d.killSwitch()
 	case "sandbox.probe":
-		return d.extra.probe(d, st)
+		return d.extra.probe(d, st, vars)
 	}
 	return domain.Observation{}, fmt.Errorf("the harness driver does not run %s", st.Do)
 }

@@ -24,6 +24,6 @@ func sandboxStart(d *rangeDriver) *stack {
 	return nil
 }
 
-func sandboxProbe(*rangeDriver, domain.Step) (domain.Observation, error) {
+func sandboxProbe(*rangeDriver, domain.Step, map[string]string) (domain.Observation, error) {
 	return domain.Observation{}, errors.New("built without the sandbox tag")
 }

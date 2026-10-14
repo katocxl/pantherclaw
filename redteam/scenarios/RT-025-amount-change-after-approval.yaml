@@ -18,7 +18,7 @@ steps:
       method: POST
       path: /v1/refunds
       body:
-        charge: ch_1
+        charge: ch_${fixture.nonce}rt025
         amount: "85.00"
         currency: USD
         reason: duplicate
@@ -40,7 +40,7 @@ steps:
       method: POST
       path: /v1/refunds
       body:
-        charge: ch_1
+        charge: ch_${fixture.nonce}rt025
         amount: "90.00"
         currency: USD
         reason: duplicate

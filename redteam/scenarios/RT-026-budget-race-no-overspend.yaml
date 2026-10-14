@@ -18,7 +18,7 @@ steps:
       concurrent: 8
       tool: create_refund
       args:
-        charge: "ch_${n}"
+        charge: "ch_${fixture.nonce}rt026n${n}"
         amount: "30.00"
         currency: USD
         reason: duplicate

@@ -43,8 +43,8 @@ func (e *rangeExtra) setup(d *rangeDriver) error {
 	return sandboxSetup(d)
 }
 
-func (e *rangeExtra) probe(d *rangeDriver, st domain.Step) (domain.Observation, error) {
-	return sandboxProbe(d, st)
+func (e *rangeExtra) probe(d *rangeDriver, st domain.Step, vars map[string]string) (domain.Observation, error) {
+	return sandboxProbe(d, st, vars)
 }
 
 func (e *rangeExtra) mutateMCP(d *rangeDriver, change string, args jsontext.Value) (domain.Observation, error) {

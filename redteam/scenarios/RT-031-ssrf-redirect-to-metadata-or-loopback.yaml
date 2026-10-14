@@ -17,7 +17,7 @@ steps:
       connection: unlisted
       tool: create_refund
       args:
-        charge: ch_1
+        charge: ch_${fixture.nonce}rt031
         amount: "30.00"
         currency: USD
         reason: duplicate
@@ -39,7 +39,7 @@ steps:
       connection: payments
       tool: create_refund
       args:
-        charge: ch_1
+        charge: ch_${fixture.nonce}rt031
         amount: "30.00"
         currency: USD
         reason: duplicate

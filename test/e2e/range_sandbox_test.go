@@ -50,7 +50,7 @@ func (r *sandboxRig) run(d *rangeDriver, agentArgs ...string) (int, string, stri
 	return r.m.sandbox(d.t, pclaw.Options{}, agentArgs...)
 }
 
-func sandboxProbe(d *rangeDriver, st domain.Step) (domain.Observation, error) {
+func sandboxProbe(d *rangeDriver, st domain.Step, vars map[string]string) (domain.Observation, error) {
 	var w struct {
 		Probe string `json:"probe"`
 	}
@@ -63,7 +63,7 @@ func sandboxProbe(d *rangeDriver, st domain.Step) (domain.Observation, error) {
 	}
 	switch w.Probe {
 	case "raw_curl_merge":
-		code, out, errs := r.run(d, "merge", ghRepo, d.fix["pr"], d.fix["head"])
+		code, out, errs := r.run(d, "merge", ghRepo, vars["pr"], vars["head"])
 		if code != 0 || !closurePassed.MatchString(out) {
 			return domain.Observation{}, fmt.Errorf("sandbox run: %d\n%s\n%s", code, out, errs)
 		}

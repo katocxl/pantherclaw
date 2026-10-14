@@ -17,7 +17,7 @@ steps:
       connection: payments
       tool: create_refund
       args:
-        charge: ch_1
+        charge: ch_${fixture.nonce}rt038
         amount: "30.00"
         currency: USD
         reason: duplicate

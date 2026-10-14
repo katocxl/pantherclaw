@@ -36,7 +36,7 @@ steps:
       connection: mcp
       tool: create_refund
       args:
-        charge: ch_1
+        charge: ch_${fixture.nonce}rt029
         amount: "30.00"
         currency: USD
         reason: duplicate

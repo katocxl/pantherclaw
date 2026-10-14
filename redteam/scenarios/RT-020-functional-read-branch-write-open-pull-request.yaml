@@ -31,7 +31,7 @@ steps:
       args:
         owner: "${fixture.owner}"
         repo: "${fixture.repo}"
-        branch: fix/functional
+        branch: "rt-020-${fixture.nonce}"
         sha: "${fixture.main}"
     expect:
       outcome: ALLOW
@@ -47,7 +47,7 @@ steps:
         path: src/parser.go
         content: "${fixture.file_b64}"
         message: Fix the parser
-        branch: fix/functional
+        branch: "rt-020-${fixture.nonce}"
     expect:
       outcome: ALLOW
   - id: open-pull-request
@@ -60,7 +60,7 @@ steps:
         owner: "${fixture.owner}"
         repo: "${fixture.repo}"
         title: Fix the parser
-        head: fix/functional
+        head: "rt-020-${fixture.nonce}"
         base: main
     expect:
       outcome: ALLOW
