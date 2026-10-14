@@ -8,12 +8,13 @@ package e2e
 import (
 	"crypto/x509"
 	"encoding/pem"
-	"github.com/katocxl/pantherclaw/internal/definitions/manifest"
 	"net"
 	"net/url"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/katocxl/pantherclaw/internal/definitions/manifest"
 
 	credapp "github.com/katocxl/pantherclaw/internal/credentials/app"
 	creddomain "github.com/katocxl/pantherclaw/internal/credentials/domain"
