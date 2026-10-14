@@ -12,6 +12,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/audit"
+	evdomain "github.com/katocxl/pantherclaw/internal/evidence/domain"
 	"github.com/katocxl/pantherclaw/internal/facts/adapters/pgstore"
 	"github.com/katocxl/pantherclaw/internal/facts/app"
 	"github.com/katocxl/pantherclaw/internal/facts/domain"
@@ -233,5 +235,41 @@ func TestHR160_ProviderScopesAreOrgOrConnection(t *testing.T) {
 	})
 	if !db.IsUniqueViolation(err) {
 		t.Errorf("the database accepted a name in both scopes: %v", err)
+	}
+}
+
+// TestHR222_ATwinRegistersBesideTheDevSeedProvider: the provider `dev seed`
+// writes for the real GitHub connection (every name the package names, one
+// declaration per target type) does not stop the twin's provider, registered
+// through the service with the same declarations, from registering.
+func TestHR222_ATwinRegistersBesideTheDevSeedProvider(t *testing.T) {
+	w := newTwins(t) // registers both through the service; start clean instead
+	w.exec(t, "UPDATE pc.fact_providers SET state = 'DISABLED' WHERE org_id = $1", w.org)
+	w.exec(t, "UPDATE pc.fact_declarations SET active = false WHERE org_id = $1", w.org)
+	named := map[string][]string{
+		"github.pull.head":    {"github.pull_request"},
+		"github.pull.state":   {"github.pull_request"},
+		"github.branch.rules": {"github.repository"},
+	}
+	w.svc.Packages = func(context.Context, ids.OrgID, ids.UUID, ids.UUID) (map[string][]string, error) { return named, nil }
+	var decls []domain.Declaration
+	for name, subjects := range named {
+		for _, s := range subjects {
+			decls = append(decls, domain.Declaration{Name: name, Type: domain.TypeObject, SubjectType: s, MaxLag: time.Minute})
+		}
+	}
+	seed := domain.Provider{ID: ids.NewV7(), Org: w.org, Name: "github.gateway", GatewayID: w.gw, ConnectionID: w.real, State: domain.ProviderActive, Facts: decls}
+	if err := w.store.CreateProvider(context.Background(), w.org, seed, "dev-seed", auditEvent(seed.ID)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := w.svc.RegisterGatewayProvider(w.human, "github.gateway.range", w.gw, w.sim, decls); err != nil {
+		t.Fatalf("the twin beside the dev-seed provider: %v", err)
+	}
+}
+
+func auditEvent(id ids.UUID) audit.Event {
+	return audit.Event{
+		Name: "facts.provider_registered", Actor: evdomain.Actor{Type: "operator", ID: "test"}, Outcome: audit.Success,
+		Object: &audit.Object{Type: "fact_provider", ID: id.String()},
 	}
 }
