@@ -161,7 +161,13 @@ func packDownload(ctx context.Context, a *app, args []string) error {
 	if err != nil {
 		return err
 	}
-	stream, err := evidenceClient(c).DownloadEvidencePack(ctx, &pantherclawv1.DownloadEvidencePackRequest{Id: args[0]})
+	return downloadPack(ctx, a, c, args[0], *out)
+}
+
+// downloadPack streams an evidence pack, checks its size and digest, and
+// writes it to a new file.
+func downloadPack(ctx context.Context, a *app, c clients, id, out string) error {
+	stream, err := evidenceClient(c).DownloadEvidencePack(ctx, &pantherclawv1.DownloadEvidencePackRequest{Id: id})
 	if err != nil {
 		return err
 	}
@@ -191,11 +197,11 @@ func packDownload(ctx context.Context, a *app, args []string) error {
 	if int64(buf.Len()) != total || !bytes.Equal(sum[:], want) {
 		return errPackContent
 	}
-	if err := writeNew(*out, buf.Bytes()); err != nil {
+	if err := writeNew(out, buf.Bytes()); err != nil {
 		return err
 	}
 	_, err = fmt.Fprintf(a.stdout, "Wrote the evidence pack (%d bytes) to %s. Check it offline with: pclaw verify %s --trust FILE\n",
-		buf.Len(), *out, *out)
+		buf.Len(), out, out)
 	return err
 }
 

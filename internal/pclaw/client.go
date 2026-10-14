@@ -120,6 +120,7 @@ type clients struct {
 	facts      pantherclawv1connect.FactServiceClient
 	packages   pantherclawv1connect.PackageServiceClient
 	policies   pantherclawv1connect.PolicyServiceClient
+	ranges     pantherclawv1connect.RangeServiceClient
 	m6Clients
 	m5p2Clients
 	m7Clients
@@ -148,6 +149,7 @@ func (a *app) clients() (clients, error) {
 		facts:         pantherclawv1connect.NewFactServiceClient(c),
 		packages:      pantherclawv1connect.NewPackageServiceClient(c),
 		policies:      pantherclawv1connect.NewPolicyServiceClient(c),
+		ranges:        pantherclawv1connect.NewRangeServiceClient(c),
 		m6Clients: m6Clients{
 			gateways:    pantherclawv1connect.NewGatewayAdminServiceClient(c),
 			containment: pantherclawv1connect.NewContainmentServiceClient(c),
