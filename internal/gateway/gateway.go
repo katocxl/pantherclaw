@@ -224,6 +224,7 @@ func newGateway(cfg *Config, d Deps, log *slog.Logger) (*Gateway, error) {
 		Containment: d.Containment, AllowedPrefixes: prefixes, ReportCircuit: d.ReportCircuit, Log: log,
 		Approvers:   proof.NewPinned(cfg.Approvals.ApproverKeysFile, d.Org),
 		ReportFacts: d.ReportFacts, FactTimeout: cfg.GitHub.FactTimeout.D(), ReportRevocation: d.ReportRevocation,
+		GitHubAPIURL: cfg.GitHub.APIURL,
 	}
 	if d.Connectors != nil {
 		o.Connectors = d.Connectors

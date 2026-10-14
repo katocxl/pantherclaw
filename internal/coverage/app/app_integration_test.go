@@ -32,6 +32,8 @@ type fixture struct {
 	version                              ids.UUID
 	// session is the sandbox session the closures come from (00090).
 	session ids.UUID
+	// d is the test database, for what pc_app may not do.
+	d *dbtest.DB
 }
 
 func newFixture(t *testing.T) *fixture {
@@ -40,6 +42,7 @@ func newFixture(t *testing.T) *fixture {
 	f := &fixture{
 		p: d.AppPool(t), org: ids.New[ids.Org](), user: ids.NewV7(), agent: ids.NewV7(), run: ids.NewV7(),
 		gateway: ids.NewV7(), conn: ids.NewV7(), pkg: ids.NewV7(), version: ids.NewV7(), session: ids.NewV7(),
+		d: d,
 	}
 	f.svc = &app.Service{Pool: f.p, Freshness: domain.Freshness{EnforcedTTL: 24 * time.Hour, ReassessEvery: time.Minute}}
 	env, version, token := ids.NewV7(), f.version, ids.NewV7()

@@ -191,10 +191,18 @@ type Options struct {
 	// item 6, R-18); nil only logs it. A dispatch's is reported with its
 	// outcome.
 	ReportRevocation RevocationReporter
+	// GitHubAPIURL is GitHub's REST API (gateway configuration
+	// github.api_url), where a GitHub App connection to GitHub's MCP server
+	// mints its tokens and reads its facts; a connection to the REST API
+	// uses its own base URL. Empty is DefaultGitHubAPIURL.
+	GitHubAPIURL string
 }
 
+// DefaultGitHubAPIURL is GitHub's REST API.
+const DefaultGitHubAPIURL = "https://api.github.com"
+
 // RevocationReporter reports an installation token that was not revoked,
-// with what it was for: facts, verification or org_scan.
+// with what it was for: facts, verification, org_scan or drift.
 type RevocationReporter func(ctx context.Context, connection, purpose string, a broker.Access) error
 
 // Engine dispatches mapped actions.
@@ -215,9 +223,12 @@ type Engine struct {
 	factTimeout time.Duration
 	revocations RevocationReporter
 	sims        *simcheck.Checker
+	githubAPI   string
 
 	mu      sync.Mutex
 	clients map[string]clientEntry
+	// apis are the GitHub API clients of kind-mcp connections (gitHubAPI).
+	apis map[string]clientEntry
 	// drift is what the last check of each kind-mcp connection found.
 	drift map[string]driftEntry
 }
@@ -246,13 +257,16 @@ func New(o Options) (*Engine, error) {
 	if o.FactTimeout <= 0 {
 		o.FactTimeout = DefaultFactTimeout
 	}
+	if o.GitHubAPIURL == "" {
+		o.GitHubAPIURL = DefaultGitHubAPIURL
+	}
 	return &Engine{
 		org: o.Org, authority: o.Authority, permits: newPermitVerifier(o.JWKSURL, o.JWKSClient, o.GatewayID, o.Org),
 		containment: o.Containment, broker: o.Broker, allowed: o.AllowedPrefixes, breaker: newBreaker(o.Now, o.ReportCircuit, o.Log),
 		log: o.Log, onDrift: o.OnDrift, clients: map[string]clientEntry{}, drift: map[string]driftEntry{}, approvers: o.Approvers,
 		connectors:  o.Connectors,
 		reportFacts: o.ReportFacts, factTimeout: o.FactTimeout, revocations: o.ReportRevocation,
-		sims: simcheck.New(),
+		sims: simcheck.New(), githubAPI: strings.TrimSuffix(o.GitHubAPIURL, "/"), apis: map[string]clientEntry{},
 	}, nil
 }
 
@@ -594,6 +608,33 @@ func (e *Engine) entry(conn *control.Connection) (clientEntry, error) {
 	return ce, nil
 }
 
+// gitHubAPI is where a GitHub App connection mints its tokens and reads
+// GitHub (ADR-0021): a connection to the REST API at its own base URL,
+// with its own client; a connection to GitHub's MCP server at the gateway's
+// github.api_url, with a client of its own for that URL under the
+// connection's timeout and response cap and the egress allow-list.
+func (e *Engine) gitHubAPI(conn *control.Connection) (string, *egress.Client, error) {
+	if conn.GetKind() != "mcp" {
+		c, err := e.client(conn)
+		return strings.TrimSuffix(conn.GetBaseUrl(), "/"), c, err
+	}
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if ce, ok := e.apis[conn.GetId()]; ok && ce.revision == conn.GetRevision() && ce.base == e.githubAPI {
+		return ce.base, ce.client, nil
+	}
+	timeout := time.Duration(conn.GetTimeoutMs()) * time.Millisecond
+	if timeout <= 0 {
+		timeout = 10 * time.Second
+	}
+	c, err := egress.NewClient(e.githubAPI, timeout, conn.GetMaxResponseBytes(), e.allowed)
+	if err != nil {
+		return "", nil, err
+	}
+	e.apis[conn.GetId()] = clientEntry{revision: conn.GetRevision(), base: e.githubAPI, client: c}
+	return e.githubAPI, c, nil
+}
+
 // prepared is the outbound request, built and checked.
 type prepared struct {
 	out    egress.Request
@@ -653,21 +694,7 @@ func (e *Engine) send(ctx context.Context, r Result, conn *control.Connection, d
 	if conn.GetAccessMode() == "pantherclaw_held" {
 		s, release, used, err := e.credential(ctx, conn, def, a.Action.Target, p.req, p.client, "")
 		if err != nil {
-			e.log.WarnContext(ctx, "gateway.credential_unavailable", slog.String("transaction_id", want.Txn),
-				slog.String("connection_id", conn.GetId()), pclog.Err(err))
-			code := CodeCredential
-			var granted func(*pb.RecordExecutionRequest)
-			if sm := (*broker.ScopeMismatchError)(nil); errors.As(err, &sm) {
-				// What GitHub granted and whether it was revoked go on the
-				// refused dispatch's receipt (ADR-0021 items 3 and 6).
-				code, granted = CodeScopeMismatch, func(req *pb.RecordExecutionRequest) { req.CredentialAccess = accessOf(sm.Access) }
-			} else if errors.Is(err, broker.ErrScopeMismatch) {
-				code = CodeScopeMismatch
-			}
-			if granted != nil {
-				return e.record(ctx, r, want, pb.Outcome_OUTCOME_FAILED, 0, nil, 0, EnforcementFailed, code, t, granted)
-			}
-			return e.record(ctx, r, want, pb.Outcome_OUTCOME_FAILED, 0, nil, 0, EnforcementFailed, code, t)
+			return e.credentialFailed(ctx, r, conn, want, err, t)
 		}
 		secret = s
 		access = used
@@ -762,27 +789,60 @@ func (e *Engine) credential(ctx context.Context, conn *control.Connection, def *
 		}
 		return plain, func() { clear(plain) }, func() *pb.CredentialAccess { return nil }, nil
 	}
-	if def.Access == defs.AccessRead && !broker.ReadOnly(def.Scopes()) {
-		return nil, nil, nil, broker.ErrScope // every read is read-only (HR-203)
-	}
-	owner, _ := def.Target.Part(target.ID, "owner")
-	repo, _ := def.Target.Part(target.ID, "repo")
-	tok, err := e.mint(ctx, conn, owner, repo, def.Scopes(), c)
+	tok, release, err := e.actionToken(ctx, conn, def, target, conn.GetBaseUrl(), c, purpose)
 	if err != nil {
 		return nil, nil, nil, err
 	}
 	if err := tok.Place(req); err != nil {
-		_ = tok.Revoke(ctx, c)
+		release()
 		return nil, nil, nil, err
 	}
-	return tok.Token(), func() {
+	return tok.Token(), release, func() *pb.CredentialAccess { return accessOf(tok.Access()) }, nil
+}
+
+// actionToken mints, at the GitHub API base, the installation token an
+// action on target under def may use: exactly the target's repository and
+// def's declared permissions, read-only for a read (HR-203). release
+// revokes it through c and clears it; a revocation that fails is logged
+// and, with a purpose, reported (a dispatch's goes on its receipt).
+func (e *Engine) actionToken(ctx context.Context, conn *control.Connection, def *defs.Definition, target actionir.Target, base string,
+	c broker.Sender, purpose string,
+) (*broker.Installation, func(), error) {
+	if def.Access == defs.AccessRead && !broker.ReadOnly(def.Scopes()) {
+		return nil, nil, broker.ErrScope // every read is read-only (HR-203)
+	}
+	owner, _ := def.Target.Part(target.ID, "owner")
+	repo, _ := def.Target.Part(target.ID, "repo")
+	tok, err := e.mint(ctx, conn, base, owner, repo, def.Scopes(), c)
+	if err != nil {
+		return nil, nil, err
+	}
+	return tok, func() {
 		if err := tok.Revoke(ctx, c); err != nil {
 			e.log.WarnContext(ctx, "gateway.installation_token_not_revoked", slog.String("connection_id", conn.GetId()), pclog.Err(err))
 			if purpose != "" {
 				e.revokeFailed(ctx, conn, purpose, tok)
 			}
 		}
-	}, func() *pb.CredentialAccess { return accessOf(tok.Access()) }, nil
+	}, nil
+}
+
+// credentialFailed records a committed dispatch whose credential could not
+// be used: nothing was sent. A wider grant than requested is
+// credential_scope_mismatch, with what GitHub granted and whether it was
+// revoked on the refused dispatch's receipt (ADR-0021 items 3 and 6).
+func (e *Engine) credentialFailed(ctx context.Context, r Result, conn *control.Connection, want permitWant, err error, t *timer) Result {
+	e.log.WarnContext(ctx, "gateway.credential_unavailable", slog.String("transaction_id", want.Txn),
+		slog.String("connection_id", conn.GetId()), pclog.Err(err))
+	code := CodeCredential
+	var granted []func(*pb.RecordExecutionRequest)
+	if sm := (*broker.ScopeMismatchError)(nil); errors.As(err, &sm) {
+		code = CodeScopeMismatch
+		granted = append(granted, func(req *pb.RecordExecutionRequest) { req.CredentialAccess = accessOf(sm.Access) })
+	} else if errors.Is(err, broker.ErrScopeMismatch) {
+		code = CodeScopeMismatch
+	}
+	return e.record(ctx, r, want, pb.Outcome_OUTCOME_FAILED, 0, nil, 0, EnforcementFailed, code, t, granted...)
 }
 
 // revokeFailed reports a token minted for purpose that could not be
