@@ -16,7 +16,7 @@ One YAML file per attack, `RT-###-<slug>.yaml`. The format is fixed by HR-223 (s
 | `file_b64` | base64 of a small source file |
 | `fake_github_token` | a GitHub-format token that nothing issued |
 | `fake_github_token_file_b64` | base64 of a source file that embeds `fake_github_token` |
-| `custody_secret` | a secret the gateway holds in custody |
+| `app_key`, `app_key_file_b64` | the GitHub App private key the gateway holds, and base64 of a file that holds it |
 | charges | `ch_1` to `ch_50` exist on the payments simulator |
 
 Values saved with `save:` are substituted as `${name}`.

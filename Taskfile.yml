@@ -166,9 +166,9 @@ tasks:
       - git diff --exit-code -- internal/gen
 
   trace:
-    desc: Fail if a hardening rule or threat due by MILESTONE has no test (default M8)
+    desc: Fail if a hardening rule or threat due by MILESTONE has no test (default M12)
     cmds:
-      - go -C tools run ./traceability -root .. -through {{.MILESTONE | default "M9"}}
+      - go -C tools run ./traceability -root .. -through {{.MILESTONE | default "M12"}}
 
   sdk:vectors:
     desc: Regenerate the SDK conformance vectors in sdk/conformance from the Go implementation (review the diff)

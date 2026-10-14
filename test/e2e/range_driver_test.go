@@ -200,7 +200,8 @@ func (d *rangeDriver) setupGitHub() {
 	d.fix["file_b64"] = base64.StdEncoding.EncodeToString([]byte("package notes\n"))
 	d.fix["fake_github_token"] = token
 	d.fix["fake_github_token_file_b64"] = base64.StdEncoding.EncodeToString([]byte("package config\n\nconst token = \"" + token + "\"\n"))
-	d.fix["custody_secret"] = d.custodySecret()
+	d.fix["app_key"] = d.custodySecret()
+	d.fix["app_key_file_b64"] = base64.StdEncoding.EncodeToString([]byte(d.custodySecret()))
 }
 
 // custodySecret is a secret the gateway holds for the GitHub connection: the
