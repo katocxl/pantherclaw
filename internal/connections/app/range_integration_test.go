@@ -44,6 +44,7 @@ func TestHR221_SimulatedTargetsMustBeLocalLiterals(t *testing.T) {
 		"https://payments.example.test", "http://localhost:9000", "http://payments.internal", "https://8.8.8.8", "http://1.1.1.1:80",
 		"http://172.15.0.1", "http://172.32.0.1", "http://192.169.0.1", "http://11.0.0.1", "http://[2001:db8::1]", "http://[fe80::1]",
 		"http://[::ffff:127.0.0.1]:9000", "https://[::ffff:10.0.0.1]", "http://[fc00::1]x",
+		"http://0.0.0.0", "http://169.254.169.254",
 	} {
 		_, err := e.svc.Create(e.admin, e.simulated(base))
 		if pcerr.CodeOf(err) != pcerr.InvalidArgument || (pcerr.ReasonOf(err) != "SIMULATED_TARGET_NOT_LOCAL" && pcerr.ReasonOf(err) != "BASE_URL_INVALID" &&
@@ -51,15 +52,47 @@ func TestHR221_SimulatedTargetsMustBeLocalLiterals(t *testing.T) {
 			t.Errorf("%s: err = %v, want a refusal", base, err)
 		}
 	}
-	// The named rule, for targets the ordinary checks accept.
-	for _, base := range []string{"https://payments.example.test", "https://8.8.8.8", "http://172.32.0.1", "https://[2001:db8::1]"} {
-		if _, err := e.svc.Create(e.admin, e.simulated(base)); pcerr.ReasonOf(err) != "SIMULATED_TARGET_NOT_LOCAL" &&
-			pcerr.ReasonOf(err) != "PLAIN_HTTP_PUBLIC" {
+	// The named rule, for targets the ordinary checks accept (https only).
+	for _, base := range []string{"https://payments.example.test", "https://8.8.8.8", "https://[2001:db8::1]", "https://172.32.0.1"} {
+		if _, err := e.svc.Create(e.admin, e.simulated(base)); pcerr.ReasonOf(err) != "SIMULATED_TARGET_NOT_LOCAL" {
 			t.Errorf("%s: err = %v, want SIMULATED_TARGET_NOT_LOCAL", base, err)
 		}
 	}
-	if _, err := e.svc.Create(e.admin, e.simulated("https://payments.example.test")); pcerr.ReasonOf(err) != "SIMULATED_TARGET_NOT_LOCAL" {
-		t.Errorf("a public https name: err = %v, want SIMULATED_TARGET_NOT_LOCAL", err)
+
+	// An odd spelling of loopback is stored in its canonical form, so what
+	// the gateway checks and dials is 127.0.0.1.
+	odd := e.simulated("http://0x7f.1:9000")
+	odd.Name = "odd"
+	if c, err := e.svc.Create(e.admin, odd); err != nil || deref(c.BaseUrl) != "http://127.0.0.1:9000" {
+		t.Errorf("0x7f.1: %v, stored %q, want http://127.0.0.1:9000", err, deref(c.BaseUrl))
+	}
+
+	// Every host a credential may be sent to is a local literal too.
+	for i, hosts := range [][]string{{"api.example.com"}, {"127.0.0.1", "api.example.com"}, {"8.8.8.8:443"}, {"localhost"}} {
+		in := e.simulated("http://127.0.0.1:9000")
+		in.Name, in.AllowedHosts = "hosts-"+strconv.Itoa(i), hosts
+		if _, err := e.svc.Create(e.admin, in); pcerr.ReasonOf(err) != "SIMULATED_TARGET_NOT_LOCAL" {
+			t.Errorf("allowed hosts %v: err = %v, want SIMULATED_TARGET_NOT_LOCAL", hosts, err)
+		}
+	}
+	ok := e.simulated("http://127.0.0.1:9000")
+	ok.Name, ok.AllowedHosts = "hosts-ok", []string{"127.0.0.1:9000", "[::1]", "10.0.0.5"}
+	c, err := e.svc.Create(e.admin, ok)
+	if err != nil {
+		t.Fatalf("local allowed hosts: %v", err)
+	}
+	// An update cannot move a simulated connection off the local literals.
+	pub, hosts := "https://payments.example.test", []string{"api.example.com"}
+	for what, u := range map[string]app.UpdateInput{
+		"base URL": {ID: c.ID, Revision: c.Revision, BaseURL: &pub}, "allowed hosts": {ID: c.ID, Revision: c.Revision, AllowedHosts: hosts, SetAllowedHosts: true},
+	} {
+		if _, err := e.svc.Update(e.admin, u); pcerr.ReasonOf(err) != "SIMULATED_TARGET_NOT_LOCAL" {
+			t.Errorf("update of the %s: err = %v, want SIMULATED_TARGET_NOT_LOCAL", what, err)
+		}
+	}
+	loc := "http://10.0.0.9:9000"
+	if _, err := e.svc.Update(e.admin, app.UpdateInput{ID: c.ID, Revision: c.Revision, BaseURL: &loc}); err != nil {
+		t.Errorf("update to another local literal: %v", err)
 	}
 
 	// A real connection keeps its ordinary rules and is not simulated.
