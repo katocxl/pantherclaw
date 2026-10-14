@@ -23,6 +23,7 @@ import (
 	"encoding/json/jsontext"
 	"encoding/json/v2"
 	"fmt"
+	"github.com/katocxl/pantherclaw/internal/sim/handshake"
 	"io"
 	"net/http"
 	"regexp"
@@ -236,7 +237,9 @@ type message struct {
 }
 
 // Handler returns the MCP endpoint (any path).
-func (s *Server) Handler() http.Handler { return http.HandlerFunc(s.serve) }
+func (s *Server) Handler() http.Handler {
+	return handshake.Wrap("mcp", http.HandlerFunc(s.serve))
+}
 
 func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("X-Simulated", "true")
