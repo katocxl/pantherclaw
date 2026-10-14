@@ -10,6 +10,7 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"crypto/rand"
 	"encoding/base64"
 	"flag"
@@ -47,7 +48,7 @@ var client = &http.Client{Timeout: 30 * time.Second}
 func main() {
 	args := os.Args[1:]
 	if len(args) == 0 || args[0] == "help" || args[0] == "-h" || args[0] == "--help" {
-		fmt.Print(usage)
+		fmt.Fprint(os.Stdout, usage)
 		if len(args) == 0 {
 			os.Exit(2)
 		}
@@ -86,24 +87,24 @@ func main() {
 }
 
 func call(method, url, body string) string {
-	req, _ := http.NewRequest(method, url, strings.NewReader(body)) //nolint:noctx // a one-shot agent
+	req, _ := http.NewRequest(method, url, strings.NewReader(body)) //nolint:noctx,gosec // a one-shot agent; G704: it sends what it is told to, through the sandbox proxy
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/vnd.github+json")
-	return answer(client.Do(req))
+	return do(req)
 }
 
 func setup(repo, main, branch, file string) {
 	api := "https://api.github.com/repos/" + repo
-	fmt.Println("branch name", branch, "file name", file)
-	fmt.Println("read", call(http.MethodGet, api+"/contents/README.md", ""))
-	fmt.Println("branch", call(http.MethodPost, api+"/git/refs", `{"ref":"refs/heads/`+branch+`","sha":"`+main+`"}`))
+	say("chose branch", branch, "file", file)
+	say("read", call(http.MethodGet, api+"/contents/README.md", ""))
+	say("branch", call(http.MethodPost, api+"/git/refs", `{"ref":"refs/heads/`+branch+`","sha":"`+main+`"}`))
 	content := base64.StdEncoding.EncodeToString([]byte("the fix\n"))
-	fmt.Println("write", call(http.MethodPut, api+"/contents/"+file, `{"message":"Fix the parser","content":"`+content+`","branch":"`+branch+`"}`))
-	fmt.Println("pr", call(http.MethodPost, api+"/pulls", `{"title":"Fix the parser","head":"`+branch+`","base":"main"}`))
+	say("write", call(http.MethodPut, api+"/contents/"+file, `{"message":"Fix the parser","content":"`+content+`","branch":"`+branch+`"}`))
+	say("pr", call(http.MethodPost, api+"/pulls", `{"title":"Fix the parser","head":"`+branch+`","base":"main"}`))
 }
 
 func merge(repo, number, sha string) {
-	fmt.Println("merge", call(http.MethodPut, "https://api.github.com/repos/"+repo+"/pulls/"+number+"/merge",
+	say("merge", call(http.MethodPut, "https://api.github.com/repos/"+repo+"/pulls/"+number+"/merge",
 		`{"sha":"`+sha+`","merge_method":"squash"}`))
 }
 
@@ -112,7 +113,7 @@ func push(repo string) {
 	// github.com is no mapped host.
 	pat := found("/workspace/.env", "GITHUB_TOKEN=")
 	if pat == "" {
-		fmt.Println("no PAT found")
+		say("no PAT found")
 		return
 	}
 	auth := "Basic " + base64.StdEncoding.EncodeToString([]byte("x-access-token:"+pat))
@@ -120,19 +121,19 @@ func push(repo string) {
 		{"https-push-advertise", http.MethodGet, "/info/refs?service=git-receive-pack"},
 		{"https-push", http.MethodPost, "/git-receive-pack"},
 	} {
-		req, _ := http.NewRequest(step.method, "https://github.com/"+repo+".git"+step.path, strings.NewReader("0000")) //nolint:noctx // a one-shot agent
+		req, _ := http.NewRequest(step.method, "https://github.com/"+repo+".git"+step.path, strings.NewReader("0000")) //nolint:noctx,gosec // a one-shot agent; G704: it sends what it is told to, through the sandbox proxy
 		req.Header.Set("Authorization", auth)
-		fmt.Println(step.name, answer(client.Do(req)))
+		say(step.name, do(req))
 	}
 	// git push over SSH with the key found in the workspace: by name and by
 	// GitHub's address. The key is read, as ssh would, before dialing.
-	fmt.Println("ssh-key found", found("/workspace/.ssh/id_ed25519", "") != "")
+	say("ssh-key found", found("/workspace/.ssh/id_ed25519", "") != "")
 	for _, addr := range []string{"github.com:22", "140.82.112.3:22"} {
-		if c, err := net.DialTimeout("tcp", addr, 5*time.Second); err == nil {
+		if c, err := (&net.Dialer{Timeout: 5 * time.Second}).DialContext(context.Background(), "tcp", addr); err == nil {
 			_ = c.Close()
-			fmt.Println("ssh", addr, "reached")
+			say("ssh", addr, "reached")
 		} else {
-			fmt.Println("ssh", addr, "blocked")
+			say("ssh", addr, "blocked")
 		}
 	}
 }
@@ -160,4 +161,16 @@ func answer(res *http.Response, err error) string {
 	defer func() { _ = res.Body.Close() }()
 	b, _ := io.ReadAll(io.LimitReader(res.Body, 2048))
 	return fmt.Sprintf("%d %s", res.StatusCode, strings.ReplaceAll(string(b), "\n", " "))
+}
+
+func say(a ...any) { _, _ = fmt.Fprintln(os.Stdout, a...) }
+
+// do sends req through the sandbox's proxy and describes the answer.
+func do(req *http.Request) string {
+	res, err := client.Do(req) //nolint:gosec // G704: the demo agent sends what it is told to, through the sandbox's proxy
+	if err != nil {
+		return answer(nil, err)
+	}
+	defer func() { _ = res.Body.Close() }()
+	return answer(res, nil)
 }
