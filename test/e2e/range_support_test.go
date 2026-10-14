@@ -86,10 +86,6 @@ func (d *rangeDriver) refusedApproval(*callRec, string) (domain.Observation, err
 	return domain.Observation{}, fmt.Errorf("the harness driver cannot try an approval as the launcher or the developer yet")
 }
 
-func (d *rangeDriver) agentChild(context.Context, domain.Step, map[string]string) (domain.Observation, error) {
-	return domain.Observation{}, errors.New("the harness driver cannot delegate yet")
-}
-
 // objectID is the id of an object of this stack's organisation.
 func (s *stack) objectID(t *testing.T, object string) ids.UUID {
 	t.Helper()
@@ -119,4 +115,12 @@ func (s *stack) revokeSeededGrant(t *testing.T) {
 	var id string
 	s.query(t, "SELECT id::text FROM pc.grants ORDER BY created_at LIMIT 1", nil, &id)
 	t.Fatalf("the harness driver cannot revoke grant %s yet", id)
+}
+
+// runHeader is the run a call is made in.
+func (d *rangeDriver) runHeader() string {
+	if d.asRun != "" {
+		return d.asRun
+	}
+	return d.s.run
 }

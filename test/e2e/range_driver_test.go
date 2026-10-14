@@ -53,6 +53,9 @@ type rangeDriver struct {
 	other *stack // the second organisation
 
 	extra rangeExtra // sandbox, per build tag
+
+	// asRun is the run calls are made in while a child acts; empty: the seeded run.
+	asRun string
 }
 
 type reviewer struct {
@@ -250,6 +253,8 @@ type callWith struct {
 	Concurrent int            `json:"concurrent"`
 	ActionOf   string         `json:"action_of"`
 	Fault      string         `json:"fault"`
+	// run is the run the call is made in; empty is the seeded one.
+	run string
 }
 
 func (d *rangeDriver) agentCall(ctx context.Context, st domain.Step, _ map[string]string) (domain.Observation, error) {
@@ -292,6 +297,10 @@ func (d *rangeDriver) concurrent(_ context.Context, st domain.Step, w callWith) 
 
 // callOnce sends one call over its face and returns what the gateway said.
 func (d *rangeDriver) callOnce(w callWith, _ []byte, _ int) (domain.Observation, *callRec, error) {
+	if w.run != "" {
+		d.asRun = w.run
+		defer func() { d.asRun = "" }()
+	}
 	act := ids.NewV7()
 	if w.ActionOf != "" {
 		prev, ok := d.recs[w.ActionOf]
@@ -355,7 +364,7 @@ func (d *rangeDriver) callHTTP(conn string, w callWith, act ids.UUID) (domain.Ob
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
-	req.Header.Set(gateway.HeaderRunID, d.s.run)
+	req.Header.Set(gateway.HeaderRunID, d.runHeader())
 	req.Header.Set(gateway.HeaderActionID, act.String())
 	resp, err := d.client(w.Instance).Do(req)
 	if err != nil {
@@ -445,7 +454,7 @@ func (d *rangeDriver) mcpRequest(conn, tool string, args any, instance string) (
 	req.Header.Set("MCP-Protocol-Version", "2026-07-28")
 	req.Header.Set("Mcp-Method", "tools/call")
 	req.Header.Set("Mcp-Name", tool)
-	req.Header.Set(gateway.HeaderRunID, d.s.run)
+	req.Header.Set(gateway.HeaderRunID, d.runHeader())
 	resp, err := d.client(instance).Do(req)
 	if err != nil {
 		return 0, nil, err

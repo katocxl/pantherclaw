@@ -60,7 +60,7 @@ func (d *rangeDriver) callSDK(conn string, w callWith, act ids.UUID) (domain.Obs
 		return domain.Observation{}, nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set(gateway.HeaderRunID, d.s.run)
+	req.Header.Set(gateway.HeaderRunID, d.runHeader())
 	req.Header.Set(gateway.HeaderActionID, act.String())
 	resp, err := d.client(w.Instance).Do(req)
 	if err != nil {
@@ -471,12 +471,6 @@ func (d *rangeDriver) targetReplay(st domain.Step) (domain.Observation, error) {
 		code = e.Code
 	}
 	return domain.Observation{Outcome: domain.OutcomeTargetRefused, Code: code, Detail: fmt.Sprintf("%d %s", resp.StatusCode, raw)}, nil
-}
-
-// revokeGrant has the grant's owner revoke the seeded grant.
-func (d *rangeDriver) revokeGrant() (domain.Observation, error) {
-	d.s.revokeSeededGrant(d.t)
-	return domain.Observation{}, nil
 }
 
 // killSwitch engages the org's kill switch and returns once the gateway has
