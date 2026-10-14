@@ -96,7 +96,8 @@ message AuthorizeRequest {
 // PayloadFinding is one credential-shaped value in an action's payload.
 message PayloadFinding {
   // The format: github_token, private_key, aws_access_key, slack_token or
-  // pantherclaw_token.
+  // pantherclaw_token; or scan_incomplete, when the gateway could not look
+  // at the whole payload (too many strings, a base64 value too large).
   string kind = 1 [(buf.validate.field).string = {
     min_len: 1
     max_len: 32
