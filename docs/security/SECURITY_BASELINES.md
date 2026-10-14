@@ -107,7 +107,7 @@ Secrets never in source, env files committed, CI logs, job args, receipts or exp
 
 ## SB-8 HTTP & RPC server hardening
 
-TLS config from `platform/httpx` only; `ReadHeaderTimeout` 5 s, `ReadTimeout` 30 s, `WriteTimeout` 60 s (streaming endpoints exempt with heartbeats), `IdleTimeout` 120 s, `MaxHeaderBytes` 32 KiB, body limit 1 MiB default; security headers (HSTS, `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, `Content-Security-Policy: default-src 'none'` for APIs, `frame-ancestors 'none'`); panic recovery returns generic errors (no stack traces to clients); errors carry stable codes, never internal details; per-identity/per-IP rate limiting; health endpoints unauthenticated but non-sensitive; pprof only on admin listener bound to localhost.
+TLS config from `platform/httpx` only; `ReadHeaderTimeout` 5 s, `ReadTimeout` 30 s, `WriteTimeout` 60 s (streaming endpoints exempt with heartbeats), `IdleTimeout` 120 s, `MaxHeaderBytes` 32 KiB, body limit 1 MiB default; security headers (HSTS, `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, `Content-Security-Policy: default-src 'none'` for APIs, `frame-ancestors 'none'`; the sign-in form pages (`/device`) send `Referrer-Policy: same-origin` instead, because a browser form POST under `no-referrer` carries `Origin: null`, which the same-origin check refuses); panic recovery returns generic errors (no stack traces to clients); errors carry stable codes, never internal details; per-identity/per-IP rate limiting; health endpoints unauthenticated but non-sensitive; pprof only on admin listener bound to localhost.
 
 ## SB-9 Privacy & retention
 
