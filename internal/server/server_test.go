@@ -115,6 +115,26 @@ func TestDevSeedUsage(t *testing.T) {
 	}
 }
 
+// TestHR163_DevSeedOnlyLocal: dev seed refuses a configuration that is not
+// local-only before it touches the database.
+func TestHR163_DevSeedOnlyLocal(t *testing.T) {
+	for name, cfg := range map[string]string{
+		"live api keys":  `{"database": {"app_password_file": "pw"}, "kek_files": ["kek"]}`,
+		"all interfaces": `{"database": {"app_password_file": "pw"}, "kek_files": ["kek"], "http": {"addr": "0.0.0.0:8080"}, "auth": {"api_key_env": "test"}}`,
+		"public url":     `{"database": {"app_password_file": "pw"}, "kek_files": ["kek"], "auth": {"public_url": "https://pantherclaw.example.com", "api_key_env": "test"}}`,
+	} {
+		path := filepath.Join(t.TempDir(), "server.json")
+		if err := os.WriteFile(path, []byte(cfg), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		var out, errb bytes.Buffer
+		code := Run(context.Background(), []string{"dev", "seed", "--config", path}, &out, &errb, noEnv)
+		if code == 0 || !strings.Contains(errb.String(), "dev seed is development-only (HR-163)") {
+			t.Errorf("%s: code %d, stderr %q", name, code, errb.String())
+		}
+	}
+}
+
 func TestRunUsageAndVersion(t *testing.T) {
 	var out, errb bytes.Buffer
 	if code := Run(context.Background(), nil, &out, &errb, noEnv); code != 2 {

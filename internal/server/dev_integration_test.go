@@ -263,7 +263,7 @@ func authorize(client pantherclawv1connect.AuthorityServiceClient, action []byte
 func publicAt(addr string) func(map[string]any) {
 	return func(c map[string]any) {
 		c["http"] = map[string]any{"addr": addr}
-		c["auth"] = map[string]any{"public_url": "http://" + addr}
+		c["auth"] = map[string]any{"public_url": "http://" + addr, "api_key_env": "test"}
 	}
 }
 

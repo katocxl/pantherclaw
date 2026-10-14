@@ -75,6 +75,11 @@ func cmdDev(ctx context.Context, args []string, stdout, stderr io.Writer, env En
 	if err != nil {
 		return err
 	}
+	// The seed mints keys and credentials for a demo org, so it runs only
+	// against a server that is reachable from this machine alone (HR-163).
+	if err := cfg.localOnly(); err != nil {
+		return fmt.Errorf("dev seed is development-only (HR-163): %w", err)
+	}
 	lim, err := money.ParseMoney(*limit, cfg.Authority.GrantCurrency)
 	if err != nil || lim.Amount.Sign() <= 0 {
 		return fmt.Errorf("dev seed: --budget-limit must be a positive %s amount", cfg.Authority.GrantCurrency)

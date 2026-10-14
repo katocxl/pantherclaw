@@ -176,7 +176,7 @@ func start(t *testing.T, o options) *stack {
 		"kek_files": []string{kek}, "worker_concurrency": 2,
 	}
 	// Workload proofs name the address they are sent to.
-	cfg["auth"] = map[string]any{"public_url": "http://" + apiAddr}
+	cfg["auth"] = map[string]any{"public_url": "http://" + apiAddr, "api_key_env": "test"}
 	public := "http://" + apiAddr
 	if o.people != nil {
 		public = withPeople(t, cfg, dir, apiAddr, *o.people, o.relay)
