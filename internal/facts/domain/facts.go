@@ -472,3 +472,40 @@ func EncodeValue(v Value) ([]byte, error) {
 	}
 	return json.Marshal(w, json.Deterministic(true))
 }
+
+// ScopedDeclaration is an active declaration with its source scope: Connection
+// is zero for an org-scoped (service account) provider and the connection of
+// a gateway provider (G0 M12 D43).
+type ScopedDeclaration struct {
+	Name        string
+	Type        Type
+	SubjectType string
+	Connection  ids.UUID
+}
+
+// CheckScope checks the provider's declarations against the active ones: a
+// fact name has one provider per source scope. A service account's provider
+// (org scope) may not supply a name any provider supplies; a gateway's
+// (connection scope) may not supply a name an org-scoped provider supplies
+// or one its own connection already supplies, and may supply a name other
+// connections supply only with the same type and subject type.
+func (p Provider) CheckScope(active []ScopedDeclaration) error {
+	for _, d := range p.Facts {
+		for _, a := range active {
+			if CELName(a.Name) != CELName(d.Name) {
+				continue
+			}
+			switch {
+			case p.ConnectionID.IsZero():
+				return invalid("provider: another provider already supplies %q", d.Name)
+			case a.Connection.IsZero():
+				return invalid("provider: %q is supplied by an org-scoped provider, so no connection can also supply it", d.Name)
+			case a.Connection == p.ConnectionID:
+				return invalid("provider: this connection already supplies %q", d.Name)
+			case a.Type != d.Type || a.SubjectType != d.SubjectType:
+				return invalid("provider: another connection supplies %q as %s about %s", d.Name, a.Type, a.SubjectType)
+			}
+		}
+	}
+	return nil
+}

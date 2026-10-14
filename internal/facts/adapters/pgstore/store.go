@@ -15,6 +15,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgconn"
+
 	"github.com/katocxl/pantherclaw/internal/approvals/adapters/pgapprovals"
 	apdomain "github.com/katocxl/pantherclaw/internal/approvals/domain"
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
@@ -49,6 +51,19 @@ func (s *Store) Taken(ctx context.Context, org ids.OrgID) (func(string) bool, er
 	return func(name string) bool { return used[domain.CELName(name)] }, nil
 }
 
+// Declared implements app.Store.
+func (s *Store) Declared(ctx context.Context, org ids.OrgID) ([]domain.ScopedDeclaration, error) {
+	var out []domain.ScopedDeclaration
+	err := s.Pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
+		rows, err := dbq.New(tx).ListActiveDeclarations(ctx, org)
+		for _, r := range rows {
+			out = append(out, domain.ScopedDeclaration{Name: r.Name, Type: domain.Type(r.ValueType), SubjectType: r.SubjectType, Connection: val(r.ConnectionID)})
+		}
+		return err
+	}, db.ReadOnly())
+	return out, err
+}
+
 // CreateProvider implements app.Store.
 func (s *Store) CreateProvider(ctx context.Context, org ids.OrgID, p domain.Provider, createdBy string, ev audit.Event) error {
 	err := s.Pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
@@ -62,7 +77,8 @@ func (s *Store) CreateProvider(ctx context.Context, org ids.OrgID, p domain.Prov
 		for _, d := range p.Facts {
 			if err := q.InsertFactDeclaration(ctx, dbq.InsertFactDeclarationParams{
 				OrgID: org, ProviderID: p.ID, Name: d.Name, ValueType: string(d.Type), SubjectType: d.SubjectType,
-				MaxLagS: int32(d.MaxLag / time.Second), //nolint:gosec // at most a day
+				MaxLagS:      int32(d.MaxLag / time.Second), //nolint:gosec // at most a day
+				ConnectionID: opt(p.ConnectionID),
 			}); err != nil {
 				return err
 			}
@@ -134,10 +150,10 @@ func (s *Store) Now(ctx context.Context, org ids.OrgID) (time.Time, error) {
 }
 
 // Latest implements app.Store.
-func (s *Store) Latest(ctx context.Context, org ids.OrgID, name, subjectType, subjectID string) (*domain.Fact, error) {
+func (s *Store) Latest(ctx context.Context, org ids.OrgID, connection ids.UUID, name, subjectType, subjectID string) (*domain.Fact, error) {
 	var out *domain.Fact
 	err := s.Pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
-		at, err := dbq.New(tx).GetFact(ctx, dbq.GetFactParams{OrgID: org, Name: name, SubjectType: subjectType, SubjectID: subjectID})
+		at, err := dbq.New(tx).GetFact(ctx, dbq.GetFactParams{OrgID: org, Name: name, SubjectType: subjectType, SubjectID: subjectID, ConnectionID: opt(connection)})
 		if db.IsNoRows(err) {
 			return nil
 		}
@@ -169,21 +185,33 @@ func (s *Store) Put(ctx context.Context, org ids.OrgID, f domain.Fact) (bool, er
 		if err != nil {
 			return err
 		}
+		// A gateway provider's fact belongs to its connection (D43).
+		var conn *ids.UUID
 		if gw {
-			if _, err := q.LockServedConnection(ctx, org, f.ProviderID); db.IsNoRows(err) {
+			c, err := q.LockServedConnection(ctx, org, f.ProviderID)
+			if db.IsNoRows(err) {
 				return app.ErrNotProvider
 			} else if err != nil {
 				return err
 			}
+			conn = &c
 		}
-		prev, err := q.CurrentFactValue(ctx, dbq.CurrentFactValueParams{OrgID: org, Name: f.Name, SubjectType: f.SubjectType, SubjectID: f.SubjectID})
+		prev, err := q.CurrentFactValue(ctx, dbq.CurrentFactValueParams{OrgID: org, Name: f.Name, SubjectType: f.SubjectType, SubjectID: f.SubjectID, ConnectionID: conn})
 		if err != nil && !db.IsNoRows(err) {
 			return err
 		}
-		tag, err := q.PutFact(ctx, dbq.PutFactParams{
-			OrgID: org, ID: ids.NewV7(), Name: f.Name, SubjectType: f.SubjectType, SubjectID: f.SubjectID,
-			ProviderID: f.ProviderID, Value: raw, ObservedAt: f.ObservedAt,
-		})
+		var tag pgconn.CommandTag
+		if conn == nil {
+			tag, err = q.PutFact(ctx, dbq.PutFactParams{
+				OrgID: org, ID: ids.NewV7(), Name: f.Name, SubjectType: f.SubjectType, SubjectID: f.SubjectID,
+				ProviderID: f.ProviderID, Value: raw, ObservedAt: f.ObservedAt,
+			})
+		} else {
+			tag, err = q.PutConnectionFact(ctx, dbq.PutConnectionFactParams{
+				OrgID: org, ID: ids.NewV7(), Name: f.Name, SubjectType: f.SubjectType, SubjectID: f.SubjectID,
+				ProviderID: f.ProviderID, Value: raw, ObservedAt: f.ObservedAt, ConnectionID: conn,
+			})
+		}
 		if err != nil {
 			return err
 		}
@@ -275,7 +303,20 @@ func (s *Store) CatalogInTx(ctx context.Context, tx db.TenantTx, org ids.OrgID) 
 // by name. A stored value that no longer decodes is left out (missing, so
 // CANNOT_AUTHORIZE), never guessed.
 func (s *Store) Subject(ctx context.Context, q *dbq.Queries, org ids.OrgID, subjectType, subjectID string, names []string) (map[string]domain.Fact, error) {
-	rows, err := q.ListSubjectFacts(ctx, dbq.ListSubjectFactsParams{OrgID: org, SubjectType: subjectType, SubjectID: subjectID, Names: names})
+	return s.subject(ctx, q, org, ids.UUID{}, true, subjectType, subjectID, names)
+}
+
+// SubjectOn is Subject for an action through a connection (the zero id: none):
+// a name an org-scoped provider supplies comes from the org-scoped row, a
+// gateway-provided name only from this connection's row (D43, HR-222).
+func (s *Store) SubjectOn(ctx context.Context, q *dbq.Queries, org ids.OrgID, connection ids.UUID, subjectType, subjectID string, names []string) (map[string]domain.Fact, error) {
+	return s.subject(ctx, q, org, connection, false, subjectType, subjectID, names)
+}
+
+func (s *Store) subject(ctx context.Context, q *dbq.Queries, org ids.OrgID, connection ids.UUID, anyConnection bool, subjectType, subjectID string, names []string) (map[string]domain.Fact, error) {
+	rows, err := q.ListSubjectFacts(ctx, dbq.ListSubjectFactsParams{
+		OrgID: org, SubjectType: subjectType, SubjectID: subjectID, Names: names, AnyConnection: anyConnection, ConnectionID: opt(connection),
+	})
 	if err != nil {
 		return nil, err
 	}

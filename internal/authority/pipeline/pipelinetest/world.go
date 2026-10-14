@@ -233,7 +233,7 @@ func (w *World) Envelopes(ctx context.Context, org ids.OrgID, scopes []gdomain.S
 }
 
 // Facts implements pipeline.Reader.
-func (w *World) Facts(_ context.Context, _ ids.OrgID, subjectType, subjectID string, names []string) (map[string]fdomain.Fact, error) {
+func (w *World) Facts(_ context.Context, _ ids.OrgID, _ ids.UUID, subjectType, subjectID string, names []string) (map[string]fdomain.Fact, error) {
 	if err := w.fail("Facts"); err != nil {
 		return nil, err
 	}

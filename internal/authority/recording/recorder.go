@@ -178,8 +178,8 @@ func scopesOf(scopes []gdomain.Scope) []Scope {
 }
 
 // Facts implements pipeline.Reader.
-func (r *Recorder) Facts(ctx context.Context, org ids.OrgID, subjectType, subjectID string, names []string) (map[string]fdomain.Fact, error) {
-	found, err := r.r.Facts(ctx, org, subjectType, subjectID, names)
+func (r *Recorder) Facts(ctx context.Context, org ids.OrgID, connection ids.UUID, subjectType, subjectID string, names []string) (map[string]fdomain.Fact, error) {
+	found, err := r.r.Facts(ctx, org, connection, subjectType, subjectID, names)
 	r.keep(func(x *Reads) error {
 		f, cerr := fromFacts(subjectType, subjectID, names, found, err)
 		if cerr != nil {

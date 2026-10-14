@@ -501,6 +501,7 @@ SELECT f.value
 FROM pc.approval_requests r
 JOIN pc.transactions t ON t.org_id = r.org_id AND t.id = r.transaction_id
 JOIN pc.facts f ON f.org_id = t.org_id AND f.subject_type = t.target_type AND f.subject_id = t.target_id AND f.name = sqlc.arg(name)
+                 AND (f.connection_id IS NULL OR f.connection_id = t.connection_id)
 JOIN pc.fact_providers p ON p.org_id = f.org_id AND p.id = f.provider_id AND p.state = 'ACTIVE'
 WHERE r.org_id = sqlc.arg(org_id) AND r.id = sqlc.arg(request_id);
 

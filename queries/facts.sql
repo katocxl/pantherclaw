@@ -9,8 +9,18 @@ VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(name), sqlc.narg(service_accoun
         sqlc.arg(created_by));
 
 -- name: InsertFactDeclaration :exec
-INSERT INTO pc.fact_declarations (org_id, provider_id, name, value_type, subject_type, max_lag_s)
-VALUES (sqlc.arg(org_id), sqlc.arg(provider_id), sqlc.arg(name), sqlc.arg(value_type), sqlc.arg(subject_type), sqlc.arg(max_lag_s));
+INSERT INTO pc.fact_declarations (org_id, provider_id, name, value_type, subject_type, max_lag_s, connection_id)
+VALUES (sqlc.arg(org_id), sqlc.arg(provider_id), sqlc.arg(name), sqlc.arg(value_type), sqlc.arg(subject_type), sqlc.arg(max_lag_s),
+        sqlc.narg(connection_id));
+
+-- ListActiveDeclarations are the active declarations of active providers
+-- with their scope: connection_id is NULL for an org-scoped (service
+-- account) provider (D43).
+-- name: ListActiveDeclarations :many
+SELECT d.name, d.value_type, d.subject_type, d.connection_id FROM pc.fact_declarations d
+JOIN pc.fact_providers p ON p.org_id = d.org_id AND p.id = d.provider_id
+WHERE d.org_id = sqlc.arg(org_id) AND d.active AND p.state = 'ACTIVE'
+ORDER BY d.name, d.connection_id;
 
 -- name: GetFactProviderByAccount :one
 SELECT id, name, service_account_id, state FROM pc.fact_providers
@@ -58,18 +68,32 @@ WHERE org_id = sqlc.arg(org_id) AND provider_id = sqlc.arg(provider_id);
 -- name: GetFact :one
 SELECT observed_at FROM pc.facts
 WHERE org_id = sqlc.arg(org_id) AND name = sqlc.arg(name) AND subject_type = sqlc.arg(subject_type)
-  AND subject_id = sqlc.arg(subject_id);
+  AND subject_id = sqlc.arg(subject_id) AND connection_id IS NOT DISTINCT FROM sqlc.narg(connection_id)::uuid;
 
--- PutFact records an observation; an older one never replaces a newer one.
+-- PutFact records an org-scoped observation; an older one never replaces a
+-- newer one.
 -- name: PutFact :execresult
 INSERT INTO pc.facts AS f (org_id, id, name, subject_type, subject_id, provider_id, value, observed_at, recorded_at)
 VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(name), sqlc.arg(subject_type), sqlc.arg(subject_id),
         sqlc.arg(provider_id), sqlc.arg(value), sqlc.arg(observed_at), now())
-ON CONFLICT (org_id, name, subject_type, subject_id) DO UPDATE
+ON CONFLICT (org_id, name, subject_type, subject_id) WHERE connection_id IS NULL DO UPDATE
+SET provider_id = EXCLUDED.provider_id, value = EXCLUDED.value, observed_at = EXCLUDED.observed_at, recorded_at = now()
+WHERE f.observed_at <= EXCLUDED.observed_at;
+
+-- PutConnectionFact is PutFact for a gateway provider's observation: one
+-- value per connection (D43).
+-- name: PutConnectionFact :execresult
+INSERT INTO pc.facts AS f (org_id, id, name, subject_type, subject_id, provider_id, value, observed_at, recorded_at, connection_id)
+VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(name), sqlc.arg(subject_type), sqlc.arg(subject_id),
+        sqlc.arg(provider_id), sqlc.arg(value), sqlc.arg(observed_at), now(), sqlc.arg(connection_id))
+ON CONFLICT (org_id, connection_id, name, subject_type, subject_id) WHERE connection_id IS NOT NULL DO UPDATE
 SET provider_id = EXCLUDED.provider_id, value = EXCLUDED.value, observed_at = EXCLUDED.observed_at, recorded_at = now()
 WHERE f.observed_at <= EXCLUDED.observed_at;
 
 -- ListSubjectFacts returns the facts of active providers about one subject.
+-- A name an org-scoped provider supplies comes from the NULL-connection row;
+-- a gateway-provided name only from the row of the action's own connection
+-- (D43, HR-222); any_connection reads every scope (tests, tools).
 -- A gateway provider's facts count only while its gateway still serves
 -- its connection and the connection is active (#299 review follow-up).
 -- name: ListSubjectFacts :many
@@ -80,6 +104,7 @@ JOIN pc.fact_declarations d ON d.org_id = f.org_id AND d.provider_id = f.provide
 LEFT JOIN pc.connections c ON c.org_id = p.org_id AND c.id = p.connection_id
 WHERE f.org_id = sqlc.arg(org_id) AND f.subject_type = sqlc.arg(subject_type) AND f.subject_id = sqlc.arg(subject_id)
   AND f.name = ANY(sqlc.arg(names)::text[])
+  AND (sqlc.arg(any_connection)::boolean OR f.connection_id IS NULL OR f.connection_id = sqlc.narg(connection_id)::uuid)
   AND (p.gateway_id IS NULL OR (c.gateway_id = p.gateway_id AND c.state = 'ACTIVE'));
 
 -- LockServedConnection locks, for the fact write's transaction, the
@@ -135,4 +160,5 @@ LIMIT 500;
 -- replaces it, so a change is seen once (G0 M8, HR-205).
 SELECT value FROM pc.facts
 WHERE org_id = sqlc.arg(org_id) AND name = sqlc.arg(name) AND subject_type = sqlc.arg(subject_type) AND subject_id = sqlc.arg(subject_id)
+  AND connection_id IS NOT DISTINCT FROM sqlc.narg(connection_id)::uuid
 FOR UPDATE;
