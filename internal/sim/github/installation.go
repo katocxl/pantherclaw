@@ -37,9 +37,16 @@ func (s *Server) describe(w http.ResponseWriter, r *http.Request) int {
 	if in == nil {
 		return fail(w, http.StatusNotFound, "Not Found")
 	}
+	if s.faults.InstallationStatus != 0 {
+		return fail(w, s.faults.InstallationStatus, "Simulated installation endpoint failure")
+	}
+	selection := in.RepositorySelection
+	if selection == "" {
+		selection = "selected"
+	}
 	return reply(w, http.StatusOK, map[string]any{
 		"id": in.ID, "app_id": s.appID, "account": map[string]any{"login": in.Account, "id": accountID(in.Account)},
-		"repository_selection": "selected", "permissions": maps.Clone(in.Permissions), "simulated": true,
+		"repository_selection": selection, "permissions": maps.Clone(in.Permissions), "simulated": true,
 	})
 }
 

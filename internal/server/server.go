@@ -241,6 +241,10 @@ func cmdServe(ctx context.Context, args []string, stderr io.Writer, env Env, onS
 	if err != nil {
 		return err
 	}
+	// Sealing a GitHub App credential schedules an org scan, and a daily one
+	// follows, so coverage reads its installation's permissions (F048).
+	ghScans := &githubapp.Scans{Pool: pool, Ents: bill}
+	m6.credentials.OnGitHubInstallation(ghScans.InstallationRecorded)
 	svc.WithToolObservations(m6.connections)
 	m5p2, err := newM5p2(cfg, pool, bill, m5.notifications, log)
 	if err != nil {
@@ -394,10 +398,13 @@ func cmdServe(ctx context.Context, args []string, stderr io.Writer, env Env, onS
 		if err := txapp.Register(jreg, pool, verification); err != nil {
 			return err
 		}
+		if err := githubapp.Register(jreg, ghScans); err != nil {
+			return err
+		}
 		client, err := jobs.NewClient(pool, jreg, jobs.Config{
 			Queues: map[string]int{river.QueueDefault: cfg.WorkerConcurrency, napp.Queue: cfg.Notifications.Concurrency},
 			PeriodicJobs: slices.Concat(chainer.PeriodicJobs(), authority.SweeperPeriodicJobs(), authnapp.JanitorPeriodicJobs(),
-				iapp.JanitorPeriodicJobs(), napp.PeriodicJobs(), m5p2.periodicJobs(), txapp.PeriodicJobs()),
+				iapp.JanitorPeriodicJobs(), napp.PeriodicJobs(), m5p2.periodicJobs(), txapp.PeriodicJobs(), githubapp.PeriodicJobs()),
 			Logger: log,
 		})
 		if err != nil {

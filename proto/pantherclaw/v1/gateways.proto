@@ -741,6 +741,28 @@ message ReportObservationRequest {
   // For a target-log task (HR-112): the objects the target created in the
   // window, as listed. Empty for every other task.
   repeated TargetLogItem items = 8 [(buf.validate.field).repeated.max_items = 1000];
+  // For an org-scan task (G0 M8, F048): the permissions of the GitHub App
+  // installation the lease names, as the scan read them with the App's JWT
+  // (which mints no token), name to level. Unset when it was not read: the
+  // server then keeps what it had, so unread permissions stay "not
+  // observed".
+  map<string, string> installation_permissions = 9 [(buf.validate.field).map = {
+    max_pairs: 128
+    keys: {
+      string: {pattern: "^[a-z][a-z0-9_]{0,63}$"}
+    }
+    values: {
+      string: {pattern: "^[a-z]{1,16}$"}
+    }
+  }];
+  // Its repository selection: "all" or "selected"; empty when not read.
+  string installation_repository_selection = 10 [(buf.validate.field).string = {
+    in: [
+      "",
+      "all",
+      "selected"
+    ]
+  }];
 }
 
 // TargetLogItem is one object a target log lists.

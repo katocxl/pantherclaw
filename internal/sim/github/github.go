@@ -53,6 +53,8 @@ type Installation struct {
 	Account     string
 	Repos       []string // repository names on the account
 	Permissions map[string]string
+	// RepositorySelection is "all" or "selected" (the default when empty).
+	RepositorySelection string
 }
 
 // Token is a credential the simulator accepts.

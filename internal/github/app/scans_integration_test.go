@@ -19,6 +19,7 @@ import (
 	aapp "github.com/katocxl/pantherclaw/internal/agents/app"
 	billing "github.com/katocxl/pantherclaw/internal/billing/domain"
 	"github.com/katocxl/pantherclaw/internal/github/app"
+	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
 	"github.com/katocxl/pantherclaw/internal/transactions/adapters/pgtransactions"
@@ -485,5 +486,113 @@ func TestHR209_ADismissedLocalFindingReopensToo(t *testing.T) {
 	}
 	if n := e.count(t, "SELECT count(*) FROM pc.ledger_entries WHERE org_id = $1 AND kind = 'audit.agents.discovery_reopened'", e.org); n != 1 {
 		t.Fatalf("%d reopen events", n)
+	}
+}
+
+// TestF048_AnOrgScanRecordsTheInstallationItRead: the gateway's report of
+// an org scan carries the connection's own installation as it read it; the
+// server records its permissions, repository selection and when it was
+// read. A report without it, or about an installation the connection no
+// longer records, changes nothing (a re-seal while the scan runs), so unread permissions stay "not
+// observed".
+func TestF048_AnOrgScanRecordsTheInstallationItRead(t *testing.T) {
+	e := newEnv(t)
+	gateway := ids.NewV7()
+	e.exec(t, "INSERT INTO pc.gateways (org_id, id, name, created_by) VALUES ($1, $2, 'edge', 'test')", e.org, gateway)
+	e.exec(t, "INSERT INTO pc.org_containment (org_id) VALUES ($1) ON CONFLICT DO NOTHING", e.org)
+	conn := e.gitHubConnection(t, gateway, e.brokerKey(t, gateway), "github", false)
+	e.exec(t, `INSERT INTO pc.connection_github (org_id, connection_id, app_client_id, installation_id, account_login, updated_by)
+		VALUES ($1, $2, 'Iv23liGateway', 7, 'acme', 'test')`, e.org, conn)
+	admin := e.caller(td.KindUser, td.RoleSecurityAdmin)
+	team := &app.Scans{Pool: e.pool, Ents: edition(billing.Team)}
+	store := &pgtransactions.Store{Pool: e.pool}
+	scan := func(in *tapp.InstallationRead, meanwhile func()) {
+		t.Helper()
+		if _, err := team.Start(admin, conn); err != nil {
+			t.Fatal(err)
+		}
+		leases, err := store.Claim(context.Background(), e.org, gateway, 4, 30*time.Second)
+		if err != nil || len(leases) != 1 {
+			t.Fatalf("leases %+v %v", leases, err)
+		}
+		if meanwhile != nil {
+			meanwhile()
+		}
+		if _, err := store.Report(context.Background(), e.org, gateway, tapp.Report{
+			Task: leases[0].Task, Secret: leases[0].Secret, HTTPStatus: 200, Found: true, Complete: true,
+			Fields: map[string]string{"/counts/repositories": "1"}, Installation: in,
+		}, nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+	read := func() (perms, selection string, readAt *time.Time) {
+		t.Helper()
+		e.queryRow(t, `SELECT permissions::text, coalesce(repository_selection, ''), read_at FROM pc.connection_github
+			WHERE org_id = $1 AND connection_id = $2`, []any{e.org, conn}, &perms, &selection, &readAt)
+		return perms, selection, readAt
+	}
+	if p, _, at := read(); p != "{}" || at != nil {
+		t.Fatalf("before any scan: %s %v", p, at)
+	}
+	scan(&tapp.InstallationRead{Permissions: map[string]string{"contents": "write", "metadata": "read"}, RepositorySelection: "all"}, nil)
+	p, sel, at := read()
+	if p != `{"contents": "write", "metadata": "read"}` || sel != "all" || at == nil {
+		t.Fatalf("after the scan: %s %q %v", p, sel, at)
+	}
+	scan(nil, nil) // the installation could not be read
+	if p2, sel2, at2 := read(); p2 != p || sel2 != sel || at2 == nil || !at2.Equal(*at) {
+		t.Fatalf("after an unread installation: %s %q %v", p2, sel2, at2)
+	}
+	// A re-seal to another installation while the scan runs: what it read
+	// of the old one is not recorded for the new one.
+	scan(&tapp.InstallationRead{Permissions: map[string]string{"administration": "admin"}, RepositorySelection: "all"}, func() {
+		e.exec(t, `UPDATE pc.connection_github SET installation_id = 8, permissions = '{}', repository_selection = NULL, read_at = NULL
+			WHERE org_id = $1 AND connection_id = $2`, e.org, conn)
+	})
+	if p3, _, at3 := read(); p3 != "{}" || at3 != nil {
+		t.Fatalf("after a re-seal during the scan: %s %v", p3, at3)
+	}
+}
+
+// TestF048_InstallationsAreScannedWhenRecordedAndDaily: in an edition that
+// scans, recording a GitHub App installation schedules an org scan at once,
+// and the daily schedule starts one for each GitHub App connection with
+// none open and none in the last day; the Community edition schedules
+// nothing.
+func TestF048_InstallationsAreScannedWhenRecordedAndDaily(t *testing.T) {
+	e := newEnv(t)
+	gateway := ids.NewV7()
+	e.exec(t, "INSERT INTO pc.gateways (org_id, id, name, created_by) VALUES ($1, $2, 'edge', 'test')", e.org, gateway)
+	conn := e.gitHubConnection(t, gateway, e.brokerKey(t, gateway), "github", false)
+	e.exec(t, `INSERT INTO pc.connection_github (org_id, connection_id, app_client_id, installation_id, account_login, updated_by)
+		VALUES ($1, $2, 'Iv23liGateway', 7, 'acme', 'test')`, e.org, conn)
+	runs := func() int {
+		return e.count(t, "SELECT count(*) FROM pc.github_scan_runs WHERE org_id = $1 AND connection_id = $2", e.org, conn)
+	}
+	community := &app.Scans{Pool: e.pool, Ents: edition(billing.Community)}
+	if n, err := community.ScheduleDaily(context.Background(), e.org); err != nil || n != 0 || runs() != 0 {
+		t.Fatalf("the Community edition: %d %v, %d runs", n, err, runs())
+	}
+	team := &app.Scans{Pool: e.pool, Ents: edition(billing.Team)}
+	if err := e.pool.InTenantTx(context.Background(), e.org, func(ctx context.Context, tx db.TenantTx) error {
+		return team.InstallationRecorded(ctx, tx, conn)
+	}); err != nil || runs() != 1 {
+		t.Fatalf("recorded: %v, %d runs", err, runs())
+	}
+	if n := e.count(t, `SELECT count(*) FROM pc.verifications WHERE org_id = $1 AND connection_id = $2 AND purpose = 'org_scan'
+		AND request ->> 'installation' = '7'`, e.org, conn); n != 1 {
+		t.Fatalf("%d leases name the installation", n)
+	}
+	// A scan is open, and one ran today: nothing is due.
+	if n, err := team.ScheduleDaily(context.Background(), e.org); err != nil || n != 0 {
+		t.Fatalf("with a scan open: %d %v", n, err)
+	}
+	e.exec(t, "UPDATE pc.verifications SET state = 'EXPIRED', finished_at = now() WHERE org_id = $1 AND purpose = 'org_scan'", e.org)
+	if n, err := team.ScheduleDaily(context.Background(), e.org); err != nil || n != 0 {
+		t.Fatalf("after today's scan: %d %v", n, err)
+	}
+	e.d.AdminExec(t, "UPDATE pc.github_scan_runs SET created_at = now() - interval '25 hours' WHERE org_id = $1", e.org)
+	if n, err := team.ScheduleDaily(context.Background(), e.org); err != nil || n != 1 || runs() != 2 {
+		t.Fatalf("a day later: %d %v, %d runs", n, err, runs())
 	}
 }

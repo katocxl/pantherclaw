@@ -56,6 +56,16 @@ type Notifier interface {
 type Service struct {
 	pool   *db.Pool
 	notify Notifier
+	// installed, when set, runs in the sealing transaction once a
+	// github_app credential recorded its installation (it schedules an org
+	// scan, which reads the installation's permissions; F048).
+	installed func(ctx context.Context, tx db.TenantTx, connection ids.UUID) error
+}
+
+// OnGitHubInstallation sets what runs, in the sealing transaction, when a
+// github_app credential records its installation.
+func (s *Service) OnGitHubInstallation(f func(ctx context.Context, tx db.TenantTx, connection ids.UUID) error) {
+	s.installed = f
 }
 
 // New returns the credential use cases; n may be nil.
@@ -229,6 +239,11 @@ func (s *Service) PutCredential(ctx context.Context, in PutInput) (Metadata, err
 				return err
 			}
 			details["github_app"], details["github_installation"], details["github_account"] = gh.AppClientID, strconv.FormatInt(gh.ID, 10), gh.Account
+			if s.installed != nil {
+				if err := s.installed(ctx, tx, conn.ID); err != nil {
+					return err
+				}
+			}
 		}
 		if _, err := q.BumpGatewayConfig(ctx, c.Org, conn.GatewayID); err != nil {
 			return err

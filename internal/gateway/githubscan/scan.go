@@ -52,8 +52,19 @@ type Result struct {
 	Counts     map[string]int64
 	Scanned    []string
 	NotScanned map[string]string
+	// Installation is the connection's own GitHub App installation as the
+	// scan read it; nil when it could not be read (F048: "not observed").
+	Installation *Installation
 	// skipped counts what a source did not read, by reason.
 	skipped map[string]map[string]int
+}
+
+// Installation is a GitHub App installation's permissions (name to level)
+// and repository selection.
+type Installation struct {
+	ID                  int64
+	Permissions         map[string]string
+	RepositorySelection string
 }
 
 // maxWorkflows is the most workflow files read per repository.
