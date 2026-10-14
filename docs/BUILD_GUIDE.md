@@ -624,6 +624,7 @@ The exit status is in [g0/M7.md](g0/M7.md), the latency re-measurement in [docs/
 - Coding-agent scenarios first: direct-API bypass of an MCP merge, found PAT/SSH key, sub-agent escalation, approval reuse after a new commit, injection → exfiltration over an allowed channel, stolen workload token, sandbox DNS/IPv6 escape.
 
 ### v0.1.0 preview exit — coding-agent wedge (ADR-0017)
+**HR:** HR-227 · **G0:** [g0/v0.1.0.md](g0/v0.1.0.md) · **Exit status:** [g0/v0.1.0.md](g0/v0.1.0.md#exit-status)
 - **Three routes, three stops**, in CI against the git simulator and live against a sandbox GitHub repository: a merge through the GitHub MCP server without a reviewer is held; the same merge by direct `curl` to the GitHub API is mapped to the same action and decision (F099); a push with a found PAT or SSH key fails because the sandbox holds no reusable credentials and its egress is closed. Each attempt has a signed receipt that `pclaw verify` checks offline.
 - The §43 scenario passes end to end with effect verification on the target branch.
 - The coverage card shows the repository routes `ENFORCED` from sandbox probe evidence, with expiry.
