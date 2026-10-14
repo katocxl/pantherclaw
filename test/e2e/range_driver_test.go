@@ -59,6 +59,9 @@ type rangeDriver struct {
 	// defaultRun is the run of a grant of the scenario.s own, when it has one.
 	defaultRun string
 
+	// simulated is set once the stack is a range's: every run is simulated.
+	simulated bool
+
 	// mcpUp is set once the payments connection dispatches to the MCP simulator.
 	mcpUp bool
 }
@@ -144,12 +147,16 @@ func (d *rangeDriver) Setup(_ context.Context, sc domain.Scenario) (app.Fixture,
 	if sc.ID == "RT-031" {
 		d.seedUnlisted()
 	}
+	if sc.ID == "RT-022" {
+		d.seedReal()
+	}
 	if sc.ID == "RT-009" {
 		d.ownGrant(`{"operations": ["github.contents.write"], "targets": {"github.branch": {"prefixes": ["acme/payments@"]}}}`, "")
 	}
 	if err := d.extra.setup(d); err != nil {
 		return nil, err
 	}
+	d.makeRangeStack()
 	return d.fix, nil
 }
 

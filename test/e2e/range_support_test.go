@@ -136,3 +136,30 @@ func (d *rangeDriver) seedUnlisted() {
 	}
 	s.waitConfig(t, s.configVersion(t, gw))
 }
+
+// seedReal adds a connection that is not simulated, to the same target.
+func (d *rangeDriver) seedReal() {
+	t, s := d.t, d.s
+	gw := s.gatewayID(t)
+	conns := capp.New(s.pool, nil, s.apiURL, "")
+	if _, err := conns.Seed(context.Background(), s.org, "range", capp.CreateInput{
+		Name: "real", Kind: capp.KindHTTP, Package: mockpayments.Name, BaseURL: s.simURL, Gateway: gw,
+		DestinationClass: capp.ClassInternal, AccessMode: capp.AccessNone, DefaultMode: capp.ModeEnforce,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	s.waitConfig(t, s.configVersion(t, gw))
+}
+
+// makeRangeStack marks what the stack seeded as a range's: the agent is a
+// range agent, its run and every connection but "real" are simulated
+// (HR-220, HR-221). dev seed predates the mark, so the flags are set the way
+// the migration leaves them settable only: by the database's owner.
+func (d *rangeDriver) makeRangeStack() {
+	t, s := d.t, d.s
+	s.db.AdminExec(t, "UPDATE pc.agents SET range_agent = true WHERE org_id = $1", s.org)
+	s.db.AdminExec(t, "UPDATE pc.runs SET simulated = true WHERE org_id = $1", s.org)
+	s.db.AdminExec(t, "UPDATE pc.connections SET simulated = true WHERE org_id = $1 AND name <> 'real'", s.org)
+	d.reloadGateway()
+	d.simulated = true
+}
