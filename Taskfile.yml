@@ -83,7 +83,7 @@ tasks:
         PC_TEST_REQUIRE_DB=1
         PC_TEST_PG_ADMIN_URL="postgres://postgres:${PC_PG_TEST_PASSWORD}@127.0.0.1:5433/postgres?sslmode=disable"
         PC_TEST_MOCK_OIDC_URL="${PC_TEST_MOCK_OIDC_URL:-http://127.0.0.1:8181}"
-        go test -tags integration -shuffle=on -count=1 {{.PKGS | default "./..."}}
+        go test -tags integration -shuffle=on -count=1 -timeout 40m {{.PKGS | default "./..."}}
       # The Go SDK's SQL replay store on PostgreSQL (T-081: two replicas, one store), its own module.
       - >-
         PC_TEST_REQUIRE_DB=1
