@@ -417,13 +417,16 @@ func TestRedteamRunSkipsWhatItCannotDo(t *testing.T) {
 type fakeSetup struct {
 	pantherclawv1connect.UnimplementedAgentServiceHandler
 	pantherclawv1connect.UnimplementedConnectionServiceHandler
+	pantherclawv1connect.UnimplementedFactServiceHandler
 	pantherclawv1connect.UnimplementedGrantServiceHandler
-	mu       sync.Mutex
-	agents   []*pantherclawv1.CreateAgentRequest
-	conns    []*pantherclawv1.CreateConnectionRequest
-	grants   []*pantherclawv1.IssueGrantRequest
-	existing []*pantherclawv1.Agent
-	issueErr error
+	mu         sync.Mutex
+	providers  []*pantherclawv1.FactProvider
+	registered []*pantherclawv1.RegisterProviderRequest
+	agents     []*pantherclawv1.CreateAgentRequest
+	conns      []*pantherclawv1.CreateConnectionRequest
+	grants     []*pantherclawv1.IssueGrantRequest
+	existing   []*pantherclawv1.Agent
+	issueErr   error
 }
 
 func (f *fakeSetup) ListAgents(context.Context, *pantherclawv1.ListAgentsRequest) (*pantherclawv1.ListAgentsResponse, error) {
@@ -449,7 +452,7 @@ func (f *fakeSetup) CreateConnection(_ context.Context, r *pantherclawv1.CreateC
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.conns = append(f.conns, r)
-	return &pantherclawv1.CreateConnectionResponse{}, nil
+	return &pantherclawv1.CreateConnectionResponse{Connection: &pantherclawv1.Connection{Id: "twin-1", Name: r.GetName()}}, nil
 }
 
 func (f *fakeSetup) GetGrant(context.Context, *pantherclawv1.GetGrantRequest) (*pantherclawv1.GetGrantResponse, error) {
@@ -479,6 +482,7 @@ func TestRedteamSetupPlansFirstAndDryRunChangesNothing(t *testing.T) {
 	pantherclawv1connect.RegisterAgentServiceHandler(cs, fake)
 	pantherclawv1connect.RegisterConnectionServiceHandler(cs, fake)
 	pantherclawv1connect.RegisterGrantServiceHandler(cs, fake)
+	pantherclawv1connect.RegisterFactServiceHandler(cs, fake)
 	mux := http.NewServeMux()
 	connecthttp.Mount(mux, cs)
 	srv := httptest.NewServer(mux)
@@ -603,6 +607,7 @@ func TestRedteamSetupPagesThroughAgentsAndConnections(t *testing.T) {
 	pantherclawv1connect.RegisterAgentServiceHandler(cs, fake)
 	pantherclawv1connect.RegisterConnectionServiceHandler(cs, fake)
 	pantherclawv1connect.RegisterGrantServiceHandler(cs, fake)
+	pantherclawv1connect.RegisterFactServiceHandler(cs, fake)
 	mux := http.NewServeMux()
 	connecthttp.Mount(mux, cs)
 	srv := httptest.NewServer(mux)
@@ -980,6 +985,7 @@ func TestD41SetupNamesTheEnvelopeThatCapsDelegation(t *testing.T) {
 	pantherclawv1connect.RegisterAgentServiceHandler(cs, fake)
 	pantherclawv1connect.RegisterConnectionServiceHandler(cs, fake)
 	pantherclawv1connect.RegisterGrantServiceHandler(cs, fake)
+	pantherclawv1connect.RegisterFactServiceHandler(cs, fake)
 	mux := http.NewServeMux()
 	connecthttp.Mount(mux, cs)
 	srv := httptest.NewServer(mux)
@@ -990,5 +996,79 @@ func TestD41SetupNamesTheEnvelopeThatCapsDelegation(t *testing.T) {
 		"--twin", "github=http://127.0.0.1:9100", "--like-grant", "0192aaaa-bbbb-7ccc-8ddd-0000000000a9", "--yes")
 	if code == 0 || !strings.Contains(errs, "envelope org-default caps delegation depth at 1") || !strings.Contains(errs, "guardrail envelope caps delegation lower") {
 		t.Fatalf("setup = %d\n%s", code, errs)
+	}
+}
+
+func (f *fakeSetup) ListProviders(context.Context, *pantherclawv1.ListProvidersRequest) (*pantherclawv1.ListProvidersResponse, error) {
+	return &pantherclawv1.ListProvidersResponse{Providers: f.providers}, nil
+}
+
+func (f *fakeSetup) RegisterProvider(_ context.Context, r *pantherclawv1.RegisterProviderRequest) (*pantherclawv1.RegisterProviderResponse, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.registered = append(f.registered, r)
+	return &pantherclawv1.RegisterProviderResponse{}, nil
+}
+
+func setupServer(t *testing.T, fake *fakeSetup) Env {
+	t.Helper()
+	cs := connect.NewServer()
+	pantherclawv1connect.RegisterAgentServiceHandler(cs, fake)
+	pantherclawv1connect.RegisterConnectionServiceHandler(cs, fake)
+	pantherclawv1connect.RegisterGrantServiceHandler(cs, fake)
+	pantherclawv1connect.RegisterFactServiceHandler(cs, fake)
+	mux := http.NewServeMux()
+	connecthttp.Mount(mux, cs)
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	return envOf(map[string]string{"PANTHERCLAW_SERVER": srv.URL, "PANTHERCLAW_API_KEY": "pck_test_x"})
+}
+
+func TestD43SetupRegistersTheTwinsFactProvider(t *testing.T) {
+	facts := []*pantherclawv1.FactDeclaration{{Name: "github.pr.head", Type: pantherclawv1.FactType_FACT_TYPE_BOOLEAN, SubjectType: "github.pr"}}
+	fake := &fakeSetup{providers: []*pantherclawv1.FactProvider{
+		{Id: "p1", Name: "github-app", ConnectionId: "c1", GatewayId: "g1", State: pantherclawv1.ProviderState_PROVIDER_STATE_ACTIVE, Facts: facts},
+		{Id: "p2", Name: "unrelated", ConnectionId: "other", GatewayId: "g1", State: pantherclawv1.ProviderState_PROVIDER_STATE_ACTIVE},
+	}}
+	env := setupServer(t, fake)
+	id := "0192aaaa-bbbb-7ccc-8ddd-000000000001"
+	args := []string{"redteam", "setup", "--name", "range", "--team", id, "--env", id, "--owner", id, "--context", "ci", "--twin", "github=http://127.0.0.1:9100"}
+
+	// The plan names the provider; a dry run registers nothing.
+	code, out, errs := run(t, env, append(args, "--dry-run")...)
+	if code != 0 || !strings.Contains(out, `register the fact provider "github_app.range" for "github-range", declaring the same 1 facts as "github-app"`) || len(fake.registered) != 0 {
+		t.Fatalf("dry run = %d\n%s\n%s", code, out, errs)
+	}
+
+	code, out, errs = run(t, env, append(args, "--yes")...)
+	if code != 0 || len(fake.registered) != 1 {
+		t.Fatalf("apply = %d\n%s\n%s", code, out, errs)
+	}
+	r := fake.registered[0]
+	if r.GetName() != "github_app.range" || r.GetConnectionId() != "twin-1" || r.GetGatewayId() != "g1" || r.GetServiceAccountId() != "" ||
+		len(r.GetFacts()) != 1 || r.GetFacts()[0].GetName() != "github.pr.head" {
+		t.Errorf("registered %v", r)
+	}
+
+	// The provider already there is "exists", not an error and not a second registration.
+	fake.providers = append(fake.providers, &pantherclawv1.FactProvider{Id: "p3", Name: "github_app.range", ConnectionId: "twin-1", GatewayId: "g1"})
+	fake.conns, fake.registered = nil, nil
+	code, out, errs = run(t, env, append(args, "--yes")...)
+	if code != 0 || len(fake.registered) != 0 || !strings.Contains(out, "Note: fact provider github_app.range already exists") {
+		t.Fatalf("existing = %d registered %d\n%s\n%s", code, len(fake.registered), out, errs)
+	}
+}
+
+func TestD43ARealConnectionWithoutAGatewayProviderGetsANote(t *testing.T) {
+	fake := &fakeSetup{providers: []*pantherclawv1.FactProvider{
+		// A service-account provider is not a gateway provider.
+		{Id: "p1", Name: "github-sa", ServiceAccountId: "sa", State: pantherclawv1.ProviderState_PROVIDER_STATE_ACTIVE},
+	}}
+	env := setupServer(t, fake)
+	id := "0192aaaa-bbbb-7ccc-8ddd-000000000001"
+	code, out, errs := run(t, env, "redteam", "setup", "--name", "range", "--team", id, "--env", id, "--owner", id, "--context", "ci",
+		"--twin", "github=http://127.0.0.1:9100", "--yes")
+	if code != 0 || len(fake.registered) != 0 || len(fake.conns) != 1 || !strings.Contains(out, "Note: github has no gateway fact provider") {
+		t.Fatalf("setup = %d registered %d conns %d\n%s\n%s", code, len(fake.registered), len(fake.conns), out, errs)
 	}
 }
