@@ -47,10 +47,11 @@ pclaw redteam run --suite coding-agent \
   --scenarios redteam/scenarios \
   --workload-file <range instance file> \
   --gateway <gateway url> \
-  [--interactive] [--baseline <pack.zip>] [--out <dir>]
+  [--grant <grant id>] [--interactive] [--baseline <pack.zip>] [--out <dir>]
 ```
 
 - `--suite` is `coding-agent`, `platform` or `all`. The platform suite needs Business (`EDITION_REQUIRED` otherwise).
+- `--grant <id>` picks the range root grant. Without it the command fails (exit 2) when the range agent has more than one active root grant. The summary prints the grant id and its delegation depth. There is no `--run` flag: the command starts its own runs. A CI gate needs no grant re-issue between runs, only when the grant expires.
 - The command always starts a range first, runs each scenario through the live driver, records each result with the server, finishes the range and writes `summary.json` and a text table to `--out`.
 - Each scenario runs in its own short-lived root run, bound to the range grant. The runner's principal needs `run.start`, and `run.manage` to end runs early. Pending holds a range leaves behind become moot (`RUN_ENDED`) at the next approvals sweep and leave the approvers' waitlist. Before it starts a range, the command checks that the range grant is active, not expiring within the run and has child delegations left for the selected `agent.child` steps; otherwise it exits 2 and tells you to re-issue the grant with `pclaw redteam setup` (which gives the range grant a delegation depth of max(real + 1, 2)).
 - The range grant is not identical to the real one in one dimension: its delegation depth is max(real + 1, 2), capped at 4, so that `agent.child` works. That makes it slightly more permissive for the delegation scenarios (RT-006 and RT-007); the run summary notes the depth, so read a PASS there with that in mind.
