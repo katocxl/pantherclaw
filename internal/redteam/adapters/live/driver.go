@@ -251,17 +251,18 @@ func (d *Driver) one(ctx context.Context, s domain.Scenario, step string, n int,
 func (d *Driver) base() string { return strings.TrimSuffix(d.cfg.Gateway, "/") }
 
 // post sends a JSON body and returns the status, headers and bounded answer.
-func (d *Driver) post(ctx context.Context, rawURL string, header http.Header, body []byte) (int, http.Header, []byte, error) {
+func (d *Driver) post(ctx context.Context, rawURL string, header http.Header, body []byte) (int, []byte, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, rawURL, bytes.NewReader(body))
 	if err != nil {
-		return 0, nil, nil, err
+		return 0, nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("PAP-Run-Id", d.cfg.Run)
 	for k, vs := range header {
 		req.Header[k] = vs
 	}
-	return d.do(req)
+	status, _, b, err := d.do(req)
+	return status, b, err
 }
 
 func (d *Driver) do(req *http.Request) (int, http.Header, []byte, error) {
@@ -309,7 +310,7 @@ func (d *Driver) sdk(ctx context.Context, conn, call, action string, w callWith)
 	if action != "" {
 		h.Set("PC-Action-Id", action)
 	}
-	status, _, b, err := d.post(ctx, d.base()+"/sdk/"+url.PathEscape(conn), h, req)
+	status, b, err := d.post(ctx, d.base()+"/sdk/"+url.PathEscape(conn), h, req)
 	if err != nil {
 		return domain.Observation{}, "", err
 	}
@@ -347,7 +348,7 @@ func (d *Driver) hook(ctx context.Context, conn string, w callWith) (domain.Obse
 	if err != nil {
 		return domain.Observation{}, err
 	}
-	status, _, b, err := d.post(ctx, target+"/hook/"+url.PathEscape(conn), nil, req)
+	status, b, err := d.post(ctx, target+"/hook/"+url.PathEscape(conn), nil, req)
 	if w.Fault == "gateway_unreachable" {
 		if err == nil {
 			return domain.Observation{}, errors.New("the address meant to be unreachable answered")
@@ -428,7 +429,7 @@ func (d *Driver) mcp(ctx context.Context, conn string, w callWith) (domain.Obser
 		for k, vs := range extra {
 			h[k] = vs
 		}
-		status, _, b, err := d.post(ctx, endpoint, h, body)
+		status, b, err := d.post(ctx, endpoint, h, body)
 		return status, b, err
 	}
 	declared, err := d.declared(conn, rpc)

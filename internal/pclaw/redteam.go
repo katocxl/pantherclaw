@@ -536,7 +536,7 @@ func (r txnReader) State(ctx context.Context, id string) (live.TxnState, error) 
 		return live.TxnState{}, err
 	}
 	var s live.TxnState
-	switch ev.GetTransaction().GetEffectState() {
+	switch ev.GetTransaction().GetEffectState() { //nolint:exhaustive // only these two settle a wait
 	case pantherclawv1.EffectState_EFFECT_STATE_CONFIRMED:
 		s.Effect = "CONFIRMED"
 	case pantherclawv1.EffectState_EFFECT_STATE_UNKNOWN:
@@ -558,7 +558,7 @@ func (r txnReader) State(ctx context.Context, id string) (live.TxnState, error) 
 		if q.GetTransactionId() != id {
 			continue
 		}
-		switch q.GetState() {
+		switch q.GetState() { //nolint:exhaustive // other states are not a decision
 		case pantherclawv1.ApprovalState_APPROVAL_STATE_APPROVED, pantherclawv1.ApprovalState_APPROVAL_STATE_CONSUMED:
 			s.Approved = true
 		case pantherclawv1.ApprovalState_APPROVAL_STATE_DECLINED:

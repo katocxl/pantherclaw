@@ -71,16 +71,15 @@ func (f *fakeRanges) FinishRange(context.Context, *pantherclawv1.FinishRangeRequ
 // rangeEnv is a fake server, a fake gateway, an enrolled range key file and
 // a scenario directory.
 type rangeEnv struct {
-	ranges     *fakeRanges
-	env        Env
-	keyFile    string
-	tokenFile  string
-	gateway    string
-	scenarios  string
-	decision   *string // the gateway's answer to /sdk/*
-	outDir     string
-	runs       int
-	workingDir string
+	ranges    *fakeRanges
+	env       Env
+	keyFile   string
+	tokenFile string
+	gateway   string
+	scenarios string
+	decision  *string // the gateway's answer to /sdk/*
+	outDir    string
+	runs      int
 }
 
 const rtScenario = `apiVersion: pantherclaw.range/v1
@@ -326,7 +325,8 @@ func TestHR226_TheBaselineGateExitsOneOnARegression(t *testing.T) {
 func TestRedteamRunSkipsWhatItCannotDo(t *testing.T) {
 	re := newRangeEnv(t)
 	probe := strings.NewReplacer("RT-001", "RT-002", "A merge is held", "A probe").Replace(rtScenario)
-	probe = probe[:strings.Index(probe, "steps:")] + "steps:\n  - {id: probe, do: sandbox.probe, with: {probe: icmp}, expect: {outcome: BLOCKED}}\n"
+	head, _, _ := strings.Cut(probe, "steps:")
+	probe = head + "steps:\n  - {id: probe, do: sandbox.probe, with: {probe: icmp}, expect: {outcome: BLOCKED}}\n"
 	writeFile(t, re.scenarios, "RT-002-probe.yaml", []byte(probe))
 	code, out, errs := re.run(t)
 	if code != 0 || !strings.Contains(out, "1 PASS, 0 FAIL, 0 ERROR, 1 SKIPPED") {

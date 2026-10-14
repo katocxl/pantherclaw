@@ -127,35 +127,35 @@ func redteamSetup(ctx context.Context, a *app, args []string) error {
 			return fmt.Errorf("--twin %q must be PACKAGE=BASE_URL", t)
 		}
 		pkg, base := m[1], m[2]
-		var real *pantherclawv1.Connection
+		var orig *pantherclawv1.Connection
 		for _, cn := range conns.GetConnections() {
 			if cn.GetPackage() == pkg && !cn.GetSimulated() && cn.GetState() == pantherclawv1.ConnectionState_CONNECTION_STATE_ACTIVE {
-				real = cn
+				orig = cn
 				break
 			}
 		}
-		if real == nil {
+		if orig == nil {
 			return fmt.Errorf("--twin %s: no active real connection of that package to copy; create one first", pkg)
 		}
-		twin := strings.TrimSuffix(real.GetName(), "-range")
+		twin := strings.TrimSuffix(orig.GetName(), "-range")
 		if len(twin) > 57 {
 			twin = twin[:57]
 		}
 		twin += "-range"
 		if have, ok := byName[twin]; ok {
 			if !have.GetSimulated() || have.GetBaseUrl() != base {
-				return fmt.Errorf("connection %s exists and is not the simulated twin of %s at %s; nothing was changed", twin, real.GetName(), base)
+				return fmt.Errorf("connection %s exists and is not the simulated twin of %s at %s; nothing was changed", twin, orig.GetName(), base)
 			}
 			continue
 		}
 		steps = append(steps, setupStep{
-			text: fmt.Sprintf("create the simulated connection %q, a twin of %q, pointing at %s", twin, real.GetName(), base),
+			text: fmt.Sprintf("create the simulated connection %q, a twin of %q, pointing at %s", twin, orig.GetName(), base),
 			apply: func(ctx context.Context) error {
 				_, err := c.connections.CreateConnection(ctx, &pantherclawv1.CreateConnectionRequest{
-					Name: twin, Kind: real.GetKind(), GatewayId: real.GetGatewayId(), Package: real.GetPackage(), BaseUrl: base,
-					AccessMode: real.GetAccessMode(), CredentialHeader: real.GetCredentialHeader(), CredentialScheme: real.GetCredentialScheme(),
-					DestinationClass: real.GetDestinationClass(), DefaultMode: real.GetDefaultMode(),
-					MaxResponseBytes: real.GetMaxResponseBytes(), TimeoutMs: real.GetTimeoutMs(), Simulated: true,
+					Name: twin, Kind: orig.GetKind(), GatewayId: orig.GetGatewayId(), Package: orig.GetPackage(), BaseUrl: base,
+					AccessMode: orig.GetAccessMode(), CredentialHeader: orig.GetCredentialHeader(), CredentialScheme: orig.GetCredentialScheme(),
+					DestinationClass: orig.GetDestinationClass(), DefaultMode: orig.GetDefaultMode(),
+					MaxResponseBytes: orig.GetMaxResponseBytes(), TimeoutMs: orig.GetTimeoutMs(), Simulated: true,
 				})
 				return err
 			},
@@ -217,7 +217,7 @@ func redteamSetup(ctx context.Context, a *app, args []string) error {
 		}
 		_, _ = fmt.Fprintf(w, "done: %s\n", s.text)
 	}
-	_, err = fmt.Fprintf(w, "\nNext: start the simulators at the twin addresses, enrol a workload for the range agent "+
+	_, err = fmt.Fprintf(w, "\nNext: start the simulators at the twin addresses, enroll a workload for the range agent "+
 		"(pclaw workload init, then enroll, then pclaw run start), and run:\n"+
 		"  pclaw redteam run --scenarios redteam/scenarios --workload-file FILE --gateway URL --role github=<twin> --fixture pr=<number>\n")
 	return err
