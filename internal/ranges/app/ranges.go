@@ -19,7 +19,6 @@ import (
 
 	billing "github.com/katocxl/pantherclaw/internal/billing/domain"
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
-	"github.com/katocxl/pantherclaw/internal/platform/clock"
 	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	"github.com/katocxl/pantherclaw/internal/platform/page"
@@ -71,15 +70,17 @@ type Tx interface {
 	Versions(ctx context.Context, agent ids.UUID) (domain.Versions, error)
 	// Range returns the range (locked for update when lock), or ErrNotFound.
 	Range(ctx context.Context, id ids.UUID, lock bool) (domain.Range, error)
-	InsertRange(ctx context.Context, r domain.Range) error
-	// Transition moves a range from Running to state at time; it reports
+	// InsertRange stores the range and returns it with the database's start time.
+	InsertRange(ctx context.Context, r domain.Range) (domain.Range, error)
+	// Transition moves a range from Running to state and returns the
+	// database's finish time; it reports
 	// false when the range was no longer Running (a conditional update).
-	Transition(ctx context.Context, id ids.UUID, to domain.State, at time.Time) (bool, error)
+	Transition(ctx context.Context, id ids.UUID, to domain.State) (time.Time, bool, error)
 	ListRanges(ctx context.Context, agent *ids.UUID, after ids.UUID, limit int32) ([]domain.Range, error)
 	// Results returns the recorded results of a range, in recording order.
 	Results(ctx context.Context, rng ids.UUID) ([]domain.Result, error)
 	// InsertResult appends a result; false when the scenario already has one.
-	InsertResult(ctx context.Context, rng ids.UUID, r domain.Result) (bool, error)
+	InsertResult(ctx context.Context, rng ids.UUID, r domain.Result) (time.Time, bool, error)
 	// Transaction returns the server's record of a transaction, if any.
 	Transaction(ctx context.Context, id ids.UUID) (domain.TransactionRecord, bool, error)
 	// Probe returns the signed probe record of a report, if any.
@@ -109,11 +110,7 @@ type Service struct {
 	Store    Store
 	Editions Editions
 	Exporter PackExporter
-	Clock    clock.Clock
 }
-
-// ScenarioInput declares a scenario.
-type ScenarioInput = domain.Scenario
 
 // StartInput starts a range.
 type StartInput struct {
@@ -121,13 +118,6 @@ type StartInput struct {
 	Scenarios     []domain.Scenario
 	RunnerVersion string
 	Baseline      *ids.UUID
-}
-
-func (s *Service) now() time.Time {
-	if s.Clock != nil {
-		return s.Clock.Now()
-	}
-	return clock.System{}.Now()
 }
 
 func (s *Service) entitlements(ctx context.Context) (billing.Entitlements, error) {
@@ -188,9 +178,9 @@ func (s *Service) StartRange(ctx context.Context, in StartInput) (domain.Range, 
 		out = domain.Range{
 			ID: ids.NewV7(), Agent: a.ID, StartedBy: c.Principal.String(), RunnerVersion: in.RunnerVersion,
 			SetDigest: domain.SetDigest(set), Scenarios: set, Versions: versions, Baseline: in.Baseline,
-			State: domain.Running, Started: s.now(),
+			State: domain.Running,
 		}
-		if err := tx.InsertRange(ctx, out); err != nil {
+		if out, err = tx.InsertRange(ctx, out); err != nil {
 			return err
 		}
 		return tx.Audit(ctx, audit.Event{
@@ -290,15 +280,17 @@ func (s *Service) RecordResult(ctx context.Context, in RecordInput) (domain.Resu
 		if !ok {
 			return ErrSteps
 		}
-		out = domain.Result{Scenario: *decl, Verdict: verdict, Steps: steps, Recorded: s.now()}
+		out = domain.Result{Scenario: *decl, Verdict: verdict, Steps: steps}
 		if verdict != in.Verdict {
 			out.Claimed = in.Verdict
 		}
-		if added, err := tx.InsertResult(ctx, rng.ID, out); err != nil {
+		at, added, err := tx.InsertResult(ctx, rng.ID, out)
+		if err != nil {
 			return err
 		} else if !added {
 			return ErrRecorded
 		}
+		out.Recorded = at
 		mismatches := 0
 		for _, st := range steps {
 			if st.Mismatch {
@@ -399,8 +391,8 @@ func (s *Service) FinishRange(ctx context.Context, id ids.UUID) (Detail, error) 
 		if err := rangeAgentFor(ctx, c, tx, rng); err != nil {
 			return err
 		}
-		now := s.now()
-		if ok, err := tx.Transition(ctx, rng.ID, domain.Finished, now); err != nil {
+		now, ok, err := tx.Transition(ctx, rng.ID, domain.Finished)
+		if err != nil {
 			return err
 		} else if !ok {
 			return ErrNotRunning
@@ -414,9 +406,12 @@ func (s *Service) FinishRange(ctx context.Context, id ids.UUID) (Detail, error) 
 			if r.Verdict != domain.Missing {
 				continue
 			}
-			if _, err := tx.InsertResult(ctx, rng.ID, r); err != nil {
+			if _, _, err := tx.InsertResult(ctx, rng.ID, r); err != nil {
 				return err
 			}
+		}
+		if all, err = tx.Results(ctx, rng.ID); err != nil {
+			return err
 		}
 		rng.State, rng.Finished = domain.Finished, &now
 		out = Detail{Range: rng, Results: all, Counts: domain.Count(all)}

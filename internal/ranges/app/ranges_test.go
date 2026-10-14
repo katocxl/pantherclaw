@@ -66,16 +66,21 @@ func (f *fake) Range(_ context.Context, id ids.UUID, _ bool) (domain.Range, erro
 	return r, nil
 }
 
-func (f *fake) InsertRange(_ context.Context, r domain.Range) error { f.ranges[r.ID] = r; return nil }
+func (f *fake) InsertRange(_ context.Context, r domain.Range) (domain.Range, error) {
+	r.Started = time.Now()
+	f.ranges[r.ID] = r
+	return r, nil
+}
 
-func (f *fake) Transition(_ context.Context, id ids.UUID, to domain.State, at time.Time) (bool, error) {
+func (f *fake) Transition(_ context.Context, id ids.UUID, to domain.State) (time.Time, bool, error) {
 	r := f.ranges[id]
 	if r.State != domain.Running {
-		return false, nil
+		return time.Time{}, false, nil
 	}
+	at := time.Now()
 	r.State, r.Finished = to, &at
 	f.ranges[id] = r
-	return true, nil
+	return at, true, nil
 }
 
 func (f *fake) ListRanges(_ context.Context, agent *ids.UUID, _ ids.UUID, _ int32) ([]domain.Range, error) {
@@ -92,14 +97,15 @@ func (f *fake) Results(_ context.Context, rng ids.UUID) ([]domain.Result, error)
 	return f.results[rng], nil
 }
 
-func (f *fake) InsertResult(_ context.Context, rng ids.UUID, r domain.Result) (bool, error) {
+func (f *fake) InsertResult(_ context.Context, rng ids.UUID, r domain.Result) (time.Time, bool, error) {
 	for _, have := range f.results[rng] {
 		if have.Scenario.ID == r.Scenario.ID {
-			return false, nil
+			return time.Time{}, false, nil
 		}
 	}
+	r.Recorded = time.Now()
 	f.results[rng] = append(f.results[rng], r)
-	return true, nil
+	return r.Recorded, true, nil
 }
 
 func (f *fake) Transaction(_ context.Context, id ids.UUID) (domain.TransactionRecord, bool, error) {
