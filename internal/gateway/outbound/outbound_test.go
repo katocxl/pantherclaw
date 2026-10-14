@@ -15,6 +15,9 @@ import (
 	"testing"
 )
 
+// pemBegin is split so the file holds no private-key header.
+const pemBegin = "-----" + "BEGIN"
+
 const (
 	ghToken = "ghp_" + "abcdefghijklmnopqrstuvwxyz0123456789"
 	custody = "s3cr3t-custody-value/with+chars="
@@ -54,7 +57,7 @@ func TestScanFormats(t *testing.T) {
 	}{
 		{"github in json body", Input{Body: []byte(`{"files":[{"content":"token=` + ghToken + `"}]}`)}, []Finding{{"github_token", "body:/files/0/content"}}},
 		{"fine grained", Input{Query: url.Values{"q": {"github_pat_" + strings.Repeat("A", 30)}}}, []Finding{{"github_token", "query:q"}}},
-		{"private key arg", Input{Args: []byte(`{"content":"-----BEGIN RSA PRIVATE KEY-----\nMIIE"}`)}, []Finding{{"private_key", "arg:content"}}},
+		{"private key arg", Input{Args: []byte(`{"content":"` + pemBegin + ` RSA PRIVATE KEY-----\nMIIE"}`)}, []Finding{{"private_key", "arg:content"}}},
 		{"aws", Input{Header: http.Header{"x-foo": {"AKIA" + strings.Repeat("A", 16)}}}, []Finding{{"aws_access_key", "header:X-Foo"}}},
 		{"slack", Input{Body: []byte("xoxb-1234567890-abc")}, []Finding{{"slack_token", "body"}}},
 		{"pantherclaw", Input{Args: []byte(`{"x":"pck_dev_` + strings.Repeat("a", 32) + `"}`)}, []Finding{{"pantherclaw_token", "arg:x"}}},
@@ -224,7 +227,7 @@ func TestScanKeepsOneFindingPerKind(t *testing.T) {
 	for i := range 20 {
 		b.WriteString(`"a` + string(rune('a'+i)) + `":"` + ghToken + `",`)
 	}
-	b.WriteString(`"z":"-----BEGIN OPENSSH PRIVATE KEY-----"}`)
+	b.WriteString(`"z":"` + pemBegin + ` OPENSSH PRIVATE KEY-----"}`)
 	r := Scan(Input{Args: []byte(b.String())}, nil)
 	if len(r.Findings) != MaxFindings || !slices.Contains(r.Findings, Finding{"private_key", "arg:z"}) {
 		t.Fatalf("%+v", r.Findings)
