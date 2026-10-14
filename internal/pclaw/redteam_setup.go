@@ -168,10 +168,7 @@ func redteamSetup(ctx context.Context, a *app, args []string) error {
 				},
 			})
 		}
-		step, note, err := twinProviderStep(c, provs, orig, twin, &twinID)
-		if err != nil {
-			return err
-		}
+		step, note := twinProviderStep(c, provs, orig, twin, &twinID)
 		if step != nil {
 			steps = append(steps, *step)
 		}
@@ -319,7 +316,7 @@ var twinProviderNameRe = regexp.MustCompile(`^[a-z][a-z0-9_.]{0,63}$`)
 // bound to the gateway and the twin, and declares exactly what the real
 // one does. It returns a step, or a note when there is nothing to register.
 // twinID is the twin's id: known when it exists, set when its step has run.
-func twinProviderStep(c clients, provs *pantherclawv1.ListProvidersResponse, orig *pantherclawv1.Connection, twin string, twinID *string) (*setupStep, string, error) {
+func twinProviderStep(c clients, provs *pantherclawv1.ListProvidersResponse, orig *pantherclawv1.Connection, twin string, twinID *string) (*setupStep, string) {
 	var realProv *pantherclawv1.FactProvider
 	taken := map[string]bool{}
 	for _, p := range provs.GetProviders() {
@@ -329,14 +326,14 @@ func twinProviderStep(c clients, provs *pantherclawv1.ListProvidersResponse, ori
 		}
 	}
 	if realProv == nil {
-		return nil, fmt.Sprintf("%s has no gateway fact provider, so its twin %s gets none: scenarios that read facts there will see none", orig.GetName(), twin), nil
+		return nil, fmt.Sprintf("%s has no gateway fact provider, so its twin %s gets none: scenarios that read facts there will see none", orig.GetName(), twin)
 	}
 	name := strings.ReplaceAll(realProv.GetName(), "-", "_") + ".range"
 	if !twinProviderNameRe.MatchString(name) {
-		return nil, fmt.Sprintf("the twin of fact provider %q cannot be named %q, so %s gets no facts", realProv.GetName(), name, twin), nil
+		return nil, fmt.Sprintf("the twin of fact provider %q cannot be named %q, so %s gets no facts", realProv.GetName(), name, twin)
 	}
 	if taken[name] {
-		return nil, fmt.Sprintf("fact provider %s already exists (the twin of %s)", name, realProv.GetName()), nil
+		return nil, fmt.Sprintf("fact provider %s already exists (the twin of %s)", name, realProv.GetName())
 	}
 	return &setupStep{
 		text: fmt.Sprintf("register the fact provider %q for %q, declaring the same %d facts as %q", name, twin, len(realProv.GetFacts()), realProv.GetName()),
@@ -349,5 +346,5 @@ func twinProviderStep(c clients, provs *pantherclawv1.ListProvidersResponse, ori
 			})
 			return err
 		},
-	}, "", nil
+	}, ""
 }
