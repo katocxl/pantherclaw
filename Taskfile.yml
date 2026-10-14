@@ -254,6 +254,21 @@ tasks:
     cmds:
       - "{{.COMPOSE}} --profile {{.PROFILE | default \"core\"}} down"
 
+  demo:up:
+    desc: Start the local demo (v0.1.0 preview quickstart, docs/quickstart.md - database, Keycloak, server, gateway, GitHub simulator, sandbox images; all simulated, idempotent)
+    cmds:
+      - bash tools/scripts/demo.sh up
+
+  demo:down:
+    desc: Stop the local demo's server, gateway and simulator (data and secrets stay)
+    cmds:
+      - bash tools/scripts/demo.sh down
+
+  demo:status:
+    desc: Show whether the local demo's processes and the server are up
+    cmds:
+      - bash tools/scripts/demo.sh status
+
   hooks:pre-commit:
     desc: Fast checks run by the git pre-commit hook (< 5 s once tools are built)
     cmds:
