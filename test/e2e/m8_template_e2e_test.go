@@ -25,7 +25,8 @@ import (
 // differs is changed only with --update.
 func TestE2E_M8_C4_Template(t *testing.T) {
 	p := inProcessIdP(t)
-	s := start(t, options{budget: "1000.00", people: &p, github: true})
+	// The org has pc.shell too, so that the shell rule compiles, as in a real org.
+	s := start(t, options{budget: "1000.00", people: &p, github: true, shell: true})
 	people := &m2Stack{url: s.apiURL, cfg: s.serverCfg, idp: p}
 	var out, errb bytes.Buffer
 	if code := server.Run(context.Background(), []string{"org", "admin-invite", "--config", s.serverCfg, "--org", s.org.String()}, &out, &errb, noEnv); code != 0 {
