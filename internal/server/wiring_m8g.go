@@ -51,8 +51,8 @@ func packageFacts(pool *db.Pool) factsapp.PackageFacts {
 				return err
 			}
 			pin, err := q.PinnedPackageRaw(ctx, org, conn.Package)
-			if db.IsNoRows(err) {
-				return factsapp.ErrConnectionUnknown
+			if db.IsNoRows(err) || (err == nil && (pin.State == "QUARANTINED" || pin.State == "RETIRED")) {
+				return factsapp.ErrConnectionUnknown // a quarantined or retired pin names no facts (#299)
 			} else if err != nil {
 				return err
 			}

@@ -159,7 +159,7 @@ func (e *Engine) ConnectorEgress(ctx context.Context, conn *control.Connection, 
 	if conn.GetAccessMode() == "pantherclaw_held" {
 		// A GitHub App connection gets a token minted for this action alone,
 		// revoked once it is sent (HR-203, HR-204).
-		s, release, used, err := e.credential(ctx, conn, def, a.Action.Target, p.req, p.client)
+		s, release, used, err := e.credential(ctx, conn, def, a.Action.Target, p.req, p.client, "")
 		if err != nil {
 			// What GitHub granted when the scope did not match goes on the
 			// call's receipt (ADR-0021 items 3 and 6).

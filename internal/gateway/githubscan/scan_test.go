@@ -159,7 +159,7 @@ func FuzzMCPConfig(f *testing.F) {
 	f.Add([]byte(strings.ReplaceAll(mcpConfig, "PLANTED", planted)))
 	f.Add([]byte(`{"servers": {"x": {"command": "/usr/bin/` + planted + ` arg"}}}`))
 	f.Fuzz(func(t *testing.T, raw []byte) {
-		servers, err := ParseMCPConfig(raw)
+		servers, _, err := ParseMCPConfig(raw)
 		if err != nil {
 			return
 		}
@@ -233,7 +233,7 @@ func TestHR209_ACommandKeepsOnlyItsProgramName(t *testing.T) {
 		"$(cat key) run":                            "",
 	} {
 		raw := []byte(`{"mcpServers": {"s": {"command": ` + strconv.Quote(command) + `}}}`)
-		servers, err := ParseMCPConfig(raw)
+		servers, _, err := ParseMCPConfig(raw)
 		if err != nil || len(servers) != 1 || servers[0].Command != want {
 			t.Errorf("%q: %+v %v, want %q", command, servers, err, want)
 		}
@@ -267,5 +267,107 @@ func TestHR209_AgentUseTheScanCannotCheckIsReported(t *testing.T) {
 	raw, _ := json.Marshal(r)
 	if strings.Contains(string(raw), planted) || strings.Contains(string(raw), "fix ") {
 		t.Fatal("a run step's text reached the result")
+	}
+}
+
+// TestHR209_ATooLargeFileIsNeverFetched (G5 review follow-up): a workflow
+// file the listing says is over the limit is skipped without being
+// fetched, and reported not scanned; one within it is read.
+func TestHR209_ATooLargeFileIsNeverFetched(t *testing.T) {
+	sim, get := newWorld(t)
+	sim.Push("acme/payments", "main", map[string]string{
+		".github/workflows/huge.yml": "on: push\njobs: {t: {runs-on: x}}\n# " + strings.Repeat("x", githubfacts.MaxWorkflowBytes) + "\n",
+		".github/workflows/ok.yml":   "on: push\njobs: {t: {runs-on: x}}\n",
+	})
+	r := ScanRepositories(context.Background(), get, []Repository{{FullName: "acme/payments", DefaultBranch: "main"}}, time.Now().Add(time.Minute))
+	if !strings.Contains(r.NotScanned["workflows"], "too large") {
+		t.Fatalf("a too large workflow: %+v", r.NotScanned)
+	}
+	okRead := false
+	for _, req := range sim.Requests() {
+		if strings.Contains(req.Path, "huge.yml") {
+			t.Fatalf("the too large file was fetched: %+v", req)
+		}
+		okRead = okRead || strings.Contains(req.Path, "ok.yml")
+	}
+	if !okRead {
+		t.Fatal("the workflow within the limit was not read")
+	}
+}
+
+// TestHR209_ListingsAreReadPastOnePageUpToTheirLimit (G5 review follow-up):
+// the installation's repositories and the organization's other Apps are
+// read page by page; up to 500 of each are all of them, and past that the
+// listing says it is not complete.
+func TestHR209_ListingsAreReadPastOnePageUpToTheirLimit(t *testing.T) {
+	for _, c := range []struct {
+		repos, apps int
+		complete    bool
+	}{{250, 230, true}, {520, 510, false}} {
+		sim := github.New(slog.New(slog.DiscardHandler))
+		names := make([]string, c.repos)
+		for i := range names {
+			names[i] = fmt.Sprintf("r%03d", i)
+			sim.CreateRepo("acme/"+names[i], "main", map[string]string{"README.md": "#\n"})
+		}
+		sim.Install(github.Installation{ID: 7, Account: "acme", Repos: names, Permissions: map[string]string{"metadata": "read"}})
+		for i := range c.apps {
+			sim.AddOrgApp("acme", github.OrgApp{ID: int64(1000 + i), Slug: fmt.Sprintf("app-%03d", i), Permissions: map[string]string{"contents": "read"}, Selection: "all"})
+		}
+		sim.AddInstallationToken("ghs_scan", 7, map[string]string{"metadata": "read", "organization_administration": "read"})
+		srv := httptest.NewServer(sim.Handler())
+		get := func(ctx context.Context, path string) (egress.Response, error) {
+			req, _ := http.NewRequestWithContext(ctx, http.MethodGet, srv.URL+path, nil)
+			req.Header.Set("Authorization", "token ghs_scan")
+			res, err := srv.Client().Do(req)
+			if err != nil {
+				return egress.Response{}, err
+			}
+			defer res.Body.Close()
+			b, err := io.ReadAll(res.Body)
+			return egress.Response{Status: res.StatusCode, Body: b}, err
+		}
+		repos, all, err := ListRepositories(context.Background(), get)
+		if err != nil || all != c.complete || len(repos) != min(c.repos, 500) {
+			t.Errorf("%d repositories: %d read, complete %v, %v", c.repos, len(repos), all, err)
+		}
+		apps, all, err := Apps(context.Background(), get, "acme")
+		if err != nil || all != c.complete || len(apps) != min(c.apps, 500) {
+			t.Errorf("%d Apps: %d read, complete %v, %v", c.apps, len(apps), all, err)
+		}
+		srv.Close()
+	}
+}
+
+// TestHR209_AnMCPConfigurationIsReadWhole (#336 review): a file with both
+// mcpServers and servers is read from both; a server entry that does not
+// decode, or a name under both keys, keeps the servers that did and marks
+// the file's finding incomplete, and the source not scanned in full.
+func TestHR209_AnMCPConfigurationIsReadWhole(t *testing.T) {
+	servers, incomplete, err := ParseMCPConfig([]byte(`{"mcpServers": {"a": {"command": "npx"}}, "servers": {"b": {"url": "https://x"}}}`))
+	if err != nil || incomplete || len(servers) != 2 || servers[0].Name != "a" || servers[1].Transport != "remote" {
+		t.Fatalf("both keys: %+v %v %v", servers, incomplete, err)
+	}
+	for name, raw := range map[string]string{
+		"an entry that does not decode": `{"mcpServers": {"a": {"command": "npx"}, "bad": {"env": "x"}}}`,
+		"a name under both keys":        `{"mcpServers": {"a": {"command": "npx"}}, "servers": {"a": {"command": "node"}}}`,
+	} {
+		servers, incomplete, err := ParseMCPConfig([]byte(raw))
+		if err != nil || !incomplete || len(servers) != 1 || servers[0].Command != "npx" {
+			t.Errorf("%s: %+v %v %v", name, servers, incomplete, err)
+		}
+	}
+	sim, get := newWorld(t)
+	sim.Push("acme/payments", "main", map[string]string{".cursor/mcp.json": `{"mcpServers": {"a": {"command": "npx"}, "bad": {"env": "x"}}}`})
+	r := ScanRepositories(context.Background(), get, []Repository{{FullName: "acme/payments", DefaultBranch: "main"}}, time.Now().Add(time.Minute))
+	var cursor map[string]string
+	for _, f := range r.Findings {
+		if f.Attributes["path"] == ".cursor/mcp.json" {
+			cursor = f.Attributes
+		}
+	}
+	if cursor["servers"] != "a" || cursor["servers_incomplete"] != "true" || !strings.Contains(r.NotScanned["mcp_configs"], "did not decode") ||
+		slices.Contains(r.Scanned, "mcp_configs") {
+		t.Fatalf("finding %v, not scanned %v", cursor, r.NotScanned)
 	}
 }

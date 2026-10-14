@@ -163,6 +163,19 @@ func (s *Store) Put(ctx context.Context, org ids.OrgID, f domain.Fact) (bool, er
 	var wrote bool
 	err = s.Pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
 		q := dbq.New(tx)
+		// A gateway provider writes only while its gateway serves the
+		// connection, checked under a lock in this transaction (#299).
+		gw, err := q.IsGatewayProvider(ctx, org, f.ProviderID)
+		if err != nil {
+			return err
+		}
+		if gw {
+			if _, err := q.LockServedConnection(ctx, org, f.ProviderID); db.IsNoRows(err) {
+				return app.ErrNotProvider
+			} else if err != nil {
+				return err
+			}
+		}
 		prev, err := q.CurrentFactValue(ctx, dbq.CurrentFactValueParams{OrgID: org, Name: f.Name, SubjectType: f.SubjectType, SubjectID: f.SubjectID})
 		if err != nil && !db.IsNoRows(err) {
 			return err

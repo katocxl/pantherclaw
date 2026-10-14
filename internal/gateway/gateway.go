@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"golang.org/x/sync/errgroup"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/katocxl/pantherclaw/internal/approvals/proof"
 	"github.com/katocxl/pantherclaw/internal/gateway/broker"
@@ -124,6 +125,9 @@ type Deps struct {
 	// decision, as the connection's fact provider (G0 M8 decision 5); nil
 	// reads nothing.
 	ReportFacts dispatch.FactReporter
+	// ReportRevocation tells the server a token minted for a read or a scan
+	// could not be revoked (ADR-0021 item 6); nil only logs it.
+	ReportRevocation dispatch.RevocationReporter
 	// SubmitScan sends an organization scan's findings to the server (G0 M8,
 	// HR-209); nil submits none.
 	SubmitScan ScanSubmitter
@@ -170,6 +174,16 @@ func New(ctx context.Context, cfg *Config, id *control.Identity, log *slog.Logge
 			return err
 		},
 		SubmitScan: controlScans{ctl}.submit,
+		ReportRevocation: func(ctx context.Context, conn, purpose string, a broker.Access) error {
+			req := &pb.ReportRevocationFailureRequest{
+				ConnectionId: conn, Purpose: purpose, InstallationId: a.Installation, Repository: a.Repository,
+			}
+			if !a.Expires.IsZero() {
+				req.ExpireTime = timestamppb.New(a.Expires)
+			}
+			_, err := ctl.Gateway.ReportRevocationFailure(ctx, req)
+			return err
+		},
 	}
 	if cfg.Broker.KeyFile != "" {
 		key, err := broker.Load(ctx, cfg.Broker.KeyFile, cfg.Broker.KEKFiles)
@@ -208,7 +222,7 @@ func newGateway(cfg *Config, d Deps, log *slog.Logger) (*Gateway, error) {
 		Org: d.Org, GatewayID: d.GatewayID, Authority: d.Authority, JWKSURL: d.JWKSURL, JWKSClient: d.JWKSClient,
 		Containment: d.Containment, AllowedPrefixes: prefixes, ReportCircuit: d.ReportCircuit, Log: log,
 		Approvers:   proof.NewPinned(cfg.Approvals.ApproverKeysFile, d.Org),
-		ReportFacts: d.ReportFacts, FactTimeout: cfg.GitHub.FactTimeout.D(),
+		ReportFacts: d.ReportFacts, FactTimeout: cfg.GitHub.FactTimeout.D(), ReportRevocation: d.ReportRevocation,
 	}
 	if d.Connectors != nil {
 		o.Connectors = d.Connectors

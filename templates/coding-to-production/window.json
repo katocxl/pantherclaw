@@ -1,0 +1,11 @@
+{
+  "environment": "{{environment}}",
+  "time_zone": "{{time_zone}}",
+  "weekly": [
+    {"day": "mon", "start": "09:00", "minutes": 480},
+    {"day": "tue", "start": "09:00", "minutes": 480},
+    {"day": "wed", "start": "09:00", "minutes": 480},
+    {"day": "thu", "start": "09:00", "minutes": 480},
+    {"day": "fri", "start": "09:00", "minutes": 480}
+  ]
+}

@@ -22,6 +22,9 @@
 <p class="note">Predicted from the package's consequence rules and current facts: a prediction, not an authorized or confirmed effect. An unknown consequence could not be ruled out and is treated as predicted.</p>
 <ul>{{range .Display.Consequences}}<li>{{if eq .State "UNKNOWN"}}<strong>Unknown</strong>{{else}}Predicted{{end}}: <code>{{.Operation}}</code> on {{.Target.Type}} <code>{{.Target.ID}}</code> ({{.Rule}}){{with .Environments}}, to {{range $i, $e := .}}{{if $i}}, {{end}}<code>{{$e}}</code>{{end}}{{end}}{{range .MixedScript}} <strong>(<code>{{.}}</code> mixes writing systems: look for look-alike characters)</strong>{{end}}{{with .Workflows}}, through {{range $i, $w := .}}{{if $i}}, {{end}}<code>{{$w}}</code>{{end}}{{end}}{{with .Unknown}}<br><span class="note">Why unknown: {{range $i, $u := .}}{{if $i}}; {{end}}{{$u}}{{end}}</span>{{end}}</li>{{end}}</ul>
 {{end}}
+{{with .Display.Consequence}}{{if or (eq .Operation "github.pull.merge") (eq .Operation "github.contents.write") (eq .Operation "github.branch.create")}}
+<p class="note">Not predicted here: a workflow that holds a personal access token or another App's secret can start further workflows and deployments that GitHub does not show PantherClaw (residual risk R-22).</p>
+{{end}}{{end}}
 {{if .Display.Fields}}
 <h2>Fields</h2>
 <table>

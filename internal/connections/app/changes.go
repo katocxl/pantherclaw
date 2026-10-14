@@ -10,6 +10,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/audit"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
@@ -65,6 +66,32 @@ func (s *Service) apply(ctx context.Context, tx db.TenantTx, c actor, before dbq
 	return after, s.after(ctx, tx, c, before, after, changes, event, extra)
 }
 
+// disableMovedProviders disables the fact providers bound to the gateway
+// a connection moved away from, so their facts stop counting and the new
+// gateway can be registered (#299 review follow-up).
+func disableMovedProviders(ctx context.Context, tx db.TenantTx, q *dbq.Queries, c actor, conn dbq.PcConnection) error {
+	moved, err := q.DisableMovedGatewayProviders(ctx, c.Org, &conn.ID, &conn.GatewayID)
+	if err != nil {
+		return err
+	}
+	for _, p := range moved {
+		if err := q.DeactivateFactDeclarations(ctx, c.Org, p.ID); err != nil {
+			return err
+		}
+		details := map[string]string{"reason": "connection_moved", "connection": conn.ID.String()}
+		if p.GatewayID != nil {
+			details["gateway"] = p.GatewayID.String()
+		}
+		if _, err := audit.Record(ctx, tx, audit.Event{
+			Name: "facts.provider_disabled", Actor: c.Audit, Outcome: audit.Success,
+			Object: &audit.Object{Type: "fact_provider", ID: p.ID.String()}, Details: details,
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // after is everything a change does besides writing it.
 func (s *Service) after(ctx context.Context, tx db.TenantTx, c actor, before, after dbq.PcConnection, changes []change,
 	event string, extra map[string]string,
@@ -93,6 +120,11 @@ func (s *Service) after(ctx context.Context, tx db.TenantTx, c actor, before, af
 	}
 	for _, g := range slices.Compact([]ids.UUID{before.GatewayID, after.GatewayID}) {
 		if _, err := q.BumpGatewayConfig(ctx, c.Org, g); err != nil {
+			return err
+		}
+	}
+	if before.GatewayID != after.GatewayID {
+		if err := disableMovedProviders(ctx, tx, q, c, after); err != nil {
 			return err
 		}
 	}

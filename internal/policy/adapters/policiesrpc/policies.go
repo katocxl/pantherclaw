@@ -62,7 +62,11 @@ func VersionProto(v app.VersionInfo, withBundle bool) *pantherclawv1.PolicyVersi
 
 // CreatePolicyVersion implements PolicyServiceHandler.
 func (s *Policies) CreatePolicyVersion(ctx context.Context, req *pantherclawv1.CreatePolicyVersionRequest) (*pantherclawv1.CreatePolicyVersionResponse, error) {
-	v, err := s.svc.Create(ctx, req.GetBundle())
+	expected, err := expectedVersion(req.ExpectedCurrentVersion)
+	if err != nil {
+		return nil, err
+	}
+	v, err := s.svc.CreateExpecting(ctx, req.GetBundle(), expected)
 	if err != nil {
 		return nil, err
 	}
@@ -75,7 +79,11 @@ func (s *Policies) PublishPolicyVersion(ctx context.Context, req *pantherclawv1.
 	if err != nil {
 		return nil, err
 	}
-	v, err := s.svc.Publish(ctx, id)
+	expected, err := expectedVersion(req.ExpectedCurrentVersion)
+	if err != nil {
+		return nil, err
+	}
+	v, err := s.svc.PublishExpecting(ctx, id, expected)
 	if err != nil {
 		return nil, err
 	}
@@ -123,4 +131,20 @@ func (s *Policies) ListPolicyVersions(ctx context.Context, req *pantherclawv1.Li
 		out.Versions = append(out.Versions, VersionProto(v, false))
 	}
 	return out, nil
+}
+
+// expectedVersion is a request's expected_current_version: nil when unset,
+// the zero id when set empty (none is published).
+func expectedVersion(v *string) (*ids.UUID, error) {
+	if v == nil {
+		return nil, nil
+	}
+	if *v == "" {
+		return &ids.UUID{}, nil
+	}
+	id, err := parseID(*v)
+	if err != nil {
+		return nil, err
+	}
+	return &id, nil
 }

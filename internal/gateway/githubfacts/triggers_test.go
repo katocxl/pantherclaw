@@ -173,13 +173,15 @@ func TestHR206_AStartedWorkflowCanDispatchADeploy(t *testing.T) {
 }
 
 // TestHR206_PullRequestTriggersFollowTheirTypes: a merge closes the pull
-// request, so only a pull_request (or pull_request_target) workflow whose
-// types include closed, and whose branch filters match the base branch,
-// starts; one on the default types (opened, synchronize, reopened) does
-// not. A push to a branch may synchronize a pull request from it.
+// request, so a pull_request (or pull_request_target) workflow whose types
+// include closed, and whose branch filters match the base branch, starts.
+// A push to a branch, a merge's push to its base included, may synchronize
+// an open pull request from it (a release pull request whose head is main),
+// so a workflow on the default types (opened, synchronize, reopened) starts
+// too; one on types without either does not.
 func TestHR206_PullRequestTriggersFollowTheirTypes(t *testing.T) {
 	for wf, want := range map[string]struct{ merge, mergeOther, push string }{
-		"on: pull_request\njobs: {ci: {runs-on: x}, d: {environment: preview}}\n":                                                                                       {"none", "none", "triggered"},
+		"on: pull_request\njobs: {ci: {runs-on: x}, d: {environment: preview}}\n":                                                                                       {"triggered", "triggered", "triggered"},
 		"on:\n  pull_request:\n    types: [closed]\n    branches: [main]\njobs:\n  d:\n    if: github.event.pull_request.merged == true\n    environment: production\n": {"triggered", "none", "none"},
 		"on:\n  pull_request_target: {types: closed}\njobs: {d: {environment: production}}\n":                                                                           {"triggered", "triggered", "none"},
 		"on:\n  pull_request: {types: [opened, labeled]}\njobs: {d: {environment: production}}\n":                                                                       {"none", "none", "none"},

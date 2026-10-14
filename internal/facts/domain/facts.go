@@ -389,6 +389,8 @@ type Check struct {
 	Status      Status
 	Fact        *Fact
 	Age         time.Duration
+	// Unread is why a fact its provider could not read is missing.
+	Unread string
 }
 
 // Reason codes.
@@ -406,6 +408,10 @@ func Evaluate(rs []Requirement, recorded map[string]Fact, now time.Time) []Check
 		f, ok := recorded[r.Name]
 		if !ok {
 			out = append(out, Check{Requirement: r, Status: Missing})
+			continue
+		}
+		if why, unread := f.Value.Unread(); unread {
+			out = append(out, Check{Requirement: r, Status: Missing, Unread: why})
 			continue
 		}
 		age := now.Sub(f.ObservedAt)

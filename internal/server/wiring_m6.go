@@ -117,7 +117,7 @@ func (m *m6Services) gatewayHandler(svc *authority.Service, log *slog.Logger) (h
 		return nil, err
 	}
 	pantherclawv1connect.RegisterAuthorityServiceHandler(rs, authority.NewHandler(svc))
-	gw := gatewaysrpc.NewGateway(m.gateways).WithHub(m.hub).WithCircuits(m.connections).WithDrifts(m.connections)
+	gw := gatewaysrpc.NewGateway(m.gateways).WithHub(m.hub).WithCircuits(m.connections).WithDrifts(m.connections).WithRevocations(m.connections)
 	if m.verifications != nil {
 		gw = gw.WithVerifications(m.verifications)
 	}

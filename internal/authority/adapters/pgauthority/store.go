@@ -587,9 +587,6 @@ func (s *Store) RecordExecution(ctx context.Context, org ids.OrgID, gatewayID st
 		} else if err != nil {
 			return err
 		}
-		if err := revokeFailed(ctx, tx, gatewayID, pc.TransactionID, e.Access); err != nil {
-			return err
-		}
 		x := executed(pc, finalize.RecordedByGateway)
 		if o == finalize.Delegated {
 			if pc.Channel == nil || (*pc.Channel != "hook" && *pc.Channel != "sdk") {
@@ -603,11 +600,27 @@ func (s *Store) RecordExecution(ctx context.Context, org ids.OrgID, gatewayID st
 		}
 		txn, err := q.FinishPermitForTransaction(ctx, dbq.FinishPermitForTransactionParams{ToState: to, OrgID: org, ID: permit, GatewayID: gatewayID})
 		if db.IsNoRows(err) {
-			// Too late: the sweeper may have marked it UNKNOWN (G0 M7).
-			receipt, err = lateReport(ctx, tx, q, org, gatewayID, e, sign, pc)
-			return err
+			// Too late: the sweeper may have marked it UNKNOWN (G0 M7). A
+			// token left valid is audited on the first late report only (#313
+			// review): a repeated one records nothing twice.
+			if err := q.LockLateReports(ctx, pc.TransactionID.String()); err != nil {
+				return err
+			}
+			seen, err := q.LateReportSeen(ctx, org, &pc.TransactionID)
+			if err != nil {
+				return err
+			}
+			if receipt, err = lateReport(ctx, tx, q, org, gatewayID, e, sign, pc); err != nil || seen {
+				return err
+			}
+			return revokeFailed(ctx, tx, gatewayID, pc.TransactionID, e.Access)
 		}
 		if err != nil {
+			return err
+		}
+		// Audited once the permit is finished, so a refused repeat records
+		// nothing (#313 review follow-up).
+		if err := revokeFailed(ctx, tx, gatewayID, pc.TransactionID, e.Access); err != nil {
 			return err
 		}
 		x.Transaction = txn

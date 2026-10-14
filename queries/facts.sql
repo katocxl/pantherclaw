@@ -70,13 +70,40 @@ SET provider_id = EXCLUDED.provider_id, value = EXCLUDED.value, observed_at = EX
 WHERE f.observed_at <= EXCLUDED.observed_at;
 
 -- ListSubjectFacts returns the facts of active providers about one subject.
+-- A gateway provider's facts count only while its gateway still serves
+-- its connection and the connection is active (#299 review follow-up).
 -- name: ListSubjectFacts :many
 SELECT f.name, f.value, f.observed_at, f.recorded_at, f.provider_id, d.value_type
 FROM pc.facts f
 JOIN pc.fact_providers p ON p.org_id = f.org_id AND p.id = f.provider_id AND p.state = 'ACTIVE'
 JOIN pc.fact_declarations d ON d.org_id = f.org_id AND d.provider_id = f.provider_id AND d.name = f.name AND d.active
+LEFT JOIN pc.connections c ON c.org_id = p.org_id AND c.id = p.connection_id
 WHERE f.org_id = sqlc.arg(org_id) AND f.subject_type = sqlc.arg(subject_type) AND f.subject_id = sqlc.arg(subject_id)
-  AND f.name = ANY(sqlc.arg(names)::text[]);
+  AND f.name = ANY(sqlc.arg(names)::text[])
+  AND (p.gateway_id IS NULL OR (c.gateway_id = p.gateway_id AND c.state = 'ACTIVE'));
+
+-- LockServedConnection locks, for the fact write's transaction, the
+-- connection a gateway provider reports for, while its gateway still
+-- serves it and it is active; no row otherwise (#299 review follow-up).
+-- name: LockServedConnection :one
+SELECT c.id
+FROM pc.fact_providers p
+JOIN pc.connections c ON c.org_id = p.org_id AND c.id = p.connection_id AND c.gateway_id = p.gateway_id AND c.state = 'ACTIVE'
+WHERE p.org_id = sqlc.arg(org_id) AND p.id = sqlc.arg(provider_id) AND p.state = 'ACTIVE'
+FOR SHARE OF c;
+
+-- IsGatewayProvider reports whether a provider is a gateway's.
+-- name: IsGatewayProvider :one
+SELECT (gateway_id IS NOT NULL)::boolean AS gateway FROM pc.fact_providers WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id);
+
+-- DisableMovedGatewayProviders disables the active providers of a
+-- connection that are bound to a gateway other than the one now serving
+-- it, and their declarations (#299 review follow-up).
+-- name: DisableMovedGatewayProviders :many
+UPDATE pc.fact_providers SET state = 'DISABLED'
+WHERE org_id = sqlc.arg(org_id) AND connection_id = sqlc.arg(connection_id) AND gateway_id IS NOT NULL
+  AND gateway_id <> sqlc.arg(gateway_id) AND state = 'ACTIVE'
+RETURNING id, gateway_id;
 
 -- name: ListFactProviders :many
 SELECT id, name, service_account_id, gateway_id, connection_id, state FROM pc.fact_providers

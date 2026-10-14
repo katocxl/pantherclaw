@@ -48,3 +48,10 @@ JOIN pc.policies p ON p.org_id = v.org_id AND p.id = v.policy_id
 WHERE v.org_id = sqlc.arg(org_id)
 ORDER BY v.created_at DESC
 LIMIT sqlc.arg(max_rows);
+
+-- name: LockPublishedPolicyVersion :one
+-- The published version, locked until the transaction ends, so a publish
+-- that expects it sees any other publish first (C4, expected version).
+SELECT id FROM pc.policy_versions
+WHERE org_id = sqlc.arg(org_id) AND state = 'PUBLISHED'
+FOR UPDATE;

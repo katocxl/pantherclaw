@@ -12,6 +12,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/credentials/app"
 	"github.com/katocxl/pantherclaw/internal/credentials/domain"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
+	"github.com/katocxl/pantherclaw/internal/platform/ids"
 )
 
 // TestHR204_AGitHubAppCredentialKeepsItsKind: the kind is stored, listed
@@ -66,9 +67,18 @@ func TestHR204_AGitHubAppCredentialKeepsItsKind(t *testing.T) {
 // connection's (connection_github), audited and shown on the connection; a
 // GitHub App credential without its installation, or a static one with
 // one, is refused. Sealing for another installation forgets what was read
-// from the old one.
+// from the old one. Each recorded installation runs the hook that
+// schedules an org scan, in the sealing transaction (F048).
 func TestHR203_AGitHubAppCredentialRecordsItsInstallation(t *testing.T) {
 	e := newEnv(t)
+	var recorded []ids.UUID
+	e.svc.OnGitHubInstallation(func(_ context.Context, tx db.TenantTx, connection ids.UUID) error {
+		if tx.OrgID() != e.org {
+			t.Error("the hook ran outside the org's sealing transaction")
+		}
+		recorded = append(recorded, connection)
+		return nil
+	})
 	gh := &domain.Installation{AppClientID: "Iv23liApp", ID: 7, Account: "acme"}
 	for name, c := range map[string]struct {
 		kind string
@@ -120,5 +130,8 @@ func TestHR203_AGitHubAppCredentialRecordsItsInstallation(t *testing.T) {
 	if conn, _ = e.conns.Get(e.sealer, e.conn.ID); conn.GitHub.InstallationID != 8 || conn.GitHub.RepositorySelection != nil || conn.GitHub.ReadAt != nil ||
 		string(conn.GitHub.Permissions) != "{}" {
 		t.Fatalf("another installation kept what was read from the old one: %+v", conn.GitHub)
+	}
+	if len(recorded) != 3 || recorded[0] != e.conn.ID {
+		t.Fatalf("the hook ran for %v", recorded)
 	}
 }

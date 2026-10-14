@@ -272,6 +272,9 @@ type Access struct {
 	Requested, Granted         map[string]string
 	Expires                    time.Time
 	Revocation                 string
+	// GrantedIncomplete: Granted was cut to what a receipt holds, keeping
+	// what made the grant wider first (#353 review).
+	GrantedIncomplete bool
 }
 
 // executionReceipt signs what the gateway (or, for a dispatch that never
@@ -307,6 +310,9 @@ func (a *Authority) executionReceipt(gw Gateway, e Execution, x Executed, now ti
 		access := map[string]any{
 			"installation": a.Installation, "repository": a.Repository, "requested": a.Requested, "granted": a.Granted,
 			"revocation": a.Revocation,
+		}
+		if a.GrantedIncomplete {
+			access["granted_incomplete"] = true
 		}
 		if a.RepositoryID > 0 {
 			access["repository_id"] = a.RepositoryID

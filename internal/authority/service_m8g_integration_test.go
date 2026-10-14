@@ -34,6 +34,7 @@ func TestHR203_TheExecutionReceiptCarriesTheAccess(t *testing.T) {
 		Granted      map[string]string `json:"granted"`
 		ExpiresAt    string            `json:"expires_at"`
 		Revocation   string            `json:"revocation"`
+		Incomplete   bool              `json:"granted_incomplete"`
 	}
 	record := func(a *authority.Access) *access {
 		t.Helper()
@@ -67,22 +68,36 @@ func TestHR203_TheExecutionReceiptCarriesTheAccess(t *testing.T) {
 		Installation: 7, Repository: "acme/payments", RepositoryID: 42, Requested: perms, Granted: perms, Expires: expires, Revocation: "revoked",
 	})
 	if got == nil || got.Installation != 7 || got.Repository != "acme/payments" || got.RepositoryID != 42 || !maps.Equal(got.Requested, perms) ||
-		!maps.Equal(got.Granted, perms) || got.ExpiresAt != "2026-10-11T13:00:00Z" || got.Revocation != "revoked" {
+		!maps.Equal(got.Granted, perms) || got.ExpiresAt != "2026-10-11T13:00:00Z" || got.Revocation != "revoked" || got.Incomplete {
 		t.Fatalf("access in the receipt: %+v", got)
 	}
 	if got := record(nil); got != nil {
 		t.Fatalf("a static credential's receipt carries access %+v", got)
 	}
+	// A grant cut to what a receipt holds says so (#353 review).
+	if got := record(&authority.Access{Installation: 7, Repository: "acme/payments", Requested: perms, Granted: perms, Revocation: "revoked", GrantedIncomplete: true}); got == nil || !got.Incomplete {
+		t.Fatalf("a cut grant's receipt: %+v", got)
+	}
 	// A token that could not be revoked: the receipt and an audit event
 	// say so (ADR-0021 item 6); with no expiry stated, none is recorded.
-	got = record(&authority.Access{Installation: 7, Repository: "acme/payments", Requested: perms, Granted: perms, Revocation: "revoke_failed"})
+	unrevoked := &authority.Access{Installation: 7, Repository: "acme/payments", Requested: perms, Granted: perms, Revocation: "revoke_failed"}
+	res := f.authorize(t, "10.00")
+	if _, err := f.svc.BeginDispatch(ctx, f.gw, res.PermitID, res.Epoch, authority.Outbound{}); err != nil {
+		t.Fatal(err)
+	}
+	for range 2 { // a repeated report is refused and records nothing more (#313)
+		_, _ = f.svc.RecordExecution(ctx, f.gw, authority.Execution{
+			Permit: res.PermitID, Outcome: authority.Accepted, TargetStatus: 200, DispatchMS: 3, Access: unrevoked,
+		})
+	}
+	got = record(unrevoked)
 	if got == nil || got.Revocation != "revoke_failed" || got.ExpiresAt != "" {
 		t.Fatalf("an unrevoked token's access: %+v", got)
 	}
 	var events int
 	if err := f.pool.InTenantTx(ctx, f.gw.Org, func(ctx context.Context, tx db.TenantTx) error {
 		return tx.QueryRow(ctx, "SELECT count(*) FROM pc.ledger_entries WHERE kind = 'audit.credential.revoke_failed'").Scan(&events)
-	}); err != nil || events != 1 {
+	}); err != nil || events != 2 {
 		t.Fatalf("%d credential.revoke_failed events: %v", events, err)
 	}
 }

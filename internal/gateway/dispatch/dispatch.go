@@ -27,15 +27,17 @@
 package dispatch
 
 import (
-	"bytes"
 	"context"
 	"crypto/sha256"
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"net"
 	"net/http"
 	"net/netip"
+	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -88,7 +90,10 @@ const (
 // Codes the gateway sets itself (Result.Code); a decision's code is its
 // decisive reason.
 const (
-	CodeAuthorityUnavailable  = "authority_unavailable"
+	CodeAuthorityUnavailable = "authority_unavailable"
+	// CodeFactsUnreported: the facts the decision needs could not be
+	// reported to the control plane, so no decision was asked for.
+	CodeFactsUnreported       = "facts_unreported"
 	CodeContainmentStale      = "containment_stale"
 	CodeKillSwitch            = "kill_switch"
 	CodeGatewayRevoked        = "gateway_revoked"
@@ -180,7 +185,16 @@ type Options struct {
 	ReportFacts FactReporter
 	// FactTimeout bounds those reads; zero is DefaultFactTimeout.
 	FactTimeout time.Duration
+	// ReportRevocation tells the server that a token minted for a fact
+	// read, a verification read or a scan could not be revoked (ADR-0021
+	// item 6, R-18); nil only logs it. A dispatch's is reported with its
+	// outcome.
+	ReportRevocation RevocationReporter
 }
+
+// RevocationReporter reports an installation token that was not revoked,
+// with what it was for: facts, verification or org_scan.
+type RevocationReporter func(ctx context.Context, connection, purpose string, a broker.Access) error
 
 // Engine dispatches mapped actions.
 type Engine struct {
@@ -198,6 +212,7 @@ type Engine struct {
 	connectors  Connectors
 	reportFacts FactReporter
 	factTimeout time.Duration
+	revocations RevocationReporter
 
 	mu      sync.Mutex
 	clients map[string]clientEntry
@@ -234,7 +249,7 @@ func New(o Options) (*Engine, error) {
 		containment: o.Containment, broker: o.Broker, allowed: o.AllowedPrefixes, breaker: newBreaker(o.Now, o.ReportCircuit, o.Log),
 		log: o.Log, onDrift: o.OnDrift, clients: map[string]clientEntry{}, drift: map[string]driftEntry{}, approvers: o.Approvers,
 		connectors:  o.Connectors,
-		reportFacts: o.ReportFacts, factTimeout: o.FactTimeout,
+		reportFacts: o.ReportFacts, factTimeout: o.FactTimeout, revocations: o.ReportRevocation,
 	}, nil
 }
 
@@ -344,8 +359,14 @@ func (e *Engine) dispatch(ctx context.Context, c Call, t *timer) Result {
 	if code := accountRefusal(conn, c.Action.Action); code != "" {
 		return Result{Class: CannotAuthorize, Code: code, Decision: pb.Decision_DECISION_CANNOT_AUTHORIZE}
 	}
-	if e.reportGitHubFacts(ctx, conn, c.Action.Action) {
+	if read, unreported := e.reportGitHubFacts(ctx, conn, c.Action.Action); read {
 		t.lap("facts")
+		if unreported != nil {
+			// The facts it read, or could not, never reached the server, which
+			// may still hold a fresh earlier observation: no decision is asked
+			// for, so that observation cannot decide (#353 review).
+			return Result{Class: CannotAuthorize, Code: CodeFactsUnreported, Decision: pb.Decision_DECISION_CANNOT_AUTHORIZE}
+		}
 	}
 	ar, err := e.authority.Authorize(ctx, &pb.AuthorizeRequest{ActionIr: c.Action.Canonical, Workload: c.Workload})
 	t.lap("authz")
@@ -483,10 +504,10 @@ var errUnsupported = errors.New("dispatch: unsupported obligation")
 // errKind refuses to place a credential that is not static.
 var errKind = errors.New("dispatch: a GitHub App credential is never placed as sealed")
 
-// errPEM refuses to place a static credential that holds a PEM block, such
-// as an App's private key sealed without --github-app: it would go to the
-// target.
-var errPEM = errors.New("dispatch: a credential holding a PEM block is never placed")
+// errPEM refuses to place a static credential that holds a private key in
+// any common form (a PEM block, base64 PEM, a bare PEM body, DER), such as an
+// App's private key sealed without --github-app: it would go to the target.
+var errPEM = errors.New("dispatch: a credential holding a private key is never placed")
 
 // effective applies the decision's obligations to the action (F104, F107):
 // the only kind the Authority sets is count_max with clamping, before
@@ -617,7 +638,7 @@ func (e *Engine) send(ctx context.Context, r Result, conn *control.Connection, d
 	revoke := func() {}
 	access := func() *pb.CredentialAccess { return nil }
 	if conn.GetAccessMode() == "pantherclaw_held" {
-		s, release, used, err := e.credential(ctx, conn, def, a.Action.Target, p.req, p.client)
+		s, release, used, err := e.credential(ctx, conn, def, a.Action.Target, p.req, p.client, "")
 		if err != nil {
 			e.log.WarnContext(ctx, "gateway.credential_unavailable", slog.String("transaction_id", want.Txn),
 				slog.String("connection_id", conn.GetId()), pclog.Err(err))
@@ -710,8 +731,12 @@ func targetRef(def *defs.Definition, body, secret []byte) string {
 // access then says what the minted token allowed (nil for a static
 // credential). A read (a verification or fact read included) gets a
 // read-only token.
+//
+// purpose is what a read's token is for (verification), whose revocation
+// failure is reported here; a dispatch's (empty) is reported with its
+// outcome.
 func (e *Engine) credential(ctx context.Context, conn *control.Connection, def *defs.Definition, target actionir.Target,
-	req *http.Request, c broker.Sender,
+	req *http.Request, c broker.Sender, purpose string,
 ) (secret []byte, release func(), access func() *pb.CredentialAccess, err error) {
 	if conn.Credential.GetKind() != credentials.KindGitHubApp {
 		plain, err := e.openStatic(conn)
@@ -740,17 +765,79 @@ func (e *Engine) credential(ctx context.Context, conn *control.Connection, def *
 	return tok.Token(), func() {
 		if err := tok.Revoke(ctx, c); err != nil {
 			e.log.WarnContext(ctx, "gateway.installation_token_not_revoked", slog.String("connection_id", conn.GetId()), pclog.Err(err))
+			if purpose != "" {
+				e.revokeFailed(ctx, conn, purpose, tok)
+			}
 		}
 	}, func() *pb.CredentialAccess { return accessOf(tok.Access()) }, nil
 }
 
+// revokeFailed reports a token minted for purpose that could not be
+// revoked; a report that fails is only logged.
+func (e *Engine) revokeFailed(ctx context.Context, conn *control.Connection, purpose string, tok *broker.Installation) {
+	if e.revocations == nil {
+		return
+	}
+	if err := e.revocations(context.WithoutCancel(ctx), conn.GetId(), purpose, tok.Access()); err != nil {
+		e.log.WarnContext(ctx, "gateway.revocation_failure_not_reported", slog.String("connection_id", conn.GetId()), pclog.Err(err))
+	}
+}
+
+// maxGrant is the most permissions a receipt's access names.
+const maxGrant = 32
+
+var (
+	grantName  = regexp.MustCompile(`^[a-z][a-z0-9_]{0,63}$`)
+	grantLevel = regexp.MustCompile(`^[a-z]{1,16}$`)
+)
+
+// clampGrant keeps the well-formed permissions of a grant, at most
+// maxGrant of them: first those that made it wider than requested (not
+// requested, or at another level), so the receipt shows why it was
+// refused, then the rest, each by name (#353 review). incomplete reports
+// that some were left out.
+func clampGrant(g, requested map[string]string) (out map[string]string, incomplete bool) {
+	if len(g) == 0 {
+		return g, false
+	}
+	wider := func(k string) bool { r, ok := requested[k]; return !ok || r != g[k] }
+	names := slices.Sorted(maps.Keys(g))
+	slices.SortStableFunc(names, func(x, y string) int {
+		switch wx, wy := wider(x), wider(y); {
+		case wx && !wy:
+			return -1
+		case wy && !wx:
+			return 1
+		}
+		return 0
+	})
+	out = map[string]string{}
+	for _, k := range names {
+		switch {
+		case !grantName.MatchString(k) || !grantLevel.MatchString(g[k]):
+			incomplete = true
+		case len(out) == maxGrant:
+			incomplete = true
+		default:
+			out[k] = g[k]
+		}
+	}
+	return out, incomplete
+}
+
 // accessOf is what a minted token allowed, for the execution receipt
 // (ADR-0021 item 5).
+//
+// GitHub's grant is clamped to what the receipt's schema allows (#313
+// review follow-up): a refused wider grant may name anything, and a grant
+// the schema refused would leave a transaction UNKNOWN although nothing was
+// sent.
 func accessOf(a broker.Access) *pb.CredentialAccess {
 	out := &pb.CredentialAccess{
 		InstallationId: a.Installation, Repository: a.Repository, RepositoryId: max(a.RepositoryID, 0), Requested: a.Requested,
-		Granted: a.Granted, Revocation: a.Revocation,
+		Revocation: a.Revocation,
 	}
+	out.Granted, out.GrantedIncomplete = clampGrant(a.Granted, a.Requested)
 	if !a.Expires.IsZero() {
 		out.ExpireTime = timestamppb.New(a.Expires)
 	}
@@ -786,13 +873,13 @@ func (e *Engine) openCredential(conn *control.Connection) ([]byte, error) {
 // placeCredential places an opened static credential on req, for the
 // credential's allowed hosts only. A GitHub App credential is never placed:
 // it holds the App's key, from which the gateway mints a token per action
-// (HR-203, HR-204). Nor is a static one holding a PEM block.
+// (HR-203, HR-204). Nor is a static one holding a private key.
 func placeCredential(conn *control.Connection, req *http.Request, secret []byte) error {
 	cred := conn.Credential
 	if k := cred.GetKind(); k != "" && k != credentials.KindStatic {
 		return errKind
 	}
-	if bytes.Contains(secret, []byte("-----BEGIN")) {
+	if credentials.HoldsPrivateKey(secret) {
 		return errPEM
 	}
 	return broker.Place(req, cred.GetAllowedHosts(), cred.GetHeader(), cred.GetScheme(), secret)
