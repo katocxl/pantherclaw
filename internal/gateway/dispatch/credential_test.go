@@ -4,6 +4,7 @@
 package dispatch
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
@@ -34,10 +35,10 @@ func TestHR204_AnAppKeyIsNeverPlaced(t *testing.T) {
 	}
 	app, static := conn(credentials.KindGitHubApp), conn("")
 	e := &Engine{} // no broker: a credential that were opened would answer ErrNoBroker
-	if _, err := e.openStatic(app); !errors.Is(err, errKind) {
+	if _, err := e.openStatic(context.Background(), app); !errors.Is(err, errKind) {
 		t.Fatalf("an App credential reached the broker: %v", err)
 	}
-	if _, err := e.openStatic(static); !errors.Is(err, broker.ErrNoBroker) {
+	if _, err := e.openStatic(context.Background(), static); !errors.Is(err, broker.ErrNoBroker) {
 		t.Fatalf("a static credential was not opened: %v", err)
 	}
 
@@ -90,5 +91,46 @@ func TestHR203_AReadGetsAReadOnlyToken(t *testing.T) {
 	}
 	if _, _, _, err := e.credential(t.Context(), conn, read(map[string]string{"contents": "read"}), target, req, nil, "verification"); !errors.Is(err, broker.ErrNoBroker) {
 		t.Fatalf("a read-only read was refused before opening: %v", err)
+	}
+}
+
+type countingOpener struct{ opens int }
+
+func (o *countingOpener) Open(string, string, []string, broker.Sealed) ([]byte, error) {
+	o.opens++
+	return []byte("ghp_static_secret"), nil
+}
+
+// TestHR225_ACallOpensItsStaticCredentialOnce: the outbound check and the
+// injection share one decryption per call; each caller gets its own copy,
+// so clearing one does not blank the other, and the call's copy is cleared
+// when it ends.
+func TestHR225_ACallOpensItsStaticCredentialOnce(t *testing.T) {
+	op := &countingOpener{}
+	e := &Engine{broker: op, org: "o"}
+	conn := &control.Connection{GatewayConnection: &pb.GatewayConnection{Id: "c"}, Credential: &pb.SealedCredential{}}
+	cs := &callSecret{conn: "c"}
+	ctx := context.WithValue(context.Background(), callSecretKey{}, cs)
+	a, err := e.openStatic(ctx, conn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	clear(a)
+	b, err := e.openStatic(ctx, conn)
+	if err != nil || string(b) != "ghp_static_secret" || op.opens != 1 {
+		t.Fatalf("%q %v after %d opens", b, err, op.opens)
+	}
+	cs.clear()
+	if string(cs.b) == "ghp_static_secret" {
+		t.Fatal("the call's copy outlived the call")
+	}
+	// Another connection in the same context gets its own secret.
+	other := &control.Connection{GatewayConnection: &pb.GatewayConnection{Id: "d"}, Credential: &pb.SealedCredential{}}
+	if _, err := e.openStatic(ctx, other); err != nil || op.opens != 2 {
+		t.Fatalf("another connection used the cache: %v %d", err, op.opens)
+	}
+	// Outside a call every open decrypts.
+	if _, err := e.openStatic(context.Background(), conn); err != nil || op.opens != 3 {
+		t.Fatalf("%v %d", err, op.opens)
 	}
 }

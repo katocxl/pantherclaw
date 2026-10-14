@@ -12,6 +12,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/gateway/outbound"
 	"github.com/katocxl/pantherclaw/internal/gateway/simcheck"
 	pb "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
+	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
 )
 
 const (
@@ -53,9 +54,13 @@ func (e *Engine) simulatorRefusal(ctx context.Context, conn *control.Connection)
 // as findings for the Authority, which can only add a requirement for them.
 func (e *Engine) outboundCheck(ctx context.Context, conn *control.Connection, a actionir.ActionIR) (refused bool, findings []*pb.PayloadFinding) {
 	var held [][]byte
-	if secret, err := e.openStatic(conn); err == nil {
+	if secret, err := e.openStatic(ctx, conn); err == nil {
 		defer clear(secret)
 		held = append(held, secret)
+	} else if conn.Credential != nil {
+		// Nothing to compare against (an App key is never opened here); the
+		// error names no value.
+		e.log.DebugContext(ctx, "gateway.held_secret_unavailable", slog.String("connection_id", conn.GetId()), pclog.Err(err))
 	}
 	res := outbound.Scan(outbound.Input{Args: a.Params, Path: a.Target.ID}, held)
 	if res.HeldSecret {

@@ -44,8 +44,11 @@ func (s *state) payloadRequirement() {
 	a := pdomain.ApprovalRequirement{Role: string(td.RoleApprover), Count: 1}
 	f := s.ev.PayloadFindings[0]
 	s.ev.Approvals = append(s.ev.Approvals, a)
-	s.cl.add(StepRequirements, adomain.RequireApproval, ReasonSecretInPayload,
-		"approval by "+a.Role+" is required: the payload holds what looks like a credential ("+f.Kind+" at "+f.Location+")", "payload")
+	why := "the payload holds what looks like a credential (" + f.Kind + " at " + f.Location + ")"
+	if f.Kind == "scan_incomplete" {
+		why = "the gateway could not check all of the payload (stopped at " + f.Location + ")"
+	}
+	s.cl.add(StepRequirements, adomain.RequireApproval, ReasonSecretInPayload, "approval by "+a.Role+" is required: "+why, "payload")
 	s.ev.Requirements = append(s.ev.Requirements, input(&a, nil, apdomain.Source{Level: "payload", Reason: ReasonSecretInPayload}))
 }
 

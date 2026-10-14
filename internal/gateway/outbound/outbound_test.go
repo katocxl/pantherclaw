@@ -4,13 +4,19 @@
 package outbound
 
 import (
+	"bytes"
 	"encoding/base64"
+	"encoding/json/jsontext"
 	"net/http"
 	"net/url"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 )
+
+// pemBegin is split so the file holds no private-key header.
+const pemBegin = "-----" + "BEGIN"
 
 const (
 	ghToken = "ghp_" + "abcdefghijklmnopqrstuvwxyz0123456789"
@@ -51,7 +57,7 @@ func TestScanFormats(t *testing.T) {
 	}{
 		{"github in json body", Input{Body: []byte(`{"files":[{"content":"token=` + ghToken + `"}]}`)}, []Finding{{"github_token", "body:/files/0/content"}}},
 		{"fine grained", Input{Query: url.Values{"q": {"github_pat_" + strings.Repeat("A", 30)}}}, []Finding{{"github_token", "query:q"}}},
-		{"private key arg", Input{Args: []byte(`{"content":"-----BEGIN RSA PRIVATE KEY-----\nMIIE"}`)}, []Finding{{"private_key", "arg:content"}}},
+		{"private key arg", Input{Args: []byte(`{"content":"` + pemBegin + ` RSA PRIVATE KEY-----\nMIIE"}`)}, []Finding{{"private_key", "arg:content"}}},
 		{"aws", Input{Header: http.Header{"x-foo": {"AKIA" + strings.Repeat("A", 16)}}}, []Finding{{"aws_access_key", "header:X-Foo"}}},
 		{"slack", Input{Body: []byte("xoxb-1234567890-abc")}, []Finding{{"slack_token", "body"}}},
 		{"pantherclaw", Input{Args: []byte(`{"x":"pck_dev_` + strings.Repeat("a", 32) + `"}`)}, []Finding{{"pantherclaw_token", "arg:x"}}},
@@ -102,6 +108,7 @@ func TestScanNeverReturnsTheValue(t *testing.T) {
 func FuzzOutboundScan(f *testing.F) {
 	f.Add([]byte(`{"a":"`+ghToken+`"}`), "q", "/p", []byte(`{"x":"y"}`), custody)
 	f.Add([]byte(custody), "", "", []byte(`[`), custody)
+	f.Add([]byte(`{}`), "", "", manyStrings(MaxParts+10, "x"), custody)
 	f.Fuzz(func(t *testing.T, body []byte, q, path string, args []byte, secret string) {
 		held := [][]byte{[]byte(secret)}
 		in := Input{Body: body, Query: url.Values{"q": {q}}, Path: path, Args: args, Header: http.Header{"X-A": {q}}}
@@ -114,6 +121,13 @@ func FuzzOutboundScan(f *testing.F) {
 		}
 		if len(r.Findings) > MaxFindings {
 			t.Fatal("too many findings")
+		}
+		// Never fail open: more strings than the cap, in valid JSON, is a
+		// refusal or an incomplete scan, and a base64 value past the decode
+		// cap is too.
+		if jsontext.Value(args).IsValid() && bytes.Count(args, []byte(`"`)) > 2*MaxParts+8 && !r.HeldSecret &&
+			!slices.ContainsFunc(r.Findings, func(f Finding) bool { return f.Kind == KindScanIncomplete }) {
+			t.Fatalf("%d quotes, a clean scan", bytes.Count(args, []byte(`"`)))
 		}
 		for i := 1; i < len(r.Findings); i++ {
 			a, b := r.Findings[i-1], r.Findings[i]
@@ -144,5 +158,83 @@ func TestScanBase64Values(t *testing.T) {
 	bin := base64.StdEncoding.EncodeToString([]byte{0xff, 0xfe, 0xfd, 0xfc, 0xfb, 0xfa, 0xf9, 0xf8, 0xf7, 0xf6, 0xf5, 0xf4})
 	if got := Scan(Input{Body: []byte(`{"c":"` + bin + `"}`)}, nil).Findings; len(got) != 0 {
 		t.Fatalf("%v", got)
+	}
+}
+
+// manyStrings is a JSON object of n benign strings and then the tail.
+func manyStrings(n int, tail string) []byte {
+	var b strings.Builder
+	b.WriteString(`{"a":[`)
+	for i := range n {
+		if i > 0 {
+			b.WriteString(",")
+		}
+		b.WriteString(`"benign"`)
+	}
+	b.WriteString(`],"z":"` + tail + `"}`)
+	return []byte(b.String())
+}
+
+// TestScanNeverFailsOpen (D36): past the string cap, or on a base64 value
+// too large to decode, a held secret still refuses or the scan says it is
+// incomplete; a result is never clean.
+func TestScanNeverFailsOpen(t *testing.T) {
+	held := [][]byte{[]byte(custody)}
+	for name, in := range map[string]Input{
+		"body past cap": {Body: manyStrings(5000, custody)},
+		"args past cap": {Args: manyStrings(5000, custody)},
+	} {
+		if r := Scan(in, held); !r.HeldSecret {
+			t.Errorf("%s: a held secret after 5000 strings: %+v", name, r)
+		}
+	}
+	for name, in := range map[string]Input{
+		"body": {Body: manyStrings(5000, ghToken)},
+		"args": {Args: manyStrings(5000, ghToken)},
+	} {
+		r := Scan(in, nil)
+		if !slices.ContainsFunc(r.Findings, func(f Finding) bool { return f.Kind == KindScanIncomplete }) {
+			t.Errorf("%s: no scan_incomplete after 5000 strings: %+v", name, r)
+		}
+	}
+	big := base64.StdEncoding.EncodeToString(make([]byte, MaxDecoded+1))
+	r := Scan(Input{Body: []byte(`{"content":"` + big + `"}`)}, nil)
+	if want := []Finding{{KindScanIncomplete, "body:/content(base64)"}}; !reflect.DeepEqual(r.Findings, want) {
+		t.Fatalf("oversize base64: %+v", r)
+	}
+	// A body that breaks halfway is still read as text.
+	r = Scan(Input{Body: []byte(`{"a":"x", ` + ghToken + ` ???`)}, nil)
+	if !slices.Contains(r.Findings, Finding{"github_token", "body"}) {
+		t.Fatalf("broken JSON: %+v", r)
+	}
+}
+
+// TestScanFindsATokenInBinaryBase64 (D36): decoded base64 is scanned as
+// bytes, so non-UTF-8 content around a token does not hide it.
+func TestScanFindsATokenInBinaryBase64(t *testing.T) {
+	enc := base64.StdEncoding.EncodeToString(append([]byte(ghToken), 0xff, 0xfe, 0x00))
+	r := Scan(Input{Body: []byte(`{"content":"` + enc + `"}`)}, nil)
+	if want := []Finding{{"github_token", "body:/content(base64)"}}; !reflect.DeepEqual(r.Findings, want) {
+		t.Fatalf("%+v", r)
+	}
+}
+
+// TestScanKeepsOneFindingPerKind (D36): sixteen tokens do not push a private
+// key out of the findings.
+func TestScanKeepsOneFindingPerKind(t *testing.T) {
+	var b strings.Builder
+	b.WriteString("{")
+	for i := range 20 {
+		b.WriteString(`"a` + string(rune('a'+i)) + `":"` + ghToken + `",`)
+	}
+	b.WriteString(`"z":"` + pemBegin + ` OPENSSH PRIVATE KEY-----"}`)
+	r := Scan(Input{Args: []byte(b.String())}, nil)
+	if len(r.Findings) != MaxFindings || !slices.Contains(r.Findings, Finding{"private_key", "arg:z"}) {
+		t.Fatalf("%+v", r.Findings)
+	}
+	for i := 1; i < len(r.Findings); i++ {
+		if a, b := r.Findings[i-1], r.Findings[i]; a.Kind > b.Kind || (a.Kind == b.Kind && a.Location >= b.Location) {
+			t.Fatalf("not sorted: %v", r.Findings)
+		}
 	}
 }

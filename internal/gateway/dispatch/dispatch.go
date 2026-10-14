@@ -350,6 +350,9 @@ func (e *Engine) Dispatch(ctx context.Context, c Call) Result {
 
 func (e *Engine) dispatch(ctx context.Context, c Call, t *timer) Result {
 	conn := c.Connection
+	cs := &callSecret{conn: conn.GetId()}
+	defer cs.clear()
+	ctx = context.WithValue(ctx, callSecretKey{}, cs)
 	if _, class, code := e.contained(conn); class != "" {
 		return Result{Class: class, Code: code}
 	}
@@ -749,7 +752,7 @@ func (e *Engine) credential(ctx context.Context, conn *control.Connection, def *
 	req *http.Request, c broker.Sender, purpose string,
 ) (secret []byte, release func(), access func() *pb.CredentialAccess, err error) {
 	if conn.Credential.GetKind() != credentials.KindGitHubApp {
-		plain, err := e.openStatic(conn)
+		plain, err := e.openStatic(ctx, conn)
 		if err != nil {
 			return nil, nil, nil, err
 		}
@@ -857,12 +860,38 @@ func accessOf(a broker.Access) *pb.CredentialAccess {
 // openStatic opens the connection's sealed credential when it is static.
 // Another kind is refused before anything is decrypted, so an App's key is
 // opened only on the path that mints with it (HR-204).
-func (e *Engine) openStatic(conn *control.Connection) ([]byte, error) {
+func (e *Engine) openStatic(ctx context.Context, conn *control.Connection) ([]byte, error) {
+	if cs, ok := ctx.Value(callSecretKey{}).(*callSecret); ok && cs.conn == conn.GetId() {
+		// The call has opened it already (the outbound check): decrypt once,
+		// hand each caller its own copy to clear.
+		cs.once.Do(func() { cs.b, cs.err = e.openStaticUncached(conn) })
+		return slices.Clone(cs.b), cs.err
+	}
+	return e.openStaticUncached(conn)
+}
+
+func (e *Engine) openStaticUncached(conn *control.Connection) ([]byte, error) {
 	if k := conn.Credential.GetKind(); k != "" && k != credentials.KindStatic {
 		return nil, errKind
 	}
 	return e.openCredential(conn)
 }
+
+// callSecretKey carries a call's callSecret in its context.
+type callSecretKey struct{}
+
+// callSecret is a call's opened static credential, opened at most once and
+// cleared when the call ends.
+type callSecret struct {
+	// conn is the connection the secret belongs to; any other connection
+	// opens its own.
+	conn string
+	once sync.Once
+	b    []byte
+	err  error
+}
+
+func (cs *callSecret) clear() { clear(cs.b) }
 
 // openCredential opens the connection's sealed credential; the caller
 // clears it.
