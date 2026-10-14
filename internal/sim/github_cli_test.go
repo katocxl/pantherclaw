@@ -6,8 +6,11 @@ package sim
 import (
 	"bytes"
 	"context"
+	"maps"
 	"path/filepath"
 	"testing"
+
+	"github.com/katocxl/pantherclaw/internal/gateway/githubfacts"
 )
 
 // TestGitHubSubcommand: the App key is created once and reused, and the
@@ -28,5 +31,22 @@ func TestGitHubSubcommand(t *testing.T) {
 	b, err := appKey(key)
 	if err != nil || !a.Equal(b) {
 		t.Fatalf("the key is not reused: %v", err)
+	}
+}
+
+// TestGitHubInstallationGrantsTheFactReads: the installation the CLI makes
+// grants every permission the gateway's fact reads and the deployment
+// verifier need (the list is derived from githubfacts.Scopes; the
+// verifier's deployments read is named here), at the level they ask or
+// more, so the gateway's fact token is never refused.
+func TestGitHubInstallationGrantsTheFactReads(t *testing.T) {
+	granted := installationPermissions()
+	rank := map[string]int{"read": 1, "write": 2, "admin": 3}
+	need := map[string]string{"deployments": "read"} // the deployment verifier's reads
+	maps.Copy(need, githubfacts.Scopes)
+	for perm, level := range need {
+		if rank[granted[perm]] < rank[level] {
+			t.Errorf("the installation grants %q %q, the gateway needs %q", perm, granted[perm], level)
+		}
 	}
 }
