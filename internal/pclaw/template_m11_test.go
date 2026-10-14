@@ -96,17 +96,30 @@ type m11Rendered struct {
 // renderM11 renders a template's policy.json and tests.json the way apply
 // fills placeholders: a "per": "repo" item once per repository (its id
 // made per repository, {{repo}} and {{repository}} filled), a "per": "org"
-// item once with {{repos}} as a CEL list.
+// item once with {{repos}} as a CEL list. A direct deployment that names
+// no environment goes to production (D21), so what it expects depends on
+// the environment applied for: {{no_environment_decision}} and
+// {{no_environment_reason}}.
 func renderM11(t *testing.T, name string, repos []string) m11Rendered {
+	t.Helper()
+	return renderM11Env(t, name, repos, "production")
+}
+
+func renderM11Env(t *testing.T, name string, repos []string, environment string) m11Rendered {
 	t.Helper()
 	quoted := make([]string, len(repos))
 	for i, r := range repos {
 		quoted[i] = "'" + r + "'"
 	}
+	noEnvDecision, noEnvReason := "REQUIRE_APPROVAL", "DEPLOYMENT_NEEDS_RELEASE"
+	if environment != "production" {
+		noEnvDecision, noEnvReason = "DENY", "DEPLOYMENT_ENVIRONMENT_NOT_ALLOWED"
+	}
 	common := []string{
 		"{{environment_id}}", exampleEnvironmentID, "{{other_environment_id}}", exampleOtherEnvID,
-		"{{environment}}", "production", "{{workspace}}", exampleWorkspace,
+		"{{environment}}", environment, "{{workspace}}", exampleWorkspace,
 		"{{repos}}", "[" + strings.Join(quoted, ", ") + "]",
+		"{{no_environment_decision}}", noEnvDecision, "{{no_environment_reason}}", noEnvReason,
 	}
 	expand := func(file, key string) []map[string]any {
 		raw, err := fs.ReadFile(templates.FS, name+"/"+file)
@@ -213,7 +226,9 @@ var m11Facts = map[string]fdomain.Type{"payments.charge.refundable": fdomain.Typ
 // TestM11TemplatesDisclose: every template, coding-to-production
 // included, says what it protects, what it does not, and which packages
 // and connections it needs (F176), and pclaw template show prints all of
-// it.
+// it. Traversal out of production-diagnostics' workspace is not a D7 case:
+// a non-normalized cwd is refused before the rules (HR-187), and through
+// the shell hook it is normalized and denied (TestM11DiagnosticsTraversal).
 func TestM11TemplatesDisclose(t *testing.T) {
 	names, err := templateNames()
 	if err != nil {
@@ -427,8 +442,12 @@ func m11Failures(t *testing.T, b *domain.Bundle, defsList []*defs.Definition, ca
 func TestHR044_M11TemplateTestsKillEveryMutant(t *testing.T) {
 	pkgs := m11Packages(t)
 	for _, n := range m11Templates {
-		for _, repos := range [][]string{{"acme/web"}, {"acme/api", "acme/web"}} {
-			t.Run(fmt.Sprintf("%s/%d", n, len(repos)), func(t *testing.T) {
+		for _, rc := range []struct {
+			repos []string
+			env   string
+		}{{[]string{"acme/web"}, "production"}, {[]string{"acme/api", "acme/web"}, "production"}, {[]string{"acme/web"}, "staging"}} {
+			repos := rc.repos
+			t.Run(fmt.Sprintf("%s/%d/%s", n, len(repos), rc.env), func(t *testing.T) {
 				info, err := readTemplateInfo(n)
 				if err != nil {
 					t.Fatal(err)
@@ -438,7 +457,7 @@ func TestHR044_M11TemplateTestsKillEveryMutant(t *testing.T) {
 					own[p] = pkgs[p]
 				}
 				ds := m11Definitions(own)
-				r := renderM11(t, n, repos)
+				r := renderM11Env(t, n, repos, rc.env)
 				b := r.bundle(t)
 				failed, err := m11Failures(t, b, ds, r.cases, pkgs, info.Requires.Packages)
 				if err != nil || len(failed) > 0 {
@@ -565,10 +584,41 @@ func TestM11DiagnosticsTraversal(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		a := actionir.ActionIR{Operation: shell.Operation, Definition: actionir.Definition{Digest: shell.Digest}, Env: exampleEnvironmentID,
-			Target: actionir.Target{Type: "shell.workspace", ID: "local"}, Params: raw}
+		a := actionir.ActionIR{
+			Operation: shell.Operation, Definition: actionir.Definition{Digest: shell.Digest}, Env: exampleEnvironmentID,
+			Target: actionir.Target{Type: "shell.workspace", ID: "local"}, Params: raw,
+		}
 		if _, err := c.Evaluate(context.Background(), shell, a, polapp.Input{Budget: polapp.DefaultBudget}); !errors.Is(err, actionir.ErrAmbiguous) {
 			t.Errorf("raw %s: %v, want ambiguous", cwd, err)
+		}
+	}
+}
+
+// TestM11ReleaseConsequenceHeld: a deployment that is a consequence of a
+// merge names no environment when the merge is decided; rd-environment
+// leaves it to rd-release, which holds it for a release approver, whatever
+// environment the template was applied for (D21). The D7 format has no
+// consequence, so this case lives here.
+func TestM11ReleaseConsequenceHeld(t *testing.T) {
+	pkgs := m11Packages(t)
+	deploy, _ := pkgs["pc.github"].Definition("github.deployment.trigger")
+	for _, env := range []string{"production", "staging"} {
+		c, err := (&polapp.Engine{Limits: celenv.DefaultLimits}).Compile(renderM11Env(t, "release-deployment", []string{"acme/web"}, env).bundle(t), []*defs.Definition{deploy})
+		if err != nil {
+			t.Fatal(err)
+		}
+		a := actionir.ActionIR{
+			Operation: deploy.Operation, Definition: actionir.Definition{Digest: deploy.Digest},
+			Target: actionir.Target{Type: "github.repository", ID: "acme/web"}, Params: jsontext.Value(`{}`),
+		}
+		for _, state := range []string{"PREDICTED", "UNKNOWN"} {
+			out, err := c.Evaluate(context.Background(), deploy, a, polapp.Input{Budget: polapp.DefaultBudget, Consequence: &polapp.Consequence{Rule: "r", State: state}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if item, _ := out.Decisive(); out.Verdict != domain.VerdictRequireApproval || item.Reason != "DEPLOYMENT_NEEDS_RELEASE" {
+				t.Errorf("%s, %s consequence: %s %s, want REQUIRE_APPROVAL DEPLOYMENT_NEEDS_RELEASE", env, state, out.Verdict, item.Reason)
+			}
 		}
 	}
 }

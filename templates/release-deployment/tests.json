@@ -21,10 +21,10 @@
       "expect": {"decision": "DENY", "reason": "DEPLOYMENT_ENVIRONMENT_NOT_ALLOWED"}
     },
     {
-      "id": "rd-env-unknown", "per": "repo",
-      "summary": "a deployment of the repository whose environment is not yet known waits for a release approver",
+      "id": "rd-no-env", "per": "repo",
+      "summary": "a direct deployment of the repository that names no environment goes to production: held when {{environment}} is production, refused otherwise",
       "action": {"operation": "github.deployment.trigger", "target": "{{repo}}", "params": {}},
-      "expect": {"decision": "REQUIRE_APPROVAL", "reason": "DEPLOYMENT_NEEDS_RELEASE"}
+      "expect": {"decision": "{{no_environment_decision}}", "reason": "{{no_environment_reason}}"}
     },
     {
       "id": "rd-other-repo", "per": "org",
