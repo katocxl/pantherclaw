@@ -160,3 +160,47 @@ func (d *rangeDriver) adminOnly() {
 	alice.login(t, s.org.String(), pciToken.FindStringSubmatch(out.String())[1])
 	d.admin = alice
 }
+
+// ineligible are the codes the approval flow gives for a person who may not
+// count (approvals/domain/eligibility.go).
+var ineligible = []string{"LAUNCHER_EXCLUDED", "PRINCIPAL_EXCLUDED", "OWNER_EXCLUDED", "GRANT_ISSUER_EXCLUDED", "REQUESTER_EXCLUDED", "ANCESTOR_RUN_EXCLUDED"}
+
+// refusedApproval has a reviewer who is also the run's launcher (or the
+// principal it acts for) try to approve its hold. The seeded run is theirs for
+// the attempt, and the seeded launcher is restored after it.
+func (d *rangeDriver) refusedApproval(rec *callRec, as string) (domain.Observation, error) {
+	if len(d.reviewers) == 0 {
+		return domain.Observation{}, fmt.Errorf("no reviewer to act as the %s", as)
+	}
+	r := d.reviewers[0]
+	if as != "launcher" && as != "developer" {
+		return domain.Observation{}, fmt.Errorf("approval as %q", as)
+	}
+	db, run := d.s.db, d.s.run
+	var launcher, principal, source string
+	d.s.query(d.t, "SELECT launcher_user_id::text, principal_user_id::text, principal_source FROM pc.runs WHERE id = $1", []any{run}, &launcher, &principal, &source)
+	defer func() {
+		db.AdminExec(d.t, "UPDATE pc.runs SET launcher_user_id = $1, principal_user_id = $2, principal_source = $3, subject_issuer = NULL, subject_subject = NULL WHERE id = $4",
+			mustUUID(d.t, launcher), mustUUID(d.t, principal), source, run)
+	}()
+	if as == "launcher" {
+		// The launcher is the principal too (runs_self_launched).
+		db.AdminExec(d.t, "UPDATE pc.runs SET launcher_user_id = $1, principal_user_id = $1 WHERE id = $2", r.user, run)
+	} else {
+		db.AdminExec(d.t, "UPDATE pc.runs SET principal_user_id = $1, principal_source = 'subject_token', "+
+			"subject_issuer = 'https://idp.test', subject_subject = 'range-developer' WHERE id = $2", r.user, run)
+	}
+	code, body := d.s.approveMerge(d.t, r.b, r.key, rec.txn)
+	if code == http.StatusOK {
+		return domain.Observation{Outcome: domain.OutcomeConfirmed, Detail: "the " + as + " approved"}, nil
+	}
+	// The page only says the person is not eligible; the CLI says why.
+	_, why, _ := r.cli.pclaw(d.t, "approval", "get", d.s.requestOf(d.t, rec.txn))
+	body += " " + why
+	for _, c := range ineligible {
+		if strings.Contains(body, c) {
+			return domain.Observation{Outcome: domain.OutcomeRefused, Code: c, Detail: body}, nil
+		}
+	}
+	return domain.Observation{Outcome: domain.OutcomeRefused, Code: fmt.Sprintf("http_%d", code), Detail: body}, nil
+}

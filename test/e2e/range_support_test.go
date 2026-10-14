@@ -11,7 +11,8 @@ import (
 	"crypto/ed25519"
 	"encoding/json/jsontext"
 	"errors"
-	"fmt"
+	capp "github.com/katocxl/pantherclaw/internal/connections/app"
+	mockpayments "github.com/katocxl/pantherclaw/packages/mock-payments"
 	"net/http"
 	"testing"
 	"time"
@@ -82,10 +83,6 @@ func enrolOtherInstance(t *testing.T, _ *stack) (ed25519.PrivateKey, string) {
 	return nil, ""
 }
 
-func (d *rangeDriver) refusedApproval(*callRec, string) (domain.Observation, error) {
-	return domain.Observation{}, fmt.Errorf("the harness driver cannot try an approval as the launcher or the developer yet")
-}
-
 // objectID is the id of an object of this stack's organisation.
 func (s *stack) objectID(t *testing.T, object string) ids.UUID {
 	t.Helper()
@@ -126,4 +123,19 @@ func (d *rangeDriver) runHeader() string {
 		return d.defaultRun
 	}
 	return d.s.run
+}
+
+// seedUnlisted adds a connection to an address the gateway's egress guard
+// does not allow, which registration accepts (S12).
+func (d *rangeDriver) seedUnlisted() {
+	t, s := d.t, d.s
+	gw := s.gatewayID(t)
+	conns := capp.New(s.pool, nil, s.apiURL, "")
+	if _, err := conns.Seed(context.Background(), s.org, "range", capp.CreateInput{
+		Name: "unlisted", Kind: capp.KindHTTP, Package: mockpayments.Name, BaseURL: "http://127.0.0.2:9", Gateway: gw,
+		DestinationClass: capp.ClassInternal, AccessMode: capp.AccessNone, DefaultMode: capp.ModeEnforce,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	s.waitConfig(t, s.configVersion(t, gw))
 }

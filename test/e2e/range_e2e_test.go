@@ -9,6 +9,7 @@ import (
 	"context"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/katocxl/pantherclaw/internal/redteam/app"
 	"github.com/katocxl/pantherclaw/internal/redteam/domain"
@@ -31,7 +32,7 @@ func TestRange_Scenarios(t *testing.T) {
 	for _, l := range set {
 		t.Run(l.Scenario.ID, func(t *testing.T) {
 			d := newRangeDriver(t)
-			r := &app.Runner{Driver: d}
+			r := &app.Runner{Driver: d, Timeout: 5 * time.Minute} // setup starts a whole stack
 			res := r.Run(context.Background(), l.Scenario)
 			results = append(results, res)
 			switch res.Verdict {

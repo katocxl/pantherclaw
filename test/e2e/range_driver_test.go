@@ -61,8 +61,10 @@ type rangeDriver struct {
 }
 
 type reviewer struct {
-	b   *browser
-	key *webauthntest.Authenticator
+	b    *browser
+	key  *webauthntest.Authenticator
+	user ids.UUID
+	cli  *user
 }
 
 // callRec is what a call step sent and saw, for later steps that refer to it.
@@ -129,6 +131,9 @@ func (d *rangeDriver) Setup(_ context.Context, sc domain.Scenario) (app.Fixture,
 		d.other = start(t, options{budget: "1000.00"})
 	}
 	d.setupPayments()
+	if sc.ID == "RT-031" {
+		d.seedUnlisted()
+	}
 	if sc.ID == "RT-009" {
 		d.ownGrant(`{"operations": ["github.contents.write"], "targets": {"github.branch": {"prefixes": ["acme/payments@"]}}}`, "")
 	}
@@ -194,8 +199,8 @@ func (d *rangeDriver) setupPeople() {
 		alice := d.people.user(t, "alice", "alice@example.test")
 		alice.login(t, s.org.String(), pciToken.FindStringSubmatch(out.String())[1])
 		d.admin = alice
-		_, carolB, carolKey, carol := s.reviewer(t, d.people, alice, "carol", td.RoleName("code_reviewer"))
-		_, rachelB, rachelKey, rachel := s.reviewer(t, d.people, alice, "rachel", td.RoleName("release_approver"))
+		carolCLI, carolB, carolKey, carol := s.reviewer(t, d.people, alice, "carol", td.RoleName("code_reviewer"))
+		rachelCLI, rachelB, rachelKey, rachel := s.reviewer(t, d.people, alice, "rachel", td.RoleName("release_approver"))
 		s.db.AdminExec(t, `UPDATE pc.webauthn_credentials SET state = 'REMOVED', state_reason = 'ADMIN_REMOVED', changed_at = now()
 			WHERE org_id = $1 AND name = 'key'`, s.org)
 		if code, out, errs := alice.pclaw(t, "approver-keys", "export", "--out", s.approverKeys); code != 0 || !strings.Contains(out, "2 key(s)") {
@@ -203,7 +208,7 @@ func (d *rangeDriver) setupPeople() {
 		}
 		s.linkGitHub(t, carol, "carol-gh")
 		s.linkGitHub(t, rachel, "rachel-gh")
-		d.reviewers = []reviewer{{carolB, carolKey}, {rachelB, rachelKey}}
+		d.reviewers = []reviewer{{carolB, carolKey, carol, carolCLI}, {rachelB, rachelKey, rachel, rachelCLI}}
 		// A change window for production is open, so only a hold's own
 		// reasons stand between the approved merge and its running.
 		s.exec(t, `INSERT INTO pc.change_windows (org_id, id, environment, time_zone, one_off, freezes, revision, created_by)
@@ -213,7 +218,7 @@ func (d *rangeDriver) setupPeople() {
 	}
 	alice, b, key := approver(t, s, d.people)
 	d.admin = alice
-	d.reviewers = []reviewer{{b, key}}
+	d.reviewers = []reviewer{{b: b, key: key}}
 }
 
 // Do runs one step.
