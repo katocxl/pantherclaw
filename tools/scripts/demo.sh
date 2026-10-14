@@ -303,6 +303,14 @@ down() {
   say "The database, Keycloak and $SECRETS stay. 'task down PROFILE=core' stops the containers."
 }
 
+# load_demo_env sources the demo's environment, or stops.
+load_demo_env() {
+  [ -f "$DEMO/env.sh" ] && [ -f "$DEMO/server.json" ] && [ -f "$DEMO/seed.done" ] || die "run 'task demo:up' first"
+  # shellcheck disable=SC1091
+  . "$DEMO/env.sh"
+  [ -n "${DEMO_ORG:-}" ] || die "run 'task demo:up' first"
+}
+
 # demo_sql runs SQL (on stdin) against the demo database, as its owner. It
 # refuses unless the database is on this machine and the configuration is the
 # one `demo.sh up` wrote: these shortcuts are raw SQL, for the local demo only.
@@ -326,6 +334,7 @@ demo_sql() {
 # minutes. DEVELOPMENT ONLY: it edits the demo org's rows directly, as the
 # end-to-end tests do.
 age() {
+  load_demo_env
   demo_sql << SQL
 UPDATE pc.users SET created_at = now() - interval '30 days' WHERE org_id = '$DEMO_ORG';
 UPDATE pc.role_bindings SET created_at = now() - interval '30 days' WHERE org_id = '$DEMO_ORG';
@@ -356,6 +365,7 @@ link_github() {
   [[ $who =~ ^[A-Za-z0-9._@+-]+$ ]] || die "the person must be an email or a subject (letters, digits and . _ @ + -)"
   [[ $login =~ ^[A-Za-z0-9-]+$ ]] || die "the GitHub login must be letters, digits and -"
   gid=$(github_account_id "$login")
+  load_demo_env
   demo_sql << SQL
 INSERT INTO pc.github_identities (org_id, id, user_id, github_login, github_user_id, linked_by, verified_at)
   SELECT '$DEMO_ORG', gen_random_uuid(), u.id, '$login', $gid, 'demo', now()
