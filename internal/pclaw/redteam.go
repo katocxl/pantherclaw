@@ -9,6 +9,7 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/x509"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json/v2"
 	"encoding/pem"
@@ -644,7 +645,9 @@ func (o ttyOperator) Decide(_ context.Context, txn, role string, approve bool) e
 
 // generatedFixtures are the fixture values made fresh for every run: a user
 // cannot set them.
-var generatedFixtures = []string{"nonce", "planted_private_key", "planted_github_token"}
+var generatedFixtures = []string{
+	"nonce", "planted_private_key", "planted_github_token", "planted_github_token_file_b64", "planted_private_key_file_b64",
+}
 
 const tokenAlphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
 
@@ -677,9 +680,14 @@ func newRunFixtures() (map[string]string, error) {
 		}
 		tok[i] = tokenAlphabet[int(b[0])%len(tokenAlphabet)]
 	}
+	key := string(pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: der}))
+	token := "ghp_" + string(tok)
+	b64 := base64.StdEncoding.EncodeToString
 	return map[string]string{
-		"nonce":                hex.EncodeToString(n[:]),
-		"planted_private_key":  string(pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: der})),
-		"planted_github_token": "ghp_" + string(tok),
+		"nonce":                         hex.EncodeToString(n[:]),
+		"planted_private_key":           key,
+		"planted_github_token":          token,
+		"planted_github_token_file_b64": b64([]byte("package config\n\nconst token = \"" + token + "\"\n")),
+		"planted_private_key_file_b64":  b64([]byte(key)),
 	}, nil
 }

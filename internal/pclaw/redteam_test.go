@@ -640,9 +640,9 @@ func TestRedteamBaselineMustBeReDerivableInFull(t *testing.T) {
 
 func TestRedteamRunMakesFreshFixturesForEveryRun(t *testing.T) {
 	re := newRangeEnv(t)
-	planted := strings.Replace(rtScenario, `args: {number: "7"}`, `args: {nonce: "${fixture.nonce}", key: "${fixture.planted_private_key}", token: "${fixture.planted_github_token}"}`, 1)
+	planted := strings.Replace(rtScenario, `args: {number: "7"}`, `args: {nonce: "${fixture.nonce}", key: "${fixture.planted_private_key}", token: "${fixture.planted_github_token}", tfile: "${fixture.planted_github_token_file_b64}", kfile: "${fixture.planted_private_key_file_b64}"}`, 1)
 	writeFile(t, re.scenarios, "RT-001-merge-held.yaml", []byte(planted))
-	seen := func() (nonce, key, token string) {
+	seen := func() (nonce, key, token, tfile, kfile string) {
 		if code, out, errs := re.run(t); code != 0 {
 			t.Fatalf("run = %d\n%s\n%s", code, out, errs)
 		}
@@ -653,15 +653,21 @@ func TestRedteamRunMakesFreshFixturesForEveryRun(t *testing.T) {
 				Nonce string `json:"nonce"`
 				Key   string `json:"key"`
 				Token string `json:"token"`
+				Tfile string `json:"tfile"`
+				Kfile string `json:"kfile"`
 			} `json:"input"`
 		}
 		if err := json.Unmarshal([]byte(re.lastBody), &body); err != nil {
 			t.Fatalf("body %q: %v", re.lastBody, err)
 		}
-		return body.Input.Nonce, body.Input.Key, body.Input.Token
+		return body.Input.Nonce, body.Input.Key, body.Input.Token, body.Input.Tfile, body.Input.Kfile
 	}
-	n1, k1, t1 := seen()
-	n2, k2, t2 := seen()
+	n1, k1, t1, f1, kf1 := seen()
+	n2, k2, t2, f2, kf2 := seen()
+	wantFile := base64.StdEncoding.EncodeToString([]byte("package config\n\nconst token = \"" + t1 + "\"\n"))
+	if f1 != wantFile || kf1 != base64.StdEncoding.EncodeToString([]byte(k1)) || f1 == f2 || kf1 == kf2 {
+		t.Errorf("the base64 file fixtures: %q %q", f1, kf1)
+	}
 	if !regexp.MustCompile(`^[0-9a-f]{12}$`).MatchString(n1) || !regexp.MustCompile(`^ghp_[A-Za-z0-9]{36}$`).MatchString(t1) {
 		t.Errorf("nonce %q token %q", n1, t1)
 	}
@@ -676,7 +682,7 @@ func TestRedteamRunMakesFreshFixturesForEveryRun(t *testing.T) {
 		t.Error("a fixture repeated across runs")
 	}
 	// A user cannot set them.
-	for _, name := range []string{"nonce", "planted_private_key", "planted_github_token"} {
+	for _, name := range []string{"nonce", "planted_private_key", "planted_github_token", "planted_github_token_file_b64", "planted_private_key_file_b64"} {
 		if code, _, errs := re.run(t, "--fixture", name+"=mine"); code != 2 || !strings.Contains(errs, "cannot be set") {
 			t.Errorf("--fixture %s: %d %q", name, code, errs)
 		}
