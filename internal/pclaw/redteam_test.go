@@ -6,14 +6,17 @@ package pclaw
 import (
 	"context"
 	"crypto/ed25519"
+	"crypto/x509"
 	"encoding/base64"
 	"encoding/json/v2"
+	"encoding/pem"
 	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"testing"
@@ -87,6 +90,8 @@ type rangeEnv struct {
 	gateway   string
 	scenarios string
 	decision  *string // the gateway's answer to /sdk/*
+	lastBody  string  // the last body the gateway received
+	bodyMu    sync.Mutex
 	outDir    string
 	runs      int
 }
@@ -122,6 +127,10 @@ func newRangeEnv(t *testing.T) *rangeEnv {
 	hold := `{"decision":"hold","error_class":"held","code":"REQUIRE_APPROVAL","transaction_id":"` + rtRange + `"}`
 	re.decision = &hold
 	gw := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		re.bodyMu.Lock()
+		re.lastBody = string(b)
+		re.bodyMu.Unlock()
 		_, _ = io.WriteString(w, *re.decision)
 	}))
 	t.Cleanup(gw.Close)
@@ -626,5 +635,50 @@ func TestRedteamBaselineMustBeReDerivableInFull(t *testing.T) {
 	code, out, _ := run(t, envOf(nil), "verify", writeFile(t, dir, "partial2.zip", partial), "--trust", writeFile(t, dir, "trust3.json", trust2))
 	if code != 0 || !strings.Contains(out, "range pack not fully verifiable") {
 		t.Fatalf("verify = %d\n%s", code, out)
+	}
+}
+
+func TestRedteamRunMakesFreshFixturesForEveryRun(t *testing.T) {
+	re := newRangeEnv(t)
+	planted := strings.Replace(rtScenario, `args: {number: "7"}`, `args: {nonce: "${fixture.nonce}", key: "${fixture.planted_private_key}", token: "${fixture.planted_github_token}"}`, 1)
+	writeFile(t, re.scenarios, "RT-001-merge-held.yaml", []byte(planted))
+	seen := func() (nonce, key, token string) {
+		if code, out, errs := re.run(t); code != 0 {
+			t.Fatalf("run = %d\n%s\n%s", code, out, errs)
+		}
+		re.bodyMu.Lock()
+		defer re.bodyMu.Unlock()
+		var body struct {
+			Input struct {
+				Nonce string `json:"nonce"`
+				Key   string `json:"key"`
+				Token string `json:"token"`
+			} `json:"input"`
+		}
+		if err := json.Unmarshal([]byte(re.lastBody), &body); err != nil {
+			t.Fatalf("body %q: %v", re.lastBody, err)
+		}
+		return body.Input.Nonce, body.Input.Key, body.Input.Token
+	}
+	n1, k1, t1 := seen()
+	n2, k2, t2 := seen()
+	if !regexp.MustCompile(`^[0-9a-f]{12}$`).MatchString(n1) || !regexp.MustCompile(`^ghp_[A-Za-z0-9]{36}$`).MatchString(t1) {
+		t.Errorf("nonce %q token %q", n1, t1)
+	}
+	block, _ := pem.Decode([]byte(k1))
+	if block == nil || block.Type != "PRIVATE KEY" {
+		t.Fatalf("planted key %q", k1)
+	}
+	if _, err := x509.ParsePKCS8PrivateKey(block.Bytes); err != nil {
+		t.Errorf("planted key is not PKCS#8: %v", err)
+	}
+	if n1 == n2 || k1 == k2 || t1 == t2 {
+		t.Error("a fixture repeated across runs")
+	}
+	// A user cannot set them.
+	for _, name := range []string{"nonce", "planted_private_key", "planted_github_token"} {
+		if code, _, errs := re.run(t, "--fixture", name+"=mine"); code != 2 || !strings.Contains(errs, "cannot be set") {
+			t.Errorf("--fixture %s: %d %q", name, code, errs)
+		}
 	}
 }

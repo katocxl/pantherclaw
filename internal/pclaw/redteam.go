@@ -6,7 +6,12 @@ package pclaw
 import (
 	"bufio"
 	"context"
+	"crypto/ed25519"
+	"crypto/rand"
+	"crypto/x509"
+	"encoding/hex"
 	"encoding/json/v2"
+	"encoding/pem"
 	"errors"
 	"flag"
 	"fmt"
@@ -117,6 +122,9 @@ func redteamRun(ctx context.Context, a *app, args []string) error {
 		if !fixtureRe.MatchString(f) {
 			return failExit("--fixture %q must be NAME=VALUE", f)
 		}
+		if name, _, _ := strings.Cut(f, "="); slices.Contains(generatedFixtures, name) {
+			return failExit("--fixture %s is made fresh for every run and cannot be set", name)
+		}
 	}
 	gw, err := checkServer(o.gateway)
 	if err != nil {
@@ -189,6 +197,13 @@ func redteamRun(ctx context.Context, a *app, args []string) error {
 	for _, f := range o.fixtures {
 		name, value, _ := strings.Cut(f, "=")
 		fixture[name] = value
+	}
+	generated, err := newRunFixtures()
+	if err != nil {
+		return failExit("%v", err)
+	}
+	for k, v := range generated {
+		fixture[k] = v
 	}
 	workload, err := a.workloadClientAt(kf.Server, kf, tokens)
 	if err != nil {
@@ -625,4 +640,46 @@ func (o ttyOperator) Decide(_ context.Context, txn, role string, approve bool) e
 		return err
 	}
 	return nil
+}
+
+// generatedFixtures are the fixture values made fresh for every run: a user
+// cannot set them.
+var generatedFixtures = []string{"nonce", "planted_private_key", "planted_github_token"}
+
+const tokenAlphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+
+// newRunFixtures makes the per-run fixtures the secret-in-payload scenarios
+// plant: a nonce, a private key and a GitHub token, none of them real. The
+// key's PEM header is assembled by encoding/pem at run time.
+func newRunFixtures() (map[string]string, error) {
+	var n [6]byte
+	if _, err := rand.Read(n[:]); err != nil {
+		return nil, err
+	}
+	_, priv, err := ed25519.GenerateKey(nil)
+	if err != nil {
+		return nil, err
+	}
+	der, err := x509.MarshalPKCS8PrivateKey(priv)
+	if err != nil {
+		return nil, err
+	}
+	tok := make([]byte, 36)
+	for i := range tok {
+		var b [1]byte
+		for { // uniform over the 62 characters: reject the bytes that would bias it
+			if _, err := rand.Read(b[:]); err != nil {
+				return nil, err
+			}
+			if int(b[0]) < 248 {
+				break
+			}
+		}
+		tok[i] = tokenAlphabet[int(b[0])%len(tokenAlphabet)]
+	}
+	return map[string]string{
+		"nonce":                hex.EncodeToString(n[:]),
+		"planted_private_key":  string(pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: der})),
+		"planted_github_token": "ghp_" + string(tok),
+	}, nil
 }
