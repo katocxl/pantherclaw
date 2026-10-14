@@ -214,7 +214,7 @@ func redteamRun(ctx context.Context, a *app, args []string) error {
 	for i, l := range set {
 		s := l.Scenario
 		decls[i] = &pantherclawv1.RangeScenarioDecl{
-			Id: s.ID, Digest: l.Digest, Tier: s.Tier, Category: s.Category, Suite: s.Suite, Title: s.Title,
+			Id: s.ID, Digest: l.Digest, Tier: s.Tier, Category: s.Category, Suite: s.Suite, Title: s.Title, StepCount: int32(len(s.Steps)), //nolint:gosec // G115: at most 40
 		}
 		digests[s.ID] = l.Digest
 	}
@@ -238,7 +238,7 @@ func redteamRun(ctx context.Context, a *app, args []string) error {
 		results = append(results, res)
 		// A failed recording never aborts the range: the rest still run and
 		// the command exits 2 at the end (D33).
-		if _, err := c.ranges.RecordResult(ctx, recordRequest(rangeID, res)); err != nil {
+		if _, err := c.ranges.RecordResult(ctx, recordRequest(rangeID, l.Scenario, res)); err != nil {
 			recordErrs = append(recordErrs, fmt.Sprintf("recording %s: %v", res.ScenarioID, describe(err)))
 		}
 	}
@@ -312,7 +312,11 @@ func gateMessage(results []rtdomain.Result, cmp *rtdomain.Comparison) string {
 // observed side is what the driver saw; where the expectation matched, the
 // expected reason and outcome are sent so the server's own comparison
 // agrees with the runner's (a concurrent step is judged by the runner).
-func recordRequest(rangeID string, res rtdomain.Result) *pantherclawv1.RecordResultRequest {
+func recordRequest(rangeID string, sc rtdomain.Scenario, res rtdomain.Result) *pantherclawv1.RecordResultRequest {
+	kinds := map[string]rtdomain.Step{}
+	for _, st := range sc.Steps {
+		kinds[st.ID] = st
+	}
 	verdicts := map[rtdomain.Verdict]pantherclawv1.RangeVerdict{
 		rtdomain.VerdictPass: pantherclawv1.RangeVerdict_RANGE_VERDICT_PASS, rtdomain.VerdictFail: pantherclawv1.RangeVerdict_RANGE_VERDICT_FAIL,
 		rtdomain.VerdictError: pantherclawv1.RangeVerdict_RANGE_VERDICT_ERROR, rtdomain.VerdictSkipped: pantherclawv1.RangeVerdict_RANGE_VERDICT_SKIPPED,
@@ -328,6 +332,7 @@ func recordRequest(rangeID string, res rtdomain.Result) *pantherclawv1.RecordRes
 		observed := observedOf(s)
 		step := &pantherclawv1.RangeStepInput{
 			StepId:   s.StepID,
+			Kind:     kinds[s.StepID].Do,
 			Expect:   &pantherclawv1.RangeExpect{Outcome: string(s.Expect.Outcome), Reason: s.Expect.Reason, Code: s.Expect.Code},
 			Observed: observed,
 		}
@@ -336,6 +341,13 @@ func recordRequest(rangeID string, res rtdomain.Result) *pantherclawv1.RecordRes
 		}
 		if uuidRe.MatchString(obs.ProbeReportID) {
 			step.ProbeReportId = obs.ProbeReportID
+		}
+		if kinds[s.StepID].Do == "sandbox.probe" && step.ProbeReportId != "" {
+			var w struct {
+				Probe string `json:"probe"`
+			}
+			_ = json.Unmarshal(kinds[s.StepID].With, &w)
+			step.ProbeKind = w.Probe
 		}
 		if hrRe.MatchString(s.Expect.DecisiveControl) {
 			step.DecisiveControl = s.Expect.DecisiveControl
@@ -487,6 +499,8 @@ func loadBaseline(packPath, trustPath, org string) (*baseline, error) {
 	}
 	if report := bundle.VerifyPack(raw, bundle.Options{Trust: trust}); report.Failed() {
 		return nil, fmt.Errorf("%s failed verification (%d checks failed); run pclaw verify for the report", packPath, report.Count(bundle.Failed))
+	} else if report.RangeNotFullyVerifiable() {
+		return nil, fmt.Errorf("BASELINE_INVALID: %s is not fully verifiable (receipts of some of its transactions are not in the pack); a baseline must be re-derivable in full", packPath)
 	}
 	files, err := pack.Read(raw)
 	if err != nil {

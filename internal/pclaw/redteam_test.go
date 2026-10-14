@@ -253,6 +253,9 @@ func TestRedteamRunRecordsAndWritesTheSummary(t *testing.T) {
 		t.Fatalf("start %v", st)
 	}
 	rec := re.ranges.recorded[0]
+	if st.GetScenarios()[0].GetStepCount() != 1 || rec.GetSteps()[0].GetKind() != "agent.call" {
+		t.Fatalf("step_count %d, kind %q", st.GetScenarios()[0].GetStepCount(), rec.GetSteps()[0].GetKind())
+	}
 	if rec.GetVerdict() != pantherclawv1.RangeVerdict_RANGE_VERDICT_PASS || rec.GetScenarioDigest() != st.GetScenarios()[0].GetDigest() ||
 		len(rec.GetSteps()) != 1 || rec.GetSteps()[0].GetObserved().GetOutcome() != "HOLD" || rec.GetSteps()[0].GetDecisiveControl() != "HR-201" ||
 		rec.GetSteps()[0].GetTransactionId() != rtRange {
@@ -562,7 +565,7 @@ func TestRecordRequestSendsOnlyStepsThatObservedSomething(t *testing.T) {
 		{StepID: "done", Expect: rtdomain.Expect{Outcome: rtdomain.OutcomeHold}, Observed: rtdomain.Observation{Outcome: rtdomain.OutcomeHold}, Matched: true},
 		{StepID: "broke", Expect: rtdomain.Expect{Outcome: rtdomain.OutcomeAllow}},
 	}}
-	req := recordRequest(rtRange, res)
+	req := recordRequest(rtRange, rtdomain.Scenario{Steps: []rtdomain.Step{{ID: "done", Do: "agent.call"}}}, res)
 	if req.GetVerdict() != pantherclawv1.RangeVerdict_RANGE_VERDICT_ERROR || len(req.GetSteps()) != 1 || req.GetSteps()[0].GetStepId() != "done" {
 		t.Fatalf("%v", req)
 	}
