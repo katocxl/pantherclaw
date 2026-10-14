@@ -631,3 +631,6 @@ func (d *rangeDriver) wait(ctx context.Context, st domain.Step) (domain.Observat
 
 // ensure the ed25519 import is used by the signing helpers in range_steal_test.go.
 var _ ed25519.PrivateKey
+
+// Supports: the harness driver runs every step kind.
+func (d *rangeDriver) Supports(string) bool { return true }

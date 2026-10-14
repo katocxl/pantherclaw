@@ -30,6 +30,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/identity/pap"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	"github.com/katocxl/pantherclaw/internal/redteam/domain"
+	"github.com/katocxl/pantherclaw/internal/redteam/receipt"
 	rapp "github.com/katocxl/pantherclaw/internal/response/app"
 	"github.com/katocxl/pantherclaw/internal/sim/payments"
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
@@ -387,39 +388,10 @@ func (d *rangeDriver) checkReceipt(st domain.Step) (domain.Observation, error) {
 	}
 	var jws string
 	d.s.query(d.t, "SELECT receipt_jws FROM pc.decision_receipts WHERE transaction_id = $1 ORDER BY evaluation DESC LIMIT 1", []any{rec.txn}, &jws)
-	parts := strings.Split(jws, ".")
-	if len(parts) != 3 {
+	if strings.Count(jws, ".") != 2 {
 		return domain.Observation{}, fmt.Errorf("no decision receipt for step %s", w.Of)
 	}
-	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
-	if err != nil {
-		return domain.Observation{}, err
-	}
-	var claims struct {
-		Pap map[string]jsontext.Value `json:"pap"`
-	}
-	if err := json.Unmarshal(payload, &claims); err != nil {
-		return domain.Observation{}, err
-	}
-	var basis map[string]jsontext.Value
-	_ = json.Unmarshal(claims.Pap["basis"], &basis)
-	nonEmptyString := func(k string) bool {
-		var s string
-		return json.Unmarshal(basis[k], &s) == nil && s != ""
-	}
-	var levels []jsontext.Value
-	_ = json.Unmarshal(basis["levels"], &levels)
-	var simulated bool
-	present := map[string]bool{
-		"grant": len(levels) > 0, "policy_version": nonEmptyString("policy"), "package_version": nonEmptyString("definition"),
-		"facts": nonEmptyString("facts"), "simulated": json.Unmarshal(claims.Pap["simulated"], &simulated) == nil,
-	}
-	var missing []string
-	for _, h := range w.Has {
-		if !present[h] {
-			missing = append(missing, h)
-		}
-	}
+	missing := receipt.Missing(jws, w.Has)
 	if len(missing) > 0 {
 		return domain.Observation{Outcome: rec.obs.Outcome, Reason: rec.obs.Reason, Reasons: rec.obs.Reasons, TransactionID: rec.txn, Missing: missing}, nil
 	}
