@@ -34,7 +34,8 @@ func TestConsequenceLimitsFollowTheConfiguration(t *testing.T) {
 	if got := (&Pipeline{Limits: configured}).consequenceLimits(s); got != ofPolicy {
 		t.Errorf("with a policy: %+v, want the policy's %+v", got, ofPolicy)
 	}
-	if evaluatorFor(configured) == evaluatorFor(ofPolicy) || evaluatorFor(configured) != evaluatorFor(configured) {
+	first := evaluatorFor(configured)
+	if first == evaluatorFor(ofPolicy) || first != evaluatorFor(configured) {
 		t.Error("evaluators are not kept per set of limits")
 	}
 }
