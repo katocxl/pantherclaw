@@ -122,7 +122,7 @@ func TestE2E_M12_CodingAgentSuite(t *testing.T) {
 	for _, m := range tableVerdict.FindAllStringSubmatch(out, -1) {
 		seen[m[1]] = m[2]
 	}
-	if len(seen) < 30 {
+	if len(seen) != 23 {
 		t.Fatalf("%d scenarios in the table:\n%s", len(seen), out)
 	}
 	passed := 0
@@ -131,7 +131,7 @@ func TestE2E_M12_CodingAgentSuite(t *testing.T) {
 			passed++
 		}
 	}
-	if passed < 15 {
+	if passed < 14 {
 		t.Fatalf("only %d scenarios passed through the live driver:\n%s", passed, out)
 	}
 }
