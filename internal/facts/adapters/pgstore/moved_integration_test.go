@@ -62,9 +62,17 @@ func TestHR160_AGatewaysFactsCountOnlyWhileItServesTheConnection(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		// The observe time comes from the database clock, as Service.put
+		// takes it (BUILD_GUIDE §3.1): the Go clock can run ahead of the
+		// database's under load, and a fact observed after it is recorded
+		// breaks facts_not_from_the_future.
+		at, err := store.Now(ctx, org)
+		if err != nil {
+			t.Fatal(err)
+		}
 		_, err = store.Put(ctx, org, domain.Fact{
 			Name: "github.pull.head", SubjectType: "github.pull_request", SubjectID: "acme/payments#7", ProviderID: prov.ID,
-			Value: v, ObservedAt: time.Now().UTC(),
+			Value: v, ObservedAt: at,
 		})
 		return err
 	}
