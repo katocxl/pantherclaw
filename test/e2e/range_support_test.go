@@ -10,12 +10,13 @@ import (
 	"context"
 	"crypto/ed25519"
 	"encoding/json/jsontext"
-	capp "github.com/katocxl/pantherclaw/internal/connections/app"
-	mockpayments "github.com/katocxl/pantherclaw/packages/mock-payments"
 	"net/http"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	capp "github.com/katocxl/pantherclaw/internal/connections/app"
+	mockpayments "github.com/katocxl/pantherclaw/packages/mock-payments"
 
 	"github.com/katocxl/pantherclaw/internal/identity/workloadclient"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"

@@ -7,6 +7,12 @@ package e2e
 
 import (
 	"context"
+	"os"
+	"path/filepath"
+	"regexp"
+	"slices"
+	"strings"
+	"testing"
 
 	evapp "github.com/katocxl/pantherclaw/internal/evidence/app"
 	"github.com/katocxl/pantherclaw/internal/evidence/pack"
@@ -15,12 +21,6 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
 	txapp "github.com/katocxl/pantherclaw/internal/transactions/app"
-	"os"
-	"path/filepath"
-	"regexp"
-	"slices"
-	"strings"
-	"testing"
 
 	"github.com/katocxl/pantherclaw/internal/redteam/domain"
 )
@@ -71,8 +71,10 @@ func startRangeStack(t *testing.T) *rangeStack {
 func (r *rangeStack) run(t *testing.T, dir string, extra ...string) (int, string, string, string) {
 	t.Helper()
 	out := t.TempDir()
-	args := []string{"redteam", "run", "--suite", "coding-agent", "--scenarios", dir, "--workload-file", r.d.s.keyFile, "--gateway", r.d.s.gateway,
-		"--role", "github=github", "--role", "payments=payments", "--role", "real=real", "--run", r.narrow, "--out", out}
+	args := []string{
+		"redteam", "run", "--suite", "coding-agent", "--scenarios", dir, "--workload-file", r.d.s.keyFile, "--gateway", r.d.s.gateway,
+		"--role", "github=github", "--role", "payments=payments", "--role", "real=real", "--run", r.narrow, "--out", out,
+	}
 	for _, name := range []string{"owner", "repo", "other_repo", "main", "file_b64"} {
 		args = append(args, "--fixture", name+"="+r.d.fix[name])
 	}

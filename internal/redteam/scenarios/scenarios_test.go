@@ -16,7 +16,7 @@ const dir = "../../../redteam/scenarios"
 
 // TestRange_EveryScenarioParses: every shipped scenario file is strict data
 // that parses and validates, carries the id in its filename, and the
-// catalogue holds at least 30 scenarios with unique ids (HR-223).
+// catalog holds at least 30 scenarios with unique ids (HR-223).
 func TestRange_EveryScenarioParses(t *testing.T) {
 	files, err := filepath.Glob(filepath.Join(dir, "RT-*.yaml"))
 	if err != nil {
