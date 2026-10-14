@@ -94,6 +94,10 @@ func newRig(t *testing.T, agent bool) *rig {
 	if err := workloadclient.WriteKeyFile(keyFile, kf, false); err != nil {
 		t.Fatal(err)
 	}
+	// The edge's uid reads it through a read-only mount, as pclaw sandbox run writes it (0644 in a private directory).
+	if err := os.Chmod(keyFile, 0o644); err != nil { //nolint:gosec // G302: see above
+		t.Fatal(err)
+	}
 	tokens := filepath.Join(dir, "token")
 	if err := os.Mkdir(tokens, 0o755); err != nil {
 		t.Fatal(err)
