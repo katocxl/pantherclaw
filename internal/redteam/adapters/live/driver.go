@@ -17,6 +17,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -338,23 +339,14 @@ type hookAnswer struct {
 }
 
 func (d *Driver) hook(ctx context.Context, conn string, w callWith) (domain.Observation, error) {
-	target := d.base()
 	if w.Fault == "gateway_unreachable" {
-		// What the hook does when it cannot reach the gateway: it exits 2
-		// and the command does not run (fail closed).
-		target = strings.TrimSuffix(d.cfg.Unreachable, "/")
+		return d.unreachable(ctx)
 	}
 	req, err := json.Marshal(map[string]any{"tool": w.Tool, "input": rawOr(w.Args)})
 	if err != nil {
 		return domain.Observation{}, err
 	}
-	status, b, err := d.post(ctx, target+"/hook/"+url.PathEscape(conn), nil, req)
-	if w.Fault == "gateway_unreachable" {
-		if err == nil {
-			return domain.Observation{}, errors.New("the address meant to be unreachable answered")
-		}
-		return domain.Observation{Outcome: domain.OutcomeRefused, Code: "hook_exit_2", Detail: "the gateway was unreachable"}, nil
-	}
+	status, b, err := d.post(ctx, d.base()+"/hook/"+url.PathEscape(conn), nil, req)
 	if err != nil {
 		return domain.Observation{}, err
 	}
@@ -650,4 +642,23 @@ func (d *Driver) person(ctx context.Context, st domain.Step) (domain.Observation
 		case <-time.After(d.cfg.WaitPoll):
 		}
 	}
+}
+
+// unreachable is the hook's fail-closed path: it cannot reach the gateway, so
+// it exits 2 and the command does not run. It only dials the address nothing
+// should listen on, sends no byte and never uses the workload-signing client,
+// so no proof or token can leave for an address that is not the gateway.
+func (d *Driver) unreachable(ctx context.Context) (domain.Observation, error) {
+	u, err := url.Parse(d.cfg.Unreachable)
+	if err != nil || u.Host == "" {
+		return domain.Observation{}, fmt.Errorf("the unreachable address %q", d.cfg.Unreachable)
+	}
+	dctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	conn, err := (&net.Dialer{}).DialContext(dctx, "tcp", u.Host)
+	if err == nil {
+		_ = conn.Close()
+		return domain.Observation{}, errors.New("the address meant to be unreachable accepted a connection")
+	}
+	return domain.Observation{Outcome: domain.OutcomeRefused, Code: "hook_exit_2", Detail: "the gateway was unreachable"}, nil
 }

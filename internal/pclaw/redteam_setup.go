@@ -82,11 +82,11 @@ func redteamSetup(ctx context.Context, a *app, args []string) error {
 	agentID := ""
 
 	// The range agent: reused when one of that name exists.
-	agents, err := c.agents.ListAgents(ctx, &pantherclawv1.ListAgentsRequest{PageSize: 200})
+	agents, err := allAgents(ctx, c)
 	if err != nil {
 		return err
 	}
-	for _, ag := range agents.GetAgents() {
+	for _, ag := range agents {
 		if ag.GetName() != *name {
 			continue
 		}
@@ -113,12 +113,12 @@ func redteamSetup(ctx context.Context, a *app, args []string) error {
 	}
 
 	// The simulated twins.
-	conns, err := c.connections.ListConnections(ctx, &pantherclawv1.ListConnectionsRequest{PageSize: 200})
+	conns, err := allConnections(ctx, c)
 	if err != nil {
 		return err
 	}
 	byName := map[string]*pantherclawv1.Connection{}
-	for _, cn := range conns.GetConnections() {
+	for _, cn := range conns {
 		byName[cn.GetName()] = cn
 	}
 	for _, t := range twins {
@@ -128,7 +128,7 @@ func redteamSetup(ctx context.Context, a *app, args []string) error {
 		}
 		pkg, base := m[1], m[2]
 		var orig *pantherclawv1.Connection
-		for _, cn := range conns.GetConnections() {
+		for _, cn := range conns {
 			if cn.GetPackage() == pkg && !cn.GetSimulated() && cn.GetState() == pantherclawv1.ConnectionState_CONNECTION_STATE_ACTIVE {
 				orig = cn
 				break
@@ -221,4 +221,41 @@ func redteamSetup(ctx context.Context, a *app, args []string) error {
 		"(pclaw workload init, then enroll, then pclaw run start), and run:\n"+
 		"  pclaw redteam run --scenarios redteam/scenarios --workload-file FILE --gateway URL --role github=<twin> --fixture pr=<number>\n")
 	return err
+}
+
+// maxSetupPages bounds paging through an org's agents or connections.
+const maxSetupPages = 100
+
+// allAgents pages through every agent of the org.
+func allAgents(ctx context.Context, c clients) ([]*pantherclawv1.Agent, error) {
+	var out []*pantherclawv1.Agent
+	tok := ""
+	for range maxSetupPages {
+		res, err := c.agents.ListAgents(ctx, &pantherclawv1.ListAgentsRequest{PageSize: 200, PageToken: tok})
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, res.GetAgents()...)
+		if tok = res.GetNextPageToken(); tok == "" {
+			return out, nil
+		}
+	}
+	return nil, errors.New("too many agents to list")
+}
+
+// allConnections pages through every connection of the org.
+func allConnections(ctx context.Context, c clients) ([]*pantherclawv1.Connection, error) {
+	var out []*pantherclawv1.Connection
+	tok := ""
+	for range maxSetupPages {
+		res, err := c.connections.ListConnections(ctx, &pantherclawv1.ListConnectionsRequest{PageSize: 200, PageToken: tok})
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, res.GetConnections()...)
+		if tok = res.GetNextPageToken(); tok == "" {
+			return out, nil
+		}
+	}
+	return nil, errors.New("too many connections to list")
 }
