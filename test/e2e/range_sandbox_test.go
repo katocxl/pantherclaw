@@ -80,11 +80,13 @@ func sandboxProbe(d *rangeDriver, st domain.Step, vars map[string]string) (domai
 		}
 		l := lineOf(out, "https-push ")
 		if strings.HasPrefix(l, "https-push error") || strings.HasPrefix(l, "https-push 403") {
-			// github.com is no mapped host: the edge refuses it, and reports it
-			// as a direct API route.
-			routes := d.s.row(d.t, "SELECT coalesce(string_agg(kind || ' ' || locator, '; '), '') FROM pc.coverage_routes WHERE connection_id = $1 AND kind = 'direct_api'", d.s.gh.conn)
-			if !strings.Contains(routes, "github.com:443") {
-				return domain.Observation{}, fmt.Errorf("the edge reported no direct route to github.com: %q", routes)
+			// github.com is no mapped host: the edge refuses it and says so; a
+			// range's routes are not recorded as coverage (HR-222).
+			if !refusedRoutes.MatchString(errs) {
+				return domain.Observation{}, fmt.Errorf("the edge reported no refused route:\n%s", errs)
+			}
+			if n := d.s.row(d.t, "SELECT count(*)::text FROM pc.coverage_routes WHERE connection_id = $1", d.s.gh.conn); n != "0" {
+				return domain.Observation{}, fmt.Errorf("%s routes of a range's sandbox were recorded as coverage", n)
 			}
 			return domain.Observation{Outcome: domain.OutcomeRefused, Reason: "CANNOT_AUTHORIZE", Code: "unmapped_destination", Detail: l}, nil
 		}
