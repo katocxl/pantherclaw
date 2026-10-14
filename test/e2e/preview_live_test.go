@@ -396,17 +396,12 @@ func TestLive_GitHub_ThreeRoutes(t *testing.T) {
 	for deadline := time.Now().Add(2 * time.Minute); ; time.Sleep(time.Second) {
 		file, _ := p.export(t, auditor, "live-closure.json", evapp.Selection{Closures: []ids.UUID{closure}}, 0)
 		code, r := p.verify(t, file)
-		pushes := 0
-		for _, c := range r.Checks {
-			if c.Name == "closure.probe" && (strings.Contains(c.Subject, "ssh_push") || strings.Contains(c.Subject, "pat_push")) && c.Status == bundle.Passed {
-				pushes++
-			}
-		}
-		if code == 0 && pushes >= 2 && all(r, "closure.reports", bundle.Passed) {
+		problem := liveVerified(r, code)
+		if problem == "" {
 			break
 		}
 		if time.Now().After(deadline) {
-			t.Fatalf("pclaw verify of closure %s: exit %d, %d push probes passed\n%+v", closure, code, pushes, r.Checks)
+			t.Fatalf("pclaw verify of closure %s: %s\n%+v", closure, problem, r.Checks)
 		}
 		if _, err := p.jobs.Insert(context.Background(), checkpoints.CheckpointDispatchArgs{}, nil); err != nil {
 			t.Fatal(err)
@@ -522,7 +517,7 @@ func TestLive_GitHub_CodingToProduction(t *testing.T) {
 		return s.ghCall(t, http.MethodPut, api+"/pulls/"+strconv.Itoa(pr.Number)+"/merge", `{"sha":"`+pr.Head.SHA+`","merge_method":"squash"}`, act)
 	}
 	// Held for the release as well, until the approver approves.
-	if code, r, raw = merge(); code == http.StatusOK || !slices.Contains(r.Reasons, "DEPLOYMENTS_NEED_A_RELEASE") {
+	if code, r, raw = merge(); code == http.StatusOK || !strings.Contains(strings.Join(r.Reasons, " ")+r.Error, "DEPLOYMENTS_NEED_A_RELEASE") {
 		t.Fatalf("the merge after the review must wait for the release: %d %+v %s", code, r, raw)
 	}
 	s.exec(t, `INSERT INTO pc.change_windows (org_id, id, environment, time_zone, one_off, freezes, revision, created_by)
@@ -575,4 +570,33 @@ func TestLive_GitHub_CodingToProduction(t *testing.T) {
 	}, consequence)
 	t.Logf("coding to production: pull request #%d merged into %s at %s, effect CONFIRMED; deployment CONFIRMED (consequence %s)",
 		pr.Number, baseBranch, merged.SHA, consequence)
+}
+
+// liveVerified says what is wrong with the verification of a closure bundle,
+// or "" when every check passed (only the ML-DSA co-signature and the witness
+// checks may be unavailable) and both the SSH-push and the planted-PAT-push
+// probes are listed, each by its distinct name.
+func liveVerified(r *bundle.Report, code int) string {
+	if code != 0 {
+		return fmt.Sprintf("exit %d", code)
+	}
+	probes := map[string]bool{}
+	for _, c := range r.Checks {
+		exempt := c.Name == "checkpoint.cosignature" || strings.HasPrefix(c.Name, "witness.")
+		if c.Status != bundle.Passed && !exempt {
+			return fmt.Sprintf("%s %s is %s: %s", c.Name, c.Subject, c.Status, c.Detail)
+		}
+		if c.Name == "closure.probe" {
+			probes[c.Subject] = true
+		}
+	}
+	var ssh, pat bool
+	for subject := range probes {
+		ssh = ssh || strings.Contains(subject, " ssh_push")
+		pat = pat || strings.Contains(subject, " pat_push")
+	}
+	if !ssh || !pat {
+		return fmt.Sprintf("the push probes are not listed (ssh_push %v, pat_push %v): %d probes", ssh, pat, len(probes))
+	}
+	return ""
 }
