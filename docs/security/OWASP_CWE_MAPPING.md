@@ -46,7 +46,7 @@ PantherClaw is itself a mitigation product for these risks; this table maps what
 | ASI04 Agentic Supply Chain Vulnerabilities | Signed tool packages, reviewed descriptions, drift quarantine | 6, 16 |
 | ASI05 Unexpected Code Execution | Shell/host routes governed, sandbox, coverage states | 16, 17 |
 | ASI06 Memory & Context Poisoning | Agent memory is never evidence of history/authority (F126); trusted facts only | 5, 8 |
-| ASI07 Insecure Inter-Agent Communication | Child agents get own identities and narrowed grants; delegation lineage | 4, 5 |
+| ASI07 Insecure Inter-Agent Communication | Child agents get own identities and narrowed grants; delegation lineage. Peer agent-to-agent calls (e.g. A2A) are open: [BUILD_GUIDE](../BUILD_GUIDE.md) M14 | 4, 5 |
 | ASI08 Cascading Failures | Fail-closed, circuit breakers, kill switch, dependency previews | 6, 10, 14 |
 | ASI09 Human-Agent Trust Exploitation | Template-only approval rendering, untrusted text quarantine, WebAuthn binding | 7 |
 | ASI10 Rogue Agents | Discovery, admission, containment, detections | 2, 10, 12 |
