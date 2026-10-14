@@ -219,9 +219,10 @@ func redteamSetup(ctx context.Context, a *app, args []string) error {
 	}
 	_, err = fmt.Fprintf(w, "\nNext: start the simulators at the twin addresses, enroll a workload for the range agent "+
 		"(pclaw workload init, then enroll, then pclaw run start), and run:\n"+
-		"  pclaw redteam run --scenarios redteam/scenarios --workload-file FILE --gateway URL --role github=<twin> --fixture pr=<number> --fixture main=<sha>\n\n"+
-		"The fixtures pr and main describe the GitHub simulator (a pull request number and the initial head of main) and are yours to supply;\n"+
-		"the nonce and the planted key and token are made fresh for every run.\n")
+		"  pclaw redteam run --scenarios redteam/scenarios --workload-file FILE --gateway URL --role github=<twin>\n"+
+		"    --fixture owner=<owner> --fixture repo=<repo> --fixture other_repo=<repo> --fixture main=<sha> --fixture file_b64=<base64>\n\n"+
+		"The fixtures owner, repo, other_repo, main and file_b64 describe the GitHub simulator and are yours to supply; each scenario opens its own\n"+
+		"pull requests, and the nonce and the planted key and token are made fresh for every run.\n")
 	return err
 }
 
