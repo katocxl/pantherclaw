@@ -109,7 +109,7 @@ func TestHR225_ACallOpensItsStaticCredentialOnce(t *testing.T) {
 	op := &countingOpener{}
 	e := &Engine{broker: op, org: "o"}
 	conn := &control.Connection{GatewayConnection: &pb.GatewayConnection{Id: "c"}, Credential: &pb.SealedCredential{}}
-	cs := &callSecret{}
+	cs := &callSecret{conn: "c"}
 	ctx := context.WithValue(context.Background(), callSecretKey{}, cs)
 	a, err := e.openStatic(ctx, conn)
 	if err != nil {
@@ -124,8 +124,13 @@ func TestHR225_ACallOpensItsStaticCredentialOnce(t *testing.T) {
 	if string(cs.b) == "ghp_static_secret" {
 		t.Fatal("the call's copy outlived the call")
 	}
+	// Another connection in the same context gets its own secret.
+	other := &control.Connection{GatewayConnection: &pb.GatewayConnection{Id: "d"}, Credential: &pb.SealedCredential{}}
+	if _, err := e.openStatic(ctx, other); err != nil || op.opens != 2 {
+		t.Fatalf("another connection used the cache: %v %d", err, op.opens)
+	}
 	// Outside a call every open decrypts.
-	if _, err := e.openStatic(context.Background(), conn); err != nil || op.opens != 2 {
+	if _, err := e.openStatic(context.Background(), conn); err != nil || op.opens != 3 {
 		t.Fatalf("%v %d", err, op.opens)
 	}
 }

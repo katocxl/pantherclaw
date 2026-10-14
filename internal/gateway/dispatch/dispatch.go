@@ -350,7 +350,7 @@ func (e *Engine) Dispatch(ctx context.Context, c Call) Result {
 
 func (e *Engine) dispatch(ctx context.Context, c Call, t *timer) Result {
 	conn := c.Connection
-	cs := &callSecret{}
+	cs := &callSecret{conn: conn.GetId()}
 	defer cs.clear()
 	ctx = context.WithValue(ctx, callSecretKey{}, cs)
 	if _, class, code := e.contained(conn); class != "" {
@@ -861,7 +861,7 @@ func accessOf(a broker.Access) *pb.CredentialAccess {
 // Another kind is refused before anything is decrypted, so an App's key is
 // opened only on the path that mints with it (HR-204).
 func (e *Engine) openStatic(ctx context.Context, conn *control.Connection) ([]byte, error) {
-	if cs, ok := ctx.Value(callSecretKey{}).(*callSecret); ok {
+	if cs, ok := ctx.Value(callSecretKey{}).(*callSecret); ok && cs.conn == conn.GetId() {
 		// The call has opened it already (the outbound check): decrypt once,
 		// hand each caller its own copy to clear.
 		cs.once.Do(func() { cs.b, cs.err = e.openStaticUncached(conn) })
@@ -883,6 +883,9 @@ type callSecretKey struct{}
 // callSecret is a call's opened static credential, opened at most once and
 // cleared when the call ends.
 type callSecret struct {
+	// conn is the connection the secret belongs to; any other connection
+	// opens its own.
+	conn string
 	once sync.Once
 	b    []byte
 	err  error
