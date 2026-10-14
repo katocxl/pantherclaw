@@ -20,7 +20,7 @@ const (
 
 // receipt is an unsigned stand-in for a compact JWS receipt: the check
 // reads its payload; the manifest's signature covers it.
-func receipt(decision, code string, simulated string) string {
+func receipt(decision, code, simulated string) string {
 	payload := `{"pap":{"decision":"` + decision + `","checklist":[{"code":"` + code + `","decisive":true}]` + simulated + `}}`
 	return "e30." + base64.RawURLEncoding.EncodeToString([]byte(payload)) + ".c2ln"
 }

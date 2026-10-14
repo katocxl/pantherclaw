@@ -79,17 +79,21 @@ func TestHR224_RangePacksVerifyOffline(t *testing.T) {
 	step := func(id string, tx ids.UUID, outcome rdomain.Expect) rdomain.StepInput {
 		return rdomain.StepInput{ID: id, Expect: outcome, Observed: outcome, Transaction: &tx}
 	}
-	observed := func(_ any, decision string, code string) rdomain.Expect {
+	observed := func(_ any, decision, code string) rdomain.Expect {
 		return rdomain.TransactionRecord{Decision: decision, Reason: code}.Observe(rdomain.Expect{})
 	}
 	deniedWant := observed(nil, string(denied.Decision), decisive(denied))
-	if _, err := svc.RecordResult(owner, rangeapp.RecordInput{Range: rng.ID, Scenario: "RT-001", Digest: decl("RT-001").Digest, Verdict: rdomain.Pass,
-		Steps: []rdomain.StepInput{step("over-limit", denied.TransactionID, deniedWant)}}); err != nil {
+	if _, err := svc.RecordResult(owner, rangeapp.RecordInput{
+		Range: rng.ID, Scenario: "RT-001", Digest: decl("RT-001").Digest, Verdict: rdomain.Pass,
+		Steps: []rdomain.StepInput{step("over-limit", denied.TransactionID, deniedWant)},
+	}); err != nil {
 		t.Fatal(err)
 	}
 	// The runner claims the allowed refund was denied: the server's record wins.
-	res, err := svc.RecordResult(owner, rangeapp.RecordInput{Range: rng.ID, Scenario: "RT-002", Digest: decl("RT-002").Digest, Verdict: rdomain.Pass,
-		Steps: []rdomain.StepInput{{ID: "small", Expect: deniedWant, Observed: deniedWant, Transaction: &allowed.TransactionID}}})
+	res, err := svc.RecordResult(owner, rangeapp.RecordInput{
+		Range: rng.ID, Scenario: "RT-002", Digest: decl("RT-002").Digest, Verdict: rdomain.Pass,
+		Steps: []rdomain.StepInput{{ID: "small", Expect: deniedWant, Observed: deniedWant, Transaction: &allowed.TransactionID}},
+	})
 	if err != nil || res.Verdict != rdomain.Fail || !res.Steps[0].Mismatch {
 		t.Fatalf("forged claim: %+v, %v", res, err)
 	}
