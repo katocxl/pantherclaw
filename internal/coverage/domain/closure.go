@@ -94,6 +94,22 @@ type Closure struct {
 	// ConfigSHA256 is the digest of the sandbox configuration.
 	ConfigSHA256 [32]byte
 	Bound        Bound
+	// Reports are the signed reports of the probe run, as stored; the
+	// closure's ledger entry names them (HR-227). ProbeKey is the
+	// session's probe key (it verified the sandbox report) and HostKey its
+	// host key (control and canary reports), both raw Ed25519 public keys.
+	Reports  []ClosureReport
+	ProbeKey []byte
+	HostKey  []byte
+}
+
+// ClosureReport names one stored probe report of a closure's run: the
+// probe_runs row, its kind (sandbox, control or canary) and the SHA-256 of
+// the compact JWS as signed.
+type ClosureReport struct {
+	Run    ids.UUID
+	Kind   string
+	SHA256 [32]byte
 }
 
 // ObservedRoute is a route the sandbox saw from inside a session: a
