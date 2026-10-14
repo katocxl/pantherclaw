@@ -65,6 +65,10 @@ func newRig(t *testing.T, agent bool) *rig {
 		r.agentImage = dockertest.Image(t, c, e, "github.com/katocxl/pantherclaw/internal/sandbox/testdata/agent", "internal/sandbox/testdata/agent.Dockerfile")
 	}
 	dir := t.TempDir()
+	// t.TempDir creates 0777 &^ umask (0755 on Linux); the sandbox requires its directory private (HR-216).
+	if err := os.Chmod(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
 	gw := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		r.mu.Lock()
 		r.seen = append(r.seen, req.Clone(req.Context()))
