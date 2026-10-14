@@ -19,6 +19,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/actionir"
 	defs "github.com/katocxl/pantherclaw/internal/definitions/domain"
 	"github.com/katocxl/pantherclaw/internal/definitions/manifest"
+	"github.com/katocxl/pantherclaw/internal/definitions/mapping"
 	fdomain "github.com/katocxl/pantherclaw/internal/facts/domain"
 	"github.com/katocxl/pantherclaw/internal/platform/celenv"
 	polapp "github.com/katocxl/pantherclaw/internal/policy/app"
@@ -76,6 +77,8 @@ type m11Case struct {
 		Approval         string `json:"approval,omitzero"`
 		StepUp           string `json:"step_up,omitzero"`
 		DestinationClass string `json:"destination_class,omitzero"`
+		// Agent sets the fixture agent and its run (D20).
+		Agent string `json:"agent,omitzero"`
 	} `json:"given,omitzero"`
 	Expect struct {
 		Decision string `json:"decision"`
@@ -510,12 +513,62 @@ func TestM11DiagnosticsCommands(t *testing.T) {
 		}
 	}
 	for _, cmd := range []string{
-		"ls; rm -rf /", "ls && reboot", "cat a | sh", "cat $(echo x)", "cat `id`", "ls\nrm x","cat < /etc/passwd",
+		"ls; rm -rf /", "ls && reboot", "cat a | sh", "cat $(echo x)", "cat `id`", "ls\nrm x", "cat < /etc/passwd",
 		"cat x > y", "cat x >> y", "echo hi", "env rm x", "find . -delete", "sed -i s/a/b/ f", "/bin/rm x", "python3 -c 'print(1)'",
 		"curl http://x", "wget x", "ssh host", "lsof -i; nc -l 80", "ls \\nrm", "grep x f || touch y", "",
 	} {
 		if d := decide(cmd); d != "DENY" {
 			t.Errorf("%q: %s, want DENY", cmd, d)
+		}
+	}
+}
+
+// TestM11DiagnosticsTraversal: a working directory that climbs out of the
+// workspace (/srv/app/../etc) is refused. Through the shell hook the
+// mapping normalizes it (normpath) to /etc, which pd-workspace denies; as
+// a raw action it is not a normalized path, so it is ambiguous and never
+// reaches the rules (HR-187, CANNOT_AUTHORIZE upstream).
+func TestM11DiagnosticsTraversal(t *testing.T) {
+	pkg, err := manifest.Decode(pcshell.Package)
+	if err != nil {
+		t.Fatal(err)
+	}
+	shell, _ := pkg.Definition("shell.command.run")
+	c, err := (&polapp.Engine{Limits: celenv.DefaultLimits}).Compile(renderM11(t, "production-diagnostics", nil).bundle(t), []*defs.Definition{shell})
+	if err != nil {
+		t.Fatal(err)
+	}
+	m, err := mapping.New(pkg, celenv.DefaultLimits)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, cwd := range []string{exampleWorkspace + "/../etc", exampleWorkspace + "/logs/../../etc", exampleWorkspace + "/./../app-other"} {
+		input, err := json.Marshal(map[string]string{"shell": "bash", "command": "ls", "cwd": cwd, "call": "toolu_1"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		p, err := m.Hook(context.Background(), mapping.Context{
+			Org: "01890000-0000-7000-8000-000000000001", Env: exampleEnvironmentID, RunID: "01890000-0000-7000-8000-000000000003",
+			ActionID: "01890000-0000-7000-8000-000000000004", AgentInstance: "01890000-0000-7000-8000-000000000005",
+		}, "shell", input)
+		if err != nil {
+			t.Fatalf("%s: %v", cwd, err)
+		}
+		out, err := c.Evaluate(context.Background(), shell, p.Action, polapp.Input{Budget: polapp.DefaultBudget})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if item, _ := out.Decisive(); out.Verdict != domain.VerdictDeny || item.Rule != "pd-workspace" {
+			t.Errorf("%s: %s by %s, want DENY by pd-workspace", cwd, out.Verdict, item.Rule)
+		}
+		raw, err := json.Marshal(map[string]string{"shell": "bash", "command": "ls", "cwd": cwd, "call": "toolu_1"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		a := actionir.ActionIR{Operation: shell.Operation, Definition: actionir.Definition{Digest: shell.Digest}, Env: exampleEnvironmentID,
+			Target: actionir.Target{Type: "shell.workspace", ID: "local"}, Params: raw}
+		if _, err := c.Evaluate(context.Background(), shell, a, polapp.Input{Budget: polapp.DefaultBudget}); !errors.Is(err, actionir.ErrAmbiguous) {
+			t.Errorf("raw %s: %v, want ambiguous", cwd, err)
 		}
 	}
 }
