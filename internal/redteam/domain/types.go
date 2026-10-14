@@ -3,7 +3,7 @@
 
 // Package domain holds the adversarial range's scenario model (HR-223): the
 // strict scenario file format, its validation against a closed step
-// catalogue, scenario digests, step results and the baseline comparison
+// catalog, scenario digests, step results and the baseline comparison
 // (HR-226). It is pure data and rules; running a scenario is internal/redteam/app.
 package domain
 
@@ -20,6 +20,7 @@ const (
 	MaxArgsDepth  = 8
 	MaxTitleLen   = 200
 	MaxWaitSecond = 10
+	MaxConcurrent = 50
 )
 
 // Scenario is one attack scenario file.
@@ -51,6 +52,7 @@ type Step struct {
 // Expect is what a step must observe. Empty fields are not checked.
 type Expect struct {
 	Outcome         Outcome `json:"outcome,omitempty"`
+	MaxAllow        *int    `json:"max_allow,omitempty"`
 	Reason          string  `json:"reason,omitempty"`
 	Code            string  `json:"code,omitempty"`
 	SameDecisionAs  string  `json:"same_decision_as,omitempty"`
@@ -98,6 +100,8 @@ const (
 type Observation struct {
 	Outcome       Outcome
 	Reason, Code  string
+	Reasons       []string      // every reason of the decision; expect.reason passes when it is one of them
+	Each          []Observation // a concurrent step: one observation per call, in order
 	DecisionHash  string
 	TransactionID string
 	ProbeReportID string

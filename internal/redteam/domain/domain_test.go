@@ -106,7 +106,7 @@ func TestHR223_UnknownStepKindsAreRejected(t *testing.T) {
 	}
 	for _, kind := range domain.StepKinds {
 		if kind == "" {
-			t.Fatal("empty kind in catalogue")
+			t.Fatal("empty kind in catalog")
 		}
 	}
 	// A known kind rejects fields outside its own shape.
@@ -221,7 +221,7 @@ func TestDigestIgnoresSpellingAndSetDigestIgnoresOrder(t *testing.T) {
 	}
 	da, _ := domain.Digest(sa)
 	db, _ := domain.Digest(sb)
-	if da != db || !strings.HasPrefix(da, "sha256:") {
+	if da != db || len(da) != 64 {
 		t.Errorf("digests differ: %s %s", da, db)
 	}
 	sc, _ := domain.Parse([]byte(strings.Replace(a, "title: t", "title: u", 1)))
@@ -316,4 +316,51 @@ func FuzzParseScenario(f *testing.F) {
 			t.Fatal("validation let a bad step count through")
 		}
 	})
+}
+
+func TestStepExtensionsAreValidated(t *testing.T) {
+	call := func(extra string) string {
+		return "  - {id: a, do: operator.revoke_grant}\n  - {id: b, do: agent.call, with: {face: hook, connection: g, tool: t" + extra + "}, expect: {outcome: ALLOW}}\n"
+	}
+	for _, ok := range []string{", concurrent: 2", ", concurrent: 50, args: {n: \"${n}\"}", ", action_of: a", ", fault: gateway_unreachable"} {
+		if err := parseSteps(call(ok)); err != nil {
+			t.Errorf("%s: %v", ok, err)
+		}
+	}
+	for _, bad := range []string{", concurrent: 1", ", concurrent: 51", ", action_of: later", ", action_of: b", ", fault: other", ", fault: 1"} {
+		if err := parseSteps(call(bad)); !errors.Is(err, domain.ErrInvalid) {
+			t.Errorf("%s: want ErrInvalid, got %v", bad, err)
+		}
+	}
+	for name, doc := range map[string]string{
+		"fault needs hook":     "  - {id: b, do: agent.call, with: {face: mcp, connection: g, tool: t, fault: gateway_unreachable}, expect: {outcome: ALLOW}}\n",
+		"${n} without concur.": "  - {id: b, do: agent.call, with: {face: mcp, connection: g, tool: t, args: {x: \"${n}\"}}, expect: {outcome: ALLOW}}\n",
+		"max_allow no concur.": "  - {id: b, do: agent.call, with: {face: mcp, connection: g, tool: t}, expect: {outcome: DENY, max_allow: 1}}\n",
+		"max_allow too big":    "  - {id: b, do: agent.call, with: {face: mcp, connection: g, tool: t, concurrent: 3}, expect: {outcome: DENY, max_allow: 4}}\n",
+		"nested concurrent":    "  - {id: b, do: agent.steal, with: {mode: proof_replay, call: {face: mcp, connection: g, tool: t, concurrent: 3}}, expect: {outcome: DENY}}\n",
+		"save named n":         "  - {id: b, do: agent.call, with: {face: mcp, connection: g, tool: t}, save: {n: /x}, expect: {outcome: DENY}}\n",
+	} {
+		if err := parseSteps(doc); !errors.Is(err, domain.ErrInvalid) {
+			t.Errorf("%s: want ErrInvalid, got %v", name, err)
+		}
+	}
+	if err := parseSteps("  - {id: b, do: agent.call, with: {face: mcp, connection: g, tool: t, concurrent: 3}, expect: {outcome: DENY, max_allow: 0}}\n"); err != nil {
+		t.Errorf("max_allow 0: %v", err)
+	}
+}
+
+func TestEmptyOutcomeNeedsConcurrentAndMaxAllow(t *testing.T) {
+	ok := "  - {id: b, do: agent.call, with: {face: mcp, connection: g, tool: t, concurrent: 3}, expect: {max_allow: 1}}\n"
+	if err := parseSteps(ok); err != nil {
+		t.Error(err)
+	}
+	for _, bad := range []string{
+		"  - {id: b, do: agent.call, with: {face: mcp, connection: g, tool: t, concurrent: 3}, expect: {}}\n",
+		"  - {id: b, do: agent.call, with: {face: mcp, connection: g, tool: t}, expect: {max_allow: 1}}\n",
+		"  - {id: b, do: agent.call, with: {face: mcp, connection: g, tool: t}}\n",
+	} {
+		if err := parseSteps(bad); !errors.Is(err, domain.ErrInvalid) {
+			t.Errorf("%s: want ErrInvalid, got %v", bad, err)
+		}
+	}
 }

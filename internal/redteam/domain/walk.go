@@ -6,6 +6,7 @@ package domain
 import (
 	"bytes"
 	"encoding/json/jsontext"
+	"errors"
 	"fmt"
 	"io"
 	"regexp"
@@ -29,7 +30,7 @@ func MapStrings(v []byte, fn func(string) (string, error)) ([]byte, error) {
 	var stack []frame
 	for {
 		tok, err := dec.ReadToken()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {
@@ -113,23 +114,24 @@ func Substitute(v []byte, vars map[string]string) ([]byte, error) {
 // jsonDepth returns the nesting depth of a JSON value (a scalar is 0).
 func jsonDepth(v []byte) (int, error) {
 	dec := jsontext.NewDecoder(bytes.NewReader(v))
-	depth, max := 0, 0
+	depth, deepest := 0, 0
 	for {
 		tok, err := dec.ReadToken()
-		if err == io.EOF {
-			return max, nil
+		if errors.Is(err, io.EOF) {
+			return deepest, nil
 		}
 		if err != nil {
 			return 0, invalid("%v", err)
 		}
-		switch tok.Kind() {
+		switch tok.Kind() { //nolint:exhaustive // only containers change the depth
 		case '{', '[':
 			depth++
-			if depth > max {
-				max = depth
+			if depth > deepest {
+				deepest = depth
 			}
 		case '}', ']':
 			depth--
+		default:
 		}
 	}
 }
