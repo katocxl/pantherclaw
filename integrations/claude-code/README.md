@@ -17,7 +17,7 @@ The plugin adds a `PreToolUse` hook for every command a tool runs in a shell: **
   - no answer within 8 seconds.
 
   The hook fails closed: the plugin also sets `onFailure: "block"`, so a hook that crashes or times out never lets the command through.
-- **Paths:** the working directory is resolved to its final form (links, junctions, 8.3 short names). The gateway normalizes it (drive letter, separators, `.` and `..`) and refuses device paths, alternate data streams and trailing dots or spaces. The command text reaches policy exactly as Claude wrote it.
+- **Paths:** the working directory is resolved to its final form (links, junctions, 8.3 short names). The gateway normalizes it (drive letter, separators, `.` and `..`) and refuses device paths, alternate data streams, trailing dots or spaces, and UNC paths to this machine (loopback servers such as `\\localhost`, and administrative disk shares such as `C$` on any server). The command text reaches policy exactly as Claude wrote it.
 - **Honest coverage:** a hook is cooperative. PantherClaw labels these routes **PARTIAL** unless the credentials the agent would use are held by PantherClaw (credential custody) or the agent runs in the containment sandbox.
 
 ### Setup (per developer, opt-in)

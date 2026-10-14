@@ -52,6 +52,43 @@ func TestHR187_PathsHaveOneSpelling(t *testing.T) {
 	}
 }
 
+// TestHR187_UNCPathsToThisMachineAreRefused: a UNC path that names this
+// machine's own disks is another spelling of a drive path, so it is
+// refused: loopback servers in every spelling, and administrative disk
+// shares on any server, since the gateway cannot tell which names are the
+// developer's own machine. Other servers and shares keep their form.
+func TestHR187_UNCPathsToThisMachineAreRefused(t *testing.T) {
+	for _, in := range []string{
+		`\\localhost\C$\secret`, `\\LOCALHOST\c$\secret`, `//localhost/c$/secret`, `\/localhost\C$\secret`, `\\localhost\Users\dev`,
+		`\\dev.localhost\share`, `\\localhost.\C$\secret`,
+		`\\127.0.0.1\C$\secret`, `\\127.0.0.1\Users\dev`, `\\127.1.2.3\share`, `\\127.1\share`, `\\2130706433\share`,
+		`\\0x7f000001\share`, `\\0X7F.1\share`, `\\0177.0.0.1\share`, `\\127.000.000.001\share`, `\\0.0.0.0\share`, `\\0\share`,
+		`\\0--1.ipv6-literal.net\C$\secret`, `\\0-0-0-0-0-0-0-1.IPV6-LITERAL.NET\share`, `\\--1s1.ipv6-literal.net\share`,
+		`\\--ffff-7f00-1.ipv6-literal.net\share`, `\\--.ipv6-literal.net\share`, `\\zz--1.ipv6-literal.net\share`,
+		`\\[::1]\C$`, `\\::1\share`,
+		`\\fileserver\C$\data`, `\\fileserver\d$`, `\\buildhost.example.test\ADMIN$\System32`, `\\10.0.0.5\admin$`,
+		`\\10.1\share`, `\\167772161\share`,
+		`\\?\UNC\localhost\C$\secret`, `\\.\UNC\localhost\C$\secret`, `\\.\C:\secret`, `\\?\C:\secret`,
+	} {
+		if got, err := actionir.NormalizePath(in); !errors.Is(err, actionir.ErrAmbiguous) {
+			t.Errorf("NormalizePath(%q) = %q, %v; want ambiguous", in, got, err)
+		}
+	}
+	for in, want := range map[string]string{
+		`\\fileserver\share\x`:                 `\\fileserver\share\x`,
+		`\\fileserver\home$\dev`:               `\\fileserver\home$\dev`,
+		`\\10.0.0.5\share`:                     `\\10.0.0.5\share`,
+		`\\localhostess\share`:                 `\\localhostess\share`,
+		`\\fe80--1s4.ipv6-literal.net\share`:   `\\fe80--1s4.ipv6-literal.net\share`,
+		`\\files.example.test\C$share\x`:       `\\files.example.test\C$share\x`,
+		`\\files.example.test\dept\C$\reports`: `\\files.example.test\dept\C$\reports`,
+	} {
+		if got, err := actionir.NormalizePath(in); err != nil || got != want {
+			t.Errorf("NormalizePath(%q) = %q, %v; want %q", in, got, err, want)
+		}
+	}
+}
+
 // fixedPoint fails t unless NormalizePath refuses p as ambiguous, or
 // accepts it and accepts its normal form unchanged.
 func fixedPoint(t *testing.T, p string) {

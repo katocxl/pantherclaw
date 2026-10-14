@@ -85,6 +85,8 @@ func TestHR187_TheHookMappingNormalizesOnlyTheDirectory(t *testing.T) {
 		"device path":       hookInput("bash", "ls", `\\?\C:\x`, "toolu_1"),
 		"data stream":       hookInput("bash", "ls", `C:\repo\x:hidden`, "toolu_1"),
 		"trailing dot":      hookInput("bash", "ls", `C:\repo.`, "toolu_1"),
+		"loopback share":    hookInput("powershell", "ls", `\\localhost\C$\repo`, "toolu_1"),
+		"admin share":       hookInput("powershell", "ls", `\\dev-pc\c$\repo`, "toolu_1"),
 		"relative":          hookInput("bash", "ls", `repo`, "toolu_1"),
 		"bidi command":      hookInput("bash", "echo a\u202eb", "/x", "toolu_1"),
 		"carriage return":   hookInput("bash", "ls\r\nrm -rf /", "/x", "toolu_1"),

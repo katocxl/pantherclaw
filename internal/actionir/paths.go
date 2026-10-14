@@ -4,6 +4,9 @@
 package actionir
 
 import (
+	"fmt"
+	"net/netip"
+	"strconv"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -25,11 +28,12 @@ const MaxPath = 4 << 10
 //   - POSIX paths ("/x") get "/" separators, and "." and ".." collapsed.
 //
 // Refused, as ambiguous: relative and drive-relative paths ("x", "C:x"),
-// device paths ("\\?\", "\\.\", also after extra separators), alternate
+// device paths ("\?\", "\.\", also after extra separators), alternate
 // data streams (a ":" after the drive), Windows segments ending in a dot or
-// a space, POSIX paths whose first segment, once "." and ".." are
-// collapsed, starts with "\" ("/./\x", which would read as UNC), and
-// control, format or bidi characters.
+// a space, UNC paths that name this machine's own disks (loopback servers,
+// administrative shares; see localShare), POSIX paths whose first segment,
+// once "." and ".." are collapsed, starts with "\" ("/./\x", which would
+// read as UNC), and control, format or bidi characters.
 //
 // The result is a fixed point: NormalizePath accepts it and returns it
 // unchanged.
@@ -67,6 +71,9 @@ func NormalizePath(p string) (string, error) {
 				return "", ambiguous("UNC server or share %q", s)
 			}
 		}
+		if err := localShare(parts[0], parts[1]); err != nil {
+			return "", err
+		}
 		segs, err := windowsSegments(strings.Join(parts[2:], `\`))
 		if err != nil {
 			return "", err
@@ -102,6 +109,82 @@ func NormalizePath(p string) (string, error) {
 }
 
 func isLetter(c byte) bool { return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') }
+
+// localShare refuses the UNC paths that are other spellings of this
+// machine's own directories ("\\localhost\C$\x" is "C:\x"): a loopback
+// server (localhost, 127.0.0.0/8 and 0.0.0.0 in any numeric form, ::1 as
+// an ipv6-literal.net name), and the administrative disk shares (C$,
+// ADMIN$) on any server, because a server name the gateway cannot tell is
+// the developer's own machine (its host name or address, or a DNS name
+// that resolves to loopback) reaches them too. A numeric IPv4 server not in
+// dotted decimal is refused as another spelling of an address.
+func localShare(server, share string) error {
+	if strings.EqualFold(share, "ADMIN$") || (len(share) == 2 && isLetter(share[0]) && share[1] == '$') {
+		return ambiguous("UNC share %q is an administrative disk share", share)
+	}
+	host := strings.ToLower(server)
+	if host == "localhost" || strings.HasSuffix(host, ".localhost") {
+		return ambiguous("UNC server %q is this machine", server)
+	}
+	if n, ok := numericIPv4(host); ok {
+		if n>>24 == 127 || n == 0 {
+			return ambiguous("UNC server %q is this machine", server)
+		}
+		if host != fmt.Sprintf("%d.%d.%d.%d", n>>24, n>>16&0xff, n>>8&0xff, n&0xff) {
+			return ambiguous("UNC server %q is an IPv4 address not in dotted decimal", server)
+		}
+	}
+	if literal, ok := strings.CutSuffix(host, ".ipv6-literal.net"); ok {
+		literal, _, _ = strings.Cut(literal, "s") // the zone
+		ip, err := netip.ParseAddr(strings.ReplaceAll(literal, "-", ":"))
+		if err != nil {
+			return ambiguous("UNC server %q is not an IPv6 literal", server)
+		}
+		if ip = ip.Unmap(); ip.IsLoopback() || ip.IsUnspecified() {
+			return ambiguous("UNC server %q is this machine", server)
+		}
+	}
+	return nil
+}
+
+// numericIPv4 reads s as Windows and inet_aton read an IPv4 address: one to
+// four parts, each decimal, octal (a leading 0) or hexadecimal (0x), the
+// last filling the remaining bytes ("127.1", "0x7f000001", "2130706433").
+func numericIPv4(s string) (uint64, bool) {
+	parts := strings.Split(s, ".")
+	if len(parts) > 4 {
+		return 0, false
+	}
+	var n uint64
+	for i, p := range parts {
+		base := 10
+		switch {
+		case strings.HasPrefix(p, "0x"):
+			base, p = 16, p[2:]
+			if p == "" {
+				p = "0"
+			}
+		case len(p) > 1 && p[0] == '0':
+			base, p = 8, p[1:]
+		}
+		if p == "" || p[0] == '+' || p[0] == '-' {
+			return 0, false
+		}
+		v, err := strconv.ParseUint(p, base, 32)
+		if err != nil {
+			return 0, false
+		}
+		bits := 8
+		if i == len(parts)-1 {
+			bits = 8 * (4 - i)
+		}
+		if v >= 1<<bits {
+			return 0, false
+		}
+		n = n<<bits | v
+	}
+	return n, true
+}
 
 func isSep(r rune) bool { return r == '\\' || r == '/' }
 

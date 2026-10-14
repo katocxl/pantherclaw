@@ -121,8 +121,9 @@ func TestHR186_TheHookIsAnsweredAndNeverDispatched(t *testing.T) {
 
 // TestHR187_HookPathsAreNormalizedAndTheCommandIsNot: every spelling of a
 // directory reaches policy as one path; device paths, alternate data
-// streams and trailing dots or spaces are refused before the Authority;
-// the command text is kept exactly as sent.
+// streams, trailing dots or spaces, and UNC spellings of this machine's
+// disks (loopback servers, administrative shares) are refused before the
+// Authority; the command text is kept exactly as sent.
 func TestHR187_HookPathsAreNormalizedAndTheCommandIsNot(t *testing.T) {
 	const command = "dir   C:\\Users\\dev\\..\\Admin  &&  echo  \"x\""
 	for cwd, want := range map[string]string{
@@ -146,7 +147,11 @@ func TestHR187_HookPathsAreNormalizedAndTheCommandIsNot(t *testing.T) {
 			t.Errorf("%s: params %+v %v, want cwd %s", cwd, p, err, want)
 		}
 	}
-	for _, cwd := range []string{`\\?\C:\Users\dev`, `\\.\pipe\x`, `C:\Users\dev\file.txt:stream`, `C:\Users\dev.`, `C:\Users\dev \x`, "relative\\dir"} {
+	for _, cwd := range []string{
+		`\\?\C:\Users\dev`, `\\.\pipe\x`, `C:\Users\dev\file.txt:stream`, `C:\Users\dev.`, `C:\Users\dev \x`, "relative\\dir",
+		`\\localhost\C$\Users\dev`, `\\127.0.0.1\c$\Users\dev`, `\\localhost\Users\dev`, `\\0--1.ipv6-literal.net\C$\Users\dev`,
+		`\\dev-pc\C$\Users\dev`, `\\?\UNC\localhost\C$\Users\dev`, `\\.\C:\Users\dev`,
+	} {
 		h := setup(t, withShell)
 		r := h.hook(t, shellInput("ls", cwd), nil)
 		if r.answer.Decision != "deny" || r.answer.ErrorClass != "cannot_authorize" || h.auth.snap().authorize != 0 {
