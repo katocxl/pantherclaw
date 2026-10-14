@@ -53,7 +53,7 @@ pclaw redteam run --suite coding-agent \
 - `--suite` is `coding-agent`, `platform` or `all`. The platform suite needs Business (`EDITION_REQUIRED` otherwise).
 - The command always starts a range first, runs each scenario through the live driver, records each result with the server, finishes the range and writes `summary.json` and a text table to `--out`.
 - Steps that need a person (approvals, declines) run only with `--interactive`: the command prints the approval link and waits. Without it those scenarios are `SKIPPED`.
-- It never executes a delegated allow, and scenarios that would engage the kill switch or quarantine real state (`harness_only`) are never run by the live driver.
+- It never executes a delegated allow. The live driver does not support `sim.mutate`, `operator.*` or `server.read` with `org: other`; scenarios using them are `SKIPPED` ("driver lacks <kind>") and, with the `harness_only` ones (RT-029, RT-034, which run in a separate non-range stack), run fully only under `task range`.
 
 ### Reading the results
 
@@ -64,7 +64,7 @@ pclaw redteam run --suite coding-agent \
 | `PASS` | Every step matched its expectation |
 | `FAIL` | A step did not match; the scenario stopped there |
 | `ERROR` | The driver failed or the 60 s scenario timeout passed |
-| `SKIPPED` | A required capability is missing, a harness-only scenario, or a person step without `--interactive` |
+| `SKIPPED` | A required capability is missing, a person step without `--interactive`, or the live driver lacks a step kind ("driver lacks <kind>": `sim.mutate`, `operator.*`, `server.read` with `org: other`). Never `ERROR`; the summary lists each skip with its reason |
 
 Steps the server can observe (a transaction, a probe report) are marked `observed_by = server`; the server's value wins over the runner's claim, and a difference is flagged `MISMATCH`. Other steps are `client` observations. Read `FAIL` first: it means a control did not do what the scenario expected, and the decisive control is named in the step.
 
@@ -74,7 +74,7 @@ Steps the server can observe (a transaction, a probe report) are marked `observe
 |---|---|
 | 0 | No `FAIL`, no `ERROR`, no regression against the baseline. `SKIPPED` without a baseline exits 0 but is listed |
 | 1 | Any `FAIL`, any `ERROR`, or any regression against the baseline |
-| 2 | Usage or infrastructure error before scenarios ran |
+| 2 | Usage or infrastructure error before scenarios ran, a baseline that cannot be used, or a failed `RecordResult` (the command carries on and exits 2 at the end; scenarios that were not recorded are missing from the report) |
 
 ## 4. Signed report (Team)
 
@@ -100,21 +100,24 @@ jobs:
   range:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Start simulators
         run: ./ci/start-simulators.sh      # your script: pantherclaw-sim on loopback
       - name: Run the range
         run: |
           pclaw redteam run --suite all --scenarios redteam/scenarios \
             --workload-file "$RANGE_WORKLOAD_FILE" --gateway "$RANGE_GATEWAY" \
-            --baseline baseline/range-pack.zip --out range-out
+            --baseline baseline/range-pack.zip --trust "$TRUST_FILE" --out range-out
         env:
           RANGE_WORKLOAD_FILE: ${{ secrets.RANGE_WORKLOAD_FILE }}
           RANGE_GATEWAY: ${{ vars.RANGE_GATEWAY }}
-      - uses: actions/upload-artifact@v4
+          TRUST_FILE: ci/trust.json
+      - uses: actions/upload-artifact@<full commit SHA>   # pin it, as this repository's workflows do
         if: always()
         with: { name: range-out, path: range-out }
 ```
+
+The baseline must verify offline against the trust file, be fully verifiable (no receipt reported as not available) and belong to the same organization. Otherwise the command exits 2 and no range is started. Pin every action by commit SHA, as this repository's workflows do.
 
 Use a service account holding `redteam.run` for the pipeline (it is not human-only). Update the baseline deliberately, in a reviewed change, after you have read the new report.
 
@@ -142,5 +145,7 @@ A pull request that touches `internal/authority`, `internal/gateway`, `internal/
 | `EDITION_REQUIRED` | The platform suite needs Business; signed reports and `--baseline` need Team. On a dev server, signed reports are exercised in tests with injected entitlements |
 | Scenarios `SKIPPED` | A capability is missing (sandbox, second organization, a person). Add `--interactive`, run with Docker for the sandbox scenarios, or accept that they do not count as passed |
 | `SIMULATED_TARGET_NOT_LOCAL` | A simulated connection names a host that is not a loopback or private IP literal; the base URL, allowed hosts and host overrides must all be |
+| `RANGE_RECORD_INVALID` / `INVALID_STEPS` | The server refused a recorded result: a transaction may back steps of only one scenario per range; a step that cites a probe report needs that probe's result in the report; a `PASS` must record exactly the scenario's declared step count (`FAIL` and `ERROR` may record fewer) |
+| Scenarios listed as "driver lacks <kind>" | Expected for the live driver; run them under `task range` |
 
 Report anything unexpected to the maintainers rather than editing a control or an expectation to make a scenario pass.
