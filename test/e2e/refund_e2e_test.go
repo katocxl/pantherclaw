@@ -88,6 +88,10 @@ type stack struct {
 	key     ed25519.PrivateKey
 	token   string
 	run     string
+
+	// gh is the GitHub simulator, its address, the seeded connection
+	// "github" to it, and its App's private key (G0 M8, options.github).
+	gh *githubSim
 }
 
 type options struct {
@@ -111,6 +115,13 @@ type options struct {
 	// name) with this OIDC provider and, with relay, email (M5 part 2).
 	people *idp
 	relay  *smtptest.Server
+	// github also starts the GitHub simulator and seeds pc.github and the
+	// connection "github" to it, held by the gateway with a GitHub App
+	// credential (dev seed --github-url, G0 M8).
+	github bool
+	// githubAt, with github, is the GitHub to call instead of the
+	// simulator (task test:github-live).
+	githubAt *githubSim
 }
 
 func freeAddr(t *testing.T) string {
@@ -136,6 +147,7 @@ func writeFile(t *testing.T, dir, name string, b []byte) string {
 var (
 	seededOrg        = regexp.MustCompile(`seeded org ([0-9a-f-]{36}) `)
 	seededConnection = regexp.MustCompile(`seeded connection ([0-9a-f-]{36}) `)
+	seededGitHub     = regexp.MustCompile(`seeded github connection ([0-9a-f-]{36}) `)
 )
 
 func start(t *testing.T, o options) *stack {
@@ -195,6 +207,13 @@ func start(t *testing.T, o options) *stack {
 	if o.shell {
 		args = append(args, "--shell")
 	}
+	if o.github {
+		s.gh = o.githubAt
+		if s.gh == nil {
+			s.gh = startGitHubSim(t)
+		}
+		args = append(args, "--github-url", s.gh.url)
+	}
 	var out, errb bytes.Buffer
 	if code := server.Run(context.Background(), args, &out, &errb, noEnv); code != 0 {
 		t.Fatalf("dev seed: %d %s", code, errb.String())
@@ -204,6 +223,13 @@ func start(t *testing.T, o options) *stack {
 		t.Fatalf("dev seed output %q", out.String())
 	}
 	s.org, s.conn = ids.MustParse[ids.Org](m[1]), mustUUID(t, c[1])
+	if o.github {
+		g := seededGitHub.FindStringSubmatch(out.String())
+		if g == nil {
+			t.Fatalf("dev seed output %q", out.String())
+		}
+		s.gh.conn = mustUUID(t, g[1])
+	}
 	s.pool = s.db.AppPool(t)
 
 	require := payments.Require{Token: o.token}
@@ -255,7 +281,7 @@ func start(t *testing.T, o options) *stack {
 	// (HR-038), as deploy/dev/gateway.example.json pins it.
 	s.approverKeys = filepath.Join(dir, "approver-keys.json")
 	gc.Approvals.ApproverKeysFile = s.approverKeys
-	if o.access == "pantherclaw_held" {
+	if o.access == "pantherclaw_held" || o.github {
 		// The gateway's broker key, which only it can open credentials with
 		// (HR-061); it registers the public half when it starts.
 		gc.Broker.KEKFiles = []string{filepath.Join(dir, "gateway-kek")}
@@ -280,6 +306,9 @@ func start(t *testing.T, o options) *stack {
 	s.gateway = gs.URL
 	if o.access == "pantherclaw_held" {
 		s.waitConfig(t, s.sealCredential(t, o.token))
+	}
+	if o.github {
+		s.waitConfig(t, s.sealGitHubApp(t))
 	}
 	return s
 }

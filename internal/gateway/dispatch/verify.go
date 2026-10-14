@@ -19,6 +19,7 @@ import (
 	defs "github.com/katocxl/pantherclaw/internal/definitions/domain"
 	"github.com/katocxl/pantherclaw/internal/gateway/control"
 	"github.com/katocxl/pantherclaw/internal/gateway/egress"
+	"github.com/katocxl/pantherclaw/internal/gateway/githubscan"
 	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
 )
 
@@ -61,6 +62,9 @@ type Observation struct {
 	Fields     map[string]string
 	Digest     []byte
 	Items      []TargetLogItem
+	// Installation is, for an org scan, the connection's own GitHub App
+	// installation as read; nil when it was not.
+	Installation *githubscan.Installation
 }
 
 // TargetLogItem is one object a target log lists.
@@ -286,7 +290,7 @@ func (e *Engine) readWith(ctx context.Context, conn *control.Connection, read *d
 		return egress.Response{}, false
 	}
 	if conn.GetAccessMode() == "pantherclaw_held" {
-		_, release, _, err := e.credential(ctx, conn, read, target, p.req, p.client)
+		_, release, _, err := e.credential(ctx, conn, read, target, p.req, p.client, "verification")
 		if err != nil {
 			e.log.WarnContext(ctx, "gateway.credential_unavailable", slog.String("connection_id", conn.GetId()), pclog.Err(err))
 			return egress.Response{}, false

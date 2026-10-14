@@ -426,6 +426,10 @@ message CredentialAccess {
       "revoke_failed"
     ]
   }];
+  // True when GitHub granted more permissions than granted holds: the
+  // ones that made the grant wider than requested are kept first, so the
+  // receipt never understates it (#353 review).
+  bool granted_incomplete = 8;
 }
 
 // CaptureDirection is which body of a dispatch a payload capture holds.

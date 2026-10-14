@@ -38,34 +38,44 @@ type MCPServer struct {
 var errMCPConfig = errors.New("githubscan: not an MCP configuration")
 
 // ParseMCPConfig reads a committed MCP configuration: {"mcpServers": {...}}
-// (Claude Code, Cursor) or {"servers": {...}} (VS Code). Every value is
-// dropped here, in memory, before anything is kept: configuration files
-// often hold literal tokens in environment values, headers, arguments or
-// URLs.
-func ParseMCPConfig(raw []byte) ([]MCPServer, error) {
+// (Claude Code, Cursor), {"servers": {...}} (VS Code), or both, merged.
+// Every value is dropped here, in memory, before anything is kept:
+// configuration files often hold literal tokens in environment values,
+// headers, arguments or URLs. incomplete reports a server entry that did
+// not decode, or a name under both keys (the first is kept): the file then
+// holds more than the servers returned (#336 review).
+func ParseMCPConfig(raw []byte) (servers []MCPServer, incomplete bool, err error) {
 	if len(raw) > maxMCPConfig {
-		return nil, errMCPConfig
+		return nil, false, errMCPConfig
 	}
 	var doc struct {
 		MCPServers map[string]jsontext.Value `json:"mcpServers"`
 		Servers    map[string]jsontext.Value `json:"servers"`
 	}
 	if err := json.Unmarshal(raw, &doc); err != nil {
-		return nil, errMCPConfig
+		return nil, false, errMCPConfig
 	}
-	servers := doc.MCPServers
-	if servers == nil {
-		servers = doc.Servers
+	entries := maps.Clone(doc.MCPServers)
+	if entries == nil {
+		entries = map[string]jsontext.Value{}
 	}
-	out := make([]MCPServer, 0, len(servers))
-	for _, name := range slices.Sorted(maps.Keys(servers)) {
+	for name, v := range doc.Servers {
+		if _, twice := entries[name]; twice {
+			incomplete = true
+			continue
+		}
+		entries[name] = v
+	}
+	out := make([]MCPServer, 0, len(entries))
+	for _, name := range slices.Sorted(maps.Keys(entries)) {
 		var s struct {
 			Command string                    `json:"command"`
 			URL     string                    `json:"url"`
 			Env     map[string]jsontext.Value `json:"env"`
 			Headers map[string]jsontext.Value `json:"headers"`
 		}
-		if json.Unmarshal(servers[name], &s) != nil {
+		if json.Unmarshal(entries[name], &s) != nil {
+			incomplete = true
 			continue
 		}
 		m := MCPServer{Name: clip(name), Transport: "stdio", Env: names(s.Env), Headers: names(s.Headers)}
@@ -77,7 +87,7 @@ func ParseMCPConfig(raw []byte) ([]MCPServer, error) {
 		}
 		out = append(out, m)
 	}
-	return out, nil
+	return out, incomplete, nil
 }
 
 // commandName is the base name of the program a command runs, and nothing

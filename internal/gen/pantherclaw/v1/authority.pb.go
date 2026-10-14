@@ -1529,9 +1529,13 @@ type CredentialAccess struct {
 	// When the token expires, as GitHub said.
 	ExpireTime *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=expire_time,json=expireTime,proto3" json:"expire_time,omitempty"`
 	// "revoked", or "revoke_failed": the token then lasts until expire_time.
-	Revocation    string `protobuf:"bytes,7,opt,name=revocation,proto3" json:"revocation,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Revocation string `protobuf:"bytes,7,opt,name=revocation,proto3" json:"revocation,omitempty"`
+	// True when GitHub granted more permissions than granted holds: the
+	// ones that made the grant wider than requested are kept first, so the
+	// receipt never understates it (#353 review).
+	GrantedIncomplete bool `protobuf:"varint,8,opt,name=granted_incomplete,json=grantedIncomplete,proto3" json:"granted_incomplete,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *CredentialAccess) Reset() {
@@ -1611,6 +1615,13 @@ func (x *CredentialAccess) GetRevocation() string {
 		return x.Revocation
 	}
 	return ""
+}
+
+func (x *CredentialAccess) GetGrantedIncomplete() bool {
+	if x != nil {
+		return x.GrantedIncomplete
+	}
+	return false
 }
 
 // PayloadCapture is one captured body of a dispatch (HR-199).
@@ -2470,7 +2481,7 @@ const file_pantherclaw_v1_authority_proto_rawDesc = "" +
 	"\n" +
 	"target_ref\x18\x06 \x01(\tB\x12\xbaH\x0fr\r\x18\x80\x022\b^[!-~]*$R\ttargetRef\x12D\n" +
 	"\bcaptures\x18\a \x03(\v2\x1e.pantherclaw.v1.PayloadCaptureB\b\xbaH\x05\x92\x01\x02\x10\x02R\bcaptures\x12M\n" +
-	"\x11credential_access\x18\b \x01(\v2 .pantherclaw.v1.CredentialAccessR\x10credentialAccess\"\xcf\x05\n" +
+	"\x11credential_access\x18\b \x01(\v2 .pantherclaw.v1.CredentialAccessR\x10credentialAccess\"\xfe\x05\n" +
 	"\x10CredentialAccess\x120\n" +
 	"\x0finstallation_id\x18\x01 \x01(\x03B\a\xbaH\x04\"\x02 \x00R\x0einstallationId\x12Y\n" +
 	"\n" +
@@ -2483,7 +2494,8 @@ const file_pantherclaw_v1_authority_proto_rawDesc = "" +
 	"expireTime\x12=\n" +
 	"\n" +
 	"revocation\x18\a \x01(\tB\x1d\xbaH\x1ar\x18R\arevokedR\rrevoke_failedR\n" +
-	"revocation\x1a<\n" +
+	"revocation\x12-\n" +
+	"\x12granted_incomplete\x18\b \x01(\bR\x11grantedIncomplete\x1a<\n" +
 	"\x0eRequestedEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\x1a:\n" +

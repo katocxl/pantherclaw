@@ -198,6 +198,10 @@ func (e *Evaluator) one(ctx context.Context, r Rule, in Input) Consequence {
 			c.Unknown = append(c.Unknown, fmt.Sprintf("%s is %s old; at most %s is accepted", name, age.Round(time.Second), maxAge))
 			continue
 		}
+		if why, unread := f.Value.Unread(); unread {
+			c.Unknown = append(c.Unknown, name+" could not be read: "+reason(why))
+			continue
+		}
 		if f.Value.Type == fdomain.TypeObject {
 			if why, ok := f.Value.Object[fdomain.UnknownMember]; ok {
 				c.Unknown = append(c.Unknown, name+" is unknown: "+reason(why))

@@ -1,0 +1,5 @@
+{
+  "name": "coding-to-production",
+  "summary": "Coding agents prepare changes on GitHub; people review merges and release deployments inside change windows (G0 M8 C4).",
+  "task_ref": "template:coding-to-production"
+}

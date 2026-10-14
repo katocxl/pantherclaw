@@ -21,6 +21,12 @@ type Faults struct {
 	// LoseMerge merges and then drops the connection without an answer:
 	// an unknown outcome whose effect happened.
 	LoseMerge bool
+	// RevokeStatus, when set, is what token revocation answers instead of
+	// revoking: the token stays valid until it expires.
+	RevokeStatus int
+	// InstallationStatus, when set, is what GET /app/installations/{id}
+	// answers instead of describing the installation.
+	InstallationStatus int
 }
 
 // SetFaults replaces the simulator's faults from the next request on.

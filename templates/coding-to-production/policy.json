@@ -1,0 +1,28 @@
+{
+  "rules": [
+    {
+      "id": "c2p-merge-review", "per": "repo", "kind": "REQUIRE_APPROVAL",
+      "summary": "an independent code reviewer approves every merge into the repository, bound to the head SHA",
+      "operations": ["github.pull.merge"], "when": "{{pull_request}}", "reason": "MERGE_NEEDS_REVIEW",
+      "approval": {"role": "code_reviewer", "count": 1, "independent": true}
+    },
+    {
+      "id": "c2p-release", "per": "repo", "kind": "REQUIRE_APPROVAL",
+      "summary": "a release approver releases a deployment of the repository inside a change window",
+      "operations": ["github.deployment.trigger"], "when": "{{repository}}", "reason": "DEPLOYMENT_NEEDS_RELEASE",
+      "approval": {"role": "release_approver", "count": 1, "independent": true, "window": true}
+    },
+    {
+      "id": "c2p-no-default-branch-write", "per": "repo", "kind": "FORBID",
+      "summary": "no branch creation or contents write on the repository's default branch",
+      "operations": ["github.contents.write", "github.branch.create"], "when": "{{default_ref}}", "reason": "DEFAULT_BRANCH_WRITE"
+    },
+    {
+      "id": "c2p-no-shell-merge", "per": "agent", "kind": "FORBID",
+      "summary": "the agent does not merge or push from the shell, a quieter route to the same effect; a heuristic over the command text",
+      "operations": ["shell.command.run"],
+      "when": "run.agent_id == '{{agent}}' && action.params.command.matches('(^|[;&|(`]|\\s)(\\S*/)?(git(\\s+-\\S+(\\s+[^-\\s;&|]\\S*)?)*\\s+push\\b|gh(\\s+-\\S+(\\s+[^-\\s;&|]\\S*)?)*\\s+(pr\\s+merge\\b|api\\b[^;&|]*merge))')",
+      "reason": "SHELL_MERGE_OR_PUSH"
+    }
+  ]
+}

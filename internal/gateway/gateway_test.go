@@ -5,12 +5,14 @@ package gateway
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json/v2"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -397,8 +399,15 @@ type harness struct {
 	// (under circuitMu).
 	reportFacts bool
 	facts       []factReport
-	gw          *Gateway
-	url         string
+	// factsFail makes every fact report fail.
+	factsFail error
+	// revocations records the tokens the gateway reported not revoked
+	// (under circuitMu): connection, purpose and repository.
+	revocations []string
+	// log, when set, is the gateway's logger instead of a discarding one.
+	log *slog.Logger
+	gw  *Gateway
+	url string
 	// approverKeys is the gateway's approvals.approver_keys_file.
 	approverKeys string
 }
@@ -491,12 +500,18 @@ func setup(t *testing.T, opts ...func(*harness)) *harness {
 			h.circuitMu.Lock()
 			defer h.circuitMu.Unlock()
 			h.facts = append(h.facts, factReport{conn: conn, obs: obs, decided: decided})
-			return nil
+			return h.factsFail
 		}
 	}
 	h.gw, err = newGateway(&cfg, Deps{
 		ReportFacts: reportFacts,
-		Org:         testOrg, GatewayID: "gw-test",
+		ReportRevocation: func(_ context.Context, conn, purpose string, a broker.Access) error {
+			h.circuitMu.Lock()
+			defer h.circuitMu.Unlock()
+			h.revocations = append(h.revocations, conn+" "+purpose+" "+a.Repository)
+			return nil
+		},
+		Org: testOrg, GatewayID: "gw-test",
 		Authority: pantherclawv1connect.NewAuthorityServiceClient(connect.NewClient(connecthttp.NewTransport(hc, h.authorityURL))),
 		JWKSURL:   as.URL + "/.well-known/pantherclaw/jwks.json", JWKSClient: hc, Containment: h.containment,
 		Configuration: newFakeConfig(h.conn), Broker: h.broker,
@@ -512,7 +527,7 @@ func setup(t *testing.T, opts ...func(*harness)) *harness {
 			h.drifts = append(h.drifts, fmt.Sprintf("%s %s %s %s", conn, d.Tool, d.Expected, d.Observed))
 			return nil
 		},
-	}, pclog.Discard())
+	}, cmp.Or(h.log, pclog.Discard()))
 	if err != nil {
 		t.Fatal(err)
 	}

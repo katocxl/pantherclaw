@@ -406,3 +406,24 @@ class IntegrationTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class GovernedShellOptionsTest(unittest.TestCase):
+    def test_HR200_with_a_governed_shell_options_refuses_what_loads_skills_and_tool_aliases(self) -> None:
+        g = Gateway(OBSERVE)
+        try:
+            p = PantherClaw(g.client, "payments", shell_connection="local")
+            ok: dict[str, Any] = {"permission_mode": "default", "setting_sources": []}
+            self.assertIn("hooks", p.options(**ok))
+            self.assertIn("hooks", p.options(**ok | {"setting_sources": ["local"], "skills": [], "plugins": [], "tool_aliases": {}}))
+            for name, bad in (("setting_sources omitted", {"setting_sources": None}), ("user settings", {"setting_sources": ["user"]}),
+                              ("project settings", {"setting_sources": ["local", "project"]}), ("skills", {"skills": "all"}),
+                              ("named skills", {"skills": ["pdf"]}), ("plugins", {"plugins": [{"type": "local", "path": "/p"}]}),
+                              ("tool_aliases", {"tool_aliases": {"Read": "Bash"}})):
+                with self.subTest(name), self.assertRaisesRegex(ValueError, "governed shell"):
+                    p.options(**ok | bad)
+            observed = PantherClaw(g.client, "payments", shell="observe")
+            self.assertIn("hooks", observed.options(permission_mode="default", setting_sources=["user", "project"], skills="all"),
+                          "an ungoverned shell is unchanged")
+        finally:
+            g.close()

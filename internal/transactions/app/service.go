@@ -79,6 +79,18 @@ type Report struct {
 	Fields         map[string]string
 	ResponseDigest []byte
 	Items          []TargetLogItem
+	// Installation is, for an org scan, the connection's own GitHub App
+	// installation as the scan read it; nil when it was not read (G0 M8,
+	// F048).
+	Installation *InstallationRead
+}
+
+// InstallationRead is a GitHub App installation's permissions (name to
+// level) and repository selection, as a gateway read them: those of the
+// installation its org-scan lease names.
+type InstallationRead struct {
+	Permissions         map[string]string
+	RepositorySelection string
 }
 
 // TargetLogItem is one object a target log listed: its id at the target,

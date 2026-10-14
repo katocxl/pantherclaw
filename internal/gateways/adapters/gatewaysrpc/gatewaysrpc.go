@@ -224,6 +224,8 @@ type GatewayHandler struct {
 	hub      *gwapp.Hub
 	circuits Circuits
 	drifts   Drifts
+	// revocations records tokens the gateway could not revoke (#261).
+	revocations Revocations
 	// verifications leases and takes verification reports (G0 M7).
 	verifications Verifications
 	facts         Facts

@@ -53,6 +53,8 @@ type Installation struct {
 	Account     string
 	Repos       []string // repository names on the account
 	Permissions map[string]string
+	// RepositorySelection is "all" or "selected" (the default when empty).
+	RepositorySelection string
 }
 
 // Token is a credential the simulator accepts.
@@ -157,6 +159,25 @@ func (s *Server) AddToken(value, user string, repos []string, permissions map[st
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.tokens[value] = &Token{value: value, User: user, Repos: lower(repos), Permissions: maps.Clone(permissions), Expires: s.now().Add(24 * time.Hour)}
+}
+
+// AddInstallationToken accepts value as an installation token of
+// installation for all its repositories, with permissions, as if minted:
+// for tests of what reads with one, such as the organization scan.
+func (s *Server) AddInstallationToken(value string, installation int64, permissions map[string]string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	in := s.installs[installation]
+	var repos []string
+	if in != nil {
+		for _, r := range in.Repos {
+			repos = append(repos, in.Account+"/"+r)
+		}
+	}
+	s.tokens[value] = &Token{
+		value: value, Installation: installation, Repos: lower(repos), Permissions: maps.Clone(permissions),
+		Expires: s.now().Add(time.Hour),
+	}
 }
 
 // Requests returns every request answered so far, in order.

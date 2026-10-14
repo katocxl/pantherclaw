@@ -142,6 +142,27 @@ class _Held:
     expires: float = 0.0
 
 
+def _refuse_ungoverned_shells(app: Mapping[str, Any]) -> None:
+    """With a governed shell, refuses what could run a shell command past the
+    PreToolUse hook (HR-200; founder decision 2026-10-13: no skills while the shell is
+    governed). A skill's ``!`` lines run when it loads, never through the
+    hook, and its ``allowed-tools`` frontmatter pre-approves them in every
+    permission mode, so no skill may load: no user or project settings (an
+    omitted setting_sources loads them all), no ``skills``, no ``plugins``.
+    Tool aliases rename a call before it is resolved, so they are refused
+    too."""
+    why = "a skill's `!` lines run past PreToolUse, and its allowed-tools pre-approves them"
+    sources = app.get("setting_sources")
+    if sources is None or any(s in ("user", "project") for s in sources):
+        raise ValueError(f'PantherClaw: with a governed shell, pass setting_sources without "user" and "project" ({why})')
+    if app.get("skills") is not None and app.get("skills") != []:
+        raise ValueError(f"PantherClaw: with a governed shell, skills cannot be enabled ({why})")
+    if app.get("plugins"):
+        raise ValueError(f"PantherClaw: with a governed shell, plugins cannot be loaded (they bring skills: {why})")
+    if app.get("tool_aliases"):
+        raise ValueError("PantherClaw: with a governed shell, tool_aliases cannot be set (an alias renames a call before PantherClaw sees it)")
+
+
 class PantherClaw:
     """The PantherClaw integration; ``options(...)`` adds its hook and
     can_use_tool to the application's ClaudeAgentOptions arguments.
@@ -223,6 +244,8 @@ class PantherClaw:
         stream open, as the SDK's documented workaround requires."""
         if not app.get("permission_mode"):
             raise ValueError("PantherClaw: pass permission_mode explicitly")
+        if self._shell_connection:
+            _refuse_ungoverned_shells(app)
         self._mode = app["permission_mode"]
         self._allowed = list(app.get("allowed_tools") or [])
         # Settings files can hold allow rules this integration cannot see, so
