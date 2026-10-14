@@ -16,6 +16,17 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 )
 
+const connectionGitHubInstallation = `-- name: ConnectionGitHubInstallation :one
+SELECT installation_id FROM pc.connection_github WHERE org_id = $1 AND connection_id = $2
+`
+
+func (q *Queries) ConnectionGitHubInstallation(ctx context.Context, orgID ids.OrgID, connectionID ids.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, connectionGitHubInstallation, orgID, connectionID)
+	var installation_id int64
+	err := row.Scan(&installation_id)
+	return installation_id, err
+}
+
 const deleteGitHubExemption = `-- name: DeleteGitHubExemption :one
 DELETE FROM pc.github_exemptions WHERE org_id = $1 AND github_user_id = $2
 RETURNING org_id, github_user_id, github_login, reason, created_by, created_at
@@ -56,6 +67,24 @@ func (q *Queries) DeleteGitHubIdentity(ctx context.Context, orgID ids.OrgID, iD 
 	return i, err
 }
 
+const failExpiredOrgScans = `-- name: FailExpiredOrgScans :execrows
+UPDATE pc.github_scan_runs r
+SET state = 'FAILED', finished_at = now()
+FROM pc.verifications v
+WHERE r.org_id = $1 AND v.org_id = r.org_id AND v.id = r.verification_id AND v.purpose = 'org_scan'
+  AND v.state = 'EXPIRED' AND r.state IN ('PENDING', 'RUNNING')
+`
+
+// FailExpiredOrgScans ends the scan runs whose lease task expired, after
+// its deadline or its last lease (G5 review follow-up).
+func (q *Queries) FailExpiredOrgScans(ctx context.Context, orgID ids.OrgID) (int64, error) {
+	result, err := q.db.Exec(ctx, failExpiredOrgScans, orgID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const finishGitHubScanRun = `-- name: FinishGitHubScanRun :exec
 UPDATE pc.github_scan_runs
 SET state = $1, counts = $2, scanned = $3::text[], not_scanned = $4,
@@ -85,7 +114,7 @@ func (q *Queries) FinishGitHubScanRun(ctx context.Context, arg FinishGitHubScanR
 }
 
 const gatewayScanRun = `-- name: GatewayScanRun :one
-SELECT r.id FROM pc.github_scan_runs r
+SELECT r.id, r.connection_id FROM pc.github_scan_runs r
 JOIN pc.verifications v ON v.org_id = r.org_id AND v.id = r.verification_id
 WHERE r.org_id = $1 AND r.id = $2 AND v.purpose = 'org_scan' AND v.state = 'LEASED'
   AND v.leased_by = $3::uuid AND v.lease_hash = $4 AND v.lease_expires_at >= now()
@@ -98,19 +127,24 @@ type GatewayScanRunParams struct {
 	LeaseHash []byte
 }
 
+type GatewayScanRunRow struct {
+	ID           ids.UUID
+	ConnectionID ids.UUID
+}
+
 // GatewayScanRun is a scan whose org_scan lease this gateway holds now,
 // under the lease it presents: only then may it submit the scan's
 // findings (HR-209).
-func (q *Queries) GatewayScanRun(ctx context.Context, arg GatewayScanRunParams) (ids.UUID, error) {
+func (q *Queries) GatewayScanRun(ctx context.Context, arg GatewayScanRunParams) (GatewayScanRunRow, error) {
 	row := q.db.QueryRow(ctx, gatewayScanRun,
 		arg.OrgID,
 		arg.ID,
 		arg.GatewayID,
 		arg.LeaseHash,
 	)
-	var id ids.UUID
-	err := row.Scan(&id)
-	return id, err
+	var i GatewayScanRunRow
+	err := row.Scan(&i.ID, &i.ConnectionID)
+	return i, err
 }
 
 const getGitHubScanRun = `-- name: GetGitHubScanRun :one
@@ -153,6 +187,42 @@ func (q *Queries) GetGitHubScanRun(ctx context.Context, orgID ids.OrgID, iD ids.
 		&i.State,
 	)
 	return i, err
+}
+
+const gitHubAppConnectionsDue = `-- name: GitHubAppConnectionsDue :many
+SELECT c.id FROM pc.connections c
+WHERE c.org_id = $1 AND c.state = 'ACTIVE' AND c.kind = 'http' AND c.package = 'pc.github'
+  AND EXISTS (SELECT 1 FROM pc.credentials cr
+              WHERE cr.org_id = c.org_id AND cr.connection_id = c.id AND cr.state = 'ACTIVE' AND cr.kind = 'github_app')
+  AND NOT EXISTS (SELECT 1 FROM pc.verifications v
+                  WHERE v.org_id = c.org_id AND v.connection_id = c.id AND v.purpose = 'org_scan' AND v.state IN ('PENDING', 'LEASED'))
+  AND NOT EXISTS (SELECT 1 FROM pc.github_scan_runs r
+                  WHERE r.org_id = c.org_id AND r.connection_id = c.id AND r.created_at > now() - interval '1 day')
+ORDER BY c.id
+LIMIT 100
+`
+
+// GitHubAppConnectionsDue are the org's active GitHub App connections with
+// no org scan open and none started in the last day: the daily scan keeps
+// what coverage reads of their installation fresh (F048).
+func (q *Queries) GitHubAppConnectionsDue(ctx context.Context, orgID ids.OrgID) ([]ids.UUID, error) {
+	rows, err := q.db.Query(ctx, gitHubAppConnectionsDue, orgID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ids.UUID{}
+	for rows.Next() {
+		var id ids.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const gitHubIdentity = `-- name: GitHubIdentity :one
@@ -327,7 +397,7 @@ func (q *Queries) InsertGitHubScanRun(ctx context.Context, arg InsertGitHubScanR
 }
 
 const leasedOrgScan = `-- name: LeasedOrgScan :one
-SELECT v.id, v.connection_id, r.id AS run_id
+SELECT v.id, v.connection_id, r.id AS run_id, v.request
 FROM pc.verifications v
 JOIN pc.github_scan_runs r ON r.org_id = v.org_id AND r.verification_id = v.id
 WHERE v.org_id = $1 AND v.id = $2 AND v.purpose = 'org_scan' AND v.state = 'LEASED'
@@ -346,6 +416,7 @@ type LeasedOrgScanRow struct {
 	ID           ids.UUID
 	ConnectionID ids.UUID
 	RunID        ids.UUID
+	Request      []byte
 }
 
 // LeasedOrgScan is an org scan task under a live lease of this gateway,
@@ -358,7 +429,12 @@ func (q *Queries) LeasedOrgScan(ctx context.Context, arg LeasedOrgScanParams) (L
 		arg.LeaseHash,
 	)
 	var i LeasedOrgScanRow
-	err := row.Scan(&i.ID, &i.ConnectionID, &i.RunID)
+	err := row.Scan(
+		&i.ID,
+		&i.ConnectionID,
+		&i.RunID,
+		&i.Request,
+	)
 	return i, err
 }
 
@@ -514,6 +590,41 @@ func (q *Queries) OpenOrgScan(ctx context.Context, orgID ids.OrgID, connectionID
 	return column_1, err
 }
 
+const recordInstallationPermissions = `-- name: RecordInstallationPermissions :execrows
+UPDATE pc.connection_github
+SET permissions = $1, repository_selection = $2, read_at = now(),
+    updated_by = $3, updated_at = now()
+WHERE org_id = $4 AND connection_id = $5 AND installation_id = $6
+`
+
+type RecordInstallationPermissionsParams struct {
+	Permissions         []byte
+	RepositorySelection *string
+	UpdatedBy           string
+	OrgID               ids.OrgID
+	ConnectionID        ids.UUID
+	InstallationID      int64
+}
+
+// RecordInstallationPermissions records what a gateway read of the
+// installation behind a connection during its org scan (G0 M8, F048), only
+// while the connection still records that installation: a re-seal to
+// another one keeps it unread.
+func (q *Queries) RecordInstallationPermissions(ctx context.Context, arg RecordInstallationPermissionsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, recordInstallationPermissions,
+		arg.Permissions,
+		arg.RepositorySelection,
+		arg.UpdatedBy,
+		arg.OrgID,
+		arg.ConnectionID,
+		arg.InstallationID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const scanConnection = `-- name: ScanConnection :one
 
 SELECT c.state, c.kind, c.package,
@@ -521,6 +632,7 @@ SELECT c.state, c.kind, c.package,
                  WHERE cr.org_id = c.org_id AND cr.connection_id = c.id AND cr.state = 'ACTIVE'), '')::text AS credential_kind
 FROM pc.connections c
 WHERE c.org_id = $1 AND c.id = $2
+FOR NO KEY UPDATE OF c
 `
 
 type ScanConnectionRow struct {
@@ -534,6 +646,8 @@ type ScanConnectionRow struct {
 // org_scan lease its gateway claims.
 // ScanConnection is what a scan needs to know of a connection: whether it
 // is active, its package, and the kind of its active credential.
+// ScanConnection locks the connection, so that concurrent starts of its
+// scan take turns and only one finds no scan open (G5 review follow-up).
 func (q *Queries) ScanConnection(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (ScanConnectionRow, error) {
 	row := q.db.QueryRow(ctx, scanConnection, orgID, iD)
 	var i ScanConnectionRow

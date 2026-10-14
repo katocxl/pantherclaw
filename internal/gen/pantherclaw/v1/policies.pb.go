@@ -139,9 +139,14 @@ func (x *PolicyVersion) GetPublishTime() *timestamppb.Timestamp {
 type CreatePolicyVersionRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Policy bundle v1 (JSON: id and rules). The server assigns the version.
-	Bundle        []byte `protobuf:"bytes,1,opt,name=bundle,proto3" json:"bundle,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Bundle []byte `protobuf:"bytes,1,opt,name=bundle,proto3" json:"bundle,omitempty"`
+	// When set, the call fails with FAILED_PRECONDITION
+	// (POLICY_PUBLISHED_CHANGED) unless the org's published version is this
+	// one, or, when empty, unless none is published: a client that edited the
+	// published bundle never replaces a version published meanwhile.
+	ExpectedCurrentVersion *string `protobuf:"bytes,2,opt,name=expected_current_version,json=expectedCurrentVersion,proto3,oneof" json:"expected_current_version,omitempty"`
+	unknownFields          protoimpl.UnknownFields
+	sizeCache              protoimpl.SizeCache
 }
 
 func (x *CreatePolicyVersionRequest) Reset() {
@@ -179,6 +184,13 @@ func (x *CreatePolicyVersionRequest) GetBundle() []byte {
 		return x.Bundle
 	}
 	return nil
+}
+
+func (x *CreatePolicyVersionRequest) GetExpectedCurrentVersion() string {
+	if x != nil && x.ExpectedCurrentVersion != nil {
+		return *x.ExpectedCurrentVersion
+	}
+	return ""
 }
 
 // CreatePolicyVersionResponse returns the version.
@@ -231,9 +243,14 @@ func (x *CreatePolicyVersionResponse) GetVersion() *PolicyVersion {
 type PublishPolicyVersionRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Version id.
-	Id            string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Id string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	// When set, the call fails with FAILED_PRECONDITION
+	// (POLICY_PUBLISHED_CHANGED) unless the org's published version is this
+	// one, or, when empty, unless none is published: a client that edited the
+	// published bundle never replaces a version published meanwhile.
+	ExpectedCurrentVersion *string `protobuf:"bytes,2,opt,name=expected_current_version,json=expectedCurrentVersion,proto3,oneof" json:"expected_current_version,omitempty"`
+	unknownFields          protoimpl.UnknownFields
+	sizeCache              protoimpl.SizeCache
 }
 
 func (x *PublishPolicyVersionRequest) Reset() {
@@ -269,6 +286,13 @@ func (*PublishPolicyVersionRequest) Descriptor() ([]byte, []int) {
 func (x *PublishPolicyVersionRequest) GetId() string {
 	if x != nil {
 		return x.Id
+	}
+	return ""
+}
+
+func (x *PublishPolicyVersionRequest) GetExpectedCurrentVersion() string {
+	if x != nil && x.ExpectedCurrentVersion != nil {
+		return *x.ExpectedCurrentVersion
 	}
 	return ""
 }
@@ -601,13 +625,17 @@ const file_pantherclaw_v1_policies_proto_rawDesc = "" +
 	"created_by\x18\x06 \x01(\tR\tcreatedBy\x12;\n" +
 	"\vcreate_time\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"createTime\x12=\n" +
-	"\fpublish_time\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\vpublishTime\"A\n" +
+	"\fpublish_time\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\vpublishTime\"\xe8\x01\n" +
 	"\x1aCreatePolicyVersionRequest\x12#\n" +
-	"\x06bundle\x18\x01 \x01(\fB\v\xbaH\bz\x06\x10\x02\x18\x80\x80@R\x06bundle\"V\n" +
+	"\x06bundle\x18\x01 \x01(\fB\v\xbaH\bz\x06\x10\x02\x18\x80\x80@R\x06bundle\x12\x87\x01\n" +
+	"\x18expected_current_version\x18\x02 \x01(\tBH\xbaHErC2A^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})?$H\x00R\x16expectedCurrentVersion\x88\x01\x01B\x1b\n" +
+	"\x19_expected_current_version\"V\n" +
 	"\x1bCreatePolicyVersionResponse\x127\n" +
-	"\aversion\x18\x01 \x01(\v2\x1d.pantherclaw.v1.PolicyVersionR\aversion\"7\n" +
+	"\aversion\x18\x01 \x01(\v2\x1d.pantherclaw.v1.PolicyVersionR\aversion\"\xde\x01\n" +
 	"\x1bPublishPolicyVersionRequest\x12\x18\n" +
-	"\x02id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x02id\"W\n" +
+	"\x02id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x02id\x12\x87\x01\n" +
+	"\x18expected_current_version\x18\x02 \x01(\tBH\xbaHErC2A^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})?$H\x00R\x16expectedCurrentVersion\x88\x01\x01B\x1b\n" +
+	"\x19_expected_current_version\"W\n" +
 	"\x1cPublishPolicyVersionResponse\x127\n" +
 	"\aversion\x18\x01 \x01(\v2\x1d.pantherclaw.v1.PolicyVersionR\aversion\"\x1b\n" +
 	"\x19GetPublishedPolicyRequest\"U\n" +
@@ -687,6 +715,8 @@ func file_pantherclaw_v1_policies_proto_init() {
 	if File_pantherclaw_v1_policies_proto != nil {
 		return
 	}
+	file_pantherclaw_v1_policies_proto_msgTypes[1].OneofWrappers = []any{}
+	file_pantherclaw_v1_policies_proto_msgTypes[3].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{

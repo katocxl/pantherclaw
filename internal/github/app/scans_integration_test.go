@@ -12,12 +12,14 @@ import (
 	"maps"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	aapp "github.com/katocxl/pantherclaw/internal/agents/app"
 	billing "github.com/katocxl/pantherclaw/internal/billing/domain"
 	"github.com/katocxl/pantherclaw/internal/github/app"
+	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
 	"github.com/katocxl/pantherclaw/internal/transactions/adapters/pgtransactions"
@@ -186,7 +188,10 @@ func TestHR209_OnlyTheLeaseHoldingGatewaySubmitsFindingsAndTheyGrantNothing(t *t
 	inv := aapp.NewInventory(e.pool, edition(billing.Team))
 	key := func(b byte) [32]byte { return [32]byte{b} }
 	findings := []aapp.ScanFinding{
-		{Kind: "github_workflow", Key: key(1), Attributes: map[string]string{"repository": "acme/payments", "path": ".github/workflows/deploy.yml", "environments": "production"}},
+		{Kind: "github_workflow", Key: key(1), Attributes: map[string]string{
+			"repository": "acme/payments", "path": ".github/workflows/deploy.yml", "environments": "production",
+			"connection": conn.String(),
+		}}, // the scan's own connection, which the server checks
 		{Kind: "github_mcp_config", Key: key(2), Attributes: map[string]string{"repository": "acme/payments", "name": "github", "command": "npx"}},
 	}
 	if _, err := inv.SubmitGitHubScan(context.Background(), e.org, gateway, scan.ID, nil, findings); !errors.Is(err, aapp.ErrNoScanLease) {
@@ -208,6 +213,12 @@ func TestHR209_OnlyTheLeaseHoldingGatewaySubmitsFindingsAndTheyGrantNothing(t *t
 	if _, err := inv.SubmitGitHubScan(context.Background(), e.org, gateway, scan.ID, lease, local); !errors.Is(err, aapp.ErrScanKind) {
 		t.Fatalf("a local kind from a gateway: %v", err)
 	}
+	// A finding naming another connection is refused (the coordinator's
+	// decision Q16); the server records the scan's on every finding.
+	wrong := []aapp.ScanFinding{{Kind: "github_workflow", Key: key(4), Attributes: map[string]string{"repository": "acme/x", "connection": ids.NewV7().String()}}}
+	if _, err := inv.SubmitGitHubScan(context.Background(), e.org, gateway, scan.ID, lease, wrong); !errors.Is(err, aapp.ErrScanConnection) {
+		t.Fatalf("a finding naming another connection: %v", err)
+	}
 	r, err := inv.SubmitGitHubScan(context.Background(), e.org, gateway, scan.ID, lease, findings)
 	if err != nil || r.Created != 2 {
 		t.Fatalf("submit %+v %v", r, err)
@@ -222,6 +233,10 @@ func TestHR209_OnlyTheLeaseHoldingGatewaySubmitsFindingsAndTheyGrantNothing(t *t
 	}
 	if n := e.count(t, "SELECT count(*) FROM pc.agents WHERE org_id = $1 AND state = 'DISCOVERED'", e.org); n != 2 {
 		t.Fatalf("%d discovered agents", n)
+	}
+	if n := e.count(t, "SELECT count(*) FROM pc.discoveries WHERE org_id = $1 AND source = 'github_scan' AND observed ->> 'connection' = $2",
+		e.org, conn.String()); n != 2 {
+		t.Fatalf("%d findings name the scan's connection", n)
 	}
 	if n := e.count(t, "SELECT count(*) FROM pc.grants WHERE org_id = $1", e.org); n != 0 {
 		t.Fatalf("findings granted something: %d grants", n)
@@ -381,5 +396,203 @@ func TestHR209_ADismissedFindingReopensWhenItsRouteMayDoMore(t *testing.T) {
 	}
 	if n := e.count(t, "SELECT count(*) FROM pc.ledger_entries WHERE org_id = $1 AND kind = 'audit.agents.discovery_reopened'", e.org); n != 1 {
 		t.Fatalf("%d reopen events", n)
+	}
+}
+
+// TestHR209_ScansStartOneAtATimeAndAnExpiredOneIsStoredFailed (G5 review
+// follow-up): concurrent starts of a connection's scan take turns on the
+// connection, so exactly one starts and the others find it running; a
+// scan whose lease expired is stored FAILED, not only read as such.
+func TestHR209_ScansStartOneAtATimeAndAnExpiredOneIsStoredFailed(t *testing.T) {
+	e := newEnv(t)
+	gateway := ids.NewV7()
+	e.exec(t, "INSERT INTO pc.gateways (org_id, id, name, created_by) VALUES ($1, $2, 'edge', 'test')", e.org, gateway)
+	e.exec(t, "INSERT INTO pc.org_containment (org_id) VALUES ($1) ON CONFLICT DO NOTHING", e.org)
+	conn := e.gitHubConnection(t, gateway, e.brokerKey(t, gateway), "github", false)
+	admin := e.caller(td.KindUser, td.RoleSecurityAdmin)
+	team := &app.Scans{Pool: e.pool, Ents: edition(billing.Team)}
+	const n = 8
+	errs := make(chan error, n)
+	var wg sync.WaitGroup
+	for range n {
+		wg.Go(func() {
+			_, err := team.Start(admin, conn)
+			errs <- err
+		})
+	}
+	wg.Wait()
+	close(errs)
+	started, running := 0, 0
+	for err := range errs {
+		switch {
+		case err == nil:
+			started++
+		case errors.Is(err, app.ErrScanRunning):
+			running++
+		default:
+			t.Errorf("a start: %v", err)
+		}
+	}
+	if started != 1 || running != n-1 {
+		t.Fatalf("%d started, %d found one running", started, running)
+	}
+	store := &pgtransactions.Store{Pool: e.pool}
+	for range 3 { // three unreported leases end the scan
+		if _, err := store.Claim(context.Background(), e.org, gateway, 4, 30*time.Second); err != nil {
+			t.Fatal(err)
+		}
+		e.exec(t, "UPDATE pc.verifications SET leased_at = now() - interval '20 seconds', lease_expires_at = now() - interval '1 second' WHERE org_id = $1 AND purpose = 'org_scan' AND state = 'LEASED'", e.org)
+		if _, err := store.Expire(context.Background(), e.org, nil); err != nil {
+			t.Fatal(err)
+		}
+		e.exec(t, "UPDATE pc.verifications SET next_at = now() WHERE org_id = $1 AND purpose = 'org_scan' AND state = 'PENDING'", e.org)
+	}
+	if got := e.count(t, `SELECT count(*) FROM pc.github_scan_runs WHERE org_id = $1 AND state = 'FAILED' AND finished_at IS NOT NULL`, e.org); got != 1 {
+		t.Fatalf("%d scan runs stored FAILED", got)
+	}
+}
+
+// TestHR209_ADismissedLocalFindingReopensToo (#336 review): a person's
+// local scan finding dismissed for what it was reopens when what it may
+// do changes (a new command, env or header names), audited, as an org
+// scan finding does; seen again unchanged, it is only counted.
+func TestHR209_ADismissedLocalFindingReopensToo(t *testing.T) {
+	e := newEnv(t)
+	inv := aapp.NewInventory(e.pool, edition(billing.Team))
+	person := e.caller(td.KindUser, td.RoleAgentOwner)
+	submit := func(attrs map[string]string) aapp.ScanResult {
+		t.Helper()
+		r, err := inv.SubmitScan(person, "laptop", []aapp.ScanFinding{{Kind: "mcp_server", Key: [32]byte{7}, Attributes: attrs}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return r
+	}
+	before := map[string]string{"client": "claude", "config": ".mcp.json", "name": "github", "transport": "stdio", "command": "npx"}
+	if r := submit(before); r.Created != 1 {
+		t.Fatalf("first %+v", r)
+	}
+	e.exec(t, "UPDATE pc.discoveries SET state = 'DISMISSED' WHERE org_id = $1 AND source = 'scan'", e.org)
+	if r := submit(before); r.Counted != 1 || r.Reopened != 0 {
+		t.Fatalf("the same server again %+v", r)
+	}
+	after := maps.Clone(before)
+	after["env_names"] = "GITHUB_TOKEN"
+	if r := submit(after); r.Created != 1 || r.Reopened != 1 {
+		t.Fatalf("a server that now reads a token %+v", r)
+	}
+	if n := e.count(t, "SELECT count(*) FROM pc.discoveries WHERE org_id = $1 AND source = 'scan' AND state = 'OPEN'", e.org); n != 1 {
+		t.Fatalf("%d reopened findings", n)
+	}
+	if n := e.count(t, "SELECT count(*) FROM pc.ledger_entries WHERE org_id = $1 AND kind = 'audit.agents.discovery_reopened'", e.org); n != 1 {
+		t.Fatalf("%d reopen events", n)
+	}
+}
+
+// TestF048_AnOrgScanRecordsTheInstallationItRead: the gateway's report of
+// an org scan carries the connection's own installation as it read it; the
+// server records its permissions, repository selection and when it was
+// read. A report without it, or about an installation the connection no
+// longer records, changes nothing (a re-seal while the scan runs), so unread permissions stay "not
+// observed".
+func TestF048_AnOrgScanRecordsTheInstallationItRead(t *testing.T) {
+	e := newEnv(t)
+	gateway := ids.NewV7()
+	e.exec(t, "INSERT INTO pc.gateways (org_id, id, name, created_by) VALUES ($1, $2, 'edge', 'test')", e.org, gateway)
+	e.exec(t, "INSERT INTO pc.org_containment (org_id) VALUES ($1) ON CONFLICT DO NOTHING", e.org)
+	conn := e.gitHubConnection(t, gateway, e.brokerKey(t, gateway), "github", false)
+	e.exec(t, `INSERT INTO pc.connection_github (org_id, connection_id, app_client_id, installation_id, account_login, updated_by)
+		VALUES ($1, $2, 'Iv23liGateway', 7, 'acme', 'test')`, e.org, conn)
+	admin := e.caller(td.KindUser, td.RoleSecurityAdmin)
+	team := &app.Scans{Pool: e.pool, Ents: edition(billing.Team)}
+	store := &pgtransactions.Store{Pool: e.pool}
+	scan := func(in *tapp.InstallationRead, meanwhile func()) {
+		t.Helper()
+		if _, err := team.Start(admin, conn); err != nil {
+			t.Fatal(err)
+		}
+		leases, err := store.Claim(context.Background(), e.org, gateway, 4, 30*time.Second)
+		if err != nil || len(leases) != 1 {
+			t.Fatalf("leases %+v %v", leases, err)
+		}
+		if meanwhile != nil {
+			meanwhile()
+		}
+		if _, err := store.Report(context.Background(), e.org, gateway, tapp.Report{
+			Task: leases[0].Task, Secret: leases[0].Secret, HTTPStatus: 200, Found: true, Complete: true,
+			Fields: map[string]string{"/counts/repositories": "1"}, Installation: in,
+		}, nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+	read := func() (perms, selection string, readAt *time.Time) {
+		t.Helper()
+		e.queryRow(t, `SELECT permissions::text, coalesce(repository_selection, ''), read_at FROM pc.connection_github
+			WHERE org_id = $1 AND connection_id = $2`, []any{e.org, conn}, &perms, &selection, &readAt)
+		return perms, selection, readAt
+	}
+	if p, _, at := read(); p != "{}" || at != nil {
+		t.Fatalf("before any scan: %s %v", p, at)
+	}
+	scan(&tapp.InstallationRead{Permissions: map[string]string{"contents": "write", "metadata": "read"}, RepositorySelection: "all"}, nil)
+	p, sel, at := read()
+	if p != `{"contents": "write", "metadata": "read"}` || sel != "all" || at == nil {
+		t.Fatalf("after the scan: %s %q %v", p, sel, at)
+	}
+	scan(nil, nil) // the installation could not be read
+	if p2, sel2, at2 := read(); p2 != p || sel2 != sel || at2 == nil || !at2.Equal(*at) {
+		t.Fatalf("after an unread installation: %s %q %v", p2, sel2, at2)
+	}
+	// A re-seal to another installation while the scan runs: what it read
+	// of the old one is not recorded for the new one.
+	scan(&tapp.InstallationRead{Permissions: map[string]string{"administration": "admin"}, RepositorySelection: "all"}, func() {
+		e.exec(t, `UPDATE pc.connection_github SET installation_id = 8, permissions = '{}', repository_selection = NULL, read_at = NULL
+			WHERE org_id = $1 AND connection_id = $2`, e.org, conn)
+	})
+	if p3, _, at3 := read(); p3 != "{}" || at3 != nil {
+		t.Fatalf("after a re-seal during the scan: %s %v", p3, at3)
+	}
+}
+
+// TestF048_InstallationsAreScannedWhenRecordedAndDaily: in an edition that
+// scans, recording a GitHub App installation schedules an org scan at once,
+// and the daily schedule starts one for each GitHub App connection with
+// none open and none in the last day; the Community edition schedules
+// nothing.
+func TestF048_InstallationsAreScannedWhenRecordedAndDaily(t *testing.T) {
+	e := newEnv(t)
+	gateway := ids.NewV7()
+	e.exec(t, "INSERT INTO pc.gateways (org_id, id, name, created_by) VALUES ($1, $2, 'edge', 'test')", e.org, gateway)
+	conn := e.gitHubConnection(t, gateway, e.brokerKey(t, gateway), "github", false)
+	e.exec(t, `INSERT INTO pc.connection_github (org_id, connection_id, app_client_id, installation_id, account_login, updated_by)
+		VALUES ($1, $2, 'Iv23liGateway', 7, 'acme', 'test')`, e.org, conn)
+	runs := func() int {
+		return e.count(t, "SELECT count(*) FROM pc.github_scan_runs WHERE org_id = $1 AND connection_id = $2", e.org, conn)
+	}
+	community := &app.Scans{Pool: e.pool, Ents: edition(billing.Community)}
+	if n, err := community.ScheduleDaily(context.Background(), e.org); err != nil || n != 0 || runs() != 0 {
+		t.Fatalf("the Community edition: %d %v, %d runs", n, err, runs())
+	}
+	team := &app.Scans{Pool: e.pool, Ents: edition(billing.Team)}
+	if err := e.pool.InTenantTx(context.Background(), e.org, func(ctx context.Context, tx db.TenantTx) error {
+		return team.InstallationRecorded(ctx, tx, conn)
+	}); err != nil || runs() != 1 {
+		t.Fatalf("recorded: %v, %d runs", err, runs())
+	}
+	if n := e.count(t, `SELECT count(*) FROM pc.verifications WHERE org_id = $1 AND connection_id = $2 AND purpose = 'org_scan'
+		AND request ->> 'installation' = '7'`, e.org, conn); n != 1 {
+		t.Fatalf("%d leases name the installation", n)
+	}
+	// A scan is open, and one ran today: nothing is due.
+	if n, err := team.ScheduleDaily(context.Background(), e.org); err != nil || n != 0 {
+		t.Fatalf("with a scan open: %d %v", n, err)
+	}
+	e.exec(t, "UPDATE pc.verifications SET state = 'EXPIRED', finished_at = now() WHERE org_id = $1 AND purpose = 'org_scan'", e.org)
+	if n, err := team.ScheduleDaily(context.Background(), e.org); err != nil || n != 0 {
+		t.Fatalf("after today's scan: %d %v", n, err)
+	}
+	e.d.AdminExec(t, "UPDATE pc.github_scan_runs SET created_at = now() - interval '25 hours' WHERE org_id = $1", e.org)
+	if n, err := team.ScheduleDaily(context.Background(), e.org); err != nil || n != 1 || runs() != 2 {
+		t.Fatalf("a day later: %d %v, %d runs", n, err, runs())
 	}
 }

@@ -118,7 +118,7 @@ func seal(ctx context.Context, a *app, args []string) error {
 	if err != nil {
 		return err
 	}
-	if *app == "" && bytes.Contains(secret, []byte("PRIVATE KEY-----")) {
+	if *app == "" && domain.HoldsPrivateKey(secret) {
 		// A static credential goes to the target in a header: a private key
 		// must never be one.
 		clear(secret)

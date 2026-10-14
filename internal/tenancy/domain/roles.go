@@ -219,7 +219,7 @@ var roles = []Role{
 	},
 	{
 		Name: RoleCodeReviewer, Title: "Code Reviewer", Scopes: teamScope,
-		Description: "Reviews the changes agents want to merge and approves or declines them with a security key (human only). A requirement that names the role and is independent excludes the change's author and every author, committer and pusher of its commits.",
+		Description: "Reviews the changes agents want to merge and approves or declines them with a security key (human only). Every approval of an action whose definition names the people it must be independent of excludes the change's author and every author, committer and pusher of its commits, whatever role it asks for.",
 		Permissions: with(basicReads, []Permission{PermApprovalRespond, PermApprovalRead, PermWaitlistRead, PermGitHubIdentityProve}),
 	},
 	{

@@ -8,6 +8,7 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
+	"encoding/base64"
 	"encoding/pem"
 	"net/http"
 	"net/http/httptest"
@@ -117,6 +118,8 @@ func TestHR204_SealAGitHubApp(t *testing.T) {
 		"PKCS#1":           pemKey,
 		"PKCS#8":           pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: pkcs8}),
 		"after other text": append([]byte("token\n"), pemKey...),
+		"PEM in base64":    []byte(base64.StdEncoding.EncodeToString(pemKey)),
+		"DER":              x509.MarshalPKCS1PrivateKey(app),
 	} {
 		f := filepath.Join(t.TempDir(), "static")
 		if err := os.WriteFile(f, content, 0o600); err != nil {

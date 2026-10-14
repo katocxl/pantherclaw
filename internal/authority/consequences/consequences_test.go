@@ -106,6 +106,8 @@ func TestHR206_AFactThatCannotBeUsedMakesTheConsequenceUnknown(t *testing.T) {
 			triggers(map[string]any{"state": "none", "unknown": "the pull request changes .github/workflows/deploy.yml\x07"}, time.Second), nil,
 			"unknown: the pull request changes .github/workflows/deploy.yml ",
 		},
+		// The gateway could not read it (Q11): never ruled out.
+		"unread": {triggers(map[string]any{"unread": "no read token"}, time.Second), nil, "could not be read: no read token"},
 	} {
 		c := evaluate(t, tc.facts, tc.ages)
 		if c.Err != nil || c.State != consequences.Unknown || len(c.Unknown) != 1 || !strings.Contains(c.Unknown[0], tc.why) ||

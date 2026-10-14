@@ -30,6 +30,7 @@ var m6Procedures = map[string]td.Permission{
 	pantherclawv1connect.GatewayServiceWatchContainmentProcedure:                  "gateway.sync",
 	pantherclawv1connect.GatewayServiceReportCircuitProcedure:                     "gateway.observe",
 	pantherclawv1connect.GatewayServiceReportDriftProcedure:                       "gateway.observe",
+	pantherclawv1connect.GatewayServiceReportRevocationFailureProcedure:           "gateway.observe",
 	pantherclawv1connect.ConnectionServiceCreateConnectionProcedure:               "connection.manage",
 	pantherclawv1connect.ConnectionServiceGetConnectionProcedure:                  "connection.read",
 	pantherclawv1connect.ConnectionServiceListConnectionsProcedure:                "connection.read",

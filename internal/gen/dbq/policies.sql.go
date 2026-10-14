@@ -182,6 +182,21 @@ func (q *Queries) ListPolicyVersions(ctx context.Context, orgID ids.OrgID, maxRo
 	return items, nil
 }
 
+const lockPublishedPolicyVersion = `-- name: LockPublishedPolicyVersion :one
+SELECT id FROM pc.policy_versions
+WHERE org_id = $1 AND state = 'PUBLISHED'
+FOR UPDATE
+`
+
+// The published version, locked until the transaction ends, so a publish
+// that expects it sees any other publish first (C4, expected version).
+func (q *Queries) LockPublishedPolicyVersion(ctx context.Context, orgID ids.OrgID) (ids.UUID, error) {
+	row := q.db.QueryRow(ctx, lockPublishedPolicyVersion, orgID)
+	var id ids.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const nextPolicyVersion = `-- name: NextPolicyVersion :one
 SELECT (coalesce(max(version), 0) + 1)::integer AS next
 FROM pc.policy_versions
