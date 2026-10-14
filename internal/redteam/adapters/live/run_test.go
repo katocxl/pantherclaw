@@ -22,12 +22,12 @@ import (
 )
 
 func TestSetupNeedsTheWorkloadServiceUnlessTestingOnly(t *testing.T) {
-	d := live.New(live.Config{Gateway: "http://127.0.0.1:9", Client: http.DefaultClient, Run: "r", Capabilities: map[app.Capability]bool{app.CapGitHub: true}})
+	d := live.New(live.Config{Gateway: "http://127.0.0.1:9", Client: &http.Client{}, Run: "r", Capabilities: map[app.Capability]bool{app.CapGitHub: true}})
 	res := run(t, d, "  - {id: a, do: agent.call, with: {face: sdk, connection: github, tool: t}, expect: {outcome: ALLOW}}\n")
 	if res.Verdict != domain.VerdictError || !strings.Contains(res.Detail, "WorkloadService") {
 		t.Fatalf("a driver with no WorkloadService ran a scenario: %+v", res)
 	}
-	d = live.New(live.Config{Gateway: "http://127.0.0.1:9", Client: http.DefaultClient, Run: "r", AgentID: "", Workload: nil})
+	d = live.New(live.Config{Gateway: "http://127.0.0.1:9", Client: &http.Client{}, Run: "r", AgentID: "", Workload: nil})
 	if res := run(t, d, "  - {id: a, do: agent.call, with: {face: sdk, connection: github, tool: t}, expect: {outcome: ALLOW}}\n"); res.Verdict != domain.VerdictError {
 		t.Errorf("%+v", res)
 	}
