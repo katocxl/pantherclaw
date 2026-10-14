@@ -251,7 +251,10 @@ type Agent struct {
 	// Claim time.
 	ClaimTime *timestamppb.Timestamp `protobuf:"bytes,14,opt,name=claim_time,json=claimTime,proto3" json:"claim_time,omitempty"`
 	// Retirement time.
-	RetireTime    *timestamppb.Timestamp `protobuf:"bytes,15,opt,name=retire_time,json=retireTime,proto3" json:"retire_time,omitempty"`
+	RetireTime *timestamppb.Timestamp `protobuf:"bytes,15,opt,name=retire_time,json=retireTime,proto3" json:"retire_time,omitempty"`
+	// A range agent (G0 M12, HR-220): marked at creation, never changed; all
+	// its runs are simulated and it may use only simulated connections.
+	RangeAgent    bool `protobuf:"varint,16,opt,name=range_agent,json=rangeAgent,proto3" json:"range_agent,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -389,6 +392,13 @@ func (x *Agent) GetRetireTime() *timestamppb.Timestamp {
 		return x.RetireTime
 	}
 	return nil
+}
+
+func (x *Agent) GetRangeAgent() bool {
+	if x != nil {
+		return x.RangeAgent
+	}
+	return false
 }
 
 // Discovery is what a gateway or scan observed about a discovered agent.
@@ -757,8 +767,12 @@ type CreateAgentRequest struct {
 	BackupOwnerUserId *string `protobuf:"bytes,6,opt,name=backup_owner_user_id,json=backupOwnerUserId,proto3,oneof" json:"backup_owner_user_id,omitempty"`
 	// Execution context; fixed for the agent's life.
 	ExecutionContext ExecutionContext `protobuf:"varint,7,opt,name=execution_context,json=executionContext,proto3,enum=pantherclaw.v1.ExecutionContext" json:"execution_context,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	// Creates a range agent (G0 M12, HR-220): all its runs are simulated and it
+	// may use only simulated connections. At most 5 per organization; they do
+	// not count toward the edition's agent limit. Fixed for the agent's life.
+	RangeAgent    bool `protobuf:"varint,8,opt,name=range_agent,json=rangeAgent,proto3" json:"range_agent,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *CreateAgentRequest) Reset() {
@@ -838,6 +852,13 @@ func (x *CreateAgentRequest) GetExecutionContext() ExecutionContext {
 		return x.ExecutionContext
 	}
 	return ExecutionContext_EXECUTION_CONTEXT_UNSPECIFIED
+}
+
+func (x *CreateAgentRequest) GetRangeAgent() bool {
+	if x != nil {
+		return x.RangeAgent
+	}
+	return false
 }
 
 // CreateAgentResponse returns the agent.
@@ -2250,7 +2271,7 @@ var File_pantherclaw_v1_agents_proto protoreflect.FileDescriptor
 
 const file_pantherclaw_v1_agents_proto_rawDesc = "" +
 	"\n" +
-	"\x1bpantherclaw/v1/agents.proto\x12\x0epantherclaw.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xaf\x05\n" +
+	"\x1bpantherclaw/v1/agents.proto\x12\x0epantherclaw.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xd0\x05\n" +
 	"\x05Agent\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x18\n" +
@@ -2272,7 +2293,9 @@ const file_pantherclaw_v1_agents_proto_rawDesc = "" +
 	"\n" +
 	"claim_time\x18\x0e \x01(\v2\x1a.google.protobuf.TimestampR\tclaimTime\x12;\n" +
 	"\vretire_time\x18\x0f \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"retireTime\"\xbc\x03\n" +
+	"retireTime\x12\x1f\n" +
+	"\vrange_agent\x18\x10 \x01(\bR\n" +
+	"rangeAgent\"\xbc\x03\n" +
 	"\tDiscovery\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x16\n" +
 	"\x06source\x18\x02 \x01(\tR\x06source\x12%\n" +
@@ -2312,7 +2335,7 @@ const file_pantherclaw_v1_agents_proto_rawDesc = "" +
 	"createTime\x1a:\n" +
 	"\fDetailsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x8e\x03\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xaf\x03\n" +
 	"\x12CreateAgentRequest\x12\x1e\n" +
 	"\x04name\x18\x01 \x01(\tB\n" +
 	"\xbaH\ar\x05\x10\x01\x18\xc8\x01R\x04name\x12\"\n" +
@@ -2322,7 +2345,9 @@ const file_pantherclaw_v1_agents_proto_rawDesc = "" +
 	"\rowner_user_id\x18\x05 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\vownerUserId\x12>\n" +
 	"\x14backup_owner_user_id\x18\x06 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01H\x00R\x11backupOwnerUserId\x88\x01\x01\x12Y\n" +
 	"\x11execution_context\x18\a \x01(\x0e2 .pantherclaw.v1.ExecutionContextB\n" +
-	"\xbaH\a\x82\x01\x04\x10\x01 \x00R\x10executionContextB\x17\n" +
+	"\xbaH\a\x82\x01\x04\x10\x01 \x00R\x10executionContext\x12\x1f\n" +
+	"\vrange_agent\x18\b \x01(\bR\n" +
+	"rangeAgentB\x17\n" +
 	"\x15_backup_owner_user_id\"B\n" +
 	"\x13CreateAgentResponse\x12+\n" +
 	"\x05agent\x18\x01 \x01(\v2\x15.pantherclaw.v1.AgentR\x05agent\"+\n" +

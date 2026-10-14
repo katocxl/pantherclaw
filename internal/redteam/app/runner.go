@@ -175,6 +175,9 @@ func (r *Runner) step(ctx context.Context, s domain.Scenario, st domain.Step, va
 		st.With = with
 	}
 	obs, err := r.Driver.Do(ctx, s, st, vars)
+	if errors.Is(err, ErrUnsupported) {
+		return sr, domain.VerdictSkipped, err.Error()
+	}
 	if err != nil {
 		return sr, domain.VerdictError, err.Error()
 	}
@@ -374,3 +377,7 @@ func mismatchEach(e domain.Expect, o domain.Observation, seen map[string]domain.
 	}
 	return ""
 }
+
+// ErrUnsupported is what a driver returns for a step it cannot perform; the
+// runner marks the scenario SKIPPED instead of ERROR.
+var ErrUnsupported = errors.New("redteam: step not supported by this driver")

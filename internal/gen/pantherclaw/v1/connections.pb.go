@@ -521,7 +521,10 @@ type Connection struct {
 	Connector *ConnectorSpec `protobuf:"bytes,29,opt,name=connector,proto3" json:"connector,omitempty"`
 	// The GitHub App installation behind a connection holding a GitHub App
 	// credential (G0 M8, ADR-0021); unset otherwise.
-	Github        *GitHubInstallation `protobuf:"bytes,24,opt,name=github,proto3" json:"github,omitempty"`
+	Github *GitHubInstallation `protobuf:"bytes,24,opt,name=github,proto3" json:"github,omitempty"`
+	// Whether the connection is simulated (G0 M12, HR-221): it points only at a
+	// simulator, and only range agents' runs may use it.
+	Simulated     bool `protobuf:"varint,30,opt,name=simulated,proto3" json:"simulated,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -729,6 +732,13 @@ func (x *Connection) GetGithub() *GitHubInstallation {
 		return x.Github
 	}
 	return nil
+}
+
+func (x *Connection) GetSimulated() bool {
+	if x != nil {
+		return x.Simulated
+	}
+	return false
 }
 
 // ConnectionRoute is one route's explicit mode.
@@ -985,7 +995,11 @@ type CreateConnectionRequest struct {
 	// and mcp connections.
 	AgentHosts []string `protobuf:"bytes,19,rep,name=agent_hosts,json=agentHosts,proto3" json:"agent_hosts,omitempty"`
 	// connector is required for, and only for, an mcp_container connection.
-	Connector     *ConnectorSpec `protobuf:"bytes,20,opt,name=connector,proto3" json:"connector,omitempty"`
+	Connector *ConnectorSpec `protobuf:"bytes,20,opt,name=connector,proto3" json:"connector,omitempty"`
+	// Creates a simulated connection (G0 M12, HR-221): http and mcp need an IP
+	// literal on loopback or a private network as the base URL; mcp_container
+	// is refused. Fixed for the connection's life.
+	Simulated     bool `protobuf:"varint,21,opt,name=simulated,proto3" json:"simulated,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1123,6 +1137,13 @@ func (x *CreateConnectionRequest) GetConnector() *ConnectorSpec {
 		return x.Connector
 	}
 	return nil
+}
+
+func (x *CreateConnectionRequest) GetSimulated() bool {
+	if x != nil {
+		return x.Simulated
+	}
+	return false
 }
 
 // CreateConnectionResponse returns the connection.
@@ -3809,7 +3830,7 @@ var File_pantherclaw_v1_connections_proto protoreflect.FileDescriptor
 
 const file_pantherclaw_v1_connections_proto_rawDesc = "" +
 	"\n" +
-	" pantherclaw/v1/connections.proto\x12\x0epantherclaw.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1fpantherclaw/v1/connectors.proto\x1a\x1bpantherclaw/v1/github.proto\"\xd9\b\n" +
+	" pantherclaw/v1/connections.proto\x12\x0epantherclaw.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1fpantherclaw/v1/connectors.proto\x1a\x1bpantherclaw/v1/github.proto\"\xf7\b\n" +
 	"\n" +
 	"Connection\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
@@ -3845,7 +3866,8 @@ const file_pantherclaw_v1_connections_proto_rawDesc = "" +
 	"\vagent_hosts\x18\x1c \x03(\tR\n" +
 	"agentHosts\x12;\n" +
 	"\tconnector\x18\x1d \x01(\v2\x1d.pantherclaw.v1.ConnectorSpecR\tconnector\x12:\n" +
-	"\x06github\x18\x18 \x01(\v2\".pantherclaw.v1.GitHubInstallationR\x06github\"\xb2\x01\n" +
+	"\x06github\x18\x18 \x01(\v2\".pantherclaw.v1.GitHubInstallationR\x06github\x12\x1c\n" +
+	"\tsimulated\x18\x1e \x01(\bR\tsimulated\"\xb2\x01\n" +
 	"\x0fConnectionRoute\x12\x14\n" +
 	"\x05route\x18\x01 \x01(\tR\x05route\x12-\n" +
 	"\x04mode\x18\x02 \x01(\x0e2\x19.pantherclaw.v1.RouteModeR\x04mode\x12\x1d\n" +
@@ -3868,7 +3890,7 @@ const file_pantherclaw_v1_connections_proto_rawDesc = "" +
 	" \x01(\tR\tcreatedBy\x12;\n" +
 	"\vcreate_time\x18\v \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"createTime\x12\x12\n" +
-	"\x04kind\x18\f \x01(\tR\x04kind\"\xef\a\n" +
+	"\x04kind\x18\f \x01(\tR\x04kind\"\x8d\b\n" +
 	"\x17CreateConnectionRequest\x12C\n" +
 	"\x04name\x18\x01 \x01(\tB/\xbaH,r*\x10\x01\x18?2$^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$R\x04name\x12>\n" +
 	"\x04kind\x18\x02 \x01(\x0e2\x1e.pantherclaw.v1.ConnectionKindB\n" +
@@ -3891,7 +3913,8 @@ const file_pantherclaw_v1_connections_proto_rawDesc = "" +
 	"timeout_ms\x18\r \x01(\x05B\v\xbaH\b\x1a\x06\x18\xe0\xd4\x03(\x00R\ttimeoutMs\x12W\n" +
 	"\vagent_hosts\x18\x13 \x03(\tB6\xbaH3\x92\x010\x10\x10\x18\x01\"*r(2&^[a-z0-9]([a-z0-9.-]{0,251}[a-z0-9])?$R\n" +
 	"agentHosts\x12;\n" +
-	"\tconnector\x18\x14 \x01(\v2\x1d.pantherclaw.v1.ConnectorSpecR\tconnector\"V\n" +
+	"\tconnector\x18\x14 \x01(\v2\x1d.pantherclaw.v1.ConnectorSpecR\tconnector\x12\x1c\n" +
+	"\tsimulated\x18\x15 \x01(\bR\tsimulated\"V\n" +
 	"\x18CreateConnectionResponse\x12:\n" +
 	"\n" +
 	"connection\x18\x01 \x01(\v2\x1a.pantherclaw.v1.ConnectionR\n" +

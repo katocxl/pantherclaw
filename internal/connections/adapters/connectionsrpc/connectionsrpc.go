@@ -86,7 +86,7 @@ func connectionOf(c capp.Connection) *pb.Connection {
 		DefaultMode: modeOf[c.DefaultMode], MaxResponseBytes: c.MaxResponseBytes, TimeoutMs: c.TimeoutMs, State: states[c.State],
 		QuarantineReason: deref(c.QuarantineReason), Revision: c.Revision, CreatedBy: c.CreatedBy,
 		CreateTime: timestamppb.New(c.CreatedAt), UpdatedBy: c.UpdatedBy, UpdateTime: timestamppb.New(c.UpdatedAt), AgentHosts: c.AgentHosts,
-		Connector: connectorOf(c.Connector),
+		Connector: connectorOf(c.Connector), Simulated: c.Simulated,
 	}
 	for _, r := range c.Routes {
 		out.Routes = append(out.Routes, routeOf(r))
@@ -138,7 +138,7 @@ func (h *Handler) CreateConnection(ctx context.Context, req *pb.CreateConnection
 		AllowedHosts: req.GetAllowedHosts(), DestinationClass: classes[req.GetDestinationClass()], AccessMode: access[req.GetAccessMode()],
 		CredentialHeader: req.GetCredentialHeader(), CredentialScheme: req.GetCredentialScheme(), DefaultMode: modes[req.GetDefaultMode()],
 		MaxResponseBytes: req.GetMaxResponseBytes(), TimeoutMs: req.GetTimeoutMs(), AgentHosts: req.GetAgentHosts(),
-		Connector: spec,
+		Connector: spec, Simulated: req.GetSimulated(),
 	})
 	if err != nil {
 		return nil, err

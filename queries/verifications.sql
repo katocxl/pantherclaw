@@ -108,10 +108,10 @@ ORDER BY c.position;
 -- decided with it (ALLOW), never dispatched.
 -- name: InsertConsequenceTransaction :execrows
 INSERT INTO pc.transactions (org_id, id, run_id, action_id, action_hash, operation, decision, reason_code, gateway_id, state,
-                             grant_id, grant_revision, connection_id, mode, target_type, target_id, effect_level_required)
+                             grant_id, grant_revision, connection_id, mode, target_type, target_id, effect_level_required, simulated)
 SELECT t.org_id, sqlc.arg(id), t.run_id, sqlc.arg(action_id), sqlc.arg(action_hash), sqlc.arg(operation), 'ALLOW',
        'CONSEQUENCE', t.gateway_id, 'FINAL', t.grant_id, t.grant_revision, t.connection_id, t.mode, sqlc.arg(target_type),
-       sqlc.arg(target_id), sqlc.arg(level_required)
+       sqlc.arg(target_id), sqlc.arg(level_required), t.simulated
 FROM pc.transactions t
 WHERE t.org_id = sqlc.arg(org_id) AND t.id = sqlc.arg(parent);
 
