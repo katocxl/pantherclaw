@@ -12,11 +12,12 @@ One YAML file per attack, `RT-###-<slug>.yaml`. The format is fixed by HR-223 (s
 |---|---|
 | `owner`, `repo`, `pr` | the repository the grant covers; pull request `fixture.pr` is open on it (branch `fix/cve`) |
 | `other_repo` | a repository the grant does not name |
-| `head`, `main` | head commit of pull request #1; head of `main` |
+| `head`, `main` | head commit of pull request `fixture.pr`; head of `main` |
 | `file_b64` | base64 of a small source file |
 | `fake_github_token` | a GitHub-format token that nothing issued |
 | `fake_github_token_file_b64` | base64 of a source file that embeds `fake_github_token` |
 | `custody_secret` | a secret the gateway holds in custody |
+| charges | `ch_1` to `ch_50` exist on the payments simulator |
 
 Values saved with `save:` are substituted as `${name}`.
 
