@@ -92,6 +92,7 @@ type rangeEnv struct {
 	decision  *string // the gateway's answer to /sdk/*
 	lastBody  string  // the last body the gateway received
 	fakeRun   *fakeRuns
+	lastRun   string         // the run of the last call the fake gateway saw
 	holdCap   int            // holds the fake gateway allows per run (0: no cap)
 	holds     map[string]int // holds seen per run
 	bodyMu    sync.Mutex
@@ -125,6 +126,9 @@ func newRangeEnv(t *testing.T) *rangeEnv {
 	re.fakeRun = &fakeRuns{}
 	pantherclawv1connect.RegisterWorkloadServiceHandler(cs, re.fakeRun)
 	pantherclawv1connect.RegisterRunServiceHandler(cs, re.fakeRun)
+	fx := &fakeTx{re: re}
+	pantherclawv1connect.RegisterTransactionServiceHandler(cs, fx)
+	pantherclawv1connect.RegisterApprovalServiceHandler(cs, fx)
 	mux := http.NewServeMux()
 	connecthttp.Mount(mux, cs)
 	srv := httptest.NewServer(mux)
@@ -136,6 +140,7 @@ func newRangeEnv(t *testing.T) *rangeEnv {
 		b, _ := io.ReadAll(r.Body)
 		re.bodyMu.Lock()
 		re.lastBody = string(b)
+		re.lastRun = r.Header.Get("PAP-Run-Id")
 		re.bodyMu.Unlock()
 		if re.holdCap > 0 {
 			re.bodyMu.Lock()
@@ -775,5 +780,47 @@ func TestD40EachScenarioRunsInItsOwnChildRun(t *testing.T) {
 	b, err := os.ReadFile(filepath.Join(re2.outDir, "0", "summary-"+rtRange+".json"))
 	if err != nil || !strings.Contains(string(b), `"notes"`) {
 		t.Errorf("summary %q %v", b, err)
+	}
+}
+
+// fakeTx serves the transaction and its approval request, which belong to
+// the run the fake gateway last saw: the scenario's own child run (D40).
+type fakeTx struct {
+	pantherclawv1connect.UnimplementedTransactionServiceHandler
+	pantherclawv1connect.UnimplementedApprovalServiceHandler
+	re *rangeEnv
+}
+
+func (f *fakeTx) run() string {
+	f.re.bodyMu.Lock()
+	defer f.re.bodyMu.Unlock()
+	return f.re.lastRun
+}
+
+func (f *fakeTx) GetTransactionEvidence(_ context.Context, r *pantherclawv1.GetTransactionEvidenceRequest) (*pantherclawv1.GetTransactionEvidenceResponse, error) {
+	return &pantherclawv1.GetTransactionEvidenceResponse{Transaction: &pantherclawv1.Transaction{Id: r.GetId(), RunId: f.run()}}, nil
+}
+
+func (f *fakeTx) ListApprovalRequests(_ context.Context, r *pantherclawv1.ListApprovalRequestsRequest) (*pantherclawv1.ListApprovalRequestsResponse, error) {
+	if r.GetRunId() != f.run() { // only the scenario's own run holds the request
+		return &pantherclawv1.ListApprovalRequestsResponse{}, nil
+	}
+	return &pantherclawv1.ListApprovalRequestsResponse{Requests: []*pantherclawv1.ApprovalRequest{{
+		Id: "ar1", TransactionId: rtRange, State: pantherclawv1.ApprovalState_APPROVAL_STATE_APPROVED,
+	}}}, nil
+}
+
+func TestD40PersonStepsSeeTheApprovalInTheScenariosRun(t *testing.T) {
+	re := newRangeEnv(t)
+	person := strings.Replace(rtScenario, "    expect: {outcome: HOLD, decisive_control: HR-201}\n",
+		"    expect: {outcome: HOLD, decisive_control: HR-201}\n  - {id: approve, do: person.approve, with: {step: merge, as: approver}, expect: {outcome: ALLOW}}\n", 1)
+	writeFile(t, re.scenarios, "RT-001-merge-held.yaml", []byte(person))
+	// Without --interactive a person step is not run.
+	if code, out, errs := re.run(t); code != 0 || !strings.Contains(out, "1 SKIPPED") {
+		t.Fatalf("without --interactive = %d\n%s\n%s", code, out, errs)
+	}
+	code, out, errs := re.run(t, "--interactive")
+	if code != 0 || !strings.Contains(out, "1 PASS, 0 FAIL, 0 ERROR, 0 SKIPPED") || !strings.Contains(out, "must APPROVE transaction") {
+		t.Fatalf("interactive = %d\n%s\n%s", code, out, errs)
 	}
 }

@@ -614,7 +614,13 @@ func (r txnReader) State(ctx context.Context, id string) (live.TxnState, error) 
 	if recs := ev.GetDecisionReceipts(); len(recs) > 0 {
 		s.Receipt = receipt.Parts(recs[len(recs)-1].GetReceiptJws())
 	}
-	list, err := r.approvals.ListApprovalRequests(ctx, &pantherclawv1.ListApprovalRequestsRequest{RunId: &r.run, PageSize: 200})
+	// The request belongs to the run the transaction was made in: under D40 a
+	// scenario's own child run, not the range instance's.
+	run := ev.GetTransaction().GetRunId()
+	if run == "" {
+		run = r.run
+	}
+	list, err := r.approvals.ListApprovalRequests(ctx, &pantherclawv1.ListApprovalRequestsRequest{RunId: &run, PageSize: 200})
 	if err != nil {
 		return live.TxnState{}, err
 	}

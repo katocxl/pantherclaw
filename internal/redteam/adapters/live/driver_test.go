@@ -49,7 +49,7 @@ func driver(t *testing.T, h http.Handler, mod func(*live.Config)) *live.Driver {
 	cfg := live.Config{
 		Gateway: srv.URL, Client: srv.Client(), Run: "00000000-0000-4000-8000-000000000001",
 		Roles: map[string]string{"github": "gh-sim"}, Fixture: app.Fixture{"pr": "7"},
-		Capabilities: map[app.Capability]bool{app.CapGitHub: true, app.CapMCP: true},
+		Capabilities: map[app.Capability]bool{app.CapGitHub: true, app.CapMCP: true}, AllowParentRun: true,
 	}
 	if mod != nil {
 		mod(&cfg)
