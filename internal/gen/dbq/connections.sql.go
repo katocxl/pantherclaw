@@ -561,10 +561,15 @@ func (q *Queries) LatestConnectionTest(ctx context.Context, orgID ids.OrgID, con
 }
 
 const latestTargetVerifierTest = `-- name: LatestTargetVerifierTest :one
-SELECT state, result, finished_at FROM pc.connection_tests
-WHERE org_id = $1 AND connection_id = $2 AND kind = 'target_verifier'
-    AND operation = $3 AND finished_at IS NOT NULL
-ORDER BY finished_at DESC, id DESC
+SELECT t.state, t.result, t.finished_at FROM pc.connection_tests t
+JOIN pc.connections c ON c.org_id = t.org_id AND c.id = t.connection_id
+WHERE t.org_id = $1 AND t.connection_id = $2 AND t.kind = 'target_verifier'
+    AND t.operation = $3 AND t.finished_at IS NOT NULL AND t.finished_at > c.updated_at
+    AND NOT EXISTS (SELECT 1 FROM pc.credentials cr WHERE cr.org_id = t.org_id AND cr.connection_id = t.connection_id
+        AND cr.state = 'ACTIVE' AND cr.created_at >= t.finished_at)
+    AND NOT EXISTS (SELECT 1 FROM pc.tool_packages tp JOIN pc.package_pins p ON p.org_id = tp.org_id AND p.package_id = tp.id
+        WHERE tp.org_id = t.org_id AND tp.name = c.package AND p.updated_at >= t.finished_at)
+ORDER BY t.finished_at DESC, t.id DESC
 LIMIT 1
 `
 
@@ -575,9 +580,13 @@ type LatestTargetVerifierTestRow struct {
 }
 
 // The latest finished target_verifier test of an operation on a connection
-// (coverage's TargetVerifier, M9 founder decision N15). Coverage lifts the
-// cap only while it is DONE and PASSED: a newer failure, or a test that
-// could not run, drops the lift (connection_tests_finished).
+// since its binding last changed (coverage's TargetVerifier, M9 founder
+// decision N15). Coverage lifts the cap only while it is DONE and PASSED: a
+// newer failure, or a test that could not run, drops the lift. A test that
+// finished before the connection's latest revision (base URL, hosts,
+// access, routes; updated_at moves with every revision), before its active
+// credential was sealed, or before its package pin last moved vouches for
+// a connection that is no longer there, and is not read (HR-211).
 func (q *Queries) LatestTargetVerifierTest(ctx context.Context, orgID ids.OrgID, connectionID ids.UUID, operation *string) (LatestTargetVerifierTestRow, error) {
 	row := q.db.QueryRow(ctx, latestTargetVerifierTest, orgID, connectionID, operation)
 	var i LatestTargetVerifierTestRow

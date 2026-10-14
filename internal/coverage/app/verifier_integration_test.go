@@ -6,6 +6,7 @@
 package app_test
 
 import (
+	"bytes"
 	"context"
 	"slices"
 	"testing"
@@ -108,6 +109,14 @@ func (f *fixture) verificationTask(t *testing.T, conn ids.UUID, operation string
 	return id
 }
 
+// boundAnHourAgo dates the connections' latest revisions and the package
+// pin an hour back, so tests that finished since count.
+func (f *fixture) boundAnHourAgo(t *testing.T) {
+	t.Helper()
+	f.d.AdminExec(t, "UPDATE pc.connections SET updated_at = now() - interval '1 hour' WHERE org_id = $1", f.org)
+	f.d.AdminExec(t, "UPDATE pc.package_pins SET updated_at = now() - interval '1 hour' WHERE org_id = $1", f.org)
+}
+
 // lastPassed asks app.ConnectionTests about operation on conn.
 func (f *fixture) lastPassed(t *testing.T, conn ids.UUID, operation string) *time.Time {
 	t.Helper()
@@ -136,6 +145,7 @@ func TestHR210_ConnectionTestsVouchWhileTheLatestPasses(t *testing.T) {
 	f.exec(t, `INSERT INTO pc.connections (org_id, id, name, kind, gateway_id, package, base_url, access_mode, default_mode,
 		created_by, updated_by) VALUES ($1, $2, 'other', 'http', $3, 'pc.mock-payments', 'https://api.example.com',
 		'target_enforced', 'enforce', 'test', 'test')`, f.org, other, f.gateway)
+	f.boundAnHourAgo(t)
 	now := f.dbNow(t).Truncate(time.Microsecond)
 	if at := f.lastPassed(t, f.conn, op); at != nil {
 		t.Fatalf("no test, yet %v", at)
@@ -182,6 +192,7 @@ func TestHR210_TheServersVerifierLiftsTheTestedRead(t *testing.T) {
 	f.exec(t, "UPDATE pc.connections SET access_mode = 'target_enforced' WHERE id = $1", f.conn)
 	f.svc.Verifier = app.ConnectionTests{}
 	const tested, write = "payments.refund.get", "payments.refund.create"
+	f.boundAnHourAgo(t)
 	now := f.dbNow(t)
 	for _, op := range []string{tested, write} {
 		f.addTest(t, f.conn, "target_verifier", op, "DONE", "PASSED", now.Add(-time.Minute))
@@ -206,5 +217,49 @@ func TestHR210_TheServersVerifierLiftsTheTestedRead(t *testing.T) {
 	}
 	if row, s, _ := f.current(t, write); row.State != "PARTIAL" || !slices.Contains(s.Reasons, domain.ReasonWriteCapped) {
 		t.Errorf("%s: %s %v", write, row.State, s.Reasons)
+	}
+}
+
+// TestHR211_AChangedConnectionDropsTheVerifierLift: a passing
+// target-verifier test vouches only for the connection it ran against. A
+// new revision of the connection (its base URL here), a newly sealed
+// credential, or a package pin that moved after the test drops the lift at
+// once, not when the TTL runs out; a new passing test restores it.
+func TestHR211_AChangedConnectionDropsTheVerifierLift(t *testing.T) {
+	const op = "payments.refund.get"
+	for name, change := range map[string]func(f *fixture){
+		"a new revision": func(f *fixture) {
+			f.exec(t, "UPDATE pc.connections SET base_url = 'https://api2.example.com', revision = revision + 1, updated_at = now() WHERE id = $1", f.conn)
+		},
+		"a new credential": func(f *fixture) {
+			cert, key := ids.NewV7(), ids.NewV7()
+			f.exec(t, `INSERT INTO pc.gateway_certs (org_id, id, gateway_id, serial, key_thumbprint, issued_via, not_before, not_after)
+				VALUES ($1, $2, $3, $4, $5, 'ENROLL', now(), now() + interval '24 hours')`, f.org, cert, f.gateway, cert[:16], bytes.Repeat([]byte("A"), 43))
+			f.exec(t, `INSERT INTO pc.broker_keys (org_id, id, gateway_id, version, public_key, fingerprint, cert_id)
+				VALUES ($1, $2, $3, 1, $4, 'sha256:' || encode(sha256($4), 'hex'), $5)`, f.org, key, f.gateway, bytes.Repeat([]byte{7}, 1216), cert)
+			f.exec(t, `INSERT INTO pc.credentials (org_id, id, connection_id, version, broker_key_id, sealed, allowed_hosts, header, created_by)
+				VALUES ($1, $2, $3, 1, $4, $5, '{api.example.com}', 'Authorization', 'test')`, f.org, ids.NewV7(), f.conn, key, bytes.Repeat([]byte{1}, 1200))
+		},
+		"a moved package pin": func(f *fixture) {
+			f.d.AdminExec(t, "UPDATE pc.package_pins SET updated_at = now() WHERE org_id = $1", f.org)
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			f := newFixture(t)
+			f.boundAnHourAgo(t)
+			f.addTest(t, f.conn, "target_verifier", op, "DONE", "PASSED", f.dbNow(t).Add(-time.Minute))
+			if at := f.lastPassed(t, f.conn, op); at == nil {
+				t.Fatal("the passing test does not vouch before the change")
+			}
+			change(f)
+			if at := f.lastPassed(t, f.conn, op); at != nil {
+				t.Fatalf("a test from before %s still vouches: %v", name, at)
+			}
+			after := f.dbNow(t).Add(time.Second)
+			f.addTest(t, f.conn, "target_verifier", op, "DONE", "PASSED", after)
+			if at := f.lastPassed(t, f.conn, op); at == nil || !at.Equal(after.Truncate(time.Microsecond)) {
+				t.Fatalf("a test after %s: %v, want %v", name, at, after)
+			}
+		})
 	}
 }
