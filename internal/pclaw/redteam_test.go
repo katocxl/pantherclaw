@@ -142,8 +142,10 @@ func newRangeEnv(t *testing.T) *rangeEnv {
 
 func (re *rangeEnv) run(t *testing.T, extra ...string) (int, string, string) {
 	t.Helper()
-	args := append([]string{"redteam", "run", "--scenarios", re.scenarios, "--workload-file", re.keyFile, "--token-file", re.tokenFile,
-		"--gateway", re.gateway, "--role", "github=gh-sim", "--out", filepath.Join(re.outDir, fmt.Sprint(re.runs))}, extra...)
+	args := append([]string{
+		"redteam", "run", "--scenarios", re.scenarios, "--workload-file", re.keyFile, "--token-file", re.tokenFile,
+		"--gateway", re.gateway, "--role", "github=gh-sim", "--out", filepath.Join(re.outDir, fmt.Sprint(re.runs)),
+	}, extra...)
 	re.runs++
 	return run(t, re.env, args...)
 }
@@ -422,8 +424,10 @@ func TestRedteamSetupPlansFirstAndDryRunChangesNothing(t *testing.T) {
 	t.Cleanup(srv.Close)
 	env := envOf(map[string]string{"PANTHERCLAW_SERVER": srv.URL, "PANTHERCLAW_API_KEY": "pck_test_x"})
 	id := "0192aaaa-bbbb-7ccc-8ddd-000000000001"
-	args := []string{"redteam", "setup", "--name", "range", "--team", id, "--env", id, "--owner", id, "--context", "ci",
-		"--twin", "github=http://127.0.0.1:9100", "--like-grant", "0192aaaa-bbbb-7ccc-8ddd-0000000000a9"}
+	args := []string{
+		"redteam", "setup", "--name", "range", "--team", id, "--env", id, "--owner", id, "--context", "ci",
+		"--twin", "github=http://127.0.0.1:9100", "--like-grant", "0192aaaa-bbbb-7ccc-8ddd-0000000000a9",
+	}
 
 	code, out, errs := run(t, env, append(args, "--dry-run")...)
 	if code != 0 || !strings.Contains(out, "Plan:") || !strings.Contains(out, `"github-range"`) || !strings.Contains(out, "Dry run: nothing was changed.") ||
