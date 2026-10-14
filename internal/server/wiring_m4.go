@@ -43,7 +43,7 @@ func newAuthority(cfg *Config, pool *db.Pool, reg *keys.Registry, kp keys.KeyPro
 	}
 	return authority.New(authority.Config{
 		Decider: &finalize.Authority{
-			Pipeline: &pipeline.Pipeline{Reader: authorityReader(pool)}, Store: store,
+			Pipeline: &pipeline.Pipeline{Reader: authorityReader(pool, cfg.CEL), Limits: cfg.CEL}, Store: store,
 			Receipts: receipts, Permits: permits, ActionTokens: actionTokens, PermitTTL: cfg.Authority.PermitTTL.D(), Log: log,
 			Inputs: replayInputs(pool, kp), Coverage: coverageClaims{svc: &covapp.Service{Pool: pool}},
 			ClaimTimeout: claimTimeoutOf(cfg),
@@ -53,10 +53,10 @@ func newAuthority(cfg *Config, pool *db.Pool, reg *keys.Registry, kp keys.KeyPro
 }
 
 // authorityReader reads the pipeline's inputs from Postgres.
-func authorityReader(pool *db.Pool) *pgauthority.Reader {
+func authorityReader(pool *db.Pool, limits celenv.Limits) *pgauthority.Reader {
 	return &pgauthority.Reader{
 		Pool: pool, Definitions: &defspg.Store{Pool: pool}, Policies: &polpg.Store{Pool: pool},
 		FactStore: &factspg.Store{Pool: pool}, Grants: &grantspg.Store{Pool: pool},
-		Limits: celenv.DefaultLimits, Budget: policyapp.DefaultBudget,
+		Limits: limits, Budget: policyapp.DefaultBudget,
 	}
 }

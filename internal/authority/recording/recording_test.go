@@ -22,6 +22,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
 	fdomain "github.com/katocxl/pantherclaw/internal/facts/domain"
 	gdomain "github.com/katocxl/pantherclaw/internal/grants/domain"
+	"github.com/katocxl/pantherclaw/internal/platform/celenv"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	pdomain "github.com/katocxl/pantherclaw/internal/policy/domain"
 )
@@ -355,7 +356,7 @@ func TestRecordingReaderListsReadsItDoesNotHold(t *testing.T) {
 			ID: "fraud", Kind: pdomain.Forbid, Summary: "no refunds on disputed charges", Operations: []string{"payments.refund.create"},
 			When: `facts.payments_charge_disputed`, Reason: "DISPUTED", Facts: []pdomain.FactRef{{Name: "payments.charge.disputed", MaxAgeSeconds: 300}},
 		},
-	}}, map[string]fdomain.Type{"payments.charge.disputed": fdomain.TypeBoolean})
+	}}, map[string]fdomain.Type{"payments.charge.disputed": fdomain.TypeBoolean}, celenv.Limits{})
 	if err != nil {
 		t.Fatal(err)
 	}

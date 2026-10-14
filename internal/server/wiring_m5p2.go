@@ -54,7 +54,7 @@ func newM5p2(cfg *Config, pool *db.Pool, bill *billing.Service, notify *napp.Ser
 	return &m5p2Services{
 		pool: pool,
 		approvals: &apapp.Service{
-			Pool: pool, Simulator: &authority.Narrower{Pipeline: &pipeline.Pipeline{Reader: authorityReader(pool)}, Pool: pool},
+			Pool: pool, Simulator: &authority.Narrower{Pipeline: &pipeline.Pipeline{Reader: authorityReader(pool, cfg.CEL), Limits: cfg.CEL}, Pool: pool},
 			Defs: &defspg.Store{Pool: pool}, Ents: bill, Notify: notify,
 		},
 		reader: wapp.NewReader(pool).WithEntitlements(bill), writer: wapp.NewWriter(pool),

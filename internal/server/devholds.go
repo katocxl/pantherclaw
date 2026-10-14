@@ -38,7 +38,7 @@ func devHoldBundle(limit money.Money) *pdomain.Bundle {
 // seedHoldPolicy publishes devHoldBundle for org, compiled against its
 // active definitions like any version. dev seed is the author and
 // publisher of record.
-func seedHoldPolicy(ctx context.Context, pool *db.Pool, org ids.OrgID, limit money.Money) (ids.UUID, error) {
+func seedHoldPolicy(ctx context.Context, pool *db.Pool, org ids.OrgID, limit money.Money, limits celenv.Limits) (ids.UUID, error) {
 	b := devHoldBundle(limit)
 	catalog, err := (&factspg.Store{Pool: pool}).Catalog(ctx, org)
 	if err != nil {
@@ -48,7 +48,7 @@ func seedHoldPolicy(ctx context.Context, pool *db.Pool, org ids.OrgID, limit mon
 	if err != nil {
 		return ids.UUID{}, err
 	}
-	if _, err := (&policyapp.Engine{Limits: celenv.DefaultLimits, Facts: catalog}).Compile(b, ds); err != nil {
+	if _, err := (&policyapp.Engine{Limits: limits, Facts: catalog}).Compile(b, ds); err != nil {
 		return ids.UUID{}, fmt.Errorf("dev seed: hold policy: %w", err)
 	}
 	store := &polpg.Store{Pool: pool}

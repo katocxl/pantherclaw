@@ -34,15 +34,34 @@ import (
 // constants: per-tenant budgets come from the caller (HR-043).
 type Limits struct {
 	// MaxExpressionBytes bounds the source of one expression.
-	MaxExpressionBytes int
+	MaxExpressionBytes int `json:"max_expression_bytes"`
 	// MaxCost bounds both the estimated and the actual cost of one
 	// evaluation, in CEL cost units.
-	MaxCost uint64
+	MaxCost uint64 `json:"max_cost"`
 	// MaxComprehensionNesting bounds nested macros such as exists/all.
-	MaxComprehensionNesting int
+	MaxComprehensionNesting int `json:"max_comprehension_nesting"`
 	// EstimatedCollectionSize is the list, map and string size assumed when
 	// estimating cost at compile time.
-	EstimatedCollectionSize uint64
+	EstimatedCollectionSize uint64 `json:"estimated_collection_size"`
+}
+
+// Validate reports a limit that is not positive. The server and gateway
+// read Limits from their configuration (G0 M4 decision 4).
+func (l Limits) Validate() error {
+	var errs []error
+	if l.MaxExpressionBytes <= 0 {
+		errs = append(errs, errors.New("max_expression_bytes must be positive"))
+	}
+	if l.MaxCost == 0 {
+		errs = append(errs, errors.New("max_cost must be positive"))
+	}
+	if l.MaxComprehensionNesting <= 0 {
+		errs = append(errs, errors.New("max_comprehension_nesting must be positive"))
+	}
+	if l.EstimatedCollectionSize == 0 {
+		errs = append(errs, errors.New("estimated_collection_size must be positive"))
+	}
+	return errors.Join(errs...)
 }
 
 // DefaultLimits are the recommended defaults (G0 M4, decision 8).

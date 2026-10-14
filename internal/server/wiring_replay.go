@@ -12,6 +12,7 @@ import (
 	defspg "github.com/katocxl/pantherclaw/internal/definitions/adapters/pgstore"
 	factspg "github.com/katocxl/pantherclaw/internal/facts/adapters/pgstore"
 	"github.com/katocxl/pantherclaw/internal/keystore"
+	"github.com/katocxl/pantherclaw/internal/platform/celenv"
 	"github.com/katocxl/pantherclaw/internal/platform/clock"
 	pccrypto "github.com/katocxl/pantherclaw/internal/platform/crypto"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
@@ -33,9 +34,10 @@ func replayInputs(pool *db.Pool, kp keys.KeyProvider) *recording.Sealer {
 // replayEngine is ReplayDecision's engine (G0 M7 design decision 11,
 // HR-197): read ports only. Its source reads in READ ONLY transactions and
 // its opener only reads the DEK version a row was sealed with.
-func replayEngine(pool *db.Pool, kp keys.KeyProvider) *replay.Engine {
+func replayEngine(pool *db.Pool, kp keys.KeyProvider, limits celenv.Limits) *replay.Engine {
 	return &replay.Engine{
 		Source: &pgauthority.ReplaySource{Pool: pool, Definitions: &defspg.Store{Pool: pool}, FactStore: &factspg.Store{Pool: pool}},
 		Inputs: recording.NewSealer(pccrypto.NewEnvelope(keystore.NewDEKStore(pool, kp))),
+		Limits: limits,
 	}
 }

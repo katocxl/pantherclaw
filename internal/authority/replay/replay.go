@@ -30,6 +30,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/authority/recording"
 	defs "github.com/katocxl/pantherclaw/internal/definitions/domain"
 	fdomain "github.com/katocxl/pantherclaw/internal/facts/domain"
+	"github.com/katocxl/pantherclaw/internal/platform/celenv"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	pdomain "github.com/katocxl/pantherclaw/internal/policy/domain"
 )
@@ -69,6 +70,10 @@ type Opener interface {
 type Engine struct {
 	Source Source
 	Inputs Opener
+	// Limits are the server's CEL limits, used where the recording names
+	// none: a proposed policy for an evaluation that read no policy, and
+	// consequence rules without a policy. Zero: celenv.DefaultLimits.
+	Limits celenv.Limits
 }
 
 // Reasons a replay is incomplete (F507).
@@ -197,7 +202,7 @@ func (e *Engine) Replay(ctx context.Context, org ids.OrgID, txn ids.UUID, evalua
 	if err != nil {
 		return out.incomplete(Limitation{Code: IncompleteInputsUnreadable, Detail: "the recorded request does not parse"}), nil //nolint:nilerr // incomplete, not a failure
 	}
-	ev, err := (&pipeline.Pipeline{}).EvaluateWith(ctx, rd, req)
+	ev, err := (&pipeline.Pipeline{Limits: e.Limits}).EvaluateWith(ctx, rd, req)
 	if err != nil {
 		return out.incomplete(gaps(rd.Gaps())...), nil //nolint:nilerr // incomplete, not a failure
 	}
@@ -283,7 +288,7 @@ func (e *Engine) served(ctx context.Context, org ids.OrgID, rec *recording.Recor
 			}
 			out.Notes = append(out.Notes, "the evaluation read no policy, so the proposed one is compiled with the org's current fact types")
 		}
-		compiled, err := p.Proposed(proposed, catalog)
+		compiled, err := p.Proposed(proposed, catalog, e.Limits)
 		if err != nil {
 			return s, []Limitation{{ //nolint:nilerr // incomplete, not a failure
 				Code: IncompletePolicyUncompilable, Step: pipeline.StepFacts, Detail: "the proposed policy does not compile for this action",

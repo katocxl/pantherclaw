@@ -131,7 +131,7 @@ func newAnchoring(cfg *Config, pool *db.Pool, keyReg *keys.Registry, log *slog.L
 func registerEvidence(rs *connect.Server, d apiDeps) (*evapp.Service, error) {
 	svc := evapp.New(d.pool, d.logOrigin)
 	if d.kp != nil {
-		svc.WithReplay(replayEngine(d.pool, d.kp), clock.System{})
+		svc.WithReplay(replayEngine(d.pool, d.kp, d.cel), clock.System{})
 	}
 	if d.billing != nil {
 		insert, err := jobs.NewClient(d.pool, nil, jobs.Config{Logger: d.log}) // insert-only: enqueue in the creating transaction

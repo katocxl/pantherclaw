@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/katocxl/pantherclaw/internal/platform/celenv"
 	"github.com/katocxl/pantherclaw/internal/platform/config"
 )
 
@@ -58,6 +59,8 @@ func TestConfigValidation(t *testing.T) {
 		"public url userinfo": func(c *Config) { c.Auth.PublicURL = "https://u:p@pc.example.com" },
 		"public url relative": func(c *Config) { c.Auth.PublicURL = "pc.example.com" },
 		"api key env":         func(c *Config) { c.Auth.APIKeyEnv = "prod" },
+		"cel max cost":        func(c *Config) { c.CEL.MaxCost = 0 },
+		"cel nesting":         func(c *Config) { c.CEL.MaxComprehensionNesting = -1 },
 		"trusted proxy":       func(c *Config) { c.HTTP.TrustedProxies = []string{"10.0.0.0/8", "proxy.internal"} },
 		"oidc http issuer": func(c *Config) {
 			c.Auth.OIDCProviders = []OIDCProviderConfig{{Name: "kc", Issuer: "http://idp.example.com", ClientID: "pc", ClientSecretFile: "s"}}
@@ -194,5 +197,25 @@ func TestTrustedProxiesParse(t *testing.T) {
 	got, err := c.trustedProxies()
 	if err != nil || len(got) != 4 || got[1].String() != "192.168.1.5/32" || got[2].String() != "172.16.0.9/32" {
 		t.Fatalf("trustedProxies = %v, %v", got, err)
+	}
+}
+
+// TestCELLimitsAreConfiguration: the CEL limits default to the recommended
+// numbers and a configuration file can change them (G0 M4 decision 4).
+func TestCELLimitsAreConfiguration(t *testing.T) {
+	if c := DefaultConfig(); c.CEL != celenv.DefaultLimits {
+		t.Fatalf("default CEL limits %+v, want %+v", c.CEL, celenv.DefaultLimits)
+	}
+	path := filepath.Join(t.TempDir(), "server.json")
+	if err := os.WriteFile(path, []byte(`{"database": {"app_password_file": "pw"}, "kek_files": ["kek"],
+		"cel": {"max_expression_bytes": 2048, "max_cost": 5000, "max_comprehension_nesting": 1, "estimated_collection_size": 256}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	c := DefaultConfig()
+	if err := config.Load(&c, path, noEnv); err != nil {
+		t.Fatal(err)
+	}
+	if want := (celenv.Limits{MaxExpressionBytes: 2048, MaxCost: 5000, MaxComprehensionNesting: 1, EstimatedCollectionSize: 256}); c.CEL != want {
+		t.Fatalf("loaded CEL limits %+v, want %+v", c.CEL, want)
 	}
 }

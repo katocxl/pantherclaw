@@ -20,6 +20,7 @@ import (
 
 	"github.com/katocxl/pantherclaw/internal/gateway/connectors"
 	"github.com/katocxl/pantherclaw/internal/gateway/dispatch"
+	"github.com/katocxl/pantherclaw/internal/platform/celenv"
 	"github.com/katocxl/pantherclaw/internal/platform/config"
 	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
 )
@@ -94,6 +95,9 @@ type Config struct {
 		// is not reported, so the decision sees it missing.
 		FactTimeout config.Duration `json:"fact_timeout" env:"PC_GW_GITHUB_FACT_TIMEOUT"`
 	} `json:"github"`
+	// CEL bounds the package mapping expressions the gateway compiles
+	// (HR-043; G0 M4 decision 4). Defaults: celenv.DefaultLimits.
+	CEL celenv.Limits `json:"cel"`
 }
 
 // DefaultConfig returns development defaults.
@@ -107,6 +111,7 @@ func DefaultConfig() Config {
 	c.Control.Timeout = config.Duration(2 * time.Second)
 	c.Control.VerifyEvery = config.Duration(VerifyEvery)
 	c.GitHub.FactTimeout = config.Duration(dispatch.DefaultFactTimeout)
+	c.CEL = celenv.DefaultLimits
 	return c
 }
 
@@ -159,6 +164,9 @@ func (c *Config) Validate() error {
 	}
 	if _, err := baseURL(c.PublicURL); err != nil {
 		errs = append(errs, fmt.Errorf("public_url: %w", err))
+	}
+	if err := c.CEL.Validate(); err != nil {
+		errs = append(errs, fmt.Errorf("cel: %w", err))
 	}
 	return errors.Join(errs...)
 }

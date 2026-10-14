@@ -26,6 +26,7 @@ func TestConfigValidation(t *testing.T) {
 	for name, mutate := range map[string]func(*Config){
 		"public listen without TLS": func(c *Config) { c.Listen = "0.0.0.0:8090" },
 		"half a TLS pair":           func(c *Config) { c.TLS.CertFile = "cert.pem" },
+		"no cel cost limit":         func(c *Config) { c.CEL.MaxCost = 0 },
 		"http api off loopback":     func(c *Config) { c.Control.APIURL = "http://10.0.0.5:8080" },
 		"api path":                  func(c *Config) { c.Control.APIURL = "http://127.0.0.1:8080/api" },
 		"plain gateway url":         func(c *Config) { c.Control.GatewayURL = "http://127.0.0.1:8443" },

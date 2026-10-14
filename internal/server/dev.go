@@ -165,7 +165,7 @@ func cmdDev(ctx context.Context, args []string, stdout, stderr io.Writer, env En
 	}
 	_, _ = fmt.Fprintf(stdout, "seeded org %s (%q) with package %s@%s active\n", org, *name, mockpayments.Name, mockpayments.Version)
 	if hold != nil {
-		if _, err := seedHoldPolicy(ctx, pool, org, *hold); err != nil {
+		if _, err := seedHoldPolicy(ctx, pool, org, *hold, cfg.CEL); err != nil {
 			return err
 		}
 		_, _ = fmt.Fprintf(stdout, "published policy dev-holds: refunds over %s wait for an approver (%s)\n%s", hold, devHoldReason,
