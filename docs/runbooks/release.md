@@ -21,6 +21,6 @@
    ```
 9. **Licence note:** each version's Change Date is four years after its first publication (LICENSE parameters).
 
-Container images are not in GoReleaser yet: a release publishes the archives, checksums, SBOMs and provenance only. Signed distroless multi-arch images (cosign) and Python/npm packages through trusted publishing bound to the same environment are still to be added.
+From M1, container images (distroless, multi-arch) are added to GoReleaser and signed with cosign; from M8, Python/npm packages publish via trusted publishing bound to the same environment.
 
 **If the release job fails under harden-runner block mode:** read the blocked endpoint in the job summary, add it to `allowed-endpoints` in a PR (G1), and re-run by deleting and re-pushing the tag only if no release was published.

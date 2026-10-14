@@ -2,8 +2,8 @@
 # Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
 #
 # GoReleaser v2 — reproducible, static, trimmed binaries + SBOMs + checksums.
-# Container images (distroless, multi-arch, signed) are not added yet.
-# Provenance attestations are created by release.yml.
+# Container images (distroless, multi-arch, signed) are added in M1 with the
+# first runnable server. Provenance attestations are created by release.yml.
 version: 2
 
 project_name: pantherclaw
