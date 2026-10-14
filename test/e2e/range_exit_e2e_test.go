@@ -1,0 +1,139 @@
+// SPDX-License-Identifier: BUSL-1.1
+// Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+
+//go:build integration
+
+package e2e
+
+import (
+	"context"
+	"os"
+	"path/filepath"
+	"regexp"
+	"slices"
+	"strings"
+	"testing"
+
+	"github.com/katocxl/pantherclaw/internal/redteam/domain"
+)
+
+// The M12 exit (G0 M12, D18) through `pclaw redteam run`, the way a person
+// runs the range: a range agent on simulated connections, the live driver,
+// every result recorded with the server. `task range` runs the same scenarios
+// through the harness driver, which also covers what a live run cannot (person
+// steps, simulator changes, the sandbox).
+
+// rangeStack is a stack set up as a range's, with a person who runs it.
+type rangeStack struct {
+	d *rangeDriver
+}
+
+func startRangeStack(t *testing.T) *rangeStack {
+	t.Helper()
+	d := newRangeDriver(t)
+	if _, err := d.Setup(context.Background(), domain.Scenario{ID: "RT-000", Requires: []string{"github", "payments", "person"}}); err != nil {
+		t.Fatal(err)
+	}
+	alice := d.s.row(t, "SELECT id::text FROM pc.users WHERE subject = 'alice'")
+	for _, role := range []string{"agent_owner", "security_admin"} {
+		if code, out, errs := d.admin.pclaw(t, "role", "bind", "--role", role, "--user", alice); code != 0 {
+			t.Fatalf("role bind %s: %d %s %s", role, code, out, errs)
+		}
+	}
+	return &rangeStack{d: d}
+}
+
+// run runs `pclaw redteam run` over the scenarios in dir, as the person who
+// owns the range agent.
+func (r *rangeStack) run(t *testing.T, dir string, extra ...string) (int, string, string, string) {
+	t.Helper()
+	out := t.TempDir()
+	args := []string{"redteam", "run", "--suite", "coding-agent", "--scenarios", dir, "--workload-file", r.d.s.keyFile, "--gateway", r.d.s.gateway,
+		"--role", "github=github", "--role", "payments=payments", "--out", out}
+	for _, name := range []string{"owner", "repo", "other_repo", "pr", "head", "main", "file_b64", "fake_github_token", "fake_github_token_file_b64"} {
+		args = append(args, "--fixture", name+"="+r.d.fix[name])
+	}
+	code, stdout, stderr := r.d.admin.pclaw(t, append(args, extra...)...)
+	return code, stdout, stderr, out
+}
+
+// scenarioDir copies the named scenarios into a directory of their own.
+func scenarioDir(t *testing.T, ids ...string) string {
+	t.Helper()
+	dir := t.TempDir()
+	files, err := filepath.Glob("../../redteam/scenarios/RT-*.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range files {
+		if len(ids) > 0 && !slices.Contains(ids, strings.SplitN(filepath.Base(f), "-", 3)[0]+"-"+strings.SplitN(filepath.Base(f), "-", 3)[1]) {
+			continue
+		}
+		b, err := os.ReadFile(f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, filepath.Base(f)), b, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return dir
+}
+
+var tableVerdict = regexp.MustCompile(`(?m)^(RT-[0-9]{3})\s+(PASS|FAIL|ERROR|SKIPPED)\s`)
+
+// TestE2E_M12_CodingAgentSuite: the coding-agent suite, run with
+// `pclaw redteam run` against the simulators, has no FAIL and no ERROR; the
+// scenarios the live driver cannot run (person steps, simulator changes,
+// the sandbox, the kill switch) are SKIPPED, not hidden, and `task range`
+// runs them.
+func TestE2E_M12_CodingAgentSuite(t *testing.T) {
+	r := startRangeStack(t)
+	code, out, errs, _ := r.run(t, scenarioDir(t))
+	if code != 0 {
+		t.Fatalf("pclaw redteam run: %d\n%s\n%s", code, out, errs)
+	}
+	seen := map[string]string{}
+	for _, m := range tableVerdict.FindAllStringSubmatch(out, -1) {
+		seen[m[1]] = m[2]
+	}
+	if len(seen) < 30 {
+		t.Fatalf("%d scenarios in the table:\n%s", len(seen), out)
+	}
+	passed := 0
+	for _, v := range seen {
+		if v == "PASS" {
+			passed++
+		}
+	}
+	if passed < 15 {
+		t.Fatalf("only %d scenarios passed through the live driver:\n%s", passed, out)
+	}
+}
+
+// TestE2E_M12_RangeReachesOnlySimulators: after a range run, every
+// transaction of the org is simulated, and the one run that was made is the
+// range agent's simulated one; nothing of the range is real (HR-220, HR-222).
+func TestE2E_M12_RangeReachesOnlySimulators(t *testing.T) {
+	r := startRangeStack(t)
+	code, out, errs, _ := r.run(t, scenarioDir(t, "RT-001", "RT-002", "RT-020", "RT-023"))
+	if code != 0 {
+		t.Fatalf("pclaw redteam run: %d\n%s\n%s", code, out, errs)
+	}
+	s := r.d.s
+	var real, total int
+	s.query(t, "SELECT count(*) FILTER (WHERE NOT simulated)::int, count(*)::int FROM pc.transactions", nil, &real, &total)
+	if total == 0 || real != 0 {
+		t.Fatalf("%d of %d transactions are real", real, total)
+	}
+	var runs, agents int
+	s.query(t, "SELECT (SELECT count(*) FROM pc.runs WHERE NOT simulated)::int, (SELECT count(*) FROM pc.agents WHERE NOT range_agent)::int", nil, &runs, &agents)
+	if runs != 0 || agents != 0 {
+		t.Fatalf("%d real runs and %d real agents in a range org", runs, agents)
+	}
+	var real2 int
+	s.query(t, "SELECT count(*)::int FROM pc.decision_receipts r JOIN pc.transactions t ON t.id = r.transaction_id WHERE NOT t.simulated", nil, &real2)
+	if real2 != 0 {
+		t.Fatalf("%d decision receipts of real transactions", real2)
+	}
+}
