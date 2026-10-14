@@ -6,7 +6,9 @@
 package e2e
 
 import (
+	"bytes"
 	"context"
+	"encoding/base64"
 
 	evapp "github.com/katocxl/pantherclaw/internal/evidence/app"
 	"github.com/katocxl/pantherclaw/internal/evidence/pack"
