@@ -32,20 +32,22 @@ var ErrInjected = errors.New("pipelinetest: injected failure")
 
 // World implements pipeline.Reader.
 type World struct {
-	mu       sync.Mutex
-	Org      ids.OrgID
-	Grants   *grantstest.Store
-	Cont     pipeline.Containment
-	pkg      *defs.Package
-	states   map[string]defs.State // operation → lifecycle state
-	policy   *pipeline.Policy
-	runs     map[ids.UUID]pipeline.Run
-	agents   map[ids.UUID]pipeline.Agent
-	facts    map[string]map[string]fdomain.Fact // subject → name → fact
-	accounts map[bdomain.Ref]bdomain.Account
-	counters map[bdomain.Ref]bdomain.Counter
-	claims   map[string]*pipeline.Claim
-	conns    map[ids.UUID]pipeline.Connection
+	mu     sync.Mutex
+	Org    ids.OrgID
+	Grants *grantstest.Store
+	Cont   pipeline.Containment
+	pkg    *defs.Package
+	states map[string]defs.State // operation → lifecycle state
+	policy *pipeline.Policy
+	// agentPolicies are the policies selected for single agents.
+	agentPolicies map[ids.UUID]*pipeline.Policy
+	runs          map[ids.UUID]pipeline.Run
+	agents        map[ids.UUID]pipeline.Agent
+	facts         map[string]map[string]fdomain.Fact // subject → name → fact
+	accounts      map[bdomain.Ref]bdomain.Account
+	counters      map[bdomain.Ref]bdomain.Counter
+	claims        map[string]*pipeline.Claim
+	conns         map[ids.UUID]pipeline.Connection
 	// Fail makes the named Reader method return ErrInjected.
 	Fail  map[string]bool
 	hold  *holdState
@@ -88,6 +90,29 @@ func (w *World) SetPolicy(rules []pdomain.Rule, catalog map[string]fdomain.Type)
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	w.policy = &pipeline.Policy{Compiled: c, Version: "org-policy@1", Budget: papp.DefaultBudget}
+	return nil
+}
+
+// SetAgentPolicy compiles rules as version 2 of the org's policy and
+// selects it for agent alone, as a pilot does (G0 M11.1, D12).
+func (w *World) SetAgentPolicy(agent ids.UUID, rules []pdomain.Rule, catalog map[string]fdomain.Type) error {
+	e := &papp.Engine{Limits: celenv.DefaultLimits, Facts: catalog}
+	var ds []*defs.Definition
+	for i := range w.pkg.Definitions {
+		ds = append(ds, &w.pkg.Definitions[i])
+	}
+	c, err := e.Compile(&pdomain.Bundle{ID: "org-policy", Version: 2, Rules: rules}, ds)
+	if err != nil {
+		return err
+	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.agentPolicies == nil {
+		w.agentPolicies = map[ids.UUID]*pipeline.Policy{}
+	}
+	w.agentPolicies[agent] = &pipeline.Policy{
+		Compiled: c, Version: "org-policy@2", Budget: papp.DefaultBudget, Rollout: "pilot", Selected: pipeline.SelectedPilot,
+	}
 	return nil
 }
 
@@ -178,13 +203,17 @@ func (w *World) Definition(_ context.Context, org ids.OrgID, pin actionir.Defini
 	return pipeline.Pinned{}, pipeline.ErrNotFound
 }
 
-// Policy implements pipeline.Reader.
-func (w *World) Policy(context.Context, ids.OrgID) (*pipeline.Policy, error) {
+// Policy implements pipeline.Reader: the agent's own policy when one was
+// set for it (a pilot, SetAgentPolicy), else the org's.
+func (w *World) Policy(_ context.Context, _ ids.OrgID, agent ids.UUID) (*pipeline.Policy, error) {
 	if err := w.fail("Policy"); err != nil {
 		return nil, err
 	}
 	w.mu.Lock()
 	defer w.mu.Unlock()
+	if p, ok := w.agentPolicies[agent]; ok {
+		return p, nil
+	}
 	return w.policy, nil
 }
 

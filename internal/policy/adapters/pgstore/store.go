@@ -204,6 +204,10 @@ func (s *Store) List(ctx context.Context, org ids.OrgID, limit int) ([]Version, 
 	return out, err
 }
 
+// Decode strictly decodes and validates a stored bundle (the Authority's
+// selection reads a rollout's version with it).
+func Decode(raw []byte) (*domain.Bundle, error) { return decode(raw) }
+
 func decode(raw []byte) (*domain.Bundle, error) {
 	var b domain.Bundle
 	if err := json.Unmarshal(raw, &b, json.RejectUnknownMembers(true)); err != nil {

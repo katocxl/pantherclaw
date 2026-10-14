@@ -124,15 +124,20 @@ type Definition struct {
 // Policy is the published policy read, by reference: the bundle and its
 // version, with the per-evaluation cost budget, the CEL limits and the fact
 // types it was compiled with. None reports that no policy was published.
+// Rollout and Selected say how the version was selected for the agent (G0
+// M11.1, D12): empty in recordings made before rollouts, which replay as
+// they did (the format and pipeline versions are unchanged).
 type Policy struct {
-	None    bool              `json:"none,omitzero"`
-	Ref     string            `json:"ref,omitzero"`
-	Bundle  string            `json:"bundle,omitzero"`
-	Version int               `json:"version,omitzero"`
-	Budget  uint64            `json:"budget,omitzero"`
-	Limits  Limits            `json:"limits,omitzero"`
-	Catalog map[string]string `json:"catalog,omitzero"`
-	Err     string            `json:"err,omitzero"`
+	None     bool              `json:"none,omitzero"`
+	Ref      string            `json:"ref,omitzero"`
+	Bundle   string            `json:"bundle,omitzero"`
+	Version  int               `json:"version,omitzero"`
+	Budget   uint64            `json:"budget,omitzero"`
+	Limits   Limits            `json:"limits,omitzero"`
+	Catalog  map[string]string `json:"catalog,omitzero"`
+	Rollout  string            `json:"rollout,omitzero"`
+	Selected string            `json:"selected,omitzero"`
+	Err      string            `json:"err,omitzero"`
 }
 
 // Limits are celenv.Limits.

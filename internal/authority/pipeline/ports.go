@@ -69,14 +69,32 @@ type Pinned struct {
 	Consequences []consequences.Rule
 }
 
-// Policy is an org's published, compiled policy.
+// Policy is the compiled policy selected for an evaluation: the org's
+// published version, or a pilot's version for the agents of its cohorts
+// (G0 M11.1, D12).
 type Policy struct {
 	Compiled *papp.Compiled
 	// Version names the bundle as id@version for the decision basis.
 	Version string
 	// Budget is the tenant's CEL cost budget per evaluation (HR-043).
 	Budget uint64
+	// Rollout is the id of the pilot rollout that selected this agent's
+	// version, or that it fell back from; empty otherwise.
+	Rollout string
+	// Selected is how the version was selected: SelectedDefault (the
+	// published version), SelectedPilot (the rollout's version) or
+	// SelectedFallback (the published version because the rollout's could
+	// not be used). It is recorded, never part of the decision basis, and
+	// never comes from the request (HR-234).
+	Selected string
 }
+
+// How a policy version was selected for an evaluation (D12).
+const (
+	SelectedDefault  = "DEFAULT"
+	SelectedPilot    = "PILOT"
+	SelectedFallback = "FALLBACK"
+)
 
 // Run is what the pipeline needs to know about a run (M3).
 type Run struct {
@@ -217,8 +235,10 @@ func (c Connection) Mode(route string) string {
 type Reader interface {
 	Containment(ctx context.Context, org ids.OrgID) (Containment, error)
 	Definition(ctx context.Context, org ids.OrgID, pin actionir.Definition) (Pinned, error)
-	// Policy returns nil when the org has published no policy.
-	Policy(ctx context.Context, org ids.OrgID) (*Policy, error)
+	// Policy returns the policy selected for agent, the verified identity's
+	// agent (D12): a pilot's version for the agents of its ENFORCE cohorts,
+	// else the published one; nil when neither exists.
+	Policy(ctx context.Context, org ids.OrgID, agent ids.UUID) (*Policy, error)
 	Run(ctx context.Context, org ids.OrgID, id ids.UUID) (Run, error)
 	Agent(ctx context.Context, org ids.OrgID, id ids.UUID) (Agent, error)
 	// Chain returns the grant and its ancestors, root first.
