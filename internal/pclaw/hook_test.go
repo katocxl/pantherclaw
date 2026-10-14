@@ -12,8 +12,10 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -143,6 +145,78 @@ func TestHR186_TheHookAllowsOnlyWhatPantherClawAllowed(t *testing.T) {
 	f.mu.Unlock()
 	if ps != "powershell" {
 		t.Fatalf("PowerShell sent as %q", ps)
+	}
+}
+
+// TestHR187_TheHookSendsTheFinalDirectory: a working directory reached
+// through a link (on Windows a directory junction, which any user can
+// create; a symbolic link elsewhere) is sent as the directory it leads to,
+// so a policy on that directory cannot be passed by another spelling of
+// it. A directory that cannot be resolved blocks the command and nothing
+// is sent.
+func TestHR187_TheHookSendsTheFinalDirectory(t *testing.T) {
+	f := newFakeHook(t)
+	env := hookEnv(t, f.URL)
+	dir := t.TempDir()
+	forbidden := filepath.Join(dir, "forbidden")
+	if err := os.MkdirAll(filepath.Join(forbidden, "sub"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(dir, "elsewhere")
+	if runtime.GOOS == "windows" {
+		if out, err := exec.Command("cmd", "/c", "mklink", "/J", link, forbidden).CombinedOutput(); err != nil {
+			t.Skipf("cannot create a junction: %v %s", err, out)
+		}
+	} else if err := os.Symlink(forbidden, link); err != nil {
+		t.Fatal(err)
+	}
+	want, err := filepath.EvalSymlinks(filepath.Join(forbidden, "sub"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, cwd := range []string{filepath.Join(link, "sub"), link + string(filepath.Separator) + "sub" + string(filepath.Separator) + "."} {
+		code, out, errs := runHook(t, env, hookEvent("Bash", "ls", cwd, "toolu_j"))
+		f.mu.Lock()
+		sent := f.body[len(f.body)-1]["input"].(map[string]string)["cwd"]
+		f.mu.Unlock()
+		if code != 0 || sent != want {
+			t.Fatalf("cwd %q sent as %q, want %q (%d %q %q)", cwd, sent, want, code, out, errs)
+		}
+	}
+	f.mu.Lock()
+	before := len(f.body)
+	f.mu.Unlock()
+	code, out, errs := runHook(t, env, hookEvent("Bash", "ls", filepath.Join(dir, "missing"), "toolu_m"))
+	f.mu.Lock()
+	after := len(f.body)
+	f.mu.Unlock()
+	if code != 2 || out != "" || !strings.Contains(errs, "cannot be resolved") || after != before {
+		t.Fatalf("missing directory: %d %q %q, %d requests sent", code, out, errs, after-before)
+	}
+}
+
+// TestHR187_FinalPathsHaveAPlainForm: the final path Windows reports is
+// turned into a drive or UNC path; a volume without a drive letter, or
+// anything else, is refused.
+func TestHR187_FinalPathsHaveAPlainForm(t *testing.T) {
+	for in, want := range map[string]string{
+		`\\?\C:\Users\dev\repo`:       `C:\Users\dev\repo`,
+		`\\?\d:\`:                     `d:\`,
+		`\\?\UNC\fileserver\share\x`:  `\\fileserver\share\x`,
+		`\\?\UNC\fileserver\share`:    `\\fileserver\share`,
+		`\\?\C:\Users\Jürgen\a b\..x`: `C:\Users\Jürgen\a b\..x`,
+	} {
+		if got, err := dosPath(in); err != nil || got != want {
+			t.Errorf("dosPath(%q) = %q, %v; want %q", in, got, err, want)
+		}
+	}
+	for _, in := range []string{
+		"", `C:\x`, `\\?\`, `\\?\C:`, `\\?\C:x`, `\\?\1:\x`, `\\?\UNC\`,
+		`\\?\Volume{6f0c3f4e-0000-0000-0000-100000000000}\x`, `\\?\GLOBALROOT\Device\HarddiskVolume3\x`, `\\.\C:\x`,
+	} {
+		if got, err := dosPath(in); err == nil {
+			t.Errorf("dosPath(%q) = %q, want an error", in, got)
+		}
 	}
 }
 

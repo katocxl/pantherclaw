@@ -206,9 +206,12 @@ func (a *app) hookAsk(ctx context.Context, args []string) (hookAnswer, error) {
 	return ans, nil
 }
 
-// finalPath resolves a working directory to its absolute, final form where
-// the file system can (links, junctions and short names, HR-187); the
-// gateway then normalizes it lexically and refuses ambiguous forms.
+// finalPath resolves a working directory to its absolute, final form
+// (links, junctions, mount points and short names, HR-187); the gateway
+// then normalizes it lexically and refuses ambiguous forms. A directory
+// that cannot be resolved is refused, never sent as spelled: a spelling
+// through a link would let a command in a forbidden directory pass as one
+// in another (fail closed, decision 4).
 func finalPath(p string) (string, error) {
 	if p == "" {
 		return "", errors.New("the hook input names no working directory")
@@ -217,11 +220,30 @@ func finalPath(p string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if final, err := filepath.EvalSymlinks(abs); err == nil {
-		return final, nil
+	final, err := resolveFinal(abs)
+	if err != nil {
+		return "", fmt.Errorf("the working directory cannot be resolved to its final path (HR-187): %w", err)
 	}
-	return abs, nil
+	return final, nil
 }
+
+// dosPath turns the final path Windows reports for a handle ("\\?\C:\x"
+// or "\\?\UNC\server\share\x") into its plain form. Anything else, such
+// as a volume without a drive letter ("\\?\Volume{…}\x"), has no plain
+// form the gateway accepts, so it is refused.
+func dosPath(p string) (string, error) {
+	const unc, local = `\\?\UNC\`, `\\?\`
+	switch {
+	case strings.HasPrefix(p, unc) && len(p) > len(unc):
+		return `\\` + p[len(unc):], nil
+	case strings.HasPrefix(p, local) && len(p) >= len(local)+3 && isDriveLetter(p[len(local)]) &&
+		p[len(local)+1] == ':' && p[len(local)+2] == '\\':
+		return p[len(local):], nil
+	}
+	return "", fmt.Errorf("%q has no drive letter or UNC share", p)
+}
+
+func isDriveLetter(c byte) bool { return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') }
 
 // hookToken returns a workload token: the one in tokenFile, or a cached one
 // with more than a minute left, or a new one, which is cached next to the
