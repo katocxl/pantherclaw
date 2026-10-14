@@ -145,7 +145,7 @@ A pull request that touches `internal/authority`, `internal/gateway`, `internal/
 | `EDITION_REQUIRED` | The platform suite needs Business; signed reports and `--baseline` need Team. On a dev server, signed reports are exercised in tests with injected entitlements |
 | Scenarios `SKIPPED` | A capability is missing (sandbox, second organization, a person). Add `--interactive`, run with Docker for the sandbox scenarios, or accept that they do not count as passed |
 | `SIMULATED_TARGET_NOT_LOCAL` | A simulated connection names a host that is not a loopback or private IP literal; the base URL, allowed hosts and host overrides must all be |
-| `RANGE_RECORD_INVALID` / `INVALID_STEPS` | The server refused a recorded result: a transaction may back steps of only one scenario per range; a step that cites a probe report needs that probe's result in the report; a `PASS` must record exactly the scenario's declared step count (`FAIL` and `ERROR` may record fewer) |
+| `RANGE_RECORD_INVALID` / `INVALID_STEPS` | The server refused a recorded result: a transaction may back steps of only one scenario per range; a step that cites a probe report needs that probe's result in the report; a `PASS` must record exactly the scenario's declared step count (`FAIL` and `ERROR` may record fewer); a probe result of `error` makes a citation of that report invalid, so record such a scenario as `ERROR` without citing the report |
 | Scenarios listed as "driver lacks <kind>" | Expected for the live driver; run them under `task range` |
 
 Report anything unexpected to the maintainers rather than editing a control or an expectation to make a scenario pass.
