@@ -18,6 +18,8 @@ type facts struct {
 	// Decision is the Authority's decision when the face reports one.
 	Decision string
 	Reasons  []string
+	// Outcome is the Authority's effect outcome when the face reports one.
+	Outcome string
 	// Held marks a held call.
 	Held          bool
 	TransactionID string
@@ -30,6 +32,8 @@ type facts struct {
 func classify(f facts) domain.Observation {
 	o := domain.Observation{TransactionID: f.TransactionID, Reasons: slices.Clone(f.Reasons)}
 	switch {
+	case f.Outcome == "UNKNOWN" || f.Class == "uncertain":
+		o.Outcome, o.Reason = domain.OutcomeUnknown, f.Code
 	case f.Held || f.Class == "held":
 		o.Outcome, o.Reason = domain.OutcomeHold, firstOf(f.Reasons, f.Code)
 	case f.Class == "":
@@ -38,10 +42,8 @@ func classify(f facts) domain.Observation {
 		o.Outcome, o.Reason = domain.OutcomeDeny, firstOf(f.Reasons, f.Code)
 	case f.Class == "cannot_authorize" && (f.Decision != "" || len(f.Reasons) > 0):
 		o.Outcome, o.Reason = domain.OutcomeCannotAuthorize, firstOf(f.Reasons, f.Code)
-	case f.Class == "tool_failed":
+	case f.Class == "tool_failed" || f.Class == "target_refused":
 		o.Outcome, o.Code = domain.OutcomeTargetRefused, f.Code
-	case f.Class == "uncertain":
-		o.Outcome, o.Reason = domain.OutcomeUnknown, f.Code
 	default: // authentication_failed, enforcement_failed, a gateway-local cannot_authorize
 		o.Outcome, o.Code = domain.OutcomeRefused, f.Code
 	}

@@ -29,6 +29,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1/pantherclawv1connect"
 	"github.com/katocxl/pantherclaw/internal/identity/workloadclient"
 	"github.com/katocxl/pantherclaw/internal/platform/crypto/jws"
+	rangesdomain "github.com/katocxl/pantherclaw/internal/ranges/domain"
 	rtdomain "github.com/katocxl/pantherclaw/internal/redteam/domain"
 )
 
@@ -36,15 +37,18 @@ const (
 	rtAgent = "0192aaaa-bbbb-7ccc-8ddd-0000000000a1"
 	rtRun   = "0192aaaa-bbbb-7ccc-8ddd-0000000000b1"
 	rtRange = "0192aaaa-bbbb-7ccc-8ddd-0000000000c1"
+	rtTxn   = "0192aaaa-bbbb-7ccc-8ddd-0000000000e1"
 )
 
 // fakeRanges records what the CLI sends the RangeService.
 type fakeRanges struct {
 	pantherclawv1connect.UnimplementedRangeServiceHandler
-	mu       sync.Mutex
-	started  []*pantherclawv1.StartRangeRequest
-	recorded []*pantherclawv1.RecordResultRequest
-	finished int
+	mu         sync.Mutex
+	started    []*pantherclawv1.StartRangeRequest
+	recorded   []*pantherclawv1.RecordResultRequest
+	finished   int
+	failRecord bool
+	attempts   int
 }
 
 func (f *fakeRanges) StartRange(_ context.Context, r *pantherclawv1.StartRangeRequest) (*pantherclawv1.StartRangeResponse, error) {
@@ -57,6 +61,10 @@ func (f *fakeRanges) StartRange(_ context.Context, r *pantherclawv1.StartRangeRe
 func (f *fakeRanges) RecordResult(_ context.Context, r *pantherclawv1.RecordResultRequest) (*pantherclawv1.RecordResultResponse, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	f.attempts++
+	if f.failRecord {
+		return nil, connect.NewError(connect.CodeUnavailable, "the store is down")
+	}
 	f.recorded = append(f.recorded, r)
 	return &pantherclawv1.RecordResultResponse{}, nil
 }
@@ -71,6 +79,7 @@ func (f *fakeRanges) FinishRange(context.Context, *pantherclawv1.FinishRangeRequ
 // rangeEnv is a fake server, a fake gateway, an enrolled range key file and
 // a scenario directory.
 type rangeEnv struct {
+	iss       *bundletest.Issuer
 	ranges    *fakeRanges
 	env       Env
 	keyFile   string
@@ -102,6 +111,7 @@ steps:
 func newRangeEnv(t *testing.T) *rangeEnv {
 	t.Helper()
 	re := &rangeEnv{ranges: &fakeRanges{}}
+	re.iss = bundletest.NewIssuer(t)
 	cs := connect.NewServer()
 	pantherclawv1connect.RegisterRangeServiceHandler(cs, re.ranges)
 	mux := http.NewServeMux()
@@ -122,7 +132,7 @@ func newRangeEnv(t *testing.T) *rangeEnv {
 	if err != nil {
 		t.Fatal(err)
 	}
-	kf.Identifier = "pc:org/0192aaaa-bbbb-7ccc-8ddd-0000000000f1/agent/" + rtAgent + "/inst/0192aaaa-bbbb-7ccc-8ddd-0000000000d1"
+	kf.Identifier = "pc:org/" + re.iss.Org.String() + "/agent/" + rtAgent + "/inst/0192aaaa-bbbb-7ccc-8ddd-0000000000d1"
 	kf.Server, kf.RunID = srv.URL, rtRun
 	re.keyFile = filepath.Join(dir, "key.json")
 	if err := workloadclient.WriteKeyFile(re.keyFile, kf, false); err != nil {
@@ -151,9 +161,17 @@ func (re *rangeEnv) run(t *testing.T, extra ...string) (int, string, string) {
 
 // assurancePack builds a signed evidence pack holding an assurance.json with
 // the given scenarios, and the trust file that pins its key.
-func assurancePack(t *testing.T, scenarios []map[string]string) (raw, trust []byte) {
+func (re *rangeEnv) assurancePack(t *testing.T, reportOrg string, scenarios []map[string]string) (raw, trust []byte) {
 	t.Helper()
-	iss := bundletest.NewIssuer(t)
+	return re.rangePack(t, reportOrg, scenarios, true)
+}
+
+// rangePack builds a signed pack of scope range: every scenario has one
+// server-observed step on the one transaction, whose receipt is in the pack
+// unless complete is false.
+func (re *rangeEnv) rangePack(t *testing.T, reportOrg string, scenarios []map[string]string, complete bool) (raw, trust []byte) {
+	t.Helper()
+	iss := re.iss
 	pub, priv, err := ed25519.GenerateKey(nil)
 	if err != nil {
 		t.Fatal(err)
@@ -162,28 +180,49 @@ func assurancePack(t *testing.T, scenarios []map[string]string) (raw, trust []by
 	if err != nil {
 		t.Fatal(err)
 	}
-	doc, err := json.Marshal(map[string]any{"range_id": rtRange, "scenarios": scenarios})
+	var scs []pack.AssuranceScenario
+	var set []rangesdomain.Scenario
+	counts := pack.AssuranceCounts{}
+	for _, s := range scenarios {
+		scs = append(scs, pack.AssuranceScenario{
+			ID: s["id"], Digest: s["digest"], Verdict: s["verdict"], Category: "boundary", Tier: "community", Suite: "coding-agent", StepCount: 1,
+			Steps: []pack.AssuranceStep{{
+				ID: "exfil", Expect: pack.AssuranceExpect{Outcome: "DENY"}, Observed: pack.AssuranceExpect{Outcome: "DENY"},
+				ObservedBy: "SERVER", Matched: true, Transaction: rtTxn, Kind: "agent.call",
+			}},
+		})
+		set = append(set, rangesdomain.Scenario{ID: s["id"], Digest: s["digest"]})
+		counts.Pass++
+	}
+	cats := map[string]pack.AssuranceCounts{"functional": {}, "boundary": counts, "recovery": {}, "explanation": {}}
+	doc, err := json.Marshal(pack.Assurance{
+		Format: pack.AssuranceFormat, Range: rtRange, Org: reportOrg, Agent: rtAgent,
+		Started: "2026-10-14T08:00:00Z", Finished: "2026-10-14T08:05:00Z", RunnerVersion: "test", ScenarioSetDigest: rangesdomain.SetDigest(set),
+		PolicyVersions: []pack.AssuranceVersion{}, PackageVersions: []pack.AssuranceVersion{}, Scenarios: scs,
+		Totals: counts, Categories: cats, Mismatches: []pack.AssuranceMismatch{}, Statement: pack.RangeStatement,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	b := iss.Bundle()
-	bb, err := json.Marshal(b)
-	if err != nil {
-		t.Fatal(err)
-	}
 	files := []pack.File{
-		{Path: "assurance.json", Kind: "assurance", Data: doc},
+		{Path: pack.AssurancePath, Kind: pack.KindAssurance, Data: doc},
 		{Path: "proofs/bundle-0001.json", Kind: pack.KindBundle, Data: bundletest.Encode(t, b)},
 	}
-	_ = bb
+	receiptJWS := stubReceipt()
+	if !complete {
+		receiptJWS = "" // removed by retention: the transaction is in the pack, its receipt is not
+	}
+	txn := `{"id":"` + rtTxn + `","agent":"` + rtAgent + `","decisions":[{"evaluation":1,"receipt":"` + receiptJWS + `"}]}`
+	files = append(files, pack.File{Path: "transactions/" + rtTxn + ".json", Kind: pack.KindTransaction, Data: []byte(txn)})
 	m := pack.Manifest{
 		Format: pack.Format, Pack: "0192aaaa-bbbb-7ccc-8ddd-0000000000ff", Org: b.Org, Origin: b.Origin,
 		Exporter: pack.Exporter{Type: "user", ID: "0192aaaa-bbbb-7ccc-8ddd-0000000000ee"},
 		Created:  bundletest.IssuedAt.Format(time.RFC3339), Expires: bundletest.IssuedAt.Add(7 * 24 * time.Hour).Format(time.RFC3339),
-		Scope:   pack.Scope{Kind: pack.ScopeTransactions, Transactions: []string{}},
+		Scope:   pack.Scope{Kind: pack.ScopeRange, Range: rtRange},
 		Include: pack.Include{Receipts: true}, Filters: []string{}, EffectStates: map[string]int{},
 		Transactions: []pack.TransactionState{}, Retention: []pack.Retention{}, Redactions: []string{}, Gaps: []pack.Gap{},
-		Statement: pack.Statement,
+		Statement: pack.RangeStatement,
 	}
 	for _, f := range files {
 		m.Items = append(m.Items, pack.ItemOf(f))
@@ -240,6 +279,9 @@ func TestRedteamRunRecordsAndWritesTheSummary(t *testing.T) {
 		t.Fatalf("start %v", st)
 	}
 	rec := re.ranges.recorded[0]
+	if st.GetScenarios()[0].GetStepCount() != 1 || rec.GetSteps()[0].GetKind() != "agent.call" {
+		t.Fatalf("step_count %d, kind %q", st.GetScenarios()[0].GetStepCount(), rec.GetSteps()[0].GetKind())
+	}
 	if rec.GetVerdict() != pantherclawv1.RangeVerdict_RANGE_VERDICT_PASS || rec.GetScenarioDigest() != st.GetScenarios()[0].GetDigest() ||
 		len(rec.GetSteps()) != 1 || rec.GetSteps()[0].GetObserved().GetOutcome() != "HOLD" || rec.GetSteps()[0].GetDecisiveControl() != "HR-201" ||
 		rec.GetSteps()[0].GetTransactionId() != rtRange {
@@ -276,7 +318,7 @@ func TestHR226_TheBaselineGateExitsOneOnARegression(t *testing.T) {
 	re := newRangeEnv(t)
 	dir := t.TempDir()
 	d := digestOf(t, rtScenario)
-	good, trust := assurancePack(t, []map[string]string{{"id": "RT-001", "digest": d, "verdict": "PASS"}})
+	good, trust := re.assurancePack(t, re.iss.Org.String(), []map[string]string{{"id": "RT-001", "digest": d, "verdict": "PASS"}})
 	goodPath := writeFile(t, dir, "baseline.zip", good)
 	trustPath := writeFile(t, dir, "trust.json", trust)
 
@@ -300,7 +342,7 @@ func TestHR226_TheBaselineGateExitsOneOnARegression(t *testing.T) {
 	// A scenario that passed in the baseline and is gone now is a regression
 	// too, with no FAIL anywhere.
 	*re.decision = `{"decision":"hold","error_class":"held","code":"REQUIRE_APPROVAL"}`
-	missing, trust2 := assurancePack(t, []map[string]string{
+	missing, trust2 := re.assurancePack(t, re.iss.Org.String(), []map[string]string{
 		{"id": "RT-001", "digest": d, "verdict": "PASS"}, {"id": "RT-777", "digest": strings.Repeat("a", 64), "verdict": "PASS"},
 	})
 	code, _, errs = re.run(t, "--baseline", writeFile(t, dir, "missing.zip", missing), "--trust", writeFile(t, dir, "trust2.json", trust2))
@@ -331,28 +373,6 @@ func TestRedteamRunSkipsWhatItCannotDo(t *testing.T) {
 	code, out, errs := re.run(t)
 	if code != 0 || !strings.Contains(out, "1 PASS, 0 FAIL, 0 ERROR, 1 SKIPPED") {
 		t.Fatalf("run = %d\n%s\n%s", code, out, errs)
-	}
-}
-
-func TestReceiptPartsReadsTheJWSPayload(t *testing.T) {
-	payload, _ := json.Marshal(map[string]any{
-		"checklist": []map[string]string{{"check": "grant.active"}}, "simulated": true,
-		"basis": map[string]string{"policy": "pv-3", "definition": "sha256:abc", "facts": "sha256:def"},
-	})
-	jws := "e30." + base64.RawURLEncoding.EncodeToString(payload) + ".sig"
-	got := receiptParts(jws)
-	for _, k := range []string{"grant", "policy_version", "package_version", "facts", "simulated"} {
-		if !got[k] {
-			t.Errorf("%s missing: %v", k, got)
-		}
-	}
-	none, _ := json.Marshal(map[string]any{"basis": map[string]string{"policy": "none"}})
-	got = receiptParts("e30." + base64.RawURLEncoding.EncodeToString(none) + ".sig")
-	if got["policy_version"] || got["simulated"] || got["grant"] {
-		t.Errorf("claims without evidence: %v", got)
-	}
-	if receiptParts("not-a-jws") != nil {
-		t.Error("a non-JWS read")
 	}
 }
 
@@ -465,5 +485,146 @@ func TestRedteamRunAnErrorFailsClosed(t *testing.T) {
 	code, out, errs := re.run(t)
 	if code != 1 || !strings.Contains(out, "1 ERROR") || !strings.Contains(errs, "RT-001 (ERROR)") {
 		t.Fatalf("run = %d\n%s\n%s", code, out, errs)
+	}
+}
+
+func TestRedteamBaselineOfAnotherOrgIsRefused(t *testing.T) {
+	re := newRangeEnv(t)
+	dir := t.TempDir()
+	d := digestOf(t, rtScenario)
+	// A pack another org made verifies, and is still not this org's baseline.
+	foreign := newRangeEnv(t)
+	other, trust := foreign.assurancePack(t, foreign.iss.Org.String(), []map[string]string{{"id": "RT-001", "digest": d, "verdict": "PASS"}})
+	code, _, errs := re.run(t, "--baseline", writeFile(t, dir, "other.zip", other), "--trust", writeFile(t, dir, "trust.json", trust))
+	if code != 2 || !strings.Contains(errs, "BASELINE_INVALID") || len(re.ranges.started) != 0 {
+		t.Fatalf("another org's baseline = %d (ranges %d)\n%s", code, len(re.ranges.started), errs)
+	}
+	own, trust := re.assurancePack(t, re.iss.Org.String(), []map[string]string{{"id": "RT-001", "digest": d, "verdict": "PASS"}})
+	code, out, errs := re.run(t, "--baseline", writeFile(t, dir, "own.zip", own), "--trust", writeFile(t, dir, "trust2.json", trust))
+	if code != 0 || !strings.Contains(out, "Baseline: range "+rtRange+", finished 2026-10-14T08:05:00Z, 1 scenarios") {
+		t.Fatalf("own baseline = %d\n%s\n%s", code, out, errs)
+	}
+}
+
+func TestRecordRequestRecordsWhatWasObserved(t *testing.T) {
+	step := func(expect rtdomain.Expect, obs rtdomain.Observation) rtdomain.StepResult {
+		return rtdomain.StepResult{StepID: "s", Expect: expect, Observed: obs, Matched: true}
+	}
+	// The expected reason is recorded as observed only when the decision carried it.
+	got := observedOf(step(rtdomain.Expect{Outcome: rtdomain.OutcomeDeny, Reason: "B"}, rtdomain.Observation{Outcome: rtdomain.OutcomeDeny, Reason: "A", Reasons: []string{"A", "B"}}))
+	if got.GetOutcome() != "DENY" || got.GetReason() != "B" {
+		t.Errorf("carried reason: %v", got)
+	}
+	got = observedOf(step(rtdomain.Expect{Reason: "B"}, rtdomain.Observation{Outcome: rtdomain.OutcomeDeny, Reason: "A", Reasons: []string{"A"}}))
+	if got.GetReason() != "A" {
+		t.Errorf("an expectation was recorded as an observation: %v", got)
+	}
+	// An outcome is the observed one, even when the step has no expectation of it.
+	got = observedOf(step(rtdomain.Expect{}, rtdomain.Observation{Outcome: rtdomain.OutcomeHold, Code: "c"}))
+	if got.GetOutcome() != "HOLD" || got.GetCode() != "c" {
+		t.Errorf("observed: %v", got)
+	}
+	// A concurrent step records its non-ALLOW outcome, or ALLOW.
+	each := rtdomain.Observation{Each: []rtdomain.Observation{{Outcome: rtdomain.OutcomeAllow}, {Outcome: rtdomain.OutcomeDeny}}}
+	if got = observedOf(step(rtdomain.Expect{}, each)); got.GetOutcome() != "DENY" {
+		t.Errorf("concurrent: %v", got)
+	}
+}
+
+// pagedSetup serves agents and connections one per page.
+type pagedSetup struct {
+	fakeSetup
+	agentPages, connPages int
+}
+
+func (f *pagedSetup) ListAgents(_ context.Context, r *pantherclawv1.ListAgentsRequest) (*pantherclawv1.ListAgentsResponse, error) {
+	f.agentPages++
+	if r.GetPageToken() == "" {
+		return &pantherclawv1.ListAgentsResponse{Agents: []*pantherclawv1.Agent{{Id: "a1", Name: "other"}}, NextPageToken: "p2"}, nil
+	}
+	return &pantherclawv1.ListAgentsResponse{Agents: []*pantherclawv1.Agent{{Id: rtAgent, Name: "range", RangeAgent: true}}}, nil
+}
+
+func (f *pagedSetup) ListConnections(ctx context.Context, r *pantherclawv1.ListConnectionsRequest) (*pantherclawv1.ListConnectionsResponse, error) {
+	f.connPages++
+	if r.GetPageToken() == "" {
+		return &pantherclawv1.ListConnectionsResponse{Connections: []*pantherclawv1.Connection{{Id: "x", Name: "unrelated", Package: "other"}}, NextPageToken: "p2"}, nil
+	}
+	return f.fakeSetup.ListConnections(ctx, r)
+}
+
+func TestRedteamSetupPagesThroughAgentsAndConnections(t *testing.T) {
+	fake := &pagedSetup{}
+	cs := connect.NewServer()
+	pantherclawv1connect.RegisterAgentServiceHandler(cs, fake)
+	pantherclawv1connect.RegisterConnectionServiceHandler(cs, fake)
+	pantherclawv1connect.RegisterGrantServiceHandler(cs, fake)
+	mux := http.NewServeMux()
+	connecthttp.Mount(mux, cs)
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	env := envOf(map[string]string{"PANTHERCLAW_SERVER": srv.URL, "PANTHERCLAW_API_KEY": "pck_test_x"})
+	id := "0192aaaa-bbbb-7ccc-8ddd-000000000001"
+	// The only real github connection and the range agent are on page 2: both
+	// must be seen.
+	code, _, errs := run(t, env, "redteam", "setup", "--name", "range", "--team", id, "--env", id, "--owner", id, "--context", "ci",
+		"--twin", "github=http://127.0.0.1:9100", "--dry-run")
+	if fake.agentPages != 2 || fake.connPages != 2 {
+		t.Fatalf("pages: agents %d connections %d", fake.agentPages, fake.connPages)
+	}
+	if code != 0 {
+		t.Errorf("setup = %d %q", code, errs)
+	}
+}
+
+func TestRedteamRunCarriesOnWhenRecordingFails(t *testing.T) {
+	re := newRangeEnv(t)
+	second := strings.NewReplacer("RT-001", "RT-002", "A merge is held", "A second merge is held").Replace(rtScenario)
+	writeFile(t, re.scenarios, "RT-002-second.yaml", []byte(second))
+	re.ranges.failRecord = true
+	code, out, errs := re.run(t)
+	if code != 2 || re.ranges.attempts != 2 || re.ranges.finished != 1 || !strings.Contains(errs, "recording RT-001") || !strings.Contains(errs, "recording RT-002") {
+		t.Fatalf("run = %d attempts %d finished %d\n%s\n%s", code, re.ranges.attempts, re.ranges.finished, out, errs)
+	}
+}
+
+func TestRecordRequestSendsOnlyStepsThatObservedSomething(t *testing.T) {
+	res := rtdomain.Result{ScenarioID: "RT-001", Digest: strings.Repeat("a", 64), Verdict: rtdomain.VerdictError, Steps: []rtdomain.StepResult{
+		{StepID: "done", Expect: rtdomain.Expect{Outcome: rtdomain.OutcomeHold}, Observed: rtdomain.Observation{Outcome: rtdomain.OutcomeHold}, Matched: true},
+		{StepID: "broke", Expect: rtdomain.Expect{Outcome: rtdomain.OutcomeAllow}},
+	}}
+	req := recordRequest(rtRange, rtdomain.Scenario{Steps: []rtdomain.Step{{ID: "done", Do: "agent.call"}}}, res)
+	if req.GetVerdict() != pantherclawv1.RangeVerdict_RANGE_VERDICT_ERROR || len(req.GetSteps()) != 1 || req.GetSteps()[0].GetStepId() != "done" {
+		t.Fatalf("%v", req)
+	}
+}
+
+// stubReceipt is an unsigned stand-in for a simulated DENY decision receipt:
+// the pack check reads its payload, and the manifest's signature covers it.
+func stubReceipt() string {
+	payload := `{"pap":{"decision":"DENY","checklist":[{"code":"DESTINATION_NOT_GRANTED","decisive":true}],"simulated":true}}`
+	return "e30." + base64.RawURLEncoding.EncodeToString([]byte(payload)) + ".c2ln"
+}
+
+func TestRedteamBaselineMustBeReDerivableInFull(t *testing.T) {
+	re := newRangeEnv(t)
+	dir := t.TempDir()
+	d := digestOf(t, rtScenario)
+	sc := []map[string]string{{"id": "RT-001", "digest": d, "verdict": "PASS"}}
+	whole, trust := re.rangePack(t, re.iss.Org.String(), sc, true)
+	trustPath := writeFile(t, dir, "trust.json", trust)
+	if code, out, errs := re.run(t, "--baseline", writeFile(t, dir, "whole.zip", whole), "--trust", trustPath); code != 0 {
+		t.Fatalf("a complete range pack as baseline = %d\n%s\n%s", code, out, errs)
+	}
+	partial, trust2 := re.rangePack(t, re.iss.Org.String(), sc, false)
+	n := len(re.ranges.started)
+	code, _, errs := re.run(t, "--baseline", writeFile(t, dir, "partial.zip", partial), "--trust", writeFile(t, dir, "trust2.json", trust2))
+	if code != 2 || !strings.Contains(errs, "not fully verifiable") || len(re.ranges.started) != n {
+		t.Fatalf("an incomplete range pack as baseline = %d\n%s", code, errs)
+	}
+	// pclaw verify says so too.
+	code, out, _ := run(t, envOf(nil), "verify", writeFile(t, dir, "partial2.zip", partial), "--trust", writeFile(t, dir, "trust3.json", trust2))
+	if code != 0 || !strings.Contains(out, "range pack not fully verifiable") {
+		t.Fatalf("verify = %d\n%s", code, out)
 	}
 }

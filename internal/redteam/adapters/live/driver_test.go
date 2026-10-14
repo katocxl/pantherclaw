@@ -8,11 +8,13 @@ import (
 	"encoding/json/v2"
 	"errors"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/katocxl/pantherclaw/internal/redteam/adapters/live"
 	"github.com/katocxl/pantherclaw/internal/redteam/app"
@@ -291,5 +293,50 @@ func TestPersonWaitAndReceiptSteps(t *testing.T) {
 `)
 	if res.Verdict != domain.VerdictFail {
 		t.Fatalf("%+v", res)
+	}
+}
+
+// A client that fails the test if it is used: the hook's unreachable path
+// must never reach for the workload-signing client.
+type forbiddenTransport struct{ t *testing.T }
+
+func (f forbiddenTransport) RoundTrip(r *http.Request) (*http.Response, error) {
+	f.t.Errorf("the signing client was used for %s", r.URL)
+	return nil, errors.New("forbidden")
+}
+
+func TestHookFaultSendsNothingToTheUnreachableAddress(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = ln.Close() })
+	var received atomic.Int64
+	go func() {
+		for {
+			c, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			_ = c.SetReadDeadline(time.Now().Add(300 * time.Millisecond))
+			n, _ := c.Read(make([]byte, 4096))
+			received.Add(int64(n))
+			_ = c.Close()
+		}
+	}()
+	d := live.New(live.Config{
+		Gateway: "http://127.0.0.1:9", Client: &http.Client{Transport: forbiddenTransport{t}}, Run: "r",
+		Unreachable: "http://" + ln.Addr().String(),
+	})
+	// Something listens there, so the "unreachable" gateway answers: that is
+	// an error, and not one byte (no PAP proof, no token) was sent to it.
+	res := (&app.Runner{Driver: d}).Run(context.Background(), scenario(t, `  - id: hook
+    do: agent.call
+    with: {face: hook, connection: local, tool: pc.shell, fault: gateway_unreachable, args: {command: ls}}
+    expect: {outcome: REFUSED, code: hook_exit_2}
+`))
+	time.Sleep(400 * time.Millisecond)
+	if res.Verdict != domain.VerdictError || received.Load() != 0 {
+		t.Fatalf("%+v received %d bytes", res, received.Load())
 	}
 }

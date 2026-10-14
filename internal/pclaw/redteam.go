@@ -6,7 +6,6 @@ package pclaw
 import (
 	"bufio"
 	"context"
-	"encoding/base64"
 	"encoding/json/v2"
 	"errors"
 	"flag"
@@ -14,7 +13,6 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"path"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -33,6 +31,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/redteam/adapters/live"
 	rtapp "github.com/katocxl/pantherclaw/internal/redteam/app"
 	rtdomain "github.com/katocxl/pantherclaw/internal/redteam/domain"
+	"github.com/katocxl/pantherclaw/internal/redteam/receipt"
 )
 
 // pclaw redteam (G0 M12, PN-009; HR-223..HR-226): the adversarial range.
@@ -133,15 +132,6 @@ func redteamRun(ctx context.Context, a *app, args []string) error {
 		return failExit("no scenarios of suite %s in %s", o.suite, o.dir)
 	}
 
-	// The baseline is checked before anything runs, so a bad baseline never
-	// costs a range.
-	var base *baseline
-	if o.baseline != "" {
-		if base, err = loadBaseline(o.baseline, o.trust); err != nil {
-			return failExit("baseline: %v", err)
-		}
-	}
-
 	kf, err := workloadclient.ReadKeyFile(o.keyFile)
 	if err != nil {
 		return failExit("%v", err)
@@ -149,6 +139,15 @@ func redteamRun(ctx context.Context, a *app, args []string) error {
 	inst, err := pap.ParseInstance(kf.Identifier)
 	if err != nil {
 		return failExit("the key file is not enrolled yet: run pclaw workload enroll")
+	}
+
+	// The baseline is checked before anything runs, so a bad baseline never
+	// costs a range.
+	var base *baseline
+	if o.baseline != "" {
+		if base, err = loadBaseline(o.baseline, o.trust, inst.Org.String()); err != nil {
+			return failExit("baseline: %v", err)
+		}
 	}
 	run := o.run
 	if run == "" {
@@ -191,6 +190,10 @@ func redteamRun(ctx context.Context, a *app, args []string) error {
 		name, value, _ := strings.Cut(f, "=")
 		fixture[name] = value
 	}
+	workload, err := a.workloadClientAt(kf.Server, kf, tokens)
+	if err != nil {
+		return failExit("%v", err)
+	}
 	cfg := live.Config{
 		Gateway: gw, Run: run, Roles: roles, Fixture: fixture, Capabilities: caps,
 		Client: &http.Client{
@@ -198,7 +201,9 @@ func redteamRun(ctx context.Context, a *app, args []string) error {
 			Timeout:       2 * time.Minute,
 			CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 		},
-		Txns: txnReader{tx: c.transactions, approvals: c.approvals, run: run},
+		Txns:    txnReader{tx: c.transactions, approvals: c.approvals, run: run},
+		AgentID: inst.Agent.String(), Key: key, Token: tokens, Transport: rt,
+		Workload: workload,
 	}
 	if o.interactive {
 		cfg.Operator = ttyOperator{a: a}
@@ -209,7 +214,7 @@ func redteamRun(ctx context.Context, a *app, args []string) error {
 	for i, l := range set {
 		s := l.Scenario
 		decls[i] = &pantherclawv1.RangeScenarioDecl{
-			Id: s.ID, Digest: l.Digest, Tier: s.Tier, Category: s.Category, Suite: s.Suite, Title: s.Title,
+			Id: s.ID, Digest: l.Digest, Tier: s.Tier, Category: s.Category, Suite: s.Suite, Title: s.Title, StepCount: int32(len(s.Steps)), //nolint:gosec // G115: at most 40
 		}
 		digests[s.ID] = l.Digest
 	}
@@ -227,11 +232,14 @@ func redteamRun(ctx context.Context, a *app, args []string) error {
 
 	runner := &rtapp.Runner{Driver: live.New(cfg)}
 	var results []rtdomain.Result
+	var recordErrs []string
 	for _, l := range set {
 		res := runner.Run(ctx, l.Scenario)
 		results = append(results, res)
-		if _, err := c.ranges.RecordResult(ctx, recordRequest(rangeID, res)); err != nil {
-			return failExit("recording %s: %v", res.ScenarioID, describe(err))
+		// A failed recording never aborts the range: the rest still run and
+		// the command exits 2 at the end (D33).
+		if _, err := c.ranges.RecordResult(ctx, recordRequest(rangeID, l.Scenario, res)); err != nil {
+			recordErrs = append(recordErrs, fmt.Sprintf("recording %s: %v", res.ScenarioID, describe(err)))
 		}
 	}
 	fin, err := c.ranges.FinishRange(ctx, &pantherclawv1.FinishRangeRequest{RangeId: rangeID})
@@ -245,6 +253,9 @@ func redteamRun(ctx context.Context, a *app, args []string) error {
 		cmp = &c
 	}
 	sum := newSummary(rangeID, fin.GetRange(), set, results, cmp)
+	if base != nil {
+		sum.Baseline = fmt.Sprintf("range %s, finished %s, %d scenarios", base.rangeID, base.finished, len(base.entries))
+	}
 	if err := writeSummary(o.out, sum); err != nil {
 		return failExit("writing the summary: %v", err)
 	}
@@ -261,6 +272,9 @@ func redteamRun(ctx context.Context, a *app, args []string) error {
 	}
 	if gate != 0 {
 		return &exitError{code: 1, msg: gateMessage(results, cmp)}
+	}
+	if len(recordErrs) > 0 {
+		return failExit("%s", strings.Join(recordErrs, "; "))
 	}
 	return nil
 }
@@ -298,7 +312,11 @@ func gateMessage(results []rtdomain.Result, cmp *rtdomain.Comparison) string {
 // observed side is what the driver saw; where the expectation matched, the
 // expected reason and outcome are sent so the server's own comparison
 // agrees with the runner's (a concurrent step is judged by the runner).
-func recordRequest(rangeID string, res rtdomain.Result) *pantherclawv1.RecordResultRequest {
+func recordRequest(rangeID string, sc rtdomain.Scenario, res rtdomain.Result) *pantherclawv1.RecordResultRequest {
+	kinds := map[string]rtdomain.Step{}
+	for _, st := range sc.Steps {
+		kinds[st.ID] = st
+	}
 	verdicts := map[rtdomain.Verdict]pantherclawv1.RangeVerdict{
 		rtdomain.VerdictPass: pantherclawv1.RangeVerdict_RANGE_VERDICT_PASS, rtdomain.VerdictFail: pantherclawv1.RangeVerdict_RANGE_VERDICT_FAIL,
 		rtdomain.VerdictError: pantherclawv1.RangeVerdict_RANGE_VERDICT_ERROR, rtdomain.VerdictSkipped: pantherclawv1.RangeVerdict_RANGE_VERDICT_SKIPPED,
@@ -308,20 +326,13 @@ func recordRequest(rangeID string, res rtdomain.Result) *pantherclawv1.RecordRes
 	}
 	for _, s := range res.Steps {
 		obs := s.Observed
-		observed := &pantherclawv1.RangeExpect{Outcome: string(obs.Outcome), Reason: obs.Reason, Code: obs.Code}
-		if s.Matched {
-			if s.Expect.Outcome != "" {
-				observed.Outcome = string(s.Expect.Outcome)
-			}
-			if s.Expect.Reason != "" {
-				observed.Reason = s.Expect.Reason
-			}
+		if obs.Outcome == "" && len(obs.Each) == 0 {
+			continue // a step that produced no observed outcome is not recorded
 		}
-		if len(obs.Each) > 0 && s.Expect.Outcome == "" {
-			observed.Outcome = ""
-		}
+		observed := observedOf(s)
 		step := &pantherclawv1.RangeStepInput{
 			StepId:   s.StepID,
+			Kind:     kinds[s.StepID].Do,
 			Expect:   &pantherclawv1.RangeExpect{Outcome: string(s.Expect.Outcome), Reason: s.Expect.Reason, Code: s.Expect.Code},
 			Observed: observed,
 		}
@@ -331,12 +342,42 @@ func recordRequest(rangeID string, res rtdomain.Result) *pantherclawv1.RecordRes
 		if uuidRe.MatchString(obs.ProbeReportID) {
 			step.ProbeReportId = obs.ProbeReportID
 		}
+		if kinds[s.StepID].Do == "sandbox.probe" && step.ProbeReportId != "" {
+			var w struct {
+				Probe string `json:"probe"`
+			}
+			_ = json.Unmarshal(kinds[s.StepID].With, &w)
+			step.ProbeKind = w.Probe
+		}
 		if hrRe.MatchString(s.Expect.DecisiveControl) {
 			step.DecisiveControl = s.Expect.DecisiveControl
 		}
 		req.Steps = append(req.Steps, step)
 	}
 	return req
+}
+
+// observedOf is what the step saw, as observed: never the expectation. A
+// decision has several reasons; the expected one is recorded as the observed
+// reason only when the decision did carry it. A concurrent step records the
+// outcome of its non-ALLOW calls (the first, if they differ), else ALLOW.
+func observedOf(s rtdomain.StepResult) *pantherclawv1.RangeExpect {
+	obs := s.Observed
+	if len(obs.Each) > 0 {
+		out := rtdomain.OutcomeAllow
+		for _, e := range obs.Each {
+			if e.Outcome != rtdomain.OutcomeAllow {
+				out = e.Outcome
+				break
+			}
+		}
+		return &pantherclawv1.RangeExpect{Outcome: string(out)}
+	}
+	o := &pantherclawv1.RangeExpect{Outcome: string(obs.Outcome), Reason: obs.Reason, Code: obs.Code}
+	if s.Expect.Reason != "" && slices.Contains(obs.Reasons, s.Expect.Reason) {
+		o.Reason = s.Expect.Reason
+	}
+	return o
 }
 
 var hrRe = regexp.MustCompile(`^HR-[0-9]{3}$`)
@@ -353,6 +394,7 @@ type summary struct {
 	Results       []summaryResult `json:"results"`
 	Regressions   []string        `json:"regressions,omitempty"`
 	Changed       []string        `json:"changed_since_baseline,omitempty"`
+	Baseline      string          `json:"baseline,omitempty"`
 }
 
 type summaryResult struct {
@@ -404,6 +446,9 @@ func writeSummary(dir string, s summary) error {
 func printTable(a *app, s summary) {
 	w := a.stdout
 	_, _ = fmt.Fprintf(w, "Range %s (%s)\n%s\n\n", s.RangeID, s.RunnerVersion, s.Statement)
+	if s.Baseline != "" {
+		_, _ = fmt.Fprintf(w, "Baseline: %s\n\n", s.Baseline)
+	}
 	_, _ = fmt.Fprintf(w, "%-8s %-8s %-11s %s\n", "ID", "VERDICT", "CATEGORY", "TITLE")
 	for _, r := range s.Results {
 		_, _ = fmt.Fprintf(w, "%-8s %-8s %-11s %s\n", r.ID, r.Verdict, r.Category, r.Title)
@@ -426,8 +471,8 @@ func printTable(a *app, s summary) {
 
 // baseline is a verified baseline pack's scenario verdicts.
 type baseline struct {
-	rangeID string
-	entries []rtdomain.Entry
+	rangeID, finished string
+	entries           []rtdomain.Entry
 }
 
 // maxAssurance bounds assurance.json.
@@ -436,7 +481,7 @@ const maxAssurance = 4 << 20
 // loadBaseline verifies a baseline assurance pack offline against the trust
 // file, exactly as pclaw verify does, and reads its scenario verdicts from
 // assurance.json. A pack that fails any check is no baseline.
-func loadBaseline(packPath, trustPath string) (*baseline, error) {
+func loadBaseline(packPath, trustPath, org string) (*baseline, error) {
 	trustRaw, err := readLimited(trustPath, bundle.MaxTrustBytes)
 	if err != nil {
 		return nil, err
@@ -454,49 +499,45 @@ func loadBaseline(packPath, trustPath string) (*baseline, error) {
 	}
 	if report := bundle.VerifyPack(raw, bundle.Options{Trust: trust}); report.Failed() {
 		return nil, fmt.Errorf("%s failed verification (%d checks failed); run pclaw verify for the report", packPath, report.Count(bundle.Failed))
+	} else if report.RangeNotFullyVerifiable() {
+		return nil, fmt.Errorf("BASELINE_INVALID: %s is not fully verifiable (receipts of some of its transactions are not in the pack); a baseline must be re-derivable in full", packPath)
 	}
 	files, err := pack.Read(raw)
 	if err != nil {
 		return nil, err
 	}
-	var doc []byte
-	for p, data := range files {
-		if path.Base(p) == "assurance.json" {
-			doc = data
-			break
-		}
+	// The signed manifest names the org that made the pack: a baseline is
+	// this org's own report, never another's (BASELINE_INVALID).
+	signed, err := pack.ParseJWS(string(files[pack.ManifestPath]))
+	if err != nil {
+		return nil, err
 	}
+	m, err := pack.DecodeManifest(signed.Payload)
+	if err != nil {
+		return nil, err
+	}
+	if m.Org != org {
+		return nil, fmt.Errorf("BASELINE_INVALID: %s was made by org %s, not yours (%s)", packPath, m.Org, org)
+	}
+	doc := files[pack.AssurancePath]
 	if doc == nil || len(doc) > maxAssurance {
-		return nil, errors.New(packPath + " is not an assurance report (no assurance.json)")
+		return nil, errors.New(packPath + " is not an assurance report (no " + pack.AssurancePath + ")")
 	}
-	var a struct {
-		Range struct {
-			ID string `json:"id"`
-		} `json:"range"`
-		RangeID   string `json:"range_id"`
-		Scenarios []struct {
-			ID      string `json:"id"`
-			Digest  string `json:"digest"`
-			Verdict string `json:"verdict"`
-		} `json:"scenarios"`
+	a, err := pack.DecodeAssurance(doc)
+	if err != nil {
+		return nil, err
 	}
-	if err := json.Unmarshal(doc, &a); err != nil || len(a.Scenarios) == 0 {
-		return nil, errors.New("assurance.json holds no scenarios")
+	if a.Org != org {
+		return nil, fmt.Errorf("BASELINE_INVALID: the report in %s is org %s's, not yours (%s)", packPath, a.Org, org)
 	}
-	b := &baseline{rangeID: cmpOr(a.Range.ID, a.RangeID)}
+	if len(a.Scenarios) == 0 {
+		return nil, errors.New(pack.AssurancePath + " holds no scenarios")
+	}
+	b := &baseline{rangeID: a.Range, finished: a.Finished}
 	for _, s := range a.Scenarios {
-		b.entries = append(b.entries, rtdomain.Entry{
-			ID: s.ID, Digest: strings.TrimPrefix(s.Digest, "sha256:"), Verdict: rtdomain.Verdict(s.Verdict),
-		})
+		b.entries = append(b.entries, rtdomain.Entry{ID: s.ID, Digest: s.Digest, Verdict: rtdomain.Verdict(s.Verdict)})
 	}
 	return b, nil
-}
-
-func cmpOr(a, b string) string {
-	if a != "" {
-		return a
-	}
-	return b
 }
 
 func redteamReport(ctx context.Context, a *app, args []string) error {
@@ -548,7 +589,7 @@ func (r txnReader) State(ctx context.Context, id string) (live.TxnState, error) 
 		pantherclawv1.Decision_DECISION_DENY: "DENY", pantherclawv1.Decision_DECISION_CANNOT_AUTHORIZE: "CANNOT_AUTHORIZE",
 	}[ev.GetTransaction().GetDecision()]
 	if recs := ev.GetDecisionReceipts(); len(recs) > 0 {
-		s.Receipt = receiptParts(recs[len(recs)-1].GetReceiptJws())
+		s.Receipt = receipt.Parts(recs[len(recs)-1].GetReceiptJws())
 	}
 	list, err := r.approvals.ListApprovalRequests(ctx, &pantherclawv1.ListApprovalRequestsRequest{RunId: &r.run, PageSize: 200})
 	if err != nil {
@@ -584,44 +625,4 @@ func (o ttyOperator) Decide(_ context.Context, txn, role string, approve bool) e
 		return err
 	}
 	return nil
-}
-
-// receiptParts reads which parts a decision receipt (a compact JWS) carries:
-// the grant (a checklist line about it), the policy version, the package
-// version (the pinned definition's digest), the facts and the simulated mark.
-func receiptParts(jws string) map[string]bool {
-	segs := strings.Split(jws, ".")
-	if len(segs) != 3 {
-		return nil
-	}
-	raw, err := base64.RawURLEncoding.DecodeString(segs[1])
-	if err != nil {
-		return nil
-	}
-	var p struct {
-		Checklist []struct {
-			Check string `json:"check"`
-		} `json:"checklist"`
-		Basis struct {
-			Policy     string `json:"policy"`
-			Definition string `json:"definition"`
-			Facts      string `json:"facts"`
-		} `json:"basis"`
-		Simulated bool `json:"simulated"`
-	}
-	if json.Unmarshal(raw, &p) != nil {
-		return nil
-	}
-	out := map[string]bool{
-		"policy_version":  p.Basis.Policy != "" && p.Basis.Policy != "none",
-		"package_version": p.Basis.Definition != "",
-		"facts":           p.Basis.Facts != "",
-		"simulated":       p.Simulated,
-	}
-	for _, it := range p.Checklist {
-		if strings.Contains(strings.ToLower(it.Check), "grant") {
-			out["grant"] = true
-		}
-	}
-	return out
 }

@@ -326,9 +326,15 @@ func (q *Queries) RangeProbeReport(ctx context.Context, orgID ids.OrgID, iD ids.
 }
 
 const rangeTransaction = `-- name: RangeTransaction :one
-SELECT t.id, r.agent_id, t.simulated, t.created_at, t.decision, t.reason_code, coalesce(t.effect_state, '')::text AS effect_state
+SELECT t.id, r.agent_id, t.simulated, t.created_at, t.decision, t.reason_code, coalesce(t.effect_state, '')::text AS effect_state,
+    coalesce(d.receipt_jws, '')::text AS receipt_jws
 FROM pc.transactions t
 JOIN pc.runs r ON r.org_id = t.org_id AND r.id = t.run_id
+LEFT JOIN LATERAL (
+    SELECT receipt_jws FROM pc.decision_receipts
+    WHERE org_id = t.org_id AND transaction_id = t.id
+    ORDER BY evaluation DESC LIMIT 1
+) d ON true
 WHERE t.org_id = $1 AND t.id = $2
 `
 
@@ -340,6 +346,7 @@ type RangeTransactionRow struct {
 	Decision    string
 	ReasonCode  string
 	EffectState string
+	ReceiptJws  string
 }
 
 // The server's own record of a transaction a step names: its run's agent,
@@ -355,6 +362,7 @@ func (q *Queries) RangeTransaction(ctx context.Context, orgID ids.OrgID, iD ids.
 		&i.Decision,
 		&i.ReasonCode,
 		&i.EffectState,
+		&i.ReceiptJws,
 	)
 	return i, err
 }

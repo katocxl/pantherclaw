@@ -20,8 +20,12 @@ const (
 
 // receipt is an unsigned stand-in for a compact JWS receipt: the check
 // reads its payload; the manifest's signature covers it.
-func receipt(decision, code, simulated string) string {
-	payload := `{"pap":{"decision":"` + decision + `","checklist":[{"code":"` + code + `","decisive":true}]` + simulated + `}}`
+func receipt(decision, code, simulated string, extra bool) string {
+	items := `{"code":"` + code + `","decisive":true}`
+	if extra {
+		items += `,{"code":"SECOND","decisive":false}`
+	}
+	payload := `{"pap":{"decision":"` + decision + `","checklist":[` + items + `]` + simulated + `}}`
 	return "e30." + base64.RawURLEncoding.EncodeToString([]byte(payload)) + ".c2ln"
 }
 
@@ -35,6 +39,31 @@ type rangeOpts struct {
 	statement                   string
 	agent                       string // the transaction file's agent
 	dropTxn                     bool
+	noReceipts                  bool
+	extraReasons                bool
+	stepReason                  string
+	stepCount                   int
+}
+
+func stepCount(o rangeOpts) int {
+	if o.stepCount > 0 {
+		return o.stepCount
+	}
+	return 1
+}
+
+func stepReason(o rangeOpts) string {
+	if o.stepReason != "" {
+		return o.stepReason
+	}
+	return "DESTINATION_NOT_GRANTED"
+}
+
+func receiptOf(o rangeOpts) string {
+	if o.noReceipts {
+		return ""
+	}
+	return receipt(o.decision, o.reason, o.simulated, o.extraReasons)
 }
 
 func goodRange() rangeOpts {
@@ -51,11 +80,11 @@ func rangePack(k *packKit, o rangeOpts) []byte {
 		m.Statement = o.statement
 		m.Include = pack.Include{Receipts: true}
 		sc := pack.AssuranceScenario{
-			ID: "RT-009", Digest: digestA, Category: "boundary", Tier: "community", Suite: "coding-agent", Verdict: o.verdict,
+			ID: "RT-009", Digest: digestA, Category: "boundary", Tier: "community", Suite: "coding-agent", StepCount: stepCount(o), Verdict: o.verdict,
 			Steps: []pack.AssuranceStep{{
-				ID: "exfil", Expect: pack.AssuranceExpect{Outcome: "DENY", Reason: "DESTINATION_NOT_GRANTED"},
-				Observed:   pack.AssuranceExpect{Outcome: o.claimedOutcome, Reason: "DESTINATION_NOT_GRANTED"},
-				ObservedBy: "SERVER", Matched: o.claimedOutcome == "DENY", Transaction: packTxn,
+				ID: "exfil", Expect: pack.AssuranceExpect{Outcome: "DENY", Reason: stepReason(o)},
+				Observed:   pack.AssuranceExpect{Outcome: o.claimedOutcome, Reason: stepReason(o)},
+				ObservedBy: "SERVER", Matched: o.claimedOutcome == "DENY", Transaction: packTxn, Kind: "agent.call",
 			}},
 		}
 		counts := pack.AssuranceCounts{}
@@ -78,7 +107,7 @@ func rangePack(k *packKit, o rangeOpts) []byte {
 		}
 		out := []pack.File{{Path: pack.AssurancePath, Kind: pack.KindAssurance, Data: data}}
 		if !o.dropTxn {
-			txn := `{"id":"` + packTxn + `","agent":"` + o.agent + `","decisions":[{"evaluation":1,"receipt":"` + receipt(o.decision, o.reason, o.simulated) + `"}]}`
+			txn := `{"id":"` + packTxn + `","agent":"` + o.agent + `","decisions":[{"evaluation":1,"receipt":"` + receiptOf(o) + `"}]}`
 			out = append(out, pack.File{Path: "transactions/" + packTxn + ".json", Kind: pack.KindTransaction, Data: []byte(txn)})
 		}
 		return append(out, files[1])

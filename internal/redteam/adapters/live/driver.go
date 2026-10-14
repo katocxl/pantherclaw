@@ -12,11 +12,13 @@ package live
 import (
 	"bytes"
 	"context"
+	"crypto/ed25519"
 	"encoding/json/jsontext"
 	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -24,6 +26,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1/pantherclawv1connect"
+	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	"github.com/katocxl/pantherclaw/internal/platform/mcpheader"
 	"github.com/katocxl/pantherclaw/internal/redteam/app"
 	"github.com/katocxl/pantherclaw/internal/redteam/domain"
@@ -84,16 +88,29 @@ type Config struct {
 	Unreachable string
 	// WaitPoll is the poll interval of wait steps (default 200 ms).
 	WaitPoll time.Duration
+	// Workload is the range instance's WorkloadService (agent.child); AgentID
+	// is the range agent. Nil or empty makes agent.child unsupported.
+	Workload pantherclawv1connect.WorkloadServiceClient
+	AgentID  string
+	// Key and Token are the instance's workload key and token (agent.steal);
+	// Transport sends the stolen-credential and direct requests (nil: the
+	// default transport).
+	Key       ed25519.PrivateKey
+	Token     func() string
+	Transport http.RoundTripper
+	// Direct maps a connection role to its simulator's base URL (agent.direct).
+	Direct map[string]string
 }
 
 // Driver is the live app.Driver.
 type Driver struct {
 	cfg Config
 
-	mu      sync.Mutex
-	txns    map[string]string // step id -> transaction id
-	actions map[string]string // step id -> action id (sdk)
-	tools   map[string]map[string][]mcpheader.Param
+	mu         sync.Mutex
+	txns       map[string]string       // step id -> transaction id
+	actions    map[string]string       // step id -> action id (sdk)
+	dispatches map[string]*sdkDispatch // step id -> the request handed to the SDK
+	tools      map[string]map[string][]mcpheader.Param
 }
 
 // New returns a driver.
@@ -105,7 +122,7 @@ func New(cfg Config) *Driver {
 		cfg.Unreachable = "http://127.0.0.1:1"
 	}
 	return &Driver{
-		cfg: cfg, txns: map[string]string{}, actions: map[string]string{},
+		cfg: cfg, txns: map[string]string{}, actions: map[string]string{}, dispatches: map[string]*sdkDispatch{},
 		tools: map[string]map[string][]mcpheader.Param{},
 	}
 }
@@ -123,7 +140,7 @@ func (d *Driver) Capabilities() map[app.Capability]bool {
 // Setup implements app.Driver.
 func (d *Driver) Setup(context.Context, domain.Scenario) (app.Fixture, error) {
 	d.mu.Lock()
-	d.txns, d.actions = map[string]string{}, map[string]string{}
+	d.txns, d.actions, d.dispatches = map[string]string{}, map[string]string{}, map[string]*sdkDispatch{}
 	d.mu.Unlock()
 	return d.cfg.Fixture, nil
 }
@@ -144,6 +161,8 @@ type callWith struct {
 	Concurrent int            `json:"concurrent"`
 	ActionOf   string         `json:"action_of"`
 	Fault      string         `json:"fault"`
+	// run overrides the run of the call (a child run).
+	run string
 }
 
 // Do implements app.Driver.
@@ -153,6 +172,14 @@ func (d *Driver) Do(ctx context.Context, s domain.Scenario, st domain.Step, _ ma
 		return d.agentCall(ctx, s, st)
 	case "wait":
 		return d.wait(ctx, st)
+	case "agent.child":
+		return d.child(ctx, s, st)
+	case "agent.steal":
+		return d.steal(ctx, st)
+	case "target.replay":
+		return d.targetReplay(ctx, st)
+	case "agent.direct":
+		return d.direct(ctx, st)
 	case "check.receipt":
 		return d.checkReceipt(ctx, st)
 	case "person.approve", "person.decline":
@@ -229,12 +256,13 @@ func (d *Driver) one(ctx context.Context, s domain.Scenario, step string, n int,
 			return domain.Observation{}, "", fmt.Errorf("action_of %s: that step has no action id (only the sdk face reports one)", w.ActionOf)
 		}
 	}
+	ctx = context.WithValue(ctx, runKey{}, runOr(w.run, d.cfg.Run))
 	switch w.Face {
 	case "sdk":
 		if w.Tool == "" {
 			return domain.Observation{}, "", fmt.Errorf("%w: sdk face with method and path", app.ErrUnsupported)
 		}
-		return d.sdk(ctx, conn, call, action, w)
+		return d.sdk(ctx, step, conn, call, action, w)
 	case "hook":
 		o, err := d.hook(ctx, conn, w)
 		return o, "", err
@@ -242,8 +270,7 @@ func (d *Driver) one(ctx context.Context, s domain.Scenario, step string, n int,
 		o, err := d.mcp(ctx, conn, w)
 		return o, "", err
 	case "http":
-		o, err := d.httpFace(ctx, conn, w)
-		return o, "", err
+		return d.httpFace(ctx, conn, action, w)
 	}
 	return domain.Observation{}, "", fmt.Errorf("face %q", w.Face)
 }
@@ -257,7 +284,7 @@ func (d *Driver) post(ctx context.Context, rawURL string, header http.Header, bo
 		return 0, nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("PAP-Run-Id", d.cfg.Run)
+	req.Header.Set("PAP-Run-Id", runFrom(ctx, d.cfg.Run))
 	for k, vs := range header {
 		req.Header[k] = vs
 	}
@@ -291,15 +318,25 @@ func response(b []byte) []byte {
 
 // sdkAnswer is the sdk face's answer (internal/gateway/sdk.Answer).
 type sdkAnswer struct {
-	Decision      string   `json:"decision"`
-	ErrorClass    string   `json:"error_class"`
-	Code          string   `json:"code"`
-	Reasons       []string `json:"reasons"`
-	ActionID      string   `json:"action_id"`
-	TransactionID string   `json:"transaction_id"`
+	Decision      string       `json:"decision"`
+	ErrorClass    string       `json:"error_class"`
+	Code          string       `json:"code"`
+	Reasons       []string     `json:"reasons"`
+	ActionID      string       `json:"action_id"`
+	TransactionID string       `json:"transaction_id"`
+	Dispatch      *sdkDispatch `json:"dispatch"`
 }
 
-func (d *Driver) sdk(ctx context.Context, conn, call, action string, w callWith) (domain.Observation, string, error) {
+// sdkDispatch is the request the gateway hands the SDK to send to a
+// target-enforced connection (internal/gateway/sdk.Dispatch).
+type sdkDispatch struct {
+	Method  string            `json:"method"`
+	URL     string            `json:"url"`
+	Headers map[string]string `json:"headers"`
+	Body    string            `json:"body"`
+}
+
+func (d *Driver) sdk(ctx context.Context, step, conn, call, action string, w callWith) (domain.Observation, string, error) {
 	req, err := json.Marshal(map[string]any{
 		"tool": "mcp__" + conn + "__" + w.Tool, "server": conn, "input": rawOr(w.Args), "tool_use_id": call,
 	})
@@ -322,6 +359,11 @@ func (d *Driver) sdk(ctx context.Context, conn, call, action string, w callWith)
 	if a.Decision == "deny" && f.Class == "" {
 		f.Class = "policy_denied"
 	}
+	if a.Dispatch != nil {
+		d.mu.Lock()
+		d.dispatches[step] = a.Dispatch
+		d.mu.Unlock()
+	}
 	o := classify(f)
 	o.Response = response(b)
 	return o, a.ActionID, nil
@@ -338,23 +380,14 @@ type hookAnswer struct {
 }
 
 func (d *Driver) hook(ctx context.Context, conn string, w callWith) (domain.Observation, error) {
-	target := d.base()
 	if w.Fault == "gateway_unreachable" {
-		// What the hook does when it cannot reach the gateway: it exits 2
-		// and the command does not run (fail closed).
-		target = strings.TrimSuffix(d.cfg.Unreachable, "/")
+		return d.unreachable(ctx)
 	}
 	req, err := json.Marshal(map[string]any{"tool": w.Tool, "input": rawOr(w.Args)})
 	if err != nil {
 		return domain.Observation{}, err
 	}
-	status, b, err := d.post(ctx, target+"/hook/"+url.PathEscape(conn), nil, req)
-	if w.Fault == "gateway_unreachable" {
-		if err == nil {
-			return domain.Observation{}, errors.New("the address meant to be unreachable answered")
-		}
-		return domain.Observation{Outcome: domain.OutcomeRefused, Code: "hook_exit_2", Detail: "the gateway was unreachable"}, nil
-	}
+	status, b, err := d.post(ctx, d.base()+"/hook/"+url.PathEscape(conn), nil, req)
 	if err != nil {
 		return domain.Observation{}, err
 	}
@@ -372,40 +405,29 @@ func (d *Driver) hook(ctx context.Context, conn string, w callWith) (domain.Obse
 }
 
 // httpFace calls /{connection}{path}: the gateway's HTTP proxy.
-func (d *Driver) httpFace(ctx context.Context, conn string, w callWith) (domain.Observation, error) {
+func (d *Driver) httpFace(ctx context.Context, conn, action string, w callWith) (domain.Observation, string, error) {
 	var body io.Reader
 	if len(w.Body) > 0 {
 		body = bytes.NewReader(w.Body)
 	}
 	req, err := http.NewRequestWithContext(ctx, w.Method, d.base()+"/"+url.PathEscape(conn)+w.Path, body)
 	if err != nil {
-		return domain.Observation{}, err
+		return domain.Observation{}, "", err
 	}
-	req.Header.Set("PAP-Run-Id", d.cfg.Run)
+	req.Header.Set("PAP-Run-Id", runFrom(ctx, d.cfg.Run))
+	if action == "" {
+		action = ids.NewV7().String()
+	}
+	req.Header.Set("PC-Action-Id", action)
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
 	status, h, b, err := d.do(req)
 	if err != nil {
-		return domain.Observation{}, err
+		return domain.Observation{}, "", err
 	}
-	var r struct {
-		ErrorClass    string   `json:"error_class"`
-		Error         string   `json:"error"`
-		Decision      string   `json:"decision"`
-		Reasons       []string `json:"reasons"`
-		TransactionID string   `json:"transaction_id"`
-	}
-	f := facts{TransactionID: h.Get("PC-Transaction-Id")}
-	switch {
-	case h.Get("PC-Decision") == "" && json.Unmarshal(b, &r) == nil && r.ErrorClass != "":
-		f = facts{Class: r.ErrorClass, Code: r.Error, Decision: r.Decision, Reasons: r.Reasons, TransactionID: r.TransactionID}
-	case h.Get("PC-Decision") == "":
-		return domain.Observation{}, fmt.Errorf("http face answered %d with neither a decision nor a refusal", status)
-	}
-	o := classify(f)
-	o.Response = response(b)
-	return o, nil
+	o, err := observeREST(status, h, b)
+	return o, action, err
 }
 
 // mcp calls tools/call on the 2026-07-28 stateless MCP face.
@@ -446,48 +468,7 @@ func (d *Driver) mcp(ctx context.Context, conn string, w callWith) (domain.Obser
 	if err != nil {
 		return domain.Observation{}, err
 	}
-	var r struct {
-		Result *struct {
-			Content           jsontext.Value `json:"content"`
-			StructuredContent jsontext.Value `json:"structuredContent"`
-			IsError           bool           `json:"isError"`
-			Meta              struct {
-				Error struct {
-					ErrorClass    string   `json:"error_class"`
-					Error         string   `json:"error"`
-					Decision      string   `json:"decision"`
-					Reasons       []string `json:"reasons"`
-					TransactionID string   `json:"transaction_id"`
-				} `json:"io.pantherclaw/error"`
-				Result struct {
-					TransactionID string `json:"transaction_id"`
-				} `json:"io.pantherclaw/result"`
-			} `json:"_meta"`
-		} `json:"result"`
-		Error *struct {
-			Code    int    `json:"code"`
-			Message string `json:"message"`
-		} `json:"error"`
-	}
-	if err := json.Unmarshal(b, &r); err != nil || (r.Result == nil && r.Error == nil) {
-		return domain.Observation{}, fmt.Errorf("mcp face answered HTTP %d without a JSON-RPC answer", status)
-	}
-	if r.Error != nil {
-		return domain.Observation{Outcome: domain.OutcomeRefused, Code: "rpc_" + strconv.Itoa(r.Error.Code), Detail: r.Error.Message}, nil
-	}
-	var f facts
-	if r.Result.IsError {
-		e := r.Result.Meta.Error
-		f = facts{Class: e.ErrorClass, Code: e.Error, Decision: e.Decision, Reasons: e.Reasons, TransactionID: e.TransactionID}
-		if f.Class == "" {
-			return domain.Observation{}, errors.New("mcp tool error without PantherClaw's error facts")
-		}
-	} else {
-		f.TransactionID = r.Result.Meta.Result.TransactionID
-	}
-	o := classify(f)
-	o.Response = toolJSON(r.Result.StructuredContent, r.Result.Content)
-	return o, nil
+	return observeMCP(status, nil, b)
 }
 
 // declared returns (and caches per connection) each tool's x-mcp-header
@@ -650,4 +631,23 @@ func (d *Driver) person(ctx context.Context, st domain.Step) (domain.Observation
 		case <-time.After(d.cfg.WaitPoll):
 		}
 	}
+}
+
+// unreachable is the hook's fail-closed path: it cannot reach the gateway, so
+// it exits 2 and the command does not run. It only dials the address nothing
+// should listen on, sends no byte and never uses the workload-signing client,
+// so no proof or token can leave for an address that is not the gateway.
+func (d *Driver) unreachable(ctx context.Context) (domain.Observation, error) {
+	u, err := url.Parse(d.cfg.Unreachable)
+	if err != nil || u.Host == "" {
+		return domain.Observation{}, fmt.Errorf("the unreachable address %q", d.cfg.Unreachable)
+	}
+	dctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	conn, err := (&net.Dialer{}).DialContext(dctx, "tcp", u.Host)
+	if err == nil {
+		_ = conn.Close()
+		return domain.Observation{}, errors.New("the address meant to be unreachable accepted a connection")
+	}
+	return domain.Observation{Outcome: domain.OutcomeRefused, Code: "hook_exit_2", Detail: "the gateway was unreachable"}, nil
 }

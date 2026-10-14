@@ -159,7 +159,7 @@ func newWorld(t *testing.T, edition billing.Edition, role td.RoleName) *world {
 }
 
 func decl(id, tier, category string) domain.Scenario {
-	return domain.Scenario{ID: id, Digest: hexA, Tier: tier, Category: category, Suite: "coding-agent", Title: id}
+	return domain.Scenario{ID: id, Digest: hexA, Tier: tier, Category: category, Suite: "coding-agent", Title: id, StepCount: 1}
 }
 
 func (w *world) start(t *testing.T, set ...domain.Scenario) domain.Range {
@@ -183,7 +183,7 @@ func (w *world) txn(t *testing.T, simulated bool, decision, reason string) ids.U
 func uid(id ids.UUID) *ids.UUID { return &id }
 
 func step(id string, expect, observed domain.Expect, txn *ids.UUID) domain.StepInput {
-	return domain.StepInput{ID: id, Expect: expect, Observed: observed, Transaction: txn}
+	return domain.StepInput{ID: id, Kind: "agent.call", Expect: expect, Observed: observed, Transaction: txn}
 }
 
 var (
@@ -238,9 +238,9 @@ func TestT091_ProbeReportsAreCheckedAgainstTheSignedRecords(t *testing.T) {
 	r := w.start(t, decl("RT-014", domain.TierCommunity, "boundary"))
 	blocked := domain.Expect{Outcome: domain.OutcomeBlocked}
 	good := ids.NewV7()
-	w.f.probes[good] = domain.ProbeRecord{ID: good, Agent: w.agent, Recorded: time.Now().Add(time.Second), Outcome: domain.OutcomeAllow}
+	w.f.probes[good] = domain.ProbeRecord{ID: good, Agent: w.agent, Recorded: time.Now().Add(time.Second), Results: map[string]string{"dns": "reachable"}}
 	in := app.RecordInput{Range: r.ID, Scenario: "RT-014", Digest: hexA, Verdict: domain.Pass}
-	in.Steps = []domain.StepInput{{ID: "dns", Expect: blocked, Observed: blocked, Probe: uid(good)}}
+	in.Steps = []domain.StepInput{{ID: "dns", Kind: "sandbox.probe", ProbeKind: "dns", Expect: blocked, Observed: blocked, Probe: uid(good)}}
 	res, err := w.svc.RecordResult(w.ctx, in)
 	if err != nil {
 		t.Fatal(err)
@@ -250,11 +250,11 @@ func TestT091_ProbeReportsAreCheckedAgainstTheSignedRecords(t *testing.T) {
 		t.Fatalf("step = %+v verdict %s", st, res.Verdict)
 	}
 	other := ids.NewV7()
-	w.f.probes[other] = domain.ProbeRecord{ID: other, Agent: ids.NewV7(), Recorded: time.Now().Add(time.Second), Outcome: domain.OutcomeBlocked}
+	w.f.probes[other] = domain.ProbeRecord{ID: other, Agent: ids.NewV7(), Recorded: time.Now().Add(time.Second), Results: map[string]string{"dns": "blocked"}}
 	for _, bad := range []ids.UUID{other, ids.NewV7()} {
 		w2 := in
 		w2.Scenario = "RT-014"
-		w2.Steps = []domain.StepInput{{ID: "dns", Expect: blocked, Observed: blocked, Probe: uid(bad)}}
+		w2.Steps = []domain.StepInput{{ID: "dns", Kind: "sandbox.probe", ProbeKind: "dns", Expect: blocked, Observed: blocked, Probe: uid(bad)}}
 		r2 := w.start(t, decl("RT-014", domain.TierCommunity, "boundary"))
 		w2.Range = r2.ID
 		if _, err := w.svc.RecordResult(w.ctx, w2); !errors.Is(err, app.ErrRecord) {
@@ -462,5 +462,33 @@ func TestRangesFollowAgentPermissions(t *testing.T) {
 	p, err := w.svc.ListRanges(auditor, nil, page.Request{Size: 10})
 	if err != nil || len(p.Items) != 1 {
 		t.Fatalf("auditor list: %v %v", p, err)
+	}
+}
+
+// A runner's ERROR or SKIPPED is its own to report: with a partial step
+// list (only the steps that produced an outcome) or none, the server keeps
+// the verdict and never upgrades it to PASS, even when every recorded step
+// matched (D33).
+func TestHR224_ErrorAndSkippedVerdictsAreNeverUpgraded(t *testing.T) {
+	w := newWorld(t, billing.Team, td.RoleAgentOwner)
+	r := w.start(t, decl("RT-001", domain.TierCommunity, "boundary"), decl("RT-002", domain.TierCommunity, "boundary"),
+		decl("RT-003", domain.TierCommunity, "boundary"))
+	for _, tc := range []struct {
+		scenario string
+		verdict  domain.Verdict
+		steps    []domain.StepInput
+	}{
+		{"RT-001", domain.Errored, []domain.StepInput{step("a", allow, allow, nil)}},
+		{"RT-002", domain.Skipped, nil},
+		{"RT-003", domain.Errored, nil},
+	} {
+		res, err := w.svc.RecordResult(w.ctx, app.RecordInput{Range: r.ID, Scenario: tc.scenario, Digest: hexA, Verdict: tc.verdict, Steps: tc.steps})
+		if err != nil || res.Verdict != tc.verdict || res.Claimed != "" {
+			t.Errorf("%s: %+v, %v, want %s kept", tc.scenario, res, err, tc.verdict)
+		}
+	}
+	d, err := w.svc.FinishRange(w.ctx, r.ID)
+	if err != nil || d.Counts != (domain.Counts{Error: 2, Skipped: 1}) {
+		t.Fatalf("finish: %+v, %v", d.Counts, err)
 	}
 }

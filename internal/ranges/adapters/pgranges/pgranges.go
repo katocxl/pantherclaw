@@ -56,6 +56,7 @@ type (
 		Category string `json:"category"`
 		Suite    string `json:"suite"`
 		Title    string `json:"title,omitzero"`
+		Steps    int    `json:"step_count"`
 	}
 	versionJSON struct {
 		Name    string `json:"name"`
@@ -78,6 +79,8 @@ type (
 		Transaction string     `json:"transaction_id,omitzero"`
 		Probe       string     `json:"probe_report_id,omitzero"`
 		Decisive    string     `json:"decisive_control,omitzero"`
+		Kind        string     `json:"kind"`
+		ProbeKind   string     `json:"probe_kind,omitzero"`
 	}
 )
 
@@ -127,7 +130,7 @@ func marshalVersions(refs []domain.VersionRef) ([]byte, error) {
 func (t *txn) InsertRange(ctx context.Context, r domain.Range) (domain.Range, error) {
 	decls := make([]scenarioJSON, 0, len(r.Scenarios))
 	for _, s := range r.Scenarios {
-		decls = append(decls, scenarioJSON(s))
+		decls = append(decls, scenarioJSON{ID: s.ID, Digest: s.Digest, Tier: s.Tier, Category: s.Category, Suite: s.Suite, Title: s.Title, Steps: s.StepCount})
 	}
 	scenarios, err := json.Marshal(decls)
 	if err != nil {
@@ -162,7 +165,7 @@ func rangeOf(r dbq.PcRedteamRun) (domain.Range, error) {
 		Baseline: r.BaselineRangeID, State: domain.State(r.State), Started: r.StartedAt, Finished: r.FinishedAt,
 	}
 	for _, d := range decls {
-		out.Scenarios = append(out.Scenarios, domain.Scenario(d))
+		out.Scenarios = append(out.Scenarios, domain.Scenario{ID: d.ID, Digest: d.Digest, Tier: d.Tier, Category: d.Category, Suite: d.Suite, Title: d.Title, StepCount: d.Steps})
 	}
 	var err error
 	if out.Versions.Policies, err = versionsOf(r.PolicyVersions); err != nil {
@@ -264,7 +267,7 @@ func resultOf(r dbq.PcRedteamResult) (domain.Result, error) {
 	for _, s := range steps {
 		st := domain.Step{
 			ID: s.ID, Expect: s.Expect.domain(), Observed: s.Observed.domain(), ObservedBy: domain.ObservedBy(s.ObservedBy),
-			Mismatch: s.Mismatch, Claimed: s.Claimed.domain(), Matched: s.Matched, Decisive: s.Decisive,
+			Mismatch: s.Mismatch, Claimed: s.Claimed.domain(), Matched: s.Matched, Decisive: s.Decisive, Kind: s.Kind, ProbeKind: s.ProbeKind,
 		}
 		var err error
 		if st.Transaction, err = optID(s.Transaction); err != nil {
@@ -303,7 +306,7 @@ func (t *txn) InsertResult(ctx context.Context, rng ids.UUID, r domain.Result) (
 		steps = append(steps, stepJSON{
 			ID: s.ID, Expect: expectJSON(s.Expect), Observed: expectJSON(s.Observed), ObservedBy: string(s.ObservedBy),
 			Mismatch: s.Mismatch, Claimed: expectJSON(s.Claimed), Matched: s.Matched, Transaction: idStr(s.Transaction),
-			Probe: idStr(s.Probe), Decisive: s.Decisive,
+			Probe: idStr(s.Probe), Decisive: s.Decisive, Kind: s.Kind, ProbeKind: s.ProbeKind,
 		})
 		if s.ObservedBy == domain.Server {
 			server++
@@ -352,16 +355,19 @@ func (t *txn) Transaction(ctx context.Context, id ids.UUID) (domain.TransactionR
 	} else if err != nil {
 		return domain.TransactionRecord{}, false, err
 	}
-	return domain.TransactionRecord{
+	rec := domain.TransactionRecord{
 		ID: r.ID, Agent: r.AgentID, Simulated: r.Simulated, Created: r.CreatedAt, Decision: r.Decision, Reason: r.ReasonCode,
 		EffectState: r.EffectState,
-	}, true, nil
+	}
+	if rc, ok := domain.ParseReceipt(r.ReceiptJws); ok {
+		rec.Reasons = rc.Reasons
+	}
+	return rec, true, nil
 }
 
 // Probe reads a stored probe report (the server verified its signature,
-// nonce and session when it accepted it, HR-215). It supports BLOCKED when
-// every result of the report was as expected, otherwise ALLOW: something
-// the report expected blocked got through, or a control failed.
+// nonce and session when it accepted it, HR-215) as the observation of each
+// of its results.
 func (t *txn) Probe(ctx context.Context, id ids.UUID) (domain.ProbeRecord, bool, error) {
 	r, err := t.q.RangeProbeReport(ctx, t.org, id)
 	if db.IsNoRows(err) {
@@ -369,36 +375,33 @@ func (t *txn) Probe(ctx context.Context, id ids.UUID) (domain.ProbeRecord, bool,
 	} else if err != nil {
 		return domain.ProbeRecord{}, false, err
 	}
-	outcome, err := ProbeOutcome(r.Report)
+	results, err := ProbeResults(r.Report)
 	if err != nil {
 		return domain.ProbeRecord{}, false, err
 	}
-	return domain.ProbeRecord{ID: r.ID, Agent: r.AgentID, Recorded: r.ReceivedAt, Outcome: outcome}, true, nil
+	return domain.ProbeRecord{ID: r.ID, Agent: r.AgentID, Recorded: r.ReceivedAt, Results: results}, true, nil
 }
 
-// ProbeOutcome reads the outcome a stored compact JWS report supports.
-func ProbeOutcome(compact string) (string, error) {
+// ProbeResults maps the result names of a stored compact JWS report to what
+// each observed.
+func ProbeResults(compact string) (map[string]string, error) {
 	parts := strings.Split(compact, ".")
 	if len(parts) != 3 {
-		return "", errors.New("pgranges: a stored probe report is not a compact JWS")
+		return nil, errors.New("pgranges: a stored probe report is not a compact JWS")
 	}
 	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	var rep report.Report
 	if err := json.Unmarshal(payload, &rep); err != nil {
-		return "", err
+		return nil, err
 	}
-	if len(rep.Results) == 0 {
-		return domain.OutcomeAllow, nil
-	}
+	out := make(map[string]string, len(rep.Results))
 	for _, res := range rep.Results {
-		if !res.Passed() {
-			return domain.OutcomeAllow, nil
-		}
+		out[res.Name] = res.Observed
 	}
-	return domain.OutcomeBlocked, nil
+	return out, nil
 }
 
 func (t *txn) Audit(ctx context.Context, ev audit.Event) error {
