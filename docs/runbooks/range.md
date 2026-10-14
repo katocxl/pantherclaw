@@ -53,7 +53,7 @@ pclaw redteam run --suite coding-agent \
 - `--suite` is `coding-agent`, `platform` or `all`. The platform suite needs Business (`EDITION_REQUIRED` otherwise).
 - The command always starts a range first, runs each scenario through the live driver, records each result with the server, finishes the range and writes `summary.json` and a text table to `--out`.
 - Steps that need a person (approvals, declines) run only with `--interactive`: the command prints the approval link and waits. Without it those scenarios are `SKIPPED`.
-- It never executes a delegated allow. The live driver does not support `sim.mutate`, `operator.*` or `server.read` with `org: other`; scenarios using them are `SKIPPED` ("driver lacks <kind>") and, with the `harness_only` ones (RT-029, RT-034, which run in a separate non-range stack), run fully only under `task range`.
+- It never executes a delegated allow. The live driver does not support `sim.mutate`, `agent.direct`, `operator.*`, `server.read` with `org: other`, `agent.steal` with mode `other_instance`, or `agent.child` widening anything other than operations and lifetime; scenarios using them are `SKIPPED` ("driver lacks <kind>") and, with the `harness_only` ones (RT-029, RT-034, which run in a separate non-range stack), run fully only under `task range`.
 
 ### Reading the results
 
@@ -64,7 +64,7 @@ pclaw redteam run --suite coding-agent \
 | `PASS` | Every step matched its expectation |
 | `FAIL` | A step did not match; the scenario stopped there |
 | `ERROR` | The driver failed or the 60 s scenario timeout passed |
-| `SKIPPED` | A required capability is missing, a person step without `--interactive`, or the live driver lacks a step kind ("driver lacks <kind>": `sim.mutate`, `operator.*`, `server.read` with `org: other`). Never `ERROR`; the summary lists each skip with its reason |
+| `SKIPPED` | A required capability is missing, a person step without `--interactive`, or the live driver lacks a step kind ("driver lacks <kind>": `sim.mutate`, `agent.direct`, `operator.*`, `server.read` with `org: other`). Never `ERROR`; the summary lists each skip with its reason |
 
 Steps the server can observe (a transaction, a probe report) are marked `observed_by = server`; the server's value wins over the runner's claim, and a difference is flagged `MISMATCH`. Other steps are `client` observations. Read `FAIL` first: it means a control did not do what the scenario expected, and the decisive control is named in the step.
 
