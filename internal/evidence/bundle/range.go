@@ -285,15 +285,15 @@ func verifyReceipts(r *Report, m *pack.Manifest, files map[string][]byte, a *pac
 		r.add("range.simulated", subject, NotAvailable, "no receipt body is in the pack (removed by retention)")
 		return nil
 	}
-	real := 0
+	nonSim := 0
 	for _, c := range all {
 		if body, ok := receiptOf(c); !ok || body.Pap.Simulated == nil || !*body.Pap.Simulated {
-			real++
+			nonSim++
 		}
 	}
-	if real > 0 {
+	if nonSim > 0 {
 		// The step check still runs: it says what the receipts support.
-		r.add("range.simulated", subject, Failed, "%d of %d receipts of this transaction do not say simulated: true: real-run evidence in a range pack", real, len(all))
+		r.add("range.simulated", subject, Failed, "%d of %d receipts of this transaction do not say simulated: true: real-run evidence in a range pack", nonSim, len(all))
 	} else {
 		r.add("range.simulated", subject, Passed, "all %d receipts say simulated: true", len(all))
 	}
