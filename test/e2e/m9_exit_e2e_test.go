@@ -15,6 +15,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -215,10 +216,17 @@ type card struct {
 // agent's merge scope.
 func (m *m9) coverage(t *testing.T) card {
 	t.Helper()
+	return m.coverageOf(t, "github.pull.merge")
+}
+
+// coverageOf reassesses as coverage does and returns the card of the
+// agent's scope of operation.
+func (m *m9) coverageOf(t *testing.T, operation string) card {
+	t.Helper()
 	if code, out, errs := m.alice.pclaw(t, "coverage", "reassess", m.gh.conn.String(), "--agent", m.agent); code != 0 {
 		t.Fatalf("coverage reassess: %d %s %s", code, out, errs)
 	}
-	code, out, errs := m.alice.pclaw(t, "coverage", "show", m.agent, m.gh.conn.String(), "github.pull.merge")
+	code, out, errs := m.alice.pclaw(t, "coverage", "show", m.agent, m.gh.conn.String(), operation)
 	var c card
 	if code != 0 || json.Unmarshal([]byte(out), &c, json.RejectUnknownMembers(false)) != nil {
 		t.Fatalf("coverage show: %d %s %s", code, out, errs)
@@ -450,6 +458,26 @@ func TestE2E_M9_EnforcedFromProbes(t *testing.T) {
 			m.row(t, "SELECT string_agg(kind || ' ' || coalesce(detail, ''), '; ' ORDER BY id) FROM pc.coverage_invalidations WHERE connection_id = $1", m.gh.conn),
 			m.row(t, "SELECT string_agg(kind || ' ' || coalesce(channel, '') || ' ' || coalesce(locator, '') || ' ' || coalesce(operation, ''), '; ') FROM pc.coverage_routes WHERE connection_id = $1", m.gh.conn))
 	}
+	// Every repository operation the demo used has a scope (the branch and
+	// the pull request it opened, the merge it asked for), and each scope of
+	// the agent on the connection reads ENFORCED from the same closure, with
+	// its expiry: no repository route is left PARTIAL or UNKNOWN.
+	scopes := strings.Split(m.row(t, `SELECT string_agg(DISTINCT operation, ' ' ORDER BY operation) FROM pc.coverage_snapshots
+		WHERE agent_id = $1 AND connection_id = $2`, m.agent, m.gh.conn), " ")
+	for _, op := range []string{"github.branch.create", "github.pull.create", "github.pull.merge"} {
+		if !slices.Contains(scopes, op) {
+			t.Fatalf("no coverage scope of %s: %v", op, scopes)
+		}
+	}
+	for _, op := range scopes {
+		sc := m.enforcedSoonOf(t, op)
+		if sc.Record.ExpireTime == "" || sc.Record.ClosureID != mm[1] {
+			t.Fatalf("the coverage card of %s: %+v", op, sc.Record)
+		}
+		if exp, err := time.Parse(time.RFC3339Nano, sc.Record.ExpireTime); err != nil || !exp.After(time.Now()) {
+			t.Fatalf("the coverage card of %s expires %q: %v", op, sc.Record.ExpireTime, err)
+		}
+	}
 
 	// The agent asked three times, a second apart. A claim is computed
 	// within coverage.claim_timeout of the decision (1 s here, 50 ms by
@@ -609,13 +637,20 @@ func (m *m9) mergeScope(t *testing.T) (int, string) {
 // job, which runs every minute; until then any change keeps it PARTIAL.
 func (m *m9) enforcedSoon(t *testing.T) card {
 	t.Helper()
+	return m.enforcedSoonOf(t, "github.pull.merge")
+}
+
+// enforcedSoonOf waits until the card of the agent's scope of operation
+// reads ENFORCED, as enforcedSoon does for the merge.
+func (m *m9) enforcedSoonOf(t *testing.T, operation string) card {
+	t.Helper()
 	for deadline := time.Now().Add(4 * time.Minute); ; time.Sleep(5 * time.Second) {
-		c := m.coverage(t)
+		c := m.coverageOf(t, operation)
 		if c.Record.State == enforced {
 			return c
 		}
 		if time.Now().After(deadline) {
-			t.Fatalf("the coverage card never read ENFORCED: %+v\nchanges: %s", c.Record,
+			t.Fatalf("the coverage card of %s never read ENFORCED: %+v\nchanges: %s", operation, c.Record,
 				m.row(t, `SELECT string_agg(kind || ' ' || coalesce(detail, '') || ' ' || (reassessed_at IS NULL)::text, '; ' ORDER BY id)
 					FROM pc.coverage_invalidations WHERE connection_id = $1`, m.gh.conn))
 		}
