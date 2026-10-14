@@ -1464,6 +1464,39 @@ type PcReconciliationTask struct {
 	ResolvedAt        *time.Time
 }
 
+type PcRedteamResult struct {
+	OrgID          ids.OrgID
+	RangeID        ids.UUID
+	ScenarioID     string
+	ScenarioDigest string
+	Title          string
+	Suite          string
+	Category       string
+	Tier           string
+	Verdict        string
+	ClaimedVerdict *string
+	Steps          []byte
+	ObservedBy     string
+	Mismatches     int32
+	RecordedAt     time.Time
+}
+
+type PcRedteamRun struct {
+	OrgID             ids.OrgID
+	ID                ids.UUID
+	RangeAgentID      ids.UUID
+	StartedBy         string
+	RunnerVersion     string
+	ScenarioSetDigest string
+	Scenarios         []byte
+	PolicyVersions    []byte
+	PackageVersions   []byte
+	BaselineRangeID   *ids.UUID
+	State             string
+	StartedAt         time.Time
+	FinishedAt        *time.Time
+}
+
 type PcReservation struct {
 	OrgID         ids.OrgID
 	ID            ids.UUID
