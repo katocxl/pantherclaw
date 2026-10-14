@@ -54,6 +54,9 @@ func TestHR224_RangePacksVerifyOffline(t *testing.T) {
 	// The agent of this world is a range agent for this test.
 	admin := w.db.Pool(t, w.db.Migrator)
 	exec(t, admin, w.org, "UPDATE pc.agents SET range_agent = true WHERE org_id = $1 AND id = $2", w.org, w.agent)
+	// Its connection is simulated too: a simulated run on a real connection is
+	// denied SIMULATION_MISMATCH (HR-220).
+	exec(t, admin, w.org, "UPDATE pc.connections SET simulated = true WHERE org_id = $1 AND id = $2", w.org, w.conn)
 
 	p := w.packs(billing.Team)
 	org := td.Scope{Type: td.ScopeOrg, ID: w.org.UUID()}
