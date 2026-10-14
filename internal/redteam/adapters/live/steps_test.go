@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"connectrpc.com/connect/v2"
 	"connectrpc.com/connect/v2/connecthttp"
@@ -78,6 +79,9 @@ func (f *fakeWorkload) StartChildRun(context.Context, *pantherclawv1.StartChildR
 
 func (f *fakeWorkload) DelegateGrant(_ context.Context, r *pantherclawv1.DelegateGrantRequest) (*pantherclawv1.DelegateGrantResponse, error) {
 	f.delegated = r
+	if string(r.GetBounds()) == `{}` && r.GetExpireTime().AsTime().Before(time.Now().Add(10*time.Minute)) {
+		return &pantherclawv1.DelegateGrantResponse{}, nil // the scenario's own grant, inherited exactly
+	}
 	return nil, connect.NewError(connect.CodePermissionDenied, "OUTSIDE_ALLOWED_AUTHORITY: wider than the parent")
 }
 

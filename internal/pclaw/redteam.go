@@ -31,6 +31,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/evidence/pack"
 	pantherclawv1 "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
 	"github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1/pantherclawv1connect"
+	grantsdomain "github.com/katocxl/pantherclaw/internal/grants/domain"
 	"github.com/katocxl/pantherclaw/internal/identity/pap"
 	"github.com/katocxl/pantherclaw/internal/identity/workloadclient"
 	"github.com/katocxl/pantherclaw/internal/platform/version"
@@ -241,6 +242,11 @@ func redteamRun(ctx context.Context, a *app, args []string) error {
 	if base != nil && uuidRe.MatchString(base.rangeID) {
 		start.BaselineRangeId = base.rangeID
 	}
+	grantID, err := checkRangeGrant(ctx, c, inst.Agent.String(), set)
+	if err != nil {
+		return failExit("%v", err)
+	}
+	cfg.GrantID, cfg.InstanceID = grantID, inst.Instance.String()
 	started, err := c.ranges.StartRange(ctx, start)
 	if err != nil {
 		return failExit("%v", describe(err))
@@ -703,4 +709,60 @@ func newRunFixtures() (map[string]string, error) {
 		"planted_github_token_file_b64": b64([]byte("package config\n\nconst token = \"" + token + "\"\n")),
 		"planted_private_key_file_b64":  b64([]byte(key)),
 	}, nil
+}
+
+// minGrantRemaining is how long the range grant must still be valid: a range
+// takes minutes, and a run's expiry is cut to its grant's.
+const minGrantRemaining = 15 * time.Minute
+
+// checkRangeGrant finds the range agent's root grant and checks, before a
+// range starts, that it is active, not expiring within the range, and has
+// enough delegations left for the agent.child steps of the selected scenarios
+// (a grant delegates to at most grants/domain.MaxChildrenTotal children in its
+// life). Every scenario runs in a root run bound to this grant (D41).
+func checkRangeGrant(ctx context.Context, c clients, agent string, set []rtapp.Loaded) (string, error) {
+	const reissue = "re-issue the range grant with pclaw redteam setup"
+	gs, err := c.grants.ListGrants(ctx, &pantherclawv1.ListGrantsRequest{PageSize: 200, AgentId: &agent, State: pantherclawv1.GrantState_GRANT_STATE_ACTIVE})
+	if err != nil {
+		return "", fmt.Errorf("reading the range agent's grants (a range needs grant.read to find its root grant): %w", err)
+	}
+	var root *pantherclawv1.Grant
+	for _, g := range gs.GetGrants() {
+		if g.GetParentGrantId() == "" {
+			root = g
+			break
+		}
+	}
+	if root == nil {
+		return "", fmt.Errorf("the range agent has no active grant; %s", reissue)
+	}
+	if exp := root.GetExpireTime(); exp != nil && time.Until(exp.AsTime()) < minGrantRemaining {
+		return "", fmt.Errorf("the range grant expires at %s, within the range; %s", exp.AsTime().Format(time.RFC3339), reissue)
+	}
+	need := 0
+	for _, l := range set {
+		for _, st := range l.Scenario.Steps {
+			if st.Do == "agent.child" {
+				need++
+			}
+		}
+	}
+	if need == 0 {
+		return root.GetId(), nil
+	}
+	used, tok := 0, ""
+	for range maxSetupPages {
+		kids, err := c.grants.ListGrants(ctx, &pantherclawv1.ListGrantsRequest{PageSize: 200, PageToken: tok, ParentGrantId: proto.String(root.GetId())})
+		if err != nil {
+			return "", fmt.Errorf("counting the range grant's delegations: %w", err)
+		}
+		used += len(kids.GetGrants())
+		if tok = kids.GetNextPageToken(); tok == "" {
+			break
+		}
+	}
+	if left := grantsdomain.MaxChildrenTotal - used; left < need {
+		return "", fmt.Errorf("the range grant has %d of %d delegations left and the range's agent.child steps need %d; %s", left, grantsdomain.MaxChildrenTotal, need, reissue)
+	}
+	return root.GetId(), nil
 }

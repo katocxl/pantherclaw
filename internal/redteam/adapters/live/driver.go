@@ -101,7 +101,10 @@ type Config struct {
 	// AllowParentRun lets Setup run scenarios in the parent run when there is no
 	// Workload or AgentID. For tests only: a real range always has them.
 	AllowParentRun bool
-	AgentID        string
+	// InstanceID and GrantID are the range instance and the range root grant a
+	// scenario's run is started for and bound to.
+	InstanceID, GrantID string
+	AgentID             string
 	// Key and Token are the instance's workload key and token (agent.steal);
 	// Transport sends the stolen-credential and direct requests (nil: the
 	// default transport).
@@ -153,19 +156,24 @@ func (d *Driver) Capabilities() map[app.Capability]bool {
 // scenario timeout, and short because the run is ended at Teardown anyway.
 const ScenarioRunMinutes = 5
 
-// Setup implements app.Driver. With a WorkloadService it starts the scenario
-// in its own child run of the range instance's run (D40): holds are capped per
-// run (HR-037), so a whole range on one run would hit the cap.
+// Setup implements app.Driver. It starts the scenario in a run of its own
+// (D41): RunService.StartRun for the range instance, bound to the range root
+// grant. Holds are capped per run (HR-037), so a whole range on one run would
+// hit the cap; and a root run needs no delegation, which is capped per grant.
 func (d *Driver) Setup(ctx context.Context, s domain.Scenario) (app.Fixture, error) {
 	d.mu.Lock()
 	d.txns, d.actions, d.dispatches = map[string]string{}, map[string]string{}, map[string]*sdkDispatch{}
 	d.scenarioRun = ""
 	d.mu.Unlock()
 	switch {
-	case d.cfg.Workload != nil && d.cfg.AgentID != "":
-		res, err := d.cfg.Workload.StartChildRun(ctx, &pantherclawv1.StartChildRunRequest{
-			ParentRunId: d.cfg.Run, AgentId: d.cfg.AgentID, TaskRef: "range " + s.ID, TtlMinutes: ScenarioRunMinutes,
-		})
+	case d.cfg.Runs != nil && d.cfg.AgentID != "" && d.cfg.GrantID != "":
+		req := &pantherclawv1.StartRunRequest{
+			AgentId: d.cfg.AgentID, TaskRef: "range " + s.ID, TtlMinutes: ScenarioRunMinutes, GrantId: &d.cfg.GrantID,
+		}
+		if d.cfg.InstanceID != "" {
+			req.InstanceId = &d.cfg.InstanceID
+		}
+		res, err := d.cfg.Runs.StartRun(ctx, req)
 		if err != nil {
 			return nil, fmt.Errorf("starting the scenario's run: %w", err)
 		}
@@ -173,9 +181,9 @@ func (d *Driver) Setup(ctx context.Context, s domain.Scenario) (app.Fixture, err
 		d.scenarioRun = res.GetRun().GetId()
 		d.mu.Unlock()
 	case !d.cfg.AllowParentRun:
-		// No silent fallback to the parent run: it would pool every scenario's
-		// holds under one run's cap (HR-037).
-		return nil, errors.New("the live driver needs the range instance's WorkloadService and agent to start a run for the scenario")
+		// No silent fallback to the range instance's run: it would pool every
+		// scenario's holds under one run's cap (HR-037).
+		return nil, errors.New("the live driver needs RunService, the range agent, its instance and its root grant to start a run for the scenario")
 	}
 	return d.cfg.Fixture, nil
 }
