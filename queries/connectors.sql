@@ -1,0 +1,56 @@
+-- SPDX-License-Identifier: BUSL-1.1
+-- Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+--
+-- Connector specs (G0 M9 track C, 00093): every version of a connector
+-- connection's spec, keyed by the connection revision it was set at.
+
+-- name: InsertConnectorSpec :one
+INSERT INTO pc.connector_specs (org_id, connection_id, revision, image, command, environment, credential_placeholders,
+                                egress_connection_id, memory_mib, milli_cpus, pids, created_by)
+VALUES (sqlc.arg(org_id), sqlc.arg(connection_id), sqlc.arg(revision), sqlc.arg(image), sqlc.arg(command)::text[],
+        sqlc.arg(environment), sqlc.arg(credential_placeholders)::text[], sqlc.narg(egress_connection_id),
+        sqlc.arg(memory_mib), sqlc.arg(milli_cpus), sqlc.arg(pids), sqlc.arg(created_by))
+RETURNING *;
+
+-- The connection's current spec: the latest.
+-- name: CurrentConnectorSpec :one
+SELECT * FROM pc.connector_specs
+WHERE org_id = sqlc.arg(org_id) AND connection_id = sqlc.arg(connection_id)
+ORDER BY revision DESC
+LIMIT 1;
+
+-- The current spec of each connector a gateway serves.
+-- name: GatewayConnectorSpecs :many
+SELECT DISTINCT ON (s.connection_id) s.* FROM pc.connector_specs s
+JOIN pc.connections c ON c.org_id = s.org_id AND c.id = s.connection_id
+WHERE s.org_id = sqlc.arg(org_id) AND c.gateway_id = sqlc.arg(gateway_id) AND c.state <> 'RETIRED'
+ORDER BY s.connection_id, s.revision DESC;
+
+-- A connector's run as its gateway reports it (00094): inserted on its
+-- first report, then only its state and error class change, and only for
+-- the same gateway and connection, spec revision and container.
+-- name: ReportConnectorInstance :one
+INSERT INTO pc.connector_instances (org_id, id, connection_id, spec_revision, gateway_id, container_name, state, engine_version,
+                                    api_version, runtime, last_error_class)
+VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(connection_id), sqlc.arg(spec_revision), sqlc.arg(gateway_id),
+        sqlc.arg(container_name), sqlc.arg(state), sqlc.arg(engine_version), sqlc.arg(api_version), sqlc.arg(runtime),
+        sqlc.narg(last_error_class))
+ON CONFLICT (org_id, id) DO UPDATE SET state = EXCLUDED.state, last_error_class = EXCLUDED.last_error_class
+WHERE pc.connector_instances.gateway_id = EXCLUDED.gateway_id AND pc.connector_instances.connection_id = EXCLUDED.connection_id
+  AND pc.connector_instances.spec_revision = EXCLUDED.spec_revision AND pc.connector_instances.container_name = EXCLUDED.container_name
+RETURNING *;
+
+-- A connection runs one connector container at a time: when a new run
+-- starts, the earlier runs still open (left by a gateway that crashed or
+-- restarted, or by a stop it never reported) are closed as superseded.
+-- name: SupersedeConnectorInstances :execrows
+UPDATE pc.connector_instances SET state = 'STOPPED', last_error_class = 'superseded'
+WHERE org_id = sqlc.arg(org_id) AND connection_id = sqlc.arg(connection_id) AND id < sqlc.arg(id)
+  AND state IN ('STARTING', 'RUNNING');
+
+-- A connection's latest connector run.
+-- name: LatestConnectorInstance :one
+SELECT * FROM pc.connector_instances
+WHERE org_id = sqlc.arg(org_id) AND connection_id = sqlc.arg(connection_id)
+ORDER BY id DESC
+LIMIT 1;

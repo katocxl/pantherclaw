@@ -90,33 +90,33 @@ func with(ps ...[]Permission) []Permission {
 var roles = []Role{
 	{
 		Name: RoleOrgAdmin, Title: "Org Admin", Scopes: orgScope,
-		Description: "Administers the organization: hierarchy, users, invitations, roles and service accounts; imports tool packages and registers the org's package-signing keys. Sets the Agent Waitlist's escalation chains and settings. Reads evidence. Cannot approve actions or see approval requests, restore suspended agents, publish policies, activate packages, issue grants, change guardrails, manage gateways and connections, engage the kill switch, resolve unknown outcomes, export evidence packs, set retention or capture, or read restricted evidence.",
+		Description: "Administers the organization: hierarchy, users, invitations, roles and service accounts; imports tool packages and registers the org's package-signing keys. Sets the Agent Waitlist's escalation chains and settings. Reads evidence and coverage. Cannot approve actions or see approval requests, restore suspended agents, publish policies, activate packages, issue grants, change guardrails, manage gateways and connections, engage the kill switch, resolve unknown outcomes, export evidence packs, exclude routes from coverage, set retention or capture, or read restricted evidence.",
 		Permissions: with(basicReads, []Permission{
 			PermOrgUpdate, PermBusinessUnitManage, PermTeamManage, PermTeamMembersManage, PermEnvironmentManage,
 			PermUserRead, PermUserManage, PermInvitationRead, PermInvitationManage, PermRoleRead, PermRoleBind,
 			PermServiceAccountRead, PermServiceAccountManage, PermAuditRead, PermAgentRead, PermRunRead,
 			PermWaitlistRead, PermWaitlistManage, PermIssuerRead, PermIssuerManage, PermFactRead, PermPackageImport,
-			PermPackageKeyManage, PermNotificationRead, PermNotificationManage, PermEvidenceRead,
+			PermPackageKeyManage, PermNotificationRead, PermNotificationManage, PermEvidenceRead, PermCoverageRead,
 			PermGitHubIdentityManage, PermGitHubIdentityProve, PermGitHubScanRun,
 		}, authorityReads, boundaryReads),
 	},
 	{
 		Name: RoleSecurityAdmin, Title: "Security Admin", Scopes: orgScope,
-		Description: "Watches and contains: reads users, roles, audit and approval requests, disables compromised users and service accounts, revokes grants, responds to incidents, sets the Agent Waitlist's escalation chains and settings, restores suspended agents with a security key, resolves unknown outcomes, exports evidence packs and sets the change windows (human only).",
+		Description: "Watches and contains: reads users, roles, audit and approval requests, disables compromised users and service accounts, revokes grants, responds to incidents, sets the Agent Waitlist's escalation chains and settings, restores suspended agents with a security key, resolves unknown outcomes, exports evidence packs, sets the change windows (human only), excludes routes from coverage and acknowledges its findings (human only), and reassesses coverage.",
 		Permissions: with(basicReads, []Permission{
 			PermUserRead, PermUserManage, PermRoleRead, PermInvitationRead, PermServiceAccountRead,
 			PermServiceAccountManage, PermAuditRead, PermAgentRead, PermIncidentRespond, PermRunRead, PermRunManage,
 			PermWaitlistRead, PermWaitlistManage, PermApprovalRead, PermAgentRestore, PermIssuerRead, PermGrantRevoke,
 			PermFactRead, PermNotificationRead, PermNotificationManage, PermEvidenceRead, PermTransactionReconcile,
-			PermEvidenceExport, PermReleaseWindowManage, PermGitHubScanRun,
+			PermEvidenceExport, PermReleaseWindowManage, PermGitHubScanRun, PermCoverageRead, PermCoverageManage, PermCoverageReassess,
 		}, authorityReads, boundaryReads),
 	},
 	{
 		Name: RoleAgentOwner, Title: "Agent Owner", Scopes: anyScope,
-		Description: "Owns agents in scope and is accountable for them; sees their approval requests and can revoke their grants but not issue them.",
+		Description: "Owns agents in scope and is accountable for them; sees their approval requests and can revoke their grants but not issue them; reads and reassesses their coverage, and runs them in the containment sandbox.",
 		Permissions: with(basicReads, []Permission{
 			PermAgentRead, PermAgentManage, PermRunRead, PermRunStart, PermRunManage, PermWaitlistRead, PermAgentEnroll,
-			PermGrantRevoke, PermApprovalRead, PermEvidenceRead,
+			PermGrantRevoke, PermApprovalRead, PermEvidenceRead, PermCoverageRead, PermCoverageReassess, PermSandboxRun,
 		}, authorityReads),
 	},
 	{
@@ -142,7 +142,7 @@ var roles = []Role{
 		Description: "Investigates and contains incidents in scope, and restores suspended agents with a security key (human only).",
 		Permissions: with(basicReads, []Permission{
 			PermAgentRead, PermIncidentRespond, PermRunRead, PermRunManage, PermGrantRead, PermGrantRevoke,
-			PermConnectionRead, PermContainmentRead, PermWaitlistRead, PermAgentRestore, PermEvidenceRead,
+			PermConnectionRead, PermContainmentRead, PermWaitlistRead, PermAgentRestore, PermEvidenceRead, PermCoverageRead,
 		}),
 	},
 	{
@@ -151,14 +151,15 @@ var roles = []Role{
 		Permissions: with(basicReads, []Permission{
 			PermUserRead, PermRoleRead, PermInvitationRead, PermServiceAccountRead, PermAuditRead,
 			PermAgentRead, PermEvidenceReadRestricted, PermRunRead, PermWaitlistRead, PermIssuerRead, PermFactRead,
-			PermNotificationRead, PermApprovalRead, PermEvidenceRead, PermEvidenceExport,
+			PermNotificationRead, PermApprovalRead, PermEvidenceRead, PermEvidenceExport, PermCoverageRead,
 		}, authorityReads, boundaryReads),
 	},
 	{
 		Name: RoleDeveloper, Title: "Developer", Scopes: anyScope,
-		Description: "Builds agents in scope.",
+		Description: "Builds agents in scope and runs them in the containment sandbox.",
 		Permissions: with(basicReads, []Permission{
-			PermAgentRead, PermRunRead, PermRunStart, PermConnectionRead, PermEvidenceRead, PermGitHubIdentityProve,
+			PermAgentRead, PermRunRead, PermRunStart, PermConnectionRead, PermEvidenceRead, PermGitHubIdentityProve, PermCoverageRead,
+			PermSandboxRun,
 		}, authorityReads),
 	},
 	{
@@ -219,7 +220,7 @@ var roles = []Role{
 	},
 	{
 		Name: RoleCodeReviewer, Title: "Code Reviewer", Scopes: teamScope,
-		Description: "Reviews the changes agents want to merge and approves or declines them with a security key (human only). A requirement that names the role and is independent excludes the change's author and every author, committer and pusher of its commits.",
+		Description: "Reviews the changes agents want to merge and approves or declines them with a security key (human only). Every approval of an action whose definition names the people it must be independent of excludes the change's author and every author, committer and pusher of its commits, whatever role it asks for.",
 		Permissions: with(basicReads, []Permission{PermApprovalRespond, PermApprovalRead, PermWaitlistRead, PermGitHubIdentityProve}),
 	},
 	{

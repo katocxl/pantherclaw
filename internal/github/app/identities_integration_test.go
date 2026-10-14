@@ -21,6 +21,7 @@ import (
 )
 
 type env struct {
+	d    *dbtest.DB
 	pool *db.Pool
 	org  ids.OrgID
 	svc  *app.Service
@@ -28,7 +29,8 @@ type env struct {
 
 func newEnv(t *testing.T) *env {
 	t.Helper()
-	e := &env{pool: dbtest.New(t).AppPool(t), org: ids.New[ids.Org]()}
+	d := dbtest.New(t)
+	e := &env{d: d, pool: d.AppPool(t), org: ids.New[ids.Org]()}
 	e.svc = &app.Service{Pool: e.pool}
 	e.exec(t, "INSERT INTO pc.orgs (id, name) VALUES ($1, 'github')", e.org)
 	return e
@@ -53,6 +55,15 @@ func (e *env) count(t *testing.T, sql string, args ...any) int {
 		t.Fatal(err)
 	}
 	return n
+}
+
+func (e *env) queryRow(t *testing.T, sql string, args []any, dest ...any) {
+	t.Helper()
+	if err := e.pool.InTenantTx(context.Background(), e.org, func(ctx context.Context, tx db.TenantTx) error {
+		return tx.QueryRow(ctx, sql, args...).Scan(dest...)
+	}); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func (e *env) person(t *testing.T, subject string) ids.UUID {

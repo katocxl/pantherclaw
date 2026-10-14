@@ -100,7 +100,9 @@ func (e *Engine) sendMCP(ctx context.Context, r Result, conn *control.Connection
 		}
 		return nil
 	}
-	declared, refusal, err := e.pinnedParams(ctx, conn, ce, tool, secret)
+	callCtx, cancel := callWindow(ctx, conn)
+	defer cancel()
+	declared, refusal, err := e.pinnedParams(callCtx, conn, ce, tool, secret)
 	switch {
 	case err != nil:
 		// The server could not be listed: the call was never sent.
@@ -117,7 +119,16 @@ func (e *Engine) sendMCP(ctx context.Context, r Result, conn *control.Connection
 		return e.record(ctx, r, want, pb.Outcome_OUTCOME_FAILED, 0, nil, 0, EnforcementFailed, CodeRequest, t)
 	}
 	start := time.Now()
-	res, err := ce.mcp.Call(ctx, tool, args, declared, decorate)
+	land, access, err := e.fly(callCtx, conn, a, want)
+	if err != nil {
+		// The connector took no call: nothing was sent.
+		outcome, class, code := classifyMCP(upstream.Result{}, fmt.Errorf("%w: %w", upstream.ErrNotSent, err))
+		e.log.WarnContext(ctx, "gateway.target_error", slog.String("transaction_id", want.Txn), slog.String("outcome", outcome.String()),
+			pclog.Err(err))
+		return e.record(ctx, r, want, outcome, 0, nil, 0, class, code, t)
+	}
+	res, err := ce.mcp.Call(callCtx, tool, args, declared, decorate)
+	land()
 	elapsed := time.Since(start)
 	t.lap("target")
 	outcome, class, code := classifyMCP(res, err)
@@ -143,7 +154,11 @@ func (e *Engine) sendMCP(ctx context.Context, r Result, conn *control.Connection
 		}
 		r.ToolResult = res.Error == nil && !res.InputRequired
 	}
-	return e.record(ctx, r, want, outcome, res.Status, digest, elapsed, class, code, t)
+	return e.record(ctx, r, want, outcome, res.Status, digest, elapsed, class, code, t, func(req *pb.RecordExecutionRequest) {
+		// A connector's write went out with a credential placed here: what it
+		// was given is on the call's receipt, as on a dispatch (ADR-0021).
+		req.CredentialAccess = access()
+	})
 }
 
 // Drift is an upstream tool that no longer matches the definition the

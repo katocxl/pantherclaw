@@ -88,7 +88,7 @@ Enforced by golangci-lint `depguard` + an architecture test:
 - `app` never imports `adapters`; adapters implement ports declared in `app`.
 - `internal/gateway/...` never imports any server DB package; it talks to the server only through generated Connect clients.
 - `encoding/json` (v1) is banned in core packages: use `encoding/json/v2` + `encoding/json/jsontext`.
-- `math/rand`, `crypto/md5`, `crypto/sha1`, `crypto/des`, `crypto/rc4`, `unsafe`, `os/exec` (outside `internal/gateway/runtime` and `cmd/pclaw`), `fmt.Print*` and `log` (std) are forbidden (`forbidigo`).
+- `math/rand`, `crypto/md5`, `crypto/sha1`, `crypto/des`, `crypto/rc4`, `unsafe`, `os/exec` (outside `internal/gateway/runtime`, `internal/sandbox/docker` (the Docker CLI with fixed arguments, G0 M9 decision 8) and `cmd/pclaw`), `fmt.Print*` and `log` (std) are forbidden (`forbidigo`).
 - Time comes from `platform/clock` (injectable); security deadlines use the **database clock** (`now()`) inside transactions.
 
 ## 5. Contracts

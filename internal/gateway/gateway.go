@@ -12,9 +12,11 @@ import (
 	"time"
 
 	"golang.org/x/sync/errgroup"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/katocxl/pantherclaw/internal/approvals/proof"
 	"github.com/katocxl/pantherclaw/internal/gateway/broker"
+	"github.com/katocxl/pantherclaw/internal/gateway/connectors"
 	"github.com/katocxl/pantherclaw/internal/gateway/control"
 	"github.com/katocxl/pantherclaw/internal/gateway/dispatch"
 	"github.com/katocxl/pantherclaw/internal/gateway/hook"
@@ -24,6 +26,7 @@ import (
 	pb "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
 	"github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1/pantherclawv1connect"
 	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
+	"github.com/katocxl/pantherclaw/internal/sandbox/docker"
 )
 
 // PAP/1 request headers, for clients of the gateway (dispatch).
@@ -115,10 +118,16 @@ type Deps struct {
 	// Verifications claims and reports verification tasks (G0 M7); nil
 	// makes no verification reads.
 	Verifications Verifications
+	// Connectors runs the connector connections; nil when they are not
+	// enabled.
+	Connectors *connectors.Supervisor
 	// ReportFacts reports what the gateway reads from GitHub before a
 	// decision, as the connection's fact provider (G0 M8 decision 5); nil
 	// reads nothing.
 	ReportFacts dispatch.FactReporter
+	// ReportRevocation tells the server a token minted for a read or a scan
+	// could not be revoked (ADR-0021 item 6); nil only logs it.
+	ReportRevocation dispatch.RevocationReporter
 	// SubmitScan sends an organization scan's findings to the server (G0 M8,
 	// HR-209); nil submits none.
 	SubmitScan ScanSubmitter
@@ -165,6 +174,16 @@ func New(ctx context.Context, cfg *Config, id *control.Identity, log *slog.Logge
 			return err
 		},
 		SubmitScan: controlScans{ctl}.submit,
+		ReportRevocation: func(ctx context.Context, conn, purpose string, a broker.Access) error {
+			req := &pb.ReportRevocationFailureRequest{
+				ConnectionId: conn, Purpose: purpose, InstallationId: a.Installation, Repository: a.Repository,
+			}
+			if !a.Expires.IsZero() {
+				req.ExpireTime = timestamppb.New(a.Expires)
+			}
+			_, err := ctl.Gateway.ReportRevocationFailure(ctx, req)
+			return err
+		},
 	}
 	if cfg.Broker.KeyFile != "" {
 		key, err := broker.Load(ctx, cfg.Broker.KeyFile, cfg.Broker.KEKFiles)
@@ -176,6 +195,17 @@ func New(ctx context.Context, cfg *Config, id *control.Identity, log *slog.Logge
 			return res.GetBrokerKey().GetId(), err
 		}, log)
 		d.Run = append(d.Run, d.Broker.Run)
+	}
+	if cfg.Connectors.Enabled {
+		sup, err := connectors.New(ctx, docker.New(docker.CLI{}), cfg.Connectors, store, log)
+		if err != nil {
+			return nil, err
+		}
+		d.Connectors = sup.WithReporter(func(ctx context.Context, r *pb.ReportConnectorStateRequest) error {
+			_, err := ctl.Gateway.ReportConnectorState(ctx, r)
+			return err
+		})
+		d.Run = append(d.Run, sup.Run)
 	}
 	return newGateway(cfg, d, log)
 }
@@ -192,7 +222,10 @@ func newGateway(cfg *Config, d Deps, log *slog.Logger) (*Gateway, error) {
 		Org: d.Org, GatewayID: d.GatewayID, Authority: d.Authority, JWKSURL: d.JWKSURL, JWKSClient: d.JWKSClient,
 		Containment: d.Containment, AllowedPrefixes: prefixes, ReportCircuit: d.ReportCircuit, Log: log,
 		Approvers:   proof.NewPinned(cfg.Approvals.ApproverKeysFile, d.Org),
-		ReportFacts: d.ReportFacts, FactTimeout: cfg.GitHub.FactTimeout.D(),
+		ReportFacts: d.ReportFacts, FactTimeout: cfg.GitHub.FactTimeout.D(), ReportRevocation: d.ReportRevocation,
+	}
+	if d.Connectors != nil {
+		o.Connectors = d.Connectors
 	}
 	if d.Broker != nil {
 		o.Broker = d.Broker
@@ -204,6 +237,9 @@ func newGateway(cfg *Config, d Deps, log *slog.Logger) (*Gateway, error) {
 	engine, err := dispatch.New(o)
 	if err != nil {
 		return nil, err
+	}
+	if d.Connectors != nil {
+		d.Connectors.WithEgress(engine)
 	}
 	if log == nil {
 		log = pclog.Discard()

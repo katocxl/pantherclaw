@@ -24,6 +24,9 @@ type Configuration struct {
 	// Captures are the active capture profiles covering those connections
 	// (G0 M7 design decision 10).
 	Captures []dbq.GatewayCaptureProfilesRow
+	// Connectors are the current specs of its connector connections (G0
+	// M9 track C); none for a PantherClaw-hosted gateway (HR-084).
+	Connectors []dbq.PcConnectorSpec
 }
 
 // Configuration returns the calling gateway's configuration: its
@@ -45,8 +48,15 @@ func (s *Service) Configuration(ctx context.Context, id Identity, known int64) (
 			out.Unchanged = true
 			return nil
 		}
-		if out.Connections, err = q.GatewayConnections(ctx, id.Org, id.Gateway); err != nil {
+		conns, err := q.GatewayConnections(ctx, id.Org, id.Gateway)
+		if err != nil {
 			return err
+		}
+		out.Connections = s.withoutConnectors(id.Gateway, conns)
+		if !s.hosted[id.Gateway] {
+			if out.Connectors, err = q.GatewayConnectorSpecs(ctx, id.Org, id.Gateway); err != nil {
+				return err
+			}
 		}
 		if out.Routes, err = q.GatewayConnectionRoutes(ctx, id.Org, id.Gateway); err != nil {
 			return err

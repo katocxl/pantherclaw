@@ -70,3 +70,16 @@ LIMIT 1;
 -- name: SetEffectRequired :exec
 UPDATE pc.transactions SET effect_level_required = sqlc.arg(level)
 WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id);
+
+-- name: LateReportSeen :one
+-- Whether the gateway reported the transaction after the sweeper already:
+-- a repeated report records nothing twice.
+SELECT EXISTS (
+    SELECT 1 FROM pc.observations
+    WHERE org_id = sqlc.arg(org_id) AND transaction_id = sqlc.arg(transaction_id) AND source = 'late_report'
+);
+
+-- name: LockLateReports :exec
+-- Serializes a transaction's late reports, so only the first sees no late
+-- observation and audits a token left valid (#353 review).
+SELECT pg_advisory_xact_lock(hashtextextended('pc.late_report:' || sqlc.arg(transaction_id)::text, 0));

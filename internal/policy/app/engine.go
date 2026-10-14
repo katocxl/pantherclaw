@@ -120,7 +120,8 @@ func (c *Compiled) forDefinition(d *defs.Definition) map[string]compiledRule {
 		schema := ActionSchema(d)
 		maps.Copy(schema, FactsSchema(needs, c.facts))
 		maps.Copy(schema, ConsequenceSchema)
-		env, err := celenv.New(c.limits, schema, ActionVariable, FactsVariable, NowVariable, ConsequenceVariable)
+		maps.Copy(schema, RunSchema)
+		env, err := celenv.New(c.limits, schema, ActionVariable, FactsVariable, NowVariable, ConsequenceVariable, RunVariable)
 		if err != nil {
 			rules[r.ID] = compiledRule{err: err}
 			continue
@@ -152,6 +153,7 @@ func (c *Compiled) Evaluate(ctx context.Context, d *defs.Definition, a actionir.
 	}
 	action := ActionRecord(d, a, vals, in.DestinationClass)
 	consequence := ConsequenceRecord(in.Consequence)
+	run := RunRecord(in.Run)
 	now := in.Now.Unix()
 	compiled := c.forDefinition(d)
 	rules := make([]*domain.Rule, 0, len(c.Bundle.Rules))
@@ -187,7 +189,7 @@ func (c *Compiled) Evaluate(ctx context.Context, d *defs.Definition, a actionir.
 		case missingFact(cr.needs, in.Facts) != "":
 			res.Effect, res.Detail = domain.FactsMissing, "fact "+missingFact(cr.needs, in.Facts)+" is missing or stale"
 		default:
-			vars := map[string]any{"action": action, "facts": FactsRecord(cr.needs, in.Facts), "now": now, "consequence": consequence}
+			vars := map[string]any{"action": action, "facts": FactsRecord(cr.needs, in.Facts), "now": now, "consequence": consequence, "run": run}
 			matched, cost, err := cr.prog.EvalBool(ctx, vars)
 			spent += cost
 			switch {
@@ -330,6 +332,9 @@ type Input struct {
 	// Consequence is the consequence being decided, when the action is one
 	// (G0 M8, HR-206); nil for the action itself.
 	Consequence *Consequence
+	// Run is the action's run from the server's own record (`run`); nil
+	// without one. It is never taken from the request.
+	Run *Run
 }
 
 func missingFact(needs []string, have map[string]fdomain.Value) string {

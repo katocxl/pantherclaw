@@ -177,3 +177,17 @@ func FuzzFactValue(f *testing.F) {
 		}
 	})
 }
+
+// TestAnUnreadFactIsMissing (the coordinator's decision Q11): an object
+// fact its provider reported unread counts as missing, with why, however
+// fresh, so no requirement is met by it.
+func TestAnUnreadFactIsMissing(t *testing.T) {
+	now := time.Now()
+	recorded := map[string]Fact{"github.pull.head": {
+		Name: "github.pull.head", ObservedAt: now, Value: Value{Type: TypeObject, Object: map[string]any{UnreadMember: "no read token"}},
+	}}
+	got := Evaluate([]Requirement{{Name: "github.pull.head", MaxAge: time.Minute, Source: "definition"}}, recorded, now)
+	if len(got) != 1 || got[0].Status != Missing || got[0].Unread != "no read token" || got[0].Fact != nil {
+		t.Fatalf("%+v", got)
+	}
+}

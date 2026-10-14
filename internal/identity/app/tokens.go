@@ -82,6 +82,16 @@ func (s *Service) IssueToken(ctx context.Context, in TokenInput) (Issued, error)
 		if r.State != "ADMITTED" {
 			return pap.Err(pap.CodeInstanceNotAdmitted)
 		}
+		// A sandbox instance acts only inside its open session (G0 M9
+		// design decision 9): no token once the session ended or expired.
+		if r.EnrollmentTokenID != nil {
+			open, err := q.SandboxSessionOpenForToken(ctx, id.Org, *r.EnrollmentTokenID)
+			if err == nil && !open {
+				return pap.Err(pap.CodeInstanceNotAdmitted)
+			} else if err != nil && !db.IsNoRows(err) {
+				return err
+			}
+		}
 		a, err := q.GetAgent(ctx, id.Org, r.AgentID)
 		if err != nil {
 			return err

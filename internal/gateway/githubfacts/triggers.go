@@ -234,13 +234,14 @@ func pushStarts(push any, branch string) (bool, error) {
 }
 
 // pullRequestStarts evaluates a pull_request (or pull_request_target)
-// trigger. A merge closes the pull request: it starts the workflow only
-// when its types include closed and its branch filters, which name the
-// pull request's base branch, match branch. A push to branch may
-// synchronize a pull request from it: it starts the workflow when its types
-// include synchronize (the default types do); that pull request's base
-// branch is not known here, so the branch filters are not evaluated and it
-// is assumed to run.
+// trigger. A merge closes the pull request: it starts the workflow when its
+// types include closed and its branch filters, which name the pull
+// request's base branch, match branch. A push to branch, a merge's push to
+// its base branch included, may synchronize an open pull request from it (a
+// release pull request whose head is main): it starts the workflow when its
+// types include synchronize (the default types do); that pull request's
+// base branch is not known here, so the branch filters are not evaluated
+// and it is assumed to run.
 func pullRequestStarts(name string, pr any, branch string, merge bool) (bool, error) {
 	types := []string{"opened", "synchronize", "reopened"} // GitHub's default
 	var filters map[string]any
@@ -258,10 +259,10 @@ func pullRequestStarts(name string, pr any, branch string, merge bool) (bool, er
 	default:
 		return false, unknownf("%s: is not a mapping", name)
 	}
-	if !merge {
-		return slices.Contains(types, "synchronize"), nil
+	if slices.Contains(types, "synchronize") {
+		return true, nil
 	}
-	if !slices.Contains(types, "closed") {
+	if !merge || !slices.Contains(types, "closed") {
 		return false, nil
 	}
 	return branchFilter(filters, branch)

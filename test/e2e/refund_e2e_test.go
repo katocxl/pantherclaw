@@ -122,6 +122,9 @@ type options struct {
 	// githubAt, with github, is the GitHub to call instead of the
 	// simulator (task test:github-live).
 	githubAt *githubSim
+	// claimTimeout is the server's coverage.claim_timeout; zero is its
+	// default (G0 M9).
+	claimTimeout time.Duration
 }
 
 func freeAddr(t *testing.T) string {
@@ -178,6 +181,9 @@ func start(t *testing.T, o options) *stack {
 	}
 	// The gateway reaches the Authority only over mTLS (HR-181).
 	cfg["gateway_api"] = map[string]any{"addr": gwAPIAddr, "hostnames": []string{"127.0.0.1"}, "url": "https://" + gwAPIAddr}
+	if o.claimTimeout > 0 {
+		cfg["coverage"] = map[string]any{"claim_timeout": o.claimTimeout.String()}
+	}
 	write := func(name string) string {
 		b, err := json.Marshal(cfg)
 		if err != nil {

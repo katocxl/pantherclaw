@@ -87,10 +87,10 @@ func NewAdmin(s *gwapp.Service) *AdminHandler { return &AdminHandler{s: s} }
 
 var _ pantherclawv1connect.GatewayAdminServiceHandler = (*AdminHandler)(nil)
 
-func gatewayOf(g dbq.PcGateway) *pantherclawv1.Gateway {
+func gatewayOf(g dbq.PcGateway, pantherclawHosted bool) *pantherclawv1.Gateway {
 	out := &pantherclawv1.Gateway{
 		Id: g.ID.String(), Name: g.Name, ConfigVersion: g.ConfigVersion, CreatedBy: g.CreatedBy, CreateTime: timestamppb.New(g.CreatedAt),
-		State: pantherclawv1.GatewayState_GATEWAY_STATE_ACTIVE,
+		State: pantherclawv1.GatewayState_GATEWAY_STATE_ACTIVE, Hosting: hosting(pantherclawHosted),
 	}
 	if g.State == "REVOKED" {
 		out.State = pantherclawv1.GatewayState_GATEWAY_STATE_REVOKED
@@ -138,7 +138,7 @@ func (h *AdminHandler) CreateGateway(ctx context.Context, req *pantherclawv1.Cre
 	if err != nil {
 		return nil, err
 	}
-	return &pantherclawv1.CreateGatewayResponse{Gateway: gatewayOf(g)}, nil
+	return &pantherclawv1.CreateGatewayResponse{Gateway: gatewayOf(g, h.s.PantherClawHosted(g.ID))}, nil
 }
 
 // CreateGatewayEnrollmentToken implements GatewayAdminServiceHandler.
@@ -164,7 +164,7 @@ func (h *AdminHandler) ListGateways(ctx context.Context, req *pantherclawv1.List
 	}
 	out := &pantherclawv1.ListGatewaysResponse{NextPageToken: next}
 	for _, g := range rows {
-		out.Gateways = append(out.Gateways, gatewayOf(g))
+		out.Gateways = append(out.Gateways, gatewayOf(g, h.s.PantherClawHosted(g.ID)))
 	}
 	return out, nil
 }
@@ -179,7 +179,7 @@ func (h *AdminHandler) GetGateway(ctx context.Context, req *pantherclawv1.GetGat
 	if err != nil {
 		return nil, err
 	}
-	out := &pantherclawv1.GetGatewayResponse{Gateway: gatewayOf(d.Gateway)}
+	out := &pantherclawv1.GetGatewayResponse{Gateway: gatewayOf(d.Gateway, h.s.PantherClawHosted(d.Gateway.ID))}
 	for _, c := range d.Certificates {
 		out.Certificates = append(out.Certificates, certOf(c))
 	}
@@ -199,7 +199,7 @@ func (h *AdminHandler) RevokeGateway(ctx context.Context, req *pantherclawv1.Rev
 	if err != nil {
 		return nil, err
 	}
-	return &pantherclawv1.RevokeGatewayResponse{Gateway: gatewayOf(g)}, nil
+	return &pantherclawv1.RevokeGatewayResponse{Gateway: gatewayOf(g, h.s.PantherClawHosted(g.ID))}, nil
 }
 
 // RevokeGatewayCertificate implements GatewayAdminServiceHandler.
@@ -224,6 +224,8 @@ type GatewayHandler struct {
 	hub      *gwapp.Hub
 	circuits Circuits
 	drifts   Drifts
+	// revocations records tokens the gateway could not revoke (#261).
+	revocations Revocations
 	// verifications leases and takes verification reports (G0 M7).
 	verifications Verifications
 	facts         Facts

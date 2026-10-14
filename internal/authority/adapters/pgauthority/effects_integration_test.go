@@ -10,6 +10,7 @@ import (
 	"encoding/base64"
 	"encoding/json/v2"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -210,5 +211,63 @@ func TestHR190_AnAcceptedRefundSchedulesItsFollowUpRead(t *testing.T) {
 	}
 	if got := w.str("SELECT operation || ' ' || (request->>'mode') FROM pc.verifications WHERE transaction_id = $1", bad.TransactionID); got != "payments.refund.list lookup" {
 		t.Fatalf("verification %q", got)
+	}
+}
+
+// TestRevokeFailedIsAuditedOnce (#313 review): a token the gateway could
+// not revoke is audited once per transaction, however often the gateway
+// reports it: on time, when a repeated report finds the permit finished,
+// and late, when only the first late report records it.
+func TestRevokeFailedIsAuditedOnce(t *testing.T) {
+	w := newWorld(t)
+	ctx := context.Background()
+	w.auth.PermitTTL = time.Hour
+	w.refundable("ch_1", "ch_2", "ch_3")
+	run := w.run(w.grant("500").ID, ids.UUID{})
+	onTime, late, racing := w.dispatched(run, "ch_1", "30.00"), w.dispatched(run, "ch_2", "20.00"), w.dispatched(run, "ch_3", "10.00")
+	access := &finalize.Access{Installation: 7, Repository: "acme/payments", Revocation: "revoke_failed"}
+	events := func() int {
+		return w.count("SELECT count(*) FROM pc.ledger_entries WHERE kind = 'audit.credential.revoke_failed'")
+	}
+	report := func(permit ids.UUID) error {
+		_, err := w.auth.RecordExecution(ctx, w.gw, finalize.Execution{
+			Permit: permit, Outcome: finalize.Accepted, TargetStatus: 200, DispatchMS: -1, TargetRef: "re_1", Access: access,
+		})
+		return err
+	}
+	if err := report(onTime.PermitID); err != nil {
+		t.Fatal(err)
+	}
+	_ = report(onTime.PermitID) // a repeat is refused or ignored; either way not audited again
+	if n := events(); n != 1 {
+		t.Fatalf("on time: %d revoke_failed events", n)
+	}
+
+	w.db.AdminExec(t, "UPDATE pc.permits SET dispatching_at = now() - interval '1 minute' WHERE id = ANY($1)", []ids.UUID{late.PermitID, racing.PermitID})
+	if _, unknown, err := w.auth.Sweep(ctx, w.org, 30*time.Second); err != nil || unknown != 2 {
+		t.Fatalf("sweep: %d unknown, %v", unknown, err)
+	}
+	for range 3 {
+		if err := report(late.PermitID); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if n := events(); n != 2 {
+		t.Fatalf("after three late reports: %d revoke_failed events, want 2", n)
+	}
+	// Late reports at the same moment take turns (#353 review): one audit.
+	var wg sync.WaitGroup
+	errs := make([]error, 4)
+	for i := range errs {
+		wg.Go(func() { errs[i] = report(racing.PermitID) })
+	}
+	wg.Wait()
+	for _, err := range errs {
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	if n := events(); n != 3 {
+		t.Fatalf("after four concurrent late reports: %d revoke_failed events, want 3", n)
 	}
 }

@@ -67,14 +67,19 @@ type m6Services struct {
 
 // newM6 builds the M6 services; notify (M5 notifications) may be nil.
 func newM6(cfg *Config, pool *db.Pool, reg *keys.Registry, notify rapp.Notifier, log *slog.Logger) (*m6Services, error) {
+	hosted, err := cfg.pantherClawHosted()
+	if err != nil {
+		return nil, err
+	}
 	authority, err := ca.New(reg)
 	if err != nil {
 		return nil, err
 	}
 	return &m6Services{
-		reg: reg, ca: authority, gateways: gwapp.New(pool, authority, cfg.GatewayAPI.URL, clock.System{}), hub: gwapp.NewHub(pool, log),
+		reg: reg, ca: authority, gateways: gwapp.New(pool, authority, cfg.GatewayAPI.URL, clock.System{}).WithPantherClawHosted(hosted),
+		hub:         gwapp.NewHub(pool, log),
 		response:    rapp.New(pool, notify, cfg.Auth.PublicURL),
-		connections: capp.New(pool, notify, cfg.Auth.PublicURL, cfg.GatewayAPI.URL),
+		connections: capp.New(pool, notify, cfg.Auth.PublicURL, cfg.GatewayAPI.URL).WithPantherClawHosted(hosted),
 		credentials: credapp.New(pool, notify),
 		rpID:        cfg.webAuthnRPID(),
 	}, nil
@@ -112,7 +117,7 @@ func (m *m6Services) gatewayHandler(svc *authority.Service, log *slog.Logger) (h
 		return nil, err
 	}
 	pantherclawv1connect.RegisterAuthorityServiceHandler(rs, authority.NewHandler(svc))
-	gw := gatewaysrpc.NewGateway(m.gateways).WithHub(m.hub).WithCircuits(m.connections).WithDrifts(m.connections)
+	gw := gatewaysrpc.NewGateway(m.gateways).WithHub(m.hub).WithCircuits(m.connections).WithDrifts(m.connections).WithRevocations(m.connections)
 	if m.verifications != nil {
 		gw = gw.WithVerifications(m.verifications)
 	}

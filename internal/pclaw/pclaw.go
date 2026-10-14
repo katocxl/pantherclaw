@@ -42,6 +42,9 @@ type Options struct {
 	HTTPClient *http.Client
 	// Stdin is the process input (mcp proxy, hook); nil reads nothing.
 	Stdin io.Reader
+	// SandboxBeforeProbe is sandbox.Options.BeforeProbe for sandbox run: a
+	// test seam (the M9 exit tests); nil otherwise.
+	SandboxBeforeProbe func(ctx context.Context, container string) error
 }
 
 type app struct {
@@ -50,6 +53,7 @@ type app struct {
 	env            Env
 	http           *http.Client
 	openBrowser    func(context.Context, string) error
+	beforeProbe    func(ctx context.Context, container string) error
 }
 
 var errUsage = errors.New("usage")
@@ -83,7 +87,10 @@ func usageText() string {
 
 // Run executes pclaw and returns the exit code.
 func Run(ctx context.Context, args []string, stdout, stderr io.Writer, env Env, opts Options) int {
-	a := &app{stdin: opts.Stdin, stdout: stdout, stderr: stderr, env: env, http: opts.HTTPClient, openBrowser: opts.OpenBrowser}
+	a := &app{
+		stdin: opts.Stdin, stdout: stdout, stderr: stderr, env: env, http: opts.HTTPClient, openBrowser: opts.OpenBrowser,
+		beforeProbe: opts.SandboxBeforeProbe,
+	}
 	if a.stdin == nil {
 		a.stdin = strings.NewReader("")
 	}
@@ -146,7 +153,9 @@ func (e *exitError) Error() string { return e.msg }
 func describe(err error) string {
 	var ce *connect.Error
 	if errors.As(err, &ce) {
-		return strings.ReplaceAll(strings.ToLower(ce.Code().String()), "_", " ") + ": " + ce.Message()
+		// What the command was doing stays in front of the RPC's error.
+		context := strings.TrimSuffix(err.Error(), ce.Error())
+		return context + strings.ReplaceAll(strings.ToLower(ce.Code().String()), "_", " ") + ": " + ce.Message()
 	}
 	return err.Error()
 }

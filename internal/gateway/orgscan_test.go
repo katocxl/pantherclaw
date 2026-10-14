@@ -39,7 +39,7 @@ func (s *scanSubmissions) submit(_ context.Context, scan string, lease []byte, f
 func orgScanLease(run string) dispatch.Lease {
 	return dispatch.Lease{
 		Purpose: "org_scan", Connection: connID, Task: "01920000-0000-7000-8000-00000000ab01", Operation: "github.org_scan",
-		Request: []byte(`{"run":"` + run + `"}`), Secret: []byte("the lease's secret"),
+		Request: []byte(`{"installation":"7","run":"` + run + `"}`), Secret: []byte("the lease's secret"),
 	}
 }
 
@@ -218,5 +218,49 @@ func TestHR209_TheScanFitsItsLeaseFromTheClaim(t *testing.T) {
 	}
 	if o := fv.reports[0]; o.Fields["/not_scanned/repositories"] == "" || o.Fields["/scanned/repositories"] != "" || o.Complete {
 		t.Fatalf("a scan past its time %+v", o)
+	}
+}
+
+// TestF048_TheScanReportsItsOwnInstallation: an org scan reads the
+// connection's own GitHub App installation with the App's JWT, minting no
+// token for it, and reports its permissions and repository selection with
+// the run. When the read fails, the report says nothing about it, so the
+// server keeps the installation unread ("not observed"), and the scan
+// still runs.
+func TestF048_TheScanReportsItsOwnInstallation(t *testing.T) {
+	w := newGitHubWorld(t)
+	h := setup(t, withGitHubApp(t, w))
+	_, o := runOrgScan(t, h, "01920000-0000-7000-8000-00000000ab07")
+	in := o.Installation
+	if in == nil || in.ID != 7 || in.RepositorySelection != "selected" || in.Permissions["contents"] != "write" ||
+		in.Permissions["metadata"] != "read" || len(in.Permissions) != 5 {
+		t.Fatalf("installation %+v", in)
+	}
+	read := slices.ContainsFunc(w.sim.Requests(), func(r github.Request) bool {
+		return r.Method == http.MethodGet && r.Path == "/app/installations/7" && r.Status == http.StatusOK
+	})
+	if !read {
+		t.Fatal("the installation was not read with the App's JWT")
+	}
+	for _, tok := range w.sim.Tokens() {
+		for p, level := range tok.Permissions {
+			if level != "read" {
+				t.Errorf("a token with %s:%s was minted", p, level)
+			}
+		}
+	}
+	// A lease scheduled for another installation (a re-seal since) carries
+	// none of it.
+	fv := &fakeVerifications{leases: []dispatch.Lease{orgScanLease("01920000-0000-7000-8000-00000000ab09")}}
+	fv.leases[0].Request = []byte(`{"installation":"8","run":"01920000-0000-7000-8000-00000000ab09"}`)
+	h.gw.verifications, h.gw.submitScan = fv, (&scanSubmissions{}).submit
+	h.gw.verifyDue(context.Background())
+	if len(fv.reports) != 1 || fv.reports[0].Installation != nil {
+		t.Fatalf("a lease for another installation: %+v", fv.reports)
+	}
+	w.sim.SetFaults(github.Faults{InstallationStatus: http.StatusInternalServerError})
+	_, o = runOrgScan(t, h, "01920000-0000-7000-8000-00000000ab08")
+	if o.Installation != nil || !o.Found {
+		t.Fatalf("after a failed read: installation %+v, found %v", o.Installation, o.Found)
 	}
 }

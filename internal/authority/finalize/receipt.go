@@ -74,6 +74,9 @@ type DecisionPAP struct {
 	// binding (G0 M5 part 2; M6 adds the assertion to the permit, HR-038).
 	Approval  *ReceiptApproval `json:"approval,omitzero"`
 	Simulated bool             `json:"simulated"`
+	// Coverage is the coverage claim of the action's scope at decision time
+	// (G0 M9, HR-217); receipts without one stay valid.
+	Coverage *CoverageClaim `json:"coverage,omitzero"`
 	// Consequences are what the action's consequence rules said (G0 M8,
 	// HR-206): predictions, apart from what the decision authorized.
 	Consequences []ReceiptConsequence `json:"consequences,omitzero"`
@@ -97,13 +100,15 @@ type ReceiptApproval struct {
 }
 
 // receipt builds, fits and signs the decision receipt of one evaluation.
-func (a *Authority) receipt(gw Gateway, ev *pipeline.Evaluation, txn ids.UUID, evaluation int, budgets []BudgetState) (Receipt, error) {
+func (a *Authority) receipt(gw Gateway, ev *pipeline.Evaluation, txn ids.UUID, evaluation int, budgets []BudgetState,
+	claim *CoverageClaim,
+) (Receipt, error) {
 	pap := DecisionPAP{
 		V: 1, Kind: "decision", Org: gw.Org.String(), Txn: txn.String(), Evaluation: evaluation,
 		Run: ev.RunID.String(), Action: ev.ActionID.String(), Act: ev.ActionHash, Decision: ev.Decision,
 		Checklist: ev.Checklist, Obligations: ev.Obligations, Approvals: ev.Approvals, StepUps: ev.StepUps,
 		Basis: ev.Basis, BasisDigest: ev.Basis.Digest(), Identity: ev.Identity, Budgets: budgets, Gateway: gw.ID,
-		Monitor: ev.MonitorPermit(),
+		Monitor: ev.MonitorPermit(), Coverage: claim,
 	}
 	if would, _, ok := ev.WouldUnknown(); ok {
 		pap.Would = would
@@ -267,6 +272,9 @@ type Access struct {
 	Requested, Granted         map[string]string
 	Expires                    time.Time
 	Revocation                 string
+	// GrantedIncomplete: Granted was cut to what a receipt holds, keeping
+	// what made the grant wider first (#353 review).
+	GrantedIncomplete bool
 }
 
 // executionReceipt signs what the gateway (or, for a dispatch that never
@@ -302,6 +310,9 @@ func (a *Authority) executionReceipt(gw Gateway, e Execution, x Executed, now ti
 		access := map[string]any{
 			"installation": a.Installation, "repository": a.Repository, "requested": a.Requested, "granted": a.Granted,
 			"revocation": a.Revocation,
+		}
+		if a.GrantedIncomplete {
+			access["granted_incomplete"] = true
 		}
 		if a.RepositoryID > 0 {
 			access["repository_id"] = a.RepositoryID

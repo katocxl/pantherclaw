@@ -375,14 +375,15 @@ func (p *Pipeline) connection(ctx context.Context, s *state, d *defs.Definition)
 var gatewayChannels = []string{string(defs.ChannelHTTP), string(defs.ChannelMCP), string(defs.ChannelHook), string(defs.ChannelSDK)}
 
 // dispatches reports whether a connection of this kind serves the
-// definition: an HTTP or MCP connection only definitions with a dispatch
-// template of its kind, a local one (the hook) any, because the agent's
-// machine executes it.
+// definition: an HTTP or MCP connection (an MCP server over HTTP, or a
+// connector's over stdio) only definitions with a dispatch template of
+// its kind, a local one (the hook) any, because the agent's machine
+// executes it.
 func dispatches(kind string, d *defs.Definition) bool {
 	switch kind {
 	case "http":
 		return d.Dispatch != nil && d.Dispatch.HTTP != nil
-	case "mcp":
+	case "mcp", "mcp_container":
 		return d.Dispatch != nil && d.Dispatch.MCP != nil
 	case "local":
 		return true
@@ -652,7 +653,11 @@ func (p *Pipeline) currentFacts(ctx context.Context, s *state) {
 		switch c.Status {
 		case fdomain.Missing:
 			ok = false
-			s.cl.add(StepFacts, adomain.CannotAuthorize, fdomain.ReasonFactMissing, c.Requirement.Name+" is not known (needed by "+c.Requirement.Source+")", "")
+			detail := c.Requirement.Name + " is not known (needed by " + c.Requirement.Source + ")"
+			if c.Unread != "" {
+				detail = c.Requirement.Name + " could not be read (needed by " + c.Requirement.Source + ")"
+			}
+			s.cl.add(StepFacts, adomain.CannotAuthorize, fdomain.ReasonFactMissing, detail, "")
 		case fdomain.Stale:
 			ok = false
 			s.cl.add(StepFacts, adomain.CannotAuthorize, fdomain.ReasonFactStale,
@@ -763,6 +768,11 @@ func (p *Pipeline) policyRules(ctx context.Context, s *state) {
 // policyInput is what the policy is evaluated with.
 func (s *state) policyInput() papp.Input {
 	in := papp.Input{Budget: s.policy.Budget, Facts: s.facts, Now: s.cont.Now}
+	if s.run != nil && s.run.AgentID == s.req.Identity.AgentID {
+		// The server's run record, found by the request's run id and checked
+		// against the agent's verified identity, never the request itself.
+		in.Run = &papp.Run{ID: s.ev.RunID.String(), AgentID: s.run.AgentID.String()}
+	}
 	if s.conn != nil {
 		// The class comes from the connection's record, never from the
 		// gateway or the agent (HR-079).

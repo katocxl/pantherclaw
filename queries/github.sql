@@ -59,12 +59,24 @@ LIMIT sqlc.arg(max_rows);
 
 -- ScanConnection is what a scan needs to know of a connection: whether it
 -- is active, its package, and the kind of its active credential.
+-- ScanConnection locks the connection, so that concurrent starts of its
+-- scan take turns and only one finds no scan open (G5 review follow-up).
 -- name: ScanConnection :one
 SELECT c.state, c.kind, c.package,
        coalesce((SELECT cr.kind FROM pc.credentials cr
                  WHERE cr.org_id = c.org_id AND cr.connection_id = c.id AND cr.state = 'ACTIVE'), '')::text AS credential_kind
 FROM pc.connections c
-WHERE c.org_id = sqlc.arg(org_id) AND c.id = sqlc.arg(id);
+WHERE c.org_id = sqlc.arg(org_id) AND c.id = sqlc.arg(id)
+FOR NO KEY UPDATE OF c;
+
+-- FailExpiredOrgScans ends the scan runs whose lease task expired, after
+-- its deadline or its last lease (G5 review follow-up).
+-- name: FailExpiredOrgScans :execrows
+UPDATE pc.github_scan_runs r
+SET state = 'FAILED', finished_at = now()
+FROM pc.verifications v
+WHERE r.org_id = sqlc.arg(org_id) AND v.org_id = r.org_id AND v.id = r.verification_id AND v.purpose = 'org_scan'
+  AND v.state = 'EXPIRED' AND r.state IN ('PENDING', 'RUNNING');
 
 -- name: OpenOrgScan :one
 SELECT EXISTS (SELECT 1 FROM pc.verifications
@@ -95,7 +107,7 @@ WHERE r.org_id = sqlc.arg(org_id) AND r.id = sqlc.arg(id);
 -- LeasedOrgScan is an org scan task under a live lease of this gateway,
 -- with its run.
 -- name: LeasedOrgScan :one
-SELECT v.id, v.connection_id, r.id AS run_id
+SELECT v.id, v.connection_id, r.id AS run_id, v.request
 FROM pc.verifications v
 JOIN pc.github_scan_runs r ON r.org_id = v.org_id AND r.verification_id = v.id
 WHERE v.org_id = sqlc.arg(org_id) AND v.id = sqlc.arg(id) AND v.purpose = 'org_scan' AND v.state = 'LEASED'
@@ -112,7 +124,7 @@ WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state IN ('PENDING', '
 -- under the lease it presents: only then may it submit the scan's
 -- findings (HR-209).
 -- name: GatewayScanRun :one
-SELECT r.id FROM pc.github_scan_runs r
+SELECT r.id, r.connection_id FROM pc.github_scan_runs r
 JOIN pc.verifications v ON v.org_id = r.org_id AND v.id = r.verification_id
 WHERE r.org_id = sqlc.arg(org_id) AND r.id = sqlc.arg(id) AND v.purpose = 'org_scan' AND v.state = 'LEASED'
   AND v.leased_by = sqlc.arg(gateway_id)::uuid AND v.lease_hash = sqlc.arg(lease_hash) AND v.lease_expires_at >= now();
@@ -125,3 +137,31 @@ WHERE d.org_id = sqlc.arg(org_id) AND d.source = 'github_scan' AND d.observed ->
   AND d.id > coalesce(sqlc.arg(after_id)::uuid, '00000000-0000-0000-0000-000000000000')
 ORDER BY d.id
 LIMIT sqlc.arg(max_rows);
+
+-- RecordInstallationPermissions records what a gateway read of the
+-- installation behind a connection during its org scan (G0 M8, F048), only
+-- while the connection still records that installation: a re-seal to
+-- another one keeps it unread.
+-- name: RecordInstallationPermissions :execrows
+UPDATE pc.connection_github
+SET permissions = sqlc.arg(permissions), repository_selection = sqlc.arg(repository_selection), read_at = now(),
+    updated_by = sqlc.arg(updated_by), updated_at = now()
+WHERE org_id = sqlc.arg(org_id) AND connection_id = sqlc.arg(connection_id) AND installation_id = sqlc.arg(installation_id);
+
+-- GitHubAppConnectionsDue are the org's active GitHub App connections with
+-- no org scan open and none started in the last day: the daily scan keeps
+-- what coverage reads of their installation fresh (F048).
+-- name: GitHubAppConnectionsDue :many
+SELECT c.id FROM pc.connections c
+WHERE c.org_id = sqlc.arg(org_id) AND c.state = 'ACTIVE' AND c.kind = 'http' AND c.package = 'pc.github'
+  AND EXISTS (SELECT 1 FROM pc.credentials cr
+              WHERE cr.org_id = c.org_id AND cr.connection_id = c.id AND cr.state = 'ACTIVE' AND cr.kind = 'github_app')
+  AND NOT EXISTS (SELECT 1 FROM pc.verifications v
+                  WHERE v.org_id = c.org_id AND v.connection_id = c.id AND v.purpose = 'org_scan' AND v.state IN ('PENDING', 'LEASED'))
+  AND NOT EXISTS (SELECT 1 FROM pc.github_scan_runs r
+                  WHERE r.org_id = c.org_id AND r.connection_id = c.id AND r.created_at > now() - interval '1 day')
+ORDER BY c.id
+LIMIT 100;
+
+-- name: ConnectionGitHubInstallation :one
+SELECT installation_id FROM pc.connection_github WHERE org_id = sqlc.arg(org_id) AND connection_id = sqlc.arg(connection_id);

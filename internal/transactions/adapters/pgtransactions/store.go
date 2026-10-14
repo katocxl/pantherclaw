@@ -297,6 +297,11 @@ func (s *Store) Expire(ctx context.Context, org ids.OrgID, sign app.Sign) (int, 
 		if _, err := q.FailExpiredConnectionTests(ctx, maxTestAttempts, org); err != nil {
 			return err
 		}
+		// An organization scan whose lease expired failed (G5 review
+		// follow-up): it never stays PENDING.
+		if _, err := q.FailExpiredOrgScans(ctx, org); err != nil {
+			return err
+		}
 		slices.SortFunc(closed, compareUUID)
 		for _, txn := range slices.Compact(closed) {
 			if err := deadline(ctx, tx, q, org, txn, sign, now); err != nil {

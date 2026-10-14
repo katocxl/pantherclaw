@@ -60,6 +60,8 @@ type Service struct {
 	clk           clock.Clock
 	gatewayAPIURL string
 	auth          authCache
+	// hosted are the PantherClaw-hosted gateways (hosting.go).
+	hosted map[ids.UUID]bool
 }
 
 // New returns the gateway use cases. gatewayAPIURL is the URL of the

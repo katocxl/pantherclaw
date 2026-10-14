@@ -6,6 +6,7 @@ package packbuild
 import (
 	"context"
 	"encoding/base64"
+	"encoding/json/jsontext"
 	"encoding/json/v2"
 	"errors"
 	"fmt"
@@ -235,6 +236,7 @@ type receiptClaims struct {
 		Approval   *struct {
 			Request string `json:"request"`
 		} `json:"approval"`
+		Coverage jsontext.Value `json:"coverage"`
 	} `json:"pap"`
 }
 
@@ -649,4 +651,21 @@ func (b *builder) redactions() {
 	if !b.r.include.Captures || b.s.Captures == nil {
 		b.m.Redactions = append(b.m.Redactions, "Payload captures are not included.")
 	}
+}
+
+// coverage lists the coverage claims of the scope's decisions (G0 M9,
+// HR-217), when any carries one.
+func (b *builder) coverage() error {
+	var out []pack.CoverageClaim
+	for _, ev := range b.txns {
+		for _, d := range ev.Decisions {
+			if c, ok := claimsOf(d.JWS); ok && len(c.Pap.Coverage) > 0 && string(c.Pap.Coverage) != "null" {
+				out = append(out, pack.CoverageClaim{Transaction: ev.Transaction.ID.String(), Evaluation: d.Evaluation, Claim: c.Pap.Coverage})
+			}
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return b.add("coverage-claims.json", pack.KindCoverage, out)
 }

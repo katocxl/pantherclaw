@@ -7,6 +7,7 @@ package pantherclaw.v1;
 
 import "buf/validate/validate.proto";
 import "google/protobuf/timestamp.proto";
+import "pantherclaw/v1/connectors.proto";
 import "pantherclaw/v1/gateway_facts.proto";
 import "pantherclaw/v1/github.proto";
 
@@ -84,6 +85,13 @@ service GatewayService {
   // dispatching.
   // permission: gateway.sync
   rpc WatchContainment(WatchContainmentRequest) returns (stream WatchContainmentResponse);
+  // ReportConnectorState reports a run of one of the calling gateway's
+  // connectors (G0 M9 track C): its spec revision, container, engine and
+  // state, which moves only forward. The org and gateway come from the
+  // certificate alone; only a connector connection that gateway serves is
+  // accepted.
+  // permission: gateway.observe
+  rpc ReportConnectorState(ReportConnectorStateRequest) returns (ReportConnectorStateResponse);
   // ReportCircuit reports that a connection's circuit breaker opened
   // (HR-078); the server quarantines the connection.
   // permission: gateway.observe
@@ -115,6 +123,12 @@ service GatewayService {
   // (G0 M8 decision 5, HR-160).
   // permission: gateway.facts.report
   rpc ReportFacts(ReportFactsRequest) returns (ReportFactsResponse);
+  // ReportRevocationFailure records that an installation token the gateway
+  // minted for a fact read, a verification read or an organization scan
+  // could not be revoked: it lasts until its expiry (ADR-0021 item 6,
+  // R-18). A dispatch's token is reported with its outcome instead.
+  // permission: gateway.observe
+  rpc ReportRevocationFailure(ReportRevocationFailureRequest) returns (ReportRevocationFailureResponse);
 }
 
 // GatewayState is whether a gateway may act.
@@ -155,6 +169,9 @@ message Gateway {
   google.protobuf.Timestamp revoke_time = 8;
   // Why it was revoked.
   string revoke_reason = 9;
+  // hosting says who runs the gateway; PantherClaw-hosted ones come only
+  // from the server's configuration and run no connector (HR-084).
+  GatewayHosting hosting = 15;
 }
 
 // GatewayCertificate is one certificate the internal CA issued.
@@ -483,6 +500,11 @@ message GatewayConnection {
   string state = 14;
   // Revision.
   int32 revision = 15;
+  // agent_hosts are the host names agents use for the connection's API
+  // (G0 M9).
+  repeated string agent_hosts = 21;
+  // connector is an mcp_container connection's spec.
+  ConnectorSpec connector = 22;
   // The GitHub App installation behind the connection (G0 M8, ADR-0021):
   // an action on a repository of another account is refused before it is
   // decided (WRONG_ACCOUNT); unset without a GitHub App credential.
@@ -621,6 +643,33 @@ message ReportDriftResponse {
   bool quarantined = 1;
 }
 
+// ReportRevocationFailureRequest names the token that was not revoked.
+message ReportRevocationFailureRequest {
+  // Connection id: one the calling gateway serves.
+  string connection_id = 1 [(buf.validate.field).string.uuid = true];
+  // What the token was for.
+  string purpose = 2 [(buf.validate.field).string = {
+    in: [
+      "facts",
+      "verification",
+      "org_scan"
+    ]
+  }];
+  // The GitHub App installation id.
+  int64 installation_id = 3 [(buf.validate.field).int64.gt = 0];
+  // The repository the token was narrowed to (owner/repo); empty for a
+  // scan token over several.
+  string repository = 4 [(buf.validate.field).string = {
+    max_len: 140
+    pattern: "^([a-z0-9][a-z0-9-]{0,38}/[A-Za-z0-9._-]{1,100})?$"
+  }];
+  // When GitHub said the token expires.
+  google.protobuf.Timestamp expire_time = 5;
+}
+
+// ReportRevocationFailureResponse is empty.
+message ReportRevocationFailureResponse {}
+
 // ClaimVerificationsRequest asks for due verification tasks.
 message ClaimVerificationsRequest {
   // The most tasks to lease.
@@ -708,6 +757,28 @@ message ReportObservationRequest {
   // For a target-log task (HR-112): the objects the target created in the
   // window, as listed. Empty for every other task.
   repeated TargetLogItem items = 8 [(buf.validate.field).repeated.max_items = 1000];
+  // For an org-scan task (G0 M8, F048): the permissions of the GitHub App
+  // installation the lease names, as the scan read them with the App's JWT
+  // (which mints no token), name to level. Unset when it was not read: the
+  // server then keeps what it had, so unread permissions stay "not
+  // observed".
+  map<string, string> installation_permissions = 9 [(buf.validate.field).map = {
+    max_pairs: 128
+    keys: {
+      string: {pattern: "^[a-z][a-z0-9_]{0,63}$"}
+    }
+    values: {
+      string: {pattern: "^[a-z]{1,16}$"}
+    }
+  }];
+  // Its repository selection: "all" or "selected"; empty when not read.
+  string installation_repository_selection = 10 [(buf.validate.field).string = {
+    in: [
+      "",
+      "all",
+      "selected"
+    ]
+  }];
 }
 
 // TargetLogItem is one object a target log lists.

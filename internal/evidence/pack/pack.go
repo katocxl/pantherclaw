@@ -82,6 +82,10 @@ const (
 	KindVersions    = "versions"
 	KindApprovals   = "approvals"
 	KindContainment = "containment"
+	// KindCoverage lists the coverage claims of the scope's decisions (G0
+	// M9, HR-217); the bundles carry the snapshot ledger they are checked
+	// against.
+	KindCoverage = "coverage"
 	// KindBundle is a pantherclaw.bundle/v1 verify bundle: the receipts'
 	// ledger entries with their inclusion proofs, the checkpoints and the
 	// anchor.
@@ -193,6 +197,14 @@ type Level struct {
 	Kind     string `json:"kind"`
 	ID       string `json:"id"`
 	Revision int    `json:"revision"`
+}
+
+// CoverageClaim is one decision's coverage claim, as its signed receipt
+// carries it (PAP-1 §9.1).
+type CoverageClaim struct {
+	Transaction string         `json:"transaction"`
+	Evaluation  int            `json:"evaluation"`
+	Claim       jsontext.Value `json:"claim"`
 }
 
 // Event is a containment or restoration event (F529).

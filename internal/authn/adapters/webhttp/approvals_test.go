@@ -209,6 +209,7 @@ func (f *fakeApprovals) View(ctx context.Context, id ids.UUID) (apapp.View, erro
 		People:   f.people,
 	}
 	if f.review {
+		v.Display.Consequence.Operation = "github.pull.merge"
 		repo := actionir.Target{Type: "github.repository", ID: "acme/payments"}
 		v.Display.Consequences = []apdomain.ConsequenceLine{
 			{
@@ -247,6 +248,7 @@ func TestF158_TheMergeReviewShowsItsConsequencesAndDeciders(t *testing.T) {
 		"<code>production</code>", "<code>.github/workflows/deploy.yml</code>", "<strong>Unknown</strong>", "Why unknown: a workflow changed",
 		"<code>code_reviewer</code>", "everyone <code>github.pull.people</code> lists", "<code>release_approver</code>",
 		"counts only when used inside an active change window",
+		"a workflow that holds a personal access token or another App's secret", "residual risk R-22",
 	} {
 		if !strings.Contains(resp.Body, want) {
 			t.Errorf("the page lacks %q", want)
@@ -259,8 +261,9 @@ func TestF158_TheMergeReviewShowsItsConsequencesAndDeciders(t *testing.T) {
 		!strings.Contains(resp.Body[i:j], "<code>github.deployment.trigger on acme/payments</code>") {
 		t.Fatalf("the warning before the approve button: %d %d", i, j)
 	}
-	if plain := getAs(t, newApprovalsHandler(t, &fakeApprovals{}), authnapp.ApprovalsPath+"/"+knownRequest.String(), "good"); strings.Contains(plain.Body, "What it may also cause") {
-		t.Fatal("an action without consequences shows the section")
+	if plain := getAs(t, newApprovalsHandler(t, &fakeApprovals{}), authnapp.ApprovalsPath+"/"+knownRequest.String(), "good"); strings.Contains(plain.Body, "What it may also cause") ||
+		strings.Contains(plain.Body, "R-22") {
+		t.Fatal("an action without consequences shows the section, or a refund the GitHub limit")
 	}
 }
 

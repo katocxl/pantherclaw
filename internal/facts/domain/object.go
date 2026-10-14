@@ -28,6 +28,26 @@ const (
 // then UNKNOWN, with this member's text as the reason (HR-206).
 const UnknownMember = "unknown"
 
+// UnreadMember is the member an object fact carries when its provider
+// could not read it (a failed read of the system of record): the fact
+// counts as missing, so a prerequisite is CANNOT_AUTHORIZE and a consequence
+// that needs it is UNKNOWN, and an older observation never stands in for
+// it (the coordinator's decision Q11, #308 review).
+const UnreadMember = "unread"
+
+// Unread is why an object fact was not read, when it carries UnreadMember.
+func (v Value) Unread() (string, bool) {
+	if v.Type != TypeObject {
+		return "", false
+	}
+	why, ok := v.Object[UnreadMember]
+	if !ok {
+		return "", false
+	}
+	s, _ := why.(string)
+	return s, true
+}
+
 // decodeObject strictly decodes an object fact's members.
 func decodeObject(raw jsontext.Value) (map[string]any, error) {
 	if len(raw) == 0 || len(raw) > maxObjectBytes {

@@ -971,7 +971,10 @@ type DecisionReceipt struct {
 	// Its ledger entry.
 	Integrity *Integrity `protobuf:"bytes,3,opt,name=integrity,proto3" json:"integrity,omitempty"`
 	// When it was issued.
-	CreateTime    *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=create_time,json=createTime,proto3" json:"create_time,omitempty"`
+	CreateTime *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=create_time,json=createTime,proto3" json:"create_time,omitempty"`
+	// The coverage claim the receipt carries (HR-217), read from its signed
+	// payload; absent when it has none or its body was removed.
+	Coverage      *DecisionCoverage `protobuf:"bytes,10,opt,name=coverage,proto3" json:"coverage,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1034,6 +1037,118 @@ func (x *DecisionReceipt) GetCreateTime() *timestamppb.Timestamp {
 	return nil
 }
 
+func (x *DecisionReceipt) GetCoverage() *DecisionCoverage {
+	if x != nil {
+		return x.Coverage
+	}
+	return nil
+}
+
+// DecisionCoverage is a decision receipt's coverage claim (PAP-1 §9.1):
+// the snapshot current for the action's scope at decision time and the
+// state effective then.
+type DecisionCoverage struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The state effective at decision time: the snapshot's, or when it had
+	// lapsed the scope recomputed then, capped at PARTIAL.
+	State CoverageState `protobuf:"varint,1,opt,name=state,proto3,enum=pantherclaw.v1.CoverageState" json:"state,omitempty"`
+	// The snapshot that was current.
+	SnapshotId string `protobuf:"bytes,2,opt,name=snapshot_id,json=snapshotId,proto3" json:"snapshot_id,omitempty"`
+	// The snapshot's own state.
+	SnapshotState CoverageState `protobuf:"varint,3,opt,name=snapshot_state,json=snapshotState,proto3,enum=pantherclaw.v1.CoverageState" json:"snapshot_state,omitempty"`
+	// Whether the snapshot had lapsed.
+	Lapsed bool `protobuf:"varint,4,opt,name=lapsed,proto3" json:"lapsed,omitempty"`
+	// Why: "expired" or an invalidation kind.
+	Reason string `protobuf:"bytes,5,opt,name=reason,proto3" json:"reason,omitempty"`
+	// The exclusions the snapshot listed.
+	ExclusionIds []string `protobuf:"bytes,6,rep,name=exclusion_ids,json=exclusionIds,proto3" json:"exclusion_ids,omitempty"`
+	// Set when the claim could not be read at decision time: "timeout" or
+	// "error". The receipt then states no coverage, and every other field is
+	// empty; an unavailable claim is never a state.
+	Unavailable   string `protobuf:"bytes,7,opt,name=unavailable,proto3" json:"unavailable,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DecisionCoverage) Reset() {
+	*x = DecisionCoverage{}
+	mi := &file_pantherclaw_v1_transactions_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DecisionCoverage) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DecisionCoverage) ProtoMessage() {}
+
+func (x *DecisionCoverage) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_transactions_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DecisionCoverage.ProtoReflect.Descriptor instead.
+func (*DecisionCoverage) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_transactions_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *DecisionCoverage) GetState() CoverageState {
+	if x != nil {
+		return x.State
+	}
+	return CoverageState_COVERAGE_STATE_UNSPECIFIED
+}
+
+func (x *DecisionCoverage) GetSnapshotId() string {
+	if x != nil {
+		return x.SnapshotId
+	}
+	return ""
+}
+
+func (x *DecisionCoverage) GetSnapshotState() CoverageState {
+	if x != nil {
+		return x.SnapshotState
+	}
+	return CoverageState_COVERAGE_STATE_UNSPECIFIED
+}
+
+func (x *DecisionCoverage) GetLapsed() bool {
+	if x != nil {
+		return x.Lapsed
+	}
+	return false
+}
+
+func (x *DecisionCoverage) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
+func (x *DecisionCoverage) GetExclusionIds() []string {
+	if x != nil {
+		return x.ExclusionIds
+	}
+	return nil
+}
+
+func (x *DecisionCoverage) GetUnavailable() string {
+	if x != nil {
+		return x.Unavailable
+	}
+	return ""
+}
+
 // Execution is the dispatch attempt and its signed execution receipt.
 type Execution struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -1066,7 +1181,7 @@ type Execution struct {
 
 func (x *Execution) Reset() {
 	*x = Execution{}
-	mi := &file_pantherclaw_v1_transactions_proto_msgTypes[6]
+	mi := &file_pantherclaw_v1_transactions_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1078,7 +1193,7 @@ func (x *Execution) String() string {
 func (*Execution) ProtoMessage() {}
 
 func (x *Execution) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_transactions_proto_msgTypes[6]
+	mi := &file_pantherclaw_v1_transactions_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1091,7 +1206,7 @@ func (x *Execution) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Execution.ProtoReflect.Descriptor instead.
 func (*Execution) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_transactions_proto_rawDescGZIP(), []int{6}
+	return file_pantherclaw_v1_transactions_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *Execution) GetAttemptId() string {
@@ -1203,7 +1318,7 @@ type Observation struct {
 
 func (x *Observation) Reset() {
 	*x = Observation{}
-	mi := &file_pantherclaw_v1_transactions_proto_msgTypes[7]
+	mi := &file_pantherclaw_v1_transactions_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1215,7 +1330,7 @@ func (x *Observation) String() string {
 func (*Observation) ProtoMessage() {}
 
 func (x *Observation) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_transactions_proto_msgTypes[7]
+	mi := &file_pantherclaw_v1_transactions_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1228,7 +1343,7 @@ func (x *Observation) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Observation.ProtoReflect.Descriptor instead.
 func (*Observation) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_transactions_proto_rawDescGZIP(), []int{7}
+	return file_pantherclaw_v1_transactions_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *Observation) GetId() string {
@@ -1335,7 +1450,7 @@ type EffectReceipt struct {
 
 func (x *EffectReceipt) Reset() {
 	*x = EffectReceipt{}
-	mi := &file_pantherclaw_v1_transactions_proto_msgTypes[8]
+	mi := &file_pantherclaw_v1_transactions_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1347,7 +1462,7 @@ func (x *EffectReceipt) String() string {
 func (*EffectReceipt) ProtoMessage() {}
 
 func (x *EffectReceipt) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_transactions_proto_msgTypes[8]
+	mi := &file_pantherclaw_v1_transactions_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1360,7 +1475,7 @@ func (x *EffectReceipt) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EffectReceipt.ProtoReflect.Descriptor instead.
 func (*EffectReceipt) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_transactions_proto_rawDescGZIP(), []int{8}
+	return file_pantherclaw_v1_transactions_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *EffectReceipt) GetSeq() int32 {
@@ -1454,7 +1569,7 @@ type Reconciliation struct {
 
 func (x *Reconciliation) Reset() {
 	*x = Reconciliation{}
-	mi := &file_pantherclaw_v1_transactions_proto_msgTypes[9]
+	mi := &file_pantherclaw_v1_transactions_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1466,7 +1581,7 @@ func (x *Reconciliation) String() string {
 func (*Reconciliation) ProtoMessage() {}
 
 func (x *Reconciliation) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_transactions_proto_msgTypes[9]
+	mi := &file_pantherclaw_v1_transactions_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1479,7 +1594,7 @@ func (x *Reconciliation) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Reconciliation.ProtoReflect.Descriptor instead.
 func (*Reconciliation) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_transactions_proto_rawDescGZIP(), []int{9}
+	return file_pantherclaw_v1_transactions_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *Reconciliation) GetId() string {
@@ -1585,7 +1700,7 @@ type TransactionLink struct {
 
 func (x *TransactionLink) Reset() {
 	*x = TransactionLink{}
-	mi := &file_pantherclaw_v1_transactions_proto_msgTypes[10]
+	mi := &file_pantherclaw_v1_transactions_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1597,7 +1712,7 @@ func (x *TransactionLink) String() string {
 func (*TransactionLink) ProtoMessage() {}
 
 func (x *TransactionLink) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_transactions_proto_msgTypes[10]
+	mi := &file_pantherclaw_v1_transactions_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1610,7 +1725,7 @@ func (x *TransactionLink) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TransactionLink.ProtoReflect.Descriptor instead.
 func (*TransactionLink) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_transactions_proto_rawDescGZIP(), []int{10}
+	return file_pantherclaw_v1_transactions_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *TransactionLink) GetFromTransactionId() string {
@@ -1664,7 +1779,7 @@ type AuthorityLevel struct {
 
 func (x *AuthorityLevel) Reset() {
 	*x = AuthorityLevel{}
-	mi := &file_pantherclaw_v1_transactions_proto_msgTypes[11]
+	mi := &file_pantherclaw_v1_transactions_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1676,7 +1791,7 @@ func (x *AuthorityLevel) String() string {
 func (*AuthorityLevel) ProtoMessage() {}
 
 func (x *AuthorityLevel) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_transactions_proto_msgTypes[11]
+	mi := &file_pantherclaw_v1_transactions_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1689,7 +1804,7 @@ func (x *AuthorityLevel) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AuthorityLevel.ProtoReflect.Descriptor instead.
 func (*AuthorityLevel) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_transactions_proto_rawDescGZIP(), []int{11}
+	return file_pantherclaw_v1_transactions_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *AuthorityLevel) GetKind() string {
@@ -1736,7 +1851,7 @@ type DecisionBasis struct {
 
 func (x *DecisionBasis) Reset() {
 	*x = DecisionBasis{}
-	mi := &file_pantherclaw_v1_transactions_proto_msgTypes[12]
+	mi := &file_pantherclaw_v1_transactions_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1748,7 +1863,7 @@ func (x *DecisionBasis) String() string {
 func (*DecisionBasis) ProtoMessage() {}
 
 func (x *DecisionBasis) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_transactions_proto_msgTypes[12]
+	mi := &file_pantherclaw_v1_transactions_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1761,7 +1876,7 @@ func (x *DecisionBasis) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DecisionBasis.ProtoReflect.Descriptor instead.
 func (*DecisionBasis) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_transactions_proto_rawDescGZIP(), []int{12}
+	return file_pantherclaw_v1_transactions_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *DecisionBasis) GetPolicyVersion() string {
@@ -1839,7 +1954,7 @@ type GetTransactionEvidenceResponse struct {
 
 func (x *GetTransactionEvidenceResponse) Reset() {
 	*x = GetTransactionEvidenceResponse{}
-	mi := &file_pantherclaw_v1_transactions_proto_msgTypes[13]
+	mi := &file_pantherclaw_v1_transactions_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1851,7 +1966,7 @@ func (x *GetTransactionEvidenceResponse) String() string {
 func (*GetTransactionEvidenceResponse) ProtoMessage() {}
 
 func (x *GetTransactionEvidenceResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_transactions_proto_msgTypes[13]
+	mi := &file_pantherclaw_v1_transactions_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1864,7 +1979,7 @@ func (x *GetTransactionEvidenceResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetTransactionEvidenceResponse.ProtoReflect.Descriptor instead.
 func (*GetTransactionEvidenceResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_transactions_proto_rawDescGZIP(), []int{13}
+	return file_pantherclaw_v1_transactions_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *GetTransactionEvidenceResponse) GetTransaction() *Transaction {
@@ -1943,7 +2058,7 @@ type ListReconciliationsRequest struct {
 
 func (x *ListReconciliationsRequest) Reset() {
 	*x = ListReconciliationsRequest{}
-	mi := &file_pantherclaw_v1_transactions_proto_msgTypes[14]
+	mi := &file_pantherclaw_v1_transactions_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1955,7 +2070,7 @@ func (x *ListReconciliationsRequest) String() string {
 func (*ListReconciliationsRequest) ProtoMessage() {}
 
 func (x *ListReconciliationsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_transactions_proto_msgTypes[14]
+	mi := &file_pantherclaw_v1_transactions_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1968,7 +2083,7 @@ func (x *ListReconciliationsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListReconciliationsRequest.ProtoReflect.Descriptor instead.
 func (*ListReconciliationsRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_transactions_proto_rawDescGZIP(), []int{14}
+	return file_pantherclaw_v1_transactions_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *ListReconciliationsRequest) GetPageSize() int32 {
@@ -2019,7 +2134,7 @@ type ListReconciliationsResponse struct {
 
 func (x *ListReconciliationsResponse) Reset() {
 	*x = ListReconciliationsResponse{}
-	mi := &file_pantherclaw_v1_transactions_proto_msgTypes[15]
+	mi := &file_pantherclaw_v1_transactions_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2031,7 +2146,7 @@ func (x *ListReconciliationsResponse) String() string {
 func (*ListReconciliationsResponse) ProtoMessage() {}
 
 func (x *ListReconciliationsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_transactions_proto_msgTypes[15]
+	mi := &file_pantherclaw_v1_transactions_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2044,7 +2159,7 @@ func (x *ListReconciliationsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListReconciliationsResponse.ProtoReflect.Descriptor instead.
 func (*ListReconciliationsResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_transactions_proto_rawDescGZIP(), []int{15}
+	return file_pantherclaw_v1_transactions_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *ListReconciliationsResponse) GetReconciliations() []*Reconciliation {
@@ -2072,7 +2187,7 @@ type GetReconciliationRequest struct {
 
 func (x *GetReconciliationRequest) Reset() {
 	*x = GetReconciliationRequest{}
-	mi := &file_pantherclaw_v1_transactions_proto_msgTypes[16]
+	mi := &file_pantherclaw_v1_transactions_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2084,7 +2199,7 @@ func (x *GetReconciliationRequest) String() string {
 func (*GetReconciliationRequest) ProtoMessage() {}
 
 func (x *GetReconciliationRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_transactions_proto_msgTypes[16]
+	mi := &file_pantherclaw_v1_transactions_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2097,7 +2212,7 @@ func (x *GetReconciliationRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetReconciliationRequest.ProtoReflect.Descriptor instead.
 func (*GetReconciliationRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_transactions_proto_rawDescGZIP(), []int{16}
+	return file_pantherclaw_v1_transactions_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *GetReconciliationRequest) GetId() string {
@@ -2120,7 +2235,7 @@ type GetReconciliationResponse struct {
 
 func (x *GetReconciliationResponse) Reset() {
 	*x = GetReconciliationResponse{}
-	mi := &file_pantherclaw_v1_transactions_proto_msgTypes[17]
+	mi := &file_pantherclaw_v1_transactions_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2132,7 +2247,7 @@ func (x *GetReconciliationResponse) String() string {
 func (*GetReconciliationResponse) ProtoMessage() {}
 
 func (x *GetReconciliationResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_transactions_proto_msgTypes[17]
+	mi := &file_pantherclaw_v1_transactions_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2145,7 +2260,7 @@ func (x *GetReconciliationResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetReconciliationResponse.ProtoReflect.Descriptor instead.
 func (*GetReconciliationResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_transactions_proto_rawDescGZIP(), []int{17}
+	return file_pantherclaw_v1_transactions_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *GetReconciliationResponse) GetReconciliation() *Reconciliation {
@@ -2180,7 +2295,7 @@ type ResolveOccurredRequest struct {
 
 func (x *ResolveOccurredRequest) Reset() {
 	*x = ResolveOccurredRequest{}
-	mi := &file_pantherclaw_v1_transactions_proto_msgTypes[18]
+	mi := &file_pantherclaw_v1_transactions_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2192,7 +2307,7 @@ func (x *ResolveOccurredRequest) String() string {
 func (*ResolveOccurredRequest) ProtoMessage() {}
 
 func (x *ResolveOccurredRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_transactions_proto_msgTypes[18]
+	mi := &file_pantherclaw_v1_transactions_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2205,7 +2320,7 @@ func (x *ResolveOccurredRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResolveOccurredRequest.ProtoReflect.Descriptor instead.
 func (*ResolveOccurredRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_transactions_proto_rawDescGZIP(), []int{18}
+	return file_pantherclaw_v1_transactions_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *ResolveOccurredRequest) GetId() string {
@@ -2247,7 +2362,7 @@ type ResolveOccurredResponse struct {
 
 func (x *ResolveOccurredResponse) Reset() {
 	*x = ResolveOccurredResponse{}
-	mi := &file_pantherclaw_v1_transactions_proto_msgTypes[19]
+	mi := &file_pantherclaw_v1_transactions_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2259,7 +2374,7 @@ func (x *ResolveOccurredResponse) String() string {
 func (*ResolveOccurredResponse) ProtoMessage() {}
 
 func (x *ResolveOccurredResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_transactions_proto_msgTypes[19]
+	mi := &file_pantherclaw_v1_transactions_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2272,7 +2387,7 @@ func (x *ResolveOccurredResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResolveOccurredResponse.ProtoReflect.Descriptor instead.
 func (*ResolveOccurredResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_transactions_proto_rawDescGZIP(), []int{19}
+	return file_pantherclaw_v1_transactions_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *ResolveOccurredResponse) GetReconciliation() *Reconciliation {
@@ -2293,7 +2408,7 @@ type RequestVerificationRequest struct {
 
 func (x *RequestVerificationRequest) Reset() {
 	*x = RequestVerificationRequest{}
-	mi := &file_pantherclaw_v1_transactions_proto_msgTypes[20]
+	mi := &file_pantherclaw_v1_transactions_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2305,7 +2420,7 @@ func (x *RequestVerificationRequest) String() string {
 func (*RequestVerificationRequest) ProtoMessage() {}
 
 func (x *RequestVerificationRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_transactions_proto_msgTypes[20]
+	mi := &file_pantherclaw_v1_transactions_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2318,7 +2433,7 @@ func (x *RequestVerificationRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RequestVerificationRequest.ProtoReflect.Descriptor instead.
 func (*RequestVerificationRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_transactions_proto_rawDescGZIP(), []int{20}
+	return file_pantherclaw_v1_transactions_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *RequestVerificationRequest) GetTransactionId() string {
@@ -2339,7 +2454,7 @@ type RequestVerificationResponse struct {
 
 func (x *RequestVerificationResponse) Reset() {
 	*x = RequestVerificationResponse{}
-	mi := &file_pantherclaw_v1_transactions_proto_msgTypes[21]
+	mi := &file_pantherclaw_v1_transactions_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2351,7 +2466,7 @@ func (x *RequestVerificationResponse) String() string {
 func (*RequestVerificationResponse) ProtoMessage() {}
 
 func (x *RequestVerificationResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_transactions_proto_msgTypes[21]
+	mi := &file_pantherclaw_v1_transactions_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2364,7 +2479,7 @@ func (x *RequestVerificationResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RequestVerificationResponse.ProtoReflect.Descriptor instead.
 func (*RequestVerificationResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_transactions_proto_rawDescGZIP(), []int{21}
+	return file_pantherclaw_v1_transactions_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *RequestVerificationResponse) GetVerificationId() string {
@@ -2390,7 +2505,7 @@ type LinkTransactionRequest struct {
 
 func (x *LinkTransactionRequest) Reset() {
 	*x = LinkTransactionRequest{}
-	mi := &file_pantherclaw_v1_transactions_proto_msgTypes[22]
+	mi := &file_pantherclaw_v1_transactions_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2402,7 +2517,7 @@ func (x *LinkTransactionRequest) String() string {
 func (*LinkTransactionRequest) ProtoMessage() {}
 
 func (x *LinkTransactionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_transactions_proto_msgTypes[22]
+	mi := &file_pantherclaw_v1_transactions_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2415,7 +2530,7 @@ func (x *LinkTransactionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LinkTransactionRequest.ProtoReflect.Descriptor instead.
 func (*LinkTransactionRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_transactions_proto_rawDescGZIP(), []int{22}
+	return file_pantherclaw_v1_transactions_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *LinkTransactionRequest) GetFromTransactionId() string {
@@ -2450,7 +2565,7 @@ type LinkTransactionResponse struct {
 
 func (x *LinkTransactionResponse) Reset() {
 	*x = LinkTransactionResponse{}
-	mi := &file_pantherclaw_v1_transactions_proto_msgTypes[23]
+	mi := &file_pantherclaw_v1_transactions_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2462,7 +2577,7 @@ func (x *LinkTransactionResponse) String() string {
 func (*LinkTransactionResponse) ProtoMessage() {}
 
 func (x *LinkTransactionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_transactions_proto_msgTypes[23]
+	mi := &file_pantherclaw_v1_transactions_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2475,7 +2590,7 @@ func (x *LinkTransactionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LinkTransactionResponse.ProtoReflect.Descriptor instead.
 func (*LinkTransactionResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_transactions_proto_rawDescGZIP(), []int{23}
+	return file_pantherclaw_v1_transactions_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *LinkTransactionResponse) GetLink() *TransactionLink {
@@ -2489,7 +2604,7 @@ var File_pantherclaw_v1_transactions_proto protoreflect.FileDescriptor
 
 const file_pantherclaw_v1_transactions_proto_rawDesc = "" +
 	"\n" +
-	"!pantherclaw/v1/transactions.proto\x12\x0epantherclaw.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1epantherclaw/v1/authority.proto\"\x93\x02\n" +
+	"!pantherclaw/v1/transactions.proto\x12\x0epantherclaw.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1epantherclaw/v1/authority.proto\x1a%pantherclaw/v1/coverage_records.proto\"\x93\x02\n" +
 	"\tIntegrity\x12&\n" +
 	"\x0fledger_entry_id\x18\x01 \x01(\tR\rledgerEntryId\x12\x1a\n" +
 	"\bsequence\x18\x02 \x01(\x03R\bsequence\x127\n" +
@@ -2538,7 +2653,7 @@ const file_pantherclaw_v1_transactions_proto_rawDesc = "" +
 	"\ftransactions\x18\x01 \x03(\v2\x1b.pantherclaw.v1.TransactionR\ftransactions\x12&\n" +
 	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"9\n" +
 	"\x1dGetTransactionEvidenceRequest\x12\x18\n" +
-	"\x02id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x02id\"\xc8\x01\n" +
+	"\x02id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x02id\"\x86\x02\n" +
 	"\x0fDecisionReceipt\x12\x1e\n" +
 	"\n" +
 	"evaluation\x18\x01 \x01(\x05R\n" +
@@ -2547,7 +2662,18 @@ const file_pantherclaw_v1_transactions_proto_rawDesc = "" +
 	"receiptJws\x127\n" +
 	"\tintegrity\x18\x03 \x01(\v2\x19.pantherclaw.v1.IntegrityR\tintegrity\x12;\n" +
 	"\vcreate_time\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"createTime\"\xd8\x03\n" +
+	"createTime\x12<\n" +
+	"\bcoverage\x18\n" +
+	" \x01(\v2 .pantherclaw.v1.DecisionCoverageR\bcoverage\"\xa5\x02\n" +
+	"\x10DecisionCoverage\x123\n" +
+	"\x05state\x18\x01 \x01(\x0e2\x1d.pantherclaw.v1.CoverageStateR\x05state\x12\x1f\n" +
+	"\vsnapshot_id\x18\x02 \x01(\tR\n" +
+	"snapshotId\x12D\n" +
+	"\x0esnapshot_state\x18\x03 \x01(\x0e2\x1d.pantherclaw.v1.CoverageStateR\rsnapshotState\x12\x16\n" +
+	"\x06lapsed\x18\x04 \x01(\bR\x06lapsed\x12\x16\n" +
+	"\x06reason\x18\x05 \x01(\tR\x06reason\x12#\n" +
+	"\rexclusion_ids\x18\x06 \x03(\tR\fexclusionIds\x12 \n" +
+	"\vunavailable\x18\a \x01(\tR\vunavailable\"\xd8\x03\n" +
 	"\tExecution\x12\x1d\n" +
 	"\n" +
 	"attempt_id\x18\x01 \x01(\tR\tattemptId\x12\x1b\n" +
@@ -2748,7 +2874,7 @@ func file_pantherclaw_v1_transactions_proto_rawDescGZIP() []byte {
 }
 
 var file_pantherclaw_v1_transactions_proto_enumTypes = make([]protoimpl.EnumInfo, 7)
-var file_pantherclaw_v1_transactions_proto_msgTypes = make([]protoimpl.MessageInfo, 25)
+var file_pantherclaw_v1_transactions_proto_msgTypes = make([]protoimpl.MessageInfo, 26)
 var file_pantherclaw_v1_transactions_proto_goTypes = []any{
 	(ExecutionState)(0),                    // 0: pantherclaw.v1.ExecutionState
 	(EffectState)(0),                       // 1: pantherclaw.v1.EffectState
@@ -2763,100 +2889,105 @@ var file_pantherclaw_v1_transactions_proto_goTypes = []any{
 	(*ListTransactionsResponse)(nil),       // 10: pantherclaw.v1.ListTransactionsResponse
 	(*GetTransactionEvidenceRequest)(nil),  // 11: pantherclaw.v1.GetTransactionEvidenceRequest
 	(*DecisionReceipt)(nil),                // 12: pantherclaw.v1.DecisionReceipt
-	(*Execution)(nil),                      // 13: pantherclaw.v1.Execution
-	(*Observation)(nil),                    // 14: pantherclaw.v1.Observation
-	(*EffectReceipt)(nil),                  // 15: pantherclaw.v1.EffectReceipt
-	(*Reconciliation)(nil),                 // 16: pantherclaw.v1.Reconciliation
-	(*TransactionLink)(nil),                // 17: pantherclaw.v1.TransactionLink
-	(*AuthorityLevel)(nil),                 // 18: pantherclaw.v1.AuthorityLevel
-	(*DecisionBasis)(nil),                  // 19: pantherclaw.v1.DecisionBasis
-	(*GetTransactionEvidenceResponse)(nil), // 20: pantherclaw.v1.GetTransactionEvidenceResponse
-	(*ListReconciliationsRequest)(nil),     // 21: pantherclaw.v1.ListReconciliationsRequest
-	(*ListReconciliationsResponse)(nil),    // 22: pantherclaw.v1.ListReconciliationsResponse
-	(*GetReconciliationRequest)(nil),       // 23: pantherclaw.v1.GetReconciliationRequest
-	(*GetReconciliationResponse)(nil),      // 24: pantherclaw.v1.GetReconciliationResponse
-	(*ResolveOccurredRequest)(nil),         // 25: pantherclaw.v1.ResolveOccurredRequest
-	(*ResolveOccurredResponse)(nil),        // 26: pantherclaw.v1.ResolveOccurredResponse
-	(*RequestVerificationRequest)(nil),     // 27: pantherclaw.v1.RequestVerificationRequest
-	(*RequestVerificationResponse)(nil),    // 28: pantherclaw.v1.RequestVerificationResponse
-	(*LinkTransactionRequest)(nil),         // 29: pantherclaw.v1.LinkTransactionRequest
-	(*LinkTransactionResponse)(nil),        // 30: pantherclaw.v1.LinkTransactionResponse
-	nil,                                    // 31: pantherclaw.v1.Observation.FieldsEntry
-	(*timestamppb.Timestamp)(nil),          // 32: google.protobuf.Timestamp
-	(Decision)(0),                          // 33: pantherclaw.v1.Decision
-	(Outcome)(0),                           // 34: pantherclaw.v1.Outcome
+	(*DecisionCoverage)(nil),               // 13: pantherclaw.v1.DecisionCoverage
+	(*Execution)(nil),                      // 14: pantherclaw.v1.Execution
+	(*Observation)(nil),                    // 15: pantherclaw.v1.Observation
+	(*EffectReceipt)(nil),                  // 16: pantherclaw.v1.EffectReceipt
+	(*Reconciliation)(nil),                 // 17: pantherclaw.v1.Reconciliation
+	(*TransactionLink)(nil),                // 18: pantherclaw.v1.TransactionLink
+	(*AuthorityLevel)(nil),                 // 19: pantherclaw.v1.AuthorityLevel
+	(*DecisionBasis)(nil),                  // 20: pantherclaw.v1.DecisionBasis
+	(*GetTransactionEvidenceResponse)(nil), // 21: pantherclaw.v1.GetTransactionEvidenceResponse
+	(*ListReconciliationsRequest)(nil),     // 22: pantherclaw.v1.ListReconciliationsRequest
+	(*ListReconciliationsResponse)(nil),    // 23: pantherclaw.v1.ListReconciliationsResponse
+	(*GetReconciliationRequest)(nil),       // 24: pantherclaw.v1.GetReconciliationRequest
+	(*GetReconciliationResponse)(nil),      // 25: pantherclaw.v1.GetReconciliationResponse
+	(*ResolveOccurredRequest)(nil),         // 26: pantherclaw.v1.ResolveOccurredRequest
+	(*ResolveOccurredResponse)(nil),        // 27: pantherclaw.v1.ResolveOccurredResponse
+	(*RequestVerificationRequest)(nil),     // 28: pantherclaw.v1.RequestVerificationRequest
+	(*RequestVerificationResponse)(nil),    // 29: pantherclaw.v1.RequestVerificationResponse
+	(*LinkTransactionRequest)(nil),         // 30: pantherclaw.v1.LinkTransactionRequest
+	(*LinkTransactionResponse)(nil),        // 31: pantherclaw.v1.LinkTransactionResponse
+	nil,                                    // 32: pantherclaw.v1.Observation.FieldsEntry
+	(*timestamppb.Timestamp)(nil),          // 33: google.protobuf.Timestamp
+	(Decision)(0),                          // 34: pantherclaw.v1.Decision
+	(CoverageState)(0),                     // 35: pantherclaw.v1.CoverageState
+	(Outcome)(0),                           // 36: pantherclaw.v1.Outcome
 }
 var file_pantherclaw_v1_transactions_proto_depIdxs = []int32{
 	3,  // 0: pantherclaw.v1.Integrity.status:type_name -> pantherclaw.v1.IntegrityStatus
-	32, // 1: pantherclaw.v1.Integrity.anchor_time:type_name -> google.protobuf.Timestamp
-	33, // 2: pantherclaw.v1.Transaction.decision:type_name -> pantherclaw.v1.Decision
+	33, // 1: pantherclaw.v1.Integrity.anchor_time:type_name -> google.protobuf.Timestamp
+	34, // 2: pantherclaw.v1.Transaction.decision:type_name -> pantherclaw.v1.Decision
 	0,  // 3: pantherclaw.v1.Transaction.execution_state:type_name -> pantherclaw.v1.ExecutionState
 	1,  // 4: pantherclaw.v1.Transaction.effect_state:type_name -> pantherclaw.v1.EffectState
 	2,  // 5: pantherclaw.v1.Transaction.level_required:type_name -> pantherclaw.v1.VerificationLevel
 	2,  // 6: pantherclaw.v1.Transaction.level_achieved:type_name -> pantherclaw.v1.VerificationLevel
-	32, // 7: pantherclaw.v1.Transaction.create_time:type_name -> google.protobuf.Timestamp
-	33, // 8: pantherclaw.v1.ListTransactionsRequest.decisions:type_name -> pantherclaw.v1.Decision
+	33, // 7: pantherclaw.v1.Transaction.create_time:type_name -> google.protobuf.Timestamp
+	34, // 8: pantherclaw.v1.ListTransactionsRequest.decisions:type_name -> pantherclaw.v1.Decision
 	0,  // 9: pantherclaw.v1.ListTransactionsRequest.execution_states:type_name -> pantherclaw.v1.ExecutionState
 	1,  // 10: pantherclaw.v1.ListTransactionsRequest.effect_states:type_name -> pantherclaw.v1.EffectState
-	32, // 11: pantherclaw.v1.ListTransactionsRequest.start_time:type_name -> google.protobuf.Timestamp
-	32, // 12: pantherclaw.v1.ListTransactionsRequest.end_time:type_name -> google.protobuf.Timestamp
+	33, // 11: pantherclaw.v1.ListTransactionsRequest.start_time:type_name -> google.protobuf.Timestamp
+	33, // 12: pantherclaw.v1.ListTransactionsRequest.end_time:type_name -> google.protobuf.Timestamp
 	8,  // 13: pantherclaw.v1.ListTransactionsResponse.transactions:type_name -> pantherclaw.v1.Transaction
 	7,  // 14: pantherclaw.v1.DecisionReceipt.integrity:type_name -> pantherclaw.v1.Integrity
-	32, // 15: pantherclaw.v1.DecisionReceipt.create_time:type_name -> google.protobuf.Timestamp
-	34, // 16: pantherclaw.v1.Execution.outcome:type_name -> pantherclaw.v1.Outcome
-	32, // 17: pantherclaw.v1.Execution.dispatch_time:type_name -> google.protobuf.Timestamp
-	32, // 18: pantherclaw.v1.Execution.record_time:type_name -> google.protobuf.Timestamp
-	7,  // 19: pantherclaw.v1.Execution.integrity:type_name -> pantherclaw.v1.Integrity
-	34, // 20: pantherclaw.v1.Observation.outcome:type_name -> pantherclaw.v1.Outcome
-	31, // 21: pantherclaw.v1.Observation.fields:type_name -> pantherclaw.v1.Observation.FieldsEntry
-	32, // 22: pantherclaw.v1.Observation.observe_time:type_name -> google.protobuf.Timestamp
-	1,  // 23: pantherclaw.v1.EffectReceipt.state:type_name -> pantherclaw.v1.EffectState
-	2,  // 24: pantherclaw.v1.EffectReceipt.level_required:type_name -> pantherclaw.v1.VerificationLevel
-	2,  // 25: pantherclaw.v1.EffectReceipt.level_achieved:type_name -> pantherclaw.v1.VerificationLevel
-	7,  // 26: pantherclaw.v1.EffectReceipt.integrity:type_name -> pantherclaw.v1.Integrity
-	32, // 27: pantherclaw.v1.EffectReceipt.create_time:type_name -> google.protobuf.Timestamp
-	4,  // 28: pantherclaw.v1.Reconciliation.kind:type_name -> pantherclaw.v1.ReconciliationKind
-	5,  // 29: pantherclaw.v1.Reconciliation.state:type_name -> pantherclaw.v1.ReconciliationState
-	32, // 30: pantherclaw.v1.Reconciliation.open_time:type_name -> google.protobuf.Timestamp
-	32, // 31: pantherclaw.v1.Reconciliation.resolve_time:type_name -> google.protobuf.Timestamp
-	6,  // 32: pantherclaw.v1.TransactionLink.kind:type_name -> pantherclaw.v1.LinkKind
-	32, // 33: pantherclaw.v1.TransactionLink.create_time:type_name -> google.protobuf.Timestamp
-	18, // 34: pantherclaw.v1.DecisionBasis.levels:type_name -> pantherclaw.v1.AuthorityLevel
-	8,  // 35: pantherclaw.v1.GetTransactionEvidenceResponse.transaction:type_name -> pantherclaw.v1.Transaction
-	12, // 36: pantherclaw.v1.GetTransactionEvidenceResponse.decision_receipts:type_name -> pantherclaw.v1.DecisionReceipt
-	19, // 37: pantherclaw.v1.GetTransactionEvidenceResponse.basis:type_name -> pantherclaw.v1.DecisionBasis
-	13, // 38: pantherclaw.v1.GetTransactionEvidenceResponse.execution:type_name -> pantherclaw.v1.Execution
-	14, // 39: pantherclaw.v1.GetTransactionEvidenceResponse.observations:type_name -> pantherclaw.v1.Observation
-	15, // 40: pantherclaw.v1.GetTransactionEvidenceResponse.effect_receipts:type_name -> pantherclaw.v1.EffectReceipt
-	16, // 41: pantherclaw.v1.GetTransactionEvidenceResponse.reconciliations:type_name -> pantherclaw.v1.Reconciliation
-	17, // 42: pantherclaw.v1.GetTransactionEvidenceResponse.links:type_name -> pantherclaw.v1.TransactionLink
-	5,  // 43: pantherclaw.v1.ListReconciliationsRequest.states:type_name -> pantherclaw.v1.ReconciliationState
-	4,  // 44: pantherclaw.v1.ListReconciliationsRequest.kinds:type_name -> pantherclaw.v1.ReconciliationKind
-	16, // 45: pantherclaw.v1.ListReconciliationsResponse.reconciliations:type_name -> pantherclaw.v1.Reconciliation
-	16, // 46: pantherclaw.v1.GetReconciliationResponse.reconciliation:type_name -> pantherclaw.v1.Reconciliation
-	8,  // 47: pantherclaw.v1.GetReconciliationResponse.transaction:type_name -> pantherclaw.v1.Transaction
-	16, // 48: pantherclaw.v1.ResolveOccurredResponse.reconciliation:type_name -> pantherclaw.v1.Reconciliation
-	6,  // 49: pantherclaw.v1.LinkTransactionRequest.kind:type_name -> pantherclaw.v1.LinkKind
-	17, // 50: pantherclaw.v1.LinkTransactionResponse.link:type_name -> pantherclaw.v1.TransactionLink
-	9,  // 51: pantherclaw.v1.TransactionService.ListTransactions:input_type -> pantherclaw.v1.ListTransactionsRequest
-	11, // 52: pantherclaw.v1.TransactionService.GetTransactionEvidence:input_type -> pantherclaw.v1.GetTransactionEvidenceRequest
-	21, // 53: pantherclaw.v1.ReconciliationService.ListReconciliations:input_type -> pantherclaw.v1.ListReconciliationsRequest
-	23, // 54: pantherclaw.v1.ReconciliationService.GetReconciliation:input_type -> pantherclaw.v1.GetReconciliationRequest
-	25, // 55: pantherclaw.v1.ReconciliationService.ResolveOccurred:input_type -> pantherclaw.v1.ResolveOccurredRequest
-	27, // 56: pantherclaw.v1.ReconciliationService.RequestVerification:input_type -> pantherclaw.v1.RequestVerificationRequest
-	29, // 57: pantherclaw.v1.ReconciliationService.LinkTransaction:input_type -> pantherclaw.v1.LinkTransactionRequest
-	10, // 58: pantherclaw.v1.TransactionService.ListTransactions:output_type -> pantherclaw.v1.ListTransactionsResponse
-	20, // 59: pantherclaw.v1.TransactionService.GetTransactionEvidence:output_type -> pantherclaw.v1.GetTransactionEvidenceResponse
-	22, // 60: pantherclaw.v1.ReconciliationService.ListReconciliations:output_type -> pantherclaw.v1.ListReconciliationsResponse
-	24, // 61: pantherclaw.v1.ReconciliationService.GetReconciliation:output_type -> pantherclaw.v1.GetReconciliationResponse
-	26, // 62: pantherclaw.v1.ReconciliationService.ResolveOccurred:output_type -> pantherclaw.v1.ResolveOccurredResponse
-	28, // 63: pantherclaw.v1.ReconciliationService.RequestVerification:output_type -> pantherclaw.v1.RequestVerificationResponse
-	30, // 64: pantherclaw.v1.ReconciliationService.LinkTransaction:output_type -> pantherclaw.v1.LinkTransactionResponse
-	58, // [58:65] is the sub-list for method output_type
-	51, // [51:58] is the sub-list for method input_type
-	51, // [51:51] is the sub-list for extension type_name
-	51, // [51:51] is the sub-list for extension extendee
-	0,  // [0:51] is the sub-list for field type_name
+	33, // 15: pantherclaw.v1.DecisionReceipt.create_time:type_name -> google.protobuf.Timestamp
+	13, // 16: pantherclaw.v1.DecisionReceipt.coverage:type_name -> pantherclaw.v1.DecisionCoverage
+	35, // 17: pantherclaw.v1.DecisionCoverage.state:type_name -> pantherclaw.v1.CoverageState
+	35, // 18: pantherclaw.v1.DecisionCoverage.snapshot_state:type_name -> pantherclaw.v1.CoverageState
+	36, // 19: pantherclaw.v1.Execution.outcome:type_name -> pantherclaw.v1.Outcome
+	33, // 20: pantherclaw.v1.Execution.dispatch_time:type_name -> google.protobuf.Timestamp
+	33, // 21: pantherclaw.v1.Execution.record_time:type_name -> google.protobuf.Timestamp
+	7,  // 22: pantherclaw.v1.Execution.integrity:type_name -> pantherclaw.v1.Integrity
+	36, // 23: pantherclaw.v1.Observation.outcome:type_name -> pantherclaw.v1.Outcome
+	32, // 24: pantherclaw.v1.Observation.fields:type_name -> pantherclaw.v1.Observation.FieldsEntry
+	33, // 25: pantherclaw.v1.Observation.observe_time:type_name -> google.protobuf.Timestamp
+	1,  // 26: pantherclaw.v1.EffectReceipt.state:type_name -> pantherclaw.v1.EffectState
+	2,  // 27: pantherclaw.v1.EffectReceipt.level_required:type_name -> pantherclaw.v1.VerificationLevel
+	2,  // 28: pantherclaw.v1.EffectReceipt.level_achieved:type_name -> pantherclaw.v1.VerificationLevel
+	7,  // 29: pantherclaw.v1.EffectReceipt.integrity:type_name -> pantherclaw.v1.Integrity
+	33, // 30: pantherclaw.v1.EffectReceipt.create_time:type_name -> google.protobuf.Timestamp
+	4,  // 31: pantherclaw.v1.Reconciliation.kind:type_name -> pantherclaw.v1.ReconciliationKind
+	5,  // 32: pantherclaw.v1.Reconciliation.state:type_name -> pantherclaw.v1.ReconciliationState
+	33, // 33: pantherclaw.v1.Reconciliation.open_time:type_name -> google.protobuf.Timestamp
+	33, // 34: pantherclaw.v1.Reconciliation.resolve_time:type_name -> google.protobuf.Timestamp
+	6,  // 35: pantherclaw.v1.TransactionLink.kind:type_name -> pantherclaw.v1.LinkKind
+	33, // 36: pantherclaw.v1.TransactionLink.create_time:type_name -> google.protobuf.Timestamp
+	19, // 37: pantherclaw.v1.DecisionBasis.levels:type_name -> pantherclaw.v1.AuthorityLevel
+	8,  // 38: pantherclaw.v1.GetTransactionEvidenceResponse.transaction:type_name -> pantherclaw.v1.Transaction
+	12, // 39: pantherclaw.v1.GetTransactionEvidenceResponse.decision_receipts:type_name -> pantherclaw.v1.DecisionReceipt
+	20, // 40: pantherclaw.v1.GetTransactionEvidenceResponse.basis:type_name -> pantherclaw.v1.DecisionBasis
+	14, // 41: pantherclaw.v1.GetTransactionEvidenceResponse.execution:type_name -> pantherclaw.v1.Execution
+	15, // 42: pantherclaw.v1.GetTransactionEvidenceResponse.observations:type_name -> pantherclaw.v1.Observation
+	16, // 43: pantherclaw.v1.GetTransactionEvidenceResponse.effect_receipts:type_name -> pantherclaw.v1.EffectReceipt
+	17, // 44: pantherclaw.v1.GetTransactionEvidenceResponse.reconciliations:type_name -> pantherclaw.v1.Reconciliation
+	18, // 45: pantherclaw.v1.GetTransactionEvidenceResponse.links:type_name -> pantherclaw.v1.TransactionLink
+	5,  // 46: pantherclaw.v1.ListReconciliationsRequest.states:type_name -> pantherclaw.v1.ReconciliationState
+	4,  // 47: pantherclaw.v1.ListReconciliationsRequest.kinds:type_name -> pantherclaw.v1.ReconciliationKind
+	17, // 48: pantherclaw.v1.ListReconciliationsResponse.reconciliations:type_name -> pantherclaw.v1.Reconciliation
+	17, // 49: pantherclaw.v1.GetReconciliationResponse.reconciliation:type_name -> pantherclaw.v1.Reconciliation
+	8,  // 50: pantherclaw.v1.GetReconciliationResponse.transaction:type_name -> pantherclaw.v1.Transaction
+	17, // 51: pantherclaw.v1.ResolveOccurredResponse.reconciliation:type_name -> pantherclaw.v1.Reconciliation
+	6,  // 52: pantherclaw.v1.LinkTransactionRequest.kind:type_name -> pantherclaw.v1.LinkKind
+	18, // 53: pantherclaw.v1.LinkTransactionResponse.link:type_name -> pantherclaw.v1.TransactionLink
+	9,  // 54: pantherclaw.v1.TransactionService.ListTransactions:input_type -> pantherclaw.v1.ListTransactionsRequest
+	11, // 55: pantherclaw.v1.TransactionService.GetTransactionEvidence:input_type -> pantherclaw.v1.GetTransactionEvidenceRequest
+	22, // 56: pantherclaw.v1.ReconciliationService.ListReconciliations:input_type -> pantherclaw.v1.ListReconciliationsRequest
+	24, // 57: pantherclaw.v1.ReconciliationService.GetReconciliation:input_type -> pantherclaw.v1.GetReconciliationRequest
+	26, // 58: pantherclaw.v1.ReconciliationService.ResolveOccurred:input_type -> pantherclaw.v1.ResolveOccurredRequest
+	28, // 59: pantherclaw.v1.ReconciliationService.RequestVerification:input_type -> pantherclaw.v1.RequestVerificationRequest
+	30, // 60: pantherclaw.v1.ReconciliationService.LinkTransaction:input_type -> pantherclaw.v1.LinkTransactionRequest
+	10, // 61: pantherclaw.v1.TransactionService.ListTransactions:output_type -> pantherclaw.v1.ListTransactionsResponse
+	21, // 62: pantherclaw.v1.TransactionService.GetTransactionEvidence:output_type -> pantherclaw.v1.GetTransactionEvidenceResponse
+	23, // 63: pantherclaw.v1.ReconciliationService.ListReconciliations:output_type -> pantherclaw.v1.ListReconciliationsResponse
+	25, // 64: pantherclaw.v1.ReconciliationService.GetReconciliation:output_type -> pantherclaw.v1.GetReconciliationResponse
+	27, // 65: pantherclaw.v1.ReconciliationService.ResolveOccurred:output_type -> pantherclaw.v1.ResolveOccurredResponse
+	29, // 66: pantherclaw.v1.ReconciliationService.RequestVerification:output_type -> pantherclaw.v1.RequestVerificationResponse
+	31, // 67: pantherclaw.v1.ReconciliationService.LinkTransaction:output_type -> pantherclaw.v1.LinkTransactionResponse
+	61, // [61:68] is the sub-list for method output_type
+	54, // [54:61] is the sub-list for method input_type
+	54, // [54:54] is the sub-list for extension type_name
+	54, // [54:54] is the sub-list for extension extendee
+	0,  // [0:54] is the sub-list for field type_name
 }
 
 func init() { file_pantherclaw_v1_transactions_proto_init() }
@@ -2865,17 +2996,18 @@ func file_pantherclaw_v1_transactions_proto_init() {
 		return
 	}
 	file_pantherclaw_v1_authority_proto_init()
+	file_pantherclaw_v1_coverage_records_proto_init()
 	file_pantherclaw_v1_transactions_proto_msgTypes[2].OneofWrappers = []any{}
-	file_pantherclaw_v1_transactions_proto_msgTypes[7].OneofWrappers = []any{}
-	file_pantherclaw_v1_transactions_proto_msgTypes[14].OneofWrappers = []any{}
-	file_pantherclaw_v1_transactions_proto_msgTypes[18].OneofWrappers = []any{}
+	file_pantherclaw_v1_transactions_proto_msgTypes[8].OneofWrappers = []any{}
+	file_pantherclaw_v1_transactions_proto_msgTypes[15].OneofWrappers = []any{}
+	file_pantherclaw_v1_transactions_proto_msgTypes[19].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pantherclaw_v1_transactions_proto_rawDesc), len(file_pantherclaw_v1_transactions_proto_rawDesc)),
 			NumEnums:      7,
-			NumMessages:   25,
+			NumMessages:   26,
 			NumExtensions: 0,
 			NumServices:   2,
 		},

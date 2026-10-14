@@ -300,7 +300,7 @@ func accessOf(a *pantherclawv1.CredentialAccess) *Access {
 	}
 	out := &Access{
 		Installation: a.GetInstallationId(), RepositoryID: a.GetRepositoryId(), Repository: a.GetRepository(),
-		Requested: a.GetRequested(), Granted: a.GetGranted(), Revocation: a.GetRevocation(),
+		Requested: a.GetRequested(), Granted: a.GetGranted(), Revocation: a.GetRevocation(), GrantedIncomplete: a.GetGrantedIncomplete(),
 	}
 	if a.GetExpireTime() != nil { // never the Unix epoch for a missing expiry
 		out.Expires = a.GetExpireTime().AsTime()

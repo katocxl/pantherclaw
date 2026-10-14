@@ -167,6 +167,9 @@ type Receipt struct {
 	// decision 11): a decision receipt's store writes them in the same
 	// transaction. Nil when the Authority records none.
 	Inputs *recording.Sealed
+	// CoverageSnapshot is the snapshot the receipt's coverage claim names,
+	// stored with it for lookups (HR-217); nil without a claim.
+	CoverageSnapshot *ids.UUID
 }
 
 // Outcome of a dispatched permit (PAP-1 §7.4).

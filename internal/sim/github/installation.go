@@ -37,9 +37,16 @@ func (s *Server) describe(w http.ResponseWriter, r *http.Request) int {
 	if in == nil {
 		return fail(w, http.StatusNotFound, "Not Found")
 	}
+	if s.faults.InstallationStatus != 0 {
+		return fail(w, s.faults.InstallationStatus, "Simulated installation endpoint failure")
+	}
+	selection := in.RepositorySelection
+	if selection == "" {
+		selection = "selected"
+	}
 	return reply(w, http.StatusOK, map[string]any{
 		"id": in.ID, "app_id": s.appID, "account": map[string]any{"login": in.Account, "id": accountID(in.Account)},
-		"repository_selection": "selected", "permissions": maps.Clone(in.Permissions), "simulated": true,
+		"repository_selection": selection, "permissions": maps.Clone(in.Permissions), "simulated": true,
 	})
 }
 
@@ -74,7 +81,7 @@ func (s *Server) installationRepositories(w http.ResponseWriter, r *http.Request
 				repos = append(repos, map[string]any{"name": repo.Name, "full_name": repo.full(), "default_branch": repo.DefaultBranch})
 			}
 		}
-		rec.Status = reply(w, http.StatusOK, map[string]any{"total_count": len(repos), "repositories": repos, "simulated": true})
+		rec.Status = reply(w, http.StatusOK, map[string]any{"total_count": len(repos), "repositories": s.paged(w, r, repos), "simulated": true})
 	}
 	s.requests = append(s.requests, rec)
 }
@@ -126,7 +133,7 @@ func (s *Server) orgInstallations(w http.ResponseWriter, r *http.Request) {
 			"id": a.ID, "app_id": a.ID, "app_slug": a.Slug, "permissions": a.Permissions, "repository_selection": a.Selection,
 		})
 	}
-	rec.Status = reply(w, http.StatusOK, map[string]any{"total_count": len(list), "installations": list, "simulated": true})
+	rec.Status = reply(w, http.StatusOK, map[string]any{"total_count": len(list), "installations": s.paged(w, r, list), "simulated": true})
 }
 
 // AccountID is the simulated GitHub id of a login (or of a repository's

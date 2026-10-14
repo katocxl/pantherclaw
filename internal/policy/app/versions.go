@@ -35,6 +35,9 @@ var (
 	// ErrNotDraft is returned by the store when the version is no longer a
 	// draft (published already, or superseded).
 	ErrNotDraft = pcerr.New(pcerr.FailedPrecondition, "POLICY_NOT_DRAFT", "only a draft can be published")
+	// ErrPublishedChanged: the call expected another published version (C4).
+	ErrPublishedChanged = pcerr.New(pcerr.FailedPrecondition, "POLICY_PUBLISHED_CHANGED",
+		"another policy version was published since the one this call expected; read the published policy again")
 )
 
 // VersionInfo is one stored bundle version.
@@ -54,6 +57,7 @@ type VersionInfo struct {
 type VersionStore interface {
 	CreateVersion(ctx context.Context, org ids.OrgID, b *domain.Bundle, createdBy string, ev *audit.Event) (ids.UUID, int, error)
 	Publish(ctx context.Context, org ids.OrgID, id ids.UUID, publishedBy string, ev *audit.Event) error
+	PublishExpecting(ctx context.Context, org ids.OrgID, id ids.UUID, publishedBy string, expected *ids.UUID, ev *audit.Event) error
 	Version(ctx context.Context, org ids.OrgID, id ids.UUID) (VersionInfo, error)
 	PublishedVersion(ctx context.Context, org ids.OrgID) (*VersionInfo, error)
 	ListVersions(ctx context.Context, org ids.OrgID, limit int) ([]VersionInfo, error)
@@ -149,9 +153,26 @@ func (v *Versions) compile(ctx context.Context, org ids.OrgID, b *domain.Bundle)
 
 // Create stores a new draft version of a bundle (policy.author at the org).
 func (v *Versions) Create(ctx context.Context, raw []byte) (VersionInfo, error) {
+	return v.CreateExpecting(ctx, raw, nil)
+}
+
+// CreateExpecting creates a version as Create does, and with expected set
+// only while the published version is *expected (the zero id: none is
+// published), else ErrPublishedChanged. Creating changes no published
+// version, so a read is enough; the publish checks again under a lock.
+func (v *Versions) CreateExpecting(ctx context.Context, raw []byte, expected *ids.UUID) (VersionInfo, error) {
 	c, err := v.caller(ctx, PermPolicyAuthor)
 	if err != nil {
 		return VersionInfo{}, err
+	}
+	if expected != nil {
+		cur, err := v.Store.PublishedVersion(ctx, c.Org)
+		if err != nil {
+			return VersionInfo{}, err
+		}
+		if (cur == nil && !expected.IsZero()) || (cur != nil && cur.ID != *expected) {
+			return VersionInfo{}, ErrPublishedChanged
+		}
 	}
 	b, err := DecodeBundle(raw)
 	if err != nil {
@@ -177,6 +198,13 @@ func (v *Versions) Create(ctx context.Context, raw []byte) (VersionInfo, error) 
 // Publish makes a draft the org's published version (policy.publish at
 // the org, human only), after compiling it again.
 func (v *Versions) Publish(ctx context.Context, id ids.UUID) (VersionInfo, error) {
+	return v.PublishExpecting(ctx, id, nil)
+}
+
+// PublishExpecting publishes as Publish does, and with expected set only
+// while the published version is *expected (the zero id: none), checked
+// in the publishing transaction; else ErrPublishedChanged.
+func (v *Versions) PublishExpecting(ctx context.Context, id ids.UUID, expected *ids.UUID) (VersionInfo, error) {
 	c, err := v.caller(ctx, PermPolicyPublish)
 	if err != nil {
 		return VersionInfo{}, err
@@ -199,7 +227,7 @@ func (v *Versions) Publish(ctx context.Context, id ids.UUID) (VersionInfo, error
 		Name: "policy.published", Actor: c.Actor(), Outcome: audit.Success,
 		Object: &audit.Object{Type: "policy", ID: cur.BundleID},
 	}
-	if err := v.Store.Publish(ctx, c.Org, id, c.Principal.String(), ev); err != nil {
+	if err := v.Store.PublishExpecting(ctx, c.Org, id, c.Principal.String(), expected, ev); err != nil {
 		return VersionInfo{}, err
 	}
 	return v.Store.Version(ctx, c.Org, id)

@@ -10,6 +10,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/audit"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
@@ -25,8 +26,16 @@ type UpdateInput struct {
 	BaseURL  *string
 	// AllowedHosts replaces the list when SetAllowedHosts (an empty list
 	// means "the base URL's host").
-	AllowedHosts     []string
-	SetAllowedHosts  bool
+	AllowedHosts    []string
+	SetAllowedHosts bool
+	// AgentHosts replaces the agent hosts when SetAgentHosts; any change
+	// weakens (HR-183).
+	AgentHosts    []string
+	SetAgentHosts bool
+	// Connector replaces a connector connection's spec, which weakens
+	// enforcement (HR-183); moving a connector to another gateway needs it,
+	// so its egress connection is checked on the new gateway.
+	Connector        *ConnectorSpec
 	DestinationClass *string
 	AccessMode       *string
 	DefaultMode      *string
@@ -55,6 +64,32 @@ func (s *Service) apply(ctx context.Context, tx db.TenantTx, c actor, before dbq
 		return dbq.PcConnection{}, err
 	}
 	return after, s.after(ctx, tx, c, before, after, changes, event, extra)
+}
+
+// disableMovedProviders disables the fact providers bound to the gateway
+// a connection moved away from, so their facts stop counting and the new
+// gateway can be registered (#299 review follow-up).
+func disableMovedProviders(ctx context.Context, tx db.TenantTx, q *dbq.Queries, c actor, conn dbq.PcConnection) error {
+	moved, err := q.DisableMovedGatewayProviders(ctx, c.Org, &conn.ID, &conn.GatewayID)
+	if err != nil {
+		return err
+	}
+	for _, p := range moved {
+		if err := q.DeactivateFactDeclarations(ctx, c.Org, p.ID); err != nil {
+			return err
+		}
+		details := map[string]string{"reason": "connection_moved", "connection": conn.ID.String()}
+		if p.GatewayID != nil {
+			details["gateway"] = p.GatewayID.String()
+		}
+		if _, err := audit.Record(ctx, tx, audit.Event{
+			Name: "facts.provider_disabled", Actor: c.Audit, Outcome: audit.Success,
+			Object: &audit.Object{Type: "fact_provider", ID: p.ID.String()}, Details: details,
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // after is everything a change does besides writing it.
@@ -88,6 +123,11 @@ func (s *Service) after(ctx context.Context, tx db.TenantTx, c actor, before, af
 			return err
 		}
 	}
+	if before.GatewayID != after.GatewayID {
+		if err := disableMovedProviders(ctx, tx, q, c, after); err != nil {
+			return err
+		}
+	}
 	if len(details) > 16 {
 		// More changes than the ledger takes in one entry: keep the field
 		// names, which say what weakened.
@@ -115,7 +155,8 @@ func params(c actor, conn dbq.PcConnection) dbq.UpdateConnectionParams {
 	return dbq.UpdateConnectionParams{
 		GatewayID: conn.GatewayID, BaseUrl: conn.BaseUrl, AllowedHosts: conn.AllowedHosts, DestinationClass: conn.DestinationClass,
 		AccessMode: conn.AccessMode, DefaultMode: conn.DefaultMode, MaxResponseBytes: conn.MaxResponseBytes, TimeoutMs: conn.TimeoutMs,
-		State: conn.State, QuarantineReason: conn.QuarantineReason, UpdatedBy: c.By, OrgID: c.Org, ID: conn.ID,
+		AgentHosts: conn.AgentHosts,
+		State:      conn.State, QuarantineReason: conn.QuarantineReason, UpdatedBy: c.By, OrgID: c.Org, ID: conn.ID,
 		Revision: conn.Revision,
 	}
 }
@@ -164,6 +205,12 @@ func (s *Service) Update(ctx context.Context, in UpdateInput) (Connection, error
 			if err := activeGateway(ctx, q, c.Org, *in.Gateway); err != nil {
 				return err
 			}
+			if conn.Kind == KindMCPContainer && s.hosted[*in.Gateway] {
+				return ErrHostedGateway
+			}
+			if conn.Kind == KindMCPContainer && in.Connector == nil {
+				return ErrConnector
+			}
 			p.GatewayID = *in.Gateway
 			set("gateway_id", conn.GatewayID.String(), p.GatewayID.String(), true)
 		}
@@ -188,6 +235,12 @@ func (s *Service) Update(ctx context.Context, in UpdateInput) (Connection, error
 			p.BaseUrl, p.AllowedHosts = nb, nh
 			set("base_url", deref(conn.BaseUrl), deref(nb), true)
 			set("allowed_hosts", strings.Join(conn.AllowedHosts, ","), strings.Join(nh, ","), true)
+		}
+		if in.SetAgentHosts {
+			if p.AgentHosts, err = checkAgentHosts(conn.Kind, in.AgentHosts); err != nil {
+				return err
+			}
+			set("agent_hosts", strings.Join(conn.AgentHosts, ","), strings.Join(p.AgentHosts, ","), true)
 		}
 		if in.DestinationClass != nil {
 			if !slices.Contains([]string{ClassPublic, ClassInternal}, *in.DestinationClass) {
@@ -218,9 +271,28 @@ func (s *Service) Update(ctx context.Context, in UpdateInput) (Connection, error
 			p.TimeoutMs = *in.TimeoutMs
 			limits["timeout_ms"] = strconv.Itoa(int(p.TimeoutMs))
 		}
+		var spec ConnectorSpec
+		if in.Connector != nil {
+			if conn.Kind != KindMCPContainer {
+				return ErrConnector
+			}
+			if spec, err = in.Connector.check(); err != nil {
+				return err
+			}
+			cur, err := q.CurrentConnectorSpec(ctx, c.Org, conn.ID)
+			if err != nil {
+				return err
+			}
+			set("connector", connectorSummary(&cur), specView(spec), true)
+		}
 		after, err := s.apply(ctx, tx, c, conn, p, changes, "connection.updated", limits)
 		if err != nil {
 			return err
+		}
+		if in.Connector != nil {
+			if _, err := putConnector(ctx, q, c, after, spec); err != nil {
+				return err
+			}
 		}
 		out, err = load(ctx, q, after)
 		return err

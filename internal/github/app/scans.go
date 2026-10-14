@@ -6,9 +6,12 @@ package app
 import (
 	"context"
 	"encoding/json/v2"
+	"errors"
+	"strconv"
 
 	billing "github.com/katocxl/pantherclaw/internal/billing/domain"
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
+	evdomain "github.com/katocxl/pantherclaw/internal/evidence/domain"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
@@ -81,38 +84,10 @@ func (s *Scans) Start(ctx context.Context, connection ids.UUID) (Scan, error) {
 	if err != nil {
 		return Scan{}, err
 	}
-	run := ids.NewV7()
+	var run ids.UUID
 	err = s.Pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
-		q := dbq.New(tx)
-		conn, err := q.ScanConnection(ctx, c.Org, connection)
-		if db.IsNoRows(err) || (err == nil && (conn.State != "ACTIVE" || conn.Kind != "http" || conn.Package != "pc.github" ||
-			conn.CredentialKind != "github_app")) {
-			return ErrNotGitHubApp
-		} else if err != nil {
-			return err
-		}
-		if open, err := q.OpenOrgScan(ctx, c.Org, connection); err != nil {
-			return err
-		} else if open {
-			return ErrScanRunning
-		}
-		request, err := json.Marshal(map[string]string{"run": run.String()})
-		if err != nil {
-			return err
-		}
-		lease := ids.NewV7()
-		if err := q.ScheduleOrgScan(ctx, dbq.ScheduleOrgScanParams{OrgID: c.Org, ID: lease, ConnectionID: connection, Request: request}); err != nil {
-			return err
-		}
-		if err := q.InsertGitHubScanRun(ctx, dbq.InsertGitHubScanRunParams{
-			OrgID: c.Org, ID: run, ConnectionID: connection, VerificationID: &lease, StartedBy: c.Principal.String(),
-		}); err != nil {
-			return err
-		}
-		_, err = audit.Record(ctx, tx, audit.Event{
-			Name: "github.scan_started", Actor: c.Actor(), Outcome: audit.Success, Object: &audit.Object{Type: "connection", ID: connection.String()},
-			Details: map[string]string{"scan": run.String()},
-		})
+		var err error
+		run, err = schedule(ctx, tx, connection, c.Principal.String(), c.Actor())
 		return err
 	})
 	if err != nil {
@@ -186,4 +161,103 @@ func (s *Scans) Findings(ctx context.Context, scan ids.UUID, size int32, token s
 		return nil
 	}, db.ReadOnly())
 	return out, next, err
+}
+
+// schedule schedules an org scan of a GitHub App connection in tx, as
+// startedBy, and returns its run. The lease's request names the run and
+// the installation the connection records now: the gateway reads that
+// installation's permissions only when its credential is for it, and the
+// server records them only under it (F048).
+func schedule(ctx context.Context, tx db.TenantTx, connection ids.UUID, startedBy string, actor evdomain.Actor) (ids.UUID, error) {
+	q, org := dbq.New(tx), tx.OrgID()
+	conn, err := q.ScanConnection(ctx, org, connection)
+	if db.IsNoRows(err) || (err == nil && (conn.State != "ACTIVE" || conn.Kind != "http" || conn.Package != "pc.github" ||
+		conn.CredentialKind != "github_app")) {
+		return ids.UUID{}, ErrNotGitHubApp
+	} else if err != nil {
+		return ids.UUID{}, err
+	}
+	if open, err := q.OpenOrgScan(ctx, org, connection); err != nil {
+		return ids.UUID{}, err
+	} else if open {
+		return ids.UUID{}, ErrScanRunning
+	}
+	run := ids.NewV7()
+	req := map[string]string{"run": run.String()}
+	if inst, err := q.ConnectionGitHubInstallation(ctx, org, connection); err == nil {
+		req["installation"] = strconv.FormatInt(inst, 10)
+	} else if !db.IsNoRows(err) {
+		return ids.UUID{}, err
+	}
+	request, err := json.Marshal(req, json.Deterministic(true))
+	if err != nil {
+		return ids.UUID{}, err
+	}
+	lease := ids.NewV7()
+	if err := q.ScheduleOrgScan(ctx, dbq.ScheduleOrgScanParams{OrgID: org, ID: lease, ConnectionID: connection, Request: request}); err != nil {
+		return ids.UUID{}, err
+	}
+	if err := q.InsertGitHubScanRun(ctx, dbq.InsertGitHubScanRunParams{
+		OrgID: org, ID: run, ConnectionID: connection, VerificationID: &lease, StartedBy: startedBy,
+	}); err != nil {
+		return ids.UUID{}, err
+	}
+	_, err = audit.Record(ctx, tx, audit.Event{
+		Name: "github.scan_started", Actor: actor, Outcome: audit.Success, Object: &audit.Object{Type: "connection", ID: connection.String()},
+		Details: map[string]string{"scan": run.String(), "started_by": startedBy},
+	})
+	return run, err
+}
+
+// systemActor is who starts the scans no person asked for.
+var systemActor = evdomain.Actor{Type: "system", ID: "github-scans"}
+
+// scans reports whether the edition scans organizations (Team and up).
+func (s *Scans) scans(ctx context.Context) bool {
+	if s.Ents == nil {
+		return false
+	}
+	e, err := s.Ents.Current(ctx)
+	return err == nil && e.GitHubOrgScan()
+}
+
+// InstallationRecorded schedules an org scan, in tx, of a connection whose
+// GitHub App installation was just recorded (a github_app credential
+// sealed), so its permissions are read at once (F048). It does nothing in
+// an edition that does not scan, or while a scan of it is open.
+func (s *Scans) InstallationRecorded(ctx context.Context, tx db.TenantTx, connection ids.UUID) error {
+	if !s.scans(ctx) {
+		return nil
+	}
+	_, err := schedule(ctx, tx, connection, "system:installation_recorded", systemActor)
+	if errors.Is(err, ErrScanRunning) || errors.Is(err, ErrNotGitHubApp) {
+		return nil
+	}
+	return err
+}
+
+// ScheduleDaily schedules an org scan of each of the org's GitHub App
+// connections that has none open and none started in the last day, so
+// what coverage reads of their installations is never older than that
+// (F048 treats a read older than 7 days as not observed). It returns how
+// many it scheduled.
+func (s *Scans) ScheduleDaily(ctx context.Context, org ids.OrgID) (int, error) {
+	if !s.scans(ctx) {
+		return 0, nil
+	}
+	n := 0
+	err := s.Pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
+		due, err := dbq.New(tx).GitHubAppConnectionsDue(ctx, org)
+		if err != nil {
+			return err
+		}
+		for _, conn := range due {
+			if _, err := schedule(ctx, tx, conn, "system:daily", systemActor); err != nil {
+				return err
+			}
+			n++
+		}
+		return nil
+	})
+	return n, err
 }
