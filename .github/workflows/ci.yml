@@ -464,6 +464,7 @@ jobs:
       - go-static
       - go-test
       - go-integration
+      - range
       - go-vuln
       - secrets
       - semgrep
