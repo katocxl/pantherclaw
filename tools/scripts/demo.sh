@@ -240,6 +240,7 @@ up() {
   [ -n "$edge" ] && [ -n "$probe" ] && [ -n "$demoagent" ] || die "could not read the image ids from $DEMO/images.out"
   write_env "$edge" "$probe" "$demoagent"
   plant_workspace
+  plant_project
 
   say "7/7 server and gateway"
   start_proc server "$server" serve --config "$DEMO/server.json"
@@ -257,6 +258,21 @@ plant_workspace() {
   [ -f "$DEMO/workspace/.env" ] || printf 'GITHUB_TOKEN=ghp_%s\n' "$(openssl rand -hex 18)" > "$DEMO/workspace/.env"
   [ -f "$DEMO/workspace/.ssh/id_ed25519" ] ||
     printf -- '-----BEGIN OPENSSH PRIVATE KEY-----\n%s\n-----END OPENSSH PRIVATE KEY-----\n' "$(openssl rand -base64 48 | tr -d '\n')" > "$DEMO/workspace/.ssh/id_ed25519"
+}
+
+# plant_project makes the folder `pclaw init` wires in the quickstart: a project
+# whose Claude Code configuration holds a GitHub MCP server with the
+# simulator's personal token, the way developers configure one. Nothing in
+# your own Claude Code settings is read or changed by the demo.
+plant_project() {
+  mkdir -p "$DEMO/project"
+  [ -f "$DEMO/project/.mcp.json" ] || cat > "$DEMO/project/.mcp.json" << JSON
+{
+  "mcpServers": {
+    "github": { "type": "http", "url": "http://$GITHUB_MCP", "headers": { "Authorization": "Bearer $(cat "$DEMO/github-mcp.token")" } }
+  }
+}
+JSON
 }
 
 # write_env writes the file the quickstart sources: the pclaw settings and the
@@ -278,6 +294,7 @@ export PANTHERCLAW_SANDBOX_EDGE_IMAGE="$1"
 export PANTHERCLAW_SANDBOX_PROBE_IMAGE="$2"
 export DEMO_AGENT_IMAGE="$3"
 export DEMO_WORKSPACE="$ROOT/$DEMO/workspace"
+export DEMO_PROJECT="$ROOT/$DEMO/project"
 export DEMO_SERVER="$API"
 export DEMO_GATEWAY="$GATEWAY"
 export DEMO_ORG="$org"
