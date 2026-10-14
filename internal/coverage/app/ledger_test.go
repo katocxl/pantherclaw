@@ -88,6 +88,7 @@ func TestHR217_CoverageLedgerBodiesNameIdsAsUUIDStrings(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			iss := bundletest.NewIssuer(t)
 			iss.Append(1)
+			iss.AppendClosure(bundletest.ClosureOpts{ID: closure.String(), Agent: agent.String()})
 			iss.AppendCoverageBody(bundle.SnapshotKind, entry)
 			if c.withInvalidation {
 				iss.AppendCoverageBody(bundle.InvalidationKind, invalidation)

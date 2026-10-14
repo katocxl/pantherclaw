@@ -4,8 +4,10 @@
 package app
 
 import (
+	"cmp"
 	"context"
 	"encoding/json/v2"
+	"errors"
 	"slices"
 
 	agents "github.com/katocxl/pantherclaw/internal/agents/app"
@@ -42,7 +44,7 @@ func (s *Service) closures(ctx context.Context, c tenancy.Caller, q *dbq.Queries
 			return nil, ErrClosureNotFound
 		}
 	}
-	return s.refEntries(ctx, c, q, refs)
+	return s.refEntries(ctx, c, q, refs, false)
 }
 
 // probeRunEntries collects the sandbox.closure entries that record probe runs
@@ -61,39 +63,51 @@ func (s *Service) probeRunEntries(ctx context.Context, c tenancy.Caller, q *dbq.
 	for i, r := range refs {
 		conv[i] = dbq.ClosureEntryRefsRow(r)
 	}
-	return s.refEntries(ctx, c, q, conv)
+	return s.refEntries(ctx, c, q, conv, false)
 }
 
 // refEntries checks evidence.read where each closure's agent lives and reads
-// the closures' chained entries.
-func (s *Service) refEntries(ctx context.Context, c tenancy.Caller, q *dbq.Queries, refs []dbq.ClosureEntryRefsRow) ([]chained, error) {
+// the closures' chained entries. With skipDenied, a closure whose agent the
+// caller may not read is left out instead of refusing the export; the
+// verifier then fails the snapshot that names it (T-095).
+func (s *Service) refEntries(ctx context.Context, c tenancy.Caller, q *dbq.Queries, refs []dbq.ClosureEntryRefsRow, skipDenied bool,
+) ([]chained, error) {
 	var entryIDs []ids.UUID
-	checked := map[string]bool{}
+	allowed := map[string]bool{}
 	for _, r := range refs {
-		entryIDs = append(entryIDs, r.EntryID)
-		if checked[r.AgentID] {
-			continue
+		ok, seen := allowed[r.AgentID]
+		if !seen {
+			err := s.mayRead(ctx, c, q, r.AgentID)
+			if err != nil && (!skipDenied || errors.Is(err, ErrClosureNotFound)) {
+				return nil, err
+			}
+			ok = err == nil
+			allowed[r.AgentID] = ok
 		}
-		checked[r.AgentID] = true
-		agent, err := ids.ParseUUID(r.AgentID)
-		if err != nil {
-			return nil, ErrClosureNotFound
-		}
-		a, err := q.GetAgent(ctx, c.Org, agent)
-		if db.IsNoRows(err) {
-			return nil, ErrClosureNotFound
-		} else if err != nil {
-			return nil, err
-		}
-		path, err := agents.PathOf(ctx, q, a)
-		if err != nil {
-			return nil, err
-		}
-		if err := c.Require(td.PermEvidenceRead, path); err != nil {
-			return nil, err
+		if ok {
+			entryIDs = append(entryIDs, r.EntryID)
 		}
 	}
 	return chainedOf(ctx, q, c.Org, entryIDs)
+}
+
+// mayRead checks evidence.read where the agent lives.
+func (s *Service) mayRead(ctx context.Context, c tenancy.Caller, q *dbq.Queries, agentID string) error {
+	agent, err := ids.ParseUUID(agentID)
+	if err != nil {
+		return ErrClosureNotFound
+	}
+	a, err := q.GetAgent(ctx, c.Org, agent)
+	if db.IsNoRows(err) {
+		return ErrClosureNotFound
+	} else if err != nil {
+		return err
+	}
+	path, err := agents.PathOf(ctx, q, a)
+	if err != nil {
+		return err
+	}
+	return c.Require(td.PermEvidenceRead, path)
 }
 
 // chainedOf reads the chained entries with ids.
@@ -113,10 +127,11 @@ func chainedOf(ctx context.Context, q *dbq.Queries, org ids.OrgID, entryIDs []id
 }
 
 // withClosures adds the sandbox.closure entries that the coverage snapshot
-// entries of entries name, so a bundle of a transaction whose receipt's
-// coverage claim names a snapshot carries the closure that snapshot was
-// computed from (HR-227). Their reports are added by probeReports.
-func withClosures(ctx context.Context, q *dbq.Queries, org ids.OrgID, entryIDs []ids.UUID, entries []chained) ([]chained, error) {
+// entries of entries name, so a bundle whose snapshots were computed from a
+// closure carries that closure (HR-227). A closure whose agent the caller
+// may not read is left out; verify then fails the snapshot that names it.
+// Their reports are added by probeReports.
+func (s *Service) withClosures(ctx context.Context, c tenancy.Caller, q *dbq.Queries, entries []chained) ([]chained, error) {
 	var closureIDs []string
 	for _, e := range entries {
 		if e.kind != snapshotKind || e.removedAt != nil {
@@ -132,14 +147,25 @@ func withClosures(ctx context.Context, q *dbq.Queries, org ids.OrgID, entryIDs [
 	if len(closureIDs) == 0 {
 		return entries, nil
 	}
-	refs, err := q.ClosureEntryRefs(ctx, org, closureIDs)
+	refs, err := q.ClosureEntryRefs(ctx, c.Org, closureIDs)
 	if err != nil {
 		return nil, err
 	}
-	for _, r := range refs {
-		entryIDs = append(entryIDs, r.EntryID)
+	extra, err := s.refEntries(ctx, c, q, refs, true)
+	if err != nil {
+		return nil, err
 	}
-	return chainedOf(ctx, q, org, entryIDs)
+	have := map[ids.UUID]bool{}
+	for _, e := range entries {
+		have[e.id] = true
+	}
+	for _, e := range extra {
+		if !have[e.id] {
+			entries = append(entries, e)
+		}
+	}
+	slices.SortFunc(entries, func(x, y chained) int { return cmp.Compare(x.seq, y.seq) })
+	return entries, nil
 }
 
 // probeReports returns the signed probe reports that the sandbox.closure

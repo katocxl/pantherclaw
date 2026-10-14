@@ -9,6 +9,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json/v2"
+	"maps"
 	"slices"
 	"strings"
 
@@ -89,6 +90,7 @@ func (v *verifier) closures() {
 	for _, c := range v.closureEntries {
 		v.closure(c, reports)
 	}
+	v.namedClosures()
 }
 
 func decodeKey(s string) (ed25519.PublicKey, bool) {
@@ -219,4 +221,25 @@ func (v *verifier) noteClosure(e *Entry, body []byte) {
 	c := closureEntry{seq: e.Seq}
 	c.ok = json.Unmarshal(body, &c.body, json.RejectUnknownMembers(true)) == nil
 	v.closureEntries = append(v.closureEntries, c)
+}
+
+// namedClosures fails every verified coverage snapshot that names a closure
+// whose sandbox.closure entry is not in the bundle: dropping the entry with
+// its reports must not turn the evidence into silence (T-095). Not
+// available only when a closure entry's body was removed by retention.
+func (v *verifier) namedClosures() {
+	have := map[string]bool{}
+	for _, c := range v.closureEntries {
+		have[c.body.Closure] = true
+	}
+	for _, s := range slices.SortedFunc(maps.Values(v.snapshots), func(a, b snapshotEntry) int { return int(a.seq - b.seq) }) {
+		id := s.body.Closure
+		switch {
+		case id == "" || have[id]:
+		case v.closuresRemoved > 0:
+			v.r.add("closure.reports", "closure "+truncate(id), NotAvailable, "snapshot %s names closure %s; a closure entry's body was removed by retention", truncate(s.body.Snapshot), truncate(id))
+		default:
+			v.r.add("closure.reports", "closure "+truncate(id), Failed, "snapshot %s names closure %s; its entry is not in the bundle", truncate(s.body.Snapshot), truncate(id))
+		}
+	}
 }

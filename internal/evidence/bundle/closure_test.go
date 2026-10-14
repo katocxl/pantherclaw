@@ -144,3 +144,34 @@ func TestT095_ASwappedOrForgedProbeReportFailsVerify(t *testing.T) {
 		t.Errorf("a rewritten closure entry passed:\n%s", r.Text())
 	}
 }
+
+// TestT095_ADroppedClosureNamedBySnapshotFailsVerify: a bundle whose
+// verified coverage snapshot names a closure fails when the closure's
+// ledger entry and its probe reports are both dropped; it is never silent.
+func TestT095_ADroppedClosureNamedBySnapshotFailsVerify(t *testing.T) {
+	iss := bundletest.NewIssuer(t)
+	iss.Append(1)
+	c := iss.AppendClosure(bundletest.ClosureOpts{})
+	iss.AppendSnapshot(bundletest.Snapshot{
+		V: 1, Scope: bundletest.Scope{Agent: c.Agent, Connection: c.Connection, Operation: "github.pulls.merge"}, State: "ENFORCED",
+		Snapshot: c.ID[:len(c.ID)-1] + "0", ComputedAt: "2026-10-10T08:30:00.000000Z", Exclusions: []string{}, RoutesDigest: "sha256:00", Closure: c.ID,
+	})
+	iss.Checkpoint()
+	good := verifyClosure(t, iss, iss.Bundle())
+	if good.Failed() {
+		t.Fatalf("a complete bundle failed:\n%s", good.Text())
+	}
+	b := iss.Bundle()
+	b.Entries = slices.DeleteFunc(b.Entries, func(e bundle.Entry) bool { return e.Kind == bundle.ClosureKind })
+	b.ProbeReports = nil
+	r := verifyClosure(t, iss, b)
+	if !r.Failed() {
+		t.Fatalf("a dropped closure passed:\n%s", r.Text())
+	}
+	if got := checksNamed(r, "closure.reports"); len(got) != 1 || got[0].Status != bundle.Failed {
+		t.Errorf("closure.reports = %v, want one failed", got)
+	}
+	if len(checksNamed(r, "closure.probe")) != 0 {
+		t.Errorf("a probe line was printed:\n%s", r.Text())
+	}
+}

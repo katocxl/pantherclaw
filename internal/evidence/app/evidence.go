@@ -452,6 +452,9 @@ func (s *Service) ExportBundle(ctx context.Context, sel Selection, consistencyFr
 		default:
 			entries, b.Receipts, err = s.entryRange(ctx, c.Org, q, sel.From, sel.To)
 		}
+		if err == nil && !byClosure && !byRuns {
+			entries, err = s.withClosures(ctx, c, q, entries)
+		}
 		if err != nil {
 			return err
 		}
@@ -611,9 +614,6 @@ func (s *Service) transactions(ctx context.Context, c tenancy.Caller, q *dbq.Que
 	}
 	entries, err := chainedOf(ctx, q, c.Org, entryIDs)
 	if err != nil {
-		return nil, nil, err
-	}
-	if entries, err = withClosures(ctx, q, c.Org, entryIDs, entries); err != nil {
 		return nil, nil, err
 	}
 	return entries, receipts, nil

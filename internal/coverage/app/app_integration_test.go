@@ -456,8 +456,25 @@ func TestHR227_ABundleOfAClosureCarriesItsEntryAndReports(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := ledger.ChainAll(context.Background(), f.p, f.org, 100); err != nil {
-		t.Fatal(err)
+	// Chaining waits for transactions of the whole cluster below xmin, so under
+	// parallel tests it may need another pass.
+	for deadline := time.Now().Add(time.Minute); ; {
+		if _, err := ledger.ChainAll(context.Background(), f.p, f.org, 100); err != nil {
+			t.Fatal(err)
+		}
+		var n int
+		if err := f.p.InTenantTx(context.Background(), f.org, func(ctx context.Context, tx db.TenantTx) error {
+			return tx.QueryRow(ctx, `SELECT count(*) FROM pc.ledger_chain WHERE org_id = $1`, f.org).Scan(&n)
+		}); err != nil {
+			t.Fatal(err)
+		}
+		if n > 0 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the closure entry was not chained within a minute")
+		}
+		time.Sleep(200 * time.Millisecond)
 	}
 	as := func(org ids.OrgID, role td.RoleName) context.Context {
 		return tenancy.WithCaller(context.Background(), tenancy.Caller{Subject: td.Subject{
@@ -505,4 +522,28 @@ func mustUUID(t *testing.T, s string) ids.UUID {
 		t.Fatal(err)
 	}
 	return id
+}
+
+// TestHR227_AFailedLedgerAppendRollsTheClosureBack: the closure row and its
+// ledger entry are one transaction. A closure whose entry the ledger refuses
+// (more reports than a 64 KiB body holds) is not stored, and nothing is
+// ledgered.
+func TestHR227_AFailedLedgerAppendRollsTheClosureBack(t *testing.T) {
+	f := newFixture(t)
+	c := f.closure(probes(false), f.dbNow(t))
+	for range 600 {
+		c.Reports = append(c.Reports, domain.ClosureReport{Run: ids.NewV7(), Kind: "sandbox"})
+	}
+	if _, err := f.record(t, c); err == nil {
+		t.Fatal("a closure whose ledger entry is refused was recorded")
+	}
+	var n int
+	if err := f.p.InTenantTx(context.Background(), f.org, func(ctx context.Context, tx db.TenantTx) error {
+		return tx.QueryRow(ctx, `SELECT count(*) FROM pc.coverage_closures WHERE org_id = $1`, f.org).Scan(&n)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if n != 0 || len(f.closureEntries(t)) != 0 {
+		t.Fatalf("%d closure rows and %d entries remain", n, len(f.closureEntries(t)))
+	}
 }

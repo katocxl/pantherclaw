@@ -69,6 +69,8 @@ type verifier struct {
 	invalidations []invalidationEntry
 	// closureEntries are the verified sandbox.closure entries (HR-227).
 	closureEntries []closureEntry
+	// closuresRemoved counts closure entries whose body retention removed.
+	closuresRemoved int
 }
 
 // Verify checks a bundle offline against the pinned keys and returns the
@@ -288,6 +290,9 @@ func (v *verifier) entries() {
 		subject := fmt.Sprintf("seq %d", e.Seq)
 		st, d := v.link(e, prev)
 		v.r.add("entry.link", subject, st, "%s", d)
+		if e.Kind == ClosureKind && e.Removed != nil {
+			v.closuresRemoved++
+		}
 		v.inclusion(e, subject, proofs[e.Seq])
 		prev = e
 	}

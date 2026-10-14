@@ -31,7 +31,7 @@ type ClosureOpts struct {
 	// although the signed reports say blocked.
 	EditOutcome string
 	// Session and Agent fix the closure's ids when set.
-	Session, Agent string
+	Session, Agent, ID string
 }
 
 // Closure is a recorded sandbox closure: its ids, keys and the reports a
@@ -56,6 +56,9 @@ func (i *Issuer) AppendClosure(o ClosureOpts) *Closure {
 	c := &Closure{
 		ID: ids.NewV7().String(), Session: ids.NewV7().String(), Agent: ids.NewV7().String(), Connection: ids.NewV7().String(),
 		Runs: map[string]string{}, ProbeKey: probeKey, HostKey: hostKey,
+	}
+	if o.ID != "" {
+		c.ID = o.ID
 	}
 	if o.Session != "" {
 		c.Session = o.Session
