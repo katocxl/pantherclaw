@@ -10,6 +10,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"unicode"
 )
 
 var (
@@ -18,7 +19,7 @@ var (
 	attackerRE     = regexp.MustCompile(`^A([1-9]|1[0-2])$`)
 	threatRE       = regexp.MustCompile(`^T-[0-9]{3}$`)
 	ruleRE         = regexp.MustCompile(`^HR-[0-9]{3}$`)
-	fileNameRE     = regexp.MustCompile(`^(RT-[0-9]{3})-[a-z0-9]+(-[a-z0-9]+)*.yaml$`)
+	fileNameRE     = regexp.MustCompile(`^(RT-[0-9]{3})-[a-z0-9]+(-[a-z0-9]+)*\.yaml$`)
 	roleRE         = regexp.MustCompile(`^[a-z0-9-]{1,40}$`)
 	toolRE         = regexp.MustCompile(`^[A-Za-z0-9_.:/-]{1,120}$`)
 	tokenRE        = regexp.MustCompile(`^[A-Za-z0-9_.:-]{1,64}$`)
@@ -43,6 +44,7 @@ var (
 	kindsNeedingEx = map[string]bool{
 		"agent.call": true, "agent.direct": true, "agent.child": true, "agent.steal": true,
 		"sandbox.probe": true, "server.read": true, "target.replay": true, "wait": true,
+		"person.approve": true, "person.decline": true, "check.receipt": true,
 	}
 )
 
@@ -134,6 +136,8 @@ func (s *Scenario) Validate() error {
 		return invalid("id %q must match RT-###", s.ID)
 	case s.Title == "" || len(s.Title) > MaxTitleLen:
 		return invalid("title must be 1..%d bytes", MaxTitleLen)
+	case hasUnsafeRune(s.Title):
+		return invalid("title must not hold control or bidirectional-control characters")
 	case !slices.Contains(categories, s.Category):
 		return invalid("category must be one of %v", categories)
 	case !slices.Contains(suites, s.Suite):
@@ -526,4 +530,18 @@ func unique(name string, v []string) error {
 		seen[x] = true
 	}
 	return nil
+}
+
+// hasUnsafeRune reports a control character (C0, C1, DEL) or a Unicode
+// bidirectional control, which could make a title read differently from
+// what it is.
+func hasUnsafeRune(s string) bool {
+	for _, r := range s {
+		switch {
+		case unicode.IsControl(r), r == 0x061C, r == 0x200E, r == 0x200F,
+			r >= 0x202A && r <= 0x202E, r >= 0x2066 && r <= 0x2069:
+			return true
+		}
+	}
+	return false
 }

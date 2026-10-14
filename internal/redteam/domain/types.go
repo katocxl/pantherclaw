@@ -98,10 +98,12 @@ const (
 
 // Observation is what a driver saw for one step.
 type Observation struct {
-	Outcome       Outcome
-	Reason, Code  string
-	Reasons       []string      // every reason of the decision; expect.reason passes when it is one of them
-	Each          []Observation // a concurrent step: one observation per call, in order
+	Outcome      Outcome
+	Reason, Code string
+	Reasons      []string      // every reason of the decision; expect.reason passes when it is one of them
+	Each         []Observation // a concurrent step: one observation per call, in order
+	// Missing lists the parts a check.receipt step found absent; any makes the step FAIL.
+	Missing       []string
 	DecisionHash  string
 	TransactionID string
 	ProbeReportID string

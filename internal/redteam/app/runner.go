@@ -63,6 +63,12 @@ type Runner struct {
 // Run runs one scenario. It never retries a step.
 func (r *Runner) Run(ctx context.Context, s domain.Scenario) (res domain.Result) {
 	res = domain.Result{ScenarioID: s.ID}
+	// A scenario is validated here too: a Scenario built in code, not parsed,
+	// never reaches the driver unchecked.
+	if err := s.Validate(); err != nil {
+		res.Verdict, res.Detail = domain.VerdictError, err.Error()
+		return res
+	}
 	digest, err := domain.Digest(&s)
 	if err != nil {
 		res.Verdict, res.Detail = domain.VerdictError, err.Error()
@@ -191,6 +197,10 @@ func (r *Runner) step(ctx context.Context, s domain.Scenario, st domain.Step, va
 		}
 	}
 	sr.Observed = obs
+	if len(obs.Missing) > 0 {
+		sr.Mismatch = "the receipt lacks " + strings.Join(obs.Missing, ", ")
+		return sr, domain.VerdictFail, sr.Mismatch
+	}
 	if why := mismatch(st.Expect, obs, seen); why != "" {
 		sr.Mismatch = why
 		return sr, domain.VerdictFail, why
@@ -301,6 +311,16 @@ func LoadDir(dir string) ([]Loaded, error) {
 	var out []Loaded
 	ids := map[string]string{}
 	for _, f := range files {
+		info, err := os.Lstat(f)
+		if err != nil {
+			return nil, err
+		}
+		if !info.Mode().IsRegular() {
+			return nil, fmt.Errorf("%s: a scenario file is a regular file (no links, no directories)", filepath.Base(f))
+		}
+		if info.Size() > domain.MaxFileBytes {
+			return nil, fmt.Errorf("%s: larger than %d bytes", filepath.Base(f), domain.MaxFileBytes)
+		}
 		raw, err := os.ReadFile(f) //nolint:gosec // G304: operator-chosen scenario directory
 		if err != nil {
 			return nil, err
