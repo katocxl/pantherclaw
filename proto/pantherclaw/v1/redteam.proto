@@ -110,6 +110,12 @@ message RangeScenarioDecl {
     ]
   }];
   string title = 6 [(buf.validate.field).string.max_len = 200];
+  // step_count is how many steps the scenario has: a PASS records exactly
+  // that many (FAIL and ERROR may record fewer).
+  int32 step_count = 7 [(buf.validate.field).int32 = {
+    gte: 1
+    lte: 40
+  }];
 }
 
 message StartRangeRequest {
@@ -184,6 +190,22 @@ message RangeStepInput {
     max_len: 16
     pattern: "^(HR-[0-9]{3})?$"
   }];
+  // kind is the scenario step kind (agent.call, wait, person.approve, ...).
+  // The server derives the observation from a cited transaction only for
+  // agent.* and wait steps that expect ALLOW, DENY, HOLD, CANNOT_AUTHORIZE,
+  // CONFIRMED or UNKNOWN; every other step is observed_by CLIENT and its
+  // transaction is only a reference that must belong to the range.
+  string kind = 7 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 32
+    pattern: "^[a-z]+([.][a-z_]+)?$"
+  }];
+  // probe_kind names the result of the cited probe report the step is
+  // based on (a sandbox.probe step's probe); required with probe_report_id.
+  string probe_kind = 8 [(buf.validate.field).string = {
+    max_len: 64
+    pattern: "^([a-z][a-z0-9_]*)?$"
+  }];
 }
 
 message RecordResultRequest {
@@ -217,6 +239,8 @@ message RangeStep {
   string transaction_id = 8;
   string probe_report_id = 9;
   string decisive_control = 10;
+  string kind = 11;
+  string probe_kind = 12;
 }
 
 // RangeResult is one scenario's recorded result.

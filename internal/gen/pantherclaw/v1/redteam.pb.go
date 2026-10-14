@@ -195,13 +195,16 @@ func (RangeObservedBy) EnumDescriptor() ([]byte, []int) {
 // RangeScenarioDecl declares a scenario of the set a range runs. The
 // digest is the SHA-256 (lowercase hex) of the scenario's canonical form.
 type RangeScenarioDecl struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	Digest        string                 `protobuf:"bytes,2,opt,name=digest,proto3" json:"digest,omitempty"`
-	Tier          string                 `protobuf:"bytes,3,opt,name=tier,proto3" json:"tier,omitempty"`
-	Category      string                 `protobuf:"bytes,4,opt,name=category,proto3" json:"category,omitempty"`
-	Suite         string                 `protobuf:"bytes,5,opt,name=suite,proto3" json:"suite,omitempty"`
-	Title         string                 `protobuf:"bytes,6,opt,name=title,proto3" json:"title,omitempty"`
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	Id       string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Digest   string                 `protobuf:"bytes,2,opt,name=digest,proto3" json:"digest,omitempty"`
+	Tier     string                 `protobuf:"bytes,3,opt,name=tier,proto3" json:"tier,omitempty"`
+	Category string                 `protobuf:"bytes,4,opt,name=category,proto3" json:"category,omitempty"`
+	Suite    string                 `protobuf:"bytes,5,opt,name=suite,proto3" json:"suite,omitempty"`
+	Title    string                 `protobuf:"bytes,6,opt,name=title,proto3" json:"title,omitempty"`
+	// step_count is how many steps the scenario has: a PASS records exactly
+	// that many (FAIL and ERROR may record fewer).
+	StepCount     int32 `protobuf:"varint,7,opt,name=step_count,json=stepCount,proto3" json:"step_count,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -276,6 +279,13 @@ func (x *RangeScenarioDecl) GetTitle() string {
 		return x.Title
 	}
 	return ""
+}
+
+func (x *RangeScenarioDecl) GetStepCount() int32 {
+	if x != nil {
+		return x.StepCount
+	}
+	return 0
 }
 
 type StartRangeRequest struct {
@@ -476,8 +486,17 @@ type RangeStepInput struct {
 	ProbeReportId string `protobuf:"bytes,5,opt,name=probe_report_id,json=probeReportId,proto3" json:"probe_report_id,omitempty"`
 	// decisive_control is the rule the scenario says decides the step.
 	DecisiveControl string `protobuf:"bytes,6,opt,name=decisive_control,json=decisiveControl,proto3" json:"decisive_control,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// kind is the scenario step kind (agent.call, wait, person.approve, ...).
+	// The server derives the observation from a cited transaction only for
+	// agent.* and wait steps that expect ALLOW, DENY, HOLD, CANNOT_AUTHORIZE,
+	// CONFIRMED or UNKNOWN; every other step is observed_by CLIENT and its
+	// transaction is only a reference that must belong to the range.
+	Kind string `protobuf:"bytes,7,opt,name=kind,proto3" json:"kind,omitempty"`
+	// probe_kind names the result of the cited probe report the step is
+	// based on (a sandbox.probe step's probe); required with probe_report_id.
+	ProbeKind     string `protobuf:"bytes,8,opt,name=probe_kind,json=probeKind,proto3" json:"probe_kind,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *RangeStepInput) Reset() {
@@ -548,6 +567,20 @@ func (x *RangeStepInput) GetProbeReportId() string {
 func (x *RangeStepInput) GetDecisiveControl() string {
 	if x != nil {
 		return x.DecisiveControl
+	}
+	return ""
+}
+
+func (x *RangeStepInput) GetKind() string {
+	if x != nil {
+		return x.Kind
+	}
+	return ""
+}
+
+func (x *RangeStepInput) GetProbeKind() string {
+	if x != nil {
+		return x.ProbeKind
 	}
 	return ""
 }
@@ -649,6 +682,8 @@ type RangeStep struct {
 	TransactionId   string `protobuf:"bytes,8,opt,name=transaction_id,json=transactionId,proto3" json:"transaction_id,omitempty"`
 	ProbeReportId   string `protobuf:"bytes,9,opt,name=probe_report_id,json=probeReportId,proto3" json:"probe_report_id,omitempty"`
 	DecisiveControl string `protobuf:"bytes,10,opt,name=decisive_control,json=decisiveControl,proto3" json:"decisive_control,omitempty"`
+	Kind            string `protobuf:"bytes,11,opt,name=kind,proto3" json:"kind,omitempty"`
+	ProbeKind       string `protobuf:"bytes,12,opt,name=probe_kind,json=probeKind,proto3" json:"probe_kind,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -749,6 +784,20 @@ func (x *RangeStep) GetProbeReportId() string {
 func (x *RangeStep) GetDecisiveControl() string {
 	if x != nil {
 		return x.DecisiveControl
+	}
+	return ""
+}
+
+func (x *RangeStep) GetKind() string {
+	if x != nil {
+		return x.Kind
+	}
+	return ""
+}
+
+func (x *RangeStep) GetProbeKind() string {
+	if x != nil {
+		return x.ProbeKind
 	}
 	return ""
 }
@@ -1498,7 +1547,7 @@ var File_pantherclaw_v1_redteam_proto protoreflect.FileDescriptor
 
 const file_pantherclaw_v1_redteam_proto_rawDesc = "" +
 	"\n" +
-	"\x1cpantherclaw/v1/redteam.proto\x12\x0epantherclaw.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xbd\x02\n" +
+	"\x1cpantherclaw/v1/redteam.proto\x12\x0epantherclaw.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xe7\x02\n" +
 	"\x11RangeScenarioDecl\x12$\n" +
 	"\x02id\x18\x01 \x01(\tB\x14\xbaH\x11r\x0f2\r^RT-[0-9]{3}$R\x02id\x12-\n" +
 	"\x06digest\x18\x02 \x01(\tB\x15\xbaH\x12r\x102\x0e^[0-9a-f]{64}$R\x06digest\x12.\n" +
@@ -1506,7 +1555,9 @@ const file_pantherclaw_v1_redteam_proto_rawDesc = "" +
 	"\bcategory\x18\x04 \x01(\tB2\xbaH/r-R\n" +
 	"functionalR\bboundaryR\brecoveryR\vexplanationR\bcategory\x123\n" +
 	"\x05suite\x18\x05 \x01(\tB\x1d\xbaH\x1ar\x18R\fcoding-agentR\bplatformR\x05suite\x12\x1e\n" +
-	"\x05title\x18\x06 \x01(\tB\b\xbaH\x05r\x03\x18\xc8\x01R\x05title\"\xfc\x01\n" +
+	"\x05title\x18\x06 \x01(\tB\b\xbaH\x05r\x03\x18\xc8\x01R\x05title\x12(\n" +
+	"\n" +
+	"step_count\x18\a \x01(\x05B\t\xbaH\x06\x1a\x04\x18((\x01R\tstepCount\"\xfc\x01\n" +
 	"\x11StartRangeRequest\x12.\n" +
 	"\x0erange_agent_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\frangeAgentId\x12L\n" +
 	"\tscenarios\x18\x02 \x03(\v2!.pantherclaw.v1.RangeScenarioDeclB\v\xbaH\b\x92\x01\x05\b\x01\x10\xc8\x01R\tscenarios\x120\n" +
@@ -1519,14 +1570,17 @@ const file_pantherclaw_v1_redteam_proto_rawDesc = "" +
 	"\vRangeExpect\x12\x85\x01\n" +
 	"\aoutcome\x18\x01 \x01(\tBk\xbaHhrfR\x05ALLOWR\x04DENYR\x04HOLDR\x10CANNOT_AUTHORIZER\aREFUSEDR\aBLOCKEDR\x0eTARGET_REFUSEDR\tNOT_FOUNDR\tCONFIRMEDR\aUNKNOWNR\aoutcome\x123\n" +
 	"\x06reason\x18\x02 \x01(\tB\x1b\xbaH\x18r\x16\x18@2\x12^[A-Za-z0-9_.:-]*$R\x06reason\x12/\n" +
-	"\x04code\x18\x03 \x01(\tB\x1b\xbaH\x18r\x16\x18@2\x12^[A-Za-z0-9_.:-]*$R\x04code\"\xf0\x02\n" +
+	"\x04code\x18\x03 \x01(\tB\x1b\xbaH\x18r\x16\x18@2\x12^[A-Za-z0-9_.:-]*$R\x04code\"\xe4\x03\n" +
 	"\x0eRangeStepInput\x121\n" +
 	"\astep_id\x18\x01 \x01(\tB\x18\xbaH\x15r\x132\x11^[a-z0-9-]{1,40}$R\x06stepId\x12;\n" +
 	"\x06expect\x18\x02 \x01(\v2\x1b.pantherclaw.v1.RangeExpectB\x06\xbaH\x03\xc8\x01\x01R\x06expect\x12?\n" +
 	"\bobserved\x18\x03 \x01(\v2\x1b.pantherclaw.v1.RangeExpectB\x06\xbaH\x03\xc8\x01\x01R\bobserved\x122\n" +
 	"\x0etransaction_id\x18\x04 \x01(\tB\v\xbaH\b\xd8\x01\x01r\x03\xb0\x01\x01R\rtransactionId\x123\n" +
 	"\x0fprobe_report_id\x18\x05 \x01(\tB\v\xbaH\b\xd8\x01\x01r\x03\xb0\x01\x01R\rprobeReportId\x12D\n" +
-	"\x10decisive_control\x18\x06 \x01(\tB\x19\xbaH\x16r\x14\x18\x102\x10^(HR-[0-9]{3})?$R\x0fdecisiveControl\"\xbb\x02\n" +
+	"\x10decisive_control\x18\x06 \x01(\tB\x19\xbaH\x16r\x14\x18\x102\x10^(HR-[0-9]{3})?$R\x0fdecisiveControl\x124\n" +
+	"\x04kind\x18\a \x01(\tB \xbaH\x1dr\x1b\x10\x01\x18 2\x15^[a-z]+([.][a-z_]+)?$R\x04kind\x12<\n" +
+	"\n" +
+	"probe_kind\x18\b \x01(\tB\x1d\xbaH\x1ar\x18\x18@2\x14^([a-z][a-z0-9_]*)?$R\tprobeKind\"\xbb\x02\n" +
 	"\x13RecordResultRequest\x12#\n" +
 	"\brange_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\arangeId\x125\n" +
 	"\vscenario_id\x18\x02 \x01(\tB\x14\xbaH\x11r\x0f2\r^RT-[0-9]{3}$R\n" +
@@ -1534,7 +1588,7 @@ const file_pantherclaw_v1_redteam_proto_rawDesc = "" +
 	"\x0fscenario_digest\x18\x03 \x01(\tB\x15\xbaH\x12r\x102\x0e^[0-9a-f]{64}$R\x0escenarioDigest\x12H\n" +
 	"\averdict\x18\x04 \x01(\x0e2\x1c.pantherclaw.v1.RangeVerdictB\x10\xbaH\r\x82\x01\n" +
 	"\x10\x01\x18\x01\x18\x02\x18\x03\x18\x04R\averdict\x12>\n" +
-	"\x05steps\x18\x05 \x03(\v2\x1e.pantherclaw.v1.RangeStepInputB\b\xbaH\x05\x92\x01\x02\x10(R\x05steps\"\xbb\x03\n" +
+	"\x05steps\x18\x05 \x03(\v2\x1e.pantherclaw.v1.RangeStepInputB\b\xbaH\x05\x92\x01\x02\x10(R\x05steps\"\xee\x03\n" +
 	"\tRangeStep\x12\x17\n" +
 	"\astep_id\x18\x01 \x01(\tR\x06stepId\x123\n" +
 	"\x06expect\x18\x02 \x01(\v2\x1b.pantherclaw.v1.RangeExpectR\x06expect\x127\n" +
@@ -1547,7 +1601,10 @@ const file_pantherclaw_v1_redteam_proto_rawDesc = "" +
 	"\x0etransaction_id\x18\b \x01(\tR\rtransactionId\x12&\n" +
 	"\x0fprobe_report_id\x18\t \x01(\tR\rprobeReportId\x12)\n" +
 	"\x10decisive_control\x18\n" +
-	" \x01(\tR\x0fdecisiveControl\"\xf4\x02\n" +
+	" \x01(\tR\x0fdecisiveControl\x12\x12\n" +
+	"\x04kind\x18\v \x01(\tR\x04kind\x12\x1d\n" +
+	"\n" +
+	"probe_kind\x18\f \x01(\tR\tprobeKind\"\xf4\x02\n" +
 	"\vRangeResult\x12\x1f\n" +
 	"\vscenario_id\x18\x01 \x01(\tR\n" +
 	"scenarioId\x12'\n" +

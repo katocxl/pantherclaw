@@ -38,7 +38,7 @@ func (h *Handler) StartRange(ctx context.Context, r *pantherclawv1.StartRangeReq
 	in := app.StartInput{Agent: agent, RunnerVersion: r.GetRunnerVersion()}
 	for _, s := range r.GetScenarios() {
 		in.Scenarios = append(in.Scenarios, domain.Scenario{
-			ID: s.GetId(), Digest: s.GetDigest(), Tier: s.GetTier(), Category: s.GetCategory(), Suite: s.GetSuite(), Title: s.GetTitle(),
+			ID: s.GetId(), Digest: s.GetDigest(), Tier: s.GetTier(), Category: s.GetCategory(), Suite: s.GetSuite(), Title: s.GetTitle(), StepCount: int(s.GetStepCount()),
 		})
 	}
 	if r.GetBaselineRangeId() != "" {
@@ -95,7 +95,10 @@ func (h *Handler) RecordResult(ctx context.Context, r *pantherclawv1.RecordResul
 	}
 	in := app.RecordInput{Range: rng, Scenario: r.GetScenarioId(), Digest: r.GetScenarioDigest(), Verdict: verdicts[r.GetVerdict()]}
 	for _, s := range r.GetSteps() {
-		st := domain.StepInput{ID: s.GetStepId(), Expect: expectOf(s.GetExpect()), Observed: expectOf(s.GetObserved()), Decisive: s.GetDecisiveControl()}
+		st := domain.StepInput{
+			ID: s.GetStepId(), Expect: expectOf(s.GetExpect()), Observed: expectOf(s.GetObserved()), Decisive: s.GetDecisiveControl(),
+			Kind: s.GetKind(), ProbeKind: s.GetProbeKind(),
+		}
 		if st.Transaction, err = optID(s.GetTransactionId()); err != nil {
 			return nil, err
 		}
@@ -197,7 +200,7 @@ func rangePB(r domain.Range, c domain.Counts) *pantherclawv1.Range {
 	}
 	for _, s := range r.Scenarios {
 		out.Scenarios = append(out.Scenarios, &pantherclawv1.RangeScenarioDecl{
-			Id: s.ID, Digest: s.Digest, Tier: s.Tier, Category: s.Category, Suite: s.Suite, Title: s.Title,
+			Id: s.ID, Digest: s.Digest, Tier: s.Tier, Category: s.Category, Suite: s.Suite, Title: s.Title, StepCount: int32(s.StepCount), //nolint:gosec // G115: at most 40
 		})
 	}
 	return out
@@ -226,7 +229,7 @@ func resultPB(r domain.Result) *pantherclawv1.RangeResult {
 	for _, s := range r.Steps {
 		st := &pantherclawv1.RangeStep{
 			StepId: s.ID, Expect: expectPB(s.Expect), Observed: expectPB(s.Observed), Mismatch: s.Mismatch, Matched: s.Matched,
-			DecisiveControl: s.Decisive,
+			DecisiveControl: s.Decisive, Kind: s.Kind, ProbeKind: s.ProbeKind,
 		}
 		if s.ObservedBy == domain.Server {
 			st.ObservedBy = pantherclawv1.RangeObservedBy_RANGE_OBSERVED_BY_SERVER

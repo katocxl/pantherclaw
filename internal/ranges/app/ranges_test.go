@@ -159,7 +159,7 @@ func newWorld(t *testing.T, edition billing.Edition, role td.RoleName) *world {
 }
 
 func decl(id, tier, category string) domain.Scenario {
-	return domain.Scenario{ID: id, Digest: hexA, Tier: tier, Category: category, Suite: "coding-agent", Title: id}
+	return domain.Scenario{ID: id, Digest: hexA, Tier: tier, Category: category, Suite: "coding-agent", Title: id, StepCount: 1}
 }
 
 func (w *world) start(t *testing.T, set ...domain.Scenario) domain.Range {
@@ -183,7 +183,7 @@ func (w *world) txn(t *testing.T, simulated bool, decision, reason string) ids.U
 func uid(id ids.UUID) *ids.UUID { return &id }
 
 func step(id string, expect, observed domain.Expect, txn *ids.UUID) domain.StepInput {
-	return domain.StepInput{ID: id, Expect: expect, Observed: observed, Transaction: txn}
+	return domain.StepInput{ID: id, Kind: "agent.call", Expect: expect, Observed: observed, Transaction: txn}
 }
 
 var (
@@ -238,9 +238,9 @@ func TestT091_ProbeReportsAreCheckedAgainstTheSignedRecords(t *testing.T) {
 	r := w.start(t, decl("RT-014", domain.TierCommunity, "boundary"))
 	blocked := domain.Expect{Outcome: domain.OutcomeBlocked}
 	good := ids.NewV7()
-	w.f.probes[good] = domain.ProbeRecord{ID: good, Agent: w.agent, Recorded: time.Now().Add(time.Second), Outcome: domain.OutcomeAllow}
+	w.f.probes[good] = domain.ProbeRecord{ID: good, Agent: w.agent, Recorded: time.Now().Add(time.Second), Results: map[string]string{"dns": "reachable"}}
 	in := app.RecordInput{Range: r.ID, Scenario: "RT-014", Digest: hexA, Verdict: domain.Pass}
-	in.Steps = []domain.StepInput{{ID: "dns", Expect: blocked, Observed: blocked, Probe: uid(good)}}
+	in.Steps = []domain.StepInput{{ID: "dns", Kind: "sandbox.probe", ProbeKind: "dns", Expect: blocked, Observed: blocked, Probe: uid(good)}}
 	res, err := w.svc.RecordResult(w.ctx, in)
 	if err != nil {
 		t.Fatal(err)
@@ -250,11 +250,11 @@ func TestT091_ProbeReportsAreCheckedAgainstTheSignedRecords(t *testing.T) {
 		t.Fatalf("step = %+v verdict %s", st, res.Verdict)
 	}
 	other := ids.NewV7()
-	w.f.probes[other] = domain.ProbeRecord{ID: other, Agent: ids.NewV7(), Recorded: time.Now().Add(time.Second), Outcome: domain.OutcomeBlocked}
+	w.f.probes[other] = domain.ProbeRecord{ID: other, Agent: ids.NewV7(), Recorded: time.Now().Add(time.Second), Results: map[string]string{"dns": "blocked"}}
 	for _, bad := range []ids.UUID{other, ids.NewV7()} {
 		w2 := in
 		w2.Scenario = "RT-014"
-		w2.Steps = []domain.StepInput{{ID: "dns", Expect: blocked, Observed: blocked, Probe: uid(bad)}}
+		w2.Steps = []domain.StepInput{{ID: "dns", Kind: "sandbox.probe", ProbeKind: "dns", Expect: blocked, Observed: blocked, Probe: uid(bad)}}
 		r2 := w.start(t, decl("RT-014", domain.TierCommunity, "boundary"))
 		w2.Range = r2.ID
 		if _, err := w.svc.RecordResult(w.ctx, w2); !errors.Is(err, app.ErrRecord) {
