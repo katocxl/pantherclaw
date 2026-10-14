@@ -224,7 +224,7 @@ func (r *Remover) batch(ctx context.Context, org ids.OrgID, s step, size int) (i
 		if err != nil {
 			return err
 		}
-		cur, ok := Current(revisionsOf(rows), s.category, now)
+		cur, ok := Current(RevisionsOf(rows), s.category, now)
 		if !ok {
 			return nil
 		}
