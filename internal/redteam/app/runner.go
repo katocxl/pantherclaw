@@ -43,6 +43,9 @@ type Fixture map[string]string
 // Driver executes steps against simulators. Targets are connection roles the
 // driver binds itself; a step never names a host.
 type Driver interface {
+	// Supports reports whether the driver can run a step kind. A scenario with
+	// a step the driver lacks is SKIPPED before Setup, never ERROR.
+	Supports(kind string) bool
 	Capabilities() map[Capability]bool
 	Setup(ctx context.Context, s domain.Scenario) (Fixture, error)
 	Do(ctx context.Context, s domain.Scenario, st domain.Step, vars map[string]string) (domain.Observation, error)
@@ -147,6 +150,11 @@ func (r *Runner) skipReason(s domain.Scenario) string {
 	}
 	if s.HarnessOnly && !caps[CapHarness] {
 		return "harness_only scenario under a non-harness driver"
+	}
+	for _, st := range s.Steps {
+		if !r.Driver.Supports(st.Do) {
+			return "driver lacks " + st.Do
+		}
 	}
 	for _, st := range s.Steps {
 		if strings.HasPrefix(st.Do, "person.") && !caps[CapPerson] {

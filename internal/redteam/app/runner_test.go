@@ -26,8 +26,10 @@ type fake struct {
 	varsSeen   []map[string]string
 	setups     int
 	teardowns  int
+	lacks      map[string]bool
 }
 
+func (f *fake) Supports(kind string) bool             { return !f.lacks[kind] }
 func (f *fake) Capabilities() map[app.Capability]bool { return f.caps }
 func (f *fake) Setup(context.Context, domain.Scenario) (app.Fixture, error) {
 	f.setups++
@@ -366,5 +368,14 @@ func TestD30LoadDirReadsOnlyRegularFilesOfBoundedSize(t *testing.T) {
 		if _, err := app.LoadDir(dir); err == nil {
 			t.Error("a symbolic link was followed")
 		}
+	}
+}
+
+func TestD33ADriverLackingAStepKindSkipsBeforeSetup(t *testing.T) {
+	d := &fake{caps: all(), respond: hold, lacks: map[string]bool{"sandbox.probe": true}}
+	s := scenario(t, "  - {id: a, do: operator.revoke_grant}\n  - {id: b, do: sandbox.probe, with: {probe: icmp}, expect: {outcome: BLOCKED}}\n")
+	res := (&app.Runner{Driver: d}).Run(context.Background(), s)
+	if res.Verdict != domain.VerdictSkipped || res.Detail != "driver lacks sandbox.probe" || d.setups != 0 || len(d.calls) != 0 {
+		t.Fatalf("%+v setups=%d calls=%d", res, d.setups, len(d.calls))
 	}
 }
