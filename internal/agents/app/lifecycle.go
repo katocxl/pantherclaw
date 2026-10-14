@@ -6,6 +6,7 @@ package app
 import (
 	"context"
 	"errors"
+	"slices"
 	"strconv"
 
 	"github.com/katocxl/pantherclaw/internal/agents/domain"
@@ -312,4 +313,33 @@ func MarkObserved(ctx context.Context, q *dbq.Queries, org ids.OrgID, agent ids.
 		return err
 	}
 	return RecordChange(ctx, q, org, agent, domain.Change{Kind: domain.ChangeObserved, Actor: by})
+}
+
+// protection are the states coverage evidence moves an agent among (F021).
+var protection = []domain.State{domain.StateObserved, domain.StatePartiallyProtected, domain.StateProtected}
+
+// MarkProtection moves an observed agent among OBSERVED,
+// PARTIALLY_PROTECTED and PROTECTED as its coverage records say (F021,
+// G0 M9), in the caller's transaction. An agent in any other state
+// (suspended, retired, not yet observed) is left alone, and so is one that
+// another transaction moved first.
+func MarkProtection(ctx context.Context, q *dbq.Queries, org ids.OrgID, agent ids.UUID, to domain.State, by domain.Actor) error {
+	a, err := q.GetAgent(ctx, org, agent)
+	if err != nil {
+		return err
+	}
+	from := domain.State(a.State)
+	if from == to || !slices.Contains(protection, from) || !slices.Contains(protection, to) {
+		return nil
+	}
+	if _, err := q.SetAgentState(ctx, dbq.SetAgentStateParams{
+		OrgID: org, ID: agent, FromState: string(from), ToState: string(to),
+	}); db.IsNoRows(err) {
+		return nil
+	} else if err != nil {
+		return err
+	}
+	return RecordChange(ctx, q, org, agent, domain.Change{
+		Kind: domain.ChangeProtection, Actor: by, Details: map[string]string{"from": string(from), "to": string(to)},
+	})
 }

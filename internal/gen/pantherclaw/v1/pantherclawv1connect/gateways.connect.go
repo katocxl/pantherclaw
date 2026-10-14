@@ -64,6 +64,9 @@ const (
 	// GatewayServiceWatchContainmentProcedure is the procedure name of the GatewayService's
 	// WatchContainment RPC.
 	GatewayServiceWatchContainmentProcedure = "/pantherclaw.v1.GatewayService/WatchContainment"
+	// GatewayServiceReportConnectorStateProcedure is the procedure name of the GatewayService's
+	// ReportConnectorState RPC.
+	GatewayServiceReportConnectorStateProcedure = "/pantherclaw.v1.GatewayService/ReportConnectorState"
 	// GatewayServiceReportCircuitProcedure is the procedure name of the GatewayService's ReportCircuit
 	// RPC.
 	GatewayServiceReportCircuitProcedure = "/pantherclaw.v1.GatewayService/ReportCircuit"
@@ -444,6 +447,13 @@ var (
 			Procedure:  GatewayServiceWatchContainmentProcedure,
 		}
 	})
+	gatewayServiceReportConnectorStateSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_pantherclaw_v1_gateways_proto.Services().ByName("GatewayService").Methods().ByName("ReportConnectorState"),
+			Procedure:  GatewayServiceReportConnectorStateProcedure,
+		}
+	})
 	gatewayServiceReportCircuitSpec = sync.OnceValue(func() connect.Spec {
 		return connect.Spec{
 			StreamType: connect.StreamTypeUnary,
@@ -520,6 +530,13 @@ type GatewayServiceClient interface {
 	// dispatching.
 	// permission: gateway.sync
 	WatchContainment(context.Context, *v1.WatchContainmentRequest) (GatewayServiceWatchContainmentClientStream, error)
+	// ReportConnectorState reports a run of one of the calling gateway's
+	// connectors (G0 M9 track C): its spec revision, container, engine and
+	// state, which moves only forward. The org and gateway come from the
+	// certificate alone; only a connector connection that gateway serves is
+	// accepted.
+	// permission: gateway.observe
+	ReportConnectorState(context.Context, *v1.ReportConnectorStateRequest) (*v1.ReportConnectorStateResponse, error)
 	// ReportCircuit reports that a connection's circuit breaker opened
 	// (HR-078); the server quarantines the connection.
 	// permission: gateway.observe
@@ -611,6 +628,13 @@ type GatewayServiceHandler interface {
 	// dispatching.
 	// permission: gateway.sync
 	WatchContainment(context.Context, *v1.WatchContainmentRequest, GatewayServiceWatchContainmentServerStream) error
+	// ReportConnectorState reports a run of one of the calling gateway's
+	// connectors (G0 M9 track C): its spec revision, container, engine and
+	// state, which moves only forward. The org and gateway come from the
+	// certificate alone; only a connector connection that gateway serves is
+	// accepted.
+	// permission: gateway.observe
+	ReportConnectorState(context.Context, *v1.ReportConnectorStateRequest) (*v1.ReportConnectorStateResponse, error)
 	// ReportCircuit reports that a connection's circuit breaker opened
 	// (HR-078); the server quarantines the connection.
 	// permission: gateway.observe
@@ -660,6 +684,7 @@ func RegisterGatewayServiceHandler(server *connect.Server, svc GatewayServiceHan
 		connect.Method{Spec: gatewayServiceRegisterBrokerKeySpec(), Handler: adapter.registerBrokerKey},
 		connect.Method{Spec: gatewayServiceGetConfigurationSpec(), Handler: adapter.getConfiguration},
 		connect.Method{Spec: gatewayServiceWatchContainmentSpec(), Handler: adapter.watchContainment},
+		connect.Method{Spec: gatewayServiceReportConnectorStateSpec(), Handler: adapter.reportConnectorState},
 		connect.Method{Spec: gatewayServiceReportCircuitSpec(), Handler: adapter.reportCircuit},
 		connect.Method{Spec: gatewayServiceReportDriftSpec(), Handler: adapter.reportDrift},
 		connect.Method{Spec: gatewayServiceClaimVerificationsSpec(), Handler: adapter.claimVerifications},
@@ -707,6 +732,10 @@ func (UnimplementedGatewayServiceHandler) GetConfiguration(context.Context, *v1.
 
 func (UnimplementedGatewayServiceHandler) WatchContainment(context.Context, *v1.WatchContainmentRequest, GatewayServiceWatchContainmentServerStream) error {
 	return connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.GatewayService.WatchContainment is not implemented")
+}
+
+func (UnimplementedGatewayServiceHandler) ReportConnectorState(context.Context, *v1.ReportConnectorStateRequest) (*v1.ReportConnectorStateResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.GatewayService.ReportConnectorState is not implemented")
 }
 
 func (UnimplementedGatewayServiceHandler) ReportCircuit(context.Context, *v1.ReportCircuitRequest) (*v1.ReportCircuitResponse, error) {
@@ -779,6 +808,14 @@ func (c *gatewayServiceClient) WatchContainment(ctx context.Context, req *v1.Wat
 		return GatewayServiceWatchContainmentClientStream{}, err
 	}
 	return GatewayServiceWatchContainmentClientStream{stream: stream}, nil
+}
+
+func (c *gatewayServiceClient) ReportConnectorState(ctx context.Context, req *v1.ReportConnectorStateRequest) (*v1.ReportConnectorStateResponse, error) {
+	var res v1.ReportConnectorStateResponse
+	if err := c.client.CallUnary(ctx, gatewayServiceReportConnectorStateSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
 }
 
 func (c *gatewayServiceClient) ReportCircuit(ctx context.Context, req *v1.ReportCircuitRequest) (*v1.ReportCircuitResponse, error) {
@@ -893,6 +930,18 @@ func (h gatewayServiceHandler) watchContainment(ctx context.Context, _ connect.S
 		return err
 	}
 	return h.svc.WatchContainment(ctx, &req, GatewayServiceWatchContainmentServerStream{stream: stream})
+}
+
+func (h gatewayServiceHandler) reportConnectorState(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ReportConnectorStateRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ReportConnectorState(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
 }
 
 func (h gatewayServiceHandler) reportCircuit(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {

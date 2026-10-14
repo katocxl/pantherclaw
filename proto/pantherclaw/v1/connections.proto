@@ -7,6 +7,7 @@ package pantherclaw.v1;
 
 import "buf/validate/validate.proto";
 import "google/protobuf/timestamp.proto";
+import "pantherclaw/v1/connectors.proto";
 import "pantherclaw/v1/github.proto";
 
 // ConnectionService manages connections: one target (an HTTP API, a remote
@@ -109,6 +110,9 @@ enum ConnectionKind {
   CONNECTION_KIND_MCP = 2;
   // The agent's own machine (hooks); the gateway never dispatches.
   CONNECTION_KIND_LOCAL = 3;
+  // A third-party stdio MCP server a customer-hosted gateway runs in a
+  // container (G0 M9; HR-084): no base URL, no credential of its own.
+  CONNECTION_KIND_MCP_CONTAINER = 9;
 }
 
 // ConnectionState is whether actions may use a connection.
@@ -205,6 +209,11 @@ message Connection {
   string updated_by = 21;
   // When it was changed last.
   google.protobuf.Timestamp update_time = 22;
+  // agent_hosts are the host names agents use for this connection's API
+  // (G0 M9): a containment sandbox's edge maps each to it (HR-183).
+  repeated string agent_hosts = 28;
+  // connector is an mcp_container connection's current spec.
+  ConnectorSpec connector = 29;
   // The GitHub App installation behind a connection holding a GitHub App
   // credential (G0 M8, ADR-0021); unset otherwise.
   GitHubInstallation github = 24;
@@ -315,6 +324,17 @@ message CreateConnectionRequest {
     gte: 0
     lte: 60000
   }];
+  // agent_hosts are the host names agents use for the API; only for http
+  // and mcp connections.
+  repeated string agent_hosts = 19 [(buf.validate.field).repeated = {
+    max_items: 16
+    unique: true
+    items: {
+      string: {pattern: "^[a-z0-9]([a-z0-9.-]{0,251}[a-z0-9])?$"}
+    }
+  }];
+  // connector is required for, and only for, an mcp_container connection.
+  ConnectorSpec connector = 20;
 }
 
 // CreateConnectionResponse returns the connection.
@@ -413,6 +433,19 @@ message UpdateConnectionRequest {
     gte: 100
     lte: 60000
   }];
+  // agent_hosts replaces the agent hosts when update_agent_hosts; any
+  // change weakens enforcement (HR-183).
+  repeated string agent_hosts = 17 [(buf.validate.field).repeated = {
+    max_items: 16
+    unique: true
+    items: {
+      string: {pattern: "^[a-z0-9]([a-z0-9.-]{0,251}[a-z0-9])?$"}
+    }
+  }];
+  bool update_agent_hosts = 18;
+  // connector replaces an mcp_container connection's spec (weakens; moving
+  // one to another gateway needs it).
+  ConnectorSpec connector = 19;
 }
 
 // UpdateConnectionResponse returns the connection.

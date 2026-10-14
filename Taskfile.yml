@@ -105,6 +105,28 @@ tasks:
         PC_TEST_MOCK_OIDC_URL="${PC_TEST_MOCK_OIDC_URL:-http://127.0.0.1:8181}"
         go test -tags "integration github_live" -count=1 -v -run '^TestLive_GitHub' ./test/e2e/
 
+  test:sandbox:
+    desc: Docker sandbox, connector and M9 exit tests (G0 M9; needs Docker ≥ 28 and, for the exit tests, the test cluster of task up PROFILE=test; they create and remove their own uniquely named networks, containers and images; PKGS=./x/... narrows the Docker tests, E2E=0 skips the exit tests)
+    dotenv: ["deploy/compose/.env"]
+    cmds:
+      - PC_TEST_SANDBOX=1 go test -tags sandbox -count=1 -timeout 30m {{.PKGS | default "./internal/sandbox/... ./internal/gateway/... ./internal/sim/... ./internal/pclaw/..."}}
+      - >-
+        {{if eq (.E2E | default "1") "0"}}true{{else}}PC_TEST_SANDBOX=1 PC_TEST_REQUIRE_DB=1
+        PC_TEST_PG_ADMIN_URL="postgres://postgres:${PC_PG_TEST_PASSWORD}@127.0.0.1:5433/postgres?sslmode=disable"
+        PC_TEST_MOCK_OIDC_URL="${PC_TEST_MOCK_OIDC_URL:-http://127.0.0.1:8181}"
+        go test -tags "integration sandbox" -count=1 -timeout 60m -run TestE2E_M9_ ./test/e2e/{{end}}
+
+  sandbox:images:
+    desc: Build the sandbox's edge and probe images locally (static Linux builds on the pinned distroless base) and print their ids, which pclaw's sandbox.images settings name (G0 M9)
+    env:
+      CGO_ENABLED: "0"
+      GOOS: linux
+    cmds:
+      - go build -trimpath -o bin/sandbox/ ./cmd/pantherclaw-edge ./cmd/pantherclaw-probe
+      - mkdir -p bin/sandbox/workspace
+      - echo "edge  $(docker build --quiet --pull=false --network none --file deploy/sandbox/edge.Dockerfile bin/sandbox)"
+      - echo "probe $(docker build --quiet --pull=false --network none --file deploy/sandbox/probe.Dockerfile bin/sandbox)"
+
   test:linux:
     desc: Run race-enabled tests inside a pinned Linux container (use on Windows)
     cmds:
@@ -134,7 +156,7 @@ tasks:
   trace:
     desc: Fail if a hardening rule or threat due by MILESTONE has no test (default M8)
     cmds:
-      - go -C tools run ./traceability -root .. -through {{.MILESTONE | default "M8"}}
+      - go -C tools run ./traceability -root .. -through {{.MILESTONE | default "M9"}}
 
   sdk:vectors:
     desc: Regenerate the SDK conformance vectors in sdk/conformance from the Go implementation (review the diff)

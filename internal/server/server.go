@@ -40,6 +40,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/authority/adapters/pgauthority"
 	"github.com/katocxl/pantherclaw/internal/billing"
 	"github.com/katocxl/pantherclaw/internal/billing/licence"
+	coverage "github.com/katocxl/pantherclaw/internal/coverage/domain"
 	"github.com/katocxl/pantherclaw/internal/definitions/adapters/packagesrpc"
 	defspg "github.com/katocxl/pantherclaw/internal/definitions/adapters/pgstore"
 	defsapp "github.com/katocxl/pantherclaw/internal/definitions/app"
@@ -307,6 +308,7 @@ func cmdServe(ctx context.Context, args []string, stderr io.Writer, env Env, onS
 		m6.mountPages(web)
 		m5p2.mountPages(web, m5)
 		mountM7Pages(web, pool, verification, m5)
+		mountCoveragePages(web, pool, cfg)
 		device.WithBrowserCallback(web.Callback)
 		roots, err := packageRoots(ctx, cfg, log)
 		if err != nil {
@@ -330,6 +332,7 @@ func cmdServe(ctx context.Context, args []string, stderr io.Writer, env Env, onS
 			m5p2:         m5p2,
 			verification: verification,
 			kp:           kp,
+			freshness:    freshnessOf(cfg),
 		})
 		if err != nil {
 			return err
@@ -383,6 +386,11 @@ func cmdServe(ctx context.Context, args []string, stderr io.Writer, env Env, onS
 		}
 		defer closeRetention()
 		evidenceJobs = append(evidenceJobs, retentionJobs...)
+		sandboxJobs, err := registerSandboxJobs(jreg, pool, log)
+		if err != nil {
+			return err
+		}
+		evidenceJobs = append(evidenceJobs, sandboxJobs...)
 		if err := authnapp.RegisterJanitor(jreg, pool, log); err != nil {
 			return err
 		}
@@ -398,6 +406,11 @@ func cmdServe(ctx context.Context, args []string, stderr io.Writer, env Env, onS
 		if err := txapp.Register(jreg, pool, verification); err != nil {
 			return err
 		}
+		coverageJobs, err := registerCoverageWorkers(jreg, cfg, pool)
+		if err != nil {
+			return err
+		}
+		evidenceJobs = append(evidenceJobs, coverageJobs...)
 		if err := githubapp.Register(jreg, ghScans); err != nil {
 			return err
 		}
@@ -497,6 +510,8 @@ type apiDeps struct {
 	captures *captureServices
 	// kp opens sealed evaluation inputs for decision replay (M7 track B).
 	kp keys.KeyProvider
+	// freshness is coverage's freshness contract (M9 track A).
+	freshness coverage.Freshness
 }
 
 // apiHandler mounts the RPC services, health endpoints and the JWKS.
@@ -557,6 +572,8 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 		return nil, err
 	}
 	registerEvidenceAdmin(rs, d)
+	registerCoverage(rs, d)
+	registerSandbox(rs, d)
 	registerReleases(rs, pool)
 	mux := http.NewServeMux()
 	rpc.Mount(mux, rs)

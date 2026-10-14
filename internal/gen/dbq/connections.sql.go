@@ -215,7 +215,7 @@ func (q *Queries) ConnectionTestFacts(ctx context.Context, orgID ids.OrgID, iD i
 }
 
 const getConnection = `-- name: GetConnection :one
-SELECT org_id, id, name, kind, gateway_id, package, base_url, allowed_hosts, destination_class, access_mode, credential_header, credential_scheme, default_mode, max_response_bytes, timeout_ms, state, quarantine_reason, revision, created_by, created_at, updated_by, updated_at FROM pc.connections WHERE org_id = $1 AND id = $2
+SELECT org_id, id, name, kind, gateway_id, package, base_url, allowed_hosts, destination_class, access_mode, credential_header, credential_scheme, default_mode, max_response_bytes, timeout_ms, state, quarantine_reason, revision, created_by, created_at, updated_by, updated_at, agent_hosts FROM pc.connections WHERE org_id = $1 AND id = $2
 `
 
 func (q *Queries) GetConnection(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (PcConnection, error) {
@@ -244,6 +244,7 @@ func (q *Queries) GetConnection(ctx context.Context, orgID ids.OrgID, iD ids.UUI
 		&i.CreatedAt,
 		&i.UpdatedBy,
 		&i.UpdatedAt,
+		&i.AgentHosts,
 	)
 	return i, err
 }
@@ -252,12 +253,13 @@ const insertConnection = `-- name: InsertConnection :one
 
 INSERT INTO pc.connections (org_id, id, name, kind, gateway_id, package, base_url, allowed_hosts, destination_class,
                             access_mode, credential_header, credential_scheme, default_mode, max_response_bytes,
-                            timeout_ms, created_by, updated_by)
+                            timeout_ms, agent_hosts, created_by, updated_by)
 VALUES ($1, $2, $3, $4, $5, $6,
         $7, $8::text[], $9, $10,
         $11, $12, $13,
-        $14, $15, $16, $16)
-RETURNING org_id, id, name, kind, gateway_id, package, base_url, allowed_hosts, destination_class, access_mode, credential_header, credential_scheme, default_mode, max_response_bytes, timeout_ms, state, quarantine_reason, revision, created_by, created_at, updated_by, updated_at
+        $14, $15, $16::text[], $17,
+        $17)
+RETURNING org_id, id, name, kind, gateway_id, package, base_url, allowed_hosts, destination_class, access_mode, credential_header, credential_scheme, default_mode, max_response_bytes, timeout_ms, state, quarantine_reason, revision, created_by, created_at, updated_by, updated_at, agent_hosts
 `
 
 type InsertConnectionParams struct {
@@ -276,6 +278,7 @@ type InsertConnectionParams struct {
 	DefaultMode      string
 	MaxResponseBytes int32
 	TimeoutMs        int32
+	AgentHosts       []string
 	CreatedBy        string
 }
 
@@ -303,6 +306,7 @@ func (q *Queries) InsertConnection(ctx context.Context, arg InsertConnectionPara
 		arg.DefaultMode,
 		arg.MaxResponseBytes,
 		arg.TimeoutMs,
+		arg.AgentHosts,
 		arg.CreatedBy,
 	)
 	var i PcConnection
@@ -329,6 +333,7 @@ func (q *Queries) InsertConnection(ctx context.Context, arg InsertConnectionPara
 		&i.CreatedAt,
 		&i.UpdatedBy,
 		&i.UpdatedAt,
+		&i.AgentHosts,
 	)
 	return i, err
 }
@@ -667,7 +672,7 @@ func (q *Queries) ListConnectionRoutes(ctx context.Context, orgID ids.OrgID, con
 }
 
 const listConnections = `-- name: ListConnections :many
-SELECT org_id, id, name, kind, gateway_id, package, base_url, allowed_hosts, destination_class, access_mode, credential_header, credential_scheme, default_mode, max_response_bytes, timeout_ms, state, quarantine_reason, revision, created_by, created_at, updated_by, updated_at FROM pc.connections
+SELECT org_id, id, name, kind, gateway_id, package, base_url, allowed_hosts, destination_class, access_mode, credential_header, credential_scheme, default_mode, max_response_bytes, timeout_ms, state, quarantine_reason, revision, created_by, created_at, updated_by, updated_at, agent_hosts FROM pc.connections
 WHERE org_id = $1 AND ($2::boolean OR state <> 'RETIRED')
   AND ($3::uuid IS NULL OR gateway_id = $3::uuid)
   AND id > coalesce($4::uuid, '00000000-0000-0000-0000-000000000000')
@@ -721,6 +726,7 @@ func (q *Queries) ListConnections(ctx context.Context, arg ListConnectionsParams
 			&i.CreatedAt,
 			&i.UpdatedBy,
 			&i.UpdatedAt,
+			&i.AgentHosts,
 		); err != nil {
 			return nil, err
 		}
@@ -733,7 +739,7 @@ func (q *Queries) ListConnections(ctx context.Context, arg ListConnectionsParams
 }
 
 const lockConnection = `-- name: LockConnection :one
-SELECT org_id, id, name, kind, gateway_id, package, base_url, allowed_hosts, destination_class, access_mode, credential_header, credential_scheme, default_mode, max_response_bytes, timeout_ms, state, quarantine_reason, revision, created_by, created_at, updated_by, updated_at FROM pc.connections WHERE org_id = $1 AND id = $2 FOR UPDATE
+SELECT org_id, id, name, kind, gateway_id, package, base_url, allowed_hosts, destination_class, access_mode, credential_header, credential_scheme, default_mode, max_response_bytes, timeout_ms, state, quarantine_reason, revision, created_by, created_at, updated_by, updated_at, agent_hosts FROM pc.connections WHERE org_id = $1 AND id = $2 FOR UPDATE
 `
 
 func (q *Queries) LockConnection(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (PcConnection, error) {
@@ -762,6 +768,7 @@ func (q *Queries) LockConnection(ctx context.Context, orgID ids.OrgID, iD ids.UU
 		&i.CreatedAt,
 		&i.UpdatedBy,
 		&i.UpdatedAt,
+		&i.AgentHosts,
 	)
 	return i, err
 }
@@ -881,10 +888,11 @@ UPDATE pc.connections
 SET gateway_id = $1, base_url = $2, allowed_hosts = $3::text[],
     destination_class = $4, access_mode = $5,
     default_mode = $6, max_response_bytes = $7,
-    timeout_ms = $8, state = $9, quarantine_reason = $10,
-    revision = revision + 1, updated_by = $11, updated_at = now()
-WHERE org_id = $12 AND id = $13 AND revision = $14
-RETURNING org_id, id, name, kind, gateway_id, package, base_url, allowed_hosts, destination_class, access_mode, credential_header, credential_scheme, default_mode, max_response_bytes, timeout_ms, state, quarantine_reason, revision, created_by, created_at, updated_by, updated_at
+    timeout_ms = $8, agent_hosts = $9::text[], state = $10,
+    quarantine_reason = $11,
+    revision = revision + 1, updated_by = $12, updated_at = now()
+WHERE org_id = $13 AND id = $14 AND revision = $15
+RETURNING org_id, id, name, kind, gateway_id, package, base_url, allowed_hosts, destination_class, access_mode, credential_header, credential_scheme, default_mode, max_response_bytes, timeout_ms, state, quarantine_reason, revision, created_by, created_at, updated_by, updated_at, agent_hosts
 `
 
 type UpdateConnectionParams struct {
@@ -896,6 +904,7 @@ type UpdateConnectionParams struct {
 	DefaultMode      string
 	MaxResponseBytes int32
 	TimeoutMs        int32
+	AgentHosts       []string
 	State            string
 	QuarantineReason *string
 	UpdatedBy        string
@@ -917,6 +926,7 @@ func (q *Queries) UpdateConnection(ctx context.Context, arg UpdateConnectionPara
 		arg.DefaultMode,
 		arg.MaxResponseBytes,
 		arg.TimeoutMs,
+		arg.AgentHosts,
 		arg.State,
 		arg.QuarantineReason,
 		arg.UpdatedBy,
@@ -948,6 +958,7 @@ func (q *Queries) UpdateConnection(ctx context.Context, arg UpdateConnectionPara
 		&i.CreatedAt,
 		&i.UpdatedBy,
 		&i.UpdatedAt,
+		&i.AgentHosts,
 	)
 	return i, err
 }

@@ -15,6 +15,7 @@ import (
 
 	"github.com/katocxl/pantherclaw/internal/authn/adapters/webhttp"
 	authnapp "github.com/katocxl/pantherclaw/internal/authn/app"
+	covdomain "github.com/katocxl/pantherclaw/internal/coverage/domain"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	tapp "github.com/katocxl/pantherclaw/internal/tenancy/app"
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
@@ -88,8 +89,9 @@ func newHandler(t *testing.T, publicURL string) (*webhttp.Handler, *fakeBrowser,
 	fb := &fakeBrowser{}
 	h, err := webhttp.New(fb, publicURL, nil, nil)
 	if err == nil {
+		fresh, _ := covdomain.NewFreshness(0, 0)
 		h.WithKeys(&fakeKeys{}).WithContainment(&fakeContainment{}).WithApprovals(&fakeApprovals{}, &fakeBindings{}).
-			WithReconciliations(&fakeReconciliations{}, &fakeBindings{})
+			WithReconciliations(&fakeReconciliations{}, &fakeBindings{}).WithCoverage(&fakeCoverage{rec: coverageRecord()}, fresh)
 	}
 	if err != nil {
 		t.Fatal(err)
@@ -186,7 +188,7 @@ func TestHR151_RouteTable(t *testing.T) {
 	for _, rt := range h.Routes() {
 		private := strings.HasPrefix(rt.Path, authnapp.AccountPath) || strings.HasPrefix(rt.Path, authnapp.ContainmentPath) ||
 			strings.HasPrefix(rt.Path, authnapp.ApprovalsPath) || strings.HasPrefix(rt.Path, authnapp.ReconciliationsPath) ||
-			rt.Path == authnapp.LogoutPath
+			strings.HasPrefix(rt.Path, webhttp.CoveragePath) || rt.Path == authnapp.LogoutPath
 		if private != rt.Session {
 			t.Errorf("%s %s: session=%v, want %v", rt.Method, rt.Path, rt.Session, private)
 		}
@@ -218,6 +220,9 @@ func TestHR151_RouteTable(t *testing.T) {
 		{Method: http.MethodGet, Path: "/reconciliations/{id}", Session: true},
 		{Method: http.MethodPost, Path: "/reconciliations/{id}/release-options", Session: true, CSRF: true},
 		{Method: http.MethodPost, Path: "/reconciliations/{id}/release", Session: true, CSRF: true},
+		// The coverage pages (G0 M9 A8), which only read.
+		{Method: http.MethodGet, Path: "/coverage", Session: true},
+		{Method: http.MethodGet, Path: "/coverage/{agent}/{connection}/{operation}", Session: true},
 	} {
 		if !slices.Contains(h.Routes(), want) {
 			t.Errorf("route %+v is not mounted", want)
@@ -234,8 +239,11 @@ func TestHR151_EveryResponseCarriesThePagePolicy(t *testing.T) {
 	_, _, mux := newHandler(t, origin)
 	account := httptest.NewRequest(http.MethodGet, origin+authnapp.AccountPath, nil)
 	account.AddCookie(&http.Cookie{Name: "__Host-pc_session", Value: "good"})
+	coverage := httptest.NewRequest(http.MethodGet, origin+webhttp.CoveragePath, nil)
+	coverage.AddCookie(&http.Cookie{Name: "__Host-pc_session", Value: "reader"})
 	for _, r := range []*http.Request{
 		account,
+		coverage,
 		httptest.NewRequest(http.MethodGet, origin+authnapp.AccountPath+"?org="+testOrg.String(), nil), // redirect to sign-in
 		httptest.NewRequest(http.MethodGet, origin+"/login?org="+testOrg.String(), nil),
 		httptest.NewRequest(http.MethodGet, origin+"/signed-out", nil),

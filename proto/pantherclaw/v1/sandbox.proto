@@ -1,0 +1,277 @@
+// SPDX-License-Identifier: BUSL-1.1
+// Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+
+syntax = "proto3";
+
+package pantherclaw.v1;
+
+import "buf/validate/validate.proto";
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
+
+// SandboxService runs the containment sandbox's sessions (G0 M9 track B;
+// PN-008, F454, F457; HR-121, HR-215, HR-218; T-087).
+//
+// `pclaw sandbox run` opens a session for an agent and the connections it
+// maps. The server records the images, the configuration digest and the
+// engine the sandbox runs, and the public half of the probe key pclaw
+// created outside every container; it mints the enrollment of a new
+// sandbox instance of the agent, which the launcher admits, and returns a
+// fresh single-use nonce for each report. The probe container, the control
+// run and the canary each sign a report with the probe key over its nonce
+// (internal/sandbox/report). The server accepts a report only when its
+// signature is the session's key, its nonce is unused, at most 15 minutes
+// old and of its kind, the session is open, and its images, configuration
+// and engine are the session's. Once the canary's report arrives, the
+// server computes each mapped connection's closure from the three reports
+// and records it through the coverage closure contract; a failed control
+// records a FAILED closure that drops ENFORCED at once. Every rejection is
+// recorded. Sessions end at their expiry, at most 24 hours.
+service SandboxService {
+  // StartSession opens a session and mints its sandbox instance's
+  // enrollment and its first nonces.
+  // permission: sandbox.run
+  rpc StartSession(SandboxServiceStartSessionRequest) returns (SandboxServiceStartSessionResponse);
+  // SubmitProbeReport accepts the probe container's (SANDBOX) or the
+  // control run's (CONTROL) signed report.
+  // permission: sandbox.run
+  rpc SubmitProbeReport(SubmitProbeReportRequest) returns (SubmitProbeReportResponse);
+  // SubmitCanaryReport accepts the canary's signed report, records the
+  // closure of every mapped connection and returns the next nonces.
+  // permission: sandbox.run
+  rpc SubmitCanaryReport(SubmitCanaryReportRequest) returns (SubmitCanaryReportResponse);
+  // ReportRoutes records the routes the session's edge saw the agent take
+  // (destinations it refused, credentials it stripped) as observed routes
+  // of the agent and every mapped connection. They are untrusted and never
+  // grant anything.
+  // permission: sandbox.run
+  rpc ReportRoutes(ReportRoutesRequest) returns (ReportRoutesResponse);
+  // EndSession ends a session and revokes its sandbox instance.
+  // permission: sandbox.run
+  rpc EndSession(SandboxServiceEndSessionRequest) returns (SandboxServiceEndSessionResponse);
+  // GetSession returns one session.
+  // permission: coverage.read
+  rpc GetSession(SandboxServiceGetSessionRequest) returns (SandboxServiceGetSessionResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // ListSessions lists sessions, newest first.
+  // permission: coverage.read
+  rpc ListSessions(SandboxServiceListSessionsRequest) returns (SandboxServiceListSessionsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+}
+
+// SandboxSessionState is where a session is in its life.
+enum SandboxSessionState {
+  SANDBOX_SESSION_STATE_UNSPECIFIED = 0;
+  SANDBOX_SESSION_STATE_OPEN = 1;
+  SANDBOX_SESSION_STATE_ENDED = 2;
+  SANDBOX_SESSION_STATE_EXPIRED = 3;
+}
+
+// SandboxImages are the digests of a session's images.
+message SandboxImages {
+  string agent = 1 [(buf.validate.field).string.pattern = "^sha256:[0-9a-f]{64}$"];
+  string edge = 2 [(buf.validate.field).string.pattern = "^sha256:[0-9a-f]{64}$"];
+  string probe = 3 [(buf.validate.field).string.pattern = "^sha256:[0-9a-f]{64}$"];
+}
+
+// SandboxEngine is the Docker engine a session runs on (HR-218).
+message SandboxEngine {
+  string version = 1 [(buf.validate.field).string.pattern = "^[0-9A-Za-z.+_-]{1,64}$"];
+  string api_version = 2 [(buf.validate.field).string.pattern = "^[0-9]{1,3}\\.[0-9]{1,3}$"];
+  string runtime = 3 [(buf.validate.field).string = {
+    in: [
+      "runc",
+      "runsc"
+    ]
+  }];
+  bool desktop = 4;
+}
+
+// SandboxSession is one session.
+message SandboxSession {
+  string id = 1;
+  string agent_id = 2;
+  // launcher is the person or service account that opened it.
+  string launcher = 3;
+  // instance_id is the sandbox instance, once it enrolled; run_id its run.
+  string instance_id = 4;
+  string run_id = 5;
+  repeated string connection_ids = 6;
+  SandboxImages images = 7;
+  string config_digest = 8;
+  // probe_key_thumbprint and host_key_thumbprint are the RFC 7638
+  // thumbprints of the probe and host keys.
+  string probe_key_thumbprint = 9;
+  SandboxEngine engine = 10;
+  SandboxSessionState state = 11;
+  google.protobuf.Timestamp open_time = 12;
+  google.protobuf.Timestamp expire_time = 13;
+  google.protobuf.Timestamp end_time = 14;
+  string host_key_thumbprint = 15;
+}
+
+// ProbeNonces are fresh single-use server nonces, one for each report of a
+// probe run, valid 15 minutes.
+message ProbeNonces {
+  string sandbox = 1;
+  string control = 2;
+  string canary = 3;
+  google.protobuf.Timestamp expire_time = 4;
+}
+
+message SandboxServiceStartSessionRequest {
+  string agent_id = 1 [(buf.validate.field).string.uuid = true];
+  repeated string connection_ids = 2 [(buf.validate.field).repeated = {
+    min_items: 1
+    max_items: 16
+    unique: true
+    items: {
+      string: {uuid: true}
+    }
+  }];
+  SandboxImages images = 3 [(buf.validate.field).required = true];
+  string config_digest = 4 [(buf.validate.field).string.pattern = "^sha256:[0-9a-f]{64}$"];
+  // probe_public_key is the raw Ed25519 public key of the probe key, which
+  // signs only the sandbox report; host_public_key that of the host key,
+  // which never enters a container and signs the control and canary
+  // reports (HR-215). They differ.
+  bytes probe_public_key = 5 [(buf.validate.field).bytes.len = 32];
+  bytes host_public_key = 8 [(buf.validate.field).bytes.len = 32];
+  SandboxEngine engine = 6 [(buf.validate.field).required = true];
+  // ttl is how long the session lasts; at most and by default 24 hours.
+  google.protobuf.Duration ttl = 7 [(buf.validate.field).duration = {
+    gte: {seconds: 60}
+    lte: {seconds: 86400}
+  }];
+}
+
+message SandboxServiceStartSessionResponse {
+  SandboxSession session = 1;
+  // enrollment_token enrolls the sandbox instance's key (pclaw workload
+  // enroll); single use, shown once, valid 15 minutes.
+  string enrollment_token = 2;
+  ProbeNonces nonces = 3;
+  // agent_hosts maps each host agents use to its connection's name: the
+  // edge's mapping (connections' agent_hosts).
+  map<string, string> agent_hosts = 4;
+}
+
+message SubmitProbeReportRequest {
+  string session_id = 1 [(buf.validate.field).string.uuid = true];
+  // report is the signed report, a compact JWS (typ pap-probe+jwt).
+  string report = 2 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 65536
+  }];
+  // run_id is the run the sandbox instance works in, bound on the first
+  // report; it must be the instance's.
+  string run_id = 3 [
+    (buf.validate.field).string.uuid = true,
+    (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE
+  ];
+}
+
+message SubmitProbeReportResponse {
+  // kind is SANDBOX or CONTROL.
+  string kind = 1;
+  // failed names the results that were not as expected.
+  repeated string failed = 2;
+}
+
+message SubmitCanaryReportRequest {
+  string session_id = 1 [(buf.validate.field).string.uuid = true];
+  string report = 2 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 65536
+  }];
+}
+
+// SandboxClosure is the closure recorded for one mapped connection.
+message SandboxClosure {
+  string connection_id = 1;
+  string closure_id = 2;
+  bool passed = 3;
+  // failed names the results that kept it from passing.
+  repeated string failed = 4;
+  google.protobuf.Timestamp expire_time = 5;
+}
+
+message SubmitCanaryReportResponse {
+  repeated SandboxClosure closures = 1;
+  // next_nonces are for a re-probe in the same session.
+  ProbeNonces next_nonces = 2;
+}
+
+message SandboxServiceEndSessionRequest {
+  string session_id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+message SandboxServiceEndSessionResponse {
+  SandboxSession session = 1;
+}
+
+message SandboxServiceGetSessionRequest {
+  string session_id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+message SandboxServiceGetSessionResponse {
+  SandboxSession session = 1;
+}
+
+message SandboxServiceListSessionsRequest {
+  string agent_id = 1 [
+    (buf.validate.field).string.uuid = true,
+    (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE
+  ];
+  int32 page_size = 2 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 200
+  }];
+  string page_token = 3 [(buf.validate.field).string = {
+    max_len: 256
+    pattern: "^[A-Za-z0-9_-]*$"
+  }];
+}
+
+message SandboxServiceListSessionsResponse {
+  repeated SandboxSession sessions = 1;
+  string next_page_token = 2;
+}
+
+// SandboxRouteKind is what the edge saw.
+enum SandboxRouteKind {
+  SANDBOX_ROUTE_KIND_UNSPECIFIED = 0;
+  // DIRECT_API is a destination the edge refused; the locator is its host
+  // and port.
+  SANDBOX_ROUTE_KIND_DIRECT_API = 1;
+  // CREDENTIAL is a credential the edge stripped; the locator is its kind
+  // and a SHA-256 prefix, never the value.
+  SANDBOX_ROUTE_KIND_CREDENTIAL = 2;
+}
+
+// SandboxRoute is one route the edge saw. The locator is untrusted.
+message SandboxRoute {
+  SandboxRouteKind kind = 1 [(buf.validate.field).enum = {
+    defined_only: true
+    not_in: [0]
+  }];
+  string locator = 2 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 512
+  }];
+}
+
+message ReportRoutesRequest {
+  string session_id = 1 [(buf.validate.field).string.uuid = true];
+  repeated SandboxRoute routes = 2 [(buf.validate.field).repeated = {
+    min_items: 1
+    max_items: 64
+  }];
+}
+
+message ReportRoutesResponse {
+  // new_routes counts the routes seen for the first time.
+  int32 new_routes = 1;
+}

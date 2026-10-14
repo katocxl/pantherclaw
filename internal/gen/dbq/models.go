@@ -78,6 +78,7 @@ type PcAgentInstance struct {
 	CreatedAt         time.Time
 	UpdatedAt         time.Time
 	ExpiresAt         *time.Time
+	SandboxSessionID  *ids.UUID
 }
 
 type PcAnchor struct {
@@ -397,6 +398,7 @@ type PcConnection struct {
 	CreatedAt        time.Time
 	UpdatedBy        string
 	UpdatedAt        time.Time
+	AgentHosts       []string
 }
 
 type PcConnectionCapability struct {
@@ -455,6 +457,39 @@ type PcConnectionTest struct {
 	FinishedAt     *time.Time
 }
 
+type PcConnectorInstance struct {
+	OrgID          ids.OrgID
+	ID             ids.UUID
+	ConnectionID   ids.UUID
+	SpecRevision   int32
+	GatewayID      ids.UUID
+	ContainerName  string
+	State          string
+	EngineVersion  string
+	ApiVersion     string
+	Runtime        string
+	LastErrorClass *string
+	StartedAt      time.Time
+	StoppedAt      *time.Time
+	UpdatedAt      time.Time
+}
+
+type PcConnectorSpec struct {
+	OrgID                  ids.OrgID
+	ConnectionID           ids.UUID
+	Revision               int32
+	Image                  string
+	Command                []string
+	Environment            []byte
+	CredentialPlaceholders []string
+	EgressConnectionID     *ids.UUID
+	MemoryMib              int32
+	MilliCpus              int32
+	Pids                   int32
+	CreatedBy              string
+	CreatedAt              time.Time
+}
+
 type PcConsequenceRule struct {
 	OrgID     ids.OrgID
 	ID        ids.UUID
@@ -475,6 +510,129 @@ type PcCounter struct {
 	Reserved    int32
 	Spent       int32
 	CreatedAt   time.Time
+}
+
+type PcCoverageClosure struct {
+	OrgID                  ids.OrgID
+	ID                     ids.UUID
+	AgentID                ids.UUID
+	ConnectionID           ids.UUID
+	SandboxSessionID       ids.UUID
+	Result                 string
+	Probes                 []byte
+	PositiveControlsPassed bool
+	NegativeControlsPassed bool
+	CanaryPassed           bool
+	SigningKeyJkt          string
+	ServerNonce            string
+	ResultsSha256          []byte
+	EngineVersion          string
+	ApiVersion             string
+	Runtime                string
+	ImageDigests           []string
+	ConfigSha256           []byte
+	ConfigChecks           []byte
+	GatewayID              ids.UUID
+	ConnectionRevision     int32
+	PackageVersionID       ids.UUID
+	CredentialVersion      *int32
+	SessionStartedAt       time.Time
+	ObservedAt             time.Time
+	ExpiresAt              time.Time
+	RecordedAt             time.Time
+}
+
+type PcCoverageExclusion struct {
+	OrgID        ids.OrgID
+	ID           ids.UUID
+	AgentID      *ids.UUID
+	ConnectionID ids.UUID
+	Operation    *string
+	RouteKind    *string
+	Reason       string
+	State        string
+	CreatedBy    ids.UUID
+	CreatedAt    time.Time
+	ExpiresAt    time.Time
+	RevokedBy    *ids.UUID
+	RevokedAt    *time.Time
+}
+
+type PcCoverageFinding struct {
+	OrgID         ids.OrgID
+	ID            ids.UUID
+	Kind          string
+	ConnectionID  *ids.UUID
+	AgentID       *ids.UUID
+	Subject       string
+	Declared      []string
+	Held          []string
+	Used          []string
+	Excess        []string
+	Severity      string
+	State         string
+	Fingerprint   []byte
+	FirstSeenAt   time.Time
+	LastSeenAt    time.Time
+	ResolvedAt    *time.Time
+	DismissedBy   *ids.UUID
+	DismissReason *string
+}
+
+type PcCoverageInvalidation struct {
+	OrgID         ids.OrgID
+	ID            ids.UUID
+	Kind          string
+	ConnectionID  ids.UUID
+	AgentID       *ids.UUID
+	SubjectID     *ids.UUID
+	Detail        *string
+	OccurredAt    time.Time
+	ReassessedAt  *time.Time
+	LedgerEntryID *ids.UUID
+}
+
+type PcCoverageInventory struct {
+	OrgID             ids.OrgID
+	TransactionsAfter ids.UUID
+	RefreshedAt       time.Time
+}
+
+type PcCoverageRoute struct {
+	OrgID        ids.OrgID
+	ID           ids.UUID
+	AgentID      *ids.UUID
+	ConnectionID ids.UUID
+	Operation    *string
+	Kind         string
+	Channel      *string
+	Locator      *string
+	Observation  string
+	Source       string
+	SourceRef    *ids.UUID
+	Mode         *string
+	Attributes   []byte
+	SeenCount    int64
+	FirstSeenAt  time.Time
+	LastSeenAt   time.Time
+}
+
+type PcCoverageSnapshot struct {
+	OrgID          ids.OrgID
+	ID             ids.UUID
+	AgentID        ids.UUID
+	ConnectionID   ids.UUID
+	Operation      string
+	State          string
+	Reasons        []string
+	ClosureID      *ids.UUID
+	LastValidID    *ids.UUID
+	InvalidationID *ids.UUID
+	Body           []byte
+	BodySha256     []byte
+	LedgerEntryID  ids.UUID
+	ComputedAt     time.Time
+	ExpiresAt      *time.Time
 }
 
 type PcCredential struct {
@@ -521,14 +679,15 @@ type PcDecisionConsequence struct {
 }
 
 type PcDecisionReceipt struct {
-	OrgID           ids.OrgID
-	TransactionID   ids.UUID
-	ReceiptJws      *string
-	LedgerEntryID   ids.UUID
-	CreatedAt       time.Time
-	Evaluation      int32
-	BodyRemovedAt   *time.Time
-	RemovedByPolicy *ids.UUID
+	OrgID              ids.OrgID
+	TransactionID      ids.UUID
+	ReceiptJws         *string
+	LedgerEntryID      ids.UUID
+	CreatedAt          time.Time
+	Evaluation         int32
+	BodyRemovedAt      *time.Time
+	RemovedByPolicy    *ids.UUID
+	CoverageSnapshotID *ids.UUID
 }
 
 type PcDedupeClaim struct {
@@ -1260,6 +1419,28 @@ type PcPolicyVersion struct {
 	PublishedAt *time.Time
 }
 
+type PcProbeNonce struct {
+	OrgID       ids.OrgID
+	ID          ids.UUID
+	SessionID   ids.UUID
+	Kind        string
+	NonceSha256 []byte
+	CreatedAt   time.Time
+	ExpiresAt   time.Time
+	UsedAt      *time.Time
+}
+
+type PcProbeRun struct {
+	OrgID        ids.OrgID
+	ID           ids.UUID
+	SessionID    ids.UUID
+	NonceID      ids.UUID
+	Kind         string
+	Report       string
+	ReportSha256 []byte
+	ReceivedAt   time.Time
+}
+
 type PcReconciliationTask struct {
 	OrgID             ids.OrgID
 	ID                ids.UUID
@@ -1352,6 +1533,41 @@ type PcRun struct {
 	CreatedAt          time.Time
 	ExpiresAt          time.Time
 	EndedAt            *time.Time
+}
+
+type PcSandboxSession struct {
+	OrgID             ids.OrgID
+	ID                ids.UUID
+	AgentID           ids.UUID
+	Launcher          string
+	EnrollmentTokenID ids.UUID
+	InstanceID        *ids.UUID
+	RunID             *ids.UUID
+	AgentImage        string
+	EdgeImage         string
+	ProbeImage        string
+	ConfigDigest      string
+	ProbeJkt          string
+	ProbePublicKey    []byte
+	HostJkt           string
+	HostPublicKey     []byte
+	EngineVersion     string
+	ApiVersion        string
+	Runtime           string
+	State             string
+	OpenedAt          time.Time
+	ExpiresAt         time.Time
+	EndedAt           *time.Time
+}
+
+type PcSandboxSessionConnection struct {
+	OrgID              ids.OrgID
+	SessionID          ids.UUID
+	ConnectionID       ids.UUID
+	ConnectionRevision int32
+	GatewayID          ids.UUID
+	PackageVersionID   ids.UUID
+	CredentialVersion  *int32
 }
 
 type PcServiceAccount struct {

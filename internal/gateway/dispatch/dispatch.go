@@ -176,6 +176,9 @@ type Options struct {
 	// Approvers verifies approvals (HR-038); nil refuses every action
 	// whose permit carries one.
 	Approvers Approvers
+	// Connectors are the gateway's running connectors (G0 M9 track C);
+	// nil when connectors are not enabled on it.
+	Connectors Connectors
 	// ReportFacts reports the github.* facts a GitHub App connection's
 	// action needs, read just before its decision (G0 M8 decision 5); nil
 	// reads none.
@@ -206,6 +209,7 @@ type Engine struct {
 	nonces      nonces
 	onDrift     func(ctx context.Context, connection string, d Drift)
 	approvers   Approvers
+	connectors  Connectors
 	reportFacts FactReporter
 	factTimeout time.Duration
 	revocations RevocationReporter
@@ -244,6 +248,7 @@ func New(o Options) (*Engine, error) {
 		org: o.Org, authority: o.Authority, permits: newPermitVerifier(o.JWKSURL, o.JWKSClient, o.GatewayID, o.Org),
 		containment: o.Containment, broker: o.Broker, allowed: o.AllowedPrefixes, breaker: newBreaker(o.Now, o.ReportCircuit, o.Log),
 		log: o.Log, onDrift: o.OnDrift, clients: map[string]clientEntry{}, drift: map[string]driftEntry{}, approvers: o.Approvers,
+		connectors:  o.Connectors,
 		reportFacts: o.ReportFacts, factTimeout: o.FactTimeout, revocations: o.ReportRevocation,
 	}, nil
 }
@@ -440,7 +445,7 @@ func (e *Engine) dispatch(ctx context.Context, c Call, t *timer) Result {
 		return e.delegateSDK(ctx, r, conn, def, bound, want, t)
 	}
 	switch conn.GetKind() {
-	case "mcp":
+	case "mcp", "mcp_container":
 		return e.sendMCP(ctx, r, conn, def, bound, want, t)
 	case "local":
 		return e.delegate(ctx, r, want, t)
@@ -552,6 +557,9 @@ func (e *Engine) client(conn *control.Connection) (*egress.Client, error) {
 
 // entry returns the connection's clients, new for each revision.
 func (e *Engine) entry(conn *control.Connection) (clientEntry, error) {
+	if conn.GetKind() == "mcp_container" {
+		return e.connectorEntry(conn)
+	}
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	if ce, ok := e.clients[conn.GetId()]; ok && ce.revision == conn.GetRevision() && ce.base == conn.GetBaseUrl() {

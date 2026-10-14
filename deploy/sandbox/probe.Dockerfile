@@ -1,0 +1,13 @@
+# SPDX-License-Identifier: BUSL-1.1
+# Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+#
+# The containment sandbox's probe (G0 M9 design decision 10). Built locally by
+# `task sandbox:images` from a static Linux build of cmd/pantherclaw-probe and
+# referenced by its image id; the base is pinned by digest (docker.BaseImage).
+FROM gcr.io/distroless/static-debian12@sha256:afa5c872c891853ca7fcf1f12c3edb23f7eeef36189728842dd51042ff57f7ab
+COPY pantherclaw-probe /pantherclaw-probe
+# An empty /workspace owned by the agent's uid: a new workspace volume first
+# mounted here takes its ownership, so the agent (65533) can write to it.
+COPY --chown=65533:65533 workspace/ /workspace/
+USER 65531:65531
+ENTRYPOINT ["/pantherclaw-probe"]

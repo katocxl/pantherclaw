@@ -8,6 +8,7 @@ package pantherclaw.v1;
 import "buf/validate/validate.proto";
 import "google/protobuf/timestamp.proto";
 import "pantherclaw/v1/authority.proto";
+import "pantherclaw/v1/coverage_records.proto";
 
 // TransactionService reads what happened to agent actions (G0 M7 track A,
 // F466–F479). A decision receipt says what was allowed, an execution
@@ -240,6 +241,32 @@ message DecisionReceipt {
   Integrity integrity = 3;
   // When it was issued.
   google.protobuf.Timestamp create_time = 4;
+  // The coverage claim the receipt carries (HR-217), read from its signed
+  // payload; absent when it has none or its body was removed.
+  DecisionCoverage coverage = 10;
+}
+
+// DecisionCoverage is a decision receipt's coverage claim (PAP-1 §9.1):
+// the snapshot current for the action's scope at decision time and the
+// state effective then.
+message DecisionCoverage {
+  // The state effective at decision time: the snapshot's, or when it had
+  // lapsed the scope recomputed then, capped at PARTIAL.
+  CoverageState state = 1;
+  // The snapshot that was current.
+  string snapshot_id = 2;
+  // The snapshot's own state.
+  CoverageState snapshot_state = 3;
+  // Whether the snapshot had lapsed.
+  bool lapsed = 4;
+  // Why: "expired" or an invalidation kind.
+  string reason = 5;
+  // The exclusions the snapshot listed.
+  repeated string exclusion_ids = 6;
+  // Set when the claim could not be read at decision time: "timeout" or
+  // "error". The receipt then states no coverage, and every other field is
+  // empty; an unavailable claim is never a state.
+  string unavailable = 7;
 }
 
 // Execution is the dispatch attempt and its signed execution receipt.

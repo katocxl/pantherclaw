@@ -528,7 +528,7 @@ func dispatches(kind string, d *domain.Definition) bool {
 	switch kind {
 	case "http":
 		return d.Dispatch != nil && d.Dispatch.HTTP != nil
-	case "mcp":
+	case "mcp", "mcp_container":
 		return d.Dispatch != nil && d.Dispatch.MCP != nil
 	}
 	return false

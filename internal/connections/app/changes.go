@@ -26,8 +26,16 @@ type UpdateInput struct {
 	BaseURL  *string
 	// AllowedHosts replaces the list when SetAllowedHosts (an empty list
 	// means "the base URL's host").
-	AllowedHosts     []string
-	SetAllowedHosts  bool
+	AllowedHosts    []string
+	SetAllowedHosts bool
+	// AgentHosts replaces the agent hosts when SetAgentHosts; any change
+	// weakens (HR-183).
+	AgentHosts    []string
+	SetAgentHosts bool
+	// Connector replaces a connector connection's spec, which weakens
+	// enforcement (HR-183); moving a connector to another gateway needs it,
+	// so its egress connection is checked on the new gateway.
+	Connector        *ConnectorSpec
 	DestinationClass *string
 	AccessMode       *string
 	DefaultMode      *string
@@ -147,7 +155,8 @@ func params(c actor, conn dbq.PcConnection) dbq.UpdateConnectionParams {
 	return dbq.UpdateConnectionParams{
 		GatewayID: conn.GatewayID, BaseUrl: conn.BaseUrl, AllowedHosts: conn.AllowedHosts, DestinationClass: conn.DestinationClass,
 		AccessMode: conn.AccessMode, DefaultMode: conn.DefaultMode, MaxResponseBytes: conn.MaxResponseBytes, TimeoutMs: conn.TimeoutMs,
-		State: conn.State, QuarantineReason: conn.QuarantineReason, UpdatedBy: c.By, OrgID: c.Org, ID: conn.ID,
+		AgentHosts: conn.AgentHosts,
+		State:      conn.State, QuarantineReason: conn.QuarantineReason, UpdatedBy: c.By, OrgID: c.Org, ID: conn.ID,
 		Revision: conn.Revision,
 	}
 }
@@ -196,6 +205,12 @@ func (s *Service) Update(ctx context.Context, in UpdateInput) (Connection, error
 			if err := activeGateway(ctx, q, c.Org, *in.Gateway); err != nil {
 				return err
 			}
+			if conn.Kind == KindMCPContainer && s.hosted[*in.Gateway] {
+				return ErrHostedGateway
+			}
+			if conn.Kind == KindMCPContainer && in.Connector == nil {
+				return ErrConnector
+			}
 			p.GatewayID = *in.Gateway
 			set("gateway_id", conn.GatewayID.String(), p.GatewayID.String(), true)
 		}
@@ -220,6 +235,12 @@ func (s *Service) Update(ctx context.Context, in UpdateInput) (Connection, error
 			p.BaseUrl, p.AllowedHosts = nb, nh
 			set("base_url", deref(conn.BaseUrl), deref(nb), true)
 			set("allowed_hosts", strings.Join(conn.AllowedHosts, ","), strings.Join(nh, ","), true)
+		}
+		if in.SetAgentHosts {
+			if p.AgentHosts, err = checkAgentHosts(conn.Kind, in.AgentHosts); err != nil {
+				return err
+			}
+			set("agent_hosts", strings.Join(conn.AgentHosts, ","), strings.Join(p.AgentHosts, ","), true)
 		}
 		if in.DestinationClass != nil {
 			if !slices.Contains([]string{ClassPublic, ClassInternal}, *in.DestinationClass) {
@@ -250,9 +271,28 @@ func (s *Service) Update(ctx context.Context, in UpdateInput) (Connection, error
 			p.TimeoutMs = *in.TimeoutMs
 			limits["timeout_ms"] = strconv.Itoa(int(p.TimeoutMs))
 		}
+		var spec ConnectorSpec
+		if in.Connector != nil {
+			if conn.Kind != KindMCPContainer {
+				return ErrConnector
+			}
+			if spec, err = in.Connector.check(); err != nil {
+				return err
+			}
+			cur, err := q.CurrentConnectorSpec(ctx, c.Org, conn.ID)
+			if err != nil {
+				return err
+			}
+			set("connector", connectorSummary(&cur), specView(spec), true)
+		}
 		after, err := s.apply(ctx, tx, c, conn, p, changes, "connection.updated", limits)
 		if err != nil {
 			return err
+		}
+		if in.Connector != nil {
+			if _, err := putConnector(ctx, q, c, after, spec); err != nil {
+				return err
+			}
 		}
 		out, err = load(ctx, q, after)
 		return err

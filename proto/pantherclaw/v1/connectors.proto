@@ -1,0 +1,126 @@
+// SPDX-License-Identifier: BUSL-1.1
+// Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+
+syntax = "proto3";
+
+package pantherclaw.v1;
+
+import "buf/validate/validate.proto";
+
+// Connectors (G0 M9 track C; HR-084, HR-216, decision 5): a connection of
+// kind CONNECTION_KIND_MCP_CONTAINER is a third-party stdio MCP server that
+// a customer-hosted gateway runs in a hardened container. It has no base
+// URL and holds no credential. Its egress goes through an edge to the
+// gateway, which maps each request through the egress connection and
+// places that connection's credential (design decision 18).
+
+// ConnectorSpec is a connector's container. Changing it weakens
+// enforcement (HR-183).
+message ConnectorSpec {
+  // image is pinned by digest: repo@sha256:<hex>, or a local image id.
+  string image = 1 [(buf.validate.field).string.pattern = "^([a-z0-9][a-z0-9._/:-]{0,254}@)?sha256:[0-9a-f]{64}$"];
+  // command is the program and its arguments, run as given (no shell).
+  repeated string command = 2 [(buf.validate.field).repeated = {
+    min_items: 1
+    max_items: 32
+    items: {
+      string: {
+        min_len: 1
+        max_len: 1024
+      }
+    }
+  }];
+  // environment holds non-secret values only; a value that looks like a
+  // credential is refused.
+  map<string, string> environment = 3 [(buf.validate.field).map = {
+    max_pairs: 64
+    keys: {
+      string: {pattern: "^[A-Z_][A-Z0-9_]{0,63}$"}
+    }
+    values: {
+      string: {max_len: 1024}
+    }
+  }];
+  // credential_placeholders are environment names the gateway sets to a
+  // placeholder: the credential is placed on the connector's mediated
+  // egress, never in the container.
+  repeated string credential_placeholders = 4 [(buf.validate.field).repeated = {
+    max_items: 16
+    unique: true
+    items: {
+      string: {pattern: "^[A-Z_][A-Z0-9_]{0,63}$"}
+    }
+  }];
+  // egress_connection_id is the http connection of the same gateway that
+  // mediates the connector's egress; empty means no egress at all.
+  string egress_connection_id = 5 [
+    (buf.validate.field).string.uuid = true,
+    (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE
+  ];
+  ConnectorLimits limits = 6;
+  // revision is the connection revision this spec was set at.
+  int32 revision = 7;
+}
+
+// ConnectorLimits caps a connector's container; zero takes the default
+// (512 MiB, 1000 milli-CPUs, 256 processes).
+message ConnectorLimits {
+  int32 memory_mib = 1 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 8192
+  }];
+  int32 milli_cpus = 2 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 8000
+  }];
+  int32 pids = 3 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 4096
+  }];
+}
+
+// GatewayHosting says who runs a gateway. PANTHERCLAW comes only from the
+// server's configuration, never from a tenant or a gateway (decision 7);
+// connectors run only on customer-hosted gateways (HR-084).
+enum GatewayHosting {
+  GATEWAY_HOSTING_UNSPECIFIED = 0;
+  GATEWAY_HOSTING_CUSTOMER = 1;
+  GATEWAY_HOSTING_PANTHERCLAW = 2;
+}
+
+// ConnectorState is a connector run's state; a run moves only forward.
+enum ConnectorState {
+  CONNECTOR_STATE_UNSPECIFIED = 0;
+  CONNECTOR_STATE_STARTING = 1;
+  CONNECTOR_STATE_RUNNING = 2;
+  CONNECTOR_STATE_STOPPED = 3;
+  CONNECTOR_STATE_FAILED = 4;
+}
+
+message ReportConnectorStateRequest {
+  // instance_id is the gateway's id for this run of the connector.
+  string instance_id = 1 [(buf.validate.field).string.uuid = true];
+  string connection_id = 2 [(buf.validate.field).string.uuid = true];
+  // spec_revision is the connector spec revision the run started from.
+  int32 spec_revision = 3 [(buf.validate.field).int32.gt = 0];
+  ConnectorState state = 4 [(buf.validate.field).enum = {
+    defined_only: true
+    not_in: [0]
+  }];
+  string container_name = 5 [(buf.validate.field).string.pattern = "^pc-[a-z0-9][a-z0-9-]{0,40}$"];
+  string engine_version = 6 [(buf.validate.field).string.pattern = "^[0-9A-Za-z.+_-]{1,64}$"];
+  string api_version = 7 [(buf.validate.field).string.pattern = "^[0-9]{1,3}\\.[0-9]{1,3}$"];
+  string runtime = 8 [(buf.validate.field).string = {
+    in: [
+      "runc",
+      "runsc"
+    ]
+  }];
+  // error_class is why a run failed: a class, never a message.
+  string error_class = 9 [
+    (buf.validate.field).string.pattern = "^[a-z0-9_]{1,64}$",
+    (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE
+  ];
+}
+
+message ReportConnectorStateResponse {}

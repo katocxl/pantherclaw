@@ -1,0 +1,64 @@
+// SPDX-License-Identifier: BUSL-1.1
+// Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+
+package coveragerpc
+
+import (
+	"context"
+
+	"github.com/katocxl/pantherclaw/internal/coverage/app"
+	"github.com/katocxl/pantherclaw/internal/coverage/domain"
+	pantherclawv1 "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
+)
+
+var accessModes = map[string]pantherclawv1.AccessControlMode{
+	app.ModeTargetEnforced:     pantherclawv1.AccessControlMode_ACCESS_CONTROL_MODE_TARGET_ENFORCED,
+	app.ModeNarrowTemporary:    pantherclawv1.AccessControlMode_ACCESS_CONTROL_MODE_NARROW_TEMPORARY,
+	app.ModePantherClawHeld:    pantherclawv1.AccessControlMode_ACCESS_CONTROL_MODE_PANTHERCLAW_HELD,
+	app.ModeConstrainedRuntime: pantherclawv1.AccessControlMode_ACCESS_CONTROL_MODE_CONSTRAINED_RUNTIME,
+	app.ModeAgentHeld:          pantherclawv1.AccessControlMode_ACCESS_CONTROL_MODE_AGENT_HELD,
+}
+
+// GetAccessDetail implements CoverageServiceHandler.
+func (h *Handler) GetAccessDetail(ctx context.Context, req *pantherclawv1.GetAccessDetailRequest) (*pantherclawv1.GetAccessDetailResponse, error) {
+	conn, err := idOf(req.GetConnectionId())
+	if err != nil {
+		return nil, err
+	}
+	agent, err := optID(req.AgentId)
+	if err != nil {
+		return nil, err
+	}
+	d, err := h.svc.GetAccessDetail(ctx, conn, agent)
+	if err != nil {
+		return nil, err
+	}
+	out := &pantherclawv1.AccessDetail{
+		ConnectionId: d.Connection.String(), AgentId: idText(d.Agent), Custodian: d.Custodian,
+		CredentialVersion: d.CredentialVersion, CredentialHosts: d.Audience, Disclosures: d.Disclosures,
+		Scope: d.Scope, Audience: d.Audience, Expiry: d.Expiry, IssuedBy: d.IssuedBy, IssueTime: tsp(d.IssuedAt),
+		VerificationBasis: d.Basis,
+	}
+	for _, v := range d.Verified {
+		out.VerifiedOperations = append(out.VerifiedOperations, &pantherclawv1.VerifiedOperation{Operation: v.Operation, VerifyTime: ts(v.At)})
+	}
+	for _, a := range d.Agents {
+		out.AgentIds = append(out.AgentIds, a.String())
+	}
+	if !d.Gateway.IsZero() {
+		out.GatewayId = d.Gateway.String()
+	}
+	for _, m := range d.Modes {
+		out.Modes = append(out.Modes, accessModes[m])
+	}
+	if c := d.Closure; c != nil {
+		out.ClosureId, out.ClosureExpireTime = c.ID.String(), ts(c.ExpiresAt)
+	}
+	for _, rt := range d.Residual {
+		out.ResidualRoutes = append(out.ResidualRoutes, &pantherclawv1.CoverageRoute{
+			Id: rt.Route, Kind: kinds[domain.RouteKind(rt.Kind)], Channel: rt.Channel, Locator: rt.Locator,
+			Status: statuses[domain.RouteStatus(rt.Status)],
+		})
+	}
+	return &pantherclawv1.GetAccessDetailResponse{Detail: out}, nil
+}

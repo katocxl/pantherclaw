@@ -375,14 +375,15 @@ func (p *Pipeline) connection(ctx context.Context, s *state, d *defs.Definition)
 var gatewayChannels = []string{string(defs.ChannelHTTP), string(defs.ChannelMCP), string(defs.ChannelHook), string(defs.ChannelSDK)}
 
 // dispatches reports whether a connection of this kind serves the
-// definition: an HTTP or MCP connection only definitions with a dispatch
-// template of its kind, a local one (the hook) any, because the agent's
-// machine executes it.
+// definition: an HTTP or MCP connection (an MCP server over HTTP, or a
+// connector's over stdio) only definitions with a dispatch template of
+// its kind, a local one (the hook) any, because the agent's machine
+// executes it.
 func dispatches(kind string, d *defs.Definition) bool {
 	switch kind {
 	case "http":
 		return d.Dispatch != nil && d.Dispatch.HTTP != nil
-	case "mcp":
+	case "mcp", "mcp_container":
 		return d.Dispatch != nil && d.Dispatch.MCP != nil
 	case "local":
 		return true

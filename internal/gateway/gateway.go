@@ -16,6 +16,7 @@ import (
 
 	"github.com/katocxl/pantherclaw/internal/approvals/proof"
 	"github.com/katocxl/pantherclaw/internal/gateway/broker"
+	"github.com/katocxl/pantherclaw/internal/gateway/connectors"
 	"github.com/katocxl/pantherclaw/internal/gateway/control"
 	"github.com/katocxl/pantherclaw/internal/gateway/dispatch"
 	"github.com/katocxl/pantherclaw/internal/gateway/hook"
@@ -25,6 +26,7 @@ import (
 	pb "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
 	"github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1/pantherclawv1connect"
 	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
+	"github.com/katocxl/pantherclaw/internal/sandbox/docker"
 )
 
 // PAP/1 request headers, for clients of the gateway (dispatch).
@@ -116,6 +118,9 @@ type Deps struct {
 	// Verifications claims and reports verification tasks (G0 M7); nil
 	// makes no verification reads.
 	Verifications Verifications
+	// Connectors runs the connector connections; nil when they are not
+	// enabled.
+	Connectors *connectors.Supervisor
 	// ReportFacts reports what the gateway reads from GitHub before a
 	// decision, as the connection's fact provider (G0 M8 decision 5); nil
 	// reads nothing.
@@ -191,6 +196,17 @@ func New(ctx context.Context, cfg *Config, id *control.Identity, log *slog.Logge
 		}, log)
 		d.Run = append(d.Run, d.Broker.Run)
 	}
+	if cfg.Connectors.Enabled {
+		sup, err := connectors.New(ctx, docker.New(docker.CLI{}), cfg.Connectors, store, log)
+		if err != nil {
+			return nil, err
+		}
+		d.Connectors = sup.WithReporter(func(ctx context.Context, r *pb.ReportConnectorStateRequest) error {
+			_, err := ctl.Gateway.ReportConnectorState(ctx, r)
+			return err
+		})
+		d.Run = append(d.Run, sup.Run)
+	}
 	return newGateway(cfg, d, log)
 }
 
@@ -208,6 +224,9 @@ func newGateway(cfg *Config, d Deps, log *slog.Logger) (*Gateway, error) {
 		Approvers:   proof.NewPinned(cfg.Approvals.ApproverKeysFile, d.Org),
 		ReportFacts: d.ReportFacts, FactTimeout: cfg.GitHub.FactTimeout.D(), ReportRevocation: d.ReportRevocation,
 	}
+	if d.Connectors != nil {
+		o.Connectors = d.Connectors
+	}
 	if d.Broker != nil {
 		o.Broker = d.Broker
 	}
@@ -218,6 +237,9 @@ func newGateway(cfg *Config, d Deps, log *slog.Logger) (*Gateway, error) {
 	engine, err := dispatch.New(o)
 	if err != nil {
 		return nil, err
+	}
+	if d.Connectors != nil {
+		d.Connectors.WithEgress(engine)
 	}
 	if log == nil {
 		log = pclog.Discard()
