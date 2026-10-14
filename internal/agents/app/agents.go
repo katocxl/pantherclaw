@@ -33,6 +33,8 @@ type Agent struct {
 	UpdatedAt         time.Time
 	ClaimedAt         *time.Time
 	RetiredAt         *time.Time
+	// RangeAgent: all its runs are simulated (G0 M12, HR-220); immutable.
+	RangeAgent bool
 }
 
 // Discovery is what was observed about a discovered agent. Observed holds
@@ -85,6 +87,7 @@ func agentView(r dbq.PcAgent) Agent {
 	a := Agent{
 		ID: r.ID, Name: r.Name, Purpose: r.Purpose, State: domain.State(r.State), CreatedBy: r.CreatedBy,
 		CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt, ClaimedAt: r.ClaimedAt, RetiredAt: r.RetiredAt,
+		RangeAgent: r.RangeAgent,
 	}
 	for dst, src := range map[*ids.UUID]*ids.UUID{
 		&a.TeamID: r.TeamID, &a.EnvironmentID: r.EnvironmentID, &a.OwnerUserID: r.OwnerUserID,
@@ -120,13 +123,17 @@ func (inv *Inventory) Create(ctx context.Context, d domain.Details) (Agent, erro
 		if err := checkOwners(ctx, q, c.Org, d.OwnerUserID, d.BackupOwnerUserID); err != nil {
 			return err
 		}
-		if err := inv.checkLimit(ctx, q, c.Org); err != nil {
+		limit := inv.checkLimit
+		if d.RangeAgent {
+			limit = inv.checkRangeLimit
+		}
+		if err := limit(ctx, q, c.Org); err != nil {
 			return err
 		}
 		r, err := q.InsertAgent(ctx, dbq.InsertAgentParams{
 			OrgID: c.Org, ID: ids.NewV7(), Name: d.Name, Purpose: d.Purpose, TeamID: &d.TeamID,
 			EnvironmentID: &d.EnvironmentID, OwnerUserID: &d.OwnerUserID, BackupOwnerUserID: optUUID(d.BackupOwnerUserID),
-			ExecutionContext: ptr(string(d.Context)), CreatedBy: c.Principal.String(),
+			ExecutionContext: ptr(string(d.Context)), CreatedBy: c.Principal.String(), RangeAgent: d.RangeAgent,
 		})
 		if err != nil {
 			return err
@@ -134,13 +141,30 @@ func (inv *Inventory) Create(ctx context.Context, d domain.Details) (Agent, erro
 		out = agentView(r)
 		if err := RecordChange(ctx, q, c.Org, r.ID, domain.Change{
 			Kind: domain.ChangeCreated, Actor: actor(c),
-			Details: map[string]string{"owner_user_id": d.OwnerUserID.String(), "execution_context": string(d.Context)},
+			Details: createDetails(d),
 		}); err != nil {
 			return err
 		}
-		return record(ctx, tx, c, "agents.agent_created", r.ID, map[string]string{"execution_context": string(d.Context)})
+		return record(ctx, tx, c, "agents.agent_created", r.ID, auditDetails(d))
 	})
 	return out, err
+}
+
+// createDetails are the details of the created change; a range agent says so.
+func createDetails(d domain.Details) map[string]string {
+	m := map[string]string{"owner_user_id": d.OwnerUserID.String(), "execution_context": string(d.Context)}
+	if d.RangeAgent {
+		m["range_agent"] = "true"
+	}
+	return m
+}
+
+func auditDetails(d domain.Details) map[string]string {
+	m := map[string]string{"execution_context": string(d.Context)}
+	if d.RangeAgent {
+		m["range_agent"] = "true"
+	}
+	return m
 }
 
 // Get returns an agent's summary.

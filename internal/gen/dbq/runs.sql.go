@@ -55,7 +55,7 @@ SET state = CASE WHEN runs.id = $1 THEN $2::text ELSE 'REVOKED' END,
     end_reason = CASE WHEN runs.id = $1 THEN $3::text ELSE 'parent_ended' END,
     ended_at = now()
 WHERE runs.org_id = $4 AND runs.id IN (SELECT id FROM tree) AND runs.state = 'ACTIVE'
-RETURNING org_id, id, agent_id, instance_id, environment_id, launcher_user_id, launcher_sa_id, launcher_instance_id, principal_user_id, principal_sa_id, principal_source, subject_issuer, subject_subject, actor_chain, parent_run_id, depth, grant_id, task_ref, state, end_reason, created_at, expires_at, ended_at
+RETURNING org_id, id, agent_id, instance_id, environment_id, launcher_user_id, launcher_sa_id, launcher_instance_id, principal_user_id, principal_sa_id, principal_source, subject_issuer, subject_subject, actor_chain, parent_run_id, depth, grant_id, task_ref, state, end_reason, created_at, expires_at, ended_at, simulated
 `
 
 type EndRunTreeParams struct {
@@ -104,6 +104,7 @@ func (q *Queries) EndRunTree(ctx context.Context, arg EndRunTreeParams) ([]PcRun
 			&i.CreatedAt,
 			&i.ExpiresAt,
 			&i.EndedAt,
+			&i.Simulated,
 		); err != nil {
 			return nil, err
 		}
@@ -131,7 +132,7 @@ func (q *Queries) ExpireRuns(ctx context.Context, orgID ids.OrgID) (int64, error
 }
 
 const getRun = `-- name: GetRun :one
-SELECT r.org_id, r.id, r.agent_id, r.instance_id, r.environment_id, r.launcher_user_id, r.launcher_sa_id, r.launcher_instance_id, r.principal_user_id, r.principal_sa_id, r.principal_source, r.subject_issuer, r.subject_subject, r.actor_chain, r.parent_run_id, r.depth, r.grant_id, r.task_ref, r.state, r.end_reason, r.created_at, r.expires_at, r.ended_at,
+SELECT r.org_id, r.id, r.agent_id, r.instance_id, r.environment_id, r.launcher_user_id, r.launcher_sa_id, r.launcher_instance_id, r.principal_user_id, r.principal_sa_id, r.principal_source, r.subject_issuer, r.subject_subject, r.actor_chain, r.parent_run_id, r.depth, r.grant_id, r.task_ref, r.state, r.end_reason, r.created_at, r.expires_at, r.ended_at, r.simulated,
     (CASE WHEN r.state = 'ACTIVE' AND r.expires_at <= now() THEN 'EXPIRED' ELSE r.state END)::text AS effective_state
 FROM pc.runs r WHERE r.org_id = $1 AND r.id = $2
 `
@@ -168,6 +169,7 @@ func (q *Queries) GetRun(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (Get
 		&i.PcRun.CreatedAt,
 		&i.PcRun.ExpiresAt,
 		&i.PcRun.EndedAt,
+		&i.PcRun.Simulated,
 		&i.EffectiveState,
 	)
 	return i, err
@@ -177,14 +179,14 @@ const insertRun = `-- name: InsertRun :one
 
 INSERT INTO pc.runs (org_id, id, agent_id, instance_id, environment_id, launcher_user_id, launcher_sa_id,
     launcher_instance_id, principal_user_id, principal_sa_id, principal_source, subject_issuer, subject_subject,
-    actor_chain, parent_run_id, depth, grant_id, task_ref, expires_at)
+    actor_chain, parent_run_id, depth, grant_id, task_ref, simulated, expires_at)
 VALUES ($1, $2, $3, $4, $5,
     $6, $7, $8, $9,
     $10, $11, $12, $13,
-    $14, $15, $16, $17, $18,
-    LEAST(now() + make_interval(mins => $19::int),
-          coalesce($20::timestamptz, 'infinity'::timestamptz)))
-RETURNING org_id, id, agent_id, instance_id, environment_id, launcher_user_id, launcher_sa_id, launcher_instance_id, principal_user_id, principal_sa_id, principal_source, subject_issuer, subject_subject, actor_chain, parent_run_id, depth, grant_id, task_ref, state, end_reason, created_at, expires_at, ended_at
+    $14, $15, $16, $17, $18, $19,
+    LEAST(now() + make_interval(mins => $20::int),
+          coalesce($21::timestamptz, 'infinity'::timestamptz)))
+RETURNING org_id, id, agent_id, instance_id, environment_id, launcher_user_id, launcher_sa_id, launcher_instance_id, principal_user_id, principal_sa_id, principal_source, subject_issuer, subject_subject, actor_chain, parent_run_id, depth, grant_id, task_ref, state, end_reason, created_at, expires_at, ended_at, simulated
 `
 
 type InsertRunParams struct {
@@ -206,6 +208,7 @@ type InsertRunParams struct {
 	Depth              int16
 	GrantID            *ids.UUID
 	TaskRef            string
+	Simulated          bool
 	TtlMinutes         int32
 	NotAfter           *time.Time
 }
@@ -239,6 +242,7 @@ func (q *Queries) InsertRun(ctx context.Context, arg InsertRunParams) (PcRun, er
 		arg.Depth,
 		arg.GrantID,
 		arg.TaskRef,
+		arg.Simulated,
 		arg.TtlMinutes,
 		arg.NotAfter,
 	)
@@ -267,12 +271,13 @@ func (q *Queries) InsertRun(ctx context.Context, arg InsertRunParams) (PcRun, er
 		&i.CreatedAt,
 		&i.ExpiresAt,
 		&i.EndedAt,
+		&i.Simulated,
 	)
 	return i, err
 }
 
 const listRuns = `-- name: ListRuns :many
-SELECT r.org_id, r.id, r.agent_id, r.instance_id, r.environment_id, r.launcher_user_id, r.launcher_sa_id, r.launcher_instance_id, r.principal_user_id, r.principal_sa_id, r.principal_source, r.subject_issuer, r.subject_subject, r.actor_chain, r.parent_run_id, r.depth, r.grant_id, r.task_ref, r.state, r.end_reason, r.created_at, r.expires_at, r.ended_at,
+SELECT r.org_id, r.id, r.agent_id, r.instance_id, r.environment_id, r.launcher_user_id, r.launcher_sa_id, r.launcher_instance_id, r.principal_user_id, r.principal_sa_id, r.principal_source, r.subject_issuer, r.subject_subject, r.actor_chain, r.parent_run_id, r.depth, r.grant_id, r.task_ref, r.state, r.end_reason, r.created_at, r.expires_at, r.ended_at, r.simulated,
     (CASE WHEN r.state = 'ACTIVE' AND r.expires_at <= now() THEN 'EXPIRED' ELSE r.state END)::text AS effective_state
 FROM pc.runs r
 WHERE r.org_id = $1 AND r.id > coalesce($2::uuid, '00000000-0000-0000-0000-000000000000')
@@ -336,6 +341,7 @@ func (q *Queries) ListRuns(ctx context.Context, arg ListRunsParams) ([]ListRunsR
 			&i.PcRun.CreatedAt,
 			&i.PcRun.ExpiresAt,
 			&i.PcRun.EndedAt,
+			&i.PcRun.Simulated,
 			&i.EffectiveState,
 		); err != nil {
 			return nil, err
@@ -349,7 +355,7 @@ func (q *Queries) ListRuns(ctx context.Context, arg ListRunsParams) ([]ListRunsR
 }
 
 const lockRun = `-- name: LockRun :one
-SELECT r.org_id, r.id, r.agent_id, r.instance_id, r.environment_id, r.launcher_user_id, r.launcher_sa_id, r.launcher_instance_id, r.principal_user_id, r.principal_sa_id, r.principal_source, r.subject_issuer, r.subject_subject, r.actor_chain, r.parent_run_id, r.depth, r.grant_id, r.task_ref, r.state, r.end_reason, r.created_at, r.expires_at, r.ended_at,
+SELECT r.org_id, r.id, r.agent_id, r.instance_id, r.environment_id, r.launcher_user_id, r.launcher_sa_id, r.launcher_instance_id, r.principal_user_id, r.principal_sa_id, r.principal_source, r.subject_issuer, r.subject_subject, r.actor_chain, r.parent_run_id, r.depth, r.grant_id, r.task_ref, r.state, r.end_reason, r.created_at, r.expires_at, r.ended_at, r.simulated,
     (CASE WHEN r.state = 'ACTIVE' AND r.expires_at <= now() THEN 'EXPIRED' ELSE r.state END)::text AS effective_state
 FROM pc.runs r WHERE r.org_id = $1 AND r.id = $2 FOR UPDATE
 `
@@ -386,6 +392,7 @@ func (q *Queries) LockRun(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (Lo
 		&i.PcRun.CreatedAt,
 		&i.PcRun.ExpiresAt,
 		&i.PcRun.EndedAt,
+		&i.PcRun.Simulated,
 		&i.EffectiveState,
 	)
 	return i, err

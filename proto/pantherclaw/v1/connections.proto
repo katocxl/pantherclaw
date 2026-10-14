@@ -217,6 +217,9 @@ message Connection {
   // The GitHub App installation behind a connection holding a GitHub App
   // credential (G0 M8, ADR-0021); unset otherwise.
   GitHubInstallation github = 24;
+  // Whether the connection is simulated (G0 M12, HR-221): it points only at a
+  // simulator, and only range agents' runs may use it.
+  bool simulated = 30;
 }
 
 // ConnectionRoute is one route's explicit mode.
@@ -335,6 +338,10 @@ message CreateConnectionRequest {
   }];
   // connector is required for, and only for, an mcp_container connection.
   ConnectorSpec connector = 20;
+  // Creates a simulated connection (G0 M12, HR-221): http and mcp need an IP
+  // literal on loopback or a private network as the base URL; mcp_container
+  // is refused. Fixed for the connection's life.
+  bool simulated = 21;
 }
 
 // CreateConnectionResponse returns the connection.

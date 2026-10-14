@@ -124,11 +124,13 @@ func (q *Queries) GetDedupeClaim(ctx context.Context, orgID ids.OrgID, dedupeKey
 const insertDecision = `-- name: InsertDecision :exec
 INSERT INTO pc.transactions (org_id, id, run_id, action_id, action_hash, operation, decision, reason_code, gateway_id,
                              state, evaluations, grant_id, grant_revision, basis_digest, effective_hash, dedupe_key, mode,
-                             connection_id, channel, target_type, target_id)
+                             connection_id, channel, target_type, target_id, simulated)
 VALUES ($1, $2, $3, $4, $5, $6,
         $7, $8, $9, $10, 1, $11,
         $12, $13, $14, $15, $16,
-        $17, $18, $19, $20)
+        $17, $18, $19, $20,
+        -- HR-220: a transaction is simulated exactly when its run is.
+        (SELECT r.simulated FROM pc.runs r WHERE r.org_id = $1 AND r.id = $3))
 `
 
 type InsertDecisionParams struct {
