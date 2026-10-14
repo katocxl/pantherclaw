@@ -6,6 +6,7 @@ package pclaw
 import (
 	"context"
 	"crypto/ed25519"
+	"encoding/base64"
 	"encoding/json/v2"
 	"fmt"
 	"io"
@@ -28,6 +29,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1/pantherclawv1connect"
 	"github.com/katocxl/pantherclaw/internal/identity/workloadclient"
 	"github.com/katocxl/pantherclaw/internal/platform/crypto/jws"
+	rangesdomain "github.com/katocxl/pantherclaw/internal/ranges/domain"
 	rtdomain "github.com/katocxl/pantherclaw/internal/redteam/domain"
 )
 
@@ -35,6 +37,7 @@ const (
 	rtAgent = "0192aaaa-bbbb-7ccc-8ddd-0000000000a1"
 	rtRun   = "0192aaaa-bbbb-7ccc-8ddd-0000000000b1"
 	rtRange = "0192aaaa-bbbb-7ccc-8ddd-0000000000c1"
+	rtTxn   = "0192aaaa-bbbb-7ccc-8ddd-0000000000e1"
 )
 
 // fakeRanges records what the CLI sends the RangeService.
@@ -160,6 +163,14 @@ func (re *rangeEnv) run(t *testing.T, extra ...string) (int, string, string) {
 // the given scenarios, and the trust file that pins its key.
 func (re *rangeEnv) assurancePack(t *testing.T, reportOrg string, scenarios []map[string]string) (raw, trust []byte) {
 	t.Helper()
+	return re.rangePack(t, reportOrg, scenarios, true)
+}
+
+// rangePack builds a signed pack of scope range: every scenario has one
+// server-observed step on the one transaction, whose receipt is in the pack
+// unless complete is false.
+func (re *rangeEnv) rangePack(t *testing.T, reportOrg string, scenarios []map[string]string, complete bool) (raw, trust []byte) {
+	t.Helper()
 	iss := re.iss
 	pub, priv, err := ed25519.GenerateKey(nil)
 	if err != nil {
@@ -170,16 +181,25 @@ func (re *rangeEnv) assurancePack(t *testing.T, reportOrg string, scenarios []ma
 		t.Fatal(err)
 	}
 	var scs []pack.AssuranceScenario
+	var set []rangesdomain.Scenario
+	counts := pack.AssuranceCounts{}
 	for _, s := range scenarios {
 		scs = append(scs, pack.AssuranceScenario{
-			ID: s["id"], Digest: s["digest"], Verdict: s["verdict"], Category: "boundary", Tier: "community", Suite: "coding-agent", Steps: []pack.AssuranceStep{},
+			ID: s["id"], Digest: s["digest"], Verdict: s["verdict"], Category: "boundary", Tier: "community", Suite: "coding-agent", StepCount: 1,
+			Steps: []pack.AssuranceStep{{
+				ID: "exfil", Expect: pack.AssuranceExpect{Outcome: "DENY"}, Observed: pack.AssuranceExpect{Outcome: "DENY"},
+				ObservedBy: "SERVER", Matched: true, Transaction: rtTxn, Kind: "agent.call",
+			}},
 		})
+		set = append(set, rangesdomain.Scenario{ID: s["id"], Digest: s["digest"]})
+		counts.Pass++
 	}
+	cats := map[string]pack.AssuranceCounts{"functional": {}, "boundary": counts, "recovery": {}, "explanation": {}}
 	doc, err := json.Marshal(pack.Assurance{
 		Format: pack.AssuranceFormat, Range: rtRange, Org: reportOrg, Agent: rtAgent,
-		Started: "2026-10-14T08:00:00Z", Finished: "2026-10-14T08:05:00Z", RunnerVersion: "test", ScenarioSetDigest: strings.Repeat("c", 64),
+		Started: "2026-10-14T08:00:00Z", Finished: "2026-10-14T08:05:00Z", RunnerVersion: "test", ScenarioSetDigest: rangesdomain.SetDigest(set),
 		PolicyVersions: []pack.AssuranceVersion{}, PackageVersions: []pack.AssuranceVersion{}, Scenarios: scs,
-		Categories: map[string]pack.AssuranceCounts{}, Mismatches: []pack.AssuranceMismatch{}, Statement: pack.RangeStatement,
+		Totals: counts, Categories: cats, Mismatches: []pack.AssuranceMismatch{}, Statement: pack.RangeStatement,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -189,14 +209,20 @@ func (re *rangeEnv) assurancePack(t *testing.T, reportOrg string, scenarios []ma
 		{Path: pack.AssurancePath, Kind: pack.KindAssurance, Data: doc},
 		{Path: "proofs/bundle-0001.json", Kind: pack.KindBundle, Data: bundletest.Encode(t, b)},
 	}
+	receiptJWS := stubReceipt()
+	if !complete {
+		receiptJWS = "" // removed by retention: the transaction is in the pack, its receipt is not
+	}
+	txn := `{"id":"` + rtTxn + `","agent":"` + rtAgent + `","decisions":[{"evaluation":1,"receipt":"` + receiptJWS + `"}]}`
+	files = append(files, pack.File{Path: "transactions/" + rtTxn + ".json", Kind: pack.KindTransaction, Data: []byte(txn)})
 	m := pack.Manifest{
 		Format: pack.Format, Pack: "0192aaaa-bbbb-7ccc-8ddd-0000000000ff", Org: b.Org, Origin: b.Origin,
 		Exporter: pack.Exporter{Type: "user", ID: "0192aaaa-bbbb-7ccc-8ddd-0000000000ee"},
 		Created:  bundletest.IssuedAt.Format(time.RFC3339), Expires: bundletest.IssuedAt.Add(7 * 24 * time.Hour).Format(time.RFC3339),
-		Scope:   pack.Scope{Kind: pack.ScopeTransactions, Transactions: []string{}},
+		Scope:   pack.Scope{Kind: pack.ScopeRange, Range: rtRange},
 		Include: pack.Include{Receipts: true}, Filters: []string{}, EffectStates: map[string]int{},
 		Transactions: []pack.TransactionState{}, Retention: []pack.Retention{}, Redactions: []string{}, Gaps: []pack.Gap{},
-		Statement: pack.Statement,
+		Statement: pack.RangeStatement,
 	}
 	for _, f := range files {
 		m.Items = append(m.Items, pack.ItemOf(f))
@@ -466,7 +492,9 @@ func TestRedteamBaselineOfAnotherOrgIsRefused(t *testing.T) {
 	re := newRangeEnv(t)
 	dir := t.TempDir()
 	d := digestOf(t, rtScenario)
-	other, trust := re.assurancePack(t, "0192aaaa-bbbb-7ccc-8ddd-0000000000f9", []map[string]string{{"id": "RT-001", "digest": d, "verdict": "PASS"}})
+	// A pack another org made verifies, and is still not this org's baseline.
+	foreign := newRangeEnv(t)
+	other, trust := foreign.assurancePack(t, foreign.iss.Org.String(), []map[string]string{{"id": "RT-001", "digest": d, "verdict": "PASS"}})
 	code, _, errs := re.run(t, "--baseline", writeFile(t, dir, "other.zip", other), "--trust", writeFile(t, dir, "trust.json", trust))
 	if code != 2 || !strings.Contains(errs, "BASELINE_INVALID") || len(re.ranges.started) != 0 {
 		t.Fatalf("another org's baseline = %d (ranges %d)\n%s", code, len(re.ranges.started), errs)
@@ -568,5 +596,35 @@ func TestRecordRequestSendsOnlyStepsThatObservedSomething(t *testing.T) {
 	req := recordRequest(rtRange, rtdomain.Scenario{Steps: []rtdomain.Step{{ID: "done", Do: "agent.call"}}}, res)
 	if req.GetVerdict() != pantherclawv1.RangeVerdict_RANGE_VERDICT_ERROR || len(req.GetSteps()) != 1 || req.GetSteps()[0].GetStepId() != "done" {
 		t.Fatalf("%v", req)
+	}
+}
+
+// stubReceipt is an unsigned stand-in for a simulated DENY decision receipt:
+// the pack check reads its payload, and the manifest's signature covers it.
+func stubReceipt() string {
+	payload := `{"pap":{"decision":"DENY","checklist":[{"code":"DESTINATION_NOT_GRANTED","decisive":true}],"simulated":true}}`
+	return "e30." + base64.RawURLEncoding.EncodeToString([]byte(payload)) + ".c2ln"
+}
+
+func TestRedteamBaselineMustBeReDerivableInFull(t *testing.T) {
+	re := newRangeEnv(t)
+	dir := t.TempDir()
+	d := digestOf(t, rtScenario)
+	sc := []map[string]string{{"id": "RT-001", "digest": d, "verdict": "PASS"}}
+	whole, trust := re.rangePack(t, re.iss.Org.String(), sc, true)
+	trustPath := writeFile(t, dir, "trust.json", trust)
+	if code, out, errs := re.run(t, "--baseline", writeFile(t, dir, "whole.zip", whole), "--trust", trustPath); code != 0 {
+		t.Fatalf("a complete range pack as baseline = %d\n%s\n%s", code, out, errs)
+	}
+	partial, trust2 := re.rangePack(t, re.iss.Org.String(), sc, false)
+	n := len(re.ranges.started)
+	code, _, errs := re.run(t, "--baseline", writeFile(t, dir, "partial.zip", partial), "--trust", writeFile(t, dir, "trust2.json", trust2))
+	if code != 2 || !strings.Contains(errs, "not fully verifiable") || len(re.ranges.started) != n {
+		t.Fatalf("an incomplete range pack as baseline = %d\n%s", code, errs)
+	}
+	// pclaw verify says so too.
+	code, out, _ := run(t, envOf(nil), "verify", writeFile(t, dir, "partial2.zip", partial), "--trust", writeFile(t, dir, "trust3.json", trust2))
+	if code != 0 || !strings.Contains(out, "range pack not fully verifiable") {
+		t.Fatalf("verify = %d\n%s", code, out)
 	}
 }
