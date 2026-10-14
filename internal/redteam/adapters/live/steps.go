@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"strconv"
 	"strings"
@@ -30,11 +31,12 @@ import (
 	"github.com/katocxl/pantherclaw/internal/redteam/domain"
 )
 
-// supported are the step kinds the live driver runs (D33). It has no harness
+// supported are the step kinds the live driver runs (D33). agent.direct is
+// implemented but not offered: no scenario uses it. It has no harness
 // powers: it cannot change a simulator (sim.mutate), act as an operator
 // (operator.*), read another org's objects (server.read) or probe a sandbox.
 var supported = map[string]bool{
-	"agent.call": true, "agent.direct": true, "agent.child": true, "agent.steal": true,
+	"agent.call": true, "agent.child": true, "agent.steal": true,
 	"target.replay": true, "wait": true, "check.receipt": true, "person.approve": true, "person.decline": true,
 }
 
@@ -194,10 +196,11 @@ func (d *Driver) child(ctx context.Context, s domain.Scenario, st domain.Step) (
 	if err != nil {
 		return obs, err
 	}
+	widened := "widened " + strings.Join(w.Grant.Widen, ", ") + "; "
 	if derr == nil {
-		obs.Detail = "the delegation was accepted: " + obs.Detail
+		obs.Detail = widened + "the delegation was accepted: " + obs.Detail
 	} else {
-		obs.Detail = "delegation: " + derr.Error() + " " + obs.Detail
+		obs.Detail = widened + "delegation: " + derr.Error() + " " + obs.Detail
 	}
 	obs.Code = code
 	return obs, nil
@@ -411,6 +414,9 @@ func (d *Driver) targetReplay(ctx context.Context, st domain.Step) (domain.Obser
 
 // deliver sends a request straight to a simulator, unsigned and unproxied.
 func (d *Driver) deliver(req *http.Request) (domain.Observation, error) {
+	if !localLiteral(req.URL.Hostname()) {
+		return domain.Observation{}, fmt.Errorf("refusing to send to %q: the range sends only to a loopback or private IP literal", req.URL.Hostname())
+	}
 	res, err := (&http.Client{
 		Timeout: 10 * time.Second, Transport: d.cfg.Transport,
 		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
@@ -474,4 +480,11 @@ func (d *Driver) direct(ctx context.Context, st domain.Step) (domain.Observation
 		req.Header.Set("Authorization", "Bearer "+pat)
 	}
 	return d.deliver(req)
+}
+
+// localLiteral reports whether host is a loopback or private IP literal: the
+// only addresses a simulated target may have (D3).
+func localLiteral(host string) bool {
+	a, err := netip.ParseAddr(host)
+	return err == nil && (a.IsLoopback() || a.IsPrivate())
 }

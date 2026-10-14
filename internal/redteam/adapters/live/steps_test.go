@@ -6,6 +6,7 @@ package live_test
 import (
 	"context"
 	"crypto/ed25519"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -26,12 +27,12 @@ const childRun = "0192aaaa-bbbb-7ccc-8ddd-0000000000c9"
 
 func TestSupportsFollowsD33(t *testing.T) {
 	d := live.New(live.Config{})
-	for _, k := range []string{"agent.call", "agent.direct", "agent.child", "agent.steal", "target.replay", "wait", "check.receipt", "person.approve", "person.decline"} {
+	for _, k := range []string{"agent.call", "agent.child", "agent.steal", "target.replay", "wait", "check.receipt", "person.approve", "person.decline"} {
 		if !d.Supports(k) {
 			t.Errorf("%s unsupported", k)
 		}
 	}
-	for _, k := range []string{"sim.mutate", "operator.revoke_grant", "operator.kill_switch", "server.read", "sandbox.probe"} {
+	for _, k := range []string{"agent.direct", "sim.mutate", "operator.revoke_grant", "operator.kill_switch", "server.read", "sandbox.probe"} {
 		if d.Supports(k) {
 			t.Errorf("%s supported", k)
 		}
@@ -210,5 +211,51 @@ func TestTargetReplayDeliversTheHandedRequestTwice(t *testing.T) {
 `)
 	if res.Verdict != domain.VerdictPass || deliveries != 2 {
 		t.Fatalf("%+v deliveries=%d", res, deliveries)
+	}
+}
+
+type countingTransport struct{ n int }
+
+func (c *countingTransport) RoundTrip(*http.Request) (*http.Response, error) {
+	c.n++
+	return nil, errors.New("must not be sent")
+}
+
+func TestTargetReplayOnlyDeliversToALocalLiteral(t *testing.T) {
+	ct := &countingTransport{}
+	h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.WriteString(w, `{"decision":"allow","action_id":"a1","dispatch":{"method":"POST","url":"https://api.github.com/repos/x/y/merge","headers":{},"body":""}}`)
+	})
+	d := driver(t, h, func(c *live.Config) { c.Roles, c.Transport = nil, ct })
+	res := run(t, d, `  - {id: merge, do: agent.call, with: {face: sdk, connection: github, tool: merge_pull_request}, expect: {outcome: ALLOW}}
+  - {id: replay, do: target.replay, with: {of: merge}, expect: {outcome: ALLOW}}
+`)
+	if res.Verdict != domain.VerdictError || ct.n != 0 || !strings.Contains(res.Detail, "loopback or private IP literal") {
+		t.Fatalf("%+v sent=%d", res, ct.n)
+	}
+}
+
+func TestAgentChildShowsWhatItWidened(t *testing.T) {
+	fw := &fakeWorkload{}
+	cs := connect.NewServer()
+	pantherclawv1connect.RegisterWorkloadServiceHandler(cs, fw)
+	mux := http.NewServeMux()
+	connecthttp.Mount(mux, cs)
+	wsrv := httptest.NewServer(mux)
+	t.Cleanup(wsrv.Close)
+	h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.WriteString(w, `{"decision":"deny","error_class":"policy_denied","code":"NO_GRANT"}`)
+	})
+	d := driver(t, h, func(c *live.Config) {
+		c.Workload = pantherclawv1connect.NewWorkloadServiceClient(connect.NewClient(connecthttp.NewTransport(wsrv.Client(), wsrv.URL)))
+		c.AgentID, c.Roles = "0192aaaa-bbbb-7ccc-8ddd-0000000000a1", nil
+	})
+	res := run(t, d, `  - id: child
+    do: agent.child
+    with: {grant: {widen: [operations, lifetime]}, then: {face: sdk, connection: github, tool: t}}
+    expect: {outcome: DENY}
+`)
+	if len(res.Steps) != 1 || !strings.HasPrefix(res.Steps[0].Observed.Detail, "widened operations, lifetime; ") {
+		t.Fatalf("%+v", res)
 	}
 }
