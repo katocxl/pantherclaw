@@ -26,3 +26,4 @@ Format: Context → Decision → Consequences → Alternatives considered. Statu
 | [0020](0020-org-package-signing-keys.md) | Org package-signing keys for customer-written packages (M4 follow-up, Team edition) |
 | [0021](0021-github-app-custody-and-per-action-tokens.md) | GitHub App custody and per-action installation tokens (M8, proposed 2026-10-11) |
 | [0022](0022-containment-sandbox-edge.md) | Containment sandbox edge, per-session TLS interception and probe trust (M9, proposed 2026-10-11) |
+| [0023](0023-adversarial-range.md) | The adversarial range: range agents, simulated connections and a local gate (M12, proposed 2026-10-14) |
