@@ -156,7 +156,12 @@ func (d *rangeDriver) Setup(_ context.Context, sc domain.Scenario) (app.Fixture,
 	if err := d.extra.setup(d); err != nil {
 		return nil, err
 	}
-	d.makeRangeStack()
+	// A harness-only scenario does what a range never does to real state (it
+	// quarantines a package, engages the kill switch), so it runs in an org of
+	// its own that is not a range's.
+	if !sc.HarnessOnly {
+		d.makeRangeStack()
+	}
 	return d.fix, nil
 }
 
