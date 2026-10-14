@@ -116,6 +116,17 @@ VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(connection_id), 'credential', '
     sqlc.arg(requested_by), now())
 RETURNING *;
 
+-- name: LatestTargetVerifierTest :one
+-- The latest finished target_verifier test of an operation on a connection
+-- (coverage's TargetVerifier, M9 founder decision N15). Coverage lifts the
+-- cap only while it is DONE and PASSED: a newer failure, or a test that
+-- could not run, drops the lift (connection_tests_finished).
+SELECT state, result, finished_at FROM pc.connection_tests
+WHERE org_id = sqlc.arg(org_id) AND connection_id = sqlc.arg(connection_id) AND kind = 'target_verifier'
+    AND operation = sqlc.arg(operation) AND finished_at IS NOT NULL
+ORDER BY finished_at DESC, id DESC
+LIMIT 1;
+
 -- name: LatestConnectionTest :one
 -- A connection's latest finished test, or its latest passed one.
 SELECT * FROM pc.connection_tests

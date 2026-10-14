@@ -560,6 +560,31 @@ func (q *Queries) LatestConnectionTest(ctx context.Context, orgID ids.OrgID, con
 	return i, err
 }
 
+const latestTargetVerifierTest = `-- name: LatestTargetVerifierTest :one
+SELECT state, result, finished_at FROM pc.connection_tests
+WHERE org_id = $1 AND connection_id = $2 AND kind = 'target_verifier'
+    AND operation = $3 AND finished_at IS NOT NULL
+ORDER BY finished_at DESC, id DESC
+LIMIT 1
+`
+
+type LatestTargetVerifierTestRow struct {
+	State      string
+	Result     *string
+	FinishedAt *time.Time
+}
+
+// The latest finished target_verifier test of an operation on a connection
+// (coverage's TargetVerifier, M9 founder decision N15). Coverage lifts the
+// cap only while it is DONE and PASSED: a newer failure, or a test that
+// could not run, drops the lift (connection_tests_finished).
+func (q *Queries) LatestTargetVerifierTest(ctx context.Context, orgID ids.OrgID, connectionID ids.UUID, operation *string) (LatestTargetVerifierTestRow, error) {
+	row := q.db.QueryRow(ctx, latestTargetVerifierTest, orgID, connectionID, operation)
+	var i LatestTargetVerifierTestRow
+	err := row.Scan(&i.State, &i.Result, &i.FinishedAt)
+	return i, err
+}
+
 const listConnectionCircuits = `-- name: ListConnectionCircuits :many
 SELECT gateway_id, state, unknown_count, total_count, opened_at, reported_at
 FROM pc.circuit_states

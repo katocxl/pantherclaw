@@ -69,11 +69,11 @@ func routeModes(pkg *defs.Package, operation, defaultMode string, routes []dbq.P
 }
 
 // TargetVerifier reads M8's target-verifier connection tests (HR-202,
-// HR-210). Coverage reads it through this interface until the connection
-// tests are wired in.
+// HR-210). The server reads them through ConnectionTests; tests use fakes.
 type TargetVerifier interface {
-	// LastPassed returns when the latest passing target-verifier test of
-	// operation on the connection ran, or nil when none passed. A test
+	// LastPassed returns when the latest target-verifier test of operation
+	// on the connection finished, when it passed, or nil when it did not or
+	// none ran. A test
 	// vouches only for the operation it ran (founder decision N15): in M9
 	// that is the package's `test: true` read.
 	LastPassed(ctx context.Context, tx db.TenantTx, connection ids.UUID, operation string) (*time.Time, error)

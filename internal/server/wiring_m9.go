@@ -25,7 +25,7 @@ import (
 // registerCoverage serves CoverageService on the public API (G0 M9 track
 // A), as pc_app.
 func registerCoverage(rs *connect.Server, d apiDeps) {
-	svc := &covapp.Service{Pool: d.pool, Freshness: d.freshness}
+	svc := &covapp.Service{Pool: d.pool, Freshness: d.freshness, Verifier: covapp.ConnectionTests{}}
 	if d.m5 != nil && d.m5.notifications != nil {
 		svc.Notify = d.m5.notifications
 	}
@@ -46,7 +46,7 @@ func freshnessOf(cfg *Config) coverage.Freshness {
 // returns its schedule.
 func registerCoverageWorkers(reg *jobs.Registry, cfg *Config, pool *db.Pool) ([]*river.PeriodicJob, error) {
 	f := freshnessOf(cfg)
-	if err := covapp.Register(reg, &covapp.Service{Pool: pool, Freshness: f}); err != nil {
+	if err := covapp.Register(reg, &covapp.Service{Pool: pool, Freshness: f, Verifier: covapp.ConnectionTests{}}); err != nil {
 		return nil, err
 	}
 	return covapp.PeriodicJobs(f), nil
@@ -80,7 +80,7 @@ func (c coverageClaims) CoverageClaim(ctx context.Context, org ids.OrgID, agent,
 // (G0 M9 slice A8).
 func mountCoveragePages(web *webhttp.Handler, pool *db.Pool, cfg *Config) {
 	f := freshnessOf(cfg)
-	web.WithCoverage(&covapp.Service{Pool: pool, Freshness: f}, f)
+	web.WithCoverage(&covapp.Service{Pool: pool, Freshness: f, Verifier: covapp.ConnectionTests{}}, f)
 }
 
 // claimTimeoutOf returns the configured claim timeout; Validate has
