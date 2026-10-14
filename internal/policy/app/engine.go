@@ -199,6 +199,11 @@ func (c *Compiled) Evaluate(ctx context.Context, d *defs.Definition, a actionir.
 				res.Effect, res.Detail = domain.EvalError, err.Error()
 			case !matched:
 				res.Effect = domain.NotMatched
+			case in.Waivers[r.ID] != "":
+				// A policy exception waives the matched rule (D14): it restricts
+				// nothing and has no obligation. Its facts were still required
+				// above, and errors and cost overruns are never waived.
+				res.Effect, res.Detail = domain.Waived, in.Waivers[r.ID]
 			case r.Kind == domain.Constrain:
 				res = constrain(d, a, vals, r)
 			default:
@@ -335,6 +340,14 @@ type Input struct {
 	// Run is the action's run from the server's own record (`run`); nil
 	// without one. It is never taken from the request.
 	Run *Run
+	// Waivers maps a rule id to the active policy exception that waives it
+	// for this agent and operation (G0 M11.1 D14, HR-235), from the
+	// Authority's own records in the decision's snapshot; nil for none.
+	// The caller lists only rules that are exceptable in the evaluated
+	// version and whose digest the exception names. A waiver never applies
+	// to a requirement on an unknown consequence, nor to a rule whose facts
+	// are missing or stale or that cannot be evaluated.
+	Waivers map[string]string
 }
 
 func missingFact(needs []string, have map[string]fdomain.Value) string {

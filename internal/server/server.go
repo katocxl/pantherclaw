@@ -396,6 +396,11 @@ func cmdServe(ctx context.Context, args []string, stderr io.Writer, env Env, onS
 			return err
 		}
 		evidenceJobs = append(evidenceJobs, rangeJobs...)
+		exceptionJobs, err := registerPolicyExceptionJobs(jreg, pool, m5.notifications, log)
+		if err != nil {
+			return err
+		}
+		evidenceJobs = append(evidenceJobs, exceptionJobs...)
 		if err := authnapp.RegisterJanitor(jreg, pool, log); err != nil {
 			return err
 		}
@@ -582,6 +587,7 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	registerSandbox(rs, d)
 	registerRanges(rs, d, evidenceSvc)
 	registerReleases(rs, pool)
+	registerPolicyExceptions(rs, d)
 	mux := http.NewServeMux()
 	rpc.Mount(mux, rs)
 	d.m5p2.mount(mux, workload)
