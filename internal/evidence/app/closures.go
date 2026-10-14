@@ -34,10 +34,42 @@ func (s *Service) closures(ctx context.Context, c tenancy.Caller, q *dbq.Queries
 		return nil, err
 	}
 	found := map[string]bool{}
+	for _, r := range refs {
+		found[r.ClosureID] = true
+	}
+	for _, w := range want {
+		if !found[w] {
+			return nil, ErrClosureNotFound
+		}
+	}
+	return s.refEntries(ctx, c, q, refs)
+}
+
+// probeRunEntries collects the sandbox.closure entries that record probe runs
+// (the probe steps of a range, HR-224), after the same permission check. Runs
+// no closure records are left out.
+func (s *Service) probeRunEntries(ctx context.Context, c tenancy.Caller, q *dbq.Queries, runs []ids.UUID) ([]chained, error) {
+	want := make([]string, 0, len(runs))
+	for _, id := range runs {
+		want = append(want, id.String())
+	}
+	refs, err := q.ClosureEntryRefsOfRuns(ctx, c.Org, want)
+	if err != nil {
+		return nil, err
+	}
+	conv := make([]dbq.ClosureEntryRefsRow, len(refs))
+	for i, r := range refs {
+		conv[i] = dbq.ClosureEntryRefsRow(r)
+	}
+	return s.refEntries(ctx, c, q, conv)
+}
+
+// refEntries checks evidence.read where each closure's agent lives and reads
+// the closures' chained entries.
+func (s *Service) refEntries(ctx context.Context, c tenancy.Caller, q *dbq.Queries, refs []dbq.ClosureEntryRefsRow) ([]chained, error) {
 	var entryIDs []ids.UUID
 	checked := map[string]bool{}
 	for _, r := range refs {
-		found[r.ClosureID] = true
 		entryIDs = append(entryIDs, r.EntryID)
 		if checked[r.AgentID] {
 			continue
@@ -59,11 +91,6 @@ func (s *Service) closures(ctx context.Context, c tenancy.Caller, q *dbq.Queries
 		}
 		if err := c.Require(td.PermEvidenceRead, path); err != nil {
 			return nil, err
-		}
-	}
-	for _, w := range want {
-		if !found[w] {
-			return nil, ErrClosureNotFound
 		}
 	}
 	return chainedOf(ctx, q, c.Org, entryIDs)

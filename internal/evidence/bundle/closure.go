@@ -174,15 +174,17 @@ func (v *verifier) closure(c closureEntry, reports map[string]string) {
 			v.r.add("closure.probe", subject+" "+d.name, Failed, "%s, expected %s", d.observed, d.expect)
 		}
 	}
-	verdict := "FAILED"
-	if passed {
-		verdict = "PASSED"
+	// Coverage also requires the whole probe catalog, so a closure may be
+	// FAILED although every probe it holds met its expectation; PASSED needs
+	// that at least.
+	switch {
+	case b.Result != "PASSED" && b.Result != "FAILED":
+		v.r.add("closure.result", subject, Failed, "the entry says %q, not PASSED or FAILED", truncate(b.Result))
+	case b.Result == "PASSED" && !passed:
+		v.r.add("closure.result", subject, Failed, "the entry says PASSED, but its signed reports show a probe or configuration check that did not pass")
+	default:
+		v.r.add("closure.result", subject, Passed, "%s, consistent with its reports", b.Result)
 	}
-	if b.Result != verdict {
-		v.r.add("closure.result", subject, Failed, "the entry says %s, its reports say %s", truncate(b.Result), verdict)
-		return
-	}
-	v.r.add("closure.result", subject, Passed, "%s, as its reports say", b.Result)
 }
 
 // derive lists the probes of a probe run as its signed reports say them,

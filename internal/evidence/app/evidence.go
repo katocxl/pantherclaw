@@ -43,7 +43,9 @@ import (
 const (
 	// MaxTransactions and MaxRange bound a bundle's selection.
 	MaxTransactions = 50
-	MaxRange        = 1000
+	// MaxProbeRuns bounds the probe runs of a range pack's bundle.
+	MaxProbeRuns = 3 * MaxRange
+	MaxRange     = 1000
 	// MaxBundleBytes keeps a bundle within one API response.
 	MaxBundleBytes = 3 << 20
 )
@@ -354,7 +356,10 @@ type Selection struct {
 	// Closures are sandbox closures (HR-227): each one's ledger entry and
 	// probe reports.
 	Closures []ids.UUID
-	From, To int64
+	// ProbeRuns are probe_runs ids: the bundle holds the closure entries that
+	// record them and their reports (the probe steps of a range pack, HR-224).
+	ProbeRuns []ids.UUID
+	From, To  int64
 }
 
 // Export is a built bundle.
@@ -415,17 +420,14 @@ func (s *Service) ExportBundle(ctx context.Context, sel Selection, consistencyFr
 	if err != nil {
 		return Export{}, err
 	}
-	byTxn, byClosure := len(sel.Transactions) > 0, len(sel.Closures) > 0
+	byTxn, byClosure, byRuns := len(sel.Transactions) > 0, len(sel.Closures) > 0, len(sel.ProbeRuns) > 0
 	switch {
-	case byTxn && byClosure, byTxn && (len(sel.Transactions) > MaxTransactions || sel.From != 0 || sel.To != 0),
+	case byTxn && byClosure, byRuns && (byTxn || byClosure || len(sel.ProbeRuns) > MaxProbeRuns), byTxn && (len(sel.Transactions) > MaxTransactions || sel.From != 0 || sel.To != 0),
 		byClosure && (len(sel.Closures) > MaxTransactions || sel.From != 0 || sel.To != 0):
 		return Export{}, ErrBadSelection
-	case !byTxn && !byClosure && (sel.From < 1 || sel.To < sel.From || sel.To-sel.From >= MaxRange):
+	case !byTxn && !byClosure && !byRuns && (sel.From < 1 || sel.To < sel.From || sel.To-sel.From >= MaxRange):
 		return Export{}, ErrBadSelection
-	case !byTxn && !byClosure:
-	case !byTxn && (sel.From < 1 || sel.To < sel.From || sel.To-sel.From >= MaxRange):
-		return Export{}, ErrBadSelection
-	case !byTxn:
+	case !byTxn && !byClosure && !byRuns:
 		org := td.OrgPath(c.Org)
 		if err := c.Require(td.PermEvidenceRead, org); err != nil {
 			return Export{}, err
@@ -443,6 +445,8 @@ func (s *Service) ExportBundle(ctx context.Context, sel Selection, consistencyFr
 		switch {
 		case byTxn:
 			entries, b.Receipts, err = s.transactions(ctx, c, q, sel.Transactions)
+		case byRuns:
+			entries, err = s.probeRunEntries(ctx, c, q, sel.ProbeRuns)
 		case byClosure:
 			entries, err = s.closures(ctx, c, q, sel.Closures)
 		default:

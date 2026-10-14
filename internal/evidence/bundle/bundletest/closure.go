@@ -28,6 +28,8 @@ type ClosureOpts struct {
 	// EditOutcome makes the entry say the named probe was reachable
 	// although the signed reports say blocked.
 	EditOutcome string
+	// Session and Agent fix the closure's ids when set.
+	Session, Agent string
 }
 
 // Closure is a recorded sandbox closure: its ids, keys and the reports a
@@ -52,6 +54,12 @@ func (i *Issuer) AppendClosure(o ClosureOpts) *Closure {
 	c := &Closure{
 		ID: ids.NewV7().String(), Session: ids.NewV7().String(), Agent: ids.NewV7().String(), Connection: ids.NewV7().String(),
 		Runs: map[string]string{}, ProbeKey: probeKey, HostKey: hostKey,
+	}
+	if o.Session != "" {
+		c.Session = o.Session
+	}
+	if o.Agent != "" {
+		c.Agent = o.Agent
 	}
 	nonce := func() string { return strings.ReplaceAll(ids.NewV7().String(), "-", "") + "aa" }
 	sandboxNonce, controlNonce := nonce(), nonce()
