@@ -16,6 +16,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/authn/adapters/oidcrp"
 	"github.com/katocxl/pantherclaw/internal/authn/credential"
 	"github.com/katocxl/pantherclaw/internal/identity/adapters/kube"
+	"github.com/katocxl/pantherclaw/internal/platform/celenv"
 	"github.com/katocxl/pantherclaw/internal/platform/config"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
@@ -42,8 +43,12 @@ type Config struct {
 	// WorkerConcurrency is the number of concurrent jobs per worker process.
 	WorkerConcurrency int             `json:"worker_concurrency" env:"PC_WORKER_CONCURRENCY"`
 	Authority         AuthorityConfig `json:"authority"`
-	Auth              AuthConfig      `json:"auth"`
-	Identity          IdentityConfig  `json:"identity"`
+	// CEL bounds the compilation and evaluation of every policy, mapping and
+	// consequence expression (HR-043; G0 M4 decision 4). Defaults:
+	// celenv.DefaultLimits.
+	CEL      celenv.Limits  `json:"cel"`
+	Auth     AuthConfig     `json:"auth"`
+	Identity IdentityConfig `json:"identity"`
 	// WebAuthn and Notifications are M5 part 1 (config_m5.go).
 	WebAuthn      WebAuthnConfig      `json:"webauthn"`
 	Notifications NotificationsConfig `json:"notifications"`
@@ -136,6 +141,7 @@ func DefaultConfig() Config {
 			SMTP:        SMTPConfig{Port: 587, TLS: "starttls"},
 		},
 		Waitlist: defaultWaitlist(),
+		CEL:      celenv.DefaultLimits,
 	}
 }
 
@@ -178,6 +184,9 @@ func (c *Config) Validate() error {
 	errs = append(errs, c.validateCoverage()...)
 	errs = append(errs, c.validateGateways()...)
 	errs = append(errs, c.validateDev()...)
+	if err := c.CEL.Validate(); err != nil {
+		errs = append(errs, fmt.Errorf("cel: %w", err))
+	}
 	if _, err := c.trustedProxies(); err != nil {
 		errs = append(errs, err)
 	}

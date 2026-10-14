@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/katocxl/pantherclaw/internal/platform/celenv"
 	"github.com/katocxl/pantherclaw/internal/platform/config"
 )
 
@@ -58,6 +59,9 @@ func TestConfigValidation(t *testing.T) {
 		"public url userinfo": func(c *Config) { c.Auth.PublicURL = "https://u:p@pc.example.com" },
 		"public url relative": func(c *Config) { c.Auth.PublicURL = "pc.example.com" },
 		"api key env":         func(c *Config) { c.Auth.APIKeyEnv = "prod" },
+		"cel max cost":        func(c *Config) { c.CEL.MaxCost = 0 },
+		"cel nesting":         func(c *Config) { c.CEL.MaxComprehensionNesting = -1 },
+		"cel above ceiling":   func(c *Config) { c.CEL.MaxCost = celenv.Ceiling.MaxCost + 1 },
 		"trusted proxy":       func(c *Config) { c.HTTP.TrustedProxies = []string{"10.0.0.0/8", "proxy.internal"} },
 		"oidc http issuer": func(c *Config) {
 			c.Auth.OIDCProviders = []OIDCProviderConfig{{Name: "kc", Issuer: "http://idp.example.com", ClientID: "pc", ClientSecretFile: "s"}}
@@ -111,6 +115,41 @@ func TestDevSeedUsage(t *testing.T) {
 	} {
 		if code := Run(context.Background(), args, &out, &errb, noEnv); code != 2 {
 			t.Errorf("%v: %d, want 2", args, code)
+		}
+	}
+}
+
+// TestHR163_DevSeedOnlyLocal: dev seed refuses a configuration that is not
+// local-only before it touches the database.
+func TestHR163_DevSeedOnlyLocal(t *testing.T) {
+	for name, cfg := range map[string]string{
+		"live api keys":   `{"database": {"app_password_file": "pw"}, "kek_files": ["kek"]}`,
+		"all interfaces":  `{"database": {"app_password_file": "pw"}, "kek_files": ["kek"], "http": {"addr": "0.0.0.0:8080"}, "auth": {"api_key_env": "test"}}`,
+		"public url":      `{"database": {"app_password_file": "pw"}, "kek_files": ["kek"], "auth": {"public_url": "https://pantherclaw.example.com", "api_key_env": "test"}}`,
+		"remote database": `{"database": {"app_password_file": "pw", "host": "db.example.com"}, "kek_files": ["kek"], "auth": {"api_key_env": "test"}}`,
+	} {
+		path := filepath.Join(t.TempDir(), "server.json")
+		if err := os.WriteFile(path, []byte(cfg), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		var out, errb bytes.Buffer
+		code := Run(context.Background(), []string{"dev", "seed", "--config", path}, &out, &errb, noEnv)
+		if code == 0 || !strings.Contains(errb.String(), "dev seed is development-only (HR-163)") {
+			t.Errorf("%s: code %d, stderr %q", name, code, errb.String())
+		}
+	}
+}
+
+// TestHR163_DevSeedNeedsALocalDatabase: loopback names and unix socket
+// directories are local; any other database host is not.
+func TestHR163_DevSeedNeedsALocalDatabase(t *testing.T) {
+	for host, local := range map[string]bool{
+		"127.0.0.1": true, "localhost": true, "::1": true, "/var/run/postgresql": true,
+		"db.example.com": false, "10.0.0.5": false, "": false, "0.0.0.0": false,
+		"127.0.0.1,localhost": true, "/var/run/postgresql,db.example.com": false, "127.0.0.1,": false,
+	} {
+		if err := localDatabase(host); (err == nil) != local {
+			t.Errorf("%q: %v, want local=%v", host, err, local)
 		}
 	}
 }
@@ -174,5 +213,25 @@ func TestTrustedProxiesParse(t *testing.T) {
 	got, err := c.trustedProxies()
 	if err != nil || len(got) != 4 || got[1].String() != "192.168.1.5/32" || got[2].String() != "172.16.0.9/32" {
 		t.Fatalf("trustedProxies = %v, %v", got, err)
+	}
+}
+
+// TestCELLimitsAreConfiguration: the CEL limits default to the recommended
+// numbers and a configuration file can change them (G0 M4 decision 4).
+func TestCELLimitsAreConfiguration(t *testing.T) {
+	if c := DefaultConfig(); c.CEL != celenv.DefaultLimits {
+		t.Fatalf("default CEL limits %+v, want %+v", c.CEL, celenv.DefaultLimits)
+	}
+	path := filepath.Join(t.TempDir(), "server.json")
+	if err := os.WriteFile(path, []byte(`{"database": {"app_password_file": "pw"}, "kek_files": ["kek"],
+		"cel": {"max_expression_bytes": 2048, "max_cost": 5000, "max_comprehension_nesting": 1, "estimated_collection_size": 256}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	c := DefaultConfig()
+	if err := config.Load(&c, path, noEnv); err != nil {
+		t.Fatal(err)
+	}
+	if want := (celenv.Limits{MaxExpressionBytes: 2048, MaxCost: 5000, MaxComprehensionNesting: 1, EstimatedCollectionSize: 256}); c.CEL != want {
+		t.Fatalf("loaded CEL limits %+v, want %+v", c.CEL, want)
 	}
 }

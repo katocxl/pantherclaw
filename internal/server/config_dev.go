@@ -95,3 +95,16 @@ func loopbackURL(raw string) bool {
 	u, err := url.Parse(raw)
 	return err == nil && loopbackHost(u.Hostname())
 }
+
+// localDatabase reports a database host off this machine: dev seed needs
+// loopback or a unix socket directory (an absolute path, as libpq reads it).
+// pgx takes a comma-separated list and falls back along it, so every host
+// listed must be local.
+func localDatabase(host string) error {
+	for h := range strings.SplitSeq(host, ",") {
+		if !loopbackHost(h) && !strings.HasPrefix(h, "/") {
+			return errors.New("database.host must be loopback or a unix socket (every host it lists)")
+		}
+	}
+	return nil
+}
