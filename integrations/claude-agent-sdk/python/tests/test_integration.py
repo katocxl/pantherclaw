@@ -62,8 +62,8 @@ class Gateway:
         self.calls: list[dict[str, Any]] = []
         # The /sdk path of each call, in order.
         self.paths: list[str] = []
-        # When the gateway received each /sdk call (time.monotonic()).
-        self.call_times: list[float] = []
+        # The tool and time (time.monotonic()) at which the gateway received each /sdk call.
+        self.call_times: list[tuple[str, float]] = []
         self.hooks: list[dict[str, Any]] = []
         gw = self
 
@@ -84,7 +84,7 @@ class Gateway:
                     call = json.loads(body)
                     gw.calls.append(call)
                     gw.paths.append(self.path)
-                    gw.call_times.append(time.monotonic())
+                    gw.call_times.append((str(call.get("tool", "")), time.monotonic()))
                     out = face(call, self.headers.get("PC-Action-Id", ""))
                     if out is None:
                         time.sleep(4)

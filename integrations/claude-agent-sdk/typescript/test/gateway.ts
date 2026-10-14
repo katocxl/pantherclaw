@@ -36,8 +36,8 @@ export async function gateway(t: { after: (fn: () => void) => void }, face: Face
   const calls: Record<string, unknown>[] = [];
   /** The /sdk path of each call, in order. */
   const paths: string[] = [];
-  /** When the gateway received each /sdk call (ms, Date.now()). */
-  const callTimes: number[] = [];
+  /** The tool and time (ms, Date.now()) at which the gateway received each /sdk call. */
+  const callTimes: { tool: string; at: number }[] = [];
   const hooks: Record<string, unknown>[] = [];
   const server = createServer((req: IncomingMessage, res: ServerResponse) => {
     let body = "";
@@ -55,7 +55,7 @@ export async function gateway(t: { after: (fn: () => void) => void }, face: Face
         const call = JSON.parse(body);
         calls.push(call);
         paths.push(req.url);
-        callTimes.push(Date.now());
+        callTimes.push({ tool: String(call.tool), at: Date.now() });
         face(call, String(req.headers["pc-action-id"]), res);
       } else if (req.url === "/hook/local" && opts.hook) {
         const call = JSON.parse(body);

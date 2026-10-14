@@ -348,7 +348,7 @@ class RealSDKTest(unittest.TestCase):
         self.assertEqual(asks, ["ask"], "PantherClaw's hook asked about the held call")
         self.assertEqual([d.behavior for d in decisions], ["deny"], "can_use_tool decided the held call once, with a denial")
         # From the gateway receiving the call to can_use_tool's decision (the CLI's start-up is not counted).
-        self.assertGreaterEqual(returned[0] - g.call_times[0], block - 0.2, "can_use_tool did not wait for the hold")
+        self.assertGreaterEqual(returned[0] - next(at for tool, at in g.call_times if tool == "mcp__payments__create_refund"), block - 0.2, "can_use_tool did not wait for the hold")
 
     def test_HR200_in_the_real_sdk_a_pantherclaw_that_does_not_answer_is_denied_at_the_integrations_deadline(self) -> None:
         g = self.gateway(face_for(lambda _c, _a: None))

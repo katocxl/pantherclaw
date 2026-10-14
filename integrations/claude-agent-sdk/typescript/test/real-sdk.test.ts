@@ -250,7 +250,7 @@ test("TestHR200_in the real SDK, the application's allow never runs a call Panth
   assert.deepEqual(asks, ["ask"], "PantherClaw's hook asked about the held call");
   assert.deepEqual(decisions.map((d) => d.behavior), ["deny"], "canUseTool decided the held call once, with a denial");
   // From the gateway receiving the call to canUseTool's decision (the CLI's start-up is not counted).
-  assert.ok(decisions[0].at - g.callTimes[0] >= block - 200, "canUseTool did not wait for the hold");
+  assert.ok(decisions[0].at - (g.callTimes.find((c) => c.tool === "mcp__payments__create_refund")?.at ?? Infinity) >= block - 200, "canUseTool did not wait for the hold");
 });
 
 test("TestHR200_in the real SDK, a PantherClaw that does not answer is denied at the integration's deadline", testOptions, async (t) => {
