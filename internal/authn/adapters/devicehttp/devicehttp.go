@@ -131,6 +131,14 @@ func (h *Handler) render(w http.ResponseWriter, status int, name string, p page)
 	hd.Set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'; base-uri 'none'")
 	hd.Set("Cache-Control", "no-store")
 	hd.Set("X-Frame-Options", "DENY")
+	// These pages post a form to an Origin-checked handler (sameOrigin).
+	// Under "no-referrer" a browser's form POST (a "navigate" request, not
+	// "cors") carries "Origin: null" (Fetch Standard, "serializing a request
+	// origin": a request whose referrer policy is no-referrer and whose method
+	// is neither GET nor HEAD gets the opaque origin), so sign-in would always
+	// be refused. "same-origin" sends our real origin on our own forms and no
+	// referrer anywhere else. The API keeps "no-referrer".
+	hd.Set("Referrer-Policy", "same-origin")
 	w.WriteHeader(status)
 	if err := pages.ExecuteTemplate(w, name, p); err != nil {
 		h.log.Error("device.render", pclog.Err(err))
