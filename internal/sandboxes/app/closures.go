@@ -80,6 +80,7 @@ func (s *Service) SubmitCanaryReport(ctx context.Context, session ids.UUID, comp
 					Probes: run.probes, SigningKeyJKT: sess.ProbeJkt, ServerNonce: run.nonce, ResultsSHA256: run.digest,
 					Engine:       covdomain.Engine{Version: sess.EngineVersion, APIVersion: sess.ApiVersion, Runtime: sess.Runtime},
 					ImageDigests: []string{sess.AgentImage, sess.EdgeImage, sess.ProbeImage}, ConfigSHA256: [32]byte(config),
+					Reports: run.reports, ProbeKey: sess.ProbePublicKey, HostKey: sess.HostPublicKey,
 					ConfigChecks: run.checks, Bound: covdomain.Bound{
 						ConnectionRevision: conn.ConnectionRevision, Gateway: conn.GatewayID, PackageVersion: conn.PackageVersionID,
 						CredentialVersion: conn.CredentialVersion,
@@ -115,6 +116,8 @@ type run struct {
 	nonce    string
 	// digest is the SHA-256 of the three reports as signed.
 	digest [32]byte
+	// reports are the three stored reports, for the closure's ledger entry.
+	reports []covdomain.ClosureReport
 }
 
 // probeRun gathers the probe run a canary report closes: the sandbox and
@@ -131,8 +134,9 @@ func (s *Service) probeRun(ctx context.Context, q *dbq.Queries, sess dbq.PcSandb
 	}
 	sb, okS := reports[KindSandbox]
 	ctl, okC := reports[KindControl]
-	if !okS || !okC {
-		return run{}, reject("the probe run's sandbox or control report is missing")
+	cn, okN := reports[KindCanary]
+	if !okS || !okC || !okN {
+		return run{}, reject("the probe run's sandbox, control or canary report is missing")
 	}
 	// Each stored report verified on submission with the key of its kind.
 	sandbox, err := report.Verify(sb.Report, ed25519.PublicKey(sess.ProbePublicKey))
@@ -146,6 +150,9 @@ func (s *Service) probeRun(ctx context.Context, q *dbq.Queries, sess dbq.PcSandb
 	// observed is the server's time of the sandbox report, not the probe's
 	// clock: it is never before the session started.
 	out := run{observed: sb.ReceivedAt, nonce: sandbox.Nonce, digest: sha256.Sum256([]byte(sb.Report + "\n" + ctl.Report + "\n" + compact))}
+	for _, r := range []dbq.PcProbeRun{sb, ctl, cn} {
+		out.reports = append(out.reports, covdomain.ClosureReport{Run: r.ID, Kind: strings.ToLower(r.Kind), SHA256: [32]byte(r.ReportSha256)})
+	}
 	// The network facts and configuration checks are pclaw's, observed on the
 	// host: they count as the host key signed them, in the control report,
 	// and the probe-signed sandbox report must carry the same.

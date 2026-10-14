@@ -70,6 +70,83 @@ func (q *Queries) ChainedEntriesByID(ctx context.Context, orgID ids.OrgID, entry
 	return items, nil
 }
 
+const closureEntryRefs = `-- name: ClosureEntryRefs :many
+SELECT e.id AS entry_id, coalesce(x.body ->> 'closure', '')::text AS closure_id, coalesce(x.body ->> 'agent', '')::text AS agent_id
+FROM pc.ledger_entries e
+JOIN pc.ledger_chain c ON c.org_id = e.org_id AND c.entry_id = e.id
+CROSS JOIN LATERAL (SELECT CASE WHEN e.body_removed_at IS NULL THEN convert_from(e.body, 'UTF8')::jsonb END AS body) x
+WHERE e.org_id = $1 AND e.kind = 'sandbox.closure'
+  AND x.body ->> 'closure' = ANY($2::text[])
+ORDER BY c.seq
+`
+
+type ClosureEntryRefsRow struct {
+	EntryID   ids.UUID
+	ClosureID string
+	AgentID   string
+}
+
+// Sandbox closures in the ledger (G0 M12 D3, HR-227): the chained
+// sandbox.closure entries of closures, with the agent each is of. Entries
+// whose body retention removed name no closure and are not matched.
+func (q *Queries) ClosureEntryRefs(ctx context.Context, orgID ids.OrgID, closureIds []string) ([]ClosureEntryRefsRow, error) {
+	rows, err := q.db.Query(ctx, closureEntryRefs, orgID, closureIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ClosureEntryRefsRow{}
+	for rows.Next() {
+		var i ClosureEntryRefsRow
+		if err := rows.Scan(&i.EntryID, &i.ClosureID, &i.AgentID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const closureEntryRefsOfRuns = `-- name: ClosureEntryRefsOfRuns :many
+SELECT e.id AS entry_id, coalesce(x.body ->> 'closure', '')::text AS closure_id, coalesce(x.body ->> 'agent', '')::text AS agent_id
+FROM pc.ledger_entries e
+JOIN pc.ledger_chain c ON c.org_id = e.org_id AND c.entry_id = e.id
+CROSS JOIN LATERAL (SELECT CASE WHEN e.body_removed_at IS NULL THEN convert_from(e.body, 'UTF8')::jsonb END AS body) x
+WHERE e.org_id = $1 AND e.kind = 'sandbox.closure'
+  AND EXISTS (SELECT 1 FROM jsonb_array_elements(x.body -> 'reports') r WHERE r ->> 'run' = ANY($2::text[]))
+ORDER BY c.seq
+`
+
+type ClosureEntryRefsOfRunsRow struct {
+	EntryID   ids.UUID
+	ClosureID string
+	AgentID   string
+}
+
+// The chained sandbox.closure entries that record any of the probe runs,
+// as ClosureEntryRefs gives them.
+func (q *Queries) ClosureEntryRefsOfRuns(ctx context.Context, orgID ids.OrgID, runIds []string) ([]ClosureEntryRefsOfRunsRow, error) {
+	rows, err := q.db.Query(ctx, closureEntryRefsOfRuns, orgID, runIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ClosureEntryRefsOfRunsRow{}
+	for rows.Next() {
+		var i ClosureEntryRefsOfRunsRow
+		if err := rows.Scan(&i.EntryID, &i.ClosureID, &i.AgentID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getCheckpointBySize = `-- name: GetCheckpointBySize :one
 SELECT tree_size, root_hash, note, kid, pq_kid, created_at
 FROM pc.checkpoints
@@ -139,6 +216,38 @@ func (q *Queries) ListCheckpointsPage(ctx context.Context, orgID ids.OrgID, befo
 			&i.PqKid,
 			&i.CreatedAt,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const probeRunReports = `-- name: ProbeRunReports :many
+SELECT id, report FROM pc.probe_runs
+WHERE org_id = $1 AND id = ANY($2::uuid[])
+ORDER BY id
+`
+
+type ProbeRunReportsRow struct {
+	ID     ids.UUID
+	Report string
+}
+
+// The signed probe reports of probe runs, exactly as stored.
+func (q *Queries) ProbeRunReports(ctx context.Context, orgID ids.OrgID, runIds []ids.UUID) ([]ProbeRunReportsRow, error) {
+	rows, err := q.db.Query(ctx, probeRunReports, orgID, runIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ProbeRunReportsRow{}
+	for rows.Next() {
+		var i ProbeRunReportsRow
+		if err := rows.Scan(&i.ID, &i.Report); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

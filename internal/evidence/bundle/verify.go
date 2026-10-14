@@ -67,6 +67,8 @@ type verifier struct {
 	snapshots map[string]snapshotEntry
 	// invalidations are the verified coverage invalidation entries.
 	invalidations []invalidationEntry
+	// closureEntries are the verified sandbox.closure entries (HR-227).
+	closureEntries []closureEntry
 }
 
 // Verify checks a bundle offline against the pinned keys and returns the
@@ -88,6 +90,7 @@ func Verify(b *Bundle, o Options) *Report {
 	v.witness("witness.previous", o.Previous, true)
 	v.entries()
 	v.receipts()
+	v.closures()
 	v.anchor()
 	return r
 }
@@ -329,6 +332,9 @@ func (v *verifier) link(e, prev *Entry) (Status, string) {
 		v.digests[ref.Receipt] = e.Seq
 	}
 	v.noteCoverage(e, body)
+	if e.Kind == ClosureKind {
+		v.noteClosure(e, body)
+	}
 	return Passed, "entry_hash recomputed from the entry and prev_hash"
 }
 

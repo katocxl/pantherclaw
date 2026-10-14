@@ -300,6 +300,11 @@ func (b *builder) build() ([]byte, string, int, error) {
 			return nil, "", 0, err
 		}
 	}
+	if b.rangeData != nil && r.include.Receipts {
+		if err := b.probeProofs(); err != nil {
+			return nil, "", 0, err
+		}
+	}
 	if err := b.proofs(); err != nil {
 		return nil, "", 0, err
 	}
