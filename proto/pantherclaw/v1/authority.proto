@@ -87,6 +87,23 @@ message AuthorizeRequest {
   // The workload's PAP/1 credentials as the gateway received them; the
   // Authority re-verifies them itself (PAP-1 §7.1, HR-021).
   WorkloadCredentials workload = 2;
+  // Credential-shaped values the gateway found in the action's payload
+  // (HR-225). Each makes the Authority require a person's approval; none
+  // can lift a requirement. At most 16, sorted, never the value.
+  repeated PayloadFinding payload_findings = 3 [(buf.validate.field).repeated.max_items = 16];
+}
+
+// PayloadFinding is one credential-shaped value in an action's payload.
+message PayloadFinding {
+  // The format: github_token, private_key, aws_access_key, slack_token or
+  // pantherclaw_token.
+  string kind = 1 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 32
+  }];
+  // Where it is, such as arg:content or body:/files/0/content(base64);
+  // never the value.
+  string location = 2 [(buf.validate.field).string.max_len = 256];
 }
 
 // AuthorizeResponse is the decision.

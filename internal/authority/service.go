@@ -106,7 +106,7 @@ type Result struct {
 
 // Authorize decides on raw canonical ActionIR bytes sent with the
 // workload's PAP/1 credentials; without them it is CANNOT_AUTHORIZE.
-func (s *Service) Authorize(ctx context.Context, gw Gateway, raw []byte, creds *Credentials) (Result, error) {
+func (s *Service) Authorize(ctx context.Context, gw Gateway, raw []byte, creds *Credentials, findings ...pipeline.PayloadFinding) (Result, error) {
 	p, perr := actionir.Parse(raw)
 	if perr != nil {
 		// Unparseable input cannot be bound to an org or action id: the answer
@@ -135,7 +135,7 @@ func (s *Service) Authorize(ctx context.Context, gw Gateway, raw []byte, creds *
 		return Result{}, errors.New("authority: the decision pipeline is not configured")
 	}
 	res, err := s.decider.Authorize(ctx, gw.final(), pipeline.Request{
-		Org: gw.Org, Action: p,
+		Org: gw.Org, Action: p, PayloadFindings: findings,
 		Identity: pipeline.Identity{InstanceID: id.Instance.Instance, AgentID: id.Instance.Agent, AttestationLevel: id.Level, JKT: id.JKT},
 	})
 	if err != nil {

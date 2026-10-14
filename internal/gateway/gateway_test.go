@@ -125,6 +125,8 @@ type fakeAuthority struct {
 	endedRuns    map[string]bool
 	// observed are the tool observations reported (HR-200).
 	observed []*pb.RecordToolObservationRequest
+	// findings are the payload findings of the last Authorize (HR-225).
+	findings []*pb.PayloadFinding
 }
 
 // VerifyWorkload verifies every workload unless identity is set, as the
@@ -174,6 +176,7 @@ func (f *fakeAuthority) Authorize(ctx context.Context, req *pb.AuthorizeRequest)
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.authorize++
+	f.findings = req.GetPayloadFindings()
 	f.auth = info.RequestHeader().Get("Authorization")
 	f.creds = req.GetWorkload()
 	f.actions = append(f.actions, p)

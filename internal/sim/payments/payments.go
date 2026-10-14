@@ -28,6 +28,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/katocxl/pantherclaw/internal/sim/handshake"
+
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	"github.com/katocxl/pantherclaw/internal/platform/money"
 )
@@ -179,7 +181,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /v1/refunds/{id}", s.getRefund)
 	mux.HandleFunc("GET /v1/account", s.account)
 	mux.HandleFunc("GET /v1/stats", s.stats)
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	return handshake.Wrap("payments", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Simulated", "true")
 		if r.URL.Path != "/v1/stats" && s.require.Token != "" &&
 			subtle.ConstantTimeCompare([]byte(r.Header.Get("Authorization")), []byte("Bearer "+s.require.Token)) != 1 {
@@ -187,7 +189,7 @@ func (s *Server) Handler() http.Handler {
 			return
 		}
 		mux.ServeHTTP(w, r)
-	})
+	}))
 }
 
 // refuse answers a refused request and counts it.

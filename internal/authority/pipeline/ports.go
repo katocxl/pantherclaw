@@ -49,6 +49,15 @@ type Request struct {
 	Action   actionir.Parsed
 	Identity Identity
 	Gateway  string
+	// PayloadFindings are the credential-shaped values the gateway found in
+	// the action's payload (HR-225): they only ever add a requirement.
+	PayloadFindings []PayloadFinding
+}
+
+// PayloadFinding is one credential-shaped value in an action's payload: its
+// format and where it is, never the value.
+type PayloadFinding struct {
+	Kind, Location string
 }
 
 // Pinned is an org's pinned definition with its lifecycle state, and the

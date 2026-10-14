@@ -53,6 +53,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/gateway/broker"
 	"github.com/katocxl/pantherclaw/internal/gateway/control"
 	"github.com/katocxl/pantherclaw/internal/gateway/egress"
+	"github.com/katocxl/pantherclaw/internal/gateway/simcheck"
 	"github.com/katocxl/pantherclaw/internal/gateway/upstream"
 	pb "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
 	"github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1/pantherclawv1connect"
@@ -213,6 +214,7 @@ type Engine struct {
 	reportFacts FactReporter
 	factTimeout time.Duration
 	revocations RevocationReporter
+	sims        *simcheck.Checker
 
 	mu      sync.Mutex
 	clients map[string]clientEntry
@@ -250,6 +252,7 @@ func New(o Options) (*Engine, error) {
 		log: o.Log, onDrift: o.OnDrift, clients: map[string]clientEntry{}, drift: map[string]driftEntry{}, approvers: o.Approvers,
 		connectors:  o.Connectors,
 		reportFacts: o.ReportFacts, factTimeout: o.FactTimeout, revocations: o.ReportRevocation,
+		sims: simcheck.New(),
 	}, nil
 }
 
@@ -356,6 +359,13 @@ func (e *Engine) dispatch(ctx context.Context, c Call, t *timer) Result {
 	if code := e.refusedUpstream(conn, c.Action.Action.Operation); code != "" {
 		return Result{Class: EnforcementFailed, Code: code}
 	}
+	if code := e.simulatorRefusal(ctx, conn); code != "" {
+		return Result{Class: CannotAuthorize, Code: code, Decision: pb.Decision_DECISION_CANNOT_AUTHORIZE}
+	}
+	refusedPayload, findings := e.outboundCheck(ctx, conn, c.Action.Action)
+	if refusedPayload {
+		return Result{Class: CannotAuthorize, Code: CodeSecretInPayload, Decision: pb.Decision_DECISION_CANNOT_AUTHORIZE}
+	}
 	if code := accountRefusal(conn, c.Action.Action); code != "" {
 		return Result{Class: CannotAuthorize, Code: code, Decision: pb.Decision_DECISION_CANNOT_AUTHORIZE}
 	}
@@ -368,7 +378,7 @@ func (e *Engine) dispatch(ctx context.Context, c Call, t *timer) Result {
 			return Result{Class: CannotAuthorize, Code: CodeFactsUnreported, Decision: pb.Decision_DECISION_CANNOT_AUTHORIZE}
 		}
 	}
-	ar, err := e.authority.Authorize(ctx, &pb.AuthorizeRequest{ActionIr: c.Action.Canonical, Workload: c.Workload})
+	ar, err := e.authority.Authorize(ctx, &pb.AuthorizeRequest{ActionIr: c.Action.Canonical, Workload: c.Workload, PayloadFindings: findings})
 	t.lap("authz")
 	if err != nil {
 		e.log.ErrorContext(ctx, "gateway.authority_unavailable", slog.String("connection_id", conn.GetId()), pclog.Err(err))

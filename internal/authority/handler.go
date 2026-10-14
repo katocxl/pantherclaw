@@ -82,7 +82,11 @@ func (h *Handler) Authorize(ctx context.Context, req *pantherclawv1.AuthorizeReq
 		return nil, err
 	}
 	creds := credentials(req.GetWorkload())
-	res, err := h.svc.Authorize(ctx, gw, req.GetActionIr(), creds)
+	var findings []pipeline.PayloadFinding
+	for _, f := range req.GetPayloadFindings() {
+		findings = append(findings, pipeline.PayloadFinding{Kind: f.GetKind(), Location: f.GetLocation()})
+	}
+	res, err := h.svc.Authorize(ctx, gw, req.GetActionIr(), creds, findings...)
 	if err != nil {
 		return nil, err
 	}

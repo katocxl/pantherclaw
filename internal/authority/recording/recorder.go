@@ -62,10 +62,14 @@ func NewTampered(req pipeline.Request, storedHash string) *Recording {
 
 func request(req pipeline.Request) Request {
 	id := req.Identity
-	return Request{
+	out := Request{
 		Action: slices.Clone(req.Action.Canonical), Instance: uid(id.InstanceID), Agent: uid(id.AgentID),
 		Attestation: id.AttestationLevel, JKT: id.JKT, Gateway: req.Gateway,
 	}
+	for _, f := range req.PayloadFindings {
+		out.PayloadFindings = append(out.PayloadFindings, PayloadFinding{Kind: f.Kind, Location: f.Location})
+	}
+	return out
 }
 
 func (r *Recorder) keep(fn func(*Reads) error) {

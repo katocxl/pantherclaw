@@ -35,6 +35,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/katocxl/pantherclaw/internal/sim/handshake"
 )
 
 // Permission levels, from the weakest.
@@ -230,10 +232,10 @@ func (s *Server) Handler() http.Handler {
 	s.pullRoutes(mux)
 	s.factRoutes(mux)
 	s.deviceRoutes(mux)
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	return handshake.Wrap("github", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Simulated", "true")
 		mux.ServeHTTP(w, r)
-	})
+	}))
 }
 
 // route is one repository endpoint and the App permission GitHub documents
