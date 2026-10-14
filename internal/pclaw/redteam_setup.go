@@ -79,6 +79,7 @@ func redteamSetup(ctx context.Context, a *app, args []string) error {
 	}
 
 	var steps []setupStep
+	var notes []string
 	agentID := ""
 
 	// The range agent: reused when one of that name exists.
@@ -117,6 +118,10 @@ func redteamSetup(ctx context.Context, a *app, args []string) error {
 	if err != nil {
 		return err
 	}
+	provs, err := c.facts.ListProviders(ctx, &pantherclawv1.ListProvidersRequest{})
+	if err != nil {
+		return fmt.Errorf("listing fact providers: %w", err)
+	}
 	byName := map[string]*pantherclawv1.Connection{}
 	for _, cn := range conns {
 		byName[cn.GetName()] = cn
@@ -142,24 +147,37 @@ func redteamSetup(ctx context.Context, a *app, args []string) error {
 			twin = twin[:57]
 		}
 		twin += "-range"
+		twinID := ""
 		if have, ok := byName[twin]; ok {
 			if !have.GetSimulated() || have.GetBaseUrl() != base {
 				return fmt.Errorf("connection %s exists and is not the simulated twin of %s at %s; nothing was changed", twin, orig.GetName(), base)
 			}
-			continue
+			twinID = have.GetId()
+		} else {
+			steps = append(steps, setupStep{
+				text: fmt.Sprintf("create the simulated connection %q, a twin of %q, pointing at %s", twin, orig.GetName(), base),
+				apply: func(ctx context.Context) error {
+					res, err := c.connections.CreateConnection(ctx, &pantherclawv1.CreateConnectionRequest{
+						Name: twin, Kind: orig.GetKind(), GatewayId: orig.GetGatewayId(), Package: orig.GetPackage(), BaseUrl: base,
+						AccessMode: orig.GetAccessMode(), CredentialHeader: orig.GetCredentialHeader(), CredentialScheme: orig.GetCredentialScheme(),
+						DestinationClass: orig.GetDestinationClass(), DefaultMode: orig.GetDefaultMode(),
+						MaxResponseBytes: orig.GetMaxResponseBytes(), TimeoutMs: orig.GetTimeoutMs(), Simulated: true,
+					})
+					twinID = res.GetConnection().GetId()
+					return err
+				},
+			})
 		}
-		steps = append(steps, setupStep{
-			text: fmt.Sprintf("create the simulated connection %q, a twin of %q, pointing at %s", twin, orig.GetName(), base),
-			apply: func(ctx context.Context) error {
-				_, err := c.connections.CreateConnection(ctx, &pantherclawv1.CreateConnectionRequest{
-					Name: twin, Kind: orig.GetKind(), GatewayId: orig.GetGatewayId(), Package: orig.GetPackage(), BaseUrl: base,
-					AccessMode: orig.GetAccessMode(), CredentialHeader: orig.GetCredentialHeader(), CredentialScheme: orig.GetCredentialScheme(),
-					DestinationClass: orig.GetDestinationClass(), DefaultMode: orig.GetDefaultMode(),
-					MaxResponseBytes: orig.GetMaxResponseBytes(), TimeoutMs: orig.GetTimeoutMs(), Simulated: true,
-				})
-				return err
-			},
-		})
+		step, note, err := twinProviderStep(c, provs, orig, twin, &twinID)
+		if err != nil {
+			return err
+		}
+		if step != nil {
+			steps = append(steps, *step)
+		}
+		if note != "" {
+			notes = append(notes, note)
+		}
 	}
 
 	// The grant, shaped like a real one.
@@ -203,6 +221,11 @@ func redteamSetup(ctx context.Context, a *app, args []string) error {
 	}
 
 	w := a.stdout
+	defer func() {
+		for _, n := range notes {
+			_, _ = fmt.Fprintf(w, "Note: %s\n", n)
+		}
+	}()
 	if len(steps) == 0 {
 		_, err := fmt.Fprintln(w, "Nothing to do: the range agent, its twins and its grant are already as asked.")
 		return err
@@ -285,4 +308,46 @@ func rangeDelegation(like *pantherclawv1.GrantDelegation) *pantherclawv1.GrantDe
 		Depth:       min(max(like.GetDepth()+1, minRangeDepth), maxGrantDepth),
 		MaxChildren: like.GetMaxChildren(),
 	}
+}
+
+var twinProviderNameRe = regexp.MustCompile(`^[a-z][a-z0-9_.]{0,63}$`)
+
+// twinProviderStep plans the fact provider of a simulated twin (D43): the
+// real connection's gateway provider has facts the twin's actions need
+// (github.* and the like), and a fact name has one provider per connection.
+// The twin's is named "<real provider>.range" (hyphens become underscores),
+// bound to the gateway and the twin, and declares exactly what the real
+// one does. It returns a step, or a note when there is nothing to register.
+// twinID is the twin's id: known when it exists, set when its step has run.
+func twinProviderStep(c clients, provs *pantherclawv1.ListProvidersResponse, orig *pantherclawv1.Connection, twin string, twinID *string) (*setupStep, string, error) {
+	var realProv *pantherclawv1.FactProvider
+	taken := map[string]bool{}
+	for _, p := range provs.GetProviders() {
+		taken[p.GetName()] = true
+		if realProv == nil && p.GetConnectionId() == orig.GetId() && p.GetGatewayId() != "" && p.GetState() == pantherclawv1.ProviderState_PROVIDER_STATE_ACTIVE {
+			realProv = p
+		}
+	}
+	if realProv == nil {
+		return nil, fmt.Sprintf("%s has no gateway fact provider, so its twin %s gets none: scenarios that read facts there will see none", orig.GetName(), twin), nil
+	}
+	name := strings.ReplaceAll(realProv.GetName(), "-", "_") + ".range"
+	if !twinProviderNameRe.MatchString(name) {
+		return nil, fmt.Sprintf("the twin of fact provider %q cannot be named %q, so %s gets no facts", realProv.GetName(), name, twin), nil
+	}
+	if taken[name] {
+		return nil, fmt.Sprintf("fact provider %s already exists (the twin of %s)", name, realProv.GetName()), nil
+	}
+	return &setupStep{
+		text: fmt.Sprintf("register the fact provider %q for %q, declaring the same %d facts as %q", name, twin, len(realProv.GetFacts()), realProv.GetName()),
+		apply: func(ctx context.Context) error {
+			if *twinID == "" {
+				return errors.New("the twin connection has no id yet")
+			}
+			_, err := c.facts.RegisterProvider(ctx, &pantherclawv1.RegisterProviderRequest{
+				Name: name, Facts: realProv.GetFacts(), GatewayId: orig.GetGatewayId(), ConnectionId: *twinID,
+			})
+			return err
+		},
+	}, "", nil
 }
