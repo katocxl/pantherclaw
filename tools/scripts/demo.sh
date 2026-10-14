@@ -98,16 +98,24 @@ write_compose_env() {
   )
 }
 
-write_secrets() { # the files of BUILD_GUIDE §4, created only when absent
-  mkdir -p "$SECRETS"
+write_secrets() { # the files of BUILD_GUIDE §4, created only when absent; owner-only
+  mkdir -p -m 700 "$SECRETS"
   local r
   for r in pc_app pc_migrator pc_audit_ro pc_retention; do
     [ -f "$SECRETS/$r.pw" ] || (umask 077 && rand_pw > "$SECRETS/$r.pw")
   done
-  # shellcheck disable=SC1091
-  (set -a && . deploy/compose/.env && printf 'postgres://pc_owner:%s@127.0.0.1:5432/pantherclaw?sslmode=disable' "$PC_PG_PASSWORD") > "$SECRETS/admin.url.new"
-  if [ ! -f "$SECRETS/admin.url" ]; then mv "$SECRETS/admin.url.new" "$SECRETS/admin.url"; else rm -f "$SECRETS/admin.url.new"; fi
-  [ -f "$SECRETS/keycloak.secret" ] || printf 'pantherclaw-dev-only-client-secret' > "$SECRETS/keycloak.secret"
+  # admin.url holds the database owner's password: made under umask 077, then renamed into place.
+  if [ ! -f "$SECRETS/admin.url" ]; then
+    # shellcheck disable=SC1091
+    (
+      umask 077
+      set -a
+      . deploy/compose/.env
+      printf 'postgres://pc_owner:%s@127.0.0.1:5432/pantherclaw?sslmode=disable' "$PC_PG_PASSWORD" > "$SECRETS/admin.url.new"
+    )
+    mv "$SECRETS/admin.url.new" "$SECRETS/admin.url"
+  fi
+  [ -f "$SECRETS/keycloak.secret" ] || (umask 077 && printf 'pantherclaw-dev-only-client-secret' > "$SECRETS/keycloak.secret")
   [ -f "$DEMO/github-signin.secret" ] || (umask 077 && rand_pw > "$DEMO/github-signin.secret")
 }
 
@@ -188,6 +196,7 @@ up() {
   command -v docker > /dev/null || die "Docker is not installed"
   command -v openssl > /dev/null || die "openssl is not installed"
   command -v curl > /dev/null || die "curl is not installed"
+  mkdir -p -m 700 "$DEMO"
   mkdir -p "$DEMO/logs" "$DEMO/pids"
 
   say "1/7 database and identity provider"
@@ -321,13 +330,27 @@ Stop with: task demo:down
 EOF
 }
 
+# pid_is PID NAME: whether PID's command line names the expected program, so
+# that a stale pid file never makes `down` kill an unrelated process.
+pid_is() {
+  local pid=$1 name=$2 cmd=""
+  cmd=$(ps -p "$pid" -o args= 2> /dev/null) || cmd=""
+  [ -n "$cmd" ] || cmd=$(tr '\0' ' ' < "/proc/$pid/cmdline" 2> /dev/null) || cmd=""
+  [ -n "$cmd" ] || cmd=$(ps -p "$pid" 2> /dev/null | tail -n +2) || cmd="" # Git Bash's ps: the program's path
+  case "$cmd" in *"$name"*) return 0 ;; esac
+  return 1
+}
+
 down() {
-  local p f
+  local p f bin
   for p in gateway server github-sim; do
     f="$DEMO/pids/$p.pid"
-    if alive "$f"; then
+    case $p in gateway) bin=pantherclaw-gateway ;; server) bin=pantherclaw-server ;; github-sim) bin=pantherclaw-sim ;; esac
+    if alive "$f" && pid_is "$(cat "$f")" "$bin"; then
       stop_pid "$(cat "$f")"
       say "  $p: stopped"
+    elif alive "$f"; then
+      say "  $p: pid $(cat "$f") is not $bin any more; left alone, stale pid file removed"
     else
       say "  $p: not running"
     fi
@@ -402,7 +425,8 @@ link_github() {
   demo_sql << SQL
 INSERT INTO pc.github_identities (org_id, id, user_id, github_login, github_user_id, linked_by, verified_at)
   SELECT '$DEMO_ORG', gen_random_uuid(), u.id, '$login', $gid, 'demo', now()
-  FROM pc.users u WHERE u.org_id = '$DEMO_ORG' AND (u.email = '$who' OR u.subject = '$who') LIMIT 1;
+  FROM pc.users u WHERE u.org_id = '$DEMO_ORG' AND (u.email = '$who' OR u.subject = '$who') LIMIT 1
+  ON CONFLICT DO NOTHING;
 INSERT INTO pc.github_identity_history (org_id, github_user_id, user_id)
   SELECT '$DEMO_ORG', $gid, u.id FROM pc.users u WHERE u.org_id = '$DEMO_ORG' AND (u.email = '$who' OR u.subject = '$who') LIMIT 1
   ON CONFLICT DO NOTHING;
