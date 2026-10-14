@@ -173,7 +173,7 @@ func TestE2E_Preview_ThreeRoutesThreeStops(t *testing.T) {
 	// Step 0: the agent reads, branches, writes and opens a pull request
 	// through the edge: all allowed.
 	main := m.gh.sim.Branch(ghRepo, "main")
-	code, out, errs := m.sandbox(t, pclaw.Options{}, "allowed", ghRepo, main)
+	code, out, errs := m.sandbox(t, pclaw.Options{}, "allowed", "--branch", "preview/fix", "--file", "fix.txt", ghRepo, main)
 	if code != 0 || !closurePassed.MatchString(out) {
 		t.Fatalf("sandbox session 1: %d\n%s\n%s", code, out, errs)
 	}
@@ -295,7 +295,9 @@ func TestE2E_Preview_ThreeRoutesThreeStops(t *testing.T) {
 		"closure": {Closures: []ids.UUID{mustUUID(t, mm[1])}},
 	}
 	for _, sel := range attempts {
-		p.checkpointed(t, sel.Transactions...)
+		if len(sel.Transactions) > 0 { // the closure has none: the wait below covers it
+			p.checkpointed(t, sel.Transactions...)
+		}
 	}
 	// The closure's entry is chained and checkpointed by the server's
 	// workers, as the receipts are; the anchor then covers all three.
@@ -322,7 +324,7 @@ func TestE2E_Preview_ThreeRoutesThreeStops(t *testing.T) {
 		for _, probe := range []string{"ssh_push", "pat_push"} {
 			found := false
 			for _, c := range r.Checks {
-				if c.Name == "closure.probe" && strings.Contains(c.Subject, probe) {
+				if c.Name == "closure.probe" && strings.Contains(c.Subject, probe) && c.Status == bundle.Passed {
 					found = true
 				}
 			}
