@@ -175,6 +175,15 @@ func (s *Service) Build(ctx context.Context, org ids.OrgID, id ids.UUID) error {
 	// days (the database checks expires_at = ready_at + 7 days).
 	ready := s.now().UTC().Truncate(time.Second)
 	b := &builder{s: s, org: org, r: r, c: caller, ctx: tenancy.WithCaller(ctx, caller), agentPaths: map[ids.UUID]td.Path{}, now: ready}
+	if r.scope.Kind == pack.ScopeRange {
+		// A range pack always holds receipts: `pclaw verify` checks them (HR-224).
+		r.include.Receipts = true
+		if b.rangeData, err = b.loadRange(); errors.Is(err, errRange) {
+			return s.fail(ctx, org, id, CodeRangeUnavailable)
+		} else if err != nil {
+			return err
+		}
+	}
 	content, manifest, items, err := b.build()
 	switch {
 	case errors.Is(err, pack.ErrTooLarge):
@@ -233,6 +242,8 @@ type builder struct {
 	agents      map[ids.UUID]bool
 	connections map[ids.UUID]bool
 	first, last time.Time
+	// rangeData is the range of a pack of scope range.
+	rangeData *rangeData
 }
 
 func (b *builder) gap(subject, reason, format string, args ...any) {
@@ -256,13 +267,18 @@ func (b *builder) build() ([]byte, string, int, error) {
 		Exporter: pack.Exporter{Type: string(td.KindUser), ID: r.createdBy.String()},
 		Created:  now.UTC().Format(time.RFC3339), Expires: now.Add(7 * 24 * time.Hour).UTC().Format(time.RFC3339),
 		Scope: r.scope, Include: r.include, Transactions: []pack.TransactionState{}, EffectStates: map[string]int{},
-		Retention: defaultRetention, Gaps: []pack.Gap{}, Statement: pack.Statement,
+		Retention: defaultRetention, Gaps: []pack.Gap{}, Statement: r.scope.ExpectedStatement(),
 		Filters: []string{fmt.Sprintf("evidence.read where each transaction's agent lives, as person %s held it at %s",
 			r.createdBy, now.UTC().Format(time.RFC3339))},
 	}
 	b.agents, b.connections = map[ids.UUID]bool{}, map[ids.UUID]bool{}
 	if err := b.transactions(); err != nil {
 		return nil, "", 0, err
+	}
+	if b.rangeData != nil {
+		if err := b.assurance(); err != nil {
+			return nil, "", 0, err
+		}
 	}
 	if r.include.Versions {
 		if err := b.versions(); err != nil {
@@ -345,6 +361,9 @@ func (b *builder) cosign(manifest string) ([]byte, error) {
 // the scope named them.
 func (b *builder) scopeIDs() ([]ids.UUID, bool, error) {
 	sc := b.r.scope
+	if sc.Kind == pack.ScopeRange {
+		return b.rangeData.transactions(), true, nil
+	}
 	if sc.Kind == pack.ScopeTransactions {
 		out := make([]ids.UUID, 0, len(sc.Transactions))
 		for _, s := range sc.Transactions {

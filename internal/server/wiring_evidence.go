@@ -128,7 +128,7 @@ func newAnchoring(cfg *Config, pool *db.Pool, keyReg *keys.Registry, log *slog.L
 // registerEvidence serves EvidenceService on the public API, with decision
 // replay when the server can open sealed inputs, and evidence packs (their
 // build job is enqueued in the creating transaction and runs in the worker).
-func registerEvidence(rs *connect.Server, d apiDeps) error {
+func registerEvidence(rs *connect.Server, d apiDeps) (*evapp.Service, error) {
 	svc := evapp.New(d.pool, d.logOrigin)
 	if d.kp != nil {
 		svc.WithReplay(replayEngine(d.pool, d.kp), clock.System{})
@@ -136,7 +136,7 @@ func registerEvidence(rs *connect.Server, d apiDeps) error {
 	if d.billing != nil {
 		insert, err := jobs.NewClient(d.pool, nil, jobs.Config{Logger: d.log}) // insert-only: enqueue in the creating transaction
 		if err != nil {
-			return err
+			return nil, err
 		}
 		svc.WithPacks(func(ctx context.Context, tx db.TenantTx, org ids.OrgID, pack ids.UUID) error {
 			args, err := packbuild.NewBuildArgs(org, pack)
@@ -147,7 +147,7 @@ func registerEvidence(rs *connect.Server, d apiDeps) error {
 		}, d.billing)
 	}
 	pantherclawv1connect.RegisterEvidenceServiceHandler(rs, evidencerpc.New(svc))
-	return nil
+	return svc, nil
 }
 
 // newPackBuilder builds evidence packs in the worker (design decision 15):

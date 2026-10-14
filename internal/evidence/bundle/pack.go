@@ -80,10 +80,14 @@ func VerifyPack(raw []byte, o Options) *Report {
 	}
 	verifyItems(r, m, files)
 	verifyCosign(r, o.Trust, subject, signed.SigningInput, files)
-	if m.Statement != pack.Statement {
+	if want := m.Scope.ExpectedStatement(); m.Statement != want {
 		r.add("pack.statement", subject, Failed, "the manifest does not carry the fixed statement")
 	} else {
-		r.add("pack.statement", subject, Passed, "%s", pack.Statement)
+		r.add("pack.statement", subject, Passed, "%s", want)
+		r.Limits = Limits + " " + want
+	}
+	if m.Scope.Kind == pack.ScopeRange {
+		verifyRange(r, m, files)
 	}
 	for _, g := range m.Gaps {
 		r.add("pack.gap", truncate(g.Subject), NotAvailable, "%s: %s", g.Reason, truncate(g.Detail))

@@ -139,9 +139,7 @@ func (w *world) start(t *testing.T, ids ...string) domain.Range {
 	return r
 }
 
-var (
-	deny = domain.Expect{Outcome: domain.OutcomeDeny, Reason: "DESTINATION_NOT_GRANTED"}
-)
+var deny = domain.Expect{Outcome: domain.OutcomeDeny, Reason: "DESTINATION_NOT_GRANTED"}
 
 func uid(id ids.UUID) *ids.UUID { return &id }
 
@@ -208,12 +206,16 @@ func TestHR224_ResultsAreAppendOnlyAndRangesChangeOnce(t *testing.T) {
 	ctx := w.as(td.RoleAgentOwner)
 	r := w.start(t, "RT-001")
 	blocked := domain.Expect{Outcome: domain.OutcomeBlocked}
-	if _, err := w.svc.RecordResult(ctx, app.RecordInput{Range: r.ID, Scenario: "RT-001", Digest: hexA, Verdict: domain.Pass,
-		Steps: []domain.StepInput{{ID: "s", Expect: blocked, Observed: blocked}}}); err != nil {
+	if _, err := w.svc.RecordResult(ctx, app.RecordInput{
+		Range: r.ID, Scenario: "RT-001", Digest: hexA, Verdict: domain.Pass,
+		Steps: []domain.StepInput{{ID: "s", Expect: blocked, Observed: blocked}},
+	}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := w.svc.RecordResult(ctx, app.RecordInput{Range: r.ID, Scenario: "RT-001", Digest: hexA, Verdict: domain.Fail,
-		Steps: []domain.StepInput{{ID: "s", Expect: blocked, Observed: domain.Expect{Outcome: domain.OutcomeAllow}}}}); !errors.Is(err, app.ErrRecorded) {
+	if _, err := w.svc.RecordResult(ctx, app.RecordInput{
+		Range: r.ID, Scenario: "RT-001", Digest: hexA, Verdict: domain.Fail,
+		Steps: []domain.StepInput{{ID: "s", Expect: blocked, Observed: domain.Expect{Outcome: domain.OutcomeAllow}}},
+	}); !errors.Is(err, app.ErrRecorded) {
 		t.Fatalf("a second result: %v", err)
 	}
 	for _, sql := range []string{
@@ -311,8 +313,10 @@ func TestHR224_StaleRangesAreAbandonedAfter24Hours(t *testing.T) {
 		t.Fatalf("fresh range %s", g.Range.State)
 	}
 	blocked := domain.Expect{Outcome: domain.OutcomeBlocked}
-	if _, err := w.svc.RecordResult(ctx, app.RecordInput{Range: old.ID, Scenario: "RT-001", Digest: hexA, Verdict: domain.Pass,
-		Steps: []domain.StepInput{{ID: "s", Expect: blocked, Observed: blocked}}}); !errors.Is(err, app.ErrNotRunning) {
+	if _, err := w.svc.RecordResult(ctx, app.RecordInput{
+		Range: old.ID, Scenario: "RT-001", Digest: hexA, Verdict: domain.Pass,
+		Steps: []domain.StepInput{{ID: "s", Expect: blocked, Observed: blocked}},
+	}); !errors.Is(err, app.ErrNotRunning) {
 		t.Fatalf("a result in an abandoned range: %v", err)
 	}
 	if n := w.count(t, w.org, "SELECT count(*) FROM pc.ledger_entries WHERE kind = 'audit.redteam.range_abandoned'"); n != 1 {
@@ -369,8 +373,10 @@ func TestTenancy_redteam_results(t *testing.T) {
 	w, them := newWorld(t, d), newWorld(t, d)
 	r := w.start(t, "RT-001")
 	blocked := domain.Expect{Outcome: domain.OutcomeBlocked}
-	if _, err := w.svc.RecordResult(w.as(td.RoleAgentOwner), app.RecordInput{Range: r.ID, Scenario: "RT-001", Digest: hexA, Verdict: domain.Pass,
-		Steps: []domain.StepInput{{ID: "s", Expect: blocked, Observed: blocked}}}); err != nil {
+	if _, err := w.svc.RecordResult(w.as(td.RoleAgentOwner), app.RecordInput{
+		Range: r.ID, Scenario: "RT-001", Digest: hexA, Verdict: domain.Pass,
+		Steps: []domain.StepInput{{ID: "s", Expect: blocked, Observed: blocked}},
+	}); err != nil {
 		t.Fatal(err)
 	}
 	if n := them.count(t, them.org, "SELECT count(*) FROM pc.redteam_results WHERE range_id = $1", r.ID); n != 0 {
