@@ -110,8 +110,9 @@ func observeMCP(status int, h http.Header, b []byte) (domain.Observation, error)
 			} `json:"_meta"`
 		} `json:"result"`
 		Error *struct {
-			Code    int    `json:"code"`
-			Message string `json:"message"`
+			Code    int            `json:"code"`
+			Message string         `json:"message"`
+			Data    jsontext.Value `json:"data"`
 		} `json:"error"`
 	}
 	if err := json.Unmarshal(b, &r); err != nil || (r.Result == nil && r.Error == nil) {
@@ -125,6 +126,13 @@ func observeMCP(status int, h http.Header, b []byte) (domain.Observation, error)
 		return domain.Observation{}, fmt.Errorf("mcp face answered HTTP %d without a JSON-RPC answer", status)
 	}
 	if r.Error != nil {
+		var data struct {
+			Error string `json:"error"`
+		}
+		_ = json.Unmarshal(r.Error.Data, &data)
+		if code := data.Error; code != "" { // the gateway's PAP refusal: key_mismatch, proof_replay, use_nonce
+			return domain.Observation{Outcome: domain.OutcomeRefused, Code: code, Detail: r.Error.Message}, nil
+		}
 		return domain.Observation{Outcome: domain.OutcomeRefused, Code: "rpc_" + strconv.Itoa(r.Error.Code), Detail: r.Error.Message}, nil
 	}
 	var f facts

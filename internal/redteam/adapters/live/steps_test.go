@@ -259,3 +259,36 @@ func TestAgentChildShowsWhatItWidened(t *testing.T) {
 		t.Fatalf("%+v", res)
 	}
 }
+
+func TestMCPFaceReadsThePAPRefusal(t *testing.T) {
+	var calls int
+	h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		w.Header().Set("Content-Type", "application/json")
+		if strings.Contains(r.Header.Get("Mcp-Method"), "tools/list") {
+			_, _ = io.WriteString(w, `{"jsonrpc":"2.0","id":1,"result":{"tools":[]}}`)
+			return
+		}
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = io.WriteString(w, `{"jsonrpc":"2.0","id":1,"error":{"code":-32002,"message":"authentication failed","data":{"error":"key_mismatch"}}}`)
+	})
+	res := run(t, driver(t, h, nil), `  - {id: a, do: agent.call, with: {face: mcp, connection: github, tool: pull_request_read}, expect: {outcome: REFUSED, code: key_mismatch}}
+`)
+	if res.Verdict != domain.VerdictPass {
+		t.Fatalf("%+v", res)
+	}
+	// A JSON-RPC error without the gateway's PAP code keeps its RPC code.
+	h2 := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Header.Get("Mcp-Method") == "tools/list" {
+			_, _ = io.WriteString(w, `{"jsonrpc":"2.0","id":1,"result":{"tools":[]}}`)
+			return
+		}
+		_, _ = io.WriteString(w, `{"jsonrpc":"2.0","id":1,"error":{"code":-32602,"message":"bad"}}`)
+	})
+	res = run(t, driver(t, h2, nil), `  - {id: a, do: agent.call, with: {face: mcp, connection: github, tool: t}, expect: {outcome: REFUSED, code: rpc_-32602}}
+`)
+	if res.Verdict != domain.VerdictPass {
+		t.Fatalf("%+v", res)
+	}
+}
