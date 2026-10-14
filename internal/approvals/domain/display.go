@@ -41,13 +41,16 @@ type Display struct {
 	// Consequences are the action's predicted or unknown consequences
 	// (G0 M8, F158): predictions, apart from what the action does.
 	Consequences []ConsequenceLine `json:"consequences,omitzero"`
-	Fields       []Field           `json:"fields"`
-	Facts        []FactLine        `json:"facts"`
-	Run          *RunLine          `json:"run,omitzero"`
-	Basis        []Source          `json:"basis"`
-	Deciders     []DeciderRule     `json:"deciders"`
-	Deadline     string            `json:"deadline"`
-	Variants     []VariantLine     `json:"variants"`
+	// PayloadFindings are the credential-shaped values the gateway found in
+	// the payload (HR-225): the format and where, never the value.
+	PayloadFindings []PayloadFindingLine `json:"payload_findings,omitzero"`
+	Fields          []Field              `json:"fields"`
+	Facts           []FactLine           `json:"facts"`
+	Run             *RunLine             `json:"run,omitzero"`
+	Basis           []Source             `json:"basis"`
+	Deciders        []DeciderRule        `json:"deciders"`
+	Deadline        string               `json:"deadline"`
+	Variants        []VariantLine        `json:"variants"`
 	// Context lists earlier approved requests for the same operation and
 	// target: context, never precedent.
 	Context   []ContextLine  `json:"context_not_precedent"`
@@ -165,6 +168,8 @@ type ActionInput struct {
 	Attributes map[string]string
 	// Consequences are the action's predicted or unknown consequences.
 	Consequences []ConsequenceInput
+	// PayloadFindings are the gateway's payload findings (HR-225).
+	PayloadFindings []PayloadFindingInput
 }
 
 // RenderAction renders an action's display from its template. It fails on
@@ -214,6 +219,7 @@ func RenderAction(in ActionInput) (Display, error) {
 	}
 	out.Facts = factLines(in.Facts, in.Bound)
 	out.Consequences = consequenceLines(in.Consequences)
+	out.PayloadFindings = payloadFindingLines(in.PayloadFindings)
 	out.finish(in.Requirements, in.Variants, in.Context)
 	var untrusted []Untrusted
 	if in.TaskLabel != "" {

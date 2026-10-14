@@ -31,28 +31,31 @@ import (
 // Reason codes of the pipeline itself (the grant, budget and fact codes
 // come from their packages).
 const (
-	ReasonDefinitionNotPinned  = "DEFINITION_NOT_PINNED"
-	ReasonRouteUnknown         = "ROUTE_UNKNOWN"
-	ReasonRouteReviewed        = "ROUTE_REVIEWED"
-	ReasonRunMismatch          = "RUN_MISMATCH"
-	ReasonSimulationMismatch   = "SIMULATION_MISMATCH"
-	ReasonRunNotActive         = "RUN_NOT_ACTIVE"
-	ReasonIdentityVerified     = "IDENTITY_VERIFIED"
-	ReasonAgentSuspended       = "AGENT_SUSPENDED"
-	ReasonPackageQuarantined   = "PACKAGE_QUARANTINED"
-	ReasonNotContained         = "NOT_CONTAINED"
-	ReasonGrantCovers          = "GRANT_COVERS"
-	ReasonDefinitionNotActive  = "DEFINITION_NOT_ACTIVE"
-	ReasonDefinitionStale      = "DEFINITION_STALE"
-	ReasonMeaningExact         = "MEANING_EXACT"
-	ReasonFactsFresh           = "FACTS_FRESH"
-	ReasonWithinBoundaries     = "WITHIN_BOUNDARIES"
-	ReasonRequirementsMet      = "REQUIREMENTS_MET"
-	ReasonReconciliation       = "RECONCILIATION_REQUIRED"
-	ReasonEvidenceUnavailable  = "EVIDENCE_UNAVAILABLE"
-	ReasonPolicyEvaluation     = "POLICY_EVALUATION_ERROR"
-	ReasonRulesNotApplicable   = "RULES_NOT_APPLICABLE"
-	ReasonGrantRequiresHold    = "GRANT_REQUIRES_APPROVAL"
+	ReasonDefinitionNotPinned = "DEFINITION_NOT_PINNED"
+	ReasonRouteUnknown        = "ROUTE_UNKNOWN"
+	ReasonRouteReviewed       = "ROUTE_REVIEWED"
+	ReasonRunMismatch         = "RUN_MISMATCH"
+	ReasonSimulationMismatch  = "SIMULATION_MISMATCH"
+	ReasonRunNotActive        = "RUN_NOT_ACTIVE"
+	ReasonIdentityVerified    = "IDENTITY_VERIFIED"
+	ReasonAgentSuspended      = "AGENT_SUSPENDED"
+	ReasonPackageQuarantined  = "PACKAGE_QUARANTINED"
+	ReasonNotContained        = "NOT_CONTAINED"
+	ReasonGrantCovers         = "GRANT_COVERS"
+	ReasonDefinitionNotActive = "DEFINITION_NOT_ACTIVE"
+	ReasonDefinitionStale     = "DEFINITION_STALE"
+	ReasonMeaningExact        = "MEANING_EXACT"
+	ReasonFactsFresh          = "FACTS_FRESH"
+	ReasonWithinBoundaries    = "WITHIN_BOUNDARIES"
+	ReasonRequirementsMet     = "REQUIREMENTS_MET"
+	ReasonReconciliation      = "RECONCILIATION_REQUIRED"
+	ReasonEvidenceUnavailable = "EVIDENCE_UNAVAILABLE"
+	ReasonPolicyEvaluation    = "POLICY_EVALUATION_ERROR"
+	ReasonRulesNotApplicable  = "RULES_NOT_APPLICABLE"
+	ReasonGrantRequiresHold   = "GRANT_REQUIRES_APPROVAL"
+	// ReasonSecretInPayload: the gateway found a credential-shaped value in
+	// the action's payload; a person must approve it (HR-225).
+	ReasonSecretInPayload      = "SECRET_IN_PAYLOAD"
 	ReasonGrantRequiresStepUp  = "GRANT_REQUIRES_STEP_UP"
 	ReasonActionInstanceDiffer = "ACTION_INSTANCE_MISMATCH"
 	ReasonConnectionUnknown    = "CONNECTION_UNKNOWN"
@@ -85,12 +88,15 @@ type IdentitySummary struct {
 type Evaluation struct {
 	// Simulated is the run's flag (HR-220, HR-120): the decision receipt
 	// carries it.
-	Simulated   bool
-	Decision    adomain.Decision
-	Checklist   []Item
-	Obligations []pdomain.Obligation
-	Approvals   []pdomain.ApprovalRequirement
-	StepUps     []pdomain.StepUpRequirement
+	Simulated bool
+	// PayloadFindings are the gateway's findings (HR-225), sorted; the
+	// decision receipt carries them.
+	PayloadFindings []PayloadFinding
+	Decision        adomain.Decision
+	Checklist       []Item
+	Obligations     []pdomain.Obligation
+	Approvals       []pdomain.ApprovalRequirement
+	StepUps         []pdomain.StepUpRequirement
 	// Requirements are the same requirements, each with its source (a grant
 	// or guardrail level, or a policy rule), as step 8 found them.
 	Requirements []apdomain.Input
@@ -430,6 +436,7 @@ func (p *Pipeline) identity(ctx context.Context, s *state) {
 	}
 	s.agent = &agent
 	s.ev.Simulated = run.Simulated
+	s.ev.PayloadFindings = payloadFindings(s.req.PayloadFindings)
 	// HR-220: a simulated run reaches only simulated connections and a real
 	// run only real ones, in both directions. It is a scope failure, so it
 	// leads the checklist; the policy never sees either flag.
@@ -1002,6 +1009,7 @@ func (p *Pipeline) requirements(ctx context.Context, s *state) {
 			apdomain.Source{Level: r.Level.String(), Reason: r.Requirement.Reason}))
 	}
 	s.consequenceRequirements()
+	s.payloadRequirement()
 	s.independence()
 	effective := s.vals
 	if eff, vals, ok := s.effective(); ok {
@@ -1126,7 +1134,7 @@ func (p *Pipeline) bind(s *state, h *Hold, effective defs.Values, deadline time.
 			Launcher: s.run.Launcher.String(), Principal: s.run.Principal.String(),
 		},
 		TaskLabel: s.run.TaskRef, Requirements: h.Requirements, Deadline: deadline, Variants: variants, Context: approved,
-		Consequences: s.displayed(),
+		Consequences: s.displayed(), PayloadFindings: s.payloadDisplayed(),
 	})
 	if err != nil {
 		return err

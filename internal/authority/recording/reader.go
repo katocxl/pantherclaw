@@ -80,7 +80,11 @@ func (r *Reader) Request() (pipeline.Request, error) {
 	if err != nil {
 		return pipeline.Request{}, err
 	}
-	return pipeline.Request{Org: r.org, Action: act, Identity: id, Gateway: r.rec.Request.Gateway}, nil
+	req := pipeline.Request{Org: r.org, Action: act, Identity: id, Gateway: r.rec.Request.Gateway}
+	for _, f := range r.rec.Request.PayloadFindings {
+		req.PayloadFindings = append(req.PayloadFindings, pipeline.PayloadFinding{Kind: f.Kind, Location: f.Location})
+	}
+	return req, nil
 }
 
 // Gaps returns the reads the replay needed and the recording did not hold.
