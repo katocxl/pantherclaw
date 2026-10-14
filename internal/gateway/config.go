@@ -117,11 +117,8 @@ func DefaultConfig() Config {
 	c.Control.Timeout = config.Duration(2 * time.Second)
 	c.Control.VerifyEvery = config.Duration(VerifyEvery)
 	c.GitHub.FactTimeout = config.Duration(dispatch.DefaultFactTimeout)
-<<<<<<< HEAD
 	c.CEL = celenv.DefaultLimits
-=======
 	c.GitHub.APIURL = dispatch.DefaultGitHubAPIURL
->>>>>>> origin/feat/v010-preview-gaps
 	return c
 }
 
