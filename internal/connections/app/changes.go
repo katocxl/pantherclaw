@@ -232,6 +232,12 @@ func (s *Service) Update(ctx context.Context, in UpdateInput) (Connection, error
 			if err != nil {
 				return err
 			}
+			if conn.Simulated {
+				// HR-221: a simulated connection stays on local literals.
+				if err := checkSimulated(nb, nh); err != nil {
+					return err
+				}
+			}
 			p.BaseUrl, p.AllowedHosts = nb, nh
 			set("base_url", deref(conn.BaseUrl), deref(nb), true)
 			set("allowed_hosts", strings.Join(conn.AllowedHosts, ","), strings.Join(nh, ","), true)

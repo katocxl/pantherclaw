@@ -74,18 +74,23 @@ func (s *Service) ReportRoutes(ctx context.Context, session ids.UUID, routes []R
 		if err != nil {
 			return err
 		}
+		// HR-222: a range agent's session, or a simulated connection, leaves
+		// no route behind for coverage.
+		if agent.RangeAgent {
+			conns = nil
+		}
+		recorded := conns[:0:0]
+		for _, conn := range conns {
+			cn, err := q.GetConnection(ctx, c.Org, conn.ConnectionID)
+			if err != nil {
+				return err
+			}
+			if !cn.Simulated {
+				recorded = append(recorded, conn)
+			}
+		}
 		for _, r := range routes {
-			for _, conn := range conns {
-				// HR-222: a range agent's session, or a simulated
-				// connection, leaves no route behind for coverage.
-				if agent.RangeAgent {
-					continue
-				}
-				if cn, err := q.GetConnection(ctx, c.Org, conn.ConnectionID); err != nil {
-					return err
-				} else if cn.Simulated {
-					continue
-				}
+			for _, conn := range recorded {
 				first, err := s.Coverage.RecordRoute(ctx, tx, covdomain.ObservedRoute{
 					Agent: sess.AgentID, Connection: conn.ConnectionID, SandboxSession: sess.ID, Kind: covdomain.RouteKind(r.Kind),
 					Locator: r.Locator,

@@ -386,8 +386,10 @@ func (s *Service) create(ctx context.Context, c actor, in CreateInput) (Connecti
 	if err != nil {
 		return Connection{}, err
 	}
-	if in.Simulated && base != nil && !localLiteral(*base) {
-		return Connection{}, ErrSimulatedTarget
+	if in.Simulated {
+		if err := checkSimulated(base, hosts); err != nil {
+			return Connection{}, err
+		}
 	}
 	agentHosts, err := checkAgentHosts(in.Kind, in.AgentHosts)
 	if err != nil {

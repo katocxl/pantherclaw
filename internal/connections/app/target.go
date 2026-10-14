@@ -135,14 +135,34 @@ func checkBaseURL(raw string, own []endpoint) (string, endpoint, error) {
 // A name is never local, and an IPv4-mapped IPv6 address is not accepted.
 func localLiteral(base string) bool {
 	u, err := url.Parse(base)
-	if err != nil {
-		return false
-	}
-	addr, err := netip.ParseAddr(u.Hostname())
+	return err == nil && localHost(u.Hostname())
+}
+
+// localHost reports whether a bare host (no port, no brackets) is such a literal.
+func localHost(h string) bool {
+	addr, err := netip.ParseAddr(h)
 	if err != nil || addr.Is4In6() || addr.Zone() != "" {
 		return false
 	}
 	return addr.IsLoopback() || addr.IsPrivate()
+}
+
+// checkSimulated applies HR-221 to a simulated http or mcp connection: its
+// base URL and every host a credential may be sent to are local literals.
+func checkSimulated(base *string, hosts []string) error {
+	if base != nil && !localLiteral(*base) {
+		return ErrSimulatedTarget
+	}
+	for _, entry := range hosts {
+		name, _, err := net.SplitHostPort(entry)
+		if err != nil {
+			name = strings.TrimSuffix(strings.TrimPrefix(entry, "["), "]")
+		}
+		if !localHost(name) {
+			return ErrSimulatedTarget
+		}
+	}
+	return nil
 }
 
 // checkAllowedHosts validates the hosts a credential may be sent to:

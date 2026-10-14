@@ -125,3 +125,40 @@ func codes(ev *pipeline.Evaluation) []string {
 	}
 	return out
 }
+
+// TestHR120_EarlyDenialsOfARangeRunAreStillSimulated: a range run whose
+// identity does not match (so the decision is decided before containment)
+// still records the run's flag, and a real run's does not.
+func TestHR120_EarlyDenialsOfARangeRunAreStillSimulated(t *testing.T) {
+	f := newFx(t)
+	for _, sim := range []bool{true, false} {
+		run := ids.NewV7()
+		f.w.AddRun(run, pipeline.Run{
+			AgentID: ids.NewV7(), InstanceID: f.instance, Launcher: f.alice, Principal: f.alice, EnvironmentID: f.env,
+			GrantID: f.grant.ID, Active: true, Simulated: sim,
+		})
+		f.conn = f.simulatedConn(sim)
+		ev := f.call(run, "create_refund", refund("ch_1", "10.00"))
+		expect(t, ev, adomain.Deny, pipeline.ReasonRunMismatch)
+		if ev.Simulated != sim {
+			t.Errorf("simulated=%v run: the denial says %v", sim, ev.Simulated)
+		}
+	}
+}
+
+// TestHR220_ASimulatedRunNeverGetsAnAllowWithoutAConnection: an action on a
+// channel that names no connection is DENY SIMULATION_MISMATCH for a range
+// run, and still decided as before for a real run.
+func TestHR220_ASimulatedRunNeverGetsAnAllowWithoutAConnection(t *testing.T) {
+	f := newFx(t)
+	for _, sim := range []bool{false, true} {
+		req := f.parse(f.simulatedRun(sim), ids.NewV7(), "create_refund", refund("ch_1", "10.00"))
+		req.Action.Action.Connection, req.Action.Action.Channel = "", "cli"
+		ev := f.eval(req)
+		if sim {
+			expect(t, ev, adomain.Deny, pipeline.ReasonSimulationMismatch)
+		} else if ev.Decision == adomain.Deny && ev.Decisive().Code == pipeline.ReasonSimulationMismatch {
+			t.Error("a real run without a connection was denied as a mismatch")
+		}
+	}
+}
