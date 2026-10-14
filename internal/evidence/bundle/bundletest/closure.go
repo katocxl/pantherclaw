@@ -121,8 +121,11 @@ func (i *Issuer) AppendClosure(o ClosureOpts) *Closure {
 		refs = append(refs, ref{Run: c.Runs[kind], Kind: kind, SHA256: hex.EncodeToString(sum[:])})
 	}
 	probes := []probe{
-		{"canary_control", report.Reachable}, {"external_canary", report.Blocked}, {"gateway_control", report.Reachable},
-		{"planted_pat_push", report.Blocked}, {"ssh_push", report.Blocked},
+		{"canary_control", report.Reachable},
+		{"external_canary", report.Blocked},
+		{"gateway_control", report.Reachable},
+		{"planted_pat_push", report.Blocked},
+		{"ssh_push", report.Blocked},
 	}
 	for k := range probes {
 		if probes[k].Name == o.EditOutcome {
