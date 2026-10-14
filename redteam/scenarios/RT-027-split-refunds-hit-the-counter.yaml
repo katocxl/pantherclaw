@@ -24,6 +24,6 @@ steps:
         reason: duplicate
     expect:
       outcome: DENY
-      reason: COUNT_LIMIT_REACHED
+      reason: BUDGET_EXHAUSTED
       max_allow: 2
       decisive_control: HR-049

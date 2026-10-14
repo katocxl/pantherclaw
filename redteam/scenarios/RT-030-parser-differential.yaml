@@ -34,8 +34,8 @@ steps:
         currency: USD
         reason: duplicate
     expect:
-      outcome: CANNOT_AUTHORIZE
-      reason: AMBIGUOUS_INPUT
+      outcome: REFUSED
+      code: invalid_arguments
       decisive_control: HR-103
   - id: confusable-charge
     do: agent.call
@@ -49,6 +49,6 @@ steps:
         currency: USD
         reason: duplicate
     expect:
-      outcome: CANNOT_AUTHORIZE
-      reason: AMBIGUOUS_INPUT
+      outcome: REFUSED
+      code: invalid_arguments
       decisive_control: HR-103

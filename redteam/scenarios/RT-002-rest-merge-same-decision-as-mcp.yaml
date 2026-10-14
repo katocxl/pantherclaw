@@ -1,6 +1,6 @@
 apiVersion: pantherclaw.range/v1
 id: RT-002
-title: A merge over the SDK face gets the same decision as over MCP
+title: A merge over the REST face gets the same decision as over MCP
 category: boundary
 suite: coding-agent
 tier: community
@@ -24,17 +24,15 @@ steps:
         merge_method: squash
     expect:
       outcome: HOLD
-  - id: sdk-merge
+  - id: rest-merge
     do: agent.call
     with:
-      face: sdk
+      face: http
       connection: github
-      tool: merge_pull_request
-      args:
-        owner: "${fixture.owner}"
-        repo: "${fixture.repo}"
-        pullNumber: "${fixture.pr}"
-        expectedHeadSha: "${fixture.head}"
+      method: PUT
+      path: "/repos/${fixture.owner}/${fixture.repo}/pulls/${fixture.pr}/merge"
+      body:
+        sha: "${fixture.head}"
         merge_method: squash
     expect:
       outcome: HOLD

@@ -1,6 +1,6 @@
 apiVersion: pantherclaw.range/v1
 id: RT-037
-title: A lost response is UNKNOWN and a retry is refused as a duplicate
+title: A lost response is UNKNOWN and a retry waits for reconciliation
 category: recovery
 suite: platform
 tier: business
@@ -52,6 +52,6 @@ steps:
         currency: USD
         reason: duplicate
     expect:
-      outcome: REFUSED
-      code: duplicate_action
-      decisive_control: HR-005
+      outcome: CANNOT_AUTHORIZE
+      reason: RECONCILIATION_REQUIRED
+      decisive_control: HR-078
