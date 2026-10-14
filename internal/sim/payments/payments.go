@@ -19,7 +19,6 @@ import (
 	"crypto/subtle"
 	"encoding/binary"
 	"encoding/json/v2"
-	"github.com/katocxl/pantherclaw/internal/sim/handshake"
 	"io"
 	"log/slog"
 	"net/http"
@@ -28,6 +27,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/katocxl/pantherclaw/internal/sim/handshake"
 
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	"github.com/katocxl/pantherclaw/internal/platform/money"

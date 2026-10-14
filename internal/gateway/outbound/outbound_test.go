@@ -56,8 +56,11 @@ func TestScanFormats(t *testing.T) {
 		{"slack", Input{Body: []byte("xoxb-1234567890-abc")}, []Finding{{"slack_token", "body"}}},
 		{"pantherclaw", Input{Args: []byte(`{"x":"pck_dev_` + strings.Repeat("a", 32) + `"}`)}, []Finding{{"pantherclaw_token", "arg:x"}}},
 		{"path", Input{Path: "/" + ghToken}, []Finding{{"github_token", "path"}}},
-		{"dedup and sort", Input{Args: []byte(`{"b":"` + ghToken + ` ` + ghToken + `","a":"AKIA` + strings.Repeat("B", 16) + `"}`)},
-			[]Finding{{"aws_access_key", "arg:a"}, {"github_token", "arg:b"}}},
+		{
+			"dedup and sort",
+			Input{Args: []byte(`{"b":"` + ghToken + ` ` + ghToken + `","a":"AKIA` + strings.Repeat("B", 16) + `"}`)},
+			[]Finding{{"aws_access_key", "arg:a"}, {"github_token", "arg:b"}},
+		},
 		{"clean", Input{Body: []byte(`{"a":"hello"}`), Path: "/repos/x"}, nil},
 		{"short", Input{Body: []byte("ghp_short")}, nil},
 	}

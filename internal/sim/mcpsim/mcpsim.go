@@ -23,7 +23,6 @@ import (
 	"encoding/json/jsontext"
 	"encoding/json/v2"
 	"fmt"
-	"github.com/katocxl/pantherclaw/internal/sim/handshake"
 	"io"
 	"net/http"
 	"regexp"
@@ -32,6 +31,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/katocxl/pantherclaw/internal/sim/handshake"
 
 	"github.com/katocxl/pantherclaw/internal/platform/mcpheader"
 	"github.com/katocxl/pantherclaw/internal/sim/github"

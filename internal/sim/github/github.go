@@ -26,7 +26,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json/v2"
-	"github.com/katocxl/pantherclaw/internal/sim/handshake"
 	"log/slog"
 	"maps"
 	"net/http"
@@ -36,6 +35,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/katocxl/pantherclaw/internal/sim/handshake"
 )
 
 // Permission levels, from the weakest.
