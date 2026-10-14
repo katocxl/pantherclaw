@@ -411,6 +411,9 @@ func (p *Pipeline) identity(ctx context.Context, s *state) {
 		return
 	}
 	s.run = &run
+	// Every later outcome of a range run, early denials included, is signed
+	// simulated (HR-120).
+	s.ev.Simulated = run.Simulated
 	s.ev.Identity = IdentitySummary{
 		Instance: id.InstanceID.String(), AttestationLevel: id.AttestationLevel, Agent: id.AgentID.String(),
 		Run: s.ev.RunID.String(), Launcher: run.Launcher.String(), Principal: run.Principal.String(),
@@ -429,11 +432,10 @@ func (p *Pipeline) identity(ctx context.Context, s *state) {
 		return
 	}
 	s.agent = &agent
-	s.ev.Simulated = run.Simulated
 	// HR-220: a simulated run reaches only simulated connections and a real
 	// run only real ones, in both directions. It is a scope failure, so it
 	// leads the checklist; the policy never sees either flag.
-	if s.conn != nil && s.conn.Simulated != run.Simulated {
+	if (s.conn != nil && s.conn.Simulated != run.Simulated) || (run.Simulated && s.conn == nil && s.def != nil) {
 		s.cl.add(StepScope, adomain.Deny, ReasonSimulationMismatch, "the run and the connection are not both simulated or both real", "")
 	}
 	if !run.GrantID.IsZero() {

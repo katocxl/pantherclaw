@@ -226,3 +226,39 @@ func TestT090_RangeActivityLeavesRealStateAlone(t *testing.T) {
 		t.Fatalf("real state changed: %s -> %s", before, after)
 	}
 }
+
+// TestHR222_SecurityEventsOfARangeRunSaySimulated: the audit event written
+// when a range run's action id is reused with a changed action (outside the
+// notification outbox) says simulated=true; a real run's does not.
+func TestHR222_SecurityEventsOfARangeRunSaySimulated(t *testing.T) {
+	base := setup(t, "1000", 0, time.Minute)
+	r := withRange(t, base)
+	tamper := func(f fixture, conn ids.UUID) {
+		f.conn = conn
+		act, charge := ids.NewV7(), f.charge(t)
+		env, inst := f.env.String(), f.wl.inst.Instance.String()
+		ctx := context.Background()
+		if _, err := f.svc.Authorize(ctx, f.gw, f.actionOn(t, charge, "30.00", f.run, act, env, inst), f.creds(t, f.wl, f.wl.token)); err != nil {
+			t.Fatal(err)
+		}
+		res, err := f.svc.Authorize(ctx, f.gw, f.actionOn(t, charge, "90.00", f.run, act, env, inst), f.creds(t, f.wl, f.wl.token))
+		if err != nil || res.Decision != domain.Deny {
+			t.Fatalf("tamper: %+v, %v", res, err)
+		}
+	}
+	tamper(r.fixture, r.simConn)
+	tamper(base, base.conn)
+	body := func(sim bool) int {
+		var n int
+		if err := base.pool.InTenantTx(context.Background(), base.gw.Org, func(ctx context.Context, tx db.TenantTx) error {
+			return tx.QueryRow(ctx, `SELECT count(*) FROM pc.ledger_entries WHERE org_id = $1 AND kind = 'audit.security.action_tampered'
+				AND (convert_from(body, 'UTF8') LIKE '%"simulated":"true"%') = $2`, base.gw.Org, sim).Scan(&n)
+		}); err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+	if body(true) != 1 || body(false) != 1 {
+		t.Fatalf("tamper events: %d labeled, %d not; want one each", body(true), body(false))
+	}
+}
