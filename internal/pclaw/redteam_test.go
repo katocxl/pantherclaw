@@ -427,6 +427,7 @@ type fakeSetup struct {
 	grants     []*pantherclawv1.IssueGrantRequest
 	existing   []*pantherclawv1.Agent
 	issueErr   error
+	twinConn   *pantherclawv1.Connection // the twin, when it exists already
 }
 
 func (f *fakeSetup) ListAgents(context.Context, *pantherclawv1.ListAgentsRequest) (*pantherclawv1.ListAgentsResponse, error) {
@@ -441,11 +442,15 @@ func (f *fakeSetup) CreateAgent(_ context.Context, r *pantherclawv1.CreateAgentR
 }
 
 func (f *fakeSetup) ListConnections(context.Context, *pantherclawv1.ListConnectionsRequest) (*pantherclawv1.ListConnectionsResponse, error) {
-	return &pantherclawv1.ListConnectionsResponse{Connections: []*pantherclawv1.Connection{{
+	out := []*pantherclawv1.Connection{{
 		Id: "c1", Name: "github", Kind: pantherclawv1.ConnectionKind_CONNECTION_KIND_HTTP, GatewayId: "g1", Package: "github",
 		BaseUrl: "https://api.github.com", AccessMode: pantherclawv1.AccessMode_ACCESS_MODE_PANTHERCLAW_HELD,
 		CredentialHeader: "Authorization", CredentialScheme: "Bearer", State: pantherclawv1.ConnectionState_CONNECTION_STATE_ACTIVE,
-	}}}, nil
+	}}
+	if f.twinConn != nil {
+		out = append(out, f.twinConn)
+	}
+	return &pantherclawv1.ListConnectionsResponse{Connections: out}, nil
 }
 
 func (f *fakeSetup) CreateConnection(_ context.Context, r *pantherclawv1.CreateConnectionRequest) (*pantherclawv1.CreateConnectionResponse, error) {
@@ -1049,13 +1054,48 @@ func TestD43SetupRegistersTheTwinsFactProvider(t *testing.T) {
 		len(r.GetFacts()) != 1 || r.GetFacts()[0].GetName() != "github.pr.head" {
 		t.Errorf("registered %v", r)
 	}
+}
 
-	// The provider already there is "exists", not an error and not a second registration.
-	fake.providers = append(fake.providers, &pantherclawv1.FactProvider{Id: "p3", Name: "github_app.range", ConnectionId: "twin-1", GatewayId: "g1"})
-	fake.conns, fake.registered = nil, nil
-	code, out, errs = run(t, env, append(args, "--yes")...)
+func TestD43AnExistingTwinProviderIsExistsOnlyOnTheTwin(t *testing.T) {
+	facts := []*pantherclawv1.FactDeclaration{{Name: "github.pr.head", Type: pantherclawv1.FactType_FACT_TYPE_BOOLEAN, SubjectType: "github.pr"}}
+	realProv := &pantherclawv1.FactProvider{Id: "p1", Name: "github-app", ConnectionId: "c1", GatewayId: "g1", State: pantherclawv1.ProviderState_PROVIDER_STATE_ACTIVE, Facts: facts}
+	fake := &fakeSetup{
+		providers: []*pantherclawv1.FactProvider{realProv},
+		twinConn: &pantherclawv1.Connection{
+			Id: "twin-1", Name: "github-range", Simulated: true, BaseUrl: "http://127.0.0.1:9100",
+			Package: "github", State: pantherclawv1.ConnectionState_CONNECTION_STATE_ACTIVE,
+		},
+	}
+	env := setupServer(t, fake)
+	id := "0192aaaa-bbbb-7ccc-8ddd-000000000001"
+	args := []string{"redteam", "setup", "--name", "range", "--team", id, "--env", id, "--owner", id, "--context", "ci", "--twin", "github=http://127.0.0.1:9100", "--yes"}
+
+	// On the twin and its gateway: exists, a note, no second registration.
+	fake.providers = []*pantherclawv1.FactProvider{realProv, {Id: "p3", Name: "github_app.range", ConnectionId: "twin-1", GatewayId: "g1"}}
+	code, out, errs := run(t, env, args...)
 	if code != 0 || len(fake.registered) != 0 || !strings.Contains(out, "Note: fact provider github_app.range already exists") {
-		t.Fatalf("existing = %d registered %d\n%s\n%s", code, len(fake.registered), out, errs)
+		t.Fatalf("on the twin = %d registered %d\n%s\n%s", code, len(fake.registered), out, errs)
+	}
+
+	// On any other connection or gateway: an error, and nothing is changed.
+	for name, taken := range map[string]*pantherclawv1.FactProvider{
+		"another connection": {Id: "p4", Name: "github_app.range", ConnectionId: "someone-else", GatewayId: "g1"},
+		"another gateway":    {Id: "p5", Name: "github_app.range", ConnectionId: "twin-1", GatewayId: "g2"},
+	} {
+		fake.providers = []*pantherclawv1.FactProvider{realProv, taken}
+		fake.conns, fake.registered, fake.agents, fake.grants = nil, nil, nil, nil
+		code, out, errs := run(t, env, args...)
+		if code == 0 || !strings.Contains(errs, "exists but is not the twin of github-app") || len(fake.registered)+len(fake.conns)+len(fake.agents) != 0 {
+			t.Errorf("%s = %d (registered %d, conns %d, agents %d)\n%s\n%s", name, code, len(fake.registered), len(fake.conns), len(fake.agents), out, errs)
+		}
+	}
+
+	// The twin does not exist yet, so a provider of that name cannot be its.
+	fake.twinConn = nil
+	fake.providers = []*pantherclawv1.FactProvider{realProv, {Id: "p6", Name: "github_app.range", ConnectionId: "twin-1", GatewayId: "g1"}}
+	fake.conns, fake.registered, fake.agents = nil, nil, nil
+	if code, _, errs := run(t, env, args...); code == 0 || !strings.Contains(errs, "exists but is not the twin") || len(fake.conns)+len(fake.agents) != 0 {
+		t.Errorf("no twin yet = %d\n%s", code, errs)
 	}
 }
 
