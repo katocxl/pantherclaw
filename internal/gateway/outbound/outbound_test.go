@@ -120,3 +120,26 @@ func FuzzOutboundScan(f *testing.F) {
 		}
 	})
 }
+
+func TestScanBase64Values(t *testing.T) {
+	enc := base64.StdEncoding.EncodeToString([]byte("config: " + ghToken + "\n"))
+	got := Scan(Input{Body: []byte(`{"message":"m","content":"` + enc + `"}`)}, nil).Findings
+	if want := []Finding{{"github_token", "body:/content(base64)"}}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("%v", got)
+	}
+	url64 := base64.RawURLEncoding.EncodeToString([]byte("x " + ghToken))
+	got = Scan(Input{Args: []byte(`{"content":"` + url64 + `"}`)}, nil).Findings
+	if want := []Finding{{"github_token", "arg:content(base64)"}}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("%v", got)
+	}
+	// Two levels are not decoded.
+	twice := base64.StdEncoding.EncodeToString([]byte(enc))
+	if got := Scan(Input{Body: []byte(`{"c":"` + twice + `"}`)}, nil).Findings; len(got) != 0 {
+		t.Fatalf("%v", got)
+	}
+	// Binary content is not text.
+	bin := base64.StdEncoding.EncodeToString([]byte{0xff, 0xfe, 0xfd, 0xfc, 0xfb, 0xfa, 0xf9, 0xf8, 0xf7, 0xf6, 0xf5, 0xf4})
+	if got := Scan(Input{Body: []byte(`{"c":"` + bin + `"}`)}, nil).Findings; len(got) != 0 {
+		t.Fatalf("%v", got)
+	}
+}

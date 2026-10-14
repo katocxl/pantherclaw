@@ -21,6 +21,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"unicode/utf8"
 )
 
 // MinSecret is the shortest held secret that is matched; shorter values
@@ -204,8 +205,34 @@ func jsonParts(prefix string, raw []byte) []part {
 			ptr = strings.TrimPrefix(ptr, "/")
 		}
 		out = append(out, part{prefix + ptr, tok.String()})
+		if d, ok := decodeBase64(tok.String()); ok {
+			out = append(out, part{prefix + ptr + "(base64)", d})
+		}
 		if len(out) > 4096 {
 			return out
 		}
 	}
+}
+
+const (
+	minBase64  = 16
+	maxDecoded = 1 << 20
+)
+
+// decodeBase64 returns the text a JSON string value holds when the value is
+// base64 (standard or URL alphabet) of valid UTF-8, such as the content of
+// a file sent through the GitHub contents API. Only one level is decoded.
+func decodeBase64(s string) (string, bool) {
+	if len(s) < minBase64 || base64.StdEncoding.DecodedLen(len(s)) > maxDecoded+3 {
+		return "", false
+	}
+	for _, enc := range []*base64.Encoding{base64.StdEncoding, base64.RawStdEncoding, base64.URLEncoding, base64.RawURLEncoding} {
+		if b, err := enc.DecodeString(s); err == nil {
+			if len(b) <= maxDecoded && utf8.Valid(b) {
+				return string(b), true
+			}
+			return "", false
+		}
+	}
+	return "", false
 }
