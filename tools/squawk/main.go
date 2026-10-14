@@ -8,7 +8,7 @@
 // other tools. This command downloads the release asset for the host from
 // GitHub, refuses it unless its SHA-256 matches the digest pinned below
 // (DEPENDENCY_POLICY §2), caches it in the user cache directory and checks the
-// digest again on every run.
+// digest again on every run before it writes the binary it runs.
 //
 // Only the "-- +goose Up" section of each migration is linted: the Down
 // section is the rollback and drops what Up created by design. The lines of
@@ -72,11 +72,17 @@ func run(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "squawk:", err)
 		return 2
 	}
-	bin, err := binary()
+	b, name, err := binary()
 	if err != nil {
 		fmt.Fprintln(stderr, "squawk:", err)
 		return 2
 	}
+	bin, cleanup, err := exe(b, name)
+	if err != nil {
+		fmt.Fprintln(stderr, "squawk:", err)
+		return 2
+	}
+	defer cleanup()
 	config := filepath.Join(*root, ".squawk.toml")
 	failed := 0
 	for _, name := range files {
@@ -143,53 +149,58 @@ func upSection(src []byte) []byte {
 	return []byte(strings.Join(lines, ""))
 }
 
-// binary returns the path of the verified squawk binary, downloading it once.
-func binary() (string, error) {
+// binary returns the verified squawk binary, downloading it once. The
+// cache only saves the download: what runs is written from these checked
+// bytes into a private directory (exe), so a cached file changed after the
+// check is never executed.
+func binary() ([]byte, string, error) {
 	a, ok := assets[runtime.GOOS+"/"+runtime.GOARCH]
 	if !ok {
-		return "", fmt.Errorf("no pinned squawk %s for %s/%s", version, runtime.GOOS, runtime.GOARCH)
+		return nil, "", fmt.Errorf("no pinned squawk %s for %s/%s", version, runtime.GOOS, runtime.GOARCH)
 	}
 	cache, err := os.UserCacheDir()
 	if err != nil {
-		return "", err
+		return nil, "", err
 	}
 	dir := filepath.Join(cache, "pantherclaw-tools", "squawk-"+version)
 	path := filepath.Join(dir, a.name)
-	if b, err := os.ReadFile(path); err == nil { //nolint:gosec // G304: the cached binary, checked below
-		if digest(b) == a.sha256 {
-			return path, nil
-		}
-		// A changed cached binary is replaced, never run.
-		if err := os.Remove(path); err != nil {
-			return "", err
-		}
-	}
-	if err := os.MkdirAll(dir, 0o750); err != nil {
-		return "", err
+	if b, err := os.ReadFile(path); err == nil && digest(b) == a.sha256 { //nolint:gosec // G304: the cached download, checked here
+		return b, a.name, nil
 	}
 	url := "https://github.com/sbdchd/squawk/releases/download/v" + version + "/" + a.name
 	b, err := download(url)
 	if err != nil {
-		return "", err
+		return nil, "", err
 	}
 	if got := digest(b); got != a.sha256 {
-		return "", fmt.Errorf("%s: sha256 %s, want %s", url, got, a.sha256)
+		return nil, "", fmt.Errorf("%s: sha256 %s, want %s", url, got, a.sha256)
 	}
-	tmp, err := os.CreateTemp(dir, a.name+".*")
+	// Caching is best effort: a failure only means downloading again.
+	if os.MkdirAll(dir, 0o750) == nil {
+		if tmp, err := os.CreateTemp(dir, a.name+".*"); err == nil {
+			_, werr := tmp.Write(b)
+			if errors.Join(werr, tmp.Close()) != nil || os.Rename(tmp.Name(), path) != nil {
+				_ = os.Remove(tmp.Name())
+			}
+		}
+	}
+	return b, a.name, nil
+}
+
+// exe writes the verified binary into a new private directory and returns
+// its path and a function that removes the directory.
+func exe(b []byte, name string) (string, func(), error) {
+	dir, err := os.MkdirTemp("", "pantherclaw-squawk-")
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
-	_, werr := tmp.Write(b)
-	cerr := tmp.Close()
-	if err := errors.Join(werr, cerr, os.Chmod(tmp.Name(), 0o750)); err != nil { //nolint:gosec // G302: the binary must be executable
-		_ = os.Remove(tmp.Name())
-		return "", err
+	cleanup := func() { _ = os.RemoveAll(dir) }
+	path := filepath.Join(dir, name)
+	if err := os.WriteFile(path, b, 0o700); err != nil { //nolint:gosec // G306: the binary must be executable; the directory is private (0700)
+		cleanup()
+		return "", nil, err
 	}
-	if err := os.Rename(tmp.Name(), path); err != nil {
-		_ = os.Remove(tmp.Name())
-		return "", err
-	}
-	return path, nil
+	return path, cleanup, nil
 }
 
 func download(url string) ([]byte, error) {

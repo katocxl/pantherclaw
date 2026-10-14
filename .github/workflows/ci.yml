@@ -70,6 +70,10 @@ jobs:
             sandbox:
               - 'internal/sandbox/**'
               - 'internal/gateway/**'
+              - 'internal/authority/**'
+              - 'internal/coverage/**'
+              - 'internal/evidence/**'
+              - 'packages/**'
               - 'internal/sim/**'
               - 'internal/pclaw/**'
               - 'cmd/pantherclaw-edge/**'
@@ -110,7 +114,7 @@ jobs:
             **/go.sum
       - name: Verify modules
         run: |
-          for m in . sdk/go tools; do (cd "$m" && go mod verify && go mod tidy -diff); done
+          for m in . sdk/go sdk/go/internal/sqltest tools; do (cd "$m" && go mod verify && go mod tidy -diff); done
       - name: Traceability (every HR/T due by the last completed milestone has a test)
         run: $TASK trace
       - name: Generated code is up to date (buf, sqlc)
@@ -202,7 +206,13 @@ jobs:
           PC_TEST_REQUIRE_DB: "1"
           PC_TEST_PG_ADMIN_URL: postgres://postgres:pc-ci-${{ github.run_id }}-${{ github.run_attempt }}@127.0.0.1:5433/postgres?sslmode=disable
           PC_TEST_MOCK_OIDC_URL: http://127.0.0.1:8181
-        run: go test -race -tags integration -shuffle=on -count=1 -timeout 75m $(go list -tags integration ./... | grep -v '/test/e2e')
+        # The package list is built first, so a failing `go list` fails the step.
+        run: |
+          pkgs="$(go list -tags integration ./...)"
+          pkgs="$(printf '%s\n' "$pkgs" | grep -v '/test/e2e$')"
+          [ -n "$pkgs" ] || { echo "::error::no integration packages listed"; exit 1; }
+          # shellcheck disable=SC2086 # one argument per package
+          go test -race -tags integration -shuffle=on -count=1 -timeout 75m $pkgs
       - name: The Go SDK's SQL replay store on PostgreSQL (T-081)
         env:
           PC_TEST_REQUIRE_DB: "1"
@@ -279,6 +289,12 @@ jobs:
         ports:
           - 8181:8080
     steps:
+      # Fail fast on an engine the sandbox refuses (HR-218); nothing else runs first.
+      - name: Docker engine 28 or later (HR-218)
+        run: |
+          v="$(docker version --format '{{.Server.Version}}')"
+          echo "Docker server $v"
+          [ "${v%%.*}" -ge 28 ] || { echo "::error::Docker server $v; the sandbox needs 28 or later (HR-218)"; exit 1; }
       - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with:
           egress-policy: audit
@@ -301,6 +317,10 @@ jobs:
           PC_PG_TEST_PASSWORD: pc-ci-${{ github.run_id }}-${{ github.run_attempt }}
           SANDBOX: "1"
         run: $TASK range
+      - name: The v0.1.0 preview tests (task test:preview, once that task exists)
+        env:
+          PC_PG_TEST_PASSWORD: pc-ci-${{ github.run_id }}-${{ github.run_attempt }}
+        run: if $TASK --list | grep -q 'test:preview'; then $TASK test:preview; fi
 
   range:
     name: range (adversarial scenarios)
