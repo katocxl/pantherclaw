@@ -2,8 +2,9 @@
 # Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
 #
 # GoReleaser v2 — reproducible, static, trimmed binaries + SBOMs + checksums.
-# Container images (distroless, multi-arch, signed) are added in M1 with the
-# first runnable server. Provenance attestations are created by release.yml.
+# The sandbox's edge and probe images (distroless, multi-arch) are built from the
+# static linux builds below by release.yml, which also creates the provenance
+# attestations.
 version: 2
 
 project_name: pantherclaw
@@ -45,6 +46,16 @@ builds:
     id: pclaw-admin
     main: ./cmd/pclaw-admin
     binary: pclaw-admin
+  - <<: *build
+    id: pantherclaw-edge
+    main: ./cmd/pantherclaw-edge
+    binary: pantherclaw-edge
+    goos: [linux]
+  - <<: *build
+    id: pantherclaw-probe
+    main: ./cmd/pantherclaw-probe
+    binary: pantherclaw-probe
+    goos: [linux]
 
 archives:
   - id: default

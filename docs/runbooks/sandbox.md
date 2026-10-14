@@ -12,12 +12,26 @@ How to run an agent in the containment sandbox, read what it proved, and get its
   task sandbox:images
   ```
   Pass the printed ids as `--edge-image` and `--probe-image`, or set `PANTHERCLAW_SANDBOX_EDGE_IMAGE` and `PANTHERCLAW_SANDBOX_PROBE_IMAGE`. Images are always pinned by digest or local id; a tag is refused.
+  To use the released images instead, see "Use the released images" below.
 - The agent's image, pinned by digest (`--image repo@sha256:…`).
 - The connections the agent uses, each active, served by one gateway, with a pinned package and the host names agents use for its API:
   ```bash
   pclaw connection update <connection> --agent-host api.github.com
   ```
 - A grant for the agent (`--grant`) and the `sandbox.run` permission over the agent (Agent Owner or Developer).
+
+### Use the released images
+
+Each release publishes the edge and probe images (linux/amd64 and linux/arm64, on the pinned distroless base) as `ghcr.io/katocxl/pantherclaw-edge` and `ghcr.io/katocxl/pantherclaw-probe`, tagged with the version and never `latest`. The release notes list both digests. Pin the digest, never the tag:
+
+```bash
+docker pull ghcr.io/katocxl/pantherclaw-edge@sha256:<digest>
+docker pull ghcr.io/katocxl/pantherclaw-probe@sha256:<digest>
+gh attestation verify oci://ghcr.io/katocxl/pantherclaw-edge@sha256:<digest> --repo katocxl/pantherclaw
+gh attestation verify oci://ghcr.io/katocxl/pantherclaw-probe@sha256:<digest> --repo katocxl/pantherclaw
+```
+
+Then set `sandbox.images` (edge and probe) to those `repo@sha256:<digest>` references, or pass them as `--edge-image` and `--probe-image`. Do not run an image whose attestation does not verify.
 
 ## 2. Run an agent
 
