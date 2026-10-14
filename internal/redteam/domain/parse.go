@@ -29,7 +29,7 @@ func invalid(format string, args ...any) error {
 // Parse decodes and validates one scenario file. The file is data: one YAML
 // document, no anchors, aliases, tags or merge keys, converted to JSON and
 // decoded rejecting unknown members; then Validate checks the closed
-// catalogue. The caller compares the filename with the id (ValidateFileName).
+// catalog. The caller compares the filename with the id (ValidateFileName).
 func Parse(raw []byte) (*Scenario, error) {
 	doc, err := ToJSON(raw)
 	if err != nil {

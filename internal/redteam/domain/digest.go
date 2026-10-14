@@ -13,7 +13,7 @@ import (
 	"strings"
 )
 
-// Digest returns "sha256:<hex>" of the RFC 8785 canonical JSON of the parsed
+// Digest returns 64 lowercase hex, no prefix, of the RFC 8785 canonical JSON of the parsed
 // scenario, so spelling and defaults in the YAML do not change it.
 func Digest(s *Scenario) (string, error) {
 	raw, err := json.Marshal(s)
@@ -25,10 +25,10 @@ func Digest(s *Scenario) (string, error) {
 		return "", invalid("%v", err)
 	}
 	sum := sha256.Sum256(v)
-	return "sha256:" + hex.EncodeToString(sum[:]), nil
+	return hex.EncodeToString(sum[:]), nil
 }
 
-// SetDigest returns "sha256:<hex>" over the sorted "id:digest" lines of a
+// SetDigest returns 64 lowercase hex, no prefix, over the sorted "id:digest" lines of a
 // scenario set (id to scenario digest).
 func SetDigest(digests map[string]string) string {
 	ids := make([]string, 0, len(digests))
@@ -41,5 +41,5 @@ func SetDigest(digests map[string]string) string {
 		fmt.Fprintf(&b, "%s:%s\n", id, digests[id])
 	}
 	sum := sha256.Sum256([]byte(b.String()))
-	return "sha256:" + hex.EncodeToString(sum[:])
+	return hex.EncodeToString(sum[:])
 }

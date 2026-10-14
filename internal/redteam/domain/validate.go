@@ -46,7 +46,7 @@ var (
 	}
 )
 
-// StepKinds is the closed `do` catalogue.
+// StepKinds is the closed `do` catalog.
 var StepKinds = []string{
 	"agent.call", "agent.direct", "agent.child", "agent.steal", "sandbox.probe",
 	"sim.mutate", "person.approve", "person.decline", "operator.revoke_grant",
@@ -64,6 +64,9 @@ type (
 		Args       jsontext.Value `json:"args,omitempty"`
 		Body       jsontext.Value `json:"body,omitempty"`
 		Instance   string         `json:"instance,omitempty"`
+		Concurrent int            `json:"concurrent,omitempty"`
+		ActionOf   string         `json:"action_of,omitempty"`
+		Fault      string         `json:"fault,omitempty"`
 	}
 	directWith struct {
 		Connection string         `json:"connection"`
@@ -185,16 +188,25 @@ func (s *Scenario) Validate() error {
 		if err != nil {
 			return invalid("%s: %v", at, err)
 		}
+		concurrent := 0
+		if st.Do == "agent.call" {
+			var cw callWith
+			_ = json.Unmarshal(with, &cw)
+			concurrent = cw.Concurrent
+		}
 		for _, r := range refs {
+			if r == "n" && concurrent > 0 {
+				continue
+			}
 			if !strings.HasPrefix(r, "fixture.") && !known[r] {
 				return invalid("%s: ${%s} is not a value saved by an earlier step", at, r)
 			}
 		}
-		if err := st.Expect.validate(st.Do, earlier); err != nil {
+		if err := st.Expect.validate(st.Do, earlier, concurrent); err != nil {
 			return invalid("%s: %v", at, err)
 		}
 		for name, ptr := range st.Save {
-			if !saveNameRE.MatchString(name) || known[name] {
+			if !saveNameRE.MatchString(name) || known[name] || name == "n" {
 				return invalid("%s: save name %q must match [a-z][a-z0-9_]{0,31} and be new", at, name)
 			}
 			if !validPointer(ptr) {
@@ -241,7 +253,7 @@ func checkWith(kind string, with []byte, earlier map[string]bool) error {
 		if err := strict(&w); err != nil {
 			return err
 		}
-		return w.validate()
+		return w.validate(true, earlier)
 	case "agent.direct":
 		var w directWith
 		if err := strict(&w); err != nil {
@@ -276,7 +288,7 @@ func checkWith(kind string, with []byte, earlier map[string]bool) error {
 		if err := unique("grant.widen", w.Grant.Widen); err != nil {
 			return err
 		}
-		return w.Then.validate()
+		return w.Then.validate(false, earlier)
 	case "agent.steal":
 		var w stealWith
 		if err := strict(&w); err != nil {
@@ -285,7 +297,7 @@ func checkWith(kind string, with []byte, earlier map[string]bool) error {
 		if !slices.Contains(stealModes, w.Mode) {
 			return fmt.Errorf("mode must be one of %v", stealModes)
 		}
-		return w.Call.validate()
+		return w.Call.validate(false, earlier)
 	case "sandbox.probe":
 		var w probeWith
 		if err := strict(&w); err != nil {
@@ -363,7 +375,21 @@ func checkWith(kind string, with []byte, earlier map[string]bool) error {
 
 // validate checks one call. Steps never name a host or URL: targets are
 // connection roles the driver binds to simulated connections.
-func (w *callWith) validate() error {
+func (w *callWith) validate(top bool, earlier map[string]bool) error {
+	if !top && (w.Concurrent != 0 || w.ActionOf != "" || w.Fault != "") {
+		return fmt.Errorf("concurrent, action_of and fault belong to a top-level agent.call")
+	}
+	if w.Concurrent != 0 && (w.Concurrent < 2 || w.Concurrent > MaxConcurrent) {
+		return fmt.Errorf("concurrent must be 2..%d", MaxConcurrent)
+	}
+	if w.ActionOf != "" {
+		if err := needEarlier("action_of", w.ActionOf, earlier); err != nil {
+			return err
+		}
+	}
+	if w.Fault != "" && (w.Fault != "gateway_unreachable" || w.Face != "hook") {
+		return fmt.Errorf("fault must be gateway_unreachable and only with face hook")
+	}
 	if !slices.Contains(faces, w.Face) {
 		return fmt.Errorf("face must be one of %v", faces)
 	}
@@ -445,8 +471,11 @@ func needEarlier(field, id string, earlier map[string]bool) error {
 	return nil
 }
 
-func (e Expect) validate(kind string, earlier map[string]bool) error {
-	if e.Outcome == "" && kindsNeedingEx[kind] {
+func (e Expect) validate(kind string, earlier map[string]bool, concurrent int) error {
+	if e.MaxAllow != nil && (concurrent == 0 || *e.MaxAllow < 0 || *e.MaxAllow > concurrent) {
+		return fmt.Errorf("expect.max_allow needs a concurrent call and a value 0..concurrent")
+	}
+	if e.Outcome == "" && kindsNeedingEx[kind] && (kind != "agent.call" || concurrent == 0 || e.MaxAllow == nil) {
 		return fmt.Errorf("expect.outcome is required for %s", kind)
 	}
 	if e.Outcome != "" && !e.Outcome.Valid() {
