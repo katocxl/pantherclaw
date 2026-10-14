@@ -132,7 +132,7 @@ func (p *Pipeline) consequenceFacts(ctx context.Context, s *state) {
 		if len(reqs) == 0 {
 			continue
 		}
-		recorded, err := p.Reader.Facts(ctx, s.req.Org, k.c.Target.Type, k.c.Target.ID, factNames(reqs, nil))
+		recorded, err := p.Reader.Facts(ctx, s.req.Org, s.connID(), k.c.Target.Type, k.c.Target.ID, factNames(reqs, nil))
 		if err != nil {
 			s.missing(StepFacts, err, "the facts"+k.label())
 			continue

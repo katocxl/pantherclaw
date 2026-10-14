@@ -8,11 +8,13 @@ package app_test
 import (
 	"context"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/katocxl/pantherclaw/internal/connections/app"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
+	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	mockpayments "github.com/katocxl/pantherclaw/packages/mock-payments"
 )
 
@@ -44,6 +46,7 @@ func TestHR221_SimulatedTargetsMustBeLocalLiterals(t *testing.T) {
 		"https://payments.example.test", "http://localhost:9000", "http://payments.internal", "https://8.8.8.8", "http://1.1.1.1:80",
 		"http://172.15.0.1", "http://172.32.0.1", "http://192.169.0.1", "http://11.0.0.1", "http://[2001:db8::1]", "http://[fe80::1]",
 		"http://[::ffff:127.0.0.1]:9000", "https://[::ffff:10.0.0.1]", "http://[fc00::1]x",
+		"http://0.0.0.0", "http://169.254.169.254",
 	} {
 		_, err := e.svc.Create(e.admin, e.simulated(base))
 		if pcerr.CodeOf(err) != pcerr.InvalidArgument || (pcerr.ReasonOf(err) != "SIMULATED_TARGET_NOT_LOCAL" && pcerr.ReasonOf(err) != "BASE_URL_INVALID" &&
@@ -51,15 +54,47 @@ func TestHR221_SimulatedTargetsMustBeLocalLiterals(t *testing.T) {
 			t.Errorf("%s: err = %v, want a refusal", base, err)
 		}
 	}
-	// The named rule, for targets the ordinary checks accept.
-	for _, base := range []string{"https://payments.example.test", "https://8.8.8.8", "http://172.32.0.1", "https://[2001:db8::1]"} {
-		if _, err := e.svc.Create(e.admin, e.simulated(base)); pcerr.ReasonOf(err) != "SIMULATED_TARGET_NOT_LOCAL" &&
-			pcerr.ReasonOf(err) != "PLAIN_HTTP_PUBLIC" {
+	// The named rule, for targets the ordinary checks accept (https only).
+	for _, base := range []string{"https://payments.example.test", "https://8.8.8.8", "https://[2001:db8::1]", "https://172.32.0.1"} {
+		if _, err := e.svc.Create(e.admin, e.simulated(base)); pcerr.ReasonOf(err) != "SIMULATED_TARGET_NOT_LOCAL" {
 			t.Errorf("%s: err = %v, want SIMULATED_TARGET_NOT_LOCAL", base, err)
 		}
 	}
-	if _, err := e.svc.Create(e.admin, e.simulated("https://payments.example.test")); pcerr.ReasonOf(err) != "SIMULATED_TARGET_NOT_LOCAL" {
-		t.Errorf("a public https name: err = %v, want SIMULATED_TARGET_NOT_LOCAL", err)
+
+	// An odd spelling of loopback is stored in its canonical form, so what
+	// the gateway checks and dials is 127.0.0.1.
+	odd := e.simulated("http://0x7f.1:9000")
+	odd.Name = "odd"
+	if c, err := e.svc.Create(e.admin, odd); err != nil || deref(c.BaseUrl) != "http://127.0.0.1:9000" {
+		t.Errorf("0x7f.1: %v, stored %q, want http://127.0.0.1:9000", err, deref(c.BaseUrl))
+	}
+
+	// Every host a credential may be sent to is a local literal too.
+	for i, hosts := range [][]string{{"api.example.com"}, {"127.0.0.1", "api.example.com"}, {"8.8.8.8:443"}, {"localhost"}} {
+		in := e.simulated("http://127.0.0.1:9000")
+		in.Name, in.AllowedHosts = "hosts-"+strconv.Itoa(i), hosts
+		if _, err := e.svc.Create(e.admin, in); pcerr.ReasonOf(err) != "SIMULATED_TARGET_NOT_LOCAL" {
+			t.Errorf("allowed hosts %v: err = %v, want SIMULATED_TARGET_NOT_LOCAL", hosts, err)
+		}
+	}
+	ok := e.simulated("http://127.0.0.1:9000")
+	ok.Name, ok.AllowedHosts = "hosts-ok", []string{"127.0.0.1:9000", "[::1]", "10.0.0.5"}
+	c, err := e.svc.Create(e.admin, ok)
+	if err != nil {
+		t.Fatalf("local allowed hosts: %v", err)
+	}
+	// An update cannot move a simulated connection off the local literals.
+	pub, hosts := "https://payments.example.test", []string{"api.example.com"}
+	for what, u := range map[string]app.UpdateInput{
+		"base URL": {ID: c.ID, Revision: c.Revision, BaseURL: &pub}, "allowed hosts": {ID: c.ID, Revision: c.Revision, AllowedHosts: hosts, SetAllowedHosts: true},
+	} {
+		if _, err := e.svc.Update(e.admin, u); pcerr.ReasonOf(err) != "SIMULATED_TARGET_NOT_LOCAL" {
+			t.Errorf("update of the %s: err = %v, want SIMULATED_TARGET_NOT_LOCAL", what, err)
+		}
+	}
+	loc := "http://10.0.0.9:9000"
+	if _, err := e.svc.Update(e.admin, app.UpdateInput{ID: c.ID, Revision: c.Revision, BaseURL: &loc}); err != nil {
+		t.Errorf("update to another local literal: %v", err)
 	}
 
 	// A real connection keeps its ordinary rules and is not simulated.
@@ -121,5 +156,83 @@ func TestHR220_ConnectionSimulatedFlagIsImmutable(t *testing.T) {
 	got, err := e.svc.Get(e.admin, sim.ID)
 	if err != nil || !got.Simulated {
 		t.Errorf("read back: %+v, %v", got.PcConnection, err)
+	}
+}
+
+// TestHR222_SimulatedDriftQuarantinesNothing (D6): a drift report about a
+// simulated connection raises no epoch, quarantines nothing, sends no
+// notice, and is audited with simulated=true; the same report about a real
+// connection of the same package still quarantines.
+func TestHR222_SimulatedDriftQuarantinesNothing(t *testing.T) {
+	e := newEnv(t)
+	e.pin(t, upstreamPackage, "1.0.0", mcpPayments(t))
+	sim, err := e.svc.Create(e.admin, app.CreateInput{
+		Name: "upstream-sim", Kind: app.KindMCP, Package: upstreamPackage, BaseURL: "http://127.0.0.1:9100/mcp", Gateway: e.gateway,
+		AccessMode: app.AccessNone, Simulated: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	observed := "sha256:" + strings.Repeat("ab", 32)
+	quarantined := func() int64 {
+		return e.int64(t, `SELECT count(*) FROM pc.package_versions v JOIN pc.tool_packages p ON p.org_id = v.org_id AND p.id = v.package_id
+			WHERE p.name = $1 AND v.state = 'QUARANTINED'`, upstreamPackage)
+	}
+	epoch := e.epoch(t)
+	q, err := e.svc.ReportDrift(ctx, e.org, e.gateway, sim.ID, "get_refund", upstreamDigest, observed)
+	if err != nil || q {
+		t.Fatalf("simulated drift: quarantined=%v, %v, want false", q, err)
+	}
+	if quarantined() != 0 || e.epoch(t) != epoch || e.notes.count("security.package_quarantined") != 0 {
+		t.Fatalf("simulated drift changed real state: quarantined %d, epoch %d (was %d)", quarantined(), e.epoch(t), epoch)
+	}
+	if n := e.int64(t, `SELECT count(*) FROM pc.ledger_entries WHERE kind = 'audit.connection.drift_reported' AND actor_type = 'gateway'
+		AND convert_from(body, 'UTF8') LIKE '%"simulated":"true"%'`); n != 1 {
+		t.Fatalf("%d audit entries with simulated=true, want 1", n)
+	}
+	// An invalid report is still refused, so it cannot be used to probe.
+	if _, err := e.svc.ReportDrift(ctx, e.org, e.gateway, sim.ID, "delete_everything", upstreamDigest, observed); !is(err, app.ErrDrift) {
+		t.Errorf("an unreviewed tool on a simulated connection: %v", err)
+	}
+	// The real connection of the same package still quarantines.
+	real, err := e.svc.Create(e.admin, app.CreateInput{
+		Name: "upstream", Kind: app.KindMCP, Package: upstreamPackage, BaseURL: "https://mcp.example.test/mcp", Gateway: e.gateway,
+		AccessMode: app.AccessNone,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if q, err := e.svc.ReportDrift(ctx, e.org, e.gateway, real.ID, "get_refund", upstreamDigest, observed); err != nil || !q || quarantined() != 1 {
+		t.Fatalf("real drift: %v %v, quarantined %d", q, err, quarantined())
+	}
+}
+
+// TestHR222_SimulatedToolCallsLeaveNoObservation: a tool call through a
+// simulated connection records no observation; through a real one it does.
+func TestHR222_SimulatedToolCallsLeaveNoObservation(t *testing.T) {
+	e := newEnv(t)
+	sim, err := e.svc.Create(e.admin, e.simulated("http://127.0.0.1:9000"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	real := e.payments(t, "real")
+	agent, run := e.agentRun(t, "coder")
+	instance := ids.NewV7()
+	e.exec(t, `INSERT INTO pc.agent_instances (org_id, id, agent_id, jkt, public_jwk, state, enrolled_via)
+		VALUES ($1, $2, $3, $4, '{}', 'ADMITTED', 'discovery')`, e.org, instance, agent, instance.String()[:36]+"0000000")
+	for _, c := range []struct {
+		conn ids.UUID
+		want int64
+	}{{sim.ID, 0}, {real.ID, 1}} {
+		id, err := e.svc.RecordToolObservation(context.Background(), e.org, e.gateway, app.ToolObservation{
+			Run: run, Instance: instance, Connection: c.conn, Tool: "x", InputSHA256: make([]byte, 32),
+		})
+		if err != nil || (c.want == 0) != id.IsZero() {
+			t.Fatalf("connection %s: id %s, %v", c.conn, id, err)
+		}
+		if n := e.int64(t, "SELECT count(*) FROM pc.tool_observations WHERE org_id = $1 AND connection_id = $2", e.org, c.conn); n != c.want {
+			t.Fatalf("connection %s: %d observations, want %d", c.conn, n, c.want)
+		}
 	}
 }

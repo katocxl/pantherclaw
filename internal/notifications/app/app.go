@@ -146,6 +146,10 @@ type Message struct {
 	// PersonalOnly delivers to the personal recipients alone, not to
 	// subscribed channels (an escalation step that does not notify them).
 	PersonalOnly bool
+	// Simulated marks a notice caused by a simulated transaction (HR-222): its
+	// title says [SIMULATED]. It is also set when Subject is a simulated
+	// transaction, approval request, reconciliation or connection.
+	Simulated bool
 }
 
 // Enqueued reports what Enqueue created.
@@ -171,6 +175,16 @@ func (s *Service) Enqueue(ctx context.Context, tx db.TenantTx, m Message) (Enque
 		ttl = DefaultTTL
 	}
 	q := dbq.New(tx)
+	if !m.Simulated && m.Subject != nil {
+		sim, err := q.SubjectSimulated(ctx, m.Subject.Type, m.Org, m.Subject.ID)
+		if err != nil {
+			return Enqueued{}, err
+		}
+		m.Simulated = sim
+	}
+	if m.Simulated {
+		r.Title = domain.SimulatedTitle(r.Title)
+	}
 	out := Enqueued{Notification: ids.NewV7()}
 	np := dbq.InsertNotificationParams{
 		OrgID: m.Org, ID: out.Notification, Type: r.Type, Severity: string(r.Severity), Title: r.Title, Body: r.Body,

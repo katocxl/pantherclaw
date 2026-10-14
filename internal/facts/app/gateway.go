@@ -55,12 +55,12 @@ func (s *Service) RegisterGatewayProvider(ctx context.Context, name string, gate
 			return domain.Provider{}, fmt.Errorf("%w: %s about %s", ErrNotDeclared, d.Name, d.SubjectType)
 		}
 	}
-	taken, err := s.Store.Taken(ctx, c.Org)
+	active, err := s.Store.Declared(ctx, c.Org)
 	if err != nil {
 		return domain.Provider{}, err
 	}
 	p := domain.Provider{ID: ids.NewV7(), Org: c.Org, Name: name, GatewayID: gateway, ConnectionID: connection, State: domain.ProviderActive, Facts: decls}
-	if err := p.Validate(taken); err != nil {
+	if err := errors.Join(p.Validate(nil), p.CheckScope(active)); err != nil {
 		return domain.Provider{}, pcerr.Wrap(err, pcerr.InvalidArgument, "PROVIDER_INVALID", err.Error())
 	}
 	ev := audit.Event{

@@ -934,25 +934,27 @@ type PcExecutionReceipt struct {
 }
 
 type PcFact struct {
-	OrgID       ids.OrgID
-	ID          ids.UUID
-	Name        string
-	SubjectType string
-	SubjectID   string
-	ProviderID  ids.UUID
-	Value       []byte
-	ObservedAt  time.Time
-	RecordedAt  time.Time
+	OrgID        ids.OrgID
+	ID           ids.UUID
+	Name         string
+	SubjectType  string
+	SubjectID    string
+	ProviderID   ids.UUID
+	Value        []byte
+	ObservedAt   time.Time
+	RecordedAt   time.Time
+	ConnectionID *ids.UUID
 }
 
 type PcFactDeclaration struct {
-	OrgID       ids.OrgID
-	ProviderID  ids.UUID
-	Name        string
-	ValueType   string
-	SubjectType string
-	MaxLagS     int32
-	Active      bool
+	OrgID        ids.OrgID
+	ProviderID   ids.UUID
+	Name         string
+	ValueType    string
+	SubjectType  string
+	MaxLagS      int32
+	Active       bool
+	ConnectionID *ids.UUID
 }
 
 type PcFactProvider struct {

@@ -226,7 +226,7 @@ func (r *Reader) Envelopes(_ context.Context, org ids.OrgID, scopes []gdomain.Sc
 // Facts implements pipeline.Reader: a read of the same subject that asked
 // for every name serves it, so a proposed policy that needs fewer facts
 // replays exactly; a name never asked for is a gap.
-func (r *Reader) Facts(_ context.Context, org ids.OrgID, subjectType, subjectID string, names []string) (map[string]fdomain.Fact, error) {
+func (r *Reader) Facts(_ context.Context, org ids.OrgID, _ ids.UUID, subjectType, subjectID string, names []string) (map[string]fdomain.Fact, error) {
 	if err := r.otherOrg(org, "facts", pipeline.StepFacts); err != nil {
 		return nil, err
 	}

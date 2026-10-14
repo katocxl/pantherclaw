@@ -187,3 +187,27 @@ func TestHR206_GrantLimitsOnAConsequenceAreRefused(t *testing.T) {
 		}
 	}
 }
+
+// TestHR222_RangeRunsLeaveEnvelopeBudgetsUntouched (D6): for a simulated run
+// the lines owned by guardrails are dropped; the grants' own still apply.
+func TestHR222_RangeRunsLeaveEnvelopeBudgetsUntouched(t *testing.T) {
+	root := rootGrant(t, refundBounds)
+	root.Limits = mustLimits(t, taskBudget)
+	env := orgEnvelope(t, `{}`)
+	env.Limits = mustLimits(t, `{
+	  "budgets": [{"id": "per_person", "grouping": "principal", "operations": ["payments.refund.create"], "currency": "USD", "limit": "500", "period": "day"}],
+	  "counters": [{"id": "per_charge", "operations": ["payments.refund.create"], "key": "target", "window": "day", "max": "3"}]}`)
+	chain := Chain{Envelopes: []Envelope{env}, Grants: []Grant{root}}
+	a := refund("12.50", "USD", "duplicate", mondayNoon)
+	realPlan, f := chain.Debits(a, DebitContext{Now: mondayNoon, RunID: ids.NewV7(), Principal: alice})
+	if f != nil || len(realPlan.Budgets) != 2 || len(realPlan.Counters) != 1 {
+		t.Fatalf("real run: %+v, %+v", realPlan, f)
+	}
+	sim, f := chain.Debits(a, DebitContext{Now: mondayNoon, RunID: ids.NewV7(), Principal: alice, Simulated: true})
+	if f != nil || len(sim.Budgets) != 1 || len(sim.Counters) != 0 {
+		t.Fatalf("simulated run: %+v, %+v, want only the grant's budget", sim, f)
+	}
+	if sim.Budgets[0].Ref != realPlan.Budgets[1].Ref {
+		t.Fatalf("the grant's own line changed: %+v vs %+v", sim.Budgets[0].Ref, realPlan.Budgets[1].Ref)
+	}
+}

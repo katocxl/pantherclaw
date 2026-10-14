@@ -106,6 +106,26 @@ func RequestProto(r app.Request, satisfied map[int]int) *pantherclawv1.ApprovalR
 	return out
 }
 
+// mark sets simulated on the requests whose transaction belongs to a range
+// run (HR-222). A failed read leaves them unmarked: it labels, never decides.
+func (s *Approvals) mark(ctx context.Context, rs ...*pantherclawv1.ApprovalRequest) {
+	var txns []ids.UUID
+	for _, r := range rs {
+		if id, err := ids.ParseUUID(r.GetTransactionId()); err == nil {
+			txns = append(txns, id)
+		}
+	}
+	sim, err := s.svc.SimulatedTransactions(ctx, txns)
+	if err != nil {
+		return
+	}
+	for _, r := range rs {
+		if id, err := ids.ParseUUID(r.GetTransactionId()); err == nil {
+			r.Simulated = sim[id]
+		}
+	}
+}
+
 // ListApprovalRequests implements ApprovalServiceHandler.
 func (s *Approvals) ListApprovalRequests(ctx context.Context, req *pantherclawv1.ListApprovalRequestsRequest) (*pantherclawv1.ListApprovalRequestsResponse, error) {
 	pr, err := page.Parse(req.GetPageSize(), req.GetPageToken())
@@ -134,6 +154,7 @@ func (s *Approvals) ListApprovalRequests(ctx context.Context, req *pantherclawv1
 	for _, r := range p.Items {
 		out.Requests = append(out.Requests, RequestProto(r, nil))
 	}
+	s.mark(ctx, out.Requests...)
 	for _, b := range p.Scopes {
 		out.CheckedScopes = append(out.CheckedScopes, scope(b))
 	}
@@ -172,6 +193,7 @@ func (s *Approvals) GetApprovalRequest(ctx context.Context, req *pantherclawv1.G
 		}
 	}
 	r := RequestProto(v.Request, satisfied)
+	s.mark(ctx, r)
 	r.State = stateProto(string(v.State))
 	out := &pantherclawv1.GetApprovalRequestResponse{
 		Request: r, Display: display.Input, DisplayHash: display.String(),
@@ -244,7 +266,9 @@ func (s *Approvals) DeclineApprovalRequest(ctx context.Context, req *pantherclaw
 	if err != nil {
 		return nil, err
 	}
-	return &pantherclawv1.DeclineApprovalRequestResponse{Request: RequestProto(r, nil)}, nil
+	p := RequestProto(r, nil)
+	s.mark(ctx, p)
+	return &pantherclawv1.DeclineApprovalRequestResponse{Request: p}, nil
 }
 
 // RequestApprovalEvidence implements ApprovalServiceHandler.
@@ -258,7 +282,9 @@ func (s *Approvals) RequestApprovalEvidence(ctx context.Context, req *panthercla
 	if err != nil {
 		return nil, err
 	}
-	return &pantherclawv1.RequestApprovalEvidenceResponse{Request: RequestProto(r, nil)}, nil
+	p := RequestProto(r, nil)
+	s.mark(ctx, p)
+	return &pantherclawv1.RequestApprovalEvidenceResponse{Request: p}, nil
 }
 
 // ProposeNarrowerAction implements ApprovalServiceHandler.
@@ -320,5 +346,6 @@ func (s *Approvals) DeclineApprovalBatch(ctx context.Context, req *pantherclawv1
 	for _, r := range rows {
 		out.Requests = append(out.Requests, RequestProto(r, nil))
 	}
+	s.mark(ctx, out.Requests...)
 	return out, nil
 }

@@ -474,9 +474,16 @@ func writeReceipt(ctx context.Context, tx db.TenantTx, org ids.OrgID, txn ids.UU
 // Tamper implements finalize.Store.
 func (s *Store) Tamper(ctx context.Context, org ids.OrgID, prev finalize.Stored, receipt *finalize.Receipt, gatewayID string) error {
 	return s.Pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
+		// HR-222: an event about a range run's transaction says so.
+		var details map[string]string
+		if sim, err := dbq.New(tx).TransactionSimulated(ctx, org, prev.TransactionID); err != nil {
+			return err
+		} else if sim {
+			details = map[string]string{"simulated": "true"}
+		}
 		if _, err := audit.Record(ctx, tx, audit.Event{
 			Name: "security.action_tampered", Actor: evdomain.Actor{Type: "gateway", ID: gatewayID}, Outcome: audit.Denied,
-			ReasonCode: "ACTION_TAMPERED", Object: &audit.Object{Type: "transaction", ID: prev.TransactionID.String()},
+			ReasonCode: "ACTION_TAMPERED", Object: &audit.Object{Type: "transaction", ID: prev.TransactionID.String()}, Details: details,
 		}); err != nil {
 			return err
 		}
@@ -794,7 +801,7 @@ func (s *Store) notifyUnknown(ctx context.Context, tx db.TenantTx, org ids.OrgID
 			"operation": w.Eval.Operation, "consequence": c.Operation + " on " + c.Target.ID, "would": would,
 			"transaction": w.TransactionID.String(),
 		},
-		DedupeKey: "consequence_unknown_dispatched:" + w.TransactionID.String(),
+		DedupeKey: "consequence_unknown_dispatched:" + w.TransactionID.String(), Simulated: w.Eval.Simulated,
 	})
 	return err
 }
