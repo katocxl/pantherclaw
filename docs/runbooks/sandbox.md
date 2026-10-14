@@ -7,6 +7,7 @@ How to run an agent in the containment sandbox, read what it proved, and get its
 ## 1. What you need
 
 - Docker 28 or later with a Linux engine, its default seccomp profile, and runc (gVisor's runsc is detected and recorded when present). `pclaw` refuses anything else (HR-218).
+- Linux and Docker Desktop both work. Docker Desktop gives containers `host.docker.internal`. A native Linux engine does not, and no container is given extra host entries (HR-216), so there the edge reaches a gateway on this host through a per-session relay that `pclaw` binds to the host's address on the sandbox's uplink network and that takes that edge's connections only (HR-228). The relay needs nothing from you: leave `--gateway-addr` unset for a gateway on this host's loopback, or give the host-side address (not `host.docker.internal`). A gateway that runs connectors (`connectors.egress_listen`) gets the same relay per connector; `connectors.egress_addr` is then not needed.
 - The edge and probe images, built locally:
   ```bash
   task sandbox:images

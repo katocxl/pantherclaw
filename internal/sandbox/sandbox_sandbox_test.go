@@ -65,6 +65,10 @@ func newRig(t *testing.T, agent bool) *rig {
 		r.agentImage = dockertest.Image(t, c, e, "github.com/katocxl/pantherclaw/internal/sandbox/testdata/agent", "internal/sandbox/testdata/agent.Dockerfile")
 	}
 	dir := t.TempDir()
+	// t.TempDir creates 0777 &^ umask (0755 on Linux); the sandbox requires its directory private (HR-216).
+	if err := os.Chmod(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
 	gw := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		r.mu.Lock()
 		r.seen = append(r.seen, req.Clone(req.Context()))
@@ -90,6 +94,10 @@ func newRig(t *testing.T, agent bool) *rig {
 	if err := workloadclient.WriteKeyFile(keyFile, kf, false); err != nil {
 		t.Fatal(err)
 	}
+	// The edge's uid reads it through a read-only mount, as pclaw sandbox run writes it (0644 in a private directory).
+	if err := os.Chmod(keyFile, 0o644); err != nil { //nolint:gosec // G302: see above
+		t.Fatal(err)
+	}
 	tokens := filepath.Join(dir, "token")
 	if err := os.Mkdir(tokens, 0o755); err != nil {
 		t.Fatal(err)
@@ -103,8 +111,9 @@ func newRig(t *testing.T, agent bool) *rig {
 	port, _ := strconv.Atoi(gport)
 	r.s, err = sandbox.Start(t.Context(), c, e, sandbox.Options{
 		Session: r.session, EdgeImage: r.edgeImage, ProbeImage: r.probeImage, AgentImage: r.agentImage,
-		GatewayURL: "http://127.0.0.1:" + gport, GatewayAddr: "host.docker.internal:" + gport,
-		Hosts: map[string]string{"payments.example": "payments"}, MappedAddrs: []string{"192.0.2.10"},
+		GatewayURL: "http://127.0.0.1:" + gport, GatewayAddr: "host.docker.internal:" + gport, GatewayDial: "127.0.0.1:" + gport,
+		// example.com resolves publicly, which the control run's resolver twin needs on a native engine, where host.docker.internal does not exist.
+		Hosts: map[string]string{"payments.example": "payments", "example.com": "payments"}, MappedAddrs: []string{"192.0.2.10"},
 		Run: ids.NewV7().String(), KeyFile: keyFile, TokenFile: filepath.Join(tokens, "token"),
 		ProbeKey: r.probeKey, HostKey: r.hostKey, Canary: cn, CanaryPorts: ports, HostPorts: []int{port}, Dir: dir,
 	})
@@ -292,4 +301,34 @@ func TestHR213_TheAgentHasItsWorkspaceAndOnlyTheEdge(t *testing.T) {
 
 func nonce() string {
 	return strings.ReplaceAll(ids.NewV7().String(), "-", "")
+}
+
+// TestHR228_TheAgentCannotReachTheRelay: on a native Linux engine the
+// sandbox network's probe aims at the relay's address and port among the
+// host's, and none of it is reachable from there; the edge, which the relay
+// takes, still reaches the gateway for a mapped host (T086 shows it).
+func TestHR228_TheAgentCannotReachTheRelay(t *testing.T) {
+	r := newRig(t, false)
+	if !r.e.UsesRelay() {
+		t.Skip("Docker Desktop: the edge reaches the host as host.docker.internal")
+	}
+	if r.s.RelayAddr() == "" {
+		t.Fatal("no relay on a native Linux engine")
+	}
+	ev, err := r.s.Probe(t.Context(), sandbox.Nonces{Sandbox: nonce(), Control: nonce(), Canary: nonce()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var host int
+	for _, res := range ev.Results {
+		if res.Name == "host_gateway" && res.Role == report.RoleProbe {
+			host++
+			if res.Observed != report.Blocked {
+				t.Errorf("the sandbox network reached the host: %+v", res)
+			}
+		}
+	}
+	if host == 0 || !strings.Contains(r.s.ProbedHostPorts(), r.s.RelayAddr()[strings.LastIndex(r.s.RelayAddr(), ":")+1:]) {
+		t.Errorf("the relay %s is not among the probed host ports (%s)", r.s.RelayAddr(), r.s.ProbedHostPorts())
+	}
 }
