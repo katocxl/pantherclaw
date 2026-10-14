@@ -619,7 +619,7 @@ The exit status is in [g0/M7.md](g0/M7.md), the latency re-measurement in [docs/
 - Automations: definitions (When/If/Under authority/Do/Wait/If fails/Finish), schedules (timezone, DST, missed-run policy), event/manual triggers, linear steps with waits and approvals, bounded retries, loop detection via ancestry, shadow mode, execution inspector data. Full branching engine = Next.
 
 ### M12 — Adversarial range (delivered after M9, before the preview)
-**HR:** HR-120, HR-220..226 · **PN:** PN-009 · **G0:** [g0/M12.md](g0/M12.md) · **Exit status:** [g0/M12.md](g0/M12.md#exit-status-2026-10-14-pr-363-head-13db768b-on-top-of-the-m12-stream-prs-356362)
+**HR:** HR-120, HR-220..226 · **PN:** PN-009 · **G0:** [g0/M12.md](g0/M12.md) · **Exit status:** [g0/M12.md](g0/M12.md#exit-status-2026-10-14-top-f64c70bb-prs-356364)
 - Scenario engine (YAML, closed step catalogue), ≥ 30 attacks (see FEATURES pillar 17), simulator-only enforcement through range agents and simulated connections, assurance reports (signed evidence packs), an outbound credential check, and a regression gate: while EX-004 is active the gate is local (`task range`, `SANDBOX=1 task range`), run and reported for every PR touching authority, gateway, sandbox, packages or the range (founder decision F1, 2026-10-14); a `range` job in the disabled `ci.yml` takes over when CI is re-enabled.
 - Coding-agent scenarios first: direct-API bypass of an MCP merge, found PAT/SSH key, sub-agent escalation, approval reuse after a new commit, injection → exfiltration over an allowed channel, stolen workload token, sandbox DNS/IPv6 escape.
 
