@@ -1,0 +1,22 @@
+# SPDX-License-Identifier: BUSL-1.1
+# Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+#
+# squawk, the migration linter (ADR-0003, BUILD_GUIDE §3.3). Run it with
+# `task lint:migrations`, which lints the Up section of every migration after
+# the baseline in tools/squawk.
+pg_version = "17"
+
+# goose runs each migration in one transaction (no migration uses
+# `-- +goose NO TRANSACTION`).
+assume_in_transaction = true
+
+excluded_rules = [
+  # The migrator's connection sets statement_timeout and lock_timeout
+  # (internal/platform/db/migrate.go), so a migration need not set them.
+  "require-statement-timeout",
+  "require-lock-timeout",
+  # Keys are uuid ((org_id, id)); integer columns hold bounded values
+  # such as counts and versions, never sequences that could overflow.
+  "prefer-bigint-over-int",
+  "prefer-bigint-over-smallint",
+]

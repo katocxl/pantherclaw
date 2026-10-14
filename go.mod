@@ -8,7 +8,7 @@ require (
 	buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go v1.36.12-20260825204119-511051f7f437.2
 	buf.build/go/protovalidate v1.4.0
 	cel.dev/cel-go v0.32.0
-	connectrpc.com/connect/v2 v2.0.0-rc.1
+	connectrpc.com/connect/v2 v2.0.0
 	github.com/BurntSushi/toml v1.6.0
 	github.com/coreos/go-oidc/v3 v3.21.0
 	github.com/go-jose/go-jose/v4 v4.1.5

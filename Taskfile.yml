@@ -37,6 +37,8 @@ tasks:
       - task: license:check
       - task: lint
       - task: lint:workflows
+      - task: lint:migrations
+      - task: proto:breaking
       - task: test
       - task: secrets
 
@@ -61,6 +63,16 @@ tasks:
     desc: Lint GitHub Actions workflows (actionlint)
     cmds:
       - go tool -modfile={{.PINS}}/actionlint/go.mod actionlint -color=false
+
+  lint:migrations:
+    desc: Lint the migrations added since the baseline with squawk (ADR-0003; pinned binary checked against its SHA-256 in tools/squawk, config .squawk.toml)
+    cmds:
+      - go -C tools run ./squawk -root ..
+
+  proto:breaking:
+    desc: Fail on a breaking protobuf change against main (buf breaking, rules in buf.yaml; AGAINST overrides the base, e.g. AGAINST=.git#ref=main)
+    cmds:
+      - go tool -modfile={{.PINS}}/buf/go.mod buf breaking --against '{{.AGAINST | default ".git#ref=origin/main"}}'
 
   test:
     desc: Unit tests for all Go modules (shuffled, uncached)
