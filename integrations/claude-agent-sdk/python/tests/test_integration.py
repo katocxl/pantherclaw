@@ -55,13 +55,15 @@ class Gateway:
     face of connection "payments", the /hook face of "local", and an SSE
     wait stream of ``states``."""
 
-    def __init__(self, face: Face, states: tuple[str, ...] = ("READY",), hook: HookFace | None = None, block: float = 0) -> None:
+    def __init__(self, face: Face, states: tuple[str, ...] = ("READY",), hook: HookFace | None = None, block: float = 0, after: tuple[str, ...] = ()) -> None:
         self.kf = pap.KeyFile.new()
         self.kf.identifier = IDENT
         jkt = self.kf.key().jkt
         self.calls: list[dict[str, Any]] = []
         # The /sdk path of each call, in order.
         self.paths: list[str] = []
+        # The tool and time (time.monotonic()) at which the gateway received each /sdk call.
+        self.call_times: list[tuple[str, float]] = []
         self.hooks: list[dict[str, Any]] = []
         gw = self
 
@@ -82,6 +84,7 @@ class Gateway:
                     call = json.loads(body)
                     gw.calls.append(call)
                     gw.paths.append(self.path)
+                    gw.call_times.append((str(call.get("tool", "")), time.monotonic()))
                     out = face(call, self.headers.get("PC-Action-Id", ""))
                     if out is None:
                         time.sleep(4)
@@ -103,6 +106,10 @@ class Gateway:
                         # A hold that stays pending: the stream stays open.
                         self.wfile.flush()
                         time.sleep(block)
+                        # What the stream says once the block ends (`after`), e.g. the hold's denial.
+                        for s in after:
+                            event = {"handle": "h", "state": s}
+                            self.wfile.write(b"event: state\ndata: " + json.dumps(event).encode() + b"\n\n")
                 else:
                     self._send(404, b"")
 
