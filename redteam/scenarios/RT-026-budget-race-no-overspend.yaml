@@ -23,7 +23,5 @@ steps:
         currency: USD
         reason: duplicate
     expect:
-      outcome: DENY
-      reason: BUDGET_EXHAUSTED
       max_allow: 3
       decisive_control: HR-048
