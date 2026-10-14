@@ -19,14 +19,16 @@ import (
 const currentFactValue = `-- name: CurrentFactValue :one
 SELECT value FROM pc.facts
 WHERE org_id = $1 AND name = $2 AND subject_type = $3 AND subject_id = $4
+  AND connection_id IS NOT DISTINCT FROM $5::uuid
 FOR UPDATE
 `
 
 type CurrentFactValueParams struct {
-	OrgID       ids.OrgID
-	Name        string
-	SubjectType string
-	SubjectID   string
+	OrgID        ids.OrgID
+	Name         string
+	SubjectType  string
+	SubjectID    string
+	ConnectionID *ids.UUID
 }
 
 // The current value of a fact about a subject, locked for the write that
@@ -37,6 +39,7 @@ func (q *Queries) CurrentFactValue(ctx context.Context, arg CurrentFactValuePara
 		arg.Name,
 		arg.SubjectType,
 		arg.SubjectID,
+		arg.ConnectionID,
 	)
 	var value []byte
 	err := row.Scan(&value)
@@ -100,14 +103,15 @@ func (q *Queries) DisableMovedGatewayProviders(ctx context.Context, orgID ids.Or
 const getFact = `-- name: GetFact :one
 SELECT observed_at FROM pc.facts
 WHERE org_id = $1 AND name = $2 AND subject_type = $3
-  AND subject_id = $4
+  AND subject_id = $4 AND connection_id IS NOT DISTINCT FROM $5::uuid
 `
 
 type GetFactParams struct {
-	OrgID       ids.OrgID
-	Name        string
-	SubjectType string
-	SubjectID   string
+	OrgID        ids.OrgID
+	Name         string
+	SubjectType  string
+	SubjectID    string
+	ConnectionID *ids.UUID
 }
 
 func (q *Queries) GetFact(ctx context.Context, arg GetFactParams) (time.Time, error) {
@@ -116,6 +120,7 @@ func (q *Queries) GetFact(ctx context.Context, arg GetFactParams) (time.Time, er
 		arg.Name,
 		arg.SubjectType,
 		arg.SubjectID,
+		arg.ConnectionID,
 	)
 	var observed_at time.Time
 	err := row.Scan(&observed_at)
@@ -181,17 +186,19 @@ func (q *Queries) GetFactProviderByConnection(ctx context.Context, orgID ids.Org
 }
 
 const insertFactDeclaration = `-- name: InsertFactDeclaration :exec
-INSERT INTO pc.fact_declarations (org_id, provider_id, name, value_type, subject_type, max_lag_s)
-VALUES ($1, $2, $3, $4, $5, $6)
+INSERT INTO pc.fact_declarations (org_id, provider_id, name, value_type, subject_type, max_lag_s, connection_id)
+VALUES ($1, $2, $3, $4, $5, $6,
+        $7)
 `
 
 type InsertFactDeclarationParams struct {
-	OrgID       ids.OrgID
-	ProviderID  ids.UUID
-	Name        string
-	ValueType   string
-	SubjectType string
-	MaxLagS     int32
+	OrgID        ids.OrgID
+	ProviderID   ids.UUID
+	Name         string
+	ValueType    string
+	SubjectType  string
+	MaxLagS      int32
+	ConnectionID *ids.UUID
 }
 
 func (q *Queries) InsertFactDeclaration(ctx context.Context, arg InsertFactDeclarationParams) error {
@@ -202,6 +209,7 @@ func (q *Queries) InsertFactDeclaration(ctx context.Context, arg InsertFactDecla
 		arg.ValueType,
 		arg.SubjectType,
 		arg.MaxLagS,
+		arg.ConnectionID,
 	)
 	return err
 }
@@ -250,6 +258,48 @@ func (q *Queries) IsGatewayProvider(ctx context.Context, orgID ids.OrgID, iD ids
 	var gateway bool
 	err := row.Scan(&gateway)
 	return gateway, err
+}
+
+const listActiveDeclarations = `-- name: ListActiveDeclarations :many
+SELECT d.name, d.value_type, d.subject_type, d.connection_id FROM pc.fact_declarations d
+JOIN pc.fact_providers p ON p.org_id = d.org_id AND p.id = d.provider_id
+WHERE d.org_id = $1 AND d.active AND p.state = 'ACTIVE'
+ORDER BY d.name, d.connection_id
+`
+
+type ListActiveDeclarationsRow struct {
+	Name         string
+	ValueType    string
+	SubjectType  string
+	ConnectionID *ids.UUID
+}
+
+// ListActiveDeclarations are the active declarations of active providers
+// with their scope: connection_id is NULL for an org-scoped (service
+// account) provider (D43).
+func (q *Queries) ListActiveDeclarations(ctx context.Context, orgID ids.OrgID) ([]ListActiveDeclarationsRow, error) {
+	rows, err := q.db.Query(ctx, listActiveDeclarations, orgID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListActiveDeclarationsRow{}
+	for rows.Next() {
+		var i ListActiveDeclarationsRow
+		if err := rows.Scan(
+			&i.Name,
+			&i.ValueType,
+			&i.SubjectType,
+			&i.ConnectionID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listActiveFactCatalog = `-- name: ListActiveFactCatalog :many
@@ -508,14 +558,17 @@ JOIN pc.fact_declarations d ON d.org_id = f.org_id AND d.provider_id = f.provide
 LEFT JOIN pc.connections c ON c.org_id = p.org_id AND c.id = p.connection_id
 WHERE f.org_id = $1 AND f.subject_type = $2 AND f.subject_id = $3
   AND f.name = ANY($4::text[])
+  AND ($5::boolean OR f.connection_id IS NULL OR f.connection_id = $6::uuid)
   AND (p.gateway_id IS NULL OR (c.gateway_id = p.gateway_id AND c.state = 'ACTIVE'))
 `
 
 type ListSubjectFactsParams struct {
-	OrgID       ids.OrgID
-	SubjectType string
-	SubjectID   string
-	Names       []string
+	OrgID         ids.OrgID
+	SubjectType   string
+	SubjectID     string
+	Names         []string
+	AnyConnection bool
+	ConnectionID  *ids.UUID
 }
 
 type ListSubjectFactsRow struct {
@@ -528,6 +581,9 @@ type ListSubjectFactsRow struct {
 }
 
 // ListSubjectFacts returns the facts of active providers about one subject.
+// A name an org-scoped provider supplies comes from the NULL-connection row;
+// a gateway-provided name only from the row of the action's own connection
+// (D43, HR-222); any_connection reads every scope (tests, tools).
 // A gateway provider's facts count only while its gateway still serves
 // its connection and the connection is active (#299 review follow-up).
 func (q *Queries) ListSubjectFacts(ctx context.Context, arg ListSubjectFactsParams) ([]ListSubjectFactsRow, error) {
@@ -536,6 +592,8 @@ func (q *Queries) ListSubjectFacts(ctx context.Context, arg ListSubjectFactsPara
 		arg.SubjectType,
 		arg.SubjectID,
 		arg.Names,
+		arg.AnyConnection,
+		arg.ConnectionID,
 	)
 	if err != nil {
 		return nil, err
@@ -580,11 +638,48 @@ func (q *Queries) LockServedConnection(ctx context.Context, orgID ids.OrgID, pro
 	return id, err
 }
 
+const putConnectionFact = `-- name: PutConnectionFact :execresult
+INSERT INTO pc.facts AS f (org_id, id, name, subject_type, subject_id, provider_id, value, observed_at, recorded_at, connection_id)
+VALUES ($1, $2, $3, $4, $5,
+        $6, $7, $8, now(), $9)
+ON CONFLICT (org_id, connection_id, name, subject_type, subject_id) WHERE connection_id IS NOT NULL DO UPDATE
+SET provider_id = EXCLUDED.provider_id, value = EXCLUDED.value, observed_at = EXCLUDED.observed_at, recorded_at = now()
+WHERE f.observed_at <= EXCLUDED.observed_at
+`
+
+type PutConnectionFactParams struct {
+	OrgID        ids.OrgID
+	ID           ids.UUID
+	Name         string
+	SubjectType  string
+	SubjectID    string
+	ProviderID   ids.UUID
+	Value        []byte
+	ObservedAt   time.Time
+	ConnectionID *ids.UUID
+}
+
+// PutConnectionFact is PutFact for a gateway provider's observation: one
+// value per connection (D43).
+func (q *Queries) PutConnectionFact(ctx context.Context, arg PutConnectionFactParams) (pgconn.CommandTag, error) {
+	return q.db.Exec(ctx, putConnectionFact,
+		arg.OrgID,
+		arg.ID,
+		arg.Name,
+		arg.SubjectType,
+		arg.SubjectID,
+		arg.ProviderID,
+		arg.Value,
+		arg.ObservedAt,
+		arg.ConnectionID,
+	)
+}
+
 const putFact = `-- name: PutFact :execresult
 INSERT INTO pc.facts AS f (org_id, id, name, subject_type, subject_id, provider_id, value, observed_at, recorded_at)
 VALUES ($1, $2, $3, $4, $5,
         $6, $7, $8, now())
-ON CONFLICT (org_id, name, subject_type, subject_id) DO UPDATE
+ON CONFLICT (org_id, name, subject_type, subject_id) WHERE connection_id IS NULL DO UPDATE
 SET provider_id = EXCLUDED.provider_id, value = EXCLUDED.value, observed_at = EXCLUDED.observed_at, recorded_at = now()
 WHERE f.observed_at <= EXCLUDED.observed_at
 `
@@ -600,7 +695,8 @@ type PutFactParams struct {
 	ObservedAt  time.Time
 }
 
-// PutFact records an observation; an older one never replaces a newer one.
+// PutFact records an org-scoped observation; an older one never replaces a
+// newer one.
 func (q *Queries) PutFact(ctx context.Context, arg PutFactParams) (pgconn.CommandTag, error) {
 	return q.db.Exec(ctx, putFact,
 		arg.OrgID,

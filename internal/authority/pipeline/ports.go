@@ -217,7 +217,9 @@ type Reader interface {
 	Envelopes(ctx context.Context, org ids.OrgID, scopes []gdomain.Scope) ([]gdomain.Envelope, error)
 	// Facts returns the current facts of active providers about one
 	// subject, by name.
-	Facts(ctx context.Context, org ids.OrgID, subjectType, subjectID string, names []string) (map[string]fdomain.Fact, error)
+	// Facts is read for an action through connection (the zero id: none): a
+	// gateway-provided name comes only from that connection's row (D43).
+	Facts(ctx context.Context, org ids.OrgID, connection ids.UUID, subjectType, subjectID string, names []string) (map[string]fdomain.Fact, error)
 	Usage(ctx context.Context, org ids.OrgID, plan gdomain.Plan) (Usage, error)
 	// Claim returns the latest attempt on a dedupe key, or nil.
 	Claim(ctx context.Context, org ids.OrgID, key string) (*Claim, error)

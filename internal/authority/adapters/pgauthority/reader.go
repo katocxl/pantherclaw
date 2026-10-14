@@ -140,9 +140,9 @@ func (r *Reader) Envelopes(ctx context.Context, org ids.OrgID, scopes []gdomain.
 }
 
 // Facts implements pipeline.Reader.
-func (r *Reader) Facts(ctx context.Context, org ids.OrgID, subjectType, subjectID string, names []string) (map[string]fdomain.Fact, error) {
+func (r *Reader) Facts(ctx context.Context, org ids.OrgID, connection ids.UUID, subjectType, subjectID string, names []string) (map[string]fdomain.Fact, error) {
 	return read(ctx, r, org, func(ctx context.Context, s *snapshot) (map[string]fdomain.Fact, error) {
-		return s.Facts(ctx, org, subjectType, subjectID, names)
+		return s.Facts(ctx, org, connection, subjectType, subjectID, names)
 	})
 }
 
@@ -333,8 +333,8 @@ func (s *snapshot) Envelopes(ctx context.Context, org ids.OrgID, scopes []gdomai
 }
 
 // Facts implements pipeline.Reader.
-func (s *snapshot) Facts(ctx context.Context, org ids.OrgID, subjectType, subjectID string, names []string) (map[string]fdomain.Fact, error) {
-	return s.r.FactStore.Subject(ctx, dbq.New(s.tx), org, subjectType, subjectID, names)
+func (s *snapshot) Facts(ctx context.Context, org ids.OrgID, connection ids.UUID, subjectType, subjectID string, names []string) (map[string]fdomain.Fact, error) {
+	return s.r.FactStore.SubjectOn(ctx, dbq.New(s.tx), org, connection, subjectType, subjectID, names)
 }
 
 // Usage implements pipeline.Reader.

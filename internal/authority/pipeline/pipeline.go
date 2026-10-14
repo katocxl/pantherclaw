@@ -289,6 +289,14 @@ func (p *Pipeline) evaluate(ctx context.Context, req Request) (*Evaluation, erro
 	return s.ev, nil
 }
 
+// connID is the action's own connection, or the zero id.
+func (s *state) connID() ids.UUID {
+	if s.conn == nil {
+		return ids.UUID{}
+	}
+	return s.conn.ID
+}
+
 func (s *state) missing(step int, err error, what string) {
 	s.cl.add(step, adomain.CannotAuthorize, ReasonEvidenceUnavailable, what+" could not be read", "")
 	_ = err // never shown: it may describe storage
@@ -648,7 +656,7 @@ func (p *Pipeline) currentFacts(ctx context.Context, s *state) {
 		s.cl.note(StepFacts, StatusNotApplicable, ReasonFactsFresh, "no facts are required")
 		return
 	}
-	recorded, err := p.Reader.Facts(ctx, s.req.Org, s.a.Target.Type, s.a.Target.ID, names)
+	recorded, err := p.Reader.Facts(ctx, s.req.Org, s.connID(), s.a.Target.Type, s.a.Target.ID, names)
 	if err != nil {
 		s.missing(StepFacts, err, "the facts")
 		return
