@@ -97,8 +97,11 @@ type Config struct {
 	Workload pantherclawv1connect.WorkloadServiceClient
 	// Runs ends the scenario runs at Teardown (needs run.manage; nil: they
 	// expire).
-	Runs    pantherclawv1connect.RunServiceClient
-	AgentID string
+	Runs pantherclawv1connect.RunServiceClient
+	// AllowParentRun lets Setup run scenarios in the parent run when there is no
+	// Workload or AgentID. For tests only: a real range always has them.
+	AllowParentRun bool
+	AgentID        string
 	// Key and Token are the instance's workload key and token (agent.steal);
 	// Transport sends the stolen-credential and direct requests (nil: the
 	// default transport).
@@ -158,7 +161,8 @@ func (d *Driver) Setup(ctx context.Context, s domain.Scenario) (app.Fixture, err
 	d.txns, d.actions, d.dispatches = map[string]string{}, map[string]string{}, map[string]*sdkDispatch{}
 	d.scenarioRun = ""
 	d.mu.Unlock()
-	if d.cfg.Workload != nil && d.cfg.AgentID != "" {
+	switch {
+	case d.cfg.Workload != nil && d.cfg.AgentID != "":
 		res, err := d.cfg.Workload.StartChildRun(ctx, &pantherclawv1.StartChildRunRequest{
 			ParentRunId: d.cfg.Run, AgentId: d.cfg.AgentID, TaskRef: "range " + s.ID, TtlMinutes: ScenarioRunMinutes,
 		})
@@ -168,6 +172,10 @@ func (d *Driver) Setup(ctx context.Context, s domain.Scenario) (app.Fixture, err
 		d.mu.Lock()
 		d.scenarioRun = res.GetRun().GetId()
 		d.mu.Unlock()
+	case !d.cfg.AllowParentRun:
+		// No silent fallback to the parent run: it would pool every scenario's
+		// holds under one run's cap (HR-037).
+		return nil, errors.New("the live driver needs the range instance's WorkloadService and agent to start a run for the scenario")
 	}
 	return d.cfg.Fixture, nil
 }
@@ -200,7 +208,7 @@ func (d *Driver) Teardown(ctx context.Context, s domain.Scenario) error {
 		return nil
 	}
 	if _, err := d.cfg.Runs.EndRun(ctx, &pantherclawv1.EndRunRequest{Id: run, Reason: "range " + s.ID}); err != nil {
-		note := "could not end the run of " + s.ID + ": " + err.Error()
+		note := "could not end the run of " + s.ID + " (" + connect.CodeOf(err).String() + ")"
 		if connect.CodeOf(err) == connect.CodePermissionDenied {
 			note = "the run of " + s.ID + " was left to expire: ending it needs run.manage"
 		}
