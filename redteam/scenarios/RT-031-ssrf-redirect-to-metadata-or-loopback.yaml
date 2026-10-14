@@ -6,7 +6,7 @@ suite: platform
 tier: business
 attacker: A11
 threats: [T-021, T-015]
-rules: [HR-070, HR-077]
+rules: [HR-070, HR-077, HR-221]
 requires: [payments]
 harness_only: false
 steps:
@@ -23,8 +23,8 @@ steps:
         reason: duplicate
     expect:
       outcome: REFUSED
-      code: egress_denied
-      decisive_control: HR-070
+      code: simulator_unverified
+      decisive_control: HR-221
   - id: target-redirects
     do: sim.mutate
     with:
