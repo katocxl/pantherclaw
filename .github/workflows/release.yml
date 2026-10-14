@@ -184,6 +184,7 @@ jobs:
             registry-1.docker.io:443
             auth.docker.io:443
             production.cloudflare.docker.com:443
+            *.r2.cloudflarestorage.com:443
             fulcio.sigstore.dev:443
             rekor.sigstore.dev:443
             tuf-repo-cdn.sigstore.dev:443
@@ -198,6 +199,8 @@ jobs:
       - name: Prepare the build contexts
         run: |
           set -euo pipefail
+          # Artifact transfer drops the Unix mode bits; the entrypoints must be executable.
+          chmod 0755 sandbox-binaries/*/pantherclaw-edge sandbox-binaries/*/pantherclaw-probe
           # The probe image copies an empty /workspace from its build context.
           for arch in amd64 arm64; do mkdir -p "sandbox-binaries/pantherclaw-probe-${arch}/workspace"; done
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
