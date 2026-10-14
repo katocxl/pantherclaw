@@ -25,3 +25,18 @@ steps:
     expect:
       max_allow: 3
       decisive_control: HR-048
+  - id: refund-the-whole-budget
+    do: agent.call
+    with:
+      face: mcp
+      connection: payments
+      tool: create_refund
+      args:
+        charge: "ch_${fixture.nonce}rt026b"
+        amount: "100.00"
+        currency: USD
+        reason: duplicate
+    expect:
+      outcome: DENY
+      reason: BUDGET_EXHAUSTED
+      decisive_control: HR-048

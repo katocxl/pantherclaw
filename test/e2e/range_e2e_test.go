@@ -8,6 +8,7 @@ package e2e
 import (
 	"context"
 	"os"
+	"slices"
 	"testing"
 	"time"
 
@@ -38,7 +39,12 @@ func TestRange_Scenarios(t *testing.T) {
 			switch res.Verdict {
 			case domain.VerdictPass:
 			case domain.VerdictSkipped:
-				t.Skipf("%s: %s", l.Scenario.ID, res.Detail)
+				// Only a scenario that needs the sandbox may be skipped, and only
+				// while there is none: a skip of anything else hides a regression.
+				if slices.Contains(l.Scenario.Requires, "sandbox") && !sandboxBuilt {
+					t.Skipf("%s: %s", l.Scenario.ID, res.Detail)
+				}
+				t.Errorf("%s SKIPPED: %s", l.Scenario.ID, res.Detail)
 			default:
 				t.Errorf("%s %s: %s", l.Scenario.ID, res.Verdict, res.Detail)
 				for _, st := range res.Steps {

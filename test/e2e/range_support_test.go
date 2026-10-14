@@ -104,14 +104,6 @@ func (s *stack) objectID(t *testing.T, object string) ids.UUID {
 	return mustUUID(t, id)
 }
 
-// revokeSeededGrant has the seeded grant's issuer revoke it.
-func (s *stack) revokeSeededGrant(t *testing.T) {
-	t.Helper()
-	var id string
-	s.query(t, "SELECT id::text FROM pc.grants ORDER BY created_at LIMIT 1", nil, &id)
-	t.Fatalf("the harness driver cannot revoke grant %s yet", id)
-}
-
 // runHeader is the run a call is made in.
 func (d *rangeDriver) runHeader() string {
 	if d.asRun != "" {

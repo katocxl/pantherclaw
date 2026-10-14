@@ -21,7 +21,7 @@ Every task ends as a pull request. GitHub runs no checks on it, and the founder 
    - always `task check` (format, headers, lint, unit tests, secret scan);
    - `task test:integration` when you touched database, server, gateway or end-to-end code (cluster on `127.0.0.1:5433`; start it with `task up PROFILE=test`);
    - `task trace` when you added or renamed `HR-###` or `T-###` tests.
-   - `task range` when you touched `internal/authority`, `internal/gateway`, `internal/sandbox`, `internal/redteam`, `packages/` or `redteam/` (cluster as above; `SANDBOX=1 task range` when `internal/sandbox` changed, needs Docker). It runs every attack scenario against the simulators and is the range gate while CI is off; report its result.
+   - `task range` when you touched `internal/authority`, `internal/gateway`, `internal/sandbox`, `internal/redteam`, `packages/`, `redteam/` or `test/e2e/` (cluster as above; `SANDBOX=1 task range` when `internal/sandbox` changed, needs Docker). It runs every attack scenario against the simulators and is the range gate while CI is off; report its result.
 
    They take minutes, so run them in the background. Never weaken a test or an `HR-###` rule to make one pass.
 6. **Open the pull request:** `git push -u origin HEAD`, then `gh pr create --base main` (or `--base <branch>` for stacked work). Say what changed, which checks ran and their result, and which pull request yours depends on.
