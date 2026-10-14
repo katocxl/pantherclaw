@@ -8,6 +8,7 @@ package migrations_test
 import (
 	"context"
 	"io/fs"
+	"slices"
 	"strings"
 	"testing"
 
@@ -61,7 +62,23 @@ func TestHR160_00081DownRemovesWhatOnlyItAllowsAndUpAppliesAgain(t *testing.T) {
 		}
 		return n
 	}
-	later := []string{"00084_sdk_connections.sql", "00083_consequences.sql", "00082_release_controls.sql"}
+	// Every migration after 00081, newest first (D17): a later one's checks
+	// would refuse 00084 applying again over rows they never saw.
+	all, err := fs.Glob(migrations.FS, "*.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var later []string
+	for _, name := range all {
+		if name > "00081_github_facts.sql" {
+			later = append(later, name)
+		}
+	}
+	slices.Sort(later)
+	slices.Reverse(later)
+	if len(later) < 3 || later[len(later)-1] != "00082_release_controls.sql" {
+		t.Fatalf("later migrations %v", later)
+	}
 	for _, name := range later {
 		_, down := section(name)
 		exec(name+" Down", down)

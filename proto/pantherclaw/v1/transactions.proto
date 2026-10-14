@@ -352,6 +352,10 @@ enum ReconciliationKind {
   RECONCILIATION_KIND_UNKNOWN_OUTCOME = 1;
   // Observations conflict with the target's answer.
   RECONCILIATION_KIND_CONFLICTING_EFFECT = 2;
+  // A consequence the server opened (a deployment a merge started) shows a
+  // status suggesting it did not take effect, or nothing by its deadline:
+  // a person decides (G0 M8 W1c).
+  RECONCILIATION_KIND_CONSEQUENCE_UNCONFIRMED = 3;
 }
 
 // ReconciliationState is where a reconciliation stands.
@@ -401,6 +405,10 @@ enum LinkKind {
   LINK_KIND_COMPENSATES = 1;
   // It completes what the earlier one did not.
   LINK_KIND_RECOVERS = 2;
+  // It is a consequence of the earlier one, opened by the server when the
+  // earlier one was confirmed (a deployment a merge started; G0 M8 W1c).
+  // People do not create it.
+  LINK_KIND_CONSEQUENCE = 3;
 }
 
 // TransactionLink links a later transaction to an earlier one.
@@ -528,7 +536,7 @@ message ListReconciliationsRequest {
   }];
   // Only of these kinds (all when empty).
   repeated ReconciliationKind kinds = 4 [(buf.validate.field).repeated = {
-    max_items: 2
+    max_items: 3
     unique: true
     items: {
       enum: {
@@ -613,7 +621,7 @@ message LinkTransactionRequest {
   // Kind.
   LinkKind kind = 3 [(buf.validate.field).enum = {
     defined_only: true
-    not_in: [0]
+    not_in: [0, 3]
   }];
 }
 

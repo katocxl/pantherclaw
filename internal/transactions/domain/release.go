@@ -43,7 +43,7 @@ func CheckReleasable(kind TaskKind, state TaskState) error {
 	switch {
 	case state != TaskOpen:
 		return ErrNotOpen
-	case kind != KindUnknownOutcome:
+	case kind != KindUnknownOutcome && kind != KindConsequenceUnconfirmed:
 		return ErrNotReleasable
 	}
 	return nil

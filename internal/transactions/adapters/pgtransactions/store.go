@@ -138,6 +138,9 @@ func (s *Store) Report(ctx context.Context, org ids.OrgID, gateway ids.UUID, r a
 		} else if err != nil {
 			return err
 		}
+		if task.PermitID == nil { // a consequence carries its own basis (G0 M8 W1c)
+			task.DefinitionDigest, task.DispatchingAt = task.TaskDefinitionDigest, task.BasisAt
+		}
 		if task.TransactionID == nil || task.DefinitionDigest == nil || task.DispatchingAt == nil {
 			return app.ErrLease
 		}
@@ -192,6 +195,22 @@ func (s *Store) Report(ctx context.Context, org ids.OrgID, gateway ids.UUID, r a
 			if err := appendEffect(ctx, tx, q, e, evdomain.Actor{Type: "gateway", ID: gateway.String()}, sign); err != nil {
 				return err
 			}
+			// A confirmed action opens the consequences its decision
+			// predicted (G0 M8 W1c).
+			if a.State == domain.Confirmed {
+				if err := openConsequences(ctx, tx, q, org, txn, *task.DefinitionDigest, v, r.Fields, evdomain.Actor{Type: "gateway", ID: gateway.String()}); err != nil {
+					return err
+				}
+			}
+		}
+		// A status that suggests the effect did not happen, or nothing by
+		// the deadline: only a person decides that (HR-192, G0 M8 W1c).
+		if a.NeedsPerson {
+			if err := q.OpenReconciliation(ctx, dbq.OpenReconciliationParams{
+				OrgID: org, ID: ids.NewV7(), TransactionID: txn, Kind: string(domain.KindConsequenceUnconfirmed),
+			}); err != nil {
+				return err
+			}
 		}
 
 		// Evidence resolves a reconciliation only towards occurred (HR-192).
@@ -205,8 +224,10 @@ func (s *Store) Report(ctx context.Context, org ids.OrgID, gateway ids.UUID, r a
 			}
 			if n == 1 {
 				out.Resolved = true
-				if err := pgbudgets.Settle(ctx, q, org, task.PermitID, bdomain.Commit); err != nil {
-					return err
+				if task.PermitID != nil {
+					if err := pgbudgets.Settle(ctx, q, org, *task.PermitID, bdomain.Commit); err != nil {
+						return err
+					}
 				}
 				if err := q.SettleDedupeClaim(ctx, claimSucceeded, org, txn); err != nil {
 					return err
@@ -302,6 +323,21 @@ func deadline(ctx context.Context, tx db.TenantTx, q *dbq.Queries, org ids.OrgID
 		return err
 	}
 	current := domain.EffectState(deref(te.EffectState, ""))
+	// A consequence not confirmed by its deadline is a person's question
+	// (G0 M8 W1c): no deployment, or one still pending.
+	if current != domain.Confirmed {
+		consequence, err := q.IsConsequence(ctx, org, txn)
+		if err != nil {
+			return err
+		}
+		if consequence {
+			if err := q.OpenReconciliation(ctx, dbq.OpenReconciliationParams{
+				OrgID: org, ID: ids.NewV7(), TransactionID: txn, Kind: string(domain.KindConsequenceUnconfirmed),
+			}); err != nil {
+				return err
+			}
+		}
+	}
 	if current != "" && current != domain.PropagationPending && current != domain.Unknown {
 		return nil
 	}

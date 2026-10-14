@@ -56,6 +56,8 @@ func TestHR203_EveryGitHubOperationDeclaresItsLeastPermissions(t *testing.T) {
 		"github.pull.merge":                {"contents": "write"},
 		"github.repo.settings.update":      {"administration": "write"},
 		"github.installation.repositories": {"metadata": "read"},
+		"github.deployment.list":           {"deployments": "read"},
+		"github.deployment.statuses":       {"deployments": "read"},
 		"github.deployment.trigger":        nil, // virtual: never dispatched
 	}
 	if len(p.Definitions) != len(want) {

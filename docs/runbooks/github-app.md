@@ -27,6 +27,7 @@ The agent never holds a GitHub credential. Tokens are never cached between actio
    | Checks | read | the fact read of a pull request's check runs |
    | Organization administration | read | optional: the organization scan lists the Apps installed on the organization (section 5) |
    | Commit statuses | read | the fact read of a pull request's commit statuses |
+   | Deployments | read | the deployment verifier: the deployments a merge starts and their statuses (`github.deployment.list`, `github.deployment.statuses`) |
    | Administration | write | `github.repo.settings.update` only; leave it off unless you allow it |
 
    Never grant **Workflows**: no operation declares it, and `github.contents.write` refuses `.github/` paths.

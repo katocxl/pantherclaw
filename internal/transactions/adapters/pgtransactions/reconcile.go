@@ -112,6 +112,20 @@ func (s *Store) ResolveOccurred(ctx context.Context, c tenancy.Caller, r app.Res
 			if err := appendEffect(ctx, tx, q, e, actor, sign); err != nil {
 				return err
 			}
+			// A person's "occurred" confirms the action: it opens the
+			// consequences its decision predicted, as the verifier's does
+			// (#349 review).
+			if te.DefinitionDigest != nil {
+				if d, err := definition(ctx, q, c.Org, *te.DefinitionDigest); err == nil && d.Verifier != nil && len(d.Verifier.Capture) > 0 {
+					fields, err := capturedOf(ctx, q, c.Org, k.TransactionID, d.Verifier)
+					if err != nil {
+						return err
+					}
+					if err := openConsequences(ctx, tx, q, c.Org, k.TransactionID, *te.DefinitionDigest, d.Verifier, fields, actor); err != nil {
+						return err
+					}
+				}
+			}
 		}
 		sum := sha256.Sum256([]byte(basis))
 		if _, err := audit.Record(ctx, tx, audit.Event{

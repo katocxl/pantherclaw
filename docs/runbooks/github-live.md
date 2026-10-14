@@ -21,6 +21,7 @@ The approval, change window and budget steps stay on the simulator (`TestE2E_M8_
    - Metadata: read
    - Checks: read
    - Commit statuses: read
+   - Deployments: read
 
    Give it no webhook, and never Workflows.
 3. Install it on the sandbox repository only. Note the installation id (from the installation's settings URL) and the App's **Client ID**.

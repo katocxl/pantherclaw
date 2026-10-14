@@ -23,7 +23,6 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -71,9 +70,6 @@ type githubSim struct {
 	app, account string
 	installation int64
 	repo         string
-	// skew moves the simulator's clock forward (nanoseconds), so a
-	// deployment settles without waiting.
-	skew *atomic.Int64
 }
 
 // startGitHubSim starts the GitHub simulator: the App, installed on acme
@@ -84,18 +80,18 @@ func startGitHubSim(t *testing.T) *githubSim {
 	if err != nil {
 		t.Fatal(err)
 	}
-	skew := new(atomic.Int64)
-	sim := github.New(slog.New(slog.DiscardHandler)).WithClock(func() time.Time { return time.Now().Add(time.Duration(skew.Load())) })
+	sim := github.New(slog.New(slog.DiscardHandler))
 	sim.RegisterApp(42, ghAppID, &key.PublicKey)
 	sim.Install(github.Installation{ID: ghInstallation, Account: ghAccount, Repos: []string{"payments"}, Permissions: map[string]string{
 		"contents": "write", "pull_requests": "write", "metadata": "read", "checks": "read", "statuses": "read",
+		"deployments": "read",
 	}})
 	sim.CreateRepo(ghRepo, "main", map[string]string{"README.md": "# payments\n", ".github/workflows/deploy.yml": deployOnMain})
 	sim.DeployOnPush(ghRepo, "main", "production", time.Hour)
 	sim.AddToken("ghp_e2e_deployments", "e2e", []string{ghRepo}, map[string]string{"deployments": "read"})
 	srv := httptest.NewServer(sim.Handler())
 	t.Cleanup(srv.Close)
-	return &githubSim{sim: sim, url: srv.URL, key: key, app: ghAppID, installation: ghInstallation, account: ghAccount, repo: ghRepo, skew: skew}
+	return &githubSim{sim: sim, url: srv.URL, key: key, app: ghAppID, installation: ghInstallation, account: ghAccount, repo: ghRepo}
 }
 
 // sealGitHubApp seals the App's key for the github connection, with its
@@ -518,6 +514,24 @@ func TestE2E_M8_CodingToProduction(t *testing.T) {
 	if state := s.gh.deploymentState(t, deployments[0].ID); state != "pending" {
 		t.Fatalf("the deployment right after the merge: %s", state)
 	}
+	// The deployment is verified on its own (W1c): confirming the merge
+	// opened a consequence transaction, which its verifier finds by the
+	// merge commit and the environment. It is pending until GitHub reports
+	// the deployment successful, then confirmed.
+	var consequence string
+	s.query(t, `SELECT coalesce((SELECT to_transaction_id::text FROM pc.transaction_links
+		WHERE from_transaction_id = $1 AND kind = 'consequence'), '')`, []any{done.TransactionID}, &consequence)
+	if consequence == "" {
+		t.Fatal("no consequence transaction for the deployment")
+	}
+	effectOf := "SELECT coalesce(effect_state, '') FROM pc.transactions WHERE id = $1"
+	s.eventually(t, "PROPAGATION_PENDING", effectOf, consequence)
+	gh.SetDeploymentStatus(ghRepo, deployments[0].ID, "success")
+	s.db.AdminExec(t, "UPDATE pc.verifications SET next_at = now() WHERE transaction_id = $1 AND state = 'PENDING'", mustUUID(t, consequence))
+	s.eventually(t, "CONFIRMED", effectOf, consequence)
+	if state := s.gh.deploymentState(t, deployments[0].ID); state != "success" {
+		t.Fatalf("the deployment once settled: %s", state)
+	}
 
 	// 7. The approval is consumed once: the same request again merges
 	// nothing more, and the task's one merge is spent.
@@ -572,11 +586,5 @@ func TestE2E_M8_CodingToProduction(t *testing.T) {
 	}
 	if minted < 5 || len(writes) < 4 {
 		t.Fatalf("%d tokens minted, %d writes", minted, len(writes))
-	}
-
-	// The deployment the merge started settles once its time has passed.
-	s.gh.skew.Add(int64(2 * time.Hour))
-	if state := s.gh.deploymentState(t, deployments[0].ID); state != "success" {
-		t.Fatalf("the deployment once settled: %s", state)
 	}
 }

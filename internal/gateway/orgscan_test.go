@@ -233,7 +233,7 @@ func TestF048_TheScanReportsItsOwnInstallation(t *testing.T) {
 	_, o := runOrgScan(t, h, "01920000-0000-7000-8000-00000000ab07")
 	in := o.Installation
 	if in == nil || in.ID != 7 || in.RepositorySelection != "selected" || in.Permissions["contents"] != "write" ||
-		in.Permissions["metadata"] != "read" || len(in.Permissions) != 5 {
+		in.Permissions["metadata"] != "read" || in.Permissions["deployments"] != "read" || len(in.Permissions) != 6 {
 		t.Fatalf("installation %+v", in)
 	}
 	read := slices.ContainsFunc(w.sim.Requests(), func(r github.Request) bool {

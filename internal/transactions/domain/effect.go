@@ -59,6 +59,11 @@ const (
 	// PurposeConnectionTest makes a connection's harmless test read (G0 M8
 	// track C, F354). It belongs to no transaction.
 	PurposeConnectionTest Purpose = "connection_test"
+	// PurposeConsequence reads the effect of a consequence the server
+	// opened when the action that starts it was confirmed (a deployment a
+	// merge starts; G0 M8 W1c): never dispatched, it is found by a
+	// matched lookup.
+	PurposeConsequence Purpose = "consequence"
 )
 
 // Observation is what one verification read reported (HR-190): only the
@@ -99,6 +104,10 @@ type Assessment struct {
 	Mismatched []string
 	// Reason is a stable code for the receipt and the explorer.
 	Reason string
+	// NeedsPerson says the observation suggests the effect did not happen
+	// without showing it (a failed deployment, or none by the deadline): a
+	// person decides (HR-192), so it never resolves towards occurred.
+	NeedsPerson bool
 }
 
 // Assessment reason codes.
@@ -114,6 +123,8 @@ const (
 	ReasonStatusNone       = "STATUS_NONE"
 	ReasonStatusOther      = "STATUS_UNRECOGNIZED"
 	ReasonFound            = "FOUND"
+	ReasonStatusReconcile  = "STATUS_NEEDS_A_PERSON"
+	ReasonNotFoundDeadline = "NOT_FOUND_BY_DEADLINE"
 )
 
 // Reasons an effect is UNVERIFIABLE (F485, G0 M7 design decision 2).
@@ -161,6 +172,16 @@ func Assess(v *defs.VerifierSpec, p Purpose, want Expected, o Observation, dispa
 	switch {
 	case o.HTTPStatus == 0 || o.HTTPStatus >= 500 || (o.HTTPStatus >= 400 && o.HTTPStatus != 404):
 		return Assessment{Reason: ReasonReadFailed}
+	case !o.Found && p == PurposeConsequence:
+		// Nothing was dispatched, so its absence is no conflict: pending
+		// within the window, then a person's question.
+		if !o.Complete {
+			return Assessment{Reason: ReasonListingCut}
+		}
+		if o.At.Before(window) {
+			return Assessment{State: PropagationPending, Reason: ReasonNotFoundYet}
+		}
+		return Assessment{Final: true, NeedsPerson: true, Reason: ReasonNotFoundDeadline}
 	case !o.Found && p == PurposeFollowUp:
 		// The target accepted the write, yet the object is not there.
 		if o.At.Before(window) {
@@ -197,6 +218,8 @@ func Assess(v *defs.VerifierSpec, p Purpose, want Expected, o Observation, dispa
 		return Assessment{State: PropagationPending, ObjectFound: true, Reason: ReasonStatusPending}
 	case ok && slices.Contains(s.None, status):
 		return Assessment{State: NoneConfirmed, Level: v.Reaches(), Final: true, ObjectFound: true, Reason: ReasonStatusNone}
+	case ok && slices.Contains(s.Reconcile, status):
+		return Assessment{Final: true, ObjectFound: true, NeedsPerson: true, Reason: ReasonStatusReconcile}
 	}
 	// The object exists but its status means nothing the package reviewed:
 	// it happened, at most at follow-up level, and is read again.
@@ -218,5 +241,5 @@ func AtDeadline(last Assessment) EffectState {
 // (HR-192): a confirmed effect, or the object found while still pending or
 // with an unreviewed status.
 func (a Assessment) Occurred() bool {
-	return a.State == Confirmed || (a.ObjectFound && a.State != Conflicting && a.State != NoneConfirmed)
+	return a.State == Confirmed || (a.ObjectFound && !a.NeedsPerson && a.State != Conflicting && a.State != NoneConfirmed)
 }
