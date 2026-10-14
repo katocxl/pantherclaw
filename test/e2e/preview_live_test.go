@@ -24,6 +24,7 @@ import (
 	"time"
 
 	evapp "github.com/katocxl/pantherclaw/internal/evidence/app"
+	"github.com/katocxl/pantherclaw/internal/evidence/bundle"
 	"github.com/katocxl/pantherclaw/internal/evidence/checkpoints"
 	"github.com/katocxl/pantherclaw/internal/pclaw"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
@@ -262,7 +263,10 @@ func TestLive_GitHub_ThreeRoutes(t *testing.T) {
 	live := liveGitHub(t)
 	d := newDirect(t, live)
 	nonce := liveNonce()
-	base, baseSHA := liveBranchHead(t, d, live.repo)
+	_, mainSHA := liveBranchHead(t, d, live.repo)
+	// A throwaway base, so that nothing can land on the default branch.
+	base, baseSHA := "pv-base-"+nonce, mainSHA
+	liveCreateBranch(t, d, live.repo, base, mainSHA)
 	before := liveHeads(t, d, live.repo)
 	branch := "pv-" + nonce
 	liveDeleteLater(t, d, live.repo, branch)
@@ -386,6 +390,29 @@ func TestLive_GitHub_ThreeRoutes(t *testing.T) {
 		}
 	}
 
+	// 4b. The closure of session 2, with the push probes (the planted-PAT and
+	// SSH pushes), verifies offline: every check passed.
+	closure := mustUUID(t, mm[1])
+	for deadline := time.Now().Add(2 * time.Minute); ; time.Sleep(time.Second) {
+		file, _ := p.export(t, auditor, "live-closure.json", evapp.Selection{Closures: []ids.UUID{closure}}, 0)
+		code, r := p.verify(t, file)
+		pushes := 0
+		for _, c := range r.Checks {
+			if c.Name == "closure.probe" && (strings.Contains(c.Subject, "ssh_push") || strings.Contains(c.Subject, "pat_push")) && c.Status == bundle.Passed {
+				pushes++
+			}
+		}
+		if code == 0 && pushes >= 2 && all(r, "closure.reports", bundle.Passed) {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("pclaw verify of closure %s: exit %d, %d push probes passed\n%+v", closure, code, pushes, r.Checks)
+		}
+		if _, err := p.jobs.Insert(context.Background(), checkpoints.CheckpointDispatchArgs{}, nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+
 	// 5. Coverage reads ENFORCED, for a day at most, for the scopes it used.
 	scopes := []string{"github.contents.read", "github.branch.create", "github.contents.write", "github.pull.create", "github.pull.merge"}
 	var got map[string]card
@@ -477,7 +504,7 @@ func TestLive_GitHub_CodingToProduction(t *testing.T) {
 	// 2. The merge is held for an independent code reviewer.
 	act := ids.NewV7()
 	code, held := s.ghMerge(t, act, pr.Number, pr.Head.SHA)
-	if code != http.StatusForbidden || held.Decision != "REQUIRE_APPROVAL" || !slices.Contains(held.Reasons, "MERGES_NEED_AN_INDEPENDENT_REVIEW") {
+	if code != http.StatusForbidden || held.Decision != "REQUIRE_APPROVAL" || !slices.Contains(held.Reasons, "MERGES_NEED_AN_INDEPENDENT_REVIEW") || !slices.Contains(held.Reasons, "DEPLOYMENTS_NEED_A_RELEASE") {
 		t.Fatalf("the merge: %d %+v", code, held)
 	}
 	if liveMerged(t, d, live.repo, pr.Number) {
@@ -494,19 +521,17 @@ func TestLive_GitHub_CodingToProduction(t *testing.T) {
 	merge := func() (int, reply, string) {
 		return s.ghCall(t, http.MethodPut, api+"/pulls/"+strconv.Itoa(pr.Number)+"/merge", `{"sha":"`+pr.Head.SHA+`","merge_method":"squash"}`, act)
 	}
-	code, r, raw = merge()
-	if code != http.StatusOK {
-		if !slices.Contains(r.Reasons, "DEPLOYMENTS_NEED_A_RELEASE") && !strings.Contains(r.Error, "DEPLOYMENTS_NEED_A_RELEASE") {
-			t.Fatalf("the merge after the review: %d %+v", code, r)
-		}
-		s.exec(t, `INSERT INTO pc.change_windows (org_id, id, environment, time_zone, one_off, freezes, revision, created_by)
-			VALUES ($1, $2, 'production', 'UTC', jsonb_build_array(jsonb_build_object('start', now() - interval '1 hour', 'end', now() + interval '1 hour')),
-			'[]'::jsonb, 1, 'live')`, s.org, ids.NewV7())
-		if code, state := s.approveMerge(t, rachelB, rachelKey, held.TransactionID); code != http.StatusOK || state != `"APPROVED"` {
-			t.Fatalf("the release approver approves: %d %s", code, state)
-		}
-		code, r, raw = merge()
+	// Held for the release as well, until the approver approves.
+	if code, r, raw = merge(); code == http.StatusOK || !slices.Contains(r.Reasons, "DEPLOYMENTS_NEED_A_RELEASE") {
+		t.Fatalf("the merge after the review must wait for the release: %d %+v %s", code, r, raw)
 	}
+	s.exec(t, `INSERT INTO pc.change_windows (org_id, id, environment, time_zone, one_off, freezes, revision, created_by)
+		VALUES ($1, $2, 'production', 'UTC', jsonb_build_array(jsonb_build_object('start', now() - interval '1 hour', 'end', now() + interval '1 hour')),
+		'[]'::jsonb, 1, 'live')`, s.org, ids.NewV7())
+	if code, state := s.approveMerge(t, rachelB, rachelKey, held.TransactionID); code != http.StatusOK || state != `"APPROVED"` {
+		t.Fatalf("the release approver approves: %d %s", code, state)
+	}
+	code, r, raw = merge()
 	if code != http.StatusOK || r.Outcome != "ACCEPTED" || r.TransactionID != held.TransactionID {
 		t.Fatalf("the approved merge: %d %+v %s", code, r, raw)
 	}
