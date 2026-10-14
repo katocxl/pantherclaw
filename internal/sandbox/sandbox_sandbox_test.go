@@ -112,7 +112,8 @@ func newRig(t *testing.T, agent bool) *rig {
 	r.s, err = sandbox.Start(t.Context(), c, e, sandbox.Options{
 		Session: r.session, EdgeImage: r.edgeImage, ProbeImage: r.probeImage, AgentImage: r.agentImage,
 		GatewayURL: "http://127.0.0.1:" + gport, GatewayAddr: "host.docker.internal:" + gport, GatewayDial: "127.0.0.1:" + gport,
-		Hosts: map[string]string{"payments.example": "payments"}, MappedAddrs: []string{"192.0.2.10"},
+		// example.com resolves publicly, which the control run's resolver twin needs on a native engine, where host.docker.internal does not exist.
+		Hosts: map[string]string{"payments.example": "payments", "example.com": "payments"}, MappedAddrs: []string{"192.0.2.10"},
 		Run: ids.NewV7().String(), KeyFile: keyFile, TokenFile: filepath.Join(tokens, "token"),
 		ProbeKey: r.probeKey, HostKey: r.hostKey, Canary: cn, CanaryPorts: ports, HostPorts: []int{port}, Dir: dir,
 	})
