@@ -123,9 +123,10 @@ func TestDevSeedUsage(t *testing.T) {
 // local-only before it touches the database.
 func TestHR163_DevSeedOnlyLocal(t *testing.T) {
 	for name, cfg := range map[string]string{
-		"live api keys":  `{"database": {"app_password_file": "pw"}, "kek_files": ["kek"]}`,
-		"all interfaces": `{"database": {"app_password_file": "pw"}, "kek_files": ["kek"], "http": {"addr": "0.0.0.0:8080"}, "auth": {"api_key_env": "test"}}`,
-		"public url":     `{"database": {"app_password_file": "pw"}, "kek_files": ["kek"], "auth": {"public_url": "https://pantherclaw.example.com", "api_key_env": "test"}}`,
+		"live api keys":   `{"database": {"app_password_file": "pw"}, "kek_files": ["kek"]}`,
+		"all interfaces":  `{"database": {"app_password_file": "pw"}, "kek_files": ["kek"], "http": {"addr": "0.0.0.0:8080"}, "auth": {"api_key_env": "test"}}`,
+		"public url":      `{"database": {"app_password_file": "pw"}, "kek_files": ["kek"], "auth": {"public_url": "https://pantherclaw.example.com", "api_key_env": "test"}}`,
+		"remote database": `{"database": {"app_password_file": "pw", "host": "db.example.com"}, "kek_files": ["kek"], "auth": {"api_key_env": "test"}}`,
 	} {
 		path := filepath.Join(t.TempDir(), "server.json")
 		if err := os.WriteFile(path, []byte(cfg), 0o600); err != nil {
@@ -135,6 +136,19 @@ func TestHR163_DevSeedOnlyLocal(t *testing.T) {
 		code := Run(context.Background(), []string{"dev", "seed", "--config", path}, &out, &errb, noEnv)
 		if code == 0 || !strings.Contains(errb.String(), "dev seed is development-only (HR-163)") {
 			t.Errorf("%s: code %d, stderr %q", name, code, errb.String())
+		}
+	}
+}
+
+// TestHR163_DevSeedNeedsALocalDatabase: loopback names and unix socket
+// directories are local; any other database host is not.
+func TestHR163_DevSeedNeedsALocalDatabase(t *testing.T) {
+	for host, local := range map[string]bool{
+		"127.0.0.1": true, "localhost": true, "::1": true, "/var/run/postgresql": true,
+		"db.example.com": false, "10.0.0.5": false, "": false, "0.0.0.0": false,
+	} {
+		if err := localDatabase(host); (err == nil) != local {
+			t.Errorf("%q: %v, want local=%v", host, err, local)
 		}
 	}
 }
