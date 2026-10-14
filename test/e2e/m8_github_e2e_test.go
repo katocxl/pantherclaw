@@ -23,6 +23,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -70,6 +71,9 @@ type githubSim struct {
 	app, account string
 	installation int64
 	repo         string
+	// mcp, once set, is a GitHub MCP server served at /mcp on the
+	// simulator's own origin, which the App credential is bound to.
+	mcp atomic.Pointer[http.Handler]
 }
 
 // startGitHubSim starts the GitHub simulator: the App, installed on acme
@@ -89,9 +93,18 @@ func startGitHubSim(t *testing.T) *githubSim {
 	sim.CreateRepo(ghRepo, "main", map[string]string{"README.md": "# payments\n", ".github/workflows/deploy.yml": deployOnMain})
 	sim.DeployOnPush(ghRepo, "main", "production", time.Hour)
 	sim.AddToken("ghp_e2e_deployments", "e2e", []string{ghRepo}, map[string]string{"deployments": "read"})
-	srv := httptest.NewServer(sim.Handler())
+	g := &githubSim{sim: sim, key: key, app: ghAppID, installation: ghInstallation, account: ghAccount, repo: ghRepo}
+	api := sim.Handler()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if h := g.mcp.Load(); h != nil && r.URL.Path == "/mcp" {
+			(*h).ServeHTTP(w, r)
+			return
+		}
+		api.ServeHTTP(w, r)
+	}))
 	t.Cleanup(srv.Close)
-	return &githubSim{sim: sim, url: srv.URL, key: key, app: ghAppID, installation: ghInstallation, account: ghAccount, repo: ghRepo}
+	g.url = srv.URL
+	return g
 }
 
 // sealGitHubApp seals the App's key for the github connection, with its
@@ -586,5 +599,57 @@ func TestE2E_M8_CodingToProduction(t *testing.T) {
 	}
 	if minted < 5 || len(writes) < 4 {
 		t.Fatalf("%d tokens minted, %d writes", minted, len(writes))
+	}
+}
+
+// TestE2E_M8_AnUnreadableWorkflowFileHoldsTheMerge: when GitHub lists the
+// deploy workflow but will not return it, the gateway cannot tell what
+// merging deploys, so the merge holds with "Consequence unknown" and
+// nothing merges (HR-206). Once the file reads again, the same merge holds
+// for what it does deploy: a release approval, its consequence known.
+func TestE2E_M8_AnUnreadableWorkflowFileHoldsTheMerge(t *testing.T) {
+	s := start(t, options{budget: "1000.00", github: true})
+	gh := s.gh.sim
+	main := gh.Branch(ghRepo, "main")
+	if code, r, _ := s.ghCall(t, http.MethodPost, "/repos/"+ghRepo+"/git/refs", `{"ref":"refs/heads/fix/cve","sha":"`+main+`"}`, ids.NewV7()); code != http.StatusCreated {
+		t.Fatalf("branch: %d %+v", code, r)
+	}
+	content := base64.StdEncoding.EncodeToString([]byte("package parser // fixed\n"))
+	if code, r, _ := s.ghCall(t, http.MethodPut, "/repos/"+ghRepo+"/contents/src/parser.go",
+		`{"message":"Fix the parser","content":"`+content+`","branch":"fix/cve"}`, ids.NewV7()); code != http.StatusCreated {
+		t.Fatalf("write: %d %+v", code, r)
+	}
+	if code, r, _ := s.ghCall(t, http.MethodPost, "/repos/"+ghRepo+"/pulls", `{"title":"Fix the parser","head":"fix/cve","base":"main"}`, ids.NewV7()); code != http.StatusCreated {
+		t.Fatalf("open: %d %+v", code, r)
+	}
+	pr, _ := gh.PullRequest(ghRepo, 1)
+
+	gh.SetFaults(github.Faults{UnreadableFiles: []string{".github/workflows/deploy.yml"}})
+	code, held := s.ghMerge(t, ids.NewV7(), 1, pr.HeadSHA)
+	if code != http.StatusForbidden || held.Decision != "REQUIRE_APPROVAL" || !slices.Contains(held.Reasons, "CONSEQUENCE_UNKNOWN") {
+		t.Fatalf("a merge whose deploy workflow cannot be read: %d %+v", code, held)
+	}
+	if p, _ := gh.PullRequest(ghRepo, 1); p.Merged {
+		t.Fatal("merged with an unreadable workflow file")
+	}
+	// The gateway asked GitHub for the file and was refused.
+	refused := false
+	for _, r := range gh.Requests() {
+		if r.Method == http.MethodGet && strings.HasSuffix(r.Path, "/contents/.github/workflows/deploy.yml") && r.Status == http.StatusForbidden {
+			refused = true
+		}
+	}
+	if !refused {
+		t.Fatal("the workflow file was never read")
+	}
+
+	gh.SetFaults(github.Faults{})
+	code, known := s.ghMerge(t, ids.NewV7(), 1, pr.HeadSHA)
+	if code != http.StatusForbidden || known.Decision != "REQUIRE_APPROVAL" || slices.Contains(known.Reasons, "CONSEQUENCE_UNKNOWN") ||
+		!slices.Contains(known.Reasons, "DEPLOYMENTS_NEED_A_RELEASE") {
+		t.Fatalf("the merge once the workflow reads: %d %+v", code, known)
+	}
+	if p, _ := gh.PullRequest(ghRepo, 1); p.Merged {
+		t.Fatal("merged while held")
 	}
 }

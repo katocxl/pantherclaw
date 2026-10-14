@@ -290,6 +290,11 @@ func start(t *testing.T, o options) *stack {
 	// (HR-038), as deploy/dev/gateway.example.json pins it.
 	s.approverKeys = filepath.Join(dir, "approver-keys.json")
 	gc.Approvals.ApproverKeysFile = s.approverKeys
+	if o.github {
+		// A GitHub App connection to GitHub's MCP server mints at the
+		// GitHub the stack calls (github.api_url).
+		gc.GitHub.APIURL = s.gh.url
+	}
 	if o.access == "pantherclaw_held" || o.github {
 		// The gateway's broker key, which only it can open credentials with
 		// (HR-061); it registers the public half when it starts.

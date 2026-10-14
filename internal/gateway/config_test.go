@@ -37,6 +37,9 @@ func TestConfigValidation(t *testing.T) {
 		"public url path":           func(c *Config) { c.PublicURL = "http://127.0.0.1:8090/gw" },
 		"fact timeout over 5s":      func(c *Config) { c.GitHub.FactTimeout = config.Duration(6 * time.Second) },
 		"negative fact timeout":     func(c *Config) { c.GitHub.FactTimeout = config.Duration(-time.Second) },
+		"github api over http":      func(c *Config) { c.GitHub.APIURL = "http://api.github.com" },
+		"github api with a query":   func(c *Config) { c.GitHub.APIURL = "https://api.github.com?x=1" },
+		"github api not a url":      func(c *Config) { c.GitHub.APIURL = "ftp://api.github.com" },
 	} {
 		c := base
 		mutate(&c)
@@ -48,5 +51,12 @@ func TestConfigValidation(t *testing.T) {
 	tlsListen.Listen, tlsListen.TLS.CertFile, tlsListen.TLS.KeyFile = "0.0.0.0:8090", "cert.pem", "key.pem"
 	if err := tlsListen.Validate(); err != nil {
 		t.Fatalf("a TLS listener on a public address refused: %v", err)
+	}
+	for _, u := range []string{"https://ghe.example.com/api/v3", "http://127.0.0.1:9092"} {
+		c := base
+		c.GitHub.APIURL = u
+		if err := c.Validate(); err != nil {
+			t.Errorf("github.api_url %s refused: %v", u, err)
+		}
 	}
 }

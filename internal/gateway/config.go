@@ -93,6 +93,12 @@ type Config struct {
 		// decision: at most 5 seconds, default 2. A fact not read in time
 		// is not reported, so the decision sees it missing.
 		FactTimeout config.Duration `json:"fact_timeout" env:"PC_GW_GITHUB_FACT_TIMEOUT"`
+		// APIURL is GitHub's REST API, where a GitHub App connection to
+		// GitHub's MCP server mints its per-action tokens and reads its
+		// facts (ADR-0021); a connection to the REST API uses its own base
+		// URL. Default https://api.github.com; for GitHub Enterprise Server
+		// https://HOST/api/v3. Plain http only on loopback (the simulator).
+		APIURL string `json:"api_url" env:"PC_GW_GITHUB_API_URL"`
 	} `json:"github"`
 }
 
@@ -107,6 +113,7 @@ func DefaultConfig() Config {
 	c.Control.Timeout = config.Duration(2 * time.Second)
 	c.Control.VerifyEvery = config.Duration(VerifyEvery)
 	c.GitHub.FactTimeout = config.Duration(dispatch.DefaultFactTimeout)
+	c.GitHub.APIURL = dispatch.DefaultGitHubAPIURL
 	return c
 }
 
@@ -132,6 +139,9 @@ func (c *Config) Validate() error {
 	}
 	if d := c.GitHub.FactTimeout.D(); d < 0 || d > 5*time.Second {
 		errs = append(errs, errors.New("github.fact_timeout must be at most 5s"))
+	}
+	if err := apiURL(c.GitHub.APIURL); err != nil {
+		errs = append(errs, fmt.Errorf("github.api_url: %w", err))
 	}
 	if c.Control.CASHA256 != "" && !pinPattern.MatchString(c.Control.CASHA256) {
 		errs = append(errs, errors.New("control.ca_sha256 must be sha256: and 64 hex digits"))
@@ -189,6 +199,27 @@ func baseURL(s string) (*url.URL, error) {
 	}
 	u.Path = ""
 	return u, nil
+}
+
+// apiURL checks GitHub's API URL: http or https, a host and an optional
+// path (GitHub Enterprise Server's /api/v3), nothing else; plain http only
+// on loopback. Empty is the default.
+func apiURL(s string) error {
+	if s == "" {
+		return nil
+	}
+	u, err := url.Parse(s)
+	switch {
+	case err != nil:
+		return errors.New("does not parse")
+	case u.Scheme != "http" && u.Scheme != "https":
+		return errors.New("scheme must be http or https")
+	case u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "":
+		return errors.New("must be scheme://host[:port][/path] only")
+	case u.Scheme == "http" && !loopback(u.Host):
+		return errors.New("may use plain http only on loopback")
+	}
+	return nil
 }
 
 func loopback(hostport string) bool {

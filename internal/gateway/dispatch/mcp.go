@@ -16,12 +16,15 @@ import (
 	"net/http"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"connectrpc.com/connect/v2"
 
 	"github.com/katocxl/pantherclaw/internal/actionir"
+	credentials "github.com/katocxl/pantherclaw/internal/credentials/domain"
 	defs "github.com/katocxl/pantherclaw/internal/definitions/domain"
+	"github.com/katocxl/pantherclaw/internal/gateway/broker"
 	"github.com/katocxl/pantherclaw/internal/gateway/control"
 	"github.com/katocxl/pantherclaw/internal/gateway/egress"
 	"github.com/katocxl/pantherclaw/internal/gateway/upstream"
@@ -81,28 +84,27 @@ func (e *Engine) sendMCP(ctx context.Context, r Result, conn *control.Connection
 		e.log.WarnContext(ctx, "gateway.request_not_built", slog.String("transaction_id", want.Txn), pclog.Err(buildErr))
 		return e.record(ctx, r, want, pb.Outcome_OUTCOME_FAILED, 0, nil, 0, EnforcementFailed, CodeRequest, t)
 	}
-	var secret []byte
+	cred := &upstreamCredential{}
 	if conn.GetAccessMode() == "pantherclaw_held" {
-		if secret, err = e.openStatic(ctx, conn); err != nil {
-			e.log.WarnContext(ctx, "gateway.credential_unavailable", slog.String("transaction_id", want.Txn),
-				slog.String("connection_id", conn.GetId()), pclog.Err(err))
-			return e.record(ctx, r, want, pb.Outcome_OUTCOME_FAILED, 0, nil, 0, EnforcementFailed, CodeCredential, t)
+		if cred, err = e.mcpCredential(ctx, conn, def, a.Action.Target); err != nil {
+			return e.credentialFailed(ctx, r, conn, want, err, t)
 		}
-		defer clear(secret)
+		// A minted token is revoked as soon as the answer is read, before the
+		// outcome is recorded (HR-203); the deferred call covers every other
+		// path.
+		defer cred.release()
 	}
+	secret := cred.secret
 	token := bd.GetActionToken()
 	decorate := func(req *http.Request) error {
 		if token != "" {
 			req.Header.Set(HeaderAction, token)
 		}
-		if secret != nil {
-			return placeCredential(conn, req, secret)
-		}
-		return nil
+		return cred.place(req)
 	}
 	callCtx, cancel := callWindow(ctx, conn)
 	defer cancel()
-	declared, refusal, err := e.pinnedParams(callCtx, conn, ce, tool, secret)
+	declared, refusal, err := e.pinnedParams(callCtx, conn, ce, tool, cred.place)
 	switch {
 	case err != nil:
 		// The server could not be listed: the call was never sent.
@@ -154,11 +156,93 @@ func (e *Engine) sendMCP(ctx context.Context, r Result, conn *control.Connection
 		}
 		r.ToolResult = res.Error == nil && !res.InputRequired
 	}
+	cred.release()
 	return e.record(ctx, r, want, outcome, res.Status, digest, elapsed, class, code, t, func(req *pb.RecordExecutionRequest) {
-		// A connector's write went out with a credential placed here: what it
-		// was given is on the call's receipt, as on a dispatch (ADR-0021).
+		// A connector's write went out with a credential placed here, and a
+		// call to GitHub's MCP server with a token minted for it: what it was
+		// given is on the call's receipt, as on a dispatch (ADR-0021).
 		req.CredentialAccess = access()
+		if minted := cred.granted(); minted != nil {
+			req.CredentialAccess = minted
+		}
 	})
+}
+
+// upstreamCredential is what a kind-mcp call places on its requests to the
+// server: put places it, secret is what is scrubbed from the answer, done
+// clears it and revokes a minted token, and access is what a minted token
+// allowed. The zero value places nothing.
+type upstreamCredential struct {
+	secret []byte
+	put    func(*http.Request) error
+	done   func()
+	access func() *pb.CredentialAccess
+	once   sync.Once
+}
+
+func (c *upstreamCredential) place(req *http.Request) error {
+	if c.put == nil {
+		return nil
+	}
+	return c.put(req)
+}
+
+// release clears the credential and revokes a minted token, once.
+func (c *upstreamCredential) release() {
+	c.once.Do(func() {
+		if c.done != nil {
+			c.done()
+		}
+	})
+}
+
+// granted is what a minted token allowed; nil for a static credential.
+func (c *upstreamCredential) granted() *pb.CredentialAccess {
+	if c.access == nil {
+		return nil
+	}
+	return c.access()
+}
+
+// mcpCredential opens what a pantherclaw_held kind-mcp connection places on
+// an action's requests. A static credential is placed as sealed. A GitHub
+// App credential never is (HR-204): as on the HTTP face, the gateway mints
+// at GitHub's API (github.api_url) an installation token for exactly the
+// action's repository and the operation's declared permissions, places it
+// as a bearer token on the requests to GitHub's MCP server, within the
+// credential's hosts, and revokes it when the answer is read (ADR-0021 item
+// 2, HR-203). A connector (mcp_container) is never given an App.
+func (e *Engine) mcpCredential(ctx context.Context, conn *control.Connection, def *defs.Definition, target actionir.Target,
+) (*upstreamCredential, error) {
+	if conn.GetKind() != "mcp" || conn.Credential.GetKind() != credentials.KindGitHubApp {
+		secret, err := e.openStatic(ctx, conn)
+		if err != nil {
+			return nil, err
+		}
+		return &upstreamCredential{
+			secret: secret, put: func(req *http.Request) error { return placeCredential(conn, req, secret) }, done: func() { clear(secret) },
+		}, nil
+	}
+	base, c, err := e.gitHubAPI(conn)
+	if err != nil {
+		return nil, err
+	}
+	tok, release, err := e.actionToken(ctx, conn, def, target, base, c, "")
+	if err != nil {
+		return nil, err
+	}
+	return &upstreamCredential{
+		secret: tok.Token(), put: func(req *http.Request) error { return placeBearer(conn, req, tok.Token()) }, done: release,
+		access: func() *pb.CredentialAccess { return accessOf(tok.Access()) },
+	}, nil
+}
+
+// placeBearer places a minted installation token on a request to GitHub's
+// MCP server as "Authorization: Bearer", for the credential's hosts only.
+// Unlike a REST call's (Installation.Place), it leaves the request's
+// media type to the MCP client.
+func placeBearer(conn *control.Connection, req *http.Request, token []byte) error {
+	return broker.Place(req, conn.Credential.GetAllowedHosts(), credentials.GitHubAppHeader, credentials.GitHubAppScheme, token)
 }
 
 // Drift is an upstream tool that no longer matches the definition the
@@ -185,14 +269,46 @@ func (e *Engine) CheckDrift(ctx context.Context, conn *control.Connection) ([]Dr
 	if err != nil {
 		return nil, err
 	}
-	var secret []byte
+	cred := &upstreamCredential{}
 	if conn.GetAccessMode() == "pantherclaw_held" {
-		if secret, err = e.openStatic(ctx, conn); err != nil {
+		if cred, err = e.listCredential(ctx, conn); err != nil {
 			return nil, err
 		}
-		defer clear(secret)
+		defer cred.release()
 	}
-	return e.check(ctx, conn, ce, secret)
+	return e.check(ctx, conn, ce, cred.place)
+}
+
+// listCredential is what a check outside any call lists the tools with: a
+// static credential as sealed, or, for a GitHub App connection to GitHub's
+// MCP server, a token of its own with metadata: read only, minted for the
+// listing and revoked after it (purpose drift), as the organization scan
+// lists repositories (ADR-0021 item 2).
+func (e *Engine) listCredential(ctx context.Context, conn *control.Connection) (*upstreamCredential, error) {
+	if conn.Credential.GetKind() != credentials.KindGitHubApp {
+		return e.mcpCredential(ctx, conn, nil, actionir.Target{})
+	}
+	base, c, err := e.gitHubAPI(conn)
+	if err != nil {
+		return nil, err
+	}
+	app, err := e.openApp(conn)
+	if err != nil {
+		return nil, err
+	}
+	tok, err := broker.MintScanToken(ctx, c, base, conn.Credential.GetAllowedHosts(), app, nil, map[string]string{"metadata": "read"}, time.Now())
+	app.Clear()
+	if err != nil {
+		return nil, err
+	}
+	return &upstreamCredential{
+		secret: tok.Token(), put: func(req *http.Request) error { return placeBearer(conn, req, tok.Token()) }, done: func() {
+			if err := tok.Revoke(ctx, c); err != nil {
+				e.log.WarnContext(ctx, "gateway.installation_token_not_revoked", slog.String("connection_id", conn.GetId()), pclog.Err(err))
+				e.revokeFailed(ctx, conn, "drift", tok)
+			}
+		},
+	}, nil
 }
 
 // reviewedTools are a connection's upstream tools, each with the digests
@@ -207,17 +323,12 @@ func reviewedTools(conn *control.Connection) map[string][]string {
 	return reviewed
 }
 
-// check lists the upstream tools with the opened credential (no action
-// token: the list belongs to no call) and records what it found for the
-// connection's revision.
-func (e *Engine) check(ctx context.Context, conn *control.Connection, ce clientEntry, secret []byte) ([]Drift, error) {
+// check lists the upstream tools with the credential place puts on each
+// request (no action token: the list belongs to no call) and records what
+// it found for the connection's revision.
+func (e *Engine) check(ctx context.Context, conn *control.Connection, ce clientEntry, place func(*http.Request) error) ([]Drift, error) {
 	reviewed := reviewedTools(conn)
-	tools, err := ce.mcp.ListTools(ctx, func(req *http.Request) error {
-		if secret != nil {
-			return placeCredential(conn, req, secret)
-		}
-		return nil
-	})
+	tools, err := ce.mcp.ListTools(ctx, place)
 	if err != nil {
 		return nil, err
 	}
@@ -319,13 +430,13 @@ func (e *Engine) refusedUpstream(conn *control.Connection, operation string) str
 // pinned definition, from the last check of the connection's revision.
 // With none yet, or a stale one, it checks first. refusal says the tool
 // must not be called; err that the server could not be listed.
-func (e *Engine) pinnedParams(ctx context.Context, conn *control.Connection, ce clientEntry, tool string, secret []byte,
+func (e *Engine) pinnedParams(ctx context.Context, conn *control.Connection, ce clientEntry, tool string, place func(*http.Request) error,
 ) (params []mcpheader.Param, refusal string, err error) {
 	e.mu.Lock()
 	d, ok := e.drift[conn.GetId()]
 	e.mu.Unlock()
 	if !ok || d.revision != conn.GetRevision() || d.stale {
-		drifts, err := e.check(ctx, conn, ce, secret)
+		drifts, err := e.check(ctx, conn, ce, place)
 		if err != nil {
 			return nil, "", err
 		}

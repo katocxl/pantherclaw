@@ -3790,10 +3790,10 @@ const file_pantherclaw_v1_gateways_proto_rawDesc = "" +
 	"\x0fexpected_digest\x18\x03 \x01(\tB\x1c\xbaH\x19r\x172\x15^sha256:[0-9a-f]{64}$R\x0eexpectedDigest\x12H\n" +
 	"\x0fobserved_digest\x18\x04 \x01(\tB\x1f\xbaH\x1cr\x1a2\x18^(sha256:[0-9a-f]{64})?$R\x0eobservedDigest\"7\n" +
 	"\x13ReportDriftResponse\x12 \n" +
-	"\vquarantined\x18\x01 \x01(\bR\vquarantined\"\xdc\x02\n" +
+	"\vquarantined\x18\x01 \x01(\bR\vquarantined\"\xe3\x02\n" +
 	"\x1eReportRevocationFailureRequest\x12-\n" +
-	"\rconnection_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\fconnectionId\x12>\n" +
-	"\apurpose\x18\x02 \x01(\tB$\xbaH!r\x1fR\x05factsR\fverificationR\borg_scanR\apurpose\x120\n" +
+	"\rconnection_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\fconnectionId\x12E\n" +
+	"\apurpose\x18\x02 \x01(\tB+\xbaH(r&R\x05factsR\fverificationR\borg_scanR\x05driftR\apurpose\x120\n" +
 	"\x0finstallation_id\x18\x03 \x01(\x03B\a\xbaH\x04\"\x02 \x00R\x0einstallationId\x12\\\n" +
 	"\n" +
 	"repository\x18\x04 \x01(\tB<\xbaH9r7\x18\x8c\x0122^([a-z0-9][a-z0-9-]{0,38}/[A-Za-z0-9._-]{1,100})?$R\n" +

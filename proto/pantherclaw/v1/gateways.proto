@@ -655,7 +655,8 @@ message ReportRevocationFailureRequest {
     in: [
       "facts",
       "verification",
-      "org_scan"
+      "org_scan",
+      "drift"
     ]
   }];
   // The GitHub App installation id.
