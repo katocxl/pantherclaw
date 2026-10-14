@@ -21,11 +21,15 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
+	"connectrpc.com/connect/v2"
+
+	pantherclawv1 "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
 	"github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1/pantherclawv1connect"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	"github.com/katocxl/pantherclaw/internal/platform/mcpheader"
@@ -91,7 +95,10 @@ type Config struct {
 	// Workload is the range instance's WorkloadService (agent.child); AgentID
 	// is the range agent. Nil or empty makes agent.child unsupported.
 	Workload pantherclawv1connect.WorkloadServiceClient
-	AgentID  string
+	// Runs ends the scenario runs at Teardown (needs run.manage; nil: they
+	// expire).
+	Runs    pantherclawv1connect.RunServiceClient
+	AgentID string
 	// Key and Token are the instance's workload key and token (agent.steal);
 	// Transport sends the stolen-credential and direct requests (nil: the
 	// default transport).
@@ -106,11 +113,13 @@ type Config struct {
 type Driver struct {
 	cfg Config
 
-	mu         sync.Mutex
-	txns       map[string]string       // step id -> transaction id
-	actions    map[string]string       // step id -> action id (sdk)
-	dispatches map[string]*sdkDispatch // step id -> the request handed to the SDK
-	tools      map[string]map[string][]mcpheader.Param
+	mu          sync.Mutex
+	txns        map[string]string       // step id -> transaction id
+	actions     map[string]string       // step id -> action id (sdk)
+	dispatches  map[string]*sdkDispatch // step id -> the request handed to the SDK
+	tools       map[string]map[string][]mcpheader.Param
+	scenarioRun string // the current scenario's own run
+	notes       []string
 }
 
 // New returns a driver.
@@ -137,16 +146,72 @@ func (d *Driver) Capabilities() map[app.Capability]bool {
 	return out
 }
 
-// Setup implements app.Driver.
-func (d *Driver) Setup(context.Context, domain.Scenario) (app.Fixture, error) {
+// ScenarioRunMinutes is the lifetime of a scenario's own run: above the 60 s
+// scenario timeout, and short because the run is ended at Teardown anyway.
+const ScenarioRunMinutes = 5
+
+// Setup implements app.Driver. With a WorkloadService it starts the scenario
+// in its own child run of the range instance's run (D40): holds are capped per
+// run (HR-037), so a whole range on one run would hit the cap.
+func (d *Driver) Setup(ctx context.Context, s domain.Scenario) (app.Fixture, error) {
 	d.mu.Lock()
 	d.txns, d.actions, d.dispatches = map[string]string{}, map[string]string{}, map[string]*sdkDispatch{}
+	d.scenarioRun = ""
 	d.mu.Unlock()
+	if d.cfg.Workload != nil && d.cfg.AgentID != "" {
+		res, err := d.cfg.Workload.StartChildRun(ctx, &pantherclawv1.StartChildRunRequest{
+			ParentRunId: d.cfg.Run, AgentId: d.cfg.AgentID, TaskRef: "range " + s.ID, TtlMinutes: ScenarioRunMinutes,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("starting the scenario's run: %w", err)
+		}
+		d.mu.Lock()
+		d.scenarioRun = res.GetRun().GetId()
+		d.mu.Unlock()
+	}
 	return d.cfg.Fixture, nil
 }
 
-// Teardown implements app.Driver.
-func (d *Driver) Teardown(context.Context, domain.Scenario) error { return nil }
+// runID is the run the current scenario's calls are made in.
+func (d *Driver) runID() string {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if d.scenarioRun != "" {
+		return d.scenarioRun
+	}
+	return d.cfg.Run
+}
+
+// Notes are what the driver could not do and the summary should say.
+func (d *Driver) Notes() []string {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return slices.Clone(d.notes)
+}
+
+// Teardown implements app.Driver: it ends the scenario's run when the caller may
+// (run.manage), best effort. Holds left pending become moot with the run.
+func (d *Driver) Teardown(ctx context.Context, s domain.Scenario) error {
+	d.mu.Lock()
+	run := d.scenarioRun
+	d.scenarioRun = ""
+	d.mu.Unlock()
+	if run == "" || d.cfg.Runs == nil {
+		return nil
+	}
+	if _, err := d.cfg.Runs.EndRun(ctx, &pantherclawv1.EndRunRequest{Id: run, Reason: "range " + s.ID}); err != nil {
+		note := "could not end the run of " + s.ID + ": " + err.Error()
+		if connect.CodeOf(err) == connect.CodePermissionDenied {
+			note = "the run of " + s.ID + " was left to expire: ending it needs run.manage"
+		}
+		d.mu.Lock()
+		if !slices.Contains(d.notes, note) && len(d.notes) < 20 {
+			d.notes = append(d.notes, note)
+		}
+		d.mu.Unlock()
+	}
+	return nil
+}
 
 // callWith is the part of agent.call's `with` the driver reads.
 type callWith struct {
@@ -256,7 +321,7 @@ func (d *Driver) one(ctx context.Context, s domain.Scenario, step string, n int,
 			return domain.Observation{}, "", fmt.Errorf("action_of %s: that step has no action id (only the sdk face reports one)", w.ActionOf)
 		}
 	}
-	ctx = context.WithValue(ctx, runKey{}, runOr(w.run, d.cfg.Run))
+	ctx = context.WithValue(ctx, runKey{}, runOr(w.run, d.runID()))
 	switch w.Face {
 	case "sdk":
 		if w.Tool == "" {
@@ -284,7 +349,7 @@ func (d *Driver) post(ctx context.Context, rawURL string, header http.Header, bo
 		return 0, nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("PAP-Run-Id", runFrom(ctx, d.cfg.Run))
+	req.Header.Set("PAP-Run-Id", runFrom(ctx, d.runID()))
 	for k, vs := range header {
 		req.Header[k] = vs
 	}
@@ -414,7 +479,7 @@ func (d *Driver) httpFace(ctx context.Context, conn, action string, w callWith) 
 	if err != nil {
 		return domain.Observation{}, "", err
 	}
-	req.Header.Set("PAP-Run-Id", runFrom(ctx, d.cfg.Run))
+	req.Header.Set("PAP-Run-Id", runFrom(ctx, d.runID()))
 	if action == "" {
 		action = ids.NewV7().String()
 	}
