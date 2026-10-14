@@ -30,12 +30,14 @@ export function decided(id: string, decision: string, extra: Record<string, unkn
 }
 
 /** A PantherClaw server and gateway in one: unsigned tokens, the /sdk face of connection "payments", the /hook face of "local" and the wait stream. */
-export async function gateway(t: { after: (fn: () => void) => void }, face: Face, opts: { waitStates?: string[]; hook?: HookFace } = {}) {
+export async function gateway(t: { after: (fn: () => void) => void }, face: Face, opts: { waitStates?: string[]; hook?: HookFace; block?: number; after?: string[] } = {}) {
   const kf: KeyFile = { ...newKeyFile(), identifier };
   const jkt = (await keyOf(kf)).jkt;
   const calls: Record<string, unknown>[] = [];
   /** The /sdk path of each call, in order. */
   const paths: string[] = [];
+  /** When the gateway received each /sdk call (ms, Date.now()). */
+  const callTimes: number[] = [];
   const hooks: Record<string, unknown>[] = [];
   const server = createServer((req: IncomingMessage, res: ServerResponse) => {
     let body = "";
@@ -53,6 +55,7 @@ export async function gateway(t: { after: (fn: () => void) => void }, face: Face
         const call = JSON.parse(body);
         calls.push(call);
         paths.push(req.url);
+        callTimes.push(Date.now());
         face(call, String(req.headers["pc-action-id"]), res);
       } else if (req.url === "/hook/local" && opts.hook) {
         const call = JSON.parse(body);
@@ -61,7 +64,13 @@ export async function gateway(t: { after: (fn: () => void) => void }, face: Face
       } else if (req.url?.startsWith("/v1/wait/")) {
         res.writeHead(200, { "Content-Type": "text/event-stream" });
         for (const s of opts.waitStates ?? ["READY"]) res.write(`event: state\ndata: ${JSON.stringify({ handle: "h", state: s })}\n\n`);
-        res.end();
+        // A hold that stays pending: the stream stays open for `block` ms, then says `after` (e.g. the hold's denial).
+        const finish = () => {
+          for (const s of opts.after ?? []) res.write(`event: state\ndata: ${JSON.stringify({ handle: "h", state: s })}\n\n`);
+          res.end();
+        };
+        if (opts.block) setTimeout(finish, opts.block);
+        else finish();
       } else {
         res.writeHead(404).end();
       }
@@ -73,7 +82,7 @@ export async function gateway(t: { after: (fn: () => void) => void }, face: Face
     server.close();
   });
   const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
-  return { client: new Client({ keyFile: { ...kf, server: base }, gateway: base, runId: run, timeoutMs: 2000, builtins: BUILTIN_TOOLS }), calls, paths, hooks, base };
+  return { client: new Client({ keyFile: { ...kf, server: base }, gateway: base, runId: run, timeoutMs: 2000, builtins: BUILTIN_TOOLS }), calls, callTimes, paths, hooks, base };
 }
 
 export const allow: Face = (_c, id, res) => res.end(decided(id, "allow"));

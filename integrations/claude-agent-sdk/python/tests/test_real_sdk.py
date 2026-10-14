@@ -181,8 +181,8 @@ class RealSDKTest(unittest.TestCase):
         for close in self.closers:
             close()
 
-    def gateway(self, face: Face, states: tuple[str, ...] = ("READY",), hook: Any = None) -> Gateway:
-        g = Gateway(face, states, hook)
+    def gateway(self, face: Face, states: tuple[str, ...] = ("READY",), hook: Any = None, block: float = 0, after: tuple[str, ...] = ()) -> Gateway:
+        g = Gateway(face, states, hook, block, after)
         self.closers.append(g.close)
         return g
 
@@ -312,14 +312,43 @@ class RealSDKTest(unittest.TestCase):
         async def app_allow(_input: Any, _id: Any, _ctx: Any) -> dict[str, Any]:
             return hook_output("allow", "app")
 
-        # The hold never becomes ready: only can_use_tool's allow could run the tool, and it denies at its deadline.
-        g = self.gateway(face_for(hold_then_allow()), states=("PENDING",))
-        start = time.monotonic()
-        r = self.run_sdk("PC_SCENARIO=refund", lambda base: self.integration(g, wait=1.5).options(
+        # The hold never becomes ready: the wait stream stays PENDING for `block` seconds and then says DENIED, so
+        # only can_use_tool's wait is left to run the tool, and it ends with the hold's denial.
+        block = 1.5
+        g = self.gateway(face_for(hold_then_allow()), states=("PENDING",), block=block, after=("DENIED",))
+        integration = self.integration(g, wait=5.0)
+        decisions: list[Any] = []
+        returned: list[float] = []
+        asks: list[str] = []
+        decide, can_use_tool = integration._decide, integration.can_use_tool  # noqa: SLF001
+
+        async def spy_decide(data: dict[str, Any], tool_use_id: str | None) -> dict[str, Any]:
+            out = await decide(data, tool_use_id)
+            if data.get("tool_name") == "mcp__payments__create_refund":
+                asks.append(out.get("hookSpecificOutput", {}).get("permissionDecision", ""))
+            return out
+
+        def spy_can_use_tool() -> Any:
+            callback = can_use_tool()
+
+            async def spy(name: str, tool_input: dict[str, Any], context: Any) -> Any:
+                out = await callback(name, tool_input, context)
+                if name == "mcp__payments__create_refund":
+                    decisions.append(out)
+                    returned.append(time.monotonic())
+                return out
+
+            return spy
+
+        integration._decide, integration.can_use_tool = spy_decide, spy_can_use_tool  # type: ignore[method-assign]  # noqa: SLF001
+        r = self.run_sdk("PC_SCENARIO=refund", lambda base: integration.options(
             **base, permission_mode="default", setting_sources=[], hooks={"PreToolUse": [sdk.HookMatcher(hooks=[app_allow])]}))
         self.assertEqual(r.refunds, [], "an app allow ran a held call")
         self.assertEqual(sum(c["tool"] == "mcp__payments__create_refund" for c in g.calls), 1, "a held call was resubmitted without PantherClaw's ready")
-        self.assertGreaterEqual(time.monotonic() - start, 1.4, "the call was not left to can_use_tool's wait")
+        self.assertEqual(asks, ["ask"], "PantherClaw's hook asked about the held call")
+        self.assertEqual([d.behavior for d in decisions], ["deny"], "can_use_tool decided the held call once, with a denial")
+        # From the gateway receiving the call to can_use_tool's decision (the CLI's start-up is not counted).
+        self.assertGreaterEqual(returned[0] - g.call_times[0], block - 0.2, "can_use_tool did not wait for the hold")
 
     def test_HR200_in_the_real_sdk_a_pantherclaw_that_does_not_answer_is_denied_at_the_integrations_deadline(self) -> None:
         g = self.gateway(face_for(lambda _c, _a: None))
