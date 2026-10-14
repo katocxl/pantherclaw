@@ -116,13 +116,13 @@ func (b *builder) assurance() error {
 			continue
 		}
 		sc := pack.AssuranceScenario{
-			ID: decl.ID, Title: decl.Title, Digest: decl.Digest, Category: decl.Category, Tier: decl.Tier, Suite: decl.Suite,
+			ID: decl.ID, Title: decl.Title, Digest: decl.Digest, Category: decl.Category, Tier: decl.Tier, Suite: decl.Suite, StepCount: decl.StepCount,
 			Verdict: string(r.Verdict), ClaimedVerdict: string(r.Claimed), Steps: []pack.AssuranceStep{},
 		}
 		for _, st := range r.Steps {
 			s := pack.AssuranceStep{
 				ID: st.ID, Expect: pack.AssuranceExpect(st.Expect), Observed: pack.AssuranceExpect(st.Observed),
-				ObservedBy: string(st.ObservedBy), Mismatch: st.Mismatch, Matched: st.Matched, Decisive: st.Decisive,
+				ObservedBy: string(st.ObservedBy), Mismatch: st.Mismatch, Matched: st.Matched, Decisive: st.Decisive, Kind: st.Kind, ProbeKind: st.ProbeKind,
 			}
 			if st.Mismatch {
 				c := pack.AssuranceExpect(st.Claimed)

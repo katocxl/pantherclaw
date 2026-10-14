@@ -45,6 +45,8 @@ type AssuranceStep struct {
 	Decisive    string           `json:"decisive_control,omitzero"`
 	Transaction string           `json:"transaction,omitzero"`
 	Probe       string           `json:"probe_report,omitzero"`
+	Kind        string           `json:"kind"`
+	ProbeKind   string           `json:"probe_kind,omitzero"`
 }
 
 // AssuranceScenario is one scenario's recorded result.
@@ -55,7 +57,9 @@ type AssuranceScenario struct {
 	Category string `json:"category"`
 	Tier     string `json:"tier"`
 	Suite    string `json:"suite"`
-	Verdict  string `json:"verdict"`
+	// StepCount is how many steps the scenario has; a PASS records all.
+	StepCount int    `json:"step_count"`
+	Verdict   string `json:"verdict"`
 	// ClaimedVerdict is the runner's verdict when the server's differs.
 	ClaimedVerdict string          `json:"claimed_verdict,omitzero"`
 	Steps          []AssuranceStep `json:"steps"`

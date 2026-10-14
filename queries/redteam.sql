@@ -59,9 +59,11 @@ ORDER BY recorded_at, scenario_id;
 -- The server's own record of a transaction a step names: its run's agent,
 -- the simulated flag, its decision and effect.
 -- name: RangeTransaction :one
-SELECT t.id, r.agent_id, t.simulated, t.created_at, t.decision, t.reason_code, coalesce(t.effect_state, '')::text AS effect_state
+SELECT t.id, r.agent_id, t.simulated, t.created_at, t.decision, t.reason_code, coalesce(t.effect_state, '')::text AS effect_state,
+    coalesce(d.receipt_jws, '')::text AS receipt_jws
 FROM pc.transactions t
 JOIN pc.runs r ON r.org_id = t.org_id AND r.id = t.run_id
+LEFT JOIN pc.decision_receipts d ON d.org_id = t.org_id AND d.transaction_id = t.id
 WHERE t.org_id = sqlc.arg(org_id) AND t.id = sqlc.arg(id);
 
 -- A stored probe report: the session's agent and the report as signed.

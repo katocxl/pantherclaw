@@ -38,28 +38,75 @@ func TestObserveDerivesFromDecisionAndEffect(t *testing.T) {
 		{"ALLOW", "PARTIAL", domain.OutcomeConfirmed, domain.OutcomeAllow},
 	} {
 		got := domain.TransactionRecord{Decision: tc.decision, EffectState: tc.effect}.Observe(domain.Expect{Outcome: tc.expect})
-		if got.Outcome != tc.want || got.Code != "" {
+		if got.Observed.Outcome != tc.want || got.Observed.Code != "" {
 			t.Errorf("%s/%s expecting %s: %+v, want %s", tc.decision, tc.effect, tc.expect, got, tc.want)
 		}
 	}
 }
 
 func TestResolveFlagsClaimsTheServerDoesNotShare(t *testing.T) {
-	server := domain.Expect{Outcome: domain.OutcomeDeny, Reason: "R"}
+	// The decision had two reasons: the decisive R and another, X2.
+	rec := domain.TransactionRecord{Decision: "DENY", Reason: "R", Reasons: []string{"R", "X2"}}
 	tx := ids.NewV7()
 	for name, tc := range map[string]struct {
 		claim    domain.Expect
 		mismatch bool
 	}{
-		"same":          {domain.Expect{Outcome: domain.OutcomeDeny, Reason: "R"}, false},
-		"no reason":     {domain.Expect{Outcome: domain.OutcomeDeny}, false},
-		"other outcome": {domain.Expect{Outcome: domain.OutcomeAllow, Reason: "R"}, true},
-		"other reason":  {domain.Expect{Outcome: domain.OutcomeDeny, Reason: "X"}, true},
-		"invented code": {domain.Expect{Outcome: domain.OutcomeDeny, Reason: "R", Code: "c"}, true},
+		"same":                 {domain.Expect{Outcome: domain.OutcomeDeny, Reason: "R"}, false},
+		"no reason":            {domain.Expect{Outcome: domain.OutcomeDeny}, false},
+		"another reason of it": {domain.Expect{Outcome: domain.OutcomeDeny, Reason: "X2"}, false},
+		"other outcome":        {domain.Expect{Outcome: domain.OutcomeAllow, Reason: "R"}, true},
+		"a reason it lacks":    {domain.Expect{Outcome: domain.OutcomeDeny, Reason: "X"}, true},
+		// The server derives no code, and an expectation's code is ignored on
+		// a derived step (D34): a claimed code is not a mismatch.
+		"a code": {domain.Expect{Outcome: domain.OutcomeDeny, Reason: "R", Code: "c"}, false},
 	} {
-		st := domain.Resolve(domain.StepInput{ID: "s", Expect: server, Observed: tc.claim, Transaction: &tx}, &server)
-		if st.Mismatch != tc.mismatch || st.Observed != server || st.ObservedBy != domain.Server || !st.Matched {
+		in := domain.StepInput{ID: "s", Kind: "agent.call", Expect: domain.Expect{Outcome: domain.OutcomeDeny, Reason: "X2", Code: "ignored"}, Observed: tc.claim, Transaction: &tx}
+		d := rec.Observe(in.Expect)
+		st := domain.Resolve(in, &d)
+		if st.Mismatch != tc.mismatch || st.Observed.Reason != "X2" || st.Observed.Code != "" || st.ObservedBy != domain.Server || !st.Matched {
 			t.Errorf("%s: %+v", name, st)
+		}
+	}
+}
+
+func TestOnlyAgentAndWaitStepsWithDecisionOutcomesAreDerived(t *testing.T) {
+	for _, tc := range []struct {
+		kind, outcome string
+		want          bool
+	}{
+		{"agent.call", domain.OutcomeAllow, true},
+		{"agent.child", domain.OutcomeDeny, true},
+		{"agent.steal", domain.OutcomeCannotAuthorize, true},
+		{"wait", domain.OutcomeConfirmed, true},
+		{"agent.call", domain.OutcomeHold, true},
+		{"wait", domain.OutcomeUnknown, true},
+		{"person.approve", domain.OutcomeAllow, false},
+		{"check.receipt", domain.OutcomeAllow, false},
+		{"target.replay", domain.OutcomeTargetRefused, false},
+		{"agent.call", domain.OutcomeRefused, false},
+		{"agent.direct", domain.OutcomeTargetRefused, false},
+		{"server.read", domain.OutcomeNotFound, false},
+		{"agent.call", domain.OutcomeBlocked, false},
+		{"sandbox.probe", domain.OutcomeBlocked, false},
+	} {
+		if got := domain.DerivesFromTransaction(tc.kind, domain.Expect{Outcome: tc.outcome}); got != tc.want {
+			t.Errorf("%s expecting %s: %v, want %v", tc.kind, tc.outcome, got, tc.want)
+		}
+	}
+}
+
+func TestProbeRecordObservesTheNamedResult(t *testing.T) {
+	p := domain.ProbeRecord{Results: map[string]string{"dns_external": "blocked", "ipv6": "reachable", "icmp": "error"}}
+	if d, ok := p.Observe("dns_external"); !ok || d.Observed.Outcome != domain.OutcomeBlocked {
+		t.Errorf("blocked: %+v, %v", d, ok)
+	}
+	if d, ok := p.Observe("ipv6"); !ok || d.Observed.Outcome != domain.OutcomeAllow {
+		t.Errorf("reachable: %+v, %v", d, ok)
+	}
+	for _, kind := range []string{"icmp", "metadata", ""} {
+		if _, ok := p.Observe(kind); ok {
+			t.Errorf("%q: observed", kind)
 		}
 	}
 }

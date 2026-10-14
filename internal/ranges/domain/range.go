@@ -101,6 +101,9 @@ type Scenario struct {
 	Category string
 	Suite    string
 	Title    string
+	// StepCount is how many steps the scenario has: a PASS records exactly
+	// that many.
+	StepCount int
 }
 
 // SetDigest is the SHA-256 (hex) over the sorted "id:digest" lines of the
@@ -160,6 +163,10 @@ type Step struct {
 	Transaction *ids.UUID
 	Probe       *ids.UUID
 	Decisive    string
+	// Kind is the scenario step kind and ProbeKind the result of the cited
+	// probe report the step is based on.
+	Kind      string
+	ProbeKind string
 }
 
 // Result is one scenario's recorded result.
@@ -203,17 +210,22 @@ type StepInput struct {
 	Transaction *ids.UUID
 	Probe       *ids.UUID
 	Decisive    string
+	Kind        string
+	ProbeKind   string
 }
 
 // TransactionRecord is what the server's own records say about a
 // transaction a step names.
 type TransactionRecord struct {
-	ID          ids.UUID
-	Agent       ids.UUID
-	Simulated   bool
-	Created     time.Time
-	Decision    string // ALLOW, ALLOW_WITH_OBLIGATIONS, REQUIRE_APPROVAL, REQUIRE_STEP_UP, DENY, CANNOT_AUTHORIZE
+	ID        ids.UUID
+	Agent     ids.UUID
+	Simulated bool
+	Created   time.Time
+	Decision  string // ALLOW, ALLOW_WITH_OBLIGATIONS, REQUIRE_APPROVAL, REQUIRE_STEP_UP, DENY, CANNOT_AUTHORIZE
+	// Reason is the decision's decisive reason; Reasons are all of them,
+	// from its receipt.
 	Reason      string
+	Reasons     []string
 	EffectState string // empty until an effect was observed
 }
 
@@ -223,9 +235,9 @@ type ProbeRecord struct {
 	ID       ids.UUID
 	Agent    ids.UUID
 	Recorded time.Time
-	// Outcome is the step outcome the verified report supports (BLOCKED
-	// when the probe's attempt was blocked, otherwise ALLOW).
-	Outcome string
+	// Results maps each probe result's name to what it observed ("blocked",
+	// "reachable" or "error").
+	Results map[string]string
 }
 
 // Belongs reports whether the transaction may back a step of a range of
@@ -241,56 +253,112 @@ func (p ProbeRecord) Belongs(agent ids.UUID, start time.Time) bool {
 	return p.Agent == agent && !p.Recorded.Before(start)
 }
 
+// DerivesFromTransaction reports whether the server derives a step's
+// observation from the transaction it cites: only agent.* and wait steps
+// that expect a decision or an effect outcome (D34). Every other step
+// (person.*, check.receipt, target.replay, server.read, and REFUSED,
+// TARGET_REFUSED, BLOCKED or NOT_FOUND expectations) is observed by the
+// runner; a transaction it cites is then only a reference.
+func DerivesFromTransaction(kind string, expect Expect) bool {
+	if !strings.HasPrefix(kind, "agent.") && kind != "wait" {
+		return false
+	}
+	switch expect.Outcome {
+	case OutcomeAllow, OutcomeDeny, OutcomeHold, OutcomeCannotAuthorize, OutcomeConfirmed, OutcomeUnknown:
+		return true
+	}
+	return false
+}
+
+// Derived is an observation the server derived from its own records.
+type Derived struct {
+	Observed Expect
+	// Reasons are every reason the observation accepts for a claim or an
+	// expectation (all reasons of a decision).
+	Reasons []string
+}
+
 // Observe derives the outcome and reason a transaction's record supports.
 // Effect outcomes (CONFIRMED, UNKNOWN) come from the effect state when the
-// step expects one; every other outcome from the decision. The server
-// knows no gateway or target refusal code, so Code is always empty.
-func (t TransactionRecord) Observe(expect Expect) Expect {
+// step expects one; every other outcome from the decision. An expected
+// reason that is any reason of the decision is the observed one; otherwise
+// the decisive reason is. The server knows no gateway or target refusal
+// code, so Code is always empty.
+func (t TransactionRecord) Observe(expect Expect) Derived {
+	d := Derived{Reasons: slices.Clone(t.Reasons)}
+	if t.Reason != "" && !slices.Contains(d.Reasons, t.Reason) {
+		d.Reasons = append(d.Reasons, t.Reason)
+	}
+	reason := t.Reason
+	if expect.Reason != "" && slices.Contains(d.Reasons, expect.Reason) {
+		reason = expect.Reason
+	}
 	if expect.Outcome == OutcomeConfirmed || expect.Outcome == OutcomeUnknown {
 		switch t.EffectState {
 		case "CONFIRMED":
-			return Expect{Outcome: OutcomeConfirmed, Reason: t.Reason}
+			d.Observed = Expect{Outcome: OutcomeConfirmed, Reason: reason}
+			return d
 		case "UNKNOWN":
-			return Expect{Outcome: OutcomeUnknown, Reason: t.Reason}
+			d.Observed = Expect{Outcome: OutcomeUnknown, Reason: reason}
+			return d
 		}
 	}
-	out := Expect{Reason: t.Reason}
+	d.Observed.Reason = reason
 	switch t.Decision {
 	case "ALLOW", "ALLOW_WITH_OBLIGATIONS":
-		out.Outcome = OutcomeAllow
+		d.Observed.Outcome = OutcomeAllow
 	case "REQUIRE_APPROVAL", "REQUIRE_STEP_UP":
-		out.Outcome = OutcomeHold
+		d.Observed.Outcome = OutcomeHold
 	case "DENY":
-		out.Outcome = OutcomeDeny
+		d.Observed.Outcome = OutcomeDeny
 	default:
-		out.Outcome = OutcomeCannotAuthorize
+		d.Observed.Outcome = OutcomeCannotAuthorize
 	}
-	return out
+	return d
 }
 
-// Observe is the probe record's observation.
-func (p ProbeRecord) Observe() Expect { return Expect{Outcome: p.Outcome} }
+// Observe is the probe record's observation of one probe's result: BLOCKED
+// when it was blocked, ALLOW when it got through. ok is false when the
+// report has no such result, or it errored.
+func (p ProbeRecord) Observe(kind string) (d Derived, ok bool) {
+	switch p.Results[kind] {
+	case "blocked":
+		return Derived{Observed: Expect{Outcome: OutcomeBlocked}}, true
+	case "reachable":
+		return Derived{Observed: Expect{Outcome: OutcomeAllow}}, true
+	}
+	return Derived{}, false
+}
 
-// Resolve turns the runner's step into the recorded one. server is the
+// MatchesIgnoringCode reports whether the expectation is met by observed, ignoring the
+// code: a derived step has no code (the server knows none).
+func (e Expect) MatchesIgnoringCode(observed Expect) bool {
+	e.Code = ""
+	return e.Matches(observed)
+}
+
+// Resolve turns the runner's step into the recorded one. derived is the
 // observation the server derived from its own records, or nil when the step
-// names no record (or none the server can read): then the step is
-// observed_by CLIENT and the claim stands. Otherwise the server's value
-// wins; a claim that differs on the outcome, on a reason it names, or by
-// naming a code the server has none for marks the step MISMATCH (T-091).
-func Resolve(in StepInput, server *Expect) Step {
+// is the runner's to observe (it names no record, or none the server
+// derives from): then the step is observed_by CLIENT and the claim stands.
+// Otherwise the server's value wins; a claim that differs on the outcome or
+// names a reason the decision does not have marks the step MISMATCH
+// (T-091). The expectation's code is ignored on a derived step.
+func Resolve(in StepInput, derived *Derived) Step {
 	st := Step{
 		ID: in.ID, Expect: in.Expect, Observed: in.Observed, ObservedBy: Client,
-		Transaction: in.Transaction, Probe: in.Probe, Decisive: in.Decisive,
+		Transaction: in.Transaction, Probe: in.Probe, Decisive: in.Decisive, Kind: in.Kind, ProbeKind: in.ProbeKind,
 	}
-	if server != nil {
-		st.ObservedBy, st.Observed = Server, *server
-		if in.Observed.Outcome != server.Outcome ||
-			(in.Observed.Reason != "" && in.Observed.Reason != server.Reason) ||
-			in.Observed.Code != server.Code {
-			st.Mismatch, st.Claimed = true, in.Observed
-		}
+	if derived == nil {
+		st.Matched = in.Expect.Matches(st.Observed)
+		return st
 	}
-	st.Matched = in.Expect.Matches(st.Observed)
+	st.ObservedBy, st.Observed = Server, derived.Observed
+	reasonOK := in.Observed.Reason == "" || in.Observed.Reason == derived.Observed.Reason || slices.Contains(derived.Reasons, in.Observed.Reason)
+	if in.Observed.Outcome != derived.Observed.Outcome || !reasonOK {
+		st.Mismatch, st.Claimed = true, in.Observed
+	}
+	st.Matched = in.Expect.MatchesIgnoringCode(st.Observed)
 	return st
 }
 

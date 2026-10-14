@@ -4,10 +4,8 @@
 package bundle
 
 import (
-	"encoding/base64"
 	"encoding/json/v2"
 	"slices"
-	"strings"
 
 	"github.com/katocxl/pantherclaw/internal/evidence/pack"
 	"github.com/katocxl/pantherclaw/internal/ranges/domain"
@@ -77,6 +75,9 @@ func verifyRange(r *Report, m *pack.Manifest, files map[string][]byte) {
 	if clientSteps > 0 {
 		r.add("range.client_observed", subject, NotAvailable, "%d steps were observed by the runner and cannot be confirmed from the pack", clientSteps)
 	}
+	if r.notFull {
+		r.add("range.complete", subject, NotAvailable, "range pack not fully verifiable: receipts of some of its transactions are not in the pack")
+	}
 	if n := len(a.Mismatches); n > 0 {
 		r.add("range.mismatches", subject, NotAvailable, "the server overwrote the runner's claim in %d steps (listed in the report)", n)
 	}
@@ -96,16 +97,21 @@ func rederive(r *Report, subject string, a *pack.Assurance) {
 		switch sc.Verdict {
 		case string(domain.Pass), string(domain.Fail):
 			want = string(domain.Pass)
-			if len(sc.Steps) == 0 {
+			if len(sc.Steps) == 0 || len(sc.Steps) != sc.StepCount {
 				want = string(domain.Fail)
 			}
 			for _, st := range sc.Steps {
-				exp := domain.Expect(st.Expect)
-				if st.Matched != exp.Matches(domain.Expect(st.Observed)) {
+				exp, obs := domain.Expect(st.Expect), domain.Expect(st.Observed)
+				matched := exp.Matches(obs)
+				if st.ObservedBy == "SERVER" {
+					// The server derives no code (D34).
+					matched = exp.MatchesIgnoringCode(obs)
+				}
+				if st.Matched != matched {
 					r.add("range.step", sc.ID+" "+st.ID, Failed, "its matched flag disagrees with its expected and observed values")
 					bad++
 				}
-				if !exp.Matches(domain.Expect(st.Observed)) {
+				if !matched {
 					want = string(domain.Fail)
 				}
 				if st.Mismatch {
@@ -207,34 +213,10 @@ type txnFile struct {
 	} `json:"effects"`
 }
 
-// txnReceipts is what a transaction's decision receipt said.
+// txnReceipts is what a transaction's latest decision receipt said.
 type txnReceipts struct {
-	ok       bool
-	decision string
-	reason   string
-	effect   string
-}
-
-// receiptBody is the part of a receipt's payload the check reads.
-type receiptBody struct {
-	Pap struct {
-		Decision  string `json:"decision"`
-		Simulated *bool  `json:"simulated"`
-		Checklist []struct {
-			Code     string `json:"code"`
-			Decisive bool   `json:"decisive"`
-		} `json:"checklist"`
-	} `json:"pap"`
-}
-
-func receiptOf(compact string) (receiptBody, bool) {
-	var b receiptBody
-	parts := strings.Split(compact, ".")
-	if len(parts) != 3 {
-		return b, false
-	}
-	raw, err := base64.RawURLEncoding.DecodeString(parts[1])
-	return b, err == nil && json.Unmarshal(raw, &b) == nil
+	ok  bool
+	rec domain.TransactionRecord
 }
 
 // verifyReceipts checks that every receipt of a transaction the report
@@ -248,6 +230,7 @@ func verifyReceipts(r *Report, m *pack.Manifest, files map[string][]byte, a *pac
 		for _, g := range m.Gaps {
 			if g.Subject == subject {
 				r.add("range.simulated", subject, NotAvailable, "%s: %s", g.Reason, truncate(g.Detail))
+				r.notFull = true
 				return nil
 			}
 		}
@@ -283,11 +266,12 @@ func verifyReceipts(r *Report, m *pack.Manifest, files map[string][]byte, a *pac
 	}
 	if len(all) == 0 {
 		r.add("range.simulated", subject, NotAvailable, "no receipt body is in the pack (removed by retention)")
+		r.notFull = true
 		return nil
 	}
 	nonSim := 0
 	for _, c := range all {
-		if body, ok := receiptOf(c); !ok || body.Pap.Simulated == nil || !*body.Pap.Simulated {
+		if body, ok := domain.ParseReceipt(c); !ok || body.Simulated == nil || !*body.Simulated {
 			nonSim++
 		}
 	}
@@ -297,14 +281,10 @@ func verifyReceipts(r *Report, m *pack.Manifest, files map[string][]byte, a *pac
 	} else {
 		r.add("range.simulated", subject, Passed, "all %d receipts say simulated: true", len(all))
 	}
-	out := &txnReceipts{ok: latest != "", effect: t.Effect}
+	out := &txnReceipts{ok: latest != "", rec: domain.TransactionRecord{EffectState: t.Effect}}
 	if latest != "" {
-		body, _ := receiptOf(latest)
-		out.decision = body.Pap.Decision
-		out.reason = "UNEXPLAINED"
-		if len(body.Pap.Checklist) > 0 && body.Pap.Checklist[0].Decisive {
-			out.reason = body.Pap.Checklist[0].Code
-		}
+		body, _ := domain.ParseReceipt(latest)
+		out.rec.Decision, out.rec.Reason, out.rec.Reasons = body.Decision, body.Decisive, body.Reasons
 	}
 	return out
 }
@@ -316,13 +296,14 @@ func verifyStep(r *Report, scenario string, st pack.AssuranceStep, t *txnReceipt
 	subject := scenario + " " + st.ID
 	if t == nil || !t.ok {
 		r.add("range.step", subject, NotAvailable, "its transaction's decision receipt is not in the pack")
+		r.notFull = true
 		return
 	}
-	got := domain.TransactionRecord{Decision: t.decision, Reason: t.reason, EffectState: t.effect}.Observe(domain.Expect(st.Expect))
+	got := t.rec.Observe(domain.Expect(st.Expect))
 	rec := domain.Expect(st.Observed)
-	if got.Outcome != rec.Outcome || (rec.Reason != "" && got.Reason != rec.Reason) {
-		r.add("range.step", subject, Failed, "the report says %s %s, the decision receipt says %s %s", rec.Outcome, truncate(rec.Reason), got.Outcome, truncate(got.Reason))
+	if got.Observed.Outcome != rec.Outcome || (rec.Reason != "" && rec.Reason != got.Observed.Reason && !slices.Contains(got.Reasons, rec.Reason)) {
+		r.add("range.step", subject, Failed, "the report says %s %s, the decision receipt says %s %s", rec.Outcome, truncate(rec.Reason), got.Observed.Outcome, truncate(got.Observed.Reason))
 		return
 	}
-	r.add("range.step", subject, Passed, "matches the decision receipt: %s", got.Outcome)
+	r.add("range.step", subject, Passed, "matches the decision receipt: %s", got.Observed.Outcome)
 }

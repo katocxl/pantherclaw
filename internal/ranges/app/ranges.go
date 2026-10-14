@@ -12,6 +12,7 @@ package app
 import (
 	"context"
 	"errors"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -25,6 +26,11 @@ import (
 	"github.com/katocxl/pantherclaw/internal/ranges/domain"
 	tenancy "github.com/katocxl/pantherclaw/internal/tenancy/app"
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
+)
+
+var (
+	idPattern     = regexp.MustCompile(`^RT-[0-9]{3}$`)
+	digestPattern = regexp.MustCompile(`^[0-9a-f]{64}$`)
 )
 
 // Limits.
@@ -128,9 +134,10 @@ func (s *Service) entitlements(ctx context.Context) (billing.Entitlements, error
 }
 
 // StartRange records a range for a range agent (redteam.run over the
-// agent). Business-tier scenarios need a Business licence; a baseline must
-// quietly stand in for a real one).
-// // quietly stand in for a real one).
+// agent). The declarations are checked up front (INVALID_SCENARIOS);
+// business-tier scenarios need a Business licence; a baseline must be a
+// finished range of the org, so a running or abandoned one cannot stand in
+// for a real one.
 func (s *Service) StartRange(ctx context.Context, in StartInput) (domain.Range, error) {
 	c, err := tenancy.CallerFrom(ctx)
 	if err != nil {
@@ -198,8 +205,9 @@ func checkDecls(set []domain.Scenario) error {
 	}
 	seen := map[string]bool{}
 	for _, sc := range set {
-		if seen[sc.ID] || !slices.Contains(domain.Categories, sc.Category) ||
-			(sc.Tier != domain.TierCommunity && sc.Tier != domain.TierBusiness) {
+		if seen[sc.ID] || !idPattern.MatchString(sc.ID) || !digestPattern.MatchString(sc.Digest) || len(sc.Title) > 200 ||
+			!slices.Contains(domain.Categories, sc.Category) || (sc.Suite != "coding-agent" && sc.Suite != "platform") ||
+			(sc.Tier != domain.TierCommunity && sc.Tier != domain.TierBusiness) || sc.StepCount < 1 || sc.StepCount > MaxSteps {
 			return ErrScenarios
 		}
 		seen[sc.ID] = true
@@ -272,13 +280,24 @@ func (s *Service) RecordResult(ctx context.Context, in RecordInput) (domain.Resu
 		if decl == nil {
 			return ErrUndeclared
 		}
-		steps, err := s.resolve(ctx, tx, rng, in.Steps)
+		if in.Verdict == domain.Pass && len(in.Steps) != decl.StepCount {
+			// A PASS records every step; FAIL and ERROR may stop early.
+			return ErrSteps
+		}
+		recorded, err := tx.Results(ctx, rng.ID)
+		if err != nil {
+			return err
+		}
+		steps, err := s.resolve(ctx, tx, rng, recorded, decl.ID, in.Steps)
 		if err != nil {
 			return err
 		}
 		verdict, ok := domain.Derive(in.Verdict, steps)
 		if !ok {
 			return ErrSteps
+		}
+		if verdict == domain.Pass && len(steps) != decl.StepCount {
+			verdict = domain.Fail
 		}
 		out = domain.Result{Scenario: *decl, Verdict: verdict, Steps: steps}
 		if verdict != in.Verdict {
@@ -308,15 +327,29 @@ func (s *Service) RecordResult(ctx context.Context, in RecordInput) (domain.Resu
 	return out, err
 }
 
-func (s *Service) resolve(ctx context.Context, tx Tx, rng domain.Range, in []domain.StepInput) ([]domain.Step, error) {
+func (s *Service) resolve(ctx context.Context, tx Tx, rng domain.Range, recorded []domain.Result, scenario string, in []domain.StepInput) ([]domain.Step, error) {
+	// A transaction backs the steps of one scenario per range: several
+	// steps of that scenario may cite it, another scenario may not.
+	usedBy := map[ids.UUID]string{}
+	for _, r := range recorded {
+		for _, st := range r.Steps {
+			if st.Transaction != nil {
+				usedBy[*st.Transaction] = r.Scenario.ID
+			}
+		}
+	}
 	seen := map[string]bool{}
 	steps := make([]domain.Step, 0, len(in))
 	for _, st := range in {
-		if st.ID == "" || seen[st.ID] {
+		if st.ID == "" || st.Kind == "" || seen[st.ID] {
 			return nil, ErrSteps
 		}
 		seen[st.ID] = true
-		var server *domain.Expect
+		if st.Transaction != nil && st.Probe != nil {
+			// One step is backed by one record.
+			return nil, ErrRecord
+		}
+		var derived *domain.Derived
 		if st.Transaction != nil {
 			rec, found, err := tx.Transaction(ctx, *st.Transaction)
 			if err != nil {
@@ -325,25 +358,31 @@ func (s *Service) resolve(ctx context.Context, tx Tx, rng domain.Range, in []dom
 			if !found || !rec.Belongs(rng.Agent, rng.Started) {
 				return nil, ErrRecord
 			}
-			o := rec.Observe(st.Expect)
-			server = &o
+			if other, taken := usedBy[*st.Transaction]; taken && other != scenario {
+				return nil, ErrRecord
+			}
+			usedBy[*st.Transaction] = scenario
+			if domain.DerivesFromTransaction(st.Kind, st.Expect) {
+				d := rec.Observe(st.Expect)
+				derived = &d
+			}
 		}
 		if st.Probe != nil {
 			rec, found, err := tx.Probe(ctx, *st.Probe)
 			if err != nil {
 				return nil, err
 			}
-			if !found || !rec.Belongs(rng.Agent, rng.Started) {
+			if !found || !rec.Belongs(rng.Agent, rng.Started) || st.ProbeKind == "" {
 				return nil, ErrRecord
 			}
-			if server != nil {
-				// One step is backed by one record.
+			d, ok := rec.Observe(st.ProbeKind)
+			if !ok {
+				// The report has no such result.
 				return nil, ErrRecord
 			}
-			o := rec.Observe()
-			server = &o
+			derived = &d
 		}
-		steps = append(steps, domain.Resolve(st, server))
+		steps = append(steps, domain.Resolve(st, derived))
 	}
 	return steps, nil
 }

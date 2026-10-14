@@ -61,7 +61,7 @@ func TestHR224_RangePacksVerifyOffline(t *testing.T) {
 	svc := &rangeapp.Service{Store: pgranges.Store{Pool: w.pool}, Editions: licence{billing.Team}, Exporter: rangePacks{p}}
 
 	decl := func(id string) rdomain.Scenario {
-		return rdomain.Scenario{ID: id, Digest: strings.Repeat("a", 64), Tier: rdomain.TierCommunity, Category: "boundary", Suite: "coding-agent", Title: id}
+		return rdomain.Scenario{ID: id, Digest: strings.Repeat("a", 64), Tier: rdomain.TierCommunity, Category: "boundary", Suite: "coding-agent", Title: id, StepCount: 1}
 	}
 	rng, err := svc.StartRange(owner, rangeapp.StartInput{Agent: w.agent, Scenarios: []rdomain.Scenario{decl("RT-001"), decl("RT-002"), decl("RT-003")}, RunnerVersion: "test"})
 	if err != nil {
@@ -77,10 +77,10 @@ func TestHR224_RangePacksVerifyOffline(t *testing.T) {
 	exec(t, admin, w.org, "UPDATE pc.transactions SET simulated = true WHERE org_id = $1 AND run_id = $2", w.org, run)
 
 	step := func(id string, tx ids.UUID, outcome rdomain.Expect) rdomain.StepInput {
-		return rdomain.StepInput{ID: id, Expect: outcome, Observed: outcome, Transaction: &tx}
+		return rdomain.StepInput{ID: id, Kind: "agent.call", Expect: outcome, Observed: outcome, Transaction: &tx}
 	}
 	observed := func(_ any, decision, code string) rdomain.Expect {
-		return rdomain.TransactionRecord{Decision: decision, Reason: code}.Observe(rdomain.Expect{})
+		return rdomain.TransactionRecord{Decision: decision, Reason: code}.Observe(rdomain.Expect{}).Observed
 	}
 	deniedWant := observed(nil, string(denied.Decision), decisive(denied))
 	if _, err := svc.RecordResult(owner, rangeapp.RecordInput{
@@ -92,7 +92,7 @@ func TestHR224_RangePacksVerifyOffline(t *testing.T) {
 	// The runner claims the allowed refund was denied: the server's record wins.
 	res, err := svc.RecordResult(owner, rangeapp.RecordInput{
 		Range: rng.ID, Scenario: "RT-002", Digest: decl("RT-002").Digest, Verdict: rdomain.Pass,
-		Steps: []rdomain.StepInput{{ID: "small", Expect: deniedWant, Observed: deniedWant, Transaction: &allowed.TransactionID}},
+		Steps: []rdomain.StepInput{{ID: "small", Kind: "agent.call", Expect: deniedWant, Observed: deniedWant, Transaction: &allowed.TransactionID}},
 	})
 	if err != nil || res.Verdict != rdomain.Fail || !res.Steps[0].Mismatch {
 		t.Fatalf("forged claim: %+v, %v", res, err)
