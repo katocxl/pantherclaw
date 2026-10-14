@@ -10,7 +10,9 @@ package main
 
 import (
 	"bufio"
+	"crypto/rand"
 	"encoding/base64"
+	"flag"
 	"fmt"
 	"io"
 	"net"
@@ -25,11 +27,14 @@ const usage = `pantherclaw-demo-agent: the demo agent of the PantherClaw preview
 Run it inside a sandbox: pclaw sandbox run ... -- pantherclaw-demo-agent COMMAND ARGS
 
 Commands:
-  allowed OWNER/REPO MAIN_SHA      allowed: read a file, create a branch, write a file, open a pull request
+  allowed [--branch NAME] [--file NAME] OWNER/REPO MAIN_SHA
+                                   allowed: read a file, create a branch, write a file, open a pull request
   held OWNER/REPO NUMBER SHA       held: a raw merge of the pull request, as curl would send it
   blocked OWNER/REPO               blocked: a push with the PAT found in /workspace/.env over HTTPS, and over SSH
                                    (the key in /workspace/.ssh/id_ed25519, to github.com and GitHub's address)
   attack OWNER/REPO NUMBER SHA     held, then blocked, in one run
+
+Without --branch and --file, allowed names its branch and file with a random suffix, so that it can run again on the same repository; it prints the names it chose.
   help, -h, --help                 this text
 
 One line per attempt: "name STATUS body" for HTTP, "ssh ADDRESS reached|blocked" for SSH.
@@ -48,21 +53,34 @@ func main() {
 		}
 		return
 	}
-	need := map[string]int{"allowed": 3, "held": 4, "blocked": 2, "attack": 4}[args[0]]
+	cmd, args := args[0], args[1:]
+	fs := flag.NewFlagSet(cmd, flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	suffix := rand.Text()[:8]
+	branch := fs.String("branch", "demo/fix-"+suffix, "")
+	file := fs.String("file", "fix-"+suffix+".txt", "")
+	if cmd == "allowed" {
+		if err := fs.Parse(args); err != nil {
+			fmt.Fprint(os.Stderr, usage)
+			os.Exit(2)
+		}
+		args = fs.Args()
+	}
+	need := map[string]int{"allowed": 2, "held": 3, "blocked": 1, "attack": 3}[cmd]
 	if need == 0 || len(args) < need {
 		fmt.Fprint(os.Stderr, usage)
 		os.Exit(2)
 	}
-	repo := args[1]
-	switch args[0] {
+	repo := args[0]
+	switch cmd {
 	case "allowed":
-		setup(repo, args[2])
+		setup(repo, args[1], *branch, *file)
 	case "held":
-		merge(repo, args[2], args[3])
+		merge(repo, args[1], args[2])
 	case "blocked":
 		push(repo)
 	case "attack":
-		merge(repo, args[2], args[3])
+		merge(repo, args[1], args[2])
 		push(repo)
 	}
 }
@@ -74,13 +92,14 @@ func call(method, url, body string) string {
 	return answer(client.Do(req))
 }
 
-func setup(repo, main string) {
+func setup(repo, main, branch, file string) {
 	api := "https://api.github.com/repos/" + repo
+	fmt.Println("branch name", branch, "file name", file)
 	fmt.Println("read", call(http.MethodGet, api+"/contents/README.md", ""))
-	fmt.Println("branch", call(http.MethodPost, api+"/git/refs", `{"ref":"refs/heads/preview/fix","sha":"`+main+`"}`))
+	fmt.Println("branch", call(http.MethodPost, api+"/git/refs", `{"ref":"refs/heads/`+branch+`","sha":"`+main+`"}`))
 	content := base64.StdEncoding.EncodeToString([]byte("the fix\n"))
-	fmt.Println("write", call(http.MethodPut, api+"/contents/fix.txt", `{"message":"Fix the parser","content":"`+content+`","branch":"preview/fix"}`))
-	fmt.Println("pr", call(http.MethodPost, api+"/pulls", `{"title":"Fix the parser","head":"preview/fix","base":"main"}`))
+	fmt.Println("write", call(http.MethodPut, api+"/contents/"+file, `{"message":"Fix the parser","content":"`+content+`","branch":"`+branch+`"}`))
+	fmt.Println("pr", call(http.MethodPost, api+"/pulls", `{"title":"Fix the parser","head":"`+branch+`","base":"main"}`))
 }
 
 func merge(repo, number, sha string) {
