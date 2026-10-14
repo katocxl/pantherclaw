@@ -112,8 +112,10 @@ func TestTemplateShellRuleDecides(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		a := actionir.ActionIR{Operation: shell.Operation, Definition: actionir.Definition{Digest: shell.Digest}, Params: params,
-			Target: actionir.Target{Type: "shell.workspace", ID: "local"}, Channel: "hook"}
+		a := actionir.ActionIR{
+			Operation: shell.Operation, Definition: actionir.Definition{Digest: shell.Digest}, Params: params,
+			Target: actionir.Target{Type: "shell.workspace", ID: "local"}, Channel: "hook",
+		}
 		out, err := c.Evaluate(context.Background(), shell, a, polapp.Input{Budget: polapp.DefaultBudget, Run: &polapp.Run{ID: "r", AgentID: agent}})
 		if err != nil {
 			t.Fatalf("%q: %v", command, err)
