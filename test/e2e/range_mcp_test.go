@@ -82,7 +82,7 @@ func (d *rangeDriver) setupMCPUpstream() {
 	signer, _ := jws.NewSigner(kid, priv)
 	sum := sha256.Sum256(raw)
 	doc, err := trust.Sign(trust.Targets{
-		Version: 1, Expires: time.Now().Add(90 * 24 * time.Hour).UTC().Format(time.RFC3339),
+		Version: 2, Expires: time.Now().Add(90 * 24 * time.Hour).UTC().Format(time.RFC3339),
 		Targets: map[string]trust.Target{trust.Key(mockpayments.Name, "1.0.1"): {
 			Length: int64(len(raw)), Hashes: map[string]string{"sha256": hex.EncodeToString(sum[:])},
 		}},

@@ -19,6 +19,11 @@ type sandboxRig struct{}
 
 func sandboxSetup(*rangeDriver) error { return errors.New("built without the sandbox tag") }
 
+func sandboxStart(d *rangeDriver) *stack {
+	d.t.Fatal("built without the sandbox tag")
+	return nil
+}
+
 func sandboxProbe(*rangeDriver, domain.Step) (domain.Observation, error) {
 	return domain.Observation{}, errors.New("built without the sandbox tag")
 }

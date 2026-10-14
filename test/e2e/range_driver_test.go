@@ -119,7 +119,11 @@ func (d *rangeDriver) Setup(_ context.Context, sc domain.Scenario) (app.Fixture,
 	if sc.ID == "RT-011" {
 		o.github = true
 	}
-	d.s = start(t, o)
+	if requires(sc, "sandbox") {
+		d.s = sandboxStart(d)
+	} else {
+		d.s = start(t, o)
+	}
 	d.fix = app.Fixture{}
 	if o.people != nil {
 		d.people = &m2Stack{url: d.s.apiURL, cfg: d.s.serverCfg, idp: p}
