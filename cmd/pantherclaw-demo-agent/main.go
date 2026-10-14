@@ -1,13 +1,11 @@
 // SPDX-License-Identifier: BUSL-1.1
 // Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
 
-// Command previewagent is the agent of the preview test (three routes, three
-// stops), run by `pclaw sandbox run`: it does what a coding agent with a
-// shell might, with nothing but the sandbox's proxy, and prints one line per
-// attempt.
-//
-//	previewagent setup OWNER/REPO MAIN_SHA          reads a file, creates a branch, writes a file, opens a pull request
-//	previewagent attack OWNER/REPO NUMBER SHA       a raw merge as curl would send it, then a push with the PAT and with the SSH key found in /workspace
+// Command pantherclaw-demo-agent is the demo agent of the v0.1.0 preview,
+// run by `pclaw sandbox run` (the quickstart's guided tests and `task
+// test:preview`): it does what a coding agent with a shell might, with
+// nothing but the sandbox's proxy, and prints one line per attempt. It is a
+// test and demo tool, not part of the release.
 package main
 
 import (
@@ -22,24 +20,49 @@ import (
 	"time"
 )
 
+const usage = `pantherclaw-demo-agent: the demo agent of the PantherClaw preview.
+
+Run it inside a sandbox: pclaw sandbox run ... -- pantherclaw-demo-agent COMMAND ARGS
+
+Commands:
+  allowed OWNER/REPO MAIN_SHA      allowed: read a file, create a branch, write a file, open a pull request
+  held OWNER/REPO NUMBER SHA       held: a raw merge of the pull request, as curl would send it
+  blocked OWNER/REPO               blocked: a push with the PAT found in /workspace/.env over HTTPS, and over SSH
+                                   (the key in /workspace/.ssh/id_ed25519, to github.com and GitHub's address)
+  attack OWNER/REPO NUMBER SHA     held, then blocked, in one run
+  help, -h, --help                 this text
+
+One line per attempt: "name STATUS body" for HTTP, "ssh ADDRESS reached|blocked" for SSH.
+`
+
 // client takes the sandbox's proxy and CA from the environment, as curl
 // and git do.
 var client = &http.Client{Timeout: 30 * time.Second}
 
 func main() {
-	if len(os.Args) < 4 {
-		fmt.Println("usage: previewagent setup|attack OWNER/REPO ...")
-		os.Exit(2)
-	}
-	repo := os.Args[2]
-	switch os.Args[1] {
-	case "setup":
-		setup(repo, os.Args[3])
-	case "attack":
-		if len(os.Args) < 5 {
+	args := os.Args[1:]
+	if len(args) == 0 || args[0] == "help" || args[0] == "-h" || args[0] == "--help" {
+		fmt.Print(usage)
+		if len(args) == 0 {
 			os.Exit(2)
 		}
-		merge(repo, os.Args[3], os.Args[4])
+		return
+	}
+	need := map[string]int{"allowed": 3, "held": 4, "blocked": 2, "attack": 4}[args[0]]
+	if need == 0 || len(args) < need {
+		fmt.Fprint(os.Stderr, usage)
+		os.Exit(2)
+	}
+	repo := args[1]
+	switch args[0] {
+	case "allowed":
+		setup(repo, args[2])
+	case "held":
+		merge(repo, args[2], args[3])
+	case "blocked":
+		push(repo)
+	case "attack":
+		merge(repo, args[2], args[3])
 		push(repo)
 	}
 }

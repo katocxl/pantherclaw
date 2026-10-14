@@ -116,7 +116,7 @@ func previewHas(list []string, want string) bool {
 // the ML-DSA cosignature (the trust file pins no ML-DSA checkpoint key) and
 // the witness check against an earlier checkpoint (--previous, which a first
 // check has none of); they are the only ones allowed to be so.
-func previewVerified(t *testing.T, p *proof, ctx context.Context, name, sigstore string, sel evapp.Selection) {
+func previewVerified(t *testing.T, p *proof, ctx context.Context, name, sigstore string, sel evapp.Selection) *bundle.Report {
 	t.Helper()
 	for deadline := time.Now().Add(2 * time.Minute); ; time.Sleep(time.Second) {
 		file, _ := p.export(t, ctx, name, sel, 0)
@@ -128,7 +128,7 @@ func previewVerified(t *testing.T, p *proof, ctx context.Context, name, sigstore
 			}
 		}
 		if code == 0 && len(r.Checks) > 0 && len(notPassed) == 0 {
-			return
+			return r
 		}
 		if time.Now().After(deadline) || r.Failed() {
 			t.Fatalf("pclaw verify %s: exit %d, not passed: %v\n%+v", name, code, notPassed, r.Checks)
@@ -142,7 +142,7 @@ func previewVerified(t *testing.T, p *proof, ctx context.Context, name, sigstore
 func TestE2E_Preview_ThreeRoutesThreeStops(t *testing.T) {
 	m := startM9(t)
 	c, e := dockertest.Client(t)
-	m.agentImage = dockertest.Image(t, c, e, "github.com/katocxl/pantherclaw/test/e2e/testdata/previewagent", "test/e2e/testdata/previewagent.Dockerfile")
+	m.agentImage = dockertest.Image(t, c, e, "github.com/katocxl/pantherclaw/cmd/pantherclaw-demo-agent", "deploy/sandbox/demo-agent.Dockerfile")
 
 	// The "coding to production" template protects the repository: alice,
 	// who owns the agent, applies it with the roles it needs.
@@ -173,7 +173,7 @@ func TestE2E_Preview_ThreeRoutesThreeStops(t *testing.T) {
 	// Step 0: the agent reads, branches, writes and opens a pull request
 	// through the edge: all allowed.
 	main := m.gh.sim.Branch(ghRepo, "main")
-	code, out, errs := m.sandbox(t, pclaw.Options{}, "setup", ghRepo, main)
+	code, out, errs := m.sandbox(t, pclaw.Options{}, "allowed", ghRepo, main)
 	if code != 0 || !closurePassed.MatchString(out) {
 		t.Fatalf("sandbox session 1: %d\n%s\n%s", code, out, errs)
 	}
@@ -283,16 +283,53 @@ func TestE2E_Preview_ThreeRoutesThreeStops(t *testing.T) {
 		t.Fatal("the PAT reached the server's logs")
 	}
 
-	// Step 4 (attempts 1 and 2): the receipts of each verify offline.
+	// Step 4: the evidence of each attempt verifies offline: the receipts
+	// of attempts 1 and 2, and, for attempt 3, which has no transaction (the
+	// push never reached the gateway), the sandbox closure with its signed
+	// probe reports (HR-227).
 	p := m.proof(t)
 	auditor := m.person(t, "preview-auditor", td.RoleAuditor).ctx
-	attempts := map[string]ids.UUID{"mcp": mustUUID(t, mcpTxn), "curl": mustUUID(t, curl.TransactionID)}
-	for _, id := range attempts {
-		p.checkpointed(t, id)
+	attempts := map[string]evapp.Selection{
+		"mcp":     {Transactions: []ids.UUID{mustUUID(t, mcpTxn)}},
+		"curl":    {Transactions: []ids.UUID{mustUUID(t, curl.TransactionID)}},
+		"closure": {Closures: []ids.UUID{mustUUID(t, mm[1])}},
+	}
+	for _, sel := range attempts {
+		p.checkpointed(t, sel.Transactions...)
+	}
+	// The closure's entry is chained and checkpointed by the server's
+	// workers, as the receipts are; the anchor then covers all three.
+	for deadline := time.Now().Add(2 * time.Minute); ; time.Sleep(time.Second) {
+		file, _ := p.export(t, auditor, "closure-wait.json", attempts["closure"], 0)
+		if code, r := p.verify(t, file); code == 0 && all(r, "entry.inclusion", bundle.Passed) {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the closure entry was never checkpointed")
+		}
+		if _, err := p.jobs.Insert(context.Background(), checkpoints.CheckpointDispatchArgs{}, nil); err != nil {
+			t.Fatal(err)
+		}
 	}
 	sigstore := p.anchor(t)
-	for name, id := range attempts {
-		previewVerified(t, p, auditor, name+".json", sigstore, evapp.Selection{Transactions: []ids.UUID{id}})
+	for name, sel := range attempts {
+		r := previewVerified(t, p, auditor, name+".json", sigstore, sel)
+		if name != "closure" {
+			continue
+		}
+		// The report lists the push probes, each passed: no route for SSH
+		// pushes, and a PAT push refused.
+		for _, probe := range []string{"ssh_push", "pat_push"} {
+			found := false
+			for _, c := range r.Checks {
+				if c.Name == "closure.probe" && strings.Contains(c.Subject, probe) {
+					found = true
+				}
+			}
+			if !found {
+				t.Errorf("the closure bundle lists no %s probe:\n%+v", probe, r.Checks)
+			}
+		}
 	}
 
 	// Step 5: the coverage card, for every operation the flow used.

@@ -139,15 +139,16 @@ tasks:
         -run 'TestRange_Scenarios{{if .SCENARIO}}/{{.SCENARIO}}{{end}}' ./test/e2e/
 
   sandbox:images:
-    desc: Build the sandbox's edge and probe images locally (static Linux builds on the pinned distroless base) and print their ids, which pclaw's sandbox.images settings name (G0 M9)
+    desc: Build the sandbox's edge, probe and demo-agent images locally (static Linux builds on the pinned distroless base) and print their ids, which pclaw's sandbox.images settings name (G0 M9)
     env:
       CGO_ENABLED: "0"
       GOOS: linux
     cmds:
-      - go build -trimpath -o bin/sandbox/ ./cmd/pantherclaw-edge ./cmd/pantherclaw-probe
+      - go build -trimpath -o bin/sandbox/ ./cmd/pantherclaw-edge ./cmd/pantherclaw-probe ./cmd/pantherclaw-demo-agent
       - mkdir -p bin/sandbox/workspace
       - echo "edge  $(docker build --quiet --pull=false --network none --file deploy/sandbox/edge.Dockerfile bin/sandbox)"
       - echo "probe $(docker build --quiet --pull=false --network none --file deploy/sandbox/probe.Dockerfile bin/sandbox)"
+      - echo "pantherclaw-demo-agent $(docker build --quiet --pull=false --network none --file deploy/sandbox/demo-agent.Dockerfile bin/sandbox)"
 
   test:linux:
     desc: Run race-enabled tests inside a pinned Linux container (use on Windows)
