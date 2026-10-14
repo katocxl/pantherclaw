@@ -551,9 +551,13 @@ type AuthorizeRequest struct {
 	ActionIr []byte `protobuf:"bytes,1,opt,name=action_ir,json=actionIr,proto3" json:"action_ir,omitempty"`
 	// The workload's PAP/1 credentials as the gateway received them; the
 	// Authority re-verifies them itself (PAP-1 §7.1, HR-021).
-	Workload      *WorkloadCredentials `protobuf:"bytes,2,opt,name=workload,proto3" json:"workload,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Workload *WorkloadCredentials `protobuf:"bytes,2,opt,name=workload,proto3" json:"workload,omitempty"`
+	// Credential-shaped values the gateway found in the action's payload
+	// (HR-225). Each makes the Authority require a person's approval; none
+	// can lift a requirement. At most 16, sorted, never the value.
+	PayloadFindings []*PayloadFinding `protobuf:"bytes,3,rep,name=payload_findings,json=payloadFindings,proto3" json:"payload_findings,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *AuthorizeRequest) Reset() {
@@ -598,6 +602,70 @@ func (x *AuthorizeRequest) GetWorkload() *WorkloadCredentials {
 		return x.Workload
 	}
 	return nil
+}
+
+func (x *AuthorizeRequest) GetPayloadFindings() []*PayloadFinding {
+	if x != nil {
+		return x.PayloadFindings
+	}
+	return nil
+}
+
+// PayloadFinding is one credential-shaped value in an action's payload.
+type PayloadFinding struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The format: github_token, private_key, aws_access_key, slack_token or
+	// pantherclaw_token.
+	Kind string `protobuf:"bytes,1,opt,name=kind,proto3" json:"kind,omitempty"`
+	// Where it is, such as arg:content or body:/files/0/content(base64);
+	// never the value.
+	Location      string `protobuf:"bytes,2,opt,name=location,proto3" json:"location,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PayloadFinding) Reset() {
+	*x = PayloadFinding{}
+	mi := &file_pantherclaw_v1_authority_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PayloadFinding) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PayloadFinding) ProtoMessage() {}
+
+func (x *PayloadFinding) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_authority_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PayloadFinding.ProtoReflect.Descriptor instead.
+func (*PayloadFinding) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_authority_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *PayloadFinding) GetKind() string {
+	if x != nil {
+		return x.Kind
+	}
+	return ""
+}
+
+func (x *PayloadFinding) GetLocation() string {
+	if x != nil {
+		return x.Location
+	}
+	return ""
 }
 
 // AuthorizeResponse is the decision.
@@ -664,7 +732,7 @@ type AuthorizeResponse struct {
 
 func (x *AuthorizeResponse) Reset() {
 	*x = AuthorizeResponse{}
-	mi := &file_pantherclaw_v1_authority_proto_msgTypes[2]
+	mi := &file_pantherclaw_v1_authority_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -676,7 +744,7 @@ func (x *AuthorizeResponse) String() string {
 func (*AuthorizeResponse) ProtoMessage() {}
 
 func (x *AuthorizeResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_authority_proto_msgTypes[2]
+	mi := &file_pantherclaw_v1_authority_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -689,7 +757,7 @@ func (x *AuthorizeResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AuthorizeResponse.ProtoReflect.Descriptor instead.
 func (*AuthorizeResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_authority_proto_rawDescGZIP(), []int{2}
+	return file_pantherclaw_v1_authority_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *AuthorizeResponse) GetDecision() Decision {
@@ -849,7 +917,7 @@ type Consequence struct {
 
 func (x *Consequence) Reset() {
 	*x = Consequence{}
-	mi := &file_pantherclaw_v1_authority_proto_msgTypes[3]
+	mi := &file_pantherclaw_v1_authority_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -861,7 +929,7 @@ func (x *Consequence) String() string {
 func (*Consequence) ProtoMessage() {}
 
 func (x *Consequence) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_authority_proto_msgTypes[3]
+	mi := &file_pantherclaw_v1_authority_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -874,7 +942,7 @@ func (x *Consequence) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Consequence.ProtoReflect.Descriptor instead.
 func (*Consequence) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_authority_proto_rawDescGZIP(), []int{3}
+	return file_pantherclaw_v1_authority_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *Consequence) GetRuleId() string {
@@ -965,7 +1033,7 @@ type WaitInfo struct {
 
 func (x *WaitInfo) Reset() {
 	*x = WaitInfo{}
-	mi := &file_pantherclaw_v1_authority_proto_msgTypes[4]
+	mi := &file_pantherclaw_v1_authority_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -977,7 +1045,7 @@ func (x *WaitInfo) String() string {
 func (*WaitInfo) ProtoMessage() {}
 
 func (x *WaitInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_authority_proto_msgTypes[4]
+	mi := &file_pantherclaw_v1_authority_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -990,7 +1058,7 @@ func (x *WaitInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WaitInfo.ProtoReflect.Descriptor instead.
 func (*WaitInfo) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_authority_proto_rawDescGZIP(), []int{4}
+	return file_pantherclaw_v1_authority_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *WaitInfo) GetHandle() string {
@@ -1080,7 +1148,7 @@ type ChecklistItem struct {
 
 func (x *ChecklistItem) Reset() {
 	*x = ChecklistItem{}
-	mi := &file_pantherclaw_v1_authority_proto_msgTypes[5]
+	mi := &file_pantherclaw_v1_authority_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1092,7 +1160,7 @@ func (x *ChecklistItem) String() string {
 func (*ChecklistItem) ProtoMessage() {}
 
 func (x *ChecklistItem) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_authority_proto_msgTypes[5]
+	mi := &file_pantherclaw_v1_authority_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1105,7 +1173,7 @@ func (x *ChecklistItem) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ChecklistItem.ProtoReflect.Descriptor instead.
 func (*ChecklistItem) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_authority_proto_rawDescGZIP(), []int{5}
+	return file_pantherclaw_v1_authority_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *ChecklistItem) GetStep() int32 {
@@ -1181,7 +1249,7 @@ type Obligation struct {
 
 func (x *Obligation) Reset() {
 	*x = Obligation{}
-	mi := &file_pantherclaw_v1_authority_proto_msgTypes[6]
+	mi := &file_pantherclaw_v1_authority_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1193,7 +1261,7 @@ func (x *Obligation) String() string {
 func (*Obligation) ProtoMessage() {}
 
 func (x *Obligation) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_authority_proto_msgTypes[6]
+	mi := &file_pantherclaw_v1_authority_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1206,7 +1274,7 @@ func (x *Obligation) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Obligation.ProtoReflect.Descriptor instead.
 func (*Obligation) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_authority_proto_rawDescGZIP(), []int{6}
+	return file_pantherclaw_v1_authority_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *Obligation) GetRule() string {
@@ -1279,7 +1347,7 @@ type BeginDispatchRequest struct {
 
 func (x *BeginDispatchRequest) Reset() {
 	*x = BeginDispatchRequest{}
-	mi := &file_pantherclaw_v1_authority_proto_msgTypes[7]
+	mi := &file_pantherclaw_v1_authority_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1291,7 +1359,7 @@ func (x *BeginDispatchRequest) String() string {
 func (*BeginDispatchRequest) ProtoMessage() {}
 
 func (x *BeginDispatchRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_authority_proto_msgTypes[7]
+	mi := &file_pantherclaw_v1_authority_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1304,7 +1372,7 @@ func (x *BeginDispatchRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BeginDispatchRequest.ProtoReflect.Descriptor instead.
 func (*BeginDispatchRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_authority_proto_rawDescGZIP(), []int{7}
+	return file_pantherclaw_v1_authority_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *BeginDispatchRequest) GetPermitId() string {
@@ -1354,7 +1422,7 @@ type BeginDispatchResponse struct {
 
 func (x *BeginDispatchResponse) Reset() {
 	*x = BeginDispatchResponse{}
-	mi := &file_pantherclaw_v1_authority_proto_msgTypes[8]
+	mi := &file_pantherclaw_v1_authority_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1366,7 +1434,7 @@ func (x *BeginDispatchResponse) String() string {
 func (*BeginDispatchResponse) ProtoMessage() {}
 
 func (x *BeginDispatchResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_authority_proto_msgTypes[8]
+	mi := &file_pantherclaw_v1_authority_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1379,7 +1447,7 @@ func (x *BeginDispatchResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BeginDispatchResponse.ProtoReflect.Descriptor instead.
 func (*BeginDispatchResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_authority_proto_rawDescGZIP(), []int{8}
+	return file_pantherclaw_v1_authority_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *BeginDispatchResponse) GetActionToken() string {
@@ -1423,7 +1491,7 @@ type RecordExecutionRequest struct {
 
 func (x *RecordExecutionRequest) Reset() {
 	*x = RecordExecutionRequest{}
-	mi := &file_pantherclaw_v1_authority_proto_msgTypes[9]
+	mi := &file_pantherclaw_v1_authority_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1435,7 +1503,7 @@ func (x *RecordExecutionRequest) String() string {
 func (*RecordExecutionRequest) ProtoMessage() {}
 
 func (x *RecordExecutionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_authority_proto_msgTypes[9]
+	mi := &file_pantherclaw_v1_authority_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1448,7 +1516,7 @@ func (x *RecordExecutionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RecordExecutionRequest.ProtoReflect.Descriptor instead.
 func (*RecordExecutionRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_authority_proto_rawDescGZIP(), []int{9}
+	return file_pantherclaw_v1_authority_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *RecordExecutionRequest) GetPermitId() string {
@@ -1540,7 +1608,7 @@ type CredentialAccess struct {
 
 func (x *CredentialAccess) Reset() {
 	*x = CredentialAccess{}
-	mi := &file_pantherclaw_v1_authority_proto_msgTypes[10]
+	mi := &file_pantherclaw_v1_authority_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1552,7 +1620,7 @@ func (x *CredentialAccess) String() string {
 func (*CredentialAccess) ProtoMessage() {}
 
 func (x *CredentialAccess) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_authority_proto_msgTypes[10]
+	mi := &file_pantherclaw_v1_authority_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1565,7 +1633,7 @@ func (x *CredentialAccess) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CredentialAccess.ProtoReflect.Descriptor instead.
 func (*CredentialAccess) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_authority_proto_rawDescGZIP(), []int{10}
+	return file_pantherclaw_v1_authority_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *CredentialAccess) GetInstallationId() int64 {
@@ -1643,7 +1711,7 @@ type PayloadCapture struct {
 
 func (x *PayloadCapture) Reset() {
 	*x = PayloadCapture{}
-	mi := &file_pantherclaw_v1_authority_proto_msgTypes[11]
+	mi := &file_pantherclaw_v1_authority_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1655,7 +1723,7 @@ func (x *PayloadCapture) String() string {
 func (*PayloadCapture) ProtoMessage() {}
 
 func (x *PayloadCapture) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_authority_proto_msgTypes[11]
+	mi := &file_pantherclaw_v1_authority_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1668,7 +1736,7 @@ func (x *PayloadCapture) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PayloadCapture.ProtoReflect.Descriptor instead.
 func (*PayloadCapture) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_authority_proto_rawDescGZIP(), []int{11}
+	return file_pantherclaw_v1_authority_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *PayloadCapture) GetProfileId() string {
@@ -1717,7 +1785,7 @@ type RecordExecutionResponse struct {
 
 func (x *RecordExecutionResponse) Reset() {
 	*x = RecordExecutionResponse{}
-	mi := &file_pantherclaw_v1_authority_proto_msgTypes[12]
+	mi := &file_pantherclaw_v1_authority_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1729,7 +1797,7 @@ func (x *RecordExecutionResponse) String() string {
 func (*RecordExecutionResponse) ProtoMessage() {}
 
 func (x *RecordExecutionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_authority_proto_msgTypes[12]
+	mi := &file_pantherclaw_v1_authority_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1742,7 +1810,7 @@ func (x *RecordExecutionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RecordExecutionResponse.ProtoReflect.Descriptor instead.
 func (*RecordExecutionResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_authority_proto_rawDescGZIP(), []int{12}
+	return file_pantherclaw_v1_authority_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *RecordExecutionResponse) GetReceipt() string {
@@ -1777,7 +1845,7 @@ type WorkloadCredentials struct {
 
 func (x *WorkloadCredentials) Reset() {
 	*x = WorkloadCredentials{}
-	mi := &file_pantherclaw_v1_authority_proto_msgTypes[13]
+	mi := &file_pantherclaw_v1_authority_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1789,7 +1857,7 @@ func (x *WorkloadCredentials) String() string {
 func (*WorkloadCredentials) ProtoMessage() {}
 
 func (x *WorkloadCredentials) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_authority_proto_msgTypes[13]
+	mi := &file_pantherclaw_v1_authority_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1802,7 +1870,7 @@ func (x *WorkloadCredentials) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WorkloadCredentials.ProtoReflect.Descriptor instead.
 func (*WorkloadCredentials) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_authority_proto_rawDescGZIP(), []int{13}
+	return file_pantherclaw_v1_authority_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *WorkloadCredentials) GetWorkloadToken() string {
@@ -1856,7 +1924,7 @@ type GetNonceRequest struct {
 
 func (x *GetNonceRequest) Reset() {
 	*x = GetNonceRequest{}
-	mi := &file_pantherclaw_v1_authority_proto_msgTypes[14]
+	mi := &file_pantherclaw_v1_authority_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1868,7 +1936,7 @@ func (x *GetNonceRequest) String() string {
 func (*GetNonceRequest) ProtoMessage() {}
 
 func (x *GetNonceRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_authority_proto_msgTypes[14]
+	mi := &file_pantherclaw_v1_authority_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1881,7 +1949,7 @@ func (x *GetNonceRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetNonceRequest.ProtoReflect.Descriptor instead.
 func (*GetNonceRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_authority_proto_rawDescGZIP(), []int{14}
+	return file_pantherclaw_v1_authority_proto_rawDescGZIP(), []int{15}
 }
 
 // GetNonceResponse returns it.
@@ -1897,7 +1965,7 @@ type GetNonceResponse struct {
 
 func (x *GetNonceResponse) Reset() {
 	*x = GetNonceResponse{}
-	mi := &file_pantherclaw_v1_authority_proto_msgTypes[15]
+	mi := &file_pantherclaw_v1_authority_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1909,7 +1977,7 @@ func (x *GetNonceResponse) String() string {
 func (*GetNonceResponse) ProtoMessage() {}
 
 func (x *GetNonceResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_authority_proto_msgTypes[15]
+	mi := &file_pantherclaw_v1_authority_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1922,7 +1990,7 @@ func (x *GetNonceResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetNonceResponse.ProtoReflect.Descriptor instead.
 func (*GetNonceResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_authority_proto_rawDescGZIP(), []int{15}
+	return file_pantherclaw_v1_authority_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *GetNonceResponse) GetNonce() string {
@@ -1954,7 +2022,7 @@ type ReportUnknownWorkloadRequest struct {
 
 func (x *ReportUnknownWorkloadRequest) Reset() {
 	*x = ReportUnknownWorkloadRequest{}
-	mi := &file_pantherclaw_v1_authority_proto_msgTypes[16]
+	mi := &file_pantherclaw_v1_authority_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1966,7 +2034,7 @@ func (x *ReportUnknownWorkloadRequest) String() string {
 func (*ReportUnknownWorkloadRequest) ProtoMessage() {}
 
 func (x *ReportUnknownWorkloadRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_authority_proto_msgTypes[16]
+	mi := &file_pantherclaw_v1_authority_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1979,7 +2047,7 @@ func (x *ReportUnknownWorkloadRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReportUnknownWorkloadRequest.ProtoReflect.Descriptor instead.
 func (*ReportUnknownWorkloadRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_authority_proto_rawDescGZIP(), []int{16}
+	return file_pantherclaw_v1_authority_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *ReportUnknownWorkloadRequest) GetWorkload() *WorkloadCredentials {
@@ -2017,7 +2085,7 @@ type ReportUnknownWorkloadResponse struct {
 
 func (x *ReportUnknownWorkloadResponse) Reset() {
 	*x = ReportUnknownWorkloadResponse{}
-	mi := &file_pantherclaw_v1_authority_proto_msgTypes[17]
+	mi := &file_pantherclaw_v1_authority_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2029,7 +2097,7 @@ func (x *ReportUnknownWorkloadResponse) String() string {
 func (*ReportUnknownWorkloadResponse) ProtoMessage() {}
 
 func (x *ReportUnknownWorkloadResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_authority_proto_msgTypes[17]
+	mi := &file_pantherclaw_v1_authority_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2042,7 +2110,7 @@ func (x *ReportUnknownWorkloadResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReportUnknownWorkloadResponse.ProtoReflect.Descriptor instead.
 func (*ReportUnknownWorkloadResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_authority_proto_rawDescGZIP(), []int{17}
+	return file_pantherclaw_v1_authority_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *ReportUnknownWorkloadResponse) GetDiscoveryId() string {
@@ -2074,7 +2142,7 @@ type VerifyWorkloadRequest struct {
 
 func (x *VerifyWorkloadRequest) Reset() {
 	*x = VerifyWorkloadRequest{}
-	mi := &file_pantherclaw_v1_authority_proto_msgTypes[18]
+	mi := &file_pantherclaw_v1_authority_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2086,7 +2154,7 @@ func (x *VerifyWorkloadRequest) String() string {
 func (*VerifyWorkloadRequest) ProtoMessage() {}
 
 func (x *VerifyWorkloadRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_authority_proto_msgTypes[18]
+	mi := &file_pantherclaw_v1_authority_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2099,7 +2167,7 @@ func (x *VerifyWorkloadRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use VerifyWorkloadRequest.ProtoReflect.Descriptor instead.
 func (*VerifyWorkloadRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_authority_proto_rawDescGZIP(), []int{18}
+	return file_pantherclaw_v1_authority_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *VerifyWorkloadRequest) GetWorkload() *WorkloadCredentials {
@@ -2141,7 +2209,7 @@ type VerifyWorkloadResponse struct {
 
 func (x *VerifyWorkloadResponse) Reset() {
 	*x = VerifyWorkloadResponse{}
-	mi := &file_pantherclaw_v1_authority_proto_msgTypes[19]
+	mi := &file_pantherclaw_v1_authority_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2153,7 +2221,7 @@ func (x *VerifyWorkloadResponse) String() string {
 func (*VerifyWorkloadResponse) ProtoMessage() {}
 
 func (x *VerifyWorkloadResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_authority_proto_msgTypes[19]
+	mi := &file_pantherclaw_v1_authority_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2166,7 +2234,7 @@ func (x *VerifyWorkloadResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use VerifyWorkloadResponse.ProtoReflect.Descriptor instead.
 func (*VerifyWorkloadResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_authority_proto_rawDescGZIP(), []int{19}
+	return file_pantherclaw_v1_authority_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *VerifyWorkloadResponse) GetVerified() bool {
@@ -2239,7 +2307,7 @@ type RecordToolObservationRequest struct {
 
 func (x *RecordToolObservationRequest) Reset() {
 	*x = RecordToolObservationRequest{}
-	mi := &file_pantherclaw_v1_authority_proto_msgTypes[20]
+	mi := &file_pantherclaw_v1_authority_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2251,7 +2319,7 @@ func (x *RecordToolObservationRequest) String() string {
 func (*RecordToolObservationRequest) ProtoMessage() {}
 
 func (x *RecordToolObservationRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_authority_proto_msgTypes[20]
+	mi := &file_pantherclaw_v1_authority_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2264,7 +2332,7 @@ func (x *RecordToolObservationRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RecordToolObservationRequest.ProtoReflect.Descriptor instead.
 func (*RecordToolObservationRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_authority_proto_rawDescGZIP(), []int{20}
+	return file_pantherclaw_v1_authority_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *RecordToolObservationRequest) GetWorkload() *WorkloadCredentials {
@@ -2323,7 +2391,7 @@ type RecordToolObservationResponse struct {
 
 func (x *RecordToolObservationResponse) Reset() {
 	*x = RecordToolObservationResponse{}
-	mi := &file_pantherclaw_v1_authority_proto_msgTypes[21]
+	mi := &file_pantherclaw_v1_authority_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2335,7 +2403,7 @@ func (x *RecordToolObservationResponse) String() string {
 func (*RecordToolObservationResponse) ProtoMessage() {}
 
 func (x *RecordToolObservationResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_authority_proto_msgTypes[21]
+	mi := &file_pantherclaw_v1_authority_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2348,7 +2416,7 @@ func (x *RecordToolObservationResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RecordToolObservationResponse.ProtoReflect.Descriptor instead.
 func (*RecordToolObservationResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_authority_proto_rawDescGZIP(), []int{21}
+	return file_pantherclaw_v1_authority_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *RecordToolObservationResponse) GetVerified() bool {
@@ -2395,10 +2463,14 @@ const file_pantherclaw_v1_authority_proto_rawDesc = "" +
 	"\x04code\x18\x01 \x01(\tR\x04code\x12\x14\n" +
 	"\x05check\x18\x02 \x01(\tR\x05check\x12\x16\n" +
 	"\x06detail\x18\x03 \x01(\tR\x06detail\x12\x1a\n" +
-	"\bdecisive\x18\x04 \x01(\bR\bdecisive\"}\n" +
+	"\bdecisive\x18\x04 \x01(\bR\bdecisive\"\xd2\x01\n" +
 	"\x10AuthorizeRequest\x12(\n" +
 	"\taction_ir\x18\x01 \x01(\fB\v\xbaH\bz\x06\x10\x02\x18\x80\x80@R\bactionIr\x12?\n" +
-	"\bworkload\x18\x02 \x01(\v2#.pantherclaw.v1.WorkloadCredentialsR\bworkload\"\x9b\x06\n" +
+	"\bworkload\x18\x02 \x01(\v2#.pantherclaw.v1.WorkloadCredentialsR\bworkload\x12S\n" +
+	"\x10payload_findings\x18\x03 \x03(\v2\x1e.pantherclaw.v1.PayloadFindingB\b\xbaH\x05\x92\x01\x02\x10\x10R\x0fpayloadFindings\"U\n" +
+	"\x0ePayloadFinding\x12\x1d\n" +
+	"\x04kind\x18\x01 \x01(\tB\t\xbaH\x06r\x04\x10\x01\x18 R\x04kind\x12$\n" +
+	"\blocation\x18\x02 \x01(\tB\b\xbaH\x05r\x03\x18\x80\x02R\blocation\"\x9b\x06\n" +
 	"\x11AuthorizeResponse\x124\n" +
 	"\bdecision\x18\x01 \x01(\x0e2\x18.pantherclaw.v1.DecisionR\bdecision\x12%\n" +
 	"\x0etransaction_id\x18\x02 \x01(\tR\rtransactionId\x12\x1f\n" +
@@ -2634,7 +2706,7 @@ func file_pantherclaw_v1_authority_proto_rawDescGZIP() []byte {
 }
 
 var file_pantherclaw_v1_authority_proto_enumTypes = make([]protoimpl.EnumInfo, 7)
-var file_pantherclaw_v1_authority_proto_msgTypes = make([]protoimpl.MessageInfo, 24)
+var file_pantherclaw_v1_authority_proto_msgTypes = make([]protoimpl.MessageInfo, 25)
 var file_pantherclaw_v1_authority_proto_goTypes = []any{
 	(Decision)(0),                         // 0: pantherclaw.v1.Decision
 	(ConsequenceState)(0),                 // 1: pantherclaw.v1.ConsequenceState
@@ -2645,76 +2717,78 @@ var file_pantherclaw_v1_authority_proto_goTypes = []any{
 	(CaptureDirection)(0),                 // 6: pantherclaw.v1.CaptureDirection
 	(*Reason)(nil),                        // 7: pantherclaw.v1.Reason
 	(*AuthorizeRequest)(nil),              // 8: pantherclaw.v1.AuthorizeRequest
-	(*AuthorizeResponse)(nil),             // 9: pantherclaw.v1.AuthorizeResponse
-	(*Consequence)(nil),                   // 10: pantherclaw.v1.Consequence
-	(*WaitInfo)(nil),                      // 11: pantherclaw.v1.WaitInfo
-	(*ChecklistItem)(nil),                 // 12: pantherclaw.v1.ChecklistItem
-	(*Obligation)(nil),                    // 13: pantherclaw.v1.Obligation
-	(*BeginDispatchRequest)(nil),          // 14: pantherclaw.v1.BeginDispatchRequest
-	(*BeginDispatchResponse)(nil),         // 15: pantherclaw.v1.BeginDispatchResponse
-	(*RecordExecutionRequest)(nil),        // 16: pantherclaw.v1.RecordExecutionRequest
-	(*CredentialAccess)(nil),              // 17: pantherclaw.v1.CredentialAccess
-	(*PayloadCapture)(nil),                // 18: pantherclaw.v1.PayloadCapture
-	(*RecordExecutionResponse)(nil),       // 19: pantherclaw.v1.RecordExecutionResponse
-	(*WorkloadCredentials)(nil),           // 20: pantherclaw.v1.WorkloadCredentials
-	(*GetNonceRequest)(nil),               // 21: pantherclaw.v1.GetNonceRequest
-	(*GetNonceResponse)(nil),              // 22: pantherclaw.v1.GetNonceResponse
-	(*ReportUnknownWorkloadRequest)(nil),  // 23: pantherclaw.v1.ReportUnknownWorkloadRequest
-	(*ReportUnknownWorkloadResponse)(nil), // 24: pantherclaw.v1.ReportUnknownWorkloadResponse
-	(*VerifyWorkloadRequest)(nil),         // 25: pantherclaw.v1.VerifyWorkloadRequest
-	(*VerifyWorkloadResponse)(nil),        // 26: pantherclaw.v1.VerifyWorkloadResponse
-	(*RecordToolObservationRequest)(nil),  // 27: pantherclaw.v1.RecordToolObservationRequest
-	(*RecordToolObservationResponse)(nil), // 28: pantherclaw.v1.RecordToolObservationResponse
-	nil,                                   // 29: pantherclaw.v1.CredentialAccess.RequestedEntry
-	nil,                                   // 30: pantherclaw.v1.CredentialAccess.GrantedEntry
-	(*timestamppb.Timestamp)(nil),         // 31: google.protobuf.Timestamp
+	(*PayloadFinding)(nil),                // 9: pantherclaw.v1.PayloadFinding
+	(*AuthorizeResponse)(nil),             // 10: pantherclaw.v1.AuthorizeResponse
+	(*Consequence)(nil),                   // 11: pantherclaw.v1.Consequence
+	(*WaitInfo)(nil),                      // 12: pantherclaw.v1.WaitInfo
+	(*ChecklistItem)(nil),                 // 13: pantherclaw.v1.ChecklistItem
+	(*Obligation)(nil),                    // 14: pantherclaw.v1.Obligation
+	(*BeginDispatchRequest)(nil),          // 15: pantherclaw.v1.BeginDispatchRequest
+	(*BeginDispatchResponse)(nil),         // 16: pantherclaw.v1.BeginDispatchResponse
+	(*RecordExecutionRequest)(nil),        // 17: pantherclaw.v1.RecordExecutionRequest
+	(*CredentialAccess)(nil),              // 18: pantherclaw.v1.CredentialAccess
+	(*PayloadCapture)(nil),                // 19: pantherclaw.v1.PayloadCapture
+	(*RecordExecutionResponse)(nil),       // 20: pantherclaw.v1.RecordExecutionResponse
+	(*WorkloadCredentials)(nil),           // 21: pantherclaw.v1.WorkloadCredentials
+	(*GetNonceRequest)(nil),               // 22: pantherclaw.v1.GetNonceRequest
+	(*GetNonceResponse)(nil),              // 23: pantherclaw.v1.GetNonceResponse
+	(*ReportUnknownWorkloadRequest)(nil),  // 24: pantherclaw.v1.ReportUnknownWorkloadRequest
+	(*ReportUnknownWorkloadResponse)(nil), // 25: pantherclaw.v1.ReportUnknownWorkloadResponse
+	(*VerifyWorkloadRequest)(nil),         // 26: pantherclaw.v1.VerifyWorkloadRequest
+	(*VerifyWorkloadResponse)(nil),        // 27: pantherclaw.v1.VerifyWorkloadResponse
+	(*RecordToolObservationRequest)(nil),  // 28: pantherclaw.v1.RecordToolObservationRequest
+	(*RecordToolObservationResponse)(nil), // 29: pantherclaw.v1.RecordToolObservationResponse
+	nil,                                   // 30: pantherclaw.v1.CredentialAccess.RequestedEntry
+	nil,                                   // 31: pantherclaw.v1.CredentialAccess.GrantedEntry
+	(*timestamppb.Timestamp)(nil),         // 32: google.protobuf.Timestamp
 }
 var file_pantherclaw_v1_authority_proto_depIdxs = []int32{
-	20, // 0: pantherclaw.v1.AuthorizeRequest.workload:type_name -> pantherclaw.v1.WorkloadCredentials
-	0,  // 1: pantherclaw.v1.AuthorizeResponse.decision:type_name -> pantherclaw.v1.Decision
-	7,  // 2: pantherclaw.v1.AuthorizeResponse.reasons:type_name -> pantherclaw.v1.Reason
-	12, // 3: pantherclaw.v1.AuthorizeResponse.checklist:type_name -> pantherclaw.v1.ChecklistItem
-	13, // 4: pantherclaw.v1.AuthorizeResponse.obligations:type_name -> pantherclaw.v1.Obligation
-	11, // 5: pantherclaw.v1.AuthorizeResponse.wait:type_name -> pantherclaw.v1.WaitInfo
-	3,  // 6: pantherclaw.v1.AuthorizeResponse.mode:type_name -> pantherclaw.v1.DispatchMode
-	10, // 7: pantherclaw.v1.AuthorizeResponse.consequences:type_name -> pantherclaw.v1.Consequence
-	1,  // 8: pantherclaw.v1.Consequence.state:type_name -> pantherclaw.v1.ConsequenceState
-	31, // 9: pantherclaw.v1.WaitInfo.deadline_time:type_name -> google.protobuf.Timestamp
-	2,  // 10: pantherclaw.v1.WaitInfo.state:type_name -> pantherclaw.v1.WaitState
-	31, // 11: pantherclaw.v1.WaitInfo.consume_by_time:type_name -> google.protobuf.Timestamp
-	31, // 12: pantherclaw.v1.WaitInfo.evidence_deadline_time:type_name -> google.protobuf.Timestamp
-	4,  // 13: pantherclaw.v1.ChecklistItem.status:type_name -> pantherclaw.v1.ChecklistStatus
-	5,  // 14: pantherclaw.v1.RecordExecutionRequest.outcome:type_name -> pantherclaw.v1.Outcome
-	18, // 15: pantherclaw.v1.RecordExecutionRequest.captures:type_name -> pantherclaw.v1.PayloadCapture
-	17, // 16: pantherclaw.v1.RecordExecutionRequest.credential_access:type_name -> pantherclaw.v1.CredentialAccess
-	29, // 17: pantherclaw.v1.CredentialAccess.requested:type_name -> pantherclaw.v1.CredentialAccess.RequestedEntry
-	30, // 18: pantherclaw.v1.CredentialAccess.granted:type_name -> pantherclaw.v1.CredentialAccess.GrantedEntry
-	31, // 19: pantherclaw.v1.CredentialAccess.expire_time:type_name -> google.protobuf.Timestamp
-	6,  // 20: pantherclaw.v1.PayloadCapture.direction:type_name -> pantherclaw.v1.CaptureDirection
-	31, // 21: pantherclaw.v1.GetNonceResponse.expire_time:type_name -> google.protobuf.Timestamp
-	20, // 22: pantherclaw.v1.ReportUnknownWorkloadRequest.workload:type_name -> pantherclaw.v1.WorkloadCredentials
-	20, // 23: pantherclaw.v1.VerifyWorkloadRequest.workload:type_name -> pantherclaw.v1.WorkloadCredentials
-	31, // 24: pantherclaw.v1.VerifyWorkloadResponse.run_expires_at:type_name -> google.protobuf.Timestamp
-	20, // 25: pantherclaw.v1.RecordToolObservationRequest.workload:type_name -> pantherclaw.v1.WorkloadCredentials
-	8,  // 26: pantherclaw.v1.AuthorityService.Authorize:input_type -> pantherclaw.v1.AuthorizeRequest
-	14, // 27: pantherclaw.v1.AuthorityService.BeginDispatch:input_type -> pantherclaw.v1.BeginDispatchRequest
-	16, // 28: pantherclaw.v1.AuthorityService.RecordExecution:input_type -> pantherclaw.v1.RecordExecutionRequest
-	21, // 29: pantherclaw.v1.AuthorityService.GetNonce:input_type -> pantherclaw.v1.GetNonceRequest
-	23, // 30: pantherclaw.v1.AuthorityService.ReportUnknownWorkload:input_type -> pantherclaw.v1.ReportUnknownWorkloadRequest
-	25, // 31: pantherclaw.v1.AuthorityService.VerifyWorkload:input_type -> pantherclaw.v1.VerifyWorkloadRequest
-	27, // 32: pantherclaw.v1.AuthorityService.RecordToolObservation:input_type -> pantherclaw.v1.RecordToolObservationRequest
-	9,  // 33: pantherclaw.v1.AuthorityService.Authorize:output_type -> pantherclaw.v1.AuthorizeResponse
-	15, // 34: pantherclaw.v1.AuthorityService.BeginDispatch:output_type -> pantherclaw.v1.BeginDispatchResponse
-	19, // 35: pantherclaw.v1.AuthorityService.RecordExecution:output_type -> pantherclaw.v1.RecordExecutionResponse
-	22, // 36: pantherclaw.v1.AuthorityService.GetNonce:output_type -> pantherclaw.v1.GetNonceResponse
-	24, // 37: pantherclaw.v1.AuthorityService.ReportUnknownWorkload:output_type -> pantherclaw.v1.ReportUnknownWorkloadResponse
-	26, // 38: pantherclaw.v1.AuthorityService.VerifyWorkload:output_type -> pantherclaw.v1.VerifyWorkloadResponse
-	28, // 39: pantherclaw.v1.AuthorityService.RecordToolObservation:output_type -> pantherclaw.v1.RecordToolObservationResponse
-	33, // [33:40] is the sub-list for method output_type
-	26, // [26:33] is the sub-list for method input_type
-	26, // [26:26] is the sub-list for extension type_name
-	26, // [26:26] is the sub-list for extension extendee
-	0,  // [0:26] is the sub-list for field type_name
+	21, // 0: pantherclaw.v1.AuthorizeRequest.workload:type_name -> pantherclaw.v1.WorkloadCredentials
+	9,  // 1: pantherclaw.v1.AuthorizeRequest.payload_findings:type_name -> pantherclaw.v1.PayloadFinding
+	0,  // 2: pantherclaw.v1.AuthorizeResponse.decision:type_name -> pantherclaw.v1.Decision
+	7,  // 3: pantherclaw.v1.AuthorizeResponse.reasons:type_name -> pantherclaw.v1.Reason
+	13, // 4: pantherclaw.v1.AuthorizeResponse.checklist:type_name -> pantherclaw.v1.ChecklistItem
+	14, // 5: pantherclaw.v1.AuthorizeResponse.obligations:type_name -> pantherclaw.v1.Obligation
+	12, // 6: pantherclaw.v1.AuthorizeResponse.wait:type_name -> pantherclaw.v1.WaitInfo
+	3,  // 7: pantherclaw.v1.AuthorizeResponse.mode:type_name -> pantherclaw.v1.DispatchMode
+	11, // 8: pantherclaw.v1.AuthorizeResponse.consequences:type_name -> pantherclaw.v1.Consequence
+	1,  // 9: pantherclaw.v1.Consequence.state:type_name -> pantherclaw.v1.ConsequenceState
+	32, // 10: pantherclaw.v1.WaitInfo.deadline_time:type_name -> google.protobuf.Timestamp
+	2,  // 11: pantherclaw.v1.WaitInfo.state:type_name -> pantherclaw.v1.WaitState
+	32, // 12: pantherclaw.v1.WaitInfo.consume_by_time:type_name -> google.protobuf.Timestamp
+	32, // 13: pantherclaw.v1.WaitInfo.evidence_deadline_time:type_name -> google.protobuf.Timestamp
+	4,  // 14: pantherclaw.v1.ChecklistItem.status:type_name -> pantherclaw.v1.ChecklistStatus
+	5,  // 15: pantherclaw.v1.RecordExecutionRequest.outcome:type_name -> pantherclaw.v1.Outcome
+	19, // 16: pantherclaw.v1.RecordExecutionRequest.captures:type_name -> pantherclaw.v1.PayloadCapture
+	18, // 17: pantherclaw.v1.RecordExecutionRequest.credential_access:type_name -> pantherclaw.v1.CredentialAccess
+	30, // 18: pantherclaw.v1.CredentialAccess.requested:type_name -> pantherclaw.v1.CredentialAccess.RequestedEntry
+	31, // 19: pantherclaw.v1.CredentialAccess.granted:type_name -> pantherclaw.v1.CredentialAccess.GrantedEntry
+	32, // 20: pantherclaw.v1.CredentialAccess.expire_time:type_name -> google.protobuf.Timestamp
+	6,  // 21: pantherclaw.v1.PayloadCapture.direction:type_name -> pantherclaw.v1.CaptureDirection
+	32, // 22: pantherclaw.v1.GetNonceResponse.expire_time:type_name -> google.protobuf.Timestamp
+	21, // 23: pantherclaw.v1.ReportUnknownWorkloadRequest.workload:type_name -> pantherclaw.v1.WorkloadCredentials
+	21, // 24: pantherclaw.v1.VerifyWorkloadRequest.workload:type_name -> pantherclaw.v1.WorkloadCredentials
+	32, // 25: pantherclaw.v1.VerifyWorkloadResponse.run_expires_at:type_name -> google.protobuf.Timestamp
+	21, // 26: pantherclaw.v1.RecordToolObservationRequest.workload:type_name -> pantherclaw.v1.WorkloadCredentials
+	8,  // 27: pantherclaw.v1.AuthorityService.Authorize:input_type -> pantherclaw.v1.AuthorizeRequest
+	15, // 28: pantherclaw.v1.AuthorityService.BeginDispatch:input_type -> pantherclaw.v1.BeginDispatchRequest
+	17, // 29: pantherclaw.v1.AuthorityService.RecordExecution:input_type -> pantherclaw.v1.RecordExecutionRequest
+	22, // 30: pantherclaw.v1.AuthorityService.GetNonce:input_type -> pantherclaw.v1.GetNonceRequest
+	24, // 31: pantherclaw.v1.AuthorityService.ReportUnknownWorkload:input_type -> pantherclaw.v1.ReportUnknownWorkloadRequest
+	26, // 32: pantherclaw.v1.AuthorityService.VerifyWorkload:input_type -> pantherclaw.v1.VerifyWorkloadRequest
+	28, // 33: pantherclaw.v1.AuthorityService.RecordToolObservation:input_type -> pantherclaw.v1.RecordToolObservationRequest
+	10, // 34: pantherclaw.v1.AuthorityService.Authorize:output_type -> pantherclaw.v1.AuthorizeResponse
+	16, // 35: pantherclaw.v1.AuthorityService.BeginDispatch:output_type -> pantherclaw.v1.BeginDispatchResponse
+	20, // 36: pantherclaw.v1.AuthorityService.RecordExecution:output_type -> pantherclaw.v1.RecordExecutionResponse
+	23, // 37: pantherclaw.v1.AuthorityService.GetNonce:output_type -> pantherclaw.v1.GetNonceResponse
+	25, // 38: pantherclaw.v1.AuthorityService.ReportUnknownWorkload:output_type -> pantherclaw.v1.ReportUnknownWorkloadResponse
+	27, // 39: pantherclaw.v1.AuthorityService.VerifyWorkload:output_type -> pantherclaw.v1.VerifyWorkloadResponse
+	29, // 40: pantherclaw.v1.AuthorityService.RecordToolObservation:output_type -> pantherclaw.v1.RecordToolObservationResponse
+	34, // [34:41] is the sub-list for method output_type
+	27, // [27:34] is the sub-list for method input_type
+	27, // [27:27] is the sub-list for extension type_name
+	27, // [27:27] is the sub-list for extension extendee
+	0,  // [0:27] is the sub-list for field type_name
 }
 
 func init() { file_pantherclaw_v1_authority_proto_init() }
@@ -2728,7 +2802,7 @@ func file_pantherclaw_v1_authority_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pantherclaw_v1_authority_proto_rawDesc), len(file_pantherclaw_v1_authority_proto_rawDesc)),
 			NumEnums:      7,
-			NumMessages:   24,
+			NumMessages:   25,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
