@@ -128,3 +128,31 @@ func TestHR182_TheConfigurationCarriesOnlyThisGatewaysConnectionsAndCredentials(
 		t.Fatalf("a revoked gateway got its configuration: %v", err)
 	}
 }
+
+// TestHR221_TheConfigurationCarriesTheSimulatedFlag (G0 M12 W1a): the
+// connections a gateway receives say which of them are simulated, so the
+// gateway can hold a simulated connection to the simulator handshake.
+func TestHR221_TheConfigurationCarriesTheSimulatedFlag(t *testing.T) {
+	e := newEnv(t)
+	e.pinMockPayments(t)
+	_, gw := e.enroll(t, "mine")
+	conns := capp.New(e.pool, nil, "https://pc.example.test", "https://gw.example.test:8443")
+	for name, in := range map[string]capp.CreateInput{
+		"real": {BaseURL: "https://real.example.test"},
+		"sim":  {BaseURL: "http://127.0.0.1:9000", Simulated: true},
+	} {
+		in.Name, in.Kind, in.Package, in.Gateway, in.AccessMode = name, capp.KindHTTP, mockpayments.Name, gw.Gateway, capp.AccessNone
+		if _, err := conns.Create(e.admin, in); err != nil {
+			t.Fatal(err)
+		}
+	}
+	cfg, err := e.svc.Configuration(context.Background(), gw, 0)
+	if err != nil || len(cfg.Connections) != 2 {
+		t.Fatalf("configuration: %+v, %v", cfg.Connections, err)
+	}
+	for _, c := range cfg.Connections {
+		if c.Simulated != (c.Name == "sim") {
+			t.Errorf("connection %s: simulated = %v", c.Name, c.Simulated)
+		}
+	}
+}

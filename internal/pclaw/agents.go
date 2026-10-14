@@ -54,11 +54,12 @@ func optStr(s string) *string {
 
 func agentCommands() map[string]command {
 	return map[string]command{
-		"agent create": rpc("agent create --name N --team ID --env ID --owner USER --context desktop|ci|kubernetes|service [--backup-owner USER] [--purpose P]", 0, func(fs *flag.FlagSet) call {
+		"agent create": rpc("agent create --name N --team ID --env ID --owner USER --context desktop|ci|kubernetes|service [--backup-owner USER] [--purpose P] [--range]", 0, func(fs *flag.FlagSet) call {
 			name, purpose, team, env := fs.String("name", "", "display name"), fs.String("purpose", "", "what the agent is for"),
 				fs.String("team", "", "team id"), fs.String("env", "", "environment id")
 			owner, backup, ctxName := fs.String("owner", "", "owner user id"), fs.String("backup-owner", "", "backup owner user id"),
 				fs.String("context", "", "where it runs (fixed for its life)")
+			rangeAgent := fs.Bool("range", false, "create a range agent: all its runs are simulated (fixed for its life; at most 5 per org)")
 			return func(ctx context.Context, c clients, _ []string) (proto.Message, error) {
 				ec, err := execContext(*ctxName)
 				if err != nil {
@@ -66,7 +67,7 @@ func agentCommands() map[string]command {
 				}
 				return c.agents.CreateAgent(ctx, &pantherclawv1.CreateAgentRequest{
 					Name: *name, Purpose: *purpose, TeamId: *team, EnvironmentId: *env, OwnerUserId: *owner,
-					BackupOwnerUserId: optStr(*backup), ExecutionContext: ec,
+					BackupOwnerUserId: optStr(*backup), ExecutionContext: ec, RangeAgent: *rangeAgent,
 				})
 			}
 		}),
