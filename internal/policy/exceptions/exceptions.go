@@ -224,7 +224,7 @@ func (s *Service) RequestException(ctx context.Context, r Request) (Exception, C
 			return ErrRuleNotFound
 		}
 		rule := b.Rules[i]
-		if !exceptable(rule) {
+		if !rule.Exceptable {
 			return ErrNotExceptable
 		}
 		for _, op := range r.Operations {
@@ -243,7 +243,7 @@ func (s *Service) RequestException(ctx context.Context, r Request) (Exception, C
 		} else if err != nil {
 			return err
 		}
-		digest := ruleDigest(rule)
+		digest := pdomain.RuleDigest(rule)
 		ops := slices.Clone(r.Operations)
 		slices.Sort(ops)
 		out, err = q.InsertPolicyException(ctx, dbq.InsertPolicyExceptionParams{

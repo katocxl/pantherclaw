@@ -199,8 +199,8 @@ func (c *Compiled) Evaluate(ctx context.Context, d *defs.Definition, a actionir.
 				res.Effect, res.Detail = domain.EvalError, err.Error()
 			case !matched:
 				res.Effect = domain.NotMatched
-			case in.Waivers[r.ID] != "":
-				// A policy exception waives the matched rule (D14): it restricts
+			case r.Exceptable && in.Waivers[r.ID] != "":
+				// A policy exception waives the matched exceptable rule (D14): it restricts
 				// nothing and has no obligation. Its facts were still required
 				// above, and errors and cost overruns are never waived.
 				res.Effect, res.Detail = domain.Waived, in.Waivers[r.ID]
