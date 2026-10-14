@@ -87,7 +87,7 @@ Expected: `Enrolled and admitted instance … of agent …`, then the settings f
 
 ## 5. Apply the "coding to production" template
 
-The agent that runs in the sandbox is a second agent, `coder`, so the demo shows an agent whose only way out is the sandbox. Create it, then apply the template to it. Reading, branching and opening pull requests are allowed. Merging needs an independent reviewer (`code_reviewer`). A deployment consequence needs a release approver in an open change window.
+The agent that runs in the sandbox is a second agent, `coder`, that you own: the agent `dev seed` created has no human owner, and only an agent's owner may admit its sandbox instance. Its only way out is the sandbox. Create it, then apply the template to it. Reading, branching and opening pull requests are allowed. Merging needs an independent reviewer (`code_reviewer`). A deployment consequence needs a release approver in an open change window.
 
 ```bash
 CODER=$(pclaw agent create --name coder --team "$TEAM" --env "$ENV" --owner "$ME" --context desktop | grep -m1 '"id"' | sed 's/.*: "\(.*\)".*/\1/')
