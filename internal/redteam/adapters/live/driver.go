@@ -38,6 +38,8 @@ type TxnState struct {
 	Approved, Declined bool
 	// Effect is the effect state: "CONFIRMED", "UNKNOWN" or "" (not yet).
 	Effect string
+	// Decision is the latest decision: ALLOW, DENY, HOLD or CANNOT_AUTHORIZE.
+	Decision string
 	// Receipt shows which parts a decision receipt carries: grant,
 	// policy_version, package_version, facts, simulated.
 	Receipt map[string]bool
@@ -612,10 +614,7 @@ func (d *Driver) checkReceipt(ctx context.Context, st domain.Step) (domain.Obser
 			missing = append(missing, h)
 		}
 	}
-	if len(missing) > 0 {
-		return domain.Observation{}, fmt.Errorf("the receipt of %s lacks %s", w.Of, strings.Join(missing, ", "))
-	}
-	return domain.Observation{TransactionID: txn}, nil
+	return domain.Observation{Outcome: domain.Outcome(s.Decision), TransactionID: txn, Missing: missing}, nil
 }
 
 // person asks the operator to approve or decline a held step's transaction
@@ -642,7 +641,7 @@ func (d *Driver) person(ctx context.Context, st domain.Step) (domain.Observation
 	for {
 		s, err := d.cfg.Txns.State(ctx, txn)
 		if err == nil && ((approve && s.Approved) || (!approve && s.Declined)) {
-			return domain.Observation{TransactionID: txn}, nil
+			return domain.Observation{Outcome: domain.OutcomeAllow, TransactionID: txn}, nil
 		}
 		select {
 		case <-ctx.Done():

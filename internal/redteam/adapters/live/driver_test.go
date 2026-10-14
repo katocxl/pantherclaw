@@ -269,7 +269,7 @@ func TestPersonWaitAndReceiptSteps(t *testing.T) {
 	})
 	op := &fakeOperator{}
 	txns := fakeTxns{states: map[string]live.TxnState{"t-9": {
-		Approved: true, Effect: "CONFIRMED",
+		Approved: true, Effect: "CONFIRMED", Decision: "HOLD",
 		Receipt: map[string]bool{"grant": true, "policy_version": true, "package_version": true, "facts": true, "simulated": true},
 	}}}
 	d := driver(t, h, func(c *live.Config) { c.Operator, c.Txns = op, txns })
@@ -277,19 +277,19 @@ func TestPersonWaitAndReceiptSteps(t *testing.T) {
 		t.Fatal("no person capability with an operator")
 	}
 	res := run(t, d, `  - {id: merge, do: agent.call, with: {face: sdk, connection: github, tool: merge_pull_request}, expect: {outcome: HOLD}}
-  - {id: approve, do: person.approve, with: {step: merge, as: approver}}
+  - {id: approve, do: person.approve, with: {step: merge, as: approver}, expect: {outcome: ALLOW}}
   - {id: settled, do: wait, with: {for: effect_confirmed, of: merge, max_seconds: 2}, expect: {outcome: CONFIRMED}}
-  - {id: evidence, do: check.receipt, with: {of: merge, has: [grant, policy_version, package_version, facts, simulated]}}
+  - {id: evidence, do: check.receipt, with: {of: merge, has: [grant, policy_version, package_version, facts, simulated]}, expect: {outcome: HOLD}}
 `)
 	if res.Verdict != domain.VerdictPass || len(op.asked) != 1 || op.asked[0] != "t-9:approver" {
 		t.Fatalf("%+v asked=%v", res, op.asked)
 	}
-	// A receipt that lacks a part is an error, not a pass.
-	txns.states["t-9"] = live.TxnState{Approved: true, Effect: "CONFIRMED", Receipt: map[string]bool{"grant": true}}
+	// A receipt that lacks a part FAILS the step.
+	txns.states["t-9"] = live.TxnState{Approved: true, Effect: "CONFIRMED", Decision: "HOLD", Receipt: map[string]bool{"grant": true}}
 	res = run(t, d, `  - {id: merge, do: agent.call, with: {face: sdk, connection: github, tool: merge_pull_request}, expect: {outcome: HOLD}}
-  - {id: evidence, do: check.receipt, with: {of: merge, has: [grant, simulated]}}
+  - {id: evidence, do: check.receipt, with: {of: merge, has: [grant, simulated]}, expect: {outcome: HOLD}}
 `)
-	if res.Verdict != domain.VerdictError {
+	if res.Verdict != domain.VerdictFail {
 		t.Fatalf("%+v", res)
 	}
 }

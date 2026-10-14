@@ -252,7 +252,7 @@ func redteamRun(ctx context.Context, a *app, args []string) error {
 
 	gate := 0
 	for _, r := range results {
-		if r.Verdict == rtdomain.VerdictFail {
+		if r.Verdict == rtdomain.VerdictFail || r.Verdict == rtdomain.VerdictError { // an ERROR fails closed (D30)
 			gate = 1
 		}
 	}
@@ -276,13 +276,13 @@ func runnerVersion() string {
 func gateMessage(results []rtdomain.Result, cmp *rtdomain.Comparison) string {
 	var fails []string
 	for _, r := range results {
-		if r.Verdict == rtdomain.VerdictFail {
-			fails = append(fails, r.ScenarioID)
+		if r.Verdict == rtdomain.VerdictFail || r.Verdict == rtdomain.VerdictError {
+			fails = append(fails, r.ScenarioID+" ("+string(r.Verdict)+")")
 		}
 	}
 	msg := "pclaw: the range gate failed:"
 	if len(fails) > 0 {
-		msg += " FAIL " + strings.Join(fails, ", ") + ";"
+		msg += " " + strings.Join(fails, ", ") + ";"
 	}
 	if cmp != nil && len(cmp.Regressions) > 0 {
 		var rs []string
@@ -542,6 +542,11 @@ func (r txnReader) State(ctx context.Context, id string) (live.TxnState, error) 
 	case pantherclawv1.EffectState_EFFECT_STATE_UNKNOWN:
 		s.Effect = "UNKNOWN"
 	}
+	s.Decision = map[pantherclawv1.Decision]string{
+		pantherclawv1.Decision_DECISION_ALLOW: "ALLOW", pantherclawv1.Decision_DECISION_ALLOW_WITH_OBLIGATIONS: "ALLOW",
+		pantherclawv1.Decision_DECISION_REQUIRE_APPROVAL: "HOLD", pantherclawv1.Decision_DECISION_REQUIRE_STEP_UP: "HOLD",
+		pantherclawv1.Decision_DECISION_DENY: "DENY", pantherclawv1.Decision_DECISION_CANNOT_AUTHORIZE: "CANNOT_AUTHORIZE",
+	}[ev.GetTransaction().GetDecision()]
 	if recs := ev.GetDecisionReceipts(); len(recs) > 0 {
 		s.Receipt = receiptParts(recs[len(recs)-1].GetReceiptJws())
 	}

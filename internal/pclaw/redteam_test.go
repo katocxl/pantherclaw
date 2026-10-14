@@ -454,3 +454,12 @@ func TestRedteamSetupPlansFirstAndDryRunChangesNothing(t *testing.T) {
 		t.Errorf("a real agent named range was reused: %d", code)
 	}
 }
+
+func TestRedteamRunAnErrorFailsClosed(t *testing.T) {
+	re := newRangeEnv(t)
+	*re.decision = `not json`
+	code, out, errs := re.run(t)
+	if code != 1 || !strings.Contains(out, "1 ERROR") || !strings.Contains(errs, "RT-001 (ERROR)") {
+		t.Fatalf("run = %d\n%s\n%s", code, out, errs)
+	}
+}
