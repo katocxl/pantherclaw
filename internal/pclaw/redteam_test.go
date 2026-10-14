@@ -24,6 +24,7 @@ import (
 
 	"connectrpc.com/connect/v2"
 	"connectrpc.com/connect/v2/connecthttp"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/katocxl/pantherclaw/internal/evidence/bundle"
 	"github.com/katocxl/pantherclaw/internal/evidence/bundle/bundletest"
@@ -92,6 +93,7 @@ type rangeEnv struct {
 	decision  *string // the gateway's answer to /sdk/*
 	lastBody  string  // the last body the gateway received
 	fakeRun   *fakeRuns
+	grants    *fakeGrants
 	lastRun   string         // the run of the last call the fake gateway saw
 	holdCap   int            // holds the fake gateway allows per run (0: no cap)
 	holds     map[string]int // holds seen per run
@@ -126,6 +128,8 @@ func newRangeEnv(t *testing.T) *rangeEnv {
 	re.fakeRun = &fakeRuns{}
 	pantherclawv1connect.RegisterWorkloadServiceHandler(cs, re.fakeRun)
 	pantherclawv1connect.RegisterRunServiceHandler(cs, re.fakeRun)
+	re.grants = &fakeGrants{}
+	pantherclawv1connect.RegisterGrantServiceHandler(cs, re.grants)
 	fx := &fakeTx{re: re}
 	pantherclawv1connect.RegisterTransactionServiceHandler(cs, fx)
 	pantherclawv1connect.RegisterApprovalServiceHandler(cs, fx)
@@ -419,6 +423,7 @@ type fakeSetup struct {
 	conns    []*pantherclawv1.CreateConnectionRequest
 	grants   []*pantherclawv1.IssueGrantRequest
 	existing []*pantherclawv1.Agent
+	issueErr error
 }
 
 func (f *fakeSetup) ListAgents(context.Context, *pantherclawv1.ListAgentsRequest) (*pantherclawv1.ListAgentsResponse, error) {
@@ -461,6 +466,9 @@ func (f *fakeSetup) ListGrants(context.Context, *pantherclawv1.ListGrantsRequest
 func (f *fakeSetup) IssueGrant(_ context.Context, r *pantherclawv1.IssueGrantRequest) (*pantherclawv1.IssueGrantResponse, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if f.issueErr != nil {
+		return nil, f.issueErr
+	}
 	f.grants = append(f.grants, r)
 	return &pantherclawv1.IssueGrantResponse{}, nil
 }
@@ -501,6 +509,9 @@ func TestRedteamSetupPlansFirstAndDryRunChangesNothing(t *testing.T) {
 		t.Errorf("twin %v", cn)
 	}
 	g := fake.grants[0]
+	if g.GetDelegation().GetDepth() != 2 || g.GetDelegation().GetMaxChildren() != 0 {
+		t.Errorf("delegation room %v", g.GetDelegation())
+	}
 	if g.GetAgentId() != rtAgent || string(g.GetBounds()) != `{"v":1}` || g.GetMinAttestationLevel() != 1 || g.GetExpireTime() == nil {
 		t.Errorf("grant %v", g)
 	}
@@ -719,16 +730,32 @@ type fakeRuns struct {
 	pantherclawv1connect.UnimplementedWorkloadServiceHandler
 	pantherclawv1connect.UnimplementedRunServiceHandler
 	mu         sync.Mutex
-	started    []*pantherclawv1.StartChildRunRequest
+	started    []*pantherclawv1.StartRunRequest
+	children   int
 	ended      []string
+	delegated  []*pantherclawv1.DelegateGrantRequest
 	denyEndRun bool
 }
 
-func (f *fakeRuns) StartChildRun(_ context.Context, r *pantherclawv1.StartChildRunRequest) (*pantherclawv1.StartChildRunResponse, error) {
+func (f *fakeRuns) StartRun(_ context.Context, r *pantherclawv1.StartRunRequest) (*pantherclawv1.StartRunResponse, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.started = append(f.started, r)
-	return &pantherclawv1.StartChildRunResponse{Run: &pantherclawv1.Run{Id: fmt.Sprintf("0192aaaa-bbbb-7ccc-8ddd-%012d", len(f.started))}}, nil
+	return &pantherclawv1.StartRunResponse{Run: &pantherclawv1.Run{Id: fmt.Sprintf("0192aaaa-bbbb-7ccc-8ddd-%012d", len(f.started))}}, nil
+}
+
+func (f *fakeRuns) StartChildRun(context.Context, *pantherclawv1.StartChildRunRequest) (*pantherclawv1.StartChildRunResponse, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.children++
+	return &pantherclawv1.StartChildRunResponse{Run: &pantherclawv1.Run{Id: fmt.Sprintf("0192aaaa-bbbb-7ccc-8ddd-9%011d", f.children)}}, nil
+}
+
+func (f *fakeRuns) DelegateGrant(_ context.Context, r *pantherclawv1.DelegateGrantRequest) (*pantherclawv1.DelegateGrantResponse, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.delegated = append(f.delegated, r)
+	return &pantherclawv1.DelegateGrantResponse{}, nil
 }
 
 func (f *fakeRuns) EndRun(_ context.Context, r *pantherclawv1.EndRunRequest) (*pantherclawv1.EndRunResponse, error) {
@@ -743,7 +770,7 @@ func (f *fakeRuns) EndRun(_ context.Context, r *pantherclawv1.EndRunRequest) (*p
 
 // TestD40EachScenarioRunsInItsOwnChildRun: more holding scenarios than one
 // run may hold (HR-037) all pass, each in a run of its own, ended afterwards.
-func TestD40EachScenarioRunsInItsOwnChildRun(t *testing.T) {
+func TestD40EachScenarioRunsInARootRunOfItsOwn(t *testing.T) {
 	re := newRangeEnv(t)
 	re.holdCap = 5
 	for i := 2; i <= 7; i++ {
@@ -756,12 +783,15 @@ func TestD40EachScenarioRunsInItsOwnChildRun(t *testing.T) {
 	}
 	fr := re.fakeRun
 	if len(fr.started) != 7 || len(fr.ended) != 7 {
-		t.Fatalf("child runs started %d ended %d", len(fr.started), len(fr.ended))
+		t.Fatalf("runs started %d ended %d", len(fr.started), len(fr.ended))
 	}
 	for _, s := range fr.started {
-		if s.GetParentRunId() != rtRun || s.GetAgentId() != rtAgent || s.GetTtlMinutes() != 5 {
-			t.Errorf("child run request %v", s)
+		if s.GetGrantId() != "root-grant" || s.GetInstanceId() == "" || s.GetAgentId() != rtAgent || s.GetTtlMinutes() != 5 {
+			t.Errorf("run request %v", s)
 		}
+	}
+	if len(fr.delegated) != 0 || fr.children != 0 {
+		t.Errorf("a scenario was started by delegation: %d delegations, %d child runs", len(fr.delegated), fr.children)
 	}
 	for run, n := range re.holds {
 		if run == rtRun || n != 1 {
@@ -822,5 +852,135 @@ func TestD40PersonStepsSeeTheApprovalInTheScenariosRun(t *testing.T) {
 	code, out, errs := re.run(t, "--interactive")
 	if code != 0 || !strings.Contains(out, "1 PASS, 0 FAIL, 0 ERROR, 0 SKIPPED") || !strings.Contains(out, "must APPROVE transaction") {
 		t.Fatalf("interactive = %d\n%s\n%s", code, out, errs)
+	}
+}
+
+// fakeGrants serves the range agent's root grant and its delegations.
+type fakeGrants struct {
+	pantherclawv1connect.UnimplementedGrantServiceHandler
+	children    int  // delegations already made from the root grant
+	noRoot      bool // the range agent has no active grant
+	expiresSoon bool
+	denyRead    bool
+}
+
+func (f *fakeGrants) ListGrants(_ context.Context, r *pantherclawv1.ListGrantsRequest) (*pantherclawv1.ListGrantsResponse, error) {
+	if f.denyRead {
+		return nil, connect.NewError(connect.CodePermissionDenied, "grant.read is needed")
+	}
+	if r.ParentGrantId != nil {
+		out := &pantherclawv1.ListGrantsResponse{}
+		for i := 0; i < f.children; i++ {
+			out.Grants = append(out.Grants, &pantherclawv1.Grant{Id: fmt.Sprintf("child-%d", i), ParentGrantId: r.GetParentGrantId()})
+		}
+		return out, nil
+	}
+	if f.noRoot {
+		return &pantherclawv1.ListGrantsResponse{}, nil
+	}
+	root := &pantherclawv1.Grant{Id: "root-grant", AgentId: r.GetAgentId(), ExpireTime: timestamppb.New(time.Now().Add(24 * time.Hour))}
+	if f.expiresSoon {
+		root.ExpireTime = timestamppb.New(time.Now().Add(5 * time.Minute))
+	}
+	return &pantherclawv1.ListGrantsResponse{Grants: []*pantherclawv1.Grant{root}}, nil
+}
+
+const childScenario = `apiVersion: pantherclaw.range/v1
+id: RT-002
+title: A sub-agent asks for more
+category: boundary
+suite: coding-agent
+tier: community
+attacker: A3
+threats: [T-080]
+rules: [HR-201]
+requires: [github]
+steps:
+  - id: child
+    do: agent.child
+    with: {grant: {widen: [operations]}, then: {face: sdk, connection: github, tool: merge_pull_request}}
+    expect: {outcome: HOLD}
+`
+
+func TestD41RunChecksTheRangeGrantBeforeStarting(t *testing.T) {
+	re := newRangeEnv(t)
+	reissue := "re-issue the range grant with pclaw redteam setup"
+
+	// The delegations left matter only to agent.child steps.
+	re.grants.children = 100
+	if code, out, errs := re.run(t); code != 0 {
+		t.Fatalf("no agent.child steps, none left = %d\n%s\n%s", code, out, errs)
+	}
+	writeFile(t, re.scenarios, "RT-002-child.yaml", []byte(childScenario))
+	re.grants.children = 100
+	code, _, errs := re.run(t)
+	if code != 2 || !strings.Contains(errs, "has 0 of 100 delegations left and the range's agent.child steps need 1") || !strings.Contains(errs, reissue) {
+		t.Fatalf("none left = %d\n%s", code, errs)
+	}
+	started := len(re.ranges.started)
+	re.grants.children = 99
+	if code, out, errs := re.run(t); code != 0 {
+		t.Fatalf("one left = %d\n%s\n%s", code, out, errs)
+	}
+
+	// No active grant, an expiring grant, an unreadable one: exit 2, no range.
+	for name, mod := range map[string]func(g *fakeGrants){
+		"no grant":   func(g *fakeGrants) { g.noRoot = true },
+		"expiring":   func(g *fakeGrants) { g.expiresSoon = true },
+		"unreadable": func(g *fakeGrants) { g.denyRead = true },
+	} {
+		g := re.grants
+		*g = fakeGrants{}
+		mod(g)
+		n := len(re.ranges.started)
+		code, _, errs := re.run(t)
+		want := map[string]string{"no grant": "no active grant", "expiring": "expires at", "unreadable": "grant.read"}[name]
+		if code != 2 || !strings.Contains(errs, want) || len(re.ranges.started) != n {
+			t.Errorf("%s = %d\n%s", name, code, errs)
+		}
+	}
+	_ = started
+}
+
+func TestD41ScenarioRunsNeedNoDelegationInSetup(t *testing.T) {
+	re := newRangeEnv(t)
+	if code, out, errs := re.run(t); code != 0 {
+		t.Fatalf("run = %d\n%s\n%s", code, out, errs)
+	}
+	if n := len(re.fakeRun.delegated); n != 0 {
+		t.Fatalf("%d delegations for a scenario with no agent.child step", n)
+	}
+	if len(re.fakeRun.started) != 1 {
+		t.Fatalf("runs started: %d", len(re.fakeRun.started))
+	}
+}
+
+func TestD41RangeDelegationIsOneDeeperAndKeepsTheFanOut(t *testing.T) {
+	for _, tc := range []struct{ depth, kids, wantDepth int32 }{
+		{0, 0, 2}, {1, 5, 2}, {2, 20, 3}, {3, 50, 4}, {4, 99, 4},
+	} {
+		got := rangeDelegation(&pantherclawv1.GrantDelegation{Depth: tc.depth, MaxChildren: tc.kids})
+		if got.GetDepth() != tc.wantDepth || got.GetMaxChildren() != tc.kids {
+			t.Errorf("real %d/%d: got %d/%d want depth %d and the same fan-out", tc.depth, tc.kids, got.GetDepth(), got.GetMaxChildren(), tc.wantDepth)
+		}
+	}
+}
+
+func TestD41SetupNamesTheEnvelopeThatCapsDelegation(t *testing.T) {
+	fake := &fakeSetup{issueErr: connect.NewError(connect.CodeFailedPrecondition, "envelope org-default caps delegation depth at 1")}
+	cs := connect.NewServer()
+	pantherclawv1connect.RegisterAgentServiceHandler(cs, fake)
+	pantherclawv1connect.RegisterConnectionServiceHandler(cs, fake)
+	pantherclawv1connect.RegisterGrantServiceHandler(cs, fake)
+	mux := http.NewServeMux()
+	connecthttp.Mount(mux, cs)
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	env := envOf(map[string]string{"PANTHERCLAW_SERVER": srv.URL, "PANTHERCLAW_API_KEY": "pck_test_x"})
+	id := "0192aaaa-bbbb-7ccc-8ddd-000000000001"
+	code, _, errs := run(t, env, "redteam", "setup", "--name", "range", "--team", id, "--env", id, "--owner", id, "--context", "ci",
+		"--twin", "github=http://127.0.0.1:9100", "--like-grant", "0192aaaa-bbbb-7ccc-8ddd-0000000000a9", "--yes")
+	if code == 0 || !strings.Contains(errs, "envelope org-default caps delegation depth at 1") || !strings.Contains(errs, "guardrail envelope caps delegation lower") {
+		t.Fatalf("setup = %d\n%s", code, errs)
 	}
 }

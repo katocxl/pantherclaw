@@ -180,16 +180,23 @@ func redteamSetup(ctx context.Context, a *app, args []string) error {
 		}
 		if !have {
 			g := like.GetGrant()
+			deleg := rangeDelegation(g.GetDelegation())
 			steps = append(steps, setupStep{
-				text: fmt.Sprintf("issue the range agent a grant like %s (same bounds, requirements and limits), lasting %s", g.GetId(), *expires),
+				text: fmt.Sprintf("issue the range agent a grant like %s (same bounds, requirements and limits; delegation depth %d), lasting %s",
+					g.GetId(), deleg.GetDepth(), *expires),
 				apply: func(ctx context.Context) error {
 					_, err := c.grants.IssueGrant(ctx, &pantherclawv1.IssueGrantRequest{
 						AgentId: agentID, Principal: g.GetPrincipal(), TaskRef: "adversarial range",
 						ExpireTime: timestamppb.New(time.Now().Add(*expires)),
 						Bounds:     g.GetBounds(), Requirements: g.GetRequirements(), Limits: g.GetLimits(),
-						Delegation: g.GetDelegation(), MinAttestationLevel: g.GetMinAttestationLevel(),
+						Delegation: deleg, MinAttestationLevel: g.GetMinAttestationLevel(),
 					})
-					return err
+					if err != nil {
+						// An envelope that caps delegation lower refuses the grant: the server names it.
+						return fmt.Errorf("the range grant needs delegation depth %d (agent.child scenarios delegate from their run) and was refused; if a guardrail envelope caps delegation lower, widen it or drop those scenarios: %w",
+							deleg.GetDepth(), err)
+					}
+					return nil
 				},
 			})
 		}
@@ -261,4 +268,21 @@ func allConnections(ctx context.Context, c clients) ([]*pantherclawv1.Connection
 		}
 	}
 	return nil, errors.New("too many connections to list")
+}
+
+// minRangeDepth is the depth a range grant needs: scenarios start their own
+// runs on the root grant, and agent.child scenarios delegate from them.
+const minRangeDepth = 2
+
+// maxGrantDepth is the deepest a grant may delegate.
+const maxGrantDepth = 4
+
+// rangeDelegation is the like-grant's delegation made one level deeper (at
+// least two) so that agent.child works. Fan-out stays as the real grant has
+// it: scenarios run in runs of their own, not in delegated children.
+func rangeDelegation(like *pantherclawv1.GrantDelegation) *pantherclawv1.GrantDelegation {
+	return &pantherclawv1.GrantDelegation{
+		Depth:       int32(min(max(like.GetDepth()+1, minRangeDepth), maxGrantDepth)),
+		MaxChildren: like.GetMaxChildren(),
+	}
 }
