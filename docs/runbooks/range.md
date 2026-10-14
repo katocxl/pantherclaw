@@ -119,6 +119,8 @@ jobs:
 
 The baseline must verify offline against the trust file, be fully verifiable (no receipt reported as not available) and belong to the same organization. Otherwise the command exits 2 and no range is started. Pin every action by commit SHA, as this repository's workflows do.
 
+A pipeline needs no cleanup between runs: every scenario creates its own objects (named with a fresh per-run nonce) and generates its own throwaway planted secrets, so runs never collide and nothing real is used.
+
 Use a service account holding `redteam.run` for the pipeline (it is not human-only). Update the baseline deliberately, in a reviewed change, after you have read the new report.
 
 ## 6. This repository's local gate
