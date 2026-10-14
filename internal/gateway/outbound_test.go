@@ -107,3 +107,30 @@ func TestHR225_AFileCommittedThroughTheContentsAPIIsScanned(t *testing.T) {
 		t.Fatalf("%d %s %+v: findings %v", r.code, r.body, r.refusal, fs)
 	}
 }
+
+// TestHR075_ATokenInAFieldTheMappingDropsNeverReachesTheTarget: outbound
+// requests are re-serialized from the mapped action (HR-075), which is
+// what the scanner reads, so a credential in an unmapped body field, header
+// reaches neither the Authority as a finding nor the target.
+func TestHR075_ATokenInAFieldTheMappingDropsNeverReachesTheTarget(t *testing.T) {
+	// A header is dropped: the request is served as
+	// the reviewed template builds it.
+	h := setup(t)
+	r := h.do(t, http.MethodPost, refunds, inbound, map[string]string{"X-Note": fixtureToken})
+	if r.code != http.StatusOK || h.target.calls() != 1 {
+		t.Fatalf("%d %+v", r.code, r.refusal)
+	}
+	sent, hdr := h.target.req(0)
+	if sent != outbound || strings.Contains(strings.Join(hdr.Values("X-Note"), ""), fixtureToken) {
+		t.Fatalf("the target got %q %v", sent, hdr)
+	}
+	if len(h.auth.findings) != 0 {
+		t.Fatalf("findings for a field no one sends: %v", h.auth.findings)
+	}
+	// An unmapped body field is refused before the Authority is asked.
+	h = setup(t)
+	body := `{ "reason":"duplicate","currency":"USD","amount":"30.00","charge":"ch_1","note":"` + fixtureToken + `" }`
+	if r := h.post(t, body, nil); r.code != http.StatusBadRequest || h.target.calls() != 0 || h.auth.snap().authorize != 0 {
+		t.Fatalf("%d %+v, target %d", r.code, r.refusal, h.target.calls())
+	}
+}
