@@ -101,7 +101,7 @@ func LocalLiteral(baseURL string) (*url.URL, error) {
 		return nil, fmt.Errorf("%w: host is not an IP literal", ErrUnverified)
 	}
 	a = a.Unmap()
-	if !(a.IsLoopback() || a.IsPrivate()) {
+	if !a.IsLoopback() && !a.IsPrivate() {
 		return nil, fmt.Errorf("%w: host is not loopback or private", ErrUnverified)
 	}
 	return u, nil

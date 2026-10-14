@@ -7,7 +7,7 @@
 package handshake
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"net/http"
 	"regexp"
 )
@@ -42,6 +42,6 @@ func Wrap(kind string, next http.Handler) http.Handler {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(Answer{Simulator: Simulator, Kind: kind, Nonce: nonce})
+		_ = json.MarshalWrite(w, Answer{Simulator: Simulator, Kind: kind, Nonce: nonce})
 	})
 }

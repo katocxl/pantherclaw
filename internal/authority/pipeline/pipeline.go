@@ -55,7 +55,7 @@ const (
 	ReasonGrantRequiresHold   = "GRANT_REQUIRES_APPROVAL"
 	// ReasonSecretInPayload: the gateway found a credential-shaped value in
 	// the action's payload; a person must approve it (HR-225).
-	ReasonSecretInPayload      = "SECRET_IN_PAYLOAD"
+	ReasonSecretInPayload      = "SECRET_IN_PAYLOAD" //nolint:gosec // G101: a reason code, not a credential
 	ReasonGrantRequiresStepUp  = "GRANT_REQUIRES_STEP_UP"
 	ReasonActionInstanceDiffer = "ACTION_INSTANCE_MISMATCH"
 	ReasonConnectionUnknown    = "CONNECTION_UNKNOWN"

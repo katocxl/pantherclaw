@@ -21,7 +21,7 @@ const (
 	CodeSimulatorUnverified = simcheck.Code
 	// CodeSecretInPayload: the action carries a secret the gateway holds;
 	// nothing was sent (HR-225).
-	CodeSecretInPayload = "secret_in_payload" //nolint:gosec // G101: an error code, not a credential
+	CodeSecretInPayload = "secret_in_payload"
 )
 
 // simulatorRefusal verifies a simulated connection's target before anything

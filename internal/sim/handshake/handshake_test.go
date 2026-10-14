@@ -4,10 +4,12 @@
 package handshake_test
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
 	"github.com/katocxl/pantherclaw/internal/sim/github"
@@ -28,26 +30,28 @@ func TestSimulatorsAnswerTheHandshake(t *testing.T) {
 		"mcp":      mcpsim.New(mcpsim.Faults{}).Handler(),
 	} {
 		ts := httptest.NewServer(h)
-		get := func(q string) *http.Response {
-			res, err := http.Get(ts.URL + handshake.Path + q)
+		get := func(q string) (int, http.Header, []byte) {
+			req, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, ts.URL+handshake.Path+q, nil)
+			res, err := (&http.Client{Timeout: 5 * time.Second}).Do(req)
 			if err != nil {
 				t.Fatal(err)
 			}
-			t.Cleanup(func() { _ = res.Body.Close() })
-			return res
+			defer func() { _ = res.Body.Close() }()
+			b, _ := io.ReadAll(res.Body)
+			return res.StatusCode, res.Header, b
 		}
-		res := get("?nonce=" + nonce)
+		code, hdr, body := get("?nonce=" + nonce)
 		var a handshake.Answer
-		if err := json.NewDecoder(res.Body).Decode(&a); err != nil {
+		if err := json.Unmarshal(body, &a); err != nil {
 			t.Fatal(err)
 		}
-		if res.StatusCode != 200 || res.Header.Get("Simulated") != "true" || res.Header.Get("Content-Type") != "application/json" ||
+		if code != http.StatusOK || hdr.Get("Simulated") != "true" || hdr.Get("Content-Type") != "application/json" ||
 			a != (handshake.Answer{Simulator: "pantherclaw-sim", Kind: kind, Nonce: nonce}) {
-			t.Errorf("%s: %d %v %+v", kind, res.StatusCode, res.Header, a)
+			t.Errorf("%s: %d %v %+v", kind, code, hdr, a)
 		}
 		for _, bad := range []string{"", "?nonce=ABCDEF0123456789abcdef0123456789", "?nonce=abc", "?nonce=" + nonce + "00"} {
-			if r := get(bad); r.StatusCode != 400 {
-				t.Errorf("%s %q: %d", kind, bad, r.StatusCode)
+			if c, _, _ := get(bad); c != http.StatusBadRequest {
+				t.Errorf("%s %q: %d", kind, bad, c)
 			}
 		}
 		ts.Close()

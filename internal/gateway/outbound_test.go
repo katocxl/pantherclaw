@@ -21,7 +21,7 @@ const fixtureToken = "ghp_" + "abcdefghijklmnopqrstuvwxyz0123456789"
 // but the credential-free handshake is sent; once the target answers, the
 // action runs.
 func TestHR221_NoDispatchWithoutTheSimulatorHandshake(t *testing.T) {
-	simulated := func(h *harness) { h.conn.GatewayConnection.Simulated = true }
+	simulated := func(h *harness) { h.conn.Simulated = true }
 	h := setup(t, simulated)
 	r := h.post(t, inbound, nil)
 	if r.code < 400 || r.refusal.Error != "simulator_unverified" || r.refusal.ErrorClass != "cannot_authorize" || h.auth.snap().authorize != 0 {
