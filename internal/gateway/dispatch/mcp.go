@@ -104,7 +104,14 @@ func (e *Engine) sendMCP(ctx context.Context, r Result, conn *control.Connection
 	}
 	callCtx, cancel := callWindow(ctx, conn)
 	defer cancel()
-	declared, refusal, err := e.pinnedParams(callCtx, conn, ce, tool, cred.place)
+	// The listing a check needs first belongs to no call: a GitHub App
+	// connection lists with a metadata-read token of its own, never the
+	// action's (ADR-0021 item 2); a static credential lists as it calls.
+	list := func(context.Context) (*upstreamCredential, error) { return &upstreamCredential{put: cred.place}, nil }
+	if conn.GetAccessMode() == "pantherclaw_held" && conn.GetKind() == "mcp" && conn.Credential.GetKind() == credentials.KindGitHubApp {
+		list = func(ctx context.Context) (*upstreamCredential, error) { return e.listCredential(ctx, conn) }
+	}
+	declared, refusal, err := e.pinnedParams(callCtx, conn, ce, tool, list)
 	switch {
 	case err != nil:
 		// The server could not be listed: the call was never sent.
@@ -428,15 +435,22 @@ func (e *Engine) refusedUpstream(conn *control.Connection, operation string) str
 
 // pinnedParams are the x-mcp-header declarations of an upstream tool's
 // pinned definition, from the last check of the connection's revision.
-// With none yet, or a stale one, it checks first. refusal says the tool
-// must not be called; err that the server could not be listed.
-func (e *Engine) pinnedParams(ctx context.Context, conn *control.Connection, ce clientEntry, tool string, place func(*http.Request) error,
+// With none yet, or a stale one, it checks first, with the credential
+// list gives for the listing. refusal says the tool must not be called;
+// err that the server could not be listed.
+func (e *Engine) pinnedParams(ctx context.Context, conn *control.Connection, ce clientEntry, tool string,
+	list func(context.Context) (*upstreamCredential, error),
 ) (params []mcpheader.Param, refusal string, err error) {
 	e.mu.Lock()
 	d, ok := e.drift[conn.GetId()]
 	e.mu.Unlock()
 	if !ok || d.revision != conn.GetRevision() || d.stale {
-		drifts, err := e.check(ctx, conn, ce, place)
+		cred, err := list(ctx)
+		if err != nil {
+			return nil, "", err
+		}
+		drifts, err := e.check(ctx, conn, ce, cred.place)
+		cred.release()
 		if err != nil {
 			return nil, "", err
 		}

@@ -80,13 +80,22 @@ func TestHR203_TheMCPFaceMintsATokenPerActionForGitHubsMCPServer(t *testing.T) {
 	if p, _ := w.sim.PullRequest("acme/payments", 1); !p.Merged {
 		t.Fatal("the pull request was not merged")
 	}
-	tokens := w.sim.Tokens()
-	if len(tokens) != 1 {
-		t.Fatalf("%d tokens minted, want one for the action: %+v", len(tokens), tokens)
+	// One token for the action, and one that can only read metadata for the
+	// tool listing the first call checks against its pins: never the
+	// action's. Both were revoked.
+	actions, listings := actionTokens(w), 0
+	for _, tok := range w.sim.Tokens() {
+		if maps.Equal(tok.Permissions, map[string]string{"metadata": "read"}) {
+			listings++
+			if !tok.Revoked {
+				t.Fatalf("the listing's token %+v", tok)
+			}
+		}
 	}
-	tok := tokens[0]
-	if !tok.Revoked || !slices.Equal(tok.Repos, []string{"acme/payments"}) || tok.Installation != 7 ||
-		!maps.Equal(tok.Permissions, map[string]string{"contents": "write", "metadata": "read"}) {
+	if len(actions) != 1 || listings != 1 {
+		t.Fatalf("%d action tokens and %d listing tokens: %+v", len(actions), listings, w.sim.Tokens())
+	}
+	if tok := actions[0]; !tok.Revoked || !slices.Equal(tok.Repos, []string{"acme/payments"}) || tok.Installation != 7 {
 		t.Fatalf("token %+v", tok)
 	}
 	// The merge reached GitHub with that token, through the MCP server.
@@ -153,5 +162,81 @@ func TestHR081_ADriftCheckOfGitHubsMCPServerUsesAReadOnlyToken(t *testing.T) {
 	tokens := w.sim.Tokens()
 	if len(tokens) != 1 || !tokens[0].Revoked || !maps.Equal(tokens[0].Permissions, map[string]string{"metadata": "read"}) {
 		t.Fatalf("tokens %+v", tokens)
+	}
+}
+
+// actionTokens are the tokens minted for merges (the merge's permissions).
+func actionTokens(w *gitHubWorld) []github.Token {
+	var out []github.Token
+	for _, tok := range w.sim.Tokens() {
+		if maps.Equal(tok.Permissions, map[string]string{"contents": "write", "metadata": "read"}) {
+			out = append(out, tok)
+		}
+	}
+	return out
+}
+
+// TestHR203_AMintFailureOverTheMCPFaceSendsNothing: when GitHub will not
+// mint the action's token, the call never reaches the MCP server and
+// nothing merges; the dispatch is FAILED with credential_unavailable.
+func TestHR203_AMintFailureOverTheMCPFaceSendsNothing(t *testing.T) {
+	w := newGitHubWorld(t)
+	w.sim.SetFaults(github.Faults{TokenStatus: http.StatusInternalServerError})
+	sim, opt := withGitHubMCP(t, w)
+	h := setup(t, opt)
+	r := h.mcpCall(t, http.MethodPost, mcpPath, jsonRPC("tools/call", mergeArgs(w.head)), nil)
+	if !r.body.Result.IsError || !strings.Contains(string(r.body.Result.Meta["io.pantherclaw/error"]), "credential_unavailable") ||
+		sim.Calls() != 0 {
+		t.Fatalf("a mint failure: %+v, %d upstream runs", r.body.Result, sim.Calls())
+	}
+	if p, _ := w.sim.PullRequest("acme/payments", 1); p.Merged {
+		t.Fatal("merged without a token")
+	}
+	for _, req := range w.sim.Requests() {
+		if strings.HasPrefix(req.Path, "/repos/") && req.Installation != 0 { // the setup opened the pull request itself
+			t.Fatalf("GitHub saw a repository request: %+v", req)
+		}
+	}
+	if s := h.auth.snap(); s.outcome() != pb.Outcome_OUTCOME_FAILED {
+		t.Fatalf("recorded %+v", s.records)
+	}
+}
+
+// TestHR203_EachMCPActionGetsItsOwnToken: two actions in a row over the
+// MCP face each get a token of their own, each used for its call alone and
+// revoked after it; the tool listing is checked once.
+func TestHR203_EachMCPActionGetsItsOwnToken(t *testing.T) {
+	w := newGitHubWorld(t)
+	sim, opt := withGitHubMCP(t, w)
+	h := setup(t, opt)
+	for _, method := range []string{"squash", "merge"} {
+		args := strings.Replace(mergeArgs(w.head), `"merge_method":"squash"`, `"merge_method":"`+method+`"`, 1)
+		if r := h.mcpCall(t, http.MethodPost, mcpPath, jsonRPC("tools/call", args), nil); r.code != http.StatusOK || r.body.Error != nil {
+			t.Fatalf("%s: %d %+v", method, r.code, r.body.Error)
+		}
+	}
+	if sim.Calls() != 2 {
+		t.Fatalf("%d upstream runs, want 2", sim.Calls())
+	}
+	actions := actionTokens(w)
+	if len(actions) != 2 {
+		t.Fatalf("%d action tokens, want one per action: %+v", len(actions), w.sim.Tokens())
+	}
+	for _, tok := range actions {
+		if !tok.Revoked || tok.Uses != 1 {
+			t.Fatalf("an action token used for more than its call, or left valid: %+v", tok)
+		}
+	}
+	tokens := map[string]bool{}
+	for _, req := range w.sim.Requests() {
+		if strings.HasSuffix(req.Path, "/pulls/1/merge") {
+			if tokens[req.Token] {
+				t.Fatalf("a token used for two merges: %+v", req)
+			}
+			tokens[req.Token] = true
+		}
+	}
+	if len(tokens) != 2 {
+		t.Fatalf("merges made with %d tokens", len(tokens))
 	}
 }
