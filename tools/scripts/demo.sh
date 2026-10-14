@@ -302,6 +302,8 @@ export DEMO_GATEWAY_ID="$gwid"
 export DEMO_AGENT="$agent"
 export DEMO_GRANT="$grant"
 export DEMO_GITHUB="$github"
+# pcid prints the first "id" of the JSON it reads (pclaw's output).
+pcid() { grep -m1 '"id"' | sed 's/.*"id": *"\([^"]*\)".*/\1/'; }
 EOS
 }
 

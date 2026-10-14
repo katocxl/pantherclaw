@@ -11,7 +11,7 @@ The 30 minutes are a target, measured and not guaranteed. The founder's timed ru
 - A browser, and a security key or a platform authenticator (Windows Hello, Touch ID) for the approval in step 9.
 - About 3 GB of free disk space and some patience on the first run: the first `task demo:up` takes several minutes while Go builds and Docker pulls PostgreSQL and Keycloak.
 
-`pclaw` prints JSON. Where a step needs an id, copy it from the output (the `grep -m1 '"id"'` lines below do that for you).
+`pclaw` prints JSON. Where a step needs an id, copy it from the output; the `pcid` helper that `. .demo/env.sh` defines prints the first `"id"` of its input, so the commands below do that for you.
 
 ## 1. Start the demo (`task demo:up`)
 
@@ -48,7 +48,7 @@ pclaw login --server "$DEMO_SERVER" --org "$DEMO_ORG" --invitation <the pci_ tok
 Give yourself the roles the rest of this guide uses:
 
 ```bash
-ME=$(pclaw role bindings | grep -A4 '"role": "org_admin"' | sed -n 's/.*"id": "\([^"]*\)".*/\1/p' | head -1)
+ME=$(pclaw role bindings | grep -A4 '"role": *"org_admin"' | pcid)
 for r in gateway_admin agent_owner agent_admitter run_launcher security_admin grant_issuer policy_author policy_publisher; do
   pclaw role bind --role "$r" --user "$ME"
 done
@@ -59,9 +59,9 @@ done
 `pclaw init` finds Claude Code's settings and MCP servers, enrolls a key as an agent, and installs the hook that asks the gateway before every shell command. The demo wires a throwaway project (`$DEMO_PROJECT`), never your own Claude Code settings. First create the team, environment and agent:
 
 ```bash
-TEAM=$(pclaw team create --slug coding --name Coding | grep -m1 '"id"' | sed 's/.*: "\(.*\)".*/\1/')
-ENV=$(pclaw env create --slug demo --name Demo --kind dev | grep -m1 '"id"' | sed 's/.*: "\(.*\)".*/\1/')
-CC=$(pclaw agent create --name claude-code --team "$TEAM" --env "$ENV" --owner "$ME" --context desktop | grep -m1 '"id"' | sed 's/.*: "\(.*\)".*/\1/')
+TEAM=$(pclaw team create --slug coding --name Coding | pcid)
+ENV=$(pclaw env create --slug demo --name Demo --kind dev | pcid)
+CC=$(pclaw agent create --name claude-code --team "$TEAM" --env "$ENV" --owner "$ME" --context desktop | pcid)
 pclaw workload init --key-file .demo/claude-code.key
 ```
 
@@ -90,7 +90,7 @@ Expected: `Enrolled and admitted instance … of agent …`, then the settings f
 The agent that runs in the sandbox is a second agent, `coder`, that you own: the agent `dev seed` created has no human owner, and only an agent's owner may admit its sandbox instance. Its only way out is the sandbox. Create it, then apply the template to it. Reading, branching and opening pull requests are allowed. Merging needs an independent reviewer (`code_reviewer`). A deployment consequence needs a release approver in an open change window.
 
 ```bash
-CODER=$(pclaw agent create --name coder --team "$TEAM" --env "$ENV" --owner "$ME" --context desktop | grep -m1 '"id"' | sed 's/.*: "\(.*\)".*/\1/')
+CODER=$(pclaw agent create --name coder --team "$TEAM" --env "$ENV" --owner "$ME" --context desktop | pcid)
 pclaw template apply coding-to-production --repos acme/payments --agent "$CODER" --team "$TEAM" --dry-run
 pclaw template apply coding-to-production --repos acme/payments --agent "$CODER" --team "$TEAM" --yes
 ```
@@ -98,7 +98,7 @@ pclaw template apply coding-to-production --repos acme/payments --agent "$CODER"
 Expected: the plan lists the policy rules, the change window, the guardrail and the grant, then a `Done:` line for each. Running it again prints `Nothing to change`. The grant it issues is the one the sandbox run uses:
 
 ```bash
-GRANT=$(pclaw grant list --agent "$CODER" | grep -m1 '"id"' | sed 's/.*: "\(.*\)".*/\1/')
+GRANT=$(pclaw grant list --agent "$CODER" | pcid)
 ```
 
 ## 6. Connect the GitHub App
@@ -106,7 +106,7 @@ GRANT=$(pclaw grant list --agent "$CODER" | grep -m1 '"id"' | sed 's/.*: "\(.*\)
 The GitHub simulator is installed as an App (client id `Iv23liSimulated`, installation `1`, account `acme`) with its key at `.demo/github-app.pem`, and the demo's `github` connection waits for that key. Seal it to the gateway, so that the agent never holds a GitHub credential:
 
 ```bash
-FP=$(pclaw gateway get "$DEMO_GATEWAY_ID" | sed -n 's/.*"fingerprint": "\(sha256:[0-9a-f]*\)".*/\1/p' | head -1)
+FP=$(pclaw gateway get "$DEMO_GATEWAY_ID" | grep -o 'sha256:[0-9a-f]\{64\}' | head -1)
 pclaw seal --connection "$DEMO_GITHUB" --github-app Iv23liSimulated --installation 1 --account acme \
   --from-file .demo/github-app.pem --fingerprint "$FP"
 ```
@@ -136,6 +136,7 @@ The first run opens a sandbox session, so Docker needs a minute. Expected: `sand
 ## 8. Read the coverage card (`pclaw coverage list`)
 
 ```bash
+pclaw coverage reassess "$DEMO_GITHUB" --agent "$CODER"      # the server does this every 60 s; this asks for it now
 pclaw coverage list --agent "$CODER" --connection "$DEMO_GITHUB"
 ```
 
