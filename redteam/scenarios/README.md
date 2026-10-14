@@ -10,7 +10,7 @@ One YAML file per attack, `RT-###-<slug>.yaml`. The format is fixed by HR-223 (s
 
 | name | value |
 |---|---|
-| `owner`, `repo` | the repository the grant covers; pull request #1 is open on it (branch `fix/cve`) |
+| `owner`, `repo`, `pr` | the repository the grant covers; pull request `fixture.pr` is open on it (branch `fix/cve`) |
 | `other_repo` | a repository the grant does not name |
 | `head`, `main` | head commit of pull request #1; head of `main` |
 | `file_b64` | base64 of a small source file |
@@ -24,11 +24,12 @@ Values saved with `save:` are substituted as `${name}`.
 
 **Step semantics the catalogue leaves to the driver:**
 
-- An `agent.call` identical to an earlier held or approved step's call reuses that step's action id (a retry of the same action).
+- `agent.call` with `action_of` is sent under that step's action id (where the agent chooses it).
+- `concurrent: N` sends N calls at once, `${n}` is 1..N; `max_allow` bounds how many may be ALLOW.
+- Object ids come from fixtures or `save`; the driver types a numeric string (`pullNumber`) as an integer for MCP tools.
 - `person.approve` approves with every role the hold needs (`as: approver`); `launcher` and `developer` are the persons who must be refused.
 - `server.read` with `org: other` reads an id of that kind that exists in the second organisation.
 - `agent.steal` mode `stale_nonce` signs the call's proof with a nonce older than the server accepts.
-- `agent.call` face `hook` with `args.gateway: unreachable` points the hook at a closed port and expects the hook's exit code 2 (`hook_exit_2`).
 - `sim.mutate` `fault` args: `redirect_to`, `lose_response_rate`.
 - `target.replay`: the first delivery of an action token's request is accepted, a later one is refused.
 - Steps with no action to judge (`sim.mutate`, `operator.*`, a successful `person.*`) carry no `expect`.

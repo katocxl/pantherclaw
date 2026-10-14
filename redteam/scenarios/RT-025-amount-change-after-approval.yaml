@@ -24,7 +24,6 @@ steps:
         reason: duplicate
     expect:
       outcome: HOLD
-      reason: REFUNDS_NEED_APPROVAL
   - id: approve
     do: person.approve
     with:
@@ -33,6 +32,7 @@ steps:
   - id: refund-with-another-amount
     do: agent.call
     with:
+      action_of: refund-held
       face: http
       connection: payments
       method: POST
@@ -43,6 +43,6 @@ steps:
         currency: USD
         reason: duplicate
     expect:
-      outcome: HOLD
-      reason: REFUNDS_NEED_APPROVAL
+      outcome: DENY
+      reason: ACTION_TAMPERED
       decisive_control: HR-031

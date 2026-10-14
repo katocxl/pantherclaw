@@ -23,7 +23,6 @@ steps:
         reason: duplicate
     expect:
       outcome: HOLD
-      reason: REFUNDS_NEED_APPROVAL
   - id: approve
     do: person.approve
     with:

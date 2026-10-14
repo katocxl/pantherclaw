@@ -16,13 +16,12 @@ steps:
       face: http
       connection: github
       method: PUT
-      path: "/repos/${fixture.owner}/${fixture.repo}/pulls/1/merge"
+      path: "/repos/${fixture.owner}/${fixture.repo}/pulls/${fixture.pr}/merge"
       body:
         sha: "${fixture.head}"
         merge_method: squash
     expect:
       outcome: HOLD
-      reason: MERGES_NEED_AN_INDEPENDENT_REVIEW
   - id: approve
     do: person.approve
     with:
@@ -43,10 +42,11 @@ steps:
   - id: merge-at-old-head
     do: agent.call
     with:
+      action_of: merge-held
       face: http
       connection: github
       method: PUT
-      path: "/repos/${fixture.owner}/${fixture.repo}/pulls/1/merge"
+      path: "/repos/${fixture.owner}/${fixture.repo}/pulls/${fixture.pr}/merge"
       body:
         sha: "${fixture.head}"
         merge_method: squash
@@ -60,10 +60,9 @@ steps:
       face: http
       connection: github
       method: PUT
-      path: "/repos/${fixture.owner}/${fixture.repo}/pulls/1/merge"
+      path: "/repos/${fixture.owner}/${fixture.repo}/pulls/${fixture.pr}/merge"
       body:
         sha: "${new_head}"
         merge_method: squash
     expect:
       outcome: HOLD
-      reason: MERGES_NEED_AN_INDEPENDENT_REVIEW

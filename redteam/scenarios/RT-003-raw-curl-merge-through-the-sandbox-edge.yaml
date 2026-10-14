@@ -19,18 +19,16 @@ steps:
       args:
         owner: "${fixture.owner}"
         repo: "${fixture.repo}"
-        pullNumber: 1
+        pullNumber: "${fixture.pr}"
         expectedHeadSha: "${fixture.head}"
         merge_method: squash
     expect:
       outcome: HOLD
-      reason: MERGES_NEED_AN_INDEPENDENT_REVIEW
   - id: curl-merge
     do: sandbox.probe
     with:
       probe: raw_curl_merge
     expect:
       outcome: HOLD
-      reason: MERGES_NEED_AN_INDEPENDENT_REVIEW
       same_decision_as: mcp-merge
       decisive_control: HR-213

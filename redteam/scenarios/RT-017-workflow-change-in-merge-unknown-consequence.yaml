@@ -34,6 +34,8 @@ steps:
         title: CI
         head: ci/x
         base: main
+    save:
+      ci_pr: /number
     expect:
       outcome: ALLOW
   - id: merge-workflow-change
@@ -45,7 +47,7 @@ steps:
       args:
         owner: "${fixture.owner}"
         repo: "${fixture.repo}"
-        pullNumber: 2
+        pullNumber: "${ci_pr}"
         expectedHeadSha: "${ci_head}"
         merge_method: squash
     expect:

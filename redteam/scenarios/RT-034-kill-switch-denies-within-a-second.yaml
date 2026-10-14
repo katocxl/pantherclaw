@@ -38,6 +38,6 @@ steps:
         currency: USD
         reason: duplicate
     expect:
-      outcome: DENY
-      reason: KILL_SWITCH_ENGAGED
+      outcome: REFUSED
+      code: kill_switch
       decisive_control: HR-010

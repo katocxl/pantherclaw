@@ -16,9 +16,9 @@ steps:
       face: hook
       connection: github
       tool: Bash
+      fault: gateway_unreachable
       args:
         command: git push origin main
-        gateway: unreachable
     expect:
       outcome: REFUSED
       code: hook_exit_2

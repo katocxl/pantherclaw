@@ -22,7 +22,7 @@ steps:
         args:
           owner: "${fixture.owner}"
           repo: "${fixture.repo}"
-          pullNumber: 1
+          pullNumber: "${fixture.pr}"
           expectedHeadSha: "${fixture.head}"
           merge_method: squash
     expect:

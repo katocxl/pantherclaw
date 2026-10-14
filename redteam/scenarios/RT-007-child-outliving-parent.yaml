@@ -23,7 +23,7 @@ steps:
           method: get
           owner: "${fixture.owner}"
           repo: "${fixture.repo}"
-          pullNumber: 1
+          pullNumber: "${fixture.pr}"
     expect:
       outcome: DENY
       reason: NO_GRANT

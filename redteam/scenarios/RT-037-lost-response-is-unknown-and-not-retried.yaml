@@ -42,6 +42,7 @@ steps:
   - id: retry
     do: agent.call
     with:
+      action_of: refund-lost
       face: mcp
       connection: payments
       tool: create_refund

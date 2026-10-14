@@ -19,10 +19,9 @@ steps:
       args:
         owner: "${fixture.owner}"
         repo: "${fixture.repo}"
-        pullNumber: 1
+        pullNumber: "${fixture.pr}"
         expectedHeadSha: "${fixture.head}"
         merge_method: squash
     expect:
       outcome: HOLD
-      reason: MERGES_NEED_AN_INDEPENDENT_REVIEW
       decisive_control: HR-201

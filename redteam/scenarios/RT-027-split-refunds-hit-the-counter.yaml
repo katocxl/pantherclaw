@@ -10,44 +10,20 @@ rules: [HR-049]
 requires: [payments]
 harness_only: false
 steps:
-  - id: split-1
+  - id: split-at-once
     do: agent.call
     with:
       face: mcp
       connection: payments
+      concurrent: 4
       tool: create_refund
       args:
         charge: ch_1
-        amount: "20.00"
-        currency: USD
-        reason: duplicate
-    expect:
-      outcome: ALLOW
-  - id: split-2
-    do: agent.call
-    with:
-      face: mcp
-      connection: payments
-      tool: create_refund
-      args:
-        charge: ch_1
-        amount: "20.01"
-        currency: USD
-        reason: duplicate
-    expect:
-      outcome: ALLOW
-  - id: split-3
-    do: agent.call
-    with:
-      face: mcp
-      connection: payments
-      tool: create_refund
-      args:
-        charge: ch_1
-        amount: "20.02"
+        amount: "20.0${n}"
         currency: USD
         reason: duplicate
     expect:
       outcome: DENY
       reason: COUNT_LIMIT_REACHED
+      max_allow: 2
       decisive_control: HR-049
