@@ -196,6 +196,10 @@ LEFT JOIN pc.permits p ON p.org_id = t.org_id AND p.transaction_id = t.id AND NO
 WHERE t.org_id = sqlc.arg(org_id) AND t.id = sqlc.arg(id)
 FOR UPDATE OF t;
 
+-- TransactionSimulated is the flag an effect receipt copies (HR-120).
+-- name: TransactionSimulated :one
+SELECT simulated FROM pc.transactions WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id);
+
 -- name: InsertTransactionLink :execrows
 INSERT INTO pc.transaction_links (org_id, from_transaction_id, to_transaction_id, kind, created_by)
 VALUES (sqlc.arg(org_id), sqlc.arg(from_transaction_id), sqlc.arg(to_transaction_id), sqlc.arg(kind), sqlc.arg(created_by))
@@ -219,3 +223,9 @@ SELECT id, transaction_id, kind, state, resolved_via, observation_id, user_id, b
        opened_at, resolved_at
 FROM pc.reconciliation_tasks
 WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id);
+
+-- SimulatedTransactions are those of the given transactions that belong to
+-- a range run (HR-222): a console shows a SIMULATED banner for them.
+-- name: SimulatedTransactions :many
+SELECT id FROM pc.transactions
+WHERE org_id = sqlc.arg(org_id) AND id = ANY (sqlc.arg(transaction_ids)::uuid[]) AND simulated;

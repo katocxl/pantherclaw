@@ -78,6 +78,9 @@ type Run struct {
 	EnvironmentID ids.UUID
 	GrantID       gdomain.GrantID
 	Active        bool
+	// Simulated: the run belongs to a range agent or descends from one
+	// (HR-220). The decision records it; policy never sees it.
+	Simulated bool
 	// TaskRef is the run's UNTRUSTED task label, shown to approvers only in
 	// the untrusted block (HR-034).
 	TaskRef string
@@ -180,6 +183,9 @@ type Connection struct {
 	// DestinationClass is where the connection sends data: "public" or
 	// "internal" (HR-079). Policies see it as action.destination_class.
 	DestinationClass string
+	// Simulated connections point only at simulators (HR-221); a run and
+	// a connection must agree on it (HR-220).
+	Simulated bool
 	// Modes are the explicit route modes; other routes take DefaultMode.
 	Modes map[string]string
 	// Reads are the read operations the gateway can make through the

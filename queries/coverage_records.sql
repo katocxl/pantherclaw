@@ -277,6 +277,8 @@ JOIN pc.runs r ON r.org_id = t.org_id AND r.id = t.run_id
 WHERE t.org_id = sqlc.arg(org_id) AND (sqlc.narg(after)::uuid IS NULL OR t.id > sqlc.narg(after)::uuid)
   AND (sqlc.narg(until)::uuid IS NULL OR t.id <= sqlc.narg(until)::uuid)
   AND t.created_at < now() - interval '1 minute'
+  -- HR-222: a range run never reaches coverage.
+  AND NOT t.simulated
 ORDER BY t.id
 LIMIT sqlc.arg(max_rows);
 
@@ -389,6 +391,8 @@ SELECT c.id, p.version_id FROM pc.connections c
 JOIN pc.tool_packages tp ON tp.org_id = c.org_id AND tp.name = c.package
 JOIN pc.package_pins p ON p.org_id = c.org_id AND p.package_id = tp.id
 WHERE c.org_id = sqlc.arg(org_id) AND c.state <> 'RETIRED'
+  -- HR-222: snapshots and routes never include a simulated connection.
+  AND NOT c.simulated
 ORDER BY c.id
 LIMIT 1000;
 

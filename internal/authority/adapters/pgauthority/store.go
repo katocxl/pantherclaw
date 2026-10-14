@@ -794,7 +794,7 @@ func (s *Store) notifyUnknown(ctx context.Context, tx db.TenantTx, org ids.OrgID
 			"operation": w.Eval.Operation, "consequence": c.Operation + " on " + c.Target.ID, "would": would,
 			"transaction": w.TransactionID.String(),
 		},
-		DedupeKey: "consequence_unknown_dispatched:" + w.TransactionID.String(),
+		DedupeKey: "consequence_unknown_dispatched:" + w.TransactionID.String(), Simulated: w.Eval.Simulated,
 	})
 	return err
 }

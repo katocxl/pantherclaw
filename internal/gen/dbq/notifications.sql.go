@@ -785,6 +785,31 @@ func (q *Queries) SetChannelPaused(ctx context.Context, paused bool, orgID ids.O
 	return result.RowsAffected(), nil
 }
 
+const subjectSimulated = `-- name: SubjectSimulated :one
+SELECT coalesce(CASE $1::text
+    WHEN 'transaction' THEN (SELECT t.simulated FROM pc.transactions t
+                             WHERE t.org_id = $2 AND t.id = $3)
+    WHEN 'approval_request' THEN (SELECT t.simulated FROM pc.approval_requests a
+                                  JOIN pc.transactions t ON t.org_id = a.org_id AND t.id = a.transaction_id
+                                  WHERE a.org_id = $2 AND a.id = $3)
+    WHEN 'reconciliation' THEN (SELECT t.simulated FROM pc.reconciliation_tasks k
+                                JOIN pc.transactions t ON t.org_id = k.org_id AND t.id = k.transaction_id
+                                WHERE k.org_id = $2 AND k.id = $3)
+    WHEN 'connection' THEN (SELECT c.simulated FROM pc.connections c
+                            WHERE c.org_id = $2 AND c.id = $3)
+END, false)::boolean AS simulated
+`
+
+// SubjectSimulated tells whether a notification's subject is a simulated
+// transaction, or comes from one or from a simulated connection (HR-222):
+// the notice then says so.
+func (q *Queries) SubjectSimulated(ctx context.Context, subjectType string, orgID ids.OrgID, subjectID ids.UUID) (bool, error) {
+	row := q.db.QueryRow(ctx, subjectSimulated, subjectType, orgID, subjectID)
+	var simulated bool
+	err := row.Scan(&simulated)
+	return simulated, err
+}
+
 const updateChannel = `-- name: UpdateChannel :execrows
 UPDATE pc.notification_channels
 SET name = coalesce($1, name), event_types = coalesce($2::text[], event_types),

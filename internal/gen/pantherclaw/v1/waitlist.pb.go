@@ -320,8 +320,11 @@ type WaitlistEntry struct {
 	AssignTime *timestamppb.Timestamp `protobuf:"bytes,22,opt,name=assign_time,json=assignTime,proto3" json:"assign_time,omitempty"`
 	// When a decider first responded.
 	FirstResponseTime *timestamppb.Timestamp `protobuf:"bytes,23,opt,name=first_response_time,json=firstResponseTime,proto3" json:"first_response_time,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	// Whether the entry's subject is a range run's (G0 M12, HR-222): a console
+	// shows a SIMULATED banner.
+	Simulated     bool `protobuf:"varint,24,opt,name=simulated,proto3" json:"simulated,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *WaitlistEntry) Reset() {
@@ -513,6 +516,13 @@ func (x *WaitlistEntry) GetFirstResponseTime() *timestamppb.Timestamp {
 		return x.FirstResponseTime
 	}
 	return nil
+}
+
+func (x *WaitlistEntry) GetSimulated() bool {
+	if x != nil {
+		return x.Simulated
+	}
+	return false
 }
 
 // ListWaitlistEntriesRequest pages through entries.
@@ -2088,7 +2098,8 @@ var File_pantherclaw_v1_waitlist_proto protoreflect.FileDescriptor
 
 const file_pantherclaw_v1_waitlist_proto_rawDesc = "" +
 	"\n" +
-	"\x1dpantherclaw/v1/waitlist.proto\x12\x0epantherclaw.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xf8\t\n" +
+	"\x1dpantherclaw/v1/waitlist.proto\x12\x0epantherclaw.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\x96\n" +
+	"\n" +
 	"\rWaitlistEntry\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x120\n" +
 	"\x04kind\x18\x02 \x01(\x0e2\x1c.pantherclaw.v1.WaitlistKindR\x04kind\x12!\n" +
@@ -2118,7 +2129,8 @@ const file_pantherclaw_v1_waitlist_proto_rawDesc = "" +
 	"\x10assignee_user_id\x18\x15 \x01(\tR\x0eassigneeUserId\x12;\n" +
 	"\vassign_time\x18\x16 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"assignTime\x12J\n" +
-	"\x13first_response_time\x18\x17 \x01(\v2\x1a.google.protobuf.TimestampR\x11firstResponseTime\x1a;\n" +
+	"\x13first_response_time\x18\x17 \x01(\v2\x1a.google.protobuf.TimestampR\x11firstResponseTime\x12\x1c\n" +
+	"\tsimulated\x18\x18 \x01(\bR\tsimulated\x1a;\n" +
 	"\rEvidenceEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\x1aD\n" +
