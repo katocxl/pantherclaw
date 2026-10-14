@@ -10,10 +10,10 @@ import (
 	"context"
 	"crypto/ed25519"
 	"encoding/json/jsontext"
-	"errors"
 	capp "github.com/katocxl/pantherclaw/internal/connections/app"
 	mockpayments "github.com/katocxl/pantherclaw/packages/mock-payments"
 	"net/http"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -28,6 +28,10 @@ type rangeExtra struct {
 	otherKey   ed25519.PrivateKey
 	otherToken string
 	sandbox    *sandboxRig
+
+	// The MCP simulator the payments connection dispatches to, clean and as it turns bad.
+	mcpClean, mcpPoisoned http.Handler
+	mcpCurrent            atomic.Pointer[http.Handler]
 }
 
 func (e *rangeExtra) available() bool { return sandboxBuilt }
@@ -43,8 +47,8 @@ func (e *rangeExtra) probe(d *rangeDriver, st domain.Step) (domain.Observation, 
 	return sandboxProbe(d, st)
 }
 
-func (e *rangeExtra) mutateMCP(*rangeDriver, string, jsontext.Value) (domain.Observation, error) {
-	return domain.Observation{}, errors.New("the harness driver cannot change the MCP simulator yet")
+func (e *rangeExtra) mutateMCP(d *rangeDriver, change string, args jsontext.Value) (domain.Observation, error) {
+	return d.mutateMCP(change, args)
 }
 
 func runServerCmd(out, errb *bytes.Buffer, args ...string) int {
@@ -74,13 +78,6 @@ func doRecorded(s *stack, rec *rangeRecorder, req *http.Request) error {
 	}
 	_ = resp.Body.Close()
 	return nil
-}
-
-// enrolOtherInstance enrols another instance of the agent.
-func enrolOtherInstance(t *testing.T, _ *stack) (ed25519.PrivateKey, string) {
-	t.Helper()
-	t.Fatal("the harness driver cannot enrol a second instance yet")
-	return nil, ""
 }
 
 // objectID is the id of an object of this stack's organisation.

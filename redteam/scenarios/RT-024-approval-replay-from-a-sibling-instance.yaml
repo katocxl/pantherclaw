@@ -1,6 +1,6 @@
 apiVersion: pantherclaw.range/v1
 id: RT-024
-title: Another instance replaying an approved refund gets no permit
+title: Another instance cannot use the run an approved refund was held in
 category: boundary
 suite: platform
 tier: business
@@ -42,5 +42,5 @@ steps:
         reason: duplicate
     expect:
       outcome: DENY
-      reason: ACTION_TAMPERED
+      reason: RUN_MISMATCH
       decisive_control: HR-030

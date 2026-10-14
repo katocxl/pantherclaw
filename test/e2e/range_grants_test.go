@@ -8,10 +8,12 @@ package e2e
 import (
 	"bytes"
 	"context"
+	"crypto/ed25519"
 	"encoding/json/jsontext"
 	"encoding/json/v2"
 	"fmt"
 	"net/http"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -203,4 +205,51 @@ func (d *rangeDriver) refusedApproval(rec *callRec, as string) (domain.Observati
 		}
 	}
 	return domain.Observation{Outcome: domain.OutcomeRefused, Code: fmt.Sprintf("http_%d", code), Detail: body}, nil
+}
+
+// enrolOtherInstance enrols and admits a second instance of the agent, with
+// a key of its own, and returns the key and a workload token.
+func (d *rangeDriver) enrolOtherInstance() (ed25519.PrivateKey, string) {
+	t, s := d.t, d.s
+	if d.admin == nil {
+		d.adminOnly()
+	}
+	var agent, alice string
+	s.query(t, "SELECT agent_id::text FROM pc.runs WHERE id = $1", []any{s.run}, &agent)
+	s.query(t, "SELECT id::text FROM pc.users WHERE subject = 'alice'", nil, &alice)
+	for _, role := range []string{"agent_owner", "agent_admitter"} {
+		if code, out, errs := d.admin.pclaw(t, "role", "bind", "--role", role, "--user", alice); code != 0 {
+			t.Fatalf("role bind %s: %d %s %s", role, code, out, errs)
+		}
+	}
+	s.db.AdminExec(t, "UPDATE pc.role_bindings SET created_at = now() - interval '30 days' WHERE org_id = $1", s.org)
+	s.db.AdminExec(t, "UPDATE pc.agents SET owner_user_id = $3 WHERE org_id = $1 AND id = $2", s.org, mustUUID(t, agent), mustUUID(t, alice))
+	dir := t.TempDir()
+	enrollFile, keyFile := filepath.Join(dir, "enroll.token"), filepath.Join(dir, "workload.json")
+	must := func(args ...string) string {
+		t.Helper()
+		code, out, errs := d.admin.pclaw(t, args...)
+		if code != 0 {
+			t.Fatalf("pclaw %s: %d %s %s", strings.Join(args, " "), code, out, errs)
+		}
+		return out
+	}
+	must("agent", "enroll-token", agent, "--out", enrollFile)
+	must("workload", "init", "--key-file", keyFile)
+	o := must("workload", "enroll", "--key-file", keyFile, "--server", s.apiURL, "--enrollment-token-file", enrollFile)
+	inst, fp := enrolledInstance.FindStringSubmatch(o), enrolledPrint.FindStringSubmatch(o)
+	if inst == nil || fp == nil {
+		t.Fatalf("enroll output %q", o)
+	}
+	must("instance", "admit", inst[1], "--fingerprint", fp[1])
+	token := strings.TrimSpace(must("workload", "token", "--key-file", keyFile))
+	kf, err := workloadclient.ReadKeyFile(keyFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	key, err := kf.Key()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return key, token
 }

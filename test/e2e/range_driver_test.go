@@ -58,6 +58,9 @@ type rangeDriver struct {
 	asRun string
 	// defaultRun is the run of a grant of the scenario.s own, when it has one.
 	defaultRun string
+
+	// mcpUp is set once the payments connection dispatches to the MCP simulator.
+	mcpUp bool
 }
 
 type reviewer struct {
@@ -131,6 +134,9 @@ func (d *rangeDriver) Setup(_ context.Context, sc domain.Scenario) (app.Fixture,
 		d.other = start(t, options{budget: "1000.00"})
 	}
 	d.setupPayments()
+	if requires(sc, "mcp") {
+		d.setupMCPUpstream()
+	}
 	if sc.ID == "RT-031" {
 		d.seedUnlisted()
 	}
@@ -339,6 +345,9 @@ func (d *rangeDriver) callOnce(w callWith, _ []byte, _ int) (domain.Observation,
 func (d *rangeDriver) role(r string) string {
 	switch r {
 	case "mcp":
+		if d.mcpUp {
+			return "payments"
+		}
 		return "mcp-upstream"
 	}
 	return r

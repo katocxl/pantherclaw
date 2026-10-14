@@ -144,7 +144,7 @@ func (r *rangeRecorder) RoundTrip(req *http.Request) (*http.Response, error) {
 // token, the same run) and returns them.
 func (d *rangeDriver) otherInstance() (ed25519.PrivateKey, string) {
 	if d.extra.otherKey == nil {
-		d.extra.otherKey, d.extra.otherToken = enrolOtherInstance(d.t, d.s)
+		d.extra.otherKey, d.extra.otherToken = d.enrolOtherInstance()
 	}
 	return d.extra.otherKey, d.extra.otherToken
 }
