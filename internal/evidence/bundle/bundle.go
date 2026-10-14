@@ -60,6 +60,9 @@ type Bundle struct {
 	Consistency []Consistency `json:"consistency,omitzero"`
 	Previous    string        `json:"previous,omitzero"` // a checkpoint saved earlier
 	Anchor      *Anchor       `json:"anchor,omitzero"`
+	// ProbeReports are the signed probe reports the bundle's sandbox.closure
+	// entries name (HR-227).
+	ProbeReports []ProbeReport `json:"probe_reports,omitzero"`
 }
 
 // Entry is a ledger entry in its chained form. Body is absent when
@@ -156,6 +159,14 @@ func (b *Bundle) check() error {
 		return invalid("too many entries, receipts or checkpoints")
 	case len(b.Inclusion) > MaxProofs || len(b.Consistency) > MaxProofs:
 		return invalid("too many proofs")
+	}
+	if len(b.ProbeReports) > maxProbeReports {
+		return invalid("too many probe reports")
+	}
+	for _, p := range b.ProbeReports {
+		if p.Run == "" || len(p.Run) > 64 || len(p.Report) == 0 || len(p.Report) > maxReceiptBytes {
+			return invalid("a probe report is empty or larger than %d bytes", maxReceiptBytes)
+		}
 	}
 	for _, r := range b.Receipts {
 		if len(r) == 0 || len(r) > maxReceiptBytes {

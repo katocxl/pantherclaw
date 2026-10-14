@@ -46,6 +46,9 @@ type Report struct {
 	Limits string  `json:"limits"`
 	// notFull: a range pack whose receipts are not all in the pack.
 	notFull bool
+	// runs are the probe reports that verified against a closure entry, by
+	// probe_runs id.
+	runs map[string]verifiedRun
 }
 
 // RangeNotFullyVerifiable reports a range pack some of whose receipts are
@@ -53,7 +56,9 @@ type Report struct {
 // re-derived in full. A baseline gate must refuse such a pack.
 func (r *Report) RangeNotFullyVerifiable() bool { return r.notFull }
 
-func newReport() *Report { return &Report{Format: ReportFormat, Result: Passed, Limits: Limits} }
+func newReport() *Report {
+	return &Report{Format: ReportFormat, Result: Passed, Limits: Limits, runs: map[string]verifiedRun{}}
+}
 
 func (r *Report) add(name, subject string, s Status, format string, args ...any) {
 	r.Checks = append(r.Checks, Check{Name: name, Subject: subject, Status: s, Detail: fmt.Sprintf(format, args...)})

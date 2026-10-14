@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	evapp "github.com/katocxl/pantherclaw/internal/evidence/app"
+	"github.com/katocxl/pantherclaw/internal/evidence/bundle"
 	"github.com/katocxl/pantherclaw/internal/evidence/pack"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	"github.com/katocxl/pantherclaw/internal/ranges/adapters/pgranges"
@@ -162,5 +164,58 @@ func (b *builder) assurance() error {
 		return err
 	}
 	b.files = append(b.files, pack.File{Path: pack.AssurancePath, Kind: pack.KindAssurance, Data: data})
+	return nil
+}
+
+// probeRuns lists the probe reports the range's steps cite, once each.
+func (d *rangeData) probeRuns() []ids.UUID {
+	var out []ids.UUID
+	for _, r := range d.results {
+		for _, st := range r.Steps {
+			if st.Probe != nil {
+				out = append(out, *st.Probe)
+			}
+		}
+	}
+	slices.SortFunc(out, func(x, y ids.UUID) int { return strings.Compare(x.String(), y.String()) })
+	return slices.Compact(out)
+}
+
+// probeProofs adds a verify bundle of the probe reports the range's steps
+// cite: the sandbox.closure entries that record them, with their inclusion
+// proofs, and the signed reports, so `pclaw verify` re-derives those steps
+// offline (HR-224, HR-227). A report no closure entry records is a gap.
+func (b *builder) probeProofs() error {
+	runs := b.rangeData.probeRuns()
+	if len(runs) == 0 {
+		return nil
+	}
+	gap := func(id ids.UUID, reason, detail string) {
+		b.gap("probe report "+id.String(), reason, "%s", detail)
+	}
+	x, err := b.s.Bundles.ExportBundle(b.ctx, evapp.Selection{ProbeRuns: runs}, 0)
+	switch {
+	case errors.Is(err, evapp.ErrNothingToExport), errors.Is(err, evapp.ErrBundleTooLarge):
+		for _, id := range runs {
+			gap(id, pack.GapNotFound, "no chained sandbox closure records this probe report, or its bundle is too large")
+		}
+		return nil
+	case err != nil:
+		return err
+	}
+	bd, err := bundle.Decode(x.Bundle)
+	if err != nil {
+		return err
+	}
+	have := map[string]bool{}
+	for _, p := range bd.ProbeReports {
+		have[p.Run] = true
+	}
+	for _, id := range runs {
+		if !have[id.String()] {
+			gap(id, pack.GapNotFound, "no chained sandbox closure records this probe report")
+		}
+	}
+	b.files = append(b.files, pack.File{Path: "proofs/probes-0001.json", Kind: pack.KindBundle, Data: x.Bundle})
 	return nil
 }
