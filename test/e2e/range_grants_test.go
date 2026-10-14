@@ -6,6 +6,7 @@
 package e2e
 
 import (
+	"bytes"
 	"context"
 	"encoding/json/jsontext"
 	"encoding/json/v2"
@@ -109,3 +110,53 @@ func (d *rangeDriver) revokeGrant() (domain.Observation, error) {
 }
 
 var _ jsontext.Value
+
+// ownGrant makes the scenario's agent act under a grant of its own: issued
+// by the org's administrator with these bounds and limits, and a run on it.
+// Calls are made in that run from then on.
+func (d *rangeDriver) ownGrant(bounds, limits string) {
+	t, s := d.t, d.s
+	if d.admin == nil {
+		d.adminOnly()
+	}
+	var agent, inst, alice string
+	s.query(t, "SELECT agent_id::text FROM pc.runs WHERE id = $1", []any{s.run}, &agent)
+	s.query(t, "SELECT id::text FROM pc.agent_instances WHERE agent_id = $1 AND state = 'ADMITTED' LIMIT 1", []any{agent}, &inst)
+	s.query(t, "SELECT id::text FROM pc.users WHERE subject = 'alice'", nil, &alice)
+	dir := t.TempDir()
+	for _, role := range []string{"grant_issuer", "run_launcher"} {
+		if code, out, errs := d.admin.pclaw(t, "role", "bind", "--role", role, "--user", alice); code != 0 {
+			t.Fatalf("role bind %s: %d %s %s", role, code, out, errs)
+		}
+	}
+	doc := func(name, content string) string {
+		return writeFile(t, dir, name, []byte(content))
+	}
+	args := []string{"grant", "issue", agent, "--principal", "user:" + alice, "--expires", "24h", "--bounds-file", doc("bounds.json", bounds),
+		"--delegation-depth", "1", "--max-children", "2", "--task", "range"}
+	if limits != "" {
+		args = append(args, "--limits-file", doc("limits.json", limits))
+	}
+	code, out, errs := d.admin.pclaw(t, args...)
+	if code != 0 {
+		t.Fatalf("grant issue: %d %s %s", code, out, errs)
+	}
+	grant := field(t, out, "id")
+	code, out, errs = d.admin.pclaw(t, "run", "start", agent, "--instance", inst, "--grant", grant, "--task", "range")
+	if code != 0 {
+		t.Fatalf("run start: %d %s %s", code, out, errs)
+	}
+	d.defaultRun = field(t, out, "id")
+}
+
+// adminOnly makes alice the org's administrator, signed in to the CLI.
+func (d *rangeDriver) adminOnly() {
+	t, s := d.t, d.s
+	var out, errb bytes.Buffer
+	if code := runServerCmd(&out, &errb, "org", "admin-invite", "--config", s.serverCfg, "--org", s.org.String()); code != 0 {
+		t.Fatalf("org admin-invite: %d %s", code, errb.String())
+	}
+	alice := d.people.user(t, "alice", "alice@example.test")
+	alice.login(t, s.org.String(), pciToken.FindStringSubmatch(out.String())[1])
+	d.admin = alice
+}

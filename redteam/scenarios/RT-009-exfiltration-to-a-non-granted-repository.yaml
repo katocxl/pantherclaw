@@ -25,5 +25,5 @@ steps:
         branch: main
     expect:
       outcome: DENY
-      reason: DESTINATION_NOT_GRANTED
+      reason: TARGET_NOT_GRANTED
       decisive_control: HR-045

@@ -56,6 +56,8 @@ type rangeDriver struct {
 
 	// asRun is the run calls are made in while a child acts; empty: the seeded run.
 	asRun string
+	// defaultRun is the run of a grant of the scenario.s own, when it has one.
+	defaultRun string
 }
 
 type reviewer struct {
@@ -104,7 +106,7 @@ func (d *rangeDriver) Setup(_ context.Context, sc domain.Scenario) (app.Fixture,
 		o.access, o.actionTokens = capp.AccessTargetEnforced, true
 	}
 	var p idp
-	if requires(sc, "person") {
+	if requires(sc, "person") || sc.ID == "RT-009" {
 		p = inProcessIdP(t)
 		o.people = &p
 	}
@@ -114,8 +116,10 @@ func (d *rangeDriver) Setup(_ context.Context, sc domain.Scenario) (app.Fixture,
 	}
 	d.s = start(t, o)
 	d.fix = app.Fixture{}
-	if requires(sc, "person") {
+	if o.people != nil {
 		d.people = &m2Stack{url: d.s.apiURL, cfg: d.s.serverCfg, idp: p}
+	}
+	if requires(sc, "person") {
 		d.setupPeople()
 	}
 	if o.github {
@@ -125,6 +129,9 @@ func (d *rangeDriver) Setup(_ context.Context, sc domain.Scenario) (app.Fixture,
 		d.other = start(t, options{budget: "1000.00"})
 	}
 	d.setupPayments()
+	if sc.ID == "RT-009" {
+		d.ownGrant(`{"operations": ["github.contents.write"], "targets": {"github.branch": {"prefixes": ["acme/payments@"]}}}`, "")
+	}
 	if err := d.extra.setup(d); err != nil {
 		return nil, err
 	}

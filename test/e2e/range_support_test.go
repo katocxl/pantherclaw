@@ -122,5 +122,8 @@ func (d *rangeDriver) runHeader() string {
 	if d.asRun != "" {
 		return d.asRun
 	}
+	if d.defaultRun != "" {
+		return d.defaultRun
+	}
 	return d.s.run
 }
