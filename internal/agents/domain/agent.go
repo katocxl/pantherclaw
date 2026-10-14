@@ -78,6 +78,9 @@ type Details struct {
 	// BackupOwnerUserID is optional (zero when absent).
 	BackupOwnerUserID ids.UUID
 	Context           ExecutionContext
+	// RangeAgent marks an agent of the adversarial range (G0 M12, HR-220):
+	// set at creation, never changed.
+	RangeAgent bool
 }
 
 // Validate checks the details a claimed agent needs.

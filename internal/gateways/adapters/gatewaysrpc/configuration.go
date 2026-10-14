@@ -60,7 +60,7 @@ func (h *GatewayHandler) GetConfiguration(ctx context.Context, req *pb.GetConfig
 			AccessMode: conn.AccessMode, DefaultMode: conn.DefaultMode, Routes: routes[conn.ID.String()],
 			MaxResponseBytes: conn.MaxResponseBytes, TimeoutMs: conn.TimeoutMs, State: conn.State, Revision: conn.Revision,
 			AgentHosts: conn.AgentHosts, Connector: specs[conn.ID.String()],
-			Github: github[conn.ID.String()],
+			Github: github[conn.ID.String()], Simulated: conn.Simulated,
 		})
 	}
 	for _, cr := range c.Credentials {

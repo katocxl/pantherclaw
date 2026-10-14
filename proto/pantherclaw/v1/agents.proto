@@ -151,6 +151,9 @@ message Agent {
   google.protobuf.Timestamp claim_time = 14;
   // Retirement time.
   google.protobuf.Timestamp retire_time = 15;
+  // A range agent (G0 M12, HR-220): marked at creation, never changed; all
+  // its runs are simulated and it may use only simulated connections.
+  bool range_agent = 16;
 }
 
 // Discovery is what a gateway or scan observed about a discovered agent.
@@ -243,6 +246,10 @@ message CreateAgentRequest {
     defined_only: true
     not_in: [0]
   }];
+  // Creates a range agent (G0 M12, HR-220): all its runs are simulated and it
+  // may use only simulated connections. At most 5 per organization; they do
+  // not count toward the edition's agent limit. Fixed for the agent's life.
+  bool range_agent = 8;
 }
 
 // CreateAgentResponse returns the agent.

@@ -34,9 +34,14 @@ var (
 		"the team and environment must be active, and the environment must belong to the org or to that team")
 	ErrOwner      = pcerr.New(pcerr.InvalidArgument, "AGENT_OWNER", "owners must be active users of the org")
 	ErrAgentLimit = pcerr.New(pcerr.FailedPrecondition, "AGENT_LIMIT", "the edition's agent limit is reached")
-	ErrState      = pcerr.New(pcerr.FailedPrecondition, "AGENT_STATE", "the agent's state does not allow this change")
-	ErrLostRace   = pcerr.New(pcerr.Aborted, "AGENT_CHANGED", "the agent changed concurrently; read it again")
+	// ErrRangeAgentLimit: an org has at most MaxRangeAgents live range agents in every edition (D1).
+	ErrRangeAgentLimit = pcerr.New(pcerr.FailedPrecondition, "RANGE_AGENT_LIMIT", "an organization has at most 5 range agents")
+	ErrState           = pcerr.New(pcerr.FailedPrecondition, "AGENT_STATE", "the agent's state does not allow this change")
+	ErrLostRace        = pcerr.New(pcerr.Aborted, "AGENT_CHANGED", "the agent changed concurrently; read it again")
 )
+
+// MaxRangeAgents is the number of live range agents an org may have (G0 M12 D1).
+const MaxRangeAgents = 5
 
 // Entitlements reports the current edition (billing.Service).
 type Entitlements interface {
@@ -183,6 +188,22 @@ func (inv *Inventory) checkLimit(ctx context.Context, q *dbq.Queries, org ids.Or
 		return pcerr.Wrap(err, pcerr.FailedPrecondition, "AGENT_LIMIT", err.Error())
 	} else if err != nil {
 		return err
+	}
+	return nil
+}
+
+// checkRangeLimit enforces the cap on range agents. They do not count toward
+// the edition's limit. It takes the same lock as checkLimit.
+func (inv *Inventory) checkRangeLimit(ctx context.Context, q *dbq.Queries, org ids.OrgID) error {
+	if err := q.LockAgentLimit(ctx, org.String()); err != nil {
+		return err
+	}
+	n, err := q.CountRangeAgents(ctx, org)
+	if err != nil {
+		return err
+	}
+	if n >= MaxRangeAgents {
+		return ErrRangeAgentLimit
 	}
 	return nil
 }

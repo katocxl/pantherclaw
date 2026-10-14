@@ -41,6 +41,7 @@ type PcAgent struct {
 	UpdatedAt         time.Time
 	ClaimedAt         *time.Time
 	RetiredAt         *time.Time
+	RangeAgent        bool
 }
 
 type PcAgentChange struct {
@@ -399,6 +400,7 @@ type PcConnection struct {
 	UpdatedBy        string
 	UpdatedAt        time.Time
 	AgentHosts       []string
+	Simulated        bool
 }
 
 type PcConnectionCapability struct {
@@ -1533,6 +1535,7 @@ type PcRun struct {
 	CreatedAt          time.Time
 	ExpiresAt          time.Time
 	EndedAt            *time.Time
+	Simulated          bool
 }
 
 type PcSandboxSession struct {
@@ -1691,6 +1694,7 @@ type PcTransaction struct {
 	EffectState         *string
 	EffectLevelRequired *string
 	EffectLevelAchieved *string
+	Simulated           bool
 }
 
 type PcTransactionLink struct {
