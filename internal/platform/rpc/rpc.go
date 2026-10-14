@@ -62,7 +62,8 @@ type Options struct {
 	// Public lists procedures callable without authentication. Each must also
 	// be declared "// permission: public" in its proto (tested).
 	Public []string
-	// Authenticate is nil until M2: every non-public procedure is refused.
+	// Authenticate authenticates every non-public procedure. When it is nil,
+	// every non-public procedure is refused.
 	Authenticate Authenticator
 }
 
