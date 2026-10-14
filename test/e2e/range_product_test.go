@@ -14,8 +14,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/katocxl/pantherclaw/internal/definitions/manifest"
-
 	credapp "github.com/katocxl/pantherclaw/internal/credentials/app"
 	creddomain "github.com/katocxl/pantherclaw/internal/credentials/domain"
 	pccrypto "github.com/katocxl/pantherclaw/internal/platform/crypto"
@@ -65,7 +63,6 @@ func (r *rangeStack) buildRangeThroughTheProduct(realGrantBounds, realGrantRequi
 	var twinID string
 	s.query(t, "SELECT id::text FROM pc.connections WHERE name = 'github-range'", nil, &twinID)
 	s.waitConfig(t, s.sealGitHubAppFor(t, mustUUID(t, twinID)))
-	d.registerGatewayFacts("github.gateway.range", twinID)
 
 	s.query(t, "SELECT id::text FROM pc.agents WHERE range_agent", nil, &r.agent)
 	r.keyFile, r.instance = d.enrolThroughTheProduct(r.agent)
@@ -140,36 +137,4 @@ func (s *stack) sealGitHubAppFor(t *testing.T, conn ids.UUID) int64 {
 		t.Fatal(err)
 	}
 	return s.configVersion(t, k.Gateway)
-}
-
-// registerGatewayFacts registers the gateway as the provider of the facts the
-// GitHub package names for a connection (the gateway reads them from GitHub
-// before each decision), as an operator does with `pclaw fact-provider
-// register --gateway --connection` for the range's twin.
-func (d *rangeDriver) registerGatewayFacts(name, conn string) {
-	t := d.t
-	p, err := manifest.Decode(pcgithub.Package)
-	if err != nil {
-		t.Fatal(err)
-	}
-	seen := map[string]bool{}
-	var facts []string
-	for _, def := range p.Definitions {
-		for _, pr := range def.Prerequisites {
-			f := pr.Fact + ":object:" + def.Target.Type + ":1m"
-			if !seen[f] {
-				seen[f] = true
-				facts = append(facts, f)
-			}
-		}
-	}
-	var gw string
-	d.s.query(t, "SELECT gateway_id::text FROM pc.connections WHERE id = $1", []any{mustUUID(t, conn)}, &gw)
-	args := []string{"fact-provider", "register", "--name", name, "--gateway", gw, "--connection", conn}
-	for _, f := range facts {
-		args = append(args, "--fact", f)
-	}
-	if code, out, errs := d.admin.pclaw(t, args...); code != 0 {
-		t.Fatalf("pclaw fact-provider register: %d %s %s", code, out, errs)
-	}
 }
