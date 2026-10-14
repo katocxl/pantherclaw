@@ -25,6 +25,7 @@ type Regression struct {
 type Comparison struct {
 	Regressions []Regression
 	Failures    []string // current FAIL verdicts
+	Errors      []string // current ERROR verdicts: the gate fails closed
 	Changed     []string // scenarios whose digest differs from the baseline (reported, still compared)
 }
 
@@ -56,16 +57,20 @@ func Compare(baseline, current []Entry) Comparison {
 		if e.Verdict == VerdictFail {
 			c.Failures = append(c.Failures, e.ID)
 		}
+		if e.Verdict == VerdictError {
+			c.Errors = append(c.Errors, e.ID)
+		}
 	}
 	sort.Slice(c.Regressions, func(i, j int) bool { return c.Regressions[i].ID < c.Regressions[j].ID })
 	sort.Strings(c.Failures)
+	sort.Strings(c.Errors)
 	sort.Strings(c.Changed)
 	return c
 }
 
-// ExitCode is the gate's exit status: 0 with no FAIL and no regression, else 1.
+// ExitCode is the gate's exit status: 0 with no FAIL, no ERROR and no regression, else 1.
 func (c Comparison) ExitCode() int {
-	if len(c.Regressions) > 0 || len(c.Failures) > 0 {
+	if len(c.Regressions) > 0 || len(c.Failures) > 0 || len(c.Errors) > 0 {
 		return 1
 	}
 	return 0

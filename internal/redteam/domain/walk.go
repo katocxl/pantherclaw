@@ -107,6 +107,9 @@ func Substitute(v []byte, vars map[string]string) ([]byte, error) {
 		if missing != "" {
 			return "", fmt.Errorf("redteam: no value for ${%s}", missing)
 		}
+		if len(out) > MaxStringLen {
+			return "", fmt.Errorf("redteam: a string is longer than %d bytes after substitution", MaxStringLen)
+		}
 		return out, nil
 	})
 }
