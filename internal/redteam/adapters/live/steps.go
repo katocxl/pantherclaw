@@ -175,7 +175,7 @@ func (d *Driver) child(ctx context.Context, s domain.Scenario, st domain.Step) (
 	if err := json.Unmarshal(st.With, &w); err != nil {
 		return domain.Observation{}, err
 	}
-	req := &pantherclawv1.DelegateGrantRequest{RunId: d.cfg.Run, Bounds: []byte(`{}`)}
+	req := &pantherclawv1.DelegateGrantRequest{RunId: d.runID(), Bounds: []byte(`{}`)}
 	for _, dim := range w.Grant.Widen {
 		switch dim {
 		case "operations":
@@ -186,7 +186,7 @@ func (d *Driver) child(ctx context.Context, s domain.Scenario, st domain.Step) (
 			return domain.Observation{}, fmt.Errorf("%w: widening %q", app.ErrUnsupported, dim)
 		}
 	}
-	child, err := d.cfg.Workload.StartChildRun(ctx, &pantherclawv1.StartChildRunRequest{ParentRunId: d.cfg.Run, AgentId: d.cfg.AgentID})
+	child, err := d.cfg.Workload.StartChildRun(ctx, &pantherclawv1.StartChildRunRequest{ParentRunId: d.runID(), AgentId: d.cfg.AgentID})
 	if err != nil {
 		return domain.Observation{}, fmt.Errorf("StartChildRun: %w", err)
 	}
@@ -288,7 +288,7 @@ func (d *Driver) stolenRequest(ctx context.Context, w callWith) (*http.Request, 
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("PAP-Run-Id", d.cfg.Run)
+	req.Header.Set("PAP-Run-Id", d.runID())
 	req.Header.Set("PC-Action-Id", ids.NewV7().String())
 	return req, nil
 }

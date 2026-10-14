@@ -91,6 +91,9 @@ type rangeEnv struct {
 	scenarios string
 	decision  *string // the gateway's answer to /sdk/*
 	lastBody  string  // the last body the gateway received
+	fakeRun   *fakeRuns
+	holdCap   int            // holds the fake gateway allows per run (0: no cap)
+	holds     map[string]int // holds seen per run
 	bodyMu    sync.Mutex
 	outDir    string
 	runs      int
@@ -119,6 +122,9 @@ func newRangeEnv(t *testing.T) *rangeEnv {
 	re.iss = bundletest.NewIssuer(t)
 	cs := connect.NewServer()
 	pantherclawv1connect.RegisterRangeServiceHandler(cs, re.ranges)
+	re.fakeRun = &fakeRuns{}
+	pantherclawv1connect.RegisterWorkloadServiceHandler(cs, re.fakeRun)
+	pantherclawv1connect.RegisterRunServiceHandler(cs, re.fakeRun)
 	mux := http.NewServeMux()
 	connecthttp.Mount(mux, cs)
 	srv := httptest.NewServer(mux)
@@ -131,6 +137,19 @@ func newRangeEnv(t *testing.T) *rangeEnv {
 		re.bodyMu.Lock()
 		re.lastBody = string(b)
 		re.bodyMu.Unlock()
+		if re.holdCap > 0 {
+			re.bodyMu.Lock()
+			if re.holds == nil {
+				re.holds = map[string]int{}
+			}
+			re.holds[r.Header.Get("PAP-Run-Id")]++
+			over := re.holds[r.Header.Get("PAP-Run-Id")] > re.holdCap
+			re.bodyMu.Unlock()
+			if over {
+				_, _ = io.WriteString(w, `{"decision":"deny","error_class":"cannot_authorize","code":"HOLD_LIMIT_REACHED","reasons":["HOLD_LIMIT_REACHED"]}`)
+				return
+			}
+		}
 		_, _ = io.WriteString(w, *re.decision)
 	}))
 	t.Cleanup(gw.Close)
@@ -686,5 +705,75 @@ func TestRedteamRunMakesFreshFixturesForEveryRun(t *testing.T) {
 		if code, _, errs := re.run(t, "--fixture", name+"=mine"); code != 2 || !strings.Contains(errs, "cannot be set") {
 			t.Errorf("--fixture %s: %d %q", name, code, errs)
 		}
+	}
+}
+
+// fakeRuns is the WorkloadService (child runs) and RunService (EndRun) of the
+// fake server.
+type fakeRuns struct {
+	pantherclawv1connect.UnimplementedWorkloadServiceHandler
+	pantherclawv1connect.UnimplementedRunServiceHandler
+	mu         sync.Mutex
+	started    []*pantherclawv1.StartChildRunRequest
+	ended      []string
+	denyEndRun bool
+}
+
+func (f *fakeRuns) StartChildRun(_ context.Context, r *pantherclawv1.StartChildRunRequest) (*pantherclawv1.StartChildRunResponse, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.started = append(f.started, r)
+	return &pantherclawv1.StartChildRunResponse{Run: &pantherclawv1.Run{Id: fmt.Sprintf("0192aaaa-bbbb-7ccc-8ddd-%012d", len(f.started))}}, nil
+}
+
+func (f *fakeRuns) EndRun(_ context.Context, r *pantherclawv1.EndRunRequest) (*pantherclawv1.EndRunResponse, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.denyEndRun {
+		return nil, connect.NewError(connect.CodePermissionDenied, "run.manage is needed")
+	}
+	f.ended = append(f.ended, r.GetId())
+	return &pantherclawv1.EndRunResponse{}, nil
+}
+
+// TestD40EachScenarioRunsInItsOwnChildRun: more holding scenarios than one
+// run may hold (HR-037) all pass, each in a run of its own, ended afterwards.
+func TestD40EachScenarioRunsInItsOwnChildRun(t *testing.T) {
+	re := newRangeEnv(t)
+	re.holdCap = 5
+	for i := 2; i <= 7; i++ {
+		id := fmt.Sprintf("RT-%03d", i)
+		writeFile(t, re.scenarios, id+"-hold.yaml", []byte(strings.NewReplacer("RT-001", id, "A merge is held", "A hold "+id).Replace(rtScenario)))
+	}
+	code, out, errs := re.run(t)
+	if code != 0 || !strings.Contains(out, "7 PASS") {
+		t.Fatalf("run = %d\n%s\n%s", code, out, errs)
+	}
+	fr := re.fakeRun
+	if len(fr.started) != 7 || len(fr.ended) != 7 {
+		t.Fatalf("child runs started %d ended %d", len(fr.started), len(fr.ended))
+	}
+	for _, s := range fr.started {
+		if s.GetParentRunId() != rtRun || s.GetAgentId() != rtAgent || s.GetTtlMinutes() != 5 {
+			t.Errorf("child run request %v", s)
+		}
+	}
+	for run, n := range re.holds {
+		if run == rtRun || n != 1 {
+			t.Errorf("run %s saw %d holds", run, n)
+		}
+	}
+
+	// Ending a run needs run.manage: without it the runs expire, and the
+	// summary says so.
+	re2 := newRangeEnv(t)
+	re2.fakeRun.denyEndRun = true
+	code, out, errs = re2.run(t)
+	if code != 0 || !strings.Contains(out, "Note: the run of RT-001 was left to expire") {
+		t.Fatalf("run = %d\n%s\n%s", code, out, errs)
+	}
+	b, err := os.ReadFile(filepath.Join(re2.outDir, "0", "summary-"+rtRange+".json"))
+	if err != nil || !strings.Contains(string(b), `"notes"`) {
+		t.Errorf("summary %q %v", b, err)
 	}
 }

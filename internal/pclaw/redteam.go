@@ -220,6 +220,7 @@ func redteamRun(ctx context.Context, a *app, args []string) error {
 		Txns:    txnReader{tx: c.transactions, approvals: c.approvals, run: run},
 		AgentID: inst.Agent.String(), Key: key, Token: tokens, Transport: rt,
 		Workload: workload,
+		Runs:     c.runs,
 	}
 	if o.interactive {
 		cfg.Operator = ttyOperator{a: a}
@@ -246,7 +247,8 @@ func redteamRun(ctx context.Context, a *app, args []string) error {
 	}
 	rangeID := started.GetRangeId()
 
-	runner := &rtapp.Runner{Driver: live.New(cfg)}
+	driver := live.New(cfg)
+	runner := &rtapp.Runner{Driver: driver}
 	var results []rtdomain.Result
 	var recordErrs []string
 	for _, l := range set {
@@ -269,6 +271,7 @@ func redteamRun(ctx context.Context, a *app, args []string) error {
 		cmp = &c
 	}
 	sum := newSummary(rangeID, fin.GetRange(), set, results, cmp)
+	sum.Notes = driver.Notes()
 	if base != nil {
 		sum.Baseline = fmt.Sprintf("range %s, finished %s, %d scenarios", base.rangeID, base.finished, len(base.entries))
 	}
@@ -411,6 +414,7 @@ type summary struct {
 	Regressions   []string        `json:"regressions,omitempty"`
 	Changed       []string        `json:"changed_since_baseline,omitempty"`
 	Baseline      string          `json:"baseline,omitempty"`
+	Notes         []string        `json:"notes,omitempty"`
 }
 
 type summaryResult struct {
@@ -477,6 +481,9 @@ func printTable(a *app, s summary) {
 		parts = append(parts, fmt.Sprintf("%d %s", s.Counts[string(v)], v))
 	}
 	_, _ = fmt.Fprintf(w, "\n%s\n", strings.Join(parts, ", "))
+	for _, n := range s.Notes {
+		_, _ = fmt.Fprintf(w, "Note: %s\n", n)
+	}
 	if len(s.Regressions) > 0 {
 		_, _ = fmt.Fprintf(w, "Regressions from the baseline: %s\n", strings.Join(s.Regressions, ", "))
 	}
