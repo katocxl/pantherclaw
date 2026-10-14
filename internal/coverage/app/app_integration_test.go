@@ -348,7 +348,7 @@ func TestHR227_ClosureEvidenceIsLedgered(t *testing.T) {
 	run := ids.NewV7()
 	sum := sha256.Sum256([]byte("a compact JWS"))
 	c := f.closure(probes(false), started)
-	c.SessionKey, c.HostKey = bytes.Repeat([]byte{1}, 32), bytes.Repeat([]byte{2}, 32)
+	c.ProbeKey, c.HostKey = bytes.Repeat([]byte{1}, 32), bytes.Repeat([]byte{2}, 32)
 	c.Reports = []domain.ClosureReport{{Run: run, Kind: "sandbox", SHA256: sum}}
 	id, err := f.record(t, c)
 	if err != nil {
@@ -364,7 +364,7 @@ func TestHR227_ClosureEvidenceIsLedgered(t *testing.T) {
 	}
 	if got.V != 1 || got.Closure != id.String() || got.Session != f.session.String() || got.Agent != f.agent.String() ||
 		!slices.Equal(got.Connections, []string{f.conn.String()}) || got.Result != "PASSED" ||
-		got.SessionKey != base64.RawURLEncoding.EncodeToString(c.SessionKey) || got.HostKey != base64.RawURLEncoding.EncodeToString(c.HostKey) ||
+		got.ProbeKey != base64.RawURLEncoding.EncodeToString(c.ProbeKey) || got.HostKey != base64.RawURLEncoding.EncodeToString(c.HostKey) ||
 		!slices.Equal(got.Reports, []app.ClosureEntryReport{{Run: run.String(), Kind: "sandbox", SHA256: hex.EncodeToString(sum[:])}}) ||
 		len(got.Probes) != len(c.Probes) || got.RecordedAt == "" {
 		t.Fatalf("entry %+v", got)
@@ -446,7 +446,7 @@ func TestHR227_ABundleOfAClosureCarriesItsEntryAndReports(t *testing.T) {
 		{Name: domain.ProbeExternalCanary, Role: domain.RoleCanary, Expect: domain.Blocked, Observed: domain.Blocked},
 		{Name: "canary_control", Role: domain.RolePositiveControl, Expect: domain.Reachable, Observed: domain.Reachable},
 	}, f.dbNow(t))
-	c.SessionKey, c.HostKey = pub(kit.ProbeKey), pub(kit.HostKey)
+	c.ProbeKey, c.HostKey = pub(kit.ProbeKey), pub(kit.HostKey)
 	for _, kind := range []string{"sandbox", "control", "canary"} {
 		c.Reports = append(c.Reports, domain.ClosureReport{
 			Run: mustUUID(t, kit.Runs[kind]), Kind: kind, SHA256: sha256.Sum256([]byte(kit.Report(kind))),

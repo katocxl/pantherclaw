@@ -80,7 +80,7 @@ func (s *Service) SubmitCanaryReport(ctx context.Context, session ids.UUID, comp
 					Probes: run.probes, SigningKeyJKT: sess.ProbeJkt, ServerNonce: run.nonce, ResultsSHA256: run.digest,
 					Engine:       covdomain.Engine{Version: sess.EngineVersion, APIVersion: sess.ApiVersion, Runtime: sess.Runtime},
 					ImageDigests: []string{sess.AgentImage, sess.EdgeImage, sess.ProbeImage}, ConfigSHA256: [32]byte(config),
-					Reports: run.reports, SessionKey: sess.ProbePublicKey, HostKey: sess.HostPublicKey,
+					Reports: run.reports, ProbeKey: sess.ProbePublicKey, HostKey: sess.HostPublicKey,
 					ConfigChecks: run.checks, Bound: covdomain.Bound{
 						ConnectionRevision: conn.ConnectionRevision, Gateway: conn.GatewayID, PackageVersion: conn.PackageVersionID,
 						CredentialVersion: conn.CredentialVersion,

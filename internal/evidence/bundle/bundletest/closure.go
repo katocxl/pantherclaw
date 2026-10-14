@@ -25,6 +25,8 @@ type ClosureOpts struct {
 	// entry records the digest of a copy signed by a stranger's key, which
 	// the bundle carries: an attacker who rewrote the ledger.
 	Forge string
+	// CrossSign names the kind of report signed with the other kind's key.
+	CrossSign string
 	// EditOutcome makes the entry say the named probe was reachable
 	// although the signed reports say blocked.
 	EditOutcome string
@@ -88,6 +90,12 @@ func (i *Issuer) AppendClosure(o ClosureOpts) *Closure {
 		if kind == o.Forge {
 			_, key, _ = ed25519.GenerateKey(rand.Reader)
 		}
+		if kind == o.CrossSign {
+			key = hostKey
+			if kind != report.KindSandbox {
+				key = probeKey
+			}
+		}
 		compact, err := report.Sign(key, r)
 		if err != nil {
 			i.T.Fatal(err)
@@ -124,7 +132,7 @@ func (i *Issuer) AppendClosure(o ClosureOpts) *Closure {
 	slices.SortStableFunc(probes, func(a, b probe) int { return strings.Compare(a.Name, b.Name) })
 	i.AppendCoverageBody(bundle.ClosureKind, mustBody(i, map[string]any{
 		"v": 1, "closure": c.ID, "session": c.Session, "agent": c.Agent, "connections": []string{c.Connection}, "result": "PASSED",
-		"session_key": base64.RawURLEncoding.EncodeToString(pub), "host_key": base64.RawURLEncoding.EncodeToString(hpub),
+		"probe_key": base64.RawURLEncoding.EncodeToString(pub), "host_key": base64.RawURLEncoding.EncodeToString(hpub),
 		"reports": refs, "probes": probes, "recorded_at": "2026-10-10T08:30:00.000000Z",
 	}))
 	i.Closures = append(i.Closures, c.Reports...)

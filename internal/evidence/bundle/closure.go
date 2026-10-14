@@ -48,7 +48,7 @@ type closureBody struct {
 	Agent       string             `json:"agent"`
 	Connections []string           `json:"connections"`
 	Result      string             `json:"result"`
-	SessionKey  string             `json:"session_key"`
+	ProbeKey    string             `json:"probe_key"`
 	HostKey     string             `json:"host_key"`
 	Reports     []closureReportRef `json:"reports"`
 	Probes      []closureProbe     `json:"probes"`
@@ -104,13 +104,13 @@ func (v *verifier) closure(c closureEntry, reports map[string]string) {
 		return
 	}
 	b := c.body
-	sessionKey, ok1 := decodeKey(b.SessionKey)
+	probeKey, ok1 := decodeKey(b.ProbeKey)
 	hostKey, ok2 := decodeKey(b.HostKey)
 	if !ok1 || !ok2 {
 		fail("the entry's session or host key is not an Ed25519 public key")
 		return
 	}
-	keys := map[string]ed25519.PublicKey{report.KindSandbox: sessionKey, report.KindControl: hostKey, report.KindCanary: hostKey}
+	keys := map[string]ed25519.PublicKey{report.KindSandbox: probeKey, report.KindControl: hostKey, report.KindCanary: hostKey}
 	got := map[string]report.Report{}
 	bad := 0
 	for _, ref := range b.Reports {

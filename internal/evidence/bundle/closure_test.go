@@ -99,6 +99,8 @@ func TestT095_ASwappedOrForgedProbeReportFailsVerify(t *testing.T) {
 		}},
 		{"a report re-signed with another key", bundletest.ClosureOpts{Forge: report.KindSandbox}, nil},
 		{"a control report re-signed with another key", bundletest.ClosureOpts{Forge: report.KindControl}, nil},
+		{"a sandbox report signed with the host key", bundletest.ClosureOpts{CrossSign: report.KindSandbox}, nil},
+		{"a control report signed with the probe key", bundletest.ClosureOpts{CrossSign: report.KindControl}, nil},
 		{"an edited outcome", bundletest.ClosureOpts{EditOutcome: "ssh_push"}, nil},
 		{"a dropped report", bundletest.ClosureOpts{}, func(c *bundletest.Closure, b *bundle.Bundle) {
 			b.ProbeReports = slices.DeleteFunc(b.ProbeReports, func(p bundle.ProbeReport) bool { return p.Run == c.Runs[report.KindCanary] })

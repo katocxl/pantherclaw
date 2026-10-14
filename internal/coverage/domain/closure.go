@@ -95,12 +95,12 @@ type Closure struct {
 	ConfigSHA256 [32]byte
 	Bound        Bound
 	// Reports are the signed reports of the probe run, as stored; the
-	// closure's ledger entry names them (HR-227). SessionKey is the
+	// closure's ledger entry names them (HR-227). ProbeKey is the
 	// session's probe key (it verified the sandbox report) and HostKey its
 	// host key (control and canary reports), both raw Ed25519 public keys.
-	Reports    []ClosureReport
-	SessionKey []byte
-	HostKey    []byte
+	Reports  []ClosureReport
+	ProbeKey []byte
+	HostKey  []byte
 }
 
 // ClosureReport names one stored probe report of a closure's run: the

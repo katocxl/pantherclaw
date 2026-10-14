@@ -256,7 +256,7 @@ const ClosureLedgerKind = "sandbox.closure"
 // computed from, by run, kind and digest, and the keys that verify them, so
 // `pclaw verify` re-checks the closure offline against the probe records
 // the bundle carries (HR-227, T-095). Ids are canonical UUID strings; keys
-// are base64url raw Ed25519 public keys: SessionKey verified the sandbox
+// are base64url raw Ed25519 public keys: ProbeKey verified the sandbox
 // report and HostKey the control and canary reports.
 type ClosureEntry struct {
 	V           int                  `json:"v"`
@@ -265,7 +265,7 @@ type ClosureEntry struct {
 	Agent       string               `json:"agent"`
 	Connections []string             `json:"connections"`
 	Result      string               `json:"result"`
-	SessionKey  string               `json:"session_key"`
+	ProbeKey    string               `json:"probe_key"`
 	HostKey     string               `json:"host_key"`
 	Reports     []ClosureEntryReport `json:"reports"`
 	Probes      []ClosureEntryProbe  `json:"probes"`
@@ -292,7 +292,7 @@ func (s *Service) enterClosure(ctx context.Context, tx db.TenantTx, id ids.UUID,
 	e := ClosureEntry{
 		V: 1, Closure: id.String(), Session: c.SandboxSession.String(), Agent: c.Agent.String(),
 		Connections: []string{c.Connection.String()}, Result: result,
-		SessionKey: base64.RawURLEncoding.EncodeToString(c.SessionKey), HostKey: base64.RawURLEncoding.EncodeToString(c.HostKey),
+		ProbeKey: base64.RawURLEncoding.EncodeToString(c.ProbeKey), HostKey: base64.RawURLEncoding.EncodeToString(c.HostKey),
 		Reports: []ClosureEntryReport{}, Probes: make([]ClosureEntryProbe, 0, len(c.Probes)),
 		RecordedAt: evdomain.Timestamp(s.now()),
 	}
