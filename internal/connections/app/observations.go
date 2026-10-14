@@ -27,12 +27,17 @@ type ToolObservation struct {
 // RecordToolObservation records an observation a gateway reports for a
 // workload the Authority verified, through a connection that gateway
 // serves (ErrNotServed otherwise). It is called by the Authority, never by
-// a person: the caller checked the gateway's identity.
+// a person: the caller checked the gateway's identity. A call through a
+// simulated connection records nothing and returns the zero id (HR-222).
 func (s *Service) RecordToolObservation(ctx context.Context, org ids.OrgID, gateway ids.UUID, o ToolObservation) (ids.UUID, error) {
 	var id ids.UUID
 	err := s.pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
-		var err error
-		id, err = dbq.New(tx).InsertToolObservation(ctx, dbq.InsertToolObservationParams{
+		q := dbq.New(tx)
+		conn, err := q.GetConnection(ctx, org, o.Connection)
+		if err == nil && conn.GatewayID == gateway && conn.Simulated {
+			return nil // HR-222: a simulator's tool calls leave no observation
+		}
+		id, err = q.InsertToolObservation(ctx, dbq.InsertToolObservationParams{
 			ID: ids.NewV7(), RunID: o.Run, InstanceID: o.Instance, Tool: o.Tool, InputSha256: o.InputSHA256, OrgID: org,
 			ConnectionID: o.Connection, GatewayID: gateway,
 		})

@@ -890,6 +890,45 @@ func (q *Queries) ResolveReconciliationByPerson(ctx context.Context, arg Resolve
 	return result.RowsAffected(), nil
 }
 
+const simulatedTransactions = `-- name: SimulatedTransactions :many
+SELECT id FROM pc.transactions
+WHERE org_id = $1 AND id = ANY ($2::uuid[]) AND simulated
+`
+
+// SimulatedTransactions are those of the given transactions that belong to
+// a range run (HR-222): a console shows a SIMULATED banner for them.
+func (q *Queries) SimulatedTransactions(ctx context.Context, orgID ids.OrgID, transactionIds []ids.UUID) ([]ids.UUID, error) {
+	rows, err := q.db.Query(ctx, simulatedTransactions, orgID, transactionIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ids.UUID{}
+	for rows.Next() {
+		var id ids.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const transactionSimulated = `-- name: TransactionSimulated :one
+SELECT simulated FROM pc.transactions WHERE org_id = $1 AND id = $2
+`
+
+// TransactionSimulated is the flag an effect receipt copies (HR-120).
+func (q *Queries) TransactionSimulated(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (bool, error) {
+	row := q.db.QueryRow(ctx, transactionSimulated, orgID, iD)
+	var simulated bool
+	err := row.Scan(&simulated)
+	return simulated, err
+}
+
 const transactionSummary = `-- name: TransactionSummary :one
 SELECT t.id, t.run_id, r.agent_id, t.operation, t.connection_id, t.decision, t.reason_code, t.effect_state,
        t.effect_level_required, t.effect_level_achieved, t.mode, t.evaluations, t.created_at,

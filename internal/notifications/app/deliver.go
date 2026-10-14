@@ -288,12 +288,15 @@ type webhookPayload struct {
 }
 
 type webhookData struct {
-	ID       string          `json:"id"`
-	Org      string          `json:"org"`
-	Severity string          `json:"severity"`
-	Title    string          `json:"title"`
-	Subject  *webhookSubject `json:"subject,omitempty"`
-	Link     string          `json:"link,omitempty"`
+	ID       string `json:"id"`
+	Org      string `json:"org"`
+	Severity string `json:"severity"`
+	Title    string `json:"title"`
+	// Simulated is true for a notice caused by a simulated transaction; its
+	// title starts with [SIMULATED] (HR-222).
+	Simulated bool            `json:"simulated,omitempty"`
+	Subject   *webhookSubject `json:"subject,omitempty"`
+	Link      string          `json:"link,omitempty"`
 }
 
 type webhookSubject struct {
@@ -317,7 +320,10 @@ func (s *Service) sendWebhook(ctx context.Context, org ids.OrgID, d dbq.LoadDeli
 	}
 	p := webhookPayload{
 		Type: d.Type, Timestamp: d.NotificationCreatedAt.UTC().Format(time.RFC3339),
-		Data: webhookData{ID: d.NotificationID.String(), Org: org.String(), Severity: d.Severity, Title: d.Title, Link: link},
+		Data: webhookData{
+			ID: d.NotificationID.String(), Org: org.String(), Severity: d.Severity, Title: d.Title, Link: link,
+			Simulated: strings.HasPrefix(d.Title, domain.SimulatedPrefix),
+		},
 	}
 	if d.SubjectType != nil && d.SubjectID != nil {
 		p.Data.Subject = &webhookSubject{Type: *d.SubjectType, ID: d.SubjectID.String()}

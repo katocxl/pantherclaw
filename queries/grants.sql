@@ -133,7 +133,7 @@ WHERE a.org_id = sqlc.arg(org_id) AND a.id = sqlc.arg(id);
 
 -- name: SubjectRun :one
 SELECT agent_id, instance_id, environment_id, launcher_user_id, launcher_sa_id, launcher_instance_id,
-       principal_user_id, principal_sa_id, parent_run_id, grant_id, state, expires_at, task_ref,
+       principal_user_id, principal_sa_id, parent_run_id, grant_id, state, expires_at, task_ref, simulated,
        (state = 'ACTIVE' AND expires_at > now())::boolean AS live
 FROM pc.runs
 WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id);

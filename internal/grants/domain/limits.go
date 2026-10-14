@@ -207,6 +207,10 @@ type DebitContext struct {
 	RunID     ids.UUID
 	Principal Principal
 	TeamID    ids.UUID
+	// Simulated drops the lines owned by guardrails (envelopes): a range
+	// run never changes what real agents depend on (HR-222). Grant-owned
+	// lines still apply.
+	Simulated bool
 }
 
 // Plan is everything one action must reserve.
@@ -230,6 +234,9 @@ func (c Chain) Debits(a Action, dc DebitContext) (Plan, *LevelFinding) {
 		var limits Limits
 		owner := bdomain.Owner{Kind: string(l.level.Kind), ID: l.level.ID}
 		task := leaf.ID.String()
+		if i < envs && dc.Simulated {
+			continue
+		}
 		if i < envs {
 			limits = c.envelopeAt(levels[i].ID).Limits
 		} else {

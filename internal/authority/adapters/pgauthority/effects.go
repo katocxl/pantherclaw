@@ -88,7 +88,7 @@ func requireLevel(ctx context.Context, q *dbq.Queries, org ids.OrgID, txn ids.UU
 func executed(c dbq.ExecutionContextRow, recordedBy string) finalize.Executed {
 	x := finalize.Executed{
 		Transaction: c.TransactionID, Connection: c.ConnectionID, AccessMode: finalize.AccessPantherClawHeld,
-		Monitor: c.Mode == pipeline.ModeMonitor, RecordedBy: recordedBy, EffectiveHash: hex.EncodeToString(c.ActionHash),
+		Monitor: c.Mode == pipeline.ModeMonitor, Simulated: c.Simulated, RecordedBy: recordedBy, EffectiveHash: hex.EncodeToString(c.ActionHash),
 	}
 	if c.AccessMode != nil {
 		x.AccessMode = *c.AccessMode

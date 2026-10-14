@@ -195,3 +195,20 @@ FROM pc.notifications n
 JOIN pc.deliveries d ON d.org_id = n.org_id AND d.notification_id = n.id
 WHERE n.org_id = sqlc.arg(org_id) AND n.subject_type = sqlc.arg(subject_type) AND n.subject_id = ANY (sqlc.arg(subject_ids)::uuid[])
   AND d.state = 'FAILED';
+
+-- SubjectSimulated tells whether a notification's subject is a simulated
+-- transaction, or comes from one or from a simulated connection (HR-222):
+-- the notice then says so.
+-- name: SubjectSimulated :one
+SELECT coalesce(CASE sqlc.arg(subject_type)::text
+    WHEN 'transaction' THEN (SELECT t.simulated FROM pc.transactions t
+                             WHERE t.org_id = sqlc.arg(org_id) AND t.id = sqlc.arg(subject_id))
+    WHEN 'approval_request' THEN (SELECT t.simulated FROM pc.approval_requests a
+                                  JOIN pc.transactions t ON t.org_id = a.org_id AND t.id = a.transaction_id
+                                  WHERE a.org_id = sqlc.arg(org_id) AND a.id = sqlc.arg(subject_id))
+    WHEN 'reconciliation' THEN (SELECT t.simulated FROM pc.reconciliation_tasks k
+                                JOIN pc.transactions t ON t.org_id = k.org_id AND t.id = k.transaction_id
+                                WHERE k.org_id = sqlc.arg(org_id) AND k.id = sqlc.arg(subject_id))
+    WHEN 'connection' THEN (SELECT c.simulated FROM pc.connections c
+                            WHERE c.org_id = sqlc.arg(org_id) AND c.id = sqlc.arg(subject_id))
+END, false)::boolean AS simulated;

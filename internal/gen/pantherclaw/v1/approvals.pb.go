@@ -544,7 +544,10 @@ type ApprovalRequest struct {
 	// The request this one superseded.
 	PreviousId string `protobuf:"bytes,19,opt,name=previous_id,json=previousId,proto3" json:"previous_id,omitempty"`
 	// RESTORATION: who asked.
-	RequestedBy   string `protobuf:"bytes,20,opt,name=requested_by,json=requestedBy,proto3" json:"requested_by,omitempty"`
+	RequestedBy string `protobuf:"bytes,20,opt,name=requested_by,json=requestedBy,proto3" json:"requested_by,omitempty"`
+	// Whether the held action is a range run's (G0 M12, HR-222): a console
+	// shows a SIMULATED banner. Approvals stay humans-only.
+	Simulated     bool `protobuf:"varint,21,opt,name=simulated,proto3" json:"simulated,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -717,6 +720,13 @@ func (x *ApprovalRequest) GetRequestedBy() string {
 		return x.RequestedBy
 	}
 	return ""
+}
+
+func (x *ApprovalRequest) GetSimulated() bool {
+	if x != nil {
+		return x.Simulated
+	}
+	return false
 }
 
 // DeciderResponse is one recorded response.
@@ -2058,7 +2068,7 @@ const file_pantherclaw_v1_approvals_proto_rawDesc = "" +
 	"\asubject\x18\x05 \x01(\tR\asubject\x12\x16\n" +
 	"\x06method\x18\x06 \x01(\tR\x06method\x12\x18\n" +
 	"\asources\x18\a \x03(\tR\asources\x12\x1c\n" +
-	"\tsatisfied\x18\b \x01(\x05R\tsatisfied\"\xaf\a\n" +
+	"\tsatisfied\x18\b \x01(\x05R\tsatisfied\"\xcd\a\n" +
 	"\x0fApprovalRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12F\n" +
 	"\fsubject_kind\x18\x02 \x01(\x0e2#.pantherclaw.v1.ApprovalSubjectKindR\vsubjectKind\x123\n" +
@@ -2083,7 +2093,8 @@ const file_pantherclaw_v1_approvals_proto_rawDesc = "" +
 	"\fconsume_time\x18\x12 \x01(\v2\x1a.google.protobuf.TimestampR\vconsumeTime\x12\x1f\n" +
 	"\vprevious_id\x18\x13 \x01(\tR\n" +
 	"previousId\x12!\n" +
-	"\frequested_by\x18\x14 \x01(\tR\vrequestedBy\"\xf1\x04\n" +
+	"\frequested_by\x18\x14 \x01(\tR\vrequestedBy\x12\x1c\n" +
+	"\tsimulated\x18\x15 \x01(\bR\tsimulated\"\xf1\x04\n" +
 	"\x0fDeciderResponse\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x127\n" +
 	"\x04kind\x18\x02 \x01(\x0e2#.pantherclaw.v1.DeciderResponseKindR\x04kind\x12\x17\n" +
