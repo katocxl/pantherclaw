@@ -67,7 +67,6 @@ func (r *rangeStack) buildRangeThroughTheProduct(realGrantBounds, realGrantRequi
 	s.query(t, "SELECT id::text FROM pc.agents WHERE range_agent", nil, &r.agent)
 	r.keyFile, r.instance = d.enrolThroughTheProduct(r.agent)
 	s.query(t, "SELECT id::text FROM pc.grants WHERE agent_id = $1 AND state = 'ACTIVE'", []any{mustUUID(t, r.agent)}, &r.grant)
-	r.run0 = d.startRun(r.agent, r.instance, r.grant)
 }
 
 func hostOf(u *url.URL) string {

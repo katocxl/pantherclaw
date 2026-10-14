@@ -38,7 +38,6 @@ import (
 type rangeStack struct {
 	d                               *rangeDriver
 	agent, instance, keyFile, grant string
-	run0                            string // the range instance's run on the range grant
 }
 
 // The team's real grant for its real agent: reviewed merges, and writes only to
@@ -75,7 +74,7 @@ func (r *rangeStack) run(t *testing.T, dir string, extra ...string) (int, string
 	out := t.TempDir()
 	args := []string{
 		"redteam", "run", "--suite", "coding-agent", "--scenarios", dir, "--workload-file", r.keyFile, "--gateway", r.d.s.gateway,
-		"--role", "github=github-range", "--role", "payments=payments-range", "--role", "real=real", "--run", r.run0, "--out", out,
+		"--role", "github=github-range", "--role", "payments=payments-range", "--role", "real=real", "--grant", r.grant, "--out", out,
 	}
 	for _, name := range []string{"owner", "repo", "other_repo", "main", "file_b64"} {
 		args = append(args, "--fixture", name+"="+r.d.fix[name])
@@ -258,8 +257,7 @@ func TestE2E_M12_BaselineCatchesARegression(t *testing.T) {
 	// RT-001 fails, and the gate says so.
 	weakGrant := r.d.issueGrant(r.agent, `{"operations": ["github.contents.read", "github.contents.write", "github.branch.create",
 	  "github.pull.read", "github.pull.create", "github.pull.merge"]}`, "", "")
-	weak := r.d.startRun(r.agent, r.instance, weakGrant)
-	code, out, errs, _ = r.run(t, dir, "--baseline", file, "--trust", p.trust, "--run", weak)
+	code, out, errs, _ = r.run(t, dir, "--baseline", file, "--trust", p.trust, "--grant", weakGrant)
 	if code != 1 || !strings.Contains(out+errs, "RT-001") {
 		t.Fatalf("a run under a weakened grant: %d\n%s\n%s", code, out, errs)
 	}
