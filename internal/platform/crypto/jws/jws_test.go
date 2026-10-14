@@ -12,6 +12,8 @@ import (
 	"errors"
 	"strings"
 	"testing"
+
+	"github.com/go-jose/go-jose/v4"
 )
 
 const testTyp = "pap-permit+jwt"
@@ -150,5 +152,65 @@ func TestConstructorValidation(t *testing.T) {
 	s, _ := NewSigner("k", priv)
 	if _, err := s.Sign("", nil); err == nil {
 		t.Error("empty typ accepted by Sign")
+	}
+}
+
+// malleate changes the unused low bits of the token's last base64
+// character, which base64 decoders ignore: the result decodes to the same
+// bytes.
+func malleate(t *testing.T, tok string) string {
+	t.Helper()
+	const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
+	sig := tok[strings.LastIndexByte(tok, '.')+1:]
+	if len(sig)%4 < 2 {
+		t.Fatalf("the last segment has no unused bits (%d characters)", len(sig))
+	}
+	i := strings.IndexByte(alphabet, tok[len(tok)-1])
+	return tok[:len(tok)-1] + string(alphabet[i^1])
+}
+
+// TestNonCanonicalEncodingsAreOneToken: a signature whose last character
+// differs only in unused bits decodes to the same bytes. Canonical maps it
+// back to the original, and Verify refuses it, so one token has one string
+// (HR-143, HR-145).
+func TestNonCanonicalEncodingsAreOneToken(t *testing.T) {
+	s, v, priv := setup(t)
+	tok, _ := s.Sign(testTyp, []byte(`{"amount":"30.00"}`))
+	odd := malleate(t, tok)
+	if odd == tok {
+		t.Fatal("malleate changed nothing")
+	}
+	sig := func(x string) string {
+		raw, err := base64.RawURLEncoding.DecodeString(x[strings.LastIndexByte(x, '.')+1:])
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(raw)
+	}
+	if sig(odd) != sig(tok) {
+		t.Fatal("the variant decodes to another signature")
+	}
+	// The premise: go-jose alone verifies the variant.
+	if obj, err := jose.ParseSignedCompact(odd, allowed); err != nil {
+		t.Fatalf("go-jose refused the variant: %v", err)
+	} else if _, err := obj.Verify(priv.Public()); err != nil {
+		t.Fatalf("go-jose refused the variant's signature: %v", err)
+	}
+	if c, ok := Canonical(odd); !ok || c != tok {
+		t.Fatalf("Canonical(variant) = %q, %v; want the original", c, ok)
+	}
+	if c, ok := Canonical(tok); !ok || c != tok {
+		t.Fatalf("Canonical(original) = %q, %v", c, ok)
+	}
+	if _, _, err := v.Verify(tok); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := v.Verify(odd); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("non-canonical variant accepted (err %v)", err)
+	}
+	for _, bad := range []string{"", "a.b", "a.b.c.d", "a.b.!!"} {
+		if _, ok := Canonical(bad); ok {
+			t.Errorf("Canonical(%q) ok", bad)
+		}
 	}
 }

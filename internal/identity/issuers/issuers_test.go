@@ -206,6 +206,11 @@ func TestHR143_AttestationLifetimeAndReplayKeys(t *testing.T) {
 	if issuers.ReplayKey("abc", "") == issuers.ReplayKey("", "abc") || issuers.ReplayKey("", "t1") == issuers.ReplayKey("", "t2") {
 		t.Fatal("replay keys collide")
 	}
+	// "sig" and "sih" differ only in unused bits: both decode to the same
+	// two bytes, so a token without a jti keeps its key (no second use).
+	if issuers.ReplayKey("", "e30.e30.sig") != issuers.ReplayKey("", "e30.e30.sih") {
+		t.Fatal("a non-canonical encoding of a token got its own replay key")
+	}
 }
 
 func k8sBinding() issuers.KubernetesBinding {

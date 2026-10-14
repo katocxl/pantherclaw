@@ -10,6 +10,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -319,6 +320,19 @@ func TestHR146_SubjectTokensRepresentActiveUsersOnce(t *testing.T) {
 	}
 	_, err = start(launcher, tok, app.SubjectIDToken)
 	wantCode(t, "reused token", err, pcerr.PermissionDenied, "SUBJECT_TOKEN")
+	// Without a jti the token itself is the key. Changing the unused bits of
+	// its last character still verifies, and is still the same token.
+	now := time.Now()
+	nojti := idp.Token(map[string]any{
+		"iss": idp.Issuer(), "sub": "alice", "aud": "https://pc.example.test", "iat": now.Unix(), "exp": now.Add(5 * time.Minute).Unix(),
+	}, "")
+	if _, err := start(launcher, nojti, app.SubjectIDToken); err != nil {
+		t.Fatalf("a token without a jti: %v", err)
+	}
+	const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
+	odd := nojti[:len(nojti)-1] + string(alphabet[strings.IndexByte(alphabet, nojti[len(nojti)-1])^1])
+	_, err = start(launcher, odd, app.SubjectIDToken)
+	wantCode(t, "the same token in another encoding", err, pcerr.PermissionDenied, "SUBJECT_TOKEN")
 	for name, tc := range map[string][2]string{
 		"disabled user":      {token("bob"), app.SubjectIDToken},
 		"unknown user":       {token("carol"), app.SubjectIDToken},

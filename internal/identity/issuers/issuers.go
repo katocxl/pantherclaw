@@ -18,6 +18,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/katocxl/pantherclaw/internal/platform/crypto/jws"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 )
 
@@ -109,10 +110,15 @@ func (w Window) Check(now time.Time) error {
 
 // ReplayKey is the single-use key of an attestation token: the SHA-256 of
 // its jti, or of the whole token when it has none (HR-143). The two cases
-// are domain-separated so a jti can never collide with a token.
+// are domain-separated so a jti can never collide with a token. A token is
+// keyed by its canonical encoding: changing the unused bits of a segment's
+// last base64 character still verifies, and must give the same key.
 func ReplayKey(jti, token string) [32]byte {
 	if jti != "" {
 		return sha256.Sum256([]byte("jti:" + jti))
+	}
+	if c, ok := jws.Canonical(token); ok {
+		token = c
 	}
 	return sha256.Sum256([]byte("tok:" + token))
 }

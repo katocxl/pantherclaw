@@ -123,6 +123,10 @@ func (v *Verifier) Verify(compact string) (payload []byte, kid string, err error
 	if !ok {
 		return nil, "", fmt.Errorf("%w: unknown kid %q", ErrInvalid, h.Kid)
 	}
+	// Only the canonical encoding is accepted, so one token has one string.
+	if c, ok := Canonical(compact); !ok || c != compact {
+		return nil, "", fmt.Errorf("%w: non-canonical encoding", ErrInvalid)
+	}
 	obj, err := jose.ParseSignedCompact(compact, allowed)
 	if err != nil {
 		return nil, "", fmt.Errorf("%w: %w", ErrInvalid, err)
@@ -135,6 +139,27 @@ func (v *Verifier) Verify(compact string) (payload []byte, kid string, err error
 		return nil, "", fmt.Errorf("%w: %w", ErrInvalid, err)
 	}
 	return payload, h.Kid, nil
+}
+
+// Canonical returns compact with each of its three segments re-encoded as
+// canonical unpadded base64url, and false when it is not three decodable
+// segments. Base64 decoders (go-jose's among them) ignore the unused low
+// bits of a segment's last character, so several strings verify as the same
+// signed token: a single-use key taken from the string must be taken from
+// this form (HR-143, HR-145).
+func Canonical(compact string) (string, bool) {
+	parts := strings.Split(compact, ".")
+	if len(parts) != 3 {
+		return "", false
+	}
+	for i, p := range parts {
+		raw, err := base64.RawURLEncoding.DecodeString(p)
+		if err != nil {
+			return "", false
+		}
+		parts[i] = base64.RawURLEncoding.EncodeToString(raw)
+	}
+	return strings.Join(parts, "."), true
 }
 
 // Unverified returns the kid and typ of a token without verifying it, for

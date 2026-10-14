@@ -29,6 +29,7 @@ import (
 	gdomain "github.com/katocxl/pantherclaw/internal/grants/domain"
 	"github.com/katocxl/pantherclaw/internal/identity/pap"
 	"github.com/katocxl/pantherclaw/internal/platform/clock"
+	"github.com/katocxl/pantherclaw/internal/platform/crypto/jws"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
@@ -337,6 +338,9 @@ func represented(ctx context.Context, q *dbq.Queries, org ids.OrgID, sc authnapp
 		return user, ErrSubjectRejected
 	} else if err != nil {
 		return user, err
+	}
+	if c, ok := jws.Canonical(token); ok {
+		token = c // one key for every encoding that verifies as this token
 	}
 	key := "tok:" + token
 	if sc.JTI != "" {

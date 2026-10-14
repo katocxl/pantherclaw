@@ -30,7 +30,13 @@ type fakeGitHub struct{}
 
 func (fakeGitHub) Verify(_ context.Context, tok string) ([]byte, error) {
 	parts := strings.Split(tok, ".")
-	if len(parts) != 3 || parts[2] != "sig" {
+	if len(parts) != 3 {
+		return nil, errors.New("signature")
+	}
+	// Like go-jose, the fake decodes the signature without checking the
+	// unused bits of its last character.
+	sig, err := base64.RawURLEncoding.DecodeString(parts[2])
+	if want, _ := base64.RawURLEncoding.DecodeString("sig"); err != nil || string(sig) != string(want) {
 		return nil, errors.New("signature")
 	}
 	return base64.RawURLEncoding.DecodeString(parts[1])
@@ -214,6 +220,11 @@ func TestHR143_AttestationTokensAreSingleUseAndShortLived(t *testing.T) {
 		}
 		_, err := w.attestEnroll(t, w.svc, newWorkload(), "", att)
 		wantPAP(t, name+": reused", err, pap.CodeInvalidToken)
+		// The same token with the unused bits of its last character changed
+		// still verifies, and is still the same token.
+		odd := &app.Attestation{Kind: att.Kind, Token: att.Token[:len(att.Token)-1] + "h"}
+		_, err = w.attestEnroll(t, w.svc, newWorkload(), "", odd)
+		wantPAP(t, name+": reused in another encoding", err, pap.CodeInvalidToken)
 	}
 	if n := w.count(t, "SELECT count(*) FROM pc.agent_instances WHERE org_id = $1", w.org); n != 2 {
 		t.Fatalf("instances %d, want 2", n)
