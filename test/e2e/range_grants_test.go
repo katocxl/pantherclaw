@@ -147,7 +147,7 @@ func (d *rangeDriver) grantRunWith(bounds, limits, requirements string) string {
 	}
 	args := []string{
 		"grant", "issue", agent, "--principal", "user:" + alice, "--expires", "24h", "--bounds-file", doc("bounds.json", bounds),
-		"--delegation-depth", "1", "--max-children", "2", "--task", "range",
+		"--delegation-depth", "2", "--max-children", "50", "--task", "range",
 	}
 	if limits != "" {
 		args = append(args, "--limits-file", doc("limits.json", limits))
