@@ -117,6 +117,12 @@ var _ jsontext.Value
 // by the org's administrator with these bounds and limits, and a run on it.
 // Calls are made in that run from then on.
 func (d *rangeDriver) ownGrant(bounds, limits string) {
+	d.defaultRun = d.grantRun(bounds, limits)
+}
+
+// grantRun issues the agent a grant with these bounds and limits and starts a
+// run on it, and returns the run.
+func (d *rangeDriver) grantRun(bounds, limits string) string {
 	t, s := d.t, d.s
 	if d.admin == nil {
 		d.adminOnly()
@@ -148,7 +154,7 @@ func (d *rangeDriver) ownGrant(bounds, limits string) {
 	if code != 0 {
 		t.Fatalf("run start: %d %s %s", code, out, errs)
 	}
-	d.defaultRun = field(t, out, "id")
+	return field(t, out, "id")
 }
 
 // adminOnly makes alice the org's administrator, signed in to the CLI.

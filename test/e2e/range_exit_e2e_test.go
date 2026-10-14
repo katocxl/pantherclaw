@@ -7,6 +7,14 @@ package e2e
 
 import (
 	"context"
+
+	evapp "github.com/katocxl/pantherclaw/internal/evidence/app"
+	"github.com/katocxl/pantherclaw/internal/evidence/pack"
+	"github.com/katocxl/pantherclaw/internal/evidence/packbuild"
+	"github.com/katocxl/pantherclaw/internal/platform/db"
+	"github.com/katocxl/pantherclaw/internal/platform/ids"
+	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
+	txapp "github.com/katocxl/pantherclaw/internal/transactions/app"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -135,5 +143,63 @@ func TestE2E_M12_RangeReachesOnlySimulators(t *testing.T) {
 	s.query(t, "SELECT count(*)::int FROM pc.decision_receipts r JOIN pc.transactions t ON t.id = r.transaction_id WHERE NOT t.simulated", nil, &real2)
 	if real2 != 0 {
 		t.Fatalf("%d decision receipts of real transactions", real2)
+	}
+}
+
+var rangeIDOf = regexp.MustCompile(`Range ([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}) `)
+
+// TestE2E_M12_BaselineCatchesARegression: a range is run and its assurance
+// report exported as a signed pack; the pack verifies offline. A second run
+// against the pack as its baseline is clean; a third, under a grant that no
+// longer holds merges for review, exits 1 naming the scenario that regressed
+// (HR-226, HR-224).
+func TestE2E_M12_BaselineCatchesARegression(t *testing.T) {
+	r := startRangeStack(t)
+	s := r.d.s
+	dir := scenarioDir(t, "RT-001", "RT-020")
+	code, out, errs, _ := r.run(t, dir)
+	first := rangeIDOf.FindStringSubmatch(out)
+	if code != 0 || first == nil {
+		t.Fatalf("the baseline run: %d\n%s\n%s", code, out, errs)
+	}
+
+	p := s.proof(t)
+	svc := evapp.New(s.pool, p.origin).WithPacks(func(context.Context, db.TenantTx, ids.OrgID, ids.UUID) error { return nil }, teamEdition{})
+	builder := &packbuild.Service{
+		Pool: s.pool, Keys: p.reg, LogOrigin: p.origin, Explorer: &txapp.Explorer{Pool: s.pool}, Bundles: evapp.New(s.pool, p.origin),
+		Log: pclog.Discard(),
+	}
+	auditor := s.boundAuditor(t, "range-auditor")
+	pk, err := svc.CreateEvidencePack(auditor, evapp.PackRequest{
+		Kind: pack.ScopeRange, Range: mustUUID(t, first[1]), Include: pack.Include{Receipts: true, Versions: true},
+	})
+	if err != nil {
+		t.Fatalf("create the assurance report: %v", err)
+	}
+	if err := builder.Build(context.Background(), s.org, pk.ID); err != nil {
+		t.Fatal(err)
+	}
+	d, err := svc.DownloadEvidencePack(auditor, pk.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	file := writeFile(t, p.dir, "range.zip", d.Content)
+	if code, rep := p.verify(t, file); code != 0 {
+		t.Fatalf("pclaw verify of the range pack: exit %d\n%+v", code, rep.Checks)
+	}
+
+	// The same range again, with the pack as its baseline: no regression.
+	code, out, errs, _ = r.run(t, dir, "--baseline", file, "--trust", p.trust)
+	if code != 0 {
+		t.Fatalf("a run against its own baseline: %d\n%s\n%s", code, out, errs)
+	}
+
+	// A grant that no longer holds merges for review: the merge goes through,
+	// RT-001 fails, and the gate says so.
+	weak := r.d.grantRun(`{"operations": ["github.contents.read", "github.contents.write", "github.branch.create",
+	  "github.pull.read", "github.pull.create", "github.pull.merge"]}`, "")
+	code, out, errs, _ = r.run(t, dir, "--baseline", file, "--trust", p.trust, "--run", weak)
+	if code != 1 || !strings.Contains(out+errs, "RT-001") {
+		t.Fatalf("a run under a weakened grant: %d\n%s\n%s", code, out, errs)
 	}
 }
