@@ -531,12 +531,12 @@ func (f *pagedSetup) ListAgents(_ context.Context, r *pantherclawv1.ListAgentsRe
 	return &pantherclawv1.ListAgentsResponse{Agents: []*pantherclawv1.Agent{{Id: rtAgent, Name: "range", RangeAgent: true}}}, nil
 }
 
-func (f *pagedSetup) ListConnections(_ context.Context, r *pantherclawv1.ListConnectionsRequest) (*pantherclawv1.ListConnectionsResponse, error) {
+func (f *pagedSetup) ListConnections(ctx context.Context, r *pantherclawv1.ListConnectionsRequest) (*pantherclawv1.ListConnectionsResponse, error) {
 	f.connPages++
 	if r.GetPageToken() == "" {
 		return &pantherclawv1.ListConnectionsResponse{Connections: []*pantherclawv1.Connection{{Id: "x", Name: "unrelated", Package: "other"}}, NextPageToken: "p2"}, nil
 	}
-	return f.fakeSetup.ListConnections(context.Background(), r)
+	return f.fakeSetup.ListConnections(ctx, r)
 }
 
 func TestRedteamSetupPagesThroughAgentsAndConnections(t *testing.T) {
