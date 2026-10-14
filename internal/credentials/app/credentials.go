@@ -35,10 +35,12 @@ var (
 	ErrCredentialNotFound = pcerr.New(pcerr.NotFound, "CREDENTIAL_NOT_FOUND", "no such credential version, or it is already revoked")
 	ErrNotHeld            = pcerr.New(pcerr.FailedPrecondition, "CONNECTION_NOT_HELD",
 		"only an active connection whose access mode is pantherclaw_held takes a credential")
-	ErrNoBrokerKey = pcerr.New(pcerr.FailedPrecondition, "NO_BROKER_KEY", "the connection's gateway has not registered a broker key")
-	ErrStaleKey    = pcerr.New(pcerr.FailedPrecondition, "BROKER_KEY_CHANGED", "the gateway's broker key changed since the sealing key was read; seal again")
-	ErrStale       = pcerr.New(pcerr.FailedPrecondition, "CREDENTIAL_VERSION_STALE", "another credential was stored since the sealing key was read; seal again")
-	ErrBinding     = pcerr.New(pcerr.FailedPrecondition, "CREDENTIAL_BINDING_CHANGED",
+	ErrNoBrokerKey    = pcerr.New(pcerr.FailedPrecondition, "NO_BROKER_KEY", "the connection's gateway has not registered a broker key")
+	ErrGatewayRevoked = pcerr.New(pcerr.FailedPrecondition, "GATEWAY_REVOKED",
+		"the connection's gateway is revoked; move the connection to an active gateway before sealing a credential")
+	ErrStaleKey = pcerr.New(pcerr.FailedPrecondition, "BROKER_KEY_CHANGED", "the gateway's broker key changed since the sealing key was read; seal again")
+	ErrStale    = pcerr.New(pcerr.FailedPrecondition, "CREDENTIAL_VERSION_STALE", "another credential was stored since the sealing key was read; seal again")
+	ErrBinding  = pcerr.New(pcerr.FailedPrecondition, "CREDENTIAL_BINDING_CHANGED",
 		"the connection's hosts, header or scheme changed since the sealing key was read; seal again")
 	ErrFormat = pcerr.New(pcerr.InvalidArgument, "SEALED_FORMAT", "the upload is not a sealed credential")
 	ErrKind   = pcerr.New(pcerr.InvalidArgument, "CREDENTIAL_KIND",
@@ -125,6 +127,19 @@ func held(conn dbq.PcConnection, err error) (dbq.PcConnection, error) {
 	return conn, nil
 }
 
+// live refuses a connection whose gateway is not active: a revoked
+// gateway's broker key may have left with it, so nothing is sealed to it,
+// even if the key was never retired (HR-182).
+func live(g dbq.PcGateway, err error) error {
+	if err != nil {
+		return err
+	}
+	if g.State != "ACTIVE" {
+		return ErrGatewayRevoked
+	}
+	return nil
+}
+
 func binding(org ids.OrgID, conn dbq.PcConnection, version int32, key ids.UUID) domain.Binding {
 	return domain.Binding{
 		Org: org.String(), Connection: conn.ID.String(), Version: version, AllowedHosts: conn.AllowedHosts, BrokerKey: key.String(),
@@ -132,8 +147,9 @@ func binding(org ids.OrgID, conn dbq.PcConnection, version int32, key ids.UUID) 
 	}
 }
 
-// GetSealingKey returns the active broker key of the connection's gateway
-// and the binding the next credential version gets (credential.seal).
+// GetSealingKey returns the active broker key of the connection's gateway,
+// which must be active, and the binding the next credential version gets
+// (credential.seal).
 func (s *Service) GetSealingKey(ctx context.Context, connection ids.UUID) (SealingKey, error) {
 	c, err := s.caller(ctx, td.PermCredentialSeal)
 	if err != nil {
@@ -144,6 +160,9 @@ func (s *Service) GetSealingKey(ctx context.Context, connection ids.UUID) (Seali
 		q := dbq.New(tx)
 		conn, err := held(q.GetConnection(ctx, c.Org, connection))
 		if err != nil {
+			return err
+		}
+		if err := live(q.GetGateway(ctx, c.Org, conn.GatewayID)); err != nil {
 			return err
 		}
 		key, err := q.GetActiveBrokerKey(ctx, c.Org, conn.GatewayID)
@@ -163,9 +182,11 @@ func (s *Service) GetSealingKey(ctx context.Context, connection ids.UUID) (Seali
 }
 
 // PutCredential stores a sealed credential as the connection's next
-// version and supersedes the active one (credential.seal). The upload must
-// name the gateway's current broker key and the next version, and the
-// binding it was sealed for must still be the connection's.
+// version and supersedes the active one (credential.seal). The gateway must
+// be active, the upload must name its current broker key and the next
+// version, and the binding it was sealed for must still be the
+// connection's. The gateway row is locked first, so a revocation either
+// waits for the upload or is seen by it.
 func (s *Service) PutCredential(ctx context.Context, in PutInput) (Metadata, error) {
 	c, err := s.caller(ctx, td.PermCredentialSeal)
 	if err != nil {
@@ -188,6 +209,9 @@ func (s *Service) PutCredential(ctx context.Context, in PutInput) (Metadata, err
 		q := dbq.New(tx)
 		conn, err := held(q.LockConnection(ctx, c.Org, in.Connection))
 		if err != nil {
+			return err
+		}
+		if err := live(q.LockGateway(ctx, c.Org, conn.GatewayID)); err != nil {
 			return err
 		}
 		key, err := q.GetActiveBrokerKey(ctx, c.Org, conn.GatewayID)

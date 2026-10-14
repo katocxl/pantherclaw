@@ -192,7 +192,7 @@ func (s *Service) RegisterBrokerKey(ctx context.Context, id Identity, public []b
 		} else if err != nil && !db.IsNoRows(err) {
 			return err
 		}
-		if err := q.RetireBrokerKeys(ctx, id.Org, id.Gateway); err != nil {
+		if _, err := q.RetireBrokerKeys(ctx, id.Org, id.Gateway); err != nil {
 			return err
 		}
 		k, err := q.InsertBrokerKey(ctx, dbq.InsertBrokerKeyParams{

@@ -313,6 +313,45 @@ func TestHR002_RevokingAGatewayRaisesTheEpoch(t *testing.T) {
 	}
 }
 
+// TestHR182_RevokingAGatewayRetiresItsBrokerKeys: the revocation retires
+// the gateway's active broker key in its transaction and audits how many;
+// another gateway's key stays active, and the revoked gateway cannot
+// register a new one.
+func TestHR182_RevokingAGatewayRetiresItsBrokerKeys(t *testing.T) {
+	e := newEnv(t)
+	_, id := e.enroll(t, "edge")
+	_, other := e.enroll(t, "other")
+	ctx := context.Background()
+	key := func() []byte {
+		k, err := pccrypto.GenerateSealKey()
+		if err != nil {
+			t.Fatal(err)
+		}
+		return k.PublicKey().Bytes()
+	}
+	for _, g := range []app.Identity{id, other} {
+		if _, err := e.svc.RegisterBrokerKey(ctx, g, key()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := e.svc.RevokeGateway(e.admin, id.Gateway, "stolen"); err != nil {
+		t.Fatal(err)
+	}
+	if n := e.count(t, "SELECT count(*) FROM pc.broker_keys WHERE gateway_id = $1 AND state = 'ACTIVE'", id.Gateway); n != 0 {
+		t.Fatalf("%d broker keys of the revoked gateway are active", n)
+	}
+	if n := e.count(t, "SELECT count(*) FROM pc.broker_keys WHERE gateway_id = $1 AND state = 'ACTIVE'", other.Gateway); n != 1 {
+		t.Fatalf("%d broker keys of the other gateway are active", n)
+	}
+	if n := e.count(t, `SELECT (convert_from(body, 'UTF8')::jsonb -> 'details' ->> 'broker_keys')::int FROM pc.ledger_entries
+		WHERE kind = 'audit.gateway.revoked' ORDER BY occurred_at DESC, id DESC LIMIT 1`); n != 1 {
+		t.Fatalf("revocation audited %d retired broker keys", n)
+	}
+	if _, err := e.svc.RegisterBrokerKey(ctx, id, key()); !errors.Is(err, app.ErrGatewayCredentials) {
+		t.Fatalf("a revoked gateway registered a broker key: %v", err)
+	}
+}
+
 // TestHR182_BrokerKeysAreRegisteredByTheirGatewayAndVersioned: the active
 // key registered again changes nothing; a new key is the next version and
 // moves the configuration version; a retired key cannot come back.

@@ -93,7 +93,7 @@ SELECT * FROM pc.broker_keys WHERE org_id = sqlc.arg(org_id) AND gateway_id = sq
 -- name: GetBrokerKey :one
 SELECT * FROM pc.broker_keys WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id);
 
--- name: RetireBrokerKeys :exec
+-- name: RetireBrokerKeys :execrows
 UPDATE pc.broker_keys SET state = 'RETIRED', retired_at = now()
 WHERE org_id = sqlc.arg(org_id) AND gateway_id = sqlc.arg(gateway_id) AND state = 'ACTIVE';
 

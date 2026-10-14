@@ -500,14 +500,17 @@ func (q *Queries) LockGatewayEnrollmentToken(ctx context.Context, orgID ids.OrgI
 	return i, err
 }
 
-const retireBrokerKeys = `-- name: RetireBrokerKeys :exec
+const retireBrokerKeys = `-- name: RetireBrokerKeys :execrows
 UPDATE pc.broker_keys SET state = 'RETIRED', retired_at = now()
 WHERE org_id = $1 AND gateway_id = $2 AND state = 'ACTIVE'
 `
 
-func (q *Queries) RetireBrokerKeys(ctx context.Context, orgID ids.OrgID, gatewayID ids.UUID) error {
-	_, err := q.db.Exec(ctx, retireBrokerKeys, orgID, gatewayID)
-	return err
+func (q *Queries) RetireBrokerKeys(ctx context.Context, orgID ids.OrgID, gatewayID ids.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, retireBrokerKeys, orgID, gatewayID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const revokeGateway = `-- name: RevokeGateway :one

@@ -19,6 +19,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/credentials/app"
 	"github.com/katocxl/pantherclaw/internal/credentials/domain"
 	"github.com/katocxl/pantherclaw/internal/definitions/manifest"
+	gapp "github.com/katocxl/pantherclaw/internal/gateways/app"
 	napp "github.com/katocxl/pantherclaw/internal/notifications/app"
 	pccrypto "github.com/katocxl/pantherclaw/internal/platform/crypto"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
@@ -285,6 +286,71 @@ func TestHR182_UploadsMustMatchTheCurrentBinding(t *testing.T) {
 	}
 	if _, err := e.svc.GetSealingKey(e.sealer, e.conn.ID); err != nil {
 		t.Errorf("sealing after a rotation: %v", err)
+	}
+}
+
+// TestHR182_ARevokedGatewaysBrokerKeyIsNeverSealedTo: revoking a gateway
+// retires its broker keys in the same transaction, audited, because its
+// private key may have left with it. Its connections then get no sealing
+// key and take no upload, not even one sealed before the revocation; so
+// does a gateway revoked while its key stayed active. Another gateway of
+// the org is unaffected.
+func TestHR182_ARevokedGatewaysBrokerKeyIsNeverSealedTo(t *testing.T) {
+	e := newEnv(t)
+	live := *e
+	live.gateway = ids.NewV7()
+	live.exec(t, "INSERT INTO pc.gateways (org_id, id, name, created_by) VALUES ($1, $2, 'live', 'test')", live.org, live.gateway)
+	live.key, live.keyID = live.registerBrokerKey(t)
+	c, err := e.conns.Create(e.sealer, capp.CreateInput{
+		Name: "payments-live", Kind: capp.KindHTTP, Package: mockpayments.Name, BaseURL: "https://live.example.test", Gateway: live.gateway,
+		AccessMode: capp.AccessHeld, CredentialHeader: "Authorization", CredentialScheme: "Bearer",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	live.conn = c
+
+	_, before := e.seal(t, "sealed before the revocation")
+	if _, err := gapp.New(e.pool, nil, "", nil).RevokeGateway(e.sealer, e.gateway, "stolen"); err != nil {
+		t.Fatal(err)
+	}
+	var active, retired int
+	var audited *string
+	if err := e.pool.InTenantTx(context.Background(), e.org, func(ctx context.Context, tx db.TenantTx) error {
+		if err := tx.QueryRow(ctx, `SELECT count(*) FILTER (WHERE state = 'ACTIVE'), count(*) FILTER (WHERE state = 'RETIRED')
+			FROM pc.broker_keys WHERE gateway_id = $1`, e.gateway).Scan(&active, &retired); err != nil {
+			return err
+		}
+		return tx.QueryRow(ctx, `SELECT convert_from(body, 'UTF8')::jsonb -> 'details' ->> 'broker_keys' FROM pc.ledger_entries
+			WHERE kind = 'audit.gateway.revoked' ORDER BY occurred_at DESC, id DESC LIMIT 1`).Scan(&audited)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if active != 0 || retired != 1 || audited == nil || *audited != "1" {
+		t.Fatalf("after the revocation: %d active and %d retired broker keys, audited %v", active, retired, audited)
+	}
+	if _, err := e.svc.GetSealingKey(e.sealer, e.conn.ID); !is(err, app.ErrGatewayRevoked) {
+		t.Errorf("sealing key of a revoked gateway: %v", err)
+	}
+	if _, err := e.svc.PutCredential(e.sealer, before); !is(err, app.ErrGatewayRevoked) {
+		t.Errorf("upload sealed before the revocation: %v", err)
+	}
+	if _, in := live.seal(t, "live"); in.BrokerKey != live.keyID {
+		t.Fatalf("the live gateway's sealing key is %s, want %s", in.BrokerKey, live.keyID)
+	} else if _, err := live.svc.PutCredential(live.sealer, in); err != nil {
+		t.Fatalf("upload for the live gateway: %v", err)
+	}
+
+	// A gateway revoked while its broker key stayed active.
+	other := e.withOrg(t)
+	_, early := other.seal(t, "x")
+	other.exec(t, "UPDATE pc.gateways SET state = 'REVOKED', revoked_at = now(), revoked_by = 'test', revoke_reason = 'lost' WHERE id = $1",
+		other.gateway)
+	if _, err := other.svc.GetSealingKey(other.sealer, other.conn.ID); !is(err, app.ErrGatewayRevoked) {
+		t.Errorf("sealing key of a revoked gateway with an active key: %v", err)
+	}
+	if _, err := other.svc.PutCredential(other.sealer, early); !is(err, app.ErrGatewayRevoked) {
+		t.Errorf("upload to a revoked gateway with an active key: %v", err)
 	}
 }
 

@@ -219,9 +219,11 @@ func (s *Service) GetGateway(ctx context.Context, id ids.UUID) (GatewayDetail, e
 	return out, err
 }
 
-// RevokeGateway revokes a gateway and every certificate it holds, and
-// raises the containment epoch so that its outstanding permits fail
-// BeginDispatch (HR-002). Its next call is refused (HR-181).
+// RevokeGateway revokes a gateway and every certificate it holds, retires
+// its broker keys, whose private key may have left with it, so nothing is
+// sealed to them again (HR-182), and raises the containment epoch so that
+// its outstanding permits fail BeginDispatch (HR-002). Its next call is
+// refused (HR-181).
 func (s *Service) RevokeGateway(ctx context.Context, id ids.UUID, reason string) (dbq.PcGateway, error) {
 	c, err := s.manager(ctx, td.PermGatewayManage)
 	if err != nil {
@@ -246,8 +248,14 @@ func (s *Service) RevokeGateway(ctx context.Context, id ids.UUID, reason string)
 		if err != nil {
 			return err
 		}
+		keys, err := q.RetireBrokerKeys(ctx, c.Org, id)
+		if err != nil {
+			return err
+		}
 		out = g
-		return record(ctx, tx, c.Actor(), "gateway.revoked", id, map[string]string{"certificates": strconv.FormatInt(n, 10)})
+		return record(ctx, tx, c.Actor(), "gateway.revoked", id, map[string]string{
+			"certificates": strconv.FormatInt(n, 10), "broker_keys": strconv.FormatInt(keys, 10),
+		})
 	})
 	if err == nil {
 		s.auth.forgetGateway(id)
