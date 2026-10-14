@@ -54,6 +54,8 @@ var (
 	ErrBadPackScope  = pcerr.New(pcerr.InvalidArgument, "INVALID_SCOPE", "name 1 to 1,000 transactions, a run, an agent, or a time range of at most 366 days")
 	ErrRunNotFound   = pcerr.New(pcerr.NotFound, "RUN_NOT_FOUND", "run not found")
 	ErrAgentNotFound = pcerr.New(pcerr.NotFound, "AGENT_NOT_FOUND", "agent not found")
+	ErrRangeNotFound = pcerr.New(pcerr.NotFound, "RANGE_NOT_FOUND", "range not found")
+	ErrRangeNotDone  = pcerr.New(pcerr.FailedPrecondition, "RANGE_NOT_FINISHED", "the range has not finished")
 	ErrPacksUnwired  = pcerr.New(pcerr.Unavailable, "PACKS_UNAVAILABLE", "evidence packs are not available on this server")
 	errPackNoContent = errors.New("app: a ready pack without content")
 )
@@ -77,6 +79,8 @@ type PackRequest struct {
 	Kind         string // pack.ScopeTransactions, ScopeRun, ScopeAgent, ScopeTimeRange
 	Transactions []ids.UUID
 	Run, Agent   ids.UUID
+	// Range is the adversarial range of a pack of scope range (G0 M12).
+	Range ids.UUID
 	// From and To bound a time range, or narrow a run or an agent.
 	From, To *time.Time
 	Include  pack.Include
@@ -131,6 +135,11 @@ func (r PackRequest) scope() (pack.Scope, error) {
 			return sc, ErrBadPackScope
 		}
 		sc.Agent = r.Agent.String()
+	case pack.ScopeRange:
+		if r.Range.IsZero() || r.From != nil {
+			return sc, ErrBadPackScope
+		}
+		sc.Range = r.Range.String()
 	case pack.ScopeTimeRange:
 		if r.From == nil {
 			return sc, ErrBadPackScope
@@ -192,6 +201,16 @@ func (s *Service) CreateEvidencePack(ctx context.Context, req PackRequest) (Pack
 				return ErrAgentNotFound
 			} else if err != nil {
 				return err
+			}
+		case pack.ScopeRange:
+			rng, err := q.GetRedteamRun(ctx, c.Org, req.Range)
+			if db.IsNoRows(err) {
+				return ErrRangeNotFound
+			} else if err != nil {
+				return err
+			}
+			if rng.State != "FINISHED" {
+				return ErrRangeNotDone
 			}
 		}
 		if err := q.InsertEvidencePack(ctx, dbq.InsertEvidencePackParams{
