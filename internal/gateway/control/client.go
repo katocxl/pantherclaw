@@ -96,7 +96,7 @@ func NewClient(id *Identity, dir, baseURL string, timeout time.Duration, log *sl
 	c.Agents = pantherclawv1connect.NewAgentServiceClient(connect.NewClient(connecthttp.NewTransport(c.hc, c.baseURL)))
 	// Streams share the transport (and so the certificate) but have no
 	// whole-request timeout: they end with their context.
-	stream := &http.Client{Transport: c.hc.Transport, CheckRedirect: c.hc.CheckRedirect}
+	stream := httpx.StreamingClient(c.hc)
 	c.Stream = pantherclawv1connect.NewGatewayServiceClient(connect.NewClient(connecthttp.NewTransport(stream, c.baseURL)))
 	return c
 }
