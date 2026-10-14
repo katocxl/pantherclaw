@@ -42,6 +42,9 @@ const (
 	JWSType = "pap-pack+jwt"
 	// Statement is the fixed sentence every manifest carries (F526).
 	Statement = "This pack supports review; it does not certify compliance."
+	// RangeStatement is the sentence a pack of scope range carries instead
+	// (G0 M12, D13, HR-224): its findings are about simulated targets.
+	RangeStatement = "Tested-control evidence against simulated targets. Not a compliance certification."
 	// ManifestPath and CosignPath are the files outside the item list.
 	ManifestPath = "manifest.jws"
 	CosignPath   = "manifest.mldsa65.json"
@@ -86,6 +89,9 @@ const (
 	// M9, HR-217); the bundles carry the snapshot ledger they are checked
 	// against.
 	KindCoverage = "coverage"
+	// KindAssurance is the assurance report of an adversarial range (G0
+	// M12, HR-224): assurance.json, in a pack of scope range.
+	KindAssurance = "assurance"
 	// KindBundle is a pantherclaw.bundle/v1 verify bundle: the receipts'
 	// ledger entries with their inclusion proofs, the checkpoints and the
 	// anchor.
@@ -98,6 +104,9 @@ const (
 	ScopeRun          = "run"
 	ScopeAgent        = "agent"
 	ScopeTimeRange    = "time_range"
+	// ScopeRange is the transactions of one adversarial range and its
+	// assurance report (G0 M12, HR-224).
+	ScopeRange = "range"
 )
 
 // ErrInvalid reports a pack or manifest that is malformed or does not
@@ -145,6 +154,7 @@ type Scope struct {
 	Transactions []string `json:"transactions,omitzero"`
 	Run          string   `json:"run,omitzero"`
 	Agent        string   `json:"agent,omitzero"`
+	Range        string   `json:"range,omitzero"`
 	From         string   `json:"from,omitzero"`
 	To           string   `json:"to,omitzero"`
 }

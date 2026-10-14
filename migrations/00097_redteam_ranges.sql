@@ -15,7 +15,14 @@
 -- caller's: a transaction counts for a range only if it was created after
 -- the range's started_at.
 
+-- A pack may be scoped to one range (the assurance report, D13): the range's
+-- transactions and its assurance.json.
+
 -- +goose Up
+ALTER TABLE pc.evidence_packs DROP CONSTRAINT evidence_packs_scope_kind_check;
+ALTER TABLE pc.evidence_packs ADD CONSTRAINT evidence_packs_scope_kind_check
+    CHECK (scope_kind IN ('transactions', 'run', 'agent', 'time_range', 'range'));
+
 CREATE TABLE pc.redteam_runs (
     org_id              uuid        NOT NULL REFERENCES pc.orgs (id),
     id                  uuid        NOT NULL,
@@ -152,6 +159,10 @@ GRANT INSERT (org_id, range_id, scenario_id, scenario_digest, title, suite, cate
 GRANT SELECT ON pc.redteam_runs, pc.redteam_results TO pc_audit_ro;
 
 -- +goose Down
+-- Packs of scope range are kept: the old rule applies to new rows only.
+ALTER TABLE pc.evidence_packs DROP CONSTRAINT evidence_packs_scope_kind_check;
+ALTER TABLE pc.evidence_packs ADD CONSTRAINT evidence_packs_scope_kind_check
+    CHECK (scope_kind IN ('transactions', 'run', 'agent', 'time_range')) NOT VALID;
 DROP TABLE pc.redteam_results;
 DROP TABLE pc.redteam_runs;
 DROP FUNCTION pc.redteam_result_insert();

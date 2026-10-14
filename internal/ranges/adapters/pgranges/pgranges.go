@@ -335,7 +335,7 @@ func (t *txn) InsertResult(ctx context.Context, rng ids.UUID, r domain.Result) (
 	at, err := t.q.InsertRedteamResult(ctx, dbq.InsertRedteamResultParams{
 		OrgID: t.org, RangeID: rng, ScenarioID: r.Scenario.ID, ScenarioDigest: r.Scenario.Digest, Title: r.Scenario.Title,
 		Suite: r.Scenario.Suite, Category: r.Scenario.Category, Tier: r.Scenario.Tier, Verdict: string(r.Verdict),
-		ClaimedVerdict: claimed, Steps: raw, ObservedBy: by, Mismatches: int32(mismatches), //nolint:gosec // G115: at most 40
+		ClaimedVerdict: claimed, Steps: raw, ObservedBy: by, Mismatches: int32(mismatches),
 	})
 	if db.IsNoRows(err) {
 		return time.Time{}, false, nil
