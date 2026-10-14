@@ -605,13 +605,31 @@ func TestS07_TargetTimeoutIsUnknownAndHeld(t *testing.T) {
 	}
 }
 
-// S09: the Authority is down: fail closed, nothing dispatched.
+// S09: the Authority cannot decide: fail closed, nothing dispatched. This
+// models the Authority's database being unavailable: Authorize fails while
+// the server keeps running and its containment heartbeat stays fresh, so the
+// gateway reaches the Authority path and reports authority_unavailable
+// whatever the timing (the stack's database is this test's own).
 func TestS09_AuthorityUnavailableDispatchesNothing(t *testing.T) {
 	s := start(t, options{budget: "1000.00"})
-	s.stopServer(t)
+	s.db.AdminExec(t, `ALTER TABLE pc.transactions RENAME TO transactions_unavailable`)
 	code, r := s.refund(t, ids.NewV7(), "30.00")
 	if code != http.StatusServiceUnavailable || r.Error != "authority_unavailable" || s.simCalls.Load() != 0 {
 		t.Fatalf("S09: %d %+v, target calls %d", code, r, s.simCalls.Load())
+	}
+}
+
+// S09b: the whole server is stopped: fail closed, nothing dispatched. The
+// gateway's containment view goes stale after HR-010's fixed 2 s, so how
+// long the shutdown took decides which refusal answers: authority_unavailable
+// while the view is fresh, containment_stale once it is not. Both are
+// correct; S09 holds the Authority path strictly.
+func TestS09b_ServerStoppedDispatchesNothing(t *testing.T) {
+	s := start(t, options{budget: "1000.00"})
+	s.stopServer(t)
+	code, r := s.refund(t, ids.NewV7(), "30.00")
+	if code != http.StatusServiceUnavailable || (r.Error != "authority_unavailable" && r.Error != "containment_stale") || s.simCalls.Load() != 0 {
+		t.Fatalf("S09b: %d %+v, target calls %d", code, r, s.simCalls.Load())
 	}
 }
 
