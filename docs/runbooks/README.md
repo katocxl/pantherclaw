@@ -19,3 +19,4 @@ Operational procedures. Each runbook is completed (from stub to tested procedure
 | [workload-identity.md](workload-identity.md) | M3 | Enroll workloads, set up GitHub Actions and Kubernetes attestation, run pull-request bots safely |
 | [github-app.md](github-app.md) | M8 | Connect a GitHub App: per-action installation tokens, sealing and rotating the App key |
 | [github-live.md](github-live.md) | M8 | Run the manual, opt-in GitHub check against a sandbox org (`task test:github-live`) |
+| [range.md](range.md) | M12 | Run the adversarial range: set up range agents and simulators, run scenarios, read reports, the baseline gate, `task range` |
