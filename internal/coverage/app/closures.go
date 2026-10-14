@@ -8,14 +8,19 @@ package app
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/hex"
 	"encoding/json/v2"
 	"log/slog"
 	"regexp"
 	"slices"
+	"strings"
 	"time"
 	"unicode/utf8"
 
 	"github.com/katocxl/pantherclaw/internal/coverage/domain"
+	evdomain "github.com/katocxl/pantherclaw/internal/evidence/domain"
+	"github.com/katocxl/pantherclaw/internal/evidence/ledger"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/platform/clock"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
@@ -172,6 +177,9 @@ func (s *Service) RecordClosure(ctx context.Context, tx db.TenantTx, c domain.Cl
 	} else if err != nil {
 		return ids.UUID{}, err
 	}
+	if err := s.enterClosure(ctx, tx, row.ID, result, c); err != nil {
+		return ids.UUID{}, err
+	}
 	if !v.Passed {
 		if err := s.RecordInvalidation(ctx, tx, domain.Invalidation{
 			Kind: domain.InvClosureFailed, Connection: c.Connection, Agent: &c.Agent, Subject: &row.ID,
@@ -238,5 +246,67 @@ func (s *Service) RecordInvalidation(ctx context.Context, tx db.TenantTx, inv do
 		OrgID: tx.OrgID(), ID: ids.NewV7(), Kind: string(inv.Kind), ConnectionID: inv.Connection, AgentID: inv.Agent,
 		SubjectID: inv.Subject, Detail: detail,
 	})
+	return err
+}
+
+// ClosureLedgerKind is the ledger kind of a recorded closure (HR-227).
+const ClosureLedgerKind = "sandbox.closure"
+
+// ClosureEntry is the ledger body of a closure: the signed reports it was
+// computed from, by run, kind and digest, and the keys that verify them, so
+// `pclaw verify` re-checks the closure offline against the probe records
+// the bundle carries (HR-227, T-095). Ids are canonical UUID strings; keys
+// are base64url raw Ed25519 public keys: SessionKey verified the sandbox
+// report and HostKey the control and canary reports.
+type ClosureEntry struct {
+	V           int                  `json:"v"`
+	Closure     string               `json:"closure"`
+	Session     string               `json:"session"`
+	Agent       string               `json:"agent"`
+	Connections []string             `json:"connections"`
+	Result      string               `json:"result"`
+	SessionKey  string               `json:"session_key"`
+	HostKey     string               `json:"host_key"`
+	Reports     []ClosureEntryReport `json:"reports"`
+	Probes      []ClosureEntryProbe  `json:"probes"`
+	RecordedAt  string               `json:"recorded_at"`
+}
+
+// ClosureEntryReport names one report of a closure's run.
+type ClosureEntryReport struct {
+	Run    string `json:"run"`
+	Kind   string `json:"kind"`
+	SHA256 string `json:"sha256"`
+}
+
+// ClosureEntryProbe is one probe's outcome as the closure recorded it.
+type ClosureEntryProbe struct {
+	Name    string `json:"name"`
+	Outcome string `json:"outcome"`
+}
+
+// enterClosure appends the closure's sandbox.closure entry to the ledger in
+// the caller's transaction, so it is recorded with the closure or not at
+// all.
+func (s *Service) enterClosure(ctx context.Context, tx db.TenantTx, id ids.UUID, result string, c domain.Closure) error {
+	e := ClosureEntry{
+		V: 1, Closure: id.String(), Session: c.SandboxSession.String(), Agent: c.Agent.String(),
+		Connections: []string{c.Connection.String()}, Result: result,
+		SessionKey: base64.RawURLEncoding.EncodeToString(c.SessionKey), HostKey: base64.RawURLEncoding.EncodeToString(c.HostKey),
+		Reports: []ClosureEntryReport{}, Probes: make([]ClosureEntryProbe, 0, len(c.Probes)),
+		RecordedAt: evdomain.Timestamp(s.now()),
+	}
+	for _, r := range c.Reports {
+		e.Reports = append(e.Reports, ClosureEntryReport{Run: r.Run.String(), Kind: r.Kind, SHA256: hex.EncodeToString(r.SHA256[:])})
+	}
+	for _, p := range c.Probes {
+		e.Probes = append(e.Probes, ClosureEntryProbe{Name: p.Name, Outcome: p.Observed})
+	}
+	slices.SortStableFunc(e.Probes, func(a, b ClosureEntryProbe) int { return strings.Compare(a.Name, b.Name) })
+	body, err := evdomain.CanonicalBody(e)
+	if err != nil {
+		return err
+	}
+	_, err = ledger.Append(ctx, tx, ClosureLedgerKind, Actor, body)
 	return err
 }

@@ -54,6 +54,7 @@ var (
 	ErrNotInCheckpoint = pcerr.New(pcerr.FailedPrecondition, "NOT_IN_CHECKPOINT", "that entry is not in that checkpoint")
 	ErrEntryNotFound   = pcerr.New(pcerr.NotFound, "ENTRY_NOT_FOUND", "no chained entry at that position")
 	ErrTxnNotFound     = pcerr.New(pcerr.NotFound, "TRANSACTION_NOT_FOUND", "transaction not found")
+	ErrClosureNotFound = pcerr.New(pcerr.NotFound, "CLOSURE_NOT_FOUND", "closure not found")
 	ErrBadSelection    = pcerr.New(pcerr.InvalidArgument, "INVALID_SELECTION", "select 1 to 50 transactions or a range of 1 to 1,000 entries")
 	ErrBadConsistency  = pcerr.New(pcerr.InvalidArgument, "INVALID_CONSISTENCY", "the earlier tree size must be at most the later checkpoint's")
 	ErrBundleTooLarge  = pcerr.New(pcerr.ResourceExhausted, "BUNDLE_TOO_LARGE", "the bundle is too large: select fewer transactions or a shorter range")
@@ -346,10 +347,14 @@ func (t tiles) ReadTile(ctx context.Context, id merkle.TileID) ([]byte, error) {
 	return b, err
 }
 
-// Selection is what a bundle holds: transactions, or the entries From..To.
+// Selection is what a bundle holds: transactions, sandbox closures, or the
+// entries From..To.
 type Selection struct {
 	Transactions []ids.UUID
-	From, To     int64
+	// Closures are sandbox closures (HR-227): each one's ledger entry and
+	// probe reports.
+	Closures []ids.UUID
+	From, To int64
 }
 
 // Export is a built bundle.
@@ -410,10 +415,14 @@ func (s *Service) ExportBundle(ctx context.Context, sel Selection, consistencyFr
 	if err != nil {
 		return Export{}, err
 	}
-	byTxn := len(sel.Transactions) > 0
+	byTxn, byClosure := len(sel.Transactions) > 0, len(sel.Closures) > 0
 	switch {
-	case byTxn && (len(sel.Transactions) > MaxTransactions || sel.From != 0 || sel.To != 0):
+	case byTxn && byClosure, byTxn && (len(sel.Transactions) > MaxTransactions || sel.From != 0 || sel.To != 0),
+		byClosure && (len(sel.Closures) > MaxTransactions || sel.From != 0 || sel.To != 0):
 		return Export{}, ErrBadSelection
+	case !byTxn && !byClosure && (sel.From < 1 || sel.To < sel.From || sel.To-sel.From >= MaxRange):
+		return Export{}, ErrBadSelection
+	case !byTxn && !byClosure:
 	case !byTxn && (sel.From < 1 || sel.To < sel.From || sel.To-sel.From >= MaxRange):
 		return Export{}, ErrBadSelection
 	case !byTxn:
@@ -431,9 +440,12 @@ func (s *Service) ExportBundle(ctx context.Context, sel Selection, consistencyFr
 		q := dbq.New(tx)
 		var entries []chained
 		var err error
-		if byTxn {
+		switch {
+		case byTxn:
 			entries, b.Receipts, err = s.transactions(ctx, c, q, sel.Transactions)
-		} else {
+		case byClosure:
+			entries, err = s.closures(ctx, c, q, sel.Closures)
+		default:
 			entries, b.Receipts, err = s.entryRange(ctx, c.Org, q, sel.From, sel.To)
 		}
 		if err != nil {
@@ -441,6 +453,9 @@ func (s *Service) ExportBundle(ctx context.Context, sel Selection, consistencyFr
 		}
 		if len(entries) == 0 && len(b.Receipts) == 0 {
 			return ErrNothingToExport
+		}
+		if b.ProbeReports, err = probeReports(ctx, q, c.Org, entries); err != nil {
+			return err
 		}
 		labels, err := policyLabels(ctx, q, c.Org, entries)
 		if err != nil {
@@ -590,16 +605,12 @@ func (s *Service) transactions(ctx context.Context, c tenancy.Caller, q *dbq.Que
 			}
 		}
 	}
-	rows, err := q.ChainedEntriesByID(ctx, c.Org, entryIDs)
+	entries, err := chainedOf(ctx, q, c.Org, entryIDs)
 	if err != nil {
 		return nil, nil, err
 	}
-	entries := make([]chained, 0, len(rows))
-	for _, r := range rows {
-		entries = append(entries, chained{
-			seq: r.Seq, prevHash: r.PrevHash, entryHash: r.EntryHash, id: r.ID, kind: r.Kind, actorType: r.ActorType,
-			actorID: r.ActorID, occurredAt: r.OccurredAt, body: r.Body, removedAt: r.BodyRemovedAt, policy: r.RemovedByPolicy,
-		})
+	if entries, err = withClosures(ctx, q, c.Org, entryIDs, entries); err != nil {
+		return nil, nil, err
 	}
 	return entries, receipts, nil
 }

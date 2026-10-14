@@ -6,7 +6,12 @@
 package app_test
 
 import (
+	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/hex"
+	"encoding/json/v2"
 	"errors"
 	"slices"
 	"strings"
@@ -323,4 +328,87 @@ func TestF443_RoutesSeenInsideTheSandboxAreObserved(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+}
+
+// TestHR227_ClosureEvidenceIsLedgered: recording a closure appends, in the
+// same transaction, a sandbox.closure ledger entry that names the closure,
+// session, agent and connection, the keys and the signed reports (run, kind,
+// digest) and the probe outcomes sorted by name; a failed closure is
+// entered too, as FAILED, and a refused one leaves no entry.
+func TestHR227_ClosureEvidenceIsLedgered(t *testing.T) {
+	f := newFixture(t)
+	started := f.dbNow(t)
+	run := ids.NewV7()
+	sum := sha256.Sum256([]byte("a compact JWS"))
+	c := f.closure(probes(false), started)
+	c.SessionKey, c.HostKey = bytes.Repeat([]byte{1}, 32), bytes.Repeat([]byte{2}, 32)
+	c.Reports = []domain.ClosureReport{{Run: run, Kind: "sandbox", SHA256: sum}}
+	id, err := f.record(t, c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	entries := f.closureEntries(t)
+	if len(entries) != 1 {
+		t.Fatalf("%d sandbox.closure entries, want 1", len(entries))
+	}
+	var got app.ClosureEntry
+	if err := json.Unmarshal(entries[0], &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.V != 1 || got.Closure != id.String() || got.Session != f.session.String() || got.Agent != f.agent.String() ||
+		!slices.Equal(got.Connections, []string{f.conn.String()}) || got.Result != "PASSED" ||
+		got.SessionKey != base64.RawURLEncoding.EncodeToString(c.SessionKey) || got.HostKey != base64.RawURLEncoding.EncodeToString(c.HostKey) ||
+		!slices.Equal(got.Reports, []app.ClosureEntryReport{{Run: run.String(), Kind: "sandbox", SHA256: hex.EncodeToString(sum[:])}}) ||
+		len(got.Probes) != len(c.Probes) || got.RecordedAt == "" {
+		t.Fatalf("entry %+v", got)
+	}
+	if !slices.IsSortedFunc(got.Probes, func(a, b app.ClosureEntryProbe) int { return strings.Compare(a.Name, b.Name) }) {
+		t.Errorf("probes are not sorted by name: %v", got.Probes)
+	}
+	// A failed closure is entered as FAILED.
+	if _, err := f.record(t, f.closure(probes(true), f.dbNow(t))); err != nil {
+		t.Fatal(err)
+	}
+	entries = f.closureEntries(t)
+	if len(entries) != 2 {
+		t.Fatalf("%d entries after a failed closure, want 2", len(entries))
+	}
+	var failed app.ClosureEntry
+	if err := json.Unmarshal(entries[1], &failed); err != nil || failed.Result != "FAILED" {
+		t.Fatalf("failed closure's entry %+v (%v)", failed, err)
+	}
+	// A refused closure (replayed nonce) leaves no entry.
+	c.SessionStartedAt = f.dbNow(t)
+	c.ObservedAt = c.SessionStartedAt
+	if _, err := f.record(t, c); !errors.Is(err, app.ErrClosureReplayed) {
+		t.Fatalf("replay: %v", err)
+	}
+	if n := len(f.closureEntries(t)); n != 2 {
+		t.Fatalf("%d entries after a refused closure, want 2", n)
+	}
+}
+
+// closureEntries returns the bodies of the org's sandbox.closure entries in
+// the order they were written.
+func (f *fixture) closureEntries(t *testing.T) [][]byte {
+	t.Helper()
+	var out [][]byte
+	if err := f.p.InTenantTx(context.Background(), f.org, func(ctx context.Context, tx db.TenantTx) error {
+		rows, err := tx.Query(ctx, `SELECT body FROM pc.ledger_entries WHERE org_id = $1 AND kind = 'sandbox.closure' ORDER BY id`, f.org)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var b []byte
+			if err := rows.Scan(&b); err != nil {
+				return err
+			}
+			out = append(out, b)
+		}
+		return rows.Err()
+	}); err != nil {
+		t.Fatal(err)
+	}
+	return out
 }
