@@ -94,7 +94,7 @@ func call(method, url, body string) string {
 
 func setup(repo, main, branch, file string) {
 	api := "https://api.github.com/repos/" + repo
-	fmt.Println("branch name", branch, "file name", file)
+	fmt.Println("chose branch", branch, "file", file)
 	fmt.Println("read", call(http.MethodGet, api+"/contents/README.md", ""))
 	fmt.Println("branch", call(http.MethodPost, api+"/git/refs", `{"ref":"refs/heads/`+branch+`","sha":"`+main+`"}`))
 	content := base64.StdEncoding.EncodeToString([]byte("the fix\n"))
