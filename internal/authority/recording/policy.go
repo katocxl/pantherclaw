@@ -29,13 +29,11 @@ func (p *Policy) Compile(b *pdomain.Bundle) (*pipeline.Policy, error) {
 
 // Proposed compiles another bundle (a draft or a later version, F505) the
 // way the recorded policy was compiled. With no recorded policy, catalog
-// gives the fact types, limits the CEL limits (zero: celenv.DefaultLimits)
-// and the default the budget.
-func (p *Policy) Proposed(b *pdomain.Bundle, catalog map[string]fdomain.Type, limits celenv.Limits) (*pipeline.Policy, error) {
-	if limits == (celenv.Limits{}) {
-		limits = celenv.DefaultLimits
-	}
-	e, budget := &papp.Engine{Limits: limits, Facts: catalog}, uint64(papp.DefaultBudget)
+// gives the fact types and the defaults the limits and budget. An
+// evaluation that read no policy recorded no limits, and the replay engine
+// holds read ports only (HR-197), so the configured limits are not used here.
+func (p *Policy) Proposed(b *pdomain.Bundle, catalog map[string]fdomain.Type) (*pipeline.Policy, error) {
+	e, budget := &papp.Engine{Limits: celenv.DefaultLimits, Facts: catalog}, uint64(papp.DefaultBudget)
 	if p != nil && !p.None && p.Err == "" {
 		e, budget = p.engine(), p.Budget
 	}
