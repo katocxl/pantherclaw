@@ -105,7 +105,7 @@ rm .demo/github-app.pem
 
 Expected: `pclaw connection get "$DEMO_GITHUB"` shows the installation. (To connect a real App instead, follow [runbooks/github-app.md](runbooks/github-app.md); the demo does not need one.)
 
-## 7. Run the agent in the sandbox (`pclaw sandbox run`) — **Blocked**
+## 7. Run the agent in the sandbox (`pclaw sandbox run`)
 
 Tell the connection which host names agents use, so that the sandbox maps `api.github.com` to the gateway:
 
@@ -114,14 +114,16 @@ REV=$(pclaw connection get "$DEMO_GITHUB" | sed -n 's/^revision[: ]*//p')
 pclaw connection update "$DEMO_GITHUB" --revision "$REV" --agent-host api.github.com
 ```
 
-The sandbox's agent image must be pinned. `demo:up` does not build one yet; the M9 test agent (`test/e2e/testdata/m9agent`) is the only agent that makes the calls below.
+The agent is the demo agent (`pantherclaw-demo-agent`), which `demo:up` built into `$DEMO_AGENT_IMAGE`. Its workspace, `$DEMO_WORKSPACE`, holds a made-up personal access token in `.env` and a made-up SSH key, the kind of leftovers a developer forgets. Look up the commit the pull request will start from, then run the agent for its first, allowed task:
 
 ```bash
+GH=http://127.0.0.1:9092; TOKEN=$(cat .demo/github-mcp.token)
+MAIN=$(curl -s -H "Authorization: Bearer $TOKEN" $GH/repos/acme/payments/branches/main | grep -o '"sha": *"[0-9a-f]*"' | head -1 | grep -o '[0-9a-f]\{20,\}')
 pclaw sandbox run --agent "$DEMO_AGENT" --connection "$DEMO_GITHUB" --grant "$DEMO_GRANT" --gateway "$DEMO_GATEWAY" \
-  --image <agent image id> --workspace <a folder without secrets> --out .demo/sandbox-out -- /m9agent push acme/payments
+  --image "$DEMO_AGENT_IMAGE" --workspace "$DEMO_WORKSPACE" --out .demo/sandbox-out -- allowed acme/payments "$MAIN"
 ```
 
-Expected near the end: `connection …: sandbox closure PASSED (closure …), evidence for ENFORCED until <time>`.
+Expected: the agent's lines `read`, `branch`, `write` and `pr` with HTTP 200 or 201, and near the end `connection …: sandbox closure PASSED (closure …), evidence for ENFORCED until <time>`.
 
 ## 8. Read the coverage card (`pclaw coverage list`)
 
@@ -133,13 +135,26 @@ Expected: the repository operations the run used show `ENFORCED`, with an expiry
 
 ## 9. Guided tests: one allowed, one held, one blocked
 
-1. **Held.** A merge without a reviewer. Raw `curl` from the sandbox and the GitHub MCP server give the same action and the same decision (F099). The request waits for an approver. Open the approval page (`pclaw approval list --waiting-for-me`, then `pclaw approval approve <id>`), check the binding hash, and approve with your security key.
+1. **Allowed.** Step 7 was it: reading a file, creating a branch, writing a file and opening a pull request went through the gateway, which decided each one.
+2. **Held.** The agent merges the pull request with a raw request, as `curl` would send it. The gateway maps it to the same action as the GitHub MCP server's merge (F099), and policy holds it, because nobody independent has reviewed the pull request:
+
+   ```bash
+   HEAD=$(curl -s -H "Authorization: Bearer $TOKEN" $GH/repos/acme/payments/pulls/1 | grep -o '"sha": *"[0-9a-f]*"' | head -1 | grep -o '[0-9a-f]\{20,\}')
+   pclaw sandbox run --agent "$DEMO_AGENT" --connection "$DEMO_GITHUB" --grant "$DEMO_GRANT" --gateway "$DEMO_GATEWAY" \
+     --image "$DEMO_AGENT_IMAGE" --workspace "$DEMO_WORKSPACE" -- held acme/payments 1 "$HEAD"
+   ```
+
+   Expected: the agent's line `merge 202 …` or `merge 409 …` naming the hold and the reason `MERGES_NEED_AN_INDEPENDENT_REVIEW`, and an approval request in `pclaw approval list`. A second person (`bob`, Keycloak password `bob-dev-only`) with the `code_reviewer` role approves it on the approval page with a security key: `pclaw approval approve <id>`.
    - Approvals count only from people, roles and keys of a minimum age (G0 M5 part 2, decision 5), which real orgs cannot shorten. For the demo only, `bash tools/scripts/demo.sh age` backdates the demo organization by 30 days. This simulates a week-old org, by editing the local demo database directly.
    - A reviewer of a GitHub merge must also have linked a GitHub account. The simulator's command line has no sign-in App, so `bash tools/scripts/demo.sh link-github bob@example.test reviewer-bob` links the reviewer directly (also raw SQL on the local demo database, which both commands refuse to touch unless it is local). Real orgs link with `pclaw github link` and keep the cooldowns.
-2. **Blocked.** A push with the personal access token the agent found in its workspace. The sandbox holds no reusable credential and its egress is closed: the push fails, and the probe evidence in step 7 shows the route closed.
-3. **Allowed.** Reading a file, creating a branch, opening a pull request.
+3. **Blocked.** The agent pushes with the personal access token it found in `.env`, over HTTPS, and with the SSH key, to `github.com` and to GitHub's address. The sandbox holds no reusable credential and its egress is closed:
 
-**Blocked:** the only agent available to the sandbox (`m9agent`) merges and pushes but does not read, branch or open pull requests, and the "held" approval needs the pieces named above.
+   ```bash
+   pclaw sandbox run --agent "$DEMO_AGENT" --connection "$DEMO_GITHUB" --grant "$DEMO_GRANT" --gateway "$DEMO_GATEWAY" \
+     --image "$DEMO_AGENT_IMAGE" --workspace "$DEMO_WORKSPACE" -- blocked acme/payments
+   ```
+
+   Expected: `https-push` refused, `ssh … blocked` for both addresses, and `sandbox closure PASSED`: the probes found every route closed.
 
 ## Troubleshooting
 

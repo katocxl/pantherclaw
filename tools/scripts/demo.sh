@@ -233,11 +233,13 @@ up() {
 
   say "6/7 sandbox images"
   "${TASK[@]}" sandbox:images > "$DEMO/images.out" 2>&1 || { cat "$DEMO/images.out" >&2; die "task sandbox:images failed"; }
-  local edge probe
+  local edge probe demoagent
   edge=$(sed -n 's/^edge  //p' "$DEMO/images.out" | tail -1)
   probe=$(sed -n 's/^probe //p' "$DEMO/images.out" | tail -1)
-  [ -n "$edge" ] && [ -n "$probe" ] || die "could not read the image ids from $DEMO/images.out"
-  write_env "$edge" "$probe"
+  demoagent=$(sed -n 's/^pantherclaw-demo-agent //p' "$DEMO/images.out" | tail -1)
+  [ -n "$edge" ] && [ -n "$probe" ] && [ -n "$demoagent" ] || die "could not read the image ids from $DEMO/images.out"
+  write_env "$edge" "$probe" "$demoagent"
+  plant_workspace
 
   say "7/7 server and gateway"
   start_proc server "$server" serve --config "$DEMO/server.json"
@@ -245,6 +247,16 @@ up() {
   start_proc gateway "$(bin pantherclaw-gateway)" serve --config "$DEMO/gateway.json" --enroll-file "$DEMO/gateway-enroll.json"
   wait_for "the gateway" 60 curl -sS -o /dev/null "$GATEWAY/"
   next_steps
+}
+
+# plant_workspace makes the folder the sandboxed agent works in, with the
+# credentials a careless developer leaves behind: a personal access token in
+# .env and an SSH key. Both are made-up and open nothing anywhere.
+plant_workspace() {
+  mkdir -p "$DEMO/workspace/.ssh"
+  [ -f "$DEMO/workspace/.env" ] || printf 'GITHUB_TOKEN=ghp_%s\n' "$(openssl rand -hex 18)" > "$DEMO/workspace/.env"
+  [ -f "$DEMO/workspace/.ssh/id_ed25519" ] ||
+    printf -- '-----BEGIN OPENSSH PRIVATE KEY-----\n%s\n-----END OPENSSH PRIVATE KEY-----\n' "$(openssl rand -base64 48 | tr -d '\n')" > "$DEMO/workspace/.ssh/id_ed25519"
 }
 
 # write_env writes the file the quickstart sources: the pclaw settings and the
@@ -264,6 +276,8 @@ export PATH="$ROOT/bin:\$PATH"
 export PANTHERCLAW_CONFIG_DIR="$ROOT/$DEMO/pclaw"
 export PANTHERCLAW_SANDBOX_EDGE_IMAGE="$1"
 export PANTHERCLAW_SANDBOX_PROBE_IMAGE="$2"
+export DEMO_AGENT_IMAGE="$3"
+export DEMO_WORKSPACE="$ROOT/$DEMO/workspace"
 export DEMO_SERVER="$API"
 export DEMO_GATEWAY="$GATEWAY"
 export DEMO_ORG="$org"
