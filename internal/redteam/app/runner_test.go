@@ -6,6 +6,8 @@ package app_test
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -147,7 +149,7 @@ func TestRunnerSkips(t *testing.T) {
 	}{
 		"missing capability": {map[app.Capability]bool{}, func(s domain.Scenario) domain.Scenario { s.Requires = []string{"github"}; return s }, step, false},
 		"harness only":       {map[app.Capability]bool{}, func(s domain.Scenario) domain.Scenario { s.HarnessOnly = true; return s }, step, false},
-		"person step":        {map[app.Capability]bool{}, func(s domain.Scenario) domain.Scenario { return s }, "  - {id: h, do: operator.revoke_grant}\n  - {id: a, do: person.approve, with: {step: h, as: approver}}\n", false},
+		"person step":        {map[app.Capability]bool{}, func(s domain.Scenario) domain.Scenario { return s }, "  - {id: h, do: operator.revoke_grant}\n  - {id: a, do: person.approve, with: {step: h, as: approver}, expect: {outcome: ALLOW}}\n", false},
 		"capable": {all(), func(s domain.Scenario) domain.Scenario {
 			s.Requires = []string{"github"}
 			s.HarnessOnly = true
@@ -286,6 +288,83 @@ func TestRunnerBlockingOutcomesWhenOutcomeIsEmpty(t *testing.T) {
 		res := (&app.Runner{Driver: dr}).Run(context.Background(), concurrentScenario(t, "{max_allow: 1}"))
 		if res.Verdict != tc.want {
 			t.Errorf("%s: %+v", name, res)
+		}
+	}
+}
+
+func TestD30PersonRefusedFailsAndMissingReceiptPartsFail(t *testing.T) {
+	steps := `  - {id: held, do: operator.revoke_grant}
+  - {id: approve, do: person.approve, with: {step: held, as: approver}, expect: {outcome: ALLOW}}
+`
+	refused := &fake{caps: all(), respond: func(st domain.Step, n int) (domain.Observation, error) {
+		if st.Do == "person.approve" {
+			return domain.Observation{Outcome: domain.OutcomeRefused, Reason: "SELF_APPROVAL"}, nil
+		}
+		return domain.Observation{}, nil
+	}}
+	if res := (&app.Runner{Driver: refused}).Run(context.Background(), scenario(t, steps)); res.Verdict != domain.VerdictFail {
+		t.Errorf("a refused approval: %+v", res)
+	}
+	receipt := `  - {id: held, do: operator.revoke_grant}
+  - {id: evidence, do: check.receipt, with: {of: held, has: [grant, simulated]}, expect: {outcome: HOLD}}
+`
+	for missing, want := range map[string]domain.Verdict{"": domain.VerdictPass, "simulated": domain.VerdictFail} {
+		d := &fake{caps: all(), respond: func(st domain.Step, n int) (domain.Observation, error) {
+			if st.Do == "check.receipt" {
+				o := domain.Observation{Outcome: domain.OutcomeHold}
+				if missing != "" {
+					o.Missing = []string{missing}
+				}
+				return o, nil
+			}
+			return domain.Observation{}, nil
+		}}
+		if res := (&app.Runner{Driver: d}).Run(context.Background(), scenario(t, receipt)); res.Verdict != want {
+			t.Errorf("missing %q: %+v", missing, res)
+		}
+	}
+}
+
+func TestD30RunValidatesFirstAndNeverCallsTheDriver(t *testing.T) {
+	s := scenario(t, "  - {id: a, do: operator.revoke_grant}\n")
+	s.Steps[0].Do = "shell.run"
+	d := &fake{caps: all(), respond: hold}
+	res := (&app.Runner{Driver: d}).Run(context.Background(), s)
+	if res.Verdict != domain.VerdictError || len(d.calls) != 0 || d.setups != 0 {
+		t.Fatalf("%+v setups=%d calls=%d", res, d.setups, len(d.calls))
+	}
+}
+
+func TestD30LoadDirReadsOnlyRegularFilesOfBoundedSize(t *testing.T) {
+	dir := t.TempDir()
+	good, err := os.ReadFile("../testdata/valid/RT-001-mcp-merge-held.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "RT-001-mcp-merge-held.yaml"), good, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := app.LoadDir(dir); err != nil {
+		t.Fatal(err)
+	}
+	huge := make([]byte, domain.MaxFileBytes+1)
+	if err := os.WriteFile(filepath.Join(dir, "RT-002-huge.yaml"), huge, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := app.LoadDir(dir); err == nil || !strings.Contains(err.Error(), "larger than") {
+		t.Errorf("an oversized file: %v", err)
+	}
+	_ = os.Remove(filepath.Join(dir, "RT-002-huge.yaml"))
+	if err := os.Mkdir(filepath.Join(dir, "RT-003-dir.yaml"), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := app.LoadDir(dir); err == nil {
+		t.Error("a directory named like a scenario file was accepted")
+	}
+	_ = os.Remove(filepath.Join(dir, "RT-003-dir.yaml"))
+	if err := os.Symlink(filepath.Join(dir, "RT-001-mcp-merge-held.yaml"), filepath.Join(dir, "RT-004-link.yaml")); err == nil {
+		if _, err := app.LoadDir(dir); err == nil {
+			t.Error("a symbolic link was followed")
 		}
 	}
 }

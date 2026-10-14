@@ -17,6 +17,7 @@ steps:
   - id: approve
     do: person.approve
     with: {step: merge, as: approver}
+    expect: {outcome: ALLOW}
   - id: settled
     do: wait
     with: {for: effect_confirmed, of: merge, max_seconds: 5}
@@ -28,3 +29,4 @@ steps:
   - id: evidence
     do: check.receipt
     with: {of: merge, has: [grant, policy_version, package_version, facts, simulated]}
+    expect: {outcome: HOLD}

@@ -169,7 +169,7 @@ func TestT092_ACannotActAsAPersonWithoutAnOperator(t *testing.T) {
 			t.Errorf("%s: want ErrInvalid, got %v", name, err)
 		}
 	}
-	if err := parseSteps("  - {id: x, do: operator.revoke_grant}\n  - {id: a, do: person.approve, with: {step: x, as: approver}}\n"); err != nil {
+	if err := parseSteps("  - {id: x, do: operator.revoke_grant}\n  - {id: a, do: person.approve, with: {step: x, as: approver}, expect: {outcome: ALLOW}}\n"); err != nil {
 		t.Errorf("a well-formed person step: %v", err)
 	}
 }
@@ -362,5 +362,57 @@ func TestEmptyOutcomeNeedsConcurrentAndMaxAllow(t *testing.T) {
 		if err := parseSteps(bad); !errors.Is(err, domain.ErrInvalid) {
 			t.Errorf("%s: want ErrInvalid, got %v", bad, err)
 		}
+	}
+}
+
+func TestD30PersonAndReceiptStepsNeedAnExpectedOutcome(t *testing.T) {
+	for _, step := range []string{
+		"  - {id: a, do: operator.revoke_grant}\n  - {id: b, do: person.approve, with: {step: a, as: approver}}\n",
+		"  - {id: a, do: operator.revoke_grant}\n  - {id: b, do: person.decline, with: {step: a, as: approver}}\n",
+		"  - {id: a, do: operator.revoke_grant}\n  - {id: b, do: check.receipt, with: {of: a, has: [grant]}}\n",
+	} {
+		if err := parseSteps(step); !errors.Is(err, domain.ErrInvalid) {
+			t.Errorf("%s: want ErrInvalid, got %v", step, err)
+		}
+	}
+	ok := "  - {id: a, do: operator.revoke_grant}\n  - {id: b, do: check.receipt, with: {of: a, has: [grant]}, expect: {outcome: ALLOW}}\n"
+	if err := parseSteps(ok); err != nil {
+		t.Error(err)
+	}
+}
+
+func TestD30ErrorsFailTheGateClosed(t *testing.T) {
+	if c := domain.Compare(nil, []domain.Entry{{ID: "RT-001", Verdict: domain.VerdictError}}); c.ExitCode() != 1 {
+		t.Errorf("a lone ERROR exits %d", c.ExitCode())
+	}
+	if c := domain.Compare([]domain.Entry{{ID: "RT-001", Verdict: domain.VerdictError}}, []domain.Entry{{ID: "RT-001", Verdict: domain.VerdictPass}}); c.ExitCode() != 0 {
+		t.Errorf("an ERROR that is now PASS exits %d", c.ExitCode())
+	}
+}
+
+func TestD30TitlesRejectControlAndBidiCharacters(t *testing.T) {
+	// YAML escapes, so the parser (not the test source) produces the character.
+	for _, bad := range []string{`a\u202eb`, `a\u2066b`, `a\u200fb`, `a\x07b`, `a\x85b`, `a\x7fb`, `a\u061cb`} {
+		doc := strings.Replace(header, "title: t", `title: "`+bad+`"`, 1) + "steps:\n  - {id: a, do: operator.revoke_grant}\n"
+		if _, err := domain.Parse([]byte(doc)); !errors.Is(err, domain.ErrInvalid) {
+			t.Errorf("%q accepted: %v", bad, err)
+		}
+	}
+}
+
+func TestD30FileNameEndsInADotYAML(t *testing.T) {
+	s := &domain.Scenario{ID: "RT-001"}
+	if err := s.CheckFileName("RT-001-foo_yaml"); err == nil {
+		t.Error("RT-001-foo_yaml accepted")
+	}
+	if err := s.CheckFileName("RT-001-fooxyaml"); err == nil {
+		t.Error("RT-001-fooxyaml accepted")
+	}
+}
+
+func TestD30SubstitutedStringsStayBounded(t *testing.T) {
+	big := strings.Repeat("x", domain.MaxStringLen)
+	if _, err := domain.Substitute([]byte(`{"a":"y${v}"}`), map[string]string{"v": big}); err == nil {
+		t.Error("a resolved string over 4 KiB accepted")
 	}
 }
