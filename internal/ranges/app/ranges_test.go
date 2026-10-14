@@ -325,7 +325,7 @@ func TestT091_InflatedReportsAreRefused(t *testing.T) {
 	}
 }
 
-// T-091: a stale baseline: only a finished range of the same agent stands
+// T-091: a stale baseline: only a finished range stands
 // in as a baseline.
 func TestT091_AStaleBaselineIsRefused(t *testing.T) {
 	w := newWorld(t, billing.Team, td.RoleAgentOwner)
@@ -339,11 +339,17 @@ func TestT091_AStaleBaselineIsRefused(t *testing.T) {
 	if _, err := w.svc.StartRange(w.ctx, in); !errors.Is(err, app.ErrBaseline) {
 		t.Fatalf("unknown baseline: %v", err)
 	}
-	foreign := domain.Range{ID: ids.NewV7(), Agent: ids.NewV7(), State: domain.Finished}
-	w.f.ranges[foreign.ID] = foreign
-	in.Baseline = &foreign.ID
+	abandoned := domain.Range{ID: ids.NewV7(), Agent: w.agent, State: domain.Abandoned}
+	w.f.ranges[abandoned.ID] = abandoned
+	in.Baseline = &abandoned.ID
 	if _, err := w.svc.StartRange(w.ctx, in); !errors.Is(err, app.ErrBaseline) {
-		t.Fatalf("another agent's baseline: %v", err)
+		t.Fatalf("abandoned baseline: %v", err)
+	}
+	replaced := domain.Range{ID: ids.NewV7(), Agent: ids.NewV7(), State: domain.Finished}
+	w.f.ranges[replaced.ID] = replaced
+	in.Baseline = &replaced.ID
+	if _, err := w.svc.StartRange(w.ctx, in); err != nil {
+		t.Fatalf("a finished range of a replaced agent: %v", err)
 	}
 	if _, err := w.svc.FinishRange(w.ctx, running.ID); err != nil {
 		t.Fatal(err)

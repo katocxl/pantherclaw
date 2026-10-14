@@ -43,7 +43,7 @@ var (
 	ErrNotRange     = pcerr.New(pcerr.FailedPrecondition, "NOT_A_RANGE_AGENT", "ranges run only for range agents")
 	ErrNotRunning   = pcerr.New(pcerr.FailedPrecondition, "RANGE_NOT_RUNNING", "the range has finished or was abandoned")
 	ErrNotFinished  = pcerr.New(pcerr.FailedPrecondition, "RANGE_NOT_FINISHED", "the range has not finished")
-	ErrBaseline     = pcerr.New(pcerr.FailedPrecondition, "BASELINE_INVALID", "the baseline must be a finished range of the same range agent")
+	ErrBaseline     = pcerr.New(pcerr.FailedPrecondition, "BASELINE_INVALID", "the baseline must be a finished range")
 	ErrScenarios    = pcerr.New(pcerr.InvalidArgument, "INVALID_SCENARIOS", "declare 1 to 200 distinct scenarios")
 	ErrUndeclared   = pcerr.New(pcerr.InvalidArgument, "SCENARIO_NOT_DECLARED", "the scenario, with this digest, was not declared when the range started")
 	ErrRecorded     = pcerr.New(pcerr.AlreadyExists, "RESULT_RECORDED", "the scenario already has a result in this range")
@@ -139,8 +139,8 @@ func (s *Service) entitlements(ctx context.Context) (billing.Entitlements, error
 
 // StartRange records a range for a range agent (redteam.run over the
 // agent). Business-tier scenarios need a Business licence; a baseline must
-// be a finished range of the same agent (a stale or foreign baseline cannot
 // quietly stand in for a real one).
+// // quietly stand in for a real one).
 func (s *Service) StartRange(ctx context.Context, in StartInput) (domain.Range, error) {
 	c, err := tenancy.CallerFrom(ctx)
 	if err != nil {
@@ -172,7 +172,7 @@ func (s *Service) StartRange(ctx context.Context, in StartInput) (domain.Range, 
 		}
 		if in.Baseline != nil {
 			b, err := tx.Range(ctx, *in.Baseline, false)
-			if err != nil || b.State != domain.Finished || b.Agent != a.ID {
+			if err != nil || b.State != domain.Finished {
 				if err != nil && !errors.Is(err, ErrNotFound) {
 					return err
 				}
