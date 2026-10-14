@@ -31,11 +31,28 @@ import (
 // through the harness driver, which also covers what a live run cannot (person
 // steps, simulator changes, the sandbox).
 
-// rangeStack is a stack set up as a range's, with a person who runs it.
+// rangeStack is a stack set up as a range's through the product, with a person
+// who runs it.
 type rangeStack struct {
-	d      *rangeDriver
-	narrow string // the narrowed grant's run
+	d                               *rangeDriver
+	agent, instance, keyFile, grant string
+	run0                            string // the range instance's run on the range grant
 }
+
+// The team's real grant for its real agent: reviewed merges, and writes only to
+// its own repository (what RT-009 tests). The range grant is shaped like it.
+const (
+	exitBounds = `{"operations": ["github.contents.read", "github.contents.write", "github.branch.create", "github.pull.read",
+	  "github.pull.create", "github.pull.merge", "github.deployment.trigger", "payments.refund.create", "payments.refund.get"],
+	  "targets": {"github.branch": {"prefixes": ["acme/payments@"]}, "github.repository": {"prefixes": ["acme/payments"]},
+	  "github.pull_request": {"prefixes": ["acme/payments#"]}, "payments.charge": {"prefixes": ["ch_"]},
+	  "payments.refund": {"prefixes": ["re_"]}}}`
+	exitRequirements = `[
+	  {"operations": ["github.pull.merge"], "reason": "MERGES_NEED_AN_INDEPENDENT_REVIEW",
+	   "approval": {"role": "code_reviewer", "count": 1, "independent": true}},
+	  {"operations": ["github.deployment.trigger"], "reason": "DEPLOYMENTS_NEED_A_RELEASE",
+	   "approval": {"role": "release_approver", "count": 1}}]`
+)
 
 func startRangeStack(t *testing.T) *rangeStack {
 	t.Helper()
@@ -43,26 +60,8 @@ func startRangeStack(t *testing.T) *rangeStack {
 	if _, err := d.Setup(context.Background(), domain.Scenario{ID: "RT-000", Requires: []string{"github", "payments", "person"}}); err != nil {
 		t.Fatal(err)
 	}
-	alice := d.s.row(t, "SELECT id::text FROM pc.users WHERE subject = 'alice'")
-	for _, role := range []string{"agent_owner", "security_admin"} {
-		if code, out, errs := d.admin.pclaw(t, "role", "bind", "--role", role, "--user", alice); code != 0 {
-			t.Fatalf("role bind %s: %d %s %s", role, code, out, errs)
-		}
-	}
-	// The range agent runs under a grant narrowed to the repository it works
-	// in, shaped like the seeded one: reviewed merges, and writes only to its
-	// own repository (what RT-009 tests).
-	prefix := "acme/payments"
 	r := &rangeStack{d: d}
-	r.narrow = d.grantRunWith(`{"operations": ["github.contents.read", "github.contents.write", "github.branch.create", "github.pull.read",
-	  "github.pull.create", "github.pull.merge", "github.deployment.trigger", "payments.refund.create", "payments.refund.get"],
-	  "targets": {"github.branch": {"prefixes": ["`+prefix+`@"]}, "github.repository": {"prefixes": ["`+prefix+`"]},
-	  "github.pull_request": {"prefixes": ["`+prefix+`#"]}, "payments.charge": {"prefixes": ["ch_"]},
-	  "payments.refund": {"prefixes": ["re_"]}}}`, "", `[
-	  {"operations": ["github.pull.merge"], "reason": "MERGES_NEED_AN_INDEPENDENT_REVIEW",
-	   "approval": {"role": "code_reviewer", "count": 1, "independent": true}},
-	  {"operations": ["github.deployment.trigger"], "reason": "DEPLOYMENTS_NEED_A_RELEASE",
-	   "approval": {"role": "release_approver", "count": 1}}]`)
+	r.buildRangeThroughTheProduct(exitBounds, exitRequirements)
 	return r
 }
 
@@ -72,8 +71,8 @@ func (r *rangeStack) run(t *testing.T, dir string, extra ...string) (int, string
 	t.Helper()
 	out := t.TempDir()
 	args := []string{
-		"redteam", "run", "--suite", "coding-agent", "--scenarios", dir, "--workload-file", r.d.s.keyFile, "--gateway", r.d.s.gateway,
-		"--role", "github=github", "--role", "payments=payments", "--role", "real=real", "--run", r.narrow, "--out", out,
+		"redteam", "run", "--suite", "coding-agent", "--scenarios", dir, "--workload-file", r.keyFile, "--gateway", r.d.s.gateway,
+		"--role", "github=github-range", "--role", "payments=payments-range", "--role", "real=real", "--run", r.run0, "--out", out,
 	}
 	for _, name := range []string{"owner", "repo", "other_repo", "main", "file_b64"} {
 		args = append(args, "--fixture", name+"="+r.d.fix[name])

@@ -155,7 +155,7 @@ func (d *rangeDriver) Setup(_ context.Context, sc domain.Scenario) (app.Fixture,
 	if sc.ID == "RT-031" {
 		d.seedUnlisted()
 	}
-	if sc.ID == "RT-022" || sc.ID == "RT-000" {
+	if sc.ID == "RT-022" {
 		d.seedReal()
 	}
 	if sc.ID == "RT-009" {
@@ -167,7 +167,7 @@ func (d *rangeDriver) Setup(_ context.Context, sc domain.Scenario) (app.Fixture,
 	// A harness-only scenario does what a range never does to real state (it
 	// quarantines a package, engages the kill switch), so it runs in an org of
 	// its own that is not a range's.
-	if !sc.HarnessOnly {
+	if !sc.HarnessOnly && sc.ID != "RT-000" {
 		d.makeRangeStack()
 	}
 	return d.fix, nil

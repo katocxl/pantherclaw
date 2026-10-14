@@ -129,25 +129,44 @@ func (d *rangeDriver) grantRun(bounds, limits string) string {
 // grantRunWith is grantRun for a grant that also holds requirements.
 func (d *rangeDriver) grantRunWith(bounds, limits, requirements string) string {
 	t, s := d.t, d.s
+	var agent, inst string
+	s.query(t, "SELECT agent_id::text FROM pc.runs WHERE id = $1", []any{s.run}, &agent)
+	s.query(t, "SELECT id::text FROM pc.agent_instances WHERE agent_id = $1 AND state = 'ADMITTED' LIMIT 1", []any{agent}, &inst)
+	return d.startRun(agent, inst, d.issueGrant(agent, bounds, limits, requirements))
+}
+
+// bindRoles has the org's administrator take roles, as the person who sets a
+// range up needs them.
+func (d *rangeDriver) bindRoles(roles ...string) {
+	t := d.t
 	if d.admin == nil {
 		d.adminOnly()
 	}
-	var agent, inst, alice string
-	s.query(t, "SELECT agent_id::text FROM pc.runs WHERE id = $1", []any{s.run}, &agent)
-	s.query(t, "SELECT id::text FROM pc.agent_instances WHERE agent_id = $1 AND state = 'ADMITTED' LIMIT 1", []any{agent}, &inst)
-	s.query(t, "SELECT id::text FROM pc.users WHERE subject = 'alice'", nil, &alice)
-	dir := t.TempDir()
-	for _, role := range []string{"grant_issuer", "run_launcher"} {
+	alice := d.s.row(t, "SELECT id::text FROM pc.users WHERE subject = 'alice'")
+	for _, role := range roles {
 		if code, out, errs := d.admin.pclaw(t, "role", "bind", "--role", role, "--user", alice); code != 0 && !strings.Contains(errs, "ROLE_BINDING_EXISTS") {
 			t.Fatalf("role bind %s: %d %s %s", role, code, out, errs)
 		}
 	}
+}
+
+// issueGrant has the administrator issue the agent a grant, and returns it.
+func (d *rangeDriver) issueGrant(agent, bounds, limits, requirements string) string {
+	return d.issueGrantDepth(agent, bounds, limits, requirements, "2")
+}
+
+// issueGrantDepth is issueGrant for a grant that delegates this many levels.
+func (d *rangeDriver) issueGrantDepth(agent, bounds, limits, requirements, depth string) string {
+	t := d.t
+	d.bindRoles("grant_issuer", "run_launcher")
+	alice := d.s.row(t, "SELECT id::text FROM pc.users WHERE subject = 'alice'")
+	dir := t.TempDir()
 	doc := func(name, content string) string {
 		return writeFile(t, dir, name, []byte(content))
 	}
 	args := []string{
 		"grant", "issue", agent, "--principal", "user:" + alice, "--expires", "24h", "--bounds-file", doc("bounds.json", bounds),
-		"--delegation-depth", "2", "--max-children", "10", "--task", "range",
+		"--delegation-depth", depth, "--max-children", "10", "--task", "range",
 	}
 	if limits != "" {
 		args = append(args, "--limits-file", doc("limits.json", limits))
@@ -159,12 +178,16 @@ func (d *rangeDriver) grantRunWith(bounds, limits, requirements string) string {
 	if code != 0 {
 		t.Fatalf("grant issue: %d %s %s", code, out, errs)
 	}
-	grant := field(t, out, "id")
-	code, out, errs = d.admin.pclaw(t, "run", "start", agent, "--instance", inst, "--grant", grant, "--task", "range")
-	if code != 0 {
-		t.Fatalf("run start: %d %s %s", code, out, errs)
-	}
 	return field(t, out, "id")
+}
+
+// startRun starts a run of the agent's instance on the grant.
+func (d *rangeDriver) startRun(agent, inst, grant string) string {
+	code, out, errs := d.admin.pclaw(d.t, "run", "start", agent, "--instance", inst, "--grant", grant, "--task", "range")
+	if code != 0 {
+		d.t.Fatalf("run start: %d %s %s", code, out, errs)
+	}
+	return field(d.t, out, "id")
 }
 
 // adminOnly makes alice the org's administrator, signed in to the CLI.
