@@ -273,3 +273,46 @@ func auditEvent(id ids.UUID) audit.Event {
 		Object: &audit.Object{Type: "fact_provider", ID: id.String()},
 	}
 }
+
+// TestRace_ANameIsNeverSuppliedFromTwoScopes: two registrations of one name,
+// one org-scoped and one for a connection, run at the same time, with each
+// transaction held open after its insert; exactly one succeeds.
+func TestRace_ANameIsNeverSuppliedFromTwoScopes(t *testing.T) {
+	w := newTwins(t)
+	sa, orgProv, connProv := ids.NewV7(), ids.NewV7(), ids.NewV7()
+	third := ids.NewV7()
+	w.exec(t, "INSERT INTO pc.service_accounts (org_id, id, name, created_by) VALUES ($1, $2, 'billing', 'test')", w.org, sa)
+	w.exec(t, `INSERT INTO pc.connections (org_id, id, name, kind, gateway_id, package, base_url, access_mode, allowed_hosts, default_mode,
+		created_by, updated_by) VALUES ($1, $2, 'github-three', 'http', $3, 'pc.github', 'https://api.github.com', 'pantherclaw_held',
+		ARRAY['api.github.com'], 'enforce', 'test', 'test')`, w.org, third, w.gw)
+	w.exec(t, "INSERT INTO pc.fact_providers (org_id, id, name, service_account_id, created_by) VALUES ($1, $2, 'race.org', $3, 'test')", w.org, orgProv, sa)
+	w.exec(t, "INSERT INTO pc.fact_providers (org_id, id, name, gateway_id, connection_id, created_by) VALUES ($1, $2, 'race.conn', $3, $4, 'test')",
+		w.org, connProv, w.gw, third)
+	insert := func(provider ids.UUID, conn *ids.UUID) error {
+		return w.p.InTenantTx(context.Background(), w.org, func(ctx context.Context, tx db.TenantTx) error {
+			if err := dbq.New(tx).InsertFactDeclaration(ctx, dbq.InsertFactDeclarationParams{
+				OrgID: w.org, ProviderID: provider, Name: "race.fact", ValueType: "boolean", SubjectType: "race.subject", MaxLagS: 60, ConnectionID: conn,
+			}); err != nil {
+				return err
+			}
+			_, err := tx.Exec(ctx, "SELECT pg_sleep(0.5)")
+			return err
+		})
+	}
+	errs := make(chan error, 2)
+	go func() { errs <- insert(orgProv, nil) }()
+	go func() { errs <- insert(connProv, &third) }()
+	ok, unique := 0, 0
+	for range 2 {
+		if err := <-errs; err == nil {
+			ok++
+		} else if db.IsUniqueViolation(err) {
+			unique++
+		} else {
+			t.Fatal(err)
+		}
+	}
+	if ok != 1 || unique != 1 {
+		t.Fatalf("%d succeeded and %d were refused, want one each", ok, unique)
+	}
+}
