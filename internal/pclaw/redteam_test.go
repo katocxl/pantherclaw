@@ -878,7 +878,7 @@ func (f *fakeGrants) ListGrants(_ context.Context, r *pantherclawv1.ListGrantsRe
 	if f.noRoot {
 		return &pantherclawv1.ListGrantsResponse{}, nil
 	}
-	root := &pantherclawv1.Grant{Id: "root-grant", AgentId: r.GetAgentId(), ExpireTime: timestamppb.New(time.Now().Add(24 * time.Hour))}
+	root := &pantherclawv1.Grant{Id: "root-grant", AgentId: r.GetAgentId(), Delegation: &pantherclawv1.GrantDelegation{Depth: 3}, ExpireTime: timestamppb.New(time.Now().Add(24 * time.Hour))}
 	if f.expiresSoon {
 		root.ExpireTime = timestamppb.New(time.Now().Add(5 * time.Minute))
 	}
