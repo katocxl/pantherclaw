@@ -1,0 +1,74 @@
+{
+  "tests": [
+    {
+      "id": "pd-read-in-workspace", "per": "org",
+      "summary": "an allow-listed reading command in the workspace runs",
+      "action": {"operation": "shell.command.run", "environment": "{{environment_id}}", "target": "local",
+        "params": {"shell": "bash", "command": "tail -n 200 logs/app.log", "cwd": "{{workspace}}", "call": "toolu_1"}},
+      "expect": {"decision": "ALLOW", "reason": "GRANT_COVERS"}
+    },
+    {
+      "id": "pd-read-in-subdir", "per": "org",
+      "summary": "an allow-listed reading command in a directory of the workspace runs",
+      "action": {"operation": "shell.command.run", "environment": "{{environment_id}}", "target": "local",
+        "params": {"shell": "bash", "command": "grep -c ERROR app.log", "cwd": "{{workspace}}/logs", "call": "toolu_2"}},
+      "expect": {"decision": "ALLOW", "reason": "GRANT_COVERS"}
+    },
+    {
+      "id": "pd-outside-workspace", "per": "org",
+      "summary": "a command outside the workspace is refused, also in a directory whose name only starts like it",
+      "action": {"operation": "shell.command.run", "environment": "{{environment_id}}", "target": "local",
+        "params": {"shell": "bash", "command": "ls", "cwd": "{{workspace}}-other", "call": "toolu_3"}},
+      "expect": {"decision": "DENY", "reason": "OUTSIDE_WORKSPACE", "rule": "pd-workspace"}
+    },
+    {
+      "id": "pd-network", "per": "org",
+      "summary": "a network tool is refused",
+      "action": {"operation": "shell.command.run", "environment": "{{environment_id}}", "target": "local",
+        "params": {"shell": "bash", "command": "curl https://example.com", "cwd": "{{workspace}}", "call": "toolu_4"}},
+      "expect": {"decision": "DENY", "reason": "COMMAND_USES_NETWORK", "rule": "pd-no-network"}
+    },
+    {
+      "id": "pd-redirect", "per": "org",
+      "summary": "output redirection is refused",
+      "action": {"operation": "shell.command.run", "environment": "{{environment_id}}", "target": "local",
+        "params": {"shell": "bash", "command": "cat app.log > copy.log", "cwd": "{{workspace}}", "call": "toolu_5"}},
+      "expect": {"decision": "DENY", "reason": "COMMAND_WRITES", "rule": "pd-no-write"}
+    },
+    {
+      "id": "pd-remove", "per": "org",
+      "summary": "a writing command is refused",
+      "action": {"operation": "shell.command.run", "environment": "{{environment_id}}", "target": "local",
+        "params": {"shell": "bash", "command": "rm -rf logs", "cwd": "{{workspace}}", "call": "toolu_6"}},
+      "expect": {"decision": "DENY", "reason": "COMMAND_WRITES", "rule": "pd-no-write"}
+    },
+    {
+      "id": "pd-powershell", "per": "org",
+      "summary": "a PowerShell command is refused",
+      "action": {"operation": "shell.command.run", "environment": "{{environment_id}}", "target": "local",
+        "params": {"shell": "powershell", "command": "Get-Process", "cwd": "{{workspace}}", "call": "toolu_7"}},
+      "expect": {"decision": "DENY", "reason": "SHELL_NOT_ALLOWED", "rule": "pd-bash-only"}
+    },
+    {
+      "id": "pd-not-listed", "per": "org",
+      "summary": "a command that is not on the allow-list is refused",
+      "action": {"operation": "shell.command.run", "environment": "{{environment_id}}", "target": "local",
+        "params": {"shell": "bash", "command": "python3 fix.py", "cwd": "{{workspace}}", "call": "toolu_8"}},
+      "expect": {"decision": "DENY", "reason": "COMMAND_NOT_READ_ONLY", "rule": "pd-read-only"}
+    },
+    {
+      "id": "pd-chained", "per": "org",
+      "summary": "an allow-listed command chained with another is refused",
+      "action": {"operation": "shell.command.run", "environment": "{{environment_id}}", "target": "local",
+        "params": {"shell": "bash", "command": "ls; python3 fix.py", "cwd": "{{workspace}}", "call": "toolu_9"}},
+      "expect": {"decision": "DENY", "reason": "COMMAND_NOT_READ_ONLY", "rule": "pd-read-only"}
+    },
+    {
+      "id": "pd-other-environment", "per": "org",
+      "summary": "in another environment the rules do not apply",
+      "action": {"operation": "shell.command.run", "environment": "{{other_environment_id}}", "target": "local",
+        "params": {"shell": "bash", "command": "python3 fix.py", "cwd": "/home/dev", "call": "toolu_10"}},
+      "expect": {"decision": "ALLOW", "reason": "GRANT_COVERS"}
+    }
+  ]
+}

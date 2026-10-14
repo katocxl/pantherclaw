@@ -1,0 +1,23 @@
+{
+  "rules": [
+    {
+      "id": "rd-release", "per": "repo", "kind": "REQUIRE_APPROVAL",
+      "summary": "a release approver releases every deployment of the repository inside a change window",
+      "operations": ["github.deployment.trigger"], "when": "{{repository}}", "reason": "DEPLOYMENT_NEEDS_RELEASE",
+      "approval": {"role": "release_approver", "count": 1, "independent": true, "window": true}
+    },
+    {
+      "id": "rd-environment", "per": "repo", "kind": "FORBID",
+      "summary": "the repository deploys to {{environment}} only",
+      "operations": ["github.deployment.trigger"],
+      "when": "{{repository}} && has(action.params.environment) && action.params.environment != '{{environment}}'",
+      "reason": "DEPLOYMENT_ENVIRONMENT_NOT_ALLOWED"
+    },
+    {
+      "id": "rd-repository", "per": "org", "kind": "FORBID",
+      "summary": "only the repositories the template was applied for deploy",
+      "operations": ["github.deployment.trigger"], "when": "!(action.target.id in {{repos}})",
+      "reason": "DEPLOYMENT_REPOSITORY_NOT_ALLOWED"
+    }
+  ]
+}

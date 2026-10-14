@@ -1,0 +1,37 @@
+{
+  "tests": [
+    {
+      "id": "rd-held", "per": "repo",
+      "summary": "a deployment of the repository to {{environment}} waits for a release approver",
+      "action": {"operation": "github.deployment.trigger", "target": "{{repo}}", "params": {"environment": "{{environment}}"}},
+      "expect": {"decision": "REQUIRE_APPROVAL", "reason": "DEPLOYMENT_NEEDS_RELEASE"}
+    },
+    {
+      "id": "rd-released", "per": "repo",
+      "summary": "a released deployment of the repository to {{environment}} goes through",
+      "action": {"operation": "github.deployment.trigger", "target": "{{repo}}", "params": {"environment": "{{environment}}"}},
+      "given": {"approval": "approved"},
+      "expect": {"decision": "ALLOW", "reason": "GRANT_COVERS"}
+    },
+    {
+      "id": "rd-other-env", "per": "repo",
+      "summary": "a deployment of the repository to another environment is refused, released or not",
+      "action": {"operation": "github.deployment.trigger", "target": "{{repo}}", "params": {"environment": "{{environment}}-other"}},
+      "given": {"approval": "approved"},
+      "expect": {"decision": "DENY", "reason": "DEPLOYMENT_ENVIRONMENT_NOT_ALLOWED"}
+    },
+    {
+      "id": "rd-env-unknown", "per": "repo",
+      "summary": "a deployment of the repository whose environment is not yet known waits for a release approver",
+      "action": {"operation": "github.deployment.trigger", "target": "{{repo}}", "params": {}},
+      "expect": {"decision": "REQUIRE_APPROVAL", "reason": "DEPLOYMENT_NEEDS_RELEASE"}
+    },
+    {
+      "id": "rd-other-repo", "per": "org",
+      "summary": "a deployment of a repository the template was not applied for is refused",
+      "action": {"operation": "github.deployment.trigger", "target": "pantherclaw-example/not-applied", "params": {"environment": "{{environment}}"}},
+      "given": {"approval": "approved"},
+      "expect": {"decision": "DENY", "reason": "DEPLOYMENT_REPOSITORY_NOT_ALLOWED", "rule": "rd-repository"}
+    }
+  ]
+}

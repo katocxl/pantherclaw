@@ -1,0 +1,8 @@
+{
+  "bounds": {
+    "operations": ["shell.command.run"],
+    "targets": {
+      "shell.workspace": {"ids": ["local"]}
+    }
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "name": "release-deployment",
+  "summary": "Deployments of the named repositories go only to the named environment, each released by a release approver inside a change window.",
+  "task_ref": "template:release-deployment",
+  "protects": [
+    "every deployment of a named repository waits for an independent release approver, whose approval counts only inside the environment's change window",
+    "a deployment to any other environment than the named one is refused",
+    "a deployment of any repository the template was not applied for is refused",
+    "the agent's grant covers deployments of the named repositories only"
+  ],
+  "excludes": [
+    "what the deployment contains: review the merge itself (the coding-to-production template)",
+    "a deployment whose environment is not yet known when it is decided is held for the release approver, not refused",
+    "deployments started outside PantherClaw (a person pushing, another CI system)",
+    "people: bind release_approver yourself (pclaw role bind)"
+  ],
+  "requires": {
+    "packages": ["pc.github"],
+    "connections": ["a pc.github connection in enforce mode for the repositories"]
+  }
+}

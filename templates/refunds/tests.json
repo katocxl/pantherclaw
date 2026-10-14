@@ -1,0 +1,52 @@
+{
+  "tests": [
+    {
+      "id": "refunds-small", "per": "org",
+      "summary": "a refund of exactly 100.00 USD goes through without a hold",
+      "action": {"operation": "payments.refund.create", "target": "ch_1", "params": {"amount": {"value": "100.00", "currency": "USD"}, "reason": "duplicate"}},
+      "given": {"facts": {"payments.charge.refundable": {"value": true, "age_seconds": 10}}},
+      "expect": {"decision": "ALLOW", "reason": "GRANT_COVERS"}
+    },
+    {
+      "id": "refunds-over-hold", "per": "org",
+      "summary": "a refund of 100.01 USD waits for an approver",
+      "action": {"operation": "payments.refund.create", "target": "ch_1", "params": {"amount": {"value": "100.01", "currency": "USD"}, "reason": "duplicate"}},
+      "given": {"facts": {"payments.charge.refundable": {"value": true, "age_seconds": 10}}},
+      "expect": {"decision": "REQUIRE_APPROVAL", "reason": "REFUND_NEEDS_APPROVAL", "rule": "refunds-hold"}
+    },
+    {
+      "id": "refunds-approved", "per": "org",
+      "summary": "an approved refund of 250.00 USD goes through",
+      "action": {"operation": "payments.refund.create", "target": "ch_1", "params": {"amount": {"value": "250.00", "currency": "USD"}, "reason": "requested_by_customer"}},
+      "given": {"facts": {"payments.charge.refundable": {"value": true, "age_seconds": 10}}, "approval": "approved"},
+      "expect": {"decision": "ALLOW", "reason": "GRANT_COVERS"}
+    },
+    {
+      "id": "refunds-at-cap", "per": "org",
+      "summary": "a refund of exactly 500.00 USD is under the cap and waits for an approver",
+      "action": {"operation": "payments.refund.create", "target": "ch_1", "params": {"amount": {"value": "500.00", "currency": "USD"}, "reason": "duplicate"}},
+      "given": {"facts": {"payments.charge.refundable": {"value": true, "age_seconds": 10}}},
+      "expect": {"decision": "REQUIRE_APPROVAL", "reason": "REFUND_NEEDS_APPROVAL", "rule": "refunds-hold"}
+    },
+    {
+      "id": "refunds-over-cap", "per": "org",
+      "summary": "a refund of 500.01 USD is refused even when approved",
+      "action": {"operation": "payments.refund.create", "target": "ch_1", "params": {"amount": {"value": "500.01", "currency": "USD"}, "reason": "duplicate"}},
+      "given": {"facts": {"payments.charge.refundable": {"value": true, "age_seconds": 10}}, "approval": "approved"},
+      "expect": {"decision": "DENY", "reason": "REFUND_OVER_CAP", "rule": "refunds-cap"}
+    },
+    {
+      "id": "refunds-other-currency", "per": "org",
+      "summary": "a refund in EUR cannot be authorized: the rules are in USD",
+      "action": {"operation": "payments.refund.create", "target": "ch_1", "params": {"amount": {"value": "10.00", "currency": "EUR"}, "reason": "duplicate"}},
+      "given": {"facts": {"payments.charge.refundable": {"value": true, "age_seconds": 10}}},
+      "expect": {"decision": "CANNOT_AUTHORIZE", "reason": "POLICY_EVALUATION_ERROR"}
+    },
+    {
+      "id": "refunds-read", "per": "org",
+      "summary": "reading a refund is allowed",
+      "action": {"operation": "payments.refund.get", "target": "re_1", "params": {}},
+      "expect": {"decision": "ALLOW", "reason": "GRANT_COVERS"}
+    }
+  ]
+}

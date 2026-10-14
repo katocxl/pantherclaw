@@ -1,0 +1,39 @@
+{
+  "rules": [
+    {
+      "id": "pd-workspace", "per": "org", "kind": "FORBID",
+      "summary": "no command runs outside the workspace {{workspace}}",
+      "operations": ["shell.command.run"], "environments": ["{{environment_id}}"],
+      "when": "!(action.params.cwd == '{{workspace}}' || action.params.cwd.startsWith('{{workspace}}/'))",
+      "reason": "OUTSIDE_WORKSPACE"
+    },
+    {
+      "id": "pd-no-network", "per": "org", "kind": "FORBID",
+      "summary": "no network tools; a heuristic over the command text",
+      "operations": ["shell.command.run"], "environments": ["{{environment_id}}"],
+      "when": "action.params.command.matches(r'(^|[\\s;&|(`])(\\S*/)?(curl|wget|nc|ncat|netcat|socat|ssh|scp|sftp|rsync|telnet|ftp|ping|nslookup|dig|host)(\\s|$)')",
+      "reason": "COMMAND_USES_NETWORK"
+    },
+    {
+      "id": "pd-no-write", "per": "org", "kind": "FORBID",
+      "summary": "no writing commands and no output redirection; a heuristic over the command text",
+      "operations": ["shell.command.run"], "environments": ["{{environment_id}}"],
+      "when": "action.params.command.matches(r'>|(^|[\\s;&|(`])(\\S*/)?(rm|rmdir|mv|cp|dd|tee|touch|mkdir|chmod|chown|ln|truncate|install|kill|pkill|killall|systemctl|service|reboot|shutdown)(\\s|$)|(^|\\s)sed\\s+(-\\S*\\s+)*-i')",
+      "reason": "COMMAND_WRITES"
+    },
+    {
+      "id": "pd-bash-only", "per": "org", "kind": "FORBID",
+      "summary": "only bash commands, which the allow-list is written for",
+      "operations": ["shell.command.run"], "environments": ["{{environment_id}}"],
+      "when": "action.params.shell != 'bash'",
+      "reason": "SHELL_NOT_ALLOWED"
+    },
+    {
+      "id": "pd-read-only", "per": "org", "kind": "FORBID",
+      "summary": "only one allow-listed reading command, with no chaining, pipes, redirection or substitution",
+      "operations": ["shell.command.run"], "environments": ["{{environment_id}}"],
+      "when": "!action.params.command.matches(r'^\\s*(ls|cat|head|tail|grep|wc|ps|df|du|free|uptime|uname|whoami|id|stat|pwd|lsof)(\\s+[^;&|`$<>()\\\\\\n\\r]*)?$')",
+      "reason": "COMMAND_NOT_READ_ONLY"
+    }
+  ]
+}
