@@ -6,7 +6,6 @@ package pclaw
 import (
 	"context"
 	"crypto/ed25519"
-	"encoding/base64"
 	"encoding/json/v2"
 	"fmt"
 	"io"
@@ -41,10 +40,12 @@ const (
 // fakeRanges records what the CLI sends the RangeService.
 type fakeRanges struct {
 	pantherclawv1connect.UnimplementedRangeServiceHandler
-	mu       sync.Mutex
-	started  []*pantherclawv1.StartRangeRequest
-	recorded []*pantherclawv1.RecordResultRequest
-	finished int
+	mu         sync.Mutex
+	started    []*pantherclawv1.StartRangeRequest
+	recorded   []*pantherclawv1.RecordResultRequest
+	finished   int
+	failRecord bool
+	attempts   int
 }
 
 func (f *fakeRanges) StartRange(_ context.Context, r *pantherclawv1.StartRangeRequest) (*pantherclawv1.StartRangeResponse, error) {
@@ -57,6 +58,10 @@ func (f *fakeRanges) StartRange(_ context.Context, r *pantherclawv1.StartRangeRe
 func (f *fakeRanges) RecordResult(_ context.Context, r *pantherclawv1.RecordResultRequest) (*pantherclawv1.RecordResultResponse, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	f.attempts++
+	if f.failRecord {
+		return nil, connect.NewError(connect.CodeUnavailable, "the store is down")
+	}
 	f.recorded = append(f.recorded, r)
 	return &pantherclawv1.RecordResultResponse{}, nil
 }
@@ -342,28 +347,6 @@ func TestRedteamRunSkipsWhatItCannotDo(t *testing.T) {
 	}
 }
 
-func TestReceiptPartsReadsTheJWSPayload(t *testing.T) {
-	payload, _ := json.Marshal(map[string]any{
-		"checklist": []map[string]string{{"check": "grant.active"}}, "simulated": true,
-		"basis": map[string]string{"policy": "pv-3", "definition": "sha256:abc", "facts": "sha256:def"},
-	})
-	jws := "e30." + base64.RawURLEncoding.EncodeToString(payload) + ".sig"
-	got := receiptParts(jws)
-	for _, k := range []string{"grant", "policy_version", "package_version", "facts", "simulated"} {
-		if !got[k] {
-			t.Errorf("%s missing: %v", k, got)
-		}
-	}
-	none, _ := json.Marshal(map[string]any{"basis": map[string]string{"policy": "none"}})
-	got = receiptParts("e30." + base64.RawURLEncoding.EncodeToString(none) + ".sig")
-	if got["policy_version"] || got["simulated"] || got["grant"] {
-		t.Errorf("claims without evidence: %v", got)
-	}
-	if receiptParts("not-a-jws") != nil {
-		t.Error("a non-JWS read")
-	}
-}
-
 // fakeSetup records the creates `redteam setup` makes.
 type fakeSetup struct {
 	pantherclawv1connect.UnimplementedAgentServiceHandler
@@ -560,5 +543,27 @@ func TestRedteamSetupPagesThroughAgentsAndConnections(t *testing.T) {
 	}
 	if code != 0 {
 		t.Errorf("setup = %d %q", code, errs)
+	}
+}
+
+func TestRedteamRunCarriesOnWhenRecordingFails(t *testing.T) {
+	re := newRangeEnv(t)
+	second := strings.NewReplacer("RT-001", "RT-002", "A merge is held", "A second merge is held").Replace(rtScenario)
+	writeFile(t, re.scenarios, "RT-002-second.yaml", []byte(second))
+	re.ranges.failRecord = true
+	code, out, errs := re.run(t)
+	if code != 2 || re.ranges.attempts != 2 || re.ranges.finished != 1 || !strings.Contains(errs, "recording RT-001") || !strings.Contains(errs, "recording RT-002") {
+		t.Fatalf("run = %d attempts %d finished %d\n%s\n%s", code, re.ranges.attempts, re.ranges.finished, out, errs)
+	}
+}
+
+func TestRecordRequestSendsOnlyStepsThatObservedSomething(t *testing.T) {
+	res := rtdomain.Result{ScenarioID: "RT-001", Digest: strings.Repeat("a", 64), Verdict: rtdomain.VerdictError, Steps: []rtdomain.StepResult{
+		{StepID: "done", Expect: rtdomain.Expect{Outcome: rtdomain.OutcomeHold}, Observed: rtdomain.Observation{Outcome: rtdomain.OutcomeHold}, Matched: true},
+		{StepID: "broke", Expect: rtdomain.Expect{Outcome: rtdomain.OutcomeAllow}},
+	}}
+	req := recordRequest(rtRange, res)
+	if req.GetVerdict() != pantherclawv1.RangeVerdict_RANGE_VERDICT_ERROR || len(req.GetSteps()) != 1 || req.GetSteps()[0].GetStepId() != "done" {
+		t.Fatalf("%v", req)
 	}
 }

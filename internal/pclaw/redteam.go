@@ -6,7 +6,6 @@ package pclaw
 import (
 	"bufio"
 	"context"
-	"encoding/base64"
 	"encoding/json/v2"
 	"errors"
 	"flag"
@@ -32,6 +31,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/redteam/adapters/live"
 	rtapp "github.com/katocxl/pantherclaw/internal/redteam/app"
 	rtdomain "github.com/katocxl/pantherclaw/internal/redteam/domain"
+	"github.com/katocxl/pantherclaw/internal/redteam/receipt"
 )
 
 // pclaw redteam (G0 M12, PN-009; HR-223..HR-226): the adversarial range.
@@ -190,6 +190,10 @@ func redteamRun(ctx context.Context, a *app, args []string) error {
 		name, value, _ := strings.Cut(f, "=")
 		fixture[name] = value
 	}
+	workload, err := a.workloadClientAt(kf.Server, kf, tokens)
+	if err != nil {
+		return failExit("%v", err)
+	}
 	cfg := live.Config{
 		Gateway: gw, Run: run, Roles: roles, Fixture: fixture, Capabilities: caps,
 		Client: &http.Client{
@@ -197,7 +201,9 @@ func redteamRun(ctx context.Context, a *app, args []string) error {
 			Timeout:       2 * time.Minute,
 			CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 		},
-		Txns: txnReader{tx: c.transactions, approvals: c.approvals, run: run},
+		Txns:    txnReader{tx: c.transactions, approvals: c.approvals, run: run},
+		AgentID: inst.Agent.String(), Key: key, Token: tokens, Transport: rt,
+		Workload: workload,
 	}
 	if o.interactive {
 		cfg.Operator = ttyOperator{a: a}
@@ -226,11 +232,14 @@ func redteamRun(ctx context.Context, a *app, args []string) error {
 
 	runner := &rtapp.Runner{Driver: live.New(cfg)}
 	var results []rtdomain.Result
+	var recordErrs []string
 	for _, l := range set {
 		res := runner.Run(ctx, l.Scenario)
 		results = append(results, res)
+		// A failed recording never aborts the range: the rest still run and
+		// the command exits 2 at the end (D33).
 		if _, err := c.ranges.RecordResult(ctx, recordRequest(rangeID, res)); err != nil {
-			return failExit("recording %s: %v", res.ScenarioID, describe(err))
+			recordErrs = append(recordErrs, fmt.Sprintf("recording %s: %v", res.ScenarioID, describe(err)))
 		}
 	}
 	fin, err := c.ranges.FinishRange(ctx, &pantherclawv1.FinishRangeRequest{RangeId: rangeID})
@@ -263,6 +272,9 @@ func redteamRun(ctx context.Context, a *app, args []string) error {
 	}
 	if gate != 0 {
 		return &exitError{code: 1, msg: gateMessage(results, cmp)}
+	}
+	if len(recordErrs) > 0 {
+		return failExit("%s", strings.Join(recordErrs, "; "))
 	}
 	return nil
 }
@@ -310,6 +322,9 @@ func recordRequest(rangeID string, res rtdomain.Result) *pantherclawv1.RecordRes
 	}
 	for _, s := range res.Steps {
 		obs := s.Observed
+		if obs.Outcome == "" && len(obs.Each) == 0 {
+			continue // a step that produced no observed outcome is not recorded
+		}
 		observed := observedOf(s)
 		step := &pantherclawv1.RangeStepInput{
 			StepId:   s.StepID,
@@ -560,7 +575,7 @@ func (r txnReader) State(ctx context.Context, id string) (live.TxnState, error) 
 		pantherclawv1.Decision_DECISION_DENY: "DENY", pantherclawv1.Decision_DECISION_CANNOT_AUTHORIZE: "CANNOT_AUTHORIZE",
 	}[ev.GetTransaction().GetDecision()]
 	if recs := ev.GetDecisionReceipts(); len(recs) > 0 {
-		s.Receipt = receiptParts(recs[len(recs)-1].GetReceiptJws())
+		s.Receipt = receipt.Parts(recs[len(recs)-1].GetReceiptJws())
 	}
 	list, err := r.approvals.ListApprovalRequests(ctx, &pantherclawv1.ListApprovalRequestsRequest{RunId: &r.run, PageSize: 200})
 	if err != nil {
@@ -596,44 +611,4 @@ func (o ttyOperator) Decide(_ context.Context, txn, role string, approve bool) e
 		return err
 	}
 	return nil
-}
-
-// receiptParts reads which parts a decision receipt (a compact JWS) carries:
-// the grant (a checklist line about it), the policy version, the package
-// version (the pinned definition's digest), the facts and the simulated mark.
-func receiptParts(jws string) map[string]bool {
-	segs := strings.Split(jws, ".")
-	if len(segs) != 3 {
-		return nil
-	}
-	raw, err := base64.RawURLEncoding.DecodeString(segs[1])
-	if err != nil {
-		return nil
-	}
-	var p struct {
-		Checklist []struct {
-			Check string `json:"check"`
-		} `json:"checklist"`
-		Basis struct {
-			Policy     string `json:"policy"`
-			Definition string `json:"definition"`
-			Facts      string `json:"facts"`
-		} `json:"basis"`
-		Simulated bool `json:"simulated"`
-	}
-	if json.Unmarshal(raw, &p) != nil {
-		return nil
-	}
-	out := map[string]bool{
-		"policy_version":  p.Basis.Policy != "" && p.Basis.Policy != "none",
-		"package_version": p.Basis.Definition != "",
-		"facts":           p.Basis.Facts != "",
-		"simulated":       p.Simulated,
-	}
-	for _, it := range p.Checklist {
-		if strings.Contains(strings.ToLower(it.Check), "grant") {
-			out["grant"] = true
-		}
-	}
-	return out
 }
