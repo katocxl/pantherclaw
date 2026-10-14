@@ -330,7 +330,11 @@ SELECT t.id, r.agent_id, t.simulated, t.created_at, t.decision, t.reason_code, c
     coalesce(d.receipt_jws, '')::text AS receipt_jws
 FROM pc.transactions t
 JOIN pc.runs r ON r.org_id = t.org_id AND r.id = t.run_id
-LEFT JOIN pc.decision_receipts d ON d.org_id = t.org_id AND d.transaction_id = t.id
+LEFT JOIN LATERAL (
+    SELECT receipt_jws FROM pc.decision_receipts
+    WHERE org_id = t.org_id AND transaction_id = t.id
+    ORDER BY evaluation DESC LIMIT 1
+) d ON true
 WHERE t.org_id = $1 AND t.id = $2
 `
 
