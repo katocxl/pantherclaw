@@ -464,3 +464,31 @@ func TestRangesFollowAgentPermissions(t *testing.T) {
 		t.Fatalf("auditor list: %v %v", p, err)
 	}
 }
+
+// A runner's ERROR or SKIPPED is its own to report: with a partial step
+// list (only the steps that produced an outcome) or none, the server keeps
+// the verdict and never upgrades it to PASS, even when every recorded step
+// matched (D33).
+func TestHR224_ErrorAndSkippedVerdictsAreNeverUpgraded(t *testing.T) {
+	w := newWorld(t, billing.Team, td.RoleAgentOwner)
+	r := w.start(t, decl("RT-001", domain.TierCommunity, "boundary"), decl("RT-002", domain.TierCommunity, "boundary"),
+		decl("RT-003", domain.TierCommunity, "boundary"))
+	for _, tc := range []struct {
+		scenario string
+		verdict  domain.Verdict
+		steps    []domain.StepInput
+	}{
+		{"RT-001", domain.Errored, []domain.StepInput{step("a", allow, allow, nil)}},
+		{"RT-002", domain.Skipped, nil},
+		{"RT-003", domain.Errored, nil},
+	} {
+		res, err := w.svc.RecordResult(w.ctx, app.RecordInput{Range: r.ID, Scenario: tc.scenario, Digest: hexA, Verdict: tc.verdict, Steps: tc.steps})
+		if err != nil || res.Verdict != tc.verdict || res.Claimed != "" {
+			t.Errorf("%s: %+v, %v, want %s kept", tc.scenario, res, err, tc.verdict)
+		}
+	}
+	d, err := w.svc.FinishRange(w.ctx, r.ID)
+	if err != nil || d.Counts != (domain.Counts{Error: 2, Skipped: 1}) {
+		t.Fatalf("finish: %+v, %v", d.Counts, err)
+	}
+}
