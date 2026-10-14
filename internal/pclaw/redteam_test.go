@@ -872,6 +872,7 @@ type fakeGrants struct {
 	noRoot      bool // the range agent has no active grant
 	expiresSoon bool
 	denyRead    bool
+	extraRoots  []string // more active root grants of the range agent
 }
 
 func (f *fakeGrants) ListGrants(_ context.Context, r *pantherclawv1.ListGrantsRequest) (*pantherclawv1.ListGrantsResponse, error) {
@@ -892,7 +893,11 @@ func (f *fakeGrants) ListGrants(_ context.Context, r *pantherclawv1.ListGrantsRe
 	if f.expiresSoon {
 		root.ExpireTime = timestamppb.New(time.Now().Add(5 * time.Minute))
 	}
-	return &pantherclawv1.ListGrantsResponse{Grants: []*pantherclawv1.Grant{root}}, nil
+	out := []*pantherclawv1.Grant{root}
+	for _, id := range f.extraRoots {
+		out = append(out, &pantherclawv1.Grant{Id: id, AgentId: r.GetAgentId(), ExpireTime: root.ExpireTime})
+	}
+	return &pantherclawv1.ListGrantsResponse{Grants: out}, nil
 }
 
 const childScenario = `apiVersion: pantherclaw.range/v1
@@ -958,11 +963,11 @@ func TestD41ScenarioRunsNeedNoDelegationInSetup(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("run = %d\n%s\n%s", code, out, errs)
 	}
-	if !strings.Contains(out, "Note: range grant: delegation depth 3 (setup gives the range grant max(real+1, 2), capped at 4)") {
+	if !strings.Contains(out, "Note: range grant root-grant: delegation depth 3 (setup gives the range grant max(real+1, 2), capped at 4)") {
 		t.Errorf("no note about the range grant's delegation depth\n%s", out)
 	}
 	b, err := os.ReadFile(filepath.Join(re.outDir, "0", "summary-"+rtRange+".json"))
-	if err != nil || !strings.Contains(string(b), "range grant: delegation depth 3") {
+	if err != nil || !strings.Contains(string(b), "range grant root-grant: delegation depth 3") {
 		t.Errorf("summary %q %v", b, err)
 	}
 	if n := len(re.fakeRun.delegated); n != 0 {
@@ -1110,5 +1115,39 @@ func TestD43ARealConnectionWithoutAGatewayProviderGetsANote(t *testing.T) {
 		"--twin", "github=http://127.0.0.1:9100", "--yes")
 	if code != 0 || len(fake.registered) != 0 || len(fake.conns) != 1 || !strings.Contains(out, "Note: github has no gateway fact provider") {
 		t.Fatalf("setup = %d registered %d conns %d\n%s\n%s", code, len(fake.registered), len(fake.conns), out, errs)
+	}
+}
+
+func TestD44TheRangeGrantIsChosenWithGrantWhenThereAreSeveral(t *testing.T) {
+	re := newRangeEnv(t)
+	re.grants.extraRoots = []string{"other-grant"}
+
+	// Two active root grants: the run must say which.
+	code, _, errs := re.run(t)
+	if code != 2 || !strings.Contains(errs, "has 2 active root grants (root-grant, other-grant): pass --grant") || len(re.ranges.started) != 0 {
+		t.Fatalf("two roots without --grant = %d (ranges %d)\n%s", code, len(re.ranges.started), errs)
+	}
+
+	// With --grant, that grant: scenarios run bound to it, and the note names it.
+	code, out, errs := re.run(t, "--grant", "other-grant")
+	if code != 0 || !strings.Contains(out, "Note: range grant other-grant: delegation depth") {
+		t.Fatalf("--grant = %d\n%s\n%s", code, out, errs)
+	}
+	if n := len(re.fakeRun.started); n != 1 || re.fakeRun.started[0].GetGrantId() != "other-grant" {
+		t.Fatalf("runs started %v", re.fakeRun.started)
+	}
+
+	// A grant that is not one of the range agent's active roots is refused.
+	if code, _, errs := re.run(t, "--grant", "not-a-root"); code != 2 || !strings.Contains(errs, "is not an active root grant of the range agent") {
+		t.Fatalf("--grant not-a-root = %d\n%s", code, errs)
+	}
+
+	// One root needs no --grant; --run is gone.
+	re.grants.extraRoots = nil
+	if code, out, errs := re.run(t); code != 0 {
+		t.Fatalf("one root = %d\n%s\n%s", code, out, errs)
+	}
+	if code, _, _ := re.run(t, "--run", rtRun); code == 0 {
+		t.Error("--run is still accepted")
 	}
 }

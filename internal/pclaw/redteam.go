@@ -53,7 +53,7 @@ import (
 
 func init() {
 	commands["redteam run"] = command{
-		usage: "redteam run --scenarios DIR --workload-file FILE --gateway URL [--suite coding-agent|platform|all] [--run ID] " +
+		usage: "redteam run --scenarios DIR --workload-file FILE --gateway URL [--suite coding-agent|platform|all] [--grant ID] " +
 			"[--token-file FILE] [--role ROLE=CONNECTION]… [--fixture NAME=VALUE]… [--provides github,payments,mcp] " +
 			"[--interactive] [--baseline PACK --trust FILE] [--out DIR]",
 		run: redteamRun,
@@ -81,10 +81,10 @@ var (
 
 // runOptions are the flags of redteam run.
 type runOptions struct {
-	dir, suite, keyFile, gateway, run, tokenFile string
-	roles, fixtures                              list
-	provides, baseline, trust, out               string
-	interactive                                  bool
+	dir, suite, keyFile, gateway, grant, tokenFile string
+	roles, fixtures                                list
+	provides, baseline, trust, out                 string
+	interactive                                    bool
 }
 
 func redteamRun(ctx context.Context, a *app, args []string) error {
@@ -95,7 +95,7 @@ func redteamRun(ctx context.Context, a *app, args []string) error {
 	fs.StringVar(&o.suite, "suite", "coding-agent", "coding-agent, platform or all")
 	fs.StringVar(&o.keyFile, "workload-file", "", "the range instance's enrolled workload key file")
 	fs.StringVar(&o.gateway, "gateway", "", "the gateway's public URL")
-	fs.StringVar(&o.run, "run", "", "the range instance's run (default: the key file's)")
+	fs.StringVar(&o.grant, "grant", "", "the range root grant (needed when the range agent has more than one active root grant)")
 	fs.StringVar(&o.tokenFile, "token-file", "", "a workload token to use instead of issuing one")
 	fs.Var(&o.roles, "role", "bind a scenario connection role to a simulated connection: ROLE=CONNECTION (repeatable; unbound roles use their own name)")
 	fs.Var(&o.fixtures, "fixture", "a ${fixture.NAME} value the simulators hold: NAME=VALUE (repeatable)")
@@ -159,13 +159,7 @@ func redteamRun(ctx context.Context, a *app, args []string) error {
 			return failExit("baseline: %v", err)
 		}
 	}
-	run := o.run
-	if run == "" {
-		run = kf.RunID
-	}
-	if !uuidRe.MatchString(run) {
-		return failExit("--run must be the range instance's run id (pclaw run start)")
-	}
+	run := kf.RunID // only a fallback: every scenario runs in a root run of its own
 	key, err := kf.Key()
 	if err != nil {
 		return failExit("%v", err)
@@ -242,7 +236,7 @@ func redteamRun(ctx context.Context, a *app, args []string) error {
 	if base != nil && uuidRe.MatchString(base.rangeID) {
 		start.BaselineRangeId = base.rangeID
 	}
-	grantID, grantNotes, err := checkRangeGrant(ctx, c, inst.Agent.String(), set)
+	grantID, grantNotes, err := checkRangeGrant(ctx, c, inst.Agent.String(), o.grant, set)
 	if err != nil {
 		return failExit("%v", err)
 	}
@@ -720,23 +714,41 @@ const minGrantRemaining = 15 * time.Minute
 // enough delegations left for the agent.child steps of the selected scenarios
 // (a grant delegates to at most grants/domain.MaxChildrenTotal children in its
 // life). Every scenario runs in a root run bound to this grant (D41).
-func checkRangeGrant(ctx context.Context, c clients, agent string, set []rtapp.Loaded) (string, []string, error) {
+func checkRangeGrant(ctx context.Context, c clients, agent, want string, set []rtapp.Loaded) (string, []string, error) {
 	const reissue = "re-issue the range grant with pclaw redteam setup"
 	gs, err := c.grants.ListGrants(ctx, &pantherclawv1.ListGrantsRequest{PageSize: 200, AgentId: &agent, State: pantherclawv1.GrantState_GRANT_STATE_ACTIVE})
 	if err != nil {
 		return "", nil, fmt.Errorf("reading the range agent's grants (a range needs grant.read to find its root grant): %w", err)
 	}
-	var root *pantherclawv1.Grant
+	var roots []*pantherclawv1.Grant
 	for _, g := range gs.GetGrants() {
 		if g.GetParentGrantId() == "" {
-			root = g
-			break
+			roots = append(roots, g)
 		}
 	}
-	if root == nil {
+	var root *pantherclawv1.Grant
+	switch {
+	case len(roots) == 0:
 		return "", nil, fmt.Errorf("the range agent has no active grant; %s", reissue)
+	case want != "":
+		for _, g := range roots {
+			if g.GetId() == want {
+				root = g
+			}
+		}
+		if root == nil {
+			return "", nil, fmt.Errorf("--grant %s is not an active root grant of the range agent", want)
+		}
+	case len(roots) > 1:
+		ids := make([]string, len(roots))
+		for i, g := range roots {
+			ids[i] = g.GetId()
+		}
+		return "", nil, fmt.Errorf("the range agent has %d active root grants (%s): pass --grant", len(roots), strings.Join(ids, ", "))
+	default:
+		root = roots[0]
 	}
-	notes := []string{fmt.Sprintf("range grant: delegation depth %d (setup gives the range grant max(real+1, 2), capped at 4)", root.GetDelegation().GetDepth())}
+	notes := []string{fmt.Sprintf("range grant %s: delegation depth %d (setup gives the range grant max(real+1, 2), capped at 4)", root.GetId(), root.GetDelegation().GetDepth())}
 	if exp := root.GetExpireTime(); exp != nil && time.Until(exp.AsTime()) < minGrantRemaining {
 		return "", nil, fmt.Errorf("the range grant expires at %s, within the range; %s", exp.AsTime().Format(time.RFC3339), reissue)
 	}
