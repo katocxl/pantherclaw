@@ -61,6 +61,7 @@ func TestConfigValidation(t *testing.T) {
 		"api key env":         func(c *Config) { c.Auth.APIKeyEnv = "prod" },
 		"cel max cost":        func(c *Config) { c.CEL.MaxCost = 0 },
 		"cel nesting":         func(c *Config) { c.CEL.MaxComprehensionNesting = -1 },
+		"cel above ceiling":   func(c *Config) { c.CEL.MaxCost = celenv.Ceiling.MaxCost + 1 },
 		"trusted proxy":       func(c *Config) { c.HTTP.TrustedProxies = []string{"10.0.0.0/8", "proxy.internal"} },
 		"oidc http issuer": func(c *Config) {
 			c.Auth.OIDCProviders = []OIDCProviderConfig{{Name: "kc", Issuer: "http://idp.example.com", ClientID: "pc", ClientSecretFile: "s"}}

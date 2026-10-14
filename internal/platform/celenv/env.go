@@ -45,22 +45,37 @@ type Limits struct {
 	EstimatedCollectionSize uint64 `json:"estimated_collection_size"`
 }
 
-// Validate reports a limit that is not positive. The server and gateway
-// read Limits from their configuration (G0 M4 decision 4).
+// CeilingFactor bounds each configured limit at this many times its
+// default, so configuration cannot lift the bound HR-043 relies on.
+const CeilingFactor = 4
+
+// Ceiling is the largest value configuration may give each limit.
+var Ceiling = Limits{
+	MaxExpressionBytes:      CeilingFactor * DefaultLimits.MaxExpressionBytes,
+	MaxCost:                 CeilingFactor * DefaultLimits.MaxCost,
+	MaxComprehensionNesting: CeilingFactor * DefaultLimits.MaxComprehensionNesting,
+	EstimatedCollectionSize: CeilingFactor * DefaultLimits.EstimatedCollectionSize,
+}
+
+// Validate reports a limit that is not positive or is above its Ceiling.
+// The server and gateway read Limits from their configuration (G0 M4
+// decision 4).
 func (l Limits) Validate() error {
 	var errs []error
-	if l.MaxExpressionBytes <= 0 {
-		errs = append(errs, errors.New("max_expression_bytes must be positive"))
+	checkInt := func(name string, v, ceiling int) {
+		if v <= 0 || v > ceiling {
+			errs = append(errs, fmt.Errorf("%s must be between 1 and %d (%d times the default)", name, ceiling, CeilingFactor))
+		}
 	}
-	if l.MaxCost == 0 {
-		errs = append(errs, errors.New("max_cost must be positive"))
+	checkUint := func(name string, v, ceiling uint64) {
+		if v == 0 || v > ceiling {
+			errs = append(errs, fmt.Errorf("%s must be between 1 and %d (%d times the default)", name, ceiling, CeilingFactor))
+		}
 	}
-	if l.MaxComprehensionNesting <= 0 {
-		errs = append(errs, errors.New("max_comprehension_nesting must be positive"))
-	}
-	if l.EstimatedCollectionSize == 0 {
-		errs = append(errs, errors.New("estimated_collection_size must be positive"))
-	}
+	checkInt("max_expression_bytes", l.MaxExpressionBytes, Ceiling.MaxExpressionBytes)
+	checkUint("max_cost", l.MaxCost, Ceiling.MaxCost)
+	checkInt("max_comprehension_nesting", l.MaxComprehensionNesting, Ceiling.MaxComprehensionNesting)
+	checkUint("estimated_collection_size", l.EstimatedCollectionSize, Ceiling.EstimatedCollectionSize)
 	return errors.Join(errs...)
 }
 
