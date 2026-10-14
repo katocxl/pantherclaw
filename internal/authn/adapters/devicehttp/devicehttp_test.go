@@ -98,3 +98,39 @@ func TestDeviceConfirmOriginChecks(t *testing.T) {
 		}
 	}
 }
+
+func (fakeDevice) Callback(context.Context, string, url.Values, string) (authnapp.Outcome, error) {
+	return authnapp.Outcome{Approved: true}, nil
+}
+
+// The pages' own referrer meta overrides the header, so it must agree with
+// it: a template that says "no-referrer" brings back Origin: null on the
+// form POST.
+func TestDeviceTemplatesAgreeWithTheHeader(t *testing.T) {
+	h := newHandler(t)
+	for name, w := range map[string]*httptest.ResponseRecorder{
+		"enter":   send(t, h, http.MethodGet, "/device", nil),
+		"confirm": send(t, h, http.MethodGet, "/device?org=o&user_code=ABCD-EFGH", nil),
+		"error":   send(t, h, http.MethodPost, "/device", nil),
+		"result":  send(t, h, http.MethodGet, authnapp.CallbackPath+"idp?code=c&state=s", nil),
+	} {
+		body := w.Body.String()
+		if !strings.Contains(body, `<meta name="referrer" content="same-origin">`) {
+			t.Errorf("%s: no same-origin referrer meta in %q", name, body)
+		}
+		if strings.Contains(body, "no-referrer") {
+			t.Errorf("%s: a no-referrer meta overrides the header", name)
+		}
+		if got := w.Header().Get("Referrer-Policy"); got != "same-origin" {
+			t.Errorf("%s: Referrer-Policy = %q", name, got)
+		}
+	}
+}
+
+// The API keeps the API-wide no-referrer.
+func TestDeviceAuthorizeKeepsNoReferrer(t *testing.T) {
+	w := send(t, newHandler(t), http.MethodPost, authnapp.DeviceAuthorizationPath, nil)
+	if got := w.Header().Get("Referrer-Policy"); got != "no-referrer" {
+		t.Errorf("Referrer-Policy = %q, want no-referrer", got)
+	}
+}
