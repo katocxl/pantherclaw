@@ -44,7 +44,14 @@ type Report struct {
 	Result Status  `json:"result"`
 	Checks []Check `json:"checks"`
 	Limits string  `json:"limits"`
+	// notFull: a range pack whose receipts are not all in the pack.
+	notFull bool
 }
+
+// RangeNotFullyVerifiable reports a range pack some of whose receipts are
+// not in the pack: what it holds verifies, but the report cannot be
+// re-derived in full. A baseline gate must refuse such a pack.
+func (r *Report) RangeNotFullyVerifiable() bool { return r.notFull }
 
 func newReport() *Report { return &Report{Format: ReportFormat, Result: Passed, Limits: Limits} }
 

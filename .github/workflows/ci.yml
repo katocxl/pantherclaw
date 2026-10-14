@@ -33,6 +33,7 @@ jobs:
       pull-requests: read
     outputs:
       go: ${{ steps.filter.outputs.go == 'true' || github.event_name != 'pull_request' }}
+      range: ${{ steps.filter.outputs.range == 'true' || github.event_name != 'pull_request' }}
       workflows: ${{ steps.filter.outputs.workflows == 'true' || github.event_name != 'pull_request' }}
       python: ${{ steps.filter.outputs.python == 'true' || github.event_name != 'pull_request' }}
       typescript: ${{ steps.filter.outputs.typescript == 'true' || github.event_name != 'pull_request' }}
@@ -57,6 +58,14 @@ jobs:
               - 'proto/**'
               - 'migrations/**'
               - 'queries/**'
+            range:
+              - 'internal/authority/**'
+              - 'internal/gateway/**'
+              - 'internal/sandbox/**'
+              - 'internal/redteam/**'
+              - 'packages/**'
+              - 'redteam/**'
+              - 'test/e2e/**'
             workflows:
               - '.github/**'
             python:
@@ -175,6 +184,49 @@ jobs:
           PC_TEST_PG_ADMIN_URL: postgres://postgres:pc-ci-${{ github.run_id }}-${{ github.run_attempt }}@127.0.0.1:5433/postgres?sslmode=disable
           PC_TEST_MOCK_OIDC_URL: http://127.0.0.1:8181
         run: go test -race -tags integration -shuffle=on -count=1 ./...
+
+  range:
+    name: range (adversarial scenarios)
+    needs: changes
+    if: needs.changes.outputs.range == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    services:
+      postgres:
+        image: postgres:17-bookworm@sha256:3645570cccdfa447589da9f57dd740faa29b30938e861289a5574b6ca6b03826
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: pc-ci-${{ github.run_id }}-${{ github.run_attempt }}
+          POSTGRES_INITDB_ARGS: --auth-host=scram-sha-256
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 2s --health-timeout 3s --health-retries 30
+      mock-oidc:
+        image: ghcr.io/navikt/mock-oauth2-server:6.0.4@sha256:47374fe063995d9b6d39ebb6ea21eb5f765025bf0aa08b61b08b439eb91adaf0
+        ports:
+          - 8181:8080
+    steps:
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: |
+            **/go.sum
+      - name: Every attack scenario against the simulators (HR-226)
+        env:
+          PC_TEST_REQUIRE_DB: "1"
+          PC_TEST_PG_ADMIN_URL: postgres://postgres:pc-ci-${{ github.run_id }}-${{ github.run_attempt }}@127.0.0.1:5433/postgres?sslmode=disable
+          PC_TEST_MOCK_OIDC_URL: http://127.0.0.1:8181
+        run: go test -tags integration -count=1 -timeout 30m -run TestRange_Scenarios ./test/e2e/
 
   go-vuln:
     name: go / govulncheck
@@ -412,6 +464,7 @@ jobs:
       - go-static
       - go-test
       - go-integration
+      - range
       - go-vuln
       - secrets
       - semgrep

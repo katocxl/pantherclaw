@@ -509,6 +509,9 @@ message GatewayConnection {
   // an action on a repository of another account is refused before it is
   // decided (WRONG_ACCOUNT); unset without a GitHub App credential.
   GitHubInstallation github = 17;
+  // Whether the connection is simulated (G0 M12, HR-221): the gateway sends
+  // its traffic only after the simulator answers the handshake.
+  bool simulated = 23;
 }
 
 // RouteModeSetting is one route's mode.

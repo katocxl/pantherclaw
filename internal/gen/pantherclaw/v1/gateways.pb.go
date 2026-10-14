@@ -2034,7 +2034,10 @@ type GatewayConnection struct {
 	// The GitHub App installation behind the connection (G0 M8, ADR-0021):
 	// an action on a repository of another account is refused before it is
 	// decided (WRONG_ACCOUNT); unset without a GitHub App credential.
-	Github        *GitHubInstallation `protobuf:"bytes,17,opt,name=github,proto3" json:"github,omitempty"`
+	Github *GitHubInstallation `protobuf:"bytes,17,opt,name=github,proto3" json:"github,omitempty"`
+	// Whether the connection is simulated (G0 M12, HR-221): the gateway sends
+	// its traffic only after the simulator answers the handshake.
+	Simulated     bool `protobuf:"varint,23,opt,name=simulated,proto3" json:"simulated,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2193,6 +2196,13 @@ func (x *GatewayConnection) GetGithub() *GitHubInstallation {
 		return x.Github
 	}
 	return nil
+}
+
+func (x *GatewayConnection) GetSimulated() bool {
+	if x != nil {
+		return x.Simulated
+	}
+	return false
 }
 
 // RouteModeSetting is one route's mode.
@@ -3711,7 +3721,7 @@ const file_pantherclaw_v1_gateways_proto_rawDesc = "" +
 	"\bresponse\x18\x05 \x01(\bR\bresponse\x12\x19\n" +
 	"\bbyte_cap\x18\x06 \x01(\x05R\abyteCap\x12;\n" +
 	"\vexpire_time\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"expireTime\"\x92\x05\n" +
+	"expireTime\"\xb0\x05\n" +
 	"\x11GatewayConnection\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x12\n" +
@@ -3734,7 +3744,8 @@ const file_pantherclaw_v1_gateways_proto_rawDesc = "" +
 	"\vagent_hosts\x18\x15 \x03(\tR\n" +
 	"agentHosts\x12;\n" +
 	"\tconnector\x18\x16 \x01(\v2\x1d.pantherclaw.v1.ConnectorSpecR\tconnector\x12:\n" +
-	"\x06github\x18\x11 \x01(\v2\".pantherclaw.v1.GitHubInstallationR\x06github\"<\n" +
+	"\x06github\x18\x11 \x01(\v2\".pantherclaw.v1.GitHubInstallationR\x06github\x12\x1c\n" +
+	"\tsimulated\x18\x17 \x01(\bR\tsimulated\"<\n" +
 	"\x10RouteModeSetting\x12\x14\n" +
 	"\x05route\x18\x01 \x01(\tR\x05route\x12\x12\n" +
 	"\x04mode\x18\x02 \x01(\tR\x04mode\"P\n" +

@@ -77,9 +77,19 @@ type DecisionPAP struct {
 	// Coverage is the coverage claim of the action's scope at decision time
 	// (G0 M9, HR-217); receipts without one stay valid.
 	Coverage *CoverageClaim `json:"coverage,omitzero"`
+	// PayloadFindings are the credential-shaped values the gateway found in
+	// the payload (HR-225); absent when there were none.
+	PayloadFindings []ReceiptFinding `json:"payload_findings,omitzero"`
 	// Consequences are what the action's consequence rules said (G0 M8,
 	// HR-206): predictions, apart from what the decision authorized.
 	Consequences []ReceiptConsequence `json:"consequences,omitzero"`
+}
+
+// ReceiptFinding is one payload finding: a credential format and where it
+// was, never the value.
+type ReceiptFinding struct {
+	Kind     string `json:"kind"`
+	Location string `json:"location"`
 }
 
 // ReceiptConsequence is one consequence rule's state with what it is
@@ -108,7 +118,10 @@ func (a *Authority) receipt(gw Gateway, ev *pipeline.Evaluation, txn ids.UUID, e
 		Run: ev.RunID.String(), Action: ev.ActionID.String(), Act: ev.ActionHash, Decision: ev.Decision,
 		Checklist: ev.Checklist, Obligations: ev.Obligations, Approvals: ev.Approvals, StepUps: ev.StepUps,
 		Basis: ev.Basis, BasisDigest: ev.Basis.Digest(), Identity: ev.Identity, Budgets: budgets, Gateway: gw.ID,
-		Monitor: ev.MonitorPermit(), Coverage: claim,
+		Monitor: ev.MonitorPermit(), Coverage: claim, Simulated: ev.Simulated,
+	}
+	for _, f := range ev.PayloadFindings {
+		pap.PayloadFindings = append(pap.PayloadFindings, ReceiptFinding{Kind: f.Kind, Location: f.Location})
 	}
 	if would, _, ok := ev.WouldUnknown(); ok {
 		pap.Would = would
@@ -286,7 +299,7 @@ func (a *Authority) executionReceipt(gw Gateway, e Execution, x Executed, now ti
 	pap := map[string]any{
 		"v": 1, "kind": "execution", "org": gw.Org.String(), "txn": txn.String(), "permit": e.Permit.String(),
 		"outcome": string(e.Outcome), "target_status": e.TargetStatus, "response_digest": hex.EncodeToString(e.ResponseDigest),
-		"gateway": gw.ID, "access_mode": x.AccessMode, "simulated": false, "attempt": 1,
+		"gateway": gw.ID, "access_mode": x.AccessMode, "simulated": x.Simulated, "attempt": 1,
 	}
 	if x.Monitor {
 		pap["monitor"] = true // nothing was prevented (HR-184)

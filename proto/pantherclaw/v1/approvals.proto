@@ -202,6 +202,9 @@ message ApprovalRequest {
   string previous_id = 19;
   // RESTORATION: who asked.
   string requested_by = 20;
+  // Whether the held action is a range run's (G0 M12, HR-222): a console
+  // shows a SIMULATED banner. Approvals stay humans-only.
+  bool simulated = 21;
 }
 
 // DeciderResponse is one recorded response.

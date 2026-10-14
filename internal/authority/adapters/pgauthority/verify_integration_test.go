@@ -464,3 +464,29 @@ func TestHR191_ClosedWindowsEndInUnknown(t *testing.T) {
 		t.Fatalf("a closed window: %s", got)
 	}
 }
+
+// TestHR120_EffectReceiptsTakeTheTransactionsFlag (D5): an effect receipt
+// says simulated: true exactly when its transaction is a range run's.
+func TestHR120_EffectReceiptsTakeTheTransactionsFlag(t *testing.T) {
+	w := newWorld(t)
+	ctx := context.Background()
+	w.auth.PermitTTL = time.Hour
+	s := w.verifier()
+	run := w.run(w.grant("500").ID, ids.UUID{})
+	for i, simulated := range []bool{false, true} {
+		charge := "ch_" + string(rune('1'+i))
+		w.refundable(charge)
+		r := w.recorded(run, charge, "30.00", finalize.Accepted, "re_1")
+		if simulated {
+			w.db.AdminExec(t, "UPDATE pc.transactions SET simulated = true WHERE id = $1", r.TransactionID)
+		}
+		l := w.lease(s, r.TransactionID)
+		if a, err := s.Report(ctx, w.org, w.gwID, tapp.Report{Task: l.Task, Secret: l.Secret, HTTPStatus: 200, Found: true, Fields: refund("succeeded", "30.00")}); err != nil || !a.Done {
+			t.Fatalf("simulated=%v: %+v %v", simulated, a, err)
+		}
+		jws := w.str("SELECT receipt_jws FROM pc.effect_receipts WHERE transaction_id = $1 ORDER BY seq DESC LIMIT 1", r.TransactionID)
+		if got, ok := claims(t, jws)["simulated"].(bool); !ok || got != simulated {
+			t.Errorf("effect receipt of a transaction with simulated=%v says %v", simulated, claims(t, jws)["simulated"])
+		}
+	}
+}

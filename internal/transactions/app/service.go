@@ -136,9 +136,11 @@ type Effect struct {
 	Org         ids.OrgID
 	Transaction ids.UUID
 	Seq         int
-	State       domain.EffectState
-	Required    defs.Level
-	Achieved    defs.Level
+	// Simulated is the transaction's flag (HR-120); the store sets it.
+	Simulated bool
+	State     domain.EffectState
+	Required  defs.Level
+	Achieved  defs.Level
 	// Basis is the kind of evidence: verifier, late_report, target_log,
 	// person, compensation, definition or deadline.
 	Basis        string
@@ -288,7 +290,7 @@ func SignEffect(receipts Signer, issuer string, e Effect) (Signed, error) {
 	}
 	pap := map[string]any{
 		"v": 1, "kind": "effect", "org": e.Org.String(), "txn": e.Transaction.String(), "seq": e.Seq,
-		"state": string(e.State), "required": string(e.Required), "basis": basis, "simulated": false,
+		"state": string(e.State), "required": string(e.Required), "basis": basis, "simulated": e.Simulated,
 		"at": e.At.UTC().Format(time.RFC3339Nano),
 	}
 	if e.Achieved != "" {

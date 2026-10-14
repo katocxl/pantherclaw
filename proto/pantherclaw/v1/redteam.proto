@@ -1,0 +1,332 @@
+// SPDX-License-Identifier: BUSL-1.1
+// Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+
+syntax = "proto3";
+
+package pantherclaw.v1;
+
+import "buf/validate/validate.proto";
+import "google/protobuf/timestamp.proto";
+
+// RangeService records adversarial-range runs and derives their assurance
+// report (G0 M12, PN-009; HR-224; T-091).
+//
+// `pclaw redteam run` starts a range for a range agent (HR-220), runs the
+// scenarios against simulated targets and records each scenario's steps.
+// The server does not take the client's word for what happened: where a
+// step names a transaction, the server reads that transaction's decision,
+// reason and effect from its own records (the transaction must be
+// simulated, of the range's agent and created after the range started),
+// and where a step names a sandbox probe report it checks the signed
+// probe records (HR-215). Those steps are observed_by SERVER; a client
+// claim that differs is overwritten and the step is marked MISMATCH.
+// Everything else is observed_by CLIENT and the report says so. The
+// server recomputes each scenario's verdict from its steps' expectations.
+// The assurance report is an evidence pack (scope range, item kind
+// assurance) that `pclaw verify` checks offline; it is tested-control
+// evidence against simulated targets and never a compliance
+// certification. Business tier scenarios need a Business licence, signed
+// reports a Team licence.
+service RangeService {
+  // StartRange records a range for a range agent.
+  // permission: redteam.run
+  rpc StartRange(StartRangeRequest) returns (StartRangeResponse);
+  // RecordResult records one scenario's result in a running range.
+  // permission: redteam.run
+  rpc RecordResult(RecordResultRequest) returns (RecordResultResponse);
+  // FinishRange ends a range; declared scenarios never recorded are
+  // MISSING.
+  // permission: redteam.run
+  rpc FinishRange(FinishRangeRequest) returns (FinishRangeResponse);
+  // GetRange returns a range and its results.
+  // permission: redteam.read
+  rpc GetRange(GetRangeRequest) returns (GetRangeResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // ListRanges lists ranges, newest first.
+  // permission: redteam.read
+  rpc ListRanges(ListRangesRequest) returns (ListRangesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // ExportAssuranceReport builds the finished range's assurance report as
+  // an evidence pack (scope range) and returns the pack's id; Team
+  // edition. The pack is downloaded through EvidenceService.
+  // permission: evidence.export
+  rpc ExportAssuranceReport(ExportAssuranceReportRequest) returns (ExportAssuranceReportResponse);
+}
+
+// RangeState is where a range is in its life.
+enum RangeState {
+  RANGE_STATE_UNSPECIFIED = 0;
+  RANGE_STATE_RUNNING = 1;
+  RANGE_STATE_FINISHED = 2;
+  // ABANDONED: never finished within 24 hours.
+  RANGE_STATE_ABANDONED = 3;
+}
+
+// RangeVerdict is a scenario's verdict. MISSING is server-only: the
+// scenario was declared and never recorded.
+enum RangeVerdict {
+  RANGE_VERDICT_UNSPECIFIED = 0;
+  RANGE_VERDICT_PASS = 1;
+  RANGE_VERDICT_FAIL = 2;
+  RANGE_VERDICT_ERROR = 3;
+  RANGE_VERDICT_SKIPPED = 4;
+  RANGE_VERDICT_MISSING = 5;
+}
+
+// RangeObservedBy says who observed a step's result.
+enum RangeObservedBy {
+  RANGE_OBSERVED_BY_UNSPECIFIED = 0;
+  // SERVER: read from the server's own records.
+  RANGE_OBSERVED_BY_SERVER = 1;
+  // CLIENT: reported by the runner and not confirmable by the server.
+  RANGE_OBSERVED_BY_CLIENT = 2;
+}
+
+// RangeScenarioDecl declares a scenario of the set a range runs. The
+// digest is the SHA-256 (lowercase hex) of the scenario's canonical form.
+message RangeScenarioDecl {
+  string id = 1 [(buf.validate.field).string.pattern = "^RT-[0-9]{3}$"];
+  string digest = 2 [(buf.validate.field).string.pattern = "^[0-9a-f]{64}$"];
+  string tier = 3 [(buf.validate.field).string = {
+    in: [
+      "community",
+      "business"
+    ]
+  }];
+  string category = 4 [(buf.validate.field).string = {
+    in: [
+      "functional",
+      "boundary",
+      "recovery",
+      "explanation"
+    ]
+  }];
+  string suite = 5 [(buf.validate.field).string = {
+    in: [
+      "coding-agent",
+      "platform"
+    ]
+  }];
+  string title = 6 [(buf.validate.field).string.max_len = 200];
+  // step_count is how many steps the scenario has: a PASS records exactly
+  // that many (FAIL and ERROR may record fewer).
+  int32 step_count = 7 [(buf.validate.field).int32 = {
+    gte: 1
+    lte: 40
+  }];
+}
+
+message StartRangeRequest {
+  string range_agent_id = 1 [(buf.validate.field).string.uuid = true];
+  repeated RangeScenarioDecl scenarios = 2 [(buf.validate.field).repeated = {
+    min_items: 1
+    max_items: 200
+  }];
+  string runner_version = 3 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 64
+  }];
+  // baseline_range_id is the finished range this one is compared with.
+  string baseline_range_id = 4 [
+    (buf.validate.field).string.uuid = true,
+    (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE
+  ];
+}
+
+message StartRangeResponse {
+  string range_id = 1;
+  google.protobuf.Timestamp start_time = 2;
+}
+
+// RangeExpect is what a step expects, or what it observed. Outcome is one
+// of ALLOW, DENY, HOLD, CANNOT_AUTHORIZE, REFUSED, BLOCKED, TARGET_REFUSED,
+// NOT_FOUND, CONFIRMED, UNKNOWN. Reason and code may be empty (expected:
+// not checked; observed: none).
+message RangeExpect {
+  string outcome = 1 [(buf.validate.field).string = {
+    in: [
+      "ALLOW",
+      "DENY",
+      "HOLD",
+      "CANNOT_AUTHORIZE",
+      "REFUSED",
+      "BLOCKED",
+      "TARGET_REFUSED",
+      "NOT_FOUND",
+      "CONFIRMED",
+      "UNKNOWN"
+    ]
+  }];
+  string reason = 2 [(buf.validate.field).string = {
+    max_len: 64
+    pattern: "^[A-Za-z0-9_.:-]*$"
+  }];
+  string code = 3 [(buf.validate.field).string = {
+    max_len: 64
+    pattern: "^[A-Za-z0-9_.:-]*$"
+  }];
+}
+
+// RangeStepInput is one step as the runner recorded it.
+message RangeStepInput {
+  string step_id = 1 [(buf.validate.field).string.pattern = "^[a-z0-9-]{1,40}$"];
+  RangeExpect expect = 2 [(buf.validate.field).required = true];
+  RangeExpect observed = 3 [(buf.validate.field).required = true];
+  // transaction_id is the simulated transaction the step caused, if any.
+  string transaction_id = 4 [
+    (buf.validate.field).string.uuid = true,
+    (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE
+  ];
+  // probe_report_id is the sandbox probe report the step is based on, if
+  // any (a sandbox.probe step).
+  string probe_report_id = 5 [
+    (buf.validate.field).string.uuid = true,
+    (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE
+  ];
+  // decisive_control is the rule the scenario says decides the step.
+  string decisive_control = 6 [(buf.validate.field).string = {
+    max_len: 16
+    pattern: "^(HR-[0-9]{3})?$"
+  }];
+  // kind is the scenario step kind (agent.call, wait, person.approve, ...).
+  // The server derives the observation from a cited transaction only for
+  // agent.* and wait steps that expect ALLOW, DENY, HOLD, CANNOT_AUTHORIZE,
+  // CONFIRMED or UNKNOWN; every other step is observed_by CLIENT and its
+  // transaction is only a reference that must belong to the range.
+  string kind = 7 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 32
+    pattern: "^[a-z]+([.][a-z_]+)?$"
+  }];
+  // probe_kind names the result of the cited probe report the step is
+  // based on (a sandbox.probe step's probe); required with probe_report_id.
+  string probe_kind = 8 [(buf.validate.field).string = {
+    max_len: 64
+    pattern: "^([a-z][a-z0-9_]*)?$"
+  }];
+}
+
+message RecordResultRequest {
+  string range_id = 1 [(buf.validate.field).string.uuid = true];
+  string scenario_id = 2 [(buf.validate.field).string.pattern = "^RT-[0-9]{3}$"];
+  string scenario_digest = 3 [(buf.validate.field).string.pattern = "^[0-9a-f]{64}$"];
+  // verdict is the runner's claim; the server recomputes PASS and FAIL
+  // from the steps (ERROR and SKIPPED are kept as claimed).
+  RangeVerdict verdict = 4 [(buf.validate.field).enum = {
+    defined_only: true
+    in: [1, 2, 3, 4]
+  }];
+  repeated RangeStepInput steps = 5 [(buf.validate.field).repeated = {max_items: 40}];
+}
+
+// RangeStep is one step as the server recorded it.
+message RangeStep {
+  string step_id = 1;
+  RangeExpect expect = 2;
+  // observed is what the server recorded: its own derivation for a
+  // SERVER step, the runner's claim for a CLIENT step.
+  RangeExpect observed = 3;
+  RangeObservedBy observed_by = 4;
+  // mismatch: the runner's claim differed from the server's records and
+  // was overwritten.
+  bool mismatch = 5;
+  // claimed is the runner's claim when mismatch.
+  RangeExpect claimed = 6;
+  // matched: observed meets expect.
+  bool matched = 7;
+  string transaction_id = 8;
+  string probe_report_id = 9;
+  string decisive_control = 10;
+  string kind = 11;
+  string probe_kind = 12;
+}
+
+// RangeResult is one scenario's recorded result.
+message RangeResult {
+  string scenario_id = 1;
+  string scenario_digest = 2;
+  string category = 3;
+  string tier = 4;
+  RangeVerdict verdict = 5;
+  // claimed_verdict is the runner's claim when it differs from verdict.
+  RangeVerdict claimed_verdict = 6;
+  repeated RangeStep steps = 7;
+  google.protobuf.Timestamp record_time = 8;
+}
+
+message RecordResultResponse {
+  RangeResult result = 1;
+}
+
+message FinishRangeRequest {
+  string range_id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// RangeCounts counts a range's scenarios by verdict.
+message RangeCounts {
+  int32 pass = 1;
+  int32 fail = 2;
+  int32 error = 3;
+  int32 skipped = 4;
+  int32 missing = 5;
+}
+
+// Range is one range.
+message Range {
+  string id = 1;
+  string range_agent_id = 2;
+  string started_by = 3;
+  string runner_version = 4;
+  string scenario_set_digest = 5;
+  repeated RangeScenarioDecl scenarios = 6;
+  string baseline_range_id = 7;
+  RangeState state = 8;
+  google.protobuf.Timestamp start_time = 9;
+  google.protobuf.Timestamp finish_time = 10;
+  RangeCounts counts = 11;
+}
+
+message FinishRangeResponse {
+  Range range = 1;
+  repeated RangeResult results = 2;
+}
+
+message GetRangeRequest {
+  string range_id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+message GetRangeResponse {
+  Range range = 1;
+  repeated RangeResult results = 2;
+}
+
+message ListRangesRequest {
+  string range_agent_id = 1 [
+    (buf.validate.field).string.uuid = true,
+    (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE
+  ];
+  int32 page_size = 2 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 200
+  }];
+  string page_token = 3 [(buf.validate.field).string = {
+    max_len: 256
+    pattern: "^[A-Za-z0-9_-]*$"
+  }];
+}
+
+message ListRangesResponse {
+  repeated Range ranges = 1;
+  string next_page_token = 2;
+}
+
+message ExportAssuranceReportRequest {
+  string range_id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+message ExportAssuranceReportResponse {
+  // pack_id is the evidence pack that holds the report.
+  string pack_id = 1;
+}

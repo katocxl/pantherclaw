@@ -129,6 +129,42 @@ func checkBaseURL(raw string, own []endpoint) (string, endpoint, error) {
 	return u.Scheme + "://" + hostPort + path, ep, nil
 }
 
+// localLiteral reports whether a normalized base URL names an IP literal on
+// loopback (127.0.0.0/8, ::1) or a private network (10/8, 172.16/12,
+// 192.168/16, fc00::/7): the only targets of a simulated connection (HR-221).
+// A name is never local, and an IPv4-mapped IPv6 address is not accepted.
+func localLiteral(base string) bool {
+	u, err := url.Parse(base)
+	return err == nil && localHost(u.Hostname())
+}
+
+// localHost reports whether a bare host (no port, no brackets) is such a literal.
+func localHost(h string) bool {
+	addr, err := netip.ParseAddr(h)
+	if err != nil || addr.Is4In6() || addr.Zone() != "" {
+		return false
+	}
+	return addr.IsLoopback() || addr.IsPrivate()
+}
+
+// checkSimulated applies HR-221 to a simulated http or mcp connection: its
+// base URL and every host a credential may be sent to are local literals.
+func checkSimulated(base *string, hosts []string) error {
+	if base != nil && !localLiteral(*base) {
+		return ErrSimulatedTarget
+	}
+	for _, entry := range hosts {
+		name, _, err := net.SplitHostPort(entry)
+		if err != nil {
+			name = strings.TrimSuffix(strings.TrimPrefix(entry, "["), "]")
+		}
+		if !localHost(name) {
+			return ErrSimulatedTarget
+		}
+	}
+	return nil
+}
+
 // checkAllowedHosts validates the hosts a credential may be sent to:
 // "host" (any port) or "host:port". The default is the base URL's host,
 // with its port when it is not the scheme's default.

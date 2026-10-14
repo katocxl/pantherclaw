@@ -40,7 +40,9 @@ var ErrDrift = pcerr.New(pcerr.InvalidArgument, "DRIFT_NOT_REVIEWED",
 // serves (otherwise not found) and an upstream tool the pinned package
 // reviewed with exactly expected (otherwise ErrDrift), so a gateway can
 // quarantine only what its own connections use. It reports whether the
-// version is quarantined; a retired version stays as it is.
+// version is quarantined; a retired version stays as it is. A report about a
+// simulated connection is audited with simulated=true and changes nothing
+// else (HR-222).
 func (s *Service) ReportDrift(ctx context.Context, org ids.OrgID, gateway, id ids.UUID, tool, expected, observed string) (bool, error) {
 	if observed == expected {
 		return false, ErrDrift
@@ -69,6 +71,18 @@ func (s *Service) ReportDrift(ctx context.Context, org ids.OrgID, gateway, id id
 		}
 		if !reviewed(p.Definitions, tool, expected) {
 			return ErrDrift
+		}
+		if conn.Simulated {
+			// HR-222: a simulator's drift changes nothing real: no epoch, no
+			// quarantine, no notification. The gateway still refuses locally.
+			_, err := audit.Record(ctx, tx, audit.Event{
+				Name: "connection.drift_reported", Actor: c.Audit, Outcome: audit.Success,
+				Object: &audit.Object{Type: "connection", ID: conn.ID.String()},
+				Details: map[string]string{
+					"simulated": "true", "upstream_tool": tool, "expected_digest": expected, "observed_digest": observed,
+				},
+			})
+			return err
 		}
 		v, err := q.GetPackageVersionState(ctx, org, conn.Package, pin.Version)
 		if err != nil {

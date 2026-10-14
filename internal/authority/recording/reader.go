@@ -80,7 +80,11 @@ func (r *Reader) Request() (pipeline.Request, error) {
 	if err != nil {
 		return pipeline.Request{}, err
 	}
-	return pipeline.Request{Org: r.org, Action: act, Identity: id, Gateway: r.rec.Request.Gateway}, nil
+	req := pipeline.Request{Org: r.org, Action: act, Identity: id, Gateway: r.rec.Request.Gateway}
+	for _, f := range r.rec.Request.PayloadFindings {
+		req.PayloadFindings = append(req.PayloadFindings, pipeline.PayloadFinding{Kind: f.Kind, Location: f.Location})
+	}
+	return req, nil
 }
 
 // Gaps returns the reads the replay needed and the recording did not hold.
@@ -226,7 +230,7 @@ func (r *Reader) Envelopes(_ context.Context, org ids.OrgID, scopes []gdomain.Sc
 // Facts implements pipeline.Reader: a read of the same subject that asked
 // for every name serves it, so a proposed policy that needs fewer facts
 // replays exactly; a name never asked for is a gap.
-func (r *Reader) Facts(_ context.Context, org ids.OrgID, subjectType, subjectID string, names []string) (map[string]fdomain.Fact, error) {
+func (r *Reader) Facts(_ context.Context, org ids.OrgID, _ ids.UUID, subjectType, subjectID string, names []string) (map[string]fdomain.Fact, error) {
 	if err := r.otherOrg(org, "facts", pipeline.StepFacts); err != nil {
 		return nil, err
 	}

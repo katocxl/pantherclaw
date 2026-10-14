@@ -201,9 +201,13 @@ func RecordHold(ctx context.Context, tx db.TenantTx, org ids.OrgID, h Hold) erro
 	if err != nil || n < VariantThreshold {
 		return err
 	}
-	return event(ctx, tx, "security.variant_suspected", h.Actor, audit.Denied, "VARIANT_SHOPPING", h.RequestID, map[string]string{
-		"variants_24h": strconv.Itoa(int(n)), "operation": h.Operation,
-	})
+	details := map[string]string{"variants_24h": strconv.Itoa(int(n)), "operation": h.Operation}
+	if sim, err := q.TransactionSimulated(ctx, org, h.TransactionID); err != nil {
+		return err
+	} else if sim {
+		details["simulated"] = "true" // HR-222
+	}
+	return event(ctx, tx, "security.variant_suspected", h.Actor, audit.Denied, "VARIANT_SHOPPING", h.RequestID, details)
 }
 
 func ptr[T any](v T) *T { return &v }

@@ -114,6 +114,7 @@ func agentProto(a app.Agent) *pantherclawv1.Agent {
 		BackupOwnerUserId: idString(a.BackupOwnerUserID), ExecutionContext: contextToProto[a.Context],
 		State: stateToProto[a.State], SuspendedFrom: stateToProto[a.SuspendedFrom], CreatedBy: a.CreatedBy,
 		CreateTime: ts(a.CreatedAt), UpdateTime: ts(a.UpdatedAt), ClaimTime: tsp(a.ClaimedAt), RetireTime: tsp(a.RetiredAt),
+		RangeAgent: a.RangeAgent,
 	}
 }
 
@@ -154,6 +155,7 @@ func (s *Agents) CreateAgent(ctx context.Context, req *pantherclawv1.CreateAgent
 	if err != nil {
 		return nil, err
 	}
+	d.RangeAgent = req.GetRangeAgent()
 	a, err := s.inv.Create(ctx, d)
 	if err != nil {
 		return nil, err

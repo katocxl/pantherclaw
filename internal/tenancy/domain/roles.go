@@ -96,7 +96,7 @@ var roles = []Role{
 			PermUserRead, PermUserManage, PermInvitationRead, PermInvitationManage, PermRoleRead, PermRoleBind,
 			PermServiceAccountRead, PermServiceAccountManage, PermAuditRead, PermAgentRead, PermRunRead,
 			PermWaitlistRead, PermWaitlistManage, PermIssuerRead, PermIssuerManage, PermFactRead, PermPackageImport,
-			PermPackageKeyManage, PermNotificationRead, PermNotificationManage, PermEvidenceRead, PermCoverageRead,
+			PermPackageKeyManage, PermNotificationRead, PermNotificationManage, PermEvidenceRead, PermCoverageRead, PermRedteamRead,
 			PermGitHubIdentityManage, PermGitHubIdentityProve, PermGitHubScanRun,
 		}, authorityReads, boundaryReads),
 	},
@@ -108,7 +108,7 @@ var roles = []Role{
 			PermServiceAccountManage, PermAuditRead, PermAgentRead, PermIncidentRespond, PermRunRead, PermRunManage,
 			PermWaitlistRead, PermWaitlistManage, PermApprovalRead, PermAgentRestore, PermIssuerRead, PermGrantRevoke,
 			PermFactRead, PermNotificationRead, PermNotificationManage, PermEvidenceRead, PermTransactionReconcile,
-			PermEvidenceExport, PermReleaseWindowManage, PermGitHubScanRun, PermCoverageRead, PermCoverageManage, PermCoverageReassess,
+			PermEvidenceExport, PermReleaseWindowManage, PermGitHubScanRun, PermCoverageRead, PermCoverageManage, PermCoverageReassess, PermRedteamRead,
 		}, authorityReads, boundaryReads),
 	},
 	{
@@ -116,7 +116,7 @@ var roles = []Role{
 		Description: "Owns agents in scope and is accountable for them; sees their approval requests and can revoke their grants but not issue them; reads and reassesses their coverage, and runs them in the containment sandbox.",
 		Permissions: with(basicReads, []Permission{
 			PermAgentRead, PermAgentManage, PermRunRead, PermRunStart, PermRunManage, PermWaitlistRead, PermAgentEnroll,
-			PermGrantRevoke, PermApprovalRead, PermEvidenceRead, PermCoverageRead, PermCoverageReassess, PermSandboxRun,
+			PermGrantRevoke, PermApprovalRead, PermEvidenceRead, PermCoverageRead, PermCoverageReassess, PermSandboxRun, PermRedteamRun, PermRedteamRead,
 		}, authorityReads),
 	},
 	{
@@ -142,7 +142,7 @@ var roles = []Role{
 		Description: "Investigates and contains incidents in scope, and restores suspended agents with a security key (human only).",
 		Permissions: with(basicReads, []Permission{
 			PermAgentRead, PermIncidentRespond, PermRunRead, PermRunManage, PermGrantRead, PermGrantRevoke,
-			PermConnectionRead, PermContainmentRead, PermWaitlistRead, PermAgentRestore, PermEvidenceRead, PermCoverageRead,
+			PermConnectionRead, PermContainmentRead, PermWaitlistRead, PermAgentRestore, PermEvidenceRead, PermCoverageRead, PermRedteamRead,
 		}),
 	},
 	{
@@ -151,7 +151,7 @@ var roles = []Role{
 		Permissions: with(basicReads, []Permission{
 			PermUserRead, PermRoleRead, PermInvitationRead, PermServiceAccountRead, PermAuditRead,
 			PermAgentRead, PermEvidenceReadRestricted, PermRunRead, PermWaitlistRead, PermIssuerRead, PermFactRead,
-			PermNotificationRead, PermApprovalRead, PermEvidenceRead, PermEvidenceExport, PermCoverageRead,
+			PermNotificationRead, PermApprovalRead, PermEvidenceRead, PermEvidenceExport, PermCoverageRead, PermRedteamRead,
 		}, authorityReads, boundaryReads),
 	},
 	{
@@ -159,7 +159,7 @@ var roles = []Role{
 		Description: "Builds agents in scope and runs them in the containment sandbox.",
 		Permissions: with(basicReads, []Permission{
 			PermAgentRead, PermRunRead, PermRunStart, PermConnectionRead, PermEvidenceRead, PermGitHubIdentityProve, PermCoverageRead,
-			PermSandboxRun,
+			PermSandboxRun, PermRedteamRun, PermRedteamRead,
 		}, authorityReads),
 	},
 	{

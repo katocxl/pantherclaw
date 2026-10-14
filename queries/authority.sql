@@ -59,7 +59,7 @@ WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id);
 -- and the verification level its decision required (G0 M7).
 -- name: ExecutionContext :one
 SELECT p.mode, p.connection_id, t.channel, c.access_mode, t.id AS transaction_id, t.action_hash, t.effective_hash,
-       p.dispatching_at, p.definition_digest, p.verify_expect, t.target_type, t.target_id, t.effect_level_required
+       p.dispatching_at, p.definition_digest, p.verify_expect, t.target_type, t.target_id, t.effect_level_required, t.simulated
 FROM pc.permits p
 JOIN pc.transactions t ON t.org_id = p.org_id AND t.id = p.transaction_id
 LEFT JOIN pc.connections c ON c.org_id = p.org_id AND c.id = p.connection_id
@@ -70,7 +70,7 @@ WHERE p.org_id = sqlc.arg(org_id) AND p.id = sqlc.arg(id) AND p.gateway_id = sql
 -- can make through it (G0 M7 design decision 2); NULL when none is pinned.
 -- name: AuthorityConnection :one
 SELECT c.id, c.gateway_id, c.kind, c.package, c.state, c.access_mode, c.default_mode, c.destination_class,
-       p.version_id AS pinned_version_id
+       c.simulated, p.version_id AS pinned_version_id
 FROM pc.connections c
 LEFT JOIN pc.tool_packages t ON t.org_id = c.org_id AND t.name = c.package
 LEFT JOIN pc.package_pins p ON p.org_id = t.org_id AND p.package_id = t.id

@@ -83,7 +83,7 @@ tasks:
         PC_TEST_REQUIRE_DB=1
         PC_TEST_PG_ADMIN_URL="postgres://postgres:${PC_PG_TEST_PASSWORD}@127.0.0.1:5433/postgres?sslmode=disable"
         PC_TEST_MOCK_OIDC_URL="${PC_TEST_MOCK_OIDC_URL:-http://127.0.0.1:8181}"
-        go test -tags integration -shuffle=on -count=1 {{.PKGS | default "./..."}}
+        go test -tags integration -shuffle=on -count=1 -timeout 30m {{.PKGS | default "./..."}}
       # The Go SDK's SQL replay store on PostgreSQL (T-081: two replicas, one store), its own module.
       - >-
         PC_TEST_REQUIRE_DB=1
@@ -115,6 +115,18 @@ tasks:
         PC_TEST_PG_ADMIN_URL="postgres://postgres:${PC_PG_TEST_PASSWORD}@127.0.0.1:5433/postgres?sslmode=disable"
         PC_TEST_MOCK_OIDC_URL="${PC_TEST_MOCK_OIDC_URL:-http://127.0.0.1:8181}"
         go test -tags "integration sandbox" -count=1 -timeout 60m -run TestE2E_M9_ ./test/e2e/{{end}}
+
+  range:
+    desc: The adversarial range (G0 M12, HR-226; EX-004 local gate) - every redteam/scenarios/*.yaml against the simulators on the test cluster (start it with `task up PROFILE=test`; SANDBOX=1 adds the sandbox scenarios and needs Docker; SCENARIO=RT-008 runs one)
+    dotenv: ["deploy/compose/.env"]
+    cmds:
+      - >-
+        PC_TEST_REQUIRE_DB=1
+        PC_TEST_PG_ADMIN_URL="postgres://postgres:${PC_PG_TEST_PASSWORD}@127.0.0.1:5433/postgres?sslmode=disable"
+        PC_TEST_MOCK_OIDC_URL="${PC_TEST_MOCK_OIDC_URL:-http://127.0.0.1:8181}"
+        {{if eq (.SANDBOX | default "0") "1"}}PC_TEST_SANDBOX=1{{end}}
+        go test -tags "integration{{if eq (.SANDBOX | default "0") "1"}} sandbox{{end}}" -count=1 -timeout 60m
+        -run 'TestRange_Scenarios{{if .SCENARIO}}/{{.SCENARIO}}{{end}}' ./test/e2e/
 
   sandbox:images:
     desc: Build the sandbox's edge and probe images locally (static Linux builds on the pinned distroless base) and print their ids, which pclaw's sandbox.images settings name (G0 M9)
@@ -154,9 +166,9 @@ tasks:
       - git diff --exit-code -- internal/gen
 
   trace:
-    desc: Fail if a hardening rule or threat due by MILESTONE has no test (default M8)
+    desc: Fail if a hardening rule or threat due by MILESTONE has no test (default M12)
     cmds:
-      - go -C tools run ./traceability -root .. -through {{.MILESTONE | default "M9"}}
+      - go -C tools run ./traceability -root .. -through {{.MILESTONE | default "M12"}}
 
   sdk:vectors:
     desc: Regenerate the SDK conformance vectors in sdk/conformance from the Go implementation (review the diff)

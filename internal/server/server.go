@@ -391,6 +391,11 @@ func cmdServe(ctx context.Context, args []string, stderr io.Writer, env Env, onS
 			return err
 		}
 		evidenceJobs = append(evidenceJobs, sandboxJobs...)
+		rangeJobs, err := registerRangeJobs(jreg, pool, log)
+		if err != nil {
+			return err
+		}
+		evidenceJobs = append(evidenceJobs, rangeJobs...)
 		if err := authnapp.RegisterJanitor(jreg, pool, log); err != nil {
 			return err
 		}
@@ -568,12 +573,14 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	if err := registerM8G(rs, pool, githubNotify, d.github, d.billing); err != nil {
 		return nil, err
 	}
-	if err := registerEvidence(rs, d); err != nil {
+	evidenceSvc, err := registerEvidence(rs, d)
+	if err != nil {
 		return nil, err
 	}
 	registerEvidenceAdmin(rs, d)
 	registerCoverage(rs, d)
 	registerSandbox(rs, d)
+	registerRanges(rs, d, evidenceSvc)
 	registerReleases(rs, pool)
 	mux := http.NewServeMux()
 	rpc.Mount(mux, rs)

@@ -174,6 +174,8 @@ SELECT c.id, p.version_id FROM pc.connections c
 JOIN pc.tool_packages tp ON tp.org_id = c.org_id AND tp.name = c.package
 JOIN pc.package_pins p ON p.org_id = c.org_id AND p.package_id = tp.id
 WHERE c.org_id = $1 AND c.state <> 'RETIRED'
+  -- HR-222: snapshots and routes never include a simulated connection.
+  AND NOT c.simulated
 ORDER BY c.id
 LIMIT 1000
 `
@@ -763,6 +765,8 @@ JOIN pc.runs r ON r.org_id = t.org_id AND r.id = t.run_id
 WHERE t.org_id = $1 AND ($2::uuid IS NULL OR t.id > $2::uuid)
   AND ($3::uuid IS NULL OR t.id <= $3::uuid)
   AND t.created_at < now() - interval '1 minute'
+  -- HR-222: a range run never reaches coverage.
+  AND NOT t.simulated
 ORDER BY t.id
 LIMIT $4
 `

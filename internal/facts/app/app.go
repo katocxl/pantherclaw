@@ -46,6 +46,9 @@ type Store interface {
 	// Taken reports whether an active declaration already uses a fact
 	// name (compared with dots as underscores).
 	Taken(ctx context.Context, org ids.OrgID) (func(name string) bool, error)
+	// Declared returns every active declaration with its source scope
+	// (G0 M12 D43).
+	Declared(ctx context.Context, org ids.OrgID) ([]domain.ScopedDeclaration, error)
 	CreateProvider(ctx context.Context, org ids.OrgID, p domain.Provider, createdBy string, ev audit.Event) error
 	DisableProvider(ctx context.Context, org ids.OrgID, id ids.UUID, ev audit.Event) error
 	// ProviderFor returns the active provider bound to a service account.
@@ -55,8 +58,9 @@ type Store interface {
 	ProviderForConnection(ctx context.Context, org ids.OrgID, connection ids.UUID) (domain.Provider, error)
 	// Now returns the database time.
 	Now(ctx context.Context, org ids.OrgID) (time.Time, error)
-	// Latest returns the recorded fact for (name, subject), or nil.
-	Latest(ctx context.Context, org ids.OrgID, name, subjectType, subjectID string) (*domain.Fact, error)
+	// Latest returns the recorded fact for (name, subject) in a connection's
+	// scope (the zero id: org scope), or nil.
+	Latest(ctx context.Context, org ids.OrgID, connection ids.UUID, name, subjectType, subjectID string) (*domain.Fact, error)
 	// Put records a fact unless a newer observation is recorded meanwhile;
 	// it reports whether it wrote.
 	Put(ctx context.Context, org ids.OrgID, f domain.Fact) (bool, error)
@@ -171,7 +175,7 @@ func (s *Service) put(ctx context.Context, org ids.OrgID, p domain.Provider, obs
 	out := make([]Result, 0, len(obs))
 	for _, o := range obs {
 		r := Result{Name: o.Name, SubjectID: o.SubjectID}
-		prev, err := s.Store.Latest(ctx, org, o.Name, o.SubjectType, o.SubjectID)
+		prev, err := s.Store.Latest(ctx, org, p.ConnectionID, o.Name, o.SubjectType, o.SubjectID)
 		if err != nil {
 			return nil, err
 		}

@@ -84,7 +84,13 @@ var (
 	ErrStale           = pcerr.New(pcerr.FailedPrecondition, "CONNECTION_REVISION_STALE", "the connection changed since it was read")
 	ErrState           = pcerr.New(pcerr.FailedPrecondition, "CONNECTION_STATE", "the connection is not in a state that allows this")
 	ErrReason          = pcerr.New(pcerr.InvalidArgument, "REASON_REQUIRED", "a reason of 1 to 500 characters is required")
-	ErrNameReserved    = pcerr.New(pcerr.InvalidArgument, "CONNECTION_NAME_RESERVED", "this name is a path of the gateway itself")
+	// ErrSimulatedTarget: a simulated connection targets only an IP literal on loopback or a private network (HR-221).
+	ErrSimulatedTarget = pcerr.New(pcerr.InvalidArgument, "SIMULATED_TARGET_NOT_LOCAL",
+		"a simulated connection's base URL must be an IP literal on loopback or a private network")
+	// ErrSimulatedConnector: a connector container cannot be simulated (HR-221).
+	ErrSimulatedConnector = pcerr.New(pcerr.InvalidArgument, "SIMULATED_CONNECTOR_UNSUPPORTED",
+		"a simulated connection cannot run a connector container")
+	ErrNameReserved = pcerr.New(pcerr.InvalidArgument, "CONNECTION_NAME_RESERVED", "this name is a path of the gateway itself")
 )
 
 // reservedNames are the gateway's own first path segments: a connection's
@@ -138,6 +144,9 @@ type CreateInput struct {
 	Connector *ConnectorSpec
 	// AgentHosts are the host names agents use for the API (G0 M9).
 	AgentHosts []string
+	// Simulated marks a connection that points only at a simulator (G0 M12,
+	// HR-221); fixed for its life.
+	Simulated bool
 }
 
 // actor is who makes a change: a person holding the permission, or the
@@ -370,9 +379,17 @@ func (s *Service) create(ctx context.Context, c actor, in CreateInput) (Connecti
 		in.MaxResponseBytes < 1024 || in.MaxResponseBytes > 8<<20 || in.TimeoutMs < 100 || in.TimeoutMs > 60_000 {
 		return Connection{}, ErrShape
 	}
+	if in.Simulated && in.Kind == KindMCPContainer {
+		return Connection{}, ErrSimulatedConnector
+	}
 	base, hosts, err := s.shape(in.Kind, in.BaseURL, in.AllowedHosts, in.AccessMode, in.CredentialHeader, in.CredentialScheme)
 	if err != nil {
 		return Connection{}, err
+	}
+	if in.Simulated {
+		if err := checkSimulated(base, hosts); err != nil {
+			return Connection{}, err
+		}
 	}
 	agentHosts, err := checkAgentHosts(in.Kind, in.AgentHosts)
 	if err != nil {
@@ -405,6 +422,7 @@ func (s *Service) create(ctx context.Context, c actor, in CreateInput) (Connecti
 			BaseUrl: base, AllowedHosts: hosts, DestinationClass: in.DestinationClass, AccessMode: in.AccessMode,
 			CredentialHeader: ptr(in.CredentialHeader), CredentialScheme: ptr(in.CredentialScheme), DefaultMode: in.DefaultMode,
 			MaxResponseBytes: in.MaxResponseBytes, TimeoutMs: in.TimeoutMs, AgentHosts: agentHosts, CreatedBy: c.By,
+			Simulated: in.Simulated,
 		})
 		if db.IsUniqueViolation(err) {
 			return ErrNameTaken

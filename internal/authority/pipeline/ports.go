@@ -49,6 +49,15 @@ type Request struct {
 	Action   actionir.Parsed
 	Identity Identity
 	Gateway  string
+	// PayloadFindings are the credential-shaped values the gateway found in
+	// the action's payload (HR-225): they only ever add a requirement.
+	PayloadFindings []PayloadFinding
+}
+
+// PayloadFinding is one credential-shaped value in an action's payload: its
+// format and where it is, never the value.
+type PayloadFinding struct {
+	Kind, Location string
 }
 
 // Pinned is an org's pinned definition with its lifecycle state, and the
@@ -78,6 +87,9 @@ type Run struct {
 	EnvironmentID ids.UUID
 	GrantID       gdomain.GrantID
 	Active        bool
+	// Simulated: the run belongs to a range agent or descends from one
+	// (HR-220). The decision records it; policy never sees it.
+	Simulated bool
 	// TaskRef is the run's UNTRUSTED task label, shown to approvers only in
 	// the untrusted block (HR-034).
 	TaskRef string
@@ -180,6 +192,9 @@ type Connection struct {
 	// DestinationClass is where the connection sends data: "public" or
 	// "internal" (HR-079). Policies see it as action.destination_class.
 	DestinationClass string
+	// Simulated connections point only at simulators (HR-221); a run and
+	// a connection must agree on it (HR-220).
+	Simulated bool
 	// Modes are the explicit route modes; other routes take DefaultMode.
 	Modes map[string]string
 	// Reads are the read operations the gateway can make through the
@@ -211,7 +226,9 @@ type Reader interface {
 	Envelopes(ctx context.Context, org ids.OrgID, scopes []gdomain.Scope) ([]gdomain.Envelope, error)
 	// Facts returns the current facts of active providers about one
 	// subject, by name.
-	Facts(ctx context.Context, org ids.OrgID, subjectType, subjectID string, names []string) (map[string]fdomain.Fact, error)
+	// Facts is read for an action through connection (the zero id: none): a
+	// gateway-provided name comes only from that connection's row (D43).
+	Facts(ctx context.Context, org ids.OrgID, connection ids.UUID, subjectType, subjectID string, names []string) (map[string]fdomain.Fact, error)
 	Usage(ctx context.Context, org ids.OrgID, plan gdomain.Plan) (Usage, error)
 	// Claim returns the latest attempt on a dedupe key, or nil.
 	Claim(ctx context.Context, org ids.OrgID, key string) (*Claim, error)

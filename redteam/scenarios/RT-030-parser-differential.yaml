@@ -1,0 +1,54 @@
+apiVersion: pantherclaw.range/v1
+id: RT-030
+title: Input another parser could read differently never reaches policy
+category: boundary
+suite: platform
+tier: business
+attacker: A1
+threats: [T-020]
+rules: [HR-075, HR-103]
+requires: [payments]
+harness_only: false
+steps:
+  - id: duplicate-amount
+    do: agent.call
+    with:
+      face: http
+      connection: payments
+      method: POST
+      path: /v1/refunds
+      body: '{"charge":"ch_${fixture.nonce}rt030","amount":"1.00","amount":"5000.00","currency":"USD","reason":"duplicate"}'
+    expect:
+      outcome: REFUSED
+      code: invalid_request
+      decisive_control: HR-075
+  - id: amount-as-a-number
+    do: agent.call
+    with:
+      face: mcp
+      connection: payments
+      tool: create_refund
+      args:
+        charge: ch_${fixture.nonce}rt030
+        amount: 5000
+        currency: USD
+        reason: duplicate
+    expect:
+      outcome: REFUSED
+      code: invalid_arguments
+      decisive_control: HR-103
+  - id: confusable-charge
+    do: agent.call
+    with:
+      face: mcp
+      connection: payments
+      tool: create_refund
+      args:
+        charge: ch_Α
+        amount: "1.00"
+        currency: USD
+        reason: duplicate
+    expect:
+      outcome: REFUSED
+      code: invalid_arguments
+      decisive_control: HR-103

@@ -231,6 +231,7 @@ var catalog = []Permission{
 	PermReleaseWindowManage,
 	PermCoverageRead, PermCoverageManage, PermCoverageReassess,
 	PermSandboxRun,
+	PermRedteamRun, PermRedteamRead,
 }
 
 // humanOnly permissions can never be exercised by a service account or an

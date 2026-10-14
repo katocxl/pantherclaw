@@ -62,10 +62,14 @@ func NewTampered(req pipeline.Request, storedHash string) *Recording {
 
 func request(req pipeline.Request) Request {
 	id := req.Identity
-	return Request{
+	out := Request{
 		Action: slices.Clone(req.Action.Canonical), Instance: uid(id.InstanceID), Agent: uid(id.AgentID),
 		Attestation: id.AttestationLevel, JKT: id.JKT, Gateway: req.Gateway,
 	}
+	for _, f := range req.PayloadFindings {
+		out.PayloadFindings = append(out.PayloadFindings, PayloadFinding{Kind: f.Kind, Location: f.Location})
+	}
+	return out
 }
 
 func (r *Recorder) keep(fn func(*Reads) error) {
@@ -174,8 +178,8 @@ func scopesOf(scopes []gdomain.Scope) []Scope {
 }
 
 // Facts implements pipeline.Reader.
-func (r *Recorder) Facts(ctx context.Context, org ids.OrgID, subjectType, subjectID string, names []string) (map[string]fdomain.Fact, error) {
-	found, err := r.r.Facts(ctx, org, subjectType, subjectID, names)
+func (r *Recorder) Facts(ctx context.Context, org ids.OrgID, connection ids.UUID, subjectType, subjectID string, names []string) (map[string]fdomain.Fact, error) {
+	found, err := r.r.Facts(ctx, org, connection, subjectType, subjectID, names)
 	r.keep(func(x *Reads) error {
 		f, cerr := fromFacts(subjectType, subjectID, names, found, err)
 		if cerr != nil {

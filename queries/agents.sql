@@ -8,10 +8,10 @@
 
 -- name: InsertAgent :one
 INSERT INTO pc.agents (org_id, id, name, purpose, team_id, environment_id, owner_user_id, backup_owner_user_id,
-    execution_context, state, created_by, claimed_at)
+    execution_context, state, created_by, claimed_at, range_agent)
 VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(name), sqlc.arg(purpose), sqlc.arg(team_id), sqlc.arg(environment_id),
     sqlc.arg(owner_user_id), sqlc.narg(backup_owner_user_id), sqlc.arg(execution_context), 'CLAIMED',
-    sqlc.arg(created_by), now())
+    sqlc.arg(created_by), now(), sqlc.arg(range_agent))
 RETURNING *;
 
 -- name: InsertDiscoveredAgent :one
@@ -40,7 +40,13 @@ SELECT EXISTS (SELECT 1 FROM pc.agents WHERE org_id = sqlc.arg(org_id))::boolean
 -- §7 item 4). The caller holds the org's agent-limit lock.
 -- name: CountGovernedAgents :one
 SELECT count(*) FROM pc.agents
-WHERE org_id = sqlc.arg(org_id) AND claimed_at IS NOT NULL AND state <> 'RETIRED';
+WHERE org_id = sqlc.arg(org_id) AND claimed_at IS NOT NULL AND state <> 'RETIRED' AND NOT range_agent;
+
+-- Range agents (HR-220) do not count toward the edition limit; they have a
+-- cap of their own. The caller holds the org's agent-limit lock.
+-- name: CountRangeAgents :one
+SELECT count(*) FROM pc.agents
+WHERE org_id = sqlc.arg(org_id) AND range_agent AND state <> 'RETIRED';
 
 -- Serializes agent creation and claims per org so the edition limit cannot
 -- be exceeded by concurrent requests.

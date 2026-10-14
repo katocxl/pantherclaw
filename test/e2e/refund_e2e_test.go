@@ -81,6 +81,8 @@ type stack struct {
 	// writes it next to the enrollment file, and approver exports it again
 	// once a person has a key.
 	approverKeys string
+	// factsKey is the API key file of the provider service account that reports facts.
+	factsKey string
 
 	// The seeded PAP/1 workload: its key file and key, its workload token
 	// and its run.
@@ -268,6 +270,7 @@ func start(t *testing.T, o options) *stack {
 	s.serverCfg = write("server.json")
 	s.serve(t)
 	s.keyFile = keyFile
+	s.factsKey = factsFile
 	s.workload(t, keyFile)
 	refundable(t, "http://"+apiAddr, factsFile, "ch_1")
 

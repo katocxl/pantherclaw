@@ -64,6 +64,15 @@ type Request struct {
 	Attestation int            `json:"attestation"`
 	JKT         string         `json:"jkt,omitzero"`
 	Gateway     string         `json:"gateway"`
+	// PayloadFindings are the gateway's findings (HR-225); a replay needs
+	// them to reach the same decision.
+	PayloadFindings []PayloadFinding `json:"payload_findings,omitzero"`
+}
+
+// PayloadFinding is a credential format and where it was found.
+type PayloadFinding struct {
+	Kind     string `json:"kind"`
+	Location string `json:"location"`
 }
 
 // Tampered is what the finalization compared: the action hash stored for

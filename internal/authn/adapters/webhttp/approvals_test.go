@@ -44,7 +44,9 @@ type fakeApprovals struct {
 	// lookAlike adds a review consequence environment that mixes writing
 	// systems, flagged as the display flags it.
 	lookAlike string
-	err       error
+	// findings adds a payload finding (HR-225).
+	findings bool
+	err      error
 
 	mu         sync.Mutex
 	responders []apapp.Responder
@@ -207,6 +209,9 @@ func (f *fakeApprovals) View(ctx context.Context, id ids.UUID) (apapp.View, erro
 		State: "PENDING", Now: now,
 		Evidence: []apapp.EvidenceLine{{Author: "instance:x", Note: apdomain.Untrusted{Source: "evidence", Text: `"><img src=x onerror=alert(1)>`}, At: now}},
 		People:   f.people,
+	}
+	if f.findings {
+		v.Display.PayloadFindings = []apdomain.PayloadFindingLine{{Kind: "github_token", Location: "arg:content(base64)"}}
 	}
 	if f.review {
 		v.Display.Consequence.Operation = "github.pull.merge"
@@ -617,5 +622,23 @@ func TestHR175_ABatchApprovalSignsTheBatchHash(t *testing.T) {
 	}
 	if resp = do(t, mux, postAs(authnapp.ApprovalsPath+"/batch-options", "responder", `{"ids":["x"]}`)); resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("a bad id: %d", resp.StatusCode)
+	}
+}
+
+// TestHR225_TheApprovalPageListsWhatLooksLikeACredential: a held action whose
+// payload held a credential format shows the kind and the place, never a
+// value, above the fields; a page without findings has no such section.
+func TestHR225_TheApprovalPageListsWhatLooksLikeACredential(t *testing.T) {
+	resp := getAs(t, newApprovalsHandler(t, &fakeApprovals{findings: true}), authnapp.ApprovalsPath+"/"+knownRequest.String(), "good")
+	for _, want := range []string{"Credentials found in the payload", "<strong>github_token</strong> at <code>arg:content(base64)</code>", "The value is not shown"} {
+		if !strings.Contains(resp.Body, want) {
+			t.Errorf("the page lacks %q", want)
+		}
+	}
+	if i, j := strings.Index(resp.Body, "Credentials found in the payload"), strings.Index(resp.Body, "<h2>Fields</h2>"); i < 0 || j < i {
+		t.Fatal("the findings must come before the fields")
+	}
+	if plain := getAs(t, newApprovalsHandler(t, &fakeApprovals{}), authnapp.ApprovalsPath+"/"+knownRequest.String(), "good"); strings.Contains(plain.Body, "Credentials found") {
+		t.Fatal("a page without findings lists some")
 	}
 }

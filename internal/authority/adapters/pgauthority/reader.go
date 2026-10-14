@@ -140,9 +140,9 @@ func (r *Reader) Envelopes(ctx context.Context, org ids.OrgID, scopes []gdomain.
 }
 
 // Facts implements pipeline.Reader.
-func (r *Reader) Facts(ctx context.Context, org ids.OrgID, subjectType, subjectID string, names []string) (map[string]fdomain.Fact, error) {
+func (r *Reader) Facts(ctx context.Context, org ids.OrgID, connection ids.UUID, subjectType, subjectID string, names []string) (map[string]fdomain.Fact, error) {
 	return read(ctx, r, org, func(ctx context.Context, s *snapshot) (map[string]fdomain.Fact, error) {
-		return s.Facts(ctx, org, subjectType, subjectID, names)
+		return s.Facts(ctx, org, connection, subjectType, subjectID, names)
 	})
 }
 
@@ -244,7 +244,7 @@ func (s *snapshot) Run(ctx context.Context, org ids.OrgID, id ids.UUID) (pipelin
 		return pipeline.Run{}, notFound(err)
 	}
 	out := pipeline.Run{
-		AgentID: row.AgentID, EnvironmentID: row.EnvironmentID, Active: row.Live, TaskRef: row.TaskRef,
+		AgentID: row.AgentID, EnvironmentID: row.EnvironmentID, Active: row.Live, TaskRef: row.TaskRef, Simulated: row.Simulated,
 		Principal: principal(row.PrincipalUserID, row.PrincipalSaID, nil),
 		Launcher:  principal(row.LauncherUserID, row.LauncherSaID, row.LauncherInstanceID),
 	}
@@ -284,7 +284,7 @@ func (s *snapshot) Connection(ctx context.Context, org ids.OrgID, id ids.UUID) (
 	}
 	out := pipeline.Connection{
 		ID: c.ID, Gateway: c.GatewayID, Kind: c.Kind, Package: c.Package, State: c.State, AccessMode: c.AccessMode,
-		DefaultMode: c.DefaultMode, DestinationClass: c.DestinationClass, Modes: make(map[string]string, len(routes)),
+		DefaultMode: c.DefaultMode, DestinationClass: c.DestinationClass, Simulated: c.Simulated, Modes: make(map[string]string, len(routes)),
 		Reads: []string{},
 	}
 	for _, rt := range routes {
@@ -333,8 +333,8 @@ func (s *snapshot) Envelopes(ctx context.Context, org ids.OrgID, scopes []gdomai
 }
 
 // Facts implements pipeline.Reader.
-func (s *snapshot) Facts(ctx context.Context, org ids.OrgID, subjectType, subjectID string, names []string) (map[string]fdomain.Fact, error) {
-	return s.r.FactStore.Subject(ctx, dbq.New(s.tx), org, subjectType, subjectID, names)
+func (s *snapshot) Facts(ctx context.Context, org ids.OrgID, connection ids.UUID, subjectType, subjectID string, names []string) (map[string]fdomain.Fact, error) {
+	return s.r.FactStore.SubjectOn(ctx, dbq.New(s.tx), org, connection, subjectType, subjectID, names)
 }
 
 // Usage implements pipeline.Reader.
