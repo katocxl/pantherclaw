@@ -59,3 +59,32 @@ FROM pc.ledger_chain c
 JOIN pc.ledger_entries e ON e.org_id = c.org_id AND e.id = c.entry_id
 WHERE c.org_id = sqlc.arg(org_id) AND c.entry_id = ANY(sqlc.arg(entry_ids)::uuid[])
 ORDER BY c.seq;
+
+-- Sandbox closures in the ledger (G0 M12 D3, HR-227): the chained
+-- sandbox.closure entries of closures, with the agent each is of. Entries
+-- whose body retention removed name no closure and are not matched.
+-- name: ClosureEntryRefs :many
+SELECT e.id AS entry_id, coalesce(x.body ->> 'closure', '')::text AS closure_id, coalesce(x.body ->> 'agent', '')::text AS agent_id
+FROM pc.ledger_entries e
+JOIN pc.ledger_chain c ON c.org_id = e.org_id AND c.entry_id = e.id
+CROSS JOIN LATERAL (SELECT CASE WHEN e.body_removed_at IS NULL THEN convert_from(e.body, 'UTF8')::jsonb END AS body) x
+WHERE e.org_id = sqlc.arg(org_id) AND e.kind = 'sandbox.closure'
+  AND x.body ->> 'closure' = ANY(sqlc.arg(closure_ids)::text[])
+ORDER BY c.seq;
+
+-- The chained sandbox.closure entries that record any of the probe runs,
+-- as ClosureEntryRefs gives them.
+-- name: ClosureEntryRefsOfRuns :many
+SELECT e.id AS entry_id, coalesce(x.body ->> 'closure', '')::text AS closure_id, coalesce(x.body ->> 'agent', '')::text AS agent_id
+FROM pc.ledger_entries e
+JOIN pc.ledger_chain c ON c.org_id = e.org_id AND c.entry_id = e.id
+CROSS JOIN LATERAL (SELECT CASE WHEN e.body_removed_at IS NULL THEN convert_from(e.body, 'UTF8')::jsonb END AS body) x
+WHERE e.org_id = sqlc.arg(org_id) AND e.kind = 'sandbox.closure'
+  AND EXISTS (SELECT 1 FROM jsonb_array_elements(x.body -> 'reports') r WHERE r ->> 'run' = ANY(sqlc.arg(run_ids)::text[]))
+ORDER BY c.seq;
+
+-- The signed probe reports of probe runs, exactly as stored.
+-- name: ProbeRunReports :many
+SELECT id, report FROM pc.probe_runs
+WHERE org_id = sqlc.arg(org_id) AND id = ANY(sqlc.arg(run_ids)::uuid[])
+ORDER BY id;

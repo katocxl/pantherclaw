@@ -40,7 +40,7 @@ func init() {
 		run:   evidenceTrust,
 	}
 	commands["evidence bundle"] = command{
-		usage: "evidence bundle (--txn ID [--txn ID]… | --from SEQ --to SEQ) [--previous FILE] --out FILE",
+		usage: "evidence bundle (--txn ID [--txn ID]… | --closure ID [--closure ID]… | --from SEQ --to SEQ) [--previous FILE] --out FILE",
 		run:   evidenceBundle,
 	}
 	commands["evidence replay"] = command{
@@ -213,6 +213,8 @@ func evidenceBundle(ctx context.Context, a *app, args []string) error {
 	fs.SetOutput(a.stderr)
 	var txns list
 	fs.Var(&txns, "txn", "a transaction to include (repeat, at most 50)")
+	var closures list
+	fs.Var(&closures, "closure", "a sandbox closure to include, with its probe reports (repeat, at most 50)")
 	from := fs.Int64("from", 0, "first ledger sequence number of a range")
 	to := fs.Int64("to", 0, "last ledger sequence number of a range (at most 1,000 entries)")
 	previous := fs.String("previous", "", "a checkpoint you saved earlier: the bundle also proves its history extends it")
@@ -221,13 +223,22 @@ func evidenceBundle(ctx context.Context, a *app, args []string) error {
 		return err
 	}
 	byRange := *from != 0 || *to != 0
-	if *out == "" || fs.NArg() != 0 || (len(txns) == 0) == !byRange {
+	selections := 0
+	for _, on := range []bool{len(txns) > 0, len(closures) > 0, byRange} {
+		if on {
+			selections++
+		}
+	}
+	if *out == "" || fs.NArg() != 0 || selections != 1 {
 		return errUsage
 	}
 	req := &pantherclawv1.ExportBundleRequest{}
-	if byRange {
+	switch {
+	case len(closures) > 0:
+		req.Selection = &pantherclawv1.ExportBundleRequest_Closures{Closures: &pantherclawv1.BundleClosures{Ids: closures}}
+	case byRange:
 		req.Selection = &pantherclawv1.ExportBundleRequest_Range{Range: &pantherclawv1.BundleRange{FromSeq: *from, ToSeq: *to}}
-	} else {
+	default:
 		req.Selection = &pantherclawv1.ExportBundleRequest_Transactions{Transactions: &pantherclawv1.BundleTransactions{Ids: txns}}
 	}
 	if *previous != "" {

@@ -116,6 +116,16 @@ tasks:
         PC_TEST_MOCK_OIDC_URL="${PC_TEST_MOCK_OIDC_URL:-http://127.0.0.1:8181}"
         go test -tags "integration sandbox" -count=1 -timeout 60m -run TestE2E_M9_ ./test/e2e/{{end}}
 
+  test:preview:
+    desc: The v0.1.0 preview demo, three routes and three stops, in one real sandbox (needs Docker ≥ 28 and the test cluster of task up PROFILE=test; build the images the test asks for with task sandbox:images)
+    dotenv: ["deploy/compose/.env"]
+    cmds:
+      - >-
+        PC_TEST_SANDBOX=1 PC_TEST_REQUIRE_DB=1
+        PC_TEST_PG_ADMIN_URL="postgres://postgres:${PC_PG_TEST_PASSWORD}@127.0.0.1:5433/postgres?sslmode=disable"
+        PC_TEST_MOCK_OIDC_URL="${PC_TEST_MOCK_OIDC_URL:-http://127.0.0.1:8181}"
+        go test -tags "integration sandbox" -count=1 -timeout 30m -run '^TestE2E_Preview_' ./test/e2e/
+
   range:
     desc: The adversarial range (G0 M12, HR-226; EX-004 local gate) - every redteam/scenarios/*.yaml against the simulators on the test cluster (start it with `task up PROFILE=test`; SANDBOX=1 adds the sandbox scenarios and needs Docker; SCENARIO=RT-008 runs one)
     dotenv: ["deploy/compose/.env"]
@@ -129,15 +139,16 @@ tasks:
         -run 'TestRange_Scenarios{{if .SCENARIO}}/{{.SCENARIO}}{{end}}' ./test/e2e/
 
   sandbox:images:
-    desc: Build the sandbox's edge and probe images locally (static Linux builds on the pinned distroless base) and print their ids, which pclaw's sandbox.images settings name (G0 M9)
+    desc: Build the sandbox's edge, probe and demo-agent images locally (static Linux builds on the pinned distroless base) and print their ids, which pclaw's sandbox.images settings name (G0 M9)
     env:
       CGO_ENABLED: "0"
       GOOS: linux
     cmds:
-      - go build -trimpath -o bin/sandbox/ ./cmd/pantherclaw-edge ./cmd/pantherclaw-probe
+      - go build -trimpath -o bin/sandbox/ ./cmd/pantherclaw-edge ./cmd/pantherclaw-probe ./cmd/pantherclaw-demo-agent
       - mkdir -p bin/sandbox/workspace
       - echo "edge  $(docker build --quiet --pull=false --network none --file deploy/sandbox/edge.Dockerfile bin/sandbox)"
       - echo "probe $(docker build --quiet --pull=false --network none --file deploy/sandbox/probe.Dockerfile bin/sandbox)"
+      - echo "pantherclaw-demo-agent $(docker build --quiet --pull=false --network none --file deploy/sandbox/demo-agent.Dockerfile bin/sandbox)"
 
   test:linux:
     desc: Run race-enabled tests inside a pinned Linux container (use on Windows)

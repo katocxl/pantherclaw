@@ -10,6 +10,7 @@ import (
 	"encoding/hex"
 	"encoding/json/v2"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 	"time"
@@ -86,12 +87,8 @@ func VerifyPack(raw []byte, o Options) *Report {
 		r.add("pack.statement", subject, Passed, "%s", want)
 		r.Limits = Limits + " " + want
 	}
-	if m.Scope.Kind == pack.ScopeRange {
-		verifyRange(r, m, files)
-	}
-	for _, g := range m.Gaps {
-		r.add("pack.gap", truncate(g.Subject), NotAvailable, "%s: %s", g.Reason, truncate(g.Detail))
-	}
+	var emit []func()
+	runs := map[string]verifiedRun{}
 	for _, it := range m.Items {
 		if it.Kind != pack.KindBundle {
 			continue
@@ -102,17 +99,31 @@ func VerifyPack(raw []byte, o Options) *Report {
 		}
 		b, err := Decode(data)
 		if err != nil {
-			r.add("pack.bundle", it.Path, Failed, "%v", err)
+			emit = append(emit, func() { r.add("pack.bundle", it.Path, Failed, "%v", err) })
 			continue
 		}
 		if b.Org != m.Org {
-			r.add("pack.bundle", it.Path, Failed, "the bundle is of org %s, not the pack's", truncate(b.Org))
+			emit = append(emit, func() {
+				r.add("pack.bundle", it.Path, Failed, "the bundle is of org %s, not the pack's", truncate(b.Org))
+			})
 			continue
 		}
 		inner := Verify(b, o)
-		for _, c := range inner.Checks {
-			r.add(c.Name, strings.TrimSpace(it.Path+" "+c.Subject), c.Status, "%s", c.Detail)
-		}
+		maps.Copy(runs, inner.runs)
+		emit = append(emit, func() {
+			for _, c := range inner.Checks {
+				r.add(c.Name, strings.TrimSpace(it.Path+" "+c.Subject), c.Status, "%s", c.Detail)
+			}
+		})
+	}
+	if m.Scope.Kind == pack.ScopeRange {
+		verifyRange(r, m, files, runs)
+	}
+	for _, g := range m.Gaps {
+		r.add("pack.gap", truncate(g.Subject), NotAvailable, "%s: %s", g.Reason, truncate(g.Detail))
+	}
+	for _, f := range emit {
+		f()
 	}
 	return r
 }

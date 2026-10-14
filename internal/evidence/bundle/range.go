@@ -19,7 +19,7 @@ import (
 // receipt (or its effect state), so a report cannot say more than the
 // receipts do. Steps the runner observed are listed as such: the pack
 // cannot confirm them.
-func verifyRange(r *Report, m *pack.Manifest, files map[string][]byte) {
+func verifyRange(r *Report, m *pack.Manifest, files map[string][]byte, runs map[string]verifiedRun) {
 	subject := "range " + m.Scope.Range
 	var item *pack.Item
 	for i := range m.Items {
@@ -67,8 +67,10 @@ func verifyRange(r *Report, m *pack.Manifest, files map[string][]byte) {
 				clientSteps++
 			case st.Transaction != "":
 				verifyStep(r, sc.ID, st, receipts[st.Transaction])
+			case st.Probe != "":
+				verifyProbeStep(r, m, a, sc.ID, st, runs)
 			default:
-				r.add("range.step", sc.ID+" "+st.ID, NotAvailable, "observed by the server from a probe report; the pack does not carry the probe records")
+				r.add("range.step", sc.ID+" "+st.ID, NotAvailable, "observed by the server, but it cites no transaction or probe report to re-derive it from")
 			}
 		}
 	}
@@ -306,4 +308,44 @@ func verifyStep(r *Report, scenario string, st pack.AssuranceStep, t *txnReceipt
 		return
 	}
 	r.add("range.step", subject, Passed, "matches the decision receipt: %s", got.Observed.Outcome)
+}
+
+// verifyProbeStep re-derives a server-observed step from the probe report
+// it cites (HR-224, HR-227): the report must have verified against a
+// sandbox.closure entry of the pack's bundles (its signature, digest and
+// session), be of the range's agent, and hold the result the step names;
+// BLOCKED when that was blocked, ALLOW when it got through. The report
+// missing from the pack is a failure, unless the manifest lists it as a gap.
+func verifyProbeStep(r *Report, m *pack.Manifest, a *pack.Assurance, scenario string, st pack.AssuranceStep, runs map[string]verifiedRun) {
+	subject := scenario + " " + st.ID
+	run, ok := runs[st.Probe]
+	if !ok {
+		for _, g := range m.Gaps {
+			if g.Subject == "probe report "+st.Probe {
+				r.add("range.step", subject, NotAvailable, "%s: %s", g.Reason, truncate(g.Detail))
+				r.notFull = true
+				return
+			}
+		}
+		r.add("range.step", subject, Failed, "it cites probe report %s, which no verified sandbox closure in the pack records", truncate(st.Probe))
+		return
+	}
+	if run.agent != a.Agent {
+		r.add("range.step", subject, Failed, "the probe report is of agent %s, not the range agent", truncate(run.agent))
+		return
+	}
+	results := map[string]string{}
+	for _, res := range run.report.Results {
+		results[res.Name] = res.Observed
+	}
+	got, ok := domain.ProbeRecord{Results: results}.Observe(st.ProbeKind)
+	rec := domain.Expect(st.Observed)
+	switch {
+	case !ok:
+		r.add("range.step", subject, Failed, "the signed probe report has no usable result %q", truncate(st.ProbeKind))
+	case got.Observed.Outcome != rec.Outcome:
+		r.add("range.step", subject, Failed, "the report says %s, the signed probe report says %s", rec.Outcome, got.Observed.Outcome)
+	default:
+		r.add("range.step", subject, Passed, "matches the signed probe report: %s %s", st.ProbeKind, got.Observed.Outcome)
+	}
 }
