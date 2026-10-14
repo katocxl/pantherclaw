@@ -106,3 +106,14 @@ func TestHR228_TheRelayClosesWithTheSession(t *testing.T) {
 		t.Fatal("the listener survived the relay")
 	}
 }
+
+// TestHR228_TheRelayRefusesAllInterfaces: an unspecified or non-IPv4 bind
+// address is refused by the relay itself.
+func TestHR228_TheRelayRefusesAllInterfaces(t *testing.T) {
+	for _, bind := range []string{"0.0.0.0", "", "::", "localhost", "::1"} {
+		if r, err := relay.Listen(t.Context(), bind, "127.0.0.1:1", nil); err == nil {
+			_ = r.Close()
+			t.Errorf("bound %q", bind)
+		}
+	}
+}

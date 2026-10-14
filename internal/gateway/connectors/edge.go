@@ -103,10 +103,7 @@ func (s *Supervisor) startEdge(ctx context.Context, id, short string, egressConn
 		// may be given one (HR-228): the edge reaches the egress listener
 		// through a relay on the host's address on its uplink network, which
 		// takes this edge's connections only.
-		if len(upInfo.IPAM.Config) == 0 || upInfo.IPAM.Config[0].Gateway == "" {
-			return m, errors.New("connectors: the uplink network has no gateway address")
-		}
-		if m.relay, err = relay.Listen(ctx, upInfo.IPAM.Config[0].Gateway, s.cfg.EgressListen, s.log); err != nil {
+		if m.relay, err = s.openRelay(ctx, upInfo); err != nil {
 			return m, err
 		}
 		egressAddr = m.relay.Addr()
@@ -137,15 +134,9 @@ func (s *Supervisor) startEdge(ctx context.Context, id, short string, egressConn
 		return m, err
 	}
 	if m.relay != nil {
-		started, err := s.c.InspectContainer(ctx, name)
-		if err != nil {
+		if err := s.allowEdge(ctx, m.relay, name, uplink); err != nil {
 			return m, err
 		}
-		ip, err := netip.ParseAddr(started.Address(uplink))
-		if err != nil {
-			return m, fmt.Errorf("connectors: the edge has no address on its uplink network: %w", err)
-		}
-		m.relay.Allow(ip)
 	}
 	ready, err := s.waitReady(ctx, name)
 	if err != nil {
@@ -218,4 +209,28 @@ func (m mediated) cleanup() {
 	if m.dir != "" {
 		_ = os.RemoveAll(m.dir)
 	}
+}
+
+// openRelay opens the relay from the uplink network's gateway address to the
+// egress listener (HR-228).
+func (s *Supervisor) openRelay(ctx context.Context, uplink docker.NetworkInfo) (*relay.Relay, error) {
+	if len(uplink.IPAM.Config) == 0 || uplink.IPAM.Config[0].Gateway == "" {
+		return nil, errors.New("connectors: the uplink network has no gateway address")
+	}
+	return relay.Listen(ctx, uplink.IPAM.Config[0].Gateway, s.cfg.EgressListen, s.log)
+}
+
+// allowEdge names the started edge's address on its uplink network as the
+// only source the relay takes.
+func (s *Supervisor) allowEdge(ctx context.Context, r *relay.Relay, edge, uplink string) error {
+	started, err := s.c.InspectContainer(ctx, edge)
+	if err != nil {
+		return err
+	}
+	ip, err := netip.ParseAddr(started.Address(uplink))
+	if err != nil {
+		return fmt.Errorf("connectors: the edge has no address on its uplink network: %w", err)
+	}
+	r.Allow(ip)
+	return nil
 }

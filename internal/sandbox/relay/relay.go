@@ -24,6 +24,11 @@ import (
 // dialTimeout bounds the connection to the service.
 const dialTimeout = 10 * time.Second
 
+// maxConns caps the connections relayed at once; a further one is refused and
+// logged. There is no idle timeout on purpose: an edge's streams to the
+// gateway can be long-lived, and the edge is the only source.
+const maxConns = 256
+
 // Relay is one listener, closed with its session.
 type Relay struct {
 	ln     net.Listener
@@ -33,6 +38,8 @@ type Relay struct {
 	mu      sync.Mutex
 	allowed netip.Addr
 	conns   map[net.Conn]struct{}
+	active  int
+	limit   int
 	closed  bool
 	wg      sync.WaitGroup
 }
@@ -45,14 +52,15 @@ func Listen(ctx context.Context, bind, target string, log *slog.Logger) (*Relay,
 		log = slog.New(slog.DiscardHandler)
 	}
 	ip, err := netip.ParseAddr(bind)
-	if err != nil || !ip.Is4() {
-		return nil, errors.New("relay: bind must be an IPv4 address")
+	if err != nil || !ip.Is4() || ip.IsUnspecified() {
+		// Never all interfaces (HR-228): the caller names the host's address on one network.
+		return nil, errors.New("relay: bind must be one IPv4 address, not an unspecified one")
 	}
 	ln, err := (&net.ListenConfig{}).Listen(ctx, "tcp4", net.JoinHostPort(bind, "0"))
 	if err != nil {
 		return nil, err
 	}
-	r := &Relay{ln: ln, target: target, log: log, conns: map[net.Conn]struct{}{}}
+	r := &Relay{ln: ln, target: target, log: log, conns: map[net.Conn]struct{}{}, limit: maxConns}
 	r.wg.Add(1)
 	go r.accept()
 	return r, nil
@@ -119,13 +127,23 @@ func (r *Relay) admit(c net.Conn) bool {
 		r.log.Warn("relay.refused", slog.String("from", c.RemoteAddr().String()))
 		return false
 	}
+	if r.active >= r.limit {
+		r.log.Warn("relay.full", slog.String("from", c.RemoteAddr().String()), slog.Int("limit", r.limit))
+		return false
+	}
+	r.active++
 	r.conns[c] = struct{}{}
 	return true
 }
 
 func (r *Relay) serve(in net.Conn) {
 	defer r.wg.Done()
-	defer r.forget(in)
+	defer func() {
+		r.forget(in)
+		r.mu.Lock()
+		r.active--
+		r.mu.Unlock()
+	}()
 	out, err := (&net.Dialer{Timeout: dialTimeout}).Dial("tcp", r.target)
 	if err != nil {
 		r.log.Warn("relay.unreachable", slog.String("error", err.Error()))
