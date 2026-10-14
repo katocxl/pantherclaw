@@ -11,6 +11,7 @@
 #   tools/scripts/demo.sh down     stop the processes (data, secrets and the database stay)
 #   tools/scripts/demo.sh status   show each process and the server's readiness
 #   tools/scripts/demo.sh age      DEVELOPMENT ONLY: backdate the demo org so approvals count (quickstart step 8)
+#   tools/scripts/demo.sh link-github EMAIL LOGIN   DEVELOPMENT ONLY: link a demo person to a GitHub login (quickstart step 9)
 #
 # Run it through `task demo:up`, `task demo:down` and `task demo:status`.
 # Works in Git Bash on Windows, and on Linux and macOS. State lives under
@@ -302,21 +303,68 @@ down() {
   say "The database, Keycloak and $SECRETS stay. 'task down PROFILE=core' stops the containers."
 }
 
-# age backdates the demo org's people, role bindings and security keys by 30
-# days. Approvals count only from accounts, roles and keys of a minimum age
-# (G0 M5 part 2, decision 5), which an org may lengthen but never shorten, so a
-# fresh demo cannot be approved within minutes. DEVELOPMENT ONLY: this edits
-# the demo org's rows directly, as the end-to-end tests do.
-age() {
+# demo_sql runs SQL (on stdin) against the demo database, as its owner. It
+# refuses unless the database is on this machine and the configuration is the
+# one `demo.sh up` wrote: these shortcuts are raw SQL, for the local demo only.
+demo_sql() {
+  [ -f "$DEMO/env.sh" ] && [ -f "$DEMO/server.json" ] && [ -f "$DEMO/seed.done" ] || die "run 'task demo:up' first"
   # shellcheck disable=SC1091
   . "$DEMO/env.sh"
   [ -n "${DEMO_ORG:-}" ] || die "run 'task demo:up' first"
-  docker compose -f deploy/compose/compose.yaml exec -T postgres psql -v ON_ERROR_STOP=1 -q -U pc_owner -d pantherclaw << SQL
+  grep -q '"host": "127.0.0.1"' "$DEMO/server.json" || die "the demo configuration does not use a local database; refusing"
+  case "$(cat "$SECRETS/admin.url" 2> /dev/null)" in
+    postgres://*@127.0.0.1:* | postgres://*@localhost:*) ;;
+    *) die "the database URL in $SECRETS/admin.url is not local; refusing" ;;
+  esac
+  docker compose -f deploy/compose/compose.yaml exec -T postgres psql -v ON_ERROR_STOP=1 -q -U pc_owner -d pantherclaw "$@"
+}
+
+# age backdates the demo org's people, role bindings and security keys by 30
+# days. Approvals count only from accounts, roles and keys of a minimum age
+# (G0 M5 part 2, decision 5), which a real org may lengthen but never shorten.
+# This simulates a week-old org so that a fresh demo can be approved within
+# minutes. DEVELOPMENT ONLY: it edits the demo org's rows directly, as the
+# end-to-end tests do.
+age() {
+  demo_sql << SQL
 UPDATE pc.users SET created_at = now() - interval '30 days' WHERE org_id = '$DEMO_ORG';
 UPDATE pc.role_bindings SET created_at = now() - interval '30 days' WHERE org_id = '$DEMO_ORG';
 UPDATE pc.webauthn_credentials SET created_at = now() - interval '30 days' WHERE org_id = '$DEMO_ORG';
 SQL
   say "  people, roles and security keys of the demo org are now 30 days old"
+}
+
+# github_account_id mirrors the GitHub simulator's id for a login
+# (internal/sim/github AccountID): n = 1000; n = n*31 + byte; n mod 1e9 + 1.
+github_account_id() {
+  local login=$1 n=1000 i c
+  for ((i = 0; i < ${#login}; i++)); do
+    printf -v c '%d' "'${login:i:1}"
+    n=$((n * 31 + c)) # wraps like uint64; fixed up below
+  done
+  local m=$((n % 1000000000))
+  if ((n < 0)); then m=$(((m + 1000000000 + 709551616) % 1000000000)); fi # 2^64 mod 1e9: n wrapped past 2^63
+  echo $((m + 1))
+}
+
+# link_github links a person of the demo org to a GitHub login, as `pclaw github
+# link` would after the person signed in to GitHub. The simulator's command
+# line has no sign-in App, so the demo links the reviewer directly.
+link_github() {
+  local who=${1:-} login=${2:-} gid
+  [ -n "$who" ] && [ -n "$login" ] || die "usage: demo.sh link-github <person email or subject> <github login>"
+  [[ $who =~ ^[A-Za-z0-9._@+-]+$ ]] || die "the person must be an email or a subject (letters, digits and . _ @ + -)"
+  [[ $login =~ ^[A-Za-z0-9-]+$ ]] || die "the GitHub login must be letters, digits and -"
+  gid=$(github_account_id "$login")
+  demo_sql << SQL
+INSERT INTO pc.github_identities (org_id, id, user_id, github_login, github_user_id, linked_by, verified_at)
+  SELECT '$DEMO_ORG', gen_random_uuid(), u.id, '$login', $gid, 'demo', now()
+  FROM pc.users u WHERE u.org_id = '$DEMO_ORG' AND (u.email = '$who' OR u.subject = '$who') LIMIT 1;
+INSERT INTO pc.github_identity_history (org_id, github_user_id, user_id)
+  SELECT '$DEMO_ORG', $gid, u.id FROM pc.users u WHERE u.org_id = '$DEMO_ORG' AND (u.email = '$who' OR u.subject = '$who') LIMIT 1
+  ON CONFLICT DO NOTHING;
+SQL
+  say "  linked $who to GitHub login $login (id $gid) in the demo org, if that person exists"
 }
 
 status() {
@@ -334,5 +382,6 @@ case "${1:-}" in
   down) down ;;
   status) status ;;
   age) age ;;
-  *) die "usage: demo.sh up|down|status|age" ;;
+  link-github) shift; link_github "$@" ;;
+  *) die "usage: demo.sh up|down|status|age|link-github" ;;
 esac

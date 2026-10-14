@@ -134,8 +134,8 @@ Expected: the repository operations the run used show `ENFORCED`, with an expiry
 ## 9. Guided tests: one allowed, one held, one blocked
 
 1. **Held.** A merge without a reviewer. Raw `curl` from the sandbox and the GitHub MCP server give the same action and the same decision (F099). The request waits for an approver. Open the approval page (`pclaw approval list --waiting-for-me`, then `pclaw approval approve <id>`), check the binding hash, and approve with your security key.
-   - Approvals count only from people, roles and keys of a minimum age (G0 M5 part 2, decision 5), which a fresh demo does not have. For the demo only, `bash tools/scripts/demo.sh age` backdates the demo organization by 30 days (DEVELOPMENT ONLY).
-   - A reviewer of a GitHub merge must also have linked a GitHub account (`pclaw github link`), which the simulator's command line does not support yet.
+   - Approvals count only from people, roles and keys of a minimum age (G0 M5 part 2, decision 5), which real orgs cannot shorten. For the demo only, `bash tools/scripts/demo.sh age` backdates the demo organization by 30 days. This simulates a week-old org, by editing the local demo database directly.
+   - A reviewer of a GitHub merge must also have linked a GitHub account. The simulator's command line has no sign-in App, so `bash tools/scripts/demo.sh link-github bob@example.test reviewer-bob` links the reviewer directly (also raw SQL on the local demo database, which both commands refuse to touch unless it is local). Real orgs link with `pclaw github link` and keep the cooldowns.
 2. **Blocked.** A push with the personal access token the agent found in its workspace. The sandbox holds no reusable credential and its egress is closed: the push fails, and the probe evidence in step 7 shows the route closed.
 3. **Allowed.** Reading a file, creating a branch, opening a pull request.
 
