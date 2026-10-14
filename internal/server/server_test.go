@@ -146,6 +146,7 @@ func TestHR163_DevSeedNeedsALocalDatabase(t *testing.T) {
 	for host, local := range map[string]bool{
 		"127.0.0.1": true, "localhost": true, "::1": true, "/var/run/postgresql": true,
 		"db.example.com": false, "10.0.0.5": false, "": false, "0.0.0.0": false,
+		"127.0.0.1,localhost": true, "/var/run/postgresql,db.example.com": false, "127.0.0.1,": false,
 	} {
 		if err := localDatabase(host); (err == nil) != local {
 			t.Errorf("%q: %v, want local=%v", host, err, local)
