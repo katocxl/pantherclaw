@@ -242,7 +242,7 @@ func redteamRun(ctx context.Context, a *app, args []string) error {
 	if base != nil && uuidRe.MatchString(base.rangeID) {
 		start.BaselineRangeId = base.rangeID
 	}
-	grantID, err := checkRangeGrant(ctx, c, inst.Agent.String(), set)
+	grantID, grantNotes, err := checkRangeGrant(ctx, c, inst.Agent.String(), set)
 	if err != nil {
 		return failExit("%v", err)
 	}
@@ -277,7 +277,7 @@ func redteamRun(ctx context.Context, a *app, args []string) error {
 		cmp = &c
 	}
 	sum := newSummary(rangeID, fin.GetRange(), set, results, cmp)
-	sum.Notes = driver.Notes()
+	sum.Notes = append(append([]string(nil), grantNotes...), driver.Notes()...)
 	if base != nil {
 		sum.Baseline = fmt.Sprintf("range %s, finished %s, %d scenarios", base.rangeID, base.finished, len(base.entries))
 	}
@@ -720,11 +720,11 @@ const minGrantRemaining = 15 * time.Minute
 // enough delegations left for the agent.child steps of the selected scenarios
 // (a grant delegates to at most grants/domain.MaxChildrenTotal children in its
 // life). Every scenario runs in a root run bound to this grant (D41).
-func checkRangeGrant(ctx context.Context, c clients, agent string, set []rtapp.Loaded) (string, error) {
+func checkRangeGrant(ctx context.Context, c clients, agent string, set []rtapp.Loaded) (string, []string, error) {
 	const reissue = "re-issue the range grant with pclaw redteam setup"
 	gs, err := c.grants.ListGrants(ctx, &pantherclawv1.ListGrantsRequest{PageSize: 200, AgentId: &agent, State: pantherclawv1.GrantState_GRANT_STATE_ACTIVE})
 	if err != nil {
-		return "", fmt.Errorf("reading the range agent's grants (a range needs grant.read to find its root grant): %w", err)
+		return "", nil, fmt.Errorf("reading the range agent's grants (a range needs grant.read to find its root grant): %w", err)
 	}
 	var root *pantherclawv1.Grant
 	for _, g := range gs.GetGrants() {
@@ -734,10 +734,11 @@ func checkRangeGrant(ctx context.Context, c clients, agent string, set []rtapp.L
 		}
 	}
 	if root == nil {
-		return "", fmt.Errorf("the range agent has no active grant; %s", reissue)
+		return "", nil, fmt.Errorf("the range agent has no active grant; %s", reissue)
 	}
+	notes := []string{fmt.Sprintf("range grant: delegation depth %d (setup gives the range grant max(real+1, 2), capped at 4)", root.GetDelegation().GetDepth())}
 	if exp := root.GetExpireTime(); exp != nil && time.Until(exp.AsTime()) < minGrantRemaining {
-		return "", fmt.Errorf("the range grant expires at %s, within the range; %s", exp.AsTime().Format(time.RFC3339), reissue)
+		return "", nil, fmt.Errorf("the range grant expires at %s, within the range; %s", exp.AsTime().Format(time.RFC3339), reissue)
 	}
 	need := 0
 	for _, l := range set {
@@ -748,13 +749,13 @@ func checkRangeGrant(ctx context.Context, c clients, agent string, set []rtapp.L
 		}
 	}
 	if need == 0 {
-		return root.GetId(), nil
+		return root.GetId(), notes, nil
 	}
 	used, tok := 0, ""
 	for range maxSetupPages {
 		kids, err := c.grants.ListGrants(ctx, &pantherclawv1.ListGrantsRequest{PageSize: 200, PageToken: tok, ParentGrantId: proto.String(root.GetId())})
 		if err != nil {
-			return "", fmt.Errorf("counting the range grant's delegations: %w", err)
+			return "", nil, fmt.Errorf("counting the range grant's delegations: %w", err)
 		}
 		used += len(kids.GetGrants())
 		if tok = kids.GetNextPageToken(); tok == "" {
@@ -762,7 +763,7 @@ func checkRangeGrant(ctx context.Context, c clients, agent string, set []rtapp.L
 		}
 	}
 	if left := grantsdomain.MaxChildrenTotal - used; left < need {
-		return "", fmt.Errorf("the range grant has %d of %d delegations left and the range's agent.child steps need %d; %s", left, grantsdomain.MaxChildrenTotal, need, reissue)
+		return "", nil, fmt.Errorf("the range grant has %d of %d delegations left and the range's agent.child steps need %d; %s", left, grantsdomain.MaxChildrenTotal, need, reissue)
 	}
-	return root.GetId(), nil
+	return root.GetId(), notes, nil
 }

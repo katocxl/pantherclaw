@@ -282,7 +282,7 @@ const maxGrantDepth = 4
 // it: scenarios run in runs of their own, not in delegated children.
 func rangeDelegation(like *pantherclawv1.GrantDelegation) *pantherclawv1.GrantDelegation {
 	return &pantherclawv1.GrantDelegation{
-		Depth:       int32(min(max(like.GetDepth()+1, minRangeDepth), maxGrantDepth)),
+		Depth:       min(max(like.GetDepth()+1, minRangeDepth), maxGrantDepth),
 		MaxChildren: like.GetMaxChildren(),
 	}
 }

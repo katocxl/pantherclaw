@@ -878,7 +878,7 @@ func (f *fakeGrants) ListGrants(_ context.Context, r *pantherclawv1.ListGrantsRe
 	if f.noRoot {
 		return &pantherclawv1.ListGrantsResponse{}, nil
 	}
-	root := &pantherclawv1.Grant{Id: "root-grant", AgentId: r.GetAgentId(), ExpireTime: timestamppb.New(time.Now().Add(24 * time.Hour))}
+	root := &pantherclawv1.Grant{Id: "root-grant", AgentId: r.GetAgentId(), Delegation: &pantherclawv1.GrantDelegation{Depth: 3}, ExpireTime: timestamppb.New(time.Now().Add(24 * time.Hour))}
 	if f.expiresSoon {
 		root.ExpireTime = timestamppb.New(time.Now().Add(5 * time.Minute))
 	}
@@ -944,8 +944,16 @@ func TestD41RunChecksTheRangeGrantBeforeStarting(t *testing.T) {
 
 func TestD41ScenarioRunsNeedNoDelegationInSetup(t *testing.T) {
 	re := newRangeEnv(t)
-	if code, out, errs := re.run(t); code != 0 {
+	code, out, errs := re.run(t)
+	if code != 0 {
 		t.Fatalf("run = %d\n%s\n%s", code, out, errs)
+	}
+	if !strings.Contains(out, "Note: range grant: delegation depth 3 (setup gives the range grant max(real+1, 2), capped at 4)") {
+		t.Errorf("no note about the range grant's delegation depth\n%s", out)
+	}
+	b, err := os.ReadFile(filepath.Join(re.outDir, "0", "summary-"+rtRange+".json"))
+	if err != nil || !strings.Contains(string(b), "range grant: delegation depth 3") {
+		t.Errorf("summary %q %v", b, err)
 	}
 	if n := len(re.fakeRun.delegated); n != 0 {
 		t.Fatalf("%d delegations for a scenario with no agent.child step", n)
