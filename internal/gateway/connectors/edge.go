@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/netip"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -20,6 +21,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/gateway/control"
 	"github.com/katocxl/pantherclaw/internal/sandbox/docker"
 	"github.com/katocxl/pantherclaw/internal/sandbox/edge"
+	"github.com/katocxl/pantherclaw/internal/sandbox/relay"
 )
 
 // Paths and users of a connector's edge.
@@ -46,7 +48,10 @@ var caEnv = []string{"SSL_CERT_FILE", "CURL_CA_BUNDLE", "REQUESTS_CA_BUNDLE", "N
 type mediated struct {
 	dir, binding string
 	// renew is when the edge's CA nears its end.
-	renew  time.Time
+	renew time.Time
+	// relay is the connector edge's path to the egress listener on a native
+	// Linux engine (HR-228); closed with the connector.
+	relay  *relay.Relay
 	env    []string
 	mounts []docker.Mount
 }
@@ -57,7 +62,7 @@ type mediated struct {
 func (s *Supervisor) startEdge(ctx context.Context, id, short string, egressConn *control.Connection, internal string,
 	labels map[string]string,
 ) (mediated, error) {
-	if s.cfg.EdgeImage == "" || s.cfg.EgressListen == "" || s.cfg.EgressAddr == "" {
+	if s.cfg.EdgeImage == "" || s.cfg.EgressListen == "" || (s.cfg.EgressAddr == "" && !s.engine.UsesRelay()) {
 		return mediated{}, errors.New("connectors: a connector with egress needs connectors.edge_image, egress_listen and egress_addr")
 	}
 	dir, err := os.MkdirTemp("", "pc-connector-")
@@ -88,12 +93,27 @@ func (s *Supervisor) startEdge(ctx context.Context, id, short string, egressConn
 	if err != nil {
 		return m, err
 	}
-	if _, err := s.c.CreateNetwork(ctx, docker.Network{Name: uplink, Labels: labels}); err != nil {
+	upInfo, err := s.c.CreateNetwork(ctx, docker.Network{Name: uplink, Labels: labels})
+	if err != nil {
 		return m, err
+	}
+	egressAddr := s.cfg.EgressAddr
+	if s.engine.UsesRelay() {
+		// A native Linux engine has no host.docker.internal and no container
+		// may be given one (HR-228): the edge reaches the egress listener
+		// through a relay on the host's address on its uplink network, which
+		// takes this edge's connections only.
+		if len(upInfo.IPAM.Config) == 0 || upInfo.IPAM.Config[0].Gateway == "" {
+			return m, errors.New("connectors: the uplink network has no gateway address")
+		}
+		if m.relay, err = relay.Listen(ctx, upInfo.IPAM.Config[0].Gateway, s.cfg.EgressListen, s.log); err != nil {
+			return m, err
+		}
+		egressAddr = m.relay.Addr()
 	}
 	cfg, err := json.Marshal(edge.Config{
 		Format: edge.ConfigFormat, Mode: edge.ModeConnector, Session: id, Listen: ":" + edgePort, Subnet: info.Subnet(),
-		GatewayURL: "http://" + s.cfg.EgressAddr, Hosts: hosts, BindingFile: bindingDir + "/binding", Placeholder: Placeholder,
+		GatewayURL: "http://" + egressAddr, Hosts: hosts, BindingFile: bindingDir + "/binding", Placeholder: Placeholder,
 		CAValiditySeconds: int64(edgeCAValidity / time.Second),
 	})
 	if err != nil {
@@ -115,6 +135,17 @@ func (s *Supervisor) startEdge(ctx context.Context, id, short string, egressConn
 	}
 	if err := s.c.Start(ctx, name); err != nil {
 		return m, err
+	}
+	if m.relay != nil {
+		started, err := s.c.InspectContainer(ctx, name)
+		if err != nil {
+			return m, err
+		}
+		ip, err := netip.ParseAddr(started.Address(uplink))
+		if err != nil {
+			return m, fmt.Errorf("connectors: the edge has no address on its uplink network: %w", err)
+		}
+		m.relay.Allow(ip)
 	}
 	ready, err := s.waitReady(ctx, name)
 	if err != nil {
@@ -175,5 +206,16 @@ func (s *Supervisor) waitReady(ctx context.Context, name string) (edge.Ready, er
 			return edge.Ready{}, fmt.Errorf("connectors: the edge %s was not ready within %s", name, readyTimeout)
 		case <-t.C:
 		}
+	}
+}
+
+// cleanup removes the edge's directory and closes its relay, after a start
+// that failed.
+func (m mediated) cleanup() {
+	if m.relay != nil {
+		_ = m.relay.Close()
+	}
+	if m.dir != "" {
+		_ = os.RemoveAll(m.dir)
 	}
 }

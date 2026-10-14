@@ -207,7 +207,7 @@ func sandboxRun(ctx context.Context, a *app, args []string) error {
 	gwPort, _ := strconv.Atoi(gwAddr[strings.LastIndex(gwAddr, ":")+1:])
 	box, err := sandbox.Start(ctx, dc, engine, sandbox.Options{
 		Session: session, EdgeImage: f.edgeImage, ProbeImage: f.probeImage, AgentImage: images[0],
-		GatewayURL: f.gateway, GatewayAddr: gwAddr, Hosts: started.GetAgentHosts(), Connections: f.connections, MappedAddrs: mapped,
+		GatewayURL: f.gateway, GatewayAddr: gwAddr, GatewayDial: gatewayDial(f.gateway, f.gatewayAddr), Hosts: started.GetAgentHosts(), Connections: f.connections, MappedAddrs: mapped,
 		Run: run.GetRun().GetId(), KeyFile: kf, TokenFile: tokenFile, ProbeKey: probeKey, HostKey: hostKey, Canary: cn, CanaryPorts: ports,
 		HostPorts: []int{gwPort}, Dir: dir, BeforeProbe: a.beforeProbe,
 	})
@@ -421,4 +421,26 @@ func printChanges(w io.Writer, out string, changes []workspace.Change) {
 	if len(flagged) > 0 {
 		_, _ = fmt.Fprintf(w, "review before running anything, these dotfiles, editor or task files changed: %s\n", strings.Join(flagged, ", "))
 	}
+}
+
+// gatewayDial is where this host reaches a gateway on this host: the given
+// address, or the URL's own host and port when it is a loopback one; empty
+// otherwise. A native Linux engine's edge reaches it through a relay
+// (HR-228) instead of the address from gatewayAddr.
+func gatewayDial(gateway, given string) string {
+	if given != "" {
+		return given
+	}
+	u, err := url.Parse(gateway)
+	if err != nil || u.Host == "" {
+		return ""
+	}
+	port := u.Port()
+	if port == "" {
+		port = map[string]string{"http": "80", "https": "443"}[u.Scheme]
+	}
+	if ip, err := netip.ParseAddr(u.Hostname()); (err == nil && ip.IsLoopback()) || u.Hostname() == "localhost" {
+		return net.JoinHostPort(u.Hostname(), port)
+	}
+	return ""
 }

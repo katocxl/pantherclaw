@@ -111,7 +111,7 @@ func newRig(t *testing.T, agent bool) *rig {
 	port, _ := strconv.Atoi(gport)
 	r.s, err = sandbox.Start(t.Context(), c, e, sandbox.Options{
 		Session: r.session, EdgeImage: r.edgeImage, ProbeImage: r.probeImage, AgentImage: r.agentImage,
-		GatewayURL: "http://127.0.0.1:" + gport, GatewayAddr: "host.docker.internal:" + gport,
+		GatewayURL: "http://127.0.0.1:" + gport, GatewayAddr: "host.docker.internal:" + gport, GatewayDial: "127.0.0.1:" + gport,
 		Hosts: map[string]string{"payments.example": "payments"}, MappedAddrs: []string{"192.0.2.10"},
 		Run: ids.NewV7().String(), KeyFile: keyFile, TokenFile: filepath.Join(tokens, "token"),
 		ProbeKey: r.probeKey, HostKey: r.hostKey, Canary: cn, CanaryPorts: ports, HostPorts: []int{port}, Dir: dir,
@@ -300,4 +300,34 @@ func TestHR213_TheAgentHasItsWorkspaceAndOnlyTheEdge(t *testing.T) {
 
 func nonce() string {
 	return strings.ReplaceAll(ids.NewV7().String(), "-", "")
+}
+
+// TestHR228_TheAgentCannotReachTheRelay: on a native Linux engine the
+// sandbox network's probe aims at the relay's address and port among the
+// host's, and none of it is reachable from there; the edge, which the relay
+// takes, still reaches the gateway for a mapped host (T086 shows it).
+func TestHR228_TheAgentCannotReachTheRelay(t *testing.T) {
+	r := newRig(t, false)
+	if !r.e.UsesRelay() {
+		t.Skip("Docker Desktop: the edge reaches the host as host.docker.internal")
+	}
+	if r.s.RelayAddr() == "" {
+		t.Fatal("no relay on a native Linux engine")
+	}
+	ev, err := r.s.Probe(t.Context(), sandbox.Nonces{Sandbox: nonce(), Control: nonce(), Canary: nonce()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var host int
+	for _, res := range ev.Results {
+		if res.Name == "host_gateway" && res.Role == report.RoleProbe {
+			host++
+			if res.Observed != report.Blocked {
+				t.Errorf("the sandbox network reached the host: %+v", res)
+			}
+		}
+	}
+	if host == 0 || !strings.Contains(r.s.ProbedHostPorts(), r.s.RelayAddr()[strings.LastIndex(r.s.RelayAddr(), ":")+1:]) {
+		t.Errorf("the relay %s is not among the probed host ports (%s)", r.s.RelayAddr(), r.s.ProbedHostPorts())
+	}
 }
