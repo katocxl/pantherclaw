@@ -108,7 +108,7 @@ func (a *Authority) receipt(gw Gateway, ev *pipeline.Evaluation, txn ids.UUID, e
 		Run: ev.RunID.String(), Action: ev.ActionID.String(), Act: ev.ActionHash, Decision: ev.Decision,
 		Checklist: ev.Checklist, Obligations: ev.Obligations, Approvals: ev.Approvals, StepUps: ev.StepUps,
 		Basis: ev.Basis, BasisDigest: ev.Basis.Digest(), Identity: ev.Identity, Budgets: budgets, Gateway: gw.ID,
-		Monitor: ev.MonitorPermit(), Coverage: claim,
+		Monitor: ev.MonitorPermit(), Coverage: claim, Simulated: ev.Simulated,
 	}
 	if would, _, ok := ev.WouldUnknown(); ok {
 		pap.Would = would
@@ -286,7 +286,7 @@ func (a *Authority) executionReceipt(gw Gateway, e Execution, x Executed, now ti
 	pap := map[string]any{
 		"v": 1, "kind": "execution", "org": gw.Org.String(), "txn": txn.String(), "permit": e.Permit.String(),
 		"outcome": string(e.Outcome), "target_status": e.TargetStatus, "response_digest": hex.EncodeToString(e.ResponseDigest),
-		"gateway": gw.ID, "access_mode": x.AccessMode, "simulated": false, "attempt": 1,
+		"gateway": gw.ID, "access_mode": x.AccessMode, "simulated": x.Simulated, "attempt": 1,
 	}
 	if x.Monitor {
 		pap["monitor"] = true // nothing was prevented (HR-184)

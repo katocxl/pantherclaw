@@ -381,6 +381,9 @@ func appendEffect(ctx context.Context, tx db.TenantTx, q *dbq.Queries, e app.Eff
 		return err
 	}
 	e.Seq = int(seq)
+	if e.Simulated, err = q.TransactionSimulated(ctx, e.Org, e.Transaction); err != nil {
+		return err
+	}
 	channel, err := q.TransactionChannel(ctx, e.Org, e.Transaction)
 	if err != nil {
 		return err

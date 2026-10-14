@@ -165,6 +165,9 @@ message WaitlistEntry {
   google.protobuf.Timestamp assign_time = 22;
   // When a decider first responded.
   google.protobuf.Timestamp first_response_time = 23;
+  // Whether the entry's subject is a range run's (G0 M12, HR-222): a console
+  // shows a SIMULATED banner.
+  bool simulated = 24;
 }
 
 // ListWaitlistEntriesRequest pages through entries.

@@ -86,6 +86,26 @@ func idOrEmpty(u ids.UUID) string {
 	return u.String()
 }
 
+// mark sets simulated on the entries whose transaction belongs to a range
+// run (HR-222). A failed read leaves them unmarked: it labels, never decides.
+func (s *Waitlist) mark(ctx context.Context, es ...*pantherclawv1.WaitlistEntry) {
+	var txns []ids.UUID
+	for _, e := range es {
+		if id, err := ids.ParseUUID(e.GetTransactionId()); err == nil {
+			txns = append(txns, id)
+		}
+	}
+	sim, err := s.r.SimulatedTransactions(ctx, txns)
+	if err != nil {
+		return
+	}
+	for _, e := range es {
+		if id, err := ids.ParseUUID(e.GetTransactionId()); err == nil {
+			e.Simulated = sim[id]
+		}
+	}
+}
+
 func entryProto(e app.Entry) *pantherclawv1.WaitlistEntry {
 	return &pantherclawv1.WaitlistEntry{
 		Id: e.ID.String(), Kind: pantherclawv1.WaitlistKind(pantherclawv1.WaitlistKind_value["WAITLIST_KIND_"+e.Kind]),
@@ -141,6 +161,7 @@ func (s *Waitlist) ListWaitlistEntries(ctx context.Context, req *pantherclawv1.L
 	for _, e := range p.Items {
 		out.Entries = append(out.Entries, entryProto(e))
 	}
+	s.mark(ctx, out.Entries...)
 	for _, b := range p.Scopes {
 		out.CheckedScopes = append(out.CheckedScopes, scope(b))
 	}
@@ -157,7 +178,9 @@ func (s *Waitlist) GetWaitlistEntry(ctx context.Context, req *pantherclawv1.GetW
 	if err != nil {
 		return nil, err
 	}
-	return &pantherclawv1.GetWaitlistEntryResponse{Entry: entryProto(e)}, nil
+	p := entryProto(e)
+	s.mark(ctx, p)
+	return &pantherclawv1.GetWaitlistEntryResponse{Entry: p}, nil
 }
 
 // AssignWaitlistEntry implements WaitlistServiceHandler.
@@ -173,7 +196,9 @@ func (s *Waitlist) AssignWaitlistEntry(ctx context.Context, req *pantherclawv1.A
 	if err != nil {
 		return nil, err
 	}
-	return &pantherclawv1.AssignWaitlistEntryResponse{Entry: entryProto(e)}, nil
+	p := entryProto(e)
+	s.mark(ctx, p)
+	return &pantherclawv1.AssignWaitlistEntryResponse{Entry: p}, nil
 }
 
 // RequestAccess implements WaitlistServiceHandler.

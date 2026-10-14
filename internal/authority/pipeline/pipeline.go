@@ -35,6 +35,7 @@ const (
 	ReasonRouteUnknown         = "ROUTE_UNKNOWN"
 	ReasonRouteReviewed        = "ROUTE_REVIEWED"
 	ReasonRunMismatch          = "RUN_MISMATCH"
+	ReasonSimulationMismatch   = "SIMULATION_MISMATCH"
 	ReasonRunNotActive         = "RUN_NOT_ACTIVE"
 	ReasonIdentityVerified     = "IDENTITY_VERIFIED"
 	ReasonAgentSuspended       = "AGENT_SUSPENDED"
@@ -82,6 +83,9 @@ type IdentitySummary struct {
 // Evaluation is the result of steps 1–8: the decision before final
 // binding, its explanation, and what the finalization must bind.
 type Evaluation struct {
+	// Simulated is the run's flag (HR-220, HR-120): the decision receipt
+	// carries it.
+	Simulated   bool
 	Decision    adomain.Decision
 	Checklist   []Item
 	Obligations []pdomain.Obligation
@@ -425,6 +429,13 @@ func (p *Pipeline) identity(ctx context.Context, s *state) {
 		return
 	}
 	s.agent = &agent
+	s.ev.Simulated = run.Simulated
+	// HR-220: a simulated run reaches only simulated connections and a real
+	// run only real ones, in both directions. It is a scope failure, so it
+	// leads the checklist; the policy never sees either flag.
+	if s.conn != nil && s.conn.Simulated != run.Simulated {
+		s.cl.add(StepScope, adomain.Deny, ReasonSimulationMismatch, "the run and the connection are not both simulated or both real", "")
+	}
 	if !run.GrantID.IsZero() {
 		p.loadChain(ctx, s)
 	}
@@ -870,7 +881,7 @@ func verdictEffect(v pdomain.Verdict) adomain.Decision {
 // budgets plans every reservation (ancestor debiting, HR-048) and checks it
 // against current usage. The binding reservation is in step 9.
 func (p *Pipeline) budgets(ctx context.Context, s *state) {
-	plan, f := s.chain.Debits(*s.gAction, gdomain.DebitContext{Now: s.cont.Now, RunID: s.ev.RunID, Principal: s.run.Principal, TeamID: s.agent.TeamID})
+	plan, f := s.chain.Debits(*s.gAction, gdomain.DebitContext{Now: s.cont.Now, RunID: s.ev.RunID, Principal: s.run.Principal, TeamID: s.agent.TeamID, Simulated: s.run.Simulated})
 	if f != nil {
 		s.cl.add(StepBoundaries, effectOf(*f), f.Reason(), f.Finding.Detail, f.Level.String())
 		return

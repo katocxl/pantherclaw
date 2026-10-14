@@ -13,6 +13,19 @@ import (
 	"unicode/utf8"
 )
 
+// SimulatedPrefix starts the title of a notice caused by a simulated
+// transaction (HR-222).
+const SimulatedPrefix = "[SIMULATED] "
+
+// SimulatedTitle prefixes a title, cut to MaxTitle characters.
+func SimulatedTitle(t string) string {
+	t = SimulatedPrefix + t
+	if r := []rune(t); len(r) > MaxTitle {
+		t = string(r[:MaxTitle])
+	}
+	return t
+}
+
 // Template renders one notification type (HR-158). Title and Body hold
 // {name} placeholders for declared parameters only; there are no free-text
 // parameters and no agent text, and a message never offers an action: it

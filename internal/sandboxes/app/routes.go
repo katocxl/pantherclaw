@@ -39,7 +39,8 @@ var ErrRoutes = pcerr.New(pcerr.InvalidArgument, "SANDBOX_ROUTES",
 // connection, while the session is open (sandbox.run over the agent). They
 // are untrusted observations that never grant anything (HR-148, G0 M9
 // design decision 11); a first sighting makes coverage recompute the
-// scope. It returns the number of first sightings.
+// scope. It returns the number of first sightings. A session of a range
+// agent, and a simulated connection, record nothing (HR-222).
 func (s *Service) ReportRoutes(ctx context.Context, session ids.UUID, routes []Route) (int, error) {
 	c, err := tenancy.CallerFrom(ctx)
 	if err != nil {
@@ -62,7 +63,8 @@ func (s *Service) ReportRoutes(ctx context.Context, session ids.UUID, routes []R
 		} else if err != nil {
 			return err
 		}
-		if _, err := agentFor(ctx, c, q, sess.AgentID); err != nil {
+		agent, err := agentFor(ctx, c, q, sess.AgentID)
+		if err != nil {
 			return err
 		}
 		if sess.State != "OPEN" || !s.now().Before(sess.ExpiresAt) {
@@ -74,6 +76,16 @@ func (s *Service) ReportRoutes(ctx context.Context, session ids.UUID, routes []R
 		}
 		for _, r := range routes {
 			for _, conn := range conns {
+				// HR-222: a range agent's session, or a simulated
+				// connection, leaves no route behind for coverage.
+				if agent.RangeAgent {
+					continue
+				}
+				if cn, err := q.GetConnection(ctx, c.Org, conn.ConnectionID); err != nil {
+					return err
+				} else if cn.Simulated {
+					continue
+				}
 				first, err := s.Coverage.RecordRoute(ctx, tx, covdomain.ObservedRoute{
 					Agent: sess.AgentID, Connection: conn.ConnectionID, SandboxSession: sess.ID, Kind: covdomain.RouteKind(r.Kind),
 					Locator: r.Locator,

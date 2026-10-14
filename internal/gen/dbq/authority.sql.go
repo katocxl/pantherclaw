@@ -17,7 +17,7 @@ import (
 
 const authorityConnection = `-- name: AuthorityConnection :one
 SELECT c.id, c.gateway_id, c.kind, c.package, c.state, c.access_mode, c.default_mode, c.destination_class,
-       p.version_id AS pinned_version_id
+       c.simulated, p.version_id AS pinned_version_id
 FROM pc.connections c
 LEFT JOIN pc.tool_packages t ON t.org_id = c.org_id AND t.name = c.package
 LEFT JOIN pc.package_pins p ON p.org_id = t.org_id AND p.package_id = t.id
@@ -33,6 +33,7 @@ type AuthorityConnectionRow struct {
 	AccessMode       string
 	DefaultMode      string
 	DestinationClass string
+	Simulated        bool
 	PinnedVersionID  *ids.UUID
 }
 
@@ -51,6 +52,7 @@ func (q *Queries) AuthorityConnection(ctx context.Context, orgID ids.OrgID, iD i
 		&i.AccessMode,
 		&i.DefaultMode,
 		&i.DestinationClass,
+		&i.Simulated,
 		&i.PinnedVersionID,
 	)
 	return i, err
@@ -199,7 +201,7 @@ func (q *Queries) EngageKillSwitch(ctx context.Context, engagedBy string, reason
 
 const executionContext = `-- name: ExecutionContext :one
 SELECT p.mode, p.connection_id, t.channel, c.access_mode, t.id AS transaction_id, t.action_hash, t.effective_hash,
-       p.dispatching_at, p.definition_digest, p.verify_expect, t.target_type, t.target_id, t.effect_level_required
+       p.dispatching_at, p.definition_digest, p.verify_expect, t.target_type, t.target_id, t.effect_level_required, t.simulated
 FROM pc.permits p
 JOIN pc.transactions t ON t.org_id = p.org_id AND t.id = p.transaction_id
 LEFT JOIN pc.connections c ON c.org_id = p.org_id AND c.id = p.connection_id
@@ -220,6 +222,7 @@ type ExecutionContextRow struct {
 	TargetType          *string
 	TargetID            *string
 	EffectLevelRequired *string
+	Simulated           bool
 }
 
 // ExecutionContext is what an execution receipt states about a permit:
@@ -242,6 +245,7 @@ func (q *Queries) ExecutionContext(ctx context.Context, orgID ids.OrgID, iD ids.
 		&i.TargetType,
 		&i.TargetID,
 		&i.EffectLevelRequired,
+		&i.Simulated,
 	)
 	return i, err
 }

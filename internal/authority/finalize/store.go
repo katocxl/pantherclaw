@@ -200,6 +200,8 @@ type Executed struct {
 	Connection  *ids.UUID
 	AccessMode  string
 	Monitor     bool
+	// Simulated: the transaction's run is a range run (HR-120).
+	Simulated bool
 	// EffectiveHash is the hex SHA-256 of the action the permit bound (the
 	// effective one, or the requested one when nothing was clamped);
 	// DispatchedAt is when the permit moved to DISPATCHING (G0 M7, PAP-1
