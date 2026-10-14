@@ -21,7 +21,7 @@ VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(run_id), sqlc.arg(action_id), s
         sqlc.narg(grant_revision), sqlc.narg(basis_digest), sqlc.narg(effective_hash), sqlc.narg(dedupe_key), sqlc.arg(mode),
         sqlc.narg(connection_id), sqlc.narg(channel), sqlc.narg(target_type), sqlc.narg(target_id),
         -- HR-220: a transaction is simulated exactly when its run is.
-        (SELECT r.simulated FROM pc.runs r WHERE r.org_id = sqlc.arg(org_id) AND r.id = sqlc.arg(run_id)));
+        coalesce((SELECT r.simulated FROM pc.runs r WHERE r.org_id = sqlc.arg(org_id) AND r.id = sqlc.arg(run_id)), false));
 
 -- name: UpdateDecision :execresult
 UPDATE pc.transactions

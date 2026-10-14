@@ -130,7 +130,7 @@ VALUES ($1, $2, $3, $4, $5, $6,
         $12, $13, $14, $15, $16,
         $17, $18, $19, $20,
         -- HR-220: a transaction is simulated exactly when its run is.
-        (SELECT r.simulated FROM pc.runs r WHERE r.org_id = $1 AND r.id = $3))
+        coalesce((SELECT r.simulated FROM pc.runs r WHERE r.org_id = $1 AND r.id = $3), false))
 `
 
 type InsertDecisionParams struct {
