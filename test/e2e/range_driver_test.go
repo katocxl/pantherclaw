@@ -64,6 +64,9 @@ type rangeDriver struct {
 
 	// mcpUp is set once the payments connection dispatches to the MCP simulator.
 	mcpUp bool
+
+	// fresh counts the extra pull requests opened.
+	fresh int
 }
 
 type reviewer struct {
@@ -147,7 +150,7 @@ func (d *rangeDriver) Setup(_ context.Context, sc domain.Scenario) (app.Fixture,
 	if sc.ID == "RT-031" {
 		d.seedUnlisted()
 	}
-	if sc.ID == "RT-022" {
+	if sc.ID == "RT-022" || sc.ID == "RT-000" {
 		d.seedReal()
 	}
 	if sc.ID == "RT-009" {

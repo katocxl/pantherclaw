@@ -123,6 +123,11 @@ func (d *rangeDriver) ownGrant(bounds, limits string) {
 // grantRun issues the agent a grant with these bounds and limits and starts a
 // run on it, and returns the run.
 func (d *rangeDriver) grantRun(bounds, limits string) string {
+	return d.grantRunWith(bounds, limits, "")
+}
+
+// grantRunWith is grantRun for a grant that also holds requirements.
+func (d *rangeDriver) grantRunWith(bounds, limits, requirements string) string {
 	t, s := d.t, d.s
 	if d.admin == nil {
 		d.adminOnly()
@@ -133,7 +138,7 @@ func (d *rangeDriver) grantRun(bounds, limits string) string {
 	s.query(t, "SELECT id::text FROM pc.users WHERE subject = 'alice'", nil, &alice)
 	dir := t.TempDir()
 	for _, role := range []string{"grant_issuer", "run_launcher"} {
-		if code, out, errs := d.admin.pclaw(t, "role", "bind", "--role", role, "--user", alice); code != 0 {
+		if code, out, errs := d.admin.pclaw(t, "role", "bind", "--role", role, "--user", alice); code != 0 && !strings.Contains(errs, "ROLE_BINDING_EXISTS") {
 			t.Fatalf("role bind %s: %d %s %s", role, code, out, errs)
 		}
 	}
@@ -144,6 +149,9 @@ func (d *rangeDriver) grantRun(bounds, limits string) string {
 		"--delegation-depth", "1", "--max-children", "2", "--task", "range"}
 	if limits != "" {
 		args = append(args, "--limits-file", doc("limits.json", limits))
+	}
+	if requirements != "" {
+		args = append(args, "--requirements-file", doc("requirements.json", requirements))
 	}
 	code, out, errs := d.admin.pclaw(t, args...)
 	if code != 0 {
