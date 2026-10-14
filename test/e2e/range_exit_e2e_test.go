@@ -64,6 +64,7 @@ func startRangeStack(t *testing.T) *rangeStack {
 	}
 	r := &rangeStack{d: d}
 	r.buildRangeThroughTheProduct(exitBounds, exitRequirements)
+	r.seedEnvelopeBudget(t)
 	return r
 }
 
@@ -171,14 +172,22 @@ func TestE2E_M12_RangeReachesOnlySimulators(t *testing.T) {
 	r := startRangeStack(t)
 	s := r.d.s
 	before := orgState(t, s)
+	// The org's own real refund (the one that made the guardrail's budget row) is
+	// not the range's; the range adds no real transaction or receipt to it.
+	var realBefore, receiptsBefore int
+	s.query(t, "SELECT count(*) FILTER (WHERE NOT simulated)::int FROM pc.transactions", nil, &realBefore)
+	s.query(t, "SELECT count(*)::int FROM pc.decision_receipts r JOIN pc.transactions t ON t.id = r.transaction_id WHERE NOT t.simulated", nil, &receiptsBefore)
+	if strings.Contains(before, "envelope budgets 0 rows") {
+		t.Fatalf("nothing to protect before the range runs: %s", before)
+	}
 	code, out, errs, _ := r.run(t, scenarioDir(t, "RT-001", "RT-002", "RT-020", "RT-023"))
 	if code != 0 {
 		t.Fatalf("pclaw redteam run: %d\n%s\n%s", code, out, errs)
 	}
 	var real, total int
 	s.query(t, "SELECT count(*) FILTER (WHERE NOT simulated)::int, count(*)::int FROM pc.transactions", nil, &real, &total)
-	if total == 0 || real != 0 {
-		t.Fatalf("%d of %d transactions are real", real, total)
+	if total == realBefore || real != realBefore {
+		t.Fatalf("%d of %d transactions are real, %d before the range", real, total, realBefore)
 	}
 	// The real agent made no run of its own; every run in the org is the range
 	// agent's and simulated.
@@ -189,8 +198,8 @@ func TestE2E_M12_RangeReachesOnlySimulators(t *testing.T) {
 	}
 	var real2 int
 	s.query(t, "SELECT count(*)::int FROM pc.decision_receipts r JOIN pc.transactions t ON t.id = r.transaction_id WHERE NOT t.simulated", nil, &real2)
-	if real2 != 0 {
-		t.Fatalf("%d decision receipts of real transactions", real2)
+	if real2 != receiptsBefore {
+		t.Fatalf("%d decision receipts of real transactions, %d before the range", real2, receiptsBefore)
 	}
 	if after := orgState(t, s); after != before {
 		t.Fatalf("the range changed what it must not:\n before: %s\n after:  %s", before, after)
@@ -253,5 +262,35 @@ func TestE2E_M12_BaselineCatchesARegression(t *testing.T) {
 	code, out, errs, _ = r.run(t, dir, "--baseline", file, "--trust", p.trust, "--run", weak)
 	if code != 1 || !strings.Contains(out+errs, "RT-001") {
 		t.Fatalf("a run under a weakened grant: %d\n%s\n%s", code, out, errs)
+	}
+}
+
+// seedEnvelopeBudget gives the org something a range must leave alone: an
+// org guardrail with a refund budget, and one real refund by the seeded
+// (real) agent, which makes the guardrail's budget row. The range runs after
+// it and must not touch that row (HR-222).
+func (r *rangeStack) seedEnvelopeBudget(t *testing.T) {
+	t.Helper()
+	s := r.d.s
+	dir := t.TempDir()
+	doc := func(name, content string) string {
+		p := filepath.Join(dir, name)
+		if err := os.WriteFile(p, []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		return p
+	}
+	bounds := doc("bounds.json", exitBounds)
+	limits := doc("limits.json", `{"budgets": [{"id": "orgrefunds", "grouping": "org", "operations": ["payments.refund.create"],
+	  "currency": "USD", "limit": "5000.00", "period": "none"}]}`)
+	if code, out, errs := r.d.admin.pclaw(t, "guardrail", "create", "--scope", "org", "--name", "refund budget", "--bounds-file", bounds, "--limits-file", limits); code != 0 {
+		t.Fatalf("guardrail create: %d %s %s", code, out, errs)
+	}
+	s.waitConfig(t, s.configVersion(t, s.gatewayID(t)))
+	if code, rep := s.refund(t, ids.NewV7(), "1.00"); code != 200 {
+		t.Fatalf("the real refund that makes the envelope's budget row: %d %+v", code, rep)
+	}
+	if n := s.row(t, "SELECT count(*) FROM pc.budget_accounts WHERE owner_kind = 'envelope'"); n == "0" {
+		t.Fatal("the org guardrail has no budget row after a real refund")
 	}
 }
