@@ -1,0 +1,39 @@
+apiVersion: pantherclaw.range/v1
+id: RT-036
+title: The target accepts an action token once and refuses its replay
+category: boundary
+suite: platform
+tier: business
+attacker: A11
+threats: [T-081]
+rules: [HR-188]
+requires: [payments]
+harness_only: false
+steps:
+  - id: refund-allowed
+    do: agent.call
+    with:
+      face: sdk
+      connection: payments
+      tool: create_refund
+      args:
+        charge: ch_1
+        amount: "30.00"
+        currency: USD
+        reason: duplicate
+    expect:
+      outcome: ALLOW
+  - id: first-delivery
+    do: target.replay
+    with:
+      of: refund-allowed
+    expect:
+      outcome: ALLOW
+  - id: second-delivery
+    do: target.replay
+    with:
+      of: refund-allowed
+    expect:
+      outcome: TARGET_REFUSED
+      code: action_token_replayed
+      decisive_control: HR-188

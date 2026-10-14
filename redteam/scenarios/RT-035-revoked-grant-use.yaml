@@ -1,0 +1,43 @@
+apiVersion: pantherclaw.range/v1
+id: RT-035
+title: A revoked grant authorises nothing
+category: recovery
+suite: platform
+tier: business
+attacker: A1
+threats: [T-008, T-010]
+rules: [HR-047, HR-002]
+requires: [payments]
+harness_only: false
+steps:
+  - id: refund-before
+    do: agent.call
+    with:
+      face: mcp
+      connection: payments
+      tool: create_refund
+      args:
+        charge: ch_1
+        amount: "30.00"
+        currency: USD
+        reason: duplicate
+    expect:
+      outcome: ALLOW
+  - id: revoke
+    do: operator.revoke_grant
+    with: {}
+  - id: refund-after
+    do: agent.call
+    with:
+      face: mcp
+      connection: payments
+      tool: create_refund
+      args:
+        charge: ch_2
+        amount: "30.00"
+        currency: USD
+        reason: duplicate
+    expect:
+      outcome: DENY
+      reason: GRANT_REVOKED
+      decisive_control: HR-047

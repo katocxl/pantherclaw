@@ -1,0 +1,25 @@
+apiVersion: pantherclaw.range/v1
+id: RT-032
+title: A proof carrying a stale nonce is refused
+category: boundary
+suite: platform
+tier: business
+attacker: A4
+threats: [T-032]
+rules: [HR-091]
+requires: [payments]
+harness_only: false
+steps:
+  - id: stale-nonce
+    do: agent.steal
+    with:
+      mode: stale_nonce
+      call:
+        face: http
+        connection: payments
+        method: GET
+        path: /v1/refunds/re_1
+    expect:
+      outcome: REFUSED
+      code: use_nonce
+      decisive_control: HR-091

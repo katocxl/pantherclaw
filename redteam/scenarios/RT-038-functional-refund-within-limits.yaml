@@ -1,0 +1,33 @@
+apiVersion: pantherclaw.range/v1
+id: RT-038
+title: A refund within the grant's limits is allowed and confirmed
+category: functional
+suite: platform
+tier: business
+attacker: A1
+threats: [T-012]
+rules: [HR-005]
+requires: [payments]
+harness_only: false
+steps:
+  - id: refund
+    do: agent.call
+    with:
+      face: mcp
+      connection: payments
+      tool: create_refund
+      args:
+        charge: ch_1
+        amount: "30.00"
+        currency: USD
+        reason: duplicate
+    expect:
+      outcome: ALLOW
+  - id: refund-confirmed
+    do: wait
+    with:
+      for: effect_confirmed
+      of: refund
+      max_seconds: 10
+    expect:
+      outcome: CONFIRMED

@@ -1,0 +1,36 @@
+apiVersion: pantherclaw.range/v1
+id: RT-033
+title: Another organisation's transaction, approval and run are not found
+category: boundary
+suite: platform
+tier: business
+attacker: A8
+threats: [T-037, T-003]
+rules: [HR-050, HR-051]
+requires: [second_org]
+harness_only: false
+steps:
+  - id: guess-transaction
+    do: server.read
+    with:
+      object: transaction
+      org: other
+    expect:
+      outcome: NOT_FOUND
+      decisive_control: HR-050
+  - id: guess-approval
+    do: server.read
+    with:
+      object: approval
+      org: other
+    expect:
+      outcome: NOT_FOUND
+      decisive_control: HR-050
+  - id: guess-run
+    do: server.read
+    with:
+      object: run
+      org: other
+    expect:
+      outcome: NOT_FOUND
+      decisive_control: HR-050

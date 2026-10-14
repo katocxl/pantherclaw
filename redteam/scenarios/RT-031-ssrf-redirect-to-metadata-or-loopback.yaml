@@ -1,0 +1,48 @@
+apiVersion: pantherclaw.range/v1
+id: RT-031
+title: The gateway never dials an unlisted address and never follows a redirect
+category: boundary
+suite: platform
+tier: business
+attacker: A11
+threats: [T-021, T-015]
+rules: [HR-070, HR-077]
+requires: [payments]
+harness_only: false
+steps:
+  - id: unlisted-address
+    do: agent.call
+    with:
+      face: mcp
+      connection: unlisted
+      tool: create_refund
+      args:
+        charge: ch_1
+        amount: "30.00"
+        currency: USD
+        reason: duplicate
+    expect:
+      outcome: REFUSED
+      code: egress_denied
+      decisive_control: HR-070
+  - id: target-redirects
+    do: sim.mutate
+    with:
+      sim: payments
+      change: fault
+      args:
+        redirect_to: metadata
+  - id: refund-redirected
+    do: agent.call
+    with:
+      face: mcp
+      connection: payments
+      tool: create_refund
+      args:
+        charge: ch_1
+        amount: "30.00"
+        currency: USD
+        reason: duplicate
+    expect:
+      outcome: UNKNOWN
+      decisive_control: HR-077
