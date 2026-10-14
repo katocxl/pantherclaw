@@ -87,3 +87,68 @@ func TestIntPolicyVersionsAndPublication(t *testing.T) {
 		t.Fatalf("another org's version was found: %v", err)
 	}
 }
+
+// TestIntPublishExpectingRefusesAConcurrentPublish (G0 M8 C4): a publish
+// that expects the published version succeeds only while that version is
+// still published; of drafts racing from the same expected version exactly
+// one is published, the others refused with ErrPublishedChanged, and the
+// expectation "none is published" holds only until something is.
+func TestIntPublishExpectingRefusesAConcurrentPublish(t *testing.T) {
+	p := dbtest.New(t).AppPool(t)
+	ctx := context.Background()
+	org := ids.New[ids.Org]()
+	if err := p.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
+		_, err := tx.Exec(ctx, "INSERT INTO pc.orgs (id, name) VALUES ($1, 'acme')", org)
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	s := &pgstore.Store{Pool: p}
+	draft := func(reason string) ids.UUID {
+		t.Helper()
+		id, _, err := s.CreateVersion(ctx, org, bundle(reason), "user:alice", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return id
+	}
+	none := ids.UUID{}
+	v1, v2 := draft("REASON_A"), draft("REASON_B")
+	if err := s.PublishExpecting(ctx, org, v1, "user:bob", &none, nil); err != nil {
+		t.Fatalf("publish expecting none: %v", err)
+	}
+	if err := s.PublishExpecting(ctx, org, v2, "user:bob", &none, nil); !errors.Is(err, pgstore.ErrPublishedChanged) {
+		t.Fatalf("publish expecting none once one is published: %v", err)
+	}
+
+	// Drafts edited from v1 race: one wins, the rest see it.
+	drafts := []ids.UUID{draft("REASON_C"), draft("REASON_D"), draft("REASON_E"), draft("REASON_F")}
+	var wg sync.WaitGroup
+	errs := make([]error, len(drafts))
+	for i, d := range drafts {
+		wg.Go(func() { errs[i] = s.PublishExpecting(ctx, org, d, "user:bob", &v1, nil) })
+	}
+	wg.Wait()
+	var won ids.UUID
+	for i, err := range errs {
+		switch {
+		case err == nil && won.IsZero():
+			won = drafts[i]
+		case err == nil:
+			t.Fatalf("two publishes from v1 won: %s and %s", won, drafts[i])
+		case !errors.Is(err, pgstore.ErrPublishedChanged):
+			t.Fatalf("unexpected %v", err)
+		}
+	}
+	if won.IsZero() {
+		t.Fatal("no publish from v1 won")
+	}
+	for _, d := range drafts {
+		if _, state, _ := s.Get(ctx, org, d); (d == won) != (state == "PUBLISHED") || (d != won && state != "DRAFT") {
+			t.Fatalf("draft %s is %s (won %s)", d, state, won)
+		}
+	}
+	if err := s.PublishExpecting(ctx, org, v2, "user:bob", &won, nil); err != nil {
+		t.Fatalf("publish expecting the current version: %v", err)
+	}
+}

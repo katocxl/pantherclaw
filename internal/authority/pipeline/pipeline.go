@@ -767,6 +767,11 @@ func (p *Pipeline) policyRules(ctx context.Context, s *state) {
 // policyInput is what the policy is evaluated with.
 func (s *state) policyInput() papp.Input {
 	in := papp.Input{Budget: s.policy.Budget, Facts: s.facts, Now: s.cont.Now}
+	if s.run != nil && s.run.AgentID == s.req.Identity.AgentID {
+		// The server's run record, found by the request's run id and checked
+		// against the agent's verified identity, never the request itself.
+		in.Run = &papp.Run{ID: s.ev.RunID.String(), AgentID: s.run.AgentID.String()}
+	}
 	if s.conn != nil {
 		// The class comes from the connection's record, never from the
 		// gateway or the agent (HR-079).

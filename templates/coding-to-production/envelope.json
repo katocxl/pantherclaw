@@ -1,0 +1,11 @@
+{
+  "name": "coding-to-production",
+  "bounds": {
+    "operations": ["github.*"],
+    "targets": {
+      "github.repository": {"ids": ["{{repo}}"]},
+      "github.pull_request": {"prefixes": ["{{repo}}#"]},
+      "github.branch": {"prefixes": ["{{repo}}@"]}
+    }
+  }
+}
