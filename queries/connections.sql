@@ -9,12 +9,12 @@
 -- name: InsertConnection :one
 INSERT INTO pc.connections (org_id, id, name, kind, gateway_id, package, base_url, allowed_hosts, destination_class,
                             access_mode, credential_header, credential_scheme, default_mode, max_response_bytes,
-                            timeout_ms, agent_hosts, created_by, updated_by)
+                            timeout_ms, agent_hosts, created_by, updated_by, simulated)
 VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(name), sqlc.arg(kind), sqlc.arg(gateway_id), sqlc.arg(package),
         sqlc.narg(base_url), sqlc.arg(allowed_hosts)::text[], sqlc.arg(destination_class), sqlc.arg(access_mode),
         sqlc.narg(credential_header), sqlc.narg(credential_scheme), sqlc.arg(default_mode),
         sqlc.arg(max_response_bytes), sqlc.arg(timeout_ms), sqlc.arg(agent_hosts)::text[], sqlc.arg(created_by),
-        sqlc.arg(created_by))
+        sqlc.arg(created_by), sqlc.arg(simulated))
 RETURNING *;
 
 -- name: GetConnection :one

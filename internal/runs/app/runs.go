@@ -61,12 +61,15 @@ var (
 		"the agent must be claimed and neither suspended nor retired")
 	ErrInstance = pcerr.New(pcerr.FailedPrecondition, "INSTANCE_STATE",
 		"the instance must be an admitted instance of the agent")
-	ErrRunState       = pcerr.New(pcerr.FailedPrecondition, "RUN_STATE", "the run is not active")
-	ErrDepth          = pcerr.New(pcerr.FailedPrecondition, "RUN_DEPTH", "child runs nest at most 8 levels deep")
-	ErrLauncher       = pcerr.New(pcerr.PermissionDenied, "LAUNCHER_KIND", "runs are started by users and service accounts")
-	ErrTaskRef        = pcerr.New(pcerr.InvalidArgument, "TASK_REF", "task_ref is at most 256 characters of valid UTF-8")
-	ErrTTL            = pcerr.New(pcerr.InvalidArgument, "RUN_TTL", "a run lasts at most 24 hours")
-	ErrReason         = pcerr.New(pcerr.InvalidArgument, "REASON", "the reason is 1 to 64 characters")
+	ErrRunState = pcerr.New(pcerr.FailedPrecondition, "RUN_STATE", "the run is not active")
+	ErrDepth    = pcerr.New(pcerr.FailedPrecondition, "RUN_DEPTH", "child runs nest at most 8 levels deep")
+	ErrLauncher = pcerr.New(pcerr.PermissionDenied, "LAUNCHER_KIND", "runs are started by users and service accounts")
+	ErrTaskRef  = pcerr.New(pcerr.InvalidArgument, "TASK_REF", "task_ref is at most 256 characters of valid UTF-8")
+	ErrTTL      = pcerr.New(pcerr.InvalidArgument, "RUN_TTL", "a run lasts at most 24 hours")
+	ErrReason   = pcerr.New(pcerr.InvalidArgument, "REASON", "the reason is 1 to 64 characters")
+	// ErrSimulationMismatch: a simulated run starts only children of range agents (G0 M12, HR-220).
+	ErrSimulationMismatch = pcerr.New(pcerr.FailedPrecondition, "SIMULATION_MISMATCH",
+		"a simulated run starts only child runs of range agents")
 	ErrGrantNotFound  = pcerr.New(pcerr.NotFound, "GRANT_NOT_FOUND", "grant not found")
 	ErrGrantDelegated = pcerr.New(pcerr.FailedPrecondition, gdomain.ReasonGrantMismatch,
 		"a delegated grant reaches its child run only through delegation")
@@ -107,6 +110,9 @@ type Run struct {
 	// actions are denied NO_GRANT).
 	GrantID *ids.UUID
 	TaskRef string
+	// Simulated runs belong to range agents or descend from one (HR-220);
+	// fixed when the run starts.
+	Simulated bool
 	// State is the effective state: an active run past its expiry reads
 	// EXPIRED.
 	State     string
@@ -134,7 +140,7 @@ func view(r dbq.PcRun, state string) (Run, error) {
 		Launcher:        actorOf(r.LauncherUserID, r.LauncherSaID, r.LauncherInstanceID),
 		Principal:       actorOf(r.PrincipalUserID, r.PrincipalSaID, nil),
 		PrincipalSource: r.PrincipalSource, ParentRunID: r.ParentRunID, Depth: int(r.Depth), GrantID: r.GrantID, TaskRef: r.TaskRef,
-		State: state, CreatedAt: r.CreatedAt, ExpiresAt: r.ExpiresAt, EndedAt: r.EndedAt,
+		Simulated: r.Simulated, State: state, CreatedAt: r.CreatedAt, ExpiresAt: r.ExpiresAt, EndedAt: r.EndedAt,
 	}
 	if r.SubjectIssuer != nil {
 		out.SubjectIssuer = *r.SubjectIssuer
@@ -285,7 +291,7 @@ func (s *Service) StartRun(ctx context.Context, in StartInput) (Run, error) {
 		chain := []Actor{launcher}
 		p := dbq.InsertRunParams{
 			OrgID: c.Org, ID: ids.NewV7(), AgentID: a.ID, InstanceID: in.InstanceID, EnvironmentID: *a.EnvironmentID,
-			PrincipalSource: SourceLauncher, TaskRef: in.TaskRef, TtlMinutes: minutes,
+			PrincipalSource: SourceLauncher, TaskRef: in.TaskRef, TtlMinutes: minutes, Simulated: a.RangeAgent,
 		}
 		id := c.Principal.ID
 		if c.Principal.Kind == td.KindUser {
@@ -398,6 +404,11 @@ func (s *Service) StartChildRun(ctx context.Context, in ChildInput) (Run, error)
 		if err != nil {
 			return err
 		}
+		// HR-220: a simulated run never starts a child of a real agent; a
+		// child of a range agent is simulated whatever its parent is.
+		if parent.Simulated && !a.RangeAgent {
+			return ErrSimulationMismatch
+		}
 		if in.InstanceID != nil {
 			if err := admittedInstance(ctx, q, org, a.ID, *in.InstanceID); err != nil {
 				return err
@@ -416,6 +427,7 @@ func (s *Service) StartChildRun(ctx context.Context, in ChildInput) (Run, error)
 			LauncherInstanceID: &inst.ID, PrincipalUserID: parent.PrincipalUserID, PrincipalSaID: parent.PrincipalSaID,
 			PrincipalSource: SourceParentRun, ActorChain: chainJSON, ParentRunID: &parent.ID, Depth: parent.Depth + 1,
 			TaskRef: in.TaskRef, TtlMinutes: minutes, NotAfter: &parent.ExpiresAt,
+			Simulated: parent.Simulated || a.RangeAgent,
 		})
 		if err != nil {
 			return err
@@ -597,6 +609,9 @@ func record(ctx context.Context, tx db.TenantTx, actor evdomain.Actor, name stri
 	}
 	if r.InstanceID != nil {
 		details["instance_id"] = r.InstanceID.String()
+	}
+	if r.Simulated {
+		details["simulated"] = "true"
 	}
 	if r.ParentRunID != nil {
 		details["parent_run_id"] = r.ParentRunID.String()
