@@ -29,6 +29,8 @@ steps:
     with:
       step: refund-held
       as: approver
+    expect:
+      outcome: ALLOW
   - id: refund-with-another-amount
     do: agent.call
     with:

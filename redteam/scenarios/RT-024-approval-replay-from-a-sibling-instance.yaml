@@ -28,6 +28,8 @@ steps:
     with:
       step: refund-held
       as: approver
+    expect:
+      outcome: ALLOW
   - id: replay-from-another-instance
     do: agent.call
     with:

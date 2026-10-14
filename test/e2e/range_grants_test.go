@@ -194,7 +194,7 @@ func (d *rangeDriver) refusedApproval(rec *callRec, as string) (domain.Observati
 	}
 	code, body := d.s.approveMerge(d.t, r.b, r.key, rec.txn)
 	if code == http.StatusOK {
-		return domain.Observation{Outcome: domain.OutcomeConfirmed, Detail: "the " + as + " approved"}, nil
+		return domain.Observation{Outcome: domain.OutcomeAllow, Detail: "the " + as + " approved"}, nil
 	}
 	// The page only says the person is not eligible; the CLI says why.
 	_, why, _ := r.cli.pclaw(d.t, "approval", "get", d.s.requestOf(d.t, rec.txn))

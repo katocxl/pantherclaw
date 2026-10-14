@@ -322,7 +322,7 @@ func (d *rangeDriver) personApprove(st domain.Step) (domain.Observation, error) 
 			d.s.approve(d.t, r.b, r.key, rec.txn)
 		}
 	}
-	return domain.Observation{Outcome: domain.OutcomeConfirmed, TransactionID: rec.txn}, nil
+	return domain.Observation{Outcome: domain.OutcomeAllow, TransactionID: rec.txn}, nil
 }
 
 // simMutate changes a simulator under the scenario's feet.
@@ -421,7 +421,7 @@ func (d *rangeDriver) checkReceipt(st domain.Step) (domain.Observation, error) {
 		}
 	}
 	if len(missing) > 0 {
-		return domain.Observation{Outcome: domain.OutcomeRefused, Code: "receipt_lacks_" + strings.Join(missing, ","), TransactionID: rec.txn, Detail: string(payload)}, nil
+		return domain.Observation{Outcome: rec.obs.Outcome, Reason: rec.obs.Reason, Reasons: rec.obs.Reasons, TransactionID: rec.txn, Missing: missing}, nil
 	}
 	return domain.Observation{Outcome: rec.obs.Outcome, Reason: rec.obs.Reason, Reasons: rec.obs.Reasons, TransactionID: rec.txn}, nil
 }

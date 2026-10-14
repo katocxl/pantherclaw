@@ -27,6 +27,8 @@ steps:
     with:
       step: merge-held
       as: approver
+    expect:
+      outcome: ALLOW
   - id: merge-approved
     do: agent.call
     with:

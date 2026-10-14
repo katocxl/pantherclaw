@@ -27,6 +27,8 @@ steps:
     with:
       step: merge-held
       as: approver
+    expect:
+      outcome: ALLOW
   - id: push-new-commit
     do: sim.mutate
     with:
