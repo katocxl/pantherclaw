@@ -11,7 +11,9 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"strings"
 
+	apdomain "github.com/katocxl/pantherclaw/internal/approvals/domain"
 	authnapp "github.com/katocxl/pantherclaw/internal/authn/app"
 	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
@@ -57,6 +59,9 @@ func (h *Handler) mountPolicyChanges(m *http.ServeMux) {
 	h.withSession(m, http.MethodPost, p+"/{id}/decline", h.policyDecline)
 }
 
+// maxSummaryLine caps one shown line of a summary, in runes.
+const maxSummaryLine = 4096
+
 // SummaryLabel is the fixed label above a change request's summary.
 const SummaryLabel = "What this change does, as PantherClaw classified it. Rule text and ids come from the authors of the policy."
 
@@ -70,8 +75,12 @@ type policyChangesView struct {
 type policyChangeView struct {
 	page
 	policyapp.ChangeRequest
-	// Summary is the request's summary, indented, shown as untrusted text.
-	Summary      string
+	// Summary is the request's summary, indented, one cleaned line each:
+	// bidi, control and format characters removed (HR-034); the signed
+	// binding is over the stored summary, unchanged.
+	Summary []apdomain.Untrusted
+	// MixedScript is set when a line mixes writing systems (look-alikes).
+	MixedScript  bool
 	SummaryLabel string
 	MayConfirm   bool
 	MaxReason    int
@@ -126,10 +135,16 @@ func (h *Handler) policyChangePage(w http.ResponseWriter, r *http.Request, s aut
 	} else {
 		pretty.Write(c.Summary)
 	}
-	h.renderAny(w, http.StatusOK, "policy_change.html", policyChangeView{
-		page: page{Title: "Policy change", Session: s}, ChangeRequest: c, Summary: pretty.String(), SummaryLabel: SummaryLabel,
+	view := policyChangeView{
+		page: page{Title: "Policy change", Session: s}, ChangeRequest: c, SummaryLabel: SummaryLabel,
 		MayConfirm: policyapp.MayConfirm(callerOf(s), c), MaxReason: policyapp.MaxDeclineReason,
-	})
+	}
+	for line := range strings.Lines(pretty.String()) {
+		u := apdomain.Clean("summary", line, maxSummaryLine)
+		view.Summary = append(view.Summary, u)
+		view.MixedScript = view.MixedScript || u.MixedScript
+	}
+	h.renderAny(w, http.StatusOK, "policy_change.html", view)
 }
 
 func callerOf(s authnapp.BrowserSession) tenancy.Caller { return s.Caller }

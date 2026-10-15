@@ -17,7 +17,9 @@
 {{end}}
 <h2>What it changes</h2>
 <p class="alert">{{.SummaryLabel}}</p>
-<pre class="untrusted">{{.Summary}}</pre>
+<pre class="untrusted">{{range .Summary}}{{.Text}}
+{{end}}</pre>
+{{if .MixedScript}}<p class="alert">The summary mixes writing systems in a word: look for look-alike characters before you confirm.</p>{{end}}
 {{if .MayConfirm}}
 <h2>Confirm</h2>
 <p class="note">Your security key signs this change request: its kind, the organization, what it changes, the version it replaces and exactly the summary above. Each confirmation must come from a different person with a different key.</p>
