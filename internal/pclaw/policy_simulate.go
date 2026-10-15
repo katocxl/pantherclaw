@@ -106,7 +106,7 @@ func init() {
 					return nil, fmt.Errorf("--days must be 1 to 30 and --max 1 to 50000")
 				}
 				res, err := c.SimulatePolicyVersion(ctx, &pantherclawv1.SimulatePolicyVersionRequest{
-					VersionId: a[0], Days: int32(*days), MaxEvaluations: int32(*maxN), //nolint:gosec // G115: checked above
+					VersionId: a[0], Days: int32(*days), MaxEvaluations: int32(*maxN),
 				})
 				if err != nil || !*wait {
 					return res, err

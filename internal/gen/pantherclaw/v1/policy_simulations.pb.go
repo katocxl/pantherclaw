@@ -35,7 +35,7 @@ const (
 	PolicySimulationState_POLICY_SIMULATION_STATE_RUNNING     PolicySimulationState = 2
 	PolicySimulationState_POLICY_SIMULATION_STATE_DONE        PolicySimulationState = 3
 	PolicySimulationState_POLICY_SIMULATION_STATE_FAILED      PolicySimulationState = 4
-	PolicySimulationState_POLICY_SIMULATION_STATE_CANCELLED   PolicySimulationState = 5
+	PolicySimulationState_POLICY_SIMULATION_STATE_CANCELED    PolicySimulationState = 5
 )
 
 // Enum value maps for PolicySimulationState.
@@ -46,7 +46,7 @@ var (
 		2: "POLICY_SIMULATION_STATE_RUNNING",
 		3: "POLICY_SIMULATION_STATE_DONE",
 		4: "POLICY_SIMULATION_STATE_FAILED",
-		5: "POLICY_SIMULATION_STATE_CANCELLED",
+		5: "POLICY_SIMULATION_STATE_CANCELED",
 	}
 	PolicySimulationState_value = map[string]int32{
 		"POLICY_SIMULATION_STATE_UNSPECIFIED": 0,
@@ -54,7 +54,7 @@ var (
 		"POLICY_SIMULATION_STATE_RUNNING":     2,
 		"POLICY_SIMULATION_STATE_DONE":        3,
 		"POLICY_SIMULATION_STATE_FAILED":      4,
-		"POLICY_SIMULATION_STATE_CANCELLED":   5,
+		"POLICY_SIMULATION_STATE_CANCELED":    5,
 	}
 )
 
@@ -1363,14 +1363,14 @@ const file_pantherclaw_v1_policy_simulations_proto_rawDesc = "" +
 	" \x03(\tR\vlimitations\"\x89\x01\n" +
 	"\x1dListSimulationSamplesResponse\x12@\n" +
 	"\asamples\x18\x01 \x03(\v2&.pantherclaw.v1.PolicySimulationSampleR\asamples\x12&\n" +
-	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken*\xf6\x01\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken*\xf5\x01\n" +
 	"\x15PolicySimulationState\x12'\n" +
 	"#POLICY_SIMULATION_STATE_UNSPECIFIED\x10\x00\x12\"\n" +
 	"\x1ePOLICY_SIMULATION_STATE_QUEUED\x10\x01\x12#\n" +
 	"\x1fPOLICY_SIMULATION_STATE_RUNNING\x10\x02\x12 \n" +
 	"\x1cPOLICY_SIMULATION_STATE_DONE\x10\x03\x12\"\n" +
-	"\x1ePOLICY_SIMULATION_STATE_FAILED\x10\x04\x12%\n" +
-	"!POLICY_SIMULATION_STATE_CANCELLED\x10\x05*\x83\x03\n" +
+	"\x1ePOLICY_SIMULATION_STATE_FAILED\x10\x04\x12$\n" +
+	" POLICY_SIMULATION_STATE_CANCELED\x10\x05*\x83\x03\n" +
 	"\x18PolicySimulationCategory\x12*\n" +
 	"&POLICY_SIMULATION_CATEGORY_UNSPECIFIED\x10\x00\x12(\n" +
 	"$POLICY_SIMULATION_CATEGORY_UNCHANGED\x10\x01\x12+\n" +

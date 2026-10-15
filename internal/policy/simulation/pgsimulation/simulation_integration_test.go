@@ -342,7 +342,7 @@ func TestHR237_SimulationSchemaHoldsTheBounds(t *testing.T) {
 		})
 	}
 	if err := exec(`UPDATE pc.policy_simulations SET state = 'RUNNING' WHERE id = $1`); !db.IsCheckViolation(err) {
-		t.Fatalf("a cancelled simulation ran again: %v", err)
+		t.Fatalf("a canceled simulation ran again: %v", err)
 	}
 	for _, sql := range []string{
 		`UPDATE pc.policy_simulation_samples SET proposed_decision = 'ALLOW' WHERE simulation_id = $1`,

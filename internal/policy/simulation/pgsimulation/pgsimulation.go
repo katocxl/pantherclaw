@@ -314,7 +314,11 @@ func (t *txn) Enqueue(ctx context.Context, id ids.UUID) error {
 	if t.jobs == nil {
 		return simulation.ErrUnwired
 	}
-	return jobs.InsertTx(ctx, t.jobs, t.tx, SimulateArgs{Org: t.org, Simulation: id}, nil)
+	sim, err := ids.FromUUID[Simulation](id)
+	if err != nil {
+		return err
+	}
+	return jobs.InsertTx(ctx, t.jobs, t.tx, SimulateArgs{Org: t.org, Simulation: sim}, nil)
 }
 
 // Audit implements simulation.Tx.

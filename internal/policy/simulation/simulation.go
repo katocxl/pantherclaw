@@ -52,11 +52,11 @@ type State string
 
 // States.
 const (
-	Queued    State = "QUEUED"
-	Running   State = "RUNNING"
-	Done      State = "DONE"
-	Failed    State = "FAILED"
-	Cancelled State = "CANCELLED"
+	Queued   State = "QUEUED"
+	Running  State = "RUNNING"
+	Done     State = "DONE"
+	Failed   State = "FAILED"
+	Canceled State = "CANCELLED" //nolint:misspell // stored value, as D15 names it
 )
 
 // Errors of the simulation use cases.
@@ -345,7 +345,7 @@ func (s *Service) Cancel(ctx context.Context, id ids.UUID) (Simulation, error) {
 			return ErrFinished
 		}
 		return tx.Audit(ctx, audit.Event{
-			Name: "policy.simulation_cancelled", Actor: c.Actor(), Outcome: audit.Success,
+			Name: "policy.simulation_canceled", Actor: c.Actor(), Outcome: audit.Success,
 			Object:  &audit.Object{Type: "policy_simulation", ID: id.String()},
 			Details: map[string]string{"evaluated": strconv.Itoa(out.Evaluated)},
 		})

@@ -21,12 +21,18 @@ import (
 // one chunk, well under River's stuck-job rescue.
 const JobTimeout = 3 * time.Minute
 
+// Simulation is the kind of a simulation's id in job arguments.
+type Simulation struct{}
+
+// KindName implements ids.Kind.
+func (Simulation) KindName() string { return "policy simulation" }
+
 // SimulateArgs runs one step of a simulation. Job args carry ids only
 // (HR-056). A step that does not finish enqueues the next one.
 type SimulateArgs struct {
-	Org        ids.OrgID `json:"org"`
-	Simulation ids.UUID  `json:"simulation"`
-	Step       int       `json:"step,omitzero"`
+	Org        ids.OrgID          `json:"org"`
+	Simulation ids.ID[Simulation] `json:"simulation"`
+	Step       int                `json:"step,omitzero"`
 }
 
 // Kind implements river.JobArgs.
@@ -45,14 +51,14 @@ func (w *simulateWorker) Timeout(*river.Job[SimulateArgs]) time.Duration { retur
 // finishes.
 func (w *simulateWorker) Work(ctx context.Context, job *river.Job[SimulateArgs]) error {
 	a := job.Args
-	more, err := w.r.Step(ctx, a.Org, a.Simulation)
+	more, err := w.r.Step(ctx, a.Org, a.Simulation.UUID())
 	if err != nil {
 		if job.Attempt < job.MaxAttempts {
 			return err
 		}
 		w.log.WarnContext(ctx, "policy.simulation_failed", slog.String("org", a.Org.String()),
 			slog.String("simulation", a.Simulation.String()), pclog.Err(err))
-		return w.r.Fail(context.WithoutCancel(ctx), a.Org, a.Simulation, simulation.FailReplay)
+		return w.r.Fail(context.WithoutCancel(ctx), a.Org, a.Simulation.UUID(), simulation.FailReplay)
 	}
 	if !more {
 		return nil

@@ -34,11 +34,11 @@ type Handler struct {
 func New(svc *simulation.Service) *Handler { return &Handler{svc: svc} }
 
 var states = map[simulation.State]pantherclawv1.PolicySimulationState{
-	simulation.Queued:    pantherclawv1.PolicySimulationState_POLICY_SIMULATION_STATE_QUEUED,
-	simulation.Running:   pantherclawv1.PolicySimulationState_POLICY_SIMULATION_STATE_RUNNING,
-	simulation.Done:      pantherclawv1.PolicySimulationState_POLICY_SIMULATION_STATE_DONE,
-	simulation.Failed:    pantherclawv1.PolicySimulationState_POLICY_SIMULATION_STATE_FAILED,
-	simulation.Cancelled: pantherclawv1.PolicySimulationState_POLICY_SIMULATION_STATE_CANCELLED,
+	simulation.Queued:   pantherclawv1.PolicySimulationState_POLICY_SIMULATION_STATE_QUEUED,
+	simulation.Running:  pantherclawv1.PolicySimulationState_POLICY_SIMULATION_STATE_RUNNING,
+	simulation.Done:     pantherclawv1.PolicySimulationState_POLICY_SIMULATION_STATE_DONE,
+	simulation.Failed:   pantherclawv1.PolicySimulationState_POLICY_SIMULATION_STATE_FAILED,
+	simulation.Canceled: pantherclawv1.PolicySimulationState_POLICY_SIMULATION_STATE_CANCELED,
 }
 
 var categories = map[replay.Category]pantherclawv1.PolicySimulationCategory{

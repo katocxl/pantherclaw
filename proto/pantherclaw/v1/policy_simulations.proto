@@ -59,7 +59,7 @@ enum PolicySimulationState {
   POLICY_SIMULATION_STATE_RUNNING = 2;
   POLICY_SIMULATION_STATE_DONE = 3;
   POLICY_SIMULATION_STATE_FAILED = 4;
-  POLICY_SIMULATION_STATE_CANCELLED = 5;
+  POLICY_SIMULATION_STATE_CANCELED = 5;
 }
 
 // PolicySimulationCategory is what the version changes about one recorded

@@ -61,7 +61,7 @@ func (r *Runner) now() time.Time {
 	return r.Clock.Now()
 }
 
-// Step runs simulation id of org until it finishes, is cancelled or its
+// Step runs simulation id of org until it finishes, is canceled or its
 // budget is spent; more reports that it has not finished. An error is a
 // failure to retry: the next Step resumes from the stored cursor.
 func (r *Runner) Step(ctx context.Context, org ids.OrgID, id ids.UUID) (more bool, err error) {
@@ -110,7 +110,7 @@ func (r *Runner) Step(ctx context.Context, org ids.OrgID, id ids.UUID) (more boo
 }
 
 // start loads the simulation and starts it when queued; running is false
-// when it is finished or cancelled.
+// when it is finished or canceled.
 func (r *Runner) start(ctx context.Context, org ids.OrgID, id ids.UUID) (Simulation, bool, error) {
 	var sim Simulation
 	running := false
@@ -125,7 +125,7 @@ func (r *Runner) start(ctx context.Context, org ids.OrgID, id ids.UUID) (Simulat
 			return err
 		case Running:
 			sim, running = cur, true
-		case Done, Failed, Cancelled:
+		case Done, Failed, Canceled:
 		}
 		return nil
 	})
@@ -137,7 +137,7 @@ func (r *Runner) start(ctx context.Context, org ids.OrgID, id ids.UUID) (Simulat
 
 // record counts a chunk, keeps its samples within the bounds and moves the
 // cursor, in one transaction; last finishes the simulation. cont is false
-// when the simulation finished or was cancelled meanwhile.
+// when the simulation finished or was canceled meanwhile.
 func (r *Runner) record(ctx context.Context, org ids.OrgID, id ids.UUID, results []Result, last bool) (Simulation, bool, error) {
 	var out Simulation
 	cont := false
@@ -147,7 +147,7 @@ func (r *Runner) record(ctx context.Context, org ids.OrgID, id ids.UUID, results
 			return err
 		}
 		if cur.State != Running {
-			return nil // cancelled meanwhile: nothing more is counted
+			return nil // canceled meanwhile: nothing more is counted
 		}
 		have, err := tx.SampleCounts(ctx, id)
 		if err != nil {

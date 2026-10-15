@@ -106,7 +106,7 @@ func (m *memStore) Cancel(_ context.Context, id ids.UUID) (simulation.Simulation
 	if s.State != simulation.Queued && s.State != simulation.Running {
 		return s, false, nil
 	}
-	s.State = simulation.Cancelled
+	s.State = simulation.Canceled
 	m.sims[id] = s
 	return s, true, nil
 }

@@ -64,11 +64,11 @@ func NewReport() Report {
 	}
 }
 
-func group(m map[string]Counts, key string, max int) Counts {
+func group(m map[string]Counts, key string, limit int) Counts {
 	if c, ok := m[key]; ok {
 		return c
 	}
-	if len(m) >= max {
+	if len(m) >= limit {
 		key = Other
 		if c, ok := m[key]; ok {
 			return c
@@ -78,8 +78,8 @@ func group(m map[string]Counts, key string, max int) Counts {
 	return m[key]
 }
 
-func bump(m map[string]int, key string, max int) {
-	if _, ok := m[key]; !ok && len(m) >= max {
+func bump(m map[string]int, key string, limit int) {
+	if _, ok := m[key]; !ok && len(m) >= limit {
 		key = Other
 	}
 	m[key]++

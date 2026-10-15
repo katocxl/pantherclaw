@@ -205,8 +205,8 @@ func TestHR237_SimulationIsBounded(t *testing.T) {
 }
 
 // TestHR237_SimulationOneRunningPerOrg: a second simulation is refused
-// while one is queued or running; a cancelled one stops counting and frees
-// the org; a finished one cannot be cancelled.
+// while one is queued or running; a canceled one stops counting and frees
+// the org; a finished one cannot be canceled.
 func TestHR237_SimulationOneRunningPerOrg(t *testing.T) {
 	w := newWorld(billing.Team)
 	w.record(30, "payments.refund.create", outcome{orig: adomain.Allow, origReason: "GRANT_COVERS", prop: adomain.Allow, propReason: "GRANT_COVERS"})
@@ -214,12 +214,12 @@ func TestHR237_SimulationOneRunningPerOrg(t *testing.T) {
 	if _, err := w.svc.Simulate(as(td.RolePolicyAuthor), simulation.Request{Version: version}); code(err) != "SIMULATION_RUNNING" {
 		t.Fatalf("a second simulation while one is queued: %v", err)
 	}
-	// Cancelled after the first chunk's replays: that chunk is not
+	// Canceled after the first chunk's replays: that chunk is not
 	// counted, and nothing more runs.
 	w.replay.onReplay = func() {
 		if w.replay.calls == 14 {
 			s := w.store.sims[first.ID]
-			s.State = simulation.Cancelled
+			s.State = simulation.Canceled
 			w.store.sims[first.ID] = s
 		}
 	}
@@ -227,8 +227,8 @@ func TestHR237_SimulationOneRunningPerOrg(t *testing.T) {
 	if err != nil || more {
 		t.Fatalf("step after cancel: %v %v", more, err)
 	}
-	if s := w.store.sims[first.ID]; s.State != simulation.Cancelled || s.Evaluated != 0 || w.replay.calls != 14 {
-		t.Fatalf("cancelled: %s, %d evaluated, %d replays", s.State, s.Evaluated, w.replay.calls)
+	if s := w.store.sims[first.ID]; s.State != simulation.Canceled || s.Evaluated != 0 || w.replay.calls != 14 {
+		t.Fatalf("canceled: %s, %d evaluated, %d replays", s.State, s.Evaluated, w.replay.calls)
 	}
 	w.replay.onReplay = nil
 	second := w.simulate(t, simulation.Request{})
@@ -237,17 +237,17 @@ func TestHR237_SimulationOneRunningPerOrg(t *testing.T) {
 		t.Fatalf("cancel a finished simulation: %v", err)
 	}
 	third := w.simulate(t, simulation.Request{})
-	if c, err := w.svc.Cancel(as(td.RolePolicyAuthor), third.ID); err != nil || c.State != simulation.Cancelled {
+	if c, err := w.svc.Cancel(as(td.RolePolicyAuthor), third.ID); err != nil || c.State != simulation.Canceled {
 		t.Fatalf("cancel a queued simulation: %+v %v", c, err)
 	}
 	if more, err := w.runner.Step(context.Background(), org, third.ID); err != nil || more {
-		t.Fatalf("a cancelled simulation ran: %v %v", more, err)
+		t.Fatalf("a canceled simulation ran: %v %v", more, err)
 	}
 	names := []string{}
 	for _, ev := range w.store.audits {
 		names = append(names, ev.Name)
 	}
-	if !slices.Contains(names, "policy.simulation_requested") || !slices.Contains(names, "policy.simulation_cancelled") {
+	if !slices.Contains(names, "policy.simulation_requested") || !slices.Contains(names, "policy.simulation_canceled") {
 		t.Errorf("audit: %v", names)
 	}
 }
