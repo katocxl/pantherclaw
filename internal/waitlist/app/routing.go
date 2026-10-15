@@ -455,6 +455,8 @@ func deciders(ctx context.Context, q *dbq.Queries, org ids.OrgID, e dbq.EntryFor
 			p.Roles = append(p.Roles, r.Role)
 		case apdomain.KindRestore:
 			p.Roles = append(p.Roles, rolesWith(td.PermAgentRestore)...)
+		case apdomain.KindContainment:
+			p.Roles = append(p.Roles, rolesWith(td.PermIncidentRespond)...)
 		case apdomain.KindStepUp:
 			if u, err := apdomain.StepUpUser(r, el.Context.Run); err == nil {
 				named = append(named, u)

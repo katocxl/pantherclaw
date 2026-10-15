@@ -1,0 +1,47 @@
+# SPDX-License-Identifier: BUSL-1.1
+# Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+id: pc.tools.drift
+version: "2"
+title: Tool definition drifted from its review
+description: >-
+  An upstream tool no longer matches the definition its package was reviewed
+  against, so the package version was quarantined automatically and a person
+  reviews it again in the TOOL_REVIEW waitlist; no detection lifts the
+  quarantine (PN-006.2, F401, HR-244). A simulated connection's drift is
+  recorded but quarantines nothing, so it raises nothing here.
+severity: HIGH
+attention: ALERT
+basis: OBSERVED
+atlas: [AML.T0010]
+owasp: [ASI04]
+edition: community
+on: [audit.package.transitioned]
+match: event.attrs.?to.orValue("") == "QUARANTINED" && event.attrs.?reason.orValue("") == "upstream_drift"
+group: connection
+tests:
+  - name: package quarantined for drift
+    fires: true
+    events:
+      - kind: audit.package.transitioned
+        actor_type: gateway
+        actor_id: 01930000-0000-7000-8000-0000000000e1
+        outcome: success
+        subjects: {connection: 01930000-0000-7000-8000-0000000000c1}
+        attrs: {object_type: package_version, from: ACTIVE, to: QUARANTINED, reason: upstream_drift, upstream_tool: get_refund, description_scan: clean}
+  - name: simulated drift report
+    fires: false
+    events:
+      - kind: audit.connection.drift_reported
+        actor_type: gateway
+        actor_id: 01930000-0000-7000-8000-0000000000e1
+        outcome: success
+        subjects: {connection: 01930000-0000-7000-8000-0000000000c1}
+        attrs: {simulated: "true", upstream_tool: get_refund, description_scan: not_scanned}
+  - name: package activated
+    fires: false
+    events:
+      - kind: audit.package.transitioned
+        actor_type: user
+        actor_id: 01930000-0000-7000-8000-0000000000u1
+        outcome: success
+        attrs: {object_type: package_version, from: REVIEWED, to: ACTIVE}

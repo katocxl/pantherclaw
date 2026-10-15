@@ -12,7 +12,6 @@ import (
 
 	"github.com/jackc/pgx/v5/pgtype"
 
-	agents "github.com/katocxl/pantherclaw/internal/agents/app"
 	defs "github.com/katocxl/pantherclaw/internal/definitions/domain"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
@@ -202,33 +201,10 @@ type Evidence struct {
 	Links           []Link
 }
 
-// readers caches, per agent, whether the caller holds evidence.read where
-// it lives.
-type readers struct {
-	c       tenancy.Caller
-	q       *dbq.Queries
-	allowed map[ids.UUID]bool
-}
-
-func newReaders(c tenancy.Caller, q *dbq.Queries) *readers {
-	return &readers{c: c, q: q, allowed: map[ids.UUID]bool{}}
-}
-
-func (r *readers) can(ctx context.Context, agent ids.UUID) (bool, error) {
-	if ok, seen := r.allowed[agent]; seen {
-		return ok, nil
-	}
-	a, err := r.q.GetAgent(ctx, r.c.Org, agent)
-	if err != nil {
-		return false, err
-	}
-	path, err := agents.PathOf(ctx, r.q, a)
-	if err != nil {
-		return false, err
-	}
-	ok := r.c.Can(td.PermEvidenceRead, path)
-	r.allowed[agent] = ok
-	return ok, nil
+// newReaders is the explorer's agent scope: evidence.read where the agent
+// lives.
+func newReaders(c tenancy.Caller, q *dbq.Queries) *AgentScope {
+	return NewAgentScope(c, q, td.PermEvidenceRead)
 }
 
 // ListTransactions lists the transactions the caller may read, newest
@@ -264,7 +240,7 @@ func (e *Explorer) ListTransactions(ctx context.Context, pr page.Request, f Filt
 		rows, out.Next = page.Finish(pr, rows, func(r dbq.ListTransactionsRow) ids.UUID { return r.ID })
 		rd := newReaders(c, q)
 		for _, r := range rows {
-			ok, err := rd.can(ctx, r.AgentID)
+			ok, err := rd.Can(ctx, r.AgentID)
 			if err != nil {
 				return err
 			}
@@ -300,7 +276,7 @@ func (e *Explorer) TransactionEvidence(ctx context.Context, id ids.UUID) (Eviden
 			return err
 		}
 		rd := newReaders(c, q)
-		if ok, err := rd.can(ctx, t.AgentID); err != nil {
+		if ok, err := rd.Can(ctx, t.AgentID); err != nil {
 			return err
 		} else if !ok {
 			return td.ErrPermissionDenied(td.PermEvidenceRead)
@@ -389,7 +365,7 @@ func (e *Explorer) TransactionEvidence(ctx context.Context, id ids.UUID) (Eviden
 			if err != nil {
 				return err
 			}
-			if ok, err := rd.can(ctx, o.AgentID); err != nil {
+			if ok, err := rd.Can(ctx, o.AgentID); err != nil {
 				return err
 			} else if !ok {
 				continue
@@ -604,7 +580,7 @@ func (e *Explorer) ListReconciliations(ctx context.Context, pr page.Request, f R
 		rows, out.Next = page.Finish(pr, rows, func(r dbq.ListReconciliationsRow) ids.UUID { return r.ID })
 		rd := newReaders(c, q)
 		for _, k := range rows {
-			ok, err := rd.can(ctx, k.AgentID)
+			ok, err := rd.Can(ctx, k.AgentID)
 			if err != nil {
 				return err
 			}
@@ -642,7 +618,7 @@ func (e *Explorer) Reconciliation(ctx context.Context, id ids.UUID) (Reconciliat
 		if err != nil {
 			return err
 		}
-		if ok, err := newReaders(c, q).can(ctx, t.AgentID); err != nil {
+		if ok, err := newReaders(c, q).Can(ctx, t.AgentID); err != nil {
 			return err
 		} else if !ok {
 			return td.ErrPermissionDenied(td.PermEvidenceRead)

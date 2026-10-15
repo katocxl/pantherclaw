@@ -177,6 +177,9 @@ func Check(r Requirement, p Person, c Context, cred ids.UUID) (bool, string) {
 	if r.Kind == KindRestore {
 		return checkRestore(p, c, cred)
 	}
+	if r.Kind == KindContainment {
+		return checkContainment(p, c, cred)
+	}
 	switch {
 	case isUser(c.Run.Launcher, p.UserID):
 		return false, IneligibleLauncher
@@ -349,4 +352,40 @@ type Authorship struct {
 	// nobody in the org: not a bot the fact names and not an account an
 	// admin exempted.
 	Unlinked []int64
+}
+
+// checkContainment checks a containment hold's decider (G0 M10 D44,
+// HR-248): an enabled person holding incident.respond, never the run's
+// launcher, principal or an ancestor's, the agent's owners or the grant
+// chain's issuers, with an active security key. approval.respond alone
+// does not qualify.
+func checkContainment(p Person, c Context, cred ids.UUID) (bool, string) {
+	switch {
+	case isUser(c.Run.Launcher, p.UserID):
+		return false, IneligibleLauncher
+	case isUser(c.Run.Principal, p.UserID):
+		return false, IneligiblePrincipal
+	case slices.ContainsFunc(c.Run.Ancestors, func(a gdomain.Principal) bool { return isUser(a, p.UserID) }):
+		return false, IneligibleAncestor
+	case slices.Contains(c.Owners, p.UserID):
+		return false, IneligibleOwner
+	case slices.Contains(c.GrantIssuers, p.UserID):
+		return false, IneligibleGrantIssuer
+	}
+	cd := c.Cooldowns.AtLeastMinimum()
+	why := IneligibleNoRole
+	held := slices.ContainsFunc(p.Bindings, func(b RoleBinding) bool {
+		if !ContainmentRole(b.Role) {
+			return false
+		}
+		if b.SelfGranted && c.Now.Sub(b.CreatedAt) < cd.SelfGrantDelay {
+			why = IneligibleSelfGrant
+			return false
+		}
+		return true
+	})
+	if !held {
+		return false, why
+	}
+	return credentialOK(p, cred, 0, c.Now)
 }

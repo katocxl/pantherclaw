@@ -6,6 +6,8 @@ package github
 import (
 	"bytes"
 	"fmt"
+
+	pcgithub "github.com/katocxl/pantherclaw/packages/pc-github"
 )
 
 // MergeTool is the GitHub MCP server's merge tool (MCPTools).
@@ -21,7 +23,7 @@ const MergeTool = "merge_pull_request"
 // REST dispatch, which a kind-mcp connection does not serve.
 func MCPMergePackage(raw []byte, version, digest string) ([]byte, error) {
 	for _, r := range [][2]string{
-		{"\nversion: 1.0.0\n", "\nversion: " + version + "\n"},
+		{"\nversion: " + pcgithub.Version + "\n", "\nversion: " + version + "\n"},
 		{
 			"      merge_method:\n        type: enum\n        material: true\n        values: [merge, squash, rebase]\n    effects:\n      - kind: repository.branch.merge\n",
 			"      merge_method:\n        type: enum\n        material: true\n        values: [merge, squash, rebase]\n" +

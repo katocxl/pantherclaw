@@ -162,6 +162,24 @@ type Containment struct {
 	Now        time.Time
 }
 
+// ControlKeys are what an action's containment controls can be keyed on (G0
+// M10 D21, D53): its run, agent, connection, grant chain, people and target
+// type. Empty keys match nothing.
+type ControlKeys struct {
+	Run, Agent, Connection string
+	Grants                 []string
+	// Principals are "user:<id>" or "service_account:<id>".
+	Principals []string
+	TargetType string
+}
+
+// MaxControls is how many controls an action's keys may match; more is
+// ErrTooManyControls, and the action is denied (fail closed, D53).
+const MaxControls = 10000
+
+// ErrTooManyControls reports more than MaxControls matching controls.
+var ErrTooManyControls = errors.New("pipeline: too many containment controls match the action")
+
 // Usage is what is already reserved and spent on budget accounts and
 // counters. A row that does not exist yet has no usage.
 type Usage struct {
@@ -240,6 +258,12 @@ func (c Connection) Mode(route string) string {
 // evidence (CANNOT_AUTHORIZE), never as a pass.
 type Reader interface {
 	Containment(ctx context.Context, org ids.OrgID) (Containment, error)
+	// Controls returns the org's unlifted containment controls that keys may
+	// match (G0 M10 D21, D53): those on its run, agent, connection, grant
+	// chain or people, the resource controls of its target type, and any of a
+	// scope type this pipeline does not know. Expiry never lifts a control.
+	// More than MaxControls is ErrTooManyControls.
+	Controls(ctx context.Context, org ids.OrgID, k ControlKeys) ([]Control, error)
 	Definition(ctx context.Context, org ids.OrgID, pin actionir.Definition) (Pinned, error)
 	// Policy returns the policy selected for agent, the verified identity's
 	// agent (D12): a pilot's version for the agents of its ENFORCE cohorts,

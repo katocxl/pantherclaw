@@ -8,7 +8,9 @@ import (
 	"encoding/hex"
 	"encoding/json/v2"
 	"fmt"
+	"slices"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/katocxl/pantherclaw/internal/approvals/proof"
@@ -194,7 +196,12 @@ func fit(r DecisionReceipt) ([]byte, error) {
 		r.Pap.Omitted += len(r.Pap.Checklist) - len(kept)
 		r.Pap.Checklist = kept
 		if len(kept) <= 1 {
-			r.Pap.Obligations, r.Pap.Budgets = nil, nil
+			// Obligations a hardening rule sets (HR-079) stay: they are small,
+			// and the receipt must record what the gateway enforced (D73).
+			r.Pap.Obligations = slices.DeleteFunc(r.Pap.Obligations, func(o pdomain.Obligation) bool {
+				return !strings.HasPrefix(o.Rule, "HR-")
+			})
+			r.Pap.Budgets = nil
 		}
 	}
 	return nil, fmt.Errorf("finalize: the decision receipt does not fit %d bytes", MaxReceiptBytes)

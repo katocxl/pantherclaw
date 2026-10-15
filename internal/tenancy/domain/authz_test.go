@@ -281,7 +281,10 @@ func TestPermissionsListsHeldPermissions(t *testing.T) {
 	tr := newTree()
 	v := user(tr.org, bind(domain.RoleViewer, domain.ScopeTeam, tr.team))
 	got := v.Permissions()
-	want := []domain.Permission{domain.PermOrgRead, domain.PermBusinessUnitRead, domain.PermTeamRead, domain.PermEnvironmentRead}
+	want := []domain.Permission{
+		domain.PermOrgRead, domain.PermBusinessUnitRead, domain.PermTeamRead, domain.PermEnvironmentRead,
+		domain.PermIncidentRead, domain.PermOperationsRead,
+	} // Viewer sees incidents and the operations view (G0 M10 D4)
 	if !slices.Equal(got, want) {
 		t.Fatalf("Permissions() = %v, want %v", got, want)
 	}

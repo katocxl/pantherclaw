@@ -1,0 +1,21 @@
+{{template "head" .}}
+<h1>Shared Signals transmitter: {{.Name}}</h1>
+<p>State: <strong>{{.State}}</strong>. Created by <code>{{.CreatedBy}}</code> at {{.CreatedAt.UTC.Format "2006-01-02 15:04:05 UTC"}}{{with .ActivatedAt}}; activated {{.UTC.Format "2006-01-02 15:04:05 UTC"}}{{end}}.</p>
+<dl>
+<dt>Transmitter</dt><dd><code>{{.ID}}</code></dd>
+<dt>Issuer</dt><dd class="untrusted"><code>{{.Issuer}}</code></dd>
+<dt>Signing keys</dt><dd class="untrusted"><code>{{.JWKSURI}}</code></dd>
+<dt>Audience</dt><dd class="untrusted"><code>{{.Audience}}</code></dd>
+<dt>Push endpoint</dt><dd><code>{{.EndpointURL}}</code></dd>
+<dt>Events</dt><dd>{{.EventsAccepted}} accepted, {{.EventsRefused}} refused{{with .LastRefusalCode}} (last refusal: <code>{{.}}</code>){{end}}</dd>
+</dl>
+{{if .CanActivate}}
+<h2>Activate</h2>
+<p class="note">Once activated, PantherClaw accepts security events signed by this issuer's keys and opens a case for each one about a person in your organization. Check the issuer and key URL before you go on. Activating needs your security key.</p>
+<p><button type="button" class="danger" id="activate" data-path="/integrations/transmitters/{{.ID}}/confirm">Activate with your security key</button></p>
+{{else}}{{if eq .State "PENDING"}}
+<p class="note">You cannot activate this transmitter: that needs signals.manage and a security key.</p>
+{{end}}{{end}}
+<p id="status" role="status"></p>
+<script src="/static/integrations.js"></script>
+{{template "foot" .}}

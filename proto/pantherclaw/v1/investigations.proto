@@ -1,0 +1,377 @@
+// SPDX-License-Identifier: BUSL-1.1
+// Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+
+syntax = "proto3";
+
+package pantherclaw.v1;
+
+import "buf/validate/validate.proto";
+import "google/protobuf/timestamp.proto";
+
+// InvestigationService explains runs and actions from recorded evidence
+// (G0 M10 D20; F239, F241, F248, F232, F284, F234; HR-247). Every row is
+// read with evidence.read where its agent lives; rows of other agents are
+// left out before anything is counted, and an action or run outside that
+// scope is reported as not found. Nothing here asserts causation: items
+// carry their basis, and a comparison never labels a run malicious.
+service InvestigationService {
+  // WhatHappened says whether an action was allowed, held, denied,
+  // observed, dispatched and its effect confirmed, with its launcher,
+  // principal, grantor chain and delegation chain.
+  // permission: evidence.read
+  rpc WhatHappened(WhatHappenedRequest) returns (WhatHappenedResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // GetRunTimeline returns a run's actions, holds, approvals, authority
+  // changes, dispatches, results, gaps and child lanes; inferred phases
+  // with the Team edition.
+  // permission: evidence.read
+  rpc GetRunTimeline(GetRunTimelineRequest) returns (GetRunTimelineResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // GetPrecedingContext returns what came before an action or a run:
+  // authority changes, new tools, shared destinations and earlier
+  // internal reads (Team edition).
+  // permission: evidence.read
+  rpc GetPrecedingContext(GetPrecedingContextRequest) returns (GetPrecedingContextResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // CompareRun compares a run with the agent's runs in a reference range
+  // (Business edition).
+  // permission: evidence.read
+  rpc CompareRun(CompareRunRequest) returns (CompareRunResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+}
+
+// InvestigationParty is a launcher, principal or grantor.
+message InvestigationParty {
+  // user, service_account or instance.
+  string kind = 1;
+  // Its id.
+  string id = 2;
+}
+
+// InvestigationApproval is a hold on an action.
+message InvestigationApproval {
+  // Approval request id.
+  string id = 1;
+  // The held transaction.
+  string transaction_id = 2;
+  // The operation.
+  string operation = 3;
+  // The request's state.
+  string state = 4;
+  // Why it ended; empty while open.
+  string end_reason = 5;
+  // When it was asked.
+  google.protobuf.Timestamp create_time = 6;
+  // When it was approved; unset otherwise.
+  google.protobuf.Timestamp approve_time = 7;
+  // When it ended; unset while open.
+  google.protobuf.Timestamp end_time = 8;
+}
+
+// WhatHappenedRequest names an action.
+message WhatHappenedRequest {
+  // Transaction id.
+  string transaction_id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// WhatHappenedResponse is what actually happened (F239).
+message WhatHappenedResponse {
+  // Transaction id.
+  string transaction_id = 1;
+  // Its run.
+  string run_id = 2;
+  // Its agent.
+  string agent_id = 3;
+  // The operation.
+  string operation = 4;
+  // The decision and its reason code.
+  string decision = 5;
+  // The decision's reason code.
+  string reason = 6;
+  // Stages, each from recorded evidence.
+  bool allowed = 7;
+  // Held for approval or step-up.
+  bool held = 8;
+  // Denied or could not be authorized.
+  bool denied = 9;
+  // Decided in monitor mode (observed, not enforced).
+  bool observed = 10;
+  // Dispatched to its target.
+  bool dispatched = 11;
+  // Its effect is confirmed.
+  bool effect_confirmed = 12;
+  // The target's answer: accepted, failed or unknown; empty before.
+  string outcome = 13;
+  // The effect state; empty before the first effect receipt.
+  string effect = 14;
+  // The launcher of the run.
+  InvestigationParty launcher = 15;
+  // The principal the run acts for.
+  InvestigationParty principal = 16;
+  // The grant and its ancestors, nearest first.
+  repeated InvestigationGrantor grantors = 17;
+  // The parent runs, nearest first.
+  repeated InvestigationDelegation delegation = 18;
+  // Holds on the action.
+  repeated InvestigationApproval approvals = 19;
+  // The caller's scope is narrower than the organization, so the chains
+  // may stop at its edge.
+  bool scope_limited = 20;
+  // When it was decided.
+  google.protobuf.Timestamp create_time = 21;
+  // The connection it used; empty when none.
+  string connection_id = 22;
+  // public or internal; empty when unknown.
+  string destination_class = 23;
+}
+
+// InvestigationGrantor is one grant of the chain.
+message InvestigationGrantor {
+  // Grant id.
+  string grant_id = 1;
+  // Its agent.
+  string agent_id = 2;
+  // Who granted it.
+  InvestigationParty grantor = 3;
+  // Its principal.
+  InvestigationParty principal = 4;
+  // Delegation depth.
+  int32 depth = 5;
+  // ACTIVE or REVOKED.
+  string state = 6;
+  // When it was issued.
+  google.protobuf.Timestamp create_time = 7;
+  // When it was revoked; unset otherwise.
+  google.protobuf.Timestamp revoke_time = 8;
+}
+
+// InvestigationDelegation is one parent run.
+message InvestigationDelegation {
+  // Run id.
+  string run_id = 1;
+  // Its agent.
+  string agent_id = 2;
+  // Its launcher.
+  InvestigationParty launcher = 3;
+  // Its principal.
+  InvestigationParty principal = 4;
+  // Its grant; empty when none.
+  string grant_id = 5;
+  // Its depth.
+  int32 depth = 6;
+}
+
+// GetRunTimelineRequest names a run.
+message GetRunTimelineRequest {
+  // Run id.
+  string run_id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// TimelineEvent is one point of the timeline.
+message TimelineEvent {
+  // When.
+  google.protobuf.Timestamp time = 1;
+  // DECISION, HOLD, APPROVAL, DISPATCH, RESULT, AUTHORITY, LANE or RUN_END.
+  string kind = 2;
+  // The transaction; empty when none.
+  string transaction_id = 3;
+  // The approval request; empty when none.
+  string approval_id = 4;
+  // The grant; empty when none.
+  string grant_id = 5;
+  // The child run; empty when none.
+  string run_id = 6;
+  // The operation; empty when none.
+  string operation = 7;
+  // The connection; empty when none.
+  string connection_id = 8;
+  // Decision, state, outcome or change.
+  string detail = 9;
+}
+
+// TimelineGap is evidence the timeline expected and did not find.
+message TimelineGap {
+  // NO_DECISION_RECEIPT, OUTCOME_UNKNOWN or NO_OUTCOME_RECORDED.
+  string kind = 1;
+  // The transaction.
+  string transaction_id = 2;
+  // When.
+  google.protobuf.Timestamp time = 3;
+}
+
+// TimelineLane is a child run.
+message TimelineLane {
+  // Run id.
+  string run_id = 1;
+  // Its agent.
+  string agent_id = 2;
+  // Its state.
+  string state = 3;
+  // When it started.
+  google.protobuf.Timestamp create_time = 4;
+  // When it ended; unset while active.
+  google.protobuf.Timestamp end_time = 5;
+}
+
+// TimelinePhase is a stretch of actions, inferred from their order.
+message TimelinePhase {
+  // When it starts.
+  google.protobuf.Timestamp start_time = 1;
+  // When it ends.
+  google.protobuf.Timestamp end_time = 2;
+  // The connection it used; empty when none.
+  string connection_id = 3;
+  // How many actions.
+  int32 actions = 4;
+  // The operations, sorted.
+  repeated string operations = 5;
+  // INFERRED unless workflow evidence says otherwise.
+  string basis = 6;
+}
+
+// GetRunTimelineResponse is a run's timeline (F284, F232).
+message GetRunTimelineResponse {
+  // Run id.
+  string run_id = 1;
+  // Its agent.
+  string agent_id = 2;
+  // Its state.
+  string state = 3;
+  // When it started.
+  google.protobuf.Timestamp start_time = 4;
+  // When it ended; unset while active.
+  google.protobuf.Timestamp end_time = 5;
+  // Events, oldest first.
+  repeated TimelineEvent events = 6;
+  // Missing evidence.
+  repeated TimelineGap gaps = 7;
+  // Child runs the caller may read.
+  repeated TimelineLane lanes = 8;
+  // Inferred phases (Team edition; empty otherwise).
+  repeated TimelinePhase phases = 9;
+  // The run has more actions than one timeline holds.
+  bool truncated = 10;
+  // The caller's scope is narrower than the organization.
+  bool scope_limited = 11;
+}
+
+// GetPrecedingContextRequest names an action or a run.
+message GetPrecedingContextRequest {
+  // The run; ignored when transaction_id is set.
+  optional string run_id = 1 [(buf.validate.field).string.uuid = true];
+  // The action.
+  optional string transaction_id = 2 [(buf.validate.field).string.uuid = true];
+  // Start of the range; unset with end: the 24 hours before.
+  google.protobuf.Timestamp start_time = 3;
+  // End of the range (at most 30 days after the start).
+  google.protobuf.Timestamp end_time = 4;
+}
+
+// ContextItem is one item of preceding context.
+message ContextItem {
+  // AUTHORITY, TOOL, SHARED or LINK.
+  string kind = 1;
+  // When (the first time, for a shared target).
+  google.protobuf.Timestamp time = 2;
+  // ISSUED, REVOKED, REVISED, REVISED_WIDER, CONNECTION_CREATED,
+  // PACKAGE_PINNED or INTERNAL_BEFORE_PUBLIC; empty for a shared target.
+  string change = 3;
+  // The grant; empty when none.
+  string grant_id = 4;
+  // The connection; empty when none.
+  string connection_id = 5;
+  // The other run, or the earlier action's run.
+  string run_id = 6;
+  // The other run's agent; empty when none.
+  string agent_id = 7;
+  // The earlier action; empty when none.
+  string transaction_id = 8;
+  // Operation, package or target ("type:id").
+  string detail = 9;
+  // How many actions (shared targets).
+  int64 actions = 10;
+  // OBSERVED or INFERRED.
+  string basis = 11;
+  // A plain explanation that is never a claim of causation.
+  string explanation = 12;
+}
+
+// GetPrecedingContextResponse is the context before an action or run
+// (F241, F248).
+message GetPrecedingContextResponse {
+  // The run.
+  string run_id = 1;
+  // The agent.
+  string agent_id = 2;
+  // The action; empty for a run.
+  string transaction_id = 3;
+  // The range.
+  google.protobuf.Timestamp start_time = 4;
+  // The range.
+  google.protobuf.Timestamp end_time = 5;
+  // Items, by kind then time.
+  repeated ContextItem items = 6;
+  // NOT_COLLECTED: external-content provenance is not recorded yet.
+  string content_provenance = 7;
+  // The caller's scope is narrower than the organization.
+  bool scope_limited = 8;
+}
+
+// CompareRunRequest names a run and a reference range.
+message CompareRunRequest {
+  // Run id.
+  string run_id = 1 [(buf.validate.field).string.uuid = true];
+  // Start of the reference range; unset with end: the 30 days before the
+  // run.
+  google.protobuf.Timestamp start_time = 2;
+  // End of the reference range (at most 30 days after the start).
+  google.protobuf.Timestamp end_time = 3;
+}
+
+// CompareDestination is a connection the run used and no reference run did.
+message CompareDestination {
+  // Connection id.
+  string connection_id = 1;
+  // Its name.
+  string name = 2;
+  // public or internal.
+  string destination_class = 3;
+  // How many actions.
+  int64 actions = 4;
+}
+
+// CompareRunResponse is how the run differs (F234).
+message CompareRunResponse {
+  // The run.
+  string run_id = 1;
+  // Its agent.
+  string agent_id = 2;
+  // The reference range.
+  google.protobuf.Timestamp start_time = 3;
+  // The reference range.
+  google.protobuf.Timestamp end_time = 4;
+  // How many reference runs; 0: nothing to compare with.
+  int32 sample_size = 5;
+  // Connections no reference run used.
+  repeated CompareDestination new_destinations = 6;
+  // Operations no reference run performed.
+  repeated string new_operations = 7;
+  // The run's actions.
+  int64 actions = 8;
+  // The run's accepted actions.
+  int64 accepted = 9;
+  // Median actions of the reference runs.
+  int64 reference_median_actions = 10;
+  // Median accepted actions of the reference runs.
+  int64 reference_median_accepted = 11;
+  // Actions accepted after the run ended.
+  int64 post_task_actions = 12;
+  // OBSERVED.
+  string basis = 13;
+  // The caller's scope is narrower than the organization.
+  bool scope_limited = 14;
+}

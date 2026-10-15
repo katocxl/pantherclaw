@@ -1,0 +1,61 @@
+# SPDX-License-Identifier: BUSL-1.1
+# Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+id: pc.authority.self_approve
+version: "3"
+title: Excluded person tried to approve an action
+description: >-
+  An approval response was refused because the responder is excluded from
+  approving that action: its launcher, its principal, an ancestor run's
+  principal, the agent's owner, the grant's issuer, the requester or the
+  change's author. Approvals are for independent people only (PN-006.3).
+severity: HIGH
+attention: ALERT
+basis: OBSERVED
+atlas: [AML.T0053]
+owasp: [ASI03, ASI09]
+edition: community
+on: [audit.approval.response_refused, audit.rpc.human_only_refused]
+match: >-
+  (event.kind == "audit.rpc.human_only_refused"
+  && event.attrs.?procedure.orValue("") in ["/pantherclaw.v1.ApprovalService/DeclineApprovalRequest",
+  "/pantherclaw.v1.ApprovalService/DeclineApprovalBatch"])
+  || event.reason in ["LAUNCHER_EXCLUDED", "PRINCIPAL_EXCLUDED", "ANCESTOR_RUN_EXCLUDED", "OWNER_EXCLUDED",
+  "GRANT_ISSUER_EXCLUDED", "REQUESTER_EXCLUDED", "AUTHOR_EXCLUDED"]
+group: agent
+tests:
+  - name: service account decides an approval over the api
+    fires: true
+    events:
+      - kind: audit.rpc.human_only_refused
+        actor_type: service_account
+        actor_id: 01930000-0000-7000-8000-0000000000b1
+        outcome: denied
+        reason: HUMAN_ONLY
+        attrs: {procedure: /pantherclaw.v1.ApprovalService/DeclineApprovalRequest, permission: approval.respond, auth_kind: api_key}
+  - name: launcher tries to approve
+    fires: true
+    events:
+      - kind: audit.approval.response_refused
+        actor_type: user
+        actor_id: 01930000-0000-7000-8000-0000000000u1
+        outcome: denied
+        reason: LAUNCHER_EXCLUDED
+        subjects: {resource: 01930000-0000-7000-8000-0000000000q1, agent: 01930000-0000-7000-8000-0000000000a1}
+        attrs: {object_type: approval_request, user: 01930000-0000-7000-8000-0000000000u1, operation: github.push}
+  - name: a responder whose key is too new
+    fires: false
+    events:
+      - kind: audit.approval.response_refused
+        actor_type: user
+        actor_id: 01930000-0000-7000-8000-0000000000u2
+        outcome: denied
+        reason: CREDENTIAL_TOO_NEW
+        subjects: {resource: 01930000-0000-7000-8000-0000000000q1, agent: 01930000-0000-7000-8000-0000000000a1}
+  - name: an independent approval
+    fires: false
+    events:
+      - kind: audit.approval.response
+        actor_type: user
+        actor_id: 01930000-0000-7000-8000-0000000000u3
+        outcome: success
+        reason: APPROVE

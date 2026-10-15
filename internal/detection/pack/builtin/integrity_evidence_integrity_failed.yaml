@@ -1,0 +1,23 @@
+# SPDX-License-Identifier: BUSL-1.1
+# Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+id: pc.integrity.evidence_integrity_failed
+version: "1"
+title: "Integrity: evidence integrity failed"
+description: >-
+  The evidence system recorded security.evidence_integrity_failed, so evidence or enforcement
+  integrity is in doubt and someone looks now.
+severity: CRITICAL
+attention: PAGE
+basis: OBSERVED
+owasp: [ASI08]
+edition: community
+on: [audit.security.evidence_integrity_failed]
+tests:
+  - name: recorded
+    fires: true
+    events:
+      - {kind: audit.security.evidence_integrity_failed}
+  - name: something else
+    fires: false
+    events:
+      - {kind: audit.security.evidence_integrity_reset}

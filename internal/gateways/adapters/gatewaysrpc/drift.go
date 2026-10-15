@@ -8,13 +8,15 @@ import (
 
 	"connectrpc.com/connect/v2"
 
+	connapp "github.com/katocxl/pantherclaw/internal/connections/app"
 	pb "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 )
 
 // Drifts records a gateway's upstream drift reports (connections app).
 type Drifts interface {
-	ReportDrift(ctx context.Context, org ids.OrgID, gateway, connection ids.UUID, tool, expected, observed string) (bool, error)
+	ReportDriftDescribed(ctx context.Context, org ids.OrgID, gateway, connection ids.UUID, tool, expected, observed string,
+		description connapp.ObservedDescription) (bool, error)
 }
 
 // WithDrifts serves ReportDrift from d.
@@ -41,7 +43,10 @@ func (h *GatewayHandler) ReportDrift(ctx context.Context, req *pb.ReportDriftReq
 	if err != nil {
 		return nil, errInvalidID
 	}
-	quarantined, err := h.drifts.ReportDrift(ctx, id.Org, id.Gateway, conn, req.GetTool(), req.GetExpectedDigest(), req.GetObservedDigest())
+	quarantined, err := h.drifts.ReportDriftDescribed(ctx, id.Org, id.Gateway, conn, req.GetTool(), req.GetExpectedDigest(),
+		req.GetObservedDigest(), connapp.ObservedDescription{
+			Text: req.ObservedDescription, Truncated: req.GetObservedDescriptionTruncated(), Digest: req.GetObservedDescriptionSha256(),
+		})
 	if err != nil {
 		return nil, err
 	}

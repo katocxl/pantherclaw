@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/audit"
 	evdomain "github.com/katocxl/pantherclaw/internal/evidence/domain"
 	"github.com/katocxl/pantherclaw/internal/grants/domain"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
@@ -91,6 +92,9 @@ func (s *Service) Delegate(ctx context.Context, w Workload, req DelegateRequest)
 		return domain.Grant{}, err
 	}
 	if err := child.ValidateIssue(ic); err != nil {
+		// A delegation beyond the parent grant or the guardrails is an agent
+		// trying to widen its own authority (G0 M10 D59 H1, PN-006.3).
+		s.refuseDelegation(ctx, w, parent, childRun.AgentID)
 		return domain.Grant{}, apiError(err)
 	}
 	caps := domain.EffectiveCaps(ic.Envelopes)
@@ -131,4 +135,18 @@ func maxTime(a, b time.Time) time.Time {
 // Delegation builds delegation settings from API values.
 func Delegation(depth, maxChildren int32) domain.Delegation {
 	return domain.Delegation{Depth: int(depth), MaxChildren: int(maxChildren)}
+}
+
+// refuseDelegation audits a refused delegation as grant.delegate_refused
+// with the delegating instance as actor. The refusal stands whether or not
+// the audit is written.
+func (s *Service) refuseDelegation(ctx context.Context, w Workload, parent domain.Grant, child ids.UUID) {
+	if s.Refusals == nil {
+		return
+	}
+	_ = s.Refusals.RecordRefusal(context.WithoutCancel(ctx), w.Org, audit.Event{
+		Name: "grant.delegate_refused", Actor: evdomain.Actor{Type: string(domain.PrincipalInstance), ID: w.InstanceID.String()},
+		Outcome: audit.Denied, ReasonCode: "DELEGATION_EXCEEDS_PARENT", Object: &audit.Object{Type: "grant", ID: parent.ID.String()},
+		Details: map[string]string{"agent": child.String(), "parent": parent.ID.String(), "attempted": "grant.delegate"},
+	})
 }

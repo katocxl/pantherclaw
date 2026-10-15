@@ -182,6 +182,42 @@ func (s *snapshot) Containment(ctx context.Context, org ids.OrgID) (pipeline.Con
 	return pipeline.Containment{Epoch: row.Epoch, KillSwitch: row.KillSwitch, Now: row.Now}, nil
 }
 
+// Controls implements pipeline.Reader: the unlifted controls the action's
+// keys may match, in the decision's snapshot (G0 M10 D21, D53).
+func (s *snapshot) Controls(ctx context.Context, org ids.OrgID, k pipeline.ControlKeys) ([]pipeline.Control, error) {
+	rows, err := dbq.New(s.tx).ActionContainmentControls(ctx, dbq.ActionContainmentControlsParams{
+		OrgID: org, Run: k.Run, Agent: k.Agent, Connection: k.Connection, Grants: nonNil(k.Grants), Principals: nonNil(k.Principals),
+		TargetType: k.TargetType,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("authority: containment controls: %w", err)
+	}
+	if len(rows) > pipeline.MaxControls {
+		return nil, pipeline.ErrTooManyControls
+	}
+	out := make([]pipeline.Control, 0, len(rows))
+	for _, c := range rows {
+		ctl := pipeline.Control{ID: c.ID, ScopeType: c.ScopeType, ScopeID: c.ScopeID, Control: c.Control, ExpiresAt: c.ExpiresAt}
+		if c.Operation != nil {
+			ctl.Operation = *c.Operation
+		}
+		out = append(out, ctl)
+	}
+	return out, nil
+}
+
+func nonNil(xs []string) []string {
+	if xs == nil {
+		return []string{}
+	}
+	return xs
+}
+
+// Controls implements pipeline.Reader.
+func (r *Reader) Controls(ctx context.Context, org ids.OrgID, k pipeline.ControlKeys) ([]pipeline.Control, error) {
+	return read(ctx, r, org, func(ctx context.Context, s *snapshot) ([]pipeline.Control, error) { return s.Controls(ctx, org, k) })
+}
+
 // Definition implements pipeline.Reader.
 func (s *snapshot) Definition(ctx context.Context, org ids.OrgID, pin actionir.Definition) (pipeline.Pinned, error) {
 	p, d, state, err := s.r.Definitions.PinnedPackageInTx(ctx, s.tx, org, pin)

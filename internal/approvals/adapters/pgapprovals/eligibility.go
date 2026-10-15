@@ -43,15 +43,20 @@ type Eligibility struct {
 
 // deciderRoles are the default roles that decide a request of kind: those
 // holding approval.respond (decision 2), or agent.restore for a
-// restoration (decision 11).
-func deciderRoles(subjectKind string) []string {
-	p := td.PermApprovalRespond
+// restoration (decision 11), and those holding incident.respond when a
+// requirement is a containment hold (G0 M10 D44). Check still matches each
+// requirement to its own roles.
+func deciderRoles(subjectKind string, reqs []apdomain.Requirement) []string {
+	perms := []td.Permission{td.PermApprovalRespond}
 	if subjectKind == subjectRestoration {
-		p = td.PermAgentRestore
+		perms = []td.Permission{td.PermAgentRestore}
+	}
+	if slices.ContainsFunc(reqs, func(r apdomain.Requirement) bool { return r.Kind == apdomain.KindContainment }) {
+		perms = append(perms, td.PermIncidentRespond)
 	}
 	var out []string
 	for _, r := range td.Roles() {
-		if r.Has(p) {
+		if slices.ContainsFunc(perms, r.Has) {
 			out = append(out, string(r.Name))
 		}
 	}
@@ -161,7 +166,7 @@ func LoadEligibility(ctx context.Context, q *dbq.Queries, org ids.OrgID, request
 		out.People[u.ID] = apdomain.Person{UserID: u.ID, Enabled: u.State == "ACTIVE", JoinedAt: u.CreatedAt}
 	}
 	bs, err := q.EligibilityBindings(ctx, dbq.EligibilityBindingsParams{
-		OrgID: org, Ids: users, Roles: deciderRoles(row.SubjectKind), BusinessUnitID: row.BusinessUnitID, TeamID: row.TeamID,
+		OrgID: org, Ids: users, Roles: deciderRoles(row.SubjectKind, out.Requirements), BusinessUnitID: row.BusinessUnitID, TeamID: row.TeamID,
 		EnvironmentID: row.EnvironmentID,
 	})
 	if err != nil {

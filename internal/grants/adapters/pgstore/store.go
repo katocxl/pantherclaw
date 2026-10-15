@@ -38,6 +38,8 @@ import (
 // Store implements app.Repository and app.Subjects.
 type Store struct {
 	Pool *db.Pool
+	// refusals deduplicates refusal audits (G0 M10 D74).
+	refusals audit.Once
 }
 
 var (
@@ -810,4 +812,18 @@ func (s *Store) GrantInTx(ctx context.Context, tx db.TenantTx, org ids.OrgID, id
 	}
 	g, err := toGrant(org, fromGetGrant(row))
 	return g, err == nil, err
+}
+
+// RecordRefusal audits a refused grant change in a transaction of its own
+// (G0 M10 D59 H1): the refusal itself changes nothing, so its audit entry
+// is the only trace pc.authority.self_issue can read.
+func (s *Store) RecordRefusal(ctx context.Context, org ids.OrgID, ev audit.Event) error {
+	// Once per (org, actor, refusal) per minute (D74).
+	if !s.refusals.First(org.String() + "|" + ev.Actor.Type + ":" + ev.Actor.ID + "|" + ev.Name) {
+		return nil
+	}
+	return s.Pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
+		_, err := audit.Record(ctx, tx, ev)
+		return err
+	})
 }

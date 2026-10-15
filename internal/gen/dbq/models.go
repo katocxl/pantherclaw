@@ -82,6 +82,59 @@ type PcAgentInstance struct {
 	SandboxSessionID  *ids.UUID
 }
 
+type PcAlert struct {
+	OrgID         ids.OrgID
+	ID            ids.UUID
+	Source        string
+	RuleID        string
+	RuleVersion   string
+	RuleDigest    string
+	PackVersion   string
+	Title         string
+	Summary       string
+	Severity      string
+	Attention     string
+	Basis         string
+	Subjects      []byte
+	Atlas         []string
+	Owasp         []string
+	Facts         []byte
+	GroupKey      string
+	DedupeKey     string
+	State         string
+	IncidentID    *ids.UUID
+	SuppressionID *ids.UUID
+	Count         int32
+	FirstSeen     time.Time
+	LastSeen      time.Time
+	Test          bool
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
+}
+
+type PcAlertEvent struct {
+	OrgID     ids.OrgID
+	ID        ids.UUID
+	AlertID   ids.UUID
+	Kind      string
+	ActorType string
+	ActorID   string
+	FromValue *string
+	ToValue   *string
+	Note      *string
+	CreatedAt time.Time
+}
+
+type PcAlertEvidence struct {
+	OrgID      ids.OrgID
+	ID         ids.UUID
+	AlertID    ids.UUID
+	Kind       string
+	RefID      ids.UUID
+	OccurredAt time.Time
+	CreatedAt  time.Time
+}
+
 type PcAnchor struct {
 	ID             ids.UUID
 	Period         time.Time
@@ -319,6 +372,61 @@ type PcCaptureProfile struct {
 	DisabledAt      *time.Time
 }
 
+type PcCase struct {
+	OrgID               ids.OrgID
+	ID                  ids.UUID
+	Title               string
+	Source              string
+	OpenedByType        string
+	OpenedByID          string
+	AlertID             *ids.UUID
+	IncidentID          *ids.UUID
+	State               string
+	OwnerID             *ids.UUID
+	FollowUpOwnerID     *ids.UUID
+	Disposition         *string
+	Impact              *string
+	HeadSeq             int64
+	HeadHash            []byte
+	CreatedAt           time.Time
+	UpdatedAt           time.Time
+	OperationalClosedAt *time.Time
+	ClosedAt            *time.Time
+}
+
+type PcCaseEntry struct {
+	OrgID               ids.OrgID
+	CaseID              ids.UUID
+	ID                  ids.UUID
+	Seq                 int64
+	Body                []byte
+	LedgerEntryID       ids.UUID
+	PrevHash            []byte
+	EntryHash           []byte
+	Kind                string
+	AuthorType          string
+	AuthorID            string
+	Text                *string
+	Basis               *string
+	Evidence            []byte
+	Confidence          *string
+	Alternatives        []string
+	QuestionID          *ids.UUID
+	Unresolved          bool
+	OwnerID             *ids.UUID
+	OwnerRole           *string
+	ImpactKind          *string
+	RefKind             *string
+	RefID               *string
+	ToState             *string
+	NoContainmentNeeded bool
+	Disposition         *string
+	CaseImpact          *string
+	Reason              *string
+	Supersedes          *ids.UUID
+	CreatedAt           time.Time
+}
+
 type PcChangeWindow struct {
 	OrgID       ids.OrgID
 	ID          ids.UUID
@@ -500,6 +608,25 @@ type PcConsequenceRule struct {
 	Canonical []byte
 }
 
+type PcContainmentControl struct {
+	OrgID         ids.OrgID
+	ID            ids.UUID
+	ActionID      ids.UUID
+	ScopeType     string
+	ScopeID       string
+	Control       string
+	Operation     *string
+	Reason        string
+	CaseID        *ids.UUID
+	IncidentID    *ids.UUID
+	CreatedBy     string
+	CreatedAt     time.Time
+	ExpiresAt     *time.Time
+	LiftedAt      *time.Time
+	LiftedBy      *string
+	RestorationID *ids.UUID
+}
+
 type PcCounter struct {
 	OrgID       ids.OrgID
 	ID          ids.UUID
@@ -664,6 +791,36 @@ type PcCrossOrgListAudit struct {
 	CalledAt time.Time
 }
 
+type PcCustomDetectionRule struct {
+	OrgID          ids.OrgID
+	ID             ids.UUID
+	RuleID         string
+	Version        int32
+	Content        string
+	ContentDigest  []byte
+	State          string
+	CreatedBy      ids.UUID
+	CreatedAt      time.Time
+	PublishedBy    *ids.UUID
+	PublishedAt    *time.Time
+	LedgerEntryID  *ids.UUID
+	DisabledBy     *ids.UUID
+	DisabledAt     *time.Time
+	DisabledReason *string
+}
+
+type PcCustomDetectionRuleTest struct {
+	OrgID     ids.OrgID
+	ID        ids.UUID
+	Rule      ids.UUID
+	Passed    bool
+	Firing    int32
+	NonFiring int32
+	Results   []byte
+	RunBy     ids.UUID
+	CreatedAt time.Time
+}
+
 type PcDecisionConsequence struct {
 	OrgID         ids.OrgID
 	TransactionID ids.UUID
@@ -725,6 +882,70 @@ type PcDelivery struct {
 	LastError       *string
 	CreatedAt       time.Time
 	FinishedAt      *time.Time
+}
+
+type PcDetectionCursor struct {
+	OrgID     ids.OrgID
+	Seq       int64
+	UpdatedAt time.Time
+}
+
+type PcDetectionRuleState struct {
+	OrgID              ids.OrgID
+	RuleID             string
+	ConsecutiveErrors  int32
+	LastError          *string
+	DisabledAt         *time.Time
+	DisabledReason     *string
+	OverflowReportedOn pgtype.Date
+	WindowGroups       int32
+	SeenKeys           int32
+	UpdatedAt          time.Time
+}
+
+type PcDetectionRuleVersion struct {
+	OrgID         ids.OrgID
+	Rule          ids.UUID
+	RuleID        string
+	Version       int32
+	ContentDigest []byte
+	LedgerEntryID ids.UUID
+	PublishedBy   ids.UUID
+	CreatedAt     time.Time
+}
+
+type PcDetectionSeen struct {
+	OrgID     ids.OrgID
+	RuleID    string
+	KeyHash   []byte
+	FirstSeen time.Time
+	LastSeen  time.Time
+}
+
+type PcDetectionSequence struct {
+	OrgID     ids.OrgID
+	RuleID    string
+	GroupKey  string
+	Step      int16
+	StartedAt time.Time
+	UpdatedAt time.Time
+	Evidence  []ids.UUID
+}
+
+type PcDetectionWindowBucket struct {
+	OrgID          ids.OrgID
+	RuleID         string
+	GroupKey       string
+	Bucket         time.Time
+	N              int32
+	DistinctValues []string
+}
+
+type PcDetectionWindowGroup struct {
+	OrgID      ids.OrgID
+	RuleID     string
+	GroupKey   string
+	LastBucket time.Time
 }
 
 type PcDeviceCode struct {
@@ -933,6 +1154,47 @@ type PcExecutionReceipt struct {
 	RemovedByPolicy *ids.UUID
 }
 
+type PcExposureChange struct {
+	OrgID     ids.OrgID
+	ChangeSeq int64
+	ChangedAt time.Time
+	ReadSeq   int64
+}
+
+type PcExposureRight struct {
+	OrgID         ids.OrgID
+	SnapshotID    ids.UUID
+	Seq           int32
+	ReachView     string
+	Label         string
+	AgentID       *ids.UUID
+	ConnectionID  *ids.UUID
+	GrantID       *ids.UUID
+	Operation     *string
+	ResourceGroup string
+	Verb          string
+	Coverage      string
+	Reasons       []string
+	Depth         int16
+	ExpiresAt     *time.Time
+	ObservedAt    *time.Time
+	Observations  int32
+	Basis         string
+	Irreversible  bool
+}
+
+type PcExposureSnapshot struct {
+	OrgID        ids.OrgID
+	ID           ids.UUID
+	FeedSeq      int64
+	Cause        string
+	Rights       int32
+	Truncated    bool
+	Gaps         []string
+	RightsSha256 []byte
+	ComputedAt   time.Time
+}
+
 type PcFact struct {
 	OrgID        ids.OrgID
 	ID           ids.UUID
@@ -1009,6 +1271,13 @@ type PcGatewayEnrollmentToken struct {
 	ExpiresAt  time.Time
 	UsedAt     *time.Time
 	UsedCertID *ids.UUID
+}
+
+type PcGatewayEpochDelivery struct {
+	OrgID       ids.OrgID
+	GatewayID   ids.UUID
+	Epoch       int64
+	DeliveredAt time.Time
 }
 
 type PcGithubExemption struct {
@@ -1105,6 +1374,67 @@ type PcHoldSlot struct {
 	ScopeID   ids.UUID
 	Pending   int32
 	UpdatedAt time.Time
+}
+
+type PcIdentityPlaybook struct {
+	OrgID     ids.OrgID
+	Enabled   bool
+	Events    []string
+	Version   int32
+	RequestID *ids.UUID
+	UpdatedAt time.Time
+}
+
+type PcIdentityPlaybookConfirmation struct {
+	OrgID        ids.OrgID
+	RequestID    ids.UUID
+	PrincipalID  ids.UUID
+	CredentialID ids.UUID
+	CreatedAt    time.Time
+}
+
+type PcIdentityPlaybookRequest struct {
+	OrgID         ids.OrgID
+	ID            ids.UUID
+	Kind          string
+	Events        []string
+	BaseVersion   int32
+	Binding       []byte
+	Required      int16
+	State         string
+	RequestedBy   ids.UUID
+	CreatedAt     time.Time
+	ExpiresAt     time.Time
+	DecidedAt     *time.Time
+	DecidedReason *string
+}
+
+type PcIncident struct {
+	OrgID     ids.OrgID
+	ID        ids.UUID
+	Title     string
+	Severity  string
+	State     string
+	OwnerID   *ids.UUID
+	GroupKey  string
+	OpenedBy  string
+	Test      bool
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}
+
+type PcIncidentEvent struct {
+	OrgID      ids.OrgID
+	ID         ids.UUID
+	IncidentID ids.UUID
+	Kind       string
+	ActorType  string
+	ActorID    string
+	FromValue  *string
+	ToValue    *string
+	AlertID    *ids.UUID
+	Note       *string
+	CreatedAt  time.Time
 }
 
 type PcInvitation struct {
@@ -1241,6 +1571,17 @@ type PcMembership struct {
 	CreatedAt time.Time
 }
 
+type PcMetricSample struct {
+	OrgID     ids.OrgID
+	ID        ids.UUID
+	Metric    string
+	Dimension string
+	Bucket    time.Time
+	Value     pgtype.Float8
+	Collected bool
+	SampledAt time.Time
+}
+
 type PcNotification struct {
 	OrgID           ids.OrgID
 	ID              ids.UUID
@@ -1298,6 +1639,26 @@ type PcObservation struct {
 	ObservedAt      time.Time
 	BodyRemovedAt   *time.Time
 	RemovedByPolicy *ids.UUID
+}
+
+type PcOperationalFailure struct {
+	OrgID      ids.OrgID
+	ID         ids.UUID
+	Kind       string
+	Summary    string
+	NextStep   string
+	Scope      []byte
+	OwnerType  *string
+	OwnerID    *string
+	Deadline   time.Time
+	State      string
+	DedupeKey  string
+	Count      int32
+	FirstSeen  time.Time
+	LastSeen   time.Time
+	ResolvedBy *ids.UUID
+	ResolvedAt *time.Time
+	Resolution *string
 }
 
 type PcOrg struct {
@@ -1616,6 +1977,46 @@ type PcPolicyVersion struct {
 	ContentDigest []byte
 }
 
+type PcPostureFinding struct {
+	OrgID                ids.OrgID
+	ID                   ids.UUID
+	Kind                 string
+	RootCause            string
+	AgentID              *ids.UUID
+	ConnectionID         *ids.UUID
+	GrantID              *ids.UUID
+	CoverageFindingID    *ids.UUID
+	Title                string
+	Detail               []byte
+	AffectedPaths        []string
+	PathsTruncated       bool
+	Severity             string
+	State                string
+	OwnerUserID          *ids.UUID
+	AcceptedUntil        *time.Time
+	AcceptedReason       *string
+	Fingerprint          []byte
+	LastSnapshotID       ids.UUID
+	RemediatedSnapshotID *ids.UUID
+	FirstSeenAt          time.Time
+	LastSeenAt           time.Time
+	StateChangedAt       time.Time
+	RemediatedAt         *time.Time
+}
+
+type PcPostureFindingEvent struct {
+	OrgID      ids.OrgID
+	ID         ids.UUID
+	FindingID  ids.UUID
+	Kind       string
+	FromState  *string
+	ToState    string
+	Actor      string
+	Note       *string
+	SnapshotID *ids.UUID
+	OccurredAt time.Time
+}
+
 type PcProbeNonce struct {
 	OrgID       ids.OrgID
 	ID          ids.UUID
@@ -1692,6 +2093,17 @@ type PcRedteamRun struct {
 	FinishedAt        *time.Time
 }
 
+type PcReflexDigest struct {
+	OrgID            ids.OrgID
+	Day              pgtype.Date
+	State            string
+	Decisions        int32
+	AuthorityChanges int32
+	Alerts           int32
+	CreatedAt        time.Time
+	SentAt           *time.Time
+}
+
 type PcReservation struct {
 	OrgID         ids.OrgID
 	ID            ids.UUID
@@ -1704,6 +2116,94 @@ type PcReservation struct {
 	CreatedAt     time.Time
 	SettledAt     *time.Time
 	Pending       bool
+}
+
+type PcResponseAction struct {
+	OrgID             ids.OrgID
+	ID                ids.UUID
+	Kind              string
+	ScopeType         string
+	ScopeID           string
+	Control           *string
+	Operation         *string
+	Reason            string
+	CaseID            *ids.UUID
+	IncidentID        *ids.UUID
+	Actor             string
+	Source            string
+	PreviewDigest     []byte
+	PreviewSummary    []byte
+	SkipPreview       bool
+	SkipReason        *string
+	SkipStepUpAt      *time.Time
+	AttestedBy        *string
+	AttestedAt        *time.Time
+	Attestation       *string
+	IdempotencyKey    *string
+	RequestDigest     []byte
+	Status            string
+	MediatedConfirmed bool
+	FutureConfirmed   bool
+	HistoricalOpen    []byte
+	Epoch             pgtype.Int8
+	RequestedAt       time.Time
+	UpdatedAt         time.Time
+	SettledAt         *time.Time
+	NextCheckAt       time.Time
+	CheckBackoffS     int32
+}
+
+type PcResponsePath struct {
+	OrgID             ids.OrgID
+	ActionID          ids.UUID
+	ID                ids.UUID
+	PathType          string
+	SubjectType       string
+	SubjectID         string
+	Material          bool
+	Control           string
+	Status            string
+	Evidence          []byte
+	Failure           *string
+	UnsupportedReason *string
+	CancelCapability  *string
+	CancelRequestedAt *time.Time
+	CreatedAt         time.Time
+	UpdatedAt         time.Time
+	ConfirmedAt       *time.Time
+}
+
+type PcRestorationPlan struct {
+	OrgID             ids.OrgID
+	ID                ids.UUID
+	ApprovalRequestID *ids.UUID
+	Reason            string
+	Staged            bool
+	State             string
+	Preconditions     []byte
+	RequestedBy       string
+	CreatedAt         time.Time
+	UpdatedAt         time.Time
+	FinishedAt        *time.Time
+}
+
+type PcRestorationPlanControl struct {
+	OrgID     ids.OrgID
+	PlanID    ids.UUID
+	ControlID ids.UUID
+}
+
+type PcRestorationStage struct {
+	OrgID     ids.OrgID
+	PlanID    ids.UUID
+	Ordinal   int32
+	Scope     []byte
+	Tests     []byte
+	Results   []byte
+	State     string
+	CreatedAt time.Time
+	TestedAt  *time.Time
+	AppliedAt *time.Time
 }
 
 type PcRetentionPolicy struct {
@@ -1801,6 +2301,19 @@ type PcSandboxSessionConnection struct {
 	CredentialVersion  *int32
 }
 
+type PcSavedQuery struct {
+	OrgID       ids.OrgID
+	ID          ids.UUID
+	Owner       string
+	Name        string
+	Description string
+	Visibility  string
+	TeamID      *ids.UUID
+	Spec        []byte
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+}
+
 type PcServiceAccount struct {
 	OrgID       ids.OrgID
 	ID          ids.UUID
@@ -1847,6 +2360,134 @@ type PcSession struct {
 	LastSeenAt         time.Time
 	ExpiresAt          time.Time
 	EndedAt            *time.Time
+}
+
+type PcSiemBatch struct {
+	OrgID         ids.OrgID
+	ID            ids.UUID
+	DestinationID ids.UUID
+	FromSeq       int64
+	ToSeq         int64
+	EventCount    int32
+	BodyBytes     int32
+	SkippedUids   []ids.UUID
+	State         string
+	Attempts      int32
+	NextAttemptAt time.Time
+	LastAttemptAt *time.Time
+	LastStatus    *int32
+	LastError     *string
+	CreatedAt     time.Time
+	DeliveredAt   *time.Time
+}
+
+type PcSiemCursor struct {
+	OrgID         ids.OrgID
+	DestinationID ids.UUID
+	Seq           int64
+	UpdatedAt     time.Time
+}
+
+type PcSiemDestination struct {
+	OrgID               ids.OrgID
+	ID                  ids.UUID
+	Name                string
+	Url                 string
+	Internal            bool
+	DataClasses         []string
+	Format              string
+	State               string
+	Secret              []byte
+	PrevSecret          []byte
+	PrevSecretExpiresAt *time.Time
+	CreatedBy           string
+	CreatedAt           time.Time
+	ActivatedBy         *ids.UUID
+	ActivatedCredential *ids.UUID
+	ActivatedAt         *time.Time
+	UpdatedAt           time.Time
+	ConfirmedAt         *time.Time
+	LastDeliveredSeq    pgtype.Int8
+	LastDeliveredAt     *time.Time
+	ConsecutiveFailures int32
+	FailingSince        *time.Time
+	LastFailureAt       *time.Time
+	LastFailureCode     *string
+	DeliveredBatches    int64
+	FailedBatches       int64
+	Retries             int64
+}
+
+type PcSoarRequest struct {
+	OrgID          ids.OrgID
+	IdempotencyKey string
+	RequestDigest  []byte
+	ActionID       ids.UUID
+	RequestedBy    string
+	CreatedAt      time.Time
+}
+
+type PcSsfEvent struct {
+	OrgID         ids.OrgID
+	ID            ids.UUID
+	TransmitterID ids.UUID
+	Jti           string
+	EventType     string
+	IssuedAt      time.Time
+	SubjectFormat *string
+	UserID        *ids.UUID
+	MatchBasis    *string
+	Outcome       string
+	CaseID        *ids.UUID
+	CaseNote      *string
+	ReceivedAt    time.Time
+	ExpiresAt     time.Time
+}
+
+type PcSsfTransmitter struct {
+	OrgID               ids.OrgID
+	ID                  ids.UUID
+	Name                string
+	Issuer              string
+	JwksUri             string
+	Audience            string
+	State               string
+	CreatedBy           string
+	CreatedAt           time.Time
+	ActivatedBy         *ids.UUID
+	ActivatedCredential *ids.UUID
+	ActivatedAt         *time.Time
+	UpdatedAt           time.Time
+	LastEventAt         *time.Time
+	EventsAccepted      int64
+	EventsRefused       int64
+	LastRefusalAt       *time.Time
+	LastRefusalCode     *string
+}
+
+type PcSuppression struct {
+	OrgID       ids.OrgID
+	ID          ids.UUID
+	RuleID      string
+	Subjects    []byte
+	MaxSeverity string
+	Reason      string
+	CreatedBy   ids.UUID
+	CreatedAt   time.Time
+	ExpiresAt   time.Time
+	EndedAt     *time.Time
+	EndedBy     *ids.UUID
+	EndReason   *string
+}
+
+type PcSuppressionBreak struct {
+	OrgID         ids.OrgID
+	ID            ids.UUID
+	SuppressionID ids.UUID
+	Subject       string
+	AlertID       ids.UUID
+	Reason        string
+	CreatedAt     time.Time
 }
 
 type PcTargetLogRun struct {
@@ -2065,20 +2706,21 @@ type PcWaitlistSetting struct {
 }
 
 type PcWebauthnCeremony struct {
-	OrgID                 ids.OrgID
-	ID                    ids.UUID
-	SessionID             ids.UUID
-	UserID                ids.UUID
-	Purpose               string
-	Challenge             []byte
-	AllowedCredentials    [][]byte
-	CreatedAt             time.Time
-	ExpiresAt             time.Time
-	ConsumedAt            *time.Time
-	ApprovalRequestID     *ids.UUID
-	BatchID               *ids.UUID
-	ReconciliationID      *ids.UUID
-	PolicyChangeRequestID *ids.UUID
+	OrgID                     ids.OrgID
+	ID                        ids.UUID
+	SessionID                 ids.UUID
+	UserID                    ids.UUID
+	Purpose                   string
+	Challenge                 []byte
+	AllowedCredentials        [][]byte
+	CreatedAt                 time.Time
+	ExpiresAt                 time.Time
+	ConsumedAt                *time.Time
+	ApprovalRequestID         *ids.UUID
+	BatchID                   *ids.UUID
+	ReconciliationID          *ids.UUID
+	PolicyChangeRequestID     *ids.UUID
+	IdentityPlaybookRequestID *ids.UUID
 }
 
 type PcWebauthnCredential struct {

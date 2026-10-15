@@ -1,0 +1,368 @@
+// SPDX-License-Identifier: BUSL-1.1
+// Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+
+syntax = "proto3";
+
+package pantherclaw.v1;
+
+import "buf/validate/validate.proto";
+import "google/protobuf/timestamp.proto";
+
+// SearchService is permission-safe structured search (G0 M10 D34; F304,
+// F306, F317, F627; HR-257, T-042). A query names one entity and typed
+// filters, or one built-in investigative query; there is no free text.
+// Every search runs under the caller's own permissions: rows it may not
+// read are left out before paging and counting, so neither the rows nor
+// the counts reveal them. Results state their scope, evidence range,
+// freshness and omissions, and an empty result says why it is empty.
+// Saved queries hold only the query, never results; whoever runs one runs
+// it under their own permissions, so sharing never widens.
+service SearchService {
+  // Search runs a structured query.
+  // permission: search.read
+  rpc Search(SearchRequest) returns (SearchResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // ListBuiltinQueries lists the built-in investigative queries.
+  // permission: search.read
+  rpc ListBuiltinQueries(ListBuiltinQueriesRequest) returns (ListBuiltinQueriesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // RunBuiltinQuery runs a built-in investigative query.
+  // permission: search.read
+  rpc RunBuiltinQuery(RunBuiltinQueryRequest) returns (RunBuiltinQueryResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // SaveQuery saves a query owned by the caller, private or shared with a
+  // team or the organization.
+  // permission: search.read
+  rpc SaveQuery(SaveQueryRequest) returns (SaveQueryResponse);
+  // UpdateSavedQuery replaces a saved query the caller owns.
+  // permission: search.read
+  rpc UpdateSavedQuery(UpdateSavedQueryRequest) returns (UpdateSavedQueryResponse);
+  // DeleteSavedQuery deletes a saved query the caller owns.
+  // permission: search.read
+  rpc DeleteSavedQuery(DeleteSavedQueryRequest) returns (DeleteSavedQueryResponse);
+  // GetSavedQuery returns a saved query the caller may see.
+  // permission: search.read
+  rpc GetSavedQuery(GetSavedQueryRequest) returns (GetSavedQueryResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // ListSavedQueries lists the saved queries the caller may see: its own,
+  // the organization's and those shared with its teams.
+  // permission: search.read
+  rpc ListSavedQueries(ListSavedQueriesRequest) returns (ListSavedQueriesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // RunSavedQuery runs a saved query under the caller's permissions.
+  // permission: search.read
+  rpc RunSavedQuery(RunSavedQueryRequest) returns (RunSavedQueryResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+}
+
+// SearchFilters are the typed filters of a structured query. Each entity
+// accepts only its own; anything else is refused.
+message SearchFilters {
+  optional string id = 1 [(buf.validate.field).string.uuid = true];
+  optional string agent_id = 2 [(buf.validate.field).string.uuid = true];
+  optional string run_id = 3 [(buf.validate.field).string.uuid = true];
+  optional string grant_id = 4 [(buf.validate.field).string.uuid = true];
+  optional string connection_id = 5 [(buf.validate.field).string.uuid = true];
+  optional string gateway_id = 6 [(buf.validate.field).string.uuid = true];
+  optional string team_id = 7 [(buf.validate.field).string.uuid = true];
+  optional string principal_user_id = 8 [(buf.validate.field).string.uuid = true];
+  optional string principal_service_account_id = 9 [(buf.validate.field).string.uuid = true];
+  // Agents that used this connection in the range.
+  optional string used_connection_id = 10 [(buf.validate.field).string.uuid = true];
+  // An exact operation.
+  string operation = 11 [(buf.validate.field).string.max_len = 200];
+  // An operation prefix ("payments.").
+  string operation_prefix = 12 [(buf.validate.field).string.max_len = 200];
+  string target_type = 13 [(buf.validate.field).string.max_len = 200];
+  // An effect kind prefix ("funds.").
+  string effect_prefix = 14 [(buf.validate.field).string.max_len = 200];
+  // An audit kind prefix ("audit.grant.").
+  string kind_prefix = 15 [(buf.validate.field).string.max_len = 200];
+  string actor = 16 [(buf.validate.field).string.max_len = 200];
+  repeated string decisions = 17 [(buf.validate.field).repeated.max_items = 16];
+  repeated string modes = 18 [(buf.validate.field).repeated.max_items = 16];
+  repeated string states = 19 [(buf.validate.field).repeated.max_items = 16];
+  repeated string kinds = 20 [(buf.validate.field).repeated.max_items = 16];
+  repeated string access_modes = 21 [(buf.validate.field).repeated.max_items = 16];
+  repeated string environment_kinds = 22 [(buf.validate.field).repeated.max_items = 16];
+  // Grants with no recorded use since then.
+  google.protobuf.Timestamp unused_since = 23;
+  // Grant changes: only new grants and widening revisions.
+  bool widens_only = 24;
+  google.protobuf.Timestamp start_time = 25;
+  google.protobuf.Timestamp end_time = 26;
+}
+
+// Query is one structured query.
+message Query {
+  // "transactions", "runs", "agents", "grants", "grant_changes",
+  // "connections", "approvals", "audit" or "operations".
+  string entity = 1 [(buf.validate.field).string = {
+    in: [
+      "transactions",
+      "runs",
+      "agents",
+      "grants",
+      "grant_changes",
+      "connections",
+      "approvals",
+      "audit",
+      "operations"
+    ]
+  }];
+  SearchFilters filters = 2;
+}
+
+// BuiltinParams are a built-in query's parameters; each query takes only
+// its own.
+message BuiltinParams {
+  optional string transaction_id = 1 [(buf.validate.field).string.uuid = true];
+  optional string agent_id = 2 [(buf.validate.field).string.uuid = true];
+  optional string connection_id = 3 [(buf.validate.field).string.uuid = true];
+  optional string principal_user_id = 4 [(buf.validate.field).string.uuid = true];
+  optional string principal_service_account_id = 5 [(buf.validate.field).string.uuid = true];
+  string effect = 6 [(buf.validate.field).string.max_len = 200];
+  string target_type = 7 [(buf.validate.field).string.max_len = 200];
+  int32 days = 8 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 365
+  }];
+  google.protobuf.Timestamp start_time = 9;
+  google.protobuf.Timestamp end_time = 10;
+  // A resource group (who_can_write).
+  string resource = 11 [(buf.validate.field).string.max_len = 200];
+}
+
+// BuiltinQuery is one built-in query with its parameters.
+message BuiltinQuery {
+  string name = 1 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 64
+    pattern: "^[a-z_]+$"
+  }];
+  BuiltinParams params = 2;
+}
+
+// SearchItem is one result row: scalar fields and links to supporting
+// evidence ("<kind>:<id>").
+message SearchItem {
+  string entity = 1;
+  string id = 2;
+  google.protobuf.Timestamp time = 3;
+  // A distinction the row carries: ATTEMPT or CONFIRMED, ENFORCED or
+  // SHADOW, MATERIAL or NARROWING_OR_METADATA, VERIFIED, DECLARED or
+  // UNCLASSIFIED, else the row's state.
+  string label = 4;
+  map<string, string> fields = 5;
+  repeated string evidence = 6;
+}
+
+// Omission is what a result cannot show, from the caller's permissions or
+// from what PantherClaw does not observe.
+message Omission {
+  string code = 1;
+  string detail = 2;
+}
+
+// SearchResult is one page of results.
+message SearchResult {
+  repeated SearchItem items = 1;
+  string next_page_token = 2;
+  // Matching rows in the caller's scope, at most 10000.
+  int32 count = 3;
+  // More than count match.
+  bool count_capped = 4;
+  // The permission the rows are read with, and whether the caller holds it
+  // across the whole organization.
+  string scope_permission = 5;
+  bool scope_whole = 6;
+  // The evidence range covered; unset ends are open.
+  google.protobuf.Timestamp range_start_time = 7;
+  google.protobuf.Timestamp range_end_time = 8;
+  // The range reaches the present, so its results may still change.
+  bool range_changing = 9;
+  // When the search ran.
+  google.protobuf.Timestamp as_of_time = 10;
+  repeated Omission omissions = 11;
+  // Why the first page is empty: "NOTHING_IN_SCOPE", "NO_DATA_COLLECTED"
+  // or "RESTRICTED"; empty when there are results.
+  string empty_reason = 12;
+}
+
+// SearchRequest runs a structured query.
+message SearchRequest {
+  Query query = 1 [(buf.validate.field).required = true];
+  // Maximum results (default 50, at most 200).
+  int32 page_size = 2 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 200
+  }];
+  // Token from a previous response.
+  string page_token = 3 [(buf.validate.field).string = {
+    max_len: 64
+    pattern: "^[A-Za-z0-9_-]*$"
+  }];
+}
+
+// ListBuiltinQueriesRequest is empty.
+message ListBuiltinQueriesRequest {}
+
+// BuiltinQueryInfo describes a built-in query.
+message BuiltinQueryInfo {
+  string name = 1;
+  // The feature it implements (F306–F315).
+  string feature = 2;
+  string description = 3;
+  // The parameters it takes.
+  repeated string params = 4;
+}
+
+// ListBuiltinQueriesResponse lists the built-in queries.
+message ListBuiltinQueriesResponse {
+  repeated BuiltinQueryInfo queries = 1;
+}
+
+// RunBuiltinQueryRequest runs a built-in query.
+message RunBuiltinQueryRequest {
+  BuiltinQuery query = 1 [(buf.validate.field).required = true];
+  int32 page_size = 2 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 200
+  }];
+  string page_token = 3 [(buf.validate.field).string = {
+    max_len: 64
+    pattern: "^[A-Za-z0-9_-]*$"
+  }];
+}
+
+// SavedQuery is a saved query.
+message SavedQuery {
+  string id = 1;
+  // The owner's principal ("user:<id>" or "service_account:<id>").
+  string owner = 2;
+  string name = 3;
+  string description = 4;
+  // "PRIVATE", "TEAM" or "ORG".
+  string visibility = 5;
+  // The team a TEAM query is shared with.
+  string team_id = 6;
+  // Exactly one of query and builtin is set.
+  Query query = 7;
+  BuiltinQuery builtin = 8;
+  google.protobuf.Timestamp create_time = 9;
+  google.protobuf.Timestamp update_time = 10;
+  // The caller owns it and may change it.
+  bool mine = 11;
+}
+
+// SavedQueryInput is what a saved query holds.
+message SavedQueryInput {
+  string name = 1 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 120
+  }];
+  string description = 2 [(buf.validate.field).string.max_len = 500];
+  string visibility = 3 [(buf.validate.field).string = {
+    in: [
+      "PRIVATE",
+      "TEAM",
+      "ORG"
+    ]
+  }];
+  optional string team_id = 4 [(buf.validate.field).string.uuid = true];
+  // Exactly one of query and builtin.
+  Query query = 5;
+  BuiltinQuery builtin = 6;
+}
+
+// SaveQueryRequest saves a query.
+message SaveQueryRequest {
+  SavedQueryInput input = 1 [(buf.validate.field).required = true];
+}
+
+// UpdateSavedQueryRequest replaces a saved query.
+message UpdateSavedQueryRequest {
+  string id = 1 [(buf.validate.field).string.uuid = true];
+  SavedQueryInput input = 2 [(buf.validate.field).required = true];
+}
+
+
+// DeleteSavedQueryRequest names a saved query.
+message DeleteSavedQueryRequest {
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// DeleteSavedQueryResponse is empty.
+message DeleteSavedQueryResponse {}
+
+// GetSavedQueryRequest names a saved query.
+message GetSavedQueryRequest {
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// ListSavedQueriesRequest pages saved queries.
+message ListSavedQueriesRequest {
+  int32 page_size = 1 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 200
+  }];
+  string page_token = 2 [(buf.validate.field).string = {
+    max_len: 64
+    pattern: "^[A-Za-z0-9_-]*$"
+  }];
+}
+
+// ListSavedQueriesResponse is one page.
+message ListSavedQueriesResponse {
+  repeated SavedQuery queries = 1;
+  string next_page_token = 2;
+}
+
+// RunSavedQueryRequest runs a saved query.
+message RunSavedQueryRequest {
+  string id = 1 [(buf.validate.field).string.uuid = true];
+  int32 page_size = 2 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 200
+  }];
+  string page_token = 3 [(buf.validate.field).string = {
+    max_len: 64
+    pattern: "^[A-Za-z0-9_-]*$"
+  }];
+}
+
+// SearchResponse is one page of a structured query.
+message SearchResponse {
+  SearchResult result = 1;
+}
+
+// RunBuiltinQueryResponse is one page of a built-in query.
+message RunBuiltinQueryResponse {
+  SearchResult result = 1;
+}
+
+// RunSavedQueryResponse is one page of a saved query.
+message RunSavedQueryResponse {
+  SearchResult result = 1;
+}
+
+// SaveQueryResponse is the saved query.
+message SaveQueryResponse {
+  SavedQuery query = 1;
+}
+
+// UpdateSavedQueryResponse is the saved query.
+message UpdateSavedQueryResponse {
+  SavedQuery query = 1;
+}
+
+// GetSavedQueryResponse is the saved query.
+message GetSavedQueryResponse {
+  SavedQuery query = 1;
+}

@@ -608,7 +608,7 @@ The exit status is in [g0/M7.md](g0/M7.md), the latency re-measurement in [docs/
 - Connector runtime for third-party MCP servers run as local processes (moved from M6, G0 M6 decision 3): each in its own locked-down container on the same sandbox machinery, customer-hosted gateways only, egress only through the gateway, which injects credentials (HR-084, HR-085).
 
 ### M10 — Detect, investigate, respond
-**F:** F211–F271, F534–F572, F607–F623 · **PN:** PN-006, PN-018, PN-024 · **ADR:** 0019.
+**HR:** HR-240..262 (with the M10 parts of HR-037 and HR-079) · **F:** F211–F271, F534–F572, F607–F623 · **PN:** PN-006, PN-018, PN-024 · **ADR:** 0019, 0026 · **G0:** [g0/M10.md](g0/M10.md).
 - Detection engine (CEL rules over outbox events, windowed counters with cardinality caps, ATLAS/OWASP mapping), attention levels, grouping, suppression with scope/expiry.
 - Alerts → incidents → cases (facts, hypotheses, open questions, lenses, closure requirements), posture findings and lifecycle.
 - Breach radius: observed vs effective vs credential/bypass reach, dependency previews, exposure matrix.

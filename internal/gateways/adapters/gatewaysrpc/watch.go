@@ -66,9 +66,10 @@ func (h *GatewayHandler) WatchContainment(ctx context.Context, _ *pantherclawv1.
 	beat := time.NewTicker(gwapp.HeartbeatEvery)
 	defer beat.Stop()
 	var (
-		last   gwapp.Containment
-		sent   bool
-		sentAt time.Time
+		last     gwapp.Containment
+		sent     bool
+		sentAt   time.Time
+		recorded int64
 	)
 	for {
 		if c, fresh := sub.State(); fresh {
@@ -88,6 +89,15 @@ func (h *GatewayHandler) WatchContainment(ctx context.Context, _ *pantherclawv1.
 					return err
 				}
 				last, sent, sentAt = c, true, time.Now()
+				if c.Epoch > recorded {
+					// A gateway path of a containment action is confirmed once
+					// its gateway was sent the epoch (G0 M10 D22); failing to
+					// record it leaves the path unconfirmed, never the stream
+					// quiet.
+					if err := sub.Delivered(ctx, c.Epoch); err == nil {
+						recorded = c.Epoch
+					}
+				}
 			}
 		}
 		select {

@@ -1,0 +1,46 @@
+# SPDX-License-Identifier: BUSL-1.1
+# Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+id: pc.coverage.lost
+version: "2"
+title: Enforced coverage lost on a route
+description: >-
+  A scope whose coverage was ENFORCED was recomputed at a lower state
+  (PARTIAL, OBSERVE_ONLY or UNKNOWN), so actions on it can bypass
+  enforcement. The snapshot entry records the state before it, however long
+  ago that was.
+severity: HIGH
+attention: ALERT
+basis: OBSERVED
+owasp: [ASI02]
+edition: community
+on: [coverage.snapshot]
+match: event.attrs.?previous_state.orValue("") == "ENFORCED" && event.outcome != "ENFORCED"
+group: agent
+tests:
+  - name: enforced then partial days later
+    fires: true
+    events:
+      - kind: coverage.snapshot
+        actor_type: system
+        outcome: PARTIAL
+        operation: github.push
+        subjects: {agent: 01930000-0000-7000-8000-0000000000a1, connection: 01930000-0000-7000-8000-0000000000c1}
+        attrs: {state: PARTIAL, previous_state: ENFORCED, snapshot: 01930000-0000-7000-8000-0000000000s2}
+  - name: stays enforced
+    fires: false
+    events:
+      - kind: coverage.snapshot
+        actor_type: system
+        outcome: ENFORCED
+        operation: github.push
+        subjects: {agent: 01930000-0000-7000-8000-0000000000a1, connection: 01930000-0000-7000-8000-0000000000c1}
+        attrs: {state: ENFORCED, previous_state: ENFORCED}
+  - name: first snapshot partial
+    fires: false
+    events:
+      - kind: coverage.snapshot
+        actor_type: system
+        outcome: PARTIAL
+        operation: github.push
+        subjects: {agent: 01930000-0000-7000-8000-0000000000a1, connection: 01930000-0000-7000-8000-0000000000c1}
+        attrs: {state: PARTIAL}

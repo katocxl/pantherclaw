@@ -313,7 +313,8 @@ func cmdServe(ctx context.Context, args []string, stderr io.Writer, env Env, onS
 		}
 		handler, err := apiHandler(apiDeps{
 			pool: pool, reg: reg, log: log, authority: svc, billing: bill,
-			auth:      rpcauth.New(authn, procedurePermissions, nil),
+			auth: rpcauth.New(authn, procedurePermissions, nil,
+				rpcauth.WithRefusals(&rpcauth.AuditRefusals{Pool: pool, Log: log})),
 			apiKeyEnv: credential.Env(cfg.Auth.APIKeyEnv),
 			cel:       cfg.CEL,
 			oauth: oauthhttp.New(authnapp.NewOAuth(pool, tokens, cfg.Auth.PublicURL, clock.System{}, log),
@@ -331,6 +332,7 @@ func cmdServe(ctx context.Context, args []string, stderr io.Writer, env Env, onS
 			verification: verification,
 			kp:           kp,
 			freshness:    freshnessOf(cfg),
+			m10ops:       m10OpsDeps{authn: authn, tokens: tokens},
 		})
 		if err != nil {
 			return err
@@ -402,6 +404,25 @@ func cmdServe(ctx context.Context, args []string, stderr io.Writer, env Env, onS
 			return err
 		}
 		evidenceJobs = append(evidenceJobs, exceptionJobs...)
+		responseJobs, err := registerResponseJobs(jreg, pool, responseNotifier(m5), bill, log)
+		if err != nil {
+			return err
+		}
+		evidenceJobs = append(evidenceJobs, responseJobs...)
+		if evidenceJobs, err = registerExposureJobs(evidenceJobs, jreg, pool, bill, log); err != nil {
+			return err
+		}
+		if evidenceJobs, err = registerM10OpsJobs(evidenceJobs, jreg, pool, bill, log); err != nil {
+			return err
+		}
+		if evidenceJobs, err = registerM10EdgesJobs(evidenceJobs, jreg, pool, kp, bill, m5, cfg.Auth.PublicURL, log); err != nil {
+			return err
+		}
+		reflexJobs, err := registerReflexCoreJobs(jreg, pool, cfg.CEL, bill, m5.notifications, log)
+		if err != nil {
+			return err
+		}
+		evidenceJobs = append(evidenceJobs, reflexJobs...)
 		if err := registerSimulationJobs(jreg, pool, kp, bill, log); err != nil {
 			return err
 		}
@@ -528,6 +549,8 @@ type apiDeps struct {
 	kp keys.KeyProvider
 	// freshness is coverage's freshness contract (M9 track A).
 	freshness coverage.Freshness
+	// M10 ops: the live stream's bearer authentication.
+	m10ops m10OpsDeps
 }
 
 // apiHandler mounts the RPC services, health endpoints and the JWKS.
@@ -557,7 +580,7 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	gstore := &grantspg.Store{Pool: pool}
 	grants := &grantsapp.Service{
 		Repo: gstore, Subjects: gstore, Defs: &defspg.Store{Pool: pool}, Authz: grantsapp.SubjectAuthorizer{},
-		Clock: clock.System{}, Listing: gstore,
+		Clock: clock.System{}, Listing: gstore, Refusals: gstore,
 	}
 	runs := runsapp.New(pool).WithGrants(gstore)
 	if len(d.subjects) > 0 {
@@ -598,7 +621,20 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	}
 	registerReleases(rs, pool)
 	registerPolicyExceptions(rs, d)
+	mountM10Ops, err := registerM10Ops(rs, d)
+	if err != nil {
+		return nil, err
+	}
+	registerCases(rs, d)
+	registerResponse(rs, d)
+	registerExposure(rs, d)
+	edges, err := registerM10Edges(rs, d)
+	if err != nil {
+		return nil, err
+	}
+	registerReflexCore(rs, d)
 	mux := http.NewServeMux()
+	edges.mount(mux)
 	rpc.Mount(mux, rs)
 	d.m5p2.mount(mux, workload)
 	d.oauth.Mount(mux)
@@ -635,6 +671,7 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 		_, _ = w.Write(b)
 	})
 	mountEvidenceKeys(mux, d)
+	mountM10Ops(mux)
 	return workloadrpc.RawBody(mux, d.clientIP), nil
 }
 

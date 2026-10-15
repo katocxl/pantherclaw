@@ -67,6 +67,12 @@ const (
 	// that its verifier cannot reach, or through a connection that cannot
 	// make the verifier's reads (F497, HR-191).
 	ReasonVerifierUnsupported = "VERIFIER_UNSUPPORTED"
+	// ReasonDisclosureLimits: a disclosure param toward a public destination
+	// carries size and entropy limits the gateway checks (HR-079).
+	ReasonDisclosureLimits = "DISCLOSURE_LIMITS"
+	// ReasonDisclosureLimit: a disclosure param toward a public destination
+	// is over its byte or entropy limit (HR-079): DENY.
+	ReasonDisclosureLimit = "DISCLOSURE_LIMIT"
 )
 
 // Pipeline evaluates steps 1–8.
@@ -239,6 +245,9 @@ type state struct {
 	facts   map[string]fdomain.Value
 	used    []fdomain.Fact
 	covered bool
+	// held are the HOLD_WRITES controls covering a write (step 3); step 8
+	// adds their requirement.
+	held []Control
 	// pending are the predicted and unknown consequences steps 4, 7 and 8
 	// decide with the action.
 	pending []pendingConsequence
@@ -289,7 +298,7 @@ func (p *Pipeline) evaluate(ctx context.Context, req Request) (*Evaluation, erro
 	s.ev.ActionID, _ = ids.ParseUUID(s.a.ActionID)
 	p.scope(ctx, s)
 	p.identity(ctx, s)
-	p.containment(s)
+	p.containment(ctx, s)
 	p.authority(s)
 	p.meaning(s)
 	p.currentFacts(ctx, s)
@@ -493,7 +502,7 @@ func (p *Pipeline) loadChain(ctx context.Context, s *state) {
 }
 
 // Step 3: nothing on the path is contained.
-func (p *Pipeline) containment(s *state) {
+func (p *Pipeline) containment(ctx context.Context, s *state) {
 	blocked := false
 	if s.cont.KillSwitch {
 		s.cl.add(StepContainment, adomain.Deny, adomain.ReasonKillSwitch, "the org kill switch is engaged", "")
@@ -515,7 +524,15 @@ func (p *Pipeline) containment(s *state) {
 		s.cl.add(StepContainment, adomain.Deny, ReasonConnectionContained, "the connection is "+s.conn.State, "")
 		blocked = true
 	}
-	if !blocked {
+	if p.controlled(ctx, s) {
+		blocked = true
+	}
+	switch {
+	case blocked:
+	case len(s.held) > 0:
+		// Step 8 holds the write for a responder (HOLD_WRITES, D21).
+		s.cl.note(StepContainment, StatusAnnotated, ReasonContainedWrites, "containment control "+s.held[0].ID.String()+" holds writes")
+	default:
 		s.cl.pass(StepContainment, ReasonNotContained)
 	}
 }
@@ -777,6 +794,7 @@ func (p *Pipeline) boundaries(ctx context.Context, s *state) {
 		s.cl.add(StepBoundaries, effectOf(f), f.Reason(), f.Finding.Detail, f.Level.String())
 	}
 	p.policyRules(ctx, s)
+	s.disclosure()
 	p.consequenceBoundaries(ctx, s)
 	p.budgets(ctx, s)
 	p.repeats(ctx, s)
@@ -1041,6 +1059,7 @@ func (p *Pipeline) requirements(ctx context.Context, s *state) {
 	}
 	s.consequenceRequirements()
 	s.payloadRequirement()
+	s.containmentHold()
 	s.independence()
 	effective := s.vals
 	if eff, vals, ok := s.effective(); ok {
@@ -1315,5 +1334,61 @@ func (s *state) independence() {
 	if _, complete := apdomain.GitHubPeople(f.Object); approvals > 0 && (f.Type != fdomain.TypeObject || !complete) {
 		s.cl.add(StepRequirements, adomain.CannotAuthorize, apdomain.IneligibleAuthorshipUnknown,
 			a.IndependentOf+" does not list every author, committer and pusher, so no approver can be shown independent", "")
+	}
+}
+
+// DisclosureRule names the source of disclosure obligations on receipts:
+// the hardening rule, not a policy rule.
+const DisclosureRule = "HR-079"
+
+// disclosure checks every disclosure param the action sets when its
+// connection's destination class is public (HR-079, G0 M10 D56, D73):
+// a value over its byte limit, or denser than its entropy limit, is
+// denied DISCLOSURE_LIMIT here, on the values the Authority holds, in
+// enforce and monitor mode alike. A value within its limits on a route
+// the gateway mediates also carries a disclosure_limits obligation the
+// gateway checks again before dispatch (MCP or HTTP through a connection
+// that is not local); an SDK call, a hook (the tool runs inside the agent)
+// or a local connection runs the action itself, so it gets no obligation
+// it could not honor, only this check. The class comes from the connection's
+// record, never from the gateway or the agent. The byte limit is the
+// control: entropy catches dense raw bytes, not base64 or hex (D73, R-32).
+func (s *state) disclosure() {
+	if s.def == nil || s.conn == nil || s.conn.DestinationClass != "public" {
+		return
+	}
+	names := make([]string, 0, len(s.def.Params))
+	for name, spec := range s.def.Params {
+		if _, present := s.vals[name]; spec.Disclosure && present {
+			names = append(names, name)
+		}
+	}
+	slices.Sort(names)
+	ch := defs.Channel(s.a.Channel)
+	mediated := (ch == defs.ChannelMCP || ch == defs.ChannelHTTP) && s.conn.Kind != "local"
+	for _, name := range names {
+		maxBytes, maxEntropy := s.def.Params[name].DisclosureLimits()
+		entropy := strconv.FormatFloat(maxEntropy, 'f', -1, 64)
+		b := s.vals[name].Disclosed()
+		switch h := defs.Entropy(b); {
+		case len(b) > maxBytes:
+			s.cl.add(StepBoundaries, adomain.Deny, ReasonDisclosureLimit,
+				fmt.Sprintf("%s goes to a public destination with %d bytes; at most %d are allowed", name, len(b), maxBytes), "")
+			continue
+		case h > maxEntropy:
+			s.cl.add(StepBoundaries, adomain.Deny, ReasonDisclosureLimit,
+				fmt.Sprintf("%s goes to a public destination at %.2f bits per byte; at most %s are allowed", name, h, entropy), "")
+			continue
+		}
+		if !mediated {
+			s.cl.pass(StepBoundaries, ReasonDisclosureLimits)
+			continue
+		}
+		s.ev.Obligations = append(s.ev.Obligations, pdomain.Obligation{
+			Rule: DisclosureRule, Kind: pdomain.DisclosureLimits, Param: name, Max: strconv.Itoa(maxBytes),
+			MaxEntropy: entropy, Timing: pdomain.TimingBeforeExecution,
+		})
+		s.cl.add(StepRequirements, adomain.AllowWithObligations, ReasonDisclosureLimits,
+			fmt.Sprintf("%s goes to a public destination: at most %d bytes and %s bits per byte", name, maxBytes, entropy), "")
 	}
 }

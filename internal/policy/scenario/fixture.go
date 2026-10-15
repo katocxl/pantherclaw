@@ -195,7 +195,7 @@ func (f *fixture) buildGrant(g *pdomain.TestGiven) error {
 				b.Targets = &t
 			case pdomain.DestinationSet:
 				b.Destinations = &gdomain.Match{IDs: c.Values}
-			case pdomain.Verify:
+			case pdomain.Verify, pdomain.DisclosureLimits:
 				return caseErr("given.grant: a grant has no %q constraint", c.Kind)
 			default:
 				return caseErr("given.grant: a grant has no %q constraint", c.Kind)
@@ -292,6 +292,12 @@ func checkApproval(g *pdomain.TestGiven) error {
 // Containment implements pipeline.Reader: nothing is contained.
 func (f *fixture) Containment(context.Context, ids.OrgID) (pipeline.Containment, error) {
 	return pipeline.Containment{Epoch: 1, Now: f.now}, nil
+}
+
+// Controls implements pipeline.Reader: a scenario test decides the policy
+// alone, with no containment control.
+func (f *fixture) Controls(context.Context, ids.OrgID, pipeline.ControlKeys) ([]pipeline.Control, error) {
+	return nil, nil
 }
 
 // Definition implements pipeline.Reader: the org's ACTIVE definition.

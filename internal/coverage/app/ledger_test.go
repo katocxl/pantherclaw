@@ -39,7 +39,7 @@ func TestHR217_CoverageLedgerBodiesNameIdsAsUUIDStrings(t *testing.T) {
 		Routes: []SnapshotRoute{{Kind: "sandbox", Status: "closed", Closure: closure.String()}}, Closure: closure.String(),
 		ExpiresAt: at(time.Hour), Exclusions: []string{excl.String()}, ComputedAt: at(-time.Hour),
 	}
-	entry, err := entryOf(s)
+	entry, err := entryOf(s, "")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -319,6 +319,9 @@ message Obligation {
   bool clamp = 6;
   // When it applies, for example "before_execution" (F071).
   string timing = 7;
+  // Entropy limit in bits per byte (decimal string), for disclosure_limits
+  // (HR-079): max is then the byte limit.
+  string max_entropy = 8;
 }
 
 // BeginDispatchRequest moves a permit to DISPATCHING.

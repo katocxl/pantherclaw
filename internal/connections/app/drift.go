@@ -9,6 +9,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/definitions/domain"
 	"github.com/katocxl/pantherclaw/internal/definitions/manifest"
 	"github.com/katocxl/pantherclaw/internal/definitions/trust"
+	"github.com/katocxl/pantherclaw/internal/detection/injection"
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
 	evdomain "github.com/katocxl/pantherclaw/internal/evidence/domain"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
@@ -16,6 +17,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
+	"github.com/katocxl/pantherclaw/internal/waitlist/adapters/pgwaitlist"
 )
 
 // ReasonUpstreamDrift is the recorded reason of a package version
@@ -44,6 +46,39 @@ var ErrDrift = pcerr.New(pcerr.InvalidArgument, "DRIFT_NOT_REVIEWED",
 // simulated connection is audited with simulated=true and changes nothing
 // else (HR-222).
 func (s *Service) ReportDrift(ctx context.Context, org ids.OrgID, gateway, id ids.UUID, tool, expected, observed string) (bool, error) {
+	return s.ReportDriftDescribed(ctx, org, gateway, id, tool, expected, observed, ObservedDescription{})
+}
+
+// ObservedDescription is the tool description a gateway observed with its
+// drift report: the text (nil when the gateway sent none), whether the
+// gateway cut it short, and the SHA-256 of the whole description.
+type ObservedDescription struct {
+	Text      *string
+	Truncated bool
+	Digest    string
+}
+
+// ReportDriftDescribed is ReportDrift with the tool description the
+// gateway observed (G0 M10 D47). The description is scanned for
+// instruction-like content: a hit writes connection.tool_description_flagged
+// and opens the package version's TOOL_REVIEW entry (HR-244); a report
+// without one (an older gateway) records the scan as not_scanned. Drift
+// itself also opens the TOOL_REVIEW entry of the version it quarantines.
+func (s *Service) ReportDriftDescribed(ctx context.Context, org ids.OrgID, gateway, id ids.UUID, tool, expected, observed string,
+	description ObservedDescription,
+) (bool, error) {
+	scan, found := injection.ScanNotScanned, injection.Result{}
+	if description.Text != nil {
+		found = injection.Scan(*description.Text)
+		switch {
+		case found.Flagged:
+			scan = injection.ScanFlagged
+		case description.Truncated:
+			scan = injection.ScanPartial
+		default:
+			scan = injection.ScanClean
+		}
+	}
 	if observed == expected {
 		return false, ErrDrift
 	}
@@ -80,6 +115,7 @@ func (s *Service) ReportDrift(ctx context.Context, org ids.OrgID, gateway, id id
 				Object: &audit.Object{Type: "connection", ID: conn.ID.String()},
 				Details: map[string]string{
 					"simulated": "true", "upstream_tool": tool, "expected_digest": expected, "observed_digest": observed,
+					"description_scan": scan,
 				},
 			})
 			return err
@@ -87,6 +123,18 @@ func (s *Service) ReportDrift(ctx context.Context, org ids.OrgID, gateway, id id
 		v, err := q.GetPackageVersionState(ctx, org, conn.Package, pin.Version)
 		if err != nil {
 			return err
+		}
+		if found.Flagged {
+			if err := injection.Record(ctx, tx, c.Audit, audit.Object{Type: "connection", ID: conn.ID.String()}, tool, "drift", found,
+				map[string]string{
+					"connection_id": conn.ID.String(), "package": conn.Package, "version": pin.Version,
+					"full_description_digest": description.Digest,
+				}); err != nil {
+				return err
+			}
+			if _, err := pgwaitlist.OpenToolReview(ctx, tx, org, v.ID, conn.Package, pin.Version, c.Audit); err != nil {
+				return err
+			}
 		}
 		from := domain.State(v.State)
 		switch from {
@@ -111,8 +159,13 @@ func (s *Service) ReportDrift(ctx context.Context, org ids.OrgID, gateway, id id
 			Details: map[string]string{
 				"from": string(from), "to": string(domain.StateQuarantined), "reason": ReasonUpstreamDrift,
 				"connection_id": conn.ID.String(), "upstream_tool": tool, "expected_digest": expected, "observed_digest": observed,
+				"description_scan": scan,
 			},
 		}); err != nil {
+			return err
+		}
+		// A person reviews the quarantined version again (PN-006.2, HR-244).
+		if _, err := pgwaitlist.OpenToolReview(ctx, tx, org, v.ID, conn.Package, pin.Version, c.Audit); err != nil {
 			return err
 		}
 		if s.notify != nil {

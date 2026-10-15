@@ -1,0 +1,76 @@
+# SPDX-License-Identifier: BUSL-1.1
+# Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+id: pc.authority.self_issue
+version: "3"
+title: Agent tried to create or widen its own authority
+description: >-
+  An agent-side principal (a service account, API key or workload) tried to
+  issue or revise a grant, which only people may do, or a workload tried to
+  delegate more authority than its own grant holds. Both are refused; the
+  attempt itself is self-authorization (PN-006.3).
+severity: HIGH
+attention: ALERT
+basis: OBSERVED
+atlas: [AML.T0053]
+owasp: [ASI03]
+edition: community
+on: [audit.grant.issue_refused, audit.grant.delegate_refused, audit.rpc.human_only_refused]
+match: >-
+  event.outcome == "denied" && (event.kind != "audit.rpc.human_only_refused"
+  || event.attrs.?procedure.orValue("") in ["/pantherclaw.v1.GrantService/IssueGrant", "/pantherclaw.v1.GrantService/ReviseGrant"])
+group: agent
+tests:
+  - name: service account calls issue grant over the api
+    fires: true
+    events:
+      - kind: audit.rpc.human_only_refused
+        actor_type: service_account
+        actor_id: 01930000-0000-7000-8000-0000000000b1
+        outcome: denied
+        reason: HUMAN_ONLY
+        attrs: {procedure: /pantherclaw.v1.GrantService/IssueGrant, permission: grant.issue, auth_kind: access_token}
+  - name: service account refused another person-only call
+    fires: false
+    events:
+      - kind: audit.rpc.human_only_refused
+        actor_type: service_account
+        actor_id: 01930000-0000-7000-8000-0000000000b1
+        outcome: denied
+        reason: HUMAN_ONLY
+        attrs: {procedure: /pantherclaw.v1.PolicyService/PublishPolicyVersion, permission: policy.publish, auth_kind: access_token}
+  - name: service account issues a grant
+    fires: true
+    events:
+      - kind: audit.grant.issue_refused
+        actor_type: service_account
+        actor_id: 01930000-0000-7000-8000-0000000000s1
+        outcome: denied
+        reason: HUMAN_ONLY
+        subjects: {agent: 01930000-0000-7000-8000-0000000000a1}
+        attrs: {attempted: grant.issue, agent: 01930000-0000-7000-8000-0000000000a1}
+  - name: workload delegates beyond its grant
+    fires: true
+    events:
+      - kind: audit.grant.delegate_refused
+        actor_type: instance
+        actor_id: 01930000-0000-7000-8000-0000000000i1
+        outcome: denied
+        reason: DELEGATION_EXCEEDS_PARENT
+        subjects: {agent: 01930000-0000-7000-8000-0000000000a2, grant: 01930000-0000-7000-8000-0000000000g1}
+        attrs: {attempted: grant.delegate, parent: 01930000-0000-7000-8000-0000000000g1}
+  - name: a person issues a grant
+    fires: false
+    events:
+      - kind: audit.grant.issued
+        actor_type: user
+        actor_id: 01930000-0000-7000-8000-0000000000u1
+        outcome: success
+        subjects: {agent: 01930000-0000-7000-8000-0000000000a1, grant: 01930000-0000-7000-8000-0000000000g1}
+  - name: a workload delegates within its grant
+    fires: false
+    events:
+      - kind: audit.grant.delegated
+        actor_type: instance
+        actor_id: 01930000-0000-7000-8000-0000000000i1
+        outcome: success
+        subjects: {grant: 01930000-0000-7000-8000-0000000000g2, run: 01930000-0000-7000-8000-0000000000r2}

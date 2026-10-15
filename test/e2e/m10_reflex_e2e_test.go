@@ -1,0 +1,515 @@
+// SPDX-License-Identifier: BUSL-1.1
+// Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+
+//go:build integration
+
+package e2e
+
+import (
+	"bytes"
+	"context"
+	"encoding/json/v2"
+	"errors"
+	"net/http"
+	"os"
+	"path/filepath"
+	"slices"
+	"strings"
+	"testing"
+	"time"
+
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
+	"google.golang.org/protobuf/types/known/timestamppb"
+
+	billing "github.com/katocxl/pantherclaw/internal/billing/domain"
+	capp "github.com/katocxl/pantherclaw/internal/cases/app"
+	cdomain "github.com/katocxl/pantherclaw/internal/cases/domain"
+	"github.com/katocxl/pantherclaw/internal/cases/store"
+	"github.com/katocxl/pantherclaw/internal/detection/engine"
+	"github.com/katocxl/pantherclaw/internal/detection/pack"
+	"github.com/katocxl/pantherclaw/internal/evidence/ledger"
+	exapp "github.com/katocxl/pantherclaw/internal/exposure/app"
+	exdomain "github.com/katocxl/pantherclaw/internal/exposure/domain"
+	"github.com/katocxl/pantherclaw/internal/exposure/recompute"
+	pantherclawv1 "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
+	"github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1/pantherclawv1connect"
+	"github.com/katocxl/pantherclaw/internal/identity/workloadclient"
+	"github.com/katocxl/pantherclaw/internal/platform/celenv"
+	"github.com/katocxl/pantherclaw/internal/platform/ids"
+	reflexapp "github.com/katocxl/pantherclaw/internal/reflex/app"
+	reflexdomain "github.com/katocxl/pantherclaw/internal/reflex/domain"
+	"github.com/katocxl/pantherclaw/internal/reflex/failures"
+	tapp "github.com/katocxl/pantherclaw/internal/tenancy/app"
+	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
+)
+
+// ents is a fixed edition for the in-process services (the e2e server is
+// Community: its licence roots are embedded, so no test licence exists).
+type ents struct{ e billing.Edition }
+
+func (x ents) Current(context.Context) (billing.Entitlements, error) {
+	return billing.Entitlements{Edition: x.e}, nil
+}
+
+// reflexStack is the M10 exit scenario's stack: the seeded org, its
+// administrator alice signed in to pclaw, and Connect clients carrying her
+// access token.
+type reflexStack struct {
+	s       *stack
+	people  *m2Stack
+	alice   *user
+	aliceID ids.UUID
+	agent   ids.UUID
+	bearer  string
+}
+
+// bearerOf is a pclaw user's access token, as pclaw saved it.
+func bearerOf(t *testing.T, u *user) string {
+	t.Helper()
+	b, err := os.ReadFile(filepath.Join(u.dir, "credentials.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var c struct {
+		AccessToken string `json:"access_token"`
+	}
+	if err := json.Unmarshal(b, &c); err != nil || c.AccessToken == "" {
+		t.Fatalf("credentials: %v", err)
+	}
+	return c.AccessToken
+}
+
+func (r *reflexStack) client(token string) *connect.Client {
+	return connect.NewClient(connecthttp.NewTransport(&http.Client{
+		Timeout: 30 * time.Second, Transport: keyBearer{token},
+	}, r.s.apiURL))
+}
+
+func startReflex(t *testing.T) *reflexStack {
+	t.Helper()
+	p := inProcessIdP(t)
+	s := start(t, options{budget: "1000.00", people: &p})
+	r := &reflexStack{s: s, people: &m2Stack{url: s.apiURL, cfg: s.serverCfg, idp: p}}
+	org := s.org.String()
+	var out, errb bytes.Buffer
+	if code := runServerCmd(&out, &errb, "org", "admin-invite", "--config", s.serverCfg, "--org", org); code != 0 {
+		t.Fatalf("org admin-invite: %d %s", code, errb.String())
+	}
+	r.alice = r.people.user(t, "alice", "alice@example.test")
+	r.alice.login(t, org, pciToken.FindStringSubmatch(out.String())[1])
+	r.aliceID = mustUUID(t, s.row(t, "SELECT id::text FROM pc.users WHERE subject = 'alice'"))
+	// Alice watches and contains (security_admin: incidents, cases,
+	// containment, search, operations, exposure).
+	for _, role := range []string{"security_admin"} {
+		if code, o, e := r.alice.pclaw(t, "role", "bind", "--role", role, "--user", r.aliceID.String()); code != 0 {
+			t.Fatalf("role bind %s: %d %s %s", role, code, o, e)
+		}
+	}
+	// Bindings are read at sign-in: sign in again for a token that carries them.
+	r.alice.login(t, org, "")
+	r.bearer = bearerOf(t, r.alice)
+	r.agent = mustUUID(t, s.row(t, "SELECT agent_id::text FROM pc.runs WHERE id = $1", s.run))
+	return r
+}
+
+// eventually retries fn until it returns true or the deadline passes.
+func eventually(t *testing.T, within time.Duration, what string, fn func() (bool, error)) {
+	t.Helper()
+	deadline := time.Now().Add(within)
+	for {
+		ok, err := fn()
+		if ok {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("%s: not within %s (last error %v)", what, within, err)
+		}
+		time.Sleep(250 * time.Millisecond)
+	}
+}
+
+// TestE2E_M10_DetectInvestigateRespond is the M10 exit scenario (G0 M10
+// D40, as amended by D52, D57, D58, D67).
+//
+// What runs where. The e2e server is Community (its licence roots are
+// embedded, so no test licence exists, D58):
+//   - over its public API (Connect RPCs, the workload API, the SSE stream):
+//     the agent's refused delegation, detection of pc.authority.self_issue,
+//     the alert promoted to an incident, the case API refusing below Team,
+//     ProposeResponse and a narrow DENY_ALL on the run with its per-path
+//     statuses, the live stream with Last-Event-ID resume, and search;
+//   - in-process on the same database, with the real application services
+//     and only an edition fake (Team/Business), test HTTP clients and root
+//     CAs, and step-up credential fixtures: cases, the business detection
+//     probing.denial_burst, exposure, SIEM export, Shared Signals and the
+//     identity playbook, and restoration.
+//
+// The seeded agent has no coverage record, so its route is UNKNOWN: the
+// containment stays PARTIAL with the bypass route listed (D52), and the
+// case refuses CONTAINED. The ENFORCED agent's CONFIRMED containment needs
+// the M9 sandbox closure and runs in TestE2E_M10_ContainEnforcedAgent
+// (build tag sandbox).
+func TestE2E_M10_DetectInvestigateRespond(t *testing.T) {
+	r := startReflex(t)
+	s, ctx := r.s, context.Background()
+	rc := r.client(r.bearer)
+	incidents := pantherclawv1connect.NewIncidentServiceClient(rc)
+	response := pantherclawv1connect.NewResponseServiceClient(rc)
+	casesRPC := pantherclawv1connect.NewCaseServiceClient(rc)
+	search := pantherclawv1connect.NewSearchServiceClient(rc)
+	team := ents{billing.Team}
+	business := ents{billing.Business}
+
+	// The agent acts once: a refund the gateway dispatches.
+	if code, rep := s.refund(t, ids.NewV7(), "5.00"); code != http.StatusOK {
+		t.Fatalf("refund: %d %+v", code, rep)
+	}
+	refundTxn := s.row(t, "SELECT id::text FROM pc.transactions ORDER BY created_at DESC LIMIT 1")
+
+	// 1. Detect. The agent asks to delegate more than its own grant holds:
+	// refused and audited, and the Community rule pc.authority.self_issue
+	// raises an alert on the real server (PN-006.3).
+	wc := pantherclawv1connect.NewWorkloadServiceClient(connect.NewClient(connecthttp.NewTransport(&http.Client{
+		Timeout: 30 * time.Second, Transport: &workloadclient.Transport{Key: s.key, Token: func() string { return s.token }},
+	}, s.apiURL)))
+	child, err := wc.StartChildRun(ctx, &pantherclawv1.StartChildRunRequest{ParentRunId: s.run, AgentId: r.agent.String()})
+	if err != nil {
+		t.Fatalf("StartChildRun: %v", err)
+	}
+	if _, err := wc.DelegateGrant(ctx, &pantherclawv1.DelegateGrantRequest{
+		RunId: s.run, ChildRunId: child.GetRun().GetId(), Bounds: []byte(`{"operations": ["github.*", "payments.*"]}`),
+		ExpireTime: timestamppb.New(time.Now().Add(1000 * time.Hour)),
+	}); err == nil {
+		t.Fatal("a delegation wider than the parent grant was accepted")
+	}
+	var alert *pantherclawv1.Alert
+	eventually(t, 90*time.Second, "the self_issue alert", func() (bool, error) {
+		res, err := incidents.ListAlerts(ctx, &pantherclawv1.ListAlertsRequest{RuleId: "pc.authority.self_issue"})
+		if err != nil || len(res.GetAlerts()) == 0 {
+			return false, err
+		}
+		alert = res.GetAlerts()[0]
+		return true, nil
+	})
+	if alert.GetSeverity() != "HIGH" || alert.GetBasis() != "OBSERVED" || alert.GetRuleDigest() == "" || alert.GetPackVersion() == "" ||
+		!slices.ContainsFunc(alert.GetSubjects(), func(x *pantherclawv1.ReflexSubject) bool {
+			return x.GetType() == "agent" && x.GetId() == r.agent.String()
+		}) {
+		t.Fatalf("alert %+v", alert)
+	}
+	// Community opens no incident for an ALERT; a responder promotes it.
+	promoted, err := incidents.PromoteAlert(ctx, &pantherclawv1.PromoteAlertRequest{Id: alert.GetId(), Note: "self-authorization"})
+	if err != nil {
+		t.Fatalf("PromoteAlert: %v", err)
+	}
+	incident := promoted.GetIncident()
+	got, err := incidents.GetIncident(ctx, &pantherclawv1.GetIncidentRequest{Id: incident.GetId()})
+	if err != nil || len(got.GetAlerts()) != 1 || got.GetAlerts()[0].GetId() != alert.GetId() {
+		t.Fatalf("GetIncident: %+v %v", got, err)
+	}
+
+	// A service account asking for a grant over the API is refused by the
+	// RPC layer before any use case runs; the refusal is audited, and
+	// self_issue detects it too (D67).
+	saKey, err := os.ReadFile(s.factsKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	grantsSA := pantherclawv1connect.NewGrantServiceClient(r.client(strings.TrimSpace(string(saKey))))
+	if _, err := grantsSA.IssueGrant(ctx, &pantherclawv1.IssueGrantRequest{AgentId: r.agent.String()}); connect.CodeOf(err) != connect.CodePermissionDenied {
+		t.Fatalf("a service account issuing a grant: %v", err)
+	}
+	eventually(t, 90*time.Second, "self_issue from the service account's refusal", func() (bool, error) {
+		res, err := incidents.ListAlerts(ctx, &pantherclawv1.ListAlertsRequest{RuleId: "pc.authority.self_issue"})
+		if err != nil {
+			return false, err
+		}
+		var n int64
+		for _, a := range res.GetAlerts() {
+			n += int64(a.GetCount())
+		}
+		return n >= 2, nil
+	})
+
+	// The Business rule probing.denial_burst: five refused decisions in one
+	// run, evaluated by the detection engine in-process with Business
+	// entitlements, raise an alert grouped by the run. A responder promotes
+	// it; with Team grouping a later burst in the same run attaches to that
+	// incident (D71 M3, F603).
+	burst := func() *pantherclawv1.Alert {
+		t.Helper()
+		for range 5 {
+			if code, rep := s.refund(t, ids.NewV7(), "100000.00"); code < 400 {
+				t.Fatalf("an over-budget refund was allowed: %d %+v", code, rep)
+			}
+		}
+		var open *pantherclawv1.Alert
+		r.runEngine(t, business, func() bool {
+			res, err := incidents.ListAlerts(ctx, &pantherclawv1.ListAlertsRequest{RuleId: "pc.probing.denial_burst", States: []string{"OPEN"}})
+			if err != nil || len(res.GetAlerts()) == 0 {
+				return false
+			}
+			open = res.GetAlerts()[0]
+			return true
+		})
+		if open.GetGroupKey() != "run:"+s.run {
+			t.Fatalf("denial_burst alert %+v, want group run:%s", open, s.run)
+		}
+		return open
+	}
+	first := burst()
+	byRun, err := incidents.PromoteAlert(ctx, &pantherclawv1.PromoteAlertRequest{Id: first.GetId(), Note: "probing"})
+	if err != nil || byRun.GetIncident().GetGroupKey() != "run:"+s.run {
+		t.Fatalf("promote the burst: %+v %v", byRun, err)
+	}
+	if _, err := incidents.SetAlertState(ctx, &pantherclawv1.SetAlertStateRequest{Id: first.GetId(), State: "RESOLVED", Note: "seen"}); err != nil {
+		t.Fatalf("resolve the burst: %v", err)
+	}
+	second := burst()
+	inRun, err := incidents.GetIncident(ctx, &pantherclawv1.GetIncidentRequest{Id: byRun.GetIncident().GetId()})
+	if err != nil || second.GetId() == first.GetId() || second.GetIncidentId() != byRun.GetIncident().GetId() || len(inRun.GetAlerts()) != 2 {
+		t.Fatalf("the second burst %+v, incident %+v %v", second, inRun, err)
+	}
+
+	// 2. Investigate. Cases need Team: the server refuses; the case service
+	// in-process (Team) opens one from the alert, with a FACT and an open
+	// QUESTION.
+	if _, err := casesRPC.OpenCase(ctx, &pantherclawv1.OpenCaseRequest{Title: "self-issue"}); connect.CodeOf(err) != connect.CodeFailedPrecondition ||
+		!strings.Contains(err.Error(), "EDITION_REQUIRED") {
+		t.Fatalf("OpenCase on Community: %v", err)
+	}
+	cases := &capp.Service{Pool: s.pool, Editions: team}
+	aliceCtx := r.inProcess(td.RoleSecurityAdmin)
+	incidentID := mustUUID(t, incident.GetId())
+	alertID := mustUUID(t, alert.GetId())
+	k, err := cases.Open(aliceCtx, capp.OpenRequest{
+		Title: "Agent tried to widen its own authority", Alert: &alertID, Incident: &incidentID,
+		Subjects:  []reflexdomain.Subject{{Type: reflexdomain.SubjectRun, ID: s.run}, {Type: reflexdomain.SubjectAgent, ID: r.agent.String()}},
+		Questions: []string{"Was anything read before the delegation?"},
+	})
+	if err != nil {
+		t.Fatalf("open case: %v", err)
+	}
+	if _, err := cases.Append(aliceCtx, k.ID, cdomain.Draft{
+		Kind: cdomain.KindFact, Text: "The agent's run dispatched a refund before it asked to delegate.", Basis: cdomain.BasisObserved,
+		Evidence: []cdomain.EvidenceRef{{Kind: cdomain.EvidenceTransaction, ID: mustUUID(t, refundTxn)}},
+	}); err != nil {
+		t.Fatalf("fact: %v", err)
+	}
+	view, err := cases.Get(aliceCtx, k.ID, 0, 0)
+	if err != nil || view.OpenQuestions != 1 {
+		t.Fatalf("case view: %+v %v", view, err)
+	}
+
+	// 3. Respond. ProposeResponse offers a narrow DENY_ALL on the run; it
+	// commits without a preview. The gateway path confirms (the gateway
+	// acknowledged the epoch), the agent's route has no coverage record, so
+	// it stays an unresolved bypass and the action PARTIAL (D52).
+	proposed, err := response.ProposeResponse(ctx, &pantherclawv1.ProposeResponseRequest{
+		Subject: &pantherclawv1.ResponseSubject{Type: "run", Id: s.run},
+	})
+	if err != nil || !slices.ContainsFunc(proposed.GetOptions(), func(o *pantherclawv1.ResponseOption) bool {
+		return o.GetNarrow() && o.GetControl() == "DENY_ALL" && o.GetScope().GetType() == "run"
+	}) {
+		t.Fatalf("ProposeResponse: %+v %v", proposed, err)
+	}
+	caseID := k.ID.String()
+	// A live stream opened now delivers the containment as it happens.
+	head, liveNext := r.live(t)
+	contained, err := response.Contain(ctx, &pantherclawv1.ContainRequest{
+		Scope: &pantherclawv1.ResponseSubject{Type: "run", Id: s.run}, Control: "DENY_ALL",
+		Reason: "self-authorization attempt", CaseId: &caseID, IncidentId: &incident.Id,
+	})
+	if err != nil {
+		t.Fatalf("Contain: %v", err)
+	}
+	actionID := contained.GetActionId()
+	// The frame names the ledger entry (ids only, D6); its body names the action.
+	f := liveNext("response.action")
+	var entry struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal([]byte(f.data), &entry); err != nil || mustInt(t, f.id) <= head {
+		t.Fatalf("live response.action %+v at or before the head %d: %v", f, head, err)
+	}
+	if body := s.row(t, "SELECT convert_from(body, 'UTF8') FROM pc.ledger_entries WHERE id = $1", entry.ID); !strings.Contains(body, actionID) {
+		t.Fatalf("the live response.action entry does not name the action %s: %s", actionID, body)
+	}
+	var action *pantherclawv1.GetResponseActionResponse
+	eventually(t, 60*time.Second, "the gateway path to confirm", func() (bool, error) {
+		a, err := response.GetResponseAction(ctx, &pantherclawv1.GetResponseActionRequest{ActionId: actionID})
+		if err != nil {
+			return false, err
+		}
+		action = a
+		return slices.ContainsFunc(a.GetPaths(), func(p *pantherclawv1.ResponsePath) bool {
+			return p.GetType() == "GATEWAY" && p.GetStatus() == "CONFIRMED"
+		}), nil
+	})
+	// Every gateway got the epoch (mediated), but new access is not stopped
+	// everywhere while the bypass route is open (D52, F561).
+	if a := action.GetAction(); a.GetStatus() != "PARTIAL" || !a.GetMediatedConfirmed() || a.GetFutureConfirmed() ||
+		!slices.ContainsFunc(action.GetPaths(), func(p *pantherclawv1.ResponsePath) bool {
+			return p.GetType() == "ROUTE" && p.GetMaterial() && p.GetStatus() == "UNRESOLVED"
+		}) {
+		t.Fatalf("response action %+v", action)
+	}
+	// The run is refused from now on.
+	if code, rep := s.refund(t, ids.NewV7(), "1.00"); code < 400 {
+		t.Fatalf("a refund in the contained run: %d %+v", code, rep)
+	}
+	// The case refuses CONTAINED while its containment is PARTIAL (HR-246).
+	if _, err := cases.Append(aliceCtx, k.ID, cdomain.Draft{Kind: cdomain.KindState, State: cdomain.StateContained}); !errors.Is(err, store.ErrNotContained) {
+		t.Fatalf("CONTAINED with a PARTIAL action: %v", err)
+	}
+
+	// 4. Exposure (Team, in-process): the three views of the agent.
+	if _, err := (&recompute.Service{Pool: s.pool, Ents: team, Failures: &failures.Sink{}}).Run(ctx, s.org); err != nil {
+		t.Fatalf("exposure recompute: %v", err)
+	}
+	ex := &exapp.Service{Pool: s.pool, Ents: team}
+	labels := []exdomain.Label{exdomain.Usable, exdomain.Conditional, exdomain.Expired, exdomain.Uncertain}
+	for _, v := range []exdomain.View{exdomain.Observed, exdomain.Effective, exdomain.Credential} {
+		got, err := ex.Exposure(aliceCtx, exdomain.Filter{Agent: &r.agent, View: v})
+		if err != nil {
+			t.Fatalf("exposure %s: %v", v, err)
+		}
+		if len(got.Rights) == 0 {
+			t.Fatalf("exposure %s of the agent is empty", v)
+		}
+		for _, right := range got.Rights {
+			if right.View != v || !slices.Contains(labels, right.Label) {
+				t.Fatalf("exposure %s holds a %s right labelled %q", v, right.View, right.Label)
+			}
+		}
+		// The agent's uncovered route is a bypass the credential view shows
+		// as UNCERTAIN, never absent (HR-253, D27).
+		if v == exdomain.Credential && !slices.ContainsFunc(got.Rights, func(x exdomain.Right) bool {
+			return x.Label == exdomain.Uncertain && slices.Contains(x.Reasons, exdomain.ReasonRouteUnknown)
+		}) {
+			t.Fatalf("the credential view has no UNCERTAIN right for the uncovered route: %+v", got.Rights)
+		}
+	}
+
+	// 5. The live stream: bearer header only, Last-Event-ID resumes.
+	r.stream(t)
+
+	// 6. Search: alice finds the refund; a person scoped to another team
+	// sees nothing of the agent, and nothing of it is counted (T-042).
+	found, err := search.Search(ctx, &pantherclawv1.SearchRequest{Query: &pantherclawv1.Query{
+		Entity: "transactions", Filters: &pantherclawv1.SearchFilters{Id: &refundTxn},
+	}})
+	if err != nil || found.GetResult().GetCount() != 1 || len(found.GetResult().GetItems()) != 1 {
+		t.Fatalf("search as alice: %+v %v", found, err)
+	}
+	bob := r.scopedPerson(t, "bob", "bob@example.test", "responder")
+	hidden, err := pantherclawv1connect.NewSearchServiceClient(r.client(bearerOf(t, bob))).Search(ctx, &pantherclawv1.SearchRequest{
+		Query: &pantherclawv1.Query{Entity: "transactions", Filters: &pantherclawv1.SearchFilters{AgentId: ptr(r.agent.String())}},
+	})
+	if err != nil || hidden.GetResult().GetCount() != 0 || len(hidden.GetResult().GetItems()) != 0 || hidden.GetResult().GetScopeWhole() {
+		t.Fatalf("search as a person of another team: %+v %v", hidden, err)
+	}
+
+	// 7. SIEM export (Business, in-process): an OCSF batch reaches an HTTPS
+	// receiver with a valid Standard Webhooks signature, and a retried batch
+	// keeps its webhook id and every event's metadata.uid.
+	r.siemExport(t, business)
+
+	// 8. Shared Signals (Business, in-process): a signed SET opens a case;
+	// with the identity playbook enabled by two people, a second SET
+	// contains the person.
+	r.sharedSignals(t, team, business)
+
+	// 9. Restoration: an independent reviewer lifts the run's control.
+	r.restore(t, response, actionID, refundTxn)
+
+	// 10. Closure. The main case stays OPEN (its containment is PARTIAL);
+	// a case that needs no containment closes once its rules hold.
+	other, err := cases.Open(aliceCtx, capp.OpenRequest{
+		Title: "Duplicate alert", Alert: &alertID,
+		Subjects: []reflexdomain.Subject{{Type: reflexdomain.SubjectAgent, ID: r.agent.String()}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	closing := cdomain.Draft{
+		Kind: cdomain.KindState, State: cdomain.StateClosed, Disposition: cdomain.DispositionFalsePositive,
+		CaseImpact: cdomain.ImpactNoneFound,
+	}
+	if _, err := cases.Append(aliceCtx, other.ID, closing); !errors.Is(err, store.ErrNotContained) {
+		t.Fatalf("close without containment or a reason: %v", err)
+	}
+	closing.NoContainmentNeeded, closing.Reason = true, "The same attempt is handled in the first case."
+	if _, err := cases.Append(aliceCtx, other.ID, closing); !errors.Is(err, store.ErrClosureRules) {
+		t.Fatalf("close without a fact: %v", err)
+	}
+	if _, err := cases.Append(aliceCtx, other.ID, cdomain.Draft{
+		Kind: cdomain.KindFact, Text: "Same refusal as the first case.",
+		Basis: cdomain.BasisObserved, Evidence: []cdomain.EvidenceRef{{Kind: cdomain.EvidenceRun, ID: mustUUID(t, s.run)}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := cases.Append(aliceCtx, other.ID, closing); err != nil {
+		t.Fatalf("close: %v", err)
+	}
+	if v, err := cases.Get(aliceCtx, other.ID, 0, 0); err != nil || v.Case.State != cdomain.StateClosed {
+		t.Fatalf("closed case: %+v %v", v.Case, err)
+	}
+	if v, err := cases.Get(aliceCtx, k.ID, 0, 0); err != nil || v.Case.State != cdomain.StateOpen {
+		t.Fatalf("the main case: %+v %v", v.Case, err)
+	}
+}
+
+func ptr[T any](v T) *T { return &v }
+
+// inProcess is alice as an in-process caller with role at the org.
+func (r *reflexStack) inProcess(role td.RoleName) context.Context {
+	return tapp.WithCaller(context.Background(), tapp.Caller{Subject: td.Subject{
+		Org: r.s.org, Principal: td.PrincipalRef{Kind: td.KindUser, ID: r.aliceID},
+		Bindings: []td.Binding{{Role: role, Scope: td.Scope{Type: td.ScopeOrg, ID: r.s.org.UUID()}}},
+	}, Credential: tapp.CredAccessToken})
+}
+
+// runEngine runs the detection engine in-process with these entitlements
+// until done reports what the test waits for, or fails after 30 s. The
+// server's own engine job evaluates the org too (as Community, so without
+// the Business rules), and the cursor moves for whichever run gets there
+// first: each attempt rewinds the org's cursor and evaluates the feed again
+// (repeats count into the same open alerts), so a race with the server's
+// job only costs another attempt (D71 M1).
+func (r *reflexStack) runEngine(t *testing.T, e ents, done func() bool) {
+	t.Helper()
+	ctx := context.Background()
+	env, err := engine.NewEnv(celenv.DefaultLimits)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, err := pack.Load(env)
+	if err != nil {
+		t.Fatal(err)
+	}
+	eng := &engine.Engine{
+		Pool: r.s.pool, Builtin: p.Rules, PackVersion: p.Version, Env: env,
+		Raiser: (&reflexapp.Hooks{Ents: e}).Raiser(), Sink: &failures.Sink{}, Ents: e,
+	}
+	eventually(t, 30*time.Second, "the in-process detection", func() (bool, error) {
+		if _, err := ledger.ChainAll(ctx, r.s.pool, r.s.org, 1000); err != nil {
+			return false, err
+		}
+		r.s.exec(t, "UPDATE pc.detection_cursors SET seq = 0")
+		for range 50 {
+			res, err := eng.Process(ctx, r.s.org)
+			if errors.Is(err, engine.ErrCursorMoved) {
+				break
+			}
+			if err != nil {
+				return false, err
+			}
+			if res.Events == 0 && res.To == res.From {
+				break
+			}
+		}
+		return done(), nil
+	})
+}
