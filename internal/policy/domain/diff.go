@@ -90,7 +90,7 @@ func Compare(base, next *Bundle) Diff {
 			continue
 		}
 		d := Looser
-		if r.Kind == Annotate && !r.IsEmergency() {
+		if r.Kind == Annotate {
 			d = Neutral
 		}
 		changes = append(changes, change(r.ID, ChangeRemoved, "", r.Summary, "", d))
@@ -125,7 +125,7 @@ func change(rule, kind, field, before, after string, d Direction) Change {
 var fieldNames = map[string]string{
 	"kind": "kind", "summary": "summary", "reason": "reason code", "operations": "operations",
 	"environments": "environments", "when": "condition", "facts": "facts", "exceptable": "exceptable",
-	"labels": "labels", "labels.emergency": "emergency label",
+	"labels": "labels", "emergency": "emergency rule",
 	"approval.role": "approval role", "approval.count": "approvals required", "approval.independent": "independent approvers",
 	"approval.window": "change window", "approval.deadline_seconds": "approval deadline",
 	"step_up.subject": "step-up subject", "step_up.method": "step-up method", "step_up.deadline_seconds": "step-up deadline",
@@ -181,13 +181,16 @@ func compareRule(a, b *Rule) []Change {
 		}
 		add("exceptable", strconv.FormatBool(a.Exceptable), strconv.FormatBool(b.Exceptable), d)
 	}
-	before := maps.Clone(a.Labels)
-	if a.IsEmergency() && !b.IsEmergency() {
-		add("labels.emergency", a.Labels[EmergencyLabel], b.Labels[EmergencyLabel], Looser)
-		delete(before, EmergencyLabel)
+	if a.Emergency != b.Emergency {
+		// An emergency rule is carried by every rollback (D4, D24).
+		d := Looser
+		if b.Emergency {
+			d = Tighter
+		}
+		add("emergency", strconv.FormatBool(a.Emergency), strconv.FormatBool(b.Emergency), d)
 	}
-	if !maps.Equal(before, b.Labels) {
-		add("labels", labelText(before), labelText(b.Labels), Neutral)
+	if !maps.Equal(a.Labels, b.Labels) {
+		add("labels", labelText(a.Labels), labelText(b.Labels), Neutral)
 	}
 	if a.Kind == b.Kind {
 		switch a.Kind { //nolint:exhaustive // FORBID and ANNOTATE carry no requirement
@@ -200,10 +203,9 @@ func compareRule(a, b *Rule) []Change {
 		}
 	}
 	if a.Kind == Annotate && b.Kind == Annotate {
-		// An annotation decides nothing; only losing the emergency label
-		// matters (D4).
+		// An annotation decides nothing (and is never an emergency rule).
 		for i := range out {
-			if out[i].Field != "labels.emergency" && out[i].Direction != Neutral {
+			if out[i].Direction != Neutral {
 				out[i].Direction = Neutral
 				out[i].Sentence = sentence(out[i])
 			}

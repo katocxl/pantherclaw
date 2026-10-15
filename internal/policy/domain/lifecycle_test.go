@@ -68,7 +68,7 @@ func values(kind ConstraintKind, vs ...string) *Rule {
 
 func emergency(id string, k Kind) *Rule {
 	r := rule(id, k)
-	r.Labels = map[string]string{EmergencyLabel: "true"}
+	r.Emergency = true
 	return r
 }
 
@@ -101,9 +101,11 @@ func TestCompareClassifiesEveryChange(t *testing.T) {
 		{"annotate added", bundleOf(), bundleOf(ann), Neutral, ""},
 		{"annotate removed", bundleOf(ann), bundleOf(), Neutral, ""},
 		{"annotate changed", bundleOf(ann), bundleOf(with(ann, func(r *Rule) { r.When = "false" })), Neutral, "when"},
-		{"emergency annotate removed", bundleOf(emergency("e", Annotate)), bundleOf(), Looser, ""},
-		{"emergency label removed", bundleOf(emergency("e", Annotate)), bundleOf(with(emergency("e", Annotate), func(r *Rule) { r.Labels = nil })), Looser, "labels.emergency"},
-		{"emergency label added", bundleOf(ann), bundleOf(with(ann, func(r *Rule) { r.Labels[EmergencyLabel] = "true" })), Neutral, "labels"},
+		{"emergency forbid removed", bundleOf(emergency("e", Forbid)), bundleOf(), Looser, ""},
+		{"emergency off", bundleOf(emergency("e", Forbid)), bundleOf(rule("e", Forbid)), Looser, "emergency"},
+		{"emergency on", bundleOf(rule("e", Forbid)), bundleOf(emergency("e", Forbid)), Tighter, "emergency"},
+		{"emergency constrain off", bundleOf(emergency("cap", Constrain)), bundleOf(rule("cap", Constrain)), Looser, "emergency"},
+		{"labels changed", bundleOf(ann), bundleOf(with(ann, func(r *Rule) { r.Labels["team"] = "ops" })), Neutral, "labels"},
 		{"summary text", bundleOf(rule("f", Forbid)), bundleOf(with(rule("f", Forbid), func(r *Rule) { r.Summary = "other" })), Neutral, "summary"},
 		{"reason code", bundleOf(rule("f", Forbid)), bundleOf(with(rule("f", Forbid), func(r *Rule) { r.Reason = "OTHER_REASON" })), Neutral, "reason"},
 		{"operations superset", bundleOf(scoped), bundleOf(with(scoped, func(r *Rule) { r.Operations = []string{"payments.*"} })), Tighter, "operations"},
@@ -297,6 +299,7 @@ func TestContentDigest(t *testing.T) {
 	for name, edit := range map[string]func(*Bundle){
 		"rule":       func(b *Bundle) { b.Rules[0].When = "false" },
 		"exceptable": func(b *Bundle) { b.Rules[0].Exceptable = true },
+		"emergency":  func(b *Bundle) { b.Rules[0].Emergency = true },
 		"test":       func(b *Bundle) { b.Tests[0].Expect.Reason = "OTHER" },
 		"id":         func(b *Bundle) { b.ID = "other" },
 	} {
@@ -336,8 +339,8 @@ func TestDefinitionsAndCatalogDigests(t *testing.T) {
 }
 
 func TestCarryEmergency(t *testing.T) {
-	e1 := emergency("freeze", Annotate)
-	e2 := emergency("stop", Annotate)
+	e1 := emergency("freeze", Forbid)
+	e2 := emergency("stop", RequireApproval)
 	current := bundleOf(rule("f", Forbid), e1, e2)
 	oldE2 := with(e2, func(r *Rule) { r.Summary = "older" })
 	target := withTests(bundleOf(rule("a", RequireApproval), oldE2), testCase("t"))
@@ -377,4 +380,20 @@ func kindRule(k Kind) *Rule {
 	r := rule("k", k)
 	r.Reason = "SAME_REASON"
 	return r
+}
+
+func TestEmergencyRuleValidation(t *testing.T) {
+	for _, k := range []Kind{Forbid, RequireApproval, RequireStepUp, Constrain} {
+		if err := emergency("e", k).Validate(); err != nil {
+			t.Errorf("%s emergency rule refused: %v", k, err)
+		}
+	}
+	if err := emergency("e", Annotate).Validate(); err == nil {
+		t.Fatal("an ANNOTATE emergency rule was accepted")
+	}
+	r := rule("e", Forbid)
+	r.Labels = map[string]string{"emergency": "true"}
+	if err := r.Validate(); err == nil {
+		t.Fatal("labels on a FORBID rule were accepted")
+	}
 }
