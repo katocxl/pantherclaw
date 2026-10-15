@@ -246,7 +246,7 @@ GRANT INSERT (org_id, rollout_id, day, category, n), UPDATE (n) ON pc.policy_sha
 GRANT SELECT ON pc.policy_cohorts, pc.policy_cohort_members, pc.policy_rollouts, pc.policy_rollout_cohorts,
     pc.policy_rollout_targets, pc.policy_rollout_cursors, pc.policy_shadow_results, pc.policy_shadow_counts TO pc_audit_ro;
 
-GRANT SELECT (org_id, stage, completed_at) ON pc.policy_rollouts TO pc_lister;
+GRANT SELECT (org_id, id, stage, completed_at) ON pc.policy_rollouts TO pc_lister;
 GRANT SELECT (org_id, rollout_id, state) ON pc.policy_rollout_targets TO pc_lister;
 
 -- The lister below replaces the whole function, starting from 00087's.
@@ -504,7 +504,7 @@ END;
 $$;
 -- +goose StatementEnd
 REVOKE SELECT (org_id, rollout_id, state) ON pc.policy_rollout_targets FROM pc_lister;
-REVOKE SELECT (org_id, stage, completed_at) ON pc.policy_rollouts FROM pc_lister;
+REVOKE SELECT (org_id, id, stage, completed_at) ON pc.policy_rollouts FROM pc_lister;
 DROP TABLE pc.policy_shadow_counts;
 DROP TABLE pc.policy_shadow_results;
 DROP TABLE pc.policy_rollout_cursors;
