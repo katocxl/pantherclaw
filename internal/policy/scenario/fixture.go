@@ -5,6 +5,8 @@ package scenario
 
 import (
 	"context"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"fmt"
 	"maps"
 	"slices"
@@ -13,6 +15,7 @@ import (
 
 	"github.com/katocxl/pantherclaw/internal/actionir"
 	apdomain "github.com/katocxl/pantherclaw/internal/approvals/domain"
+	"github.com/katocxl/pantherclaw/internal/authority/consequences"
 	"github.com/katocxl/pantherclaw/internal/authority/pipeline"
 	bdomain "github.com/katocxl/pantherclaw/internal/budgets/domain"
 	defs "github.com/katocxl/pantherclaw/internal/definitions/domain"
@@ -69,6 +72,7 @@ type fixture struct {
 	org     ids.OrgID
 	now     time.Time
 	def     *defs.Definition
+	rules   []consequences.Rule
 	policy  *pipeline.Policy
 	agentID ids.UUID
 	env     ids.UUID
@@ -84,14 +88,14 @@ var _ pipeline.Reader = (*fixture)(nil)
 
 // build turns a case into a fixture and its request. reads are the HTTP
 // GET reads of the active definitions, which the fixture connection serves.
-func build(org ids.OrgID, now time.Time, def *defs.Definition, catalog map[string]fdomain.Type, reads []string,
+func build(org ids.OrgID, now time.Time, def *defs.Definition, rules []consequences.Rule, catalog map[string]fdomain.Type, reads []string,
 	tc *pdomain.TestCase,
 ) (*fixture, error) {
 	g := tc.Given
 	if g == nil {
 		g = &pdomain.TestGiven{}
 	}
-	f := &fixture{org: org, now: now, def: def, agentID: DefaultAgentID, env: DefaultEnvironmentID, budget: g.Budget}
+	f := &fixture{org: org, now: now, def: def, rules: rules, agentID: DefaultAgentID, env: DefaultEnvironmentID, budget: g.Budget}
 	if g.Agent != "" {
 		id, err := ids.ParseUUID(g.Agent)
 		if err != nil {
@@ -153,11 +157,18 @@ func build(org ids.OrgID, now time.Time, def *defs.Definition, catalog map[strin
 	return f, nil
 }
 
-// buildGrant is the root grant: the operation, narrowed by the case's
-// grant constraints, with its budget.
+// buildGrant is the root grant: the operation and its consequences,
+// narrowed by the case's grant constraints, with its budget.
 func (f *fixture) buildGrant(g *pdomain.TestGiven) error {
 	op := f.def.Operation
+	// The grant also covers what the action's consequences do, which the
+	// pipeline decides with it (D28).
 	ops := gdomain.Ops{op}
+	for _, r := range f.rules {
+		if c := r.Consequence.Operation; !slices.Contains(ops, c) {
+			ops = append(ops, c)
+		}
+	}
 	b := gdomain.Bounds{Operations: &ops}
 	param := func(name string, pb gdomain.ParamBound) {
 		if b.Params == nil {
@@ -217,23 +228,35 @@ func (f *fixture) buildGrant(g *pdomain.TestGiven) error {
 	return nil
 }
 
-// buildFacts records the case's facts about the action's target. A fact
-// the org's catalog declares is typed by it. A prerequisite of the
-// definition that no provider declares yet (M11.1 D26) matters only by
-// its presence and age: no rule can read it (that is FACT_UNKNOWN), so its
-// value is ignored. A fact the case does not give is missing.
+// buildFacts records the case's facts. Every subject the pipeline asks
+// about (the action's target and a consequence's target) is served the
+// same facts by name (M11.1 D28). A fact the org's catalog declares is
+// typed by it. A fact no provider declares yet may still be given when the
+// definitions read it: a prerequisite of the action's definition or of a
+// consequence's, or a fact a consequence rule requires (D26, D28). Its
+// presence and age count, and its value, when given, is typed by its wire
+// form ({"bool": ...}, {"object": ...}); no policy rule can read it (that
+// is FACT_UNKNOWN). A fact the case does not give is missing.
 func (f *fixture) buildFacts(g *pdomain.TestGiven, catalog map[string]fdomain.Type, target *actionir.Target) error {
 	f.facts = map[string]fdomain.Fact{}
+	read := f.definitionFacts()
 	for _, name := range slices.Sorted(maps.Keys(g.Facts)) {
 		tf := g.Facts[name]
 		var v fdomain.Value
-		if t, ok := catalog[name]; ok {
+		t, declared := catalog[name]
+		switch {
+		case !declared && !read[name]:
+			return caseErr("given.facts: %s is neither a fact this org's providers declare nor one the definitions of %s read", name, f.def.Operation)
+		case !declared && len(tf.Value) > 0:
+			if t = wireType(tf.Value); t == "" {
+				return caseErr("given.facts: %s has no typed value such as {\"bool\": true} or {\"object\": {...}}", name)
+			}
+			fallthrough
+		case declared:
 			var err error
 			if v, err = fdomain.DecodeValue(t, tf.Value); err != nil {
 				return caseErr("given.facts: %s is not a %s: %v", name, t, err)
 			}
-		} else if !slices.ContainsFunc(f.def.Prerequisites, func(p defs.Prerequisite) bool { return p.Fact == name }) {
-			return caseErr("given.facts: %s is neither a fact this org's providers declare nor a prerequisite of %s", name, f.def.Operation)
 		}
 		if tf.AgeSeconds < 0 {
 			return caseErr("given.facts: %s has a negative age", name)
@@ -273,7 +296,7 @@ func (f *fixture) Definition(_ context.Context, org ids.OrgID, pin actionir.Defi
 	if org != f.org || pin.Package != fixturePackage || pin.Version != fixtureVersion || pin.Digest != f.def.Digest {
 		return pipeline.Pinned{}, pipeline.ErrNotFound
 	}
-	return pipeline.Pinned{Definition: f.def, State: defs.StateActive}, nil
+	return pipeline.Pinned{Definition: f.def, State: defs.StateActive, Consequences: f.rules}, nil
 }
 
 // Policy implements pipeline.Reader: the version under test (or a mutant).
@@ -425,4 +448,52 @@ func mustGrantID(s string) gdomain.GrantID {
 		panic(err)
 	}
 	return g
+}
+
+// definitionFacts are the facts the definitions read for the case's action:
+// its prerequisites, its consequence rules' facts and their consequence
+// definitions' prerequisites.
+func (f *fixture) definitionFacts() map[string]bool {
+	out := map[string]bool{}
+	add := func(d *defs.Definition) {
+		if d == nil {
+			return
+		}
+		for _, p := range d.Prerequisites {
+			out[p.Fact] = true
+		}
+	}
+	add(f.def)
+	for _, r := range f.rules {
+		for _, n := range r.RequiresFacts {
+			out[n] = true
+		}
+		add(r.Definition)
+	}
+	return out
+}
+
+// wireType is the type a fact value's wire form names by its one member,
+// or "".
+func wireType(raw jsontext.Value) fdomain.Type {
+	var members map[string]jsontext.Value
+	if err := json.Unmarshal(raw, &members); err != nil {
+		return ""
+	}
+	byMember := map[string]fdomain.Type{
+		"bool": fdomain.TypeBoolean, "int": fdomain.TypeInteger, "decimal": fdomain.TypeDecimal, "amount": fdomain.TypeMoney,
+		"id": fdomain.TypeIdentifier, "time": fdomain.TypeTimestamp, "object": fdomain.TypeObject,
+	}
+	var out fdomain.Type
+	for m := range members {
+		t, ok := byMember[m]
+		if m == "currency" {
+			continue
+		}
+		if !ok || out != "" {
+			return ""
+		}
+		out = t
+	}
+	return out
 }
