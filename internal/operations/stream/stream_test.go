@@ -156,7 +156,14 @@ func agent(id ids.UUID) stream.Subject { return stream.Subject{Type: "agent", ID
 
 func txn(id ids.UUID) stream.Subject { return stream.Subject{Type: "transaction", ID: id.String()} }
 
-func (w *world) open(t *testing.T, ctx context.Context, path, bearer string, hdr map[string]string) *http.Response {
+// opened is a stream response; its body closes when the test ends.
+type opened struct {
+	StatusCode int
+	Header     http.Header
+	Body       io.Reader
+}
+
+func (w *world) open(t *testing.T, ctx context.Context, path, bearer string, hdr map[string]string) opened {
 	t.Helper()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, w.srv.URL+path, nil)
 	if err != nil {
@@ -168,12 +175,12 @@ func (w *world) open(t *testing.T, ctx context.Context, path, bearer string, hdr
 	for k, v := range hdr {
 		req.Header.Set(k, v)
 	}
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := w.srv.Client().Do(req)
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = resp.Body.Close() })
-	return resp
+	return opened{StatusCode: resp.StatusCode, Header: resp.Header, Body: resp.Body}
 }
 
 // frame is one SSE frame.

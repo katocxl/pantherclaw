@@ -98,8 +98,10 @@ func (b BuiltinQuery) expand(now time.Time) (Query, []Omission, error) {
 			return Query{}, nil, ErrInvalidQuery("parameter " + used + " does not apply to " + string(b.Name))
 		}
 	}
-	unobserved := Omission{Code: omissionUnobservedUse,
-		Detail: "use through routes PantherClaw does not observe (OBSERVE_ONLY or UNKNOWN coverage) is not recorded"}
+	unobserved := Omission{
+		Code:   omissionUnobservedUse,
+		Detail: "use through routes PantherClaw does not observe (OBSERVE_ONLY or UNKNOWN coverage) is not recorded",
+	}
 	switch b.Name {
 	case BuiltinProductionAccess:
 		return Query{Entity: EntityTransactions, Filters: Filters{
@@ -139,20 +141,24 @@ func (b BuiltinQuery) expand(now time.Time) (Query, []Omission, error) {
 			return Query{}, nil, ErrInvalidQuery("connection is required")
 		}
 		return Query{Entity: EntityAgents, Filters: Filters{UsedConnection: p.Connection, Start: p.Start, End: p.End}},
-			[]Omission{{Code: omissionUnknownDependents,
-				Detail: "workloads that hold the connection's credential or reach its target directly are not listed"}}, nil
+			[]Omission{{
+				Code:   omissionUnknownDependents,
+				Detail: "workloads that hold the connection's credential or reach its target directly are not listed",
+			}}, nil
 	case BuiltinDenials:
 		return Query{Entity: EntityTransactions, Filters: Filters{
 			Agent: p.Agent, Connection: p.Connection, TargetType: p.TargetType,
 			Decisions: []string{"DENY", "CANNOT_AUTHORIZE"}, Start: p.Start, End: p.End,
 		}}, nil, nil
-	default: // BuiltinRecentAuthorityChange
+	case BuiltinRecentAuthorityChange:
 		start := p.Start
 		if start == nil {
 			s := now.Add(-defaultRecent)
 			start = &s
 		}
 		return Query{Entity: EntityGrantChanges, Filters: Filters{Agent: p.Agent, Start: start, End: p.End}}, nil, nil
+	default:
+		return Query{}, nil, ErrInvalidQuery("unknown built-in query")
 	}
 }
 

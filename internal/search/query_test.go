@@ -115,7 +115,7 @@ func TestBuiltinsExpand(t *testing.T) {
 	if q.Filters.Start == nil || !q.Filters.Start.Equal(now.Add(-7*24*time.Hour)) {
 		t.Errorf("authority changes default window: %+v", q.Filters)
 	}
-	q, notes, _ = BuiltinQuery{Name: BuiltinConnectionDependents, Params: Params{Connection: &id}}.expand(now)
+	_, notes, _ = BuiltinQuery{Name: BuiltinConnectionDependents, Params: Params{Connection: &id}}.expand(now)
 	if len(notes) != 1 || notes[0].Code != omissionUnknownDependents {
 		t.Errorf("connection dependents must name unknown dependencies: %v", notes)
 	}
@@ -151,12 +151,18 @@ func TestLabels(t *testing.T) {
 // effect (it may have any).
 func TestCapability(t *testing.T) {
 	now := time.Date(2026, 10, 15, 0, 0, 0, 0, time.UTC)
-	pay := &defs.Definition{Operation: "payments.refund", Effects: []defs.Effect{{Kind: "funds.transfer"}},
-		Assurance: defs.Assurance{Basis: defs.BasisObserved, ValidUntil: "2027-01-01"}}
-	stale := &defs.Definition{Operation: "payments.old", Effects: []defs.Effect{{Kind: "funds.transfer"}},
-		Assurance: defs.Assurance{Basis: defs.BasisObserved, ValidUntil: "2026-01-01"}}
-	declared := &defs.Definition{Operation: "payments.charge", SideEffects: []defs.Effect{{Kind: "funds.hold"}},
-		Assurance: defs.Assurance{Basis: defs.BasisDeclared, ValidUntil: "2027-01-01"}}
+	pay := &defs.Definition{
+		Operation: "payments.refund", Effects: []defs.Effect{{Kind: "funds.transfer"}},
+		Assurance: defs.Assurance{Basis: defs.BasisObserved, ValidUntil: "2027-01-01"},
+	}
+	stale := &defs.Definition{
+		Operation: "payments.old", Effects: []defs.Effect{{Kind: "funds.transfer"}},
+		Assurance: defs.Assurance{Basis: defs.BasisObserved, ValidUntil: "2026-01-01"},
+	}
+	declared := &defs.Definition{
+		Operation: "payments.charge", SideEffects: []defs.Effect{{Kind: "funds.hold"}},
+		Assurance: defs.Assurance{Basis: defs.BasisDeclared, ValidUntil: "2027-01-01"},
+	}
 	read := &defs.Definition{Operation: "repo.read", Effects: []defs.Effect{{Kind: "none"}}}
 	unknown := &defs.Definition{Operation: "tool.mystery"}
 	if capability(pay, now) != "VERIFIED" || capability(stale, now) != "DECLARED" ||
@@ -203,8 +209,12 @@ func TestSpecValidate(t *testing.T) {
 			t.Errorf("round trip %s: %v", b, err)
 		}
 	}
-	for _, s := range []Spec{{}, {Query: &Query{Entity: EntityRuns}, Builtin: &BuiltinQuery{Name: BuiltinDenials}},
-		{Query: &Query{Entity: "x"}}, {Builtin: &BuiltinQuery{Name: "x"}}} {
+	for _, s := range []Spec{
+		{},
+		{Query: &Query{Entity: EntityRuns}, Builtin: &BuiltinQuery{Name: BuiltinDenials}},
+		{Query: &Query{Entity: "x"}},
+		{Builtin: &BuiltinQuery{Name: "x"}},
+	} {
 		if err := s.Validate(); !invalid(err) {
 			t.Errorf("%+v accepted", s)
 		}

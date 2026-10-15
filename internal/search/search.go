@@ -156,11 +156,15 @@ func (s *Service) run(ctx context.Context, c tenancy.Caller, tx db.TenantTx, q Q
 	out := Result{Scope: sc, AsOf: asOf, Range: rangeOf(q.Filters, asOf)}
 	switch {
 	case sc.Restricted:
-		out.Omissions = append(out.Omissions, Omission{Code: omissionRestricted,
-			Detail: "you do not hold " + string(perm) + " anywhere in this org"})
+		out.Omissions = append(out.Omissions, Omission{
+			Code:   omissionRestricted,
+			Detail: "you do not hold " + string(perm) + " anywhere in this org",
+		})
 	case !sc.All:
-		out.Omissions = append(out.Omissions, Omission{Code: omissionScopeLimited,
-			Detail: "results cover only the agents where you hold " + string(perm)})
+		out.Omissions = append(out.Omissions, Omission{
+			Code:   omissionScopeLimited,
+			Detail: "results cover only the agents where you hold " + string(perm),
+		})
 	}
 	if sc.Restricted {
 		out.Empty = EmptyRestricted

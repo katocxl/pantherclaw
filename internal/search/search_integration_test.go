@@ -187,7 +187,7 @@ func TestHR257_EmptyResultsGiveTheirReason(t *testing.T) {
 }
 
 // TestHR257_BuiltinsRunUnderTheViewersScope: production access is the
-// production environment's rows the viewer may read, labelled attempts
+// production environment's rows the viewer may read, labeled attempts
 // until an effect is confirmed.
 func TestHR257_BuiltinsRunUnderTheViewersScope(t *testing.T) {
 	f := newFx(t)

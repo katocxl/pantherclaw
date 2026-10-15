@@ -161,8 +161,10 @@ func New(feed Feed, auth Authenticator, scoper Scoper, expiry func(string) (time
 	if expiry == nil {
 		expiry = func(string) (time.Time, bool) { return time.Time{}, false }
 	}
-	return &Handler{feed: feed, auth: auth, scoper: scoper, expiry: expiry, clk: clk, cfg: cfg.withDefaults(), log: log,
-		active: map[string]int{}}, nil
+	return &Handler{
+		feed: feed, auth: auth, scoper: scoper, expiry: expiry, clk: clk, cfg: cfg.withDefaults(), log: log,
+		active: map[string]int{},
+	}, nil
 }
 
 // Mount adds the stream to mux.

@@ -176,8 +176,10 @@ func visible(ctx context.Context, c tenancy.Caller, q *dbq.Queries, r dbq.PcSave
 			return false, err
 		}
 		return r.TeamID != nil && slices.Contains(teams, *r.TeamID), nil
-	default:
+	case Private:
 		return r.Owner == c.Principal.String(), nil
+	default:
+		return false, nil
 	}
 }
 
