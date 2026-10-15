@@ -250,8 +250,10 @@ func TestT017_SensitiveReadThenPublicWriteIsDetected(t *testing.T) {
 // quarantine raise pc.tools.drift; an ordinary package transition does
 // not; no rule lifts the quarantine (rules only raise signals).
 func TestT025_DefinitionDriftIsDetected(t *testing.T) {
-	if fires(t, "pc.tools.drift", rules.TestEvent{Kind: "audit.connection.drift_reported", Subjects: map[string]string{"connection": "c1"},
-		Attrs: map[string]string{"simulated": "true"}}) {
+	if fires(t, "pc.tools.drift", rules.TestEvent{
+		Kind: "audit.connection.drift_reported", Subjects: map[string]string{"connection": "c1"},
+		Attrs: map[string]string{"simulated": "true"},
+	}) {
 		t.Error("a simulated drift report fired (HR-222)")
 	}
 	if !fires(t, "pc.tools.drift", rules.TestEvent{

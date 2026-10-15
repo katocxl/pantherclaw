@@ -5,7 +5,7 @@ package rules
 
 import "slices"
 
-// atlasTechniques is the closed list of MITRE ATLAS technique and
+// atlasTechniques is the closed list of ATLAS technique and
 // sub-technique ids a rule may map to (D9, D59 L11), as published in 2025.
 // A new ATLAS release adds ids here.
 var atlasTechniques = []string{
