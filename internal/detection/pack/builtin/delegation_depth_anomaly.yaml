@@ -1,0 +1,30 @@
+# SPDX-License-Identifier: BUSL-1.1
+# Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+id: pc.delegation.depth_anomaly
+version: "1"
+title: Deep delegation chain
+description: >-
+  An action was decided in a run three or more delegations below the run a
+  person or service launched. Chains that deep are unusual and hide who
+  asked for what (PN-006.5).
+severity: MEDIUM
+attention: FINDING
+basis: INFERRED
+owasp: [ASI07, ASI10]
+edition: business
+on: [receipt.decision]
+match: event.attrs.?depth.orValue("0") in ["3", "4", "5", "6", "7", "8"]
+window:
+  duration: 24h
+  group_by: [subjects.run]
+  count: 1
+group: run
+tests:
+  - name: depth three
+    fires: true
+    events:
+      - {kind: receipt.decision, decision: ALLOW, subjects: {run: r1}, attrs: {depth: "3"}}
+  - name: depth one
+    fires: false
+    events:
+      - {kind: receipt.decision, decision: ALLOW, subjects: {run: r1}, attrs: {depth: "1"}}

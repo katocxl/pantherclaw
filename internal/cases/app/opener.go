@@ -12,9 +12,10 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	reflexdomain "github.com/katocxl/pantherclaw/internal/reflex/domain"
+	reflexports "github.com/katocxl/pantherclaw/internal/reflex/ports"
 )
 
-// Opener implements reflexdomain.CaseOpener (D1): other parts of the
+// Opener implements reflexports.CaseOpener (D1, D55): other parts of the
 // product (detections, response, Shared Signals) open a case in their own
 // transaction. It checks no caller permission (its callers are the
 // product, not a person) but needs the Team edition: below it, Open
@@ -23,7 +24,7 @@ type Opener struct {
 	Editions Editions
 }
 
-var _ reflexdomain.CaseOpener = (*Opener)(nil)
+var _ reflexports.CaseOpener = (*Opener)(nil)
 
 // Open opens a case from seed in tx: a LINK entry per subject, evidence
 // ref, alert and incident, and an open QUESTION per question, all written

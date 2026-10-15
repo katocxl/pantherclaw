@@ -234,7 +234,7 @@ func (e Entitlements) Cases() bool { return e.Edition.Paid() }
 func (e Entitlements) BreachRadius() bool { return e.Edition.Paid() }
 
 // AdvancedDetections reports whether the edition runs the sequence,
-// probing, delegation and behaviour-drift detections and typical-run
+// probing, delegation and behavior-drift detections and typical-run
 // comparison (PN-006.4, PN-006.5, F399, F234): Business and above.
 func (e Entitlements) AdvancedDetections() bool { return e.businessPlus() }
 

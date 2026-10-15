@@ -8,7 +8,7 @@
 -- The context of the transactions a feed batch names: run, agent, instance,
 -- environment, grant, principal, operation, connection and its class.
 SELECT t.id, t.run_id, r.agent_id, r.instance_id, r.environment_id, r.grant_id, r.principal_user_id,
-       r.principal_sa_id, r.parent_run_id, r.depth, t.operation, t.connection_id, t.mode,
+       r.principal_sa_id, r.parent_run_id, r.depth, t.operation, t.connection_id, t.mode, t.budget_id,
        coalesce(c.destination_class, '')::text AS destination_class
 FROM pc.transactions t
 JOIN pc.runs r ON r.org_id = t.org_id AND r.id = t.run_id

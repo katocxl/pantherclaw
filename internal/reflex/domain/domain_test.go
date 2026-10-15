@@ -37,7 +37,7 @@ func TestSignalValidate(t *testing.T) {
 		"basis":     func(s *reflexdomain.Signal) { s.Basis = "GUESS" },
 		"subject":   func(s *reflexdomain.Signal) { s.Subjects = []reflexdomain.Subject{{Type: "planet", ID: "x"}} },
 		"evidence": func(s *reflexdomain.Signal) {
-			s.Evidence = []reflexdomain.EvidenceRef{{Kind: "rumour", ID: ids.NewV7()}}
+			s.Evidence = []reflexdomain.EvidenceRef{{Kind: "rumor", ID: ids.NewV7()}}
 		},
 		"fact key":        func(s *reflexdomain.Signal) { s.Facts = map[string]string{"Bad Key": "x"} },
 		"fact value":      func(s *reflexdomain.Signal) { s.Facts = map[string]string{"k": strings.Repeat("x", 513)} },
@@ -81,5 +81,16 @@ func TestAttentionOrder(t *testing.T) {
 func TestReflexKind(t *testing.T) {
 	if !reflexdomain.ReflexKind(reflexdomain.KindAlert) || reflexdomain.ReflexKind("receipt.decision") {
 		t.Error("ReflexKind")
+	}
+}
+
+func TestSystemSubjectsAreFixedNames(t *testing.T) {
+	for _, id := range []string{reflexdomain.SystemIdentityPlaybook, reflexdomain.SystemDetection, reflexdomain.SystemSweeper} {
+		if !(reflexdomain.Subject{Type: reflexdomain.SubjectSystem, ID: id}).Valid() {
+			t.Errorf("%s invalid", id)
+		}
+	}
+	if (reflexdomain.Subject{Type: reflexdomain.SubjectSystem, ID: "root"}).Valid() {
+		t.Error("an unknown system actor is valid")
 	}
 }

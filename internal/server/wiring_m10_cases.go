@@ -11,7 +11,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1/pantherclawv1connect"
 	"github.com/katocxl/pantherclaw/internal/investigations"
 	"github.com/katocxl/pantherclaw/internal/investigations/adapters/investigationsrpc"
-	reflexdomain "github.com/katocxl/pantherclaw/internal/reflex/domain"
+	reflexports "github.com/katocxl/pantherclaw/internal/reflex/ports"
 )
 
 // m10CaseEditions returns the server's entitlements source, or nil (fail
@@ -30,9 +30,9 @@ func caseService(d apiDeps) *capp.Service {
 	return &capp.Service{Pool: d.pool, Editions: m10CaseEditions(d)}
 }
 
-// caseOpener is the reflexdomain.CaseOpener other streams open cases with
+// caseOpener is the reflexports.CaseOpener other streams open cases with
 // (D1): detections, response and Shared Signals.
-func caseOpener(d apiDeps) reflexdomain.CaseOpener { //nolint:unused // wired by the M10 streams that open cases (D1)
+func caseOpener(d apiDeps) reflexports.CaseOpener { //nolint:unused // wired by the M10 streams that open cases (D1)
 	return capp.NewOpener(m10CaseEditions(d))
 }
 

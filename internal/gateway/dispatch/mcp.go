@@ -257,6 +257,10 @@ func placeBearer(conn *control.Connection, req *http.Request, token []byte) erro
 // digest the server lists now, empty when the tool is gone.
 type Drift struct {
 	Tool, Expected, Observed string
+	// Description is the changed tool's description as listed now, for the
+	// server's instruction-like content scan (G0 M10 D47); nil when the tool
+	// is gone or listed no description.
+	Description *string
 }
 
 // CheckDrift lists a kind-mcp connection's upstream tools, with its
@@ -340,20 +344,22 @@ func (e *Engine) check(ctx context.Context, conn *control.Connection, ce clientE
 		return nil, err
 	}
 	type definition struct {
-		digest string
-		schema jsontext.Value
+		digest      string
+		schema      jsontext.Value
+		description *string
 	}
 	listed := map[string][]definition{}
 	for _, t := range tools {
 		var n struct {
 			Name        string         `json:"name"`
+			Description *string        `json:"description"`
 			InputSchema jsontext.Value `json:"inputSchema"`
 		}
 		d, err := upstream.ToolDigest(t)
 		if err != nil || json.Unmarshal(t, &n) != nil {
 			return nil, fmt.Errorf("%w: a tool definition does not decode", upstream.ErrProtocol)
 		}
-		listed[n.Name] = append(listed[n.Name], definition{digest: d, schema: n.InputSchema})
+		listed[n.Name] = append(listed[n.Name], definition{digest: d, schema: n.InputSchema, description: n.Description})
 	}
 	var drifts []Drift
 	entry := driftEntry{revision: conn.GetRevision(), tools: map[string]bool{}, pinned: map[string]pinned{}}
@@ -366,7 +372,7 @@ func (e *Engine) check(ctx context.Context, conn *control.Connection, ce clientE
 				drifts = append(drifts, Drift{Tool: tool, Expected: want})
 			case other >= 0:
 				// A changed definition, or the name listed more than once.
-				drifts = append(drifts, Drift{Tool: tool, Expected: want, Observed: got[other].digest})
+				drifts = append(drifts, Drift{Tool: tool, Expected: want, Observed: got[other].digest, Description: got[other].description})
 			default:
 				continue
 			}
