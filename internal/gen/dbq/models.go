@@ -1157,6 +1157,13 @@ type PcGatewayEnrollmentToken struct {
 	UsedCertID *ids.UUID
 }
 
+type PcGatewayEpochDelivery struct {
+	OrgID       ids.OrgID
+	GatewayID   ids.UUID
+	Epoch       int64
+	DeliveredAt time.Time
+}
+
 type PcGithubExemption struct {
 	OrgID        ids.OrgID
 	GithubUserID int64

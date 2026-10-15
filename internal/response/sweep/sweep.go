@@ -17,12 +17,12 @@ import (
 	"github.com/riverqueue/river"
 	"github.com/riverqueue/river/rivertype"
 
+	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	"github.com/katocxl/pantherclaw/internal/platform/jobs"
 	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
 	"github.com/katocxl/pantherclaw/internal/response/adapters/pgresponse"
-	rdomain "github.com/katocxl/pantherclaw/internal/response/domain"
 )
 
 // Interval is how often the sweep is dispatched (D22).
@@ -31,29 +31,20 @@ const Interval = 2 * time.Second
 // maxPerSweep bounds one org's sweep; the next run takes the rest.
 const maxPerSweep = 200
 
-// Confirmer looks for confirmation evidence of an action's open paths and
-// records it in tx (D22): a gateway path once that gateway acknowledged the
-// action's epoch, a credential path once its revoke or rotate is recorded,
-// an in-flight path once its transaction ended. A bypass route stays
-// UNRESOLVED unless a credential path confirms it.
-type Confirmer interface {
-	Confirm(ctx context.Context, tx db.TenantTx, org ids.OrgID, action ids.UUID) error
-}
-
-// Settled is told, in the sweep's transaction, about an action that reached
-// a final or partial status (FAILED raises a non-suppressible signal,
-// HR-249).
-type Settled interface {
-	Settled(ctx context.Context, tx db.TenantTx, org ids.OrgID, action ids.UUID, status rdomain.Status) error
+// Advancer looks for confirmation evidence of an unsettled action's open
+// paths in tx (a gateway path once its gateway was sent the action's epoch, a
+// credential or bypass path once the credential changed, an in-flight path
+// once its dispatch ended) and moves the action to the status its material
+// paths give, telling the org about PARTIAL and FAILED (HR-249). It reports
+// whether the status changed.
+type Advancer interface {
+	Advance(ctx context.Context, tx db.TenantTx, a dbq.PcResponseAction) (bool, error)
 }
 
 // Sweeper settles response actions.
 type Sweeper struct {
-	Pool *db.Pool
-	// Confirm may be nil: then only recorded path states count.
-	Confirm Confirmer
-	// Notify may be nil.
-	Notify Settled
+	Pool    *db.Pool
+	Advance Advancer
 }
 
 // Sweep settles one org's unsettled actions and returns how many changed
@@ -66,49 +57,17 @@ func (s *Sweeper) Sweep(ctx context.Context, org ids.OrgID) (int, error) {
 			return err
 		}
 		for _, a := range actions {
-			if s.Confirm != nil {
-				if err := s.Confirm.Confirm(ctx, tx, org, a.ID); err != nil {
-					return err
-				}
-			}
-			paths, err := pgresponse.Paths(ctx, tx, org, a.ID)
+			changed, err := s.Advance.Advance(ctx, tx, a)
 			if err != nil {
 				return err
 			}
-			cur, next := rdomain.Status(a.Status), rdomain.StatusOf(paths)
-			if next == cur || next == rdomain.StatusRequested {
-				continue
+			if changed {
+				n++
 			}
-			if err := pgresponse.Settle(ctx, tx, org, a.ID, cur, next, futureConfirmed(paths), a.HistoricalOpen); err != nil {
-				return err
-			}
-			if s.Notify != nil {
-				if err := s.Notify.Settled(ctx, tx, org, a.ID, next); err != nil {
-					return err
-				}
-			}
-			n++
 		}
 		return nil
 	})
 	return n, err
-}
-
-// futureConfirmed reports whether new access is stopped (F561): every
-// material gateway path is confirmed. Historical exposure is reported
-// separately.
-func futureConfirmed(paths []rdomain.Path) bool {
-	gateways := 0
-	for _, p := range paths {
-		if p.Type != rdomain.PathGateway || !p.Material {
-			continue
-		}
-		if p.Status != rdomain.PathConfirmed {
-			return false
-		}
-		gateways++
-	}
-	return gateways > 0
 }
 
 // OrgArgs asks for one org's actions to be swept. Job args carry ids only

@@ -176,11 +176,12 @@ func (c Control) Narrow() bool {
 }
 
 // StatusOf is an action's status from its paths (HR-249): FAILED when a
-// material path failed, CONFIRMED only when every material path is
-// confirmed, UNSUPPORTED when no material path could be reached at all,
-// PARTIAL while any material path is unresolved or pending.
+// material path failed; CONFIRMED only when every material path is
+// confirmed; UNSUPPORTED when no material path can be reached at all;
+// PARTIAL while any material path is unresolved or unsupported; REQUESTED
+// while the rest are still pending.
 func StatusOf(paths []Path) Status {
-	material, confirmed, unsupported := 0, 0, 0
+	material, confirmed, unsupported, open := 0, 0, 0, 0
 	for _, p := range paths {
 		if !p.Material {
 			continue
@@ -193,7 +194,9 @@ func StatusOf(paths []Path) Status {
 			confirmed++
 		case PathUnsupported:
 			unsupported++
-		case PathPending, PathUnresolved:
+		case PathUnresolved:
+			open++
+		case PathPending:
 		}
 	}
 	switch {
@@ -203,6 +206,8 @@ func StatusOf(paths []Path) Status {
 		return StatusConfirmed
 	case unsupported == material:
 		return StatusUnsupported
+	case open > 0 || unsupported > 0:
+		return StatusPartial
 	}
-	return StatusPartial
+	return StatusRequested
 }

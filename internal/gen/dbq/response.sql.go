@@ -67,6 +67,159 @@ func (q *Queries) ActiveContainmentControls(ctx context.Context, orgID ids.OrgID
 	return items, nil
 }
 
+const agentCoverage = `-- name: AgentCoverage :many
+SELECT DISTINCT ON (s.agent_id, s.connection_id, s.operation)
+       s.agent_id, s.connection_id, s.operation, c.gateway_id,
+       CASE WHEN s.state = 'ENFORCED' AND s.expires_at <= now() THEN 'UNKNOWN' ELSE s.state END::text AS state
+FROM pc.coverage_snapshots s
+JOIN pc.connections c ON c.org_id = s.org_id AND c.id = s.connection_id
+WHERE s.org_id = $1 AND s.agent_id = ANY ($2::uuid[])
+ORDER BY s.agent_id, s.connection_id, s.operation, s.id DESC
+LIMIT 2000
+`
+
+type AgentCoverageRow struct {
+	AgentID      ids.UUID
+	ConnectionID ids.UUID
+	Operation    string
+	GatewayID    ids.UUID
+	State        string
+}
+
+// AgentCoverage is the current coverage state of each (connection,
+// operation) of the agents: an ENFORCED state past its expiry reads UNKNOWN.
+func (q *Queries) AgentCoverage(ctx context.Context, orgID ids.OrgID, agents []ids.UUID) ([]AgentCoverageRow, error) {
+	rows, err := q.db.Query(ctx, agentCoverage, orgID, agents)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []AgentCoverageRow{}
+	for rows.Next() {
+		var i AgentCoverageRow
+		if err := rows.Scan(
+			&i.AgentID,
+			&i.ConnectionID,
+			&i.Operation,
+			&i.GatewayID,
+			&i.State,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const agentHeldConnections = `-- name: AgentHeldConnections :many
+SELECT DISTINCT c.id, c.gateway_id
+FROM pc.connections c
+JOIN pc.coverage_routes cr ON cr.org_id = c.org_id AND cr.connection_id = c.id
+WHERE c.org_id = $1 AND c.access_mode = 'agent_held' AND c.state <> 'RETIRED'
+  AND (cr.agent_id IS NULL OR cr.agent_id = ANY ($2::uuid[]))
+ORDER BY c.id
+LIMIT 200
+`
+
+type AgentHeldConnectionsRow struct {
+	ID        ids.UUID
+	GatewayID ids.UUID
+}
+
+// AgentHeldConnections are the connections whose credential the agents
+// hold themselves (agent_held access) and that they have a route through.
+func (q *Queries) AgentHeldConnections(ctx context.Context, orgID ids.OrgID, agents []ids.UUID) ([]AgentHeldConnectionsRow, error) {
+	rows, err := q.db.Query(ctx, agentHeldConnections, orgID, agents)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []AgentHeldConnectionsRow{}
+	for rows.Next() {
+		var i AgentHeldConnectionsRow
+		if err := rows.Scan(&i.ID, &i.GatewayID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const controlsOfAction = `-- name: ControlsOfAction :many
+SELECT org_id, id, action_id, scope_type, scope_id, control, operation, reason, case_id, incident_id, created_by, created_at, expires_at, lifted_at, lifted_by, restoration_id FROM pc.containment_controls WHERE org_id = $1 AND action_id = $2
+`
+
+func (q *Queries) ControlsOfAction(ctx context.Context, orgID ids.OrgID, actionID ids.UUID) ([]PcContainmentControl, error) {
+	rows, err := q.db.Query(ctx, controlsOfAction, orgID, actionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []PcContainmentControl{}
+	for rows.Next() {
+		var i PcContainmentControl
+		if err := rows.Scan(
+			&i.OrgID,
+			&i.ID,
+			&i.ActionID,
+			&i.ScopeType,
+			&i.ScopeID,
+			&i.Control,
+			&i.Operation,
+			&i.Reason,
+			&i.CaseID,
+			&i.IncidentID,
+			&i.CreatedBy,
+			&i.CreatedAt,
+			&i.ExpiresAt,
+			&i.LiftedAt,
+			&i.LiftedBy,
+			&i.RestorationID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const gatewayEpochDelivery = `-- name: GatewayEpochDelivery :one
+SELECT epoch, delivered_at FROM pc.gateway_epoch_deliveries
+WHERE org_id = $1 AND gateway_id = $2
+`
+
+type GatewayEpochDeliveryRow struct {
+	Epoch       int64
+	DeliveredAt time.Time
+}
+
+func (q *Queries) GatewayEpochDelivery(ctx context.Context, orgID ids.OrgID, gatewayID ids.UUID) (GatewayEpochDeliveryRow, error) {
+	row := q.db.QueryRow(ctx, gatewayEpochDelivery, orgID, gatewayID)
+	var i GatewayEpochDeliveryRow
+	err := row.Scan(&i.Epoch, &i.DeliveredAt)
+	return i, err
+}
+
+const gatewayStateOf = `-- name: GatewayStateOf :one
+SELECT state FROM pc.gateways WHERE org_id = $1 AND id = $2
+`
+
+func (q *Queries) GatewayStateOf(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (string, error) {
+	row := q.db.QueryRow(ctx, gatewayStateOf, orgID, iD)
+	var state string
+	err := row.Scan(&state)
+	return state, err
+}
+
 const getContainmentControl = `-- name: GetContainmentControl :one
 SELECT org_id, id, action_id, scope_type, scope_id, control, operation, reason, case_id, incident_id, created_by, created_at, expires_at, lifted_at, lifted_by, restoration_id FROM pc.containment_controls WHERE org_id = $1 AND id = $2
 `
@@ -130,6 +283,49 @@ func (q *Queries) GetResponseAction(ctx context.Context, orgID ids.OrgID, iD ids
 		&i.SettledAt,
 	)
 	return i, err
+}
+
+const inFlightTransactions = `-- name: InFlightTransactions :many
+SELECT t.id, t.run_id, p.state, p.gateway_id
+FROM pc.transactions t
+JOIN pc.permits p ON p.org_id = t.org_id AND p.transaction_id = t.id
+WHERE t.org_id = $1 AND t.run_id = ANY ($2::uuid[]) AND p.state IN ('DISPATCHING', 'UNKNOWN')
+ORDER BY t.id
+LIMIT 500
+`
+
+type InFlightTransactionsRow struct {
+	ID        ids.UUID
+	RunID     ids.UUID
+	State     string
+	GatewayID string
+}
+
+// InFlightTransactions are the dispatched-but-unfinished transactions of
+// the runs (permits DISPATCHING or UNKNOWN).
+func (q *Queries) InFlightTransactions(ctx context.Context, orgID ids.OrgID, runs []ids.UUID) ([]InFlightTransactionsRow, error) {
+	rows, err := q.db.Query(ctx, inFlightTransactions, orgID, runs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []InFlightTransactionsRow{}
+	for rows.Next() {
+		var i InFlightTransactionsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.RunID,
+			&i.State,
+			&i.GatewayID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const insertContainmentControl = `-- name: InsertContainmentControl :one
@@ -353,6 +549,76 @@ func (q *Queries) ListContainmentControls(ctx context.Context, orgID ids.OrgID, 
 	return items, nil
 }
 
+const listResponseActions = `-- name: ListResponseActions :many
+SELECT org_id, id, kind, scope_type, scope_id, control, operation, reason, case_id, incident_id, actor, source, preview_digest, skip_preview, skip_reason, skip_step_up_at, idempotency_key, request_digest, status, future_confirmed, historical_open, epoch, requested_at, updated_at, settled_at FROM pc.response_actions
+WHERE org_id = $1
+  AND ($2::uuid IS NULL OR case_id = $2::uuid)
+  AND ($3::uuid IS NULL OR incident_id = $3::uuid)
+  AND ($4::uuid IS NULL OR id < $4::uuid)
+ORDER BY id DESC
+LIMIT $5
+`
+
+type ListResponseActionsParams struct {
+	OrgID      ids.OrgID
+	CaseID     *ids.UUID
+	IncidentID *ids.UUID
+	Before     *ids.UUID
+	MaxRows    int32
+}
+
+func (q *Queries) ListResponseActions(ctx context.Context, arg ListResponseActionsParams) ([]PcResponseAction, error) {
+	rows, err := q.db.Query(ctx, listResponseActions,
+		arg.OrgID,
+		arg.CaseID,
+		arg.IncidentID,
+		arg.Before,
+		arg.MaxRows,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []PcResponseAction{}
+	for rows.Next() {
+		var i PcResponseAction
+		if err := rows.Scan(
+			&i.OrgID,
+			&i.ID,
+			&i.Kind,
+			&i.ScopeType,
+			&i.ScopeID,
+			&i.Control,
+			&i.Operation,
+			&i.Reason,
+			&i.CaseID,
+			&i.IncidentID,
+			&i.Actor,
+			&i.Source,
+			&i.PreviewDigest,
+			&i.SkipPreview,
+			&i.SkipReason,
+			&i.SkipStepUpAt,
+			&i.IdempotencyKey,
+			&i.RequestDigest,
+			&i.Status,
+			&i.FutureConfirmed,
+			&i.HistoricalOpen,
+			&i.Epoch,
+			&i.RequestedAt,
+			&i.UpdatedAt,
+			&i.SettledAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listResponsePaths = `-- name: ListResponsePaths :many
 SELECT org_id, action_id, id, path_type, subject_type, subject_id, material, control, status, evidence, failure, unsupported_reason, cancel_capability, cancel_requested_at, created_at, updated_at, confirmed_at FROM pc.response_paths
 WHERE org_id = $1 AND action_id = $2
@@ -397,6 +663,32 @@ func (q *Queries) ListResponsePaths(ctx context.Context, orgID ids.OrgID, action
 	return items, nil
 }
 
+const permitState = `-- name: PermitState :one
+SELECT state FROM pc.permits WHERE org_id = $1 AND transaction_id = $2
+`
+
+// PermitState is a transaction's permit state now.
+func (q *Queries) PermitState(ctx context.Context, orgID ids.OrgID, transactionID ids.UUID) (string, error) {
+	row := q.db.QueryRow(ctx, permitState, orgID, transactionID)
+	var state string
+	err := row.Scan(&state)
+	return state, err
+}
+
+const recordEpochDelivery = `-- name: RecordEpochDelivery :exec
+INSERT INTO pc.gateway_epoch_deliveries (org_id, gateway_id, epoch)
+VALUES ($1, $2, $3)
+ON CONFLICT (org_id, gateway_id) DO UPDATE SET epoch = EXCLUDED.epoch, delivered_at = now()
+WHERE pc.gateway_epoch_deliveries.epoch < EXCLUDED.epoch
+`
+
+// RecordEpochDelivery keeps the highest epoch a gateway's live containment
+// stream delivered (D22).
+func (q *Queries) RecordEpochDelivery(ctx context.Context, orgID ids.OrgID, gatewayID ids.UUID, epoch int64) error {
+	_, err := q.db.Exec(ctx, recordEpochDelivery, orgID, gatewayID, epoch)
+	return err
+}
+
 const responseActionByKey = `-- name: ResponseActionByKey :one
 SELECT org_id, id, kind, scope_type, scope_id, control, operation, reason, case_id, incident_id, actor, source, preview_digest, skip_preview, skip_reason, skip_step_up_at, idempotency_key, request_digest, status, future_confirmed, historical_open, epoch, requested_at, updated_at, settled_at FROM pc.response_actions WHERE org_id = $1 AND idempotency_key = $2
 `
@@ -432,6 +724,106 @@ func (q *Queries) ResponseActionByKey(ctx context.Context, orgID ids.OrgID, idem
 		&i.SettledAt,
 	)
 	return i, err
+}
+
+const scopeActiveRuns = `-- name: ScopeActiveRuns :many
+SELECT r.id, r.agent_id
+FROM pc.runs r
+WHERE r.org_id = $1 AND r.state = 'ACTIVE' AND (
+    ($2::text = 'run' AND r.id::text = $3::text)
+    OR ($2::text = 'agent' AND r.agent_id::text = $3::text)
+    OR ($2::text = 'grant' AND r.grant_id IN (
+        SELECT l.grant_id FROM pc.grant_lineage l
+        WHERE l.org_id = $1 AND l.ancestor_id::text = $3::text))
+    OR ($2::text = 'principal' AND $3::text IN (
+        'user:' || r.launcher_user_id::text, 'user:' || r.principal_user_id::text,
+        'service_account:' || r.launcher_sa_id::text, 'service_account:' || r.principal_sa_id::text))
+    OR ($2::text = 'connection' AND r.agent_id IN (
+        SELECT cr.agent_id FROM pc.coverage_routes cr
+        WHERE cr.org_id = $1 AND cr.connection_id::text = $3::text AND cr.agent_id IS NOT NULL))
+)
+ORDER BY r.id
+LIMIT 1001
+`
+
+type ScopeActiveRunsRow struct {
+	ID      ids.UUID
+	AgentID ids.UUID
+}
+
+// ScopeActiveRuns are the active runs a control's scope covers, as the
+// pipeline matches them (D21); a connection covers the runs of the agents
+// with a route through it. At most 1001 rows: more means "over 1000".
+func (q *Queries) ScopeActiveRuns(ctx context.Context, orgID ids.OrgID, scopeType string, scopeID string) ([]ScopeActiveRunsRow, error) {
+	rows, err := q.db.Query(ctx, scopeActiveRuns, orgID, scopeType, scopeID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ScopeActiveRunsRow{}
+	for rows.Next() {
+		var i ScopeActiveRunsRow
+		if err := rows.Scan(&i.ID, &i.AgentID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const scopeExists = `-- name: ScopeExists :one
+SELECT CASE $1::text
+    WHEN 'agent' THEN EXISTS (SELECT 1 FROM pc.agents x WHERE x.org_id = $2::uuid AND x.id = $3::uuid)
+    WHEN 'run' THEN EXISTS (SELECT 1 FROM pc.runs x WHERE x.org_id = $2::uuid AND x.id = $3::uuid)
+    WHEN 'grant' THEN EXISTS (SELECT 1 FROM pc.grants x WHERE x.org_id = $2::uuid AND x.id = $3::uuid)
+    WHEN 'connection' THEN EXISTS (SELECT 1 FROM pc.connections x WHERE x.org_id = $2::uuid AND x.id = $3::uuid)
+    WHEN 'user' THEN EXISTS (SELECT 1 FROM pc.users x WHERE x.org_id = $2::uuid AND x.id = $3::uuid)
+    WHEN 'service_account' THEN EXISTS (SELECT 1 FROM pc.service_accounts x WHERE x.org_id = $2::uuid AND x.id = $3::uuid)
+    ELSE false END::boolean AS found
+`
+
+// ScopeExists reports whether a control's subject exists in the org.
+func (q *Queries) ScopeExists(ctx context.Context, scopeType string, orgID ids.UUID, iD ids.UUID) (bool, error) {
+	row := q.db.QueryRow(ctx, scopeExists, scopeType, orgID, iD)
+	var found bool
+	err := row.Scan(&found)
+	return found, err
+}
+
+const scopeGateways = `-- name: ScopeGateways :many
+SELECT g.id
+FROM pc.gateways g
+WHERE g.org_id = $1 AND g.state = 'ACTIVE' AND (
+    $2::text <> 'connection'
+    OR g.id IN (SELECT c.gateway_id FROM pc.connections c
+                WHERE c.org_id = $1 AND c.id::text = $3::text))
+ORDER BY g.id
+LIMIT 200
+`
+
+// ScopeGateways are the active gateways that serve a scope: a connection's
+// own gateway, else every active gateway of the org.
+func (q *Queries) ScopeGateways(ctx context.Context, orgID ids.OrgID, scopeType string, scopeID string) ([]ids.UUID, error) {
+	rows, err := q.db.Query(ctx, scopeGateways, orgID, scopeType, scopeID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ids.UUID{}
+	for rows.Next() {
+		var id ids.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const setResponseActionEpoch = `-- name: SetResponseActionEpoch :exec
@@ -567,4 +959,18 @@ func (q *Queries) UpdateResponsePath(ctx context.Context, arg UpdateResponsePath
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const waitingHoldsOfRuns = `-- name: WaitingHoldsOfRuns :one
+SELECT count(*) FROM pc.approval_requests a
+WHERE a.org_id = $1 AND a.run_id = ANY ($2::uuid[])
+  AND a.state IN ('PENDING', 'EVIDENCE_REQUESTED', 'APPROVED')
+`
+
+// WaitingHoldsOfRuns counts the waiting approval requests of the runs.
+func (q *Queries) WaitingHoldsOfRuns(ctx context.Context, orgID ids.OrgID, runs []ids.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, waitingHoldsOfRuns, orgID, runs)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
 }

@@ -95,3 +95,118 @@ SET status = sqlc.arg(status), evidence = sqlc.arg(evidence), failure = sqlc.nar
     confirmed_at = CASE WHEN sqlc.arg(status)::text = 'CONFIRMED' THEN now() END
 WHERE org_id = sqlc.arg(org_id) AND action_id = sqlc.arg(action_id) AND id = sqlc.arg(id)
   AND status = sqlc.arg(expected) AND status IN ('PENDING', 'UNRESOLVED');
+
+-- RecordEpochDelivery keeps the highest epoch a gateway's live containment
+-- stream delivered (D22).
+-- name: RecordEpochDelivery :exec
+INSERT INTO pc.gateway_epoch_deliveries (org_id, gateway_id, epoch)
+VALUES (sqlc.arg(org_id), sqlc.arg(gateway_id), sqlc.arg(epoch))
+ON CONFLICT (org_id, gateway_id) DO UPDATE SET epoch = EXCLUDED.epoch, delivered_at = now()
+WHERE pc.gateway_epoch_deliveries.epoch < EXCLUDED.epoch;
+
+-- name: GatewayEpochDelivery :one
+SELECT epoch, delivered_at FROM pc.gateway_epoch_deliveries
+WHERE org_id = sqlc.arg(org_id) AND gateway_id = sqlc.arg(gateway_id);
+
+-- ScopeActiveRuns are the active runs a control's scope covers, as the
+-- pipeline matches them (D21); a connection covers the runs of the agents
+-- with a route through it. At most 1001 rows: more means "over 1000".
+-- name: ScopeActiveRuns :many
+SELECT r.id, r.agent_id
+FROM pc.runs r
+WHERE r.org_id = sqlc.arg(org_id) AND r.state = 'ACTIVE' AND (
+    (sqlc.arg(scope_type)::text = 'run' AND r.id::text = sqlc.arg(scope_id)::text)
+    OR (sqlc.arg(scope_type)::text = 'agent' AND r.agent_id::text = sqlc.arg(scope_id)::text)
+    OR (sqlc.arg(scope_type)::text = 'grant' AND r.grant_id IN (
+        SELECT l.grant_id FROM pc.grant_lineage l
+        WHERE l.org_id = sqlc.arg(org_id) AND l.ancestor_id::text = sqlc.arg(scope_id)::text))
+    OR (sqlc.arg(scope_type)::text = 'principal' AND sqlc.arg(scope_id)::text IN (
+        'user:' || r.launcher_user_id::text, 'user:' || r.principal_user_id::text,
+        'service_account:' || r.launcher_sa_id::text, 'service_account:' || r.principal_sa_id::text))
+    OR (sqlc.arg(scope_type)::text = 'connection' AND r.agent_id IN (
+        SELECT cr.agent_id FROM pc.coverage_routes cr
+        WHERE cr.org_id = sqlc.arg(org_id) AND cr.connection_id::text = sqlc.arg(scope_id)::text AND cr.agent_id IS NOT NULL))
+)
+ORDER BY r.id
+LIMIT 1001;
+
+-- ScopeGateways are the active gateways that serve a scope: a connection's
+-- own gateway, else every active gateway of the org.
+-- name: ScopeGateways :many
+SELECT g.id
+FROM pc.gateways g
+WHERE g.org_id = sqlc.arg(org_id) AND g.state = 'ACTIVE' AND (
+    sqlc.arg(scope_type)::text <> 'connection'
+    OR g.id IN (SELECT c.gateway_id FROM pc.connections c
+                WHERE c.org_id = sqlc.arg(org_id) AND c.id::text = sqlc.arg(scope_id)::text))
+ORDER BY g.id
+LIMIT 200;
+
+-- AgentCoverage is the current coverage state of each (connection,
+-- operation) of the agents: an ENFORCED state past its expiry reads UNKNOWN.
+-- name: AgentCoverage :many
+SELECT DISTINCT ON (s.agent_id, s.connection_id, s.operation)
+       s.agent_id, s.connection_id, s.operation, c.gateway_id,
+       CASE WHEN s.state = 'ENFORCED' AND s.expires_at <= now() THEN 'UNKNOWN' ELSE s.state END::text AS state
+FROM pc.coverage_snapshots s
+JOIN pc.connections c ON c.org_id = s.org_id AND c.id = s.connection_id
+WHERE s.org_id = sqlc.arg(org_id) AND s.agent_id = ANY (sqlc.arg(agents)::uuid[])
+ORDER BY s.agent_id, s.connection_id, s.operation, s.id DESC
+LIMIT 2000;
+
+-- AgentHeldConnections are the connections whose credential the agents
+-- hold themselves (agent_held access) and that they have a route through.
+-- name: AgentHeldConnections :many
+SELECT DISTINCT c.id, c.gateway_id
+FROM pc.connections c
+JOIN pc.coverage_routes cr ON cr.org_id = c.org_id AND cr.connection_id = c.id
+WHERE c.org_id = sqlc.arg(org_id) AND c.access_mode = 'agent_held' AND c.state <> 'RETIRED'
+  AND (cr.agent_id IS NULL OR cr.agent_id = ANY (sqlc.arg(agents)::uuid[]))
+ORDER BY c.id
+LIMIT 200;
+
+-- InFlightTransactions are the dispatched-but-unfinished transactions of
+-- the runs (permits DISPATCHING or UNKNOWN).
+-- name: InFlightTransactions :many
+SELECT t.id, t.run_id, p.state, p.gateway_id
+FROM pc.transactions t
+JOIN pc.permits p ON p.org_id = t.org_id AND p.transaction_id = t.id
+WHERE t.org_id = sqlc.arg(org_id) AND t.run_id = ANY (sqlc.arg(runs)::uuid[]) AND p.state IN ('DISPATCHING', 'UNKNOWN')
+ORDER BY t.id
+LIMIT 500;
+
+-- PermitState is a transaction's permit state now.
+-- name: PermitState :one
+SELECT state FROM pc.permits WHERE org_id = sqlc.arg(org_id) AND transaction_id = sqlc.arg(transaction_id);
+
+-- WaitingHoldsOfRuns counts the waiting approval requests of the runs.
+-- name: WaitingHoldsOfRuns :one
+SELECT count(*) FROM pc.approval_requests a
+WHERE a.org_id = sqlc.arg(org_id) AND a.run_id = ANY (sqlc.arg(runs)::uuid[])
+  AND a.state IN ('PENDING', 'EVIDENCE_REQUESTED', 'APPROVED');
+
+-- name: ListResponseActions :many
+SELECT * FROM pc.response_actions
+WHERE org_id = sqlc.arg(org_id)
+  AND (sqlc.narg(case_id)::uuid IS NULL OR case_id = sqlc.narg(case_id)::uuid)
+  AND (sqlc.narg(incident_id)::uuid IS NULL OR incident_id = sqlc.narg(incident_id)::uuid)
+  AND (sqlc.narg(before)::uuid IS NULL OR id < sqlc.narg(before)::uuid)
+ORDER BY id DESC
+LIMIT sqlc.arg(max_rows);
+
+-- name: ControlsOfAction :many
+SELECT * FROM pc.containment_controls WHERE org_id = sqlc.arg(org_id) AND action_id = sqlc.arg(action_id);
+
+-- name: GatewayStateOf :one
+SELECT state FROM pc.gateways WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id);
+
+-- ScopeExists reports whether a control's subject exists in the org.
+-- name: ScopeExists :one
+SELECT CASE sqlc.arg(scope_type)::text
+    WHEN 'agent' THEN EXISTS (SELECT 1 FROM pc.agents x WHERE x.org_id = sqlc.arg(org_id)::uuid AND x.id = sqlc.arg(id)::uuid)
+    WHEN 'run' THEN EXISTS (SELECT 1 FROM pc.runs x WHERE x.org_id = sqlc.arg(org_id)::uuid AND x.id = sqlc.arg(id)::uuid)
+    WHEN 'grant' THEN EXISTS (SELECT 1 FROM pc.grants x WHERE x.org_id = sqlc.arg(org_id)::uuid AND x.id = sqlc.arg(id)::uuid)
+    WHEN 'connection' THEN EXISTS (SELECT 1 FROM pc.connections x WHERE x.org_id = sqlc.arg(org_id)::uuid AND x.id = sqlc.arg(id)::uuid)
+    WHEN 'user' THEN EXISTS (SELECT 1 FROM pc.users x WHERE x.org_id = sqlc.arg(org_id)::uuid AND x.id = sqlc.arg(id)::uuid)
+    WHEN 'service_account' THEN EXISTS (SELECT 1 FROM pc.service_accounts x WHERE x.org_id = sqlc.arg(org_id)::uuid AND x.id = sqlc.arg(id)::uuid)
+    ELSE false END::boolean AS found;

@@ -402,7 +402,7 @@ func cmdServe(ctx context.Context, args []string, stderr io.Writer, env Env, onS
 			return err
 		}
 		evidenceJobs = append(evidenceJobs, exceptionJobs...)
-		responseJobs, err := registerResponseJobs(jreg, pool, log)
+		responseJobs, err := registerResponseJobs(jreg, pool, responseNotifier(m5), bill, log)
 		if err != nil {
 			return err
 		}

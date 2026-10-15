@@ -241,6 +241,19 @@ CREATE TABLE pc.soar_requests (
     FOREIGN KEY (org_id, action_id) REFERENCES pc.response_actions (org_id, id)
 );
 
+-- The highest containment epoch each gateway's live containment stream
+-- delivered (D22): a gateway path is confirmed once its gateway was sent the
+-- action's epoch. The gateway itself fails closed when its stream goes
+-- quiet (HR-010), and BeginDispatch refuses a permit of an older epoch.
+CREATE TABLE pc.gateway_epoch_deliveries (
+    org_id       uuid        NOT NULL REFERENCES pc.orgs (id),
+    gateway_id   uuid        NOT NULL,
+    epoch        bigint      NOT NULL CHECK (epoch > 0),
+    delivered_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (org_id, gateway_id),
+    FOREIGN KEY (org_id, gateway_id) REFERENCES pc.gateways (org_id, id)
+);
+
 ALTER TABLE pc.response_actions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE pc.response_actions FORCE ROW LEVEL SECURITY;
 CREATE POLICY tenant_isolation ON pc.response_actions
@@ -271,6 +284,11 @@ ALTER TABLE pc.restoration_stages FORCE ROW LEVEL SECURITY;
 CREATE POLICY tenant_isolation ON pc.restoration_stages
     USING (org_id = (SELECT NULLIF(current_setting('app.org_id', true), '')::uuid))
     WITH CHECK (org_id = (SELECT NULLIF(current_setting('app.org_id', true), '')::uuid));
+ALTER TABLE pc.gateway_epoch_deliveries ENABLE ROW LEVEL SECURITY;
+ALTER TABLE pc.gateway_epoch_deliveries FORCE ROW LEVEL SECURITY;
+CREATE POLICY tenant_isolation ON pc.gateway_epoch_deliveries
+    USING (org_id = (SELECT NULLIF(current_setting('app.org_id', true), '')::uuid))
+    WITH CHECK (org_id = (SELECT NULLIF(current_setting('app.org_id', true), '')::uuid));
 ALTER TABLE pc.soar_requests ENABLE ROW LEVEL SECURITY;
 ALTER TABLE pc.soar_requests FORCE ROW LEVEL SECURITY;
 CREATE POLICY tenant_isolation ON pc.soar_requests
@@ -288,10 +306,13 @@ GRANT UPDATE (status, evidence, failure, unsupported_reason, cancel_capability, 
     ON pc.response_paths TO pc_app;
 GRANT UPDATE (approval_request_id, state, preconditions, updated_at, finished_at) ON pc.restoration_plans TO pc_app;
 GRANT UPDATE (results, state, tested_at, applied_at) ON pc.restoration_stages TO pc_app;
+GRANT SELECT, INSERT ON pc.gateway_epoch_deliveries TO pc_app;
+GRANT UPDATE (epoch, delivered_at) ON pc.gateway_epoch_deliveries TO pc_app;
 GRANT SELECT ON pc.containment_controls, pc.response_actions, pc.response_paths, pc.restoration_plans,
     pc.restoration_plan_controls, pc.restoration_stages, pc.soar_requests TO pc_audit_ro;
 
 -- +goose Down
+DROP TABLE pc.gateway_epoch_deliveries;
 DROP TABLE pc.soar_requests;
 DROP TABLE pc.restoration_stages;
 DROP TABLE pc.restoration_plan_controls;
