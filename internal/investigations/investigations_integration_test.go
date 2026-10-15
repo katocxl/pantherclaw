@@ -22,6 +22,15 @@ type scope map[ids.UUID]bool
 
 func (s scope) Visible(_ context.Context, a ids.UUID) (bool, error) { return s[a], nil }
 func (s scope) Limited() bool                                       { return true }
+func (s scope) Agents(context.Context) ([]ids.UUID, error) {
+	out := []ids.UUID{}
+	for a, ok := range s {
+		if ok {
+			out = append(out, a)
+		}
+	}
+	return out, nil
+}
 
 type fixture struct {
 	p                *db.Pool

@@ -169,8 +169,12 @@ func PrecedingContext(ctx context.Context, tx db.TenantTx, s Scope, run ids.UUID
 		}
 	}
 
+	scoped, visible, err := visibleFilter(ctx, s)
+	if err != nil {
+		return Preceding{}, err
+	}
 	shared, err := q.InvSharedTargets(ctx, dbq.InvSharedTargetsParams{
-		OrgID: tx.OrgID(), RunID: run, StartTime: rng.Start, EndTime: rng.End,
+		OrgID: tx.OrgID(), RunID: run, Scoped: scoped, VisibleAgents: visible, StartTime: rng.Start, EndTime: rng.End,
 	})
 	if err != nil {
 		return Preceding{}, err

@@ -107,7 +107,8 @@ SELECT r.agent_id FROM pc.transactions t JOIN pc.runs r ON r.org_id = t.org_id A
 WHERE t.org_id = sqlc.arg(org_id) AND t.id = ANY (sqlc.arg(transaction_ids)::uuid[]);
 
 -- The actions of a case's runs, transactions and agents in a window, for
--- the sequence and effects lenses (F237).
+-- the sequence and effects lenses (F237). A scoped viewer sees only the
+-- visible agents' rows, filtered before the limit (D60).
 -- name: CaseLensTransactions :many
 SELECT t.id, t.run_id, r.agent_id, t.operation, t.decision, t.reason_code, t.mode, t.connection_id,
        t.effect_state, t.effect_level_achieved, t.created_at, p.state AS permit_state, a.outcome
@@ -120,5 +121,6 @@ WHERE t.org_id = sqlc.arg(org_id)
        OR r.agent_id = ANY (sqlc.arg(agent_ids)::uuid[]))
   AND t.created_at >= sqlc.arg(start_time) AND t.created_at < sqlc.arg(end_time)
   AND (NOT sqlc.arg(effects_only)::boolean OR t.effect_state IS NOT NULL OR a.outcome IS NOT NULL)
+  AND (NOT sqlc.arg(scoped)::boolean OR r.agent_id = ANY (sqlc.arg(visible_agents)::uuid[]))
 ORDER BY t.created_at, t.id
 LIMIT sqlc.arg(max_rows);

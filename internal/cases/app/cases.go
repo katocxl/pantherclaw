@@ -193,7 +193,7 @@ func (s *Service) Open(ctx context.Context, r OpenRequest) (domain.Case, error) 
 			return ErrForbidden
 		}
 		out, err = seed(ctx, tx, seedOf{
-			title: r.Title, source: "manual", opener: author(c), subjects: r.Subjects, questions: r.Questions,
+			title: r.Title, source: "manual", opener: author(c), subjects: r.Subjects, questions: r.Questions, questionOwner: &c.Principal.ID,
 			alert: r.Alert, incident: r.Incident,
 		})
 		return err
@@ -242,11 +242,14 @@ func subjectAgents(ctx context.Context, q *dbq.Queries, org ids.OrgID, subjects 
 
 // seedOf is what a new case starts from.
 type seedOf struct {
-	title, source   string
-	opener          domain.Author
-	subjects        []reflexdomain.Subject
-	evidence        []reflexdomain.EvidenceRef
-	questions       []string
+	title, source string
+	opener        domain.Author
+	subjects      []reflexdomain.Subject
+	evidence      []reflexdomain.EvidenceRef
+	questions     []string
+	// questionOwner owns the seeded questions: the person who opens a case;
+	// nil for the product's seeds, which a person takes on later.
+	questionOwner   *ids.UUID
 	alert, incident *ids.UUID
 }
 
@@ -289,7 +292,7 @@ func seed(ctx context.Context, tx db.TenantTx, s seedOf) (domain.Case, error) {
 		}
 	}
 	for _, q := range s.questions {
-		if _, err := store.Append(ctx, tx, k.ID, s.opener, domain.Draft{Kind: domain.KindQuestion, Text: q}); err != nil {
+		if _, err := store.Append(ctx, tx, k.ID, s.opener, domain.Draft{Kind: domain.KindQuestion, Text: q, Owner: s.questionOwner}); err != nil {
 			return domain.Case{}, err
 		}
 	}
@@ -311,9 +314,20 @@ func (s *Service) Append(ctx context.Context, c ids.UUID, d domain.Draft) (domai
 		if _, err := sc.manageable(ctx, tx, c); err != nil {
 			return err
 		}
-		// A link must not take the case outside what the person may manage.
+		// The subjects an entry names must stay inside what the person may
+		// manage: a link, or the runs and transactions a fact or impact cites
+		// (D62).
+		subjects := []reflexdomain.Subject{}
 		if d.Kind == domain.KindLink && d.Ref != nil {
-			agents, err := subjectAgents(ctx, sc.q, caller.Org, []reflexdomain.Subject{{Type: reflexdomain.SubjectType(d.Ref.Kind), ID: d.Ref.ID}})
+			subjects = append(subjects, reflexdomain.Subject{Type: reflexdomain.SubjectType(d.Ref.Kind), ID: d.Ref.ID})
+		}
+		for _, e := range d.Evidence {
+			if e.Kind == domain.EvidenceRun || e.Kind == domain.EvidenceTransaction {
+				subjects = append(subjects, reflexdomain.Subject{Type: reflexdomain.SubjectType(e.Kind), ID: e.ID.String()})
+			}
+		}
+		if len(subjects) > 0 {
+			agents, err := subjectAgents(ctx, sc.q, caller.Org, subjects)
 			if err != nil {
 				return err
 			}

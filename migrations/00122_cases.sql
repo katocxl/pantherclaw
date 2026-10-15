@@ -30,9 +30,14 @@
 --     needed and why;
 --   * CLOSED: impact and a disposition are given, at least one FACT stands,
 --     and a follow-up owner is named while any QUESTION is still open
---     (F571: forensic questions stay open and owned after containment).
+--     (F571: forensic questions stay open and owned after containment);
+--     straight from OPEN it also needs the CONTAINED rule, whose reason
+--     may come with the closing entry.
 -- Superseded entries do not count. A closed case takes only facts, answers,
--- notes and a follow-up owner.
+-- notes and a follow-up owner, and no entry may leave it with an open
+-- question and no follow-up owner. A link is superseded only by a link to
+-- the same kind of subject, with a reason; a case has at most 1000 links.
+-- A person's question names its owner.
 --
 -- A case's containment actions (D43) are its standing LINK entries to
 -- response actions plus the pc.response_actions rows whose case_id is the
@@ -121,9 +126,9 @@ CREATE TABLE pc.case_entries (
     CHECK (kind <> 'ANSWER' OR question_id IS NOT NULL),
     CHECK (kind <> 'IMPACT' OR impact_kind IS NOT NULL),
     CHECK (kind <> 'LINK' OR (ref_kind IS NOT NULL AND ref_id IS NOT NULL)),
-    CHECK (kind <> 'OWNER' OR owner_role IS NOT NULL),
+    CHECK (kind <> 'OWNER' OR (owner_role IS NOT NULL AND owner_id IS NOT NULL)),
     CHECK (kind <> 'STATE' OR to_state IS NOT NULL),
-    CHECK (NOT no_containment_needed OR (to_state = 'CONTAINED' AND reason IS NOT NULL)),
+    CHECK (NOT no_containment_needed OR (to_state IN ('CONTAINED', 'CLOSED') AND reason IS NOT NULL)),
     CHECK ((kind IN ('FACT', 'HYPOTHESIS', 'QUESTION', 'ANSWER', 'NOTE', 'IMPACT')) = (text IS NOT NULL AND btrim(text) <> ''))
 );
 CREATE INDEX case_entries_kind ON pc.case_entries (org_id, case_id, kind, seq);
@@ -271,8 +276,18 @@ BEGIN
        OR (NEW.kind NOT IN ('STATE', 'LINK') AND NEW.reason IS NOT NULL) THEN
         RAISE EXCEPTION 'the case entry carries fields of another kind' USING ERRCODE = 'check_violation';
     END IF;
-    IF NEW.kind = 'OWNER' AND NEW.owner_role = 'OWNER' AND NEW.owner_id IS NULL THEN
+    IF NEW.kind = 'OWNER' AND NEW.owner_id IS NULL THEN
         RAISE EXCEPTION 'an owner entry names the owner' USING ERRCODE = 'check_violation';
+    END IF;
+    -- A person's question has an owner (D19, D62); the product's seeded
+    -- questions are owned once a person takes them on.
+    IF NEW.kind = 'QUESTION' AND NEW.owner_id IS NULL AND NEW.author_type = 'user' THEN
+        RAISE EXCEPTION 'a question names its owner' USING ERRCODE = 'check_violation';
+    END IF;
+    -- At most 1000 links per case, so the case's scope is always read whole.
+    IF NEW.kind = 'LINK' AND (SELECT count(*) FROM pc.case_entries x
+                              WHERE x.org_id = NEW.org_id AND x.case_id = NEW.case_id AND x.kind = 'LINK') >= 1000 THEN
+        RAISE EXCEPTION 'CASE_LINKS_EXHAUSTED: a case links at most 1000 subjects' USING ERRCODE = 'check_violation';
     END IF;
     IF cardinality(NEW.alternatives) > 8 OR EXISTS (
         SELECT 1 FROM unnest(NEW.alternatives) a WHERE char_length(btrim(a)) NOT BETWEEN 1 AND 500) THEN
@@ -316,6 +331,12 @@ BEGIN
         IF NOT FOUND OR target.kind <> NEW.kind OR NEW.kind IN ('STATE', 'OWNER') THEN
             RAISE EXCEPTION 'an entry supersedes an earlier entry of the same kind in the same case (not a state or owner)'
                 USING ERRCODE = 'check_violation';
+        END IF;
+        -- A link is replaced only by a link to the same kind of subject, and
+        -- says why (D62): unlinking never quietly drops a containment action
+        -- or narrows who may read the case.
+        IF NEW.kind = 'LINK' AND (target.ref_kind IS DISTINCT FROM NEW.ref_kind OR NEW.reason IS NULL) THEN
+            RAISE EXCEPTION 'a link supersedes a link of the same kind, with a reason' USING ERRCODE = 'check_violation';
         END IF;
     END IF;
     RETURN NEW;
@@ -394,6 +415,12 @@ BEGIN
     NEW.operational_closed_at := OLD.operational_closed_at;
     NEW.closed_at := OLD.closed_at;
     IF e.kind <> 'STATE' THEN
+        -- A closed case keeps an owner for every question still open
+        -- (F571): no entry may leave one without (HR-246).
+        IF NEW.state = 'CLOSED' AND NEW.follow_up_owner_id IS NULL AND pc.case_open_questions(NEW.org_id, NEW.id) > 0 THEN
+            RAISE EXCEPTION 'CASE_CLOSURE_RULES: open questions of a closed case need a follow-up owner'
+                USING ERRCODE = 'check_violation';
+        END IF;
         RETURN NEW;
     END IF;
 
@@ -405,40 +432,42 @@ BEGIN
         RAISE EXCEPTION 'only closing sets a disposition and an impact' USING ERRCODE = 'check_violation';
     END IF;
 
+    -- Operational close, also on the way from OPEN straight to CLOSED
+    -- (F251): confirmed containment or a reason none is needed.
+    IF (NEW.state = 'CONTAINED' OR (NEW.state = 'CLOSED' AND OLD.state = 'OPEN')) AND NOT e.no_containment_needed THEN
+        -- The case's actions (D43): standing LINK entries to response
+        -- actions and the actions that name the case. A missing or
+        -- unknown action is not confirmed.
+        IF to_regclass('pc.response_actions') IS NULL THEN
+            SELECT count(*), count(*) INTO links, pending FROM pc.case_entries l
+            WHERE l.org_id = NEW.org_id AND l.case_id = NEW.id AND l.kind = 'LINK' AND l.ref_kind = 'response_action'
+              AND NOT pc.case_entry_superseded(l.org_id, l.id);
+        ELSE
+            WITH acts AS (
+                SELECT l.ref_id AS id FROM pc.case_entries l
+                WHERE l.org_id = NEW.org_id AND l.case_id = NEW.id AND l.kind = 'LINK' AND l.ref_kind = 'response_action'
+                  AND NOT pc.case_entry_superseded(l.org_id, l.id)
+                UNION
+                SELECT a.id::text FROM pc.response_actions a WHERE a.org_id = NEW.org_id AND a.case_id = NEW.id
+            )
+            SELECT count(*), count(*) FILTER (WHERE NOT EXISTS (
+                       SELECT 1 FROM pc.response_actions a
+                       WHERE a.org_id = NEW.org_id AND a.id::text = acts.id AND a.status = 'CONFIRMED'))
+            INTO links, pending FROM acts;
+        END IF;
+        IF links = 0 THEN
+            RAISE EXCEPTION 'CASE_NOT_CONTAINED: no containment action is linked and no reason says none is needed'
+                USING ERRCODE = 'check_violation';
+        END IF;
+        IF pending > 0 THEN
+            RAISE EXCEPTION 'CASE_NOT_CONTAINED: % linked containment actions are not confirmed', pending
+                USING ERRCODE = 'check_violation';
+        END IF;
+    END IF;
+
     IF NEW.state = 'OPEN' THEN
         NEW.operational_closed_at := NULL;
     ELSIF NEW.state = 'CONTAINED' THEN
-        -- Operational close: confirmed containment or a reason none is needed.
-        IF NOT e.no_containment_needed THEN
-            -- The case's actions (D43): standing LINK entries to response
-            -- actions and the actions that name the case. A missing or
-            -- unknown action is not confirmed.
-            IF to_regclass('pc.response_actions') IS NULL THEN
-                SELECT count(*), count(*) INTO links, pending FROM pc.case_entries l
-                WHERE l.org_id = NEW.org_id AND l.case_id = NEW.id AND l.kind = 'LINK' AND l.ref_kind = 'response_action'
-                  AND NOT pc.case_entry_superseded(l.org_id, l.id);
-            ELSE
-                WITH acts AS (
-                    SELECT l.ref_id AS id FROM pc.case_entries l
-                    WHERE l.org_id = NEW.org_id AND l.case_id = NEW.id AND l.kind = 'LINK' AND l.ref_kind = 'response_action'
-                      AND NOT pc.case_entry_superseded(l.org_id, l.id)
-                    UNION
-                    SELECT a.id::text FROM pc.response_actions a WHERE a.org_id = NEW.org_id AND a.case_id = NEW.id
-                )
-                SELECT count(*), count(*) FILTER (WHERE NOT EXISTS (
-                           SELECT 1 FROM pc.response_actions a
-                           WHERE a.org_id = NEW.org_id AND a.id::text = acts.id AND a.status = 'CONFIRMED'))
-                INTO links, pending FROM acts;
-            END IF;
-            IF links = 0 THEN
-                RAISE EXCEPTION 'CASE_NOT_CONTAINED: no containment action is linked and no reason says none is needed'
-                    USING ERRCODE = 'check_violation';
-            END IF;
-            IF pending > 0 THEN
-                RAISE EXCEPTION 'CASE_NOT_CONTAINED: % linked containment actions are not confirmed', pending
-                    USING ERRCODE = 'check_violation';
-            END IF;
-        END IF;
         NEW.operational_closed_at := now();
     ELSE
         -- Closure (F251): impact, disposition, a standing fact, and an owner
@@ -453,6 +482,9 @@ BEGIN
         END IF;
         IF NEW.follow_up_owner_id IS NULL AND pc.case_open_questions(NEW.org_id, NEW.id) > 0 THEN
             RAISE EXCEPTION 'CASE_CLOSURE_RULES: open questions need a follow-up owner' USING ERRCODE = 'check_violation';
+        END IF;
+        IF OLD.state = 'OPEN' THEN
+            NEW.operational_closed_at := now();
         END IF;
         NEW.closed_at := now();
     END IF;

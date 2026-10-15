@@ -19,7 +19,10 @@ import "google/protobuf/timestamp.proto";
 // The database enforces the closure rules: CONTAINED needs every linked
 // containment action confirmed or a reason none is needed; CLOSED needs an
 // impact, a disposition, a fact, and a follow-up owner while questions are
-// open.
+// open, and straight from OPEN also the containment rule. A closed case
+// never loses the owner of a question still open. A person's question names
+// its owner; a link is superseded only by a link of the same kind, with a
+// reason.
 //
 // A case is read with case.read and changed with case.manage (a person
 // only) over the whole organization or over every agent the case is about.

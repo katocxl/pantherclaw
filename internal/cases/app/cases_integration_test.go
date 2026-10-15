@@ -170,6 +170,10 @@ func TestHR247_CaseReadsApplyTheViewersScope(t *testing.T) {
 		t.Fatalf("alice opens an org-wide case: %v", err)
 	}
 
+	// A fact may not cite another team's action (D62).
+	if _, err := f.svc.Append(alice, onlyA.ID, f.fact(f.txnB)); !errors.Is(err, capp.ErrForbidden) {
+		t.Fatalf("alice cites a transaction of agent B: %v", err)
+	}
 	if _, err := f.svc.Append(alice, onlyA.ID, f.fact(f.txnA)); err != nil {
 		t.Fatal(err)
 	}
@@ -347,14 +351,20 @@ func (r *reach) AgentReach(_ context.Context, _ ids.OrgID, agents []ids.UUID) ([
 }
 
 // response is a fake response read port.
-type response struct{ asked []reflexdomain.Subject }
+// response is a fake response read port; besides an action on a subject it
+// was asked about, it returns one that only names the case and scopes a
+// hidden run, which the lens must drop for a scoped viewer.
+type response struct {
+	asked  []reflexdomain.Subject
+	hidden reflexdomain.Subject
+}
 
 func (r *response) CaseActions(_ context.Context, _ ids.OrgID, _ ids.UUID, subjects []reflexdomain.Subject) ([]capp.ResponseAction, error) {
 	r.asked = subjects
 	return []capp.ResponseAction{{
 		ID: ids.NewV7(), Scope: subjects[0], Control: reflexdomain.ControlDenyAll, Status: "PARTIAL",
 		Paths: []capp.ResponsePath{{Kind: "gateway", Status: "CONFIRMED"}, {Kind: "route", Status: "UNRESOLVED"}},
-	}}, nil
+	}, {ID: ids.NewV7(), Scope: r.hidden, Control: reflexdomain.ControlDenyAll, Status: "CONFIRMED"}}, nil
 }
 
 // TestHR247_ReachAndResponseLensesGoThroughPorts: the lenses ask their
@@ -362,7 +372,7 @@ func (r *response) CaseActions(_ context.Context, _ ids.OrgID, _ ids.UUID, subje
 // rows about them.
 func TestHR247_ReachAndResponseLensesGoThroughPorts(t *testing.T) {
 	f := newFixture(t)
-	rp, xp := &reach{}, &response{}
+	rp, xp := &reach{}, &response{hidden: subject(reflexdomain.SubjectRun, f.runB)}
 	f.svc.Reach, f.svc.Response = rp, xp
 	alice := f.as(f.alice, td.RoleResponder, &f.teamA)
 	k, err := f.svc.Open(alice, capp.OpenRequest{Title: "A", Subjects: []reflexdomain.Subject{subject(reflexdomain.SubjectRun, f.runA)}})

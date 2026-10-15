@@ -189,7 +189,7 @@ func TestHR245_FactsNeedEvidenceThatExistsInTheOrg(t *testing.T) {
 		t.Fatalf("fact without evidence: %v", err)
 	}
 	other := f.open(t)
-	q := f.must(t, other.ID, domain.Draft{Kind: domain.KindQuestion, Text: "Elsewhere?"})
+	q := f.must(t, other.ID, domain.Draft{Kind: domain.KindQuestion, Text: "Elsewhere?", Owner: &f.bob})
 	if _, err := f.append(c.ID, domain.Draft{Kind: domain.KindAnswer, Text: "x", Question: &q.ID}); !errors.Is(err, store.ErrInvalid) {
 		t.Fatalf("answer to another case's question: %v", err)
 	}
@@ -284,7 +284,7 @@ func TestHR246_ClosureRulesAreEnforcedInSQL(t *testing.T) {
 		t.Fatalf("close without a fact: %v", err)
 	}
 	fact := f.must(t, c.ID, f.fact())
-	q := f.must(t, c.ID, domain.Draft{Kind: domain.KindQuestion, Text: "What did it read?"})
+	q := f.must(t, c.ID, domain.Draft{Kind: domain.KindQuestion, Text: "What did it read?", Owner: &f.bob})
 	if _, err := f.append(c.ID, closing); !errors.Is(err, store.ErrClosureRules) {
 		t.Fatalf("close with an open question and no follow-up owner: %v", err)
 	}
@@ -309,4 +309,72 @@ func TestHR246_ClosureRulesAreEnforcedInSQL(t *testing.T) {
 	if _, err := f.append(c.ID, domain.Draft{Kind: domain.KindState, State: domain.StateOpen}); !errors.Is(err, store.ErrTransition) {
 		t.Fatalf("reopen a closed case: %v", err)
 	}
+}
+
+// TestHR246_AClosedCaseKeepsAnOwnerForItsOpenQuestions: no entry leaves a
+// closed case with an open question nobody owns (F571), and closing
+// straight from OPEN applies the containment rule (F251).
+func TestHR246_AClosedCaseKeepsAnOwnerForItsOpenQuestions(t *testing.T) {
+	f := newFixture(t)
+	c := f.open(t)
+	f.must(t, c.ID, f.fact())
+	q := f.must(t, c.ID, domain.Draft{Kind: domain.KindQuestion, Text: "Was data read?", Owner: &f.bob})
+	answer := f.must(t, c.ID, domain.Draft{Kind: domain.KindAnswer, Text: "No.", Question: &q.ID})
+	closing := domain.Draft{
+		Kind: domain.KindState, State: domain.StateClosed, Disposition: domain.DispositionBenign,
+		CaseImpact: domain.ImpactNoneFound,
+	}
+	if _, err := f.append(c.ID, closing); !errors.Is(err, store.ErrNotContained) {
+		t.Fatalf("close from OPEN without containment or a reason: %v", err)
+	}
+	closing.NoContainmentNeeded, closing.Reason = true, "Nothing ran."
+	f.must(t, c.ID, closing)
+	// Reopening the question by superseding its answer would leave it
+	// unowned.
+	if _, err := f.append(c.ID, domain.Draft{
+		Kind: domain.KindAnswer, Text: "Unclear after all.", Question: &q.ID,
+		Unresolved: true, Supersedes: &answer.ID,
+	}); !errors.Is(err, store.ErrClosureRules) {
+		t.Fatalf("reopen a question of a closed case without a follow-up owner: %v", err)
+	}
+	if _, err := f.append(c.ID, domain.Draft{Kind: domain.KindOwner, OwnerRole: domain.RoleFollowUp}); !errors.Is(err, store.ErrInvalid) {
+		t.Fatalf("follow-up owner without an owner: %v", err)
+	}
+	f.must(t, c.ID, domain.Draft{Kind: domain.KindOwner, OwnerRole: domain.RoleFollowUp, Owner: &f.alice})
+	f.must(t, c.ID, domain.Draft{
+		Kind: domain.KindAnswer, Text: "Unclear after all.", Question: &q.ID,
+		Unresolved: true, Supersedes: &answer.ID,
+	})
+	if k := f.get(t, c.ID); k.State != domain.StateClosed || k.OperationalClosed == nil {
+		t.Fatalf("closed case %+v", k)
+	}
+	// A person's question names its owner.
+	other := f.open(t)
+	if _, err := f.append(other.ID, domain.Draft{Kind: domain.KindQuestion, Text: "Who?"}); !errors.Is(err, store.ErrInvalid) {
+		t.Fatalf("a person's question without an owner: %v", err)
+	}
+}
+
+// TestHR245_ALinkIsSupersededOnlyByTheSameKindWithAReason: unlinking never
+// quietly drops a containment action or narrows who may read the case.
+func TestHR245_ALinkIsSupersededOnlyByTheSameKindWithAReason(t *testing.T) {
+	f := newFixture(t)
+	c := f.open(t)
+	action := f.must(t, c.ID, domain.Draft{Kind: domain.KindLink, Ref: &domain.Ref{Kind: domain.RefResponseAction, ID: ids.NewV7().String()}})
+	if _, err := f.append(c.ID, domain.Draft{
+		Kind: domain.KindLink, Ref: &domain.Ref{Kind: "run", ID: f.run.String()},
+		Supersedes: &action.ID, Reason: "wrong link",
+	}); !errors.Is(err, store.ErrInvalid) {
+		t.Fatalf("a link superseded by a link of another kind: %v", err)
+	}
+	if _, err := f.append(c.ID, domain.Draft{Kind: domain.KindLink, Ref: &domain.Ref{
+		Kind: domain.RefResponseAction,
+		ID:   ids.NewV7().String(),
+	}, Supersedes: &action.ID}); !errors.Is(err, store.ErrInvalid) {
+		t.Fatalf("a link superseded without a reason: %v", err)
+	}
+	f.must(t, c.ID, domain.Draft{
+		Kind: domain.KindLink, Ref: &domain.Ref{Kind: domain.RefResponseAction, ID: ids.NewV7().String()},
+		Supersedes: &action.ID, Reason: "The first action was retried under a new id.",
+	})
 }

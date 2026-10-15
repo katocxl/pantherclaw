@@ -240,9 +240,19 @@ func (s *Service) GetLens(ctx context.Context, r LensRequest) (Lens, error) {
 func (s *Service) actionLens(ctx context.Context, q *dbq.Queries, org ids.OrgID, ev *tapp.AgentScope, l links,
 	r LensRequest, out *Lens,
 ) error {
+	// A scoped viewer's rows are filtered in SQL, before the limit, so the
+	// truncation flag counts only rows the viewer may see (D60).
+	scoped := out.ScopeLimited
+	visible := []ids.UUID{}
+	if scoped {
+		var err error
+		if visible, err = visibleAgents(ctx, q, org, ev, l); err != nil {
+			return err
+		}
+	}
 	rows, err := q.CaseLensTransactions(ctx, dbq.CaseLensTransactionsParams{
 		OrgID: org, TransactionIds: l.txns, RunIds: l.runs, AgentIds: l.agents, StartTime: r.Start, EndTime: r.End,
-		EffectsOnly: r.Lens == LensEffects, MaxRows: MaxLensItems + 1,
+		EffectsOnly: r.Lens == LensEffects, Scoped: scoped, VisibleAgents: visible, MaxRows: MaxLensItems + 1,
 	})
 	if err != nil {
 		return err
@@ -251,12 +261,10 @@ func (s *Service) actionLens(ctx context.Context, q *dbq.Queries, org ids.OrgID,
 		rows, out.Truncated = rows[:MaxLensItems], true
 	}
 	for _, t := range rows {
-		ok, err := ev.Can(ctx, t.AgentID)
-		if err != nil {
+		if ok, err := ev.Can(ctx, t.AgentID); err != nil {
 			return err
-		}
-		if !ok {
-			continue
+		} else if !ok {
+			continue // never reached: SQL kept only visible agents
 		}
 		it := LensItem{
 			At: t.CreatedAt, Kind: "ACTION", Title: t.Operation, Detail: t.Decision, Basis: reflexdomain.BasisObserved,
@@ -352,9 +360,14 @@ func compareIDs(a, b ids.UUID) int {
 func relatedLens(ctx context.Context, q *dbq.Queries, sc scope, c ids.UUID, l links, out *Lens) error {
 	seen := map[ids.UUID]bool{c: true}
 	for _, ref := range l.all {
-		rows, err := q.CasesLinking(ctx, dbq.CasesLinkingParams{OrgID: sc.c.Org, RefKind: &ref.Kind, RefID: &ref.ID, MaxRows: 100})
+		rows, err := q.CasesLinking(ctx, dbq.CasesLinkingParams{OrgID: sc.c.Org, RefKind: &ref.Kind, RefID: &ref.ID, MaxRows: maxRelated + 1})
 		if err != nil {
 			return err
+		}
+		if len(rows) > maxRelated {
+			// More cases link this subject than one read takes: say so rather
+			// than imply the list is whole (D62).
+			rows, out.Truncated = rows[:maxRelated], true
 		}
 		for _, k := range rows {
 			if seen[k.ID] {
@@ -483,7 +496,16 @@ func (s *Service) responseLens(ctx context.Context, q *dbq.Queries, org ids.OrgI
 	if err != nil {
 		return err
 	}
+	asked := map[reflexdomain.Subject]bool{}
+	for _, sub := range subjects {
+		asked[sub] = true
+	}
 	for _, a := range rows {
+		// A scoped viewer sees only actions on the subjects it asked about;
+		// an action that merely names the case may scope a hidden agent (D62).
+		if out.ScopeLimited && !asked[a.Scope] {
+			continue
+		}
 		detail := a.Status
 		if open := countOpen(a.Paths); open > 0 {
 			detail = fmt.Sprintf("%s (%d of %d paths unresolved)", a.Status, open, len(a.Paths))
@@ -508,3 +530,6 @@ func countOpen(ps []ResponsePath) int {
 	}
 	return n
 }
+
+// maxRelated bounds the cases read per linked subject for the related lens.
+const maxRelated = 100

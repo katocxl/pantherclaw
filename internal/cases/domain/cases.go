@@ -364,6 +364,9 @@ func (d Draft) Validate() error {
 			return bad("impact is observed or potential")
 		}
 	case KindLink:
+		if d.Supersedes != nil && d.Reason == "" {
+			return bad("a link that supersedes another says why")
+		}
 		if d.Ref == nil || !linkKinds[d.Ref.Kind] || d.Ref.ID == "" || len(d.Ref.ID) > MaxRefID {
 			return bad("a link names a known kind and an id")
 		}
@@ -371,7 +374,7 @@ func (d Draft) Validate() error {
 		switch {
 		case d.OwnerRole != RoleOwner && d.OwnerRole != RoleFollowUp:
 			return bad("an owner entry is for the owner or the follow-up owner")
-		case d.OwnerRole == RoleOwner && d.Owner == nil:
+		case d.Owner == nil:
 			return bad("an owner entry names the owner")
 		}
 	case KindState:
@@ -394,8 +397,8 @@ func (d Draft) Validate() error {
 		default:
 			return bad("unknown state %q", d.State)
 		}
-		if d.NoContainmentNeeded && (d.State != StateContained || d.Reason == "") {
-			return bad("no containment needed is given with a reason when containing")
+		if d.NoContainmentNeeded && (d.State == StateOpen || d.Reason == "") {
+			return bad("no containment needed is given with a reason when containing or closing")
 		}
 	case KindQuestion, KindNote:
 	default:

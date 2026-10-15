@@ -39,7 +39,8 @@ var (
 		"every linked containment action must be confirmed, or the entry must say why no containment is needed")
 	ErrTransition = pcerr.New(pcerr.FailedPrecondition, "CASE_TRANSITION",
 		"the case cannot move to that state, or a closed case takes only facts, answers, notes and a follow-up owner")
-	ErrSuperseded = pcerr.New(pcerr.FailedPrecondition, "CASE_ENTRY_SUPERSEDED", "that entry was already superseded")
+	ErrSuperseded   = pcerr.New(pcerr.FailedPrecondition, "CASE_ENTRY_SUPERSEDED", "that entry was already superseded")
+	ErrTooManyLinks = pcerr.New(pcerr.ResourceExhausted, "CASE_LINKS_EXHAUSTED", "a case links at most 1000 subjects")
 )
 
 // Open inserts a new OPEN case.
@@ -95,6 +96,8 @@ func mapWriteError(err error) error {
 	case db.IsCheckViolation(err):
 		msg := err.Error()
 		switch {
+		case strings.Contains(msg, "CASE_LINKS_EXHAUSTED"):
+			return ErrTooManyLinks
 		case strings.Contains(msg, "CASE_CLOSURE_RULES"):
 			return ErrClosureRules
 		case strings.Contains(msg, "CASE_NOT_CONTAINED"):

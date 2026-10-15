@@ -220,6 +220,32 @@ func (q *Queries) InvGrantChanges(ctx context.Context, arg InvGrantChangesParams
 	return items, nil
 }
 
+const invOrgAgents = `-- name: InvOrgAgents :many
+SELECT id FROM pc.agents WHERE org_id = $1 ORDER BY id LIMIT 10001
+`
+
+// Every agent of the org, for a scoped viewer's visible-agent list (D60):
+// at most 10 000 (one more tells the caller there are too many).
+func (q *Queries) InvOrgAgents(ctx context.Context, orgID ids.OrgID) ([]ids.UUID, error) {
+	rows, err := q.db.Query(ctx, invOrgAgents, orgID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ids.UUID{}
+	for rows.Next() {
+		var id ids.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const invReferenceRuns = `-- name: InvReferenceRuns :many
 SELECT id FROM pc.runs
 WHERE org_id = $1 AND agent_id = $2 AND id <> $3
@@ -584,7 +610,8 @@ SELECT t.run_id, r.agent_id, t.connection_id, coalesce(t.target_type, '')::text 
 FROM pc.transactions t
 JOIN pc.runs r ON r.org_id = t.org_id AND r.id = t.run_id
 WHERE t.org_id = $1 AND t.run_id <> $2
-  AND t.created_at >= $3 AND t.created_at < $4
+  AND (NOT $3::boolean OR r.agent_id = ANY ($4::uuid[]))
+  AND t.created_at >= $5 AND t.created_at < $6
   AND (t.connection_id, coalesce(t.target_type, ''), coalesce(t.target_id, '')) IN (
       SELECT s.connection_id, coalesce(s.target_type, ''), coalesce(s.target_id, '')
       FROM pc.transactions s
@@ -595,10 +622,12 @@ LIMIT 500
 `
 
 type InvSharedTargetsParams struct {
-	OrgID     ids.OrgID
-	RunID     ids.UUID
-	StartTime time.Time
-	EndTime   time.Time
+	OrgID         ids.OrgID
+	RunID         ids.UUID
+	Scoped        bool
+	VisibleAgents []ids.UUID
+	StartTime     time.Time
+	EndTime       time.Time
 }
 
 type InvSharedTargetsRow struct {
@@ -613,11 +642,14 @@ type InvSharedTargetsRow struct {
 }
 
 // Other runs that touched the same destinations or resources (connection
-// and target) in the window: shared, never causal (F241, F248).
+// and target) in the window: shared, never causal (F241, F248). A scoped
+// viewer sees only visible agents' runs, filtered before the limit (D60).
 func (q *Queries) InvSharedTargets(ctx context.Context, arg InvSharedTargetsParams) ([]InvSharedTargetsRow, error) {
 	rows, err := q.db.Query(ctx, invSharedTargets,
 		arg.OrgID,
 		arg.RunID,
+		arg.Scoped,
+		arg.VisibleAgents,
 		arg.StartTime,
 		arg.EndTime,
 	)

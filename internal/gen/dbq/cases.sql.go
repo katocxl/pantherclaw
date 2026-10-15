@@ -114,8 +114,9 @@ WHERE t.org_id = $1
        OR r.agent_id = ANY ($4::uuid[]))
   AND t.created_at >= $5 AND t.created_at < $6
   AND (NOT $7::boolean OR t.effect_state IS NOT NULL OR a.outcome IS NOT NULL)
+  AND (NOT $8::boolean OR r.agent_id = ANY ($9::uuid[]))
 ORDER BY t.created_at, t.id
-LIMIT $8
+LIMIT $10
 `
 
 type CaseLensTransactionsParams struct {
@@ -126,6 +127,8 @@ type CaseLensTransactionsParams struct {
 	StartTime      time.Time
 	EndTime        time.Time
 	EffectsOnly    bool
+	Scoped         bool
+	VisibleAgents  []ids.UUID
 	MaxRows        int32
 }
 
@@ -146,7 +149,8 @@ type CaseLensTransactionsRow struct {
 }
 
 // The actions of a case's runs, transactions and agents in a window, for
-// the sequence and effects lenses (F237).
+// the sequence and effects lenses (F237). A scoped viewer sees only the
+// visible agents' rows, filtered before the limit (D60).
 func (q *Queries) CaseLensTransactions(ctx context.Context, arg CaseLensTransactionsParams) ([]CaseLensTransactionsRow, error) {
 	rows, err := q.db.Query(ctx, caseLensTransactions,
 		arg.OrgID,
@@ -156,6 +160,8 @@ func (q *Queries) CaseLensTransactions(ctx context.Context, arg CaseLensTransact
 		arg.StartTime,
 		arg.EndTime,
 		arg.EffectsOnly,
+		arg.Scoped,
+		arg.VisibleAgents,
 		arg.MaxRows,
 	)
 	if err != nil {

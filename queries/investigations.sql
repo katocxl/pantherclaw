@@ -129,7 +129,8 @@ ORDER BY 5, 1
 LIMIT 200;
 
 -- Other runs that touched the same destinations or resources (connection
--- and target) in the window: shared, never causal (F241, F248).
+-- and target) in the window: shared, never causal (F241, F248). A scoped
+-- viewer sees only visible agents' runs, filtered before the limit (D60).
 -- name: InvSharedTargets :many
 SELECT t.run_id, r.agent_id, t.connection_id, coalesce(t.target_type, '')::text AS target_type,
        coalesce(t.target_id, '')::text AS target_id, count(*)::bigint AS actions,
@@ -137,6 +138,7 @@ SELECT t.run_id, r.agent_id, t.connection_id, coalesce(t.target_type, '')::text 
 FROM pc.transactions t
 JOIN pc.runs r ON r.org_id = t.org_id AND r.id = t.run_id
 WHERE t.org_id = sqlc.arg(org_id) AND t.run_id <> sqlc.arg(run_id)
+  AND (NOT sqlc.arg(scoped)::boolean OR r.agent_id = ANY (sqlc.arg(visible_agents)::uuid[]))
   AND t.created_at >= sqlc.arg(start_time) AND t.created_at < sqlc.arg(end_time)
   AND (t.connection_id, coalesce(t.target_type, ''), coalesce(t.target_id, '')) IN (
       SELECT s.connection_id, coalesce(s.target_type, ''), coalesce(s.target_id, '')
@@ -169,3 +171,8 @@ WHERE t.org_id = sqlc.arg(org_id) AND t.run_id = ANY (sqlc.arg(run_ids)::uuid[])
 GROUP BY t.run_id, t.connection_id, t.operation, c.destination_class, c.name
 ORDER BY t.run_id, t.operation
 LIMIT 5000;
+
+-- Every agent of the org, for a scoped viewer's visible-agent list (D60):
+-- at most 10 000 (one more tells the caller there are too many).
+-- name: InvOrgAgents :many
+SELECT id FROM pc.agents WHERE org_id = sqlc.arg(org_id) ORDER BY id LIMIT 10001;

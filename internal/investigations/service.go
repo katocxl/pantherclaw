@@ -39,6 +39,7 @@ type Service struct {
 type callerScope struct {
 	c  tenancy.Caller
 	as *tapp.AgentScope
+	q  *dbq.Queries
 }
 
 func (s callerScope) Visible(ctx context.Context, agent ids.UUID) (bool, error) {
@@ -64,7 +65,8 @@ func (s *Service) read(ctx context.Context, fn func(context.Context, db.TenantTx
 		return err
 	}
 	return s.Pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
-		return fn(ctx, tx, callerScope{c: c, as: tapp.NewAgentScope(c, dbq.New(tx), td.PermEvidenceRead)})
+		q := dbq.New(tx)
+		return fn(ctx, tx, callerScope{c: c, q: q, as: tapp.NewAgentScope(c, q, td.PermEvidenceRead)})
 	}, db.ReadOnly())
 }
 
@@ -129,4 +131,33 @@ func (s *Service) CompareRun(ctx context.Context, run ids.UUID, ref Range) (Comp
 		return err
 	})
 	return out, err
+}
+
+// MaxScopedAgents bounds a scoped viewer's visible-agent list (D60).
+const MaxScopedAgents = 10000
+
+// ErrTooManyAgents refuses a scoped read over more agents than one list holds.
+var ErrTooManyAgents = pcerr.New(pcerr.ResourceExhausted, "SCOPE_TOO_LARGE",
+	"the caller's scope covers more agents than one read can list; ask for an organization-wide role")
+
+// Agents lists the agents the caller may read (D60).
+func (s callerScope) Agents(ctx context.Context) ([]ids.UUID, error) {
+	all, err := s.q.InvOrgAgents(ctx, s.c.Org)
+	if err != nil {
+		return nil, err
+	}
+	if len(all) > MaxScopedAgents {
+		return nil, ErrTooManyAgents
+	}
+	out := []ids.UUID{}
+	for _, a := range all {
+		ok, err := s.as.Can(ctx, a)
+		if err != nil {
+			return nil, err
+		}
+		if ok {
+			out = append(out, a)
+		}
+	}
+	return out, nil
 }

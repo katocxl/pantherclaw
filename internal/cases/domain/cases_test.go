@@ -28,7 +28,7 @@ func TestDraftValidate(t *testing.T) {
 		{Kind: domain.KindImpact, Text: "i", Impact: domain.ImpactPotential, Evidence: ev},
 		{Kind: domain.KindLink, Ref: &domain.Ref{Kind: domain.RefResponseAction, ID: ids.NewV7().String()}},
 		{Kind: domain.KindOwner, OwnerRole: domain.RoleOwner, Owner: &q},
-		{Kind: domain.KindOwner, OwnerRole: domain.RoleFollowUp},
+		{Kind: domain.KindOwner, OwnerRole: domain.RoleFollowUp, Owner: &q},
 		{Kind: domain.KindState, State: domain.StateContained, NoContainmentNeeded: true, Reason: "r"},
 		{Kind: domain.KindState, State: domain.StateClosed, Disposition: domain.DispositionBenign, CaseImpact: domain.ImpactNoneFound},
 	}
@@ -38,20 +38,22 @@ func TestDraftValidate(t *testing.T) {
 		}
 	}
 	bad := map[string]domain.Draft{
-		"fact without evidence":     {Kind: domain.KindFact, Text: "f", Basis: domain.BasisObserved},
-		"fact as hypothesis":        {Kind: domain.KindFact, Text: "f", Basis: domain.BasisHypothesis, Evidence: ev},
-		"hypothesis no confidence":  {Kind: domain.KindHypothesis, Text: "h", Basis: domain.BasisHypothesis},
-		"note with evidence":        {Kind: domain.KindNote, Text: "n", Evidence: ev},
-		"answer without question":   {Kind: domain.KindAnswer, Text: "a"},
-		"unknown evidence kind":     {Kind: domain.KindFact, Text: "f", Basis: domain.BasisObserved, Evidence: []domain.EvidenceRef{{Kind: "x", ID: q}}},
-		"link unknown kind":         {Kind: domain.KindLink, Ref: &domain.Ref{Kind: "x", ID: "1"}},
-		"close without disposition": {Kind: domain.KindState, State: domain.StateClosed, CaseImpact: domain.ImpactNoneFound},
-		"contain with disposition":  {Kind: domain.KindState, State: domain.StateContained, Disposition: domain.DispositionBenign},
-		"no containment no reason":  {Kind: domain.KindState, State: domain.StateContained, NoContainmentNeeded: true},
-		"state superseding":         {Kind: domain.KindState, State: domain.StateOpen, Supersedes: &q},
-		"owner without owner":       {Kind: domain.KindOwner, OwnerRole: domain.RoleOwner},
-		"blank text":                {Kind: domain.KindNote, Text: "  "},
-		"long text":                 {Kind: domain.KindNote, Text: strings.Repeat("x", domain.MaxText+1)},
+		"fact without evidence":      {Kind: domain.KindFact, Text: "f", Basis: domain.BasisObserved},
+		"fact as hypothesis":         {Kind: domain.KindFact, Text: "f", Basis: domain.BasisHypothesis, Evidence: ev},
+		"hypothesis no confidence":   {Kind: domain.KindHypothesis, Text: "h", Basis: domain.BasisHypothesis},
+		"note with evidence":         {Kind: domain.KindNote, Text: "n", Evidence: ev},
+		"answer without question":    {Kind: domain.KindAnswer, Text: "a"},
+		"unknown evidence kind":      {Kind: domain.KindFact, Text: "f", Basis: domain.BasisObserved, Evidence: []domain.EvidenceRef{{Kind: "x", ID: q}}},
+		"link unknown kind":          {Kind: domain.KindLink, Ref: &domain.Ref{Kind: "x", ID: "1"}},
+		"close without disposition":  {Kind: domain.KindState, State: domain.StateClosed, CaseImpact: domain.ImpactNoneFound},
+		"contain with disposition":   {Kind: domain.KindState, State: domain.StateContained, Disposition: domain.DispositionBenign},
+		"no containment no reason":   {Kind: domain.KindState, State: domain.StateContained, NoContainmentNeeded: true},
+		"state superseding":          {Kind: domain.KindState, State: domain.StateOpen, Supersedes: &q},
+		"owner without owner":        {Kind: domain.KindOwner, OwnerRole: domain.RoleOwner},
+		"follow-up without owner":    {Kind: domain.KindOwner, OwnerRole: domain.RoleFollowUp},
+		"link supersedes, no reason": {Kind: domain.KindLink, Ref: &domain.Ref{Kind: "run", ID: "1"}, Supersedes: &q},
+		"blank text":                 {Kind: domain.KindNote, Text: "  "},
+		"long text":                  {Kind: domain.KindNote, Text: strings.Repeat("x", domain.MaxText+1)},
 	}
 	for name, d := range bad {
 		if err := d.Validate(); !errors.Is(err, domain.ErrInvalid) {

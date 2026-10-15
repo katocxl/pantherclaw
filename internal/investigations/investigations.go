@@ -55,6 +55,18 @@ var (
 type Scope interface {
 	Visible(ctx context.Context, agent ids.UUID) (bool, error)
 	Limited() bool
+	// Agents lists the agents a Limited scope may read, for filters applied
+	// in SQL before a limit (D60); it is not called when the scope is whole.
+	Agents(ctx context.Context) ([]ids.UUID, error)
+}
+
+// visibleFilter returns the SQL filter of s: scoped and the visible agents.
+func visibleFilter(ctx context.Context, s Scope) (bool, []ids.UUID, error) {
+	if !s.Limited() {
+		return false, []ids.UUID{}, nil
+	}
+	a, err := s.Agents(ctx)
+	return true, a, err
 }
 
 // Basis says how an item is known (reflexdomain.Basis, F648).
