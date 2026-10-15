@@ -26,8 +26,8 @@ var m10EdgesTemplates = []Template{
 	{
 		Type: "signals.playbook_changed", Severity: Warning, Params: []string{"change", "request"},
 		Title: "The identity playbook changed",
-		Body: "The identity playbook change {request} ({change}) took effect after its confirmations.",
-		Link: "/integrations/playbook/{request}/confirm",
+		Body:  "The identity playbook change {request} ({change}) took effect after its confirmations.",
+		Link:  "/integrations/playbook/{request}/confirm",
 	},
 }
 

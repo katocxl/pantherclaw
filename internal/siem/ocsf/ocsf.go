@@ -260,7 +260,7 @@ type Analytic struct {
 	Version string `json:"version,omitzero"`
 }
 
-// Attack is the OCSF attack object; PantherClaw puts MITRE ATLAS
+// Attack is the OCSF attack object; PantherClaw puts ATLAS (adversarial AI)
 // techniques in it.
 type Attack struct {
 	Technique Technique `json:"technique"`

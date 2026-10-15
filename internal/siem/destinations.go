@@ -35,6 +35,7 @@ import (
 	"net/url"
 	"slices"
 	"strconv"
+	"strings"
 	"time"
 
 	billing "github.com/katocxl/pantherclaw/internal/billing/domain"
@@ -48,6 +49,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/httpx"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
+	"github.com/katocxl/pantherclaw/internal/platform/page"
 	reflexdomain "github.com/katocxl/pantherclaw/internal/reflex/domain"
 	"github.com/katocxl/pantherclaw/internal/siem/ocsf"
 	"github.com/katocxl/pantherclaw/internal/siem/stepup"
@@ -441,7 +443,7 @@ func (s *Service) Activate(ctx context.Context, id ids.UUID, su stepup.StepUp) (
 			return err
 		}
 		if err := s.audit(ctx, tx, c, "siem.destination_activated", id, map[string]string{
-			"host": hostOf(d.URL), "internal": boolString(d.Internal), "credential": su.Credential.String(),
+			"host": hostOf(d.URL), "internal": boolString(d.Internal), "security_key": su.Credential.String(),
 		}); err != nil {
 			return err
 		}
@@ -598,21 +600,26 @@ func (s *Service) Get(ctx context.Context, id ids.UUID) (Destination, error) {
 	return out, err
 }
 
-// List returns destinations after the id (siem.read).
-func (s *Service) List(ctx context.Context, after *ids.UUID, limit int) ([]Destination, error) {
+// List returns one page of destinations by id (siem.read).
+func (s *Service) List(ctx context.Context, size int32, token string) ([]Destination, string, error) {
 	c, err := tenancy.CallerFrom(ctx)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	if err := c.Require(PermRead, td.OrgPath(c.Org)); err != nil {
-		return nil, err
+		return nil, "", err
 	}
-	if limit <= 0 || limit > MaxList {
-		limit = MaxList
+	pr, err := page.Parse(size, token)
+	if err != nil {
+		return nil, "", err
+	}
+	var after *ids.UUID
+	if !pr.After.IsZero() {
+		after = &pr.After
 	}
 	var out []Destination
 	err = s.pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
-		rows, err := dbq.New(tx).ListSIEMDestinations(ctx, c.Org, after, int32(limit))
+		rows, err := dbq.New(tx).ListSIEMDestinations(ctx, c.Org, after, pr.Limit())
 		if err != nil {
 			return err
 		}
@@ -621,7 +628,72 @@ func (s *Service) List(ctx context.Context, after *ids.UUID, limit int) ([]Desti
 		}
 		return nil
 	}, db.ReadOnly())
+	if err != nil {
+		return nil, "", err
+	}
+	out, next := page.Finish(pr, out, func(d Destination) ids.UUID { return d.ID })
+	return out, next, nil
+}
+
+// Batch is one export batch (F537).
+type Batch struct {
+	ID            ids.UUID
+	FromSeq       int64
+	ToSeq         int64
+	EventCount    int
+	BodyBytes     int
+	State         string
+	Attempts      int
+	NextAttemptAt time.Time
+	LastAttemptAt *time.Time
+	LastStatus    int
+	LastError     string
+	CreatedAt     time.Time
+	DeliveredAt   *time.Time
+}
+
+// Batches returns a destination's last 20 batches, newest first
+// (siem.read).
+func (s *Service) Batches(ctx context.Context, id ids.UUID) ([]Batch, error) {
+	c, err := tenancy.CallerFrom(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := c.Require(PermRead, td.OrgPath(c.Org)); err != nil {
+		return nil, err
+	}
+	var out []Batch
+	err = s.pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
+		q := dbq.New(tx)
+		if _, err := get(ctx, q, c.Org, id); err != nil {
+			return err
+		}
+		rows, err := q.RecentSIEMBatches(ctx, c.Org, id)
+		if err != nil {
+			return err
+		}
+		for _, r := range rows {
+			b := Batch{
+				ID: r.ID, FromSeq: r.FromSeq, ToSeq: r.ToSeq, EventCount: int(r.EventCount), BodyBytes: int(r.BodyBytes), State: r.State,
+				Attempts: int(r.Attempts), NextAttemptAt: r.NextAttemptAt, LastAttemptAt: r.LastAttemptAt, CreatedAt: r.CreatedAt,
+				DeliveredAt: r.DeliveredAt,
+			}
+			if r.LastStatus != nil {
+				b.LastStatus = int(*r.LastStatus)
+			}
+			if r.LastError != nil {
+				b.LastError = *r.LastError
+			}
+			out = append(out, b)
+		}
+		return nil
+	}, db.ReadOnly())
 	return out, err
+}
+
+// ConfirmURL is a destination's activation page.
+func (s *Service) ConfirmURL(id ids.UUID) string {
+	return strings.TrimSuffix(s.cfg.PublicURL, "/") + "/integrations/destinations/" + id.String() + "/confirm"
 }
 
 func get(ctx context.Context, q *dbq.Queries, org ids.OrgID, id ids.UUID) (Destination, error) {

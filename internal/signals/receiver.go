@@ -6,6 +6,7 @@ package signals
 import (
 	"context"
 	"encoding/json/v2"
+	"errors"
 	"io"
 	"log/slog"
 	"mime"
@@ -35,7 +36,9 @@ const (
 	ContentType = "application/secevent+jwt"
 )
 
-// Event type URIs PantherClaw acts on.
+// Event type URIs PantherClaw acts on (names, not credentials).
+//
+//nolint:gosec // G101: event type URIs that name credential events
 const (
 	TypeSessionRevoked          = "https://schemas.openid.net/secevent/caep/event-type/session-revoked"
 	TypeCredentialChange        = "https://schemas.openid.net/secevent/caep/event-type/credential-change"
@@ -178,7 +181,8 @@ func (s *Service) receive(ctx context.Context, org ids.OrgID, tid ids.UUID, toke
 	set, err := setverify.Verify(ctx, setverify.Transmitter{Issuer: t.Issuer, Audience: t.Audience, Keys: keys}, token, s.clock.Now())
 	if err != nil {
 		var desc string
-		if ve, ok := err.(*setverify.Error); ok {
+		var ve *setverify.Error
+		if errors.As(err, &ve) {
 			desc = ve.Description
 		}
 		return s.refused(ctx, org, tid, setverify.CodeOf(err), desc)

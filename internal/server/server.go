@@ -402,6 +402,9 @@ func cmdServe(ctx context.Context, args []string, stderr io.Writer, env Env, onS
 			return err
 		}
 		evidenceJobs = append(evidenceJobs, exceptionJobs...)
+		if evidenceJobs, err = registerM10EdgesJobs(evidenceJobs, jreg, pool, kp, bill, m5, cfg.Auth.PublicURL, log); err != nil {
+			return err
+		}
 		if err := registerSimulationJobs(jreg, pool, kp, bill, log); err != nil {
 			return err
 		}
@@ -598,7 +601,12 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	}
 	registerReleases(rs, pool)
 	registerPolicyExceptions(rs, d)
+	edges, err := registerM10Edges(rs, d)
+	if err != nil {
+		return nil, err
+	}
 	mux := http.NewServeMux()
+	edges.mount(mux)
 	rpc.Mount(mux, rs)
 	d.m5p2.mount(mux, workload)
 	d.oauth.Mount(mux)

@@ -43,7 +43,7 @@ func TestT114_DestinationURLRules(t *testing.T) {
 	}
 	for _, c := range cases {
 		err := CheckURL(c.url, own, c.internal, nil)
-		if !errors.Is(err, c.want) && err != c.want {
+		if !errors.Is(err, c.want) {
 			t.Errorf("CheckURL(%q, internal=%v) = %v, want %v", c.url, c.internal, err, c.want)
 		}
 	}

@@ -36,6 +36,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/httpx"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
+	"github.com/katocxl/pantherclaw/internal/platform/page"
 	reflexdomain "github.com/katocxl/pantherclaw/internal/reflex/domain"
 	"github.com/katocxl/pantherclaw/internal/siem/stepup"
 	"github.com/katocxl/pantherclaw/internal/signals/setverify"
@@ -298,7 +299,7 @@ func (s *Service) Activate(ctx context.Context, id ids.UUID, su stepup.StepUp) (
 			}
 			return ErrState
 		}
-		if err := auditCaller(ctx, tx, c, "signals.transmitter_activated", id, map[string]string{"credential": su.Credential.String()}); err != nil {
+		if err := auditCaller(ctx, tx, c, "signals.transmitter_activated", id, map[string]string{"security_key": su.Credential.String()}); err != nil {
 			return err
 		}
 		out, err = s.get(ctx, q, c.Org, id)
@@ -367,21 +368,26 @@ func (s *Service) Get(ctx context.Context, id ids.UUID) (Transmitter, error) {
 	return out, err
 }
 
-// List returns transmitters after the id (signals.read).
-func (s *Service) List(ctx context.Context, after *ids.UUID, limit int) ([]Transmitter, error) {
+// List returns one page of transmitters by id (signals.read).
+func (s *Service) List(ctx context.Context, size int32, token string) ([]Transmitter, string, error) {
 	c, err := tenancy.CallerFrom(ctx)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	if err := c.Require(PermRead, td.OrgPath(c.Org)); err != nil {
-		return nil, err
+		return nil, "", err
 	}
-	if limit <= 0 || limit > MaxList {
-		limit = MaxList
+	pr, err := page.Parse(size, token)
+	if err != nil {
+		return nil, "", err
+	}
+	var after *ids.UUID
+	if !pr.After.IsZero() {
+		after = &pr.After
 	}
 	var out []Transmitter
 	err = s.pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
-		rows, err := dbq.New(tx).ListSSFTransmitters(ctx, c.Org, after, int32(limit))
+		rows, err := dbq.New(tx).ListSSFTransmitters(ctx, c.Org, after, pr.Limit())
 		if err != nil {
 			return err
 		}
@@ -390,7 +396,69 @@ func (s *Service) List(ctx context.Context, after *ids.UUID, limit int) ([]Trans
 		}
 		return nil
 	}, db.ReadOnly())
+	if err != nil {
+		return nil, "", err
+	}
+	out, next := page.Finish(pr, out, func(t Transmitter) ids.UUID { return t.ID })
+	return out, next, nil
+}
+
+// Event is one received event: its type and whom it matched, never the
+// token or the subject's identifiers.
+type Event struct {
+	ID            ids.UUID
+	JTI           string
+	EventType     string
+	IssuedAt      time.Time
+	SubjectFormat string
+	User          *ids.UUID
+	MatchBasis    string
+	Outcome       string
+	Case          *ids.UUID
+	ReceivedAt    time.Time
+}
+
+// Events returns a transmitter's last 50 events, newest first
+// (signals.read).
+func (s *Service) Events(ctx context.Context, id ids.UUID) ([]Event, error) {
+	c, err := tenancy.CallerFrom(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := c.Require(PermRead, td.OrgPath(c.Org)); err != nil {
+		return nil, err
+	}
+	var out []Event
+	err = s.pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
+		q := dbq.New(tx)
+		if _, err := s.get(ctx, q, c.Org, id); err != nil {
+			return err
+		}
+		rows, err := q.ListSSFEvents(ctx, c.Org, id)
+		if err != nil {
+			return err
+		}
+		for _, r := range rows {
+			e := Event{
+				ID: r.ID, JTI: r.Jti, EventType: r.EventType, IssuedAt: r.IssuedAt, User: r.UserID, Outcome: r.Outcome, Case: r.CaseID,
+				ReceivedAt: r.ReceivedAt,
+			}
+			if r.SubjectFormat != nil {
+				e.SubjectFormat = *r.SubjectFormat
+			}
+			if r.MatchBasis != nil {
+				e.MatchBasis = *r.MatchBasis
+			}
+			out = append(out, e)
+		}
+		return nil
+	}, db.ReadOnly())
 	return out, err
+}
+
+// ConfirmURL is a transmitter's activation page.
+func (s *Service) ConfirmURL(id ids.UUID) string {
+	return s.base + "/integrations/transmitters/" + id.String() + "/confirm"
 }
 
 func (s *Service) get(ctx context.Context, q *dbq.Queries, org ids.OrgID, id ids.UUID) (Transmitter, error) {

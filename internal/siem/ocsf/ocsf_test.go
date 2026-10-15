@@ -6,6 +6,7 @@ package ocsf
 import (
 	"bytes"
 	"encoding/json/v2"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -250,7 +251,7 @@ func TestBuilderBounds(t *testing.T) {
 	if ok, err := big.Add(half); ok || err != nil {
 		t.Fatalf("a batch went past 1 MiB: %v %v", ok, err)
 	}
-	if _, err := big.Add(make([]byte, MaxBatchBytes)); err != ErrEventTooLarge {
+	if _, err := big.Add(make([]byte, MaxBatchBytes)); !errors.Is(err, ErrEventTooLarge) {
 		t.Fatalf("oversize event: %v", err)
 	}
 }

@@ -160,7 +160,7 @@ func (s *Service) plan(ctx context.Context, tx db.TenantTx, org ids.OrgID, id id
 			return nil, Step{}, err
 		}
 		if err := q.InsertSIEMBatch(ctx, dbq.InsertSIEMBatchParams{
-			OrgID: org, ID: p.id, DestinationID: id, FromSeq: p.from, ToSeq: p.to, EventCount: int32(b.Len()), BodyBytes: int32(len(p.body)), LeaseSeconds: leaseSeconds,
+			OrgID: org, ID: p.id, DestinationID: id, FromSeq: p.from, ToSeq: p.to, EventCount: int32(b.Len()), BodyBytes: int32(len(p.body)), LeaseSeconds: leaseSeconds, //nolint:gosec // G115: ≤ 100 events, ≤ 1 MiB
 		}); err != nil {
 			return nil, Step{}, err
 		}
@@ -287,7 +287,7 @@ func (s *Service) send(ctx context.Context, p *batchPlan) outcome {
 // record stores an attempt's outcome and the destination's health.
 func (s *Service) record(ctx context.Context, tx db.TenantTx, org ids.OrgID, id ids.UUID, p *batchPlan, out outcome, step *Step) error {
 	q := dbq.New(tx)
-	status := int32(out.status)
+	status := int32(out.status) //nolint:gosec // G115: an HTTP status
 	var last *int32
 	if out.status != 0 {
 		last = &status
@@ -322,7 +322,7 @@ func (s *Service) record(ctx context.Context, tx db.TenantTx, org ids.OrgID, id 
 	}
 	code := out.code
 	if _, err := q.FailedSIEMBatchAttempt(ctx, dbq.FailedSIEMBatchAttemptParams{
-		State: state, LastStatus: last, LastError: &code, DelaySeconds: int32(delay / time.Second), OrgID: org, ID: p.id,
+		State: state, LastStatus: last, LastError: &code, DelaySeconds: int32(delay / time.Second), OrgID: org, ID: p.id, //nolint:gosec // G115: ≤ 10 h
 	}); err != nil {
 		return err
 	}

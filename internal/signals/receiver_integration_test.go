@@ -60,8 +60,10 @@ type rxFixture struct {
 func newRxFixture(t *testing.T) *rxFixture {
 	t.Helper()
 	d := dbtest.New(t)
-	f := &rxFixture{p: d.AppPool(t), org: ids.New[ids.Org](), alice: ids.NewV7(), bob: ids.NewV7(), cred: ids.NewV7(),
-		sink: &recordingSink{}, clk: clock.NewFake(time.Now())}
+	f := &rxFixture{
+		p: d.AppPool(t), org: ids.New[ids.Org](), alice: ids.NewV7(), bob: ids.NewV7(), cred: ids.NewV7(),
+		sink: &recordingSink{}, clk: clock.NewFake(time.Now()),
+	}
 	var err error
 	if f.key, err = rsa.GenerateKey(rand.Reader, 2048); err != nil {
 		t.Fatal(err)
@@ -223,10 +225,14 @@ func TestT113_ReceiverAcceptsOnlyFreshSignedEventsFromActiveTransmitters(t *test
 	}{
 		{"replayed jti", f.org, f.tx, ContentType, tok, http.StatusBadRequest, setverify.CodeInvalidRequest},
 		{"forged signature", f.org, f.tx, ContentType, f.token(t, f.other, f.tx, nil), http.StatusBadRequest, setverify.CodeAuthFailed},
-		{"audience of another transmitter", f.org, f.tx, ContentType, f.token(t, f.key, ids.NewV7(), nil), http.StatusBadRequest,
-			setverify.CodeInvalidAudience},
-		{"stale", f.org, f.tx, ContentType, f.token(t, f.key, f.tx, func(c map[string]any) { c["iat"] = f.clk.Now().Add(-time.Hour).Unix() }),
-			http.StatusBadRequest, setverify.CodeInvalidRequest},
+		{
+			"audience of another transmitter", f.org, f.tx, ContentType, f.token(t, f.key, ids.NewV7(), nil), http.StatusBadRequest,
+			setverify.CodeInvalidAudience,
+		},
+		{
+			"stale", f.org, f.tx, ContentType, f.token(t, f.key, f.tx, func(c map[string]any) { c["iat"] = f.clk.Now().Add(-time.Hour).Unix() }),
+			http.StatusBadRequest, setverify.CodeInvalidRequest,
+		},
 		{"unknown transmitter", f.org, ids.NewV7(), ContentType, tok, http.StatusNotFound, setverify.CodeInvalidRequest},
 		{"pending transmitter", f.org, f.transmitter(t, "pending", false), ContentType, tok, http.StatusNotFound, setverify.CodeInvalidRequest},
 		{"another org", ids.New[ids.Org](), f.tx, ContentType, tok, http.StatusNotFound, setverify.CodeInvalidRequest},
