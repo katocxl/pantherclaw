@@ -185,6 +185,8 @@ func (e *env) person(name string, roles ...td.RoleName) person {
 func (e *env) sign(p person, req ids.UUID, challenge [32]byte) app.Assertion {
 	e.t.Helper()
 	cer := ids.NewV7()
+	e.exec(`DELETE FROM pc.webauthn_ceremonies WHERE org_id = $1 AND user_id = $2 AND policy_change_request_id = $3 AND consumed_at IS NULL`,
+		e.org, p.id, req)
 	e.exec(`INSERT INTO pc.webauthn_ceremonies (org_id, id, session_id, user_id, purpose, challenge, policy_change_request_id, expires_at)
 		VALUES ($1, $2, $3, $4, 'BINDING', $5, $6, now() + interval '5 minutes')`, e.org, cer, p.session, p.id, challenge[:], req)
 	return app.Assertion{Ceremony: cer, Credential: p.key}
@@ -226,9 +228,11 @@ func denyAbove(id, amount string) domain.Rule {
 	}
 }
 
+// emergency is an emergency rule. Only ANNOTATE rules carry labels today
+// (domain.Rule.Validate), so it is one.
 func emergency(id string) domain.Rule {
 	r := denyAbove(id, "10")
-	r.Reason, r.Labels = "INCIDENT_FREEZE", map[string]string{"emergency": "true"}
+	r.Kind, r.Reason, r.Labels = domain.Annotate, "INCIDENT_FREEZE", map[string]string{domain.EmergencyLabel: "true"}
 	return r
 }
 

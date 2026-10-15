@@ -5,6 +5,7 @@ package server
 
 import (
 	"context"
+	"encoding/json/v2"
 
 	"connectrpc.com/connect/v2"
 
@@ -19,6 +20,8 @@ import (
 	"github.com/katocxl/pantherclaw/internal/policy/adapters/policiesrpc"
 	policyapp "github.com/katocxl/pantherclaw/internal/policy/app"
 	pdomain "github.com/katocxl/pantherclaw/internal/policy/domain"
+	"github.com/katocxl/pantherclaw/internal/policy/scenario"
+	"github.com/katocxl/pantherclaw/internal/policy/validate"
 )
 
 // policyGateExtensions let the other M11.1 streams hook into the publish
@@ -47,14 +50,18 @@ func registerPolicyGate(rs *connect.Server, d apiDeps) {
 }
 
 // newPolicyVersions builds the policy versions use cases with the gate's
-// ports and the change requests (PUBLISH registered). Without a validator
-// or a test runner nothing is published (fail closed).
+// ports (S1a's validator and scenario test runner, D7a) and the change
+// requests (PUBLISH registered). Without a validator or a test runner the
+// gate publishes nothing (fail closed).
 func newPolicyVersions(pool *db.Pool, notify policyapp.Notifier, publicURL string) *policyapp.Versions {
 	defs := &defspg.Store{Pool: pool}
 	facts := &factspg.Store{Pool: pool}
+	validator := validate.New(defs, facts, facts, celenv.DefaultLimits)
 	v := &policyapp.Versions{
 		Store: &polpg.Store{Pool: pool}, Facts: facts, Subjects: facts, Definitions: defs,
 		Authz: grantsapp.SubjectAuthorizer{}, Limits: celenv.DefaultLimits,
+		Validator: validator, Tests: scenario.New(defs, facts, celenv.DefaultLimits, policyapp.DefaultBudget),
+		Outcomes: outcomeDiff{validator},
 	}
 	v.Changes = policyapp.NewChanges(pool, notify, publicURL, currentPolicyDigests(defs, facts))
 	v.Changes.Register(policyapp.ChangePublish, v.ApplyPublish)
@@ -75,4 +82,19 @@ func currentPolicyDigests(defs *defspg.Store, facts *factspg.Store) policyapp.Cu
 		}
 		return pdomain.DefinitionsDigest(ds), pdomain.CatalogDigest(catalog), nil
 	}
+}
+
+// outcomeDiff serves DiffPolicyVersions' sample outcome changes (D8) as
+// JSON.
+type outcomeDiff struct{ v *validate.Validator }
+
+func (o outcomeDiff) OutcomeDiff(ctx context.Context, org ids.OrgID, base, next *pdomain.Bundle) ([]byte, error) {
+	changes, err := o.v.OutcomeDiff(ctx, org, base, next)
+	if err != nil {
+		return nil, err
+	}
+	if changes == nil {
+		changes = []validate.OutcomeChange{}
+	}
+	return json.Marshal(changes, json.Deterministic(true))
 }

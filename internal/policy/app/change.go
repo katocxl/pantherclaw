@@ -508,9 +508,6 @@ func (c *Changes) BeginConfirm(ctx context.Context, id ids.UUID) (ChangeRequest,
 	return r, nil
 }
 
-// errExpiredNow marks a request found expired inside a transaction that
-// still commits the expiry.
-var errExpiredNow = errors.New("policy: change request expired")
 
 // Confirm records the caller's confirmation with the ceremony that signed
 // the request's binding (HR-231). The confirmation that reaches the
@@ -533,6 +530,7 @@ func (c *Changes) Confirm(ctx context.Context, id ids.UUID, a Assertion) (Change
 		return ChangeRequest{}, err
 	}
 	var voided string
+	var expired bool
 	err = c.pool.InTenantTx(ctx, caller.Org, func(ctx context.Context, tx db.TenantTx) error {
 		q := dbq.New(tx)
 		row, err := q.LockPolicyChangeRequest(ctx, caller.Org, id)
@@ -545,7 +543,8 @@ func (c *Changes) Confirm(ctx context.Context, id ids.UUID, a Assertion) (Change
 			if _, err := q.ExpirePolicyChangeRequests(ctx, caller.Org); err != nil {
 				return err
 			}
-			return errExpiredNow
+			expired = true // committed: the expiry is recorded
+			return nil
 		}
 		if row.State != ChangePending {
 			return ErrChangeNotPending
@@ -612,7 +611,7 @@ func (c *Changes) Confirm(ctx context.Context, id ids.UUID, a Assertion) (Change
 	})
 	var ve *VoidError
 	switch {
-	case errors.Is(err, errExpiredNow):
+	case err == nil && expired:
 		return ChangeRequest{}, ErrChangeExpired
 	case errors.As(err, &ve):
 		voided = ve.Reason
@@ -684,6 +683,7 @@ func (c *Changes) Decline(ctx context.Context, id ids.UUID, reason string) (Chan
 	if err := confirmer(caller); err != nil {
 		return ChangeRequest{}, err
 	}
+	var expired bool
 	err = c.pool.InTenantTx(ctx, caller.Org, func(ctx context.Context, tx db.TenantTx) error {
 		q := dbq.New(tx)
 		row, err := q.LockPolicyChangeRequest(ctx, caller.Org, id)
@@ -696,7 +696,8 @@ func (c *Changes) Decline(ctx context.Context, id ids.UUID, reason string) (Chan
 			if _, err := q.ExpirePolicyChangeRequests(ctx, caller.Org); err != nil {
 				return err
 			}
-			return errExpiredNow
+			expired = true // committed: the expiry is recorded
+			return nil
 		}
 		if row.State != ChangePending {
 			return ErrChangeNotPending
@@ -712,7 +713,7 @@ func (c *Changes) Decline(ctx context.Context, id ids.UUID, reason string) (Chan
 		})
 	})
 	switch {
-	case errors.Is(err, errExpiredNow):
+	case err == nil && expired:
 		return ChangeRequest{}, ErrChangeExpired
 	case errors.Is(err, db.ErrLostRace):
 		return ChangeRequest{}, ErrChangeNotPending

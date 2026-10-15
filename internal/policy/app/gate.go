@@ -278,7 +278,7 @@ func emergencyChanged(published, next *domain.Bundle) bool {
 		return false
 	}
 	for _, r := range published.Rules {
-		if r.Labels["emergency"] != "true" {
+		if !r.IsEmergency() {
 			continue
 		}
 		i := slices.IndexFunc(next.Rules, func(x domain.Rule) bool { return x.ID == r.ID })

@@ -58,7 +58,7 @@ func (h *Handler) mountPolicyChanges(m *http.ServeMux) {
 }
 
 // SummaryLabel is the fixed label above a change request's summary.
-const SummaryLabel = "What this change does, as PantherClaw classified it. Rule text and ids come from the policy's authors."
+const SummaryLabel = "What this change does, as PantherClaw classified it. Rule text and ids come from the authors of the policy."
 
 // policyChangesView is the data of policy_changes.html.
 type policyChangesView struct {
