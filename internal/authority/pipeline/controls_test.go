@@ -97,8 +97,10 @@ func TestHR248_HoldWritesLetsReadsContinue(t *testing.T) {
 	if ev.Permits() || ev.MonitorPermit() || ev.Hold == nil {
 		t.Fatalf("a held write: permits %v, hold %+v", ev.Permits(), ev.Hold)
 	}
-	want := apdomain.Requirement{Kind: apdomain.KindContainment, Count: 1, Independent: true,
-		Sources: []apdomain.Source{{Level: "containment", Reason: pipeline.ReasonContainedWrites}}}
+	want := apdomain.Requirement{
+		Kind: apdomain.KindContainment, Count: 1, Independent: true,
+		Sources: []apdomain.Source{{Level: "containment", Reason: pipeline.ReasonContainedWrites}},
+	}
 	if len(ev.Hold.Requirements) != 1 || !reflect.DeepEqual(ev.Hold.Requirements[0], want) {
 		t.Fatalf("hold requirements %+v", ev.Hold.Requirements)
 	}

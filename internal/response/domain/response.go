@@ -193,6 +193,7 @@ func StatusOf(paths []Path) Status {
 			confirmed++
 		case PathUnsupported:
 			unsupported++
+		case PathPending, PathUnresolved:
 		}
 	}
 	switch {
