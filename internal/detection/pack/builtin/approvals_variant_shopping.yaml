@@ -1,0 +1,25 @@
+# SPDX-License-Identifier: BUSL-1.1
+# Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+id: pc.approvals.variant_shopping
+version: "1"
+title: Approval variant shopping
+description: >-
+  An agent kept asking for approval of variants of the same action toward
+  the same target after declines (HR-037, T-007). A hardening rule is never
+  edition-gated, so this rule runs in every edition.
+severity: MEDIUM
+attention: ALERT
+basis: OBSERVED
+owasp: [ASI09]
+edition: community
+on: [audit.security.variant_suspected]
+group: agent
+tests:
+  - name: variants suspected
+    fires: true
+    events:
+      - {kind: audit.security.variant_suspected, reason: VARIANT_SHOPPING, operation: payments.refund.create, subjects: {agent: a1}}
+  - name: a single approval request
+    fires: false
+    events:
+      - {kind: audit.approval.requested, operation: payments.refund.create, subjects: {agent: a1}}

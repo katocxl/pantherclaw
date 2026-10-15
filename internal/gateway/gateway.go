@@ -9,7 +9,9 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
+	"unicode/utf8"
 
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -166,6 +168,7 @@ func New(ctx context.Context, cfg *Config, id *control.Identity, log *slog.Logge
 		ReportDrift: func(ctx context.Context, conn string, d dispatch.Drift) error {
 			_, err := ctl.Gateway.ReportDrift(ctx, &pb.ReportDriftRequest{
 				ConnectionId: conn, Tool: d.Tool, ExpectedDigest: d.Expected, ObservedDigest: d.Observed,
+				ObservedDescription: driftDescription(d.Description),
 			})
 			return err
 		},
@@ -318,4 +321,24 @@ func (g *Gateway) WaitReady(ctx context.Context, timeout time.Duration) error {
 		}
 	}
 	return nil
+}
+
+// maxDriftDescription is the most of an observed tool description a drift
+// report carries (ReportDriftRequest.observed_description).
+const maxDriftDescription = 8192
+
+// driftDescription bounds an observed description to whole UTF-8
+// characters within maxDriftDescription bytes (G0 M10 D47).
+func driftDescription(d *string) *string {
+	if d == nil {
+		return nil
+	}
+	s := strings.ToValidUTF8(*d, "")
+	if len(s) > maxDriftDescription {
+		s = s[:maxDriftDescription]
+		for len(s) > 0 && !utf8.ValidString(s) {
+			s = s[:len(s)-1]
+		}
+	}
+	return &s
 }

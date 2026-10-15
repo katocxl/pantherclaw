@@ -26,7 +26,7 @@ import (
 )
 
 // responseContainment is graduated containment (G0 M10 D21–D23), the
-// reflexdomain.Container the other streams call: failed containment raises
+// reflexports.Container the other streams call: failed containment raises
 // a response signal through the core Raiser and an owned failure (HR-249).
 // notify and bill may be nil (no notifications; Community).
 func responseContainment(pool *db.Pool, notify rapp.Notifier, bill *billing.Service) *rapp.Containment {

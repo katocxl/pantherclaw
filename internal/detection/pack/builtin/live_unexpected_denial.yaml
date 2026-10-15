@@ -1,0 +1,31 @@
+# SPDX-License-Identifier: BUSL-1.1
+# Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+id: pc.live.unexpected_denial
+version: "1"
+title: Action denied
+description: >-
+  The Authority denied an enforced action or could not authorize it, for a
+  reason other than a person declining, an approval expiring or a narrower
+  action being proposed. Shown on the live view (F215); not an alert.
+severity: LOW
+attention: LIVE
+basis: OBSERVED
+edition: community
+on: [receipt.decision]
+match: >-
+  event.decision in ["DENY", "CANNOT_AUTHORIZE"] && event.mode != "MONITOR"
+  && !(event.reason in ["APPROVAL_DECLINED", "APPROVAL_EXPIRED", "NARROWER_PROPOSED"])
+group: run
+tests:
+  - name: denied
+    fires: true
+    events:
+      - {kind: receipt.decision, decision: DENY, reason: NO_GRANT, subjects: {run: r1}}
+  - name: declined by a person
+    fires: false
+    events:
+      - {kind: receipt.decision, decision: DENY, reason: APPROVAL_DECLINED, subjects: {run: r1}}
+  - name: monitor mode
+    fires: false
+    events:
+      - {kind: receipt.decision, decision: DENY, reason: NO_GRANT, mode: MONITOR, subjects: {run: r1}}

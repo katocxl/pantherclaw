@@ -24,6 +24,7 @@ import (
 	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	reflexdomain "github.com/katocxl/pantherclaw/internal/reflex/domain"
+	reflexports "github.com/katocxl/pantherclaw/internal/reflex/ports"
 	"github.com/katocxl/pantherclaw/internal/response/adapters/pgresponse"
 	rdomain "github.com/katocxl/pantherclaw/internal/response/domain"
 )
@@ -40,7 +41,7 @@ var (
 
 // PlaybookActor is the actor of a control the identity playbook adds (D38):
 // pre-authorized by its two-person enablement, so it needs no preview.
-var PlaybookActor = reflexdomain.Subject{Type: "system", ID: "identity_playbook"}
+var PlaybookActor = reflexdomain.Subject{Type: reflexdomain.SubjectSystem, ID: reflexdomain.SystemIdentityPlaybook}
 
 // Editions reports the licence's entitlements (Team and above preview the
 // reach and stage restorations; Business and above accept SOAR requests).
@@ -51,14 +52,14 @@ type Editions interface {
 
 // Containment serves graduated containment (D21–D23): it adds controls the
 // Authority enforces, records the response action and the paths it must
-// reach, and previews wider controls. It implements reflexdomain.Container.
+// reach, and previews wider controls. It implements reflexports.Container.
 type Containment struct {
 	Pool *db.Pool
 	// Raiser raises the non-suppressible signal of failed containment
 	// (HR-249); Failures records it as an owned failure. Either may be nil
 	// in tests.
-	Raiser   reflexdomain.Raiser
-	Failures reflexdomain.FailureSink
+	Raiser   reflexports.Raiser
+	Failures reflexports.FailureSink
 	// Reach previews the reach before and after (exposure, D27); nil or a
 	// Community licence omits it with a note.
 	Reach    reflexdomain.ReachPreviewer
@@ -66,7 +67,7 @@ type Containment struct {
 	Notify   Notifier
 }
 
-var _ reflexdomain.Container = (*Containment)(nil)
+var _ reflexports.Container = (*Containment)(nil)
 
 // scopeOf maps a request's subject to a control scope.
 func scopeOf(s reflexdomain.Subject) (string, string, error) {
@@ -85,7 +86,7 @@ func scopeOf(s reflexdomain.Subject) (string, string, error) {
 		return rdomain.ScopePrincipal, string(s.Type) + ":" + s.ID, nil
 	case reflexdomain.SubjectInstance, reflexdomain.SubjectTransaction, reflexdomain.SubjectCredential, reflexdomain.SubjectGateway,
 		reflexdomain.SubjectPackage, reflexdomain.SubjectPolicyVersion, reflexdomain.SubjectAlert, reflexdomain.SubjectIncident,
-		reflexdomain.SubjectCase, reflexdomain.SubjectFinding:
+		reflexdomain.SubjectCase, reflexdomain.SubjectFinding, reflexdomain.SubjectSystem:
 	}
 	return "", "", rdomain.ErrScope
 }
@@ -124,7 +125,7 @@ func uuidString(u *ids.UUID) string {
 	return u.String()
 }
 
-// Contain implements reflexdomain.Container: it adds one control in tx (the
+// Contain implements reflexports.Container: it adds one control in tx (the
 // caller's tenant transaction, which it checks belongs to r.Org), with its
 // response action and paths, and raises the containment epoch (HR-248). The
 // source is the server's (D50): PERSON for a user actor, PLAYBOOK only for

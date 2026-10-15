@@ -406,7 +406,7 @@ func appendLedger(ctx context.Context, tx db.TenantTx, kind string, body map[str
 }
 
 // sweeperActor records the status changes the confirmation sweep finds.
-var sweeperActor = evdomain.Actor{Type: "system", ID: "response_sweeper"}
+var sweeperActor = evdomain.Actor{Type: string(reflexdomain.SubjectSystem), ID: reflexdomain.SystemSweeper}
 
 // credentialChangedSince reports whether the sealed credential of a
 // connection was revoked or superseded after since (D25), and when.

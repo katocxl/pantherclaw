@@ -20,6 +20,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	reflexdomain "github.com/katocxl/pantherclaw/internal/reflex/domain"
+	reflexports "github.com/katocxl/pantherclaw/internal/reflex/ports"
 )
 
 // Failure states.
@@ -44,9 +45,9 @@ type Sink struct {
 	Now func() time.Time
 }
 
-var _ reflexdomain.FailureSink = (*Sink)(nil)
+var _ reflexports.FailureSink = (*Sink)(nil)
 
-// Report implements reflexdomain.FailureSink.
+// Report implements reflexports.FailureSink.
 func (s *Sink) Report(ctx context.Context, ptx pgx.Tx, f reflexdomain.Failure) (ids.UUID, error) {
 	tx, err := db.AdoptTenantTx(ctx, ptx, f.Org)
 	if err != nil {
