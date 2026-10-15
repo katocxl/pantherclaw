@@ -13,13 +13,16 @@ import (
 	"encoding/base64"
 	"encoding/json/v2"
 	"errors"
+	"math/rand/v2"
 	"net"
 	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -267,15 +270,32 @@ func publicAt(addr string) func(map[string]any) {
 	}
 }
 
+// freePorts are the ports freeAddr has handed out in this test binary.
+var freePorts sync.Map
+
+// freeAddr returns a loopback address nothing listens on, for a server the
+// test starts later. Its port comes from below every ephemeral range
+// (Linux 32768–60999, Windows and macOS 49152–65535): a listener the test
+// opens on port 0 in the meantime is never given the same port. No port is
+// handed out twice.
 func freeAddr(t *testing.T) string {
 	t.Helper()
 	var lc net.ListenConfig
-	ln, err := lc.Listen(context.Background(), "tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
+	for range 1000 {
+		port := 20000 + rand.IntN(12000)
+		if _, taken := freePorts.LoadOrStore(port, true); taken {
+			continue
+		}
+		ln, err := lc.Listen(context.Background(), "tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(port)))
+		if err != nil {
+			continue
+		}
+		addr := ln.Addr().String()
+		_ = ln.Close()
+		return addr
 	}
-	defer func() { _ = ln.Close() }()
-	return ln.Addr().String()
+	t.Fatal("no free loopback port below the ephemeral range")
+	return ""
 }
 
 // TestHR181_AGatewayEnrolledByDevSeedAuthorizesOverMTLS: a gateway enrolled

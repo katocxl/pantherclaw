@@ -8,10 +8,12 @@ package gateway
 import (
 	"bytes"
 	"context"
+	"math/rand/v2"
 	"net"
 	"net/http"
 	"os"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -44,18 +46,40 @@ type connectorRig struct {
 	log *syncBuffer
 }
 
+// freePorts are the ports freeAddr has handed out in this test binary.
+var freePorts sync.Map
+
+// freeAddr returns a loopback address nothing listens on, for a listener
+// the test opens later. Its port comes from below every ephemeral range
+// (Linux 32768–60999, Windows and macOS 49152–65535), so a listener opened
+// on port 0 in the meantime is never given the same port. No port is
+// handed out twice.
+func freeAddr(t *testing.T) string {
+	t.Helper()
+	var lc net.ListenConfig
+	for range 1000 {
+		port := 20000 + rand.IntN(12000)
+		if _, taken := freePorts.LoadOrStore(port, true); taken {
+			continue
+		}
+		ln, err := lc.Listen(t.Context(), "tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(port)))
+		if err != nil {
+			continue
+		}
+		addr := ln.Addr().String()
+		_ = ln.Close()
+		return addr
+	}
+	t.Fatal("no free loopback port below the ephemeral range")
+	return ""
+}
+
 func startConnector(t *testing.T, misbehave bool) *connectorRig {
 	t.Helper()
 	c, e := dockertest.Client(t)
 	simImage := dockertest.Image(t, c, e, "github.com/katocxl/pantherclaw/cmd/pantherclaw-sim", "internal/gateway/connectors/testdata/sim.Dockerfile")
 	edgeImage := dockertest.Image(t, c, e, "github.com/katocxl/pantherclaw/cmd/pantherclaw-edge", "deploy/sandbox/edge.Dockerfile")
-	var lc net.ListenConfig
-	ln, err := lc.Listen(t.Context(), "tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	listen := ln.Addr().String()
-	_ = ln.Close()
+	listen := freeAddr(t)
 	_, port, _ := net.SplitHostPort(listen)
 
 	// The connector's package dispatches refunds to the simulator's tools,
