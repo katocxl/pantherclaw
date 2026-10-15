@@ -282,9 +282,22 @@ SELECT i.id, i.title, i.severity, i.state, i.owner_id, i.created_at, i.updated_a
                  WHERE a.org_id = i.org_id AND a.incident_id = i.id AND s ->> 'type' = 'agent'), '{}')::text[] AS agents
 FROM pc.incidents i
 WHERE i.org_id = $1 AND i.state <> 'RESOLVED'
+  AND ($2::boolean
+       OR (EXISTS (SELECT 1 FROM pc.alerts a, jsonb_array_elements(a.subjects) s
+                   WHERE a.org_id = i.org_id AND a.incident_id = i.id AND s ->> 'type' = 'agent')
+           AND NOT EXISTS (SELECT 1 FROM pc.alerts a, jsonb_array_elements(a.subjects) s
+                           WHERE a.org_id = i.org_id AND a.incident_id = i.id AND s ->> 'type' = 'agent'
+                             AND NOT (s ->> 'id') = ANY ($3::text[]))))
 ORDER BY i.id DESC
-LIMIT 1000
+LIMIT $4
 `
+
+type OpsActiveIncidentsParams struct {
+	OrgID     ids.OrgID
+	AllAgents bool
+	Agents    []string
+	MaxRows   int32
+}
 
 type OpsActiveIncidentsRow struct {
 	ID        ids.UUID
@@ -300,12 +313,20 @@ type OpsActiveIncidentsRow struct {
 
 // SPDX-License-Identifier: BUSL-1.1
 // Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
-// Operations surface (G0 M10 D33; F211, F212, F219; HR-258). Each query
-// returns the agents a row is about, so the caller filters by the viewer's
-// scope before ranking or counting (D8). Each reads at most 1000 rows; a
-// full read is reported as truncated, never as complete.
-func (q *Queries) OpsActiveIncidents(ctx context.Context, orgID ids.OrgID) ([]OpsActiveIncidentsRow, error) {
-	rows, err := q.db.Query(ctx, opsActiveIncidents, orgID)
+// Operations surface (G0 M10 D33; F211, F212, F219; HR-258). The queue's
+// queries take the viewer's scope for the source's read permission
+// (all_agents, or the agents it may read) and filter by it before the
+// limit (D8, D60): a row about agents is read only when every one of them
+// is in scope, a row about no agent only with all_agents. They read at
+// most max_rows rows, so a full read (max_rows) is truncation among
+// visible rows only.
+func (q *Queries) OpsActiveIncidents(ctx context.Context, arg OpsActiveIncidentsParams) ([]OpsActiveIncidentsRow, error) {
+	rows, err := q.db.Query(ctx, opsActiveIncidents,
+		arg.OrgID,
+		arg.AllAgents,
+		arg.Agents,
+		arg.MaxRows,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -340,9 +361,18 @@ FROM pc.grant_revisions v
 JOIN pc.grants g ON g.org_id = v.org_id AND g.id = v.grant_id
 WHERE v.org_id = $1 AND g.state = 'ACTIVE' AND (v.widens OR v.revision = 1)
   AND v.created_at >= $2::timestamptz
+  AND ($3::boolean OR g.agent_id::text = ANY ($4::text[]))
 ORDER BY v.id DESC
-LIMIT 1000
+LIMIT $5
 `
+
+type OpsAuthorityExpansionParams struct {
+	OrgID     ids.OrgID
+	Since     time.Time
+	AllAgents bool
+	Agents    []string
+	MaxRows   int32
+}
 
 type OpsAuthorityExpansionRow struct {
 	ID        ids.UUID
@@ -355,8 +385,14 @@ type OpsAuthorityExpansionRow struct {
 }
 
 // New grants and widening revisions since a time.
-func (q *Queries) OpsAuthorityExpansion(ctx context.Context, orgID ids.OrgID, since time.Time) ([]OpsAuthorityExpansionRow, error) {
-	rows, err := q.db.Query(ctx, opsAuthorityExpansion, orgID, since)
+func (q *Queries) OpsAuthorityExpansion(ctx context.Context, arg OpsAuthorityExpansionParams) ([]OpsAuthorityExpansionRow, error) {
+	rows, err := q.db.Query(ctx, opsAuthorityExpansion,
+		arg.OrgID,
+		arg.Since,
+		arg.AllAgents,
+		arg.Agents,
+		arg.MaxRows,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -521,9 +557,20 @@ SELECT a.id, a.title, a.severity, a.attention, a.state, a.source, a.rule_id, a.c
 FROM pc.alerts a
 WHERE a.org_id = $1 AND a.state IN ('OPEN', 'ACKNOWLEDGED') AND a.incident_id IS NULL
   AND a.attention IN ('ALERT', 'INCIDENT', 'PAGE')
+  AND ($2::boolean
+       OR (EXISTS (SELECT 1 FROM jsonb_array_elements(a.subjects) s WHERE s ->> 'type' = 'agent')
+           AND NOT EXISTS (SELECT 1 FROM jsonb_array_elements(a.subjects) s
+                           WHERE s ->> 'type' = 'agent' AND NOT (s ->> 'id') = ANY ($3::text[]))))
 ORDER BY a.id DESC
-LIMIT 1000
+LIMIT $4
 `
+
+type OpsOpenAlertsParams struct {
+	OrgID     ids.OrgID
+	AllAgents bool
+	Agents    []string
+	MaxRows   int32
+}
 
 type OpsOpenAlertsRow struct {
 	ID        ids.UUID
@@ -542,8 +589,13 @@ type OpsOpenAlertsRow struct {
 
 // Open alerts not yet attached to an incident (attached ones are listed
 // with their incident).
-func (q *Queries) OpsOpenAlerts(ctx context.Context, orgID ids.OrgID) ([]OpsOpenAlertsRow, error) {
-	rows, err := q.db.Query(ctx, opsOpenAlerts, orgID)
+func (q *Queries) OpsOpenAlerts(ctx context.Context, arg OpsOpenAlertsParams) ([]OpsOpenAlertsRow, error) {
+	rows, err := q.db.Query(ctx, opsOpenAlerts,
+		arg.OrgID,
+		arg.AllAgents,
+		arg.Agents,
+		arg.MaxRows,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -582,9 +634,20 @@ SELECT f.id, f.kind, f.summary, f.next_step, f.scope, f.owner_type, f.owner_id, 
                  WHERE s ->> 'type' = 'agent'), '{}')::text[] AS agents
 FROM pc.operational_failures f
 WHERE f.org_id = $1 AND f.state <> 'RESOLVED'
+  AND ($2::boolean
+       OR (EXISTS (SELECT 1 FROM jsonb_array_elements(f.scope) s WHERE s ->> 'type' = 'agent')
+           AND NOT EXISTS (SELECT 1 FROM jsonb_array_elements(f.scope) s
+                           WHERE s ->> 'type' = 'agent' AND NOT (s ->> 'id') = ANY ($3::text[]))))
 ORDER BY f.id DESC
-LIMIT 1000
+LIMIT $4
 `
+
+type OpsOpenFailuresParams struct {
+	OrgID     ids.OrgID
+	AllAgents bool
+	Agents    []string
+	MaxRows   int32
+}
 
 type OpsOpenFailuresRow struct {
 	ID        ids.UUID
@@ -602,8 +665,13 @@ type OpsOpenFailuresRow struct {
 	Agents    []string
 }
 
-func (q *Queries) OpsOpenFailures(ctx context.Context, orgID ids.OrgID) ([]OpsOpenFailuresRow, error) {
-	rows, err := q.db.Query(ctx, opsOpenFailures, orgID)
+func (q *Queries) OpsOpenFailures(ctx context.Context, arg OpsOpenFailuresParams) ([]OpsOpenFailuresRow, error) {
+	rows, err := q.db.Query(ctx, opsOpenFailures,
+		arg.OrgID,
+		arg.AllAgents,
+		arg.Agents,
+		arg.MaxRows,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -636,13 +704,78 @@ func (q *Queries) OpsOpenFailures(ctx context.Context, orgID ids.OrgID) ([]OpsOp
 	return items, nil
 }
 
+const opsUnconfirmedContainment = `-- name: OpsUnconfirmedContainment :many
+SELECT r.id, r.kind, r.scope_type, r.scope_id, r.control, r.status, r.requested_at, r.incident_id, r.case_id
+FROM pc.response_actions r
+WHERE r.org_id = $1 AND r.status <> 'CONFIRMED'
+  AND (r.settled_at IS NULL OR r.settled_at >= now() - interval '7 days')
+ORDER BY r.requested_at DESC, r.id DESC
+LIMIT $2
+`
+
+type OpsUnconfirmedContainmentRow struct {
+	ID          ids.UUID
+	Kind        string
+	ScopeType   string
+	ScopeID     string
+	Control     *string
+	Status      string
+	RequestedAt time.Time
+	IncidentID  *ids.UUID
+	CaseID      *ids.UUID
+}
+
+// Containment actions not confirmed (D22): every unsettled one, and those
+// that settled FAILED or UNSUPPORTED in the last seven days, newest first.
+// Response reads need containment.read at the org, which the caller
+// checks.
+func (q *Queries) OpsUnconfirmedContainment(ctx context.Context, orgID ids.OrgID, maxRows int32) ([]OpsUnconfirmedContainmentRow, error) {
+	rows, err := q.db.Query(ctx, opsUnconfirmedContainment, orgID, maxRows)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []OpsUnconfirmedContainmentRow{}
+	for rows.Next() {
+		var i OpsUnconfirmedContainmentRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Kind,
+			&i.ScopeType,
+			&i.ScopeID,
+			&i.Control,
+			&i.Status,
+			&i.RequestedAt,
+			&i.IncidentID,
+			&i.CaseID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const opsWaitingApprovals = `-- name: OpsWaitingApprovals :many
 SELECT a.id, a.agent_id, a.operation, a.state, a.created_at, a.deadline_at, a.transaction_id
 FROM pc.approval_requests a
 WHERE a.org_id = $1 AND a.state IN ('PENDING', 'EVIDENCE_REQUESTED') AND a.deadline_at > now()
+  AND a.deadline_at <= $2::timestamptz
+  AND ($3::boolean OR a.agent_id::text = ANY ($4::text[]))
 ORDER BY a.deadline_at
-LIMIT 1000
+LIMIT $5
 `
+
+type OpsWaitingApprovalsParams struct {
+	OrgID     ids.OrgID
+	Horizon   time.Time
+	AllAgents bool
+	Agents    []string
+	MaxRows   int32
+}
 
 type OpsWaitingApprovalsRow struct {
 	ID            ids.UUID
@@ -654,9 +787,16 @@ type OpsWaitingApprovalsRow struct {
 	TransactionID *ids.UUID
 }
 
-// Approval requests still waiting for a person, soonest deadline first.
-func (q *Queries) OpsWaitingApprovals(ctx context.Context, orgID ids.OrgID) ([]OpsWaitingApprovalsRow, error) {
-	rows, err := q.db.Query(ctx, opsWaitingApprovals, orgID)
+// Approval requests still waiting for a person whose deadline falls
+// within the horizon, soonest first.
+func (q *Queries) OpsWaitingApprovals(ctx context.Context, arg OpsWaitingApprovalsParams) ([]OpsWaitingApprovalsRow, error) {
+	rows, err := q.db.Query(ctx, opsWaitingApprovals,
+		arg.OrgID,
+		arg.Horizon,
+		arg.AllAgents,
+		arg.Agents,
+		arg.MaxRows,
+	)
 	if err != nil {
 		return nil, err
 	}

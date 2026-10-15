@@ -22,8 +22,6 @@ import (
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
 )
 
-// perm is what opening the stream needs.
-const perm = stream.PermOperations
 
 type fakeFeed struct {
 	mu  sync.Mutex
