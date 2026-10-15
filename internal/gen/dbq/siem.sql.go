@@ -136,9 +136,10 @@ const getSIEMDestination = `-- name: GetSIEMDestination :one
 SELECT d.id, d.name, d.url, d.internal, d.data_classes, d.format, d.state, d.created_by, d.created_at, d.activated_by,
        d.activated_at, d.updated_at, d.confirmed_at, coalesce(d.last_delivered_seq, 0)::bigint AS last_delivered_seq, d.last_delivered_at, d.consecutive_failures,
        d.failing_since, d.last_failure_at, d.last_failure_code, d.delivered_batches, d.failed_batches, d.retries,
-       d.prev_secret_expires_at, coalesce(c.seq, 0)::bigint AS cursor_seq
+       d.prev_secret_expires_at, coalesce(c.seq, 0)::bigint AS cursor_seq, ob.created_at AS open_batch_since
 FROM pc.siem_destinations d
 LEFT JOIN pc.siem_cursors c ON c.org_id = d.org_id AND c.destination_id = d.id
+LEFT JOIN pc.siem_batches ob ON ob.org_id = d.org_id AND ob.destination_id = d.id AND ob.state <> 'DELIVERED'
 WHERE d.org_id = $1 AND d.id = $2
 `
 
@@ -167,6 +168,7 @@ type GetSIEMDestinationRow struct {
 	Retries             int64
 	PrevSecretExpiresAt *time.Time
 	CursorSeq           int64
+	OpenBatchSince      *time.Time
 }
 
 func (q *Queries) GetSIEMDestination(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (GetSIEMDestinationRow, error) {
@@ -197,6 +199,7 @@ func (q *Queries) GetSIEMDestination(ctx context.Context, orgID ids.OrgID, iD id
 		&i.Retries,
 		&i.PrevSecretExpiresAt,
 		&i.CursorSeq,
+		&i.OpenBatchSince,
 	)
 	return i, err
 }
@@ -321,9 +324,10 @@ const listSIEMDestinations = `-- name: ListSIEMDestinations :many
 SELECT d.id, d.name, d.url, d.internal, d.data_classes, d.format, d.state, d.created_by, d.created_at, d.activated_by,
        d.activated_at, d.updated_at, d.confirmed_at, coalesce(d.last_delivered_seq, 0)::bigint AS last_delivered_seq, d.last_delivered_at, d.consecutive_failures,
        d.failing_since, d.last_failure_at, d.last_failure_code, d.delivered_batches, d.failed_batches, d.retries,
-       d.prev_secret_expires_at, coalesce(c.seq, 0)::bigint AS cursor_seq
+       d.prev_secret_expires_at, coalesce(c.seq, 0)::bigint AS cursor_seq, ob.created_at AS open_batch_since
 FROM pc.siem_destinations d
 LEFT JOIN pc.siem_cursors c ON c.org_id = d.org_id AND c.destination_id = d.id
+LEFT JOIN pc.siem_batches ob ON ob.org_id = d.org_id AND ob.destination_id = d.id AND ob.state <> 'DELIVERED'
 WHERE d.org_id = $1 AND d.state <> 'DISABLED'
   AND ($2::uuid IS NULL OR d.id > $2::uuid)
 ORDER BY d.id
@@ -355,6 +359,7 @@ type ListSIEMDestinationsRow struct {
 	Retries             int64
 	PrevSecretExpiresAt *time.Time
 	CursorSeq           int64
+	OpenBatchSince      *time.Time
 }
 
 func (q *Queries) ListSIEMDestinations(ctx context.Context, orgID ids.OrgID, afterID *ids.UUID, maxRows int32) ([]ListSIEMDestinationsRow, error) {
@@ -391,6 +396,7 @@ func (q *Queries) ListSIEMDestinations(ctx context.Context, orgID ids.OrgID, aft
 			&i.Retries,
 			&i.PrevSecretExpiresAt,
 			&i.CursorSeq,
+			&i.OpenBatchSince,
 		); err != nil {
 			return nil, err
 		}
@@ -540,6 +546,21 @@ func (q *Queries) RecentSIEMBatches(ctx context.Context, orgID ids.OrgID, destin
 		return nil, err
 	}
 	return items, nil
+}
+
+const retrySIEMBatchNow = `-- name: RetrySIEMBatchNow :execrows
+UPDATE pc.siem_batches SET state = 'PENDING', attempts = 0, next_attempt_at = now()
+WHERE org_id = $1 AND destination_id = $2 AND state <> 'DELIVERED'
+`
+
+// A person asks for the open batch to be tried again now, with a fresh
+// schedule (D46).
+func (q *Queries) RetrySIEMBatchNow(ctx context.Context, orgID ids.OrgID, destinationID ids.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, retrySIEMBatchNow, orgID, destinationID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const rotateSIEMSecret = `-- name: RotateSIEMSecret :execrows

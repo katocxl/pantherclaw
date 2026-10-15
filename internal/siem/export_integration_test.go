@@ -314,12 +314,24 @@ func TestHR260_ExportIsCursorBasedSignedAndStable(t *testing.T) {
 	if d.Health != HealthFailing || d.CursorSeq != 7 || d.FailedBatches != 1 || len(f.sink.got) != 1 || f.sink.got[0].Destination != id {
 		t.Fatalf("failing: %+v, sink %+v", d, f.sink.got)
 	}
+	if d.WaitingSince == nil {
+		t.Fatal("a held destination does not say since when events wait")
+	}
+	// RetryDestination's storage step: a fresh schedule, due now (D46).
 	f.recv.set(http.StatusOK)
-	f.due(t, id)
+	if err := f.p.InTenantTx(ctx, f.org, func(ctx context.Context, tx db.TenantTx) error {
+		n, err := dbq.New(tx).RetrySIEMBatchNow(ctx, f.org, id)
+		if err == nil && n != 1 {
+			t.Errorf("retried %d batches", n)
+		}
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
 	if step, err := f.svc.ExportOnce(ctx, f.org, id); err != nil || !step.Delivered {
 		t.Fatalf("recovery: %+v %v", step, err)
 	}
-	if d := f.state(t, id); d.CursorSeq != 8 || d.Health != HealthHealthy {
+	if d := f.state(t, id); d.CursorSeq != 8 || d.Health != HealthHealthy || d.WaitingSince != nil || len(f.sink.got) != 1 {
 		t.Fatalf("after recovery: %+v", d)
 	}
 

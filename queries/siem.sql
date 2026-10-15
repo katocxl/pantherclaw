@@ -16,18 +16,20 @@ INSERT INTO pc.siem_cursors (org_id, destination_id, seq) VALUES (sqlc.arg(org_i
 SELECT d.id, d.name, d.url, d.internal, d.data_classes, d.format, d.state, d.created_by, d.created_at, d.activated_by,
        d.activated_at, d.updated_at, d.confirmed_at, coalesce(d.last_delivered_seq, 0)::bigint AS last_delivered_seq, d.last_delivered_at, d.consecutive_failures,
        d.failing_since, d.last_failure_at, d.last_failure_code, d.delivered_batches, d.failed_batches, d.retries,
-       d.prev_secret_expires_at, coalesce(c.seq, 0)::bigint AS cursor_seq
+       d.prev_secret_expires_at, coalesce(c.seq, 0)::bigint AS cursor_seq, ob.created_at AS open_batch_since
 FROM pc.siem_destinations d
 LEFT JOIN pc.siem_cursors c ON c.org_id = d.org_id AND c.destination_id = d.id
+LEFT JOIN pc.siem_batches ob ON ob.org_id = d.org_id AND ob.destination_id = d.id AND ob.state <> 'DELIVERED'
 WHERE d.org_id = sqlc.arg(org_id) AND d.id = sqlc.arg(id);
 
 -- name: ListSIEMDestinations :many
 SELECT d.id, d.name, d.url, d.internal, d.data_classes, d.format, d.state, d.created_by, d.created_at, d.activated_by,
        d.activated_at, d.updated_at, d.confirmed_at, coalesce(d.last_delivered_seq, 0)::bigint AS last_delivered_seq, d.last_delivered_at, d.consecutive_failures,
        d.failing_since, d.last_failure_at, d.last_failure_code, d.delivered_batches, d.failed_batches, d.retries,
-       d.prev_secret_expires_at, coalesce(c.seq, 0)::bigint AS cursor_seq
+       d.prev_secret_expires_at, coalesce(c.seq, 0)::bigint AS cursor_seq, ob.created_at AS open_batch_since
 FROM pc.siem_destinations d
 LEFT JOIN pc.siem_cursors c ON c.org_id = d.org_id AND c.destination_id = d.id
+LEFT JOIN pc.siem_batches ob ON ob.org_id = d.org_id AND ob.destination_id = d.id AND ob.state <> 'DELIVERED'
 WHERE d.org_id = sqlc.arg(org_id) AND d.state <> 'DISABLED'
   AND (sqlc.narg(after_id)::uuid IS NULL OR d.id > sqlc.narg(after_id)::uuid)
 ORDER BY d.id
@@ -136,3 +138,9 @@ FOR UPDATE;
 -- other worker re-sends it meanwhile.
 UPDATE pc.siem_batches SET next_attempt_at = now() + make_interval(secs => sqlc.arg(lease_seconds)::int)
 WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state <> 'DELIVERED' AND next_attempt_at <= now();
+
+-- name: RetrySIEMBatchNow :execrows
+-- A person asks for the open batch to be tried again now, with a fresh
+-- schedule (D46).
+UPDATE pc.siem_batches SET state = 'PENDING', attempts = 0, next_attempt_at = now()
+WHERE org_id = sqlc.arg(org_id) AND destination_id = sqlc.arg(destination_id) AND state <> 'DELIVERED';

@@ -34,6 +34,7 @@ import (
 	"net/netip"
 	"net/url"
 	"slices"
+	"strconv"
 	"time"
 
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
@@ -92,11 +93,12 @@ var (
 		"a destination has a name (lowercase letters, digits and dashes), an https URL and 1 to 6 distinct data classes")
 	ErrURL = pcerr.New(pcerr.InvalidArgument, "SIEM_DESTINATION_URL",
 		"the URL must be https, without credentials or fragment, on port 443 or 1024-65535, not PantherClaw's own host, and public unless the destination is internal")
-	ErrMetadata = pcerr.New(pcerr.InvalidArgument, "SIEM_DESTINATION_METADATA", "a cloud metadata service is never a destination")
-	ErrExists   = pcerr.New(pcerr.AlreadyExists, "SIEM_DESTINATION_EXISTS", "a destination with this name exists")
-	ErrNotFound = pcerr.New(pcerr.NotFound, "SIEM_DESTINATION_NOT_FOUND", "destination not found")
-	ErrState    = pcerr.New(pcerr.FailedPrecondition, "SIEM_DESTINATION_STATE", "the destination is not in a state that allows this")
-	ErrHuman    = pcerr.New(pcerr.PermissionDenied, "HUMAN_ONLY", "only a person can do this")
+	ErrMetadata       = pcerr.New(pcerr.InvalidArgument, "SIEM_DESTINATION_METADATA", "a cloud metadata service is never a destination")
+	ErrExists         = pcerr.New(pcerr.AlreadyExists, "SIEM_DESTINATION_EXISTS", "a destination with this name exists")
+	ErrNotFound       = pcerr.New(pcerr.NotFound, "SIEM_DESTINATION_NOT_FOUND", "destination not found")
+	ErrState          = pcerr.New(pcerr.FailedPrecondition, "SIEM_DESTINATION_STATE", "the destination is not in a state that allows this")
+	ErrHuman          = pcerr.New(pcerr.PermissionDenied, "HUMAN_ONLY", "only a person can do this")
+	ErrNothingWaiting = pcerr.New(pcerr.FailedPrecondition, "SIEM_NOTHING_WAITING", "no batch is waiting for delivery")
 )
 
 // Feed reads the evidence feed (D2, reflex/feed.Reader).
@@ -236,7 +238,11 @@ type Destination struct {
 	FailedBatches       int64
 	Retries             int64
 	RotationEndsAt      *time.Time
-	Health              string
+	// WaitingSince is when the open batch (from CursorSeq, where export is
+	// held) was first built: its oldest event has waited at least since
+	// then. Nil when nothing is waiting.
+	WaitingSince *time.Time
+	Health       string
 }
 
 // Health values of a destination.
@@ -494,6 +500,40 @@ func (s *Service) RotateSecret(ctx context.Context, id ids.UUID) (string, error)
 	return ndomain.FormatSecret(secret), nil
 }
 
+// RetryDestination tries the destination's open batch again now, with a
+// fresh retry schedule (D46). The cursor stays where it is: no event is
+// ever skipped.
+func (s *Service) RetryDestination(ctx context.Context, id ids.UUID) (Destination, error) {
+	c, err := manager(ctx)
+	if err != nil {
+		return Destination{}, err
+	}
+	var out Destination
+	err = s.pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
+		q := dbq.New(tx)
+		d, err := get(ctx, q, c.Org, id)
+		if err != nil {
+			return err
+		}
+		if d.State != StateActive {
+			return ErrState
+		}
+		n, err := q.RetrySIEMBatchNow(ctx, c.Org, id)
+		if err != nil {
+			return err
+		}
+		if n == 0 {
+			return ErrNothingWaiting
+		}
+		if err := s.audit(ctx, tx, c, "siem.destination_retried", id, map[string]string{"cursor_seq": strconv.FormatInt(d.CursorSeq, 10)}); err != nil {
+			return err
+		}
+		out, err = get(ctx, q, c.Org, id)
+		return err
+	})
+	return out, err
+}
+
 // Get returns one destination (siem.read).
 func (s *Service) Get(ctx context.Context, id ids.UUID) (Destination, error) {
 	c, err := tenancy.CallerFrom(ctx)
@@ -554,6 +594,7 @@ func fromRow(r dbq.GetSIEMDestinationRow) Destination {
 		ConfirmedAt: r.ConfirmedAt, CursorSeq: r.CursorSeq, LastDeliveredSeq: r.LastDeliveredSeq, LastDeliveredAt: r.LastDeliveredAt,
 		ConsecutiveFailures: int(r.ConsecutiveFailures), FailingSince: r.FailingSince, LastFailureAt: r.LastFailureAt,
 		DeliveredBatches: r.DeliveredBatches, FailedBatches: r.FailedBatches, Retries: r.Retries, RotationEndsAt: r.PrevSecretExpiresAt,
+		WaitingSince: r.OpenBatchSince,
 	}
 	if r.LastFailureCode != nil {
 		d.LastFailureCode = *r.LastFailureCode
