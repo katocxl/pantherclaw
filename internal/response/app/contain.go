@@ -318,10 +318,6 @@ func auditRecord(ctx context.Context, tx db.TenantTx, actor evdomain.Actor, name
 	})
 }
 
-func canonicalEvidence(m map[string]string) ([]byte, error) {
-	return json.Marshal(m, json.Deterministic(true))
-}
-
 // Errors of the playbook and SOAR sources (D50).
 var (
 	ErrSOARPort = pcerr.New(pcerr.InvalidArgument, "SOAR_THROUGH_REQUEST_CONTROL",
