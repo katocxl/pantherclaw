@@ -12,6 +12,7 @@
     "refunds in currencies other than USD: both rules fail closed (CANNOT_AUTHORIZE) until you add rules for them",
     "the total refunded per day or per customer: set a budget for that",
     "whether a refund is justified: the approver decides from the charge and the reason the agent gives",
+    "refunds made outside PantherClaw (the payments dashboard, another integration, a person with the API key) are not seen or limited",
     "the thresholds are examples: change them in a new policy version before relying on them"
   ],
   "requires": {

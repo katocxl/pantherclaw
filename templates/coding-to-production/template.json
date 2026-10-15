@@ -6,8 +6,8 @@
     "every merge into a named repository waits for an independent code reviewer, bound to the head SHA",
     "every deployment of a named repository waits for a release approver inside a change window",
     "no branch creation or contents write on a named repository's default branch",
-    "the agent does not merge or push from the shell (a heuristic over the command text)",
-    "the agent's grant covers the GitHub operations on the named repositories only, with one merge per run"
+    "with --agent: that agent does not merge or push from the shell (a heuristic over the command text); without --agent this rule is skipped",
+    "with --agent: the agent's grant covers the GitHub operations on the named repositories only, with one merge per run; without --agent no grant is issued"
   ],
   "excludes": [
     "renaming a default branch: apply the template again",

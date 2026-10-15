@@ -5,12 +5,12 @@
   "protects": [
     "every deployment of a named repository waits for an independent release approver, whose approval counts only inside the environment's change window",
     "a deployment to any other environment than the named one is refused",
-    "a deployment of any repository the template was not applied for is refused",
+    "a deployment of any repository the template was not applied for is refused: this rule applies org-wide, to every agent and every repository, not only to the agent the template grants",
     "the agent's grant covers deployments of the named repositories only"
   ],
   "excludes": [
     "what the deployment contains: review the merge itself (the coding-to-production template)",
-    "a deployment that is a consequence of a merge, whose environment is not known when the merge is decided, is held for the release approver, not refused; a direct deployment that names no environment counts as production, GitHub's default",
+    "a deployment that is a consequence of a merge, whose environment is not known when the merge is decided, is held, not refused; its approval counts only inside a change window, and with no environment it is in none, so the hold expires unless the deployment is asked for again with its environment. A direct deployment that names no environment counts as production, GitHub's default",
     "deployments started outside PantherClaw (a person pushing, another CI system)",
     "people: bind release_approver yourself (pclaw role bind)"
   ],

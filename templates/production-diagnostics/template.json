@@ -3,7 +3,7 @@
   "summary": "Agents diagnose an environment from a shell, read-only: one allow-listed reading command at a time, in bash, from the workspace; no network tools, no writes.",
   "task_ref": "template:production-diagnostics",
   "protects": [
-    "in the named environment, a shell command runs only when it is one allow-listed reading command (ls, cat, head, tail, grep, wc, ps, df, du, free, uptime, uname, whoami, id, stat, pwd, lsof) with no chaining, pipes, redirection or substitution",
+    "in the named environment, a shell command runs only when it is one allow-listed reading command (ls, cat, head, tail, grep, wc, ps, df, du, free, uptime, uname, whoami, id, stat, pwd, lsof) with no chaining, pipes, redirection, substitution or control characters other than tab (a newline would run a second command)",
     "network tools (curl, wget, ssh, nc and the like) are refused",
     "writing commands and output redirection (rm, mv, cp, tee, chmod, kill, systemctl, > and the like) are refused",
     "a command whose working directory is outside the workspace is refused",
@@ -12,6 +12,7 @@
   "excludes": [
     "what the reading commands read: an allowed command reads any file the developer's account can, secrets included",
     "the command lists are a heuristic over the command text, not a sandbox: run the agent in a sandbox for containment",
+    "writes through tools other than the shell: an agent's file edits (Edit, Write) and MCP tools are not shell commands, so these rules do not see them; bound them with the agent's grant and its sandbox",
     "other environments: the rules apply to the named environment only",
     "commands the agent runs without asking (a hook that is not installed, another tool)"
   ],

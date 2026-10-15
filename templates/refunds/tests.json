@@ -8,6 +8,20 @@
       "expect": {"decision": "ALLOW", "reason": "GRANT_COVERS"}
     },
     {
+      "id": "refunds-below-hold", "per": "org",
+      "summary": "a refund of 99.99 USD goes through without a hold",
+      "action": {"operation": "payments.refund.create", "target": "ch_1", "params": {"amount": {"value": "99.99", "currency": "USD"}, "reason": "duplicate"}},
+      "given": {"facts": {"payments.charge.refundable": {"value": true, "age_seconds": 10}}},
+      "expect": {"decision": "ALLOW", "reason": "GRANT_COVERS"}
+    },
+    {
+      "id": "refunds-below-cap", "per": "org",
+      "summary": "an approved refund of 499.99 USD goes through",
+      "action": {"operation": "payments.refund.create", "target": "ch_1", "params": {"amount": {"value": "499.99", "currency": "USD"}, "reason": "duplicate"}},
+      "given": {"facts": {"payments.charge.refundable": {"value": true, "age_seconds": 10}}, "approval": "approved"},
+      "expect": {"decision": "ALLOW", "reason": "GRANT_COVERS"}
+    },
+    {
       "id": "refunds-over-hold", "per": "org",
       "summary": "a refund of 100.01 USD waits for an approver",
       "action": {"operation": "payments.refund.create", "target": "ch_1", "params": {"amount": {"value": "100.01", "currency": "USD"}, "reason": "duplicate"}},

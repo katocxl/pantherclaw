@@ -526,18 +526,35 @@ func TestM11DiagnosticsCommands(t *testing.T) {
 		}
 		return decision
 	}
-	for _, cmd := range []string{"ls -la", "cat /var/log/app.log", "  tail -n 50 app.log", "grep -rn 'timeout' logs", "ps aux", "df -h", "du -sh .", "uptime", "lsof -i"} {
+	for _, cmd := range []string{"ls -la", "cat /var/log/app.log", "  tail -n 50 app.log", "grep -rn 'timeout' logs", "ps aux", "df -h", "du -sh .", "uptime", "lsof -i", "ls\t-la", "grep\t-c\tERROR app.log"} {
 		if d := decide(cmd); d != "ALLOW" {
 			t.Errorf("%q: %s, want ALLOW", cmd, d)
 		}
 	}
 	for _, cmd := range []string{
-		"ls; rm -rf /", "ls && reboot", "cat a | sh", "cat $(echo x)", "cat `id`", "ls\nrm x", "cat < /etc/passwd",
+		"ls; rm -rf /", "ls && reboot", "cat a | sh", "cat $(echo x)", "cat `id`", "ls\nrm x", "ls\npython3 fix.py", "ls\nsh evil.sh", "cat \n bash x.sh", "cat < /etc/passwd",
 		"cat x > y", "cat x >> y", "echo hi", "env rm x", "find . -delete", "sed -i s/a/b/ f", "/bin/rm x", "python3 -c 'print(1)'",
 		"curl http://x", "wget x", "ssh host", "lsof -i; nc -l 80", "ls \\nrm", "grep x f || touch y", "",
 	} {
 		if d := decide(cmd); d != "DENY" {
 			t.Errorf("%q: %s, want DENY", cmd, d)
+		}
+	}
+	// Other control characters never reach the rules: the command param
+	// refuses them (HR-102). pd-control-character also forbids them, in
+	// case that check ever loosens.
+	for _, cmd := range []string{"ls\x0bpython3 x", "ls\x1b[2Jid", "ls\x7f", "ls\rpython3 x"} {
+		params, err := json.Marshal(map[string]string{"shell": "bash", "command": cmd, "cwd": exampleWorkspace, "call": "toolu_1"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := shell.DecodeParams(params); !errors.Is(err, actionir.ErrAmbiguous) {
+			t.Errorf("%q: %v, want ambiguous", cmd, err)
+		}
+	}
+	for _, cmd := range []string{"ls\x0bpython3 x", "ls\x1b[2Jid", "ls\x7f", "ls\rpython3 x", "ls\npython3 x"} {
+		if !regexp.MustCompile(`[\x00-\x08\x0a-\x1f\x7f]`).MatchString(cmd) {
+			t.Errorf("%q: the control-character pattern misses it", cmd)
 		}
 	}
 }

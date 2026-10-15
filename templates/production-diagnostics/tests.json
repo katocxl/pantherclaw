@@ -64,6 +64,48 @@
       "expect": {"decision": "DENY", "reason": "COMMAND_NOT_READ_ONLY", "rule": "pd-read-only"}
     },
     {
+      "id": "pd-newline-chain", "per": "org",
+      "summary": "a newline after an allow-listed command runs a second command, so it is refused",
+      "action": {"operation": "shell.command.run", "environment": "{{environment_id}}", "target": "local",
+        "params": {"shell": "bash", "command": "ls\npython3 fix.py", "cwd": "{{workspace}}", "call": "toolu_11"}},
+      "expect": {"decision": "DENY", "reason": "COMMAND_CONTROL_CHARACTER", "rule": "pd-control-character"}
+    },
+    {
+      "id": "pd-newline-in-args", "per": "org",
+      "summary": "a newline inside an allow-listed command's arguments is refused",
+      "action": {"operation": "shell.command.run", "environment": "{{environment_id}}", "target": "local",
+        "params": {"shell": "bash", "command": "cat \n bash x.sh", "cwd": "{{workspace}}", "call": "toolu_12"}},
+      "expect": {"decision": "DENY", "reason": "COMMAND_CONTROL_CHARACTER", "rule": "pd-control-character"}
+    },
+    {
+      "id": "pd-tab-separated", "per": "org",
+      "summary": "a tab separates arguments like a space",
+      "action": {"operation": "shell.command.run", "environment": "{{environment_id}}", "target": "local",
+        "params": {"shell": "bash", "command": "ls\t-la", "cwd": "{{workspace}}", "call": "toolu_13"}},
+      "expect": {"decision": "ALLOW", "reason": "GRANT_COVERS"}
+    },
+    {
+      "id": "pd-tab-write", "per": "org",
+      "summary": "a writing command separated by a tab is refused",
+      "action": {"operation": "shell.command.run", "environment": "{{environment_id}}", "target": "local",
+        "params": {"shell": "bash", "command": "rm\t-rf logs", "cwd": "{{workspace}}", "call": "toolu_14"}},
+      "expect": {"decision": "DENY", "reason": "COMMAND_WRITES", "rule": "pd-no-write"}
+    },
+    {
+      "id": "pd-sed-in-place", "per": "org",
+      "summary": "editing a file in place with sed is refused",
+      "action": {"operation": "shell.command.run", "environment": "{{environment_id}}", "target": "local",
+        "params": {"shell": "bash", "command": "sed -n -i s/a/b/ app.conf", "cwd": "{{workspace}}", "call": "toolu_15"}},
+      "expect": {"decision": "DENY", "reason": "COMMAND_WRITES", "rule": "pd-no-write"}
+    },
+    {
+      "id": "pd-network-by-path", "per": "org",
+      "summary": "a network tool called by its path after an allow-listed command is refused",
+      "action": {"operation": "shell.command.run", "environment": "{{environment_id}}", "target": "local",
+        "params": {"shell": "bash", "command": "ls;/usr/bin/wget x", "cwd": "{{workspace}}", "call": "toolu_16"}},
+      "expect": {"decision": "DENY", "reason": "COMMAND_USES_NETWORK", "rule": "pd-no-network"}
+    },
+    {
       "id": "pd-other-environment", "per": "org",
       "summary": "in another environment the rules do not apply",
       "action": {"operation": "shell.command.run", "environment": "{{other_environment_id}}", "target": "local",
