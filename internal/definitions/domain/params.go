@@ -5,8 +5,11 @@ package domain
 
 import (
 	"fmt"
+	"math"
 	"regexp"
 	"slices"
+	"strconv"
+	"strings"
 	"unicode"
 
 	"github.com/katocxl/pantherclaw/internal/actionir"
@@ -62,6 +65,13 @@ type ParamSpec struct {
 	Pattern    string    `json:"pattern,omitzero"`
 	MaxLength  int       `json:"max_length,omitzero"`
 	MaxItems   int       `json:"max_items,omitzero"`
+	// Disclosure marks a parameter that can carry data out (HR-079, G0 M10
+	// D56): toward a public destination its value is limited to MaxBytes
+	// (0: DefaultDisclosureBytes) and MaxEntropy bits per byte (0:
+	// DefaultDisclosureEntropy), which the gateway checks before dispatch.
+	Disclosure bool   `json:"disclosure,omitzero"`
+	MaxBytes   int    `json:"max_bytes,omitzero"`
+	MaxEntropy string `json:"max_entropy,omitzero"` // decimal, e.g. "6.0"
 }
 
 const (
@@ -90,6 +100,14 @@ func (p ParamSpec) validate(name string) error {
 		return invalid("%s: pattern applies to identifiers only", name)
 	case p.MaxLength < 0 || p.MaxLength > maxParamText:
 		return invalid("%s: max_length must be 0..%d", name, maxParamText)
+	case !p.Disclosure && (p.MaxBytes != 0 || p.MaxEntropy != ""):
+		return invalid("%s: max_bytes and max_entropy apply to disclosure params only", name)
+	case p.Disclosure && !slices.Contains(disclosureTypes, p.Type):
+		return invalid("%s: only text, content, command, path and identifier params can be disclosure params", name)
+	case p.MaxBytes < 0 || p.MaxBytes > maxParamText:
+		return invalid("%s: max_bytes must be 0..%d", name, maxParamText)
+	case p.MaxEntropy != "" && !validEntropy(p.MaxEntropy):
+		return invalid("%s: max_entropy must be a decimal above 0 and at most 8 bits per byte", name)
 	case (p.MaxItems != 0) != (p.Type == TypeIdentifierList) || p.MaxItems < 0 || p.MaxItems > maxListItems:
 		return invalid("%s: identifier_list params need max_items 1..%d; other types take none", name, maxListItems)
 	}
@@ -148,4 +166,69 @@ func checkText(name, s string) error {
 		}
 	}
 	return nil
+}
+
+// Disclosure defaults (HR-079, G0 M10 D56).
+const (
+	DefaultDisclosureBytes   = 4096
+	DefaultDisclosureEntropy = 6.0
+)
+
+// disclosureTypes are the parameter types a disclosure param may have:
+// the ones that carry free bytes to the target.
+var disclosureTypes = []ParamType{TypeText, TypeContent, TypeCommand, TypePath, TypeIdentifier, TypeIdentifierList}
+
+// DisclosureLimits returns a disclosure param's byte and entropy limits,
+// with the defaults filled in.
+func (p ParamSpec) DisclosureLimits() (maxBytes int, maxEntropy float64) {
+	maxBytes, maxEntropy = p.MaxBytes, 0
+	if p.MaxEntropy != "" {
+		maxEntropy, _ = strconv.ParseFloat(p.MaxEntropy, 64) // validated
+	}
+	if maxBytes == 0 {
+		maxBytes = DefaultDisclosureBytes
+	}
+	if maxEntropy == 0 {
+		maxEntropy = DefaultDisclosureEntropy
+	}
+	return maxBytes, maxEntropy
+}
+
+// Disclosed is the bytes a value discloses: its text, or a list's items
+// joined by newlines.
+func (v Value) Disclosed() []byte {
+	if v.Type == TypeIdentifierList {
+		return []byte(strings.Join(v.List, "\n"))
+	}
+	return []byte(v.Str)
+}
+
+// Entropy is the Shannon entropy of b in bits per byte (0 for no bytes).
+func Entropy(b []byte) float64 {
+	if len(b) == 0 {
+		return 0
+	}
+	var counts [256]int
+	for _, c := range b {
+		counts[c]++
+	}
+	n, h := float64(len(b)), 0.0
+	for _, c := range counts {
+		if c > 0 {
+			p := float64(c) / n
+			h -= p * math.Log2(p)
+		}
+	}
+	return h
+}
+
+var entropyRe = regexp.MustCompile(`^[0-9](\.[0-9]{1,3})?$`)
+
+// validEntropy reports a decimal entropy limit above 0 and at most 8.
+func validEntropy(s string) bool {
+	if !entropyRe.MatchString(s) {
+		return false
+	}
+	v, err := strconv.ParseFloat(s, 64)
+	return err == nil && v > 0 && v <= 8
 }

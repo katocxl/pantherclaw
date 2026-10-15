@@ -114,6 +114,10 @@ const (
 	ConstraintAllowedValues  ConstraintKind = "allowed_values"
 	ConstraintTargetSet      ConstraintKind = "target_set"
 	ConstraintDestinationSet ConstraintKind = "destination_set"
+	// ConstraintDisclosureLimits is never declared by a definition: the
+	// Authority attaches it to a disclosure param of an action toward a
+	// public destination (HR-079), and the gateway checks it before dispatch.
+	ConstraintDisclosureLimits ConstraintKind = "disclosure_limits"
 )
 
 // ConstraintSpec declares support for one constraint. Clamp declares that
@@ -377,6 +381,8 @@ func (d *Definition) validateConstraint(c ConstraintSpec) error {
 			return invalid("%s: %s constraint takes no param and cannot clamp", op, c.Kind)
 		}
 		return nil
+	case ConstraintDisclosureLimits:
+		return invalid("%s: disclosure limits are set on params (disclosure: true), never declared as a constraint", op)
 	default:
 		return invalid("%s: unknown constraint kind %q", op, c.Kind)
 	}

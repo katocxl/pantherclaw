@@ -87,6 +87,9 @@ type Obligation struct {
 	// Level is the verification level a verify obligation requires.
 	Level  defs.Level `json:"level,omitzero"`
 	Timing string     `json:"timing"`
+	// MaxEntropy is a disclosure_limits obligation's entropy limit, bits
+	// per byte (HR-079).
+	MaxEntropy string `json:"max_entropy,omitzero"`
 }
 
 // Obligation timings (F071).

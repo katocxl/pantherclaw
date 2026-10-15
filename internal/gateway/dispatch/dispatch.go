@@ -102,12 +102,16 @@ const (
 	CodeCircuitOpen           = "circuit_open"
 	CodeDuplicate             = "duplicate_action"
 	CodeObligation            = "obligation_unsupported"
-	CodeEffective             = "effective_action_mismatch"
-	CodePermitInvalid         = "permit_invalid"
-	CodeEpochStale            = "epoch_stale"
-	CodeDispatchRefused       = "dispatch_refused"
-	CodeRequest               = "request_not_built"
-	CodeCredential            = "credential_unavailable" //nolint:gosec // G101: an error code, not a credential
+	// CodeObligationFailed: the action breaks an obligation the gateway
+	// checks, such as a disclosure param over its size or entropy limit
+	// (HR-079); nothing is dispatched.
+	CodeObligationFailed = "obligation_failed"
+	CodeEffective        = "effective_action_mismatch"
+	CodePermitInvalid    = "permit_invalid"
+	CodeEpochStale       = "epoch_stale"
+	CodeDispatchRefused  = "dispatch_refused"
+	CodeRequest          = "request_not_built"
+	CodeCredential       = "credential_unavailable" //nolint:gosec // G101: an error code, not a credential
 	// CodeScopeMismatch: GitHub granted a wider token than requested; it
 	// was revoked and nothing was sent (ADR-0021 item 3).
 	CodeScopeMismatch     = "credential_scope_mismatch"
@@ -435,7 +439,9 @@ func (e *Engine) dispatch(ctx context.Context, c Call, t *timer) Result {
 			return r.fail(EnforcementFailed, CodeObligation)
 		}
 		eff, err := effective(def, c.Action, ar.GetObligations())
-		if err != nil {
+		if errors.Is(err, errDisclosure) {
+			return r.fail(EnforcementFailed, CodeObligationFailed)
+		} else if err != nil {
 			return r.fail(EnforcementFailed, CodeObligation)
 		}
 		want := ar.GetEffectiveActionHash()
@@ -526,7 +532,11 @@ func (r Result) fail(class Class, code string) Result {
 }
 
 // errUnsupported reports an obligation the gateway cannot apply.
-var errUnsupported = errors.New("dispatch: unsupported obligation")
+var (
+	errUnsupported = errors.New("dispatch: unsupported obligation")
+	// errDisclosure: a disclosure param over its limits (HR-079).
+	errDisclosure = errors.New("dispatch: disclosure limit exceeded")
+)
 
 // errKind refuses to place a credential that is not static.
 var errKind = errors.New("dispatch: a GitHub App credential is never placed as sealed")
@@ -549,6 +559,12 @@ func effective(def *defs.Definition, p actionir.Parsed, obligations []*pb.Obliga
 	}
 	changed := false
 	for _, o := range obligations {
+		if o.GetKind() == string(defs.ConstraintDisclosureLimits) {
+			if err := disclosed(vals, o); err != nil {
+				return actionir.Parsed{}, err
+			}
+			continue
+		}
 		if o.GetKind() != string(defs.ConstraintCountMax) || !o.GetClamp() || (o.GetTiming() != "" && o.GetTiming() != "before_execution") {
 			return actionir.Parsed{}, errUnsupported
 		}
@@ -574,6 +590,32 @@ func effective(def *defs.Definition, p actionir.Parsed, obligations []*pb.Obliga
 	a := p.Action
 	a.Params = raw
 	return actionir.Encode(a)
+}
+
+// disclosed checks a disclosure_limits obligation (HR-079, G0 M10 D56):
+// the param's bytes first, then their Shannon entropy in bits per byte.
+// An absent param discloses nothing; a malformed limit is unsupported.
+func disclosed(vals defs.Values, o *pb.Obligation) error {
+	if o.GetTiming() != "" && o.GetTiming() != "before_execution" {
+		return errUnsupported
+	}
+	maxBytes, err := strconv.Atoi(o.GetMax())
+	if err != nil || maxBytes < 1 {
+		return errUnsupported
+	}
+	maxEntropy, err := strconv.ParseFloat(o.GetMaxEntropy(), 64)
+	if err != nil || maxEntropy <= 0 || maxEntropy > 8 {
+		return errUnsupported
+	}
+	v, present := vals[o.GetParam()]
+	if !present {
+		return nil
+	}
+	b := v.Disclosed()
+	if len(b) > maxBytes || defs.Entropy(b) > maxEntropy {
+		return errDisclosure
+	}
+	return nil
 }
 
 // client returns the connection's egress client, new for each revision.

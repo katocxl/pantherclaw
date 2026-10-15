@@ -67,6 +67,9 @@ const (
 	// that its verifier cannot reach, or through a connection that cannot
 	// make the verifier's reads (F497, HR-191).
 	ReasonVerifierUnsupported = "VERIFIER_UNSUPPORTED"
+	// ReasonDisclosureLimits: a disclosure param toward a public destination
+	// carries size and entropy limits the gateway checks (HR-079).
+	ReasonDisclosureLimits = "DISCLOSURE_LIMITS"
 )
 
 // Pipeline evaluates steps 1–8.
@@ -777,6 +780,7 @@ func (p *Pipeline) boundaries(ctx context.Context, s *state) {
 		s.cl.add(StepBoundaries, effectOf(f), f.Reason(), f.Finding.Detail, f.Level.String())
 	}
 	p.policyRules(ctx, s)
+	s.disclosure()
 	p.consequenceBoundaries(ctx, s)
 	p.budgets(ctx, s)
 	p.repeats(ctx, s)
@@ -1315,5 +1319,38 @@ func (s *state) independence() {
 	if _, complete := apdomain.GitHubPeople(f.Object); approvals > 0 && (f.Type != fdomain.TypeObject || !complete) {
 		s.cl.add(StepRequirements, adomain.CannotAuthorize, apdomain.IneligibleAuthorshipUnknown,
 			a.IndependentOf+" does not list every author, committer and pusher, so no approver can be shown independent", "")
+	}
+}
+
+// DisclosureRule names the source of disclosure obligations on receipts:
+// the hardening rule, not a policy rule.
+const DisclosureRule = "HR-079"
+
+// disclosure attaches a disclosure_limits obligation to every disclosure
+// param of the action when its connection's destination class is public
+// (HR-079, G0 M10 D56): the byte and entropy limits the definition
+// declares, which the gateway checks before dispatch and the receipt
+// records. The class comes from the connection's record, never from the
+// gateway or the agent.
+func (s *state) disclosure() {
+	if s.def == nil || s.conn == nil || s.conn.DestinationClass != "public" {
+		return
+	}
+	names := make([]string, 0, len(s.def.Params))
+	for name, spec := range s.def.Params {
+		if _, present := s.vals[name]; spec.Disclosure && present {
+			names = append(names, name)
+		}
+	}
+	slices.Sort(names)
+	for _, name := range names {
+		maxBytes, maxEntropy := s.def.Params[name].DisclosureLimits()
+		s.ev.Obligations = append(s.ev.Obligations, pdomain.Obligation{
+			Rule: DisclosureRule, Kind: pdomain.DisclosureLimits, Param: name, Max: strconv.Itoa(maxBytes),
+			MaxEntropy: strconv.FormatFloat(maxEntropy, 'f', -1, 64), Timing: pdomain.TimingBeforeExecution,
+		})
+		s.cl.add(StepRequirements, adomain.AllowWithObligations, ReasonDisclosureLimits,
+			fmt.Sprintf("%s goes to a public destination: at most %d bytes and %s bits per byte", name, maxBytes,
+				strconv.FormatFloat(maxEntropy, 'f', -1, 64)), "")
 	}
 }
