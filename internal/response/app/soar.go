@@ -35,7 +35,7 @@ var (
 		"a SOAR request contains one run, agent, grant or connection; wider scopes, the kill switch and restoration are for people")
 	// ErrSOARBusy: other SOAR requests of the org held the lock past the lock
 	// timeout; nothing was done, and the request may be retried.
-	ErrSOARBusy = pcerr.New(pcerr.Unavailable, "SOAR_BUSY", "other SOAR requests of the organization are being processed; retry")
+	ErrSOARBusy     = pcerr.New(pcerr.Unavailable, "SOAR_BUSY", "other SOAR requests of the organization are being processed; retry")
 	ErrSOARNotFound = pcerr.New(pcerr.NotFound, "SOAR_REQUEST_NOT_FOUND", "no SOAR request of this caller has this key")
 	ErrSOARKey      = pcerr.New(pcerr.InvalidArgument, "IDEMPOTENCY_KEY_REQUIRED", "an idempotency key of 1 to 128 characters is required")
 	// ErrSOARCaller refuses a SOAR request from a person: the source SOAR is
