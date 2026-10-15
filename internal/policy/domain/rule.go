@@ -64,6 +64,9 @@ type Rule struct {
 	// action in the rule's scope; a rule whose facts are missing or stale is
 	// not evaluated (HR-160, F120).
 	Facts []FactRef `json:"facts,omitzero"`
+	// Exceptable marks a rule an approved exception may waive for an agent
+	// (M11.1 F2). Unset, no exception can touch it.
+	Exceptable bool `json:"exceptable,omitzero"`
 }
 
 // FactRef names a fact a rule reads and how old it may be.
@@ -161,6 +164,9 @@ type Bundle struct {
 	ID      string `json:"id"`
 	Version int    `json:"version"`
 	Rules   []Rule `json:"rules"`
+	// Tests are the bundle's scenario tests (M11.1, internal/policy/scenario);
+	// publication requires them to pass and to kill every mutant (HR-044).
+	Tests []TestCase `json:"tests,omitzero"`
 }
 
 var (
@@ -206,7 +212,7 @@ func (b *Bundle) Validate() error {
 		}
 		seen[r.ID] = true
 	}
-	return nil
+	return validateTests(b.Tests)
 }
 
 // Validate checks one rule. Each kind carries exactly its own fields.
