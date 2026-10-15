@@ -28,9 +28,11 @@ Each POST is one batch of at most 100 events and 1 MiB.
 Read the destination's health (`siem.read`):
 - **Configured** versus **delivery confirmed:** a destination is confirmed only after its first 2xx.
 - Last delivered sequence and time, lag, delayed and failed batches, retries.
-- Retries back off from 5 seconds to 10 hours, 8 attempts per batch. The destination's cursor advances by compare-and-set only as batches are delivered.
+- Retries back off from 5 seconds to 10 hours, 8 attempts per batch. The cursor never skips: it advances by compare-and-set only as batches are delivered.
+- After 8 failed attempts the batch is FAILED and the destination FAILING. The same range is retried every 10 hours; `RetryDestination` (`siem.manage`) resets the attempts at once.
+- Health shows the stuck sequence and the age of the oldest undelivered event.
 
-When delivery is **FAILING**, PantherClaw raises an owned failure (owner and next step) and a `siem` signal in the operations work queue, and sends `siem.delivery_failing`. Fix the collector (TLS, certificate, URL, signature check, size limit), then the backlog drains from the cursor.
+When delivery is **FAILING**, PantherClaw raises an owned failure (owner and next step) and a `siem` signal in the operations work queue, once per episode, and sends `siem.delivery_failing`. Fix the collector (TLS, certificate, URL, signature check, size limit), then call `RetryDestination` or wait for the 10-hour retry; the backlog drains from the cursor.
 
 ## 4. Rotate the secret
 
@@ -40,4 +42,4 @@ When delivery is **FAILING**, PantherClaw raises an owned failure (owner and nex
 
 ## 5. Pause or disable
 
-A destination is PAUSED or DISABLED through the `siem.proto` API (`siem.manage`); neither receives batches. Every change is audited.
+A destination is PAUSED or DISABLED through the `siem.proto` API (`siem.manage`); neither receives batches. Pausing keeps the cursor, so a resumed destination continues where it stopped. Every change is audited.

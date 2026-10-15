@@ -11,7 +11,7 @@ The last section covers a security incident in PantherClaw itself.
 1. Start from the work queue: `GetWorkQueue` (`operations.proto`). It ranks active incidents, unconfirmed containment, important waiting decisions and protection failures (coverage loss, stale gateways, failing export, detection overflow, owned failures). Each item lists the actions you may take.
 2. Read the alert (`incidents.proto` reads, `incident.read`). Check:
    - **Basis:** OBSERVED, RULE_MATCH, INFERRED or HYPOTHESIS. Treat only OBSERVED as fact.
-   - **Rule and pack:** the rule id, version, `rule_digest` and `pack_version`. A custom rule (`org.*`) is the organization's own.
+   - **Rule and pack:** the rule id, version, `rule_digest` and `pack_version`. Built-in rule ids are `pc.<area>.<name>` and use US spelling (for example `pc.drift.behavior`); a custom rule (`org.*`) is the organization's own.
    - **Subjects and evidence:** the run, agent, principal, grant, connection and ledger entries. `count`, `first_seen` and `last_seen` show repeats.
    - **ATLAS and OWASP mappings**, for the report.
 3. Act on it:
@@ -23,7 +23,7 @@ The last section covers a security incident in PantherClaw itself.
 
 ## 2. Run the incident
 
-1. Assign an owner (`AssignIncident`). Every change is an incident event; nothing is edited in place (HR-243).
+1. Assign an owner (`AssignIncident`). Every change adds an incident event, and alert evidence is append-only (HR-243).
 2. Open a case (Team): from the incident, an alert or a transaction. The case keeps its own record:
    - **FACT** entries need at least one evidence reference.
    - **HYPOTHESIS** entries carry a confidence and alternatives.
@@ -46,7 +46,7 @@ Contain narrow first. The kill switch ([kill-switch.md](kill-switch.md)) is for 
 1. Ask for options: `ProposeResponse(subject)` (`response.proto`) for a run, agent, transaction, alert or incident. It returns prefilled, narrow-first controls.
 2. Choose a control:
    - **DENY_ALL:** every action in scope is denied `CONTAINED`.
-   - **HOLD_WRITES:** reads continue; every non-read is held `CONTAINED_WRITES` until an `incident.respond` holder independent of the launcher and grant owner approves it.
+   - **HOLD_WRITES:** reads continue; every non-read is held `CONTAINED_WRITES` until a responder releases it with `DecideContainmentHold`: an enabled person with `incident.respond` and a security key who is not the launcher, the principal or an ancestor, the agent owner or the grant issuer.
    - **DENY_OPERATION:** one operation is denied.
 3. Narrow controls (one run, or one agent's DENY_ALL or HOLD_WRITES) commit at once. A wider control (a grant with dependants, a connection, a resource, a principal, or more than one agent) needs a preview first:
    1. `PreviewContainment(scope, control)` shows targets, dependent runs, waiting actions it voids, alternative paths, unknown dependencies and reach before and after.
@@ -54,19 +54,19 @@ Contain narrow first. The kill switch ([kill-switch.md](kill-switch.md)) is for 
    3. In an emergency you may skip the preview with a reason and a step-up at most 5 minutes old; the skip is recorded (HR-252).
 4. Watch the response action's paths until it is CONFIRMED (HR-249):
    - A **gateway path** is confirmed when that gateway acknowledges the new containment epoch.
-   - A **bypass route** (OBSERVE_ONLY or UNKNOWN coverage) stays UNRESOLVED until a credential revoke or rotation closes it. Revoke or rotate the credential: `PreviewCredentialChange` first lists every agent, connection and workload that shares it, then `RotateCredential` or the existing revoke.
-   - **In-flight work** is listed per path with its cancellation status (F134).
-   - PARTIAL means at least one material path is open. `future_confirmed` says new access is stopped; `historical_open` lists earlier reads and accepted operations, which containment cannot undo.
+   - A **bypass route** (OBSERVE_ONLY or UNKNOWN coverage, including an agent with no coverage record) is material and stays UNRESOLVED until a credential revoke or rotation closes it. Revoke or rotate the credential: `PreviewCredentialChange` first lists every agent, connection and workload that shares it, then `RotateCredential` or the existing revoke.
+   - **In-flight work** is listed per path with its cancellation status (F134). It is material for a termination; for a containment it is listed in `historical_open`.
+   - PARTIAL means at least one material path is open. `mediated_confirmed` says every gateway path is confirmed; `future_confirmed` says new access is stopped on every material path, and stays false while a bypass is open; `historical_open` lists earlier reads and accepted operations, which containment cannot undo.
    - FAILED always raises a `response` signal, whatever suppressions exist.
-5. When every linked containment action is CONFIRMED, the case can move to CONTAINED (operational close). If no containment is needed, say why in a STATE entry.
-6. SOAR (Business): an integration with the `soar_integration` role may request narrow controls (`RequestControl`, with an idempotency key). It cannot engage the kill switch or lift anything. Results are CONFIRMED, FAILED, UNSUPPORTED or UNKNOWN (PARTIAL is reported as UNKNOWN with the paths).
+5. When every containment action of the case is CONFIRMED, the case can move to CONTAINED (operational close). The case's actions are those linked to it and those created with its `case_id`; a missing or unknown action counts as unconfirmed. If no containment is needed, say why in a STATE entry `no_containment_needed`.
+6. SOAR (Business): an integration with the `soar_integration` role may request controls on a run, agent, grant or connection (`RequestControl`, with an idempotency key). For a wide control the server computes and stores the preview itself; wide SOAR controls are capped at 10 per organization per rolling hour, beyond which they fail `RATE_LIMITED`. It cannot engage the kill switch or lift anything. Results are CONFIRMED, FAILED, UNSUPPORTED or UNKNOWN (PARTIAL is reported as UNKNOWN with the paths).
 
 ## 4. Restore
 
-Closing an incident or a case never lifts a control (HR-250). Lifting is a restoration:
+Closing an incident or a case never lifts a control, and neither does a control's expiry: at `expires_at` the system drafts a PROPOSED restoration plan and the control stays until the plan is decided (HR-250). Lifting is a restoration:
 
-1. Request restoration for the control. It becomes a RESTORATION waitlist entry with computed preconditions: identity re-verified, connection health, remediation and test results, remaining grants, waiting approvals.
-2. A reviewer independent of the requester, holding `agent.restore`, reviews the preconditions and decides.
+1. Request a restoration plan for the controls (`RequestRestoration`). The plan records the computed preconditions: identity re-verified, connection health, remediation and test results, remaining grants, waiting approvals.
+2. A person holding `agent.restore` decides it (`DecideRestoration`, APPROVE or DECLINE) with a security-key step-up at most 5 minutes old. The requester, the creator of any control in the plan and the principal of any control in the plan may not decide; service accounts and API keys are refused. An approval lifts the plan's controls in the same transaction. A suspended agent (M5) is still restored through its RESTORATION waitlist entry.
 3. Staged restoration (Team): restore a cohort or task scope first. Before widening, the plan's permitted and prohibited test actions run through the replay evaluator as a dry run; nothing is dispatched.
 4. Denied, expired, missed irreversible and ambiguous actions are never replayed. The agent must ask again and get fresh authorization.
 5. Lifting bumps the containment epoch; gateways follow within the usual revocation bound.

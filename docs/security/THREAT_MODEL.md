@@ -107,7 +107,7 @@ Connect APIs (gRPC/JSON) · MCP endpoint (Streamable HTTP, two spec versions) ·
 | T-022 | Gateway mTLS identity presented to an attacker-chosen host | A1, A11 | TB2 | Control-plane impersonation | HR-074 | M1.5 |
 | T-023 | DoS: CEL cost, oversized/deep input, counter cardinality, long-poll exhaustion, lock storms | A1, A8 | TB1/TB4 | Outage | HR-043, HR-057, HR-100; connection caps; rate limits | M4/M6 |
 | T-024 | Reservation leak or double release after crash | A11 | — | Budget drift | HR-003, HR-004 | M1.5 |
-| T-025 | Tool poisoning / rug pull (descriptions or behavior change) | A3 | TB9/TB2 | Agent manipulated; meaning drift | HR-081, HR-123; drift detection | M6/M10 |
+| T-025 | Tool poisoning / rug pull (descriptions or behavior change) | A3 | TB9/TB2 | Agent manipulated; meaning drift | HR-081, HR-123; drift detection (HR-244) | M6/M10 |
 | T-026 | Approval UI spoofing (confusables, bidi, agent-written text) | A1, A2 | TB4 | Phished approver | HR-033, HR-034, HR-102 | M5 |
 | T-027 | Sock-puppet second approver | A5, A7 | TB4 | Two-person rule defeated | HR-035; residual if IdP admin colludes | M5 |
 | T-028 | MCP elicitation/sampling phishing users or injecting prompts | A3 | TB2→TB1 | Secret disclosure | HR-082 | M6 |
@@ -130,7 +130,7 @@ Connect APIs (gRPC/JSON) · MCP endpoint (Streamable HTTP, two spec versions) ·
 | T-039 | Sandbox escape / DNS exfil / forged probe results | A1 | Sandbox | False ENFORCED claim | HR-121, HR-122, HR-213, HR-215, HR-218 | M9 |
 | T-040 | CI/supply-chain compromise (deps, actions, release hijack) | A10 | TB10 | Malicious release | HR-130..132 | M0 |
 | T-041 | Log injection / sensitive data in logs or traces | A1 | Logging | Leak, forged audit lines | SB-4 redaction types, JSON encoding, field caps | M1 |
-| T-042 | Permission-unsafe search/graph/count inference | A5, A8 | TB4/TB7 | Hidden record disclosure | Permission filters before aggregation; tests (F300, F320) | M10 |
+| T-042 | Permission-unsafe search/graph/count inference | A5, A8 | TB4/TB7 | Hidden record disclosure | Permission filters before aggregation (HR-247, HR-254, HR-257, HR-258); tests (F300, F320) | M10 |
 | T-043 | Customer admin abuses platform admin to read payloads or approve | A7 | TB4 | Privacy breach | Admin ≠ approver ≠ evidence reader (F583); audited restricted access | M2/M5 |
 | T-044 | Trusted-issuer mis-scoping: an entry bound by names or broad claims (any repository of an owner, any namespace), or silently widened, lets unintended workloads attest as an agent | A5, A7 | Attestation configuration | Impersonation, rogue admission | HR-140, HR-141 | M3 |
 | T-045 | Issuer key source abuse: a tenant-supplied issuer or key URL used for SSRF, a poisoned or stale key cache, unknown-`kid` refetch amplification | A8, A9 | Attestation | Internal network access, forged attestation, outage | HR-142, HR-071 | M3 |

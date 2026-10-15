@@ -22,18 +22,18 @@ A SET is accepted (202) only when all of these hold:
 - signed with RS256 or ES256 by a key from the pinned JWKS (cached 15 minutes; an unknown `kid` refetches at most once a minute). Headers `jku`, `x5u` and `jwk` are refused: keys never come from the token;
 - `iss` is the issuer; `aud` contains the audience; `iat` is within ±5 minutes; the `jti` was not seen from this transmitter in the last 7 days; exactly one event.
 
-Otherwise the answer is 400 with an RFC 8935 error code: `invalid_request`, `invalid_key`, `invalid_issuer`, `invalid_audience` or `authentication_failed`. Errors never say whether a subject matched a person.
+Otherwise the answer is 400 with an RFC 8935 error code: `invalid_request`, `invalid_key`, `invalid_issuer`, `invalid_audience` or `authentication_failed`.
 
 Events handled: CAEP `session-revoked`, `credential-change`; RISC `account-disabled`, `account-purged`, `credential-compromise`, `account-credential-change-required`. Other event types are recorded and ignored.
 
-Subjects (`sub_id`) in the formats `email`, `iss_sub` and `opaque` are matched to a person by verified email or by OIDC issuer and subject. An event with no match is recorded and opens nothing.
+Subjects (`sub_id`) in the formats `email`, `iss_sub` and `opaque` are matched to a person: `iss_sub` against the person's linked OIDC identity first; an email only for an ACTIVE person whose email is unique. The match basis is recorded. An email match only opens a case; the identity playbook acts on `iss_sub` matches only. An event with no match is recorded and opens nothing.
 
 ## 3. What happens on an event
 
 Without the playbook (the default): a case opens with the event, listing the grants the person issued, approved or is represented in, and their waiting approvals. A responder decides what to do ([incident-response.md](incident-response.md)). Nothing is contained automatically.
 
-With the identity playbook enabled, for the event types it lists:
-- a principal DENY_ALL containment control is added for the person, and controls for the grants they issued;
+With the identity playbook enabled, for the event types it lists and a subject matched by `iss_sub`:
+- a principal DENY_ALL containment control is added for the person, and controls for the grants they issued (nothing wider; the server computes and stores the preview);
 - the waiting approvals they requested or must decide are voided;
 - the case links all of it.
 
