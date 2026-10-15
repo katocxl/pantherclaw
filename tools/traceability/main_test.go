@@ -52,6 +52,24 @@ func TestDeliveryOrder(t *testing.T) {
 	}
 }
 
+func TestM11PartOneComesBetweenM12AndM10(t *testing.T) {
+	// G0 M11.1 (founder, 2026-10-15): the policy half of M11 lands after the
+	// preview and before M10; the automations half (M11) stays after M10.
+	if i := milestoneIndex("M11.1"); i < 0 || i <= milestoneIndex("M12") || i >= milestoneIndex("M10") {
+		t.Fatalf("milestone order %v: want M12 < M11.1 < M10", milestones)
+	}
+	rules := []Item{{ID: "HR-230", Due: "M11.1"}, {ID: "HR-200", Due: "M10"}, {ID: "HR-300", Due: "M11"}}
+	if got := Missing(rules, nil, map[string]bool{}, "M12"); len(got) != 0 {
+		t.Fatalf("through M12: %v, want nothing due", got)
+	}
+	if got := Missing(rules, nil, map[string]bool{}, "M11.1"); len(got) != 1 || !strings.HasPrefix(got[0], "HR-230") {
+		t.Fatalf("through M11.1: %v, want only HR-230", got)
+	}
+	if got := Missing(rules, nil, map[string]bool{}, "M10"); len(got) != 2 {
+		t.Fatalf("through M10: %v, want HR-230 and HR-200", got)
+	}
+}
+
 // TestCollectsSDKTests: the SDKs' Python and TypeScript tests count under
 // the Go test names (G0 M8); other files and names do not.
 func TestCollectsSDKTests(t *testing.T) {
