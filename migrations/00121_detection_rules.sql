@@ -20,7 +20,9 @@
 CREATE TABLE pc.custom_detection_rules (
     org_id          uuid        NOT NULL REFERENCES pc.orgs (id),
     id              uuid        NOT NULL,
-    rule_id         text        NOT NULL CHECK (rule_id ~ '^org\.[a-z][a-z0-9_]{0,62}(\.[a-z0-9_]{1,63}){0,3}$'),
+    -- At most 128 bytes, like every other rule_id column (HR-240).
+    rule_id         text        NOT NULL CHECK (char_length(rule_id) <= 128
+                                                AND rule_id ~ '^org\.[a-z][a-z0-9_]{0,62}(\.[a-z0-9_]{1,63}){0,3}$'),
     version         integer     NOT NULL CHECK (version >= 1),
     content         text        NOT NULL CHECK (octet_length(content) BETWEEN 1 AND 65536),
     content_digest  bytea       NOT NULL CHECK (octet_length(content_digest) = 32),

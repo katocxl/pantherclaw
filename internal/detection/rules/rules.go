@@ -163,8 +163,6 @@ var (
 	customID   = regexp.MustCompile(`^org\.[a-z][a-z0-9_]{0,62}(\.[a-z0-9_]{1,63}){0,3}$`)
 	versionRe  = regexp.MustCompile(`^[1-9][0-9]{0,8}$`)
 	kindRe     = regexp.MustCompile(`^[a-z][a-z0-9_]*(\.[a-z0-9_]+)*(\.\*)?$`)
-	atlasRe    = regexp.MustCompile(`^AML\.T[0-9]{4}(\.[0-9]{3})?$`)
-	owaspRe    = regexp.MustCompile(`^ASI(0[1-9]|10)$`)
 	fieldRe    = regexp.MustCompile(`^(kind|actor_type|actor_id|decision|reason|operation|mode|outcome|environment|destination_class|subjects\.[a-z_]+|attrs\.[a-z][a-z0-9_]{0,63})$`)
 	subjectFld = regexp.MustCompile(`^subjects\.([a-z_]+)$`)
 	testNameRe = regexp.MustCompile(`^[a-z0-9][a-z0-9 _.-]{0,79}$`)
@@ -178,7 +176,7 @@ func (r *Rule) Builtin() bool { return strings.HasPrefix(r.ID, "pc.") }
 func (r *Rule) Validate() error {
 	id := r.ID
 	switch {
-	case !builtinID.MatchString(id) && !customID.MatchString(id):
+	case len(id) > reflexdomain.MaxRuleIDSize || (!builtinID.MatchString(id) && !customID.MatchString(id)):
 		return invalid("", "id %q must be pc.<area>.<name> or org.<slug>", id)
 	case !versionRe.MatchString(r.Version):
 		return invalid(id, "version must be a positive integer")
@@ -202,12 +200,12 @@ func (r *Rule) Validate() error {
 		return invalid(id, "group must be one of %v", groups)
 	}
 	for _, a := range r.ATLAS {
-		if !atlasRe.MatchString(a) {
+		if !KnownATLAS(a) {
 			return invalid(id, "ATLAS technique %q", a)
 		}
 	}
 	for _, o := range r.OWASP {
-		if !owaspRe.MatchString(o) {
+		if !KnownOWASP(o) {
 			return invalid(id, "OWASP agentic risk %q", o)
 		}
 	}

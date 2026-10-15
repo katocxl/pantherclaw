@@ -105,6 +105,8 @@ func enrich(e *Event, r dbq.FeedTransactionsRow) {
 	add(reflexdomain.SubjectConnection, r.ConnectionID)
 	e.Subjects = dedupe(e.Subjects)
 	e.Operation, e.Environment, e.DestinationClass = r.Operation, r.EnvironmentID.String(), r.DestinationClass
+	// A simulated transaction is a test event: capped at ALERT, never paging (HR-222, D59 L5).
+	e.Test = e.Test || r.Simulated
 	if e.Mode == "" {
 		e.Mode = upper(r.Mode)
 	}

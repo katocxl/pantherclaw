@@ -235,14 +235,24 @@ func TestT017_SensitiveReadThenPublicWriteIsDetected(t *testing.T) {
 	if fires(t, "pc.sequence.read_then_disclose", write, read) {
 		t.Error("write then read fired")
 	}
+	// A newer read restarts the window (D59 M6): read at 0, read at 29m,
+	// write at 31m still fires.
+	second := read
+	second.At = "29m"
+	later := write
+	later.At = "31m"
+	if !fires(t, "pc.sequence.read_then_disclose", read, second, later) {
+		t.Error("an early read let a later disclosure through")
+	}
 }
 
 // TestT025_DefinitionDriftIsDetected: a drift report and a drift
 // quarantine raise pc.tools.drift; an ordinary package transition does
 // not; no rule lifts the quarantine (rules only raise signals).
 func TestT025_DefinitionDriftIsDetected(t *testing.T) {
-	if !fires(t, "pc.tools.drift", rules.TestEvent{Kind: "audit.connection.drift_reported", Subjects: map[string]string{"connection": "c1"}}) {
-		t.Error("drift report did not fire")
+	if fires(t, "pc.tools.drift", rules.TestEvent{Kind: "audit.connection.drift_reported", Subjects: map[string]string{"connection": "c1"},
+		Attrs: map[string]string{"simulated": "true"}}) {
+		t.Error("a simulated drift report fired (HR-222)")
 	}
 	if !fires(t, "pc.tools.drift", rules.TestEvent{
 		Kind:  "audit.package.transitioned",

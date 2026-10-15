@@ -76,7 +76,7 @@ func (s *Service) batchItem(ctx context.Context, tx db.TenantTx, q *dbq.Queries,
 	}
 	if !cred.IsZero() && len(e.Requirements) > 0 {
 		if ok, _ := apdomain.Check(e.Requirements[0], e.People[user], e.Context, cred); !ok {
-			return locked{}, binding, "", ErrNotEligible
+			return locked{}, binding, "", notEligible(id, e.Requirements[:1], e.People[user], e.Context, cred)
 		}
 	}
 	var a actionir.ActionIR
@@ -173,7 +173,7 @@ func (s *Service) BeginBatch(ctx context.Context, orgID ids.OrgID, r Responder, 
 			RequestIds: sorted, State: "PENDING",
 		})
 	})
-	return batch, hash, err
+	return batch, hash, s.recordRefusal(ctx, orgID, r.User, err)
 }
 
 // ApproveBatch records a batch approval from the approval page (HR-175):
@@ -257,7 +257,7 @@ func (s *Service) ApproveBatch(ctx context.Context, orgID ids.OrgID, r Responder
 		return event(ctx, tx, "approval.batch_approved", userActor(r.User), "", batch,
 			map[string]string{"requests": strconv.Itoa(len(items))})
 	})
-	return out, err
+	return out, s.recordRefusal(ctx, orgID, r.User, err)
 }
 
 func orNotWaiting(err error) error {

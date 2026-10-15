@@ -168,9 +168,10 @@ func coverageSnapshot(e *Event, body []byte) error {
 			Connection string `json:"connection"`
 			Operation  string `json:"operation"`
 		} `json:"scope"`
-		State    string `json:"state"`
-		Snapshot string `json:"snapshot"`
-		Closure  string `json:"closure"`
+		State         string `json:"state"`
+		Snapshot      string `json:"snapshot"`
+		Closure       string `json:"closure"`
+		PreviousState string `json:"previous_state"`
 	}
 	if err := json.Unmarshal(body, &b); err != nil {
 		return err
@@ -178,7 +179,7 @@ func coverageSnapshot(e *Event, body []byte) error {
 	e.Operation, e.Outcome = b.Scope.Operation, b.State
 	e.Subjects = appendID(e.Subjects, reflexdomain.SubjectAgent, b.Scope.Agent)
 	e.Subjects = appendID(e.Subjects, reflexdomain.SubjectConnection, b.Scope.Connection)
-	e.Attrs = attrs("state", b.State, "snapshot", b.Snapshot, "closure", b.Closure)
+	e.Attrs = attrs("state", b.State, "snapshot", b.Snapshot, "closure", b.Closure, "previous_state", b.PreviousState)
 	return nil
 }
 
@@ -285,6 +286,9 @@ func auditEntry(e *Event, body []byte) error {
 		return err
 	}
 	e.Outcome, e.Reason = b.Outcome, b.ReasonCode
+	// A simulated connection's or transaction's audit entry is a test event
+	// (HR-222, D59 L5).
+	e.Test = b.Details["simulated"] == "true"
 	if b.Object != nil {
 		if t, ok := objectTypes[b.Object.Type]; ok {
 			e.Subjects = appendID(e.Subjects, t, b.Object.ID)

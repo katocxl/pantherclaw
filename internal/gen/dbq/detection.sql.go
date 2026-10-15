@@ -64,15 +64,24 @@ func (q *Queries) AdvanceDetectionCursor(ctx context.Context, nextSeq int64, org
 	return result.RowsAffected(), nil
 }
 
-const countDetectionSeen = `-- name: CountDetectionSeen :one
-SELECT count(*)::int FROM pc.detection_seen WHERE org_id = $1 AND rule_id = $2
+const countDetectionSeenKey = `-- name: CountDetectionSeenKey :exec
+UPDATE pc.detection_rule_state SET seen_keys = seen_keys + 1
+WHERE org_id = $1 AND rule_id = $2
 `
 
-func (q *Queries) CountDetectionSeen(ctx context.Context, orgID ids.OrgID, ruleID string) (int32, error) {
-	row := q.db.QueryRow(ctx, countDetectionSeen, orgID, ruleID)
-	var column_1 int32
-	err := row.Scan(&column_1)
-	return column_1, err
+func (q *Queries) CountDetectionSeenKey(ctx context.Context, orgID ids.OrgID, ruleID string) error {
+	_, err := q.db.Exec(ctx, countDetectionSeenKey, orgID, ruleID)
+	return err
+}
+
+const countDetectionWindowGroup = `-- name: CountDetectionWindowGroup :exec
+UPDATE pc.detection_rule_state SET window_groups = window_groups + 1
+WHERE org_id = $1 AND rule_id = $2
+`
+
+func (q *Queries) CountDetectionWindowGroup(ctx context.Context, orgID ids.OrgID, ruleID string) error {
+	_, err := q.db.Exec(ctx, countDetectionWindowGroup, orgID, ruleID)
+	return err
 }
 
 const countPublishedCustomRules = `-- name: CountPublishedCustomRules :one
@@ -169,40 +178,15 @@ func (q *Queries) DetectionWindowCount(ctx context.Context, arg DetectionWindowC
 	return i, err
 }
 
-const detectionWindowGroups = `-- name: DetectionWindowGroups :one
-SELECT count(DISTINCT group_key)::int FROM pc.detection_window_buckets
-WHERE org_id = $1 AND rule_id = $2 AND bucket > $3
-`
-
-func (q *Queries) DetectionWindowGroups(ctx context.Context, orgID ids.OrgID, ruleID string, since time.Time) (int32, error) {
-	row := q.db.QueryRow(ctx, detectionWindowGroups, orgID, ruleID, since)
-	var column_1 int32
-	err := row.Scan(&column_1)
-	return column_1, err
-}
-
-const detectionWindowHasGroup = `-- name: DetectionWindowHasGroup :one
+const detectionWindowGroupKnown = `-- name: DetectionWindowGroupKnown :one
 SELECT EXISTS (
-    SELECT 1 FROM pc.detection_window_buckets
+    SELECT 1 FROM pc.detection_window_groups
     WHERE org_id = $1 AND rule_id = $2 AND group_key = $3
-      AND bucket > $4
 )::bool
 `
 
-type DetectionWindowHasGroupParams struct {
-	OrgID    ids.OrgID
-	RuleID   string
-	GroupKey string
-	Since    time.Time
-}
-
-func (q *Queries) DetectionWindowHasGroup(ctx context.Context, arg DetectionWindowHasGroupParams) (bool, error) {
-	row := q.db.QueryRow(ctx, detectionWindowHasGroup,
-		arg.OrgID,
-		arg.RuleID,
-		arg.GroupKey,
-		arg.Since,
-	)
+func (q *Queries) DetectionWindowGroupKnown(ctx context.Context, orgID ids.OrgID, ruleID string, groupKey string) (bool, error) {
+	row := q.db.QueryRow(ctx, detectionWindowGroupKnown, orgID, ruleID, groupKey)
 	var column_1 bool
 	err := row.Scan(&column_1)
 	return column_1, err
@@ -289,7 +273,8 @@ func (q *Queries) EnableDetectionRule(ctx context.Context, orgID ids.OrgID, rule
 
 const ensureDetectionCursor = `-- name: EnsureDetectionCursor :one
 
-INSERT INTO pc.detection_cursors (org_id) VALUES ($1)
+INSERT INTO pc.detection_cursors (org_id, seq)
+VALUES ($1, coalesce((SELECT h.seq FROM pc.ledger_heads h WHERE h.org_id = $1), 0))
 ON CONFLICT (org_id) DO UPDATE SET org_id = EXCLUDED.org_id
 RETURNING seq
 `
@@ -299,11 +284,32 @@ RETURNING seq
 //
 // Detection engine queries (G0 M10 D10, D13; HR-240, HR-241). Every query
 // runs inside db.InTenantTx and also filters by org_id explicitly.
+// A new cursor starts at the feed's head: detection never replays an
+// org's history when it is first enabled (D59 M4).
 func (q *Queries) EnsureDetectionCursor(ctx context.Context, orgID ids.OrgID) (int64, error) {
 	row := q.db.QueryRow(ctx, ensureDetectionCursor, orgID)
 	var seq int64
 	err := row.Scan(&seq)
 	return seq, err
+}
+
+const ensureDetectionRuleState = `-- name: EnsureDetectionRuleState :one
+INSERT INTO pc.detection_rule_state (org_id, rule_id) VALUES ($1, $2)
+ON CONFLICT (org_id, rule_id) DO UPDATE SET rule_id = EXCLUDED.rule_id
+RETURNING window_groups, seen_keys
+`
+
+type EnsureDetectionRuleStateRow struct {
+	WindowGroups int32
+	SeenKeys     int32
+}
+
+// The rule's state row, created on first use, with its counters (D59 M5).
+func (q *Queries) EnsureDetectionRuleState(ctx context.Context, orgID ids.OrgID, ruleID string) (EnsureDetectionRuleStateRow, error) {
+	row := q.db.QueryRow(ctx, ensureDetectionRuleState, orgID, ruleID)
+	var i EnsureDetectionRuleStateRow
+	err := row.Scan(&i.WindowGroups, &i.SeenKeys)
+	return i, err
 }
 
 const getCustomRule = `-- name: GetCustomRule :one
@@ -552,16 +558,18 @@ func (q *Queries) MarkDetectionOverflow(ctx context.Context, orgID ids.OrgID, ru
 	return result.RowsAffected(), nil
 }
 
-const pruneDetectionSeen = `-- name: PruneDetectionSeen :execrows
-DELETE FROM pc.detection_seen WHERE org_id = $1 AND last_seen < $2
+const pruneDetectionSeen = `-- name: PruneDetectionSeen :exec
+WITH gone AS (
+    DELETE FROM pc.detection_seen WHERE org_id = $1 AND last_seen < $2
+    RETURNING rule_id
+), n AS (SELECT rule_id, count(*)::int AS c FROM gone GROUP BY rule_id)
+UPDATE pc.detection_rule_state s SET seen_keys = greatest(s.seen_keys - n.c, 0)
+FROM n WHERE s.org_id = $1 AND s.rule_id = n.rule_id
 `
 
-func (q *Queries) PruneDetectionSeen(ctx context.Context, orgID ids.OrgID, before time.Time) (int64, error) {
-	result, err := q.db.Exec(ctx, pruneDetectionSeen, orgID, before)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
+func (q *Queries) PruneDetectionSeen(ctx context.Context, orgID ids.OrgID, before time.Time) error {
+	_, err := q.db.Exec(ctx, pruneDetectionSeen, orgID, before)
+	return err
 }
 
 const pruneDetectionSequences = `-- name: PruneDetectionSequences :execrows
@@ -574,6 +582,21 @@ func (q *Queries) PruneDetectionSequences(ctx context.Context, orgID ids.OrgID, 
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const pruneDetectionWindowGroups = `-- name: PruneDetectionWindowGroups :exec
+WITH gone AS (
+    DELETE FROM pc.detection_window_groups
+    WHERE org_id = $1 AND last_bucket < $2
+    RETURNING rule_id
+), n AS (SELECT rule_id, count(*)::int AS c FROM gone GROUP BY rule_id)
+UPDATE pc.detection_rule_state s SET window_groups = greatest(s.window_groups - n.c, 0)
+FROM n WHERE s.org_id = $1 AND s.rule_id = n.rule_id
+`
+
+func (q *Queries) PruneDetectionWindowGroups(ctx context.Context, orgID ids.OrgID, before time.Time) error {
+	_, err := q.db.Exec(ctx, pruneDetectionWindowGroups, orgID, before)
+	return err
 }
 
 const pruneDetectionWindows = `-- name: PruneDetectionWindows :execrows
@@ -683,6 +706,34 @@ func (q *Queries) SetDetectionRuleErrors(ctx context.Context, arg SetDetectionRu
 		arg.LastError,
 	)
 	return err
+}
+
+const touchDetectionWindowGroup = `-- name: TouchDetectionWindowGroup :one
+INSERT INTO pc.detection_window_groups (org_id, rule_id, group_key, last_bucket)
+VALUES ($1, $2, $3, $4)
+ON CONFLICT (org_id, rule_id, group_key) DO UPDATE
+    SET last_bucket = greatest(pc.detection_window_groups.last_bucket, EXCLUDED.last_bucket)
+RETURNING (xmax = 0)::bool AS inserted
+`
+
+type TouchDetectionWindowGroupParams struct {
+	OrgID    ids.OrgID
+	RuleID   string
+	GroupKey string
+	Bucket   time.Time
+}
+
+// Records a group as live; inserted reports a new group, counted below.
+func (q *Queries) TouchDetectionWindowGroup(ctx context.Context, arg TouchDetectionWindowGroupParams) (bool, error) {
+	row := q.db.QueryRow(ctx, touchDetectionWindowGroup,
+		arg.OrgID,
+		arg.RuleID,
+		arg.GroupKey,
+		arg.Bucket,
+	)
+	var inserted bool
+	err := row.Scan(&inserted)
+	return inserted, err
 }
 
 const upsertDetectionSeen = `-- name: UpsertDetectionSeen :exec

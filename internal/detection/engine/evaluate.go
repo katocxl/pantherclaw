@@ -181,15 +181,15 @@ func sequence(ctx context.Context, st State, c *Compiled, e feed.Event) (Result,
 			return Result{}, st.SetSequence(ctx, c.Rule.ID, group, p)
 		}
 	}
-	if !have {
-		ok, err := matches(0)
-		if err != nil || !ok {
-			return Result{}, err
-		}
-		return Result{}, st.SetSequence(ctx, c.Rule.ID, group,
-			Progress{Step: 1, Started: e.OccurredAt, Updated: e.OccurredAt, Evidence: []ids.UUID{e.ID}})
+	// An event matching the first step (re)starts the sequence from the
+	// newest match, so an early benign first step cannot run the window out
+	// before the real one (D59 M6).
+	ok, err = matches(0)
+	if err != nil || !ok {
+		return Result{}, err
 	}
-	return Result{}, nil
+	return Result{}, st.SetSequence(ctx, c.Rule.ID, group,
+		Progress{Step: 1, Started: e.OccurredAt, Updated: e.OccurredAt, Evidence: []ids.UUID{e.ID}})
 }
 
 // groupKeys map a rule's group (F603) to the subject it groups by.

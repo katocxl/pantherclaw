@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -123,12 +124,16 @@ func (e *Engine) Process(ctx context.Context, org ids.OrgID) (RunResult, error) 
 			return err
 		}
 		res.From, res.To = cursor, events[len(events)-1].Seq
-		set, err := e.ruleSet(ctx, tx, q, ents)
+		set, seed, err := e.ruleSet(ctx, tx, q, ents)
 		if err != nil {
 			return err
 		}
+		if err := e.lapsed(ctx, tx, ents); err != nil {
+			return err
+		}
 		st := e.state(tx)
-		errs := map[string]int{}
+		// Consecutive errors carry over between runs (D59 M3).
+		errs := maps.Clone(seed)
 		lastErr := map[string]string{}
 		for _, ev := range events {
 			if reflexdomain.ReflexKind(ev.Kind) {
@@ -142,29 +147,35 @@ func (e *Engine) Process(ctx context.Context, org ids.OrgID) (RunResult, error) 
 				}
 				r, err := Evaluate(ctx, st, c, ev)
 				if err != nil {
-					if !errors.Is(err, celenv.ErrEval) {
+					if !ruleError(err) {
 						return err
 					}
 					errs[id]++
 					lastErr[id] = truncate(err.Error(), 512)
 					continue
 				}
-				errs[id] = 0
 				if r.Overflow {
 					if err := e.overflow(ctx, tx, q, c); err != nil {
 						return err
 					}
 				}
 				if r.Fired == nil {
+					errs[id] = 0
 					continue
 				}
 				if _, err := e.Raiser.RaiseTx(ctx, tx, Signal(c, ev, *r.Fired)); err != nil {
-					return fmt.Errorf("detection: %s: %w", id, err)
+					if !ruleError(err) {
+						return fmt.Errorf("detection: %s: %w", id, err)
+					}
+					errs[id]++
+					lastErr[id] = truncate(err.Error(), 512)
+					continue
 				}
+				errs[id] = 0
 				res.Signals++
 			}
 		}
-		if err := e.saveErrors(ctx, tx, q, set, errs, lastErr); err != nil {
+		if err := e.saveErrors(ctx, tx, q, set, errs, seed, lastErr); err != nil {
 			return err
 		}
 		if err := st.Prune(ctx, e.now()); err != nil {
@@ -200,16 +211,20 @@ func (e *Engine) report(ctx context.Context, tx db.TenantTx, f reflexdomain.Fail
 // ruleSet is the rules that run for the org now: the built-in rules of the
 // edition and the published custom rules whose stored digest equals the
 // ledger-recorded one (HR-241), minus the auto-disabled ones.
-func (e *Engine) ruleSet(ctx context.Context, tx db.TenantTx, q *dbq.Queries, ents billing.Entitlements) ([]*Compiled, error) {
+func (e *Engine) ruleSet(ctx context.Context, tx db.TenantTx, q *dbq.Queries, ents billing.Entitlements) (
+	[]*Compiled, map[string]int, error,
+) {
 	states, err := q.DetectionRuleStates(ctx, tx.OrgID())
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	disabled := map[string]bool{}
+	seed := map[string]int{}
 	for _, s := range states {
 		if s.DisabledAt != nil {
 			disabled[s.RuleID] = true
 		}
+		seed[s.RuleID] = int(s.ConsecutiveErrors)
 	}
 	var out []*Compiled
 	for _, c := range e.Builtin {
@@ -219,11 +234,11 @@ func (e *Engine) ruleSet(ctx context.Context, tx db.TenantTx, q *dbq.Queries, en
 		out = append(out, c)
 	}
 	if e.Env == nil || !ents.CustomDetections() {
-		return out, nil
+		return out, seed, nil
 	}
 	custom, err := q.PublishedCustomRules(ctx, tx.OrgID())
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	for _, r := range custom {
 		if disabled[r.RuleID] {
@@ -237,13 +252,13 @@ func (e *Engine) ruleSet(ctx context.Context, tx db.TenantTx, q *dbq.Queries, en
 				Summary:  "Custom detection rule " + r.RuleID + " does not match its published digest, so it does not run.",
 				NextStep: "Publish the rule again from its reviewed source.",
 			}); err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 			continue
 		}
 		out = append(out, c)
 	}
-	return out, nil
+	return out, seed, nil
 }
 
 // ErrDigestMismatch reports a custom rule whose stored content does not
@@ -281,13 +296,13 @@ func (e *Engine) overflow(ctx context.Context, tx db.TenantTx, q *dbq.Queries, c
 	})
 }
 
-func (e *Engine) saveErrors(ctx context.Context, tx db.TenantTx, q *dbq.Queries, set []*Compiled, errs map[string]int,
+func (e *Engine) saveErrors(ctx context.Context, tx db.TenantTx, q *dbq.Queries, set []*Compiled, errs, seed map[string]int,
 	last map[string]string,
 ) error {
 	for _, c := range set {
 		id := c.Rule.ID
-		n, touched := errs[id]
-		if !touched {
+		n := errs[id]
+		if n == seed[id] {
 			continue
 		}
 		var le *string
@@ -321,4 +336,26 @@ func (e *Engine) saveErrors(ctx context.Context, tx db.TenantTx, q *dbq.Queries,
 		}
 	}
 	return nil
+}
+
+// ruleError reports an error that belongs to one rule rather than to the
+// database: a CEL evaluation error, or a signal or rule that does not
+// validate (checked before anything is written). Such errors count toward
+// the rule's auto-disable and never fail the batch, so one bad rule cannot
+// stall the org's detections (D59 H3, HR-240).
+func ruleError(err error) bool {
+	return errors.Is(err, celenv.ErrEval) || errors.Is(err, reflexdomain.ErrInvalidSignal) || errors.Is(err, rules.ErrInvalid)
+}
+
+// lapsed records, once while it stays open, that a lapsed licence stopped
+// the Business detections (D5, D59 L6).
+func (e *Engine) lapsed(ctx context.Context, tx db.TenantTx, ents billing.Entitlements) error {
+	if ents.Status != billing.StatusExpired {
+		return nil
+	}
+	return e.report(ctx, tx, reflexdomain.Failure{
+		Org: tx.OrgID(), Kind: FailureEditionLapsed, DedupeKey: FailureEditionLapsed,
+		Summary:  "The licence expired, so the Business detections and custom rules stopped; the Community rules still run.",
+		NextStep: "Renew the licence to run them again.",
+	})
 }

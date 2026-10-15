@@ -562,7 +562,7 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	gstore := &grantspg.Store{Pool: pool}
 	grants := &grantsapp.Service{
 		Repo: gstore, Subjects: gstore, Defs: &defspg.Store{Pool: pool}, Authz: grantsapp.SubjectAuthorizer{},
-		Clock: clock.System{}, Listing: gstore,
+		Clock: clock.System{}, Listing: gstore, Refusals: gstore,
 	}
 	runs := runsapp.New(pool).WithGrants(gstore)
 	if len(d.subjects) > 0 {

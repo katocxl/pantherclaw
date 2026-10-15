@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: BUSL-1.1
 # Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
 id: pc.identity.key_new_network
-version: "1"
+version: "2"
 title: Workload key used from a new network
 description: >-
   The same agent instance key presented a token from a network it had not
@@ -17,8 +17,17 @@ tests:
   - name: network changed
     fires: true
     events:
-      - {kind: audit.security.instance_network_changed, subjects: {instance: i1}}
+      - kind: audit.security.instance_network_changed
+        actor_type: system
+        actor_id: system
+        outcome: success
+        subjects: {instance: 01930000-0000-7000-8000-0000000000i1, agent: 01930000-0000-7000-8000-0000000000a1}
+        attrs: {object_type: instance, agent_id: 01930000-0000-7000-8000-0000000000a1, from_network: 10.0.0.0/24, to_network: 192.0.2.0/24}
   - name: an ordinary token
     fires: false
     events:
-      - {kind: audit.authn.token_issued, subjects: {instance: i1}}
+      - kind: audit.authn.token_issued
+        actor_type: instance
+        actor_id: 01930000-0000-7000-8000-0000000000i1
+        outcome: success
+        subjects: {instance: 01930000-0000-7000-8000-0000000000i1}

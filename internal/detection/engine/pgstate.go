@@ -32,22 +32,33 @@ func (p *PG) Window(ctx context.Context, rule, group string, at time.Time, dur t
 ) (int, bool, error) {
 	org := p.tx.OrgID()
 	since := at.Add(-dur)
-	has, err := p.q.DetectionWindowHasGroup(ctx, dbq.DetectionWindowHasGroupParams{OrgID: org, RuleID: rule, GroupKey: group, Since: since})
+	// The caps are checked against the rule's counters, in O(1) (D59 M5).
+	known, err := p.q.DetectionWindowGroupKnown(ctx, org, rule, group)
 	if err != nil {
 		return 0, false, err
 	}
 	overflow := false
-	if !has {
-		n, err := p.q.DetectionWindowGroups(ctx, org, rule, since)
+	if !known {
+		c, err := p.q.EnsureDetectionRuleState(ctx, org, rule)
 		if err != nil {
 			return 0, false, err
 		}
-		if int(n) >= p.MaxGroups {
+		if int(c.WindowGroups) >= p.MaxGroups {
 			group, overflow = OverflowKey, true
 		}
 	}
+	bucket := at.UTC().Truncate(Bucket)
+	inserted, err := p.q.TouchDetectionWindowGroup(ctx, dbq.TouchDetectionWindowGroupParams{OrgID: org, RuleID: rule, GroupKey: group, Bucket: bucket})
+	if err != nil {
+		return 0, false, err
+	}
+	if inserted && group != OverflowKey {
+		if err := p.q.CountDetectionWindowGroup(ctx, org, rule); err != nil {
+			return 0, false, err
+		}
+	}
 	if err := p.q.AddDetectionWindowEvent(ctx, dbq.AddDetectionWindowEventParams{
-		OrgID: org, RuleID: rule, GroupKey: group, Bucket: at.UTC().Truncate(Bucket), DistinctValue: distinct,
+		OrgID: org, RuleID: rule, GroupKey: group, Bucket: bucket, DistinctValue: distinct,
 	}); err != nil {
 		return 0, false, err
 	}
@@ -74,16 +85,21 @@ func (p *PG) Seen(ctx context.Context, rule string, key [32]byte, at time.Time, 
 		return false, false, err
 	}
 	if !known {
-		n, err := p.q.CountDetectionSeen(ctx, org, rule)
+		c, err := p.q.EnsureDetectionRuleState(ctx, org, rule)
 		if err != nil {
 			return false, false, err
 		}
-		if int(n) >= p.MaxSeen {
+		if int(c.SeenKeys) >= p.MaxSeen {
 			return false, true, nil
 		}
 	}
 	if err := p.q.UpsertDetectionSeen(ctx, dbq.UpsertDetectionSeenParams{OrgID: org, RuleID: rule, KeyHash: key[:], At: at}); err != nil {
 		return false, false, err
+	}
+	if !known {
+		if err := p.q.CountDetectionSeenKey(ctx, org, rule); err != nil {
+			return false, false, err
+		}
 	}
 	return !known || at.Sub(last) > horizon, false, nil
 }
@@ -120,11 +136,13 @@ func (p *PG) Prune(ctx context.Context, now time.Time) error {
 	if _, err := p.q.PruneDetectionWindows(ctx, org, now.Add(-MaxWindowAge)); err != nil {
 		return err
 	}
+	if err := p.q.PruneDetectionWindowGroups(ctx, org, now.Add(-MaxWindowAge)); err != nil {
+		return err
+	}
 	if _, err := p.q.PruneDetectionSequences(ctx, org, now.Add(-MaxWindowAge)); err != nil {
 		return err
 	}
-	_, err := p.q.PruneDetectionSeen(ctx, org, now.Add(-MaxSeenAge))
-	return err
+	return p.q.PruneDetectionSeen(ctx, org, now.Add(-MaxSeenAge))
 }
 
 // Retention of the engine's working memory: the longest window or

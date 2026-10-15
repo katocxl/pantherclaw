@@ -12,6 +12,8 @@ package engine
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"strings"
 	"time"
@@ -170,7 +172,10 @@ func key(e feed.Event, fs []string) (string, bool) {
 	}
 	k := strings.Join(parts, "|")
 	if len(k) > 500 {
-		k = k[:500]
+		// A long key is stored as its SHA-256, never cut inside a
+		// character (D59 L1).
+		sum := sha256.Sum256([]byte(k))
+		k = "sha256:" + hex.EncodeToString(sum[:])
 	}
 	return k, some
 }

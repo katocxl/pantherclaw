@@ -66,6 +66,8 @@ type Service struct {
 	Clock    clock.Clock
 	// Listing serves the API's list and state reads (optional elsewhere).
 	Listing Listing
+	// Refusals audits refused grant changes (optional; G0 M10 D59 H1).
+	Refusals RefusalRecorder
 }
 
 // IssueRequest asks for a new root grant.
@@ -91,7 +93,7 @@ func (s *Service) Issue(ctx context.Context, req IssueRequest) (domain.Grant, er
 		return domain.Grant{}, err
 	}
 	if !c.Human() {
-		return domain.Grant{}, ErrHumanOnly
+		return domain.Grant{}, s.refuse(ctx, c, "grant.issue", req.AgentID, ids.UUID{})
 	}
 	agent, err := s.grantableAgent(ctx, c, req.AgentID, PermGrantIssue)
 	if err != nil {
@@ -165,7 +167,7 @@ func (s *Service) Revise(ctx context.Context, req ReviseRequest) (domain.Grant, 
 		return domain.Grant{}, domain.Revision{}, err
 	}
 	if !c.Human() {
-		return domain.Grant{}, domain.Revision{}, ErrHumanOnly
+		return domain.Grant{}, domain.Revision{}, s.refuse(ctx, c, "grant.revise", ids.UUID{}, req.ID.UUID())
 	}
 	cur, err := s.grant(ctx, c.Org, req.ID)
 	if err != nil {
@@ -398,4 +400,34 @@ func grantEvent(actor evdomain.Actor, name string, g domain.Grant, details map[s
 // detail returns the domain's explanation without the sentinel's prefix.
 func detail(err, sentinel error) string {
 	return strings.TrimPrefix(err.Error(), sentinel.Error()+": ")
+}
+
+// RefusalRecorder audits a refused change in a transaction of its own.
+type RefusalRecorder interface {
+	RecordRefusal(ctx context.Context, org ids.OrgID, ev audit.Event) error
+}
+
+// refuse audits a non-human caller's attempt to issue or revise a grant as
+// grant.issue_refused, with the caller as actor and the attempted
+// operation (G0 M10 D59 H1, PN-006.3), and returns ErrHumanOnly. When the
+// audit cannot be written the refusal still stands.
+func (s *Service) refuse(ctx context.Context, c tapp.Caller, op string, agent, grant ids.UUID) error {
+	if s.Refusals == nil {
+		return ErrHumanOnly
+	}
+	details := map[string]string{"attempted": op}
+	obj := (*audit.Object)(nil)
+	if !agent.IsZero() {
+		details["agent"] = agent.String()
+	}
+	if !grant.IsZero() {
+		obj = &audit.Object{Type: "grant", ID: grant.String()}
+	}
+	if err := s.Refusals.RecordRefusal(context.WithoutCancel(ctx), c.Org, audit.Event{
+		Name: "grant.issue_refused", Actor: c.Actor(), Outcome: audit.Denied, ReasonCode: "HUMAN_ONLY", Object: obj,
+		Details: details,
+	}); err != nil {
+		return errors.Join(ErrHumanOnly, err)
+	}
+	return ErrHumanOnly
 }

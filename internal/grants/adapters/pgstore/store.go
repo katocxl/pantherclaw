@@ -811,3 +811,13 @@ func (s *Store) GrantInTx(ctx context.Context, tx db.TenantTx, org ids.OrgID, id
 	g, err := toGrant(org, fromGetGrant(row))
 	return g, err == nil, err
 }
+
+// RecordRefusal audits a refused grant change in a transaction of its own
+// (G0 M10 D59 H1): the refusal itself changes nothing, so its audit entry
+// is the only trace pc.authority.self_issue can read.
+func (s *Store) RecordRefusal(ctx context.Context, org ids.OrgID, ev audit.Event) error {
+	return s.Pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
+		_, err := audit.Record(ctx, tx, ev)
+		return err
+	})
+}
