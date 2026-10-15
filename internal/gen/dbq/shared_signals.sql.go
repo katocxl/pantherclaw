@@ -42,6 +42,93 @@ func (q *Queries) ActivateSSFTransmitter(ctx context.Context, arg ActivateSSFTra
 	return result.RowsAffected(), nil
 }
 
+const applyIdentityPlaybook = `-- name: ApplyIdentityPlaybook :execrows
+UPDATE pc.identity_playbooks
+SET enabled = $1, events = $2, version = version + 1, request_id = $3,
+    updated_at = now()
+WHERE org_id = $4 AND version = $5
+`
+
+type ApplyIdentityPlaybookParams struct {
+	Enabled     bool
+	Events      []string
+	RequestID   *ids.UUID
+	OrgID       ids.OrgID
+	BaseVersion int32
+}
+
+// Only from the version the request was made against.
+func (q *Queries) ApplyIdentityPlaybook(ctx context.Context, arg ApplyIdentityPlaybookParams) (int64, error) {
+	result, err := q.db.Exec(ctx, applyIdentityPlaybook,
+		arg.Enabled,
+		arg.Events,
+		arg.RequestID,
+		arg.OrgID,
+		arg.BaseVersion,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const consumeIdentityPlaybookCeremony = `-- name: ConsumeIdentityPlaybookCeremony :execrows
+UPDATE pc.webauthn_ceremonies SET consumed_at = now()
+WHERE org_id = $1 AND id = $2 AND purpose = 'BINDING'
+  AND identity_playbook_request_id = $3 AND user_id = $4
+  AND session_id = $5 AND challenge = $6 AND consumed_at IS NULL
+  AND expires_at > now()
+`
+
+type ConsumeIdentityPlaybookCeremonyParams struct {
+	OrgID     ids.OrgID
+	ID        ids.UUID
+	RequestID *ids.UUID
+	UserID    ids.UUID
+	SessionID ids.UUID
+	Challenge []byte
+}
+
+func (q *Queries) ConsumeIdentityPlaybookCeremony(ctx context.Context, arg ConsumeIdentityPlaybookCeremonyParams) (int64, error) {
+	result, err := q.db.Exec(ctx, consumeIdentityPlaybookCeremony,
+		arg.OrgID,
+		arg.ID,
+		arg.RequestID,
+		arg.UserID,
+		arg.SessionID,
+		arg.Challenge,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const decideIdentityPlaybookRequest = `-- name: DecideIdentityPlaybookRequest :execrows
+UPDATE pc.identity_playbook_requests SET state = $1, decided_at = now(), decided_reason = $2
+WHERE org_id = $3 AND id = $4 AND state = 'PENDING'
+`
+
+type DecideIdentityPlaybookRequestParams struct {
+	State  string
+	Reason *string
+	OrgID  ids.OrgID
+	ID     ids.UUID
+}
+
+func (q *Queries) DecideIdentityPlaybookRequest(ctx context.Context, arg DecideIdentityPlaybookRequestParams) (int64, error) {
+	result, err := q.db.Exec(ctx, decideIdentityPlaybookRequest,
+		arg.State,
+		arg.Reason,
+		arg.OrgID,
+		arg.ID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const deleteExpiredSSFEvents = `-- name: DeleteExpiredSSFEvents :execrows
 DELETE FROM pc.ssf_events WHERE org_id = $1 AND expires_at <= now()
 `
@@ -52,6 +139,99 @@ func (q *Queries) DeleteExpiredSSFEvents(ctx context.Context, orgID ids.OrgID) (
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const ensureIdentityPlaybook = `-- name: EnsureIdentityPlaybook :exec
+INSERT INTO pc.identity_playbooks (org_id) VALUES ($1) ON CONFLICT (org_id) DO NOTHING
+`
+
+func (q *Queries) EnsureIdentityPlaybook(ctx context.Context, orgID ids.OrgID) error {
+	_, err := q.db.Exec(ctx, ensureIdentityPlaybook, orgID)
+	return err
+}
+
+const expireIdentityPlaybookRequests = `-- name: ExpireIdentityPlaybookRequests :execrows
+UPDATE pc.identity_playbook_requests SET state = 'EXPIRED', decided_at = now(), decided_reason = 'EXPIRED'
+WHERE org_id = $1 AND state = 'PENDING' AND expires_at <= now()
+`
+
+func (q *Queries) ExpireIdentityPlaybookRequests(ctx context.Context, orgID ids.OrgID) (int64, error) {
+	result, err := q.db.Exec(ctx, expireIdentityPlaybookRequests, orgID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const getIdentityPlaybook = `-- name: GetIdentityPlaybook :one
+
+SELECT enabled, events, version, request_id, updated_at FROM pc.identity_playbooks WHERE org_id = $1
+`
+
+type GetIdentityPlaybookRow struct {
+	Enabled   bool
+	Events    []string
+	Version   int32
+	RequestID *ids.UUID
+	UpdatedAt time.Time
+}
+
+// Identity playbook (D38).
+func (q *Queries) GetIdentityPlaybook(ctx context.Context, orgID ids.OrgID) (GetIdentityPlaybookRow, error) {
+	row := q.db.QueryRow(ctx, getIdentityPlaybook, orgID)
+	var i GetIdentityPlaybookRow
+	err := row.Scan(
+		&i.Enabled,
+		&i.Events,
+		&i.Version,
+		&i.RequestID,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getIdentityPlaybookRequest = `-- name: GetIdentityPlaybookRequest :one
+SELECT id, kind, events, base_version, binding, required, state, requested_by, created_at, expires_at, decided_at,
+       decided_reason, (expires_at <= now())::bool AS expired
+FROM pc.identity_playbook_requests
+WHERE org_id = $1 AND id = $2
+`
+
+type GetIdentityPlaybookRequestRow struct {
+	ID            ids.UUID
+	Kind          string
+	Events        []string
+	BaseVersion   int32
+	Binding       []byte
+	Required      int16
+	State         string
+	RequestedBy   ids.UUID
+	CreatedAt     time.Time
+	ExpiresAt     time.Time
+	DecidedAt     *time.Time
+	DecidedReason *string
+	Expired       bool
+}
+
+func (q *Queries) GetIdentityPlaybookRequest(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (GetIdentityPlaybookRequestRow, error) {
+	row := q.db.QueryRow(ctx, getIdentityPlaybookRequest, orgID, iD)
+	var i GetIdentityPlaybookRequestRow
+	err := row.Scan(
+		&i.ID,
+		&i.Kind,
+		&i.Events,
+		&i.BaseVersion,
+		&i.Binding,
+		&i.Required,
+		&i.State,
+		&i.RequestedBy,
+		&i.CreatedAt,
+		&i.ExpiresAt,
+		&i.DecidedAt,
+		&i.DecidedReason,
+		&i.Expired,
+	)
+	return i, err
 }
 
 const getSSFTransmitter = `-- name: GetSSFTransmitter :one
@@ -102,6 +282,95 @@ func (q *Queries) GetSSFTransmitter(ctx context.Context, orgID ids.OrgID, iD ids
 		&i.LastRefusalCode,
 	)
 	return i, err
+}
+
+const identityPlaybookCeremony = `-- name: IdentityPlaybookCeremony :one
+SELECT challenge, (expires_at > now() AND consumed_at IS NULL)::bool AS live FROM pc.webauthn_ceremonies
+WHERE org_id = $1 AND id = $2 AND purpose = 'BINDING'
+  AND identity_playbook_request_id = $3 AND user_id = $4 AND session_id = $5
+`
+
+type IdentityPlaybookCeremonyParams struct {
+	OrgID     ids.OrgID
+	ID        ids.UUID
+	RequestID *ids.UUID
+	UserID    ids.UUID
+	SessionID ids.UUID
+}
+
+type IdentityPlaybookCeremonyRow struct {
+	Challenge []byte
+	Live      bool
+}
+
+func (q *Queries) IdentityPlaybookCeremony(ctx context.Context, arg IdentityPlaybookCeremonyParams) (IdentityPlaybookCeremonyRow, error) {
+	row := q.db.QueryRow(ctx, identityPlaybookCeremony,
+		arg.OrgID,
+		arg.ID,
+		arg.RequestID,
+		arg.UserID,
+		arg.SessionID,
+	)
+	var i IdentityPlaybookCeremonyRow
+	err := row.Scan(&i.Challenge, &i.Live)
+	return i, err
+}
+
+const insertIdentityPlaybookConfirmation = `-- name: InsertIdentityPlaybookConfirmation :execrows
+INSERT INTO pc.identity_playbook_confirmations (org_id, request_id, principal_id, credential_id)
+VALUES ($1, $2, $3, $4)
+ON CONFLICT DO NOTHING
+`
+
+type InsertIdentityPlaybookConfirmationParams struct {
+	OrgID        ids.OrgID
+	RequestID    ids.UUID
+	PrincipalID  ids.UUID
+	CredentialID ids.UUID
+}
+
+func (q *Queries) InsertIdentityPlaybookConfirmation(ctx context.Context, arg InsertIdentityPlaybookConfirmationParams) (int64, error) {
+	result, err := q.db.Exec(ctx, insertIdentityPlaybookConfirmation,
+		arg.OrgID,
+		arg.RequestID,
+		arg.PrincipalID,
+		arg.CredentialID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const insertIdentityPlaybookRequest = `-- name: InsertIdentityPlaybookRequest :exec
+INSERT INTO pc.identity_playbook_requests (org_id, id, kind, events, base_version, binding, required, requested_by)
+VALUES ($1, $2, $3, $4, $5, $6,
+        $7, $8)
+`
+
+type InsertIdentityPlaybookRequestParams struct {
+	OrgID       ids.OrgID
+	ID          ids.UUID
+	Kind        string
+	Events      []string
+	BaseVersion int32
+	Binding     []byte
+	Required    int16
+	RequestedBy ids.UUID
+}
+
+func (q *Queries) InsertIdentityPlaybookRequest(ctx context.Context, arg InsertIdentityPlaybookRequestParams) error {
+	_, err := q.db.Exec(ctx, insertIdentityPlaybookRequest,
+		arg.OrgID,
+		arg.ID,
+		arg.Kind,
+		arg.Events,
+		arg.BaseVersion,
+		arg.Binding,
+		arg.Required,
+		arg.RequestedBy,
+	)
+	return err
 }
 
 const insertSSFEvent = `-- name: InsertSSFEvent :execrows
@@ -178,6 +447,97 @@ func (q *Queries) InsertSSFTransmitter(ctx context.Context, arg InsertSSFTransmi
 		arg.CreatedBy,
 	)
 	return err
+}
+
+const listIdentityPlaybookConfirmations = `-- name: ListIdentityPlaybookConfirmations :many
+SELECT principal_id, credential_id, created_at FROM pc.identity_playbook_confirmations
+WHERE org_id = $1 AND request_id = $2
+ORDER BY created_at
+`
+
+type ListIdentityPlaybookConfirmationsRow struct {
+	PrincipalID  ids.UUID
+	CredentialID ids.UUID
+	CreatedAt    time.Time
+}
+
+func (q *Queries) ListIdentityPlaybookConfirmations(ctx context.Context, orgID ids.OrgID, requestID ids.UUID) ([]ListIdentityPlaybookConfirmationsRow, error) {
+	rows, err := q.db.Query(ctx, listIdentityPlaybookConfirmations, orgID, requestID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListIdentityPlaybookConfirmationsRow{}
+	for rows.Next() {
+		var i ListIdentityPlaybookConfirmationsRow
+		if err := rows.Scan(&i.PrincipalID, &i.CredentialID, &i.CreatedAt); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listIdentityPlaybookRequests = `-- name: ListIdentityPlaybookRequests :many
+SELECT id, kind, events, base_version, binding, required, state, requested_by, created_at, expires_at, decided_at,
+       decided_reason, (expires_at <= now())::bool AS expired
+FROM pc.identity_playbook_requests
+WHERE org_id = $1
+ORDER BY created_at DESC
+LIMIT 50
+`
+
+type ListIdentityPlaybookRequestsRow struct {
+	ID            ids.UUID
+	Kind          string
+	Events        []string
+	BaseVersion   int32
+	Binding       []byte
+	Required      int16
+	State         string
+	RequestedBy   ids.UUID
+	CreatedAt     time.Time
+	ExpiresAt     time.Time
+	DecidedAt     *time.Time
+	DecidedReason *string
+	Expired       bool
+}
+
+func (q *Queries) ListIdentityPlaybookRequests(ctx context.Context, orgID ids.OrgID) ([]ListIdentityPlaybookRequestsRow, error) {
+	rows, err := q.db.Query(ctx, listIdentityPlaybookRequests, orgID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListIdentityPlaybookRequestsRow{}
+	for rows.Next() {
+		var i ListIdentityPlaybookRequestsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Kind,
+			&i.Events,
+			&i.BaseVersion,
+			&i.Binding,
+			&i.Required,
+			&i.State,
+			&i.RequestedBy,
+			&i.CreatedAt,
+			&i.ExpiresAt,
+			&i.DecidedAt,
+			&i.DecidedReason,
+			&i.Expired,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listSSFEvents = `-- name: ListSSFEvents :many
@@ -300,6 +660,68 @@ func (q *Queries) ListSSFTransmitters(ctx context.Context, orgID ids.OrgID, afte
 	return items, nil
 }
 
+const lockIdentityPlaybook = `-- name: LockIdentityPlaybook :one
+SELECT enabled, events, version FROM pc.identity_playbooks WHERE org_id = $1 FOR UPDATE
+`
+
+type LockIdentityPlaybookRow struct {
+	Enabled bool
+	Events  []string
+	Version int32
+}
+
+func (q *Queries) LockIdentityPlaybook(ctx context.Context, orgID ids.OrgID) (LockIdentityPlaybookRow, error) {
+	row := q.db.QueryRow(ctx, lockIdentityPlaybook, orgID)
+	var i LockIdentityPlaybookRow
+	err := row.Scan(&i.Enabled, &i.Events, &i.Version)
+	return i, err
+}
+
+const lockIdentityPlaybookRequest = `-- name: LockIdentityPlaybookRequest :one
+SELECT id, kind, events, base_version, binding, required, state, requested_by, created_at, expires_at, decided_at,
+       decided_reason, (expires_at <= now())::bool AS expired
+FROM pc.identity_playbook_requests
+WHERE org_id = $1 AND id = $2
+FOR UPDATE
+`
+
+type LockIdentityPlaybookRequestRow struct {
+	ID            ids.UUID
+	Kind          string
+	Events        []string
+	BaseVersion   int32
+	Binding       []byte
+	Required      int16
+	State         string
+	RequestedBy   ids.UUID
+	CreatedAt     time.Time
+	ExpiresAt     time.Time
+	DecidedAt     *time.Time
+	DecidedReason *string
+	Expired       bool
+}
+
+func (q *Queries) LockIdentityPlaybookRequest(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (LockIdentityPlaybookRequestRow, error) {
+	row := q.db.QueryRow(ctx, lockIdentityPlaybookRequest, orgID, iD)
+	var i LockIdentityPlaybookRequestRow
+	err := row.Scan(
+		&i.ID,
+		&i.Kind,
+		&i.Events,
+		&i.BaseVersion,
+		&i.Binding,
+		&i.Required,
+		&i.State,
+		&i.RequestedBy,
+		&i.CreatedAt,
+		&i.ExpiresAt,
+		&i.DecidedAt,
+		&i.DecidedReason,
+		&i.Expired,
+	)
+	return i, err
+}
+
 const sSFAccepted = `-- name: SSFAccepted :exec
 UPDATE pc.ssf_transmitters SET last_event_at = now(), events_accepted = events_accepted + 1
 WHERE org_id = $1 AND id = $2
@@ -308,6 +730,79 @@ WHERE org_id = $1 AND id = $2
 func (q *Queries) SSFAccepted(ctx context.Context, orgID ids.OrgID, iD ids.UUID) error {
 	_, err := q.db.Exec(ctx, sSFAccepted, orgID, iD)
 	return err
+}
+
+const sSFPersonApprovals = `-- name: SSFPersonApprovals :many
+SELECT r.id FROM pc.approval_requests r
+LEFT JOIN pc.grants g ON g.org_id = r.org_id AND g.id = r.grant_id
+WHERE r.org_id = $1 AND r.state IN ('PENDING', 'EVIDENCE_REQUESTED', 'APPROVED')
+  AND (r.requested_by = $2
+       OR (g.grantor_kind = 'user' AND g.grantor_id = $2)
+       OR g.principal_user_id = $2
+       OR EXISTS (SELECT 1 FROM pc.approval_responses x
+                  WHERE x.org_id = r.org_id AND x.request_id = r.id AND x.user_id = $2
+                    AND x.kind IN ('APPROVE', 'STEP_UP') AND x.voided_at IS NULL))
+ORDER BY r.id
+LIMIT 100
+`
+
+// The person's waiting approvals: restorations they asked for, actions
+// under grants they issued or are the principal of, and requests where
+// their approval still counts.
+func (q *Queries) SSFPersonApprovals(ctx context.Context, orgID ids.OrgID, userID *ids.UUID) ([]ids.UUID, error) {
+	rows, err := q.db.Query(ctx, sSFPersonApprovals, orgID, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ids.UUID{}
+	for rows.Next() {
+		var id ids.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const sSFPersonGrants = `-- name: SSFPersonGrants :many
+SELECT g.id, (g.grantor_kind = 'user' AND g.grantor_id = $1)::bool AS issued
+FROM pc.grants g
+WHERE g.org_id = $2 AND g.state = 'ACTIVE'
+  AND ((g.grantor_kind = 'user' AND g.grantor_id = $1) OR g.principal_user_id = $1)
+ORDER BY g.id
+LIMIT 100
+`
+
+type SSFPersonGrantsRow struct {
+	ID     ids.UUID
+	Issued bool
+}
+
+// What a case about a person lists (D37): the active grants they issued,
+// are the principal of, or that a live approval of theirs concerns.
+func (q *Queries) SSFPersonGrants(ctx context.Context, userID ids.UUID, orgID ids.OrgID) ([]SSFPersonGrantsRow, error) {
+	rows, err := q.db.Query(ctx, sSFPersonGrants, userID, orgID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []SSFPersonGrantsRow{}
+	for rows.Next() {
+		var i SSFPersonGrantsRow
+		if err := rows.Scan(&i.ID, &i.Issued); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const sSFRefused = `-- name: SSFRefused :exec
@@ -382,6 +877,19 @@ WHERE org_id = $2 AND id = $3 AND case_id IS NULL
 
 func (q *Queries) SetSSFEventCase(ctx context.Context, caseID *ids.UUID, orgID ids.OrgID, iD ids.UUID) (int64, error) {
 	result, err := q.db.Exec(ctx, setSSFEventCase, caseID, orgID, iD)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const setSSFEventCaseNote = `-- name: SetSSFEventCaseNote :execrows
+UPDATE pc.ssf_events SET case_note = $1
+WHERE org_id = $2 AND id = $3 AND case_id IS NULL
+`
+
+func (q *Queries) SetSSFEventCaseNote(ctx context.Context, note *string, orgID ids.OrgID, iD ids.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, setSSFEventCaseNote, note, orgID, iD)
 	if err != nil {
 		return 0, err
 	}

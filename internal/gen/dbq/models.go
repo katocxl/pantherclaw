@@ -1234,6 +1234,39 @@ type PcHoldSlot struct {
 	UpdatedAt time.Time
 }
 
+type PcIdentityPlaybook struct {
+	OrgID     ids.OrgID
+	Enabled   bool
+	Events    []string
+	Version   int32
+	RequestID *ids.UUID
+	UpdatedAt time.Time
+}
+
+type PcIdentityPlaybookConfirmation struct {
+	OrgID        ids.OrgID
+	RequestID    ids.UUID
+	PrincipalID  ids.UUID
+	CredentialID ids.UUID
+	CreatedAt    time.Time
+}
+
+type PcIdentityPlaybookRequest struct {
+	OrgID         ids.OrgID
+	ID            ids.UUID
+	Kind          string
+	Events        []string
+	BaseVersion   int32
+	Binding       []byte
+	Required      int16
+	State         string
+	RequestedBy   ids.UUID
+	CreatedAt     time.Time
+	ExpiresAt     time.Time
+	DecidedAt     *time.Time
+	DecidedReason *string
+}
+
 type PcIncident struct {
 	OrgID     ids.OrgID
 	ID        ids.UUID
@@ -2102,6 +2135,7 @@ type PcSsfEvent struct {
 	MatchBasis    *string
 	Outcome       string
 	CaseID        *ids.UUID
+	CaseNote      *string
 	ReceivedAt    time.Time
 	ExpiresAt     time.Time
 }
@@ -2368,20 +2402,21 @@ type PcWaitlistSetting struct {
 }
 
 type PcWebauthnCeremony struct {
-	OrgID                 ids.OrgID
-	ID                    ids.UUID
-	SessionID             ids.UUID
-	UserID                ids.UUID
-	Purpose               string
-	Challenge             []byte
-	AllowedCredentials    [][]byte
-	CreatedAt             time.Time
-	ExpiresAt             time.Time
-	ConsumedAt            *time.Time
-	ApprovalRequestID     *ids.UUID
-	BatchID               *ids.UUID
-	ReconciliationID      *ids.UUID
-	PolicyChangeRequestID *ids.UUID
+	OrgID                     ids.OrgID
+	ID                        ids.UUID
+	SessionID                 ids.UUID
+	UserID                    ids.UUID
+	Purpose                   string
+	Challenge                 []byte
+	AllowedCredentials        [][]byte
+	CreatedAt                 time.Time
+	ExpiresAt                 time.Time
+	ConsumedAt                *time.Time
+	ApprovalRequestID         *ids.UUID
+	BatchID                   *ids.UUID
+	ReconciliationID          *ids.UUID
+	PolicyChangeRequestID     *ids.UUID
+	IdentityPlaybookRequestID *ids.UUID
 }
 
 type PcWebauthnCredential struct {

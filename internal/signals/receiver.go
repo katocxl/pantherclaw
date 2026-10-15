@@ -252,17 +252,25 @@ func (s *Service) record(ctx context.Context, tx db.TenantTx, org ids.OrgID, tid
 		details["match_basis"] = *p.MatchBasis
 		details["user"] = p.UserID.String()
 	}
-	if _, err := audit.Record(ctx, tx, audit.Event{
+	entry, err := audit.Record(ctx, tx, audit.Event{
 		Name: "signals.event_received", Actor: evdomain.Actor{Type: "ssf_transmitter", ID: tid.String()}, Outcome: audit.Success,
 		Object: &audit.Object{Type: "ssf_event", ID: p.ID.String()}, Details: details,
-	}); err != nil {
+	})
+	if err != nil {
 		return false, err
 	}
-	if p.Outcome == OutcomeAccepted && s.sink != nil {
-		return false, s.sink.Received(ctx, tx, Received{
-			Org: org, Transmitter: tid, Event: p.ID, EventType: set.EventType, User: *p.UserID, MatchBasis: *p.MatchBasis,
-			IssuedAt: set.IssuedAt,
-		})
+	if p.Outcome != OutcomeAccepted {
+		return false, nil
+	}
+	rec := Received{
+		Org: org, Transmitter: tid, Event: p.ID, EventType: set.EventType, User: *p.UserID, MatchBasis: *p.MatchBasis,
+		IssuedAt: set.IssuedAt,
+	}
+	if err := s.accepted(ctx, tx, rec, entry.ID); err != nil {
+		return false, err
+	}
+	if s.sink != nil {
+		return false, s.sink.Received(ctx, tx, rec)
 	}
 	return false, nil
 }

@@ -76,3 +76,107 @@ LIMIT 50;
 
 -- name: DeleteExpiredSSFEvents :execrows
 DELETE FROM pc.ssf_events WHERE org_id = sqlc.arg(org_id) AND expires_at <= now();
+
+-- name: SetSSFEventCaseNote :execrows
+UPDATE pc.ssf_events SET case_note = sqlc.arg(note)
+WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND case_id IS NULL;
+
+-- What a case about a person lists (D37): the active grants they issued,
+-- are the principal of, or that a live approval of theirs concerns.
+-- name: SSFPersonGrants :many
+SELECT g.id, (g.grantor_kind = 'user' AND g.grantor_id = sqlc.arg(user_id))::bool AS issued
+FROM pc.grants g
+WHERE g.org_id = sqlc.arg(org_id) AND g.state = 'ACTIVE'
+  AND ((g.grantor_kind = 'user' AND g.grantor_id = sqlc.arg(user_id)) OR g.principal_user_id = sqlc.arg(user_id))
+ORDER BY g.id
+LIMIT 100;
+
+-- The person's waiting approvals: restorations they asked for, actions
+-- under grants they issued or are the principal of, and requests where
+-- their approval still counts.
+-- name: SSFPersonApprovals :many
+SELECT r.id FROM pc.approval_requests r
+LEFT JOIN pc.grants g ON g.org_id = r.org_id AND g.id = r.grant_id
+WHERE r.org_id = sqlc.arg(org_id) AND r.state IN ('PENDING', 'EVIDENCE_REQUESTED', 'APPROVED')
+  AND (r.requested_by = sqlc.arg(user_id)
+       OR (g.grantor_kind = 'user' AND g.grantor_id = sqlc.arg(user_id))
+       OR g.principal_user_id = sqlc.arg(user_id)
+       OR EXISTS (SELECT 1 FROM pc.approval_responses x
+                  WHERE x.org_id = r.org_id AND x.request_id = r.id AND x.user_id = sqlc.arg(user_id)
+                    AND x.kind IN ('APPROVE', 'STEP_UP') AND x.voided_at IS NULL))
+ORDER BY r.id
+LIMIT 100;
+
+-- Identity playbook (D38).
+
+-- name: GetIdentityPlaybook :one
+SELECT enabled, events, version, request_id, updated_at FROM pc.identity_playbooks WHERE org_id = sqlc.arg(org_id);
+
+-- name: EnsureIdentityPlaybook :exec
+INSERT INTO pc.identity_playbooks (org_id) VALUES (sqlc.arg(org_id)) ON CONFLICT (org_id) DO NOTHING;
+
+-- name: LockIdentityPlaybook :one
+SELECT enabled, events, version FROM pc.identity_playbooks WHERE org_id = sqlc.arg(org_id) FOR UPDATE;
+
+-- name: ApplyIdentityPlaybook :execrows
+-- Only from the version the request was made against.
+UPDATE pc.identity_playbooks
+SET enabled = sqlc.arg(enabled), events = sqlc.arg(events), version = version + 1, request_id = sqlc.arg(request_id),
+    updated_at = now()
+WHERE org_id = sqlc.arg(org_id) AND version = sqlc.arg(base_version);
+
+-- name: InsertIdentityPlaybookRequest :exec
+INSERT INTO pc.identity_playbook_requests (org_id, id, kind, events, base_version, binding, required, requested_by)
+VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(kind), sqlc.arg(events), sqlc.arg(base_version), sqlc.arg(binding),
+        sqlc.arg(required), sqlc.arg(requested_by));
+
+-- name: GetIdentityPlaybookRequest :one
+SELECT id, kind, events, base_version, binding, required, state, requested_by, created_at, expires_at, decided_at,
+       decided_reason, (expires_at <= now())::bool AS expired
+FROM pc.identity_playbook_requests
+WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id);
+
+-- name: LockIdentityPlaybookRequest :one
+SELECT id, kind, events, base_version, binding, required, state, requested_by, created_at, expires_at, decided_at,
+       decided_reason, (expires_at <= now())::bool AS expired
+FROM pc.identity_playbook_requests
+WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id)
+FOR UPDATE;
+
+-- name: ListIdentityPlaybookRequests :many
+SELECT id, kind, events, base_version, binding, required, state, requested_by, created_at, expires_at, decided_at,
+       decided_reason, (expires_at <= now())::bool AS expired
+FROM pc.identity_playbook_requests
+WHERE org_id = sqlc.arg(org_id)
+ORDER BY created_at DESC
+LIMIT 50;
+
+-- name: DecideIdentityPlaybookRequest :execrows
+UPDATE pc.identity_playbook_requests SET state = sqlc.arg(state), decided_at = now(), decided_reason = sqlc.narg(reason)
+WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state = 'PENDING';
+
+-- name: ExpireIdentityPlaybookRequests :execrows
+UPDATE pc.identity_playbook_requests SET state = 'EXPIRED', decided_at = now(), decided_reason = 'EXPIRED'
+WHERE org_id = sqlc.arg(org_id) AND state = 'PENDING' AND expires_at <= now();
+
+-- name: InsertIdentityPlaybookConfirmation :execrows
+INSERT INTO pc.identity_playbook_confirmations (org_id, request_id, principal_id, credential_id)
+VALUES (sqlc.arg(org_id), sqlc.arg(request_id), sqlc.arg(principal_id), sqlc.arg(credential_id))
+ON CONFLICT DO NOTHING;
+
+-- name: ListIdentityPlaybookConfirmations :many
+SELECT principal_id, credential_id, created_at FROM pc.identity_playbook_confirmations
+WHERE org_id = sqlc.arg(org_id) AND request_id = sqlc.arg(request_id)
+ORDER BY created_at;
+
+-- name: IdentityPlaybookCeremony :one
+SELECT challenge, (expires_at > now() AND consumed_at IS NULL)::bool AS live FROM pc.webauthn_ceremonies
+WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND purpose = 'BINDING'
+  AND identity_playbook_request_id = sqlc.arg(request_id) AND user_id = sqlc.arg(user_id) AND session_id = sqlc.arg(session_id);
+
+-- name: ConsumeIdentityPlaybookCeremony :execrows
+UPDATE pc.webauthn_ceremonies SET consumed_at = now()
+WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND purpose = 'BINDING'
+  AND identity_playbook_request_id = sqlc.arg(request_id) AND user_id = sqlc.arg(user_id)
+  AND session_id = sqlc.arg(session_id) AND challenge = sqlc.arg(challenge) AND consumed_at IS NULL
+  AND expires_at > now();

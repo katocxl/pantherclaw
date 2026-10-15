@@ -96,6 +96,12 @@ type Service struct {
 	client *http.Client
 	// sink handles accepted events (cases, playbook); nil: record only.
 	sink Sink
+	// cases, container, raiser and notify handle accepted events (D37, D38);
+	// each may be nil (D49).
+	cases     reflexdomain.CaseOpener
+	container reflexdomain.Container
+	raiser    reflexdomain.Raiser
+	notify    Notifier
 	// editions gates the use cases and the receiver (Business, D5); nil
 	// is Community.
 	editions Editions
