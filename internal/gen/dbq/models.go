@@ -1241,6 +1241,17 @@ type PcMembership struct {
 	CreatedAt time.Time
 }
 
+type PcMetricSample struct {
+	OrgID     ids.OrgID
+	ID        ids.UUID
+	Metric    string
+	Dimension string
+	Bucket    time.Time
+	Value     pgtype.Float8
+	Collected bool
+	SampledAt time.Time
+}
+
 type PcNotification struct {
 	OrgID           ids.OrgID
 	ID              ids.UUID
@@ -1799,6 +1810,19 @@ type PcSandboxSessionConnection struct {
 	GatewayID          ids.UUID
 	PackageVersionID   ids.UUID
 	CredentialVersion  *int32
+}
+
+type PcSavedQuery struct {
+	OrgID       ids.OrgID
+	ID          ids.UUID
+	Owner       string
+	Name        string
+	Description string
+	Visibility  string
+	TeamID      *ids.UUID
+	Spec        []byte
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
 }
 
 type PcServiceAccount struct {
