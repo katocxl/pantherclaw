@@ -90,7 +90,7 @@ func with(ps ...[]Permission) []Permission {
 var roles = []Role{
 	{
 		Name: RoleOrgAdmin, Title: "Org Admin", Scopes: orgScope,
-		Description: "Administers the organization: hierarchy, users, invitations, roles and service accounts; imports tool packages and registers the org's package-signing keys; asks for policy exceptions, which only policy publishers confirm. Sets the Agent Waitlist's escalation chains and settings. Reads evidence and coverage. Cannot approve actions or see approval requests, restore suspended agents, publish policies, activate packages, issue grants, change guardrails, manage gateways and connections, engage the kill switch, resolve unknown outcomes, export evidence packs, exclude routes from coverage, set retention or capture, or read restricted evidence.",
+		Description: "Administers the organization: hierarchy, users, invitations, roles and service accounts; imports tool packages and registers the org's package-signing keys; asks for policy exceptions, which only policy publishers confirm. Sets the Agent Waitlist's escalation chains and settings. Reads evidence and coverage, and simulates policy versions over recorded decisions. Cannot approve actions or see approval requests, restore suspended agents, publish policies, activate packages, issue grants, change guardrails, manage gateways and connections, engage the kill switch, resolve unknown outcomes, export evidence packs, exclude routes from coverage, set retention or capture, or read restricted evidence.",
 		Permissions: with(basicReads, []Permission{
 			PermOrgUpdate, PermBusinessUnitManage, PermTeamManage, PermTeamMembersManage, PermEnvironmentManage,
 			PermUserRead, PermUserManage, PermInvitationRead, PermInvitationManage, PermRoleRead, PermRoleBind,
@@ -98,7 +98,7 @@ var roles = []Role{
 			PermWaitlistRead, PermWaitlistManage, PermIssuerRead, PermIssuerManage, PermFactRead, PermPackageImport,
 			PermPackageKeyManage, PermNotificationRead, PermNotificationManage, PermEvidenceRead, PermCoverageRead, PermRedteamRead,
 			PermPolicyExceptionRequest,
-			PermGitHubIdentityManage, PermGitHubIdentityProve, PermGitHubScanRun,
+			PermGitHubIdentityManage, PermGitHubIdentityProve, PermGitHubScanRun, PermPolicySimulate,
 		}, authorityReads, boundaryReads),
 	},
 	{
@@ -122,14 +122,14 @@ var roles = []Role{
 	},
 	{
 		Name: RolePolicyAuthor, Title: "Policy Author", Scopes: anyScope,
-		Description: "Drafts policies and grants in scope and asks for policy exceptions (human only); cannot publish them.",
-		Permissions: with(basicReads, []Permission{PermAgentRead, PermPolicyAuthor, PermFactRead, PermPolicyExceptionRequest}, authorityReads),
+		Description: "Drafts policies and grants in scope, simulates policy versions over recorded decisions and asks for policy exceptions (human only); cannot publish them.",
+		Permissions: with(basicReads, []Permission{PermAgentRead, PermPolicyAuthor, PermPolicySimulate, PermFactRead, PermPolicyExceptionRequest}, authorityReads),
 	},
 	{
 		Name: RolePolicyPublisher, Title: "Policy Publisher", Scopes: anyScope,
-		Description: "Publishes reviewed policies, asks for, confirms and revokes policy exceptions, changes guardrails, activates imported tool packages and registers fact providers in scope (human only). Cannot author policies or import packages.",
+		Description: "Publishes reviewed policies, asks for, confirms and revokes policy exceptions, changes guardrails, activates imported tool packages and registers fact providers in scope (human only); simulates policy versions over recorded decisions. Cannot author policies or import packages.",
 		Permissions: with(basicReads, []Permission{
-			PermAgentRead, PermPolicyPublish, PermGuardrailsManage, PermPackageActivate, PermFactRead,
+			PermAgentRead, PermPolicyPublish, PermPolicySimulate, PermGuardrailsManage, PermPackageActivate, PermFactRead,
 			PermFactProviderManage, PermServiceAccountRead, PermWaitlistRead, PermPolicyExceptionRequest,
 		}, authorityReads),
 	},

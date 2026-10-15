@@ -59,6 +59,7 @@ const (
 	PermAgentManage            Permission = "agent.manage"             // M3
 	PermPolicyAuthor           Permission = "policy.author"            // M4
 	PermPolicyPublish          Permission = "policy.publish"           // M4/M11, human only
+	PermPolicySimulate         Permission = "policy.simulate"          // M11.1
 	PermApprovalRespond        Permission = "approval.respond"         // M5, human only
 	PermIncidentRespond        Permission = "incident.respond"         // M10
 	PermEvidenceReadRestricted Permission = "evidence.read_restricted" // M7, human only
@@ -222,7 +223,7 @@ var catalog = []Permission{
 	PermWaitlistRead, PermWaitlistManage, PermApprovalRead, PermAgentRestore,
 	PermAgentEnroll, PermAgentAdmit,
 	PermIssuerRead, PermIssuerManage, PermIssuerActivate,
-	PermPolicyAuthor, PermPolicyPublish, PermPolicyRead, PermPolicyExceptionRequest,
+	PermPolicyAuthor, PermPolicyPublish, PermPolicyRead, PermPolicyExceptionRequest, PermPolicySimulate,
 	PermGrantRead, PermGrantIssue, PermGrantRevoke,
 	PermGuardrailsRead, PermGuardrailsManage, PermBudgetRead,
 	PermFactRead, PermFactProviderManage, PermFactWrite,

@@ -205,6 +205,10 @@ func (e Entitlements) PolicyRollout() bool { return e.Edition.Paid() }
 // (G0 M8, PN-001.2: Team and above).
 func (e Entitlements) GitHubOrgScan() bool { return e.Edition.Paid() }
 
+// PolicySimulation reports whether the edition simulates policy versions
+// over recorded decisions (G0 M11.1 D15, F187: Team and above).
+func (e Entitlements) PolicySimulation() bool { return e.Edition.Paid() }
+
 // MLDSACosign reports whether the edition includes ML-DSA-65 co-signatures
 // on checkpoints and pack manifests (G0 M7 decision 6, PN-007.5:
 // Enterprise).

@@ -1532,6 +1532,44 @@ type PcPolicyShadowResult struct {
 	CreatedAt        time.Time
 }
 
+type PcPolicySimulation struct {
+	OrgID            ids.OrgID
+	ID               ids.UUID
+	VersionID        ids.UUID
+	ContentDigest    []byte
+	WindowStart      time.Time
+	WindowEnd        time.Time
+	MaxEvaluations   int32
+	State            string
+	Evaluated        int32
+	Counts           []byte
+	ByWorkflow       []byte
+	Burden           []byte
+	CursorCreatedAt  *time.Time
+	CursorTxn        *ids.UUID
+	CursorEvaluation *int32
+	RequestedBy      string
+	CreatedAt        time.Time
+	StartedAt        *time.Time
+	FinishedAt       *time.Time
+	Error            *string
+}
+
+type PcPolicySimulationSample struct {
+	OrgID            ids.OrgID
+	SimulationID     ids.UUID
+	Category         string
+	TransactionID    ids.UUID
+	Evaluation       int32
+	AgentID          ids.UUID
+	Operation        string
+	OriginalDecision string
+	OriginalReason   string
+	ProposedDecision string
+	ProposedReason   string
+	Limitation       string
+}
+
 type PcPolicyTestRun struct {
 	OrgID             ids.OrgID
 	ID                ids.UUID

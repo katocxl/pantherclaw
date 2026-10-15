@@ -400,6 +400,9 @@ func cmdServe(ctx context.Context, args []string, stderr io.Writer, env Env, onS
 			return err
 		}
 		evidenceJobs = append(evidenceJobs, exceptionJobs...)
+		if err := registerSimulationJobs(jreg, pool, kp, log); err != nil {
+			return err
+		}
 		if err := authnapp.RegisterJanitor(jreg, pool, log); err != nil {
 			return err
 		}
@@ -586,6 +589,9 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	registerSandbox(rs, d)
 	registerRanges(rs, d, evidenceSvc)
 	registerPolicyRollouts(rs, d)
+	if err := registerSimulation(rs, d); err != nil {
+		return nil, err
+	}
 	registerReleases(rs, pool)
 	registerPolicyExceptions(rs, d)
 	mux := http.NewServeMux()
