@@ -1,0 +1,231 @@
+// SPDX-License-Identifier: BUSL-1.1
+// Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+
+syntax = "proto3";
+
+package pantherclaw.v1;
+
+import "buf/validate/validate.proto";
+import "google/protobuf/timestamp.proto";
+
+// PostureService is the posture remediation queue (G0 M10 D30; F265, F268;
+// HR-255; Business edition).
+//
+// Findings come from each breach-radius recomputation: excessive grants,
+// uncovered paths, unowned agents, unsafe delegation, stale credentials,
+// unused authority, unverified sensitive tools and credential overreach,
+// grouped by root cause. A finding moves OPEN -> ASSIGNED -> TESTING and is
+// REMEDIATED only when a recomputation shows that none of its affected
+// paths is reachable; no call here remediates. It may be accepted for at
+// most 90 days with a reason, or marked evidence-incomplete. Every move is
+// recorded in its history and the evidence ledger. Reads filter by the
+// caller's posture.read where each finding's agent lives; a finding with no
+// agent needs it at org scope.
+service PostureService {
+  // ListPostureFindings lists findings, newest first.
+  // permission: posture.read
+  rpc ListPostureFindings(ListPostureFindingsRequest) returns (ListPostureFindingsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // ListPostureRootCauses groups the active findings by root cause.
+  // permission: posture.read
+  rpc ListPostureRootCauses(ListPostureRootCausesRequest) returns (ListPostureRootCausesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // GetPostureFinding returns a finding and its history.
+  // permission: posture.read
+  rpc GetPostureFinding(GetPostureFindingRequest) returns (GetPostureFindingResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // AssignPostureFinding gives an active finding an owner.
+  // permission: posture.manage
+  rpc AssignPostureFinding(AssignPostureFindingRequest) returns (AssignPostureFindingResponse);
+  // StartPostureTesting marks an assigned finding's fix under test.
+  // permission: posture.manage
+  rpc StartPostureTesting(StartPostureTestingRequest) returns (StartPostureTestingResponse);
+  // AcceptPostureFinding accepts an active finding until a time at most 90
+  // days away, with a reason.
+  // permission: posture.manage
+  rpc AcceptPostureFinding(AcceptPostureFindingRequest) returns (AcceptPostureFindingResponse);
+  // MarkPostureEvidenceIncomplete records that the evidence to decide an
+  // active finding is missing.
+  // permission: posture.manage
+  rpc MarkPostureEvidenceIncomplete(MarkPostureEvidenceIncompleteRequest) returns (MarkPostureEvidenceIncompleteResponse);
+  // ReopenPostureFinding puts a finding back in the queue.
+  // permission: posture.manage
+  rpc ReopenPostureFinding(ReopenPostureFindingRequest) returns (ReopenPostureFindingResponse);
+  // AddPostureNote adds a note to a finding's history.
+  // permission: posture.manage
+  rpc AddPostureNote(AddPostureNoteRequest) returns (AddPostureNoteResponse);
+}
+
+enum PostureState {
+  POSTURE_STATE_UNSPECIFIED = 0;
+  POSTURE_STATE_OPEN = 1;
+  POSTURE_STATE_ASSIGNED = 2;
+  POSTURE_STATE_TESTING = 3;
+  POSTURE_STATE_REMEDIATED = 4;
+  POSTURE_STATE_ACCEPTED_TEMPORARILY = 5;
+  POSTURE_STATE_EVIDENCE_INCOMPLETE = 6;
+}
+
+message PostureFinding {
+  string id = 1;
+  // kind: excessive_grant, uncovered_path, unowned_agent,
+  // unsafe_delegation, stale_credential, unused_authority,
+  // unverified_sensitive_tool or credential_overreach.
+  string kind = 2;
+  string root_cause = 3;
+  string agent_id = 4;
+  string connection_id = 5;
+  string grant_id = 6;
+  string coverage_finding_id = 7;
+  string title = 8;
+  map<string, string> detail = 9;
+  // affected_paths are what a remediation must reach.
+  repeated string affected_paths = 10;
+  string severity = 11;
+  PostureState state = 12;
+  string owner_user_id = 13;
+  google.protobuf.Timestamp accept_until = 14;
+  string accept_reason = 15;
+  string last_snapshot_id = 16;
+  string remediated_snapshot_id = 17;
+  google.protobuf.Timestamp first_seen_time = 18;
+  google.protobuf.Timestamp last_seen_time = 19;
+  google.protobuf.Timestamp state_change_time = 20;
+}
+
+message PostureFindingEvent {
+  string kind = 1;
+  PostureState from_state = 2;
+  PostureState to_state = 3;
+  string actor = 4;
+  string note = 5;
+  string snapshot_id = 6;
+  google.protobuf.Timestamp time = 7;
+}
+
+message ListPostureFindingsRequest {
+  repeated PostureState states = 1 [(buf.validate.field).repeated = {
+    max_items: 6
+    items: {
+      enum: {
+        defined_only: true
+        not_in: [0]
+      }
+    }
+  }];
+  string kind = 2 [(buf.validate.field).string = {
+    in: ["", "excessive_grant", "uncovered_path", "unowned_agent", "unsafe_delegation", "stale_credential", "unused_authority", "unverified_sensitive_tool", "credential_overreach"]
+  }];
+  string root_cause = 3 [(buf.validate.field).string = {
+    max_len: 100
+    pattern: "^([a-z_]+:[0-9a-f-]{36})?$"
+  }];
+  int32 page_size = 4 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 200
+  }];
+  string page_token = 5 [(buf.validate.field).string = {
+    max_len: 256
+    pattern: "^[A-Za-z0-9_-]*$"
+  }];
+}
+
+message ListPostureFindingsResponse {
+  repeated PostureFinding findings = 1;
+  string next_page_token = 2;
+  // restricted: the caller's scope is narrower than the org.
+  bool restricted = 3;
+}
+
+message PostureRootCause {
+  string root_cause = 1;
+  int32 findings = 2;
+  string max_severity = 3;
+  repeated string kinds = 4;
+}
+
+message ListPostureRootCausesRequest {}
+
+message ListPostureRootCausesResponse {
+  repeated PostureRootCause root_causes = 1;
+  bool restricted = 2;
+}
+
+message GetPostureFindingRequest {
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+message GetPostureFindingResponse {
+  PostureFinding finding = 1;
+  repeated PostureFindingEvent events = 2;
+}
+
+message AssignPostureFindingRequest {
+  string id = 1 [(buf.validate.field).string.uuid = true];
+  string owner_user_id = 2 [(buf.validate.field).string.uuid = true];
+}
+
+message AssignPostureFindingResponse {
+  PostureFinding finding = 1;
+}
+
+message StartPostureTestingRequest {
+  string id = 1 [(buf.validate.field).string.uuid = true];
+  string note = 2 [(buf.validate.field).string.max_len = 1000];
+}
+
+message StartPostureTestingResponse {
+  PostureFinding finding = 1;
+}
+
+message AcceptPostureFindingRequest {
+  string id = 1 [(buf.validate.field).string.uuid = true];
+  google.protobuf.Timestamp until = 2 [(buf.validate.field).required = true];
+  string reason = 3 [(buf.validate.field).string = {
+    min_len: 10
+    max_len: 1000
+  }];
+}
+
+message AcceptPostureFindingResponse {
+  PostureFinding finding = 1;
+}
+
+message MarkPostureEvidenceIncompleteRequest {
+  string id = 1 [(buf.validate.field).string.uuid = true];
+  string note = 2 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 1000
+  }];
+}
+
+message MarkPostureEvidenceIncompleteResponse {
+  PostureFinding finding = 1;
+}
+
+message ReopenPostureFindingRequest {
+  string id = 1 [(buf.validate.field).string.uuid = true];
+  string note = 2 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 1000
+  }];
+}
+
+message ReopenPostureFindingResponse {
+  PostureFinding finding = 1;
+}
+
+message AddPostureNoteRequest {
+  string id = 1 [(buf.validate.field).string.uuid = true];
+  string note = 2 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 1000
+  }];
+}
+
+message AddPostureNoteResponse {
+  PostureFinding finding = 1;
+}
