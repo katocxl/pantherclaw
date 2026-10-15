@@ -76,10 +76,18 @@ func (e Event) validate() error {
 		return fmt.Errorf("%w: reason code must be UPPER_SNAKE", ErrInvalidEvent)
 	case e.Object != nil && (e.Object.Type == "" || len(e.Object.Type) > 64 || e.Object.ID == "" || len(e.Object.ID) > 256):
 		return fmt.Errorf("%w: object type (1..64) and id (1..256) are required", ErrInvalidEvent)
-	case len(e.Details) > maxDetails:
+	}
+	return ValidateDetails(e.Details)
+}
+
+// ValidateDetails checks small, non-secret context the way audit details
+// are checked: at most 16 lowercase keys, none suggesting a secret, values
+// of at most 512 bytes. Reflex signal facts reuse it (G0 M10 D1).
+func ValidateDetails(details map[string]string) error {
+	if len(details) > maxDetails {
 		return fmt.Errorf("%w: at most %d details", ErrInvalidEvent, maxDetails)
 	}
-	for k, v := range e.Details {
+	for k, v := range details {
 		if !keyPattern.MatchString(k) {
 			return fmt.Errorf("%w: detail key %q", ErrInvalidEvent, k)
 		}

@@ -233,3 +233,25 @@ func hasCode(err error, code string) bool {
 	var pgErr *pgconn.PgError
 	return errors.As(err, &pgErr) && pgErr.Code == code
 }
+
+// ErrTenantMismatch reports a transaction whose tenant context is not the
+// org a caller expected.
+var ErrTenantMismatch = pcerr.New(pcerr.Internal, "TENANT_MISMATCH", "tenant context mismatch")
+
+// AdoptTenantTx returns the TenantTx of a pgx transaction InTenantTx began
+// for org, for ports that pass a pgx.Tx across packages (the Reflex ports,
+// G0 M10 D1). It checks the transaction's tenant setting first, so it never
+// widens a transaction to another org or to none.
+func AdoptTenantTx(ctx context.Context, tx pgx.Tx, org ids.OrgID) (TenantTx, error) {
+	if org.IsZero() || tx == nil {
+		return TenantTx{}, ErrNoTenant
+	}
+	var current string
+	if err := tx.QueryRow(ctx, "SELECT coalesce(current_setting('app.org_id', true), '')").Scan(&current); err != nil {
+		return TenantTx{}, fmt.Errorf("db: read tenant: %w", err)
+	}
+	if current != org.String() {
+		return TenantTx{}, ErrTenantMismatch
+	}
+	return TenantTx{queryTx: queryTx{tx: tx}, org: org}, nil
+}

@@ -213,3 +213,49 @@ func (e Entitlements) PolicySimulation() bool { return e.Edition.Paid() }
 // on checkpoints and pack manifests (G0 M7 decision 6, PN-007.5:
 // Enterprise).
 func (e Entitlements) MLDSACosign() bool { return e.Edition == Enterprise }
+
+// Reflex editions (G0 M10 D5). Community keeps the core detections,
+// graduated containment, the kill switch, search, the run's "what actually
+// happened" view and the HR-037 variant-shopping rule: a hardening rule is
+// never edition-gated.
+
+// ReflexTeam reports whether the edition offers alert grouping (F603),
+// suppression (F616), alert notifications and digests (F620), staged
+// restoration (F568), residual follow-up (F571), the task-phase timeline
+// (F232) and operating metrics (F301): Team and above.
+func (e Entitlements) ReflexTeam() bool { return e.Edition.Paid() }
+
+// Cases reports whether the edition offers investigation cases (F237, F241,
+// F244, F248, F249, F251, F299): Team and above.
+func (e Entitlements) Cases() bool { return e.Edition.Paid() }
+
+// BreachRadius reports whether the edition offers breach radius and graphs
+// (F253–F260, F272, F274, F289, F293, F430): Team and above.
+func (e Entitlements) BreachRadius() bool { return e.Edition.Paid() }
+
+// AdvancedDetections reports whether the edition runs the sequence,
+// probing, delegation and behaviour-drift detections and typical-run
+// comparison (PN-006.4, PN-006.5, F399, F234): Business and above.
+func (e Entitlements) AdvancedDetections() bool { return e.businessPlus() }
+
+// CustomDetections reports whether the edition publishes custom detection
+// rules (PN-006.1, founder decision F4): Business and above.
+func (e Entitlements) CustomDetections() bool { return e.businessPlus() }
+
+// PostureRemediation reports whether the edition offers the posture
+// remediation queue and finding lifecycle (F265, F268): Business and above.
+func (e Entitlements) PostureRemediation() bool { return e.businessPlus() }
+
+// SIEMExport reports whether the edition exports OCSF events (PN-018):
+// Business and above.
+func (e Entitlements) SIEMExport() bool { return e.businessPlus() }
+
+// SOAR reports whether the edition accepts SOAR response requests (F541):
+// Business and above.
+func (e Entitlements) SOAR() bool { return e.businessPlus() }
+
+// SharedSignals reports whether the edition receives Shared Signals events
+// (PN-024): Business and above.
+func (e Entitlements) SharedSignals() bool { return e.businessPlus() }
+
+func (e Entitlements) businessPlus() bool { return e.Edition == Business || e.Edition == Enterprise }
