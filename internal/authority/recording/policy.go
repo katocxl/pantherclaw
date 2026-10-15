@@ -5,6 +5,7 @@ package recording
 
 import (
 	"fmt"
+	"slices"
 
 	"github.com/katocxl/pantherclaw/internal/authority/pipeline"
 	fdomain "github.com/katocxl/pantherclaw/internal/facts/domain"
@@ -24,22 +25,37 @@ func (p *Policy) Compile(b *pdomain.Bundle) (*pipeline.Policy, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &pipeline.Policy{Compiled: c, Version: p.Ref, Budget: p.Budget}, nil
+	return &pipeline.Policy{Compiled: c, Version: p.Ref, Budget: p.Budget, Exceptions: p.exceptions()}, nil
 }
 
 // Proposed compiles another bundle (a draft or a later version, F505) the
 // way the recorded policy was compiled. With no recorded policy, catalog
 // gives the fact types and the defaults the limits and budget.
 func (p *Policy) Proposed(b *pdomain.Bundle, catalog map[string]fdomain.Type) (*pipeline.Policy, error) {
+	var exceptions []pdomain.Exception
 	e, budget := &papp.Engine{Limits: celenv.DefaultLimits, Facts: catalog}, uint64(papp.DefaultBudget)
 	if p != nil && !p.None && p.Err == "" {
 		e, budget = p.engine(), p.Budget
+		// The agent's exceptions as recorded: they waive a rule of the
+		// proposed version only where it is exceptable with the same digest.
+		exceptions = p.exceptions()
 	}
 	c, err := e.Compile(b, nil)
 	if err != nil {
 		return nil, err
 	}
-	return &pipeline.Policy{Compiled: c, Version: fmt.Sprintf("%s@%d", b.ID, b.Version), Budget: budget}, nil
+	return &pipeline.Policy{Compiled: c, Version: fmt.Sprintf("%s@%d", b.ID, b.Version), Budget: budget, Exceptions: exceptions}, nil
+}
+
+// exceptions are the recorded exceptions as the pipeline reads them.
+func (p *Policy) exceptions() []pdomain.Exception {
+	var out []pdomain.Exception
+	for _, x := range p.Exceptions {
+		out = append(out, pdomain.Exception{
+			ID: x.ID, Rule: x.Rule, RuleDigest: x.RuleDigest, Operations: slices.Clone(x.Operations), ExpiresAt: x.ExpiresAt,
+		})
+	}
+	return out
 }
 
 func (p *Policy) engine() *papp.Engine {

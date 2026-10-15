@@ -127,6 +127,11 @@ func fromPolicy(p *pipeline.Policy, err error) *Policy {
 	for name, t := range p.Compiled.Catalog() {
 		out.Catalog[name] = string(t)
 	}
+	for _, x := range p.Exceptions {
+		out.Exceptions = append(out.Exceptions, Exception{
+			ID: x.ID, Rule: x.Rule, RuleDigest: x.RuleDigest, Operations: slices.Clone(x.Operations), ExpiresAt: x.ExpiresAt,
+		})
+	}
 	return out
 }
 

@@ -24,6 +24,7 @@ import (
 	gdomain "github.com/katocxl/pantherclaw/internal/grants/domain"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	papp "github.com/katocxl/pantherclaw/internal/policy/app"
+	pdomain "github.com/katocxl/pantherclaw/internal/policy/domain"
 )
 
 // ErrNotFound is returned by the Reader for a record that does not exist in
@@ -76,6 +77,11 @@ type Policy struct {
 	Version string
 	// Budget is the tenant's CEL cost budget per evaluation (HR-043).
 	Budget uint64
+	// Exceptions are the agent's active policy exceptions, read by the
+	// database clock in the decision's snapshot (G0 M11.1 D14, HR-235).
+	// Only rules exceptable in this version whose digest an exception
+	// names are waived, and only for the operations it lists.
+	Exceptions []pdomain.Exception
 }
 
 // Run is what the pipeline needs to know about a run (M3).

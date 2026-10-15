@@ -91,6 +91,16 @@ func (w *World) SetPolicy(rules []pdomain.Rule, catalog map[string]fdomain.Type)
 	return nil
 }
 
+// SetExceptions gives the published policy the agent's active policy
+// exceptions (G0 M11.1 D14), as the snapshot read would.
+func (w *World) SetExceptions(xs []pdomain.Exception) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	p := *w.policy
+	p.Exceptions = xs
+	w.policy = &p
+}
+
 // AddAgent registers an agent.
 func (w *World) AddAgent(id ids.UUID, a pipeline.Agent) {
 	w.mu.Lock()

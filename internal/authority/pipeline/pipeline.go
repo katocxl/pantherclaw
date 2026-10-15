@@ -773,7 +773,9 @@ func (p *Pipeline) boundaries(ctx context.Context, s *state) {
 	p.consequenceBoundaries(ctx, s)
 	p.budgets(ctx, s)
 	p.repeats(ctx, s)
-	if !slices.ContainsFunc(s.cl.items[start:], func(it Item) bool { return it.Step == StepBoundaries && it.Status != StatusPassed }) {
+	if !slices.ContainsFunc(s.cl.items[start:], func(it Item) bool {
+		return it.Step == StepBoundaries && it.Status != StatusPassed && it.Status != StatusWaived
+	}) {
 		s.cl.pass(StepBoundaries, ReasonWithinBoundaries)
 	}
 }
@@ -795,7 +797,7 @@ func (p *Pipeline) policyRules(ctx context.Context, s *state) {
 
 // policyInput is what the policy is evaluated with.
 func (s *state) policyInput() papp.Input {
-	in := papp.Input{Budget: s.policy.Budget, Facts: s.facts, Now: s.cont.Now}
+	in := papp.Input{Budget: s.policy.Budget, Facts: s.facts, Now: s.cont.Now, Waivers: s.waivers(s.a.Operation)}
 	if s.run != nil && s.run.AgentID == s.req.Identity.AgentID {
 		// The server's run record, found by the request's run id and checked
 		// against the agent's verified identity, never the request itself.
@@ -807,6 +809,13 @@ func (s *state) policyInput() papp.Input {
 		in.DestinationClass = s.conn.DestinationClass
 	}
 	return in
+}
+
+// waivers are the rules the agent's active policy exceptions waive for
+// an operation (G0 M11.1 D14): exceptable in the evaluated version, with
+// the digest the exception names, and the operation listed.
+func (s *state) waivers(operation string) map[string]string {
+	return pdomain.Waivers(s.policy.Compiled.Bundle, operation, s.policy.Exceptions)
 }
 
 // filePolicy files a policy outcome's items, approvals, step-ups and
@@ -827,6 +836,11 @@ func (s *state) filePolicy(out pdomain.Outcome, label string) int {
 		switch it.Status { //nolint:exhaustive // the remaining statuses only explain
 		case pdomain.StatusPassed:
 			continue // passing rules are summarized by the step's own item
+		case pdomain.StatusWaived:
+			// Shown with the exception that waived it, in the checklist and so
+			// the receipt (F2); it restricts nothing.
+			s.cl.items = append(s.cl.items, Item{Step: step, Check: stepChecks[step], Status: StatusWaived, Code: it.Reason, Detail: it.Detail, Level: level, effect: adomain.Allow})
+			continue
 		case pdomain.StatusAnnotated:
 			s.cl.items = append(s.cl.items, Item{Step: step, Check: stepChecks[step], Status: StatusAnnotated, Code: it.Reason, Level: level, effect: adomain.Allow})
 			continue

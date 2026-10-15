@@ -132,7 +132,19 @@ type Policy struct {
 	Budget  uint64            `json:"budget,omitzero"`
 	Limits  Limits            `json:"limits,omitzero"`
 	Catalog map[string]string `json:"catalog,omitzero"`
-	Err     string            `json:"err,omitzero"`
+	// Exceptions are the agent's active policy exceptions the evaluation
+	// read (G0 M11.1 D14); replay serves them as recorded.
+	Exceptions []Exception `json:"exceptions,omitzero"`
+	Err        string      `json:"err,omitzero"`
+}
+
+// Exception is an active policy exception read with the policy.
+type Exception struct {
+	ID         string    `json:"id"`
+	Rule       string    `json:"rule"`
+	RuleDigest string    `json:"rule_digest"`
+	Operations []string  `json:"operations"`
+	ExpiresAt  time.Time `json:"expires_at"`
 }
 
 // Limits are celenv.Limits.

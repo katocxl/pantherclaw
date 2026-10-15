@@ -195,6 +195,7 @@ func (p *Pipeline) consequenceBoundaries(ctx context.Context, s *state) {
 		}
 		in := s.policyInput()
 		in.Facts = k.facts
+		in.Waivers = s.waivers(k.ir.Operation)
 		in.Consequence = &papp.Consequence{Rule: k.c.Rule, State: string(k.c.State), Environments: k.c.Environments}
 		out, err := s.policy.Compiled.Evaluate(ctx, k.c.Definition, k.ir, in)
 		if err != nil {
