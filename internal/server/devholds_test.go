@@ -20,11 +20,15 @@ import (
 
 type devDefs struct{ ds []*defs.Definition }
 
-func (d devDefs) ActiveDefinitions(context.Context, ids.OrgID) ([]*defs.Definition, error) { return d.ds, nil }
+func (d devDefs) ActiveDefinitions(context.Context, ids.OrgID) ([]*defs.Definition, error) {
+	return d.ds, nil
+}
 
 type devCatalog map[string]fdomain.Type
 
-func (c devCatalog) Catalog(context.Context, ids.OrgID) (map[string]fdomain.Type, error) { return c, nil }
+func (c devCatalog) Catalog(context.Context, ids.OrgID) (map[string]fdomain.Type, error) {
+	return c, nil
+}
 
 // TestDevHoldBundlePassesTheGate (G0 M11.1 D10, D26): the dev seed's hold
 // policy passes its own scenario tests, every mutant killed, in an org with
