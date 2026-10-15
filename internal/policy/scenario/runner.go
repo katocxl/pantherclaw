@@ -19,11 +19,13 @@ package scenario
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
 	"time"
 
+	"github.com/katocxl/pantherclaw/internal/authority/consequences"
 	"github.com/katocxl/pantherclaw/internal/authority/pipeline"
 	defs "github.com/katocxl/pantherclaw/internal/definitions/domain"
 	fdomain "github.com/katocxl/pantherclaw/internal/facts/domain"
@@ -37,6 +39,15 @@ import (
 // (app.ActiveDefinitions).
 type Definitions interface {
 	ActiveDefinitions(ctx context.Context, org ids.OrgID) ([]*defs.Definition, error)
+}
+
+// Packages returns the decoded packages of the org's active versions,
+// with their consequence rules (definitions pgstore.Store.ActivePackages).
+// When the Definitions reader also implements it, a case's action decides
+// its consequences as the Authority does (M11.1 D28); without it, the
+// fixture has no consequence rules.
+type Packages interface {
+	ActivePackages(ctx context.Context, org ids.OrgID) ([]*defs.Package, error)
 }
 
 // Catalog returns the org's declared fact names and types
@@ -66,6 +77,7 @@ const RemoveRule = "remove rule"
 // port (internal/policy/app).
 type Runner struct {
 	defs   Definitions
+	pkgs   Packages
 	facts  Catalog
 	limits celenv.Limits
 	budget uint64
@@ -77,7 +89,8 @@ type Runner struct {
 // New returns a runner that compiles with limits and evaluates each case
 // with the tenant's CEL cost budget per evaluation (HR-043).
 func New(definitions Definitions, facts Catalog, limits celenv.Limits, budget uint64) *Runner {
-	return &Runner{defs: definitions, facts: facts, limits: limits, budget: budget, now: time.Now, mutate: mutantsOf}
+	pkgs, _ := definitions.(Packages)
+	return &Runner{defs: definitions, pkgs: pkgs, facts: facts, limits: limits, budget: budget, now: time.Now, mutate: mutantsOf}
 }
 
 // prepared is a case with its fixture, or why it could not be built.
@@ -127,6 +140,12 @@ func (r *Runner) Run(ctx context.Context, org ids.OrgID, b *pdomain.Bundle) (pdo
 	if err != nil {
 		return res, fmt.Errorf("scenario: fact catalog: %w", err)
 	}
+	var pkgs []*defs.Package
+	if r.pkgs != nil {
+		if pkgs, err = r.pkgs.ActivePackages(ctx, org); err != nil {
+			return res, fmt.Errorf("scenario: packages: %w", err)
+		}
+	}
 	res.DefinitionsDigest, res.CatalogDigest = pdomain.DefinitionsDigest(ds), pdomain.CatalogDigest(catalog)
 	version := fmt.Sprintf("%s@%d", b.ID, b.Version)
 	policy, err := r.compile(b, ds, catalog, version)
@@ -149,7 +168,7 @@ func (r *Runner) Run(ctx context.Context, org ids.OrgID, b *pdomain.Bundle) (pdo
 			cases[i].failed = why
 			continue
 		}
-		f, err := build(org, now, def, catalog, reads, tc)
+		f, err := build(org, now, def, consequencesOf(pkgs, def), catalog, reads, tc)
 		if err != nil {
 			cases[i].failed = err.Error()
 			continue
@@ -175,6 +194,9 @@ func (r *Runner) Run(ctx context.Context, org ids.OrgID, b *pdomain.Bundle) (pdo
 		res.Cases = append(res.Cases, cr)
 	}
 	mutants, err := r.mutate(b)
+	if errors.Is(err, errTooManyMutants) {
+		return tooLarge(res), nil
+	}
 	if err != nil {
 		res.Error = ErrBundleInvalid
 		return res, nil //nolint:nilerr // a condition that cannot be parsed did not compile either
@@ -190,7 +212,7 @@ func (r *Runner) Run(ctx context.Context, org ids.OrgID, b *pdomain.Bundle) (pdo
 		if err := ctx.Err(); err != nil {
 			return res, err
 		}
-		mp, err := r.compile(m.bundle, ds, catalog, version)
+		mp, err := r.compile(m.bundle(b), ds, catalog, version)
 		if err != nil {
 			// It can never be published, but no case showed that: listed,
 			// neither killed nor surviving (D26).
@@ -294,41 +316,75 @@ func httpReads(ds []*defs.Definition) []string {
 	return pkg.HTTPReads()
 }
 
-// mutant is a bundle with one change the tests must notice.
+// mutant is one change to a bundle the tests must notice: rule index's
+// condition replaced by mutation, or the rule removed. Its bundle is built
+// only when it is compiled (D32), so a run holds one mutant bundle at a
+// time, not one per mutant.
 type mutant struct {
 	rule, mutation string
-	bundle         *pdomain.Bundle
+	index          int
+	remove         bool
 }
+
+// bundle is b with the mutant's change, without tests.
+func (m mutant) bundle(b *pdomain.Bundle) *pdomain.Bundle {
+	c := *b
+	c.Tests = nil
+	if m.remove {
+		c.Rules = slices.Delete(slices.Clone(b.Rules), m.index, m.index+1)
+		return &c
+	}
+	c.Rules = slices.Clone(b.Rules)
+	c.Rules[m.index].When = m.mutation
+	return &c
+}
+
+// errTooManyMutants: the bundle has more than MaxMutants mutants.
+var errTooManyMutants = errors.New("scenario: too many mutants")
+
+// mutantsFor builds one condition's mutants (papp.Mutants; counted in
+// tests).
+var mutantsFor = papp.Mutants
 
 // mutantsOf lists every comparison mutant of every deciding rule's
 // condition (HR-044) and every deciding rule's removal, in rule order.
 // ANNOTATE rules decide nothing, so no case could notice a change to
-// them.
+// them. It counts as it goes and stops with errTooManyMutants before
+// building any rule's mutants that would pass MaxMutants (D26).
 func mutantsOf(b *pdomain.Bundle) ([]mutant, error) {
 	var out []mutant
-	with := func(edit func(rules []pdomain.Rule) []pdomain.Rule) *pdomain.Bundle {
-		c := *b
-		c.Rules = edit(slices.Clone(b.Rules))
-		c.Tests = nil
-		return &c
-	}
 	for i, rule := range b.Rules {
 		if rule.Kind == pdomain.Annotate {
 			continue
 		}
-		ms, err := papp.Mutants(rule.When)
+		n, err := papp.MutantCount(rule.When)
+		if err != nil {
+			return nil, err
+		}
+		if len(out)+n+1 > MaxMutants {
+			return nil, errTooManyMutants
+		}
+		ms, err := mutantsFor(rule.When)
 		if err != nil {
 			return nil, err
 		}
 		for _, m := range ms {
-			out = append(out, mutant{rule: rule.ID, mutation: m, bundle: with(func(rs []pdomain.Rule) []pdomain.Rule {
-				rs[i].When = m
-				return rs
-			})})
+			out = append(out, mutant{rule: rule.ID, mutation: m, index: i})
 		}
-		out = append(out, mutant{rule: rule.ID, mutation: RemoveRule, bundle: with(func(rs []pdomain.Rule) []pdomain.Rule {
-			return slices.Delete(rs, i, i+1)
-		})})
+		out = append(out, mutant{rule: rule.ID, mutation: RemoveRule, index: i, remove: true})
 	}
 	return out, nil
+}
+
+// consequencesOf are the consequence rules of the package version that
+// holds def (found by its digest), as the Authority reads them.
+func consequencesOf(pkgs []*defs.Package, def *defs.Definition) []consequences.Rule {
+	for _, p := range pkgs {
+		for i := range p.Definitions {
+			if p.Definitions[i].Digest == def.Digest {
+				return consequences.Of(p, def.Operation)
+			}
+		}
+	}
+	return nil
 }
