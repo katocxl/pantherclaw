@@ -144,6 +144,9 @@ CREATE TABLE pc.siem_batches (
     to_seq          bigint      NOT NULL,
     event_count     integer     NOT NULL CHECK (event_count BETWEEN 0 AND 100),
     body_bytes      integer     NOT NULL CHECK (body_bytes BETWEEN 0 AND 1048576),
+    -- Feed entries in the range too large for any batch (never expected):
+    -- recorded here and as an owned failure, never skipped silently (D64).
+    skipped_uids    uuid[]      NOT NULL DEFAULT '{}' CHECK (cardinality(skipped_uids) <= 500),
     state           text        NOT NULL DEFAULT 'PENDING' CHECK (state IN ('PENDING', 'DELIVERED', 'FAILED')),
     attempts        integer     NOT NULL DEFAULT 0 CHECK (attempts >= 0),
     next_attempt_at timestamptz NOT NULL DEFAULT now(),

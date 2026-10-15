@@ -92,7 +92,7 @@ func (s *Service) accepted(ctx context.Context, tx db.TenantTx, r Received, entr
 	if err != nil {
 		return err
 	}
-	approvals, err := q.SSFPersonApprovals(ctx, r.Org, &user)
+	counts, err := q.SSFPersonCounts(ctx, r.Org, user)
 	if err != nil {
 		return err
 	}
@@ -132,8 +132,12 @@ func (s *Service) accepted(ctx context.Context, tx db.TenantTx, r Received, entr
 			"Is this person's account compromised? The identity provider reported " + short + "; the person was matched by " + r.MatchBasis + ".",
 			"Which actions under the listed grants since " + r.IssuedAt.UTC().Format(time.RFC3339) + " did this person really take?",
 		}
-		if len(approvals) > 0 {
-			questions = append(questions, "Should the person's "+strconv.Itoa(len(approvals))+" waiting approvals stand?")
+		if listed := len(subjects) - 1; int(counts.Grants) > listed {
+			questions = append(questions, "The person has "+strconv.Itoa(int(counts.Grants))+" active grants; the case lists "+
+				strconv.Itoa(listed)+". Which of the others matter?")
+		}
+		if counts.Approvals > 0 {
+			questions = append(questions, "Should the person's "+strconv.Itoa(int(counts.Approvals))+" waiting approvals stand?")
 		}
 		caseID, err = s.cases.Open(ctx, tx.Pgx(), reflexdomain.CaseSeed{
 			Org: r.Org, Title: "Identity provider reported " + short, Source: reflexdomain.SourceSignals, Subjects: subjects,
@@ -164,14 +168,12 @@ func (s *Service) accepted(ctx context.Context, tx db.TenantTx, r Received, entr
 			return err
 		}
 	}
-	return s.playbookActs(ctx, tx, r, grants, approvals, caseID)
+	return s.playbookActs(ctx, tx, r, caseID)
 }
 
 // playbookActs runs the identity playbook for an accepted event (D38,
-// HR-262), in a savepoint.
-func (s *Service) playbookActs(ctx context.Context, tx db.TenantTx, r Received, grants []dbq.SSFPersonGrantsRow, approvals []ids.UUID,
-	caseID ids.UUID,
-) error {
+// HR-262).
+func (s *Service) playbookActs(ctx context.Context, tx db.TenantTx, r Received, caseID ids.UUID) error {
 	pb, err := playbookOf(ctx, dbq.New(tx), r.Org)
 	if err != nil {
 		return err
@@ -179,33 +181,66 @@ func (s *Service) playbookActs(ctx context.Context, tx db.TenantTx, r Received, 
 	if !pb.Enabled || !slices.Contains(pb.Events, r.EventType) {
 		return nil
 	}
-	if r.MatchBasis != "iss_sub" {
-		// An email match never acts (D46): the case states the basis.
-		return s.playbookNote(ctx, tx, r, "skipped", "MATCH_BY_EMAIL")
+	if r.MatchBasis != BasisIssSub {
+		// An email or foreign issuer match never acts (D46, D64): the case
+		// states the basis.
+		return s.playbookNote(ctx, tx, r, "skipped", "MATCH_NOT_ISS_SUB")
 	}
 	if s.container == nil {
 		return s.playbookFailed(ctx, tx, r, "containment is unavailable on this server")
 	}
-	sp, err := tx.Pgx().Begin(ctx)
+	res, err := s.contain(ctx, tx, r, caseID)
 	if err != nil {
 		return err
 	}
-	if err := s.contain(ctx, sp, r, grants, approvals, caseID); err != nil {
-		_ = sp.Rollback(ctx)
-		s.log.WarnContext(ctx, "signals.playbook_failed", slog.String("event", r.Event.String()), pclog.Err(err))
-		return s.playbookFailed(ctx, tx, r, "a containment request failed")
+	if _, err := audit.Record(ctx, tx, audit.Event{
+		Name: "signals.playbook_acted", Actor: evdomain.Actor{Type: "system", ID: PlaybookActor.ID}, Outcome: audit.Success,
+		Object: &audit.Object{Type: "ssf_event", ID: r.Event.String()},
+		Details: map[string]string{
+			"user": r.User.String(), "event_type": ShortName(r.EventType), "principal_contained": strconv.FormatBool(res.principal),
+			"grants_contained": strconv.Itoa(res.grants), "grants_not_contained": strconv.Itoa(res.grantsMissed),
+			"approvals_voided": strconv.Itoa(res.approvals), "approvals_not_voided": strconv.Itoa(res.approvalsMissed),
+		},
+	}); err != nil {
+		return err
 	}
-	return sp.Commit(ctx)
+	if res.complete() {
+		return nil
+	}
+	return s.playbookFailed(ctx, tx, r, res.shortfall())
 }
 
-// contain asks Response for a principal DENY_ALL on the person and a
-// DENY_ALL on each grant they issued (the only scopes the playbook may
-// ask for, D50), then voids the person's waiting approvals. Each request
-// is idempotent per event and scope; no preview digest is sent (Response
-// records its own preview).
-func (s *Service) contain(ctx context.Context, sp pgx.Tx, r Received, grants []dbq.SSFPersonGrantsRow, approvals []ids.UUID,
-	caseID ids.UUID,
-) error {
+// containResult counts what the playbook did and did not do.
+type containResult struct {
+	principal                  bool
+	grants, grantsMissed       int
+	approvals, approvalsMissed int
+}
+
+func (c containResult) complete() bool {
+	return c.principal && c.grantsMissed == 0 && c.approvalsMissed == 0
+}
+
+func (c containResult) shortfall() string {
+	out := ""
+	if !c.principal {
+		out = "the person was not contained; "
+	}
+	return out + strconv.Itoa(c.grantsMissed) + " of " + strconv.Itoa(c.grants+c.grantsMissed) + " issued grants not contained and " +
+		strconv.Itoa(c.approvalsMissed) + " of " + strconv.Itoa(c.approvals+c.approvalsMissed) + " waiting approvals not voided; contain by hand"
+}
+
+// playbookPage is how many grants or approvals one query reads.
+const playbookPage = 500
+
+// contain asks Response for a principal DENY_ALL on the person, then a
+// DENY_ALL on every grant they issued (the only scopes the playbook may
+// ask for, D50), then voids every waiting approval of theirs, paging with
+// no cap (D64). The principal control commits in its own savepoint first,
+// and every later request in its own, so one failure never undoes the
+// others (D64 L3); failures are counted. Each request is idempotent per
+// event and scope; no preview digest is sent (Response records its own).
+func (s *Service) contain(ctx context.Context, tx db.TenantTx, r Received, caseID ids.UUID) (containResult, error) {
 	var caseRef *ids.UUID
 	if !caseID.IsZero() {
 		caseRef = &caseID
@@ -217,38 +252,72 @@ func (s *Service) contain(ctx context.Context, sp pgx.Tx, r Received, grants []d
 			Idempotency: "playbook:" + r.Event.String() + ":" + scope.String(),
 		}
 	}
-	contained := 0
-	if _, err := s.container.Contain(ctx, sp, req(reflexdomain.Subject{Type: reflexdomain.SubjectUser, ID: r.User.String()})); err != nil {
-		return err
-	}
-	contained++
-	for _, g := range grants {
-		if !g.Issued {
-			continue
-		}
-		if _, err := s.container.Contain(ctx, sp, req(reflexdomain.Subject{Type: reflexdomain.SubjectGrant, ID: g.ID.String()})); err != nil {
+	contain := func(scope reflexdomain.Subject) func(pgx.Tx) error {
+		return func(sp pgx.Tx) error {
+			_, err := s.container.Contain(ctx, sp, req(scope))
 			return err
 		}
-		contained++
 	}
-	tx, err := db.AdoptTenantTx(ctx, sp, r.Org)
+	var res containResult
+	res.principal = s.attempt(ctx, tx, r, contain(reflexdomain.Subject{Type: reflexdomain.SubjectUser, ID: r.User.String()}))
+	q := dbq.New(tx)
+	for after := (*ids.UUID)(nil); ; {
+		page, err := q.SSFIssuedGrantsPage(ctx, dbq.SSFIssuedGrantsPageParams{OrgID: r.Org, UserID: r.User, AfterID: after, MaxRows: playbookPage})
+		if err != nil {
+			return res, err
+		}
+		for _, g := range page {
+			if s.attempt(ctx, tx, r, contain(reflexdomain.Subject{Type: reflexdomain.SubjectGrant, ID: g.String()})) {
+				res.grants++
+			} else {
+				res.grantsMissed++
+			}
+		}
+		if len(page) < playbookPage {
+			break
+		}
+		last := page[len(page)-1]
+		after = &last
+	}
+	for after := (*ids.UUID)(nil); ; {
+		page, err := q.SSFPersonApprovalsPage(ctx, dbq.SSFPersonApprovalsPageParams{OrgID: r.Org, UserID: r.User, AfterID: after, MaxRows: playbookPage})
+		if err != nil {
+			return res, err
+		}
+		for _, a := range page {
+			if s.attempt(ctx, tx, r, func(sp pgx.Tx) error {
+				stx, err := db.AdoptTenantTx(ctx, sp, r.Org)
+				if err != nil {
+					return err
+				}
+				return pgapprovals.Invalidate(ctx, stx, r.Org, a, "IDENTITY_PLAYBOOK")
+			}) {
+				res.approvals++
+			} else {
+				res.approvalsMissed++
+			}
+		}
+		if len(page) < playbookPage {
+			break
+		}
+		last := page[len(page)-1]
+		after = &last
+	}
+	return res, nil
+}
+
+// attempt runs f in its own savepoint and reports whether it committed.
+func (s *Service) attempt(ctx context.Context, tx db.TenantTx, r Received, f func(pgx.Tx) error) bool {
+	sp, err := tx.Pgx().Begin(ctx)
 	if err != nil {
-		return err
+		return false
 	}
-	for _, a := range approvals {
-		if err := pgapprovals.Invalidate(ctx, tx, r.Org, a, "IDENTITY_PLAYBOOK"); err != nil {
-			return err
-		}
+	if err := f(sp); err != nil {
+		_ = sp.Rollback(ctx)
+		s.log.WarnContext(ctx, "signals.playbook_step_failed", slog.String("event", r.Event.String()), pclog.Err(err))
+		return false
 	}
-	_, err = audit.Record(ctx, tx, audit.Event{
-		Name: "signals.playbook_acted", Actor: evdomain.Actor{Type: "system", ID: PlaybookActor.ID}, Outcome: audit.Success,
-		Object: &audit.Object{Type: "ssf_event", ID: r.Event.String()},
-		Details: map[string]string{
-			"user": r.User.String(), "event_type": ShortName(r.EventType), "controls": strconv.Itoa(contained),
-			"approvals_voided": strconv.Itoa(len(approvals)),
-		},
-	})
-	return err
+	return sp.Commit(ctx) == nil
 }
 
 // playbookNote records what the playbook did (or why it did not act).

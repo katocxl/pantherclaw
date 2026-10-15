@@ -29,9 +29,12 @@ import (
 const (
 	// MaxBody is the largest request body read.
 	MaxBody = setverify.MaxToken
-	// RateLimit and RateWindow bound the requests of one transmitter.
-	RateLimit  = 120
-	RateWindow = time.Minute
+	// RateLimit and RateWindow bound the header-valid tokens of one
+	// transmitter; IPRateLimit bounds the requests of one source address
+	// before anything is parsed (D64 L2).
+	RateLimit   = 120
+	IPRateLimit = 240
+	RateWindow  = time.Minute
 	// ContentType is the RFC 8935 push media type.
 	ContentType = "application/secevent+jwt"
 )
@@ -96,11 +99,16 @@ type Sink interface {
 type Receiver struct {
 	s       *Service
 	limiter *httpx.Limiter
+	byIP    *httpx.Limiter
 }
 
-// Receiver returns the push endpoint's handler.
-func (s *Service) Receiver() *Receiver {
-	return &Receiver{s: s, limiter: httpx.NewLimiter(RateLimit, RateWindow, s.clock)}
+// Receiver returns the push endpoint's handler; clientIP resolves the
+// source address behind trusted proxies (nil: the remote address).
+func (s *Service) Receiver(clientIP httpx.ClientIPFunc) *Receiver {
+	return &Receiver{
+		s: s, limiter: httpx.NewLimiter(RateLimit, RateWindow, s.clock),
+		byIP: httpx.NewLimiter(IPRateLimit, RateWindow, s.clock).WithClientIP(clientIP),
+	}
 }
 
 // Mount installs the endpoint on mux.
@@ -132,9 +140,15 @@ func (h *Receiver) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, setverify.CodeInvalidRequest, "unknown transmitter")
 		return
 	}
-	if !h.limiter.Allow(org.String() + "/" + tid.String()) {
+	tooMany := func() {
 		w.Header().Set("Retry-After", "60")
 		writeError(w, http.StatusTooManyRequests, setverify.CodeInvalidRequest, "too many requests")
+	}
+	// A source address is limited before anything is read; a transmitter's
+	// budget counts only well-formed tokens, so junk from others cannot
+	// spend it (D64 L2).
+	if !h.byIP.AllowRequest(r) {
+		tooMany()
 		return
 	}
 	if mt, _, err := mime.ParseMediaType(r.Header.Get("Content-Type")); err != nil || mt != ContentType {
@@ -146,7 +160,21 @@ func (h *Receiver) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, setverify.CodeInvalidRequest, "the body is larger than 64 KiB")
 		return
 	}
-	status, code, desc := h.s.receive(r.Context(), org, tid, strings.TrimSpace(string(body)))
+	token := strings.TrimSpace(string(body))
+	if err := setverify.CheckHeader(token); err != nil {
+		var ve *setverify.Error
+		desc := ""
+		if errors.As(err, &ve) {
+			desc = ve.Description
+		}
+		writeError(w, http.StatusBadRequest, setverify.CodeOf(err), desc)
+		return
+	}
+	if !h.limiter.Allow(org.String() + "/" + tid.String()) {
+		tooMany()
+		return
+	}
+	status, code, desc := h.s.receive(r.Context(), org, tid, token)
 	if status == http.StatusAccepted {
 		w.Header().Set("Cache-Control", "no-store")
 		w.WriteHeader(http.StatusAccepted)
@@ -190,7 +218,7 @@ func (s *Service) receive(ctx context.Context, org ids.OrgID, tid ids.UUID, toke
 	replay := false
 	err = s.pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
 		var err error
-		replay, err = s.record(ctx, tx, org, tid, set)
+		replay, err = s.record(ctx, tx, org, tid, t.Issuer, set)
 		return err
 	})
 	switch {
@@ -218,7 +246,7 @@ func (s *Service) refused(ctx context.Context, org ids.OrgID, tid ids.UUID, code
 
 // record stores a verified event once per (transmitter, jti) and hands an
 // accepted one to the sink. replay is true when the jti was seen.
-func (s *Service) record(ctx context.Context, tx db.TenantTx, org ids.OrgID, tid ids.UUID, set setverify.SET) (replay bool, err error) {
+func (s *Service) record(ctx context.Context, tx db.TenantTx, org ids.OrgID, tid ids.UUID, issuer string, set setverify.SET) (replay bool, err error) {
 	q := dbq.New(tx)
 	p := dbq.InsertSSFEventParams{OrgID: org, ID: ids.NewV7(), TransmitterID: tid, Jti: set.JTI, EventType: set.EventType, IssuedAt: set.IssuedAt}
 	if set.Subject.Format != "" {
@@ -231,7 +259,7 @@ func (s *Service) record(ctx context.Context, tx db.TenantTx, org ids.OrgID, tid
 	case !handled(set.EventType):
 		p.Outcome = OutcomeIgnored
 	default:
-		user, basis, err := matchUser(ctx, q, org, set.Subject)
+		user, basis, err := matchUser(ctx, q, org, issuer, set.Subject)
 		if err != nil {
 			return false, err
 		}
@@ -275,10 +303,25 @@ func (s *Service) record(ctx context.Context, tx db.TenantTx, org ids.OrgID, tid
 	return false, nil
 }
 
+// Match bases. Only BasisIssSub lets the identity playbook act (D46, D64).
+const (
+	// BasisIssSub: the subject's issuer is the transmitter's own issuer and
+	// its subject is a person's linked OIDC identity.
+	BasisIssSub = "iss_sub"
+	// BasisForeignIssSub: an issuer and subject the transmitter names for
+	// another issuer; the token's signer only vouches for its own issuer,
+	// so the match is email-grade: a case only.
+	BasisForeignIssSub = "foreign_iss_sub"
+	// BasisEmail: an email exactly one active person has; a case only.
+	BasisEmail = "email"
+)
+
 // matchUser finds the person an event is about (D37): by OIDC issuer and
-// subject, or by an email that exactly one active person has. An opaque
-// subject or any other format matches nobody.
-func matchUser(ctx context.Context, q *dbq.Queries, org ids.OrgID, sub setverify.Subject) (ids.UUID, string, error) {
+// subject, or by an email that exactly one active person has. An issuer
+// and subject count fully only when the subject's issuer is the
+// transmitter's own issuer (D64). An opaque subject or any other format
+// matches nobody.
+func matchUser(ctx context.Context, q *dbq.Queries, org ids.OrgID, issuer string, sub setverify.Subject) (ids.UUID, string, error) {
 	var (
 		found []ids.UUID
 		basis string
@@ -287,10 +330,13 @@ func matchUser(ctx context.Context, q *dbq.Queries, org ids.OrgID, sub setverify
 	switch sub.Format {
 	case "iss_sub":
 		found, err = q.SSFUserByIssSub(ctx, org, sub.Iss, sub.Sub)
-		basis = "iss_sub"
+		basis = BasisForeignIssSub
+		if sub.Iss == issuer {
+			basis = BasisIssSub
+		}
 	case "email":
 		found, err = q.SSFUsersByEmail(ctx, org, td.NormalizeEmail(sub.Email))
-		basis = "email"
+		basis = BasisEmail
 	}
 	if err != nil || len(found) != 1 {
 		return ids.UUID{}, "", err

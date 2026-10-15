@@ -97,12 +97,14 @@ var (
 		"a destination has a name (lowercase letters, digits and dashes), an https URL and 1 to 6 distinct data classes")
 	ErrURL = pcerr.New(pcerr.InvalidArgument, "SIEM_DESTINATION_URL",
 		"the URL must be https, without credentials or fragment, on port 443 or 1024-65535, not PantherClaw's own host, and public unless the destination is internal")
-	ErrMetadata       = pcerr.New(pcerr.InvalidArgument, "SIEM_DESTINATION_METADATA", "a cloud metadata service is never a destination")
-	ErrExists         = pcerr.New(pcerr.AlreadyExists, "SIEM_DESTINATION_EXISTS", "a destination with this name exists")
-	ErrNotFound       = pcerr.New(pcerr.NotFound, "SIEM_DESTINATION_NOT_FOUND", "destination not found")
-	ErrState          = pcerr.New(pcerr.FailedPrecondition, "SIEM_DESTINATION_STATE", "the destination is not in a state that allows this")
-	ErrHuman          = pcerr.New(pcerr.PermissionDenied, "HUMAN_ONLY", "only a person can do this")
-	ErrEdition        = pcerr.New(pcerr.FailedPrecondition, "EDITION_REQUIRED", "SIEM export needs the Business edition or above")
+	ErrMetadata = pcerr.New(pcerr.InvalidArgument, "SIEM_DESTINATION_METADATA", "a cloud metadata service is never a destination")
+	ErrExists   = pcerr.New(pcerr.AlreadyExists, "SIEM_DESTINATION_EXISTS", "a destination with this name exists")
+	ErrNotFound = pcerr.New(pcerr.NotFound, "SIEM_DESTINATION_NOT_FOUND", "destination not found")
+	ErrState    = pcerr.New(pcerr.FailedPrecondition, "SIEM_DESTINATION_STATE", "the destination is not in a state that allows this")
+	ErrHuman    = pcerr.New(pcerr.PermissionDenied, "HUMAN_ONLY", "only a person can do this")
+	ErrEdition  = pcerr.New(pcerr.FailedPrecondition, "EDITION_REQUIRED", "SIEM export needs the Business edition or above")
+	ErrRotating = pcerr.New(pcerr.FailedPrecondition, "SIEM_ROTATION_IN_PROGRESS",
+		"the previous secret still signs for its 24-hour overlap; rotate again once it ends")
 	ErrNothingWaiting = pcerr.New(pcerr.FailedPrecondition, "SIEM_NOTHING_WAITING", "no batch is waiting for delivery")
 )
 
@@ -497,6 +499,8 @@ func (s *Service) SetState(ctx context.Context, id ids.UUID, state string) (Dest
 }
 
 // RotateSecret replaces the signing secret and returns the new one once;
+// it is refused while an earlier rotation's overlap runs (D64 L4), so the
+// secret a receiver still uses never stops signing early;
 // the old one keeps signing for RotationOverlap.
 func (s *Service) RotateSecret(ctx context.Context, id ids.UUID) (string, error) {
 	c, err := s.manager(ctx, true)
@@ -514,6 +518,9 @@ func (s *Service) RotateSecret(ctx context.Context, id ids.UUID) (string, error)
 			return ErrNotFound
 		} else if err != nil {
 			return err
+		}
+		if row.Rotating {
+			return ErrRotating
 		}
 		if row.State == StateDisabled {
 			return ErrState
@@ -650,6 +657,8 @@ type Batch struct {
 	LastError     string
 	CreatedAt     time.Time
 	DeliveredAt   *time.Time
+	// Skipped are entries in the range too large for any batch (D64 L5).
+	Skipped []ids.UUID
 }
 
 // Batches returns a destination's last 20 batches, newest first
@@ -676,7 +685,7 @@ func (s *Service) Batches(ctx context.Context, id ids.UUID) ([]Batch, error) {
 			b := Batch{
 				ID: r.ID, FromSeq: r.FromSeq, ToSeq: r.ToSeq, EventCount: int(r.EventCount), BodyBytes: int(r.BodyBytes), State: r.State,
 				Attempts: int(r.Attempts), NextAttemptAt: r.NextAttemptAt, LastAttemptAt: r.LastAttemptAt, CreatedAt: r.CreatedAt,
-				DeliveredAt: r.DeliveredAt,
+				DeliveredAt: r.DeliveredAt, Skipped: r.SkippedUids,
 			}
 			if r.LastStatus != nil {
 				b.LastStatus = int(*r.LastStatus)

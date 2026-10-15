@@ -145,6 +145,9 @@ func (h *Handler) ListSIEMBatches(ctx context.Context, req *pantherclawv1.ListSI
 			LastStatus: int32(b.LastStatus), LastError: b.LastError, CreateTime: timestamppb.New(b.CreatedAt), //nolint:gosec // G115: HTTP status
 			DeliverTime: ts(b.DeliveredAt),
 		}
+		for _, u := range b.Skipped {
+			p.SkippedUids = append(p.SkippedUids, u.String())
+		}
 		if b.DeliveredAt == nil {
 			p.NextAttemptTime = timestamppb.New(b.NextAttemptAt)
 		}

@@ -81,30 +81,15 @@ DELETE FROM pc.ssf_events WHERE org_id = sqlc.arg(org_id) AND expires_at <= now(
 UPDATE pc.ssf_events SET case_note = sqlc.arg(note)
 WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND case_id IS NULL;
 
--- What a case about a person lists (D37): the active grants they issued,
--- are the principal of, or that a live approval of theirs concerns.
+-- The grants a case about a person lists (D37, at most 100; the case says
+-- how many there are): the active grants they issued or are the principal
+-- of.
 -- name: SSFPersonGrants :many
 SELECT g.id, (g.grantor_kind = 'user' AND g.grantor_id = sqlc.arg(user_id))::bool AS issued
 FROM pc.grants g
 WHERE g.org_id = sqlc.arg(org_id) AND g.state = 'ACTIVE'
   AND ((g.grantor_kind = 'user' AND g.grantor_id = sqlc.arg(user_id)) OR g.principal_user_id = sqlc.arg(user_id))
 ORDER BY g.id
-LIMIT 100;
-
--- The person's waiting approvals: restorations they asked for, actions
--- under grants they issued or are the principal of, and requests where
--- their approval still counts.
--- name: SSFPersonApprovals :many
-SELECT r.id FROM pc.approval_requests r
-LEFT JOIN pc.grants g ON g.org_id = r.org_id AND g.id = r.grant_id
-WHERE r.org_id = sqlc.arg(org_id) AND r.state IN ('PENDING', 'EVIDENCE_REQUESTED', 'APPROVED')
-  AND (r.requested_by = sqlc.arg(user_id)
-       OR (g.grantor_kind = 'user' AND g.grantor_id = sqlc.arg(user_id))
-       OR g.principal_user_id = sqlc.arg(user_id)
-       OR EXISTS (SELECT 1 FROM pc.approval_responses x
-                  WHERE x.org_id = r.org_id AND x.request_id = r.id AND x.user_id = sqlc.arg(user_id)
-                    AND x.kind IN ('APPROVE', 'STEP_UP') AND x.voided_at IS NULL))
-ORDER BY r.id
 LIMIT 100;
 
 -- Identity playbook (D38).
@@ -180,3 +165,41 @@ WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND purpose = 'BINDING'
   AND identity_playbook_request_id = sqlc.arg(request_id) AND user_id = sqlc.arg(user_id)
   AND session_id = sqlc.arg(session_id) AND challenge = sqlc.arg(challenge) AND consumed_at IS NULL
   AND expires_at > now();
+
+-- The playbook pages through every active grant the person issued and
+-- every waiting approval of theirs, with no cap (D64).
+-- name: SSFIssuedGrantsPage :many
+SELECT g.id FROM pc.grants g
+WHERE g.org_id = sqlc.arg(org_id) AND g.state = 'ACTIVE' AND g.grantor_kind = 'user' AND g.grantor_id = sqlc.arg(user_id)
+  AND (sqlc.narg(after_id)::uuid IS NULL OR g.id > sqlc.narg(after_id)::uuid)
+ORDER BY g.id
+LIMIT sqlc.arg(max_rows)::int;
+
+-- name: SSFPersonApprovalsPage :many
+SELECT r.id FROM pc.approval_requests r
+LEFT JOIN pc.grants g ON g.org_id = r.org_id AND g.id = r.grant_id
+WHERE r.org_id = sqlc.arg(org_id) AND r.state IN ('PENDING', 'EVIDENCE_REQUESTED', 'APPROVED')
+  AND (sqlc.narg(after_id)::uuid IS NULL OR r.id > sqlc.narg(after_id)::uuid)
+  AND (r.requested_by = sqlc.arg(user_id)::uuid
+       OR (g.grantor_kind = 'user' AND g.grantor_id = sqlc.arg(user_id)::uuid)
+       OR g.principal_user_id = sqlc.arg(user_id)::uuid
+       OR EXISTS (SELECT 1 FROM pc.approval_responses x
+                  WHERE x.org_id = r.org_id AND x.request_id = r.id AND x.user_id = sqlc.arg(user_id)::uuid
+                    AND x.kind IN ('APPROVE', 'STEP_UP') AND x.voided_at IS NULL))
+ORDER BY r.id
+LIMIT sqlc.arg(max_rows)::int;
+
+-- name: SSFPersonCounts :one
+-- How many grants and waiting approvals the person has, for the case.
+SELECT
+  (SELECT count(*) FROM pc.grants g WHERE g.org_id = sqlc.arg(org_id) AND g.state = 'ACTIVE'
+     AND ((g.grantor_kind = 'user' AND g.grantor_id = sqlc.arg(user_id)::uuid) OR g.principal_user_id = sqlc.arg(user_id)::uuid))::int AS grants,
+  (SELECT count(*) FROM pc.approval_requests r
+     LEFT JOIN pc.grants g ON g.org_id = r.org_id AND g.id = r.grant_id
+     WHERE r.org_id = sqlc.arg(org_id) AND r.state IN ('PENDING', 'EVIDENCE_REQUESTED', 'APPROVED')
+       AND (r.requested_by = sqlc.arg(user_id)::uuid
+            OR (g.grantor_kind = 'user' AND g.grantor_id = sqlc.arg(user_id)::uuid)
+            OR g.principal_user_id = sqlc.arg(user_id)::uuid
+            OR EXISTS (SELECT 1 FROM pc.approval_responses x
+                       WHERE x.org_id = r.org_id AND x.request_id = r.id AND x.user_id = sqlc.arg(user_id)::uuid
+                         AND x.kind IN ('APPROVE', 'STEP_UP') AND x.voided_at IS NULL)))::int AS approvals;

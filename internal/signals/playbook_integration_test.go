@@ -15,6 +15,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	billing "github.com/katocxl/pantherclaw/internal/billing/domain"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
@@ -32,14 +33,19 @@ func (c *fakeCases) Open(_ context.Context, _ pgx.Tx, seed reflexdomain.CaseSeed
 	return ids.NewV7(), nil
 }
 
-// fakeContainer records containment requests; fail makes them fail.
+// fakeContainer records containment requests; fail makes them all fail,
+// failGrants only those on grants.
 type fakeContainer struct {
-	got  []reflexdomain.ContainRequest
-	fail error
+	got        []reflexdomain.ContainRequest
+	failGrants bool
+	fail       error
 }
 
 func (c *fakeContainer) Contain(_ context.Context, _ pgx.Tx, r reflexdomain.ContainRequest) (reflexdomain.ContainResult, error) {
-	if c.fail != nil {
+	if c.fail != nil || (c.failGrants && r.Scope.Type == reflexdomain.SubjectGrant) {
+		if c.fail == nil {
+			return reflexdomain.ContainResult{}, errors.New("grant containment failed")
+		}
 		return reflexdomain.ContainResult{}, c.fail
 	}
 	c.got = append(c.got, r)
@@ -188,6 +194,12 @@ func TestHR262_PlaybookNeedsTwoPeopleWithTwoKeysAndActsOnlyOnIssSub(t *testing.T
 	if pb, _ := f.svc.GetPlaybook(f.page(bob)); pb.Enabled {
 		t.Fatal("enabled by one confirmation")
 	}
+	// A lapsed licence confirms no enabling (D64 L6).
+	f.ed.e = billing.Team
+	if _, err := f.confirm(t, dave, req); !errors.Is(err, ErrEdition) {
+		t.Fatalf("confirm after a lapse: %v", err)
+	}
+	f.ed.e = billing.Business
 	out, err = f.confirm(t, dave, req)
 	if err != nil || out.State != RequestApplied {
 		t.Fatalf("second confirmation: %+v %v", out, err)
@@ -251,6 +263,21 @@ func TestHR262_PlaybookNeedsTwoPeopleWithTwoKeysAndActsOnlyOnIssSub(t *testing.T
 	}
 	box.fail = nil
 
+	// When only the grants fail, the person stays contained (their own
+	// savepoint, D64 L3) and the shortfall is an owned failure (D64 M2).
+	box.failGrants = true
+	before := len(box.got)
+	if a := f.post(t, f.org, f.tx, ContentType, f.token(t, f.key, f.tx, nil)); a.status != http.StatusAccepted {
+		t.Fatalf("push with failing grant containment: %+v", a)
+	}
+	if len(box.got) != before+1 || box.got[before].Scope.Type != reflexdomain.SubjectUser {
+		t.Fatalf("principal not contained alone: %+v", box.got[before:])
+	}
+	if n := f.count(t, "SELECT count(*) FROM pc.operational_failures WHERE kind = 'signals.playbook_failed' AND summary LIKE '%1 of 1 issued grants not contained%' AND summary NOT LIKE '%the person was not contained%'"); n != 1 {
+		t.Fatalf("grant shortfall failures = %d", n)
+	}
+	box.failGrants = false
+
 	// Without cases the event says so.
 	f.svc.WithCases(nil)
 	if a := f.post(t, f.org, f.tx, ContentType, f.token(t, f.key, f.tx, func(c map[string]any) {
@@ -288,5 +315,45 @@ func TestHR262_PlaybookNeedsTwoPeopleWithTwoKeysAndActsOnlyOnIssSub(t *testing.T
 	}
 	if pb, _ := f.svc.GetPlaybook(f.page(bob)); pb.Enabled {
 		t.Fatal("a voided request enabled the playbook")
+	}
+}
+
+// TestT113_AnotherIssuersSubjectNeverTriggersThePlaybook: a transmitter
+// vouches only for its own issuer (D64). A token from a second transmitter
+// that names a person by the corporate IdP's issuer and subject opens a
+// case with the basis foreign_iss_sub, and the enabled playbook does not
+// act; the same subject from the IdP's own transmitter does.
+func TestT113_AnotherIssuersSubjectNeverTriggersThePlaybook(t *testing.T) {
+	f := newRxFixture(t)
+	cases, box := &fakeCases{}, &fakeContainer{}
+	f.svc.WithCases(cases).WithContainer(box)
+	f.exec(t, "INSERT INTO pc.identity_playbooks (org_id, enabled, events, version) VALUES ($1, true, $2, 1)",
+		f.org, []string{TypeCredentialCompromise})
+	saasIssuer := f.issuer + "/saas"
+	saas := f.transmitterOf(t, "saas", saasIssuer, true)
+	compromise := func(c map[string]any) {
+		c["events"] = map[string]any{TypeCredentialCompromise: map[string]any{}}
+	}
+	if a := f.post(t, f.org, saas, ContentType, f.token(t, f.key, saas, func(c map[string]any) {
+		compromise(c)
+		c["iss"] = saasIssuer
+	})); a.status != http.StatusAccepted {
+		t.Fatalf("saas push: %+v", a)
+	}
+	if len(box.got) != 0 {
+		t.Fatalf("a foreign issuer's subject triggered containment: %+v", box.got)
+	}
+	if len(cases.seeds) != 1 {
+		t.Fatalf("cases = %d", len(cases.seeds))
+	}
+	if n := f.count(t, "SELECT count(*) FROM pc.ssf_events WHERE transmitter_id = $1 AND match_basis = 'foreign_iss_sub' AND user_id = $2",
+		saas, f.alice); n != 1 {
+		t.Fatalf("foreign matches = %d", n)
+	}
+	if a := f.post(t, f.org, f.tx, ContentType, f.token(t, f.key, f.tx, compromise)); a.status != http.StatusAccepted {
+		t.Fatalf("idp push: %+v", a)
+	}
+	if len(box.got) == 0 || box.got[0].Scope.ID != f.alice.String() {
+		t.Fatalf("the IdP's own subject did not act: %+v", box.got)
 	}
 }

@@ -373,7 +373,10 @@ func (s *Service) BeginConfirm(ctx context.Context, id ids.UUID) (PlaybookReques
 		if err != nil {
 			return err
 		}
-		return pendingFor(c, out)
+		if err := pendingFor(c, out); err != nil {
+			return err
+		}
+		return s.confirmEdition(ctx, out)
 	}, db.ReadOnly())
 	return out, err
 }
@@ -416,6 +419,9 @@ func (s *Service) Confirm(ctx context.Context, id ids.UUID, a Assertion) (Playbo
 		}
 		req := s.requestOf(c.Org, dbq.GetIdentityPlaybookRequestRow(row))
 		if err := confirmationsOf(ctx, q, c.Org, &req); err != nil {
+			return err
+		}
+		if err := s.confirmEdition(ctx, req); err != nil {
 			return err
 		}
 		if err := pendingFor(c, req); err != nil {
@@ -586,4 +592,14 @@ func eventsDetail(events []string) string {
 		out += ShortName(e)
 	}
 	return out
+}
+
+// confirmEdition refuses to confirm enabling or changing the playbook once
+// the licence no longer includes Shared Signals (D64 L6); disabling stays
+// possible.
+func (s *Service) confirmEdition(ctx context.Context, r PlaybookRequest) error {
+	if r.Kind == PlaybookDisable {
+		return nil
+	}
+	return s.business(ctx)
 }

@@ -63,6 +63,7 @@ type JWKS struct {
 	keys      map[string]any
 	fetchedAt time.Time
 	lastMiss  time.Time
+	lastFail  time.Time
 }
 
 // NewJWKS returns the key cache of a transmitter. client must be an egress
@@ -96,14 +97,23 @@ func (j *JWKS) Key(ctx context.Context, kid string) (any, error) {
 		}
 		j.lastMiss = now
 	}
+	// A failed fetch is not retried within MissInterval either: a down
+	// issuer never turns pushes into a stream of fetches (D64 L7).
+	if !j.lastFail.IsZero() && now.Sub(j.lastFail) < MissInterval {
+		if stale {
+			j.keys = nil
+		}
+		return nil, errors.New("setverify: the key set is unavailable")
+	}
 	keys, err := j.fetch(ctx)
 	if err != nil {
+		j.lastFail = now
 		if stale {
 			j.keys = nil
 		}
 		return nil, err
 	}
-	j.keys, j.fetchedAt = keys, now
+	j.keys, j.fetchedAt, j.lastFail = keys, now, time.Time{}
 	if k, ok := keys[kid]; ok {
 		return k, nil
 	}

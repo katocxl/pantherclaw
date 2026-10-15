@@ -110,6 +110,9 @@ func TestHR259_DestinationsNeedAPersonAKeyAndBusiness(t *testing.T) {
 	if err != nil || !strings.HasPrefix(secret, "whsec_") || secret == created.Secret {
 		t.Fatalf("rotate: %q %v", secret, err)
 	}
+	if _, err := f.svc.RotateSecret(admin, id); !errors.Is(err, ErrRotating) {
+		t.Fatalf("rotation during the overlap: %v", err)
+	}
 	if d, err := f.svc.Get(f.as(td.KindUser, td.RoleAuditor), id); err != nil || d.RotationEndsAt == nil {
 		t.Fatalf("auditor read: %+v %v", d, err)
 	}

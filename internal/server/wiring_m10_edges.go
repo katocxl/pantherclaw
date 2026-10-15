@@ -137,7 +137,7 @@ func registerM10Edges(rs *connect.Server, d apiDeps) (m10Edges, error) {
 			d.web.WithPlaybook(sig, d.m5.webauthn)
 		}
 	}
-	return m10Edges{receiver: sig.Receiver()}, nil
+	return m10Edges{receiver: sig.Receiver(d.clientIP)}, nil
 }
 
 // registerM10EdgesJobs adds the exporter and the janitor and returns their

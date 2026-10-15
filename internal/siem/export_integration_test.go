@@ -15,6 +15,7 @@ import (
 	"net/http/httptest"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -28,6 +29,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/db/dbtest"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	"github.com/katocxl/pantherclaw/internal/platform/keys"
+	"github.com/katocxl/pantherclaw/internal/reflex/failures"
 	"github.com/katocxl/pantherclaw/internal/siem/ocsf"
 )
 
@@ -403,5 +405,37 @@ func TestHR259_RotationSignsWithBothSecrets(t *testing.T) {
 	want := ndomain.Signatures([][]byte{next, old}, r.header.Get("webhook-id"), ts, r.body)
 	if got := r.header.Get("webhook-signature"); got != want {
 		t.Fatalf("signature %q, want %q", got, want)
+	}
+}
+
+// TestHR260_AnOversizedEntryIsRecordedNotSilentlySkipped: an entry too
+// large for any batch moves export on but is listed on its batch and
+// raised as an owned failure naming it (D64 L5).
+func TestHR260_AnOversizedEntryIsRecordedNotSilentlySkipped(t *testing.T) {
+	f := newExportFixture(t)
+	f.svc.WithFailures(&failures.Sink{})
+	huge := ev(2, "reflex.alert")
+	huge.Attrs["blob"] = strings.Repeat("x", ocsf.MaxBatchBytes)
+	f.feed.events = []ocsf.Event{ev(1, "reflex.alert"), huge, ev(3, "reflex.alert")}
+	id := f.destination(t, f.recv.srv.URL+"/ingest", true, []string{"alerts"}, 0)
+	if st, err := f.svc.ExportOnce(context.Background(), f.org, id); err != nil || !st.Delivered {
+		t.Fatalf("export: %+v %v", st, err)
+	}
+	var b sentBatch
+	if err := json.Unmarshal(f.recv.requests()[0].body, &b); err != nil || len(b.Data.Events) != 2 || b.Data.ToSeq != 3 {
+		t.Fatalf("batch = %+v (%v)", b, err)
+	}
+	var skipped int
+	if err := f.p.InTenantTx(context.Background(), f.org, func(ctx context.Context, tx db.TenantTx) error {
+		return tx.QueryRow(ctx, "SELECT count(*) FROM pc.siem_batches WHERE $1 = ANY (skipped_uids)", huge.ID).Scan(&skipped)
+	}); err != nil || skipped != 1 {
+		t.Fatalf("batches listing the skipped entry = %d (%v)", skipped, err)
+	}
+	var failed int
+	if err := f.p.InTenantTx(context.Background(), f.org, func(ctx context.Context, tx db.TenantTx) error {
+		return tx.QueryRow(ctx, "SELECT count(*) FROM pc.operational_failures WHERE kind = 'siem.event_skipped' AND summary LIKE '%' || $1 || '%'",
+			huge.ID.String()).Scan(&failed)
+	}); err != nil || failed != 1 {
+		t.Fatalf("skipped failures = %d (%v)", failed, err)
 	}
 }

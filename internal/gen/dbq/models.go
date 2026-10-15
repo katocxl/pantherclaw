@@ -2076,6 +2076,7 @@ type PcSiemBatch struct {
 	ToSeq         int64
 	EventCount    int32
 	BodyBytes     int32
+	SkippedUids   []ids.UUID
 	State         string
 	Attempts      int32
 	NextAttemptAt time.Time

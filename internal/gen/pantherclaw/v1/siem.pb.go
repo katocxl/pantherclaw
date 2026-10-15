@@ -978,7 +978,10 @@ type SIEMBatch struct {
 	// When it was built.
 	CreateTime *timestamppb.Timestamp `protobuf:"bytes,11,opt,name=create_time,json=createTime,proto3" json:"create_time,omitempty"`
 	// When it was delivered; unset before.
-	DeliverTime   *timestamppb.Timestamp `protobuf:"bytes,12,opt,name=deliver_time,json=deliverTime,proto3" json:"deliver_time,omitempty"`
+	DeliverTime *timestamppb.Timestamp `protobuf:"bytes,12,opt,name=deliver_time,json=deliverTime,proto3" json:"deliver_time,omitempty"`
+	// Entries in the range too large for any batch: recorded here and as an
+	// owned failure, never skipped silently.
+	SkippedUids   []string `protobuf:"bytes,13,rep,name=skipped_uids,json=skippedUids,proto3" json:"skipped_uids,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1093,6 +1096,13 @@ func (x *SIEMBatch) GetCreateTime() *timestamppb.Timestamp {
 func (x *SIEMBatch) GetDeliverTime() *timestamppb.Timestamp {
 	if x != nil {
 		return x.DeliverTime
+	}
+	return nil
+}
+
+func (x *SIEMBatch) GetSkippedUids() []string {
+	if x != nil {
+		return x.SkippedUids
 	}
 	return nil
 }
@@ -1213,7 +1223,7 @@ const file_pantherclaw_v1_siem_proto_rawDesc = "" +
 	"\x1cRetrySIEMDestinationResponse\x12A\n" +
 	"\vdestination\x18\x01 \x01(\v2\x1f.pantherclaw.v1.SIEMDestinationR\vdestination\"I\n" +
 	"\x16ListSIEMBatchesRequest\x12/\n" +
-	"\x0edestination_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\rdestinationId\"\xc3\x03\n" +
+	"\x0edestination_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\rdestinationId\"\xe6\x03\n" +
 	"\tSIEMBatch\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x19\n" +
 	"\bfrom_seq\x18\x02 \x01(\x03R\afromSeq\x12\x15\n" +
@@ -1232,7 +1242,8 @@ const file_pantherclaw_v1_siem_proto_rawDesc = "" +
 	" \x01(\tR\tlastError\x12;\n" +
 	"\vcreate_time\x18\v \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"createTime\x12=\n" +
-	"\fdeliver_time\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\vdeliverTime\"N\n" +
+	"\fdeliver_time\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\vdeliverTime\x12!\n" +
+	"\fskipped_uids\x18\r \x03(\tR\vskippedUids\"N\n" +
 	"\x17ListSIEMBatchesResponse\x123\n" +
 	"\abatches\x18\x01 \x03(\v2\x19.pantherclaw.v1.SIEMBatchR\abatches2\xce\x06\n" +
 	"\vSIEMService\x12t\n" +

@@ -295,3 +295,14 @@ func subjectOf(raw jsontext.Value) Subject {
 	}
 	return Subject{}
 }
+
+// CheckHeader is the header check Verify starts with (allowed members,
+// algorithm, kid, typ), without keys: the receiver runs it before a
+// token counts against its transmitter's rate budget.
+func CheckHeader(compact string) error {
+	if len(compact) == 0 || len(compact) > MaxToken {
+		return refuse(CodeInvalidRequest, "the token is empty or larger than 64 KiB")
+	}
+	_, _, err := checkHeader(compact)
+	return err
+}

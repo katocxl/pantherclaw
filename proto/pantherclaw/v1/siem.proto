@@ -261,6 +261,9 @@ message SIEMBatch {
   google.protobuf.Timestamp create_time = 11;
   // When it was delivered; unset before.
   google.protobuf.Timestamp deliver_time = 12;
+  // Entries in the range too large for any batch: recorded here and as an
+  // owned failure, never skipped silently.
+  repeated string skipped_uids = 13;
 }
 
 // ListSIEMBatchesResponse lists batches, newest first.

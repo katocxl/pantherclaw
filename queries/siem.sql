@@ -48,11 +48,13 @@ UPDATE pc.siem_destinations SET state = sqlc.arg(state), updated_at = now()
 WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state = sqlc.arg(expected);
 
 -- name: RotateSIEMSecret :execrows
--- The old secret keeps signing alongside the new one for the overlap.
+-- The old secret keeps signing alongside the new one for the overlap; a
+-- rotation never starts while another overlap runs (D64 L4).
 UPDATE pc.siem_destinations
 SET prev_secret = sqlc.arg(prev_secret), secret = sqlc.arg(secret),
     prev_secret_expires_at = now() + make_interval(secs => sqlc.arg(overlap_seconds)::int), updated_at = now()
-WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state IN ('PENDING', 'ACTIVE', 'PAUSED');
+WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state IN ('PENDING', 'ACTIVE', 'PAUSED')
+  AND (prev_secret_expires_at IS NULL OR prev_secret_expires_at <= now());
 
 -- Export (the per-destination worker).
 
@@ -77,9 +79,9 @@ UPDATE pc.siem_cursors SET seq = sqlc.arg(seq)
 WHERE org_id = sqlc.arg(org_id) AND destination_id = sqlc.arg(destination_id) AND seq = sqlc.arg(expected);
 
 -- name: InsertSIEMBatch :exec
-INSERT INTO pc.siem_batches (org_id, id, destination_id, from_seq, to_seq, event_count, body_bytes, next_attempt_at)
+INSERT INTO pc.siem_batches (org_id, id, destination_id, from_seq, to_seq, event_count, body_bytes, skipped_uids, next_attempt_at)
 VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(destination_id), sqlc.arg(from_seq), sqlc.arg(to_seq),
-        sqlc.arg(event_count), sqlc.arg(body_bytes), now() + make_interval(secs => sqlc.arg(lease_seconds)::int));
+        sqlc.arg(event_count), sqlc.arg(body_bytes), coalesce(sqlc.arg(skipped_uids)::uuid[], '{}'), now() + make_interval(secs => sqlc.arg(lease_seconds)::int));
 
 -- name: DeliveredSIEMBatch :execrows
 UPDATE pc.siem_batches
@@ -116,7 +118,7 @@ RETURNING consecutive_failures;
 SELECT id FROM pc.siem_destinations WHERE org_id = sqlc.arg(org_id) AND state = 'ACTIVE' ORDER BY id LIMIT 100;
 
 -- name: RecentSIEMBatches :many
-SELECT id, from_seq, to_seq, event_count, body_bytes, state, attempts, next_attempt_at, last_attempt_at, last_status,
+SELECT id, from_seq, to_seq, event_count, body_bytes, skipped_uids, state, attempts, next_attempt_at, last_attempt_at, last_status,
        last_error, created_at, delivered_at
 FROM pc.siem_batches
 WHERE org_id = sqlc.arg(org_id) AND destination_id = sqlc.arg(destination_id)
@@ -129,7 +131,7 @@ DELETE FROM pc.siem_batches
 WHERE org_id = sqlc.arg(org_id) AND state = 'DELIVERED' AND delivered_at < now() - interval '30 days';
 
 -- name: LoadSIEMSecrets :one
-SELECT state, secret FROM pc.siem_destinations
+SELECT state, secret, coalesce(prev_secret_expires_at > now(), false)::bool AS rotating FROM pc.siem_destinations
 WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id)
 FOR UPDATE;
 

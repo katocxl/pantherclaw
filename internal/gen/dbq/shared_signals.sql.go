@@ -732,25 +732,30 @@ func (q *Queries) SSFAccepted(ctx context.Context, orgID ids.OrgID, iD ids.UUID)
 	return err
 }
 
-const sSFPersonApprovals = `-- name: SSFPersonApprovals :many
-SELECT r.id FROM pc.approval_requests r
-LEFT JOIN pc.grants g ON g.org_id = r.org_id AND g.id = r.grant_id
-WHERE r.org_id = $1 AND r.state IN ('PENDING', 'EVIDENCE_REQUESTED', 'APPROVED')
-  AND (r.requested_by = $2
-       OR (g.grantor_kind = 'user' AND g.grantor_id = $2)
-       OR g.principal_user_id = $2
-       OR EXISTS (SELECT 1 FROM pc.approval_responses x
-                  WHERE x.org_id = r.org_id AND x.request_id = r.id AND x.user_id = $2
-                    AND x.kind IN ('APPROVE', 'STEP_UP') AND x.voided_at IS NULL))
-ORDER BY r.id
-LIMIT 100
+const sSFIssuedGrantsPage = `-- name: SSFIssuedGrantsPage :many
+SELECT g.id FROM pc.grants g
+WHERE g.org_id = $1 AND g.state = 'ACTIVE' AND g.grantor_kind = 'user' AND g.grantor_id = $2
+  AND ($3::uuid IS NULL OR g.id > $3::uuid)
+ORDER BY g.id
+LIMIT $4::int
 `
 
-// The person's waiting approvals: restorations they asked for, actions
-// under grants they issued or are the principal of, and requests where
-// their approval still counts.
-func (q *Queries) SSFPersonApprovals(ctx context.Context, orgID ids.OrgID, userID *ids.UUID) ([]ids.UUID, error) {
-	rows, err := q.db.Query(ctx, sSFPersonApprovals, orgID, userID)
+type SSFIssuedGrantsPageParams struct {
+	OrgID   ids.OrgID
+	UserID  ids.UUID
+	AfterID *ids.UUID
+	MaxRows int32
+}
+
+// The playbook pages through every active grant the person issued and
+// every waiting approval of theirs, with no cap (D64).
+func (q *Queries) SSFIssuedGrantsPage(ctx context.Context, arg SSFIssuedGrantsPageParams) ([]ids.UUID, error) {
+	rows, err := q.db.Query(ctx, sSFIssuedGrantsPage,
+		arg.OrgID,
+		arg.UserID,
+		arg.AfterID,
+		arg.MaxRows,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -769,6 +774,81 @@ func (q *Queries) SSFPersonApprovals(ctx context.Context, orgID ids.OrgID, userI
 	return items, nil
 }
 
+const sSFPersonApprovalsPage = `-- name: SSFPersonApprovalsPage :many
+SELECT r.id FROM pc.approval_requests r
+LEFT JOIN pc.grants g ON g.org_id = r.org_id AND g.id = r.grant_id
+WHERE r.org_id = $1 AND r.state IN ('PENDING', 'EVIDENCE_REQUESTED', 'APPROVED')
+  AND ($2::uuid IS NULL OR r.id > $2::uuid)
+  AND (r.requested_by = $3::uuid
+       OR (g.grantor_kind = 'user' AND g.grantor_id = $3::uuid)
+       OR g.principal_user_id = $3::uuid
+       OR EXISTS (SELECT 1 FROM pc.approval_responses x
+                  WHERE x.org_id = r.org_id AND x.request_id = r.id AND x.user_id = $3::uuid
+                    AND x.kind IN ('APPROVE', 'STEP_UP') AND x.voided_at IS NULL))
+ORDER BY r.id
+LIMIT $4::int
+`
+
+type SSFPersonApprovalsPageParams struct {
+	OrgID   ids.OrgID
+	AfterID *ids.UUID
+	UserID  ids.UUID
+	MaxRows int32
+}
+
+func (q *Queries) SSFPersonApprovalsPage(ctx context.Context, arg SSFPersonApprovalsPageParams) ([]ids.UUID, error) {
+	rows, err := q.db.Query(ctx, sSFPersonApprovalsPage,
+		arg.OrgID,
+		arg.AfterID,
+		arg.UserID,
+		arg.MaxRows,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ids.UUID{}
+	for rows.Next() {
+		var id ids.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const sSFPersonCounts = `-- name: SSFPersonCounts :one
+SELECT
+  (SELECT count(*) FROM pc.grants g WHERE g.org_id = $1 AND g.state = 'ACTIVE'
+     AND ((g.grantor_kind = 'user' AND g.grantor_id = $2::uuid) OR g.principal_user_id = $2::uuid))::int AS grants,
+  (SELECT count(*) FROM pc.approval_requests r
+     LEFT JOIN pc.grants g ON g.org_id = r.org_id AND g.id = r.grant_id
+     WHERE r.org_id = $1 AND r.state IN ('PENDING', 'EVIDENCE_REQUESTED', 'APPROVED')
+       AND (r.requested_by = $2::uuid
+            OR (g.grantor_kind = 'user' AND g.grantor_id = $2::uuid)
+            OR g.principal_user_id = $2::uuid
+            OR EXISTS (SELECT 1 FROM pc.approval_responses x
+                       WHERE x.org_id = r.org_id AND x.request_id = r.id AND x.user_id = $2::uuid
+                         AND x.kind IN ('APPROVE', 'STEP_UP') AND x.voided_at IS NULL)))::int AS approvals
+`
+
+type SSFPersonCountsRow struct {
+	Grants    int32
+	Approvals int32
+}
+
+// How many grants and waiting approvals the person has, for the case.
+func (q *Queries) SSFPersonCounts(ctx context.Context, orgID ids.OrgID, userID ids.UUID) (SSFPersonCountsRow, error) {
+	row := q.db.QueryRow(ctx, sSFPersonCounts, orgID, userID)
+	var i SSFPersonCountsRow
+	err := row.Scan(&i.Grants, &i.Approvals)
+	return i, err
+}
+
 const sSFPersonGrants = `-- name: SSFPersonGrants :many
 SELECT g.id, (g.grantor_kind = 'user' AND g.grantor_id = $1)::bool AS issued
 FROM pc.grants g
@@ -783,8 +863,9 @@ type SSFPersonGrantsRow struct {
 	Issued bool
 }
 
-// What a case about a person lists (D37): the active grants they issued,
-// are the principal of, or that a live approval of theirs concerns.
+// The grants a case about a person lists (D37, at most 100; the case says
+// how many there are): the active grants they issued or are the principal
+// of.
 func (q *Queries) SSFPersonGrants(ctx context.Context, userID ids.UUID, orgID ids.OrgID) ([]SSFPersonGrantsRow, error) {
 	rows, err := q.db.Query(ctx, sSFPersonGrants, userID, orgID)
 	if err != nil {

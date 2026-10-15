@@ -205,9 +205,9 @@ func (q *Queries) GetSIEMDestination(ctx context.Context, orgID ids.OrgID, iD id
 }
 
 const insertSIEMBatch = `-- name: InsertSIEMBatch :exec
-INSERT INTO pc.siem_batches (org_id, id, destination_id, from_seq, to_seq, event_count, body_bytes, next_attempt_at)
+INSERT INTO pc.siem_batches (org_id, id, destination_id, from_seq, to_seq, event_count, body_bytes, skipped_uids, next_attempt_at)
 VALUES ($1, $2, $3, $4, $5,
-        $6, $7, now() + make_interval(secs => $8::int))
+        $6, $7, coalesce($8::uuid[], '{}'), now() + make_interval(secs => $9::int))
 `
 
 type InsertSIEMBatchParams struct {
@@ -218,6 +218,7 @@ type InsertSIEMBatchParams struct {
 	ToSeq         int64
 	EventCount    int32
 	BodyBytes     int32
+	SkippedUids   []ids.UUID
 	LeaseSeconds  int32
 }
 
@@ -230,6 +231,7 @@ func (q *Queries) InsertSIEMBatch(ctx context.Context, arg InsertSIEMBatchParams
 		arg.ToSeq,
 		arg.EventCount,
 		arg.BodyBytes,
+		arg.SkippedUids,
 		arg.LeaseSeconds,
 	)
 	return err
@@ -472,25 +474,26 @@ func (q *Queries) LoadSIEMExport(ctx context.Context, orgID ids.OrgID, iD ids.UU
 }
 
 const loadSIEMSecrets = `-- name: LoadSIEMSecrets :one
-SELECT state, secret FROM pc.siem_destinations
+SELECT state, secret, coalesce(prev_secret_expires_at > now(), false)::bool AS rotating FROM pc.siem_destinations
 WHERE org_id = $1 AND id = $2
 FOR UPDATE
 `
 
 type LoadSIEMSecretsRow struct {
-	State  string
-	Secret []byte
+	State    string
+	Secret   []byte
+	Rotating bool
 }
 
 func (q *Queries) LoadSIEMSecrets(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (LoadSIEMSecretsRow, error) {
 	row := q.db.QueryRow(ctx, loadSIEMSecrets, orgID, iD)
 	var i LoadSIEMSecretsRow
-	err := row.Scan(&i.State, &i.Secret)
+	err := row.Scan(&i.State, &i.Secret, &i.Rotating)
 	return i, err
 }
 
 const recentSIEMBatches = `-- name: RecentSIEMBatches :many
-SELECT id, from_seq, to_seq, event_count, body_bytes, state, attempts, next_attempt_at, last_attempt_at, last_status,
+SELECT id, from_seq, to_seq, event_count, body_bytes, skipped_uids, state, attempts, next_attempt_at, last_attempt_at, last_status,
        last_error, created_at, delivered_at
 FROM pc.siem_batches
 WHERE org_id = $1 AND destination_id = $2
@@ -504,6 +507,7 @@ type RecentSIEMBatchesRow struct {
 	ToSeq         int64
 	EventCount    int32
 	BodyBytes     int32
+	SkippedUids   []ids.UUID
 	State         string
 	Attempts      int32
 	NextAttemptAt time.Time
@@ -529,6 +533,7 @@ func (q *Queries) RecentSIEMBatches(ctx context.Context, orgID ids.OrgID, destin
 			&i.ToSeq,
 			&i.EventCount,
 			&i.BodyBytes,
+			&i.SkippedUids,
 			&i.State,
 			&i.Attempts,
 			&i.NextAttemptAt,
@@ -568,6 +573,7 @@ UPDATE pc.siem_destinations
 SET prev_secret = $1, secret = $2,
     prev_secret_expires_at = now() + make_interval(secs => $3::int), updated_at = now()
 WHERE org_id = $4 AND id = $5 AND state IN ('PENDING', 'ACTIVE', 'PAUSED')
+  AND (prev_secret_expires_at IS NULL OR prev_secret_expires_at <= now())
 `
 
 type RotateSIEMSecretParams struct {
@@ -578,7 +584,8 @@ type RotateSIEMSecretParams struct {
 	ID             ids.UUID
 }
 
-// The old secret keeps signing alongside the new one for the overlap.
+// The old secret keeps signing alongside the new one for the overlap; a
+// rotation never starts while another overlap runs (D64 L4).
 func (q *Queries) RotateSIEMSecret(ctx context.Context, arg RotateSIEMSecretParams) (int64, error) {
 	result, err := q.db.Exec(ctx, rotateSIEMSecret,
 		arg.PrevSecret,

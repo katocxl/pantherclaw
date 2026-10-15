@@ -93,7 +93,9 @@ CREATE TABLE pc.ssf_events (
     issued_at      timestamptz NOT NULL,
     subject_format text        CHECK (subject_format IS NULL OR subject_format ~ '^[a-z_]{1,32}$'),
     user_id        uuid,
-    match_basis    text        CHECK (match_basis IS NULL OR match_basis IN ('iss_sub', 'email')),
+    -- iss_sub only when the subject's issuer is the transmitter's own (D64);
+    -- foreign_iss_sub and email open a case only.
+    match_basis    text        CHECK (match_basis IS NULL OR match_basis IN ('iss_sub', 'foreign_iss_sub', 'email')),
     outcome        text        NOT NULL CHECK (outcome IN ('ACCEPTED', 'UNMATCHED', 'IGNORED', 'VERIFICATION')),
     case_id        uuid,
     -- Why an accepted event opened no case (cases unavailable).

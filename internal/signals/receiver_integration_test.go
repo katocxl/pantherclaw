@@ -13,6 +13,7 @@ import (
 	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -85,11 +86,11 @@ func newRxFixture(t *testing.T) *rxFixture {
 	f.ed = &edition{e: billing.Business}
 	f.svc.WithHTTPClient(srv.Client()).WithSink(f.sink).WithEditions(f.ed)
 	f.mux = http.NewServeMux()
-	f.svc.Receiver().Mount(f.mux)
+	f.svc.Receiver(nil).Mount(f.mux)
 
 	f.exec(t, "INSERT INTO pc.orgs (id, name) VALUES ($1, 'ssf')", f.org)
-	f.exec(t, `INSERT INTO pc.users (org_id, id, issuer, subject, email) VALUES ($1, $2, 'https://login.example.com', 'user-7', 'alice@example.com')`,
-		f.org, f.alice)
+	f.exec(t, `INSERT INTO pc.users (org_id, id, issuer, subject, email) VALUES ($1, $2, $3, 'user-7', 'alice@example.com')`,
+		f.org, f.alice, f.issuer)
 	f.exec(t, `INSERT INTO pc.users (org_id, id, issuer, subject, email) VALUES ($1, $2, 'https://login.example.com', 'user-8', 'shared@example.com')`,
 		f.org, f.bob)
 	f.exec(t, `INSERT INTO pc.users (org_id, id, issuer, subject, email) VALUES ($1, $2, 'https://other.example.com', 'x', 'shared@example.com')`,
@@ -125,11 +126,17 @@ func (f *rxFixture) count(t *testing.T, sql string, args ...any) int {
 // transmitter stores a transmitter as Create (and Activate) would.
 func (f *rxFixture) transmitter(t *testing.T, name string, active bool) ids.UUID {
 	t.Helper()
+	return f.transmitterOf(t, name, f.issuer, active)
+}
+
+// transmitterOf stores a transmitter of issuer (keys on the test server).
+func (f *rxFixture) transmitterOf(t *testing.T, name, issuer string, active bool) ids.UUID {
+	t.Helper()
 	id := ids.NewV7()
 	if err := f.p.InTenantTx(context.Background(), f.org, func(ctx context.Context, tx db.TenantTx) error {
 		q := dbq.New(tx)
 		if err := q.InsertSSFTransmitter(ctx, dbq.InsertSSFTransmitterParams{
-			OrgID: f.org, ID: id, Name: name, Issuer: f.issuer, JwksUri: f.issuer + "/jwks", Audience: f.svc.EndpointURL(f.org, id),
+			OrgID: f.org, ID: id, Name: name, Issuer: issuer, JwksUri: f.issuer + "/jwks", Audience: f.svc.EndpointURL(f.org, id),
 			CreatedBy: f.alice.String(),
 		}); err != nil {
 			return err
@@ -149,7 +156,7 @@ func (f *rxFixture) token(t *testing.T, key *rsa.PrivateKey, tx ids.UUID, mut fu
 	t.Helper()
 	c := map[string]any{
 		"iss": f.issuer, "aud": f.svc.EndpointURL(f.org, tx), "iat": f.clk.Now().Unix(), "jti": ids.NewV7().String(),
-		"sub_id": map[string]any{"format": "iss_sub", "iss": "https://login.example.com", "sub": "user-7"},
+		"sub_id": map[string]any{"format": "iss_sub", "iss": f.issuer, "sub": "user-7"},
 		"events": map[string]any{TypeSessionRevoked: map[string]any{"event_timestamp": f.clk.Now().Unix()}},
 	}
 	if mut != nil {
@@ -253,18 +260,6 @@ func TestT113_ReceiverAcceptsOnlyFreshSignedEventsFromActiveTransmitters(t *test
 	if n := f.count(t, "SELECT events_refused FROM pc.ssf_transmitters WHERE id = $1", f.tx); n != 4 {
 		t.Fatalf("refusals counted = %d", n)
 	}
-
-	// Rate limit per transmitter.
-	limited := false
-	for range RateLimit {
-		if a := f.post(t, f.org, f.tx, ContentType, "x"); a.status == http.StatusTooManyRequests {
-			limited = true
-			break
-		}
-	}
-	if !limited {
-		t.Error("the transmitter was never rate-limited")
-	}
 }
 
 // TestHR261_SubjectMatchingAndEventTypes: an event about nobody, about an
@@ -284,7 +279,7 @@ func TestHR261_SubjectMatchingAndEventTypes(t *testing.T) {
 		}, OutcomeAccepted, true},
 		{"ambiguous email", func(c map[string]any) { c["sub_id"] = map[string]any{"format": "email", "email": "shared@example.com"} }, OutcomeUnmatched, false},
 		{"unknown person", func(c map[string]any) {
-			c["sub_id"] = map[string]any{"format": "iss_sub", "iss": "https://login.example.com", "sub": "nobody"}
+			c["sub_id"] = map[string]any{"format": "iss_sub", "iss": f.issuer, "sub": "nobody"}
 		}, OutcomeUnmatched, false},
 		{"opaque", func(c map[string]any) { c["sub_id"] = map[string]any{"format": "opaque", "id": "x"} }, OutcomeUnmatched, false},
 		{"other event type", func(c map[string]any) {
@@ -322,5 +317,55 @@ func TestHR261_LapsedEditionAcceptsNothing(t *testing.T) {
 	}
 	if n := f.count(t, "SELECT count(*) FROM pc.ssf_events"); n != 0 || len(f.sink.got) != 0 {
 		t.Fatalf("events %d, sink %d", n, len(f.sink.got))
+	}
+}
+
+// TestT113_JunkCannotSpendATransmittersBudget: a source address is limited
+// before anything is parsed, and a transmitter's budget counts only tokens
+// whose header is well formed, so junk sent to its public endpoint from
+// elsewhere cannot crowd out its real events (D64 L2).
+func TestT113_JunkCannotSpendATransmittersBudget(t *testing.T) {
+	f := newRxFixture(t)
+	push := func(ip, body string) int {
+		req := httptest.NewRequest(http.MethodPost, "/v1/ssf/"+f.org.String()+"/"+f.tx.String(), strings.NewReader(body))
+		req.Header.Set("Content-Type", ContentType)
+		req.RemoteAddr = ip + ":40000"
+		rec := httptest.NewRecorder()
+		f.mux.ServeHTTP(rec, req)
+		return rec.Code
+	}
+	for i := range RateLimit + 10 {
+		if code := push("198.51.100.7", "junk"); code != http.StatusBadRequest {
+			t.Fatalf("junk %d: %d", i, code)
+		}
+	}
+	if n := f.count(t, "SELECT events_refused FROM pc.ssf_transmitters WHERE id = $1", f.tx); n != 0 {
+		t.Fatalf("junk was counted against the transmitter: %d", n)
+	}
+	if code := push("203.0.113.9", f.token(t, f.key, f.tx, nil)); code != http.StatusAccepted {
+		t.Fatalf("the transmitter's real event after junk: %d", code)
+	}
+	// The source address limit.
+	limited := false
+	for range IPRateLimit {
+		if push("198.51.100.7", "junk") == http.StatusTooManyRequests {
+			limited = true
+			break
+		}
+	}
+	if !limited {
+		t.Error("a source address was never limited")
+	}
+	// The transmitter's budget, with well-formed tokens from many addresses.
+	tok := f.token(t, f.key, f.tx, nil)
+	limited = false
+	for i := range RateLimit + 1 {
+		if push("192.0.2."+strconv.Itoa(i%200+1), tok) == http.StatusTooManyRequests {
+			limited = true
+			break
+		}
+	}
+	if !limited {
+		t.Error("the transmitter was never rate-limited")
 	}
 }

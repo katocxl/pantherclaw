@@ -310,3 +310,48 @@ func TestJWKSCacheAndLimits(t *testing.T) {
 		t.Error("a JWKS URI on another host was accepted")
 	}
 }
+
+// TestJWKSFailedFetchWaitsAMinute: while the key set cannot be fetched,
+// pushes do not refetch more than once per MissInterval (D64 L7).
+func TestJWKSFailedFetchWaitsAMinute(t *testing.T) {
+	var fetches atomic.Int32
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		fetches.Add(1)
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	defer srv.Close()
+	clock := now
+	j, err := NewJWKS(srv.Client(), srv.URL, srv.URL+"/keys", func() time.Time { return clock })
+	if err != nil {
+		t.Fatal(err)
+	}
+	for range 10 {
+		if _, err := j.Key(context.Background(), "k"); err == nil {
+			t.Fatal("a key from a failing key set")
+		}
+	}
+	if n := fetches.Load(); n != 1 {
+		t.Fatalf("fetches = %d, want 1", n)
+	}
+	clock = clock.Add(MissInterval)
+	_, _ = j.Key(context.Background(), "k")
+	if n := fetches.Load(); n != 2 {
+		t.Fatalf("fetches after a minute = %d, want 2", n)
+	}
+}
+
+func TestCheckHeaderRefusesBeforeKeys(t *testing.T) {
+	f := newFixture(t)
+	good := sign(t, jose.RS256, f.rsa, "r1", nil, claimsJSON(nil))
+	if err := CheckHeader(good); err != nil {
+		t.Fatalf("good header: %v", err)
+	}
+	for _, bad := range []string{
+		"", "junk", rawToken(map[string]any{"alg": "none", "kid": "r1"}, claimsJSON(nil), ""),
+		sign(t, jose.RS256, f.rsa, "r1", map[jose.HeaderKey]any{"jku": "https://evil.example/jwks"}, claimsJSON(nil)),
+	} {
+		if err := CheckHeader(bad); err == nil {
+			t.Errorf("accepted header of %q", bad)
+		}
+	}
+}

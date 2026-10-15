@@ -20,6 +20,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/httpx"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
+	reflexdomain "github.com/katocxl/pantherclaw/internal/reflex/domain"
 	"github.com/katocxl/pantherclaw/internal/siem/ocsf"
 )
 
@@ -135,7 +136,7 @@ func (s *Service) plan(ctx context.Context, tx db.TenantTx, org ids.OrgID, id id
 			p.attempts = int(*row.BatchAttempts)
 		}
 		var b ocsf.Builder
-		if _, err := s.fill(ctx, tx, &b, p.from, p.to, classes); err != nil {
+		if _, _, err := s.fill(ctx, tx, &b, p.from, p.to, classes); err != nil {
 			return nil, Step{}, err
 		}
 		if p.body, err = b.Body(p.id.String(), p.from, p.to); err != nil {
@@ -143,9 +144,14 @@ func (s *Service) plan(ctx context.Context, tx db.TenantTx, org ids.OrgID, id id
 		}
 	} else {
 		var b ocsf.Builder
-		to, err := s.fill(ctx, tx, &b, row.CursorSeq, 0, classes)
+		to, skipped, err := s.fill(ctx, tx, &b, row.CursorSeq, 0, classes)
 		if err != nil {
 			return nil, Step{}, err
+		}
+		if len(skipped) > 0 {
+			if err := s.skippedFailure(ctx, tx, org, id, row.CursorSeq, to, skipped); err != nil {
+				return nil, Step{}, err
+			}
 		}
 		switch {
 		case to == row.CursorSeq:
@@ -160,7 +166,8 @@ func (s *Service) plan(ctx context.Context, tx db.TenantTx, org ids.OrgID, id id
 			return nil, Step{}, err
 		}
 		if err := q.InsertSIEMBatch(ctx, dbq.InsertSIEMBatchParams{
-			OrgID: org, ID: p.id, DestinationID: id, FromSeq: p.from, ToSeq: p.to, EventCount: int32(b.Len()), BodyBytes: int32(len(p.body)), LeaseSeconds: leaseSeconds, //nolint:gosec // G115: ≤ 100 events, ≤ 1 MiB
+			OrgID: org, ID: p.id, DestinationID: id, FromSeq: p.from, ToSeq: p.to, EventCount: int32(b.Len()), //nolint:gosec // G115: ≤ 100
+			BodyBytes: int32(len(p.body)), SkippedUids: skipped, LeaseSeconds: leaseSeconds, //nolint:gosec // G115: ≤ 1 MiB
 		}); err != nil {
 			return nil, Step{}, err
 		}
@@ -174,13 +181,17 @@ func (s *Service) plan(ctx context.Context, tx db.TenantTx, org ids.OrgID, id id
 // fill reads the feed after from and adds the destination's events to b.
 // With to > 0 it re-reads exactly (from, to]; otherwise it returns where
 // the new batch ends: the last event added when the batch filled up,
-// else the last entry read.
-func (s *Service) fill(ctx context.Context, tx db.TenantTx, b *ocsf.Builder, from, to int64, classes []ocsf.DataClass) (int64, error) {
+// else the last entry read. skipped lists the entries too large for any
+// batch (never expected: feed bodies are ≤ 8 KiB), which the caller
+// records on the batch and as an owned failure (D64 L5).
+func (s *Service) fill(ctx context.Context, tx db.TenantTx, b *ocsf.Builder, from, to int64, classes []ocsf.DataClass) (
+	end int64, skipped []ids.UUID, err error,
+) {
 	evs, err := s.feed.After(ctx, tx, from, ScanLimit)
 	if err != nil {
-		return 0, err
+		return 0, nil, err
 	}
-	end := from
+	end = from
 	for _, e := range evs {
 		if to > 0 && e.Seq > to {
 			break
@@ -191,24 +202,52 @@ func (s *Service) fill(ctx context.Context, tx db.TenantTx, b *ocsf.Builder, fro
 		}
 		enc, err := ocsf.Encode(ocsf.Map(e, s.cfg.ProductVersion))
 		if err != nil {
-			return 0, err
+			return 0, nil, err
 		}
 		ok, err := b.Add(enc)
 		if errors.Is(err, ocsf.ErrEventTooLarge) {
-			// Never expected (feed bodies are ≤ 8 KiB); skipping it keeps
-			// the export moving and the log says which entry.
 			s.log.ErrorContext(ctx, "siem.event_too_large", slog.String("entry", e.ID.String()), slog.Int64("seq", e.Seq))
+			skipped = append(skipped, e.ID)
 			end = e.Seq
 			continue
 		} else if err != nil {
-			return 0, err
+			return 0, nil, err
 		}
 		if !ok {
-			return end, nil
+			return end, skipped, nil
 		}
 		end = e.Seq
 	}
-	return end, nil
+	return end, skipped, nil
+}
+
+// skippedFailure records entries no batch could carry as an owned failure
+// naming them (D64 L5): export moves on, and the gap is never silent.
+func (s *Service) skippedFailure(ctx context.Context, tx db.TenantTx, org ids.OrgID, id ids.UUID, from, to int64, skipped []ids.UUID) error {
+	s.log.ErrorContext(ctx, "siem.events_skipped", slog.String("destination", id.String()), slog.Int("entries", len(skipped)))
+	if s.failures == nil {
+		return nil
+	}
+	list := ""
+	for i, u := range skipped {
+		if i == 8 {
+			list += ", …"
+			break
+		}
+		if i > 0 {
+			list += ", "
+		}
+		list += u.String()
+	}
+	_, err := s.failures.Report(ctx, tx.Pgx(), reflexdomain.Failure{
+		Org: org, Kind: "siem.event_skipped",
+		Summary: strconv.Itoa(len(skipped)) + " evidence entries between sequence " + strconv.FormatInt(from, 10) + " and " +
+			strconv.FormatInt(to, 10) + " were too large to export to destination " + id.String() + ": " + list + ".",
+		NextStep:  "Export these entries from the evidence ledger by hand; the destination's batch lists them.",
+		Scope:     []reflexdomain.Subject{{Type: reflexdomain.SubjectResource, ID: "siem_destination:" + id.String()}},
+		DedupeKey: "siem.event_skipped:" + id.String() + ":" + skipped[0].String(),
+	})
+	return err
 }
 
 func (s *Service) secrets(ctx context.Context, org ids.OrgID, id ids.UUID, cur, prev []byte, prevLive bool) ([][]byte, error) {
