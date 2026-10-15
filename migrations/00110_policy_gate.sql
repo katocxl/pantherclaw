@@ -37,8 +37,14 @@ ALTER TABLE pc.policy_versions
                AND (published_at IS NULL) = (published_by IS NULL)) NOT VALID,
     ADD CONSTRAINT policy_versions_digest
         CHECK (state NOT IN ('VALIDATED', 'TESTED') OR content_digest IS NOT NULL) NOT VALID;
+-- squawk: pc.policy_versions holds a few versions per org, so validating each
+-- constraint takes its lock briefly; goose runs each migration in one
+-- transaction (.squawk.toml), so the validation cannot move to its own.
+-- squawk-ignore constraint-missing-not-valid
 ALTER TABLE pc.policy_versions VALIDATE CONSTRAINT policy_versions_state_check;
+-- squawk-ignore constraint-missing-not-valid
 ALTER TABLE pc.policy_versions VALIDATE CONSTRAINT policy_versions_published;
+-- squawk-ignore constraint-missing-not-valid
 ALTER TABLE pc.policy_versions VALIDATE CONSTRAINT policy_versions_digest;
 
 -- One validation of a version: the content, active definitions and fact
@@ -149,15 +155,23 @@ GRANT SELECT ON pc.policy_validations, pc.policy_test_runs, pc.policy_change_req
 
 -- The confirmation ceremony of a change request. pc_app's table-level
 -- SELECT and INSERT on webauthn_ceremonies (00030) cover the new column.
+-- squawk: pc.webauthn_ceremonies rows live 5 minutes, so the table is small and
+-- adding and validating the constraints locks it briefly; goose runs each
+-- migration in one transaction (.squawk.toml), so CONCURRENTLY and a separate
+-- VALIDATE are not possible. squawk reads an ignore on the line above the
+-- clause it flags.
 ALTER TABLE pc.webauthn_ceremonies
     ADD COLUMN policy_change_request_id uuid,
     DROP CONSTRAINT webauthn_ceremonies_binding_subject,
     ADD CONSTRAINT webauthn_ceremonies_binding_subject
         CHECK ((purpose = 'BINDING') = (num_nonnulls(approval_request_id, batch_id, reconciliation_id, policy_change_request_id) = 1)
                AND num_nonnulls(approval_request_id, batch_id, reconciliation_id, policy_change_request_id) <= 1) NOT VALID,
+    -- squawk-ignore constraint-missing-not-valid, adding-foreign-key-constraint
     ADD CONSTRAINT webauthn_ceremonies_policy_change_fk FOREIGN KEY (org_id, policy_change_request_id)
         REFERENCES pc.policy_change_requests (org_id, id);
+-- squawk-ignore constraint-missing-not-valid
 ALTER TABLE pc.webauthn_ceremonies VALIDATE CONSTRAINT webauthn_ceremonies_binding_subject;
+-- squawk-ignore require-concurrent-index-creation
 CREATE UNIQUE INDEX webauthn_ceremonies_binding_policy_change
     ON pc.webauthn_ceremonies (org_id, policy_change_request_id, user_id)
     WHERE policy_change_request_id IS NOT NULL AND consumed_at IS NULL;

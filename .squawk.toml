@@ -4,6 +4,11 @@
 # squawk, the migration linter (ADR-0003, BUILD_GUIDE §3.3). Run it with
 # `task lint:migrations`, which lints the Up section of every migration after
 # the baseline in tools/squawk.
+#
+# A statement may carry `-- squawk-ignore <rule>` only with a reason naming
+# why its lock is short; no rule is disabled globally. squawk reads the
+# ignore on the line directly above the line it flags (a clause inside a
+# multi-line statement takes its own).
 pg_version = "17"
 
 # goose runs each migration in one transaction (no migration uses
