@@ -31,7 +31,8 @@ type exceptionVerb struct {
 }
 
 var exceptionVerbs = map[string]exceptionVerb{
-	"request": {"request RULE --agent ID --operation OP [--operation OP]... --reason TEXT --expires-in DURATION [--owner USER_ID]", 1,
+	"request": {
+		"request RULE --agent ID --operation OP [--operation OP]... --reason TEXT --expires-in DURATION [--owner USER_ID]", 1,
 		func(fs *flag.FlagSet) exceptionCall {
 			var ops list
 			agent := fs.String("agent", "", "the agent it applies to (required)")
@@ -51,8 +52,10 @@ var exceptionVerbs = map[string]exceptionVerb{
 					ExpiresInSeconds: int64(*expires / time.Second), OwnerId: optString(*owner),
 				})
 			}
-		}},
-	"list": {"list [--agent ID] [--rule RULE] [--state pending|active|declined|revoked|expired]", 0,
+		},
+	},
+	"list": {
+		"list [--agent ID] [--rule RULE] [--state pending|active|declined|revoked|expired]", 0,
 		func(fs *flag.FlagSet) exceptionCall {
 			agent, rule := fs.String("agent", "", "only this agent"), fs.String("rule", "", "only this rule")
 			state := fs.String("state", "", "only this state")
@@ -63,7 +66,8 @@ var exceptionVerbs = map[string]exceptionVerb{
 					PageSize: size(n), PageToken: *tok,
 				})
 			}
-		}},
+		},
+	},
 	"get": {"get ID", 1, func(*flag.FlagSet) exceptionCall {
 		return func(ctx context.Context, c pantherclawv1connect.PolicyExceptionServiceClient, args []string) (proto.Message, error) {
 			return c.GetPolicyException(ctx, &pantherclawv1.GetPolicyExceptionRequest{Id: args[0]})

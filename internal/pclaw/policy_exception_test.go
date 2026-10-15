@@ -62,8 +62,10 @@ func TestPolicyExceptionCommands(t *testing.T) {
 	const agent = "0192aaaa-bbbb-7ccc-8ddd-000000000001"
 	for name, args := range map[string][]string{
 		"no reason": {"policy", "exception", "request", "hold-large", "--agent", agent, "--operation", "payments.refund.create", "--expires-in", "24h"},
-		"31 days": {"policy", "exception", "request", "hold-large", "--agent", agent, "--operation", "payments.refund.create",
-			"--reason", "backlog", "--expires-in", "744h"},
+		"31 days": {
+			"policy", "exception", "request", "hold-large", "--agent", agent, "--operation", "payments.refund.create",
+			"--reason", "backlog", "--expires-in", "744h",
+		},
 		"no verb":      {"policy", "exception"},
 		"unknown verb": {"policy", "exception", "extend", "x1"},
 	} {

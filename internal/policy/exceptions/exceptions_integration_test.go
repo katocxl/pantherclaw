@@ -60,8 +60,10 @@ const op = "payments.refund.create"
 
 func rules() []pdomain.Rule {
 	return []pdomain.Rule{
-		{ID: "hold-large", Kind: pdomain.RequireApproval, Summary: "Hold large refunds", Operations: []string{"payments.refund.*"},
-			When: "true", Reason: "LARGE_REFUND", Approval: &pdomain.ApprovalRequirement{Role: "approver", Count: 1}, Exceptable: true},
+		{
+			ID: "hold-large", Kind: pdomain.RequireApproval, Summary: "Hold large refunds", Operations: []string{"payments.refund.*"},
+			When: "true", Reason: "LARGE_REFUND", Approval: &pdomain.ApprovalRequirement{Role: "approver", Count: 1}, Exceptable: true,
+		},
 		{ID: "no-huge", Kind: pdomain.Forbid, Summary: "No huge refunds", Operations: []string{op}, When: "true", Reason: "HUGE"},
 	}
 }
