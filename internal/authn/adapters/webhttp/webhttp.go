@@ -447,7 +447,7 @@ func (h *Handler) static(w http.ResponseWriter, r *http.Request) {
 		"account.js": "text/javascript; charset=utf-8", "containment.js": "text/javascript; charset=utf-8",
 		"approvals.js": "text/javascript; charset=utf-8", "reconciliations.js": "text/javascript; charset=utf-8",
 		"policy_changes.js": "text/javascript; charset=utf-8",
-		"pc.css": "text/css; charset=utf-8",
+		"pc.css":            "text/css; charset=utf-8",
 	}
 	ct, ok := types[name]
 	if !ok {

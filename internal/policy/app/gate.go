@@ -584,7 +584,6 @@ type OutcomeDiffer interface {
 	OutcomeDiff(ctx context.Context, org ids.OrgID, base, next *domain.Bundle) ([]byte, error)
 }
 
-
 // ApplyPublish is the PUBLISH change requests' apply callback: on the last
 // confirmation, the version is published in the approving transaction if
 // its newest passing test run ran against the org's current definitions
