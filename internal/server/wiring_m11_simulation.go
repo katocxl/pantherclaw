@@ -58,7 +58,7 @@ func registerSimulationJobs(reg *jobs.Registry, pool *db.Pool, kp keys.KeyProvid
 	versions := &simulation.VersionCache{Source: engine.Source}
 	engine.Source = versions
 	r := &simulation.Runner{
-		Store: pgsimulation.Store{Pool: pool}, Replay: engine, Versions: versions, Infrastructure: pgsimulation.Infrastructure,
+		Store: pgsimulation.Store{Pool: pool}, Replay: engine, Versions: versions,
 	}
 	if bill != nil {
 		r.Editions = bill

@@ -56,11 +56,6 @@ type Runner struct {
 	// Editions is checked at each step: a run whose edition lapsed fails
 	// with EDITION_REQUIRED (nil: no edition, so every run fails, D34).
 	Editions Editions
-	// Infrastructure reports an error that should fail the step (and be
-	// retried): the database or the context. Any other replay error is one
-	// recorded decision that cannot be read, counted unevaluable
-	// (INPUTS_UNREADABLE). nil: every error is infrastructure.
-	Infrastructure func(error) bool
 }
 
 func (r *Runner) now() time.Time {
@@ -296,11 +291,12 @@ func unevaluable(res Result, lims []replay.Limitation) Result {
 	return res
 }
 
-// unreadable is a replay that failed: an infrastructure error fails the
-// step (and is retried); any other is this recorded decision's own, so it
-// is unevaluable (INPUTS_UNREADABLE) and the run goes on (D34).
+// unreadable is a replay that failed: a stored receipt that does not parse
+// is this recorded decision's own, so it is unevaluable (INPUTS_UNREADABLE)
+// and the run goes on (D34); any other error fails the step, which is
+// retried (D38).
 func (r *Runner) unreadable(res Result, err error) (Result, error) {
-	if r.Infrastructure == nil || r.Infrastructure(err) {
+	if !receiptUnreadable(err) {
 		return Result{}, err
 	}
 	res.Category, res.Proposed, res.PropReason = replay.Unevaluable, "", ""

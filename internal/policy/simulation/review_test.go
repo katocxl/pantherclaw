@@ -5,6 +5,7 @@ package simulation_test
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"testing"
@@ -19,7 +20,9 @@ import (
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
 )
 
-var errInfrastructure = errors.New("connection reset")
+// errClosedPool is what a closed pool returns: a plain error, named by no
+// type the runner knows, so it must fail the step rather than count.
+var errClosedPool = errors.New("closed pool")
 
 // ticking is a clock that moves a minute each time it is read.
 type ticking struct{ t time.Time }
@@ -95,28 +98,33 @@ func TestHR237_SimulationFailsWhenTheEditionLapses(t *testing.T) {
 	}
 }
 
-// TestHR237_AnUnreadableDecisionIsUnevaluable: a replay error of one
-// recorded decision counts it unevaluable (INPUTS_UNREADABLE) and the run
-// goes on; an infrastructure error fails the step for a retry, and the
-// retry resumes where the last chunk ended (D34).
+// TestHR237_AnUnreadableDecisionIsUnevaluable: a stored receipt that does
+// not parse (not a compact JWS, its payload not base64) counts that one
+// decision unevaluable (INPUTS_UNREADABLE) and the run goes on (D34);
+// any other error, such as a closed pool's plain one, fails the step for a
+// retry without counting anything, and the retry resumes where the last
+// chunk ended (D38).
 func TestHR237_AnUnreadableDecisionIsUnevaluable(t *testing.T) {
 	w := newWorld(billing.Team)
-	w.record(3, "payments.refund.create", outcome{orig: adomain.Allow, origReason: "GRANT_COVERS", prop: adomain.Allow, propReason: "GRANT_COVERS"})
-	w.replay.errs = map[ids.UUID]error{w.store.recorded[1].Transaction: errors.New("replay: the decision receipt is not a compact JWS")}
+	w.record(4, "payments.refund.create", outcome{orig: adomain.Allow, origReason: "GRANT_COVERS", prop: adomain.Allow, propReason: "GRANT_COVERS"})
+	w.replay.errs = map[ids.UUID]error{
+		w.store.recorded[1].Transaction: errors.New("replay: the decision receipt is not a compact JWS"),
+		w.store.recorded[2].Transaction: fmt.Errorf("replay: the decision receipt: %w", base64.CorruptInputError(7)),
+	}
 	s := w.run(t, w.simulate(t, simulation.Request{}).ID)
 	samples, err := w.svc.Samples(as(td.RolePolicyAuthor), s.ID, simulation.SampleFilter{Category: replay.Unevaluable}, 0, "")
-	if err != nil || s.Report.Counts[replay.Unevaluable] != 1 || s.Report.Counts[replay.Unchanged] != 2 || len(samples.Items) != 1 ||
-		samples.Items[0].Limitations[0] != replay.IncompleteInputsUnreadable {
+	if err != nil || s.Report.Counts[replay.Unevaluable] != 2 || s.Report.Counts[replay.Unchanged] != 2 || len(samples.Items) != 2 ||
+		samples.Items[0].Limitations[0] != replay.IncompleteInputsUnreadable || samples.Items[1].Limitations[0] != replay.IncompleteInputsUnreadable {
 		t.Fatalf("unreadable decision: %v %+v %v", s.Report.Counts, samples.Items, err)
 	}
 
 	w = newWorld(billing.Team)
 	w.record(4, "payments.refund.create", outcome{orig: adomain.Allow, origReason: "GRANT_COVERS", prop: adomain.Allow, propReason: "GRANT_COVERS"})
 	w.runner.Chunk = 2
-	w.replay.errs = map[ids.UUID]error{w.store.recorded[2].Transaction: fmt.Errorf("replay: %w", errInfrastructure)}
+	w.replay.errs = map[ids.UUID]error{w.store.recorded[2].Transaction: fmt.Errorf("replay: the decision receipt: %w", errClosedPool)}
 	id := w.simulate(t, simulation.Request{}).ID
-	if _, err := w.runner.Step(context.Background(), org, id); !errors.Is(err, errInfrastructure) {
-		t.Fatalf("an infrastructure error: %v", err)
+	if _, err := w.runner.Step(context.Background(), org, id); !errors.Is(err, errClosedPool) {
+		t.Fatalf("a closed pool: %v", err)
 	}
 	if got := w.store.sims[id]; got.State != simulation.Running || got.Evaluated != 2 {
 		t.Fatalf("after the failed step: %s %d", got.State, got.Evaluated)

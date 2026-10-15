@@ -5,7 +5,6 @@ package simulation_test
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"go/build"
 	"go/parser"
@@ -42,7 +41,6 @@ func newWorld(edition billing.Edition) *world {
 	w.svc = &simulation.Service{Store: w.store, Versions: v, Editions: editions(edition), IsNotFound: func(err error) bool { return err != nil }}
 	w.runner = &simulation.Runner{
 		Store: w.store, Replay: w.replay, Versions: v, Chunk: 7, Budget: time.Hour, Editions: editions(edition),
-		Infrastructure: func(err error) bool { return errors.Is(err, errInfrastructure) },
 	}
 	return w
 }
