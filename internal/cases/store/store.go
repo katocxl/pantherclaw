@@ -254,3 +254,17 @@ func EntryFromRow(r dbq.PcCaseEntry) (domain.Entry, error) {
 func invalid(err error) error {
 	return pcerr.Wrap(err, pcerr.InvalidArgument, "INVALID_CASE_ENTRY", err.Error())
 }
+
+// UnownedOpenQuestions returns the open questions of case c that name no
+// owner (D66).
+func UnownedOpenQuestions(ctx context.Context, tx db.TenantTx, c ids.UUID) (map[ids.UUID]bool, error) {
+	rows, err := dbq.New(tx).UnownedOpenQuestions(ctx, tx.OrgID(), c)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[ids.UUID]bool, len(rows))
+	for _, id := range rows {
+		out[id] = true
+	}
+	return out, nil
+}

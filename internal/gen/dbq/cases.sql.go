@@ -725,3 +725,36 @@ func (q *Queries) SupersededCaseEntries(ctx context.Context, orgID ids.OrgID, ca
 	}
 	return items, nil
 }
+
+const unownedOpenQuestions = `-- name: UnownedOpenQuestions :many
+SELECT q.id FROM pc.case_entries q
+WHERE q.org_id = $1 AND q.case_id = $2 AND q.kind = 'QUESTION' AND q.owner_id IS NULL
+  AND NOT pc.case_entry_superseded(q.org_id, q.id)
+  AND NOT EXISTS (
+      SELECT 1 FROM pc.case_entries a
+      WHERE a.org_id = q.org_id AND a.case_id = q.case_id AND a.kind = 'ANSWER' AND a.question_id = q.id
+        AND NOT a.unresolved AND NOT pc.case_entry_superseded(a.org_id, a.id))
+ORDER BY q.seq
+`
+
+// The case's open questions that name no owner (D66): standing QUESTION
+// entries without an owner and without a standing resolving ANSWER.
+func (q *Queries) UnownedOpenQuestions(ctx context.Context, orgID ids.OrgID, caseID ids.UUID) ([]ids.UUID, error) {
+	rows, err := q.db.Query(ctx, unownedOpenQuestions, orgID, caseID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ids.UUID{}
+	for rows.Next() {
+		var id ids.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}

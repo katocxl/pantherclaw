@@ -325,6 +325,10 @@ func TestCaseOpenerSeedsLinksAndQuestions(t *testing.T) {
 	if kinds[domain.KindLink] != 3 || kinds[domain.KindQuestion] != 1 || kinds[domain.KindFact] != 0 || v.Case.Alert == nil {
 		t.Fatalf("seeded %v, case %+v", kinds, v.Case)
 	}
+	// The seeded question is open and unowned until a person takes it on (D66).
+	if v.OpenQuestions != 1 || len(v.Unowned) != 1 {
+		t.Fatalf("seeded question: open %d, unowned %v", v.OpenQuestions, v.Unowned)
+	}
 	// Another org's transaction is refused.
 	err = f.p.InTenantTx(context.Background(), f.org, func(ctx context.Context, tx db.TenantTx) error {
 		s := seed

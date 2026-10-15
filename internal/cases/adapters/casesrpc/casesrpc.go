@@ -98,10 +98,10 @@ func draftProto(d domain.Draft) *pantherclawv1.CaseEntryDraft {
 }
 
 // EntryProto maps an entry.
-func EntryProto(e domain.Entry, superseded bool) *pantherclawv1.CaseEntry {
+func EntryProto(e domain.Entry, superseded, unowned bool) *pantherclawv1.CaseEntry {
 	return &pantherclawv1.CaseEntry{
 		Id: e.ID.String(), Seq: e.Seq, Author: e.Author.Type + ":" + e.Author.ID, Entry: draftProto(e.Draft),
-		Superseded: superseded, LedgerEntryId: e.LedgerEntry.String(), PrevHash: hex.EncodeToString(e.PrevHash),
+		Superseded: superseded, Unowned: unowned, LedgerEntryId: e.LedgerEntry.String(), PrevHash: hex.EncodeToString(e.PrevHash),
 		EntryHash: hex.EncodeToString(e.Hash), Body: e.Body, CreateTime: timestamppb.New(e.Created),
 	}
 }
@@ -188,7 +188,7 @@ func (h *Handler) AppendCaseEntry(ctx context.Context, req *pantherclawv1.Append
 	if err != nil {
 		return nil, err
 	}
-	return &pantherclawv1.AppendCaseEntryResponse{Entry: EntryProto(e, false), Case: CaseProto(v.Case)}, nil
+	return &pantherclawv1.AppendCaseEntryResponse{Entry: EntryProto(e, false, false), Case: CaseProto(v.Case)}, nil
 }
 
 // GetCase implements CaseServiceHandler.
@@ -203,7 +203,7 @@ func (h *Handler) GetCase(ctx context.Context, req *pantherclawv1.GetCaseRequest
 	}
 	out := &pantherclawv1.GetCaseResponse{Case: CaseProto(v.Case), More: v.More, OpenQuestions: v.OpenQuestions}
 	for _, e := range v.Entries {
-		out.Entries = append(out.Entries, EntryProto(e, v.Superseded[e.ID]))
+		out.Entries = append(out.Entries, EntryProto(e, v.Superseded[e.ID], v.Unowned[e.ID]))
 	}
 	return out, nil
 }

@@ -552,7 +552,10 @@ type CaseEntry struct {
 	// The canonical JSON body that was hashed.
 	Body []byte `protobuf:"bytes,9,opt,name=body,proto3" json:"body,omitempty"`
 	// When it was added.
-	CreateTime    *timestamppb.Timestamp `protobuf:"bytes,10,opt,name=create_time,json=createTime,proto3" json:"create_time,omitempty"`
+	CreateTime *timestamppb.Timestamp `protobuf:"bytes,10,opt,name=create_time,json=createTime,proto3" json:"create_time,omitempty"`
+	// An open question that names no owner, such as one the product seeded:
+	// a person should take it on (D66).
+	Unowned       bool `protobuf:"varint,11,opt,name=unowned,proto3" json:"unowned,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -655,6 +658,13 @@ func (x *CaseEntry) GetCreateTime() *timestamppb.Timestamp {
 		return x.CreateTime
 	}
 	return nil
+}
+
+func (x *CaseEntry) GetUnowned() bool {
+	if x != nil {
+		return x.Unowned
+	}
+	return false
 }
 
 // OpenCaseRequest describes a case.
@@ -1638,7 +1648,7 @@ const file_pantherclaw_v1_cases_proto_rawDesc = "" +
 	"supersedes\x88\x01\x01B\x0e\n" +
 	"\f_question_idB\v\n" +
 	"\t_owner_idB\r\n" +
-	"\v_supersedes\"\xd0\x02\n" +
+	"\v_supersedes\"\xea\x02\n" +
 	"\tCaseEntry\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x10\n" +
 	"\x03seq\x18\x02 \x01(\x03R\x03seq\x12\x16\n" +
@@ -1654,7 +1664,8 @@ const file_pantherclaw_v1_cases_proto_rawDesc = "" +
 	"\x04body\x18\t \x01(\fR\x04body\x12;\n" +
 	"\vcreate_time\x18\n" +
 	" \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"createTime\"\x9e\x02\n" +
+	"createTime\x12\x18\n" +
+	"\aunowned\x18\v \x01(\bR\aunowned\"\x9e\x02\n" +
 	"\x0fOpenCaseRequest\x12 \n" +
 	"\x05title\x18\x01 \x01(\tB\n" +
 	"\xbaH\ar\x05\x10\x01\x18\xc8\x01R\x05title\x12A\n" +

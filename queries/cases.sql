@@ -124,3 +124,15 @@ WHERE t.org_id = sqlc.arg(org_id)
   AND (NOT sqlc.arg(scoped)::boolean OR r.agent_id = ANY (sqlc.arg(visible_agents)::uuid[]))
 ORDER BY t.created_at, t.id
 LIMIT sqlc.arg(max_rows);
+
+-- The case's open questions that name no owner (D66): standing QUESTION
+-- entries without an owner and without a standing resolving ANSWER.
+-- name: UnownedOpenQuestions :many
+SELECT q.id FROM pc.case_entries q
+WHERE q.org_id = sqlc.arg(org_id) AND q.case_id = sqlc.arg(case_id) AND q.kind = 'QUESTION' AND q.owner_id IS NULL
+  AND NOT pc.case_entry_superseded(q.org_id, q.id)
+  AND NOT EXISTS (
+      SELECT 1 FROM pc.case_entries a
+      WHERE a.org_id = q.org_id AND a.case_id = q.case_id AND a.kind = 'ANSWER' AND a.question_id = q.id
+        AND NOT a.unresolved AND NOT pc.case_entry_superseded(a.org_id, a.id))
+ORDER BY q.seq;

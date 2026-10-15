@@ -214,6 +214,9 @@ message CaseEntry {
   bytes body = 9;
   // When it was added.
   google.protobuf.Timestamp create_time = 10;
+  // An open question that names no owner, such as one the product seeded:
+  // a person should take it on (D66).
+  bool unowned = 11;
 }
 
 // OpenCaseRequest describes a case.

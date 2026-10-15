@@ -351,6 +351,9 @@ type View struct {
 	Entries       []domain.Entry
 	Superseded    map[ids.UUID]bool
 	OpenQuestions int64
+	// Unowned are the open questions that name no owner, such as the ones the
+	// product seeded (D66).
+	Unowned map[ids.UUID]bool
 	// More: the case has entries after the last one returned.
 	More bool
 }
@@ -384,7 +387,10 @@ func (s *Service) Get(ctx context.Context, c ids.UUID, after int64, limit int) (
 		if v.Superseded, err = store.Superseded(ctx, tx, c); err != nil {
 			return err
 		}
-		v.OpenQuestions, err = store.OpenQuestions(ctx, tx, c)
+		if v.OpenQuestions, err = store.OpenQuestions(ctx, tx, c); err != nil {
+			return err
+		}
+		v.Unowned, err = store.UnownedOpenQuestions(ctx, tx, c)
 		return err
 	}, db.ReadOnly())
 	return v, err
