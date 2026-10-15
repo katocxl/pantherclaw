@@ -1,0 +1,176 @@
+// SPDX-License-Identifier: BUSL-1.1
+// Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+
+syntax = "proto3";
+
+package pantherclaw.v1;
+
+import "buf/validate/validate.proto";
+import "google/protobuf/timestamp.proto";
+
+// PromotionService promotes agents for production work, one operation at a
+// time (G0 M11 part 2, D39; F333, F334, HR-290, T-128).
+//
+// In a PRODUCTION environment a new or widened grant, issued by a person
+// or by an automation, must list its operations, and the agent must hold
+// an ACTIVE promotion covering each (the same entry, or a prefix such as
+// payments.* that covers it); otherwise it is refused NOT_PROMOTED.
+// Existing grants keep working until they expire. A promotion is made by a
+// person with a security-key step-up on their browser session at most 5
+// minutes old, and only for operations whose checks pass: OWNER, IDENTITY,
+// TESTS, APPROVALS, COVERAGE and FAILURE_BEHAVIOUR. Readiness is stated
+// per operation, never for the agent as a whole.
+service PromotionService {
+  // PromoteAgent promotes an agent in its PRODUCTION environment for each
+  // operation whose checks pass; the others are reported with the checks
+  // they failed. Needs a fresh step-up.
+  // permission: agent.promote
+  rpc PromoteAgent(PromoteAgentRequest) returns (PromoteAgentResponse);
+  // RevokePromotion revokes an ACTIVE promotion: new and widened grants for
+  // its operation are refused from now on; existing grants are untouched.
+  // permission: agent.promote
+  rpc RevokePromotion(RevokePromotionRequest) returns (RevokePromotionResponse);
+  // GetReadiness runs every check for each operation of an agent in an
+  // environment, and names its ACTIVE promotion when it has one.
+  // permission: agent.read
+  rpc GetReadiness(GetReadinessRequest) returns (GetReadinessResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // ListPromotions lists promotions, newest first.
+  // permission: agent.read
+  rpc ListPromotions(ListPromotionsRequest) returns (ListPromotionsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+}
+
+// FailureBehavior is what the agent's work does when PantherClaw cannot
+// decide.
+enum FailureBehavior {
+  FAILURE_BEHAVIOR_UNSPECIFIED = 0;
+  FAILURE_BEHAVIOR_FAIL_CLOSED = 1;
+  FAILURE_BEHAVIOR_QUEUE = 2;
+  FAILURE_BEHAVIOR_DEGRADE_READ_ONLY = 3;
+}
+
+enum PromotionState {
+  PROMOTION_STATE_UNSPECIFIED = 0;
+  PROMOTION_STATE_ACTIVE = 1;
+  PROMOTION_STATE_REVOKED = 2;
+}
+
+// PromotionCheck is one check of one operation.
+message PromotionCheck {
+  // OWNER, IDENTITY, TESTS, APPROVALS, COVERAGE or FAILURE_BEHAVIOUR.
+  string name = 1;
+  bool passed = 2;
+  string detail = 3;
+}
+
+message Promotion {
+  string id = 1;
+  string agent_id = 2;
+  string environment_id = 3;
+  // An exact operation or a prefix such as payments.*.
+  string operation = 4;
+  PromotionState state = 5;
+  repeated PromotionCheck checks = 6;
+  FailureBehavior failure_behavior = 7;
+  string promoted_by = 8;
+  // The security key of the step-up behind the promotion.
+  string credential_id = 9;
+  google.protobuf.Timestamp promote_time = 10;
+  string revoked_by = 11;
+  google.protobuf.Timestamp revoke_time = 12;
+  string revoke_reason = 13;
+}
+
+// OperationReadiness is one operation's checks.
+message OperationReadiness {
+  string operation = 1;
+  // ready: every check passed.
+  bool ready = 2;
+  repeated PromotionCheck checks = 3;
+  // promotion is the operation's ACTIVE promotion, when it has one.
+  Promotion promotion = 4;
+}
+
+message PromoteAgentRequest {
+  string agent_id = 1 [(buf.validate.field).string.uuid = true];
+  // The agent's own environment, of kind PRODUCTION.
+  string environment_id = 2 [(buf.validate.field).string.uuid = true];
+  repeated string operations = 3 [(buf.validate.field).repeated = {
+    min_items: 1
+    max_items: 50
+    items: {
+      string: {pattern: "^[a-z][a-z0-9_]*(\\.[a-z0-9_]+){0,6}(\\.\\*)?$", max_len: 128}
+    }
+  }];
+  FailureBehavior failure_behavior = 4 [(buf.validate.field).enum = {
+    defined_only: true
+    not_in: [0]
+  }];
+}
+
+message PromoteAgentResponse {
+  // promoted are the promotions made now; already those that existed.
+  repeated Promotion promoted = 1;
+  repeated Promotion already = 2;
+  repeated OperationReadiness readiness = 3;
+}
+
+message RevokePromotionRequest {
+  string promotion_id = 1 [(buf.validate.field).string.uuid = true];
+  string reason = 2 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 500
+  }];
+}
+
+message RevokePromotionResponse {
+  Promotion promotion = 1;
+}
+
+message GetReadinessRequest {
+  string agent_id = 1 [(buf.validate.field).string.uuid = true];
+  string environment_id = 2 [(buf.validate.field).string.uuid = true];
+  // operations to check; none: the operations of the agent's promotions,
+  // active grants and coverage records there.
+  repeated string operations = 3 [(buf.validate.field).repeated = {
+    max_items: 50
+    items: {
+      string: {pattern: "^[a-z][a-z0-9_]*(\\.[a-z0-9_]+){0,6}(\\.\\*)?$", max_len: 128}
+    }
+  }];
+  // failure_behavior the FAILURE_BEHAVIOUR check takes as declared;
+  // unspecified: the ACTIVE promotion's, if any.
+  FailureBehavior failure_behavior = 4 [(buf.validate.field).enum.defined_only = true];
+}
+
+message GetReadinessResponse {
+  repeated OperationReadiness readiness = 1;
+}
+
+message ListPromotionsRequest {
+  string agent_id = 1 [
+    (buf.validate.field).string.uuid = true,
+    (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE
+  ];
+  string environment_id = 2 [
+    (buf.validate.field).string.uuid = true,
+    (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE
+  ];
+  PromotionState state = 3 [(buf.validate.field).enum.defined_only = true];
+  int32 page_size = 4 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 200
+  }];
+  string page_token = 5 [
+    (buf.validate.field).string.uuid = true,
+    (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE
+  ];
+}
+
+message ListPromotionsResponse {
+  repeated Promotion promotions = 1;
+  string next_page_token = 2;
+}

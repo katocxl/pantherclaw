@@ -1,0 +1,311 @@
+// SPDX-License-Identifier: BUSL-1.1
+// Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+
+syntax = "proto3";
+
+package pantherclaw.v1;
+
+import "buf/validate/validate.proto";
+import "google/protobuf/timestamp.proto";
+import "pantherclaw/v1/promotions.proto";
+
+// CohortService groups agents into fleet cohorts (G0 M11 part 2, D40;
+// F600, F601, HR-291). A fleet cohort is its static members (at most
+// 1,000) plus the agents its optional rule matches (team, environment,
+// task type), with an owner and an optional grant baseline. It only
+// organizes: it grants nothing, and its baseline is a template a person
+// issues grants from. These are not the policy rollout cohorts of
+// PolicyRolloutService.
+//
+// Needs the Team edition. Every change is made by a person holding
+// cohort.manage; reads need agent.read, and list only agents the caller
+// may read (the others are counted as hidden).
+service CohortService {
+  // permission: cohort.manage
+  rpc CreateFleetCohort(CreateFleetCohortRequest) returns (CreateFleetCohortResponse);
+  // UpdateFleetCohort replaces a cohort's name, description, owner, rule
+  // and baseline.
+  // permission: cohort.manage
+  rpc UpdateFleetCohort(UpdateFleetCohortRequest) returns (UpdateFleetCohortResponse);
+  // DeleteFleetCohort deletes a cohort and its memberships; its agents are
+  // untouched.
+  // permission: cohort.manage
+  rpc DeleteFleetCohort(DeleteFleetCohortRequest) returns (DeleteFleetCohortResponse);
+  // permission: agent.read
+  rpc GetFleetCohort(GetFleetCohortRequest) returns (GetFleetCohortResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // ListFleetCohorts lists cohorts by name.
+  // permission: agent.read
+  rpc ListFleetCohorts(ListFleetCohortsRequest) returns (ListFleetCohortsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // ListFleetCohortMembers lists a cohort's agents, static and matched.
+  // permission: agent.read
+  rpc ListFleetCohortMembers(ListFleetCohortMembersRequest) returns (ListFleetCohortMembersResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // AddFleetCohortMembers adds agents to a cohort's static members.
+  // permission: cohort.manage
+  rpc AddFleetCohortMembers(AddFleetCohortMembersRequest) returns (AddFleetCohortMembersResponse);
+  // permission: cohort.manage
+  rpc RemoveFleetCohortMembers(RemoveFleetCohortMembersRequest) returns (RemoveFleetCohortMembersResponse);
+  // SetAgentTaskType sets or clears the task type cohort rules match.
+  // permission: cohort.manage
+  rpc SetAgentTaskType(SetAgentTaskTypeRequest) returns (SetAgentTaskTypeResponse);
+  // GetCohortQueue lists what a cohort needs from a person: unowned or
+  // unpromoted agents, grants beyond its baseline and pending approvals.
+  // permission: agent.read
+  rpc GetCohortQueue(GetCohortQueueRequest) returns (GetCohortQueueResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // GetCohortChanges lists what moved for a cohort's agents since a time
+  // (at most 31 days back): members, grants, policy versions, package
+  // activations and promotions.
+  // permission: agent.read
+  rpc GetCohortChanges(GetCohortChangesRequest) returns (GetCohortChangesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // GetFleetOverview lists every agent the caller may read with its owner,
+  // last run, promoted operations and active grants; no cohort needed.
+  // permission: agent.read
+  rpc GetFleetOverview(GetFleetOverviewRequest) returns (GetFleetOverviewResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+}
+
+// FleetCohortRule matches agents by every field it gives (at least one).
+message FleetCohortRule {
+  string team_id = 1 [
+    (buf.validate.field).string.uuid = true,
+    (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE
+  ];
+  string environment_id = 2 [
+    (buf.validate.field).string.uuid = true,
+    (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE
+  ];
+  string task_type = 3 [
+    (buf.validate.field).string.pattern = "^[a-z][a-z0-9-]{0,63}$",
+    (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE
+  ];
+}
+
+message FleetCohort {
+  string id = 1;
+  string name = 2;
+  string description = 3;
+  string owner_user_id = 4;
+  // rule is unset for static members only.
+  FleetCohortRule rule = 5;
+  // baseline is a grant template, JSON {bounds, limits, ttl_seconds}.
+  bytes baseline = 6;
+  int32 static_members = 7;
+  string created_by = 8;
+  google.protobuf.Timestamp create_time = 9;
+  google.protobuf.Timestamp update_time = 10;
+}
+
+message FleetCohortInput {
+  string name = 1 [(buf.validate.field).string.pattern = "^[a-z][a-z0-9-]{0,63}$"];
+  string description = 2 [(buf.validate.field).string.max_len = 1000];
+  string owner_user_id = 3 [(buf.validate.field).string.uuid = true];
+  FleetCohortRule rule = 4;
+  bytes baseline = 5 [(buf.validate.field).bytes.max_len = 16384];
+}
+
+// FleetAgent is what the overview and the queue show about an agent.
+message FleetAgent {
+  string agent_id = 1;
+  string name = 2;
+  string state = 3;
+  string owner_user_id = 4;
+  string environment_id = 5;
+  // DEVELOPMENT, STAGING or PRODUCTION.
+  string environment_kind = 6;
+  string team_id = 7;
+  string task_type = 8;
+  google.protobuf.Timestamp last_run_time = 9;
+  repeated string promoted_operations = 10;
+  int32 active_grants = 11;
+  int32 pending_approvals = 12;
+}
+
+message CreateFleetCohortRequest {
+  FleetCohortInput cohort = 1 [(buf.validate.field).required = true];
+}
+
+message CreateFleetCohortResponse {
+  FleetCohort cohort = 1;
+}
+
+message UpdateFleetCohortRequest {
+  string cohort_id = 1 [(buf.validate.field).string.uuid = true];
+  FleetCohortInput cohort = 2 [(buf.validate.field).required = true];
+}
+
+message UpdateFleetCohortResponse {
+  FleetCohort cohort = 1;
+}
+
+message DeleteFleetCohortRequest {
+  string cohort_id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+message DeleteFleetCohortResponse {}
+
+message GetFleetCohortRequest {
+  string cohort_id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+message GetFleetCohortResponse {
+  FleetCohort cohort = 1;
+}
+
+message ListFleetCohortsRequest {
+  int32 page_size = 1 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 200
+  }];
+  // page_token is the last name of the previous page.
+  string page_token = 2 [
+    (buf.validate.field).string.pattern = "^[a-z][a-z0-9-]{0,63}$",
+    (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE
+  ];
+}
+
+message ListFleetCohortsResponse {
+  repeated FleetCohort cohorts = 1;
+  string next_page_token = 2;
+}
+
+message ListFleetCohortMembersRequest {
+  string cohort_id = 1 [(buf.validate.field).string.uuid = true];
+  int32 page_size = 2 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 200
+  }];
+  string page_token = 3 [
+    (buf.validate.field).string.uuid = true,
+    (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE
+  ];
+}
+
+message FleetCohortMember {
+  string agent_id = 1;
+  string name = 2;
+  string state = 3;
+  // static_member: added by a person (else matched by the rule).
+  bool static_member = 4;
+}
+
+message ListFleetCohortMembersResponse {
+  repeated FleetCohortMember members = 1;
+  // hidden counts the agents of the page the caller may not read.
+  int32 hidden = 2;
+  string next_page_token = 3;
+}
+
+message AddFleetCohortMembersRequest {
+  string cohort_id = 1 [(buf.validate.field).string.uuid = true];
+  repeated string agent_ids = 2 [(buf.validate.field).repeated = {
+    min_items: 1
+    max_items: 1000
+    items: {
+      string: {uuid: true}
+    }
+  }];
+}
+
+message AddFleetCohortMembersResponse {
+  int32 changed = 1;
+}
+
+message RemoveFleetCohortMembersRequest {
+  string cohort_id = 1 [(buf.validate.field).string.uuid = true];
+  repeated string agent_ids = 2 [(buf.validate.field).repeated = {
+    min_items: 1
+    max_items: 1000
+    items: {
+      string: {uuid: true}
+    }
+  }];
+}
+
+message RemoveFleetCohortMembersResponse {
+  int32 changed = 1;
+}
+
+message SetAgentTaskTypeRequest {
+  string agent_id = 1 [(buf.validate.field).string.uuid = true];
+  // task_type empty clears it.
+  string task_type = 2 [
+    (buf.validate.field).string.pattern = "^[a-z][a-z0-9-]{0,63}$",
+    (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE
+  ];
+}
+
+message SetAgentTaskTypeResponse {}
+
+message GetCohortQueueRequest {
+  string cohort_id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// BaselineDeparture is an active grant beyond the cohort's baseline.
+message BaselineDeparture {
+  string grant_id = 1;
+  string agent_id = 2;
+  string reason = 3;
+}
+
+message GetCohortQueueResponse {
+  repeated FleetAgent unowned = 1;
+  repeated FleetAgent unpromoted = 2;
+  repeated FleetAgent pending_approvals = 3;
+  repeated BaselineDeparture over_baseline = 4;
+  int32 hidden = 5;
+  repeated string notes = 6;
+}
+
+message GetCohortChangesRequest {
+  string cohort_id = 1 [(buf.validate.field).string.uuid = true];
+  // since unset or older than 31 days: 31 days ago.
+  google.protobuf.Timestamp since = 2;
+}
+
+// CohortChange is one thing that moved, oldest first.
+message CohortChange {
+  // MEMBER_ADDED, GRANT_ISSUED, GRANT_REVISED, GRANT_REVOKED,
+  // POLICY_PUBLISHED, PACKAGE_ACTIVATED, PROMOTED or PROMOTION_REVOKED.
+  string kind = 1;
+  google.protobuf.Timestamp time = 2;
+  string agent_id = 3;
+  // subject_id is the grant, policy version or promotion; for a package,
+  // its name@version.
+  string subject_id = 4;
+  string actor = 5;
+  string detail = 6;
+}
+
+message GetCohortChangesResponse {
+  google.protobuf.Timestamp since = 1;
+  repeated CohortChange changes = 2;
+  int32 hidden = 3;
+  repeated Promotion promotions = 4;
+}
+
+message GetFleetOverviewRequest {
+  int32 page_size = 1 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 200
+  }];
+  string page_token = 2 [
+    (buf.validate.field).string.uuid = true,
+    (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE
+  ];
+}
+
+message GetFleetOverviewResponse {
+  repeated FleetAgent agents = 1;
+  int32 hidden = 2;
+  string next_page_token = 3;
+}

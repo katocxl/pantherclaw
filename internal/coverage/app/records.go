@@ -63,6 +63,35 @@ func lapseOf(reasons []string) string {
 	return "changed"
 }
 
+// unseenChanges are the changes to a scope its snapshot row did not see:
+// a change the computation read, made before it, is in the snapshot.
+func unseenChanges(changes []dbq.PcCoverageInvalidation, row *dbq.PcCoverageSnapshot, seen []string) []domain.Change {
+	unseen := make([]domain.Change, 0, len(changes))
+	for _, ch := range changes {
+		if ch.OccurredAt.Before(row.ComputedAt) && slices.Contains(seen, ch.ID.String()) {
+			continue
+		}
+		unseen = append(unseen, domain.Change{ID: ch.ID, Kind: domain.InvalidationKind(ch.Kind), OccurredAt: ch.OccurredAt})
+	}
+	return unseen
+}
+
+// Lapsed reports why a scope's current snapshot no longer holds at now:
+// it expired, or a change it did not see arrived (HR-211); "" while it
+// holds. It reads in the caller's transaction and checks no permission:
+// the promotion checks read it (G0 M11 part 2, D39).
+func Lapsed(ctx context.Context, q *dbq.Queries, row dbq.PcCoverageSnapshot, now time.Time) (string, error) {
+	var body Snapshot
+	if err := json.Unmarshal(row.Body, &body); err != nil {
+		return "", err
+	}
+	changes, err := q.CoverageChangesPending(ctx, row.OrgID, row.ConnectionID, &row.AgentID)
+	if err != nil {
+		return "", err
+	}
+	return domain.Lapse(row.ExpiresAt, unseenChanges(changes, &row, body.Seen), now), nil
+}
+
 // record reads one scope's record at now from its current snapshot (nil
 // when none); full adds the exclusions that apply.
 func (s *Service) record(ctx context.Context, tx db.TenantTx, sc domain.Scope, row *dbq.PcCoverageSnapshot, full bool,
@@ -89,15 +118,7 @@ func (s *Service) record(ctx context.Context, tx db.TenantTx, sc domain.Scope, r
 	if r.Changes, err = q.CoverageChangesPending(ctx, org, sc.Connection, &sc.Agent); err != nil {
 		return r, err
 	}
-	unseen := make([]domain.Change, 0, len(r.Changes))
-	for _, ch := range r.Changes {
-		// A change the computation read, made before it, is in the snapshot.
-		if ch.OccurredAt.Before(row.ComputedAt) && slices.Contains(r.Body.Seen, ch.ID.String()) {
-			continue
-		}
-		unseen = append(unseen, domain.Change{ID: ch.ID, Kind: domain.InvalidationKind(ch.Kind), OccurredAt: ch.OccurredAt})
-	}
-	r.Lapse = domain.Lapse(row.ExpiresAt, unseen, now)
+	r.Lapse = domain.Lapse(row.ExpiresAt, unseenChanges(r.Changes, row, r.Body.Seen), now)
 	if r.Lapse == "" {
 		r.State, r.Reasons = r.Computed, r.Body.Reasons
 		if row.LastValidID != nil {

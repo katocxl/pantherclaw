@@ -42,6 +42,7 @@ type PcAgent struct {
 	ClaimedAt         *time.Time
 	RetiredAt         *time.Time
 	RangeAgent        bool
+	TaskType          *string
 }
 
 type PcAgentChange struct {
@@ -80,6 +81,23 @@ type PcAgentInstance struct {
 	UpdatedAt         time.Time
 	ExpiresAt         *time.Time
 	SandboxSessionID  *ids.UUID
+}
+
+type PcAgentPromotion struct {
+	OrgID           ids.OrgID
+	ID              ids.UUID
+	AgentID         ids.UUID
+	EnvironmentID   ids.UUID
+	Operation       string
+	State           string
+	Checks          []byte
+	FailureBehavior string
+	PromotedBy      ids.UUID
+	CredentialID    ids.UUID
+	PromotedAt      time.Time
+	RevokedBy       *ids.UUID
+	RevokedAt       *time.Time
+	RevokeReason    *string
 }
 
 type PcAlert struct {
@@ -1229,6 +1247,27 @@ type PcFactProvider struct {
 	CreatedAt        time.Time
 	GatewayID        *ids.UUID
 	ConnectionID     *ids.UUID
+}
+
+type PcFleetCohort struct {
+	OrgID       ids.OrgID
+	ID          ids.UUID
+	Name        string
+	Description string
+	Rule        []byte
+	OwnerUserID ids.UUID
+	Baseline    []byte
+	CreatedBy   string
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+}
+
+type PcFleetCohortMember struct {
+	OrgID    ids.OrgID
+	CohortID ids.UUID
+	AgentID  ids.UUID
+	AddedBy  string
+	AddedAt  time.Time
 }
 
 type PcGateway struct {
