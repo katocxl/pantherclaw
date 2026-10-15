@@ -13,19 +13,24 @@
 -- version because the rollout version could not be used) or EXCEPTION
 -- (excluded by a person, stays on the published version).
 --
--- What pc_app may change (D22): it updates only rollouts (stage,
+-- What pc_app may change (D22, D31): it updates only rollouts (stage,
 -- stage_changed_at, completed_at), targets (state, owner_id, coverage,
--- reason, updated_at) and cursors (last_created_at, last_txn). Cohorts are
--- created and deleted, never updated; cohort members and a rollout's cohorts
--- are inserted (members also deleted); shadow results are insert-only and
--- shadow counts insert-only but for their count n (INSERT ... ON CONFLICT
--- DO UPDATE). A rollout's version and base never change.
+-- reason, updated_at) and cursors (last_created_at, last_txn,
+-- last_evaluation, verify_after_agent). Cohorts are created, never updated
+-- or deleted; cohort members are inserted and deleted; a rollout's cohorts,
+-- shadow results and shadow counts are insert-only (counts are one row per
+-- sweep, summed on read). A rollout's version and base never change: a
+-- publication of another version cancels every open rollout (D31).
 --
 -- The Authority only reads these tables, to select an agent's version; the
 -- rollout sweeper writes target states and shadow results (HR-233). The
 -- sweeper lists orgs through the audited cross-org lister (purpose
 -- policy_rollouts_due): orgs with a rollout in SHADOW or PILOT, or one
--- completed less than 7 days ago with targets not VERIFIED.
+-- completed less than 7 days ago (a VERIFIED target regresses when its
+-- coverage lapses in that time). Limit: the sweeper reads a decision only
+-- 2 minutes after its receipt's transaction started (created_at is the
+-- start), so a receipt whose transaction commits later than that is never
+-- read.
 
 -- +goose Up
 CREATE TABLE pc.policy_cohorts (
@@ -108,6 +113,9 @@ CREATE TABLE pc.policy_rollout_cursors (
     rollout_id      uuid        NOT NULL,
     last_created_at timestamptz NOT NULL,
     last_txn        uuid        NOT NULL,
+    last_evaluation integer     NOT NULL DEFAULT 0 CHECK (last_evaluation BETWEEN 0 AND 64),
+    -- Where the VERIFIED check continues: targets after this agent id.
+    verify_after_agent uuid,
     PRIMARY KEY (org_id, rollout_id),
     FOREIGN KEY (org_id, rollout_id) REFERENCES pc.policy_rollouts (org_id, id)
 );
@@ -140,15 +148,17 @@ CREATE TABLE pc.policy_shadow_results (
 CREATE INDEX policy_shadow_results_rollout ON pc.policy_shadow_results (org_id, rollout_id, created_at DESC);
 
 -- Counts of every shadow evaluation by day and category, kept past the
--- 100 000 rows a rollout's results hold (D13).
+-- 100 000 rows a rollout's results hold (D13): one row per sweep, day and
+-- category, summed on read.
 CREATE TABLE pc.policy_shadow_counts (
     org_id     uuid    NOT NULL,
     rollout_id uuid    NOT NULL,
+    id         uuid    NOT NULL,
     day        date    NOT NULL,
     category   text    NOT NULL CHECK (category IN ('UNCHANGED', 'NEWLY_DENIED', 'NEWLY_HELD', 'NEWLY_CONSTRAINED',
                                                     'NEWLY_ALLOWED', 'REASON_CHANGED', 'UNEVALUABLE')),
-    n          bigint  NOT NULL CHECK (n >= 0),
-    PRIMARY KEY (org_id, rollout_id, day, category),
+    n          bigint  NOT NULL CHECK (n >= 1),
+    PRIMARY KEY (org_id, rollout_id, id),
     FOREIGN KEY (org_id, rollout_id) REFERENCES pc.policy_rollouts (org_id, id)
 );
 
@@ -234,22 +244,22 @@ CREATE TRIGGER policy_rollouts_forward BEFORE UPDATE ON pc.policy_rollouts
 -- sweeper; targets change only their state columns.
 GRANT SELECT ON pc.policy_cohorts, pc.policy_cohort_members, pc.policy_rollouts, pc.policy_rollout_cohorts,
     pc.policy_rollout_targets, pc.policy_rollout_cursors, pc.policy_shadow_results, pc.policy_shadow_counts TO pc_app;
-GRANT INSERT (org_id, id, name, created_by), DELETE ON pc.policy_cohorts TO pc_app;
+GRANT INSERT (org_id, id, name, created_by) ON pc.policy_cohorts TO pc_app;
 GRANT INSERT (org_id, cohort_id, agent_id, added_by), DELETE ON pc.policy_cohort_members TO pc_app;
 GRANT INSERT (org_id, id, version_id, base_version_id, stage, created_by) ON pc.policy_rollouts TO pc_app;
 GRANT UPDATE (stage, stage_changed_at, completed_at) ON pc.policy_rollouts TO pc_app;
 GRANT INSERT (org_id, rollout_id, cohort_id, mode) ON pc.policy_rollout_cohorts TO pc_app;
 GRANT INSERT (org_id, rollout_id, agent_id, state, owner_id, coverage, reason) ON pc.policy_rollout_targets TO pc_app;
 GRANT UPDATE (state, owner_id, coverage, reason, updated_at) ON pc.policy_rollout_targets TO pc_app;
-GRANT INSERT (org_id, rollout_id, last_created_at, last_txn), UPDATE (last_created_at, last_txn) ON pc.policy_rollout_cursors TO pc_app;
+GRANT INSERT (org_id, rollout_id, last_created_at, last_txn, last_evaluation, verify_after_agent),
+    UPDATE (last_created_at, last_txn, last_evaluation, verify_after_agent) ON pc.policy_rollout_cursors TO pc_app;
 GRANT INSERT (org_id, rollout_id, transaction_id, evaluation, agent_id, operation, original_decision, original_reason,
     shadow_decision, shadow_reason, category, limitation) ON pc.policy_shadow_results TO pc_app;
-GRANT INSERT (org_id, rollout_id, day, category, n), UPDATE (n) ON pc.policy_shadow_counts TO pc_app;
+GRANT INSERT (org_id, rollout_id, id, day, category, n) ON pc.policy_shadow_counts TO pc_app;
 GRANT SELECT ON pc.policy_cohorts, pc.policy_cohort_members, pc.policy_rollouts, pc.policy_rollout_cohorts,
     pc.policy_rollout_targets, pc.policy_rollout_cursors, pc.policy_shadow_results, pc.policy_shadow_counts TO pc_audit_ro;
 
 GRANT SELECT (org_id, id, stage, completed_at) ON pc.policy_rollouts TO pc_lister;
-GRANT SELECT (org_id, rollout_id, state) ON pc.policy_rollout_targets TO pc_lister;
 
 -- The lister below replaces the whole function, starting from 00087's.
 -- Refuse to run if the current one has purposes it does not carry (a
@@ -375,8 +385,7 @@ BEGIN
                 LIMIT p_max_rows;
         WHEN 'policy_rollouts_due' THEN
             -- Active orgs with a policy rollout in SHADOW or PILOT, or one
-            -- completed less than 7 days ago with targets not VERIFIED (G0
-            -- M11.1, D12).
+            -- completed less than 7 days ago (G0 M11.1, D12, D31).
             RETURN QUERY
                 SELECT o.id, o.id
                 FROM pc.orgs o
@@ -384,10 +393,7 @@ BEGIN
                   AND EXISTS (SELECT 1 FROM pc.policy_rollouts r
                               WHERE r.org_id = o.id
                                 AND (r.stage IN ('SHADOW', 'PILOT')
-                                     OR (r.stage = 'COMPLETE' AND r.completed_at > now() - interval '7 days'
-                                         AND EXISTS (SELECT 1 FROM pc.policy_rollout_targets t
-                                                     WHERE t.org_id = r.org_id AND t.rollout_id = r.id
-                                                       AND t.state <> 'VERIFIED'))))
+                                     OR (r.stage = 'COMPLETE' AND r.completed_at > now() - interval '7 days')))
                 ORDER BY 1
                 LIMIT p_max_rows;
         ELSE
@@ -505,7 +511,6 @@ BEGIN
 END;
 $$;
 -- +goose StatementEnd
-REVOKE SELECT (org_id, rollout_id, state) ON pc.policy_rollout_targets FROM pc_lister;
 REVOKE SELECT (org_id, id, stage, completed_at) ON pc.policy_rollouts FROM pc_lister;
 DROP TABLE pc.policy_shadow_counts;
 DROP TABLE pc.policy_shadow_results;

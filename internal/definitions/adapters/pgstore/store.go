@@ -343,6 +343,30 @@ func (s *Store) ActiveDefinitionsInTx(ctx context.Context, tx db.TenantTx, org i
 	return out, nil
 }
 
+// ActivePackages returns the decoded packages of the org's ACTIVE
+// versions, with their consequence rules (policy scenario tests decide
+// consequences as the Authority does, M11.1 D28). The returned packages
+// are shared: callers must not change them.
+func (s *Store) ActivePackages(ctx context.Context, org ids.OrgID) ([]*domain.Package, error) {
+	var out []*domain.Package
+	err := s.Pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
+		q := dbq.New(tx)
+		versions, err := q.ListActiveVersions(ctx, org)
+		if err != nil {
+			return err
+		}
+		for _, v := range versions {
+			p, err := s.decoded(ctx, q, org, v)
+			if err != nil {
+				return err
+			}
+			out = append(out, p)
+		}
+		return nil
+	})
+	return out, err
+}
+
 // VersionInTx returns the decoded package of an imported version, by its
 // id, inside the caller's transaction (the Authority's one-snapshot read).
 // The returned package is shared: callers must not change it.

@@ -5,6 +5,7 @@ package rollout
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/katocxl/pantherclaw/internal/authority/replay"
@@ -16,6 +17,9 @@ import (
 // samplesPerCategory is how many of the newest results of each changed
 // category a summary shows.
 const samplesPerCategory = 5
+
+// expandedExposureNote is the summary's line on NEWLY_ALLOWED (F189).
+const expandedExposureNote = "expanded exposure: %d decision(s) the version would allow that were held or denied (NEWLY_ALLOWED)"
 
 // ShadowSummary is what a rollout's shadow evaluation predicts (D13, F203):
 // counts, and samples by id, decision and reason. It never carries a
@@ -31,8 +35,14 @@ type ShadowSummary struct {
 	// NewlyHeldPerDay is the approval burden: decisions the version would
 	// hold for approval or step-up that were not held.
 	NewlyHeldPerDay []DayCount
+	// ExpandedExposure counts the NEWLY_ALLOWED evaluations: what the version
+	// would allow that was held or denied (F189), and ExpandedExposureNote
+	// says so in words.
+	ExpandedExposure     int64
+	ExpandedExposureNote string
 	// ByOperation and ByAgent count the stored results; Truncated reports
-	// that past 100 000 results only the totals above grew.
+	// that the rollout reached its 100 000 stored results, past which only
+	// the totals above grow.
 	ByOperation []GroupCount
 	ByAgent     []GroupCount
 	Truncated   bool
@@ -107,7 +117,7 @@ func (s *Service) GetShadowSummary(ctx context.Context, rollout ids.UUID) (Shado
 			out.ByOperation = append(out.ByOperation, GroupCount{Key: o.Operation, Category: replay.Category(o.Category), N: o.N})
 			stored += o.N
 		}
-		out.Truncated = stored < out.Total
+		out.Truncated = stored >= maxShadowResults
 		agents, err := q.ShadowResultsByAgent(ctx, c.Org, rollout)
 		if err != nil {
 			return err
@@ -128,6 +138,8 @@ func (s *Service) GetShadowSummary(ctx context.Context, rollout ids.UUID) (Shado
 		}
 		return nil
 	}, db.ReadOnly())
+	out.ExpandedExposure = out.ByCategory[replay.NewlyAllowed]
+	out.ExpandedExposureNote = fmt.Sprintf(expandedExposureNote, out.ExpandedExposure)
 	return out, err
 }
 

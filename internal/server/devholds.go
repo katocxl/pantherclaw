@@ -14,6 +14,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	"github.com/katocxl/pantherclaw/internal/platform/money"
 	pdomain "github.com/katocxl/pantherclaw/internal/policy/domain"
+	"github.com/katocxl/pantherclaw/internal/policy/rollout"
 )
 
 // devHoldReason is the reason of the seeded hold (S02).
@@ -61,7 +62,10 @@ func devHoldBundle(limit money.Money) *pdomain.Bundle {
 // tested against its active definitions. dev seed is the author and
 // publisher of record.
 func seedHoldPolicy(ctx context.Context, pool *db.Pool, org ids.OrgID, limit money.Money) (ids.UUID, error) {
-	id, err := newPolicyVersions(pool, nil, "").Seed(ctx, org, devHoldBundle(limit), devSeedActor)
+	v := newPolicyVersions(pool, nil, "")
+	// The publication records its rollout, as every publication does (D31).
+	rollout.Connect(v, &rollout.Service{Pool: pool})
+	id, err := v.Seed(ctx, org, devHoldBundle(limit), devSeedActor)
 	if err != nil {
 		return ids.UUID{}, fmt.Errorf("dev seed: hold policy: %w", err)
 	}

@@ -1491,10 +1491,12 @@ type PcPolicyRolloutCohort struct {
 }
 
 type PcPolicyRolloutCursor struct {
-	OrgID         ids.OrgID
-	RolloutID     ids.UUID
-	LastCreatedAt time.Time
-	LastTxn       ids.UUID
+	OrgID            ids.OrgID
+	RolloutID        ids.UUID
+	LastCreatedAt    time.Time
+	LastTxn          ids.UUID
+	LastEvaluation   int32
+	VerifyAfterAgent *ids.UUID
 }
 
 type PcPolicyRolloutTarget struct {
@@ -1511,6 +1513,7 @@ type PcPolicyRolloutTarget struct {
 type PcPolicyShadowCount struct {
 	OrgID     ids.OrgID
 	RolloutID ids.UUID
+	ID        ids.UUID
 	Day       pgtype.Date
 	Category  string
 	N         int64

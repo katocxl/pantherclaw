@@ -65,7 +65,18 @@ func newPolicyVersions(pool *db.Pool, notify policyapp.Notifier, publicURL strin
 		Validator: validator, Tests: scenario.New(defs, facts, celenv.DefaultLimits, policyapp.DefaultBudget),
 		Outcomes: outcomeDiff{validator},
 	}
-	v.Changes = policyapp.NewChanges(pool, notify, publicURL, currentPolicyDigests(defs, facts))
+	v.Changes = policyapp.NewChanges(pool, notify, publicURL, currentPolicyDigests(defs, facts)).
+		WithDigestsInTx(func(ctx context.Context, tx db.TenantTx, org ids.OrgID) ([32]byte, [32]byte, error) {
+			ds, err := defs.ActiveDefinitionsInTx(ctx, tx, org)
+			if err != nil {
+				return [32]byte{}, [32]byte{}, err
+			}
+			catalog, err := facts.CatalogInTx(ctx, tx, org)
+			if err != nil {
+				return [32]byte{}, [32]byte{}, err
+			}
+			return pdomain.DefinitionsDigest(ds), pdomain.CatalogDigest(catalog), nil
+		})
 	v.Changes.Register(policyapp.ChangePublish, v.ApplyPublish)
 	return v
 }

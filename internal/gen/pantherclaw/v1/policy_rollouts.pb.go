@@ -2043,10 +2043,14 @@ type GetShadowSummaryResponse struct {
 	ByAgent         []*ShadowCount `protobuf:"bytes,8,rep,name=by_agent,json=byAgent,proto3" json:"by_agent,omitempty"`
 	// truncated: past 100 000 results, only total, by_category and by_day
 	// grew.
-	Truncated     bool            `protobuf:"varint,9,opt,name=truncated,proto3" json:"truncated,omitempty"`
-	Samples       []*ShadowSample `protobuf:"bytes,10,rep,name=samples,proto3" json:"samples,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Truncated bool            `protobuf:"varint,9,opt,name=truncated,proto3" json:"truncated,omitempty"`
+	Samples   []*ShadowSample `protobuf:"bytes,10,rep,name=samples,proto3" json:"samples,omitempty"`
+	// expanded_exposure counts the NEWLY_ALLOWED evaluations: what the version
+	// would allow that was held or denied; expanded_exposure_note says so.
+	ExpandedExposure     int64  `protobuf:"varint,11,opt,name=expanded_exposure,json=expandedExposure,proto3" json:"expanded_exposure,omitempty"`
+	ExpandedExposureNote string `protobuf:"bytes,12,opt,name=expanded_exposure_note,json=expandedExposureNote,proto3" json:"expanded_exposure_note,omitempty"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
 }
 
 func (x *GetShadowSummaryResponse) Reset() {
@@ -2147,6 +2151,20 @@ func (x *GetShadowSummaryResponse) GetSamples() []*ShadowSample {
 		return x.Samples
 	}
 	return nil
+}
+
+func (x *GetShadowSummaryResponse) GetExpandedExposure() int64 {
+	if x != nil {
+		return x.ExpandedExposure
+	}
+	return 0
+}
+
+func (x *GetShadowSummaryResponse) GetExpandedExposureNote() string {
+	if x != nil {
+		return x.ExpandedExposureNote
+	}
+	return ""
 }
 
 var File_pantherclaw_v1_policy_rollouts_proto protoreflect.FileDescriptor
@@ -2296,7 +2314,7 @@ const file_pantherclaw_v1_policy_rollouts_proto_rawDesc = "" +
 	" \x01(\tR\n" +
 	"limitation\x12;\n" +
 	"\vcreate_time\x18\v \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"createTime\"\xcb\x04\n" +
+	"createTime\"\xae\x05\n" +
 	"\x18GetShadowSummaryResponse\x12\x14\n" +
 	"\x05label\x18\x01 \x01(\tR\x05label\x12\x1d\n" +
 	"\n" +
@@ -2310,7 +2328,9 @@ const file_pantherclaw_v1_policy_rollouts_proto_rawDesc = "" +
 	"\bby_agent\x18\b \x03(\v2\x1b.pantherclaw.v1.ShadowCountR\abyAgent\x12\x1c\n" +
 	"\ttruncated\x18\t \x01(\bR\ttruncated\x126\n" +
 	"\asamples\x18\n" +
-	" \x03(\v2\x1c.pantherclaw.v1.ShadowSampleR\asamples\x1a=\n" +
+	" \x03(\v2\x1c.pantherclaw.v1.ShadowSampleR\asamples\x12+\n" +
+	"\x11expanded_exposure\x18\v \x01(\x03R\x10expandedExposure\x124\n" +
+	"\x16expanded_exposure_note\x18\f \x01(\tR\x14expandedExposureNote\x1a=\n" +
 	"\x0fByCategoryEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\x03R\x05value:\x028\x01*\xc2\x01\n" +

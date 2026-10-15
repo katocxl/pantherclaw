@@ -236,6 +236,7 @@ func policyShadowCommands() map[string]command {
 				return err
 			}
 			_, _ = fmt.Fprintln(a.stderr, "# "+shadowLabel)
+			_, _ = fmt.Fprintln(a.stderr, "# "+res.GetExpandedExposureNote())
 			return a.print(res)
 		}},
 	}

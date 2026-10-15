@@ -21,6 +21,8 @@ import (
 var (
 	knownChange   = ids.NewV7()
 	changeBinding = [32]byte{4, 5, 6}
+	// rlo is RIGHT-TO-LEFT OVERRIDE and cyrillicA a look-alike of "a".
+	rlo, cyrillicA = string(rune(0x202e)), string(rune(0x0430))
 )
 
 // fakePolicyChanges shows knownChange with a summary that tries to inject
@@ -46,7 +48,7 @@ func (f *fakePolicyChanges) request() policyapp.ChangeRequest {
 	return policyapp.ChangeRequest{
 		ID: knownChange, Kind: policyapp.ChangePublish, Subject: ids.NewV7(), Binding: changeBinding, Required: 2,
 		State: policyapp.ChangePending, RequestedBy: "user:alice", CreatedAt: time.Now(), ExpiresAt: time.Now().Add(24 * time.Hour),
-		Summary: []byte(`{"changes":[{"rule_id":"x","sentence":"<script>alert(1)</script>"}]}`),
+		Summary: []byte("{\"changes\":[{\"rule_id\":\"x\",\"sentence\":\"<script>alert(1)</script>\",\"before\":\"amount " + rlo + "05 >\",\"after\":\"p" + cyrillicA + "ypal\"}]}"),
 	}
 }
 
@@ -127,6 +129,9 @@ func TestHR231_ThePolicyChangePageShowsAnUntrustedSummary(t *testing.T) {
 	if !strings.Contains(body, webhttp.SummaryLabel) || !strings.Contains(body, `<pre class="untrusted">`) ||
 		!strings.Contains(body, "&lt;script&gt;alert(1)&lt;/script&gt;") || strings.Contains(body, "<script>alert") {
 		t.Fatalf("the summary is not shown as escaped untrusted text: %s", body)
+	}
+	if strings.ContainsRune(body, 0x202e) || !strings.Contains(body, "amount 05 &gt;") || !strings.Contains(body, "mixes writing systems") {
+		t.Fatal("the summary keeps a bidi override or does not flag mixed script (HR-034)")
 	}
 	if strings.Count(body, "<script") != 1 || !strings.Contains(body, `<script src="/static/policy_changes.js"></script>`) {
 		t.Fatal("the page must load exactly one script, the static file")

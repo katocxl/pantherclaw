@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	adomain "github.com/katocxl/pantherclaw/internal/authority/domain"
+	"github.com/katocxl/pantherclaw/internal/authority/pipeline"
 	billing "github.com/katocxl/pantherclaw/internal/billing/domain"
 	defpg "github.com/katocxl/pantherclaw/internal/definitions/adapters/pgstore"
 	factpg "github.com/katocxl/pantherclaw/internal/facts/adapters/pgstore"
@@ -243,5 +244,82 @@ func TestHR234_ALooseningCompletionWaitsForItsPublishRequest(t *testing.T) {
 	}
 	if got, err := g.svc.GetRollout(g.publisher, r.ID); err != nil || got.Stage != rollout.StageComplete {
 		t.Fatalf("after the confirmation: %+v %v", got.Stage, err)
+	}
+}
+
+// TestHR234_AnotherPublicationCancelsOpenRollouts (D31): publishing another
+// version cancels the open rollout, whose version was classified against a
+// base that is no longer published, and voids its pending pilot request
+// (BASE_CHANGED); its shadow results stay.
+func TestHR234_AnotherPublicationCancelsOpenRollouts(t *testing.T) {
+	w := newWorld(t)
+	g := w.gatedRollouts()
+	r := g.shadowOf([]pdomain.Rule{pgCapOver1000, pgHoldOver50}, []pdomain.Rule{pgCapOver1000})
+	_, cr, err := g.svc.StartPilot(g.publisher, r.ID, []string{"pilot"})
+	if err != nil || cr == nil {
+		t.Fatalf("pilot: %v %v", cr, err)
+	}
+	v3 := w.publishPolicy(3, true, pgCapOver1000, pgHoldOver50, pgForbidOver20)
+	if out, err := g.versions.Publish(g.pat.ctx, v3); err != nil || out.ChangeRequest != nil {
+		t.Fatalf("publish: %+v %v", out.ChangeRequest, err)
+	}
+	if got, _ := g.svc.GetRollout(g.publisher, r.ID); got.Stage != rollout.StageCancelled {
+		t.Fatalf("the stale rollout: %s", got.Stage)
+	}
+	req, _ := g.versions.Changes.Get(g.publisher, cr.ID)
+	if req.State != papp.ChangeVoided || req.DecidedReason != papp.VoidBaseChanged {
+		t.Fatalf("its pilot request: %s %s", req.State, req.DecidedReason)
+	}
+}
+
+// TestHR234_APilotWhoseBaseIsNoLongerPublishedSelectsNothing (D31): a pilot
+// left open while another version became published (here without the
+// hook) no longer selects its version, and its cohort cannot grow.
+func TestHR234_APilotWhoseBaseIsNoLongerPublishedSelectsNothing(t *testing.T) {
+	w := newWorld(t)
+	w.refundable("ch_1", "ch_2")
+	g := w.gatedRollouts()
+	r := g.shadowOf([]pdomain.Rule{pgCapOver1000}, []pdomain.Rule{pgCapOver1000, pgHoldOver50})
+	if _, cr, err := g.svc.StartPilot(g.publisher, r.ID, []string{"pilot"}); err != nil || cr != nil {
+		t.Fatalf("pilot: %v %v", cr, err)
+	}
+	run := w.run(w.grant("500").ID, ids.UUID{})
+	if res := w.authorize(w.request(run, ids.NewV7(), "ch_1", "70.00")); res.Decision != adomain.RequireApproval {
+		t.Fatalf("in the pilot: %s", res.Decision)
+	}
+	w.publishPolicy(3, false, pgCapOver1000, pgForbidOver20)
+	res := w.authorize(w.request(run, ids.NewV7(), "ch_2", "70.00"))
+	if ref, _, sel := g.selection(res); ref != "org-policy@3" || sel != pipeline.SelectedDefault || res.Decision != adomain.Deny {
+		t.Fatalf("after another publication: %s under %s (%s)", res.Decision, ref, sel)
+	}
+	if _, err := g.svc.ChangeCohort(g.publisher, "pilot", []ids.UUID{w.agent}, false); !errors.Is(err, rollout.ErrBaseChanged) {
+		t.Fatalf("growing a stale pilot: %v", err)
+	}
+}
+
+// TestHR234_CancellingVoidsTheRolloutsChangeRequests (D31): cancelling a
+// rollout whose loosening completion waits for confirmation voids that
+// PUBLISH request, so a later confirmation publishes nothing.
+func TestHR234_CancellingVoidsTheRolloutsChangeRequests(t *testing.T) {
+	w := newWorld(t)
+	g := w.gatedRollouts()
+	r := g.shadowOf([]pdomain.Rule{pgCapOver1000, pgHoldOver50}, []pdomain.Rule{pgCapOver1000})
+	_, cr, err := g.svc.CompleteRollout(g.publisher, r.ID)
+	if err != nil || cr == nil {
+		t.Fatalf("complete: %v %v", cr, err)
+	}
+	if got, err := g.svc.CancelRollout(g.publisher, r.ID); err != nil || got.Stage != rollout.StageCancelled {
+		t.Fatalf("cancel: %+v %v", got.Stage, err)
+	}
+	req, _ := g.versions.Changes.Get(g.publisher, cr.ID)
+	if req.State != papp.ChangeVoided || req.DecidedReason != "ROLLOUT_CANCELLED" {
+		t.Fatalf("its publish request: %s %s", req.State, req.DecidedReason)
+	}
+	if _, err := g.confirm(g.pat, cr.ID); err == nil {
+		t.Fatal("a voided request was confirmed")
+	}
+	pub, err := g.versions.Store.PublishedVersion(context.Background(), w.org)
+	if err != nil || pub == nil || pub.ID == r.VersionID {
+		t.Fatalf("published: %+v %v", pub, err)
 	}
 }

@@ -7,8 +7,10 @@ import (
 	"context"
 	"encoding/json/v2"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
+	"unicode"
 
 	defs "github.com/katocxl/pantherclaw/internal/definitions/domain"
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
@@ -137,7 +139,38 @@ func DecodeBundle(raw []byte) (*domain.Bundle, error) {
 	if err := b.CheckApprovalRoles(); err != nil {
 		return nil, invalidBundle(err)
 	}
+	if err := checkVisible(&b); err != nil {
+		return nil, invalidBundle(err)
+	}
 	return &b, nil
+}
+
+// checkVisible refuses format (Cf) and bidi-control characters in a new
+// bundle's ids, rule summaries and reasons and test summaries, which the
+// change-request page shows people who confirm a change (G0 M11.1 D29,
+// HR-034). Stored bundles are not checked again, so they still decode.
+func checkVisible(b *domain.Bundle) error {
+	bad := func(what, s string) error {
+		for _, r := range s {
+			if unicode.Is(unicode.Cf, r) || unicode.Is(unicode.Bidi_Control, r) {
+				return fmt.Errorf("%w: %s has an invisible or bidi control character (U+%04X)", domain.ErrInvalid, what, r)
+			}
+		}
+		return nil
+	}
+	errs := []error{bad("the bundle id", b.ID)}
+	for _, r := range b.Rules {
+		errs = append(errs, bad("rule id "+r.ID, r.ID), bad("rule "+r.ID+" summary", r.Summary), bad("rule "+r.ID+" reason", r.Reason))
+	}
+	for _, tc := range b.Tests {
+		errs = append(errs, bad("test id "+tc.ID, tc.ID), bad("test "+tc.ID+" summary", tc.Summary))
+	}
+	for _, err := range errs {
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func invalidBundle(err error) error {

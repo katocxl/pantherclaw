@@ -5,8 +5,12 @@ package rollout
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/json/v2"
+	"errors"
 	"fmt"
 	"log/slog"
+	stdmaps "maps"
 	"slices"
 	"strings"
 	"time"
@@ -18,6 +22,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/authority/pipeline"
 	"github.com/katocxl/pantherclaw/internal/authority/recording"
 	"github.com/katocxl/pantherclaw/internal/authority/replay"
+	defpg "github.com/katocxl/pantherclaw/internal/definitions/adapters/pgstore"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	napp "github.com/katocxl/pantherclaw/internal/notifications/app"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
@@ -27,10 +32,10 @@ import (
 	pdomain "github.com/katocxl/pantherclaw/internal/policy/domain"
 )
 
-// The rollout sweeper (D12, D13). A periodic dispatcher lists the orgs with
-// a rollout to follow through the audited cross-org lister and enqueues one
-// unique job per org (HR-054, HR-056: ids only). The job reads the org's
-// new decisions after each rollout's cursor and:
+// The rollout sweeper (D12, D13, D31). A periodic dispatcher lists the orgs
+// with a rollout to follow through the audited cross-org lister and
+// enqueues one unique job per org (HR-054, HR-056: ids only). The job reads
+// the org's new decisions after each rollout's cursor and:
 //
 //   - marks a target ACKNOWLEDGED when a decision for its agent was made
 //     under the rollout's version, and FAILED, notifying the agent's owner,
@@ -39,9 +44,12 @@ import (
 //   - for a rollout in SHADOW, or the SHADOW cohorts of a PILOT, replays
 //     the decision with the recorded policy and with the rollout's version,
 //     read-only (HR-232), and records the D5 category: the decision path is
-//     never touched (HR-233);
-//   - marks an ACKNOWLEDGED target VERIFIED once the latest coverage of its
-//     agent for the version's operations is PARTIAL or ENFORCED.
+//     never touched (HR-233). Without the Team edition no shadow replay
+//     runs;
+//   - marks a target VERIFIED once every route of its agent for the
+//     version's operations is PARTIAL or ENFORCED, and back ACKNOWLEDGED
+//     (COVERAGE_LAPSED) when that lapses, while the rollout is open or
+//     completed less than 7 days ago.
 //
 // The Authority never writes these rows (HR-233).
 const (
@@ -61,7 +69,10 @@ const (
 	maxShadowResults = 100_000
 	maxVerifyPerTick = 200
 	sweepTimeout     = 5 * time.Minute
-	defaultLag       = time.Minute
+	// defaultLag is how old a receipt must be before the sweeper reads it
+	// (D31): its created_at is its transaction's start, so one committed
+	// later than that is never read (a recorded limit).
+	defaultLag = 2 * time.Minute
 )
 
 // Replayer replays recorded evaluations and reads their recordings, with
@@ -73,10 +84,17 @@ type Replayer interface {
 
 var _ Replayer = (*replay.Engine)(nil)
 
+// Receipts reads decision receipts (replay.Source): the sweeper falls back
+// to a receipt's decision basis when a decision's recording cannot be read.
+type Receipts interface {
+	Receipt(ctx context.Context, org ids.OrgID, txn ids.UUID, evaluation int) (string, error)
+}
+
 // Swept reports one org's sweep.
 type Swept struct {
 	Evaluations, Replays           int
 	Acknowledged, Failed, Verified int
+	Lapsed                         int
 	Shadowed                       int
 }
 
@@ -92,6 +110,15 @@ func (s *Service) SweepOrg(ctx context.Context, org ids.OrgID) (Swept, error) {
 		return out, err
 	}
 	b := budget{evaluations: maxEvaluationsPerTick, replays: maxReplaysPerTick}
+	// Shadow replays need Team (D31); without it the replay budget is
+	// spent, and targets are still followed.
+	if err := s.team(ctx); err != nil {
+		if !errors.Is(err, ErrEdition) {
+			s.log().WarnContext(ctx, "policy.rollout: edition unknown, no shadow replay", slog.String("error", err.Error()))
+		}
+		b.replays = 0
+		b.noShadow = true
+	}
 	for _, r := range due {
 		if err := s.sweepRollout(ctx, org, r, &b, &out); err != nil {
 			return out, fmt.Errorf("rollout %s: %w", r.ID, err)
@@ -100,16 +127,20 @@ func (s *Service) SweepOrg(ctx context.Context, org ids.OrgID) (Swept, error) {
 	return out, nil
 }
 
-type budget struct{ evaluations, replays int }
+type budget struct {
+	evaluations, replays int
+	noShadow             bool
+}
 
 // scope is what a sweep of one rollout reads before it replays.
 type scope struct {
-	version   dbq.GetPolicyVersionBundleRow
 	bundle    *pdomain.Bundle
 	ref       string // bundle@version
 	shadowAll bool
 	shadow    map[ids.UUID]bool
+	// cursor is where the sweep starts; hadCursor whether its row exists.
 	cursor    dbq.GetRolloutCursorRow
+	hadCursor bool
 	decisions []dbq.RolloutDecisionsAfterRow
 }
 
@@ -130,11 +161,11 @@ func (s *Service) read(ctx context.Context, org ids.OrgID, r dbq.PcPolicyRollout
 	var sc scope
 	err := s.Pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
 		q := dbq.New(tx)
-		var err error
-		if sc.version, err = q.GetPolicyVersionBundle(ctx, org, r.VersionID); err != nil {
+		v, err := q.GetPolicyVersionBundle(ctx, org, r.VersionID)
+		if err != nil {
 			return err
 		}
-		if sc.bundle, err = polpg.Decode(sc.version.Bundle); err != nil {
+		if sc.bundle, err = polpg.Decode(v.Bundle); err != nil {
 			return err
 		}
 		sc.ref = fmt.Sprintf("%s@%d", sc.bundle.ID, sc.bundle.Version)
@@ -157,55 +188,109 @@ func (s *Service) read(ctx context.Context, org ids.OrgID, r dbq.PcPolicyRollout
 			}
 		}
 		sc.cursor, err = q.GetRolloutCursor(ctx, org, r.ID)
-		if db.IsNoRows(err) {
+		switch {
+		case db.IsNoRows(err):
 			sc.cursor, err = dbq.GetRolloutCursorRow{LastCreatedAt: r.CreatedAt}, nil
+		case err == nil:
+			sc.hadCursor = true
 		}
-		if err != nil {
+		if err != nil || limit == 0 {
 			return err
 		}
 		sc.decisions, err = q.RolloutDecisionsAfter(ctx, dbq.RolloutDecisionsAfterParams{
-			OrgID: org, LagSeconds: s.lag().Seconds(), AfterCreatedAt: sc.cursor.LastCreatedAt, AfterTxn: sc.cursor.LastTxn,
-			MaxRows: int32(limit), //nolint:gosec // ≤ 1000
+			OrgID: org, LagSeconds: s.lag().Seconds(), AfterCreatedAt: sc.cursor.LastCreatedAt, AfterTxn: optional(sc.cursor.LastTxn),
+			AfterEvaluation: sc.cursor.LastEvaluation, MaxRows: int32(limit), //nolint:gosec // ≤ 1000
 		})
 		return err
 	}, db.ReadOnly())
 	return sc, err
 }
 
+// selection is what a decision recorded about the policy it was decided
+// under: from its recording, else (logged) from its receipt's decision
+// basis, which names the version but not how it was selected.
+type selection struct {
+	ref, rollout, selected string
+	known                  bool
+}
+
+func (s *Service) selectionOf(ctx context.Context, org ids.OrgID, d dbq.RolloutDecisionsAfterRow) (selection, error) {
+	rec, err := s.Replay.RecordedInputs(ctx, org, d.TransactionID, int(d.Evaluation))
+	if err == nil && rec != nil {
+		p := rec.Reads.Policy
+		if p == nil || p.Err != "" || p.None {
+			return selection{known: true}, nil
+		}
+		return selection{ref: p.Ref, rollout: p.Rollout, selected: p.Selected, known: true}, nil
+	}
+	if ctx.Err() != nil {
+		return selection{}, ctx.Err()
+	}
+	s.log().WarnContext(ctx, "policy.rollout: recording unreadable, reading the receipt's basis", slog.String("org", org.String()),
+		slog.String("transaction", d.TransactionID.String()), slog.Int("evaluation", int(d.Evaluation)), slog.Any("error", err))
+	if s.Receipts == nil {
+		return selection{}, nil
+	}
+	jws, rerr := s.Receipts.Receipt(ctx, org, d.TransactionID, int(d.Evaluation))
+	if rerr != nil || jws == "" {
+		if ctx.Err() != nil {
+			return selection{}, ctx.Err()
+		}
+		return selection{}, nil
+	}
+	ref, ok := basisPolicy(jws)
+	return selection{ref: ref, known: ok}, nil
+}
+
+// basisPolicy reads the policy version (id@version) a decision receipt's
+// basis names. It reads the receipt's own claims, which the Authority
+// signed; the sweeper only marks status from it.
+func basisPolicy(jws string) (string, bool) {
+	parts := strings.Split(jws, ".")
+	if len(parts) != 3 {
+		return "", false
+	}
+	raw, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil {
+		return "", false
+	}
+	var claims struct {
+		Basis struct {
+			Policy string `json:"policy"`
+		} `json:"basis"`
+	}
+	if err := json.Unmarshal(raw, &claims); err != nil || claims.Basis.Policy == "" {
+		return "", false
+	}
+	return claims.Basis.Policy, true
+}
+
 func (s *Service) sweepRollout(ctx context.Context, org ids.OrgID, r dbq.PcPolicyRollout, b *budget, out *Swept) error {
-	var sc scope
-	if s.Replay != nil && b.evaluations > 0 {
-		var err error
-		if sc, err = s.read(ctx, org, r, b.evaluations); err != nil {
-			return err
-		}
-	} else {
-		var err error
-		if sc, err = s.read(ctx, org, r, 1); err != nil {
-			return err
-		}
-		sc.decisions = nil
+	limit := b.evaluations
+	if s.Replay == nil {
+		limit = 0
+	}
+	sc, err := s.read(ctx, org, r, limit)
+	if err != nil {
+		return err
 	}
 	var events []event
 	var results []dbq.InsertShadowResultParams
-	var uncounted []replay.Category // shadow evaluations whose replay failed: counted, no row
-	cursor, moved := sc.cursor, false
+	counts := map[string]int64{} // every shadow evaluation by category
+	next := sc.cursor
 	for _, d := range sc.decisions {
-		var pol *recording.Policy
-		rec, err := s.Replay.RecordedInputs(ctx, org, d.TransactionID, int(d.Evaluation))
-		switch {
-		case ctx.Err() != nil:
-			return ctx.Err()
-		case err == nil && rec != nil:
-			pol = rec.Reads.Policy
+		sel, err := s.selectionOf(ctx, org, d)
+		if err != nil {
+			return err
 		}
-		underVersion := pol != nil && pol.Err == "" && !pol.None && pol.Ref == sc.ref
-		inShadow := (r.Stage == StageShadow || r.Stage == StagePilot) && (sc.shadowAll || sc.shadow[d.AgentID]) && !underVersion
+		underVersion := sel.known && sel.ref == sc.ref
+		inShadow := !b.noShadow && (r.Stage == StageShadow || r.Stage == StagePilot) && (sc.shadowAll || sc.shadow[d.AgentID]) &&
+			!underVersion
 		if inShadow && b.replays < 2 {
 			break // the next tick continues with this decision
 		}
 		switch {
-		case pol != nil && pol.Selected == pipeline.SelectedFallback && pol.Rollout == r.ID.String():
+		case sel.selected == pipeline.SelectedFallback && sel.rollout == r.ID.String():
 			events = append(events, event{agent: d.AgentID, failed: true})
 		case underVersion:
 			events = append(events, event{agent: d.AgentID})
@@ -219,11 +304,12 @@ func (s *Service) sweepRollout(ctx context.Context, org ids.OrgID, r dbq.PcPolic
 			}
 			if ok {
 				results = append(results, res)
+				counts[res.Category]++
 			} else {
-				uncounted = append(uncounted, replay.Unevaluable)
+				counts[string(replay.Unevaluable)]++
 			}
 		}
-		cursor, moved = dbq.GetRolloutCursorRow{LastCreatedAt: d.CreatedAt, LastTxn: d.TransactionID}, true
+		next.LastCreatedAt, next.LastTxn, next.LastEvaluation = d.CreatedAt, d.TransactionID, d.Evaluation
 		b.evaluations--
 		out.Evaluations++
 	}
@@ -244,18 +330,40 @@ func (s *Service) sweepRollout(ctx context.Context, org ids.OrgID, r dbq.PcPolic
 				return err
 			}
 		}
-		if err := s.recordShadow(ctx, q, org, r.ID, results, uncounted, out); err != nil {
+		if err := s.recordShadow(ctx, q, org, r.ID, results, counts, out); err != nil {
 			return err
 		}
-		if moved {
-			if err := q.SetRolloutCursor(ctx, dbq.SetRolloutCursorParams{
-				OrgID: org, RolloutID: r.ID, LastCreatedAt: cursor.LastCreatedAt, LastTxn: cursor.LastTxn,
-			}); err != nil {
-				return err
-			}
+		after, err := s.verify(ctx, tx, r.ID, sc.bundle, sc.cursor.VerifyAfterAgent, out)
+		if err != nil {
+			return err
 		}
-		return s.verify(ctx, q, org, r.ID, sc.bundle, out)
+		next.VerifyAfterAgent = after
+		return s.moveCursor(ctx, q, org, r.ID, sc, next)
 	})
+}
+
+// moveCursor saves where the next sweep starts, only from the position this
+// one read (D31): a concurrent sweep of the same rollout makes this one
+// fail and roll back, so nothing is counted twice.
+func (s *Service) moveCursor(ctx context.Context, q *dbq.Queries, org ids.OrgID, rollout ids.UUID, sc scope, next dbq.GetRolloutCursorRow) error {
+	if next == sc.cursor && sc.hadCursor {
+		return nil
+	}
+	if !sc.hadCursor {
+		return q.InsertRolloutCursor(ctx, dbq.InsertRolloutCursorParams{
+			OrgID: org, RolloutID: rollout, LastCreatedAt: next.LastCreatedAt, LastTxn: optional(next.LastTxn),
+			LastEvaluation: next.LastEvaluation, VerifyAfterAgent: next.VerifyAfterAgent,
+		})
+	}
+	n, err := q.AdvanceRolloutCursor(ctx, dbq.AdvanceRolloutCursorParams{
+		LastCreatedAt: next.LastCreatedAt, LastTxn: optional(next.LastTxn), LastEvaluation: next.LastEvaluation, VerifyAfterAgent: next.VerifyAfterAgent,
+		OrgID: org, RolloutID: rollout, OldCreatedAt: sc.cursor.LastCreatedAt, OldTxn: optional(sc.cursor.LastTxn),
+		OldEvaluation: sc.cursor.LastEvaluation, OldVerifyAfterAgent: sc.cursor.VerifyAfterAgent,
+	})
+	if err == nil && n != 1 {
+		err = db.ErrLostRace
+	}
+	return err
 }
 
 // applyEvent moves a target as one decision says: FAILED (from any state
@@ -285,22 +393,23 @@ func (s *Service) applyEvent(ctx context.Context, tx db.TenantTx, r dbq.PcPolicy
 }
 
 // notifyFailed tells the agent's owner, who resolves the target (F3), that
-// the agent is decided by the published version: ids and names only.
+// the agent is decided by the published version: ids and the version only,
+// never the agent's name (free text, HR-158).
 func (s *Service) notifyFailed(ctx context.Context, tx db.TenantTx, r dbq.PcPolicyRollout, ref string, agent ids.UUID) error {
 	if s.Notify == nil {
 		return nil
 	}
 	org := tx.OrgID()
-	a, err := dbq.New(tx).RolloutAgentOwner(ctx, org, agent)
+	owner, err := dbq.New(tx).RolloutAgentOwner(ctx, org, agent)
 	if err != nil {
 		return err
 	}
 	m := napp.Message{
-		Org: org, Type: "policy.rollout_target_failed", Params: map[string]string{"agent": a.Name, "version": ref},
+		Org: org, Type: "policy.rollout_target_failed", Params: map[string]string{"agent": agent.String(), "version": ref},
 		DedupeKey: "policy.rollout_target_failed:" + r.ID.String() + ":" + agent.String(),
 	}
-	if a.OwnerUserID != nil {
-		m.Personal = []ids.UUID{*a.OwnerUserID}
+	if owner != nil {
+		m.Personal = []ids.UUID{*owner}
 	}
 	_, err = s.Notify.Enqueue(ctx, tx, m)
 	return err
@@ -368,11 +477,12 @@ func (s *Service) shadowOf(ctx context.Context, org ids.OrgID, r dbq.PcPolicyRol
 }
 
 // recordShadow writes a tick's shadow results, up to the rollout's bound,
-// and counts every one by day and category.
+// and one count row per category for every shadow evaluation (insert-only,
+// summed on read: D31).
 func (s *Service) recordShadow(ctx context.Context, q *dbq.Queries, org ids.OrgID, rollout ids.UUID,
-	results []dbq.InsertShadowResultParams, uncounted []replay.Category, out *Swept,
+	results []dbq.InsertShadowResultParams, counts map[string]int64, out *Swept,
 ) error {
-	if len(results) == 0 && len(uncounted) == 0 {
+	if len(counts) == 0 {
 		return nil
 	}
 	stored, err := q.CountShadowResults(ctx, org, rollout)
@@ -380,26 +490,20 @@ func (s *Service) recordShadow(ctx context.Context, q *dbq.Queries, org ids.OrgI
 		return err
 	}
 	for _, res := range results {
-		if stored < maxShadowResults {
-			n, err := q.InsertShadowResult(ctx, res)
-			if err != nil {
-				return err
-			}
-			if n == 0 {
-				continue // recorded by an earlier tick that did not move the cursor
-			}
-			stored += n
+		if stored >= maxShadowResults {
+			break
 		}
-		if err := q.AddShadowCount(ctx, org, rollout, res.Category); err != nil {
+		n, err := q.InsertShadowResult(ctx, res)
+		if err != nil {
 			return err
 		}
-		out.Shadowed++
+		stored += n
 	}
-	for _, c := range uncounted {
-		if err := q.AddShadowCount(ctx, org, rollout, string(c)); err != nil {
+	for _, c := range slices.Sorted(stdmaps.Keys(counts)) {
+		if err := q.InsertShadowCount(ctx, dbq.InsertShadowCountParams{OrgID: org, RolloutID: rollout, ID: ids.NewV7(), Category: c, N: counts[c]}); err != nil {
 			return err
 		}
-		out.Shadowed++
+		out.Shadowed += int(counts[c])
 	}
 	return nil
 }
@@ -407,59 +511,139 @@ func (s *Service) recordShadow(ctx context.Context, q *dbq.Queries, org ids.OrgI
 // coverageRank orders coverage states, weakest first.
 var coverageRank = []string{"UNKNOWN", "OBSERVE_ONLY", "PARTIAL", "ENFORCED"}
 
-// verify marks ACKNOWLEDGED targets VERIFIED when the latest unexpired
-// coverage snapshots of their agent for the version's rule operations are
-// all PARTIAL or ENFORCED, keeping the weakest. Without a snapshot a target
-// stays ACKNOWLEDGED with the reason COVERAGE_UNKNOWN; with a weaker one,
-// COVERAGE_ and the state.
-func (s *Service) verify(ctx context.Context, q *dbq.Queries, org ids.OrgID, rollout ids.UUID, b *pdomain.Bundle, out *Swept) error {
-	targets, err := q.AcknowledgedRolloutTargets(ctx, org, rollout, maxVerifyPerTick)
+// scopeKey is one route of an agent: a connection and an exact operation.
+type scopeKey struct {
+	connection ids.UUID
+	operation  string
+}
+
+// operations are the exact operations of b's non-ANNOTATE rules, prefix
+// rules expanded against the org's active definitions (D31).
+func operations(b *pdomain.Bundle, active []string) []string {
+	var out []string
+	for _, r := range b.Rules {
+		if r.Kind == pdomain.Annotate {
+			continue
+		}
+		for _, op := range r.Operations {
+			if !strings.HasSuffix(op, ".*") {
+				out = append(out, op)
+			}
+		}
+		for _, op := range active {
+			if r.CoversOperation(op) {
+				out = append(out, op)
+			}
+		}
+	}
+	slices.Sort(out)
+	return slices.Compact(out)
+}
+
+// verify follows the next targets (a keyset over agent ids, D31) to VERIFIED
+// and back: the scopes are the agent's coverage routes (its own and those of
+// every agent of a connection) for the version's exact operations, and each
+// needs an unexpired PARTIAL or ENFORCED snapshot, a missing one counting as
+// UNKNOWN. Without such a route the target stays ACKNOWLEDGED (NO_ROUTES);
+// a VERIFIED target whose coverage lapsed is ACKNOWLEDGED again
+// (COVERAGE_LAPSED). It returns where the next sweep continues (nil: from
+// the start).
+func (s *Service) verify(ctx context.Context, tx db.TenantTx, rollout ids.UUID, b *pdomain.Bundle, after *ids.UUID, out *Swept,
+) (*ids.UUID, error) {
+	q := dbq.New(tx)
+	org := tx.OrgID()
+	targets, err := q.VerifiableRolloutTargets(ctx, dbq.VerifiableRolloutTargetsParams{
+		OrgID: org, RolloutID: rollout, AfterAgent: after, MaxRows: maxVerifyPerTick,
+	})
+	if err != nil || len(targets) == 0 {
+		return nil, err
+	}
+	defs, err := (&defpg.Store{Pool: s.Pool}).ActiveDefinitionsInTx(ctx, tx, org)
+	if err != nil {
+		return nil, err
+	}
+	active := make([]string, 0, len(defs))
+	for _, d := range defs {
+		active = append(active, d.Operation)
+	}
+	ops := operations(b, active)
+	for _, t := range targets {
+		if err := s.verifyTarget(ctx, q, org, rollout, ops, t, out); err != nil {
+			return nil, err
+		}
+	}
+	if len(targets) < maxVerifyPerTick {
+		return nil, nil //nolint:nilnil // every target was seen: start over next time
+	}
+	last := targets[len(targets)-1].AgentID
+	return &last, nil
+}
+
+func (s *Service) verifyTarget(ctx context.Context, q *dbq.Queries, org ids.OrgID, rollout ids.UUID, ops []string,
+	t dbq.PcPolicyRolloutTarget, out *Swept,
+) error {
+	agent := t.AgentID
+	routes, err := q.AgentRouteScopes(ctx, org, &agent)
 	if err != nil {
 		return err
 	}
-	for _, t := range targets {
+	scopes := map[scopeKey]bool{}
+	for _, r := range routes {
+		for _, op := range ops {
+			if r.Operation == nil || *r.Operation == op {
+				scopes[scopeKey{r.ConnectionID, op}] = true
+			}
+		}
+	}
+	p := dbq.SetRolloutTargetStateParams{
+		State: TargetAcknowledged, OrgID: org, RolloutID: rollout, AgentID: t.AgentID, FromStates: []string{t.State},
+	}
+	var reason string
+	if len(scopes) == 0 {
+		reason = "NO_ROUTES"
+	} else {
 		snaps, err := q.LatestAgentCoverage(ctx, org, t.AgentID)
 		if err != nil {
 			return err
 		}
-		weakest := -1
+		seen := map[scopeKey]int{}
 		for _, sn := range snaps {
-			if !governs(b, sn.Operation) {
-				continue
-			}
 			rank := slices.Index(coverageRank, sn.State)
 			if sn.Expired {
 				rank = 0
 			}
-			if weakest < 0 || rank < weakest {
-				weakest = rank
-			}
+			seen[scopeKey{sn.ConnectionID, sn.Operation}] = rank
 		}
-		p := dbq.SetRolloutTargetStateParams{
-			State: TargetAcknowledged, OrgID: org, RolloutID: rollout, AgentID: t.AgentID, FromStates: []string{TargetAcknowledged},
+		weakest := len(coverageRank) - 1
+		for k := range scopes {
+			weakest = min(weakest, seen[k]) // a missing snapshot is UNKNOWN (0)
 		}
-		reason := "COVERAGE_UNKNOWN"
-		if weakest >= 0 {
-			coverage := coverageRank[max(weakest, 0)]
-			p.Coverage = &coverage
+		coverage := coverageRank[weakest]
+		p.Coverage = &coverage
+		switch {
+		case coverage == "PARTIAL" || coverage == "ENFORCED":
+			p.State = TargetVerified
+		case t.State == TargetVerified:
+			reason = "COVERAGE_LAPSED"
+		default:
 			reason = "COVERAGE_" + coverage
-			if coverage == "PARTIAL" || coverage == "ENFORCED" {
-				p.State, reason = TargetVerified, ""
-			}
 		}
-		if reason != "" {
-			p.Reason = &reason
-		}
-		if sameTarget(t, p) {
-			continue
-		}
-		n, err := q.SetRolloutTargetState(ctx, p)
-		if err != nil {
-			return err
-		}
-		if p.State == TargetVerified {
-			out.Verified += int(n)
-		}
+	}
+	if reason != "" {
+		p.Reason = &reason
+	}
+	if sameTarget(t, p) {
+		return nil
+	}
+	n, err := q.SetRolloutTargetState(ctx, p)
+	if err != nil {
+		return err
+	}
+	switch {
+	case p.State == TargetVerified && t.State != TargetVerified:
+		out.Verified += int(n)
+	case p.State != TargetVerified && t.State == TargetVerified:
+		out.Lapsed += int(n)
 	}
 	return nil
 }
@@ -467,14 +651,6 @@ func (s *Service) verify(ctx context.Context, q *dbq.Queries, org ids.OrgID, rol
 func sameTarget(t dbq.PcPolicyRolloutTarget, p dbq.SetRolloutTargetStateParams) bool {
 	eq := func(a, b *string) bool { return (a == nil && b == nil) || (a != nil && b != nil && *a == *b) }
 	return t.State == p.State && eq(t.Coverage, p.Coverage) && eq(t.Reason, p.Reason)
-}
-
-// governs reports whether a rule of b that is not ANNOTATE covers
-// operation.
-func governs(b *pdomain.Bundle, operation string) bool {
-	return slices.ContainsFunc(b.Rules, func(r pdomain.Rule) bool {
-		return r.Kind != pdomain.Annotate && r.CoversOperation(operation)
-	})
 }
 
 // SweepOrgArgs asks for one org's sweep.
