@@ -366,7 +366,12 @@ func (s *Service) Graph(ctx context.Context, mode domain.Mode, scope GraphScope,
 			if err != nil {
 				return err
 			}
-			vis = vis.Intersect(agents)
+			// A run scope keeps every visible agent: the SQL limits it to the run
+			// and its child runs, whoever runs them; the run itself was checked
+			// visible above (L11).
+			if run == nil || mode == domain.ModeChange {
+				vis = vis.Intersect(agents)
+			}
 			start, end := now.Add(-Window), now
 			if f.Start != nil {
 				start = *f.Start
