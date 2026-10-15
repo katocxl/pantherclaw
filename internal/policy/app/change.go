@@ -155,6 +155,7 @@ type Changes struct {
 	notify    Notifier
 	publicURL string
 	digests   CurrentDigests
+	digestsTx CurrentDigestsInTx
 	mu        sync.RWMutex
 	apply     map[ChangeKind]ApplyFunc
 }
@@ -163,6 +164,17 @@ type Changes struct {
 // digests may not.
 func NewChanges(pool *db.Pool, n Notifier, publicURL string, digests CurrentDigests) *Changes {
 	return &Changes{pool: pool, notify: n, publicURL: publicURL, digests: digests, apply: map[ChangeKind]ApplyFunc{}}
+}
+
+// CurrentDigestsInTx is CurrentDigests read in the caller's transaction.
+type CurrentDigestsInTx func(ctx context.Context, tx db.TenantTx, org ids.OrgID) (definitions, catalog [32]byte, err error)
+
+// WithDigestsInTx makes the last confirmation read the current digests in
+// the transaction that applies the change, so a definitions or catalog
+// change committed meanwhile is seen (D29).
+func (c *Changes) WithDigestsInTx(f CurrentDigestsInTx) *Changes {
+	c.digestsTx = f
+	return c
 }
 
 // Register sets the apply callback of a kind (its owning stream's). A
@@ -524,10 +536,6 @@ func (c *Changes) Confirm(ctx context.Context, id ids.UUID, a Assertion) (Change
 	if c.digests == nil {
 		return ChangeRequest{}, ErrGateUnavailable
 	}
-	defsDigest, catalogDigest, err := c.digests(ctx, caller.Org)
-	if err != nil {
-		return ChangeRequest{}, err
-	}
 	var voided string
 	var expired bool
 	err = c.pool.InTenantTx(ctx, caller.Org, func(ctx context.Context, tx db.TenantTx) error {
@@ -569,6 +577,14 @@ func (c *Changes) Confirm(ctx context.Context, id ids.UUID, a Assertion) (Change
 			return err
 		}
 		n := len(req.Confirmations) + 1
+		if n >= req.Required {
+			// Only confirmations by people who still hold policy.publish at the
+			// org and are active count (D29); the caller qualified above.
+			if n, err = qualified(ctx, q, caller.Org, req.Confirmations); err != nil {
+				return err
+			}
+			n++
+		}
 		if err := record(ctx, tx, caller, "policy.change_confirmed", id, map[string]string{
 			"kind": string(req.Kind), "confirmations": strconv.Itoa(n), "required": strconv.Itoa(req.Required),
 			"security_key": a.Credential.String(), "ceremony": a.Ceremony.String(), "session": caller.Session.String(),
@@ -595,7 +611,9 @@ func (c *Changes) Confirm(ctx context.Context, id ids.UUID, a Assertion) (Change
 		if apply == nil {
 			return ErrGateUnavailable
 		}
-		req.DefinitionsDigest, req.CatalogDigest = defsDigest, catalogDigest
+		if req.DefinitionsDigest, req.CatalogDigest, err = c.currentDigests(ctx, tx, caller.Org); err != nil {
+			return err
+		}
 		if err := apply(ctx, tx, req); err != nil {
 			return err
 		}
@@ -747,4 +765,24 @@ func oneRow(n int64, err error) error {
 		return db.ErrLostRace
 	}
 	return nil
+}
+
+// currentDigests reads the org's current digests, in tx when the server
+// gave an in-transaction reader.
+func (c *Changes) currentDigests(ctx context.Context, tx db.TenantTx, org ids.OrgID) ([32]byte, [32]byte, error) {
+	if c.digestsTx != nil {
+		return c.digestsTx(ctx, tx, org)
+	}
+	return c.digests(ctx, org)
+}
+
+// qualified counts the confirmations whose person is still active and
+// still holds policy.publish at the org.
+func qualified(ctx context.Context, q *dbq.Queries, org ids.OrgID, cs []Confirmation) (int, error) {
+	users := make([]ids.UUID, 0, len(cs))
+	for _, x := range cs {
+		users = append(users, x.Principal)
+	}
+	still, err := q.PolicyActiveHoldersAmong(ctx, org, publisherRoles(), users)
+	return len(still), err
 }

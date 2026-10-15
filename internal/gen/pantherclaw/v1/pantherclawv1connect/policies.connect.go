@@ -192,7 +192,8 @@ type PolicyServiceClient interface {
 	// tests, carries every emergency rule of the published version forward
 	// (HR-236), and publishes it through the gate: rolling back to a looser
 	// version waits for confirmations like any loosening. Containment,
-	// grants and guardrails are separate records and are never changed.
+	// grants and envelopes (org guardrails) are separate records and are
+	// never changed.
 	// Human only.
 	// permission: policy.publish
 	RollbackPolicy(context.Context, *v1.RollbackPolicyRequest) (*v1.RollbackPolicyResponse, error)
@@ -255,7 +256,8 @@ type PolicyServiceHandler interface {
 	// tests, carries every emergency rule of the published version forward
 	// (HR-236), and publishes it through the gate: rolling back to a looser
 	// version waits for confirmations like any loosening. Containment,
-	// grants and guardrails are separate records and are never changed.
+	// grants and envelopes (org guardrails) are separate records and are
+	// never changed.
 	// Human only.
 	// permission: policy.publish
 	RollbackPolicy(context.Context, *v1.RollbackPolicyRequest) (*v1.RollbackPolicyResponse, error)

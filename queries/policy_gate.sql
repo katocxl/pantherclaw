@@ -22,3 +22,13 @@ LEFT JOIN pc.connections c ON c.org_id = d.org_id AND c.id = d.connection_id
 WHERE d.org_id = sqlc.arg(org_id) AND d.active AND p.state = 'ACTIVE'
   AND (d.connection_id IS NULL OR c.state = 'ACTIVE')
 ORDER BY d.name;
+
+-- PolicyActiveHoldersAmong are those of the given users who are active
+-- and hold one of the roles at the org path (a change request's
+-- confirmers, re-checked at the last confirmation).
+-- name: PolicyActiveHoldersAmong :many
+SELECT DISTINCT u.id
+FROM pc.role_bindings b
+JOIN pc.users u ON u.org_id = b.org_id AND u.id = b.user_id
+WHERE b.org_id = sqlc.arg(org_id) AND b.role = ANY (sqlc.arg(roles)::text[]) AND b.scope_type = 'ORG'
+  AND u.state = 'ACTIVE' AND u.id = ANY (sqlc.arg(users)::uuid[]);

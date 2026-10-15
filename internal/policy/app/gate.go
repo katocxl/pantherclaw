@@ -450,8 +450,8 @@ func (v *Versions) PublishExpecting(ctx context.Context, id ids.UUID, expected *
 // emergency rule of the published version forward (D4, HR-236) and runs it
 // through the gate (policy.publish at the org, human only; D9). Rolling
 // back to a looser version waits for confirmations like any loosening.
-// Containment, grants and guardrails are separate records and are never
-// touched.
+// Containment, grants and envelopes (org guardrails) are separate records
+// and are never touched.
 func (v *Versions) Rollback(ctx context.Context, to ids.UUID, expected *ids.UUID) (PublishOutcome, error) {
 	p, err := v.person(ctx)
 	if err != nil {

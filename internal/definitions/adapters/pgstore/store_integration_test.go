@@ -127,6 +127,10 @@ func TestIntImportStoresPackagesDefinitionsAndPins(t *testing.T) {
 	if defs, err := f.store.ActiveDefinitions(ctx, org); err != nil || len(defs) != len(res.Package.Definitions) {
 		t.Fatalf("ActiveDefinitions = %d %v", len(defs), err)
 	}
+	if pkgs, err := f.store.ActivePackages(ctx, org); err != nil || len(pkgs) != 1 || pkgs[0].Name != res.Package.Name ||
+		len(pkgs[0].Definitions) != len(res.Package.Definitions) {
+		t.Fatalf("ActivePackages = %d %v", len(pkgs), err)
+	}
 
 	// A newer version moves the pin; the older one stays usable until it
 	// is retired, and retiring it raises the containment epoch.
