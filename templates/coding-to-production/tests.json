@@ -10,7 +10,8 @@
         "github.pull.people": {"value": {"object": {"complete": true, "author": 101, "pushers": [101]}}, "age_seconds": 5},
         "github.pull.reviews": {"value": {"object": {}}, "age_seconds": 5},
         "github.pull.checks": {"value": {"object": {}}, "age_seconds": 5},
-        "github.branch.rules": {"value": {"object": {}}, "age_seconds": 5}
+        "github.branch.rules": {"value": {"object": {}}, "age_seconds": 5},
+        "github.repo.deploy_triggers": {"value": {"object": {"state": "none", "branch": "main", "at": "1111111111111111111111111111111111111111", "workflows": [], "environments": []}}, "age_seconds": 5}
       }},
       "expect": {"decision": "REQUIRE_APPROVAL", "reason": "MERGE_NEEDS_REVIEW"}
     },
@@ -24,7 +25,8 @@
         "github.pull.people": {"value": {"object": {"complete": true, "author": 101, "pushers": [101]}}, "age_seconds": 5},
         "github.pull.reviews": {"value": {"object": {}}, "age_seconds": 5},
         "github.pull.checks": {"value": {"object": {}}, "age_seconds": 5},
-        "github.branch.rules": {"value": {"object": {}}, "age_seconds": 5}
+        "github.branch.rules": {"value": {"object": {}}, "age_seconds": 5},
+        "github.repo.deploy_triggers": {"value": {"object": {"state": "none", "branch": "main", "at": "1111111111111111111111111111111111111111", "workflows": [], "environments": []}}, "age_seconds": 5}
       }},
       "expect": {"decision": "ALLOW", "reason": "GRANT_COVERS"}
     },
@@ -44,10 +46,23 @@
     },
     {
       "id": "c2p-feature-write", "per": "repo",
-      "summary": "a contents write on another branch of the repository goes through",
+      "summary": "a contents write on another branch of the repository that deploys nothing goes through",
       "action": {"operation": "github.contents.write", "target": {"type": "github.branch", "id": "{{repo}}@refs/heads/{{default_branch}}-feature"},
         "params": {"path": "README.md", "content": "aGk=", "message": "update"}},
+      "given": {"facts": {
+        "github.branch.deploy_triggers": {"value": {"object": {"state": "none", "branch": "{{default_branch}}-feature", "at": "1111111111111111111111111111111111111111", "workflows": [], "environments": []}}, "age_seconds": 5}
+      }},
       "expect": {"decision": "ALLOW", "reason": "GRANT_COVERS"}
+    },
+    {
+      "id": "c2p-write-deploys", "per": "repo",
+      "summary": "a contents write on a branch whose pushes deploy waits for a release approver",
+      "action": {"operation": "github.contents.write", "target": {"type": "github.branch", "id": "{{repo}}@refs/heads/{{default_branch}}-feature"},
+        "params": {"path": "README.md", "content": "aGk=", "message": "update"}},
+      "given": {"facts": {
+        "github.branch.deploy_triggers": {"value": {"object": {"state": "triggered", "branch": "{{default_branch}}-feature", "at": "1111111111111111111111111111111111111111", "workflows": [], "environments": ["{{environment}}"]}}, "age_seconds": 5}
+      }},
+      "expect": {"decision": "REQUIRE_APPROVAL", "reason": "DEPLOYMENT_NEEDS_RELEASE"}
     },
     {
       "id": "c2p-shell-push", "per": "agent",

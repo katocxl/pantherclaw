@@ -207,7 +207,7 @@ func m11Definitions(pkgs map[string]*defs.Package) []*defs.Definition {
 var m11Facts = map[string]fdomain.Type{
 	"payments.charge.refundable": fdomain.TypeBoolean,
 	"github.pull.head":           fdomain.TypeObject, "github.pull.people": fdomain.TypeObject, "github.pull.reviews": fdomain.TypeObject,
-	"github.pull.checks": fdomain.TypeObject, "github.branch.rules": fdomain.TypeObject, "github.repo.deploy_triggers": fdomain.TypeObject,
+	"github.pull.checks": fdomain.TypeObject, "github.branch.rules": fdomain.TypeObject, "github.repo.deploy_triggers": fdomain.TypeObject, "github.branch.deploy_triggers": fdomain.TypeObject,
 }
 
 // TestM11TemplatesDisclose: every template, coding-to-production
@@ -513,7 +513,16 @@ func TestM11DiagnosticsTraversal(t *testing.T) {
 
 // m11World is the read side of the scenario runner: the templates'
 // packages, with their own digests, and the fact catalog.
-type m11World struct{ defs []*defs.Definition }
+type m11World struct {
+	defs []*defs.Definition
+	pkgs []*defs.Package
+}
+
+// ActivePackages serves the packages, as the definitions store does, so
+// the runner decides their consequences (D28).
+func (w m11World) ActivePackages(context.Context, ids.OrgID) ([]*defs.Package, error) {
+	return w.pkgs, nil
+}
 
 func (w m11World) ActiveDefinitions(context.Context, ids.OrgID) ([]*defs.Definition, error) {
 	return w.defs, nil
@@ -529,11 +538,13 @@ func (m11World) Catalog(context.Context, ids.OrgID) (map[string]fdomain.Type, er
 // and rule removal killed.
 func TestM11TemplatesPassTheGate(t *testing.T) {
 	var ds []*defs.Definition
+	var pkgs []*defs.Package
 	for _, raw := range [][]byte{mockpayments.Package, pcgithub.Package, pcshell.Package} {
 		p, err := manifest.Decode(raw)
 		if err != nil {
 			t.Fatal(err)
 		}
+		pkgs = append(pkgs, p)
 		for i := range p.Definitions {
 			ds = append(ds, &p.Definitions[i])
 		}
@@ -542,11 +553,6 @@ func TestM11TemplatesPassTheGate(t *testing.T) {
 	for _, n := range []string{"coding-to-production", "production-diagnostics", "refunds", "release-deployment"} {
 		for _, env := range []string{"production", "staging"} {
 			t.Run(n+"/"+env, func(t *testing.T) {
-				if n == "coding-to-production" || n == "release-deployment" {
-					// c2p-release decides github.deployment.trigger, which only
-					// ever arises as a consequence; the runner cannot reach it yet.
-					t.Skip("waiting for the scenario runner to decide consequences (asked of the coordinator)")
-				}
 				r := renderM11Env(t, n, []string{"acme/api", "acme/web"}, env)
 				b := r.bundle(t)
 				for _, c := range r.raw {
@@ -559,7 +565,7 @@ func TestM11TemplatesPassTheGate(t *testing.T) {
 				if err := json.Unmarshal(raw, &b.Tests, json.RejectUnknownMembers(true)); err != nil {
 					t.Fatal(err)
 				}
-				res, err := scenario.New(m11World{ds}, m11World{ds}, celenv.DefaultLimits, polapp.DefaultBudget).Run(context.Background(), org, b)
+				res, err := scenario.New(m11World{ds, pkgs}, m11World{ds, pkgs}, celenv.DefaultLimits, polapp.DefaultBudget).Run(context.Background(), org, b)
 				if err != nil {
 					t.Fatal(err)
 				}

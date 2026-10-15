@@ -43,7 +43,7 @@
         "github.branch.rules": {"value": {"object": {}}, "age_seconds": 5},
         "github.repo.deploy_triggers": {"value": {"object": {"state": "unknown", "branch": "main", "at": "1111111111111111111111111111111111111111", "workflows": [], "environments": [], "unknown": "a workflow the parser does not evaluate"}}, "age_seconds": 5}
       }},
-      "expect": {"decision": "REQUIRE_APPROVAL", "reason": "DEPLOYMENT_NEEDS_RELEASE"}
+      "expect": {"decision": "REQUIRE_APPROVAL", "reason": "CONSEQUENCE_UNKNOWN"}
     },
     {
       "id": "rd-no-deployment", "per": "repo",
