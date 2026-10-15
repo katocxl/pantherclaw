@@ -41,11 +41,16 @@ FROM pc.policy_rollout_cohorts rc
 JOIN pc.policy_cohort_members m ON m.org_id = rc.org_id AND m.cohort_id = rc.cohort_id
 JOIN pc.agents a ON a.org_id = m.org_id AND a.id = m.agent_id
 WHERE rc.org_id = $1 AND rc.rollout_id = $2 AND rc.mode = 'ENFORCE' AND a.state <> 'RETIRED'
-ON CONFLICT DO NOTHING
+ON CONFLICT (org_id, rollout_id, agent_id) DO UPDATE
+    SET state = 'CONFIGURED', reason = NULL, coverage = NULL, updated_at = now()
+    WHERE pc.policy_rollout_targets.state = 'EXCEPTION' AND pc.policy_rollout_targets.reason = 'REMOVED_FROM_COHORT'
 `
 
 // Targets for every agent of the rollout's ENFORCE cohorts that has none
 // yet, CONFIGURED, with the agent's owner (F3). Retired agents are left out.
+// An agent added back to such a cohort after its removal made it an
+// EXCEPTION (REMOVED_FROM_COHORT) is CONFIGURED again; an exclusion a
+// person made stays (D37).
 func (q *Queries) AddCohortRolloutTargets(ctx context.Context, orgID ids.OrgID, rolloutID ids.UUID) (int64, error) {
 	result, err := q.db.Exec(ctx, addCohortRolloutTargets, orgID, rolloutID)
 	if err != nil {
@@ -394,6 +399,23 @@ func (q *Queries) GetRolloutTarget(ctx context.Context, orgID ids.OrgID, rollout
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const includeExceptionsAtCompletion = `-- name: IncludeExceptionsAtCompletion :execrows
+UPDATE pc.policy_rollout_targets
+SET state = 'CONFIGURED', reason = 'INCLUDED_AT_COMPLETION', coverage = NULL, updated_at = now()
+WHERE org_id = $1 AND rollout_id = $2 AND state = 'EXCEPTION'
+`
+
+// A completed rollout's version is everyone's published policy: its
+// EXCEPTION targets are CONFIGURED (INCLUDED_AT_COMPLETION) and followed
+// like the others (D37).
+func (q *Queries) IncludeExceptionsAtCompletion(ctx context.Context, orgID ids.OrgID, rolloutID ids.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, includeExceptionsAtCompletion, orgID, rolloutID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const insertPolicyCohort = `-- name: InsertPolicyCohort :one

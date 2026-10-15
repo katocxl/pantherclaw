@@ -864,6 +864,7 @@ func publishActor(ctx context.Context) evdomain.Actor {
 // its version was classified against a base that is no longer published.
 // Their shadow results are kept. Without an open rollout of version a
 // COMPLETE rollout is recorded (every edition: status only). Every
+// EXCEPTION target is CONFIGURED again (INCLUDED_AT_COMPLETION) and every
 // non-retired agent becomes a target, so the sweeper can follow each one
 // to VERIFIED.
 func (s *Service) Published(ctx context.Context, tx db.TenantTx, org ids.OrgID, version ids.UUID, base *ids.UUID) error {
@@ -905,6 +906,10 @@ func (s *Service) Published(ctx context.Context, tx db.TenantTx, org ids.OrgID, 
 			return err
 		}
 		id = r.ID
+	}
+	// The version is everyone's now: an excluded agent is followed too (D37).
+	if _, err := q.IncludeExceptionsAtCompletion(ctx, org, id); err != nil {
+		return err
 	}
 	_, err = q.AddAllRolloutTargets(ctx, id, org)
 	return err

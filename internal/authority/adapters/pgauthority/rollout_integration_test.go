@@ -205,6 +205,10 @@ func TestHR234_PilotSelectsItsVersionForTheCohortsAgentsOnly(t *testing.T) {
 	if ref, _, sel := rw.selection(excluded); excluded.Decision != adomain.Allow || ref != "org-policy@1" || sel != pipeline.SelectedDefault {
 		t.Fatalf("excluded: %s under %s (%s)", excluded.Decision, ref, sel)
 	}
+	// Adding it to the cohort again does not undo a person's exclusion (D37).
+	if _, err := rw.svc.ChangeCohort(ctx, "pilot", []ids.UUID{w.agent}, false); err != nil {
+		t.Fatal(err)
+	}
 	rw.sweep()
 	if tg := rw.target(r.ID); tg.State != rollout.TargetException {
 		t.Fatalf("an excluded target moved: %+v", tg)
@@ -335,6 +339,13 @@ func TestHR234_TargetsAreAcknowledgedThenVerifiedByCoverage(t *testing.T) {
 	res := w.authorize(w.request(run, ids.NewV7(), "ch_2", "70.00"))
 	if ref, _, sel := rw.selection(res); ref != "org-policy@1" || sel != pipeline.SelectedDefault {
 		t.Fatalf("after the removal: %s (%s)", ref, sel)
+	}
+	// Added back, it is CONFIGURED again (D37).
+	if _, err := rw.svc.ChangeCohort(rw.publisher, "pilot", []ids.UUID{w.agent}, false); err != nil {
+		t.Fatal(err)
+	}
+	if tg := rw.target(id); tg.State != rollout.TargetConfigured || tg.Reason != nil {
+		t.Fatalf("added back: %+v", tg)
 	}
 }
 

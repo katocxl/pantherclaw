@@ -208,6 +208,9 @@ func TestHR234_ATighteningPilotStartsAndCompletesThroughTheGate(t *testing.T) {
 	if err != nil || cr != nil || got.Stage != rollout.StagePilot {
 		t.Fatalf("a tightening pilot: %+v %v %v", got.Stage, cr, err)
 	}
+	if _, err := g.svc.ExcludeTarget(g.publisher, r.ID, w.agent, "kept on the published policy for now"); err != nil {
+		t.Fatal(err)
+	}
 	got, cr, err = g.svc.CompleteRollout(g.publisher, r.ID)
 	if err != nil || cr != nil || got.Stage != rollout.StageComplete || got.Targets[rollout.TargetConfigured] != 1 {
 		t.Fatalf("complete: %+v %v %v", got, cr, err)
@@ -215,6 +218,10 @@ func TestHR234_ATighteningPilotStartsAndCompletesThroughTheGate(t *testing.T) {
 	pub, err := g.versions.Store.PublishedVersion(context.Background(), w.org)
 	if err != nil || pub == nil || pub.ID != r.VersionID {
 		t.Fatalf("published: %+v %v", pub, err)
+	}
+	// The excluded agent is included: the version is everyone's (D37).
+	if tg := g.target(r.ID); tg.State != rollout.TargetConfigured || tg.Reason == nil || *tg.Reason != "INCLUDED_AT_COMPLETION" {
+		t.Fatalf("an excluded target at completion: %+v", tg)
 	}
 	v3 := w.publishPolicy(3, true, pgCapOver1000, pgHoldOver50, pgForbidOver20)
 	if out, err := g.versions.Publish(g.pat.ctx, v3); err != nil || out.ChangeRequest != nil {
