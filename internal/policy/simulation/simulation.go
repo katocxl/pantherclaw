@@ -23,12 +23,10 @@ package simulation
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/json/jsontext"
-	"encoding/json/v2"
 	"strconv"
 	"time"
 
+	"github.com/katocxl/pantherclaw/internal/authority/replay"
 	billing "github.com/katocxl/pantherclaw/internal/billing/domain"
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
 	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
@@ -125,7 +123,7 @@ type NewSimulation struct {
 
 // SampleFilter narrows a sample listing.
 type SampleFilter struct {
-	Category  Category
+	Category  replay.Category
 	Operation string
 }
 
@@ -160,7 +158,7 @@ type Tx interface {
 	// cursor, newest first.
 	Receipts(ctx context.Context, s Simulation, limit int) ([]Recorded, error)
 	// SampleCounts counts the stored samples by category and operation.
-	SampleCounts(ctx context.Context, id ids.UUID) (map[Category]map[string]int, error)
+	SampleCounts(ctx context.Context, id ids.UUID) (map[replay.Category]map[string]int, error)
 	InsertSample(ctx context.Context, id ids.UUID, s Sample) error
 	Samples(ctx context.Context, id ids.UUID, f SampleFilter, after SampleKey, limit int32) ([]Sample, error)
 	// Enqueue adds the simulation's job in this transaction.
@@ -260,10 +258,7 @@ func (s *Service) Simulate(ctx context.Context, in Request) (Simulation, error) 
 		}
 		return Simulation{}, err
 	}
-	digest, err := ContentDigest(b)
-	if err != nil {
-		return Simulation{}, err
-	}
+	digest := pdomain.ContentDigest(b)
 	var out Simulation
 	err = s.Store.InTx(ctx, c.Org, false, func(ctx context.Context, tx Tx) error {
 		keep, err := tx.RetentionDays(ctx)
@@ -371,7 +366,7 @@ func (s *Service) Samples(ctx context.Context, id ids.UUID, f SampleFilter, size
 	if err != nil {
 		return SamplePage{}, err
 	}
-	if f.Category != "" && !f.Category.Valid() {
+	if f.Category != "" && !validCategory(f.Category) {
 		return SamplePage{}, ErrCategory
 	}
 	after, err := parseSampleToken(token)
@@ -400,23 +395,4 @@ func (s *Service) Samples(ctx context.Context, id ids.UUID, f SampleFilter, size
 		return nil
 	})
 	return out, err
-}
-
-// ContentDigest is the version's content digest: SHA-256 of the JCS form
-// of {"id", "rules"}.
-//
-// Stand-in for D2's domain.ContentDigest until it is on this branch's base.
-func ContentDigest(b *pdomain.Bundle) ([32]byte, error) {
-	raw, err := json.Marshal(struct {
-		ID    string         `json:"id"`
-		Rules []pdomain.Rule `json:"rules"`
-	}{b.ID, b.Rules})
-	if err != nil {
-		return [32]byte{}, err
-	}
-	v := jsontext.Value(raw)
-	if err := v.Canonicalize(); err != nil {
-		return [32]byte{}, err
-	}
-	return sha256.Sum256(v), nil
 }

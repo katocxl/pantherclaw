@@ -121,8 +121,8 @@ func (m *memStore) Receipts(_ context.Context, s simulation.Simulation, limit in
 	return m.recorded[start:min(len(m.recorded), start+limit)], nil
 }
 
-func (m *memStore) SampleCounts(_ context.Context, id ids.UUID) (map[simulation.Category]map[string]int, error) {
-	out := map[simulation.Category]map[string]int{}
+func (m *memStore) SampleCounts(_ context.Context, id ids.UUID) (map[replay.Category]map[string]int, error) {
+	out := map[replay.Category]map[string]int{}
 	for _, s := range m.samples[id] {
 		if out[s.Category] == nil {
 			out[s.Category] = map[string]int{}

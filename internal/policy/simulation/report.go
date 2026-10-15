@@ -11,6 +11,7 @@ import (
 
 	adomain "github.com/katocxl/pantherclaw/internal/authority/domain"
 	"github.com/katocxl/pantherclaw/internal/authority/pipeline"
+	"github.com/katocxl/pantherclaw/internal/authority/replay"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	pdomain "github.com/katocxl/pantherclaw/internal/policy/domain"
 )
@@ -32,7 +33,7 @@ const (
 )
 
 // Counts counts recorded decisions by category.
-type Counts map[Category]int
+type Counts map[replay.Category]int
 
 // Total is the number of decisions counted.
 func (c Counts) Total() int {
@@ -89,7 +90,7 @@ func (r *Report) Add(o Result) {
 	r.Counts[o.Category]++
 	group(r.ByOperation, o.Operation, MaxGroups)[o.Category]++
 	group(r.ByAgent, o.Agent.String(), MaxGroups)[o.Category]++
-	if o.Category == NewlyHeld {
+	if o.Category == replay.NewlyHeld {
 		bump(r.HeldPerDay, o.Recorded.UTC().Format(time.DateOnly), MaxGroups)
 		bump(r.HeldByRole, o.Role, MaxRoles)
 	}
@@ -98,10 +99,10 @@ func (r *Report) Add(o Result) {
 // Notices flag what needs attention in a report.
 func (s Simulation) Notices() []string {
 	var out []string
-	if n := s.Report.Counts[NewlyAllowed]; n > 0 {
+	if n := s.Report.Counts[replay.NewlyAllowed]; n > 0 {
 		out = append(out, fmt.Sprintf("expanded exposure: %d recorded decision(s) would have been less strict under this version", n))
 	}
-	if n := s.Report.Counts[Unevaluable]; n > 0 {
+	if n := s.Report.Counts[replay.Unevaluable]; n > 0 {
 		out = append(out, fmt.Sprintf("%d recorded decision(s) could not be evaluated: they do not reproduce, or the version needs inputs "+
 			"they never read; their samples name why", n))
 	}
@@ -119,7 +120,7 @@ type Result struct {
 	Agent       ids.UUID
 	Operation   string
 	Recorded    time.Time
-	Category    Category
+	Category    replay.Category
 	Original    adomain.Decision
 	OrigReason  string
 	Proposed    adomain.Decision
@@ -132,7 +133,7 @@ type Result struct {
 
 // Sample is a stored sample decision.
 type Sample struct {
-	Category    Category
+	Category    replay.Category
 	Transaction ids.UUID
 	Evaluation  int
 	Agent       ids.UUID
@@ -179,3 +180,13 @@ func heldRole(b *pdomain.Bundle, decision adomain.Decision, checklist []pipeline
 	}
 	return RoleOther
 }
+
+// Categories lists D5's categories in report order.
+func Categories() []replay.Category {
+	return []replay.Category{
+		replay.NewlyDenied, replay.NewlyHeld, replay.NewlyConstrained, replay.NewlyAllowed, replay.ReasonChanged, replay.Unevaluable,
+		replay.Unchanged,
+	}
+}
+
+func validCategory(c replay.Category) bool { return slices.Contains(Categories(), c) }

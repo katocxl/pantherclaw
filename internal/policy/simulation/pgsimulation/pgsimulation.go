@@ -12,6 +12,7 @@ import (
 	"encoding/json/v2"
 	"strings"
 
+	"github.com/katocxl/pantherclaw/internal/authority/replay"
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
 	"github.com/katocxl/pantherclaw/internal/evidence/retention"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
@@ -71,7 +72,7 @@ func countsJSON(c simulation.Counts) map[string]int {
 func countsOf(m map[string]int) simulation.Counts {
 	out := simulation.Counts{}
 	for k, v := range m {
-		out[simulation.Category(k)] = v
+		out[replay.Category(k)] = v
 	}
 	return out
 }
@@ -257,14 +258,14 @@ func (t *txn) Receipts(ctx context.Context, s simulation.Simulation, limit int) 
 }
 
 // SampleCounts implements simulation.Tx.
-func (t *txn) SampleCounts(ctx context.Context, id ids.UUID) (map[simulation.Category]map[string]int, error) {
+func (t *txn) SampleCounts(ctx context.Context, id ids.UUID) (map[replay.Category]map[string]int, error) {
 	rows, err := t.q.SimulationSampleCounts(ctx, t.org, id)
 	if err != nil {
 		return nil, err
 	}
-	out := map[simulation.Category]map[string]int{}
+	out := map[replay.Category]map[string]int{}
 	for _, r := range rows {
-		c := simulation.Category(r.Category)
+		c := replay.Category(r.Category)
 		if out[c] == nil {
 			out[c] = map[string]int{}
 		}
@@ -295,7 +296,7 @@ func (t *txn) Samples(ctx context.Context, id ids.UUID, f simulation.SampleFilte
 	out := make([]simulation.Sample, 0, len(rows))
 	for _, r := range rows {
 		s := simulation.Sample{
-			Category: simulation.Category(r.Category), Transaction: r.TransactionID, Evaluation: int(r.Evaluation), Agent: r.AgentID,
+			Category: replay.Category(r.Category), Transaction: r.TransactionID, Evaluation: int(r.Evaluation), Agent: r.AgentID,
 			Operation: r.Operation, Original: r.OriginalDecision, OrigReason: r.OriginalReason, Proposed: r.ProposedDecision,
 			PropReason: r.ProposedReason,
 		}

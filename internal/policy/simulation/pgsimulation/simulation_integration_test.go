@@ -24,6 +24,7 @@ import (
 
 	"github.com/katocxl/pantherclaw/internal/authn/adapters/rpcauth"
 	adomain "github.com/katocxl/pantherclaw/internal/authority/domain"
+	"github.com/katocxl/pantherclaw/internal/authority/replay"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	pantherclawv1 "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
 	"github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1/pantherclawv1connect"
@@ -97,11 +98,11 @@ func TestHR232_SimulationWritesOnlyItsOwnRows(t *testing.T) {
 	}
 	// The 30.00 refund the draft would hold is unevaluable: the hold needs
 	// reads (the approval's) its allowed evaluation never made (R-26).
-	want := simulation.Counts{simulation.Unchanged: 1, simulation.Unevaluable: 1, simulation.ReasonChanged: 1, simulation.NewlyDenied: 1}
+	want := simulation.Counts{replay.Unchanged: 1, replay.Unevaluable: 1, replay.ReasonChanged: 1, replay.NewlyDenied: 1}
 	if got.State != simulation.Done || got.Evaluated != 4 || !reflect.DeepEqual(got.Report.Counts, want) || got.Finished == nil || got.Started == nil {
 		t.Fatalf("simulation: %s %d %v", got.State, got.Evaluated, got.Report.Counts)
 	}
-	unevaluable, err := w.svc.Samples(w.human, s.ID, simulation.SampleFilter{Category: simulation.Unevaluable}, 0, "")
+	unevaluable, err := w.svc.Samples(w.human, s.ID, simulation.SampleFilter{Category: replay.Unevaluable}, 0, "")
 	if err != nil || len(unevaluable.Items) != 1 || unevaluable.Items[0].Original != "ALLOW" || unevaluable.Items[0].Proposed != "" ||
 		!slices.Equal(unevaluable.Items[0].Limitations, []string{"INPUT_UNAVAILABLE"}) {
 		t.Fatalf("unevaluable samples: %+v %v", unevaluable.Items, err)

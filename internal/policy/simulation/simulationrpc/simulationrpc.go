@@ -16,6 +16,7 @@ import (
 
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"github.com/katocxl/pantherclaw/internal/authority/replay"
 	pantherclawv1 "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
 	"github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1/pantherclawv1connect"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
@@ -40,21 +41,21 @@ var states = map[simulation.State]pantherclawv1.PolicySimulationState{
 	simulation.Cancelled: pantherclawv1.PolicySimulationState_POLICY_SIMULATION_STATE_CANCELLED,
 }
 
-var categories = map[simulation.Category]pantherclawv1.PolicySimulationCategory{
-	simulation.Unchanged:        pantherclawv1.PolicySimulationCategory_POLICY_SIMULATION_CATEGORY_UNCHANGED,
-	simulation.NewlyDenied:      pantherclawv1.PolicySimulationCategory_POLICY_SIMULATION_CATEGORY_NEWLY_DENIED,
-	simulation.NewlyHeld:        pantherclawv1.PolicySimulationCategory_POLICY_SIMULATION_CATEGORY_NEWLY_HELD,
-	simulation.NewlyConstrained: pantherclawv1.PolicySimulationCategory_POLICY_SIMULATION_CATEGORY_NEWLY_CONSTRAINED,
-	simulation.NewlyAllowed:     pantherclawv1.PolicySimulationCategory_POLICY_SIMULATION_CATEGORY_NEWLY_ALLOWED,
-	simulation.ReasonChanged:    pantherclawv1.PolicySimulationCategory_POLICY_SIMULATION_CATEGORY_REASON_CHANGED,
-	simulation.Unevaluable:      pantherclawv1.PolicySimulationCategory_POLICY_SIMULATION_CATEGORY_UNEVALUABLE,
+var categories = map[replay.Category]pantherclawv1.PolicySimulationCategory{
+	replay.Unchanged:        pantherclawv1.PolicySimulationCategory_POLICY_SIMULATION_CATEGORY_UNCHANGED,
+	replay.NewlyDenied:      pantherclawv1.PolicySimulationCategory_POLICY_SIMULATION_CATEGORY_NEWLY_DENIED,
+	replay.NewlyHeld:        pantherclawv1.PolicySimulationCategory_POLICY_SIMULATION_CATEGORY_NEWLY_HELD,
+	replay.NewlyConstrained: pantherclawv1.PolicySimulationCategory_POLICY_SIMULATION_CATEGORY_NEWLY_CONSTRAINED,
+	replay.NewlyAllowed:     pantherclawv1.PolicySimulationCategory_POLICY_SIMULATION_CATEGORY_NEWLY_ALLOWED,
+	replay.ReasonChanged:    pantherclawv1.PolicySimulationCategory_POLICY_SIMULATION_CATEGORY_REASON_CHANGED,
+	replay.Unevaluable:      pantherclawv1.PolicySimulationCategory_POLICY_SIMULATION_CATEGORY_UNEVALUABLE,
 }
 
 func countsPB(c simulation.Counts) *pantherclawv1.PolicySimulationCounts {
 	return &pantherclawv1.PolicySimulationCounts{
-		Unchanged: n(c[simulation.Unchanged]), NewlyDenied: n(c[simulation.NewlyDenied]), NewlyHeld: n(c[simulation.NewlyHeld]),
-		NewlyConstrained: n(c[simulation.NewlyConstrained]), NewlyAllowed: n(c[simulation.NewlyAllowed]),
-		ReasonChanged: n(c[simulation.ReasonChanged]), Unevaluable: n(c[simulation.Unevaluable]),
+		Unchanged: n(c[replay.Unchanged]), NewlyDenied: n(c[replay.NewlyDenied]), NewlyHeld: n(c[replay.NewlyHeld]),
+		NewlyConstrained: n(c[replay.NewlyConstrained]), NewlyAllowed: n(c[replay.NewlyAllowed]),
+		ReasonChanged: n(c[replay.ReasonChanged]), Unevaluable: n(c[replay.Unevaluable]),
 	}
 }
 

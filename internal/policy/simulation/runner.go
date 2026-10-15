@@ -221,7 +221,7 @@ func (r *Runner) evaluate(ctx context.Context, org ids.OrgID, version ids.UUID, 
 	case !base.Complete:
 		return unevaluable(res, base.Incomplete), nil
 	case !base.Reproduced:
-		res.Category, res.Limitations = Unevaluable, []string{NotReproduced}
+		res.Category, res.Limitations = replay.Unevaluable, []string{NotReproduced}
 		return res, nil
 	}
 	prop, err := r.Replay.Replay(ctx, org, rec.Transaction, rec.Evaluation, &version)
@@ -232,15 +232,15 @@ func (r *Runner) evaluate(ctx context.Context, org ids.OrgID, version ids.UUID, 
 		return unevaluable(res, prop.Incomplete), nil
 	}
 	res.Proposed, res.PropReason = prop.Decision, prop.Reason
-	res.Category = Classify(res.Original, res.Proposed, res.OrigReason, res.PropReason)
-	if res.Category == NewlyHeld {
+	res.Category = replay.Classify(res.Original, res.Proposed, res.OrigReason, res.PropReason)
+	if res.Category == replay.NewlyHeld {
 		res.Role = heldRole(b, prop.Decision, prop.Checklist)
 	}
 	return res, nil
 }
 
 func unevaluable(res Result, lims []replay.Limitation) Result {
-	res.Category = Unevaluable
+	res.Category = replay.Unevaluable
 	for _, l := range lims {
 		code := strings.ToUpper(l.Code)
 		if !slices.Contains(res.Limitations, code) {

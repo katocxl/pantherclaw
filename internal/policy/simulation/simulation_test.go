@@ -18,6 +18,7 @@ import (
 	"time"
 
 	adomain "github.com/katocxl/pantherclaw/internal/authority/domain"
+	"github.com/katocxl/pantherclaw/internal/authority/replay"
 	billing "github.com/katocxl/pantherclaw/internal/billing/domain"
 	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
@@ -91,31 +92,6 @@ func (w *world) simulate(t *testing.T, r simulation.Request) simulation.Simulati
 
 func code(err error) string { return pcerr.ReasonOf(err) }
 
-// TestClassify: D5's categories, by severity (stand-in for
-// replay.Classify).
-func TestClassify(t *testing.T) {
-	for _, c := range []struct {
-		before, after adomain.Decision
-		br, ar        string
-		want          simulation.Category
-	}{
-		{adomain.Allow, adomain.Allow, "GRANT_COVERS", "GRANT_COVERS", simulation.Unchanged},
-		{adomain.Allow, adomain.Deny, "GRANT_COVERS", "REFUND_TOO_LARGE", simulation.NewlyDenied},
-		{adomain.RequireApproval, adomain.CannotAuthorize, "HOLD", "FACT_MISSING", simulation.NewlyDenied},
-		{adomain.Allow, adomain.RequireApproval, "GRANT_COVERS", "HOLD", simulation.NewlyHeld},
-		{adomain.AllowWithObligations, adomain.RequireStepUp, "C", "S", simulation.NewlyHeld},
-		{adomain.Allow, adomain.AllowWithObligations, "GRANT_COVERS", "CONSTRAINED", simulation.NewlyConstrained},
-		{adomain.Deny, adomain.Allow, "REFUND_TOO_LARGE", "GRANT_COVERS", simulation.NewlyAllowed},
-		{adomain.RequireApproval, adomain.RequireStepUp, "HOLD", "S", simulation.NewlyAllowed},
-		{adomain.Deny, adomain.CannotAuthorize, "X", "Y", simulation.ReasonChanged},
-		{adomain.Deny, adomain.Deny, "X", "Y", simulation.ReasonChanged},
-	} {
-		if got := simulation.Classify(c.before, c.after, c.br, c.ar); got != c.want {
-			t.Errorf("%s/%s → %s/%s: %s, want %s", c.before, c.br, c.after, c.ar, got, c.want)
-		}
-	}
-}
-
 // TestSimulationReportsEachCategoryAndTheBurden: every category is counted
 // apart, per operation and per agent; newly held decisions are counted
 // per day and by the role the version requires; a decision that does not
@@ -140,13 +116,13 @@ func TestSimulationReportsEachCategoryAndTheBurden(t *testing.T) {
 
 	s := w.run(t, w.simulate(t, simulation.Request{}).ID)
 	want := simulation.Counts{
-		simulation.NewlyDenied: 3, simulation.NewlyHeld: 3, simulation.NewlyConstrained: 1, simulation.NewlyAllowed: 4,
-		simulation.ReasonChanged: 2, simulation.Unchanged: 5, simulation.Unevaluable: 3,
+		replay.NewlyDenied: 3, replay.NewlyHeld: 3, replay.NewlyConstrained: 1, replay.NewlyAllowed: 4,
+		replay.ReasonChanged: 2, replay.Unchanged: 5, replay.Unevaluable: 3,
 	}
 	if s.State != simulation.Done || s.Evaluated != 21 || !reflect.DeepEqual(s.Report.Counts, want) {
 		t.Fatalf("simulation: %s, %d evaluated, %v", s.State, s.Evaluated, s.Report.Counts)
 	}
-	if got := s.Report.ByOperation[refund]; got[simulation.NewlyDenied] != 3 || got[simulation.Unevaluable] != 2 || got.Total() != 9 {
+	if got := s.Report.ByOperation[refund]; got[replay.NewlyDenied] != 3 || got[replay.Unevaluable] != 2 || got.Total() != 9 {
 		t.Errorf("by operation %s: %v", refund, got)
 	}
 	if len(s.Report.ByAgent) != 21 {
@@ -166,7 +142,7 @@ func TestSimulationReportsEachCategoryAndTheBurden(t *testing.T) {
 	if !strings.Contains(notices, "expanded exposure: 4") || !strings.Contains(notices, "3 recorded decision(s) could not be evaluated") {
 		t.Errorf("notices: %s", notices)
 	}
-	samples, err := w.svc.Samples(as(td.RolePolicyAuthor), s.ID, simulation.SampleFilter{Category: simulation.Unevaluable}, 0, "")
+	samples, err := w.svc.Samples(as(td.RolePolicyAuthor), s.ID, simulation.SampleFilter{Category: replay.Unevaluable}, 0, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -318,7 +294,7 @@ func TestHR237_SimulationIsTeamAndFailsClosed(t *testing.T) {
 func TestHR237_SimulationOutputsCarryNoInputValues(t *testing.T) {
 	allowed := map[reflect.Type]bool{
 		reflect.TypeFor[ids.UUID](): true, reflect.TypeFor[time.Time](): true, reflect.TypeFor[adomain.Decision](): true,
-		reflect.TypeFor[simulation.Category](): true, reflect.TypeFor[simulation.Counts](): true,
+		reflect.TypeFor[replay.Category](): true, reflect.TypeFor[simulation.Counts](): true,
 		reflect.TypeFor[map[string]simulation.Counts](): true, reflect.TypeFor[map[string]int](): true,
 	}
 	for _, typ := range []reflect.Type{reflect.TypeFor[simulation.Report](), reflect.TypeFor[simulation.Sample](), reflect.TypeFor[simulation.Result]()} {
