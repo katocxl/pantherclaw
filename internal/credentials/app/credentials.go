@@ -14,6 +14,9 @@ package app
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json/v2"
 	"slices"
 	"strconv"
 	"strings"
@@ -25,6 +28,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
+	"github.com/katocxl/pantherclaw/internal/protect"
 	tenancy "github.com/katocxl/pantherclaw/internal/tenancy/app"
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
 )
@@ -62,6 +66,9 @@ type Service struct {
 	// github_app credential recorded its installation (it schedules an org
 	// scan, which reads the installation's permissions; F048).
 	installed func(ctx context.Context, tx db.TenantTx, connection ids.UUID) error
+	// protect holds uploads for a distinct publisher when the org protects
+	// CUSTODY (WithProtect, G0 M11 D42); nil holds none.
+	protect *protect.Gate
 }
 
 // OnGitHubInstallation sets what runs, in the sealing transaction, when a
@@ -192,20 +199,93 @@ func (s *Service) PutCredential(ctx context.Context, in PutInput) (Metadata, err
 	if err != nil {
 		return Metadata{}, err
 	}
+	if err := checkPut(&in); err != nil {
+		return Metadata{}, err
+	}
+	var out Metadata
+	var pending *protect.PendingError
+	err = s.pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
+		var err error
+		out, pending, err = s.put(ctx, tx, c, in)
+		return err
+	})
+	if err == nil && pending != nil {
+		return Metadata{}, pending
+	}
+	return out, err
+}
+
+// checkPut checks an upload's form and fills its default kind.
+func checkPut(in *PutInput) error {
 	if domain.CheckFormat(in.Sealed) != nil {
-		return Metadata{}, ErrFormat
+		return ErrFormat
 	}
 	if in.Kind == "" {
 		in.Kind = domain.KindStatic
 	}
 	if !domain.ValidKind(in.Kind) || (in.Kind == domain.KindGitHubApp && (in.Header != domain.GitHubAppHeader || in.Scheme != domain.GitHubAppScheme)) {
-		return Metadata{}, ErrKind
+		return ErrKind
 	}
 	if (in.Kind == domain.KindGitHubApp) != (in.GitHub != nil) || (in.GitHub != nil && in.GitHub.Validate() != nil) {
-		return Metadata{}, ErrInstallation
+		return ErrInstallation
 	}
+	return nil
+}
+
+// ApplyProtectedPut re-runs a confirmed protected upload as its author (a
+// protect.Applier). The stored payload holds the credential sealed to the
+// gateway's broker key, never in plaintext (D42a).
+func (s *Service) ApplyProtectedPut(ctx context.Context, tx db.TenantTx, author tenancy.Caller, payload []byte) error {
+	var in PutInput
+	if err := json.Unmarshal(payload, &in); err != nil {
+		return ErrFormat
+	}
+	c, err := s.caller(tenancy.WithCaller(ctx, author), td.PermCredentialSeal)
+	if err != nil {
+		return err
+	}
+	if err := checkPut(&in); err != nil {
+		return err
+	}
+	_, pending, err := s.put(ctx, tx, c, in)
+	if err == nil && pending != nil {
+		return pending
+	}
+	return err
+}
+
+// WithProtect holds every upload for a distinct publisher when the org
+// protects CUSTODY (G0 M11 D42) and registers their re-runs with g.
+func (s *Service) WithProtect(g *protect.Gate) *Service {
+	s.protect = g
+	if g != nil {
+		g.Register(protect.SurfaceCredentialPut, s.ApplyProtectedPut)
+	}
+	return s
+}
+
+// credentialChange is an upload as a protected change: metadata and
+// fingerprints only.
+func credentialChange(conn dbq.PcConnection, key dbq.PcBrokerKey, in PutInput) protect.Change {
+	sum := sha256.Sum256(in.Sealed)
+	summary := map[string]string{
+		"connection": conn.ID.String(), "connection_name": conn.Name, "version": strconv.Itoa(int(in.Version)),
+		"kind": in.Kind, "broker_key_fingerprint": key.Fingerprint, "sealed_sha256": hex.EncodeToString(sum[:]),
+		"allowed_hosts": strings.Join(conn.AllowedHosts, ","),
+	}
+	if gh := in.GitHub; gh != nil {
+		summary["github_account"] = gh.Account
+	}
+	return protect.Change{
+		Category: protect.Custody, Surface: protect.SurfaceCredentialPut, Subject: conn.ID.String(), SubjectID: conn.ID,
+		Summary: summary, Widening: []string{"credential"}, Payload: in,
+	}
+}
+
+func (s *Service) put(ctx context.Context, tx db.TenantTx, c tenancy.Caller, in PutInput) (Metadata, *protect.PendingError, error) {
 	var out Metadata
-	err = s.pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
+	var pending *protect.PendingError
+	err := func() error {
 		q := dbq.New(tx)
 		conn, err := held(q.LockConnection(ctx, c.Org, in.Connection))
 		if err != nil {
@@ -234,65 +314,68 @@ func (s *Service) PutCredential(ctx context.Context, in PutInput) (Metadata, err
 		if !slices.Equal(want, got) || in.Header != deref(conn.CredentialHeader) || in.Scheme != deref(conn.CredentialScheme) {
 			return ErrBinding
 		}
-		replaced, err := q.SupersedeCredentials(ctx, c.Org, conn.ID)
-		if err != nil {
-			return err
-		}
-		var scheme *string
-		if in.Scheme != "" {
-			scheme = &in.Scheme
-		}
-		row, err := q.InsertSealedCredential(ctx, dbq.InsertSealedCredentialParams{
-			OrgID: c.Org, ID: ids.NewV7(), ConnectionID: conn.ID, Version: in.Version, BrokerKeyID: key.ID, Sealed: in.Sealed,
-			AllowedHosts: conn.AllowedHosts, Header: in.Header, Scheme: scheme, CreatedBy: c.Principal.String(), Kind: in.Kind,
-		})
-		if err != nil {
-			return err
-		}
-		details := map[string]string{
-			"version": strconv.Itoa(int(in.Version)), "broker_key_id": key.ID.String(), "broker_key_fingerprint": key.Fingerprint,
-			"allowed_hosts": strings.Join(conn.AllowedHosts, ","), "replaced": strconv.FormatInt(replaced, 10), "kind": in.Kind,
-		}
-		if gh := in.GitHub; gh != nil {
-			// The installation is configuration, not a secret: the gateway
-			// refuses another account's repository with it (ADR-0021).
-			if err := q.UpsertConnectionGitHub(ctx, dbq.UpsertConnectionGitHubParams{
-				OrgID: c.Org, ConnectionID: conn.ID, AppClientID: gh.AppClientID, InstallationID: gh.ID, AccountLogin: gh.Account,
-				UpdatedBy: c.Principal.String(),
-			}); err != nil {
+		pending, err = s.protect.Hold(ctx, tx, c, credentialChange(conn, key, in), func(ctx context.Context) error {
+			replaced, err := q.SupersedeCredentials(ctx, c.Org, conn.ID)
+			if err != nil {
 				return err
 			}
-			details["github_app"], details["github_installation"], details["github_account"] = gh.AppClientID, strconv.FormatInt(gh.ID, 10), gh.Account
-			if s.installed != nil {
-				if err := s.installed(ctx, tx, conn.ID); err != nil {
+			var scheme *string
+			if in.Scheme != "" {
+				scheme = &in.Scheme
+			}
+			row, err := q.InsertSealedCredential(ctx, dbq.InsertSealedCredentialParams{
+				OrgID: c.Org, ID: ids.NewV7(), ConnectionID: conn.ID, Version: in.Version, BrokerKeyID: key.ID, Sealed: in.Sealed,
+				AllowedHosts: conn.AllowedHosts, Header: in.Header, Scheme: scheme, CreatedBy: c.Principal.String(), Kind: in.Kind,
+			})
+			if err != nil {
+				return err
+			}
+			details := map[string]string{
+				"version": strconv.Itoa(int(in.Version)), "broker_key_id": key.ID.String(), "broker_key_fingerprint": key.Fingerprint,
+				"allowed_hosts": strings.Join(conn.AllowedHosts, ","), "replaced": strconv.FormatInt(replaced, 10), "kind": in.Kind,
+			}
+			if gh := in.GitHub; gh != nil {
+				// The installation is configuration, not a secret: the gateway
+				// refuses another account's repository with it (ADR-0021).
+				if err := q.UpsertConnectionGitHub(ctx, dbq.UpsertConnectionGitHubParams{
+					OrgID: c.Org, ConnectionID: conn.ID, AppClientID: gh.AppClientID, InstallationID: gh.ID, AccountLogin: gh.Account,
+					UpdatedBy: c.Principal.String(),
+				}); err != nil {
+					return err
+				}
+				details["github_app"], details["github_installation"], details["github_account"] = gh.AppClientID, strconv.FormatInt(gh.ID, 10), gh.Account
+				if s.installed != nil {
+					if err := s.installed(ctx, tx, conn.ID); err != nil {
+						return err
+					}
+				}
+			}
+			if _, err := q.BumpGatewayConfig(ctx, c.Org, conn.GatewayID); err != nil {
+				return err
+			}
+			if replaced > 0 {
+				details["weakening"] = "sealed_replaced"
+			}
+			if err := record(ctx, tx, c, "connection.sealed_stored", conn.ID, details); err != nil {
+				return err
+			}
+			if replaced > 0 && s.notify != nil {
+				if _, err := s.notify.Enqueue(ctx, tx, napp.Message{Org: c.Org, Type: "security.connection_weakened", Params: map[string]string{
+					"connection": conn.Name, "user": c.Principal.String(), "change": "credential replaced",
+				}}); err != nil {
 					return err
 				}
 			}
-		}
-		if _, err := q.BumpGatewayConfig(ctx, c.Org, conn.GatewayID); err != nil {
-			return err
-		}
-		if replaced > 0 {
-			details["weakening"] = "sealed_replaced"
-		}
-		if err := record(ctx, tx, c, "connection.sealed_stored", conn.ID, details); err != nil {
-			return err
-		}
-		if replaced > 0 && s.notify != nil {
-			if _, err := s.notify.Enqueue(ctx, tx, napp.Message{Org: c.Org, Type: "security.connection_weakened", Params: map[string]string{
-				"connection": conn.Name, "user": c.Principal.String(), "change": "credential replaced",
-			}}); err != nil {
-				return err
+			out = Metadata{
+				ID: row.ID, ConnectionID: conn.ID, Version: row.Version, BrokerKeyID: key.ID, BrokerKeyFingerprint: key.Fingerprint,
+				AllowedHosts: conn.AllowedHosts, Header: in.Header, Scheme: scheme, State: row.State, CreatedBy: c.Principal.String(),
+				CreatedAt: row.CreatedAt, Kind: in.Kind,
 			}
-		}
-		out = Metadata{
-			ID: row.ID, ConnectionID: conn.ID, Version: row.Version, BrokerKeyID: key.ID, BrokerKeyFingerprint: key.Fingerprint,
-			AllowedHosts: conn.AllowedHosts, Header: in.Header, Scheme: scheme, State: row.State, CreatedBy: c.Principal.String(),
-			CreatedAt: row.CreatedAt, Kind: in.Kind,
-		}
-		return nil
-	})
-	return out, err
+			return nil
+		})
+		return err
+	}()
+	return out, pending, err
 }
 
 // ListCredentials lists a connection's credentials, newest first, as

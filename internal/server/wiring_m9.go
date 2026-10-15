@@ -26,6 +26,7 @@ import (
 // A), as pc_app.
 func registerCoverage(rs *connect.Server, d apiDeps) {
 	svc := &covapp.Service{Pool: d.pool, Freshness: d.freshness, Verifier: covapp.ConnectionTests{}}
+	protectCoverage(svc, d.m11protect)
 	if d.m5 != nil && d.m5.notifications != nil {
 		svc.Notify = d.m5.notifications
 	}

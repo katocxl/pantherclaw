@@ -14,6 +14,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json/v2"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -23,6 +24,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
+	"github.com/katocxl/pantherclaw/internal/protect"
 	"github.com/katocxl/pantherclaw/internal/releases/domain"
 	tenancy "github.com/katocxl/pantherclaw/internal/tenancy/app"
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
@@ -54,6 +56,10 @@ type Record struct {
 // Service manages change windows.
 type Service struct {
 	Pool *db.Pool
+	// Protect holds freeze-dropping changes for a distinct publisher when
+	// the org protects CONSEQUENCE_RULES (WithProtect, G0 M11 D42); nil
+	// holds none.
+	Protect *protect.Gate
 }
 
 func (s *Service) caller(ctx context.Context) (tenancy.Caller, error) {
@@ -71,6 +77,9 @@ func (s *Service) caller(ctx context.Context) (tenancy.Caller, error) {
 // fails with ErrChanged. The audit event records how many weekly entries,
 // one-off windows and freezes the window has and their Digest, and for a
 // replacement the window it replaces and how many freezes that one had.
+// With CONSEQUENCE_RULES protected, a replacement that drops or shortens a
+// current or future freeze waits for a distinct publisher instead (G0 M11
+// D42a, HR-292) and returns protect.ErrPending.
 func (s *Service) Create(ctx context.Context, w domain.Window) (Record, error) {
 	c, err := s.caller(ctx)
 	if err != nil {
@@ -80,33 +89,73 @@ func (s *Service) Create(ctx context.Context, w domain.Window) (Record, error) {
 	if err := w.Validate(); err != nil {
 		return Record{}, pcerr.Wrap(err, pcerr.InvalidArgument, "CHANGE_WINDOW_INVALID", strings.TrimPrefix(err.Error(), "releases: "))
 	}
+	var out Record
+	var held *protect.PendingError
+	err = s.Pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
+		var err error
+		out, held, err = s.create(ctx, tx, c, w)
+		return err
+	})
+	if err == nil && held != nil {
+		return Record{}, held
+	}
+	return out, err
+}
+
+// ApplyProtectedCreate re-runs a confirmed protected window as its author
+// (a protect.Applier).
+func (s *Service) ApplyProtectedCreate(ctx context.Context, tx db.TenantTx, author tenancy.Caller, payload []byte) error {
+	var w domain.Window
+	if err := json.Unmarshal(payload, &w); err != nil {
+		return ErrInvalid
+	}
+	c, err := s.caller(tenancy.WithCaller(ctx, author))
+	if err != nil {
+		return err
+	}
+	w.Environment = domain.NormalizeEnvironment(w.Environment)
+	if err := w.Validate(); err != nil {
+		return ErrInvalid
+	}
+	_, held, err := s.create(ctx, tx, c, w)
+	if err == nil && held != nil {
+		return held
+	}
+	return err
+}
+
+func (s *Service) create(ctx context.Context, tx db.TenantTx, c tenancy.Caller, w domain.Window) (Record, *protect.PendingError, error) {
 	weekly, err := json.Marshal(orEmpty(w.Weekly), json.Deterministic(true))
 	if err != nil {
-		return Record{}, err
+		return Record{}, nil, err
 	}
 	oneOff, err := json.Marshal(orEmpty(w.OneOff), json.Deterministic(true))
 	if err != nil {
-		return Record{}, err
+		return Record{}, nil, err
 	}
 	freezes, err := json.Marshal(orEmpty(w.Freezes), json.Deterministic(true))
 	if err != nil {
-		return Record{}, err
+		return Record{}, nil, err
 	}
 	var out Record
-	err = s.Pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
-		q := dbq.New(tx)
-		by := c.Principal.String()
-		details := map[string]string{"environment": w.Environment, "repository": w.Repository, "time_zone": w.TimeZone}
-		current, err := q.ActiveChangeWindow(ctx, c.Org, w.Environment, w.Repository)
-		switch {
-		case db.IsNoRows(err):
-		case err != nil:
-			return err
-		default:
-			replaced, err := recordOf(current)
-			if err != nil {
-				return err
-			}
+	q := dbq.New(tx)
+	by := c.Principal.String()
+	details := map[string]string{"environment": w.Environment, "repository": w.Repository, "time_zone": w.TimeZone}
+	current, err := q.ActiveChangeWindow(ctx, c.Org, w.Environment, w.Repository)
+	var replaced *Record
+	switch {
+	case db.IsNoRows(err):
+	case err != nil:
+		return Record{}, nil, err
+	default:
+		r, err := recordOf(current)
+		if err != nil {
+			return Record{}, nil, err
+		}
+		replaced = &r
+	}
+	write := func(ctx context.Context) error {
+		if replaced != nil {
 			if _, err := q.RetireChangeWindow(ctx, &by, c.Org, current.ID); err != nil {
 				return err
 			}
@@ -142,8 +191,59 @@ func (s *Service) Create(ctx context.Context, w domain.Window) (Record, error) {
 		details["weekly"], details["one_off"] = strconv.Itoa(len(out.Weekly)), strconv.Itoa(len(out.OneOff))
 		details["freezes"], details["window_sha256"] = strconv.Itoa(len(out.Freezes)), digest
 		return s.audit(ctx, tx, c, "release.window.created", row.ID, details)
-	})
-	return out, err
+	}
+	if replaced == nil || s.Protect == nil {
+		return out, nil, write(ctx)
+	}
+	now, err := q.DBNow(ctx)
+	if err != nil {
+		return Record{}, nil, err
+	}
+	dropped := DroppedFreezes(replaced.Freezes, w.Freezes, now)
+	if len(dropped) == 0 {
+		return out, nil, write(ctx)
+	}
+	held, err := s.Protect.Hold(ctx, tx, c, protect.Change{
+		Category: protect.ConsequenceRules, Surface: protect.SurfaceWindowCreate, Subject: w.Environment + "/" + w.Repository,
+		Summary: map[string]string{
+			"environment": w.Environment, "repository": w.Repository, "replaces": current.ID.String(),
+			"freezes_dropped": strconv.Itoa(len(dropped)),
+			"first_dropped":   dropped[0].Start.UTC().Format(time.RFC3339) + "/" + dropped[0].End.UTC().Format(time.RFC3339),
+		},
+		Widening: []string{"freezes"}, Payload: w,
+	}, write)
+	return out, held, err
+}
+
+// DroppedFreezes returns the parts of the old freezes, from now on, that
+// the next freezes no longer cover: what a replacement or a retirement
+// lifts of a current or future freeze.
+func DroppedFreezes(old, next []domain.Span, now time.Time) []domain.Span {
+	cover := slices.Clone(next)
+	slices.SortFunc(cover, func(a, b domain.Span) int { return a.Start.Compare(b.Start) })
+	var out []domain.Span
+	for _, f := range old {
+		start := f.Start
+		if start.Before(now) {
+			start = now
+		}
+		for _, n := range cover {
+			if !start.Before(f.End) {
+				break
+			}
+			if !n.End.After(start) || !n.Start.Before(f.End) {
+				continue
+			}
+			if n.Start.After(start) {
+				out = append(out, domain.Span{Start: start, End: n.Start})
+			}
+			start = n.End
+		}
+		if start.Before(f.End) {
+			out = append(out, domain.Span{Start: start, End: f.End})
+		}
+	}
+	return out
 }
 
 // Digest is the SHA-256, in hex, of what a window allows: its time zone,
@@ -167,6 +267,9 @@ func Digest(w domain.Window) (string, error) {
 }
 
 // Retire retires a window; releases to its environment then need another.
+// With CONSEQUENCE_RULES protected, retiring a window with a current or
+// future freeze waits for a distinct publisher instead (G0 M11 D42a,
+// HR-292) and returns protect.ErrPending.
 func (s *Service) Retire(ctx context.Context, id ids.UUID, reason string) (Record, error) {
 	c, err := s.caller(ctx)
 	if err != nil {
@@ -176,9 +279,63 @@ func (s *Service) Retire(ctx context.Context, id ids.UUID, reason string) (Recor
 		return Record{}, ErrReason
 	}
 	var out Record
+	var held *protect.PendingError
 	err = s.Pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
-		q := dbq.New(tx)
-		by := c.Principal.String()
+		var err error
+		out, held, err = s.retire(ctx, tx, c, RetireInput{Window: id, Reason: reason})
+		return err
+	})
+	if err == nil && held != nil {
+		return Record{}, held
+	}
+	return out, err
+}
+
+// RetireInput is a retirement, as a protected change stores it.
+type RetireInput struct {
+	Window ids.UUID
+	Reason string
+}
+
+// ApplyProtectedRetire re-runs a confirmed protected retirement as its
+// author (a protect.Applier).
+func (s *Service) ApplyProtectedRetire(ctx context.Context, tx db.TenantTx, author tenancy.Caller, payload []byte) error {
+	var in RetireInput
+	if err := json.Unmarshal(payload, &in); err != nil {
+		return ErrInvalid
+	}
+	if n := len([]rune(in.Reason)); n < 1 || n > 500 {
+		return ErrReason
+	}
+	c, err := s.caller(tenancy.WithCaller(ctx, author))
+	if err != nil {
+		return err
+	}
+	_, held, err := s.retire(ctx, tx, c, in)
+	if err == nil && held != nil {
+		return held
+	}
+	return err
+}
+
+// WithProtect holds freeze-dropping windows and retirements for a distinct
+// publisher when the org protects CONSEQUENCE_RULES (G0 M11 D42) and
+// registers their re-runs with g.
+func (s *Service) WithProtect(g *protect.Gate) *Service {
+	s.Protect = g
+	if g != nil {
+		g.Register(protect.SurfaceWindowCreate, s.ApplyProtectedCreate)
+		g.Register(protect.SurfaceWindowRetire, s.ApplyProtectedRetire)
+	}
+	return s
+}
+
+func (s *Service) retire(ctx context.Context, tx db.TenantTx, c tenancy.Caller, in RetireInput) (Record, *protect.PendingError, error) {
+	id, reason := in.Window, in.Reason
+	var out Record
+	q := dbq.New(tx)
+	by := c.Principal.String()
+	write := func(ctx context.Context) error {
 		row, err := q.RetireChangeWindow(ctx, &by, c.Org, id)
 		if db.IsNoRows(err) {
 			if _, err := q.GetChangeWindow(ctx, c.Org, id); db.IsNoRows(err) {
@@ -194,8 +351,37 @@ func (s *Service) Retire(ctx context.Context, id ids.UUID, reason string) (Recor
 		return s.audit(ctx, tx, c, "release.window.retired", id, map[string]string{
 			"environment": row.Environment, "reason": reason,
 		})
-	})
-	return out, err
+	}
+	if s.Protect == nil {
+		return out, nil, write(ctx)
+	}
+	cur, err := q.GetChangeWindow(ctx, c.Org, id)
+	if db.IsNoRows(err) {
+		return out, nil, ErrNotFound
+	} else if err != nil {
+		return out, nil, err
+	}
+	r, err := recordOf(cur)
+	if err != nil {
+		return out, nil, err
+	}
+	now, err := q.DBNow(ctx)
+	if err != nil {
+		return out, nil, err
+	}
+	dropped := DroppedFreezes(r.Freezes, nil, now)
+	if r.RetiredAt != nil || len(dropped) == 0 {
+		return out, nil, write(ctx)
+	}
+	held, err := s.Protect.Hold(ctx, tx, c, protect.Change{
+		Category: protect.ConsequenceRules, Surface: protect.SurfaceWindowRetire, Subject: id.String(), SubjectID: id,
+		Summary: map[string]string{
+			"environment": r.Environment, "repository": r.Repository, "window": id.String(),
+			"freezes_dropped": strconv.Itoa(len(dropped)), "reason": reason,
+		},
+		Widening: []string{"freezes"}, Payload: in,
+	}, write)
+	return out, held, err
 }
 
 // List lists the windows, of one environment (in any case) when it is not

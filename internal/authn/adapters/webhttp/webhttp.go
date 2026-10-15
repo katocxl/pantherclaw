@@ -105,6 +105,9 @@ type Handler struct {
 	// mounted.
 	playbook         PlaybookRequests
 	playbookBindings Bindings
+	// protect is the protected-change step-up pages (G0 M11 D42, D43); nil
+	// when not mounted.
+	protect Protect
 }
 
 // New returns the handler. publicURL is the server's public URL: its origin
@@ -141,6 +144,7 @@ func (h *Handler) Mount(mux *http.ServeMux) {
 	h.mountPolicyChanges(mux)
 	h.mountIntegrations(mux)
 	h.mountPlaybook(mux)
+	h.mountProtect(mux)
 }
 
 // Routes lists the mounted routes.
@@ -456,7 +460,8 @@ func (h *Handler) static(w http.ResponseWriter, r *http.Request) {
 		"account.js": "text/javascript; charset=utf-8", "containment.js": "text/javascript; charset=utf-8",
 		"approvals.js": "text/javascript; charset=utf-8", "reconciliations.js": "text/javascript; charset=utf-8",
 		"policy_changes.js": "text/javascript; charset=utf-8", "integrations.js": "text/javascript; charset=utf-8", "playbook.js": "text/javascript; charset=utf-8",
-		"pc.css": "text/css; charset=utf-8",
+		"protect.js": "text/javascript; charset=utf-8",
+		"pc.css":     "text/css; charset=utf-8",
 	}
 	ct, ok := types[name]
 	if !ok {
