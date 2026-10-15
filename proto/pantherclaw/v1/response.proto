@@ -72,9 +72,12 @@ service ResponseService {
   // preconditions (a person only); stages need the Team edition.
   // permission: incident.respond
   rpc RequestRestoration(RequestRestorationRequest) returns (RequestRestorationResponse);
-  // DecideRestoration approves or declines a restoration: a person holding
-  // agent.restore, never the requester, with a security-key step-up less
-  // than 5 minutes old. Approving an unstaged plan lifts its controls.
+  // DecideRestoration approves or declines a restoration (a requested one,
+  // or one the sweeper proposed when a control expired): a person holding
+  // agent.restore, with a security-key step-up less than 5 minutes old on a
+  // browser session, never the requester, the creator of one of its
+  // controls or a person one of them contains. Approving an unstaged plan
+  // lifts its controls; expiry alone never does.
   // permission: agent.restore
   rpc DecideRestoration(DecideRestorationRequest) returns (DecideRestorationResponse);
   // ApplyRestorationStage runs a stage's test actions, dry run, against the
@@ -187,7 +190,8 @@ message ResponseAction {
   string source = 11;
   // "REQUESTED", "PARTIAL", "CONFIRMED", "FAILED" or "UNSUPPORTED".
   string status = 12;
-  // New access through every gateway serving the scope is stopped.
+  // New access is stopped on every material path (F561, D52): false while
+  // a bypass route is open.
   bool future_confirmed = 13;
   // Historical exposure, reported apart from new access (F561).
   repeated HistoricalItem historical_open = 14;
@@ -201,6 +205,8 @@ message ResponseAction {
   google.protobuf.Timestamp settle_time = 19;
   // The known consequence at request time: counts and the first agent ids.
   map<string, string> preview_summary = 20;
+  // Every gateway serving the scope was sent the action's epoch (D52).
+  bool mediated_confirmed = 21;
 }
 
 // ContainmentControl is a control the Authority enforces until lifted.
@@ -518,7 +524,7 @@ message DecideRestorationRequest {
 
 // DecideRestorationResponse is the plan's new state.
 message DecideRestorationResponse {
-  // "REQUESTED", "STAGING", "COMPLETED" or "REFUSED".
+  // "PROPOSED", "REQUESTED", "STAGING", "COMPLETED" or "REFUSED".
   string state = 1;
   repeated RestorationPrecondition preconditions = 2;
 }

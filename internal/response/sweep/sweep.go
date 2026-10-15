@@ -39,6 +39,9 @@ const maxPerSweep = 200
 // whether the status changed.
 type Advancer interface {
 	Advance(ctx context.Context, tx db.TenantTx, a dbq.PcResponseAction) (bool, error)
+	// ProposeExpiredIn drafts restoration plans for controls past their
+	// expiry (D54); it never lifts one.
+	ProposeExpiredIn(ctx context.Context, tx db.TenantTx) (int, error)
 }
 
 // Sweeper settles response actions.
@@ -52,6 +55,9 @@ type Sweeper struct {
 func (s *Sweeper) Sweep(ctx context.Context, org ids.OrgID) (int, error) {
 	n := 0
 	err := s.Pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
+		if _, err := s.Advance.ProposeExpiredIn(ctx, tx); err != nil {
+			return err
+		}
 		actions, err := pgresponse.Unsettled(ctx, tx, org, maxPerSweep)
 		if err != nil || len(actions) == 0 {
 			return err

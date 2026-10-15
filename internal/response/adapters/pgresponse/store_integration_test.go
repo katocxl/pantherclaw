@@ -39,7 +39,8 @@ func epoch(t *testing.T, pool *db.Pool, org ids.OrgID) int64 {
 // TestHR248_AddingAndLiftingAControlRaisesTheEpoch: adding a control raises
 // the containment epoch in the same transaction (and a rolled-back add
 // raises nothing); lifting needs a restoration plan, raises the epoch
-// again, and a lifted control is never lifted twice. pc_app can neither
+// again, and a lifted control is never lifted twice; only a decided plan
+// (STAGING or COMPLETED) that lists the control lifts it (D53). pc_app can neither
 // delete a control nor change its scope or control, and the active-control
 // read no longer returns a lifted one.
 func TestHR248_AddingAndLiftingAControlRaisesTheEpoch(t *testing.T) {
@@ -128,12 +129,27 @@ func TestHR248_AddingAndLiftingAControlRaisesTheEpoch(t *testing.T) {
 	}
 
 	plan := ids.NewV7()
-	d.AdminExec(t, "INSERT INTO pc.restoration_plans (org_id, id, reason, requested_by) VALUES ($1, $2, 'fixed', 'user:x')", org, plan)
-	lift := func() error {
+	d.AdminExec(t, "INSERT INTO pc.restoration_plans (org_id, id, reason, requested_by, state) VALUES ($1, $2, 'fixed', 'user:x', 'REQUESTED')", org, plan)
+	liftBy := func(p ids.UUID) error {
 		return pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
-			return pgresponse.LiftControl(ctx, tx, org, added.ControlID, plan, "user:reviewer")
+			return pgresponse.LiftControl(ctx, tx, org, added.ControlID, p, "user:reviewer")
 		})
 	}
+	lift := func() error { return liftBy(plan) }
+	// D53: only a decided plan that lists the control lifts it.
+	if err := lift(); err == nil {
+		t.Fatal("a plan that does not list the control lifted it")
+	}
+	d.AdminExec(t, "INSERT INTO pc.restoration_plan_controls (org_id, plan_id, control_id) VALUES ($1, $2, $3)", org, plan, added.ControlID)
+	if err := lift(); err == nil {
+		t.Fatal("an undecided plan lifted the control")
+	}
+	other := ids.NewV7()
+	d.AdminExec(t, "INSERT INTO pc.restoration_plans (org_id, id, reason, requested_by, state, finished_at) VALUES ($1, $2, 'x', 'user:x', 'COMPLETED', now())", org, other)
+	if err := liftBy(other); err == nil {
+		t.Fatal("a decided plan that does not list the control lifted it")
+	}
+	d.AdminExec(t, "UPDATE pc.restoration_plans SET state = 'COMPLETED', finished_at = now() WHERE org_id = $1 AND id = $2", org, plan)
 	if err := lift(); err != nil {
 		t.Fatal(err)
 	}

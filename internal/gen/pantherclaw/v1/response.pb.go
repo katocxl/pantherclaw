@@ -295,7 +295,8 @@ type ResponseAction struct {
 	Source string `protobuf:"bytes,11,opt,name=source,proto3" json:"source,omitempty"`
 	// "REQUESTED", "PARTIAL", "CONFIRMED", "FAILED" or "UNSUPPORTED".
 	Status string `protobuf:"bytes,12,opt,name=status,proto3" json:"status,omitempty"`
-	// New access through every gateway serving the scope is stopped.
+	// New access is stopped on every material path (F561, D52): false while
+	// a bypass route is open.
 	FutureConfirmed bool `protobuf:"varint,13,opt,name=future_confirmed,json=futureConfirmed,proto3" json:"future_confirmed,omitempty"`
 	// Historical exposure, reported apart from new access (F561).
 	HistoricalOpen []*HistoricalItem `protobuf:"bytes,14,rep,name=historical_open,json=historicalOpen,proto3" json:"historical_open,omitempty"`
@@ -309,8 +310,10 @@ type ResponseAction struct {
 	SettleTime     *timestamppb.Timestamp `protobuf:"bytes,19,opt,name=settle_time,json=settleTime,proto3" json:"settle_time,omitempty"`
 	// The known consequence at request time: counts and the first agent ids.
 	PreviewSummary map[string]string `protobuf:"bytes,20,rep,name=preview_summary,json=previewSummary,proto3" json:"preview_summary,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// Every gateway serving the scope was sent the action's epoch (D52).
+	MediatedConfirmed bool `protobuf:"varint,21,opt,name=mediated_confirmed,json=mediatedConfirmed,proto3" json:"mediated_confirmed,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *ResponseAction) Reset() {
@@ -481,6 +484,13 @@ func (x *ResponseAction) GetPreviewSummary() map[string]string {
 		return x.PreviewSummary
 	}
 	return nil
+}
+
+func (x *ResponseAction) GetMediatedConfirmed() bool {
+	if x != nil {
+		return x.MediatedConfirmed
+	}
+	return false
 }
 
 // ContainmentControl is a control the Authority enforces until lifted.
@@ -2356,7 +2366,7 @@ func (x *DecideRestorationRequest) GetDecision() string {
 // DecideRestorationResponse is the plan's new state.
 type DecideRestorationResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// "REQUESTED", "STAGING", "COMPLETED" or "REFUSED".
+	// "PROPOSED", "REQUESTED", "STAGING", "COMPLETED" or "REFUSED".
 	State         string                     `protobuf:"bytes,1,opt,name=state,proto3" json:"state,omitempty"`
 	Preconditions []*RestorationPrecondition `protobuf:"bytes,2,rep,name=preconditions,proto3" json:"preconditions,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -3322,7 +3332,7 @@ const file_pantherclaw_v1_response_proto_rawDesc = "" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"Z\n" +
 	"\x0eHistoricalItem\x12%\n" +
 	"\x0etransaction_id\x18\x01 \x01(\tR\rtransactionId\x12!\n" +
-	"\fpermit_state\x18\x02 \x01(\tR\vpermitState\"\xb4\x06\n" +
+	"\fpermit_state\x18\x02 \x01(\tR\vpermitState\"\xe3\x06\n" +
 	"\x0eResponseAction\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04kind\x18\x02 \x01(\tR\x04kind\x12\x1d\n" +
@@ -3347,7 +3357,8 @@ const file_pantherclaw_v1_response_proto_rawDesc = "" +
 	"\frequest_time\x18\x12 \x01(\v2\x1a.google.protobuf.TimestampR\vrequestTime\x12;\n" +
 	"\vsettle_time\x18\x13 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"settleTime\x12[\n" +
-	"\x0fpreview_summary\x18\x14 \x03(\v22.pantherclaw.v1.ResponseAction.PreviewSummaryEntryR\x0epreviewSummary\x1aA\n" +
+	"\x0fpreview_summary\x18\x14 \x03(\v22.pantherclaw.v1.ResponseAction.PreviewSummaryEntryR\x0epreviewSummary\x12-\n" +
+	"\x12mediated_confirmed\x18\x15 \x01(\bR\x11mediatedConfirmed\x1aA\n" +
 	"\x13PreviewSummaryEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xe1\x03\n" +

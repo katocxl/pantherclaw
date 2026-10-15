@@ -244,9 +244,12 @@ type ResponseServiceClient interface {
 	// preconditions (a person only); stages need the Team edition.
 	// permission: incident.respond
 	RequestRestoration(context.Context, *v1.RequestRestorationRequest) (*v1.RequestRestorationResponse, error)
-	// DecideRestoration approves or declines a restoration: a person holding
-	// agent.restore, never the requester, with a security-key step-up less
-	// than 5 minutes old. Approving an unstaged plan lifts its controls.
+	// DecideRestoration approves or declines a restoration (a requested one,
+	// or one the sweeper proposed when a control expired): a person holding
+	// agent.restore, with a security-key step-up less than 5 minutes old on a
+	// browser session, never the requester, the creator of one of its
+	// controls or a person one of them contains. Approving an unstaged plan
+	// lifts its controls; expiry alone never does.
 	// permission: agent.restore
 	DecideRestoration(context.Context, *v1.DecideRestorationRequest) (*v1.DecideRestorationResponse, error)
 	// ApplyRestorationStage runs a stage's test actions, dry run, against the
@@ -323,9 +326,12 @@ type ResponseServiceHandler interface {
 	// preconditions (a person only); stages need the Team edition.
 	// permission: incident.respond
 	RequestRestoration(context.Context, *v1.RequestRestorationRequest) (*v1.RequestRestorationResponse, error)
-	// DecideRestoration approves or declines a restoration: a person holding
-	// agent.restore, never the requester, with a security-key step-up less
-	// than 5 minutes old. Approving an unstaged plan lifts its controls.
+	// DecideRestoration approves or declines a restoration (a requested one,
+	// or one the sweeper proposed when a control expired): a person holding
+	// agent.restore, with a security-key step-up less than 5 minutes old on a
+	// browser session, never the requester, the creator of one of its
+	// controls or a person one of them contains. Approving an unstaged plan
+	// lifts its controls; expiry alone never does.
 	// permission: agent.restore
 	DecideRestoration(context.Context, *v1.DecideRestorationRequest) (*v1.DecideRestorationResponse, error)
 	// ApplyRestorationStage runs a stage's test actions, dry run, against the

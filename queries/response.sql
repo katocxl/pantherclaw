@@ -81,16 +81,36 @@ WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id);
 -- (conditional on the status read, HR-249).
 -- name: SettleResponseAction :execrows
 UPDATE pc.response_actions
-SET status = sqlc.arg(status), future_confirmed = sqlc.arg(future_confirmed), historical_open = sqlc.arg(historical_open),
-    updated_at = now(),
+SET status = sqlc.arg(status), mediated_confirmed = sqlc.arg(mediated_confirmed), future_confirmed = sqlc.arg(future_confirmed),
+    historical_open = sqlc.arg(historical_open), updated_at = now(),
     settled_at = CASE WHEN sqlc.arg(status)::text IN ('CONFIRMED', 'FAILED', 'UNSUPPORTED') THEN now() END
 WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND status = sqlc.arg(expected) AND settled_at IS NULL;
 
+-- UnsettledResponseActions are the unsettled actions due a sweep, the
+-- longest waiting first, so none starves (D53).
 -- name: UnsettledResponseActions :many
 SELECT * FROM pc.response_actions
-WHERE org_id = sqlc.arg(org_id) AND settled_at IS NULL
-ORDER BY requested_at, id
+WHERE org_id = sqlc.arg(org_id) AND settled_at IS NULL AND next_check_at <= now()
+ORDER BY next_check_at, id
 LIMIT sqlc.arg(max_rows);
+
+-- ScheduleResponseCheck sets when an unsettled action is swept next.
+-- name: ScheduleResponseCheck :exec
+UPDATE pc.response_actions
+SET next_check_at = now() + make_interval(secs => sqlc.arg(backoff_s)::int), check_backoff_s = sqlc.arg(backoff_s)::int
+WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND settled_at IS NULL;
+
+-- ExpiredUnplannedControls are unlifted controls past their expiry that
+-- no unfinished plan lifts yet (D54): the sweeper drafts a PROPOSED plan.
+-- name: ExpiredUnplannedControls :many
+SELECT c.* FROM pc.containment_controls c
+WHERE c.org_id = sqlc.arg(org_id) AND c.lifted_at IS NULL AND c.expires_at <= now()
+  AND NOT EXISTS (
+    SELECT 1 FROM pc.restoration_plan_controls pc2
+    JOIN pc.restoration_plans p ON p.org_id = pc2.org_id AND p.id = pc2.plan_id
+    WHERE pc2.org_id = c.org_id AND pc2.control_id = c.id AND p.finished_at IS NULL)
+ORDER BY c.expires_at, c.id
+LIMIT 50;
 
 -- name: InsertResponsePath :exec
 INSERT INTO pc.response_paths (org_id, action_id, id, path_type, subject_type, subject_id, material, control, status,
@@ -290,8 +310,8 @@ INSERT INTO pc.soar_requests (org_id, idempotency_key, request_digest, action_id
 VALUES (sqlc.arg(org_id), sqlc.arg(idempotency_key), sqlc.arg(request_digest), sqlc.arg(action_id), sqlc.arg(requested_by));
 
 -- name: InsertRestorationPlan :one
-INSERT INTO pc.restoration_plans (org_id, id, reason, staged, preconditions, requested_by)
-VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(reason), sqlc.arg(staged), sqlc.arg(preconditions), sqlc.arg(requested_by))
+INSERT INTO pc.restoration_plans (org_id, id, reason, staged, preconditions, requested_by, state)
+VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(reason), sqlc.arg(staged), sqlc.arg(preconditions), sqlc.arg(requested_by), sqlc.arg(state))
 RETURNING created_at;
 
 -- name: InsertRestorationPlanControl :exec

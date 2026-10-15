@@ -1919,32 +1919,35 @@ type PcReservation struct {
 }
 
 type PcResponseAction struct {
-	OrgID           ids.OrgID
-	ID              ids.UUID
-	Kind            string
-	ScopeType       string
-	ScopeID         string
-	Control         *string
-	Operation       *string
-	Reason          string
-	CaseID          *ids.UUID
-	IncidentID      *ids.UUID
-	Actor           string
-	Source          string
-	PreviewDigest   []byte
-	PreviewSummary  []byte
-	SkipPreview     bool
-	SkipReason      *string
-	SkipStepUpAt    *time.Time
-	IdempotencyKey  *string
-	RequestDigest   []byte
-	Status          string
-	FutureConfirmed bool
-	HistoricalOpen  []byte
-	Epoch           pgtype.Int8
-	RequestedAt     time.Time
-	UpdatedAt       time.Time
-	SettledAt       *time.Time
+	OrgID             ids.OrgID
+	ID                ids.UUID
+	Kind              string
+	ScopeType         string
+	ScopeID           string
+	Control           *string
+	Operation         *string
+	Reason            string
+	CaseID            *ids.UUID
+	IncidentID        *ids.UUID
+	Actor             string
+	Source            string
+	PreviewDigest     []byte
+	PreviewSummary    []byte
+	SkipPreview       bool
+	SkipReason        *string
+	SkipStepUpAt      *time.Time
+	IdempotencyKey    *string
+	RequestDigest     []byte
+	Status            string
+	MediatedConfirmed bool
+	FutureConfirmed   bool
+	HistoricalOpen    []byte
+	Epoch             pgtype.Int8
+	RequestedAt       time.Time
+	UpdatedAt         time.Time
+	SettledAt         *time.Time
+	NextCheckAt       time.Time
+	CheckBackoffS     int32
 }
 
 type PcResponsePath struct {

@@ -438,3 +438,128 @@ func (w *world) sealed(version int, state string) {
 		w.org, ids.NewV7(), w.conn, version, ids.NewV7(), state)
 	w.exec("ALTER TABLE pc.credentials ENABLE TRIGGER ALL")
 }
+
+// TestHR250_InvolvedPeopleNeverDecideARestoration (D54): the person who added
+// a control of the plan, and a person one of its controls contains, never
+// decide it.
+func TestHR250_InvolvedPeopleNeverDecideARestoration(t *testing.T) {
+	w := newWorld(t, "PARTIAL")
+	_, byAlice := w.containAgent()
+	carol := ids.NewV7()
+	w.exec(`INSERT INTO pc.users (org_id, id, issuer, subject) VALUES ($1, $2, 'https://idp.test', 'carol')`, w.org, carol)
+	res, err := w.contain(reflexdomain.ContainRequest{
+		Scope: reflexdomain.Subject{Type: reflexdomain.SubjectUser, ID: carol.String()}, Control: reflexdomain.ControlDenyAll,
+		Actor: rapp.PlaybookActor,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var onCarol ids.UUID
+	var plan ids.UUID
+	if err := w.tx(func(ctx context.Context, tx db.TenantTx) error {
+		cs, err := dbq.New(tx).ControlsOfAction(ctx, w.org, res.ActionID)
+		if err != nil {
+			return err
+		}
+		onCarol = cs[0].ID
+		plan, _, err = w.c.RequestRestorationIn(ctx, tx, rapp.RestorationRequest{
+			Controls: []ids.UUID{byAlice, onCarol}, Reason: "resolved", Requester: ids.NewV7(),
+		})
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	for name, reviewer := range map[string]ids.UUID{"the control's creator": w.alice, "the contained person": carol} {
+		err := w.tx(func(ctx context.Context, tx db.TenantTx) error {
+			_, _, err := w.c.DecideRestorationIn(ctx, tx, plan, reviewer, true)
+			return err
+		})
+		if !errors.Is(err, rapp.ErrInvolvedDecides) {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+	if err := w.tx(func(ctx context.Context, tx db.TenantTx) error {
+		_, _, err := w.c.DecideRestorationIn(ctx, tx, plan, ids.NewV7(), true)
+		return err
+	}); err != nil {
+		t.Fatalf("an independent reviewer: %v", err)
+	}
+	if len(w.activeControls()) != 0 {
+		t.Fatal("the approved plan left a control")
+	}
+}
+
+// TestHR248_ExpiryNeverLiftsAControl (D53, D54): past its expiry a control
+// is still enforced; the sweep drafts one PROPOSED plan for it, and only a
+// reviewer's decision lifts it.
+func TestHR248_ExpiryNeverLiftsAControl(t *testing.T) {
+	w := newWorld(t, "PARTIAL")
+	_, control := w.containAgent()
+	w.exec(`UPDATE pc.containment_controls SET created_at = now() - interval '2 hours', expires_at = now() - interval '1 hour'
+		WHERE org_id = $1 AND id = $2`, w.org, control)
+	propose := func() int {
+		var n int
+		if err := w.tx(func(ctx context.Context, tx db.TenantTx) error {
+			var err error
+			n, err = w.c.ProposeExpiredIn(ctx, tx)
+			return err
+		}); err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+	if n := propose(); n != 1 {
+		t.Fatalf("%d plans drafted, want 1", n)
+	}
+	if n := propose(); n != 0 {
+		t.Fatalf("a second sweep drafted %d more", n)
+	}
+	if len(w.activeControls()) != 1 {
+		t.Fatal("expiry lifted the control")
+	}
+	var plan ids.UUID
+	w.d.AdminQueryRow(t, `SELECT plan_id FROM pc.restoration_plan_controls WHERE org_id = $1 AND control_id = $2`, []any{w.org, control}, &plan)
+	if n := w.count(`SELECT count(*) FROM pc.restoration_plans WHERE org_id = $1 AND id = $2 AND state = 'PROPOSED'`, w.org, plan); n != 1 {
+		t.Fatal("the drafted plan is not PROPOSED")
+	}
+	if err := w.tx(func(ctx context.Context, tx db.TenantTx) error {
+		_, _, err := w.c.DecideRestorationIn(ctx, tx, plan, ids.NewV7(), true)
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if len(w.activeControls()) != 0 {
+		t.Fatal("the decided plan did not lift the control")
+	}
+}
+
+// TestHR249_SweepNeverStarvesNewActions (D53): an action kept PARTIAL only
+// by bypass paths is swept less often (backing off to 5 min), so the due
+// queue serves the others first; its failure timer still runs from
+// requested_at.
+func TestHR249_SweepNeverStarvesNewActions(t *testing.T) {
+	w := newWorld(t, "OBSERVE_ONLY")
+	id, _ := w.containAgent()
+	a := w.action(id)
+	w.deliver(a.Epoch.Int64)
+	for _, want := range []int32{4, 8} {
+		w.exec("UPDATE pc.response_actions SET next_check_at = now() WHERE org_id = $1 AND id = $2", w.org, id)
+		if a = w.advance(id); a.Status != string(rdomain.StatusPartial) || a.CheckBackoffS != want {
+			t.Fatalf("backoff %d, want %d (%s)", a.CheckBackoffS, want, a.Status)
+		}
+	}
+	if n := w.count(`SELECT count(*) FROM pc.response_actions WHERE org_id = $1 AND id = $2 AND next_check_at > now()`, w.org, id); n != 1 {
+		t.Fatal("the backed-off action is still due")
+	}
+	var due []dbq.PcResponseAction
+	if err := w.tx(func(ctx context.Context, tx db.TenantTx) error {
+		var err error
+		due, err = dbq.New(tx).UnsettledResponseActions(ctx, w.org, 10)
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if len(due) != 0 {
+		t.Fatalf("%d due, want none", len(due))
+	}
+}

@@ -441,6 +441,56 @@ func (q *Queries) CredentialOfConnection(ctx context.Context, orgID ids.OrgID, c
 	return i, err
 }
 
+const expiredUnplannedControls = `-- name: ExpiredUnplannedControls :many
+SELECT c.org_id, c.id, c.action_id, c.scope_type, c.scope_id, c.control, c.operation, c.reason, c.case_id, c.incident_id, c.created_by, c.created_at, c.expires_at, c.lifted_at, c.lifted_by, c.restoration_id FROM pc.containment_controls c
+WHERE c.org_id = $1 AND c.lifted_at IS NULL AND c.expires_at <= now()
+  AND NOT EXISTS (
+    SELECT 1 FROM pc.restoration_plan_controls pc2
+    JOIN pc.restoration_plans p ON p.org_id = pc2.org_id AND p.id = pc2.plan_id
+    WHERE pc2.org_id = c.org_id AND pc2.control_id = c.id AND p.finished_at IS NULL)
+ORDER BY c.expires_at, c.id
+LIMIT 50
+`
+
+// ExpiredUnplannedControls are unlifted controls past their expiry that
+// no unfinished plan lifts yet (D54): the sweeper drafts a PROPOSED plan.
+func (q *Queries) ExpiredUnplannedControls(ctx context.Context, orgID ids.OrgID) ([]PcContainmentControl, error) {
+	rows, err := q.db.Query(ctx, expiredUnplannedControls, orgID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []PcContainmentControl{}
+	for rows.Next() {
+		var i PcContainmentControl
+		if err := rows.Scan(
+			&i.OrgID,
+			&i.ID,
+			&i.ActionID,
+			&i.ScopeType,
+			&i.ScopeID,
+			&i.Control,
+			&i.Operation,
+			&i.Reason,
+			&i.CaseID,
+			&i.IncidentID,
+			&i.CreatedBy,
+			&i.CreatedAt,
+			&i.ExpiresAt,
+			&i.LiftedAt,
+			&i.LiftedBy,
+			&i.RestorationID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const gatewayEpochDelivery = `-- name: GatewayEpochDelivery :one
 SELECT epoch, delivered_at FROM pc.gateway_epoch_deliveries
 WHERE org_id = $1 AND gateway_id = $2
@@ -498,7 +548,7 @@ func (q *Queries) GetContainmentControl(ctx context.Context, orgID ids.OrgID, iD
 }
 
 const getResponseAction = `-- name: GetResponseAction :one
-SELECT org_id, id, kind, scope_type, scope_id, control, operation, reason, case_id, incident_id, actor, source, preview_digest, preview_summary, skip_preview, skip_reason, skip_step_up_at, idempotency_key, request_digest, status, future_confirmed, historical_open, epoch, requested_at, updated_at, settled_at FROM pc.response_actions WHERE org_id = $1 AND id = $2
+SELECT org_id, id, kind, scope_type, scope_id, control, operation, reason, case_id, incident_id, actor, source, preview_digest, preview_summary, skip_preview, skip_reason, skip_step_up_at, idempotency_key, request_digest, status, mediated_confirmed, future_confirmed, historical_open, epoch, requested_at, updated_at, settled_at, next_check_at, check_backoff_s FROM pc.response_actions WHERE org_id = $1 AND id = $2
 `
 
 func (q *Queries) GetResponseAction(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (PcResponseAction, error) {
@@ -525,12 +575,15 @@ func (q *Queries) GetResponseAction(ctx context.Context, orgID ids.OrgID, iD ids
 		&i.IdempotencyKey,
 		&i.RequestDigest,
 		&i.Status,
+		&i.MediatedConfirmed,
 		&i.FutureConfirmed,
 		&i.HistoricalOpen,
 		&i.Epoch,
 		&i.RequestedAt,
 		&i.UpdatedAt,
 		&i.SettledAt,
+		&i.NextCheckAt,
+		&i.CheckBackoffS,
 	)
 	return i, err
 }
@@ -796,8 +849,8 @@ func (q *Queries) InsertResponsePath(ctx context.Context, arg InsertResponsePath
 }
 
 const insertRestorationPlan = `-- name: InsertRestorationPlan :one
-INSERT INTO pc.restoration_plans (org_id, id, reason, staged, preconditions, requested_by)
-VALUES ($1, $2, $3, $4, $5, $6)
+INSERT INTO pc.restoration_plans (org_id, id, reason, staged, preconditions, requested_by, state)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
 RETURNING created_at
 `
 
@@ -808,6 +861,7 @@ type InsertRestorationPlanParams struct {
 	Staged        bool
 	Preconditions []byte
 	RequestedBy   string
+	State         string
 }
 
 func (q *Queries) InsertRestorationPlan(ctx context.Context, arg InsertRestorationPlanParams) (time.Time, error) {
@@ -818,6 +872,7 @@ func (q *Queries) InsertRestorationPlan(ctx context.Context, arg InsertRestorati
 		arg.Staged,
 		arg.Preconditions,
 		arg.RequestedBy,
+		arg.State,
 	)
 	var created_at time.Time
 	err := row.Scan(&created_at)
@@ -954,7 +1009,7 @@ func (q *Queries) ListContainmentControls(ctx context.Context, orgID ids.OrgID, 
 }
 
 const listResponseActions = `-- name: ListResponseActions :many
-SELECT org_id, id, kind, scope_type, scope_id, control, operation, reason, case_id, incident_id, actor, source, preview_digest, preview_summary, skip_preview, skip_reason, skip_step_up_at, idempotency_key, request_digest, status, future_confirmed, historical_open, epoch, requested_at, updated_at, settled_at FROM pc.response_actions
+SELECT org_id, id, kind, scope_type, scope_id, control, operation, reason, case_id, incident_id, actor, source, preview_digest, preview_summary, skip_preview, skip_reason, skip_step_up_at, idempotency_key, request_digest, status, mediated_confirmed, future_confirmed, historical_open, epoch, requested_at, updated_at, settled_at, next_check_at, check_backoff_s FROM pc.response_actions
 WHERE org_id = $1
   AND ($2::uuid IS NULL OR case_id = $2::uuid)
   AND ($3::uuid IS NULL OR incident_id = $3::uuid)
@@ -1012,12 +1067,15 @@ func (q *Queries) ListResponseActions(ctx context.Context, arg ListResponseActio
 			&i.IdempotencyKey,
 			&i.RequestDigest,
 			&i.Status,
+			&i.MediatedConfirmed,
 			&i.FutureConfirmed,
 			&i.HistoricalOpen,
 			&i.Epoch,
 			&i.RequestedAt,
 			&i.UpdatedAt,
 			&i.SettledAt,
+			&i.NextCheckAt,
+			&i.CheckBackoffS,
 		); err != nil {
 			return nil, err
 		}
@@ -1196,7 +1254,7 @@ func (q *Queries) RecordEpochDelivery(ctx context.Context, orgID ids.OrgID, gate
 }
 
 const responseActionByKey = `-- name: ResponseActionByKey :one
-SELECT org_id, id, kind, scope_type, scope_id, control, operation, reason, case_id, incident_id, actor, source, preview_digest, preview_summary, skip_preview, skip_reason, skip_step_up_at, idempotency_key, request_digest, status, future_confirmed, historical_open, epoch, requested_at, updated_at, settled_at FROM pc.response_actions WHERE org_id = $1 AND idempotency_key = $2
+SELECT org_id, id, kind, scope_type, scope_id, control, operation, reason, case_id, incident_id, actor, source, preview_digest, preview_summary, skip_preview, skip_reason, skip_step_up_at, idempotency_key, request_digest, status, mediated_confirmed, future_confirmed, historical_open, epoch, requested_at, updated_at, settled_at, next_check_at, check_backoff_s FROM pc.response_actions WHERE org_id = $1 AND idempotency_key = $2
 `
 
 func (q *Queries) ResponseActionByKey(ctx context.Context, orgID ids.OrgID, idempotencyKey *string) (PcResponseAction, error) {
@@ -1223,12 +1281,15 @@ func (q *Queries) ResponseActionByKey(ctx context.Context, orgID ids.OrgID, idem
 		&i.IdempotencyKey,
 		&i.RequestDigest,
 		&i.Status,
+		&i.MediatedConfirmed,
 		&i.FutureConfirmed,
 		&i.HistoricalOpen,
 		&i.Epoch,
 		&i.RequestedAt,
 		&i.UpdatedAt,
 		&i.SettledAt,
+		&i.NextCheckAt,
+		&i.CheckBackoffS,
 	)
 	return i, err
 }
@@ -1336,6 +1397,18 @@ func (q *Queries) SOARWideLastHour(ctx context.Context, orgID ids.OrgID) (int64,
 	var count int64
 	err := row.Scan(&count)
 	return count, err
+}
+
+const scheduleResponseCheck = `-- name: ScheduleResponseCheck :exec
+UPDATE pc.response_actions
+SET next_check_at = now() + make_interval(secs => $1::int), check_backoff_s = $1::int
+WHERE org_id = $2 AND id = $3 AND settled_at IS NULL
+`
+
+// ScheduleResponseCheck sets when an unsettled action is swept next.
+func (q *Queries) ScheduleResponseCheck(ctx context.Context, backoffS int32, orgID ids.OrgID, iD ids.UUID) error {
+	_, err := q.db.Exec(ctx, scheduleResponseCheck, backoffS, orgID, iD)
+	return err
 }
 
 const scopeActiveRuns = `-- name: ScopeActiveRuns :many
@@ -1531,19 +1604,20 @@ func (q *Queries) SetRestorationStage(ctx context.Context, arg SetRestorationSta
 
 const settleResponseAction = `-- name: SettleResponseAction :execrows
 UPDATE pc.response_actions
-SET status = $1, future_confirmed = $2, historical_open = $3,
-    updated_at = now(),
+SET status = $1, mediated_confirmed = $2, future_confirmed = $3,
+    historical_open = $4, updated_at = now(),
     settled_at = CASE WHEN $1::text IN ('CONFIRMED', 'FAILED', 'UNSUPPORTED') THEN now() END
-WHERE org_id = $4 AND id = $5 AND status = $6 AND settled_at IS NULL
+WHERE org_id = $5 AND id = $6 AND status = $7 AND settled_at IS NULL
 `
 
 type SettleResponseActionParams struct {
-	Status          string
-	FutureConfirmed bool
-	HistoricalOpen  []byte
-	OrgID           ids.OrgID
-	ID              ids.UUID
-	Expected        string
+	Status            string
+	MediatedConfirmed bool
+	FutureConfirmed   bool
+	HistoricalOpen    []byte
+	OrgID             ids.OrgID
+	ID                ids.UUID
+	Expected          string
 }
 
 // SettleResponseAction moves an unsettled action to its next status
@@ -1551,6 +1625,7 @@ type SettleResponseActionParams struct {
 func (q *Queries) SettleResponseAction(ctx context.Context, arg SettleResponseActionParams) (int64, error) {
 	result, err := q.db.Exec(ctx, settleResponseAction,
 		arg.Status,
+		arg.MediatedConfirmed,
 		arg.FutureConfirmed,
 		arg.HistoricalOpen,
 		arg.OrgID,
@@ -1593,12 +1668,14 @@ func (q *Queries) SharedInstallationConnections(ctx context.Context, orgID ids.O
 }
 
 const unsettledResponseActions = `-- name: UnsettledResponseActions :many
-SELECT org_id, id, kind, scope_type, scope_id, control, operation, reason, case_id, incident_id, actor, source, preview_digest, preview_summary, skip_preview, skip_reason, skip_step_up_at, idempotency_key, request_digest, status, future_confirmed, historical_open, epoch, requested_at, updated_at, settled_at FROM pc.response_actions
-WHERE org_id = $1 AND settled_at IS NULL
-ORDER BY requested_at, id
+SELECT org_id, id, kind, scope_type, scope_id, control, operation, reason, case_id, incident_id, actor, source, preview_digest, preview_summary, skip_preview, skip_reason, skip_step_up_at, idempotency_key, request_digest, status, mediated_confirmed, future_confirmed, historical_open, epoch, requested_at, updated_at, settled_at, next_check_at, check_backoff_s FROM pc.response_actions
+WHERE org_id = $1 AND settled_at IS NULL AND next_check_at <= now()
+ORDER BY next_check_at, id
 LIMIT $2
 `
 
+// UnsettledResponseActions are the unsettled actions due a sweep, the
+// longest waiting first, so none starves (D53).
 func (q *Queries) UnsettledResponseActions(ctx context.Context, orgID ids.OrgID, maxRows int32) ([]PcResponseAction, error) {
 	rows, err := q.db.Query(ctx, unsettledResponseActions, orgID, maxRows)
 	if err != nil {
@@ -1629,12 +1706,15 @@ func (q *Queries) UnsettledResponseActions(ctx context.Context, orgID ids.OrgID,
 			&i.IdempotencyKey,
 			&i.RequestDigest,
 			&i.Status,
+			&i.MediatedConfirmed,
 			&i.FutureConfirmed,
 			&i.HistoricalOpen,
 			&i.Epoch,
 			&i.RequestedAt,
 			&i.UpdatedAt,
 			&i.SettledAt,
+			&i.NextCheckAt,
+			&i.CheckBackoffS,
 		); err != nil {
 			return nil, err
 		}

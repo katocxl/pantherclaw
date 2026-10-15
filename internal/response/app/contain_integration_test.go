@@ -187,9 +187,9 @@ func TestHR248_ContainerAddsAControlTheAuthorityEnforces(t *testing.T) {
 // TestHR249_ConfirmedOnlyWhenEveryMaterialPathIs: an action waits
 // (REQUESTED) until its gateway is sent its epoch, then a route the gateway
 // enforces confirms with it and the action is CONFIRMED with new access
-// stopped. A bypass route (OBSERVE_ONLY) stays unresolved, so the same
-// control on such an agent is PARTIAL however its gateway confirms; new
-// access through the gateway is reported stopped on its own (F561).
+// stopped. A bypass route (OBSERVE_ONLY) is material and stays unresolved
+// (D52), so the same control on such an agent is PARTIAL however its
+// gateway confirms: mediated_confirmed, but not future_confirmed (F561).
 func TestHR249_ConfirmedOnlyWhenEveryMaterialPathIs(t *testing.T) {
 	w := newWorld(t, "PARTIAL")
 	res, err := w.contain(reflexdomain.ContainRequest{
@@ -207,8 +207,8 @@ func TestHR249_ConfirmedOnlyWhenEveryMaterialPathIs(t *testing.T) {
 		t.Fatalf("an older epoch confirmed the gateway: %s", a.Status)
 	}
 	w.deliver(a.Epoch.Int64)
-	if a = w.advance(res.ActionID); a.Status != string(rdomain.StatusConfirmed) || !a.FutureConfirmed || a.SettledAt == nil {
-		t.Fatalf("after delivery: %s future=%v", a.Status, a.FutureConfirmed)
+	if a = w.advance(res.ActionID); a.Status != string(rdomain.StatusConfirmed) || !a.FutureConfirmed || !a.MediatedConfirmed || a.SettledAt == nil {
+		t.Fatalf("after delivery: %s future=%v mediated=%v", a.Status, a.FutureConfirmed, a.MediatedConfirmed)
 	}
 
 	b := newWorld(t, "OBSERVE_ONLY")
@@ -223,8 +223,8 @@ func TestHR249_ConfirmedOnlyWhenEveryMaterialPathIs(t *testing.T) {
 		t.Fatalf("a bypass route: %s", a.Status)
 	}
 	b.deliver(a.Epoch.Int64)
-	if a = b.advance(res.ActionID); a.Status != string(rdomain.StatusPartial) || !a.FutureConfirmed {
-		t.Fatalf("a bypass route after delivery: %s future=%v", a.Status, a.FutureConfirmed)
+	if a = b.advance(res.ActionID); a.Status != string(rdomain.StatusPartial) || a.FutureConfirmed || !a.MediatedConfirmed {
+		t.Fatalf("a bypass route after delivery: %s future=%v mediated=%v", a.Status, a.FutureConfirmed, a.MediatedConfirmed)
 	}
 }
 

@@ -64,7 +64,11 @@ CREATE TABLE pc.response_actions (
     request_digest   bytea       CHECK (request_digest IS NULL OR octet_length(request_digest) = 32),
     status           text        NOT NULL DEFAULT 'REQUESTED'
                                  CHECK (status IN ('REQUESTED', 'PARTIAL', 'CONFIRMED', 'FAILED', 'UNSUPPORTED')),
-    -- New access stopped (F561), separate from historical exposure.
+    -- Every gateway path is confirmed (D52).
+    mediated_confirmed boolean   NOT NULL DEFAULT false,
+    -- New access stopped (F561, D52): every material path but the dispatches
+    -- already in flight is confirmed; false while a bypass route is open.
+    -- Historical exposure is reported apart.
     future_confirmed boolean     NOT NULL DEFAULT false,
     historical_open  jsonb       NOT NULL DEFAULT '[]'
                                  CHECK (jsonb_typeof(historical_open) = 'array' AND octet_length(historical_open::text) <= 65536),
@@ -73,6 +77,10 @@ CREATE TABLE pc.response_actions (
     requested_at     timestamptz NOT NULL DEFAULT now(),
     updated_at       timestamptz NOT NULL DEFAULT now(),
     settled_at       timestamptz,
+    -- When the sweeper looks again (D53): 2 s, backing off to 5 min while
+    -- only bypass paths keep the action PARTIAL.
+    next_check_at    timestamptz NOT NULL DEFAULT now(),
+    check_backoff_s  integer     NOT NULL DEFAULT 2 CHECK (check_backoff_s BETWEEN 2 AND 300),
     PRIMARY KEY (org_id, id),
     CONSTRAINT response_actions_control CHECK ((kind = 'CONTAIN') = (control IS NOT NULL)),
     CONSTRAINT response_actions_operation CHECK ((control = 'DENY_OPERATION') = (operation IS NOT NULL)),
@@ -82,7 +90,7 @@ CREATE TABLE pc.response_actions (
 );
 CREATE UNIQUE INDEX response_actions_idempotency_key ON pc.response_actions (org_id, idempotency_key)
     WHERE idempotency_key IS NOT NULL;
-CREATE INDEX response_actions_unsettled ON pc.response_actions (org_id, requested_at) WHERE settled_at IS NULL;
+CREATE INDEX response_actions_unsettled ON pc.response_actions (org_id, next_check_at) WHERE settled_at IS NULL;
 CREATE INDEX response_actions_case ON pc.response_actions (org_id, case_id) WHERE case_id IS NOT NULL;
 CREATE INDEX response_actions_incident ON pc.response_actions (org_id, incident_id) WHERE incident_id IS NOT NULL;
 CREATE INDEX response_actions_scope ON pc.response_actions (org_id, scope_type, scope_id);
@@ -332,7 +340,8 @@ CREATE POLICY tenant_isolation ON pc.soar_requests
 GRANT SELECT, INSERT ON pc.containment_controls, pc.response_actions, pc.response_paths, pc.restoration_plans,
     pc.restoration_plan_controls, pc.restoration_stages, pc.soar_requests TO pc_app;
 GRANT UPDATE (lifted_at, lifted_by, restoration_id) ON pc.containment_controls TO pc_app;
-GRANT UPDATE (status, future_confirmed, historical_open, epoch, updated_at, settled_at) ON pc.response_actions TO pc_app;
+GRANT UPDATE (status, mediated_confirmed, future_confirmed, historical_open, epoch, updated_at, settled_at, next_check_at, check_backoff_s)
+    ON pc.response_actions TO pc_app;
 GRANT UPDATE (status, evidence, failure, unsupported_reason, cancel_capability, cancel_requested_at, updated_at, confirmed_at)
     ON pc.response_paths TO pc_app;
 GRANT UPDATE (approval_request_id, state, preconditions, updated_at, finished_at) ON pc.restoration_plans TO pc_app;

@@ -391,7 +391,7 @@ func actionOf(a dbq.PcResponseAction) *pantherclawv1.ResponseAction {
 	out := &pantherclawv1.ResponseAction{
 		Id: a.ID.String(), Kind: a.Kind, ScopeType: a.ScopeType, ScopeId: a.ScopeID, Control: deref(a.Control), Operation: deref(a.Operation),
 		Reason: a.Reason, CaseId: uuidString(a.CaseID), IncidentId: uuidString(a.IncidentID), Actor: a.Actor, Source: a.Source,
-		Status: a.Status, FutureConfirmed: a.FutureConfirmed, Epoch: a.Epoch.Int64, PreviewDigest: hex.EncodeToString(a.PreviewDigest),
+		Status: a.Status, FutureConfirmed: a.FutureConfirmed, MediatedConfirmed: a.MediatedConfirmed, Epoch: a.Epoch.Int64, PreviewDigest: hex.EncodeToString(a.PreviewDigest),
 		PreviewSkipped: a.SkipPreview, RequestTime: timestamppb.New(a.RequestedAt),
 	}
 	if a.SettledAt != nil {

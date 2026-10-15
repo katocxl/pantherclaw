@@ -158,13 +158,15 @@ func Unsettled(ctx context.Context, tx db.TenantTx, org ids.OrgID, limit int32) 
 }
 
 // Settle moves an action from expected to status, conditionally (HR-249).
-func Settle(ctx context.Context, tx db.TenantTx, org ids.OrgID, action ids.UUID, expected, status rdomain.Status, futureConfirmed bool, historicalOpen []byte) error {
+func Settle(ctx context.Context, tx db.TenantTx, org ids.OrgID, action ids.UUID, expected, status rdomain.Status, mediated, futureConfirmed bool,
+	historicalOpen []byte,
+) error {
 	if historicalOpen == nil {
 		historicalOpen = []byte("[]")
 	}
 	n, err := dbq.New(tx).SettleResponseAction(ctx, dbq.SettleResponseActionParams{
 		OrgID: org, ID: action, Expected: string(expected), Status: string(status),
-		FutureConfirmed: futureConfirmed, HistoricalOpen: historicalOpen,
+		MediatedConfirmed: mediated, FutureConfirmed: futureConfirmed, HistoricalOpen: historicalOpen,
 	})
 	switch {
 	case err != nil:

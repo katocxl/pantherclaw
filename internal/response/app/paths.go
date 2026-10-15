@@ -6,6 +6,7 @@ package app
 import (
 	"context"
 	"encoding/json/v2"
+	"slices"
 	"strconv"
 	"time"
 
@@ -123,7 +124,34 @@ func (s *Containment) Advance(ctx context.Context, tx db.TenantTx, a dbq.PcRespo
 	}
 	before := a.Status
 	status, err := s.settle(ctx, tx, tx.OrgID(), a.ID)
-	return err == nil && string(status) != before, err
+	if err != nil {
+		return false, err
+	}
+	if !status.Settled() {
+		if err := schedule(ctx, tx, a, status); err != nil {
+			return false, err
+		}
+	}
+	return string(status) != before, nil
+}
+
+// schedule sets the action's next sweep (D53): in 2 s while a material path
+// is pending, backing off to 5 min while only open bypass paths keep it
+// PARTIAL, so new actions are never starved by old ones. The HR-249
+// deadline runs from requested_at whatever the backoff.
+func schedule(ctx context.Context, tx db.TenantTx, a dbq.PcResponseAction, status rdomain.Status) error {
+	q := dbq.New(tx)
+	backoff := int32(2)
+	if status == rdomain.StatusPartial {
+		paths, err := q.ListResponsePaths(ctx, tx.OrgID(), a.ID)
+		if err != nil {
+			return err
+		}
+		if !slices.ContainsFunc(paths, func(p dbq.PcResponsePath) bool { return p.Material && p.Status == string(rdomain.PathPending) }) {
+			backoff = min(300, max(2, a.CheckBackoffS*2))
+		}
+	}
+	return q.ScheduleResponseCheck(ctx, backoff, tx.OrgID(), a.ID)
 }
 
 // confirm records the evidence each open path now has.
@@ -292,16 +320,24 @@ func (s *Containment) settle(ctx context.Context, tx db.TenantTx, org ids.OrgID,
 	}
 	var paths []rdomain.Path
 	historical := []historicalItem{}
-	future, gateways := true, 0
+	// D52: mediated = every gateway path confirmed; future = every material
+	// path but the dispatches in flight confirmed (new access stopped, false
+	// while a bypass route is open).
+	mediated, future, gateways, futurePaths := true, true, 0, 0
 	for _, r := range rows {
 		paths = append(paths, rdomain.Path{
 			ID: r.ID, Type: r.PathType, SubjectType: r.SubjectType, SubjectID: r.SubjectID, Material: r.Material,
 			Control: r.Control, Status: rdomain.PathStatus(r.Status),
 		})
+		confirmed := r.Status == string(rdomain.PathConfirmed)
+		if r.PathType != rdomain.PathInFlight && r.Material {
+			futurePaths++
+			future = future && confirmed
+		}
 		switch r.PathType {
 		case rdomain.PathGateway:
 			gateways++
-			future = future && r.Status == string(rdomain.PathConfirmed)
+			mediated = mediated && confirmed
 		case rdomain.PathInFlight:
 			var ev map[string]string
 			_ = json.Unmarshal(r.Evidence, &ev)
@@ -313,15 +349,16 @@ func (s *Containment) settle(ctx context.Context, tx db.TenantTx, org ids.OrgID,
 	if next == rdomain.StatusRequested {
 		next = cur
 	}
-	futureConfirmed := gateways > 0 && future
+	mediatedConfirmed := gateways > 0 && mediated
+	futureConfirmed := futurePaths > 0 && future
 	hist, err := json.Marshal(historical, json.Deterministic(true))
 	if err != nil {
 		return "", err
 	}
-	if next == cur && futureConfirmed == a.FutureConfirmed && string(hist) == string(a.HistoricalOpen) {
+	if next == cur && mediatedConfirmed == a.MediatedConfirmed && futureConfirmed == a.FutureConfirmed && string(hist) == string(a.HistoricalOpen) {
 		return cur, nil
 	}
-	if err := pgresponse.Settle(ctx, tx, org, action, cur, next, futureConfirmed, hist); err != nil {
+	if err := pgresponse.Settle(ctx, tx, org, action, cur, next, mediatedConfirmed, futureConfirmed, hist); err != nil {
 		return "", err
 	}
 	if next == cur {

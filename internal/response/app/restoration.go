@@ -168,7 +168,7 @@ func (s *Containment) RequestRestorationIn(ctx context.Context, tx db.TenantTx, 
 	plan := ids.NewV7()
 	requester := "user:" + r.Requester.String()
 	if _, err := q.InsertRestorationPlan(ctx, dbq.InsertRestorationPlanParams{
-		OrgID: org, ID: plan, Reason: r.Reason, Staged: len(r.Stages) > 0, Preconditions: preJSON, RequestedBy: requester,
+		OrgID: org, ID: plan, Reason: r.Reason, Staged: len(r.Stages) > 0, Preconditions: preJSON, RequestedBy: requester, State: PlanRequested,
 	}); err != nil {
 		return ids.UUID{}, nil, err
 	}
@@ -611,4 +611,42 @@ func independentOf(controls []dbq.PcContainmentControl, reviewer ids.UUID) error
 		}
 	}
 	return nil
+}
+
+// ProposeExpiredIn drafts a PROPOSED restoration plan for each control past
+// its expiry that no unfinished plan lifts yet (D53, D54): expiry never lifts
+// a control by itself. The control stays until a reviewer decides the plan.
+// It returns how many plans it drafted.
+func (s *Containment) ProposeExpiredIn(ctx context.Context, tx db.TenantTx) (int, error) {
+	org := tx.OrgID()
+	q := dbq.New(tx)
+	expired, err := q.ExpiredUnplannedControls(ctx, org)
+	if err != nil || len(expired) == 0 {
+		return 0, err
+	}
+	for _, c := range expired {
+		pre, err := preconditions(ctx, q, org, []dbq.PcContainmentControl{c}, false)
+		if err != nil {
+			return 0, err
+		}
+		preJSON, err := json.Marshal(map[string]any{"checks": pre}, json.Deterministic(true))
+		if err != nil {
+			return 0, err
+		}
+		plan := ids.NewV7()
+		if _, err := q.InsertRestorationPlan(ctx, dbq.InsertRestorationPlanParams{
+			OrgID: org, ID: plan, Reason: "the control reached its expiry; a reviewer decides whether to lift it", Preconditions: preJSON,
+			RequestedBy: "system:" + reflexdomain.SystemSweeper, State: PlanProposed,
+		}); err != nil {
+			return 0, err
+		}
+		if err := q.InsertRestorationPlanControl(ctx, org, plan, c.ID); err != nil {
+			return 0, err
+		}
+		if _, err := auditRecord(ctx, tx, sweeperActor, "response.restoration_proposed", "restoration_plan", plan.String(),
+			map[string]string{"control": c.ID.String(), "reason": "EXPIRED"}); err != nil {
+			return 0, err
+		}
+	}
+	return len(expired), nil
 }
