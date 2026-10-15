@@ -50,14 +50,17 @@ type VersionInfo struct {
 	CreatedBy   string
 	CreatedAt   time.Time
 	PublishedAt *time.Time
+	// ContentDigest is the SHA-256 of the bundle without its version (D2);
+	// empty for a version stored before the publish gate.
+	ContentDigest []byte
 }
 
-// VersionStore persists bundle versions. CreateVersion and Publish audit ev
-// in their own transaction.
+// VersionStore persists bundle versions. CreateVersion and the gate's
+// publication audit ev in their own transaction. Only the gate publishes
+// (HR-230).
 type VersionStore interface {
+	GateStore
 	CreateVersion(ctx context.Context, org ids.OrgID, b *domain.Bundle, createdBy string, ev *audit.Event) (ids.UUID, int, error)
-	Publish(ctx context.Context, org ids.OrgID, id ids.UUID, publishedBy string, ev *audit.Event) error
-	PublishExpecting(ctx context.Context, org ids.OrgID, id ids.UUID, publishedBy string, expected *ids.UUID, ev *audit.Event) error
 	Version(ctx context.Context, org ids.OrgID, id ids.UUID) (VersionInfo, error)
 	PublishedVersion(ctx context.Context, org ids.OrgID) (*VersionInfo, error)
 	ListVersions(ctx context.Context, org ids.OrgID, limit int) ([]VersionInfo, error)
@@ -87,8 +90,9 @@ type Authorizer interface {
 // Versions runs the policy-version use cases of the API (HR-040..044).
 // Authoring and publishing are separate permissions (F582); publishing is
 // human only. A bundle is compiled against the org's active definitions
-// and fact catalog when it is created and again when it is published, so a
-// version that no longer compiles is never published.
+// and fact catalog when it is created, and goes through the publish gate
+// (gate.go, HR-230) when it is published, so a version that no longer
+// compiles, validates or passes its tests is never published.
 type Versions struct {
 	Store VersionStore
 	Facts FactCatalog
@@ -98,6 +102,17 @@ type Versions struct {
 	Definitions ActiveDefinitions
 	Authz       Authorizer
 	Limits      celenv.Limits
+	// Validator and Tests are the gate's ports (D7a); without either,
+	// nothing is validated, tested or published (fail closed).
+	Validator Validator
+	Tests     TestRunner
+	// Outcomes, when set, adds sample outcome changes to Diff (D8).
+	Outcomes OutcomeDiffer
+	// Changes holds the change requests a loosening waits in; without it a
+	// loosening is refused (fail closed).
+	Changes *Changes
+	// OnPublished, when set, runs in every publishing transaction (D6).
+	OnPublished PublishedHook
 }
 
 func (v *Versions) caller(ctx context.Context, p tdomain.Permission) (tapp.Caller, error) {
@@ -190,44 +205,6 @@ func (v *Versions) CreateExpecting(ctx context.Context, raw []byte, expected *id
 		return VersionInfo{}, invalidBundle(err)
 	}
 	if err != nil {
-		return VersionInfo{}, err
-	}
-	return v.Store.Version(ctx, c.Org, id)
-}
-
-// Publish makes a draft the org's published version (policy.publish at
-// the org, human only), after compiling it again.
-func (v *Versions) Publish(ctx context.Context, id ids.UUID) (VersionInfo, error) {
-	return v.PublishExpecting(ctx, id, nil)
-}
-
-// PublishExpecting publishes as Publish does, and with expected set only
-// while the published version is *expected (the zero id: none), checked
-// in the publishing transaction; else ErrPublishedChanged.
-func (v *Versions) PublishExpecting(ctx context.Context, id ids.UUID, expected *ids.UUID) (VersionInfo, error) {
-	c, err := v.caller(ctx, PermPolicyPublish)
-	if err != nil {
-		return VersionInfo{}, err
-	}
-	if !c.Human() {
-		return VersionInfo{}, ErrHumanOnly
-	}
-	cur, err := v.Store.Version(ctx, c.Org, id)
-	if err != nil {
-		return VersionInfo{}, err
-	}
-	b, err := decodeStored(cur.Bundle)
-	if err != nil {
-		return VersionInfo{}, err
-	}
-	if err := v.compile(ctx, c.Org, b); err != nil {
-		return VersionInfo{}, err
-	}
-	ev := &audit.Event{
-		Name: "policy.published", Actor: c.Actor(), Outcome: audit.Success,
-		Object: &audit.Object{Type: "policy", ID: cur.BundleID},
-	}
-	if err := v.Store.PublishExpecting(ctx, c.Org, id, c.Principal.String(), expected, ev); err != nil {
 		return VersionInfo{}, err
 	}
 	return v.Store.Version(ctx, c.Org, id)

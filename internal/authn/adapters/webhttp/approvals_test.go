@@ -137,6 +137,7 @@ type fakeBindings struct {
 	names          ids.UUID
 	batch          ids.UUID
 	reconciliation ids.UUID
+	policyChange   ids.UUID
 	verifyErr      error
 	spent          []ids.UUID
 }
@@ -153,7 +154,9 @@ func (b *fakeBindings) VerifyBinding(_ context.Context, _ authnapp.BrowserSessio
 		return authnapp.BindingAssertion{}, b.verifyErr
 	}
 	return authnapp.BindingAssertion{
-		Ceremony: ceremony, Subject: authnapp.BindingSubject{Request: b.names, Batch: b.batch, Reconciliation: b.reconciliation},
+		Ceremony: ceremony, Subject: authnapp.BindingSubject{
+			Request: b.names, Batch: b.batch, Reconciliation: b.reconciliation, PolicyChange: b.policyChange,
+		},
 		Challenge: knownBinding, Credential: responderKey,
 		AuthenticatorData: make([]byte, 37), ClientDataJSON: []byte(`{}`), Signature: []byte{1},
 	}, nil

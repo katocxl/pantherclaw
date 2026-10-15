@@ -19,7 +19,14 @@ service PolicyService {
   // first; a bundle that does not compile is refused.
   // permission: policy.author
   rpc CreatePolicyVersion(CreatePolicyVersionRequest) returns (CreatePolicyVersionResponse);
-  // PublishPolicyVersion makes a version the published one.
+  // PublishPolicyVersion makes a version the published one through the
+  // publish gate (HR-230): it is validated and its scenario tests run again
+  // against the org's current definitions and fact catalog, and a failure
+  // refuses with FAILED_PRECONDITION (POLICY_VALIDATION_FAILED or
+  // POLICY_TESTS_FAILED, the report in the error details). A version that
+  // is not provably tighter than the published one is not published: the
+  // response carries the change request that waits for confirmations with
+  // security keys (HR-231). Human only.
   // permission: policy.publish
   rpc PublishPolicyVersion(PublishPolicyVersionRequest) returns (PublishPolicyVersionResponse);
   // GetPublishedPolicy returns the published version.
@@ -37,6 +44,41 @@ service PolicyService {
   rpc ListPolicyVersions(ListPolicyVersionsRequest) returns (ListPolicyVersionsResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
+  // ValidatePolicyVersion validates a version now and records the result;
+  // a DRAFT that passes becomes VALIDATED (G0 M11.1).
+  // permission: policy.author
+  rpc ValidatePolicyVersion(ValidatePolicyVersionRequest) returns (ValidatePolicyVersionResponse);
+  // TestPolicyVersion runs a version's scenario tests and the HR-044
+  // mutants now and records the run; a VALIDATED version that passes
+  // becomes TESTED.
+  // permission: policy.author
+  rpc TestPolicyVersion(TestPolicyVersionRequest) returns (TestPolicyVersionResponse);
+  // DiffPolicyVersions compares two versions rule by rule, each change
+  // classified tighter, looser, unknown or neutral, with the decisions that
+  // change over validation's samples.
+  // permission: policy.read
+  rpc DiffPolicyVersions(DiffPolicyVersionsRequest) returns (DiffPolicyVersionsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // RollbackPolicy makes a new version from an earlier version's rules and
+  // tests, carries every emergency rule of the published version forward
+  // (HR-236), and publishes it through the gate: rolling back to a looser
+  // version waits for confirmations like any loosening. Containment,
+  // grants and guardrails are separate records and are never changed.
+  // Human only.
+  // permission: policy.publish
+  rpc RollbackPolicy(RollbackPolicyRequest) returns (RollbackPolicyResponse);
+  // ListPolicyChangeRequests lists change requests, newest first.
+  // permission: policy.read
+  rpc ListPolicyChangeRequests(ListPolicyChangeRequestsRequest) returns (ListPolicyChangeRequestsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // GetPolicyChangeRequest returns one change request with its
+  // confirmations. People confirm or decline it only on its page.
+  // permission: policy.read
+  rpc GetPolicyChangeRequest(GetPolicyChangeRequestRequest) returns (GetPolicyChangeRequestResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 }
 
 // PolicyVersion is one stored bundle version.
@@ -47,7 +89,7 @@ message PolicyVersion {
   string bundle_id = 2;
   // Version number, from 1.
   int32 version = 3;
-  // "DRAFT", "PUBLISHED" or "SUPERSEDED".
+  // "DRAFT", "VALIDATED", "TESTED", "PUBLISHED" or "SUPERSEDED".
   string state = 4;
   // The bundle (policy bundle v1, JSON).
   bytes bundle = 5;
@@ -57,6 +99,9 @@ message PolicyVersion {
   google.protobuf.Timestamp create_time = 7;
   // When it was published; unset if never.
   google.protobuf.Timestamp publish_time = 8;
+  // SHA-256 of the bundle without its version; empty for a version stored
+  // before the publish gate, which can never be published again.
+  bytes content_digest = 9;
 }
 
 // CreatePolicyVersionRequest carries a bundle.
@@ -92,8 +137,18 @@ message PublishPolicyVersionRequest {
 
 // PublishPolicyVersionResponse returns it.
 message PublishPolicyVersionResponse {
-  // The version (without the bundle).
+  // The version (without the bundle): PUBLISHED, or TESTED while a change
+  // request waits.
   PolicyVersion version = 1;
+  // Set when the version loosens the published policy: it is published
+  // once enough people confirm this request at its url.
+  PolicyChangeRequest change_request = 2;
+  // The classified changes against the published version.
+  PolicyDiff diff = 3;
+  // The validation of this call.
+  ValidationReport validation = 4;
+  // The test run of this call.
+  TestReport tests = 5;
 }
 
 // GetPublishedPolicyRequest asks for the published version.
@@ -130,4 +185,246 @@ message ListPolicyVersionsRequest {
 message ListPolicyVersionsResponse {
   // Versions, newest first, without their bundles.
   repeated PolicyVersion versions = 1;
+}
+
+// ValidatePolicyVersionRequest names a version.
+message ValidatePolicyVersionRequest {
+  // Version id.
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// ValidatePolicyVersionResponse returns the version and the report.
+message ValidatePolicyVersionResponse {
+  // The version (without the bundle).
+  PolicyVersion version = 1;
+  // The validation.
+  ValidationReport validation = 2;
+}
+
+// ValidationReport is one validation (G0 M11.1 design decision 8).
+message ValidationReport {
+  // Whether nothing blocks publication (no ERROR finding).
+  bool passed = 1;
+  // Findings.
+  repeated PolicyFinding findings = 2;
+  // SHA-256 over the active definitions it ran with.
+  bytes definitions_digest = 3;
+  // SHA-256 over the fact catalog it ran with.
+  bytes catalog_digest = 4;
+}
+
+// PolicyFinding is one validation finding.
+message PolicyFinding {
+  // For example CONFLICT, OPERATION_UNKNOWN or SHADOWED.
+  string code = 1;
+  // "ERROR" (blocks publication), "WARNING" or "INFO".
+  string severity = 2;
+  // The rules concerned.
+  repeated string rules = 3;
+  // What was found.
+  string detail = 4;
+  // An action that shows it (JSON), when there is one.
+  bytes example = 5;
+  // Found on generated samples: absence of the finding proves nothing (R-25).
+  bool sample_based = 6;
+}
+
+// TestPolicyVersionRequest names a version.
+message TestPolicyVersionRequest {
+  // Version id.
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// TestPolicyVersionResponse returns the version and the report.
+message TestPolicyVersionResponse {
+  // The version (without the bundle).
+  PolicyVersion version = 1;
+  // The test run.
+  TestReport tests = 2;
+}
+
+// TestReport is one scenario test run (HR-044).
+message TestReport {
+  // Whether every case passed and every mutant was killed.
+  bool passed = 1;
+  // Per case.
+  repeated TestCaseResult cases = 2;
+  // Mutants tried.
+  int32 mutants = 3;
+  // Mutants no case killed.
+  int32 survivors = 4;
+  // The surviving mutants.
+  repeated SurvivingMutant surviving = 5;
+  // Why the run stopped, for example TESTS_TOO_LARGE; empty otherwise.
+  string error = 6;
+  // SHA-256 over the active definitions it ran with.
+  bytes definitions_digest = 7;
+  // SHA-256 over the fact catalog it ran with.
+  bytes catalog_digest = 8;
+}
+
+// TestCaseResult is one case's outcome.
+message TestCaseResult {
+  // Case id.
+  string id = 1;
+  // Whether the decision, reason (and rule) matched.
+  bool passed = 2;
+  // The decision.
+  string decision = 3;
+  // The decisive reason.
+  string reason = 4;
+  // The deciding rule.
+  string rule = 5;
+  // Why it failed.
+  string detail = 6;
+}
+
+// SurvivingMutant is a mutant of a rule that no case killed.
+message SurvivingMutant {
+  // Rule id.
+  string rule = 1;
+  // The mutation.
+  string mutation = 2;
+}
+
+// DiffPolicyVersionsRequest names two versions.
+message DiffPolicyVersionsRequest {
+  // The base; unset: the published version (or none).
+  optional string from_id = 1 [(buf.validate.field).string.uuid = true];
+  // The version compared with it.
+  string to_id = 2 [(buf.validate.field).string.uuid = true];
+}
+
+// DiffPolicyVersionsResponse returns the differences.
+message DiffPolicyVersionsResponse {
+  // Rule by rule.
+  PolicyDiff diff = 1;
+  // The decisions that change over validation's samples (JSON array);
+  // sample-based, so an empty list proves nothing (R-25).
+  bytes outcomes = 2;
+}
+
+// PolicyDiff is a classified comparison (G0 M11.1 design decision 3).
+message PolicyDiff {
+  // "TIGHTER", "LOOSER", "UNKNOWN" or "NEUTRAL" overall: LOOSER and UNKNOWN
+  // need confirmations to publish.
+  string direction = 1;
+  // The changes.
+  repeated PolicyRuleChange changes = 2;
+}
+
+// PolicyRuleChange is one classified change.
+message PolicyRuleChange {
+  // Rule id.
+  string rule_id = 1;
+  // "ADDED", "REMOVED" or "CHANGED".
+  string kind = 2;
+  // The field that changed, for CHANGED.
+  string field = 3;
+  // Before.
+  string before = 4;
+  // After.
+  string after = 5;
+  // "TIGHTER", "LOOSER", "UNKNOWN" or "NEUTRAL".
+  string direction = 6;
+  // In words.
+  string sentence = 7;
+}
+
+// RollbackPolicyRequest names the version to go back to.
+message RollbackPolicyRequest {
+  // The earlier version whose rules and tests to publish again.
+  string to_version_id = 1 [(buf.validate.field).string.uuid = true];
+  // When set, the call fails with FAILED_PRECONDITION
+  // (POLICY_PUBLISHED_CHANGED) unless the org's published version is this
+  // one, or, when empty, unless none is published.
+  optional string expected_current_version = 2 [(buf.validate.field).string = {pattern: "^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})?$"}];
+}
+
+// RollbackPolicyResponse returns the new version.
+message RollbackPolicyResponse {
+  // The new version (without the bundle): PUBLISHED, or TESTED while a
+  // change request waits.
+  PolicyVersion version = 1;
+  // Set when the rollback loosens the published policy.
+  PolicyChangeRequest change_request = 2;
+  // The emergency rules of the published version carried forward.
+  repeated string carried_rule_ids = 3;
+  // The classified changes against the published version.
+  PolicyDiff diff = 4;
+}
+
+// PolicyChangeRequest is a change waiting for, or done with, confirmations
+// (G0 M11.1 design decision 11).
+message PolicyChangeRequest {
+  // Request id.
+  string id = 1;
+  // "PUBLISH", "ROLLOUT" or "EXCEPTION".
+  string kind = 2;
+  // What it changes: the version, rollout or exception id.
+  string subject_id = 3;
+  // The published version it was made against; empty for none.
+  string base_version_id = 4;
+  // "PENDING", "APPROVED", "DECLINED", "EXPIRED" or "VOIDED".
+  string state = 5;
+  // Confirmations needed: 2 when the org had two or more people holding
+  // policy.publish when it was made, else 1.
+  int32 required = 6;
+  // Confirmations so far.
+  repeated PolicyChangeConfirmation confirmations = 7;
+  // Who asked.
+  string requested_by = 8;
+  // When.
+  google.protobuf.Timestamp create_time = 9;
+  // 24 hours after it was made.
+  google.protobuf.Timestamp expire_time = 10;
+  // When it ended.
+  google.protobuf.Timestamp decide_time = 11;
+  // Why it ended (BASE_CHANGED, STALE_TESTS, EXPIRED, or a decline's reason).
+  string decided_reason = 12;
+  // What the confirmers are shown (JSON): the classified changes.
+  bytes summary = 13;
+  // What each confirmer's security key signs.
+  bytes binding = 14;
+  // The page people confirm it on.
+  string url = 15;
+}
+
+// PolicyChangeConfirmation is one person's confirmation.
+message PolicyChangeConfirmation {
+  // The person.
+  string user_id = 1;
+  // The security key.
+  string credential_id = 2;
+  // When.
+  google.protobuf.Timestamp create_time = 3;
+}
+
+// ListPolicyChangeRequestsRequest lists change requests.
+message ListPolicyChangeRequestsRequest {
+  // Only this state; empty: all.
+  string state = 1 [(buf.validate.field).string = {pattern: "^(|PENDING|APPROVED|DECLINED|EXPIRED|VOIDED)$"}];
+  // Maximum results (default 50, at most 200).
+  int32 page_size = 2 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 200
+  }];
+}
+
+// ListPolicyChangeRequestsResponse returns them.
+message ListPolicyChangeRequestsResponse {
+  // Newest first.
+  repeated PolicyChangeRequest requests = 1;
+}
+
+// GetPolicyChangeRequestRequest names a change request.
+message GetPolicyChangeRequestRequest {
+  // Request id.
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// GetPolicyChangeRequestResponse returns it.
+message GetPolicyChangeRequestResponse {
+  // The request.
+  PolicyChangeRequest request = 1;
 }

@@ -35,7 +35,7 @@ type PolicyVersion struct {
 	BundleId string `protobuf:"bytes,2,opt,name=bundle_id,json=bundleId,proto3" json:"bundle_id,omitempty"`
 	// Version number, from 1.
 	Version int32 `protobuf:"varint,3,opt,name=version,proto3" json:"version,omitempty"`
-	// "DRAFT", "PUBLISHED" or "SUPERSEDED".
+	// "DRAFT", "VALIDATED", "TESTED", "PUBLISHED" or "SUPERSEDED".
 	State string `protobuf:"bytes,4,opt,name=state,proto3" json:"state,omitempty"`
 	// The bundle (policy bundle v1, JSON).
 	Bundle []byte `protobuf:"bytes,5,opt,name=bundle,proto3" json:"bundle,omitempty"`
@@ -44,7 +44,10 @@ type PolicyVersion struct {
 	// When.
 	CreateTime *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=create_time,json=createTime,proto3" json:"create_time,omitempty"`
 	// When it was published; unset if never.
-	PublishTime   *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=publish_time,json=publishTime,proto3" json:"publish_time,omitempty"`
+	PublishTime *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=publish_time,json=publishTime,proto3" json:"publish_time,omitempty"`
+	// SHA-256 of the bundle without its version; empty for a version stored
+	// before the publish gate, which can never be published again.
+	ContentDigest []byte `protobuf:"bytes,9,opt,name=content_digest,json=contentDigest,proto3" json:"content_digest,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -131,6 +134,13 @@ func (x *PolicyVersion) GetCreateTime() *timestamppb.Timestamp {
 func (x *PolicyVersion) GetPublishTime() *timestamppb.Timestamp {
 	if x != nil {
 		return x.PublishTime
+	}
+	return nil
+}
+
+func (x *PolicyVersion) GetContentDigest() []byte {
+	if x != nil {
+		return x.ContentDigest
 	}
 	return nil
 }
@@ -300,8 +310,18 @@ func (x *PublishPolicyVersionRequest) GetExpectedCurrentVersion() string {
 // PublishPolicyVersionResponse returns it.
 type PublishPolicyVersionResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// The version (without the bundle).
-	Version       *PolicyVersion `protobuf:"bytes,1,opt,name=version,proto3" json:"version,omitempty"`
+	// The version (without the bundle): PUBLISHED, or TESTED while a change
+	// request waits.
+	Version *PolicyVersion `protobuf:"bytes,1,opt,name=version,proto3" json:"version,omitempty"`
+	// Set when the version loosens the published policy: it is published
+	// once enough people confirm this request at its url.
+	ChangeRequest *PolicyChangeRequest `protobuf:"bytes,2,opt,name=change_request,json=changeRequest,proto3" json:"change_request,omitempty"`
+	// The classified changes against the published version.
+	Diff *PolicyDiff `protobuf:"bytes,3,opt,name=diff,proto3" json:"diff,omitempty"`
+	// The validation of this call.
+	Validation *ValidationReport `protobuf:"bytes,4,opt,name=validation,proto3" json:"validation,omitempty"`
+	// The test run of this call.
+	Tests         *TestReport `protobuf:"bytes,5,opt,name=tests,proto3" json:"tests,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -339,6 +359,34 @@ func (*PublishPolicyVersionResponse) Descriptor() ([]byte, []int) {
 func (x *PublishPolicyVersionResponse) GetVersion() *PolicyVersion {
 	if x != nil {
 		return x.Version
+	}
+	return nil
+}
+
+func (x *PublishPolicyVersionResponse) GetChangeRequest() *PolicyChangeRequest {
+	if x != nil {
+		return x.ChangeRequest
+	}
+	return nil
+}
+
+func (x *PublishPolicyVersionResponse) GetDiff() *PolicyDiff {
+	if x != nil {
+		return x.Diff
+	}
+	return nil
+}
+
+func (x *PublishPolicyVersionResponse) GetValidation() *ValidationReport {
+	if x != nil {
+		return x.Validation
+	}
+	return nil
+}
+
+func (x *PublishPolicyVersionResponse) GetTests() *TestReport {
+	if x != nil {
+		return x.Tests
 	}
 	return nil
 }
@@ -610,11 +658,1461 @@ func (x *ListPolicyVersionsResponse) GetVersions() []*PolicyVersion {
 	return nil
 }
 
+// ValidatePolicyVersionRequest names a version.
+type ValidatePolicyVersionRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Version id.
+	Id            string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ValidatePolicyVersionRequest) Reset() {
+	*x = ValidatePolicyVersionRequest{}
+	mi := &file_pantherclaw_v1_policies_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ValidatePolicyVersionRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ValidatePolicyVersionRequest) ProtoMessage() {}
+
+func (x *ValidatePolicyVersionRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_policies_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ValidatePolicyVersionRequest.ProtoReflect.Descriptor instead.
+func (*ValidatePolicyVersionRequest) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_policies_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *ValidatePolicyVersionRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+// ValidatePolicyVersionResponse returns the version and the report.
+type ValidatePolicyVersionResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The version (without the bundle).
+	Version *PolicyVersion `protobuf:"bytes,1,opt,name=version,proto3" json:"version,omitempty"`
+	// The validation.
+	Validation    *ValidationReport `protobuf:"bytes,2,opt,name=validation,proto3" json:"validation,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ValidatePolicyVersionResponse) Reset() {
+	*x = ValidatePolicyVersionResponse{}
+	mi := &file_pantherclaw_v1_policies_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ValidatePolicyVersionResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ValidatePolicyVersionResponse) ProtoMessage() {}
+
+func (x *ValidatePolicyVersionResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_policies_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ValidatePolicyVersionResponse.ProtoReflect.Descriptor instead.
+func (*ValidatePolicyVersionResponse) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_policies_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *ValidatePolicyVersionResponse) GetVersion() *PolicyVersion {
+	if x != nil {
+		return x.Version
+	}
+	return nil
+}
+
+func (x *ValidatePolicyVersionResponse) GetValidation() *ValidationReport {
+	if x != nil {
+		return x.Validation
+	}
+	return nil
+}
+
+// ValidationReport is one validation (G0 M11.1 design decision 8).
+type ValidationReport struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Whether nothing blocks publication (no ERROR finding).
+	Passed bool `protobuf:"varint,1,opt,name=passed,proto3" json:"passed,omitempty"`
+	// Findings.
+	Findings []*PolicyFinding `protobuf:"bytes,2,rep,name=findings,proto3" json:"findings,omitempty"`
+	// SHA-256 over the active definitions it ran with.
+	DefinitionsDigest []byte `protobuf:"bytes,3,opt,name=definitions_digest,json=definitionsDigest,proto3" json:"definitions_digest,omitempty"`
+	// SHA-256 over the fact catalog it ran with.
+	CatalogDigest []byte `protobuf:"bytes,4,opt,name=catalog_digest,json=catalogDigest,proto3" json:"catalog_digest,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ValidationReport) Reset() {
+	*x = ValidationReport{}
+	mi := &file_pantherclaw_v1_policies_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ValidationReport) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ValidationReport) ProtoMessage() {}
+
+func (x *ValidationReport) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_policies_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ValidationReport.ProtoReflect.Descriptor instead.
+func (*ValidationReport) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_policies_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *ValidationReport) GetPassed() bool {
+	if x != nil {
+		return x.Passed
+	}
+	return false
+}
+
+func (x *ValidationReport) GetFindings() []*PolicyFinding {
+	if x != nil {
+		return x.Findings
+	}
+	return nil
+}
+
+func (x *ValidationReport) GetDefinitionsDigest() []byte {
+	if x != nil {
+		return x.DefinitionsDigest
+	}
+	return nil
+}
+
+func (x *ValidationReport) GetCatalogDigest() []byte {
+	if x != nil {
+		return x.CatalogDigest
+	}
+	return nil
+}
+
+// PolicyFinding is one validation finding.
+type PolicyFinding struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// For example CONFLICT, OPERATION_UNKNOWN or SHADOWED.
+	Code string `protobuf:"bytes,1,opt,name=code,proto3" json:"code,omitempty"`
+	// "ERROR" (blocks publication), "WARNING" or "INFO".
+	Severity string `protobuf:"bytes,2,opt,name=severity,proto3" json:"severity,omitempty"`
+	// The rules concerned.
+	Rules []string `protobuf:"bytes,3,rep,name=rules,proto3" json:"rules,omitempty"`
+	// What was found.
+	Detail string `protobuf:"bytes,4,opt,name=detail,proto3" json:"detail,omitempty"`
+	// An action that shows it (JSON), when there is one.
+	Example []byte `protobuf:"bytes,5,opt,name=example,proto3" json:"example,omitempty"`
+	// Found on generated samples: absence of the finding proves nothing (R-25).
+	SampleBased   bool `protobuf:"varint,6,opt,name=sample_based,json=sampleBased,proto3" json:"sample_based,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PolicyFinding) Reset() {
+	*x = PolicyFinding{}
+	mi := &file_pantherclaw_v1_policies_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PolicyFinding) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PolicyFinding) ProtoMessage() {}
+
+func (x *PolicyFinding) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_policies_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PolicyFinding.ProtoReflect.Descriptor instead.
+func (*PolicyFinding) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_policies_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *PolicyFinding) GetCode() string {
+	if x != nil {
+		return x.Code
+	}
+	return ""
+}
+
+func (x *PolicyFinding) GetSeverity() string {
+	if x != nil {
+		return x.Severity
+	}
+	return ""
+}
+
+func (x *PolicyFinding) GetRules() []string {
+	if x != nil {
+		return x.Rules
+	}
+	return nil
+}
+
+func (x *PolicyFinding) GetDetail() string {
+	if x != nil {
+		return x.Detail
+	}
+	return ""
+}
+
+func (x *PolicyFinding) GetExample() []byte {
+	if x != nil {
+		return x.Example
+	}
+	return nil
+}
+
+func (x *PolicyFinding) GetSampleBased() bool {
+	if x != nil {
+		return x.SampleBased
+	}
+	return false
+}
+
+// TestPolicyVersionRequest names a version.
+type TestPolicyVersionRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Version id.
+	Id            string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TestPolicyVersionRequest) Reset() {
+	*x = TestPolicyVersionRequest{}
+	mi := &file_pantherclaw_v1_policies_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TestPolicyVersionRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TestPolicyVersionRequest) ProtoMessage() {}
+
+func (x *TestPolicyVersionRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_policies_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TestPolicyVersionRequest.ProtoReflect.Descriptor instead.
+func (*TestPolicyVersionRequest) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_policies_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *TestPolicyVersionRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+// TestPolicyVersionResponse returns the version and the report.
+type TestPolicyVersionResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The version (without the bundle).
+	Version *PolicyVersion `protobuf:"bytes,1,opt,name=version,proto3" json:"version,omitempty"`
+	// The test run.
+	Tests         *TestReport `protobuf:"bytes,2,opt,name=tests,proto3" json:"tests,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TestPolicyVersionResponse) Reset() {
+	*x = TestPolicyVersionResponse{}
+	mi := &file_pantherclaw_v1_policies_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TestPolicyVersionResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TestPolicyVersionResponse) ProtoMessage() {}
+
+func (x *TestPolicyVersionResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_policies_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TestPolicyVersionResponse.ProtoReflect.Descriptor instead.
+func (*TestPolicyVersionResponse) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_policies_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *TestPolicyVersionResponse) GetVersion() *PolicyVersion {
+	if x != nil {
+		return x.Version
+	}
+	return nil
+}
+
+func (x *TestPolicyVersionResponse) GetTests() *TestReport {
+	if x != nil {
+		return x.Tests
+	}
+	return nil
+}
+
+// TestReport is one scenario test run (HR-044).
+type TestReport struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Whether every case passed and every mutant was killed.
+	Passed bool `protobuf:"varint,1,opt,name=passed,proto3" json:"passed,omitempty"`
+	// Per case.
+	Cases []*TestCaseResult `protobuf:"bytes,2,rep,name=cases,proto3" json:"cases,omitempty"`
+	// Mutants tried.
+	Mutants int32 `protobuf:"varint,3,opt,name=mutants,proto3" json:"mutants,omitempty"`
+	// Mutants no case killed.
+	Survivors int32 `protobuf:"varint,4,opt,name=survivors,proto3" json:"survivors,omitempty"`
+	// The surviving mutants.
+	Surviving []*SurvivingMutant `protobuf:"bytes,5,rep,name=surviving,proto3" json:"surviving,omitempty"`
+	// Why the run stopped, for example TESTS_TOO_LARGE; empty otherwise.
+	Error string `protobuf:"bytes,6,opt,name=error,proto3" json:"error,omitempty"`
+	// SHA-256 over the active definitions it ran with.
+	DefinitionsDigest []byte `protobuf:"bytes,7,opt,name=definitions_digest,json=definitionsDigest,proto3" json:"definitions_digest,omitempty"`
+	// SHA-256 over the fact catalog it ran with.
+	CatalogDigest []byte `protobuf:"bytes,8,opt,name=catalog_digest,json=catalogDigest,proto3" json:"catalog_digest,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TestReport) Reset() {
+	*x = TestReport{}
+	mi := &file_pantherclaw_v1_policies_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TestReport) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TestReport) ProtoMessage() {}
+
+func (x *TestReport) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_policies_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TestReport.ProtoReflect.Descriptor instead.
+func (*TestReport) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_policies_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *TestReport) GetPassed() bool {
+	if x != nil {
+		return x.Passed
+	}
+	return false
+}
+
+func (x *TestReport) GetCases() []*TestCaseResult {
+	if x != nil {
+		return x.Cases
+	}
+	return nil
+}
+
+func (x *TestReport) GetMutants() int32 {
+	if x != nil {
+		return x.Mutants
+	}
+	return 0
+}
+
+func (x *TestReport) GetSurvivors() int32 {
+	if x != nil {
+		return x.Survivors
+	}
+	return 0
+}
+
+func (x *TestReport) GetSurviving() []*SurvivingMutant {
+	if x != nil {
+		return x.Surviving
+	}
+	return nil
+}
+
+func (x *TestReport) GetError() string {
+	if x != nil {
+		return x.Error
+	}
+	return ""
+}
+
+func (x *TestReport) GetDefinitionsDigest() []byte {
+	if x != nil {
+		return x.DefinitionsDigest
+	}
+	return nil
+}
+
+func (x *TestReport) GetCatalogDigest() []byte {
+	if x != nil {
+		return x.CatalogDigest
+	}
+	return nil
+}
+
+// TestCaseResult is one case's outcome.
+type TestCaseResult struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Case id.
+	Id string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	// Whether the decision, reason (and rule) matched.
+	Passed bool `protobuf:"varint,2,opt,name=passed,proto3" json:"passed,omitempty"`
+	// The decision.
+	Decision string `protobuf:"bytes,3,opt,name=decision,proto3" json:"decision,omitempty"`
+	// The decisive reason.
+	Reason string `protobuf:"bytes,4,opt,name=reason,proto3" json:"reason,omitempty"`
+	// The deciding rule.
+	Rule string `protobuf:"bytes,5,opt,name=rule,proto3" json:"rule,omitempty"`
+	// Why it failed.
+	Detail        string `protobuf:"bytes,6,opt,name=detail,proto3" json:"detail,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TestCaseResult) Reset() {
+	*x = TestCaseResult{}
+	mi := &file_pantherclaw_v1_policies_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TestCaseResult) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TestCaseResult) ProtoMessage() {}
+
+func (x *TestCaseResult) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_policies_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TestCaseResult.ProtoReflect.Descriptor instead.
+func (*TestCaseResult) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_policies_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *TestCaseResult) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *TestCaseResult) GetPassed() bool {
+	if x != nil {
+		return x.Passed
+	}
+	return false
+}
+
+func (x *TestCaseResult) GetDecision() string {
+	if x != nil {
+		return x.Decision
+	}
+	return ""
+}
+
+func (x *TestCaseResult) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
+func (x *TestCaseResult) GetRule() string {
+	if x != nil {
+		return x.Rule
+	}
+	return ""
+}
+
+func (x *TestCaseResult) GetDetail() string {
+	if x != nil {
+		return x.Detail
+	}
+	return ""
+}
+
+// SurvivingMutant is a mutant of a rule that no case killed.
+type SurvivingMutant struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Rule id.
+	Rule string `protobuf:"bytes,1,opt,name=rule,proto3" json:"rule,omitempty"`
+	// The mutation.
+	Mutation      string `protobuf:"bytes,2,opt,name=mutation,proto3" json:"mutation,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SurvivingMutant) Reset() {
+	*x = SurvivingMutant{}
+	mi := &file_pantherclaw_v1_policies_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SurvivingMutant) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SurvivingMutant) ProtoMessage() {}
+
+func (x *SurvivingMutant) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_policies_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SurvivingMutant.ProtoReflect.Descriptor instead.
+func (*SurvivingMutant) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_policies_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *SurvivingMutant) GetRule() string {
+	if x != nil {
+		return x.Rule
+	}
+	return ""
+}
+
+func (x *SurvivingMutant) GetMutation() string {
+	if x != nil {
+		return x.Mutation
+	}
+	return ""
+}
+
+// DiffPolicyVersionsRequest names two versions.
+type DiffPolicyVersionsRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The base; unset: the published version (or none).
+	FromId *string `protobuf:"bytes,1,opt,name=from_id,json=fromId,proto3,oneof" json:"from_id,omitempty"`
+	// The version compared with it.
+	ToId          string `protobuf:"bytes,2,opt,name=to_id,json=toId,proto3" json:"to_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DiffPolicyVersionsRequest) Reset() {
+	*x = DiffPolicyVersionsRequest{}
+	mi := &file_pantherclaw_v1_policies_proto_msgTypes[20]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DiffPolicyVersionsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DiffPolicyVersionsRequest) ProtoMessage() {}
+
+func (x *DiffPolicyVersionsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_policies_proto_msgTypes[20]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DiffPolicyVersionsRequest.ProtoReflect.Descriptor instead.
+func (*DiffPolicyVersionsRequest) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_policies_proto_rawDescGZIP(), []int{20}
+}
+
+func (x *DiffPolicyVersionsRequest) GetFromId() string {
+	if x != nil && x.FromId != nil {
+		return *x.FromId
+	}
+	return ""
+}
+
+func (x *DiffPolicyVersionsRequest) GetToId() string {
+	if x != nil {
+		return x.ToId
+	}
+	return ""
+}
+
+// DiffPolicyVersionsResponse returns the differences.
+type DiffPolicyVersionsResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Rule by rule.
+	Diff *PolicyDiff `protobuf:"bytes,1,opt,name=diff,proto3" json:"diff,omitempty"`
+	// The decisions that change over validation's samples (JSON array);
+	// sample-based, so an empty list proves nothing (R-25).
+	Outcomes      []byte `protobuf:"bytes,2,opt,name=outcomes,proto3" json:"outcomes,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DiffPolicyVersionsResponse) Reset() {
+	*x = DiffPolicyVersionsResponse{}
+	mi := &file_pantherclaw_v1_policies_proto_msgTypes[21]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DiffPolicyVersionsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DiffPolicyVersionsResponse) ProtoMessage() {}
+
+func (x *DiffPolicyVersionsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_policies_proto_msgTypes[21]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DiffPolicyVersionsResponse.ProtoReflect.Descriptor instead.
+func (*DiffPolicyVersionsResponse) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_policies_proto_rawDescGZIP(), []int{21}
+}
+
+func (x *DiffPolicyVersionsResponse) GetDiff() *PolicyDiff {
+	if x != nil {
+		return x.Diff
+	}
+	return nil
+}
+
+func (x *DiffPolicyVersionsResponse) GetOutcomes() []byte {
+	if x != nil {
+		return x.Outcomes
+	}
+	return nil
+}
+
+// PolicyDiff is a classified comparison (G0 M11.1 design decision 3).
+type PolicyDiff struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// "TIGHTER", "LOOSER", "UNKNOWN" or "NEUTRAL" overall: LOOSER and UNKNOWN
+	// need confirmations to publish.
+	Direction string `protobuf:"bytes,1,opt,name=direction,proto3" json:"direction,omitempty"`
+	// The changes.
+	Changes       []*PolicyRuleChange `protobuf:"bytes,2,rep,name=changes,proto3" json:"changes,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PolicyDiff) Reset() {
+	*x = PolicyDiff{}
+	mi := &file_pantherclaw_v1_policies_proto_msgTypes[22]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PolicyDiff) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PolicyDiff) ProtoMessage() {}
+
+func (x *PolicyDiff) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_policies_proto_msgTypes[22]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PolicyDiff.ProtoReflect.Descriptor instead.
+func (*PolicyDiff) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_policies_proto_rawDescGZIP(), []int{22}
+}
+
+func (x *PolicyDiff) GetDirection() string {
+	if x != nil {
+		return x.Direction
+	}
+	return ""
+}
+
+func (x *PolicyDiff) GetChanges() []*PolicyRuleChange {
+	if x != nil {
+		return x.Changes
+	}
+	return nil
+}
+
+// PolicyRuleChange is one classified change.
+type PolicyRuleChange struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Rule id.
+	RuleId string `protobuf:"bytes,1,opt,name=rule_id,json=ruleId,proto3" json:"rule_id,omitempty"`
+	// "ADDED", "REMOVED" or "CHANGED".
+	Kind string `protobuf:"bytes,2,opt,name=kind,proto3" json:"kind,omitempty"`
+	// The field that changed, for CHANGED.
+	Field string `protobuf:"bytes,3,opt,name=field,proto3" json:"field,omitempty"`
+	// Before.
+	Before string `protobuf:"bytes,4,opt,name=before,proto3" json:"before,omitempty"`
+	// After.
+	After string `protobuf:"bytes,5,opt,name=after,proto3" json:"after,omitempty"`
+	// "TIGHTER", "LOOSER", "UNKNOWN" or "NEUTRAL".
+	Direction string `protobuf:"bytes,6,opt,name=direction,proto3" json:"direction,omitempty"`
+	// In words.
+	Sentence      string `protobuf:"bytes,7,opt,name=sentence,proto3" json:"sentence,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PolicyRuleChange) Reset() {
+	*x = PolicyRuleChange{}
+	mi := &file_pantherclaw_v1_policies_proto_msgTypes[23]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PolicyRuleChange) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PolicyRuleChange) ProtoMessage() {}
+
+func (x *PolicyRuleChange) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_policies_proto_msgTypes[23]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PolicyRuleChange.ProtoReflect.Descriptor instead.
+func (*PolicyRuleChange) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_policies_proto_rawDescGZIP(), []int{23}
+}
+
+func (x *PolicyRuleChange) GetRuleId() string {
+	if x != nil {
+		return x.RuleId
+	}
+	return ""
+}
+
+func (x *PolicyRuleChange) GetKind() string {
+	if x != nil {
+		return x.Kind
+	}
+	return ""
+}
+
+func (x *PolicyRuleChange) GetField() string {
+	if x != nil {
+		return x.Field
+	}
+	return ""
+}
+
+func (x *PolicyRuleChange) GetBefore() string {
+	if x != nil {
+		return x.Before
+	}
+	return ""
+}
+
+func (x *PolicyRuleChange) GetAfter() string {
+	if x != nil {
+		return x.After
+	}
+	return ""
+}
+
+func (x *PolicyRuleChange) GetDirection() string {
+	if x != nil {
+		return x.Direction
+	}
+	return ""
+}
+
+func (x *PolicyRuleChange) GetSentence() string {
+	if x != nil {
+		return x.Sentence
+	}
+	return ""
+}
+
+// RollbackPolicyRequest names the version to go back to.
+type RollbackPolicyRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The earlier version whose rules and tests to publish again.
+	ToVersionId string `protobuf:"bytes,1,opt,name=to_version_id,json=toVersionId,proto3" json:"to_version_id,omitempty"`
+	// When set, the call fails with FAILED_PRECONDITION
+	// (POLICY_PUBLISHED_CHANGED) unless the org's published version is this
+	// one, or, when empty, unless none is published.
+	ExpectedCurrentVersion *string `protobuf:"bytes,2,opt,name=expected_current_version,json=expectedCurrentVersion,proto3,oneof" json:"expected_current_version,omitempty"`
+	unknownFields          protoimpl.UnknownFields
+	sizeCache              protoimpl.SizeCache
+}
+
+func (x *RollbackPolicyRequest) Reset() {
+	*x = RollbackPolicyRequest{}
+	mi := &file_pantherclaw_v1_policies_proto_msgTypes[24]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RollbackPolicyRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RollbackPolicyRequest) ProtoMessage() {}
+
+func (x *RollbackPolicyRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_policies_proto_msgTypes[24]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RollbackPolicyRequest.ProtoReflect.Descriptor instead.
+func (*RollbackPolicyRequest) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_policies_proto_rawDescGZIP(), []int{24}
+}
+
+func (x *RollbackPolicyRequest) GetToVersionId() string {
+	if x != nil {
+		return x.ToVersionId
+	}
+	return ""
+}
+
+func (x *RollbackPolicyRequest) GetExpectedCurrentVersion() string {
+	if x != nil && x.ExpectedCurrentVersion != nil {
+		return *x.ExpectedCurrentVersion
+	}
+	return ""
+}
+
+// RollbackPolicyResponse returns the new version.
+type RollbackPolicyResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The new version (without the bundle): PUBLISHED, or TESTED while a
+	// change request waits.
+	Version *PolicyVersion `protobuf:"bytes,1,opt,name=version,proto3" json:"version,omitempty"`
+	// Set when the rollback loosens the published policy.
+	ChangeRequest *PolicyChangeRequest `protobuf:"bytes,2,opt,name=change_request,json=changeRequest,proto3" json:"change_request,omitempty"`
+	// The emergency rules of the published version carried forward.
+	CarriedRuleIds []string `protobuf:"bytes,3,rep,name=carried_rule_ids,json=carriedRuleIds,proto3" json:"carried_rule_ids,omitempty"`
+	// The classified changes against the published version.
+	Diff          *PolicyDiff `protobuf:"bytes,4,opt,name=diff,proto3" json:"diff,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RollbackPolicyResponse) Reset() {
+	*x = RollbackPolicyResponse{}
+	mi := &file_pantherclaw_v1_policies_proto_msgTypes[25]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RollbackPolicyResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RollbackPolicyResponse) ProtoMessage() {}
+
+func (x *RollbackPolicyResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_policies_proto_msgTypes[25]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RollbackPolicyResponse.ProtoReflect.Descriptor instead.
+func (*RollbackPolicyResponse) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_policies_proto_rawDescGZIP(), []int{25}
+}
+
+func (x *RollbackPolicyResponse) GetVersion() *PolicyVersion {
+	if x != nil {
+		return x.Version
+	}
+	return nil
+}
+
+func (x *RollbackPolicyResponse) GetChangeRequest() *PolicyChangeRequest {
+	if x != nil {
+		return x.ChangeRequest
+	}
+	return nil
+}
+
+func (x *RollbackPolicyResponse) GetCarriedRuleIds() []string {
+	if x != nil {
+		return x.CarriedRuleIds
+	}
+	return nil
+}
+
+func (x *RollbackPolicyResponse) GetDiff() *PolicyDiff {
+	if x != nil {
+		return x.Diff
+	}
+	return nil
+}
+
+// PolicyChangeRequest is a change waiting for, or done with, confirmations
+// (G0 M11.1 design decision 11).
+type PolicyChangeRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Request id.
+	Id string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	// "PUBLISH", "ROLLOUT" or "EXCEPTION".
+	Kind string `protobuf:"bytes,2,opt,name=kind,proto3" json:"kind,omitempty"`
+	// What it changes: the version, rollout or exception id.
+	SubjectId string `protobuf:"bytes,3,opt,name=subject_id,json=subjectId,proto3" json:"subject_id,omitempty"`
+	// The published version it was made against; empty for none.
+	BaseVersionId string `protobuf:"bytes,4,opt,name=base_version_id,json=baseVersionId,proto3" json:"base_version_id,omitempty"`
+	// "PENDING", "APPROVED", "DECLINED", "EXPIRED" or "VOIDED".
+	State string `protobuf:"bytes,5,opt,name=state,proto3" json:"state,omitempty"`
+	// Confirmations needed: 2 when the org had two or more people holding
+	// policy.publish when it was made, else 1.
+	Required int32 `protobuf:"varint,6,opt,name=required,proto3" json:"required,omitempty"`
+	// Confirmations so far.
+	Confirmations []*PolicyChangeConfirmation `protobuf:"bytes,7,rep,name=confirmations,proto3" json:"confirmations,omitempty"`
+	// Who asked.
+	RequestedBy string `protobuf:"bytes,8,opt,name=requested_by,json=requestedBy,proto3" json:"requested_by,omitempty"`
+	// When.
+	CreateTime *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=create_time,json=createTime,proto3" json:"create_time,omitempty"`
+	// 24 hours after it was made.
+	ExpireTime *timestamppb.Timestamp `protobuf:"bytes,10,opt,name=expire_time,json=expireTime,proto3" json:"expire_time,omitempty"`
+	// When it ended.
+	DecideTime *timestamppb.Timestamp `protobuf:"bytes,11,opt,name=decide_time,json=decideTime,proto3" json:"decide_time,omitempty"`
+	// Why it ended (BASE_CHANGED, STALE_TESTS, EXPIRED, or a decline's reason).
+	DecidedReason string `protobuf:"bytes,12,opt,name=decided_reason,json=decidedReason,proto3" json:"decided_reason,omitempty"`
+	// What the confirmers are shown (JSON): the classified changes.
+	Summary []byte `protobuf:"bytes,13,opt,name=summary,proto3" json:"summary,omitempty"`
+	// What each confirmer's security key signs.
+	Binding []byte `protobuf:"bytes,14,opt,name=binding,proto3" json:"binding,omitempty"`
+	// The page people confirm it on.
+	Url           string `protobuf:"bytes,15,opt,name=url,proto3" json:"url,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PolicyChangeRequest) Reset() {
+	*x = PolicyChangeRequest{}
+	mi := &file_pantherclaw_v1_policies_proto_msgTypes[26]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PolicyChangeRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PolicyChangeRequest) ProtoMessage() {}
+
+func (x *PolicyChangeRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_policies_proto_msgTypes[26]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PolicyChangeRequest.ProtoReflect.Descriptor instead.
+func (*PolicyChangeRequest) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_policies_proto_rawDescGZIP(), []int{26}
+}
+
+func (x *PolicyChangeRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *PolicyChangeRequest) GetKind() string {
+	if x != nil {
+		return x.Kind
+	}
+	return ""
+}
+
+func (x *PolicyChangeRequest) GetSubjectId() string {
+	if x != nil {
+		return x.SubjectId
+	}
+	return ""
+}
+
+func (x *PolicyChangeRequest) GetBaseVersionId() string {
+	if x != nil {
+		return x.BaseVersionId
+	}
+	return ""
+}
+
+func (x *PolicyChangeRequest) GetState() string {
+	if x != nil {
+		return x.State
+	}
+	return ""
+}
+
+func (x *PolicyChangeRequest) GetRequired() int32 {
+	if x != nil {
+		return x.Required
+	}
+	return 0
+}
+
+func (x *PolicyChangeRequest) GetConfirmations() []*PolicyChangeConfirmation {
+	if x != nil {
+		return x.Confirmations
+	}
+	return nil
+}
+
+func (x *PolicyChangeRequest) GetRequestedBy() string {
+	if x != nil {
+		return x.RequestedBy
+	}
+	return ""
+}
+
+func (x *PolicyChangeRequest) GetCreateTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.CreateTime
+	}
+	return nil
+}
+
+func (x *PolicyChangeRequest) GetExpireTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ExpireTime
+	}
+	return nil
+}
+
+func (x *PolicyChangeRequest) GetDecideTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.DecideTime
+	}
+	return nil
+}
+
+func (x *PolicyChangeRequest) GetDecidedReason() string {
+	if x != nil {
+		return x.DecidedReason
+	}
+	return ""
+}
+
+func (x *PolicyChangeRequest) GetSummary() []byte {
+	if x != nil {
+		return x.Summary
+	}
+	return nil
+}
+
+func (x *PolicyChangeRequest) GetBinding() []byte {
+	if x != nil {
+		return x.Binding
+	}
+	return nil
+}
+
+func (x *PolicyChangeRequest) GetUrl() string {
+	if x != nil {
+		return x.Url
+	}
+	return ""
+}
+
+// PolicyChangeConfirmation is one person's confirmation.
+type PolicyChangeConfirmation struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The person.
+	UserId string `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	// The security key.
+	CredentialId string `protobuf:"bytes,2,opt,name=credential_id,json=credentialId,proto3" json:"credential_id,omitempty"`
+	// When.
+	CreateTime    *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=create_time,json=createTime,proto3" json:"create_time,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PolicyChangeConfirmation) Reset() {
+	*x = PolicyChangeConfirmation{}
+	mi := &file_pantherclaw_v1_policies_proto_msgTypes[27]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PolicyChangeConfirmation) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PolicyChangeConfirmation) ProtoMessage() {}
+
+func (x *PolicyChangeConfirmation) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_policies_proto_msgTypes[27]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PolicyChangeConfirmation.ProtoReflect.Descriptor instead.
+func (*PolicyChangeConfirmation) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_policies_proto_rawDescGZIP(), []int{27}
+}
+
+func (x *PolicyChangeConfirmation) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
+}
+
+func (x *PolicyChangeConfirmation) GetCredentialId() string {
+	if x != nil {
+		return x.CredentialId
+	}
+	return ""
+}
+
+func (x *PolicyChangeConfirmation) GetCreateTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.CreateTime
+	}
+	return nil
+}
+
+// ListPolicyChangeRequestsRequest lists change requests.
+type ListPolicyChangeRequestsRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Only this state; empty: all.
+	State string `protobuf:"bytes,1,opt,name=state,proto3" json:"state,omitempty"`
+	// Maximum results (default 50, at most 200).
+	PageSize      int32 `protobuf:"varint,2,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListPolicyChangeRequestsRequest) Reset() {
+	*x = ListPolicyChangeRequestsRequest{}
+	mi := &file_pantherclaw_v1_policies_proto_msgTypes[28]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListPolicyChangeRequestsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListPolicyChangeRequestsRequest) ProtoMessage() {}
+
+func (x *ListPolicyChangeRequestsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_policies_proto_msgTypes[28]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListPolicyChangeRequestsRequest.ProtoReflect.Descriptor instead.
+func (*ListPolicyChangeRequestsRequest) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_policies_proto_rawDescGZIP(), []int{28}
+}
+
+func (x *ListPolicyChangeRequestsRequest) GetState() string {
+	if x != nil {
+		return x.State
+	}
+	return ""
+}
+
+func (x *ListPolicyChangeRequestsRequest) GetPageSize() int32 {
+	if x != nil {
+		return x.PageSize
+	}
+	return 0
+}
+
+// ListPolicyChangeRequestsResponse returns them.
+type ListPolicyChangeRequestsResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Newest first.
+	Requests      []*PolicyChangeRequest `protobuf:"bytes,1,rep,name=requests,proto3" json:"requests,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListPolicyChangeRequestsResponse) Reset() {
+	*x = ListPolicyChangeRequestsResponse{}
+	mi := &file_pantherclaw_v1_policies_proto_msgTypes[29]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListPolicyChangeRequestsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListPolicyChangeRequestsResponse) ProtoMessage() {}
+
+func (x *ListPolicyChangeRequestsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_policies_proto_msgTypes[29]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListPolicyChangeRequestsResponse.ProtoReflect.Descriptor instead.
+func (*ListPolicyChangeRequestsResponse) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_policies_proto_rawDescGZIP(), []int{29}
+}
+
+func (x *ListPolicyChangeRequestsResponse) GetRequests() []*PolicyChangeRequest {
+	if x != nil {
+		return x.Requests
+	}
+	return nil
+}
+
+// GetPolicyChangeRequestRequest names a change request.
+type GetPolicyChangeRequestRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Request id.
+	Id            string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetPolicyChangeRequestRequest) Reset() {
+	*x = GetPolicyChangeRequestRequest{}
+	mi := &file_pantherclaw_v1_policies_proto_msgTypes[30]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetPolicyChangeRequestRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetPolicyChangeRequestRequest) ProtoMessage() {}
+
+func (x *GetPolicyChangeRequestRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_policies_proto_msgTypes[30]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetPolicyChangeRequestRequest.ProtoReflect.Descriptor instead.
+func (*GetPolicyChangeRequestRequest) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_policies_proto_rawDescGZIP(), []int{30}
+}
+
+func (x *GetPolicyChangeRequestRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+// GetPolicyChangeRequestResponse returns it.
+type GetPolicyChangeRequestResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The request.
+	Request       *PolicyChangeRequest `protobuf:"bytes,1,opt,name=request,proto3" json:"request,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetPolicyChangeRequestResponse) Reset() {
+	*x = GetPolicyChangeRequestResponse{}
+	mi := &file_pantherclaw_v1_policies_proto_msgTypes[31]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetPolicyChangeRequestResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetPolicyChangeRequestResponse) ProtoMessage() {}
+
+func (x *GetPolicyChangeRequestResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_policies_proto_msgTypes[31]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetPolicyChangeRequestResponse.ProtoReflect.Descriptor instead.
+func (*GetPolicyChangeRequestResponse) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_policies_proto_rawDescGZIP(), []int{31}
+}
+
+func (x *GetPolicyChangeRequestResponse) GetRequest() *PolicyChangeRequest {
+	if x != nil {
+		return x.Request
+	}
+	return nil
+}
+
 var File_pantherclaw_v1_policies_proto protoreflect.FileDescriptor
 
 const file_pantherclaw_v1_policies_proto_rawDesc = "" +
 	"\n" +
-	"\x1dpantherclaw/v1/policies.proto\x12\x0epantherclaw.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\x9f\x02\n" +
+	"\x1dpantherclaw/v1/policies.proto\x12\x0epantherclaw.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xc6\x02\n" +
 	"\rPolicyVersion\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1b\n" +
 	"\tbundle_id\x18\x02 \x01(\tR\bbundleId\x12\x18\n" +
@@ -625,7 +2123,8 @@ const file_pantherclaw_v1_policies_proto_rawDesc = "" +
 	"created_by\x18\x06 \x01(\tR\tcreatedBy\x12;\n" +
 	"\vcreate_time\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"createTime\x12=\n" +
-	"\fpublish_time\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\vpublishTime\"\xe8\x01\n" +
+	"\fpublish_time\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\vpublishTime\x12%\n" +
+	"\x0econtent_digest\x18\t \x01(\fR\rcontentDigest\"\xe8\x01\n" +
 	"\x1aCreatePolicyVersionRequest\x12#\n" +
 	"\x06bundle\x18\x01 \x01(\fB\v\xbaH\bz\x06\x10\x02\x18\x80\x80@R\x06bundle\x12\x87\x01\n" +
 	"\x18expected_current_version\x18\x02 \x01(\tBH\xbaHErC2A^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})?$H\x00R\x16expectedCurrentVersion\x88\x01\x01B\x1b\n" +
@@ -635,9 +2134,15 @@ const file_pantherclaw_v1_policies_proto_rawDesc = "" +
 	"\x1bPublishPolicyVersionRequest\x12\x18\n" +
 	"\x02id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x02id\x12\x87\x01\n" +
 	"\x18expected_current_version\x18\x02 \x01(\tBH\xbaHErC2A^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})?$H\x00R\x16expectedCurrentVersion\x88\x01\x01B\x1b\n" +
-	"\x19_expected_current_version\"W\n" +
+	"\x19_expected_current_version\"\xc7\x02\n" +
 	"\x1cPublishPolicyVersionResponse\x127\n" +
-	"\aversion\x18\x01 \x01(\v2\x1d.pantherclaw.v1.PolicyVersionR\aversion\"\x1b\n" +
+	"\aversion\x18\x01 \x01(\v2\x1d.pantherclaw.v1.PolicyVersionR\aversion\x12J\n" +
+	"\x0echange_request\x18\x02 \x01(\v2#.pantherclaw.v1.PolicyChangeRequestR\rchangeRequest\x12.\n" +
+	"\x04diff\x18\x03 \x01(\v2\x1a.pantherclaw.v1.PolicyDiffR\x04diff\x12@\n" +
+	"\n" +
+	"validation\x18\x04 \x01(\v2 .pantherclaw.v1.ValidationReportR\n" +
+	"validation\x120\n" +
+	"\x05tests\x18\x05 \x01(\v2\x1a.pantherclaw.v1.TestReportR\x05tests\"\x1b\n" +
 	"\x19GetPublishedPolicyRequest\"U\n" +
 	"\x1aGetPublishedPolicyResponse\x127\n" +
 	"\aversion\x18\x01 \x01(\v2\x1d.pantherclaw.v1.PolicyVersionR\aversion\"3\n" +
@@ -649,13 +2154,128 @@ const file_pantherclaw_v1_policies_proto_rawDesc = "" +
 	"\tpage_size\x18\x01 \x01(\x05B\n" +
 	"\xbaH\a\x1a\x05\x18\xc8\x01(\x00R\bpageSize\"W\n" +
 	"\x1aListPolicyVersionsResponse\x129\n" +
-	"\bversions\x18\x01 \x03(\v2\x1d.pantherclaw.v1.PolicyVersionR\bversions2\xc2\x04\n" +
+	"\bversions\x18\x01 \x03(\v2\x1d.pantherclaw.v1.PolicyVersionR\bversions\"8\n" +
+	"\x1cValidatePolicyVersionRequest\x12\x18\n" +
+	"\x02id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x02id\"\x9a\x01\n" +
+	"\x1dValidatePolicyVersionResponse\x127\n" +
+	"\aversion\x18\x01 \x01(\v2\x1d.pantherclaw.v1.PolicyVersionR\aversion\x12@\n" +
+	"\n" +
+	"validation\x18\x02 \x01(\v2 .pantherclaw.v1.ValidationReportR\n" +
+	"validation\"\xbb\x01\n" +
+	"\x10ValidationReport\x12\x16\n" +
+	"\x06passed\x18\x01 \x01(\bR\x06passed\x129\n" +
+	"\bfindings\x18\x02 \x03(\v2\x1d.pantherclaw.v1.PolicyFindingR\bfindings\x12-\n" +
+	"\x12definitions_digest\x18\x03 \x01(\fR\x11definitionsDigest\x12%\n" +
+	"\x0ecatalog_digest\x18\x04 \x01(\fR\rcatalogDigest\"\xaa\x01\n" +
+	"\rPolicyFinding\x12\x12\n" +
+	"\x04code\x18\x01 \x01(\tR\x04code\x12\x1a\n" +
+	"\bseverity\x18\x02 \x01(\tR\bseverity\x12\x14\n" +
+	"\x05rules\x18\x03 \x03(\tR\x05rules\x12\x16\n" +
+	"\x06detail\x18\x04 \x01(\tR\x06detail\x12\x18\n" +
+	"\aexample\x18\x05 \x01(\fR\aexample\x12!\n" +
+	"\fsample_based\x18\x06 \x01(\bR\vsampleBased\"4\n" +
+	"\x18TestPolicyVersionRequest\x12\x18\n" +
+	"\x02id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x02id\"\x86\x01\n" +
+	"\x19TestPolicyVersionResponse\x127\n" +
+	"\aversion\x18\x01 \x01(\v2\x1d.pantherclaw.v1.PolicyVersionR\aversion\x120\n" +
+	"\x05tests\x18\x02 \x01(\v2\x1a.pantherclaw.v1.TestReportR\x05tests\"\xbd\x02\n" +
+	"\n" +
+	"TestReport\x12\x16\n" +
+	"\x06passed\x18\x01 \x01(\bR\x06passed\x124\n" +
+	"\x05cases\x18\x02 \x03(\v2\x1e.pantherclaw.v1.TestCaseResultR\x05cases\x12\x18\n" +
+	"\amutants\x18\x03 \x01(\x05R\amutants\x12\x1c\n" +
+	"\tsurvivors\x18\x04 \x01(\x05R\tsurvivors\x12=\n" +
+	"\tsurviving\x18\x05 \x03(\v2\x1f.pantherclaw.v1.SurvivingMutantR\tsurviving\x12\x14\n" +
+	"\x05error\x18\x06 \x01(\tR\x05error\x12-\n" +
+	"\x12definitions_digest\x18\a \x01(\fR\x11definitionsDigest\x12%\n" +
+	"\x0ecatalog_digest\x18\b \x01(\fR\rcatalogDigest\"\x98\x01\n" +
+	"\x0eTestCaseResult\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x16\n" +
+	"\x06passed\x18\x02 \x01(\bR\x06passed\x12\x1a\n" +
+	"\bdecision\x18\x03 \x01(\tR\bdecision\x12\x16\n" +
+	"\x06reason\x18\x04 \x01(\tR\x06reason\x12\x12\n" +
+	"\x04rule\x18\x05 \x01(\tR\x04rule\x12\x16\n" +
+	"\x06detail\x18\x06 \x01(\tR\x06detail\"A\n" +
+	"\x0fSurvivingMutant\x12\x12\n" +
+	"\x04rule\x18\x01 \x01(\tR\x04rule\x12\x1a\n" +
+	"\bmutation\x18\x02 \x01(\tR\bmutation\"n\n" +
+	"\x19DiffPolicyVersionsRequest\x12&\n" +
+	"\afrom_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01H\x00R\x06fromId\x88\x01\x01\x12\x1d\n" +
+	"\x05to_id\x18\x02 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x04toIdB\n" +
+	"\n" +
+	"\b_from_id\"h\n" +
+	"\x1aDiffPolicyVersionsResponse\x12.\n" +
+	"\x04diff\x18\x01 \x01(\v2\x1a.pantherclaw.v1.PolicyDiffR\x04diff\x12\x1a\n" +
+	"\boutcomes\x18\x02 \x01(\fR\boutcomes\"f\n" +
+	"\n" +
+	"PolicyDiff\x12\x1c\n" +
+	"\tdirection\x18\x01 \x01(\tR\tdirection\x12:\n" +
+	"\achanges\x18\x02 \x03(\v2 .pantherclaw.v1.PolicyRuleChangeR\achanges\"\xbd\x01\n" +
+	"\x10PolicyRuleChange\x12\x17\n" +
+	"\arule_id\x18\x01 \x01(\tR\x06ruleId\x12\x12\n" +
+	"\x04kind\x18\x02 \x01(\tR\x04kind\x12\x14\n" +
+	"\x05field\x18\x03 \x01(\tR\x05field\x12\x16\n" +
+	"\x06before\x18\x04 \x01(\tR\x06before\x12\x14\n" +
+	"\x05after\x18\x05 \x01(\tR\x05after\x12\x1c\n" +
+	"\tdirection\x18\x06 \x01(\tR\tdirection\x12\x1a\n" +
+	"\bsentence\x18\a \x01(\tR\bsentence\"\xec\x01\n" +
+	"\x15RollbackPolicyRequest\x12,\n" +
+	"\rto_version_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\vtoVersionId\x12\x87\x01\n" +
+	"\x18expected_current_version\x18\x02 \x01(\tBH\xbaHErC2A^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})?$H\x00R\x16expectedCurrentVersion\x88\x01\x01B\x1b\n" +
+	"\x19_expected_current_version\"\xf7\x01\n" +
+	"\x16RollbackPolicyResponse\x127\n" +
+	"\aversion\x18\x01 \x01(\v2\x1d.pantherclaw.v1.PolicyVersionR\aversion\x12J\n" +
+	"\x0echange_request\x18\x02 \x01(\v2#.pantherclaw.v1.PolicyChangeRequestR\rchangeRequest\x12(\n" +
+	"\x10carried_rule_ids\x18\x03 \x03(\tR\x0ecarriedRuleIds\x12.\n" +
+	"\x04diff\x18\x04 \x01(\v2\x1a.pantherclaw.v1.PolicyDiffR\x04diff\"\xc9\x04\n" +
+	"\x13PolicyChangeRequest\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
+	"\x04kind\x18\x02 \x01(\tR\x04kind\x12\x1d\n" +
+	"\n" +
+	"subject_id\x18\x03 \x01(\tR\tsubjectId\x12&\n" +
+	"\x0fbase_version_id\x18\x04 \x01(\tR\rbaseVersionId\x12\x14\n" +
+	"\x05state\x18\x05 \x01(\tR\x05state\x12\x1a\n" +
+	"\brequired\x18\x06 \x01(\x05R\brequired\x12N\n" +
+	"\rconfirmations\x18\a \x03(\v2(.pantherclaw.v1.PolicyChangeConfirmationR\rconfirmations\x12!\n" +
+	"\frequested_by\x18\b \x01(\tR\vrequestedBy\x12;\n" +
+	"\vcreate_time\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\n" +
+	"createTime\x12;\n" +
+	"\vexpire_time\x18\n" +
+	" \x01(\v2\x1a.google.protobuf.TimestampR\n" +
+	"expireTime\x12;\n" +
+	"\vdecide_time\x18\v \x01(\v2\x1a.google.protobuf.TimestampR\n" +
+	"decideTime\x12%\n" +
+	"\x0edecided_reason\x18\f \x01(\tR\rdecidedReason\x12\x18\n" +
+	"\asummary\x18\r \x01(\fR\asummary\x12\x18\n" +
+	"\abinding\x18\x0e \x01(\fR\abinding\x12\x10\n" +
+	"\x03url\x18\x0f \x01(\tR\x03url\"\x95\x01\n" +
+	"\x18PolicyChangeConfirmation\x12\x17\n" +
+	"\auser_id\x18\x01 \x01(\tR\x06userId\x12#\n" +
+	"\rcredential_id\x18\x02 \x01(\tR\fcredentialId\x12;\n" +
+	"\vcreate_time\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
+	"createTime\"\x96\x01\n" +
+	"\x1fListPolicyChangeRequestsRequest\x12J\n" +
+	"\x05state\x18\x01 \x01(\tB4\xbaH1r/2-^(|PENDING|APPROVED|DECLINED|EXPIRED|VOIDED)$R\x05state\x12'\n" +
+	"\tpage_size\x18\x02 \x01(\x05B\n" +
+	"\xbaH\a\x1a\x05\x18\xc8\x01(\x00R\bpageSize\"c\n" +
+	" ListPolicyChangeRequestsResponse\x12?\n" +
+	"\brequests\x18\x01 \x03(\v2#.pantherclaw.v1.PolicyChangeRequestR\brequests\"9\n" +
+	"\x1dGetPolicyChangeRequestRequest\x12\x18\n" +
+	"\x02id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x02id\"_\n" +
+	"\x1eGetPolicyChangeRequestResponse\x12=\n" +
+	"\arequest\x18\x01 \x01(\v2#.pantherclaw.v1.PolicyChangeRequestR\arequest2\xf8\t\n" +
 	"\rPolicyService\x12n\n" +
 	"\x13CreatePolicyVersion\x12*.pantherclaw.v1.CreatePolicyVersionRequest\x1a+.pantherclaw.v1.CreatePolicyVersionResponse\x12q\n" +
 	"\x14PublishPolicyVersion\x12+.pantherclaw.v1.PublishPolicyVersionRequest\x1a,.pantherclaw.v1.PublishPolicyVersionResponse\x12p\n" +
 	"\x12GetPublishedPolicy\x12).pantherclaw.v1.GetPublishedPolicyRequest\x1a*.pantherclaw.v1.GetPublishedPolicyResponse\"\x03\x90\x02\x01\x12j\n" +
 	"\x10GetPolicyVersion\x12'.pantherclaw.v1.GetPolicyVersionRequest\x1a(.pantherclaw.v1.GetPolicyVersionResponse\"\x03\x90\x02\x01\x12p\n" +
-	"\x12ListPolicyVersions\x12).pantherclaw.v1.ListPolicyVersionsRequest\x1a*.pantherclaw.v1.ListPolicyVersionsResponse\"\x03\x90\x02\x01B\xc6\x01\n" +
+	"\x12ListPolicyVersions\x12).pantherclaw.v1.ListPolicyVersionsRequest\x1a*.pantherclaw.v1.ListPolicyVersionsResponse\"\x03\x90\x02\x01\x12t\n" +
+	"\x15ValidatePolicyVersion\x12,.pantherclaw.v1.ValidatePolicyVersionRequest\x1a-.pantherclaw.v1.ValidatePolicyVersionResponse\x12h\n" +
+	"\x11TestPolicyVersion\x12(.pantherclaw.v1.TestPolicyVersionRequest\x1a).pantherclaw.v1.TestPolicyVersionResponse\x12p\n" +
+	"\x12DiffPolicyVersions\x12).pantherclaw.v1.DiffPolicyVersionsRequest\x1a*.pantherclaw.v1.DiffPolicyVersionsResponse\"\x03\x90\x02\x01\x12_\n" +
+	"\x0eRollbackPolicy\x12%.pantherclaw.v1.RollbackPolicyRequest\x1a&.pantherclaw.v1.RollbackPolicyResponse\x12\x82\x01\n" +
+	"\x18ListPolicyChangeRequests\x12/.pantherclaw.v1.ListPolicyChangeRequestsRequest\x1a0.pantherclaw.v1.ListPolicyChangeRequestsResponse\"\x03\x90\x02\x01\x12|\n" +
+	"\x16GetPolicyChangeRequest\x12-.pantherclaw.v1.GetPolicyChangeRequestRequest\x1a..pantherclaw.v1.GetPolicyChangeRequestResponse\"\x03\x90\x02\x01B\xc6\x01\n" +
 	"\x12com.pantherclaw.v1B\rPoliciesProtoP\x01ZHgithub.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1;pantherclawv1\xa2\x02\x03PXX\xaa\x02\x0ePantherclaw.V1\xca\x02\x0ePantherclaw\\V1\xe2\x02\x1aPantherclaw\\V1\\GPBMetadata\xea\x02\x0fPantherclaw::V1b\x06proto3"
 
 var (
@@ -670,44 +2290,100 @@ func file_pantherclaw_v1_policies_proto_rawDescGZIP() []byte {
 	return file_pantherclaw_v1_policies_proto_rawDescData
 }
 
-var file_pantherclaw_v1_policies_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
+var file_pantherclaw_v1_policies_proto_msgTypes = make([]protoimpl.MessageInfo, 32)
 var file_pantherclaw_v1_policies_proto_goTypes = []any{
-	(*PolicyVersion)(nil),                // 0: pantherclaw.v1.PolicyVersion
-	(*CreatePolicyVersionRequest)(nil),   // 1: pantherclaw.v1.CreatePolicyVersionRequest
-	(*CreatePolicyVersionResponse)(nil),  // 2: pantherclaw.v1.CreatePolicyVersionResponse
-	(*PublishPolicyVersionRequest)(nil),  // 3: pantherclaw.v1.PublishPolicyVersionRequest
-	(*PublishPolicyVersionResponse)(nil), // 4: pantherclaw.v1.PublishPolicyVersionResponse
-	(*GetPublishedPolicyRequest)(nil),    // 5: pantherclaw.v1.GetPublishedPolicyRequest
-	(*GetPublishedPolicyResponse)(nil),   // 6: pantherclaw.v1.GetPublishedPolicyResponse
-	(*GetPolicyVersionRequest)(nil),      // 7: pantherclaw.v1.GetPolicyVersionRequest
-	(*GetPolicyVersionResponse)(nil),     // 8: pantherclaw.v1.GetPolicyVersionResponse
-	(*ListPolicyVersionsRequest)(nil),    // 9: pantherclaw.v1.ListPolicyVersionsRequest
-	(*ListPolicyVersionsResponse)(nil),   // 10: pantherclaw.v1.ListPolicyVersionsResponse
-	(*timestamppb.Timestamp)(nil),        // 11: google.protobuf.Timestamp
+	(*PolicyVersion)(nil),                    // 0: pantherclaw.v1.PolicyVersion
+	(*CreatePolicyVersionRequest)(nil),       // 1: pantherclaw.v1.CreatePolicyVersionRequest
+	(*CreatePolicyVersionResponse)(nil),      // 2: pantherclaw.v1.CreatePolicyVersionResponse
+	(*PublishPolicyVersionRequest)(nil),      // 3: pantherclaw.v1.PublishPolicyVersionRequest
+	(*PublishPolicyVersionResponse)(nil),     // 4: pantherclaw.v1.PublishPolicyVersionResponse
+	(*GetPublishedPolicyRequest)(nil),        // 5: pantherclaw.v1.GetPublishedPolicyRequest
+	(*GetPublishedPolicyResponse)(nil),       // 6: pantherclaw.v1.GetPublishedPolicyResponse
+	(*GetPolicyVersionRequest)(nil),          // 7: pantherclaw.v1.GetPolicyVersionRequest
+	(*GetPolicyVersionResponse)(nil),         // 8: pantherclaw.v1.GetPolicyVersionResponse
+	(*ListPolicyVersionsRequest)(nil),        // 9: pantherclaw.v1.ListPolicyVersionsRequest
+	(*ListPolicyVersionsResponse)(nil),       // 10: pantherclaw.v1.ListPolicyVersionsResponse
+	(*ValidatePolicyVersionRequest)(nil),     // 11: pantherclaw.v1.ValidatePolicyVersionRequest
+	(*ValidatePolicyVersionResponse)(nil),    // 12: pantherclaw.v1.ValidatePolicyVersionResponse
+	(*ValidationReport)(nil),                 // 13: pantherclaw.v1.ValidationReport
+	(*PolicyFinding)(nil),                    // 14: pantherclaw.v1.PolicyFinding
+	(*TestPolicyVersionRequest)(nil),         // 15: pantherclaw.v1.TestPolicyVersionRequest
+	(*TestPolicyVersionResponse)(nil),        // 16: pantherclaw.v1.TestPolicyVersionResponse
+	(*TestReport)(nil),                       // 17: pantherclaw.v1.TestReport
+	(*TestCaseResult)(nil),                   // 18: pantherclaw.v1.TestCaseResult
+	(*SurvivingMutant)(nil),                  // 19: pantherclaw.v1.SurvivingMutant
+	(*DiffPolicyVersionsRequest)(nil),        // 20: pantherclaw.v1.DiffPolicyVersionsRequest
+	(*DiffPolicyVersionsResponse)(nil),       // 21: pantherclaw.v1.DiffPolicyVersionsResponse
+	(*PolicyDiff)(nil),                       // 22: pantherclaw.v1.PolicyDiff
+	(*PolicyRuleChange)(nil),                 // 23: pantherclaw.v1.PolicyRuleChange
+	(*RollbackPolicyRequest)(nil),            // 24: pantherclaw.v1.RollbackPolicyRequest
+	(*RollbackPolicyResponse)(nil),           // 25: pantherclaw.v1.RollbackPolicyResponse
+	(*PolicyChangeRequest)(nil),              // 26: pantherclaw.v1.PolicyChangeRequest
+	(*PolicyChangeConfirmation)(nil),         // 27: pantherclaw.v1.PolicyChangeConfirmation
+	(*ListPolicyChangeRequestsRequest)(nil),  // 28: pantherclaw.v1.ListPolicyChangeRequestsRequest
+	(*ListPolicyChangeRequestsResponse)(nil), // 29: pantherclaw.v1.ListPolicyChangeRequestsResponse
+	(*GetPolicyChangeRequestRequest)(nil),    // 30: pantherclaw.v1.GetPolicyChangeRequestRequest
+	(*GetPolicyChangeRequestResponse)(nil),   // 31: pantherclaw.v1.GetPolicyChangeRequestResponse
+	(*timestamppb.Timestamp)(nil),            // 32: google.protobuf.Timestamp
 }
 var file_pantherclaw_v1_policies_proto_depIdxs = []int32{
-	11, // 0: pantherclaw.v1.PolicyVersion.create_time:type_name -> google.protobuf.Timestamp
-	11, // 1: pantherclaw.v1.PolicyVersion.publish_time:type_name -> google.protobuf.Timestamp
+	32, // 0: pantherclaw.v1.PolicyVersion.create_time:type_name -> google.protobuf.Timestamp
+	32, // 1: pantherclaw.v1.PolicyVersion.publish_time:type_name -> google.protobuf.Timestamp
 	0,  // 2: pantherclaw.v1.CreatePolicyVersionResponse.version:type_name -> pantherclaw.v1.PolicyVersion
 	0,  // 3: pantherclaw.v1.PublishPolicyVersionResponse.version:type_name -> pantherclaw.v1.PolicyVersion
-	0,  // 4: pantherclaw.v1.GetPublishedPolicyResponse.version:type_name -> pantherclaw.v1.PolicyVersion
-	0,  // 5: pantherclaw.v1.GetPolicyVersionResponse.version:type_name -> pantherclaw.v1.PolicyVersion
-	0,  // 6: pantherclaw.v1.ListPolicyVersionsResponse.versions:type_name -> pantherclaw.v1.PolicyVersion
-	1,  // 7: pantherclaw.v1.PolicyService.CreatePolicyVersion:input_type -> pantherclaw.v1.CreatePolicyVersionRequest
-	3,  // 8: pantherclaw.v1.PolicyService.PublishPolicyVersion:input_type -> pantherclaw.v1.PublishPolicyVersionRequest
-	5,  // 9: pantherclaw.v1.PolicyService.GetPublishedPolicy:input_type -> pantherclaw.v1.GetPublishedPolicyRequest
-	7,  // 10: pantherclaw.v1.PolicyService.GetPolicyVersion:input_type -> pantherclaw.v1.GetPolicyVersionRequest
-	9,  // 11: pantherclaw.v1.PolicyService.ListPolicyVersions:input_type -> pantherclaw.v1.ListPolicyVersionsRequest
-	2,  // 12: pantherclaw.v1.PolicyService.CreatePolicyVersion:output_type -> pantherclaw.v1.CreatePolicyVersionResponse
-	4,  // 13: pantherclaw.v1.PolicyService.PublishPolicyVersion:output_type -> pantherclaw.v1.PublishPolicyVersionResponse
-	6,  // 14: pantherclaw.v1.PolicyService.GetPublishedPolicy:output_type -> pantherclaw.v1.GetPublishedPolicyResponse
-	8,  // 15: pantherclaw.v1.PolicyService.GetPolicyVersion:output_type -> pantherclaw.v1.GetPolicyVersionResponse
-	10, // 16: pantherclaw.v1.PolicyService.ListPolicyVersions:output_type -> pantherclaw.v1.ListPolicyVersionsResponse
-	12, // [12:17] is the sub-list for method output_type
-	7,  // [7:12] is the sub-list for method input_type
-	7,  // [7:7] is the sub-list for extension type_name
-	7,  // [7:7] is the sub-list for extension extendee
-	0,  // [0:7] is the sub-list for field type_name
+	26, // 4: pantherclaw.v1.PublishPolicyVersionResponse.change_request:type_name -> pantherclaw.v1.PolicyChangeRequest
+	22, // 5: pantherclaw.v1.PublishPolicyVersionResponse.diff:type_name -> pantherclaw.v1.PolicyDiff
+	13, // 6: pantherclaw.v1.PublishPolicyVersionResponse.validation:type_name -> pantherclaw.v1.ValidationReport
+	17, // 7: pantherclaw.v1.PublishPolicyVersionResponse.tests:type_name -> pantherclaw.v1.TestReport
+	0,  // 8: pantherclaw.v1.GetPublishedPolicyResponse.version:type_name -> pantherclaw.v1.PolicyVersion
+	0,  // 9: pantherclaw.v1.GetPolicyVersionResponse.version:type_name -> pantherclaw.v1.PolicyVersion
+	0,  // 10: pantherclaw.v1.ListPolicyVersionsResponse.versions:type_name -> pantherclaw.v1.PolicyVersion
+	0,  // 11: pantherclaw.v1.ValidatePolicyVersionResponse.version:type_name -> pantherclaw.v1.PolicyVersion
+	13, // 12: pantherclaw.v1.ValidatePolicyVersionResponse.validation:type_name -> pantherclaw.v1.ValidationReport
+	14, // 13: pantherclaw.v1.ValidationReport.findings:type_name -> pantherclaw.v1.PolicyFinding
+	0,  // 14: pantherclaw.v1.TestPolicyVersionResponse.version:type_name -> pantherclaw.v1.PolicyVersion
+	17, // 15: pantherclaw.v1.TestPolicyVersionResponse.tests:type_name -> pantherclaw.v1.TestReport
+	18, // 16: pantherclaw.v1.TestReport.cases:type_name -> pantherclaw.v1.TestCaseResult
+	19, // 17: pantherclaw.v1.TestReport.surviving:type_name -> pantherclaw.v1.SurvivingMutant
+	22, // 18: pantherclaw.v1.DiffPolicyVersionsResponse.diff:type_name -> pantherclaw.v1.PolicyDiff
+	23, // 19: pantherclaw.v1.PolicyDiff.changes:type_name -> pantherclaw.v1.PolicyRuleChange
+	0,  // 20: pantherclaw.v1.RollbackPolicyResponse.version:type_name -> pantherclaw.v1.PolicyVersion
+	26, // 21: pantherclaw.v1.RollbackPolicyResponse.change_request:type_name -> pantherclaw.v1.PolicyChangeRequest
+	22, // 22: pantherclaw.v1.RollbackPolicyResponse.diff:type_name -> pantherclaw.v1.PolicyDiff
+	27, // 23: pantherclaw.v1.PolicyChangeRequest.confirmations:type_name -> pantherclaw.v1.PolicyChangeConfirmation
+	32, // 24: pantherclaw.v1.PolicyChangeRequest.create_time:type_name -> google.protobuf.Timestamp
+	32, // 25: pantherclaw.v1.PolicyChangeRequest.expire_time:type_name -> google.protobuf.Timestamp
+	32, // 26: pantherclaw.v1.PolicyChangeRequest.decide_time:type_name -> google.protobuf.Timestamp
+	32, // 27: pantherclaw.v1.PolicyChangeConfirmation.create_time:type_name -> google.protobuf.Timestamp
+	26, // 28: pantherclaw.v1.ListPolicyChangeRequestsResponse.requests:type_name -> pantherclaw.v1.PolicyChangeRequest
+	26, // 29: pantherclaw.v1.GetPolicyChangeRequestResponse.request:type_name -> pantherclaw.v1.PolicyChangeRequest
+	1,  // 30: pantherclaw.v1.PolicyService.CreatePolicyVersion:input_type -> pantherclaw.v1.CreatePolicyVersionRequest
+	3,  // 31: pantherclaw.v1.PolicyService.PublishPolicyVersion:input_type -> pantherclaw.v1.PublishPolicyVersionRequest
+	5,  // 32: pantherclaw.v1.PolicyService.GetPublishedPolicy:input_type -> pantherclaw.v1.GetPublishedPolicyRequest
+	7,  // 33: pantherclaw.v1.PolicyService.GetPolicyVersion:input_type -> pantherclaw.v1.GetPolicyVersionRequest
+	9,  // 34: pantherclaw.v1.PolicyService.ListPolicyVersions:input_type -> pantherclaw.v1.ListPolicyVersionsRequest
+	11, // 35: pantherclaw.v1.PolicyService.ValidatePolicyVersion:input_type -> pantherclaw.v1.ValidatePolicyVersionRequest
+	15, // 36: pantherclaw.v1.PolicyService.TestPolicyVersion:input_type -> pantherclaw.v1.TestPolicyVersionRequest
+	20, // 37: pantherclaw.v1.PolicyService.DiffPolicyVersions:input_type -> pantherclaw.v1.DiffPolicyVersionsRequest
+	24, // 38: pantherclaw.v1.PolicyService.RollbackPolicy:input_type -> pantherclaw.v1.RollbackPolicyRequest
+	28, // 39: pantherclaw.v1.PolicyService.ListPolicyChangeRequests:input_type -> pantherclaw.v1.ListPolicyChangeRequestsRequest
+	30, // 40: pantherclaw.v1.PolicyService.GetPolicyChangeRequest:input_type -> pantherclaw.v1.GetPolicyChangeRequestRequest
+	2,  // 41: pantherclaw.v1.PolicyService.CreatePolicyVersion:output_type -> pantherclaw.v1.CreatePolicyVersionResponse
+	4,  // 42: pantherclaw.v1.PolicyService.PublishPolicyVersion:output_type -> pantherclaw.v1.PublishPolicyVersionResponse
+	6,  // 43: pantherclaw.v1.PolicyService.GetPublishedPolicy:output_type -> pantherclaw.v1.GetPublishedPolicyResponse
+	8,  // 44: pantherclaw.v1.PolicyService.GetPolicyVersion:output_type -> pantherclaw.v1.GetPolicyVersionResponse
+	10, // 45: pantherclaw.v1.PolicyService.ListPolicyVersions:output_type -> pantherclaw.v1.ListPolicyVersionsResponse
+	12, // 46: pantherclaw.v1.PolicyService.ValidatePolicyVersion:output_type -> pantherclaw.v1.ValidatePolicyVersionResponse
+	16, // 47: pantherclaw.v1.PolicyService.TestPolicyVersion:output_type -> pantherclaw.v1.TestPolicyVersionResponse
+	21, // 48: pantherclaw.v1.PolicyService.DiffPolicyVersions:output_type -> pantherclaw.v1.DiffPolicyVersionsResponse
+	25, // 49: pantherclaw.v1.PolicyService.RollbackPolicy:output_type -> pantherclaw.v1.RollbackPolicyResponse
+	29, // 50: pantherclaw.v1.PolicyService.ListPolicyChangeRequests:output_type -> pantherclaw.v1.ListPolicyChangeRequestsResponse
+	31, // 51: pantherclaw.v1.PolicyService.GetPolicyChangeRequest:output_type -> pantherclaw.v1.GetPolicyChangeRequestResponse
+	41, // [41:52] is the sub-list for method output_type
+	30, // [30:41] is the sub-list for method input_type
+	30, // [30:30] is the sub-list for extension type_name
+	30, // [30:30] is the sub-list for extension extendee
+	0,  // [0:30] is the sub-list for field type_name
 }
 
 func init() { file_pantherclaw_v1_policies_proto_init() }
@@ -717,13 +2393,15 @@ func file_pantherclaw_v1_policies_proto_init() {
 	}
 	file_pantherclaw_v1_policies_proto_msgTypes[1].OneofWrappers = []any{}
 	file_pantherclaw_v1_policies_proto_msgTypes[3].OneofWrappers = []any{}
+	file_pantherclaw_v1_policies_proto_msgTypes[20].OneofWrappers = []any{}
+	file_pantherclaw_v1_policies_proto_msgTypes[24].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pantherclaw_v1_policies_proto_rawDesc), len(file_pantherclaw_v1_policies_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   11,
+			NumMessages:   32,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
