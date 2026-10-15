@@ -34,13 +34,6 @@ type Service struct {
 	Clock clock.Clock
 }
 
-func (s *Service) now() time.Time {
-	if s.Clock == nil {
-		return time.Now().UTC()
-	}
-	return s.Clock.Now().UTC()
-}
-
 // viewer is a caller with its scopes, computed once per request.
 type viewer struct {
 	c      tenancy.Caller
@@ -79,15 +72,24 @@ func (v *viewer) whole(p td.Permission) bool { return v.c.Can(p, td.OrgPath(v.c.
 // agent in its scope, or the org for a row about none. A malformed agent
 // id makes the row org-level.
 func (v *viewer) covers(ctx context.Context, p td.Permission, agents []string) (bool, error) {
-	parsed := make([]ids.UUID, 0, len(agents))
+	parsed, ok := parseAgents(agents)
+	if !ok {
+		return v.whole(p), nil
+	}
+	return v.coversIDs(ctx, p, parsed)
+}
+
+// parseAgents parses agent ids; false when one is malformed.
+func parseAgents(agents []string) ([]ids.UUID, bool) {
+	out := make([]ids.UUID, 0, len(agents))
 	for _, a := range agents {
 		id, err := ids.ParseUUID(a)
 		if err != nil {
-			return v.whole(p), nil
+			return nil, false
 		}
-		parsed = append(parsed, id)
+		out = append(out, id)
 	}
-	return v.coversIDs(ctx, p, parsed)
+	return out, true
 }
 
 func (v *viewer) coversIDs(ctx context.Context, p td.Permission, agents []ids.UUID) (bool, error) {

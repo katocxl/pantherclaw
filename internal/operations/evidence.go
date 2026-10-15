@@ -136,8 +136,10 @@ func evidenceStatus(ctx context.Context, v *viewer) (EvidenceStatus, error) {
 		add(SourceSandbox, "sandbox closures", "", never(last))
 	} else {
 		for _, k := range []string{SourceGateway, SourceLedger, SourceDetections, SourceSandbox} {
-			out.Sources = append(out.Sources, SourceStatus{Kind: k, Freshness: Restricted,
-				Note: "needs operations.read across the organization"})
+			out.Sources = append(out.Sources, SourceStatus{
+				Kind: k, Freshness: Restricted,
+				Note: "needs operations.read across the organization",
+			})
 		}
 	}
 	sc, err := v.scope(ctx, td.PermOperationsRead)
@@ -161,8 +163,10 @@ func evidenceStatus(ctx context.Context, v *viewer) (EvidenceStatus, error) {
 		}
 		add(ch, ch+" channel", "", never(last))
 	}
-	out.Sources = append(out.Sources, SourceStatus{Kind: SourceExport, Freshness: NotAvailable,
-		Note: "export delivery health is reported once SIEM export is configured"})
+	out.Sources = append(out.Sources, SourceStatus{
+		Kind: SourceExport, Freshness: NotAvailable,
+		Note: "export delivery health is reported once SIEM export is configured",
+	})
 	return out, nil
 }
 

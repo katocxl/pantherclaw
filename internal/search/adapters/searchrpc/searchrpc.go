@@ -77,9 +77,15 @@ func filtersOf(f *pantherclawv1.SearchFilters) (search.Filters, error) {
 		dst **ids.UUID
 		src *string
 	}{
-		{&out.ID, f.Id}, {&out.Agent, f.AgentId}, {&out.Run, f.RunId}, {&out.Grant, f.GrantId},
-		{&out.Connection, f.ConnectionId}, {&out.Gateway, f.GatewayId}, {&out.Team, f.TeamId},
-		{&out.PrincipalUser, f.PrincipalUserId}, {&out.PrincipalSA, f.PrincipalServiceAccountId},
+		{&out.ID, f.Id},
+		{&out.Agent, f.AgentId},
+		{&out.Run, f.RunId},
+		{&out.Grant, f.GrantId},
+		{&out.Connection, f.ConnectionId},
+		{&out.Gateway, f.GatewayId},
+		{&out.Team, f.TeamId},
+		{&out.PrincipalUser, f.PrincipalUserId},
+		{&out.PrincipalSA, f.PrincipalServiceAccountId},
 		{&out.UsedConnection, f.UsedConnectionId},
 	} {
 		id, err := optID(p.src)
@@ -106,8 +112,11 @@ func builtinOf(b *pantherclawv1.BuiltinQuery) (search.BuiltinQuery, error) {
 		dst **ids.UUID
 		src *string
 	}{
-		{&out.Params.Transaction, p.TransactionId}, {&out.Params.Agent, p.AgentId}, {&out.Params.Connection, p.ConnectionId},
-		{&out.Params.PrincipalUser, p.PrincipalUserId}, {&out.Params.PrincipalSA, p.PrincipalServiceAccountId},
+		{&out.Params.Transaction, p.TransactionId},
+		{&out.Params.Agent, p.AgentId},
+		{&out.Params.Connection, p.ConnectionId},
+		{&out.Params.PrincipalUser, p.PrincipalUserId},
+		{&out.Params.PrincipalSA, p.PrincipalServiceAccountId},
 	} {
 		id, err := optID(x.src)
 		if err != nil {
