@@ -29,6 +29,7 @@ import (
 	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
 	polpg "github.com/katocxl/pantherclaw/internal/policy/adapters/pgstore"
 	policyapp "github.com/katocxl/pantherclaw/internal/policy/app"
+	"github.com/katocxl/pantherclaw/internal/policy/policytest"
 	rapp "github.com/katocxl/pantherclaw/internal/response/app"
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
 )
@@ -289,9 +290,8 @@ func (s *stack) publishPolicy(t *testing.T, bundle string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := v.Publish(s.person(t, "policy-publisher", td.RolePolicyPublisher).ctx, draft.ID); err != nil {
-		t.Fatal(err)
-	}
+	// Test setup: the gate itself is tested in internal/policy (HR-230).
+	policytest.PublishVersion(context.Background(), t, s.pool, s.org, draft.ID)
 }
 
 // hook runs pclaw hook claude-code with a PreToolUse event on stdin.

@@ -8,15 +8,9 @@ import (
 	"fmt"
 	"strings"
 
-	defspg "github.com/katocxl/pantherclaw/internal/definitions/adapters/pgstore"
-	"github.com/katocxl/pantherclaw/internal/evidence/audit"
-	factspg "github.com/katocxl/pantherclaw/internal/facts/adapters/pgstore"
-	"github.com/katocxl/pantherclaw/internal/platform/celenv"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	"github.com/katocxl/pantherclaw/internal/platform/money"
-	polpg "github.com/katocxl/pantherclaw/internal/policy/adapters/pgstore"
-	policyapp "github.com/katocxl/pantherclaw/internal/policy/app"
 	pdomain "github.com/katocxl/pantherclaw/internal/policy/domain"
 )
 
@@ -35,33 +29,13 @@ func devHoldBundle(limit money.Money) *pdomain.Bundle {
 	}}}
 }
 
-// seedHoldPolicy publishes devHoldBundle for org, compiled against its
-// active definitions like any version. dev seed is the author and
+// seedHoldPolicy publishes devHoldBundle for org through the publish gate
+// like any version (G0 M11.1 design decision 10): compiled, validated and
+// tested against its active definitions. dev seed is the author and
 // publisher of record.
 func seedHoldPolicy(ctx context.Context, pool *db.Pool, org ids.OrgID, limit money.Money) (ids.UUID, error) {
-	b := devHoldBundle(limit)
-	catalog, err := (&factspg.Store{Pool: pool}).Catalog(ctx, org)
+	id, err := newPolicyVersions(pool, nil, "").Seed(ctx, org, devHoldBundle(limit), devSeedActor)
 	if err != nil {
-		return ids.UUID{}, err
-	}
-	ds, err := (&defspg.Store{Pool: pool}).ActiveDefinitions(ctx, org)
-	if err != nil {
-		return ids.UUID{}, err
-	}
-	if _, err := (&policyapp.Engine{Limits: celenv.DefaultLimits, Facts: catalog}).Compile(b, ds); err != nil {
-		return ids.UUID{}, fmt.Errorf("dev seed: hold policy: %w", err)
-	}
-	store := &polpg.Store{Pool: pool}
-	object := &audit.Object{Type: "policy", ID: b.ID}
-	id, _, err := store.CreateVersion(ctx, org, b, devSeedActor.ID, &audit.Event{
-		Name: "policy.version_created", Actor: devSeedActor, Outcome: audit.Success, Object: object,
-	})
-	if err != nil {
-		return ids.UUID{}, fmt.Errorf("dev seed: hold policy: %w", err)
-	}
-	if err := store.Publish(ctx, org, id, devSeedActor.ID, &audit.Event{
-		Name: "policy.published", Actor: devSeedActor, Outcome: audit.Success, Object: object,
-	}); err != nil {
 		return ids.UUID{}, fmt.Errorf("dev seed: hold policy: %w", err)
 	}
 	return id, nil

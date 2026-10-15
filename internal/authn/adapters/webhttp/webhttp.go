@@ -94,6 +94,10 @@ type Handler struct {
 	// coverage is the coverage pages (G0 M9); nil when not mounted.
 	coverage  Coverage
 	freshness covdomain.Freshness
+	// policyChanges is the policy changes pages (G0 M11.1); nil when not
+	// mounted.
+	policyChanges  PolicyChanges
+	policyBindings Bindings
 }
 
 // New returns the handler. publicURL is the server's public URL: its origin
@@ -127,6 +131,7 @@ func (h *Handler) Mount(mux *http.ServeMux) {
 	h.mountApprovals(mux)
 	h.mountReconciliations(mux)
 	h.mountCoverage(mux)
+	h.mountPolicyChanges(mux)
 }
 
 // Routes lists the mounted routes.
@@ -441,6 +446,7 @@ func (h *Handler) static(w http.ResponseWriter, r *http.Request) {
 	types := map[string]string{
 		"account.js": "text/javascript; charset=utf-8", "containment.js": "text/javascript; charset=utf-8",
 		"approvals.js": "text/javascript; charset=utf-8", "reconciliations.js": "text/javascript; charset=utf-8",
+		"policy_changes.js": "text/javascript; charset=utf-8",
 		"pc.css": "text/css; charset=utf-8",
 	}
 	ct, ok := types[name]
