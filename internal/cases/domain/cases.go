@@ -370,6 +370,11 @@ func (d Draft) Validate() error {
 		if d.Ref == nil || !linkKinds[d.Ref.Kind] || d.Ref.ID == "" || len(d.Ref.ID) > MaxRefID {
 			return bad("a link names a known kind and an id")
 		}
+		if uuidRefKinds[d.Ref.Kind] {
+			if _, err := ids.ParseUUID(d.Ref.ID); err != nil {
+				return bad("a %s link names a UUID", d.Ref.Kind)
+			}
+		}
 	case KindOwner:
 		switch {
 		case d.OwnerRole != RoleOwner && d.OwnerRole != RoleFollowUp:
@@ -475,7 +480,7 @@ func (d Draft) Body(c, id ids.UUID, seq int64, author Author) ([]byte, error) {
 		b.Evidence = append(b.Evidence, bodyRef{e.Kind, e.ID.String()})
 	}
 	if d.Ref != nil {
-		b.Ref = &bodyRef{d.Ref.Kind, d.Ref.ID}
+		b.Ref = &bodyRef{d.Ref.Kind, canonicalRef(*d.Ref)}
 	}
 	out, err := evdomain.CanonicalBody(b)
 	if err != nil {
@@ -485,4 +490,21 @@ func (d Draft) Body(c, id ids.UUID, seq int64, author Author) ([]byte, error) {
 		return nil, fmt.Errorf("%w: an entry body is at most %d bytes", ErrInvalid, MaxBodyBytes)
 	}
 	return out, nil
+}
+
+// uuidRefKinds are the link kinds whose ids are UUIDs: they are stored in
+// canonical (lower-case) form, so the database's joins and the case's read
+// scope see the same subject the permission check saw (D70).
+var uuidRefKinds = map[string]bool{
+	"agent": true, "run": true, "transaction": true, RefResponseAction: true, "ledger": true,
+}
+
+// canonicalRef is r's id as stored: canonical for UUID kinds.
+func canonicalRef(r Ref) string {
+	if uuidRefKinds[r.Kind] {
+		if u, err := ids.ParseUUID(r.ID); err == nil {
+			return u.String()
+		}
+	}
+	return r.ID
 }

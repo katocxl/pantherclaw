@@ -45,6 +45,7 @@ ORDER BY s.seq;
 SELECT pc.case_open_questions(sqlc.arg(org_id), sqlc.arg(case_id))::bigint AS open;
 
 -- Cases newest-updated first; keyset paging on (updated_at, id).
+-- A scoped viewer's cases are filtered here, before the limit (D60).
 -- name: ListCases :many
 SELECT * FROM pc.cases
 WHERE org_id = sqlc.arg(org_id)
@@ -54,6 +55,7 @@ WHERE org_id = sqlc.arg(org_id)
   AND (sqlc.narg(incident_id)::uuid IS NULL OR incident_id = sqlc.narg(incident_id))
   AND (sqlc.narg(before_updated)::timestamptz IS NULL
        OR (updated_at, id) < (sqlc.narg(before_updated)::timestamptz, sqlc.narg(before_id)::uuid))
+  AND (NOT sqlc.arg(scoped)::boolean OR pc.case_within(org_id, id, sqlc.arg(visible_agents)::uuid[]))
 ORDER BY updated_at DESC, id DESC
 LIMIT sqlc.arg(page_limit);
 
@@ -70,31 +72,14 @@ SELECT DISTINCT c.* FROM pc.cases c
 JOIN pc.case_entries l ON l.org_id = c.org_id AND l.case_id = c.id
 WHERE c.org_id = sqlc.arg(org_id) AND l.kind = 'LINK' AND l.ref_kind = sqlc.arg(ref_kind) AND l.ref_id = sqlc.arg(ref_id)
   AND NOT pc.case_entry_superseded(l.org_id, l.id)
+  AND (NOT sqlc.arg(scoped)::boolean OR pc.case_within(c.org_id, c.id, sqlc.arg(visible_agents)::uuid[]))
 ORDER BY c.id
 LIMIT sqlc.arg(max_rows);
 
 -- The agents a case is about: linked agents and the agents of linked runs
 -- and transactions (the case's read scope, HR-247).
 -- name: CaseAgents :many
-SELECT DISTINCT a.agent_id::uuid AS agent_id FROM (
-    SELECT g.id AS agent_id FROM pc.case_entries l
-    JOIN pc.agents g ON g.org_id = l.org_id AND g.id::text = l.ref_id
-    WHERE l.org_id = sqlc.arg(org_id) AND l.case_id = sqlc.arg(case_id) AND l.kind = 'LINK' AND l.ref_kind = 'agent'
-      AND NOT pc.case_entry_superseded(l.org_id, l.id)
-    UNION
-    SELECT r.agent_id FROM pc.case_entries l
-    JOIN pc.runs r ON r.org_id = l.org_id AND r.id::text = l.ref_id
-    WHERE l.org_id = sqlc.arg(org_id) AND l.case_id = sqlc.arg(case_id) AND l.kind = 'LINK' AND l.ref_kind = 'run'
-      AND NOT pc.case_entry_superseded(l.org_id, l.id)
-    UNION
-    SELECT r.agent_id FROM pc.case_entries l
-    JOIN pc.transactions t ON t.org_id = l.org_id AND t.id::text = l.ref_id
-    JOIN pc.runs r ON r.org_id = t.org_id AND r.id = t.run_id
-    WHERE l.org_id = sqlc.arg(org_id) AND l.case_id = sqlc.arg(case_id) AND l.kind = 'LINK' AND l.ref_kind = 'transaction'
-      AND NOT pc.case_entry_superseded(l.org_id, l.id)
-) a
-ORDER BY 1
-LIMIT 1000;
+SELECT a::uuid AS agent_id FROM pc.case_agents(sqlc.arg(org_id), sqlc.arg(case_id)) a ORDER BY 1;
 
 -- The agents of subjects named before a case exists (agent, run and
 -- transaction ids).
