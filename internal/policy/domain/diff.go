@@ -214,20 +214,20 @@ func compareRule(a, b *Rule) []Change {
 	return out
 }
 
-// kindRank orders the deciding kinds: FORBID > REQUIRE_APPROVAL,
-// REQUIRE_STEP_UP > CONSTRAIN.
-var kindRank = map[Kind]int{Forbid: 3, RequireApproval: 2, RequireStepUp: 2, Constrain: 1}
-
+// kindDirection classifies a kind change (M11.1 D25). Only FORBID is
+// stricter than everything: it denies every action it matches, so a change
+// to FORBID is TIGHTER (the requirement or constraint it drops does not
+// count) and a change from it LOOSER. Every other change is UNKNOWN: a
+// violated CONSTRAIN is a DENY while a REQUIRE_* match is a hold an
+// approver can release, and an approval and a step-up are not comparable.
 func kindDirection(a, b Kind) Direction {
-	ra, okA := kindRank[a]
-	rb, okB := kindRank[b]
 	switch {
-	case !okA || !okB || ra == rb:
-		return Unknown
-	case rb > ra:
+	case b == Forbid:
 		return Tighter
-	default:
+	case a == Forbid:
 		return Looser
+	default:
+		return Unknown
 	}
 }
 
