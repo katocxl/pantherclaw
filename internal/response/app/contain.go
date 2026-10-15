@@ -33,10 +33,13 @@ import (
 var (
 	ErrPreviewStale = pcerr.New(pcerr.FailedPrecondition, "PREVIEW_STALE",
 		"this control is wider than one run or agent: preview it and confirm the preview's digest, which no longer matches")
-	ErrScopeNotFound  = pcerr.New(pcerr.NotFound, "SCOPE_NOT_FOUND", "the scope's subject was not found")
-	ErrIdempotency    = pcerr.New(pcerr.AlreadyExists, "ALREADY_EXISTS", "the idempotency key was used for a different request")
-	ErrActor          = pcerr.New(pcerr.InvalidArgument, "ACTOR_INVALID", "the actor must be a user, a service account or the identity playbook")
-	ErrActionNotFound = pcerr.New(pcerr.NotFound, "ACTION_NOT_FOUND", "response action not found")
+	ErrScopeNotFound = pcerr.New(pcerr.NotFound, "SCOPE_NOT_FOUND", "the scope's subject was not found")
+	// ErrIdempotencyBusy: another request under the same key held it past the
+	// lock timeout; nothing was done, and the request may be retried (D72).
+	ErrIdempotencyBusy = pcerr.New(pcerr.Unavailable, "IDEMPOTENCY_BUSY", "another request with this idempotency key is being processed; retry")
+	ErrIdempotency     = pcerr.New(pcerr.AlreadyExists, "ALREADY_EXISTS", "the idempotency key was used for a different request")
+	ErrActor           = pcerr.New(pcerr.InvalidArgument, "ACTOR_INVALID", "the actor must be a user, a service account or the identity playbook")
+	ErrActionNotFound  = pcerr.New(pcerr.NotFound, "ACTION_NOT_FOUND", "response action not found")
 )
 
 // PlaybookActor is the actor of a control the identity playbook adds (D38):
@@ -178,7 +181,9 @@ func (s *Containment) contain(ctx context.Context, tx db.TenantTx, org ids.OrgID
 	if o.idempotency != "" {
 		// Requests under one key wait for each other, so a repeat returns
 		// the first result instead of hitting the unique index (D61).
-		if err := q.LockIdempotency(ctx, org.String(), o.idempotency); err != nil {
+		if err := q.LockIdempotency(ctx, org.String(), o.idempotency); db.IsLockTimeout(err) {
+			return reflexdomain.ContainResult{}, ErrIdempotencyBusy
+		} else if err != nil {
 			return reflexdomain.ContainResult{}, err
 		}
 		reqDigest = requestDigest(c, o.caseID, o.incidentID)

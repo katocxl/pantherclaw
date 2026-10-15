@@ -144,8 +144,9 @@ func TestT108_TerminationKeepsBypassRoutesOpen(t *testing.T) {
 
 // TestT108_BypassClosesOnlyOnAnAttestedUpstreamRevoke (D61): an agent-held
 // credential and its bypass route stay UNRESOLVED until a person attests
-// that the agent's credential was revoked at the provider; PantherClaw
-// cannot revoke it, and refuses to pretend.
+// that the agent's credential was revoked at the provider; an attested
+// rotation leaves the agent a valid credential and closes nothing (D72).
+// PantherClaw cannot revoke it, and refuses to pretend.
 func TestT108_BypassClosesOnlyOnAnAttestedUpstreamRevoke(t *testing.T) {
 	w := newWorld(t, "OBSERVE_ONLY")
 	w.exec("UPDATE pc.connections SET access_mode = 'agent_held' WHERE org_id = $1 AND id = $2", w.org, w.conn)
@@ -160,6 +161,19 @@ func TestT108_BypassClosesOnlyOnAnAttestedUpstreamRevoke(t *testing.T) {
 	p := w.credentialPreview(0)
 	if _, err := w.change(0, p.Digest, false, false); !errors.Is(err, rapp.ErrAttestationRequired) {
 		t.Fatalf("an unattested agent-held revoke: %v", err)
+	}
+	// D72: an attested rotation confirms only its own credential path; the
+	// agent now holds a fresh, valid credential, so the bypass stays open.
+	rot, err := w.change(0, p.Digest, true, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n := w.count(`SELECT count(*) FROM pc.response_paths WHERE org_id = $1 AND action_id = $2 AND path_type = 'CREDENTIAL' AND status = 'CONFIRMED'`,
+		w.org, rot.ActionID); n != 1 {
+		t.Fatal("the attested rotation did not confirm its own credential path")
+	}
+	if a = w.advance(id); a.Status != string(rdomain.StatusPartial) {
+		t.Fatalf("an attested rotation closed the bypass: %s", a.Status)
 	}
 	if _, err := w.change(0, p.Digest, false, true); err != nil {
 		t.Fatal(err)
@@ -203,5 +217,34 @@ func TestT108_GitHubAppRotationWaitsForOldTokens(t *testing.T) {
 			return nil
 		})
 		t.Fatalf("after the old tokens expired: %s %+v", a.Status, paths)
+	}
+}
+
+// TestT108_TerminationListsEveryAgentOfTheTree (D72): a terminated run's
+// delegated child lane of another agent brings that agent's bypass route,
+// so the termination stays PARTIAL.
+func TestT108_TerminationListsEveryAgentOfTheTree(t *testing.T) {
+	w := newWorld(t, "PARTIAL")
+	child, childAgent, entry := ids.NewV7(), ids.NewV7(), ids.NewV7()
+	w.exec("INSERT INTO pc.agents (org_id, id, name, state, created_by) VALUES ($1, $2, 'helper', 'DISCOVERED', 'test')", w.org, childAgent)
+	// A child lane launched by the parent's instance (its foreign keys are not
+	// what is tested).
+	w.exec("ALTER TABLE pc.runs DISABLE TRIGGER ALL")
+	w.exec(`INSERT INTO pc.runs (org_id, id, agent_id, environment_id, launcher_instance_id, principal_user_id, principal_source, expires_at, grant_id, parent_run_id, depth)
+		SELECT org_id, $2, $3, environment_id, $5, principal_user_id, 'parent_run', expires_at, grant_id, id, 1
+		FROM pc.runs WHERE org_id = $1 AND id = $4`, w.org, child, childAgent, w.run, ids.NewV7())
+	w.exec("ALTER TABLE pc.runs ENABLE TRIGGER ALL")
+	w.exec(`INSERT INTO pc.ledger_entries (org_id, id, kind, actor_type, actor_id, body) VALUES ($1, $2, 'coverage.snapshot', 'system', 'test', '\x7b7d')`, w.org, entry)
+	w.exec(`INSERT INTO pc.coverage_snapshots (org_id, id, agent_id, connection_id, operation, state, reasons, body, body_sha256, ledger_entry_id)
+		VALUES ($1, $2, $3, $4, 'payments.refund.create', 'OBSERVE_ONLY', '{}', '{}', decode(repeat('00', 32), 'hex'), $5)`,
+		w.org, ids.NewV7(), childAgent, w.conn, entry)
+	id, err := w.terminate()
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := w.action(id)
+	w.deliver(a.Epoch.Int64)
+	if a = w.advance(id); a.Status != string(rdomain.StatusPartial) || a.FutureConfirmed {
+		t.Fatalf("the child agent's bypass: %s future=%v", a.Status, a.FutureConfirmed)
 	}
 }
