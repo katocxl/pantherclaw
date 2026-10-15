@@ -5,12 +5,9 @@ package domain
 
 import "slices"
 
-// EmergencyLabel marks an emergency rule: labels.emergency == "true"
-// (M11.1 D4, HR-236).
-const EmergencyLabel = "emergency"
-
-// IsEmergency reports whether r is an emergency rule.
-func (r *Rule) IsEmergency() bool { return r.Labels[EmergencyLabel] == "true" }
+// IsEmergency reports whether r is an emergency rule (Rule.Emergency;
+// M11.1 D4, D24, HR-236).
+func (r *Rule) IsEmergency() bool { return r.Emergency }
 
 // CarryEmergency returns target with every emergency rule of current
 // carried forward, each replacing a target rule with the same id, and the

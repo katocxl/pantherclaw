@@ -18,7 +18,6 @@ import (
 	"context"
 	"fmt"
 	"maps"
-	"math"
 	"slices"
 	"strings"
 	"time"
@@ -85,12 +84,15 @@ type Validator struct {
 	// FACT_NO_SOURCE; without them those checks are not made.
 	Approvers Approvers
 	Sources   Sources
-	now       func() time.Time
+	// Budget is the tenant's CEL cost budget each sample evaluation runs
+	// under (HR-043, D26); New sets the default, the caller the tenant's.
+	Budget uint64
+	now    func() time.Time
 }
 
 // New returns a validator. subjects may be nil.
 func New(definitions Definitions, facts Catalog, subjects Subjects, limits celenv.Limits) *Validator {
-	return &Validator{defs: definitions, facts: facts, subjects: subjects, limits: limits, now: time.Now}
+	return &Validator{defs: definitions, facts: facts, subjects: subjects, limits: limits, Budget: papp.DefaultBudget, now: time.Now}
 }
 
 // inputs are what one validation reads.
@@ -298,7 +300,7 @@ func (v *Validator) sampled(ctx context.Context, b *pdomain.Bundle, in inputs, e
 		return nil // every rule compiled alone; nothing to sample if they do not together
 	}
 	ds, facts := operations(b.Rules, in)
-	g := &generator{lit: collect(b.Rules), catalog: in.catalog, now: v.now(), budget: math.MaxUint64}
+	g := &generator{lit: collect(b.Rules), catalog: in.catalog, now: v.now(), budget: v.Budget}
 	index := map[string]int{}
 	for i, r := range b.Rules {
 		index[r.ID] = i

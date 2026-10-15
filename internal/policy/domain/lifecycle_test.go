@@ -68,7 +68,7 @@ func values(kind ConstraintKind, vs ...string) *Rule {
 
 func emergency(id string, k Kind) *Rule {
 	r := rule(id, k)
-	r.Labels = map[string]string{EmergencyLabel: "true"}
+	r.Emergency = true
 	return r
 }
 
@@ -101,9 +101,11 @@ func TestCompareClassifiesEveryChange(t *testing.T) {
 		{"annotate added", bundleOf(), bundleOf(ann), Neutral, ""},
 		{"annotate removed", bundleOf(ann), bundleOf(), Neutral, ""},
 		{"annotate changed", bundleOf(ann), bundleOf(with(ann, func(r *Rule) { r.When = "false" })), Neutral, "when"},
-		{"emergency annotate removed", bundleOf(emergency("e", Annotate)), bundleOf(), Looser, ""},
-		{"emergency label removed", bundleOf(emergency("e", Annotate)), bundleOf(with(emergency("e", Annotate), func(r *Rule) { r.Labels = nil })), Looser, "labels.emergency"},
-		{"emergency label added", bundleOf(ann), bundleOf(with(ann, func(r *Rule) { r.Labels[EmergencyLabel] = "true" })), Neutral, "labels"},
+		{"emergency forbid removed", bundleOf(emergency("e", Forbid)), bundleOf(), Looser, ""},
+		{"emergency off", bundleOf(emergency("e", Forbid)), bundleOf(rule("e", Forbid)), Looser, "emergency"},
+		{"emergency on", bundleOf(rule("e", Forbid)), bundleOf(emergency("e", Forbid)), Tighter, "emergency"},
+		{"emergency constrain off", bundleOf(emergency("cap", Constrain)), bundleOf(rule("cap", Constrain)), Looser, "emergency"},
+		{"labels changed", bundleOf(ann), bundleOf(with(ann, func(r *Rule) { r.Labels["team"] = "ops" })), Neutral, "labels"},
 		{"summary text", bundleOf(rule("f", Forbid)), bundleOf(with(rule("f", Forbid), func(r *Rule) { r.Summary = "other" })), Neutral, "summary"},
 		{"reason code", bundleOf(rule("f", Forbid)), bundleOf(with(rule("f", Forbid), func(r *Rule) { r.Reason = "OTHER_REASON" })), Neutral, "reason"},
 		{"operations superset", bundleOf(scoped), bundleOf(with(scoped, func(r *Rule) { r.Operations = []string{"payments.*"} })), Tighter, "operations"},
@@ -118,14 +120,17 @@ func TestCompareClassifiesEveryChange(t *testing.T) {
 		{"constrain to forbid", bundleOf(kindRule(Constrain)), bundleOf(kindRule(Forbid)), Tighter, "kind"},
 		{"approval to forbid", bundleOf(kindRule(RequireApproval)), bundleOf(kindRule(Forbid)), Tighter, "kind"},
 		{"step-up to forbid", bundleOf(kindRule(RequireStepUp)), bundleOf(kindRule(Forbid)), Tighter, "kind"},
-		{"constrain to approval", bundleOf(kindRule(Constrain)), bundleOf(kindRule(RequireApproval)), Tighter, "kind"},
-		{"constrain to step-up", bundleOf(kindRule(Constrain)), bundleOf(kindRule(RequireStepUp)), Tighter, "kind"},
+		{"constrain to approval", bundleOf(kindRule(Constrain)), bundleOf(kindRule(RequireApproval)), Unknown, "kind"},
+		{"constrain to step-up", bundleOf(kindRule(Constrain)), bundleOf(kindRule(RequireStepUp)), Unknown, "kind"},
 		{"forbid to approval", bundleOf(kindRule(Forbid)), bundleOf(kindRule(RequireApproval)), Looser, "kind"},
 		{"forbid to constrain", bundleOf(kindRule(Forbid)), bundleOf(kindRule(Constrain)), Looser, "kind"},
-		{"step-up to constrain", bundleOf(kindRule(RequireStepUp)), bundleOf(kindRule(Constrain)), Looser, "kind"},
+		{"step-up to constrain", bundleOf(kindRule(RequireStepUp)), bundleOf(kindRule(Constrain)), Unknown, "kind"},
 		{"approval to step-up", bundleOf(kindRule(RequireApproval)), bundleOf(kindRule(RequireStepUp)), Unknown, "kind"},
 		{"step-up to approval", bundleOf(kindRule(RequireStepUp)), bundleOf(kindRule(RequireApproval)), Unknown, "kind"},
-		{"forbid to annotate", bundleOf(kindRule(Forbid)), bundleOf(with(kindRule(Annotate), func(r *Rule) { r.Labels = nil })), Unknown, "kind"},
+		{"forbid to annotate", bundleOf(kindRule(Forbid)), bundleOf(with(kindRule(Annotate), func(r *Rule) { r.Labels = nil })), Looser, "kind"},
+		{"approval to constrain", bundleOf(kindRule(RequireApproval)), bundleOf(kindRule(Constrain)), Unknown, "kind"},
+		{"annotate to forbid", bundleOf(with(kindRule(Annotate), func(r *Rule) { r.Labels = nil })), bundleOf(kindRule(Forbid)), Tighter, "kind"},
+		{"forbid to step-up", bundleOf(kindRule(Forbid)), bundleOf(kindRule(RequireStepUp)), Looser, "kind"},
 		{"amount lower", bundleOf(amount("100.00")), bundleOf(amount("50.00")), Tighter, "constraint.max"},
 		{"amount higher", bundleOf(amount("50.00")), bundleOf(amount("100.00")), Looser, "constraint.max"},
 		{"amount same value", bundleOf(amount("50")), bundleOf(amount("50.00")), Neutral, "constraint.max"},
@@ -297,6 +302,7 @@ func TestContentDigest(t *testing.T) {
 	for name, edit := range map[string]func(*Bundle){
 		"rule":       func(b *Bundle) { b.Rules[0].When = "false" },
 		"exceptable": func(b *Bundle) { b.Rules[0].Exceptable = true },
+		"emergency":  func(b *Bundle) { b.Rules[0].Emergency = true },
 		"test":       func(b *Bundle) { b.Tests[0].Expect.Reason = "OTHER" },
 		"id":         func(b *Bundle) { b.ID = "other" },
 	} {
@@ -336,8 +342,8 @@ func TestDefinitionsAndCatalogDigests(t *testing.T) {
 }
 
 func TestCarryEmergency(t *testing.T) {
-	e1 := emergency("freeze", Annotate)
-	e2 := emergency("stop", Annotate)
+	e1 := emergency("freeze", Forbid)
+	e2 := emergency("stop", RequireApproval)
 	current := bundleOf(rule("f", Forbid), e1, e2)
 	oldE2 := with(e2, func(r *Rule) { r.Summary = "older" })
 	target := withTests(bundleOf(rule("a", RequireApproval), oldE2), testCase("t"))
@@ -377,4 +383,39 @@ func kindRule(k Kind) *Rule {
 	r := rule("k", k)
 	r.Reason = "SAME_REASON"
 	return r
+}
+
+func TestEmergencyRuleValidation(t *testing.T) {
+	for _, k := range []Kind{Forbid, RequireApproval, RequireStepUp, Constrain} {
+		if err := emergency("e", k).Validate(); err != nil {
+			t.Errorf("%s emergency rule refused: %v", k, err)
+		}
+	}
+	if err := emergency("e", Annotate).Validate(); err == nil {
+		t.Fatal("an ANNOTATE emergency rule was accepted")
+	}
+	r := rule("e", Forbid)
+	r.Labels = map[string]string{"emergency": "true"}
+	if err := r.Validate(); err == nil {
+		t.Fatal("labels on a FORBID rule were accepted")
+	}
+}
+
+// TestKindChangeToARequirementLoosens is D25: an over-limit action a
+// CONSTRAIN rule denies would only be held after the change, and an
+// approver can release a hold, so the change needs the loosening
+// confirmations.
+func TestKindChangeToARequirementLoosens(t *testing.T) {
+	limit := amount("100.00")
+	held := with(limit, func(r *Rule) {
+		r.Kind, r.Constraint = RequireApproval, nil
+		r.Approval = &ApprovalRequirement{Role: "approver", Count: 2}
+	})
+	d := Compare(bundleOf(limit), bundleOf(held))
+	if !d.Loosens() || d.Direction != Unknown {
+		t.Fatalf("CONSTRAIN → REQUIRE_APPROVAL: %s %+v", d.Direction, d.Changes)
+	}
+	if d := Compare(bundleOf(held), bundleOf(with(held, func(r *Rule) { r.Kind, r.Approval = Forbid, nil }))); d.Direction != Tighter || len(d.Changes) != 1 {
+		t.Fatalf("REQUIRE_APPROVAL → FORBID: %s %+v", d.Direction, d.Changes)
+	}
 }

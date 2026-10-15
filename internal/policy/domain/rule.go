@@ -67,6 +67,11 @@ type Rule struct {
 	// Exceptable marks a rule an approved exception may waive for an agent
 	// (M11.1 F2). Unset, no exception can touch it.
 	Exceptable bool `json:"exceptable,omitzero"`
+	// Emergency marks a rule added during an incident: a rollback carries
+	// it forward, and dropping or weakening it is a loosening that also
+	// needs incident.respond (M11.1 D4, D24, HR-236). An ANNOTATE rule
+	// restricts nothing, so it cannot be one.
+	Emergency bool `json:"emergency,omitzero"`
 }
 
 // FactRef names a fact a rule reads and how old it may be.
@@ -260,6 +265,9 @@ func (r *Rule) Validate() error {
 	}
 	if have := [4]bool{r.Approval != nil, r.StepUp != nil, r.Constraint != nil, len(r.Labels) > 0}; have != w {
 		return invalid("%s: a %s rule carries exactly its own requirement fields", id, r.Kind)
+	}
+	if r.Emergency && r.Kind == Annotate {
+		return invalid("%s: an ANNOTATE rule restricts nothing, so it cannot be an emergency rule", id)
 	}
 	switch r.Kind { //nolint:exhaustive // FORBID carries nothing extra
 	case RequireApproval:
