@@ -104,8 +104,8 @@ func (p ParamSpec) validate(name string) error {
 		return invalid("%s: max_bytes and max_entropy apply to disclosure params only", name)
 	case p.Disclosure && !slices.Contains(disclosureTypes, p.Type):
 		return invalid("%s: only text, content, command, path and identifier params can be disclosure params", name)
-	case p.MaxBytes < 0 || p.MaxBytes > maxParamText:
-		return invalid("%s: max_bytes must be 0..%d", name, maxParamText)
+	case p.MaxBytes < 0 || p.MaxBytes > MaxDisclosureBytes:
+		return invalid("%s: max_bytes must be 0..%d", name, MaxDisclosureBytes)
 	case p.MaxEntropy != "" && !validEntropy(p.MaxEntropy):
 		return invalid("%s: max_entropy must be a decimal above 0 and at most 8 bits per byte", name)
 	case (p.MaxItems != 0) != (p.Type == TypeIdentifierList) || p.MaxItems < 0 || p.MaxItems > maxListItems:
@@ -172,6 +172,9 @@ func checkText(name, s string) error {
 const (
 	DefaultDisclosureBytes   = 4096
 	DefaultDisclosureEntropy = 6.0
+	// MaxDisclosureBytes bounds a declared byte limit (GitHub's own body
+	// limit is 65536).
+	MaxDisclosureBytes = 64 << 10
 )
 
 // disclosureTypes are the parameter types a disclosure param may have:

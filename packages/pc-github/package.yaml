@@ -411,6 +411,10 @@ definitions:
         type: content
         material: true
         max_length: 8192
+        # The description goes to GitHub, a public destination: it is a
+        # disclosure param (HR-079), capped at GitHub's own body limit.
+        disclosure: true
+        max_bytes: 65536
       head:
         type: identifier
         material: true

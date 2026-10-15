@@ -70,6 +70,9 @@ const (
 	// ReasonDisclosureLimits: a disclosure param toward a public destination
 	// carries size and entropy limits the gateway checks (HR-079).
 	ReasonDisclosureLimits = "DISCLOSURE_LIMITS"
+	// ReasonDisclosureLimit: a disclosure param toward a public destination
+	// is over its byte or entropy limit (HR-079): DENY.
+	ReasonDisclosureLimit = "DISCLOSURE_LIMIT"
 )
 
 // Pipeline evaluates steps 1–8.
@@ -1326,12 +1329,17 @@ func (s *state) independence() {
 // the hardening rule, not a policy rule.
 const DisclosureRule = "HR-079"
 
-// disclosure attaches a disclosure_limits obligation to every disclosure
-// param of the action when its connection's destination class is public
-// (HR-079, G0 M10 D56): the byte and entropy limits the definition
-// declares, which the gateway checks before dispatch and the receipt
-// records. The class comes from the connection's record, never from the
-// gateway or the agent.
+// disclosure checks every disclosure param the action sets when its
+// connection's destination class is public (HR-079, G0 M10 D56, D73):
+// a value over its byte limit, or denser than its entropy limit, is
+// denied DISCLOSURE_LIMIT here, on the values the Authority holds, in
+// enforce and monitor mode alike. A value within its limits on a route
+// the gateway mediates also carries a disclosure_limits obligation the
+// gateway checks again before dispatch; a cooperative SDK call or a local
+// connection runs the action itself, so it gets no obligation it could
+// not honor, only this check. The class comes from the connection's
+// record, never from the gateway or the agent. The byte limit is the
+// control: entropy catches dense raw bytes, not base64 or hex (D73, R-32).
 func (s *state) disclosure() {
 	if s.def == nil || s.conn == nil || s.conn.DestinationClass != "public" {
 		return
@@ -1343,14 +1351,30 @@ func (s *state) disclosure() {
 		}
 	}
 	slices.Sort(names)
+	mediated := s.conn.Kind != "local" && s.a.Channel != string(defs.ChannelSDK)
 	for _, name := range names {
 		maxBytes, maxEntropy := s.def.Params[name].DisclosureLimits()
+		entropy := strconv.FormatFloat(maxEntropy, 'f', -1, 64)
+		b := s.vals[name].Disclosed()
+		switch h := defs.Entropy(b); {
+		case len(b) > maxBytes:
+			s.cl.add(StepBoundaries, adomain.Deny, ReasonDisclosureLimit,
+				fmt.Sprintf("%s goes to a public destination with %d bytes; at most %d are allowed", name, len(b), maxBytes), "")
+			continue
+		case h > maxEntropy:
+			s.cl.add(StepBoundaries, adomain.Deny, ReasonDisclosureLimit,
+				fmt.Sprintf("%s goes to a public destination at %.2f bits per byte; at most %s are allowed", name, h, entropy), "")
+			continue
+		}
+		if !mediated {
+			s.cl.pass(StepBoundaries, ReasonDisclosureLimits)
+			continue
+		}
 		s.ev.Obligations = append(s.ev.Obligations, pdomain.Obligation{
 			Rule: DisclosureRule, Kind: pdomain.DisclosureLimits, Param: name, Max: strconv.Itoa(maxBytes),
-			MaxEntropy: strconv.FormatFloat(maxEntropy, 'f', -1, 64), Timing: pdomain.TimingBeforeExecution,
+			MaxEntropy: entropy, Timing: pdomain.TimingBeforeExecution,
 		})
 		s.cl.add(StepRequirements, adomain.AllowWithObligations, ReasonDisclosureLimits,
-			fmt.Sprintf("%s goes to a public destination: at most %d bytes and %s bits per byte", name, maxBytes,
-				strconv.FormatFloat(maxEntropy, 'f', -1, 64)), "")
+			fmt.Sprintf("%s goes to a public destination: at most %d bytes and %s bits per byte", name, maxBytes, entropy), "")
 	}
 }
