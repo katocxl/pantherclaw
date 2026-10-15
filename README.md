@@ -25,6 +25,10 @@ Details: [docs/PRODUCT.md](docs/PRODUCT.md).
 
 Planned (not yet released), coding agents first: Claude Code and the Claude Agent SDK, MCP clients, GitHub, and Go, Python and TypeScript SDKs. See the milestones in [docs/BUILD_GUIDE.md](docs/BUILD_GUIDE.md).
 
+## Try it
+
+On one machine, with nothing real connected: `task demo:up` starts a local server, gateway and GitHub simulator, and [docs/quickstart.md](docs/quickstart.md) walks through the first 30 minutes of a coding agent behind PantherClaw (one action allowed, one held for approval, one blocked). Needs Go, Docker and Git Bash on Windows. The time it takes is measured in [docs/perf/onboarding.md](docs/perf/onboarding.md).
+
 ## Development
 
 ```bash

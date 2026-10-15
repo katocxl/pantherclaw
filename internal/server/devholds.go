@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/katocxl/pantherclaw/internal/actionir"
+	"github.com/katocxl/pantherclaw/internal/platform/celenv"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	"github.com/katocxl/pantherclaw/internal/platform/money"
@@ -61,8 +62,8 @@ func devHoldBundle(limit money.Money) *pdomain.Bundle {
 // like any version (G0 M11.1 design decision 10): compiled, validated and
 // tested against its active definitions. dev seed is the author and
 // publisher of record.
-func seedHoldPolicy(ctx context.Context, pool *db.Pool, org ids.OrgID, limit money.Money) (ids.UUID, error) {
-	v := newPolicyVersions(pool, nil, "")
+func seedHoldPolicy(ctx context.Context, pool *db.Pool, org ids.OrgID, limit money.Money, limits celenv.Limits) (ids.UUID, error) {
+	v := newPolicyVersions(pool, nil, "", limits)
 	// The publication records its rollout, as every publication does (D31).
 	rollout.Connect(v, &rollout.Service{Pool: pool})
 	id, err := v.Seed(ctx, org, devHoldBundle(limit), devSeedActor)

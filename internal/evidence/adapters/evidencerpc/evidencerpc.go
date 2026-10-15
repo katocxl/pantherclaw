@@ -105,6 +105,13 @@ func (e *Evidence) ExportBundle(ctx context.Context, req *pantherclawv1.ExportBu
 		}
 		sel.Transactions = append(sel.Transactions, id)
 	}
+	for _, s := range req.GetClosures().GetIds() {
+		id, err := ids.ParseUUID(s)
+		if err != nil || id.Version() != 7 {
+			return nil, errInvalidID
+		}
+		sel.Closures = append(sel.Closures, id)
+	}
 	x, err := e.svc.ExportBundle(ctx, sel, req.GetConsistencyFrom())
 	if err != nil {
 		return nil, err

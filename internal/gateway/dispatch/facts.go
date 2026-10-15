@@ -119,13 +119,13 @@ func (e *Engine) reportGitHubFacts(ctx context.Context, conn *control.Connection
 		report("the action names no pull request or branch to read them for")
 		return true, unreported
 	}
-	c, err := e.client(conn)
+	base, c, err := e.gitHubAPI(conn)
 	if err != nil {
 		warn("gateway.facts_unavailable", err)
 		report("no GitHub client")
 		return true, unreported
 	}
-	tok, err := e.mint(read, conn, s.Owner, s.Repo, githubfacts.Scopes, c)
+	tok, err := e.mint(read, conn, base, s.Owner, s.Repo, githubfacts.Scopes, c)
 	if err != nil {
 		warn("gateway.facts_unavailable", err)
 		report("no read token")
@@ -137,7 +137,7 @@ func (e *Engine) reportGitHubFacts(ctx context.Context, conn *control.Connection
 			e.revokeFailed(ctx, conn, "facts", tok)
 		}
 	}()
-	get := tokenGetter(conn, c, tok)
+	get := tokenGetter(base, c, tok)
 	if s.Branch != "" && s.At == "" {
 		// A contents write: its files are the branch's with the write
 		// applied, and it never writes under .github/, so the workflows
@@ -179,12 +179,13 @@ func subject(def *defs.Definition, a actionir.ActionIR) (githubfacts.Subject, bo
 }
 
 // mint opens the connection's GitHub App credential and mints a token for
-// owner/repo with scopes.
-func (e *Engine) mint(ctx context.Context, conn *control.Connection, owner, repo string, scopes map[string]string, c broker.Sender) (*broker.Installation, error) {
+// owner/repo with scopes at the GitHub API base (gitHubAPI).
+func (e *Engine) mint(ctx context.Context, conn *control.Connection, base, owner, repo string, scopes map[string]string, c broker.Sender,
+) (*broker.Installation, error) {
 	app, err := e.openApp(conn)
 	if err != nil {
 		return nil, err
 	}
 	defer app.Clear()
-	return broker.MintInstallationToken(ctx, c, conn.GetBaseUrl(), conn.Credential.GetAllowedHosts(), app, owner, repo, scopes, time.Now())
+	return broker.MintInstallationToken(ctx, c, base, conn.Credential.GetAllowedHosts(), app, owner, repo, scopes, time.Now())
 }

@@ -56,7 +56,7 @@ func registerPolicyRollouts(rs *connect.Server, d apiDeps) {
 		notify = d.m5.notifications
 	}
 	svc := policyRollouts(d.pool, d.billing, d.m5, d.kp, d.log)
-	svc.Gate = rollout.Connect(newPolicyVersions(d.pool, notify, d.publicURL), svc)
+	svc.Gate = rollout.Connect(newPolicyVersions(d.pool, notify, d.publicURL, d.cel), svc)
 	pantherclawv1connect.RegisterPolicyRolloutServiceHandler(rs, rolloutrpc.New(svc))
 }
 

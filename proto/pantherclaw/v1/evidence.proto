@@ -234,6 +234,21 @@ message BundleTransactions {
   }];
 }
 
+// BundleClosures selects sandbox closures for a bundle (G0 M12 D3, HR-227):
+// each closure's ledger entry with its inclusion proof, and its signed probe
+// reports.
+message BundleClosures {
+  // Closure ids.
+  repeated string ids = 1 [(buf.validate.field).repeated = {
+    min_items: 1
+    max_items: 50
+    unique: true
+    items: {
+      string: {uuid: true}
+    }
+  }];
+}
+
 // BundleRange selects consecutive ledger entries for a bundle.
 message BundleRange {
   // The first sequence number.
@@ -257,6 +272,8 @@ message ExportBundleRequest {
     BundleTransactions transactions = 1;
     // These ledger entries and the receipts they record.
     BundleRange range = 2;
+    // The ledger entries of these sandbox closures and their probe reports.
+    BundleClosures closures = 4;
   }
   // The tree size of a checkpoint the requester saved earlier: the bundle
   // then also proves its checkpoint extends that one, for `pclaw verify

@@ -6,7 +6,13 @@
 package app_test
 
 import (
+	"bytes"
 	"context"
+	"crypto/ed25519"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/hex"
+	"encoding/json/v2"
 	"errors"
 	"slices"
 	"strings"
@@ -15,10 +21,16 @@ import (
 
 	"github.com/katocxl/pantherclaw/internal/coverage/app"
 	"github.com/katocxl/pantherclaw/internal/coverage/domain"
+	evapp "github.com/katocxl/pantherclaw/internal/evidence/app"
+	"github.com/katocxl/pantherclaw/internal/evidence/bundle"
+	"github.com/katocxl/pantherclaw/internal/evidence/bundle/bundletest"
+	"github.com/katocxl/pantherclaw/internal/evidence/ledger"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/db/dbtest"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
+	tenancy "github.com/katocxl/pantherclaw/internal/tenancy/app"
+	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
 	mockpayments "github.com/katocxl/pantherclaw/packages/mock-payments"
 )
 
@@ -32,6 +44,8 @@ type fixture struct {
 	version                              ids.UUID
 	// session is the sandbox session the closures come from (00090).
 	session ids.UUID
+	// d is the test database, for what pc_app may not do.
+	d *dbtest.DB
 }
 
 func newFixture(t *testing.T) *fixture {
@@ -40,6 +54,7 @@ func newFixture(t *testing.T) *fixture {
 	f := &fixture{
 		p: d.AppPool(t), org: ids.New[ids.Org](), user: ids.NewV7(), agent: ids.NewV7(), run: ids.NewV7(),
 		gateway: ids.NewV7(), conn: ids.NewV7(), pkg: ids.NewV7(), version: ids.NewV7(), session: ids.NewV7(),
+		d: d,
 	}
 	f.svc = &app.Service{Pool: f.p, Freshness: domain.Freshness{EnforcedTTL: 24 * time.Hour, ReassessEvery: time.Minute}}
 	env, version, token := ids.NewV7(), f.version, ids.NewV7()
@@ -322,5 +337,216 @@ func TestF443_RoutesSeenInsideTheSandboxAreObserved(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatal(err)
+	}
+}
+
+// TestHR227_ClosureEvidenceIsLedgered: recording a closure appends, in the
+// same transaction, a sandbox.closure ledger entry that names the closure,
+// session, agent and connection, the keys and the signed reports (run, kind,
+// digest) and the probe outcomes sorted by name; a failed closure is
+// entered too, as FAILED, and a refused one leaves no entry.
+func TestHR227_ClosureEvidenceIsLedgered(t *testing.T) {
+	f := newFixture(t)
+	started := f.dbNow(t)
+	run := ids.NewV7()
+	sum := sha256.Sum256([]byte("a compact JWS"))
+	c := f.closure(probes(false), started)
+	c.ProbeKey, c.HostKey = bytes.Repeat([]byte{1}, 32), bytes.Repeat([]byte{2}, 32)
+	c.Reports = []domain.ClosureReport{{Run: run, Kind: "sandbox", SHA256: sum}}
+	id, err := f.record(t, c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	entries := f.closureEntries(t)
+	if len(entries) != 1 {
+		t.Fatalf("%d sandbox.closure entries, want 1", len(entries))
+	}
+	var got app.ClosureEntry
+	if err := json.Unmarshal(entries[0], &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.V != 1 || got.Closure != id.String() || got.Session != f.session.String() || got.Agent != f.agent.String() ||
+		!slices.Equal(got.Connections, []string{f.conn.String()}) || got.Result != "PASSED" ||
+		got.ProbeKey != base64.RawURLEncoding.EncodeToString(c.ProbeKey) || got.HostKey != base64.RawURLEncoding.EncodeToString(c.HostKey) ||
+		!slices.Equal(got.Reports, []app.ClosureEntryReport{{Run: run.String(), Kind: "sandbox", SHA256: hex.EncodeToString(sum[:])}}) ||
+		len(got.Probes) != len(c.Probes) || got.RecordedAt == "" {
+		t.Fatalf("entry %+v", got)
+	}
+	if !slices.IsSortedFunc(got.Probes, func(a, b app.ClosureEntryProbe) int { return strings.Compare(a.Name, b.Name) }) {
+		t.Errorf("probes are not sorted by name: %v", got.Probes)
+	}
+	// A failed closure is entered as FAILED.
+	if _, err := f.record(t, f.closure(probes(true), f.dbNow(t))); err != nil {
+		t.Fatal(err)
+	}
+	entries = f.closureEntries(t)
+	if len(entries) != 2 {
+		t.Fatalf("%d entries after a failed closure, want 2", len(entries))
+	}
+	var failed app.ClosureEntry
+	if err := json.Unmarshal(entries[1], &failed); err != nil || failed.Result != "FAILED" {
+		t.Fatalf("failed closure's entry %+v (%v)", failed, err)
+	}
+	// A refused closure (replayed nonce) leaves no entry.
+	c.SessionStartedAt = f.dbNow(t)
+	c.ObservedAt = c.SessionStartedAt
+	if _, err := f.record(t, c); !errors.Is(err, app.ErrClosureReplayed) {
+		t.Fatalf("replay: %v", err)
+	}
+	if n := len(f.closureEntries(t)); n != 2 {
+		t.Fatalf("%d entries after a refused closure, want 2", n)
+	}
+}
+
+// closureEntries returns the bodies of the org's sandbox.closure entries in
+// the order they were written.
+func (f *fixture) closureEntries(t *testing.T) [][]byte {
+	t.Helper()
+	var out [][]byte
+	if err := f.p.InTenantTx(context.Background(), f.org, func(ctx context.Context, tx db.TenantTx) error {
+		rows, err := tx.Query(ctx, `SELECT body FROM pc.ledger_entries WHERE org_id = $1 AND kind = 'sandbox.closure' ORDER BY id`, f.org)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var b []byte
+			if err := rows.Scan(&b); err != nil {
+				return err
+			}
+			out = append(out, b)
+		}
+		return rows.Err()
+	}); err != nil {
+		t.Fatal(err)
+	}
+	return out
+}
+
+// TestHR227_ABundleOfAClosureCarriesItsEntryAndReports: ExportBundle of a
+// closure holds its sandbox.closure entry and the signed reports from
+// pc.probe_runs, which verify offline under the keys the entry names; a
+// closure of another org is not found, and a caller without evidence.read
+// where its agent lives is refused.
+func TestHR227_ABundleOfAClosureCarriesItsEntryAndReports(t *testing.T) {
+	f := newFixture(t)
+	iss := bundletest.NewIssuer(t)
+	kit := iss.AppendClosure(bundletest.ClosureOpts{Session: f.session.String(), Agent: f.agent.String()})
+	for _, kind := range []string{"sandbox", "control", "canary"} {
+		nonce, run := ids.NewV7(), mustUUID(t, kit.Runs[kind])
+		sum := sha256.Sum256([]byte(kit.Report(kind)))
+		f.exec(t, `INSERT INTO pc.probe_nonces (org_id, id, session_id, kind, nonce_sha256, expires_at)
+			VALUES ($1, $2, $3, $4, sha256(convert_to($2::uuid::text, 'UTF8')), now() + interval '10 minutes')`,
+			f.org, nonce, f.session, strings.ToUpper(kind))
+		f.exec(t, `INSERT INTO pc.probe_runs (org_id, id, session_id, nonce_id, kind, report, report_sha256)
+			VALUES ($1, $2, $3, $4, $5, $6, $7)`, f.org, run, f.session, nonce, strings.ToUpper(kind), kit.Report(kind), sum[:])
+	}
+	pub := func(k ed25519.PrivateKey) []byte { return k.Public().(ed25519.PublicKey) }
+	c := f.closure([]domain.ProbeResult{
+		{Name: "ssh_push", Role: domain.RoleProbe, Expect: domain.Blocked, Observed: domain.Blocked},
+		{Name: "planted_pat_push", Role: domain.RoleProbe, Expect: domain.Blocked, Observed: domain.Blocked},
+		{Name: "gateway_control", Role: domain.RolePositiveControl, Expect: domain.Reachable, Observed: domain.Reachable},
+		{Name: domain.ProbeExternalCanary, Role: domain.RoleCanary, Expect: domain.Blocked, Observed: domain.Blocked},
+		{Name: "canary_control", Role: domain.RolePositiveControl, Expect: domain.Reachable, Observed: domain.Reachable},
+	}, f.dbNow(t))
+	c.ProbeKey, c.HostKey = pub(kit.ProbeKey), pub(kit.HostKey)
+	for _, kind := range []string{"sandbox", "control", "canary"} {
+		c.Reports = append(c.Reports, domain.ClosureReport{
+			Run: mustUUID(t, kit.Runs[kind]), Kind: kind, SHA256: sha256.Sum256([]byte(kit.Report(kind))),
+		})
+	}
+	id, err := f.record(t, c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Chaining waits for transactions of the whole cluster below xmin, so under
+	// parallel tests it may need another pass.
+	for deadline := time.Now().Add(time.Minute); ; {
+		if _, err := ledger.ChainAll(context.Background(), f.p, f.org, 100); err != nil {
+			t.Fatal(err)
+		}
+		var n int
+		if err := f.p.InTenantTx(context.Background(), f.org, func(ctx context.Context, tx db.TenantTx) error {
+			return tx.QueryRow(ctx, `SELECT count(*) FROM pc.ledger_chain WHERE org_id = $1`, f.org).Scan(&n)
+		}); err != nil {
+			t.Fatal(err)
+		}
+		if n > 0 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the closure entry was not chained within a minute")
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	as := func(org ids.OrgID, role td.RoleName) context.Context {
+		return tenancy.WithCaller(context.Background(), tenancy.Caller{Subject: td.Subject{
+			Org: org, Principal: td.PrincipalRef{Kind: td.KindUser, ID: ids.NewV7()},
+			Bindings: []td.Binding{{Role: role, Scope: td.Scope{Type: td.ScopeOrg, ID: org.UUID()}}},
+		}})
+	}
+	svc := evapp.New(f.p, "pc.test")
+	x, err := svc.ExportBundle(as(f.org, td.RoleAuditor), evapp.Selection{Closures: []ids.UUID{id}}, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := bundle.Decode(x.Bundle)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(b.Entries) != 1 || b.Entries[0].Kind != bundle.ClosureKind || len(b.ProbeReports) != 3 {
+		t.Fatalf("bundle holds %d entries and %d probe reports", len(b.Entries), len(b.ProbeReports))
+	}
+	r := bundle.Verify(b, bundle.Options{Trust: &bundle.Trust{LogOrigin: "pc.test"}})
+	var lines []string
+	for _, ck := range r.Checks {
+		if strings.HasPrefix(ck.Name, "closure.") && ck.Status != bundle.Passed {
+			t.Errorf("%s %s is %s: %s", ck.Name, ck.Subject, ck.Status, ck.Detail)
+		}
+		if ck.Name == "closure.probe" {
+			lines = append(lines, ck.Detail)
+		}
+	}
+	if len(lines) != 5 {
+		t.Errorf("%d probe lines, want 5", len(lines))
+	}
+	if _, err := svc.ExportBundle(as(f.org, td.RoleAuditor), evapp.Selection{Closures: []ids.UUID{ids.NewV7()}}, 0); !errors.Is(err, evapp.ErrClosureNotFound) {
+		t.Errorf("unknown closure: %v", err)
+	}
+	if _, err := svc.ExportBundle(as(ids.New[ids.Org](), td.RoleAuditor), evapp.Selection{Closures: []ids.UUID{id}}, 0); !errors.Is(err, evapp.ErrClosureNotFound) {
+		t.Errorf("another org's closure: %v", err)
+	}
+}
+
+func mustUUID(t *testing.T, s string) ids.UUID {
+	t.Helper()
+	id, err := ids.ParseUUID(s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return id
+}
+
+// TestHR227_AFailedLedgerAppendRollsTheClosureBack: the closure row and its
+// ledger entry are one transaction. A closure whose entry the ledger refuses
+// (more reports than a 64 KiB body holds) is not stored, and nothing is
+// ledgered.
+func TestHR227_AFailedLedgerAppendRollsTheClosureBack(t *testing.T) {
+	f := newFixture(t)
+	c := f.closure(probes(false), f.dbNow(t))
+	for range 600 {
+		c.Reports = append(c.Reports, domain.ClosureReport{Run: ids.NewV7(), Kind: "sandbox"})
+	}
+	if _, err := f.record(t, c); err == nil {
+		t.Fatal("a closure whose ledger entry is refused was recorded")
+	}
+	var n int
+	if err := f.p.InTenantTx(context.Background(), f.org, func(ctx context.Context, tx db.TenantTx) error {
+		return tx.QueryRow(ctx, `SELECT count(*) FROM pc.coverage_closures WHERE org_id = $1`, f.org).Scan(&n)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if n != 0 || len(f.closureEntries(t)) != 0 {
+		t.Fatalf("%d closure rows and %d entries remain", n, len(f.closureEntries(t)))
 	}
 }

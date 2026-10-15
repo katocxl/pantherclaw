@@ -75,6 +75,11 @@ type Faults struct {
 	// with GitHubToken as the real server calls GitHub with its token.
 	GitHub      *github.Server
 	GitHubToken string
+	// GitHubBearer makes the GitHub tools call the API with the bearer
+	// token each request carries instead of GitHubToken, as GitHub's hosted
+	// MCP server does: a request without one is refused (401), and a call
+	// can do only what its token allows.
+	GitHubBearer bool
 	// ParamHeaders makes create_refund declare x-mcp-header on its
 	// currency (Mcp-Param-Currency) and reason (Mcp-Param-Reason); a
 	// 2026-07-28 call whose Mcp-Param-* headers do not match the body is
@@ -247,6 +252,14 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 	if s.f.Token != "" && r.Header.Get("Authorization") != "Bearer "+s.f.Token {
 		writeJSON(w, http.StatusUnauthorized, map[string]any{"jsonrpc": "2.0", "id": nil, "error": rpcError(-32001, "unauthorized")})
 		return
+	}
+	if s.f.GitHub != nil && s.f.GitHubBearer {
+		token, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
+		if !ok || token == "" {
+			writeJSON(w, http.StatusUnauthorized, map[string]any{"jsonrpc": "2.0", "id": nil, "error": rpcError(-32001, "unauthorized")})
+			return
+		}
+		r = r.WithContext(context.WithValue(r.Context(), bearerKey{}, token))
 	}
 	if r.Method != http.MethodPost {
 		w.Header().Set("Allow", http.MethodPost)
@@ -447,6 +460,9 @@ var (
 	refundPattern = regexp.MustCompile(`^re_[A-Za-z0-9-]{1,64}$`)
 )
 
+// bearerKey carries a request's bearer token (Faults.GitHubBearer).
+type bearerKey struct{}
+
 // call runs a tool.
 func (s *Server) call(ctx context.Context, params jsontext.Value) (map[string]any, map[string]any) {
 	var raw struct {
@@ -456,8 +472,12 @@ func (s *Server) call(ctx context.Context, params jsontext.Value) (map[string]an
 	if json.Unmarshal(params, &raw) != nil {
 		return nil, rpcError(-32602, "Invalid params")
 	}
+	token := s.f.GitHubToken
+	if b, ok := ctx.Value(bearerKey{}).(string); ok {
+		token = b
+	}
 	if g := s.f.GitHub; g != nil {
-		if res, isErr, ok := g.CallTool(ctx, s.f.GitHubToken, raw.Name, raw.Arguments); ok {
+		if res, isErr, ok := g.CallTool(ctx, token, raw.Name, raw.Arguments); ok {
 			s.mu.Lock()
 			s.calls++
 			s.mu.Unlock()

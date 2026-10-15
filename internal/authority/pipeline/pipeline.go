@@ -21,6 +21,7 @@ import (
 	defs "github.com/katocxl/pantherclaw/internal/definitions/domain"
 	fdomain "github.com/katocxl/pantherclaw/internal/facts/domain"
 	gdomain "github.com/katocxl/pantherclaw/internal/grants/domain"
+	"github.com/katocxl/pantherclaw/internal/platform/celenv"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	"github.com/katocxl/pantherclaw/internal/platform/money"
 	papp "github.com/katocxl/pantherclaw/internal/policy/app"
@@ -71,6 +72,10 @@ const (
 // Pipeline evaluates steps 1–8.
 type Pipeline struct {
 	Reader Reader
+	// Limits bound the consequence rules when no policy is published (a
+	// published policy's own limits apply otherwise); zero means
+	// celenv.DefaultLimits. The server sets them from its configuration.
+	Limits celenv.Limits
 }
 
 // IdentitySummary is the identity part of a decision receipt (ids only).
@@ -671,7 +676,7 @@ func (p *Pipeline) currentFacts(ctx context.Context, s *state) {
 		return
 	}
 	defer func() {
-		s.consequences(ctx, recorded, reqs)
+		s.consequences(ctx, evaluatorFor(p.consequenceLimits(s)), recorded, reqs)
 		p.consequenceFacts(ctx, s)
 	}()
 	if len(reqs) == 0 {

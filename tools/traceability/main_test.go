@@ -95,6 +95,22 @@ func TestCollectsSDKTests(t *testing.T) {
 	}
 }
 
+// A session worktree under .claude holds tests from branches that are not
+// merged yet, so they must not count.
+func TestSkipsWorktrees(t *testing.T) {
+	fsys := fstest.MapFS{
+		"internal/x/x_test.go":                           {Data: []byte("func TestHR001_Merged(t *testing.T) {}")},
+		".claude/worktrees/feature/internal/x/x_test.go": {Data: []byte("func TestHR002_Unmerged(t *testing.T) {}")},
+	}
+	got, err := collectTests(fsys)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if keys := slices.Sorted(maps.Keys(got)); !slices.Equal(keys, []string{"TestHR001"}) {
+		t.Fatalf("collected %v, want [TestHR001]", keys)
+	}
+}
+
 func TestRunAgainstRepository(t *testing.T) {
 	var out, errb bytes.Buffer
 	code := run([]string{"-root", "../..", "-through", "M1"}, &out, &errb)

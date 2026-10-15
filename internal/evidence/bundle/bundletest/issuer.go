@@ -59,8 +59,10 @@ type Issuer struct {
 	CoSign    bool // sign checkpoints with ML-DSA-65 as well
 	Entries   []bundle.Entry
 	Receipts  []string
-	tiles     *merkle.MemoryTiles
-	notes     map[uint64][]byte
+	// Closures are the probe reports of the closures appended, which Bundle carries.
+	Closures []bundle.ProbeReport
+	tiles    *merkle.MemoryTiles
+	notes    map[uint64][]byte
 }
 
 // NewIssuer returns an issuer with fresh keys, an empty ledger, a fake log
@@ -232,6 +234,7 @@ func (i *Issuer) Bundle() *bundle.Bundle {
 	b := &bundle.Bundle{
 		Format: bundle.Format, Org: i.Org.String(), Origin: i.Origin,
 		Receipts: slices.Clone(i.Receipts), Entries: slices.Clone(i.Entries),
+		ProbeReports: slices.Clone(i.Closures),
 	}
 	sizes := slices.Sorted(func(yield func(uint64) bool) {
 		for s := range i.notes {

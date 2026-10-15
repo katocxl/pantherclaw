@@ -8,6 +8,7 @@ import (
 	"encoding/json/jsontext"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/katocxl/pantherclaw/internal/actionir"
@@ -31,8 +32,32 @@ import (
 // requirement applies to it, nothing can release it and it is
 // CANNOT_AUTHORIZE until the facts can be read. A DENY anywhere still wins.
 
-// consequenceEvaluator keeps the rule programs it compiled.
-var consequenceEvaluator = consequences.NewEvaluator(celenv.DefaultLimits)
+// evaluators keeps one consequence evaluator, with the rule programs it
+// compiled, per set of CEL limits.
+var evaluators sync.Map // celenv.Limits -> *consequences.Evaluator
+
+func evaluatorFor(l celenv.Limits) *consequences.Evaluator {
+	if e, ok := evaluators.Load(l); ok {
+		ev, _ := e.(*consequences.Evaluator)
+		return ev
+	}
+	e, _ := evaluators.LoadOrStore(l, consequences.NewEvaluator(l))
+	ev, _ := e.(*consequences.Evaluator)
+	return ev
+}
+
+// consequenceLimits are the CEL limits of the consequence rules: the
+// decision policy's, which a replay compiles as recorded, or the
+// Pipeline's when no policy is published.
+func (p *Pipeline) consequenceLimits(s *state) celenv.Limits {
+	if s.policy != nil && s.policy.Compiled != nil {
+		return s.policy.Compiled.Limits()
+	}
+	if p.Limits == (celenv.Limits{}) {
+		return celenv.DefaultLimits
+	}
+	return p.Limits
+}
 
 // pendingConsequence is a predicted or unknown consequence that steps 4, 7
 // and 8 decide with the action.
@@ -72,7 +97,7 @@ func factNames(reqs []fdomain.Requirement, rules []consequences.Rule) []string {
 }
 
 // consequences evaluates the rules from the facts step 6 read.
-func (s *state) consequences(ctx context.Context, recorded map[string]fdomain.Fact, reqs []fdomain.Requirement) {
+func (s *state) consequences(ctx context.Context, ev *consequences.Evaluator, recorded map[string]fdomain.Fact, reqs []fdomain.Requirement) {
 	if s.pinned == nil || len(s.pinned.Consequences) == 0 {
 		return
 	}
@@ -80,7 +105,7 @@ func (s *state) consequences(ctx context.Context, recorded map[string]fdomain.Fa
 	for _, r := range fdomain.Merge(reqs) {
 		ages[r.Name] = r.MaxAge
 	}
-	s.ev.Consequences = consequenceEvaluator.Evaluate(ctx, s.pinned.Consequences, consequences.Input{
+	s.ev.Consequences = ev.Evaluate(ctx, s.pinned.Consequences, consequences.Input{
 		On: s.def, TargetID: s.a.Target.ID, Facts: recorded, Ages: ages, Now: s.cont.Now,
 	})
 	for i := range s.ev.Consequences {

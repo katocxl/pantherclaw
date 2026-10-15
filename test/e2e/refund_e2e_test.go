@@ -176,7 +176,7 @@ func start(t *testing.T, o options) *stack {
 		"kek_files": []string{kek}, "worker_concurrency": 2,
 	}
 	// Workload proofs name the address they are sent to.
-	cfg["auth"] = map[string]any{"public_url": "http://" + apiAddr}
+	cfg["auth"] = map[string]any{"public_url": "http://" + apiAddr, "api_key_env": "test"}
 	public := "http://" + apiAddr
 	if o.people != nil {
 		public = withPeople(t, cfg, dir, apiAddr, *o.people, o.relay)
@@ -290,6 +290,11 @@ func start(t *testing.T, o options) *stack {
 	// (HR-038), as deploy/dev/gateway.example.json pins it.
 	s.approverKeys = filepath.Join(dir, "approver-keys.json")
 	gc.Approvals.ApproverKeysFile = s.approverKeys
+	if o.github {
+		// A GitHub App connection to GitHub's MCP server mints at the
+		// GitHub the stack calls (github.api_url).
+		gc.GitHub.APIURL = s.gh.url
+	}
 	if o.access == "pantherclaw_held" || o.github {
 		// The gateway's broker key, which only it can open credentials with
 		// (HR-061); it registers the public half when it starts.
@@ -605,13 +610,31 @@ func TestS07_TargetTimeoutIsUnknownAndHeld(t *testing.T) {
 	}
 }
 
-// S09: the Authority is down: fail closed, nothing dispatched.
+// S09: the Authority cannot decide: fail closed, nothing dispatched. This
+// models the Authority's database being unavailable: Authorize fails while
+// the server keeps running and its containment heartbeat stays fresh, so the
+// gateway reaches the Authority path and reports authority_unavailable
+// whatever the timing (the stack's database is this test's own).
 func TestS09_AuthorityUnavailableDispatchesNothing(t *testing.T) {
 	s := start(t, options{budget: "1000.00"})
-	s.stopServer(t)
+	s.db.AdminExec(t, `ALTER TABLE pc.transactions RENAME TO transactions_unavailable`)
 	code, r := s.refund(t, ids.NewV7(), "30.00")
 	if code != http.StatusServiceUnavailable || r.Error != "authority_unavailable" || s.simCalls.Load() != 0 {
 		t.Fatalf("S09: %d %+v, target calls %d", code, r, s.simCalls.Load())
+	}
+}
+
+// S09b: the whole server is stopped: fail closed, nothing dispatched. The
+// gateway's containment view goes stale after HR-010's fixed 2 s, so how
+// long the shutdown took decides which refusal answers: authority_unavailable
+// while the view is fresh, containment_stale once it is not. Both are
+// correct; S09 holds the Authority path strictly.
+func TestS09b_ServerStoppedDispatchesNothing(t *testing.T) {
+	s := start(t, options{budget: "1000.00"})
+	s.stopServer(t)
+	code, r := s.refund(t, ids.NewV7(), "30.00")
+	if code != http.StatusServiceUnavailable || (r.Error != "authority_unavailable" && r.Error != "containment_stale") || s.simCalls.Load() != 0 {
+		t.Fatalf("S09b: %d %+v, target calls %d", code, r, s.simCalls.Load())
 	}
 }
 

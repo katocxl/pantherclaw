@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/katocxl/pantherclaw/internal/authority/finalize"
-	"github.com/katocxl/pantherclaw/internal/evidence/ledger"
 	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	"github.com/katocxl/pantherclaw/internal/platform/page"
@@ -183,9 +182,7 @@ func TestExplorer_ReportsEachItemsIntegrity(t *testing.T) {
 	if d, x := statuses(); d.Status() != txapp.IntegrityPending || x.Status() != txapp.IntegrityPending {
 		t.Fatalf("before chaining: %+v %+v", d, x)
 	}
-	if _, err := ledger.ChainAll(context.Background(), w.pool, w.org, 500); err != nil {
-		t.Fatal(err)
-	}
+	w.chainAll()
 	d, x := statuses()
 	if d.Status() != txapp.IntegrityChained || x.Status() != txapp.IntegrityChained || d.Seq >= x.Seq {
 		t.Fatalf("chained: %+v %+v", d, x)

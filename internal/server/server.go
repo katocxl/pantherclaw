@@ -64,6 +64,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/keystore"
 	"github.com/katocxl/pantherclaw/internal/notifications/adapters/notificationsrpc"
 	napp "github.com/katocxl/pantherclaw/internal/notifications/app"
+	"github.com/katocxl/pantherclaw/internal/platform/celenv"
 	"github.com/katocxl/pantherclaw/internal/platform/clock"
 	"github.com/katocxl/pantherclaw/internal/platform/config"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
@@ -314,6 +315,7 @@ func cmdServe(ctx context.Context, args []string, stderr io.Writer, env Env, onS
 			pool: pool, reg: reg, log: log, authority: svc, billing: bill,
 			auth:      rpcauth.New(authn, procedurePermissions, nil),
 			apiKeyEnv: credential.Env(cfg.Auth.APIKeyEnv),
+			cel:       cfg.CEL,
 			oauth: oauthhttp.New(authnapp.NewOAuth(pool, tokens, cfg.Auth.PublicURL, clock.System{}, log),
 				cfg.Auth.PublicURL, limiter),
 			device:    device,
@@ -486,7 +488,9 @@ func publicProcedures() []string {
 // service accounts and API keys. Gateway procedures are refused here: gateways
 // call the Authority only on the mTLS gateway listener (HR-181).
 type apiDeps struct {
-	pool      *db.Pool
+	pool *db.Pool
+	// cel are the configured CEL limits (cel).
+	cel       celenv.Limits
 	reg       *keys.Registry
 	log       *slog.Logger
 	authority *authority.Service

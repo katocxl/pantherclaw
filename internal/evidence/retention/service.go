@@ -63,7 +63,8 @@ func manager(ctx context.Context) (tenancy.Caller, error) {
 	return c, c.Require(td.PermEvidenceRetentionManage, td.OrgPath(c.Org))
 }
 
-func revisionsOf(rows []dbq.ListRetentionRevisionsRow) []Revision {
+// RevisionsOf converts the rows of ListRetentionRevisions.
+func RevisionsOf(rows []dbq.ListRetentionRevisionsRow) []Revision {
 	out := make([]Revision, 0, len(rows))
 	for _, r := range rows {
 		out = append(out, Revision{
@@ -142,7 +143,7 @@ func (s *Service) Policies(ctx context.Context) ([]Policy, error) {
 		if err != nil {
 			return err
 		}
-		out = policiesAt(revisionsOf(rows), now)
+		out = policiesAt(RevisionsOf(rows), now)
 		return nil
 	})
 	return out, err
@@ -188,7 +189,7 @@ func (s *Service) SetPolicy(ctx context.Context, cat Category, days int) (Change
 		if err != nil {
 			return err
 		}
-		revs := revisionsOf(rows)
+		revs := RevisionsOf(rows)
 		cur, _ := Current(revs, cat, now)
 		_, pending := Pending(revs, cat, now)
 		if days == cur.Days && !pending {

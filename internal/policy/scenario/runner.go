@@ -173,6 +173,7 @@ func (r *Runner) Run(ctx context.Context, org ids.OrgID, b *pdomain.Bundle) (pdo
 			cases[i].failed = err.Error()
 			continue
 		}
+		f.limits = r.limits
 		cases[i].f = f
 	}
 	st := &run{}

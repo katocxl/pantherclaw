@@ -37,6 +37,8 @@ tasks:
       - task: license:check
       - task: lint
       - task: lint:workflows
+      - task: lint:migrations
+      - task: proto:breaking
       - task: test
       - task: secrets
 
@@ -61,6 +63,16 @@ tasks:
     desc: Lint GitHub Actions workflows (actionlint)
     cmds:
       - go tool -modfile={{.PINS}}/actionlint/go.mod actionlint -color=false
+
+  lint:migrations:
+    desc: Lint the migrations added since the baseline with squawk (ADR-0003; pinned binary checked against its SHA-256 in tools/squawk, config .squawk.toml)
+    cmds:
+      - go -C tools run ./squawk -root ..
+
+  proto:breaking:
+    desc: Fail on a breaking protobuf change against main (buf breaking, rules in buf.yaml; AGAINST overrides the base, e.g. AGAINST=.git#ref=main)
+    cmds:
+      - go tool -modfile={{.PINS}}/buf/go.mod buf breaking --against '{{.AGAINST | default ".git#ref=origin/main"}}'
 
   test:
     desc: Unit tests for all Go modules (shuffled, uncached)
@@ -91,19 +103,21 @@ tasks:
         go -C sdk/go/internal/sqltest test -count=1 ./...
 
   test:github-live:
-    desc: "Manual and opt-in: the M8 GitHub run against GitHub itself with your sandbox App (docs/runbooks/github-live.md); never part of check"
+    desc: "Manual and opt-in: the M8 GitHub run and the v0.1.0 three routes and coding to production against GitHub itself with your sandbox App (needs Docker; docs/runbooks/github-live.md); never part of check"
     dotenv: ["deploy/compose/.env"]
     preconditions:
       - sh: '[ "$PC_GITHUB_LIVE" = 1 ]'
         msg: "Set PC_GITHUB_LIVE=1 and the PC_GITHUB_LIVE_* variables first (docs/runbooks/github-live.md)"
       - sh: '[ -n "$PC_GITHUB_LIVE_APP" ] && [ -n "$PC_GITHUB_LIVE_INSTALLATION" ] && [ -n "$PC_GITHUB_LIVE_REPO" ] && [ -f "$PC_GITHUB_LIVE_KEY_FILE" ]'
         msg: "PC_GITHUB_LIVE_APP, PC_GITHUB_LIVE_INSTALLATION, PC_GITHUB_LIVE_REPO and PC_GITHUB_LIVE_KEY_FILE (an existing file) are required"
+      - sh: docker version >/dev/null 2>&1
+        msg: "Docker (>= 28) is required for the sandbox: start it, then run task sandbox:images (docs/runbooks/github-live.md)"
     cmds:
       - >-
-        PC_TEST_REQUIRE_DB=1
+        PC_TEST_SANDBOX=1 PC_TEST_REQUIRE_DB=1
         PC_TEST_PG_ADMIN_URL="postgres://postgres:${PC_PG_TEST_PASSWORD}@127.0.0.1:5433/postgres?sslmode=disable"
         PC_TEST_MOCK_OIDC_URL="${PC_TEST_MOCK_OIDC_URL:-http://127.0.0.1:8181}"
-        go test -tags "integration github_live" -count=1 -v -run '^TestLive_GitHub' ./test/e2e/
+        go test -tags "integration github_live sandbox" -count=1 -v -timeout 60m -run '^TestLive_GitHub' ./test/e2e/
 
   test:sandbox:
     desc: Docker sandbox, connector and M9 exit tests (G0 M9; needs Docker ≥ 28 and, for the exit tests, the test cluster of task up PROFILE=test; they create and remove their own uniquely named networks, containers and images; PKGS=./x/... narrows the Docker tests, E2E=0 skips the exit tests)
@@ -115,6 +129,16 @@ tasks:
         PC_TEST_PG_ADMIN_URL="postgres://postgres:${PC_PG_TEST_PASSWORD}@127.0.0.1:5433/postgres?sslmode=disable"
         PC_TEST_MOCK_OIDC_URL="${PC_TEST_MOCK_OIDC_URL:-http://127.0.0.1:8181}"
         go test -tags "integration sandbox" -count=1 -timeout 60m -run TestE2E_M9_ ./test/e2e/{{end}}
+
+  test:preview:
+    desc: The v0.1.0 preview demo, three routes and three stops, in one real sandbox (needs Docker ≥ 28 and the test cluster of task up PROFILE=test; build the images the test asks for with task sandbox:images)
+    dotenv: ["deploy/compose/.env"]
+    cmds:
+      - >-
+        PC_TEST_SANDBOX=1 PC_TEST_REQUIRE_DB=1
+        PC_TEST_PG_ADMIN_URL="postgres://postgres:${PC_PG_TEST_PASSWORD}@127.0.0.1:5433/postgres?sslmode=disable"
+        PC_TEST_MOCK_OIDC_URL="${PC_TEST_MOCK_OIDC_URL:-http://127.0.0.1:8181}"
+        go test -tags "integration sandbox" -count=1 -timeout 30m -run '^TestE2E_Preview_' ./test/e2e/
 
   range:
     desc: The adversarial range (G0 M12, HR-226; EX-004 local gate) - every redteam/scenarios/*.yaml against the simulators on the test cluster (start it with `task up PROFILE=test`; SANDBOX=1 adds the sandbox scenarios and needs Docker; SCENARIO=RT-008 runs one)
@@ -129,15 +153,16 @@ tasks:
         -run 'TestRange_Scenarios{{if .SCENARIO}}/{{.SCENARIO}}{{end}}' ./test/e2e/
 
   sandbox:images:
-    desc: Build the sandbox's edge and probe images locally (static Linux builds on the pinned distroless base) and print their ids, which pclaw's sandbox.images settings name (G0 M9)
+    desc: Build the sandbox's edge, probe and demo-agent images locally (static Linux builds on the pinned distroless base) and print their ids, which pclaw's sandbox.images settings name (G0 M9)
     env:
       CGO_ENABLED: "0"
       GOOS: linux
     cmds:
-      - go build -trimpath -o bin/sandbox/ ./cmd/pantherclaw-edge ./cmd/pantherclaw-probe
+      - go build -trimpath -o bin/sandbox/ ./cmd/pantherclaw-edge ./cmd/pantherclaw-probe ./cmd/pantherclaw-demo-agent
       - mkdir -p bin/sandbox/workspace
       - echo "edge  $(docker build --quiet --pull=false --network none --file deploy/sandbox/edge.Dockerfile bin/sandbox)"
       - echo "probe $(docker build --quiet --pull=false --network none --file deploy/sandbox/probe.Dockerfile bin/sandbox)"
+      - echo "pantherclaw-demo-agent $(docker build --quiet --pull=false --network none --file deploy/sandbox/demo-agent.Dockerfile bin/sandbox)"
 
   test:linux:
     desc: Run race-enabled tests inside a pinned Linux container (use on Windows)
@@ -166,7 +191,7 @@ tasks:
       - git diff --exit-code -- internal/gen
 
   trace:
-    desc: Fail if a hardening rule or threat due by MILESTONE has no test (default M12)
+    desc: Fail if a hardening rule or threat due by MILESTONE has no test (default M11.1)
     cmds:
       - go -C tools run ./traceability -root .. -through {{.MILESTONE | default "M11.1"}}
 
@@ -230,6 +255,21 @@ tasks:
     desc: Stop the local stack (volumes are kept)
     cmds:
       - "{{.COMPOSE}} --profile {{.PROFILE | default \"core\"}} down"
+
+  demo:up:
+    desc: Start the local demo (v0.1.0 preview quickstart, docs/quickstart.md - database, Keycloak, server, gateway, GitHub simulator, sandbox images; all simulated, idempotent)
+    cmds:
+      - bash tools/scripts/demo.sh up
+
+  demo:down:
+    desc: Stop the local demo's server, gateway and simulator (data and secrets stay)
+    cmds:
+      - bash tools/scripts/demo.sh down
+
+  demo:status:
+    desc: Show whether the local demo's processes and the server are up
+    cmds:
+      - bash tools/scripts/demo.sh status
 
   hooks:pre-commit:
     desc: Fast checks run by the git pre-commit hook (< 5 s once tools are built)

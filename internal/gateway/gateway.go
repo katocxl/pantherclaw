@@ -153,6 +153,7 @@ func New(ctx context.Context, cfg *Config, id *control.Identity, log *slog.Logge
 	ctl := control.NewClient(id, cfg.Control.IdentityDir, cfg.Control.GatewayURL, cfg.Control.Timeout.D(), log)
 	k := control.NewContainment(ctl, log)
 	store := control.NewStore(ctl, log)
+	store.Limits = cfg.CEL
 	k.OnConfig(store.Changed)
 	d := Deps{
 		Org: id.Org.String(), GatewayID: id.Gateway.String(), Authority: ctl.Authority,
@@ -223,6 +224,7 @@ func newGateway(cfg *Config, d Deps, log *slog.Logger) (*Gateway, error) {
 		Containment: d.Containment, AllowedPrefixes: prefixes, ReportCircuit: d.ReportCircuit, Log: log,
 		Approvers:   proof.NewPinned(cfg.Approvals.ApproverKeysFile, d.Org),
 		ReportFacts: d.ReportFacts, FactTimeout: cfg.GitHub.FactTimeout.D(), ReportRevocation: d.ReportRevocation,
+		GitHubAPIURL: cfg.GitHub.APIURL,
 	}
 	if d.Connectors != nil {
 		o.Connectors = d.Connectors

@@ -21,6 +21,7 @@ import (
 	defs "github.com/katocxl/pantherclaw/internal/definitions/domain"
 	fdomain "github.com/katocxl/pantherclaw/internal/facts/domain"
 	gdomain "github.com/katocxl/pantherclaw/internal/grants/domain"
+	"github.com/katocxl/pantherclaw/internal/platform/celenv"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	"github.com/katocxl/pantherclaw/internal/platform/money"
 	pdomain "github.com/katocxl/pantherclaw/internal/policy/domain"
@@ -69,7 +70,9 @@ func caseErr(format string, args ...any) error { return caseError{fmt.Sprintf(fo
 // one root grant covering the operation, the case's facts and budget usage,
 // an ACTIVE connection in enforce mode, and the case's approval request.
 type fixture struct {
-	org     ids.OrgID
+	org ids.OrgID
+	// limits bound the consequence rules, as the runner's compile does.
+	limits  celenv.Limits
 	now     time.Time
 	def     *defs.Definition
 	rules   []consequences.Rule
@@ -410,7 +413,7 @@ func (f *fixture) evaluate(ctx context.Context, policy *pipeline.Policy, g *pdom
 		g = &pdomain.TestGiven{}
 	}
 	f.policy, f.hold = policy, nil
-	p := &pipeline.Pipeline{Reader: f}
+	p := &pipeline.Pipeline{Reader: f, Limits: f.limits}
 	switch g.Approval {
 	case pdomain.ApprovalExpired:
 		f.hold = &pipeline.HoldRequest{ID: holdID, State: apdomain.StatePending, Deadline: f.now.Add(-time.Minute)}

@@ -40,7 +40,7 @@ func registerPolicyGate(rs *connect.Server, d apiDeps) {
 	if d.m5 != nil && d.m5.notifications != nil {
 		notify = d.m5.notifications
 	}
-	v := newPolicyVersions(d.pool, notify, d.publicURL)
+	v := newPolicyVersions(d.pool, notify, d.publicURL, d.cel)
 	for _, ext := range policyGateExtensions {
 		ext(d, v)
 	}
@@ -54,15 +54,15 @@ func registerPolicyGate(rs *connect.Server, d apiDeps) {
 // ports (S1a's validator and scenario test runner, D7a) and the change
 // requests (PUBLISH registered). Without a validator or a test runner the
 // gate publishes nothing (fail closed).
-func newPolicyVersions(pool *db.Pool, notify policyapp.Notifier, publicURL string) *policyapp.Versions {
+func newPolicyVersions(pool *db.Pool, notify policyapp.Notifier, publicURL string, limits celenv.Limits) *policyapp.Versions {
 	defs := &defspg.Store{Pool: pool}
 	facts := &factspg.Store{Pool: pool}
-	validator := validate.New(defs, facts, facts, celenv.DefaultLimits)
+	validator := validate.New(defs, facts, facts, limits)
 	validator.Approvers, validator.Sources = gateReaders{pool}, gateReaders{pool}
 	v := &policyapp.Versions{
 		Store: &polpg.Store{Pool: pool}, Facts: facts, Subjects: facts, Definitions: defs,
-		Authz: grantsapp.SubjectAuthorizer{}, Limits: celenv.DefaultLimits,
-		Validator: validator, Tests: scenario.New(defs, facts, celenv.DefaultLimits, policyapp.DefaultBudget),
+		Authz: grantsapp.SubjectAuthorizer{}, Limits: limits,
+		Validator: validator, Tests: scenario.New(defs, facts, limits, policyapp.DefaultBudget),
 		Outcomes: outcomeDiff{validator},
 	}
 	v.Changes = policyapp.NewChanges(pool, notify, publicURL, currentPolicyDigests(defs, facts)).

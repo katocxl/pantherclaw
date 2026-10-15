@@ -170,7 +170,8 @@ func collectTests(fsys fs.FS) (map[string]bool, error) {
 		}
 		if d.IsDir() {
 			switch d.Name() {
-			case ".git", "node_modules", "vendor", "testdata", ".venv", "__pycache__", "dist":
+			// .claude holds session worktrees, whose tests are on unmerged branches.
+			case ".git", ".claude", "node_modules", "vendor", "testdata", ".venv", "__pycache__", "dist":
 				return fs.SkipDir
 			}
 			return nil

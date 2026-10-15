@@ -59,6 +59,8 @@ func testConfig(t *testing.T, d *dbtest.DB, role string, mutate ...func(map[stri
 		},
 		"kek_files":          []string{kek},
 		"worker_concurrency": 2,
+		// Not live, so dev seed accepts the configuration (HR-163).
+		"auth": map[string]any{"api_key_env": "test"},
 	}
 	for _, m := range mutate {
 		m(cfg)

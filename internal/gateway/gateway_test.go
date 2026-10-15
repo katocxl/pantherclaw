@@ -415,6 +415,8 @@ type harness struct {
 	// revocations records the tokens the gateway reported not revoked
 	// (under circuitMu): connection, purpose and repository.
 	revocations []string
+	// githubAPI, when set, is the gateway's github.api_url.
+	githubAPI string
 	// log, when set, is the gateway's logger instead of a discarding one.
 	log *slog.Logger
 	gw  *Gateway
@@ -510,6 +512,9 @@ func setup(t *testing.T, opts ...func(*harness)) *harness {
 	cfg.Control.IdentityDir = t.TempDir()
 	cfg.Egress.AllowedPrefixes = []string{"127.0.0.1/32"}
 	cfg.Approvals.ApproverKeysFile = h.approverKeys
+	if h.githubAPI != "" {
+		cfg.GitHub.APIURL = h.githubAPI
+	}
 	// The control plane is reached over mTLS in production (internal/gateway/
 	// control and the end-to-end tests); here the fakes take plain calls,
 	// marked so that the test can tell they came from the gateway.

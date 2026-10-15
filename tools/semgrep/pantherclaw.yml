@@ -50,7 +50,7 @@ rules:
     message: "Domain packages must not read the wall clock; inject platform/clock (ARCHITECTURE §4)."
     paths:
       include:
-        - "internal/*/domain/"
+        - "/internal/*/domain/"
     pattern: time.Now()
 
   - id: pc-jose-alg-none
@@ -68,5 +68,5 @@ rules:
     message: "Outbound clients must come from internal/platform/httpx (no redirects, dial-time IP checks) (HR-070..074)."
     paths:
       include:
-        - "internal/gateway/"
+        - "/internal/gateway/"
     pattern: "&http.Client{...}"

@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -44,8 +45,12 @@ type fake struct {
 	issued atomic.Int32
 	// sdk answers the /sdk face once the proof checked out; wait answers
 	// the server's long-poll and SSE wait routes.
-	sdk  func(w http.ResponseWriter, r *http.Request, body []byte)
-	wait func(w http.ResponseWriter, r *http.Request)
+	//
+	// Set sdk with setSDK: a handler the client gave up on (a timeout) may
+	// still be running when the next case replaces it.
+	sdkMu sync.Mutex
+	sdk   func(w http.ResponseWriter, r *http.Request, body []byte)
+	wait  func(w http.ResponseWriter, r *http.Request)
 	// requireNonce refuses proofs without the fake's nonce (use_nonce).
 	requireNonce bool
 	// expireFirst refuses the first /sdk call with token_expired.
@@ -132,7 +137,7 @@ func (f *fake) serve(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusUnauthorized)
 			return
 		}
-		f.sdk(w, r, body)
+		f.sdkHandler()(w, r, body)
 	case f.wait != nil && (r.URL.Path == "/pantherclaw.v1.WorkloadService/Wait" || strings.HasPrefix(r.URL.Path, "/v1/wait/")):
 		f.wait(w, r)
 	default:
@@ -227,7 +232,7 @@ func TestHR200_FailsClosedWhenPantherClawCannotDecide(t *testing.T) {
 			<-r.Context().Done()
 		},
 	} {
-		f.sdk = sdk
+		f.setSDK(sdk)
 		ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 		res := c.Authorize(ctx, "payments", refund, client.NewActionID())
 		cancel()
@@ -249,7 +254,7 @@ func TestAuthorizeRetriesForANonceAndAnExpiredToken(t *testing.T) {
 	f.requireNonce = true
 	f.expireFirst.Store(true)
 	var sent string
-	f.sdk = func(w http.ResponseWriter, r *http.Request, body []byte) {
+	f.setSDK(func(w http.ResponseWriter, r *http.Request, body []byte) {
 		var call client.ToolCall
 		if err := json.Unmarshal(body, &call, json.RejectUnknownMembers(true)); err != nil || call.Tool != refund.Tool || call.Server != "payments" ||
 			string(call.Input) != string(refund.Input) || call.ToolUseID != "toolu_01" || r.URL.Path != "/sdk/payments" {
@@ -257,7 +262,7 @@ func TestAuthorizeRetriesForANonceAndAnExpiredToken(t *testing.T) {
 		}
 		sent = r.Header.Get("PC-Action-Id")
 		f.allowed(w, r)
-	}
+	})
 	c := f.client(t)
 	id := client.NewActionID()
 	res := c.Authorize(context.Background(), "payments", refund, id)
@@ -271,9 +276,9 @@ func TestAuthorizeRetriesForANonceAndAnExpiredToken(t *testing.T) {
 // nor a built-in is never sent.
 func TestHR200_OnlyBuiltinsAreObserved(t *testing.T) {
 	f := newFake(t)
-	f.sdk = func(w http.ResponseWriter, _ *http.Request, _ []byte) {
+	f.setSDK(func(w http.ResponseWriter, _ *http.Request, _ []byte) {
 		answer(w, map[string]any{"decision": "allow", "mode": "monitor", "coverage": "OBSERVE_ONLY"})
-	}
+	})
 	c := f.client(t)
 	read := client.ToolCall{Tool: "Read", Input: jsontext.Value(`{"file_path":"/etc/hosts"}`), ToolUseID: "toolu_02"}
 	if res := c.Authorize(context.Background(), "payments", read, client.NewActionID()); res.Outcome != client.Observe {
@@ -300,9 +305,9 @@ func TestHR200_OnlyBuiltinsAreObserved(t *testing.T) {
 // connection, is cannot_decide without a request.
 func TestHR200_AServerNamedLikeNoConnectionIsNeverSent(t *testing.T) {
 	f := newFake(t)
-	f.sdk = func(w http.ResponseWriter, _ *http.Request, _ []byte) {
+	f.setSDK(func(w http.ResponseWriter, _ *http.Request, _ []byte) {
 		answer(w, map[string]any{"decision": "allow", "mode": "monitor", "coverage": "OBSERVE_ONLY"})
-	}
+	})
 	c := f.client(t)
 	for _, call := range []client.ToolCall{
 		{Tool: "mcp__git__hub__merge", Server: "git__hub", Input: jsontext.Value(`{}`), ToolUseID: "toolu_01"},
@@ -356,9 +361,9 @@ func TestRedirectsAreNeverFollowed(t *testing.T) {
 	elsewhere := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { reached.Store(true) }))
 	t.Cleanup(elsewhere.Close)
 	f := newFake(t)
-	f.sdk = func(w http.ResponseWriter, r *http.Request, _ []byte) {
+	f.setSDK(func(w http.ResponseWriter, r *http.Request, _ []byte) {
 		http.Redirect(w, r, elsewhere.URL+"/sdk/payments", http.StatusTemporaryRedirect)
-	}
+	})
 	k := f.key
 	k.Server = f.srv.URL
 	c, err := client.New(client.Config{Key: k, Gateway: f.srv.URL, RunID: runID, HTTPClient: &http.Client{}})
@@ -368,4 +373,16 @@ func TestRedirectsAreNeverFollowed(t *testing.T) {
 	if res := c.Authorize(context.Background(), "payments", refund, client.NewActionID()); res.Outcome != client.CannotDecide || reached.Load() {
 		t.Fatalf("%s, reached the redirect target: %v", res.Outcome, reached.Load())
 	}
+}
+
+func (f *fake) setSDK(fn func(w http.ResponseWriter, r *http.Request, body []byte)) {
+	f.sdkMu.Lock()
+	defer f.sdkMu.Unlock()
+	f.sdk = fn
+}
+
+func (f *fake) sdkHandler() func(w http.ResponseWriter, r *http.Request, body []byte) {
+	f.sdkMu.Lock()
+	defer f.sdkMu.Unlock()
+	return f.sdk
 }

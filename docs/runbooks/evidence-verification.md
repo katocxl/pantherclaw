@@ -95,7 +95,7 @@ Anyone holding `evidence.read` can check a transaction's evidence without trusti
    pclaw evidence trust --out trust.json --server https://pantherclaw.example.com
    ```
 
-2. **Export a bundle** of transactions (`--txn`, up to 50; scoped like `run.read`), or of a range of at most 1,000 ledger positions (`--from`/`--to`; needs `evidence.read` and `audit.read` at org scope). Keep a checkpoint you saved earlier, for example from an earlier bundle, and pass it as `--previous`: the bundle then also holds the proof that today's tree extends it.
+2. **Export a bundle** of transactions (`--txn`, up to 50; scoped like `run.read`), of sandbox closures (`--closure`, below), or of a range of at most 1,000 ledger positions (`--from`/`--to`; needs `evidence.read` and `audit.read` at org scope). Keep a checkpoint you saved earlier, for example from an earlier bundle, and pass it as `--previous`: the bundle then also holds the proof that today's tree extends it.
 
    ```bash
    pclaw evidence bundle --txn <transaction id> --previous saved-checkpoint.txt --out bundle.json
@@ -126,6 +126,29 @@ Every report ends with its limits: what passed shows the integrity of the eviden
 - `entry.link` failed: a stored entry no longer matches its hash. Someone changed the database; the daily verification finds the same thing (`CHAIN_LINK`, above).
 - `witness.previous` or `checkpoint.consistency` failed: the deployment shows a history that does not extend one it showed before. A rewritten history signed again with the real `checkpoints` key verifies on its own (a signature proves who signed, not that nothing changed), so keep checkpoints from earlier bundles and anchor the root: they are what exposes it.
 - A signature by a key that is not in your trust file: either the bundle comes from another deployment, or the deployment rotated its keys. Pin again only after checking the new fingerprints through another channel ([key-rotation.md](key-rotation.md) §7).
+
+## Sandbox closures
+
+A sandbox closure is the evidence that the agent's sandbox refused what it should have: a push with a found token or SSH key, direct DNS, the cloud metadata address, and the rest of the probe catalog (G0 M9, HR-215, HR-227, T-095). Recording a closure appends a `sandbox.closure` entry to the ledger. It names the closure, session, agent and connection, the session's probe key and the host key (base64url, raw Ed25519), each signed probe report (its `probe_runs` id, kind `sandbox`, `control` or `canary`, and the SHA-256 of the compact JWS), and every probe's outcome, sorted by name. The entry is chained, in a checkpoint's tree and anchored like any other.
+
+1. **Export the closure.** `--closure` takes the closure id (up to 50; permission as for a transaction: `evidence.read` where the agent lives). A bundle of a transaction whose receipt's coverage claim names a snapshot computed from a closure carries that closure's entry and reports too, with no flag.
+
+   ```bash
+   pclaw evidence bundle --closure <closure id> --out closure.json
+   pclaw verify closure.json --trust trust.json
+   ```
+
+2. **Read the report.** The entry's hash, its inclusion in a signed checkpoint and the checkpoint signature are the ordinary `entry.link`, `entry.inclusion` and `checkpoint.signature` checks. The closure adds:
+
+| Check | What it establishes |
+|---|---|
+| `closure.reports` | the bundle holds the sandbox, control and canary reports the entry names; each matches the SHA-256 in the entry, verifies under the key the entry names (the session's probe key for the sandbox report, the host key for the others), and is of the entry's session and kind; and the probes the entry lists are the ones the reports hold, with the same outcomes. The canary's two verdicts (`external_canary`, `canary_control`) are re-derived from its hits |
+| `closure.probe` | one line per probe, for example `ssh_push blocked` or `planted_pat_push blocked`: `passed` when the signed report's observation is what the probe expected, `failed` (with what it saw) when it is not |
+| `closure.result` | the entry's `PASSED` or `FAILED` is consistent with the reports: `PASSED` needs every probe and configuration check to have passed. `FAILED` is allowed when everything held, because coverage also requires the whole probe catalog |
+
+A missing, swapped or altered report, one signed by another key, one of another session, or an entry whose outcomes differ from its reports is `failed`, never `not_available`. The only `not_available` is a body removed by retention, as for any entry.
+
+**Range packs.** A range pack (an evidence pack of scope range, HR-224) carries, in `proofs/probes-0001.json`, the closure entries and reports for every step whose `probe_report` it cites. `pclaw verify` re-derives each such step offline: the report must verify through a closure entry of the pack, belong to the range's agent, and say what the step recorded (`blocked` is `BLOCKED`, `reachable` is `ALLOW`). A cited report the pack does not carry fails, unless the manifest lists it as a gap.
 
 ## Evidence packs
 

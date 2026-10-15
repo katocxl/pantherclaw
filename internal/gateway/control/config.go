@@ -76,6 +76,10 @@ type Store struct {
 	ready chan struct{}
 	once  sync.Once
 	wake  chan struct{}
+
+	// Limits bound the package mapping expressions; zero means
+	// celenv.DefaultLimits. The gateway sets them from its configuration.
+	Limits celenv.Limits
 }
 
 // NewStore returns the configuration store of an enrolled gateway.
@@ -188,7 +192,7 @@ func (s *Store) build(res *pb.GetConfigurationResponse) (*Config, error) {
 		if err != nil || d.Name != p.GetName() || d.Version != p.GetVersion() {
 			return nil, fmt.Errorf("%w: package %s@%s does not decode", ErrConfig, p.GetName(), p.GetVersion())
 		}
-		m, err := mapping.New(d, celenv.DefaultLimits)
+		m, err := mapping.New(d, s.limits())
 		if err != nil {
 			return nil, fmt.Errorf("%w: package %s@%s: %w", ErrConfig, p.GetName(), p.GetVersion(), err)
 		}
@@ -218,4 +222,12 @@ func (s *Store) build(res *pb.GetConfigurationResponse) (*Config, error) {
 		}
 	}
 	return cfg, nil
+}
+
+// limits are the CEL limits the mappings compile with.
+func (s *Store) limits() celenv.Limits {
+	if s.Limits == (celenv.Limits{}) {
+		return celenv.DefaultLimits
+	}
+	return s.Limits
 }

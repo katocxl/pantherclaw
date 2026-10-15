@@ -27,6 +27,10 @@ type Faults struct {
 	// InstallationStatus, when set, is what GET /app/installations/{id}
 	// answers instead of describing the installation.
 	InstallationStatus int
+	// UnreadableFiles are paths (such as .github/workflows/deploy.yml)
+	// whose contents GitHub refuses to return (403) while still listing
+	// them: a workflow file that cannot be read.
+	UnreadableFiles []string
 }
 
 // SetFaults replaces the simulator's faults from the next request on.
