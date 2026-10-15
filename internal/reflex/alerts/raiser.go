@@ -101,6 +101,8 @@ func (r *Raiser) RaiseTx(ctx context.Context, tx db.TenantTx, s reflexdomain.Sig
 			return Raised{}, fmt.Errorf("alerts: live entry: %w", err)
 		}
 		return Raised{Attention: s.Attention}, nil
+	case reflexdomain.AttentionFinding, reflexdomain.AttentionAlert, reflexdomain.AttentionIncident, reflexdomain.AttentionPage:
+		// An alert, below.
 	}
 	var suppression *ids.UUID
 	var bypassed []Break
@@ -252,8 +254,10 @@ func entryBody(s reflexdomain.Signal, id ids.UUID, state string) []byte {
 		case len(b.Subjects) > 1:
 			b.Subjects = b.Subjects[:len(b.Subjects)/2]
 		default:
-			out, _ := evdomain.CanonicalBody(body{ID: b.ID, Source: b.Source, Rule: b.Rule, Severity: b.Severity,
-				Attention: b.Attention, Basis: b.Basis, State: b.State, Subjects: []reflexdomain.Subject{}, Test: b.Test})
+			out, _ := evdomain.CanonicalBody(body{
+				ID: b.ID, Source: b.Source, Rule: b.Rule, Severity: b.Severity,
+				Attention: b.Attention, Basis: b.Basis, State: b.State, Subjects: []reflexdomain.Subject{}, Test: b.Test,
+			})
 			return out
 		}
 	}

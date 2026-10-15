@@ -261,8 +261,8 @@ func recordTests(ctx context.Context, q *dbq.Queries, c tenancy.Caller, rule ids
 		return err
 	}
 	return q.InsertCustomRuleTest(ctx, dbq.InsertCustomRuleTestParams{
-		OrgID: c.Org, ID: ids.NewV7(), Rule: rule, Passed: engine.AllPass(rs), Firing: int32(firing), //nolint:gosec // ≤ 32
-		NonFiring: int32(quiet), Results: raw, RunBy: c.Principal.ID, //nolint:gosec // ≤ 32
+		OrgID: c.Org, ID: ids.NewV7(), Rule: rule, Passed: engine.AllPass(rs), Firing: int32(firing),
+		NonFiring: int32(quiet), Results: raw, RunBy: c.Principal.ID,
 	})
 }
 
@@ -301,7 +301,7 @@ func (s *Detections) PublishCustomRule(ctx context.Context, id ids.UUID) (Rule, 
 		}
 		results = engine.RunTests(ctx, cr)
 		if !engine.AllPass(results) {
-			return errTests{results}
+			return testsError{results}
 		}
 		superseded, err := q.DisablePublishedCustomRule(ctx, &c.Principal.ID, c.Org, row.RuleID)
 		if err != nil {
@@ -337,16 +337,16 @@ func (s *Detections) PublishCustomRule(ctx context.Context, id ids.UUID) (Rule, 
 		out = Rule{Rule: cr.Rule, Digest: cr.Digest, Custom: &row, Licensed: true}
 		return err
 	})
-	var te errTests
+	var te testsError
 	if errors.As(err, &te) {
 		return Rule{}, te.results, ErrTestsFailed
 	}
 	return out, results, err
 }
 
-type errTests struct{ results []engine.TestResult }
+type testsError struct{ results []engine.TestResult }
 
-func (errTests) Error() string { return "rule tests failed" }
+func (testsError) Error() string { return "rule tests failed" }
 
 // DisableCustomRule disables a custom rule version.
 func (s *Detections) DisableCustomRule(ctx context.Context, id ids.UUID, reason string) (Rule, error) {

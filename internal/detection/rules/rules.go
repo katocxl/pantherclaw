@@ -301,9 +301,9 @@ func checkKinds(id string, on []string) error {
 	return nil
 }
 
-func checkFields(id, what string, fs []string, min int) error {
-	if len(fs) < min || len(fs) > MaxGroupBy {
-		return invalid(id, "%s lists %d..%d fields", what, min, MaxGroupBy)
+func checkFields(id, what string, fs []string, least int) error {
+	if len(fs) < least || len(fs) > MaxGroupBy {
+		return invalid(id, "%s lists %d..%d fields", what, least, MaxGroupBy)
 	}
 	for _, f := range fs {
 		if !fieldRe.MatchString(f) {
@@ -316,16 +316,16 @@ func checkFields(id, what string, fs []string, min int) error {
 	return nil
 }
 
-func duration(id, what, s string, limit time.Duration) (time.Duration, error) {
+func checkDuration(id, what, s string, limit time.Duration) error {
 	d, err := time.ParseDuration(s)
 	if err != nil || d <= 0 || d > limit {
-		return 0, invalid(id, "%s must be a duration in (0, %s]", what, limit)
+		return invalid(id, "%s must be a duration in (0, %s]", what, limit)
 	}
-	return d, nil
+	return nil
 }
 
 func (w *Window) validate(id string) error {
-	if _, err := duration(id, "window.duration", w.Duration, MaxWindow); err != nil {
+	if err := checkDuration(id, "window.duration", w.Duration, MaxWindow); err != nil {
 		return err
 	}
 	if w.Count < 1 || w.Count > MaxWindowCount {
@@ -338,7 +338,7 @@ func (w *Window) validate(id string) error {
 }
 
 func (f *FirstSeen) validate(id string) error {
-	if _, err := duration(id, "first_seen.horizon", f.Horizon, MaxHorizon); err != nil {
+	if err := checkDuration(id, "first_seen.horizon", f.Horizon, MaxHorizon); err != nil {
 		return err
 	}
 	return checkFields(id, "first_seen.keys", f.Keys, 1)
@@ -348,7 +348,7 @@ func (s *Sequence) validate(id string) error {
 	if len(s.Steps) < MinSequence || len(s.Steps) > MaxSequence {
 		return invalid(id, "a sequence has %d..%d steps", MinSequence, MaxSequence)
 	}
-	if _, err := duration(id, "sequence.within", s.Within, MaxWithin); err != nil {
+	if err := checkDuration(id, "sequence.within", s.Within, MaxWithin); err != nil {
 		return err
 	}
 	for _, st := range s.Steps {

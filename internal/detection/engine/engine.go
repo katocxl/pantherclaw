@@ -262,7 +262,7 @@ func CustomRule(env *celenv.Env, content string, stored []byte, ledger string) (
 		return nil, err
 	}
 	if r.Builtin() {
-		return nil, fmt.Errorf("%w: a custom rule id starts with org.", rules.ErrInvalid)
+		return nil, fmt.Errorf("%w: a custom rule id starts with org", rules.ErrInvalid)
 	}
 	return Compile(env, r, hex.EncodeToString(sum[:]), "")
 }

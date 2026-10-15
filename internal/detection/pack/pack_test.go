@@ -208,10 +208,14 @@ func fires(t *testing.T, id string, events ...rules.TestEvent) bool {
 // pc.sequence.read_then_disclose; the same writes in another run, after the
 // window, or denied, do not.
 func TestT017_SensitiveReadThenPublicWriteIsDetected(t *testing.T) {
-	read := rules.TestEvent{Kind: "receipt.decision", Decision: "ALLOW", Operation: "crm.customer.read", DestinationClass: "internal",
-		Subjects: map[string]string{"run": "r1"}}
-	write := rules.TestEvent{Kind: "receipt.decision", Decision: "ALLOW", Operation: "slack.message.post", DestinationClass: "public",
-		Subjects: map[string]string{"run": "r1"}, At: "29m"}
+	read := rules.TestEvent{
+		Kind: "receipt.decision", Decision: "ALLOW", Operation: "crm.customer.read", DestinationClass: "internal",
+		Subjects: map[string]string{"run": "r1"},
+	}
+	write := rules.TestEvent{
+		Kind: "receipt.decision", Decision: "ALLOW", Operation: "slack.message.post", DestinationClass: "public",
+		Subjects: map[string]string{"run": "r1"}, At: "29m",
+	}
 	if !fires(t, "pc.sequence.read_then_disclose", read, write) {
 		t.Error("read then public write within 30 minutes did not fire")
 	}
@@ -240,12 +244,16 @@ func TestT025_DefinitionDriftIsDetected(t *testing.T) {
 	if !fires(t, "pc.tools.drift", rules.TestEvent{Kind: "audit.connection.drift_reported", Subjects: map[string]string{"connection": "c1"}}) {
 		t.Error("drift report did not fire")
 	}
-	if !fires(t, "pc.tools.drift", rules.TestEvent{Kind: "audit.package.transitioned",
-		Attrs: map[string]string{"to": "QUARANTINED", "reason": "upstream_drift"}}) {
+	if !fires(t, "pc.tools.drift", rules.TestEvent{
+		Kind:  "audit.package.transitioned",
+		Attrs: map[string]string{"to": "QUARANTINED", "reason": "upstream_drift"},
+	}) {
 		t.Error("drift quarantine did not fire")
 	}
-	if fires(t, "pc.tools.drift", rules.TestEvent{Kind: "audit.package.transitioned",
-		Attrs: map[string]string{"to": "QUARANTINED", "reason": "reviewer"}}) {
+	if fires(t, "pc.tools.drift", rules.TestEvent{
+		Kind:  "audit.package.transitioned",
+		Attrs: map[string]string{"to": "QUARANTINED", "reason": "reviewer"},
+	}) {
 		t.Error("a quarantine for another reason fired")
 	}
 }
@@ -254,8 +262,10 @@ func TestT025_DefinitionDriftIsDetected(t *testing.T) {
 // variant-shopping report raises pc.approvals.variant_shopping, a
 // community rule (HR-037 is never edition-gated).
 func TestT007_VariantShoppingRuleFiresInCommunity(t *testing.T) {
-	if !fires(t, "pc.approvals.variant_shopping", rules.TestEvent{Kind: "audit.security.variant_suspected", Reason: "VARIANT_SHOPPING",
-		Subjects: map[string]string{"agent": "a1"}}) {
+	if !fires(t, "pc.approvals.variant_shopping", rules.TestEvent{
+		Kind: "audit.security.variant_suspected", Reason: "VARIANT_SHOPPING",
+		Subjects: map[string]string{"agent": "a1"},
+	}) {
 		t.Error("variant shopping did not fire")
 	}
 }

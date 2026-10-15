@@ -163,14 +163,14 @@ func key(e feed.Event, fs []string) (string, bool) {
 		return "*", true
 	}
 	parts := make([]string, len(fs))
-	any := false
+	some := false
 	for i, f := range fs {
 		parts[i] = f + "=" + field(e, f)
-		any = any || field(e, f) != ""
+		some = some || field(e, f) != ""
 	}
 	k := strings.Join(parts, "|")
 	if len(k) > 500 {
 		k = k[:500]
 	}
-	return k, any
+	return k, some
 }

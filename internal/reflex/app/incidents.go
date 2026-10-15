@@ -77,8 +77,16 @@ type visibility struct {
 	scope *tapp.AgentScope
 }
 
-func newVisibility(c tenancy.Caller, q *dbq.Queries, perm td.Permission) *visibility {
-	return &visibility{org: c.Can(perm, td.OrgPath(c.Org)), scope: tapp.NewAgentScope(c, q, perm)}
+func newVisibility(c tenancy.Caller, q *dbq.Queries) *visibility {
+	return &visibility{
+		org: c.Can(td.PermIncidentRead, td.OrgPath(c.Org)), scope: tapp.NewAgentScope(c, q, td.PermIncidentRead),
+	}
+}
+
+// agentID parses an agent subject's id.
+func agentID(s string) (ids.UUID, bool) {
+	id, err := ids.ParseUUID(s)
+	return id, err == nil
 }
 
 func (v *visibility) subjects(ctx context.Context, subs []reflexdomain.Subject) (bool, error) {
@@ -90,8 +98,8 @@ func (v *visibility) subjects(ctx context.Context, subs []reflexdomain.Subject) 
 		if s.Type != reflexdomain.SubjectAgent {
 			continue
 		}
-		id, err := ids.ParseUUID(s.ID)
-		if err != nil {
+		id, valid := agentID(s.ID)
+		if !valid {
 			return false, nil
 		}
 		ok, err := v.scope.Can(ctx, id)
@@ -174,7 +182,7 @@ func (s *Incidents) ListAlerts(ctx context.Context, f AlertFilter, size int32, t
 			return err
 		}
 		rows, out.Next = page.Finish(p, rows, func(a dbq.PcAlert) ids.UUID { return a.ID })
-		v := newVisibility(c, q, td.PermIncidentRead)
+		v := newVisibility(c, q)
 		for _, a := range rows {
 			ok, err := v.alert(ctx, a)
 			if err != nil {
@@ -216,7 +224,7 @@ func (s *Incidents) GetAlert(ctx context.Context, id ids.UUID) (AlertDetail, err
 		} else if err != nil {
 			return err
 		}
-		v := newVisibility(c, q, td.PermIncidentRead)
+		v := newVisibility(c, q)
 		if ok, err := v.alert(ctx, a); err != nil {
 			return err
 		} else if !ok {
@@ -445,7 +453,7 @@ func (s *Incidents) ListIncidents(ctx context.Context, states []string, size int
 			return err
 		}
 		rows, out.Next = page.Finish(p, rows, func(i dbq.PcIncident) ids.UUID { return i.ID })
-		v := newVisibility(c, q, td.PermIncidentRead)
+		v := newVisibility(c, q)
 		for _, inc := range rows {
 			ok, err := incidentVisible(ctx, q, v, inc)
 			if err != nil {
@@ -511,7 +519,7 @@ func (s *Incidents) GetIncident(ctx context.Context, id ids.UUID) (IncidentDetai
 		} else if err != nil {
 			return err
 		}
-		v := newVisibility(c, q, td.PermIncidentRead)
+		v := newVisibility(c, q)
 		if ok, err := incidentVisible(ctx, q, v, inc); err != nil {
 			return err
 		} else if !ok {
