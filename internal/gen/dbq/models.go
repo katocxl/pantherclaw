@@ -958,6 +958,8 @@ type PcExposureRight struct {
 	ExpiresAt     *time.Time
 	ObservedAt    *time.Time
 	Observations  int32
+	Basis         string
+	Irreversible  bool
 }
 
 type PcExposureSnapshot struct {

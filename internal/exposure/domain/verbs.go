@@ -46,45 +46,102 @@ func (v Verb) Consequence() int {
 
 var (
 	deleteWords   = []string{"delete", "remove", "destroy", "purge"}
-	transferWords = []string{"transfer", "send", "pay", "payout"}
+	transferWords = []string{"transfer", "send", "pay", "payout", "refund"}
+	exportWords   = []string{"export", "upload", "share", "publish"}
 )
 
-// lastSegment is the last dot-separated segment of an effect kind.
-func lastSegment(kind string) string {
-	if i := strings.LastIndexByte(kind, '.'); i >= 0 {
-		return kind[i+1:]
-	}
-	return kind
+// Bases say why an operation got a verb (D45, F257).
+const (
+	BasisAccess        = "ACCESS"         // the definition's access class
+	BasisEffectKind    = "EFFECT_KIND"    // an effect kind's last segment; Classified.Kind names it
+	BasisDefaultUpdate = "DEFAULT_UPDATE" // a write nothing else classifies
+	BasisDelegation    = "DELEGATION"     // the grant's delegation depth
+	BasisScope         = "SCOPE_LEVEL"    // a credential scope's level
+)
+
+// Classified is one verb an operation gets, and why.
+type Classified struct {
+	Verb  Verb
+	Basis string
+	// Kind is the matched effect kind (EFFECT_KIND only).
+	Kind string
 }
 
-// Verbs maps an operation to matrix verbs from its definition (D28): a read
-// reads, and exports when the connection's destination class is public; a
-// write deletes or transfers when an effect kind ends in such a word, and
-// otherwise (or as well) updates. A write whose effects say nothing is an
-// update: a write is never dropped.
-func Verbs(op Operation, c Connection) []Verb {
-	if op.Access == defs.AccessRead {
+// Explain renders the basis as stored: "EFFECT_KIND:<kind>" or the basis.
+func (c Classified) Explain() string {
+	if c.Kind != "" {
+		return c.Basis + ":" + c.Kind
+	}
+	return c.Basis
+}
+
+// lastSegment is the last dot-separated segment of an effect kind, lower
+// case.
+func lastSegment(kind string) string {
+	if i := strings.LastIndexByte(kind, '.'); i >= 0 {
+		kind = kind[i+1:]
+	}
+	return strings.ToLower(kind)
+}
+
+// Classify maps an operation to matrix verbs from its definition (D28,
+// D45), matching each effect kind's last segment case-insensitively:
+//   - a read reads; it also exports when the connection's destination
+//     class is public;
+//   - an effect ending in export, upload, share or publish exports, and
+//     counts under its write verb too;
+//   - a write effect ending in delete, remove, destroy or purge deletes;
+//     in transfer, send, pay, payout or refund transfers; any other write
+//     updates, and a write nothing classifies is an update (never
+//     dropped).
+//
+// Each verb appears once, with the first basis that gave it.
+func Classify(op Operation, c Connection) []Classified {
+	var out []Classified
+	add := func(x Classified) {
+		if !slices.ContainsFunc(out, func(y Classified) bool { return y.Verb == x.Verb }) {
+			out = append(out, x)
+		}
+	}
+	read := op.Access == defs.AccessRead
+	if read {
+		add(Classified{Verb: VerbRead, Basis: BasisAccess})
 		if c.DestinationClass == "public" {
-			return []Verb{VerbRead, VerbExport}
+			add(Classified{Verb: VerbExport, Basis: BasisAccess})
 		}
-		return []Verb{VerbRead}
 	}
-	var out []Verb
 	for _, e := range op.Effects {
-		switch s := lastSegment(e); {
+		s := lastSegment(e)
+		switch {
+		case slices.Contains(exportWords, s):
+			add(Classified{Verb: VerbExport, Basis: BasisEffectKind, Kind: e})
+			if !read {
+				add(Classified{Verb: VerbUpdate, Basis: BasisEffectKind, Kind: e})
+			}
+		case read:
 		case slices.Contains(deleteWords, s):
-			out = append(out, VerbDelete)
+			add(Classified{Verb: VerbDelete, Basis: BasisEffectKind, Kind: e})
 		case slices.Contains(transferWords, s):
-			out = append(out, VerbTransfer)
-		default:
-			out = append(out, VerbUpdate)
+			add(Classified{Verb: VerbTransfer, Basis: BasisEffectKind, Kind: e})
+		case s != "none":
+			add(Classified{Verb: VerbUpdate, Basis: BasisEffectKind, Kind: e})
 		}
 	}
-	if len(out) == 0 {
-		out = []Verb{VerbUpdate}
+	if !read && !slices.ContainsFunc(out, func(x Classified) bool { return x.Verb != VerbExport }) {
+		add(Classified{Verb: VerbUpdate, Basis: BasisDefaultUpdate})
 	}
-	slices.SortFunc(out, func(a, b Verb) int { return slices.Index(AllVerbs, a) - slices.Index(AllVerbs, b) })
-	return slices.Compact(out)
+	slices.SortFunc(out, func(a, b Classified) int { return slices.Index(AllVerbs, a.Verb) - slices.Index(AllVerbs, b.Verb) })
+	return out
+}
+
+// Verbs lists Classify's verbs.
+func Verbs(op Operation, c Connection) []Verb {
+	cs := Classify(op, c)
+	out := make([]Verb, len(cs))
+	for i, x := range cs {
+		out[i] = x.Verb
+	}
+	return out
 }
 
 // Group is an operation's resource group: its target type, qualified by

@@ -93,13 +93,13 @@ RETURNING computed_at;
 -- JSON array of rows (COPY is not allowed under row-level security).
 -- name: InsertExposureRights :exec
 INSERT INTO pc.exposure_rights (org_id, snapshot_id, seq, reach_view, label, agent_id, connection_id, grant_id, operation,
-    resource_group, verb, coverage, reasons, depth, expires_at, observed_at, observations)
+    resource_group, verb, coverage, reasons, depth, expires_at, observed_at, observations, basis, irreversible)
 SELECT sqlc.arg(org_id), sqlc.arg(snapshot_id), x.seq, x.reach_view, x.label, x.agent_id, x.connection_id, x.grant_id,
     x.operation, x.resource_group, x.verb, x.coverage, COALESCE(x.reasons, '{}'), x.depth, x.expires_at, x.observed_at,
-    x.observations
+    x.observations, x.basis, x.irreversible
 FROM jsonb_to_recordset(sqlc.arg(rows)::jsonb) AS x(seq integer, reach_view text, label text, agent_id uuid,
     connection_id uuid, grant_id uuid, operation text, resource_group text, verb text, coverage text, reasons text[],
-    depth smallint, expires_at timestamptz, observed_at timestamptz, observations integer);
+    depth smallint, expires_at timestamptz, observed_at timestamptz, observations integer, basis text, irreversible boolean);
 
 -- LatestExposureSnapshot is the org's current snapshot, with whether a
 -- change was recorded after it was computed.

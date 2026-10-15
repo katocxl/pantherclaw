@@ -67,8 +67,10 @@ func NewIn(t *testing.T, d *dbtest.DB, p *db.Pool) *Org {
 		{"INSERT INTO pc.tool_packages (org_id, id, name) VALUES ($1, $2, 'pc.mock-payments')", []any{o.Org, o.Pkg}},
 		{`INSERT INTO pc.package_versions (org_id, id, package_id, version, file_digest, raw, state)
 			VALUES ($1, $2, $3, '1.0.0', $4, $5, 'ACTIVE')`, []any{o.Org, o.Version, o.Pkg, Digest, mockpayments.Package}},
-		{`INSERT INTO pc.package_pins (org_id, package_id, version_id, version, digest) VALUES ($1, $2, $3, '1.0.0', $4)`,
-			[]any{o.Org, o.Pkg, o.Version, Digest}},
+		{
+			`INSERT INTO pc.package_pins (org_id, package_id, version_id, version, digest) VALUES ($1, $2, $3, '1.0.0', $4)`,
+			[]any{o.Org, o.Pkg, o.Version, Digest},
+		},
 	} {
 		o.Exec(t, s.sql, s.args...)
 	}

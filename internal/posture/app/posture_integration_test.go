@@ -68,8 +68,10 @@ func TestIntReconcileOpensAndRecordsFindings(t *testing.T) {
 	o.Credential(t, "100 days")
 	_, sum := reconcile(t, o)
 	got := findings(t, o)
-	for _, k := range []domain.Kind{domain.UnownedAgent, domain.UncoveredPath, domain.StaleCredential, domain.UnusedAuthority,
-		domain.UnsafeDelegation} {
+	for _, k := range []domain.Kind{
+		domain.UnownedAgent, domain.UncoveredPath, domain.StaleCredential, domain.UnusedAuthority,
+		domain.UnsafeDelegation,
+	} {
 		f, ok := got[k]
 		if !ok || f.State != string(domain.Open) || len(f.AffectedPaths) == 0 {
 			t.Errorf("%s: %+v %v", k, f, ok)
@@ -180,8 +182,12 @@ func TestIntPostureLifecycle(t *testing.T) {
 	}
 	for _, fn := range []func(ctx context.Context, tx db.TenantTx) error{
 		func(ctx context.Context, tx db.TenantTx) error { return app.Assign(ctx, tx, id, o.User, alice) },
-		func(ctx context.Context, tx db.TenantTx) error { return app.StartTesting(ctx, tx, id, alice, "fix deployed") },
-		func(ctx context.Context, tx db.TenantTx) error { return app.Note(ctx, tx, id, "waiting for the rollout", alice) },
+		func(ctx context.Context, tx db.TenantTx) error {
+			return app.StartTesting(ctx, tx, id, alice, "fix deployed")
+		},
+		func(ctx context.Context, tx db.TenantTx) error {
+			return app.Note(ctx, tx, id, "waiting for the rollout", alice)
+		},
 	} {
 		if err := step(fn); err != nil {
 			t.Fatal(err)

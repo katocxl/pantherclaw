@@ -71,6 +71,10 @@ CREATE TABLE pc.exposure_rights (
     -- OBSERVED: the latest dispatch and how many in the window.
     observed_at    timestamptz,
     observations   integer     NOT NULL DEFAULT 0 CHECK (observations >= 0),
+    -- Why the verb (D45): ACCESS, EFFECT_KIND:<kind>, DEFAULT_UPDATE,
+    -- DELEGATION or SCOPE_LEVEL; and whether the operation is irreversible.
+    basis          text        NOT NULL CHECK (basis ~ '^(ACCESS|DEFAULT_UPDATE|DELEGATION|SCOPE_LEVEL|EFFECT_KIND:[A-Za-z0-9_.-]{1,128})$'),
+    irreversible   boolean     NOT NULL DEFAULT false,
     PRIMARY KEY (org_id, snapshot_id, seq),
     FOREIGN KEY (org_id, snapshot_id) REFERENCES pc.exposure_snapshots (org_id, id) ON DELETE CASCADE,
     CHECK ((reach_view = 'OBSERVED') = (observed_at IS NOT NULL)),

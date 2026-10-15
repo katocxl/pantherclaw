@@ -20,6 +20,10 @@ type Cell struct {
 	View          View
 	Label         Label
 	Coverage      Coverage
+	// Bases explain the verb: every distinct basis behind the cell (D45,
+	// F257). Irreversible is set when any operation behind it is.
+	Bases        []string
+	Irreversible bool
 	// Rights counts the rights behind the cell.
 	Rights int
 }
@@ -58,11 +62,18 @@ func BuildMatrix(rights []Right) Matrix {
 		k := key{a, r.ResourceGroup, r.Verb, r.View}
 		c, ok := cells[k]
 		if !ok {
-			cells[k] = &Cell{Agent: r.Agent, ResourceGroup: r.ResourceGroup, Verb: r.Verb, View: r.View, Label: r.Label,
-				Coverage: r.Coverage, Rights: 1}
+			cells[k] = &Cell{
+				Agent: r.Agent, ResourceGroup: r.ResourceGroup, Verb: r.Verb, View: r.View, Label: r.Label,
+				Coverage: r.Coverage, Rights: 1, Bases: []string{r.Basis}, Irreversible: r.Irreversible,
+			}
 			continue
 		}
 		c.Rights++
+		c.Irreversible = c.Irreversible || r.Irreversible
+		if !slices.Contains(c.Bases, r.Basis) {
+			c.Bases = append(c.Bases, r.Basis)
+			slices.Sort(c.Bases)
+		}
 		if r.Label.Rank() < c.Label.Rank() {
 			c.Label = r.Label
 		}
@@ -159,8 +170,10 @@ func Rank(rights []Right, agents []AgentInfo, irreversible map[string]bool) []Ra
 		k := agentKey(r.Agent)
 		a, ok := by[k]
 		if !ok {
-			a = &acc{agent: r.Agent, groups: map[string]bool{}, conns: map[string]bool{},
-				keys: RankKeys{Consequence: VerbRead, Usability: Expired, Enforceability: CoverageEnforced, Owned: owned[k]}}
+			a = &acc{
+				agent: r.Agent, groups: map[string]bool{}, conns: map[string]bool{},
+				keys: RankKeys{Consequence: VerbRead, Usability: Expired, Enforceability: CoverageEnforced, Owned: owned[k]},
+			}
 			by[k] = a
 		}
 		if !a.seen || r.Verb.Consequence() > a.keys.Consequence.Consequence() {

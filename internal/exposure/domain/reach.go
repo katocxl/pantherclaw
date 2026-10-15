@@ -140,6 +140,11 @@ type Right struct {
 	ExpiresAt     *time.Time
 	ObservedAt    *time.Time
 	Observations  int
+	// Basis says why the right has its verb (D45): ACCESS, EFFECT_KIND:<kind>,
+	// DEFAULT_UPDATE, DELEGATION or SCOPE_LEVEL.
+	Basis string
+	// Irreversible flags an operation whose definition is irreversible.
+	Irreversible bool
 }
 
 // Key identifies a right within a view.
@@ -427,17 +432,18 @@ func effective(b *builder, in Inputs, conns map[ids.UUID]*Connection) {
 				if !ok {
 					cov = CoverageUnknown
 				}
-				for _, v := range Verbs(op, *c) {
+				for _, cl := range Classify(op, *c) {
+					v := cl.Verb
 					b.add(Right{
 						View: Effective, Label: l, Agent: ptr(g.Agent), Connection: ptr(c.ID), Grant: ptr(g.ID),
-						Operation: op.Name, ResourceGroup: Group(op, *c), Verb: v, Coverage: cov, Reasons: rs,
+						Operation: op.Name, ResourceGroup: Group(op, *c), Verb: v, Basis: cl.Explain(), Irreversible: op.Reversibility == defs.Irreversible, Coverage: cov, Reasons: rs,
 						ExpiresAt: expires,
 					})
 				}
 				if g.DelegationDepth > 0 {
 					b.add(Right{
 						View: Effective, Label: l, Agent: ptr(g.Agent), Connection: ptr(c.ID), Grant: ptr(g.ID),
-						ResourceGroup: Group(op, *c), Verb: VerbDelegate, Coverage: cov,
+						ResourceGroup: Group(op, *c), Verb: VerbDelegate, Basis: BasisDelegation, Coverage: cov,
 						Reasons: append(slices.Clone(rs), ReasonDelegable), Depth: g.DelegationDepth, ExpiresAt: expires,
 					})
 				}
@@ -483,10 +489,11 @@ func credential(b *builder, in Inputs, conns map[ids.UUID]*Connection) {
 					continue
 				}
 				for _, op := range c.Operations {
-					for _, v := range Verbs(op, *c) {
+					for _, cl := range Classify(op, *c) {
+						v := cl.Verb
 						b.add(Right{
 							View: Credential, Label: Uncertain, Agent: ptr(a), Connection: ptr(c.ID), Operation: op.Name,
-							ResourceGroup: Group(op, *c), Verb: v, Coverage: cov(a, op.Name), Reasons: []string{ReasonAgentHeld},
+							ResourceGroup: Group(op, *c), Verb: v, Basis: cl.Explain(), Irreversible: op.Reversibility == defs.Irreversible, Coverage: cov(a, op.Name), Reasons: []string{ReasonAgentHeld},
 						})
 					}
 				}
@@ -558,10 +565,11 @@ func credential(b *builder, in Inputs, conns map[ids.UUID]*Connection) {
 				default:
 					continue
 				}
-				for _, v := range Verbs(op, *c) {
+				for _, cl := range Classify(op, *c) {
+					v := cl.Verb
 					b.add(Right{
 						View: Credential, Label: label, Agent: ptr(g.Agent), Connection: ptr(c.ID), Operation: op.Name,
-						ResourceGroup: Group(op, *c), Verb: v, Coverage: cv, Reasons: []string{reason},
+						ResourceGroup: Group(op, *c), Verb: v, Basis: cl.Explain(), Irreversible: op.Reversibility == defs.Irreversible, Coverage: cv, Reasons: []string{reason},
 					})
 				}
 			}
@@ -640,7 +648,8 @@ func observed(b *builder, in Inputs, conns map[ids.UUID]*Connection) {
 		if known {
 			group = Group(op, conn)
 		}
-		for _, v := range Verbs(op, conn) {
+		for _, cl := range Classify(op, conn) {
+			v := cl.Verb
 			label, rs := Usable, []string{ReasonDispatched}
 			if !known {
 				rs = append(rs, ReasonDefinitionUnknown)
@@ -650,7 +659,7 @@ func observed(b *builder, in Inputs, conns map[ids.UUID]*Connection) {
 			}
 			b.add(Right{
 				View: Observed, Label: label, Agent: ptr(d.Agent), Connection: ptr(d.Connection), Operation: d.Operation,
-				ResourceGroup: group, Verb: v, Coverage: CoverageUnknown, Reasons: rs, ObservedAt: ptr(d.Last),
+				ResourceGroup: group, Verb: v, Basis: cl.Explain(), Irreversible: op.Reversibility == defs.Irreversible, Coverage: CoverageUnknown, Reasons: rs, ObservedAt: ptr(d.Last),
 				Observations: d.Count,
 			})
 		}
@@ -675,6 +684,9 @@ type builder struct {
 func (b *builder) gap(g string) { b.gaps = append(b.gaps, g) }
 
 func (b *builder) add(r Right) {
+	if r.Basis == "" {
+		r.Basis = defaultBasis(r)
+	}
 	k := r.Key()
 	i, ok := b.idx[k]
 	if !ok {
@@ -691,6 +703,7 @@ func (b *builder) add(r Right) {
 		cur.Coverage = r.Coverage // the weakest path's coverage is what a bypass meets
 	}
 	cur.Depth = max(cur.Depth, r.Depth)
+	cur.Irreversible = cur.Irreversible || r.Irreversible
 	cur.Observations += r.Observations
 	if r.ObservedAt != nil && (cur.ObservedAt == nil || r.ObservedAt.After(*cur.ObservedAt)) {
 		cur.ObservedAt = r.ObservedAt
@@ -709,4 +722,19 @@ func compareRights(a, b Right) int {
 		cmp.Compare(slices.Index(Views, a.View), slices.Index(Views, b.View)),
 		cmp.Compare(a.PathKey(), b.PathKey()),
 	)
+}
+
+// defaultBasis explains a right no definition classified: a credential
+// scope's level, a read's access class, or a write taken as an update.
+func defaultBasis(r Right) string {
+	switch {
+	case slices.Contains(r.Reasons, ReasonCredentialScope) || slices.Contains(r.Reasons, ReasonCapability):
+		return BasisScope
+	case r.Verb == VerbRead:
+		return BasisAccess
+	case r.Verb == VerbDelegate:
+		return BasisDelegation
+	default:
+		return BasisDefaultUpdate
+	}
 }

@@ -186,7 +186,9 @@ func TestTenancy_exposure_snapshots(t *testing.T) {
 	o := exposuretest.New(t)
 	o.Grant(t, o.Agent, 0, "", "payments.*")
 	rec := recompute(t, o)
-	o.Tx(t, func(ctx context.Context, tx db.TenantTx) error { return dbq.New(tx).RecordExposureChange(ctx, o.Org, 1) })
+	o.Tx(t, func(ctx context.Context, tx db.TenantTx) error {
+		return dbq.New(tx).RecordExposureChange(ctx, o.Org, 1)
+	})
 	them := exposuretest.NewIn(t, o.D, o.P)
 	for _, c := range []struct {
 		table, where string

@@ -202,18 +202,24 @@ func Derive(in Inputs) []Candidate {
 		}
 		path := r.PathKey()
 		if r.Agent != nil && !owned[*r.Agent] {
-			d.add(Candidate{Kind: UnownedAgent, RootCause: "agent:" + r.Agent.String(), Agent: r.Agent,
-				Title: "Agent with reach has no owner", Severity: "medium"}, path)
+			d.add(Candidate{
+				Kind: UnownedAgent, RootCause: "agent:" + r.Agent.String(), Agent: r.Agent,
+				Title: "Agent with reach has no owner", Severity: "medium",
+			}, path)
 		}
 		if r.View == exposure.Effective && sensitive(r.Verb) && r.Agent != nil && r.Connection != nil &&
 			(r.Coverage == exposure.CoverageUnknown || r.Coverage == exposure.CoverageObserveOnly) {
-			d.add(Candidate{Kind: UncoveredPath, RootCause: "connection:" + r.Connection.String(), Agent: r.Agent,
-				Connection: r.Connection, Title: "Write reach on a path that is not enforced", Severity: sev(r.Verb)}, path)
+			d.add(Candidate{
+				Kind: UncoveredPath, RootCause: "connection:" + r.Connection.String(), Agent: r.Agent,
+				Connection: r.Connection, Title: "Write reach on a path that is not enforced", Severity: sev(r.Verb),
+			}, path)
 		}
 		if r.View == exposure.Credential && r.Agent != nil && r.Connection != nil && sensitive(r.Verb) &&
 			slicesContainsAny(r.Reasons, exposure.ReasonRouteOutside, exposure.ReasonAgentHeld) {
-			d.add(Candidate{Kind: UncoveredPath, RootCause: "connection:" + r.Connection.String(), Agent: r.Agent,
-				Connection: r.Connection, Title: "Write reach on a path that is not enforced", Severity: sev(r.Verb)}, path)
+			d.add(Candidate{
+				Kind: UncoveredPath, RootCause: "connection:" + r.Connection.String(), Agent: r.Agent,
+				Connection: r.Connection, Title: "Write reach on a path that is not enforced", Severity: sev(r.Verb),
+			}, path)
 		}
 		if r.Grant == nil || r.View != exposure.Effective {
 			if r.View == exposure.Effective && r.Operation != "" && sensitive(r.Verb) && in.Unverified[r.Operation] &&
@@ -225,8 +231,10 @@ func Derive(in Inputs) []Candidate {
 		g := grants[*r.Grant]
 		root := "grant:" + r.Grant.String()
 		if len(g.Unbounded) > 0 && sensitive(r.Verb) {
-			c := Candidate{Kind: ExcessiveGrant, RootCause: root, Agent: r.Agent, Grant: r.Grant,
-				Title: "Grant leaves write authority unbounded", Severity: sev(r.Verb), Detail: map[string]string{}}
+			c := Candidate{
+				Kind: ExcessiveGrant, RootCause: root, Agent: r.Agent, Grant: r.Grant,
+				Title: "Grant leaves write authority unbounded", Severity: sev(r.Verb), Detail: map[string]string{},
+			}
 			for _, u := range g.Unbounded {
 				c.Detail["unbounded_"+u] = "true"
 			}
@@ -234,14 +242,18 @@ func Derive(in Inputs) []Candidate {
 		}
 		if r.Verb == exposure.VerbDelegate && slicesContainsAny(r.Reasons, exposure.ReasonDelegable) &&
 			r.Coverage != exposure.CoverageEnforced {
-			d.add(Candidate{Kind: UnsafeDelegation, RootCause: root, Agent: r.Agent, Grant: r.Grant,
+			d.add(Candidate{
+				Kind: UnsafeDelegation, RootCause: root, Agent: r.Agent, Grant: r.Grant,
 				Title: "Grant can be delegated over a path that is not enforced", Severity: "high",
-				Detail: map[string]string{"depth": strconv.Itoa(r.Depth)}}, path)
+				Detail: map[string]string{"depth": strconv.Itoa(r.Depth)},
+			}, path)
 		}
 		if sensitive(r.Verb) && r.Operation != "" && !g.CreatedAt.IsZero() && in.Now.Sub(g.CreatedAt) >= UnusedAfter &&
 			!used[r.PathKey()] {
-			d.add(Candidate{Kind: UnusedAuthority, RootCause: root, Agent: r.Agent, Grant: r.Grant,
-				Title: "Grant reaches writes it has not used in 30 days", Severity: "low"}, path)
+			d.add(Candidate{
+				Kind: UnusedAuthority, RootCause: root, Agent: r.Agent, Grant: r.Grant,
+				Title: "Grant reaches writes it has not used in 30 days", Severity: "low",
+			}, path)
 		}
 		if r.Operation != "" && sensitive(r.Verb) && in.Unverified[r.Operation] &&
 			(in.Irreversible[r.Operation] || r.Verb != exposure.VerbUpdate) && r.Connection != nil {
@@ -257,9 +269,11 @@ func Derive(in Inputs) []Candidate {
 		if len(paths) == 0 {
 			paths = []string{exposure.PathKey(nil, &conn, "", "credential:"+c.Name, exposure.VerbRead)}
 		}
-		d.add(Candidate{Kind: StaleCredential, RootCause: "connection:" + conn.String(), Connection: &conn,
+		d.add(Candidate{
+			Kind: StaleCredential, RootCause: "connection:" + conn.String(), Connection: &conn,
 			Title: "Credential not rotated in 90 days", Severity: "medium",
-			Detail: map[string]string{"age_days": strconv.Itoa(int(in.Now.Sub(c.CreatedAt).Hours() / 24))}}, paths...)
+			Detail: map[string]string{"age_days": strconv.Itoa(int(in.Now.Sub(c.CreatedAt).Hours() / 24))},
+		}, paths...)
 	}
 	for _, f := range in.CoverageFindings {
 		id := f.ID
@@ -280,9 +294,11 @@ func Derive(in Inputs) []Candidate {
 		if len(paths) == 0 {
 			paths = []string{exposure.PathKey(f.Agent, f.Connection, "", "finding:"+id.String(), exposure.VerbUpdate)}
 		}
-		d.add(Candidate{Kind: CredentialOverreach, RootCause: root, Agent: f.Agent, Connection: f.Connection,
+		d.add(Candidate{
+			Kind: CredentialOverreach, RootCause: root, Agent: f.Agent, Connection: f.Connection,
 			CoverageFinding: &id, Title: "Credential holds more than its operations need", Severity: f.Severity,
-			Detail: map[string]string{"subject": truncate(f.Subject, 256)}}, paths...)
+			Detail: map[string]string{"subject": truncate(f.Subject, 256)},
+		}, paths...)
 	}
 	out := make([]Candidate, 0, len(d.by))
 	for _, c := range d.by {
@@ -300,9 +316,11 @@ func Derive(in Inputs) []Candidate {
 }
 
 func unverified(r exposure.Right) Candidate {
-	return Candidate{Kind: UnverifiedSensitiveTool, RootCause: "connection:" + r.Connection.String(), Agent: r.Agent,
+	return Candidate{
+		Kind: UnverifiedSensitiveTool, RootCause: "connection:" + r.Connection.String(), Agent: r.Agent,
 		Connection: r.Connection, Title: "Sensitive operation has no effect verifier", Severity: sev(r.Verb),
-		Detail: map[string]string{"operation": r.Operation}}
+		Detail: map[string]string{"operation": r.Operation},
+	}
 }
 
 func cutLevel(s string) (string, string, bool) {

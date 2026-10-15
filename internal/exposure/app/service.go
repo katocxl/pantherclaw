@@ -67,8 +67,10 @@ func Recompute(ctx context.Context, tx db.TenantTx, cause string, feedSeq int64)
 	if gaps == nil {
 		gaps = []string{}
 	}
-	s := Snapshot{ID: ids.NewV7(), FeedSeq: feedSeq, Cause: cause, Rights: len(rights), Truncated: truncated, Gaps: gaps,
-		Digest: Digest(rights)}
+	s := Snapshot{
+		ID: ids.NewV7(), FeedSeq: feedSeq, Cause: cause, Rights: len(rights), Truncated: truncated, Gaps: gaps,
+		Digest: Digest(rights),
+	}
 	q := dbq.New(tx)
 	s.ComputedAt, err = q.InsertExposureSnapshot(ctx, dbq.InsertExposureSnapshotParams{
 		OrgID: tx.OrgID(), ID: s.ID, FeedSeq: feedSeq, Cause: cause, Rights: int32(len(rights)), //nolint:gosec // G115: ≤ MaxRights
@@ -110,6 +112,8 @@ type row struct {
 	ExpiresAt     *time.Time `json:"expires_at"`
 	ObservedAt    *time.Time `json:"observed_at"`
 	Observations  int        `json:"observations"`
+	Basis         string     `json:"basis"`
+	Irreversible  bool       `json:"irreversible"`
 }
 
 func rowOf(seq int, r domain.Right) row {
@@ -128,6 +132,7 @@ func rowOf(seq int, r domain.Right) row {
 		Seq: seq, View: string(r.View), Label: string(r.Label), Agent: str(r.Agent), Connection: str(r.Connection), Grant: str(r.Grant),
 		Operation: op, ResourceGroup: r.ResourceGroup, Verb: string(r.Verb), Coverage: string(r.Coverage), Reasons: reasons,
 		Depth: r.Depth, ExpiresAt: r.ExpiresAt, ObservedAt: r.ObservedAt, Observations: r.Observations,
+		Basis: r.Basis, Irreversible: r.Irreversible,
 	}
 }
 
@@ -137,7 +142,7 @@ func RightOf(x dbq.PcExposureRight) domain.Right {
 		View: domain.View(x.ReachView), Label: domain.Label(x.Label), Agent: x.AgentID, Connection: x.ConnectionID,
 		Grant: x.GrantID, ResourceGroup: x.ResourceGroup, Verb: domain.Verb(x.Verb), Coverage: domain.Coverage(x.Coverage),
 		Reasons: x.Reasons, Depth: int(x.Depth), ExpiresAt: x.ExpiresAt, ObservedAt: x.ObservedAt,
-		Observations: int(x.Observations),
+		Observations: int(x.Observations), Basis: x.Basis, Irreversible: x.Irreversible,
 	}
 	if x.Operation != nil {
 		r.Operation = *x.Operation

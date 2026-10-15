@@ -36,18 +36,24 @@ func newWorld() *world {
 				Known: true,
 				Operations: []domain.Operation{
 					{Name: "payments.charge.read", Access: defs.AccessRead, TargetType: "charge"},
-					{Name: "payments.refund.create", Access: defs.AccessWrite, TargetType: "charge", Effects: []string{"funds.transfer"},
-						Reversibility: defs.Irreversible},
-					{Name: "payments.customer.delete", Access: defs.AccessWrite, TargetType: "customer",
-						Effects: []string{"customer.delete"}},
+					{
+						Name: "payments.refund.create", Access: defs.AccessWrite, TargetType: "charge", Effects: []string{"funds.transfer"},
+						Reversibility: defs.Irreversible,
+					},
+					{
+						Name: "payments.customer.delete", Access: defs.AccessWrite, TargetType: "customer",
+						Effects: []string{"customer.delete"},
+					},
 				},
 				Credential: &domain.CredentialInfo{Kind: "static", Version: 1, CreatedAt: now.Add(-time.Hour)},
 			},
 			{
 				ID: w.gh, Name: "github", State: "ACTIVE", AccessMode: "pantherclaw_held", DestinationClass: "public", Known: true,
 				Operations: []domain.Operation{{Name: "repository.contents.read", Access: defs.AccessRead, TargetType: "repository"}},
-				Credential: &domain.CredentialInfo{Kind: "github_app", Version: 1, ScopeKnown: true,
-					Scopes: map[string]string{"contents": "write", "administration": "write"}, Overreach: []string{"administration:write"}},
+				Credential: &domain.CredentialInfo{
+					Kind: "github_app", Version: 1, ScopeKnown: true,
+					Scopes: map[string]string{"contents": "write", "administration": "write"}, Overreach: []string{"administration:write"},
+				},
 			},
 		},
 		Policy:   domain.Policy{Known: true},
@@ -81,13 +87,78 @@ func TestVerbsFromDefinitions(t *testing.T) {
 		{"bare write updates", domain.Operation{Access: defs.AccessWrite}, internal, []domain.Verb{domain.VerbUpdate}},
 		{"delete", domain.Operation{Access: defs.AccessWrite, Effects: []string{"repo.branch.delete"}}, internal, []domain.Verb{domain.VerbDelete}},
 		{"transfer", domain.Operation{Access: defs.AccessWrite, Effects: []string{"funds.transfer"}}, internal, []domain.Verb{domain.VerbTransfer}},
-		{"mixed", domain.Operation{Access: defs.AccessWrite, Effects: []string{"a.write", "b.remove"}}, internal,
-			[]domain.Verb{domain.VerbUpdate, domain.VerbDelete}},
+		{
+			"mixed",
+			domain.Operation{Access: defs.AccessWrite, Effects: []string{"a.write", "b.remove"}},
+			internal,
+			[]domain.Verb{domain.VerbUpdate, domain.VerbDelete},
+		},
 		{"unknown access is a write", domain.Operation{}, internal, []domain.Verb{domain.VerbUpdate}},
+		{
+			"refund transfers, any case",
+			domain.Operation{Access: defs.AccessWrite, Effects: []string{"payments.REFUND"}},
+			internal,
+			[]domain.Verb{domain.VerbTransfer},
+		},
+		{
+			"publish exports and updates",
+			domain.Operation{Access: defs.AccessWrite, Effects: []string{"site.page.publish"}},
+			internal,
+			[]domain.Verb{domain.VerbExport, domain.VerbUpdate},
+		},
+		{
+			"read with an upload effect exports",
+			domain.Operation{Access: defs.AccessRead, Effects: []string{"file.Upload"}},
+			internal,
+			[]domain.Verb{domain.VerbRead, domain.VerbExport},
+		},
+		{
+			"write with no effect but none",
+			domain.Operation{Access: defs.AccessWrite, Effects: []string{"none"}},
+			internal,
+			[]domain.Verb{domain.VerbUpdate},
+		},
 	} {
 		if got := domain.Verbs(c.op, c.conn); !slices.Equal(got, c.want) {
 			t.Errorf("%s: %v, want %v", c.name, got, c.want)
 		}
+	}
+	// Each verb says why (D45).
+	for _, c := range []struct {
+		op   domain.Operation
+		want []string
+	}{
+		{domain.Operation{Access: defs.AccessRead}, []string{"ACCESS"}},
+		{domain.Operation{Access: defs.AccessWrite, Effects: []string{"funds.transfer"}}, []string{"EFFECT_KIND:funds.transfer"}},
+		{domain.Operation{Access: defs.AccessWrite}, []string{"DEFAULT_UPDATE"}},
+		{domain.Operation{Access: defs.AccessWrite, Effects: []string{"a.share"}}, []string{"EFFECT_KIND:a.share", "EFFECT_KIND:a.share"}},
+	} {
+		var got []string
+		for _, x := range domain.Classify(c.op, internal) {
+			got = append(got, x.Explain())
+		}
+		if !slices.Equal(got, c.want) {
+			t.Errorf("%v: bases %v, want %v", c.op.Effects, got, c.want)
+		}
+	}
+}
+
+// TestMatrixCellsExplainTheirVerb: a cell carries its bases and flags an
+// irreversible operation behind it.
+func TestMatrixCellsExplainTheirVerb(t *testing.T) {
+	w := newWorld()
+	m := domain.BuildMatrix(domain.Compute(w.in).Rights)
+	i := slices.IndexFunc(m.Cells, func(c domain.Cell) bool {
+		return c.View == domain.Effective && c.Verb == domain.VerbTransfer
+	})
+	if i < 0 || !m.Cells[i].Irreversible || !slices.Equal(m.Cells[i].Bases, []string{"EFFECT_KIND:funds.transfer"}) {
+		t.Fatalf("transfer cell: %+v", m.Cells[i])
+	}
+	j := slices.IndexFunc(m.Cells, func(c domain.Cell) bool {
+		return c.View == domain.Effective && c.Verb == domain.VerbRead
+	})
+	if j < 0 || m.Cells[j].Irreversible || !slices.Equal(m.Cells[j].Bases, []string{"ACCESS"}) {
+		t.Fatalf("read cell: %+v", m.Cells[j])
 	}
 }
 
@@ -235,7 +306,8 @@ func TestMatrixRankingAndDependents(t *testing.T) {
 	w := newWorld()
 	second := ids.NewV7()
 	w.in.Grants = append(w.in.Grants, domain.Grant{ID: ids.NewV7(), Agent: w.other, Bounds: gdomain.Bounds{
-		Operations: &gdomain.Ops{"payments.charge.read"}}, NotBefore: now.Add(-time.Hour), ExpiresAt: now.Add(time.Hour)})
+		Operations: &gdomain.Ops{"payments.charge.read"},
+	}, NotBefore: now.Add(-time.Hour), ExpiresAt: now.Add(time.Hour)})
 	w.in.Dispatches = []domain.Dispatch{{Agent: w.other, Connection: w.conn, Operation: "payments.charge.read", Count: 1, Last: now}}
 	rs := domain.Compute(w.in).Rights
 	m := domain.BuildMatrix(rs)
@@ -288,8 +360,10 @@ func TestPreviewKeepsRemainingReach(t *testing.T) {
 		t.Fatalf("credential revoke: %+v", d.Removed)
 	}
 	// A second grant keeps the path: it is remaining, not removed.
-	w.in.Grants = append(w.in.Grants, domain.Grant{ID: ids.NewV7(), Agent: w.agent, Bounds: gdomain.Bounds{},
-		NotBefore: now.Add(-time.Hour), ExpiresAt: now.Add(time.Hour)})
+	w.in.Grants = append(w.in.Grants, domain.Grant{
+		ID: ids.NewV7(), Agent: w.agent, Bounds: gdomain.Bounds{},
+		NotBefore: now.Add(-time.Hour), ExpiresAt: now.Add(time.Hour),
+	})
 	d = domain.Preview(w.in, domain.Change{RevokeGrants: []ids.UUID{w.grant}})
 	if len(d.Disruption) != 0 || !slices.ContainsFunc(d.Remaining, func(r domain.Right) bool { return r.Verb == domain.VerbTransfer }) {
 		t.Fatalf("second grant: disruption %d remaining %d", len(d.Disruption), len(d.Remaining))
@@ -301,8 +375,10 @@ func TestPreviewKeepsRemainingReach(t *testing.T) {
 // expired and historical edges never count as current authority.
 func TestHR254_GraphFiltersBeforeCounting(t *testing.T) {
 	w := newWorld()
-	w.in.Grants = append(w.in.Grants, domain.Grant{ID: ids.NewV7(), Agent: w.other, Bounds: gdomain.Bounds{},
-		NotBefore: now.Add(-time.Hour), ExpiresAt: now.Add(time.Hour)})
+	w.in.Grants = append(w.in.Grants, domain.Grant{
+		ID: ids.NewV7(), Agent: w.other, Bounds: gdomain.Bounds{},
+		NotBefore: now.Add(-time.Hour), ExpiresAt: now.Add(time.Hour),
+	})
 	w.in.Grants[0].ExpiresAt = now.Add(-time.Second)
 	rs := domain.Compute(w.in).Rights
 	hidden := w.other.String()
@@ -360,8 +436,10 @@ func TestCausalAndChangeEdges(t *testing.T) {
 	if len(es) != 2 || es[0].Kind != domain.EdgeDelegated || es[1].From.ID != "t1" || es[1].Basis != "INFERRED" {
 		t.Fatalf("causal: %+v", es)
 	}
-	cs := domain.ChangeEdges([]domain.ChangeRecord{{Actor: domain.Node{Type: "user", ID: "u"}, Subject: domain.Node{Type: "grant", ID: "g"},
-		Revision: 2, At: now, Current: true}})
+	cs := domain.ChangeEdges([]domain.ChangeRecord{{
+		Actor: domain.Node{Type: "user", ID: "u"}, Subject: domain.Node{Type: "grant", ID: "g"},
+		Revision: 2, At: now, Current: true,
+	}})
 	if len(cs) != 1 || cs[0].State != domain.EdgeActive || cs[0].Revision != 2 {
 		t.Fatalf("change: %+v", cs)
 	}

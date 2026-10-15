@@ -20,10 +20,17 @@ func p(u ids.UUID) *ids.UUID { return &u }
 func TestLifecycleTable(t *testing.T) {
 	allowed := map[[2]domain.State]bool{}
 	for _, m := range [][2]domain.State{
-		{domain.Open, domain.Assigned}, {domain.Open, domain.AcceptedTemporarily}, {domain.Open, domain.EvidenceIncomplete},
-		{domain.Open, domain.Remediated}, {domain.Assigned, domain.Testing}, {domain.Assigned, domain.Remediated},
-		{domain.Testing, domain.Remediated}, {domain.Testing, domain.Open}, {domain.Remediated, domain.Open},
-		{domain.AcceptedTemporarily, domain.Open}, {domain.EvidenceIncomplete, domain.Open},
+		{domain.Open, domain.Assigned},
+		{domain.Open, domain.AcceptedTemporarily},
+		{domain.Open, domain.EvidenceIncomplete},
+		{domain.Open, domain.Remediated},
+		{domain.Assigned, domain.Testing},
+		{domain.Assigned, domain.Remediated},
+		{domain.Testing, domain.Remediated},
+		{domain.Testing, domain.Open},
+		{domain.Remediated, domain.Open},
+		{domain.AcceptedTemporarily, domain.Open},
+		{domain.EvidenceIncomplete, domain.Open},
 	} {
 		allowed[m] = true
 		if !domain.CanMove(m[0], m[1]) {
@@ -31,8 +38,11 @@ func TestLifecycleTable(t *testing.T) {
 		}
 	}
 	for _, m := range [][2]domain.State{
-		{domain.Open, domain.Testing}, {domain.Remediated, domain.Assigned}, {domain.AcceptedTemporarily, domain.Remediated},
-		{domain.Open, domain.Open}, {domain.Remediated, domain.AcceptedTemporarily},
+		{domain.Open, domain.Testing},
+		{domain.Remediated, domain.Assigned},
+		{domain.AcceptedTemporarily, domain.Remediated},
+		{domain.Open, domain.Open},
+		{domain.Remediated, domain.AcceptedTemporarily},
 	} {
 		if domain.CanMove(m[0], m[1]) {
 			t.Errorf("%s -> %s allowed", m[0], m[1])
@@ -49,14 +59,18 @@ func TestLifecycleTable(t *testing.T) {
 func TestDeriveKinds(t *testing.T) {
 	agent, conn, grant, cf := ids.NewV7(), ids.NewV7(), ids.NewV7(), ids.NewV7()
 	r := func(view exposure.View, verb exposure.Verb, op string, cov exposure.Coverage, reasons ...string) exposure.Right {
-		return exposure.Right{View: view, Label: exposure.Usable, Agent: p(agent), Connection: p(conn), Grant: p(grant),
-			Operation: op, ResourceGroup: "payments/charge", Verb: verb, Coverage: cov, Reasons: reasons, Depth: 1}
+		return exposure.Right{
+			View: view, Label: exposure.Usable, Agent: p(agent), Connection: p(conn), Grant: p(grant),
+			Operation: op, ResourceGroup: "payments/charge", Verb: verb, Coverage: cov, Reasons: reasons, Depth: 1,
+		}
 	}
 	rights := []exposure.Right{
 		r(exposure.Effective, exposure.VerbTransfer, "payments.refund.create", exposure.CoverageUnknown),
 		r(exposure.Effective, exposure.VerbDelegate, "", exposure.CoveragePartial, exposure.ReasonDelegable),
-		{View: exposure.Credential, Label: exposure.Usable, Connection: p(conn), ResourceGroup: "scope:administration",
-			Verb: exposure.VerbUpdate, Coverage: exposure.CoverageUnknown},
+		{
+			View: exposure.Credential, Label: exposure.Usable, Connection: p(conn), ResourceGroup: "scope:administration",
+			Verb: exposure.VerbUpdate, Coverage: exposure.CoverageUnknown,
+		},
 	}
 	got := domain.Derive(domain.Inputs{
 		Now: now, Rights: rights, Agents: []domain.Agent{{ID: agent}},
@@ -104,12 +118,18 @@ func TestDeriveKinds(t *testing.T) {
 // acceptance reopens.
 func TestHR255_RemediatedOnlyWhenEveryPathIsGone(t *testing.T) {
 	agent, conn := ids.NewV7(), ids.NewV7()
-	right := exposure.Right{View: exposure.Effective, Label: exposure.Usable, Agent: p(agent), Connection: p(conn),
-		Operation: "x.y", ResourceGroup: "g", Verb: exposure.VerbUpdate, Coverage: exposure.CoverageUnknown}
-	cand := domain.Candidate{Kind: domain.UncoveredPath, RootCause: "connection:" + conn.String(), Agent: p(agent),
-		Paths: []string{right.PathKey(), "other|path"}}
-	f := domain.Finding{ID: ids.NewV7(), Kind: cand.Kind, Fingerprint: cand.Fingerprint(), State: domain.Open,
-		Paths: cand.Paths, Connection: p(conn)}
+	right := exposure.Right{
+		View: exposure.Effective, Label: exposure.Usable, Agent: p(agent), Connection: p(conn),
+		Operation: "x.y", ResourceGroup: "g", Verb: exposure.VerbUpdate, Coverage: exposure.CoverageUnknown,
+	}
+	cand := domain.Candidate{
+		Kind: domain.UncoveredPath, RootCause: "connection:" + conn.String(), Agent: p(agent),
+		Paths: []string{right.PathKey(), "other|path"},
+	}
+	f := domain.Finding{
+		ID: ids.NewV7(), Kind: cand.Kind, Fingerprint: cand.Fingerprint(), State: domain.Open,
+		Paths: cand.Paths, Connection: p(conn),
+	}
 
 	acts := domain.Reconcile([]domain.Finding{f}, nil, domain.Snapshot{Now: now, Rights: []exposure.Right{right}})
 	if len(acts) != 0 {

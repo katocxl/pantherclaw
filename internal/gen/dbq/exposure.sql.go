@@ -441,13 +441,13 @@ func (q *Queries) GetExposureChanges(ctx context.Context, orgID ids.OrgID) (PcEx
 
 const insertExposureRights = `-- name: InsertExposureRights :exec
 INSERT INTO pc.exposure_rights (org_id, snapshot_id, seq, reach_view, label, agent_id, connection_id, grant_id, operation,
-    resource_group, verb, coverage, reasons, depth, expires_at, observed_at, observations)
+    resource_group, verb, coverage, reasons, depth, expires_at, observed_at, observations, basis, irreversible)
 SELECT $1, $2, x.seq, x.reach_view, x.label, x.agent_id, x.connection_id, x.grant_id,
     x.operation, x.resource_group, x.verb, x.coverage, COALESCE(x.reasons, '{}'), x.depth, x.expires_at, x.observed_at,
-    x.observations
+    x.observations, x.basis, x.irreversible
 FROM jsonb_to_recordset($3::jsonb) AS x(seq integer, reach_view text, label text, agent_id uuid,
     connection_id uuid, grant_id uuid, operation text, resource_group text, verb text, coverage text, reasons text[],
-    depth smallint, expires_at timestamptz, observed_at timestamptz, observations integer)
+    depth smallint, expires_at timestamptz, observed_at timestamptz, observations integer, basis text, irreversible boolean)
 `
 
 // InsertExposureRights inserts a batch of a snapshot's rights, given as a
@@ -536,7 +536,7 @@ func (q *Queries) LatestExposureSnapshot(ctx context.Context, orgID ids.OrgID) (
 }
 
 const listExposureRights = `-- name: ListExposureRights :many
-SELECT org_id, snapshot_id, seq, reach_view, label, agent_id, connection_id, grant_id, operation, resource_group, verb, coverage, reasons, depth, expires_at, observed_at, observations FROM pc.exposure_rights
+SELECT org_id, snapshot_id, seq, reach_view, label, agent_id, connection_id, grant_id, operation, resource_group, verb, coverage, reasons, depth, expires_at, observed_at, observations, basis, irreversible FROM pc.exposure_rights
 WHERE org_id = $1 AND snapshot_id = $2 AND seq > $3
   AND ($4::uuid IS NULL OR agent_id = $4)
   AND ($5::uuid IS NULL OR connection_id = $5)
@@ -589,6 +589,8 @@ func (q *Queries) ListExposureRights(ctx context.Context, arg ListExposureRights
 			&i.ExpiresAt,
 			&i.ObservedAt,
 			&i.Observations,
+			&i.Basis,
+			&i.Irreversible,
 		); err != nil {
 			return nil, err
 		}
