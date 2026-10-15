@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"maps"
 	"regexp"
 	"slices"
 	"strings"
@@ -22,8 +23,10 @@ import (
 	"github.com/katocxl/pantherclaw/internal/definitions/mapping"
 	fdomain "github.com/katocxl/pantherclaw/internal/facts/domain"
 	"github.com/katocxl/pantherclaw/internal/platform/celenv"
+	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	polapp "github.com/katocxl/pantherclaw/internal/policy/app"
 	"github.com/katocxl/pantherclaw/internal/policy/domain"
+	"github.com/katocxl/pantherclaw/internal/policy/scenario"
 	mockpayments "github.com/katocxl/pantherclaw/packages/mock-payments"
 	pcgithub "github.com/katocxl/pantherclaw/packages/pc-github"
 	pcshell "github.com/katocxl/pantherclaw/packages/pc-shell"
@@ -55,10 +58,10 @@ type m11Case struct {
 	Per     string `json:"per"`
 	Summary string `json:"summary"`
 	Action  struct {
-		Operation   string         `json:"operation"`
-		Environment string         `json:"environment,omitzero"`
-		Target      string         `json:"target,omitzero"`
-		Params      jsontext.Value `json:"params"`
+		Operation   string           `json:"operation"`
+		Environment string           `json:"environment,omitzero"`
+		Target      *actionir.Target `json:"target,omitzero"`
+		Params      jsontext.Value   `json:"params"`
 	} `json:"action"`
 	Given struct {
 		Grant *struct {
@@ -91,6 +94,8 @@ type m11Case struct {
 type m11Rendered struct {
 	rules []map[string]any
 	cases []m11Case
+	// raw are the rendered cases as JSON objects.
+	raw []map[string]any
 }
 
 // renderM11 renders a template's policy.json and tests.json the way apply
@@ -174,6 +179,7 @@ func renderM11Env(t *testing.T, name string, repos []string, environment string)
 			t.Fatalf("%s/tests.json %v: not in the D7 format: %v", name, c["id"], err)
 		}
 		r.cases = append(r.cases, tc)
+		r.raw = append(r.raw, c)
 	}
 	return r
 }
@@ -381,15 +387,17 @@ func m11Decide(t *testing.T, c *polapp.Compiled, d *defs.Definition, tc m11Case)
 	t.Helper()
 	facts := map[string]fdomain.Value{}
 	for name, f := range tc.Given.Facts {
-		var b bool
+		var b struct {
+			Bool bool `json:"bool"`
+		}
 		if err := json.Unmarshal(f.Value, &b); err != nil {
 			t.Fatalf("%s: fact %s: %v", tc.ID, name, err)
 		}
-		facts[name] = fdomain.Value{Type: fdomain.TypeBoolean, Bool: b}
+		facts[name] = fdomain.Value{Type: fdomain.TypeBoolean, Bool: b.Bool}
 	}
 	a := actionir.ActionIR{
 		Operation: d.Operation, Definition: actionir.Definition{Digest: d.Digest}, Env: tc.Action.Environment,
-		Target: actionir.Target{Type: d.Target.Type, ID: tc.Action.Target}, Params: tc.Action.Params,
+		Target: *tc.Action.Target, Params: tc.Action.Params,
 	}
 	out, err := c.Evaluate(context.Background(), d, a, polapp.Input{Budget: polapp.DefaultBudget, Facts: facts})
 	if err != nil {
@@ -519,7 +527,7 @@ func TestM11DiagnosticsCommands(t *testing.T) {
 			t.Fatal(err)
 		}
 		tc := m11Case{ID: "x"}
-		tc.Action.Environment, tc.Action.Target, tc.Action.Params = exampleEnvironmentID, "local", params
+		tc.Action.Environment, tc.Action.Target, tc.Action.Params = exampleEnvironmentID, &actionir.Target{Type: "shell.workspace", ID: "local"}, params
 		decision, _, _, err := m11Decide(t, c, shell, tc)
 		if err != nil {
 			t.Fatalf("%q: %v", command, err)
@@ -636,6 +644,70 @@ func TestM11ReleaseConsequenceHeld(t *testing.T) {
 			if item, _ := out.Decisive(); out.Verdict != domain.VerdictRequireApproval || item.Reason != "DEPLOYMENT_NEEDS_RELEASE" {
 				t.Errorf("%s, %s consequence: %s %s, want REQUIRE_APPROVAL DEPLOYMENT_NEEDS_RELEASE", env, state, out.Verdict, item.Reason)
 			}
+		}
+	}
+}
+
+// m11World is the read side of the scenario runner: the templates'
+// packages, with their own digests, and the fact catalog.
+type m11World struct{ defs []*defs.Definition }
+
+func (w m11World) ActiveDefinitions(context.Context, ids.OrgID) ([]*defs.Definition, error) {
+	return w.defs, nil
+}
+
+func (m11World) Catalog(context.Context, ids.OrgID) (map[string]fdomain.Type, error) {
+	return maps.Clone(m11Facts), nil
+}
+
+// TestM11TemplatesPassTheGate: each template's rules and tests, rendered,
+// pass the publish gate's test runner (M11.1 D7, HR-044): every case
+// decided by the real pipeline as it expects, and every comparison mutant
+// and rule removal killed.
+func TestM11TemplatesPassTheGate(t *testing.T) {
+	var ds []*defs.Definition
+	for _, raw := range [][]byte{mockpayments.Package, pcgithub.Package, pcshell.Package} {
+		p, err := manifest.Decode(raw)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for i := range p.Definitions {
+			ds = append(ds, &p.Definitions[i])
+		}
+	}
+	org := ids.MustParse[ids.Org]("01890000-0000-7000-8000-000000000001")
+	for _, n := range []string{"production-diagnostics", "refunds"} {
+		for _, env := range []string{"production", "staging"} {
+			t.Run(n+"/"+env, func(t *testing.T) {
+				r := renderM11Env(t, n, []string{"acme/api", "acme/web"}, env)
+				b := r.bundle(t)
+				for _, c := range r.raw {
+					delete(c, "per")
+				}
+				raw, err := json.Marshal(r.raw)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if err := json.Unmarshal(raw, &b.Tests, json.RejectUnknownMembers(true)); err != nil {
+					t.Fatal(err)
+				}
+				res, err := scenario.New(m11World{ds}, m11World{ds}, celenv.DefaultLimits, polapp.DefaultBudget).Run(context.Background(), org, b)
+				if err != nil {
+					t.Fatal(err)
+				}
+				for _, c := range res.Cases {
+					if !c.Passed {
+						t.Errorf("case %s: %s", c.ID, c.Detail)
+					}
+				}
+				for _, m := range res.Surviving {
+					t.Errorf("mutant survives: %s %s", m.Rule, m.Mutation)
+				}
+				t.Logf("%d cases, %d mutants, %d survivors", len(res.Cases), res.Mutants, res.Survivors)
+				if !res.Passed || res.Error != "" {
+					t.Errorf("gate: passed %v, error %q, %d mutants", res.Passed, res.Error, res.Mutants)
+				}
+			})
 		}
 	}
 }
