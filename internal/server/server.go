@@ -313,7 +313,8 @@ func cmdServe(ctx context.Context, args []string, stderr io.Writer, env Env, onS
 		}
 		handler, err := apiHandler(apiDeps{
 			pool: pool, reg: reg, log: log, authority: svc, billing: bill,
-			auth:      rpcauth.New(authn, procedurePermissions, nil),
+			auth: rpcauth.New(authn, procedurePermissions, nil,
+				rpcauth.WithRefusals(&rpcauth.AuditRefusals{Pool: pool, Log: log})),
 			apiKeyEnv: credential.Env(cfg.Auth.APIKeyEnv),
 			cel:       cfg.CEL,
 			oauth: oauthhttp.New(authnapp.NewOAuth(pool, tokens, cfg.Auth.PublicURL, clock.System{}, log),

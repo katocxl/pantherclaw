@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: BUSL-1.1
 # Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
 id: pc.authority.self_issue
-version: "2"
+version: "3"
 title: Agent tried to create or widen its own authority
 description: >-
   An agent-side principal (a service account, API key or workload) tried to
@@ -14,10 +14,30 @@ basis: OBSERVED
 atlas: [AML.T0053]
 owasp: [ASI03]
 edition: community
-on: [audit.grant.issue_refused, audit.grant.delegate_refused]
-match: event.outcome == "denied"
+on: [audit.grant.issue_refused, audit.grant.delegate_refused, audit.rpc.human_only_refused]
+match: >-
+  event.outcome == "denied" && (event.kind != "audit.rpc.human_only_refused"
+  || event.attrs.?procedure.orValue("") in ["/pantherclaw.v1.GrantService/IssueGrant", "/pantherclaw.v1.GrantService/ReviseGrant"])
 group: agent
 tests:
+  - name: service account calls issue grant over the api
+    fires: true
+    events:
+      - kind: audit.rpc.human_only_refused
+        actor_type: service_account
+        actor_id: 01930000-0000-7000-8000-0000000000b1
+        outcome: denied
+        reason: HUMAN_ONLY
+        attrs: {procedure: /pantherclaw.v1.GrantService/IssueGrant, permission: grant.issue, auth_kind: access_token}
+  - name: service account refused another person-only call
+    fires: false
+    events:
+      - kind: audit.rpc.human_only_refused
+        actor_type: service_account
+        actor_id: 01930000-0000-7000-8000-0000000000b1
+        outcome: denied
+        reason: HUMAN_ONLY
+        attrs: {procedure: /pantherclaw.v1.PolicyService/PublishPolicyVersion, permission: policy.publish, auth_kind: access_token}
   - name: service account issues a grant
     fires: true
     events:
