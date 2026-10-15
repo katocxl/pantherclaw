@@ -74,8 +74,7 @@ linters:
             - pkg: "github.com/katocxl/pantherclaw/internal/platform/db"
               desc: "the gateway has no database access (ADR-0002)"
         domain-is-pure:
-          # G0 M10 D1: the Reflex ports take a pgx.Tx; only ports.go imports pgx.
-          files: ["**/internal/*/domain/**", "!**/internal/reflex/domain/ports.go"]
+          files: ["**/internal/*/domain/**"]
           deny:
             - pkg: "net/http"
               desc: "domain packages are pure (ARCHITECTURE §4)"

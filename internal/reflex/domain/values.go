@@ -3,26 +3,12 @@
 
 package domain
 
-// The ports take a pgx.Tx (G0 M10 D1): the one place a domain package of
-// this repository imports pgx, kept to this file (.golangci.yml depguard
-// domain-is-pure exempts it). Implementers turn it back into a tenant
-// transaction with db.AdoptTenantTx.
-
 import (
 	"context"
 	"time"
 
-	"github.com/jackc/pgx/v5"
-
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 )
-
-// Raiser records signals (core, D14): an alert, a live ledger entry or
-// nothing, by attention, in the caller's transaction. It returns the alert
-// id, or the zero id when no alert was written.
-type Raiser interface {
-	Raise(ctx context.Context, tx pgx.Tx, s Signal) (ids.UUID, error)
-}
 
 // CaseSeed is what a new case starts from (cases, D19).
 type CaseSeed struct {
@@ -37,11 +23,6 @@ type CaseSeed struct {
 	Opener     Subject
 }
 
-// CaseOpener opens a case (cases, D19).
-type CaseOpener interface {
-	Open(ctx context.Context, tx pgx.Tx, seed CaseSeed) (ids.UUID, error)
-}
-
 // Failure is an owned operational failure (F641): what broke, where, who
 // owns it, by when and what to do next.
 type Failure struct {
@@ -53,12 +34,6 @@ type Failure struct {
 	Owner     *Subject
 	Deadline  time.Time
 	DedupeKey string
-}
-
-// FailureSink records owned failures (core, D18). A repeat with the same
-// dedupe key while the failure is open returns the open failure.
-type FailureSink interface {
-	Report(ctx context.Context, tx pgx.Tx, f Failure) (ids.UUID, error)
 }
 
 // Containment controls (response, D21).
@@ -89,11 +64,6 @@ type ContainRequest struct {
 type ContainResult struct {
 	ActionID ids.UUID
 	Status   string
-}
-
-// Container applies containment controls (response, D21).
-type Container interface {
-	Contain(ctx context.Context, tx pgx.Tx, r ContainRequest) (ContainResult, error)
 }
 
 // ReductionChange is an authority reduction to preview (exposure, D27):

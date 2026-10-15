@@ -36,5 +36,5 @@ description = "Local, git-ignored development secrets: the demo's state (`task d
 paths = ['''^\.demo/''', '''^deploy/dev/secrets/''']
 
 [[allowlists]]
-description = "The built-in detection pack's manifest (G0 M10 D12): the SHA-256 of each rule file, keyed by file name (one is identity_key_new_network.yaml). Digests of committed files, no secret."
+description = "The built-in detection pack manifest (G0 M10 D12): the SHA-256 of each rule file, keyed by file name (one is identity_key_new_network.yaml). Digests of committed files, no secret. The file is generated and digest-checked at startup, and the HR-241 stale test (TestPackDigestIsCurrent) fails on any hand edit."
 paths = ['''^internal/detection/pack/builtin/manifest\.json$''']

@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: BUSL-1.1
 # Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
-id: pc.drift.behaviour
+id: pc.drift.behavior
 version: "1"
 title: New target or destination for a connection
 description: >-
   A connection was used for an operation, or toward a destination class,
-  not seen on it in the last 30 days. Behaviour drift is a finding to look
+  not seen on it in the last 30 days. Behavior drift is a finding to look
   at, not proof of misuse (F399).
 severity: LOW
 attention: FINDING

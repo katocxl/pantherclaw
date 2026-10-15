@@ -2,13 +2,14 @@
 // Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
 
 // Package domain holds the Reflex contracts every M10 stream codes against
-// (G0 M10 D1): signals, their subjects, attention and basis, and the ports
-// one stream implements for the others (Raiser, CaseOpener, FailureSink,
-// Container, ReachPreviewer). Implementations are wired in internal/server;
-// packages never import each other's adapters.
+// (G0 M10 D1, D55): signals, their subjects, attention and basis, the value
+// types of the ports and ReachPreviewer. The ports that take a transaction
+// (Raiser, CaseOpener, FailureSink, Container) are in internal/reflex/ports.
+// Implementations are wired in internal/server; packages never import each
+// other's adapters.
 //
-// Import it as reflexdomain. It imports nothing beyond ids, pgx and the
-// standard library.
+// Import it as reflexdomain. It imports nothing beyond ids and the standard
+// library.
 package domain
 
 import (
@@ -188,6 +189,8 @@ var sources = []string{SourceDetection, SourceResponse, SourceSIEM, SourceSignal
 // another part of the product (response, SIEM delivery, Shared Signals,
 // coverage, the system itself). The Raiser turns it into an alert, a live
 // event or nothing, by its attention (D14).
+//
+//nolint:misspell // MITRE is a proper noun (the ATLAS publisher), not "miter".
 type Signal struct {
 	Org         ids.OrgID
 	Source      string
@@ -206,7 +209,7 @@ type Signal struct {
 	// "agent:<id>", …; F603); DedupeKey makes a repeat signal count into
 	// the same open alert.
 	GroupKey, DedupeKey string
-	// ATLAS and OWASP are the ATLAS techniques and OWASP agentic
+	// ATLAS and OWASP are the MITRE ATLAS techniques and OWASP agentic
 	// risks the rule maps to.
 	ATLAS, OWASP []string
 	OccurredAt   time.Time

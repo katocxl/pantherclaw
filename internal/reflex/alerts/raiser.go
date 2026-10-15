@@ -24,6 +24,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	reflexdomain "github.com/katocxl/pantherclaw/internal/reflex/domain"
+	reflexports "github.com/katocxl/pantherclaw/internal/reflex/ports"
 )
 
 // Actor is how Reflex appears in the ledger.
@@ -69,9 +70,9 @@ type Raiser struct {
 	Hooks Hooks
 }
 
-var _ reflexdomain.Raiser = (*Raiser)(nil)
+var _ reflexports.Raiser = (*Raiser)(nil)
 
-// Raise implements reflexdomain.Raiser.
+// Raise implements reflexports.Raiser.
 func (r *Raiser) Raise(ctx context.Context, ptx pgx.Tx, s reflexdomain.Signal) (ids.UUID, error) {
 	tx, err := db.AdoptTenantTx(ctx, ptx, s.Org)
 	if err != nil {

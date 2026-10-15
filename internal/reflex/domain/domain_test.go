@@ -37,7 +37,7 @@ func TestSignalValidate(t *testing.T) {
 		"basis":     func(s *reflexdomain.Signal) { s.Basis = "GUESS" },
 		"subject":   func(s *reflexdomain.Signal) { s.Subjects = []reflexdomain.Subject{{Type: "planet", ID: "x"}} },
 		"evidence": func(s *reflexdomain.Signal) {
-			s.Evidence = []reflexdomain.EvidenceRef{{Kind: "hearsay", ID: ids.NewV7()}}
+			s.Evidence = []reflexdomain.EvidenceRef{{Kind: "rumor", ID: ids.NewV7()}}
 		},
 		"fact key":        func(s *reflexdomain.Signal) { s.Facts = map[string]string{"Bad Key": "x"} },
 		"fact value":      func(s *reflexdomain.Signal) { s.Facts = map[string]string{"k": strings.Repeat("x", 513)} },
