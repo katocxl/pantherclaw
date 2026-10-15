@@ -55,9 +55,9 @@ func writeCredential(t *testing.T, content []byte) string {
 }
 
 // TestHR204_ReadCredentialKeepsADERKeyEndingInALineBreak: a DER key whose
-// last byte is 0x0a or 0x0d is read whole and recognised as a private key,
+// last byte is 0x0a or 0x0d is read whole and recognized as a private key,
 // a token loses only the line break an editor adds, and a DER key followed
-// by a line break is still recognised.
+// by a line break is still recognized.
 func TestHR204_ReadCredentialKeepsADERKeyEndingInALineBreak(t *testing.T) {
 	for _, last := range []byte{'\n', '\r'} {
 		der := derEndingIn(t, last)
