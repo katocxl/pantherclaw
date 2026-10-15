@@ -331,6 +331,7 @@ func cmdServe(ctx context.Context, args []string, stderr io.Writer, env Env, onS
 			verification: verification,
 			kp:           kp,
 			freshness:    freshnessOf(cfg),
+			m10ops:       m10OpsDeps{authn: authn, tokens: tokens},
 		})
 		if err != nil {
 			return err
@@ -528,6 +529,8 @@ type apiDeps struct {
 	kp keys.KeyProvider
 	// freshness is coverage's freshness contract (M9 track A).
 	freshness coverage.Freshness
+	// M10 ops: the live stream's bearer authentication.
+	m10ops m10OpsDeps
 }
 
 // apiHandler mounts the RPC services, health endpoints and the JWKS.
@@ -598,6 +601,10 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	}
 	registerReleases(rs, pool)
 	registerPolicyExceptions(rs, d)
+	mountM10Ops, err := registerM10Ops(rs, d)
+	if err != nil {
+		return nil, err
+	}
 	mux := http.NewServeMux()
 	rpc.Mount(mux, rs)
 	d.m5p2.mount(mux, workload)
@@ -635,6 +642,7 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 		_, _ = w.Write(b)
 	})
 	mountEvidenceKeys(mux, d)
+	mountM10Ops(mux)
 	return workloadrpc.RawBody(mux, d.clientIP), nil
 }
 

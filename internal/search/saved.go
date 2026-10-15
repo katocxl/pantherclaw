@@ -361,3 +361,9 @@ func (s *Service) RunSaved(ctx context.Context, id ids.UUID, pr page.Request) (R
 	}
 	return s.Search(ctx, *sq.Spec.Query, pr)
 }
+
+// CanSearch returns nil when the caller holds search.read somewhere.
+func (s *Service) CanSearch(ctx context.Context) error {
+	_, err := searcher(ctx)
+	return err
+}

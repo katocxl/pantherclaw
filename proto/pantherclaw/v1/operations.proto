@@ -1,0 +1,131 @@
+// SPDX-License-Identifier: BUSL-1.1
+// Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+
+syntax = "proto3";
+
+package pantherclaw.v1;
+
+import "google/protobuf/timestamp.proto";
+
+// OperationsService is the Operations surface (G0 M10 D33; F211, F212,
+// F219; HR-258). Every answer is read under the caller's permissions and
+// stamped with its scope and as-of time: rows about agents outside the
+// caller's scope are neither shown nor counted, and nothing here claims
+// that the organization is safe. A telemetry source that has gone quiet is
+// shown as a gap with its last-seen time. The live stream of focus events
+// is GET /v1/operations/stream (text/event-stream, bearer token in the
+// Authorization header only).
+service OperationsService {
+  // GetWorkQueue returns the ranked work queue: active incidents, open
+  // alerts, protection failures, decisions near their deadline and recent
+  // authority expansion, each with the actions the caller may take.
+  // permission: operations.read
+  rpc GetWorkQueue(GetWorkQueueRequest) returns (GetWorkQueueResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // GetSummary returns counts within the caller's scope, its as-of time
+  // and what is not known.
+  // permission: operations.read
+  rpc GetSummary(GetSummaryRequest) returns (GetSummaryResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // GetEvidenceStatus returns each telemetry source's last-seen time and
+  // freshness.
+  // permission: operations.read
+  rpc GetEvidenceStatus(GetEvidenceStatusRequest) returns (GetEvidenceStatusResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+}
+
+// WorkAction is an action the caller may take on a work item.
+message WorkAction {
+  // "assign", "set_state", "promote", "suspend_agent", "resolve",
+  // "open_approval" or "revoke_grant".
+  string name = 1;
+  // The permission it needs (the caller holds it for the item).
+  string permission = 2;
+  // What it acts on ("<kind>:<id>").
+  string target = 3;
+}
+
+// WorkItem is one work-queue item.
+message WorkItem {
+  // "INCIDENT", "ALERT", "PROTECTION_FAILURE", "WAITING_DECISION" or
+  // "AUTHORITY_EXPANSION".
+  string kind = 1;
+  string id = 2;
+  // Untrusted text where it comes from a rule or a report.
+  string title = 3;
+  // "LOW", "MEDIUM", "HIGH" or "CRITICAL".
+  string severity = 4;
+  string state = 5;
+  google.protobuf.Timestamp since_time = 6;
+  google.protobuf.Timestamp deadline_time = 7;
+  repeated string agent_ids = 8;
+  repeated WorkAction actions = 9;
+  // Raised by a test signal.
+  bool test = 10;
+}
+
+// GetWorkQueueRequest is empty.
+message GetWorkQueueRequest {}
+
+// GetWorkQueueResponse is the ranked queue, highest severity first.
+message GetWorkQueueResponse {
+  repeated WorkItem items = 1;
+  google.protobuf.Timestamp as_of_time = 2;
+  // The caller reads across the whole organization; otherwise items about
+  // agents outside its scope are left out.
+  bool scope_whole = 3;
+  // A source held more items than were read.
+  bool truncated = 4;
+  // Queue sources this server does not report yet.
+  repeated string pending_sources = 5;
+}
+
+// GetSummaryRequest is empty.
+message GetSummaryRequest {}
+
+// GetSummaryResponse is the summary.
+message GetSummaryResponse {
+  google.protobuf.Timestamp as_of_time = 1;
+  bool scope_whole = 2;
+  // The scope in words.
+  string scope = 3;
+  // Counts by key: active_incidents, open_alerts, critical,
+  // protection_failures, expiring_decisions, authority_expansion_24h,
+  // telemetry_gaps.
+  map<string, int32> counts = 4;
+  bool truncated = 5;
+  // What the summary cannot vouch for.
+  repeated string unknown = 6;
+  // The summary in one paragraph; never a claim that nothing is wrong.
+  string statement = 7;
+}
+
+// SourceStatus is one telemetry source.
+message SourceStatus {
+  // "gateway", "sdk", "hook", "sandbox", "ledger", "detections" or
+  // "export".
+  string kind = 1;
+  string name = 2;
+  string id = 3;
+  // Unset when never seen.
+  google.protobuf.Timestamp last_seen_time = 4;
+  // "FRESH", "STALE", "NEVER", "RESTRICTED" or "NOT_AVAILABLE".
+  string freshness = 5;
+  // STALE or NEVER: a gap in the evidence.
+  bool gap = 6;
+  // Feed entries detection has yet to read.
+  int64 lag = 7;
+  string note = 8;
+}
+
+// GetEvidenceStatusRequest is empty.
+message GetEvidenceStatusRequest {}
+
+// GetEvidenceStatusResponse lists the sources.
+message GetEvidenceStatusResponse {
+  google.protobuf.Timestamp as_of_time = 1;
+  repeated SourceStatus sources = 2;
+}
