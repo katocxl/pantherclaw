@@ -126,8 +126,10 @@ func newEnv(t *testing.T) *env {
 		t.Fatal(err)
 	}
 	d := dbtest.New(t)
-	e := &env{t: t, d: d, pool: d.AppPool(t), org: ids.New[ids.Org](), gate: &gate{valid: true, pass: true}, notes: &notes{},
-		digests: digestsNow}
+	e := &env{
+		t: t, d: d, pool: d.AppPool(t), org: ids.New[ids.Org](), gate: &gate{valid: true, pass: true}, notes: &notes{},
+		digests: digestsNow,
+	}
 	e.store = &pgstore.Store{Pool: e.pool}
 	e.exec("INSERT INTO pc.orgs (id, name) VALUES ($1, 'gate')", e.org)
 	e.v = &app.Versions{
@@ -327,7 +329,7 @@ func TestHR230_PublicationNeedsAPassingRunOfItsContent(t *testing.T) {
 	va, _ := e.store.Version(ctx, e.org, a)
 	var digest [32]byte
 	copy(digest[:], va.ContentDigest)
-	publish := func(id ids.UUID, run ids.UUID, d [32]byte) error {
+	publish := func(id, run ids.UUID, d [32]byte) error {
 		return e.store.PublishTested(ctx, e.org, app.PublishRequest{Version: id, Digest: d, TestRun: run, PublishedBy: "user:x"})
 	}
 	if err := publish(a, ids.NewV7(), digest); !errors.Is(err, pgstore.ErrNotDraft) {
