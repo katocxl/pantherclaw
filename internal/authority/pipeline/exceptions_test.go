@@ -37,7 +37,7 @@ func excepted(t *testing.T) *fx {
 	}
 	d := pdomain.RuleDigest(r)
 	f.w.SetExceptions([]pdomain.Exception{{
-		ID: exceptionID, Rule: r.ID, RuleDigest: hex.EncodeToString(d[:]), Operations: []string{"payments.refund.create"},
+		ID: exceptionID, Bundle: "org-policy", Rule: r.ID, RuleDigest: hex.EncodeToString(d[:]), Operations: []string{"payments.refund.create"},
 		ExpiresAt: now.Add(time.Hour),
 	}})
 	return f
@@ -162,5 +162,33 @@ func TestHR235_CoverageAndRouteModeAreNeverWaived(t *testing.T) {
 	f.w.PutConnection(c)
 	if ev := f.on(gw, c.ID, "create_refund", refund("ch_1", "30.00")); ev.Mode != pipeline.ModeEnforce || ev.MonitorPermit() {
 		t.Fatalf("mode %s", ev.Mode)
+	}
+}
+
+// TestHR235_OnlyAKnownConsequenceIsWaived (D33, HR-206): an exception that
+// lists a consequence's operation waives an exceptable rule on a predicted
+// consequence as it would on the action; on an unknown consequence, which
+// could be any of its outcomes, nothing is waived.
+func TestHR235_OnlyAKnownConsequenceIsWaived(t *testing.T) {
+	noPayouts := pdomain.Rule{
+		ID: "no-payouts", Kind: pdomain.Forbid, Summary: "no payouts from refunds", Operations: []string{"payments.payout.trigger"},
+		When: "true", Reason: "NO_PAYOUTS", Exceptable: true,
+	}
+	f := newFxWith(t, payoutPackage, "")
+	f.payoutRun(false)
+	if err := f.w.SetPolicy([]pdomain.Rule{noPayouts}, nil); err != nil {
+		t.Fatal(err)
+	}
+	d := pdomain.RuleDigest(noPayouts)
+	f.w.SetExceptions([]pdomain.Exception{{
+		ID: exceptionID, Bundle: "org-policy", Rule: noPayouts.ID, RuleDigest: hex.EncodeToString(d[:]),
+		Operations: []string{"payments.payout.trigger"}, ExpiresAt: now.Add(time.Hour),
+	}})
+	// Unknown: no payout schedule is known for ch_1.
+	expect(t, f.call(f.run, "create_refund", refund("ch_1", "30.00")), adomain.Deny, "NO_PAYOUTS")
+	f.payouts("ch_1", scheduled, time.Second)
+	ev := f.call(f.run, "create_refund", refund("ch_1", "30.00"))
+	if it, ok := waivedItem(ev); ev.Decision != adomain.Allow || !ok || it.Detail != exceptionID {
+		t.Fatalf("a predicted payout: %s %+v", ev.Decision, ev.Checklist)
 	}
 }

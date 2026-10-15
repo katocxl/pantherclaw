@@ -130,7 +130,7 @@ func fromPolicy(p *pipeline.Policy, err error) *Policy {
 	}
 	for _, x := range p.Exceptions {
 		out.Exceptions = append(out.Exceptions, Exception{
-			ID: x.ID, Rule: x.Rule, RuleDigest: x.RuleDigest, Operations: slices.Clone(x.Operations), ExpiresAt: x.ExpiresAt,
+			ID: x.ID, Bundle: x.Bundle, Rule: x.Rule, RuleDigest: x.RuleDigest, Operations: slices.Clone(x.Operations), ExpiresAt: x.ExpiresAt,
 		})
 	}
 	return out

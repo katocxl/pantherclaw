@@ -146,6 +146,7 @@ type Policy struct {
 // Exception is an active policy exception read with the policy.
 type Exception struct {
 	ID         string    `json:"id"`
+	Bundle     string    `json:"bundle"`
 	Rule       string    `json:"rule"`
 	RuleDigest string    `json:"rule_digest"`
 	Operations []string  `json:"operations"`

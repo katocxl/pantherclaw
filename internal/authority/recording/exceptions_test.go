@@ -28,7 +28,7 @@ func TestRecordingKeepsTheExceptionsItApplied(t *testing.T) {
 	policy(t, s, rule)
 	d := pdomain.RuleDigest(rule)
 	x := pdomain.Exception{
-		ID: "01920000-0000-7000-8000-0000000000e1", Rule: rule.ID, RuleDigest: hex.EncodeToString(d[:]),
+		ID: "01920000-0000-7000-8000-0000000000e1", Bundle: "org-policy", Rule: rule.ID, RuleDigest: hex.EncodeToString(d[:]),
 		Operations: []string{"payments.refund.create"}, ExpiresAt: s.W.Cont.Now.Add(time.Hour).UTC(),
 	}
 	s.W.SetExceptions([]pdomain.Exception{x})

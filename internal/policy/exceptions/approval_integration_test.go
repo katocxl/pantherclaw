@@ -145,3 +145,33 @@ func TestT102_AFailedChangeRequestClosesTheException(t *testing.T) {
 		t.Fatalf("activated: %v", err)
 	}
 }
+
+// TestT102_ARevokedRequestIsVoided (D33): an exception revoked while its
+// change request waits is never activated; the last confirmation voids the
+// request EXCEPTION_REVOKED instead of failing every confirmation.
+func TestT102_ARevokedRequestIsVoided(t *testing.T) {
+	f := newFixture(t)
+	changes := f.realChanges()
+	bob, carol := f.publisher(t, "bob-publisher"), f.publisher(t, "carol-publisher")
+	x, cr, err := f.svc.RequestException(f.as(f.alice, tenancy.CredAccessToken, td.RolePolicyAuthor), f.request())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.svc.RevokeException(f.as(f.bob, tenancy.CredAccessToken, td.RolePolicyPublisher), x.ID, "Not needed."); err != nil {
+		t.Fatal(err)
+	}
+	req, err := changes.Get(bob.ctx, cr.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := changes.Confirm(bob.ctx, req.ID, f.sign(t, bob, req)); err != nil {
+		t.Fatal(err)
+	}
+	got, err := changes.Confirm(carol.ctx, req.ID, f.sign(t, carol, req))
+	if !errors.Is(err, papp.ErrChangeVoided) || got.State != papp.ChangeVoided || got.DecidedReason != exceptions.VoidRevoked {
+		t.Fatalf("a revoked exception's request: %+v (%v)", got, err)
+	}
+	if a := f.active(t); len(a) != 0 {
+		t.Fatalf("active %+v", a)
+	}
+}

@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	adomain "github.com/katocxl/pantherclaw/internal/authority/domain"
+	gdomain "github.com/katocxl/pantherclaw/internal/grants/domain"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	pdomain "github.com/katocxl/pantherclaw/internal/policy/domain"
 )
@@ -21,11 +22,17 @@ import (
 func (w *world) exception(agent ids.UUID, rule pdomain.Rule, ends string) ids.UUID {
 	w.t.Helper()
 	id, d := ids.NewV7(), pdomain.RuleDigest(rule)
+	// Inserted PENDING and activated as an approval would, then its times
+	// moved as the database clock would have set them (test setup).
 	w.db.AdminExec(w.t, `INSERT INTO pc.policy_exceptions (org_id, id, bundle_id, rule_id, rule_digest, agent_id, operations, reason,
-		owner_id, requested_by, requested_expiry, state, activated_at, expires_at, created_at)
-		VALUES ($1, $2, 'org-policy', $3, $4, $5, ARRAY['payments.refund.create'], 'quarter end', $6, $6,
-			now() + $7::interval, 'ACTIVE', now() - interval '2 hours', now() + $7::interval, now() - interval '2 hours')`,
-		w.org, id, rule.ID, d[:], agent, w.alice, ends)
+		owner_id, requested_by, requested_expiry)
+		VALUES ($1, $2, 'org-policy', $3, $4, $5, ARRAY['payments.refund.create'], 'quarter end', $6, $6, now() + interval '1 day')`,
+		w.org, id, rule.ID, d[:], agent, w.alice)
+	w.db.AdminExec(w.t, `UPDATE pc.policy_exceptions SET state = 'ACTIVE' WHERE id = $1`, id)
+	w.db.AdminExec(w.t, `ALTER TABLE pc.policy_exceptions DISABLE TRIGGER policy_exceptions_transition`)
+	w.db.AdminExec(w.t, `UPDATE pc.policy_exceptions SET created_at = now() - interval '2 hours', activated_at = now() - interval '2 hours',
+		requested_expiry = now() + $2::interval, expires_at = now() + $2::interval WHERE id = $1`, id, ends)
+	w.db.AdminExec(w.t, `ALTER TABLE pc.policy_exceptions ENABLE TRIGGER policy_exceptions_transition`)
 	return id
 }
 
@@ -106,5 +113,29 @@ func TestHR235_AWaivedHoldThroughTheRealAuthority(t *testing.T) {
 	w.db.AdminExec(t, `ALTER TABLE pc.policy_exceptions ENABLE TRIGGER policy_exceptions_transition`)
 	if r := w.authorize(w.request(run, ids.NewV7(), "ch_2", "70.00")); r.Decision != adomain.RequireApproval {
 		t.Fatalf("after the expiry: %s", r.Decision)
+	}
+}
+
+// TestHR235_ContainmentAndTheGrantStillDecideThroughTheRealAuthority: with
+// an active exception waiving the agent's exceptable hold, a refund over the
+// grant's limit is still denied by the grant, and under the kill switch
+// every refund is still denied by containment.
+func TestHR235_ContainmentAndTheGrantStillDecideThroughTheRealAuthority(t *testing.T) {
+	w := newWorld(t)
+	w.refundable("ch_1", "ch_2", "ch_3")
+	run := w.run(w.grant("500").ID, ids.UUID{})
+	hold := pgHoldOver50
+	hold.Exceptable = true
+	w.publishPolicy(1, false, hold)
+	w.exception(w.agent, hold, "1 hour")
+	if r := w.authorize(w.request(run, ids.NewV7(), "ch_1", "70.00")); r.Decision != adomain.Allow {
+		t.Fatalf("the waived hold: %s %s", r.Decision, decisive(r))
+	}
+	if r := w.authorize(w.request(run, ids.NewV7(), "ch_2", "125.00")); r.Decision != adomain.Deny || decisive(r) != gdomain.ReasonGrantLimitExceeded {
+		t.Fatalf("over the grant's limit: %s %s", r.Decision, decisive(r))
+	}
+	w.db.AdminExec(t, "UPDATE pc.org_containment SET epoch = epoch + 1, kill_switch = true, engaged_at = now(), engaged_by = 'test' WHERE org_id = $1", w.org)
+	if r := w.authorize(w.request(run, ids.NewV7(), "ch_3", "70.00")); r.Decision != adomain.Deny || decisive(r) != adomain.ReasonKillSwitch {
+		t.Fatalf("under the kill switch: %s %s", r.Decision, decisive(r))
 	}
 }

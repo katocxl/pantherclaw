@@ -99,7 +99,7 @@ func TestHR235_NonExceptableRuleIsNeverWaived(t *testing.T) {
 		t.Fatalf("verdict %s, want DENY", out.Verdict)
 	}
 	d := domain.RuleDigest(forbid)
-	x := domain.Exception{ID: exceptionID, Rule: "no-large", RuleDigest: hex.EncodeToString(d[:]), Operations: []string{a.Operation}}
+	x := domain.Exception{ID: exceptionID, Bundle: "test", Rule: "no-large", RuleDigest: hex.EncodeToString(d[:]), Operations: []string{a.Operation}}
 	if w := domain.Waivers(c.Bundle, a.Operation, []domain.Exception{x}); w != nil {
 		t.Fatalf("waivers for a non-exceptable rule: %v", w)
 	}
@@ -139,18 +139,23 @@ func TestHR235_MissingFactIsNeverWaived(t *testing.T) {
 }
 
 // TestHR235_RuleDigestChangeEndsTheWaiver: an exception names the rule as
-// it was requested; once the rule changes, or for an operation it does not
-// list, it waives nothing.
+// it was requested in its bundle; once the rule changes, for an operation
+// it does not list, or in another bundle, it waives nothing.
 func TestHR235_RuleDigestChangeEndsTheWaiver(t *testing.T) {
 	r := exceptable(refundRule("approve-over-50", domain.RequireApproval, `action.params.amount > money("50.00", "USD")`))
 	d := domain.RuleDigest(r)
-	x := domain.Exception{ID: exceptionID, Rule: r.ID, RuleDigest: hex.EncodeToString(d[:]), Operations: []string{"payments.refund.create"}}
+	x := domain.Exception{ID: exceptionID, Bundle: "test", Rule: r.ID, RuleDigest: hex.EncodeToString(d[:]), Operations: []string{"payments.refund.create"}}
 	b := &domain.Bundle{ID: "test", Version: 1, Rules: []domain.Rule{r}}
 	if w := domain.Waivers(b, "payments.refund.create", []domain.Exception{x}); w[r.ID] != exceptionID {
 		t.Fatalf("waivers %v", w)
 	}
 	if w := domain.Waivers(b, "payments.refund.cancel", []domain.Exception{x}); w != nil {
 		t.Fatalf("an unlisted operation was waived: %v", w)
+	}
+	other := x
+	other.Bundle = "other-policy"
+	if w := domain.Waivers(b, "payments.refund.create", []domain.Exception{other}); w != nil {
+		t.Fatalf("an exception of another bundle was applied: %v", w)
 	}
 	changed := r
 	changed.When = `action.params.amount > money("500.00", "USD")`

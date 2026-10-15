@@ -82,6 +82,9 @@ var (
 	ErrBaseChanged = pcerr.New(pcerr.FailedPrecondition, "BASE_CHANGED",
 		"the rule is no longer exceptable as requested in the published policy, or the agent is retired")
 	ErrRequestExpired = pcerr.New(pcerr.FailedPrecondition, "EXPIRED", "the requested expiry of the exception has passed")
+	// ErrRevoked: the exception was revoked while its change request waited;
+	// the request is voided EXCEPTION_REVOKED (D33).
+	ErrRevoked = pcerr.New(pcerr.FailedPrecondition, "EXCEPTION_REVOKED", "the exception was revoked")
 	// ErrNoChangeRequests: without the change-request mechanism an exception
 	// could never be approved, so none is requested (fail closed).
 	ErrNoChangeRequests = pcerr.New(pcerr.FailedPrecondition, "CHANGE_REQUESTS_UNAVAILABLE",
@@ -300,7 +303,8 @@ func (s *Service) RequestException(ctx context.Context, r Request) (Exception, C
 // Apply is the EXCEPTION change request's apply callback (register it
 // with papp.Changes.Register(papp.ChangeException, s.Apply)): it activates
 // the exception in the confirming transaction, or voids the request with
-// BASE_CHANGED or EXPIRED when the base no longer holds (D23).
+// BASE_CHANGED or EXPIRED when the base no longer holds (D23), or with
+// EXCEPTION_REVOKED when the exception was revoked meanwhile (D33).
 func (s *Service) Apply(ctx context.Context, tx db.TenantTx, req papp.ChangeRequest) error {
 	c, err := tenancy.CallerFrom(ctx)
 	if err != nil {
@@ -312,13 +316,18 @@ func (s *Service) Apply(ctx context.Context, tx db.TenantTx, req papp.ChangeRequ
 		return &papp.VoidError{Reason: papp.VoidBaseChanged}
 	case errors.Is(err, ErrRequestExpired):
 		return &papp.VoidError{Reason: VoidExpired}
+	case errors.Is(err, ErrRevoked):
+		return &papp.VoidError{Reason: VoidRevoked}
 	}
 	return err
 }
 
-// VoidExpired voids an EXCEPTION change request whose requested expiry
-// has passed (D23).
-const VoidExpired = "EXPIRED"
+// Void reasons of EXCEPTION change requests: the requested expiry has
+// passed (D23), or the exception was revoked while it waited (D33).
+const (
+	VoidExpired = "EXPIRED"
+	VoidRevoked = "EXCEPTION_REVOKED"
+)
 
 func summarize(x Exception, r pdomain.Rule, agentName string) Summary {
 	expiry := x.RequestedExpiry.UTC().Format(time.RFC3339)
@@ -346,7 +355,13 @@ func (s *Service) Activate(ctx context.Context, tx db.TenantTx, org ids.OrgID, i
 	} else if err != nil {
 		return x, err
 	}
-	if x.State != StatePending {
+	switch x.State {
+	case StatePending:
+	case StateRevoked:
+		return x, ErrRevoked
+	case StateExpired:
+		return x, ErrRequestExpired
+	default:
 		return x, ErrNotPending
 	}
 	if err := baseHolds(ctx, q, x); err != nil {
@@ -532,7 +547,7 @@ func ActiveFor(ctx context.Context, tx db.TenantTx, org ids.OrgID, agent ids.UUI
 	out := make([]pdomain.Exception, 0, len(rows))
 	for _, x := range rows {
 		out = append(out, pdomain.Exception{
-			ID: x.ID.String(), Rule: x.RuleID, RuleDigest: hex.EncodeToString(x.RuleDigest),
+			ID: x.ID.String(), Bundle: x.BundleID, Rule: x.RuleID, RuleDigest: hex.EncodeToString(x.RuleDigest),
 			Operations: slices.Clone(x.Operations), ExpiresAt: x.ExpiresAt.UTC(),
 		})
 	}
@@ -558,20 +573,16 @@ func (s *Service) audit(ctx context.Context, tx db.TenantTx, actor evdomain.Acto
 }
 
 // notify tells an exception's owner (only them) of its activation or its
-// coming expiry, with the rule, agent and operations in fixed words and
-// never its reason (HR-158).
+// coming expiry, with the rule, the agent's id and the operations, never
+// a name or the reason, which are free text (HR-158).
 func (s *Service) notify(ctx context.Context, tx db.TenantTx, x Exception, typ, dedupe string) error {
 	if s.Notify == nil {
 		return nil
 	}
-	agent, err := dbq.New(tx).GetAgent(ctx, x.OrgID, x.AgentID)
-	if err != nil {
-		return err
-	}
-	_, err = s.Notify.Enqueue(ctx, tx, napp.Message{
+	_, err := s.Notify.Enqueue(ctx, tx, napp.Message{
 		Org: x.OrgID, Type: typ, Personal: []ids.UUID{x.OwnerID}, PersonalOnly: true, DedupeKey: dedupe,
 		Params: map[string]string{
-			"rule": x.RuleID, "agent": agent.Name, "operations": strings.Join(x.Operations, ", "),
+			"rule": x.RuleID, "agent": x.AgentID.String(), "operations": strings.Join(x.Operations, ", "),
 			"expires": x.ExpiresAt.UTC().Format("2006-01-02 15:04 UTC"), "exception": x.ID.String(),
 		},
 	})

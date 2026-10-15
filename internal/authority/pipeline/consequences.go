@@ -195,7 +195,12 @@ func (p *Pipeline) consequenceBoundaries(ctx context.Context, s *state) {
 		}
 		in := s.policyInput()
 		in.Facts = k.facts
-		in.Waivers = s.waivers(k.ir.Operation)
+		// A known consequence is waived like the action, when an exception
+		// lists its operation; an unknown one is never waived: it could be
+		// any of its outcomes (G0 M11.1 D33, HR-206).
+		if k.c.State != consequences.Unknown {
+			in.Waivers = s.waivers(k.ir.Operation)
+		}
 		in.Consequence = &papp.Consequence{Rule: k.c.Rule, State: string(k.c.State), Environments: k.c.Environments}
 		out, err := s.policy.Compiled.Evaluate(ctx, k.c.Definition, k.ir, in)
 		if err != nil {

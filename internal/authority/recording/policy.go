@@ -52,7 +52,7 @@ func (p *Policy) exceptions() []pdomain.Exception {
 	var out []pdomain.Exception
 	for _, x := range p.Exceptions {
 		out = append(out, pdomain.Exception{
-			ID: x.ID, Rule: x.Rule, RuleDigest: x.RuleDigest, Operations: slices.Clone(x.Operations), ExpiresAt: x.ExpiresAt,
+			ID: x.ID, Bundle: x.Bundle, Rule: x.Rule, RuleDigest: x.RuleDigest, Operations: slices.Clone(x.Operations), ExpiresAt: x.ExpiresAt,
 		})
 	}
 	return out

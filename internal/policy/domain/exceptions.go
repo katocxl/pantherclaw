@@ -10,12 +10,13 @@ import (
 )
 
 // Exception is an active policy exception as the Authority reads it in a
-// decision's snapshot (G0 M11.1 D14, HR-235): it waives rule Rule, as it
-// was when the exception was requested (RuleDigest, hex), for the agent the
-// decision is about and the listed exact operations, until ExpiresAt by
-// the database clock.
+// decision's snapshot (G0 M11.1 D14, HR-235): it waives rule Rule of
+// bundle Bundle, as the rule was when the exception was requested
+// (RuleDigest, hex), for the agent the decision is about and the listed
+// exact operations, until ExpiresAt by the database clock.
 type Exception struct {
 	ID         string    `json:"id"`
+	Bundle     string    `json:"bundle"`
 	Rule       string    `json:"rule"`
 	RuleDigest string    `json:"rule_digest"`
 	Operations []string  `json:"operations"`
@@ -23,12 +24,12 @@ type Exception struct {
 }
 
 // Waivers returns, by rule id, the exception that waives each rule of b for
-// an action on operation: a rule is waived only when it is exceptable in b,
-// its digest is the one the exception names (a changed rule is not
-// waived), and the operation is listed exactly. When several exceptions
-// qualify for one rule, the lowest id wins, so the choice is
-// deterministic. The exceptions are the agent's active ones; nil when none
-// applies.
+// an action on operation: a rule is waived only when the exception names
+// b's bundle, the rule is exceptable in b, its digest is the one the
+// exception names (a changed rule is not waived), and the operation is
+// listed exactly. When several exceptions qualify for one rule, the
+// lowest id wins, so the choice is deterministic. The exceptions are the
+// agent's active ones; nil when none applies.
 func Waivers(b *Bundle, operation string, xs []Exception) map[string]string {
 	if b == nil || len(xs) == 0 {
 		return nil
@@ -42,7 +43,7 @@ func Waivers(b *Bundle, operation string, xs []Exception) map[string]string {
 		d := RuleDigest(*r)
 		digest := hex.EncodeToString(d[:])
 		for _, x := range xs {
-			if x.Rule != r.ID || x.RuleDigest != digest || !slices.Contains(x.Operations, operation) {
+			if x.Bundle != b.ID || x.Rule != r.ID || x.RuleDigest != digest || !slices.Contains(x.Operations, operation) {
 				continue
 			}
 			if cur, ok := out[r.ID]; ok && cur <= x.ID {

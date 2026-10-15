@@ -4,8 +4,9 @@
 package domain
 
 // m11ExceptionTemplates are the policy exception notification types (G0 M11.1 D14,
-// HR-235), sent to the exception's owner alone. They render only names
-// and fixed text, never the exception's reason (HR-158).
+// HR-235), sent to the exception's owner alone. They render rule and
+// operation names, ids and fixed text, never the agent's name or the
+// exception's reason, which are free text (HR-158).
 var m11ExceptionTemplates = []Template{
 	{
 		Type: "policy.exception_activated", Severity: Warning, Params: []string{"rule", "agent", "operations", "expires", "exception"},

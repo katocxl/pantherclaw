@@ -254,7 +254,7 @@ func TestHR235_ExpiryIsTheDatabaseClocks(t *testing.T) {
 		t.Fatalf("active %+v", got)
 	}
 	if len(f.n.sent) != 1 || f.n.sent[0].Type != "policy.exception_activated" || f.n.sent[0].Personal[0] != f.alice ||
-		!f.n.sent[0].PersonalOnly {
+		!f.n.sent[0].PersonalOnly || f.n.sent[0].Params["agent"] != f.agent.String() {
 		t.Fatalf("notifications %+v", f.n.sent)
 	}
 	// pc_app may not move an expiry, nor bring a closed exception back.
@@ -273,10 +273,11 @@ func TestHR235_ExpiryIsTheDatabaseClocks(t *testing.T) {
 		ends    string
 	}{{ended, "2 hours", "-1 hour"}, {soon, "1 hour", "2 hours"}} {
 		f.d.AdminExec(t, `INSERT INTO pc.policy_exceptions (org_id, id, bundle_id, rule_id, rule_digest, agent_id, operations, reason,
-			owner_id, requested_by, requested_expiry, state, activated_at, expires_at, created_at)
-			SELECT org_id, $2, bundle_id, rule_id, rule_digest, agent_id, operations, reason, $3, requested_by,
-				now() + $5::interval, 'ACTIVE', now() - $4::interval, now() + $5::interval, now() - $4::interval
-			FROM pc.policy_exceptions WHERE id = $1`, x.ID, s.id, f.bob, s.created, s.ends)
+			owner_id, requested_by, requested_expiry)
+			SELECT org_id, $2, bundle_id, rule_id, rule_digest, agent_id, operations, reason, $3, requested_by, now() + interval '1 day'
+			FROM pc.policy_exceptions WHERE id = $1`, x.ID, s.id, f.bob)
+		f.d.AdminExec(t, `UPDATE pc.policy_exceptions SET state = 'ACTIVE' WHERE id = $1`, s.id)
+		backdate(t, f.d, s.id, s.created, s.ends)
 	}
 	got := f.active(t)
 	if len(got) != 2 || got[0].ID == ended.String() || got[1].ID == ended.String() {
@@ -353,7 +354,7 @@ func TestHR235_RevokeIsAPublishersAnyTime(t *testing.T) {
 	if _, err := f.svc.RevokeException(publisher, y.ID, "Not needed."); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := f.activate(t, y.ID); !errors.Is(err, exceptions.ErrNotPending) {
+	if _, err := f.activate(t, y.ID); !errors.Is(err, exceptions.ErrRevoked) {
 		t.Fatalf("a revoked request was activated: %v", err)
 	}
 	rows, _, err := f.svc.ListExceptions(publisher, exceptions.Filter{Agent: &f.agent}, 0, "")
@@ -431,4 +432,51 @@ func (f *fixture) republish(t *testing.T, rs []pdomain.Rule) {
 	f.exec(t, `INSERT INTO pc.policy_versions (org_id, id, policy_id, version, bundle, state, created_by, published_by, published_at)
 		SELECT org_id, $2, policy_id, 2, $3, 'PUBLISHED', 'test', 'test', now() FROM pc.policy_versions WHERE org_id = $1 AND id = $4`,
 		f.org, ids.NewV7(), raw, f.published)
+}
+
+// backdate moves an active exception's times as the database clock would
+// have set them: activated (and requested) `ago` before now, ending
+// `ends` from now (test setup; pc_app never can).
+func backdate(t *testing.T, d *dbtest.DB, id ids.UUID, ago, ends string) {
+	t.Helper()
+	d.AdminExec(t, `ALTER TABLE pc.policy_exceptions DISABLE TRIGGER policy_exceptions_transition`)
+	d.AdminExec(t, `UPDATE pc.policy_exceptions SET created_at = now() - $2::interval, activated_at = now() - $2::interval,
+		requested_expiry = now() + $3::interval, expires_at = now() + $3::interval WHERE id = $1`, id, ago, ends)
+	d.AdminExec(t, `ALTER TABLE pc.policy_exceptions ENABLE TRIGGER policy_exceptions_transition`)
+}
+
+// TestHR235_AnExceptionIsInsertedPendingOnly (D33): pc_app cannot insert
+// an exception that is already active, revoked or dated, nor one longer
+// than 30 days; whatever it says, the database's time and PENDING are
+// stored.
+func TestHR235_AnExceptionIsInsertedPendingOnly(t *testing.T) {
+	f := newFixture(t)
+	d := pdomain.RuleDigest(rules()[0])
+	insert := func(state, created, expiry string) error {
+		return f.p.InTenantTx(context.Background(), f.org, func(ctx context.Context, tx db.TenantTx) error {
+			_, err := tx.Exec(ctx, `INSERT INTO pc.policy_exceptions (org_id, id, bundle_id, rule_id, rule_digest, agent_id, operations,
+				reason, owner_id, requested_by, requested_expiry, state, activated_at, expires_at, created_at)
+				VALUES ($1, $2, 'refunds', 'hold-large', $3, $4, ARRAY['payments.refund.create'], 'r', $5, $5,
+					`+expiry+`, $6, now(), `+expiry+`, `+created+`)`,
+				f.org, ids.NewV7(), d[:], f.agent, f.alice, state)
+			return err
+		})
+	}
+	for name, err := range map[string]error{
+		"ACTIVE":               insert("ACTIVE", "now()", "now() + interval '1 hour'"),
+		"dated in the future":  insert("ACTIVE", "now() + interval '70 years'", "now() + interval '70 years 1 hour'"),
+		"longer than 30 days":  insert("PENDING", "now()", "now() + interval '31 days'"),
+		"REVOKED from the off": insert("REVOKED", "now()", "now() + interval '1 hour'"),
+	} {
+		if !db.IsCheckViolation(err) {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+	if err := insert("PENDING", "now() - interval '1 day'", "now() + interval '1 hour'"); err != nil {
+		t.Fatal(err)
+	}
+	if n := f.count(t, `SELECT count(*) FROM pc.policy_exceptions WHERE state = 'PENDING' AND activated_at IS NULL
+		AND expires_at IS NULL AND created_at > now() - interval '1 minute'`); n != 1 {
+		t.Fatalf("%d exceptions stored as inserted by the database", n)
+	}
 }

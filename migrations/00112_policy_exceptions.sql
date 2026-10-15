@@ -64,6 +64,33 @@ CREATE TABLE pc.policy_exceptions (
 CREATE INDEX policy_exceptions_active ON pc.policy_exceptions (org_id, agent_id) WHERE state = 'ACTIVE';
 CREATE INDEX policy_exceptions_open ON pc.policy_exceptions (org_id, id) WHERE state IN ('PENDING', 'ACTIVE');
 
+-- An exception is always inserted PENDING, with the database's time and
+-- nothing decided: only an approved change request activates it (D33,
+-- HR-231, HR-235).
+-- +goose StatementBegin
+CREATE FUNCTION pc.policy_exception_insert() RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = pc, pg_temp
+AS $$
+BEGIN
+    IF NEW.state IS DISTINCT FROM 'PENDING' THEN
+        RAISE EXCEPTION 'a policy exception is inserted PENDING' USING ERRCODE = 'check_violation';
+    END IF;
+    IF NEW.requested_expiry > now() + interval '30 days' THEN
+        RAISE EXCEPTION 'a policy exception lasts at most 30 days' USING ERRCODE = 'check_violation';
+    END IF;
+    NEW.created_at := now();
+    NEW.activated_at := NULL;
+    NEW.expires_at := NULL;
+    NEW.revoked_by := NULL;
+    NEW.revoked_reason := NULL;
+    RETURN NEW;
+END
+$$;
+-- +goose StatementEnd
+CREATE TRIGGER policy_exceptions_insert BEFORE INSERT ON pc.policy_exceptions
+    FOR EACH ROW EXECUTE FUNCTION pc.policy_exception_insert();
+
 -- Transitions are one way, and activation takes its times from the
 -- database clock whatever the statement says (HR-235).
 -- +goose StatementBegin
@@ -108,4 +135,5 @@ GRANT SELECT ON pc.policy_exceptions TO pc_audit_ro;
 
 -- +goose Down
 DROP TABLE pc.policy_exceptions;
+DROP FUNCTION pc.policy_exception_insert();
 DROP FUNCTION pc.policy_exception_transition();
