@@ -122,8 +122,10 @@ func (s *Service) runExposure(ctx context.Context, b BuiltinQuery, pr page.Reque
 		Range: Range{End: &computed, Changing: v.Stale},
 	}
 	if v.Restricted {
-		out.Omissions = append(out.Omissions, Omission{Code: omissionScopeLimited,
-			Detail: "results cover only the agents where you hold " + string(td.PermExposureRead)})
+		out.Omissions = append(out.Omissions, Omission{
+			Code:   omissionScopeLimited,
+			Detail: "results cover only the agents where you hold " + string(td.PermExposureRead),
+		})
 	}
 	if v.Stale {
 		d := "computed at " + v.ComputedAt.UTC().Format(time.RFC3339) + "; authority changed since"

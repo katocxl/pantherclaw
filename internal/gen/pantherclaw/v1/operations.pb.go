@@ -10,6 +10,7 @@
 package pantherclawv1
 
 import (
+	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
@@ -666,11 +667,287 @@ func (x *GetEvidenceStatusResponse) GetSources() []*SourceStatus {
 	return nil
 }
 
+// MetricPoint is one hourly value.
+type MetricPoint struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The start of the hour (UTC).
+	BucketTime *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=bucket_time,json=bucketTime,proto3" json:"bucket_time,omitempty"`
+	// "COLLECTED", "NOT_COLLECTED" (the source is not collected) or
+	// "NO_SAMPLE" (no sample was taken: a gap).
+	State string `protobuf:"bytes,2,opt,name=state,proto3" json:"state,omitempty"`
+	// Set when COLLECTED.
+	Value float64 `protobuf:"fixed64,3,opt,name=value,proto3" json:"value,omitempty"`
+	// The search behind the point (drill-down); one of query and builtin.
+	DrillQuery    *Query        `protobuf:"bytes,4,opt,name=drill_query,json=drillQuery,proto3" json:"drill_query,omitempty"`
+	DrillBuiltin  *BuiltinQuery `protobuf:"bytes,5,opt,name=drill_builtin,json=drillBuiltin,proto3" json:"drill_builtin,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MetricPoint) Reset() {
+	*x = MetricPoint{}
+	mi := &file_pantherclaw_v1_operations_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MetricPoint) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MetricPoint) ProtoMessage() {}
+
+func (x *MetricPoint) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_operations_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MetricPoint.ProtoReflect.Descriptor instead.
+func (*MetricPoint) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_operations_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *MetricPoint) GetBucketTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.BucketTime
+	}
+	return nil
+}
+
+func (x *MetricPoint) GetState() string {
+	if x != nil {
+		return x.State
+	}
+	return ""
+}
+
+func (x *MetricPoint) GetValue() float64 {
+	if x != nil {
+		return x.Value
+	}
+	return 0
+}
+
+func (x *MetricPoint) GetDrillQuery() *Query {
+	if x != nil {
+		return x.DrillQuery
+	}
+	return nil
+}
+
+func (x *MetricPoint) GetDrillBuiltin() *BuiltinQuery {
+	if x != nil {
+		return x.DrillBuiltin
+	}
+	return nil
+}
+
+// MetricSeries is one metric and dimension over the range.
+type MetricSeries struct {
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	Metric string                 `protobuf:"bytes,1,opt,name=metric,proto3" json:"metric,omitempty"`
+	// A breakdown key (a resource group), empty for the whole organization.
+	Dimension     string         `protobuf:"bytes,2,opt,name=dimension,proto3" json:"dimension,omitempty"`
+	Points        []*MetricPoint `protobuf:"bytes,3,rep,name=points,proto3" json:"points,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MetricSeries) Reset() {
+	*x = MetricSeries{}
+	mi := &file_pantherclaw_v1_operations_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MetricSeries) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MetricSeries) ProtoMessage() {}
+
+func (x *MetricSeries) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_operations_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MetricSeries.ProtoReflect.Descriptor instead.
+func (*MetricSeries) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_operations_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *MetricSeries) GetMetric() string {
+	if x != nil {
+		return x.Metric
+	}
+	return ""
+}
+
+func (x *MetricSeries) GetDimension() string {
+	if x != nil {
+		return x.Dimension
+	}
+	return ""
+}
+
+func (x *MetricSeries) GetPoints() []*MetricPoint {
+	if x != nil {
+		return x.Points
+	}
+	return nil
+}
+
+// GetMetricsRequest names the metrics and range.
+type GetMetricsRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Metrics to read; all when empty.
+	Metrics []string `protobuf:"bytes,1,rep,name=metrics,proto3" json:"metrics,omitempty"`
+	// At most 30 days, hour-aligned (rounded down).
+	StartTime     *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=start_time,json=startTime,proto3" json:"start_time,omitempty"`
+	EndTime       *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=end_time,json=endTime,proto3" json:"end_time,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetMetricsRequest) Reset() {
+	*x = GetMetricsRequest{}
+	mi := &file_pantherclaw_v1_operations_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetMetricsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetMetricsRequest) ProtoMessage() {}
+
+func (x *GetMetricsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_operations_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetMetricsRequest.ProtoReflect.Descriptor instead.
+func (*GetMetricsRequest) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_operations_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *GetMetricsRequest) GetMetrics() []string {
+	if x != nil {
+		return x.Metrics
+	}
+	return nil
+}
+
+func (x *GetMetricsRequest) GetStartTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.StartTime
+	}
+	return nil
+}
+
+func (x *GetMetricsRequest) GetEndTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.EndTime
+	}
+	return nil
+}
+
+// GetMetricsResponse is one series per metric and dimension.
+type GetMetricsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	AsOfTime      *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=as_of_time,json=asOfTime,proto3" json:"as_of_time,omitempty"`
+	StartTime     *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=start_time,json=startTime,proto3" json:"start_time,omitempty"`
+	EndTime       *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=end_time,json=endTime,proto3" json:"end_time,omitempty"`
+	Series        []*MetricSeries        `protobuf:"bytes,4,rep,name=series,proto3" json:"series,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetMetricsResponse) Reset() {
+	*x = GetMetricsResponse{}
+	mi := &file_pantherclaw_v1_operations_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetMetricsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetMetricsResponse) ProtoMessage() {}
+
+func (x *GetMetricsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_operations_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetMetricsResponse.ProtoReflect.Descriptor instead.
+func (*GetMetricsResponse) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_operations_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *GetMetricsResponse) GetAsOfTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.AsOfTime
+	}
+	return nil
+}
+
+func (x *GetMetricsResponse) GetStartTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.StartTime
+	}
+	return nil
+}
+
+func (x *GetMetricsResponse) GetEndTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.EndTime
+	}
+	return nil
+}
+
+func (x *GetMetricsResponse) GetSeries() []*MetricSeries {
+	if x != nil {
+		return x.Series
+	}
+	return nil
+}
+
 var File_pantherclaw_v1_operations_proto protoreflect.FileDescriptor
 
 const file_pantherclaw_v1_operations_proto_rawDesc = "" +
 	"\n" +
-	"\x1fpantherclaw/v1/operations.proto\x12\x0epantherclaw.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"X\n" +
+	"\x1fpantherclaw/v1/operations.proto\x12\x0epantherclaw.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1bpantherclaw/v1/search.proto\"X\n" +
 	"\n" +
 	"WorkAction\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1e\n" +
@@ -727,12 +1004,38 @@ const file_pantherclaw_v1_operations_proto_rawDesc = "" +
 	"\x19GetEvidenceStatusResponse\x128\n" +
 	"\n" +
 	"as_of_time\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\basOfTime\x126\n" +
-	"\asources\x18\x02 \x03(\v2\x1c.pantherclaw.v1.SourceStatusR\asources2\xbc\x02\n" +
+	"\asources\x18\x02 \x03(\v2\x1c.pantherclaw.v1.SourceStatusR\asources\"\xf1\x01\n" +
+	"\vMetricPoint\x12;\n" +
+	"\vbucket_time\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
+	"bucketTime\x12\x14\n" +
+	"\x05state\x18\x02 \x01(\tR\x05state\x12\x14\n" +
+	"\x05value\x18\x03 \x01(\x01R\x05value\x126\n" +
+	"\vdrill_query\x18\x04 \x01(\v2\x15.pantherclaw.v1.QueryR\n" +
+	"drillQuery\x12A\n" +
+	"\rdrill_builtin\x18\x05 \x01(\v2\x1c.pantherclaw.v1.BuiltinQueryR\fdrillBuiltin\"y\n" +
+	"\fMetricSeries\x12\x16\n" +
+	"\x06metric\x18\x01 \x01(\tR\x06metric\x12\x1c\n" +
+	"\tdimension\x18\x02 \x01(\tR\tdimension\x123\n" +
+	"\x06points\x18\x03 \x03(\v2\x1b.pantherclaw.v1.MetricPointR\x06points\"\xd5\x01\n" +
+	"\x11GetMetricsRequest\x12>\n" +
+	"\ametrics\x18\x01 \x03(\tB$\xbaH!\x92\x01\x1e\x10\x10\"\x1ar\x18\x10\x01\x18@2\x12^[a-z][a-z0-9_.]*$R\ametrics\x12A\n" +
+	"\n" +
+	"start_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampB\x06\xbaH\x03\xc8\x01\x01R\tstartTime\x12=\n" +
+	"\bend_time\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampB\x06\xbaH\x03\xc8\x01\x01R\aendTime\"\xf6\x01\n" +
+	"\x12GetMetricsResponse\x128\n" +
+	"\n" +
+	"as_of_time\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\basOfTime\x129\n" +
+	"\n" +
+	"start_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\tstartTime\x125\n" +
+	"\bend_time\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\aendTime\x124\n" +
+	"\x06series\x18\x04 \x03(\v2\x1c.pantherclaw.v1.MetricSeriesR\x06series2\x96\x03\n" +
 	"\x11OperationsService\x12^\n" +
 	"\fGetWorkQueue\x12#.pantherclaw.v1.GetWorkQueueRequest\x1a$.pantherclaw.v1.GetWorkQueueResponse\"\x03\x90\x02\x01\x12X\n" +
 	"\n" +
 	"GetSummary\x12!.pantherclaw.v1.GetSummaryRequest\x1a\".pantherclaw.v1.GetSummaryResponse\"\x03\x90\x02\x01\x12m\n" +
-	"\x11GetEvidenceStatus\x12(.pantherclaw.v1.GetEvidenceStatusRequest\x1a).pantherclaw.v1.GetEvidenceStatusResponse\"\x03\x90\x02\x01B\xc8\x01\n" +
+	"\x11GetEvidenceStatus\x12(.pantherclaw.v1.GetEvidenceStatusRequest\x1a).pantherclaw.v1.GetEvidenceStatusResponse\"\x03\x90\x02\x01\x12X\n" +
+	"\n" +
+	"GetMetrics\x12!.pantherclaw.v1.GetMetricsRequest\x1a\".pantherclaw.v1.GetMetricsResponse\"\x03\x90\x02\x01B\xc8\x01\n" +
 	"\x12com.pantherclaw.v1B\x0fOperationsProtoP\x01ZHgithub.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1;pantherclawv1\xa2\x02\x03PXX\xaa\x02\x0ePantherclaw.V1\xca\x02\x0ePantherclaw\\V1\xe2\x02\x1aPantherclaw\\V1\\GPBMetadata\xea\x02\x0fPantherclaw::V1b\x06proto3"
 
 var (
@@ -747,7 +1050,7 @@ func file_pantherclaw_v1_operations_proto_rawDescGZIP() []byte {
 	return file_pantherclaw_v1_operations_proto_rawDescData
 }
 
-var file_pantherclaw_v1_operations_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
+var file_pantherclaw_v1_operations_proto_msgTypes = make([]protoimpl.MessageInfo, 14)
 var file_pantherclaw_v1_operations_proto_goTypes = []any{
 	(*WorkAction)(nil),                // 0: pantherclaw.v1.WorkAction
 	(*WorkItem)(nil),                  // 1: pantherclaw.v1.WorkItem
@@ -758,31 +1061,49 @@ var file_pantherclaw_v1_operations_proto_goTypes = []any{
 	(*SourceStatus)(nil),              // 6: pantherclaw.v1.SourceStatus
 	(*GetEvidenceStatusRequest)(nil),  // 7: pantherclaw.v1.GetEvidenceStatusRequest
 	(*GetEvidenceStatusResponse)(nil), // 8: pantherclaw.v1.GetEvidenceStatusResponse
-	nil,                               // 9: pantherclaw.v1.GetSummaryResponse.CountsEntry
-	(*timestamppb.Timestamp)(nil),     // 10: google.protobuf.Timestamp
+	(*MetricPoint)(nil),               // 9: pantherclaw.v1.MetricPoint
+	(*MetricSeries)(nil),              // 10: pantherclaw.v1.MetricSeries
+	(*GetMetricsRequest)(nil),         // 11: pantherclaw.v1.GetMetricsRequest
+	(*GetMetricsResponse)(nil),        // 12: pantherclaw.v1.GetMetricsResponse
+	nil,                               // 13: pantherclaw.v1.GetSummaryResponse.CountsEntry
+	(*timestamppb.Timestamp)(nil),     // 14: google.protobuf.Timestamp
+	(*Query)(nil),                     // 15: pantherclaw.v1.Query
+	(*BuiltinQuery)(nil),              // 16: pantherclaw.v1.BuiltinQuery
 }
 var file_pantherclaw_v1_operations_proto_depIdxs = []int32{
-	10, // 0: pantherclaw.v1.WorkItem.since_time:type_name -> google.protobuf.Timestamp
-	10, // 1: pantherclaw.v1.WorkItem.deadline_time:type_name -> google.protobuf.Timestamp
+	14, // 0: pantherclaw.v1.WorkItem.since_time:type_name -> google.protobuf.Timestamp
+	14, // 1: pantherclaw.v1.WorkItem.deadline_time:type_name -> google.protobuf.Timestamp
 	0,  // 2: pantherclaw.v1.WorkItem.actions:type_name -> pantherclaw.v1.WorkAction
 	1,  // 3: pantherclaw.v1.GetWorkQueueResponse.items:type_name -> pantherclaw.v1.WorkItem
-	10, // 4: pantherclaw.v1.GetWorkQueueResponse.as_of_time:type_name -> google.protobuf.Timestamp
-	10, // 5: pantherclaw.v1.GetSummaryResponse.as_of_time:type_name -> google.protobuf.Timestamp
-	9,  // 6: pantherclaw.v1.GetSummaryResponse.counts:type_name -> pantherclaw.v1.GetSummaryResponse.CountsEntry
-	10, // 7: pantherclaw.v1.SourceStatus.last_seen_time:type_name -> google.protobuf.Timestamp
-	10, // 8: pantherclaw.v1.GetEvidenceStatusResponse.as_of_time:type_name -> google.protobuf.Timestamp
+	14, // 4: pantherclaw.v1.GetWorkQueueResponse.as_of_time:type_name -> google.protobuf.Timestamp
+	14, // 5: pantherclaw.v1.GetSummaryResponse.as_of_time:type_name -> google.protobuf.Timestamp
+	13, // 6: pantherclaw.v1.GetSummaryResponse.counts:type_name -> pantherclaw.v1.GetSummaryResponse.CountsEntry
+	14, // 7: pantherclaw.v1.SourceStatus.last_seen_time:type_name -> google.protobuf.Timestamp
+	14, // 8: pantherclaw.v1.GetEvidenceStatusResponse.as_of_time:type_name -> google.protobuf.Timestamp
 	6,  // 9: pantherclaw.v1.GetEvidenceStatusResponse.sources:type_name -> pantherclaw.v1.SourceStatus
-	2,  // 10: pantherclaw.v1.OperationsService.GetWorkQueue:input_type -> pantherclaw.v1.GetWorkQueueRequest
-	4,  // 11: pantherclaw.v1.OperationsService.GetSummary:input_type -> pantherclaw.v1.GetSummaryRequest
-	7,  // 12: pantherclaw.v1.OperationsService.GetEvidenceStatus:input_type -> pantherclaw.v1.GetEvidenceStatusRequest
-	3,  // 13: pantherclaw.v1.OperationsService.GetWorkQueue:output_type -> pantherclaw.v1.GetWorkQueueResponse
-	5,  // 14: pantherclaw.v1.OperationsService.GetSummary:output_type -> pantherclaw.v1.GetSummaryResponse
-	8,  // 15: pantherclaw.v1.OperationsService.GetEvidenceStatus:output_type -> pantherclaw.v1.GetEvidenceStatusResponse
-	13, // [13:16] is the sub-list for method output_type
-	10, // [10:13] is the sub-list for method input_type
-	10, // [10:10] is the sub-list for extension type_name
-	10, // [10:10] is the sub-list for extension extendee
-	0,  // [0:10] is the sub-list for field type_name
+	14, // 10: pantherclaw.v1.MetricPoint.bucket_time:type_name -> google.protobuf.Timestamp
+	15, // 11: pantherclaw.v1.MetricPoint.drill_query:type_name -> pantherclaw.v1.Query
+	16, // 12: pantherclaw.v1.MetricPoint.drill_builtin:type_name -> pantherclaw.v1.BuiltinQuery
+	9,  // 13: pantherclaw.v1.MetricSeries.points:type_name -> pantherclaw.v1.MetricPoint
+	14, // 14: pantherclaw.v1.GetMetricsRequest.start_time:type_name -> google.protobuf.Timestamp
+	14, // 15: pantherclaw.v1.GetMetricsRequest.end_time:type_name -> google.protobuf.Timestamp
+	14, // 16: pantherclaw.v1.GetMetricsResponse.as_of_time:type_name -> google.protobuf.Timestamp
+	14, // 17: pantherclaw.v1.GetMetricsResponse.start_time:type_name -> google.protobuf.Timestamp
+	14, // 18: pantherclaw.v1.GetMetricsResponse.end_time:type_name -> google.protobuf.Timestamp
+	10, // 19: pantherclaw.v1.GetMetricsResponse.series:type_name -> pantherclaw.v1.MetricSeries
+	2,  // 20: pantherclaw.v1.OperationsService.GetWorkQueue:input_type -> pantherclaw.v1.GetWorkQueueRequest
+	4,  // 21: pantherclaw.v1.OperationsService.GetSummary:input_type -> pantherclaw.v1.GetSummaryRequest
+	7,  // 22: pantherclaw.v1.OperationsService.GetEvidenceStatus:input_type -> pantherclaw.v1.GetEvidenceStatusRequest
+	11, // 23: pantherclaw.v1.OperationsService.GetMetrics:input_type -> pantherclaw.v1.GetMetricsRequest
+	3,  // 24: pantherclaw.v1.OperationsService.GetWorkQueue:output_type -> pantherclaw.v1.GetWorkQueueResponse
+	5,  // 25: pantherclaw.v1.OperationsService.GetSummary:output_type -> pantherclaw.v1.GetSummaryResponse
+	8,  // 26: pantherclaw.v1.OperationsService.GetEvidenceStatus:output_type -> pantherclaw.v1.GetEvidenceStatusResponse
+	12, // 27: pantherclaw.v1.OperationsService.GetMetrics:output_type -> pantherclaw.v1.GetMetricsResponse
+	24, // [24:28] is the sub-list for method output_type
+	20, // [20:24] is the sub-list for method input_type
+	20, // [20:20] is the sub-list for extension type_name
+	20, // [20:20] is the sub-list for extension extendee
+	0,  // [0:20] is the sub-list for field type_name
 }
 
 func init() { file_pantherclaw_v1_operations_proto_init() }
@@ -790,13 +1111,14 @@ func file_pantherclaw_v1_operations_proto_init() {
 	if File_pantherclaw_v1_operations_proto != nil {
 		return
 	}
+	file_pantherclaw_v1_search_proto_init()
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pantherclaw_v1_operations_proto_rawDesc), len(file_pantherclaw_v1_operations_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   10,
+			NumMessages:   14,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

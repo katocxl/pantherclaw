@@ -117,9 +117,7 @@ func summarize(q Queue, es EvidenceStatus) Summary {
 			out.Unknown = append(out.Unknown, label+": not reported yet")
 		}
 	}
-	for _, p := range q.Pending {
-		out.Unknown = append(out.Unknown, p)
-	}
+	out.Unknown = append(out.Unknown, q.Pending...)
 	if !q.Whole {
 		out.Unknown = append(out.Unknown, "agents outside your scope are not counted")
 	}

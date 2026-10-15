@@ -34,6 +34,8 @@ type Service struct {
 	Clock clock.Clock
 	// Sources are the other streams' ports (D49); any may be nil.
 	Sources Sources
+	// Ents gates metrics (Team, D5); nil refuses them.
+	Ents Entitlements
 }
 
 // viewer is a caller with its scopes, computed once per request.

@@ -12,8 +12,266 @@ import (
 	"context"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 )
+
+const insertMetricSample = `-- name: InsertMetricSample :execrows
+INSERT INTO pc.metric_samples (org_id, id, metric, dimension, bucket, value, collected)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
+ON CONFLICT (org_id, metric, dimension, bucket) DO NOTHING
+`
+
+type InsertMetricSampleParams struct {
+	OrgID     ids.OrgID
+	ID        ids.UUID
+	Metric    string
+	Dimension string
+	Bucket    time.Time
+	Value     pgtype.Float8
+	Collected bool
+}
+
+func (q *Queries) InsertMetricSample(ctx context.Context, arg InsertMetricSampleParams) (int64, error) {
+	result, err := q.db.Exec(ctx, insertMetricSample,
+		arg.OrgID,
+		arg.ID,
+		arg.Metric,
+		arg.Dimension,
+		arg.Bucket,
+		arg.Value,
+		arg.Collected,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const listMetricSamples = `-- name: ListMetricSamples :many
+SELECT m.metric, m.dimension, m.bucket, m.value, m.collected
+FROM pc.metric_samples m
+WHERE m.org_id = $1 AND m.metric = ANY ($2::text[])
+  AND m.bucket >= $3::timestamptz AND m.bucket < $4::timestamptz
+ORDER BY m.metric, m.dimension, m.bucket
+LIMIT 20000
+`
+
+type ListMetricSamplesParams struct {
+	OrgID      ids.OrgID
+	Metrics    []string
+	RangeStart time.Time
+	RangeEnd   time.Time
+}
+
+type ListMetricSamplesRow struct {
+	Metric    string
+	Dimension string
+	Bucket    time.Time
+	Value     pgtype.Float8
+	Collected bool
+}
+
+func (q *Queries) ListMetricSamples(ctx context.Context, arg ListMetricSamplesParams) ([]ListMetricSamplesRow, error) {
+	rows, err := q.db.Query(ctx, listMetricSamples,
+		arg.OrgID,
+		arg.Metrics,
+		arg.RangeStart,
+		arg.RangeEnd,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListMetricSamplesRow{}
+	for rows.Next() {
+		var i ListMetricSamplesRow
+		if err := rows.Scan(
+			&i.Metric,
+			&i.Dimension,
+			&i.Bucket,
+			&i.Value,
+			&i.Collected,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const metricBypassRoutes = `-- name: MetricBypassRoutes :one
+SELECT count(*)::bigint AS n,
+       coalesce(max(extract(epoch FROM (now() - r.first_seen_at)) / 3600), 0)::double precision AS oldest_hours
+FROM pc.coverage_routes r
+WHERE r.org_id = $1 AND r.kind <> 'channel' AND r.observation = 'observed' AND r.last_seen_at >= now() - interval '7 days'
+`
+
+type MetricBypassRoutesRow struct {
+	N           int64
+	OldestHours float64
+}
+
+// Routes around the gateway seen in the last 7 days, and the age in hours
+// of the oldest of them.
+func (q *Queries) MetricBypassRoutes(ctx context.Context, orgID ids.OrgID) (MetricBypassRoutesRow, error) {
+	row := q.db.QueryRow(ctx, metricBypassRoutes, orgID)
+	var i MetricBypassRoutesRow
+	err := row.Scan(&i.N, &i.OldestHours)
+	return i, err
+}
+
+const metricCoverageStates = `-- name: MetricCoverageStates :many
+SELECT s.state, count(*)::bigint AS n
+FROM (SELECT DISTINCT ON (c.agent_id, c.connection_id, c.operation) c.state
+      FROM pc.coverage_snapshots c
+      WHERE c.org_id = $1
+      ORDER BY c.agent_id, c.connection_id, c.operation, c.computed_at DESC) s
+GROUP BY s.state
+`
+
+type MetricCoverageStatesRow struct {
+	State string
+	N     int64
+}
+
+// The latest coverage state of each agent, connection and operation.
+func (q *Queries) MetricCoverageStates(ctx context.Context, orgID ids.OrgID) ([]MetricCoverageStatesRow, error) {
+	rows, err := q.db.Query(ctx, metricCoverageStates, orgID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []MetricCoverageStatesRow{}
+	for rows.Next() {
+		var i MetricCoverageStatesRow
+		if err := rows.Scan(&i.State, &i.N); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const metricDecisions = `-- name: MetricDecisions :many
+
+SELECT t.decision, t.mode, count(*)::bigint AS n
+FROM pc.transactions t
+WHERE t.org_id = $1 AND t.created_at >= $2::timestamptz
+  AND t.created_at < $3::timestamptz
+GROUP BY t.decision, t.mode
+`
+
+type MetricDecisionsRow struct {
+	Decision string
+	Mode     string
+	N        int64
+}
+
+// Operating metrics (D33, F301). Each query reads one source for one
+// hourly bucket [bucket_start, bucket_end) or as it stands now; the
+// collector writes one sample per metric, dimension and hour.
+func (q *Queries) MetricDecisions(ctx context.Context, orgID ids.OrgID, bucketStart time.Time, bucketEnd time.Time) ([]MetricDecisionsRow, error) {
+	rows, err := q.db.Query(ctx, metricDecisions, orgID, bucketStart, bucketEnd)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []MetricDecisionsRow{}
+	for rows.Next() {
+		var i MetricDecisionsRow
+		if err := rows.Scan(&i.Decision, &i.Mode, &i.N); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const metricEffectsConfirmed = `-- name: MetricEffectsConfirmed :one
+SELECT count(*)::bigint AS n
+FROM pc.transactions t
+WHERE t.org_id = $1 AND t.effect_state = 'CONFIRMED'
+  AND t.created_at >= $2::timestamptz AND t.created_at < $3::timestamptz
+`
+
+func (q *Queries) MetricEffectsConfirmed(ctx context.Context, orgID ids.OrgID, bucketStart time.Time, bucketEnd time.Time) (int64, error) {
+	row := q.db.QueryRow(ctx, metricEffectsConfirmed, orgID, bucketStart, bucketEnd)
+	var n int64
+	err := row.Scan(&n)
+	return n, err
+}
+
+const metricExposureByGroup = `-- name: MetricExposureByGroup :many
+SELECT r.resource_group, count(*)::bigint AS n
+FROM pc.exposure_rights r
+WHERE r.org_id = $1 AND r.snapshot_id = $2
+  AND r.reach_view = 'EFFECTIVE' AND r.label = 'USABLE'
+GROUP BY r.resource_group
+ORDER BY r.resource_group
+LIMIT 200
+`
+
+type MetricExposureByGroupRow struct {
+	ResourceGroup string
+	N             int64
+}
+
+// Usable effective rights per resource group in the latest snapshot.
+func (q *Queries) MetricExposureByGroup(ctx context.Context, orgID ids.OrgID, snapshotID ids.UUID) ([]MetricExposureByGroupRow, error) {
+	rows, err := q.db.Query(ctx, metricExposureByGroup, orgID, snapshotID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []MetricExposureByGroupRow{}
+	for rows.Next() {
+		var i MetricExposureByGroupRow
+		if err := rows.Scan(&i.ResourceGroup, &i.N); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const metricLatestExposureSnapshot = `-- name: MetricLatestExposureSnapshot :one
+SELECT s.id FROM pc.exposure_snapshots s WHERE s.org_id = $1 ORDER BY s.computed_at DESC, s.id DESC LIMIT 1
+`
+
+func (q *Queries) MetricLatestExposureSnapshot(ctx context.Context, orgID ids.OrgID) (ids.UUID, error) {
+	row := q.db.QueryRow(ctx, metricLatestExposureSnapshot, orgID)
+	var id ids.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const metricReconciliationBacklog = `-- name: MetricReconciliationBacklog :one
+SELECT count(*)::bigint AS n
+FROM pc.transactions t
+WHERE t.org_id = $1 AND t.effect_state IN ('UNKNOWN', 'PROPAGATION_PENDING', 'CONFLICTING')
+`
+
+// Transactions whose effect is not settled: unknown, pending propagation
+// or conflicting.
+func (q *Queries) MetricReconciliationBacklog(ctx context.Context, orgID ids.OrgID) (int64, error) {
+	row := q.db.QueryRow(ctx, metricReconciliationBacklog, orgID)
+	var n int64
+	err := row.Scan(&n)
+	return n, err
+}
 
 const opsActiveIncidents = `-- name: OpsActiveIncidents :many
 

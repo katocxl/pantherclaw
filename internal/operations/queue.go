@@ -146,7 +146,7 @@ func workQueue(ctx context.Context, v *viewer, x external) (Queue, error) {
 	if err := containmentItems(ctx, v, x, &out); err != nil {
 		return Queue{}, err
 	}
-	if err := findingItems(ctx, v, x, &out, push); err != nil {
+	if err := findingItems(ctx, v, x, push); err != nil {
 		return Queue{}, err
 	}
 	if out.Whole {
@@ -361,7 +361,7 @@ func containmentItems(ctx context.Context, v *viewer, x external, out *Queue) er
 
 // findingItems queues open posture findings (D30) the posture port read
 // under the caller's posture.read.
-func findingItems(ctx context.Context, v *viewer, x external, out *Queue, push pushFn) error {
+func findingItems(ctx context.Context, v *viewer, x external, push pushFn) error {
 	for _, f := range x.findings {
 		var agents []string
 		if f.Agent != nil {

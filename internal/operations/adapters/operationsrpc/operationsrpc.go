@@ -15,6 +15,7 @@ import (
 	pantherclawv1 "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
 	"github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1/pantherclawv1connect"
 	"github.com/katocxl/pantherclaw/internal/operations"
+	"github.com/katocxl/pantherclaw/internal/search/adapters/searchrpc"
 )
 
 // Handler serves OperationsService.
@@ -85,6 +86,29 @@ func (h *Handler) GetEvidenceStatus(ctx context.Context, _ *pantherclawv1.GetEvi
 			Kind: src.Kind, Name: src.Name, Id: src.ID, LastSeenTime: ts(src.LastSeen), Freshness: string(src.Freshness),
 			Gap: src.Gap(), Lag: src.Lag, Note: src.Note,
 		})
+	}
+	return out, nil
+}
+
+// GetMetrics implements OperationsServiceHandler.
+func (h *Handler) GetMetrics(ctx context.Context, req *pantherclawv1.GetMetricsRequest) (*pantherclawv1.GetMetricsResponse, error) {
+	m, err := h.svc.GetMetrics(ctx, req.GetMetrics(), req.GetStartTime().AsTime(), req.GetEndTime().AsTime())
+	if err != nil {
+		return nil, err
+	}
+	out := &pantherclawv1.GetMetricsResponse{
+		AsOfTime: timestamppb.New(m.AsOf), StartTime: timestamppb.New(m.Start), EndTime: timestamppb.New(m.End),
+	}
+	for _, s := range m.Series {
+		ps := &pantherclawv1.MetricSeries{Metric: s.Metric, Dimension: s.Dimension}
+		for _, p := range s.Points {
+			mp := &pantherclawv1.MetricPoint{BucketTime: timestamppb.New(p.Bucket), State: string(p.State), Value: p.Value}
+			if p.Drill != nil {
+				mp.DrillQuery, mp.DrillBuiltin = searchrpc.SpecProto(*p.Drill)
+			}
+			ps.Points = append(ps.Points, mp)
+		}
+		out.Series = append(out.Series, ps)
 	}
 	return out, nil
 }

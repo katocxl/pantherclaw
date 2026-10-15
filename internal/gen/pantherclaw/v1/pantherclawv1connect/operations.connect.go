@@ -36,6 +36,9 @@ const (
 	// OperationsServiceGetEvidenceStatusProcedure is the procedure name of the OperationsService's
 	// GetEvidenceStatus RPC.
 	OperationsServiceGetEvidenceStatusProcedure = "/pantherclaw.v1.OperationsService/GetEvidenceStatus"
+	// OperationsServiceGetMetricsProcedure is the procedure name of the OperationsService's GetMetrics
+	// RPC.
+	OperationsServiceGetMetricsProcedure = "/pantherclaw.v1.OperationsService/GetMetrics"
 )
 
 var (
@@ -63,6 +66,14 @@ var (
 			IdempotencyLevel: connect.IdempotencyNoSideEffects,
 		}
 	})
+	operationsServiceGetMetricsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_pantherclaw_v1_operations_proto.Services().ByName("OperationsService").Methods().ByName("GetMetrics"),
+			Procedure:        OperationsServiceGetMetricsProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
 )
 
 // OperationsServiceClient is a client for the pantherclaw.v1.OperationsService service.
@@ -80,6 +91,13 @@ type OperationsServiceClient interface {
 	// freshness.
 	// permission: operations.read
 	GetEvidenceStatus(context.Context, *v1.GetEvidenceStatusRequest) (*v1.GetEvidenceStatusResponse, error)
+	// GetMetrics returns hourly operating metrics (Team): consequential
+	// outcomes, coverage, bypass routes, exposure by resource group and the
+	// reconciliation backlog, each point with its drill-down search. They are
+	// organization-wide, so they need operations.read across the
+	// organization.
+	// permission: operations.read
+	GetMetrics(context.Context, *v1.GetMetricsRequest) (*v1.GetMetricsResponse, error)
 }
 
 // NewOperationsServiceClient constructs a client for the pantherclaw.v1.OperationsService service.
@@ -103,6 +121,13 @@ type OperationsServiceHandler interface {
 	// freshness.
 	// permission: operations.read
 	GetEvidenceStatus(context.Context, *v1.GetEvidenceStatusRequest) (*v1.GetEvidenceStatusResponse, error)
+	// GetMetrics returns hourly operating metrics (Team): consequential
+	// outcomes, coverage, bypass routes, exposure by resource group and the
+	// reconciliation backlog, each point with its drill-down search. They are
+	// organization-wide, so they need operations.read across the
+	// organization.
+	// permission: operations.read
+	GetMetrics(context.Context, *v1.GetMetricsRequest) (*v1.GetMetricsResponse, error)
 }
 
 // RegisterOperationsServiceHandler registers svc as the pantherclaw.v1.OperationsService
@@ -113,6 +138,7 @@ func RegisterOperationsServiceHandler(server *connect.Server, svc OperationsServ
 		connect.Method{Spec: operationsServiceGetWorkQueueSpec(), Handler: adapter.getWorkQueue},
 		connect.Method{Spec: operationsServiceGetSummarySpec(), Handler: adapter.getSummary},
 		connect.Method{Spec: operationsServiceGetEvidenceStatusSpec(), Handler: adapter.getEvidenceStatus},
+		connect.Method{Spec: operationsServiceGetMetricsSpec(), Handler: adapter.getMetrics},
 	)
 }
 
@@ -129,6 +155,10 @@ func (UnimplementedOperationsServiceHandler) GetSummary(context.Context, *v1.Get
 
 func (UnimplementedOperationsServiceHandler) GetEvidenceStatus(context.Context, *v1.GetEvidenceStatusRequest) (*v1.GetEvidenceStatusResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.OperationsService.GetEvidenceStatus is not implemented")
+}
+
+func (UnimplementedOperationsServiceHandler) GetMetrics(context.Context, *v1.GetMetricsRequest) (*v1.GetMetricsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.OperationsService.GetMetrics is not implemented")
 }
 
 type operationsServiceClient struct {
@@ -154,6 +184,14 @@ func (c *operationsServiceClient) GetSummary(ctx context.Context, req *v1.GetSum
 func (c *operationsServiceClient) GetEvidenceStatus(ctx context.Context, req *v1.GetEvidenceStatusRequest) (*v1.GetEvidenceStatusResponse, error) {
 	var res v1.GetEvidenceStatusResponse
 	if err := c.client.CallUnary(ctx, operationsServiceGetEvidenceStatusSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *operationsServiceClient) GetMetrics(ctx context.Context, req *v1.GetMetricsRequest) (*v1.GetMetricsResponse, error) {
+	var res v1.GetMetricsResponse
+	if err := c.client.CallUnary(ctx, operationsServiceGetMetricsSpec(), req, &res); err != nil {
 		return nil, err
 	}
 	return &res, nil
@@ -191,6 +229,18 @@ func (h operationsServiceHandler) getEvidenceStatus(ctx context.Context, _ conne
 		return err
 	}
 	res, err := h.svc.GetEvidenceStatus(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h operationsServiceHandler) getMetrics(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetMetricsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetMetrics(ctx, &req)
 	if err != nil {
 		return err
 	}

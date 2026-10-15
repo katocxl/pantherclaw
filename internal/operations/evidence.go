@@ -213,6 +213,7 @@ func exportSources(x external) []SourceStatus {
 		return []SourceStatus{{Kind: SourceExport, Freshness: Restricted, Note: "needs siem.read across the organization"}}
 	case notInEdition:
 		return []SourceStatus{{Kind: SourceExport, Freshness: NotAvailable, Note: "SIEM export is not in this edition"}}
+	case available:
 	}
 	var out []SourceStatus
 	for _, d := range x.exports {

@@ -4,19 +4,26 @@
 package server
 
 import (
+	"log/slog"
 	"net/http"
 	"time"
 
 	"connectrpc.com/connect/v2"
 
+	"github.com/riverqueue/river"
+
 	authnapp "github.com/katocxl/pantherclaw/internal/authn/app"
 	"github.com/katocxl/pantherclaw/internal/authn/token"
+	"github.com/katocxl/pantherclaw/internal/billing"
 	defspg "github.com/katocxl/pantherclaw/internal/definitions/adapters/pgstore"
 	"github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1/pantherclawv1connect"
 	"github.com/katocxl/pantherclaw/internal/operations"
 	"github.com/katocxl/pantherclaw/internal/operations/adapters/operationsrpc"
 	"github.com/katocxl/pantherclaw/internal/operations/stream"
 	"github.com/katocxl/pantherclaw/internal/platform/clock"
+	"github.com/katocxl/pantherclaw/internal/platform/db"
+	"github.com/katocxl/pantherclaw/internal/platform/jobs"
+	"github.com/katocxl/pantherclaw/internal/reflex/failures"
 	"github.com/katocxl/pantherclaw/internal/search"
 	"github.com/katocxl/pantherclaw/internal/search/adapters/searchrpc"
 )
@@ -33,7 +40,7 @@ type m10OpsDeps struct {
 // HR-256) on the API mux.
 func registerM10Ops(rs *connect.Server, d apiDeps) (func(*http.ServeMux), error) {
 	pantherclawv1connect.RegisterOperationsServiceHandler(rs,
-		operationsrpc.New(&operations.Service{Pool: d.pool, Clock: clock.System{}, Sources: opsSources(d)}))
+		operationsrpc.New(&operations.Service{Pool: d.pool, Clock: clock.System{}, Sources: opsSources(d), Ents: opsEnts(d.billing)}))
 	pantherclawv1connect.RegisterSearchServiceHandler(rs,
 		searchrpc.New(&search.Service{
 			Pool: d.pool, Defs: &defspg.Store{Pool: d.pool}, Clock: clock.System{},
@@ -59,4 +66,24 @@ func registerM10Ops(rs *connect.Server, d apiDeps) (func(*http.ServeMux), error)
 		return nil, err
 	}
 	return h.Mount, nil
+}
+
+// opsEnts is the licence as metrics read it; nil refuses them (D5).
+func opsEnts(b *billing.Service) operations.Entitlements {
+	if b == nil {
+		return nil
+	}
+	return b
+}
+
+// registerM10OpsJobs adds the hourly operating-metrics collection (D33):
+// a dispatcher every 15 minutes and one idempotent job per org.
+func registerM10OpsJobs(periodic []*river.PeriodicJob, reg *jobs.Registry, pool *db.Pool, bill *billing.Service,
+	log *slog.Logger,
+) ([]*river.PeriodicJob, error) {
+	p, err := operations.RegisterMetrics(reg, &operations.Collector{Pool: pool, Ents: opsEnts(bill), Failures: &failures.Sink{}}, log)
+	if err != nil {
+		return nil, err
+	}
+	return append(periodic, p...), nil
 }

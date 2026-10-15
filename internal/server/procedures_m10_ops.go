@@ -17,6 +17,7 @@ var m10OpsProcedures = map[string]td.Permission{
 	pantherclawv1connect.OperationsServiceGetWorkQueueProcedure:      td.PermOperationsRead,
 	pantherclawv1connect.OperationsServiceGetSummaryProcedure:        td.PermOperationsRead,
 	pantherclawv1connect.OperationsServiceGetEvidenceStatusProcedure: td.PermOperationsRead,
+	pantherclawv1connect.OperationsServiceGetMetricsProcedure:        td.PermOperationsRead,
 	pantherclawv1connect.SearchServiceSearchProcedure:                td.PermSearchRead,
 	pantherclawv1connect.SearchServiceListBuiltinQueriesProcedure:    td.PermSearchRead,
 	pantherclawv1connect.SearchServiceRunBuiltinQueryProcedure:       td.PermSearchRead,

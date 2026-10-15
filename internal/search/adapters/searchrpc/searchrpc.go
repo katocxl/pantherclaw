@@ -186,12 +186,7 @@ func savedProto(q search.SavedQuery) *pantherclawv1.SavedQuery {
 	if q.Team != nil {
 		out.TeamId = q.Team.String()
 	}
-	if q.Spec.Query != nil {
-		out.Query = &pantherclawv1.Query{Entity: string(q.Spec.Query.Entity), Filters: filtersProto(q.Spec.Query.Filters)}
-	}
-	if q.Spec.Builtin != nil {
-		out.Builtin = builtinProto(*q.Spec.Builtin)
-	}
+	out.Query, out.Builtin = SpecProto(q.Spec)
 	return out
 }
 
@@ -367,4 +362,18 @@ func (h *Handler) RunSavedQuery(ctx context.Context, req *pantherclawv1.RunSaved
 		return nil, err
 	}
 	return &pantherclawv1.RunSavedQueryResponse{Result: resultProto(r)}, nil
+}
+
+// SpecProto renders a saved or drill-down search as the API shows it: one
+// of the query and the built-in query is set.
+func SpecProto(s search.Spec) (*pantherclawv1.Query, *pantherclawv1.BuiltinQuery) {
+	var q *pantherclawv1.Query
+	if s.Query != nil {
+		q = &pantherclawv1.Query{Entity: string(s.Query.Entity), Filters: filtersProto(s.Query.Filters)}
+	}
+	var b *pantherclawv1.BuiltinQuery
+	if s.Builtin != nil {
+		b = builtinProto(*s.Builtin)
+	}
+	return q, b
 }

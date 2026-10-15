@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/katocxl/pantherclaw/internal/operations"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
@@ -229,5 +230,79 @@ func TestOperations_NeedsOperationsRead(t *testing.T) {
 	}
 	if _, err := f.s.GetSummary(ctx); err == nil {
 		t.Fatal("summary without operations.read")
+	}
+}
+
+type fakeContainment struct {
+	actions []operations.ContainmentAction
+	err     error
+}
+
+func (f fakeContainment) Unconfirmed(context.Context) ([]operations.ContainmentAction, error) {
+	return f.actions, f.err
+}
+
+type fakeExports struct {
+	ds []operations.ExportDestination
+}
+
+func (f fakeExports) Destinations(context.Context) ([]operations.ExportDestination, error) {
+	return f.ds, nil
+}
+
+// TestHR258_AMissingSourceIsNeverReadAsEmpty (D49): without the
+// containment, posture or export ports the queue and summary say those
+// sources are not reported; a port that refuses the caller's permission
+// is reported as outside its permissions; unconfirmed containment ranks
+// with its severity; a failing export destination is a gap.
+func TestHR258_AMissingSourceIsNeverReadAsEmpty(t *testing.T) {
+	f := newFx(t)
+	q, err := f.s.GetWorkQueue(f.orgWide())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"unconfirmed containment: not reported yet", "posture findings: not reported yet"} {
+		if !slices.Contains(q.Pending, want) {
+			t.Fatalf("pending %v lacks %q", q.Pending, want)
+		}
+	}
+	es, err := f.s.GetEvidenceStatus(f.orgWide())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.ContainsFunc(es.Sources, func(s operations.SourceStatus) bool {
+		return s.Kind == operations.SourceExport && s.Freshness == operations.NotAvailable
+	}) {
+		t.Fatalf("export source: %+v", es.Sources)
+	}
+
+	failing := time.Now().Add(-2 * time.Hour)
+	f.s.Sources = operations.Sources{
+		Containment: fakeContainment{err: td.ErrPermissionDenied(td.PermContainmentRead)},
+		Exports:     fakeExports{ds: []operations.ExportDestination{{ID: ids.NewV7(), Name: "splunk", State: "ACTIVE", Health: "FAILING", FailingSince: &failing}}},
+	}
+	sum, err := f.s.GetSummary(f.orgWide())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Contains(sum.Unknown, "unconfirmed containment: outside your permissions") || sum.Counts[operations.CountTelemetryGaps] == 0 {
+		t.Fatalf("summary: %v %v", sum.Unknown, sum.Counts)
+	}
+
+	action := ids.NewV7()
+	f.s.Sources.Containment = fakeContainment{actions: []operations.ContainmentAction{
+		{ID: action, ScopeType: "agent", ScopeID: f.agentA.String(), Control: "DENY_ALL", Status: "FAILED", Requested: time.Now()},
+		{ID: ids.NewV7(), ScopeType: "run", ScopeID: ids.NewV7().String(), Status: "CONFIRMED", Requested: time.Now()},
+	}}
+	q, err = f.s.GetWorkQueue(f.orgWide())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(q.Items) == 0 || q.Items[0].ID != action.String() || q.Items[0].Severity != "CRITICAL" ||
+		q.Items[0].Kind != operations.KindUnconfirmedContainment {
+		t.Fatalf("failed containment not first: %v", kinds(q))
+	}
+	if slices.ContainsFunc(q.Items, func(it operations.Item) bool { return it.State == "CONFIRMED" }) {
+		t.Fatal("confirmed containment queued")
 	}
 }

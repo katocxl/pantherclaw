@@ -160,6 +160,8 @@ func (b BuiltinQuery) expand(now time.Time) (Query, []Omission, error) {
 			start = &s
 		}
 		return Query{Entity: EntityGrantChanges, Filters: Filters{Agent: p.Agent, Start: start, End: p.End}}, nil, nil
+	case BuiltinWhoCanWrite, BuiltinWidestExposure:
+		return Query{}, nil, ErrInvalidQuery(string(b.Name) + " reads the exposure views, not a structured query")
 	default:
 		return Query{}, nil, ErrInvalidQuery("unknown built-in query")
 	}

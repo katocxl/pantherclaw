@@ -5,7 +5,9 @@ syntax = "proto3";
 
 package pantherclaw.v1;
 
+import "buf/validate/validate.proto";
 import "google/protobuf/timestamp.proto";
+import "pantherclaw/v1/search.proto";
 
 // OperationsService is the Operations surface (G0 M10 D33; F211, F212,
 // F219; HR-258). Every answer is read under the caller's permissions and
@@ -33,6 +35,15 @@ service OperationsService {
   // freshness.
   // permission: operations.read
   rpc GetEvidenceStatus(GetEvidenceStatusRequest) returns (GetEvidenceStatusResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // GetMetrics returns hourly operating metrics (Team): consequential
+  // outcomes, coverage, bypass routes, exposure by resource group and the
+  // reconciliation backlog, each point with its drill-down search. They are
+  // organization-wide, so they need operations.read across the
+  // organization.
+  // permission: operations.read
+  rpc GetMetrics(GetMetricsRequest) returns (GetMetricsResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
 }
@@ -131,4 +142,52 @@ message GetEvidenceStatusRequest {}
 message GetEvidenceStatusResponse {
   google.protobuf.Timestamp as_of_time = 1;
   repeated SourceStatus sources = 2;
+}
+
+// MetricPoint is one hourly value.
+message MetricPoint {
+  // The start of the hour (UTC).
+  google.protobuf.Timestamp bucket_time = 1;
+  // "COLLECTED", "NOT_COLLECTED" (the source is not collected) or
+  // "NO_SAMPLE" (no sample was taken: a gap).
+  string state = 2;
+  // Set when COLLECTED.
+  double value = 3;
+  // The search behind the point (drill-down); one of query and builtin.
+  Query drill_query = 4;
+  BuiltinQuery drill_builtin = 5;
+}
+
+// MetricSeries is one metric and dimension over the range.
+message MetricSeries {
+  string metric = 1;
+  // A breakdown key (a resource group), empty for the whole organization.
+  string dimension = 2;
+  repeated MetricPoint points = 3;
+}
+
+// GetMetricsRequest names the metrics and range.
+message GetMetricsRequest {
+  // Metrics to read; all when empty.
+  repeated string metrics = 1 [(buf.validate.field).repeated = {
+    max_items: 16
+    items: {
+      string: {
+        min_len: 1
+        max_len: 64
+        pattern: "^[a-z][a-z0-9_.]*$"
+      }
+    }
+  }];
+  // At most 30 days, hour-aligned (rounded down).
+  google.protobuf.Timestamp start_time = 2 [(buf.validate.field).required = true];
+  google.protobuf.Timestamp end_time = 3 [(buf.validate.field).required = true];
+}
+
+// GetMetricsResponse is one series per metric and dimension.
+message GetMetricsResponse {
+  google.protobuf.Timestamp as_of_time = 1;
+  google.protobuf.Timestamp start_time = 2;
+  google.protobuf.Timestamp end_time = 3;
+  repeated MetricSeries series = 4;
 }
