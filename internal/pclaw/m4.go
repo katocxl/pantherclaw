@@ -434,11 +434,11 @@ func authorityCommands() map[string]command {
 				return c.policies.CreatePolicyVersion(ctx, &pantherclawv1.CreatePolicyVersionRequest{Bundle: b})
 			}
 		}),
-		"policy publish": rpc("policy publish VERSION_ID", 1, func(*flag.FlagSet) call {
+		"policy publish": rpcThen("policy publish VERSION_ID", 1, func(*flag.FlagSet) call {
 			return func(ctx context.Context, c clients, a []string) (proto.Message, error) {
 				return c.policies.PublishPolicyVersion(ctx, &pantherclawv1.PublishPolicyVersionRequest{Id: a[0]})
 			}
-		}),
+		}, changeNote),
 		"policy published": rpc("policy published", 0, func(*flag.FlagSet) call {
 			return func(ctx context.Context, c clients, _ []string) (proto.Message, error) {
 				return c.policies.GetPublishedPolicy(ctx, &pantherclawv1.GetPublishedPolicyRequest{})
