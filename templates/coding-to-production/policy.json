@@ -21,7 +21,7 @@
       "id": "c2p-no-shell-merge", "per": "agent", "kind": "FORBID",
       "summary": "the agent does not merge or push from the shell, a quieter route to the same effect; a heuristic over the command text",
       "operations": ["shell.command.run"],
-      "when": "run.agent_id == '{{agent}}' && action.params.command.matches('(^|[;&|(`]|\\s)(\\S*/)?(git(\\s+-\\S+(\\s+[^-\\s;&|]\\S*)?)*\\s+push\\b|gh(\\s+-\\S+(\\s+[^-\\s;&|]\\S*)?)*\\s+(pr\\s+merge\\b|api\\b[^;&|]*merge))')",
+      "when": "run.agent_id == '{{agent}}' && action.params.command.matches(r'(^|[;&|(`]|\\s)(\\S*/)?(git(\\s+-\\S+(\\s+[^-\\s;&|]\\S*)?)*\\s+push\\b|gh(\\s+-\\S+(\\s+[^-\\s;&|]\\S*)?)*\\s+(pr\\s+merge\\b|api\\b[^;&|]*merge))')",
       "reason": "SHELL_MERGE_OR_PUSH"
     }
   ]
