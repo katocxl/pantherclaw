@@ -83,3 +83,14 @@ func TestReflexKind(t *testing.T) {
 		t.Error("ReflexKind")
 	}
 }
+
+func TestSystemSubjectsAreFixedNames(t *testing.T) {
+	for _, id := range []string{reflexdomain.SystemIdentityPlaybook, reflexdomain.SystemDetection, reflexdomain.SystemSweeper} {
+		if !(reflexdomain.Subject{Type: reflexdomain.SubjectSystem, ID: id}).Valid() {
+			t.Errorf("%s invalid", id)
+		}
+	}
+	if (reflexdomain.Subject{Type: reflexdomain.SubjectSystem, ID: "root"}).Valid() {
+		t.Error("an unknown system actor is valid")
+	}
+}

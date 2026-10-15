@@ -73,8 +73,21 @@ type Subject struct {
 // String is "type:id".
 func (s Subject) String() string { return string(s.Type) + ":" + s.ID }
 
-// Valid reports whether s has a known type and a 1..256 byte id.
-func (s Subject) Valid() bool { return s.Type.Valid() && s.ID != "" && len(s.ID) <= 256 }
+// System actor ids (D51).
+const (
+	SystemIdentityPlaybook = "identity_playbook"
+	SystemDetection        = "detection"
+	SystemSweeper          = "sweeper"
+)
+
+// Valid reports whether s has a known type and a 1..256 byte id; a system
+// subject names one of the fixed system actors.
+func (s Subject) Valid() bool {
+	if s.Type == SubjectSystem {
+		return s.ID == SystemIdentityPlaybook || s.ID == SystemDetection || s.ID == SystemSweeper
+	}
+	return s.Type.Valid() && s.ID != "" && len(s.ID) <= 256
+}
 
 // Attention is how much attention a signal asks for (F607), ordered
 // TELEMETRY < LIVE < FINDING < ALERT < INCIDENT < PAGE.
