@@ -195,7 +195,7 @@ func TestScenarioCaseFailuresExplain(t *testing.T) {
 		"bad-agent":    `given.agent "agent-7" is not a canonical UUID`,
 		"bad-env":      "not a canonical UUID",
 		"bad-op":       "OPERATION_UNKNOWN",
-		"bad-fact":     "unknown.fact is neither a fact this org's providers declare nor a prerequisite",
+		"bad-fact":     "unknown.fact is neither a fact this org's providers declare nor one the definitions of payments.refund.create read",
 		"bad-approval": "given.approval",
 		"bad-grant":    "a grant has no",
 	}
@@ -438,5 +438,51 @@ func TestHR238_MutantsAreBoundedAndUncompilableOnesListed(t *testing.T) {
 	if !res.Passed || res.Mutants != 3 || res.Survivors != 0 ||
 		!slices.Equal(res.Uncompilable, []pdomain.MutantResult{{Rule: "approve-over-50", Mutation: "action.params.nope > 1"}}) {
 		t.Fatalf("uncompilable mutant: %+v", res)
+	}
+}
+
+// TestHR238_TheMutantCapStopsGeneration: a bundle whose comparisons exceed
+// MaxMutants is refused while its mutants are being built, not after all
+// of them were (D26).
+func TestHR238_TheMutantCapStopsGeneration(t *testing.T) {
+	var conds []string
+	for i := range 100 {
+		conds = append(conds, "a < "+strconv.Itoa(i))
+	}
+	when := strings.Join(conds, " || ")
+	var rules []pdomain.Rule
+	for i := range 40 { // 40 × (100 + 1) mutants: twice the cap
+		r := over50()
+		r.ID, r.When = "r"+strconv.Itoa(i), when
+		rules = append(rules, r)
+	}
+	built := 0
+	defer func(f func(string) ([]string, error)) { mutantsFor = f }(mutantsFor)
+	mutantsFor = func(src string) ([]string, error) {
+		built++
+		return papp.Mutants(src)
+	}
+	if _, err := mutantsOf(bundle(rules)); !errors.Is(err, errTooManyMutants) {
+		t.Fatalf("err = %v", err)
+	}
+	if want := MaxMutants / 101; built != want {
+		t.Fatalf("built the mutants of %d rules, want %d (the rules that fit)", built, want)
+	}
+	// Through Run, on a bundle that compiles: refused as TESTS_TOO_LARGE.
+	w := newWorld(t)
+	amounts := make([]string, 0, 80)
+	for i := range 80 {
+		amounts = append(amounts, `action.params.amount > money("`+strconv.Itoa(i+1)+`", "USD")`)
+	}
+	big := make([]pdomain.Rule, 0, 30)
+	for i := range 30 {
+		r := over50()
+		r.ID, r.When = "big"+strconv.Itoa(i), strings.Join(amounts, " || ")
+		big = append(big, r)
+	}
+	built = 0
+	res := runOK(t, newRunner(w, papp.DefaultBudget), bundle(big, refundCase("at", "50.00", allow())))
+	if res.Passed || res.Error != pdomain.ErrTestsTooLarge || built >= len(big) || len(res.Surviving)+len(res.Uncompilable) != 0 {
+		t.Fatalf("run: built %d, %+v", built, res)
 	}
 }

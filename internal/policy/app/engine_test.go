@@ -200,6 +200,16 @@ func TestMutants(t *testing.T) {
 	if _, err := Mutants(`a <`); err == nil {
 		t.Fatal("unparsable condition")
 	}
+	// A comparison inside a macro is flipped too (M11.1 D28: consequence
+	// conditions such as consequence.environments.exists(...)).
+	got, err = Mutants(`x.exists(e, e == "production") && y.all(n, n > 1)`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want = []string{`x.exists(e, e != "production") && y.all(n, n > 1)`, `x.exists(e, e == "production") && y.all(n, n >= 1)`}
+	if !slices.Equal(got, want) {
+		t.Fatalf("macro Mutants = %q, want %q", got, want)
+	}
 }
 
 func TestHR040_RuntimeErrorsFailClosed(t *testing.T) {
