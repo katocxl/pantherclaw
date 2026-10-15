@@ -5,12 +5,11 @@ package server
 
 import (
 	"log/slog"
+	"sync"
 
 	"connectrpc.com/connect/v2"
 	"github.com/riverqueue/river"
 
-	defspg "github.com/katocxl/pantherclaw/internal/definitions/adapters/pgstore"
-	factspg "github.com/katocxl/pantherclaw/internal/facts/adapters/pgstore"
 	"github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1/pantherclawv1connect"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/jobs"
@@ -19,12 +18,21 @@ import (
 	"github.com/katocxl/pantherclaw/internal/policy/exceptions"
 )
 
-// The policy gate's change requests apply an approved EXCEPTION request by
-// activating its exception (G0 M11.1 D11, D14, D23), from the policy
-// changes page.
+// gateChanges are the policy gate's change requests per server (by pool),
+// with EXCEPTION registered: exception requests are created through the
+// same change requests, and the same apply callback, that the policy
+// changes page confirms (G0 M11.1 D11, D14, D23).
+var gateChanges = struct {
+	sync.Mutex
+	by map[*db.Pool]*policyapp.Changes
+}{by: map[*db.Pool]*policyapp.Changes{}}
+
 func init() {
 	policyGateExtensions = append(policyGateExtensions, func(d apiDeps, v *policyapp.Versions) {
-		v.Changes.Register(policyapp.ChangeException, policyExceptions(d.pool, exceptionNotifier(d), nil).Apply)
+		v.Changes.Register(policyapp.ChangeException, policyExceptions(d.pool, exceptionNotifier(d), v.Changes).Apply)
+		gateChanges.Lock()
+		defer gateChanges.Unlock()
+		gateChanges.by[d.pool] = v.Changes
 	})
 }
 
@@ -38,22 +46,28 @@ func exceptionNotifier(d apiDeps) exceptions.Notifier {
 // policyExceptions builds the exception service as pc_app, telling owners
 // through the M5 notifier when there is one.
 func policyExceptions(pool *db.Pool, notify exceptions.Notifier, changes exceptions.ChangeRequester) *exceptions.Service {
-	return &exceptions.Service{Pool: pool, Notify: notify, Changes: changes}
+	svc := &exceptions.Service{Pool: pool, Notify: notify}
+	if changes != nil {
+		svc.Changes = changes
+	}
+	return svc
 }
 
-// registerPolicyExceptions serves PolicyExceptionService on the public API.
-// Its requests go through change requests configured as the gate's, with
-// the same EXCEPTION apply callback.
-func registerPolicyExceptions(rs *connect.Server, d apiDeps) {
-	var notify policyapp.Notifier
-	if d.m5 != nil && d.m5.notifications != nil {
-		notify = d.m5.notifications
+// registerPolicyExceptions serves PolicyExceptionService on the public API,
+// after registerPolicyGate. Without the gate's change requests no
+// exception can be requested (fail closed).
+func registerPolicyExceptions(rs *connect.Server, d apiDeps) *exceptions.Service {
+	gateChanges.Lock()
+	changes := gateChanges.by[d.pool]
+	gateChanges.Unlock()
+	var svc *exceptions.Service
+	if changes != nil {
+		svc = policyExceptions(d.pool, exceptionNotifier(d), changes)
+	} else {
+		svc = policyExceptions(d.pool, exceptionNotifier(d), nil)
 	}
-	changes := policyapp.NewChanges(d.pool, notify, d.publicURL,
-		currentPolicyDigests(&defspg.Store{Pool: d.pool}, &factspg.Store{Pool: d.pool}))
-	svc := policyExceptions(d.pool, exceptionNotifier(d), changes)
-	changes.Register(policyapp.ChangeException, svc.Apply)
 	pantherclawv1connect.RegisterPolicyExceptionServiceHandler(rs, exceptionsrpc.New(svc))
+	return svc
 }
 
 // registerPolicyExceptionJobs adds the exception sweep (expiry, pending

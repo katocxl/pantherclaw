@@ -73,3 +73,38 @@ func TestHR235_TheAuthorityReadsOnlyTheAgentsActiveExceptions(t *testing.T) {
 		t.Fatalf("after revocation: %s", r.Decision)
 	}
 }
+
+// TestHR235_AWaivedHoldThroughTheRealAuthority: an exceptable hold waived
+// for the agent allows the refund, and the receipt names the exception;
+// a refund whose required fact is missing stays CANNOT_AUTHORIZE with the
+// same exception active; once the database clock passes the exception's
+// expiry the hold applies again.
+func TestHR235_AWaivedHoldThroughTheRealAuthority(t *testing.T) {
+	w := newWorld(t)
+	w.refundable("ch_1", "ch_2")
+	run := w.run(w.grant("500").ID, ids.UUID{})
+	hold := pgHoldOver50
+	hold.Exceptable = true
+	w.publishPolicy(1, false, hold)
+	if r := w.authorize(w.request(run, ids.NewV7(), "ch_1", "70.00")); r.Decision != adomain.RequireApproval {
+		t.Fatalf("without an exception: %s", r.Decision)
+	}
+	x := w.exception(w.agent, hold, "1 hour")
+	r := w.authorize(w.request(run, ids.NewV7(), "ch_1", "70.00"))
+	if body := string(payload(t, r.Receipt)); r.Decision != adomain.Allow || !strings.Contains(body, "EXCEPTION_APPLIED") ||
+		!strings.Contains(body, x.String()) {
+		t.Fatalf("waived hold: %s, receipt %s", r.Decision, body)
+	}
+	if r := w.authorize(w.request(run, ids.NewV7(), "ch_unknown", "70.00")); r.Decision != adomain.CannotAuthorize {
+		t.Fatalf("a missing fact under an exception: %s %s", r.Decision, decisive(r))
+	}
+	// The database clock passes the expiry (the row is moved into the past
+	// as a whole, as time would).
+	w.db.AdminExec(t, `ALTER TABLE pc.policy_exceptions DISABLE TRIGGER policy_exceptions_transition`)
+	w.db.AdminExec(t, `UPDATE pc.policy_exceptions SET created_at = now() - interval '3 hours', activated_at = now() - interval '3 hours',
+		requested_expiry = now() - interval '1 second', expires_at = now() - interval '1 second' WHERE id = $1`, x)
+	w.db.AdminExec(t, `ALTER TABLE pc.policy_exceptions ENABLE TRIGGER policy_exceptions_transition`)
+	if r := w.authorize(w.request(run, ids.NewV7(), "ch_2", "70.00")); r.Decision != adomain.RequireApproval {
+		t.Fatalf("after the expiry: %s", r.Decision)
+	}
+}
