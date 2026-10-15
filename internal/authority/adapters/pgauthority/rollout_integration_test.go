@@ -460,6 +460,9 @@ func TestHR237_ShadowSummaryIsLabelledAndCarriesNoInputValues(t *testing.T) {
 		s.ByCategory[replay.Unchanged] != 1 || len(s.ByOperation) == 0 || len(s.ByAgent) == 0 || len(s.Samples) != 1 {
 		t.Fatalf("summary: %+v", s)
 	}
+	if s.ExpandedExposure != 0 || !strings.HasPrefix(s.ExpandedExposureNote, "expanded exposure: 0 ") {
+		t.Fatalf("expanded exposure: %d %q", s.ExpandedExposure, s.ExpandedExposureNote)
+	}
 	raw, _ := json.Marshal(s)
 	for _, secret := range []string{"ch_973", "73.21", "19.87"} {
 		if strings.Contains(string(raw), secret) {
@@ -648,5 +651,87 @@ func (w *world) tested(id ids.UUID) {
 	}
 	if _, err := s.RecordTestRun(ctx, w.org, id, digest, pdomain.TestResult{Passed: true}, "test"); err != nil {
 		w.t.Fatal(err)
+	}
+}
+
+// TestHR233_APilotsShadowCohortsAddNothingToTheDecisionPath: an agent in a
+// PILOT's SHADOW cohort is decided exactly as without the rollout (same
+// decision, basis and checklist, the published version's selection), and
+// only the shadow's rows hold the prediction.
+func TestHR233_APilotsShadowCohortsAddNothingToTheDecisionPath(t *testing.T) {
+	w := newWorld(t)
+	w.keepInputs()
+	w.refundable("ch_1", "ch_2")
+	rw := w.rollouts(billing.Team)
+	run := w.run(w.grant("500").ID, ids.UUID{})
+	w.publishPolicy(1, false, pgCapOver1000)
+	draft := w.publishPolicy(2, true, pgCapOver1000, pgForbidOver20)
+	w.tested(draft)
+	ctx := rw.publisher
+	for _, name := range []string{"watch", "pilot"} {
+		if _, err := rw.svc.CreateCohort(ctx, name); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := rw.svc.ChangeCohort(ctx, "watch", []ids.UUID{w.agent}, false); err != nil {
+		t.Fatal(err)
+	}
+	same := w.request(run, ids.NewV7(), "ch_1", "70.00")
+	same.Gateway = w.gw.ID
+	evaluate := func() *pipeline.Evaluation {
+		ev, err := w.auth.Pipeline.Evaluate(context.Background(), same)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return ev
+	}
+	without := evaluate()
+	r, err := rw.svc.StartRollout(ctx, draft, []string{"watch"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, _, err := rw.svc.StartPilot(ctx, r.ID, []string{"pilot"}); err != nil || got.Stage != rollout.StagePilot {
+		t.Fatalf("pilot: %+v %v", got.Stage, err)
+	}
+	with := evaluate()
+	decided := w.authorize(w.request(run, ids.NewV7(), "ch_2", "70.00"))
+	rw.sweep()
+	afterSweep := evaluate()
+	for _, ev := range []*pipeline.Evaluation{with, afterSweep} {
+		if ev.Decision != without.Decision || ev.Basis.Digest() != without.Basis.Digest() || !sameChecklist(ev.Checklist, without.Checklist) {
+			t.Fatalf("in a pilot's shadow cohort: %s %s\nwithout: %s %s", ev.Decision, ev.Basis.Digest(), without.Decision, without.Basis.Digest())
+		}
+	}
+	if ref, rid, sel := rw.selection(decided); decided.Decision != adomain.Allow || ref != "org-policy@1" || rid != "" || sel != pipeline.SelectedDefault {
+		t.Fatalf("recorded selection: %s %s %q %s", decided.Decision, ref, rid, sel)
+	}
+	s, err := rw.svc.GetShadowSummary(ctx, r.ID)
+	if err != nil || s.ByCategory[replay.NewlyDenied] != 1 || s.Total != 1 {
+		t.Fatalf("the shadow's prediction: %+v %v", s, err)
+	}
+}
+
+// TestHR232_ShadowStopsWithoutTheTeamEdition (D31): once the licence is no
+// longer Team, the sweeper replays nothing for a shadow; it still follows
+// the rollout's decisions.
+func TestHR232_ShadowStopsWithoutTheTeamEdition(t *testing.T) {
+	w := newWorld(t)
+	w.keepInputs()
+	w.refundable("ch_1")
+	rw := w.rollouts(billing.Team)
+	run := w.run(w.grant("500").ID, ids.UUID{})
+	w.publishPolicy(1, false, pgCapOver1000)
+	draft := w.publishPolicy(2, true, pgCapOver1000, pgForbidOver20)
+	r, err := rw.svc.StartRollout(rw.publisher, draft, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.authorize(w.request(run, ids.NewV7(), "ch_1", "70.00"))
+	lapsed := w.rollouts(billing.Community)
+	if s := lapsed.sweep(); s.Evaluations != 1 || s.Replays != 0 || s.Shadowed != 0 {
+		t.Fatalf("sweep without Team: %+v", s)
+	}
+	if s, err := rw.svc.GetShadowSummary(rw.publisher, r.ID); err != nil || s.Total != 0 {
+		t.Fatalf("summary: %+v %v", s, err)
 	}
 }
