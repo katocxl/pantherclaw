@@ -14,11 +14,11 @@ LIMIT 1000;
 
 -- name: InsertResponseAction :one
 INSERT INTO pc.response_actions (org_id, id, kind, scope_type, scope_id, control, operation, reason, case_id, incident_id,
-                                 actor, source, preview_digest, skip_preview, skip_reason, skip_step_up_at,
+                                 actor, source, preview_digest, preview_summary, skip_preview, skip_reason, skip_step_up_at,
                                  idempotency_key, request_digest)
 VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(kind), sqlc.arg(scope_type), sqlc.arg(scope_id),
         sqlc.narg(control), sqlc.narg(operation), sqlc.arg(reason), sqlc.narg(case_id), sqlc.narg(incident_id),
-        sqlc.arg(actor), sqlc.arg(source), sqlc.narg(preview_digest), sqlc.arg(skip_preview), sqlc.narg(skip_reason),
+        sqlc.arg(actor), sqlc.arg(source), sqlc.narg(preview_digest), sqlc.arg(preview_summary), sqlc.arg(skip_preview), sqlc.narg(skip_reason),
         sqlc.narg(skip_step_up_at), sqlc.narg(idempotency_key), sqlc.narg(request_digest))
 RETURNING requested_at;
 
@@ -190,6 +190,7 @@ SELECT * FROM pc.response_actions
 WHERE org_id = sqlc.arg(org_id)
   AND (sqlc.narg(case_id)::uuid IS NULL OR case_id = sqlc.narg(case_id)::uuid)
   AND (sqlc.narg(incident_id)::uuid IS NULL OR incident_id = sqlc.narg(incident_id)::uuid)
+  AND (sqlc.narg(scope_type)::text IS NULL OR (scope_type = sqlc.narg(scope_type)::text AND scope_id = sqlc.narg(scope_id)::text))
   AND (sqlc.narg(before)::uuid IS NULL OR id < sqlc.narg(before)::uuid)
 ORDER BY id DESC
 LIMIT sqlc.arg(max_rows);
@@ -358,3 +359,22 @@ SELECT run_id FROM pc.transactions WHERE org_id = sqlc.arg(org_id) AND id = sqlc
 -- IncidentAlertSubjects are the subjects of an incident's alerts.
 -- name: IncidentAlertSubjects :many
 SELECT subjects FROM pc.alerts WHERE org_id = sqlc.arg(org_id) AND incident_id = sqlc.arg(incident_id) ORDER BY id LIMIT 50;
+
+-- SOARWideLastHour counts the org's SOAR controls on grants and connections
+-- in the last hour, by the database clock (D50).
+-- name: SOARWideLastHour :one
+SELECT count(*) FROM pc.response_actions
+WHERE org_id = sqlc.arg(org_id) AND source = 'SOAR' AND scope_type IN ('grant', 'connection')
+  AND requested_at > now() - interval '1 hour';
+
+-- PlaybookContainedIssuer reports whether a grant was issued by a person
+-- whom an active identity-playbook DENY_ALL control contains (D50).
+-- name: PlaybookContainedIssuer :one
+SELECT EXISTS (
+    SELECT 1 FROM pc.grants g
+    JOIN pc.containment_controls c ON c.org_id = g.org_id AND c.scope_type = 'principal'
+        AND c.scope_id = 'user:' || g.grantor_id::text AND c.control = 'DENY_ALL' AND c.lifted_at IS NULL
+        AND (c.expires_at IS NULL OR c.expires_at > now())
+    JOIN pc.response_actions a ON a.org_id = c.org_id AND a.id = c.action_id AND a.source = 'PLAYBOOK'
+    WHERE g.org_id = sqlc.arg(org_id) AND g.id = sqlc.arg(grant_id) AND g.grantor_kind = 'user'
+)::boolean AS contained;

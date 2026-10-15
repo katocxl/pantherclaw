@@ -52,7 +52,7 @@ func TestHR248_AddingAndLiftingAControlRaisesTheEpoch(t *testing.T) {
 	agent := ids.NewV7()
 	action := pgresponse.Action{
 		ID: ids.NewV7(), Kind: rdomain.KindContain, ScopeType: rdomain.ScopeAgent, ScopeID: agent.String(),
-		Control: rdomain.DenyAll, Reason: "suspicious writes", Actor: "user:" + ids.NewV7().String(), Source: rdomain.SourceUser,
+		Control: rdomain.DenyAll, Reason: "suspicious writes", Actor: "user:" + ids.NewV7().String(), Source: rdomain.SourcePerson,
 	}
 	errRollback := errors.New("rollback")
 	err := pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
@@ -157,7 +157,7 @@ func TestIntResponseTablesAreTenantScoped(t *testing.T) {
 	if err := pool.InTenantTx(ctx, a, func(ctx context.Context, tx db.TenantTx) error {
 		_, err := pgresponse.AddControl(ctx, tx, a, pgresponse.Action{
 			ID: ids.NewV7(), Kind: rdomain.KindContain, ScopeType: rdomain.ScopeRun, ScopeID: ids.NewV7().String(),
-			Control: rdomain.DenyAll, Reason: "r", Actor: "user:x", Source: rdomain.SourceUser,
+			Control: rdomain.DenyAll, Reason: "r", Actor: "user:x", Source: rdomain.SourcePerson,
 		}, nil)
 		return err
 	}); err != nil {

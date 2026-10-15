@@ -291,7 +291,7 @@ type ResponseAction struct {
 	IncidentId string `protobuf:"bytes,9,opt,name=incident_id,json=incidentId,proto3" json:"incident_id,omitempty"`
 	// "user:<id>", "service_account:<id>" or "system:identity_playbook".
 	Actor string `protobuf:"bytes,10,opt,name=actor,proto3" json:"actor,omitempty"`
-	// "USER", "SOAR" or "PLAYBOOK".
+	// "PERSON", "SOAR" or "PLAYBOOK", set by the server.
 	Source string `protobuf:"bytes,11,opt,name=source,proto3" json:"source,omitempty"`
 	// "REQUESTED", "PARTIAL", "CONFIRMED", "FAILED" or "UNSUPPORTED".
 	Status string `protobuf:"bytes,12,opt,name=status,proto3" json:"status,omitempty"`
@@ -301,11 +301,14 @@ type ResponseAction struct {
 	HistoricalOpen []*HistoricalItem `protobuf:"bytes,14,rep,name=historical_open,json=historicalOpen,proto3" json:"historical_open,omitempty"`
 	// The containment epoch the change raised the org to.
 	Epoch int64 `protobuf:"varint,15,opt,name=epoch,proto3" json:"epoch,omitempty"`
-	// The preview it was confirmed against (hex), or the emergency skip.
+	// The preview computed at request time (hex), which a supplied digest
+	// matched, and whether a wider control's preview was skipped.
 	PreviewDigest  string                 `protobuf:"bytes,16,opt,name=preview_digest,json=previewDigest,proto3" json:"preview_digest,omitempty"`
 	PreviewSkipped bool                   `protobuf:"varint,17,opt,name=preview_skipped,json=previewSkipped,proto3" json:"preview_skipped,omitempty"`
 	RequestTime    *timestamppb.Timestamp `protobuf:"bytes,18,opt,name=request_time,json=requestTime,proto3" json:"request_time,omitempty"`
 	SettleTime     *timestamppb.Timestamp `protobuf:"bytes,19,opt,name=settle_time,json=settleTime,proto3" json:"settle_time,omitempty"`
+	// The known consequence at request time: counts and the first agent ids.
+	PreviewSummary map[string]string `protobuf:"bytes,20,rep,name=preview_summary,json=previewSummary,proto3" json:"preview_summary,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -469,6 +472,13 @@ func (x *ResponseAction) GetRequestTime() *timestamppb.Timestamp {
 func (x *ResponseAction) GetSettleTime() *timestamppb.Timestamp {
 	if x != nil {
 		return x.SettleTime
+	}
+	return nil
+}
+
+func (x *ResponseAction) GetPreviewSummary() map[string]string {
+	if x != nil {
+		return x.PreviewSummary
 	}
 	return nil
 }
@@ -1914,7 +1924,10 @@ type RequestControlResponse struct {
 	Result string          `protobuf:"bytes,2,opt,name=result,proto3" json:"result,omitempty"`
 	Paths  []*ResponsePath `protobuf:"bytes,3,rep,name=paths,proto3" json:"paths,omitempty"`
 	// The key was used before for this same request.
-	Replayed      bool `protobuf:"varint,4,opt,name=replayed,proto3" json:"replayed,omitempty"`
+	Replayed bool `protobuf:"varint,4,opt,name=replayed,proto3" json:"replayed,omitempty"`
+	// Why a FAILED result created no action: "RATE_LIMITED" (more than 10
+	// grant or connection controls in the last hour).
+	Reason        string `protobuf:"bytes,5,opt,name=reason,proto3" json:"reason,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1975,6 +1988,13 @@ func (x *RequestControlResponse) GetReplayed() bool {
 		return x.Replayed
 	}
 	return false
+}
+
+func (x *RequestControlResponse) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
 }
 
 // RestorationTestAction is a recorded evaluation re-decided, dry run.
@@ -2807,8 +2827,11 @@ type ListResponseActionsRequest struct {
 	CaseId     *string                `protobuf:"bytes,1,opt,name=case_id,json=caseId,proto3,oneof" json:"case_id,omitempty"`
 	IncidentId *string                `protobuf:"bytes,2,opt,name=incident_id,json=incidentId,proto3,oneof" json:"incident_id,omitempty"`
 	// The last action id of the previous page.
-	PageToken     string `protobuf:"bytes,3,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
-	PageSize      int32  `protobuf:"varint,4,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
+	PageToken string `protobuf:"bytes,3,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
+	PageSize  int32  `protobuf:"varint,4,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
+	// Only actions on this scope (a user or service account is its
+	// principal scope).
+	Scope         *ResponseSubject `protobuf:"bytes,5,opt,name=scope,proto3" json:"scope,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2869,6 +2892,13 @@ func (x *ListResponseActionsRequest) GetPageSize() int32 {
 		return x.PageSize
 	}
 	return 0
+}
+
+func (x *ListResponseActionsRequest) GetScope() *ResponseSubject {
+	if x != nil {
+		return x.Scope
+	}
+	return nil
 }
 
 // ListResponseActionsResponse is one page.
@@ -3292,7 +3322,7 @@ const file_pantherclaw_v1_response_proto_rawDesc = "" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"Z\n" +
 	"\x0eHistoricalItem\x12%\n" +
 	"\x0etransaction_id\x18\x01 \x01(\tR\rtransactionId\x12!\n" +
-	"\fpermit_state\x18\x02 \x01(\tR\vpermitState\"\x94\x05\n" +
+	"\fpermit_state\x18\x02 \x01(\tR\vpermitState\"\xb4\x06\n" +
 	"\x0eResponseAction\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04kind\x18\x02 \x01(\tR\x04kind\x12\x1d\n" +
@@ -3316,7 +3346,11 @@ const file_pantherclaw_v1_response_proto_rawDesc = "" +
 	"\x0fpreview_skipped\x18\x11 \x01(\bR\x0epreviewSkipped\x12=\n" +
 	"\frequest_time\x18\x12 \x01(\v2\x1a.google.protobuf.TimestampR\vrequestTime\x12;\n" +
 	"\vsettle_time\x18\x13 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"settleTime\"\xe1\x03\n" +
+	"settleTime\x12[\n" +
+	"\x0fpreview_summary\x18\x14 \x03(\v22.pantherclaw.v1.ResponseAction.PreviewSummaryEntryR\x0epreviewSummary\x1aA\n" +
+	"\x13PreviewSummaryEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xe1\x03\n" +
 	"\x12ContainmentControl\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1b\n" +
 	"\taction_id\x18\x02 \x01(\tR\bactionId\x12\x1d\n" +
@@ -3465,12 +3499,13 @@ const file_pantherclaw_v1_response_proto_rawDesc = "" +
 	"\acontrol\x18\x03 \x01(\tB,\xbaH)r'R\bDENY_ALLR\vHOLD_WRITESR\x0eDENY_OPERATIONR\acontrol\x12&\n" +
 	"\toperation\x18\x04 \x01(\tB\b\xbaH\x05r\x03\x18\xc8\x01R\toperation\x12\"\n" +
 	"\x06reason\x18\x05 \x01(\tB\n" +
-	"\xbaH\ar\x05\x10\x01\x18\xe8\aR\x06reason\"\x9d\x01\n" +
+	"\xbaH\ar\x05\x10\x01\x18\xe8\aR\x06reason\"\xb5\x01\n" +
 	"\x16RequestControlResponse\x12\x1b\n" +
 	"\taction_id\x18\x01 \x01(\tR\bactionId\x12\x16\n" +
 	"\x06result\x18\x02 \x01(\tR\x06result\x122\n" +
 	"\x05paths\x18\x03 \x03(\v2\x1c.pantherclaw.v1.ResponsePathR\x05paths\x12\x1a\n" +
-	"\breplayed\x18\x04 \x01(\bR\breplayed\"\xa9\x01\n" +
+	"\breplayed\x18\x04 \x01(\bR\breplayed\x12\x16\n" +
+	"\x06reason\x18\x05 \x01(\tR\x06reason\"\xa9\x01\n" +
 	"\x15RestorationTestAction\x12/\n" +
 	"\x0etransaction_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\rtransactionId\x12)\n" +
 	"\n" +
@@ -3527,7 +3562,7 @@ const file_pantherclaw_v1_response_proto_rawDesc = "" +
 	"\x19GetResponseActionResponse\x126\n" +
 	"\x06action\x18\x01 \x01(\v2\x1e.pantherclaw.v1.ResponseActionR\x06action\x122\n" +
 	"\x05paths\x18\x02 \x03(\v2\x1c.pantherclaw.v1.ResponsePathR\x05paths\x12>\n" +
-	"\bcontrols\x18\x03 \x03(\v2\".pantherclaw.v1.ContainmentControlR\bcontrols\"\xf5\x01\n" +
+	"\bcontrols\x18\x03 \x03(\v2\".pantherclaw.v1.ContainmentControlR\bcontrols\"\xac\x02\n" +
 	"\x1aListResponseActionsRequest\x12&\n" +
 	"\acase_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01H\x00R\x06caseId\x88\x01\x01\x12.\n" +
 	"\vincident_id\x18\x02 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01H\x01R\n" +
@@ -3535,7 +3570,8 @@ const file_pantherclaw_v1_response_proto_rawDesc = "" +
 	"\n" +
 	"page_token\x18\x03 \x01(\tB\x1b\xbaH\x18r\x16\x18$2\x12^([0-9a-f-]{36})?$R\tpageToken\x12'\n" +
 	"\tpage_size\x18\x04 \x01(\x05B\n" +
-	"\xbaH\a\x1a\x05\x18\xc8\x01(\x00R\bpageSizeB\n" +
+	"\xbaH\a\x1a\x05\x18\xc8\x01(\x00R\bpageSize\x125\n" +
+	"\x05scope\x18\x05 \x01(\v2\x1f.pantherclaw.v1.ResponseSubjectR\x05scopeB\n" +
 	"\n" +
 	"\b_case_idB\x0e\n" +
 	"\f_incident_id\"\x7f\n" +
@@ -3602,7 +3638,7 @@ func file_pantherclaw_v1_response_proto_rawDescGZIP() []byte {
 	return file_pantherclaw_v1_response_proto_rawDescData
 }
 
-var file_pantherclaw_v1_response_proto_msgTypes = make([]protoimpl.MessageInfo, 45)
+var file_pantherclaw_v1_response_proto_msgTypes = make([]protoimpl.MessageInfo, 46)
 var file_pantherclaw_v1_response_proto_goTypes = []any{
 	(*ResponseSubject)(nil),                 // 0: pantherclaw.v1.ResponseSubject
 	(*ResponsePath)(nil),                    // 1: pantherclaw.v1.ResponsePath
@@ -3649,82 +3685,85 @@ var file_pantherclaw_v1_response_proto_goTypes = []any{
 	(*RestorationStage)(nil),                // 42: pantherclaw.v1.RestorationStage
 	(*GetRestorationPlanResponse)(nil),      // 43: pantherclaw.v1.GetRestorationPlanResponse
 	nil,                                     // 44: pantherclaw.v1.ResponsePath.EvidenceEntry
-	(*timestamppb.Timestamp)(nil),           // 45: google.protobuf.Timestamp
+	nil,                                     // 45: pantherclaw.v1.ResponseAction.PreviewSummaryEntry
+	(*timestamppb.Timestamp)(nil),           // 46: google.protobuf.Timestamp
 }
 var file_pantherclaw_v1_response_proto_depIdxs = []int32{
 	44, // 0: pantherclaw.v1.ResponsePath.evidence:type_name -> pantherclaw.v1.ResponsePath.EvidenceEntry
-	45, // 1: pantherclaw.v1.ResponsePath.confirm_time:type_name -> google.protobuf.Timestamp
+	46, // 1: pantherclaw.v1.ResponsePath.confirm_time:type_name -> google.protobuf.Timestamp
 	2,  // 2: pantherclaw.v1.ResponseAction.historical_open:type_name -> pantherclaw.v1.HistoricalItem
-	45, // 3: pantherclaw.v1.ResponseAction.request_time:type_name -> google.protobuf.Timestamp
-	45, // 4: pantherclaw.v1.ResponseAction.settle_time:type_name -> google.protobuf.Timestamp
-	45, // 5: pantherclaw.v1.ContainmentControl.create_time:type_name -> google.protobuf.Timestamp
-	45, // 6: pantherclaw.v1.ContainmentControl.expire_time:type_name -> google.protobuf.Timestamp
-	45, // 7: pantherclaw.v1.ContainmentControl.lift_time:type_name -> google.protobuf.Timestamp
-	0,  // 8: pantherclaw.v1.PreviewContainmentRequest.scope:type_name -> pantherclaw.v1.ResponseSubject
-	0,  // 9: pantherclaw.v1.ContainmentReach.disruption:type_name -> pantherclaw.v1.ResponseSubject
-	6,  // 10: pantherclaw.v1.PreviewContainmentResponse.reach:type_name -> pantherclaw.v1.ContainmentReach
-	0,  // 11: pantherclaw.v1.ContainRequest.scope:type_name -> pantherclaw.v1.ResponseSubject
-	45, // 12: pantherclaw.v1.ContainRequest.expire_time:type_name -> google.protobuf.Timestamp
-	0,  // 13: pantherclaw.v1.ProposeResponseRequest.subject:type_name -> pantherclaw.v1.ResponseSubject
-	0,  // 14: pantherclaw.v1.ResponseOption.scope:type_name -> pantherclaw.v1.ResponseSubject
-	11, // 15: pantherclaw.v1.ProposeResponseResponse.options:type_name -> pantherclaw.v1.ResponseOption
-	0,  // 16: pantherclaw.v1.RequestControlRequest.scope:type_name -> pantherclaw.v1.ResponseSubject
-	1,  // 17: pantherclaw.v1.RequestControlResponse.paths:type_name -> pantherclaw.v1.ResponsePath
-	23, // 18: pantherclaw.v1.RestorationStageSpec.tests:type_name -> pantherclaw.v1.RestorationTestAction
-	24, // 19: pantherclaw.v1.RequestRestorationRequest.stages:type_name -> pantherclaw.v1.RestorationStageSpec
-	26, // 20: pantherclaw.v1.RequestRestorationResponse.preconditions:type_name -> pantherclaw.v1.RestorationPrecondition
-	26, // 21: pantherclaw.v1.DecideRestorationResponse.preconditions:type_name -> pantherclaw.v1.RestorationPrecondition
-	23, // 22: pantherclaw.v1.RestorationTestResult.test:type_name -> pantherclaw.v1.RestorationTestAction
-	31, // 23: pantherclaw.v1.ApplyRestorationStageResponse.results:type_name -> pantherclaw.v1.RestorationTestResult
-	3,  // 24: pantherclaw.v1.GetResponseActionResponse.action:type_name -> pantherclaw.v1.ResponseAction
-	1,  // 25: pantherclaw.v1.GetResponseActionResponse.paths:type_name -> pantherclaw.v1.ResponsePath
-	4,  // 26: pantherclaw.v1.GetResponseActionResponse.controls:type_name -> pantherclaw.v1.ContainmentControl
-	3,  // 27: pantherclaw.v1.ListResponseActionsResponse.actions:type_name -> pantherclaw.v1.ResponseAction
-	4,  // 28: pantherclaw.v1.ListContainmentControlsResponse.controls:type_name -> pantherclaw.v1.ContainmentControl
-	23, // 29: pantherclaw.v1.RestorationStage.tests:type_name -> pantherclaw.v1.RestorationTestAction
-	31, // 30: pantherclaw.v1.RestorationStage.results:type_name -> pantherclaw.v1.RestorationTestResult
-	26, // 31: pantherclaw.v1.GetRestorationPlanResponse.preconditions:type_name -> pantherclaw.v1.RestorationPrecondition
-	4,  // 32: pantherclaw.v1.GetRestorationPlanResponse.controls:type_name -> pantherclaw.v1.ContainmentControl
-	42, // 33: pantherclaw.v1.GetRestorationPlanResponse.stages:type_name -> pantherclaw.v1.RestorationStage
-	45, // 34: pantherclaw.v1.GetRestorationPlanResponse.create_time:type_name -> google.protobuf.Timestamp
-	45, // 35: pantherclaw.v1.GetRestorationPlanResponse.finish_time:type_name -> google.protobuf.Timestamp
-	5,  // 36: pantherclaw.v1.ResponseService.PreviewContainment:input_type -> pantherclaw.v1.PreviewContainmentRequest
-	8,  // 37: pantherclaw.v1.ResponseService.Contain:input_type -> pantherclaw.v1.ContainRequest
-	10, // 38: pantherclaw.v1.ResponseService.ProposeResponse:input_type -> pantherclaw.v1.ProposeResponseRequest
-	13, // 39: pantherclaw.v1.ResponseService.TerminateRun:input_type -> pantherclaw.v1.TerminateRunRequest
-	15, // 40: pantherclaw.v1.ResponseService.PreviewCredentialChange:input_type -> pantherclaw.v1.PreviewCredentialChangeRequest
-	17, // 41: pantherclaw.v1.ResponseService.RevokeSealedCredential:input_type -> pantherclaw.v1.RevokeSealedCredentialRequest
-	19, // 42: pantherclaw.v1.ResponseService.RotateSealedCredential:input_type -> pantherclaw.v1.RotateSealedCredentialRequest
-	21, // 43: pantherclaw.v1.ResponseService.RequestControl:input_type -> pantherclaw.v1.RequestControlRequest
-	25, // 44: pantherclaw.v1.ResponseService.RequestRestoration:input_type -> pantherclaw.v1.RequestRestorationRequest
-	28, // 45: pantherclaw.v1.ResponseService.DecideRestoration:input_type -> pantherclaw.v1.DecideRestorationRequest
-	30, // 46: pantherclaw.v1.ResponseService.ApplyRestorationStage:input_type -> pantherclaw.v1.ApplyRestorationStageRequest
-	33, // 47: pantherclaw.v1.ResponseService.DecideContainmentHold:input_type -> pantherclaw.v1.DecideContainmentHoldRequest
-	35, // 48: pantherclaw.v1.ResponseService.GetResponseAction:input_type -> pantherclaw.v1.GetResponseActionRequest
-	37, // 49: pantherclaw.v1.ResponseService.ListResponseActions:input_type -> pantherclaw.v1.ListResponseActionsRequest
-	39, // 50: pantherclaw.v1.ResponseService.ListContainmentControls:input_type -> pantherclaw.v1.ListContainmentControlsRequest
-	41, // 51: pantherclaw.v1.ResponseService.GetRestorationPlan:input_type -> pantherclaw.v1.GetRestorationPlanRequest
-	7,  // 52: pantherclaw.v1.ResponseService.PreviewContainment:output_type -> pantherclaw.v1.PreviewContainmentResponse
-	9,  // 53: pantherclaw.v1.ResponseService.Contain:output_type -> pantherclaw.v1.ContainResponse
-	12, // 54: pantherclaw.v1.ResponseService.ProposeResponse:output_type -> pantherclaw.v1.ProposeResponseResponse
-	14, // 55: pantherclaw.v1.ResponseService.TerminateRun:output_type -> pantherclaw.v1.TerminateRunResponse
-	16, // 56: pantherclaw.v1.ResponseService.PreviewCredentialChange:output_type -> pantherclaw.v1.PreviewCredentialChangeResponse
-	18, // 57: pantherclaw.v1.ResponseService.RevokeSealedCredential:output_type -> pantherclaw.v1.RevokeSealedCredentialResponse
-	20, // 58: pantherclaw.v1.ResponseService.RotateSealedCredential:output_type -> pantherclaw.v1.RotateSealedCredentialResponse
-	22, // 59: pantherclaw.v1.ResponseService.RequestControl:output_type -> pantherclaw.v1.RequestControlResponse
-	27, // 60: pantherclaw.v1.ResponseService.RequestRestoration:output_type -> pantherclaw.v1.RequestRestorationResponse
-	29, // 61: pantherclaw.v1.ResponseService.DecideRestoration:output_type -> pantherclaw.v1.DecideRestorationResponse
-	32, // 62: pantherclaw.v1.ResponseService.ApplyRestorationStage:output_type -> pantherclaw.v1.ApplyRestorationStageResponse
-	34, // 63: pantherclaw.v1.ResponseService.DecideContainmentHold:output_type -> pantherclaw.v1.DecideContainmentHoldResponse
-	36, // 64: pantherclaw.v1.ResponseService.GetResponseAction:output_type -> pantherclaw.v1.GetResponseActionResponse
-	38, // 65: pantherclaw.v1.ResponseService.ListResponseActions:output_type -> pantherclaw.v1.ListResponseActionsResponse
-	40, // 66: pantherclaw.v1.ResponseService.ListContainmentControls:output_type -> pantherclaw.v1.ListContainmentControlsResponse
-	43, // 67: pantherclaw.v1.ResponseService.GetRestorationPlan:output_type -> pantherclaw.v1.GetRestorationPlanResponse
-	52, // [52:68] is the sub-list for method output_type
-	36, // [36:52] is the sub-list for method input_type
-	36, // [36:36] is the sub-list for extension type_name
-	36, // [36:36] is the sub-list for extension extendee
-	0,  // [0:36] is the sub-list for field type_name
+	46, // 3: pantherclaw.v1.ResponseAction.request_time:type_name -> google.protobuf.Timestamp
+	46, // 4: pantherclaw.v1.ResponseAction.settle_time:type_name -> google.protobuf.Timestamp
+	45, // 5: pantherclaw.v1.ResponseAction.preview_summary:type_name -> pantherclaw.v1.ResponseAction.PreviewSummaryEntry
+	46, // 6: pantherclaw.v1.ContainmentControl.create_time:type_name -> google.protobuf.Timestamp
+	46, // 7: pantherclaw.v1.ContainmentControl.expire_time:type_name -> google.protobuf.Timestamp
+	46, // 8: pantherclaw.v1.ContainmentControl.lift_time:type_name -> google.protobuf.Timestamp
+	0,  // 9: pantherclaw.v1.PreviewContainmentRequest.scope:type_name -> pantherclaw.v1.ResponseSubject
+	0,  // 10: pantherclaw.v1.ContainmentReach.disruption:type_name -> pantherclaw.v1.ResponseSubject
+	6,  // 11: pantherclaw.v1.PreviewContainmentResponse.reach:type_name -> pantherclaw.v1.ContainmentReach
+	0,  // 12: pantherclaw.v1.ContainRequest.scope:type_name -> pantherclaw.v1.ResponseSubject
+	46, // 13: pantherclaw.v1.ContainRequest.expire_time:type_name -> google.protobuf.Timestamp
+	0,  // 14: pantherclaw.v1.ProposeResponseRequest.subject:type_name -> pantherclaw.v1.ResponseSubject
+	0,  // 15: pantherclaw.v1.ResponseOption.scope:type_name -> pantherclaw.v1.ResponseSubject
+	11, // 16: pantherclaw.v1.ProposeResponseResponse.options:type_name -> pantherclaw.v1.ResponseOption
+	0,  // 17: pantherclaw.v1.RequestControlRequest.scope:type_name -> pantherclaw.v1.ResponseSubject
+	1,  // 18: pantherclaw.v1.RequestControlResponse.paths:type_name -> pantherclaw.v1.ResponsePath
+	23, // 19: pantherclaw.v1.RestorationStageSpec.tests:type_name -> pantherclaw.v1.RestorationTestAction
+	24, // 20: pantherclaw.v1.RequestRestorationRequest.stages:type_name -> pantherclaw.v1.RestorationStageSpec
+	26, // 21: pantherclaw.v1.RequestRestorationResponse.preconditions:type_name -> pantherclaw.v1.RestorationPrecondition
+	26, // 22: pantherclaw.v1.DecideRestorationResponse.preconditions:type_name -> pantherclaw.v1.RestorationPrecondition
+	23, // 23: pantherclaw.v1.RestorationTestResult.test:type_name -> pantherclaw.v1.RestorationTestAction
+	31, // 24: pantherclaw.v1.ApplyRestorationStageResponse.results:type_name -> pantherclaw.v1.RestorationTestResult
+	3,  // 25: pantherclaw.v1.GetResponseActionResponse.action:type_name -> pantherclaw.v1.ResponseAction
+	1,  // 26: pantherclaw.v1.GetResponseActionResponse.paths:type_name -> pantherclaw.v1.ResponsePath
+	4,  // 27: pantherclaw.v1.GetResponseActionResponse.controls:type_name -> pantherclaw.v1.ContainmentControl
+	0,  // 28: pantherclaw.v1.ListResponseActionsRequest.scope:type_name -> pantherclaw.v1.ResponseSubject
+	3,  // 29: pantherclaw.v1.ListResponseActionsResponse.actions:type_name -> pantherclaw.v1.ResponseAction
+	4,  // 30: pantherclaw.v1.ListContainmentControlsResponse.controls:type_name -> pantherclaw.v1.ContainmentControl
+	23, // 31: pantherclaw.v1.RestorationStage.tests:type_name -> pantherclaw.v1.RestorationTestAction
+	31, // 32: pantherclaw.v1.RestorationStage.results:type_name -> pantherclaw.v1.RestorationTestResult
+	26, // 33: pantherclaw.v1.GetRestorationPlanResponse.preconditions:type_name -> pantherclaw.v1.RestorationPrecondition
+	4,  // 34: pantherclaw.v1.GetRestorationPlanResponse.controls:type_name -> pantherclaw.v1.ContainmentControl
+	42, // 35: pantherclaw.v1.GetRestorationPlanResponse.stages:type_name -> pantherclaw.v1.RestorationStage
+	46, // 36: pantherclaw.v1.GetRestorationPlanResponse.create_time:type_name -> google.protobuf.Timestamp
+	46, // 37: pantherclaw.v1.GetRestorationPlanResponse.finish_time:type_name -> google.protobuf.Timestamp
+	5,  // 38: pantherclaw.v1.ResponseService.PreviewContainment:input_type -> pantherclaw.v1.PreviewContainmentRequest
+	8,  // 39: pantherclaw.v1.ResponseService.Contain:input_type -> pantherclaw.v1.ContainRequest
+	10, // 40: pantherclaw.v1.ResponseService.ProposeResponse:input_type -> pantherclaw.v1.ProposeResponseRequest
+	13, // 41: pantherclaw.v1.ResponseService.TerminateRun:input_type -> pantherclaw.v1.TerminateRunRequest
+	15, // 42: pantherclaw.v1.ResponseService.PreviewCredentialChange:input_type -> pantherclaw.v1.PreviewCredentialChangeRequest
+	17, // 43: pantherclaw.v1.ResponseService.RevokeSealedCredential:input_type -> pantherclaw.v1.RevokeSealedCredentialRequest
+	19, // 44: pantherclaw.v1.ResponseService.RotateSealedCredential:input_type -> pantherclaw.v1.RotateSealedCredentialRequest
+	21, // 45: pantherclaw.v1.ResponseService.RequestControl:input_type -> pantherclaw.v1.RequestControlRequest
+	25, // 46: pantherclaw.v1.ResponseService.RequestRestoration:input_type -> pantherclaw.v1.RequestRestorationRequest
+	28, // 47: pantherclaw.v1.ResponseService.DecideRestoration:input_type -> pantherclaw.v1.DecideRestorationRequest
+	30, // 48: pantherclaw.v1.ResponseService.ApplyRestorationStage:input_type -> pantherclaw.v1.ApplyRestorationStageRequest
+	33, // 49: pantherclaw.v1.ResponseService.DecideContainmentHold:input_type -> pantherclaw.v1.DecideContainmentHoldRequest
+	35, // 50: pantherclaw.v1.ResponseService.GetResponseAction:input_type -> pantherclaw.v1.GetResponseActionRequest
+	37, // 51: pantherclaw.v1.ResponseService.ListResponseActions:input_type -> pantherclaw.v1.ListResponseActionsRequest
+	39, // 52: pantherclaw.v1.ResponseService.ListContainmentControls:input_type -> pantherclaw.v1.ListContainmentControlsRequest
+	41, // 53: pantherclaw.v1.ResponseService.GetRestorationPlan:input_type -> pantherclaw.v1.GetRestorationPlanRequest
+	7,  // 54: pantherclaw.v1.ResponseService.PreviewContainment:output_type -> pantherclaw.v1.PreviewContainmentResponse
+	9,  // 55: pantherclaw.v1.ResponseService.Contain:output_type -> pantherclaw.v1.ContainResponse
+	12, // 56: pantherclaw.v1.ResponseService.ProposeResponse:output_type -> pantherclaw.v1.ProposeResponseResponse
+	14, // 57: pantherclaw.v1.ResponseService.TerminateRun:output_type -> pantherclaw.v1.TerminateRunResponse
+	16, // 58: pantherclaw.v1.ResponseService.PreviewCredentialChange:output_type -> pantherclaw.v1.PreviewCredentialChangeResponse
+	18, // 59: pantherclaw.v1.ResponseService.RevokeSealedCredential:output_type -> pantherclaw.v1.RevokeSealedCredentialResponse
+	20, // 60: pantherclaw.v1.ResponseService.RotateSealedCredential:output_type -> pantherclaw.v1.RotateSealedCredentialResponse
+	22, // 61: pantherclaw.v1.ResponseService.RequestControl:output_type -> pantherclaw.v1.RequestControlResponse
+	27, // 62: pantherclaw.v1.ResponseService.RequestRestoration:output_type -> pantherclaw.v1.RequestRestorationResponse
+	29, // 63: pantherclaw.v1.ResponseService.DecideRestoration:output_type -> pantherclaw.v1.DecideRestorationResponse
+	32, // 64: pantherclaw.v1.ResponseService.ApplyRestorationStage:output_type -> pantherclaw.v1.ApplyRestorationStageResponse
+	34, // 65: pantherclaw.v1.ResponseService.DecideContainmentHold:output_type -> pantherclaw.v1.DecideContainmentHoldResponse
+	36, // 66: pantherclaw.v1.ResponseService.GetResponseAction:output_type -> pantherclaw.v1.GetResponseActionResponse
+	38, // 67: pantherclaw.v1.ResponseService.ListResponseActions:output_type -> pantherclaw.v1.ListResponseActionsResponse
+	40, // 68: pantherclaw.v1.ResponseService.ListContainmentControls:output_type -> pantherclaw.v1.ListContainmentControlsResponse
+	43, // 69: pantherclaw.v1.ResponseService.GetRestorationPlan:output_type -> pantherclaw.v1.GetRestorationPlanResponse
+	54, // [54:70] is the sub-list for method output_type
+	38, // [38:54] is the sub-list for method input_type
+	38, // [38:38] is the sub-list for extension type_name
+	38, // [38:38] is the sub-list for extension extendee
+	0,  // [0:38] is the sub-list for field type_name
 }
 
 func init() { file_pantherclaw_v1_response_proto_init() }
@@ -3743,7 +3782,7 @@ func file_pantherclaw_v1_response_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pantherclaw_v1_response_proto_rawDesc), len(file_pantherclaw_v1_response_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   45,
+			NumMessages:   46,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

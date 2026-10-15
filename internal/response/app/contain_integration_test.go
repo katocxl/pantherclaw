@@ -163,7 +163,7 @@ func TestHR248_ContainerAddsAControlTheAuthorityEnforces(t *testing.T) {
 		t.Fatalf("authority containment after: %+v (epoch before %d)", after, before.Epoch)
 	}
 	a := w.action(res.ActionID)
-	if a.Status != string(rdomain.StatusRequested) || a.Epoch.Int64 != after.Epoch || a.Source != rdomain.SourceUser {
+	if a.Status != string(rdomain.StatusRequested) || a.Epoch.Int64 != after.Epoch || a.Source != rdomain.SourcePerson {
 		t.Fatalf("action %+v", a)
 	}
 	if n := w.count("SELECT count(*) FROM pc.ledger_entries WHERE org_id = $1 AND kind IN ('response.action', 'audit.response.contain')", w.org); n != 2 {
@@ -246,7 +246,9 @@ func TestHR249_FailedContainmentRaisesASignal(t *testing.T) {
 // TestHR252_WiderContainmentNeedsTheCurrentPreview: a control wider than one
 // run or agent is refused without its preview's digest, or with a digest
 // the scope has since outgrown, and committed with the current one; the
-// identity playbook needs none. An idempotency key returns its first
+// identity playbook needs none but is limited to a person and the grants
+// they issued (D50), and a SOAR request never comes through the port. An
+// idempotency key returns its first
 // result and refuses a different request.
 func TestHR252_WiderContainmentNeedsTheCurrentPreview(t *testing.T) {
 	w := newWorld(t, "PARTIAL")
@@ -287,12 +289,43 @@ func TestHR252_WiderContainmentNeedsTheCurrentPreview(t *testing.T) {
 		t.Fatalf("with the current preview: %v", err)
 	}
 
-	byPlaybook := reflexdomain.ContainRequest{
-		Scope: reflexdomain.Subject{Type: reflexdomain.SubjectUser, ID: w.alice.String()}, Control: reflexdomain.ControlDenyAll,
-		Actor: rapp.PlaybookActor,
+	playbook := func(scope reflexdomain.Subject, control string) (reflexdomain.ContainResult, error) {
+		return w.contain(reflexdomain.ContainRequest{Scope: scope, Control: control, Actor: rapp.PlaybookActor})
 	}
-	if _, err := w.contain(byPlaybook); err != nil {
+	grant := reflexdomain.Subject{Type: reflexdomain.SubjectGrant, ID: w.grant.String()}
+	alice := reflexdomain.Subject{Type: reflexdomain.SubjectUser, ID: w.alice.String()}
+	// D50: the playbook contains a person, then the grants they issued;
+	// nothing else, and no grant before its issuer is contained.
+	for _, c := range []struct {
+		scope   reflexdomain.Subject
+		control string
+	}{
+		{grant, reflexdomain.ControlDenyAll},
+		{reflexdomain.Subject{Type: reflexdomain.SubjectAgent, ID: w.agent.String()}, reflexdomain.ControlDenyAll},
+		{alice, reflexdomain.ControlHoldWrites},
+		{reflexdomain.Subject{Type: reflexdomain.SubjectConnection, ID: w.conn.String()}, reflexdomain.ControlDenyAll},
+	} {
+		if _, err := playbook(c.scope, c.control); !errors.Is(err, rapp.ErrPlaybookScope) {
+			t.Errorf("the playbook on %s %s: %v", c.scope.Type, c.control, err)
+		}
+	}
+	byPlaybook, err := playbook(alice, reflexdomain.ControlDenyAll)
+	if err != nil {
 		t.Fatalf("the identity playbook: %v", err)
+	}
+	if _, err := playbook(grant, reflexdomain.ControlDenyAll); err != nil {
+		t.Fatalf("the playbook on a grant its person issued: %v", err)
+	}
+	// No digest was supplied: the server recorded the preview it computed.
+	if a := w.action(byPlaybook.ActionID); a.Source != rdomain.SourcePlaybook || len(a.PreviewDigest) != 32 || len(a.PreviewSummary) < 10 {
+		t.Fatalf("playbook action: %s %x %s", a.Source, a.PreviewDigest, a.PreviewSummary)
+	}
+	// A SOAR integration never contains through the port.
+	if _, err := w.contain(reflexdomain.ContainRequest{
+		Scope: reflexdomain.Subject{Type: reflexdomain.SubjectRun, ID: w.run.String()}, Control: reflexdomain.ControlDenyAll,
+		Actor: reflexdomain.Subject{Type: reflexdomain.SubjectServiceAccount, ID: ids.NewV7().String()},
+	}); !errors.Is(err, rapp.ErrSOARPort) {
+		t.Fatalf("a service account through the port: %v", err)
 	}
 
 	keyed := reflexdomain.ContainRequest{

@@ -178,9 +178,12 @@ func (s *Response) PreviewContainment(ctx context.Context, scope reflexdomain.Su
 		diff, err := s.C.Reach.PreviewReduction(ctx, c.Org, reflexdomain.ReductionChange{
 			Kind: "contain", Subjects: []reflexdomain.Subject{scope}, Control: control, Operation: operation,
 		})
-		if err != nil {
+		switch {
+		case pcerr.ReasonOf(err) == "EDITION_REQUIRED":
+			out.ReachNote = "reach before and after is shown on the Team edition and above"
+		case err != nil:
 			out.ReachNote = "reach could not be computed"
-		} else {
+		default:
 			out.Reach = &diff
 		}
 	}
@@ -459,6 +462,9 @@ func (s *Response) RequestControl(ctx context.Context, r SOARRequest) (SOARResul
 	if err != nil {
 		return SOARResult{}, nil, err
 	}
+	if c.Human() {
+		return SOARResult{}, nil, ErrSOARCaller
+	}
 	if err := c.Require(td.PermResponseRequest, td.OrgPath(c.Org)); err != nil {
 		return SOARResult{}, nil, err
 	}
@@ -701,9 +707,10 @@ func (s *Response) GetAction(ctx context.Context, id ids.UUID) (ActionView, erro
 	return out, err
 }
 
-// ListActions lists response actions newest first, optionally of one case
-// or incident (containment.read).
-func (s *Response) ListActions(ctx context.Context, caseID, incidentID, before *ids.UUID, limit int32) ([]dbq.PcResponseAction, error) {
+// ListActions lists response actions newest first, optionally of one case,
+// incident or subject (containment.read): the read port cases' response
+// lens and the operations queue adapt to (D49).
+func (s *Response) ListActions(ctx context.Context, caseID, incidentID *ids.UUID, scope *reflexdomain.Subject, before *ids.UUID, limit int32) ([]dbq.PcResponseAction, error) {
 	c, err := tenancy.CallerFrom(ctx)
 	if err != nil {
 		return nil, err
@@ -711,11 +718,20 @@ func (s *Response) ListActions(ctx context.Context, caseID, incidentID, before *
 	if err := c.Require(td.PermContainmentRead, td.OrgPath(c.Org)); err != nil {
 		return nil, err
 	}
+	var scopeType, scopeID *string
+	if scope != nil {
+		st, sid, err := scopeOf(*scope)
+		if err != nil {
+			// A credential or transaction action names its own scope type.
+			st, sid = string(scope.Type), scope.ID
+		}
+		scopeType, scopeID = &st, &sid
+	}
 	var out []dbq.PcResponseAction
 	err = s.C.Pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
 		var err error
 		out, err = dbq.New(tx).ListResponseActions(ctx, dbq.ListResponseActionsParams{
-			OrgID: c.Org, CaseID: caseID, IncidentID: incidentID, Before: before, MaxRows: limit,
+			OrgID: c.Org, CaseID: caseID, IncidentID: incidentID, ScopeType: scopeType, ScopeID: scopeID, Before: before, MaxRows: limit,
 		})
 		return err
 	}, db.ReadOnly())

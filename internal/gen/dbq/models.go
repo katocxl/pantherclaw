@@ -1932,6 +1932,7 @@ type PcResponseAction struct {
 	Actor           string
 	Source          string
 	PreviewDigest   []byte
+	PreviewSummary  []byte
 	SkipPreview     bool
 	SkipReason      *string
 	SkipStepUpAt    *time.Time

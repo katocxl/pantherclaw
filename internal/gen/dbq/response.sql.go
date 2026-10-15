@@ -424,7 +424,7 @@ func (q *Queries) GetContainmentControl(ctx context.Context, orgID ids.OrgID, iD
 }
 
 const getResponseAction = `-- name: GetResponseAction :one
-SELECT org_id, id, kind, scope_type, scope_id, control, operation, reason, case_id, incident_id, actor, source, preview_digest, skip_preview, skip_reason, skip_step_up_at, idempotency_key, request_digest, status, future_confirmed, historical_open, epoch, requested_at, updated_at, settled_at FROM pc.response_actions WHERE org_id = $1 AND id = $2
+SELECT org_id, id, kind, scope_type, scope_id, control, operation, reason, case_id, incident_id, actor, source, preview_digest, preview_summary, skip_preview, skip_reason, skip_step_up_at, idempotency_key, request_digest, status, future_confirmed, historical_open, epoch, requested_at, updated_at, settled_at FROM pc.response_actions WHERE org_id = $1 AND id = $2
 `
 
 func (q *Queries) GetResponseAction(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (PcResponseAction, error) {
@@ -444,6 +444,7 @@ func (q *Queries) GetResponseAction(ctx context.Context, orgID ids.OrgID, iD ids
 		&i.Actor,
 		&i.Source,
 		&i.PreviewDigest,
+		&i.PreviewSummary,
 		&i.SkipPreview,
 		&i.SkipReason,
 		&i.SkipStepUpAt,
@@ -617,12 +618,12 @@ func (q *Queries) InsertContainmentControl(ctx context.Context, arg InsertContai
 
 const insertResponseAction = `-- name: InsertResponseAction :one
 INSERT INTO pc.response_actions (org_id, id, kind, scope_type, scope_id, control, operation, reason, case_id, incident_id,
-                                 actor, source, preview_digest, skip_preview, skip_reason, skip_step_up_at,
+                                 actor, source, preview_digest, preview_summary, skip_preview, skip_reason, skip_step_up_at,
                                  idempotency_key, request_digest)
 VALUES ($1, $2, $3, $4, $5,
         $6, $7, $8, $9, $10,
-        $11, $12, $13, $14, $15,
-        $16, $17, $18)
+        $11, $12, $13, $14, $15, $16,
+        $17, $18, $19)
 RETURNING requested_at
 `
 
@@ -640,6 +641,7 @@ type InsertResponseActionParams struct {
 	Actor          string
 	Source         string
 	PreviewDigest  []byte
+	PreviewSummary []byte
 	SkipPreview    bool
 	SkipReason     *string
 	SkipStepUpAt   *time.Time
@@ -662,6 +664,7 @@ func (q *Queries) InsertResponseAction(ctx context.Context, arg InsertResponseAc
 		arg.Actor,
 		arg.Source,
 		arg.PreviewDigest,
+		arg.PreviewSummary,
 		arg.SkipPreview,
 		arg.SkipReason,
 		arg.SkipStepUpAt,
@@ -877,19 +880,22 @@ func (q *Queries) ListContainmentControls(ctx context.Context, orgID ids.OrgID, 
 }
 
 const listResponseActions = `-- name: ListResponseActions :many
-SELECT org_id, id, kind, scope_type, scope_id, control, operation, reason, case_id, incident_id, actor, source, preview_digest, skip_preview, skip_reason, skip_step_up_at, idempotency_key, request_digest, status, future_confirmed, historical_open, epoch, requested_at, updated_at, settled_at FROM pc.response_actions
+SELECT org_id, id, kind, scope_type, scope_id, control, operation, reason, case_id, incident_id, actor, source, preview_digest, preview_summary, skip_preview, skip_reason, skip_step_up_at, idempotency_key, request_digest, status, future_confirmed, historical_open, epoch, requested_at, updated_at, settled_at FROM pc.response_actions
 WHERE org_id = $1
   AND ($2::uuid IS NULL OR case_id = $2::uuid)
   AND ($3::uuid IS NULL OR incident_id = $3::uuid)
-  AND ($4::uuid IS NULL OR id < $4::uuid)
+  AND ($4::text IS NULL OR (scope_type = $4::text AND scope_id = $5::text))
+  AND ($6::uuid IS NULL OR id < $6::uuid)
 ORDER BY id DESC
-LIMIT $5
+LIMIT $7
 `
 
 type ListResponseActionsParams struct {
 	OrgID      ids.OrgID
 	CaseID     *ids.UUID
 	IncidentID *ids.UUID
+	ScopeType  *string
+	ScopeID    *string
 	Before     *ids.UUID
 	MaxRows    int32
 }
@@ -899,6 +905,8 @@ func (q *Queries) ListResponseActions(ctx context.Context, arg ListResponseActio
 		arg.OrgID,
 		arg.CaseID,
 		arg.IncidentID,
+		arg.ScopeType,
+		arg.ScopeID,
 		arg.Before,
 		arg.MaxRows,
 	)
@@ -923,6 +931,7 @@ func (q *Queries) ListResponseActions(ctx context.Context, arg ListResponseActio
 			&i.Actor,
 			&i.Source,
 			&i.PreviewDigest,
+			&i.PreviewSummary,
 			&i.SkipPreview,
 			&i.SkipReason,
 			&i.SkipStepUpAt,
@@ -1079,6 +1088,26 @@ func (q *Queries) PermitState(ctx context.Context, orgID ids.OrgID, transactionI
 	return state, err
 }
 
+const playbookContainedIssuer = `-- name: PlaybookContainedIssuer :one
+SELECT EXISTS (
+    SELECT 1 FROM pc.grants g
+    JOIN pc.containment_controls c ON c.org_id = g.org_id AND c.scope_type = 'principal'
+        AND c.scope_id = 'user:' || g.grantor_id::text AND c.control = 'DENY_ALL' AND c.lifted_at IS NULL
+        AND (c.expires_at IS NULL OR c.expires_at > now())
+    JOIN pc.response_actions a ON a.org_id = c.org_id AND a.id = c.action_id AND a.source = 'PLAYBOOK'
+    WHERE g.org_id = $1 AND g.id = $2 AND g.grantor_kind = 'user'
+)::boolean AS contained
+`
+
+// PlaybookContainedIssuer reports whether a grant was issued by a person
+// whom an active identity-playbook DENY_ALL control contains (D50).
+func (q *Queries) PlaybookContainedIssuer(ctx context.Context, orgID ids.OrgID, grantID ids.UUID) (bool, error) {
+	row := q.db.QueryRow(ctx, playbookContainedIssuer, orgID, grantID)
+	var contained bool
+	err := row.Scan(&contained)
+	return contained, err
+}
+
 const recordEpochDelivery = `-- name: RecordEpochDelivery :exec
 INSERT INTO pc.gateway_epoch_deliveries (org_id, gateway_id, epoch)
 VALUES ($1, $2, $3)
@@ -1094,7 +1123,7 @@ func (q *Queries) RecordEpochDelivery(ctx context.Context, orgID ids.OrgID, gate
 }
 
 const responseActionByKey = `-- name: ResponseActionByKey :one
-SELECT org_id, id, kind, scope_type, scope_id, control, operation, reason, case_id, incident_id, actor, source, preview_digest, skip_preview, skip_reason, skip_step_up_at, idempotency_key, request_digest, status, future_confirmed, historical_open, epoch, requested_at, updated_at, settled_at FROM pc.response_actions WHERE org_id = $1 AND idempotency_key = $2
+SELECT org_id, id, kind, scope_type, scope_id, control, operation, reason, case_id, incident_id, actor, source, preview_digest, preview_summary, skip_preview, skip_reason, skip_step_up_at, idempotency_key, request_digest, status, future_confirmed, historical_open, epoch, requested_at, updated_at, settled_at FROM pc.response_actions WHERE org_id = $1 AND idempotency_key = $2
 `
 
 func (q *Queries) ResponseActionByKey(ctx context.Context, orgID ids.OrgID, idempotencyKey *string) (PcResponseAction, error) {
@@ -1114,6 +1143,7 @@ func (q *Queries) ResponseActionByKey(ctx context.Context, orgID ids.OrgID, idem
 		&i.Actor,
 		&i.Source,
 		&i.PreviewDigest,
+		&i.PreviewSummary,
 		&i.SkipPreview,
 		&i.SkipReason,
 		&i.SkipStepUpAt,
@@ -1218,6 +1248,21 @@ func (q *Queries) RunOfTransaction(ctx context.Context, orgID ids.OrgID, iD ids.
 	var run_id ids.UUID
 	err := row.Scan(&run_id)
 	return run_id, err
+}
+
+const sOARWideLastHour = `-- name: SOARWideLastHour :one
+SELECT count(*) FROM pc.response_actions
+WHERE org_id = $1 AND source = 'SOAR' AND scope_type IN ('grant', 'connection')
+  AND requested_at > now() - interval '1 hour'
+`
+
+// SOARWideLastHour counts the org's SOAR controls on grants and connections
+// in the last hour, by the database clock (D50).
+func (q *Queries) SOARWideLastHour(ctx context.Context, orgID ids.OrgID) (int64, error) {
+	row := q.db.QueryRow(ctx, sOARWideLastHour, orgID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
 }
 
 const scopeActiveRuns = `-- name: ScopeActiveRuns :many
@@ -1475,7 +1520,7 @@ func (q *Queries) SharedInstallationConnections(ctx context.Context, orgID ids.O
 }
 
 const unsettledResponseActions = `-- name: UnsettledResponseActions :many
-SELECT org_id, id, kind, scope_type, scope_id, control, operation, reason, case_id, incident_id, actor, source, preview_digest, skip_preview, skip_reason, skip_step_up_at, idempotency_key, request_digest, status, future_confirmed, historical_open, epoch, requested_at, updated_at, settled_at FROM pc.response_actions
+SELECT org_id, id, kind, scope_type, scope_id, control, operation, reason, case_id, incident_id, actor, source, preview_digest, preview_summary, skip_preview, skip_reason, skip_step_up_at, idempotency_key, request_digest, status, future_confirmed, historical_open, epoch, requested_at, updated_at, settled_at FROM pc.response_actions
 WHERE org_id = $1 AND settled_at IS NULL
 ORDER BY requested_at, id
 LIMIT $2
@@ -1504,6 +1549,7 @@ func (q *Queries) UnsettledResponseActions(ctx context.Context, orgID ids.OrgID,
 			&i.Actor,
 			&i.Source,
 			&i.PreviewDigest,
+			&i.PreviewSummary,
 			&i.SkipPreview,
 			&i.SkipReason,
 			&i.SkipStepUpAt,

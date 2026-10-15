@@ -183,7 +183,7 @@ message ResponseAction {
   string incident_id = 9;
   // "user:<id>", "service_account:<id>" or "system:identity_playbook".
   string actor = 10;
-  // "USER", "SOAR" or "PLAYBOOK".
+  // "PERSON", "SOAR" or "PLAYBOOK", set by the server.
   string source = 11;
   // "REQUESTED", "PARTIAL", "CONFIRMED", "FAILED" or "UNSUPPORTED".
   string status = 12;
@@ -193,11 +193,14 @@ message ResponseAction {
   repeated HistoricalItem historical_open = 14;
   // The containment epoch the change raised the org to.
   int64 epoch = 15;
-  // The preview it was confirmed against (hex), or the emergency skip.
+  // The preview computed at request time (hex), which a supplied digest
+  // matched, and whether a wider control's preview was skipped.
   string preview_digest = 16;
   bool preview_skipped = 17;
   google.protobuf.Timestamp request_time = 18;
   google.protobuf.Timestamp settle_time = 19;
+  // The known consequence at request time: counts and the first agent ids.
+  map<string, string> preview_summary = 20;
 }
 
 // ContainmentControl is a control the Authority enforces until lifted.
@@ -432,6 +435,9 @@ message RequestControlResponse {
   repeated ResponsePath paths = 3;
   // The key was used before for this same request.
   bool replayed = 4;
+  // Why a FAILED result created no action: "RATE_LIMITED" (more than 10
+  // grant or connection controls in the last hour).
+  string reason = 5;
 }
 
 // RestorationTestAction is a recorded evaluation re-decided, dry run.
@@ -588,6 +594,9 @@ message ListResponseActionsRequest {
     gte: 0
     lte: 200
   }];
+  // Only actions on this scope (a user or service account is its
+  // principal scope).
+  ResponseSubject scope = 5;
 }
 
 // ListResponseActionsResponse is one page.

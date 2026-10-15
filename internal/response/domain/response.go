@@ -44,7 +44,7 @@ const (
 
 // Sources of response actions.
 const (
-	SourceUser     = "USER"
+	SourcePerson   = "PERSON"
 	SourceSOAR     = "SOAR"
 	SourcePlaybook = "PLAYBOOK"
 )

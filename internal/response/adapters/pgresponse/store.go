@@ -44,8 +44,10 @@ type Action struct {
 	// PreviewDigest is the preview the requester confirmed (D23); a skip
 	// records its reason and the step-up behind it.
 	PreviewDigest []byte
-	SkipReason    string
-	SkipStepUpAt  *time.Time
+	// PreviewSummary is the known consequence at request time (D50).
+	PreviewSummary []byte
+	SkipReason     string
+	SkipStepUpAt   *time.Time
 	// IdempotencyKey and RequestDigest are set together.
 	IdempotencyKey string
 	RequestDigest  []byte
@@ -72,7 +74,7 @@ func InsertAction(ctx context.Context, tx db.TenantTx, org ids.OrgID, a Action) 
 	return dbq.New(tx).InsertResponseAction(ctx, dbq.InsertResponseActionParams{
 		OrgID: org, ID: a.ID, Kind: a.Kind, ScopeType: a.ScopeType, ScopeID: a.ScopeID, Control: opt(a.Control),
 		Operation: opt(a.Operation), Reason: a.Reason, CaseID: a.CaseID, IncidentID: a.IncidentID, Actor: a.Actor,
-		Source: a.Source, PreviewDigest: a.PreviewDigest, SkipPreview: a.SkipReason != "", SkipReason: opt(a.SkipReason),
+		Source: a.Source, PreviewDigest: a.PreviewDigest, PreviewSummary: summaryOrEmpty(a.PreviewSummary), SkipPreview: a.SkipReason != "", SkipReason: opt(a.SkipReason),
 		SkipStepUpAt: a.SkipStepUpAt, IdempotencyKey: opt(a.IdempotencyKey), RequestDigest: a.RequestDigest,
 	})
 }
@@ -174,4 +176,11 @@ func GetAction(ctx context.Context, tx db.TenantTx, org ids.OrgID, id ids.UUID) 
 		return a, ErrNotFound
 	}
 	return a, err
+}
+
+func summaryOrEmpty(b []byte) []byte {
+	if len(b) == 0 {
+		return []byte("{}")
+	}
+	return b
 }

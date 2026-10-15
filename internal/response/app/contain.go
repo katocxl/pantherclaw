@@ -97,7 +97,7 @@ func actorOf(a reflexdomain.Subject) (string, string, evdomain.Actor, error) {
 		return "system:identity_playbook", rdomain.SourcePlaybook, evdomain.Actor{Type: "system", ID: "identity_playbook"}, nil
 	case a.Type == reflexdomain.SubjectUser:
 		if _, err := ids.ParseUUID(a.ID); err == nil {
-			return "user:" + a.ID, rdomain.SourceUser, evdomain.Actor{Type: "user", ID: a.ID}, nil
+			return "user:" + a.ID, rdomain.SourcePerson, evdomain.Actor{Type: "user", ID: a.ID}, nil
 		}
 	case a.Type == reflexdomain.SubjectServiceAccount:
 		if _, err := ids.ParseUUID(a.ID); err == nil {
@@ -126,12 +126,13 @@ func uuidString(u *ids.UUID) string {
 
 // Contain implements reflexdomain.Container: it adds one control in tx (the
 // caller's tenant transaction, which it checks belongs to r.Org), with its
-// response action and paths, and raises the containment epoch (HR-248). A
-// wider control needs the digest of its current preview (HR-252), except
-// when it comes from the identity playbook or a SOAR service account (whose
-// scopes RequestControl already narrowed, HR-251). A repeat of the same
-// idempotency key returns the first result; a different request under the
-// key is refused.
+// response action and paths, and raises the containment epoch (HR-248). The
+// source is the server's (D50): PERSON for a user actor, PLAYBOOK only for
+// PlaybookActor; a SOAR request goes through RequestControl. A wider
+// control needs the digest of its current preview (HR-252) unless it comes
+// from the identity playbook, whose scope is limited to a person and the
+// grants they issued. A repeat of the same idempotency key returns the
+// first result; a different request under the key is refused.
 func (s *Containment) Contain(ctx context.Context, ptx pgx.Tx, r reflexdomain.ContainRequest) (reflexdomain.ContainResult, error) {
 	tx, err := db.AdoptTenantTx(ctx, ptx, r.Org)
 	if err != nil {
@@ -144,6 +145,9 @@ func (s *Containment) Contain(ctx context.Context, ptx pgx.Tx, r reflexdomain.Co
 	actor, source, evActor, err := actorOf(r.Actor)
 	if err != nil {
 		return reflexdomain.ContainResult{}, err
+	}
+	if source == rdomain.SourceSOAR {
+		return reflexdomain.ContainResult{}, ErrSOARPort
 	}
 	c := rdomain.Control{ScopeType: scopeType, ScopeID: scopeID, Control: r.Control, Operation: r.Operation, Reason: r.Reason}
 	if err := c.Validate(); err != nil {
@@ -185,12 +189,18 @@ func (s *Containment) contain(ctx context.Context, tx db.TenantTx, org ids.OrgID
 	if err := exists(ctx, q, org, c); err != nil {
 		return reflexdomain.ContainResult{}, err
 	}
+	if o.source == rdomain.SourcePlaybook {
+		if err := playbookScope(ctx, q, org, c); err != nil {
+			return reflexdomain.ContainResult{}, err
+		}
+	}
 	p, err := preview(ctx, tx, org, c)
 	if err != nil {
 		return reflexdomain.ContainResult{}, err
 	}
 	// A digest, when given, must match; a wider control needs one unless an
-	// emergency skip, the identity playbook or a SOAR request stands in.
+	// emergency skip, the identity playbook or a SOAR request stands in. The
+	// preview computed now is recorded either way (D50).
 	preauthorized := o.skipReason != "" || o.source == rdomain.SourcePlaybook || o.source == rdomain.SourceSOAR
 	if (len(o.previewDigest) > 0 && !bytes.Equal(o.previewDigest, p.Digest)) ||
 		(len(o.previewDigest) == 0 && !c.Narrow() && !preauthorized) {
@@ -201,9 +211,7 @@ func (s *Containment) contain(ctx context.Context, tx db.TenantTx, org ids.OrgID
 		Operation: c.Operation, Reason: c.Reason, CaseID: o.caseID, IncidentID: o.incidentID, Actor: o.actor, Source: o.source,
 		SkipReason: o.skipReason, SkipStepUpAt: o.skipStepUpAt, IdempotencyKey: o.idempotency, RequestDigest: reqDigest,
 	}
-	if len(o.previewDigest) > 0 {
-		a.PreviewDigest = p.Digest
-	}
+	a.PreviewDigest, a.PreviewSummary = p.Digest, summaryOf(p)
 	added, err := pgresponse.AddControl(ctx, tx, org, a, o.expires)
 	if err != nil {
 		return reflexdomain.ContainResult{}, err
@@ -305,4 +313,50 @@ func auditRecord(ctx context.Context, tx db.TenantTx, actor evdomain.Actor, name
 
 func canonicalEvidence(m map[string]string) ([]byte, error) {
 	return json.Marshal(m, json.Deterministic(true))
+}
+
+// Errors of the playbook and SOAR sources (D50).
+var (
+	ErrSOARPort = pcerr.New(pcerr.InvalidArgument, "SOAR_THROUGH_REQUEST_CONTROL",
+		"a SOAR integration asks through RequestControl, which sets its source")
+	ErrPlaybookScope = pcerr.New(pcerr.InvalidArgument, "PLAYBOOK_SCOPE",
+		"the identity playbook contains only a person (DENY_ALL) and the grants that person issued")
+)
+
+// playbookScope limits the identity playbook (D50): a DENY_ALL on a user,
+// or a control on a grant whose issuer the playbook already contains.
+func playbookScope(ctx context.Context, q *dbq.Queries, org ids.OrgID, c rdomain.Control) error {
+	switch c.ScopeType {
+	case rdomain.ScopePrincipal:
+		if kind, _, _ := cutPrincipal(c.ScopeID); kind == "user" && c.Control == rdomain.DenyAll {
+			return nil
+		}
+	case rdomain.ScopeGrant:
+		id, err := ids.ParseUUID(c.ScopeID)
+		if err != nil {
+			return rdomain.ErrScope
+		}
+		ok, err := q.PlaybookContainedIssuer(ctx, org, id)
+		if err != nil {
+			return err
+		}
+		if ok {
+			return nil
+		}
+	}
+	return ErrPlaybookScope
+}
+
+// summaryOf is the recorded summary of a preview (D50): counts and the
+// first ids, never more than the column holds.
+func summaryOf(p Preview) []byte {
+	first := func(xs []ids.UUID, n int) []string { return idStrings(xs[:min(len(xs), n)]) }
+	b, err := json.Marshal(map[string]any{
+		"narrow": p.Narrow, "runs": len(p.Runs), "runs_over": p.RunsOver, "agents": first(p.Agents, 20), "agent_count": len(p.Agents),
+		"waiting": p.Waiting, "gateways": len(p.Gateways), "alternatives": len(p.Alternatives), "unknown": len(p.Unknown),
+	}, json.Deterministic(true))
+	if err != nil {
+		return nil
+	}
+	return b
 }

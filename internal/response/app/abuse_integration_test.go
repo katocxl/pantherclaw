@@ -12,6 +12,7 @@ import (
 
 	bdomain "github.com/katocxl/pantherclaw/internal/billing/domain"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
+	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	reflexdomain "github.com/katocxl/pantherclaw/internal/reflex/domain"
 	rapp "github.com/katocxl/pantherclaw/internal/response/app"
@@ -55,8 +56,10 @@ func TestT110_ResponseAPIAbuseIsRefused(t *testing.T) {
 	if _, _, err := r.RequestControl(w.caller(td.KindServiceAccount, sa), req); err == nil {
 		t.Fatal("a SOAR request without response.request")
 	}
-	if _, _, err := r.RequestControl(soar, rapp.SOARRequest{Key: "k2", Scope: reflexdomain.Subject{Type: reflexdomain.SubjectUser, ID: w.alice.String()},
-		Control: rdomain.DenyAll, Reason: "edr"}); !errors.Is(err, rapp.ErrSOARScope) {
+	if _, _, err := r.RequestControl(soar, rapp.SOARRequest{
+		Key: "k2", Scope: reflexdomain.Subject{Type: reflexdomain.SubjectUser, ID: w.alice.String()},
+		Control: rdomain.DenyAll, Reason: "edr",
+	}); !errors.Is(err, rapp.ErrSOARScope) {
 		t.Fatalf("SOAR on a person: %v", err)
 	}
 	res, paths, err := r.RequestControl(soar, req)
@@ -117,5 +120,52 @@ func TestT109_RestorationAbuseIsRefused(t *testing.T) {
 	}
 	if len(w.activeControls()) != 1 {
 		t.Fatal("a refused restoration lifted the control")
+	}
+}
+
+type fakeReach struct {
+	got []reflexdomain.ReductionChange
+	err error
+}
+
+func (f *fakeReach) PreviewReduction(_ context.Context, _ ids.OrgID, c reflexdomain.ReductionChange) (reflexdomain.ReachDiff, error) {
+	f.got = append(f.got, c)
+	if f.err != nil {
+		return reflexdomain.ReachDiff{}, f.err
+	}
+	return reflexdomain.ReachDiff{Before: reflexdomain.Reach{Resources: 4}, After: reflexdomain.Reach{Resources: 1}}, nil
+}
+
+// TestHR252_PreviewShowsReachOnTeamOnly (D23, D49): the preview asks the
+// exposure previewer for a "contain" reduction on Team and above, and
+// otherwise omits the reach with a note; an EDITION_REQUIRED from the
+// previewer is a note too, never an error. The digest never depends on it.
+func TestHR252_PreviewShowsReachOnTeamOnly(t *testing.T) {
+	w := newWorld(t, "PARTIAL")
+	r := &rapp.Response{C: w.c}
+	ctx := w.caller(td.KindUser, w.alice, td.RoleResponder)
+	agent := reflexdomain.Subject{Type: reflexdomain.SubjectAgent, ID: w.agent.String()}
+	reach := &fakeReach{}
+	w.c.Reach = reach
+	p, err := r.PreviewContainment(ctx, agent, rdomain.DenyAll, "")
+	if err != nil || p.Reach != nil || p.ReachNote == "" || len(reach.got) != 0 {
+		t.Fatalf("Community: %+v %v", p, err)
+	}
+	w.c.Editions = edition(bdomain.Team)
+	q, err := r.PreviewContainment(ctx, agent, rdomain.DenyAll, "")
+	if err != nil || q.Reach == nil || q.Reach.Before.Resources != 4 || len(reach.got) != 1 || reach.got[0].Kind != "contain" ||
+		reach.got[0].Control != rdomain.DenyAll || reach.got[0].Subjects[0] != agent {
+		t.Fatalf("Team: %+v %v %+v", q, err, reach.got)
+	}
+	if string(q.Digest) != string(p.Digest) {
+		t.Fatal("the digest depends on the reach")
+	}
+	reach.err = pcerr.New(pcerr.FailedPrecondition, "EDITION_REQUIRED", "x")
+	if q, err = r.PreviewContainment(ctx, agent, rdomain.DenyAll, ""); err != nil || q.Reach != nil || q.ReachNote == "" {
+		t.Fatalf("EDITION_REQUIRED from the previewer: %+v %v", q, err)
+	}
+	w.c.Reach = nil
+	if q, err = r.PreviewContainment(ctx, agent, rdomain.DenyAll, ""); err != nil || q.Reach != nil || q.ReachNote == "" {
+		t.Fatalf("no previewer: %+v %v", q, err)
 	}
 }

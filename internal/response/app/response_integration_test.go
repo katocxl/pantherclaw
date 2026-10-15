@@ -8,6 +8,7 @@ package app_test
 import (
 	"context"
 	"errors"
+	"strconv"
 	"testing"
 
 	"github.com/katocxl/pantherclaw/internal/authority/adapters/pgauthority"
@@ -222,7 +223,8 @@ func TestHR250_StagedRestorationWidensOnlyAfterItsTests(t *testing.T) {
 // one control on a run, agent, grant or connection (a grant needs no
 // preview), never a resource or a person; a repeated key returns the same
 // action, a different request under it is refused; the action records its
-// SOAR source and is audited; PARTIAL reads as UNKNOWN.
+// SOAR source and is audited; PARTIAL reads as UNKNOWN. Wide SOAR
+// controls are rate limited (D50).
 func TestHR251_SOARRequestsAreNarrowIdempotentAndAudited(t *testing.T) {
 	w := newWorld(t, "OBSERVE_ONLY")
 	sa := reflexdomain.Subject{Type: reflexdomain.SubjectServiceAccount, ID: ids.NewV7().String()}
@@ -265,9 +267,31 @@ func TestHR251_SOARRequestsAreNarrowIdempotentAndAudited(t *testing.T) {
 	if n := w.count(`SELECT count(*) FROM pc.response_actions WHERE org_id = $1 AND source = 'SOAR'`, w.org); n != 2 {
 		t.Fatalf("%d SOAR actions, want 2", n)
 	}
+	// D50: at most 10 wide (grant or connection) SOAR controls an hour; past
+	// that, FAILED RATE_LIMITED with no action, and one owned failure an hour.
+	for i := range 9 {
+		if _, err := req("wide-"+strconv.Itoa(i), reflexdomain.Subject{Type: reflexdomain.SubjectConnection, ID: w.conn.String()}, rdomain.HoldWrites); err != nil {
+			t.Fatalf("wide request %d: %v", i+2, err)
+		}
+	}
+	for _, key := range []string{"over-1", "over-2"} {
+		res, err := req(key, reflexdomain.Subject{Type: reflexdomain.SubjectGrant, ID: w.grant.String()}, rdomain.DenyAll)
+		if err != nil || res.Result != rapp.SOARFailed || res.Reason != rapp.ReasonRateLimited || !res.ActionID.IsZero() {
+			t.Fatalf("over the limit: %+v %v", res, err)
+		}
+	}
+	if n := w.count(`SELECT count(*) FROM pc.operational_failures WHERE org_id = $1 AND kind = 'soar_rate_limited'`, w.org); n != 1 {
+		t.Fatalf("%d rate-limit failures, want 1", n)
+	}
+	if _, err := req("narrow-after", reflexdomain.Subject{Type: reflexdomain.SubjectRun, ID: w.run.String()}, rdomain.DenyAll); err != nil {
+		t.Fatalf("a narrow request past the wide limit: %v", err)
+	}
 	if n := w.count(`SELECT count(*) FROM pc.ledger_entries WHERE org_id = $1 AND kind = 'audit.response.contain'
-		AND convert_from(body, 'UTF8')::jsonb #>> '{details,source}' = 'SOAR' AND convert_from(body, 'UTF8')::jsonb #>> '{details,reason}' = 'edr verdict'`, w.org); n != 2 {
-		t.Fatalf("%d audited SOAR actions, want 2", n)
+		AND convert_from(body, 'UTF8')::jsonb #>> '{details,source}' = 'SOAR' AND convert_from(body, 'UTF8')::jsonb #>> '{details,reason}' = 'edr verdict'`, w.org); n != 12 {
+		t.Fatalf("%d audited SOAR actions, want every one of the 12", n)
+	}
+	if n := w.count(`SELECT count(*) FROM pc.ledger_entries WHERE org_id = $1 AND kind = 'audit.response.soar_rate_limited'`, w.org); n != 2 {
+		t.Fatalf("%d audited refusals, want 2", n)
 	}
 }
 
@@ -292,8 +316,10 @@ func TestHR252_CredentialChangesDiscloseEverySharerFirst(t *testing.T) {
 	change := func(digest []byte, rotate bool) (reflexdomain.ContainResult, error) {
 		var out reflexdomain.ContainResult
 		err := w.tx(func(ctx context.Context, tx db.TenantTx) error {
-			r := rapp.CredentialChange{Connection: w.conn, Version: 1, Reason: "leaked", PreviewDigest: digest,
-				Actor: reflexdomain.Subject{Type: reflexdomain.SubjectUser, ID: w.alice.String()}}
+			r := rapp.CredentialChange{
+				Connection: w.conn, Version: 1, Reason: "leaked", PreviewDigest: digest,
+				Actor: reflexdomain.Subject{Type: reflexdomain.SubjectUser, ID: w.alice.String()},
+			}
 			var err error
 			if rotate {
 				out, err = w.c.RotateCredentialIn(ctx, tx, r)
@@ -370,8 +396,10 @@ func (w *world) terminate() (ids.UUID, error) {
 	var out reflexdomain.ContainResult
 	err := w.tx(func(ctx context.Context, tx db.TenantTx) error {
 		var err error
-		out, err = w.c.TerminateIn(ctx, tx, rapp.Termination{Run: w.run, Reason: "exfiltration",
-			Actor: reflexdomain.Subject{Type: reflexdomain.SubjectUser, ID: w.alice.String()}})
+		out, err = w.c.TerminateIn(ctx, tx, rapp.Termination{
+			Run: w.run, Reason: "exfiltration",
+			Actor: reflexdomain.Subject{Type: reflexdomain.SubjectUser, ID: w.alice.String()},
+		})
 		return err
 	})
 	return out.ActionID, err

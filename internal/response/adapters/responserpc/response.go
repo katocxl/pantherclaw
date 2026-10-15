@@ -253,7 +253,7 @@ func (h *ResponseHandler) RequestControl(ctx context.Context, req *pantherclawv1
 	if err != nil {
 		return nil, err
 	}
-	return &pantherclawv1.RequestControlResponse{ActionId: res.ActionID.String(), Result: res.Result, Paths: pathsOf(paths), Replayed: res.Replayed}, nil
+	return &pantherclawv1.RequestControlResponse{ActionId: res.ActionID.String(), Result: res.Result, Paths: pathsOf(paths), Replayed: res.Replayed, Reason: res.Reason}, nil
 }
 
 func pathsOf(ps []rapp.PathView) []*pantherclawv1.ResponsePath {
@@ -397,6 +397,14 @@ func actionOf(a dbq.PcResponseAction) *pantherclawv1.ResponseAction {
 	if a.SettledAt != nil {
 		out.SettleTime = timestamppb.New(*a.SettledAt)
 	}
+	var summary map[string]any
+	if json.Unmarshal(a.PreviewSummary, &summary) == nil && len(summary) > 0 {
+		out.PreviewSummary = map[string]string{}
+		for k, v := range summary {
+			b, _ := json.Marshal(v)
+			out.PreviewSummary[k] = string(b)
+		}
+	}
 	var hist []struct {
 		Transaction string `json:"transaction"`
 		Permit      string `json:"permit"`
@@ -467,7 +475,12 @@ func (h *ResponseHandler) ListResponseActions(ctx context.Context, req *pantherc
 		before = &u
 	}
 	size := pageSize(req.GetPageSize())
-	rows, err := h.r.ListActions(ctx, caseID, incidentID, before, size+1)
+	var scope *reflexdomain.Subject
+	if s := req.GetScope(); s != nil {
+		sub := subject(s)
+		scope = &sub
+	}
+	rows, err := h.r.ListActions(ctx, caseID, incidentID, scope, before, size+1)
 	if err != nil {
 		return nil, err
 	}

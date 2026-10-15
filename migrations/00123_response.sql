@@ -47,9 +47,16 @@ CREATE TABLE pc.response_actions (
     incident_id      uuid,
     -- Who asked: "user:<id>", "service_account:<id>" or "system:<name>".
     actor            text        NOT NULL CHECK (char_length(actor) BETWEEN 1 AND 128),
-    source           text        NOT NULL DEFAULT 'USER' CHECK (source IN ('USER', 'SOAR', 'PLAYBOOK')),
-    -- The preview the requester saw (D23), or the recorded emergency skip.
+    -- Set by the server, never from request fields (D50): PERSON from the
+    -- authenticated caller of Contain, SOAR from RequestControl, PLAYBOOK
+    -- only from the identity playbook.
+    source           text        NOT NULL CHECK (source IN ('PERSON', 'SOAR', 'PLAYBOOK')),
+    -- The preview the server computed at request time (D23, D50): its digest
+    -- and a summary of the known consequence; a supplied digest matched it.
     preview_digest   bytea       CHECK (preview_digest IS NULL OR octet_length(preview_digest) = 32),
+    preview_summary  jsonb       NOT NULL DEFAULT '{}'
+                                 CHECK (jsonb_typeof(preview_summary) = 'object' AND octet_length(preview_summary::text) <= 8192),
+    -- The emergency skip of a wider control's preview, when recorded.
     skip_preview     boolean     NOT NULL DEFAULT false,
     skip_reason      text        CHECK (skip_reason IS NULL OR char_length(skip_reason) BETWEEN 1 AND 500),
     skip_step_up_at  timestamptz,
@@ -78,6 +85,9 @@ CREATE UNIQUE INDEX response_actions_idempotency_key ON pc.response_actions (org
 CREATE INDEX response_actions_unsettled ON pc.response_actions (org_id, requested_at) WHERE settled_at IS NULL;
 CREATE INDEX response_actions_case ON pc.response_actions (org_id, case_id) WHERE case_id IS NOT NULL;
 CREATE INDEX response_actions_incident ON pc.response_actions (org_id, incident_id) WHERE incident_id IS NOT NULL;
+CREATE INDEX response_actions_scope ON pc.response_actions (org_id, scope_type, scope_id);
+-- The SOAR rate limit counts the wide requests of the last hour (D50).
+CREATE INDEX response_actions_soar ON pc.response_actions (org_id, requested_at) WHERE source = 'SOAR';
 
 CREATE TABLE pc.containment_controls (
     org_id         uuid        NOT NULL REFERENCES pc.orgs (id),
