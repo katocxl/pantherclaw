@@ -202,18 +202,15 @@ type Connection struct {
 	// UNCERTAIN.
 	Operations []Operation
 	Known      bool
-	// Agents with coverage routes on it; nil means every agent.
-	Agents []ids.UUID
+	// RouteAgents are the agents with coverage routes on it. They add
+	// holders of agent-held access; they never limit what a grant reaches
+	// through the connection (any agent with a grant can call it).
+	RouteAgents []ids.UUID
 	// Credential is the active credential, if any.
 	Credential *CredentialInfo
 	// Capabilities the connection's approved declaration says it holds, as
 	// "name:level" (empty when none is approved).
 	Capabilities []string
-}
-
-// AgentCan reports whether agent may use the connection.
-func (c Connection) AgentCan(agent ids.UUID) bool {
-	return c.Agents == nil || slices.Contains(c.Agents, agent)
 }
 
 // CredentialInfo describes the active credential, never its secret.
@@ -392,9 +389,6 @@ func effective(b *builder, in Inputs, conns map[ids.UUID]*Connection) {
 		}
 		expires = ptr(g.ExpiresAt)
 		for _, c := range sortedConns(conns) {
-			if !c.AgentCan(g.Agent) {
-				continue
-			}
 			base, baseReasons := label, slices.Clone(reasons)
 			if c.State == "QUARANTINED" && base == Usable {
 				base = Conditional
@@ -546,7 +540,7 @@ func credential(b *builder, in Inputs, conns map[ids.UUID]*Connection) {
 			continue
 		}
 		for _, c := range sortedConns(conns) {
-			if !c.AgentCan(g.Agent) || !c.Known || c.AccessMode == "agent_held" {
+			if !c.Known || c.AccessMode == "agent_held" {
 				continue
 			}
 			for _, op := range c.Operations {
@@ -602,14 +596,17 @@ func credential(b *builder, in Inputs, conns map[ids.UUID]*Connection) {
 	}
 }
 
-// agentsOf lists the agents that may use c: its route agents, or every
-// agent with a grant.
+// agentsOf lists the agents that may use c: its route agents and every
+// agent with a grant (a grant reaches any connection its bounds allow).
 func agentsOf(c *Connection, grants []Grant) []ids.UUID {
-	if c.Agents != nil {
-		return slices.Clone(c.Agents)
-	}
 	seen := map[ids.UUID]bool{}
 	var out []ids.UUID
+	for _, a := range c.RouteAgents {
+		if !seen[a] {
+			seen[a] = true
+			out = append(out, a)
+		}
+	}
 	for _, g := range grants {
 		if !seen[g.Agent] {
 			seen[g.Agent] = true

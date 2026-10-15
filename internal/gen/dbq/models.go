@@ -933,6 +933,45 @@ type PcExecutionReceipt struct {
 	RemovedByPolicy *ids.UUID
 }
 
+type PcExposureChange struct {
+	OrgID     ids.OrgID
+	ChangeSeq int64
+	ChangedAt time.Time
+	ReadSeq   int64
+}
+
+type PcExposureRight struct {
+	OrgID         ids.OrgID
+	SnapshotID    ids.UUID
+	Seq           int32
+	ReachView     string
+	Label         string
+	AgentID       *ids.UUID
+	ConnectionID  *ids.UUID
+	GrantID       *ids.UUID
+	Operation     *string
+	ResourceGroup string
+	Verb          string
+	Coverage      string
+	Reasons       []string
+	Depth         int16
+	ExpiresAt     *time.Time
+	ObservedAt    *time.Time
+	Observations  int32
+}
+
+type PcExposureSnapshot struct {
+	OrgID        ids.OrgID
+	ID           ids.UUID
+	FeedSeq      int64
+	Cause        string
+	Rights       int32
+	Truncated    bool
+	Gaps         []string
+	RightsSha256 []byte
+	ComputedAt   time.Time
+}
+
 type PcFact struct {
 	OrgID        ids.OrgID
 	ID           ids.UUID
@@ -1614,6 +1653,45 @@ type PcPolicyVersion struct {
 	PublishedBy   *string
 	PublishedAt   *time.Time
 	ContentDigest []byte
+}
+
+type PcPostureFinding struct {
+	OrgID                ids.OrgID
+	ID                   ids.UUID
+	Kind                 string
+	RootCause            string
+	AgentID              *ids.UUID
+	ConnectionID         *ids.UUID
+	GrantID              *ids.UUID
+	CoverageFindingID    *ids.UUID
+	Title                string
+	Detail               []byte
+	AffectedPaths        []string
+	Severity             string
+	State                string
+	OwnerUserID          *ids.UUID
+	AcceptedUntil        *time.Time
+	AcceptedReason       *string
+	Fingerprint          []byte
+	LastSnapshotID       ids.UUID
+	RemediatedSnapshotID *ids.UUID
+	FirstSeenAt          time.Time
+	LastSeenAt           time.Time
+	StateChangedAt       time.Time
+	RemediatedAt         *time.Time
+}
+
+type PcPostureFindingEvent struct {
+	OrgID      ids.OrgID
+	ID         ids.UUID
+	FindingID  ids.UUID
+	Kind       string
+	FromState  *string
+	ToState    string
+	Actor      string
+	Note       *string
+	SnapshotID *ids.UUID
+	OccurredAt time.Time
 }
 
 type PcProbeNonce struct {
