@@ -1,0 +1,76 @@
+{
+  "tests": [
+    {
+      "id": "c2p-merge-held", "per": "repo",
+      "summary": "a merge into the repository waits for an independent code reviewer",
+      "action": {"operation": "github.pull.merge", "target": {"type": "github.pull_request", "id": "{{repo}}#7"},
+        "params": {"sha": "1111111111111111111111111111111111111111"}},
+      "given": {"facts": {
+        "github.pull.head": {"value": {"object": {"sha": "1111111111111111111111111111111111111111"}}, "age_seconds": 5},
+        "github.pull.people": {"value": {"object": {"complete": true, "author": 101, "pushers": [101]}}, "age_seconds": 5},
+        "github.pull.reviews": {"value": {"object": {}}, "age_seconds": 5},
+        "github.pull.checks": {"value": {"object": {}}, "age_seconds": 5},
+        "github.branch.rules": {"value": {"object": {}}, "age_seconds": 5}
+      }},
+      "expect": {"decision": "REQUIRE_APPROVAL", "reason": "MERGE_NEEDS_REVIEW"}
+    },
+    {
+      "id": "c2p-merge-reviewed", "per": "repo",
+      "summary": "a reviewed merge into the repository goes through",
+      "action": {"operation": "github.pull.merge", "target": {"type": "github.pull_request", "id": "{{repo}}#7"},
+        "params": {"sha": "1111111111111111111111111111111111111111"}},
+      "given": {"approval": "approved", "facts": {
+        "github.pull.head": {"value": {"object": {"sha": "1111111111111111111111111111111111111111"}}, "age_seconds": 5},
+        "github.pull.people": {"value": {"object": {"complete": true, "author": 101, "pushers": [101]}}, "age_seconds": 5},
+        "github.pull.reviews": {"value": {"object": {}}, "age_seconds": 5},
+        "github.pull.checks": {"value": {"object": {}}, "age_seconds": 5},
+        "github.branch.rules": {"value": {"object": {}}, "age_seconds": 5}
+      }},
+      "expect": {"decision": "ALLOW", "reason": "GRANT_COVERS"}
+    },
+    {
+      "id": "c2p-default-write", "per": "repo",
+      "summary": "a contents write on the repository's default branch is refused",
+      "action": {"operation": "github.contents.write", "target": {"type": "github.branch", "id": "{{repo}}@refs/heads/{{default_branch}}"},
+        "params": {"path": "README.md", "content": "aGk=", "message": "update"}},
+      "expect": {"decision": "DENY", "reason": "DEFAULT_BRANCH_WRITE"}
+    },
+    {
+      "id": "c2p-default-branch", "per": "repo",
+      "summary": "creating the repository's default branch is refused",
+      "action": {"operation": "github.branch.create", "target": {"type": "github.branch", "id": "{{repo}}@refs/heads/{{default_branch}}"},
+        "params": {"sha": "1111111111111111111111111111111111111111"}},
+      "expect": {"decision": "DENY", "reason": "DEFAULT_BRANCH_WRITE"}
+    },
+    {
+      "id": "c2p-feature-write", "per": "repo",
+      "summary": "a contents write on another branch of the repository goes through",
+      "action": {"operation": "github.contents.write", "target": {"type": "github.branch", "id": "{{repo}}@refs/heads/{{default_branch}}-feature"},
+        "params": {"path": "README.md", "content": "aGk=", "message": "update"}},
+      "expect": {"decision": "ALLOW", "reason": "GRANT_COVERS"}
+    },
+    {
+      "id": "c2p-shell-push", "per": "agent",
+      "summary": "the agent's git push from the shell is refused",
+      "action": {"operation": "shell.command.run", "target": {"type": "shell.workspace", "id": "local"},
+        "params": {"shell": "bash", "command": "git push origin HEAD", "cwd": "/work", "call": "toolu_1"}},
+      "given": {"agent": "{{agent}}"},
+      "expect": {"decision": "DENY", "reason": "SHELL_MERGE_OR_PUSH"}
+    },
+    {
+      "id": "c2p-shell-status", "per": "agent",
+      "summary": "the agent's other shell commands go through",
+      "action": {"operation": "shell.command.run", "target": {"type": "shell.workspace", "id": "local"},
+        "params": {"shell": "bash", "command": "git status", "cwd": "/work", "call": "toolu_2"}},
+      "given": {"agent": "{{agent}}"},
+      "expect": {"decision": "ALLOW", "reason": "GRANT_COVERS"}
+    },
+    {
+      "id": "c2p-shell-other-agent", "per": "agent",
+      "summary": "another agent's git push is not this rule's",
+      "action": {"operation": "shell.command.run", "target": {"type": "shell.workspace", "id": "local"},
+        "params": {"shell": "bash", "command": "git push origin HEAD", "cwd": "/work", "call": "toolu_3"}},
+      "expect": {"decision": "ALLOW", "reason": "GRANT_COVERS"}
+    }
+  ]
+}

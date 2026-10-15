@@ -204,7 +204,11 @@ func m11Definitions(pkgs map[string]*defs.Package) []*defs.Definition {
 
 // m11Facts is the fact catalog the templates' rules may read: the
 // payments package's prerequisite.
-var m11Facts = map[string]fdomain.Type{"payments.charge.refundable": fdomain.TypeBoolean}
+var m11Facts = map[string]fdomain.Type{
+	"payments.charge.refundable": fdomain.TypeBoolean,
+	"github.pull.head":           fdomain.TypeObject, "github.pull.people": fdomain.TypeObject, "github.pull.reviews": fdomain.TypeObject,
+	"github.pull.checks": fdomain.TypeObject, "github.branch.rules": fdomain.TypeObject,
+}
 
 // TestM11TemplatesDisclose: every template, coding-to-production
 // included, says what it protects, what it does not, and which packages
@@ -653,9 +657,14 @@ func TestM11TemplatesPassTheGate(t *testing.T) {
 		}
 	}
 	org := ids.MustParse[ids.Org]("01890000-0000-7000-8000-000000000001")
-	for _, n := range []string{"production-diagnostics", "refunds"} {
+	for _, n := range []string{"coding-to-production", "production-diagnostics", "refunds"} {
 		for _, env := range []string{"production", "staging"} {
 			t.Run(n+"/"+env, func(t *testing.T) {
+				if n == "coding-to-production" {
+					// c2p-release decides github.deployment.trigger, which only
+					// ever arises as a consequence; the runner cannot reach it yet.
+					t.Skip("waiting for the scenario runner to decide consequences (asked of the coordinator)")
+				}
 				r := renderM11Env(t, n, []string{"acme/api", "acme/web"}, env)
 				b := r.bundle(t)
 				for _, c := range r.raw {
