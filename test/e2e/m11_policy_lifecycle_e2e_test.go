@@ -54,12 +54,14 @@ import (
 // rule; an exception waives an exceptable hold for one agent, the receipt
 // shows EXCEPTION_APPLIED, and the exception expires by the database clock.
 //
-// Decisions are made by the real gateway and server. The e2e server runs
-// Community (it has no licence roots), so simulation, shadow and pilot,
-// which need Team, run through the same services the server wires, over
-// the same database, with a Team edition (teamEdition, as M7's
-// evidence-pack test does); the server's own decisions then select the
-// pilot version from the database.
+// Team features are exercised in-process: the e2e server is Community
+// because the licence roots are empty until Day-0. Simulation, shadow and
+// pilot run through the services the server wires, over the same database,
+// with a Team edition (teamEdition, as M7's evidence-pack test does); the
+// simulation is driven with Runner.Step over a store without the job
+// client, so the server's Community worker never picks it up. Every
+// decision goes through the real gateway and server, which select the
+// pilot version from the database (D35, D36).
 
 // Rules of the lifecycle's versions, on refunds of the payments simulator.
 // ruleSeed is the dev seed's published rule (dev-holds), kept unchanged in
