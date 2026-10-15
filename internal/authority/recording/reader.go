@@ -144,8 +144,9 @@ func (r *Reader) Definition(_ context.Context, org ids.OrgID, pin actionir.Defin
 	return pipeline.Pinned{Definition: def, State: defs.State(d.State), Consequences: rules}, nil
 }
 
-// Policy implements pipeline.Reader.
-func (r *Reader) Policy(_ context.Context, org ids.OrgID) (*pipeline.Policy, error) {
+// Policy implements pipeline.Reader: the version the evaluation recorded
+// (which records the selection for its agent), or the proposed one.
+func (r *Reader) Policy(_ context.Context, org ids.OrgID, _ ids.UUID) (*pipeline.Policy, error) {
 	if err := r.otherOrg(org, "policy", pipeline.StepFacts); err != nil {
 		return nil, err
 	}

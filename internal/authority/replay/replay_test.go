@@ -97,7 +97,7 @@ func publish(t *testing.T, s *pipelinetest.Scenario, x *source, rules ...pdomain
 	if err := s.W.SetPolicy(rules, catalog); err != nil {
 		t.Fatal(err)
 	}
-	p, _ := s.W.Policy(t.Context(), s.Org)
+	p, _ := s.W.Policy(t.Context(), s.Org, ids.UUID{})
 	x.bundles[p.Version] = p.Compiled.Bundle
 }
 

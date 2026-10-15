@@ -640,7 +640,9 @@ func (p *Pipeline) currentFacts(ctx context.Context, s *state) {
 		s.cl.skip(StepFacts, "the meaning is not known")
 		return
 	}
-	pol, err := p.Reader.Policy(ctx, s.req.Org)
+	// The version is selected for the verified identity's agent, never for
+	// anything the request says (HR-234).
+	pol, err := p.Reader.Policy(ctx, s.req.Org, s.req.Identity.AgentID)
 	if err != nil {
 		s.missing(StepFacts, err, "the policy")
 		return

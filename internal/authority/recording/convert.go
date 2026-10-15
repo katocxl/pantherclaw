@@ -118,6 +118,7 @@ func fromPolicy(p *pipeline.Policy, err error) *Policy {
 	l := p.Compiled.Limits()
 	out := &Policy{
 		Ref: p.Version, Bundle: p.Compiled.Bundle.ID, Version: p.Compiled.Bundle.Version, Budget: p.Budget,
+		Rollout: p.Rollout, Selected: p.Selected,
 		Limits: Limits{
 			MaxExpressionBytes: l.MaxExpressionBytes, MaxCost: l.MaxCost, MaxComprehensionNesting: l.MaxComprehensionNesting,
 			EstimatedCollectionSize: l.EstimatedCollectionSize,

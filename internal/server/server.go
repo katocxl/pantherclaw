@@ -392,6 +392,9 @@ func cmdServe(ctx context.Context, args []string, stderr io.Writer, env Env, onS
 			return err
 		}
 		evidenceJobs = append(evidenceJobs, rangeJobs...)
+		if evidenceJobs, err = registerPolicyRolloutJobs(evidenceJobs, jreg, pool, bill, m5, kp, log); err != nil {
+			return err
+		}
 		exceptionJobs, err := registerPolicyExceptionJobs(jreg, pool, m5.notifications, log)
 		if err != nil {
 			return err
@@ -582,6 +585,7 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	registerCoverage(rs, d)
 	registerSandbox(rs, d)
 	registerRanges(rs, d, evidenceSvc)
+	registerPolicyRollouts(rs, d)
 	registerReleases(rs, pool)
 	registerPolicyExceptions(rs, d)
 	mux := http.NewServeMux()
