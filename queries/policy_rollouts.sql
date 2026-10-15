@@ -7,11 +7,16 @@
 
 -- The pilot rollout whose ENFORCE cohorts hold the agent and that did not
 -- exclude it, with the version it enforces (the Authority's selection,
--- HR-234). At most one rollout per org is in PILOT.
+-- HR-234). At most one rollout per org is in PILOT. Only a pilot whose base
+-- is still the published version, of a version that passed the gate
+-- (TESTED, or PUBLISHED), selects anything (D31).
 -- name: PilotRolloutForAgent :one
 SELECT r.id, r.version_id
 FROM pc.policy_rollouts r
+JOIN pc.policy_versions v ON v.org_id = r.org_id AND v.id = r.version_id AND v.state IN ('TESTED', 'PUBLISHED')
 WHERE r.org_id = sqlc.arg(org_id) AND r.stage = 'PILOT'
+  AND r.base_version_id IS NOT DISTINCT FROM (SELECT p.id FROM pc.policy_versions p
+                                               WHERE p.org_id = r.org_id AND p.state = 'PUBLISHED')
   AND EXISTS (SELECT 1 FROM pc.policy_rollout_cohorts rc
               JOIN pc.policy_cohort_members m ON m.org_id = rc.org_id AND m.cohort_id = rc.cohort_id
               WHERE rc.org_id = r.org_id AND rc.rollout_id = r.id AND rc.mode = 'ENFORCE' AND m.agent_id = sqlc.arg(agent_id))
@@ -63,15 +68,46 @@ SELECT * FROM pc.policy_rollouts WHERE org_id = sqlc.arg(org_id) AND id = sqlc.a
 SELECT * FROM pc.policy_rollouts WHERE org_id = sqlc.arg(org_id) ORDER BY created_at DESC, id DESC LIMIT sqlc.arg(max_rows);
 
 -- Rollouts the sweeper works on: in SHADOW or PILOT, or completed less than
--- 7 days ago with targets not VERIFIED (the lister's policy_rollouts_due).
+-- 7 days ago (the lister's policy_rollouts_due).
 -- name: DuePolicyRollouts :many
 SELECT * FROM pc.policy_rollouts r
 WHERE r.org_id = sqlc.arg(org_id)
-  AND (r.stage IN ('SHADOW', 'PILOT')
-       OR (r.stage = 'COMPLETE' AND r.completed_at > now() - interval '7 days'
-           AND EXISTS (SELECT 1 FROM pc.policy_rollout_targets t
-                       WHERE t.org_id = r.org_id AND t.rollout_id = r.id AND t.state <> 'VERIFIED')))
+  AND (r.stage IN ('SHADOW', 'PILOT') OR (r.stage = 'COMPLETE' AND r.completed_at > now() - interval '7 days'))
 ORDER BY r.created_at, r.id;
+
+-- The org's rollouts in SHADOW or PILOT, locked until the transaction
+-- ends.
+-- name: LockOpenPolicyRollouts :many
+SELECT * FROM pc.policy_rollouts
+WHERE org_id = sqlc.arg(org_id) AND stage IN ('SHADOW', 'PILOT')
+ORDER BY id
+FOR UPDATE;
+
+-- Open pilots that enforce their version for a cohort.
+-- name: PilotsEnforcingCohort :many
+SELECT r.* FROM pc.policy_rollouts r
+WHERE r.org_id = sqlc.arg(org_id) AND r.stage = 'PILOT'
+  AND EXISTS (SELECT 1 FROM pc.policy_rollout_cohorts rc
+              WHERE rc.org_id = r.org_id AND rc.rollout_id = r.id AND rc.cohort_id = sqlc.arg(cohort_id) AND rc.mode = 'ENFORCE');
+
+-- An agent removed from a cohort leaves the open pilots that no other of
+-- their ENFORCE cohorts holds it in: its target is EXCEPTION (D31).
+-- name: RemovedFromCohortTargets :execrows
+UPDATE pc.policy_rollout_targets t
+SET state = 'EXCEPTION', reason = 'REMOVED_FROM_COHORT', coverage = NULL, updated_at = now()
+FROM pc.policy_rollouts r
+WHERE t.org_id = sqlc.arg(org_id) AND t.agent_id = sqlc.arg(agent_id) AND t.state <> 'EXCEPTION'
+  AND r.org_id = t.org_id AND r.id = t.rollout_id AND r.stage IN ('SHADOW', 'PILOT')
+  AND NOT EXISTS (SELECT 1 FROM pc.policy_rollout_cohorts rc
+                  JOIN pc.policy_cohort_members m ON m.org_id = rc.org_id AND m.cohort_id = rc.cohort_id
+                  WHERE rc.org_id = r.org_id AND rc.rollout_id = r.id AND rc.mode = 'ENFORCE' AND m.agent_id = t.agent_id);
+
+-- Pending change requests of a kind for a subject (D31: a rollout that ends
+-- voids its requests).
+-- name: PendingChangeRequestsFor :many
+SELECT id FROM pc.policy_change_requests
+WHERE org_id = sqlc.arg(org_id) AND kind = sqlc.arg(kind) AND subject_id = sqlc.arg(subject_id) AND state = 'PENDING'
+FOR UPDATE;
 
 -- A conditional stage change (HR-004): only from the stages given.
 -- name: SetPolicyRolloutStage :one
@@ -95,6 +131,9 @@ ORDER BY c.name;
 
 -- Targets for every agent of the rollout's ENFORCE cohorts that has none
 -- yet, CONFIGURED, with the agent's owner (F3). Retired agents are left out.
+-- An agent added back to such a cohort after its removal made it an
+-- EXCEPTION (REMOVED_FROM_COHORT) is CONFIGURED again; an exclusion a
+-- person made stays (D37).
 -- name: AddCohortRolloutTargets :execrows
 INSERT INTO pc.policy_rollout_targets (org_id, rollout_id, agent_id, state, owner_id)
 SELECT DISTINCT rc.org_id, rc.rollout_id, m.agent_id, 'CONFIGURED', a.owner_user_id
@@ -102,7 +141,9 @@ FROM pc.policy_rollout_cohorts rc
 JOIN pc.policy_cohort_members m ON m.org_id = rc.org_id AND m.cohort_id = rc.cohort_id
 JOIN pc.agents a ON a.org_id = m.org_id AND a.id = m.agent_id
 WHERE rc.org_id = sqlc.arg(org_id) AND rc.rollout_id = sqlc.arg(rollout_id) AND rc.mode = 'ENFORCE' AND a.state <> 'RETIRED'
-ON CONFLICT DO NOTHING;
+ON CONFLICT (org_id, rollout_id, agent_id) DO UPDATE
+    SET state = 'CONFIGURED', reason = NULL, coverage = NULL, updated_at = now()
+    WHERE pc.policy_rollout_targets.state = 'EXCEPTION' AND pc.policy_rollout_targets.reason = 'REMOVED_FROM_COHORT';
 
 -- Targets for every agent of the org that has none yet (a completed
 -- rollout: the version is published for everyone).
@@ -137,15 +178,17 @@ WHERE org_id = sqlc.arg(org_id) AND rollout_id = sqlc.arg(rollout_id) AND agent_
 SELECT * FROM pc.policy_rollout_targets
 WHERE org_id = sqlc.arg(org_id) AND rollout_id = sqlc.arg(rollout_id)
   AND (sqlc.narg(state)::text IS NULL OR state = sqlc.narg(state)::text)
-  AND agent_id > sqlc.arg(after_agent)
+  AND agent_id > coalesce(sqlc.narg(after_agent)::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
 ORDER BY agent_id
 LIMIT sqlc.arg(max_rows);
 
--- Targets the sweeper may advance to VERIFIED.
--- name: AcknowledgedRolloutTargets :many
+-- Targets the sweeper checks for VERIFIED (and its lapse), by agent id after
+-- the cursor's verify_after_agent (a keyset over every target, D31).
+-- name: VerifiableRolloutTargets :many
 SELECT * FROM pc.policy_rollout_targets
-WHERE org_id = sqlc.arg(org_id) AND rollout_id = sqlc.arg(rollout_id) AND state = 'ACKNOWLEDGED'
-ORDER BY updated_at, agent_id
+WHERE org_id = sqlc.arg(org_id) AND rollout_id = sqlc.arg(rollout_id) AND state IN ('ACKNOWLEDGED', 'VERIFIED')
+  AND agent_id > coalesce(sqlc.narg(after_agent)::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
+ORDER BY agent_id
 LIMIT sqlc.arg(max_rows);
 
 -- name: CountRolloutTargets :many
@@ -154,27 +197,39 @@ WHERE org_id = sqlc.arg(org_id) AND rollout_id = sqlc.arg(rollout_id)
 GROUP BY state ORDER BY state;
 
 -- name: GetRolloutCursor :one
-SELECT last_created_at, last_txn FROM pc.policy_rollout_cursors
+SELECT last_created_at, last_txn, last_evaluation, verify_after_agent FROM pc.policy_rollout_cursors
 WHERE org_id = sqlc.arg(org_id) AND rollout_id = sqlc.arg(rollout_id);
 
--- name: SetRolloutCursor :exec
-INSERT INTO pc.policy_rollout_cursors (org_id, rollout_id, last_created_at, last_txn)
-VALUES (sqlc.arg(org_id), sqlc.arg(rollout_id), sqlc.arg(last_created_at), sqlc.arg(last_txn))
-ON CONFLICT (org_id, rollout_id) DO UPDATE SET last_created_at = EXCLUDED.last_created_at, last_txn = EXCLUDED.last_txn;
+-- A rollout's first cursor; a concurrent sweep's insert makes it a unique
+-- violation, and the sweep is retried.
+-- name: InsertRolloutCursor :exec
+INSERT INTO pc.policy_rollout_cursors (org_id, rollout_id, last_created_at, last_txn, last_evaluation, verify_after_agent)
+VALUES (sqlc.arg(org_id), sqlc.arg(rollout_id), sqlc.arg(last_created_at), coalesce(sqlc.narg(last_txn)::uuid, '00000000-0000-0000-0000-000000000000'::uuid), sqlc.arg(last_evaluation),
+    sqlc.narg(verify_after_agent));
+
+-- Moves a cursor only from the position the sweep read (D31, HR-004).
+-- name: AdvanceRolloutCursor :execrows
+UPDATE pc.policy_rollout_cursors
+SET last_created_at = sqlc.arg(last_created_at), last_txn = coalesce(sqlc.narg(last_txn)::uuid, '00000000-0000-0000-0000-000000000000'::uuid), last_evaluation = sqlc.arg(last_evaluation),
+    verify_after_agent = sqlc.narg(verify_after_agent)
+WHERE org_id = sqlc.arg(org_id) AND rollout_id = sqlc.arg(rollout_id)
+  AND last_created_at = sqlc.arg(old_created_at) AND last_txn = coalesce(sqlc.narg(old_txn)::uuid, '00000000-0000-0000-0000-000000000000'::uuid) AND last_evaluation = sqlc.arg(old_evaluation)
+  AND verify_after_agent IS NOT DISTINCT FROM sqlc.narg(old_verify_after_agent);
 
 -- Decisions after a cursor, oldest first, with the agent of their run and
--- their operation. Only decisions older than the lag (a minute in
+-- their operation. Only receipts older than the lag (2 minutes in
 -- production) are read, so one whose transaction committed late is not
--- passed over; receipts whose body retention removed have nothing to
--- replay or read.
+-- passed over (a limit: created_at is the transaction's start); receipts
+-- whose body retention removed have nothing to replay or read.
 -- name: RolloutDecisionsAfter :many
 SELECT d.transaction_id, d.evaluation, d.created_at, r.agent_id, t.operation
 FROM pc.decision_receipts d
 JOIN pc.transactions t ON t.org_id = d.org_id AND t.id = d.transaction_id
 JOIN pc.runs r ON r.org_id = t.org_id AND r.id = t.run_id
 WHERE d.org_id = sqlc.arg(org_id) AND d.body_removed_at IS NULL
-  AND d.created_at <= now() - make_interval(secs => sqlc.arg(lag_seconds)::double precision)
-  AND (d.created_at, d.transaction_id) > (sqlc.arg(after_created_at)::timestamptz, sqlc.arg(after_txn)::uuid)
+  AND d.created_at < now() - make_interval(secs => sqlc.arg(lag_seconds)::double precision)
+  AND (d.created_at, d.transaction_id, d.evaluation)
+      > (sqlc.arg(after_created_at)::timestamptz, coalesce(sqlc.narg(after_txn)::uuid, '00000000-0000-0000-0000-000000000000'::uuid), sqlc.arg(after_evaluation)::integer)
 ORDER BY d.created_at, d.transaction_id, d.evaluation
 LIMIT sqlc.arg(max_rows);
 
@@ -189,14 +244,15 @@ ON CONFLICT DO NOTHING;
 -- name: CountShadowResults :one
 SELECT count(*)::bigint FROM pc.policy_shadow_results WHERE org_id = sqlc.arg(org_id) AND rollout_id = sqlc.arg(rollout_id);
 
--- name: AddShadowCount :exec
-INSERT INTO pc.policy_shadow_counts (org_id, rollout_id, day, category, n)
-VALUES (sqlc.arg(org_id), sqlc.arg(rollout_id), (now() AT TIME ZONE 'UTC')::date, sqlc.arg(category), 1)
-ON CONFLICT (org_id, rollout_id, day, category) DO UPDATE SET n = pc.policy_shadow_counts.n + 1;
+-- One sweep's count of a category today (UTC), insert-only (D31).
+-- name: InsertShadowCount :exec
+INSERT INTO pc.policy_shadow_counts (org_id, rollout_id, id, day, category, n)
+VALUES (sqlc.arg(org_id), sqlc.arg(rollout_id), sqlc.arg(id), (now() AT TIME ZONE 'UTC')::date, sqlc.arg(category), sqlc.arg(n));
 
 -- name: ShadowCountsByDay :many
-SELECT day, category, n FROM pc.policy_shadow_counts
+SELECT day, category, sum(n)::bigint AS n FROM pc.policy_shadow_counts
 WHERE org_id = sqlc.arg(org_id) AND rollout_id = sqlc.arg(rollout_id)
+GROUP BY day, category
 ORDER BY day, category;
 
 -- name: ShadowResultsByOperation :many
@@ -229,5 +285,19 @@ FROM pc.coverage_snapshots s
 WHERE s.org_id = sqlc.arg(org_id) AND s.agent_id = sqlc.arg(agent_id)
 ORDER BY s.connection_id, s.operation, s.id DESC;
 
+-- The coverage routes an agent has (its own and those of every agent of a
+-- connection), by connection and operation (NULL: every operation).
+-- name: AgentRouteScopes :many
+SELECT DISTINCT connection_id, operation FROM pc.coverage_routes
+WHERE org_id = sqlc.arg(org_id) AND (agent_id = sqlc.arg(agent_id) OR agent_id IS NULL);
+
 -- name: RolloutAgentOwner :one
-SELECT owner_user_id, name FROM pc.agents WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id);
+SELECT owner_user_id FROM pc.agents WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id);
+
+-- A completed rollout's version is everyone's published policy: its
+-- EXCEPTION targets are CONFIGURED (INCLUDED_AT_COMPLETION) and followed
+-- like the others (D37).
+-- name: IncludeExceptionsAtCompletion :execrows
+UPDATE pc.policy_rollout_targets
+SET state = 'CONFIGURED', reason = 'INCLUDED_AT_COMPLETION', coverage = NULL, updated_at = now()
+WHERE org_id = sqlc.arg(org_id) AND rollout_id = sqlc.arg(rollout_id) AND state = 'EXCEPTION';
