@@ -31,6 +31,7 @@ const (
 	// Failure reasons of a FAILED simulation.
 	FailVersionGone = "POLICY_VERSION_NOT_FOUND"
 	FailReplay      = "REPLAY_FAILED"
+	FailEdition     = "EDITION_REQUIRED"
 )
 
 // Defaults of a runner.
@@ -52,6 +53,9 @@ type Runner struct {
 	Chunk  int
 	Budget time.Duration
 	Clock  clock.Clock
+	// Editions is checked at each step: a run whose edition lapsed fails
+	// with EDITION_REQUIRED (nil: no edition, so every run fails, D34).
+	Editions Editions
 }
 
 func (r *Runner) now() time.Time {
@@ -77,6 +81,11 @@ func (r *Runner) Step(ctx context.Context, org ids.OrgID, id ids.UUID) (more boo
 	if err != nil || !running {
 		return false, err
 	}
+	if ok, err := r.licensed(ctx); err != nil {
+		return false, err
+	} else if !ok {
+		return false, r.Fail(ctx, org, id, FailEdition)
+	}
 	bundle, err := r.Versions.PolicyVersion(ctx, org, sim.Version)
 	if errors.Is(err, replay.ErrNotFound) {
 		return false, r.Fail(ctx, org, id, FailVersionGone)
@@ -100,7 +109,7 @@ func (r *Runner) Step(ctx context.Context, org ids.OrgID, id ids.UUID) (more boo
 			results = append(results, res)
 		}
 		var cont bool
-		if sim, cont, err = r.record(ctx, org, id, results, len(recs) < chunk); err != nil || !cont {
+		if sim, cont, err = r.record(ctx, org, sim, results, len(recs) < chunk); err != nil || !cont {
 			return false, err
 		}
 		if r.now().After(deadline) {
@@ -135,20 +144,48 @@ func (r *Runner) start(ctx context.Context, org ids.OrgID, id ids.UUID) (Simulat
 	return sim, running, err
 }
 
-// record counts a chunk, keeps its samples within the bounds and moves the
-// cursor, in one transaction; last finishes the simulation. cont is false
-// when the simulation finished or was canceled meanwhile.
-func (r *Runner) record(ctx context.Context, org ids.OrgID, id ids.UUID, results []Result, last bool) (Simulation, bool, error) {
+// licensed reports whether the edition still includes simulation.
+func (r *Runner) licensed(ctx context.Context) (bool, error) {
+	if r.Editions == nil {
+		return false, nil
+	}
+	e, err := r.Editions.Current(ctx)
+	if err != nil {
+		return false, err
+	}
+	return e.PolicySimulation(), nil
+}
+
+// samePosition reports whether two cursors name the same recorded
+// decision (both nil: the start).
+func samePosition(a, b *Cursor) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return a.Transaction == b.Transaction && a.Evaluation == b.Evaluation
+}
+
+// record counts a chunk read at read's position, keeps its samples within
+// the bounds and moves the cursor, in one transaction; last finishes the
+// simulation. It is a compare-and-set (D34): a chunk is dropped unless the
+// simulation is still at the count and cursor it was read at, so two steps
+// that read one position (a rescued job beside its successor) count it
+// once. cont is false when the simulation finished, was canceled or moved
+// on meanwhile.
+func (r *Runner) record(ctx context.Context, org ids.OrgID, read Simulation, results []Result, last bool) (Simulation, bool, error) {
 	var out Simulation
 	cont := false
+	id := read.ID
 	err := r.Store.InTx(ctx, org, false, func(ctx context.Context, tx Tx) error {
 		cur, err := tx.Get(ctx, id, true)
 		if err != nil {
 			return err
 		}
-		if cur.State != Running {
-			return nil // canceled meanwhile: nothing more is counted
+		if cur.State != Running || cur.Evaluated != read.Evaluated || !samePosition(cur.Cursor, read.Cursor) {
+			return nil // canceled, or another step counted this chunk: nothing is counted
 		}
+		prev := cur
+		prev.Cursor = read.Cursor
 		have, err := tx.SampleCounts(ctx, id)
 		if err != nil {
 			return err
@@ -176,7 +213,7 @@ func (r *Runner) record(ctx context.Context, org ids.OrgID, id ids.UUID, results
 			cur.State = Done
 		}
 		var ok bool
-		if out, ok, err = tx.Advance(ctx, cur); err != nil || !ok {
+		if out, ok, err = tx.Advance(ctx, cur, prev); err != nil || !ok {
 			return err
 		}
 		cont = out.State == Running
@@ -200,8 +237,9 @@ func (r *Runner) Fail(ctx context.Context, org ids.OrgID, id ids.UUID, reason st
 		if cur.State != Running {
 			return nil
 		}
-		cur.State, cur.Error = Failed, reason
-		_, _, err = tx.Advance(ctx, cur)
+		next := cur
+		next.State, next.Error = Failed, reason
+		_, _, err = tx.Advance(ctx, next, cur)
 		return err
 	})
 }
@@ -214,7 +252,7 @@ func (r *Runner) evaluate(ctx context.Context, org ids.OrgID, version ids.UUID, 
 	res := Result{Transaction: rec.Transaction, Evaluation: rec.Evaluation, Agent: rec.Agent, Operation: rec.Operation, Recorded: rec.Created}
 	base, err := r.Replay.Replay(ctx, org, rec.Transaction, rec.Evaluation, nil)
 	if err != nil {
-		return Result{}, fmt.Errorf("simulation: replay %s/%d: %w", rec.Transaction, rec.Evaluation, err)
+		return r.unreadable(res, fmt.Errorf("simulation: replay %s/%d: %w", rec.Transaction, rec.Evaluation, err))
 	}
 	res.Original, res.OrigReason = base.Original.Decision, base.Original.Reason
 	switch {
@@ -226,7 +264,7 @@ func (r *Runner) evaluate(ctx context.Context, org ids.OrgID, version ids.UUID, 
 	}
 	prop, err := r.Replay.Replay(ctx, org, rec.Transaction, rec.Evaluation, &version)
 	if err != nil {
-		return Result{}, fmt.Errorf("simulation: replay %s/%d under the version: %w", rec.Transaction, rec.Evaluation, err)
+		return r.unreadable(res, fmt.Errorf("simulation: replay %s/%d under the version: %w", rec.Transaction, rec.Evaluation, err))
 	}
 	if !prop.Complete {
 		return unevaluable(res, prop.Incomplete), nil
@@ -251,4 +289,17 @@ func unevaluable(res Result, lims []replay.Limitation) Result {
 		res.Limitations = []string{replay.IncompleteInputUnavailable}
 	}
 	return res
+}
+
+// unreadable is a replay that failed: a stored receipt that does not parse
+// is this recorded decision's own, so it is unevaluable (INPUTS_UNREADABLE)
+// and the run goes on (D34); any other error fails the step, which is
+// retried (D38).
+func (r *Runner) unreadable(res Result, err error) (Result, error) {
+	if !receiptUnreadable(err) {
+		return Result{}, err
+	}
+	res.Category, res.Proposed, res.PropReason = replay.Unevaluable, "", ""
+	res.Limitations = []string{replay.IncompleteInputsUnreadable}
+	return res, nil
 }

@@ -51,6 +51,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/rootkey"
 	polpg "github.com/katocxl/pantherclaw/internal/policy/adapters/pgstore"
 	pdomain "github.com/katocxl/pantherclaw/internal/policy/domain"
+	"github.com/katocxl/pantherclaw/internal/policy/policytest"
 	"github.com/katocxl/pantherclaw/internal/policy/simulation"
 	"github.com/katocxl/pantherclaw/internal/policy/simulation/pgsimulation"
 	tapp "github.com/katocxl/pantherclaw/internal/tenancy/app"
@@ -202,7 +203,7 @@ func newWorld(t testing.TB) *world {
 		IsNotFound: func(err error) bool { return err == replay.ErrNotFound }, //nolint:errorlint // the sentinel itself
 	}
 	w.runner = &simulation.Runner{
-		Store: pgsimulation.Store{Pool: p}, Versions: src, Chunk: 2,
+		Store: pgsimulation.Store{Pool: p}, Versions: src, Chunk: 2, Editions: team{},
 		Replay: &replay.Engine{Source: src, Inputs: recording.NewSealer(pccrypto.NewEnvelope(keystore.NewDEKStore(p, kp)))},
 	}
 	return w
@@ -277,7 +278,7 @@ func (w *world) refund(run ids.UUID, charge, amount string) finalize.Result {
 }
 
 // policy stores rules as a new version of the org's policy, published
-// unless draft (test setup through the store); it returns its id.
+// unless draft (test setup through policytest, D10); it returns its id.
 func (w *world) policy(draft bool, rules ...pdomain.Rule) ids.UUID {
 	w.t.Helper()
 	store := &polpg.Store{Pool: w.pool}
@@ -286,9 +287,7 @@ func (w *world) policy(draft bool, rules ...pdomain.Rule) ids.UUID {
 		w.t.Fatal(err)
 	}
 	if !draft {
-		if err := store.Publish(context.Background(), w.org, id, w.alice.String(), nil); err != nil {
-			w.t.Fatal(err)
-		}
+		policytest.PublishVersion(context.Background(), w.t, w.pool, w.org, id)
 	}
 	return id
 }

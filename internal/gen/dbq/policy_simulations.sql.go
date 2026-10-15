@@ -21,24 +21,33 @@ SET state = $1, evaluated = $2, counts = $3, by_workflow = $4,
     burden = $5, cursor_created_at = $6, cursor_txn = $7,
     cursor_evaluation = $8, error = $9
 WHERE org_id = $10 AND id = $11 AND state = 'RUNNING'
+  AND evaluated = $12
+  AND cursor_txn IS NOT DISTINCT FROM $13
+  AND cursor_evaluation IS NOT DISTINCT FROM $14
 RETURNING org_id, id, version_id, content_digest, window_start, window_end, max_evaluations, state, evaluated, counts, by_workflow, burden, cursor_created_at, cursor_txn, cursor_evaluation, requested_by, created_at, started_at, finished_at, error
 `
 
 type AdvancePolicySimulationParams struct {
-	State            string
-	Evaluated        int32
-	Counts           []byte
-	ByWorkflow       []byte
-	Burden           []byte
-	CursorCreatedAt  *time.Time
-	CursorTxn        *ids.UUID
-	CursorEvaluation *int32
-	Error            *string
-	OrgID            ids.OrgID
-	ID               ids.UUID
+	State                string
+	Evaluated            int32
+	Counts               []byte
+	ByWorkflow           []byte
+	Burden               []byte
+	CursorCreatedAt      *time.Time
+	CursorTxn            *ids.UUID
+	CursorEvaluation     *int32
+	Error                *string
+	OrgID                ids.OrgID
+	ID                   ids.UUID
+	PrevEvaluated        int32
+	PrevCursorTxn        *ids.UUID
+	PrevCursorEvaluation *int32
 }
 
-// Records progress, or finishes (DONE or FAILED), while it runs.
+// Records progress, or finishes (DONE or FAILED), while it runs. It is a
+// compare-and-set (D34): nothing changes unless the simulation is still
+// at the count and cursor the step read, so a chunk two steps read from
+// one position is counted once.
 func (q *Queries) AdvancePolicySimulation(ctx context.Context, arg AdvancePolicySimulationParams) (PcPolicySimulation, error) {
 	row := q.db.QueryRow(ctx, advancePolicySimulation,
 		arg.State,
@@ -52,6 +61,9 @@ func (q *Queries) AdvancePolicySimulation(ctx context.Context, arg AdvancePolicy
 		arg.Error,
 		arg.OrgID,
 		arg.ID,
+		arg.PrevEvaluated,
+		arg.PrevCursorTxn,
+		arg.PrevCursorEvaluation,
 	)
 	var i PcPolicySimulation
 	err := row.Scan(

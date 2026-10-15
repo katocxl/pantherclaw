@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/riverqueue/river"
+	"github.com/riverqueue/river/rivertype"
 
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	"github.com/katocxl/pantherclaw/internal/platform/jobs"
@@ -37,6 +38,18 @@ type SimulateArgs struct {
 
 // Kind implements river.JobArgs.
 func (SimulateArgs) Kind() string { return "policy_simulate" }
+
+// InsertOpts keeps one job per simulation step while it waits or runs, so
+// a rescued step and its successor never both enqueue the next step (D34).
+func (SimulateArgs) InsertOpts() river.InsertOpts {
+	return river.InsertOpts{UniqueOpts: river.UniqueOpts{
+		ByArgs: true,
+		ByState: []rivertype.JobState{
+			rivertype.JobStateAvailable, rivertype.JobStatePending, rivertype.JobStateRetryable,
+			rivertype.JobStateRunning, rivertype.JobStateScheduled,
+		},
+	}}
+}
 
 type simulateWorker struct {
 	river.WorkerDefaults[SimulateArgs]

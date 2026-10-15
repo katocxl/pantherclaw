@@ -12,7 +12,6 @@ import (
 	"net/http/httptest"
 	"path/filepath"
 	"reflect"
-	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -34,6 +33,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/rpc"
 	"github.com/katocxl/pantherclaw/internal/platform/rpc/protoperms"
 	"github.com/katocxl/pantherclaw/internal/policy/simulation"
+	"github.com/katocxl/pantherclaw/internal/policy/simulation/pgsimulation"
 	"github.com/katocxl/pantherclaw/internal/policy/simulation/simulationrpc"
 	tapp "github.com/katocxl/pantherclaw/internal/tenancy/app"
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
@@ -65,12 +65,12 @@ func (w *world) decide() ids.UUID {
 }
 
 // TestHR232_SimulationWritesOnlyItsOwnRows: a simulation of a draft over
-// recorded refunds counts them by category (a refund it would newly hold
-// is unevaluable, with its limitation) and keeps its samples, while every
-// other table of the database keeps its rows: no transaction, receipt,
-// reservation, permit, claim, ledger entry, audit event or job, and no
-// target reached (the runner has no gateway or finalization, only the
-// replay engine's read ports).
+// recorded refunds counts them by category (an allowed refund it would
+// hold is newly held, in the approval burden) and keeps its samples,
+// while every other table of the database keeps its rows: no transaction,
+// receipt, reservation, permit, claim, ledger entry, audit event or job,
+// and no target reached (the runner has no gateway or finalization, only
+// the replay engine's read ports).
 func TestHR232_SimulationWritesOnlyItsOwnRows(t *testing.T) {
 	w := newWorld(t)
 	draft := w.decide()
@@ -98,16 +98,20 @@ func TestHR232_SimulationWritesOnlyItsOwnRows(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// The 30.00 refund the draft would hold is unevaluable: the hold needs
-	// reads (the approval's) its allowed evaluation never made (R-26).
-	want := simulation.Counts{replay.Unchanged: 1, replay.Unevaluable: 1, replay.ReasonChanged: 1, replay.NewlyDenied: 1}
+	// The allowed 30.00 refund the draft would hold for an approver is newly
+	// held (D36: a proposed replay reaches the hold), and counts in the
+	// approval burden by role and per day.
+	want := simulation.Counts{replay.Unchanged: 1, replay.NewlyHeld: 1, replay.ReasonChanged: 1, replay.NewlyDenied: 1}
 	if got.State != simulation.Done || got.Evaluated != 4 || !reflect.DeepEqual(got.Report.Counts, want) || got.Finished == nil || got.Started == nil {
 		t.Fatalf("simulation: %s %d %v", got.State, got.Evaluated, got.Report.Counts)
 	}
-	unevaluable, err := w.svc.Samples(w.human, s.ID, simulation.SampleFilter{Category: replay.Unevaluable}, 0, "")
-	if err != nil || len(unevaluable.Items) != 1 || unevaluable.Items[0].Original != "ALLOW" || unevaluable.Items[0].Proposed != "" ||
-		!slices.Equal(unevaluable.Items[0].Limitations, []string{"INPUT_UNAVAILABLE"}) {
-		t.Fatalf("unevaluable samples: %+v %v", unevaluable.Items, err)
+	if !reflect.DeepEqual(got.Report.HeldByRole, map[string]int{"approver": 1}) || len(got.Report.HeldPerDay) != 1 {
+		t.Fatalf("burden: %v %v", got.Report.HeldByRole, got.Report.HeldPerDay)
+	}
+	held, err := w.svc.Samples(w.human, s.ID, simulation.SampleFilter{Category: replay.NewlyHeld}, 0, "")
+	if err != nil || len(held.Items) != 1 || held.Items[0].Original != "ALLOW" || held.Items[0].Proposed != "REQUIRE_APPROVAL" ||
+		held.Items[0].PropReason != "REFUND_OVER_20" || len(held.Items[0].Limitations) != 0 {
+		t.Fatalf("newly held samples: %+v %v", held.Items, err)
 	}
 	if c := got.Report.ByOperation["payments.refund.create"]; c.Total() != 4 || len(got.Report.ByAgent[w.agent.String()]) == 0 {
 		t.Fatalf("by workflow: %v %v", got.Report.ByOperation, got.Report.ByAgent)
@@ -353,5 +357,49 @@ func TestHR237_SimulationSchemaHoldsTheBounds(t *testing.T) {
 		if err := exec(sql); !db.IsPermissionDenied(err) {
 			t.Errorf("%s: %v", sql, err)
 		}
+	}
+}
+
+// TestHR237_SimulationAdvanceIsCompareAndSet: the store records progress
+// only from the count and cursor a step read, so a second step that read
+// the same position cannot count its chunk again (D34).
+func TestHR237_SimulationAdvanceIsCompareAndSet(t *testing.T) {
+	w := newWorld(t)
+	draft := w.policy(true, holdOver50)
+	s, err := w.svc.Simulate(w.human, simulation.Request{Version: draft, Days: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	store := pgsimulation.Store{Pool: w.pool}
+	ctx := context.Background()
+	var read simulation.Simulation
+	if err := store.InTx(ctx, w.org, false, func(ctx context.Context, tx simulation.Tx) error {
+		read, _, err = tx.Start(ctx, s.ID)
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	advance := func(from simulation.Simulation) bool {
+		next := from
+		next.Evaluated++
+		next.Cursor = &simulation.Cursor{Created: time.Now().Add(-time.Hour), Transaction: ids.NewV7(), Evaluation: 1}
+		ok := false
+		if err := store.InTx(ctx, w.org, false, func(ctx context.Context, tx simulation.Tx) error {
+			_, ok, err = tx.Advance(ctx, next, from)
+			return err
+		}); err != nil {
+			t.Fatal(err)
+		}
+		return ok
+	}
+	if !advance(read) {
+		t.Fatal("the first step's chunk was not recorded")
+	}
+	if advance(read) {
+		t.Fatal("a second step from the same position recorded its chunk too")
+	}
+	got, err := w.svc.Get(w.human, s.ID)
+	if err != nil || got.Evaluated != 1 {
+		t.Fatalf("evaluated %d, %v", got.Evaluated, err)
 	}
 }

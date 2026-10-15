@@ -39,7 +39,9 @@ func newWorld(edition billing.Edition) *world {
 	w := &world{store: newMemStore(), replay: &fakeReplay{byTxn: map[ids.UUID]outcome{}}}
 	v := versions{proposedBundle}
 	w.svc = &simulation.Service{Store: w.store, Versions: v, Editions: editions(edition), IsNotFound: func(err error) bool { return err != nil }}
-	w.runner = &simulation.Runner{Store: w.store, Replay: w.replay, Versions: v, Chunk: 7, Budget: time.Hour}
+	w.runner = &simulation.Runner{
+		Store: w.store, Replay: w.replay, Versions: v, Chunk: 7, Budget: time.Hour, Editions: editions(edition),
+	}
 	return w
 }
 

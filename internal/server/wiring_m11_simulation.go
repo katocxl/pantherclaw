@@ -11,6 +11,7 @@ import (
 
 	"github.com/katocxl/pantherclaw/internal/authority/adapters/pgauthority"
 	"github.com/katocxl/pantherclaw/internal/authority/replay"
+	"github.com/katocxl/pantherclaw/internal/billing"
 	defspg "github.com/katocxl/pantherclaw/internal/definitions/adapters/pgstore"
 	factspg "github.com/katocxl/pantherclaw/internal/facts/adapters/pgstore"
 	"github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1/pantherclawv1connect"
@@ -49,9 +50,18 @@ func registerSimulation(rs *connect.Server, d apiDeps) error {
 }
 
 // registerSimulationJobs adds the simulation worker: the replay engine
-// (read ports only, HR-232) and the store of the simulation's own rows.
-func registerSimulationJobs(reg *jobs.Registry, pool *db.Pool, kp keys.KeyProvider, log *slog.Logger) error {
-	return pgsimulation.Register(reg, &simulation.Runner{
-		Store: pgsimulation.Store{Pool: pool}, Replay: replayEngine(pool, kp), Versions: simulationVersions(pool),
-	}, log)
+// (read ports only, HR-232) reading each proposed version once, the store
+// of the simulation's own rows, and the licence, checked at each step
+// (D34).
+func registerSimulationJobs(reg *jobs.Registry, pool *db.Pool, kp keys.KeyProvider, bill *billing.Service, log *slog.Logger) error {
+	engine := replayEngine(pool, kp)
+	versions := &simulation.VersionCache{Source: engine.Source}
+	engine.Source = versions
+	r := &simulation.Runner{
+		Store: pgsimulation.Store{Pool: pool}, Replay: engine, Versions: versions,
+	}
+	if bill != nil {
+		r.Editions = bill
+	}
+	return pgsimulation.Register(reg, r, log)
 }
