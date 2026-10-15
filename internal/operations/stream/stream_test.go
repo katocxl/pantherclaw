@@ -273,12 +273,12 @@ func TestHR256_TheBearerTokenComesFromTheAuthorizationHeaderOnly(t *testing.T) {
 func TestHR256_EveryEventIsFilteredByTheViewersPermissions(t *testing.T) {
 	w := newWorld(t, stream.Config{})
 	ctx := ctxFor(t)
-	w.event("reflex.alert", agent(w.agentA))                  // 1 visible to team A
-	w.event("reflex.alert", agent(w.agentB))                  // 2 hidden from team A
-	w.event("reflex.live", agent(w.agentA), agent(w.agentB))  // 3 hidden: names B
-	w.event("audit.containment.kill_switch_engaged")          // 4 org-wide
-	w.event("receipt.decision", agent(w.agentA))              // 5 routine: never streamed
-	w.event("reflex.incident", agent(w.agentA))               // 6 visible to team A
+	w.event("reflex.alert", agent(w.agentA))                                // 1 visible to team A
+	w.event("reflex.alert", agent(w.agentB))                                // 2 hidden from team A
+	w.event("reflex.live", agent(w.agentA), agent(w.agentB))                // 3 hidden: names B
+	w.event("audit.containment.kill_switch_engaged")                        // 4 org-wide
+	w.event("receipt.decision", agent(w.agentA))                            // 5 routine: never streamed
+	w.event("reflex.incident", agent(w.agentA))                             // 6 visible to team A
 	w.event("reflex.live", stream.Subject{Type: "agent", ID: "not-a-uuid"}) // 7 malformed: org-wide only
 
 	team := w.open(t, ctx, stream.Path, "team-a-dev", map[string]string{"Last-Event-ID": "0"})

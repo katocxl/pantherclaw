@@ -21,13 +21,13 @@ type Builtin string
 // Built-in queries. who_can_write (F308) and widest_exposure (F313) read
 // the exposure views and join when those land.
 const (
-	BuiltinProductionAccess      Builtin = "production_access"      // F306
-	BuiltinWhyAllowed            Builtin = "why_allowed"            // F307
-	BuiltinToolCapability        Builtin = "tool_capability"        // F309
-	BuiltinUnusedGrants          Builtin = "unused_grants"          // F310
-	BuiltinActionsForPrincipal   Builtin = "actions_for_principal"  // F311
-	BuiltinConnectionDependents  Builtin = "connection_dependents"  // F312
-	BuiltinDenials               Builtin = "denials"                // F314
+	BuiltinProductionAccess      Builtin = "production_access"        // F306
+	BuiltinWhyAllowed            Builtin = "why_allowed"              // F307
+	BuiltinToolCapability        Builtin = "tool_capability"          // F309
+	BuiltinUnusedGrants          Builtin = "unused_grants"            // F310
+	BuiltinActionsForPrincipal   Builtin = "actions_for_principal"    // F311
+	BuiltinConnectionDependents  Builtin = "connection_dependents"    // F312
+	BuiltinDenials               Builtin = "denials"                  // F314
 	BuiltinRecentAuthorityChange Builtin = "recent_authority_changes" // F315
 )
 

@@ -47,13 +47,13 @@ type EmptyReason string
 // means nothing at all is recorded in the viewer's scope; NOTHING_IN_SCOPE
 // means data exists in scope but none matches.
 const (
-	EmptyNothingInScope   EmptyReason = "NOTHING_IN_SCOPE"
-	EmptyNoDataCollected  EmptyReason = "NO_DATA_COLLECTED"
-	EmptyRestricted       EmptyReason = "RESTRICTED"
-	omissionScopeLimited              = "SCOPE_LIMITED"
-	omissionRestricted                = "RESTRICTED"
-	omissionUnobservedUse             = "UNOBSERVED_ROUTES"
-	omissionUnknownDependents         = "UNKNOWN_DEPENDENCIES"
+	EmptyNothingInScope       EmptyReason = "NOTHING_IN_SCOPE"
+	EmptyNoDataCollected      EmptyReason = "NO_DATA_COLLECTED"
+	EmptyRestricted           EmptyReason = "RESTRICTED"
+	omissionScopeLimited                  = "SCOPE_LIMITED"
+	omissionRestricted                    = "RESTRICTED"
+	omissionUnobservedUse                 = "UNOBSERVED_ROUTES"
+	omissionUnknownDependents             = "UNKNOWN_DEPENDENCIES"
 )
 
 // Omission is a note about what a result cannot show, derived from the
