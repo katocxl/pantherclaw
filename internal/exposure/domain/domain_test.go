@@ -444,3 +444,33 @@ func TestCausalAndChangeEdges(t *testing.T) {
 		t.Fatalf("change: %+v", cs)
 	}
 }
+
+// TestRestrictionsShapeOnlyEffectiveReach: DENY_ALL on an agent removes
+// its effective rights and leaves the credential view; HOLD_WRITES keeps
+// reads usable and makes writes conditional; DENY_OPERATION removes one
+// operation (D21, D31).
+func TestRestrictionsShapeOnlyEffectiveReach(t *testing.T) {
+	w := newWorld()
+	agent := w.agent
+	before := domain.Compute(w.in).Rights
+	d := domain.Compare(before, domain.Compute(domain.Change{Restrictions: []domain.Restriction{{Agent: &agent}}}.Apply(w.in)).Rights,
+		domain.Change{Restrictions: []domain.Restriction{{Agent: &agent}}})
+	if d.After[domain.Effective] != 0 || d.After[domain.Credential] != d.Before[domain.Credential] || len(d.Remaining) == 0 {
+		t.Fatalf("deny all: %v -> %v, remaining %d", d.Before, d.After, len(d.Remaining))
+	}
+	held := domain.Compute(domain.Change{Restrictions: []domain.Restriction{{Agent: &agent, Hold: true}}}.Apply(w.in)).Rights
+	if r, _ := find(held, domain.Effective, &agent, "payments.charge.read", domain.VerbRead); r.Label != domain.Usable {
+		t.Fatalf("held read: %v", r.Label)
+	}
+	if r, _ := find(held, domain.Effective, &agent, "payments.refund.create", domain.VerbTransfer); r.Label != domain.Conditional ||
+		!slices.Contains(r.Reasons, domain.ReasonContainedHold) {
+		t.Fatalf("held write: %+v", r)
+	}
+	one := domain.Compute(domain.Change{Restrictions: []domain.Restriction{{Agent: &agent, Operation: "payments.refund.create"}}}.Apply(w.in)).Rights
+	if _, ok := find(one, domain.Effective, &agent, "payments.refund.create", domain.VerbTransfer); ok {
+		t.Fatal("denied operation still reachable")
+	}
+	if _, ok := find(one, domain.Effective, &agent, "payments.charge.read", domain.VerbRead); !ok {
+		t.Fatal("other operation lost")
+	}
+}

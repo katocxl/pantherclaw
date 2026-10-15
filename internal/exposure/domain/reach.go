@@ -319,6 +319,10 @@ type Inputs struct {
 	Coverage    map[CoverageKey]Coverage
 	Routes      []Route
 	Dispatches  []Dispatch
+	// Restrictions are containment controls a preview applies to the
+	// effective view (D23, D27). The credential view never changes with
+	// them: a control stops decisions, not what a credential can do.
+	Restrictions []Restriction
 }
 
 // Result is a computation's rights, sorted, with what it could not read.
@@ -383,6 +387,11 @@ func grantAllows(b gdomain.Bounds, op Operation) bool {
 }
 
 func effective(b *builder, in Inputs, conns map[ids.UUID]*Connection) {
+	addEff := func(r Right) {
+		if r, ok := in.restrict(r); ok {
+			b.add(r)
+		}
+	}
 	for _, g := range in.Grants {
 		label, reasons := Usable, []string{ReasonGrant}
 		var expires *time.Time
@@ -409,7 +418,7 @@ func effective(b *builder, in Inputs, conns map[ids.UUID]*Connection) {
 					l = Uncertain
 				}
 				for _, v := range []Verb{VerbRead, VerbUpdate} {
-					b.add(Right{
+					addEff(Right{
 						View: Effective, Label: l, Agent: ptr(g.Agent), Connection: ptr(c.ID), Grant: ptr(g.ID),
 						ResourceGroup: "connection:" + c.Name, Verb: v, Coverage: CoverageUnknown,
 						Reasons: append(slices.Clone(baseReasons), ReasonPackageUnknown), ExpiresAt: expires,
@@ -434,14 +443,14 @@ func effective(b *builder, in Inputs, conns map[ids.UUID]*Connection) {
 				}
 				for _, cl := range Classify(op, *c) {
 					v := cl.Verb
-					b.add(Right{
+					addEff(Right{
 						View: Effective, Label: l, Agent: ptr(g.Agent), Connection: ptr(c.ID), Grant: ptr(g.ID),
 						Operation: op.Name, ResourceGroup: Group(op, *c), Verb: v, Basis: cl.Explain(), Irreversible: op.Reversibility == defs.Irreversible, Coverage: cov, Reasons: rs,
 						ExpiresAt: expires,
 					})
 				}
 				if g.DelegationDepth > 0 {
-					b.add(Right{
+					addEff(Right{
 						View: Effective, Label: l, Agent: ptr(g.Agent), Connection: ptr(c.ID), Grant: ptr(g.ID),
 						ResourceGroup: Group(op, *c), Verb: VerbDelegate, Basis: BasisDelegation, Coverage: cov,
 						Reasons: append(slices.Clone(rs), ReasonDelegable), Depth: g.DelegationDepth, ExpiresAt: expires,
@@ -737,4 +746,52 @@ func defaultBasis(r Right) string {
 	default:
 		return BasisDefaultUpdate
 	}
+}
+
+// ReasonContainedHold marks a write held by a containment control.
+const ReasonContainedHold = "CONTAINED_HOLD"
+
+// Restriction is a containment control as a preview applies it: on rights
+// of an agent, a connection or a grant (nil fields match any), and of one
+// operation when set. Hold holds writes for approval (CONDITIONAL);
+// otherwise matching rights are gone (WritesOnly limits it to writes).
+type Restriction struct {
+	Agent, Connection, Grant *ids.UUID
+	Operation                string
+	WritesOnly               bool
+	Hold                     bool
+}
+
+func (x Restriction) matches(r Right) bool {
+	switch {
+	case x.Agent != nil && (r.Agent == nil || *r.Agent != *x.Agent):
+		return false
+	case x.Connection != nil && (r.Connection == nil || *r.Connection != *x.Connection):
+		return false
+	case x.Grant != nil && (r.Grant == nil || *r.Grant != *x.Grant):
+		return false
+	case x.Operation != "" && r.Operation != x.Operation:
+		return false
+	case (x.WritesOnly || x.Hold) && r.Verb == VerbRead:
+		return false
+	}
+	return true
+}
+
+// restrict applies the restrictions to an effective right; ok is false
+// when one removes it.
+func (in Inputs) restrict(r Right) (Right, bool) {
+	for _, x := range in.Restrictions {
+		if !x.matches(r) {
+			continue
+		}
+		if !x.Hold {
+			return r, false
+		}
+		if r.Label == Usable {
+			r.Label = Conditional
+		}
+		r.Reasons = append(slices.Clone(r.Reasons), ReasonContainedHold)
+	}
+	return r, true
 }

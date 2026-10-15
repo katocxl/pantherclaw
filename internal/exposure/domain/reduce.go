@@ -18,6 +18,8 @@ type Change struct {
 	SuspendAgents         []ids.UUID
 	QuarantineConnections []ids.UUID
 	RevokeCredentials     []ids.UUID // connections whose active credential is revoked
+	// Restrictions are containment controls (D21) on the effective view.
+	Restrictions []Restriction
 	// Descendants maps a grant to the grants delegated from it.
 	Descendants map[ids.UUID][]ids.UUID
 }
@@ -25,7 +27,7 @@ type Change struct {
 // Empty reports a change that changes nothing.
 func (c Change) Empty() bool {
 	return len(c.RevokeGrants) == 0 && len(c.SuspendAgents) == 0 && len(c.QuarantineConnections) == 0 &&
-		len(c.RevokeCredentials) == 0
+		len(c.RevokeCredentials) == 0 && len(c.Restrictions) == 0
 }
 
 // Apply returns in with the change made. A quarantined connection still
@@ -34,6 +36,7 @@ func (c Change) Empty() bool {
 // loses its grants' reach but keeps what it holds itself.
 func (c Change) Apply(in Inputs) Inputs {
 	out := in
+	out.Restrictions = append(slices.Clone(in.Restrictions), c.Restrictions...)
 	revoked := map[ids.UUID]bool{}
 	for _, g := range c.RevokeGrants {
 		revoked[g] = true
@@ -72,6 +75,8 @@ type Diff struct {
 	// Disruption is the expected cost: recently observed work whose
 	// effective right the change removes.
 	Disruption []Right
+	// BeforeRights and AfterRights are the two computations.
+	BeforeRights, AfterRights []Right
 }
 
 // Preview computes before and after for a change.
@@ -84,7 +89,7 @@ func Preview(in Inputs, c Change) Diff {
 // Compare diffs two right sets; scope decides which remaining rights the
 // change was aimed at.
 func Compare(before, after []Right, c Change) Diff {
-	d := Diff{Before: counts(before), After: counts(after)}
+	d := Diff{Before: counts(before), After: counts(after), BeforeRights: before, AfterRights: after}
 	now := map[string]Right{}
 	for _, r := range after {
 		now[r.Key()] = r
@@ -128,6 +133,11 @@ func (c Change) revokes(grant ids.UUID) bool {
 
 // inScope reports whether a right belongs to what the change targets.
 func (c Change) inScope(r Right) bool {
+	for _, x := range c.Restrictions {
+		if (x.Agent != nil && r.Agent != nil && *x.Agent == *r.Agent) || (x.Connection != nil && r.Connection != nil && *x.Connection == *r.Connection) {
+			return true
+		}
+	}
 	if r.Agent != nil && slices.Contains(c.SuspendAgents, *r.Agent) {
 		return true
 	}

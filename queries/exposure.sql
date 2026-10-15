@@ -151,3 +151,15 @@ WHERE s.org_id = sqlc.arg(org_id) AND s.computed_at < sqlc.arg(before)
   AND NOT EXISTS (SELECT 1 FROM pc.posture_findings f WHERE f.org_id = s.org_id
                   AND (f.last_snapshot_id = s.id OR f.remediated_snapshot_id = s.id))
   AND NOT EXISTS (SELECT 1 FROM pc.posture_finding_events e WHERE e.org_id = s.org_id AND e.snapshot_id = s.id);
+
+-- name: ExposureCredentialConnection :one
+SELECT connection_id FROM pc.credentials WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id);
+
+-- name: ExposureRunGrant :one
+SELECT agent_id, grant_id FROM pc.runs WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id);
+
+-- ExposurePrincipalGrants lists the active grants that represent a person.
+-- name: ExposurePrincipalGrants :many
+SELECT id FROM pc.grants
+WHERE org_id = sqlc.arg(org_id) AND principal_user_id = sqlc.arg(user_id) AND state = 'ACTIVE'
+ORDER BY id;

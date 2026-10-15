@@ -174,6 +174,17 @@ func (q *Queries) ExposureCoverage(ctx context.Context, orgID ids.OrgID) ([]Expo
 	return items, nil
 }
 
+const exposureCredentialConnection = `-- name: ExposureCredentialConnection :one
+SELECT connection_id FROM pc.credentials WHERE org_id = $1 AND id = $2
+`
+
+func (q *Queries) ExposureCredentialConnection(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (ids.UUID, error) {
+	row := q.db.QueryRow(ctx, exposureCredentialConnection, orgID, iD)
+	var connection_id ids.UUID
+	err := row.Scan(&connection_id)
+	return connection_id, err
+}
+
 const exposureDispatches = `-- name: ExposureDispatches :many
 SELECT r.agent_id, t.connection_id::uuid AS connection_id, t.operation::text AS operation, count(*)::integer AS dispatches,
     max(t.created_at)::timestamptz AS last_at
@@ -390,6 +401,33 @@ func (q *Queries) ExposureOverreach(ctx context.Context, orgID ids.OrgID) ([]Exp
 	return items, nil
 }
 
+const exposurePrincipalGrants = `-- name: ExposurePrincipalGrants :many
+SELECT id FROM pc.grants
+WHERE org_id = $1 AND principal_user_id = $2 AND state = 'ACTIVE'
+ORDER BY id
+`
+
+// ExposurePrincipalGrants lists the active grants that represent a person.
+func (q *Queries) ExposurePrincipalGrants(ctx context.Context, orgID ids.OrgID, userID *ids.UUID) ([]ids.UUID, error) {
+	rows, err := q.db.Query(ctx, exposurePrincipalGrants, orgID, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ids.UUID{}
+	for rows.Next() {
+		var id ids.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const exposureRouteAgents = `-- name: ExposureRouteAgents :many
 SELECT DISTINCT connection_id, agent_id::uuid AS agent_id FROM pc.coverage_routes
 WHERE org_id = $1 AND agent_id IS NOT NULL
@@ -421,6 +459,22 @@ func (q *Queries) ExposureRouteAgents(ctx context.Context, orgID ids.OrgID) ([]E
 		return nil, err
 	}
 	return items, nil
+}
+
+const exposureRunGrant = `-- name: ExposureRunGrant :one
+SELECT agent_id, grant_id FROM pc.runs WHERE org_id = $1 AND id = $2
+`
+
+type ExposureRunGrantRow struct {
+	AgentID ids.UUID
+	GrantID *ids.UUID
+}
+
+func (q *Queries) ExposureRunGrant(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (ExposureRunGrantRow, error) {
+	row := q.db.QueryRow(ctx, exposureRunGrant, orgID, iD)
+	var i ExposureRunGrantRow
+	err := row.Scan(&i.AgentID, &i.GrantID)
+	return i, err
 }
 
 const getExposureChanges = `-- name: GetExposureChanges :one
