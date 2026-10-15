@@ -93,16 +93,23 @@ func freshness(kind string, last *time.Time, now time.Time) Freshness {
 // operations.read at the org and read RESTRICTED otherwise; the SDK and
 // hook channels are read over the viewer's agents only.
 func (s *Service) GetEvidenceStatus(ctx context.Context) (EvidenceStatus, error) {
+	if _, err := operator(ctx); err != nil {
+		return EvidenceStatus{}, err
+	}
+	x, err := s.readSources(ctx)
+	if err != nil {
+		return EvidenceStatus{}, err
+	}
 	var out EvidenceStatus
-	err := s.read(ctx, func(ctx context.Context, v *viewer) error {
+	err = s.read(ctx, func(ctx context.Context, v *viewer) error {
 		var err error
-		out, err = evidenceStatus(ctx, v)
+		out, err = evidenceStatus(ctx, v, x)
 		return err
 	})
 	return out, err
 }
 
-func evidenceStatus(ctx context.Context, v *viewer) (EvidenceStatus, error) {
+func evidenceStatus(ctx context.Context, v *viewer, x external) (EvidenceStatus, error) {
 	now, err := v.q.OpsDBNow(ctx)
 	if err != nil {
 		return EvidenceStatus{}, err
@@ -163,10 +170,7 @@ func evidenceStatus(ctx context.Context, v *viewer) (EvidenceStatus, error) {
 		}
 		add(ch, ch+" channel", "", never(last))
 	}
-	out.Sources = append(out.Sources, SourceStatus{
-		Kind: SourceExport, Freshness: NotAvailable,
-		Note: "export delivery health is reported once SIEM export is configured",
-	})
+	out.Sources = append(out.Sources, exportSources(x)...)
 	return out, nil
 }
 
@@ -195,4 +199,35 @@ func detections(ctx context.Context, v *viewer, head int64, now time.Time, out *
 	}
 	out.Sources = append(out.Sources, st)
 	return nil
+}
+
+// exportSources reports each SIEM export destination (D36, F537): when it
+// last delivered, FAILING as a gap since it began failing, never-delivered
+// as NEVER. Configured is not delivered: an active destination that has
+// never delivered is a gap.
+func exportSources(x external) []SourceStatus {
+	switch x.exportsState {
+	case unavailable:
+		return []SourceStatus{{Kind: SourceExport, Freshness: NotAvailable, Note: "export delivery health is not reported"}}
+	case restricted:
+		return []SourceStatus{{Kind: SourceExport, Freshness: Restricted, Note: "needs siem.read across the organization"}}
+	case notInEdition:
+		return []SourceStatus{{Kind: SourceExport, Freshness: NotAvailable, Note: "SIEM export is not in this edition"}}
+	}
+	var out []SourceStatus
+	for _, d := range x.exports {
+		st := SourceStatus{Kind: SourceExport, Name: d.Name, ID: d.ID.String(), LastSeen: d.LastDelivered, Note: d.State + " " + d.Health}
+		switch {
+		case d.State != "ACTIVE":
+			st.Freshness = NotAvailable
+		case d.FailingSince != nil:
+			st.Freshness = Stale
+		case d.LastDelivered == nil:
+			st.Freshness = Never
+		default:
+			st.Freshness = Fresh
+		}
+		out = append(out, st)
+	}
+	return out
 }

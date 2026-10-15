@@ -29,6 +29,7 @@ const (
 type WorkAction struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// "assign", "set_state", "promote", "suspend_agent", "resolve",
+	// "open_response_action",
 	// "open_approval" or "revoke_grant".
 	Name string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	// The permission it needs (the caller holds it for the item).
@@ -93,7 +94,8 @@ func (x *WorkAction) GetTarget() string {
 // WorkItem is one work-queue item.
 type WorkItem struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// "INCIDENT", "ALERT", "PROTECTION_FAILURE", "WAITING_DECISION" or
+	// "INCIDENT", "UNCONFIRMED_CONTAINMENT", "ALERT", "PROTECTION_FAILURE",
+	// "WAITING_DECISION", "POSTURE_FINDING" or
 	// "AUTHORITY_EXPANSION".
 	Kind string `protobuf:"bytes,1,opt,name=kind,proto3" json:"kind,omitempty"`
 	Id   string `protobuf:"bytes,2,opt,name=id,proto3" json:"id,omitempty"`
@@ -376,6 +378,7 @@ type GetSummaryResponse struct {
 	Scope string `protobuf:"bytes,3,opt,name=scope,proto3" json:"scope,omitempty"`
 	// Counts by key: active_incidents, open_alerts, critical,
 	// protection_failures, expiring_decisions, authority_expansion_24h,
+	// unconfirmed_containment, posture_findings,
 	// telemetry_gaps.
 	Counts    map[string]int32 `protobuf:"bytes,4,rep,name=counts,proto3" json:"counts,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"varint,2,opt,name=value"`
 	Truncated bool             `protobuf:"varint,5,opt,name=truncated,proto3" json:"truncated,omitempty"`

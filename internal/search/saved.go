@@ -48,6 +48,9 @@ func (s Spec) Validate() error {
 	case s.Query != nil:
 		return s.Query.Validate()
 	default:
+		if exposureBuiltin(s.Builtin.Name) {
+			return s.Builtin.validateExposure()
+		}
 		q, _, err := s.Builtin.expand(time.Now())
 		if err != nil {
 			return err

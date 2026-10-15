@@ -31,24 +31,33 @@ type Summary struct {
 
 // Summary count keys.
 const (
-	CountActiveIncidents    = "active_incidents"
-	CountOpenAlerts         = "open_alerts"
-	CountCritical           = "critical"
-	CountProtectionFailures = "protection_failures"
-	CountExpiringDecisions  = "expiring_decisions"
-	CountAuthorityExpansion = "authority_expansion_24h"
-	CountTelemetryGaps      = "telemetry_gaps"
+	CountActiveIncidents        = "active_incidents"
+	CountOpenAlerts             = "open_alerts"
+	CountCritical               = "critical"
+	CountProtectionFailures     = "protection_failures"
+	CountExpiringDecisions      = "expiring_decisions"
+	CountAuthorityExpansion     = "authority_expansion_24h"
+	CountTelemetryGaps          = "telemetry_gaps"
+	CountUnconfirmedContainment = "unconfirmed_containment"
+	CountPostureFindings        = "posture_findings"
 )
 
 // GetSummary returns the viewer's summary.
 func (s *Service) GetSummary(ctx context.Context) (Summary, error) {
+	if _, err := operator(ctx); err != nil {
+		return Summary{}, err
+	}
+	x, err := s.readSources(ctx)
+	if err != nil {
+		return Summary{}, err
+	}
 	var out Summary
-	err := s.read(ctx, func(ctx context.Context, v *viewer) error {
-		q, err := workQueue(ctx, v)
+	err = s.read(ctx, func(ctx context.Context, v *viewer) error {
+		q, err := workQueue(ctx, v, x)
 		if err != nil {
 			return err
 		}
-		es, err := evidenceStatus(ctx, v)
+		es, err := evidenceStatus(ctx, v, x)
 		if err != nil {
 			return err
 		}
@@ -61,7 +70,8 @@ func (s *Service) GetSummary(ctx context.Context) (Summary, error) {
 func summarize(q Queue, es EvidenceStatus) Summary {
 	out := Summary{AsOf: q.AsOf, Whole: q.Whole, Truncated: q.Truncated, Counts: map[string]int{
 		CountActiveIncidents: 0, CountOpenAlerts: 0, CountCritical: 0, CountProtectionFailures: 0,
-		CountExpiringDecisions: 0, CountAuthorityExpansion: 0, CountTelemetryGaps: 0,
+		CountExpiringDecisions: 0, CountAuthorityExpansion: 0, CountTelemetryGaps: 0, CountUnconfirmedContainment: 0,
+		CountPostureFindings: 0,
 	}}
 	out.Scope = "the agents in your scope"
 	if q.Whole {
@@ -77,6 +87,10 @@ func summarize(q Queue, es EvidenceStatus) Summary {
 			out.Counts[CountProtectionFailures]++
 		case KindWaitingDecision:
 			out.Counts[CountExpiringDecisions]++
+		case KindUnconfirmedContainment:
+			out.Counts[CountUnconfirmedContainment]++
+		case KindPostureFinding:
+			out.Counts[CountPostureFindings]++
 		case KindAuthorityExpansion:
 			out.Counts[CountAuthorityExpansion]++
 		}
@@ -104,7 +118,7 @@ func summarize(q Queue, es EvidenceStatus) Summary {
 		}
 	}
 	for _, p := range q.Pending {
-		out.Unknown = append(out.Unknown, p+": not reported yet")
+		out.Unknown = append(out.Unknown, p)
 	}
 	if !q.Whole {
 		out.Unknown = append(out.Unknown, "agents outside your scope are not counted")
@@ -118,11 +132,12 @@ func summarize(q Queue, es EvidenceStatus) Summary {
 
 func statement(s Summary) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "As of %s, for %s: %d active incidents, %d open alerts (%d critical), %d protection failures, "+
-		"%d decisions expiring within the hour, %d authority expansions in the last day.",
-		s.AsOf.Format(time.RFC3339), s.Scope, s.Counts[CountActiveIncidents], s.Counts[CountOpenAlerts],
-		s.Counts[CountCritical], s.Counts[CountProtectionFailures], s.Counts[CountExpiringDecisions],
-		s.Counts[CountAuthorityExpansion])
+	fmt.Fprintf(&b, "As of %s, for %s: %d active incidents, %d unconfirmed containment actions, %d open alerts (%d critical), "+
+		"%d protection failures, %d decisions expiring within the hour, %d open posture findings, "+
+		"%d authority expansions in the last day.",
+		s.AsOf.Format(time.RFC3339), s.Scope, s.Counts[CountActiveIncidents], s.Counts[CountUnconfirmedContainment],
+		s.Counts[CountOpenAlerts], s.Counts[CountCritical], s.Counts[CountProtectionFailures],
+		s.Counts[CountExpiringDecisions], s.Counts[CountPostureFindings], s.Counts[CountAuthorityExpansion])
 	if len(s.Unknown) > 0 {
 		b.WriteString(" Not known: " + strings.Join(s.Unknown, "; ") + ".")
 	}

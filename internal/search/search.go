@@ -106,6 +106,9 @@ type Service struct {
 	Pool  *db.Pool
 	Defs  Definitions
 	Clock clock.Clock
+	// Exposure answers who_can_write and widest_exposure; nil: those
+	// queries are not available (D49).
+	Exposure ExposureReader
 }
 
 func (s *Service) now() time.Time {

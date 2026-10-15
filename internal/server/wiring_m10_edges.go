@@ -21,7 +21,6 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/jobs"
 	"github.com/katocxl/pantherclaw/internal/platform/keys"
 	"github.com/katocxl/pantherclaw/internal/platform/version"
-	"github.com/katocxl/pantherclaw/internal/reflex/alerts"
 	"github.com/katocxl/pantherclaw/internal/reflex/failures"
 	"github.com/katocxl/pantherclaw/internal/reflex/feed"
 	reflexports "github.com/katocxl/pantherclaw/internal/reflex/ports"
@@ -37,16 +36,16 @@ import (
 // SharedSignalsService, the activation pages and the RFC 8935 push
 // endpoint; workers run the exporter and the received-events janitor.
 
-// edgesRaiser is the Raiser edges signals go through (core, D14).
-func edgesRaiser() reflexports.Raiser { return &alerts.Raiser{} }
+// edgesRaiser is the Raiser edges signals go through (core, D14, D49).
+func edgesRaiser(pool *db.Pool) reflexports.Raiser { return m10Raiser{pool: pool} }
 
 // edgesCaseOpener and edgesContainer are the cases and response ports the
-// receiver and the identity playbook use (D49): Ops wires the real
-// providers. Nil until then: accepted events are recorded with "case not
+// receiver and the identity playbook use (D49), set in wiring_m10_ports.go.
+// Left nil, accepted events are recorded with "case not
 // opened: cases unavailable" and the playbook refuses to be enabled.
 var (
-	edgesCaseOpener func(pool *db.Pool) reflexports.CaseOpener
-	edgesContainer  func(pool *db.Pool) reflexports.Container
+	edgesCaseOpener func(pool *db.Pool, bill *billing.Service) reflexports.CaseOpener
+	edgesContainer  func(pool *db.Pool, bill *billing.Service) reflexports.Container
 )
 
 // edgesFailures is the owned failure sink (core, D18).
@@ -64,7 +63,7 @@ func newSIEM(pool *db.Pool, kp keys.KeyProvider, bill *billing.Service, notify s
 	if err != nil {
 		return nil, err
 	}
-	health := siem.ReflexHealth{Failures: edgesFailures(), Raiser: edgesRaiser()}
+	health := siem.ReflexHealth{Failures: edgesFailures(), Raiser: edgesRaiser(pool)}
 	if notify != nil {
 		health.Notify = notify
 	}
@@ -81,15 +80,15 @@ func newSignals(pool *db.Pool, bill *billing.Service, notify siem.Notifier, publ
 	if err != nil {
 		return nil, err
 	}
-	svc.WithFailures(edgesFailures()).WithRaiser(edgesRaiser())
+	svc.WithFailures(edgesFailures()).WithRaiser(edgesRaiser(pool))
 	if notify != nil {
 		svc.WithNotifier(notify)
 	}
 	if edgesCaseOpener != nil {
-		svc.WithCases(edgesCaseOpener(pool))
+		svc.WithCases(edgesCaseOpener(pool, bill))
 	}
 	if edgesContainer != nil {
-		svc.WithContainer(edgesContainer(pool))
+		svc.WithContainer(edgesContainer(pool, bill))
 	}
 	if bill != nil {
 		svc.WithEditions(bill)

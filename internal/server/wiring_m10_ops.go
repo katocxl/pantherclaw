@@ -33,9 +33,12 @@ type m10OpsDeps struct {
 // HR-256) on the API mux.
 func registerM10Ops(rs *connect.Server, d apiDeps) (func(*http.ServeMux), error) {
 	pantherclawv1connect.RegisterOperationsServiceHandler(rs,
-		operationsrpc.New(&operations.Service{Pool: d.pool, Clock: clock.System{}}))
+		operationsrpc.New(&operations.Service{Pool: d.pool, Clock: clock.System{}, Sources: opsSources(d)}))
 	pantherclawv1connect.RegisterSearchServiceHandler(rs,
-		searchrpc.New(&search.Service{Pool: d.pool, Defs: &defspg.Store{Pool: d.pool}, Clock: clock.System{}}))
+		searchrpc.New(&search.Service{
+			Pool: d.pool, Defs: &defspg.Store{Pool: d.pool}, Clock: clock.System{},
+			Exposure: searchExposure{svc: m10Exposure(d.pool, d.billing)},
+		}))
 	if d.m10ops.authn == nil {
 		return func(*http.ServeMux) {}, nil // no bearer authentication configured (tests)
 	}

@@ -19,7 +19,6 @@ import (
 	"github.com/katocxl/pantherclaw/internal/billing"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/jobs"
-	"github.com/katocxl/pantherclaw/internal/reflex/alerts"
 	"github.com/katocxl/pantherclaw/internal/reflex/failures"
 	rapp "github.com/katocxl/pantherclaw/internal/response/app"
 	"github.com/katocxl/pantherclaw/internal/response/sweep"
@@ -30,7 +29,9 @@ import (
 // a response signal through the core Raiser and an owned failure (HR-249).
 // notify and bill may be nil (no notifications; Community).
 func responseContainment(pool *db.Pool, notify rapp.Notifier, bill *billing.Service) *rapp.Containment {
-	c := &rapp.Containment{Pool: pool, Raiser: &alerts.Raiser{}, Failures: &failures.Sink{}, Notify: notify}
+	c := &rapp.Containment{
+		Pool: pool, Raiser: m10Raiser{pool: pool}, Failures: &failures.Sink{}, Notify: notify, Reach: m10Reach(pool, bill),
+	}
 	if bill != nil {
 		c.Editions = bill
 	}

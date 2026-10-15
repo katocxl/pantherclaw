@@ -80,6 +80,9 @@ func TestBuiltinsExpand(t *testing.T) {
 		BuiltinRecentAuthorityChange: {},
 	}
 	for _, info := range Builtins() {
+		if exposureBuiltin(info.Name) {
+			continue // TestExposureBuiltins
+		}
 		p, ok := params[info.Name]
 		if !ok {
 			t.Fatalf("%s: no test parameters", info.Name)

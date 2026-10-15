@@ -105,7 +105,7 @@ func queryOf(q *pantherclawv1.Query) (search.Query, error) {
 func builtinOf(b *pantherclawv1.BuiltinQuery) (search.BuiltinQuery, error) {
 	p := b.GetParams()
 	out := search.BuiltinQuery{Name: search.Builtin(b.GetName()), Params: search.Params{
-		Effect: p.GetEffect(), TargetType: p.GetTargetType(), Days: int(p.GetDays()),
+		Effect: p.GetEffect(), TargetType: p.GetTargetType(), Resource: p.GetResource(), Days: int(p.GetDays()),
 		Start: optTime(p.GetStartTime()), End: optTime(p.GetEndTime()),
 	}}
 	for _, x := range []struct {
@@ -153,7 +153,7 @@ func builtinProto(b search.BuiltinQuery) *pantherclawv1.BuiltinQuery {
 	return &pantherclawv1.BuiltinQuery{Name: string(b.Name), Params: &pantherclawv1.BuiltinParams{
 		TransactionId: idPtr(p.Transaction), AgentId: idPtr(p.Agent), ConnectionId: idPtr(p.Connection),
 		PrincipalUserId: idPtr(p.PrincipalUser), PrincipalServiceAccountId: idPtr(p.PrincipalSA),
-		Effect: p.Effect, TargetType: p.TargetType, Days: int32(p.Days), //nolint:gosec // G115: bounded by validation
+		Effect: p.Effect, TargetType: p.TargetType, Resource: p.Resource, Days: int32(p.Days), //nolint:gosec // G115: bounded by validation
 		StartTime: ts(p.Start), EndTime: ts(p.End),
 	}}
 }

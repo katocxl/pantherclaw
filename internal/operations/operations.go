@@ -32,6 +32,8 @@ import (
 type Service struct {
 	Pool  *db.Pool
 	Clock clock.Clock
+	// Sources are the other streams' ports (D49); any may be nil.
+	Sources Sources
 }
 
 // viewer is a caller with its scopes, computed once per request.

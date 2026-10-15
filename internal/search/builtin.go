@@ -18,8 +18,8 @@ import (
 // Builtin names a built-in investigative query (F306–F315).
 type Builtin string
 
-// Built-in queries. who_can_write (F308) and widest_exposure (F313) read
-// the exposure views and join when those land.
+// Built-in queries over search's own tables; who_can_write (F308) and
+// widest_exposure (F313) read the exposure views (exposure.go).
 const (
 	BuiltinProductionAccess      Builtin = "production_access"        // F306
 	BuiltinWhyAllowed            Builtin = "why_allowed"              // F307
@@ -41,6 +41,7 @@ type Params struct {
 	PrincipalSA   *ids.UUID  `json:"principal_service_account,omitzero"`
 	Effect        string     `json:"effect,omitzero"`
 	TargetType    string     `json:"target_type,omitzero"`
+	Resource      string     `json:"resource,omitzero"`
 	Days          int        `json:"days,omitzero"`
 	Start         *time.Time `json:"start,omitzero"`
 	End           *time.Time `json:"end,omitzero"`
@@ -78,6 +79,8 @@ func Builtins() []BuiltinInfo {
 		{BuiltinConnectionDependents, "F312", "Agents that used a connection, with what PantherClaw cannot see.", []string{"connection", "start", "end"}},
 		{BuiltinDenials, "F314", "Denied actions, enforced denials apart from shadow predictions.", []string{"agent", "connection", "target_type", "start", "end"}},
 		{BuiltinRecentAuthorityChange, "F315", "New and widened grants, material changes apart from narrowing or metadata.", []string{"agent", "start", "end"}},
+		{BuiltinWhoCanWrite, "F308", "Agents able to write a resource group or through a connection, grant-constrained authority apart from technical reach.", []string{"resource", "connection"}},
+		{BuiltinWidestExposure, "F313", "Agents ranked by widest exposure on explicit keys: consequence, scope, usability, enforceability, ownership, remediation readiness.", []string{}},
 	}
 }
 
@@ -176,6 +179,7 @@ func (p Params) used() []string {
 	add(p.PrincipalSA != nil, "principal_service_account")
 	add(p.Effect != "", "effect")
 	add(p.TargetType != "", "target_type")
+	add(p.Resource != "", "resource")
 	add(p.Days != 0, "days")
 	add(p.Start != nil, "start")
 	add(p.End != nil, "end")
@@ -190,6 +194,9 @@ func (s *Service) RunBuiltin(ctx context.Context, b BuiltinQuery, pr page.Reques
 	}
 	if !c.CanAnywhere(PermSearch) {
 		return Result{}, td.ErrPermissionDenied(PermSearch)
+	}
+	if exposureBuiltin(b.Name) {
+		return s.runExposure(ctx, b, pr)
 	}
 	q, notes, err := b.expand(s.now())
 	if err != nil {

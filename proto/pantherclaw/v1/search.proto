@@ -135,6 +135,8 @@ message BuiltinParams {
   }];
   google.protobuf.Timestamp start_time = 9;
   google.protobuf.Timestamp end_time = 10;
+  // A resource group (who_can_write).
+  string resource = 11 [(buf.validate.field).string.max_len = 200];
 }
 
 // BuiltinQuery is one built-in query with its parameters.

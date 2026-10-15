@@ -40,6 +40,7 @@ service OperationsService {
 // WorkAction is an action the caller may take on a work item.
 message WorkAction {
   // "assign", "set_state", "promote", "suspend_agent", "resolve",
+  // "open_response_action",
   // "open_approval" or "revoke_grant".
   string name = 1;
   // The permission it needs (the caller holds it for the item).
@@ -50,7 +51,8 @@ message WorkAction {
 
 // WorkItem is one work-queue item.
 message WorkItem {
-  // "INCIDENT", "ALERT", "PROTECTION_FAILURE", "WAITING_DECISION" or
+  // "INCIDENT", "UNCONFIRMED_CONTAINMENT", "ALERT", "PROTECTION_FAILURE",
+  // "WAITING_DECISION", "POSTURE_FINDING" or
   // "AUTHORITY_EXPANSION".
   string kind = 1;
   string id = 2;
@@ -94,6 +96,7 @@ message GetSummaryResponse {
   string scope = 3;
   // Counts by key: active_incidents, open_alerts, critical,
   // protection_failures, expiring_decisions, authority_expansion_24h,
+  // unconfirmed_containment, posture_findings,
   // telemetry_gaps.
   map<string, int32> counts = 4;
   bool truncated = 5;

@@ -348,8 +348,10 @@ type BuiltinParams struct {
 	Days                      int32                  `protobuf:"varint,8,opt,name=days,proto3" json:"days,omitempty"`
 	StartTime                 *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=start_time,json=startTime,proto3" json:"start_time,omitempty"`
 	EndTime                   *timestamppb.Timestamp `protobuf:"bytes,10,opt,name=end_time,json=endTime,proto3" json:"end_time,omitempty"`
-	unknownFields             protoimpl.UnknownFields
-	sizeCache                 protoimpl.SizeCache
+	// A resource group (who_can_write).
+	Resource      string `protobuf:"bytes,11,opt,name=resource,proto3" json:"resource,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *BuiltinParams) Reset() {
@@ -450,6 +452,13 @@ func (x *BuiltinParams) GetEndTime() *timestamppb.Timestamp {
 		return x.EndTime
 	}
 	return nil
+}
+
+func (x *BuiltinParams) GetResource() string {
+	if x != nil {
+		return x.Resource
+	}
+	return ""
 }
 
 // BuiltinQuery is one built-in query with its parameters.
@@ -1998,7 +2007,7 @@ const file_pantherclaw_v1_search_proto_rawDesc = "" +
 	"\x05Query\x12{\n" +
 	"\x06entity\x18\x01 \x01(\tBc\xbaH`r^R\ftransactionsR\x04runsR\x06agentsR\x06grantsR\rgrant_changesR\vconnectionsR\tapprovalsR\x05auditR\n" +
 	"operationsR\x06entity\x127\n" +
-	"\afilters\x18\x02 \x01(\v2\x1d.pantherclaw.v1.SearchFiltersR\afilters\"\xf6\x04\n" +
+	"\afilters\x18\x02 \x01(\v2\x1d.pantherclaw.v1.SearchFiltersR\afilters\"\x9c\x05\n" +
 	"\rBuiltinParams\x124\n" +
 	"\x0etransaction_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01H\x00R\rtransactionId\x88\x01\x01\x12(\n" +
 	"\bagent_id\x18\x02 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01H\x01R\aagentId\x88\x01\x01\x122\n" +
@@ -2013,7 +2022,8 @@ const file_pantherclaw_v1_search_proto_rawDesc = "" +
 	"\n" +
 	"start_time\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\tstartTime\x125\n" +
 	"\bend_time\x18\n" +
-	" \x01(\v2\x1a.google.protobuf.TimestampR\aendTimeB\x11\n" +
+	" \x01(\v2\x1a.google.protobuf.TimestampR\aendTime\x12$\n" +
+	"\bresource\x18\v \x01(\tB\b\xbaH\x05r\x03\x18\xc8\x01R\bresourceB\x11\n" +
 	"\x0f_transaction_idB\v\n" +
 	"\t_agent_idB\x10\n" +
 	"\x0e_connection_idB\x14\n" +

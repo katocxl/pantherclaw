@@ -17,15 +17,18 @@ type ItemKind string
 
 // Item kinds, in the order they rank at equal severity.
 const (
-	KindIncident           ItemKind = "INCIDENT"
-	KindAlert              ItemKind = "ALERT"
-	KindProtectionFailure  ItemKind = "PROTECTION_FAILURE"
-	KindWaitingDecision    ItemKind = "WAITING_DECISION"
-	KindAuthorityExpansion ItemKind = "AUTHORITY_EXPANSION"
+	KindIncident               ItemKind = "INCIDENT"
+	KindAlert                  ItemKind = "ALERT"
+	KindProtectionFailure      ItemKind = "PROTECTION_FAILURE"
+	KindWaitingDecision        ItemKind = "WAITING_DECISION"
+	KindAuthorityExpansion     ItemKind = "AUTHORITY_EXPANSION"
+	KindUnconfirmedContainment ItemKind = "UNCONFIRMED_CONTAINMENT"
+	KindPostureFinding         ItemKind = "POSTURE_FINDING"
 )
 
 var kindOrder = map[ItemKind]int{
-	KindIncident: 5, KindAlert: 4, KindProtectionFailure: 3, KindWaitingDecision: 2, KindAuthorityExpansion: 1,
+	KindIncident: 7, KindUnconfirmedContainment: 6, KindAlert: 5, KindProtectionFailure: 4, KindWaitingDecision: 3,
+	KindPostureFinding: 2, KindAuthorityExpansion: 1,
 }
 
 var severityOrder = map[string]int{"CRITICAL": 4, "HIGH": 3, "MEDIUM": 2, "LOW": 1}
@@ -74,18 +77,22 @@ const (
 	expansionHorizon = 24 * time.Hour
 )
 
-// pendingSources are queue sources whose streams have not landed.
-var pendingSources = []string{"unconfirmed containment", "export delivery failing", "posture findings"}
-
 // GetWorkQueue returns the viewer's ranked work queue (F211): active
 // incidents, open alerts, protection failures, waiting decisions near their
 // deadline and authority expansion of the last day, highest severity
 // first.
 func (s *Service) GetWorkQueue(ctx context.Context) (Queue, error) {
+	if _, err := operator(ctx); err != nil {
+		return Queue{}, err
+	}
+	x, err := s.readSources(ctx)
+	if err != nil {
+		return Queue{}, err
+	}
 	var out Queue
-	err := s.read(ctx, func(ctx context.Context, v *viewer) error {
+	err = s.read(ctx, func(ctx context.Context, v *viewer) error {
 		var err error
-		out, err = workQueue(ctx, v)
+		out, err = workQueue(ctx, v, x)
 		return err
 	})
 	return out, err
@@ -110,13 +117,13 @@ func (v *viewer) actions(ctx context.Context, agents []string, cands ...Action) 
 	return out, nil
 }
 
-func workQueue(ctx context.Context, v *viewer) (Queue, error) {
+func workQueue(ctx context.Context, v *viewer, x external) (Queue, error) {
 	now, err := v.q.OpsDBNow(ctx)
 	if err != nil {
 		return Queue{}, err
 	}
 	now = now.UTC()
-	out := Queue{AsOf: now, Whole: v.whole(td.PermOperationsRead), Pending: pendingSources}
+	out := Queue{AsOf: now, Whole: v.whole(td.PermOperationsRead), Pending: x.notes()}
 	push := func(it Item, perm td.Permission) error {
 		ok, err := v.covers(ctx, perm, it.Agents)
 		if ok {
@@ -136,8 +143,14 @@ func workQueue(ctx context.Context, v *viewer) (Queue, error) {
 	if err := expansionItems(ctx, v, now, &out, push); err != nil {
 		return Queue{}, err
 	}
+	if err := containmentItems(ctx, v, x, &out); err != nil {
+		return Queue{}, err
+	}
+	if err := findingItems(ctx, v, x, &out, push); err != nil {
+		return Queue{}, err
+	}
 	if out.Whole {
-		es, err := evidenceStatus(ctx, v)
+		es, err := evidenceStatus(ctx, v, x)
 		if err != nil {
 			return Queue{}, err
 		}
@@ -308,6 +321,61 @@ func expansionItems(ctx context.Context, v *viewer, now time.Time, out *Queue, p
 			Kind: KindAuthorityExpansion, ID: r.ID.String(), Title: title, Severity: sev, State: "ACTIVE",
 			Since: r.CreatedAt, Agents: agents, Actions: acts,
 		}, td.PermGrantRead); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+var containmentSeverity = map[string]string{"FAILED": "CRITICAL", "UNSUPPORTED": "HIGH", "PARTIAL": "HIGH", "REQUESTED": "MEDIUM"}
+
+// containmentItems queues containment not yet confirmed on every material
+// path (D22, F211). The response port read them under the caller's
+// containment.read at the org.
+func containmentItems(ctx context.Context, v *viewer, x external, out *Queue) error {
+	for _, a := range x.containment {
+		sev, ok := containmentSeverity[a.Status]
+		if !ok {
+			continue // confirmed
+		}
+		var agents []string
+		if a.ScopeType == "agent" {
+			agents = []string{a.ScopeID}
+		}
+		target := "response_action:" + a.ID.String()
+		acts, err := v.actions(ctx, agents, Action{"open_response_action", td.PermContainmentRead, target})
+		if err != nil {
+			return err
+		}
+		title := "containment " + a.Status
+		if a.Control != "" {
+			title = a.Control + " on " + a.ScopeType + " " + a.Status
+		}
+		out.Items = append(out.Items, Item{
+			Kind: KindUnconfirmedContainment, ID: a.ID.String(), Title: title, Severity: sev, State: a.Status,
+			Since: a.Requested, Agents: agents, Actions: acts,
+		})
+	}
+	return nil
+}
+
+// findingItems queues open posture findings (D30) the posture port read
+// under the caller's posture.read.
+func findingItems(ctx context.Context, v *viewer, x external, out *Queue, push pushFn) error {
+	for _, f := range x.findings {
+		var agents []string
+		if f.Agent != nil {
+			agents = []string{f.Agent.String()}
+		}
+		target := "posture_finding:" + f.ID.String()
+		acts, err := v.actions(ctx, agents, Action{"assign", td.PermPostureManage, target})
+		if err != nil {
+			return err
+		}
+		if err := push(Item{
+			Kind: KindPostureFinding, ID: f.ID.String(), Title: f.Title, Severity: f.Severity, State: f.State,
+			Since: f.Since, Agents: agents, Actions: acts,
+		}, td.PermPostureRead); err != nil {
 			return err
 		}
 	}
