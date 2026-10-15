@@ -1,0 +1,23 @@
+# SPDX-License-Identifier: BUSL-1.1
+# Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+id: pc.integrity.action_tampered
+version: "1"
+title: "Integrity: action tampered"
+description: >-
+  The evidence system recorded security.action_tampered, so evidence or enforcement
+  integrity is in doubt and someone looks now.
+severity: CRITICAL
+attention: PAGE
+basis: OBSERVED
+owasp: [ASI08]
+edition: community
+on: [audit.security.action_tampered]
+tests:
+  - name: recorded
+    fires: true
+    events:
+      - {kind: audit.security.action_tampered}
+  - name: something else
+    fires: false
+    events:
+      - {kind: audit.security.evidence_integrity_reset}

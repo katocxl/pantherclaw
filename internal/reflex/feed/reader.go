@@ -35,7 +35,7 @@ func (Reader) After(ctx context.Context, tx db.TenantTx, after int64, limit int)
 	}
 	org := tx.OrgID()
 	q := dbq.New(tx)
-	rows, err := q.ChainedLedgerEntries(ctx, org, after, int32(limit)) //nolint:gosec // G115: limit ≤ 500
+	rows, err := q.ChainedLedgerEntries(ctx, org, after, int32(limit))
 	if err != nil {
 		return nil, fmt.Errorf("feed: read: %w", err)
 	}
@@ -112,6 +112,9 @@ func enrich(e *Event, r dbq.FeedTransactionsRow) {
 		e.Attrs = map[string]string{}
 	}
 	e.Attrs["depth"] = strconv.Itoa(int(r.Depth))
+	if r.BudgetID != nil {
+		e.Attrs["budget"] = r.BudgetID.String()
+	}
 	if r.ParentRunID != nil {
 		e.Attrs["parent_run"] = r.ParentRunID.String()
 	}

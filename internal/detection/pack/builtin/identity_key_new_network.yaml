@@ -1,0 +1,24 @@
+# SPDX-License-Identifier: BUSL-1.1
+# Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+id: pc.identity.key_new_network
+version: "1"
+title: Workload key used from a new network
+description: >-
+  The same agent instance key presented a token from a network it had not
+  used before (HR-092). A copied key is the usual cause (PN-006.3).
+severity: HIGH
+attention: ALERT
+basis: OBSERVED
+owasp: [ASI03]
+edition: community
+on: [audit.security.instance_network_changed]
+group: agent
+tests:
+  - name: network changed
+    fires: true
+    events:
+      - {kind: audit.security.instance_network_changed, subjects: {instance: i1}}
+  - name: an ordinary token
+    fires: false
+    events:
+      - {kind: audit.authn.token_issued, subjects: {instance: i1}}

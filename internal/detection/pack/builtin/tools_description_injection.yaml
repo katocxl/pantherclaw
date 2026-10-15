@@ -1,0 +1,27 @@
+# SPDX-License-Identifier: BUSL-1.1
+# Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+id: pc.tools.description_injection
+version: "1"
+title: Instruction-like content in a tool description
+description: >-
+  A tool description holds text that reads like instructions to the agent
+  (ignore previous instructions, hidden steps, secrets to read). Tool
+  poisoning hides such text where agents read it and people rarely do; the
+  tool goes to TOOL_REVIEW (PN-006.2, HR-244).
+severity: HIGH
+attention: ALERT
+basis: INFERRED
+atlas: [AML.T0051.001]
+owasp: [ASI01, ASI06]
+edition: community
+on: [audit.connection.tool_description_flagged]
+group: connection
+tests:
+  - name: description flagged
+    fires: true
+    events:
+      - {kind: audit.connection.tool_description_flagged, subjects: {connection: c1}, attrs: {patterns: ignore_instructions}}
+  - name: drift without a flag
+    fires: false
+    events:
+      - {kind: audit.connection.drift_reported, subjects: {connection: c1}}

@@ -50,7 +50,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
 	"github.com/katocxl/pantherclaw/internal/platform/page"
-	reflexdomain "github.com/katocxl/pantherclaw/internal/reflex/domain"
+	reflexports "github.com/katocxl/pantherclaw/internal/reflex/ports"
 	"github.com/katocxl/pantherclaw/internal/siem/ocsf"
 	"github.com/katocxl/pantherclaw/internal/siem/stepup"
 	tenancy "github.com/katocxl/pantherclaw/internal/tenancy/app"
@@ -151,7 +151,7 @@ type Service struct {
 	// editions gates the use cases (Business, D5); nil is Community.
 	editions Editions
 	// failures records owned failures (a lapsed edition); nil: not wired.
-	failures reflexdomain.FailureSink
+	failures reflexports.FailureSink
 }
 
 // New returns the service.
@@ -305,7 +305,7 @@ func (s *Service) WithEditions(e Editions) *Service {
 }
 
 // WithFailures records owned failures (a lapsed edition).
-func (s *Service) WithFailures(f reflexdomain.FailureSink) *Service {
+func (s *Service) WithFailures(f reflexports.FailureSink) *Service {
 	s.failures = f
 	return s
 }

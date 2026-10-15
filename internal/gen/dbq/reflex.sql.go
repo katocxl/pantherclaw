@@ -29,7 +29,7 @@ func (q *Queries) FeedHead(ctx context.Context, orgID ids.OrgID) (int64, error) 
 const feedTransactions = `-- name: FeedTransactions :many
 
 SELECT t.id, t.run_id, r.agent_id, r.instance_id, r.environment_id, r.grant_id, r.principal_user_id,
-       r.principal_sa_id, r.parent_run_id, r.depth, t.operation, t.connection_id, t.mode,
+       r.principal_sa_id, r.parent_run_id, r.depth, t.operation, t.connection_id, t.mode, t.budget_id,
        coalesce(c.destination_class, '')::text AS destination_class
 FROM pc.transactions t
 JOIN pc.runs r ON r.org_id = t.org_id AND r.id = t.run_id
@@ -51,6 +51,7 @@ type FeedTransactionsRow struct {
 	Operation        string
 	ConnectionID     *ids.UUID
 	Mode             string
+	BudgetID         *ids.UUID
 	DestinationClass string
 }
 
@@ -84,6 +85,7 @@ func (q *Queries) FeedTransactions(ctx context.Context, orgID ids.OrgID, ids []i
 			&i.Operation,
 			&i.ConnectionID,
 			&i.Mode,
+			&i.BudgetID,
 			&i.DestinationClass,
 		); err != nil {
 			return nil, err

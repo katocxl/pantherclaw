@@ -22,9 +22,9 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/keys"
 	"github.com/katocxl/pantherclaw/internal/platform/version"
 	"github.com/katocxl/pantherclaw/internal/reflex/alerts"
-	reflexdomain "github.com/katocxl/pantherclaw/internal/reflex/domain"
 	"github.com/katocxl/pantherclaw/internal/reflex/failures"
 	"github.com/katocxl/pantherclaw/internal/reflex/feed"
+	reflexports "github.com/katocxl/pantherclaw/internal/reflex/ports"
 	"github.com/katocxl/pantherclaw/internal/siem"
 	"github.com/katocxl/pantherclaw/internal/siem/siemrpc"
 	"github.com/katocxl/pantherclaw/internal/siem/stepup"
@@ -38,19 +38,19 @@ import (
 // endpoint; workers run the exporter and the received-events janitor.
 
 // edgesRaiser is the Raiser edges signals go through (core, D14).
-func edgesRaiser() reflexdomain.Raiser { return &alerts.Raiser{} }
+func edgesRaiser() reflexports.Raiser { return &alerts.Raiser{} }
 
 // edgesCaseOpener and edgesContainer are the cases and response ports the
 // receiver and the identity playbook use (D49): Ops wires the real
 // providers. Nil until then: accepted events are recorded with "case not
 // opened: cases unavailable" and the playbook refuses to be enabled.
 var (
-	edgesCaseOpener func(pool *db.Pool) reflexdomain.CaseOpener
-	edgesContainer  func(pool *db.Pool) reflexdomain.Container
+	edgesCaseOpener func(pool *db.Pool) reflexports.CaseOpener
+	edgesContainer  func(pool *db.Pool) reflexports.Container
 )
 
 // edgesFailures is the owned failure sink (core, D18).
-func edgesFailures() reflexdomain.FailureSink { return &failures.Sink{} }
+func edgesFailures() reflexports.FailureSink { return &failures.Sink{} }
 
 // newSIEM builds the export service as pc_app: destination secrets under
 // the org's DEKs, the evidence feed, the licence and Operations' health

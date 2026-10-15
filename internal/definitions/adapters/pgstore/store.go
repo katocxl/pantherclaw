@@ -22,6 +22,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/definitions/domain"
 	"github.com/katocxl/pantherclaw/internal/definitions/manifest"
 	"github.com/katocxl/pantherclaw/internal/definitions/trust"
+	"github.com/katocxl/pantherclaw/internal/detection/injection"
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
 	evdomain "github.com/katocxl/pantherclaw/internal/evidence/domain"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
@@ -139,8 +140,14 @@ func (s *Store) Import(ctx context.Context, org ids.OrgID, rec app.Record) error
 		if err := advancePin(ctx, q, org, pkgID, versionID, rec); err != nil {
 			return err
 		}
+		// Reviewed tool descriptions with instruction-like content are
+		// flagged and the version goes to review (G0 M10 D47, HR-244).
+		flagged, err := scanDescriptions(ctx, tx, versionID, rec)
+		if err != nil {
+			return err
+		}
 		// A version that is not active yet waits for review (G0 M5 part 2).
-		if rec.State != domain.StateActive {
+		if rec.State != domain.StateActive || flagged {
 			if _, err := pgwaitlist.OpenToolReview(ctx, tx, org, versionID, rec.Package.Name, rec.Package.Version, actorOf(rec.Event)); err != nil {
 				return err
 			}
@@ -474,4 +481,30 @@ func (s *Store) DefinitionByDigest(ctx context.Context, org ids.OrgID, digest st
 		return nil
 	}, db.ReadOnly())
 	return out, err
+}
+
+// scanDescriptions scans the reviewed MCP tool descriptions of an imported
+// version for instruction-like content (G0 M10 D47, HR-244) and records
+// each hit. It reports whether any was flagged.
+func scanDescriptions(ctx context.Context, tx db.TenantTx, version ids.UUID, rec app.Record) (bool, error) {
+	flagged := false
+	seen := map[string]bool{}
+	for _, d := range rec.Package.Definitions {
+		for _, m := range d.Mappings {
+			if m.Channel != domain.ChannelMCP || m.Description == "" || seen[m.Tool+"\x00"+m.Description] {
+				continue
+			}
+			seen[m.Tool+"\x00"+m.Description] = true
+			r := injection.Scan(m.Description)
+			if !r.Flagged {
+				continue
+			}
+			flagged = true
+			if err := injection.Record(ctx, tx, actorOf(rec.Event), audit.Object{Type: "package_version", ID: version.String()},
+				m.Tool, "import", r, map[string]string{"package": rec.Package.Name, "version": rec.Package.Version}); err != nil {
+				return false, err
+			}
+		}
+	}
+	return flagged, nil
 }

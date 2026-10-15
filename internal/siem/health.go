@@ -11,6 +11,7 @@ import (
 	napp "github.com/katocxl/pantherclaw/internal/notifications/app"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	reflexdomain "github.com/katocxl/pantherclaw/internal/reflex/domain"
+	reflexports "github.com/katocxl/pantherclaw/internal/reflex/ports"
 )
 
 // Notifier enqueues notifications in the caller's transaction (M5).
@@ -22,8 +23,8 @@ type Notifier interface {
 // owned failure, a siem signal and a siem.delivery_failing notification,
 // once per failing episode (the dedupe key carries when it began).
 type ReflexHealth struct {
-	Failures reflexdomain.FailureSink
-	Raiser   reflexdomain.Raiser
+	Failures reflexports.FailureSink
+	Raiser   reflexports.Raiser
 	// Notify is optional.
 	Notify Notifier
 }

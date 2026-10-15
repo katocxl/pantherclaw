@@ -21,6 +21,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
 	reflexdomain "github.com/katocxl/pantherclaw/internal/reflex/domain"
+	reflexports "github.com/katocxl/pantherclaw/internal/reflex/ports"
 )
 
 // Notifier enqueues notifications in the caller's transaction (M5).
@@ -30,20 +31,20 @@ type Notifier interface {
 
 // WithCases sets the case opener (cases, D19). Without one an accepted
 // event is recorded with the note NoCaseNote.
-func (s *Service) WithCases(o reflexdomain.CaseOpener) *Service {
+func (s *Service) WithCases(o reflexports.CaseOpener) *Service {
 	s.cases = o
 	return s
 }
 
 // WithContainer sets the containment port (response, D21). Without one
 // the identity playbook cannot be enabled (fail closed).
-func (s *Service) WithContainer(c reflexdomain.Container) *Service {
+func (s *Service) WithContainer(c reflexports.Container) *Service {
 	s.container = c
 	return s
 }
 
 // WithRaiser sets the signal raiser (core, D14).
-func (s *Service) WithRaiser(r reflexdomain.Raiser) *Service {
+func (s *Service) WithRaiser(r reflexports.Raiser) *Service {
 	s.raiser = r
 	return s
 }
@@ -63,7 +64,7 @@ const NoCaseNote = "case not opened: cases unavailable"
 const PlaybookReason = "PLAYBOOK: "
 
 // PlaybookActor is the actor of the playbook's containment requests.
-var PlaybookActor = reflexdomain.Subject{Type: reflexdomain.SubjectResource, ID: "identity_playbook"}
+var PlaybookActor = reflexdomain.Subject{Type: reflexdomain.SubjectSystem, ID: reflexdomain.SystemIdentityPlaybook}
 
 // maxCaseGrants bounds the grants a case lists as subjects.
 const maxCaseGrants = reflexdomain.MaxSubjects - 1

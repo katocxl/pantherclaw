@@ -37,7 +37,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
 	"github.com/katocxl/pantherclaw/internal/platform/page"
-	reflexdomain "github.com/katocxl/pantherclaw/internal/reflex/domain"
+	reflexports "github.com/katocxl/pantherclaw/internal/reflex/ports"
 	"github.com/katocxl/pantherclaw/internal/siem/stepup"
 	"github.com/katocxl/pantherclaw/internal/signals/setverify"
 	tenancy "github.com/katocxl/pantherclaw/internal/tenancy/app"
@@ -98,15 +98,15 @@ type Service struct {
 	sink Sink
 	// cases, container, raiser and notify handle accepted events (D37, D38);
 	// each may be nil (D49).
-	cases     reflexdomain.CaseOpener
-	container reflexdomain.Container
-	raiser    reflexdomain.Raiser
+	cases     reflexports.CaseOpener
+	container reflexports.Container
+	raiser    reflexports.Raiser
 	notify    Notifier
 	// editions gates the use cases and the receiver (Business, D5); nil
 	// is Community.
 	editions Editions
 	// failures records owned failures (a lapsed edition); nil: not wired.
-	failures reflexdomain.FailureSink
+	failures reflexports.FailureSink
 
 	mu   sync.Mutex
 	jwks map[ids.UUID]*cachedJWKS
@@ -197,7 +197,7 @@ func (s *Service) WithEditions(e Editions) *Service {
 }
 
 // WithFailures records owned failures (a lapsed edition).
-func (s *Service) WithFailures(f reflexdomain.FailureSink) *Service {
+func (s *Service) WithFailures(f reflexports.FailureSink) *Service {
 	s.failures = f
 	return s
 }

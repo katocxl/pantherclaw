@@ -1,0 +1,39 @@
+# SPDX-License-Identifier: BUSL-1.1
+# Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+id: pc.authority.self_issue
+version: "1"
+title: Agent created or widened its own authority
+description: >-
+  A grant was issued or revised by an agent-side principal (an instance,
+  workload or service account) rather than a person, or an agent asked the
+  Authority to run one of PantherClaw's own grant, role or policy operations.
+  Agents never hold grant.issue, so an attempt is self-authorization (PN-006.3).
+severity: HIGH
+attention: ALERT
+basis: RULE_MATCH
+atlas: [AML.T0053]
+owasp: [ASI03]
+edition: community
+on: [audit.grant.issued, audit.grant.revised, receipt.decision]
+match: >-
+  (event.kind != "receipt.decision" && event.actor_type in ["instance", "workload", "agent", "service_account"])
+  || (event.kind == "receipt.decision"
+  && event.operation.matches("^(pantherclaw|pc)\\.(grant|grants|role|roles|policy|policies|guardrails)\\."))
+group: agent
+tests:
+  - name: workload issues a grant
+    fires: true
+    events:
+      - {kind: audit.grant.issued, actor_type: instance, actor_id: i1, subjects: {agent: a1, grant: g1}}
+  - name: agent asks for a grant operation
+    fires: true
+    events:
+      - {kind: receipt.decision, decision: DENY, operation: pantherclaw.grant.issue, subjects: {agent: a1, run: r1}}
+  - name: a person issues a grant
+    fires: false
+    events:
+      - {kind: audit.grant.issued, actor_type: user, actor_id: u1, subjects: {agent: a1, grant: g1}}
+  - name: an ordinary action
+    fires: false
+    events:
+      - {kind: receipt.decision, decision: ALLOW, operation: github.pull.create, subjects: {agent: a1}}

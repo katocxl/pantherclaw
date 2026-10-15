@@ -1,0 +1,183 @@
+// SPDX-License-Identifier: BUSL-1.1
+// Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+
+syntax = "proto3";
+
+package pantherclaw.v1;
+
+import "buf/validate/validate.proto";
+import "google/protobuf/timestamp.proto";
+
+// DetectionService serves Reflex's detection rules (G0 M10 D9–D13;
+// PN-006.1, founder decision F4; HR-240, HR-241). The built-in pack ships
+// inside the release-signed binary and is digest-checked at startup; if it
+// fails the check, detections stay off and an owned failure says so.
+// Custom rules (Business) are CEL over the event feed; they publish only
+// with a passing firing and non-firing test, raise at most INCIDENT, never
+// act, and run only while their content matches the digest their
+// publication recorded in the ledger.
+service DetectionService {
+  // ListRules lists the built-in rules and the org's custom rules with
+  // their state.
+  // permission: detection.read
+  rpc ListRules(ListRulesRequest) returns (ListRulesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // GetDetectionStatus says how far detection has read the org's feed.
+  // permission: detection.read
+  rpc GetDetectionStatus(GetDetectionStatusRequest) returns (GetDetectionStatusResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // CreateCustomRule stores a DRAFT custom rule version (Business; a person
+  // only).
+  // permission: detection.manage
+  rpc CreateCustomRule(CreateCustomRuleRequest) returns (CreateCustomRuleResponse);
+  // TestCustomRule runs a custom rule version's tests and records the run.
+  // permission: detection.manage
+  rpc TestCustomRule(TestCustomRuleRequest) returns (TestCustomRuleResponse);
+  // PublishCustomRule re-runs the tests and publishes the version when at
+  // least one firing and one non-firing test pass; a published older
+  // version of the same rule is disabled (Business; a person only).
+  // permission: detection.manage
+  rpc PublishCustomRule(PublishCustomRuleRequest) returns (PublishCustomRuleResponse);
+  // DisableCustomRule disables a custom rule version (a person only).
+  // permission: detection.manage
+  rpc DisableCustomRule(DisableCustomRuleRequest) returns (DisableCustomRuleResponse);
+  // EnableRule turns a rule the engine disabled after repeated evaluation
+  // errors back on (a person only).
+  // permission: detection.manage
+  rpc EnableRule(EnableRuleRequest) returns (EnableRuleResponse);
+}
+
+// DetectionRule is one rule as the org runs it.
+message DetectionRule {
+  // "pc.<area>.<name>" for built-in rules, "org.<slug>" for custom ones.
+  string rule_id = 1;
+  string version = 2;
+  string title = 3;
+  string description = 4;
+  string severity = 5;
+  string attention = 6;
+  string basis = 7;
+  repeated string atlas = 8;
+  repeated string owasp = 9;
+  // "community" or "business".
+  string edition = 10;
+  // Hex SHA-256 of the rule's content.
+  string digest = 11;
+  // Whether it is built in.
+  bool builtin = 12;
+  // Whether the org's edition runs it.
+  bool licensed = 13;
+  // Custom rule version id and state ("DRAFT", "PUBLISHED", "DISABLED").
+  string custom_id = 14;
+  string custom_state = 15;
+  // Set when the engine disabled it after evaluation errors.
+  google.protobuf.Timestamp disable_time = 16;
+  string disabled_reason = 17;
+  // Consecutive evaluation errors.
+  int32 consecutive_errors = 18;
+  // The rule's YAML, for custom rules.
+  string content = 19;
+}
+
+// ListRulesRequest has no filters.
+message ListRulesRequest {}
+
+// ListRulesResponse lists the rules.
+message ListRulesResponse {
+  repeated DetectionRule rules = 1;
+  // The built-in pack's version.
+  string pack_version = 2;
+  // Whether the built-in pack passed its integrity check.
+  bool pack_verified = 3;
+}
+
+// GetDetectionStatusRequest has no fields.
+message GetDetectionStatusRequest {}
+
+// GetDetectionStatusResponse says how far detection has read.
+message GetDetectionStatusResponse {
+  // The last feed seq evaluated, and the feed's head.
+  int64 cursor_seq = 1;
+  int64 head_seq = 2;
+  // When the cursor last moved; unset before the first run.
+  google.protobuf.Timestamp update_time = 3;
+  // Whether detections run (the pack verified).
+  bool running = 4;
+}
+
+// CreateCustomRuleRequest holds a rule's YAML.
+message CreateCustomRuleRequest {
+  // One YAML document (at most 64 KiB).
+  string content = 1 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 65536
+  }];
+}
+
+// CreateCustomRuleResponse returns the draft.
+message CreateCustomRuleResponse {
+  DetectionRule rule = 1;
+}
+
+// TestCustomRuleRequest names a version.
+message TestCustomRuleRequest {
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// RuleTestResult is one test's outcome.
+message RuleTestResult {
+  string name = 1;
+  bool fires = 2;
+  bool fired = 3;
+  bool passed = 4;
+  string error = 5;
+}
+
+// TestCustomRuleResponse returns the results.
+message TestCustomRuleResponse {
+  repeated RuleTestResult results = 1;
+  // Whether every test passed with at least one firing and one non-firing
+  // test.
+  bool passed = 2;
+}
+
+// PublishCustomRuleRequest names a version.
+message PublishCustomRuleRequest {
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// PublishCustomRuleResponse returns the published rule.
+message PublishCustomRuleResponse {
+  DetectionRule rule = 1;
+  repeated RuleTestResult results = 2;
+}
+
+// DisableCustomRuleRequest names a version.
+message DisableCustomRuleRequest {
+  string id = 1 [(buf.validate.field).string.uuid = true];
+  string reason = 2 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 500
+  }];
+}
+
+// DisableCustomRuleResponse returns it.
+message DisableCustomRuleResponse {
+  DetectionRule rule = 1;
+}
+
+// EnableRuleRequest names a rule.
+message EnableRuleRequest {
+  string rule_id = 1 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 128
+    pattern: "^[a-z][a-z0-9_.]*$"
+  }];
+}
+
+// EnableRuleResponse says whether it was disabled.
+message EnableRuleResponse {
+  bool enabled = 1;
+}
