@@ -90,7 +90,7 @@ func Compare(base, next *Bundle) Diff {
 			continue
 		}
 		d := Looser
-		if r.Kind == Annotate && !r.IsEmergency() {
+		if r.Kind == Annotate {
 			d = Neutral
 		}
 		changes = append(changes, change(r.ID, ChangeRemoved, "", r.Summary, "", d))
@@ -125,7 +125,7 @@ func change(rule, kind, field, before, after string, d Direction) Change {
 var fieldNames = map[string]string{
 	"kind": "kind", "summary": "summary", "reason": "reason code", "operations": "operations",
 	"environments": "environments", "when": "condition", "facts": "facts", "exceptable": "exceptable",
-	"labels": "labels", "labels.emergency": "emergency label",
+	"labels": "labels", "emergency": "emergency rule",
 	"approval.role": "approval role", "approval.count": "approvals required", "approval.independent": "independent approvers",
 	"approval.window": "change window", "approval.deadline_seconds": "approval deadline",
 	"step_up.subject": "step-up subject", "step_up.method": "step-up method", "step_up.deadline_seconds": "step-up deadline",
@@ -181,13 +181,16 @@ func compareRule(a, b *Rule) []Change {
 		}
 		add("exceptable", strconv.FormatBool(a.Exceptable), strconv.FormatBool(b.Exceptable), d)
 	}
-	before := maps.Clone(a.Labels)
-	if a.IsEmergency() && !b.IsEmergency() {
-		add("labels.emergency", a.Labels[EmergencyLabel], b.Labels[EmergencyLabel], Looser)
-		delete(before, EmergencyLabel)
+	if a.Emergency != b.Emergency {
+		// An emergency rule is carried by every rollback (D4, D24).
+		d := Looser
+		if b.Emergency {
+			d = Tighter
+		}
+		add("emergency", strconv.FormatBool(a.Emergency), strconv.FormatBool(b.Emergency), d)
 	}
-	if !maps.Equal(before, b.Labels) {
-		add("labels", labelText(before), labelText(b.Labels), Neutral)
+	if !maps.Equal(a.Labels, b.Labels) {
+		add("labels", labelText(a.Labels), labelText(b.Labels), Neutral)
 	}
 	if a.Kind == b.Kind {
 		switch a.Kind { //nolint:exhaustive // FORBID and ANNOTATE carry no requirement
@@ -200,10 +203,9 @@ func compareRule(a, b *Rule) []Change {
 		}
 	}
 	if a.Kind == Annotate && b.Kind == Annotate {
-		// An annotation decides nothing; only losing the emergency label
-		// matters (D4).
+		// An annotation decides nothing (and is never an emergency rule).
 		for i := range out {
-			if out[i].Field != "labels.emergency" && out[i].Direction != Neutral {
+			if out[i].Direction != Neutral {
 				out[i].Direction = Neutral
 				out[i].Sentence = sentence(out[i])
 			}
@@ -212,20 +214,20 @@ func compareRule(a, b *Rule) []Change {
 	return out
 }
 
-// kindRank orders the deciding kinds: FORBID > REQUIRE_APPROVAL,
-// REQUIRE_STEP_UP > CONSTRAIN.
-var kindRank = map[Kind]int{Forbid: 3, RequireApproval: 2, RequireStepUp: 2, Constrain: 1}
-
+// kindDirection classifies a kind change (M11.1 D25). Only FORBID is
+// stricter than everything: it denies every action it matches, so a change
+// to FORBID is TIGHTER (the requirement or constraint it drops does not
+// count) and a change from it LOOSER. Every other change is UNKNOWN: a
+// violated CONSTRAIN is a DENY while a REQUIRE_* match is a hold an
+// approver can release, and an approval and a step-up are not comparable.
 func kindDirection(a, b Kind) Direction {
-	ra, okA := kindRank[a]
-	rb, okB := kindRank[b]
 	switch {
-	case !okA || !okB || ra == rb:
-		return Unknown
-	case rb > ra:
+	case b == Forbid:
 		return Tighter
-	default:
+	case a == Forbid:
 		return Looser
+	default:
+		return Unknown
 	}
 }
 
