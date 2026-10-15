@@ -165,16 +165,17 @@ VALUES (sqlc.arg(org_id), sqlc.arg(rollout_id), sqlc.arg(last_created_at), sqlc.
 ON CONFLICT (org_id, rollout_id) DO UPDATE SET last_created_at = EXCLUDED.last_created_at, last_txn = EXCLUDED.last_txn;
 
 -- Decisions after a cursor, oldest first, with the agent of their run and
--- their operation. Only decisions at least a minute old are read, so one
--- whose transaction committed late is not passed over; receipts whose body
--- retention removed have nothing to replay or read.
+-- their operation. Only decisions older than the lag (a minute in
+-- production) are read, so one whose transaction committed late is not
+-- passed over; receipts whose body retention removed have nothing to
+-- replay or read.
 -- name: RolloutDecisionsAfter :many
 SELECT d.transaction_id, d.evaluation, d.created_at, r.agent_id, t.operation
 FROM pc.decision_receipts d
 JOIN pc.transactions t ON t.org_id = d.org_id AND t.id = d.transaction_id
 JOIN pc.runs r ON r.org_id = t.org_id AND r.id = t.run_id
 WHERE d.org_id = sqlc.arg(org_id) AND d.body_removed_at IS NULL
-  AND d.created_at < now() - interval '1 minute'
+  AND d.created_at <= now() - make_interval(secs => sqlc.arg(lag_seconds)::double precision)
   AND (d.created_at, d.transaction_id) > (sqlc.arg(after_created_at)::timestamptz, sqlc.arg(after_txn)::uuid)
 ORDER BY d.created_at, d.transaction_id, d.evaluation
 LIMIT sqlc.arg(max_rows);

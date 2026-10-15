@@ -777,14 +777,15 @@ FROM pc.decision_receipts d
 JOIN pc.transactions t ON t.org_id = d.org_id AND t.id = d.transaction_id
 JOIN pc.runs r ON r.org_id = t.org_id AND r.id = t.run_id
 WHERE d.org_id = $1 AND d.body_removed_at IS NULL
-  AND d.created_at < now() - interval '1 minute'
-  AND (d.created_at, d.transaction_id) > ($2::timestamptz, $3::uuid)
+  AND d.created_at <= now() - make_interval(secs => $2::double precision)
+  AND (d.created_at, d.transaction_id) > ($3::timestamptz, $4::uuid)
 ORDER BY d.created_at, d.transaction_id, d.evaluation
-LIMIT $4
+LIMIT $5
 `
 
 type RolloutDecisionsAfterParams struct {
 	OrgID          ids.OrgID
+	LagSeconds     float64
 	AfterCreatedAt time.Time
 	AfterTxn       ids.UUID
 	MaxRows        int32
@@ -799,12 +800,14 @@ type RolloutDecisionsAfterRow struct {
 }
 
 // Decisions after a cursor, oldest first, with the agent of their run and
-// their operation. Only decisions at least a minute old are read, so one
-// whose transaction committed late is not passed over; receipts whose body
-// retention removed have nothing to replay or read.
+// their operation. Only decisions older than the lag (a minute in
+// production) are read, so one whose transaction committed late is not
+// passed over; receipts whose body retention removed have nothing to
+// replay or read.
 func (q *Queries) RolloutDecisionsAfter(ctx context.Context, arg RolloutDecisionsAfterParams) ([]RolloutDecisionsAfterRow, error) {
 	rows, err := q.db.Query(ctx, rolloutDecisionsAfter,
 		arg.OrgID,
+		arg.LagSeconds,
 		arg.AfterCreatedAt,
 		arg.AfterTxn,
 		arg.MaxRows,
