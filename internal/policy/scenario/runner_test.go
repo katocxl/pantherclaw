@@ -535,3 +535,35 @@ func BenchmarkMutantsOf512Rules(bm *testing.B) {
 		_, _ = mutantsOf(b)
 	}
 }
+
+// TestScenarioRollbackCarriesEmergencyTests is D35: rolling back to a
+// version without an emergency FORBID carries the rule and its test, and
+// the carried bundle passes its own gate with no survivors.
+func TestScenarioRollbackCarriesEmergencyTests(t *testing.T) {
+	r := newRunner(newWorld(t), papp.DefaultBudget)
+	target := bundle([]pdomain.Rule{over50()}, refundCase("at", "50.00", allow()), refundCase("above", "50.01", held("approve-over-50")))
+	freeze := pdomain.Rule{
+		ID: "freeze-fraud", Kind: pdomain.Forbid, Summary: "no fraud refunds during the incident", Operations: []string{refund},
+		When: `action.params.reason == "fraudulent"`, Reason: "FRAUD_FREEZE", Emergency: true,
+	}
+	fraud := refundCase("fraud", "10.00", pdomain.TestExpect{Decision: "DENY", Reason: "FRAUD_FREEZE", Rule: "freeze-fraud"})
+	fraud.Action.Params = jsontext.Value(`{"amount":{"value":"10.00","currency":"USD"},"reason":"fraudulent"}`)
+	current := bundle(append([]pdomain.Rule{over50()}, freeze), append(slices.Clone(target.Tests), fraud)...)
+	current.Version = 4
+	if res := runOK(t, r, current); !res.Passed {
+		t.Fatalf("current: %+v", res)
+	}
+	// Without its test, the carried rule's removal survives.
+	rulesOnly := *target
+	rulesOnly.Rules = append(slices.Clone(target.Rules), freeze)
+	if res := runOK(t, r, &rulesOnly); res.Passed {
+		t.Fatalf("a carried rule without its test passed: %+v", res)
+	}
+	out, carried := pdomain.CarryEmergency(current, target)
+	if !slices.Equal(carried, []string{"freeze-fraud"}) || len(out.Tests) != 3 {
+		t.Fatalf("carried %v, %d tests", carried, len(out.Tests))
+	}
+	if res := runOK(t, r, out); !res.Passed || res.Survivors != 0 || res.Mutants != 4 {
+		t.Fatalf("rollback: %+v", res)
+	}
+}
