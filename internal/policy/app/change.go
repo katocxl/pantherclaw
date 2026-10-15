@@ -508,7 +508,6 @@ func (c *Changes) BeginConfirm(ctx context.Context, id ids.UUID) (ChangeRequest,
 	return r, nil
 }
 
-
 // Confirm records the caller's confirmation with the ceremony that signed
 // the request's binding (HR-231). The confirmation that reaches the
 // required count applies the change in the same transaction: the base

@@ -77,7 +77,9 @@ func (catalog) Catalog(context.Context, ids.OrgID) (map[string]fdomain.Type, err
 
 type definitions struct{ ds []*defs.Definition }
 
-func (d definitions) ActiveDefinitions(context.Context, ids.OrgID) ([]*defs.Definition, error) { return d.ds, nil }
+func (d definitions) ActiveDefinitions(context.Context, ids.OrgID) ([]*defs.Definition, error) {
+	return d.ds, nil
+}
 
 type notes struct {
 	mu    sync.Mutex
