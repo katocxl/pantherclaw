@@ -11,11 +11,13 @@ import (
 	"go/token"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
+	"unsafe"
 
 	"github.com/katocxl/pantherclaw/internal/actionir"
 	"github.com/katocxl/pantherclaw/internal/authority/pipeline/pipelinetest"
@@ -419,7 +421,7 @@ func TestHR238_MutantsAreBoundedAndUncompilableOnesListed(t *testing.T) {
 	r.mutate = func(b *pdomain.Bundle) ([]mutant, error) {
 		ms := make([]mutant, MaxMutants+1)
 		for i := range ms {
-			ms[i] = mutant{rule: "approve-over-50", mutation: "x", bundle: b}
+			ms[i] = mutant{rule: "approve-over-50", mutation: "x"}
 		}
 		return ms, nil
 	}
@@ -429,10 +431,7 @@ func TestHR238_MutantsAreBoundedAndUncompilableOnesListed(t *testing.T) {
 	}
 	r.mutate = func(b *pdomain.Bundle) ([]mutant, error) {
 		ms, err := mutantsOf(b)
-		bad := *b
-		bad.Rules = slices.Clone(b.Rules)
-		bad.Rules[0].When = "action.params.nope > 1"
-		return append(ms, mutant{rule: "approve-over-50", mutation: bad.Rules[0].When, bundle: &bad}), err
+		return append(ms, mutant{rule: "approve-over-50", mutation: "action.params.nope > 1"}), err
 	}
 	res = runOK(t, r, b)
 	if !res.Passed || res.Mutants != 3 || res.Survivors != 0 ||
@@ -484,5 +483,55 @@ func TestHR238_TheMutantCapStopsGeneration(t *testing.T) {
 	res := runOK(t, newRunner(w, papp.DefaultBudget), bundle(big, refundCase("at", "50.00", allow())))
 	if res.Passed || res.Error != pdomain.ErrTestsTooLarge || built >= len(big) || len(res.Surviving)+len(res.Uncompilable) != 0 {
 		t.Fatalf("run: built %d, %+v", built, res)
+	}
+}
+
+// TestHR238_MutantsHoldNoBundles is D32: listing a 512-rule bundle's
+// mutants copies no rule slice, and each mutant's bundle is built only
+// when it is compiled.
+func TestHR238_MutantsHoldNoBundles(t *testing.T) {
+	rules := make([]pdomain.Rule, 512)
+	for i := range rules {
+		r := over50()
+		r.ID = "r" + strconv.Itoa(i)
+		rules[i] = r
+	}
+	b := bundle(rules)
+	ms, err := mutantsOf(b)
+	if err != nil || len(ms) != 2*len(rules) {
+		t.Fatalf("%d mutants, %v", len(ms), err)
+	}
+	// Eager bundles copied the 512-rule slice once per mutant (1 024
+	// copies); what remains is parsing each condition, a fraction of that.
+	var stats runtime.MemStats
+	runtime.GC()
+	runtime.ReadMemStats(&stats)
+	before := stats.TotalAlloc
+	_, _ = mutantsOf(b)
+	runtime.ReadMemStats(&stats)
+	if grown, oneCopy := stats.TotalAlloc-before, uint64(len(rules))*uint64(unsafe.Sizeof(pdomain.Rule{})); grown > uint64(len(ms)/4)*oneCopy {
+		t.Fatalf("listing mutants allocated %d bytes, %d rule-slice copies", grown, grown/oneCopy)
+	}
+	m := ms[2] // r1's flip (ms[1] is r0's removal)
+	got := m.bundle(b)
+	if got.Rules[m.index].When != m.mutation || b.Rules[m.index].When != over50().When || got.Tests != nil {
+		t.Fatal("a mutant bundle is not the bundle with its one change")
+	}
+	if removed := ms[1].bundle(b); len(removed.Rules) != len(rules)-1 || len(b.Rules) != len(rules) {
+		t.Fatal("a removal mutant does not remove exactly its rule")
+	}
+}
+
+func BenchmarkMutantsOf512Rules(bm *testing.B) {
+	rules := make([]pdomain.Rule, 512)
+	for i := range rules {
+		r := over50()
+		r.ID = "r" + strconv.Itoa(i)
+		rules[i] = r
+	}
+	b := bundle(rules)
+	bm.ReportAllocs()
+	for bm.Loop() {
+		_, _ = mutantsOf(b)
 	}
 }

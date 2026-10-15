@@ -212,7 +212,7 @@ func (r *Runner) Run(ctx context.Context, org ids.OrgID, b *pdomain.Bundle) (pdo
 		if err := ctx.Err(); err != nil {
 			return res, err
 		}
-		mp, err := r.compile(m.bundle, ds, catalog, version)
+		mp, err := r.compile(m.bundle(b), ds, catalog, version)
 		if err != nil {
 			// It can never be published, but no case showed that: listed,
 			// neither killed nor surviving (D26).
@@ -316,10 +316,27 @@ func httpReads(ds []*defs.Definition) []string {
 	return pkg.HTTPReads()
 }
 
-// mutant is a bundle with one change the tests must notice.
+// mutant is one change to a bundle the tests must notice: rule index's
+// condition replaced by mutation, or the rule removed. Its bundle is built
+// only when it is compiled (D32), so a run holds one mutant bundle at a
+// time, not one per mutant.
 type mutant struct {
 	rule, mutation string
-	bundle         *pdomain.Bundle
+	index          int
+	remove         bool
+}
+
+// bundle is b with the mutant's change, without tests.
+func (m mutant) bundle(b *pdomain.Bundle) *pdomain.Bundle {
+	c := *b
+	c.Tests = nil
+	if m.remove {
+		c.Rules = slices.Delete(slices.Clone(b.Rules), m.index, m.index+1)
+		return &c
+	}
+	c.Rules = slices.Clone(b.Rules)
+	c.Rules[m.index].When = m.mutation
+	return &c
 }
 
 // errTooManyMutants: the bundle has more than MaxMutants mutants.
@@ -336,12 +353,6 @@ var mutantsFor = papp.Mutants
 // building any rule's mutants that would pass MaxMutants (D26).
 func mutantsOf(b *pdomain.Bundle) ([]mutant, error) {
 	var out []mutant
-	with := func(edit func(rules []pdomain.Rule) []pdomain.Rule) *pdomain.Bundle {
-		c := *b
-		c.Rules = edit(slices.Clone(b.Rules))
-		c.Tests = nil
-		return &c
-	}
 	for i, rule := range b.Rules {
 		if rule.Kind == pdomain.Annotate {
 			continue
@@ -358,14 +369,9 @@ func mutantsOf(b *pdomain.Bundle) ([]mutant, error) {
 			return nil, err
 		}
 		for _, m := range ms {
-			out = append(out, mutant{rule: rule.ID, mutation: m, bundle: with(func(rs []pdomain.Rule) []pdomain.Rule {
-				rs[i].When = m
-				return rs
-			})})
+			out = append(out, mutant{rule: rule.ID, mutation: m, index: i})
 		}
-		out = append(out, mutant{rule: rule.ID, mutation: RemoveRule, bundle: with(func(rs []pdomain.Rule) []pdomain.Rule {
-			return slices.Delete(rs, i, i+1)
-		})})
+		out = append(out, mutant{rule: rule.ID, mutation: RemoveRule, index: i, remove: true})
 	}
 	return out, nil
 }
