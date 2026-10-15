@@ -18,6 +18,10 @@
 -- REVOKED or EXPIRED; ACTIVE → REVOKED or EXPIRED. An ACTIVE exception past
 -- its expiry already waives nothing (readers check expires_at > now()); the
 -- sweep only records the state.
+--
+-- pc_app may UPDATE only the transition columns (D22): state, activated_at,
+-- expires_at, revoked_by and revoked_reason; never the ids, the rule, its
+-- digest, the agent, the operations, the reason, the owner or requester.
 
 -- +goose Up
 CREATE TABLE pc.policy_exceptions (

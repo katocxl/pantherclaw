@@ -362,3 +362,67 @@ func TestHR235_RevokeIsAPublishersAnyTime(t *testing.T) {
 		t.Fatalf("an approver listed: %v", err)
 	}
 }
+
+// TestT102_ApprovalRechecksTheBase (D23): at the last confirmation the
+// apply callback refuses with BASE_CHANGED when the rule changed or is no
+// longer exceptable in the published version or the agent was retired,
+// and with EXPIRED when the requested expiry has passed; nothing becomes
+// active.
+func TestT102_ApprovalRechecksTheBase(t *testing.T) {
+	author := func(f *fixture) context.Context { return f.as(f.alice, tenancy.CredAccessToken, td.RolePolicyAuthor) }
+	for name, tt := range map[string]struct {
+		change func(t *testing.T, f *fixture, x exceptions.Exception)
+		want   error
+	}{
+		"rule changed": {func(t *testing.T, f *fixture, _ exceptions.Exception) {
+			rs := rules()
+			rs[0].When = "false"
+			f.republish(t, rs)
+		}, exceptions.ErrBaseChanged},
+		"rule no longer exceptable": {func(t *testing.T, f *fixture, _ exceptions.Exception) {
+			rs := rules()
+			rs[0].Exceptable = false
+			f.republish(t, rs)
+		}, exceptions.ErrBaseChanged},
+		"rule removed": {func(t *testing.T, f *fixture, _ exceptions.Exception) {
+			f.republish(t, rules()[1:])
+		}, exceptions.ErrBaseChanged},
+		"agent retired": {func(t *testing.T, f *fixture, _ exceptions.Exception) {
+			f.d.AdminExec(t, `UPDATE pc.agents SET state = 'RETIRED', retired_at = now() WHERE org_id = $1 AND id = $2`, f.org, f.agent)
+		}, exceptions.ErrBaseChanged},
+		"requested expiry passed": {func(t *testing.T, f *fixture, x exceptions.Exception) {
+			f.d.AdminExec(t, `ALTER TABLE pc.policy_exceptions DISABLE TRIGGER policy_exceptions_transition`)
+			f.d.AdminExec(t, `UPDATE pc.policy_exceptions SET created_at = now() - interval '2 hours', requested_expiry = now() - interval '1 hour'
+				WHERE id = $1`, x.ID)
+			f.d.AdminExec(t, `ALTER TABLE pc.policy_exceptions ENABLE TRIGGER policy_exceptions_transition`)
+		}, exceptions.ErrRequestExpired},
+	} {
+		t.Run(name, func(t *testing.T) {
+			f := newFixture(t)
+			x, _, err := f.svc.RequestException(author(f), f.request())
+			if err != nil {
+				t.Fatal(err)
+			}
+			tt.change(t, f, x)
+			if _, err := f.activate(t, x.ID); !errors.Is(err, tt.want) {
+				t.Fatalf("activate: %v, want %v", err, tt.want)
+			}
+			if n := f.count(t, `SELECT count(*) FROM pc.policy_exceptions WHERE state = 'ACTIVE'`); n != 0 {
+				t.Fatalf("%d active exceptions", n)
+			}
+		})
+	}
+}
+
+// republish replaces the published version with rules (test setup).
+func (f *fixture) republish(t *testing.T, rs []pdomain.Rule) {
+	t.Helper()
+	raw, err := json.Marshal(pdomain.Bundle{ID: "refunds", Version: 2, Rules: rs}, json.Deterministic(true))
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.exec(t, `UPDATE pc.policy_versions SET state = 'SUPERSEDED' WHERE org_id = $1 AND id = $2`, f.org, f.published)
+	f.exec(t, `INSERT INTO pc.policy_versions (org_id, id, policy_id, version, bundle, state, created_by, published_by, published_at)
+		SELECT org_id, $2, policy_id, 2, $3, 'PUBLISHED', 'test', 'test', now() FROM pc.policy_versions WHERE org_id = $1 AND id = $4`,
+		f.org, ids.NewV7(), raw, f.published)
+}

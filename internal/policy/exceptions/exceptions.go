@@ -13,6 +13,7 @@
 package exceptions
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -72,6 +73,13 @@ var (
 	ErrNotOpen       = pcerr.New(pcerr.FailedPrecondition, "POLICY_EXCEPTION_NOT_OPEN", "the exception is no longer pending or active")
 	ErrNotPending    = pcerr.New(pcerr.FailedPrecondition, "POLICY_EXCEPTION_NOT_PENDING",
 		"the exception is no longer pending, or its requested expiry has passed")
+	// ErrBaseChanged and ErrRequestExpired void an EXCEPTION change request at
+	// its last confirmation (D23): BASE_CHANGED when the rule changed, is no
+	// longer exceptable or published, or the agent was retired; EXPIRED when
+	// the requested expiry has passed.
+	ErrBaseChanged = pcerr.New(pcerr.FailedPrecondition, "BASE_CHANGED",
+		"the rule is no longer exceptable as requested in the published policy, or the agent is retired")
+	ErrRequestExpired = pcerr.New(pcerr.FailedPrecondition, "EXPIRED", "the requested expiry of the exception has passed")
 	// ErrNoChangeRequests: without the change-request mechanism an exception
 	// could never be approved, so none is requested (fail closed).
 	ErrNoChangeRequests = pcerr.New(pcerr.FailedPrecondition, "CHANGE_REQUESTS_UNAVAILABLE",
@@ -279,12 +287,31 @@ func summarize(x Exception, r pdomain.Rule, agentName string) Summary {
 }
 
 // Activate is the EXCEPTION change request's apply callback: in the
-// approving transaction, the pending exception becomes ACTIVE and the
-// database clock sets its expiry. Its owner is told.
+// confirming transaction it re-checks that the rule still exists in the
+// published version, is exceptable and has the digest the exception names,
+// that the agent is not retired (else ErrBaseChanged) and that the
+// requested expiry has not passed (else ErrRequestExpired), D23. Then the
+// pending exception becomes ACTIVE, the database clock sets its expiry and
+// its owner is told.
 func (s *Service) Activate(ctx context.Context, tx db.TenantTx, org ids.OrgID, id ids.UUID) (Exception, error) {
-	x, err := dbq.New(tx).ActivatePolicyException(ctx, org, id)
+	q := dbq.New(tx)
+	x, err := q.GetPolicyException(ctx, org, id)
 	if db.IsNoRows(err) {
+		return x, ErrNotFound
+	} else if err != nil {
+		return x, err
+	}
+	if x.State != StatePending {
 		return x, ErrNotPending
+	}
+	if err := baseHolds(ctx, q, x); err != nil {
+		return x, err
+	}
+	x, err = q.ActivatePolicyException(ctx, org, id)
+	if db.IsNoRows(err) {
+		// Still pending (checked above, in this transaction): only the
+		// requested expiry can have stopped it.
+		return x, ErrRequestExpired
 	} else if err != nil {
 		return x, err
 	}
@@ -294,6 +321,34 @@ func (s *Service) Activate(ctx context.Context, tx db.TenantTx, org ids.OrgID, i
 		return x, err
 	}
 	return x, s.notify(ctx, tx, x, "policy.exception_activated", "")
+}
+
+// baseHolds reports ErrBaseChanged unless the exception's rule is still in
+// the published version, exceptable and unchanged, and its agent is not
+// retired.
+func baseHolds(ctx context.Context, q *dbq.Queries, x Exception) error {
+	pub, err := q.GetPublishedPolicy(ctx, x.OrgID)
+	if db.IsNoRows(err) {
+		return ErrBaseChanged
+	} else if err != nil {
+		return err
+	}
+	b, err := decodeBundle(pub.Bundle)
+	if err != nil {
+		return err
+	}
+	i := slices.IndexFunc(b.Rules, func(r pdomain.Rule) bool { return r.ID == x.RuleID })
+	if b.ID != x.BundleID || i < 0 || !b.Rules[i].Exceptable {
+		return ErrBaseChanged
+	}
+	if d := pdomain.RuleDigest(b.Rules[i]); !bytes.Equal(d[:], x.RuleDigest) {
+		return ErrBaseChanged
+	}
+	agent, err := q.GetAgent(ctx, x.OrgID, x.AgentID)
+	if db.IsNoRows(err) || (err == nil && agent.State == "RETIRED") {
+		return ErrBaseChanged
+	}
+	return err
 }
 
 // Decline closes a pending exception whose change request ended without
