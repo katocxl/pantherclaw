@@ -11,6 +11,7 @@ import (
 	"errors"
 	"strconv"
 	"time"
+	"unicode/utf8"
 
 	"github.com/jackc/pgx/v5"
 
@@ -284,4 +285,24 @@ func recordAction(ctx context.Context, tx db.TenantTx, actor evdomain.Actor, nam
 		Details: withReason(details, reason),
 	})
 	return err
+}
+
+func sha(b []byte) []byte {
+	sum := sha256.Sum256(b)
+	return sum[:]
+}
+
+func reasonOK1000(r string) bool {
+	n := utf8.RuneCountInString(r)
+	return utf8.ValidString(r) && n >= 1 && n <= rdomain.MaxReason
+}
+
+func auditRecord(ctx context.Context, tx db.TenantTx, actor evdomain.Actor, name, objType, objID string, details map[string]string) (evdomain.Entry, error) {
+	return audit.Record(ctx, tx, audit.Event{
+		Name: name, Actor: actor, Outcome: audit.Success, Object: &audit.Object{Type: objType, ID: objID}, Details: details,
+	})
+}
+
+func canonicalEvidence(m map[string]string) ([]byte, error) {
+	return json.Marshal(m, json.Deterministic(true))
 }

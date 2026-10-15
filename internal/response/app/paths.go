@@ -228,6 +228,20 @@ func confirm(ctx context.Context, tx db.TenantTx, a dbq.PcResponseAction) error 
 				}
 			}
 		case rdomain.PathCredential:
+			if gw := ev["gateway"]; gw != "" {
+				// A rotated GitHub App credential: the gateway mints fresh
+				// tokens once sent the new epoch.
+				got, ok, err := delivered(gw)
+				if err != nil {
+					return err
+				}
+				if ok {
+					if err := update(p, rdomain.PathConfirmed, got, ""); err != nil {
+						return err
+					}
+				}
+				continue
+			}
 			if ok, at, err := credentialChangedSince(ctx, q, org, p.SubjectID, a.RequestedAt); err != nil {
 				return err
 			} else if ok {
@@ -394,10 +408,21 @@ func appendLedger(ctx context.Context, tx db.TenantTx, kind string, body map[str
 // sweeperActor records the status changes the confirmation sweep finds.
 var sweeperActor = evdomain.Actor{Type: "system", ID: "response_sweeper"}
 
-// credentialChangedSince reports whether the credential of a connection
-// was revoked or rotated after at (D25): set by the credential use cases.
-var credentialChangedSince = func(_ context.Context, _ *dbq.Queries, _ ids.OrgID, _ string, _ time.Time) (bool, string, error) {
-	return false, "", nil
+// credentialChangedSince reports whether the sealed credential of a
+// connection was revoked or superseded after since (D25), and when.
+func credentialChangedSince(ctx context.Context, q *dbq.Queries, org ids.OrgID, connection string, since time.Time) (bool, string, error) {
+	id, ok := parseUUID(connection)
+	if !ok {
+		return false, "", nil
+	}
+	at, err := q.CredentialChangedSince(ctx, org, id, since)
+	switch {
+	case db.IsNoRows(err):
+		return false, "", nil
+	case err != nil:
+		return false, "", err
+	}
+	return true, at.UTC().Format(time.RFC3339), nil
 }
 
 func parseUUID(s string) (ids.UUID, bool) {

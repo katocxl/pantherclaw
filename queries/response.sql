@@ -210,3 +210,151 @@ SELECT CASE sqlc.arg(scope_type)::text
     WHEN 'user' THEN EXISTS (SELECT 1 FROM pc.users x WHERE x.org_id = sqlc.arg(org_id)::uuid AND x.id = sqlc.arg(id)::uuid)
     WHEN 'service_account' THEN EXISTS (SELECT 1 FROM pc.service_accounts x WHERE x.org_id = sqlc.arg(org_id)::uuid AND x.id = sqlc.arg(id)::uuid)
     ELSE false END::boolean AS found;
+
+-- CredentialChangedSince is the first revocation or supersession of a
+-- connection's sealed credential after a time (D25), or no row.
+-- name: CredentialChangedSince :one
+SELECT coalesce(revoked_at, superseded_at)::timestamptz AS changed_at
+FROM pc.credentials
+WHERE org_id = sqlc.arg(org_id) AND connection_id = sqlc.arg(connection_id)
+  AND coalesce(revoked_at, superseded_at) >= sqlc.arg(since)::timestamptz
+ORDER BY 1
+LIMIT 1;
+
+-- CredentialOfConnection is one version of a connection's sealed credential.
+-- name: CredentialOfConnection :one
+SELECT c.id, c.version, c.state, c.kind, c.created_at, n.gateway_id, n.access_mode
+FROM pc.credentials c
+JOIN pc.connections n ON n.org_id = c.org_id AND n.id = c.connection_id
+WHERE c.org_id = sqlc.arg(org_id) AND c.connection_id = sqlc.arg(connection_id) AND c.version = sqlc.arg(version);
+
+-- ActiveCredentialVersion is the connection's active sealed version.
+-- name: ActiveCredentialVersion :one
+SELECT version, created_at FROM pc.credentials
+WHERE org_id = sqlc.arg(org_id) AND connection_id = sqlc.arg(connection_id) AND state = 'ACTIVE';
+
+-- CredentialSharers are the agents with a route through a connection, and
+-- the other connections sharing its GitHub App installation (D25, F555).
+-- name: CredentialAgents :many
+SELECT DISTINCT cr.agent_id
+FROM pc.coverage_routes cr
+WHERE cr.org_id = sqlc.arg(org_id) AND cr.connection_id = sqlc.arg(connection_id) AND cr.agent_id IS NOT NULL
+ORDER BY cr.agent_id
+LIMIT 1000;
+
+-- name: CredentialEveryAgentRoutes :one
+SELECT count(*) FROM pc.coverage_routes
+WHERE org_id = sqlc.arg(org_id) AND connection_id = sqlc.arg(connection_id) AND agent_id IS NULL;
+
+-- name: SharedInstallationConnections :many
+SELECT o.connection_id
+FROM pc.connection_github g
+JOIN pc.connection_github o ON o.org_id = g.org_id AND o.installation_id = g.installation_id AND o.connection_id <> g.connection_id
+WHERE g.org_id = sqlc.arg(org_id) AND g.connection_id = sqlc.arg(connection_id)
+ORDER BY o.connection_id
+LIMIT 200;
+
+-- name: WaitingRequestsOfRuns :many
+SELECT id FROM pc.approval_requests
+WHERE org_id = sqlc.arg(org_id) AND run_id = ANY (sqlc.arg(runs)::uuid[])
+  AND state IN ('PENDING', 'EVIDENCE_REQUESTED', 'APPROVED')
+ORDER BY id
+LIMIT 500;
+
+
+-- name: GetSOARRequest :one
+SELECT * FROM pc.soar_requests WHERE org_id = sqlc.arg(org_id) AND idempotency_key = sqlc.arg(idempotency_key);
+
+-- name: InsertSOARRequest :exec
+INSERT INTO pc.soar_requests (org_id, idempotency_key, request_digest, action_id, requested_by)
+VALUES (sqlc.arg(org_id), sqlc.arg(idempotency_key), sqlc.arg(request_digest), sqlc.arg(action_id), sqlc.arg(requested_by));
+
+-- name: InsertRestorationPlan :one
+INSERT INTO pc.restoration_plans (org_id, id, reason, staged, preconditions, requested_by)
+VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(reason), sqlc.arg(staged), sqlc.arg(preconditions), sqlc.arg(requested_by))
+RETURNING created_at;
+
+-- name: InsertRestorationPlanControl :exec
+INSERT INTO pc.restoration_plan_controls (org_id, plan_id, control_id) VALUES (sqlc.arg(org_id), sqlc.arg(plan_id), sqlc.arg(control_id));
+
+-- name: InsertRestorationStage :exec
+INSERT INTO pc.restoration_stages (org_id, plan_id, ordinal, scope, tests)
+VALUES (sqlc.arg(org_id), sqlc.arg(plan_id), sqlc.arg(ordinal), sqlc.arg(scope), sqlc.arg(tests));
+
+-- name: LockRestorationPlan :one
+SELECT * FROM pc.restoration_plans WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) FOR UPDATE;
+
+-- name: GetRestorationPlan :one
+SELECT * FROM pc.restoration_plans WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id);
+
+-- name: ListRestorationPlans :many
+SELECT * FROM pc.restoration_plans
+WHERE org_id = sqlc.arg(org_id) AND (sqlc.narg(before)::uuid IS NULL OR id < sqlc.narg(before)::uuid)
+ORDER BY id DESC
+LIMIT sqlc.arg(max_rows);
+
+-- name: RestorationPlanControls :many
+SELECT c.* FROM pc.containment_controls c
+JOIN pc.restoration_plan_controls p ON p.org_id = c.org_id AND p.control_id = c.id
+WHERE p.org_id = sqlc.arg(org_id) AND p.plan_id = sqlc.arg(plan_id)
+ORDER BY c.id;
+
+-- name: RestorationStages :many
+SELECT * FROM pc.restoration_stages WHERE org_id = sqlc.arg(org_id) AND plan_id = sqlc.arg(plan_id) ORDER BY ordinal;
+
+-- name: SetRestorationPlanState :execrows
+UPDATE pc.restoration_plans
+SET state = sqlc.arg(state), preconditions = sqlc.arg(preconditions), updated_at = now(),
+    finished_at = CASE WHEN sqlc.arg(state)::text IN ('COMPLETED', 'REFUSED', 'CANCELLED') THEN now() END
+WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state = sqlc.arg(expected);
+
+-- name: SetRestorationStage :execrows
+UPDATE pc.restoration_stages
+SET results = sqlc.arg(results), state = sqlc.arg(state), tested_at = now(),
+    applied_at = CASE WHEN sqlc.arg(state)::text = 'APPLIED' THEN now() END
+WHERE org_id = sqlc.arg(org_id) AND plan_id = sqlc.arg(plan_id) AND ordinal = sqlc.arg(ordinal) AND state IN ('PENDING', 'FAILED');
+
+-- OpenPlanOfControl is the unfinished plan that already lifts a control.
+-- name: OpenPlanOfControl :one
+SELECT p.id FROM pc.restoration_plans p
+JOIN pc.restoration_plan_controls c ON c.org_id = p.org_id AND c.plan_id = p.id
+WHERE p.org_id = sqlc.arg(org_id) AND c.control_id = sqlc.arg(control_id) AND p.finished_at IS NULL
+LIMIT 1;
+
+-- name: AgentStateOf :one
+SELECT state FROM pc.agents WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id);
+
+-- name: UserStateOf :one
+SELECT state FROM pc.users WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id);
+
+-- name: ConnectionHealth :one
+SELECT c.state, g.state AS gateway_state
+FROM pc.connections c JOIN pc.gateways g ON g.org_id = c.org_id AND g.id = c.gateway_id
+WHERE c.org_id = sqlc.arg(org_id) AND c.id = sqlc.arg(id);
+
+-- name: ActiveGrantsOfAgents :one
+SELECT count(*) FROM pc.grants g
+JOIN pc.grant_revisions r ON r.org_id = g.org_id AND r.grant_id = g.id AND r.revision = g.current_revision
+WHERE g.org_id = sqlc.arg(org_id) AND g.agent_id = ANY (sqlc.arg(agents)::uuid[]) AND g.state = 'ACTIVE' AND r.expires_at > now();
+
+-- SessionStepUp is when a person's browser session last stepped up with
+-- one of their own active security keys, and the database time.
+-- name: SessionStepUp :one
+SELECT s.step_up_at::timestamptz AS step_up_at, s.step_up_credential_id::uuid AS credential_id, now()::timestamptz AS db_now
+FROM pc.sessions s
+JOIN pc.webauthn_credentials k ON k.org_id = s.org_id AND k.id = s.step_up_credential_id AND k.user_id = s.user_id
+WHERE s.org_id = sqlc.arg(org_id) AND s.id = sqlc.arg(session_id) AND s.user_id = sqlc.arg(user_id)
+  AND s.state = 'ACTIVE' AND s.step_up_at IS NOT NULL AND k.state = 'ACTIVE';
+
+-- name: AgentOfRun :one
+SELECT agent_id FROM pc.runs WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id);
+
+-- name: AlertSubjects :one
+SELECT subjects FROM pc.alerts WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id);
+
+-- name: RunOfTransaction :one
+SELECT run_id FROM pc.transactions WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id);
+
+-- IncidentAlertSubjects are the subjects of an incident's alerts.
+-- name: IncidentAlertSubjects :many
+SELECT subjects FROM pc.alerts WHERE org_id = sqlc.arg(org_id) AND incident_id = sqlc.arg(incident_id) ORDER BY id LIMIT 50;

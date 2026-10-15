@@ -67,6 +67,37 @@ func (q *Queries) ActiveContainmentControls(ctx context.Context, orgID ids.OrgID
 	return items, nil
 }
 
+const activeCredentialVersion = `-- name: ActiveCredentialVersion :one
+SELECT version, created_at FROM pc.credentials
+WHERE org_id = $1 AND connection_id = $2 AND state = 'ACTIVE'
+`
+
+type ActiveCredentialVersionRow struct {
+	Version   int32
+	CreatedAt time.Time
+}
+
+// ActiveCredentialVersion is the connection's active sealed version.
+func (q *Queries) ActiveCredentialVersion(ctx context.Context, orgID ids.OrgID, connectionID ids.UUID) (ActiveCredentialVersionRow, error) {
+	row := q.db.QueryRow(ctx, activeCredentialVersion, orgID, connectionID)
+	var i ActiveCredentialVersionRow
+	err := row.Scan(&i.Version, &i.CreatedAt)
+	return i, err
+}
+
+const activeGrantsOfAgents = `-- name: ActiveGrantsOfAgents :one
+SELECT count(*) FROM pc.grants g
+JOIN pc.grant_revisions r ON r.org_id = g.org_id AND r.grant_id = g.id AND r.revision = g.current_revision
+WHERE g.org_id = $1 AND g.agent_id = ANY ($2::uuid[]) AND g.state = 'ACTIVE' AND r.expires_at > now()
+`
+
+func (q *Queries) ActiveGrantsOfAgents(ctx context.Context, orgID ids.OrgID, agents []ids.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, activeGrantsOfAgents, orgID, agents)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const agentCoverage = `-- name: AgentCoverage :many
 SELECT DISTINCT ON (s.agent_id, s.connection_id, s.operation)
        s.agent_id, s.connection_id, s.operation, c.gateway_id,
@@ -151,6 +182,57 @@ func (q *Queries) AgentHeldConnections(ctx context.Context, orgID ids.OrgID, age
 	return items, nil
 }
 
+const agentOfRun = `-- name: AgentOfRun :one
+SELECT agent_id FROM pc.runs WHERE org_id = $1 AND id = $2
+`
+
+func (q *Queries) AgentOfRun(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (ids.UUID, error) {
+	row := q.db.QueryRow(ctx, agentOfRun, orgID, iD)
+	var agent_id ids.UUID
+	err := row.Scan(&agent_id)
+	return agent_id, err
+}
+
+const agentStateOf = `-- name: AgentStateOf :one
+SELECT state FROM pc.agents WHERE org_id = $1 AND id = $2
+`
+
+func (q *Queries) AgentStateOf(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (string, error) {
+	row := q.db.QueryRow(ctx, agentStateOf, orgID, iD)
+	var state string
+	err := row.Scan(&state)
+	return state, err
+}
+
+const alertSubjects = `-- name: AlertSubjects :one
+SELECT subjects FROM pc.alerts WHERE org_id = $1 AND id = $2
+`
+
+func (q *Queries) AlertSubjects(ctx context.Context, orgID ids.OrgID, iD ids.UUID) ([]byte, error) {
+	row := q.db.QueryRow(ctx, alertSubjects, orgID, iD)
+	var subjects []byte
+	err := row.Scan(&subjects)
+	return subjects, err
+}
+
+const connectionHealth = `-- name: ConnectionHealth :one
+SELECT c.state, g.state AS gateway_state
+FROM pc.connections c JOIN pc.gateways g ON g.org_id = c.org_id AND g.id = c.gateway_id
+WHERE c.org_id = $1 AND c.id = $2
+`
+
+type ConnectionHealthRow struct {
+	State        string
+	GatewayState string
+}
+
+func (q *Queries) ConnectionHealth(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (ConnectionHealthRow, error) {
+	row := q.db.QueryRow(ctx, connectionHealth, orgID, iD)
+	var i ConnectionHealthRow
+	err := row.Scan(&i.State, &i.GatewayState)
+	return i, err
+}
+
 const controlsOfAction = `-- name: ControlsOfAction :many
 SELECT org_id, id, action_id, scope_type, scope_id, control, operation, reason, case_id, incident_id, created_by, created_at, expires_at, lifted_at, lifted_by, restoration_id FROM pc.containment_controls WHERE org_id = $1 AND action_id = $2
 `
@@ -190,6 +272,99 @@ func (q *Queries) ControlsOfAction(ctx context.Context, orgID ids.OrgID, actionI
 		return nil, err
 	}
 	return items, nil
+}
+
+const credentialAgents = `-- name: CredentialAgents :many
+SELECT DISTINCT cr.agent_id
+FROM pc.coverage_routes cr
+WHERE cr.org_id = $1 AND cr.connection_id = $2 AND cr.agent_id IS NOT NULL
+ORDER BY cr.agent_id
+LIMIT 1000
+`
+
+// CredentialSharers are the agents with a route through a connection, and
+// the other connections sharing its GitHub App installation (D25, F555).
+func (q *Queries) CredentialAgents(ctx context.Context, orgID ids.OrgID, connectionID ids.UUID) ([]*ids.UUID, error) {
+	rows, err := q.db.Query(ctx, credentialAgents, orgID, connectionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []*ids.UUID{}
+	for rows.Next() {
+		var agent_id *ids.UUID
+		if err := rows.Scan(&agent_id); err != nil {
+			return nil, err
+		}
+		items = append(items, agent_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const credentialChangedSince = `-- name: CredentialChangedSince :one
+SELECT coalesce(revoked_at, superseded_at)::timestamptz AS changed_at
+FROM pc.credentials
+WHERE org_id = $1 AND connection_id = $2
+  AND coalesce(revoked_at, superseded_at) >= $3::timestamptz
+ORDER BY 1
+LIMIT 1
+`
+
+// CredentialChangedSince is the first revocation or supersession of a
+// connection's sealed credential after a time (D25), or no row.
+func (q *Queries) CredentialChangedSince(ctx context.Context, orgID ids.OrgID, connectionID ids.UUID, since time.Time) (time.Time, error) {
+	row := q.db.QueryRow(ctx, credentialChangedSince, orgID, connectionID, since)
+	var changed_at time.Time
+	err := row.Scan(&changed_at)
+	return changed_at, err
+}
+
+const credentialEveryAgentRoutes = `-- name: CredentialEveryAgentRoutes :one
+SELECT count(*) FROM pc.coverage_routes
+WHERE org_id = $1 AND connection_id = $2 AND agent_id IS NULL
+`
+
+func (q *Queries) CredentialEveryAgentRoutes(ctx context.Context, orgID ids.OrgID, connectionID ids.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, credentialEveryAgentRoutes, orgID, connectionID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const credentialOfConnection = `-- name: CredentialOfConnection :one
+SELECT c.id, c.version, c.state, c.kind, c.created_at, n.gateway_id, n.access_mode
+FROM pc.credentials c
+JOIN pc.connections n ON n.org_id = c.org_id AND n.id = c.connection_id
+WHERE c.org_id = $1 AND c.connection_id = $2 AND c.version = $3
+`
+
+type CredentialOfConnectionRow struct {
+	ID         ids.UUID
+	Version    int32
+	State      string
+	Kind       string
+	CreatedAt  time.Time
+	GatewayID  ids.UUID
+	AccessMode string
+}
+
+// CredentialOfConnection is one version of a connection's sealed credential.
+func (q *Queries) CredentialOfConnection(ctx context.Context, orgID ids.OrgID, connectionID ids.UUID, version int32) (CredentialOfConnectionRow, error) {
+	row := q.db.QueryRow(ctx, credentialOfConnection, orgID, connectionID, version)
+	var i CredentialOfConnectionRow
+	err := row.Scan(
+		&i.ID,
+		&i.Version,
+		&i.State,
+		&i.Kind,
+		&i.CreatedAt,
+		&i.GatewayID,
+		&i.AccessMode,
+	)
+	return i, err
 }
 
 const gatewayEpochDelivery = `-- name: GatewayEpochDelivery :one
@@ -285,6 +460,47 @@ func (q *Queries) GetResponseAction(ctx context.Context, orgID ids.OrgID, iD ids
 	return i, err
 }
 
+const getRestorationPlan = `-- name: GetRestorationPlan :one
+SELECT org_id, id, approval_request_id, reason, staged, state, preconditions, requested_by, created_at, updated_at, finished_at FROM pc.restoration_plans WHERE org_id = $1 AND id = $2
+`
+
+func (q *Queries) GetRestorationPlan(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (PcRestorationPlan, error) {
+	row := q.db.QueryRow(ctx, getRestorationPlan, orgID, iD)
+	var i PcRestorationPlan
+	err := row.Scan(
+		&i.OrgID,
+		&i.ID,
+		&i.ApprovalRequestID,
+		&i.Reason,
+		&i.Staged,
+		&i.State,
+		&i.Preconditions,
+		&i.RequestedBy,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.FinishedAt,
+	)
+	return i, err
+}
+
+const getSOARRequest = `-- name: GetSOARRequest :one
+SELECT org_id, idempotency_key, request_digest, action_id, requested_by, created_at FROM pc.soar_requests WHERE org_id = $1 AND idempotency_key = $2
+`
+
+func (q *Queries) GetSOARRequest(ctx context.Context, orgID ids.OrgID, idempotencyKey string) (PcSoarRequest, error) {
+	row := q.db.QueryRow(ctx, getSOARRequest, orgID, idempotencyKey)
+	var i PcSoarRequest
+	err := row.Scan(
+		&i.OrgID,
+		&i.IdempotencyKey,
+		&i.RequestDigest,
+		&i.ActionID,
+		&i.RequestedBy,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const inFlightTransactions = `-- name: InFlightTransactions :many
 SELECT t.id, t.run_id, p.state, p.gateway_id
 FROM pc.transactions t
@@ -321,6 +537,31 @@ func (q *Queries) InFlightTransactions(ctx context.Context, orgID ids.OrgID, run
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const incidentAlertSubjects = `-- name: IncidentAlertSubjects :many
+SELECT subjects FROM pc.alerts WHERE org_id = $1 AND incident_id = $2 ORDER BY id LIMIT 50
+`
+
+// IncidentAlertSubjects are the subjects of an incident's alerts.
+func (q *Queries) IncidentAlertSubjects(ctx context.Context, orgID ids.OrgID, incidentID *ids.UUID) ([][]byte, error) {
+	rows, err := q.db.Query(ctx, incidentAlertSubjects, orgID, incidentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := [][]byte{}
+	for rows.Next() {
+		var subjects []byte
+		if err := rows.Scan(&subjects); err != nil {
+			return nil, err
+		}
+		items = append(items, subjects)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -473,6 +714,92 @@ func (q *Queries) InsertResponsePath(ctx context.Context, arg InsertResponsePath
 		arg.Failure,
 		arg.UnsupportedReason,
 		arg.CancelCapability,
+	)
+	return err
+}
+
+const insertRestorationPlan = `-- name: InsertRestorationPlan :one
+INSERT INTO pc.restoration_plans (org_id, id, reason, staged, preconditions, requested_by)
+VALUES ($1, $2, $3, $4, $5, $6)
+RETURNING created_at
+`
+
+type InsertRestorationPlanParams struct {
+	OrgID         ids.OrgID
+	ID            ids.UUID
+	Reason        string
+	Staged        bool
+	Preconditions []byte
+	RequestedBy   string
+}
+
+func (q *Queries) InsertRestorationPlan(ctx context.Context, arg InsertRestorationPlanParams) (time.Time, error) {
+	row := q.db.QueryRow(ctx, insertRestorationPlan,
+		arg.OrgID,
+		arg.ID,
+		arg.Reason,
+		arg.Staged,
+		arg.Preconditions,
+		arg.RequestedBy,
+	)
+	var created_at time.Time
+	err := row.Scan(&created_at)
+	return created_at, err
+}
+
+const insertRestorationPlanControl = `-- name: InsertRestorationPlanControl :exec
+INSERT INTO pc.restoration_plan_controls (org_id, plan_id, control_id) VALUES ($1, $2, $3)
+`
+
+func (q *Queries) InsertRestorationPlanControl(ctx context.Context, orgID ids.OrgID, planID ids.UUID, controlID ids.UUID) error {
+	_, err := q.db.Exec(ctx, insertRestorationPlanControl, orgID, planID, controlID)
+	return err
+}
+
+const insertRestorationStage = `-- name: InsertRestorationStage :exec
+INSERT INTO pc.restoration_stages (org_id, plan_id, ordinal, scope, tests)
+VALUES ($1, $2, $3, $4, $5)
+`
+
+type InsertRestorationStageParams struct {
+	OrgID   ids.OrgID
+	PlanID  ids.UUID
+	Ordinal int32
+	Scope   []byte
+	Tests   []byte
+}
+
+func (q *Queries) InsertRestorationStage(ctx context.Context, arg InsertRestorationStageParams) error {
+	_, err := q.db.Exec(ctx, insertRestorationStage,
+		arg.OrgID,
+		arg.PlanID,
+		arg.Ordinal,
+		arg.Scope,
+		arg.Tests,
+	)
+	return err
+}
+
+const insertSOARRequest = `-- name: InsertSOARRequest :exec
+INSERT INTO pc.soar_requests (org_id, idempotency_key, request_digest, action_id, requested_by)
+VALUES ($1, $2, $3, $4, $5)
+`
+
+type InsertSOARRequestParams struct {
+	OrgID          ids.OrgID
+	IdempotencyKey string
+	RequestDigest  []byte
+	ActionID       ids.UUID
+	RequestedBy    string
+}
+
+func (q *Queries) InsertSOARRequest(ctx context.Context, arg InsertSOARRequestParams) error {
+	_, err := q.db.Exec(ctx, insertSOARRequest,
+		arg.OrgID,
+		arg.IdempotencyKey,
+		arg.RequestDigest,
+		arg.ActionID,
+		arg.RequestedBy,
 	)
 	return err
 }
@@ -663,6 +990,83 @@ func (q *Queries) ListResponsePaths(ctx context.Context, orgID ids.OrgID, action
 	return items, nil
 }
 
+const listRestorationPlans = `-- name: ListRestorationPlans :many
+SELECT org_id, id, approval_request_id, reason, staged, state, preconditions, requested_by, created_at, updated_at, finished_at FROM pc.restoration_plans
+WHERE org_id = $1 AND ($2::uuid IS NULL OR id < $2::uuid)
+ORDER BY id DESC
+LIMIT $3
+`
+
+func (q *Queries) ListRestorationPlans(ctx context.Context, orgID ids.OrgID, before *ids.UUID, maxRows int32) ([]PcRestorationPlan, error) {
+	rows, err := q.db.Query(ctx, listRestorationPlans, orgID, before, maxRows)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []PcRestorationPlan{}
+	for rows.Next() {
+		var i PcRestorationPlan
+		if err := rows.Scan(
+			&i.OrgID,
+			&i.ID,
+			&i.ApprovalRequestID,
+			&i.Reason,
+			&i.Staged,
+			&i.State,
+			&i.Preconditions,
+			&i.RequestedBy,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.FinishedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const lockRestorationPlan = `-- name: LockRestorationPlan :one
+SELECT org_id, id, approval_request_id, reason, staged, state, preconditions, requested_by, created_at, updated_at, finished_at FROM pc.restoration_plans WHERE org_id = $1 AND id = $2 FOR UPDATE
+`
+
+func (q *Queries) LockRestorationPlan(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (PcRestorationPlan, error) {
+	row := q.db.QueryRow(ctx, lockRestorationPlan, orgID, iD)
+	var i PcRestorationPlan
+	err := row.Scan(
+		&i.OrgID,
+		&i.ID,
+		&i.ApprovalRequestID,
+		&i.Reason,
+		&i.Staged,
+		&i.State,
+		&i.Preconditions,
+		&i.RequestedBy,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.FinishedAt,
+	)
+	return i, err
+}
+
+const openPlanOfControl = `-- name: OpenPlanOfControl :one
+SELECT p.id FROM pc.restoration_plans p
+JOIN pc.restoration_plan_controls c ON c.org_id = p.org_id AND c.plan_id = p.id
+WHERE p.org_id = $1 AND c.control_id = $2 AND p.finished_at IS NULL
+LIMIT 1
+`
+
+// OpenPlanOfControl is the unfinished plan that already lifts a control.
+func (q *Queries) OpenPlanOfControl(ctx context.Context, orgID ids.OrgID, controlID ids.UUID) (ids.UUID, error) {
+	row := q.db.QueryRow(ctx, openPlanOfControl, orgID, controlID)
+	var id ids.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const permitState = `-- name: PermitState :one
 SELECT state FROM pc.permits WHERE org_id = $1 AND transaction_id = $2
 `
@@ -724,6 +1128,96 @@ func (q *Queries) ResponseActionByKey(ctx context.Context, orgID ids.OrgID, idem
 		&i.SettledAt,
 	)
 	return i, err
+}
+
+const restorationPlanControls = `-- name: RestorationPlanControls :many
+SELECT c.org_id, c.id, c.action_id, c.scope_type, c.scope_id, c.control, c.operation, c.reason, c.case_id, c.incident_id, c.created_by, c.created_at, c.expires_at, c.lifted_at, c.lifted_by, c.restoration_id FROM pc.containment_controls c
+JOIN pc.restoration_plan_controls p ON p.org_id = c.org_id AND p.control_id = c.id
+WHERE p.org_id = $1 AND p.plan_id = $2
+ORDER BY c.id
+`
+
+func (q *Queries) RestorationPlanControls(ctx context.Context, orgID ids.OrgID, planID ids.UUID) ([]PcContainmentControl, error) {
+	rows, err := q.db.Query(ctx, restorationPlanControls, orgID, planID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []PcContainmentControl{}
+	for rows.Next() {
+		var i PcContainmentControl
+		if err := rows.Scan(
+			&i.OrgID,
+			&i.ID,
+			&i.ActionID,
+			&i.ScopeType,
+			&i.ScopeID,
+			&i.Control,
+			&i.Operation,
+			&i.Reason,
+			&i.CaseID,
+			&i.IncidentID,
+			&i.CreatedBy,
+			&i.CreatedAt,
+			&i.ExpiresAt,
+			&i.LiftedAt,
+			&i.LiftedBy,
+			&i.RestorationID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const restorationStages = `-- name: RestorationStages :many
+SELECT org_id, plan_id, ordinal, scope, tests, results, state, created_at, tested_at, applied_at FROM pc.restoration_stages WHERE org_id = $1 AND plan_id = $2 ORDER BY ordinal
+`
+
+func (q *Queries) RestorationStages(ctx context.Context, orgID ids.OrgID, planID ids.UUID) ([]PcRestorationStage, error) {
+	rows, err := q.db.Query(ctx, restorationStages, orgID, planID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []PcRestorationStage{}
+	for rows.Next() {
+		var i PcRestorationStage
+		if err := rows.Scan(
+			&i.OrgID,
+			&i.PlanID,
+			&i.Ordinal,
+			&i.Scope,
+			&i.Tests,
+			&i.Results,
+			&i.State,
+			&i.CreatedAt,
+			&i.TestedAt,
+			&i.AppliedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const runOfTransaction = `-- name: RunOfTransaction :one
+SELECT run_id FROM pc.transactions WHERE org_id = $1 AND id = $2
+`
+
+func (q *Queries) RunOfTransaction(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (ids.UUID, error) {
+	row := q.db.QueryRow(ctx, runOfTransaction, orgID, iD)
+	var run_id ids.UUID
+	err := row.Scan(&run_id)
+	return run_id, err
 }
 
 const scopeActiveRuns = `-- name: ScopeActiveRuns :many
@@ -826,6 +1320,29 @@ func (q *Queries) ScopeGateways(ctx context.Context, orgID ids.OrgID, scopeType 
 	return items, nil
 }
 
+const sessionStepUp = `-- name: SessionStepUp :one
+SELECT s.step_up_at::timestamptz AS step_up_at, s.step_up_credential_id::uuid AS credential_id, now()::timestamptz AS db_now
+FROM pc.sessions s
+JOIN pc.webauthn_credentials k ON k.org_id = s.org_id AND k.id = s.step_up_credential_id AND k.user_id = s.user_id
+WHERE s.org_id = $1 AND s.id = $2 AND s.user_id = $3
+  AND s.state = 'ACTIVE' AND s.step_up_at IS NOT NULL AND k.state = 'ACTIVE'
+`
+
+type SessionStepUpRow struct {
+	StepUpAt     time.Time
+	CredentialID ids.UUID
+	DbNow        time.Time
+}
+
+// SessionStepUp is when a person's browser session last stepped up with
+// one of their own active security keys, and the database time.
+func (q *Queries) SessionStepUp(ctx context.Context, orgID ids.OrgID, sessionID ids.UUID, userID ids.UUID) (SessionStepUpRow, error) {
+	row := q.db.QueryRow(ctx, sessionStepUp, orgID, sessionID, userID)
+	var i SessionStepUpRow
+	err := row.Scan(&i.StepUpAt, &i.CredentialID, &i.DbNow)
+	return i, err
+}
+
 const setResponseActionEpoch = `-- name: SetResponseActionEpoch :exec
 UPDATE pc.response_actions SET epoch = $1, updated_at = now()
 WHERE org_id = $2 AND id = $3
@@ -834,6 +1351,64 @@ WHERE org_id = $2 AND id = $3
 func (q *Queries) SetResponseActionEpoch(ctx context.Context, epoch pgtype.Int8, orgID ids.OrgID, iD ids.UUID) error {
 	_, err := q.db.Exec(ctx, setResponseActionEpoch, epoch, orgID, iD)
 	return err
+}
+
+const setRestorationPlanState = `-- name: SetRestorationPlanState :execrows
+UPDATE pc.restoration_plans
+SET state = $1, preconditions = $2, updated_at = now(),
+    finished_at = CASE WHEN $1::text IN ('COMPLETED', 'REFUSED', 'CANCELLED') THEN now() END
+WHERE org_id = $3 AND id = $4 AND state = $5
+`
+
+type SetRestorationPlanStateParams struct {
+	State         string
+	Preconditions []byte
+	OrgID         ids.OrgID
+	ID            ids.UUID
+	Expected      string
+}
+
+func (q *Queries) SetRestorationPlanState(ctx context.Context, arg SetRestorationPlanStateParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setRestorationPlanState,
+		arg.State,
+		arg.Preconditions,
+		arg.OrgID,
+		arg.ID,
+		arg.Expected,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const setRestorationStage = `-- name: SetRestorationStage :execrows
+UPDATE pc.restoration_stages
+SET results = $1, state = $2, tested_at = now(),
+    applied_at = CASE WHEN $2::text = 'APPLIED' THEN now() END
+WHERE org_id = $3 AND plan_id = $4 AND ordinal = $5 AND state IN ('PENDING', 'FAILED')
+`
+
+type SetRestorationStageParams struct {
+	Results []byte
+	State   string
+	OrgID   ids.OrgID
+	PlanID  ids.UUID
+	Ordinal int32
+}
+
+func (q *Queries) SetRestorationStage(ctx context.Context, arg SetRestorationStageParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setRestorationStage,
+		arg.Results,
+		arg.State,
+		arg.OrgID,
+		arg.PlanID,
+		arg.Ordinal,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const settleResponseAction = `-- name: SettleResponseAction :execrows
@@ -868,6 +1443,35 @@ func (q *Queries) SettleResponseAction(ctx context.Context, arg SettleResponseAc
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const sharedInstallationConnections = `-- name: SharedInstallationConnections :many
+SELECT o.connection_id
+FROM pc.connection_github g
+JOIN pc.connection_github o ON o.org_id = g.org_id AND o.installation_id = g.installation_id AND o.connection_id <> g.connection_id
+WHERE g.org_id = $1 AND g.connection_id = $2
+ORDER BY o.connection_id
+LIMIT 200
+`
+
+func (q *Queries) SharedInstallationConnections(ctx context.Context, orgID ids.OrgID, connectionID ids.UUID) ([]ids.UUID, error) {
+	rows, err := q.db.Query(ctx, sharedInstallationConnections, orgID, connectionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ids.UUID{}
+	for rows.Next() {
+		var connection_id ids.UUID
+		if err := rows.Scan(&connection_id); err != nil {
+			return nil, err
+		}
+		items = append(items, connection_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const unsettledResponseActions = `-- name: UnsettledResponseActions :many
@@ -961,6 +1565,17 @@ func (q *Queries) UpdateResponsePath(ctx context.Context, arg UpdateResponsePath
 	return result.RowsAffected(), nil
 }
 
+const userStateOf = `-- name: UserStateOf :one
+SELECT state FROM pc.users WHERE org_id = $1 AND id = $2
+`
+
+func (q *Queries) UserStateOf(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (string, error) {
+	row := q.db.QueryRow(ctx, userStateOf, orgID, iD)
+	var state string
+	err := row.Scan(&state)
+	return state, err
+}
+
 const waitingHoldsOfRuns = `-- name: WaitingHoldsOfRuns :one
 SELECT count(*) FROM pc.approval_requests a
 WHERE a.org_id = $1 AND a.run_id = ANY ($2::uuid[])
@@ -973,4 +1588,32 @@ func (q *Queries) WaitingHoldsOfRuns(ctx context.Context, orgID ids.OrgID, runs 
 	var count int64
 	err := row.Scan(&count)
 	return count, err
+}
+
+const waitingRequestsOfRuns = `-- name: WaitingRequestsOfRuns :many
+SELECT id FROM pc.approval_requests
+WHERE org_id = $1 AND run_id = ANY ($2::uuid[])
+  AND state IN ('PENDING', 'EVIDENCE_REQUESTED', 'APPROVED')
+ORDER BY id
+LIMIT 500
+`
+
+func (q *Queries) WaitingRequestsOfRuns(ctx context.Context, orgID ids.OrgID, runs []ids.UUID) ([]ids.UUID, error) {
+	rows, err := q.db.Query(ctx, waitingRequestsOfRuns, orgID, runs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ids.UUID{}
+	for rows.Next() {
+		var id ids.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }

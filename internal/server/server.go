@@ -603,6 +603,7 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	}
 	registerReleases(rs, pool)
 	registerPolicyExceptions(rs, d)
+	registerResponse(rs, d)
 	mux := http.NewServeMux()
 	rpc.Mount(mux, rs)
 	d.m5p2.mount(mux, workload)

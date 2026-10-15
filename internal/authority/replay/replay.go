@@ -167,6 +167,24 @@ type Difference struct {
 // version proposed when it is not nil. It never calls the finalization and
 // reaches nothing but its read ports (HR-197, F508).
 func (e *Engine) Replay(ctx context.Context, org ids.OrgID, txn ids.UUID, evaluation int, proposed *ids.UUID) (*Outcome, error) {
+	return e.replay(ctx, org, txn, evaluation, proposed, nil)
+}
+
+// ReplayContained runs evaluation of txn again on its recorded inputs, with
+// the recorded policy, but with controls as the org's containment controls
+// instead of the recorded ones (G0 M10 D24): a staged restoration's test
+// action, asking what the action would be decided once some controls are
+// lifted. Like Replay it is a dry run: it never calls the finalization and
+// reaches nothing but its read ports, so nothing is dispatched (HR-250).
+// Its outcome is never Reproduced.
+func (e *Engine) ReplayContained(ctx context.Context, org ids.OrgID, txn ids.UUID, evaluation int, controls []pipeline.Control) (*Outcome, error) {
+	if controls == nil {
+		controls = []pipeline.Control{}
+	}
+	return e.replay(ctx, org, txn, evaluation, nil, controls)
+}
+
+func (e *Engine) replay(ctx context.Context, org ids.OrgID, txn ids.UUID, evaluation int, proposed *ids.UUID, controls []pipeline.Control) (*Outcome, error) {
 	jws, err := e.Source.Receipt(ctx, org, txn, evaluation)
 	if err != nil {
 		return nil, fmt.Errorf("replay: the decision receipt: %w", err)
@@ -205,11 +223,15 @@ func (e *Engine) Replay(ctx context.Context, org ids.OrgID, txn ids.UUID, evalua
 		return out.incomplete(lims...), nil
 	}
 	rd := recording.NewReader(org, rec, served)
+	var reader pipeline.Reader = rd
+	if controls != nil {
+		reader = containedReader{Reader: rd, controls: controls}
+	}
 	req, err := rd.Request()
 	if err != nil {
 		return out.incomplete(Limitation{Code: IncompleteInputsUnreadable, Detail: "the recorded request does not parse"}), nil //nolint:nilerr // incomplete, not a failure
 	}
-	ev, err := (&pipeline.Pipeline{}).EvaluateWith(ctx, rd, req)
+	ev, err := (&pipeline.Pipeline{}).EvaluateWith(ctx, reader, req)
 	if err != nil {
 		return out.incomplete(gaps(rd.Gaps())...), nil //nolint:nilerr // incomplete, not a failure
 	}
@@ -217,7 +239,7 @@ func (e *Engine) Replay(ctx context.Context, org ids.OrgID, txn ids.UUID, evalua
 	out.Incomplete = gaps(rd.Gaps())
 	out.Complete = len(out.Incomplete) == 0
 	out.SameDecision = out.Decision == orig.Decision && out.Reason == orig.Reason
-	out.Reproduced = !out.Proposed && out.Complete && out.SameDecision && out.BasisDigest == orig.BasisDigest
+	out.Reproduced = !out.Proposed && controls == nil && out.Complete && out.SameDecision && out.BasisDigest == orig.BasisDigest
 	out.Differences = differences(orig, ev.Checklist, out.Incomplete, policyChange(rec, out))
 	return out, nil
 }
@@ -414,4 +436,22 @@ func original(jws string) (Original, error) {
 		}
 	}
 	return o, nil
+}
+
+// containedReader serves a recording with other containment controls
+// (ReplayContained).
+type containedReader struct {
+	pipeline.Reader
+	controls []pipeline.Control
+}
+
+// Containment implements pipeline.Reader: the recorded epoch, kill switch
+// and time, with the controls given.
+func (r containedReader) Containment(ctx context.Context, org ids.OrgID) (pipeline.Containment, error) {
+	c, err := r.Reader.Containment(ctx, org)
+	if err != nil {
+		return c, err
+	}
+	c.Controls = r.controls
+	return c, nil
 }

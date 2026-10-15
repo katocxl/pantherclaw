@@ -1,0 +1,641 @@
+// SPDX-License-Identifier: BUSL-1.1
+// Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+
+syntax = "proto3";
+
+package pantherclaw.v1;
+
+import "buf/validate/validate.proto";
+import "google/protobuf/timestamp.proto";
+
+// ResponseService contains, terminates, revokes and restores (G0 M10;
+// F547, F552, F561, F288, F013, F243, F230, F134, F555, F564, F568, F570,
+// F541; HR-248..HR-252). A containment control is enforced in the
+// Authority's decision path: DENY_ALL and DENY_OPERATION deny CONTAINED,
+// HOLD_WRITES holds every non-read action for one independent responder.
+// Adding or lifting one raises the containment epoch in the same
+// transaction. Each request is a response action whose paths (the gateways
+// serving the scope, the affected agents' coverage routes, agent-held
+// credentials, dispatches in flight) are confirmed one by one: the action
+// is CONFIRMED only when every material path is. A control wider than one
+// run or agent needs the digest of its current preview. Lifting is a
+// restoration, decided by an independent reviewer; closing an incident lifts
+// nothing. The kill switch stays on the emergency-stop page.
+service ResponseService {
+  // PreviewContainment says what a control would do (F013): the active runs
+  // and agents it stops, the waiting approvals it voids, the gateways that
+  // enforce it, the bypass routes it does not close, what is unknown, the
+  // reach before and after (Team and above), and the digest a wider
+  // control must be confirmed against.
+  // permission: containment.read
+  rpc PreviewContainment(PreviewContainmentRequest) returns (PreviewContainmentResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // Contain adds a containment control (a person only). One run, or one
+  // agent's DENY_ALL or HOLD_WRITES, commits at once; anything wider needs
+  // preview_digest, or skip_preview with a reason and a security-key
+  // step-up less than 5 minutes old, which is recorded.
+  // permission: incident.respond
+  rpc Contain(ContainRequest) returns (ContainResponse);
+  // ProposeResponse returns prefilled, narrow-first options for a run,
+  // agent, transaction, alert or incident (F243, F230). Nothing is applied.
+  // permission: containment.read
+  rpc ProposeResponse(ProposeResponseRequest) returns (ProposeResponseResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // TerminateRun ends a run and its children, voids their waiting
+  // approvals and lists their dispatched work, which cannot be called back
+  // (F134; a person only).
+  // permission: incident.respond
+  rpc TerminateRun(TerminateRunRequest) returns (TerminateRunResponse);
+  // PreviewCredentialChange lists every workload sharing a sealed
+  // credential, with the digest a revoke or rotate must name (F555).
+  // permission: containment.read
+  rpc PreviewCredentialChange(PreviewCredentialChangeRequest) returns (PreviewCredentialChangeResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // RevokeSealedCredential revokes a version of a connection's sealed
+  // credential through the existing revoke path (a person only).
+  // permission: incident.respond
+  rpc RevokeSealedCredential(RevokeSealedCredentialRequest) returns (RevokeSealedCredentialResponse);
+  // RotateSealedCredential rotates a connection's credential: a static one
+  // once a new value was sealed, a GitHub App one by making the gateway mint
+  // fresh installation tokens (a person only).
+  // permission: incident.respond
+  rpc RotateSealedCredential(RotateSealedCredentialRequest) returns (RotateSealedCredentialResponse);
+  // RequestControl is a SOAR integration's request (Business): one narrow
+  // control on a run, agent, grant or connection, idempotent on its key.
+  // It never engages the kill switch, lifts or restores.
+  // permission: response.request
+  rpc RequestControl(RequestControlRequest) returns (RequestControlResponse);
+  // RequestRestoration asks for controls to be lifted, recording the
+  // preconditions (a person only); stages need the Team edition.
+  // permission: incident.respond
+  rpc RequestRestoration(RequestRestorationRequest) returns (RequestRestorationResponse);
+  // DecideRestoration approves or declines a restoration: a person holding
+  // agent.restore, never the requester, with a security-key step-up less
+  // than 5 minutes old. Approving an unstaged plan lifts its controls.
+  // permission: agent.restore
+  rpc DecideRestoration(DecideRestorationRequest) returns (DecideRestorationResponse);
+  // ApplyRestorationStage runs a stage's test actions, dry run, against the
+  // controls that would remain, and lifts its controls when all pass (Team).
+  // permission: agent.restore
+  rpc ApplyRestorationStage(ApplyRestorationStageRequest) returns (ApplyRestorationStageResponse);
+  // DecideContainmentHold declines a write a HOLD_WRITES control holds;
+  // approving it needs a security key, so APPROVE returns the approval page.
+  // permission: incident.respond
+  rpc DecideContainmentHold(DecideContainmentHoldRequest) returns (DecideContainmentHoldResponse);
+  // GetResponseAction returns an action with its paths and controls.
+  // permission: containment.read
+  rpc GetResponseAction(GetResponseActionRequest) returns (GetResponseActionResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // ListResponseActions lists actions, newest first.
+  // permission: containment.read
+  rpc ListResponseActions(ListResponseActionsRequest) returns (ListResponseActionsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // ListContainmentControls lists the org's controls.
+  // permission: containment.read
+  rpc ListContainmentControls(ListContainmentControlsRequest) returns (ListContainmentControlsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // GetRestorationPlan returns a plan with its controls and stages.
+  // permission: containment.read
+  rpc GetRestorationPlan(GetRestorationPlanRequest) returns (GetRestorationPlanResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+}
+
+// ResponseSubject is what a control or proposal is about.
+message ResponseSubject {
+  // "agent", "run", "grant", "connection", "resource", "user",
+  // "service_account", "transaction", "alert" or "incident".
+  string type = 1 [(buf.validate.field).string = {
+    in: [
+      "agent",
+      "run",
+      "grant",
+      "connection",
+      "resource",
+      "user",
+      "service_account",
+      "transaction",
+      "alert",
+      "incident"
+    ]
+  }];
+  // A uuid, or for a resource "<target type>:<target id>" where a trailing
+  // * matches a prefix.
+  string id = 2 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 256
+  }];
+}
+
+// ResponsePath is one path an action must reach (F288).
+message ResponsePath {
+  // "GATEWAY", "ROUTE", "CREDENTIAL" or "IN_FLIGHT".
+  string type = 1;
+  // What it is: a gateway, a connection route ("agent:connection:operation"),
+  // a credential's connection or a transaction.
+  string subject_type = 2;
+  string subject_id = 3;
+  // A material path decides the action's status.
+  bool material = 4;
+  // How it is enforced or why it is open: "epoch", a coverage state
+  // ("ENFORCED", "PARTIAL", "OBSERVE_ONLY", "UNKNOWN"), "agent_held",
+  // a credential kind or "dispatched".
+  string control = 5;
+  // "PENDING", "CONFIRMED", "UNRESOLVED", "FAILED" or "UNSUPPORTED".
+  string status = 6;
+  // Confirmation evidence: ids, epochs and times only.
+  map<string, string> evidence = 7;
+  // Why it failed, or why it cannot be reached.
+  string failure = 8;
+  string unsupported_reason = 9;
+  // For dispatched work: "CANCELLABLE", "NOT_CANCELLABLE" or "UNKNOWN".
+  string cancel_capability = 10;
+  google.protobuf.Timestamp confirm_time = 11;
+}
+
+// HistoricalItem is work dispatched before the control (F561): stopping
+// new access does not undo it.
+message HistoricalItem {
+  string transaction_id = 1;
+  // The permit's state when last read.
+  string permit_state = 2;
+}
+
+// ResponseAction is one Contain, Terminate, Revoke or Rotate request.
+message ResponseAction {
+  string id = 1;
+  // "CONTAIN", "TERMINATE", "REVOKE" or "ROTATE".
+  string kind = 2;
+  string scope_type = 3;
+  string scope_id = 4;
+  // For CONTAIN: "DENY_ALL", "HOLD_WRITES" or "DENY_OPERATION".
+  string control = 5;
+  string operation = 6;
+  // Why (untrusted text).
+  string reason = 7;
+  string case_id = 8;
+  string incident_id = 9;
+  // "user:<id>", "service_account:<id>" or "system:identity_playbook".
+  string actor = 10;
+  // "USER", "SOAR" or "PLAYBOOK".
+  string source = 11;
+  // "REQUESTED", "PARTIAL", "CONFIRMED", "FAILED" or "UNSUPPORTED".
+  string status = 12;
+  // New access through every gateway serving the scope is stopped.
+  bool future_confirmed = 13;
+  // Historical exposure, reported apart from new access (F561).
+  repeated HistoricalItem historical_open = 14;
+  // The containment epoch the change raised the org to.
+  int64 epoch = 15;
+  // The preview it was confirmed against (hex), or the emergency skip.
+  string preview_digest = 16;
+  bool preview_skipped = 17;
+  google.protobuf.Timestamp request_time = 18;
+  google.protobuf.Timestamp settle_time = 19;
+}
+
+// ContainmentControl is a control the Authority enforces until lifted.
+message ContainmentControl {
+  string id = 1;
+  string action_id = 2;
+  string scope_type = 3;
+  string scope_id = 4;
+  string control = 5;
+  string operation = 6;
+  // Why (untrusted text).
+  string reason = 7;
+  string created_by = 8;
+  google.protobuf.Timestamp create_time = 9;
+  google.protobuf.Timestamp expire_time = 10;
+  // Set once lifted, with the restoration plan that lifted it.
+  google.protobuf.Timestamp lift_time = 11;
+  string lifted_by = 12;
+  string restoration_id = 13;
+}
+
+// PreviewContainmentRequest names a control.
+message PreviewContainmentRequest {
+  ResponseSubject scope = 1 [(buf.validate.field).required = true];
+  string control = 2 [(buf.validate.field).string = {
+    in: [
+      "DENY_ALL",
+      "HOLD_WRITES",
+      "DENY_OPERATION"
+    ]
+  }];
+  string operation = 3 [(buf.validate.field).string.max_len = 200];
+}
+
+// ContainmentReach is the reach before and after (exposure).
+message ContainmentReach {
+  int32 resources_before = 1;
+  int32 resources_after = 2;
+  int32 usable_before = 3;
+  int32 usable_after = 4;
+  // What the change would stop.
+  repeated ResponseSubject disruption = 5;
+  bool stale = 6;
+  string note = 7;
+}
+
+// PreviewContainmentResponse is the preview.
+message PreviewContainmentResponse {
+  // Whether it commits without a preview.
+  bool narrow = 1;
+  repeated string run_ids = 2;
+  bool runs_over_limit = 3;
+  repeated string agent_ids = 4;
+  int64 waiting_approvals = 5;
+  repeated string gateway_ids = 6;
+  // Bypass routes ("agent:connection:operation") the control does not close.
+  repeated string alternative_paths = 7;
+  repeated string unknown = 8;
+  // SHA-256 of the canonical preview, hex: Contain's preview_digest.
+  string preview_digest = 9;
+  // Unset below Team, or when it could not be computed (reach_note says).
+  ContainmentReach reach = 10;
+  string reach_note = 11;
+}
+
+// ContainRequest asks for a control.
+message ContainRequest {
+  ResponseSubject scope = 1 [(buf.validate.field).required = true];
+  string control = 2 [(buf.validate.field).string = {
+    in: [
+      "DENY_ALL",
+      "HOLD_WRITES",
+      "DENY_OPERATION"
+    ]
+  }];
+  // The operation a DENY_OPERATION control denies.
+  string operation = 3 [(buf.validate.field).string.max_len = 200];
+  // Why (1 to 1000 characters).
+  string reason = 4 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 1000
+  }];
+  optional string case_id = 5 [(buf.validate.field).string.uuid = true];
+  optional string incident_id = 6 [(buf.validate.field).string.uuid = true];
+  // Hex SHA-256 from PreviewContainment; required for a wider control.
+  string preview_digest = 7 [(buf.validate.field).string.pattern = "^([0-9a-f]{64})?$"];
+  // Emergency skip of a wider control's preview: needs skip_reason and a
+  // fresh security-key step-up of the calling browser session.
+  bool skip_preview = 8;
+  string skip_reason = 9 [(buf.validate.field).string.max_len = 500];
+  string idempotency_key = 10 [(buf.validate.field).string.max_len = 128];
+  // When the control ends by itself; unset: until restored.
+  google.protobuf.Timestamp expire_time = 11;
+}
+
+// ContainResponse is the action.
+message ContainResponse {
+  string action_id = 1;
+  string status = 2;
+}
+
+// ProposeResponseRequest names what to respond to.
+message ProposeResponseRequest {
+  ResponseSubject subject = 1 [(buf.validate.field).required = true];
+}
+
+// ResponseOption is one prefilled option, narrowest first.
+message ResponseOption {
+  // "CONTAIN" or "TERMINATE".
+  string kind = 1;
+  ResponseSubject scope = 2;
+  string control = 3;
+  bool narrow = 4;
+  // What it stops.
+  string rationale = 5;
+}
+
+// ProposeResponseResponse lists the options.
+message ProposeResponseResponse {
+  repeated ResponseOption options = 1;
+}
+
+// TerminateRunRequest names a run.
+message TerminateRunRequest {
+  string run_id = 1 [(buf.validate.field).string.uuid = true];
+  string reason = 2 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 1000
+  }];
+  optional string case_id = 3 [(buf.validate.field).string.uuid = true];
+  optional string incident_id = 4 [(buf.validate.field).string.uuid = true];
+}
+
+// TerminateRunResponse is the action.
+message TerminateRunResponse {
+  string action_id = 1;
+  string status = 2;
+}
+
+// PreviewCredentialChangeRequest names a sealed credential version.
+message PreviewCredentialChangeRequest {
+  string connection_id = 1 [(buf.validate.field).string.uuid = true];
+  int32 version = 2 [(buf.validate.field).int32.gt = 0];
+}
+
+// PreviewCredentialChangeResponse is everyone sharing it.
+message PreviewCredentialChangeResponse {
+  // "static" or "github_app".
+  string kind = 1;
+  // "ACTIVE", "SUPERSEDED" or "REVOKED".
+  string state = 2;
+  string gateway_id = 3;
+  repeated string agent_ids = 4;
+  // A route of the connection serves every agent.
+  bool every_agent = 5;
+  repeated string run_ids = 6;
+  bool runs_over_limit = 7;
+  // Connections sharing its GitHub App installation.
+  repeated string shared_connection_ids = 8;
+  repeated string unknown = 9;
+  // Hex SHA-256: the revoke or rotate's preview_digest.
+  string preview_digest = 10;
+}
+
+// RevokeSealedCredentialRequest names the version and its preview.
+message RevokeSealedCredentialRequest {
+  string connection_id = 1 [(buf.validate.field).string.uuid = true];
+  int32 version = 2 [(buf.validate.field).int32.gt = 0];
+  string reason = 3 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 1000
+  }];
+  string preview_digest = 4 [(buf.validate.field).string.pattern = "^[0-9a-f]{64}$"];
+  optional string case_id = 5 [(buf.validate.field).string.uuid = true];
+  optional string incident_id = 6 [(buf.validate.field).string.uuid = true];
+}
+
+// RevokeSealedCredentialResponse is the action.
+message RevokeSealedCredentialResponse {
+  string action_id = 1;
+  string status = 2;
+}
+
+// RotateSealedCredentialRequest names the version and its preview.
+message RotateSealedCredentialRequest {
+  string connection_id = 1 [(buf.validate.field).string.uuid = true];
+  int32 version = 2 [(buf.validate.field).int32.gt = 0];
+  string reason = 3 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 1000
+  }];
+  string preview_digest = 4 [(buf.validate.field).string.pattern = "^[0-9a-f]{64}$"];
+  optional string case_id = 5 [(buf.validate.field).string.uuid = true];
+  optional string incident_id = 6 [(buf.validate.field).string.uuid = true];
+}
+
+// RotateSealedCredentialResponse is the action.
+message RotateSealedCredentialResponse {
+  string action_id = 1;
+  string status = 2;
+}
+
+// RequestControlRequest is a SOAR request.
+message RequestControlRequest {
+  // Idempotent on (org, key): the same request returns the same action.
+  string idempotency_key = 1 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 128
+  }];
+  // A run, agent, grant or connection.
+  ResponseSubject scope = 2 [(buf.validate.field).required = true];
+  string control = 3 [(buf.validate.field).string = {
+    in: [
+      "DENY_ALL",
+      "HOLD_WRITES",
+      "DENY_OPERATION"
+    ]
+  }];
+  string operation = 4 [(buf.validate.field).string.max_len = 200];
+  string reason = 5 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 1000
+  }];
+}
+
+// RequestControlResponse is the result.
+message RequestControlResponse {
+  string action_id = 1;
+  // "CONFIRMED", "FAILED", "UNSUPPORTED" or "UNKNOWN" (not yet confirmed
+  // on every path; see paths).
+  string result = 2;
+  repeated ResponsePath paths = 3;
+  // The key was used before for this same request.
+  bool replayed = 4;
+}
+
+// RestorationTestAction is a recorded evaluation re-decided, dry run.
+message RestorationTestAction {
+  string transaction_id = 1 [(buf.validate.field).string.uuid = true];
+  int32 evaluation = 2 [(buf.validate.field).int32 = {
+    gte: 1
+    lte: 64
+  }];
+  // "PERMITTED" or "PROHIBITED".
+  string expect = 3 [(buf.validate.field).string = {
+    in: [
+      "PERMITTED",
+      "PROHIBITED"
+    ]
+  }];
+}
+
+// RestorationStageSpec is one stage of a staged restoration.
+message RestorationStageSpec {
+  repeated string control_ids = 1 [(buf.validate.field).repeated = {
+    min_items: 1
+    max_items: 50
+    unique: true
+    items: {
+      string: {uuid: true}
+    }
+  }];
+  repeated RestorationTestAction tests = 2 [(buf.validate.field).repeated.max_items = 20];
+}
+
+// RequestRestorationRequest names the controls to lift.
+message RequestRestorationRequest {
+  repeated string control_ids = 1 [(buf.validate.field).repeated = {
+    min_items: 1
+    max_items: 50
+    unique: true
+    items: {
+      string: {uuid: true}
+    }
+  }];
+  string reason = 2 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 1000
+  }];
+  // Stages make a staged restoration (Team): each control in one stage.
+  repeated RestorationStageSpec stages = 3 [(buf.validate.field).repeated.max_items = 20];
+}
+
+// RestorationPrecondition is one precondition (F564).
+message RestorationPrecondition {
+  // "identity_reverified", "connection_health", "remaining_grants",
+  // "waiting_approvals" or "remediation_tests".
+  string check = 1;
+  string subject = 2;
+  // "MET", "UNMET" (blocks the lift) or "INFO".
+  string state = 3;
+  string detail = 4;
+}
+
+// RequestRestorationResponse is the plan.
+message RequestRestorationResponse {
+  string plan_id = 1;
+  repeated RestorationPrecondition preconditions = 2;
+}
+
+// DecideRestorationRequest is a reviewer's decision.
+message DecideRestorationRequest {
+  string plan_id = 1 [(buf.validate.field).string.uuid = true];
+  // "APPROVE" or "DECLINE".
+  string decision = 2 [(buf.validate.field).string = {
+    in: [
+      "APPROVE",
+      "DECLINE"
+    ]
+  }];
+}
+
+// DecideRestorationResponse is the plan's new state.
+message DecideRestorationResponse {
+  // "REQUESTED", "STAGING", "COMPLETED" or "REFUSED".
+  string state = 1;
+  repeated RestorationPrecondition preconditions = 2;
+}
+
+// ApplyRestorationStageRequest names the next stage.
+message ApplyRestorationStageRequest {
+  string plan_id = 1 [(buf.validate.field).string.uuid = true];
+  int32 ordinal = 2 [(buf.validate.field).int32 = {
+    gte: 1
+    lte: 20
+  }];
+}
+
+// RestorationTestResult is one test's outcome.
+message RestorationTestResult {
+  RestorationTestAction test = 1;
+  string decision = 2;
+  string reason = 3;
+  bool complete = 4;
+  bool passed = 5;
+}
+
+// ApplyRestorationStageResponse is the results and the plan's state.
+message ApplyRestorationStageResponse {
+  string state = 1;
+  repeated RestorationTestResult results = 2;
+  bool applied = 3;
+}
+
+// DecideContainmentHoldRequest names the held transaction.
+message DecideContainmentHoldRequest {
+  string transaction_id = 1 [(buf.validate.field).string.uuid = true];
+  // "APPROVE" or "DECLINE".
+  string decision = 2 [(buf.validate.field).string = {
+    in: [
+      "APPROVE",
+      "DECLINE"
+    ]
+  }];
+  // For people only (untrusted text).
+  string note = 3 [(buf.validate.field).string.max_len = 500];
+}
+
+// DecideContainmentHoldResponse says what happened.
+message DecideContainmentHoldResponse {
+  // "DECLINED", or "APPROVE_ON_PAGE" with page_url.
+  string outcome = 1;
+  string page_url = 2;
+}
+
+// GetResponseActionRequest names an action.
+message GetResponseActionRequest {
+  string action_id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// GetResponseActionResponse is the action.
+message GetResponseActionResponse {
+  ResponseAction action = 1;
+  repeated ResponsePath paths = 2;
+  repeated ContainmentControl controls = 3;
+}
+
+// ListResponseActionsRequest filters and pages.
+message ListResponseActionsRequest {
+  optional string case_id = 1 [(buf.validate.field).string.uuid = true];
+  optional string incident_id = 2 [(buf.validate.field).string.uuid = true];
+  // The last action id of the previous page.
+  string page_token = 3 [(buf.validate.field).string = {
+    max_len: 36
+    pattern: "^([0-9a-f-]{36})?$"
+  }];
+  int32 page_size = 4 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 200
+  }];
+}
+
+// ListResponseActionsResponse is one page.
+message ListResponseActionsResponse {
+  repeated ResponseAction actions = 1;
+  string next_page_token = 2;
+}
+
+// ListContainmentControlsRequest filters.
+message ListContainmentControlsRequest {
+  bool include_lifted = 1;
+  int32 page_size = 2 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 200
+  }];
+}
+
+// ListContainmentControlsResponse lists controls.
+message ListContainmentControlsResponse {
+  repeated ContainmentControl controls = 1;
+}
+
+// GetRestorationPlanRequest names a plan.
+message GetRestorationPlanRequest {
+  string plan_id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// RestorationStage is one stage as recorded.
+message RestorationStage {
+  int32 ordinal = 1;
+  repeated string control_ids = 2;
+  repeated RestorationTestAction tests = 3;
+  repeated RestorationTestResult results = 4;
+  // "PENDING", "PASSED", "FAILED" or "APPLIED".
+  string state = 5;
+}
+
+// GetRestorationPlanResponse is the plan.
+message GetRestorationPlanResponse {
+  string id = 1;
+  // Why (untrusted text).
+  string reason = 2;
+  bool staged = 3;
+  string state = 4;
+  repeated RestorationPrecondition preconditions = 5;
+  string requested_by = 6;
+  repeated ContainmentControl controls = 7;
+  repeated RestorationStage stages = 8;
+  google.protobuf.Timestamp create_time = 9;
+  google.protobuf.Timestamp finish_time = 10;
+}
