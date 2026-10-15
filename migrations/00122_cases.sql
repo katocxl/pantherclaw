@@ -195,17 +195,17 @@ LANGUAGE sql STABLE
 SET search_path = pc, pg_temp
 AS $$
     SELECT g.id FROM pc.case_entries l
-    JOIN pc.agents g ON g.org_id = l.org_id AND g.id::text = l.ref_id
+    JOIN pc.agents g ON g.org_id = l.org_id AND g.id::text = lower(l.ref_id)
     WHERE l.org_id = p_org AND l.case_id = p_case AND l.kind = 'LINK' AND l.ref_kind = 'agent'
       AND NOT pc.case_entry_superseded(l.org_id, l.id)
     UNION
     SELECT r.agent_id FROM pc.case_entries l
-    JOIN pc.runs r ON r.org_id = l.org_id AND r.id::text = l.ref_id
+    JOIN pc.runs r ON r.org_id = l.org_id AND r.id::text = lower(l.ref_id)
     WHERE l.org_id = p_org AND l.case_id = p_case AND l.kind = 'LINK' AND l.ref_kind = 'run'
       AND NOT pc.case_entry_superseded(l.org_id, l.id)
     UNION
     SELECT r.agent_id FROM pc.case_entries l
-    JOIN pc.transactions t ON t.org_id = l.org_id AND t.id::text = l.ref_id
+    JOIN pc.transactions t ON t.org_id = l.org_id AND t.id::text = lower(l.ref_id)
     JOIN pc.runs r ON r.org_id = t.org_id AND r.id = t.run_id
     WHERE l.org_id = p_org AND l.case_id = p_case AND l.kind = 'LINK' AND l.ref_kind = 'transaction'
       AND NOT pc.case_entry_superseded(l.org_id, l.id)
@@ -213,13 +213,15 @@ $$;
 -- +goose StatementEnd
 
 -- Whether a viewer whose scope is the visible agents may read the case: it
--- is about at least one agent and every one of them is visible (D60).
+-- is about at least one agent and every one of them is visible (D60). A
+-- NULL list, or a NULL in it, reads nothing (STRICT and the guard, D70).
 -- +goose StatementBegin
 CREATE FUNCTION pc.case_within(p_org uuid, p_case uuid, p_visible uuid[]) RETURNS boolean
-LANGUAGE sql STABLE
+LANGUAGE sql STABLE STRICT
 SET search_path = pc, pg_temp
 AS $$
-    SELECT EXISTS (SELECT 1 FROM pc.case_agents(p_org, p_case))
+    SELECT array_position(p_visible, NULL) IS NULL
+       AND EXISTS (SELECT 1 FROM pc.case_agents(p_org, p_case))
        AND NOT EXISTS (SELECT 1 FROM pc.case_agents(p_org, p_case) a WHERE a <> ALL (p_visible))
 $$;
 -- +goose StatementEnd
@@ -482,7 +484,7 @@ BEGIN
               AND NOT pc.case_entry_superseded(l.org_id, l.id);
         ELSE
             WITH acts AS (
-                SELECT l.ref_id AS id FROM pc.case_entries l
+                SELECT lower(l.ref_id) AS id FROM pc.case_entries l
                 WHERE l.org_id = NEW.org_id AND l.case_id = NEW.id AND l.kind = 'LINK' AND l.ref_kind = 'response_action'
                   AND NOT pc.case_entry_superseded(l.org_id, l.id)
                 UNION

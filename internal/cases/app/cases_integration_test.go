@@ -9,6 +9,7 @@ import (
 	"context"
 	"encoding/json/v2"
 	"errors"
+	"strings"
 	"testing"
 
 	billing "github.com/katocxl/pantherclaw/internal/billing/domain"
@@ -170,6 +171,21 @@ func TestHR247_CaseReadsApplyTheViewersScope(t *testing.T) {
 		t.Fatalf("alice opens an org-wide case: %v", err)
 	}
 
+	// A link given in upper case is the same subject: it widens the case's
+	// read scope just as the check that allowed it saw it (D70).
+	mixed, err := f.svc.Open(bob, capp.OpenRequest{Title: "A, then B", Subjects: []reflexdomain.Subject{subject(reflexdomain.SubjectRun, f.runA)}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.svc.Append(bob, mixed.ID, domain.Draft{
+		Kind: domain.KindLink,
+		Ref:  &domain.Ref{Kind: "agent", ID: strings.ToUpper(f.agentB.String())},
+	}); err != nil {
+		t.Fatalf("link agent B in upper case: %v", err)
+	}
+	if _, err := f.svc.Get(alice, mixed.ID, 0, 0); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("alice reads a case that links agent B in upper case: %v", err)
+	}
 	// Hidden cases never crowd a scoped caller's page out (D60): with newer
 	// cases about B, alice's first one-item page is still her case about A.
 	for range 3 {
@@ -225,12 +241,15 @@ func TestHR247_CaseReadsApplyTheViewersScope(t *testing.T) {
 			t.Fatalf("%s lens: %+v, %v", name, l, err)
 		}
 	}
-	// related: bob sees the other case about A; alice does not.
+	// related: the case that also links run A (and agent B) is related;
+	// bob sees it, alice does not.
 	if l, err := f.svc.GetLens(bob, capp.LensRequest{Case: onlyA.ID, Lens: capp.LensRelated}); err != nil {
 		t.Fatal(err)
-	} else if len(l.Items) != 0 {
-		// The two cases link different subjects (run A vs transaction A).
-		t.Fatalf("related: %+v", l.Items)
+	} else if len(l.Items) != 1 || l.Items[0].Subjects[0].ID != mixed.ID.String() {
+		t.Fatalf("related as bob: %+v", l.Items)
+	}
+	if l, err := f.svc.GetLens(alice, capp.LensRequest{Case: onlyA.ID, Lens: capp.LensRelated}); err != nil || len(l.Items) != 0 {
+		t.Fatalf("related as alice: %+v %v", l.Items, err)
 	}
 
 	if _, err := f.svc.Export(alice, onlyA.ID); !errors.Is(err, capp.ErrForbidden) {
