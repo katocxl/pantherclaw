@@ -372,6 +372,61 @@ type PcCaptureProfile struct {
 	DisabledAt      *time.Time
 }
 
+type PcCase struct {
+	OrgID               ids.OrgID
+	ID                  ids.UUID
+	Title               string
+	Source              string
+	OpenedByType        string
+	OpenedByID          string
+	AlertID             *ids.UUID
+	IncidentID          *ids.UUID
+	State               string
+	OwnerID             *ids.UUID
+	FollowUpOwnerID     *ids.UUID
+	Disposition         *string
+	Impact              *string
+	HeadSeq             int64
+	HeadHash            []byte
+	CreatedAt           time.Time
+	UpdatedAt           time.Time
+	OperationalClosedAt *time.Time
+	ClosedAt            *time.Time
+}
+
+type PcCaseEntry struct {
+	OrgID               ids.OrgID
+	CaseID              ids.UUID
+	ID                  ids.UUID
+	Seq                 int64
+	Body                []byte
+	LedgerEntryID       ids.UUID
+	PrevHash            []byte
+	EntryHash           []byte
+	Kind                string
+	AuthorType          string
+	AuthorID            string
+	Text                *string
+	Basis               *string
+	Evidence            []byte
+	Confidence          *string
+	Alternatives        []string
+	QuestionID          *ids.UUID
+	Unresolved          bool
+	OwnerID             *ids.UUID
+	OwnerRole           *string
+	ImpactKind          *string
+	RefKind             *string
+	RefID               *string
+	ToState             *string
+	NoContainmentNeeded bool
+	Disposition         *string
+	CaseImpact          *string
+	Reason              *string
+	Supersedes          *ids.UUID
+	CreatedAt           time.Time
+}
+
 type PcChangeWindow struct {
 	OrgID       ids.OrgID
 	ID          ids.UUID

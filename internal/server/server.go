@@ -610,6 +610,7 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	if err != nil {
 		return nil, err
 	}
+	registerCases(rs, d)
 	registerReflexCore(rs, d)
 	mux := http.NewServeMux()
 	rpc.Mount(mux, rs)
