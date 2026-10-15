@@ -32,6 +32,8 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/clock"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
+	reflexdomain "github.com/katocxl/pantherclaw/internal/reflex/domain"
+	"github.com/katocxl/pantherclaw/internal/reflex/feed"
 	tenancy "github.com/katocxl/pantherclaw/internal/tenancy/app"
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
 )
@@ -40,34 +42,13 @@ import (
 const Path = "/v1/operations/stream"
 
 // PermOperations is the permission the stream needs (D4).
-const PermOperations td.Permission = "operations.read"
+const PermOperations = td.PermOperationsRead
 
 // Subject is one subject of an event (D1).
-type Subject struct {
-	Type string `json:"type"`
-	ID   string `json:"id"`
-}
+type Subject = reflexdomain.Subject
 
-// Event is one feed event as the stream reads it (the D2 feed contract).
-type Event struct {
-	Seq              int64
-	ID               ids.UUID
-	Org              ids.OrgID
-	Kind             string
-	OccurredAt       time.Time
-	ActorType        string
-	ActorID          string
-	Subjects         []Subject
-	Decision         string
-	Reason           string
-	Operation        string
-	Mode             string
-	Outcome          string
-	Environment      string
-	DestinationClass string
-	Test             bool
-	Attrs            map[string]string
-}
+// Event is one feed event (D2).
+type Event = feed.Event
 
 // Feed reads an org's feed in sequence order.
 type Feed interface {
@@ -103,8 +84,6 @@ type Config struct {
 	Recheck      time.Duration // credential and permission recheck (30 s)
 	MaxPerCaller int           // concurrent streams per principal (5)
 	Batch        int           // events read per poll (500)
-	// Permission overrides PermOperations (tests).
-	Permission td.Permission
 }
 
 func (c Config) withDefaults() Config {
@@ -122,9 +101,6 @@ func (c Config) withDefaults() Config {
 	}
 	if c.Batch <= 0 || c.Batch > 500 {
 		c.Batch = 500
-	}
-	if c.Permission == "" {
-		c.Permission = PermOperations
 	}
 	return c
 }
@@ -249,8 +225,8 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid or expired credentials", http.StatusUnauthorized)
 		return
 	}
-	if !c.CanAnywhere(h.cfg.Permission) {
-		http.Error(w, "missing permission "+string(h.cfg.Permission), http.StatusForbidden)
+	if !c.CanAnywhere(PermOperations) {
+		http.Error(w, "missing permission "+string(PermOperations), http.StatusForbidden)
 		return
 	}
 	sc, err := h.scoper.Scope(ctx, c)
@@ -363,7 +339,7 @@ func (s *session) recheck(ctx context.Context) string {
 	if err != nil {
 		return closedRevoked
 	}
-	if !c.CanAnywhere(s.h.cfg.Permission) || c.Org != s.caller.Org || c.Principal != s.caller.Principal {
+	if !c.CanAnywhere(PermOperations) || c.Org != s.caller.Org || c.Principal != s.caller.Principal {
 		return closedPermission
 	}
 	sc, err := s.h.scoper.Scope(ctx, c)
@@ -386,7 +362,7 @@ func (s *session) drain(ctx context.Context) string {
 			return closedFeed
 		}
 		for _, g := range group(evs) {
-			if !Focus(g.Event) || !Visible(s.caller, s.h.cfg.Permission, s.scope, g.Event) {
+			if !Focus(g.Event) || !Visible(s.caller, PermOperations, s.scope, g.Event) {
 				continue
 			}
 			b, err := json.Marshal(wireOf(g))

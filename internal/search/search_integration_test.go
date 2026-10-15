@@ -85,20 +85,11 @@ func (f *fx) caller(role td.RoleName, scope td.Scope) tenancy.Caller {
 	}}
 }
 
-// search runs q for c past the search.read gate (which the M10 core
-// stream adds to the catalog): the scope and filters under test are the
-// same.
+// search runs q as c.
 func (f *fx) search(c tenancy.Caller, q Query) Result {
 	f.t.Helper()
-	if err := q.Validate(); err != nil {
-		f.t.Fatal(err)
-	}
-	var out Result
-	if err := f.p.InTenantTx(context.Background(), f.org, func(ctx context.Context, tx db.TenantTx) error {
-		var err error
-		out, err = f.s.run(ctx, c, tx, q, page.Request{Size: 2})
-		return err
-	}, db.ReadOnly()); err != nil {
+	out, err := f.s.Search(tenancy.WithCaller(context.Background(), c), q, page.Request{Size: 2})
+	if err != nil {
 		f.t.Fatal(err)
 	}
 	return out
@@ -120,7 +111,7 @@ func agentsOf(r Result) []string {
 func TestHR257_SearchReadsAndCountsOnlyTheViewersScope(t *testing.T) {
 	f := newFx(t)
 	org := f.caller(td.RoleAuditor, td.Scope{Type: td.ScopeOrg, ID: f.org.UUID()})
-	team := f.caller(td.RoleDeveloper, td.Scope{Type: td.ScopeTeam, ID: f.teamA})
+	team := f.caller(td.RoleResponder, td.Scope{Type: td.ScopeTeam, ID: f.teamA})
 	q := Query{Entity: EntityTransactions}
 
 	all := f.search(org, q)
@@ -168,11 +159,11 @@ func TestHR257_SearchReadsAndCountsOnlyTheViewersScope(t *testing.T) {
 // match; none of them depends on rows outside the scope.
 func TestHR257_EmptyResultsGiveTheirReason(t *testing.T) {
 	f := newFx(t)
-	launcher := f.caller(td.RoleRunLauncher, td.Scope{Type: td.ScopeOrg, ID: f.org.UUID()})
-	teamC := f.caller(td.RoleDeveloper, td.Scope{Type: td.ScopeTeam, ID: f.teamC})
-	teamA := f.caller(td.RoleDeveloper, td.Scope{Type: td.ScopeTeam, ID: f.teamA})
+	noAudit := f.caller(td.RoleResponder, td.Scope{Type: td.ScopeOrg, ID: f.org.UUID()})
+	teamC := f.caller(td.RoleResponder, td.Scope{Type: td.ScopeTeam, ID: f.teamC})
+	teamA := f.caller(td.RoleResponder, td.Scope{Type: td.ScopeTeam, ID: f.teamA})
 
-	if r := f.search(launcher, Query{Entity: EntityAudit}); r.Empty != EmptyRestricted || r.Count != 0 {
+	if r := f.search(noAudit, Query{Entity: EntityAudit}); r.Empty != EmptyRestricted || r.Count != 0 {
 		t.Errorf("no audit.read: %+v", r)
 	}
 	if r := f.search(teamC, Query{Entity: EntityTransactions}); r.Empty != EmptyNoDataCollected {
@@ -191,17 +182,89 @@ func TestHR257_EmptyResultsGiveTheirReason(t *testing.T) {
 // until an effect is confirmed.
 func TestHR257_BuiltinsRunUnderTheViewersScope(t *testing.T) {
 	f := newFx(t)
-	teamB := f.caller(td.RoleDeveloper, td.Scope{Type: td.ScopeTeam, ID: f.teamB})
+	teamB := f.caller(td.RoleResponder, td.Scope{Type: td.ScopeTeam, ID: f.teamB})
 	org := f.caller(td.RoleAuditor, td.Scope{Type: td.ScopeOrg, ID: f.org.UUID()})
-	q, _, err := BuiltinQuery{Name: BuiltinProductionAccess}.expand(f.s.now())
+	run := func(c tenancy.Caller) Result {
+		t.Helper()
+		r, err := f.s.RunBuiltin(tenancy.WithCaller(context.Background(), c), BuiltinQuery{Name: BuiltinProductionAccess}, page.Request{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return r
+	}
+	if r := run(teamB); r.Count != 0 {
+		t.Fatalf("team B sees production access of team A: %d", r.Count)
+	}
+	r := run(org)
+	if r.Count != 3 || slices.ContainsFunc(r.Items, func(i Item) bool { return i.Label != "ATTEMPT" }) {
+		t.Fatalf("org production access: %d %+v", r.Count, r.Items)
+	}
+	if len(r.Omissions) != 1 || r.Omissions[0].Code != omissionUnobservedUse {
+		t.Fatalf("production access omissions: %v", r.Omissions)
+	}
+}
+
+// TestHR257_SearchNeedsSearchRead: a caller without search.read is
+// refused before anything is read.
+func TestHR257_SearchNeedsSearchRead(t *testing.T) {
+	f := newFx(t)
+	dev := tenancy.WithCaller(context.Background(), f.caller(td.RoleDeveloper, td.Scope{Type: td.ScopeOrg, ID: f.org.UUID()}))
+	if _, err := f.s.Search(dev, Query{Entity: EntityTransactions}, page.Request{}); err == nil {
+		t.Fatal("searched without search.read")
+	}
+	if _, err := f.s.List(dev, page.Request{}); err == nil {
+		t.Fatal("listed saved queries without search.read")
+	}
+}
+
+// TestHR257_SharingASavedQueryNeverWidensIt: an org-wide viewer saves and
+// shares a query with the org; a team viewer running it sees and counts
+// only its own scope. A private query is invisible to others, and only
+// its owner changes or deletes a shared one.
+func TestHR257_SharingASavedQueryNeverWidensIt(t *testing.T) {
+	f := newFx(t)
+	owner := f.caller(td.RoleAuditor, td.Scope{Type: td.ScopeOrg, ID: f.org.UUID()})
+	other := f.caller(td.RoleResponder, td.Scope{Type: td.ScopeTeam, ID: f.teamA})
+	other.Principal.ID = ids.NewV7()
+	f.exec("INSERT INTO pc.users (org_id, id, issuer, subject) VALUES ($1, $2, 'https://idp.test', 'bob')", f.org, other.Principal.ID)
+	oc, tc := tenancy.WithCaller(context.Background(), owner), tenancy.WithCaller(context.Background(), other)
+	spec := Spec{Query: &Query{Entity: EntityTransactions}}
+	shared, err := f.s.Save(oc, SaveInput{Name: "all actions", Visibility: Org, Spec: spec})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if r := f.search(teamB, q); r.Count != 0 {
-		t.Fatalf("team B sees production access of team A: %d", r.Count)
+	private, err := f.s.Save(oc, SaveInput{Name: "mine", Visibility: Private, Spec: spec})
+	if err != nil {
+		t.Fatal(err)
 	}
-	r := f.search(org, q)
-	if r.Count != 3 || slices.ContainsFunc(r.Items, func(i Item) bool { return i.Label != "ATTEMPT" }) {
-		t.Fatalf("org production access: %d %+v", r.Count, r.Items)
+	if _, err := f.s.Save(oc, SaveInput{Name: "mine", Visibility: Private, Spec: spec}); err == nil {
+		t.Fatal("duplicate name saved")
+	}
+	if r, err := f.s.RunSaved(oc, shared.ID, page.Request{}); err != nil || r.Count != 5 {
+		t.Fatalf("owner run: %d %v", r.Count, err)
+	}
+	r, err := f.s.RunSaved(tc, shared.ID, page.Request{})
+	if err != nil || r.Count != 3 || r.Scope.All {
+		t.Fatalf("shared run widened: %d %+v %v", r.Count, r.Scope, err)
+	}
+	if _, err := f.s.RunSaved(tc, private.ID, page.Request{}); err == nil {
+		t.Fatal("ran another's private query")
+	}
+	list, err := f.s.List(tc, page.Request{})
+	if err != nil || len(list.Items) != 1 || list.Items[0].ID != shared.ID || list.Items[0].Mine {
+		t.Fatalf("other's list: %+v %v", list.Items, err)
+	}
+	if err := f.s.Delete(tc, shared.ID); err == nil {
+		t.Fatal("deleted another's query")
+	}
+	if _, err := f.s.Update(tc, shared.ID, SaveInput{Name: "x", Visibility: Org, Spec: spec}); err == nil {
+		t.Fatal("changed another's query")
+	}
+	// Sharing with a team the sharer holds no search.read in is refused.
+	if _, err := f.s.Save(tc, SaveInput{Name: "b", Visibility: Team, Team: &f.teamB, Spec: spec}); err == nil {
+		t.Fatal("shared with a team outside the sharer's scope")
+	}
+	if _, err := f.s.Save(tc, SaveInput{Name: "a", Visibility: Team, Team: &f.teamA, Spec: spec}); err != nil {
+		t.Fatalf("share with own team: %v", err)
 	}
 }

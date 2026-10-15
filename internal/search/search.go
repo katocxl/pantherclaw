@@ -20,7 +20,7 @@ import (
 
 // PermSearch is the permission every search needs (D4). Each entity also
 // needs its own read permission where its rows live (entityPerm).
-const PermSearch td.Permission = "search.read"
+const PermSearch = td.PermSearchRead
 
 // entityPerm is the permission that reads each entity's rows.
 var entityPerm = map[Entity]td.Permission{
@@ -141,6 +141,9 @@ func (s *Service) Search(ctx context.Context, q Query, pr page.Request) (Result,
 
 // run executes a validated query in tx.
 func (s *Service) run(ctx context.Context, c tenancy.Caller, tx db.TenantTx, q Query, pr page.Request) (Result, error) {
+	if pr.Size <= 0 || pr.Size > page.Max {
+		pr.Size = page.Default
+	}
 	dq := dbq.New(tx)
 	perm := entityPerm[q.Entity]
 	var sc Scope

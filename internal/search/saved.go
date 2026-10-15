@@ -319,6 +319,9 @@ func (s *Service) List(ctx context.Context, pr page.Request) (SavedPage, error) 
 	if err != nil {
 		return SavedPage{}, err
 	}
+	if pr.Size <= 0 || pr.Size > page.Max {
+		pr.Size = page.Default
+	}
 	var out SavedPage
 	err = s.Pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
 		q := dbq.New(tx)

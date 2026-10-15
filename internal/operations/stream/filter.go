@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
+	reflexdomain "github.com/katocxl/pantherclaw/internal/reflex/domain"
 	tenancy "github.com/katocxl/pantherclaw/internal/tenancy/app"
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
 )
@@ -17,16 +18,16 @@ import (
 // unexpected denials), alerts, incidents and containment. Routine reads
 // and everything else stay searchable but are not streamed.
 var focusKinds = map[string]bool{
-	"reflex.live":     true,
-	"reflex.alert":    true,
-	"reflex.incident": true,
-	"response.action": true,
-	"response.path":   true,
+	reflexdomain.KindLive:           true,
+	reflexdomain.KindAlert:          true,
+	reflexdomain.KindIncident:       true,
+	reflexdomain.KindResponseAction: true,
+	reflexdomain.KindResponsePath:   true,
 }
 
 // focusPrefixes are kind prefixes the stream sends: kill switch and
 // containment audit records.
-var focusPrefixes = []string{"audit.containment."}
+var focusPrefixes = []string{"audit.containment.", "audit.security.kill_switch"}
 
 // Focus reports whether e belongs on the live stream.
 func Focus(e Event) bool {
@@ -46,7 +47,7 @@ func Focus(e Event) bool {
 func agentsOf(e Event) ([]ids.UUID, bool) {
 	var out []ids.UUID
 	for _, s := range e.Subjects {
-		if s.Type != "agent" {
+		if s.Type != reflexdomain.SubjectAgent {
 			continue
 		}
 		id, err := ids.ParseUUID(s.ID)
@@ -93,7 +94,7 @@ type grouped struct {
 // the same transaction (its idempotency).
 func retryKey(e Event) string {
 	for _, s := range e.Subjects {
-		if s.Type == "transaction" {
+		if s.Type == reflexdomain.SubjectTransaction {
 			return e.Kind + "/" + s.ID
 		}
 	}

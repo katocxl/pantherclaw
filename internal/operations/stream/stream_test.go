@@ -21,9 +21,8 @@ import (
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
 )
 
-// The tests stand evidence.read in for operations.read, which the M10 core
-// stream adds to the catalog; the checks are the same.
-const perm = td.PermEvidenceRead
+// perm is what the stream checks.
+const perm = stream.PermOperations
 
 type fakeFeed struct {
 	mu  sync.Mutex
@@ -128,9 +127,8 @@ func newWorld(t *testing.T, cfg stream.Config) *world {
 		agentA: ids.NewV7(), agentB: ids.NewV7(), teamA: ids.NewV7(), teamB: ids.NewV7(), expiry: map[string]time.Time{},
 	}
 	w.auth.set("org-auditor", caller(w.org, td.RoleAuditor, td.Scope{Type: td.ScopeOrg, ID: w.org.UUID()}))
-	w.auth.set("team-a-dev", caller(w.org, td.RoleDeveloper, td.Scope{Type: td.ScopeTeam, ID: w.teamA}))
+	w.auth.set("team-a-dev", caller(w.org, td.RoleResponder, td.Scope{Type: td.ScopeTeam, ID: w.teamA}))
 	sc := teamScoper{team: map[ids.UUID]ids.UUID{w.agentA: w.teamA, w.agentB: w.teamB}}
-	cfg.Permission = perm
 	if cfg.Poll == 0 {
 		cfg.Poll = 5 * time.Millisecond
 	}
@@ -363,7 +361,7 @@ func TestHR256_TheStreamClosesOnRevocationOrRoleRemoval(t *testing.T) {
 		t.Fatal("revoked session: stream still open")
 	}
 
-	dev := caller(w.org, td.RoleDeveloper, td.Scope{Type: td.ScopeTeam, ID: w.teamA})
+	dev := caller(w.org, td.RoleResponder, td.Scope{Type: td.ScopeTeam, ID: w.teamA})
 	w.auth.set("dev", dev)
 	resp = w.open(t, ctx, stream.Path, "dev", nil)
 	dev.Bindings = []td.Binding{{Role: td.RoleRunLauncher, Scope: td.Scope{Type: td.ScopeTeam, ID: w.teamA}}}
