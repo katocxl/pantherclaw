@@ -73,8 +73,9 @@ func TestAutomationCeilingAndExecutionReachStaySeparate(t *testing.T) {
 	}
 }
 
-// An inactive or past-review ceiling is history, never current reach.
-func TestAutomationCeilingInactiveIsExpired(t *testing.T) {
+// An inactive or past-review ceiling can issue nothing: it has no rights
+// (D37a).
+func TestAutomationCeilingInactiveHasNoReach(t *testing.T) {
 	for name, mut := range map[string]func(*domain.Ceiling){
 		"inactive":    func(c *domain.Ceiling) { c.Active = false },
 		"past review": func(c *domain.Ceiling) { c.ReviewBy = now.Add(-time.Minute) },
@@ -82,8 +83,8 @@ func TestAutomationCeilingInactiveIsExpired(t *testing.T) {
 		w, _, _ := automationWorld()
 		mut(&w.in.Ceilings[0])
 		for _, r := range domain.Compute(w.in).Rights {
-			if r.View == domain.IssuanceCeiling && r.Label.Current() {
-				t.Errorf("%s: ceiling right %s is current", name, r.Label)
+			if r.View == domain.IssuanceCeiling {
+				t.Errorf("%s: ceiling right %+v", name, r)
 			}
 		}
 	}
@@ -105,5 +106,39 @@ func TestAutomationRankingByCeilingNotActivity(t *testing.T) {
 	}
 	if ranked[0].Keys.ActiveGrants != 0 || ranked[1].Keys.ActiveGrants != 1 || ranked[0].Keys.Agents != 2 {
 		t.Errorf("keys %+v / %+v", ranked[0].Keys, ranked[1].Keys)
+	}
+}
+
+// Readers of current authority keep their views: the ceiling appears only
+// when asked for by name, and never in an agent ranking, a matrix of the
+// default views or a reduction preview (D37a).
+func TestHR289_ReadersNeverCountTheCeilingUnlessAsked(t *testing.T) {
+	w, _, _ := automationWorld()
+	with := domain.Compute(w.in).Rights
+	w.in.Ceilings = nil
+	without := domain.Compute(w.in).Rights
+	if len(with) == len(without) {
+		t.Fatal("the world has no ceiling rights")
+	}
+	if got, want := len(domain.Select(with, domain.Filter{})), len(without); got != want {
+		t.Errorf("default select: %d rights, want %d", got, want)
+	}
+	if got := domain.Select(with, domain.Filter{View: domain.IssuanceCeiling}); len(got) != len(with)-len(without) {
+		t.Errorf("asked-for ceiling: %d rights, want %d", len(got), len(with)-len(without))
+	}
+	if got, want := domain.Rank(with, nil, nil), domain.Rank(without, nil, nil); !slices.EqualFunc(got, want, func(a, b domain.Ranked) bool {
+		return (a.Agent == nil) == (b.Agent == nil) && (a.Agent == nil || *a.Agent == *b.Agent) && a.Keys == b.Keys
+	}) {
+		t.Errorf("agent ranking changed with a ceiling:\n%+v\n%+v", got, want)
+	}
+	if got, want := len(domain.BuildMatrix(domain.Select(with, domain.Filter{})).Cells), len(domain.BuildMatrix(without).Cells); got != want {
+		t.Errorf("matrix: %d cells, want %d", got, want)
+	}
+	w2, _, _ := automationWorld()
+	d := domain.Preview(w2.in, domain.Change{Restrictions: []domain.Restriction{{Agent: &w2.other}}})
+	for _, r := range slices.Concat(d.BeforeRights, d.AfterRights, d.Removed) {
+		if r.View.Potential() {
+			t.Fatalf("reduction preview carries a ceiling right %+v", r)
+		}
 	}
 }

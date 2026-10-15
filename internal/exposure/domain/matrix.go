@@ -254,6 +254,8 @@ func (f Filter) Match(r Right) bool {
 		return false
 	case f.View != "" && r.View != f.View:
 		return false
+	case f.View == "" && r.View.Potential():
+		return false // the issuance ceiling only when asked for (D37a)
 	case f.Current && !r.Label.Current():
 		return false
 	}

@@ -30,11 +30,18 @@ import (
 // issue (D37).
 const IssuanceCeiling View = "ISSUANCE_CEILING"
 
-// Reason codes of ceiling rights.
-const (
-	ReasonCeiling         = "ISSUANCE_CEILING"
-	ReasonCeilingInactive = "CEILING_INACTIVE"
-)
+// Potential reports a view of reach nobody holds yet: the issuance ceiling.
+// Readers of current authority (views, graphs, ranking, posture, search,
+// previews) leave it out unless it is asked for by name (D37a).
+func (v View) Potential() bool { return v == IssuanceCeiling }
+
+// HeldReach drops the potential (ceiling) rights.
+func HeldReach(rights []Right) []Right {
+	return slices.DeleteFunc(slices.Clone(rights), func(r Right) bool { return r.View.Potential() })
+}
+
+// ReasonCeiling marks a ceiling right.
+const ReasonCeiling = "ISSUANCE_CEILING"
 
 // Ceiling is an automation's issuance ceiling as exposure reads it.
 type Ceiling struct {
@@ -45,21 +52,23 @@ type Ceiling struct {
 	Bounds          gdomain.Bounds
 	DelegationDepth int
 	ReviewBy        time.Time
-	// Active is false for a SUPERSEDED, EXPIRED, VOID or REVOKED ceiling:
-	// its reach is kept as history (EXPIRED), never as current.
+	// Active is false for a SUPERSEDED, EXPIRED, VOID or REVOKED ceiling,
+	// which can issue nothing and so has no reach (D37a).
 	Active bool
 }
 
-// ceilings adds the ISSUANCE_CEILING view: every right a grant inside the
-// ceiling could carry, for every ceiling agent. A live ceiling's rights are
+// ceilings adds the ISSUANCE_CEILING view: every right a grant inside an
+// ACTIVE ceiling could carry, for every ceiling agent. Its rights are
 // CONDITIONAL (an execution must issue them first), never USABLE; reach
 // through a connection whose package is unknown is UNCERTAIN, never absent.
+// A ceiling that is not active, or past its review date, can issue nothing
+// and has no rights (D37a).
 func ceilings(b *builder, in Inputs, conns map[ids.UUID]*Connection) {
 	for _, ce := range in.Ceilings {
-		label, reasons := Conditional, []string{ReasonCeiling}
 		if !ce.Active || !in.Now.Before(ce.ReviewBy) {
-			label, reasons = Expired, []string{ReasonCeiling, ReasonCeilingInactive}
+			continue
 		}
+		label, reasons := Conditional, []string{ReasonCeiling}
 		expires := ptr(ce.ReviewBy)
 		auto := ptr(ce.Automation)
 		agents := slices.Clone(ce.Agents)
