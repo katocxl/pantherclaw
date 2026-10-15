@@ -46,12 +46,16 @@ const (
 	SubjectIncident       SubjectType = "incident"
 	SubjectCase           SubjectType = "case"
 	SubjectFinding        SubjectType = "finding"
+	// SubjectSystem is PantherClaw acting by itself (D51), as the actor of
+	// automated containment. Its ids are fixed lowercase names:
+	// identity_playbook, detection, sweeper.
+	SubjectSystem SubjectType = "system"
 )
 
 var subjectTypes = []SubjectType{
 	SubjectAgent, SubjectInstance, SubjectRun, SubjectTransaction, SubjectGrant, SubjectConnection, SubjectCredential,
 	SubjectGateway, SubjectPackage, SubjectUser, SubjectServiceAccount, SubjectResource, SubjectPolicyVersion,
-	SubjectAlert, SubjectIncident, SubjectCase, SubjectFinding,
+	SubjectAlert, SubjectIncident, SubjectCase, SubjectFinding, SubjectSystem,
 }
 
 // Valid reports whether t is a known subject type.
