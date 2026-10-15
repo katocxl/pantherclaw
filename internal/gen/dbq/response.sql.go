@@ -289,6 +289,65 @@ func (q *Queries) AlertSubjects(ctx context.Context, orgID ids.OrgID, iD ids.UUI
 	return subjects, err
 }
 
+const attestResponseAction = `-- name: AttestResponseAction :exec
+UPDATE pc.response_actions SET attested_by = $1, attested_at = now(), attestation = $2
+WHERE org_id = $3 AND id = $4 AND attested_at IS NULL
+`
+
+type AttestResponseActionParams struct {
+	AttestedBy  *string
+	Attestation *string
+	OrgID       ids.OrgID
+	ID          ids.UUID
+}
+
+func (q *Queries) AttestResponseAction(ctx context.Context, arg AttestResponseActionParams) error {
+	_, err := q.db.Exec(ctx, attestResponseAction,
+		arg.AttestedBy,
+		arg.Attestation,
+		arg.OrgID,
+		arg.ID,
+	)
+	return err
+}
+
+const attestedCredentialChangeSince = `-- name: AttestedCredentialChangeSince :one
+SELECT a.attested_at::timestamptz AS attested_at
+FROM pc.response_actions a
+JOIN pc.connections c ON c.org_id = a.org_id AND c.id::text = split_part(a.scope_id, ':', 1)
+WHERE a.org_id = $1 AND a.kind IN ('REVOKE', 'ROTATE') AND a.scope_type = 'credential'
+  AND split_part(a.scope_id, ':', 1) = $2::text AND c.access_mode = 'agent_held'
+  AND a.attested_at IS NOT NULL AND a.attested_at >= $3::timestamptz
+ORDER BY a.attested_at
+LIMIT 1
+`
+
+// AttestedCredentialChangeSince is the first upstream-attested revoke or
+// rotate of an agent-held connection's credential at or after a time (D61):
+// the only change that confirms a bypass route.
+func (q *Queries) AttestedCredentialChangeSince(ctx context.Context, orgID ids.OrgID, connectionID string, since time.Time) (time.Time, error) {
+	row := q.db.QueryRow(ctx, attestedCredentialChangeSince, orgID, connectionID, since)
+	var attested_at time.Time
+	err := row.Scan(&attested_at)
+	return attested_at, err
+}
+
+const connectionAccess = `-- name: ConnectionAccess :one
+SELECT access_mode, gateway_id FROM pc.connections WHERE org_id = $1 AND id = $2
+`
+
+type ConnectionAccessRow struct {
+	AccessMode string
+	GatewayID  ids.UUID
+}
+
+func (q *Queries) ConnectionAccess(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (ConnectionAccessRow, error) {
+	row := q.db.QueryRow(ctx, connectionAccess, orgID, iD)
+	var i ConnectionAccessRow
+	err := row.Scan(&i.AccessMode, &i.GatewayID)
+	return i, err
+}
+
 const connectionHealth = `-- name: ConnectionHealth :one
 SELECT c.state, g.state AS gateway_state
 FROM pc.connections c JOIN pc.gateways g ON g.org_id = c.org_id AND g.id = c.gateway_id
@@ -548,7 +607,7 @@ func (q *Queries) GetContainmentControl(ctx context.Context, orgID ids.OrgID, iD
 }
 
 const getResponseAction = `-- name: GetResponseAction :one
-SELECT org_id, id, kind, scope_type, scope_id, control, operation, reason, case_id, incident_id, actor, source, preview_digest, preview_summary, skip_preview, skip_reason, skip_step_up_at, idempotency_key, request_digest, status, mediated_confirmed, future_confirmed, historical_open, epoch, requested_at, updated_at, settled_at, next_check_at, check_backoff_s FROM pc.response_actions WHERE org_id = $1 AND id = $2
+SELECT org_id, id, kind, scope_type, scope_id, control, operation, reason, case_id, incident_id, actor, source, preview_digest, preview_summary, skip_preview, skip_reason, skip_step_up_at, attested_by, attested_at, attestation, idempotency_key, request_digest, status, mediated_confirmed, future_confirmed, historical_open, epoch, requested_at, updated_at, settled_at, next_check_at, check_backoff_s FROM pc.response_actions WHERE org_id = $1 AND id = $2
 `
 
 func (q *Queries) GetResponseAction(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (PcResponseAction, error) {
@@ -572,6 +631,9 @@ func (q *Queries) GetResponseAction(ctx context.Context, orgID ids.OrgID, iD ids
 		&i.SkipPreview,
 		&i.SkipReason,
 		&i.SkipStepUpAt,
+		&i.AttestedBy,
+		&i.AttestedAt,
+		&i.Attestation,
 		&i.IdempotencyKey,
 		&i.RequestDigest,
 		&i.Status,
@@ -1009,7 +1071,7 @@ func (q *Queries) ListContainmentControls(ctx context.Context, orgID ids.OrgID, 
 }
 
 const listResponseActions = `-- name: ListResponseActions :many
-SELECT org_id, id, kind, scope_type, scope_id, control, operation, reason, case_id, incident_id, actor, source, preview_digest, preview_summary, skip_preview, skip_reason, skip_step_up_at, idempotency_key, request_digest, status, mediated_confirmed, future_confirmed, historical_open, epoch, requested_at, updated_at, settled_at, next_check_at, check_backoff_s FROM pc.response_actions
+SELECT org_id, id, kind, scope_type, scope_id, control, operation, reason, case_id, incident_id, actor, source, preview_digest, preview_summary, skip_preview, skip_reason, skip_step_up_at, attested_by, attested_at, attestation, idempotency_key, request_digest, status, mediated_confirmed, future_confirmed, historical_open, epoch, requested_at, updated_at, settled_at, next_check_at, check_backoff_s FROM pc.response_actions
 WHERE org_id = $1
   AND ($2::uuid IS NULL OR case_id = $2::uuid)
   AND ($3::uuid IS NULL OR incident_id = $3::uuid)
@@ -1064,6 +1126,9 @@ func (q *Queries) ListResponseActions(ctx context.Context, arg ListResponseActio
 			&i.SkipPreview,
 			&i.SkipReason,
 			&i.SkipStepUpAt,
+			&i.AttestedBy,
+			&i.AttestedAt,
+			&i.Attestation,
 			&i.IdempotencyKey,
 			&i.RequestDigest,
 			&i.Status,
@@ -1170,6 +1235,16 @@ func (q *Queries) ListRestorationPlans(ctx context.Context, orgID ids.OrgID, bef
 	return items, nil
 }
 
+const lockIdempotency = `-- name: LockIdempotency :exec
+SELECT pg_advisory_xact_lock(hashtext('idem:' || $1::text || ':' || $2::text))
+`
+
+// LockIdempotency serializes requests under one idempotency key (D61).
+func (q *Queries) LockIdempotency(ctx context.Context, orgID string, idempotencyKey string) error {
+	_, err := q.db.Exec(ctx, lockIdempotency, orgID, idempotencyKey)
+	return err
+}
+
 const lockRestorationPlan = `-- name: LockRestorationPlan :one
 SELECT org_id, id, approval_request_id, reason, staged, state, preconditions, requested_by, created_at, updated_at, finished_at FROM pc.restoration_plans WHERE org_id = $1 AND id = $2 FOR UPDATE
 `
@@ -1191,6 +1266,16 @@ func (q *Queries) LockRestorationPlan(ctx context.Context, orgID ids.OrgID, iD i
 		&i.FinishedAt,
 	)
 	return i, err
+}
+
+const lockSOAR = `-- name: LockSOAR :exec
+SELECT pg_advisory_xact_lock(hashtext('soar:' || $1::text))
+`
+
+// LockSOAR serializes an org's SOAR requests for the rate limit (D61).
+func (q *Queries) LockSOAR(ctx context.Context, orgID string) error {
+	_, err := q.db.Exec(ctx, lockSOAR, orgID)
+	return err
 }
 
 const openPlanOfControl = `-- name: OpenPlanOfControl :one
@@ -1254,7 +1339,7 @@ func (q *Queries) RecordEpochDelivery(ctx context.Context, orgID ids.OrgID, gate
 }
 
 const responseActionByKey = `-- name: ResponseActionByKey :one
-SELECT org_id, id, kind, scope_type, scope_id, control, operation, reason, case_id, incident_id, actor, source, preview_digest, preview_summary, skip_preview, skip_reason, skip_step_up_at, idempotency_key, request_digest, status, mediated_confirmed, future_confirmed, historical_open, epoch, requested_at, updated_at, settled_at, next_check_at, check_backoff_s FROM pc.response_actions WHERE org_id = $1 AND idempotency_key = $2
+SELECT org_id, id, kind, scope_type, scope_id, control, operation, reason, case_id, incident_id, actor, source, preview_digest, preview_summary, skip_preview, skip_reason, skip_step_up_at, attested_by, attested_at, attestation, idempotency_key, request_digest, status, mediated_confirmed, future_confirmed, historical_open, epoch, requested_at, updated_at, settled_at, next_check_at, check_backoff_s FROM pc.response_actions WHERE org_id = $1 AND idempotency_key = $2
 `
 
 func (q *Queries) ResponseActionByKey(ctx context.Context, orgID ids.OrgID, idempotencyKey *string) (PcResponseAction, error) {
@@ -1278,6 +1363,9 @@ func (q *Queries) ResponseActionByKey(ctx context.Context, orgID ids.OrgID, idem
 		&i.SkipPreview,
 		&i.SkipReason,
 		&i.SkipStepUpAt,
+		&i.AttestedBy,
+		&i.AttestedAt,
+		&i.Attestation,
 		&i.IdempotencyKey,
 		&i.RequestDigest,
 		&i.Status,
@@ -1668,7 +1756,7 @@ func (q *Queries) SharedInstallationConnections(ctx context.Context, orgID ids.O
 }
 
 const unsettledResponseActions = `-- name: UnsettledResponseActions :many
-SELECT org_id, id, kind, scope_type, scope_id, control, operation, reason, case_id, incident_id, actor, source, preview_digest, preview_summary, skip_preview, skip_reason, skip_step_up_at, idempotency_key, request_digest, status, mediated_confirmed, future_confirmed, historical_open, epoch, requested_at, updated_at, settled_at, next_check_at, check_backoff_s FROM pc.response_actions
+SELECT org_id, id, kind, scope_type, scope_id, control, operation, reason, case_id, incident_id, actor, source, preview_digest, preview_summary, skip_preview, skip_reason, skip_step_up_at, attested_by, attested_at, attestation, idempotency_key, request_digest, status, mediated_confirmed, future_confirmed, historical_open, epoch, requested_at, updated_at, settled_at, next_check_at, check_backoff_s FROM pc.response_actions
 WHERE org_id = $1 AND settled_at IS NULL AND next_check_at <= now()
 ORDER BY next_check_at, id
 LIMIT $2
@@ -1703,6 +1791,9 @@ func (q *Queries) UnsettledResponseActions(ctx context.Context, orgID ids.OrgID,
 			&i.SkipPreview,
 			&i.SkipReason,
 			&i.SkipStepUpAt,
+			&i.AttestedBy,
+			&i.AttestedAt,
+			&i.Attestation,
 			&i.IdempotencyKey,
 			&i.RequestDigest,
 			&i.Status,

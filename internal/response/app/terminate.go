@@ -57,6 +57,12 @@ func (s *Containment) TerminateIn(ctx context.Context, tx db.TenantTx, t Termina
 	} else if !found {
 		return reflexdomain.ContainResult{}, ErrScopeNotFound
 	}
+	// The paths are those of the run while it is active: its agent's routes
+	// and credentials too, so a bypass route keeps the action PARTIAL (D61).
+	p, err := preview(ctx, tx, org, rdomain.Control{ScopeType: rdomain.ScopeRun, ScopeID: t.Run.String(), Control: rdomain.DenyAll})
+	if err != nil {
+		return reflexdomain.ContainResult{}, err
+	}
 	rows, err := q.EndRunTree(ctx, dbq.EndRunTreeParams{OrgID: org, ID: t.Run, State: "REVOKED", Reason: "terminated"})
 	if err != nil {
 		return reflexdomain.ContainResult{}, err
@@ -94,25 +100,9 @@ func (s *Containment) TerminateIn(ctx context.Context, tx db.TenantTx, t Termina
 	if err := q.SetResponseActionEpoch(ctx, pgtype.Int8{Int64: epoch, Valid: true}, org, a.ID); err != nil {
 		return reflexdomain.ContainResult{}, err
 	}
-	gws, err := q.ScopeGateways(ctx, org, rdomain.ScopeRun, t.Run.String())
-	if err != nil {
+	p.Runs = runs
+	if err := planPaths(ctx, tx, a.ID, rdomain.KindTerminate, p, epoch); err != nil {
 		return reflexdomain.ContainResult{}, err
-	}
-	need := map[string]string{"epoch": strconv.FormatInt(epoch, 10)}
-	for _, g := range gws {
-		if err := addPath(ctx, q, org, a.ID, rdomain.PathGateway, "gateway", g.String(), true, pathEpoch, rdomain.PathPending, need); err != nil {
-			return reflexdomain.ContainResult{}, err
-		}
-	}
-	inflight, err := q.InFlightTransactions(ctx, org, runs)
-	if err != nil {
-		return reflexdomain.ContainResult{}, err
-	}
-	notCancellable := "NOT_CANCELLABLE"
-	for _, f := range inflight {
-		if err := addPathCancel(ctx, q, org, a.ID, f, notCancellable); err != nil {
-			return reflexdomain.ContainResult{}, err
-		}
 	}
 	st, err := s.settle(ctx, tx, org, a.ID)
 	if err != nil {
@@ -120,7 +110,7 @@ func (s *Containment) TerminateIn(ctx context.Context, tx db.TenantTx, t Termina
 	}
 	if err := recordAction(ctx, tx, evActor, "response.run_terminated", a.ID, map[string]string{
 		"action": a.ID.String(), "run": t.Run.String(), "runs_revoked": strconv.Itoa(len(runs)),
-		"approvals_voided": strconv.Itoa(len(waiting)), "in_flight": strconv.Itoa(len(inflight)), "epoch": strconv.FormatInt(epoch, 10),
+		"approvals_voided": strconv.Itoa(len(waiting)), "epoch": strconv.FormatInt(epoch, 10),
 	}, t.Reason); err != nil {
 		return reflexdomain.ContainResult{}, err
 	}
@@ -134,16 +124,4 @@ func ended(rows []dbq.PcRun, run ids.UUID) bool {
 		}
 	}
 	return false
-}
-
-func addPathCancel(ctx context.Context, q *dbq.Queries, org ids.OrgID, action ids.UUID, f dbq.InFlightTransactionsRow, capability string) error {
-	ev, err := canonicalEvidence(map[string]string{"run": f.RunID.String(), "permit": f.State})
-	if err != nil {
-		return err
-	}
-	return q.InsertResponsePath(ctx, dbq.InsertResponsePathParams{
-		OrgID: org, ActionID: action, ID: ids.NewV7(), PathType: rdomain.PathInFlight, SubjectType: "transaction",
-		SubjectID: f.ID.String(), Material: true, Control: pathDispatched, Status: string(rdomain.PathPending), Evidence: ev,
-		CancelCapability: &capability,
-	})
 }

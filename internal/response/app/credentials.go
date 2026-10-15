@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json/v2"
 	"strconv"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
 
@@ -28,6 +29,10 @@ var (
 		"a credential change first discloses every workload sharing the credential: preview it and confirm the preview's digest, which no longer matches")
 	ErrSealFirst = pcerr.New(pcerr.FailedPrecondition, "SEAL_NEW_VALUE",
 		"rotating a static credential needs a new value sealed for the connection first (credential.seal); this version is still the active one")
+	ErrAttestation = pcerr.New(pcerr.InvalidArgument, "ATTESTATION_INVALID",
+		"attesting a revocation at the provider needs a security-key step-up and a note of 1 to 500 characters")
+	ErrAttestationRequired = pcerr.New(pcerr.FailedPrecondition, "ATTESTATION_REQUIRED",
+		"the agent holds this credential: PantherClaw can only record your attestation that it was revoked at the provider")
 	ErrCredentialRevoked = pcerr.New(pcerr.FailedPrecondition, "CREDENTIAL_REVOKED", "the credential version is already revoked")
 )
 
@@ -35,7 +40,14 @@ var (
 const (
 	credentialStatic    = "static"
 	credentialGitHubApp = "github_app" //nolint:gosec // G101: a credential kind, not a credential
+	// credentialAgentHeld is the credential an agent holds itself (version 0 of
+	// an agent_held connection): PantherClaw has no copy.
+	credentialAgentHeld = "agent_held"
 )
+
+// installationTokenLife is how long a GitHub App installation token minted
+// before a rotation stays valid at GitHub.
+const installationTokenLife = time.Hour
 
 // CredentialPreview is every workload sharing a sealed credential (D25,
 // F555, HR-252): the agents with a route through its connection (or every
@@ -57,19 +69,32 @@ type CredentialPreview struct {
 	Digest     []byte     `json:"-"`
 }
 
-// PreviewCredentialIn lists who shares a sealed credential, in tx.
+// PreviewCredentialIn lists who shares a sealed credential, in tx; version
+// 0 names the credential an agent holds itself on an agent_held connection.
 func (s *Containment) PreviewCredentialIn(ctx context.Context, tx db.TenantTx, connection ids.UUID, version int32) (CredentialPreview, error) {
 	org := tx.OrgID()
 	q := dbq.New(tx)
-	c, err := q.CredentialOfConnection(ctx, org, connection, version)
-	if db.IsNoRows(err) {
-		return CredentialPreview{}, ErrCredentialNotFound
-	} else if err != nil {
-		return CredentialPreview{}, err
-	}
 	p := CredentialPreview{
-		Connection: connection, Version: version, Kind: c.Kind, State: c.State, Gateway: c.GatewayID,
-		Agents: []ids.UUID{}, Runs: []ids.UUID{}, Shared: []ids.UUID{}, Unknown: []string{},
+		Connection: connection, Version: version, Agents: []ids.UUID{}, Runs: []ids.UUID{}, Shared: []ids.UUID{}, Unknown: []string{},
+	}
+	if version == 0 {
+		// Version 0 is the credential an agent holds itself (D61).
+		c, err := q.ConnectionAccess(ctx, org, connection)
+		if db.IsNoRows(err) || (err == nil && c.AccessMode != credentialAgentHeld) {
+			return CredentialPreview{}, ErrCredentialNotFound
+		} else if err != nil {
+			return CredentialPreview{}, err
+		}
+		p.Kind, p.State, p.Gateway = credentialAgentHeld, "AGENT_HELD", c.GatewayID
+		p.Unknown = append(p.Unknown, "the agent holds this credential; PantherClaw has no copy and cannot revoke it")
+	} else {
+		c, err := q.CredentialOfConnection(ctx, org, connection, version)
+		if db.IsNoRows(err) {
+			return CredentialPreview{}, ErrCredentialNotFound
+		} else if err != nil {
+			return CredentialPreview{}, err
+		}
+		p.Kind, p.State, p.Gateway = c.Kind, c.State, c.GatewayID
 	}
 	agents, err := q.CredentialAgents(ctx, org, connection)
 	if err != nil {
@@ -122,6 +147,12 @@ type CredentialChange struct {
 	CaseID        *ids.UUID
 	IncidentID    *ids.UUID
 	Actor         reflexdomain.Subject
+	// Attested: the person attests, at a security-key step-up the service
+	// checked at AttestedAt, that the credential was revoked at its
+	// provider, saying how (D61). Only that closes upstream exposure.
+	Attested    bool
+	Attestation string
+	AttestedAt  time.Time
 }
 
 // RevokeCredentialIn revokes one version of a connection's sealed
@@ -152,6 +183,9 @@ func (s *Containment) changeCredential(ctx context.Context, tx db.TenantTx, r Cr
 	if !reasonOK1000(r.Reason) {
 		return reflexdomain.ContainResult{}, rdomain.ErrReason
 	}
+	if r.Attested && (r.AttestedAt.IsZero() || !reasonOK(r.Attestation)) {
+		return reflexdomain.ContainResult{}, ErrAttestation
+	}
 	if _, err := q.LockConnection(ctx, org, r.Connection); db.IsNoRows(err) {
 		return reflexdomain.ContainResult{}, ErrCredentialNotFound
 	} else if err != nil {
@@ -169,7 +203,15 @@ func (s *Containment) changeCredential(ctx context.Context, tx db.TenantTx, r Cr
 	}
 	details := map[string]string{"connection": r.Connection.String(), "version": strconv.Itoa(int(r.Version)), "kind": p.Kind}
 	credentialPath := map[string]string{"connection": r.Connection.String()}
+	status := rdomain.PathUnresolved
+	var until time.Time
 	switch {
+	case p.Kind == credentialAgentHeld:
+		// The agent holds it: PantherClaw changes nothing, and only the
+		// person's attestation that it was revoked at the provider counts.
+		if !r.Attested {
+			return reflexdomain.ContainResult{}, ErrAttestationRequired
+		}
 	case kind == rdomain.KindRevoke:
 		by := actor
 		n, err := q.RevokeCredentialVersion(ctx, dbq.RevokeCredentialVersionParams{RevokedBy: &by, OrgID: org, ConnectionID: r.Connection, Version: r.Version})
@@ -180,8 +222,16 @@ func (s *Containment) changeCredential(ctx context.Context, tx db.TenantTx, r Cr
 			return reflexdomain.ContainResult{}, ErrCredentialRevoked
 		}
 	case p.Kind == credentialGitHubApp:
-		// Confirmed once the gateway is sent the new epoch.
-		credentialPath["gateway"] = p.Gateway.String()
+		// The gateway mints fresh installation tokens once sent the new
+		// epoch; those minted before stay valid at GitHub for up to an hour
+		// (D61), so the path waits for both.
+		now, err := q.DBNow(ctx)
+		if err != nil {
+			return reflexdomain.ContainResult{}, err
+		}
+		until = now.Add(installationTokenLife).UTC().Truncate(time.Second)
+		credentialPath["gateway"], credentialPath["tokens_valid_until"] = p.Gateway.String(), until.Format(time.RFC3339)
+		status = rdomain.PathPending
 	default:
 		if p.State == "ACTIVE" {
 			return reflexdomain.ContainResult{}, ErrSealFirst
@@ -190,6 +240,15 @@ func (s *Containment) changeCredential(ctx context.Context, tx db.TenantTx, r Cr
 			return reflexdomain.ContainResult{}, ErrSealFirst
 		} else if err != nil {
 			return reflexdomain.ContainResult{}, err
+		}
+	}
+	if status == rdomain.PathUnresolved {
+		// D61: PantherClaw's copy changed here; the upstream secret is closed
+		// only by the person's attestation.
+		if r.Attested {
+			status, credentialPath["upstream"] = rdomain.PathConfirmed, "attested"
+		} else {
+			credentialPath["note"] = "PantherClaw copy revoked; upstream not attested"
 		}
 	}
 	if err := q.InsertContainment(ctx, org); err != nil {
@@ -212,14 +271,17 @@ func (s *Containment) changeCredential(ctx context.Context, tx db.TenantTx, r Cr
 	if err := q.SetResponseActionEpoch(ctx, pgtype.Int8{Int64: epoch, Valid: true}, org, a.ID); err != nil {
 		return reflexdomain.ContainResult{}, err
 	}
+	if r.Attested {
+		if err := q.AttestResponseAction(ctx, dbq.AttestResponseActionParams{
+			OrgID: org, ID: a.ID, AttestedBy: &actor, Attestation: &r.Attestation,
+		}); err != nil {
+			return reflexdomain.ContainResult{}, err
+		}
+		details["upstream_attested"] = "true"
+	}
 	gw := Preview{Gateways: []ids.UUID{p.Gateway}}
 	if err := planPaths(ctx, tx, a.ID, kind, gw, epoch); err != nil {
 		return reflexdomain.ContainResult{}, err
-	}
-	status := rdomain.PathPending
-	if _, gateway := credentialPath["gateway"]; !gateway {
-		// Revoked or superseded: this transaction checked or made it.
-		status, credentialPath["credential_state"] = rdomain.PathConfirmed, map[string]string{rdomain.KindRevoke: "REVOKED", rdomain.KindRotate: "SUPERSEDED"}[kind]
 	}
 	if err := addPath(ctx, q, org, a.ID, rdomain.PathCredential, "connection", r.Connection.String(), true, p.Kind, status, credentialPath); err != nil {
 		return reflexdomain.ContainResult{}, err
@@ -237,7 +299,7 @@ func (s *Containment) changeCredential(ctx context.Context, tx db.TenantTx, r Cr
 	if err := recordAction(ctx, tx, evActor, name, a.ID, details, r.Reason); err != nil {
 		return reflexdomain.ContainResult{}, err
 	}
-	if kind == rdomain.KindRevoke {
+	if kind == rdomain.KindRevoke && p.Kind != credentialAgentHeld {
 		// The existing revoke path's own record.
 		if err := auditAs(ctx, tx, evActor, "connection.sealed_revoked", "connection", r.Connection.String(),
 			map[string]string{"version": strconv.Itoa(int(r.Version))}); err != nil {

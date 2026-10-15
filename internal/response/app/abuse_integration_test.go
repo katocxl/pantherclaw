@@ -115,7 +115,7 @@ func TestT109_RestorationAbuseIsRefused(t *testing.T) {
 	if err := w.tx(func(ctx context.Context, tx db.TenantTx) error {
 		_, _, err := w.c.DecideRestorationIn(ctx, tx, plan, w.alice, true)
 		return err
-	}); !errors.Is(err, rapp.ErrRequesterDecides) {
+	}); !errors.Is(err, rapp.ErrReviewerNotIndependent) {
 		t.Fatalf("the requester: %v", err)
 	}
 	if len(w.activeControls()) != 1 {

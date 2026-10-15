@@ -176,6 +176,11 @@ func (s *Containment) contain(ctx context.Context, tx db.TenantTx, org ids.OrgID
 	q := dbq.New(tx)
 	var reqDigest []byte
 	if o.idempotency != "" {
+		// Requests under one key wait for each other, so a repeat returns
+		// the first result instead of hitting the unique index (D61).
+		if err := q.LockIdempotency(ctx, org.String(), o.idempotency); err != nil {
+			return reflexdomain.ContainResult{}, err
+		}
 		reqDigest = requestDigest(c, o.caseID, o.incidentID)
 		prev, err := q.ResponseActionByKey(ctx, org, &o.idempotency)
 		switch {

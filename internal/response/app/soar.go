@@ -33,7 +33,8 @@ const (
 var (
 	ErrSOARScope = pcerr.New(pcerr.InvalidArgument, "SOAR_SCOPE",
 		"a SOAR request contains one run, agent, grant or connection; wider scopes, the kill switch and restoration are for people")
-	ErrSOARKey = pcerr.New(pcerr.InvalidArgument, "IDEMPOTENCY_KEY_REQUIRED", "an idempotency key of 1 to 128 characters is required")
+	ErrSOARNotFound = pcerr.New(pcerr.NotFound, "SOAR_REQUEST_NOT_FOUND", "no SOAR request of this caller has this key")
+	ErrSOARKey      = pcerr.New(pcerr.InvalidArgument, "IDEMPOTENCY_KEY_REQUIRED", "an idempotency key of 1 to 128 characters is required")
 	// ErrSOARCaller refuses a SOAR request from a person: the source SOAR is
 	// a service account's holding response.request (D50).
 	ErrSOARCaller = pcerr.New(pcerr.PermissionDenied, "SOAR_SERVICE_ACCOUNT_ONLY", "SOAR requests come from a service account")
@@ -106,10 +107,19 @@ func (s *Containment) RequestControlIn(ctx context.Context, tx db.TenantTx, r SO
 		return SOARResult{}, ErrSOARCaller
 	}
 	q := dbq.New(tx)
+	// One SOAR request of the org at a time: the rate limit counts what is
+	// committed (D61).
+	if err := q.LockSOAR(ctx, org.String()); err != nil {
+		return SOARResult{}, err
+	}
 	digest := requestDigest(c, nil, nil)
 	prev, err := q.GetSOARRequest(ctx, org, r.Key)
 	switch {
 	case err == nil:
+		// Another integration's key is not this one's to read (D61).
+		if prev.RequestedBy != actor {
+			return SOARResult{}, ErrSOARNotFound
+		}
 		if !bytes.Equal(prev.RequestDigest, digest) {
 			return SOARResult{}, ErrIdempotency
 		}

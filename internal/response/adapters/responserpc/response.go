@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"encoding/json/v2"
 	"errors"
+	"time"
 
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -202,7 +203,9 @@ func (h *ResponseHandler) PreviewCredentialChange(ctx context.Context, req *pant
 	}, nil
 }
 
-func (h *ResponseHandler) change(ctx context.Context, conn string, version int32, reason, dig string, caseID, incidentID *string, rotate bool) (
+func (h *ResponseHandler) change(ctx context.Context, conn string, version int32, reason, dig string, caseID, incidentID *string,
+	upstream bool, attestation string, rotate bool,
+) (
 	reflexdomain.ContainResult, error,
 ) {
 	c, err := uuid(conn)
@@ -223,12 +226,14 @@ func (h *ResponseHandler) change(ctx context.Context, conn string, version int32
 	}
 	return h.r.ChangeCredential(ctx, rapp.CredentialChange{
 		Connection: c, Version: version, Reason: reason, PreviewDigest: d, CaseID: cs, IncidentID: is,
+		Attested: upstream, Attestation: attestation,
 	}, rotate)
 }
 
 // RevokeSealedCredential implements ResponseServiceHandler.
 func (h *ResponseHandler) RevokeSealedCredential(ctx context.Context, req *pantherclawv1.RevokeSealedCredentialRequest) (*pantherclawv1.RevokeSealedCredentialResponse, error) {
-	res, err := h.change(ctx, req.GetConnectionId(), req.GetVersion(), req.GetReason(), req.GetPreviewDigest(), req.CaseId, req.IncidentId, false)
+	res, err := h.change(ctx, req.GetConnectionId(), req.GetVersion(), req.GetReason(), req.GetPreviewDigest(), req.CaseId, req.IncidentId,
+		req.GetUpstreamRevoked(), req.GetAttestation(), false)
 	if err != nil {
 		return nil, err
 	}
@@ -237,7 +242,8 @@ func (h *ResponseHandler) RevokeSealedCredential(ctx context.Context, req *panth
 
 // RotateSealedCredential implements ResponseServiceHandler.
 func (h *ResponseHandler) RotateSealedCredential(ctx context.Context, req *pantherclawv1.RotateSealedCredentialRequest) (*pantherclawv1.RotateSealedCredentialResponse, error) {
-	res, err := h.change(ctx, req.GetConnectionId(), req.GetVersion(), req.GetReason(), req.GetPreviewDigest(), req.CaseId, req.IncidentId, true)
+	res, err := h.change(ctx, req.GetConnectionId(), req.GetVersion(), req.GetReason(), req.GetPreviewDigest(), req.CaseId, req.IncidentId,
+		req.GetUpstreamRevoked(), req.GetAttestation(), true)
 	if err != nil {
 		return nil, err
 	}
@@ -408,10 +414,17 @@ func actionOf(a dbq.PcResponseAction) *pantherclawv1.ResponseAction {
 	var hist []struct {
 		Transaction string `json:"transaction"`
 		Permit      string `json:"permit"`
+		Kind        string `json:"kind"`
+		Connection  string `json:"connection"`
+		ValidUntil  string `json:"valid_until"`
 	}
 	if json.Unmarshal(a.HistoricalOpen, &hist) == nil {
 		for _, x := range hist {
-			out.HistoricalOpen = append(out.HistoricalOpen, &pantherclawv1.HistoricalItem{TransactionId: x.Transaction, PermitState: x.Permit})
+			item := &pantherclawv1.HistoricalItem{TransactionId: x.Transaction, PermitState: x.Permit, Kind: x.Kind, ConnectionId: x.Connection}
+			if t, err := time.Parse(time.RFC3339, x.ValidUntil); err == nil {
+				item.ValidUntil = timestamppb.New(t)
+			}
+			out.HistoricalOpen = append(out.HistoricalOpen, item)
 		}
 	}
 	return out

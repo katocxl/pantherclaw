@@ -104,10 +104,15 @@ func planPaths(ctx context.Context, tx db.TenantTx, action ids.UUID, kind string
 		if err != nil {
 			return err
 		}
-		unknown := "UNKNOWN"
+		// Dispatched work cannot be called back: a termination waits for it
+		// to end (material), a containment lists it as history (F134, F561).
+		capability := "UNKNOWN"
+		if kind == rdomain.KindTerminate {
+			capability = "NOT_CANCELLABLE"
+		}
 		for _, t := range inflight {
 			if err := add(rdomain.PathInFlight, "transaction", t.ID.String(), kind == rdomain.KindTerminate, pathDispatched, rdomain.PathPending,
-				map[string]string{"run": t.RunID.String(), "permit": t.State}, &unknown); err != nil {
+				map[string]string{"run": t.RunID.String(), "permit": t.State}, &capability); err != nil {
 				return err
 			}
 		}
@@ -236,10 +241,10 @@ func confirm(ctx context.Context, tx db.TenantTx, a dbq.PcResponseAction) error 
 				// A bypass route closes only when the credential it uses
 				// changed after the action (D22, D25).
 				if conn := ev["connection"]; conn != "" {
-					if ok, at, err := credentialChangedSince(ctx, q, org, conn, a.RequestedAt); err != nil {
+					if ok, at, err := attestedChangeSince(ctx, q, org, conn, a.RequestedAt); err != nil {
 						return err
 					} else if ok {
-						if err := update(p, rdomain.PathConfirmed, map[string]string{"credential_changed_at": at}, ""); err != nil {
+						if err := update(p, rdomain.PathConfirmed, map[string]string{"upstream_attested_at": at}, ""); err != nil {
 							return err
 						}
 					}
@@ -258,10 +263,14 @@ func confirm(ctx context.Context, tx db.TenantTx, a dbq.PcResponseAction) error 
 		case rdomain.PathCredential:
 			if gw := ev["gateway"]; gw != "" {
 				// A rotated GitHub App credential: the gateway mints fresh
-				// tokens once sent the new epoch.
+				// tokens once sent the new epoch, and the tokens minted before
+				// stay valid at GitHub until they expire (D61).
 				got, ok, err := delivered(gw)
 				if err != nil {
 					return err
+				}
+				if until, perr := time.Parse(time.RFC3339, ev["tokens_valid_until"]); perr != nil || now.Before(until) {
+					ok = false
 				}
 				if ok {
 					if err := update(p, rdomain.PathConfirmed, got, ""); err != nil {
@@ -270,10 +279,15 @@ func confirm(ctx context.Context, tx db.TenantTx, a dbq.PcResponseAction) error 
 				}
 				continue
 			}
-			if ok, at, err := credentialChangedSince(ctx, q, org, p.SubjectID, a.RequestedAt); err != nil {
+			if p.Control != pathAgentHeld {
+				// A sealed copy revoked without an upstream attestation stays
+				// UNRESOLVED (D61).
+				continue
+			}
+			if ok, at, err := attestedChangeSince(ctx, q, org, p.SubjectID, a.RequestedAt); err != nil {
 				return err
 			} else if ok {
-				if err := update(p, rdomain.PathConfirmed, map[string]string{"credential_changed_at": at}, ""); err != nil {
+				if err := update(p, rdomain.PathConfirmed, map[string]string{"upstream_attested_at": at}, ""); err != nil {
 					return err
 				}
 			}
@@ -300,8 +314,13 @@ func confirm(ctx context.Context, tx db.TenantTx, a dbq.PcResponseAction) error 
 // work already dispatched before the control, which stopping new access
 // does not undo.
 type historicalItem struct {
-	Transaction string `json:"transaction"`
-	Permit      string `json:"permit"`
+	Transaction string `json:"transaction,omitzero"`
+	Permit      string `json:"permit,omitzero"`
+	// Installation tokens minted before a GitHub App rotation (D61): valid
+	// at GitHub until ValidUntil.
+	Kind       string `json:"kind,omitzero"`
+	Connection string `json:"connection,omitzero"`
+	ValidUntil string `json:"valid_until,omitzero"`
 }
 
 // settle moves the action to the status its paths give, records whether
@@ -342,6 +361,12 @@ func (s *Containment) settle(ctx context.Context, tx db.TenantTx, org ids.OrgID,
 			var ev map[string]string
 			_ = json.Unmarshal(r.Evidence, &ev)
 			historical = append(historical, historicalItem{Transaction: r.SubjectID, Permit: ev["permit"]})
+		case rdomain.PathCredential:
+			var ev map[string]string
+			_ = json.Unmarshal(r.Evidence, &ev)
+			if until := ev["tokens_valid_until"]; until != "" && !confirmed {
+				historical = append(historical, historicalItem{Kind: "installation_tokens", Connection: r.SubjectID, ValidUntil: until})
+			}
 		}
 	}
 	cur := rdomain.Status(a.Status)
@@ -445,14 +470,15 @@ func appendLedger(ctx context.Context, tx db.TenantTx, kind string, body map[str
 // sweeperActor records the status changes the confirmation sweep finds.
 var sweeperActor = evdomain.Actor{Type: string(reflexdomain.SubjectSystem), ID: reflexdomain.SystemSweeper}
 
-// credentialChangedSince reports whether the sealed credential of a
-// connection was revoked or superseded after since (D25), and when.
-func credentialChangedSince(ctx context.Context, q *dbq.Queries, org ids.OrgID, connection string, since time.Time) (bool, string, error) {
-	id, ok := parseUUID(connection)
-	if !ok {
+// attestedChangeSince reports whether a person attested, at or after since,
+// that the credential an agent holds on an agent_held connection was revoked
+// or rotated at its provider (D61), and when: the only change that closes a
+// bypass route.
+func attestedChangeSince(ctx context.Context, q *dbq.Queries, org ids.OrgID, connection string, since time.Time) (bool, string, error) {
+	if _, ok := parseUUID(connection); !ok {
 		return false, "", nil
 	}
-	at, err := q.CredentialChangedSince(ctx, org, id, since)
+	at, err := q.AttestedCredentialChangeSince(ctx, org, connection, since)
 	switch {
 	case db.IsNoRows(err):
 		return false, "", nil

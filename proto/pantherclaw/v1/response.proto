@@ -168,6 +168,11 @@ message HistoricalItem {
   string transaction_id = 1;
   // The permit's state when last read.
   string permit_state = 2;
+  // "installation_tokens": GitHub App tokens minted before a rotation, still
+  // valid at GitHub until valid_until (D61); empty for a dispatch.
+  string kind = 3;
+  string connection_id = 4;
+  google.protobuf.Timestamp valid_until = 5;
 }
 
 // ResponseAction is one Contain, Terminate, Revoke or Rotate request.
@@ -349,7 +354,8 @@ message TerminateRunResponse {
 // PreviewCredentialChangeRequest names a sealed credential version.
 message PreviewCredentialChangeRequest {
   string connection_id = 1 [(buf.validate.field).string.uuid = true];
-  int32 version = 2 [(buf.validate.field).int32.gt = 0];
+  // 0: the credential the agent holds itself on an agent_held connection.
+  int32 version = 2 [(buf.validate.field).int32.gte = 0];
 }
 
 // PreviewCredentialChangeResponse is everyone sharing it.
@@ -374,7 +380,9 @@ message PreviewCredentialChangeResponse {
 // RevokeSealedCredentialRequest names the version and its preview.
 message RevokeSealedCredentialRequest {
   string connection_id = 1 [(buf.validate.field).string.uuid = true];
-  int32 version = 2 [(buf.validate.field).int32.gt = 0];
+  // 0: the credential the agent holds itself on an agent_held connection,
+  // which only an upstream attestation revokes.
+  int32 version = 2 [(buf.validate.field).int32.gte = 0];
   string reason = 3 [(buf.validate.field).string = {
     min_len: 1
     max_len: 1000
@@ -382,6 +390,11 @@ message RevokeSealedCredentialRequest {
   string preview_digest = 4 [(buf.validate.field).string.pattern = "^[0-9a-f]{64}$"];
   optional string case_id = 5 [(buf.validate.field).string.uuid = true];
   optional string incident_id = 6 [(buf.validate.field).string.uuid = true];
+  // The person attests the credential was revoked at its provider (D61):
+  // needs a security-key step-up of the calling browser session and a note.
+  // Without it a revoked copy leaves the upstream path UNRESOLVED.
+  bool upstream_revoked = 7;
+  string attestation = 8 [(buf.validate.field).string.max_len = 500];
 }
 
 // RevokeSealedCredentialResponse is the action.
@@ -393,7 +406,8 @@ message RevokeSealedCredentialResponse {
 // RotateSealedCredentialRequest names the version and its preview.
 message RotateSealedCredentialRequest {
   string connection_id = 1 [(buf.validate.field).string.uuid = true];
-  int32 version = 2 [(buf.validate.field).int32.gt = 0];
+  // 0: the credential the agent holds itself (see RevokeSealedCredential).
+  int32 version = 2 [(buf.validate.field).int32.gte = 0];
   string reason = 3 [(buf.validate.field).string = {
     min_len: 1
     max_len: 1000
@@ -401,6 +415,11 @@ message RotateSealedCredentialRequest {
   string preview_digest = 4 [(buf.validate.field).string.pattern = "^[0-9a-f]{64}$"];
   optional string case_id = 5 [(buf.validate.field).string.uuid = true];
   optional string incident_id = 6 [(buf.validate.field).string.uuid = true];
+  // The person attests the credential was revoked at its provider (D61):
+  // needs a security-key step-up of the calling browser session and a note.
+  // Without it a revoked copy leaves the upstream path UNRESOLVED.
+  bool upstream_revoked = 7;
+  string attestation = 8 [(buf.validate.field).string.max_len = 500];
 }
 
 // RotateSealedCredentialResponse is the action.

@@ -228,7 +228,11 @@ func (s *Response) Contain(ctx context.Context, in ContainInput) (reflexdomain.C
 		}
 		o := containOpts{
 			actor: actor, source: source, evActor: evActor, caseID: in.CaseID, incidentID: in.IncidentID,
-			previewDigest: in.PreviewDigest, idempotency: in.Idempotency, expires: in.ExpiresAt,
+			previewDigest: in.PreviewDigest, expires: in.ExpiresAt,
+		}
+		if in.Idempotency != "" {
+			// A person's keys live apart from SOAR's (D61).
+			o.idempotency = "person:" + in.Idempotency
 		}
 		if in.SkipPreview && !ctl.Narrow() {
 			at, err := freshStepUp(ctx, q, c)
@@ -445,6 +449,15 @@ func (s *Response) ChangeCredential(ctx context.Context, r CredentialChange, rot
 	r.Actor = callerActor(c)
 	var out reflexdomain.ContainResult
 	err = s.C.Pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
+		if r.Attested {
+			// An upstream attestation is a person's word at a fresh security-key
+			// step-up (D61).
+			at, err := freshStepUp(ctx, dbq.New(tx), c)
+			if err != nil {
+				return err
+			}
+			r.AttestedAt = at
+		}
 		var err error
 		if rotate {
 			out, err = s.C.RotateCredentialIn(ctx, tx, r)
@@ -660,12 +673,17 @@ func toPathViews(rows []dbq.PcResponsePath) []PathView {
 	return out
 }
 
+// sameControls compares two sets of controls by id, whatever their order.
 func sameControls(a, b []pipeline.Control) bool {
 	if len(a) != len(b) {
 		return false
 	}
-	for i := range a {
-		if a[i].ID != b[i].ID {
+	seen := make(map[ids.UUID]bool, len(a))
+	for _, c := range a {
+		seen[c.ID] = true
+	}
+	for _, c := range b {
+		if !seen[c.ID] {
 			return false
 		}
 	}

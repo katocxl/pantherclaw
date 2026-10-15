@@ -225,7 +225,12 @@ type HistoricalItem struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	TransactionId string                 `protobuf:"bytes,1,opt,name=transaction_id,json=transactionId,proto3" json:"transaction_id,omitempty"`
 	// The permit's state when last read.
-	PermitState   string `protobuf:"bytes,2,opt,name=permit_state,json=permitState,proto3" json:"permit_state,omitempty"`
+	PermitState string `protobuf:"bytes,2,opt,name=permit_state,json=permitState,proto3" json:"permit_state,omitempty"`
+	// "installation_tokens": GitHub App tokens minted before a rotation, still
+	// valid at GitHub until valid_until (D61); empty for a dispatch.
+	Kind          string                 `protobuf:"bytes,3,opt,name=kind,proto3" json:"kind,omitempty"`
+	ConnectionId  string                 `protobuf:"bytes,4,opt,name=connection_id,json=connectionId,proto3" json:"connection_id,omitempty"`
+	ValidUntil    *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=valid_until,json=validUntil,proto3" json:"valid_until,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -272,6 +277,27 @@ func (x *HistoricalItem) GetPermitState() string {
 		return x.PermitState
 	}
 	return ""
+}
+
+func (x *HistoricalItem) GetKind() string {
+	if x != nil {
+		return x.Kind
+	}
+	return ""
+}
+
+func (x *HistoricalItem) GetConnectionId() string {
+	if x != nil {
+		return x.ConnectionId
+	}
+	return ""
+}
+
+func (x *HistoricalItem) GetValidUntil() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ValidUntil
+	}
+	return nil
 }
 
 // ResponseAction is one Contain, Terminate, Revoke or Rotate request.
@@ -1397,9 +1423,10 @@ func (x *TerminateRunResponse) GetStatus() string {
 
 // PreviewCredentialChangeRequest names a sealed credential version.
 type PreviewCredentialChangeRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ConnectionId  string                 `protobuf:"bytes,1,opt,name=connection_id,json=connectionId,proto3" json:"connection_id,omitempty"`
-	Version       int32                  `protobuf:"varint,2,opt,name=version,proto3" json:"version,omitempty"`
+	state        protoimpl.MessageState `protogen:"open.v1"`
+	ConnectionId string                 `protobuf:"bytes,1,opt,name=connection_id,json=connectionId,proto3" json:"connection_id,omitempty"`
+	// 0: the credential the agent holds itself on an agent_held connection.
+	Version       int32 `protobuf:"varint,2,opt,name=version,proto3" json:"version,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1572,15 +1599,22 @@ func (x *PreviewCredentialChangeResponse) GetPreviewDigest() string {
 
 // RevokeSealedCredentialRequest names the version and its preview.
 type RevokeSealedCredentialRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ConnectionId  string                 `protobuf:"bytes,1,opt,name=connection_id,json=connectionId,proto3" json:"connection_id,omitempty"`
-	Version       int32                  `protobuf:"varint,2,opt,name=version,proto3" json:"version,omitempty"`
-	Reason        string                 `protobuf:"bytes,3,opt,name=reason,proto3" json:"reason,omitempty"`
-	PreviewDigest string                 `protobuf:"bytes,4,opt,name=preview_digest,json=previewDigest,proto3" json:"preview_digest,omitempty"`
-	CaseId        *string                `protobuf:"bytes,5,opt,name=case_id,json=caseId,proto3,oneof" json:"case_id,omitempty"`
-	IncidentId    *string                `protobuf:"bytes,6,opt,name=incident_id,json=incidentId,proto3,oneof" json:"incident_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state        protoimpl.MessageState `protogen:"open.v1"`
+	ConnectionId string                 `protobuf:"bytes,1,opt,name=connection_id,json=connectionId,proto3" json:"connection_id,omitempty"`
+	// 0: the credential the agent holds itself on an agent_held connection,
+	// which only an upstream attestation revokes.
+	Version       int32   `protobuf:"varint,2,opt,name=version,proto3" json:"version,omitempty"`
+	Reason        string  `protobuf:"bytes,3,opt,name=reason,proto3" json:"reason,omitempty"`
+	PreviewDigest string  `protobuf:"bytes,4,opt,name=preview_digest,json=previewDigest,proto3" json:"preview_digest,omitempty"`
+	CaseId        *string `protobuf:"bytes,5,opt,name=case_id,json=caseId,proto3,oneof" json:"case_id,omitempty"`
+	IncidentId    *string `protobuf:"bytes,6,opt,name=incident_id,json=incidentId,proto3,oneof" json:"incident_id,omitempty"`
+	// The person attests the credential was revoked at its provider (D61):
+	// needs a security-key step-up of the calling browser session and a note.
+	// Without it a revoked copy leaves the upstream path UNRESOLVED.
+	UpstreamRevoked bool   `protobuf:"varint,7,opt,name=upstream_revoked,json=upstreamRevoked,proto3" json:"upstream_revoked,omitempty"`
+	Attestation     string `protobuf:"bytes,8,opt,name=attestation,proto3" json:"attestation,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *RevokeSealedCredentialRequest) Reset() {
@@ -1655,6 +1689,20 @@ func (x *RevokeSealedCredentialRequest) GetIncidentId() string {
 	return ""
 }
 
+func (x *RevokeSealedCredentialRequest) GetUpstreamRevoked() bool {
+	if x != nil {
+		return x.UpstreamRevoked
+	}
+	return false
+}
+
+func (x *RevokeSealedCredentialRequest) GetAttestation() string {
+	if x != nil {
+		return x.Attestation
+	}
+	return ""
+}
+
 // RevokeSealedCredentialResponse is the action.
 type RevokeSealedCredentialResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -1710,15 +1758,21 @@ func (x *RevokeSealedCredentialResponse) GetStatus() string {
 
 // RotateSealedCredentialRequest names the version and its preview.
 type RotateSealedCredentialRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ConnectionId  string                 `protobuf:"bytes,1,opt,name=connection_id,json=connectionId,proto3" json:"connection_id,omitempty"`
-	Version       int32                  `protobuf:"varint,2,opt,name=version,proto3" json:"version,omitempty"`
-	Reason        string                 `protobuf:"bytes,3,opt,name=reason,proto3" json:"reason,omitempty"`
-	PreviewDigest string                 `protobuf:"bytes,4,opt,name=preview_digest,json=previewDigest,proto3" json:"preview_digest,omitempty"`
-	CaseId        *string                `protobuf:"bytes,5,opt,name=case_id,json=caseId,proto3,oneof" json:"case_id,omitempty"`
-	IncidentId    *string                `protobuf:"bytes,6,opt,name=incident_id,json=incidentId,proto3,oneof" json:"incident_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state        protoimpl.MessageState `protogen:"open.v1"`
+	ConnectionId string                 `protobuf:"bytes,1,opt,name=connection_id,json=connectionId,proto3" json:"connection_id,omitempty"`
+	// 0: the credential the agent holds itself (see RevokeSealedCredential).
+	Version       int32   `protobuf:"varint,2,opt,name=version,proto3" json:"version,omitempty"`
+	Reason        string  `protobuf:"bytes,3,opt,name=reason,proto3" json:"reason,omitempty"`
+	PreviewDigest string  `protobuf:"bytes,4,opt,name=preview_digest,json=previewDigest,proto3" json:"preview_digest,omitempty"`
+	CaseId        *string `protobuf:"bytes,5,opt,name=case_id,json=caseId,proto3,oneof" json:"case_id,omitempty"`
+	IncidentId    *string `protobuf:"bytes,6,opt,name=incident_id,json=incidentId,proto3,oneof" json:"incident_id,omitempty"`
+	// The person attests the credential was revoked at its provider (D61):
+	// needs a security-key step-up of the calling browser session and a note.
+	// Without it a revoked copy leaves the upstream path UNRESOLVED.
+	UpstreamRevoked bool   `protobuf:"varint,7,opt,name=upstream_revoked,json=upstreamRevoked,proto3" json:"upstream_revoked,omitempty"`
+	Attestation     string `protobuf:"bytes,8,opt,name=attestation,proto3" json:"attestation,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *RotateSealedCredentialRequest) Reset() {
@@ -1789,6 +1843,20 @@ func (x *RotateSealedCredentialRequest) GetCaseId() string {
 func (x *RotateSealedCredentialRequest) GetIncidentId() string {
 	if x != nil && x.IncidentId != nil {
 		return *x.IncidentId
+	}
+	return ""
+}
+
+func (x *RotateSealedCredentialRequest) GetUpstreamRevoked() bool {
+	if x != nil {
+		return x.UpstreamRevoked
+	}
+	return false
+}
+
+func (x *RotateSealedCredentialRequest) GetAttestation() string {
+	if x != nil {
+		return x.Attestation
 	}
 	return ""
 }
@@ -3329,10 +3397,14 @@ const file_pantherclaw_v1_response_proto_rawDesc = "" +
 	"\fconfirm_time\x18\v \x01(\v2\x1a.google.protobuf.TimestampR\vconfirmTime\x1a;\n" +
 	"\rEvidenceEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"Z\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xd0\x01\n" +
 	"\x0eHistoricalItem\x12%\n" +
 	"\x0etransaction_id\x18\x01 \x01(\tR\rtransactionId\x12!\n" +
-	"\fpermit_state\x18\x02 \x01(\tR\vpermitState\"\xe3\x06\n" +
+	"\fpermit_state\x18\x02 \x01(\tR\vpermitState\x12\x12\n" +
+	"\x04kind\x18\x03 \x01(\tR\x04kind\x12#\n" +
+	"\rconnection_id\x18\x04 \x01(\tR\fconnectionId\x12;\n" +
+	"\vvalid_until\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
+	"validUntil\"\xe3\x06\n" +
 	"\x0eResponseAction\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04kind\x18\x02 \x01(\tR\x04kind\x12\x1d\n" +
@@ -3458,7 +3530,7 @@ const file_pantherclaw_v1_response_proto_rawDesc = "" +
 	"\x06status\x18\x02 \x01(\tR\x06status\"r\n" +
 	"\x1ePreviewCredentialChangeRequest\x12-\n" +
 	"\rconnection_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\fconnectionId\x12!\n" +
-	"\aversion\x18\x02 \x01(\x05B\a\xbaH\x04\x1a\x02 \x00R\aversion\"\xde\x02\n" +
+	"\aversion\x18\x02 \x01(\x05B\a\xbaH\x04\x1a\x02(\x00R\aversion\"\xde\x02\n" +
 	"\x1fPreviewCredentialChangeResponse\x12\x12\n" +
 	"\x04kind\x18\x01 \x01(\tR\x04kind\x12\x14\n" +
 	"\x05state\x18\x02 \x01(\tR\x05state\x12\x1d\n" +
@@ -3472,31 +3544,35 @@ const file_pantherclaw_v1_response_proto_rawDesc = "" +
 	"\x15shared_connection_ids\x18\b \x03(\tR\x13sharedConnectionIds\x12\x18\n" +
 	"\aunknown\x18\t \x03(\tR\aunknown\x12%\n" +
 	"\x0epreview_digest\x18\n" +
-	" \x01(\tR\rpreviewDigest\"\xc7\x02\n" +
+	" \x01(\tR\rpreviewDigest\"\x9e\x03\n" +
 	"\x1dRevokeSealedCredentialRequest\x12-\n" +
 	"\rconnection_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\fconnectionId\x12!\n" +
-	"\aversion\x18\x02 \x01(\x05B\a\xbaH\x04\x1a\x02 \x00R\aversion\x12\"\n" +
+	"\aversion\x18\x02 \x01(\x05B\a\xbaH\x04\x1a\x02(\x00R\aversion\x12\"\n" +
 	"\x06reason\x18\x03 \x01(\tB\n" +
 	"\xbaH\ar\x05\x10\x01\x18\xe8\aR\x06reason\x12<\n" +
 	"\x0epreview_digest\x18\x04 \x01(\tB\x15\xbaH\x12r\x102\x0e^[0-9a-f]{64}$R\rpreviewDigest\x12&\n" +
 	"\acase_id\x18\x05 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01H\x00R\x06caseId\x88\x01\x01\x12.\n" +
 	"\vincident_id\x18\x06 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01H\x01R\n" +
-	"incidentId\x88\x01\x01B\n" +
+	"incidentId\x88\x01\x01\x12)\n" +
+	"\x10upstream_revoked\x18\a \x01(\bR\x0fupstreamRevoked\x12*\n" +
+	"\vattestation\x18\b \x01(\tB\b\xbaH\x05r\x03\x18\xf4\x03R\vattestationB\n" +
 	"\n" +
 	"\b_case_idB\x0e\n" +
 	"\f_incident_id\"U\n" +
 	"\x1eRevokeSealedCredentialResponse\x12\x1b\n" +
 	"\taction_id\x18\x01 \x01(\tR\bactionId\x12\x16\n" +
-	"\x06status\x18\x02 \x01(\tR\x06status\"\xc7\x02\n" +
+	"\x06status\x18\x02 \x01(\tR\x06status\"\x9e\x03\n" +
 	"\x1dRotateSealedCredentialRequest\x12-\n" +
 	"\rconnection_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\fconnectionId\x12!\n" +
-	"\aversion\x18\x02 \x01(\x05B\a\xbaH\x04\x1a\x02 \x00R\aversion\x12\"\n" +
+	"\aversion\x18\x02 \x01(\x05B\a\xbaH\x04\x1a\x02(\x00R\aversion\x12\"\n" +
 	"\x06reason\x18\x03 \x01(\tB\n" +
 	"\xbaH\ar\x05\x10\x01\x18\xe8\aR\x06reason\x12<\n" +
 	"\x0epreview_digest\x18\x04 \x01(\tB\x15\xbaH\x12r\x102\x0e^[0-9a-f]{64}$R\rpreviewDigest\x12&\n" +
 	"\acase_id\x18\x05 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01H\x00R\x06caseId\x88\x01\x01\x12.\n" +
 	"\vincident_id\x18\x06 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01H\x01R\n" +
-	"incidentId\x88\x01\x01B\n" +
+	"incidentId\x88\x01\x01\x12)\n" +
+	"\x10upstream_revoked\x18\a \x01(\bR\x0fupstreamRevoked\x12*\n" +
+	"\vattestation\x18\b \x01(\tB\b\xbaH\x05r\x03\x18\xf4\x03R\vattestationB\n" +
 	"\n" +
 	"\b_case_idB\x0e\n" +
 	"\f_incident_id\"U\n" +
@@ -3702,79 +3778,80 @@ var file_pantherclaw_v1_response_proto_goTypes = []any{
 var file_pantherclaw_v1_response_proto_depIdxs = []int32{
 	44, // 0: pantherclaw.v1.ResponsePath.evidence:type_name -> pantherclaw.v1.ResponsePath.EvidenceEntry
 	46, // 1: pantherclaw.v1.ResponsePath.confirm_time:type_name -> google.protobuf.Timestamp
-	2,  // 2: pantherclaw.v1.ResponseAction.historical_open:type_name -> pantherclaw.v1.HistoricalItem
-	46, // 3: pantherclaw.v1.ResponseAction.request_time:type_name -> google.protobuf.Timestamp
-	46, // 4: pantherclaw.v1.ResponseAction.settle_time:type_name -> google.protobuf.Timestamp
-	45, // 5: pantherclaw.v1.ResponseAction.preview_summary:type_name -> pantherclaw.v1.ResponseAction.PreviewSummaryEntry
-	46, // 6: pantherclaw.v1.ContainmentControl.create_time:type_name -> google.protobuf.Timestamp
-	46, // 7: pantherclaw.v1.ContainmentControl.expire_time:type_name -> google.protobuf.Timestamp
-	46, // 8: pantherclaw.v1.ContainmentControl.lift_time:type_name -> google.protobuf.Timestamp
-	0,  // 9: pantherclaw.v1.PreviewContainmentRequest.scope:type_name -> pantherclaw.v1.ResponseSubject
-	0,  // 10: pantherclaw.v1.ContainmentReach.disruption:type_name -> pantherclaw.v1.ResponseSubject
-	6,  // 11: pantherclaw.v1.PreviewContainmentResponse.reach:type_name -> pantherclaw.v1.ContainmentReach
-	0,  // 12: pantherclaw.v1.ContainRequest.scope:type_name -> pantherclaw.v1.ResponseSubject
-	46, // 13: pantherclaw.v1.ContainRequest.expire_time:type_name -> google.protobuf.Timestamp
-	0,  // 14: pantherclaw.v1.ProposeResponseRequest.subject:type_name -> pantherclaw.v1.ResponseSubject
-	0,  // 15: pantherclaw.v1.ResponseOption.scope:type_name -> pantherclaw.v1.ResponseSubject
-	11, // 16: pantherclaw.v1.ProposeResponseResponse.options:type_name -> pantherclaw.v1.ResponseOption
-	0,  // 17: pantherclaw.v1.RequestControlRequest.scope:type_name -> pantherclaw.v1.ResponseSubject
-	1,  // 18: pantherclaw.v1.RequestControlResponse.paths:type_name -> pantherclaw.v1.ResponsePath
-	23, // 19: pantherclaw.v1.RestorationStageSpec.tests:type_name -> pantherclaw.v1.RestorationTestAction
-	24, // 20: pantherclaw.v1.RequestRestorationRequest.stages:type_name -> pantherclaw.v1.RestorationStageSpec
-	26, // 21: pantherclaw.v1.RequestRestorationResponse.preconditions:type_name -> pantherclaw.v1.RestorationPrecondition
-	26, // 22: pantherclaw.v1.DecideRestorationResponse.preconditions:type_name -> pantherclaw.v1.RestorationPrecondition
-	23, // 23: pantherclaw.v1.RestorationTestResult.test:type_name -> pantherclaw.v1.RestorationTestAction
-	31, // 24: pantherclaw.v1.ApplyRestorationStageResponse.results:type_name -> pantherclaw.v1.RestorationTestResult
-	3,  // 25: pantherclaw.v1.GetResponseActionResponse.action:type_name -> pantherclaw.v1.ResponseAction
-	1,  // 26: pantherclaw.v1.GetResponseActionResponse.paths:type_name -> pantherclaw.v1.ResponsePath
-	4,  // 27: pantherclaw.v1.GetResponseActionResponse.controls:type_name -> pantherclaw.v1.ContainmentControl
-	0,  // 28: pantherclaw.v1.ListResponseActionsRequest.scope:type_name -> pantherclaw.v1.ResponseSubject
-	3,  // 29: pantherclaw.v1.ListResponseActionsResponse.actions:type_name -> pantherclaw.v1.ResponseAction
-	4,  // 30: pantherclaw.v1.ListContainmentControlsResponse.controls:type_name -> pantherclaw.v1.ContainmentControl
-	23, // 31: pantherclaw.v1.RestorationStage.tests:type_name -> pantherclaw.v1.RestorationTestAction
-	31, // 32: pantherclaw.v1.RestorationStage.results:type_name -> pantherclaw.v1.RestorationTestResult
-	26, // 33: pantherclaw.v1.GetRestorationPlanResponse.preconditions:type_name -> pantherclaw.v1.RestorationPrecondition
-	4,  // 34: pantherclaw.v1.GetRestorationPlanResponse.controls:type_name -> pantherclaw.v1.ContainmentControl
-	42, // 35: pantherclaw.v1.GetRestorationPlanResponse.stages:type_name -> pantherclaw.v1.RestorationStage
-	46, // 36: pantherclaw.v1.GetRestorationPlanResponse.create_time:type_name -> google.protobuf.Timestamp
-	46, // 37: pantherclaw.v1.GetRestorationPlanResponse.finish_time:type_name -> google.protobuf.Timestamp
-	5,  // 38: pantherclaw.v1.ResponseService.PreviewContainment:input_type -> pantherclaw.v1.PreviewContainmentRequest
-	8,  // 39: pantherclaw.v1.ResponseService.Contain:input_type -> pantherclaw.v1.ContainRequest
-	10, // 40: pantherclaw.v1.ResponseService.ProposeResponse:input_type -> pantherclaw.v1.ProposeResponseRequest
-	13, // 41: pantherclaw.v1.ResponseService.TerminateRun:input_type -> pantherclaw.v1.TerminateRunRequest
-	15, // 42: pantherclaw.v1.ResponseService.PreviewCredentialChange:input_type -> pantherclaw.v1.PreviewCredentialChangeRequest
-	17, // 43: pantherclaw.v1.ResponseService.RevokeSealedCredential:input_type -> pantherclaw.v1.RevokeSealedCredentialRequest
-	19, // 44: pantherclaw.v1.ResponseService.RotateSealedCredential:input_type -> pantherclaw.v1.RotateSealedCredentialRequest
-	21, // 45: pantherclaw.v1.ResponseService.RequestControl:input_type -> pantherclaw.v1.RequestControlRequest
-	25, // 46: pantherclaw.v1.ResponseService.RequestRestoration:input_type -> pantherclaw.v1.RequestRestorationRequest
-	28, // 47: pantherclaw.v1.ResponseService.DecideRestoration:input_type -> pantherclaw.v1.DecideRestorationRequest
-	30, // 48: pantherclaw.v1.ResponseService.ApplyRestorationStage:input_type -> pantherclaw.v1.ApplyRestorationStageRequest
-	33, // 49: pantherclaw.v1.ResponseService.DecideContainmentHold:input_type -> pantherclaw.v1.DecideContainmentHoldRequest
-	35, // 50: pantherclaw.v1.ResponseService.GetResponseAction:input_type -> pantherclaw.v1.GetResponseActionRequest
-	37, // 51: pantherclaw.v1.ResponseService.ListResponseActions:input_type -> pantherclaw.v1.ListResponseActionsRequest
-	39, // 52: pantherclaw.v1.ResponseService.ListContainmentControls:input_type -> pantherclaw.v1.ListContainmentControlsRequest
-	41, // 53: pantherclaw.v1.ResponseService.GetRestorationPlan:input_type -> pantherclaw.v1.GetRestorationPlanRequest
-	7,  // 54: pantherclaw.v1.ResponseService.PreviewContainment:output_type -> pantherclaw.v1.PreviewContainmentResponse
-	9,  // 55: pantherclaw.v1.ResponseService.Contain:output_type -> pantherclaw.v1.ContainResponse
-	12, // 56: pantherclaw.v1.ResponseService.ProposeResponse:output_type -> pantherclaw.v1.ProposeResponseResponse
-	14, // 57: pantherclaw.v1.ResponseService.TerminateRun:output_type -> pantherclaw.v1.TerminateRunResponse
-	16, // 58: pantherclaw.v1.ResponseService.PreviewCredentialChange:output_type -> pantherclaw.v1.PreviewCredentialChangeResponse
-	18, // 59: pantherclaw.v1.ResponseService.RevokeSealedCredential:output_type -> pantherclaw.v1.RevokeSealedCredentialResponse
-	20, // 60: pantherclaw.v1.ResponseService.RotateSealedCredential:output_type -> pantherclaw.v1.RotateSealedCredentialResponse
-	22, // 61: pantherclaw.v1.ResponseService.RequestControl:output_type -> pantherclaw.v1.RequestControlResponse
-	27, // 62: pantherclaw.v1.ResponseService.RequestRestoration:output_type -> pantherclaw.v1.RequestRestorationResponse
-	29, // 63: pantherclaw.v1.ResponseService.DecideRestoration:output_type -> pantherclaw.v1.DecideRestorationResponse
-	32, // 64: pantherclaw.v1.ResponseService.ApplyRestorationStage:output_type -> pantherclaw.v1.ApplyRestorationStageResponse
-	34, // 65: pantherclaw.v1.ResponseService.DecideContainmentHold:output_type -> pantherclaw.v1.DecideContainmentHoldResponse
-	36, // 66: pantherclaw.v1.ResponseService.GetResponseAction:output_type -> pantherclaw.v1.GetResponseActionResponse
-	38, // 67: pantherclaw.v1.ResponseService.ListResponseActions:output_type -> pantherclaw.v1.ListResponseActionsResponse
-	40, // 68: pantherclaw.v1.ResponseService.ListContainmentControls:output_type -> pantherclaw.v1.ListContainmentControlsResponse
-	43, // 69: pantherclaw.v1.ResponseService.GetRestorationPlan:output_type -> pantherclaw.v1.GetRestorationPlanResponse
-	54, // [54:70] is the sub-list for method output_type
-	38, // [38:54] is the sub-list for method input_type
-	38, // [38:38] is the sub-list for extension type_name
-	38, // [38:38] is the sub-list for extension extendee
-	0,  // [0:38] is the sub-list for field type_name
+	46, // 2: pantherclaw.v1.HistoricalItem.valid_until:type_name -> google.protobuf.Timestamp
+	2,  // 3: pantherclaw.v1.ResponseAction.historical_open:type_name -> pantherclaw.v1.HistoricalItem
+	46, // 4: pantherclaw.v1.ResponseAction.request_time:type_name -> google.protobuf.Timestamp
+	46, // 5: pantherclaw.v1.ResponseAction.settle_time:type_name -> google.protobuf.Timestamp
+	45, // 6: pantherclaw.v1.ResponseAction.preview_summary:type_name -> pantherclaw.v1.ResponseAction.PreviewSummaryEntry
+	46, // 7: pantherclaw.v1.ContainmentControl.create_time:type_name -> google.protobuf.Timestamp
+	46, // 8: pantherclaw.v1.ContainmentControl.expire_time:type_name -> google.protobuf.Timestamp
+	46, // 9: pantherclaw.v1.ContainmentControl.lift_time:type_name -> google.protobuf.Timestamp
+	0,  // 10: pantherclaw.v1.PreviewContainmentRequest.scope:type_name -> pantherclaw.v1.ResponseSubject
+	0,  // 11: pantherclaw.v1.ContainmentReach.disruption:type_name -> pantherclaw.v1.ResponseSubject
+	6,  // 12: pantherclaw.v1.PreviewContainmentResponse.reach:type_name -> pantherclaw.v1.ContainmentReach
+	0,  // 13: pantherclaw.v1.ContainRequest.scope:type_name -> pantherclaw.v1.ResponseSubject
+	46, // 14: pantherclaw.v1.ContainRequest.expire_time:type_name -> google.protobuf.Timestamp
+	0,  // 15: pantherclaw.v1.ProposeResponseRequest.subject:type_name -> pantherclaw.v1.ResponseSubject
+	0,  // 16: pantherclaw.v1.ResponseOption.scope:type_name -> pantherclaw.v1.ResponseSubject
+	11, // 17: pantherclaw.v1.ProposeResponseResponse.options:type_name -> pantherclaw.v1.ResponseOption
+	0,  // 18: pantherclaw.v1.RequestControlRequest.scope:type_name -> pantherclaw.v1.ResponseSubject
+	1,  // 19: pantherclaw.v1.RequestControlResponse.paths:type_name -> pantherclaw.v1.ResponsePath
+	23, // 20: pantherclaw.v1.RestorationStageSpec.tests:type_name -> pantherclaw.v1.RestorationTestAction
+	24, // 21: pantherclaw.v1.RequestRestorationRequest.stages:type_name -> pantherclaw.v1.RestorationStageSpec
+	26, // 22: pantherclaw.v1.RequestRestorationResponse.preconditions:type_name -> pantherclaw.v1.RestorationPrecondition
+	26, // 23: pantherclaw.v1.DecideRestorationResponse.preconditions:type_name -> pantherclaw.v1.RestorationPrecondition
+	23, // 24: pantherclaw.v1.RestorationTestResult.test:type_name -> pantherclaw.v1.RestorationTestAction
+	31, // 25: pantherclaw.v1.ApplyRestorationStageResponse.results:type_name -> pantherclaw.v1.RestorationTestResult
+	3,  // 26: pantherclaw.v1.GetResponseActionResponse.action:type_name -> pantherclaw.v1.ResponseAction
+	1,  // 27: pantherclaw.v1.GetResponseActionResponse.paths:type_name -> pantherclaw.v1.ResponsePath
+	4,  // 28: pantherclaw.v1.GetResponseActionResponse.controls:type_name -> pantherclaw.v1.ContainmentControl
+	0,  // 29: pantherclaw.v1.ListResponseActionsRequest.scope:type_name -> pantherclaw.v1.ResponseSubject
+	3,  // 30: pantherclaw.v1.ListResponseActionsResponse.actions:type_name -> pantherclaw.v1.ResponseAction
+	4,  // 31: pantherclaw.v1.ListContainmentControlsResponse.controls:type_name -> pantherclaw.v1.ContainmentControl
+	23, // 32: pantherclaw.v1.RestorationStage.tests:type_name -> pantherclaw.v1.RestorationTestAction
+	31, // 33: pantherclaw.v1.RestorationStage.results:type_name -> pantherclaw.v1.RestorationTestResult
+	26, // 34: pantherclaw.v1.GetRestorationPlanResponse.preconditions:type_name -> pantherclaw.v1.RestorationPrecondition
+	4,  // 35: pantherclaw.v1.GetRestorationPlanResponse.controls:type_name -> pantherclaw.v1.ContainmentControl
+	42, // 36: pantherclaw.v1.GetRestorationPlanResponse.stages:type_name -> pantherclaw.v1.RestorationStage
+	46, // 37: pantherclaw.v1.GetRestorationPlanResponse.create_time:type_name -> google.protobuf.Timestamp
+	46, // 38: pantherclaw.v1.GetRestorationPlanResponse.finish_time:type_name -> google.protobuf.Timestamp
+	5,  // 39: pantherclaw.v1.ResponseService.PreviewContainment:input_type -> pantherclaw.v1.PreviewContainmentRequest
+	8,  // 40: pantherclaw.v1.ResponseService.Contain:input_type -> pantherclaw.v1.ContainRequest
+	10, // 41: pantherclaw.v1.ResponseService.ProposeResponse:input_type -> pantherclaw.v1.ProposeResponseRequest
+	13, // 42: pantherclaw.v1.ResponseService.TerminateRun:input_type -> pantherclaw.v1.TerminateRunRequest
+	15, // 43: pantherclaw.v1.ResponseService.PreviewCredentialChange:input_type -> pantherclaw.v1.PreviewCredentialChangeRequest
+	17, // 44: pantherclaw.v1.ResponseService.RevokeSealedCredential:input_type -> pantherclaw.v1.RevokeSealedCredentialRequest
+	19, // 45: pantherclaw.v1.ResponseService.RotateSealedCredential:input_type -> pantherclaw.v1.RotateSealedCredentialRequest
+	21, // 46: pantherclaw.v1.ResponseService.RequestControl:input_type -> pantherclaw.v1.RequestControlRequest
+	25, // 47: pantherclaw.v1.ResponseService.RequestRestoration:input_type -> pantherclaw.v1.RequestRestorationRequest
+	28, // 48: pantherclaw.v1.ResponseService.DecideRestoration:input_type -> pantherclaw.v1.DecideRestorationRequest
+	30, // 49: pantherclaw.v1.ResponseService.ApplyRestorationStage:input_type -> pantherclaw.v1.ApplyRestorationStageRequest
+	33, // 50: pantherclaw.v1.ResponseService.DecideContainmentHold:input_type -> pantherclaw.v1.DecideContainmentHoldRequest
+	35, // 51: pantherclaw.v1.ResponseService.GetResponseAction:input_type -> pantherclaw.v1.GetResponseActionRequest
+	37, // 52: pantherclaw.v1.ResponseService.ListResponseActions:input_type -> pantherclaw.v1.ListResponseActionsRequest
+	39, // 53: pantherclaw.v1.ResponseService.ListContainmentControls:input_type -> pantherclaw.v1.ListContainmentControlsRequest
+	41, // 54: pantherclaw.v1.ResponseService.GetRestorationPlan:input_type -> pantherclaw.v1.GetRestorationPlanRequest
+	7,  // 55: pantherclaw.v1.ResponseService.PreviewContainment:output_type -> pantherclaw.v1.PreviewContainmentResponse
+	9,  // 56: pantherclaw.v1.ResponseService.Contain:output_type -> pantherclaw.v1.ContainResponse
+	12, // 57: pantherclaw.v1.ResponseService.ProposeResponse:output_type -> pantherclaw.v1.ProposeResponseResponse
+	14, // 58: pantherclaw.v1.ResponseService.TerminateRun:output_type -> pantherclaw.v1.TerminateRunResponse
+	16, // 59: pantherclaw.v1.ResponseService.PreviewCredentialChange:output_type -> pantherclaw.v1.PreviewCredentialChangeResponse
+	18, // 60: pantherclaw.v1.ResponseService.RevokeSealedCredential:output_type -> pantherclaw.v1.RevokeSealedCredentialResponse
+	20, // 61: pantherclaw.v1.ResponseService.RotateSealedCredential:output_type -> pantherclaw.v1.RotateSealedCredentialResponse
+	22, // 62: pantherclaw.v1.ResponseService.RequestControl:output_type -> pantherclaw.v1.RequestControlResponse
+	27, // 63: pantherclaw.v1.ResponseService.RequestRestoration:output_type -> pantherclaw.v1.RequestRestorationResponse
+	29, // 64: pantherclaw.v1.ResponseService.DecideRestoration:output_type -> pantherclaw.v1.DecideRestorationResponse
+	32, // 65: pantherclaw.v1.ResponseService.ApplyRestorationStage:output_type -> pantherclaw.v1.ApplyRestorationStageResponse
+	34, // 66: pantherclaw.v1.ResponseService.DecideContainmentHold:output_type -> pantherclaw.v1.DecideContainmentHoldResponse
+	36, // 67: pantherclaw.v1.ResponseService.GetResponseAction:output_type -> pantherclaw.v1.GetResponseActionResponse
+	38, // 68: pantherclaw.v1.ResponseService.ListResponseActions:output_type -> pantherclaw.v1.ListResponseActionsResponse
+	40, // 69: pantherclaw.v1.ResponseService.ListContainmentControls:output_type -> pantherclaw.v1.ListContainmentControlsResponse
+	43, // 70: pantherclaw.v1.ResponseService.GetRestorationPlan:output_type -> pantherclaw.v1.GetRestorationPlanResponse
+	55, // [55:71] is the sub-list for method output_type
+	39, // [39:55] is the sub-list for method input_type
+	39, // [39:39] is the sub-list for extension type_name
+	39, // [39:39] is the sub-list for extension extendee
+	0,  // [0:39] is the sub-list for field type_name
 }
 
 func init() { file_pantherclaw_v1_response_proto_init() }

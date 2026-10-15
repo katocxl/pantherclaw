@@ -62,7 +62,6 @@ var (
 	ErrControlPlanned    = pcerr.New(pcerr.FailedPrecondition, "CONTROL_IN_PLAN", "a control is already in an unfinished restoration plan")
 	ErrPlanNotFound      = pcerr.New(pcerr.NotFound, "PLAN_NOT_FOUND", "restoration plan not found")
 	ErrPlanState         = pcerr.New(pcerr.FailedPrecondition, "PLAN_STATE", "the restoration plan is not in a state that allows this")
-	ErrRequesterDecides  = pcerr.New(pcerr.PermissionDenied, "REQUESTER_EXCLUDED", "the person who asked for a restoration never decides it")
 	ErrPreconditions     = pcerr.New(pcerr.FailedPrecondition, "PRECONDITIONS_UNMET", "a precondition of the restoration is not met; see the plan")
 	ErrStageOrder        = pcerr.New(pcerr.FailedPrecondition, "STAGE_ORDER", "stages are applied in order, each once its tests pass")
 	ErrStagedEdition     = pcerr.New(pcerr.FailedPrecondition, "EDITION_REQUIRED", "staged restoration needs the Team edition or above")
@@ -217,7 +216,7 @@ func (s *Containment) DecideRestorationIn(ctx context.Context, tx db.TenantTx, p
 		return "", nil, err
 	}
 	if p.RequestedBy == "user:"+reviewer.String() {
-		return "", nil, ErrRequesterDecides
+		return "", nil, ErrReviewerNotIndependent
 	}
 	if p.State != PlanRequested && p.State != PlanProposed {
 		return "", nil, ErrPlanState
@@ -388,7 +387,7 @@ func (s *Containment) ApplyStageIn(ctx context.Context, tx db.TenantTx, sp Stage
 		return "", err
 	}
 	if p.RequestedBy == "user:"+reviewer.String() {
-		return "", ErrRequesterDecides
+		return "", ErrReviewerNotIndependent
 	}
 	controls, err := q.RestorationPlanControls(ctx, org, sp.Plan)
 	if err != nil {
@@ -597,17 +596,18 @@ func nonNilResults(r []TestResult) []TestResult {
 	return r
 }
 
-// ErrInvolvedDecides refuses a reviewer who added a control of the plan, or
-// whom a control of the plan contains (D54).
-var ErrInvolvedDecides = pcerr.New(pcerr.PermissionDenied, "REVIEWER_INVOLVED",
-	"a person who added one of the plan's controls, or whom one of them contains, never decides it")
+// ErrReviewerNotIndependent refuses a reviewer who asked for the plan, added
+// one of its controls or is contained by one of them (D54, D61); the lift
+// trigger refuses the same in the database.
+var ErrReviewerNotIndependent = pcerr.New(pcerr.PermissionDenied, "REVIEWER_NOT_INDEPENDENT",
+	"the person who asked for a restoration, added one of its controls or is contained by one of them never decides it")
 
 // independentOf checks a reviewer against the plan's controls (D54).
 func independentOf(controls []dbq.PcContainmentControl, reviewer ids.UUID) error {
 	me := "user:" + reviewer.String()
 	for _, c := range controls {
 		if c.CreatedBy == me || (c.ScopeType == rdomain.ScopePrincipal && c.ScopeID == me) {
-			return ErrInvolvedDecides
+			return ErrReviewerNotIndependent
 		}
 	}
 	return nil

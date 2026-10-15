@@ -1936,6 +1936,9 @@ type PcResponseAction struct {
 	SkipPreview       bool
 	SkipReason        *string
 	SkipStepUpAt      *time.Time
+	AttestedBy        *string
+	AttestedAt        *time.Time
+	Attestation       *string
 	IdempotencyKey    *string
 	RequestDigest     []byte
 	Status            string

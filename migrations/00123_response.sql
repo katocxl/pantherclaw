@@ -60,6 +60,12 @@ CREATE TABLE pc.response_actions (
     skip_preview     boolean     NOT NULL DEFAULT false,
     skip_reason      text        CHECK (skip_reason IS NULL OR char_length(skip_reason) BETWEEN 1 AND 500),
     skip_step_up_at  timestamptz,
+    -- A person's attestation, at a security-key step-up, that a credential was
+    -- revoked at its provider (D61): only it confirms a bypass route or a
+    -- static credential path.
+    attested_by      text        CHECK (attested_by IS NULL OR char_length(attested_by) BETWEEN 1 AND 128),
+    attested_at      timestamptz,
+    attestation      text        CHECK (attestation IS NULL OR char_length(attestation) BETWEEN 1 AND 500),
     idempotency_key  text        CHECK (idempotency_key IS NULL OR char_length(idempotency_key) BETWEEN 1 AND 128),
     request_digest   bytea       CHECK (request_digest IS NULL OR octet_length(request_digest) = 32),
     status           text        NOT NULL DEFAULT 'REQUESTED'
@@ -84,6 +90,8 @@ CREATE TABLE pc.response_actions (
     PRIMARY KEY (org_id, id),
     CONSTRAINT response_actions_control CHECK ((kind = 'CONTAIN') = (control IS NOT NULL)),
     CONSTRAINT response_actions_operation CHECK ((control = 'DENY_OPERATION') = (operation IS NOT NULL)),
+    CONSTRAINT response_actions_attested CHECK ((attested_by IS NULL) = (attested_at IS NULL)
+                                               AND (attested_by IS NULL) = (attestation IS NULL)),
     CONSTRAINT response_actions_skip CHECK (skip_preview = (skip_reason IS NOT NULL) AND skip_preview = (skip_step_up_at IS NOT NULL)),
     CONSTRAINT response_actions_idempotency CHECK ((idempotency_key IS NULL) = (request_digest IS NULL)),
     CONSTRAINT response_actions_settled CHECK ((status IN ('CONFIRMED', 'FAILED', 'UNSUPPORTED')) = (settled_at IS NOT NULL))
@@ -161,6 +169,18 @@ BEGIN
             WHERE p.org_id = NEW.org_id AND p.id = NEW.restoration_id AND c.control_id = NEW.id
               AND p.state IN ('STAGING', 'COMPLETED')) THEN
             RAISE EXCEPTION 'containment control % is lifted only by a decided restoration plan that lists it', NEW.id
+                USING ERRCODE = 'check_violation';
+        END IF;
+        -- The reviewer is independent (D54, D61): not the plan's requester, not
+        -- the creator of any of its controls, not a person one of them contains.
+        IF EXISTS (SELECT 1 FROM pc.restoration_plans p WHERE p.org_id = NEW.org_id AND p.id = NEW.restoration_id
+                   AND p.requested_by = NEW.lifted_by)
+           OR EXISTS (
+            SELECT 1 FROM pc.restoration_plan_controls pc2
+            JOIN pc.containment_controls k ON k.org_id = pc2.org_id AND k.id = pc2.control_id
+            WHERE pc2.org_id = NEW.org_id AND pc2.plan_id = NEW.restoration_id
+              AND (k.created_by = NEW.lifted_by OR (k.scope_type = 'principal' AND k.scope_id = NEW.lifted_by))) THEN
+            RAISE EXCEPTION 'containment control % is lifted only by an independent reviewer', NEW.id
                 USING ERRCODE = 'check_violation';
         END IF;
         NEW.lifted_at := now();
@@ -340,7 +360,8 @@ CREATE POLICY tenant_isolation ON pc.soar_requests
 GRANT SELECT, INSERT ON pc.containment_controls, pc.response_actions, pc.response_paths, pc.restoration_plans,
     pc.restoration_plan_controls, pc.restoration_stages, pc.soar_requests TO pc_app;
 GRANT UPDATE (lifted_at, lifted_by, restoration_id) ON pc.containment_controls TO pc_app;
-GRANT UPDATE (status, mediated_confirmed, future_confirmed, historical_open, epoch, updated_at, settled_at, next_check_at, check_backoff_s)
+GRANT UPDATE (status, mediated_confirmed, future_confirmed, historical_open, epoch, updated_at, settled_at, next_check_at, check_backoff_s,
+    attested_by, attested_at, attestation)
     ON pc.response_actions TO pc_app;
 GRANT UPDATE (status, evidence, failure, unsupported_reason, cancel_capability, cancel_requested_at, updated_at, confirmed_at)
     ON pc.response_paths TO pc_app;

@@ -10,6 +10,7 @@ import (
 	"errors"
 	"strconv"
 	"testing"
+	"time"
 
 	adomain "github.com/katocxl/pantherclaw/internal/authority/domain"
 	"github.com/katocxl/pantherclaw/internal/authority/pipeline"
@@ -93,7 +94,7 @@ func TestHR250_RestorationNeedsAnIndependentReviewerAndPreconditions(t *testing.
 		}
 		return state, pre, derr
 	}
-	if _, _, err := decide(w.alice); !errors.Is(err, rapp.ErrRequesterDecides) {
+	if _, _, err := decide(w.alice); !errors.Is(err, rapp.ErrReviewerNotIndependent) {
 		t.Fatalf("the requester decided: %v", err)
 	}
 	w.exec("UPDATE pc.agents SET state = 'SUSPENDED', suspended_from = 'DISCOVERED' WHERE org_id = $1 AND id = $2", w.org, w.agent)
@@ -317,21 +318,7 @@ func TestHR252_CredentialChangesDiscloseEverySharerFirst(t *testing.T) {
 		return p
 	}
 	change := func(digest []byte, rotate bool) (reflexdomain.ContainResult, error) {
-		var out reflexdomain.ContainResult
-		err := w.tx(func(ctx context.Context, tx db.TenantTx) error {
-			r := rapp.CredentialChange{
-				Connection: w.conn, Version: 1, Reason: "leaked", PreviewDigest: digest,
-				Actor: reflexdomain.Subject{Type: reflexdomain.SubjectUser, ID: w.alice.String()},
-			}
-			var err error
-			if rotate {
-				out, err = w.c.RotateCredentialIn(ctx, tx, r)
-			} else {
-				out, err = w.c.RevokeCredentialIn(ctx, tx, r)
-			}
-			return err
-		})
-		return out, err
+		return w.change(1, digest, rotate, false)
 	}
 	p := preview()
 	if len(p.Agents) != 0 {
@@ -361,13 +348,60 @@ func TestHR252_CredentialChangesDiscloseEverySharerFirst(t *testing.T) {
 	if w.epoch() != before+1 || w.count("SELECT count(*) FROM pc.credentials WHERE org_id = $1 AND state = 'REVOKED'", w.org) != 1 {
 		t.Fatal("the revoke did not take the existing path")
 	}
-	if a := w.action(res.ActionID); a.Kind != rdomain.KindRevoke || a.Status != string(rdomain.StatusRequested) {
+	// D61: PantherClaw's copy is revoked, but without an upstream attestation
+	// the credential path stays UNRESOLVED, so the action stays PARTIAL.
+	if a := w.action(res.ActionID); a.Kind != rdomain.KindRevoke || a.Status != string(rdomain.StatusPartial) {
 		t.Fatalf("revoke action %s %s", a.Kind, a.Status)
 	}
 	w.deliver(before + 1)
-	if a := w.advance(res.ActionID); a.Status != string(rdomain.StatusConfirmed) {
-		t.Fatalf("after the gateway got the epoch: %s", a.Status)
+	if a := w.advance(res.ActionID); a.Status != string(rdomain.StatusPartial) || !a.MediatedConfirmed || a.FutureConfirmed {
+		t.Fatalf("unattested, after the gateway got the epoch: %s", a.Status)
 	}
+	// An attested revoke (the person revoked it at the provider) confirms.
+	w.sealed(2, "ACTIVE")
+	p = w.credentialPreview(2)
+	res, err = w.change(2, p.Digest, false, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.deliver(w.epoch())
+	if a := w.advance(res.ActionID); a.Status != string(rdomain.StatusConfirmed) || a.AttestedBy == nil {
+		t.Fatalf("attested, after the gateway got the epoch: %s", a.Status)
+	}
+}
+
+func (w *world) credentialPreview(version int32) rapp.CredentialPreview {
+	w.t.Helper()
+	var p rapp.CredentialPreview
+	if err := w.tx(func(ctx context.Context, tx db.TenantTx) error {
+		var err error
+		p, err = w.c.PreviewCredentialIn(ctx, tx, w.conn, version)
+		return err
+	}); err != nil {
+		w.t.Fatal(err)
+	}
+	return p
+}
+
+func (w *world) change(version int32, digest []byte, rotate, attested bool) (reflexdomain.ContainResult, error) {
+	var out reflexdomain.ContainResult
+	err := w.tx(func(ctx context.Context, tx db.TenantTx) error {
+		r := rapp.CredentialChange{
+			Connection: w.conn, Version: version, Reason: "leaked", PreviewDigest: digest,
+			Actor: reflexdomain.Subject{Type: reflexdomain.SubjectUser, ID: w.alice.String()},
+		}
+		if attested {
+			r.Attested, r.Attestation, r.AttestedAt = true, "revoked in the provider console", time.Now()
+		}
+		var err error
+		if rotate {
+			out, err = w.c.RotateCredentialIn(ctx, tx, r)
+		} else {
+			out, err = w.c.RevokeCredentialIn(ctx, tx, r)
+		}
+		return err
+	})
+	return out, err
 }
 
 // TestT108_TerminationIsConfirmedOnlyWhenDispatchedWorkEnds: a terminated
@@ -474,7 +508,7 @@ func TestHR250_InvolvedPeopleNeverDecideARestoration(t *testing.T) {
 			_, _, err := w.c.DecideRestorationIn(ctx, tx, plan, reviewer, true)
 			return err
 		})
-		if !errors.Is(err, rapp.ErrInvolvedDecides) {
+		if !errors.Is(err, rapp.ErrReviewerNotIndependent) {
 			t.Errorf("%s: %v", name, err)
 		}
 	}
