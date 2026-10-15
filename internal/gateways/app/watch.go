@@ -287,3 +287,16 @@ func (h *Hub) listen(ctx context.Context) error {
 		h.mu.Unlock()
 	}
 }
+
+// Delivered records that the stream sent its gateway epoch (G0 M10 D22):
+// a containment action's gateway path is confirmed once its gateway was
+// sent the action's epoch. Only a higher epoch is written, so a stream
+// writes once per change, not per heartbeat.
+func (s *Subscription) Delivered(ctx context.Context, epoch int64) error {
+	if epoch <= 0 {
+		return nil
+	}
+	return s.hub.pool.InTenantTx(ctx, s.org, func(ctx context.Context, tx db.TenantTx) error {
+		return dbq.New(tx).RecordEpochDelivery(ctx, s.org, s.gateway, epoch)
+	})
+}

@@ -437,3 +437,24 @@ func (r *Reader) HoldSettings(_ context.Context, org ids.OrgID) (pipeline.HoldSe
 
 // String names a gap for an explanation.
 func (g Gap) String() string { return fmt.Sprintf("step %d: %s", g.Step, g.Detail) }
+
+// Controls implements pipeline.Reader. A recording made before containment
+// controls existed has no such read, and no control applied then.
+func (r *Reader) Controls(_ context.Context, org ids.OrgID, k pipeline.ControlKeys) ([]pipeline.Control, error) {
+	if err := r.otherOrg(org, "containment controls", pipeline.StepContainment); err != nil {
+		return nil, err
+	}
+	c := r.rec.Reads.Controls
+	if c == nil {
+		return nil, nil
+	}
+	if !sameKeys(c.Keys, k) {
+		return nil, r.gap("containment controls", pipeline.StepContainment, "the containment controls were read for another action")
+	}
+	return c.value()
+}
+
+func sameKeys(a ControlKeys, b pipeline.ControlKeys) bool {
+	return a.Run == b.Run && a.Agent == b.Agent && a.Connection == b.Connection && a.TargetType == b.TargetType &&
+		slices.Equal(a.Grants, b.Grants) && slices.Equal(a.Principals, b.Principals)
+}

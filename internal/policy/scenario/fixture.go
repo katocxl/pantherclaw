@@ -294,6 +294,12 @@ func (f *fixture) Containment(context.Context, ids.OrgID) (pipeline.Containment,
 	return pipeline.Containment{Epoch: 1, Now: f.now}, nil
 }
 
+// Controls implements pipeline.Reader: a scenario test decides the policy
+// alone, with no containment control.
+func (f *fixture) Controls(context.Context, ids.OrgID, pipeline.ControlKeys) ([]pipeline.Control, error) {
+	return nil, nil
+}
+
 // Definition implements pipeline.Reader: the org's ACTIVE definition.
 func (f *fixture) Definition(_ context.Context, org ids.OrgID, pin actionir.Definition) (pipeline.Pinned, error) {
 	if org != f.org || pin.Package != fixturePackage || pin.Version != fixtureVersion || pin.Digest != f.def.Digest {
