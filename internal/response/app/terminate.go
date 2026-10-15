@@ -5,6 +5,7 @@ package app
 
 import (
 	"context"
+	"slices"
 	"strconv"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -100,7 +101,14 @@ func (s *Containment) TerminateIn(ctx context.Context, tx db.TenantTx, t Termina
 	if err := q.SetResponseActionEpoch(ctx, pgtype.Int8{Int64: epoch, Valid: true}, org, a.ID); err != nil {
 		return reflexdomain.ContainResult{}, err
 	}
+	// Every run of the tree, and every agent of it: a delegated child lane's
+	// agent has routes and credentials of its own (D72).
 	p.Runs = runs
+	for _, r := range rows {
+		if !slices.Contains(p.Agents, r.AgentID) {
+			p.Agents = append(p.Agents, r.AgentID)
+		}
+	}
 	if err := planPaths(ctx, tx, a.ID, rdomain.KindTerminate, p, epoch); err != nil {
 		return reflexdomain.ContainResult{}, err
 	}

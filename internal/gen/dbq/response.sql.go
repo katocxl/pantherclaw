@@ -315,16 +315,17 @@ const attestedCredentialChangeSince = `-- name: AttestedCredentialChangeSince :o
 SELECT a.attested_at::timestamptz AS attested_at
 FROM pc.response_actions a
 JOIN pc.connections c ON c.org_id = a.org_id AND c.id::text = split_part(a.scope_id, ':', 1)
-WHERE a.org_id = $1 AND a.kind IN ('REVOKE', 'ROTATE') AND a.scope_type = 'credential'
+WHERE a.org_id = $1 AND a.kind = 'REVOKE' AND a.scope_type = 'credential'
   AND split_part(a.scope_id, ':', 1) = $2::text AND c.access_mode = 'agent_held'
   AND a.attested_at IS NOT NULL AND a.attested_at >= $3::timestamptz
 ORDER BY a.attested_at
 LIMIT 1
 `
 
-// AttestedCredentialChangeSince is the first upstream-attested revoke or
-// rotate of an agent-held connection's credential at or after a time (D61):
-// the only change that confirms a bypass route.
+// AttestedCredentialChangeSince is the first upstream-attested revoke of an
+// agent-held connection's credential at or after a time (D61, D72): the only
+// change that confirms a bypass route. A rotation leaves the agent a fresh,
+// valid credential, so it never does.
 func (q *Queries) AttestedCredentialChangeSince(ctx context.Context, orgID ids.OrgID, connectionID string, since time.Time) (time.Time, error) {
 	row := q.db.QueryRow(ctx, attestedCredentialChangeSince, orgID, connectionID, since)
 	var attested_at time.Time
