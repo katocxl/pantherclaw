@@ -143,3 +143,75 @@ func (h *Handler) proto(t signals.Transmitter) *pantherclawv1.SSFTransmitter {
 	}
 	return out
 }
+
+// GetIdentityPlaybook implements SharedSignalsServiceHandler.
+func (h *Handler) GetIdentityPlaybook(ctx context.Context, _ *pantherclawv1.GetIdentityPlaybookRequest) (
+	*pantherclawv1.GetIdentityPlaybookResponse, error,
+) {
+	pb, err := h.svc.GetPlaybook(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := &pantherclawv1.IdentityPlaybook{Enabled: pb.Enabled, Events: pb.Events, Version: int32(pb.Version)} //nolint:gosec // G115: a small counter
+	if pb.Request != nil {
+		out.RequestId = pb.Request.String()
+		out.UpdateTime = timestamppb.New(pb.UpdatedAt)
+	}
+	return &pantherclawv1.GetIdentityPlaybookResponse{Playbook: out}, nil
+}
+
+// RequestIdentityPlaybookChange implements SharedSignalsServiceHandler.
+func (h *Handler) RequestIdentityPlaybookChange(ctx context.Context, req *pantherclawv1.RequestIdentityPlaybookChangeRequest) (
+	*pantherclawv1.RequestIdentityPlaybookChangeResponse, error,
+) {
+	r, err := h.svc.RequestPlaybookChange(ctx, req.GetKind(), req.GetEvents())
+	if err != nil {
+		return nil, err
+	}
+	return &pantherclawv1.RequestIdentityPlaybookChangeResponse{Request: playbookRequest(r)}, nil
+}
+
+// ListIdentityPlaybookRequests implements SharedSignalsServiceHandler.
+func (h *Handler) ListIdentityPlaybookRequests(ctx context.Context, _ *pantherclawv1.ListIdentityPlaybookRequestsRequest) (
+	*pantherclawv1.ListIdentityPlaybookRequestsResponse, error,
+) {
+	rows, err := h.svc.PlaybookRequests(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := &pantherclawv1.ListIdentityPlaybookRequestsResponse{}
+	for _, r := range rows {
+		out.Requests = append(out.Requests, playbookRequest(r))
+	}
+	return out, nil
+}
+
+// DeclineIdentityPlaybookRequest implements SharedSignalsServiceHandler.
+func (h *Handler) DeclineIdentityPlaybookRequest(ctx context.Context, req *pantherclawv1.DeclineIdentityPlaybookRequestRequest) (
+	*pantherclawv1.DeclineIdentityPlaybookRequestResponse, error,
+) {
+	id, err := idOf(req.GetId())
+	if err != nil {
+		return nil, err
+	}
+	r, err := h.svc.DeclinePlaybookRequest(ctx, id, req.GetReason())
+	if err != nil {
+		return nil, err
+	}
+	return &pantherclawv1.DeclineIdentityPlaybookRequestResponse{Request: playbookRequest(r)}, nil
+}
+
+func playbookRequest(r signals.PlaybookRequest) *pantherclawv1.IdentityPlaybookRequest {
+	out := &pantherclawv1.IdentityPlaybookRequest{
+		Id: r.ID.String(), Kind: r.Kind, Events: r.Events, BaseVersion: int32(r.BaseVersion), //nolint:gosec // G115: a small counter
+		Required: int32(r.Required), State: r.State, RequestedBy: r.RequestedBy.String(), //nolint:gosec // G115: 1 or 2
+		CreateTime: timestamppb.New(r.CreatedAt), ExpireTime: timestamppb.New(r.ExpiresAt), DecideTime: ts(r.DecidedAt),
+		DecidedReason: r.DecidedReason, ConfirmUrl: r.URL,
+	}
+	for _, c := range r.Confirmations {
+		out.Confirmations = append(out.Confirmations, &pantherclawv1.IdentityPlaybookConfirmation{
+			PrincipalId: c.Principal.String(), CredentialId: c.Credential.String(), CreateTime: timestamppb.New(c.At),
+		})
+	}
+	return out
+}

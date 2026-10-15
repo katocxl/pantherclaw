@@ -1,0 +1,36 @@
+{{template "head" .}}
+<h1>Identity playbook: {{.Kind}}</h1>
+<p>State: <strong>{{.State}}</strong>{{with .DecidedReason}} ({{.}}){{end}}. Requested by <code>{{.RequestedBy}}</code> at {{.CreatedAt.UTC.Format "2006-01-02 15:04:05 UTC"}}; {{if eq .State "PENDING"}}expires {{.ExpiresAt.UTC.Format "2006-01-02 15:04:05 UTC"}}{{else}}{{with .DecidedAt}}ended {{.UTC.Format "2006-01-02 15:04:05 UTC"}}{{end}}{{end}}.</p>
+<dl>
+<dt>Request</dt><dd><code>{{.ID}}</code></dd>
+<dt>Playbook version it changes</dt><dd>{{.BaseVersion}}</dd>
+<dt>Events it acts on</dt><dd>{{if .EventNames}}{{range $i, $e := .EventNames}}{{if $i}}, {{end}}<code>{{$e}}</code>{{end}}{{else}}none (the playbook is turned off){{end}}</dd>
+<dt>Confirmations</dt><dd>{{len .Confirmations}} of {{.Required}}</dd>
+</dl>
+{{if .Confirmations}}
+<table>
+<thead><tr><th>Confirmed by</th><th>Security key</th><th>At</th></tr></thead>
+<tbody>
+{{range .Confirmations}}<tr><td><code>{{.Principal}}</code></td><td><code>{{.Credential}}</code></td><td>{{.At.UTC.Format "2006-01-02 15:04:05 UTC"}}</td></tr>
+{{end}}</tbody>
+</table>
+{{end}}
+{{if eq .Kind "DISABLE"}}
+<p class="note">Turning the playbook off stops it acting on new events. Containment it already applied stays until it is lifted through a restoration.</p>
+{{else}}
+<p class="alert">When the playbook is on and your identity provider reports one of these events about a person it matches by issuer and subject, PantherClaw immediately denies everything that person's authority reaches and every grant they issued, and voids their waiting approvals. A match by email alone never acts. Lifting it is a restoration with an independent reviewer.</p>
+{{end}}
+{{if .MayConfirm}}
+<h2>Confirm</h2>
+<p class="note">Your security key signs this request: the change, the organization, the events and the playbook version it changes. {{if eq .Required 2}}Two different people with two different keys must confirm it.{{end}}</p>
+<p><button type="button" class="danger" id="confirm" data-id="{{.ID}}">Confirm with your security key</button></p>
+<h2>Decline</h2>
+<p><label for="decline-reason">Reason</label></p>
+<p><textarea id="decline-reason" rows="3" cols="72" maxlength="{{.MaxReason}}" spellcheck="true"></textarea></p>
+<p><button type="button" id="decline" data-id="{{.ID}}">Decline</button></p>
+{{else}}{{if eq .State "PENDING"}}
+<p class="note">You cannot confirm this request: that needs signals.manage, a security key, and that you have not confirmed it already.</p>
+{{end}}{{end}}
+<p id="status" role="status"></p>
+<script src="/static/playbook.js"></script>
+{{template "foot" .}}

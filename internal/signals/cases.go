@@ -155,8 +155,10 @@ func (s *Service) accepted(ctx context.Context, tx db.TenantTx, r Received, entr
 		}
 		if _, err := s.notify.Enqueue(ctx, tx, napp.Message{
 			Org: r.Org, Type: "signals.event_received", DedupeKey: "signals.event_received:" + r.Event.String(),
-			Params: map[string]string{"transmitter": r.Transmitter.String(), "event": short, "user": user.String(),
-				"basis": r.MatchBasis, "case": c},
+			Params: map[string]string{
+				"transmitter": r.Transmitter.String(), "event": short, "user": user.String(),
+				"basis": r.MatchBasis, "case": c,
+			},
 		}); err != nil {
 			return err
 		}

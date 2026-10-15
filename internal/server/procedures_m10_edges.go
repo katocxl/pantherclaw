@@ -31,3 +31,15 @@ var edgesProcedures = map[string]td.Permission{
 }
 
 func init() { maps.Copy(procedurePermissions, edgesProcedures) }
+
+// playbookProcedures are the identity playbook's procedures (D38): asking
+// for or declining a change needs signals.manage (a person, checked by the
+// use case); confirming happens only on the page.
+var playbookProcedures = map[string]td.Permission{
+	pantherclawv1connect.SharedSignalsServiceGetIdentityPlaybookProcedure:            td.PermSignalsRead,
+	pantherclawv1connect.SharedSignalsServiceRequestIdentityPlaybookChangeProcedure:  td.PermSignalsManage,
+	pantherclawv1connect.SharedSignalsServiceListIdentityPlaybookRequestsProcedure:   td.PermSignalsRead,
+	pantherclawv1connect.SharedSignalsServiceDeclineIdentityPlaybookRequestProcedure: td.PermSignalsManage,
+}
+
+func init() { maps.Copy(procedurePermissions, playbookProcedures) }

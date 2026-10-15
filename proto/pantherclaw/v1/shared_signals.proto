@@ -37,6 +37,147 @@ service SharedSignalsService {
   rpc ListSSFEvents(ListSSFEventsRequest) returns (ListSSFEventsResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
+  // GetIdentityPlaybook returns the identity playbook (D38, HR-262): off by
+  // default; when on, an event of one of its types about a person matched
+  // by issuer and subject contains that person and the grants they issued
+  // and voids their waiting approvals.
+  // permission: signals.read
+  rpc GetIdentityPlaybook(GetIdentityPlaybookRequest) returns (GetIdentityPlaybookResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // RequestIdentityPlaybookChange asks to enable, change or disable the
+  // playbook (a person only). It applies only when confirmed on its page
+  // (confirm_url) with security keys: by two different people with two
+  // different keys to enable or change it, by one to disable it.
+  // permission: signals.manage
+  rpc RequestIdentityPlaybookChange(RequestIdentityPlaybookChangeRequest) returns (RequestIdentityPlaybookChangeResponse);
+  // ListIdentityPlaybookRequests lists the last 50 playbook requests.
+  // permission: signals.read
+  rpc ListIdentityPlaybookRequests(ListIdentityPlaybookRequestsRequest) returns (ListIdentityPlaybookRequestsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // DeclineIdentityPlaybookRequest ends a pending request (a person only).
+  // permission: signals.manage
+  rpc DeclineIdentityPlaybookRequest(DeclineIdentityPlaybookRequestRequest) returns (DeclineIdentityPlaybookRequestResponse);
+}
+
+// IdentityPlaybook is the org's playbook.
+message IdentityPlaybook {
+  // Whether it acts.
+  bool enabled = 1;
+  // The event type URIs it acts on.
+  repeated string events = 2;
+  // Its version (each applied request adds one).
+  int32 version = 3;
+  // The request that set it; empty when never changed.
+  string request_id = 4;
+  // When it last changed.
+  google.protobuf.Timestamp update_time = 5;
+}
+
+// IdentityPlaybookConfirmation is one person's confirmation.
+message IdentityPlaybookConfirmation {
+  // The person.
+  string principal_id = 1;
+  // The security key that signed the request's binding.
+  string credential_id = 2;
+  // When.
+  google.protobuf.Timestamp create_time = 3;
+}
+
+// IdentityPlaybookRequest is a playbook change and its confirmations.
+message IdentityPlaybookRequest {
+  // Request id.
+  string id = 1;
+  // "ENABLE", "CHANGE" or "DISABLE".
+  string kind = 2;
+  // The event type URIs it would act on (none for DISABLE).
+  repeated string events = 3;
+  // The playbook version it changes.
+  int32 base_version = 4;
+  // Confirmations required: 2 to enable or change, 1 to disable.
+  int32 required = 5;
+  // "PENDING", "APPLIED", "DECLINED", "EXPIRED" or "VOIDED".
+  string state = 6;
+  // Who asked.
+  string requested_by = 7;
+  // When it was asked and when it expires (24 hours).
+  google.protobuf.Timestamp create_time = 8;
+  // When it expires.
+  google.protobuf.Timestamp expire_time = 9;
+  // When it ended.
+  google.protobuf.Timestamp decide_time = 10;
+  // Why it ended (untrusted text for a decline).
+  string decided_reason = 11;
+  // Confirmations so far.
+  repeated IdentityPlaybookConfirmation confirmations = 12;
+  // The page where people confirm it.
+  string confirm_url = 13;
+}
+
+// GetIdentityPlaybookRequest asks for the playbook.
+message GetIdentityPlaybookRequest {}
+
+// GetIdentityPlaybookResponse returns it.
+message GetIdentityPlaybookResponse {
+  // The playbook.
+  IdentityPlaybook playbook = 1;
+}
+
+// RequestIdentityPlaybookChangeRequest describes the change.
+message RequestIdentityPlaybookChangeRequest {
+  // "ENABLE", "CHANGE" or "DISABLE".
+  string kind = 1 [(buf.validate.field).string = {
+    in: [
+      "ENABLE",
+      "CHANGE",
+      "DISABLE"
+    ]
+  }];
+  // The event type URIs to act on: 1 to 6 for ENABLE and CHANGE, none for
+  // DISABLE.
+  repeated string events = 2 [(buf.validate.field).repeated = {
+    max_items: 6
+    unique: true
+    items: {
+      string: {
+        min_len: 1
+        max_len: 256
+      }
+    }
+  }];
+}
+
+// RequestIdentityPlaybookChangeResponse returns the pending request.
+message RequestIdentityPlaybookChangeResponse {
+  // The request.
+  IdentityPlaybookRequest request = 1;
+}
+
+// ListIdentityPlaybookRequestsRequest lists requests.
+message ListIdentityPlaybookRequestsRequest {}
+
+// ListIdentityPlaybookRequestsResponse lists them, newest first.
+message ListIdentityPlaybookRequestsResponse {
+  // Requests.
+  repeated IdentityPlaybookRequest requests = 1;
+}
+
+// DeclineIdentityPlaybookRequestRequest names a request.
+message DeclineIdentityPlaybookRequestRequest {
+  // Request id.
+  string id = 1 [(buf.validate.field).string.uuid = true];
+  // Why (1 to 500 characters).
+  string reason = 2 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 500
+  }];
+}
+
+// DeclineIdentityPlaybookRequestResponse returns the request.
+message DeclineIdentityPlaybookRequestResponse {
+  // The request.
+  IdentityPlaybookRequest request = 1;
 }
 
 // SSFTransmitter is one transmitter.

@@ -32,6 +32,18 @@ func TestHR259_EdgesTablesKeepTargetsAndActivationsFixed(t *testing.T) {
 		"ssf_events":        {"id", "org_id", "transmitter_id", "jti", "event_type", "issued_at", "user_id", "match_basis", "outcome", "received_at", "expires_at"},
 		"siem_batches":      {"id", "org_id", "destination_id", "from_seq", "to_seq", "event_count", "body_bytes", "created_at"},
 		"siem_cursors":      {"org_id", "destination_id"},
+		// HR-262: what a playbook request changes, its binding, its required
+		// confirmations and its requester never change; confirmations are
+		// insert-only.
+		"identity_playbook_requests":      {"id", "org_id", "kind", "events", "base_version", "binding", "required", "requested_by", "created_at", "expires_at"},
+		"identity_playbook_confirmations": {"org_id", "request_id", "principal_id", "credential_id", "created_at"},
+		"identity_playbooks":              {"org_id"},
+	}
+	for _, table := range []string{"identity_playbook_requests", "identity_playbook_confirmations", "identity_playbooks"} {
+		var del bool
+		if err := m.Pgx().QueryRow(ctx, `SELECT has_table_privilege('pc_app', 'pc.' || $1, 'DELETE')`, table).Scan(&del); err != nil || del {
+			t.Errorf("pc_app may DELETE pc.%s: %v %v", table, del, err)
+		}
 	}
 	for table, cols := range fixed {
 		for _, c := range cols {
@@ -116,7 +128,7 @@ func TestHR259_EdgesTablesKeepTargetsAndActivationsFixed(t *testing.T) {
 		VALUES ($1, $2, $3, 'j2', 'https://x', now(), 'ACCEPTED')`, org, ids.NewV7(), tx)
 
 	var tables []string
-	rows, err := m.Pgx().Query(ctx, `SELECT tablename FROM pg_tables WHERE schemaname = 'pc' AND (tablename LIKE 'siem_%' OR tablename LIKE 'ssf_%')`)
+	rows, err := m.Pgx().Query(ctx, `SELECT tablename FROM pg_tables WHERE schemaname = 'pc' AND (tablename LIKE 'siem_%' OR tablename LIKE 'ssf_%' OR tablename LIKE 'identity_playbook%')`)
 	if err != nil {
 		t.Fatal(err)
 	}

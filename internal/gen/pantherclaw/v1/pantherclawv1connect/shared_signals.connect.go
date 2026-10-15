@@ -42,6 +42,18 @@ const (
 	// SharedSignalsServiceListSSFEventsProcedure is the procedure name of the SharedSignalsService's
 	// ListSSFEvents RPC.
 	SharedSignalsServiceListSSFEventsProcedure = "/pantherclaw.v1.SharedSignalsService/ListSSFEvents"
+	// SharedSignalsServiceGetIdentityPlaybookProcedure is the procedure name of the
+	// SharedSignalsService's GetIdentityPlaybook RPC.
+	SharedSignalsServiceGetIdentityPlaybookProcedure = "/pantherclaw.v1.SharedSignalsService/GetIdentityPlaybook"
+	// SharedSignalsServiceRequestIdentityPlaybookChangeProcedure is the procedure name of the
+	// SharedSignalsService's RequestIdentityPlaybookChange RPC.
+	SharedSignalsServiceRequestIdentityPlaybookChangeProcedure = "/pantherclaw.v1.SharedSignalsService/RequestIdentityPlaybookChange"
+	// SharedSignalsServiceListIdentityPlaybookRequestsProcedure is the procedure name of the
+	// SharedSignalsService's ListIdentityPlaybookRequests RPC.
+	SharedSignalsServiceListIdentityPlaybookRequestsProcedure = "/pantherclaw.v1.SharedSignalsService/ListIdentityPlaybookRequests"
+	// SharedSignalsServiceDeclineIdentityPlaybookRequestProcedure is the procedure name of the
+	// SharedSignalsService's DeclineIdentityPlaybookRequest RPC.
+	SharedSignalsServiceDeclineIdentityPlaybookRequestProcedure = "/pantherclaw.v1.SharedSignalsService/DeclineIdentityPlaybookRequest"
 )
 
 var (
@@ -83,6 +95,36 @@ var (
 			IdempotencyLevel: connect.IdempotencyNoSideEffects,
 		}
 	})
+	sharedSignalsServiceGetIdentityPlaybookSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_pantherclaw_v1_shared_signals_proto.Services().ByName("SharedSignalsService").Methods().ByName("GetIdentityPlaybook"),
+			Procedure:        SharedSignalsServiceGetIdentityPlaybookProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
+	sharedSignalsServiceRequestIdentityPlaybookChangeSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_pantherclaw_v1_shared_signals_proto.Services().ByName("SharedSignalsService").Methods().ByName("RequestIdentityPlaybookChange"),
+			Procedure:  SharedSignalsServiceRequestIdentityPlaybookChangeProcedure,
+		}
+	})
+	sharedSignalsServiceListIdentityPlaybookRequestsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_pantherclaw_v1_shared_signals_proto.Services().ByName("SharedSignalsService").Methods().ByName("ListIdentityPlaybookRequests"),
+			Procedure:        SharedSignalsServiceListIdentityPlaybookRequestsProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
+	sharedSignalsServiceDeclineIdentityPlaybookRequestSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_pantherclaw_v1_shared_signals_proto.Services().ByName("SharedSignalsService").Methods().ByName("DeclineIdentityPlaybookRequest"),
+			Procedure:  SharedSignalsServiceDeclineIdentityPlaybookRequestProcedure,
+		}
+	})
 )
 
 // SharedSignalsServiceClient is a client for the pantherclaw.v1.SharedSignalsService service.
@@ -103,6 +145,24 @@ type SharedSignalsServiceClient interface {
 	// ListSSFEvents lists a transmitter's last 50 received events.
 	// permission: signals.read
 	ListSSFEvents(context.Context, *v1.ListSSFEventsRequest) (*v1.ListSSFEventsResponse, error)
+	// GetIdentityPlaybook returns the identity playbook (D38, HR-262): off by
+	// default; when on, an event of one of its types about a person matched
+	// by issuer and subject contains that person and the grants they issued
+	// and voids their waiting approvals.
+	// permission: signals.read
+	GetIdentityPlaybook(context.Context, *v1.GetIdentityPlaybookRequest) (*v1.GetIdentityPlaybookResponse, error)
+	// RequestIdentityPlaybookChange asks to enable, change or disable the
+	// playbook (a person only). It applies only when confirmed on its page
+	// (confirm_url) with security keys: by two different people with two
+	// different keys to enable or change it, by one to disable it.
+	// permission: signals.manage
+	RequestIdentityPlaybookChange(context.Context, *v1.RequestIdentityPlaybookChangeRequest) (*v1.RequestIdentityPlaybookChangeResponse, error)
+	// ListIdentityPlaybookRequests lists the last 50 playbook requests.
+	// permission: signals.read
+	ListIdentityPlaybookRequests(context.Context, *v1.ListIdentityPlaybookRequestsRequest) (*v1.ListIdentityPlaybookRequestsResponse, error)
+	// DeclineIdentityPlaybookRequest ends a pending request (a person only).
+	// permission: signals.manage
+	DeclineIdentityPlaybookRequest(context.Context, *v1.DeclineIdentityPlaybookRequestRequest) (*v1.DeclineIdentityPlaybookRequestResponse, error)
 }
 
 // NewSharedSignalsServiceClient constructs a client for the pantherclaw.v1.SharedSignalsService
@@ -130,6 +190,24 @@ type SharedSignalsServiceHandler interface {
 	// ListSSFEvents lists a transmitter's last 50 received events.
 	// permission: signals.read
 	ListSSFEvents(context.Context, *v1.ListSSFEventsRequest) (*v1.ListSSFEventsResponse, error)
+	// GetIdentityPlaybook returns the identity playbook (D38, HR-262): off by
+	// default; when on, an event of one of its types about a person matched
+	// by issuer and subject contains that person and the grants they issued
+	// and voids their waiting approvals.
+	// permission: signals.read
+	GetIdentityPlaybook(context.Context, *v1.GetIdentityPlaybookRequest) (*v1.GetIdentityPlaybookResponse, error)
+	// RequestIdentityPlaybookChange asks to enable, change or disable the
+	// playbook (a person only). It applies only when confirmed on its page
+	// (confirm_url) with security keys: by two different people with two
+	// different keys to enable or change it, by one to disable it.
+	// permission: signals.manage
+	RequestIdentityPlaybookChange(context.Context, *v1.RequestIdentityPlaybookChangeRequest) (*v1.RequestIdentityPlaybookChangeResponse, error)
+	// ListIdentityPlaybookRequests lists the last 50 playbook requests.
+	// permission: signals.read
+	ListIdentityPlaybookRequests(context.Context, *v1.ListIdentityPlaybookRequestsRequest) (*v1.ListIdentityPlaybookRequestsResponse, error)
+	// DeclineIdentityPlaybookRequest ends a pending request (a person only).
+	// permission: signals.manage
+	DeclineIdentityPlaybookRequest(context.Context, *v1.DeclineIdentityPlaybookRequestRequest) (*v1.DeclineIdentityPlaybookRequestResponse, error)
 }
 
 // RegisterSharedSignalsServiceHandler registers svc as the pantherclaw.v1.SharedSignalsService
@@ -142,6 +220,10 @@ func RegisterSharedSignalsServiceHandler(server *connect.Server, svc SharedSigna
 		connect.Method{Spec: sharedSignalsServiceListSSFTransmittersSpec(), Handler: adapter.listSSFTransmitters},
 		connect.Method{Spec: sharedSignalsServiceSetSSFTransmitterStateSpec(), Handler: adapter.setSSFTransmitterState},
 		connect.Method{Spec: sharedSignalsServiceListSSFEventsSpec(), Handler: adapter.listSSFEvents},
+		connect.Method{Spec: sharedSignalsServiceGetIdentityPlaybookSpec(), Handler: adapter.getIdentityPlaybook},
+		connect.Method{Spec: sharedSignalsServiceRequestIdentityPlaybookChangeSpec(), Handler: adapter.requestIdentityPlaybookChange},
+		connect.Method{Spec: sharedSignalsServiceListIdentityPlaybookRequestsSpec(), Handler: adapter.listIdentityPlaybookRequests},
+		connect.Method{Spec: sharedSignalsServiceDeclineIdentityPlaybookRequestSpec(), Handler: adapter.declineIdentityPlaybookRequest},
 	)
 }
 
@@ -166,6 +248,22 @@ func (UnimplementedSharedSignalsServiceHandler) SetSSFTransmitterState(context.C
 
 func (UnimplementedSharedSignalsServiceHandler) ListSSFEvents(context.Context, *v1.ListSSFEventsRequest) (*v1.ListSSFEventsResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.SharedSignalsService.ListSSFEvents is not implemented")
+}
+
+func (UnimplementedSharedSignalsServiceHandler) GetIdentityPlaybook(context.Context, *v1.GetIdentityPlaybookRequest) (*v1.GetIdentityPlaybookResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.SharedSignalsService.GetIdentityPlaybook is not implemented")
+}
+
+func (UnimplementedSharedSignalsServiceHandler) RequestIdentityPlaybookChange(context.Context, *v1.RequestIdentityPlaybookChangeRequest) (*v1.RequestIdentityPlaybookChangeResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.SharedSignalsService.RequestIdentityPlaybookChange is not implemented")
+}
+
+func (UnimplementedSharedSignalsServiceHandler) ListIdentityPlaybookRequests(context.Context, *v1.ListIdentityPlaybookRequestsRequest) (*v1.ListIdentityPlaybookRequestsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.SharedSignalsService.ListIdentityPlaybookRequests is not implemented")
+}
+
+func (UnimplementedSharedSignalsServiceHandler) DeclineIdentityPlaybookRequest(context.Context, *v1.DeclineIdentityPlaybookRequestRequest) (*v1.DeclineIdentityPlaybookRequestResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.SharedSignalsService.DeclineIdentityPlaybookRequest is not implemented")
 }
 
 type sharedSignalsServiceClient struct {
@@ -207,6 +305,38 @@ func (c *sharedSignalsServiceClient) SetSSFTransmitterState(ctx context.Context,
 func (c *sharedSignalsServiceClient) ListSSFEvents(ctx context.Context, req *v1.ListSSFEventsRequest) (*v1.ListSSFEventsResponse, error) {
 	var res v1.ListSSFEventsResponse
 	if err := c.client.CallUnary(ctx, sharedSignalsServiceListSSFEventsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *sharedSignalsServiceClient) GetIdentityPlaybook(ctx context.Context, req *v1.GetIdentityPlaybookRequest) (*v1.GetIdentityPlaybookResponse, error) {
+	var res v1.GetIdentityPlaybookResponse
+	if err := c.client.CallUnary(ctx, sharedSignalsServiceGetIdentityPlaybookSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *sharedSignalsServiceClient) RequestIdentityPlaybookChange(ctx context.Context, req *v1.RequestIdentityPlaybookChangeRequest) (*v1.RequestIdentityPlaybookChangeResponse, error) {
+	var res v1.RequestIdentityPlaybookChangeResponse
+	if err := c.client.CallUnary(ctx, sharedSignalsServiceRequestIdentityPlaybookChangeSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *sharedSignalsServiceClient) ListIdentityPlaybookRequests(ctx context.Context, req *v1.ListIdentityPlaybookRequestsRequest) (*v1.ListIdentityPlaybookRequestsResponse, error) {
+	var res v1.ListIdentityPlaybookRequestsResponse
+	if err := c.client.CallUnary(ctx, sharedSignalsServiceListIdentityPlaybookRequestsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *sharedSignalsServiceClient) DeclineIdentityPlaybookRequest(ctx context.Context, req *v1.DeclineIdentityPlaybookRequestRequest) (*v1.DeclineIdentityPlaybookRequestResponse, error) {
+	var res v1.DeclineIdentityPlaybookRequestResponse
+	if err := c.client.CallUnary(ctx, sharedSignalsServiceDeclineIdentityPlaybookRequestSpec(), req, &res); err != nil {
 		return nil, err
 	}
 	return &res, nil
@@ -268,6 +398,54 @@ func (h sharedSignalsServiceHandler) listSSFEvents(ctx context.Context, _ connec
 		return err
 	}
 	res, err := h.svc.ListSSFEvents(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h sharedSignalsServiceHandler) getIdentityPlaybook(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetIdentityPlaybookRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetIdentityPlaybook(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h sharedSignalsServiceHandler) requestIdentityPlaybookChange(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.RequestIdentityPlaybookChangeRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.RequestIdentityPlaybookChange(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h sharedSignalsServiceHandler) listIdentityPlaybookRequests(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListIdentityPlaybookRequestsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListIdentityPlaybookRequests(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h sharedSignalsServiceHandler) declineIdentityPlaybookRequest(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.DeclineIdentityPlaybookRequestRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.DeclineIdentityPlaybookRequest(ctx, &req)
 	if err != nil {
 		return err
 	}

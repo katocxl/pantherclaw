@@ -26,6 +26,675 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+// IdentityPlaybook is the org's playbook.
+type IdentityPlaybook struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Whether it acts.
+	Enabled bool `protobuf:"varint,1,opt,name=enabled,proto3" json:"enabled,omitempty"`
+	// The event type URIs it acts on.
+	Events []string `protobuf:"bytes,2,rep,name=events,proto3" json:"events,omitempty"`
+	// Its version (each applied request adds one).
+	Version int32 `protobuf:"varint,3,opt,name=version,proto3" json:"version,omitempty"`
+	// The request that set it; empty when never changed.
+	RequestId string `protobuf:"bytes,4,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+	// When it last changed.
+	UpdateTime    *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=update_time,json=updateTime,proto3" json:"update_time,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *IdentityPlaybook) Reset() {
+	*x = IdentityPlaybook{}
+	mi := &file_pantherclaw_v1_shared_signals_proto_msgTypes[0]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *IdentityPlaybook) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*IdentityPlaybook) ProtoMessage() {}
+
+func (x *IdentityPlaybook) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_shared_signals_proto_msgTypes[0]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use IdentityPlaybook.ProtoReflect.Descriptor instead.
+func (*IdentityPlaybook) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_shared_signals_proto_rawDescGZIP(), []int{0}
+}
+
+func (x *IdentityPlaybook) GetEnabled() bool {
+	if x != nil {
+		return x.Enabled
+	}
+	return false
+}
+
+func (x *IdentityPlaybook) GetEvents() []string {
+	if x != nil {
+		return x.Events
+	}
+	return nil
+}
+
+func (x *IdentityPlaybook) GetVersion() int32 {
+	if x != nil {
+		return x.Version
+	}
+	return 0
+}
+
+func (x *IdentityPlaybook) GetRequestId() string {
+	if x != nil {
+		return x.RequestId
+	}
+	return ""
+}
+
+func (x *IdentityPlaybook) GetUpdateTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.UpdateTime
+	}
+	return nil
+}
+
+// IdentityPlaybookConfirmation is one person's confirmation.
+type IdentityPlaybookConfirmation struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The person.
+	PrincipalId string `protobuf:"bytes,1,opt,name=principal_id,json=principalId,proto3" json:"principal_id,omitempty"`
+	// The security key that signed the request's binding.
+	CredentialId string `protobuf:"bytes,2,opt,name=credential_id,json=credentialId,proto3" json:"credential_id,omitempty"`
+	// When.
+	CreateTime    *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=create_time,json=createTime,proto3" json:"create_time,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *IdentityPlaybookConfirmation) Reset() {
+	*x = IdentityPlaybookConfirmation{}
+	mi := &file_pantherclaw_v1_shared_signals_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *IdentityPlaybookConfirmation) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*IdentityPlaybookConfirmation) ProtoMessage() {}
+
+func (x *IdentityPlaybookConfirmation) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_shared_signals_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use IdentityPlaybookConfirmation.ProtoReflect.Descriptor instead.
+func (*IdentityPlaybookConfirmation) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_shared_signals_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *IdentityPlaybookConfirmation) GetPrincipalId() string {
+	if x != nil {
+		return x.PrincipalId
+	}
+	return ""
+}
+
+func (x *IdentityPlaybookConfirmation) GetCredentialId() string {
+	if x != nil {
+		return x.CredentialId
+	}
+	return ""
+}
+
+func (x *IdentityPlaybookConfirmation) GetCreateTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.CreateTime
+	}
+	return nil
+}
+
+// IdentityPlaybookRequest is a playbook change and its confirmations.
+type IdentityPlaybookRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Request id.
+	Id string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	// "ENABLE", "CHANGE" or "DISABLE".
+	Kind string `protobuf:"bytes,2,opt,name=kind,proto3" json:"kind,omitempty"`
+	// The event type URIs it would act on (none for DISABLE).
+	Events []string `protobuf:"bytes,3,rep,name=events,proto3" json:"events,omitempty"`
+	// The playbook version it changes.
+	BaseVersion int32 `protobuf:"varint,4,opt,name=base_version,json=baseVersion,proto3" json:"base_version,omitempty"`
+	// Confirmations required: 2 to enable or change, 1 to disable.
+	Required int32 `protobuf:"varint,5,opt,name=required,proto3" json:"required,omitempty"`
+	// "PENDING", "APPLIED", "DECLINED", "EXPIRED" or "VOIDED".
+	State string `protobuf:"bytes,6,opt,name=state,proto3" json:"state,omitempty"`
+	// Who asked.
+	RequestedBy string `protobuf:"bytes,7,opt,name=requested_by,json=requestedBy,proto3" json:"requested_by,omitempty"`
+	// When it was asked and when it expires (24 hours).
+	CreateTime *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=create_time,json=createTime,proto3" json:"create_time,omitempty"`
+	// When it expires.
+	ExpireTime *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=expire_time,json=expireTime,proto3" json:"expire_time,omitempty"`
+	// When it ended.
+	DecideTime *timestamppb.Timestamp `protobuf:"bytes,10,opt,name=decide_time,json=decideTime,proto3" json:"decide_time,omitempty"`
+	// Why it ended (untrusted text for a decline).
+	DecidedReason string `protobuf:"bytes,11,opt,name=decided_reason,json=decidedReason,proto3" json:"decided_reason,omitempty"`
+	// Confirmations so far.
+	Confirmations []*IdentityPlaybookConfirmation `protobuf:"bytes,12,rep,name=confirmations,proto3" json:"confirmations,omitempty"`
+	// The page where people confirm it.
+	ConfirmUrl    string `protobuf:"bytes,13,opt,name=confirm_url,json=confirmUrl,proto3" json:"confirm_url,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *IdentityPlaybookRequest) Reset() {
+	*x = IdentityPlaybookRequest{}
+	mi := &file_pantherclaw_v1_shared_signals_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *IdentityPlaybookRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*IdentityPlaybookRequest) ProtoMessage() {}
+
+func (x *IdentityPlaybookRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_shared_signals_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use IdentityPlaybookRequest.ProtoReflect.Descriptor instead.
+func (*IdentityPlaybookRequest) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_shared_signals_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *IdentityPlaybookRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *IdentityPlaybookRequest) GetKind() string {
+	if x != nil {
+		return x.Kind
+	}
+	return ""
+}
+
+func (x *IdentityPlaybookRequest) GetEvents() []string {
+	if x != nil {
+		return x.Events
+	}
+	return nil
+}
+
+func (x *IdentityPlaybookRequest) GetBaseVersion() int32 {
+	if x != nil {
+		return x.BaseVersion
+	}
+	return 0
+}
+
+func (x *IdentityPlaybookRequest) GetRequired() int32 {
+	if x != nil {
+		return x.Required
+	}
+	return 0
+}
+
+func (x *IdentityPlaybookRequest) GetState() string {
+	if x != nil {
+		return x.State
+	}
+	return ""
+}
+
+func (x *IdentityPlaybookRequest) GetRequestedBy() string {
+	if x != nil {
+		return x.RequestedBy
+	}
+	return ""
+}
+
+func (x *IdentityPlaybookRequest) GetCreateTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.CreateTime
+	}
+	return nil
+}
+
+func (x *IdentityPlaybookRequest) GetExpireTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ExpireTime
+	}
+	return nil
+}
+
+func (x *IdentityPlaybookRequest) GetDecideTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.DecideTime
+	}
+	return nil
+}
+
+func (x *IdentityPlaybookRequest) GetDecidedReason() string {
+	if x != nil {
+		return x.DecidedReason
+	}
+	return ""
+}
+
+func (x *IdentityPlaybookRequest) GetConfirmations() []*IdentityPlaybookConfirmation {
+	if x != nil {
+		return x.Confirmations
+	}
+	return nil
+}
+
+func (x *IdentityPlaybookRequest) GetConfirmUrl() string {
+	if x != nil {
+		return x.ConfirmUrl
+	}
+	return ""
+}
+
+// GetIdentityPlaybookRequest asks for the playbook.
+type GetIdentityPlaybookRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetIdentityPlaybookRequest) Reset() {
+	*x = GetIdentityPlaybookRequest{}
+	mi := &file_pantherclaw_v1_shared_signals_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetIdentityPlaybookRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetIdentityPlaybookRequest) ProtoMessage() {}
+
+func (x *GetIdentityPlaybookRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_shared_signals_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetIdentityPlaybookRequest.ProtoReflect.Descriptor instead.
+func (*GetIdentityPlaybookRequest) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_shared_signals_proto_rawDescGZIP(), []int{3}
+}
+
+// GetIdentityPlaybookResponse returns it.
+type GetIdentityPlaybookResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The playbook.
+	Playbook      *IdentityPlaybook `protobuf:"bytes,1,opt,name=playbook,proto3" json:"playbook,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetIdentityPlaybookResponse) Reset() {
+	*x = GetIdentityPlaybookResponse{}
+	mi := &file_pantherclaw_v1_shared_signals_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetIdentityPlaybookResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetIdentityPlaybookResponse) ProtoMessage() {}
+
+func (x *GetIdentityPlaybookResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_shared_signals_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetIdentityPlaybookResponse.ProtoReflect.Descriptor instead.
+func (*GetIdentityPlaybookResponse) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_shared_signals_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *GetIdentityPlaybookResponse) GetPlaybook() *IdentityPlaybook {
+	if x != nil {
+		return x.Playbook
+	}
+	return nil
+}
+
+// RequestIdentityPlaybookChangeRequest describes the change.
+type RequestIdentityPlaybookChangeRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// "ENABLE", "CHANGE" or "DISABLE".
+	Kind string `protobuf:"bytes,1,opt,name=kind,proto3" json:"kind,omitempty"`
+	// The event type URIs to act on: 1 to 6 for ENABLE and CHANGE, none for
+	// DISABLE.
+	Events        []string `protobuf:"bytes,2,rep,name=events,proto3" json:"events,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RequestIdentityPlaybookChangeRequest) Reset() {
+	*x = RequestIdentityPlaybookChangeRequest{}
+	mi := &file_pantherclaw_v1_shared_signals_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RequestIdentityPlaybookChangeRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RequestIdentityPlaybookChangeRequest) ProtoMessage() {}
+
+func (x *RequestIdentityPlaybookChangeRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_shared_signals_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RequestIdentityPlaybookChangeRequest.ProtoReflect.Descriptor instead.
+func (*RequestIdentityPlaybookChangeRequest) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_shared_signals_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *RequestIdentityPlaybookChangeRequest) GetKind() string {
+	if x != nil {
+		return x.Kind
+	}
+	return ""
+}
+
+func (x *RequestIdentityPlaybookChangeRequest) GetEvents() []string {
+	if x != nil {
+		return x.Events
+	}
+	return nil
+}
+
+// RequestIdentityPlaybookChangeResponse returns the pending request.
+type RequestIdentityPlaybookChangeResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The request.
+	Request       *IdentityPlaybookRequest `protobuf:"bytes,1,opt,name=request,proto3" json:"request,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RequestIdentityPlaybookChangeResponse) Reset() {
+	*x = RequestIdentityPlaybookChangeResponse{}
+	mi := &file_pantherclaw_v1_shared_signals_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RequestIdentityPlaybookChangeResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RequestIdentityPlaybookChangeResponse) ProtoMessage() {}
+
+func (x *RequestIdentityPlaybookChangeResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_shared_signals_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RequestIdentityPlaybookChangeResponse.ProtoReflect.Descriptor instead.
+func (*RequestIdentityPlaybookChangeResponse) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_shared_signals_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *RequestIdentityPlaybookChangeResponse) GetRequest() *IdentityPlaybookRequest {
+	if x != nil {
+		return x.Request
+	}
+	return nil
+}
+
+// ListIdentityPlaybookRequestsRequest lists requests.
+type ListIdentityPlaybookRequestsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListIdentityPlaybookRequestsRequest) Reset() {
+	*x = ListIdentityPlaybookRequestsRequest{}
+	mi := &file_pantherclaw_v1_shared_signals_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListIdentityPlaybookRequestsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListIdentityPlaybookRequestsRequest) ProtoMessage() {}
+
+func (x *ListIdentityPlaybookRequestsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_shared_signals_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListIdentityPlaybookRequestsRequest.ProtoReflect.Descriptor instead.
+func (*ListIdentityPlaybookRequestsRequest) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_shared_signals_proto_rawDescGZIP(), []int{7}
+}
+
+// ListIdentityPlaybookRequestsResponse lists them, newest first.
+type ListIdentityPlaybookRequestsResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Requests.
+	Requests      []*IdentityPlaybookRequest `protobuf:"bytes,1,rep,name=requests,proto3" json:"requests,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListIdentityPlaybookRequestsResponse) Reset() {
+	*x = ListIdentityPlaybookRequestsResponse{}
+	mi := &file_pantherclaw_v1_shared_signals_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListIdentityPlaybookRequestsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListIdentityPlaybookRequestsResponse) ProtoMessage() {}
+
+func (x *ListIdentityPlaybookRequestsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_shared_signals_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListIdentityPlaybookRequestsResponse.ProtoReflect.Descriptor instead.
+func (*ListIdentityPlaybookRequestsResponse) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_shared_signals_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *ListIdentityPlaybookRequestsResponse) GetRequests() []*IdentityPlaybookRequest {
+	if x != nil {
+		return x.Requests
+	}
+	return nil
+}
+
+// DeclineIdentityPlaybookRequestRequest names a request.
+type DeclineIdentityPlaybookRequestRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Request id.
+	Id string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	// Why (1 to 500 characters).
+	Reason        string `protobuf:"bytes,2,opt,name=reason,proto3" json:"reason,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeclineIdentityPlaybookRequestRequest) Reset() {
+	*x = DeclineIdentityPlaybookRequestRequest{}
+	mi := &file_pantherclaw_v1_shared_signals_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeclineIdentityPlaybookRequestRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeclineIdentityPlaybookRequestRequest) ProtoMessage() {}
+
+func (x *DeclineIdentityPlaybookRequestRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_shared_signals_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeclineIdentityPlaybookRequestRequest.ProtoReflect.Descriptor instead.
+func (*DeclineIdentityPlaybookRequestRequest) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_shared_signals_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *DeclineIdentityPlaybookRequestRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *DeclineIdentityPlaybookRequestRequest) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
+// DeclineIdentityPlaybookRequestResponse returns the request.
+type DeclineIdentityPlaybookRequestResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The request.
+	Request       *IdentityPlaybookRequest `protobuf:"bytes,1,opt,name=request,proto3" json:"request,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeclineIdentityPlaybookRequestResponse) Reset() {
+	*x = DeclineIdentityPlaybookRequestResponse{}
+	mi := &file_pantherclaw_v1_shared_signals_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeclineIdentityPlaybookRequestResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeclineIdentityPlaybookRequestResponse) ProtoMessage() {}
+
+func (x *DeclineIdentityPlaybookRequestResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_shared_signals_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeclineIdentityPlaybookRequestResponse.ProtoReflect.Descriptor instead.
+func (*DeclineIdentityPlaybookRequestResponse) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_shared_signals_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *DeclineIdentityPlaybookRequestResponse) GetRequest() *IdentityPlaybookRequest {
+	if x != nil {
+		return x.Request
+	}
+	return nil
+}
+
 // SSFTransmitter is one transmitter.
 type SSFTransmitter struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -69,7 +738,7 @@ type SSFTransmitter struct {
 
 func (x *SSFTransmitter) Reset() {
 	*x = SSFTransmitter{}
-	mi := &file_pantherclaw_v1_shared_signals_proto_msgTypes[0]
+	mi := &file_pantherclaw_v1_shared_signals_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -81,7 +750,7 @@ func (x *SSFTransmitter) String() string {
 func (*SSFTransmitter) ProtoMessage() {}
 
 func (x *SSFTransmitter) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_shared_signals_proto_msgTypes[0]
+	mi := &file_pantherclaw_v1_shared_signals_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -94,7 +763,7 @@ func (x *SSFTransmitter) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SSFTransmitter.ProtoReflect.Descriptor instead.
 func (*SSFTransmitter) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_shared_signals_proto_rawDescGZIP(), []int{0}
+	return file_pantherclaw_v1_shared_signals_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *SSFTransmitter) GetId() string {
@@ -233,7 +902,7 @@ type CreateSSFTransmitterRequest struct {
 
 func (x *CreateSSFTransmitterRequest) Reset() {
 	*x = CreateSSFTransmitterRequest{}
-	mi := &file_pantherclaw_v1_shared_signals_proto_msgTypes[1]
+	mi := &file_pantherclaw_v1_shared_signals_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -245,7 +914,7 @@ func (x *CreateSSFTransmitterRequest) String() string {
 func (*CreateSSFTransmitterRequest) ProtoMessage() {}
 
 func (x *CreateSSFTransmitterRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_shared_signals_proto_msgTypes[1]
+	mi := &file_pantherclaw_v1_shared_signals_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -258,7 +927,7 @@ func (x *CreateSSFTransmitterRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateSSFTransmitterRequest.ProtoReflect.Descriptor instead.
 func (*CreateSSFTransmitterRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_shared_signals_proto_rawDescGZIP(), []int{1}
+	return file_pantherclaw_v1_shared_signals_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *CreateSSFTransmitterRequest) GetName() string {
@@ -300,7 +969,7 @@ type CreateSSFTransmitterResponse struct {
 
 func (x *CreateSSFTransmitterResponse) Reset() {
 	*x = CreateSSFTransmitterResponse{}
-	mi := &file_pantherclaw_v1_shared_signals_proto_msgTypes[2]
+	mi := &file_pantherclaw_v1_shared_signals_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -312,7 +981,7 @@ func (x *CreateSSFTransmitterResponse) String() string {
 func (*CreateSSFTransmitterResponse) ProtoMessage() {}
 
 func (x *CreateSSFTransmitterResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_shared_signals_proto_msgTypes[2]
+	mi := &file_pantherclaw_v1_shared_signals_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -325,7 +994,7 @@ func (x *CreateSSFTransmitterResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateSSFTransmitterResponse.ProtoReflect.Descriptor instead.
 func (*CreateSSFTransmitterResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_shared_signals_proto_rawDescGZIP(), []int{2}
+	return file_pantherclaw_v1_shared_signals_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *CreateSSFTransmitterResponse) GetTransmitter() *SSFTransmitter {
@@ -346,7 +1015,7 @@ type GetSSFTransmitterRequest struct {
 
 func (x *GetSSFTransmitterRequest) Reset() {
 	*x = GetSSFTransmitterRequest{}
-	mi := &file_pantherclaw_v1_shared_signals_proto_msgTypes[3]
+	mi := &file_pantherclaw_v1_shared_signals_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -358,7 +1027,7 @@ func (x *GetSSFTransmitterRequest) String() string {
 func (*GetSSFTransmitterRequest) ProtoMessage() {}
 
 func (x *GetSSFTransmitterRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_shared_signals_proto_msgTypes[3]
+	mi := &file_pantherclaw_v1_shared_signals_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -371,7 +1040,7 @@ func (x *GetSSFTransmitterRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetSSFTransmitterRequest.ProtoReflect.Descriptor instead.
 func (*GetSSFTransmitterRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_shared_signals_proto_rawDescGZIP(), []int{3}
+	return file_pantherclaw_v1_shared_signals_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *GetSSFTransmitterRequest) GetId() string {
@@ -392,7 +1061,7 @@ type GetSSFTransmitterResponse struct {
 
 func (x *GetSSFTransmitterResponse) Reset() {
 	*x = GetSSFTransmitterResponse{}
-	mi := &file_pantherclaw_v1_shared_signals_proto_msgTypes[4]
+	mi := &file_pantherclaw_v1_shared_signals_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -404,7 +1073,7 @@ func (x *GetSSFTransmitterResponse) String() string {
 func (*GetSSFTransmitterResponse) ProtoMessage() {}
 
 func (x *GetSSFTransmitterResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_shared_signals_proto_msgTypes[4]
+	mi := &file_pantherclaw_v1_shared_signals_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -417,7 +1086,7 @@ func (x *GetSSFTransmitterResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetSSFTransmitterResponse.ProtoReflect.Descriptor instead.
 func (*GetSSFTransmitterResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_shared_signals_proto_rawDescGZIP(), []int{4}
+	return file_pantherclaw_v1_shared_signals_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *GetSSFTransmitterResponse) GetTransmitter() *SSFTransmitter {
@@ -440,7 +1109,7 @@ type ListSSFTransmittersRequest struct {
 
 func (x *ListSSFTransmittersRequest) Reset() {
 	*x = ListSSFTransmittersRequest{}
-	mi := &file_pantherclaw_v1_shared_signals_proto_msgTypes[5]
+	mi := &file_pantherclaw_v1_shared_signals_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -452,7 +1121,7 @@ func (x *ListSSFTransmittersRequest) String() string {
 func (*ListSSFTransmittersRequest) ProtoMessage() {}
 
 func (x *ListSSFTransmittersRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_shared_signals_proto_msgTypes[5]
+	mi := &file_pantherclaw_v1_shared_signals_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -465,7 +1134,7 @@ func (x *ListSSFTransmittersRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListSSFTransmittersRequest.ProtoReflect.Descriptor instead.
 func (*ListSSFTransmittersRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_shared_signals_proto_rawDescGZIP(), []int{5}
+	return file_pantherclaw_v1_shared_signals_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *ListSSFTransmittersRequest) GetPageSize() int32 {
@@ -495,7 +1164,7 @@ type ListSSFTransmittersResponse struct {
 
 func (x *ListSSFTransmittersResponse) Reset() {
 	*x = ListSSFTransmittersResponse{}
-	mi := &file_pantherclaw_v1_shared_signals_proto_msgTypes[6]
+	mi := &file_pantherclaw_v1_shared_signals_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -507,7 +1176,7 @@ func (x *ListSSFTransmittersResponse) String() string {
 func (*ListSSFTransmittersResponse) ProtoMessage() {}
 
 func (x *ListSSFTransmittersResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_shared_signals_proto_msgTypes[6]
+	mi := &file_pantherclaw_v1_shared_signals_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -520,7 +1189,7 @@ func (x *ListSSFTransmittersResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListSSFTransmittersResponse.ProtoReflect.Descriptor instead.
 func (*ListSSFTransmittersResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_shared_signals_proto_rawDescGZIP(), []int{6}
+	return file_pantherclaw_v1_shared_signals_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *ListSSFTransmittersResponse) GetTransmitters() []*SSFTransmitter {
@@ -550,7 +1219,7 @@ type SetSSFTransmitterStateRequest struct {
 
 func (x *SetSSFTransmitterStateRequest) Reset() {
 	*x = SetSSFTransmitterStateRequest{}
-	mi := &file_pantherclaw_v1_shared_signals_proto_msgTypes[7]
+	mi := &file_pantherclaw_v1_shared_signals_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -562,7 +1231,7 @@ func (x *SetSSFTransmitterStateRequest) String() string {
 func (*SetSSFTransmitterStateRequest) ProtoMessage() {}
 
 func (x *SetSSFTransmitterStateRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_shared_signals_proto_msgTypes[7]
+	mi := &file_pantherclaw_v1_shared_signals_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -575,7 +1244,7 @@ func (x *SetSSFTransmitterStateRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetSSFTransmitterStateRequest.ProtoReflect.Descriptor instead.
 func (*SetSSFTransmitterStateRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_shared_signals_proto_rawDescGZIP(), []int{7}
+	return file_pantherclaw_v1_shared_signals_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *SetSSFTransmitterStateRequest) GetId() string {
@@ -603,7 +1272,7 @@ type SetSSFTransmitterStateResponse struct {
 
 func (x *SetSSFTransmitterStateResponse) Reset() {
 	*x = SetSSFTransmitterStateResponse{}
-	mi := &file_pantherclaw_v1_shared_signals_proto_msgTypes[8]
+	mi := &file_pantherclaw_v1_shared_signals_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -615,7 +1284,7 @@ func (x *SetSSFTransmitterStateResponse) String() string {
 func (*SetSSFTransmitterStateResponse) ProtoMessage() {}
 
 func (x *SetSSFTransmitterStateResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_shared_signals_proto_msgTypes[8]
+	mi := &file_pantherclaw_v1_shared_signals_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -628,7 +1297,7 @@ func (x *SetSSFTransmitterStateResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetSSFTransmitterStateResponse.ProtoReflect.Descriptor instead.
 func (*SetSSFTransmitterStateResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_shared_signals_proto_rawDescGZIP(), []int{8}
+	return file_pantherclaw_v1_shared_signals_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *SetSSFTransmitterStateResponse) GetTransmitter() *SSFTransmitter {
@@ -649,7 +1318,7 @@ type ListSSFEventsRequest struct {
 
 func (x *ListSSFEventsRequest) Reset() {
 	*x = ListSSFEventsRequest{}
-	mi := &file_pantherclaw_v1_shared_signals_proto_msgTypes[9]
+	mi := &file_pantherclaw_v1_shared_signals_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -661,7 +1330,7 @@ func (x *ListSSFEventsRequest) String() string {
 func (*ListSSFEventsRequest) ProtoMessage() {}
 
 func (x *ListSSFEventsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_shared_signals_proto_msgTypes[9]
+	mi := &file_pantherclaw_v1_shared_signals_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -674,7 +1343,7 @@ func (x *ListSSFEventsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListSSFEventsRequest.ProtoReflect.Descriptor instead.
 func (*ListSSFEventsRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_shared_signals_proto_rawDescGZIP(), []int{9}
+	return file_pantherclaw_v1_shared_signals_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *ListSSFEventsRequest) GetTransmitterId() string {
@@ -714,7 +1383,7 @@ type SSFEvent struct {
 
 func (x *SSFEvent) Reset() {
 	*x = SSFEvent{}
-	mi := &file_pantherclaw_v1_shared_signals_proto_msgTypes[10]
+	mi := &file_pantherclaw_v1_shared_signals_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -726,7 +1395,7 @@ func (x *SSFEvent) String() string {
 func (*SSFEvent) ProtoMessage() {}
 
 func (x *SSFEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_shared_signals_proto_msgTypes[10]
+	mi := &file_pantherclaw_v1_shared_signals_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -739,7 +1408,7 @@ func (x *SSFEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SSFEvent.ProtoReflect.Descriptor instead.
 func (*SSFEvent) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_shared_signals_proto_rawDescGZIP(), []int{10}
+	return file_pantherclaw_v1_shared_signals_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *SSFEvent) GetId() string {
@@ -823,7 +1492,7 @@ type ListSSFEventsResponse struct {
 
 func (x *ListSSFEventsResponse) Reset() {
 	*x = ListSSFEventsResponse{}
-	mi := &file_pantherclaw_v1_shared_signals_proto_msgTypes[11]
+	mi := &file_pantherclaw_v1_shared_signals_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -835,7 +1504,7 @@ func (x *ListSSFEventsResponse) String() string {
 func (*ListSSFEventsResponse) ProtoMessage() {}
 
 func (x *ListSSFEventsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_shared_signals_proto_msgTypes[11]
+	mi := &file_pantherclaw_v1_shared_signals_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -848,7 +1517,7 @@ func (x *ListSSFEventsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListSSFEventsResponse.ProtoReflect.Descriptor instead.
 func (*ListSSFEventsResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_shared_signals_proto_rawDescGZIP(), []int{11}
+	return file_pantherclaw_v1_shared_signals_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *ListSSFEventsResponse) GetEvents() []*SSFEvent {
@@ -862,7 +1531,56 @@ var File_pantherclaw_v1_shared_signals_proto protoreflect.FileDescriptor
 
 const file_pantherclaw_v1_shared_signals_proto_rawDesc = "" +
 	"\n" +
-	"#pantherclaw/v1/shared_signals.proto\x12\x0epantherclaw.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xa5\x05\n" +
+	"#pantherclaw/v1/shared_signals.proto\x12\x0epantherclaw.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xba\x01\n" +
+	"\x10IdentityPlaybook\x12\x18\n" +
+	"\aenabled\x18\x01 \x01(\bR\aenabled\x12\x16\n" +
+	"\x06events\x18\x02 \x03(\tR\x06events\x12\x18\n" +
+	"\aversion\x18\x03 \x01(\x05R\aversion\x12\x1d\n" +
+	"\n" +
+	"request_id\x18\x04 \x01(\tR\trequestId\x12;\n" +
+	"\vupdate_time\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
+	"updateTime\"\xa3\x01\n" +
+	"\x1cIdentityPlaybookConfirmation\x12!\n" +
+	"\fprincipal_id\x18\x01 \x01(\tR\vprincipalId\x12#\n" +
+	"\rcredential_id\x18\x02 \x01(\tR\fcredentialId\x12;\n" +
+	"\vcreate_time\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
+	"createTime\"\xa0\x04\n" +
+	"\x17IdentityPlaybookRequest\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
+	"\x04kind\x18\x02 \x01(\tR\x04kind\x12\x16\n" +
+	"\x06events\x18\x03 \x03(\tR\x06events\x12!\n" +
+	"\fbase_version\x18\x04 \x01(\x05R\vbaseVersion\x12\x1a\n" +
+	"\brequired\x18\x05 \x01(\x05R\brequired\x12\x14\n" +
+	"\x05state\x18\x06 \x01(\tR\x05state\x12!\n" +
+	"\frequested_by\x18\a \x01(\tR\vrequestedBy\x12;\n" +
+	"\vcreate_time\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\n" +
+	"createTime\x12;\n" +
+	"\vexpire_time\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\n" +
+	"expireTime\x12;\n" +
+	"\vdecide_time\x18\n" +
+	" \x01(\v2\x1a.google.protobuf.TimestampR\n" +
+	"decideTime\x12%\n" +
+	"\x0edecided_reason\x18\v \x01(\tR\rdecidedReason\x12R\n" +
+	"\rconfirmations\x18\f \x03(\v2,.pantherclaw.v1.IdentityPlaybookConfirmationR\rconfirmations\x12\x1f\n" +
+	"\vconfirm_url\x18\r \x01(\tR\n" +
+	"confirmUrl\"\x1c\n" +
+	"\x1aGetIdentityPlaybookRequest\"[\n" +
+	"\x1bGetIdentityPlaybookResponse\x12<\n" +
+	"\bplaybook\x18\x01 \x01(\v2 .pantherclaw.v1.IdentityPlaybookR\bplaybook\"\x87\x01\n" +
+	"$RequestIdentityPlaybookChangeRequest\x122\n" +
+	"\x04kind\x18\x01 \x01(\tB\x1e\xbaH\x1br\x19R\x06ENABLER\x06CHANGER\aDISABLER\x04kind\x12+\n" +
+	"\x06events\x18\x02 \x03(\tB\x13\xbaH\x10\x92\x01\r\x10\x06\x18\x01\"\ar\x05\x10\x01\x18\x80\x02R\x06events\"j\n" +
+	"%RequestIdentityPlaybookChangeResponse\x12A\n" +
+	"\arequest\x18\x01 \x01(\v2'.pantherclaw.v1.IdentityPlaybookRequestR\arequest\"%\n" +
+	"#ListIdentityPlaybookRequestsRequest\"k\n" +
+	"$ListIdentityPlaybookRequestsResponse\x12C\n" +
+	"\brequests\x18\x01 \x03(\v2'.pantherclaw.v1.IdentityPlaybookRequestR\brequests\"e\n" +
+	"%DeclineIdentityPlaybookRequestRequest\x12\x18\n" +
+	"\x02id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x02id\x12\"\n" +
+	"\x06reason\x18\x02 \x01(\tB\n" +
+	"\xbaH\ar\x05\x10\x01\x18\xf4\x03R\x06reason\"k\n" +
+	"&DeclineIdentityPlaybookRequestResponse\x12A\n" +
+	"\arequest\x18\x01 \x01(\v2'.pantherclaw.v1.IdentityPlaybookRequestR\arequest\"\xa5\x05\n" +
 	"\x0eSSFTransmitter\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x16\n" +
@@ -929,13 +1647,17 @@ const file_pantherclaw_v1_shared_signals_proto_rawDesc = "" +
 	"\freceive_time\x18\n" +
 	" \x01(\v2\x1a.google.protobuf.TimestampR\vreceiveTime\"I\n" +
 	"\x15ListSSFEventsResponse\x120\n" +
-	"\x06events\x18\x01 \x03(\v2\x18.pantherclaw.v1.SSFEventR\x06events2\xc9\x04\n" +
+	"\x06events\x18\x01 \x03(\v2\x18.pantherclaw.v1.SSFEventR\x06events2\xf0\b\n" +
 	"\x14SharedSignalsService\x12q\n" +
 	"\x14CreateSSFTransmitter\x12+.pantherclaw.v1.CreateSSFTransmitterRequest\x1a,.pantherclaw.v1.CreateSSFTransmitterResponse\x12m\n" +
 	"\x11GetSSFTransmitter\x12(.pantherclaw.v1.GetSSFTransmitterRequest\x1a).pantherclaw.v1.GetSSFTransmitterResponse\"\x03\x90\x02\x01\x12s\n" +
 	"\x13ListSSFTransmitters\x12*.pantherclaw.v1.ListSSFTransmittersRequest\x1a+.pantherclaw.v1.ListSSFTransmittersResponse\"\x03\x90\x02\x01\x12w\n" +
 	"\x16SetSSFTransmitterState\x12-.pantherclaw.v1.SetSSFTransmitterStateRequest\x1a..pantherclaw.v1.SetSSFTransmitterStateResponse\x12a\n" +
-	"\rListSSFEvents\x12$.pantherclaw.v1.ListSSFEventsRequest\x1a%.pantherclaw.v1.ListSSFEventsResponse\"\x03\x90\x02\x01B\xcb\x01\n" +
+	"\rListSSFEvents\x12$.pantherclaw.v1.ListSSFEventsRequest\x1a%.pantherclaw.v1.ListSSFEventsResponse\"\x03\x90\x02\x01\x12s\n" +
+	"\x13GetIdentityPlaybook\x12*.pantherclaw.v1.GetIdentityPlaybookRequest\x1a+.pantherclaw.v1.GetIdentityPlaybookResponse\"\x03\x90\x02\x01\x12\x8c\x01\n" +
+	"\x1dRequestIdentityPlaybookChange\x124.pantherclaw.v1.RequestIdentityPlaybookChangeRequest\x1a5.pantherclaw.v1.RequestIdentityPlaybookChangeResponse\x12\x8e\x01\n" +
+	"\x1cListIdentityPlaybookRequests\x123.pantherclaw.v1.ListIdentityPlaybookRequestsRequest\x1a4.pantherclaw.v1.ListIdentityPlaybookRequestsResponse\"\x03\x90\x02\x01\x12\x8f\x01\n" +
+	"\x1eDeclineIdentityPlaybookRequest\x125.pantherclaw.v1.DeclineIdentityPlaybookRequestRequest\x1a6.pantherclaw.v1.DeclineIdentityPlaybookRequestResponseB\xcb\x01\n" +
 	"\x12com.pantherclaw.v1B\x12SharedSignalsProtoP\x01ZHgithub.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1;pantherclawv1\xa2\x02\x03PXX\xaa\x02\x0ePantherclaw.V1\xca\x02\x0ePantherclaw\\V1\xe2\x02\x1aPantherclaw\\V1\\GPBMetadata\xea\x02\x0fPantherclaw::V1b\x06proto3"
 
 var (
@@ -950,49 +1672,78 @@ func file_pantherclaw_v1_shared_signals_proto_rawDescGZIP() []byte {
 	return file_pantherclaw_v1_shared_signals_proto_rawDescData
 }
 
-var file_pantherclaw_v1_shared_signals_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
+var file_pantherclaw_v1_shared_signals_proto_msgTypes = make([]protoimpl.MessageInfo, 23)
 var file_pantherclaw_v1_shared_signals_proto_goTypes = []any{
-	(*SSFTransmitter)(nil),                 // 0: pantherclaw.v1.SSFTransmitter
-	(*CreateSSFTransmitterRequest)(nil),    // 1: pantherclaw.v1.CreateSSFTransmitterRequest
-	(*CreateSSFTransmitterResponse)(nil),   // 2: pantherclaw.v1.CreateSSFTransmitterResponse
-	(*GetSSFTransmitterRequest)(nil),       // 3: pantherclaw.v1.GetSSFTransmitterRequest
-	(*GetSSFTransmitterResponse)(nil),      // 4: pantherclaw.v1.GetSSFTransmitterResponse
-	(*ListSSFTransmittersRequest)(nil),     // 5: pantherclaw.v1.ListSSFTransmittersRequest
-	(*ListSSFTransmittersResponse)(nil),    // 6: pantherclaw.v1.ListSSFTransmittersResponse
-	(*SetSSFTransmitterStateRequest)(nil),  // 7: pantherclaw.v1.SetSSFTransmitterStateRequest
-	(*SetSSFTransmitterStateResponse)(nil), // 8: pantherclaw.v1.SetSSFTransmitterStateResponse
-	(*ListSSFEventsRequest)(nil),           // 9: pantherclaw.v1.ListSSFEventsRequest
-	(*SSFEvent)(nil),                       // 10: pantherclaw.v1.SSFEvent
-	(*ListSSFEventsResponse)(nil),          // 11: pantherclaw.v1.ListSSFEventsResponse
-	(*timestamppb.Timestamp)(nil),          // 12: google.protobuf.Timestamp
+	(*IdentityPlaybook)(nil),                       // 0: pantherclaw.v1.IdentityPlaybook
+	(*IdentityPlaybookConfirmation)(nil),           // 1: pantherclaw.v1.IdentityPlaybookConfirmation
+	(*IdentityPlaybookRequest)(nil),                // 2: pantherclaw.v1.IdentityPlaybookRequest
+	(*GetIdentityPlaybookRequest)(nil),             // 3: pantherclaw.v1.GetIdentityPlaybookRequest
+	(*GetIdentityPlaybookResponse)(nil),            // 4: pantherclaw.v1.GetIdentityPlaybookResponse
+	(*RequestIdentityPlaybookChangeRequest)(nil),   // 5: pantherclaw.v1.RequestIdentityPlaybookChangeRequest
+	(*RequestIdentityPlaybookChangeResponse)(nil),  // 6: pantherclaw.v1.RequestIdentityPlaybookChangeResponse
+	(*ListIdentityPlaybookRequestsRequest)(nil),    // 7: pantherclaw.v1.ListIdentityPlaybookRequestsRequest
+	(*ListIdentityPlaybookRequestsResponse)(nil),   // 8: pantherclaw.v1.ListIdentityPlaybookRequestsResponse
+	(*DeclineIdentityPlaybookRequestRequest)(nil),  // 9: pantherclaw.v1.DeclineIdentityPlaybookRequestRequest
+	(*DeclineIdentityPlaybookRequestResponse)(nil), // 10: pantherclaw.v1.DeclineIdentityPlaybookRequestResponse
+	(*SSFTransmitter)(nil),                         // 11: pantherclaw.v1.SSFTransmitter
+	(*CreateSSFTransmitterRequest)(nil),            // 12: pantherclaw.v1.CreateSSFTransmitterRequest
+	(*CreateSSFTransmitterResponse)(nil),           // 13: pantherclaw.v1.CreateSSFTransmitterResponse
+	(*GetSSFTransmitterRequest)(nil),               // 14: pantherclaw.v1.GetSSFTransmitterRequest
+	(*GetSSFTransmitterResponse)(nil),              // 15: pantherclaw.v1.GetSSFTransmitterResponse
+	(*ListSSFTransmittersRequest)(nil),             // 16: pantherclaw.v1.ListSSFTransmittersRequest
+	(*ListSSFTransmittersResponse)(nil),            // 17: pantherclaw.v1.ListSSFTransmittersResponse
+	(*SetSSFTransmitterStateRequest)(nil),          // 18: pantherclaw.v1.SetSSFTransmitterStateRequest
+	(*SetSSFTransmitterStateResponse)(nil),         // 19: pantherclaw.v1.SetSSFTransmitterStateResponse
+	(*ListSSFEventsRequest)(nil),                   // 20: pantherclaw.v1.ListSSFEventsRequest
+	(*SSFEvent)(nil),                               // 21: pantherclaw.v1.SSFEvent
+	(*ListSSFEventsResponse)(nil),                  // 22: pantherclaw.v1.ListSSFEventsResponse
+	(*timestamppb.Timestamp)(nil),                  // 23: google.protobuf.Timestamp
 }
 var file_pantherclaw_v1_shared_signals_proto_depIdxs = []int32{
-	12, // 0: pantherclaw.v1.SSFTransmitter.create_time:type_name -> google.protobuf.Timestamp
-	12, // 1: pantherclaw.v1.SSFTransmitter.activate_time:type_name -> google.protobuf.Timestamp
-	12, // 2: pantherclaw.v1.SSFTransmitter.last_event_time:type_name -> google.protobuf.Timestamp
-	12, // 3: pantherclaw.v1.SSFTransmitter.last_refusal_time:type_name -> google.protobuf.Timestamp
-	0,  // 4: pantherclaw.v1.CreateSSFTransmitterResponse.transmitter:type_name -> pantherclaw.v1.SSFTransmitter
-	0,  // 5: pantherclaw.v1.GetSSFTransmitterResponse.transmitter:type_name -> pantherclaw.v1.SSFTransmitter
-	0,  // 6: pantherclaw.v1.ListSSFTransmittersResponse.transmitters:type_name -> pantherclaw.v1.SSFTransmitter
-	0,  // 7: pantherclaw.v1.SetSSFTransmitterStateResponse.transmitter:type_name -> pantherclaw.v1.SSFTransmitter
-	12, // 8: pantherclaw.v1.SSFEvent.issue_time:type_name -> google.protobuf.Timestamp
-	12, // 9: pantherclaw.v1.SSFEvent.receive_time:type_name -> google.protobuf.Timestamp
-	10, // 10: pantherclaw.v1.ListSSFEventsResponse.events:type_name -> pantherclaw.v1.SSFEvent
-	1,  // 11: pantherclaw.v1.SharedSignalsService.CreateSSFTransmitter:input_type -> pantherclaw.v1.CreateSSFTransmitterRequest
-	3,  // 12: pantherclaw.v1.SharedSignalsService.GetSSFTransmitter:input_type -> pantherclaw.v1.GetSSFTransmitterRequest
-	5,  // 13: pantherclaw.v1.SharedSignalsService.ListSSFTransmitters:input_type -> pantherclaw.v1.ListSSFTransmittersRequest
-	7,  // 14: pantherclaw.v1.SharedSignalsService.SetSSFTransmitterState:input_type -> pantherclaw.v1.SetSSFTransmitterStateRequest
-	9,  // 15: pantherclaw.v1.SharedSignalsService.ListSSFEvents:input_type -> pantherclaw.v1.ListSSFEventsRequest
-	2,  // 16: pantherclaw.v1.SharedSignalsService.CreateSSFTransmitter:output_type -> pantherclaw.v1.CreateSSFTransmitterResponse
-	4,  // 17: pantherclaw.v1.SharedSignalsService.GetSSFTransmitter:output_type -> pantherclaw.v1.GetSSFTransmitterResponse
-	6,  // 18: pantherclaw.v1.SharedSignalsService.ListSSFTransmitters:output_type -> pantherclaw.v1.ListSSFTransmittersResponse
-	8,  // 19: pantherclaw.v1.SharedSignalsService.SetSSFTransmitterState:output_type -> pantherclaw.v1.SetSSFTransmitterStateResponse
-	11, // 20: pantherclaw.v1.SharedSignalsService.ListSSFEvents:output_type -> pantherclaw.v1.ListSSFEventsResponse
-	16, // [16:21] is the sub-list for method output_type
-	11, // [11:16] is the sub-list for method input_type
-	11, // [11:11] is the sub-list for extension type_name
-	11, // [11:11] is the sub-list for extension extendee
-	0,  // [0:11] is the sub-list for field type_name
+	23, // 0: pantherclaw.v1.IdentityPlaybook.update_time:type_name -> google.protobuf.Timestamp
+	23, // 1: pantherclaw.v1.IdentityPlaybookConfirmation.create_time:type_name -> google.protobuf.Timestamp
+	23, // 2: pantherclaw.v1.IdentityPlaybookRequest.create_time:type_name -> google.protobuf.Timestamp
+	23, // 3: pantherclaw.v1.IdentityPlaybookRequest.expire_time:type_name -> google.protobuf.Timestamp
+	23, // 4: pantherclaw.v1.IdentityPlaybookRequest.decide_time:type_name -> google.protobuf.Timestamp
+	1,  // 5: pantherclaw.v1.IdentityPlaybookRequest.confirmations:type_name -> pantherclaw.v1.IdentityPlaybookConfirmation
+	0,  // 6: pantherclaw.v1.GetIdentityPlaybookResponse.playbook:type_name -> pantherclaw.v1.IdentityPlaybook
+	2,  // 7: pantherclaw.v1.RequestIdentityPlaybookChangeResponse.request:type_name -> pantherclaw.v1.IdentityPlaybookRequest
+	2,  // 8: pantherclaw.v1.ListIdentityPlaybookRequestsResponse.requests:type_name -> pantherclaw.v1.IdentityPlaybookRequest
+	2,  // 9: pantherclaw.v1.DeclineIdentityPlaybookRequestResponse.request:type_name -> pantherclaw.v1.IdentityPlaybookRequest
+	23, // 10: pantherclaw.v1.SSFTransmitter.create_time:type_name -> google.protobuf.Timestamp
+	23, // 11: pantherclaw.v1.SSFTransmitter.activate_time:type_name -> google.protobuf.Timestamp
+	23, // 12: pantherclaw.v1.SSFTransmitter.last_event_time:type_name -> google.protobuf.Timestamp
+	23, // 13: pantherclaw.v1.SSFTransmitter.last_refusal_time:type_name -> google.protobuf.Timestamp
+	11, // 14: pantherclaw.v1.CreateSSFTransmitterResponse.transmitter:type_name -> pantherclaw.v1.SSFTransmitter
+	11, // 15: pantherclaw.v1.GetSSFTransmitterResponse.transmitter:type_name -> pantherclaw.v1.SSFTransmitter
+	11, // 16: pantherclaw.v1.ListSSFTransmittersResponse.transmitters:type_name -> pantherclaw.v1.SSFTransmitter
+	11, // 17: pantherclaw.v1.SetSSFTransmitterStateResponse.transmitter:type_name -> pantherclaw.v1.SSFTransmitter
+	23, // 18: pantherclaw.v1.SSFEvent.issue_time:type_name -> google.protobuf.Timestamp
+	23, // 19: pantherclaw.v1.SSFEvent.receive_time:type_name -> google.protobuf.Timestamp
+	21, // 20: pantherclaw.v1.ListSSFEventsResponse.events:type_name -> pantherclaw.v1.SSFEvent
+	12, // 21: pantherclaw.v1.SharedSignalsService.CreateSSFTransmitter:input_type -> pantherclaw.v1.CreateSSFTransmitterRequest
+	14, // 22: pantherclaw.v1.SharedSignalsService.GetSSFTransmitter:input_type -> pantherclaw.v1.GetSSFTransmitterRequest
+	16, // 23: pantherclaw.v1.SharedSignalsService.ListSSFTransmitters:input_type -> pantherclaw.v1.ListSSFTransmittersRequest
+	18, // 24: pantherclaw.v1.SharedSignalsService.SetSSFTransmitterState:input_type -> pantherclaw.v1.SetSSFTransmitterStateRequest
+	20, // 25: pantherclaw.v1.SharedSignalsService.ListSSFEvents:input_type -> pantherclaw.v1.ListSSFEventsRequest
+	3,  // 26: pantherclaw.v1.SharedSignalsService.GetIdentityPlaybook:input_type -> pantherclaw.v1.GetIdentityPlaybookRequest
+	5,  // 27: pantherclaw.v1.SharedSignalsService.RequestIdentityPlaybookChange:input_type -> pantherclaw.v1.RequestIdentityPlaybookChangeRequest
+	7,  // 28: pantherclaw.v1.SharedSignalsService.ListIdentityPlaybookRequests:input_type -> pantherclaw.v1.ListIdentityPlaybookRequestsRequest
+	9,  // 29: pantherclaw.v1.SharedSignalsService.DeclineIdentityPlaybookRequest:input_type -> pantherclaw.v1.DeclineIdentityPlaybookRequestRequest
+	13, // 30: pantherclaw.v1.SharedSignalsService.CreateSSFTransmitter:output_type -> pantherclaw.v1.CreateSSFTransmitterResponse
+	15, // 31: pantherclaw.v1.SharedSignalsService.GetSSFTransmitter:output_type -> pantherclaw.v1.GetSSFTransmitterResponse
+	17, // 32: pantherclaw.v1.SharedSignalsService.ListSSFTransmitters:output_type -> pantherclaw.v1.ListSSFTransmittersResponse
+	19, // 33: pantherclaw.v1.SharedSignalsService.SetSSFTransmitterState:output_type -> pantherclaw.v1.SetSSFTransmitterStateResponse
+	22, // 34: pantherclaw.v1.SharedSignalsService.ListSSFEvents:output_type -> pantherclaw.v1.ListSSFEventsResponse
+	4,  // 35: pantherclaw.v1.SharedSignalsService.GetIdentityPlaybook:output_type -> pantherclaw.v1.GetIdentityPlaybookResponse
+	6,  // 36: pantherclaw.v1.SharedSignalsService.RequestIdentityPlaybookChange:output_type -> pantherclaw.v1.RequestIdentityPlaybookChangeResponse
+	8,  // 37: pantherclaw.v1.SharedSignalsService.ListIdentityPlaybookRequests:output_type -> pantherclaw.v1.ListIdentityPlaybookRequestsResponse
+	10, // 38: pantherclaw.v1.SharedSignalsService.DeclineIdentityPlaybookRequest:output_type -> pantherclaw.v1.DeclineIdentityPlaybookRequestResponse
+	30, // [30:39] is the sub-list for method output_type
+	21, // [21:30] is the sub-list for method input_type
+	21, // [21:21] is the sub-list for extension type_name
+	21, // [21:21] is the sub-list for extension extendee
+	0,  // [0:21] is the sub-list for field type_name
 }
 
 func init() { file_pantherclaw_v1_shared_signals_proto_init() }
@@ -1000,14 +1751,14 @@ func file_pantherclaw_v1_shared_signals_proto_init() {
 	if File_pantherclaw_v1_shared_signals_proto != nil {
 		return
 	}
-	file_pantherclaw_v1_shared_signals_proto_msgTypes[1].OneofWrappers = []any{}
+	file_pantherclaw_v1_shared_signals_proto_msgTypes[12].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pantherclaw_v1_shared_signals_proto_rawDesc), len(file_pantherclaw_v1_shared_signals_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   12,
+			NumMessages:   23,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

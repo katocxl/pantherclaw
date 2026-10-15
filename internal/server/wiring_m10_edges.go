@@ -40,6 +40,15 @@ import (
 // edgesRaiser is the Raiser edges signals go through (core, D14).
 func edgesRaiser() reflexdomain.Raiser { return &alerts.Raiser{} }
 
+// edgesCaseOpener and edgesContainer are the cases and response ports the
+// receiver and the identity playbook use (D49): Ops wires the real
+// providers. Nil until then: accepted events are recorded with "case not
+// opened: cases unavailable" and the playbook refuses to be enabled.
+var (
+	edgesCaseOpener func(pool *db.Pool) reflexdomain.CaseOpener
+	edgesContainer  func(pool *db.Pool) reflexdomain.Container
+)
+
 // edgesFailures is the owned failure sink (core, D18).
 func edgesFailures() reflexdomain.FailureSink { return &failures.Sink{} }
 
@@ -67,12 +76,21 @@ func newSIEM(pool *db.Pool, kp keys.KeyProvider, bill *billing.Service, notify s
 }
 
 // newSignals builds the Shared Signals service as pc_app.
-func newSignals(pool *db.Pool, bill *billing.Service, publicURL string, log *slog.Logger) (*signals.Service, error) {
+func newSignals(pool *db.Pool, bill *billing.Service, notify siem.Notifier, publicURL string, log *slog.Logger) (*signals.Service, error) {
 	svc, err := signals.New(pool, signals.Config{PublicURL: publicURL}, clock.System{}, log)
 	if err != nil {
 		return nil, err
 	}
-	svc.WithFailures(edgesFailures())
+	svc.WithFailures(edgesFailures()).WithRaiser(edgesRaiser())
+	if notify != nil {
+		svc.WithNotifier(notify)
+	}
+	if edgesCaseOpener != nil {
+		svc.WithCases(edgesCaseOpener(pool))
+	}
+	if edgesContainer != nil {
+		svc.WithContainer(edgesContainer(pool))
+	}
 	if bill != nil {
 		svc.WithEditions(bill)
 	}
@@ -107,7 +125,7 @@ func registerM10Edges(rs *connect.Server, d apiDeps) (m10Edges, error) {
 	if err != nil {
 		return m10Edges{}, err
 	}
-	sig, err := newSignals(d.pool, d.billing, d.publicURL, d.log)
+	sig, err := newSignals(d.pool, d.billing, edgesNotifier(d.m5), d.publicURL, d.log)
 	if err != nil {
 		return m10Edges{}, err
 	}
@@ -115,6 +133,9 @@ func registerM10Edges(rs *connect.Server, d apiDeps) (m10Edges, error) {
 	pantherclawv1connect.RegisterSharedSignalsServiceHandler(rs, signalsrpc.New(sig))
 	if d.web != nil {
 		d.web.WithIntegrations(integrations{siem: s, signals: sig})
+		if d.m5 != nil && d.m5.webauthn != nil {
+			d.web.WithPlaybook(sig, d.m5.webauthn)
+		}
 	}
 	return m10Edges{receiver: sig.Receiver()}, nil
 }
@@ -132,7 +153,7 @@ func registerM10EdgesJobs(periodic []*river.PeriodicJob, reg *jobs.Registry, poo
 	if err != nil {
 		return nil, err
 	}
-	sig, err := newSignals(pool, bill, publicURL, log)
+	sig, err := newSignals(pool, bill, edgesNotifier(m5), publicURL, log)
 	if err != nil {
 		return nil, err
 	}
