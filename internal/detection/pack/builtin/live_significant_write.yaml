@@ -1,0 +1,24 @@
+# SPDX-License-Identifier: BUSL-1.1
+# Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+id: pc.live.significant_write
+version: "1"
+title: Write confirmed toward a public destination
+description: >-
+  An effect was confirmed, fully or partly, for an action toward a public
+  destination. Shown on the live view (F215); not an alert.
+severity: LOW
+attention: LIVE
+basis: OBSERVED
+edition: community
+on: [receipt.effect]
+match: event.outcome in ["CONFIRMED", "PARTIAL"] && event.destination_class == "public"
+group: run
+tests:
+  - name: public effect confirmed
+    fires: true
+    events:
+      - {kind: receipt.effect, outcome: CONFIRMED, destination_class: public, subjects: {run: r1}}
+  - name: internal effect
+    fires: false
+    events:
+      - {kind: receipt.effect, outcome: CONFIRMED, destination_class: internal, subjects: {run: r1}}

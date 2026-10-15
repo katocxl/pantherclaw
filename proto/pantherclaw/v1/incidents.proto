@@ -1,0 +1,543 @@
+// SPDX-License-Identifier: BUSL-1.1
+// Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+
+syntax = "proto3";
+
+package pantherclaw.v1;
+
+import "buf/validate/validate.proto";
+import "google/protobuf/timestamp.proto";
+
+// IncidentService serves Reflex's alerts, incidents, suppressions and owned
+// operational failures (G0 M10 D14–D18; F603, F607, F616, F641; HR-242,
+// HR-243). Alert and incident history is append-only: repeats add evidence
+// and changes add events. Lists show only what the caller may read: an
+// alert or incident about agents is listed when the caller holds
+// incident.read where those agents live, and counts never include hidden
+// rows (D8).
+service IncidentService {
+  // ListAlerts lists alerts, newest first.
+  // permission: incident.read
+  rpc ListAlerts(ListAlertsRequest) returns (ListAlertsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // GetAlert returns one alert with its evidence, its events and the
+  // possibly related alerts (the same rule on other subjects, never
+  // attached).
+  // permission: incident.read
+  rpc GetAlert(GetAlertRequest) returns (GetAlertResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // SetAlertState acknowledges or resolves an alert (a person only).
+  // permission: incident.manage
+  rpc SetAlertState(SetAlertStateRequest) returns (SetAlertStateResponse);
+  // PromoteAlert opens an incident from an alert (a person only).
+  // permission: incident.manage
+  rpc PromoteAlert(PromoteAlertRequest) returns (PromoteAlertResponse);
+  // LinkAlert attaches an alert to an open incident (a person only).
+  // permission: incident.manage
+  rpc LinkAlert(LinkAlertRequest) returns (LinkAlertResponse);
+  // ListIncidents lists incidents, newest first.
+  // permission: incident.read
+  rpc ListIncidents(ListIncidentsRequest) returns (ListIncidentsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // GetIncident returns one incident with its alerts and its history.
+  // permission: incident.read
+  rpc GetIncident(GetIncidentRequest) returns (GetIncidentResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // AssignIncident sets an incident's owner (a person only).
+  // permission: incident.manage
+  rpc AssignIncident(AssignIncidentRequest) returns (AssignIncidentResponse);
+  // SetIncidentState moves an incident to CONTAINED or RESOLVED, or opens
+  // it again (a person only). Closing an incident lifts no containment.
+  // permission: incident.manage
+  rpc SetIncidentState(SetIncidentStateRequest) returns (SetIncidentStateResponse);
+  // CreateSuppression suppresses one rule's alerts, optionally for listed
+  // subjects only, with a reason and an expiry at most 30 days out (Team; a
+  // person only). Suppressed alerts stay listable and never notify or page;
+  // higher severity, a subject outside the scope or failed containment
+  // bypasses it (HR-242).
+  // permission: incident.manage
+  rpc CreateSuppression(CreateSuppressionRequest) returns (CreateSuppressionResponse);
+  // ListSuppressions lists suppressions, newest first.
+  // permission: incident.read
+  rpc ListSuppressions(ListSuppressionsRequest) returns (ListSuppressionsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // EndSuppression ends a suppression now (a person only).
+  // permission: incident.manage
+  rpc EndSuppression(EndSuppressionRequest) returns (EndSuppressionResponse);
+  // ListFailures lists owned operational failures, newest first (F641).
+  // permission: incident.read
+  rpc ListFailures(ListFailuresRequest) returns (ListFailuresResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // AssignFailure sets a failure's owner (a person only).
+  // permission: incident.manage
+  rpc AssignFailure(AssignFailureRequest) returns (AssignFailureResponse);
+  // ResolveFailure records how a failure was resolved (a person only).
+  // permission: incident.manage
+  rpc ResolveFailure(ResolveFailureRequest) returns (ResolveFailureResponse);
+}
+
+// ReflexSubject is what an alert, incident or failure is about.
+message ReflexSubject {
+  // "agent", "run", "transaction", "connection", …
+  string type = 1;
+  // Its id.
+  string id = 2;
+}
+
+// Alert is one alert (D14).
+message Alert {
+  // Alert id.
+  string id = 1;
+  // "detection", "response", "siem", "signals", "coverage" or "system".
+  string source = 2;
+  // The detection rule, its version and content digest, and the built-in
+  // pack version; empty for other sources.
+  string rule_id = 3;
+  string rule_version = 4;
+  string rule_digest = 5;
+  string pack_version = 6;
+  // What happened and why it matters.
+  string title = 7;
+  string summary = 8;
+  // "LOW", "MEDIUM", "HIGH" or "CRITICAL".
+  string severity = 9;
+  // "FINDING", "ALERT", "INCIDENT" or "PAGE".
+  string attention = 10;
+  // How it knows (F648): "OBSERVED", "RULE_MATCH", "INFERRED" or
+  // "HYPOTHESIS".
+  string basis = 11;
+  // What it is about.
+  repeated ReflexSubject subjects = 12;
+  // MITRE ATLAS techniques and OWASP agentic risks.
+  repeated string atlas = 13;
+  repeated string owasp = 14;
+  // Small context facts.
+  map<string, string> facts = 15;
+  // Evidence-based grouping key.
+  string group_key = 16;
+  // "OPEN", "ACKNOWLEDGED", "RESOLVED" or "SUPPRESSED".
+  string state = 17;
+  // The incident it is attached to, if any.
+  string incident_id = 18;
+  // The suppression it is stored under, if suppressed.
+  string suppression_id = 19;
+  // How many signals it counted.
+  int32 count = 20;
+  google.protobuf.Timestamp first_seen_time = 21;
+  google.protobuf.Timestamp last_seen_time = 22;
+  // A test alert, capped at ALERT; it never pages.
+  bool test = 23;
+}
+
+// AlertEvidence is one recorded fact an alert rests on.
+message AlertEvidence {
+  // "ledger", "transaction", "run", "receipt" or "case_entry".
+  string kind = 1;
+  // Its id.
+  string id = 2;
+  google.protobuf.Timestamp occur_time = 3;
+}
+
+// ReflexEvent is one append-only history entry of an alert or incident.
+message ReflexEvent {
+  // Event id.
+  string id = 1;
+  // "RAISED", "STATE", "LINK", "PROMOTE", "SUPPRESS_BYPASS", "OPENED",
+  // "OWNER", "SEVERITY" or "NOTE".
+  string kind = 2;
+  // Who: actor type and id.
+  string actor_type = 3;
+  string actor_id = 4;
+  string from_value = 5;
+  string to_value = 6;
+  // The alert it names, for incident events.
+  string alert_id = 7;
+  // A person's note (untrusted text).
+  string note = 8;
+  google.protobuf.Timestamp create_time = 9;
+}
+
+// Incident is one incident (D15).
+message Incident {
+  // Incident id.
+  string id = 1;
+  string title = 2;
+  string severity = 3;
+  // "OPEN", "CONTAINED" or "RESOLVED".
+  string state = 4;
+  // Owner user id; empty when unassigned.
+  string owner_id = 5;
+  // Evidence-based grouping key; empty for one opened by hand.
+  string group_key = 6;
+  // "alert:<id>" or "user:<id>".
+  string opened_by = 7;
+  google.protobuf.Timestamp create_time = 8;
+  google.protobuf.Timestamp update_time = 9;
+}
+
+// PageRequest fields shared by lists.
+message ListAlertsRequest {
+  // Maximum results (default 50, at most 200).
+  int32 page_size = 1 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 200
+  }];
+  // Token from a previous response.
+  string page_token = 2 [(buf.validate.field).string = {
+    max_len: 64
+    pattern: "^[A-Za-z0-9_-]*$"
+  }];
+  // Only these states.
+  repeated string states = 3 [(buf.validate.field).repeated = {
+    max_items: 4
+    unique: true
+    items: {
+      string: {
+        in: [
+          "OPEN",
+          "ACKNOWLEDGED",
+          "RESOLVED",
+          "SUPPRESSED"
+        ]
+      }
+    }
+  }];
+  // Only this rule.
+  string rule_id = 4 [(buf.validate.field).string = {
+    max_len: 128
+    pattern: "^([a-z][a-z0-9_.]*)?$"
+  }];
+  // Only alerts of this incident.
+  optional string incident_id = 5 [(buf.validate.field).string.uuid = true];
+}
+
+// ListAlertsResponse is one page.
+message ListAlertsResponse {
+  repeated Alert alerts = 1;
+  // Token for the next page; empty at the end.
+  string next_page_token = 2;
+}
+
+// GetAlertRequest names an alert.
+message GetAlertRequest {
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// GetAlertResponse returns it.
+message GetAlertResponse {
+  Alert alert = 1;
+  repeated AlertEvidence evidence = 2;
+  repeated ReflexEvent events = 3;
+  // The same rule on other subjects within a day: listed, never attached.
+  repeated Alert possible_related = 4;
+}
+
+// SetAlertStateRequest moves an alert.
+message SetAlertStateRequest {
+  string id = 1 [(buf.validate.field).string.uuid = true];
+  // "ACKNOWLEDGED", "RESOLVED" or "OPEN".
+  string state = 2 [(buf.validate.field).string = {
+    in: [
+      "ACKNOWLEDGED",
+      "RESOLVED",
+      "OPEN"
+    ]
+  }];
+  // Optional note (at most 2000 characters).
+  string note = 3 [(buf.validate.field).string.max_len = 2000];
+}
+
+// SetAlertStateResponse returns the alert.
+message SetAlertStateResponse {
+  Alert alert = 1;
+}
+
+// PromoteAlertRequest names an alert.
+message PromoteAlertRequest {
+  string id = 1 [(buf.validate.field).string.uuid = true];
+  // Optional note.
+  string note = 2 [(buf.validate.field).string.max_len = 2000];
+}
+
+// PromoteAlertResponse returns the new incident.
+message PromoteAlertResponse {
+  Incident incident = 1;
+}
+
+// LinkAlertRequest names an alert and an incident.
+message LinkAlertRequest {
+  string alert_id = 1 [(buf.validate.field).string.uuid = true];
+  string incident_id = 2 [(buf.validate.field).string.uuid = true];
+}
+
+// LinkAlertResponse returns the alert.
+message LinkAlertResponse {
+  Alert alert = 1;
+}
+
+// ListIncidentsRequest filters incidents.
+message ListIncidentsRequest {
+  int32 page_size = 1 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 200
+  }];
+  string page_token = 2 [(buf.validate.field).string = {
+    max_len: 64
+    pattern: "^[A-Za-z0-9_-]*$"
+  }];
+  repeated string states = 3 [(buf.validate.field).repeated = {
+    max_items: 3
+    unique: true
+    items: {
+      string: {
+        in: [
+          "OPEN",
+          "CONTAINED",
+          "RESOLVED"
+        ]
+      }
+    }
+  }];
+}
+
+// ListIncidentsResponse is one page.
+message ListIncidentsResponse {
+  repeated Incident incidents = 1;
+  string next_page_token = 2;
+}
+
+// GetIncidentRequest names an incident.
+message GetIncidentRequest {
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// GetIncidentResponse returns it.
+message GetIncidentResponse {
+  Incident incident = 1;
+  // Its alerts the caller may read.
+  repeated Alert alerts = 2;
+  // Its history.
+  repeated ReflexEvent events = 3;
+  // Retry groups: alerts about the same transaction, with first and latest
+  // time, count and whether any attempt executed.
+  repeated RetryGroup retry_groups = 4;
+}
+
+// RetryGroup summarises repeated attempts of one transaction.
+message RetryGroup {
+  string transaction_id = 1;
+  int32 count = 2;
+  google.protobuf.Timestamp first_time = 3;
+  google.protobuf.Timestamp latest_time = 4;
+  // Whether any attempt was dispatched.
+  bool executed = 5;
+}
+
+// AssignIncidentRequest sets an owner.
+message AssignIncidentRequest {
+  string id = 1 [(buf.validate.field).string.uuid = true];
+  // The owner's user id.
+  string owner_id = 2 [(buf.validate.field).string.uuid = true];
+}
+
+// AssignIncidentResponse returns the incident.
+message AssignIncidentResponse {
+  Incident incident = 1;
+}
+
+// SetIncidentStateRequest moves an incident.
+message SetIncidentStateRequest {
+  string id = 1 [(buf.validate.field).string.uuid = true];
+  string state = 2 [(buf.validate.field).string = {
+    in: [
+      "OPEN",
+      "CONTAINED",
+      "RESOLVED"
+    ]
+  }];
+  string note = 3 [(buf.validate.field).string.max_len = 2000];
+}
+
+// SetIncidentStateResponse returns the incident.
+message SetIncidentStateResponse {
+  Incident incident = 1;
+}
+
+// Suppression is one suppression (D16).
+message Suppression {
+  string id = 1;
+  string rule_id = 2;
+  // Empty: every subject of the rule.
+  repeated ReflexSubject subjects = 3;
+  // Alerts above it bypass the suppression.
+  string max_severity = 4;
+  // Why (untrusted text).
+  string reason = 5;
+  string created_by = 6;
+  google.protobuf.Timestamp create_time = 7;
+  google.protobuf.Timestamp expire_time = 8;
+  // Set once ended.
+  google.protobuf.Timestamp end_time = 9;
+  string ended_by = 10;
+  string end_reason = 11;
+  // Subjects a bypass took out of it.
+  repeated string broken_subjects = 12;
+}
+
+// CreateSuppressionRequest describes a suppression.
+message CreateSuppressionRequest {
+  // The rule it applies to.
+  string rule_id = 1 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 128
+    pattern: "^[a-z][a-z0-9_.]*$"
+  }];
+  // Limit it to these subjects (at most 32).
+  repeated ReflexSubject subjects = 2 [(buf.validate.field).repeated.max_items = 32];
+  // Alerts above this severity bypass it.
+  string max_severity = 3 [(buf.validate.field).string = {
+    in: [
+      "LOW",
+      "MEDIUM",
+      "HIGH",
+      "CRITICAL"
+    ]
+  }];
+  // Why (1 to 500 characters).
+  string reason = 4 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 500
+  }];
+  // How long, in seconds: at most 30 days.
+  int64 expires_in_seconds = 5 [(buf.validate.field).int64 = {
+    gte: 60
+    lte: 2592000
+  }];
+}
+
+// CreateSuppressionResponse returns it.
+message CreateSuppressionResponse {
+  Suppression suppression = 1;
+}
+
+// ListSuppressionsRequest filters suppressions.
+message ListSuppressionsRequest {
+  int32 page_size = 1 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 200
+  }];
+  string page_token = 2 [(buf.validate.field).string = {
+    max_len: 64
+    pattern: "^[A-Za-z0-9_-]*$"
+  }];
+  // Only those in force now.
+  bool active_only = 3;
+}
+
+// ListSuppressionsResponse is one page.
+message ListSuppressionsResponse {
+  repeated Suppression suppressions = 1;
+  string next_page_token = 2;
+}
+
+// EndSuppressionRequest ends one.
+message EndSuppressionRequest {
+  string id = 1 [(buf.validate.field).string.uuid = true];
+  string reason = 2 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 500
+  }];
+}
+
+// EndSuppressionResponse returns it.
+message EndSuppressionResponse {
+  Suppression suppression = 1;
+}
+
+// OperationalFailure is one owned failure (F641).
+message OperationalFailure {
+  string id = 1;
+  // Dotted kind, for example "detection.overflow".
+  string kind = 2;
+  // What broke.
+  string summary = 3;
+  // What to do next.
+  string next_step = 4;
+  // Where.
+  repeated ReflexSubject scope = 5;
+  // Who owns it; unset when nobody yet.
+  ReflexSubject owner = 6;
+  google.protobuf.Timestamp deadline = 7;
+  // "OPEN", "ASSIGNED" or "RESOLVED".
+  string state = 8;
+  int32 count = 9;
+  google.protobuf.Timestamp first_seen_time = 10;
+  google.protobuf.Timestamp last_seen_time = 11;
+  string resolved_by = 12;
+  google.protobuf.Timestamp resolve_time = 13;
+  string resolution = 14;
+}
+
+// ListFailuresRequest filters failures.
+message ListFailuresRequest {
+  int32 page_size = 1 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 200
+  }];
+  string page_token = 2 [(buf.validate.field).string = {
+    max_len: 64
+    pattern: "^[A-Za-z0-9_-]*$"
+  }];
+  repeated string states = 3 [(buf.validate.field).repeated = {
+    max_items: 3
+    unique: true
+    items: {
+      string: {
+        in: [
+          "OPEN",
+          "ASSIGNED",
+          "RESOLVED"
+        ]
+      }
+    }
+  }];
+}
+
+// ListFailuresResponse is one page.
+message ListFailuresResponse {
+  repeated OperationalFailure failures = 1;
+  string next_page_token = 2;
+}
+
+// AssignFailureRequest sets an owner.
+message AssignFailureRequest {
+  string id = 1 [(buf.validate.field).string.uuid = true];
+  // The owner's user id.
+  string owner_id = 2 [(buf.validate.field).string.uuid = true];
+}
+
+// AssignFailureResponse returns the failure.
+message AssignFailureResponse {
+  OperationalFailure failure = 1;
+}
+
+// ResolveFailureRequest resolves one.
+message ResolveFailureRequest {
+  string id = 1 [(buf.validate.field).string.uuid = true];
+  // How (1 to 1000 characters).
+  string resolution = 2 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 1000
+  }];
+}
+
+// ResolveFailureResponse returns the failure.
+message ResolveFailureResponse {
+  OperationalFailure failure = 1;
+}

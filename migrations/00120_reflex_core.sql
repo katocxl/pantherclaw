@@ -35,7 +35,8 @@ CREATE TABLE pc.detection_cursors (
 
 -- Per-rule engine state: consecutive evaluation errors, auto-disable after
 -- ten in a row, and the day an overflow was last reported (one report per
--- rule per day, D10).
+-- rule per day, D10). window_groups and seen_keys count the rule's live window groups
+-- and first-seen keys, so the cardinality caps are checked in O(1) (D59 M5).
 CREATE TABLE pc.detection_rule_state (
     org_id              uuid        NOT NULL REFERENCES pc.orgs (id),
     rule_id             text        NOT NULL CHECK (char_length(rule_id) BETWEEN 1 AND 128),
@@ -44,6 +45,8 @@ CREATE TABLE pc.detection_rule_state (
     disabled_at         timestamptz,
     disabled_reason     text        CHECK (char_length(disabled_reason) BETWEEN 1 AND 512),
     overflow_reported_on date,
+    window_groups       integer     NOT NULL DEFAULT 0 CHECK (window_groups >= 0),
+    seen_keys           integer     NOT NULL DEFAULT 0 CHECK (seen_keys >= 0),
     updated_at          timestamptz NOT NULL DEFAULT now(),
     PRIMARY KEY (org_id, rule_id)
 );
@@ -61,6 +64,17 @@ CREATE TABLE pc.detection_window_buckets (
     PRIMARY KEY (org_id, rule_id, group_key, bucket)
 );
 CREATE INDEX detection_window_buckets_age ON pc.detection_window_buckets (org_id, bucket);
+
+-- The live groups of each window rule and when each was last counted; the
+-- engine keeps detection_rule_state.window_groups equal to their number.
+CREATE TABLE pc.detection_window_groups (
+    org_id      uuid        NOT NULL REFERENCES pc.orgs (id),
+    rule_id     text        NOT NULL CHECK (char_length(rule_id) BETWEEN 1 AND 128),
+    group_key   text        NOT NULL CHECK (char_length(group_key) BETWEEN 1 AND 512),
+    last_bucket timestamptz NOT NULL,
+    PRIMARY KEY (org_id, rule_id, group_key)
+);
+CREATE INDEX detection_window_groups_age ON pc.detection_window_groups (org_id, last_bucket);
 
 -- Sequence progress: the steps matched so far for one group, and the
 -- ledger entries that matched them.
@@ -221,6 +235,7 @@ CREATE UNIQUE INDEX alerts_open_dedupe ON pc.alerts (org_id, dedupe_key)
 CREATE INDEX alerts_by_time ON pc.alerts (org_id, id DESC);
 CREATE INDEX alerts_by_group ON pc.alerts (org_id, group_key, last_seen) WHERE group_key <> '';
 CREATE INDEX alerts_by_incident ON pc.alerts (org_id, incident_id) WHERE incident_id IS NOT NULL;
+CREATE INDEX alerts_suppressed ON pc.alerts (org_id, suppression_id) WHERE state = 'SUPPRESSED';
 
 CREATE TABLE pc.alert_evidence (
     org_id      uuid        NOT NULL,
@@ -295,7 +310,9 @@ CREATE INDEX operational_failures_by_time ON pc.operational_failures (org_id, id
 CREATE TABLE pc.reflex_digests (
     org_id          uuid        NOT NULL REFERENCES pc.orgs (id),
     day             date        NOT NULL,
-    state           text        NOT NULL DEFAULT 'PENDING' CHECK (state IN ('PENDING', 'SENT', 'FAILED')),
+    -- ENQUEUED once its notification is queued; a failed enqueue rolls the
+    -- row back and the next run retries (D59 L8).
+    state           text        NOT NULL DEFAULT 'PENDING' CHECK (state IN ('PENDING', 'ENQUEUED')),
     decisions       integer     NOT NULL DEFAULT 0 CHECK (decisions >= 0),
     authority_changes integer   NOT NULL DEFAULT 0 CHECK (authority_changes >= 0),
     alerts          integer     NOT NULL DEFAULT 0 CHECK (alerts >= 0),
@@ -317,6 +334,11 @@ CREATE POLICY tenant_isolation ON pc.detection_rule_state
 ALTER TABLE pc.detection_window_buckets ENABLE ROW LEVEL SECURITY;
 ALTER TABLE pc.detection_window_buckets FORCE ROW LEVEL SECURITY;
 CREATE POLICY tenant_isolation ON pc.detection_window_buckets
+    USING (org_id = (SELECT NULLIF(current_setting('app.org_id', true), '')::uuid))
+    WITH CHECK (org_id = (SELECT NULLIF(current_setting('app.org_id', true), '')::uuid));
+ALTER TABLE pc.detection_window_groups ENABLE ROW LEVEL SECURITY;
+ALTER TABLE pc.detection_window_groups FORCE ROW LEVEL SECURITY;
+CREATE POLICY tenant_isolation ON pc.detection_window_groups
     USING (org_id = (SELECT NULLIF(current_setting('app.org_id', true), '')::uuid))
     WITH CHECK (org_id = (SELECT NULLIF(current_setting('app.org_id', true), '')::uuid));
 ALTER TABLE pc.detection_sequences ENABLE ROW LEVEL SECURITY;
@@ -372,11 +394,11 @@ CREATE POLICY tenant_isolation ON pc.reflex_digests
 
 -- Engine working memory: the engine inserts, updates and prunes it.
 GRANT SELECT, INSERT, UPDATE ON pc.detection_cursors, pc.detection_rule_state TO pc_app;
-GRANT SELECT, INSERT, UPDATE, DELETE ON pc.detection_window_buckets, pc.detection_sequences TO pc_app;
+GRANT SELECT, INSERT, UPDATE, DELETE ON pc.detection_window_buckets, pc.detection_window_groups, pc.detection_sequences TO pc_app;
 -- Alerts, incidents and failures change only through their state, owner
 -- and counting columns; their evidence and events are append-only.
 GRANT SELECT, INSERT ON pc.alerts, pc.incidents, pc.suppressions, pc.operational_failures TO pc_app;
-GRANT UPDATE (state, incident_id, suppression_id, count, last_seen, severity, updated_at) ON pc.alerts TO pc_app;
+GRANT UPDATE (state, incident_id, suppression_id, count, last_seen, severity, attention, updated_at) ON pc.alerts TO pc_app;
 GRANT UPDATE (state, owner_id, severity, updated_at) ON pc.incidents TO pc_app;
 GRANT UPDATE (ended_at, ended_by, end_reason) ON pc.suppressions TO pc_app;
 GRANT UPDATE (state, owner_type, owner_id, count, last_seen, resolved_by, resolved_at, resolution, summary, next_step, deadline)
@@ -400,6 +422,7 @@ DROP FUNCTION pc.suppression_end();
 DROP TABLE pc.incident_events;
 DROP TABLE pc.incidents;
 DROP TABLE pc.detection_sequences;
+DROP TABLE pc.detection_window_groups;
 DROP TABLE pc.detection_window_buckets;
 DROP TABLE pc.detection_rule_state;
 DROP TABLE pc.detection_cursors;

@@ -824,7 +824,20 @@ type PcDetectionRuleState struct {
 	DisabledAt         *time.Time
 	DisabledReason     *string
 	OverflowReportedOn pgtype.Date
+	WindowGroups       int32
+	SeenKeys           int32
 	UpdatedAt          time.Time
+}
+
+type PcDetectionRuleVersion struct {
+	OrgID         ids.OrgID
+	Rule          ids.UUID
+	RuleID        string
+	Version       int32
+	ContentDigest []byte
+	LedgerEntryID ids.UUID
+	PublishedBy   ids.UUID
+	CreatedAt     time.Time
 }
 
 type PcDetectionSeen struct {
@@ -852,6 +865,13 @@ type PcDetectionWindowBucket struct {
 	Bucket         time.Time
 	N              int32
 	DistinctValues []string
+}
+
+type PcDetectionWindowGroup struct {
+	OrgID      ids.OrgID
+	RuleID     string
+	GroupKey   string
+	LastBucket time.Time
 }
 
 type PcDeviceCode struct {

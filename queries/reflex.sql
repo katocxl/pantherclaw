@@ -8,7 +8,7 @@
 -- The context of the transactions a feed batch names: run, agent, instance,
 -- environment, grant, principal, operation, connection and its class.
 SELECT t.id, t.run_id, r.agent_id, r.instance_id, r.environment_id, r.grant_id, r.principal_user_id,
-       r.principal_sa_id, r.parent_run_id, r.depth, t.operation, t.connection_id, t.mode,
+       r.principal_sa_id, r.parent_run_id, r.depth, t.operation, t.connection_id, t.mode, t.budget_id, t.simulated,
        coalesce(c.destination_class, '')::text AS destination_class
 FROM pc.transactions t
 JOIN pc.runs r ON r.org_id = t.org_id AND r.id = t.run_id
@@ -53,3 +53,11 @@ VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(kind), sqlc.arg(summary), sqlc.
 ON CONFLICT (org_id, dedupe_key) WHERE state <> 'RESOLVED'
 DO UPDATE SET count = pc.operational_failures.count + 1, last_seen = now()
 RETURNING id, (xmax = 0) AS inserted;
+
+-- name: ScopeAgentPlacements :many
+-- Every agent's placement, for computing the agents a scoped viewer may
+-- read (D60); at most max_rows.
+SELECT id, team_id, environment_id FROM pc.agents
+WHERE org_id = sqlc.arg(org_id)
+ORDER BY id
+LIMIT sqlc.arg(max_rows);

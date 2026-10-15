@@ -386,7 +386,7 @@ func (s *Service) Approve(ctx context.Context, orgID ids.OrgID, r Responder, id 
 			return ok
 		})
 		if !ok {
-			return ErrNotEligible
+			return notEligible(id, reqs, me, l.elig.Context, a.Credential)
 		}
 		kind := "APPROVE"
 		if reqs[idx].Kind == apdomain.KindStepUp {
@@ -432,7 +432,7 @@ func (s *Service) Approve(ctx context.Context, orgID ids.OrgID, r Responder, id 
 		out, err = q.GetApprovalRequest(ctx, orgID, id)
 		return err
 	})
-	return out, err
+	return out, s.recordRefusal(ctx, orgID, r.User, err)
 }
 
 // approved moves a met request to APPROVED with its consume-by time, closes
@@ -494,7 +494,7 @@ func (s *Service) BeginApproval(ctx context.Context, orgID ids.OrgID, r Responde
 		copy(binding[:], row.Binding)
 		return nil
 	}, db.ReadOnly())
-	return binding, err
+	return binding, s.recordRefusal(ctx, orgID, r.User, err)
 }
 
 // approvable checks that user may approve or step up the request now: it is
@@ -527,7 +527,7 @@ func approvable(ctx context.Context, q *dbq.Queries, orgID ids.OrgID, row dbq.Pc
 		ok, _ := apdomain.Check(e.Requirements[i], me, e.Context, ids.UUID{})
 		return ok
 	}); !ok {
-		return ErrNotEligible
+		return notEligible(row.ID, e.Requirements, me, e.Context, ids.UUID{})
 	}
 	return nil
 }

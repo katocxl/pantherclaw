@@ -20,7 +20,9 @@
 CREATE TABLE pc.custom_detection_rules (
     org_id          uuid        NOT NULL REFERENCES pc.orgs (id),
     id              uuid        NOT NULL,
-    rule_id         text        NOT NULL CHECK (rule_id ~ '^org\.[a-z][a-z0-9_]{0,62}(\.[a-z0-9_]{1,63}){0,3}$'),
+    -- At most 128 bytes, like every other rule_id column (HR-240).
+    rule_id         text        NOT NULL CHECK (char_length(rule_id) <= 128
+                                                AND rule_id ~ '^org\.[a-z][a-z0-9_]{0,62}(\.[a-z0-9_]{1,63}){0,3}$'),
     version         integer     NOT NULL CHECK (version >= 1),
     content         text        NOT NULL CHECK (octet_length(content) BETWEEN 1 AND 65536),
     content_digest  bytea       NOT NULL CHECK (octet_length(content_digest) = 32),
@@ -89,6 +91,24 @@ CREATE TABLE pc.custom_detection_rule_tests (
 );
 CREATE INDEX custom_detection_rule_tests_by_rule ON pc.custom_detection_rule_tests (org_id, rule, id);
 
+-- The content digest each published version was published with, kept apart
+-- from the ledger body so retention (HR-198) cannot remove it, and never
+-- changed: no UPDATE or DELETE grants (D59 L2, HR-241).
+CREATE TABLE pc.detection_rule_versions (
+    org_id          uuid        NOT NULL,
+    rule            uuid        NOT NULL,
+    rule_id         text        NOT NULL CHECK (char_length(rule_id) BETWEEN 1 AND 128),
+    version         integer     NOT NULL CHECK (version >= 1),
+    content_digest  bytea       NOT NULL CHECK (octet_length(content_digest) = 32),
+    ledger_entry_id uuid        NOT NULL,
+    published_by    uuid        NOT NULL,
+    created_at      timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (org_id, rule),
+    FOREIGN KEY (org_id, rule) REFERENCES pc.custom_detection_rules (org_id, id),
+    FOREIGN KEY (org_id, ledger_entry_id) REFERENCES pc.ledger_entries (org_id, id),
+    FOREIGN KEY (org_id, published_by) REFERENCES pc.users (org_id, id)
+);
+
 CREATE TABLE pc.detection_seen (
     org_id     uuid        NOT NULL REFERENCES pc.orgs (id),
     rule_id    text        NOT NULL CHECK (char_length(rule_id) BETWEEN 1 AND 128),
@@ -110,19 +130,25 @@ ALTER TABLE pc.custom_detection_rule_tests FORCE ROW LEVEL SECURITY;
 CREATE POLICY tenant_isolation ON pc.custom_detection_rule_tests
     USING (org_id = (SELECT NULLIF(current_setting('app.org_id', true), '')::uuid))
     WITH CHECK (org_id = (SELECT NULLIF(current_setting('app.org_id', true), '')::uuid));
+ALTER TABLE pc.detection_rule_versions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE pc.detection_rule_versions FORCE ROW LEVEL SECURITY;
+CREATE POLICY tenant_isolation ON pc.detection_rule_versions
+    USING (org_id = (SELECT NULLIF(current_setting('app.org_id', true), '')::uuid))
+    WITH CHECK (org_id = (SELECT NULLIF(current_setting('app.org_id', true), '')::uuid));
 ALTER TABLE pc.detection_seen ENABLE ROW LEVEL SECURITY;
 ALTER TABLE pc.detection_seen FORCE ROW LEVEL SECURITY;
 CREATE POLICY tenant_isolation ON pc.detection_seen
     USING (org_id = (SELECT NULLIF(current_setting('app.org_id', true), '')::uuid))
     WITH CHECK (org_id = (SELECT NULLIF(current_setting('app.org_id', true), '')::uuid));
 
-GRANT SELECT, INSERT ON pc.custom_detection_rules, pc.custom_detection_rule_tests TO pc_app;
+GRANT SELECT, INSERT ON pc.custom_detection_rules, pc.custom_detection_rule_tests, pc.detection_rule_versions TO pc_app;
 GRANT UPDATE (state, published_by, published_at, ledger_entry_id, disabled_by, disabled_at, disabled_reason)
     ON pc.custom_detection_rules TO pc_app;
 GRANT SELECT, INSERT, UPDATE, DELETE ON pc.detection_seen TO pc_app;
-GRANT SELECT ON pc.custom_detection_rules, pc.custom_detection_rule_tests, pc.detection_seen TO pc_audit_ro;
+GRANT SELECT ON pc.custom_detection_rules, pc.custom_detection_rule_tests, pc.detection_rule_versions, pc.detection_seen TO pc_audit_ro;
 
 -- +goose Down
+DROP TABLE pc.detection_rule_versions;
 DROP TABLE pc.detection_seen;
 DROP TABLE pc.custom_detection_rule_tests;
 DROP TABLE pc.custom_detection_rules;

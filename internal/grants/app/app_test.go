@@ -11,6 +11,7 @@ import (
 	"time"
 
 	defs "github.com/katocxl/pantherclaw/internal/definitions/domain"
+	"github.com/katocxl/pantherclaw/internal/evidence/audit"
 	"github.com/katocxl/pantherclaw/internal/grants/app"
 	"github.com/katocxl/pantherclaw/internal/grants/domain"
 	"github.com/katocxl/pantherclaw/internal/grants/grantstest"
@@ -379,5 +380,47 @@ func TestGetShowsLineageAndEffectiveAuthority(t *testing.T) {
 	}
 	if _, err := f.svc.Get(f.ctx, domain.NewGrantID()); !errors.Is(err, app.ErrGrantNotFound) {
 		t.Fatalf("Get(unknown) = %v", err)
+	}
+}
+
+type refusals struct{ events []audit.Event }
+
+func (r *refusals) RecordRefusal(_ context.Context, _ ids.OrgID, ev audit.Event) error {
+	r.events = append(r.events, ev)
+	return nil
+}
+
+// TestHR161_RefusedGrantChangesAreAudited: a non-human caller's refused
+// issue or revision, and a workload's delegation beyond its grant, are
+// audited with the caller as actor, so pc.authority.self_issue sees them
+// (G0 M10 D59 H1).
+func TestHR161_RefusedGrantChangesAreAudited(t *testing.T) {
+	f := setup(t, allPerms)
+	rec := &refusals{}
+	f.svc.Refusals = rec
+	g := f.issue(t)
+	saID := ids.NewV7()
+	sa := as(saID, tdomain.KindServiceAccount)
+	if _, err := f.svc.Issue(sa, app.IssueRequest{AgentID: f.agent.ID, Principal: f.alice, ExpiresAt: now.Add(time.Hour)}); !errors.Is(err, app.ErrHumanOnly) {
+		t.Fatal(err)
+	}
+	if _, _, err := f.svc.Revise(sa, app.ReviseRequest{ID: g.ID, Revision: 1, Bounds: g.Bounds}); !errors.Is(err, app.ErrHumanOnly) {
+		t.Fatal(err)
+	}
+	parentRun := f.run(g.ID, ids.UUID{})
+	if _, _, err := f.delegate(t, parentRun, `{"operations": ["payments.*"]}`); err == nil {
+		t.Fatal("widening delegation accepted")
+	}
+	if len(rec.events) != 3 {
+		t.Fatalf("refusals %d, want 3", len(rec.events))
+	}
+	for i, want := range []string{"grant.issue_refused", "grant.issue_refused", "grant.delegate_refused"} {
+		ev := rec.events[i]
+		if ev.Name != want || ev.Outcome != audit.Denied {
+			t.Errorf("refusal %d: %s %s", i, ev.Name, ev.Outcome)
+		}
+	}
+	if rec.events[0].Actor.ID != saID.String() || rec.events[0].Details["agent"] != f.agent.ID.String() {
+		t.Errorf("issue refusal: %+v", rec.events[0])
 	}
 }

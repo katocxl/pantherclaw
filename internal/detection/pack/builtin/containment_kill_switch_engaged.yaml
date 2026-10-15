@@ -1,0 +1,22 @@
+# SPDX-License-Identifier: BUSL-1.1
+# Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+id: pc.containment.kill_switch_engaged
+version: "1"
+title: Kill switch engaged
+description: >-
+  A person engaged the organization's kill switch. Every agent action is
+  stopped, and an incident tracks the response.
+severity: CRITICAL
+attention: INCIDENT
+basis: OBSERVED
+edition: community
+on: [audit.security.kill_switch_engaged]
+tests:
+  - name: engaged
+    fires: true
+    events:
+      - {kind: audit.security.kill_switch_engaged, actor_type: user, actor_id: u1}
+  - name: restore proposed
+    fires: false
+    events:
+      - {kind: audit.security.kill_switch_restore_proposed, actor_type: user, actor_id: u1}

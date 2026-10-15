@@ -29,7 +29,7 @@ func (q *Queries) FeedHead(ctx context.Context, orgID ids.OrgID) (int64, error) 
 const feedTransactions = `-- name: FeedTransactions :many
 
 SELECT t.id, t.run_id, r.agent_id, r.instance_id, r.environment_id, r.grant_id, r.principal_user_id,
-       r.principal_sa_id, r.parent_run_id, r.depth, t.operation, t.connection_id, t.mode,
+       r.principal_sa_id, r.parent_run_id, r.depth, t.operation, t.connection_id, t.mode, t.budget_id, t.simulated,
        coalesce(c.destination_class, '')::text AS destination_class
 FROM pc.transactions t
 JOIN pc.runs r ON r.org_id = t.org_id AND r.id = t.run_id
@@ -51,6 +51,8 @@ type FeedTransactionsRow struct {
 	Operation        string
 	ConnectionID     *ids.UUID
 	Mode             string
+	BudgetID         *ids.UUID
+	Simulated        bool
 	DestinationClass string
 }
 
@@ -84,6 +86,8 @@ func (q *Queries) FeedTransactions(ctx context.Context, orgID ids.OrgID, ids []i
 			&i.Operation,
 			&i.ConnectionID,
 			&i.Mode,
+			&i.BudgetID,
+			&i.Simulated,
 			&i.DestinationClass,
 		); err != nil {
 			return nil, err
@@ -153,6 +157,41 @@ func (q *Queries) InsertAlertEvidence(ctx context.Context, arg InsertAlertEviden
 		arg.OccurredAt,
 	)
 	return err
+}
+
+const scopeAgentPlacements = `-- name: ScopeAgentPlacements :many
+SELECT id, team_id, environment_id FROM pc.agents
+WHERE org_id = $1
+ORDER BY id
+LIMIT $2
+`
+
+type ScopeAgentPlacementsRow struct {
+	ID            ids.UUID
+	TeamID        *ids.UUID
+	EnvironmentID *ids.UUID
+}
+
+// Every agent's placement, for computing the agents a scoped viewer may
+// read (D60); at most max_rows.
+func (q *Queries) ScopeAgentPlacements(ctx context.Context, orgID ids.OrgID, maxRows int32) ([]ScopeAgentPlacementsRow, error) {
+	rows, err := q.db.Query(ctx, scopeAgentPlacements, orgID, maxRows)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ScopeAgentPlacementsRow{}
+	for rows.Next() {
+		var i ScopeAgentPlacementsRow
+		if err := rows.Scan(&i.ID, &i.TeamID, &i.EnvironmentID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const upsertAlert = `-- name: UpsertAlert :one

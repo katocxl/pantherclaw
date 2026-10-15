@@ -403,6 +403,11 @@ func cmdServe(ctx context.Context, args []string, stderr io.Writer, env Env, onS
 			return err
 		}
 		evidenceJobs = append(evidenceJobs, exceptionJobs...)
+		reflexJobs, err := registerReflexCoreJobs(jreg, pool, cfg.CEL, bill, m5.notifications, log)
+		if err != nil {
+			return err
+		}
+		evidenceJobs = append(evidenceJobs, reflexJobs...)
 		if err := registerSimulationJobs(jreg, pool, kp, bill, log); err != nil {
 			return err
 		}
@@ -560,7 +565,7 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	gstore := &grantspg.Store{Pool: pool}
 	grants := &grantsapp.Service{
 		Repo: gstore, Subjects: gstore, Defs: &defspg.Store{Pool: pool}, Authz: grantsapp.SubjectAuthorizer{},
-		Clock: clock.System{}, Listing: gstore,
+		Clock: clock.System{}, Listing: gstore, Refusals: gstore,
 	}
 	runs := runsapp.New(pool).WithGrants(gstore)
 	if len(d.subjects) > 0 {
@@ -605,6 +610,7 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	if err != nil {
 		return nil, err
 	}
+	registerReflexCore(rs, d)
 	mux := http.NewServeMux()
 	rpc.Mount(mux, rs)
 	d.m5p2.mount(mux, workload)

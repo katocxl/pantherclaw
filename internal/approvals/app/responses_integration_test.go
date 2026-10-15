@@ -229,6 +229,12 @@ func TestHR036_TheLauncherNeitherApprovesNorDeclines(t *testing.T) {
 	if _, err := f.approve(f.alice, req); !errors.Is(err, approvals.ErrNotEligible) {
 		t.Fatalf("the launcher approving: %v", err)
 	}
+	// The refusal is audited with its reason, for pc.authority.self_approve
+	// (G0 M10 D59 H2).
+	if n := f.str(`SELECT count(*)::text FROM pc.ledger_entries WHERE kind = 'audit.approval.response_refused'
+		AND convert_from(body, 'UTF8')::jsonb ->> 'reason_code' = 'LAUNCHER_EXCLUDED'`); n == "0" {
+		t.Error("the launcher's refused approval was not audited")
+	}
 	if _, err := f.svc.Decline(f.as(f.alice), req, "OTHER", "", ""); !errors.Is(err, approvals.ErrNotEligible) {
 		t.Fatalf("the launcher declining: %v", err)
 	}

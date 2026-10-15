@@ -64,6 +64,9 @@ type Faults struct {
 	// Description, when set, replaces get_refund's description: the drift
 	// a reviewed package must catch.
 	Description string
+	// DescriptionJSON, when set, replaces get_refund's description with this
+	// raw JSON value (a non-string description, G0 M10 D59 H4).
+	DescriptionJSON string
 	// Hide leaves these tools out of tools/list (a tool that disappeared).
 	Hide []string
 	// PageSize, when set, lists tools that many per page.
@@ -196,6 +199,10 @@ func (s *Server) tools() []jsontext.Value {
 	if s.f.Description != "" {
 		get = s.f.Description
 	}
+	getJSON := strconv.Quote(get)
+	if s.f.DescriptionJSON != "" {
+		getJSON = s.f.DescriptionJSON
+	}
 	currency, reason := `{"type":"string"}`, `{"type":"string"}`
 	if s.f.ParamHeaders {
 		currency, reason = `{"type":"string","x-mcp-header":"Currency"}`, `{"type":"string","x-mcp-header":"Reason"}`
@@ -208,7 +215,7 @@ func (s *Server) tools() []jsontext.Value {
 		jsontext.Value(`{"name":"create_refund","description":"Refund a simulated charge.","inputSchema":{"type":"object",` +
 			`"properties":{"charge":{"type":"string"},"amount":{"type":"string"},"currency":` + currency + `,"reason":` + reason + `},` +
 			`"required":["charge","amount","currency"]}}`),
-		jsontext.Value(`{"name":"get_refund","description":` + strconv.Quote(get) + `,"inputSchema":{"type":"object",` +
+		jsontext.Value(`{"name":"get_refund","description":` + getJSON + `,"inputSchema":{"type":"object",` +
 			`"properties":{` + refundProps + `},"required":["refund"]}}`),
 	}
 	if s.f.GitHub != nil {

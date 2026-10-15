@@ -1,0 +1,39 @@
+# SPDX-License-Identifier: BUSL-1.1
+# Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+id: pc.budget.splitting
+version: "1"
+title: Budgeted operation split across runs
+description: >-
+  One agent was authorized for the same budgeted operation from five or
+  more different runs within an hour. Splitting spend across runs or
+  children keeps each one under its limit (PN-006.4).
+severity: MEDIUM
+attention: ALERT
+basis: INFERRED
+owasp: [ASI02]
+edition: business
+on: [receipt.decision]
+match: event.decision in ["ALLOW", "ALLOW_WITH_OBLIGATIONS"] && "budget" in event.attrs
+window:
+  duration: 1h
+  group_by: [subjects.agent, operation, attrs.budget]
+  distinct: subjects.run
+  count: 5
+group: agent
+tests:
+  - name: five runs
+    fires: true
+    events:
+      - {kind: receipt.decision, decision: ALLOW, operation: payments.refund.create, subjects: {agent: a1, run: r1}, attrs: {budget: b1}}
+      - {kind: receipt.decision, decision: ALLOW, operation: payments.refund.create, subjects: {agent: a1, run: r2}, attrs: {budget: b1}, at: 1m}
+      - {kind: receipt.decision, decision: ALLOW, operation: payments.refund.create, subjects: {agent: a1, run: r3}, attrs: {budget: b1}, at: 2m}
+      - {kind: receipt.decision, decision: ALLOW, operation: payments.refund.create, subjects: {agent: a1, run: r4}, attrs: {budget: b1}, at: 3m}
+      - {kind: receipt.decision, decision: ALLOW, operation: payments.refund.create, subjects: {agent: a1, run: r5}, attrs: {budget: b1}, at: 4m}
+  - name: one run many times
+    fires: false
+    events:
+      - {kind: receipt.decision, decision: ALLOW, operation: payments.refund.create, subjects: {agent: a1, run: r1}, attrs: {budget: b1}}
+      - {kind: receipt.decision, decision: ALLOW, operation: payments.refund.create, subjects: {agent: a1, run: r1}, attrs: {budget: b1}, at: 1m}
+      - {kind: receipt.decision, decision: ALLOW, operation: payments.refund.create, subjects: {agent: a1, run: r1}, attrs: {budget: b1}, at: 2m}
+      - {kind: receipt.decision, decision: ALLOW, operation: payments.refund.create, subjects: {agent: a1, run: r1}, attrs: {budget: b1}, at: 3m}
+      - {kind: receipt.decision, decision: ALLOW, operation: payments.refund.create, subjects: {agent: a1, run: r1}, attrs: {budget: b1}, at: 4m}

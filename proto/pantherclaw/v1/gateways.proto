@@ -638,6 +638,15 @@ message ReportDriftRequest {
   string expected_digest = 3 [(buf.validate.field).string.pattern = "^sha256:[0-9a-f]{64}$"];
   // Digest observed now; empty when the tool is gone.
   string observed_digest = 4 [(buf.validate.field).string.pattern = "^(sha256:[0-9a-f]{64})?$"];
+  // The tool description the gateway observed in the upstream listing, for
+  // the instruction-like content scan (G0 M10 D47, PN-006.2). Unset from
+  // older gateways: the scan is then recorded as not_scanned.
+  optional string observed_description = 5 [(buf.validate.field).string.max_bytes = 8192];
+  // Whether the gateway cut observed_description to 8 KiB: the scan then
+  // covers a prefix only and is recorded as partial, never clean (D59 M8).
+  bool observed_description_truncated = 6;
+  // SHA-256 of the whole observed description, "sha256:<hex>".
+  string observed_description_sha256 = 7 [(buf.validate.field).string.pattern = "^(sha256:[0-9a-f]{64})?$"];
 }
 
 // ReportDriftResponse says what the server did.

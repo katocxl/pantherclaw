@@ -49,6 +49,9 @@ type Entry struct {
 	Exclusions   []string   `json:"exclusions"`
 	RoutesDigest string     `json:"routes_digest"`
 	Closure      string     `json:"closure,omitzero"`
+	// PreviousState is the scope's state before this snapshot, empty for
+	// its first; pc.coverage.lost reads it (G0 M10 D59 M7).
+	PreviousState string `json:"previous_state,omitzero"`
 }
 
 // InvalidationEntry is the ledger body of a coverage invalidation, which
@@ -167,8 +170,10 @@ func (s *Service) reassess(ctx context.Context, tx db.TenantTx, sc domain.Scope,
 		OrgID: tx.OrgID(), AgentID: sc.Agent, ConnectionID: sc.Connection, Operation: sc.Operation,
 	})
 	var lastValid *ids.UUID
+	previous := ""
 	switch {
 	case err == nil:
+		previous = current.State
 		var prev Snapshot
 		if err := json.Unmarshal(current.Body, &prev); err != nil {
 			return false, err
@@ -196,7 +201,7 @@ func (s *Service) reassess(ctx context.Context, tx db.TenantTx, sc domain.Scope,
 	if err != nil {
 		return false, err
 	}
-	entryBody, err := entryOf(next)
+	entryBody, err := entryOf(next, previous)
 	if err != nil {
 		return false, err
 	}
@@ -220,7 +225,7 @@ func (s *Service) reassess(ctx context.Context, tx db.TenantTx, sc domain.Scope,
 // entryOf is the canonical ledger body of a snapshot (HR-217): its scope,
 // state, times, exclusions and closure, and the SHA-256 of the canonical
 // {"routes": [...]} of its record.
-func entryOf(s Snapshot) ([]byte, error) {
+func entryOf(s Snapshot, previous string) ([]byte, error) {
 	routes, err := evdomain.CanonicalBody(struct {
 		Routes []SnapshotRoute `json:"routes"`
 	}{s.Routes})
@@ -232,6 +237,7 @@ func entryOf(s Snapshot) ([]byte, error) {
 		V: 1, Scope: EntryScope{Agent: s.Agent, Connection: s.Connection, Operation: s.Operation}, State: s.State,
 		Snapshot: s.ID, ComputedAt: s.ComputedAt, ExpiresAt: s.ExpiresAt, Exclusions: s.Exclusions,
 		RoutesDigest: "sha256:" + hex.EncodeToString(digest[:]), Closure: s.Closure,
+		PreviousState: previous,
 	}
 	if e.Exclusions == nil {
 		e.Exclusions = []string{}
