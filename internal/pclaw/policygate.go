@@ -69,7 +69,7 @@ func changeNote(a *app, m proto.Message) error {
 		if ids := r.GetCarriedRuleIds(); len(ids) > 0 {
 			fmt.Fprintf(&b, "emergency rules carried forward from the published version: %s\n", strings.Join(ids, ", "))
 		}
-		b.WriteString("containment, grants and guardrails are separate records: the rollback did not change them\n")
+		b.WriteString("containment, grants and envelopes (org guardrails) are separate records: the rollback did not change them\n")
 	}
 	if cr != nil {
 		fmt.Fprintf(&b, "waiting for confirmation: this version loosens the published policy, so %d %s holding policy.publish must confirm it with a security key within 24 hours at\n  %s\n",

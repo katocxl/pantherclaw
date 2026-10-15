@@ -14,6 +14,37 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 )
 
+const policyActiveHoldersAmong = `-- name: PolicyActiveHoldersAmong :many
+SELECT DISTINCT u.id
+FROM pc.role_bindings b
+JOIN pc.users u ON u.org_id = b.org_id AND u.id = b.user_id
+WHERE b.org_id = $1 AND b.role = ANY ($2::text[]) AND b.scope_type = 'ORG'
+  AND u.state = 'ACTIVE' AND u.id = ANY ($3::uuid[])
+`
+
+// PolicyActiveHoldersAmong are those of the given users who are active
+// and hold one of the roles at the org path (a change request's
+// confirmers, re-checked at the last confirmation).
+func (q *Queries) PolicyActiveHoldersAmong(ctx context.Context, orgID ids.OrgID, roles []string, users []ids.UUID) ([]ids.UUID, error) {
+	rows, err := q.db.Query(ctx, policyActiveHoldersAmong, orgID, roles, users)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ids.UUID{}
+	for rows.Next() {
+		var id ids.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const policyRoleHolders = `-- name: PolicyRoleHolders :one
 
 SELECT count(DISTINCT u.id)::integer AS n
