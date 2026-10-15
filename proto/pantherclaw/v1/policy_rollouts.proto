@@ -1,0 +1,369 @@
+// SPDX-License-Identifier: BUSL-1.1
+// Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+
+syntax = "proto3";
+
+package pantherclaw.v1;
+
+import "buf/validate/validate.proto";
+import "google/protobuf/timestamp.proto";
+
+// PolicyRolloutService takes a policy version to an org's agents in stages
+// (G0 M11.1, D12, D13; F200–F205; HR-232, HR-233, HR-234, HR-237).
+//
+// SHADOW replays the agents' new decisions under the version and records
+// what it would have decided: a shadow prediction, not enforcement, and
+// never on the decision path. PILOT enforces the version for the agents of
+// named cohorts; every other agent keeps the published version, and the
+// Authority selects the version from its own records, never from a
+// request. COMPLETE publishes it for everyone through the publish gate.
+// Rollout targets are agents: CONFIGURED, ACKNOWLEDGED (a live decision
+// used the version), VERIFIED (its routes for the version's operations are
+// covered), FAILED (decided with the published version because the
+// rollout's could not be used) or EXCEPTION (excluded by a person).
+//
+// Shadow, pilots and cohorts need the Team edition; every publish records a
+// COMPLETE rollout for target status in every edition. Every change is
+// made by a person.
+service PolicyRolloutService {
+  // StartPolicyRollout starts a SHADOW rollout of a version that is not
+  // published (Team): the agents of shadow_cohorts (none: every agent).
+  // permission: policy.publish
+  rpc StartPolicyRollout(StartPolicyRolloutRequest) returns (StartPolicyRolloutResponse);
+  // StartPolicyPilot enforces a SHADOW rollout's version for the agents of
+  // cohorts (Team), after the publish gate. A version that loosens the
+  // published one waits for a change request, returned in change_request.
+  // permission: policy.publish
+  rpc StartPolicyPilot(StartPolicyPilotRequest) returns (StartPolicyPilotResponse);
+  // ExpandPolicyPilot adds cohorts to a pilot (Team); no new approval while
+  // the version it started from is still published.
+  // permission: policy.publish
+  rpc ExpandPolicyPilot(ExpandPolicyPilotRequest) returns (ExpandPolicyPilotResponse);
+  // ExcludePolicyRolloutTarget keeps an agent on the published version
+  // (EXCEPTION).
+  // permission: policy.publish
+  rpc ExcludePolicyRolloutTarget(ExcludePolicyRolloutTargetRequest) returns (ExcludePolicyRolloutTargetResponse);
+  // CompletePolicyRollout publishes the rollout's version through the
+  // publish gate. A version that loosens the published one waits for a
+  // change request, returned in change_request.
+  // permission: policy.publish
+  rpc CompletePolicyRollout(CompletePolicyRolloutRequest) returns (CompletePolicyRolloutResponse);
+  // CancelPolicyRollout ends a rollout in SHADOW or PILOT: its agents are
+  // decided by the published version again.
+  // permission: policy.publish
+  rpc CancelPolicyRollout(CancelPolicyRolloutRequest) returns (CancelPolicyRolloutResponse);
+  // GetPolicyRollout returns a rollout with its cohorts and target counts.
+  // permission: policy.read
+  rpc GetPolicyRollout(GetPolicyRolloutRequest) returns (GetPolicyRolloutResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // ListPolicyRollouts lists rollouts, newest first.
+  // permission: policy.read
+  rpc ListPolicyRollouts(ListPolicyRolloutsRequest) returns (ListPolicyRolloutsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // ListPolicyRolloutTargets lists a rollout's targets by agent id.
+  // permission: policy.read
+  rpc ListPolicyRolloutTargets(ListPolicyRolloutTargetsRequest) returns (ListPolicyRolloutTargetsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // CreatePolicyCohort creates an empty cohort of agents (Team).
+  // permission: policy.publish
+  rpc CreatePolicyCohort(CreatePolicyCohortRequest) returns (CreatePolicyCohortResponse);
+  // AddPolicyCohortMembers adds agents to a cohort (Team; at most 1,000).
+  // permission: policy.publish
+  rpc AddPolicyCohortMembers(AddPolicyCohortMembersRequest) returns (AddPolicyCohortMembersResponse);
+  // RemovePolicyCohortMembers removes agents from a cohort (Team).
+  // permission: policy.publish
+  rpc RemovePolicyCohortMembers(RemovePolicyCohortMembersRequest) returns (RemovePolicyCohortMembersResponse);
+  // ListPolicyCohorts lists the org's cohorts with their agents.
+  // permission: policy.read
+  rpc ListPolicyCohorts(ListPolicyCohortsRequest) returns (ListPolicyCohortsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // GetShadowSummary returns what a rollout's shadow evaluation predicts:
+  // counts and samples by id, decision and reason, never an input value.
+  // permission: policy.read
+  rpc GetShadowSummary(GetShadowSummaryRequest) returns (GetShadowSummaryResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+}
+
+// PolicyRolloutStage is where a rollout is.
+enum PolicyRolloutStage {
+  POLICY_ROLLOUT_STAGE_UNSPECIFIED = 0;
+  POLICY_ROLLOUT_STAGE_SHADOW = 1;
+  POLICY_ROLLOUT_STAGE_PILOT = 2;
+  POLICY_ROLLOUT_STAGE_COMPLETE = 3;
+  POLICY_ROLLOUT_STAGE_CANCELLED = 4;
+}
+
+// PolicyRolloutTargetState is where one agent of a rollout is (F3).
+enum PolicyRolloutTargetState {
+  POLICY_ROLLOUT_TARGET_STATE_UNSPECIFIED = 0;
+  POLICY_ROLLOUT_TARGET_STATE_CONFIGURED = 1;
+  POLICY_ROLLOUT_TARGET_STATE_ACKNOWLEDGED = 2;
+  POLICY_ROLLOUT_TARGET_STATE_VERIFIED = 3;
+  POLICY_ROLLOUT_TARGET_STATE_FAILED = 4;
+  POLICY_ROLLOUT_TARGET_STATE_EXCEPTION = 5;
+}
+
+// PolicyRollout is a rollout with its cohorts and target counts.
+message PolicyRollout {
+  string id = 1;
+  string version_id = 2;
+  // base_version_id is the version published when the rollout started or
+  // its pilot did; empty when none was.
+  string base_version_id = 3;
+  PolicyRolloutStage stage = 4;
+  string created_by = 5;
+  google.protobuf.Timestamp create_time = 6;
+  google.protobuf.Timestamp stage_change_time = 7;
+  google.protobuf.Timestamp complete_time = 8;
+  repeated PolicyRolloutCohort cohorts = 9;
+  // target_counts counts the targets by state name.
+  map<string, int64> target_counts = 10;
+}
+
+// PolicyRolloutCohort is one of a rollout's cohorts: SHADOW or ENFORCE.
+message PolicyRolloutCohort {
+  string cohort_id = 1;
+  string name = 2;
+  string mode = 3;
+  int32 members = 4;
+}
+
+// PolicyRolloutTarget is one agent of a rollout.
+message PolicyRolloutTarget {
+  string agent_id = 1;
+  PolicyRolloutTargetState state = 2;
+  // owner_id is the agent's owner, who resolves a target that does not
+  // verify.
+  string owner_id = 3;
+  // coverage is the weakest coverage state seen for the version's
+  // operations.
+  string coverage = 4;
+  string reason = 5;
+  google.protobuf.Timestamp update_time = 6;
+}
+
+// PolicyCohort is a named group of agents.
+message PolicyCohort {
+  string id = 1;
+  string name = 2;
+  string created_by = 3;
+  google.protobuf.Timestamp create_time = 4;
+  repeated string agent_ids = 5;
+}
+
+// PolicyChangeRequestRef names a change request a person must confirm.
+message PolicyChangeRequestRef {
+  string id = 1;
+  string url = 2;
+}
+
+message StartPolicyRolloutRequest {
+  string version_id = 1 [(buf.validate.field).string.uuid = true];
+  repeated string shadow_cohorts = 2 [(buf.validate.field).repeated = {
+    max_items: 50
+    items: {
+      string: {pattern: "^[a-z][a-z0-9-]{0,63}$"}
+    }
+  }];
+}
+
+message StartPolicyRolloutResponse {
+  PolicyRollout rollout = 1;
+}
+
+message StartPolicyPilotRequest {
+  string rollout_id = 1 [(buf.validate.field).string.uuid = true];
+  repeated string cohorts = 2 [(buf.validate.field).repeated = {
+    min_items: 1
+    max_items: 50
+    items: {
+      string: {pattern: "^[a-z][a-z0-9-]{0,63}$"}
+    }
+  }];
+}
+
+message StartPolicyPilotResponse {
+  PolicyRollout rollout = 1;
+  // change_request is set when the pilot waits for confirmation.
+  PolicyChangeRequestRef change_request = 2;
+}
+
+message ExpandPolicyPilotRequest {
+  string rollout_id = 1 [(buf.validate.field).string.uuid = true];
+  repeated string cohorts = 2 [(buf.validate.field).repeated = {
+    min_items: 1
+    max_items: 50
+    items: {
+      string: {pattern: "^[a-z][a-z0-9-]{0,63}$"}
+    }
+  }];
+}
+
+message ExpandPolicyPilotResponse {
+  PolicyRollout rollout = 1;
+}
+
+message ExcludePolicyRolloutTargetRequest {
+  string rollout_id = 1 [(buf.validate.field).string.uuid = true];
+  string agent_id = 2 [(buf.validate.field).string.uuid = true];
+  string reason = 3 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 500
+  }];
+}
+
+message ExcludePolicyRolloutTargetResponse {
+  PolicyRolloutTarget target = 1;
+}
+
+message CompletePolicyRolloutRequest {
+  string rollout_id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+message CompletePolicyRolloutResponse {
+  PolicyRollout rollout = 1;
+  // change_request is set when the publish waits for confirmation.
+  PolicyChangeRequestRef change_request = 2;
+}
+
+message CancelPolicyRolloutRequest {
+  string rollout_id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+message CancelPolicyRolloutResponse {
+  PolicyRollout rollout = 1;
+}
+
+message GetPolicyRolloutRequest {
+  string rollout_id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+message GetPolicyRolloutResponse {
+  PolicyRollout rollout = 1;
+}
+
+message ListPolicyRolloutsRequest {
+  int32 page_size = 1 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 200
+  }];
+}
+
+message ListPolicyRolloutsResponse {
+  repeated PolicyRollout rollouts = 1;
+}
+
+message ListPolicyRolloutTargetsRequest {
+  string rollout_id = 1 [(buf.validate.field).string.uuid = true];
+  // state filters by state; unspecified lists every state.
+  PolicyRolloutTargetState state = 2 [(buf.validate.field).enum.defined_only = true];
+  int32 page_size = 3 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 200
+  }];
+  // page_token is the last agent id of the previous page.
+  string page_token = 4 [(buf.validate.field).string.max_len = 64];
+}
+
+message ListPolicyRolloutTargetsResponse {
+  repeated PolicyRolloutTarget targets = 1;
+  string next_page_token = 2;
+}
+
+message CreatePolicyCohortRequest {
+  string name = 1 [(buf.validate.field).string.pattern = "^[a-z][a-z0-9-]{0,63}$"];
+}
+
+message CreatePolicyCohortResponse {
+  PolicyCohort cohort = 1;
+}
+
+message AddPolicyCohortMembersRequest {
+  string name = 1 [(buf.validate.field).string.pattern = "^[a-z][a-z0-9-]{0,63}$"];
+  repeated string agent_ids = 2 [(buf.validate.field).repeated = {
+    min_items: 1
+    max_items: 1000
+    items: {
+      string: {uuid: true}
+    }
+  }];
+}
+
+message AddPolicyCohortMembersResponse {
+  // added counts the agents that were not members yet.
+  int32 added = 1;
+}
+
+message RemovePolicyCohortMembersRequest {
+  string name = 1 [(buf.validate.field).string.pattern = "^[a-z][a-z0-9-]{0,63}$"];
+  repeated string agent_ids = 2 [(buf.validate.field).repeated = {
+    min_items: 1
+    max_items: 1000
+    items: {
+      string: {uuid: true}
+    }
+  }];
+}
+
+message RemovePolicyCohortMembersResponse {
+  // removed counts the agents that were members.
+  int32 removed = 1;
+}
+
+message ListPolicyCohortsRequest {}
+
+message ListPolicyCohortsResponse {
+  repeated PolicyCohort cohorts = 1;
+}
+
+message GetShadowSummaryRequest {
+  string rollout_id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// ShadowCount is a count of one category: on a UTC day (key YYYY-MM-DD),
+// for an operation, or for an agent (key the agent id).
+message ShadowCount {
+  string key = 1;
+  // category is UNCHANGED, NEWLY_DENIED, NEWLY_HELD, NEWLY_CONSTRAINED,
+  // NEWLY_ALLOWED (expanded exposure), REASON_CHANGED or UNEVALUABLE.
+  string category = 2;
+  int64 n = 3;
+}
+
+// ShadowSample is one shadow result: ids, decisions and reasons only.
+message ShadowSample {
+  string transaction_id = 1;
+  int32 evaluation = 2;
+  string agent_id = 3;
+  string operation = 4;
+  string original_decision = 5;
+  string original_reason = 6;
+  string shadow_decision = 7;
+  string shadow_reason = 8;
+  string category = 9;
+  // limitation lists why an UNEVALUABLE replay could not run, by code.
+  string limitation = 10;
+  google.protobuf.Timestamp create_time = 11;
+}
+
+message GetShadowSummaryResponse {
+  // label is always "shadow prediction, not enforcement".
+  string label = 1;
+  string rollout_id = 2;
+  int64 total = 3;
+  map<string, int64> by_category = 4;
+  repeated ShadowCount by_day = 5;
+  // newly_held_per_day is the approval burden the version would add.
+  repeated ShadowCount newly_held_per_day = 6;
+  repeated ShadowCount by_operation = 7;
+  repeated ShadowCount by_agent = 8;
+  // truncated: past 100 000 results, only total, by_category and by_day
+  // grew.
+  bool truncated = 9;
+  repeated ShadowSample samples = 10;
+}
