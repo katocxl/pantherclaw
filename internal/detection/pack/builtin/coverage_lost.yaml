@@ -1,0 +1,39 @@
+# SPDX-License-Identifier: BUSL-1.1
+# Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+id: pc.coverage.lost
+version: "1"
+title: Enforced coverage lost on a route
+description: >-
+  A scope whose coverage was ENFORCED was recomputed at a lower state
+  (PARTIAL, OBSERVE_ONLY or UNKNOWN), so actions on it can bypass
+  enforcement.
+severity: HIGH
+attention: ALERT
+basis: OBSERVED
+owasp: [ASI02]
+edition: community
+sequence:
+  within: 24h
+  group_by: [subjects.agent, subjects.connection, operation]
+  steps:
+    - on: [coverage.snapshot]
+      match: event.outcome == "ENFORCED"
+    - on: [coverage.snapshot]
+      match: event.outcome != "ENFORCED"
+group: agent
+tests:
+  - name: enforced then partial
+    fires: true
+    events:
+      - {kind: coverage.snapshot, outcome: ENFORCED, operation: github.push, subjects: {agent: a1, connection: c1}}
+      - {kind: coverage.snapshot, outcome: PARTIAL, operation: github.push, subjects: {agent: a1, connection: c1}, at: 1h}
+  - name: stays enforced
+    fires: false
+    events:
+      - {kind: coverage.snapshot, outcome: ENFORCED, operation: github.push, subjects: {agent: a1, connection: c1}}
+      - {kind: coverage.snapshot, outcome: ENFORCED, operation: github.push, subjects: {agent: a1, connection: c1}, at: 1h}
+  - name: another scope drops
+    fires: false
+    events:
+      - {kind: coverage.snapshot, outcome: ENFORCED, operation: github.push, subjects: {agent: a1, connection: c1}}
+      - {kind: coverage.snapshot, outcome: PARTIAL, operation: github.push, subjects: {agent: a2, connection: c1}, at: 1h}

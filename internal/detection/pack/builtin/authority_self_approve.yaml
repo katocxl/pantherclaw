@@ -1,0 +1,36 @@
+# SPDX-License-Identifier: BUSL-1.1
+# Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+id: pc.authority.self_approve
+version: "1"
+title: Agent tried to approve its own action
+description: >-
+  An agent asked the Authority to run one of PantherClaw's own approval
+  operations, or an approval response was refused because the responder is
+  excluded from approving that action (its launcher, principal, owner, grant
+  issuer, requester or author). Approvals are for independent people only
+  (PN-006.3).
+severity: HIGH
+attention: ALERT
+basis: RULE_MATCH
+atlas: [AML.T0053]
+owasp: [ASI03, ASI09]
+edition: community
+on: [receipt.decision, audit.approval.response, audit.approval.response_refused]
+match: >-
+  (event.kind == "receipt.decision" && event.operation.matches("^(pantherclaw|pc)\\.(approval|approvals|waitlist)\\."))
+  || (event.kind != "receipt.decision" && event.reason in ["LAUNCHER_EXCLUDED", "PRINCIPAL_EXCLUDED",
+  "ANCESTOR_RUN_EXCLUDED", "OWNER_EXCLUDED", "GRANT_ISSUER_EXCLUDED", "REQUESTER_EXCLUDED", "AUTHOR_EXCLUDED"])
+group: agent
+tests:
+  - name: agent calls the approval api
+    fires: true
+    events:
+      - {kind: receipt.decision, decision: DENY, operation: pantherclaw.approval.respond, subjects: {agent: a1}}
+  - name: launcher tries to approve
+    fires: true
+    events:
+      - {kind: audit.approval.response, actor_type: user, reason: LAUNCHER_EXCLUDED}
+  - name: an independent approval
+    fires: false
+    events:
+      - {kind: audit.approval.response, actor_type: user, reason: APPROVE}

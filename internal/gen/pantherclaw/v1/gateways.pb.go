@@ -2770,8 +2770,12 @@ type ReportDriftRequest struct {
 	ExpectedDigest string `protobuf:"bytes,3,opt,name=expected_digest,json=expectedDigest,proto3" json:"expected_digest,omitempty"`
 	// Digest observed now; empty when the tool is gone.
 	ObservedDigest string `protobuf:"bytes,4,opt,name=observed_digest,json=observedDigest,proto3" json:"observed_digest,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// The tool description the gateway observed in the upstream listing, for
+	// the instruction-like content scan (G0 M10 D47, PN-006.2). Unset from
+	// older gateways: the scan is then recorded as not_scanned.
+	ObservedDescription *string `protobuf:"bytes,5,opt,name=observed_description,json=observedDescription,proto3,oneof" json:"observed_description,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *ReportDriftRequest) Reset() {
@@ -2828,6 +2832,13 @@ func (x *ReportDriftRequest) GetExpectedDigest() string {
 func (x *ReportDriftRequest) GetObservedDigest() string {
 	if x != nil {
 		return x.ObservedDigest
+	}
+	return ""
+}
+
+func (x *ReportDriftRequest) GetObservedDescription() string {
+	if x != nil && x.ObservedDescription != nil {
+		return *x.ObservedDescription
 	}
 	return ""
 }
@@ -3783,12 +3794,14 @@ const file_pantherclaw_v1_gateways_proto_rawDesc = "" +
 	"\vtotal_count\x18\x03 \x01(\x05B\v\xbaH\b\x1a\x06\x18\xc0\x84=(\x00R\n" +
 	"totalCount\"9\n" +
 	"\x15ReportCircuitResponse\x12 \n" +
-	"\vquarantined\x18\x01 \x01(\bR\vquarantined\"\x87\x02\n" +
+	"\vquarantined\x18\x01 \x01(\bR\vquarantined\"\xe2\x02\n" +
 	"\x12ReportDriftRequest\x12-\n" +
 	"\rconnection_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\fconnectionId\x121\n" +
 	"\x04tool\x18\x02 \x01(\tB\x1d\xbaH\x1ar\x18\x10\x01\x18\x80\x012\x11^[A-Za-z0-9_.-]+$R\x04tool\x12E\n" +
 	"\x0fexpected_digest\x18\x03 \x01(\tB\x1c\xbaH\x19r\x172\x15^sha256:[0-9a-f]{64}$R\x0eexpectedDigest\x12H\n" +
-	"\x0fobserved_digest\x18\x04 \x01(\tB\x1f\xbaH\x1cr\x1a2\x18^(sha256:[0-9a-f]{64})?$R\x0eobservedDigest\"7\n" +
+	"\x0fobserved_digest\x18\x04 \x01(\tB\x1f\xbaH\x1cr\x1a2\x18^(sha256:[0-9a-f]{64})?$R\x0eobservedDigest\x12@\n" +
+	"\x14observed_description\x18\x05 \x01(\tB\b\xbaH\x05r\x03(\x80@H\x00R\x13observedDescription\x88\x01\x01B\x17\n" +
+	"\x15_observed_description\"7\n" +
 	"\x13ReportDriftResponse\x12 \n" +
 	"\vquarantined\x18\x01 \x01(\bR\vquarantined\"\xe3\x02\n" +
 	"\x1eReportRevocationFailureRequest\x12-\n" +
@@ -4056,6 +4069,7 @@ func file_pantherclaw_v1_gateways_proto_init() {
 	file_pantherclaw_v1_connectors_proto_init()
 	file_pantherclaw_v1_gateway_facts_proto_init()
 	file_pantherclaw_v1_github_proto_init()
+	file_pantherclaw_v1_gateways_proto_msgTypes[36].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{

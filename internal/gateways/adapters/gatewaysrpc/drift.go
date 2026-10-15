@@ -14,7 +14,8 @@ import (
 
 // Drifts records a gateway's upstream drift reports (connections app).
 type Drifts interface {
-	ReportDrift(ctx context.Context, org ids.OrgID, gateway, connection ids.UUID, tool, expected, observed string) (bool, error)
+	ReportDriftDescribed(ctx context.Context, org ids.OrgID, gateway, connection ids.UUID, tool, expected, observed string,
+		description *string) (bool, error)
 }
 
 // WithDrifts serves ReportDrift from d.
@@ -41,7 +42,8 @@ func (h *GatewayHandler) ReportDrift(ctx context.Context, req *pb.ReportDriftReq
 	if err != nil {
 		return nil, errInvalidID
 	}
-	quarantined, err := h.drifts.ReportDrift(ctx, id.Org, id.Gateway, conn, req.GetTool(), req.GetExpectedDigest(), req.GetObservedDigest())
+	quarantined, err := h.drifts.ReportDriftDescribed(ctx, id.Org, id.Gateway, conn, req.GetTool(), req.GetExpectedDigest(),
+		req.GetObservedDigest(), req.ObservedDescription)
 	if err != nil {
 		return nil, err
 	}

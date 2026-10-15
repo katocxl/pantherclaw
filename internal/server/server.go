@@ -405,6 +405,11 @@ func cmdServe(ctx context.Context, args []string, stderr io.Writer, env Env, onS
 		if evidenceJobs, err = registerExposureJobs(evidenceJobs, jreg, pool, bill, log); err != nil {
 			return err
 		}
+		reflexJobs, err := registerReflexCoreJobs(jreg, pool, cfg.CEL, bill, m5.notifications, log)
+		if err != nil {
+			return err
+		}
+		evidenceJobs = append(evidenceJobs, reflexJobs...)
 		if err := registerSimulationJobs(jreg, pool, kp, bill, log); err != nil {
 			return err
 		}
@@ -602,6 +607,7 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	registerReleases(rs, pool)
 	registerPolicyExceptions(rs, d)
 	registerExposure(rs, d)
+	registerReflexCore(rs, d)
 	mux := http.NewServeMux()
 	rpc.Mount(mux, rs)
 	d.m5p2.mount(mux, workload)
