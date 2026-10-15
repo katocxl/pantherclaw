@@ -13,7 +13,7 @@ import _ "embed"
 // Name and Version identify the embedded package.
 const (
 	Name    = "pc.github"
-	Version = "1.0.0"
+	Version = "1.0.1"
 )
 
 // Package is the exact package file (package.yaml).

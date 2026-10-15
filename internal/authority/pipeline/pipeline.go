@@ -1335,9 +1335,10 @@ const DisclosureRule = "HR-079"
 // denied DISCLOSURE_LIMIT here, on the values the Authority holds, in
 // enforce and monitor mode alike. A value within its limits on a route
 // the gateway mediates also carries a disclosure_limits obligation the
-// gateway checks again before dispatch; a cooperative SDK call or a local
-// connection runs the action itself, so it gets no obligation it could
-// not honor, only this check. The class comes from the connection's
+// gateway checks again before dispatch (MCP or HTTP through a connection
+// that is not local); an SDK call, a hook (the tool runs inside the agent)
+// or a local connection runs the action itself, so it gets no obligation
+// it could not honor, only this check. The class comes from the connection's
 // record, never from the gateway or the agent. The byte limit is the
 // control: entropy catches dense raw bytes, not base64 or hex (D73, R-32).
 func (s *state) disclosure() {
@@ -1351,7 +1352,8 @@ func (s *state) disclosure() {
 		}
 	}
 	slices.Sort(names)
-	mediated := s.conn.Kind != "local" && s.a.Channel != string(defs.ChannelSDK)
+	ch := defs.Channel(s.a.Channel)
+	mediated := (ch == defs.ChannelMCP || ch == defs.ChannelHTTP) && s.conn.Kind != "local"
 	for _, name := range names {
 		maxBytes, maxEntropy := s.def.Params[name].DisclosureLimits()
 		entropy := strconv.FormatFloat(maxEntropy, 'f', -1, 64)

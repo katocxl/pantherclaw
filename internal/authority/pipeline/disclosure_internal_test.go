@@ -19,9 +19,9 @@ import (
 // marks a pull request's body as a disclosure param with GitHub's 64 KiB
 // limit, so a body toward GitHub (a public destination) is checked: dense
 // raw bytes are denied DISCLOSURE_LIMIT; an ordinary body on a route the
-// gateway mediates carries the obligation; through an SDK call (which the
-// agent runs itself) it is checked here and carries none it could not
-// honor.
+// gateway mediates (MCP or HTTP) carries the obligation; through an SDK
+// call or a hook (which the agent runs itself) it is checked here and
+// carries none it could not honor (D76).
 func TestHR079_GitHubPullRequestBodyIsChecked(t *testing.T) {
 	pkg, err := manifest.Decode(pcgithub.Package)
 	if err != nil {
@@ -72,5 +72,19 @@ func TestHR079_GitHubPullRequestBodyIsChecked(t *testing.T) {
 	}
 	if s := run(string(defs.ChannelSDK), dense.String()); !decided(s, adomain.Deny, ReasonDisclosureLimit) {
 		t.Fatal("an SDK call is not checked")
+	}
+	// D76: a hook (gh pr create run by the agent, seen by the PreToolUse
+	// hook) runs the tool inside the agent: within its limits it is
+	// allowed with no obligation; over them it is denied.
+	hook := run(string(defs.ChannelHook), "Bumps the dependency.")
+	if len(hook.ev.Obligations) != 0 || !decided(hook, adomain.Allow, ReasonDisclosureLimits) ||
+		decided(hook, adomain.AllowWithObligations, ReasonDisclosureLimits) {
+		t.Fatalf("hook body: %+v %+v", hook.ev.Obligations, hook.cl.items)
+	}
+	if s := run(string(defs.ChannelHook), dense.String()); !decided(s, adomain.Deny, ReasonDisclosureLimit) || len(s.ev.Obligations) != 0 {
+		t.Fatal("a hook call over its limits is not denied")
+	}
+	if s := run(string(defs.ChannelHTTP), "Bumps the dependency."); len(s.ev.Obligations) != 1 {
+		t.Fatal("an HTTP call through the gateway carries no obligation")
 	}
 }

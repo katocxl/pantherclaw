@@ -34,7 +34,7 @@
 # updated deliberately.
 format: 1
 name: pc.github
-version: 1.0.0
+version: 1.0.1
 publisher: pantherclaw
 summary: GitHub repositories, branches and pull requests through a GitHub App
 
