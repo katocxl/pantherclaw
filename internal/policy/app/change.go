@@ -425,7 +425,7 @@ func (c *Changes) List(ctx context.Context, state string, limit int) ([]ChangeRe
 	var out []ChangeRequest
 	err = c.pool.InTenantTx(ctx, caller.Org, func(ctx context.Context, tx db.TenantTx) error {
 		q := dbq.New(tx)
-		rows, err := q.ListPolicyChangeRequests(ctx, caller.Org, filter, int32(min(max(limit, 1), 200))) //nolint:gosec // bounded
+		rows, err := q.ListPolicyChangeRequests(ctx, caller.Org, filter, int32(min(max(limit, 1), 200)))
 		if err != nil {
 			return err
 		}
