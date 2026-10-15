@@ -116,15 +116,13 @@ type ChangeRequest struct {
 // Gate is the publish gate (D6) as rollouts use it. Every path that makes
 // a version enforced goes through it; without one, nothing is.
 type Gate interface {
-	// Check runs the gate's validation and tests for version again, with
-	// the current definitions and catalog, and classifies it against the
-	// published version (D3): loosens reports Diff.Loosens(). It publishes
-	// nothing.
-	Check(ctx context.Context, version ids.UUID) (loosens bool, err error)
-	// RequestPilot creates the ROLLOUT change request for entering rollout's
-	// pilot with cohorts, against base (the published version, nil: none).
-	// Its apply calls Service.EnterPilot.
-	RequestPilot(ctx context.Context, rollout, version ids.UUID, base *ids.UUID, cohorts []ids.UUID) (ChangeRequest, error)
+	// CheckPilot runs the gate's validation and tests for version again,
+	// with the current definitions and catalog, and classifies it against
+	// base, the published version the rollout started from (D3); it
+	// publishes nothing. It returns nil when the version does not loosen
+	// base, so the pilot starts now, else the ROLLOUT change request the
+	// pilot waits for, whose apply calls Service.EnterPilot (D11).
+	CheckPilot(ctx context.Context, rollout, version ids.UUID, base *ids.UUID, cohorts []RolloutCohort) (*ChangeRequest, error)
 	// Publish publishes version through the gate expecting base to be the
 	// published version, or returns the PUBLISH change request it created
 	// when the version loosens it. A publish calls Service.Published in its
@@ -489,6 +487,12 @@ func (s *Service) StartPilot(ctx context.Context, rollout ids.UUID, cohorts []st
 	}
 	var r dbq.PcPolicyRollout
 	var cohortList []ids.UUID
+	var cohortNames []string // cohorts without repeats, in cohortList's order
+	for _, n := range cohorts {
+		if !slices.Contains(cohortNames, n) {
+			cohortNames = append(cohortNames, n)
+		}
+	}
 	var base *ids.UUID
 	err = s.Pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
 		q := dbq.New(tx)
@@ -519,17 +523,17 @@ func (s *Service) StartPilot(ctx context.Context, rollout ids.UUID, cohorts []st
 	if err != nil {
 		return Rollout{}, nil, err
 	}
-	loosens, err := s.Gate.Check(ctx, r.VersionID)
+	named := make([]RolloutCohort, 0, len(cohortList))
+	for i, id := range cohortList {
+		named = append(named, RolloutCohort{ID: id, Name: cohortNames[i]})
+	}
+	cr, err := s.Gate.CheckPilot(ctx, rollout, r.VersionID, base, named)
 	if err != nil {
 		return Rollout{}, nil, err
 	}
-	if loosens {
-		cr, err := s.Gate.RequestPilot(ctx, rollout, r.VersionID, base, cohortList)
-		if err != nil {
-			return Rollout{}, nil, err
-		}
+	if cr != nil {
 		out, err := s.get(ctx, c.Org, rollout)
-		return out, &cr, err
+		return out, cr, err
 	}
 	err = s.Pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
 		return s.EnterPilot(ctx, tx, c.Actor(), rollout, base, cohortList)

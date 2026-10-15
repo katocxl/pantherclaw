@@ -23,6 +23,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	pdomain "github.com/katocxl/pantherclaw/internal/policy/domain"
+	"github.com/katocxl/pantherclaw/internal/policy/policytest"
 	"github.com/katocxl/pantherclaw/internal/policy/rollout"
 	tapp "github.com/katocxl/pantherclaw/internal/tenancy/app"
 	tdomain "github.com/katocxl/pantherclaw/internal/tenancy/domain"
@@ -37,8 +38,9 @@ var pgCapOver1000 = pdomain.Rule{
 }
 
 // fakeGate stands in for the publish gate (D6): it says whether a version
-// loosens and publishes through the store, calling the rollout hook in the
-// publishing transaction as the gate does.
+// loosens and publishes through the test-setup helper, then records the
+// rollout as the gate's hook does (the real gate runs the hook in the
+// publishing transaction: rollout_gate_integration_test.go).
 type fakeGate struct {
 	w       *world
 	svc     **rollout.Service
@@ -46,11 +48,12 @@ type fakeGate struct {
 	asked   int
 }
 
-func (g *fakeGate) Check(context.Context, ids.UUID) (bool, error) { return g.loosens, nil }
-
-func (g *fakeGate) RequestPilot(context.Context, ids.UUID, ids.UUID, *ids.UUID, []ids.UUID) (rollout.ChangeRequest, error) {
+func (g *fakeGate) CheckPilot(context.Context, ids.UUID, ids.UUID, *ids.UUID, []rollout.RolloutCohort) (*rollout.ChangeRequest, error) {
+	if !g.loosens {
+		return nil, nil
+	}
 	g.asked++
-	return rollout.ChangeRequest{ID: ids.NewV7(), URL: "/policy-changes/x"}, nil
+	return &rollout.ChangeRequest{ID: ids.NewV7(), URL: "/policy-changes/x"}, nil
 }
 
 func (g *fakeGate) Publish(ctx context.Context, version ids.UUID, base *ids.UUID) (*rollout.ChangeRequest, error) {
@@ -58,15 +61,8 @@ func (g *fakeGate) Publish(ctx context.Context, version ids.UUID, base *ids.UUID
 		g.asked++
 		return &rollout.ChangeRequest{ID: ids.NewV7(), URL: "/policy-changes/y"}, nil
 	}
+	policytest.PublishVersion(ctx, g.w.t, g.w.pool, g.w.org, version)
 	return nil, g.w.pool.InTenantTx(ctx, g.w.org, func(ctx context.Context, tx db.TenantTx) error {
-		q := dbq.New(tx)
-		if _, err := q.SupersedePublishedPolicy(ctx, g.w.org, version); err != nil {
-			return err
-		}
-		by := "test"
-		if err := db.ExpectOneRow(q.PublishPolicyVersion(ctx, &by, g.w.org, version)); err != nil {
-			return err
-		}
 		return (*g.svc).Published(ctx, tx, g.w.org, version, base)
 	})
 }
