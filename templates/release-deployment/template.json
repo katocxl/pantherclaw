@@ -10,7 +10,7 @@
   ],
   "excludes": [
     "what the deployment contains: review the merge itself (the coding-to-production template)",
-    "a deployment that is a consequence of a merge, whose environment is not known when the merge is decided, is held, not refused; its approval counts only inside a change window, and with no environment it is in none, so the hold expires unless the deployment is asked for again with its environment. A direct deployment that names no environment counts as production, GitHub's default",
+    "a deployment whose environments cannot be told when the merge that starts it is decided is held, not refused; its approval counts only inside a change window, and with no environment it is in none, so the hold expires unless the merge is asked for again once they can be told",
     "deployments started outside PantherClaw (a person pushing, another CI system)",
     "people: bind release_approver yourself (pclaw role bind)"
   ],

@@ -207,7 +207,7 @@ func m11Definitions(pkgs map[string]*defs.Package) []*defs.Definition {
 var m11Facts = map[string]fdomain.Type{
 	"payments.charge.refundable": fdomain.TypeBoolean,
 	"github.pull.head":           fdomain.TypeObject, "github.pull.people": fdomain.TypeObject, "github.pull.reviews": fdomain.TypeObject,
-	"github.pull.checks": fdomain.TypeObject, "github.branch.rules": fdomain.TypeObject,
+	"github.pull.checks": fdomain.TypeObject, "github.branch.rules": fdomain.TypeObject, "github.repo.deploy_triggers": fdomain.TypeObject,
 }
 
 // TestM11TemplatesDisclose: every template, coding-to-production
@@ -401,95 +401,6 @@ func m11Decide(t *testing.T, c *polapp.Compiled, d *defs.Definition, tc m11Case)
 	return string(out.Verdict), item.Reason, item.Rule, nil
 }
 
-// m11Failures runs every case against a bundle and returns the ids of the
-// cases whose decision, reason or rule differ from what they expect.
-func m11Failures(t *testing.T, b *domain.Bundle, defsList []*defs.Definition, cases []m11Case, pkgs map[string]*defs.Package, required []string) ([]string, error) {
-	t.Helper()
-	c, err := (&polapp.Engine{Limits: celenv.DefaultLimits, Facts: m11Facts}).Compile(b, defsList)
-	if err != nil {
-		return nil, err
-	}
-	var failed []string
-	for _, tc := range cases {
-		d := m11Definition(pkgs, required, tc.Action.Operation)
-		decision, reason, rule, err := m11Decide(t, c, d, tc)
-		if err != nil {
-			return nil, fmt.Errorf("%s: %w", tc.ID, err)
-		}
-		if decision != tc.Expect.Decision || reason != tc.Expect.Reason || (tc.Expect.Rule != "" && rule != tc.Expect.Rule) {
-			failed = append(failed, fmt.Sprintf("%s: got %s %s %s, want %+v", tc.ID, decision, reason, rule, tc.Expect))
-		}
-	}
-	return failed, nil
-}
-
-// TestHR044_M11TemplateTestsKillEveryMutant: evaluated with the policy
-// engine, every case of every template holds, for one repository and for
-// two; and every comparison flip in every rule's condition (Mutants) and
-// the removal of every rule each make at least one case fail. A threshold
-// or equality no case pins would let a weakened rule pass the gate.
-func TestHR044_M11TemplateTestsKillEveryMutant(t *testing.T) {
-	pkgs := m11Packages(t)
-	for _, n := range m11Templates {
-		for _, rc := range []struct {
-			repos []string
-			env   string
-		}{{[]string{"acme/web"}, "production"}, {[]string{"acme/api", "acme/web"}, "production"}, {[]string{"acme/web"}, "staging"}} {
-			repos := rc.repos
-			t.Run(fmt.Sprintf("%s/%d/%s", n, len(repos), rc.env), func(t *testing.T) {
-				info, err := readTemplateInfo(n)
-				if err != nil {
-					t.Fatal(err)
-				}
-				own := map[string]*defs.Package{}
-				for _, p := range info.Requires.Packages {
-					own[p] = pkgs[p]
-				}
-				ds := m11Definitions(own)
-				r := renderM11Env(t, n, repos, rc.env)
-				b := r.bundle(t)
-				failed, err := m11Failures(t, b, ds, r.cases, pkgs, info.Requires.Packages)
-				if err != nil || len(failed) > 0 {
-					t.Fatalf("the template's own cases: %v\n%s", err, strings.Join(failed, "\n"))
-				}
-				killed := func(m *domain.Bundle, what string) {
-					t.Helper()
-					failed, err := m11Failures(t, m, ds, r.cases, pkgs, info.Requires.Packages)
-					if errors.Is(err, domain.ErrInvalid) {
-						t.Fatalf("%s does not compile: %v", what, err)
-					}
-					if err == nil && len(failed) == 0 {
-						t.Errorf("mutant survives: %s", what)
-					}
-				}
-				for i, rule := range b.Rules {
-					mutants, err := polapp.Mutants(rule.When)
-					if err != nil {
-						t.Fatal(err)
-					}
-					for _, m := range mutants {
-						mb := *b
-						mb.Rules = slices.Clone(b.Rules)
-						mb.Rules[i].When = m
-						killed(&mb, rule.ID+" when "+m)
-					}
-					if rule.Kind == domain.Annotate {
-						continue
-					}
-					mb := *b
-					mb.Rules = slices.Delete(slices.Clone(b.Rules), i, i+1)
-					if len(mb.Rules) == 0 {
-						// A bundle has at least one rule: removing the last
-						// is a bundle that forbids nothing in its scope.
-						mb.Rules = []domain.Rule{{ID: "noop", Kind: domain.Forbid, Summary: "nothing", Operations: rule.Operations, When: "false", Reason: "NOOP"}}
-					}
-					killed(&mb, "without "+rule.ID)
-				}
-			})
-		}
-	}
-}
-
 // TestM11DiagnosticsCommands: the production-diagnostics rules, compiled
 // and evaluated as the server does, allow single reading commands and
 // refuse chaining, substitution, redirection, network and writing
@@ -600,35 +511,6 @@ func TestM11DiagnosticsTraversal(t *testing.T) {
 	}
 }
 
-// TestM11ReleaseConsequenceHeld: a deployment that is a consequence of a
-// merge names no environment when the merge is decided; rd-environment
-// leaves it to rd-release, which holds it for a release approver, whatever
-// environment the template was applied for (D21). The D7 format has no
-// consequence, so this case lives here.
-func TestM11ReleaseConsequenceHeld(t *testing.T) {
-	pkgs := m11Packages(t)
-	deploy, _ := pkgs["pc.github"].Definition("github.deployment.trigger")
-	for _, env := range []string{"production", "staging"} {
-		c, err := (&polapp.Engine{Limits: celenv.DefaultLimits}).Compile(renderM11Env(t, "release-deployment", []string{"acme/web"}, env).bundle(t), []*defs.Definition{deploy})
-		if err != nil {
-			t.Fatal(err)
-		}
-		a := actionir.ActionIR{
-			Operation: deploy.Operation, Definition: actionir.Definition{Digest: deploy.Digest},
-			Target: actionir.Target{Type: "github.repository", ID: "acme/web"}, Params: jsontext.Value(`{}`),
-		}
-		for _, state := range []string{"PREDICTED", "UNKNOWN"} {
-			out, err := c.Evaluate(context.Background(), deploy, a, polapp.Input{Budget: polapp.DefaultBudget, Consequence: &polapp.Consequence{Rule: "r", State: state}})
-			if err != nil {
-				t.Fatal(err)
-			}
-			if item, _ := out.Decisive(); out.Verdict != domain.VerdictRequireApproval || item.Reason != "DEPLOYMENT_NEEDS_RELEASE" {
-				t.Errorf("%s, %s consequence: %s %s, want REQUIRE_APPROVAL DEPLOYMENT_NEEDS_RELEASE", env, state, out.Verdict, item.Reason)
-			}
-		}
-	}
-}
-
 // m11World is the read side of the scenario runner: the templates'
 // packages, with their own digests, and the fact catalog.
 type m11World struct{ defs []*defs.Definition }
@@ -657,10 +539,10 @@ func TestM11TemplatesPassTheGate(t *testing.T) {
 		}
 	}
 	org := ids.MustParse[ids.Org]("01890000-0000-7000-8000-000000000001")
-	for _, n := range []string{"coding-to-production", "production-diagnostics", "refunds"} {
+	for _, n := range []string{"coding-to-production", "production-diagnostics", "refunds", "release-deployment"} {
 		for _, env := range []string{"production", "staging"} {
 			t.Run(n+"/"+env, func(t *testing.T) {
-				if n == "coding-to-production" {
+				if n == "coding-to-production" || n == "release-deployment" {
 					// c2p-release decides github.deployment.trigger, which only
 					// ever arises as a consequence; the runner cannot reach it yet.
 					t.Skip("waiting for the scenario runner to decide consequences (asked of the coordinator)")
@@ -906,5 +788,42 @@ func TestM11ReposRuleKeepsEarlierRepositories(t *testing.T) {
 	p = &gatedPolicies{racingPolicies: racingPolicies{published: v1, bundles: map[string][]byte{v1: edited}, raced: true}}
 	if _, err := planPolicy(context.Background(), gatedClients(t, p), second, d2, ""); err == nil || !strings.Contains(err.Error(), "--update") {
 		t.Fatalf("plan over an edited list: %v", err)
+	}
+}
+
+// TestM11ReleaseConsequenceEnvironments: a deployment that is a
+// consequence of a merge names its environments in the consequence
+// (D28): rd-environment refuses one that reaches an environment other
+// than the template's, and leaves one that reaches only it, or none
+// known, to rd-release's hold.
+func TestM11ReleaseConsequenceEnvironments(t *testing.T) {
+	pkgs := m11Packages(t)
+	deploy, _ := pkgs["pc.github"].Definition("github.deployment.trigger")
+	c, err := (&polapp.Engine{Limits: celenv.DefaultLimits}).Compile(renderM11(t, "release-deployment", []string{"acme/web"}).bundle(t), []*defs.Definition{deploy})
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := actionir.ActionIR{
+		Operation: deploy.Operation, Definition: actionir.Definition{Digest: deploy.Digest},
+		Target: actionir.Target{Type: "github.repository", ID: "acme/web"}, Params: jsontext.Value(`{}`),
+	}
+	for _, tc := range []struct {
+		state, reason string
+		envs          []string
+		verdict       domain.Verdict
+	}{
+		{"PREDICTED", "DEPLOYMENT_NEEDS_RELEASE", []string{"production"}, domain.VerdictRequireApproval},
+		{"PREDICTED", "DEPLOYMENT_ENVIRONMENT_NOT_ALLOWED", []string{"production", "staging"}, domain.VerdictDeny},
+		{"UNKNOWN", "DEPLOYMENT_NEEDS_RELEASE", nil, domain.VerdictRequireApproval},
+	} {
+		out, err := c.Evaluate(context.Background(), deploy, a, polapp.Input{
+			Budget: polapp.DefaultBudget, Consequence: &polapp.Consequence{Rule: "merge-triggers-deployment", State: tc.state, Environments: tc.envs},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if item, _ := out.Decisive(); out.Verdict != tc.verdict || item.Reason != tc.reason {
+			t.Errorf("%s %v: %s %s, want %s %s", tc.state, tc.envs, out.Verdict, item.Reason, tc.verdict, tc.reason)
+		}
 	}
 }

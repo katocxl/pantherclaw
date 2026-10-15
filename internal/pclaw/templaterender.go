@@ -245,22 +245,6 @@ func (r renderer) value(name, repo string, cel bool) (string, error) {
 		if r.declared(kindEnvironmentID) {
 			return quote(otherEnvironmentID), nil
 		}
-	case "no_environment_decision", "no_environment_reason":
-		// What a direct deployment that names no environment, which goes
-		// to production, expects (M11.1 D21): held when the template is
-		// for production, refused otherwise.
-		if r.declared(kindEnvironment) && !cel {
-			prod := r.o.environment == "production"
-			switch {
-			case name == "no_environment_decision" && prod:
-				return "REQUIRE_APPROVAL", nil
-			case name == "no_environment_decision":
-				return "DENY", nil
-			case prod:
-				return "DEPLOYMENT_NEEDS_RELEASE", nil
-			}
-			return "DEPLOYMENT_ENVIRONMENT_NOT_ALLOWED", nil
-		}
 	}
 	if !r.declared(name) || name == kindRepository {
 		return "", fmt.Errorf("{{%s}} is not a declared placeholder", name)
