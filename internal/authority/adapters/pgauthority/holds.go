@@ -109,7 +109,13 @@ func (s *snapshot) Variants(ctx context.Context, org ids.OrgID, key [32]byte, op
 
 // HoldSettings implements pipeline.Reader.
 func (s *snapshot) HoldSettings(ctx context.Context, org ids.OrgID) (pipeline.HoldSettings, error) {
-	row, err := dbq.New(s.tx).GetWaitlistSettings(ctx, org)
+	return holdSettings(ctx, s.tx, org)
+}
+
+// holdSettings reads the org's hold settings in tx (defaults when it has
+// none).
+func holdSettings(ctx context.Context, tx db.TenantTx, org ids.OrgID) (pipeline.HoldSettings, error) {
+	row, err := dbq.New(tx).GetWaitlistSettings(ctx, org)
 	if db.IsNoRows(err) {
 		return pipeline.HoldSettings{}, nil
 	}

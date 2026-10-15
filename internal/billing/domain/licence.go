@@ -196,9 +196,18 @@ func (e Entitlements) OrgPackageKeys() bool { return e.Edition.Paid() }
 // waitlist's SLA metrics (G0 M5 part 2: F171, F169, F170; Team and above).
 func (e Entitlements) TeamWaitlist() bool { return e.Edition.Paid() }
 
+// PolicyRollout reports whether the edition offers policy shadow
+// evaluation, pilots and pilot cohorts (G0 M11.1, D12: Team and above). A
+// publish records a completed rollout in every edition.
+func (e Entitlements) PolicyRollout() bool { return e.Edition.Paid() }
+
 // GitHubOrgScan reports whether the edition scans GitHub organizations
 // (G0 M8, PN-001.2: Team and above).
 func (e Entitlements) GitHubOrgScan() bool { return e.Edition.Paid() }
+
+// PolicySimulation reports whether the edition simulates policy versions
+// over recorded decisions (G0 M11.1 D15, F187: Team and above).
+func (e Entitlements) PolicySimulation() bool { return e.Edition.Paid() }
 
 // MLDSACosign reports whether the edition includes ML-DSA-65 co-signatures
 // on checkpoints and pack manifests (G0 M7 decision 6, PN-007.5:

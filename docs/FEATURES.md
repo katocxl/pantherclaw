@@ -33,14 +33,15 @@ Each pillar table has the columns `ID | Feature | What the backend delivers | Ph
 | M8 | Coding-agent integrations: Go SDK and target verifier, core Python and TypeScript clients, Claude Agent SDK, GitHub App connector, `pclaw init` |
 | M9 | Coverage & containment sandbox |
 | M10 | Detection, investigation, response, breach radius, SIEM (OCSF), search |
-| M11 | Policy lifecycle & automations |
+| M11 | Policy lifecycle & automations (part 2: automations) |
+| M11.1 | Policy lifecycle (M11 part 1): staged publication with scenario tests, validation and diffs, simulation, shadow and pilot rollout, rollback, exceptions, three task templates |
 | M12 | Adversarial red-team range |
 | M13 | Commercial & production hardening |
 | M14 | Framework SDKs & business connectors (framework wrappers, Stripe test mode, Slack, Postgres) |
 | UI phase | User interface, built after the backend |
 | post-1.0 | Not yet scheduled to a milestone |
 
-Milestone numbers are identifiers, not delivery order. Delivery order ([ADR-0017](adr/0017-coding-agents-first-and-proven-coverage.md)): M1 … M9, M12, then the v0.1.0 preview, then M10, M11, M14, M13 and v1.0.
+Milestone numbers are identifiers, not delivery order. Delivery order ([ADR-0017](adr/0017-coding-agents-first-and-proven-coverage.md)): M1 … M9, M12, then the v0.1.0 preview, then M11.1, M10, M11, M14, M13 and v1.0.
 
 **Component**
 
@@ -210,16 +211,16 @@ Every pillar belongs to one of seven product components (Badge, Pass, Guardrails
 
 | ID | Feature | What the backend delivers | Phase | Edition | Milestone | Source |
 | --- | --- | --- | --- | --- | --- | --- |
-| F172 | Protect-a-task templates | Templates for customer support, refunds, production diagnostics, release deployment and internal analysis. Each states what it protects, what it excludes and which connections it needs. | MVP | Community | M11 | F172–F178 |
+| F172 | Protect-a-task templates | Templates for customer support, refunds, production diagnostics, release deployment and internal analysis. Each states what it protects, what it excludes and which connections it needs. Refunds, release deployment and production diagnostics ship in M11.1 with baseline scenario tests; customer support and internal analysis follow with M14's connectors. | MVP | Community | M11.1 | F172–F178 |
 | F181 | Natural-language drafting | Drafts policies and automation workflows from text, with ambiguities made explicit. Vague terms must become concrete thresholds, and only the reviewed structured form executes. | Next | Team | post-1.0 | F181, F682 |
-| F184 | Draft-first versioning | Edits create immutable draft revisions, and saving never publishes. Versions advance from draft to validated to tested to published via the API and `pclaw policy test`. | MVP | Community | M11 | F184, F199 |
+| F184 | Draft-first versioning | Edits create immutable draft revisions, and saving never publishes. Versions advance from draft to validated to tested to published via the API and `pclaw policy test`. | MVP | Community | M11.1 | F184, F199 |
 | F185 | Evidence-backed suggestions | Suggested restrictions carry an evidence window, coverage limits, observed operations, expected effect, affected owners and false-positive uncertainty. Unused authority prompts review, not removal. | Next | Business | post-1.0 | F185, F186 |
-| F187 | Historical simulation | `pclaw policy simulate` replays a draft over recorded actions. Newly denied, held, constrained, allowed and unevaluable actions are reported separately by workflow, with an approval-burden forecast; agent replanning is not predicted. | MVP | Team | M11 | F187–F192, F287 |
-| F193 | Policy scenario tests | Test suites assert the expected decision and decisive reason (valid lookup, threshold hold, grant-limit deny, split budget, stale approval). Production publication is blocked until baseline tests pass. | MVP | Community | M11 | F193, F194, F195 |
-| F196 | Validation & behavioural diffs | Detects conflicting clauses and gives an example action. Checks that integrations can satisfy the constraints and evidence. Diffs versions by changed outcomes and thresholds. | MVP | Community | M11 | F196, F197, F198 |
-| F200 | Shadow & pilot rollout | Shadow evaluation on live traffic without enforcement claims, then enforcement for named pilot cohorts first. Per-target states are configured, acknowledged, verified or exception; publishing never implies enforcement. | MVP | Team | M11 | F200–F203 |
-| F204 | Partial rollout & rollback | Failed targets keep their previous valid controls and are listed with version and owner. Rollback respects current org restrictions and never removes active emergency containment. | MVP | Community | M11 | F204–F207, F636 |
-| F208 | Temporary exceptions | Exceptions need a target, reason, owner, expiry and eligible approver. They cannot defeat non-overridable controls, and renewal needs fresh review. | MVP | Community | M11 | F208, F209, F210 |
+| F187 | Historical simulation | `pclaw policy simulate` replays a draft over recorded actions. Newly denied, held, constrained, allowed and unevaluable actions are reported separately by workflow, with an approval-burden forecast; agent replanning is not predicted. | MVP | Team | M11.1 | F187–F192, F287 |
+| F193 | Policy scenario tests | Test suites assert the expected decision and decisive reason (valid lookup, threshold hold, grant-limit deny, split budget, stale approval). Production publication is blocked until baseline tests pass. | MVP | Community | M11.1 | F193, F194, F195 |
+| F196 | Validation & behavioural diffs | Detects conflicting clauses and gives an example action. Checks that integrations can satisfy the constraints and evidence. Diffs versions by changed outcomes and thresholds. | MVP | Community | M11.1 | F196, F197, F198 |
+| F200 | Shadow & pilot rollout | Shadow evaluation on live traffic without enforcement claims, then enforcement for named pilot cohorts first. Per-target states are configured, acknowledged, verified or exception; publishing never implies enforcement. | MVP | Team | M11.1 | F200–F203 |
+| F204 | Partial rollout & rollback | Failed targets keep their previous valid controls and are listed with version and owner. Rollback respects current org restrictions and never removes active emergency containment. | MVP | Community | M11.1 | F204–F207, F636 |
+| F208 | Temporary exceptions | Exceptions need a target, reason, owner, expiry and eligible approver. They cannot defeat non-overridable controls, and renewal needs fresh review. | MVP | Community | M11.1 | F208, F209, F210 |
 | F582 | Protected changes | Changes that can widen authority (policy, tool meaning, consequence rules, custody, coverage exclusions) show the widening and need a distinct publisher where configured. Once active they are fixed and attributable. | MVP | Community | M11 | F582, F586, F587, F590, F592, F593, F599 |
 | F595 | Compromised-publisher response | If publishing or signing authority is compromised, affected promotions freeze, exposed versions are listed, and restoration needs independent review. A valid signature never proves the issuer was uncompromised. | MVP | Business | M11 | F595, F596 |
 | F762 | Reference workflow packs | Tested policy packs for support resolution, treasury payments, read-only diagnostics, aggregate reporting, research/disclosure and coding-to-production, each with expected allow, hold and deny cases. | MVP | Team | M11 | F762–F767 |

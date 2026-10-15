@@ -20,6 +20,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/budgets/adapters/pgbudgets"
 	bdomain "github.com/katocxl/pantherclaw/internal/budgets/domain"
 	defpg "github.com/katocxl/pantherclaw/internal/definitions/adapters/pgstore"
+	defsdomain "github.com/katocxl/pantherclaw/internal/definitions/domain"
 	factpg "github.com/katocxl/pantherclaw/internal/facts/adapters/pgstore"
 	fdomain "github.com/katocxl/pantherclaw/internal/facts/domain"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
@@ -31,6 +32,8 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	polpg "github.com/katocxl/pantherclaw/internal/policy/adapters/pgstore"
 	papp "github.com/katocxl/pantherclaw/internal/policy/app"
+	pdomain "github.com/katocxl/pantherclaw/internal/policy/domain"
+	"github.com/katocxl/pantherclaw/internal/policy/exceptions"
 )
 
 // maxCompiled bounds the compiled-policy cache.
@@ -108,8 +111,8 @@ func (r *Reader) Definition(ctx context.Context, org ids.OrgID, pin actionir.Def
 }
 
 // Policy implements pipeline.Reader.
-func (r *Reader) Policy(ctx context.Context, org ids.OrgID) (*pipeline.Policy, error) {
-	return read(ctx, r, org, func(ctx context.Context, s *snapshot) (*pipeline.Policy, error) { return s.Policy(ctx, org) })
+func (r *Reader) Policy(ctx context.Context, org ids.OrgID, agent ids.UUID) (*pipeline.Policy, error) {
+	return read(ctx, r, org, func(ctx context.Context, s *snapshot) (*pipeline.Policy, error) { return s.Policy(ctx, org, agent) })
 }
 
 // Run implements pipeline.Reader.
@@ -188,22 +191,98 @@ func (s *snapshot) Definition(ctx context.Context, org ids.OrgID, pin actionir.D
 	return pipeline.Pinned{Definition: d, State: state, Consequences: consequences.Of(p, d.Operation)}, nil
 }
 
-// Policy implements pipeline.Reader: the published bundle compiled against
-// the org's fact catalog and active definitions, cached by all three.
-func (s *snapshot) Policy(ctx context.Context, org ids.OrgID) (*pipeline.Policy, error) {
+// Policy implements pipeline.Reader: the version selected for agent (G0
+// M11.1, D12, HR-234). An org PILOT rollout whose ENFORCE cohorts hold the
+// agent, and that did not exclude it, selects its version; any other agent
+// gets the published version. A rollout version that cannot be compiled
+// for this evaluation is not used: the published version decides instead
+// (FALLBACK), and the recording says so, so the rollout sweeper marks the
+// target FAILED. Each bundle version is compiled against the org's fact
+// catalog and active definitions, cached by all three.
+//
+// The selected version carries the agent's active policy exceptions, read
+// in the same snapshot by the database clock (G0 M11.1 D14, HR-235).
+func (s *snapshot) Policy(ctx context.Context, org ids.OrgID, agent ids.UUID) (*pipeline.Policy, error) {
+	p, err := s.selectPolicy(ctx, org, agent)
+	if err != nil || p == nil {
+		return p, err
+	}
+	if p.Exceptions, err = exceptions.ActiveFor(ctx, s.tx, org, agent); err != nil {
+		return nil, err
+	}
+	return p, nil
+}
+
+func (s *snapshot) selectPolicy(ctx context.Context, org ids.OrgID, agent ids.UUID) (*pipeline.Policy, error) {
+	// The catalog and definitions are read only when a version is compiled,
+	// so an org without a policy reads no more than before rollouts.
+	var catalog map[string]fdomain.Type
+	var defs []*defsdomain.Definition
+	loaded := false
+	load := func() error {
+		if loaded {
+			return nil
+		}
+		var err error
+		if catalog, err = s.r.FactStore.CatalogInTx(ctx, s.tx, org); err != nil {
+			return err
+		}
+		if defs, err = s.r.Definitions.ActiveDefinitionsInTx(ctx, s.tx, org); err != nil {
+			return err
+		}
+		loaded = true
+		return nil
+	}
+	var fallback string
+	pilot, err := dbq.New(s.tx).PilotRolloutForAgent(ctx, org, agent)
+	switch {
+	case db.IsNoRows(err):
+	case err != nil:
+		return nil, err
+	default:
+		row, err := dbq.New(s.tx).GetPolicyVersionBundle(ctx, org, pilot.VersionID)
+		if err != nil {
+			return nil, err
+		}
+		if err := load(); err != nil {
+			return nil, err
+		}
+		b, derr := polpg.Decode(row.Bundle)
+		if derr == nil {
+			p, cerr := s.r.compile(org, b, catalog, defs)
+			if cerr == nil {
+				return selected(p, pilot.ID.String(), pipeline.SelectedPilot), nil
+			}
+		}
+		fallback = pilot.ID.String()
+	}
 	b, err := s.r.Policies.PublishedInTx(ctx, s.tx, org)
 	if err != nil || b == nil {
 		return nil, err
 	}
-	catalog, err := s.r.FactStore.CatalogInTx(ctx, s.tx, org)
-	if err != nil {
+	if err := load(); err != nil {
 		return nil, err
 	}
-	defs, err := s.r.Definitions.ActiveDefinitionsInTx(ctx, s.tx, org)
+	p, err := s.r.compile(org, b, catalog, defs)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("authority: the published policy does not compile: %w", err)
 	}
-	r := s.r
+	if fallback != "" {
+		return selected(p, fallback, pipeline.SelectedFallback), nil
+	}
+	return selected(p, "", pipeline.SelectedDefault), nil
+}
+
+// selected is a copy of a cached compiled policy with how it was selected.
+func selected(p *pipeline.Policy, rollout, how string) *pipeline.Policy {
+	out := *p
+	out.Rollout, out.Selected = rollout, how
+	return &out
+}
+
+// compile compiles b against catalog and defs, from the cache when the same
+// bundle version was compiled against the same catalog and definitions.
+func (r *Reader) compile(org ids.OrgID, b *pdomain.Bundle, catalog map[string]fdomain.Type, defs []*defsdomain.Definition) (*pipeline.Policy, error) {
 	h := sha256.New()
 	fmt.Fprintf(h, "%s|%s|%d|", org, b.ID, b.Version)
 	for _, n := range slices.Sorted(maps.Keys(catalog)) {
@@ -221,7 +300,7 @@ func (s *snapshot) Policy(ctx context.Context, org ids.OrgID) (*pipeline.Policy,
 	}
 	c, err := (&papp.Engine{Limits: r.Limits, Facts: catalog}).Compile(b, defs)
 	if err != nil {
-		return nil, fmt.Errorf("authority: the published policy does not compile: %w", err)
+		return nil, err
 	}
 	budget := r.Budget
 	if budget == 0 {

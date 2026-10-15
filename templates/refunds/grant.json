@@ -1,0 +1,12 @@
+{
+  "bounds": {
+    "operations": ["payments.refund.create", "payments.refund.get"],
+    "targets": {
+      "payments.charge": {"prefixes": ["ch_"]},
+      "payments.refund": {"prefixes": ["re_"]}
+    }
+  },
+  "limits": {
+    "counters": [{"id": "ten_refunds_per_run", "operations": ["payments.refund.create"], "key": "run", "window": "none", "max": "10"}]
+  }
+}

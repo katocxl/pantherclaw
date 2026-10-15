@@ -16,6 +16,39 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 )
 
+const advancePolicyVersion = `-- name: AdvancePolicyVersion :execrows
+UPDATE pc.policy_versions
+SET state = $1::text
+WHERE org_id = $2 AND id = $3 AND state = $4::text
+  AND content_digest = $5
+  AND ($4::text, $1::text) IN (('DRAFT', 'VALIDATED'), ('VALIDATED', 'TESTED'))
+`
+
+type AdvancePolicyVersionParams struct {
+	ToState       string
+	OrgID         ids.OrgID
+	ID            ids.UUID
+	FromState     string
+	ContentDigest []byte
+}
+
+// AdvancePolicyVersion moves a version one step of DRAFT -> VALIDATED ->
+// TESTED, only from the expected state and for its recorded content
+// (HR-004).
+func (q *Queries) AdvancePolicyVersion(ctx context.Context, arg AdvancePolicyVersionParams) (int64, error) {
+	result, err := q.db.Exec(ctx, advancePolicyVersion,
+		arg.ToState,
+		arg.OrgID,
+		arg.ID,
+		arg.FromState,
+		arg.ContentDigest,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const getPolicyID = `-- name: GetPolicyID :one
 
 SELECT id FROM pc.policies WHERE org_id = $1 AND bundle_id = $2
@@ -35,21 +68,22 @@ func (q *Queries) GetPolicyID(ctx context.Context, orgID ids.OrgID, bundleID str
 }
 
 const getPolicyVersion = `-- name: GetPolicyVersion :one
-SELECT v.id, v.version, v.bundle, v.state, p.bundle_id, v.created_by, v.created_at, v.published_at
+SELECT v.id, v.version, v.bundle, v.state, p.bundle_id, v.created_by, v.created_at, v.published_at, v.content_digest
 FROM pc.policy_versions v
 JOIN pc.policies p ON p.org_id = v.org_id AND p.id = v.policy_id
 WHERE v.org_id = $1 AND v.id = $2
 `
 
 type GetPolicyVersionRow struct {
-	ID          ids.UUID
-	Version     int32
-	Bundle      []byte
-	State       string
-	BundleID    string
-	CreatedBy   string
-	CreatedAt   time.Time
-	PublishedAt *time.Time
+	ID            ids.UUID
+	Version       int32
+	Bundle        []byte
+	State         string
+	BundleID      string
+	CreatedBy     string
+	CreatedAt     time.Time
+	PublishedAt   *time.Time
+	ContentDigest []byte
 }
 
 func (q *Queries) GetPolicyVersion(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (GetPolicyVersionRow, error) {
@@ -64,25 +98,27 @@ func (q *Queries) GetPolicyVersion(ctx context.Context, orgID ids.OrgID, iD ids.
 		&i.CreatedBy,
 		&i.CreatedAt,
 		&i.PublishedAt,
+		&i.ContentDigest,
 	)
 	return i, err
 }
 
 const getPublishedPolicy = `-- name: GetPublishedPolicy :one
-SELECT v.id, v.version, v.bundle, p.bundle_id, v.created_by, v.created_at, v.published_at
+SELECT v.id, v.version, v.bundle, p.bundle_id, v.created_by, v.created_at, v.published_at, v.content_digest
 FROM pc.policy_versions v
 JOIN pc.policies p ON p.org_id = v.org_id AND p.id = v.policy_id
 WHERE v.org_id = $1 AND v.state = 'PUBLISHED'
 `
 
 type GetPublishedPolicyRow struct {
-	ID          ids.UUID
-	Version     int32
-	Bundle      []byte
-	BundleID    string
-	CreatedBy   string
-	CreatedAt   time.Time
-	PublishedAt *time.Time
+	ID            ids.UUID
+	Version       int32
+	Bundle        []byte
+	BundleID      string
+	CreatedBy     string
+	CreatedAt     time.Time
+	PublishedAt   *time.Time
+	ContentDigest []byte
 }
 
 func (q *Queries) GetPublishedPolicy(ctx context.Context, orgID ids.OrgID) (GetPublishedPolicyRow, error) {
@@ -96,6 +132,7 @@ func (q *Queries) GetPublishedPolicy(ctx context.Context, orgID ids.OrgID) (GetP
 		&i.CreatedBy,
 		&i.CreatedAt,
 		&i.PublishedAt,
+		&i.ContentDigest,
 	)
 	return i, err
 }
@@ -109,18 +146,95 @@ func (q *Queries) InsertPolicy(ctx context.Context, orgID ids.OrgID, iD ids.UUID
 	return err
 }
 
+const insertPolicyTestRun = `-- name: InsertPolicyTestRun :exec
+INSERT INTO pc.policy_test_runs (org_id, id, version_id, content_digest, definitions_digest, catalog_digest, passed,
+    cases, mutants, survivors, results, run_by)
+VALUES ($1, $2, $3, $4, $5,
+    $6, $7, $8, $9, $10,
+    $11, $12)
+`
+
+type InsertPolicyTestRunParams struct {
+	OrgID             ids.OrgID
+	ID                ids.UUID
+	VersionID         ids.UUID
+	ContentDigest     []byte
+	DefinitionsDigest []byte
+	CatalogDigest     []byte
+	Passed            bool
+	Cases             int32
+	Mutants           int32
+	Survivors         int32
+	Results           []byte
+	RunBy             string
+}
+
+func (q *Queries) InsertPolicyTestRun(ctx context.Context, arg InsertPolicyTestRunParams) error {
+	_, err := q.db.Exec(ctx, insertPolicyTestRun,
+		arg.OrgID,
+		arg.ID,
+		arg.VersionID,
+		arg.ContentDigest,
+		arg.DefinitionsDigest,
+		arg.CatalogDigest,
+		arg.Passed,
+		arg.Cases,
+		arg.Mutants,
+		arg.Survivors,
+		arg.Results,
+		arg.RunBy,
+	)
+	return err
+}
+
+const insertPolicyValidation = `-- name: InsertPolicyValidation :exec
+INSERT INTO pc.policy_validations (org_id, id, version_id, content_digest, definitions_digest, catalog_digest, passed,
+    findings, run_by)
+VALUES ($1, $2, $3, $4, $5,
+    $6, $7, $8, $9)
+`
+
+type InsertPolicyValidationParams struct {
+	OrgID             ids.OrgID
+	ID                ids.UUID
+	VersionID         ids.UUID
+	ContentDigest     []byte
+	DefinitionsDigest []byte
+	CatalogDigest     []byte
+	Passed            bool
+	Findings          []byte
+	RunBy             string
+}
+
+func (q *Queries) InsertPolicyValidation(ctx context.Context, arg InsertPolicyValidationParams) error {
+	_, err := q.db.Exec(ctx, insertPolicyValidation,
+		arg.OrgID,
+		arg.ID,
+		arg.VersionID,
+		arg.ContentDigest,
+		arg.DefinitionsDigest,
+		arg.CatalogDigest,
+		arg.Passed,
+		arg.Findings,
+		arg.RunBy,
+	)
+	return err
+}
+
 const insertPolicyVersion = `-- name: InsertPolicyVersion :exec
-INSERT INTO pc.policy_versions (org_id, id, policy_id, version, bundle, created_by)
-VALUES ($1, $2, $3, $4, $5, $6)
+INSERT INTO pc.policy_versions (org_id, id, policy_id, version, bundle, content_digest, created_by)
+VALUES ($1, $2, $3, $4, $5, $6,
+    $7)
 `
 
 type InsertPolicyVersionParams struct {
-	OrgID     ids.OrgID
-	ID        ids.UUID
-	PolicyID  ids.UUID
-	Version   int32
-	Bundle    []byte
-	CreatedBy string
+	OrgID         ids.OrgID
+	ID            ids.UUID
+	PolicyID      ids.UUID
+	Version       int32
+	Bundle        []byte
+	ContentDigest []byte
+	CreatedBy     string
 }
 
 func (q *Queries) InsertPolicyVersion(ctx context.Context, arg InsertPolicyVersionParams) error {
@@ -130,9 +244,41 @@ func (q *Queries) InsertPolicyVersion(ctx context.Context, arg InsertPolicyVersi
 		arg.PolicyID,
 		arg.Version,
 		arg.Bundle,
+		arg.ContentDigest,
 		arg.CreatedBy,
 	)
 	return err
+}
+
+const latestPassedTestRun = `-- name: LatestPassedTestRun :one
+SELECT t.id, t.definitions_digest, t.catalog_digest, t.created_at
+FROM pc.policy_test_runs t
+JOIN pc.policy_versions v ON v.org_id = t.org_id AND v.id = t.version_id
+WHERE t.org_id = $1 AND t.version_id = $2 AND t.passed
+  AND t.content_digest = v.content_digest
+ORDER BY t.created_at DESC, t.id DESC
+LIMIT 1
+`
+
+type LatestPassedTestRunRow struct {
+	ID                ids.UUID
+	DefinitionsDigest []byte
+	CatalogDigest     []byte
+	CreatedAt         time.Time
+}
+
+// LatestPassedTestRun is the newest passing test run of a version's
+// recorded content.
+func (q *Queries) LatestPassedTestRun(ctx context.Context, orgID ids.OrgID, versionID ids.UUID) (LatestPassedTestRunRow, error) {
+	row := q.db.QueryRow(ctx, latestPassedTestRun, orgID, versionID)
+	var i LatestPassedTestRunRow
+	err := row.Scan(
+		&i.ID,
+		&i.DefinitionsDigest,
+		&i.CatalogDigest,
+		&i.CreatedAt,
+	)
+	return i, err
 }
 
 const listPolicyVersions = `-- name: ListPolicyVersions :many
@@ -211,13 +357,34 @@ func (q *Queries) NextPolicyVersion(ctx context.Context, orgID ids.OrgID, policy
 }
 
 const publishPolicyVersion = `-- name: PublishPolicyVersion :execresult
-UPDATE pc.policy_versions
+UPDATE pc.policy_versions v
 SET state = 'PUBLISHED', published_by = $1, published_at = now()
-WHERE org_id = $2 AND id = $3 AND state = 'DRAFT'
+WHERE v.org_id = $2 AND v.id = $3 AND v.state = 'TESTED'
+  AND v.content_digest = $4
+  AND EXISTS (SELECT 1 FROM pc.policy_test_runs t
+              WHERE t.org_id = v.org_id AND t.id = $5 AND t.version_id = v.id AND t.passed
+                AND t.content_digest = v.content_digest)
 `
 
-func (q *Queries) PublishPolicyVersion(ctx context.Context, publishedBy *string, orgID ids.OrgID, iD ids.UUID) (pgconn.CommandTag, error) {
-	return q.db.Exec(ctx, publishPolicyVersion, publishedBy, orgID, iD)
+type PublishPolicyVersionParams struct {
+	PublishedBy   *string
+	OrgID         ids.OrgID
+	ID            ids.UUID
+	ContentDigest []byte
+	TestRunID     ids.UUID
+}
+
+// PublishPolicyVersion is the publish gate's last step (G0 M11.1 design
+// decision 6, HR-230): only a TESTED version of exactly this content, with
+// a passing test run of that content, becomes the published one.
+func (q *Queries) PublishPolicyVersion(ctx context.Context, arg PublishPolicyVersionParams) (pgconn.CommandTag, error) {
+	return q.db.Exec(ctx, publishPolicyVersion,
+		arg.PublishedBy,
+		arg.OrgID,
+		arg.ID,
+		arg.ContentDigest,
+		arg.TestRunID,
+	)
 }
 
 const supersedePublishedPolicy = `-- name: SupersedePublishedPolicy :execrows

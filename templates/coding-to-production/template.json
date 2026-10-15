@@ -1,5 +1,34 @@
 {
   "name": "coding-to-production",
   "summary": "Coding agents prepare changes on GitHub; people review merges and release deployments inside change windows (G0 M8 C4).",
-  "task_ref": "template:coding-to-production"
+  "task_ref": "template:coding-to-production",
+  "protects": [
+    "every merge into a named repository waits for an independent code reviewer, bound to the head SHA",
+    "every deployment of a named repository waits for a release approver inside a change window",
+    "no branch creation or contents write on a named repository's default branch",
+    "with --agent: that agent does not merge or push from the shell (a heuristic over the command text); without --agent this rule is skipped",
+    "with --agent: the agent's grant covers the GitHub operations on the named repositories only, with one merge per run; without --agent no grant is issued"
+  ],
+  "excludes": [
+    "renaming a default branch: apply the template again",
+    "people: bind code_reviewer and release_approver yourself (pclaw role bind)",
+    "routes in monitor mode record the rules' decisions and do not block"
+  ],
+  "placeholders": {
+    "repository": {"kind": "repository", "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"},
+    "default_branch": {"kind": "default_branch", "pattern": "^[A-Za-z0-9_-][A-Za-z0-9._-]{0,99}(/[A-Za-z0-9_-][A-Za-z0-9._-]{0,99}){0,7}$"},
+    "environment": {"kind": "environment", "pattern": "^[a-z][a-z0-9_-]{0,63}$"},
+    "time_zone": {"kind": "time_zone", "pattern": "^[A-Za-z][A-Za-z0-9_+-]*(/[A-Za-z0-9_+-]+){0,2}$"},
+    "agent": {"kind": "agent", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"}
+  },
+  "routes": [
+    {"package": "pc.github", "route": "github-pull-merge"},
+    {"package": "pc.github", "route": "github-contents-write"},
+    {"package": "pc.github", "route": "github-branch-create"}
+  ],
+  "grant": "reads, branch preparation, contents writes, pull requests and merges on these repositories; one merge per run",
+  "requires": {
+    "packages": ["pc.github", "pc.shell"],
+    "connections": ["a pc.github connection in enforce mode for the repositories", "the pclaw shell hook (pclaw init) for the shell rule"]
+  }
 }

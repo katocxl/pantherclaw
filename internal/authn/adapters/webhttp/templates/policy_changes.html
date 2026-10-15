@@ -1,0 +1,14 @@
+{{template "head" .}}
+<h1>Policy changes</h1>
+{{if .Requests}}
+<p class="note">Changes that loosen what the organization enforces wait here for confirmation with a security key by people who publish policies. Changes you already confirmed are not listed.</p>
+<table>
+<thead><tr><th>Change</th><th>Kind</th><th>Requested by</th><th>Confirmations</th><th>Expires</th></tr></thead>
+<tbody>
+{{range .Requests}}<tr><td><a href="/policy-changes/{{.ID}}"><code>{{.ID}}</code></a></td><td>{{.Kind}}</td><td><code>{{.RequestedBy}}</code></td><td>{{len .Confirmations}} of {{.Required}}</td><td>{{.ExpiresAt.UTC.Format "2006-01-02 15:04 UTC"}}</td></tr>
+{{end}}</tbody>
+</table>
+{{else}}
+<p class="ok">No policy change is waiting for your confirmation.</p>
+{{end}}
+{{template "foot" .}}

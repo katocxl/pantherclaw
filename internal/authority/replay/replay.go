@@ -58,6 +58,10 @@ type Source interface {
 	PolicyVersion(ctx context.Context, org ids.OrgID, id ids.UUID) (*pdomain.Bundle, error)
 	// Catalog returns the org's current fact types.
 	Catalog(ctx context.Context, org ids.OrgID) (map[string]fdomain.Type, error)
+	// HoldSettings returns the org's current hold settings, for a replay
+	// under a proposed policy of an evaluation that never read them
+	// (M11.1 D36).
+	HoldSettings(ctx context.Context, org ids.OrgID) (pipeline.HoldSettings, error)
 }
 
 // Opener opens sealed inputs; recording.Sealer implements it.
@@ -118,6 +122,14 @@ type Outcome struct {
 	// Notes are limits of a complete replay worth knowing.
 	Notes []string `json:"notes,omitzero"`
 }
+
+// NoteHoldSettings is the note of a proposed replay that served the org's
+// current hold settings (D36).
+const NoteHoldSettings = "hold settings read at replay time; the original decision did not need them"
+
+// NoteNoVariants is the note of a proposed replay of an evaluation that
+// read no earlier or approved requests (D36).
+const NoteNoVariants = "earlier and approved requests not read at replay time; the hold's display may differ, the decision does not depend on them"
 
 // Original is the recorded decision, from its receipt.
 type Original struct {
@@ -275,6 +287,21 @@ func (e *Engine) served(ctx context.Context, org ids.OrgID, rec *recording.Recor
 	}
 	p := rec.Reads.Policy
 	if proposed != nil {
+		if rec.Reads.HoldSettings == nil {
+			// A proposed policy may hold an action the original decision
+			// allowed, which reads the hold settings; they set only the
+			// hold deadline, never the decision (D36).
+			h, err := e.Source.HoldSettings(ctx, org)
+			if err != nil {
+				return s, nil, fmt.Errorf("replay: hold settings: %w", err)
+			}
+			s.HoldSettings = &h
+			out.Notes = append(out.Notes, NoteHoldSettings)
+		}
+		if len(rec.Reads.Variants) == 0 {
+			s.NoVariants = true
+			out.Notes = append(out.Notes, NoteNoVariants)
+		}
 		var catalog map[string]fdomain.Type
 		if p == nil || p.None || p.Err != "" {
 			var err error

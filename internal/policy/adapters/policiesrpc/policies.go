@@ -49,7 +49,7 @@ func ts(t time.Time) *timestamppb.Timestamp {
 func VersionProto(v app.VersionInfo, withBundle bool) *pantherclawv1.PolicyVersion {
 	out := &pantherclawv1.PolicyVersion{
 		Id: v.ID.String(), BundleId: v.BundleID, Version: int32(v.Version), State: v.State, //nolint:gosec // small
-		CreatedBy: v.CreatedBy, CreateTime: ts(v.CreatedAt),
+		CreatedBy: v.CreatedBy, CreateTime: ts(v.CreatedAt), ContentDigest: v.ContentDigest,
 	}
 	if v.PublishedAt != nil {
 		out.PublishTime = ts(*v.PublishedAt)
@@ -83,11 +83,14 @@ func (s *Policies) PublishPolicyVersion(ctx context.Context, req *pantherclawv1.
 	if err != nil {
 		return nil, err
 	}
-	v, err := s.svc.PublishExpecting(ctx, id, expected)
+	out, err := s.svc.PublishExpecting(ctx, id, expected)
 	if err != nil {
-		return nil, err
+		return nil, gateError(err)
 	}
-	return &pantherclawv1.PublishPolicyVersionResponse{Version: VersionProto(v, false)}, nil
+	return &pantherclawv1.PublishPolicyVersionResponse{
+		Version: VersionProto(out.Version, false), ChangeRequest: ChangeRequestProto(out.ChangeRequest), Diff: diffProto(out.Diff),
+		Validation: validationProto(out.Validation), Tests: testsProto(out.Tests),
+	}, nil
 }
 
 // GetPublishedPolicy implements PolicyServiceHandler.

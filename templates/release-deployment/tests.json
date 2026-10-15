@@ -1,0 +1,79 @@
+{
+  "tests": [
+    {
+      "id": "rd-held", "per": "repo",
+      "summary": "a merge into the repository that deploys to {{environment}} waits for a release approver",
+      "action": {"operation": "github.pull.merge", "target": {"type": "github.pull_request", "id": "{{repo}}#7"},
+        "params": {"sha": "1111111111111111111111111111111111111111"}},
+      "given": {"facts": {
+        "github.pull.head": {"value": {"object": {"sha": "1111111111111111111111111111111111111111"}}, "age_seconds": 5},
+        "github.pull.people": {"value": {"object": {"complete": true, "author": 101, "pushers": [101]}}, "age_seconds": 5},
+        "github.pull.reviews": {"value": {"object": {}}, "age_seconds": 5},
+        "github.pull.checks": {"value": {"object": {}}, "age_seconds": 5},
+        "github.branch.rules": {"value": {"object": {}}, "age_seconds": 5},
+        "github.repo.deploy_triggers": {"value": {"object": {"state": "triggered", "branch": "main", "at": "1111111111111111111111111111111111111111", "workflows": [], "environments": ["{{environment}}"]}}, "age_seconds": 5}
+      }},
+      "expect": {"decision": "REQUIRE_APPROVAL", "reason": "DEPLOYMENT_NEEDS_RELEASE"}
+    },
+    {
+      "id": "rd-other-env", "per": "repo",
+      "summary": "a merge into the repository that deploys to another environment is refused",
+      "action": {"operation": "github.pull.merge", "target": {"type": "github.pull_request", "id": "{{repo}}#7"},
+        "params": {"sha": "1111111111111111111111111111111111111111"}},
+      "given": {"facts": {
+        "github.pull.head": {"value": {"object": {"sha": "1111111111111111111111111111111111111111"}}, "age_seconds": 5},
+        "github.pull.people": {"value": {"object": {"complete": true, "author": 101, "pushers": [101]}}, "age_seconds": 5},
+        "github.pull.reviews": {"value": {"object": {}}, "age_seconds": 5},
+        "github.pull.checks": {"value": {"object": {}}, "age_seconds": 5},
+        "github.branch.rules": {"value": {"object": {}}, "age_seconds": 5},
+        "github.repo.deploy_triggers": {"value": {"object": {"state": "triggered", "branch": "main", "at": "1111111111111111111111111111111111111111", "workflows": [], "environments": ["{{environment}}", "{{environment}}-other"]}}, "age_seconds": 5}
+      }},
+      "expect": {"decision": "DENY", "reason": "DEPLOYMENT_ENVIRONMENT_NOT_ALLOWED"}
+    },
+    {
+      "id": "rd-unknown", "per": "repo",
+      "summary": "a merge into the repository whose deployments cannot be told waits for a release approver",
+      "action": {"operation": "github.pull.merge", "target": {"type": "github.pull_request", "id": "{{repo}}#7"},
+        "params": {"sha": "1111111111111111111111111111111111111111"}},
+      "given": {"facts": {
+        "github.pull.head": {"value": {"object": {"sha": "1111111111111111111111111111111111111111"}}, "age_seconds": 5},
+        "github.pull.people": {"value": {"object": {"complete": true, "author": 101, "pushers": [101]}}, "age_seconds": 5},
+        "github.pull.reviews": {"value": {"object": {}}, "age_seconds": 5},
+        "github.pull.checks": {"value": {"object": {}}, "age_seconds": 5},
+        "github.branch.rules": {"value": {"object": {}}, "age_seconds": 5},
+        "github.repo.deploy_triggers": {"value": {"object": {"state": "unknown", "branch": "main", "at": "1111111111111111111111111111111111111111", "workflows": [], "environments": [], "unknown": "a workflow the parser does not evaluate"}}, "age_seconds": 5}
+      }},
+      "expect": {"decision": "REQUIRE_APPROVAL", "reason": "CONSEQUENCE_UNKNOWN"}
+    },
+    {
+      "id": "rd-no-deployment", "per": "repo",
+      "summary": "a merge into the repository that deploys nothing goes through",
+      "action": {"operation": "github.pull.merge", "target": {"type": "github.pull_request", "id": "{{repo}}#7"},
+        "params": {"sha": "1111111111111111111111111111111111111111"}},
+      "given": {"facts": {
+        "github.pull.head": {"value": {"object": {"sha": "1111111111111111111111111111111111111111"}}, "age_seconds": 5},
+        "github.pull.people": {"value": {"object": {"complete": true, "author": 101, "pushers": [101]}}, "age_seconds": 5},
+        "github.pull.reviews": {"value": {"object": {}}, "age_seconds": 5},
+        "github.pull.checks": {"value": {"object": {}}, "age_seconds": 5},
+        "github.branch.rules": {"value": {"object": {}}, "age_seconds": 5},
+        "github.repo.deploy_triggers": {"value": {"object": {"state": "none", "branch": "main", "at": "1111111111111111111111111111111111111111", "workflows": [], "environments": []}}, "age_seconds": 5}
+      }},
+      "expect": {"decision": "ALLOW", "reason": "GRANT_COVERS"}
+    },
+    {
+      "id": "rd-other-repo", "per": "org",
+      "summary": "a merge into a repository the template was not applied for that deploys is refused",
+      "action": {"operation": "github.pull.merge", "target": {"type": "github.pull_request", "id": "pantherclaw-example/not-applied#7"},
+        "params": {"sha": "1111111111111111111111111111111111111111"}},
+      "given": {"facts": {
+        "github.pull.head": {"value": {"object": {"sha": "1111111111111111111111111111111111111111"}}, "age_seconds": 5},
+        "github.pull.people": {"value": {"object": {"complete": true, "author": 101, "pushers": [101]}}, "age_seconds": 5},
+        "github.pull.reviews": {"value": {"object": {}}, "age_seconds": 5},
+        "github.pull.checks": {"value": {"object": {}}, "age_seconds": 5},
+        "github.branch.rules": {"value": {"object": {}}, "age_seconds": 5},
+        "github.repo.deploy_triggers": {"value": {"object": {"state": "triggered", "branch": "main", "at": "1111111111111111111111111111111111111111", "workflows": [], "environments": ["{{environment}}"]}}, "age_seconds": 5}
+      }},
+      "expect": {"decision": "DENY", "reason": "DEPLOYMENT_REPOSITORY_NOT_ALLOWED", "rule": "rd-repository"}
+    }
+  ]
+}

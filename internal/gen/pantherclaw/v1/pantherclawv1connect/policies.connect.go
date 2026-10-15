@@ -42,6 +42,24 @@ const (
 	// PolicyServiceListPolicyVersionsProcedure is the procedure name of the PolicyService's
 	// ListPolicyVersions RPC.
 	PolicyServiceListPolicyVersionsProcedure = "/pantherclaw.v1.PolicyService/ListPolicyVersions"
+	// PolicyServiceValidatePolicyVersionProcedure is the procedure name of the PolicyService's
+	// ValidatePolicyVersion RPC.
+	PolicyServiceValidatePolicyVersionProcedure = "/pantherclaw.v1.PolicyService/ValidatePolicyVersion"
+	// PolicyServiceTestPolicyVersionProcedure is the procedure name of the PolicyService's
+	// TestPolicyVersion RPC.
+	PolicyServiceTestPolicyVersionProcedure = "/pantherclaw.v1.PolicyService/TestPolicyVersion"
+	// PolicyServiceDiffPolicyVersionsProcedure is the procedure name of the PolicyService's
+	// DiffPolicyVersions RPC.
+	PolicyServiceDiffPolicyVersionsProcedure = "/pantherclaw.v1.PolicyService/DiffPolicyVersions"
+	// PolicyServiceRollbackPolicyProcedure is the procedure name of the PolicyService's RollbackPolicy
+	// RPC.
+	PolicyServiceRollbackPolicyProcedure = "/pantherclaw.v1.PolicyService/RollbackPolicy"
+	// PolicyServiceListPolicyChangeRequestsProcedure is the procedure name of the PolicyService's
+	// ListPolicyChangeRequests RPC.
+	PolicyServiceListPolicyChangeRequestsProcedure = "/pantherclaw.v1.PolicyService/ListPolicyChangeRequests"
+	// PolicyServiceGetPolicyChangeRequestProcedure is the procedure name of the PolicyService's
+	// GetPolicyChangeRequest RPC.
+	PolicyServiceGetPolicyChangeRequestProcedure = "/pantherclaw.v1.PolicyService/GetPolicyChangeRequest"
 )
 
 var (
@@ -83,6 +101,51 @@ var (
 			IdempotencyLevel: connect.IdempotencyNoSideEffects,
 		}
 	})
+	policyServiceValidatePolicyVersionSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_pantherclaw_v1_policies_proto.Services().ByName("PolicyService").Methods().ByName("ValidatePolicyVersion"),
+			Procedure:  PolicyServiceValidatePolicyVersionProcedure,
+		}
+	})
+	policyServiceTestPolicyVersionSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_pantherclaw_v1_policies_proto.Services().ByName("PolicyService").Methods().ByName("TestPolicyVersion"),
+			Procedure:  PolicyServiceTestPolicyVersionProcedure,
+		}
+	})
+	policyServiceDiffPolicyVersionsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_pantherclaw_v1_policies_proto.Services().ByName("PolicyService").Methods().ByName("DiffPolicyVersions"),
+			Procedure:        PolicyServiceDiffPolicyVersionsProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
+	policyServiceRollbackPolicySpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_pantherclaw_v1_policies_proto.Services().ByName("PolicyService").Methods().ByName("RollbackPolicy"),
+			Procedure:  PolicyServiceRollbackPolicyProcedure,
+		}
+	})
+	policyServiceListPolicyChangeRequestsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_pantherclaw_v1_policies_proto.Services().ByName("PolicyService").Methods().ByName("ListPolicyChangeRequests"),
+			Procedure:        PolicyServiceListPolicyChangeRequestsProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
+	policyServiceGetPolicyChangeRequestSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType:       connect.StreamTypeUnary,
+			Schema:           v1.File_pantherclaw_v1_policies_proto.Services().ByName("PolicyService").Methods().ByName("GetPolicyChangeRequest"),
+			Procedure:        PolicyServiceGetPolicyChangeRequestProcedure,
+			IdempotencyLevel: connect.IdempotencyNoSideEffects,
+		}
+	})
 )
 
 // PolicyServiceClient is a client for the pantherclaw.v1.PolicyService service.
@@ -92,7 +155,14 @@ type PolicyServiceClient interface {
 	// first; a bundle that does not compile is refused.
 	// permission: policy.author
 	CreatePolicyVersion(context.Context, *v1.CreatePolicyVersionRequest) (*v1.CreatePolicyVersionResponse, error)
-	// PublishPolicyVersion makes a version the published one.
+	// PublishPolicyVersion makes a version the published one through the
+	// publish gate (HR-230): it is validated and its scenario tests run again
+	// against the org's current definitions and fact catalog, and a failure
+	// refuses with FAILED_PRECONDITION (POLICY_VALIDATION_FAILED or
+	// POLICY_TESTS_FAILED, the report in the error details). A version that
+	// is not provably tighter than the published one is not published: the
+	// response carries the change request that waits for confirmations with
+	// security keys (HR-231). Human only.
 	// permission: policy.publish
 	PublishPolicyVersion(context.Context, *v1.PublishPolicyVersionRequest) (*v1.PublishPolicyVersionResponse, error)
 	// GetPublishedPolicy returns the published version.
@@ -104,6 +174,36 @@ type PolicyServiceClient interface {
 	// ListPolicyVersions lists versions, newest first.
 	// permission: policy.read
 	ListPolicyVersions(context.Context, *v1.ListPolicyVersionsRequest) (*v1.ListPolicyVersionsResponse, error)
+	// ValidatePolicyVersion validates a version now and records the result;
+	// a DRAFT that passes becomes VALIDATED (G0 M11.1).
+	// permission: policy.author
+	ValidatePolicyVersion(context.Context, *v1.ValidatePolicyVersionRequest) (*v1.ValidatePolicyVersionResponse, error)
+	// TestPolicyVersion runs a version's scenario tests and the HR-044
+	// mutants now and records the run; a VALIDATED version that passes
+	// becomes TESTED.
+	// permission: policy.author
+	TestPolicyVersion(context.Context, *v1.TestPolicyVersionRequest) (*v1.TestPolicyVersionResponse, error)
+	// DiffPolicyVersions compares two versions rule by rule, each change
+	// classified tighter, looser, unknown or neutral, with the decisions that
+	// change over validation's samples.
+	// permission: policy.read
+	DiffPolicyVersions(context.Context, *v1.DiffPolicyVersionsRequest) (*v1.DiffPolicyVersionsResponse, error)
+	// RollbackPolicy makes a new version from an earlier version's rules and
+	// tests, carries every emergency rule of the published version forward
+	// (HR-236), and publishes it through the gate: rolling back to a looser
+	// version waits for confirmations like any loosening. Containment,
+	// grants and envelopes (org guardrails) are separate records and are
+	// never changed.
+	// Human only.
+	// permission: policy.publish
+	RollbackPolicy(context.Context, *v1.RollbackPolicyRequest) (*v1.RollbackPolicyResponse, error)
+	// ListPolicyChangeRequests lists change requests, newest first.
+	// permission: policy.read
+	ListPolicyChangeRequests(context.Context, *v1.ListPolicyChangeRequestsRequest) (*v1.ListPolicyChangeRequestsResponse, error)
+	// GetPolicyChangeRequest returns one change request with its
+	// confirmations. People confirm or decline it only on its page.
+	// permission: policy.read
+	GetPolicyChangeRequest(context.Context, *v1.GetPolicyChangeRequestRequest) (*v1.GetPolicyChangeRequestResponse, error)
 }
 
 // NewPolicyServiceClient constructs a client for the pantherclaw.v1.PolicyService service. Multiple
@@ -119,7 +219,14 @@ type PolicyServiceHandler interface {
 	// first; a bundle that does not compile is refused.
 	// permission: policy.author
 	CreatePolicyVersion(context.Context, *v1.CreatePolicyVersionRequest) (*v1.CreatePolicyVersionResponse, error)
-	// PublishPolicyVersion makes a version the published one.
+	// PublishPolicyVersion makes a version the published one through the
+	// publish gate (HR-230): it is validated and its scenario tests run again
+	// against the org's current definitions and fact catalog, and a failure
+	// refuses with FAILED_PRECONDITION (POLICY_VALIDATION_FAILED or
+	// POLICY_TESTS_FAILED, the report in the error details). A version that
+	// is not provably tighter than the published one is not published: the
+	// response carries the change request that waits for confirmations with
+	// security keys (HR-231). Human only.
 	// permission: policy.publish
 	PublishPolicyVersion(context.Context, *v1.PublishPolicyVersionRequest) (*v1.PublishPolicyVersionResponse, error)
 	// GetPublishedPolicy returns the published version.
@@ -131,6 +238,36 @@ type PolicyServiceHandler interface {
 	// ListPolicyVersions lists versions, newest first.
 	// permission: policy.read
 	ListPolicyVersions(context.Context, *v1.ListPolicyVersionsRequest) (*v1.ListPolicyVersionsResponse, error)
+	// ValidatePolicyVersion validates a version now and records the result;
+	// a DRAFT that passes becomes VALIDATED (G0 M11.1).
+	// permission: policy.author
+	ValidatePolicyVersion(context.Context, *v1.ValidatePolicyVersionRequest) (*v1.ValidatePolicyVersionResponse, error)
+	// TestPolicyVersion runs a version's scenario tests and the HR-044
+	// mutants now and records the run; a VALIDATED version that passes
+	// becomes TESTED.
+	// permission: policy.author
+	TestPolicyVersion(context.Context, *v1.TestPolicyVersionRequest) (*v1.TestPolicyVersionResponse, error)
+	// DiffPolicyVersions compares two versions rule by rule, each change
+	// classified tighter, looser, unknown or neutral, with the decisions that
+	// change over validation's samples.
+	// permission: policy.read
+	DiffPolicyVersions(context.Context, *v1.DiffPolicyVersionsRequest) (*v1.DiffPolicyVersionsResponse, error)
+	// RollbackPolicy makes a new version from an earlier version's rules and
+	// tests, carries every emergency rule of the published version forward
+	// (HR-236), and publishes it through the gate: rolling back to a looser
+	// version waits for confirmations like any loosening. Containment,
+	// grants and envelopes (org guardrails) are separate records and are
+	// never changed.
+	// Human only.
+	// permission: policy.publish
+	RollbackPolicy(context.Context, *v1.RollbackPolicyRequest) (*v1.RollbackPolicyResponse, error)
+	// ListPolicyChangeRequests lists change requests, newest first.
+	// permission: policy.read
+	ListPolicyChangeRequests(context.Context, *v1.ListPolicyChangeRequestsRequest) (*v1.ListPolicyChangeRequestsResponse, error)
+	// GetPolicyChangeRequest returns one change request with its
+	// confirmations. People confirm or decline it only on its page.
+	// permission: policy.read
+	GetPolicyChangeRequest(context.Context, *v1.GetPolicyChangeRequestRequest) (*v1.GetPolicyChangeRequestResponse, error)
 }
 
 // RegisterPolicyServiceHandler registers svc as the pantherclaw.v1.PolicyService implementation on
@@ -143,6 +280,12 @@ func RegisterPolicyServiceHandler(server *connect.Server, svc PolicyServiceHandl
 		connect.Method{Spec: policyServiceGetPublishedPolicySpec(), Handler: adapter.getPublishedPolicy},
 		connect.Method{Spec: policyServiceGetPolicyVersionSpec(), Handler: adapter.getPolicyVersion},
 		connect.Method{Spec: policyServiceListPolicyVersionsSpec(), Handler: adapter.listPolicyVersions},
+		connect.Method{Spec: policyServiceValidatePolicyVersionSpec(), Handler: adapter.validatePolicyVersion},
+		connect.Method{Spec: policyServiceTestPolicyVersionSpec(), Handler: adapter.testPolicyVersion},
+		connect.Method{Spec: policyServiceDiffPolicyVersionsSpec(), Handler: adapter.diffPolicyVersions},
+		connect.Method{Spec: policyServiceRollbackPolicySpec(), Handler: adapter.rollbackPolicy},
+		connect.Method{Spec: policyServiceListPolicyChangeRequestsSpec(), Handler: adapter.listPolicyChangeRequests},
+		connect.Method{Spec: policyServiceGetPolicyChangeRequestSpec(), Handler: adapter.getPolicyChangeRequest},
 	)
 }
 
@@ -167,6 +310,30 @@ func (UnimplementedPolicyServiceHandler) GetPolicyVersion(context.Context, *v1.G
 
 func (UnimplementedPolicyServiceHandler) ListPolicyVersions(context.Context, *v1.ListPolicyVersionsRequest) (*v1.ListPolicyVersionsResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.PolicyService.ListPolicyVersions is not implemented")
+}
+
+func (UnimplementedPolicyServiceHandler) ValidatePolicyVersion(context.Context, *v1.ValidatePolicyVersionRequest) (*v1.ValidatePolicyVersionResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.PolicyService.ValidatePolicyVersion is not implemented")
+}
+
+func (UnimplementedPolicyServiceHandler) TestPolicyVersion(context.Context, *v1.TestPolicyVersionRequest) (*v1.TestPolicyVersionResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.PolicyService.TestPolicyVersion is not implemented")
+}
+
+func (UnimplementedPolicyServiceHandler) DiffPolicyVersions(context.Context, *v1.DiffPolicyVersionsRequest) (*v1.DiffPolicyVersionsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.PolicyService.DiffPolicyVersions is not implemented")
+}
+
+func (UnimplementedPolicyServiceHandler) RollbackPolicy(context.Context, *v1.RollbackPolicyRequest) (*v1.RollbackPolicyResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.PolicyService.RollbackPolicy is not implemented")
+}
+
+func (UnimplementedPolicyServiceHandler) ListPolicyChangeRequests(context.Context, *v1.ListPolicyChangeRequestsRequest) (*v1.ListPolicyChangeRequestsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.PolicyService.ListPolicyChangeRequests is not implemented")
+}
+
+func (UnimplementedPolicyServiceHandler) GetPolicyChangeRequest(context.Context, *v1.GetPolicyChangeRequestRequest) (*v1.GetPolicyChangeRequestResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "pantherclaw.v1.PolicyService.GetPolicyChangeRequest is not implemented")
 }
 
 type policyServiceClient struct {
@@ -208,6 +375,54 @@ func (c *policyServiceClient) GetPolicyVersion(ctx context.Context, req *v1.GetP
 func (c *policyServiceClient) ListPolicyVersions(ctx context.Context, req *v1.ListPolicyVersionsRequest) (*v1.ListPolicyVersionsResponse, error) {
 	var res v1.ListPolicyVersionsResponse
 	if err := c.client.CallUnary(ctx, policyServiceListPolicyVersionsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *policyServiceClient) ValidatePolicyVersion(ctx context.Context, req *v1.ValidatePolicyVersionRequest) (*v1.ValidatePolicyVersionResponse, error) {
+	var res v1.ValidatePolicyVersionResponse
+	if err := c.client.CallUnary(ctx, policyServiceValidatePolicyVersionSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *policyServiceClient) TestPolicyVersion(ctx context.Context, req *v1.TestPolicyVersionRequest) (*v1.TestPolicyVersionResponse, error) {
+	var res v1.TestPolicyVersionResponse
+	if err := c.client.CallUnary(ctx, policyServiceTestPolicyVersionSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *policyServiceClient) DiffPolicyVersions(ctx context.Context, req *v1.DiffPolicyVersionsRequest) (*v1.DiffPolicyVersionsResponse, error) {
+	var res v1.DiffPolicyVersionsResponse
+	if err := c.client.CallUnary(ctx, policyServiceDiffPolicyVersionsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *policyServiceClient) RollbackPolicy(ctx context.Context, req *v1.RollbackPolicyRequest) (*v1.RollbackPolicyResponse, error) {
+	var res v1.RollbackPolicyResponse
+	if err := c.client.CallUnary(ctx, policyServiceRollbackPolicySpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *policyServiceClient) ListPolicyChangeRequests(ctx context.Context, req *v1.ListPolicyChangeRequestsRequest) (*v1.ListPolicyChangeRequestsResponse, error) {
+	var res v1.ListPolicyChangeRequestsResponse
+	if err := c.client.CallUnary(ctx, policyServiceListPolicyChangeRequestsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *policyServiceClient) GetPolicyChangeRequest(ctx context.Context, req *v1.GetPolicyChangeRequestRequest) (*v1.GetPolicyChangeRequestResponse, error) {
+	var res v1.GetPolicyChangeRequestResponse
+	if err := c.client.CallUnary(ctx, policyServiceGetPolicyChangeRequestSpec(), req, &res); err != nil {
 		return nil, err
 	}
 	return &res, nil
@@ -269,6 +484,78 @@ func (h policyServiceHandler) listPolicyVersions(ctx context.Context, _ connect.
 		return err
 	}
 	res, err := h.svc.ListPolicyVersions(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h policyServiceHandler) validatePolicyVersion(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ValidatePolicyVersionRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ValidatePolicyVersion(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h policyServiceHandler) testPolicyVersion(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.TestPolicyVersionRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.TestPolicyVersion(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h policyServiceHandler) diffPolicyVersions(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.DiffPolicyVersionsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.DiffPolicyVersions(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h policyServiceHandler) rollbackPolicy(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.RollbackPolicyRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.RollbackPolicy(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h policyServiceHandler) listPolicyChangeRequests(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListPolicyChangeRequestsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListPolicyChangeRequests(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h policyServiceHandler) getPolicyChangeRequest(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetPolicyChangeRequestRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetPolicyChangeRequest(ctx, &req)
 	if err != nil {
 		return err
 	}

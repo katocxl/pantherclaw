@@ -12,6 +12,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/katocxl/pantherclaw/internal/actionir"
 	adomain "github.com/katocxl/pantherclaw/internal/authority/domain"
@@ -33,6 +34,8 @@ type source struct {
 	bundles  map[string]*pdomain.Bundle
 	missing  map[string]bool // reads that find nothing
 	reads    int
+	// holdSettings counts HoldSettings reads (D36).
+	holdSettings int
 }
 
 func newSource(s *pipelinetest.Scenario) *source {
@@ -85,7 +88,13 @@ func (x *source) PolicyVersion(_ context.Context, _ ids.OrgID, id ids.UUID) (*pd
 
 func (x *source) Catalog(context.Context, ids.OrgID) (map[string]fdomain.Type, error) {
 	x.reads++
-	return map[string]fdomain.Type{"payments.charge.refundable": fdomain.TypeBoolean}, nil
+	return map[string]fdomain.Type{"payments.charge.refundable": fdomain.TypeBoolean, "payments.charge.risk": fdomain.TypeInteger}, nil
+}
+
+func (x *source) HoldSettings(context.Context, ids.OrgID) (pipeline.HoldSettings, error) {
+	x.reads++
+	x.holdSettings++
+	return pipeline.HoldSettings{HoldDeadline: 30 * time.Minute}, nil
 }
 
 var catalog = map[string]fdomain.Type{"payments.charge.refundable": fdomain.TypeBoolean}
@@ -97,7 +106,7 @@ func publish(t *testing.T, s *pipelinetest.Scenario, x *source, rules ...pdomain
 	if err := s.W.SetPolicy(rules, catalog); err != nil {
 		t.Fatal(err)
 	}
-	p, _ := s.W.Policy(t.Context(), s.Org)
+	p, _ := s.W.Policy(t.Context(), s.Org, ids.UUID{})
 	x.bundles[p.Version] = p.Compiled.Bundle
 }
 
@@ -214,22 +223,34 @@ func TestHR197_AProposedPolicyThatDeniesShowsTheDifferingRule(t *testing.T) {
 }
 
 // TestHR197_ANewRequirementNeedsReadsTheEvaluationNeverMade: a proposed
-// policy that holds the action needs the approval request reads, which the
-// original never made: the replay is incomplete and says which, never a
-// guess (F507).
+// policy may need reads the original never made. The hold's settings and
+// earlier requests are read or served at replay time and noted (D36: they
+// never change the decision); any other read the evaluation never made,
+// such as a fact a proposed rule reads, leaves the replay incomplete and
+// says which, never a guess (F507).
 func TestHR197_ANewRequirementNeedsReadsTheEvaluationNeverMade(t *testing.T) {
 	f := newFixture(t)
 	ok := f.refund("ch_1", "70.00") // no policy published
 	draft := propose(f.src, 1, holdOver50)
 	out := f.replay(t, ok, &draft)
-	if out.Complete || out.Reproduced || out.Decision == adomain.Allow ||
-		!slices.ContainsFunc(out.Incomplete, func(l replay.Limitation) bool {
-			return l.Code == replay.IncompleteInputUnavailable && l.Step == pipeline.StepRequirements
-		}) {
+	if !out.Complete || out.Reproduced || out.Decision != adomain.RequireApproval ||
+		!slices.Contains(out.Notes, replay.NoteHoldSettings) || !slices.Contains(out.Notes, replay.NoteNoVariants) {
 		t.Fatalf("outcome = %+v", out)
 	}
 	if !slices.ContainsFunc(out.Notes, func(n string) bool { return strings.Contains(n, "current fact types") }) {
 		t.Fatalf("notes = %v", out.Notes)
+	}
+	risky := pdomain.Rule{
+		ID: "risky", Kind: pdomain.Forbid, Summary: "no risky refunds", Operations: []string{"payments.refund.create"},
+		When: "facts.payments_charge_risk > 5", Reason: "RISKY_REFUND", Facts: []pdomain.FactRef{{Name: "payments.charge.risk", MaxAgeSeconds: 60}},
+	}
+	unread := propose(f.src, 2, risky)
+	out = f.replay(t, ok, &unread)
+	if out.Complete || out.Reproduced || out.Decision == adomain.Allow ||
+		!slices.ContainsFunc(out.Incomplete, func(l replay.Limitation) bool {
+			return l.Code == replay.IncompleteInputUnavailable && l.Step == pipeline.StepFacts
+		}) {
+		t.Fatalf("a fact never read: %+v", out)
 	}
 }
 
@@ -296,7 +317,10 @@ func TestHR197_RemovedOrTruncatedInputsGiveAnIncompleteReplay(t *testing.T) {
 // signs); replaying leaves the world's transactions, receipts, permits,
 // claims and budgets as they were (F508).
 func TestHR197_ReplayHoldsNoStoreAndWritesNothing(t *testing.T) {
-	reads := map[string]bool{"Receipt": true, "Inputs": true, "Definition": true, "Bundle": true, "PolicyVersion": true, "Catalog": true, "Open": true}
+	reads := map[string]bool{
+		"Receipt": true, "Inputs": true, "Definition": true, "Bundle": true, "PolicyVersion": true, "Catalog": true, "Open": true,
+		"HoldSettings": true, // a read in a READ ONLY transaction (D36)
+	}
 	e := reflect.TypeFor[replay.Engine]()
 	store := reflect.TypeFor[finalize.Store]()
 	for i := range e.NumField() {
@@ -397,5 +421,48 @@ func TestRecordedInputsAreTheValuesRead(t *testing.T) {
 	}
 	if _, err := f.engine.RecordedInputs(t.Context(), f.s.Org, r.TransactionID, 2); !errors.Is(err, replay.ErrNotFound) {
 		t.Fatalf("missing: %v", err)
+	}
+}
+
+// TestHR197_AProposedHoldReadsTheCurrentHoldSettings is D36: an allowed
+// decision never read the org's hold settings, so a replay under a
+// proposed version that holds the action reads them at replay time, says
+// so, and is complete; a reproduction replay never reads them.
+func TestHR197_AProposedHoldReadsTheCurrentHoldSettings(t *testing.T) {
+	f := newFixture(t)
+	publish(t, f.s, f.src, forbidOver20)
+	ok := f.refund("ch_1", "15.00")
+	if ok.Decision != adomain.Allow {
+		t.Fatalf("original: %+v", ok)
+	}
+	hold10 := holdOver50
+	hold10.When = `action.params.amount > money("10", "USD")`
+	draft := propose(f.src, 2, forbidOver20, hold10)
+	out := f.replay(t, ok, &draft)
+	if !out.Complete || out.Decision != adomain.RequireApproval || out.Reason != "REFUND_OVER_50" ||
+		!slices.Contains(out.Notes, replay.NoteHoldSettings) || !slices.Contains(out.Notes, replay.NoteNoVariants) || f.src.holdSettings != 1 {
+		t.Fatalf("outcome = %+v, hold settings read %d times", out, f.src.holdSettings)
+	}
+	if got := replay.Classify(ok.Decision, out.Decision, decisive(ok), out.Reason); got != replay.NewlyHeld {
+		t.Fatalf("category %s", got)
+	}
+	// Reproduction replays are unchanged: no read, no note.
+	f.src.holdSettings = 0
+	same := f.replay(t, ok, nil)
+	if !same.Complete || !same.Reproduced || slices.Contains(same.Notes, replay.NoteHoldSettings) || slices.Contains(same.Notes, replay.NoteNoVariants) ||
+		f.src.holdSettings != 0 {
+		t.Fatalf("reproduction: %+v, hold settings read %d times", same, f.src.holdSettings)
+	}
+	// A held decision read them: it is replayed with what it read.
+	h := newFixture(t)
+	publish(t, h.s, h.src, holdOver50)
+	held := h.refund("ch_2", "70.00")
+	if held.Decision != adomain.RequireApproval {
+		t.Fatalf("held original: %+v", held)
+	}
+	stricter := propose(h.src, 2, hold10)
+	if out := h.replay(t, held, &stricter); !out.Complete || slices.Contains(out.Notes, replay.NoteHoldSettings) || slices.Contains(out.Notes, replay.NoteNoVariants) ||
+		h.src.holdSettings != 0 {
+		t.Fatalf("a recording with hold settings: %+v", out)
 	}
 }
