@@ -33,6 +33,9 @@ const (
 var (
 	ErrSOARScope = pcerr.New(pcerr.InvalidArgument, "SOAR_SCOPE",
 		"a SOAR request contains one run, agent, grant or connection; wider scopes, the kill switch and restoration are for people")
+	// ErrSOARBusy: other SOAR requests of the org held the lock past the lock
+	// timeout; nothing was done, and the request may be retried.
+	ErrSOARBusy = pcerr.New(pcerr.Unavailable, "SOAR_BUSY", "other SOAR requests of the organization are being processed; retry")
 	ErrSOARNotFound = pcerr.New(pcerr.NotFound, "SOAR_REQUEST_NOT_FOUND", "no SOAR request of this caller has this key")
 	ErrSOARKey      = pcerr.New(pcerr.InvalidArgument, "IDEMPOTENCY_KEY_REQUIRED", "an idempotency key of 1 to 128 characters is required")
 	// ErrSOARCaller refuses a SOAR request from a person: the source SOAR is
@@ -109,7 +112,9 @@ func (s *Containment) RequestControlIn(ctx context.Context, tx db.TenantTx, r SO
 	q := dbq.New(tx)
 	// One SOAR request of the org at a time: the rate limit counts what is
 	// committed (D61).
-	if err := q.LockSOAR(ctx, org.String()); err != nil {
+	if err := q.LockSOAR(ctx, org.String()); db.IsLockTimeout(err) {
+		return SOARResult{}, ErrSOARBusy
+	} else if err != nil {
 		return SOARResult{}, err
 	}
 	digest := requestDigest(c, nil, nil)
