@@ -1410,6 +1410,31 @@ type PcPolicy struct {
 	CreatedAt time.Time
 }
 
+type PcPolicyChangeConfirmation struct {
+	OrgID        ids.OrgID
+	RequestID    ids.UUID
+	PrincipalID  ids.UUID
+	CredentialID ids.UUID
+	CreatedAt    time.Time
+}
+
+type PcPolicyChangeRequest struct {
+	OrgID         ids.OrgID
+	ID            ids.UUID
+	Kind          string
+	SubjectID     ids.UUID
+	BaseVersionID *ids.UUID
+	Binding       []byte
+	Summary       []byte
+	Required      int16
+	State         string
+	RequestedBy   string
+	CreatedAt     time.Time
+	ExpiresAt     time.Time
+	DecidedAt     *time.Time
+	DecidedReason *string
+}
+
 type PcPolicyException struct {
 	OrgID           ids.OrgID
 	ID              ids.UUID
@@ -1430,17 +1455,47 @@ type PcPolicyException struct {
 	CreatedAt       time.Time
 }
 
+type PcPolicyTestRun struct {
+	OrgID             ids.OrgID
+	ID                ids.UUID
+	VersionID         ids.UUID
+	ContentDigest     []byte
+	DefinitionsDigest []byte
+	CatalogDigest     []byte
+	Passed            bool
+	Cases             int32
+	Mutants           int32
+	Survivors         int32
+	Results           []byte
+	RunBy             string
+	CreatedAt         time.Time
+}
+
+type PcPolicyValidation struct {
+	OrgID             ids.OrgID
+	ID                ids.UUID
+	VersionID         ids.UUID
+	ContentDigest     []byte
+	DefinitionsDigest []byte
+	CatalogDigest     []byte
+	Passed            bool
+	Findings          []byte
+	RunBy             string
+	CreatedAt         time.Time
+}
+
 type PcPolicyVersion struct {
-	OrgID       ids.OrgID
-	ID          ids.UUID
-	PolicyID    ids.UUID
-	Version     int32
-	Bundle      []byte
-	State       string
-	CreatedBy   string
-	CreatedAt   time.Time
-	PublishedBy *string
-	PublishedAt *time.Time
+	OrgID         ids.OrgID
+	ID            ids.UUID
+	PolicyID      ids.UUID
+	Version       int32
+	Bundle        []byte
+	State         string
+	CreatedBy     string
+	CreatedAt     time.Time
+	PublishedBy   *string
+	PublishedAt   *time.Time
+	ContentDigest []byte
 }
 
 type PcProbeNonce struct {
@@ -1892,19 +1947,20 @@ type PcWaitlistSetting struct {
 }
 
 type PcWebauthnCeremony struct {
-	OrgID              ids.OrgID
-	ID                 ids.UUID
-	SessionID          ids.UUID
-	UserID             ids.UUID
-	Purpose            string
-	Challenge          []byte
-	AllowedCredentials [][]byte
-	CreatedAt          time.Time
-	ExpiresAt          time.Time
-	ConsumedAt         *time.Time
-	ApprovalRequestID  *ids.UUID
-	BatchID            *ids.UUID
-	ReconciliationID   *ids.UUID
+	OrgID                 ids.OrgID
+	ID                    ids.UUID
+	SessionID             ids.UUID
+	UserID                ids.UUID
+	Purpose               string
+	Challenge             []byte
+	AllowedCredentials    [][]byte
+	CreatedAt             time.Time
+	ExpiresAt             time.Time
+	ConsumedAt            *time.Time
+	ApprovalRequestID     *ids.UUID
+	BatchID               *ids.UUID
+	ReconciliationID      *ids.UUID
+	PolicyChangeRequestID *ids.UUID
 }
 
 type PcWebauthnCredential struct {

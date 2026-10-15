@@ -64,7 +64,6 @@ import (
 	"github.com/katocxl/pantherclaw/internal/keystore"
 	"github.com/katocxl/pantherclaw/internal/notifications/adapters/notificationsrpc"
 	napp "github.com/katocxl/pantherclaw/internal/notifications/app"
-	"github.com/katocxl/pantherclaw/internal/platform/celenv"
 	"github.com/katocxl/pantherclaw/internal/platform/clock"
 	"github.com/katocxl/pantherclaw/internal/platform/config"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
@@ -74,9 +73,6 @@ import (
 	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
 	"github.com/katocxl/pantherclaw/internal/platform/rpc"
 	"github.com/katocxl/pantherclaw/internal/platform/version"
-	polpg "github.com/katocxl/pantherclaw/internal/policy/adapters/pgstore"
-	"github.com/katocxl/pantherclaw/internal/policy/adapters/policiesrpc"
-	policyapp "github.com/katocxl/pantherclaw/internal/policy/app"
 	"github.com/katocxl/pantherclaw/internal/runs/adapters/runsrpc"
 	runsapp "github.com/katocxl/pantherclaw/internal/runs/app"
 	"github.com/katocxl/pantherclaw/internal/tenancy/adapters/tenancyrpc"
@@ -819,8 +815,6 @@ func registerAuthorityAdmin(rs *connect.Server, d apiDeps, grants *grantsapp.Ser
 		Importer: &defsapp.Importer{Roots: roots, Repo: defs, Keys: defs, Clock: clock.System{}}, Reads: defs, Authz: authz,
 		Ents: d.billing,
 	}))
-	pantherclawv1connect.RegisterPolicyServiceHandler(rs, policiesrpc.New(&policyapp.Versions{
-		Store: &polpg.Store{Pool: d.pool}, Facts: facts, Subjects: facts, Definitions: defs, Authz: authz, Limits: celenv.DefaultLimits,
-	}))
+	registerPolicyGate(rs, d)
 	return nil
 }

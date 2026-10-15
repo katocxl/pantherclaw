@@ -24,6 +24,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	polpg "github.com/katocxl/pantherclaw/internal/policy/adapters/pgstore"
 	pdomain "github.com/katocxl/pantherclaw/internal/policy/domain"
+	"github.com/katocxl/pantherclaw/internal/policy/policytest"
 )
 
 // rowCounts counts the rows of every table in schema pc, as the admin: what
@@ -61,9 +62,7 @@ func (w *world) publishPolicy(version int, draft bool, rules ...pdomain.Rule) id
 		w.t.Fatalf("policy version %d: %v", got, err)
 	}
 	if !draft {
-		if err := store.Publish(context.Background(), w.org, id, w.alice.String(), nil); err != nil {
-			w.t.Fatal(err)
-		}
+		policytest.PublishVersion(context.Background(), w.t, w.pool, w.org, id)
 	}
 	return id
 }

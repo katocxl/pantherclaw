@@ -23,8 +23,8 @@ import (
 	fdomain "github.com/katocxl/pantherclaw/internal/facts/domain"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
-	polpg "github.com/katocxl/pantherclaw/internal/policy/adapters/pgstore"
 	pdomain "github.com/katocxl/pantherclaw/internal/policy/domain"
+	"github.com/katocxl/pantherclaw/internal/policy/policytest"
 	tenancy "github.com/katocxl/pantherclaw/internal/tenancy/app"
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
 )
@@ -103,12 +103,7 @@ func t055Edit(t *testing.T, raw []byte, edit func(map[string]any)) []byte {
 func t055Publish(t *testing.T, f fixture, rules ...pdomain.Rule) {
 	t.Helper()
 	ctx := context.Background()
-	store := &polpg.Store{Pool: f.pool}
-	id, _, err := store.CreateVersion(ctx, f.gw.Org, &pdomain.Bundle{ID: "org-policy", Rules: rules}, "user:"+f.owner.String(), nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := store.Publish(ctx, f.gw.Org, id, "user:"+f.owner.String(), nil); err != nil {
+	if _, err := policytest.PublishAs(ctx, f.pool, f.gw.Org, &pdomain.Bundle{ID: "org-policy", Rules: rules}, "user:"+f.owner.String()); err != nil {
 		t.Fatal(err)
 	}
 }
