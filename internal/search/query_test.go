@@ -83,6 +83,9 @@ func TestBuiltinsExpand(t *testing.T) {
 		if exposureBuiltin(info.Name) {
 			continue // TestExposureBuiltins
 		}
+		if info.Name == BuiltinIncidentCorrelation {
+			continue // TestT130_CorrelationParameters
+		}
 		p, ok := params[info.Name]
 		if !ok {
 			t.Fatalf("%s: no test parameters", info.Name)

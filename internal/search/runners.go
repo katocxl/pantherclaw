@@ -97,7 +97,7 @@ func txParams(c tenancy.Caller, sc Scope, f Filters) dbq.SearchTransactionsParam
 		OrgID: c.Org, AllAgents: sc.All, Agents: sc.agentList(), ID: f.ID, AgentID: f.Agent, RunID: f.Run,
 		ConnectionID: f.Connection, GrantID: f.Grant, PrincipalUserID: f.PrincipalUser, PrincipalSaID: f.PrincipalSA,
 		Operation: f.Operation, OperationPrefix: f.OperationPrefix, TargetType: f.TargetType,
-		Decisions: list(f.Decisions), Modes: list(f.Modes), EnvironmentKinds: list(f.EnvKinds),
+		Decisions: list(f.Decisions), Modes: list(f.Modes), EffectStates: list(f.EffectStates), EnvironmentKinds: list(f.EnvKinds),
 		StartTime: f.Start, EndTime: f.End,
 	}
 }
@@ -131,7 +131,7 @@ func countTransactions(ctx context.Context, _ *Service, c tenancy.Caller, tx db.
 		OrgID: p.OrgID, AllAgents: p.AllAgents, Agents: p.Agents, ID: p.ID, AgentID: p.AgentID, RunID: p.RunID,
 		ConnectionID: p.ConnectionID, GrantID: p.GrantID, PrincipalUserID: p.PrincipalUserID, PrincipalSaID: p.PrincipalSaID,
 		Operation: p.Operation, OperationPrefix: p.OperationPrefix, TargetType: p.TargetType, Decisions: p.Decisions,
-		Modes: p.Modes, EnvironmentKinds: p.EnvironmentKinds, StartTime: p.StartTime, EndTime: p.EndTime,
+		Modes: p.Modes, EffectStates: p.EffectStates, EnvironmentKinds: p.EnvironmentKinds, StartTime: p.StartTime, EndTime: p.EndTime,
 	})
 	return int(n), err
 }

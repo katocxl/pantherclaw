@@ -51,6 +51,9 @@ func (s Spec) Validate() error {
 		if exposureBuiltin(s.Builtin.Name) {
 			return s.Builtin.validateExposure()
 		}
+		if s.Builtin.Name == BuiltinIncidentCorrelation {
+			return s.Builtin.validateCorrelation()
+		}
 		q, _, err := s.Builtin.expand(time.Now())
 		if err != nil {
 			return err

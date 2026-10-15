@@ -356,9 +356,10 @@ SELECT count(*) FROM (
       AND ($13::text = '' OR t.target_type = $13::text)
       AND (cardinality($14::text[]) = 0 OR t.decision = ANY ($14::text[]))
       AND (cardinality($15::text[]) = 0 OR t.mode = ANY ($15::text[]))
-      AND (cardinality($16::text[]) = 0 OR e.kind = ANY ($16::text[]))
-      AND ($17::timestamptz IS NULL OR t.created_at >= $17::timestamptz)
-      AND ($18::timestamptz IS NULL OR t.created_at < $18::timestamptz)
+      AND (cardinality($16::text[]) = 0 OR t.effect_state = ANY ($16::text[]))
+      AND (cardinality($17::text[]) = 0 OR e.kind = ANY ($17::text[]))
+      AND ($18::timestamptz IS NULL OR t.created_at >= $18::timestamptz)
+      AND ($19::timestamptz IS NULL OR t.created_at < $19::timestamptz)
     LIMIT 10001
 ) x
 `
@@ -379,6 +380,7 @@ type CountTransactionsParams struct {
 	TargetType       string
 	Decisions        []string
 	Modes            []string
+	EffectStates     []string
 	EnvironmentKinds []string
 	StartTime        *time.Time
 	EndTime          *time.Time
@@ -401,6 +403,7 @@ func (q *Queries) CountTransactions(ctx context.Context, arg CountTransactionsPa
 		arg.TargetType,
 		arg.Decisions,
 		arg.Modes,
+		arg.EffectStates,
 		arg.EnvironmentKinds,
 		arg.StartTime,
 		arg.EndTime,
@@ -1048,11 +1051,12 @@ WHERE t.org_id = $1
   AND ($14::text = '' OR t.target_type = $14::text)
   AND (cardinality($15::text[]) = 0 OR t.decision = ANY ($15::text[]))
   AND (cardinality($16::text[]) = 0 OR t.mode = ANY ($16::text[]))
-  AND (cardinality($17::text[]) = 0 OR e.kind = ANY ($17::text[]))
-  AND ($18::timestamptz IS NULL OR t.created_at >= $18::timestamptz)
-  AND ($19::timestamptz IS NULL OR t.created_at < $19::timestamptz)
+  AND (cardinality($17::text[]) = 0 OR t.effect_state = ANY ($17::text[]))
+  AND (cardinality($18::text[]) = 0 OR e.kind = ANY ($18::text[]))
+  AND ($19::timestamptz IS NULL OR t.created_at >= $19::timestamptz)
+  AND ($20::timestamptz IS NULL OR t.created_at < $20::timestamptz)
 ORDER BY t.id DESC
-LIMIT $20
+LIMIT $21
 `
 
 type SearchTransactionsParams struct {
@@ -1072,6 +1076,7 @@ type SearchTransactionsParams struct {
 	TargetType       string
 	Decisions        []string
 	Modes            []string
+	EffectStates     []string
 	EnvironmentKinds []string
 	StartTime        *time.Time
 	EndTime          *time.Time
@@ -1120,6 +1125,7 @@ func (q *Queries) SearchTransactions(ctx context.Context, arg SearchTransactions
 		arg.TargetType,
 		arg.Decisions,
 		arg.Modes,
+		arg.EffectStates,
 		arg.EnvironmentKinds,
 		arg.StartTime,
 		arg.EndTime,

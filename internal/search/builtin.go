@@ -42,6 +42,8 @@ type Params struct {
 	Effect        string     `json:"effect,omitzero"`
 	TargetType    string     `json:"target_type,omitzero"`
 	Resource      string     `json:"resource,omitzero"`
+	Incident      *ids.UUID  `json:"incident,omitzero"`
+	Case          *ids.UUID  `json:"case,omitzero"`
 	Days          int        `json:"days,omitzero"`
 	Start         *time.Time `json:"start,omitzero"`
 	End           *time.Time `json:"end,omitzero"`
@@ -81,6 +83,7 @@ func Builtins() []BuiltinInfo {
 		{BuiltinRecentAuthorityChange, "F315", "New and widened grants, material changes apart from narrowing or metadata.", []string{"agent", "start", "end"}},
 		{BuiltinWhoCanWrite, "F308", "Agents able to write a resource group or through a connection, grant-constrained authority apart from technical reach.", []string{"resource", "connection"}},
 		{BuiltinWidestExposure, "F313", "Agents ranked by widest exposure on explicit keys: consequence, scope, usability, enforceability, ownership, remediation readiness.", []string{}},
+		{BuiltinIncidentCorrelation, "F316", "What an incident's or case's runs share with other runs in the last N days (default 7, at most 30): destinations, credentials (inferred), operation sequences, grant and tool changes. Correlations, never causes. Team.", []string{"incident", "case", "days"}},
 	}
 }
 
@@ -162,6 +165,8 @@ func (b BuiltinQuery) expand(now time.Time) (Query, []Omission, error) {
 		return Query{Entity: EntityGrantChanges, Filters: Filters{Agent: p.Agent, Start: start, End: p.End}}, nil, nil
 	case BuiltinWhoCanWrite, BuiltinWidestExposure:
 		return Query{}, nil, ErrInvalidQuery(string(b.Name) + " reads the exposure views, not a structured query")
+	case BuiltinIncidentCorrelation:
+		return Query{}, nil, ErrInvalidQuery(string(b.Name) + " reads correlations, not a structured query")
 	default:
 		return Query{}, nil, ErrInvalidQuery("unknown built-in query")
 	}
@@ -182,6 +187,8 @@ func (p Params) used() []string {
 	add(p.Effect != "", "effect")
 	add(p.TargetType != "", "target_type")
 	add(p.Resource != "", "resource")
+	add(p.Incident != nil, "incident")
+	add(p.Case != nil, "case")
 	add(p.Days != 0, "days")
 	add(p.Start != nil, "start")
 	add(p.End != nil, "end")
@@ -199,6 +206,9 @@ func (s *Service) RunBuiltin(ctx context.Context, b BuiltinQuery, pr page.Reques
 	}
 	if exposureBuiltin(b.Name) {
 		return s.runExposure(ctx, b, pr)
+	}
+	if b.Name == BuiltinIncidentCorrelation {
+		return s.runCorrelation(ctx, c, b, pr)
 	}
 	q, notes, err := b.expand(s.now())
 	if err != nil {

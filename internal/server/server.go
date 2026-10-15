@@ -625,6 +625,7 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	if err != nil {
 		return nil, err
 	}
+	registerM11Search(rs, d)
 	registerCases(rs, d)
 	registerResponse(rs, d)
 	registerExposure(rs, d)
