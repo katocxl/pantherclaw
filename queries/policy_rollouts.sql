@@ -131,6 +131,9 @@ ORDER BY c.name;
 
 -- Targets for every agent of the rollout's ENFORCE cohorts that has none
 -- yet, CONFIGURED, with the agent's owner (F3). Retired agents are left out.
+-- An agent added back to such a cohort after its removal made it an
+-- EXCEPTION (REMOVED_FROM_COHORT) is CONFIGURED again; an exclusion a
+-- person made stays (D37).
 -- name: AddCohortRolloutTargets :execrows
 INSERT INTO pc.policy_rollout_targets (org_id, rollout_id, agent_id, state, owner_id)
 SELECT DISTINCT rc.org_id, rc.rollout_id, m.agent_id, 'CONFIGURED', a.owner_user_id
@@ -138,7 +141,9 @@ FROM pc.policy_rollout_cohorts rc
 JOIN pc.policy_cohort_members m ON m.org_id = rc.org_id AND m.cohort_id = rc.cohort_id
 JOIN pc.agents a ON a.org_id = m.org_id AND a.id = m.agent_id
 WHERE rc.org_id = sqlc.arg(org_id) AND rc.rollout_id = sqlc.arg(rollout_id) AND rc.mode = 'ENFORCE' AND a.state <> 'RETIRED'
-ON CONFLICT DO NOTHING;
+ON CONFLICT (org_id, rollout_id, agent_id) DO UPDATE
+    SET state = 'CONFIGURED', reason = NULL, coverage = NULL, updated_at = now()
+    WHERE pc.policy_rollout_targets.state = 'EXCEPTION' AND pc.policy_rollout_targets.reason = 'REMOVED_FROM_COHORT';
 
 -- Targets for every agent of the org that has none yet (a completed
 -- rollout: the version is published for everyone).
@@ -288,3 +293,11 @@ WHERE org_id = sqlc.arg(org_id) AND (agent_id = sqlc.arg(agent_id) OR agent_id I
 
 -- name: RolloutAgentOwner :one
 SELECT owner_user_id FROM pc.agents WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id);
+
+-- A completed rollout's version is everyone's published policy: its
+-- EXCEPTION targets are CONFIGURED (INCLUDED_AT_COMPLETION) and followed
+-- like the others (D37).
+-- name: IncludeExceptionsAtCompletion :execrows
+UPDATE pc.policy_rollout_targets
+SET state = 'CONFIGURED', reason = 'INCLUDED_AT_COMPLETION', coverage = NULL, updated_at = now()
+WHERE org_id = sqlc.arg(org_id) AND rollout_id = sqlc.arg(rollout_id) AND state = 'EXCEPTION';

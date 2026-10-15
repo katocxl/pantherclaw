@@ -419,3 +419,31 @@ func TestKindChangeToARequirementLoosens(t *testing.T) {
 		t.Fatalf("REQUIRE_APPROVAL → FORBID: %s %+v", d.Direction, d.Changes)
 	}
 }
+
+// TestCarryEmergencyCarriesItsTests is D35: the tests that name a carried
+// rule follow it, replacing a same-id target test; other tests stay.
+func TestCarryEmergencyCarriesItsTests(t *testing.T) {
+	named := func(id, rule string) TestCase {
+		tc := testCase(id)
+		tc.Expect = TestExpect{Decision: "DENY", Reason: "R", Rule: rule}
+		return tc
+	}
+	current := withTests(bundleOf(rule("f", Forbid), emergency("freeze", Forbid)),
+		named("freeze-denies", "freeze"), named("f-denies", "f"), named("shared", "freeze"), testCase("plain"))
+	stale := named("shared", "f")
+	target := withTests(bundleOf(rule("a", RequireApproval)), testCase("a-case"), stale)
+	out, carried := CarryEmergency(current, target)
+	if !slices.Equal(carried, []string{"freeze"}) {
+		t.Fatalf("carried %v", carried)
+	}
+	var ids []string
+	for _, tc := range out.Tests {
+		ids = append(ids, tc.ID+"→"+tc.Expect.Rule)
+	}
+	if want := []string{"a-case→", "shared→freeze", "freeze-denies→freeze"}; !slices.Equal(ids, want) {
+		t.Fatalf("tests %v, want %v", ids, want)
+	}
+	if target.Tests[1].Expect.Rule != "f" || len(target.Tests) != 2 {
+		t.Fatal("the target's tests were modified")
+	}
+}

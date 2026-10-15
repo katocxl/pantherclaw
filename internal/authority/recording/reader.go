@@ -50,6 +50,16 @@ type Served struct {
 	Policy *pipeline.Policy
 	// Proposed: Policy replaces whatever policy the evaluation read (F505).
 	Proposed bool
+	// HoldSettings, when set, are the org's current hold settings, served
+	// when the evaluation did not read them: a replay under a proposed
+	// policy that adds a hold needs them, and they set only the hold
+	// deadline, never the decision (M11.1 D36). Reproduction replays never
+	// set it.
+	HoldSettings *pipeline.HoldSettings
+	// NoVariants: when the evaluation read no earlier or approved requests,
+	// none are served instead of a gap. They feed only a hold's display and
+	// binding, never the decision (D36); reproduction replays never set it.
+	NoVariants bool
 }
 
 // Reader serves a recording to the pipeline. It reads nothing else and
@@ -391,7 +401,13 @@ func (r *Reader) Variants(_ context.Context, org ids.OrgID, key [32]byte, operat
 	i := slices.IndexFunc(r.rec.Reads.Variants, func(x Variants) bool {
 		return x.Key == k && x.Operation == operation && x.Target == target && x.Now.Equal(now)
 	})
-	if err := r.otherOrg(org, "variants", pipeline.StepRequirements); err != nil || i < 0 {
+	if err := r.otherOrg(org, "variants", pipeline.StepRequirements); err != nil {
+		return nil, nil, r.gap("variants", pipeline.StepRequirements, "earlier and approved requests for this action were not recorded")
+	}
+	if i < 0 && r.served.NoVariants && len(r.rec.Reads.Variants) == 0 {
+		return nil, nil, nil // a proposed policy's new hold (Served)
+	}
+	if i < 0 {
 		return nil, nil, r.gap("variants", pipeline.StepRequirements, "earlier and approved requests for this action were not recorded")
 	}
 	v := r.rec.Reads.Variants[i]
@@ -404,7 +420,13 @@ func (r *Reader) Variants(_ context.Context, org ids.OrgID, key [32]byte, operat
 // HoldSettings implements pipeline.Reader.
 func (r *Reader) HoldSettings(_ context.Context, org ids.OrgID) (pipeline.HoldSettings, error) {
 	h := r.rec.Reads.HoldSettings
-	if err := r.otherOrg(org, "hold_settings", pipeline.StepRequirements); err != nil || h == nil {
+	if err := r.otherOrg(org, "hold_settings", pipeline.StepRequirements); err != nil {
+		return pipeline.HoldSettings{}, r.gap("hold_settings", pipeline.StepRequirements, "the org's hold settings were not recorded")
+	}
+	if h == nil {
+		if s := r.served.HoldSettings; s != nil {
+			return *s, nil // read at replay time for a proposed policy (Served)
+		}
 		return pipeline.HoldSettings{}, r.gap("hold_settings", pipeline.StepRequirements, "the org's hold settings were not recorded")
 	}
 	if err := errOf(h.Err); err != nil {

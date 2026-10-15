@@ -161,7 +161,10 @@ type Changes struct {
 }
 
 // NewChanges returns the change requests. n may be nil (no notifications);
-// digests may not.
+// digests may not. digests is read outside the confirming transaction, on a
+// second pool connection while that transaction holds the request's row
+// lock, and misses a change committed in between: it is a fallback for
+// tests. The server always sets WithDigestsInTx (D29).
 func NewChanges(pool *db.Pool, n Notifier, publicURL string, digests CurrentDigests) *Changes {
 	return &Changes{pool: pool, notify: n, publicURL: publicURL, digests: digests, apply: map[ChangeKind]ApplyFunc{}}
 }
@@ -176,6 +179,10 @@ func (c *Changes) WithDigestsInTx(f CurrentDigestsInTx) *Changes {
 	c.digestsTx = f
 	return c
 }
+
+// DigestsInTx reports whether the last confirmation reads the digests in
+// its own transaction.
+func (c *Changes) DigestsInTx() bool { return c.digestsTx != nil }
 
 // Register sets the apply callback of a kind (its owning stream's). A
 // request of a kind without one is never created.
