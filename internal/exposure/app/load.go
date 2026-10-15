@@ -267,11 +267,16 @@ func policy(ctx context.Context, q *dbq.Queries, org ids.OrgID) (domain.Policy, 
 	} else if err != nil {
 		return domain.Policy{}, err
 	}
+	return policyOf(v.Bundle), nil
+}
+
+// policyOf reads a published bundle. An unreadable bundle restricts we
+// know not what: every effective right is then CONDITIONAL with
+// POLICY_UNKNOWN (more reach, never less).
+func policyOf(raw []byte) domain.Policy {
 	var b pdomain.Bundle
-	if json.Unmarshal(v.Bundle, &b) != nil {
-		// An unreadable bundle restricts we know not what: every effective
-		// right is CONDITIONAL with POLICY_UNKNOWN (more reach, never less).
-		return domain.Policy{Known: false}, nil
+	if json.Unmarshal(raw, &b) != nil {
+		return domain.Policy{Known: false}
 	}
 	p := domain.Policy{Known: true}
 	for _, r := range b.Rules {
@@ -280,7 +285,7 @@ func policy(ctx context.Context, q *dbq.Queries, org ids.OrgID) (domain.Policy, 
 			Unconditional: (r.When == "" || r.When == "true") && len(r.Environments) == 0 && len(r.Facts) == 0,
 		})
 	}
-	return p, nil
+	return p
 }
 
 // ErrNoSnapshot reports an org with no snapshot yet.
