@@ -246,7 +246,7 @@ func startLifecycle(t *testing.T) *lifecycle {
 		Store: noJobs{pgsimulation.Store{Pool: pool}}, Versions: versions, Editions: teamEdition{},
 		IsNotFound: func(err error) bool { return errors.Is(err, replay.ErrNotFound) },
 	}
-	l.simRunner = &simulation.Runner{Store: pgsimulation.Store{Pool: pool}, Replay: engine, Versions: versions}
+	l.simRunner = &simulation.Runner{Store: pgsimulation.Store{Pool: pool}, Replay: engine, Versions: versions, Editions: teamEdition{}}
 	l.publisher = s.person(t, "rollout-publisher", td.RolePolicyPublisher).ctx
 	l.author = s.person(t, "simulating-author", td.RolePolicyAuthor).ctx
 	return l
