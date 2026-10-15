@@ -91,7 +91,7 @@ func TestE2E_M8_C4_Template(t *testing.T) {
 
 	// Without an agent or a team, the plan says what it skips and why.
 	code, o, e = alice.pclaw(t, "template", "apply", "coding-to-production", "--repos", ghRepo, "--dry-run")
-	for _, want := range []string{"grant skipped: no agent", "envelope", "shell rule skipped: no agent", "Binds no people to roles"} {
+	for _, want := range []string{"grant skipped: no agent", "envelope", "skipped for want of an agent (pass --agent ID): c2p-no-shell-merge", "Binds no people to roles"} {
 		if code != 0 || !strings.Contains(o, want) {
 			t.Fatalf("plan without an agent, want %q: %d %s %s", want, code, o, e)
 		}
