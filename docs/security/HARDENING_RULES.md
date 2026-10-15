@@ -95,7 +95,7 @@
 | HR-076 | Responses are size- and decompression-ratio-capped and scanned for echoed injected secrets (redacted). | T-015 | M6 |
 | HR-077 | Egress deny list enforced at connection registration and at dial; connections to PantherClaw's own hosts are forbidden; private targets only via customer-hosted gateways. | T-002, T-021 | M6 |
 | HR-078 | Per-connection circuit breaker on `UNKNOWN` rate → connection quarantine + alert. | T-013 | M6 |
-| HR-079 | Destinations are classified public or internal. A gateway action's class is its connection's: the Authority resolves it from the connection the ActionIR names (never from the gateway or the agent), gives it to policy as `action.destination_class` and records it on the decision receipt (founder decision 2026-10-10). Disclosure-capable params carry size/entropy obligations (M10). | T-017 | M6/M10 |
+| HR-079 | Destinations are classified public or internal. A gateway action's class is its connection's: the Authority resolves it from the connection the ActionIR names (never from the gateway or the agent), gives it to policy as `action.destination_class` and records it on the decision receipt (founder decision 2026-10-10). Disclosure-capable params carry size/entropy obligations (M10): an operation parameter declared `disclosure: true` in its package manifest, on an action whose destination class is public, gets a `disclosure_limits` obligation (`max_bytes`, default 4096; `max_entropy`, default 6.0 bits per byte), recorded on the decision receipt and enforced by the gateway before dispatch (byte length, then Shannon entropy); a violation refuses the dispatch with `OBLIGATION_FAILED`. | T-017 | M6/M10 |
 
 ## MCP and connector runtime
 
