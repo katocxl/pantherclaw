@@ -452,7 +452,7 @@ func (s *Service) StartRollout(ctx context.Context, version ids.UUID, shadowCoho
 		}
 		id = r.ID
 		for _, co := range cohorts {
-			if err := q.SetPolicyRolloutCohort(ctx, dbq.SetPolicyRolloutCohortParams{
+			if err := q.AddPolicyRolloutCohort(ctx, dbq.AddPolicyRolloutCohortParams{
 				OrgID: c.Org, RolloutID: r.ID, CohortID: co, Mode: ModeShadow,
 			}); err != nil {
 				return err
@@ -504,8 +504,17 @@ func (s *Service) StartPilot(ctx context.Context, rollout ids.UUID, cohorts []st
 		if cohortList, err = cohortIDs(ctx, q, c.Org, cohorts); err != nil {
 			return err
 		}
-		base, err = published(ctx, q, c.Org)
-		return err
+		// The rollout's base never changes (D22): a pilot is checked against
+		// the version published when the rollout started, which must still be.
+		cur, err := published(ctx, q, c.Org)
+		if err != nil {
+			return err
+		}
+		if !sameVersion(cur, r.BaseVersionID) {
+			return ErrBaseChanged
+		}
+		base = r.BaseVersionID
+		return nil
 	}, db.ReadOnly())
 	if err != nil {
 		return Rollout{}, nil, err
@@ -553,11 +562,8 @@ func (s *Service) EnterPilot(ctx context.Context, tx db.TenantTx, actor evdomain
 	if err != nil {
 		return err
 	}
-	if !sameVersion(cur, base) {
+	if !sameVersion(cur, base) || !sameVersion(cur, r.BaseVersionID) {
 		return ErrBaseChanged
-	}
-	if err := q.SetPolicyRolloutBase(ctx, cur, org, rollout); err != nil {
-		return err
 	}
 	if _, err := q.SetPolicyRolloutStage(ctx, dbq.SetPolicyRolloutStageParams{
 		Stage: StagePilot, OrgID: org, ID: rollout, FromStages: []string{StageShadow},
@@ -579,7 +585,7 @@ func (s *Service) EnterPilot(ctx context.Context, tx db.TenantTx, actor evdomain
 
 func enforce(ctx context.Context, q *dbq.Queries, org ids.OrgID, rollout ids.UUID, cohorts []ids.UUID) error {
 	for _, co := range cohorts {
-		if err := q.SetPolicyRolloutCohort(ctx, dbq.SetPolicyRolloutCohortParams{
+		if err := q.AddPolicyRolloutCohort(ctx, dbq.AddPolicyRolloutCohortParams{
 			OrgID: org, RolloutID: rollout, CohortID: co, Mode: ModeEnforce,
 		}); err != nil {
 			return err

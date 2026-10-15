@@ -146,8 +146,8 @@ type PolicyRollout struct {
 	state     protoimpl.MessageState `protogen:"open.v1"`
 	Id        string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
 	VersionId string                 `protobuf:"bytes,2,opt,name=version_id,json=versionId,proto3" json:"version_id,omitempty"`
-	// base_version_id is the version published when the rollout started or
-	// its pilot did; empty when none was.
+	// base_version_id is the version published when the rollout started;
+	// empty when none was. A pilot or completion needs it still published.
 	BaseVersionId   string                 `protobuf:"bytes,3,opt,name=base_version_id,json=baseVersionId,proto3" json:"base_version_id,omitempty"`
 	Stage           PolicyRolloutStage     `protobuf:"varint,4,opt,name=stage,proto3,enum=pantherclaw.v1.PolicyRolloutStage" json:"stage,omitempty"`
 	CreatedBy       string                 `protobuf:"bytes,5,opt,name=created_by,json=createdBy,proto3" json:"created_by,omitempty"`

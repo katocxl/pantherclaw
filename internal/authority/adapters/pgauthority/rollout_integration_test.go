@@ -504,6 +504,23 @@ func TestT103_RolloutsCannotBeConfused(t *testing.T) {
 	if !db.IsCheckViolation(err) {
 		t.Fatalf("a stage moved back: %v", err)
 	}
+	// A rollout's version and base, its cohorts' modes and shadow results
+	// never change (D22).
+	for _, sql := range []string{
+		`UPDATE pc.policy_rollouts SET base_version_id = NULL WHERE org_id = $1`,
+		`UPDATE pc.policy_rollouts SET version_id = version_id WHERE org_id = $1`,
+		`UPDATE pc.policy_rollout_cohorts SET mode = 'SHADOW' WHERE org_id = $1`,
+		`UPDATE pc.policy_shadow_results SET category = 'UNCHANGED' WHERE org_id = $1`,
+		`UPDATE pc.policy_cohorts SET name = 'renamed' WHERE org_id = $1`,
+	} {
+		err := w.pool.InTenantTx(context.Background(), w.org, func(ctx context.Context, tx db.TenantTx) error {
+			_, err := tx.Exec(ctx, sql, w.org)
+			return err
+		})
+		if !db.IsPermissionDenied(err) {
+			t.Fatalf("%s: %v, want permission denied", sql, err)
+		}
+	}
 	// Another version published meanwhile: the pilot cannot grow or complete.
 	w.publishPolicy(4, false, pgCapOver1000)
 	if _, err := rw.svc.ExpandPilot(ctx, r.ID, []string{"pilot"}); !errors.Is(err, rollout.ErrBaseChanged) {

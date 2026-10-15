@@ -79,14 +79,11 @@ UPDATE pc.policy_rollouts SET stage = sqlc.arg(stage)
 WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND stage = ANY (sqlc.arg(from_stages)::text[])
 RETURNING *;
 
--- name: SetPolicyRolloutBase :exec
-UPDATE pc.policy_rollouts SET base_version_id = sqlc.narg(base_version_id)
-WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id);
-
--- name: SetPolicyRolloutCohort :exec
+-- A cohort in a mode (rows are never updated: D22).
+-- name: AddPolicyRolloutCohort :exec
 INSERT INTO pc.policy_rollout_cohorts (org_id, rollout_id, cohort_id, mode)
 VALUES (sqlc.arg(org_id), sqlc.arg(rollout_id), sqlc.arg(cohort_id), sqlc.arg(mode))
-ON CONFLICT (org_id, rollout_id, cohort_id) DO UPDATE SET mode = EXCLUDED.mode;
+ON CONFLICT DO NOTHING;
 
 -- name: ListPolicyRolloutCohorts :many
 SELECT rc.cohort_id, rc.mode, c.name,

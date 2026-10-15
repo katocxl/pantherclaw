@@ -117,6 +117,30 @@ func (q *Queries) AddPolicyCohortMember(ctx context.Context, arg AddPolicyCohort
 	return result.RowsAffected(), nil
 }
 
+const addPolicyRolloutCohort = `-- name: AddPolicyRolloutCohort :exec
+INSERT INTO pc.policy_rollout_cohorts (org_id, rollout_id, cohort_id, mode)
+VALUES ($1, $2, $3, $4)
+ON CONFLICT DO NOTHING
+`
+
+type AddPolicyRolloutCohortParams struct {
+	OrgID     ids.OrgID
+	RolloutID ids.UUID
+	CohortID  ids.UUID
+	Mode      string
+}
+
+// A cohort in a mode (rows are never updated: D22).
+func (q *Queries) AddPolicyRolloutCohort(ctx context.Context, arg AddPolicyRolloutCohortParams) error {
+	_, err := q.db.Exec(ctx, addPolicyRolloutCohort,
+		arg.OrgID,
+		arg.RolloutID,
+		arg.CohortID,
+		arg.Mode,
+	)
+	return err
+}
+
 const addShadowCount = `-- name: AddShadowCount :exec
 INSERT INTO pc.policy_shadow_counts (org_id, rollout_id, day, category, n)
 VALUES ($1, $2, (now() AT TIME ZONE 'UTC')::date, $3, 1)
@@ -832,39 +856,6 @@ func (q *Queries) RolloutDecisionsAfter(ctx context.Context, arg RolloutDecision
 		return nil, err
 	}
 	return items, nil
-}
-
-const setPolicyRolloutBase = `-- name: SetPolicyRolloutBase :exec
-UPDATE pc.policy_rollouts SET base_version_id = $1
-WHERE org_id = $2 AND id = $3
-`
-
-func (q *Queries) SetPolicyRolloutBase(ctx context.Context, baseVersionID *ids.UUID, orgID ids.OrgID, iD ids.UUID) error {
-	_, err := q.db.Exec(ctx, setPolicyRolloutBase, baseVersionID, orgID, iD)
-	return err
-}
-
-const setPolicyRolloutCohort = `-- name: SetPolicyRolloutCohort :exec
-INSERT INTO pc.policy_rollout_cohorts (org_id, rollout_id, cohort_id, mode)
-VALUES ($1, $2, $3, $4)
-ON CONFLICT (org_id, rollout_id, cohort_id) DO UPDATE SET mode = EXCLUDED.mode
-`
-
-type SetPolicyRolloutCohortParams struct {
-	OrgID     ids.OrgID
-	RolloutID ids.UUID
-	CohortID  ids.UUID
-	Mode      string
-}
-
-func (q *Queries) SetPolicyRolloutCohort(ctx context.Context, arg SetPolicyRolloutCohortParams) error {
-	_, err := q.db.Exec(ctx, setPolicyRolloutCohort,
-		arg.OrgID,
-		arg.RolloutID,
-		arg.CohortID,
-		arg.Mode,
-	)
-	return err
 }
 
 const setPolicyRolloutStage = `-- name: SetPolicyRolloutStage :one

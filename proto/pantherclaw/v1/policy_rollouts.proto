@@ -112,8 +112,8 @@ enum PolicyRolloutTargetState {
 message PolicyRollout {
   string id = 1;
   string version_id = 2;
-  // base_version_id is the version published when the rollout started or
-  // its pilot did; empty when none was.
+  // base_version_id is the version published when the rollout started;
+  // empty when none was. A pilot or completion needs it still published.
   string base_version_id = 3;
   PolicyRolloutStage stage = 4;
   string created_by = 5;

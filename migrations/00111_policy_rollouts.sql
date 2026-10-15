@@ -13,6 +13,14 @@
 -- version because the rollout version could not be used) or EXCEPTION
 -- (excluded by a person, stays on the published version).
 --
+-- What pc_app may change (D22): it updates only rollouts (stage,
+-- stage_changed_at, completed_at), targets (state, owner_id, coverage,
+-- reason, updated_at) and cursors (last_created_at, last_txn). Cohorts are
+-- created and deleted, never updated; cohort members and a rollout's cohorts
+-- are inserted (members also deleted); shadow results are insert-only and
+-- shadow counts insert-only but for their count n (INSERT ... ON CONFLICT
+-- DO UPDATE). A rollout's version and base never change.
+--
 -- The Authority only reads these tables, to select an agent's version; the
 -- rollout sweeper writes target states and shadow results (HR-233). The
 -- sweeper lists orgs through the audited cross-org lister (purpose
@@ -47,8 +55,8 @@ CREATE TABLE pc.policy_rollouts (
     org_id           uuid        NOT NULL REFERENCES pc.orgs (id),
     id               uuid        NOT NULL,
     version_id       uuid        NOT NULL,
-    -- The version published when the rollout started (or its pilot did);
-    -- NULL when none was.
+    -- The version published when the rollout started (NULL: none was); a
+    -- pilot or completion needs it still published.
     base_version_id  uuid,
     stage            text        NOT NULL CHECK (stage IN ('SHADOW', 'PILOT', 'COMPLETE', 'CANCELLED')),
     created_by       text        NOT NULL CHECK (char_length(created_by) BETWEEN 1 AND 100),
@@ -69,7 +77,9 @@ CREATE TABLE pc.policy_rollout_cohorts (
     rollout_id uuid NOT NULL,
     cohort_id  uuid NOT NULL,
     mode       text NOT NULL CHECK (mode IN ('SHADOW', 'ENFORCE')),
-    PRIMARY KEY (org_id, rollout_id, cohort_id),
+    -- A SHADOW cohort a pilot then enforces gets an ENFORCE row of its own:
+    -- rows are never updated.
+    PRIMARY KEY (org_id, rollout_id, cohort_id, mode),
     FOREIGN KEY (org_id, rollout_id) REFERENCES pc.policy_rollouts (org_id, id),
     FOREIGN KEY (org_id, cohort_id) REFERENCES pc.policy_cohorts (org_id, id)
 );
@@ -224,12 +234,11 @@ CREATE TRIGGER policy_rollouts_forward BEFORE UPDATE ON pc.policy_rollouts
 -- sweeper; targets change only their state columns.
 GRANT SELECT ON pc.policy_cohorts, pc.policy_cohort_members, pc.policy_rollouts, pc.policy_rollout_cohorts,
     pc.policy_rollout_targets, pc.policy_rollout_cursors, pc.policy_shadow_results, pc.policy_shadow_counts TO pc_app;
-GRANT INSERT (org_id, id, name, created_by) ON pc.policy_cohorts TO pc_app;
+GRANT INSERT (org_id, id, name, created_by), DELETE ON pc.policy_cohorts TO pc_app;
 GRANT INSERT (org_id, cohort_id, agent_id, added_by), DELETE ON pc.policy_cohort_members TO pc_app;
 GRANT INSERT (org_id, id, version_id, base_version_id, stage, created_by) ON pc.policy_rollouts TO pc_app;
-GRANT UPDATE (stage, base_version_id) ON pc.policy_rollouts TO pc_app;
+GRANT UPDATE (stage, stage_changed_at, completed_at) ON pc.policy_rollouts TO pc_app;
 GRANT INSERT (org_id, rollout_id, cohort_id, mode) ON pc.policy_rollout_cohorts TO pc_app;
-GRANT UPDATE (mode) ON pc.policy_rollout_cohorts TO pc_app;
 GRANT INSERT (org_id, rollout_id, agent_id, state, owner_id, coverage, reason) ON pc.policy_rollout_targets TO pc_app;
 GRANT UPDATE (state, owner_id, coverage, reason, updated_at) ON pc.policy_rollout_targets TO pc_app;
 GRANT INSERT (org_id, rollout_id, last_created_at, last_txn), UPDATE (last_created_at, last_txn) ON pc.policy_rollout_cursors TO pc_app;
