@@ -118,6 +118,7 @@ func fromPolicy(p *pipeline.Policy, err error) *Policy {
 	l := p.Compiled.Limits()
 	out := &Policy{
 		Ref: p.Version, Bundle: p.Compiled.Bundle.ID, Version: p.Compiled.Bundle.Version, Budget: p.Budget,
+		Rollout: p.Rollout, Selected: p.Selected,
 		Limits: Limits{
 			MaxExpressionBytes: l.MaxExpressionBytes, MaxCost: l.MaxCost, MaxComprehensionNesting: l.MaxComprehensionNesting,
 			EstimatedCollectionSize: l.EstimatedCollectionSize,
@@ -126,6 +127,11 @@ func fromPolicy(p *pipeline.Policy, err error) *Policy {
 	}
 	for name, t := range p.Compiled.Catalog() {
 		out.Catalog[name] = string(t)
+	}
+	for _, x := range p.Exceptions {
+		out.Exceptions = append(out.Exceptions, Exception{
+			ID: x.ID, Bundle: x.Bundle, Rule: x.Rule, RuleDigest: x.RuleDigest, Operations: slices.Clone(x.Operations), ExpiresAt: x.ExpiresAt,
+		})
 	}
 	return out
 }

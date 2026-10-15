@@ -1,0 +1,46 @@
+{
+  "rules": [
+    {
+      "id": "pd-control-character", "per": "org", "kind": "FORBID",
+      "summary": "no control character other than tab in the command: a newline runs a second command",
+      "operations": ["shell.command.run"], "environments": ["{{environment_id}}"],
+      "when": "action.params.command.matches(r'[\\x00-\\x08\\x0a-\\x1f\\x7f]')",
+      "reason": "COMMAND_CONTROL_CHARACTER"
+    },
+    {
+      "id": "pd-workspace", "per": "org", "kind": "FORBID",
+      "summary": "no command runs outside the workspace {{workspace}}",
+      "operations": ["shell.command.run"], "environments": ["{{environment_id}}"],
+      "when": "!(action.params.cwd == {{workspace}} || action.params.cwd.startsWith({{workspace}} + '/'))",
+      "reason": "OUTSIDE_WORKSPACE"
+    },
+    {
+      "id": "pd-no-network", "per": "org", "kind": "FORBID",
+      "summary": "no network tools; a heuristic over the command text",
+      "operations": ["shell.command.run"], "environments": ["{{environment_id}}"],
+      "when": "action.params.command.matches(r'(^|[ \\t;&|(`])(\\S*/)?(curl|wget|nc|ncat|netcat|socat|ssh|scp|sftp|rsync|telnet|ftp|ping|nslookup|dig|host)([ \\t]|$)')",
+      "reason": "COMMAND_USES_NETWORK"
+    },
+    {
+      "id": "pd-no-write", "per": "org", "kind": "FORBID",
+      "summary": "no writing commands and no output redirection; a heuristic over the command text",
+      "operations": ["shell.command.run"], "environments": ["{{environment_id}}"],
+      "when": "action.params.command.matches(r'>|(^|[ \\t;&|(`])(\\S*/)?(rm|rmdir|mv|cp|dd|tee|touch|mkdir|chmod|chown|ln|truncate|install|kill|pkill|killall|systemctl|service|reboot|shutdown)([ \\t]|$)|(^|[ \\t])sed[ \\t]+(-[^ \\t]*[ \\t]+)*-i')",
+      "reason": "COMMAND_WRITES"
+    },
+    {
+      "id": "pd-bash-only", "per": "org", "kind": "FORBID",
+      "summary": "only bash commands, which the allow-list is written for",
+      "operations": ["shell.command.run"], "environments": ["{{environment_id}}"],
+      "when": "action.params.shell != 'bash'",
+      "reason": "SHELL_NOT_ALLOWED"
+    },
+    {
+      "id": "pd-read-only", "per": "org", "kind": "FORBID",
+      "summary": "only one allow-listed reading command, with no chaining, pipes, redirection or substitution",
+      "operations": ["shell.command.run"], "environments": ["{{environment_id}}"],
+      "when": "!action.params.command.matches(r'^[ \\t]*(ls|cat|head|tail|grep|wc|ps|df|du|free|uptime|uname|whoami|id|stat|pwd|lsof)([ \\t]+[^;&|`$<>()\\\\\\x00-\\x08\\x0a-\\x1f\\x7f]*)?$')",
+      "reason": "COMMAND_NOT_READ_ONLY"
+    }
+  ]
+}

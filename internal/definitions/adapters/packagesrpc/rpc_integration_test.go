@@ -50,6 +50,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/policy/adapters/pgstore"
 	"github.com/katocxl/pantherclaw/internal/policy/adapters/policiesrpc"
 	policyapp "github.com/katocxl/pantherclaw/internal/policy/app"
+	pdomain "github.com/katocxl/pantherclaw/internal/policy/domain"
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
 )
 
@@ -105,6 +106,7 @@ func newStack(t *testing.T, roots trust.Roots) *stack {
 	}))
 	pantherclawv1connect.RegisterPolicyServiceHandler(s, policiesrpc.New(&policyapp.Versions{
 		Store: &pgstore.Store{Pool: pool}, Facts: facts, Definitions: defs, Authz: authz, Limits: celenv.DefaultLimits,
+		Validator: passingGate{}, Tests: passingGate{},
 	}))
 	pantherclawv1connect.RegisterFactServiceHandler(s, factsrpc.New(&factsapp.Service{Store: facts, Authz: authz, Reads: facts}))
 	mux := http.NewServeMux()
@@ -400,4 +402,17 @@ func TestIntRPCPackagesPoliciesAndFacts(t *testing.T) {
 	wantCode(t, "another org publishes the policy", err, connect.CodeNotFound)
 	_, err = other.facts.DisableProvider(ctx, &pantherclawv1.DisableProviderRequest{Id: prov.GetProvider().GetId()})
 	wantCode(t, "another org disables the provider", err, connect.CodeNotFound)
+}
+
+// passingGate stands in for the publish gate's validator and test runner:
+// this test is about who may publish over the API, and the gate itself is
+// tested in internal/policy (HR-230).
+type passingGate struct{}
+
+func (passingGate) Validate(context.Context, ids.OrgID, *pdomain.Bundle) (pdomain.ValidationResult, error) {
+	return pdomain.ValidationResult{Passed: true}, nil
+}
+
+func (passingGate) Run(context.Context, ids.OrgID, *pdomain.Bundle) (pdomain.TestResult, error) {
+	return pdomain.TestResult{Passed: true}, nil
 }

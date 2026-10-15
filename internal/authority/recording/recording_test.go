@@ -258,7 +258,7 @@ func served(t *testing.T, s *pipelinetest.Scenario, r *recording.Recording) reco
 	}
 	if p := r.Reads.Policy; p != nil && p.Err == "" && !p.None {
 		s.W.Fail["Policy"] = false
-		cur, err := s.W.Policy(t.Context(), s.Org)
+		cur, err := s.W.Policy(t.Context(), s.Org, ids.UUID{})
 		if err != nil {
 			t.Fatal(err)
 		}

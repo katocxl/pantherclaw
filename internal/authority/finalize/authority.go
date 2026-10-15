@@ -450,7 +450,7 @@ func reasons(items []pipeline.Item) []adomain.Reason {
 	var out []adomain.Reason
 	for _, it := range items {
 		if it.Decisive || (it.Status != pipeline.StatusPassed && it.Status != pipeline.StatusNotApplicable &&
-			it.Status != pipeline.StatusNotEvaluated && it.Status != pipeline.StatusAnnotated) {
+			it.Status != pipeline.StatusNotEvaluated && it.Status != pipeline.StatusAnnotated && it.Status != pipeline.StatusWaived) {
 			out = append(out, adomain.Reason{Code: it.Code, Check: it.Check, Detail: it.Detail, Decisive: it.Decisive})
 		}
 	}

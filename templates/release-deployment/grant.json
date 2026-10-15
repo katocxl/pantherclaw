@@ -1,0 +1,8 @@
+{
+  "bounds": {
+    "operations": ["github.deployment.trigger"],
+    "targets": {
+      "github.repository": {"ids": ["{{repo}}"]}
+    }
+  }
+}

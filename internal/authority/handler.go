@@ -59,6 +59,7 @@ var checklistStatus = map[pipeline.Status]pantherclawv1.ChecklistStatus{
 	pipeline.StatusAnnotated:     pantherclawv1.ChecklistStatus_CHECKLIST_STATUS_ANNOTATED,
 	pipeline.StatusNotEvaluated:  pantherclawv1.ChecklistStatus_CHECKLIST_STATUS_NOT_EVALUATED,
 	pipeline.StatusNotApplicable: pantherclawv1.ChecklistStatus_CHECKLIST_STATUS_NOT_APPLICABLE,
+	pipeline.StatusWaived:        pantherclawv1.ChecklistStatus_CHECKLIST_STATUS_WAIVED,
 }
 
 // modeToProto maps a route mode; an empty mode (an M5 caller) is unspecified.

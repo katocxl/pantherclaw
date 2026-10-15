@@ -137,7 +137,7 @@ Use a service account holding `redteam.run` for the pipeline (it is not human-on
 
 ## 6. This repository's local gate
 
-CI is suspended (EX-004), so the gate is local:
+CI's `range` and `sandbox` jobs run these on every pull request and are part of the required `ci-ok`. Run them locally before you push:
 
 ```bash
 task up PROFILE=test      # the test stack on 127.0.0.1:5433
@@ -145,7 +145,7 @@ task range                # every scenario against simulators
 SANDBOX=1 task range      # also the sandbox scenarios (needs Docker 28+, see sandbox.md)
 ```
 
-A pull request that touches `internal/authority`, `internal/gateway`, `internal/sandbox`, `internal/redteam`, `packages/` or `redteam/` runs `task range` (with `SANDBOX=1` when `internal/sandbox` changed) and reports the result in its description. A `range` job exists in the disabled `ci.yml` and switches on with the other workflows before the first release tag.
+A pull request that touches `internal/authority`, `internal/gateway`, `internal/sandbox`, `internal/redteam`, `packages/` or `redteam/` runs `task range` (with `SANDBOX=1` when `internal/sandbox` changed) and reports the result in its description. CI then repeats both, and auto-merge waits for them through `ci-ok`.
 
 ## 7. Troubleshooting
 

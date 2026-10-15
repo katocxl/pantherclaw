@@ -1,0 +1,27 @@
+# ADR-0025 — Policy lifecycle: staged enforcement and change approval
+
+**Status:** Proposed (2026-10-15; G0 M11.1 founder decisions F1–F4, answered with the recommended option; accepted with the [G0 M11.1 brief](../g0/M11.md))
+
+**Context.** Until M11.1 a policy version goes from draft straight to published, and the published version decides every agent's actions in the organization from the next evaluation. Nothing requires tests before publication (HR-044 was due in M11 and only the engine's own reference rules were mutation-tested), nothing shows what a new version will change, and the role split of F582 means one person holding `policy.publish` can loosen the policy alone. A change that widens authority is as dangerous as a stolen grant (T-100), tests that check nothing make a gate worthless (T-104), and tools that predict a change must not themselves change decisions or leak recorded inputs (T-101). The founder asked on 2026-10-15 to build the policy half of M11 now, ahead of M10.
+
+**Decision.**
+1. **Draft-first states and a publication gate** (HR-230, F184, F195). A version advances DRAFT → VALIDATED → TESTED → PUBLISHED → SUPERSEDED by conditional updates and carries a content digest. Publication re-runs validation and the version's scenario tests with the current action definitions and fact catalog in the publish call, and the publishing update requires a passing test run for the same digest. Every path that makes a version enforced (publication, pilot, completion, rollback, template apply, the development seed) uses the gate; without a validator or test runner it refuses.
+2. **Scenario tests inside the bundle, with mutation testing** (HR-044, HR-238). Tests state an action, the given context and the expected decision and decisive reason. The runner evaluates them with the real decision pipeline over an in-memory fixture, so a test exercises the same code that decides live actions. Every comparison mutant and every rule-removal mutant must be killed. Runs are bounded and fail closed.
+3. **A conservative classifier and change approval** (HR-231, F1). A rule-level diff gives each change a direction. Only a version that is provably tighter is published by one publisher; anything LOOSER or UNKNOWN, including a rollback to a looser version, needs security-key confirmations (BINDING ceremonies over the classified changes) from two distinct persons holding `policy.publish`, or from the one when the organization has only one. One change-request mechanism serves publications, pilots and exceptions, and re-checks its base when it is applied.
+4. **Staged enforcement per agent** (HR-232, HR-233, HR-234, HR-237, F3). Simulation replays a version over recorded decisions; shadow replays live evaluations of in-scope agents asynchronously; a pilot enforces the version for named cohorts of agents, selected by the server alone, with a fallback to the published version and a per-agent target state backed by live decisions and coverage. None of the prediction tools writes outside its own result tables or exposes recorded input values.
+5. **Rollback keeps emergency rules** (HR-236, F206, F207). An emergency rule is marked by the rule field `emergency: true` (not allowed on ANNOTATE rules), not by a label. A rollback is a new version that carries every emergency rule of the published version forward and passes the gate; dropping an emergency rule needs `incident.respond` as well as the confirmations.
+6. **Narrow, expiring exceptions** (HR-235, F2). An exception waives one rule the publisher marked `exceptable`, for one agent and listed operations, for at most 30 days by the database clock, approved like a loosening. It never waives grants, envelopes, containment, identity, budgets, missing or stale facts, coverage or the route mode, and every decision that used it names it in its checklist and receipt.
+
+**Consequences.**
+- Publishing is slower for loosening changes and unchanged for tightening ones; templates and the development seed need tests that pass the gate.
+- New states, a content digest and new records (validations, test runs, change requests and confirmations, cohorts, rollouts and their targets, shadow results, exceptions, simulations) are needed (migrations 00110–00113).
+- The pipeline's policy read takes the agent, and recordings carry the selection and the exceptions used; old recordings replay unchanged.
+- Conflict detection and outcome diffs are sample-based (R-25); shadow and simulation see only recorded inputs (R-26); an organization with one publisher can still loosen with one key (R-27).
+- Versions published before the gate stay published until superseded but can never be published again.
+
+**Alternatives considered.**
+- Two persons for every publication: rejected by the founder (F1). Tightening is the safe direction and should stay fast, notably during an incident.
+- Trusting the author's label of a change as tighter: rejected. The server classifies, and a change it cannot prove tighter counts as loosening.
+- Evaluating shadow versions on the hot path: rejected. It adds latency and risk to live decisions; shadow replays asynchronously from recordings, and a test proves live decisions are identical with and without it.
+- Rollout targets per gateway or connection: rejected by the founder (F3). Agents are what policies decide for and what owners answer for.
+- Exceptions for any rule or control: rejected by the founder (F2). Only rules the publisher marked `exceptable`; non-overridable controls stay out of reach.

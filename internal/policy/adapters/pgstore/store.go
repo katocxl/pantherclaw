@@ -112,8 +112,9 @@ func (s *Store) CreateVersion(ctx context.Context, org ids.OrgID, b *domain.Bund
 		if len(raw) > MaxBundleBytes {
 			return fmt.Errorf("%w: the bundle is larger than %d bytes", domain.ErrInvalid, MaxBundleBytes)
 		}
+		digest := domain.ContentDigest(&stored)
 		if err := q.InsertPolicyVersion(ctx, dbq.InsertPolicyVersionParams{
-			OrgID: org, ID: id, PolicyID: policyID, Version: next, Bundle: raw, CreatedBy: createdBy,
+			OrgID: org, ID: id, PolicyID: policyID, Version: next, Bundle: raw, ContentDigest: digest[:], CreatedBy: createdBy,
 		}); err != nil {
 			return err
 		}
@@ -141,50 +142,6 @@ func (s *Store) Get(ctx context.Context, org ids.OrgID, id ids.UUID) (*domain.Bu
 	return out, state, err
 }
 
-// Publish makes a draft the org's published version, superseding the
-// previous one in the same transaction.
-func (s *Store) Publish(ctx context.Context, org ids.OrgID, id ids.UUID, publishedBy string, ev *audit.Event) error {
-	return s.PublishExpecting(ctx, org, id, publishedBy, nil, ev)
-}
-
-// PublishExpecting publishes as Publish does, and with expected set only
-// while the published version is still *expected (the zero id: none is
-// published); otherwise it returns ErrPublishedChanged. The published
-// version is locked first, so a concurrent publish is seen.
-func (s *Store) PublishExpecting(ctx context.Context, org ids.OrgID, id ids.UUID, publishedBy string, expected *ids.UUID, ev *audit.Event) error {
-	err := s.Pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
-		q := dbq.New(tx)
-		if expected != nil {
-			cur, err := q.LockPublishedPolicyVersion(ctx, org)
-			if db.IsNoRows(err) {
-				cur, err = ids.UUID{}, nil
-			}
-			if err != nil {
-				return err
-			}
-			if cur != *expected {
-				return ErrPublishedChanged
-			}
-		}
-		if _, err := q.SupersedePublishedPolicy(ctx, org, id); err != nil {
-			return err
-		}
-		if err := db.ExpectOneRow(q.PublishPolicyVersion(ctx, &publishedBy, org, id)); err != nil {
-			return err
-		}
-		return record(ctx, tx, ev, map[string]string{"version_id": id.String()})
-	})
-	// Two publishes that both expected none: the second meets the first's
-	// row at the one-published index.
-	if expected != nil && db.IsUniqueViolation(err) {
-		return ErrPublishedChanged
-	}
-	if errors.Is(err, db.ErrLostRace) {
-		return ErrNotDraft
-	}
-	return err
-}
-
 // List returns the org's versions, newest first.
 func (s *Store) List(ctx context.Context, org ids.OrgID, limit int) ([]Version, error) {
 	var out []Version
@@ -203,6 +160,10 @@ func (s *Store) List(ctx context.Context, org ids.OrgID, limit int) ([]Version, 
 	})
 	return out, err
 }
+
+// Decode strictly decodes and validates a stored bundle (the Authority's
+// selection reads a rollout's version with it).
+func Decode(raw []byte) (*domain.Bundle, error) { return decode(raw) }
 
 func decode(raw []byte) (*domain.Bundle, error) {
 	var b domain.Bundle
@@ -229,20 +190,26 @@ func record(ctx context.Context, tx db.TenantTx, ev *audit.Event, details map[st
 func (s *Store) Version(ctx context.Context, org ids.OrgID, id ids.UUID) (app.VersionInfo, error) {
 	var out app.VersionInfo
 	err := s.Pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
-		r, err := dbq.New(tx).GetPolicyVersion(ctx, org, id)
-		if db.IsNoRows(err) {
-			return app.ErrVersionNotFound
-		}
-		if err != nil {
-			return err
-		}
-		out = app.VersionInfo{
-			ID: r.ID, BundleID: r.BundleID, Version: int(r.Version), State: r.State, Bundle: r.Bundle,
-			CreatedBy: r.CreatedBy, CreatedAt: r.CreatedAt, PublishedAt: r.PublishedAt,
-		}
-		return nil
+		var err error
+		out, err = s.VersionInTx(ctx, tx, org, id)
+		return err
 	}, db.ReadOnly())
 	return out, err
+}
+
+// VersionInTx implements app.GateStore.
+func (s *Store) VersionInTx(ctx context.Context, tx db.TenantTx, org ids.OrgID, id ids.UUID) (app.VersionInfo, error) {
+	r, err := dbq.New(tx).GetPolicyVersion(ctx, org, id)
+	if db.IsNoRows(err) {
+		return app.VersionInfo{}, app.ErrVersionNotFound
+	}
+	if err != nil {
+		return app.VersionInfo{}, err
+	}
+	return app.VersionInfo{
+		ID: r.ID, BundleID: r.BundleID, Version: int(r.Version), State: r.State, Bundle: r.Bundle,
+		CreatedBy: r.CreatedBy, CreatedAt: r.CreatedAt, PublishedAt: r.PublishedAt, ContentDigest: r.ContentDigest,
+	}, nil
 }
 
 // PublishedVersion returns the org's published version, or nil.
@@ -258,7 +225,7 @@ func (s *Store) PublishedVersion(ctx context.Context, org ids.OrgID) (*app.Versi
 		}
 		out = &app.VersionInfo{
 			ID: r.ID, BundleID: r.BundleID, Version: int(r.Version), State: "PUBLISHED", Bundle: r.Bundle,
-			CreatedBy: r.CreatedBy, CreatedAt: r.CreatedAt, PublishedAt: r.PublishedAt,
+			CreatedBy: r.CreatedBy, CreatedAt: r.CreatedAt, PublishedAt: r.PublishedAt, ContentDigest: r.ContentDigest,
 		}
 		return nil
 	}, db.ReadOnly())

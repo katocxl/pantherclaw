@@ -1,0 +1,33 @@
+{
+  "name": "release-deployment",
+  "summary": "Deployments of the named repositories go only to the named environment, each released by a release approver inside a change window.",
+  "task_ref": "template:release-deployment",
+  "protects": [
+    "every deployment of a named repository waits for an independent release approver, whose approval counts only inside the environment's change window",
+    "a deployment to any other environment than the named one is refused",
+    "deployments are checked as consequences of merges and pushes: a deployment decided directly, not as a consequence of a merge or push, is refused",
+    "a deployment of any repository the template was not applied for is refused: this rule applies org-wide, to every agent and every repository, not only to the agent the template grants",
+    "the agent's grant covers deployments of the named repositories only"
+  ],
+  "excludes": [
+    "what the deployment contains: review the merge itself (the coding-to-production template)",
+    "a deployment whose environments cannot be told when the merge that starts it is decided is held, not refused; its approval counts only inside a change window, and with no environment it is in none, so the hold expires unless the merge is asked for again once they can be told",
+    "deployments started outside PantherClaw (a person pushing, another CI system)",
+    "people: bind release_approver yourself (pclaw role bind)"
+  ],
+  "placeholders": {
+    "repository": {"kind": "repository", "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"},
+    "environment": {"kind": "environment", "pattern": "^[a-z][a-z0-9_-]{0,63}$"},
+    "time_zone": {"kind": "time_zone", "pattern": "^[A-Za-z][A-Za-z0-9_+-]*(/[A-Za-z0-9_+-]+){0,2}$"}
+  },
+  "routes": [
+    {"package": "pc.github", "route": "github-pull-merge"},
+    {"package": "pc.github", "route": "github-contents-write"},
+    {"package": "pc.github", "route": "github-branch-create"}
+  ],
+  "grant": "deployments of these repositories",
+  "requires": {
+    "packages": ["pc.github"],
+    "connections": ["a pc.github connection in enforce mode for the repositories"]
+  }
+}

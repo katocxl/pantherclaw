@@ -122,6 +122,18 @@ func (s *ReplaySource) Catalog(ctx context.Context, org ids.OrgID) (map[string]f
 	return out, err
 }
 
+// HoldSettings implements replay.Source: the org's current hold settings,
+// read as the Authority reads them (M11.1 D36).
+func (s *ReplaySource) HoldSettings(ctx context.Context, org ids.OrgID) (pipeline.HoldSettings, error) {
+	var out pipeline.HoldSettings
+	err := s.read(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
+		var err error
+		out, err = holdSettings(ctx, tx, org)
+		return err
+	})
+	return out, err
+}
+
 // storedBundle decodes a stored bundle as the policy store does.
 func storedBundle(raw []byte) (*pdomain.Bundle, error) {
 	var b pdomain.Bundle
