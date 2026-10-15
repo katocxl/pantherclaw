@@ -28,7 +28,11 @@ type Authenticator interface {
 // procedure to its declared permission; a procedure missing from it is
 // refused (fail closed). Procedures declaring a gateway permission are
 // delegated to gateway, which may be nil (they are then refused).
-func New(a Authenticator, perms map[string]td.Permission, gateway rpc.Authenticator) rpc.Authenticator {
+func New(a Authenticator, perms map[string]td.Permission, gateway rpc.Authenticator, opts ...Option) rpc.Authenticator {
+	var o options
+	for _, opt := range opts {
+		opt(&o)
+	}
 	return func(ctx context.Context, info *connect.CallInfo, spec connect.Spec) (context.Context, error) {
 		perm, ok := perms[spec.Procedure]
 		if !ok || perm == td.PermPublic {
@@ -59,8 +63,28 @@ func New(a Authenticator, perms map[string]td.Permission, gateway rpc.Authentica
 			return nil, err
 		}
 		if perm != td.PermAuthenticated && !c.CanAnywhere(perm) {
+			if o.refusals != nil && perm.HumanOnly() && (!c.Human() || c.Credential == tapp.CredAPIKey) {
+				// A service, workload or API key calling a person's procedure is
+				// what pc.authority.self_issue and self_approve look for (G0 M10
+				// D67). The refusal never waits on or fails with the audit.
+				o.refusals.HumanOnlyRefused(ctx, c, spec.Procedure, perm)
+			}
 			return nil, td.ErrPermissionDenied(perm)
 		}
 		return tapp.WithCaller(ctx, c), nil
 	}
 }
+
+// Option configures New.
+type Option func(*options)
+
+type options struct{ refusals RefusalRecorder }
+
+// RefusalRecorder records a non-human caller refused a human-only
+// procedure. It must not block the refusal for long or fail it.
+type RefusalRecorder interface {
+	HumanOnlyRefused(ctx context.Context, c tapp.Caller, procedure string, perm td.Permission)
+}
+
+// WithRefusals records human-only refusals through r (G0 M10 D67).
+func WithRefusals(r RefusalRecorder) Option { return func(o *options) { o.refusals = r } }

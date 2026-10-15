@@ -75,7 +75,7 @@ func newStack(t *testing.T) *stack {
 	for proc, p := range declared {
 		perms[proc] = td.Permission(p)
 	}
-	s, err := rpc.NewServer(rpc.Options{Authenticate: rpcauth.New(authn, perms, nil)})
+	s, err := rpc.NewServer(rpc.Options{Authenticate: rpcauth.New(authn, perms, nil, rpcauth.WithRefusals(&rpcauth.AuditRefusals{Pool: pool}))})
 	if err != nil {
 		t.Fatal(err)
 	}
