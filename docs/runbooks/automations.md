@@ -1,8 +1,20 @@
 # Runbook — Governed automations
 
-**Milestone:** M11 · **Owner:** the automation's owner, the org's automation publishers (`automation.publish`) and endpoint admins (`automation.endpoints.manage`) · **Edition:** Team (the `contain` step, latent exposure and the compromised-publisher response are Business) · **Status:** procedure written from the [G0 M11 part 2 brief](../g0/M11.md) (D5–D43); tested at the M11 exit.
+**Milestone:** M11 · **Owner:** the automation's owner, automation authors (`automation_author`), publishers (`automation_publisher`) and operators (`automation_operator`); fleet managers (`fleet_manager`) for promotion · **Edition:** Team (the `contain` step, latent exposure and the compromised-publisher response are Business) · **Status:** procedure written from the [G0 M11 part 2 brief](../g0/M11.md) (D5–D43); tested at the M11 exit.
 
 An automation is a versioned definition that starts work on a schedule, a platform event, a condition, a threshold, a manual start or a signed inbound event. It acts as its own execution identity, and when it launches an agent, each execution gets a fresh grant inside an issuance ceiling that people approved with security keys. Background: [g0/M11.md](../g0/M11.md), [ADR-0027](../adr/0027-governed-automations.md), HR-270..HR-293, R-33..R-38.
+
+## 0. Who does what
+
+| Role | Permissions | Typical work |
+|---|---|---|
+| `automation_author` | `automation.read`, `automation.manage`, `automation.endpoints.manage` | Create automations and versions, request enabling, pause, resume, cancel, retire, revoke authority; add and rotate event sources and destinations |
+| `automation_publisher` | `automation.read`, `automation.publish`, `automation.approve` | Confirm enabling and rollout ceremonies; decide gates |
+| `automation_operator` | `automation.read`, `automation.run`, `automation.approve` | Start manual executions; decide gates |
+| `fleet_manager` (people only) | `agent.promote`, `cohort.manage`, `agent.read` and basic reads | Promote agents for production operations; manage cohorts |
+| `security_admin` | adds `publisher.compromise`, `protected_change.manage`, `automation.read` | Mark a publisher compromised; manage protected changes |
+
+`org_admin` gets only `automation.read`: administering the org never implies publishing or approving. No role holds both `automation.manage` and `automation.publish`, so the author of a version and its confirmers are normally different people; a person who holds both roles may confirm their own request, which is one of the confirmations, not all of them when two are required.
 
 ## 1. Create, validate and test a version
 
@@ -71,7 +83,7 @@ If a person who confirms changes may be compromised:
 |---|---|---|
 | Execution FAILED `CEILING_VOID` | An approver lost a permission or was marked compromised | Enable a new version with current approvers |
 | Execution FAILED `USAGE_EXCEEDED` | Per-day grant, run or budget cap reached | Wait for the next day, or enable a version with a larger ceiling |
-| Execution FAILED `NOT_PROMOTED` | A production grant lists operations the agent is not promoted for | Promote the agent for those operations (`PromoteAgent`, `agent.promote` with a step-up) |
+| Execution FAILED `NOT_PROMOTED` | A production grant lists operations the agent is not promoted for | Promote the agent for those operations (`PromoteAgent`: a `fleet_manager` with `agent.promote` and a step-up) |
 | Execution FAILED `LAUNCH_NOT_CLAIMED` | No runner or agent claimed the launch in time | Check that the agent's workload (or `pclaw automation runner`) is running and enrolled |
 | Triggers REFUSED_DUPLICATE | The same dedupe key within its window | Expected for retries; check the sender's ids |
 | Triggers REFUSED_LOOP | The automation is already in the trigger's ancestry | Change the triggers so automations do not feed each other |
