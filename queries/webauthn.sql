@@ -71,19 +71,22 @@ WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND user_id = sqlc.arg(use
 -- An approval's BINDING ceremony (G0 M5 part 2, HR-033): its challenge is
 -- the binding (or a batch's hash), bound to the browser session, the user
 -- and the request or batch; or (G0 M7 slice A11) a release's binding,
--- bound to the reconciliation. A person's open ceremony for the same
+-- bound to the reconciliation; or (G0 M11.1) a policy change request's
+-- binding, bound to the request. A person's open ceremony for the same
 -- subject is replaced.
 -- name: DeleteOpenBindingCeremonies :exec
 DELETE FROM pc.webauthn_ceremonies
 WHERE org_id = sqlc.arg(org_id) AND user_id = sqlc.arg(user_id) AND purpose = 'BINDING' AND consumed_at IS NULL
   AND (approval_request_id = sqlc.narg(approval_request_id)::uuid OR batch_id = sqlc.narg(batch_id)::uuid
-       OR reconciliation_id = sqlc.narg(reconciliation_id)::uuid);
+       OR reconciliation_id = sqlc.narg(reconciliation_id)::uuid
+       OR policy_change_request_id = sqlc.narg(policy_change_request_id)::uuid);
 
 -- name: InsertBindingCeremony :exec
 INSERT INTO pc.webauthn_ceremonies (org_id, id, session_id, user_id, purpose, challenge, allowed_credentials,
-    approval_request_id, batch_id, reconciliation_id, expires_at)
+    approval_request_id, batch_id, reconciliation_id, policy_change_request_id, expires_at)
 VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(session_id), sqlc.arg(user_id), 'BINDING', sqlc.arg(challenge),
     sqlc.arg(allowed_credentials), sqlc.narg(approval_request_id), sqlc.narg(batch_id), sqlc.narg(reconciliation_id),
+    sqlc.narg(policy_change_request_id),
     now() + make_interval(secs => sqlc.arg(ttl_seconds)::int));
 
 -- The approval page verifies an assertion against an open ceremony of this
@@ -91,6 +94,7 @@ VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(session_id), sqlc.arg(user_id),
 -- records the response (and the release, in the one that records the
 -- release).
 -- name: GetOpenBindingCeremony :one
-SELECT challenge, allowed_credentials, expires_at, approval_request_id, batch_id, reconciliation_id FROM pc.webauthn_ceremonies
+SELECT challenge, allowed_credentials, expires_at, approval_request_id, batch_id, reconciliation_id, policy_change_request_id
+FROM pc.webauthn_ceremonies
 WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND session_id = sqlc.arg(session_id) AND user_id = sqlc.arg(user_id)
   AND purpose = 'BINDING' AND consumed_at IS NULL AND expires_at > now();

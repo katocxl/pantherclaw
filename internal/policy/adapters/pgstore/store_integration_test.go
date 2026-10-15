@@ -15,6 +15,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/db/dbtest"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	"github.com/katocxl/pantherclaw/internal/policy/adapters/pgstore"
+	"github.com/katocxl/pantherclaw/internal/policy/app"
 	"github.com/katocxl/pantherclaw/internal/policy/domain"
 )
 
@@ -23,6 +24,27 @@ func bundle(reason string) *domain.Bundle {
 		ID: "no-large", Kind: domain.Forbid, Summary: "no large refunds", Operations: []string{"payments.refund.create"},
 		When: `action.params.amount > money("1000", "USD")`, Reason: reason,
 	}}}
+}
+
+// tested records a passing validation and test run of a version, as the
+// gate does, and returns its publish request (as user:bob, from base).
+func tested(t *testing.T, s *pgstore.Store, org ids.OrgID, id, base ids.UUID) app.PublishRequest {
+	t.Helper()
+	ctx := context.Background()
+	v, err := s.Version(ctx, org, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var digest [32]byte
+	copy(digest[:], v.ContentDigest)
+	if _, err := s.RecordValidation(ctx, org, id, digest, domain.ValidationResult{Passed: true}, "user:alice"); err != nil {
+		t.Fatal(err)
+	}
+	run, err := s.RecordTestRun(ctx, org, id, digest, domain.TestResult{Passed: true}, "user:alice")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return app.PublishRequest{Version: id, Digest: digest, TestRun: run, Base: base, PublishedBy: "user:bob"}
 }
 
 func TestIntPolicyVersionsAndPublication(t *testing.T) {
@@ -47,24 +69,25 @@ func TestIntPolicyVersionsAndPublication(t *testing.T) {
 	if err != nil || n2 != 2 {
 		t.Fatalf("v2: %d %v", n2, err)
 	}
-	if err := s.Publish(ctx, org, v1, "user:bob", nil); err != nil {
+	if err := s.PublishTested(ctx, org, tested(t, s, org, v1, ids.UUID{})); err != nil {
 		t.Fatal(err)
 	}
 	if b, _ := s.Published(ctx, org); b == nil || b.Version != 1 || b.Rules[0].Reason != "TOO_LARGE" {
 		t.Fatalf("published %+v", b)
 	}
-	// Concurrent publications of the same draft: exactly one wins.
+	// Concurrent publications of the same version: exactly one wins.
+	req2 := tested(t, s, org, v2, v1)
 	var wg sync.WaitGroup
 	errs := make([]error, 4)
 	for i := range errs {
-		wg.Go(func() { errs[i] = s.Publish(ctx, org, v2, "user:bob", nil) })
+		wg.Go(func() { errs[i] = s.PublishTested(ctx, org, req2) })
 	}
 	wg.Wait()
 	wins := 0
 	for _, err := range errs {
 		if err == nil {
 			wins++
-		} else if !errors.Is(err, pgstore.ErrNotDraft) && !db.IsUniqueViolation(err) {
+		} else if !errors.Is(err, pgstore.ErrNotDraft) && !errors.Is(err, pgstore.ErrPublishedChanged) {
 			t.Fatalf("unexpected %v", err)
 		}
 	}
@@ -77,7 +100,9 @@ func TestIntPolicyVersionsAndPublication(t *testing.T) {
 	if _, state, _ := s.Get(ctx, org, v1); state != "SUPERSEDED" {
 		t.Fatalf("the previous version is %s", state)
 	}
-	if err := s.Publish(ctx, org, v1, "user:bob", nil); !errors.Is(err, pgstore.ErrNotDraft) {
+	if err := s.PublishTested(ctx, org, app.PublishRequest{
+		Version: v1, Digest: req2.Digest, TestRun: req2.TestRun, Base: v2, PublishedBy: "user:bob",
+	}); !errors.Is(err, pgstore.ErrNotDraft) {
 		t.Fatalf("a superseded version was published again: %v", err)
 	}
 	if vs, err := s.List(ctx, org, 10); err != nil || len(vs) != 2 {
@@ -114,10 +139,10 @@ func TestIntPublishExpectingRefusesAConcurrentPublish(t *testing.T) {
 	}
 	none := ids.UUID{}
 	v1, v2 := draft("REASON_A"), draft("REASON_B")
-	if err := s.PublishExpecting(ctx, org, v1, "user:bob", &none, nil); err != nil {
+	if err := s.PublishTested(ctx, org, tested(t, s, org, v1, none)); err != nil {
 		t.Fatalf("publish expecting none: %v", err)
 	}
-	if err := s.PublishExpecting(ctx, org, v2, "user:bob", &none, nil); !errors.Is(err, pgstore.ErrPublishedChanged) {
+	if err := s.PublishTested(ctx, org, tested(t, s, org, v2, none)); !errors.Is(err, pgstore.ErrPublishedChanged) {
 		t.Fatalf("publish expecting none once one is published: %v", err)
 	}
 
@@ -125,8 +150,12 @@ func TestIntPublishExpectingRefusesAConcurrentPublish(t *testing.T) {
 	drafts := []ids.UUID{draft("REASON_C"), draft("REASON_D"), draft("REASON_E"), draft("REASON_F")}
 	var wg sync.WaitGroup
 	errs := make([]error, len(drafts))
+	reqs := make([]app.PublishRequest, len(drafts))
 	for i, d := range drafts {
-		wg.Go(func() { errs[i] = s.PublishExpecting(ctx, org, d, "user:bob", &v1, nil) })
+		reqs[i] = tested(t, s, org, d, v1)
+	}
+	for i := range drafts {
+		wg.Go(func() { errs[i] = s.PublishTested(ctx, org, reqs[i]) })
 	}
 	wg.Wait()
 	var won ids.UUID
@@ -144,11 +173,12 @@ func TestIntPublishExpectingRefusesAConcurrentPublish(t *testing.T) {
 		t.Fatal("no publish from v1 won")
 	}
 	for _, d := range drafts {
-		if _, state, _ := s.Get(ctx, org, d); (d == won) != (state == "PUBLISHED") || (d != won && state != "DRAFT") {
+		if _, state, _ := s.Get(ctx, org, d); (d == won) != (state == "PUBLISHED") || (d != won && state != "TESTED") {
 			t.Fatalf("draft %s is %s (won %s)", d, state, won)
 		}
 	}
-	if err := s.PublishExpecting(ctx, org, v2, "user:bob", &won, nil); err != nil {
+	req := tested(t, s, org, v2, won)
+	if err := s.PublishTested(ctx, org, req); err != nil {
 		t.Fatalf("publish expecting the current version: %v", err)
 	}
 }
