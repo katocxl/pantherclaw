@@ -22,7 +22,6 @@ import (
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
 )
 
-
 type fakeFeed struct {
 	mu  sync.Mutex
 	evs []stream.Event
