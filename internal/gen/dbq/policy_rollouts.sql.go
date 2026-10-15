@@ -251,7 +251,7 @@ func (q *Queries) ExcludeRolloutTarget(ctx context.Context, arg ExcludeRolloutTa
 }
 
 const getPolicyCohortByName = `-- name: GetPolicyCohortByName :one
-SELECT org_id, id, name, members, created_by, created_at FROM pc.policy_cohorts WHERE org_id = $1 AND name = $2
+SELECT org_id, id, name, created_by, created_at FROM pc.policy_cohorts WHERE org_id = $1 AND name = $2
 `
 
 func (q *Queries) GetPolicyCohortByName(ctx context.Context, orgID ids.OrgID, name string) (PcPolicyCohort, error) {
@@ -261,7 +261,6 @@ func (q *Queries) GetPolicyCohortByName(ctx context.Context, orgID ids.OrgID, na
 		&i.OrgID,
 		&i.ID,
 		&i.Name,
-		&i.Members,
 		&i.CreatedBy,
 		&i.CreatedAt,
 	)
@@ -346,7 +345,7 @@ func (q *Queries) GetRolloutTarget(ctx context.Context, orgID ids.OrgID, rollout
 const insertPolicyCohort = `-- name: InsertPolicyCohort :one
 INSERT INTO pc.policy_cohorts (org_id, id, name, created_by)
 VALUES ($1, $2, $3, $4)
-RETURNING org_id, id, name, members, created_by, created_at
+RETURNING org_id, id, name, created_by, created_at
 `
 
 type InsertPolicyCohortParams struct {
@@ -368,7 +367,6 @@ func (q *Queries) InsertPolicyCohort(ctx context.Context, arg InsertPolicyCohort
 		&i.OrgID,
 		&i.ID,
 		&i.Name,
-		&i.Members,
 		&i.CreatedBy,
 		&i.CreatedAt,
 	)
@@ -530,7 +528,7 @@ func (q *Queries) ListPolicyCohortMembers(ctx context.Context, orgID ids.OrgID, 
 }
 
 const listPolicyCohorts = `-- name: ListPolicyCohorts :many
-SELECT org_id, id, name, members, created_by, created_at FROM pc.policy_cohorts WHERE org_id = $1 ORDER BY name LIMIT $2
+SELECT org_id, id, name, created_by, created_at FROM pc.policy_cohorts WHERE org_id = $1 ORDER BY name LIMIT $2
 `
 
 func (q *Queries) ListPolicyCohorts(ctx context.Context, orgID ids.OrgID, maxRows int32) ([]PcPolicyCohort, error) {
@@ -546,7 +544,6 @@ func (q *Queries) ListPolicyCohorts(ctx context.Context, orgID ids.OrgID, maxRow
 			&i.OrgID,
 			&i.ID,
 			&i.Name,
-			&i.Members,
 			&i.CreatedBy,
 			&i.CreatedAt,
 		); err != nil {
@@ -561,7 +558,8 @@ func (q *Queries) ListPolicyCohorts(ctx context.Context, orgID ids.OrgID, maxRow
 }
 
 const listPolicyRolloutCohorts = `-- name: ListPolicyRolloutCohorts :many
-SELECT rc.cohort_id, rc.mode, c.name, c.members
+SELECT rc.cohort_id, rc.mode, c.name,
+    (SELECT count(*) FROM pc.policy_cohort_members m WHERE m.org_id = rc.org_id AND m.cohort_id = rc.cohort_id)::integer AS members
 FROM pc.policy_rollout_cohorts rc
 JOIN pc.policy_cohorts c ON c.org_id = rc.org_id AND c.id = rc.cohort_id
 WHERE rc.org_id = $1 AND rc.rollout_id = $2

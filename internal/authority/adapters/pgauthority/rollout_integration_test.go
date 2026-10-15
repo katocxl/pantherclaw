@@ -514,6 +514,17 @@ func TestT103_RolloutsCannotBeConfused(t *testing.T) {
 	if got, err := rw.svc.CancelRollout(ctx, r.ID); err != nil || got.Stage != rollout.StageCancelled {
 		t.Fatalf("cancel: %v %v", got.Stage, err)
 	}
+	// A cohort holds at most 1,000 agents.
+	if _, err := rw.svc.CreateCohort(ctx, "big"); err != nil {
+		t.Fatal(err)
+	}
+	exec(t, w.pool, w.org, `WITH a AS (INSERT INTO pc.agents (org_id, id, name, state, created_by)
+		SELECT $1, gen_random_uuid(), 'bot-' || g, 'DISCOVERED', 'test' FROM generate_series(1, 1000) g RETURNING org_id, id)
+		INSERT INTO pc.policy_cohort_members (org_id, cohort_id, agent_id, added_by)
+		SELECT a.org_id, c.id, a.id, 'test' FROM a, pc.policy_cohorts c WHERE c.org_id = $1 AND c.name = 'big'`, w.org)
+	if _, err := rw.svc.ChangeCohort(ctx, "big", []ids.UUID{w.agent}, false); !errors.Is(err, rollout.ErrCohortFull) {
+		t.Fatalf("a 1,001st agent: %v", err)
+	}
 }
 
 // TestHR234_CompletingPublishesForEveryoneAndRecordsTargets: completing a

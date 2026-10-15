@@ -199,13 +199,24 @@ func (s *snapshot) Definition(ctx context.Context, org ids.OrgID, pin actionir.D
 // target FAILED. Each bundle version is compiled against the org's fact
 // catalog and active definitions, cached by all three.
 func (s *snapshot) Policy(ctx context.Context, org ids.OrgID, agent ids.UUID) (*pipeline.Policy, error) {
-	catalog, err := s.r.FactStore.CatalogInTx(ctx, s.tx, org)
-	if err != nil {
-		return nil, err
-	}
-	defs, err := s.r.Definitions.ActiveDefinitionsInTx(ctx, s.tx, org)
-	if err != nil {
-		return nil, err
+	// The catalog and definitions are read only when a version is compiled,
+	// so an org without a policy reads no more than before rollouts.
+	var catalog map[string]fdomain.Type
+	var defs []*defsdomain.Definition
+	loaded := false
+	load := func() error {
+		if loaded {
+			return nil
+		}
+		var err error
+		if catalog, err = s.r.FactStore.CatalogInTx(ctx, s.tx, org); err != nil {
+			return err
+		}
+		if defs, err = s.r.Definitions.ActiveDefinitionsInTx(ctx, s.tx, org); err != nil {
+			return err
+		}
+		loaded = true
+		return nil
 	}
 	var fallback string
 	pilot, err := dbq.New(s.tx).PilotRolloutForAgent(ctx, org, agent)
@@ -216,6 +227,9 @@ func (s *snapshot) Policy(ctx context.Context, org ids.OrgID, agent ids.UUID) (*
 	default:
 		row, err := dbq.New(s.tx).GetPolicyVersionBundle(ctx, org, pilot.VersionID)
 		if err != nil {
+			return nil, err
+		}
+		if err := load(); err != nil {
 			return nil, err
 		}
 		b, derr := polpg.Decode(row.Bundle)
@@ -229,6 +243,9 @@ func (s *snapshot) Policy(ctx context.Context, org ids.OrgID, agent ids.UUID) (*
 	}
 	b, err := s.r.Policies.PublishedInTx(ctx, s.tx, org)
 	if err != nil || b == nil {
+		return nil, err
+	}
+	if err := load(); err != nil {
 		return nil, err
 	}
 	p, err := s.r.compile(org, b, catalog, defs)

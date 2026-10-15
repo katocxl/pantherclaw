@@ -45,7 +45,7 @@ const (
 	StageShadow    = "SHADOW"
 	StagePilot     = "PILOT"
 	StageComplete  = "COMPLETE"
-	StageCancelled = "CANCELLED"
+	StageCancelled = "CANCELLED" //nolint:misspell // stored value (D12), British spelling as in ARCHITECTURE §6.2
 )
 
 // Modes of a rollout's cohort.
@@ -182,12 +182,12 @@ type Cohort struct {
 	Agents []ids.UUID
 }
 
-func caller(ctx context.Context, p tdomain.Permission) (tapp.Caller, error) {
+func reader(ctx context.Context) (tapp.Caller, error) {
 	c, err := tapp.CallerFrom(ctx)
 	if err != nil {
 		return c, err
 	}
-	return c, c.Require(p, tdomain.OrgPath(c.Org))
+	return c, c.Require(tdomain.PermPolicyRead, tdomain.OrgPath(c.Org))
 }
 
 // publisher is a person holding policy.publish at the org, signed in as
@@ -346,7 +346,7 @@ func (s *Service) syncPilotTargets(ctx context.Context, tx db.TenantTx, org ids.
 
 // ListCohorts returns the org's cohorts with their members (policy.read).
 func (s *Service) ListCohorts(ctx context.Context) ([]Cohort, error) {
-	c, err := caller(ctx, tdomain.PermPolicyRead)
+	c, err := reader(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -741,7 +741,7 @@ func (s *Service) CancelRollout(ctx context.Context, rollout ids.UUID) (Rollout,
 		} else if err != nil {
 			return err
 		}
-		return s.audit(ctx, tx, c, "policy.rollout_cancelled", rollout, nil)
+		return s.audit(ctx, tx, c, "policy.rollout_cancelled", rollout, nil) //nolint:misspell // as the stage
 	})
 	if err != nil {
 		return Rollout{}, err
@@ -787,7 +787,7 @@ func (s *Service) Published(ctx context.Context, tx db.TenantTx, org ids.OrgID, 
 // GetRollout returns a rollout with its cohorts and target counts
 // (policy.read).
 func (s *Service) GetRollout(ctx context.Context, id ids.UUID) (Rollout, error) {
-	c, err := caller(ctx, tdomain.PermPolicyRead)
+	c, err := reader(ctx)
 	if err != nil {
 		return Rollout{}, err
 	}
@@ -832,14 +832,14 @@ func load(ctx context.Context, q *dbq.Queries, org ids.OrgID, id ids.UUID) (Roll
 
 // ListRollouts returns the org's rollouts, newest first (policy.read).
 func (s *Service) ListRollouts(ctx context.Context, limit int) ([]Rollout, error) {
-	c, err := caller(ctx, tdomain.PermPolicyRead)
+	c, err := reader(ctx)
 	if err != nil {
 		return nil, err
 	}
 	var out []Rollout
 	err = s.Pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
 		q := dbq.New(tx)
-		rows, err := q.ListPolicyRollouts(ctx, c.Org, int32(min(max(limit, 1), maxList))) //nolint:gosec // ≤ 200
+		rows, err := q.ListPolicyRollouts(ctx, c.Org, int32(min(max(limit, 1), maxList)))
 		if err != nil {
 			return err
 		}
@@ -858,7 +858,7 @@ func (s *Service) ListRollouts(ctx context.Context, limit int) ([]Rollout, error
 // ListTargets returns a rollout's targets, by agent id after after, in one
 // state or all (policy.read).
 func (s *Service) ListTargets(ctx context.Context, rollout ids.UUID, state string, after ids.UUID, limit int) ([]dbq.PcPolicyRolloutTarget, error) {
-	c, err := caller(ctx, tdomain.PermPolicyRead)
+	c, err := reader(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -879,7 +879,7 @@ func (s *Service) ListTargets(ctx context.Context, rollout ids.UUID, state strin
 		}
 		var err error
 		out, err = q.ListRolloutTargets(ctx, dbq.ListRolloutTargetsParams{
-			OrgID: c.Org, RolloutID: rollout, State: st, AfterAgent: after, MaxRows: int32(min(max(limit, 1), maxList)), //nolint:gosec // ≤ 200
+			OrgID: c.Org, RolloutID: rollout, State: st, AfterAgent: after, MaxRows: int32(min(max(limit, 1), maxList)),
 		})
 		return err
 	}, db.ReadOnly())

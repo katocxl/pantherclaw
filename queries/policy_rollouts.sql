@@ -89,7 +89,8 @@ VALUES (sqlc.arg(org_id), sqlc.arg(rollout_id), sqlc.arg(cohort_id), sqlc.arg(mo
 ON CONFLICT (org_id, rollout_id, cohort_id) DO UPDATE SET mode = EXCLUDED.mode;
 
 -- name: ListPolicyRolloutCohorts :many
-SELECT rc.cohort_id, rc.mode, c.name, c.members
+SELECT rc.cohort_id, rc.mode, c.name,
+    (SELECT count(*) FROM pc.policy_cohort_members m WHERE m.org_id = rc.org_id AND m.cohort_id = rc.cohort_id)::integer AS members
 FROM pc.policy_rollout_cohorts rc
 JOIN pc.policy_cohorts c ON c.org_id = rc.org_id AND c.id = rc.cohort_id
 WHERE rc.org_id = sqlc.arg(org_id) AND rc.rollout_id = sqlc.arg(rollout_id)

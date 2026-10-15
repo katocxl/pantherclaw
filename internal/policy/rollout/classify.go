@@ -34,8 +34,10 @@ func severity(d adomain.Decision) int {
 		return 2
 	case adomain.RequireApproval:
 		return 3
+	case adomain.Deny, adomain.CannotAuthorize:
+		return 4
 	}
-	return 4 // DENY, CANNOT_AUTHORIZE
+	return 4
 }
 
 // Classify compares a decision and its decisive reason before and after

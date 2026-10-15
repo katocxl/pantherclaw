@@ -213,7 +213,7 @@ func (s *Service) sweepRollout(ctx context.Context, org ids.OrgID, r dbq.PcPolic
 		if inShadow {
 			b.replays -= 2
 			out.Replays += 2
-			res, ok, err := s.shadowOf(ctx, org, r, sc, d)
+			res, ok, err := s.shadowOf(ctx, org, r, d)
 			if err != nil {
 				return err
 			}
@@ -309,7 +309,7 @@ func (s *Service) notifyFailed(ctx context.Context, tx db.TenantTx, r dbq.PcPoli
 // shadowOf replays one decision with the recorded policy and with the
 // rollout's version (D13). ok is false when the replays themselves could
 // not run; the decision then counts as UNEVALUABLE without a row.
-func (s *Service) shadowOf(ctx context.Context, org ids.OrgID, r dbq.PcPolicyRollout, sc scope, d dbq.RolloutDecisionsAfterRow,
+func (s *Service) shadowOf(ctx context.Context, org ids.OrgID, r dbq.PcPolicyRollout, d dbq.RolloutDecisionsAfterRow,
 ) (dbq.InsertShadowResultParams, bool, error) {
 	res := dbq.InsertShadowResultParams{
 		OrgID: org, RolloutID: r.ID, TransactionID: d.TransactionID, Evaluation: d.Evaluation, AgentID: d.AgentID, Operation: d.Operation,

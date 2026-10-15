@@ -24,8 +24,6 @@ CREATE TABLE pc.policy_cohorts (
     org_id     uuid        NOT NULL REFERENCES pc.orgs (id),
     id         uuid        NOT NULL,
     name       text        NOT NULL CHECK (name ~ '^[a-z][a-z0-9-]{0,63}$'),
-    -- Kept by the members trigger; at most 1 000 members per cohort.
-    members    integer     NOT NULL DEFAULT 0 CHECK (members BETWEEN 0 AND 1000),
     created_by text        NOT NULL CHECK (char_length(created_by) BETWEEN 1 AND 100),
     created_at timestamptz NOT NULL DEFAULT now(),
     PRIMARY KEY (org_id, id),
@@ -162,28 +160,23 @@ END
 $$;
 -- +goose StatementEnd
 
--- A cohort holds at most 1 000 agents: the member count is kept here, under
--- the cohort row's lock, so two concurrent additions cannot both pass.
+-- A cohort holds at most 1 000 agents. Additions to one cohort take a
+-- transaction lock of their own and count after it, so two concurrent
+-- additions cannot both pass (the trigger runs as the caller: HR-053).
 -- +goose StatementBegin
-CREATE FUNCTION pc.policy_cohort_members_count() RETURNS trigger
-    LANGUAGE plpgsql SECURITY DEFINER SET search_path = pc, pg_temp AS $$
+CREATE FUNCTION pc.policy_cohort_members_limit() RETURNS trigger
+    LANGUAGE plpgsql SET search_path = pc, pg_temp AS $$
 BEGIN
-    IF TG_OP = 'INSERT' THEN
-        UPDATE pc.policy_cohorts SET members = members + 1
-        WHERE org_id = NEW.org_id AND id = NEW.cohort_id AND members < 1000;
-        IF NOT FOUND THEN
-            RAISE EXCEPTION 'cohort % holds at most 1000 agents', NEW.cohort_id USING ERRCODE = 'check_violation';
-        END IF;
-    ELSE
-        UPDATE pc.policy_cohorts SET members = members - 1 WHERE org_id = OLD.org_id AND id = OLD.cohort_id;
+    PERFORM pg_advisory_xact_lock(hashtextextended('policy_cohort:' || NEW.org_id::text || ':' || NEW.cohort_id::text, 0));
+    IF (SELECT count(*) FROM pc.policy_cohort_members WHERE org_id = NEW.org_id AND cohort_id = NEW.cohort_id) > 1000 THEN
+        RAISE EXCEPTION 'cohort % holds at most 1000 agents', NEW.cohort_id USING ERRCODE = 'check_violation';
     END IF;
     RETURN NULL;
 END
 $$;
 -- +goose StatementEnd
-CREATE TRIGGER policy_cohort_members_count AFTER INSERT OR DELETE ON pc.policy_cohort_members
-    FOR EACH ROW EXECUTE FUNCTION pc.policy_cohort_members_count();
-REVOKE ALL ON FUNCTION pc.policy_cohort_members_count() FROM PUBLIC;
+CREATE TRIGGER policy_cohort_members_limit AFTER INSERT ON pc.policy_cohort_members
+    FOR EACH ROW EXECUTE FUNCTION pc.policy_cohort_members_limit();
 
 -- A rollout starts in SHADOW (Team), or is recorded COMPLETE when a version
 -- is published without one (status only); completed_at is the database's.
@@ -515,4 +508,4 @@ DROP TABLE pc.policy_cohort_members;
 DROP TABLE pc.policy_cohorts;
 DROP FUNCTION pc.policy_rollout_insert();
 DROP FUNCTION pc.policy_rollout_forward();
-DROP FUNCTION pc.policy_cohort_members_count();
+DROP FUNCTION pc.policy_cohort_members_limit();

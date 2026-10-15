@@ -10,7 +10,6 @@ import (
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
-	tdomain "github.com/katocxl/pantherclaw/internal/tenancy/domain"
 )
 
 // samplesPerCategory is how many of the newest results of each changed
@@ -70,7 +69,7 @@ type Sample struct {
 
 // GetShadowSummary returns a rollout's shadow summary (policy.read).
 func (s *Service) GetShadowSummary(ctx context.Context, rollout ids.UUID) (ShadowSummary, error) {
-	c, err := caller(ctx, tdomain.PermPolicyRead)
+	c, err := reader(ctx)
 	if err != nil {
 		return ShadowSummary{}, err
 	}

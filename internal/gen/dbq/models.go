@@ -1414,7 +1414,6 @@ type PcPolicyCohort struct {
 	OrgID     ids.OrgID
 	ID        ids.UUID
 	Name      string
-	Members   int32
 	CreatedBy string
 	CreatedAt time.Time
 }

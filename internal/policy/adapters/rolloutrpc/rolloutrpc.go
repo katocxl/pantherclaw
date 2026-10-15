@@ -56,7 +56,7 @@ var stages = map[string]pantherclawv1.PolicyRolloutStage{
 	rollout.StageShadow:    pantherclawv1.PolicyRolloutStage_POLICY_ROLLOUT_STAGE_SHADOW,
 	rollout.StagePilot:     pantherclawv1.PolicyRolloutStage_POLICY_ROLLOUT_STAGE_PILOT,
 	rollout.StageComplete:  pantherclawv1.PolicyRolloutStage_POLICY_ROLLOUT_STAGE_COMPLETE,
-	rollout.StageCancelled: pantherclawv1.PolicyRolloutStage_POLICY_ROLLOUT_STAGE_CANCELLED,
+	rollout.StageCancelled: pantherclawv1.PolicyRolloutStage_POLICY_ROLLOUT_STAGE_CANCELLED, //nolint:misspell // generated name
 }
 
 var states = map[string]pantherclawv1.PolicyRolloutTargetState{
