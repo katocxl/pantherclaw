@@ -172,6 +172,18 @@ func gateVersions(pool *db.Pool) *policyapp.Versions {
 			return [32]byte{}, [32]byte{}, err
 		}
 		return pdomain.DefinitionsDigest(ds), pdomain.CatalogDigest(catalog), nil
+	}).WithDigestsInTx(func(ctx context.Context, tx db.TenantTx, org ids.OrgID) ([32]byte, [32]byte, error) {
+		// As the server: the last confirmation reads the digests in its own
+		// transaction (D29).
+		ds, err := defs.ActiveDefinitionsInTx(ctx, tx, org)
+		if err != nil {
+			return [32]byte{}, [32]byte{}, err
+		}
+		catalog, err := facts.CatalogInTx(ctx, tx, org)
+		if err != nil {
+			return [32]byte{}, [32]byte{}, err
+		}
+		return pdomain.DefinitionsDigest(ds), pdomain.CatalogDigest(catalog), nil
 	})
 	v.Changes.Register(policyapp.ChangePublish, v.ApplyPublish)
 	return v
