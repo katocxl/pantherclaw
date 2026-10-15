@@ -833,3 +833,31 @@ func TestM11ReleaseConsequenceEnvironments(t *testing.T) {
 		}
 	}
 }
+
+// TestM11ReleaseDirectDeploymentHeld pins what rd-environment does with a
+// deployment decided directly, not as a consequence (D30): no route
+// allows one today. With no consequence its environments are empty, so
+// rd-environment does not match even for another environment, and
+// rd-release holds it for a release approver: never allowed without a
+// person, but its environment is not checked (the disclosure says so).
+func TestM11ReleaseDirectDeploymentHeld(t *testing.T) {
+	pkgs := m11Packages(t)
+	deploy, _ := pkgs["pc.github"].Definition("github.deployment.trigger")
+	c, err := (&polapp.Engine{Limits: celenv.DefaultLimits}).Compile(renderM11(t, "release-deployment", []string{"acme/web"}).bundle(t), []*defs.Definition{deploy})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, params := range []string{`{}`, `{"environment":"staging"}`, `{"environment":"production"}`} {
+		a := actionir.ActionIR{
+			Operation: deploy.Operation, Definition: actionir.Definition{Digest: deploy.Digest},
+			Target: actionir.Target{Type: "github.repository", ID: "acme/web"}, Params: jsontext.Value(params),
+		}
+		out, err := c.Evaluate(context.Background(), deploy, a, polapp.Input{Budget: polapp.DefaultBudget})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if item, _ := out.Decisive(); out.Verdict != domain.VerdictRequireApproval || item.Rule != "rd-release--acme-web-86f279" {
+			t.Errorf("direct deployment %s: %s by %s, want REQUIRE_APPROVAL by rd-release", params, out.Verdict, item.Rule)
+		}
+	}
+}

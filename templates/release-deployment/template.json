@@ -10,6 +10,7 @@
   ],
   "excludes": [
     "what the deployment contains: review the merge itself (the coding-to-production template)",
+    "deployments are checked as consequences of merges and pushes; a deployment decided directly, which no route allows today, would not have its environment checked and would only be held for the release approver",
     "a deployment whose environments cannot be told when the merge that starts it is decided is held, not refused; its approval counts only inside a change window, and with no environment it is in none, so the hold expires unless the merge is asked for again once they can be told",
     "deployments started outside PantherClaw (a person pushing, another CI system)",
     "people: bind release_approver yourself (pclaw role bind)"

@@ -10,7 +10,7 @@
       "id": "rd-environment", "per": "repo", "kind": "FORBID",
       "summary": "the repository deploys to {{environment}} only",
       "operations": ["github.deployment.trigger"],
-      "when": "{{repository}} && (has(action.params.environment) ? action.params.environment != {{environment}} : consequence.environments.exists(e, e != {{environment}}))",
+      "when": "{{repository}} && consequence.environments.exists(e, e != {{environment}})",
       "reason": "DEPLOYMENT_ENVIRONMENT_NOT_ALLOWED"
     },
     {
