@@ -1,0 +1,24 @@
+# SPDX-License-Identifier: BUSL-1.1
+# Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+id: pc.live.authority_expanded
+version: "1"
+title: Authority expanded
+description: >-
+  A grant was issued, revised or delegated, guardrails changed or a policy
+  was published. Shown on the live view (F215); not an alert.
+severity: LOW
+attention: LIVE
+basis: OBSERVED
+edition: community
+on: [audit.grant.issued, audit.grant.revised, audit.grant.delegated, audit.guardrails.changed, audit.policy.published]
+match: event.outcome == "success"
+group: agent
+tests:
+  - name: grant issued
+    fires: true
+    events:
+      - {kind: audit.grant.issued, outcome: success, subjects: {agent: a1, grant: g1}}
+  - name: grant revoked
+    fires: false
+    events:
+      - {kind: audit.grant.revoked, outcome: success, subjects: {agent: a1, grant: g1}}

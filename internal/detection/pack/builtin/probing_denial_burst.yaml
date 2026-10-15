@@ -1,0 +1,46 @@
+# SPDX-License-Identifier: BUSL-1.1
+# Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+id: pc.probing.denial_burst
+version: "1"
+title: Burst of denied actions in a run
+description: >-
+  One run had five or more enforced actions denied, or not authorized,
+  within five minutes. An agent probing for what it may do, or retrying
+  around a boundary, looks like this (PN-006.4).
+severity: MEDIUM
+attention: ALERT
+basis: INFERRED
+owasp: [ASI02, ASI10]
+edition: business
+on: [receipt.decision]
+match: event.decision in ["DENY", "CANNOT_AUTHORIZE"] && event.mode != "MONITOR"
+window:
+  duration: 5m
+  group_by: [subjects.run]
+  count: 5
+group: run
+tests:
+  - name: five denials
+    fires: true
+    events:
+      - {kind: receipt.decision, decision: DENY, subjects: {run: r1}}
+      - {kind: receipt.decision, decision: DENY, subjects: {run: r1}, at: 30s}
+      - {kind: receipt.decision, decision: CANNOT_AUTHORIZE, subjects: {run: r1}, at: 60s}
+      - {kind: receipt.decision, decision: DENY, subjects: {run: r1}, at: 90s}
+      - {kind: receipt.decision, decision: DENY, subjects: {run: r1}, at: 2m}
+  - name: spread out
+    fires: false
+    events:
+      - {kind: receipt.decision, decision: DENY, subjects: {run: r1}}
+      - {kind: receipt.decision, decision: DENY, subjects: {run: r1}, at: 2m}
+      - {kind: receipt.decision, decision: DENY, subjects: {run: r1}, at: 4m}
+      - {kind: receipt.decision, decision: DENY, subjects: {run: r1}, at: 6m}
+      - {kind: receipt.decision, decision: DENY, subjects: {run: r1}, at: 8m}
+  - name: across runs
+    fires: false
+    events:
+      - {kind: receipt.decision, decision: DENY, subjects: {run: r1}}
+      - {kind: receipt.decision, decision: DENY, subjects: {run: r2}}
+      - {kind: receipt.decision, decision: DENY, subjects: {run: r3}}
+      - {kind: receipt.decision, decision: DENY, subjects: {run: r4}}
+      - {kind: receipt.decision, decision: DENY, subjects: {run: r5}}

@@ -1,0 +1,34 @@
+# SPDX-License-Identifier: BUSL-1.1
+# Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+id: pc.drift.behaviour
+version: "1"
+title: New target or destination for a connection
+description: >-
+  A connection was used for an operation, or toward a destination class,
+  not seen on it in the last 30 days. Behaviour drift is a finding to look
+  at, not proof of misuse (F399).
+severity: LOW
+attention: FINDING
+basis: INFERRED
+owasp: [ASI10]
+edition: business
+on: [receipt.decision]
+match: >-
+  event.decision in ["ALLOW", "ALLOW_WITH_OBLIGATIONS"] && event.mode != "MONITOR" && "connection" in event.subjects
+first_seen:
+  keys: [subjects.connection, operation, destination_class]
+  horizon: 720h
+group: connection
+tests:
+  - name: new operation
+    fires: true
+    events:
+      - {kind: receipt.decision, decision: ALLOW, operation: github.push, destination_class: public, subjects: {connection: c1}}
+  - name: no connection
+    fires: false
+    events:
+      - {kind: receipt.decision, decision: ALLOW, operation: github.push, destination_class: public}
+  - name: denied
+    fires: false
+    events:
+      - {kind: receipt.decision, decision: DENY, operation: github.push, destination_class: public, subjects: {connection: c1}}

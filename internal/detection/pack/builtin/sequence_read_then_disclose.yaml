@@ -1,0 +1,52 @@
+# SPDX-License-Identifier: BUSL-1.1
+# Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+id: pc.sequence.read_then_disclose
+version: "1"
+title: Read followed by a write to a public destination
+description: >-
+  Within 30 minutes, one run was authorized to read data and then to write
+  toward a public destination. Reading something sensitive and then sending
+  it out is how an agent discloses data (T-017, PN-006.4). The rule infers
+  the link from order and run; it does not see the payload.
+severity: HIGH
+attention: ALERT
+basis: INFERRED
+atlas: [AML.T0057]
+owasp: [ASI01, ASI02]
+edition: business
+sequence:
+  within: 30m
+  group_by: [subjects.run]
+  steps:
+    - on: [receipt.decision]
+      match: >-
+        event.decision in ["ALLOW", "ALLOW_WITH_OBLIGATIONS"]
+        && (event.attrs.?access.orValue("") == "read"
+        || event.operation.matches("\\.(read|get|list|search|download|export|fetch|clone)(\\.|$)"))
+    - on: [receipt.decision]
+      match: >-
+        event.decision in ["ALLOW", "ALLOW_WITH_OBLIGATIONS"] && event.destination_class == "public"
+        && event.attrs.?access.orValue("") != "read"
+        && !event.operation.matches("\\.(read|get|list|search|download|export|fetch|clone)(\\.|$)")
+group: run
+tests:
+  - name: read then public write
+    fires: true
+    events:
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, destination_class: internal, subjects: {run: r1}}
+      - {kind: receipt.decision, decision: ALLOW, operation: github.issue.create, destination_class: public, subjects: {run: r1}, at: 10m}
+  - name: too far apart
+    fires: false
+    events:
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, destination_class: internal, subjects: {run: r1}}
+      - {kind: receipt.decision, decision: ALLOW, operation: github.issue.create, destination_class: public, subjects: {run: r1}, at: 45m}
+  - name: write denied
+    fires: false
+    events:
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, destination_class: internal, subjects: {run: r1}}
+      - {kind: receipt.decision, decision: DENY, operation: github.issue.create, destination_class: public, subjects: {run: r1}, at: 10m}
+  - name: another run writes
+    fires: false
+    events:
+      - {kind: receipt.decision, decision: ALLOW, operation: crm.customer.read, destination_class: internal, subjects: {run: r1}}
+      - {kind: receipt.decision, decision: ALLOW, operation: github.issue.create, destination_class: public, subjects: {run: r2}, at: 10m}

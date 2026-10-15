@@ -112,6 +112,9 @@ func enrich(e *Event, r dbq.FeedTransactionsRow) {
 		e.Attrs = map[string]string{}
 	}
 	e.Attrs["depth"] = strconv.Itoa(int(r.Depth))
+	if r.BudgetID != nil {
+		e.Attrs["budget"] = r.BudgetID.String()
+	}
 	if r.ParentRunID != nil {
 		e.Attrs["parent_run"] = r.ParentRunID.String()
 	}

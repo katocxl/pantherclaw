@@ -1,0 +1,30 @@
+# SPDX-License-Identifier: BUSL-1.1
+# Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+id: pc.live.first_sensitive_use
+version: "1"
+title: First use of an operation by an agent
+description: >-
+  An agent was authorized for an operation it had not used in the last 30
+  days, toward a public destination or with obligations attached. Shown on
+  the live view (F215); not an alert.
+severity: LOW
+attention: LIVE
+basis: OBSERVED
+edition: community
+on: [receipt.decision]
+match: >-
+  event.decision in ["ALLOW", "ALLOW_WITH_OBLIGATIONS"] && event.mode != "MONITOR"
+  && (event.destination_class == "public" || event.decision == "ALLOW_WITH_OBLIGATIONS")
+first_seen:
+  keys: [subjects.agent, operation]
+  horizon: 720h
+group: agent
+tests:
+  - name: first public use
+    fires: true
+    events:
+      - {kind: receipt.decision, decision: ALLOW, destination_class: public, operation: github.push, subjects: {agent: a1}}
+  - name: internal use
+    fires: false
+    events:
+      - {kind: receipt.decision, decision: ALLOW, destination_class: internal, operation: github.push, subjects: {agent: a1}}
