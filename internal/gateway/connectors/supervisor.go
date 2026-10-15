@@ -23,6 +23,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
 	"github.com/katocxl/pantherclaw/internal/sandbox/docker"
+	"github.com/katocxl/pantherclaw/internal/sandbox/relay"
 )
 
 // Kind is a connector connection's kind.
@@ -110,10 +111,13 @@ type instance struct {
 	// replaced between calls (zero without an edge).
 	renew         time.Time
 	name, network string
-	client        *upstream.Client
-	stdio         *Stdio
-	stop          context.CancelFunc
-	done          chan struct{}
+	// relay is the edge's path to the egress listener on a native Linux
+	// engine (HR-228).
+	relay  *relay.Relay
+	client *upstream.Client
+	stdio  *Stdio
+	stop   context.CancelFunc
+	done   chan struct{}
 	// pipes are the gateway's ends of the connector's input and output,
 	// closed when it stops.
 	pipes []*os.File
@@ -341,9 +345,7 @@ func (s *Supervisor) start(ctx context.Context, c *control.Connection) error {
 		var err error
 		if med, err = s.startEdge(ctx, id, short, egressConn, net, labels); err != nil {
 			_ = s.c.RemoveLabelled(context.WithoutCancel(ctx), id)
-			if med.dir != "" {
-				_ = os.RemoveAll(med.dir)
-			}
+			med.cleanup()
 			return fail("edge", err)
 		}
 	}
@@ -362,9 +364,7 @@ func (s *Supervisor) start(ctx context.Context, c *control.Connection) error {
 		Limits: docker.Limits{PIDs: int(l.GetPids()), MemoryMiB: int(l.GetMemoryMib()), MilliCPUs: int(l.GetMilliCpus())},
 	}); err != nil {
 		_ = s.c.RemoveLabelled(context.WithoutCancel(ctx), id)
-		if med.dir != "" {
-			_ = os.RemoveAll(med.dir)
-		}
+		med.cleanup()
 		return fail("container", err)
 	}
 	// Operating-system pipes go to docker as they are: with an in-process
@@ -374,12 +374,14 @@ func (s *Supervisor) start(ctx context.Context, c *control.Connection) error {
 	inR, inW, err := os.Pipe()
 	if err != nil {
 		_ = s.c.RemoveLabelled(context.WithoutCancel(ctx), id)
+		med.cleanup()
 		return fail("pipe", err)
 	}
 	outR, outW, err := os.Pipe()
 	if err != nil {
 		_, _ = inR.Close(), inW.Close()
 		_ = s.c.RemoveLabelled(context.WithoutCancel(ctx), id)
+		med.cleanup()
 		return fail("pipe", err)
 	}
 	runCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
@@ -400,7 +402,7 @@ func (s *Supervisor) start(ctx context.Context, c *control.Connection) error {
 	s.mu.Lock()
 	s.running[id] = &instance{
 		id: run, revision: c.GetRevision(), started: time.Now(), renew: med.renew, name: name, network: net, stdio: stdio, stop: cancel, done: done,
-		connection: id, binding: med.binding, egress: egressID, dir: med.dir, calls: make(chan struct{}, 1),
+		connection: id, binding: med.binding, egress: egressID, dir: med.dir, relay: med.relay, calls: make(chan struct{}, 1),
 		client: upstream.New("http://connector.invalid/"+id, stdio), pipes: []*os.File{inW, outR},
 	}
 	delete(s.failed, id)
@@ -423,6 +425,9 @@ func (s *Supervisor) stop(ctx context.Context, id string) {
 	in.stop()
 	if err := s.c.RemoveLabelled(context.WithoutCancel(ctx), id); err != nil {
 		s.log.WarnContext(ctx, "gateway.connector_not_removed", slog.String("connection", id), pclog.Err(err))
+	}
+	if in.relay != nil {
+		_ = in.relay.Close()
 	}
 	if in.dir != "" {
 		_ = os.RemoveAll(in.dir)

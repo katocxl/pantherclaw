@@ -2,12 +2,18 @@
 # Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
 #
 # Tag-driven release (runbook: docs/runbooks/release.md).
-#   1. Founder pushes a signed tag vX.Y.Z (tag ruleset restricts who can).
-#   2. `verify` re-runs the core gate on the tagged commit.
+#   1. Founder pushes a signed annotated tag vX.Y.Z (`git tag -s`; tag ruleset
+#      restricts who can). While Day-0 item 2 (SSH signing) is open, an annotated
+#      tag pushed by the founder is acceptable.
+#   2. `verify` fails unless the tagged commit is on `main` and its `ci-ok`
+#      check run succeeded, then re-runs the core gate on the tagged commit.
 #   3. `release` waits for approval of the protected `release` environment
-#      (gates G2/G3), builds with GoReleaser into a DRAFT release, attests every
-#      artifact (SLSA provenance via GitHub OIDC), then publishes the draft
-#      (immutable once published).
+#      (gates G2/G3), builds the 7 binaries with GoReleaser into a DRAFT release
+#      and attests every artifact (SLSA provenance via GitHub OIDC).
+#   4. `images` builds the edge and probe sandbox images (linux/amd64 + arm64),
+#      pushes them to GHCR by version tag, attests each image digest, appends the
+#      digests to the release notes, then publishes the draft (immutable once
+#      published).
 name: release
 
 on:
@@ -31,10 +37,29 @@ jobs:
     timeout-minutes: 30
     permissions:
       contents: read
+      checks: read # the ci-ok check run of the tagged commit
     steps:
       - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
         with:
           egress-policy: audit
+      - name: Tagged commit is on main and passed ci-ok
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          # The tagged commit is on main when main is identical to it or ahead of it.
+          status=$(gh api "repos/${GITHUB_REPOSITORY}/compare/${SHA}...main" --jq .status)
+          if [ "$status" != "identical" ] && [ "$status" != "ahead" ]; then
+            echo "::error::tagged commit ${SHA} is not on main (compare status: ${status})"
+            exit 1
+          fi
+          conclusion=$(gh api "repos/${GITHUB_REPOSITORY}/commits/${SHA}/check-runs?check_name=ci-ok" \
+            --jq '[.check_runs[]] | sort_by(.started_at) | last | .conclusion // "none"')
+          if [ "$conclusion" != "success" ]; then
+            echo "::error::ci-ok on ${SHA} is '${conclusion}', not 'success'"
+            exit 1
+          fi
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
@@ -103,8 +128,177 @@ jobs:
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-checksums: dist/checksums.txt
-      - name: Publish the draft release (becomes immutable)
+      - name: Stage the sandbox binaries for the image build
+        run: |
+          set -euo pipefail
+          mkdir -p sandbox-binaries
+          for name in pantherclaw-edge pantherclaw-probe; do
+            for arch in amd64 arm64; do
+              bin=$(find dist -type f -path "dist/${name}_linux_${arch}*/${name}")
+              if [ -z "$bin" ] || [ "$(printf '%s\n' "$bin" | wc -l)" -ne 1 ]; then
+                echo "::error::expected exactly one ${name} linux/${arch} binary in dist"
+                exit 1
+              fi
+              mkdir -p "sandbox-binaries/${name}-${arch}"
+              cp "$bin" "sandbox-binaries/${name}-${arch}/${name}"
+            done
+          done
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: sandbox-binaries
+          path: sandbox-binaries
+          if-no-files-found: error
+          retention-days: 1
+
+  images:
+    name: sandbox images, publish
+    needs: release
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: write # append the digests to the draft release and publish it
+      packages: write # push the images to GHCR (this job only)
+      id-token: write # Sigstore OIDC for image attestations
+      attestations: write
+    env:
+      EDGE_IMAGE: ghcr.io/katocxl/pantherclaw-edge
+      PROBE_IMAGE: ghcr.io/katocxl/pantherclaw-probe
+    steps:
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            github.com:443
+            api.github.com:443
+            uploads.github.com:443
+            objects.githubusercontent.com:443
+            release-assets.githubusercontent.com:443
+            token.actions.githubusercontent.com:443
+            results-receiver.actions.githubusercontent.com:443
+            *.actions.githubusercontent.com:443
+            *.blob.core.windows.net:443
+            ghcr.io:443
+            pkg-containers.githubusercontent.com:443
+            gcr.io:443
+            storage.googleapis.com:443
+            registry-1.docker.io:443
+            auth.docker.io:443
+            production.cloudflare.docker.com:443
+            *.r2.cloudflarestorage.com:443
+            fulcio.sigstore.dev:443
+            rekor.sigstore.dev:443
+            tuf-repo-cdn.sigstore.dev:443
+            timestamp.sigstore.dev:443
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: sandbox-binaries
+          path: sandbox-binaries
+      - name: Prepare the build contexts
+        run: |
+          set -euo pipefail
+          # Artifact transfer drops the Unix mode bits; the entrypoints must be executable.
+          chmod 0755 sandbox-binaries/*/pantherclaw-edge sandbox-binaries/*/pantherclaw-probe
+          # The probe image copies an empty /workspace from its build context.
+          for arch in amd64 arm64; do mkdir -p "sandbox-binaries/pantherclaw-probe-${arch}/workspace"; done
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      # One single-platform build per image and architecture, each pushed by
+      # digest; the digests are joined into a multi-arch index below.
+      - name: Build edge (amd64)
+        id: edge-amd64
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: sandbox-binaries/pantherclaw-edge-amd64
+          file: deploy/sandbox/edge.Dockerfile
+          platforms: linux/amd64
+          provenance: false
+          sbom: false
+          outputs: type=image,name=${{ env.EDGE_IMAGE }},push-by-digest=true,name-canonical=true,push=true
+      - name: Build edge (arm64)
+        id: edge-arm64
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: sandbox-binaries/pantherclaw-edge-arm64
+          file: deploy/sandbox/edge.Dockerfile
+          platforms: linux/arm64
+          provenance: false
+          sbom: false
+          outputs: type=image,name=${{ env.EDGE_IMAGE }},push-by-digest=true,name-canonical=true,push=true
+      - name: Build probe (amd64)
+        id: probe-amd64
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: sandbox-binaries/pantherclaw-probe-amd64
+          file: deploy/sandbox/probe.Dockerfile
+          platforms: linux/amd64
+          provenance: false
+          sbom: false
+          outputs: type=image,name=${{ env.PROBE_IMAGE }},push-by-digest=true,name-canonical=true,push=true
+      - name: Build probe (arm64)
+        id: probe-arm64
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: sandbox-binaries/pantherclaw-probe-arm64
+          file: deploy/sandbox/probe.Dockerfile
+          platforms: linux/arm64
+          provenance: false
+          sbom: false
+          outputs: type=image,name=${{ env.PROBE_IMAGE }},push-by-digest=true,name-canonical=true,push=true
+      - name: Tag the multi-arch images by version
+        id: index
+        env:
+          TAG: ${{ github.ref_name }}
+          EDGE_AMD64: ${{ steps.edge-amd64.outputs.digest }}
+          EDGE_ARM64: ${{ steps.edge-arm64.outputs.digest }}
+          PROBE_AMD64: ${{ steps.probe-amd64.outputs.digest }}
+          PROBE_ARM64: ${{ steps.probe-arm64.outputs.digest }}
+        run: |
+          set -euo pipefail
+          version="${TAG#v}" # the same <version> GoReleaser uses; no `latest` tag
+          docker buildx imagetools create --tag "${EDGE_IMAGE}:${version}" \
+            "${EDGE_IMAGE}@${EDGE_AMD64}" "${EDGE_IMAGE}@${EDGE_ARM64}"
+          docker buildx imagetools create --tag "${PROBE_IMAGE}:${version}" \
+            "${PROBE_IMAGE}@${PROBE_AMD64}" "${PROBE_IMAGE}@${PROBE_ARM64}"
+          edge=$(docker buildx imagetools inspect "${EDGE_IMAGE}:${version}" --format '{{.Manifest.Digest}}')
+          probe=$(docker buildx imagetools inspect "${PROBE_IMAGE}:${version}" --format '{{.Manifest.Digest}}')
+          case "$edge$probe" in sha256:*sha256:*) ;; *) echo "::error::no image digest"; exit 1 ;; esac
+          echo "edge=${edge}" >> "$GITHUB_OUTPUT"
+          echo "probe=${probe}" >> "$GITHUB_OUTPUT"
+      - name: Attest edge image provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ${{ env.EDGE_IMAGE }}
+          subject-digest: ${{ steps.index.outputs.edge }}
+          push-to-registry: true
+      - name: Attest probe image provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ${{ env.PROBE_IMAGE }}
+          subject-digest: ${{ steps.index.outputs.probe }}
+          push-to-registry: true
+      - name: Append the image digests to the release notes, then publish (becomes immutable)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ github.ref_name }}
-        run: gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false
+          EDGE_DIGEST: ${{ steps.index.outputs.edge }}
+          PROBE_DIGEST: ${{ steps.index.outputs.probe }}
+        run: |
+          set -euo pipefail
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json body --jq .body > notes.md
+          {
+            echo
+            echo "**Sandbox images** (linux/amd64, linux/arm64; pin the digest in \`sandbox.images\`, see docs/runbooks/sandbox.md):"
+            echo
+            echo "- \`${EDGE_IMAGE}@${EDGE_DIGEST}\`"
+            echo "- \`${PROBE_IMAGE}@${PROBE_DIGEST}\`"
+            echo
+            echo "Verify: \`gh attestation verify oci://${EDGE_IMAGE}@${EDGE_DIGEST} --repo ${GITHUB_REPOSITORY}\`"
+          } >> notes.md
+          gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --notes-file notes.md --draft=false

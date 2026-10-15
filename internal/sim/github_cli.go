@@ -69,9 +69,7 @@ func runGitHub(ctx context.Context, args []string, stderr io.Writer) error {
 	sim := github.New(log)
 	sim.RegisterApp(*appID, *clientID, &key.PublicKey)
 	names := strings.Split(*repos, ",")
-	sim.Install(github.Installation{ID: *installation, Account: *account, Repos: names, Permissions: map[string]string{
-		"metadata": "read", "contents": "write", "pull_requests": "write", "administration": "write", "actions": "read", "checks": "read",
-	}})
+	sim.Install(github.Installation{ID: *installation, Account: *account, Repos: names, Permissions: installationPermissions()})
 	full := make([]string, len(names))
 	for i, n := range names {
 		full[i] = *account + "/" + n
@@ -114,4 +112,17 @@ func appKey(path string) (*rsa.PrivateKey, error) {
 		return nil, errors.New("--app-key: not a PEM file")
 	}
 	return x509.ParsePKCS1PrivateKey(block.Bytes)
+}
+
+// installationPermissions are the permissions the simulated App is installed
+// with: what docs/runbooks/github-app.md asks of a real App. Among them are
+// the gateway's fact reads (githubfacts.Scopes: metadata, contents, pull
+// requests, checks and commit statuses, read) and the deployment verifier's
+// (deployments, read); without one, the gateway's fact token is refused (422)
+// and branch creations and contents writes are held as CONSEQUENCE_UNKNOWN.
+func installationPermissions() map[string]string {
+	return map[string]string{
+		"metadata": "read", "contents": "write", "pull_requests": "write", "administration": "write", "actions": "read",
+		"checks": "read", "statuses": "read", "deployments": "read",
+	}
 }

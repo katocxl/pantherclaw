@@ -89,13 +89,13 @@ func (f *fake) heldUntil(w http.ResponseWriter, r *http.Request, deadline time.T
 // heldThenReady answers a hold first, then an allow for the same action.
 func heldThenReady(t *testing.T, f *fake, calls *atomic.Int32) {
 	t.Helper()
-	f.sdk = func(w http.ResponseWriter, r *http.Request, _ []byte) {
+	f.setSDK(func(w http.ResponseWriter, r *http.Request, _ []byte) {
 		if calls.Add(1) > 1 {
 			f.allowed(w, r)
 			return
 		}
 		f.held(w, r)
-	}
+	})
 }
 
 // A held call waits on the SSE stream and, once ready, is resubmitted with
@@ -159,9 +159,9 @@ func TestHR200_AWaitPastTheDeadlineCannotDecide(t *testing.T) {
 // the stream alive and long-polls answer PENDING.
 func TestHR200_AWaitEndsAtTheHoldsDeadline(t *testing.T) {
 	f := newFake(t)
-	f.sdk = func(w http.ResponseWriter, r *http.Request, _ []byte) {
+	f.setSDK(func(w http.ResponseWriter, r *http.Request, _ []byte) {
 		f.heldUntil(w, r, time.Now().Add(-4*time.Second))
-	}
+	})
 	f.wait = func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet {
 			w.Header().Set("Content-Type", "text/event-stream")
@@ -212,7 +212,7 @@ func TestASilentStreamFallsBackToLongPolls(t *testing.T) {
 func TestHR200_ResubmissionsAreBounded(t *testing.T) {
 	f := newFake(t)
 	var calls atomic.Int32
-	f.sdk = func(w http.ResponseWriter, r *http.Request, _ []byte) { calls.Add(1); f.held(w, r) }
+	f.setSDK(func(w http.ResponseWriter, r *http.Request, _ []byte) { calls.Add(1); f.held(w, r) })
 	f.wait = func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		_, _ = fmt.Fprintf(w, "event: state\ndata: {\"handle\":%q,\"state\":\"READY\"}\n\n", actionID)

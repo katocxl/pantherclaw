@@ -134,6 +134,28 @@ func TestFaults(t *testing.T) {
 	if p, _ := w.sim.PullRequest("acme/payments", 1); !p.Merged {
 		t.Fatal("the lost merge did not happen")
 	}
+	// An unreadable workflow file is still listed, but its contents are
+	// refused; other files read as before.
+	w.sim.SetFaults(Faults{UnreadableFiles: []string{".github/workflows/deploy.yml"}})
+	_, tok := w.mint(`{"repositories":["payments"],"permissions":{"contents":"read"}}`)
+	auth = "Bearer " + tok
+	req, _ = http.NewRequestWithContext(t.Context(), http.MethodGet, w.srv.URL+"/repos/acme/payments/contents/.github/workflows", nil)
+	req.Header.Set("Authorization", auth)
+	resp, err := w.srv.Client().Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	listing, _ := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusOK || !strings.Contains(string(listing), `"deploy.yml"`) {
+		t.Fatalf("the workflow listing: %d %s", resp.StatusCode, listing)
+	}
+	if status, out := w.do(http.MethodGet, "/repos/acme/payments/contents/.github/workflows/deploy.yml", auth, ""); status != http.StatusForbidden {
+		t.Fatalf("an unreadable workflow file: %d %v", status, out)
+	}
+	if status, _ := w.do(http.MethodGet, "/repos/acme/payments/contents/README.md", auth, ""); status != http.StatusOK {
+		t.Fatalf("a readable file: %d", status)
+	}
 }
 
 // factWorld is newWorld with an installation that may read every fact

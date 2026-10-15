@@ -75,6 +75,14 @@ func cmdDev(ctx context.Context, args []string, stdout, stderr io.Writer, env En
 	if err != nil {
 		return err
 	}
+	// The seed mints keys and credentials for a demo org, so it runs only
+	// against a server that is reachable from this machine alone (HR-163),
+	// and writes only to a database on this machine: database.host must be
+	// loopback or a unix socket directory. A loopback tunnel to a remote
+	// database looks local and is out of scope of this check.
+	if err := errors.Join(cfg.localOnly(), localDatabase(cfg.DB.Host)); err != nil {
+		return fmt.Errorf("dev seed is development-only (HR-163): %w", err)
+	}
 	lim, err := money.ParseMoney(*limit, cfg.Authority.GrantCurrency)
 	if err != nil || lim.Amount.Sign() <= 0 {
 		return fmt.Errorf("dev seed: --budget-limit must be a positive %s amount", cfg.Authority.GrantCurrency)
@@ -160,7 +168,7 @@ func cmdDev(ctx context.Context, args []string, stdout, stderr io.Writer, env En
 	}
 	_, _ = fmt.Fprintf(stdout, "seeded org %s (%q) with package %s@%s active\n", org, *name, mockpayments.Name, mockpayments.Version)
 	if hold != nil {
-		if _, err := seedHoldPolicy(ctx, pool, org, *hold); err != nil {
+		if _, err := seedHoldPolicy(ctx, pool, org, *hold, cfg.CEL); err != nil {
 			return err
 		}
 		_, _ = fmt.Fprintf(stdout, "published policy dev-holds: refunds over %s wait for an approver (%s)\n%s", hold, devHoldReason,

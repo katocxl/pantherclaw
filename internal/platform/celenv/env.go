@@ -34,15 +34,49 @@ import (
 // constants: per-tenant budgets come from the caller (HR-043).
 type Limits struct {
 	// MaxExpressionBytes bounds the source of one expression.
-	MaxExpressionBytes int
+	MaxExpressionBytes int `json:"max_expression_bytes"`
 	// MaxCost bounds both the estimated and the actual cost of one
 	// evaluation, in CEL cost units.
-	MaxCost uint64
+	MaxCost uint64 `json:"max_cost"`
 	// MaxComprehensionNesting bounds nested macros such as exists/all.
-	MaxComprehensionNesting int
+	MaxComprehensionNesting int `json:"max_comprehension_nesting"`
 	// EstimatedCollectionSize is the list, map and string size assumed when
 	// estimating cost at compile time.
-	EstimatedCollectionSize uint64
+	EstimatedCollectionSize uint64 `json:"estimated_collection_size"`
+}
+
+// CeilingFactor bounds each configured limit at this many times its
+// default, so configuration cannot lift the bound HR-043 relies on.
+const CeilingFactor = 4
+
+// Ceiling is the largest value configuration may give each limit.
+var Ceiling = Limits{
+	MaxExpressionBytes:      CeilingFactor * DefaultLimits.MaxExpressionBytes,
+	MaxCost:                 CeilingFactor * DefaultLimits.MaxCost,
+	MaxComprehensionNesting: CeilingFactor * DefaultLimits.MaxComprehensionNesting,
+	EstimatedCollectionSize: CeilingFactor * DefaultLimits.EstimatedCollectionSize,
+}
+
+// Validate reports a limit that is not positive or is above its Ceiling.
+// The server and gateway read Limits from their configuration (G0 M4
+// decision 4).
+func (l Limits) Validate() error {
+	var errs []error
+	checkInt := func(name string, v, ceiling int) {
+		if v <= 0 || v > ceiling {
+			errs = append(errs, fmt.Errorf("%s must be between 1 and %d (%d times the default)", name, ceiling, CeilingFactor))
+		}
+	}
+	checkUint := func(name string, v, ceiling uint64) {
+		if v == 0 || v > ceiling {
+			errs = append(errs, fmt.Errorf("%s must be between 1 and %d (%d times the default)", name, ceiling, CeilingFactor))
+		}
+	}
+	checkInt("max_expression_bytes", l.MaxExpressionBytes, Ceiling.MaxExpressionBytes)
+	checkUint("max_cost", l.MaxCost, Ceiling.MaxCost)
+	checkInt("max_comprehension_nesting", l.MaxComprehensionNesting, Ceiling.MaxComprehensionNesting)
+	checkUint("estimated_collection_size", l.EstimatedCollectionSize, Ceiling.EstimatedCollectionSize)
+	return errors.Join(errs...)
 }
 
 // DefaultLimits are the recommended defaults (G0 M4, decision 8).

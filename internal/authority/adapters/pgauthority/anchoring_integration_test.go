@@ -47,24 +47,7 @@ func (s *stalledLog) Do(req *http.Request) (*http.Response, error) {
 func (w *world) checkpointWorld(reg *keys.Registry) {
 	w.t.Helper()
 	ctx := context.Background()
-	for deadline := time.Now().Add(30 * time.Second); ; {
-		if _, err := ledger.ChainAll(ctx, w.pool, w.org, 500); err != nil {
-			w.t.Fatal(err)
-		}
-		var pending int
-		if err := w.pool.InTenantTx(ctx, w.org, func(ctx context.Context, tx db.TenantTx) error {
-			return tx.QueryRow(ctx, `SELECT (SELECT count(*) FROM pc.ledger_entries) - (SELECT count(*) FROM pc.ledger_chain)`).Scan(&pending)
-		}); err != nil {
-			w.t.Fatal(err)
-		}
-		if pending == 0 {
-			break
-		}
-		if time.Now().After(deadline) {
-			w.t.Fatal("the entries were not chained within 30 seconds")
-		}
-		time.Sleep(50 * time.Millisecond)
-	}
+	w.chainAll()
 	cps := &checkpoints.Service{Pool: w.pool, Keys: reg, LogOrigin: "pc.test", Log: pclog.Discard()}
 	if res, err := cps.Checkpoint(ctx, w.org); err != nil || !res.Signed {
 		w.t.Fatalf("checkpoint: %+v, %v", res, err)
@@ -149,5 +132,32 @@ func TestHR195_AnchoringFailureNeverAffectsAuthorize(t *testing.T) {
 	}
 	if r := w.authorize(w.request(run, ids.NewV7(), "ch_3", "10.00")); r.Decision != adomain.Allow {
 		t.Fatalf("after the anchor failed: %s", r.Decision)
+	}
+}
+
+// chainAll links every entry of w's org. The chainer links only entries
+// whose transaction is below pg_snapshot_xmin, which is cluster-wide, so a
+// transaction another test holds open can leave entries for a later pass;
+// it passes until none is pending.
+func (w *world) chainAll() {
+	w.t.Helper()
+	ctx := context.Background()
+	for deadline := time.Now().Add(30 * time.Second); ; {
+		if _, err := ledger.ChainAll(ctx, w.pool, w.org, 500); err != nil {
+			w.t.Fatal(err)
+		}
+		var pending int
+		if err := w.pool.InTenantTx(ctx, w.org, func(ctx context.Context, tx db.TenantTx) error {
+			return tx.QueryRow(ctx, `SELECT (SELECT count(*) FROM pc.ledger_entries) - (SELECT count(*) FROM pc.ledger_chain)`).Scan(&pending)
+		}); err != nil {
+			w.t.Fatal(err)
+		}
+		if pending == 0 {
+			return
+		}
+		if time.Now().After(deadline) {
+			w.t.Fatal("the entries were not chained within 30 seconds")
+		}
+		time.Sleep(50 * time.Millisecond)
 	}
 }

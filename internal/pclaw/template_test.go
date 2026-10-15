@@ -134,11 +134,11 @@ func TestTemplateShellRule(t *testing.T) {
 	if !strings.HasPrefix(when, "run.agent_id == '"+agent+"' && ") {
 		t.Fatalf("the shell rule is not the agent's: %q", when)
 	}
-	m := regexp.MustCompile(`matches\('(.*)'\)$`).FindStringSubmatch(when)
+	m := regexp.MustCompile(`matches\(r'(.*)'\)$`).FindStringSubmatch(when)
 	if m == nil {
 		t.Fatalf("shell rule when %q", when)
 	}
-	re := regexp.MustCompile(strings.ReplaceAll(m[1], `\\`, `\`))
+	re := regexp.MustCompile(m[1]) // a CEL raw string: the pattern as RE2 reads it
 	for _, c := range []string{
 		"git push", "git push origin main", "cd x && git  push", "gh pr merge 1", "true; gh pr merge --squash",
 		"gh api -X PUT repos/acme/web/pulls/1/merge", "(git push)",

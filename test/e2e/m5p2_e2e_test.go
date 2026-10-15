@@ -41,7 +41,8 @@ func withPeople(t *testing.T, cfg map[string]any, dir, apiAddr string, p idp, re
 	_, port, _ := net.SplitHostPort(apiAddr)
 	public := "http://localhost:" + port
 	cfg["auth"] = map[string]any{
-		"public_url": public,
+		"public_url":  public,
+		"api_key_env": "test",
 		"oidc_providers": []map[string]any{{
 			"name": "test", "issuer": p.issuer, "client_id": p.clientID, "allow_insecure_loopback": true,
 			"client_secret_file": writeFile(t, dir, "idp-secret", []byte(p.secret)),

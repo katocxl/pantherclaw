@@ -31,6 +31,7 @@ import (
 
 	evapp "github.com/katocxl/pantherclaw/internal/evidence/app"
 	"github.com/katocxl/pantherclaw/internal/evidence/pack"
+	"github.com/katocxl/pantherclaw/internal/evidence/retention"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/platform/clock"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
@@ -63,15 +64,24 @@ const (
 	CodeBuildFailed        = "BUILD_FAILED"
 )
 
-// Default retention per category (design decision 9). Per-org retention
-// policies arrive with migration 00072; until then a pack states the
-// defaults.
-var defaultRetention = []pack.Retention{
-	{Category: "payloads", Days: 7, Source: "default"},
-	{Category: "normalized_facts", Days: 90, Source: "default"},
-	{Category: "receipts", Days: 365, Source: "default"},
-	{Category: "approvals", Days: 365, Source: "default"},
-	{Category: "security_audit", Days: 365, Source: "default"},
+// retentionAt is the retention of every category in effect at at (F530,
+// design decision 9): the revision the org set ("policy <category> rN"), or
+// the default when the system recorded it or nothing was recorded yet.
+func retentionAt(revs []retention.Revision, at time.Time) []pack.Retention {
+	cats := retention.Categories()
+	out := make([]pack.Retention, 0, len(cats))
+	for _, c := range cats {
+		b, _ := retention.BoundsOf(c)
+		r := pack.Retention{Category: string(c), Days: b.Default, Source: "default"}
+		if cur, ok := retention.Current(revs, c, at); ok {
+			r.Days = cur.Days
+			if cur.SetBy != nil {
+				r.Source = "policy " + cur.Label()
+			}
+		}
+		out = append(out, r)
+	}
+	return out
 }
 
 // Ledger kinds of org-level containment and restoration events (F529).
@@ -126,6 +136,8 @@ type row struct {
 	scope     pack.Scope
 	include   pack.Include
 	created   time.Time
+	// retention are the org's retention revisions (migration 00072).
+	retention []retention.Revision
 }
 
 var errCreator = errors.New("packbuild: the creator is not an active person of the org")
@@ -157,6 +169,11 @@ func (s *Service) Build(ctx context.Context, org ids.OrgID, id ids.UUID) error {
 		} else if err != nil {
 			return err
 		}
+		revs, err := q.ListRetentionRevisions(ctx, org)
+		if err != nil {
+			return err
+		}
+		r.retention = retention.RevisionsOf(revs)
 		bindings, err = tenancy.Bindings(ctx, q, org, td.PrincipalRef{Kind: td.KindUser, ID: p.CreatedBy})
 		return err
 	}, db.ReadOnly())
@@ -267,7 +284,7 @@ func (b *builder) build() ([]byte, string, int, error) {
 		Exporter: pack.Exporter{Type: string(td.KindUser), ID: r.createdBy.String()},
 		Created:  now.UTC().Format(time.RFC3339), Expires: now.Add(7 * 24 * time.Hour).UTC().Format(time.RFC3339),
 		Scope: r.scope, Include: r.include, Transactions: []pack.TransactionState{}, EffectStates: map[string]int{},
-		Retention: defaultRetention, Gaps: []pack.Gap{}, Statement: r.scope.ExpectedStatement(),
+		Retention: retentionAt(r.retention, now), Gaps: []pack.Gap{}, Statement: r.scope.ExpectedStatement(),
 		Filters: []string{fmt.Sprintf("evidence.read where each transaction's agent lives, as person %s held it at %s",
 			r.createdBy, now.UTC().Format(time.RFC3339))},
 	}
@@ -297,6 +314,11 @@ func (b *builder) build() ([]byte, string, int, error) {
 	if r.include.Containment {
 		b.m.Filters = append(b.m.Filters, "containment.read at org scope for connection and kill-switch events")
 		if err := b.containment(); err != nil {
+			return nil, "", 0, err
+		}
+	}
+	if b.rangeData != nil && r.include.Receipts {
+		if err := b.probeProofs(); err != nil {
 			return nil, "", 0, err
 		}
 	}

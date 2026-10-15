@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -143,3 +144,8 @@ type Evidence struct {
 func (e Engine) Evidence(runtime string) Evidence {
 	return Evidence{Version: e.Version, APIVersion: e.APIVersion, Runtime: runtime, Desktop: e.Desktop}
 }
+
+// UsesRelay reports whether containers reach services on the host through a
+// per-session relay (HR-228): this process runs on Linux and the engine is
+// native, not Docker Desktop's, whose containers have host.docker.internal.
+func (e Engine) UsesRelay() bool { return runtime.GOOS == "linux" && !e.Desktop }

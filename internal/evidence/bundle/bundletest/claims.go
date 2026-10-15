@@ -32,6 +32,7 @@ type Snapshot struct {
 	ExpiresAt    string   `json:"expires_at,omitzero"`
 	Exclusions   []string `json:"exclusions"`
 	RoutesDigest string   `json:"routes_digest"`
+	Closure      string   `json:"closure,omitzero"`
 }
 
 // Invalidation is a coverage.invalidation ledger body.

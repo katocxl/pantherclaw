@@ -249,6 +249,9 @@ func (s *Server) contents(w http.ResponseWriter, req *http.Request, r *Repo, _ *
 		return fail(w, http.StatusNotFound, "No commit found for the ref")
 	}
 	path := strings.Trim(req.PathValue("path"), "/")
+	if _, ok := c.Files[path]; ok && slices.Contains(s.faults.UnreadableFiles, path) {
+		return fail(w, http.StatusForbidden, "Simulated unreadable file")
+	}
 	if body, ok := c.Files[path]; ok {
 		sum := sha256.Sum256([]byte(body))
 		return reply(w, http.StatusOK, map[string]any{

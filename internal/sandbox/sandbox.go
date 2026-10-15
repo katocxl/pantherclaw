@@ -30,12 +30,14 @@ import (
 	"path/filepath"
 	"runtime"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/katocxl/pantherclaw/internal/sandbox/docker"
 	"github.com/katocxl/pantherclaw/internal/sandbox/edge"
 	"github.com/katocxl/pantherclaw/internal/sandbox/probe"
+	"github.com/katocxl/pantherclaw/internal/sandbox/relay"
 	"github.com/katocxl/pantherclaw/internal/sandbox/report"
 	"github.com/katocxl/pantherclaw/internal/sim/canary"
 )
@@ -71,6 +73,11 @@ type Options struct {
 	// GatewayURL is the gateway's public URL; GatewayAddr the address the
 	// edge dials for it; GatewayCAPin pins an HTTPS gateway's CA.
 	GatewayURL, GatewayAddr, GatewayCAPin string
+	// GatewayDial is where this host reaches a gateway on this host (for
+	// example 127.0.0.1:8090). On a native Linux engine the edge reaches it
+	// through a per-session relay on the uplink network's gateway address
+	// instead of GatewayAddr (HR-228); Docker Desktop ignores it.
+	GatewayDial string
 	// Hosts maps each agent host to its connection; MappedAddrs are the
 	// hosts' real addresses, resolved on this host, which the probes try.
 	Hosts map[string]string
@@ -132,7 +139,14 @@ type Sandbox struct {
 	// bridge is the internal network's gateway address: none in isolated
 	// gateway mode.
 	bridge string
-	base   report.Report
+	// relay is the per-session relay to the gateway on a native Linux engine
+	// (HR-228); relayHost is this host's address on the uplink network, and
+	// hostPorts the ports of the host's services the probes aim at.
+	relay     *relay.Relay
+	relayHost string
+	hostPorts []int
+	canaryTo  canary.Ports
+	base      report.Report
 	// agentAddr is the agent's address on Internal while it runs, by which
 	// the edge's log tells its requests from the probe's.
 	agentAddr string
@@ -182,11 +196,35 @@ func (s *Sandbox) start(ctx context.Context) error {
 		}
 		if n.Internal {
 			internal = info
+		} else if len(info.IPAM.Config) > 0 {
+			s.relayHost = info.IPAM.Config[0].Gateway
+		}
+	}
+	s.hostPorts, s.canaryTo = s.o.HostPorts, s.o.CanaryPorts
+	gatewayAddr := s.o.GatewayAddr
+	if s.engine.UsesRelay() {
+		// A native Linux engine has no host.docker.internal and no container
+		// may be given one (HR-228): the host's address on the uplink network
+		// is where the canary listens and where the relay takes the edge's
+		// connections to the gateway.
+		if s.relayHost == "" {
+			return errors.New("sandbox: the uplink network has no gateway address")
+		}
+		var err error
+		if s.canaryTo, err = s.o.Canary.Listen(ctx, s.relayHost, canary.Ports{}); err != nil {
+			return fmt.Errorf("sandbox: the canary: %w", err)
+		}
+		if dial := s.o.GatewayDial; dial != "" {
+			if s.relay, err = relay.Listen(ctx, s.relayHost, dial, nil); err != nil {
+				return err
+			}
+			gatewayAddr = s.relay.Addr()
+			s.hostPorts = append(slices.Clone(s.hostPorts), s.relay.Port())
 		}
 	}
 	cfg := edge.Config{
 		Format: edge.ConfigFormat, Mode: edge.ModeSandbox, Session: s.o.Session, Listen: ":" + edgePort, Subnet: internal.Subnet(),
-		GatewayURL: s.o.GatewayURL, GatewayAddr: s.o.GatewayAddr, GatewayCAPin: s.o.GatewayCAPin, Hosts: s.o.Hosts, Run: s.o.Run,
+		GatewayURL: s.o.GatewayURL, GatewayAddr: gatewayAddr, GatewayCAPin: s.o.GatewayCAPin, Hosts: s.o.Hosts, Run: s.o.Run,
 		KeyFile: keyPath, TokenFile: tokenDir + "/" + filepath.Base(s.o.TokenFile),
 	}
 	path, err := s.writeJSON("edge.json", cfg)
@@ -209,6 +247,18 @@ func (s *Sandbox) start(ctx context.Context) error {
 	if err := s.c.Start(ctx, s.Edge); err != nil {
 		return err
 	}
+	if s.relay != nil {
+		// The relay takes the edge's connections, and no other's.
+		started, err := s.c.InspectContainer(ctx, s.Edge)
+		if err != nil {
+			return err
+		}
+		ip, err := netip.ParseAddr(started.Address(s.Uplink))
+		if err != nil {
+			return fmt.Errorf("sandbox: the edge has no address on the uplink network: %w", err)
+		}
+		s.relay.Allow(ip)
+	}
 	ready, err := s.waitReady(ctx)
 	if err != nil {
 		return err
@@ -217,8 +267,11 @@ func (s *Sandbox) start(ctx context.Context) error {
 	if s.CAFile, err = s.write("ca.pem", []byte(ready.CAPEM)); err != nil {
 		return err
 	}
+	if s.engine.UsesRelay() {
+		s.HostAddrs = []string{s.relayHost}
+	}
 	for _, a := range ready.HostAddrs {
-		if ip, err := netip.ParseAddr(a); err == nil && ip.Is4() {
+		if ip, err := netip.ParseAddr(a); err == nil && ip.Is4() && !s.engine.UsesRelay() {
 			s.HostAddrs = append(s.HostAddrs, ip.String())
 		}
 	}
@@ -382,11 +435,11 @@ func (s *Sandbox) Probe(ctx context.Context, n Nonces) (Evidence, error) {
 		return Evidence{}, err
 	}
 	defer func() { _ = os.Remove(keyFile) }()
-	ca := probe.Target{Addrs: s.HostAddrs, DNS: s.o.CanaryPorts.DNS, HTTPS: s.o.CanaryPorts.HTTPS, SSH: s.o.CanaryPorts.SSH}
+	ca := probe.Target{Addrs: s.HostAddrs, DNS: s.canaryTo.DNS, HTTPS: s.canaryTo.HTTPS, SSH: s.canaryTo.SSH}
 	hosts := slices.Sorted(maps.Keys(s.o.Hosts))
 	cfg := probe.Config{
 		Format: probe.ConfigFormat, Kind: report.KindSandbox, KeyFile: keyPath, Report: s.base, Edge: s.EdgeAddr, CAFile: caPath,
-		AgentHosts: hosts, MappedAddrs: s.o.MappedAddrs, Canary: ca, HostAddrs: s.HostAddrs, HostPorts: s.o.HostPorts, BridgeGateway: s.bridge,
+		AgentHosts: hosts, MappedAddrs: s.o.MappedAddrs, Canary: ca, HostAddrs: s.HostAddrs, HostPorts: s.hostPorts, BridgeGateway: s.bridge,
 	}
 	cfg.Report.Nonce = n.Sandbox
 	var ev Evidence
@@ -400,7 +453,7 @@ func (s *Sandbox) Probe(ctx context.Context, n Nonces) (Evidence, error) {
 	}
 	control := probe.Config{
 		Format: probe.ConfigFormat, Kind: report.KindControl, Report: s.base, AgentHosts: hosts, Canary: ca,
-		HostAddrs: s.HostAddrs, HostPorts: s.o.HostPorts,
+		HostAddrs: s.HostAddrs, HostPorts: s.hostPorts,
 	}
 	control.Report.Nonce = n.Control
 	out, err := s.probe(ctx, "control", s.Uplink, control, "")
@@ -544,9 +597,31 @@ func (s *Sandbox) Close(ctx context.Context) error {
 	}
 	ctx = context.WithoutCancel(ctx)
 	errs := []error{s.c.RemoveLabelled(ctx, s.labels[docker.LabelSession])}
+	if s.relay != nil {
+		_ = s.relay.Close()
+	}
 	matches, _ := filepath.Glob(filepath.Join(s.o.Dir, short(s.o.Session)+"-*"))
 	for _, m := range matches {
 		errs = append(errs, os.Remove(m))
 	}
 	return errors.Join(errs...)
+}
+
+// RelayAddr is the relay's address (host:port) on a native Linux engine,
+// "" without one (HR-228).
+func (s *Sandbox) RelayAddr() string {
+	if s.relay == nil {
+		return ""
+	}
+	return s.relay.Addr()
+}
+
+// ProbedHostPorts are the host ports the sandbox network's probe tries, as
+// a comma-separated list (HR-228: the relay's is among them).
+func (s *Sandbox) ProbedHostPorts() string {
+	var out []string
+	for _, p := range s.hostPorts {
+		out = append(out, strconv.Itoa(p))
+	}
+	return strings.Join(out, ",")
 }

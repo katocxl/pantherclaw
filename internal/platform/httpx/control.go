@@ -65,3 +65,11 @@ func NewControlClient(cfg ControlConfig) *http.Client {
 		},
 	}
 }
+
+// StreamingClient returns a copy of base for long-lived streams: the same
+// transport (and so the same certificates and dial checks) and the same
+// redirect policy, without base's whole-request timeout. A stream ends
+// with its context instead.
+func StreamingClient(base *http.Client) *http.Client {
+	return &http.Client{Transport: base.Transport, CheckRedirect: base.CheckRedirect, Jar: base.Jar}
+}

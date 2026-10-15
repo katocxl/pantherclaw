@@ -262,3 +262,35 @@ func TestFieldsReportsWhatAnExpressionReads(t *testing.T) {
 		}
 	}
 }
+
+// TestHR043_ConfiguredLimitsHaveACeiling: configuration can lower the CEL
+// limits or raise them to at most four times the defaults, never remove
+// the bound; a value above the ceiling is refused with the ceiling named.
+func TestHR043_ConfiguredLimitsHaveACeiling(t *testing.T) {
+	if err := DefaultLimits.Validate(); err != nil {
+		t.Fatalf("defaults refused: %v", err)
+	}
+	if err := Ceiling.Validate(); err != nil {
+		t.Fatalf("the ceiling itself refused: %v", err)
+	}
+	if Ceiling.MaxCost != 40_000 || Ceiling.EstimatedCollectionSize != 4096 ||
+		Ceiling.MaxExpressionBytes != 16<<10 || Ceiling.MaxComprehensionNesting != 8 {
+		t.Fatalf("ceiling %+v, want four times the defaults", Ceiling)
+	}
+	for name, c := range map[string]struct {
+		mutate func(*Limits)
+		want   string
+	}{
+		"max_expression_bytes":      {func(l *Limits) { l.MaxExpressionBytes = Ceiling.MaxExpressionBytes + 1 }, "between 1 and 16384"},
+		"max_cost":                  {func(l *Limits) { l.MaxCost = Ceiling.MaxCost + 1 }, "between 1 and 40000"},
+		"max_comprehension_nesting": {func(l *Limits) { l.MaxComprehensionNesting = Ceiling.MaxComprehensionNesting + 1 }, "between 1 and 8"},
+		"estimated_collection_size": {func(l *Limits) { l.EstimatedCollectionSize = Ceiling.EstimatedCollectionSize + 1 }, "between 1 and 4096"},
+		"zero max_cost":             {func(l *Limits) { l.MaxCost = 0 }, "max_cost must be between 1 and 40000"},
+	} {
+		l := DefaultLimits
+		c.mutate(&l)
+		if err := l.Validate(); err == nil || !strings.Contains(err.Error(), c.want) {
+			t.Errorf("%s: %v, want an error naming %q", name, err, c.want)
+		}
+	}
+}

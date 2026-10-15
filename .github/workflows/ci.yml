@@ -34,6 +34,7 @@ jobs:
     outputs:
       go: ${{ steps.filter.outputs.go == 'true' || github.event_name != 'pull_request' }}
       range: ${{ steps.filter.outputs.range == 'true' || github.event_name != 'pull_request' }}
+      sandbox: ${{ steps.filter.outputs.sandbox == 'true' || github.event_name != 'pull_request' }}
       workflows: ${{ steps.filter.outputs.workflows == 'true' || github.event_name != 'pull_request' }}
       python: ${{ steps.filter.outputs.python == 'true' || github.event_name != 'pull_request' }}
       typescript: ${{ steps.filter.outputs.typescript == 'true' || github.event_name != 'pull_request' }}
@@ -66,13 +67,29 @@ jobs:
               - 'packages/**'
               - 'redteam/**'
               - 'test/e2e/**'
+            sandbox:
+              - 'internal/sandbox/**'
+              - 'internal/gateway/**'
+              - 'internal/authority/**'
+              - 'internal/coverage/**'
+              - 'internal/evidence/**'
+              - 'packages/**'
+              - 'internal/sim/**'
+              - 'internal/pclaw/**'
+              - 'cmd/pantherclaw-edge/**'
+              - 'cmd/pantherclaw-probe/**'
+              - 'deploy/sandbox/**'
+              - 'redteam/**'
+              - 'test/e2e/**'
             workflows:
               - '.github/**'
             python:
               - 'sdk/python/**'
+              - 'integrations/claude-agent-sdk/python/**'
             typescript:
               - 'sdk/typescript/**'
               - 'integrations/claude-code/**'
+              - 'integrations/claude-agent-sdk/typescript/**'
 
   go-static:
     name: go / format, headers, lint
@@ -89,6 +106,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          fetch-depth: 0 # buf breaking compares against origin/main
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
@@ -96,7 +114,7 @@ jobs:
             **/go.sum
       - name: Verify modules
         run: |
-          for m in . sdk/go tools; do (cd "$m" && go mod verify && go mod tidy -diff); done
+          for m in . sdk/go sdk/go/internal/sqltest tools; do (cd "$m" && go mod verify && go mod tidy -diff); done
       - name: Traceability (every HR/T due by the last completed milestone has a test)
         run: $TASK trace
       - name: Generated code is up to date (buf, sqlc)
@@ -107,6 +125,10 @@ jobs:
         run: $TASK license:check
       - name: Lint
         run: $TASK lint
+      - name: Migrations (squawk, pinned binary checked against its SHA-256)
+        run: $TASK lint:migrations
+      - name: Protobuf breaking changes against main (buf breaking)
+        run: $TASK proto:breaking
 
   go-test:
     name: go / test (${{ matrix.os }})
@@ -146,7 +168,8 @@ jobs:
     needs: changes
     if: needs.changes.outputs.go == 'true'
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    # The packages alone take 17-40 minutes locally; the race detector adds more.
+    timeout-minutes: 90
     permissions:
       contents: read
     services:
@@ -178,12 +201,126 @@ jobs:
           go-version-file: go.mod
           cache-dependency-path: |
             **/go.sum
-      - name: Integration tests as pc_app (race detector)
+      - name: Integration tests as pc_app (race detector; test/e2e runs in its own job)
         env:
           PC_TEST_REQUIRE_DB: "1"
           PC_TEST_PG_ADMIN_URL: postgres://postgres:pc-ci-${{ github.run_id }}-${{ github.run_attempt }}@127.0.0.1:5433/postgres?sslmode=disable
           PC_TEST_MOCK_OIDC_URL: http://127.0.0.1:8181
-        run: go test -race -tags integration -shuffle=on -count=1 ./...
+        # The package list is built first, so a failing `go list` fails the step.
+        run: |
+          pkgs="$(go list -tags integration ./...)"
+          pkgs="$(printf '%s\n' "$pkgs" | grep -v '/test/e2e$')"
+          [ -n "$pkgs" ] || { echo "::error::no integration packages listed"; exit 1; }
+          # shellcheck disable=SC2086 # one argument per package
+          go test -race -tags integration -shuffle=on -count=1 -timeout 75m $pkgs
+      - name: The Go SDK's SQL replay store on PostgreSQL (T-081)
+        env:
+          PC_TEST_REQUIRE_DB: "1"
+          PC_TEST_PG_ADMIN_URL: postgres://postgres:pc-ci-${{ github.run_id }}-${{ github.run_attempt }}@127.0.0.1:5433/postgres?sslmode=disable
+        run: go -C sdk/go/internal/sqltest test -count=1 ./...
+
+  e2e:
+    name: go / end-to-end (postgres)
+    needs: changes
+    if: needs.changes.outputs.go == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    permissions:
+      contents: read
+    services:
+      postgres:
+        image: postgres:17-bookworm@sha256:3645570cccdfa447589da9f57dd740faa29b30938e861289a5574b6ca6b03826
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: pc-ci-${{ github.run_id }}-${{ github.run_attempt }}
+          POSTGRES_INITDB_ARGS: --auth-host=scram-sha-256
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 2s --health-timeout 3s --health-retries 30
+      # Third-party OpenID provider for the M2 interoperability e2e test.
+      mock-oidc:
+        image: ghcr.io/navikt/mock-oauth2-server:6.0.4@sha256:47374fe063995d9b6d39ebb6ea21eb5f765025bf0aa08b61b08b439eb91adaf0
+        ports:
+          - 8181:8080
+    steps:
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: |
+            **/go.sum
+      - name: End-to-end tests as pc_app (race detector; the range has its own jobs)
+        env:
+          PC_TEST_REQUIRE_DB: "1"
+          PC_TEST_PG_ADMIN_URL: postgres://postgres:pc-ci-${{ github.run_id }}-${{ github.run_attempt }}@127.0.0.1:5433/postgres?sslmode=disable
+          PC_TEST_MOCK_OIDC_URL: http://127.0.0.1:8181
+        run: go test -race -tags integration -shuffle=on -count=1 -timeout 60m -skip TestRange_Scenarios ./test/e2e/
+
+  sandbox:
+    name: sandbox (docker, M9 exit, sandbox range scenarios)
+    needs: changes
+    if: needs.changes.outputs.sandbox == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    permissions:
+      contents: read
+    services:
+      postgres:
+        image: postgres:17-bookworm@sha256:3645570cccdfa447589da9f57dd740faa29b30938e861289a5574b6ca6b03826
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: pc-ci-${{ github.run_id }}-${{ github.run_attempt }}
+          POSTGRES_INITDB_ARGS: --auth-host=scram-sha-256
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 2s --health-timeout 3s --health-retries 30
+      # Third-party OpenID provider for the M2 interoperability e2e test.
+      mock-oidc:
+        image: ghcr.io/navikt/mock-oauth2-server:6.0.4@sha256:47374fe063995d9b6d39ebb6ea21eb5f765025bf0aa08b61b08b439eb91adaf0
+        ports:
+          - 8181:8080
+    steps:
+      # Fail fast on an engine the sandbox refuses (HR-218); nothing else runs first.
+      - name: Docker engine 28 or later (HR-218)
+        run: |
+          v="$(docker version --format '{{.Server.Version}}')"
+          echo "Docker server $v"
+          [ "${v%%.*}" -ge 28 ] || { echo "::error::Docker server $v; the sandbox needs 28 or later (HR-218)"; exit 1; }
+      - uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: |
+            **/go.sum
+      # The runner's Docker engine (>= 28, HR-218) runs the sandboxes; every
+      # network, container and image the tests create has a fresh name.
+      - name: Docker sandbox, connector and M9 exit tests (task test:sandbox)
+        env:
+          PC_PG_TEST_PASSWORD: pc-ci-${{ github.run_id }}-${{ github.run_attempt }}
+        run: $TASK test:sandbox
+      - name: Every attack scenario, sandbox ones included (SANDBOX=1 task range)
+        env:
+          PC_PG_TEST_PASSWORD: pc-ci-${{ github.run_id }}-${{ github.run_attempt }}
+          SANDBOX: "1"
+        run: $TASK range
+      - name: The v0.1.0 preview tests (task test:preview, once that task exists)
+        env:
+          PC_PG_TEST_PASSWORD: pc-ci-${{ github.run_id }}-${{ github.run_attempt }}
+        run: if $TASK --list | grep -q 'test:preview'; then $TASK test:preview; fi
 
   range:
     name: range (adversarial scenarios)
@@ -381,12 +518,15 @@ jobs:
           persona: regular
           min-severity: low
 
+  # The SDK jobs run what `task sdk:check` runs: each package declares only
+  # its tests (node:test, unittest), and the integrations' tests run inside
+  # the real Agent SDKs pinned in their lockfiles.
   python-sdk:
     name: sdk / python
     needs: changes
     if: needs.changes.outputs.python == 'true'
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 20
     permissions:
       contents: read
     steps:
@@ -396,34 +536,22 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Detect Python SDK
-        id: detect
-        run: echo "present=$([ -f sdk/python/pyproject.toml ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
-        if: steps.detect.outputs.present == 'true'
         with:
           enable-cache: false
-      - name: Lint, type-check, test (Python 3.13 and 3.14)
-        if: steps.detect.outputs.present == 'true'
-        working-directory: sdk/python
+      - name: SDK and Agent SDK integration tests (Python 3.13 and 3.14)
         run: |
           for py in 3.13 3.14; do
-            uv sync --locked --python "$py"
-            uv run --python "$py" ruff check .
-            uv run --python "$py" ruff format --check .
-            uv run --python "$py" mypy --strict src
-            uv run --python "$py" pytest -q
+            (cd sdk/python && PYTHONPATH=src uv run --locked --python "$py" python -m unittest discover -s tests)
+            (cd integrations/claude-agent-sdk/python && uv run --locked --python "$py" python -m unittest discover -s tests)
           done
-      - name: No Python SDK yet
-        if: steps.detect.outputs.present != 'true'
-        run: echo "::notice::sdk/python has no pyproject.toml yet (delivered in M8)"
 
   typescript-sdk:
     name: sdk / typescript
     needs: changes
     if: needs.changes.outputs.typescript == 'true'
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 20
     permissions:
       contents: read
     steps:
@@ -433,28 +561,19 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Detect TypeScript SDK
-        id: detect
-        run: echo "present=$([ -f sdk/typescript/package.json ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
-      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
-        if: steps.detect.outputs.present == 'true'
-        with:
-          package_json_file: sdk/typescript/package.json
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        if: steps.detect.outputs.present == 'true'
         with:
           node-version: 24
-      - name: Lint, type-check, test
-        if: steps.detect.outputs.present == 'true'
+      - name: SDK tests (no dependencies)
         working-directory: sdk/typescript
+        run: node --test "test/**/*.test.ts"
+      - name: Agent SDK integration tests (pnpm through packageManager and Corepack)
+        working-directory: integrations/claude-agent-sdk/typescript
+        env:
+          COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
         run: |
-          pnpm install --frozen-lockfile
-          pnpm run lint
-          pnpm run typecheck
-          pnpm run test
-      - name: No TypeScript SDK yet
-        if: steps.detect.outputs.present != 'true'
-        run: echo "::notice::sdk/typescript has no package.json yet (delivered in M8)"
+          corepack pnpm install --frozen-lockfile
+          node --test "test/**/*.test.ts"
 
   ci-ok:
     name: ci-ok
@@ -464,6 +583,8 @@ jobs:
       - go-static
       - go-test
       - go-integration
+      - e2e
+      - sandbox
       - range
       - go-vuln
       - secrets

@@ -33,6 +33,7 @@ type snapshotEntry struct {
 		ComputedAt string   `json:"computed_at"`
 		ExpiresAt  string   `json:"expires_at"`
 		Exclusions []string `json:"exclusions"`
+		Closure    string   `json:"closure"`
 	}
 	computed time.Time
 }

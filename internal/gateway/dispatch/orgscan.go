@@ -42,7 +42,7 @@ func (e *Engine) ScanOrg(ctx context.Context, conn *control.Connection, deadline
 	if conn.Credential.GetKind() != credentials.KindGitHubApp {
 		return githubscan.Result{}, errNotGitHubApp
 	}
-	c, err := e.client(conn)
+	base, c, err := e.gitHubAPI(conn)
 	if err != nil {
 		return githubscan.Result{}, err
 	}
@@ -54,16 +54,16 @@ func (e *Engine) ScanOrg(ctx context.Context, conn *control.Connection, deadline
 	// The installation's own permissions, with the App's JWT and no token
 	// (F048). A failed read leaves the installation unread on the server.
 	var installation *githubscan.Installation
-	if in, err := broker.ReadInstallation(ctx, c, conn.GetBaseUrl(), conn.Credential.GetAllowedHosts(), app, time.Now()); err != nil {
+	if in, err := broker.ReadInstallation(ctx, c, base, conn.Credential.GetAllowedHosts(), app, time.Now()); err != nil {
 		e.log.WarnContext(ctx, "gateway.installation_not_read", slog.String("connection_id", conn.GetId()), pclog.Err(err))
 	} else {
 		installation = &githubscan.Installation{ID: app.Installation, Permissions: in.Permissions, RepositorySelection: in.RepositorySelection}
 	}
 	mint := func(repos []string, perms map[string]string) (*broker.Installation, error) {
-		return broker.MintScanToken(ctx, c, conn.GetBaseUrl(), conn.Credential.GetAllowedHosts(), app, repos, perms, time.Now())
+		return broker.MintScanToken(ctx, c, base, conn.Credential.GetAllowedHosts(), app, repos, perms, time.Now())
 	}
 	use := func(tok *broker.Installation, read func(githubscan.Getter)) {
-		read(tokenGetter(conn, c, tok))
+		read(tokenGetter(base, c, tok))
 		if err := tok.Revoke(context.WithoutCancel(ctx), c); err != nil {
 			e.log.WarnContext(ctx, "gateway.installation_token_not_revoked", slog.String("connection_id", conn.GetId()), pclog.Err(err))
 			e.revokeFailed(ctx, conn, "org_scan", tok)
@@ -149,8 +149,8 @@ func (e *Engine) openApp(conn *control.Connection) (credentials.GitHubApp, error
 
 // tokenGetter reads one GitHub path through the connection's egress client
 // with tok placed.
-func tokenGetter(conn *control.Connection, c *egress.Client, tok *broker.Installation) githubscan.Getter {
-	base := strings.TrimSuffix(conn.GetBaseUrl(), "/")
+func tokenGetter(base string, c *egress.Client, tok *broker.Installation) githubscan.Getter {
+	base = strings.TrimSuffix(base, "/")
 	return func(ctx context.Context, path string) (egress.Response, error) {
 		u, err := url.Parse(base + path)
 		if err != nil {
