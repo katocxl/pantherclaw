@@ -87,7 +87,10 @@ func (f *fixture) read(t *testing.T, fn func(context.Context, db.TenantTx) error
 	}
 }
 
-func TestRunInvestigationViews(t *testing.T) {
+// TestHR247_RunInvestigationViewsApplyTheViewersScope: an action of a hidden
+// agent is not found, and a hidden agent's run is never listed among shared
+// targets; context links carry their basis.
+func TestHR247_RunInvestigationViewsApplyTheViewersScope(t *testing.T) {
 	f := newFixture(t)
 	run := f.run(t, f.agent)
 	read := f.txn(t, run, f.internal, "wiki.page.read", "ALLOW")

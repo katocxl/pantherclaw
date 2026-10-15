@@ -26,6 +26,7 @@ import (
 
 	evdomain "github.com/katocxl/pantherclaw/internal/evidence/domain"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
+	reflexdomain "github.com/katocxl/pantherclaw/internal/reflex/domain"
 )
 
 // LedgerKind is the ledger kind of every case entry (D6).
@@ -76,14 +77,14 @@ const (
 var Kinds = []Kind{KindFact, KindHypothesis, KindQuestion, KindAnswer, KindNote, KindImpact, KindLink, KindOwner, KindState}
 
 // Basis says how a fact or hypothesis is known (F648).
-type Basis string
+type Basis = reflexdomain.Basis
 
 // Bases.
 const (
-	BasisObserved   Basis = "OBSERVED"
-	BasisRuleMatch  Basis = "RULE_MATCH"
-	BasisInferred   Basis = "INFERRED"
-	BasisHypothesis Basis = "HYPOTHESIS"
+	BasisObserved   = reflexdomain.BasisObserved
+	BasisRuleMatch  = reflexdomain.BasisRuleMatch
+	BasisInferred   = reflexdomain.BasisInferred
+	BasisHypothesis = reflexdomain.BasisHypothesis
 )
 
 // Confidence of a hypothesis.
@@ -139,11 +140,11 @@ const (
 
 // Evidence ref kinds (reflexdomain.EvidenceRef, D1).
 const (
-	EvidenceLedger      = "ledger"
-	EvidenceTransaction = "transaction"
-	EvidenceRun         = "run"
-	EvidenceReceipt     = "receipt"
-	EvidenceCaseEntry   = "case_entry"
+	EvidenceLedger      = reflexdomain.EvidenceLedger
+	EvidenceTransaction = reflexdomain.EvidenceTransaction
+	EvidenceRun         = reflexdomain.EvidenceRun
+	EvidenceReceipt     = reflexdomain.EvidenceReceipt
+	EvidenceCaseEntry   = reflexdomain.EvidenceCaseEntry
 )
 
 // RefResponseAction is the LINK kind of a containment action; the closure
@@ -167,11 +168,8 @@ var sources = map[string]bool{
 // ErrInvalid is wrapped by every validation error.
 var ErrInvalid = errors.New("invalid case entry")
 
-// EvidenceRef points at recorded evidence.
-type EvidenceRef struct {
-	Kind string
-	ID   ids.UUID
-}
+// EvidenceRef points at recorded evidence (reflexdomain.EvidenceRef).
+type EvidenceRef = reflexdomain.EvidenceRef
 
 // Ref is what a LINK entry links.
 type Ref struct {

@@ -1,0 +1,399 @@
+// SPDX-License-Identifier: BUSL-1.1
+// Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+
+syntax = "proto3";
+
+package pantherclaw.v1;
+
+import "buf/validate/validate.proto";
+import "google/protobuf/timestamp.proto";
+
+// CaseService manages investigation cases (G0 M10 D19; F237, F244, F248,
+// F249, F251, F571, F299; HR-245–HR-247). Cases need the Team edition.
+//
+// A case is an append-only list of entries: facts with evidence,
+// hypotheses with confidence and alternatives, questions with an owner,
+// answers, notes, impact, links, owner and state changes. A later entry
+// may supersede an earlier one; nothing is changed or deleted. Every entry
+// is chained to the one before it and recorded in the evidence ledger.
+// The database enforces the closure rules: CONTAINED needs every linked
+// containment action confirmed or a reason none is needed; CLOSED needs an
+// impact, a disposition, a fact, and a follow-up owner while questions are
+// open.
+//
+// A case is read with case.read and changed with case.manage (a person
+// only) over the whole organization or over every agent the case is about.
+// A case the caller may not read is reported as not found.
+service CaseService {
+  // OpenCase opens a case about the subjects, with the questions open.
+  // permission: case.manage
+  rpc OpenCase(OpenCaseRequest) returns (OpenCaseResponse);
+  // AppendCaseEntry adds one entry to a case.
+  // permission: case.manage
+  rpc AppendCaseEntry(AppendCaseEntryRequest) returns (AppendCaseEntryResponse);
+  // GetCase returns a case and a page of its entries.
+  // permission: case.read
+  rpc GetCase(GetCaseRequest) returns (GetCaseResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // ListCases lists the cases the caller may read, most recently updated
+  // first.
+  // permission: case.read
+  rpc ListCases(ListCasesRequest) returns (ListCasesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // GetCaseLens returns one lens of a case, with one selection and time
+  // range shared by every lens. Rows of agents outside the caller's
+  // evidence.read scope are left out before anything is counted.
+  // permission: case.read
+  rpc GetCaseLens(GetCaseLensRequest) returns (GetCaseLensResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // ExportCase exports a case for handoff as canonical JSON with entry
+  // hashes and evidence ids. It also needs evidence.export over the case
+  // and is audited.
+  // permission: case.read
+  rpc ExportCase(ExportCaseRequest) returns (ExportCaseResponse);
+}
+
+// CaseSubject is one thing a case is about.
+message CaseSubject {
+  // Subject type: agent, run, transaction, grant, connection, credential,
+  // alert, incident, … (reflex subject types).
+  string type = 1 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 32
+  }];
+  // Subject id.
+  string id = 2 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 256
+  }];
+}
+
+// CaseEvidenceRef points at recorded evidence.
+message CaseEvidenceRef {
+  // "ledger", "transaction", "run", "receipt" or "case_entry".
+  string kind = 1 [(buf.validate.field).string = {
+    in: [
+      "ledger",
+      "transaction",
+      "run",
+      "receipt",
+      "case_entry"
+    ]
+  }];
+  // Evidence id.
+  string id = 2 [(buf.validate.field).string.uuid = true];
+}
+
+// Case is one case.
+message Case {
+  // Case id.
+  string id = 1;
+  // Title (untrusted text).
+  string title = 2;
+  // What opened it: detection, response, siem, signals, coverage, system
+  // or manual.
+  string source = 3;
+  // Who opened it ("type:id").
+  string opened_by = 4;
+  // The alert it was opened from; empty when none.
+  string alert_id = 5;
+  // The incident it was opened from; empty when none.
+  string incident_id = 6;
+  // "OPEN", "CONTAINED" or "CLOSED".
+  string state = 7;
+  // The owner; empty when none.
+  string owner_id = 8;
+  // The owner of the questions that stay open; empty when none.
+  string follow_up_owner_id = 9;
+  // TRUE_POSITIVE, BENIGN, FALSE_POSITIVE or INCONCLUSIVE once closed.
+  string disposition = 10;
+  // CONFIRMED, EXPLICITLY_UNRESOLVED or NONE_FOUND once closed.
+  string impact = 11;
+  // Number of entries.
+  int64 head_seq = 12;
+  // Hash of the newest entry, hex.
+  string head_hash = 13;
+  // When it was opened.
+  google.protobuf.Timestamp create_time = 14;
+  // When it last changed.
+  google.protobuf.Timestamp update_time = 15;
+  // When it was contained; unset otherwise.
+  google.protobuf.Timestamp contain_time = 16;
+  // When it was closed; unset otherwise.
+  google.protobuf.Timestamp close_time = 17;
+}
+
+// CaseEntryDraft is an entry to add. Only the fields of its kind may be
+// set.
+message CaseEntryDraft {
+  // FACT, HYPOTHESIS, QUESTION, ANSWER, NOTE, IMPACT, LINK, OWNER or STATE.
+  string kind = 1 [(buf.validate.field).string = {
+    in: [
+      "FACT",
+      "HYPOTHESIS",
+      "QUESTION",
+      "ANSWER",
+      "NOTE",
+      "IMPACT",
+      "LINK",
+      "OWNER",
+      "STATE"
+    ]
+  }];
+  // The statement (untrusted text) of a fact, hypothesis, question,
+  // answer, note or impact.
+  string text = 2 [(buf.validate.field).string.max_len = 4000];
+  // OBSERVED, RULE_MATCH or INFERRED for a fact; HYPOTHESIS for a
+  // hypothesis.
+  string basis = 3 [(buf.validate.field).string.max_len = 16];
+  // A fact's evidence (1 to 32), or an impact's.
+  repeated CaseEvidenceRef evidence = 4 [(buf.validate.field).repeated.max_items = 32];
+  // LOW, MEDIUM or HIGH for a hypothesis.
+  string confidence = 5 [(buf.validate.field).string.max_len = 8];
+  // A hypothesis's alternatives.
+  repeated string alternatives = 6 [(buf.validate.field).repeated = {
+    max_items: 8
+    items: {
+      string: {
+        min_len: 1
+        max_len: 500
+      }
+    }
+  }];
+  // The question an answer answers.
+  optional string question_id = 7 [(buf.validate.field).string.uuid = true];
+  // An answer that leaves the question open.
+  bool unresolved = 8;
+  // The owner a question or an owner entry names.
+  optional string owner_id = 9 [(buf.validate.field).string.uuid = true];
+  // OWNER or FOLLOW_UP for an owner entry.
+  string owner_role = 10 [(buf.validate.field).string.max_len = 16];
+  // OBSERVED or POTENTIAL for an impact.
+  string impact = 11 [(buf.validate.field).string.max_len = 16];
+  // What a link links.
+  CaseSubject ref = 12;
+  // OPEN, CONTAINED or CLOSED for a state entry.
+  string state = 13 [(buf.validate.field).string.max_len = 16];
+  // Containing without a containment action: no containment is needed.
+  bool no_containment_needed = 14;
+  // The disposition when closing.
+  string disposition = 15 [(buf.validate.field).string.max_len = 32];
+  // The case impact when closing.
+  string case_impact = 16 [(buf.validate.field).string.max_len = 32];
+  // Why (untrusted text), for a state or link entry.
+  string reason = 17 [(buf.validate.field).string.max_len = 1000];
+  // The entry this one supersedes.
+  optional string supersedes = 18 [(buf.validate.field).string.uuid = true];
+}
+
+// CaseEntry is one stored entry.
+message CaseEntry {
+  // Entry id.
+  string id = 1;
+  // Position in the case, from 1.
+  int64 seq = 2;
+  // Who wrote it ("type:id").
+  string author = 3;
+  // The entry.
+  CaseEntryDraft entry = 4;
+  // A later entry superseded it.
+  bool superseded = 5;
+  // The ledger entry that records it.
+  string ledger_entry_id = 6;
+  // Hash of the entry before it, hex.
+  string prev_hash = 7;
+  // sha256(prev_hash || body), hex.
+  string entry_hash = 8;
+  // The canonical JSON body that was hashed.
+  bytes body = 9;
+  // When it was added.
+  google.protobuf.Timestamp create_time = 10;
+}
+
+// OpenCaseRequest describes a case.
+message OpenCaseRequest {
+  // Title (1 to 200 characters).
+  string title = 1 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 200
+  }];
+  // What it is about.
+  repeated CaseSubject subjects = 2 [(buf.validate.field).repeated.max_items = 32];
+  // Questions to start with.
+  repeated string questions = 3 [(buf.validate.field).repeated = {
+    max_items: 16
+    items: {
+      string: {
+        min_len: 1
+        max_len: 4000
+      }
+    }
+  }];
+  // The alert it comes from.
+  optional string alert_id = 4 [(buf.validate.field).string.uuid = true];
+  // The incident it comes from.
+  optional string incident_id = 5 [(buf.validate.field).string.uuid = true];
+}
+
+// OpenCaseResponse returns the new case.
+message OpenCaseResponse {
+  // The case, OPEN.
+  Case case = 1;
+}
+
+// AppendCaseEntryRequest adds an entry.
+message AppendCaseEntryRequest {
+  // Case id.
+  string case_id = 1 [(buf.validate.field).string.uuid = true];
+  // The entry.
+  CaseEntryDraft entry = 2 [(buf.validate.field).required = true];
+}
+
+// AppendCaseEntryResponse returns the stored entry and the case.
+message AppendCaseEntryResponse {
+  // The entry.
+  CaseEntry entry = 1;
+  // The case after it.
+  Case case = 2;
+}
+
+// GetCaseRequest names a case.
+message GetCaseRequest {
+  // Case id.
+  string id = 1 [(buf.validate.field).string.uuid = true];
+  // Entries after this position (0: from the first).
+  int64 after_seq = 2 [(buf.validate.field).int64.gte = 0];
+  // Entries per page (0: 500).
+  int32 page_size = 3 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 500
+  }];
+}
+
+// GetCaseResponse returns the case and its entries.
+message GetCaseResponse {
+  // The case.
+  Case case = 1;
+  // Entries in order.
+  repeated CaseEntry entries = 2;
+  // More entries follow the last one.
+  bool more = 3;
+  // Questions no standing answer resolves.
+  int64 open_questions = 4;
+}
+
+// ListCasesRequest filters cases.
+message ListCasesRequest {
+  // Page size (0: default).
+  int32 page_size = 1 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 100
+  }];
+  // Token from the previous page.
+  string page_token = 2 [(buf.validate.field).string.max_len = 128];
+  // Only these states.
+  repeated string states = 3 [(buf.validate.field).repeated = {
+    max_items: 3
+    items: {
+      string: {
+        in: [
+          "OPEN",
+          "CONTAINED",
+          "CLOSED"
+        ]
+      }
+    }
+  }];
+  // Only cases this person owns or follows up.
+  optional string owner_id = 4 [(buf.validate.field).string.uuid = true];
+  // Only cases from this alert.
+  optional string alert_id = 5 [(buf.validate.field).string.uuid = true];
+  // Only cases from this incident.
+  optional string incident_id = 6 [(buf.validate.field).string.uuid = true];
+}
+
+// ListCasesResponse is a page of cases.
+message ListCasesResponse {
+  // Cases the caller may read; a page may hold fewer than its size.
+  repeated Case cases = 1;
+  // Token of the next page; empty at the end.
+  string next_page_token = 2;
+}
+
+// GetCaseLensRequest asks for one lens.
+message GetCaseLensRequest {
+  // Case id.
+  string case_id = 1 [(buf.validate.field).string.uuid = true];
+  // sequence, authority, effects, reach, related or response.
+  string lens = 2 [(buf.validate.field).string = {
+    in: [
+      "sequence",
+      "authority",
+      "effects",
+      "reach",
+      "related",
+      "response"
+    ]
+  }];
+  // An agent, run or transaction the case links; unset: all of them.
+  CaseSubject selection = 3;
+  // Start of the range; unset with end: the last 7 days.
+  google.protobuf.Timestamp start_time = 4;
+  // End of the range (at most 30 days after the start).
+  google.protobuf.Timestamp end_time = 5;
+}
+
+// CaseLensItem is one row of a lens.
+message CaseLensItem {
+  // When.
+  google.protobuf.Timestamp time = 1;
+  // ACTION, EFFECT, AUTHORITY, CASE, REACH or CONTAINMENT.
+  string kind = 2;
+  // What it is about.
+  repeated CaseSubject subjects = 3;
+  // Short title.
+  string title = 4;
+  // Decision, state or status.
+  string detail = 5;
+  // OBSERVED, RULE_MATCH, INFERRED or HYPOTHESIS.
+  string basis = 6;
+}
+
+// GetCaseLensResponse is one lens.
+message GetCaseLensResponse {
+  // The lens.
+  string lens = 1;
+  // The selection it was narrowed to.
+  CaseSubject selection = 2;
+  // The range.
+  google.protobuf.Timestamp start_time = 3;
+  // The range.
+  google.protobuf.Timestamp end_time = 4;
+  // False when the lens's source is not connected.
+  bool available = 5;
+  // NOT_AVAILABLE, or empty.
+  string note = 6;
+  // Rows, oldest first.
+  repeated CaseLensItem items = 7;
+  // More rows exist than one lens holds.
+  bool truncated = 8;
+  // The caller's scope is narrower than the organization.
+  bool scope_limited = 9;
+}
+
+// ExportCaseRequest names a case.
+message ExportCaseRequest {
+  // Case id.
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// ExportCaseResponse returns the export.
+message ExportCaseResponse {
+  // Canonical JSON (format pantherclaw.case.v1).
+  bytes document = 1;
+  // The audit ledger entry that records the export.
+  string audit_entry_id = 2;
+}

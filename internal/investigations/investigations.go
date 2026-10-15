@@ -25,6 +25,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
+	reflexdomain "github.com/katocxl/pantherclaw/internal/reflex/domain"
 )
 
 // Bounds of the views.
@@ -57,12 +58,12 @@ type Scope interface {
 }
 
 // Basis says how an item is known (reflexdomain.Basis, F648).
-type Basis string
+type Basis = reflexdomain.Basis
 
 // Bases.
 const (
-	BasisObserved Basis = "OBSERVED"
-	BasisInferred Basis = "INFERRED"
+	BasisObserved = reflexdomain.BasisObserved
+	BasisInferred = reflexdomain.BasisInferred
 )
 
 // Range is a time window [Start, End).

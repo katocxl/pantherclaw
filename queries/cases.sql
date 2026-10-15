@@ -72,3 +72,53 @@ WHERE c.org_id = sqlc.arg(org_id) AND l.kind = 'LINK' AND l.ref_kind = sqlc.arg(
   AND NOT pc.case_entry_superseded(l.org_id, l.id)
 ORDER BY c.id
 LIMIT sqlc.arg(max_rows);
+
+-- The agents a case is about: linked agents and the agents of linked runs
+-- and transactions (the case's read scope, HR-247).
+-- name: CaseAgents :many
+SELECT DISTINCT a.agent_id::uuid AS agent_id FROM (
+    SELECT g.id AS agent_id FROM pc.case_entries l
+    JOIN pc.agents g ON g.org_id = l.org_id AND g.id::text = l.ref_id
+    WHERE l.org_id = sqlc.arg(org_id) AND l.case_id = sqlc.arg(case_id) AND l.kind = 'LINK' AND l.ref_kind = 'agent'
+      AND NOT pc.case_entry_superseded(l.org_id, l.id)
+    UNION
+    SELECT r.agent_id FROM pc.case_entries l
+    JOIN pc.runs r ON r.org_id = l.org_id AND r.id::text = l.ref_id
+    WHERE l.org_id = sqlc.arg(org_id) AND l.case_id = sqlc.arg(case_id) AND l.kind = 'LINK' AND l.ref_kind = 'run'
+      AND NOT pc.case_entry_superseded(l.org_id, l.id)
+    UNION
+    SELECT r.agent_id FROM pc.case_entries l
+    JOIN pc.transactions t ON t.org_id = l.org_id AND t.id::text = l.ref_id
+    JOIN pc.runs r ON r.org_id = t.org_id AND r.id = t.run_id
+    WHERE l.org_id = sqlc.arg(org_id) AND l.case_id = sqlc.arg(case_id) AND l.kind = 'LINK' AND l.ref_kind = 'transaction'
+      AND NOT pc.case_entry_superseded(l.org_id, l.id)
+) a
+ORDER BY 1
+LIMIT 1000;
+
+-- The agents of subjects named before a case exists (agent, run and
+-- transaction ids).
+-- name: AgentsOfSubjects :many
+SELECT g.id AS agent_id FROM pc.agents g WHERE g.org_id = sqlc.arg(org_id) AND g.id = ANY (sqlc.arg(agent_ids)::uuid[])
+UNION
+SELECT r.agent_id FROM pc.runs r WHERE r.org_id = sqlc.arg(org_id) AND r.id = ANY (sqlc.arg(run_ids)::uuid[])
+UNION
+SELECT r.agent_id FROM pc.transactions t JOIN pc.runs r ON r.org_id = t.org_id AND r.id = t.run_id
+WHERE t.org_id = sqlc.arg(org_id) AND t.id = ANY (sqlc.arg(transaction_ids)::uuid[]);
+
+-- The actions of a case's runs, transactions and agents in a window, for
+-- the sequence and effects lenses (F237).
+-- name: CaseLensTransactions :many
+SELECT t.id, t.run_id, r.agent_id, t.operation, t.decision, t.reason_code, t.mode, t.connection_id,
+       t.effect_state, t.effect_level_achieved, t.created_at, p.state AS permit_state, a.outcome
+FROM pc.transactions t
+JOIN pc.runs r ON r.org_id = t.org_id AND r.id = t.run_id
+LEFT JOIN pc.permits p ON p.org_id = t.org_id AND p.transaction_id = t.id AND NOT p.replaced
+LEFT JOIN pc.execution_attempts a ON a.org_id = p.org_id AND a.permit_id = p.id
+WHERE t.org_id = sqlc.arg(org_id)
+  AND (t.id = ANY (sqlc.arg(transaction_ids)::uuid[]) OR t.run_id = ANY (sqlc.arg(run_ids)::uuid[])
+       OR r.agent_id = ANY (sqlc.arg(agent_ids)::uuid[]))
+  AND t.created_at >= sqlc.arg(start_time) AND t.created_at < sqlc.arg(end_time)
+  AND (NOT sqlc.arg(effects_only)::boolean OR t.effect_state IS NOT NULL OR a.outcome IS NOT NULL)
+ORDER BY t.created_at, t.id
+LIMIT sqlc.arg(max_rows);

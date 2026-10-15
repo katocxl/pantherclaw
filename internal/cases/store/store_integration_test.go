@@ -126,7 +126,10 @@ func (f *fixture) fact() domain.Draft {
 	}
 }
 
-func TestCaseEntriesChainAndRecordInLedger(t *testing.T) {
+// TestHR245_CaseEntriesChainAndAreRecordedInTheLedger: entries are numbered
+// and hash-chained onto the case head, and each body is a reflex.case ledger
+// entry.
+func TestHR245_CaseEntriesChainAndAreRecordedInTheLedger(t *testing.T) {
 	f := newFixture(t)
 	c := f.open(t)
 	if c.State != domain.StateOpen || c.HeadSeq != 0 || string(c.HeadHash) != string(domain.GenesisHash(c.ID)) {
@@ -169,7 +172,10 @@ func TestCaseEntriesChainAndRecordInLedger(t *testing.T) {
 	}
 }
 
-func TestCaseEntriesRefuseWhatCanNeverStand(t *testing.T) {
+// TestHR245_FactsNeedEvidenceThatExistsInTheOrg: a fact without evidence, or
+// with evidence the org does not have, is refused; supersession adds an entry
+// of the same kind, once.
+func TestHR245_FactsNeedEvidenceThatExistsInTheOrg(t *testing.T) {
 	f := newFixture(t)
 	c := f.open(t)
 	ghost := f.fact()
@@ -198,7 +204,9 @@ func TestCaseEntriesRefuseWhatCanNeverStand(t *testing.T) {
 	}
 }
 
-func TestCaseEntriesAreAppendOnly(t *testing.T) {
+// TestHR245_CaseEntriesAreAppendOnly: no UPDATE or DELETE of entries, no case
+// change that is not its newest entry, and no entry without its ledger record.
+func TestHR245_CaseEntriesAreAppendOnly(t *testing.T) {
 	f := newFixture(t)
 	c := f.open(t)
 	e := f.must(t, c.ID, f.fact())
@@ -247,7 +255,10 @@ func TestCaseEntriesAreAppendOnly(t *testing.T) {
 	}
 }
 
-func TestCaseClosureRules(t *testing.T) {
+// TestHR246_ClosureRulesAreEnforcedInSQL: CONTAINED needs confirmed
+// containment or a reason; CLOSED needs impact, disposition, a fact and a
+// follow-up owner while questions are open.
+func TestHR246_ClosureRulesAreEnforcedInSQL(t *testing.T) {
 	f := newFixture(t)
 	c := f.open(t)
 	contain := domain.Draft{Kind: domain.KindState, State: domain.StateContained}

@@ -15,6 +15,181 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 )
 
+const agentsOfSubjects = `-- name: AgentsOfSubjects :many
+SELECT g.id AS agent_id FROM pc.agents g WHERE g.org_id = $1 AND g.id = ANY ($2::uuid[])
+UNION
+SELECT r.agent_id FROM pc.runs r WHERE r.org_id = $1 AND r.id = ANY ($3::uuid[])
+UNION
+SELECT r.agent_id FROM pc.transactions t JOIN pc.runs r ON r.org_id = t.org_id AND r.id = t.run_id
+WHERE t.org_id = $1 AND t.id = ANY ($4::uuid[])
+`
+
+type AgentsOfSubjectsParams struct {
+	OrgID          ids.OrgID
+	AgentIds       []ids.UUID
+	RunIds         []ids.UUID
+	TransactionIds []ids.UUID
+}
+
+// The agents of subjects named before a case exists (agent, run and
+// transaction ids).
+func (q *Queries) AgentsOfSubjects(ctx context.Context, arg AgentsOfSubjectsParams) ([]ids.UUID, error) {
+	rows, err := q.db.Query(ctx, agentsOfSubjects,
+		arg.OrgID,
+		arg.AgentIds,
+		arg.RunIds,
+		arg.TransactionIds,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ids.UUID{}
+	for rows.Next() {
+		var agent_id ids.UUID
+		if err := rows.Scan(&agent_id); err != nil {
+			return nil, err
+		}
+		items = append(items, agent_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const caseAgents = `-- name: CaseAgents :many
+SELECT DISTINCT a.agent_id::uuid AS agent_id FROM (
+    SELECT g.id AS agent_id FROM pc.case_entries l
+    JOIN pc.agents g ON g.org_id = l.org_id AND g.id::text = l.ref_id
+    WHERE l.org_id = $1 AND l.case_id = $2 AND l.kind = 'LINK' AND l.ref_kind = 'agent'
+      AND NOT pc.case_entry_superseded(l.org_id, l.id)
+    UNION
+    SELECT r.agent_id FROM pc.case_entries l
+    JOIN pc.runs r ON r.org_id = l.org_id AND r.id::text = l.ref_id
+    WHERE l.org_id = $1 AND l.case_id = $2 AND l.kind = 'LINK' AND l.ref_kind = 'run'
+      AND NOT pc.case_entry_superseded(l.org_id, l.id)
+    UNION
+    SELECT r.agent_id FROM pc.case_entries l
+    JOIN pc.transactions t ON t.org_id = l.org_id AND t.id::text = l.ref_id
+    JOIN pc.runs r ON r.org_id = t.org_id AND r.id = t.run_id
+    WHERE l.org_id = $1 AND l.case_id = $2 AND l.kind = 'LINK' AND l.ref_kind = 'transaction'
+      AND NOT pc.case_entry_superseded(l.org_id, l.id)
+) a
+ORDER BY 1
+LIMIT 1000
+`
+
+// The agents a case is about: linked agents and the agents of linked runs
+// and transactions (the case's read scope, HR-247).
+func (q *Queries) CaseAgents(ctx context.Context, orgID ids.OrgID, caseID ids.UUID) ([]ids.UUID, error) {
+	rows, err := q.db.Query(ctx, caseAgents, orgID, caseID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ids.UUID{}
+	for rows.Next() {
+		var agent_id ids.UUID
+		if err := rows.Scan(&agent_id); err != nil {
+			return nil, err
+		}
+		items = append(items, agent_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const caseLensTransactions = `-- name: CaseLensTransactions :many
+SELECT t.id, t.run_id, r.agent_id, t.operation, t.decision, t.reason_code, t.mode, t.connection_id,
+       t.effect_state, t.effect_level_achieved, t.created_at, p.state AS permit_state, a.outcome
+FROM pc.transactions t
+JOIN pc.runs r ON r.org_id = t.org_id AND r.id = t.run_id
+LEFT JOIN pc.permits p ON p.org_id = t.org_id AND p.transaction_id = t.id AND NOT p.replaced
+LEFT JOIN pc.execution_attempts a ON a.org_id = p.org_id AND a.permit_id = p.id
+WHERE t.org_id = $1
+  AND (t.id = ANY ($2::uuid[]) OR t.run_id = ANY ($3::uuid[])
+       OR r.agent_id = ANY ($4::uuid[]))
+  AND t.created_at >= $5 AND t.created_at < $6
+  AND (NOT $7::boolean OR t.effect_state IS NOT NULL OR a.outcome IS NOT NULL)
+ORDER BY t.created_at, t.id
+LIMIT $8
+`
+
+type CaseLensTransactionsParams struct {
+	OrgID          ids.OrgID
+	TransactionIds []ids.UUID
+	RunIds         []ids.UUID
+	AgentIds       []ids.UUID
+	StartTime      time.Time
+	EndTime        time.Time
+	EffectsOnly    bool
+	MaxRows        int32
+}
+
+type CaseLensTransactionsRow struct {
+	ID                  ids.UUID
+	RunID               ids.UUID
+	AgentID             ids.UUID
+	Operation           string
+	Decision            string
+	ReasonCode          string
+	Mode                string
+	ConnectionID        *ids.UUID
+	EffectState         *string
+	EffectLevelAchieved *string
+	CreatedAt           time.Time
+	PermitState         *string
+	Outcome             *string
+}
+
+// The actions of a case's runs, transactions and agents in a window, for
+// the sequence and effects lenses (F237).
+func (q *Queries) CaseLensTransactions(ctx context.Context, arg CaseLensTransactionsParams) ([]CaseLensTransactionsRow, error) {
+	rows, err := q.db.Query(ctx, caseLensTransactions,
+		arg.OrgID,
+		arg.TransactionIds,
+		arg.RunIds,
+		arg.AgentIds,
+		arg.StartTime,
+		arg.EndTime,
+		arg.EffectsOnly,
+		arg.MaxRows,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []CaseLensTransactionsRow{}
+	for rows.Next() {
+		var i CaseLensTransactionsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.RunID,
+			&i.AgentID,
+			&i.Operation,
+			&i.Decision,
+			&i.ReasonCode,
+			&i.Mode,
+			&i.ConnectionID,
+			&i.EffectState,
+			&i.EffectLevelAchieved,
+			&i.CreatedAt,
+			&i.PermitState,
+			&i.Outcome,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const caseLinks = `-- name: CaseLinks :many
 SELECT l.org_id, l.case_id, l.id, l.seq, l.body, l.ledger_entry_id, l.prev_hash, l.entry_hash, l.kind, l.author_type, l.author_id, l.text, l.basis, l.evidence, l.confidence, l.alternatives, l.question_id, l.unresolved, l.owner_id, l.owner_role, l.impact_kind, l.ref_kind, l.ref_id, l.to_state, l.no_containment_needed, l.disposition, l.case_impact, l.reason, l.supersedes, l.created_at FROM pc.case_entries l
 WHERE l.org_id = $1 AND l.case_id = $2 AND l.kind = 'LINK'
