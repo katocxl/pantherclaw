@@ -34,6 +34,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/rpc"
 	"github.com/katocxl/pantherclaw/internal/platform/rpc/protoperms"
 	"github.com/katocxl/pantherclaw/internal/policy/simulation"
+	"github.com/katocxl/pantherclaw/internal/policy/simulation/pgsimulation"
 	"github.com/katocxl/pantherclaw/internal/policy/simulation/simulationrpc"
 	tapp "github.com/katocxl/pantherclaw/internal/tenancy/app"
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
@@ -353,5 +354,49 @@ func TestHR237_SimulationSchemaHoldsTheBounds(t *testing.T) {
 		if err := exec(sql); !db.IsPermissionDenied(err) {
 			t.Errorf("%s: %v", sql, err)
 		}
+	}
+}
+
+// TestHR237_SimulationAdvanceIsCompareAndSet: the store records progress
+// only from the count and cursor a step read, so a second step that read
+// the same position cannot count its chunk again (D34).
+func TestHR237_SimulationAdvanceIsCompareAndSet(t *testing.T) {
+	w := newWorld(t)
+	draft := w.policy(true, holdOver50)
+	s, err := w.svc.Simulate(w.human, simulation.Request{Version: draft, Days: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	store := pgsimulation.Store{Pool: w.pool}
+	ctx := context.Background()
+	var read simulation.Simulation
+	if err := store.InTx(ctx, w.org, false, func(ctx context.Context, tx simulation.Tx) error {
+		read, _, err = tx.Start(ctx, s.ID)
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	advance := func(from simulation.Simulation) bool {
+		next := from
+		next.Evaluated++
+		next.Cursor = &simulation.Cursor{Created: time.Now().Add(-time.Hour), Transaction: ids.NewV7(), Evaluation: 1}
+		ok := false
+		if err := store.InTx(ctx, w.org, false, func(ctx context.Context, tx simulation.Tx) error {
+			_, ok, err = tx.Advance(ctx, next, from)
+			return err
+		}); err != nil {
+			t.Fatal(err)
+		}
+		return ok
+	}
+	if !advance(read) {
+		t.Fatal("the first step's chunk was not recorded")
+	}
+	if advance(read) {
+		t.Fatal("a second step from the same position recorded its chunk too")
+	}
+	got, err := w.svc.Get(w.human, s.ID)
+	if err != nil || got.Evaluated != 1 {
+		t.Fatalf("evaluated %d, %v", got.Evaluated, err)
 	}
 }

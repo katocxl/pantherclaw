@@ -202,7 +202,7 @@ func newWorld(t testing.TB) *world {
 		IsNotFound: func(err error) bool { return err == replay.ErrNotFound }, //nolint:errorlint // the sentinel itself
 	}
 	w.runner = &simulation.Runner{
-		Store: pgsimulation.Store{Pool: p}, Versions: src, Chunk: 2,
+		Store: pgsimulation.Store{Pool: p}, Versions: src, Chunk: 2, Editions: team{}, Infrastructure: pgsimulation.Infrastructure,
 		Replay: &replay.Engine{Source: src, Inputs: recording.NewSealer(pccrypto.NewEnvelope(keystore.NewDEKStore(p, kp)))},
 	}
 	return w

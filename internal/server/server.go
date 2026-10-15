@@ -396,7 +396,7 @@ func cmdServe(ctx context.Context, args []string, stderr io.Writer, env Env, onS
 			return err
 		}
 		evidenceJobs = append(evidenceJobs, rangeJobs...)
-		if err := registerSimulationJobs(jreg, pool, kp, log); err != nil {
+		if err := registerSimulationJobs(jreg, pool, kp, bill, log); err != nil {
 			return err
 		}
 		if err := authnapp.RegisterJanitor(jreg, pool, log); err != nil {

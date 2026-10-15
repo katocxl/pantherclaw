@@ -38,13 +38,19 @@ UPDATE pc.policy_simulations SET state = 'RUNNING'
 WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state = 'QUEUED'
 RETURNING *;
 
--- Records progress, or finishes (DONE or FAILED), while it runs.
+-- Records progress, or finishes (DONE or FAILED), while it runs. It is a
+-- compare-and-set (D34): nothing changes unless the simulation is still
+-- at the count and cursor the step read, so a chunk two steps read from
+-- one position is counted once.
 -- name: AdvancePolicySimulation :one
 UPDATE pc.policy_simulations
 SET state = sqlc.arg(state), evaluated = sqlc.arg(evaluated), counts = sqlc.arg(counts), by_workflow = sqlc.arg(by_workflow),
     burden = sqlc.arg(burden), cursor_created_at = sqlc.narg(cursor_created_at), cursor_txn = sqlc.narg(cursor_txn),
     cursor_evaluation = sqlc.narg(cursor_evaluation), error = sqlc.narg(error)
 WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state = 'RUNNING'
+  AND evaluated = sqlc.arg(prev_evaluated)
+  AND cursor_txn IS NOT DISTINCT FROM sqlc.narg(prev_cursor_txn)
+  AND cursor_evaluation IS NOT DISTINCT FROM sqlc.narg(prev_cursor_evaluation)
 RETURNING *;
 
 -- name: CancelPolicySimulation :one

@@ -93,8 +93,9 @@ func (m *memStore) Start(_ context.Context, id ids.UUID) (simulation.Simulation,
 	return s, true, nil
 }
 
-func (m *memStore) Advance(_ context.Context, s simulation.Simulation) (simulation.Simulation, bool, error) {
-	if m.sims[s.ID].State != simulation.Running {
+func (m *memStore) Advance(_ context.Context, s, prev simulation.Simulation) (simulation.Simulation, bool, error) {
+	cur := m.sims[s.ID]
+	if cur.State != simulation.Running || cur.Evaluated != prev.Evaluated || !sameCursor(cur.Cursor, prev.Cursor) {
 		return s, false, nil
 	}
 	m.sims[s.ID] = s
@@ -172,6 +173,8 @@ type outcome struct {
 type fakeReplay struct {
 	mu    sync.Mutex
 	byTxn map[ids.UUID]outcome
+	// errs makes the replay of a transaction fail.
+	errs  map[ids.UUID]error
 	calls int
 	// onReplay runs before each replay (to cancel mid-run).
 	onReplay func()
@@ -181,10 +184,14 @@ func (f *fakeReplay) Replay(_ context.Context, _ ids.OrgID, txn ids.UUID, ev int
 	f.mu.Lock()
 	f.calls++
 	o := f.byTxn[txn]
+	failure := f.errs[txn]
 	hook := f.onReplay
 	f.mu.Unlock()
 	if hook != nil {
 		hook()
+	}
+	if failure != nil {
+		return nil, failure
 	}
 	out := &replay.Outcome{
 		Transaction: txn, Evaluation: ev, Proposed: proposed != nil, Complete: true,
@@ -241,4 +248,11 @@ func as(role td.RoleName) context.Context {
 	return tapp.WithCaller(context.Background(), tapp.Caller{Subject: td.Subject{
 		Org: org, Principal: td.PrincipalRef{Kind: td.KindUser, ID: ids.NewV7()}, Bindings: bs,
 	}})
+}
+
+func sameCursor(a, b *simulation.Cursor) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return a.Transaction == b.Transaction && a.Evaluation == b.Evaluation
 }

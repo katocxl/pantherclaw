@@ -148,9 +148,10 @@ type Tx interface {
 	// Start moves a queued simulation to RUNNING; false when it was not
 	// queued (a conditional update).
 	Start(ctx context.Context, id ids.UUID) (Simulation, bool, error)
-	// Advance stores a running simulation's progress, state and report;
-	// false when it was no longer running.
-	Advance(ctx context.Context, s Simulation) (Simulation, bool, error)
+	// Advance stores a running simulation's progress, state and report as
+	// next, a compare-and-set: false when it is no longer running at prev's
+	// count and cursor (D34).
+	Advance(ctx context.Context, next, prev Simulation) (Simulation, bool, error)
 	// Cancel stops a queued or running simulation; false when it had
 	// finished.
 	Cancel(ctx context.Context, id ids.UUID) (Simulation, bool, error)

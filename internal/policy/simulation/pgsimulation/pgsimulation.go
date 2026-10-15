@@ -207,7 +207,7 @@ func (t *txn) Cancel(ctx context.Context, id ids.UUID) (simulation.Simulation, b
 }
 
 // Advance implements simulation.Tx.
-func (t *txn) Advance(ctx context.Context, s simulation.Simulation) (simulation.Simulation, bool, error) {
+func (t *txn) Advance(ctx context.Context, s, prev simulation.Simulation) (simulation.Simulation, bool, error) {
 	counts, err := json.Marshal(countsJSON(s.Report.Counts))
 	if err != nil {
 		return simulation.Simulation{}, false, err
@@ -227,6 +227,11 @@ func (t *txn) Advance(ctx context.Context, s simulation.Simulation) (simulation.
 	if c := s.Cursor; c != nil {
 		ev := int32(c.Evaluation) //nolint:gosec // G115: 1..64
 		p.CursorCreatedAt, p.CursorTxn, p.CursorEvaluation = &c.Created, &c.Transaction, &ev
+	}
+	p.PrevEvaluated = int32(prev.Evaluated) //nolint:gosec // ≤ 50 000
+	if c := prev.Cursor; c != nil {
+		ev := int32(c.Evaluation) //nolint:gosec // G115: 1..64
+		p.PrevCursorTxn, p.PrevCursorEvaluation = &c.Transaction, &ev
 	}
 	if s.Error != "" {
 		p.Error = &s.Error
