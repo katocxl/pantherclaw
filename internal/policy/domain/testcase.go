@@ -31,6 +31,10 @@ type TestAction struct {
 // TestGiven is the state around the action. Absent parts take the fixture's
 // defaults (internal/policy/scenario); an absent fact is missing.
 type TestGiven struct {
+	// Agent is the agent (a canonical UUID) the action's run belongs to, so
+	// a rule on run.agent_id can be tested (M11.1 D20); unset, the runner's
+	// fixed default agent.
+	Agent            string              `json:"agent,omitzero"`
 	Grant            *TestGrant          `json:"grant,omitzero"`
 	Budget           *TestBudget         `json:"budget,omitzero"`
 	Facts            map[string]TestFact `json:"facts,omitzero"`
