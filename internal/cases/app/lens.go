@@ -358,15 +358,23 @@ func compareIDs(a, b ids.UUID) int {
 // relatedLens lists the other cases, readable by the caller, that link one
 // of this case's subjects.
 func relatedLens(ctx context.Context, q *dbq.Queries, sc scope, c ids.UUID, l links, out *Lens) error {
+	// Only cases the caller may read are fetched (D60), so the truncation
+	// flag counts readable cases only.
+	scoped, visible, err := sc.visible(ctx, td.PermCaseRead)
+	if err != nil {
+		return err
+	}
 	seen := map[ids.UUID]bool{c: true}
 	for _, ref := range l.all {
-		rows, err := q.CasesLinking(ctx, dbq.CasesLinkingParams{OrgID: sc.c.Org, RefKind: &ref.Kind, RefID: &ref.ID, MaxRows: maxRelated + 1})
+		rows, err := q.CasesLinking(ctx, dbq.CasesLinkingParams{
+			OrgID: sc.c.Org, RefKind: &ref.Kind, RefID: &ref.ID, Scoped: scoped, VisibleAgents: visible, MaxRows: maxRelated + 1,
+		})
 		if err != nil {
 			return err
 		}
 		if len(rows) > maxRelated {
-			// More cases link this subject than one read takes: say so rather
-			// than imply the list is whole (D62).
+			// More readable cases link this subject than one read takes: say
+			// so rather than imply the list is whole (D62).
 			rows, out.Truncated = rows[:maxRelated], true
 		}
 		for _, k := range rows {

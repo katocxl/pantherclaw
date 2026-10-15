@@ -186,6 +186,44 @@ AS $$
 $$;
 -- +goose StatementEnd
 
+-- The agents a case is about: its standing links to agents and the agents
+-- of its standing links to runs and transactions (the case's read scope,
+-- HR-247, D60).
+-- +goose StatementBegin
+CREATE FUNCTION pc.case_agents(p_org uuid, p_case uuid) RETURNS SETOF uuid
+LANGUAGE sql STABLE
+SET search_path = pc, pg_temp
+AS $$
+    SELECT g.id FROM pc.case_entries l
+    JOIN pc.agents g ON g.org_id = l.org_id AND g.id::text = l.ref_id
+    WHERE l.org_id = p_org AND l.case_id = p_case AND l.kind = 'LINK' AND l.ref_kind = 'agent'
+      AND NOT pc.case_entry_superseded(l.org_id, l.id)
+    UNION
+    SELECT r.agent_id FROM pc.case_entries l
+    JOIN pc.runs r ON r.org_id = l.org_id AND r.id::text = l.ref_id
+    WHERE l.org_id = p_org AND l.case_id = p_case AND l.kind = 'LINK' AND l.ref_kind = 'run'
+      AND NOT pc.case_entry_superseded(l.org_id, l.id)
+    UNION
+    SELECT r.agent_id FROM pc.case_entries l
+    JOIN pc.transactions t ON t.org_id = l.org_id AND t.id::text = l.ref_id
+    JOIN pc.runs r ON r.org_id = t.org_id AND r.id = t.run_id
+    WHERE l.org_id = p_org AND l.case_id = p_case AND l.kind = 'LINK' AND l.ref_kind = 'transaction'
+      AND NOT pc.case_entry_superseded(l.org_id, l.id)
+$$;
+-- +goose StatementEnd
+
+-- Whether a viewer whose scope is the visible agents may read the case: it
+-- is about at least one agent and every one of them is visible (D60).
+-- +goose StatementBegin
+CREATE FUNCTION pc.case_within(p_org uuid, p_case uuid, p_visible uuid[]) RETURNS boolean
+LANGUAGE sql STABLE
+SET search_path = pc, pg_temp
+AS $$
+    SELECT EXISTS (SELECT 1 FROM pc.case_agents(p_org, p_case))
+       AND NOT EXISTS (SELECT 1 FROM pc.case_agents(p_org, p_case) a WHERE a <> ALL (p_visible))
+$$;
+-- +goose StatementEnd
+
 -- An entry is derived from its body, numbered and chained onto the case's
 -- head, and checked against the case, the ledger and the evidence (HR-245).
 -- +goose StatementBegin
@@ -542,6 +580,8 @@ DROP FUNCTION pc.case_entry_immutable();
 DROP FUNCTION pc.case_transition();
 DROP FUNCTION pc.case_entry_apply();
 DROP FUNCTION pc.case_entry_insert();
+DROP FUNCTION pc.case_within(uuid, uuid, uuid[]);
+DROP FUNCTION pc.case_agents(uuid, uuid);
 DROP FUNCTION pc.case_open_questions(uuid, uuid);
 DROP FUNCTION pc.case_entry_superseded(uuid, uuid);
 DROP FUNCTION pc.case_insert();

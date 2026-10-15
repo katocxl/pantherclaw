@@ -59,30 +59,12 @@ func (q *Queries) AgentsOfSubjects(ctx context.Context, arg AgentsOfSubjectsPara
 }
 
 const caseAgents = `-- name: CaseAgents :many
-SELECT DISTINCT a.agent_id::uuid AS agent_id FROM (
-    SELECT g.id AS agent_id FROM pc.case_entries l
-    JOIN pc.agents g ON g.org_id = l.org_id AND g.id::text = l.ref_id
-    WHERE l.org_id = $1 AND l.case_id = $2 AND l.kind = 'LINK' AND l.ref_kind = 'agent'
-      AND NOT pc.case_entry_superseded(l.org_id, l.id)
-    UNION
-    SELECT r.agent_id FROM pc.case_entries l
-    JOIN pc.runs r ON r.org_id = l.org_id AND r.id::text = l.ref_id
-    WHERE l.org_id = $1 AND l.case_id = $2 AND l.kind = 'LINK' AND l.ref_kind = 'run'
-      AND NOT pc.case_entry_superseded(l.org_id, l.id)
-    UNION
-    SELECT r.agent_id FROM pc.case_entries l
-    JOIN pc.transactions t ON t.org_id = l.org_id AND t.id::text = l.ref_id
-    JOIN pc.runs r ON r.org_id = t.org_id AND r.id = t.run_id
-    WHERE l.org_id = $1 AND l.case_id = $2 AND l.kind = 'LINK' AND l.ref_kind = 'transaction'
-      AND NOT pc.case_entry_superseded(l.org_id, l.id)
-) a
-ORDER BY 1
-LIMIT 1000
+SELECT a::uuid AS agent_id FROM pc.case_agents($1, $2) a ORDER BY 1
 `
 
 // The agents a case is about: linked agents and the agents of linked runs
 // and transactions (the case's read scope, HR-247).
-func (q *Queries) CaseAgents(ctx context.Context, orgID ids.OrgID, caseID ids.UUID) ([]ids.UUID, error) {
+func (q *Queries) CaseAgents(ctx context.Context, orgID ids.UUID, caseID ids.UUID) ([]ids.UUID, error) {
 	rows, err := q.db.Query(ctx, caseAgents, orgID, caseID)
 	if err != nil {
 		return nil, err
@@ -271,15 +253,18 @@ SELECT DISTINCT c.org_id, c.id, c.title, c.source, c.opened_by_type, c.opened_by
 JOIN pc.case_entries l ON l.org_id = c.org_id AND l.case_id = c.id
 WHERE c.org_id = $1 AND l.kind = 'LINK' AND l.ref_kind = $2 AND l.ref_id = $3
   AND NOT pc.case_entry_superseded(l.org_id, l.id)
+  AND (NOT $4::boolean OR pc.case_within(c.org_id, c.id, $5::uuid[]))
 ORDER BY c.id
-LIMIT $4
+LIMIT $6
 `
 
 type CasesLinkingParams struct {
-	OrgID   ids.OrgID
-	RefKind *string
-	RefID   *string
-	MaxRows int32
+	OrgID         ids.OrgID
+	RefKind       *string
+	RefID         *string
+	Scoped        bool
+	VisibleAgents []ids.UUID
+	MaxRows       int32
 }
 
 // Cases that link a subject (the cases of an alert, a run or an agent).
@@ -288,6 +273,8 @@ func (q *Queries) CasesLinking(ctx context.Context, arg CasesLinkingParams) ([]P
 		arg.OrgID,
 		arg.RefKind,
 		arg.RefID,
+		arg.Scoped,
+		arg.VisibleAgents,
 		arg.MaxRows,
 	)
 	if err != nil {
@@ -601,8 +588,9 @@ WHERE org_id = $1
   AND ($5::uuid IS NULL OR incident_id = $5)
   AND ($6::timestamptz IS NULL
        OR (updated_at, id) < ($6::timestamptz, $7::uuid))
+  AND (NOT $8::boolean OR pc.case_within(org_id, id, $9::uuid[]))
 ORDER BY updated_at DESC, id DESC
-LIMIT $8
+LIMIT $10
 `
 
 type ListCasesParams struct {
@@ -613,10 +601,13 @@ type ListCasesParams struct {
 	IncidentID    *ids.UUID
 	BeforeUpdated *time.Time
 	BeforeID      *ids.UUID
+	Scoped        bool
+	VisibleAgents []ids.UUID
 	PageLimit     int32
 }
 
 // Cases newest-updated first; keyset paging on (updated_at, id).
+// A scoped viewer's cases are filtered here, before the limit (D60).
 func (q *Queries) ListCases(ctx context.Context, arg ListCasesParams) ([]PcCase, error) {
 	rows, err := q.db.Query(ctx, listCases,
 		arg.OrgID,
@@ -626,6 +617,8 @@ func (q *Queries) ListCases(ctx context.Context, arg ListCasesParams) ([]PcCase,
 		arg.IncidentID,
 		arg.BeforeUpdated,
 		arg.BeforeID,
+		arg.Scoped,
+		arg.VisibleAgents,
 		arg.PageLimit,
 	)
 	if err != nil {

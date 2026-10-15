@@ -170,6 +170,36 @@ func TestHR247_CaseReadsApplyTheViewersScope(t *testing.T) {
 		t.Fatalf("alice opens an org-wide case: %v", err)
 	}
 
+	// Hidden cases never crowd a scoped caller's page out (D60): with newer
+	// cases about B, alice's first one-item page is still her case about A.
+	for range 3 {
+		if _, err := f.svc.Open(bob, capp.OpenRequest{Title: "B only", Subjects: []reflexdomain.Subject{
+			subject(reflexdomain.SubjectRun, f.runB),
+		}}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if p, err := f.svc.List(alice, 1, "", capp.Filter{}); err != nil || len(p.Items) != 1 || p.Items[0].ID != onlyA.ID || p.Next != "" {
+		t.Fatalf("alice's first page: %+v, %v", p, err)
+	}
+	// A ledger entry names no agent a scope could check: only an
+	// organization-wide author cites one (D62).
+	var entry ids.UUID
+	if err := f.p.InTenantTx(context.Background(), f.org, func(ctx context.Context, tx db.TenantTx) error {
+		return tx.QueryRow(ctx, "SELECT ledger_entry_id FROM pc.case_entries WHERE case_id = $1 ORDER BY seq LIMIT 1", onlyA.ID).Scan(&entry)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	ledgerFact := domain.Draft{
+		Kind: domain.KindFact, Text: "Recorded.", Basis: domain.BasisObserved,
+		Evidence: []domain.EvidenceRef{{Kind: domain.EvidenceLedger, ID: entry}},
+	}
+	if _, err := f.svc.Append(alice, onlyA.ID, ledgerFact); !errors.Is(err, capp.ErrForbidden) {
+		t.Fatalf("a scoped author cites a ledger entry: %v", err)
+	}
+	if _, err := f.svc.Append(bob, onlyA.ID, ledgerFact); err != nil {
+		t.Fatalf("an organization-wide author cites a ledger entry: %v", err)
+	}
 	// A fact may not cite another team's action (D62).
 	if _, err := f.svc.Append(alice, onlyA.ID, f.fact(f.txnB)); !errors.Is(err, capp.ErrForbidden) {
 		t.Fatalf("alice cites a transaction of agent B: %v", err)
@@ -178,7 +208,7 @@ func TestHR247_CaseReadsApplyTheViewersScope(t *testing.T) {
 		t.Fatal(err)
 	}
 	v, err := f.svc.Get(alice, onlyA.ID, 0, 0)
-	if err != nil || v.OpenQuestions != 1 || len(v.Entries) != 3 {
+	if err != nil || v.OpenQuestions != 1 || len(v.Entries) != 4 {
 		t.Fatalf("alice's view: %+v, %v", v, err)
 	}
 	l, err := f.svc.GetLens(alice, capp.LensRequest{Case: onlyA.ID, Lens: capp.LensSequence})
@@ -220,7 +250,7 @@ func TestHR247_CaseReadsApplyTheViewersScope(t *testing.T) {
 	if err := json.Unmarshal(x.Document, &doc); err != nil {
 		t.Fatal(err)
 	}
-	if doc.Format != capp.ExportFormat || len(doc.Entries) != 3 || len(doc.Evidence) != 1 || doc.Entries[2].Hash == "" {
+	if doc.Format != capp.ExportFormat || len(doc.Entries) != 4 || len(doc.Evidence) != 2 || doc.Entries[3].Hash == "" {
 		t.Fatalf("export: %s", x.Document)
 	}
 	var kind string
