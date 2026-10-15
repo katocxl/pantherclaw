@@ -195,7 +195,7 @@ func (f *fixture) buildGrant(g *pdomain.TestGiven) error {
 				b.Targets = &t
 			case pdomain.DestinationSet:
 				b.Destinations = &gdomain.Match{IDs: c.Values}
-			case pdomain.Verify:
+			case pdomain.Verify, pdomain.DisclosureLimits:
 				return caseErr("given.grant: a grant has no %q constraint", c.Kind)
 			default:
 				return caseErr("given.grant: a grant has no %q constraint", c.Kind)

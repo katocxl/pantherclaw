@@ -447,6 +447,8 @@ func compareConstraint(id string, a, b *Constraint) []Change {
 		sup := !slices.ContainsFunc(a.Values, func(v string) bool { return !slices.Contains(b.Values, v) })
 		// Fewer allowed values is stricter.
 		return one("constraint.values", strings.Join(a.Values, ", "), strings.Join(b.Values, ", "), scope(sub, sup))
+	case DisclosureLimits:
+		return nil // never in a rule (validate refuses it)
 	case Verify:
 		if a.Level == b.Level {
 			return nil

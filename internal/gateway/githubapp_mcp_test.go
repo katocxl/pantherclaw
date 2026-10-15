@@ -46,7 +46,7 @@ func withGitHubMCP(t *testing.T, w *gitHubWorld) (*mcpsim.Server, func(*harness)
 		app(h)
 		h.conn.Kind, h.targetURL, h.githubAPI = "mcp", ts.URL+"/mcp", w.url
 		h.mutatePkg = func(raw []byte) []byte {
-			out, err := github.MCPMergePackage(raw, "1.0.1", digest)
+			out, err := github.MCPMergePackage(raw, "1.0.2", digest)
 			if err != nil {
 				t.Fatal(err)
 			}
