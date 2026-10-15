@@ -28,6 +28,7 @@ var AllVerbs = []Verb{VerbRead, VerbExport, VerbUpdate, VerbDelete, VerbTransfer
 
 // Consequence ranks a verb: higher costs more.
 func (v Verb) Consequence() int {
+	//exhaustive:ignore // read and anything unrecognized cost least
 	switch v {
 	case VerbTransfer:
 		return 5

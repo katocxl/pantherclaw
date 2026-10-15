@@ -7,13 +7,13 @@
 //
 //   - OBSERVED: effects actually dispatched through a connection;
 //   - EFFECTIVE: active grant bounds, intersected with the published policy
-//     (a rule that may restrict makes a right CONDITIONAL) and labelled with
+//     (a rule that may restrict makes a right CONDITIONAL) and labeled with
 //     the path's coverage;
 //   - CREDENTIAL: reach outside PantherClaw's decisions: agent-held access,
 //     what a connection's credential can do at the target, and routes that
 //     are observe-only, unknown or not a channel.
 //
-// Every right is labelled USABLE, CONDITIONAL, EXPIRED or UNCERTAIN. What
+// Every right is labeled USABLE, CONDITIONAL, EXPIRED or UNCERTAIN. What
 // cannot be read (a credential's scope, a connection's package) is
 // UNCERTAIN, never left out: the computation errs toward more reach, never
 // less (T-111). Everything here is pure: no I/O, clock or randomness.
@@ -57,6 +57,7 @@ const (
 // Rank orders labels by present usability: lower is more usable. An
 // UNCERTAIN right ranks above an EXPIRED one: it may well be usable.
 func (l Label) Rank() int {
+	//exhaustive:ignore // every other label ranks last
 	switch l {
 	case Usable:
 		return 0
@@ -86,6 +87,7 @@ const (
 
 // Rank orders coverage by enforceability: lower is weaker.
 func (c Coverage) Rank() int {
+	//exhaustive:ignore // UNKNOWN and anything unrecognized rank weakest
 	switch c {
 	case CoverageEnforced:
 		return 3
@@ -110,7 +112,7 @@ const (
 	ReasonPackageUnknown        = "PACKAGE_UNKNOWN"
 	ReasonDefinitionUnknown     = "DEFINITION_UNKNOWN"
 	ReasonAgentHeld             = "AGENT_HELD"
-	ReasonCredentialScope       = "CREDENTIAL_SCOPE"
+	ReasonCredentialScope       = "CREDENTIAL_SCOPE" //nolint:gosec // G101: a reason code, not a credential
 	ReasonScopeUnknown          = "CREDENTIAL_SCOPE_UNKNOWN"
 	ReasonOverreach             = "CREDENTIAL_OVERREACH"
 	ReasonCapability            = "HELD_CAPABILITY"

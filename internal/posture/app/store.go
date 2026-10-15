@@ -31,6 +31,8 @@ var (
 	ErrAcceptance = domain.ErrAcceptance
 )
 
+var errNote = errors.New("posture: a note is 1..1000 characters")
+
 // LedgerKind is the ledger entry kind of a finding's state change (D6).
 const LedgerKind = "posture.finding"
 
@@ -98,12 +100,12 @@ func Reconcile(ctx context.Context, tx db.TenantTx, rec exapp.Recomputed) (Summa
 				return nil, err
 			}
 		case domain.ActSeen:
-			if _, err := see(ctx, q, org, a.Finding.ID, *a.Candidate, snap, at); err != nil {
+			if err := see(ctx, q, org, a.Finding.ID, *a.Candidate, snap, at); err != nil {
 				return nil, err
 			}
 		case domain.ActReopen, domain.ActExpire:
 			if a.Candidate != nil {
-				if _, err := see(ctx, q, org, a.Finding.ID, *a.Candidate, snap, at); err != nil {
+				if err := see(ctx, q, org, a.Finding.ID, *a.Candidate, snap, at); err != nil {
 					return nil, err
 				}
 			}
@@ -149,15 +151,16 @@ func insert(ctx context.Context, q *dbq.Queries, org ids.OrgID, c domain.Candida
 	})
 }
 
-func see(ctx context.Context, q *dbq.Queries, org ids.OrgID, id ids.UUID, c domain.Candidate, snap ids.UUID, at time.Time) (dbq.PcPostureFinding, error) {
+func see(ctx context.Context, q *dbq.Queries, org ids.OrgID, id ids.UUID, c domain.Candidate, snap ids.UUID, at time.Time) error {
 	detail, err := detailOf(c)
 	if err != nil {
-		return dbq.PcPostureFinding{}, err
+		return err
 	}
-	return q.SeePostureFinding(ctx, dbq.SeePostureFindingParams{
+	_, err = q.SeePostureFinding(ctx, dbq.SeePostureFindingParams{
 		OrgID: org, ID: id, Title: c.Title, Detail: detail, AffectedPaths: c.Paths, Severity: c.Severity, SnapshotID: snap,
 		SeenAt: at, AgentID: c.Agent, ConnectionID: c.Connection, GrantID: c.Grant, CoverageFindingID: c.CoverageFinding,
 	})
+	return err
 }
 
 type moveOpts struct {
@@ -301,7 +304,7 @@ func Note(ctx context.Context, tx db.TenantTx, id ids.UUID, note string, actor e
 		return err
 	}
 	if n := len([]rune(strings.TrimSpace(note))); n == 0 || n > 1000 {
-		return errors.New("posture: a note is 1..1000 characters")
+		return errNote
 	}
 	return record(ctx, tx, id, "NOTE", nil, domain.State(f.State), actor, strings.TrimSpace(note), nil)
 }

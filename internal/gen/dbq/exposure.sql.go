@@ -493,6 +493,180 @@ func (q *Queries) GetExposureChanges(ctx context.Context, orgID ids.OrgID) (PcEx
 	return i, err
 }
 
+const graphActivity = `-- name: GraphActivity :many
+SELECT t.id, t.run_id, r.agent_id, r.parent_run_id, r.principal_user_id, t.operation::text AS operation,
+    COALESCE(t.target_type, '')::text AS target_type, t.decision, t.effect_state, t.created_at,
+    COALESCE((SELECT a.outcome FROM pc.execution_attempts a WHERE a.org_id = t.org_id AND a.transaction_id = t.id
+     ORDER BY a.id DESC LIMIT 1), '')::text AS outcome,
+    EXISTS (SELECT 1 FROM pc.decision_receipts d WHERE d.org_id = t.org_id AND d.transaction_id = t.id)::boolean AS has_receipt
+FROM pc.transactions t
+JOIN pc.runs r ON r.org_id = t.org_id AND r.id = t.run_id
+WHERE t.org_id = $1
+  AND ($2::uuid IS NULL OR t.run_id = $2 OR r.parent_run_id = $2)
+  AND (cardinality($3::uuid[]) = 0 OR r.agent_id = ANY ($3::uuid[]))
+  AND t.created_at >= $4 AND t.created_at <= $5
+ORDER BY t.created_at, t.id
+LIMIT $6
+`
+
+type GraphActivityParams struct {
+	OrgID     ids.OrgID
+	RunID     *ids.UUID
+	AgentIds  []ids.UUID
+	StartTime time.Time
+	EndTime   time.Time
+	MaxRows   int32
+}
+
+type GraphActivityRow struct {
+	ID              ids.UUID
+	RunID           ids.UUID
+	AgentID         ids.UUID
+	ParentRunID     *ids.UUID
+	PrincipalUserID *ids.UUID
+	Operation       string
+	TargetType      string
+	Decision        string
+	EffectState     *string
+	CreatedAt       time.Time
+	Outcome         string
+	HasReceipt      bool
+}
+
+// GraphActivity lists the transactions of a run (and its child runs) or
+// of agents, in a window, oldest first, with their latest execution
+// outcome and whether a decision receipt was recorded.
+func (q *Queries) GraphActivity(ctx context.Context, arg GraphActivityParams) ([]GraphActivityRow, error) {
+	rows, err := q.db.Query(ctx, graphActivity,
+		arg.OrgID,
+		arg.RunID,
+		arg.AgentIds,
+		arg.StartTime,
+		arg.EndTime,
+		arg.MaxRows,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GraphActivityRow{}
+	for rows.Next() {
+		var i GraphActivityRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.RunID,
+			&i.AgentID,
+			&i.ParentRunID,
+			&i.PrincipalUserID,
+			&i.Operation,
+			&i.TargetType,
+			&i.Decision,
+			&i.EffectState,
+			&i.CreatedAt,
+			&i.Outcome,
+			&i.HasReceipt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const graphGrantChanges = `-- name: GraphGrantChanges :many
+SELECT g.id AS grant_id, g.agent_id, r.revision, r.created_by, r.created_at,
+    (r.revision = g.current_revision AND g.state = 'ACTIVE')::boolean AS current
+FROM pc.grants g
+JOIN pc.grant_revisions r ON r.org_id = g.org_id AND r.grant_id = g.id
+WHERE g.org_id = $1
+  AND (cardinality($2::uuid[]) = 0 OR g.agent_id = ANY ($2::uuid[]))
+  AND r.created_at >= $3 AND r.created_at <= $4
+ORDER BY r.created_at, g.id
+LIMIT $5
+`
+
+type GraphGrantChangesParams struct {
+	OrgID     ids.OrgID
+	AgentIds  []ids.UUID
+	StartTime time.Time
+	EndTime   time.Time
+	MaxRows   int32
+}
+
+type GraphGrantChangesRow struct {
+	GrantID   ids.UUID
+	AgentID   ids.UUID
+	Revision  int32
+	CreatedBy string
+	CreatedAt time.Time
+	Current   bool
+}
+
+// GraphGrantChanges lists the revisions of agents' grants in a window.
+func (q *Queries) GraphGrantChanges(ctx context.Context, arg GraphGrantChangesParams) ([]GraphGrantChangesRow, error) {
+	rows, err := q.db.Query(ctx, graphGrantChanges,
+		arg.OrgID,
+		arg.AgentIds,
+		arg.StartTime,
+		arg.EndTime,
+		arg.MaxRows,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GraphGrantChangesRow{}
+	for rows.Next() {
+		var i GraphGrantChangesRow
+		if err := rows.Scan(
+			&i.GrantID,
+			&i.AgentID,
+			&i.Revision,
+			&i.CreatedBy,
+			&i.CreatedAt,
+			&i.Current,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const incidentAgents = `-- name: IncidentAgents :many
+SELECT DISTINCT (s ->> 'id')::text AS agent_id
+FROM pc.alerts a, jsonb_array_elements(a.subjects) s
+WHERE a.org_id = $1 AND a.incident_id = $2 AND s ->> 'type' = 'agent'
+ORDER BY 1
+`
+
+// IncidentAgents lists the agents an incident's alerts are about.
+func (q *Queries) IncidentAgents(ctx context.Context, orgID ids.OrgID, incidentID *ids.UUID) ([]string, error) {
+	rows, err := q.db.Query(ctx, incidentAgents, orgID, incidentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []string{}
+	for rows.Next() {
+		var agent_id string
+		if err := rows.Scan(&agent_id); err != nil {
+			return nil, err
+		}
+		items = append(items, agent_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const insertExposureRights = `-- name: InsertExposureRights :exec
 INSERT INTO pc.exposure_rights (org_id, snapshot_id, seq, reach_view, label, agent_id, connection_id, grant_id, operation,
     resource_group, verb, coverage, reasons, depth, expires_at, observed_at, observations, basis, irreversible)

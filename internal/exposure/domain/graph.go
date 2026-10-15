@@ -248,6 +248,7 @@ func agentNode(r Right) Node {
 }
 
 func stateOf(l Label) EdgeState {
+	//exhaustive:ignore // usable and conditional rights are active edges
 	switch l {
 	case Expired:
 		return EdgeExpired
@@ -274,7 +275,7 @@ func AuthorityEdges(rights []Right) []Edge {
 				Provenance: string(Effective),
 			},
 			Edge{
-				From: grant, To: Node{Type: "resource", ID: r.ResourceGroup}, Owner: ptr(agentNode(r)), Kind: EdgeAllows, Verb: r.Verb, State: st,
+				From: grant, To: Node{Type: "resource", ID: r.ResourceGroup}, Owner: ptr(ownerNode(r)), Kind: EdgeAllows, Verb: r.Verb, State: st,
 				Coverage: r.Coverage, Basis: "RULE_MATCH", ExpiresAt: r.ExpiresAt, Provenance: string(Effective),
 			})
 	}
@@ -289,6 +290,7 @@ func ExposureEdges(rights []Right) []Edge {
 	for _, r := range rights {
 		st := stateOf(r.Label)
 		basis := "RULE_MATCH"
+		//exhaustive:ignore // an effective right keeps its rule-match basis
 		switch r.View {
 		case Observed:
 			basis = "OBSERVED"
@@ -308,7 +310,7 @@ func ExposureEdges(rights []Right) []Edge {
 			})
 		}
 		out = append(out, Edge{
-			From: from, To: Node{Type: "resource", ID: r.ResourceGroup}, Owner: ptr(from), Kind: EdgeReaches, Verb: r.Verb,
+			From: from, To: Node{Type: "resource", ID: r.ResourceGroup}, Owner: ptr(ownerNode(r)), Kind: EdgeReaches, Verb: r.Verb,
 			State: st, Coverage: r.Coverage, Basis: basis, Operation: r.Operation, At: r.ObservedAt, ExpiresAt: r.ExpiresAt, Provenance: string(r.View),
 		})
 	}
@@ -413,6 +415,8 @@ type ChangeRecord struct {
 	Revision int
 	What     string
 	At       time.Time
+	// Owner is the agent the subject belongs to, when it has one.
+	Owner *Node
 	// Current is false for a change since superseded.
 	Current bool
 }
@@ -426,9 +430,20 @@ func ChangeEdges(cs []ChangeRecord) []Edge {
 			st = EdgeActive
 		}
 		out = append(out, Edge{
-			From: c.Actor, To: c.Subject, Kind: EdgeChanged, State: st, Revision: c.Revision,
+			From: c.Actor, To: c.Subject, Owner: c.Owner, Kind: EdgeChanged, State: st, Revision: c.Revision,
 			Basis: "OBSERVED", At: &at, Provenance: c.What,
 		})
 	}
 	return out
+}
+
+// CredentialHolder is the owner type of a right no agent holds: whoever
+// holds the connection's credential. Only an org-wide viewer sees it.
+const CredentialHolder = "credential_holder" //nolint:gosec // G101: a node type, not a credential
+
+func ownerNode(r Right) Node {
+	if r.Agent == nil {
+		return Node{Type: CredentialHolder, ID: r.Connection.String()}
+	}
+	return Node{Type: "agent", ID: r.Agent.String()}
 }

@@ -3,7 +3,7 @@
 
 // Package app computes and reads breach radius (G0 M10 D27–D31): it loads
 // what the exposure domain reads from the org's grants, published policy,
-// coverage, connections and credentials, materialises snapshots, and
+// coverage, connections and credentials, materializes snapshots, and
 // serves reads filtered by the viewer's permissions before anything is
 // assembled or counted (D8, HR-254).
 package app
@@ -268,7 +268,9 @@ func policy(ctx context.Context, q *dbq.Queries, org ids.OrgID) (domain.Policy, 
 		return domain.Policy{}, err
 	}
 	var b pdomain.Bundle
-	if err := json.Unmarshal(v.Bundle, &b); err != nil {
+	if json.Unmarshal(v.Bundle, &b) != nil {
+		// An unreadable bundle restricts we know not what: every effective
+		// right is CONDITIONAL with POLICY_UNKNOWN (more reach, never less).
 		return domain.Policy{Known: false}, nil
 	}
 	p := domain.Policy{Known: true}

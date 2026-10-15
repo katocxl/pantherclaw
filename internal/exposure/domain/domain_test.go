@@ -163,7 +163,7 @@ func TestMatrixCellsExplainTheirVerb(t *testing.T) {
 }
 
 // TestHR253_ViewsStaySeparate: the effective view carries the grant's
-// reach, labelled with coverage; the credential view carries the
+// reach, labeled with coverage; the credential view carries the
 // credential's scopes (with overreach) and the unknown routes; the
 // observed view carries only dispatches. None stands in for another.
 func TestHR253_ViewsStaySeparate(t *testing.T) {
@@ -382,7 +382,7 @@ func TestHR254_GraphFiltersBeforeCounting(t *testing.T) {
 	w.in.Grants[0].ExpiresAt = now.Add(-time.Second)
 	rs := domain.Compute(w.in).Rights
 	hidden := w.other.String()
-	visible := func(n domain.Node) bool { return !(n.Type == "agent" && n.ID == hidden) }
+	visible := func(n domain.Node) bool { return n.Type != "agent" || n.ID != hidden }
 	g := domain.Build(domain.ModeAuthority, domain.AuthorityEdges(rs), visible, domain.GraphFilter{}, true, domain.DefaultLimits)
 	for _, n := range g.Nodes {
 		if n.ID == hidden {

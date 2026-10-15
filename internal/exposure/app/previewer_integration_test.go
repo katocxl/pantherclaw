@@ -37,8 +37,10 @@ func TestIntReachPreviewer(t *testing.T) {
 	ctx := context.Background()
 	agent := reflexdomain.Subject{Type: reflexdomain.SubjectAgent, ID: o.Agent.String()}
 
-	d, err := p.PreviewReduction(ctx, o.Org, reflexdomain.ReductionChange{Kind: app.KindContain, Control: reflexdomain.ControlDenyAll,
-		Subjects: []reflexdomain.Subject{agent}})
+	d, err := p.PreviewReduction(ctx, o.Org, reflexdomain.ReductionChange{
+		Kind: app.KindContain, Control: reflexdomain.ControlDenyAll,
+		Subjects: []reflexdomain.Subject{agent},
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -46,16 +48,20 @@ func TestIntReachPreviewer(t *testing.T) {
 		d.Disruption[0] != agent || !strings.Contains(d.Note, "credential view") {
 		t.Fatalf("deny all: %+v", d)
 	}
-	h, err := p.PreviewReduction(ctx, o.Org, reflexdomain.ReductionChange{Kind: app.KindContain, Control: reflexdomain.ControlHoldWrites,
-		Subjects: []reflexdomain.Subject{agent}})
+	h, err := p.PreviewReduction(ctx, o.Org, reflexdomain.ReductionChange{
+		Kind: app.KindContain, Control: reflexdomain.ControlHoldWrites,
+		Subjects: []reflexdomain.Subject{agent},
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if h.After.Conditional <= h.Before.Conditional || len(h.Disruption) != 0 {
 		t.Fatalf("hold writes: %+v", h)
 	}
-	r, err := p.PreviewReduction(ctx, o.Org, reflexdomain.ReductionChange{Kind: app.KindRevokeCredential,
-		Subjects: []reflexdomain.Subject{{Type: reflexdomain.SubjectConnection, ID: o.Conn.String()}}})
+	r, err := p.PreviewReduction(ctx, o.Org, reflexdomain.ReductionChange{
+		Kind:     app.KindRevokeCredential,
+		Subjects: []reflexdomain.Subject{{Type: reflexdomain.SubjectConnection, ID: o.Conn.String()}},
+	})
 	if err != nil || r.After.Uncertain >= r.Before.Uncertain {
 		t.Fatalf("revoke credential: %+v %v", r, err)
 	}
@@ -63,8 +69,10 @@ func TestIntReachPreviewer(t *testing.T) {
 		t.Fatalf("unknown kind: %v", err)
 	}
 	community := &app.Previewer{Pool: o.P, Ents: edition(billing.Community)}
-	if _, err := community.PreviewReduction(ctx, o.Org, reflexdomain.ReductionChange{Kind: app.KindContain,
-		Control: reflexdomain.ControlDenyAll, Subjects: []reflexdomain.Subject{agent}}); !errors.Is(err, app.ErrEdition) {
+	if _, err := community.PreviewReduction(ctx, o.Org, reflexdomain.ReductionChange{
+		Kind:    app.KindContain,
+		Control: reflexdomain.ControlDenyAll, Subjects: []reflexdomain.Subject{agent},
+	}); !errors.Is(err, app.ErrEdition) {
 		t.Fatalf("community: %v", err)
 	}
 	if _, err := (&app.Previewer{Pool: o.P}).PreviewReduction(ctx, o.Org, reflexdomain.ReductionChange{}); !errors.Is(err, app.ErrEdition) {

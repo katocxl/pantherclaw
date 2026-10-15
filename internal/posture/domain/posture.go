@@ -31,10 +31,10 @@ const (
 	UncoveredPath           Kind = "uncovered_path"
 	UnownedAgent            Kind = "unowned_agent"
 	UnsafeDelegation        Kind = "unsafe_delegation"
-	StaleCredential         Kind = "stale_credential"
+	StaleCredential         Kind = "stale_credential" //nolint:gosec // G101: a finding kind, not a credential
 	UnusedAuthority         Kind = "unused_authority"
 	UnverifiedSensitiveTool Kind = "unverified_sensitive_tool"
-	CredentialOverreach     Kind = "credential_overreach"
+	CredentialOverreach     Kind = "credential_overreach" //nolint:gosec // G101: a finding kind, not a credential
 )
 
 // Kinds lists every kind.
@@ -356,6 +356,7 @@ func credentialPaths(rights []exposure.Right, conn ids.UUID) []string {
 }
 
 func sev(v exposure.Verb) string {
+	//exhaustive:ignore // reads, exports and delegation are low
 	switch v {
 	case exposure.VerbTransfer, exposure.VerbDelete:
 		return "high"

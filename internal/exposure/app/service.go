@@ -24,7 +24,7 @@ const MaxRights = 100000
 // batch is how many rights one insert carries.
 const batch = 1000
 
-// Snapshot is a materialised computation.
+// Snapshot is a materialized computation.
 type Snapshot struct {
 	ID         ids.UUID
 	FeedSeq    int64

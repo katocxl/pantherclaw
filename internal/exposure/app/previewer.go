@@ -34,12 +34,11 @@ const (
 	KindContain              = "contain"
 	KindRevokeGrant          = "revoke_grant"
 	KindNarrowGrant          = "narrow_grant"
-	KindRevokeCredential     = "revoke_credential"
-	KindRotateCredential     = "rotate_credential"
+	KindRevokeCredential     = "revoke_credential" //nolint:gosec // G101: a reduction kind, not a credential
+	KindRotateCredential     = "rotate_credential" //nolint:gosec // G101: a reduction kind, not a credential
 	KindQuarantineConnection = "quarantine_connection"
 	KindSuspendAgent         = "suspend_agent"
 )
-
 
 // Previewer implements reflexdomain.ReachPreviewer on the org's live
 // inputs (F259): it computes reach before and after the reduction in a
@@ -147,6 +146,7 @@ func ChangeOf(ctx context.Context, q *dbq.Queries, org ids.OrgID, c reflexdomain
 		case c.Kind == KindNarrowGrant:
 			notes = append(notes, "narrowing a grant is not previewed: reach is shown unchanged")
 		case c.Kind == KindContain:
+			//exhaustive:ignore // any other subject type cannot be contained here
 			switch s.Type {
 			case reflexdomain.SubjectAgent:
 				restrict(domain.Restriction{Agent: &id})
@@ -202,7 +202,7 @@ func descendants(ctx context.Context, q *dbq.Queries, org ids.OrgID, grant ids.U
 	return out
 }
 
-// ReachOf summarises current rights (effective and credential views).
+// ReachOf summarizes current rights (effective and credential views).
 func ReachOf(rights []domain.Right) reflexdomain.Reach {
 	var r reflexdomain.Reach
 	groups := map[string]bool{}
@@ -211,6 +211,7 @@ func ReachOf(rights []domain.Right) reflexdomain.Reach {
 			continue
 		}
 		groups[x.ResourceGroup] = true
+		//exhaustive:ignore // uncertain and anything unrecognized count as uncertain; expired never reaches here
 		switch x.Label {
 		case domain.Usable:
 			r.Usable++

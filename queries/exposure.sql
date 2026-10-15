@@ -163,3 +163,40 @@ SELECT agent_id, grant_id FROM pc.runs WHERE org_id = sqlc.arg(org_id) AND id = 
 SELECT id FROM pc.grants
 WHERE org_id = sqlc.arg(org_id) AND principal_user_id = sqlc.arg(user_id) AND state = 'ACTIVE'
 ORDER BY id;
+
+-- GraphActivity lists the transactions of a run (and its child runs) or
+-- of agents, in a window, oldest first, with their latest execution
+-- outcome and whether a decision receipt was recorded.
+-- name: GraphActivity :many
+SELECT t.id, t.run_id, r.agent_id, r.parent_run_id, r.principal_user_id, t.operation::text AS operation,
+    COALESCE(t.target_type, '')::text AS target_type, t.decision, t.effect_state, t.created_at,
+    COALESCE((SELECT a.outcome FROM pc.execution_attempts a WHERE a.org_id = t.org_id AND a.transaction_id = t.id
+     ORDER BY a.id DESC LIMIT 1), '')::text AS outcome,
+    EXISTS (SELECT 1 FROM pc.decision_receipts d WHERE d.org_id = t.org_id AND d.transaction_id = t.id)::boolean AS has_receipt
+FROM pc.transactions t
+JOIN pc.runs r ON r.org_id = t.org_id AND r.id = t.run_id
+WHERE t.org_id = sqlc.arg(org_id)
+  AND (sqlc.narg(run_id)::uuid IS NULL OR t.run_id = sqlc.narg(run_id) OR r.parent_run_id = sqlc.narg(run_id))
+  AND (cardinality(sqlc.arg(agent_ids)::uuid[]) = 0 OR r.agent_id = ANY (sqlc.arg(agent_ids)::uuid[]))
+  AND t.created_at >= sqlc.arg(start_time) AND t.created_at <= sqlc.arg(end_time)
+ORDER BY t.created_at, t.id
+LIMIT sqlc.arg(max_rows);
+
+-- GraphGrantChanges lists the revisions of agents' grants in a window.
+-- name: GraphGrantChanges :many
+SELECT g.id AS grant_id, g.agent_id, r.revision, r.created_by, r.created_at,
+    (r.revision = g.current_revision AND g.state = 'ACTIVE')::boolean AS current
+FROM pc.grants g
+JOIN pc.grant_revisions r ON r.org_id = g.org_id AND r.grant_id = g.id
+WHERE g.org_id = sqlc.arg(org_id)
+  AND (cardinality(sqlc.arg(agent_ids)::uuid[]) = 0 OR g.agent_id = ANY (sqlc.arg(agent_ids)::uuid[]))
+  AND r.created_at >= sqlc.arg(start_time) AND r.created_at <= sqlc.arg(end_time)
+ORDER BY r.created_at, g.id
+LIMIT sqlc.arg(max_rows);
+
+-- IncidentAgents lists the agents an incident's alerts are about.
+-- name: IncidentAgents :many
+SELECT DISTINCT (s ->> 'id')::text AS agent_id
+FROM pc.alerts a, jsonb_array_elements(a.subjects) s
+WHERE a.org_id = sqlc.arg(org_id) AND a.incident_id = sqlc.arg(incident_id) AND s ->> 'type' = 'agent'
+ORDER BY 1;

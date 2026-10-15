@@ -154,3 +154,18 @@ func (o *Org) Dispatch(t *testing.T, op string) ids.UUID {
 		VALUES ($1, $2, $3, $4, 'accepted', 200, 're_1')`, o.Org, ids.NewV7(), permit, txn)
 	return txn
 }
+
+// Claim places agent in a new team (with an environment of its own) owned
+// by the org's user, and returns the team: a caller bound at that team
+// sees the agent, and nothing at org scope.
+func (o *Org) Claim(t *testing.T, agent ids.UUID) ids.UUID {
+	t.Helper()
+	team, env := ids.NewV7(), ids.NewV7()
+	slug := "t" + strings.ReplaceAll(team.String(), "-", "")[:12]
+	o.Exec(t, "INSERT INTO pc.teams (org_id, id, slug, name) VALUES ($1, $2, $3, 'Team')", o.Org, team, slug)
+	o.Exec(t, `INSERT INTO pc.environments (org_id, id, team_id, slug, name, kind) VALUES ($1, $2, $3, $4, 'Env', 'DEVELOPMENT')`,
+		o.Org, env, team, slug)
+	o.D.AdminExec(t, `UPDATE pc.agents SET state = 'CLAIMED', claimed_at = now(), team_id = $2, environment_id = $3,
+		owner_user_id = $4, execution_context = 'ci' WHERE id = $1`, agent, team, env, o.User)
+	return team
+}

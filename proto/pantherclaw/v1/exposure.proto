@@ -1,0 +1,454 @@
+// SPDX-License-Identifier: BUSL-1.1
+// Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+
+syntax = "proto3";
+
+package pantherclaw.v1;
+
+import "buf/validate/validate.proto";
+import "google/protobuf/timestamp.proto";
+
+// ExposureService reads breach radius (G0 M10 D27–D31; F253–F260, F430;
+// HR-253, HR-254; Team edition).
+//
+// Reach is kept in three views that never stand in for each other:
+// OBSERVED (effects actually dispatched), EFFECTIVE (active grant bounds
+// with the published policy and coverage) and CREDENTIAL (what a credential
+// or a bypass route can do outside PantherClaw's decisions). Every right
+// carries a label: USABLE, CONDITIONAL, EXPIRED or UNCERTAIN; a scope that
+// could not be read is UNCERTAIN, never absent. A snapshot is recomputed
+// when grants, policy, coverage, connections or credentials change, and a
+// read says when it is stale. Every read filters by the caller's
+// exposure.read where each agent lives before it lists, counts or ranks
+// anything; credential rights, held by no agent, need exposure.read at org
+// scope.
+service ExposureService {
+  // GetExposure lists the current snapshot's rights the caller may see.
+  // permission: exposure.read
+  rpc GetExposure(GetExposureRequest) returns (GetExposureResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // GetReachMatrix folds the visible rights into agents x resource groups
+  // x verbs per view (F256); each cell explains its verb.
+  // permission: exposure.read
+  rpc GetReachMatrix(GetReachMatrixRequest) returns (GetReachMatrixResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // RankExposure orders the visible agents by consequence, scope, present
+  // usability, enforceability, ownership and remediation readiness, each
+  // key shown; there is no single score (F257).
+  // permission: exposure.read
+  rpc RankExposure(RankExposureRequest) returns (RankExposureResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // ListCredentialDependents lists every workload whose reach goes through
+  // a connection's credential (F260, F430); needs exposure.read at org
+  // scope.
+  // permission: exposure.read
+  rpc ListCredentialDependents(ListCredentialDependentsRequest) returns (ListCredentialDependentsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // PreviewReduction computes reach before and after an authority
+  // reduction on live data and stores nothing (F259); needs exposure.read
+  // at org scope.
+  // permission: exposure.read
+  rpc PreviewReduction(PreviewReductionRequest) returns (PreviewReductionResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+}
+
+// GraphService reads activity, causal, authority, exposure and change
+// graphs (F272, F274, F289, F293, F298; HR-254; Team edition). Every graph
+// shares one edge vocabulary. Edges the caller may not see are dropped
+// before expansion, collapsing, capping and counting; historical and
+// expired edges are kept but never counted as current authority. Graphs
+// are capped at 2000 nodes and 5000 edges and say when they were cut.
+// Every graph has a tabular twin with the same filters.
+service GraphService {
+  // GetGraph builds a graph from a scope.
+  // permission: exposure.read
+  rpc GetGraph(GetGraphRequest) returns (GetGraphResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // ListGraphEdges lists the same graph's edges as a table.
+  // permission: exposure.read
+  rpc ListGraphEdges(ListGraphEdgesRequest) returns (ListGraphEdgesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+}
+
+enum ExposureView {
+  EXPOSURE_VIEW_UNSPECIFIED = 0;
+  EXPOSURE_VIEW_OBSERVED = 1;
+  EXPOSURE_VIEW_EFFECTIVE = 2;
+  EXPOSURE_VIEW_CREDENTIAL = 3;
+}
+
+enum ExposureLabel {
+  EXPOSURE_LABEL_UNSPECIFIED = 0;
+  EXPOSURE_LABEL_USABLE = 1;
+  EXPOSURE_LABEL_CONDITIONAL = 2;
+  EXPOSURE_LABEL_EXPIRED = 3;
+  EXPOSURE_LABEL_UNCERTAIN = 4;
+}
+
+enum ExposureVerb {
+  EXPOSURE_VERB_UNSPECIFIED = 0;
+  EXPOSURE_VERB_READ = 1;
+  EXPOSURE_VERB_EXPORT = 2;
+  EXPOSURE_VERB_UPDATE = 3;
+  EXPOSURE_VERB_DELETE = 4;
+  EXPOSURE_VERB_TRANSFER = 5;
+  EXPOSURE_VERB_DELEGATE = 6;
+}
+
+// ExposureSnapshot says which computation a read comes from.
+message ExposureSnapshot {
+  string id = 1;
+  google.protobuf.Timestamp compute_time = 2;
+  // stale: a change was recorded after the computation (F258).
+  bool stale = 3;
+  google.protobuf.Timestamp change_time = 4;
+  // truncated: more rights than a snapshot holds; never complete.
+  bool truncated = 5;
+  // gaps name what the computation could not read.
+  repeated string gaps = 6;
+  string cause = 7;
+}
+
+// ExposureRight is one thing an agent, or a credential's holder, can do.
+message ExposureRight {
+  ExposureView view = 1;
+  ExposureLabel label = 2;
+  // agent_id is empty for a credential right: every holder of it.
+  string agent_id = 3;
+  string connection_id = 4;
+  string grant_id = 5;
+  string operation = 6;
+  string resource_group = 7;
+  ExposureVerb verb = 8;
+  // coverage is UNKNOWN, OBSERVE_ONLY, PARTIAL or ENFORCED.
+  string coverage = 9;
+  repeated string reasons = 10;
+  // basis explains the verb: ACCESS, EFFECT_KIND:<kind>, DEFAULT_UPDATE,
+  // DELEGATION or SCOPE_LEVEL.
+  string basis = 11;
+  bool irreversible = 12;
+  int32 delegation_depth = 13;
+  google.protobuf.Timestamp expire_time = 14;
+  google.protobuf.Timestamp observe_time = 15;
+  int32 observations = 16;
+}
+
+message GetExposureRequest {
+  string agent_id = 1 [(buf.validate.field).string = {
+    max_len: 36
+    pattern: "^([0-9a-f-]{36})?$"
+  }];
+  string connection_id = 2 [(buf.validate.field).string = {
+    max_len: 36
+    pattern: "^([0-9a-f-]{36})?$"
+  }];
+  ExposureView view = 3 [(buf.validate.field).enum.defined_only = true];
+  string resource_group = 4 [(buf.validate.field).string.max_len = 200];
+  // current_only leaves out EXPIRED rights.
+  bool current_only = 5;
+  int32 page_size = 6 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 200
+  }];
+  string page_token = 7 [(buf.validate.field).string = {
+    max_len: 16
+    pattern: "^[0-9]*$"
+  }];
+}
+
+message GetExposureResponse {
+  ExposureSnapshot snapshot = 1;
+  repeated ExposureRight rights = 2;
+  // restricted: the caller's scope is narrower than the org. It comes
+  // from the caller's permissions, never from whether hidden rows exist.
+  bool restricted = 3;
+  string next_page_token = 4;
+}
+
+message ReachCell {
+  string agent_id = 1;
+  string resource_group = 2;
+  ExposureVerb verb = 3;
+  ExposureView view = 4;
+  ExposureLabel label = 5;
+  string coverage = 6;
+  repeated string bases = 7;
+  bool irreversible = 8;
+  int32 rights = 9;
+}
+
+message GetReachMatrixRequest {
+  string agent_id = 1 [(buf.validate.field).string = {
+    max_len: 36
+    pattern: "^([0-9a-f-]{36})?$"
+  }];
+  string connection_id = 2 [(buf.validate.field).string = {
+    max_len: 36
+    pattern: "^([0-9a-f-]{36})?$"
+  }];
+}
+
+message GetReachMatrixResponse {
+  ExposureSnapshot snapshot = 1;
+  repeated string agent_ids = 2;
+  repeated string resource_groups = 3;
+  repeated ReachCell cells = 4;
+  bool restricted = 5;
+}
+
+// RankKeys are the ranking's keys in order, each shown as is.
+message RankKeys {
+  ExposureVerb consequence = 1;
+  bool irreversible = 2;
+  int32 resource_groups = 3;
+  int32 connections = 4;
+  ExposureLabel usability = 5;
+  string enforceability = 6;
+  bool owned = 7;
+  int32 revocable = 8;
+  int32 unrevocable = 9;
+}
+
+message RankedAgent {
+  // agent_id is empty for credential holders.
+  string agent_id = 1;
+  RankKeys keys = 2;
+}
+
+message RankExposureRequest {
+  int32 limit = 1 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 200
+  }];
+}
+
+message RankExposureResponse {
+  ExposureSnapshot snapshot = 1;
+  repeated RankedAgent agents = 2;
+  bool restricted = 3;
+}
+
+message CredentialWorkload {
+  string agent_id = 1;
+  repeated ExposureView views = 2;
+  int32 rights = 3;
+  google.protobuf.Timestamp last_use_time = 4;
+}
+
+message ListCredentialDependentsRequest {
+  string connection_id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+message ListCredentialDependentsResponse {
+  ExposureSnapshot snapshot = 1;
+  repeated CredentialWorkload workloads = 2;
+}
+
+// ReductionSubject names what a reduction acts on (D1 subject types).
+message ReductionSubject {
+  string type = 1 [(buf.validate.field).string = {
+    in: ["agent", "run", "grant", "connection", "credential", "user", "resource"]
+  }];
+  string id = 2 [(buf.validate.field).string.uuid = true];
+}
+
+message PreviewReductionRequest {
+  // kind: contain, revoke_grant, narrow_grant, revoke_credential,
+  // rotate_credential, quarantine_connection or suspend_agent.
+  string kind = 1 [(buf.validate.field).string = {
+    in: ["contain", "revoke_grant", "narrow_grant", "revoke_credential", "rotate_credential", "quarantine_connection", "suspend_agent"]
+  }];
+  repeated ReductionSubject subjects = 2 [(buf.validate.field).repeated = {
+    min_items: 1
+    max_items: 32
+  }];
+  // control for contain: DENY_ALL, HOLD_WRITES or DENY_OPERATION.
+  string control = 3 [(buf.validate.field).string = {
+    in: ["", "DENY_ALL", "HOLD_WRITES", "DENY_OPERATION"]
+  }];
+  string operation = 4 [(buf.validate.field).string = {
+    max_len: 200
+    pattern: "^([a-z][a-z0-9_]*(\\.[a-z0-9_]+){1,7})?$"
+  }];
+}
+
+// ReachCount counts current rights per view and label.
+message ReachCount {
+  ExposureView view = 1;
+  int32 usable = 2;
+  int32 conditional = 3;
+  int32 uncertain = 4;
+}
+
+message PreviewReductionResponse {
+  repeated ReachCount before = 1;
+  repeated ReachCount after = 2;
+  // removed: current rights the reduction takes away.
+  repeated ExposureRight removed = 3;
+  // weakened: rights that stay but become less usable.
+  repeated ExposureRight weakened = 4;
+  // remaining: rights in the reduction's scope it does not reach (another
+  // grant, a credential, a route): containment is not closure (D31).
+  repeated ExposureRight remaining = 5;
+  // disruption: recently observed work whose effective right goes.
+  repeated ExposureRight disruption = 6;
+  string note = 7;
+  // truncated: the lists were cut at 500 rights each.
+  bool truncated = 8;
+}
+
+enum GraphMode {
+  GRAPH_MODE_UNSPECIFIED = 0;
+  GRAPH_MODE_ACTIVITY = 1;
+  GRAPH_MODE_CAUSAL = 2;
+  GRAPH_MODE_AUTHORITY = 3;
+  GRAPH_MODE_EXPOSURE = 4;
+  GRAPH_MODE_CHANGE = 5;
+}
+
+enum GraphEdgeState {
+  GRAPH_EDGE_STATE_UNSPECIFIED = 0;
+  GRAPH_EDGE_STATE_ACTIVE = 1;
+  GRAPH_EDGE_STATE_HISTORICAL = 2;
+  GRAPH_EDGE_STATE_EXPIRED = 3;
+  GRAPH_EDGE_STATE_POSSIBLE = 4;
+}
+
+message GraphNode {
+  string type = 1;
+  string id = 2;
+}
+
+message GraphEdge {
+  GraphNode from = 1;
+  GraphNode to = 2;
+  // kind: holds, allows, reaches, through, acted, touched, delegated,
+  // then, changed or gap.
+  string kind = 3;
+  ExposureVerb verb = 4;
+  string operation = 5;
+  GraphEdgeState state = 6;
+  string decision = 7;
+  string coverage = 8;
+  string execution = 9;
+  string effect = 10;
+  // basis: OBSERVED, RULE_MATCH, INFERRED or HYPOTHESIS.
+  string basis = 11;
+  int32 revision = 12;
+  google.protobuf.Timestamp time = 13;
+  google.protobuf.Timestamp expire_time = 14;
+  string freshness = 15;
+  string provenance = 16;
+  int32 count = 17;
+}
+
+// GraphScope is where a graph starts (F293).
+message GraphScope {
+  // type: run (a task), agent, incident or resource (a resource group).
+  string type = 1 [(buf.validate.field).string = {
+    in: ["run", "agent", "incident", "resource"]
+  }];
+  string id = 2 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 200
+  }];
+}
+
+// GraphFilter narrows a graph; empty fields do not filter.
+message GraphFilter {
+  google.protobuf.Timestamp start_time = 1;
+  google.protobuf.Timestamp end_time = 2;
+  repeated string run_ids = 3 [(buf.validate.field).repeated = {
+    max_items: 50
+    items: {
+      string: {uuid: true}
+    }
+  }];
+  repeated string agent_ids = 4 [(buf.validate.field).repeated = {
+    max_items: 50
+    items: {
+      string: {uuid: true}
+    }
+  }];
+  repeated string operations = 5 [(buf.validate.field).repeated = {
+    max_items: 50
+    items: {
+      string: {max_len: 200}
+    }
+  }];
+  repeated string decisions = 6 [(buf.validate.field).repeated = {
+    max_items: 10
+    items: {
+      string: {max_len: 32}
+    }
+  }];
+  repeated string outcomes = 7 [(buf.validate.field).repeated = {
+    max_items: 10
+    items: {
+      string: {max_len: 32}
+    }
+  }];
+  repeated string principal_ids = 8 [(buf.validate.field).repeated = {
+    max_items: 50
+    items: {
+      string: {uuid: true}
+    }
+  }];
+}
+
+message GetGraphRequest {
+  GraphMode mode = 1 [(buf.validate.field).enum = {
+    defined_only: true
+    not_in: [0]
+  }];
+  GraphScope scope = 2 [(buf.validate.field).required = true];
+  GraphFilter filter = 3;
+  // collapse merges repeated edges; gaps are never merged away.
+  bool collapse = 4;
+}
+
+message GetGraphResponse {
+  GraphMode mode = 1;
+  repeated GraphNode nodes = 2;
+  repeated GraphEdge edges = 3;
+  bool truncated = 4;
+  // current counts current edges by kind; history is never in it.
+  map<string, int32> current = 5;
+  bool restricted = 6;
+  // as_of is when the data was read; snapshot is set for authority and
+  // exposure graphs.
+  google.protobuf.Timestamp as_of = 7;
+  ExposureSnapshot snapshot = 8;
+}
+
+message ListGraphEdgesRequest {
+  GraphMode mode = 1 [(buf.validate.field).enum = {
+    defined_only: true
+    not_in: [0]
+  }];
+  GraphScope scope = 2 [(buf.validate.field).required = true];
+  GraphFilter filter = 3;
+  bool collapse = 4;
+  int32 page_size = 5 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 200
+  }];
+  string page_token = 6 [(buf.validate.field).string = {
+    max_len: 16
+    pattern: "^[0-9]*$"
+  }];
+}
+
+message ListGraphEdgesResponse {
+  repeated GraphEdge edges = 1;
+  bool truncated = 2;
+  bool restricted = 3;
+  string next_page_token = 4;
+}
