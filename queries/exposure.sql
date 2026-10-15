@@ -133,8 +133,8 @@ ON CONFLICT (org_id) DO UPDATE SET change_seq = GREATEST(pc.exposure_changes.cha
 -- AdvanceExposureRead moves the recompute job's feed position forward,
 -- compare-and-set.
 -- name: AdvanceExposureRead :execrows
-INSERT INTO pc.exposure_changes (org_id, read_seq)
-VALUES (sqlc.arg(org_id), sqlc.arg(read_seq))
+INSERT INTO pc.exposure_changes (org_id, read_seq, changed_at)
+VALUES (sqlc.arg(org_id), sqlc.arg(read_seq), 'epoch')
 ON CONFLICT (org_id) DO UPDATE SET read_seq = EXCLUDED.read_seq
 WHERE pc.exposure_changes.read_seq = sqlc.arg(expected);
 

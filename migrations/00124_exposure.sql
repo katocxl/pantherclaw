@@ -85,7 +85,8 @@ CREATE INDEX exposure_rights_connection ON pc.exposure_rights (org_id, snapshot_
 
 CREATE TABLE pc.exposure_changes (
     org_id     uuid        NOT NULL REFERENCES pc.orgs (id),
-    -- The feed seq of the last change that moves reach, and when it was.
+    -- The feed seq of the last change that moves reach, and when it was
+    -- (the epoch until the first change).
     change_seq bigint      NOT NULL DEFAULT 0 CHECK (change_seq >= 0),
     changed_at timestamptz NOT NULL DEFAULT now(),
     -- The feed seq the recompute job has read up to.

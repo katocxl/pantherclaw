@@ -16,8 +16,8 @@ import (
 )
 
 const advanceExposureRead = `-- name: AdvanceExposureRead :execrows
-INSERT INTO pc.exposure_changes (org_id, read_seq)
-VALUES ($1, $2)
+INSERT INTO pc.exposure_changes (org_id, read_seq, changed_at)
+VALUES ($1, $2, 'epoch')
 ON CONFLICT (org_id) DO UPDATE SET read_seq = EXCLUDED.read_seq
 WHERE pc.exposure_changes.read_seq = $3
 `

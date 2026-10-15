@@ -40,12 +40,6 @@ const (
 	KindSuspendAgent         = "suspend_agent"
 )
 
-// Containment controls (D21).
-const (
-	ControlDenyAll       = "DENY_ALL"
-	ControlHoldWrites    = "HOLD_WRITES"
-	ControlDenyOperation = "DENY_OPERATION"
-)
 
 // Previewer implements reflexdomain.ReachPreviewer on the org's live
 // inputs (F259): it computes reach before and after the reduction in a
@@ -115,9 +109,9 @@ func ChangeOf(ctx context.Context, q *dbq.Queries, org ids.OrgID, c reflexdomain
 	}
 	restrict := func(x domain.Restriction) {
 		switch c.Control {
-		case ControlHoldWrites:
+		case reflexdomain.ControlHoldWrites:
 			x.Hold = true
-		case ControlDenyOperation:
+		case reflexdomain.ControlDenyOperation:
 			x.Operation = c.Operation
 		}
 		out.Restrictions = append(out.Restrictions, x)
