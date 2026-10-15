@@ -16,6 +16,7 @@ import (
 	adomain "github.com/katocxl/pantherclaw/internal/authority/domain"
 	"github.com/katocxl/pantherclaw/internal/authority/finalize"
 	"github.com/katocxl/pantherclaw/internal/authority/pipeline"
+	"github.com/katocxl/pantherclaw/internal/authority/replay"
 	billing "github.com/katocxl/pantherclaw/internal/billing/domain"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	napp "github.com/katocxl/pantherclaw/internal/notifications/app"
@@ -338,7 +339,7 @@ func TestHR233_ShadowAddsNothingToTheDecisionPath(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if s.ByCategory[rollout.NewlyDenied] != 1 || s.Total != 1 {
+	if s.ByCategory[replay.NewlyDenied] != 1 || s.Total != 1 {
 		t.Fatalf("the shadow's prediction: %+v", s)
 	}
 }
@@ -407,8 +408,8 @@ func TestHR237_ShadowSummaryIsLabelledAndCarriesNoInputValues(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if s.Label != "shadow prediction, not enforcement" || s.Total != 2 || s.ByCategory[rollout.NewlyDenied] != 1 ||
-		s.ByCategory[rollout.Unchanged] != 1 || len(s.ByOperation) == 0 || len(s.ByAgent) == 0 || len(s.Samples) != 1 {
+	if s.Label != "shadow prediction, not enforcement" || s.Total != 2 || s.ByCategory[replay.NewlyDenied] != 1 ||
+		s.ByCategory[replay.Unchanged] != 1 || len(s.ByOperation) == 0 || len(s.ByAgent) == 0 || len(s.Samples) != 1 {
 		t.Fatalf("summary: %+v", s)
 	}
 	raw, _ := json.Marshal(s)

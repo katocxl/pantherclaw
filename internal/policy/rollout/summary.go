@@ -7,6 +7,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/katocxl/pantherclaw/internal/authority/replay"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
@@ -25,7 +26,7 @@ type ShadowSummary struct {
 	Rollout ids.UUID
 	// Total and ByCategory count every shadow evaluation; ByDay by UTC day.
 	Total      int64
-	ByCategory map[Category]int64
+	ByCategory map[replay.Category]int64
 	ByDay      []DayCount
 	// NewlyHeldPerDay is the approval burden: decisions the version would
 	// hold for approval or step-up that were not held.
@@ -41,14 +42,14 @@ type ShadowSummary struct {
 // DayCount is a count of one category on one UTC day.
 type DayCount struct {
 	Day      string
-	Category Category
+	Category replay.Category
 	N        int64
 }
 
 // GroupCount is a count of one category for an operation or an agent.
 type GroupCount struct {
 	Key      string
-	Category Category
+	Category replay.Category
 	N        int64
 }
 
@@ -62,7 +63,7 @@ type Sample struct {
 	OriginalReason   string
 	ShadowDecision   string
 	ShadowReason     string
-	Category         Category
+	Category         replay.Category
 	Limitation       string
 	At               time.Time
 }
@@ -74,7 +75,7 @@ func (s *Service) GetShadowSummary(ctx context.Context, rollout ids.UUID) (Shado
 		return ShadowSummary{}, err
 	}
 	out := ShadowSummary{
-		Label: ShadowLabel, Rollout: rollout, ByCategory: map[Category]int64{}, ByDay: []DayCount{}, NewlyHeldPerDay: []DayCount{},
+		Label: ShadowLabel, Rollout: rollout, ByCategory: map[replay.Category]int64{}, ByDay: []DayCount{}, NewlyHeldPerDay: []DayCount{},
 		ByOperation: []GroupCount{}, ByAgent: []GroupCount{}, Samples: []Sample{},
 	}
 	err = s.Pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
@@ -89,11 +90,11 @@ func (s *Service) GetShadowSummary(ctx context.Context, rollout ids.UUID) (Shado
 			return err
 		}
 		for _, d := range days {
-			dc := DayCount{Day: d.Day.Time.Format(time.DateOnly), Category: Category(d.Category), N: d.N}
+			dc := DayCount{Day: d.Day.Time.Format(time.DateOnly), Category: replay.Category(d.Category), N: d.N}
 			out.ByDay = append(out.ByDay, dc)
 			out.ByCategory[dc.Category] += d.N
 			out.Total += d.N
-			if dc.Category == NewlyHeld {
+			if dc.Category == replay.NewlyHeld {
 				out.NewlyHeldPerDay = append(out.NewlyHeldPerDay, dc)
 			}
 		}
@@ -103,7 +104,7 @@ func (s *Service) GetShadowSummary(ctx context.Context, rollout ids.UUID) (Shado
 		}
 		var stored int64
 		for _, o := range ops {
-			out.ByOperation = append(out.ByOperation, GroupCount{Key: o.Operation, Category: Category(o.Category), N: o.N})
+			out.ByOperation = append(out.ByOperation, GroupCount{Key: o.Operation, Category: replay.Category(o.Category), N: o.N})
 			stored += o.N
 		}
 		out.Truncated = stored < out.Total
@@ -112,7 +113,7 @@ func (s *Service) GetShadowSummary(ctx context.Context, rollout ids.UUID) (Shado
 			return err
 		}
 		for _, a := range agents {
-			out.ByAgent = append(out.ByAgent, GroupCount{Key: a.AgentID.String(), Category: Category(a.Category), N: a.N})
+			out.ByAgent = append(out.ByAgent, GroupCount{Key: a.AgentID.String(), Category: replay.Category(a.Category), N: a.N})
 		}
 		samples, err := q.ShadowSamples(ctx, c.Org, rollout, samplesPerCategory)
 		if err != nil {
@@ -122,7 +123,7 @@ func (s *Service) GetShadowSummary(ctx context.Context, rollout ids.UUID) (Shado
 			out.Samples = append(out.Samples, Sample{
 				Transaction: x.TransactionID, Evaluation: int(x.Evaluation), Agent: x.AgentID, Operation: x.Operation,
 				OriginalDecision: x.OriginalDecision, OriginalReason: x.OriginalReason, ShadowDecision: deref(x.ShadowDecision),
-				ShadowReason: deref(x.ShadowReason), Category: Category(x.Category), Limitation: deref(x.Limitation), At: x.CreatedAt,
+				ShadowReason: deref(x.ShadowReason), Category: replay.Category(x.Category), Limitation: deref(x.Limitation), At: x.CreatedAt,
 			})
 		}
 		return nil

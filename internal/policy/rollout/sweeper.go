@@ -188,7 +188,7 @@ func (s *Service) sweepRollout(ctx context.Context, org ids.OrgID, r dbq.PcPolic
 	}
 	var events []event
 	var results []dbq.InsertShadowResultParams
-	var uncounted []Category // shadow evaluations whose replay failed: counted, no row
+	var uncounted []replay.Category // shadow evaluations whose replay failed: counted, no row
 	cursor, moved := sc.cursor, false
 	for _, d := range sc.decisions {
 		var pol *recording.Policy
@@ -220,7 +220,7 @@ func (s *Service) sweepRollout(ctx context.Context, org ids.OrgID, r dbq.PcPolic
 			if ok {
 				results = append(results, res)
 			} else {
-				uncounted = append(uncounted, Unevaluable)
+				uncounted = append(uncounted, replay.Unevaluable)
 			}
 		}
 		cursor, moved = dbq.GetRolloutCursorRow{LastCreatedAt: d.CreatedAt, LastTxn: d.TransactionID}, true
@@ -341,7 +341,7 @@ func (s *Service) shadowOf(ctx context.Context, org ids.OrgID, r dbq.PcPolicyRol
 		if len(lim) > 500 {
 			lim = lim[:500]
 		}
-		res.Category, res.Limitation = string(Unevaluable), &lim
+		res.Category, res.Limitation = string(replay.Unevaluable), &lim
 		return res, true, nil
 	}
 	if !base.Complete {
@@ -363,14 +363,14 @@ func (s *Service) shadowOf(ctx context.Context, org ids.OrgID, r dbq.PcPolicyRol
 	}
 	decision, reason := string(sh.Decision), sh.Reason
 	res.ShadowDecision, res.ShadowReason = &decision, &reason
-	res.Category = string(Classify(base.Original.Decision, adomain.Decision(decision), base.Original.Reason, reason))
+	res.Category = string(replay.Classify(base.Original.Decision, adomain.Decision(decision), base.Original.Reason, reason))
 	return res, true, nil
 }
 
 // recordShadow writes a tick's shadow results, up to the rollout's bound,
 // and counts every one by day and category.
 func (s *Service) recordShadow(ctx context.Context, q *dbq.Queries, org ids.OrgID, rollout ids.UUID,
-	results []dbq.InsertShadowResultParams, uncounted []Category, out *Swept,
+	results []dbq.InsertShadowResultParams, uncounted []replay.Category, out *Swept,
 ) error {
 	if len(results) == 0 && len(uncounted) == 0 {
 		return nil
