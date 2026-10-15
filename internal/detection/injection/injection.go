@@ -21,6 +21,8 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"golang.org/x/text/unicode/norm"
+
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
 	evdomain "github.com/katocxl/pantherclaw/internal/evidence/domain"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
@@ -35,6 +37,9 @@ const (
 	ScanFlagged    = "flagged"
 	ScanClean      = "clean"
 	ScanNotScanned = "not_scanned"
+	// ScanPartial is a clean scan of a description the gateway cut short: the
+	// rest was not scanned, so it is never recorded as clean (D59 M8).
+	ScanPartial = "partial"
 )
 
 // MaxExcerpt bounds the recorded excerpt, in bytes.
@@ -70,9 +75,10 @@ type Result struct {
 func Scan(desc string) Result {
 	sum := sha256.Sum256([]byte(desc))
 	r := Result{Digest: "sha256:" + hex.EncodeToString(sum[:])}
+	text := Normalize(desc)
 	first := -1
 	for _, p := range patterns {
-		loc := p.re.FindStringIndex(desc)
+		loc := p.re.FindStringIndex(text)
 		if loc == nil {
 			continue
 		}
@@ -85,7 +91,7 @@ func Scan(desc string) Result {
 		return r
 	}
 	r.Flagged = true
-	r.Excerpt = excerpt(desc, first)
+	r.Excerpt = excerpt(text, first)
 	return r
 }
 
@@ -129,4 +135,43 @@ func Record(ctx context.Context, tx db.TenantTx, actor evdomain.Actor, object au
 		Details: details,
 	})
 	return err
+}
+
+// Normalize prepares a description for the scan (D59 M9): NFKC folds
+// fullwidth and compatibility forms, format characters (zero-width and
+// bidirectional controls) are dropped, every space separator becomes a
+// plain space, and Cyrillic and Greek letters that look like Latin ones
+// become those Latin letters, so look-alike spellings match the patterns.
+func Normalize(s string) string {
+	s = norm.NFKC.String(s)
+	var b strings.Builder
+	b.Grow(len(s))
+	for _, r := range s {
+		switch {
+		case unicode.Is(unicode.Cf, r):
+			continue
+		case unicode.IsSpace(r) || unicode.Is(unicode.Z, r):
+			r = ' '
+		}
+		if l, ok := homoglyphs[r]; ok {
+			r = l
+		}
+		b.WriteRune(r)
+	}
+	return b.String()
+}
+
+// homoglyphs maps Cyrillic and Greek letters to the Latin letters they
+// look like.
+var homoglyphs = map[rune]rune{
+	// Cyrillic.
+	'а': 'a', 'в': 'b', 'е': 'e', 'ё': 'e', 'з': '3', 'і': 'i', 'ї': 'i', 'ј': 'j', 'к': 'k', 'м': 'm', 'н': 'h',
+	'о': 'o', 'р': 'p', 'с': 'c', 'т': 't', 'у': 'y', 'х': 'x', 'ѕ': 's', 'ԁ': 'd', 'ӏ': 'l', 'ԛ': 'q', 'ԝ': 'w',
+	'һ': 'h', 'ь': 'b', 'А': 'A', 'В': 'B', 'Е': 'E', 'Ё': 'E', 'І': 'I', 'Ї': 'I', 'Ј': 'J', 'К': 'K', 'М': 'M',
+	'Н': 'H', 'О': 'O', 'Р': 'P', 'С': 'C', 'Т': 'T', 'У': 'Y', 'Х': 'X', 'Ѕ': 'S', 'Ԁ': 'D', 'Ӏ': 'I', 'Ԛ': 'Q',
+	'Ԝ': 'W', 'Һ': 'H',
+	// Greek.
+	'α': 'a', 'β': 'b', 'γ': 'y', 'ε': 'e', 'ι': 'i', 'κ': 'k', 'ν': 'v', 'ο': 'o', 'ρ': 'p', 'σ': 'o', 'τ': 't',
+	'υ': 'u', 'χ': 'x', 'ω': 'w', 'Α': 'A', 'Β': 'B', 'Ε': 'E', 'Ζ': 'Z', 'Η': 'H', 'Ι': 'I', 'Κ': 'K', 'Μ': 'M',
+	'Ν': 'N', 'Ο': 'O', 'Ρ': 'P', 'Τ': 'T', 'Υ': 'Y', 'Χ': 'X',
 }

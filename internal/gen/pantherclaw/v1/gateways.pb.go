@@ -2774,8 +2774,13 @@ type ReportDriftRequest struct {
 	// the instruction-like content scan (G0 M10 D47, PN-006.2). Unset from
 	// older gateways: the scan is then recorded as not_scanned.
 	ObservedDescription *string `protobuf:"bytes,5,opt,name=observed_description,json=observedDescription,proto3,oneof" json:"observed_description,omitempty"`
-	unknownFields       protoimpl.UnknownFields
-	sizeCache           protoimpl.SizeCache
+	// Whether the gateway cut observed_description to 8 KiB: the scan then
+	// covers a prefix only and is recorded as partial, never clean (D59 M8).
+	ObservedDescriptionTruncated bool `protobuf:"varint,6,opt,name=observed_description_truncated,json=observedDescriptionTruncated,proto3" json:"observed_description_truncated,omitempty"`
+	// SHA-256 of the whole observed description, "sha256:<hex>".
+	ObservedDescriptionSha256 string `protobuf:"bytes,7,opt,name=observed_description_sha256,json=observedDescriptionSha256,proto3" json:"observed_description_sha256,omitempty"`
+	unknownFields             protoimpl.UnknownFields
+	sizeCache                 protoimpl.SizeCache
 }
 
 func (x *ReportDriftRequest) Reset() {
@@ -2839,6 +2844,20 @@ func (x *ReportDriftRequest) GetObservedDigest() string {
 func (x *ReportDriftRequest) GetObservedDescription() string {
 	if x != nil && x.ObservedDescription != nil {
 		return *x.ObservedDescription
+	}
+	return ""
+}
+
+func (x *ReportDriftRequest) GetObservedDescriptionTruncated() bool {
+	if x != nil {
+		return x.ObservedDescriptionTruncated
+	}
+	return false
+}
+
+func (x *ReportDriftRequest) GetObservedDescriptionSha256() string {
+	if x != nil {
+		return x.ObservedDescriptionSha256
 	}
 	return ""
 }
@@ -3794,13 +3813,15 @@ const file_pantherclaw_v1_gateways_proto_rawDesc = "" +
 	"\vtotal_count\x18\x03 \x01(\x05B\v\xbaH\b\x1a\x06\x18\xc0\x84=(\x00R\n" +
 	"totalCount\"9\n" +
 	"\x15ReportCircuitResponse\x12 \n" +
-	"\vquarantined\x18\x01 \x01(\bR\vquarantined\"\xe2\x02\n" +
+	"\vquarantined\x18\x01 \x01(\bR\vquarantined\"\x89\x04\n" +
 	"\x12ReportDriftRequest\x12-\n" +
 	"\rconnection_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\fconnectionId\x121\n" +
 	"\x04tool\x18\x02 \x01(\tB\x1d\xbaH\x1ar\x18\x10\x01\x18\x80\x012\x11^[A-Za-z0-9_.-]+$R\x04tool\x12E\n" +
 	"\x0fexpected_digest\x18\x03 \x01(\tB\x1c\xbaH\x19r\x172\x15^sha256:[0-9a-f]{64}$R\x0eexpectedDigest\x12H\n" +
 	"\x0fobserved_digest\x18\x04 \x01(\tB\x1f\xbaH\x1cr\x1a2\x18^(sha256:[0-9a-f]{64})?$R\x0eobservedDigest\x12@\n" +
-	"\x14observed_description\x18\x05 \x01(\tB\b\xbaH\x05r\x03(\x80@H\x00R\x13observedDescription\x88\x01\x01B\x17\n" +
+	"\x14observed_description\x18\x05 \x01(\tB\b\xbaH\x05r\x03(\x80@H\x00R\x13observedDescription\x88\x01\x01\x12D\n" +
+	"\x1eobserved_description_truncated\x18\x06 \x01(\bR\x1cobservedDescriptionTruncated\x12_\n" +
+	"\x1bobserved_description_sha256\x18\a \x01(\tB\x1f\xbaH\x1cr\x1a2\x18^(sha256:[0-9a-f]{64})?$R\x19observedDescriptionSha256B\x17\n" +
 	"\x15_observed_description\"7\n" +
 	"\x13ReportDriftResponse\x12 \n" +
 	"\vquarantined\x18\x01 \x01(\bR\vquarantined\"\xe3\x02\n" +

@@ -352,14 +352,14 @@ func (e *Engine) check(ctx context.Context, conn *control.Connection, ce clientE
 	for _, t := range tools {
 		var n struct {
 			Name        string         `json:"name"`
-			Description *string        `json:"description"`
+			Description jsontext.Value `json:"description"`
 			InputSchema jsontext.Value `json:"inputSchema"`
 		}
 		d, err := upstream.ToolDigest(t)
 		if err != nil || json.Unmarshal(t, &n) != nil {
 			return nil, fmt.Errorf("%w: a tool definition does not decode", upstream.ErrProtocol)
 		}
-		listed[n.Name] = append(listed[n.Name], definition{digest: d, schema: n.InputSchema, description: n.Description})
+		listed[n.Name] = append(listed[n.Name], definition{digest: d, schema: n.InputSchema, description: descriptionOf(n.Description)})
 	}
 	var drifts []Drift
 	entry := driftEntry{revision: conn.GetRevision(), tools: map[string]bool{}, pinned: map[string]pinned{}}
@@ -554,4 +554,19 @@ func classifyMCP(res upstream.Result, err error) (pb.Outcome, Class, string) {
 		return pb.Outcome_OUTCOME_FAILED, ToolFailed, CodeToolError
 	}
 	return pb.Outcome_OUTCOME_ACCEPTED, "", ""
+}
+
+// descriptionOf reads a listed tool's description leniently (G0 M10 D59
+// H4): only a JSON string is a description. Anything else (an object, an
+// array, a number) is left out here and changes the tool's digest, so it
+// is reported as drift rather than failing the whole listing.
+func descriptionOf(v jsontext.Value) *string {
+	if len(v) == 0 || v.Kind() != '"' {
+		return nil
+	}
+	var s string
+	if json.Unmarshal(v, &s) != nil {
+		return nil
+	}
+	return &s
 }

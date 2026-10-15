@@ -5,6 +5,8 @@ package gateway
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -166,10 +168,9 @@ func New(ctx context.Context, cfg *Config, id *control.Identity, log *slog.Logge
 			return err
 		},
 		ReportDrift: func(ctx context.Context, conn string, d dispatch.Drift) error {
-			_, err := ctl.Gateway.ReportDrift(ctx, &pb.ReportDriftRequest{
-				ConnectionId: conn, Tool: d.Tool, ExpectedDigest: d.Expected, ObservedDigest: d.Observed,
-				ObservedDescription: driftDescription(d.Description),
-			})
+			req := &pb.ReportDriftRequest{ConnectionId: conn, Tool: d.Tool, ExpectedDigest: d.Expected, ObservedDigest: d.Observed}
+			req.ObservedDescription, req.ObservedDescriptionTruncated, req.ObservedDescriptionSha256 = driftDescription(d.Description)
+			_, err := ctl.Gateway.ReportDrift(ctx, req)
 			return err
 		},
 		Verifications: controlVerifications{ctl},
@@ -328,17 +329,20 @@ func (g *Gateway) WaitReady(ctx context.Context, timeout time.Duration) error {
 const maxDriftDescription = 8192
 
 // driftDescription bounds an observed description to whole UTF-8
-// characters within maxDriftDescription bytes (G0 M10 D47).
-func driftDescription(d *string) *string {
+// characters within maxDriftDescription bytes (G0 M10 D47), and says
+// whether it cut it and the SHA-256 of the whole description (D59 M8).
+func driftDescription(d *string) (*string, bool, string) {
 	if d == nil {
-		return nil
+		return nil, false, ""
 	}
+	sum := sha256.Sum256([]byte(*d))
 	s := strings.ToValidUTF8(*d, "")
-	if len(s) > maxDriftDescription {
+	truncated := len(s) > maxDriftDescription
+	if truncated {
 		s = s[:maxDriftDescription]
 		for len(s) > 0 && !utf8.ValidString(s) {
 			s = s[:len(s)-1]
 		}
 	}
-	return &s
+	return &s, truncated, "sha256:" + hex.EncodeToString(sum[:])
 }

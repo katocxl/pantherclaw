@@ -46,7 +46,16 @@ var ErrDrift = pcerr.New(pcerr.InvalidArgument, "DRIFT_NOT_REVIEWED",
 // simulated connection is audited with simulated=true and changes nothing
 // else (HR-222).
 func (s *Service) ReportDrift(ctx context.Context, org ids.OrgID, gateway, id ids.UUID, tool, expected, observed string) (bool, error) {
-	return s.ReportDriftDescribed(ctx, org, gateway, id, tool, expected, observed, nil)
+	return s.ReportDriftDescribed(ctx, org, gateway, id, tool, expected, observed, ObservedDescription{})
+}
+
+// ObservedDescription is the tool description a gateway observed with its
+// drift report: the text (nil when the gateway sent none), whether the
+// gateway cut it short, and the SHA-256 of the whole description.
+type ObservedDescription struct {
+	Text      *string
+	Truncated bool
+	Digest    string
 }
 
 // ReportDriftDescribed is ReportDrift with the tool description the
@@ -56,14 +65,18 @@ func (s *Service) ReportDrift(ctx context.Context, org ids.OrgID, gateway, id id
 // without one (an older gateway) records the scan as not_scanned. Drift
 // itself also opens the TOOL_REVIEW entry of the version it quarantines.
 func (s *Service) ReportDriftDescribed(ctx context.Context, org ids.OrgID, gateway, id ids.UUID, tool, expected, observed string,
-	description *string,
+	description ObservedDescription,
 ) (bool, error) {
 	scan, found := injection.ScanNotScanned, injection.Result{}
-	if description != nil {
-		found = injection.Scan(*description)
-		scan = injection.ScanClean
-		if found.Flagged {
+	if description.Text != nil {
+		found = injection.Scan(*description.Text)
+		switch {
+		case found.Flagged:
 			scan = injection.ScanFlagged
+		case description.Truncated:
+			scan = injection.ScanPartial
+		default:
+			scan = injection.ScanClean
 		}
 	}
 	if observed == expected {
@@ -113,7 +126,10 @@ func (s *Service) ReportDriftDescribed(ctx context.Context, org ids.OrgID, gatew
 		}
 		if found.Flagged {
 			if err := injection.Record(ctx, tx, c.Audit, audit.Object{Type: "connection", ID: conn.ID.String()}, tool, "drift", found,
-				map[string]string{"connection_id": conn.ID.String(), "package": conn.Package, "version": pin.Version}); err != nil {
+				map[string]string{
+					"connection_id": conn.ID.String(), "package": conn.Package, "version": pin.Version,
+					"full_description_digest": description.Digest,
+				}); err != nil {
 				return err
 			}
 			if _, err := pgwaitlist.OpenToolReview(ctx, tx, org, v.ID, conn.Package, pin.Version, c.Audit); err != nil {
