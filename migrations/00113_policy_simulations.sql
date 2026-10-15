@@ -16,6 +16,12 @@
 -- recorded input value (HR-237). Drill-down goes through ReplayDecision and
 -- its own permission. One simulation per org is QUEUED or RUNNING at a time.
 -- Times are the database's.
+--
+-- Grants (coordinator decision D22): pc_app may UPDATE policy_simulations'
+-- state, evaluated, counts, by_workflow, burden, error and the resume
+-- cursor (cursor_created_at, cursor_txn, cursor_evaluation) only; the
+-- start and finish times are set by a trigger from the database clock.
+-- Samples are insert-only: never updated or deleted.
 
 -- +goose Up
 CREATE TABLE pc.policy_simulations (
