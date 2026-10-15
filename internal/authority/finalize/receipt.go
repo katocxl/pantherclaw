@@ -172,7 +172,9 @@ func (a *Authority) receipt(gw Gateway, ev *pipeline.Evaluation, txn ids.UUID, e
 
 // fit marshals r, dropping passed and not-applicable checklist items (then
 // any item but the decisive one) until the signed receipt stays well under
-// MaxReceiptBytes; it records how many items it left out.
+// MaxReceiptBytes; it records how many items it left out. Waived items
+// name the policy exceptions the decision used and are always kept, like
+// the decisive one (F2, G0 M11.1 D33).
 func fit(r DecisionReceipt) ([]byte, error) {
 	const budget = MaxReceiptBytes / 2 // the JWS is base64 and signed
 	for range 3 {
@@ -185,7 +187,7 @@ func fit(r DecisionReceipt) ([]byte, error) {
 		}
 		kept := r.Pap.Checklist[:0:0]
 		for i, it := range r.Pap.Checklist {
-			if i == 0 || (it.Status != pipeline.StatusPassed && it.Status != pipeline.StatusNotApplicable && len(kept) < 64) {
+			if i == 0 || it.Status == pipeline.StatusWaived || (it.Status != pipeline.StatusPassed && it.Status != pipeline.StatusNotApplicable && len(kept) < 64) {
 				kept = append(kept, it)
 			}
 		}

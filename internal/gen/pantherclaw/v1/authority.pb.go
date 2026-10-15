@@ -301,6 +301,9 @@ const (
 	// Depends on a check that failed.
 	ChecklistStatus_CHECKLIST_STATUS_NOT_EVALUATED  ChecklistStatus = 7
 	ChecklistStatus_CHECKLIST_STATUS_NOT_APPLICABLE ChecklistStatus = 8
+	// A policy exception waived a matched exceptable rule (G0 M11.1); the
+	// item names the exception.
+	ChecklistStatus_CHECKLIST_STATUS_WAIVED ChecklistStatus = 9
 )
 
 // Enum value maps for ChecklistStatus.
@@ -315,6 +318,7 @@ var (
 		6: "CHECKLIST_STATUS_ANNOTATED",
 		7: "CHECKLIST_STATUS_NOT_EVALUATED",
 		8: "CHECKLIST_STATUS_NOT_APPLICABLE",
+		9: "CHECKLIST_STATUS_WAIVED",
 	}
 	ChecklistStatus_value = map[string]int32{
 		"CHECKLIST_STATUS_UNSPECIFIED":    0,
@@ -326,6 +330,7 @@ var (
 		"CHECKLIST_STATUS_ANNOTATED":      6,
 		"CHECKLIST_STATUS_NOT_EVALUATED":  7,
 		"CHECKLIST_STATUS_NOT_APPLICABLE": 8,
+		"CHECKLIST_STATUS_WAIVED":         9,
 	}
 )
 
@@ -2663,7 +2668,7 @@ const file_pantherclaw_v1_authority_proto_rawDesc = "" +
 	"\fDispatchMode\x12\x1d\n" +
 	"\x19DISPATCH_MODE_UNSPECIFIED\x10\x00\x12\x19\n" +
 	"\x15DISPATCH_MODE_ENFORCE\x10\x01\x12\x19\n" +
-	"\x15DISPATCH_MODE_MONITOR\x10\x02*\xb5\x02\n" +
+	"\x15DISPATCH_MODE_MONITOR\x10\x02*\xd2\x02\n" +
 	"\x0fChecklistStatus\x12 \n" +
 	"\x1cCHECKLIST_STATUS_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17CHECKLIST_STATUS_PASSED\x10\x01\x12\x1b\n" +
@@ -2673,7 +2678,8 @@ const file_pantherclaw_v1_authority_proto_rawDesc = "" +
 	"\x1cCHECKLIST_STATUS_CONSTRAINED\x10\x05\x12\x1e\n" +
 	"\x1aCHECKLIST_STATUS_ANNOTATED\x10\x06\x12\"\n" +
 	"\x1eCHECKLIST_STATUS_NOT_EVALUATED\x10\a\x12#\n" +
-	"\x1fCHECKLIST_STATUS_NOT_APPLICABLE\x10\b*x\n" +
+	"\x1fCHECKLIST_STATUS_NOT_APPLICABLE\x10\b\x12\x1b\n" +
+	"\x17CHECKLIST_STATUS_WAIVED\x10\t*x\n" +
 	"\aOutcome\x12\x17\n" +
 	"\x13OUTCOME_UNSPECIFIED\x10\x00\x12\x14\n" +
 	"\x10OUTCOME_ACCEPTED\x10\x01\x12\x12\n" +

@@ -44,6 +44,10 @@ const (
 	StatusAnnotated     Status = "ANNOTATED"
 	StatusNotEvaluated  Status = "NOT_EVALUATED"
 	StatusNotApplicable Status = "NOT_APPLICABLE"
+	// StatusWaived: an active policy exception waived a matched exceptable
+	// rule (G0 M11.1 D14, HR-235); the item's code is EXCEPTION_APPLIED and
+	// its detail the exception id.
+	StatusWaived Status = "WAIVED"
 )
 
 // Item is one checklist line. Detail names the offending value and what is

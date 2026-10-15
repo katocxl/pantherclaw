@@ -1435,6 +1435,103 @@ type PcPolicyChangeRequest struct {
 	DecidedReason *string
 }
 
+type PcPolicyCohort struct {
+	OrgID     ids.OrgID
+	ID        ids.UUID
+	Name      string
+	CreatedBy string
+	CreatedAt time.Time
+}
+
+type PcPolicyCohortMember struct {
+	OrgID    ids.OrgID
+	CohortID ids.UUID
+	AgentID  ids.UUID
+	AddedBy  string
+	AddedAt  time.Time
+}
+
+type PcPolicyException struct {
+	OrgID           ids.OrgID
+	ID              ids.UUID
+	BundleID        string
+	RuleID          string
+	RuleDigest      []byte
+	AgentID         ids.UUID
+	Operations      []string
+	Reason          string
+	OwnerID         ids.UUID
+	RequestedBy     ids.UUID
+	RequestedExpiry time.Time
+	State           string
+	ActivatedAt     *time.Time
+	ExpiresAt       *time.Time
+	RevokedBy       *ids.UUID
+	RevokedReason   *string
+	CreatedAt       time.Time
+}
+
+type PcPolicyRollout struct {
+	OrgID          ids.OrgID
+	ID             ids.UUID
+	VersionID      ids.UUID
+	BaseVersionID  *ids.UUID
+	Stage          string
+	CreatedBy      string
+	CreatedAt      time.Time
+	StageChangedAt time.Time
+	CompletedAt    *time.Time
+}
+
+type PcPolicyRolloutCohort struct {
+	OrgID     ids.OrgID
+	RolloutID ids.UUID
+	CohortID  ids.UUID
+	Mode      string
+}
+
+type PcPolicyRolloutCursor struct {
+	OrgID         ids.OrgID
+	RolloutID     ids.UUID
+	LastCreatedAt time.Time
+	LastTxn       ids.UUID
+}
+
+type PcPolicyRolloutTarget struct {
+	OrgID     ids.OrgID
+	RolloutID ids.UUID
+	AgentID   ids.UUID
+	State     string
+	OwnerID   *ids.UUID
+	Coverage  *string
+	Reason    *string
+	UpdatedAt time.Time
+}
+
+type PcPolicyShadowCount struct {
+	OrgID     ids.OrgID
+	RolloutID ids.UUID
+	Day       pgtype.Date
+	Category  string
+	N         int64
+}
+
+type PcPolicyShadowResult struct {
+	OrgID            ids.OrgID
+	RolloutID        ids.UUID
+	TransactionID    ids.UUID
+	Evaluation       int32
+	AgentID          ids.UUID
+	Operation        string
+	OriginalDecision string
+	OriginalReason   string
+	ShadowDecision   *string
+	ShadowReason     *string
+	Category         string
+	Limitation       *string
+	CreatedAt        time.Time
+}
+
 type PcPolicyTestRun struct {
 	OrgID             ids.OrgID
 	ID                ids.UUID

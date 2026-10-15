@@ -278,6 +278,9 @@ enum ChecklistStatus {
   // Depends on a check that failed.
   CHECKLIST_STATUS_NOT_EVALUATED = 7;
   CHECKLIST_STATUS_NOT_APPLICABLE = 8;
+  // A policy exception waived a matched exceptable rule (G0 M11.1); the
+  // item names the exception.
+  CHECKLIST_STATUS_WAIVED = 9;
 }
 
 // ChecklistItem is one check of the decision pipeline.

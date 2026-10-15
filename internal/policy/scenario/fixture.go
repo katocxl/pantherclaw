@@ -300,7 +300,9 @@ func (f *fixture) Definition(_ context.Context, org ids.OrgID, pin actionir.Defi
 }
 
 // Policy implements pipeline.Reader: the version under test (or a mutant).
-func (f *fixture) Policy(context.Context, ids.OrgID) (*pipeline.Policy, error) { return f.policy, nil }
+func (f *fixture) Policy(context.Context, ids.OrgID, ids.UUID) (*pipeline.Policy, error) {
+	return f.policy, nil
+}
 
 // Run implements pipeline.Reader.
 func (f *fixture) Run(_ context.Context, _ ids.OrgID, id ids.UUID) (pipeline.Run, error) {
