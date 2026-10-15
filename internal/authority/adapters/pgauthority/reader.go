@@ -179,7 +179,19 @@ func (s *snapshot) Containment(ctx context.Context, org ids.OrgID) (pipeline.Con
 	if err != nil {
 		return pipeline.Containment{}, fmt.Errorf("authority: containment: %w", err)
 	}
-	return pipeline.Containment{Epoch: row.Epoch, KillSwitch: row.KillSwitch, Now: row.Now}, nil
+	rows, err := dbq.New(s.tx).ActiveContainmentControls(ctx, org)
+	if err != nil {
+		return pipeline.Containment{}, fmt.Errorf("authority: containment controls: %w", err)
+	}
+	out := pipeline.Containment{Epoch: row.Epoch, KillSwitch: row.KillSwitch, Now: row.Now}
+	for _, c := range rows {
+		ctl := pipeline.Control{ID: c.ID, ScopeType: c.ScopeType, ScopeID: c.ScopeID, Control: c.Control, ExpiresAt: c.ExpiresAt}
+		if c.Operation != nil {
+			ctl.Operation = *c.Operation
+		}
+		out.Controls = append(out.Controls, ctl)
+	}
+	return out, nil
 }
 
 // Definition implements pipeline.Reader.

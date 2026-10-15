@@ -105,7 +105,21 @@ type Containment struct {
 	Epoch      int64     `json:"epoch"`
 	KillSwitch bool      `json:"kill_switch"`
 	Now        time.Time `json:"now"`
-	Err        string    `json:"err,omitzero"`
+	// Controls are the active containment controls (G0 M10 D21): empty in
+	// recordings made before them, which replay as they did (no control
+	// existed), so the format and pipeline versions are unchanged.
+	Controls []Control `json:"controls,omitzero"`
+	Err      string    `json:"err,omitzero"`
+}
+
+// Control is an active containment control, by value.
+type Control struct {
+	ID        string     `json:"id"`
+	ScopeType string     `json:"scope_type"`
+	ScopeID   string     `json:"scope_id"`
+	Control   string     `json:"control"`
+	Operation string     `json:"operation,omitzero"`
+	ExpiresAt *time.Time `json:"expires_at,omitzero"`
 }
 
 // Definition is a definition read: the pin asked for, and the digest and

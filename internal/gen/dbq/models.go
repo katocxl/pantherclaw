@@ -500,6 +500,25 @@ type PcConsequenceRule struct {
 	Canonical []byte
 }
 
+type PcContainmentControl struct {
+	OrgID         ids.OrgID
+	ID            ids.UUID
+	ActionID      ids.UUID
+	ScopeType     string
+	ScopeID       string
+	Control       string
+	Operation     *string
+	Reason        string
+	CaseID        *ids.UUID
+	IncidentID    *ids.UUID
+	CreatedBy     string
+	CreatedAt     time.Time
+	ExpiresAt     *time.Time
+	LiftedAt      *time.Time
+	LiftedBy      *string
+	RestorationID *ids.UUID
+}
+
 type PcCounter struct {
 	OrgID       ids.OrgID
 	ID          ids.UUID
@@ -1706,6 +1725,87 @@ type PcReservation struct {
 	Pending       bool
 }
 
+type PcResponseAction struct {
+	OrgID           ids.OrgID
+	ID              ids.UUID
+	Kind            string
+	ScopeType       string
+	ScopeID         string
+	Control         *string
+	Operation       *string
+	Reason          string
+	CaseID          *ids.UUID
+	IncidentID      *ids.UUID
+	Actor           string
+	Source          string
+	PreviewDigest   []byte
+	SkipPreview     bool
+	SkipReason      *string
+	SkipStepUpAt    *time.Time
+	IdempotencyKey  *string
+	RequestDigest   []byte
+	Status          string
+	FutureConfirmed bool
+	HistoricalOpen  []byte
+	Epoch           pgtype.Int8
+	RequestedAt     time.Time
+	UpdatedAt       time.Time
+	SettledAt       *time.Time
+}
+
+type PcResponsePath struct {
+	OrgID             ids.OrgID
+	ActionID          ids.UUID
+	ID                ids.UUID
+	PathType          string
+	SubjectType       string
+	SubjectID         string
+	Material          bool
+	Control           string
+	Status            string
+	Evidence          []byte
+	Failure           *string
+	UnsupportedReason *string
+	CancelCapability  *string
+	CancelRequestedAt *time.Time
+	CreatedAt         time.Time
+	UpdatedAt         time.Time
+	ConfirmedAt       *time.Time
+}
+
+type PcRestorationPlan struct {
+	OrgID             ids.OrgID
+	ID                ids.UUID
+	ApprovalRequestID *ids.UUID
+	Reason            string
+	Staged            bool
+	State             string
+	Preconditions     []byte
+	RequestedBy       string
+	CreatedAt         time.Time
+	UpdatedAt         time.Time
+	FinishedAt        *time.Time
+}
+
+type PcRestorationPlanControl struct {
+	OrgID     ids.OrgID
+	PlanID    ids.UUID
+	ControlID ids.UUID
+}
+
+type PcRestorationStage struct {
+	OrgID     ids.OrgID
+	PlanID    ids.UUID
+	Ordinal   int32
+	Scope     []byte
+	Tests     []byte
+	Results   []byte
+	State     string
+	CreatedAt time.Time
+	TestedAt  *time.Time
+	AppliedAt *time.Time
+}
+
 type PcRetentionPolicy struct {
 	OrgID         ids.OrgID
 	ID            ids.UUID
@@ -1847,6 +1947,15 @@ type PcSession struct {
 	LastSeenAt         time.Time
 	ExpiresAt          time.Time
 	EndedAt            *time.Time
+}
+
+type PcSoarRequest struct {
+	OrgID          ids.OrgID
+	IdempotencyKey string
+	RequestDigest  []byte
+	ActionID       ids.UUID
+	RequestedBy    string
+	CreatedAt      time.Time
 }
 
 type PcTargetLogRun struct {

@@ -160,6 +160,9 @@ type Containment struct {
 	Epoch      int64
 	KillSwitch bool
 	Now        time.Time
+	// Controls are the org's active containment controls (G0 M10 D21,
+	// HR-248), read with the epoch in the decision's snapshot.
+	Controls []Control
 }
 
 // Usage is what is already reserved and spent on budget accounts and

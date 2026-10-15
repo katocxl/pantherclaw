@@ -402,6 +402,11 @@ func cmdServe(ctx context.Context, args []string, stderr io.Writer, env Env, onS
 			return err
 		}
 		evidenceJobs = append(evidenceJobs, exceptionJobs...)
+		responseJobs, err := registerResponseJobs(jreg, pool, log)
+		if err != nil {
+			return err
+		}
+		evidenceJobs = append(evidenceJobs, responseJobs...)
 		if err := registerSimulationJobs(jreg, pool, kp, bill, log); err != nil {
 			return err
 		}

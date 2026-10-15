@@ -101,11 +101,27 @@ func (r *Recording) identity() (pipeline.Identity, error) {
 }
 
 func fromContainment(c pipeline.Containment, err error) *Containment {
-	return &Containment{Epoch: c.Epoch, KillSwitch: c.KillSwitch, Now: c.Now, Err: errKind(err)}
+	out := &Containment{Epoch: c.Epoch, KillSwitch: c.KillSwitch, Now: c.Now, Err: errKind(err)}
+	for _, x := range c.Controls {
+		out.Controls = append(out.Controls, Control{
+			ID: x.ID.String(), ScopeType: x.ScopeType, ScopeID: x.ScopeID, Control: x.Control, Operation: x.Operation, ExpiresAt: x.ExpiresAt,
+		})
+	}
+	return out
 }
 
 func (c Containment) value() (pipeline.Containment, error) {
-	return pipeline.Containment{Epoch: c.Epoch, KillSwitch: c.KillSwitch, Now: c.Now}, errOf(c.Err)
+	out := pipeline.Containment{Epoch: c.Epoch, KillSwitch: c.KillSwitch, Now: c.Now}
+	for _, x := range c.Controls {
+		id, err := ids.ParseUUID(x.ID)
+		if err != nil {
+			return pipeline.Containment{}, fmt.Errorf("containment control %q: %w", x.ID, err)
+		}
+		out.Controls = append(out.Controls, pipeline.Control{
+			ID: id, ScopeType: x.ScopeType, ScopeID: x.ScopeID, Control: x.Control, Operation: x.Operation, ExpiresAt: x.ExpiresAt,
+		})
+	}
+	return out, errOf(c.Err)
 }
 
 func fromPolicy(p *pipeline.Policy, err error) *Policy {

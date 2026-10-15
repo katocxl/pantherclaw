@@ -239,6 +239,9 @@ type state struct {
 	facts   map[string]fdomain.Value
 	used    []fdomain.Fact
 	covered bool
+	// held are the HOLD_WRITES controls covering a write (step 3); step 8
+	// adds their requirement.
+	held []Control
 	// pending are the predicted and unknown consequences steps 4, 7 and 8
 	// decide with the action.
 	pending []pendingConsequence
@@ -515,7 +518,15 @@ func (p *Pipeline) containment(s *state) {
 		s.cl.add(StepContainment, adomain.Deny, ReasonConnectionContained, "the connection is "+s.conn.State, "")
 		blocked = true
 	}
-	if !blocked {
+	if s.controlled() {
+		blocked = true
+	}
+	switch {
+	case blocked:
+	case len(s.held) > 0:
+		// Step 8 holds the write for a responder (HOLD_WRITES, D21).
+		s.cl.note(StepContainment, StatusAnnotated, ReasonContainedWrites, "containment control "+s.held[0].ID.String()+" holds writes")
+	default:
 		s.cl.pass(StepContainment, ReasonNotContained)
 	}
 }
@@ -1041,6 +1052,7 @@ func (p *Pipeline) requirements(ctx context.Context, s *state) {
 	}
 	s.consequenceRequirements()
 	s.payloadRequirement()
+	s.containmentHold()
 	s.independence()
 	effective := s.vals
 	if eff, vals, ok := s.effective(); ok {
