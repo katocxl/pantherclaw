@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	apdomain "github.com/katocxl/pantherclaw/internal/approvals/domain"
 	adomain "github.com/katocxl/pantherclaw/internal/authority/domain"
 	defs "github.com/katocxl/pantherclaw/internal/definitions/domain"
 	gdomain "github.com/katocxl/pantherclaw/internal/grants/domain"
@@ -144,16 +145,19 @@ func resourceMatches(scope, typ, id string) bool {
 	return pattern == id
 }
 
-// containmentHold is step 8's part of a HOLD_WRITES control (D21): the
-// write waits for one approval by a responder independent of the launcher
-// and the grant owner. Until approvals can route a request to responders,
-// a held write is denied CONTAINED_WRITES, so a HOLD_WRITES control never
-// lets a write through.
+// containmentHold is step 8's part of a HOLD_WRITES control (D21, D44): the
+// write waits for one approval by a person holding incident.respond who is
+// independent of the run's people, the agent's owners and the grant's
+// issuers (apdomain.KindContainment).
 func (s *state) containmentHold() {
 	if len(s.held) == 0 {
 		return
 	}
 	c := s.held[0]
-	s.cl.add(StepRequirements, adomain.Deny, ReasonContainedWrites,
-		"containment control "+c.ID.String()+" holds writes on its "+c.ScopeType+"; no responder approval can be asked for yet", "")
+	s.cl.add(StepRequirements, adomain.RequireApproval, ReasonContainedWrites,
+		"containment control "+c.ID.String()+" holds writes on its "+c.ScopeType+": approval by an independent responder is required", "containment")
+	s.ev.Requirements = append(s.ev.Requirements, apdomain.Input{
+		Kind: apdomain.KindContainment, Count: 1, Independent: true,
+		Source: apdomain.Source{Level: "containment", Reason: ReasonContainedWrites},
+	})
 }

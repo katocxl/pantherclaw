@@ -69,7 +69,9 @@ func TestHR252_OnlyNarrowControlsSkipThePreview(t *testing.T) {
 // path keeps the action PARTIAL, a failed one makes it FAILED, and
 // non-material paths never decide.
 func TestHR249_ConfirmedOnlyWhenEveryMaterialPathIs(t *testing.T) {
-	p := func(material bool, s domain.PathStatus) domain.Path { return domain.Path{Material: material, Status: s} }
+	p := func(material bool, s domain.PathStatus) domain.Path {
+		return domain.Path{Material: material, Status: s}
+	}
 	for _, c := range []struct {
 		paths []domain.Path
 		want  domain.Status

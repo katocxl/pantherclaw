@@ -189,6 +189,8 @@ func needs(reqs []apdomain.BoundRequirement) ([]int, error) {
 		switch {
 		case r.Kind == apdomain.KindApproval && r.Count >= 1 && r.Count <= apdomain.MaxApprovers:
 			out[i] = r.Count
+		case r.Kind == apdomain.KindContainment && r.Count == 1:
+			out[i] = 1
 		case r.Kind == apdomain.KindStepUp:
 			out[i] = 1
 		default:

@@ -29,6 +29,13 @@ const (
 	// the requester. Only the server creates it; no grant or policy may
 	// name it.
 	KindRestore = "restore"
+	// KindContainment is the requirement of a write held by a HOLD_WRITES
+	// containment control (G0 M10 D21, D44): one person holding
+	// incident.respond on the agent's scope path, independent of the run's
+	// people, the agent's owners and the grant's issuers, with a security key.
+	// An approval.respond holder without incident.respond does not qualify.
+	// Only the decision pipeline creates it; no grant or policy may name it.
+	KindContainment = "containment"
 )
 
 // RestoreRequirement is the requirement of every restoration.
@@ -39,6 +46,13 @@ var RestoreRequirement = Requirement{Kind: KindRestore, Count: 1, Sources: []Sou
 func RestoreRole(role string) bool {
 	r, ok := td.LookupRole(td.RoleName(role))
 	return ok && r.Has(td.PermAgentRestore)
+}
+
+// ContainmentRole reports whether role decides containment holds: it holds
+// incident.respond.
+func ContainmentRole(role string) bool {
+	r, ok := td.LookupRole(td.RoleName(role))
+	return ok && r.Has(td.PermIncidentRespond)
 }
 
 // Step-up subjects and the only method (decision 4).
@@ -165,6 +179,10 @@ func (in Input) Validate() error {
 		if in.Count < 1 || in.Count > MaxApprovers {
 			return fmt.Errorf("%w: an approval needs 1..%d approvers", ErrRequirementInvalid, MaxApprovers)
 		}
+	case KindContainment:
+		if in.Role != "" || in.Count != 1 || !in.Independent || in.Subject != "" || in.IndependentOf != "" {
+			return fmt.Errorf("%w: a containment hold needs one independent responder", ErrRequirementInvalid)
+		}
 	case KindStepUp:
 		if in.Subject != SubjectLauncher && in.Subject != SubjectPrincipal {
 			return fmt.Errorf("%w: a step-up names the launcher or the principal", ErrRequirementInvalid)
@@ -207,7 +225,7 @@ func Merge(ins []Input) ([]Requirement, time.Duration, error) {
 			i = len(out) - 1
 		}
 		r := &out[i]
-		if in.Kind == KindApproval {
+		if in.Kind == KindApproval || in.Kind == KindContainment {
 			r.Count = max(r.Count, in.Count)
 			r.Independent = r.Independent || in.Independent
 			if in.IndependentOf != "" && r.IndependentOf == "" {
@@ -234,10 +252,13 @@ func Merge(ins []Input) ([]Requirement, time.Duration, error) {
 }
 
 func kindRank(k string) int {
-	if k == KindApproval {
+	switch k {
+	case KindApproval:
 		return 0
+	case KindContainment:
+		return 1
 	}
-	return 1
+	return 2
 }
 
 // Deadline returns a new hold's deadline: now plus the requirements'
