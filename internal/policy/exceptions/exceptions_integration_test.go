@@ -480,3 +480,28 @@ func TestHR235_AnExceptionIsInsertedPendingOnly(t *testing.T) {
 		t.Fatalf("%d exceptions stored as inserted by the database", n)
 	}
 }
+
+// TestT102_ListingPagesFromTheFirst: the first page (no token) starts at the
+// newest exception, and the token continues after the last one shown, so
+// every exception is listed once.
+func TestT102_ListingPagesFromTheFirst(t *testing.T) {
+	f := newFixture(t)
+	author := f.as(f.alice, tenancy.CredAccessToken, td.RolePolicyAuthor)
+	var made []ids.UUID
+	for range 3 {
+		x, _, err := f.svc.RequestException(author, f.request())
+		if err != nil {
+			t.Fatal(err)
+		}
+		made = append(made, x.ID)
+	}
+	reader := f.as(f.bob, tenancy.CredAccessToken, td.RoleViewer, td.RolePolicyPublisher)
+	first, next, err := f.svc.ListExceptions(reader, exceptions.Filter{}, 2, "")
+	if err != nil || len(first) != 2 || next == "" || first[0].ID != made[2] || first[1].ID != made[1] {
+		t.Fatalf("first page %+v next %q (%v)", first, next, err)
+	}
+	rest, next, err := f.svc.ListExceptions(reader, exceptions.Filter{}, 2, next)
+	if err != nil || len(rest) != 1 || next != "" || rest[0].ID != made[0] {
+		t.Fatalf("second page %+v next %q (%v)", rest, next, err)
+	}
+}
