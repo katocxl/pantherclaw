@@ -52,8 +52,10 @@ func (w *world) decide() ids.UUID {
 		charge, amount string
 		want           adomain.Decision
 	}{
-		{"ch_1", "10.00", adomain.Allow}, {"ch_2", "30.00", adomain.Allow},
-		{"ch_3", "55.00", adomain.RequireApproval}, {"ch_4", "70.00", adomain.RequireApproval},
+		{"ch_1", "10.00", adomain.Allow},
+		{"ch_2", "30.00", adomain.Allow},
+		{"ch_3", "55.00", adomain.RequireApproval},
+		{"ch_4", "70.00", adomain.RequireApproval},
 	} {
 		if r := w.refund(run, c.charge, c.amount); r.Decision != c.want {
 			w.t.Fatalf("refund of %s: %s", c.amount, r.Decision)
