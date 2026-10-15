@@ -28,3 +28,4 @@ Format: Context → Decision → Consequences → Alternatives considered. Statu
 | [0022](0022-containment-sandbox-edge.md) | Containment sandbox edge, per-session TLS interception and probe trust (M9, proposed 2026-10-11) |
 | [0023](0023-adversarial-range.md) | The adversarial range: range agents, simulated connections and a local gate (M12, proposed 2026-10-14) |
 | [0025](0025-policy-lifecycle-staged-enforcement.md) | Policy lifecycle: staged enforcement and change approval (M11.1, proposed 2026-10-15; ADR-0024 is reserved by the v0.1.0 preview) |
+| [0026](0026-reflex-detection-containment-and-signals.md) | Reflex: detection over the evidence ledger, containment controls in the decision path, Shared Signals receiver trust (M10, accepted 2026-10-15) |
