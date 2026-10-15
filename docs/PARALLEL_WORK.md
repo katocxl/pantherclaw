@@ -1,10 +1,10 @@
 # Parallel work: several AI sessions on one repository
 
-Read this before you start any task in this repository. It applies to every Claude Code session (desktop tab, terminal or IDE) and to people. It works together with the pull-request rule in [CLAUDE.md](../CLAUDE.md) ([EX-004](security/GATES_AND_REVIEW.md#4-exceptions)).
+Read this before you start any task in this repository. It applies to every Claude Code session (desktop tab, terminal or IDE) and to people. It works together with the pull-request rule in [CLAUDE.md](../CLAUDE.md) (CI and G1 are on again: [EX-004](security/GATES_AND_REVIEW.md#4-exceptions) ended 2026-10-15).
 
 ## How work reaches `main`
 
-Every task ends as a pull request. GitHub runs no checks on it, and the founder merges the pull requests, usually in a batch when a piece of work is done. Two tasks can still change the same lines; that shows up as a conflict on the second pull request after the first one merges, and the session that owns it resolves it on its branch.
+Every task ends as a pull request. CI runs on it and `ci-ok` must be green; after the G1 review (a comment "G1: approved <sha>" at least 1 hour after the pull request was ready) the founder merges the pull requests, usually in a batch when a piece of work is done. Commits on `main` are signed once the founder enables `required_signatures` on the ruleset. Two tasks can still change the same lines; that shows up as a conflict on the second pull request after the first one merges, and the session that owns it resolves it on its branch.
 
 | Branch | What it is | Rules |
 |---|---|---|
@@ -17,14 +17,14 @@ Every task ends as a pull request. GitHub runs no checks on it, and the founder 
 2. **Look at what is in flight:** `gh pr list` shows the open pull requests and `gh pr diff <n> --name-only` the files each one changes. If your task needs the same files, tell the founder before you start. Either build on that pull request's branch (a stacked pull request), or put your code in new files and keep your edits to the shared files to a few lines.
 3. **Start** from the latest `origin/main`: `git fetch origin`, then `git switch -c <type>/<slug> origin/main`. In a desktop worktree that already has a `claude/…` branch, run `git rebase origin/main` before your first commit. For stacked work, start from the branch you build on instead.
 4. **Work in small steps.** A task should take about 30–60 minutes of agent time and stay under about 600 lines of non-generated diff ([BUILD_GUIDE](BUILD_GUIDE.md) §0). Split bigger work into several pull requests. Commit often.
-5. **Check locally.** There is no CI, so this is the only test the code gets before the founder merges it:
+5. **Check locally** before you push, so CI starts green (CI is the gate, the local run is how you find problems early):
    - always `task check` (format, headers, lint, unit tests, secret scan);
    - `task test:integration` when you touched database, server, gateway or end-to-end code (cluster on `127.0.0.1:5433`; start it with `task up PROFILE=test`);
    - `task trace` when you added or renamed `HR-###` or `T-###` tests.
-   - `task range` when you touched `internal/authority`, `internal/gateway`, `internal/sandbox`, `internal/redteam`, `packages/`, `redteam/` or `test/e2e/` (cluster as above; `SANDBOX=1 task range` when `internal/sandbox` changed, needs Docker). It runs every attack scenario against the simulators and is the range gate while CI is off; report its result.
+   - `task range` when you touched `internal/authority`, `internal/gateway`, `internal/sandbox`, `internal/redteam`, `packages/`, `redteam/` or `test/e2e/` (cluster as above; `SANDBOX=1 task range` when `internal/sandbox` changed, needs Docker). It runs every attack scenario against the simulators (CI runs it too); report its result.
 
    They take minutes, so run them in the background. Never weaken a test or an `HR-###` rule to make one pass.
-6. **Open the pull request:** `git push -u origin HEAD`, then `gh pr create --base main` (or `--base <branch>` for stacked work). Say what changed, which checks ran and their result, and which pull request yours depends on.
+6. **Open the pull request:** `git push -u origin HEAD`, then `gh pr create --base main` (or `--base <branch>` for stacked work). Say what changed, which checks ran and their result, and which pull request yours depends on. Then watch `ci-ok` on the pull request and fix failures on your branch.
 7. **Report** the pull request link to the founder, then start the next task. Never merge, not even your own pull request.
 
 ## Keeping an open pull request up to date

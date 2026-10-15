@@ -13,7 +13,7 @@ All changes follow [docs/BUILD_GUIDE.md](docs/BUILD_GUIDE.md) and the gates in [
 3. Every source file carries the SPDX + copyright header (`task license:fix`).
 4. Tests first for security-relevant behavior; reference requirement IDs (`F###`, `PN-###`, `HR-###`, `T-###`) in test names or comments.
 5. `task check` must pass locally (format, lint, unit tests, headers, secrets scan), and so must `task test:integration` (start the cluster with `task up PROFILE=test`) and `task trace` when the change touches what they cover. A change to `internal/authority`, `internal/gateway`, `internal/sandbox`, `internal/redteam`, `packages/`, `redteam/` or `test/e2e/` also runs `task range` (`SANDBOX=1 task range` when `internal/sandbox` changed).
-6. Commit with a [Conventional Commit](https://www.conventionalcommits.org/) message, push the branch and open a pull request; the founder merges it. CI and the G1 review are suspended for development speed ([EX-004](docs/security/GATES_AND_REVIEW.md#4-exceptions)), so GitHub runs no checks and the local checks are the only gate.
+6. Commit with a [Conventional Commit](https://www.conventionalcommits.org/) message, push the branch and open a pull request. CI runs on it and `ci-ok` must be green; the founder then gives the G1 approval (a comment "G1: approved <sha>" at least 1 hour after the pull request was ready) and merges it. Commits on `main` are signed once the founder enables `required_signatures` ([EX-004](docs/security/GATES_AND_REVIEW.md#4-exceptions) ended 2026-10-15).
 
 ## Development setup
 

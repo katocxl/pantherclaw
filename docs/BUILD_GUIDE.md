@@ -28,11 +28,11 @@ Also: [THREAT_MODEL.md](security/THREAT_MODEL.md) (`T-###`), [GATES_AND_REVIEW.m
 
 ```
 G0 brief (GATES_AND_REVIEW §5) → protos/migrations/contracts first → tests named by ID first
-→ implement (domain → app → adapters → cmd) → commit on a branch → task check (+ task test:integration, task trace where they apply) → pull request; the founder merges
+→ implement (domain → app → adapters → cmd) → commit on a branch → task check (+ task test:integration, task trace where they apply) → pull request → green `ci-ok` → G1 approval; the founder merges
 → update traceability (FEATURES status, HR/T test links) → next slice
 ```
 
-While EX-004 is active there is no CI: GitHub runs no checks on a pull request, so the local checks are the only gate. Run them before you open the pull request and report the result in it. Several sessions may work at once: each works on its own branch and worktree and opens its own pull request, and only the founder merges ([PARALLEL_WORK.md](PARALLEL_WORK.md)).
+CI is on ([EX-004](security/GATES_AND_REVIEW.md#4-exceptions) ended 2026-10-15): every pull request needs a green `ci-ok`, and the founder's G1 approval ("G1: approved <sha>", at least 1 hour after the pull request was ready) before it merges. Run the local checks before you open the pull request and report the result in it. Several sessions may work at once: each works on its own branch and worktree and opens its own pull request, and only the founder merges ([PARALLEL_WORK.md](PARALLEL_WORK.md)).
 
 Rules for the AI implementer:
 - Implement only what the current G0 brief covers; surface missing security decisions instead of guessing.
