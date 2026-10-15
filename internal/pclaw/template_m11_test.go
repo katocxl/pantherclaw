@@ -577,6 +577,9 @@ func TestM11TemplatesPassTheGate(t *testing.T) {
 				for _, m := range res.Surviving {
 					t.Errorf("mutant survives: %s %s", m.Rule, m.Mutation)
 				}
+				for _, m := range res.Uncompilable {
+					t.Errorf("mutant does not compile: %s %s", m.Rule, m.Mutation)
+				}
 				t.Logf("%d cases, %d mutants, %d survivors", len(res.Cases), res.Mutants, res.Survivors)
 				if !res.Passed || res.Error != "" {
 					t.Errorf("gate: passed %v, error %q, %d mutants", res.Passed, res.Error, res.Mutants)
