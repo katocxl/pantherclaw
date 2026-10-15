@@ -32,6 +32,8 @@ func errKind(err error) string {
 		return ""
 	case errors.Is(err, pipeline.ErrNotFound):
 		return errNotFound
+	case errors.Is(err, pipeline.ErrTooManyControls):
+		return errTooMany
 	}
 	return errFailed
 }
@@ -42,6 +44,8 @@ func errOf(kind string) error {
 		return nil
 	case errNotFound:
 		return pipeline.ErrNotFound
+	case errTooMany:
+		return pipeline.ErrTooManyControls
 	case errFailed:
 		return errRecordedFailure
 	}
@@ -101,8 +105,16 @@ func (r *Recording) identity() (pipeline.Identity, error) {
 }
 
 func fromContainment(c pipeline.Containment, err error) *Containment {
-	out := &Containment{Epoch: c.Epoch, KillSwitch: c.KillSwitch, Now: c.Now, Err: errKind(err)}
-	for _, x := range c.Controls {
+	return &Containment{Epoch: c.Epoch, KillSwitch: c.KillSwitch, Now: c.Now, Err: errKind(err)}
+}
+
+func (c Containment) value() (pipeline.Containment, error) {
+	return pipeline.Containment{Epoch: c.Epoch, KillSwitch: c.KillSwitch, Now: c.Now}, errOf(c.Err)
+}
+
+func fromControls(k pipeline.ControlKeys, cs []pipeline.Control, err error) *Controls {
+	out := &Controls{Keys: ControlKeys(k), Err: errKind(err)}
+	for _, x := range cs {
 		out.Controls = append(out.Controls, Control{
 			ID: x.ID.String(), ScopeType: x.ScopeType, ScopeID: x.ScopeID, Control: x.Control, Operation: x.Operation, ExpiresAt: x.ExpiresAt,
 		})
@@ -110,14 +122,14 @@ func fromContainment(c pipeline.Containment, err error) *Containment {
 	return out
 }
 
-func (c Containment) value() (pipeline.Containment, error) {
-	out := pipeline.Containment{Epoch: c.Epoch, KillSwitch: c.KillSwitch, Now: c.Now}
+func (c Controls) value() ([]pipeline.Control, error) {
+	var out []pipeline.Control
 	for _, x := range c.Controls {
 		id, err := ids.ParseUUID(x.ID)
 		if err != nil {
-			return pipeline.Containment{}, fmt.Errorf("containment control %q: %w", x.ID, err)
+			return nil, fmt.Errorf("containment control %q: %w", x.ID, err)
 		}
-		out.Controls = append(out.Controls, pipeline.Control{
+		out = append(out, pipeline.Control{
 			ID: id, ScopeType: x.ScopeType, ScopeID: x.ScopeID, Control: x.Control, Operation: x.Operation, ExpiresAt: x.ExpiresAt,
 		})
 	}
@@ -545,13 +557,16 @@ func (h Hold) value() (*pipeline.HoldRequest, error) {
 func (r Reads) check() error {
 	var errs []error
 	ok := func(kind string) bool {
-		if kind != "" && kind != errNotFound && kind != errFailed {
+		if kind != "" && kind != errNotFound && kind != errFailed && kind != errTooMany {
 			errs = append(errs, fmt.Errorf("unknown read outcome %q", kind))
 		}
 		return kind == ""
 	}
 	add := func(_ any, err error) { errs = append(errs, err) }
 	if c := r.Containment; c != nil && ok(c.Err) {
+		add(c.value())
+	}
+	if c := r.Controls; c != nil && ok(c.Err) {
 		add(c.value())
 	}
 	for _, d := range r.Definitions {

@@ -445,13 +445,8 @@ type containedReader struct {
 	controls []pipeline.Control
 }
 
-// Containment implements pipeline.Reader: the recorded epoch, kill switch
-// and time, with the controls given.
-func (r containedReader) Containment(ctx context.Context, org ids.OrgID) (pipeline.Containment, error) {
-	c, err := r.Reader.Containment(ctx, org)
-	if err != nil {
-		return c, err
-	}
-	c.Controls = r.controls
-	return c, nil
+// Controls implements pipeline.Reader: the controls given, whatever was
+// recorded; the pipeline decides which cover the action.
+func (r containedReader) Controls(context.Context, ids.OrgID, pipeline.ControlKeys) ([]pipeline.Control, error) {
+	return r.controls, nil
 }

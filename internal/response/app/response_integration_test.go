@@ -11,7 +11,6 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/katocxl/pantherclaw/internal/authority/adapters/pgauthority"
 	adomain "github.com/katocxl/pantherclaw/internal/authority/domain"
 	"github.com/katocxl/pantherclaw/internal/authority/pipeline"
 	"github.com/katocxl/pantherclaw/internal/authority/replay"
@@ -44,13 +43,17 @@ func (w *world) containAgent() (ids.UUID, ids.UUID) {
 	return res.ActionID, control
 }
 
-func (w *world) activeControls() []pipeline.Control {
+func (w *world) activeControls() []dbq.ActiveContainmentControlsRow {
 	w.t.Helper()
-	c, err := (&pgauthority.Reader{Pool: w.pool}).Containment(context.Background(), w.org)
-	if err != nil {
+	var out []dbq.ActiveContainmentControlsRow
+	if err := w.tx(func(ctx context.Context, tx db.TenantTx) error {
+		var err error
+		out, err = dbq.New(tx).ActiveContainmentControls(ctx, w.org)
+		return err
+	}); err != nil {
 		w.t.Fatal(err)
 	}
-	return c.Controls
+	return out
 }
 
 // TestHR250_RestorationNeedsAnIndependentReviewerAndPreconditions: the

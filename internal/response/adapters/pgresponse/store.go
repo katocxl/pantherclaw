@@ -86,6 +86,12 @@ func AddControl(ctx context.Context, tx db.TenantTx, org ids.OrgID, a Action, ex
 	if a.Kind != rdomain.KindContain {
 		return Added{}, fmt.Errorf("pgresponse: a control comes from a CONTAIN action, not %s", a.Kind)
 	}
+	// Validated and stored canonical, whoever calls (D53).
+	c, err := rdomain.Control{ScopeType: a.ScopeType, ScopeID: a.ScopeID, Control: a.Control, Operation: a.Operation, Reason: a.Reason}.Canonical()
+	if err != nil {
+		return Added{}, err
+	}
+	a.ScopeID = c.ScopeID
 	q := dbq.New(tx)
 	if err := q.InsertContainment(ctx, org); err != nil {
 		return Added{}, err

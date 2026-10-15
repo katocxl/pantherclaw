@@ -16,13 +16,87 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 )
 
+const actionContainmentControls = `-- name: ActionContainmentControls :many
+SELECT id, scope_type, scope_id, control, operation, expires_at
+FROM pc.containment_controls
+WHERE org_id = $1 AND lifted_at IS NULL AND (
+    (scope_type = 'run' AND scope_id = $2::text)
+    OR (scope_type = 'agent' AND scope_id = $3::text)
+    OR (scope_type = 'connection' AND scope_id = $4::text)
+    OR (scope_type = 'grant' AND scope_id = ANY ($5::text[]))
+    OR (scope_type = 'principal' AND scope_id = ANY ($6::text[]))
+    OR (scope_type = 'resource' AND lower(split_part(scope_id, ':', 1)) = lower($7::text))
+    OR scope_type NOT IN ('run', 'agent', 'connection', 'grant', 'principal', 'resource')
+)
+ORDER BY created_at, id
+LIMIT 10001
+`
+
+type ActionContainmentControlsParams struct {
+	OrgID      ids.OrgID
+	Run        string
+	Agent      string
+	Connection string
+	Grants     []string
+	Principals []string
+	TargetType string
+}
+
+type ActionContainmentControlsRow struct {
+	ID        ids.UUID
+	ScopeType string
+	ScopeID   string
+	Control   string
+	Operation *string
+	ExpiresAt *time.Time
+}
+
+// ActionContainmentControls are the unlifted controls an action's keys may
+// match (D21, D53): on its run, agent, connection, grant chain or people,
+// the resource controls of its target type (case-insensitive), and any of a
+// scope type the pipeline does not know (fail closed). One row past the
+// pipeline's cap (10 000) tells it to fail closed.
+func (q *Queries) ActionContainmentControls(ctx context.Context, arg ActionContainmentControlsParams) ([]ActionContainmentControlsRow, error) {
+	rows, err := q.db.Query(ctx, actionContainmentControls,
+		arg.OrgID,
+		arg.Run,
+		arg.Agent,
+		arg.Connection,
+		arg.Grants,
+		arg.Principals,
+		arg.TargetType,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ActionContainmentControlsRow{}
+	for rows.Next() {
+		var i ActionContainmentControlsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ScopeType,
+			&i.ScopeID,
+			&i.Control,
+			&i.Operation,
+			&i.ExpiresAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const activeContainmentControls = `-- name: ActiveContainmentControls :many
 
 SELECT id, scope_type, scope_id, control, operation, expires_at
 FROM pc.containment_controls
-WHERE org_id = $1 AND lifted_at IS NULL AND (expires_at IS NULL OR expires_at > now())
+WHERE org_id = $1 AND lifted_at IS NULL
 ORDER BY created_at, id
-LIMIT 1000
 `
 
 type ActiveContainmentControlsRow struct {
@@ -38,8 +112,8 @@ type ActiveContainmentControlsRow struct {
 // Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
 //
 // Graduated containment and response actions (G0 M10 D21–D26).
-// ActiveContainmentControls are the controls the decision pipeline enforces
-// (HR-248): not lifted and not expired by the database clock.
+// ActiveContainmentControls are the org's unlifted controls (HR-248):
+// expiry never lifts one (D53).
 func (q *Queries) ActiveContainmentControls(ctx context.Context, orgID ids.OrgID) ([]ActiveContainmentControlsRow, error) {
 	rows, err := q.db.Query(ctx, activeContainmentControls, orgID)
 	if err != nil {
@@ -1093,7 +1167,6 @@ SELECT EXISTS (
     SELECT 1 FROM pc.grants g
     JOIN pc.containment_controls c ON c.org_id = g.org_id AND c.scope_type = 'principal'
         AND c.scope_id = 'user:' || g.grantor_id::text AND c.control = 'DENY_ALL' AND c.lifted_at IS NULL
-        AND (c.expires_at IS NULL OR c.expires_at > now())
     JOIN pc.response_actions a ON a.org_id = c.org_id AND a.id = c.action_id AND a.source = 'PLAYBOOK'
     WHERE g.org_id = $1 AND g.id = $2 AND g.grantor_kind = 'user'
 )::boolean AS contained

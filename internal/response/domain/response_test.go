@@ -5,6 +5,7 @@ package domain_test
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
@@ -88,6 +89,22 @@ func TestHR249_ConfirmedOnlyWhenEveryMaterialPathIs(t *testing.T) {
 	} {
 		if got := domain.StatusOf(c.paths); got != c.want {
 			t.Errorf("%+v: %s, want %s", c.paths, got, c.want)
+		}
+	}
+}
+
+// TestHR248_ControlsStoreCanonicalIds (D53): an upper-case uuid is stored
+// lower-case, so the pipeline and the SQL filter both match it.
+func TestHR248_ControlsStoreCanonicalIds(t *testing.T) {
+	id := ids.NewV7().String()
+	for _, c := range []struct{ scope, in, want string }{
+		{domain.ScopeAgent, strings.ToUpper(id), id},
+		{domain.ScopePrincipal, "user:" + strings.ToUpper(id), "user:" + id},
+		{domain.ScopeResource, "GitHub.Repo:Acme/*", "GitHub.Repo:Acme/*"},
+	} {
+		got, err := domain.Control{ScopeType: c.scope, ScopeID: c.in, Control: domain.DenyAll, Reason: "r"}.Canonical()
+		if err != nil || got.ScopeID != c.want {
+			t.Errorf("%s %s: %q %v, want %q", c.scope, c.in, got.ScopeID, err, c.want)
 		}
 	}
 }

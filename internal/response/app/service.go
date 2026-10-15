@@ -205,7 +205,8 @@ func (s *Response) Contain(ctx context.Context, in ContainInput) (reflexdomain.C
 		return reflexdomain.ContainResult{}, err
 	}
 	ctl := rdomain.Control{ScopeType: scopeType, ScopeID: scopeID, Control: in.Control, Operation: in.Operation, Reason: in.Reason}
-	if err := ctl.Validate(); err != nil {
+	ctl, err = ctl.Canonical()
+	if err != nil {
 		return reflexdomain.ContainResult{}, err
 	}
 	if in.SkipPreview && !reasonOK(in.SkipReason) {

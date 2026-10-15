@@ -150,7 +150,8 @@ func (s *Containment) Contain(ctx context.Context, ptx pgx.Tx, r reflexdomain.Co
 		return reflexdomain.ContainResult{}, ErrSOARPort
 	}
 	c := rdomain.Control{ScopeType: scopeType, ScopeID: scopeID, Control: r.Control, Operation: r.Operation, Reason: r.Reason}
-	if err := c.Validate(); err != nil {
+	c, err = c.Canonical()
+	if err != nil {
 		return reflexdomain.ContainResult{}, err
 	}
 	return s.contain(ctx, tx, r.Org, c, containOpts{

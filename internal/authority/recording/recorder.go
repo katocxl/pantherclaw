@@ -247,6 +247,13 @@ func (r *Recorder) HoldSettings(ctx context.Context, org ids.OrgID) (pipeline.Ho
 
 // any reports whether any read is recorded.
 func (r *Reads) any() bool {
-	return r.Containment != nil || r.Policy != nil || r.HoldSettings != nil || len(r.Definitions)+len(r.Runs)+len(r.Agents)+
+	return r.Containment != nil || r.Controls != nil || r.Policy != nil || r.HoldSettings != nil || len(r.Definitions)+len(r.Runs)+len(r.Agents)+
 		len(r.Chains)+len(r.Envelopes)+len(r.Facts)+len(r.Usage)+len(r.Claims)+len(r.Connections)+len(r.Holds)+len(r.Variants) > 0
+}
+
+// Controls implements pipeline.Reader.
+func (r *Recorder) Controls(ctx context.Context, org ids.OrgID, k pipeline.ControlKeys) ([]pipeline.Control, error) {
+	cs, err := r.r.Controls(ctx, org, k)
+	r.keep(func(x *Reads) error { x.Controls = fromControls(k, cs, err); return nil })
+	return cs, err
 }

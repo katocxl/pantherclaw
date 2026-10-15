@@ -211,3 +211,22 @@ func StatusOf(paths []Path) Status {
 	}
 	return StatusRequested
 }
+
+// Canonical validates c and returns it with canonical ids (D53): lower-case
+// uuids for agent, run, grant and connection scopes and for a principal's
+// id. A resource pattern is kept as given; it matches ignoring case.
+func (c Control) Canonical() (Control, error) {
+	if err := c.Validate(); err != nil {
+		return Control{}, err
+	}
+	switch c.ScopeType {
+	case ScopeAgent, ScopeRun, ScopeGrant, ScopeConnection:
+		id, _ := ids.ParseUUID(c.ScopeID)
+		c.ScopeID = id.String()
+	case ScopePrincipal:
+		k, raw, _ := strings.Cut(c.ScopeID, ":")
+		id, _ := ids.ParseUUID(raw)
+		c.ScopeID = k + ":" + id.String()
+	}
+	return c, nil
+}

@@ -6,6 +6,7 @@ package pipeline_test
 import (
 	"context"
 	"reflect"
+	"strings"
 	"testing"
 
 	apdomain "github.com/katocxl/pantherclaw/internal/approvals/domain"
@@ -16,7 +17,7 @@ import (
 )
 
 func (f *fx) control(scopeType, scopeID, control, op string) {
-	f.w.Cont.Controls = []pipeline.Control{{ID: ids.NewV7(), ScopeType: scopeType, ScopeID: scopeID, Control: control, Operation: op}}
+	f.w.ActiveControls = []pipeline.Control{{ID: ids.NewV7(), ScopeType: scopeType, ScopeID: scopeID, Control: control, Operation: op}}
 }
 
 // TestHR248_ContainmentControlsDenyInTheDecisionPath: a DENY_ALL control
@@ -67,7 +68,7 @@ func TestHR248_ContainmentControlsDenyInTheDecisionPath(t *testing.T) {
 	f.control("somewhere_new", "x", pipeline.ControlDenyAll, "")
 	expect(t, read(), adomain.Deny, pipeline.ReasonContained)
 
-	f.w.Cont.Controls = nil
+	f.w.ActiveControls = nil
 	expect(t, read(), adomain.Allow, pipeline.ReasonGrantCovers)
 }
 
@@ -116,4 +117,36 @@ func TestHR248_HoldWritesLetsReadsContinue(t *testing.T) {
 	if ev.MonitorPermit() {
 		t.Fatal("a monitor-mode write was permitted under HOLD_WRITES")
 	}
+}
+
+// TestHR248_ControlsFailClosed (D53): more controls matching an action than
+// the pipeline checks deny it CONTAINMENT_UNAVAILABLE, and controls that
+// cannot be read leave it undecidable; neither is ever allowed.
+func TestHR248_ControlsFailClosed(t *testing.T) {
+	f := newFx(t)
+	many := make([]pipeline.Control, pipeline.MaxControls+1)
+	for i := range many {
+		many[i] = pipeline.Control{ID: ids.NewV7(), ScopeType: pipeline.ControlScopeRun, ScopeID: ids.NewV7().String(), Control: pipeline.ControlDenyAll}
+	}
+	f.w.ActiveControls = many
+	expect(t, f.call(f.run, "get_refund", `{"refund":"re_1"}`), adomain.Deny, pipeline.ReasonContainmentUnavailable)
+	f.w.ActiveControls = nil
+	f.w.Fail["Controls"] = true
+	expect(t, f.call(f.run, "get_refund", `{"refund":"re_1"}`), adomain.CannotAuthorize, pipeline.ReasonEvidenceUnavailable)
+	delete(f.w.Fail, "Controls")
+	expect(t, f.call(f.run, "get_refund", `{"refund":"re_1"}`), adomain.Allow, pipeline.ReasonGrantCovers)
+}
+
+// TestHR248_ControlIdsAndResourcesMatchWhateverTheirCase (D53): an upper-case
+// uuid still covers its subject, and a resource control covers its target
+// whatever the case of either (covering more is the safe direction).
+func TestHR248_ControlIdsAndResourcesMatchWhateverTheirCase(t *testing.T) {
+	f := newFx(t)
+	read := func() *pipeline.Evaluation { return f.call(f.run, "get_refund", `{"refund":"re_1"}`) }
+	f.control(pipeline.ControlScopeAgent, strings.ToUpper(f.agent.String()), pipeline.ControlDenyAll, "")
+	expect(t, read(), adomain.Deny, pipeline.ReasonContained)
+	f.control(pipeline.ControlScopeResource, "PAYMENTS.REFUND:RE_*", pipeline.ControlDenyAll, "")
+	expect(t, read(), adomain.Deny, pipeline.ReasonContained)
+	f.control(pipeline.ControlScopePrincipal, strings.ToUpper(f.alice.String()), pipeline.ControlDenyAll, "")
+	expect(t, read(), adomain.Deny, pipeline.ReasonContained)
 }

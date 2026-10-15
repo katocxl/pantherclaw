@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/katocxl/pantherclaw/internal/authority/adapters/pgauthority"
+	"github.com/katocxl/pantherclaw/internal/authority/pipeline"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/db/dbtest"
@@ -158,9 +159,16 @@ func TestHR248_ContainerAddsAControlTheAuthorityEnforces(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if after.Epoch != before.Epoch+1 || len(after.Controls) != 1 || after.Controls[0].ScopeID != w.run.String() ||
-		after.Controls[0].Control != rdomain.DenyAll {
-		t.Fatalf("authority containment after: %+v (epoch before %d)", after, before.Epoch)
+	controls, err := (&pgauthority.Reader{Pool: w.pool}).Controls(context.Background(), w.org, pipeline.ControlKeys{Run: w.run.String()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after.Epoch != before.Epoch+1 || len(controls) != 1 || controls[0].ScopeID != w.run.String() || controls[0].Control != rdomain.DenyAll {
+		t.Fatalf("authority containment after: %+v %+v (epoch before %d)", after, controls, before.Epoch)
+	}
+	// Another run's keys do not read it.
+	if other, err := (&pgauthority.Reader{Pool: w.pool}).Controls(context.Background(), w.org, pipeline.ControlKeys{Run: ids.NewV7().String()}); err != nil || len(other) != 0 {
+		t.Fatalf("another run's controls: %+v %v", other, err)
 	}
 	a := w.action(res.ActionID)
 	if a.Status != string(rdomain.StatusRequested) || a.Epoch.Int64 != after.Epoch || a.Source != rdomain.SourcePerson {

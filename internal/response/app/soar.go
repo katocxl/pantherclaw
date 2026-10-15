@@ -94,7 +94,8 @@ func (s *Containment) RequestControlIn(ctx context.Context, tx db.TenantTx, r SO
 		return SOARResult{}, ErrSOARScope
 	}
 	c := rdomain.Control{ScopeType: scopeType, ScopeID: scopeID, Control: r.Control, Operation: r.Operation, Reason: r.Reason}
-	if err := c.Validate(); err != nil {
+	c, err = c.Canonical()
+	if err != nil {
 		return SOARResult{}, err
 	}
 	actor, source, evActor, err := actorOf(r.Requester)

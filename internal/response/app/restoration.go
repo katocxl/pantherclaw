@@ -31,6 +31,9 @@ const (
 
 // Plan states (D24).
 const (
+	// PlanProposed is a plan the sweeper drafts when a control reaches its
+	// expiry (D54): expiry never lifts a control by itself.
+	PlanProposed  = "PROPOSED"
 	PlanRequested = "REQUESTED"
 	PlanApproved  = "APPROVED"
 	PlanStaging   = "STAGING"
@@ -216,11 +219,14 @@ func (s *Containment) DecideRestorationIn(ctx context.Context, tx db.TenantTx, p
 	if p.RequestedBy == "user:"+reviewer.String() {
 		return "", nil, ErrRequesterDecides
 	}
-	if p.State != PlanRequested {
+	if p.State != PlanRequested && p.State != PlanProposed {
 		return "", nil, ErrPlanState
 	}
 	controls, err := q.RestorationPlanControls(ctx, org, plan)
 	if err != nil {
+		return "", nil, err
+	}
+	if err := independentOf(controls, reviewer); err != nil {
 		return "", nil, err
 	}
 	pre, err := preconditions(ctx, q, org, controls, p.Staged)
@@ -237,15 +243,23 @@ func (s *Containment) DecideRestorationIn(ctx context.Context, tx db.TenantTx, p
 	case slices.ContainsFunc(pre, func(c Precondition) bool { return c.State == PreUnmet }):
 		// Record what blocked it; the plan stays REQUESTED.
 		if _, err := q.SetRestorationPlanState(ctx, dbq.SetRestorationPlanStateParams{
-			OrgID: org, ID: plan, Expected: PlanRequested, State: PlanRequested, Preconditions: preJSON,
+			OrgID: org, ID: plan, Expected: p.State, State: p.State, Preconditions: preJSON,
 		}); err != nil {
 			return "", nil, err
 		}
-		return PlanRequested, pre, ErrPreconditions
+		return p.State, pre, ErrPreconditions
 	case p.Staged:
 		next = PlanStaging
 	default:
 		next = PlanCompleted
+	}
+	// The plan is decided first: the lift trigger checks it (D53).
+	if n, err := q.SetRestorationPlanState(ctx, dbq.SetRestorationPlanStateParams{
+		OrgID: org, ID: plan, Expected: p.State, State: next, Preconditions: preJSON,
+	}); err != nil {
+		return "", nil, err
+	} else if n == 0 {
+		return "", nil, ErrPlanState
 	}
 	if next == PlanCompleted {
 		for _, c := range controls {
@@ -256,13 +270,6 @@ func (s *Containment) DecideRestorationIn(ctx context.Context, tx db.TenantTx, p
 				return "", nil, err
 			}
 		}
-	}
-	if n, err := q.SetRestorationPlanState(ctx, dbq.SetRestorationPlanStateParams{
-		OrgID: org, ID: plan, Expected: PlanRequested, State: next, Preconditions: preJSON,
-	}); err != nil {
-		return "", nil, err
-	} else if n == 0 {
-		return "", nil, ErrPlanState
 	}
 	name := map[string]string{
 		PlanRefused: "response.restoration_declined", PlanStaging: "response.restoration_approved",
@@ -382,6 +389,13 @@ func (s *Containment) ApplyStageIn(ctx context.Context, tx db.TenantTx, sp Stage
 	}
 	if p.RequestedBy == "user:"+reviewer.String() {
 		return "", ErrRequesterDecides
+	}
+	controls, err := q.RestorationPlanControls(ctx, org, sp.Plan)
+	if err != nil {
+		return "", err
+	}
+	if err := independentOf(controls, reviewer); err != nil {
+		return "", err
 	}
 	if p.State != PlanStaging {
 		return "", ErrPlanState
@@ -581,4 +595,20 @@ func nonNilResults(r []TestResult) []TestResult {
 		return []TestResult{}
 	}
 	return r
+}
+
+// ErrInvolvedDecides refuses a reviewer who added a control of the plan, or
+// whom a control of the plan contains (D54).
+var ErrInvolvedDecides = pcerr.New(pcerr.PermissionDenied, "REVIEWER_INVOLVED",
+	"a person who added one of the plan's controls, or whom one of them contains, never decides it")
+
+// independentOf checks a reviewer against the plan's controls (D54).
+func independentOf(controls []dbq.PcContainmentControl, reviewer ids.UUID) error {
+	me := "user:" + reviewer.String()
+	for _, c := range controls {
+		if c.CreatedBy == me || (c.ScopeType == rdomain.ScopePrincipal && c.ScopeID == me) {
+			return ErrInvolvedDecides
+		}
+	}
+	return nil
 }

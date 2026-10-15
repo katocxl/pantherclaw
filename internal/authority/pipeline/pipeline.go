@@ -292,7 +292,7 @@ func (p *Pipeline) evaluate(ctx context.Context, req Request) (*Evaluation, erro
 	s.ev.ActionID, _ = ids.ParseUUID(s.a.ActionID)
 	p.scope(ctx, s)
 	p.identity(ctx, s)
-	p.containment(s)
+	p.containment(ctx, s)
 	p.authority(s)
 	p.meaning(s)
 	p.currentFacts(ctx, s)
@@ -496,7 +496,7 @@ func (p *Pipeline) loadChain(ctx context.Context, s *state) {
 }
 
 // Step 3: nothing on the path is contained.
-func (p *Pipeline) containment(s *state) {
+func (p *Pipeline) containment(ctx context.Context, s *state) {
 	blocked := false
 	if s.cont.KillSwitch {
 		s.cl.add(StepContainment, adomain.Deny, adomain.ReasonKillSwitch, "the org kill switch is engaged", "")
@@ -518,7 +518,7 @@ func (p *Pipeline) containment(s *state) {
 		s.cl.add(StepContainment, adomain.Deny, ReasonConnectionContained, "the connection is "+s.conn.State, "")
 		blocked = true
 	}
-	if s.controlled() {
+	if p.controlled(ctx, s) {
 		blocked = true
 	}
 	switch {

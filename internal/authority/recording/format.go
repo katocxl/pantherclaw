@@ -32,6 +32,8 @@ const FormatVersion = 1
 const (
 	errNotFound = "not_found"
 	errFailed   = "error"
+	// errTooMany: more containment controls matched than the pipeline checks.
+	errTooMany = "too_many"
 )
 
 // Errors of Decode.
@@ -84,6 +86,7 @@ type Tampered struct {
 // Reads are the reads of one evaluation, by kind.
 type Reads struct {
 	Containment  *Containment  `json:"containment,omitzero"`
+	Controls     *Controls     `json:"controls,omitzero"`
 	Definitions  []Definition  `json:"definitions,omitzero"`
 	Policy       *Policy       `json:"policy,omitzero"`
 	Runs         []Run         `json:"runs,omitzero"`
@@ -105,11 +108,27 @@ type Containment struct {
 	Epoch      int64     `json:"epoch"`
 	KillSwitch bool      `json:"kill_switch"`
 	Now        time.Time `json:"now"`
-	// Controls are the active containment controls (G0 M10 D21): empty in
-	// recordings made before them, which replay as they did (no control
-	// existed), so the format and pipeline versions are unchanged.
-	Controls []Control `json:"controls,omitzero"`
-	Err      string    `json:"err,omitzero"`
+	Err        string    `json:"err,omitzero"`
+}
+
+// Controls is the containment-controls read (G0 M10 D21, D53): the keys it
+// asked with and the controls returned. Recordings made before it have none
+// and replay as they did (no control existed), so the format and pipeline
+// versions are unchanged.
+type Controls struct {
+	Keys     ControlKeys `json:"keys"`
+	Controls []Control   `json:"controls,omitzero"`
+	Err      string      `json:"err,omitzero"`
+}
+
+// ControlKeys are the keys of a controls read.
+type ControlKeys struct {
+	Run        string   `json:"run,omitzero"`
+	Agent      string   `json:"agent,omitzero"`
+	Connection string   `json:"connection,omitzero"`
+	Grants     []string `json:"grants,omitzero"`
+	Principals []string `json:"principals,omitzero"`
+	TargetType string   `json:"target_type,omitzero"`
 }
 
 // Control is an active containment control, by value.

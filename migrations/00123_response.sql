@@ -112,20 +112,33 @@ CREATE TABLE pc.containment_controls (
     PRIMARY KEY (org_id, id),
     FOREIGN KEY (org_id, action_id) REFERENCES pc.response_actions (org_id, id),
     CONSTRAINT containment_controls_operation CHECK ((control = 'DENY_OPERATION') = (operation IS NOT NULL)),
+    -- Canonical lower-case ids (D53): what the decision path matches.
+    CONSTRAINT containment_controls_canonical CHECK (
+        (scope_type NOT IN ('agent', 'run', 'grant', 'connection')
+            OR scope_id ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$')
+        AND (scope_type <> 'principal'
+            OR scope_id ~ '^(user|service_account):[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$')
+        AND (scope_type <> 'resource' OR scope_id ~ '^[^:]+:.+$')),
     CONSTRAINT containment_controls_expiry CHECK (expires_at IS NULL OR expires_at > created_at),
     -- Lifting is a restoration (HR-248): a lift names the plan and who lifted.
     CONSTRAINT containment_controls_lift CHECK ((lifted_at IS NULL) = (lifted_by IS NULL)
                                                 AND (lifted_at IS NULL) = (restoration_id IS NULL))
 );
-CREATE INDEX containment_controls_active ON pc.containment_controls (org_id) WHERE lifted_at IS NULL;
+-- The decision path reads an action's controls by scope (D53).
+CREATE INDEX containment_controls_active ON pc.containment_controls (org_id, scope_type, scope_id) WHERE lifted_at IS NULL;
 CREATE INDEX containment_controls_action ON pc.containment_controls (org_id, action_id);
 
 -- Adding or lifting a control raises the epoch in the same transaction
 -- (HR-248, HR-002); the org_containment trigger then notifies the
--- containment watchers. A lifted control is never lifted again.
+-- containment watchers. A lifted control is never lifted again, and a lift
+-- names a decided restoration plan (STAGING or COMPLETED) that lists the
+-- control (D53): lifting happens only through restoration, whatever code
+-- writes it. The function runs as the writing role, under its RLS.
 -- +goose StatementBegin
 CREATE FUNCTION pc.containment_control_epoch() RETURNS trigger
-LANGUAGE plpgsql AS $$
+LANGUAGE plpgsql
+SET search_path = pc, pg_temp
+AS $$
 BEGIN
     IF TG_OP = 'UPDATE' THEN
         IF OLD.lifted_at IS NOT NULL THEN
@@ -133,6 +146,14 @@ BEGIN
         END IF;
         IF NEW.lifted_at IS NULL THEN
             RETURN NEW;
+        END IF;
+        IF NOT EXISTS (
+            SELECT 1 FROM pc.restoration_plans p
+            JOIN pc.restoration_plan_controls c ON c.org_id = p.org_id AND c.plan_id = p.id
+            WHERE p.org_id = NEW.org_id AND p.id = NEW.restoration_id AND c.control_id = NEW.id
+              AND p.state IN ('STAGING', 'COMPLETED')) THEN
+            RAISE EXCEPTION 'containment control % is lifted only by a decided restoration plan that lists it', NEW.id
+                USING ERRCODE = 'check_violation';
         END IF;
         NEW.lifted_at := now();
     END IF;
@@ -189,7 +210,7 @@ CREATE TABLE pc.restoration_plans (
     reason              text        NOT NULL CHECK (char_length(reason) BETWEEN 1 AND 1000),
     staged              boolean     NOT NULL DEFAULT false,
     state               text        NOT NULL DEFAULT 'REQUESTED'
-                                    CHECK (state IN ('REQUESTED', 'APPROVED', 'STAGING', 'COMPLETED', 'REFUSED', 'CANCELLED')),
+                                    CHECK (state IN ('PROPOSED', 'REQUESTED', 'APPROVED', 'STAGING', 'COMPLETED', 'REFUSED', 'CANCELLED')),
     -- Computed and recorded when asked for and again before each lift
     -- (F564): identity re-verified, connection health, remediation and test
     -- results, remaining grants, waiting approvals.

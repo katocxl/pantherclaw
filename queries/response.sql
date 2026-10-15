@@ -3,14 +3,33 @@
 --
 -- Graduated containment and response actions (G0 M10 D21–D26).
 
--- ActiveContainmentControls are the controls the decision pipeline enforces
--- (HR-248): not lifted and not expired by the database clock.
+-- ActiveContainmentControls are the org's unlifted controls (HR-248):
+-- expiry never lifts one (D53).
 -- name: ActiveContainmentControls :many
 SELECT id, scope_type, scope_id, control, operation, expires_at
 FROM pc.containment_controls
-WHERE org_id = sqlc.arg(org_id) AND lifted_at IS NULL AND (expires_at IS NULL OR expires_at > now())
+WHERE org_id = sqlc.arg(org_id) AND lifted_at IS NULL
+ORDER BY created_at, id;
+
+-- ActionContainmentControls are the unlifted controls an action's keys may
+-- match (D21, D53): on its run, agent, connection, grant chain or people,
+-- the resource controls of its target type (case-insensitive), and any of a
+-- scope type the pipeline does not know (fail closed). One row past the
+-- pipeline's cap (10 000) tells it to fail closed.
+-- name: ActionContainmentControls :many
+SELECT id, scope_type, scope_id, control, operation, expires_at
+FROM pc.containment_controls
+WHERE org_id = sqlc.arg(org_id) AND lifted_at IS NULL AND (
+    (scope_type = 'run' AND scope_id = sqlc.arg(run)::text)
+    OR (scope_type = 'agent' AND scope_id = sqlc.arg(agent)::text)
+    OR (scope_type = 'connection' AND scope_id = sqlc.arg(connection)::text)
+    OR (scope_type = 'grant' AND scope_id = ANY (sqlc.arg(grants)::text[]))
+    OR (scope_type = 'principal' AND scope_id = ANY (sqlc.arg(principals)::text[]))
+    OR (scope_type = 'resource' AND lower(split_part(scope_id, ':', 1)) = lower(sqlc.arg(target_type)::text))
+    OR scope_type NOT IN ('run', 'agent', 'connection', 'grant', 'principal', 'resource')
+)
 ORDER BY created_at, id
-LIMIT 1000;
+LIMIT 10001;
 
 -- name: InsertResponseAction :one
 INSERT INTO pc.response_actions (org_id, id, kind, scope_type, scope_id, control, operation, reason, case_id, incident_id,
@@ -374,7 +393,6 @@ SELECT EXISTS (
     SELECT 1 FROM pc.grants g
     JOIN pc.containment_controls c ON c.org_id = g.org_id AND c.scope_type = 'principal'
         AND c.scope_id = 'user:' || g.grantor_id::text AND c.control = 'DENY_ALL' AND c.lifted_at IS NULL
-        AND (c.expires_at IS NULL OR c.expires_at > now())
     JOIN pc.response_actions a ON a.org_id = c.org_id AND a.id = c.action_id AND a.source = 'PLAYBOOK'
     WHERE g.org_id = sqlc.arg(org_id) AND g.id = sqlc.arg(grant_id) AND g.grantor_kind = 'user'
 )::boolean AS contained;

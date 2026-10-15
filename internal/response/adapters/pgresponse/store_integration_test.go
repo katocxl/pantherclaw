@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/katocxl/pantherclaw/internal/authority/adapters/pgauthority"
+	"github.com/katocxl/pantherclaw/internal/authority/pipeline"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/db/dbtest"
@@ -90,14 +91,17 @@ func TestHR248_AddingAndLiftingAControlRaisesTheEpoch(t *testing.T) {
 	if active() != 1 {
 		t.Fatalf("%d active controls, want 1", active())
 	}
-	// The Authority reads the control with the epoch, in the decision snapshot.
+	// The Authority reads the control by the action's keys.
 	cont, err := (&pgauthority.Reader{Pool: pool}).Containment(ctx, org)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(cont.Controls) != 1 || cont.Epoch != e0+1 || cont.Controls[0].ID != added.ControlID ||
-		cont.Controls[0].ScopeID != agent.String() || cont.Controls[0].Control != rdomain.DenyAll {
-		t.Fatalf("authority containment: %+v", cont)
+	cs, err := (&pgauthority.Reader{Pool: pool}).Controls(ctx, org, pipeline.ControlKeys{Agent: agent.String()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cs) != 1 || cont.Epoch != e0+1 || cs[0].ID != added.ControlID || cs[0].ScopeID != agent.String() || cs[0].Control != rdomain.DenyAll {
+		t.Fatalf("authority containment: %+v %+v", cont, cs)
 	}
 
 	// pc_app cannot delete a control or change what it controls.

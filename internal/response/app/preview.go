@@ -154,7 +154,8 @@ func compareUUID(a, b ids.UUID) int {
 // PreviewIn computes a control's preview in tx (D23), without the reach:
 // what Contain compares a wider control's digest against.
 func (s *Containment) PreviewIn(ctx context.Context, tx db.TenantTx, c rdomain.Control) (Preview, error) {
-	if err := c.Validate(); err != nil {
+	c, err := c.Canonical()
+	if err != nil {
 		return Preview{}, err
 	}
 	if err := exists(ctx, dbq.New(tx), tx.OrgID(), c); err != nil {

@@ -36,9 +36,12 @@ type World struct {
 	Org    ids.OrgID
 	Grants *grantstest.Store
 	Cont   pipeline.Containment
-	pkg    *defs.Package
-	states map[string]defs.State // operation → lifecycle state
-	policy *pipeline.Policy
+	// ActiveControls are the org's unlifted containment controls; Controls returns
+	// them all (the pipeline decides which cover the action).
+	ActiveControls []pipeline.Control
+	pkg            *defs.Package
+	states         map[string]defs.State // operation → lifecycle state
+	policy         *pipeline.Policy
 	// agentPolicies are the policies selected for single agents.
 	agentPolicies map[ids.UUID]*pipeline.Policy
 	runs          map[ids.UUID]pipeline.Run
@@ -193,6 +196,19 @@ func (w *World) Containment(context.Context, ids.OrgID) (pipeline.Containment, e
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	return w.Cont, nil
+}
+
+// Controls implements pipeline.Reader.
+func (w *World) Controls(context.Context, ids.OrgID, pipeline.ControlKeys) ([]pipeline.Control, error) {
+	if err := w.fail("Controls"); err != nil {
+		return nil, err
+	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if len(w.ActiveControls) > pipeline.MaxControls {
+		return nil, pipeline.ErrTooManyControls
+	}
+	return w.ActiveControls, nil
 }
 
 // Definition implements pipeline.Reader.
