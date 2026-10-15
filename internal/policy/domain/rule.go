@@ -145,6 +145,11 @@ const (
 	// definition's verifier cannot reach the level or the connection cannot
 	// make its read.
 	Verify ConstraintKind = "verify"
+	// DisclosureLimits is an obligation the Authority itself attaches to a
+	// disclosure param of an action toward a public destination (HR-079, G0
+	// M10 D56): Max is the byte limit, MaxEntropy the entropy limit. No rule
+	// declares it.
+	DisclosureLimits ConstraintKind = "disclosure_limits"
 )
 
 // Constraint is the limit a CONSTRAIN rule applies. Max is a decimal string
@@ -313,6 +318,8 @@ func (c *Constraint) validate(id string) error {
 		if c.Param != "" || c.Max != "" || c.Currency != "" || len(c.Values) == 0 {
 			return invalid("%s: %s needs values and no param", id, c.Kind)
 		}
+	case DisclosureLimits:
+		return invalid("%s: disclosure limits come from the definition's disclosure params, never from a rule", id)
 	default:
 		return invalid("%s: unknown constraint kind %q", id, c.Kind)
 	}

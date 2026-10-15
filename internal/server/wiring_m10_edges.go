@@ -24,6 +24,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/reflex/failures"
 	"github.com/katocxl/pantherclaw/internal/reflex/feed"
 	reflexports "github.com/katocxl/pantherclaw/internal/reflex/ports"
+	rapp "github.com/katocxl/pantherclaw/internal/response/app"
 	"github.com/katocxl/pantherclaw/internal/siem"
 	"github.com/katocxl/pantherclaw/internal/siem/siemrpc"
 	"github.com/katocxl/pantherclaw/internal/siem/stepup"
@@ -45,7 +46,7 @@ func edgesRaiser(pool *db.Pool) reflexports.Raiser { return m10Raiser{pool: pool
 // opened: cases unavailable" and the playbook refuses to be enabled.
 var (
 	edgesCaseOpener func(pool *db.Pool, bill *billing.Service) reflexports.CaseOpener
-	edgesContainer  func(pool *db.Pool, bill *billing.Service) reflexports.Container
+	edgesContainer  func(pool *db.Pool, bill *billing.Service, notify rapp.Notifier) reflexports.Container
 )
 
 // edgesFailures is the owned failure sink (core, D18).
@@ -88,7 +89,10 @@ func newSignals(pool *db.Pool, bill *billing.Service, notify siem.Notifier, publ
 		svc.WithCases(edgesCaseOpener(pool, bill))
 	}
 	if edgesContainer != nil {
-		svc.WithContainer(edgesContainer(pool, bill))
+		// The M5 notifier sends response's notifications for playbook
+		// containment too (D69 L4).
+		rn, _ := notify.(rapp.Notifier)
+		svc.WithContainer(edgesContainer(pool, bill, rn))
 	}
 	if bill != nil {
 		svc.WithEditions(bill)

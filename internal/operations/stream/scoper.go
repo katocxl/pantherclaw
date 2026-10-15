@@ -12,19 +12,20 @@ import (
 	"github.com/katocxl/pantherclaw/internal/reflex/feed"
 	"github.com/katocxl/pantherclaw/internal/search"
 	tenancy "github.com/katocxl/pantherclaw/internal/tenancy/app"
+	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
 )
 
-// PoolScoper scopes viewers by operations.read where each agent lives
-// (D4, D8): the same agent scope search filters with.
+// PoolScoper scopes viewers by a permission where each agent lives
+// (D8): the same agent scope search filters with.
 type PoolScoper struct {
 	Pool *db.Pool
 }
 
 // Scope implements Scoper.
-func (p PoolScoper) Scope(ctx context.Context, c tenancy.Caller) (Scope, error) {
+func (p PoolScoper) Scope(ctx context.Context, c tenancy.Caller, perm td.Permission) (Scope, error) {
 	var out Scope
 	err := p.Pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
-		sc, err := search.AgentScope(ctx, c, dbq.New(tx), PermOperations)
+		sc, err := search.AgentScope(ctx, c, dbq.New(tx), perm)
 		if err != nil {
 			return err
 		}

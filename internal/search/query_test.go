@@ -231,3 +231,25 @@ func TestSpecValidate(t *testing.T) {
 		t.Error("ORG with a team accepted")
 	}
 }
+
+// TestScopeIntersect (D69 L3): a filter that reads recorded actions keeps
+// only the agents the viewer may read with both permissions.
+func TestScopeIntersect(t *testing.T) {
+	a, b, c := ids.NewV7(), ids.NewV7(), ids.NewV7()
+	all := Scope{Permission: "agent.read", All: true}
+	some := Scope{Permission: "agent.read", Agents: []ids.UUID{a, b}}
+	ev := Scope{Permission: "evidence.read", Agents: []ids.UUID{b, c}}
+	none := Scope{Permission: "evidence.read", Restricted: true}
+	if got := some.intersect(ev); got.All || got.Restricted || len(got.Agents) != 1 || got.Agents[0] != b {
+		t.Errorf("some ∩ ev: %+v", got)
+	}
+	if got := all.intersect(ev); got.All || len(got.Agents) != 2 || got.Permission != "agent.read" {
+		t.Errorf("all ∩ ev: %+v", got)
+	}
+	if got := some.intersect(Scope{All: true}); len(got.Agents) != 2 {
+		t.Errorf("some ∩ all: %+v", got)
+	}
+	if got := all.intersect(none); !got.Restricted {
+		t.Errorf("all ∩ restricted: %+v", got)
+	}
+}

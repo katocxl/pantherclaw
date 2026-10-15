@@ -34,9 +34,11 @@ type ContainmentAction struct {
 	Case      *ids.UUID
 }
 
-// ContainmentReader lists unconfirmed containment actions.
+// ContainmentReader lists unconfirmed containment actions: every unsettled
+// one and those settled FAILED or UNSUPPORTED lately, newest first, and
+// whether more exist than it returned (D69 M5).
 type ContainmentReader interface {
-	Unconfirmed(ctx context.Context) ([]ContainmentAction, error)
+	Unconfirmed(ctx context.Context) ([]ContainmentAction, bool, error)
 }
 
 // PostureFinding is an open posture finding (exposure, D30).
@@ -107,12 +109,13 @@ func availabilityOf(err error) (availability, error) {
 
 // external is what the ports returned for one request.
 type external struct {
-	containment      []ContainmentAction
-	containmentState availability
-	findings         []PostureFinding
-	findingsState    availability
-	exports          []ExportDestination
-	exportsState     availability
+	containment          []ContainmentAction
+	containmentState     availability
+	containmentTruncated bool
+	findings             []PostureFinding
+	findingsState        availability
+	exports              []ExportDestination
+	exportsState         availability
 }
 
 // readSources reads every port under the caller in ctx.
@@ -121,7 +124,7 @@ func (s *Service) readSources(ctx context.Context) (external, error) {
 	var err error
 	if s.Sources.Containment == nil {
 		out.containmentState = unavailable
-	} else if out.containment, err = s.Sources.Containment.Unconfirmed(ctx); err != nil {
+	} else if out.containment, out.containmentTruncated, err = s.Sources.Containment.Unconfirmed(ctx); err != nil {
 		if out.containmentState, err = availabilityOf(err); err != nil {
 			return external{}, err
 		}

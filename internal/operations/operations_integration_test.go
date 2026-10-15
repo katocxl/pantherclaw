@@ -137,7 +137,7 @@ func TestT112_AnotherTeamsItemsAreNeitherShownNorCounted(t *testing.T) {
 	if sum.Counts[operations.CountActiveIncidents] != 1 || sum.Counts[operations.CountCritical] != 0 {
 		t.Fatalf("team A summary counts hidden rows: %v", sum.Counts)
 	}
-	if !slices.Contains(sum.Unknown, "agents outside your scope are not counted") {
+	if !slices.Contains(sum.Unknown, "agents and kinds outside your permissions are not counted") {
 		t.Fatalf("team A summary unknowns: %v", sum.Unknown)
 	}
 	sum, err = f.s.GetSummary(f.orgWide())
@@ -234,12 +234,13 @@ func TestOperations_NeedsOperationsRead(t *testing.T) {
 }
 
 type fakeContainment struct {
-	actions []operations.ContainmentAction
-	err     error
+	actions   []operations.ContainmentAction
+	truncated bool
+	err       error
 }
 
-func (f fakeContainment) Unconfirmed(context.Context) ([]operations.ContainmentAction, error) {
-	return f.actions, f.err
+func (f fakeContainment) Unconfirmed(context.Context) ([]operations.ContainmentAction, bool, error) {
+	return f.actions, f.truncated, f.err
 }
 
 type fakeExports struct {
@@ -304,5 +305,94 @@ func TestHR258_AMissingSourceIsNeverReadAsEmpty(t *testing.T) {
 	}
 	if slices.ContainsFunc(q.Items, func(it operations.Item) bool { return it.State == "CONFIRMED" }) {
 		t.Fatal("confirmed containment queued")
+	}
+}
+
+// alerts inserts n open alerts about agent.
+func (f *fx) alerts(agent ids.UUID, n int, severity string) {
+	f.exec(`INSERT INTO pc.alerts (org_id, id, source, title, severity, attention, basis, subjects, dedupe_key, first_seen, last_seen)
+		SELECT $1, gen_random_uuid(), 'detection', 'burst', $3, 'ALERT', 'RULE_MATCH',
+		       jsonb_build_array(jsonb_build_object('type', 'agent', 'id', $2::text)), 'k' || g || '-' || $2::text, now(), now()
+		FROM generate_series(1, $4::int) g`, f.org, agent.String(), severity, n)
+}
+
+// TestT112_HiddenRowsNeverCrowdOutOrTruncateAViewersQueue (D69 M2): a
+// thousand and more alerts on team B neither hide team A's alert from a
+// team-A viewer nor mark its queue truncated.
+func TestT112_HiddenRowsNeverCrowdOutOrTruncateAViewersQueue(t *testing.T) {
+	f := newFx(t)
+	f.alerts(f.agentB, 1001, "HIGH")
+	f.alerts(f.agentA, 1, "LOW")
+	q, err := f.s.GetWorkQueue(f.teamOf(f.teamA))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if q.Truncated || q.Counts[operations.KindAlert] != 1 || len(q.Items) != 1 || q.Items[0].Agents[0] != f.agentA.String() {
+		t.Fatalf("team A queue: truncated %v, counts %v, %v", q.Truncated, q.Counts, kinds(q))
+	}
+	for _, p := range q.Pending {
+		if strings.Contains(p, "more exist") {
+			t.Fatalf("truncation from hidden rows: %v", q.Pending)
+		}
+	}
+	all, err := f.s.GetWorkQueue(f.orgWide())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !all.Truncated || !slices.Contains(all.Pending, "alerts: more exist than were read") {
+		t.Fatalf("org-wide queue: %v %v", all.Truncated, all.Pending)
+	}
+}
+
+// TestHR258_SummaryCountsBeforeTheCapAndNamesWhatItCannotRead (D69 M3,
+// M4): 250 alerts count as 250 though the queue lists 200; a Viewer
+// without approval.read or grant.read gets those kinds named as outside
+// its permissions, and the summary is not "the whole organization".
+func TestHR258_SummaryCountsBeforeTheCapAndNamesWhatItCannotRead(t *testing.T) {
+	f := newFx(t)
+	f.alerts(f.agentA, 250, "HIGH")
+	q, err := f.s.GetWorkQueue(f.orgWide())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(q.Items) != 200 || !q.Truncated {
+		t.Fatalf("queue: %d items, truncated %v", len(q.Items), q.Truncated)
+	}
+	sum, err := f.s.GetSummary(f.orgWide())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sum.Counts[operations.CountOpenAlerts] != 250 {
+		t.Fatalf("summary counts the cut queue: %v", sum.Counts)
+	}
+	viewer := f.as(td.RoleViewer, td.Scope{Type: td.ScopeOrg, ID: f.org.UUID()})
+	sum, err = f.s.GetSummary(viewer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"waiting decisions: outside your permissions", "authority expansion: outside your permissions"} {
+		if !slices.Contains(sum.Unknown, want) {
+			t.Fatalf("viewer unknowns lack %q: %v", want, sum.Unknown)
+		}
+	}
+	if sum.Whole || sum.Scope == "the whole organization" || sum.Counts[operations.CountOpenAlerts] != 250 {
+		t.Fatalf("viewer summary: whole %v scope %q counts %v", sum.Whole, sum.Scope, sum.Counts)
+	}
+}
+
+// TestHR258_ContainmentTruncationIsReported (D69 M5): a containment port
+// that read only part of the unconfirmed actions says so.
+func TestHR258_ContainmentTruncationIsReported(t *testing.T) {
+	f := newFx(t)
+	f.s.Sources.Containment = fakeContainment{truncated: true, actions: []operations.ContainmentAction{
+		{ID: ids.NewV7(), ScopeType: "run", ScopeID: ids.NewV7().String(), Status: "PARTIAL", Requested: time.Now()},
+	}}
+	sum, err := f.s.GetSummary(f.orgWide())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !sum.Truncated || !slices.Contains(sum.Unknown, "unconfirmed containment: more exist than were read") ||
+		sum.Counts[operations.CountUnconfirmedContainment] != 1 {
+		t.Fatalf("summary: %v %v %v", sum.Truncated, sum.Unknown, sum.Counts)
 	}
 }

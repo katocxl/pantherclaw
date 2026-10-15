@@ -16,6 +16,7 @@ import (
 	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	"github.com/katocxl/pantherclaw/internal/reflex/failures"
+	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
 )
 
 type edition billing.Edition
@@ -95,5 +96,37 @@ func TestHR258_MetricsNeverReadAMissingSourceAsZero(t *testing.T) {
 	}
 	if _, err := f.s.GetMetrics(f.orgWide(), nil, now.Add(-31*24*time.Hour), now); err == nil {
 		t.Fatal("a 31-day range was read")
+	}
+}
+
+// TestHR258_EachMetricNeedsItsSourcePermission (D69 M7): a Viewer holds
+// operations.read across the org but neither evidence.read, coverage.read
+// nor exposure.read: those metrics read RESTRICTED, with no dimension or
+// drill-down, and only the automation metric is shown.
+func TestHR258_EachMetricNeedsItsSourcePermission(t *testing.T) {
+	f := newFx(t)
+	c := &operations.Collector{Pool: f.p, Ents: edition(billing.Team), Failures: &failures.Sink{}}
+	if _, err := c.Collect(context.Background(), f.org); err != nil {
+		t.Fatal(err)
+	}
+	f.s.Ents = edition(billing.Team)
+	now := time.Now().UTC().Truncate(time.Hour)
+	viewer := f.as(td.RoleViewer, td.Scope{Type: td.ScopeOrg, ID: f.org.UUID()})
+	m, err := f.s.GetMetrics(viewer, nil, now.Add(-2*time.Hour), now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, s := range m.Series {
+		want := operations.PointRestricted
+		if s.Metric == operations.MetricAutomationOutcomes {
+			want = operations.NotCollected
+		}
+		if s.Dimension != "" {
+			t.Fatalf("%s leaks a dimension %q", s.Metric, s.Dimension)
+		}
+		last := s.Points[len(s.Points)-1]
+		if last.State != want || (want == operations.PointRestricted && last.Drill != nil) {
+			t.Fatalf("%s: %+v, want %s", s.Metric, last, want)
+		}
 	}
 }

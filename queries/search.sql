@@ -7,9 +7,6 @@
 -- here, before paging and counting, so counts never include hidden rows
 -- (D8, T-042). Searches page newest first by id; counts stop at 10001.
 
--- name: SearchAgentPlacements :many
-SELECT id, team_id, environment_id FROM pc.agents WHERE org_id = $1 ORDER BY id;
-
 -- name: SearchTransactions :many
 SELECT t.id, t.run_id, r.agent_id, t.operation, t.connection_id, t.decision, t.reason_code, t.mode, t.effect_state,
        t.target_type, t.target_id, t.created_at, t.simulated, e.kind AS environment_kind

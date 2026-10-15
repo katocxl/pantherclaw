@@ -105,7 +105,7 @@ func (s scope) over(ctx context.Context, perm td.Permission, agents []ids.UUID) 
 
 // caseAgents returns the agents case c is about.
 func (s scope) caseAgents(ctx context.Context, c ids.UUID) ([]ids.UUID, error) {
-	return s.q.CaseAgents(ctx, s.c.Org, c)
+	return s.q.CaseAgents(ctx, s.c.Org.UUID(), c)
 }
 
 // readable loads case c for the caller, or NotFound when the caller may
@@ -321,10 +321,21 @@ func (s *Service) Append(ctx context.Context, c ids.UUID, d domain.Draft) (domai
 		if d.Kind == domain.KindLink && d.Ref != nil {
 			subjects = append(subjects, reflexdomain.Subject{Type: reflexdomain.SubjectType(d.Ref.Kind), ID: d.Ref.ID})
 		}
+		orgWide := caller.Can(td.PermCaseManage, td.OrgPath(caller.Org))
 		for _, e := range d.Evidence {
-			if e.Kind == domain.EvidenceRun || e.Kind == domain.EvidenceTransaction {
+			switch e.Kind {
+			case domain.EvidenceRun, domain.EvidenceTransaction:
 				subjects = append(subjects, reflexdomain.Subject{Type: reflexdomain.SubjectType(e.Kind), ID: e.ID.String()})
+			case domain.EvidenceLedger, domain.EvidenceReceipt:
+				// A ledger entry names no agent the scope could check, so only
+				// an organization-wide author may cite one (D62).
+				if !orgWide {
+					return ErrForbidden
+				}
 			}
+		}
+		if d.Kind == domain.KindLink && d.Ref != nil && d.Ref.Kind == "ledger" && !orgWide {
+			return ErrForbidden
 		}
 		if len(subjects) > 0 {
 			agents, err := subjectAgents(ctx, sc.q, caller.Org, subjects)
@@ -442,9 +453,16 @@ func (s *Service) List(ctx context.Context, size int32, token string, f Filter) 
 	var out Page
 	err = s.Pool.InTenantTx(ctx, caller.Org, func(ctx context.Context, tx db.TenantTx) error {
 		q := dbq.New(tx)
+		// A scoped caller's cases are filtered in SQL, before the page is cut,
+		// so a page is never short because of hidden cases (D60).
+		sc := scope{c: caller, q: q}
+		scoped, visible, err := sc.visible(ctx, td.PermCaseRead)
+		if err != nil {
+			return err
+		}
 		p := dbq.ListCasesParams{
 			OrgID: caller.Org, States: states, OwnerID: f.Owner, AlertID: f.Alert,
-			IncidentID: f.Incident, PageLimit: pr.Limit(),
+			IncidentID: f.Incident, Scoped: scoped, VisibleAgents: visible, PageLimit: pr.Limit(),
 		}
 		if cur != nil {
 			p.BeforeUpdated, p.BeforeID = &cur.updated, &cur.id
@@ -457,7 +475,6 @@ func (s *Service) List(ctx context.Context, size int32, token string, f Filter) 
 		if more {
 			rows = rows[:len(rows)-1]
 		}
-		sc := scope{c: caller, q: q}
 		for _, r := range rows {
 			agents, err := sc.caseAgents(ctx, r.ID)
 			if err != nil {
@@ -503,4 +520,38 @@ func parseCursor(s string) (*cursor, error) {
 		return nil, errBadCursor
 	}
 	return &cursor{updated: t, id: u}, nil
+}
+
+// MaxScopedAgents bounds a scoped viewer's visible-agent list (D60).
+const MaxScopedAgents = 10000
+
+// ErrScopeTooLarge refuses a scoped read over more agents than one list holds.
+var ErrScopeTooLarge = pcerr.New(pcerr.ResourceExhausted, "SCOPE_TOO_LARGE",
+	"the caller's scope covers more agents than one read can list; ask for an organization-wide role")
+
+// visible returns the SQL filter for perm: whether the caller is scoped
+// and, if so, the agents where it holds perm (D60).
+func (s scope) visible(ctx context.Context, perm td.Permission) (bool, []ids.UUID, error) {
+	if s.c.Can(perm, td.OrgPath(s.c.Org)) {
+		return false, []ids.UUID{}, nil
+	}
+	all, err := s.q.InvOrgAgents(ctx, s.c.Org)
+	if err != nil {
+		return false, nil, err
+	}
+	if len(all) > MaxScopedAgents {
+		return false, nil, ErrScopeTooLarge
+	}
+	as := tapp.NewAgentScope(s.c, s.q, perm)
+	out := []ids.UUID{}
+	for _, a := range all {
+		ok, err := as.Can(ctx, a)
+		if err != nil {
+			return false, nil, err
+		}
+		if ok {
+			out = append(out, a)
+		}
+	}
+	return true, out, nil
 }

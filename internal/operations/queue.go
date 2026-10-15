@@ -9,6 +9,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
 )
 
@@ -60,13 +61,20 @@ type Item struct {
 type Queue struct {
 	Items []Item
 	AsOf  time.Time
-	// Whole reports that the viewer reads across the whole organization;
-	// otherwise items about agents outside its scope are left out.
+	// Whole reports that the viewer reads every source across the whole
+	// organization; otherwise items about agents outside its scope, or of
+	// kinds it may not read, are left out (Pending says which kinds).
 	Whole bool
-	// Truncated reports that a source held more rows than were read.
+	// Truncated reports that a source held more visible rows than were
+	// read, or that the queue held more than it lists.
 	Truncated bool
-	// Pending lists queue sources this server does not report yet.
+	// Pending lists the sources the queue does not report: not available,
+	// outside the viewer's permissions, or truncated.
 	Pending []string
+	// Counts are the items per kind and Critical the CRITICAL ones, counted
+	// before the queue is cut to its length (D69 M4).
+	Counts   map[ItemKind]int
+	Critical int
 }
 
 // Queue limits.
@@ -117,39 +125,71 @@ func (v *viewer) actions(ctx context.Context, agents []string, cands ...Action) 
 	return out, nil
 }
 
+// sqlScope is the viewer's scope for p as the queue queries take it.
+func (v *viewer) sqlScope(ctx context.Context, p td.Permission) (bool, []string, error) {
+	sc, err := v.scope(ctx, p)
+	if err != nil {
+		return false, nil, err
+	}
+	agents := make([]string, 0, len(sc.Agents))
+	for _, a := range sc.Agents {
+		agents = append(agents, a.String())
+	}
+	return sc.All, agents, nil
+}
+
+// builder collects the queue.
+type builder struct {
+	v   *viewer
+	now time.Time
+	out *Queue
+}
+
+// readable reports whether the viewer may read a kind anywhere; when not,
+// the queue says the kind is outside its permissions (D69 M3).
+func (b *builder) readable(kind string, p td.Permission) bool {
+	if b.v.c.CanAnywhere(p) {
+		return true
+	}
+	b.out.Pending = append(b.out.Pending, kind+": outside your permissions")
+	return false
+}
+
+// cut trims a source read with maxRows+1 rows to maxRows and notes the
+// truncation, which is among visible rows only (D60).
+func cut[T any](b *builder, kind string, rows []T) []T {
+	if len(rows) <= maxRows {
+		return rows
+	}
+	b.out.Truncated = true
+	b.out.Pending = append(b.out.Pending, kind+": more exist than were read")
+	return rows[:maxRows]
+}
+
 func workQueue(ctx context.Context, v *viewer, x external) (Queue, error) {
 	now, err := v.q.OpsDBNow(ctx)
 	if err != nil {
 		return Queue{}, err
 	}
 	now = now.UTC()
-	out := Queue{AsOf: now, Whole: v.whole(td.PermOperationsRead), Pending: x.notes()}
-	push := func(it Item, perm td.Permission) error {
-		ok, err := v.covers(ctx, perm, it.Agents)
-		if ok {
-			out.Items = append(out.Items, it)
+	out := Queue{AsOf: now, Pending: x.notes(), Counts: map[ItemKind]int{}}
+	b := &builder{v: v, now: now, out: &out}
+	// Whole only when the viewer holds every kind's read permission across
+	// the org (D69 M3); a source not reported is listed in Pending.
+	out.Whole = v.whole(td.PermOperationsRead) && v.whole(td.PermIncidentRead) && v.whole(td.PermApprovalRead) &&
+		v.whole(td.PermGrantRead) && v.whole(td.PermContainmentRead) && v.whole(td.PermPostureRead)
+	for _, step := range []func(context.Context, *builder) error{incidentItems, failureItems, decisionItems, expansionItems} {
+		if err := step(ctx, b); err != nil {
+			return Queue{}, err
 		}
-		return err
 	}
-	if err := incidentItems(ctx, v, &out, push); err != nil {
+	if err := containmentItems(ctx, b, x); err != nil {
 		return Queue{}, err
 	}
-	if err := failureItems(ctx, v, now, &out, push); err != nil {
+	if err := findingItems(ctx, b, x); err != nil {
 		return Queue{}, err
 	}
-	if err := decisionItems(ctx, v, now, &out, push); err != nil {
-		return Queue{}, err
-	}
-	if err := expansionItems(ctx, v, now, &out, push); err != nil {
-		return Queue{}, err
-	}
-	if err := containmentItems(ctx, v, x, &out); err != nil {
-		return Queue{}, err
-	}
-	if err := findingItems(ctx, v, x, push); err != nil {
-		return Queue{}, err
-	}
-	if out.Whole {
+	if v.whole(td.PermOperationsRead) {
 		es, err := evidenceStatus(ctx, v, x)
 		if err != nil {
 			return Queue{}, err
@@ -165,6 +205,12 @@ func workQueue(ctx context.Context, v *viewer, x external) (Queue, error) {
 					State: string(src.Freshness), Since: since,
 				})
 			}
+		}
+	}
+	for _, it := range out.Items {
+		out.Counts[it.Kind]++
+		if it.Severity == "CRITICAL" {
+			out.Critical++
 		}
 	}
 	slices.SortStableFunc(out.Items, func(a, b Item) int {
@@ -191,34 +237,36 @@ func gapTitle(s SourceStatus) string {
 	return name + " not seen since " + s.LastSeen.Format(time.RFC3339)
 }
 
-type pushFn func(Item, td.Permission) error
-
-func incidentItems(ctx context.Context, v *viewer, out *Queue, push pushFn) error {
-	incs, err := v.q.OpsActiveIncidents(ctx, v.c.Org)
+func incidentItems(ctx context.Context, b *builder) error {
+	v := b.v
+	if !b.readable("incidents and alerts", td.PermIncidentRead) {
+		return nil
+	}
+	all, agents, err := v.sqlScope(ctx, td.PermIncidentRead)
 	if err != nil {
 		return err
 	}
-	out.Truncated = out.Truncated || len(incs) >= maxRows
-	for _, r := range incs {
+	incs, err := v.q.OpsActiveIncidents(ctx, dbq.OpsActiveIncidentsParams{OrgID: v.c.Org, AllAgents: all, Agents: agents, MaxRows: maxRows + 1})
+	if err != nil {
+		return err
+	}
+	for _, r := range cut(b, "incidents", incs) {
 		target := "incident:" + r.ID.String()
 		acts, err := v.actions(ctx, r.Agents, Action{"assign", td.PermIncidentManage, target},
 			Action{"set_state", td.PermIncidentManage, target})
 		if err != nil {
 			return err
 		}
-		if err := push(Item{
+		b.out.Items = append(b.out.Items, Item{
 			Kind: KindIncident, ID: r.ID.String(), Title: r.Title, Severity: r.Severity, State: r.State,
 			Since: r.CreatedAt, Agents: r.Agents, Actions: acts, Test: r.Test,
-		}, td.PermIncidentRead); err != nil {
-			return err
-		}
+		})
 	}
-	alerts, err := v.q.OpsOpenAlerts(ctx, v.c.Org)
+	alerts, err := v.q.OpsOpenAlerts(ctx, dbq.OpsOpenAlertsParams{OrgID: v.c.Org, AllAgents: all, Agents: agents, MaxRows: maxRows + 1})
 	if err != nil {
 		return err
 	}
-	out.Truncated = out.Truncated || len(alerts) >= maxRows
-	for _, r := range alerts {
+	for _, r := range cut(b, "alerts", alerts) {
 		sev := r.Severity
 		if r.Attention == "PAGE" {
 			sev = "CRITICAL"
@@ -232,25 +280,30 @@ func incidentItems(ctx context.Context, v *viewer, out *Queue, push pushFn) erro
 		if err != nil {
 			return err
 		}
-		if err := push(Item{
+		b.out.Items = append(b.out.Items, Item{
 			Kind: KindAlert, ID: r.ID.String(), Title: r.Title, Severity: sev, State: r.State, Since: r.FirstSeen,
 			Agents: r.Agents, Actions: acts, Test: r.Test,
-		}, td.PermIncidentRead); err != nil {
-			return err
-		}
+		})
 	}
 	return nil
 }
 
-func failureItems(ctx context.Context, v *viewer, now time.Time, out *Queue, push pushFn) error {
-	fs, err := v.q.OpsOpenFailures(ctx, v.c.Org)
+func failureItems(ctx context.Context, b *builder) error {
+	v := b.v
+	if !b.readable("owned failures", td.PermIncidentRead) {
+		return nil
+	}
+	all, agents, err := v.sqlScope(ctx, td.PermIncidentRead)
 	if err != nil {
 		return err
 	}
-	out.Truncated = out.Truncated || len(fs) >= maxRows
-	for _, r := range fs {
+	fs, err := v.q.OpsOpenFailures(ctx, dbq.OpsOpenFailuresParams{OrgID: v.c.Org, AllAgents: all, Agents: agents, MaxRows: maxRows + 1})
+	if err != nil {
+		return err
+	}
+	for _, r := range cut(b, "owned failures", fs) {
 		sev := "MEDIUM"
-		if now.After(r.Deadline) {
+		if b.now.After(r.Deadline) {
 			sev = "HIGH"
 		}
 		target := "failure:" + r.ID.String()
@@ -260,69 +313,77 @@ func failureItems(ctx context.Context, v *viewer, now time.Time, out *Queue, pus
 			return err
 		}
 		d := r.Deadline.UTC()
-		if err := push(Item{
+		b.out.Items = append(b.out.Items, Item{
 			Kind: KindProtectionFailure, ID: r.ID.String(), Title: r.Summary, Severity: sev, State: r.State,
 			Since: r.FirstSeen, Deadline: &d, Agents: r.Agents, Actions: acts,
-		}, td.PermIncidentRead); err != nil {
-			return err
-		}
+		})
 	}
 	return nil
 }
 
-func decisionItems(ctx context.Context, v *viewer, now time.Time, out *Queue, push pushFn) error {
-	rows, err := v.q.OpsWaitingApprovals(ctx, v.c.Org)
+func decisionItems(ctx context.Context, b *builder) error {
+	v := b.v
+	if !b.readable("waiting decisions", td.PermApprovalRead) {
+		return nil
+	}
+	all, agents, err := v.sqlScope(ctx, td.PermApprovalRead)
 	if err != nil {
 		return err
 	}
-	out.Truncated = out.Truncated || len(rows) >= maxRows
-	for _, r := range rows {
-		left := r.DeadlineAt.Sub(now)
-		if left > decisionHorizon {
-			break // soonest deadline first
-		}
+	rows, err := v.q.OpsWaitingApprovals(ctx, dbq.OpsWaitingApprovalsParams{
+		OrgID: v.c.Org, Horizon: b.now.Add(decisionHorizon), AllAgents: all, Agents: agents, MaxRows: maxRows + 1,
+	})
+	if err != nil {
+		return err
+	}
+	for _, r := range cut(b, "waiting decisions", rows) {
 		sev := "MEDIUM"
-		if left <= 15*time.Minute {
+		if r.DeadlineAt.Sub(b.now) <= 15*time.Minute {
 			sev = "HIGH"
 		}
-		agents := []string{r.AgentID.String()}
-		acts, err := v.actions(ctx, agents, Action{"open_approval", td.PermApprovalRespond, "approval:" + r.ID.String()})
+		agentIDs := []string{r.AgentID.String()}
+		acts, err := v.actions(ctx, agentIDs, Action{"open_approval", td.PermApprovalRespond, "approval:" + r.ID.String()})
 		if err != nil {
 			return err
 		}
 		d := r.DeadlineAt.UTC()
-		if err := push(Item{
+		b.out.Items = append(b.out.Items, Item{
 			Kind: KindWaitingDecision, ID: r.ID.String(), Title: r.Operation + " waits for a decision", Severity: sev,
-			State: r.State, Since: r.CreatedAt, Deadline: &d, Agents: agents, Actions: acts,
-		}, td.PermApprovalRead); err != nil {
-			return err
-		}
+			State: r.State, Since: r.CreatedAt, Deadline: &d, Agents: agentIDs, Actions: acts,
+		})
 	}
 	return nil
 }
 
-func expansionItems(ctx context.Context, v *viewer, now time.Time, out *Queue, push pushFn) error {
-	rows, err := v.q.OpsAuthorityExpansion(ctx, v.c.Org, now.Add(-expansionHorizon))
+func expansionItems(ctx context.Context, b *builder) error {
+	v := b.v
+	if !b.readable("authority expansion", td.PermGrantRead) {
+		return nil
+	}
+	all, agents, err := v.sqlScope(ctx, td.PermGrantRead)
 	if err != nil {
 		return err
 	}
-	out.Truncated = out.Truncated || len(rows) >= maxRows
-	for _, r := range rows {
+	rows, err := v.q.OpsAuthorityExpansion(ctx, dbq.OpsAuthorityExpansionParams{
+		OrgID: v.c.Org, Since: b.now.Add(-expansionHorizon), AllAgents: all, Agents: agents, MaxRows: maxRows + 1,
+	})
+	if err != nil {
+		return err
+	}
+	for _, r := range cut(b, "authority expansion", rows) {
 		sev, title := "LOW", "new grant"
 		if r.Widens {
 			sev, title = "MEDIUM", "grant widened"
 		}
-		agents := []string{r.AgentID.String()}
-		acts, err := v.actions(ctx, agents, Action{"revoke_grant", td.PermGrantRevoke, "grant:" + r.GrantID.String()})
+		agentIDs := []string{r.AgentID.String()}
+		acts, err := v.actions(ctx, agentIDs, Action{"revoke_grant", td.PermGrantRevoke, "grant:" + r.GrantID.String()})
 		if err != nil {
 			return err
 		}
-		if err := push(Item{
+		b.out.Items = append(b.out.Items, Item{
 			Kind: KindAuthorityExpansion, ID: r.ID.String(), Title: title, Severity: sev, State: "ACTIVE",
-			Since: r.CreatedAt, Agents: agents, Actions: acts,
-		}, td.PermGrantRead); err != nil {
-			return err
-		}
+			Since: r.CreatedAt, Agents: agentIDs, Actions: acts,
+		})
 	}
 	return nil
 }
@@ -330,9 +391,13 @@ func expansionItems(ctx context.Context, v *viewer, now time.Time, out *Queue, p
 var containmentSeverity = map[string]string{"FAILED": "CRITICAL", "UNSUPPORTED": "HIGH", "PARTIAL": "HIGH", "REQUESTED": "MEDIUM"}
 
 // containmentItems queues containment not yet confirmed on every material
-// path (D22, F211). The response port read them under the caller's
+// path (D22, F211), which the response port read under the caller's
 // containment.read at the org.
-func containmentItems(ctx context.Context, v *viewer, x external, out *Queue) error {
+func containmentItems(ctx context.Context, b *builder, x external) error {
+	if x.containmentTruncated {
+		b.out.Truncated = true
+		b.out.Pending = append(b.out.Pending, "unconfirmed containment: more exist than were read")
+	}
 	for _, a := range x.containment {
 		sev, ok := containmentSeverity[a.Status]
 		if !ok {
@@ -343,7 +408,7 @@ func containmentItems(ctx context.Context, v *viewer, x external, out *Queue) er
 			agents = []string{a.ScopeID}
 		}
 		target := "response_action:" + a.ID.String()
-		acts, err := v.actions(ctx, agents, Action{"open_response_action", td.PermContainmentRead, target})
+		acts, err := b.v.actions(ctx, agents, Action{"open_response_action", td.PermContainmentRead, target})
 		if err != nil {
 			return err
 		}
@@ -351,7 +416,7 @@ func containmentItems(ctx context.Context, v *viewer, x external, out *Queue) er
 		if a.Control != "" {
 			title = a.Control + " on " + a.ScopeType + " " + a.Status
 		}
-		out.Items = append(out.Items, Item{
+		b.out.Items = append(b.out.Items, Item{
 			Kind: KindUnconfirmedContainment, ID: a.ID.String(), Title: title, Severity: sev, State: a.Status,
 			Since: a.Requested, Agents: agents, Actions: acts,
 		})
@@ -359,25 +424,23 @@ func containmentItems(ctx context.Context, v *viewer, x external, out *Queue) er
 	return nil
 }
 
-// findingItems queues open posture findings (D30) the posture port read
-// under the caller's posture.read.
-func findingItems(ctx context.Context, v *viewer, x external, push pushFn) error {
+// findingItems queues open posture findings (D30), which the posture port
+// read under the caller's posture.read (only those it may read).
+func findingItems(ctx context.Context, b *builder, x external) error {
 	for _, f := range x.findings {
 		var agents []string
 		if f.Agent != nil {
 			agents = []string{f.Agent.String()}
 		}
 		target := "posture_finding:" + f.ID.String()
-		acts, err := v.actions(ctx, agents, Action{"assign", td.PermPostureManage, target})
+		acts, err := b.v.actions(ctx, agents, Action{"assign", td.PermPostureManage, target})
 		if err != nil {
 			return err
 		}
-		if err := push(Item{
+		b.out.Items = append(b.out.Items, Item{
 			Kind: KindPostureFinding, ID: f.ID.String(), Title: f.Title, Severity: f.Severity, State: f.State,
 			Since: f.Since, Agents: agents, Actions: acts,
-		}, td.PermPostureRead); err != nil {
-			return err
-		}
+		})
 	}
 	return nil
 }

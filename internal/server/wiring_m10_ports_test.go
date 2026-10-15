@@ -25,7 +25,7 @@ func TestM10Ports_EveryPortIsWired(t *testing.T) {
 	if cs.Reach == nil || cs.Response == nil {
 		t.Fatal("cases lenses are not wired")
 	}
-	if edgesCaseOpener == nil || edgesContainer == nil || edgesCaseOpener(pool, nil) == nil || edgesContainer(pool, nil) == nil {
+	if edgesCaseOpener == nil || edgesContainer == nil || edgesCaseOpener(pool, nil) == nil || edgesContainer(pool, nil, nil) == nil {
 		t.Fatal("edges ports are not wired")
 	}
 	if _, ok := edgesRaiser(pool).(m10Raiser); !ok {

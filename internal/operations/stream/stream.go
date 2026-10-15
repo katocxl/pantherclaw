@@ -64,17 +64,17 @@ type Authenticator interface {
 	Authenticate(ctx context.Context, bearer string) (tenancy.Caller, error)
 }
 
-// Scope is the set of agents whose events a viewer may see: All, or the
-// listed agents.
+// Scope is the set of agents whose events of one kind a viewer may see:
+// All, or the listed agents.
 type Scope struct {
 	All    bool
 	Agents map[ids.UUID]bool
 }
 
-// Scoper computes a viewer's agent scope (evidence.read where each agent
-// lives, D8).
+// Scoper computes a viewer's agent scope for one permission (where each
+// agent lives, D8).
 type Scoper interface {
-	Scope(ctx context.Context, c tenancy.Caller) (Scope, error)
+	Scope(ctx context.Context, c tenancy.Caller, p td.Permission) (Scope, error)
 }
 
 // Config tunes the stream; zero values take the D32 defaults.
@@ -117,7 +117,9 @@ type Handler struct {
 	cfg    Config
 	log    *slog.Logger
 
-	mu     sync.Mutex
+	mu sync.Mutex
+	// active counts open streams per principal in this process: the
+	// limit is per replica, so N replicas allow N times MaxPerCaller.
 	active map[string]int
 }
 
@@ -156,8 +158,10 @@ var credentialParams = []string{"access_token", "token", "bearer", "authorizatio
 // Any other query parameter is refused.
 func cursorOf(r *http.Request) (int64, bool, error) {
 	q := r.URL.Query()
+	// The only parameter is "after", spelled exactly so: a near spelling
+	// is refused rather than silently ignored.
 	for name := range q {
-		if strings.EqualFold(name, "after") {
+		if name == "after" {
 			continue
 		}
 		for _, c := range credentialParams {
@@ -229,7 +233,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "missing permission "+string(PermOperations), http.StatusForbidden)
 		return
 	}
-	sc, err := h.scoper.Scope(ctx, c)
+	scopes, err := h.scopes(ctx, c)
 	if err != nil {
 		h.log.ErrorContext(ctx, "operations.stream_scope", pclog.Err(err))
 		http.Error(w, "unavailable", http.StatusServiceUnavailable)
@@ -249,7 +253,10 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	s := &session{h: h, w: w, rc: http.NewResponseController(w), bearer: bearer, caller: c, scope: sc, cursor: after}
+	s := &session{
+		h: h, w: w, rc: http.NewResponseController(w), bearer: bearer, caller: c, scopes: scopes, cursor: after,
+		checked: h.clk.Now(),
+	}
 	if exp, ok := h.expiry(bearer); ok {
 		s.expires = exp
 	}
@@ -261,6 +268,20 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h.log.InfoContext(ctx, "operations.stream_closed", slog.String("reason", reason))
 }
 
+// scopes computes the viewer's scope for every permission an event kind
+// needs (D8, HR-256).
+func (h *Handler) scopes(ctx context.Context, c tenancy.Caller) (map[td.Permission]Scope, error) {
+	out := make(map[td.Permission]Scope, len(eventPerms))
+	for _, p := range eventPerms {
+		sc, err := h.scoper.Scope(ctx, c, p)
+		if err != nil {
+			return nil, err
+		}
+		out[p] = sc
+	}
+	return out, nil
+}
+
 // session is one open stream.
 type session struct {
 	h       *Handler
@@ -268,9 +289,11 @@ type session struct {
 	rc      *http.ResponseController
 	bearer  string
 	caller  tenancy.Caller
-	scope   Scope
+	scopes  map[td.Permission]Scope
 	cursor  int64
 	expires time.Time
+	// checked is when the credential and scopes were last checked.
+	checked time.Time
 }
 
 // Close reasons (logged; the client sees the stream end).
@@ -332,8 +355,8 @@ func (s *session) run(ctx context.Context) string {
 }
 
 // recheck authenticates the credential again and reloads the viewer's
-// scope: a revoked session, a disabled principal or a removed role closes
-// the stream.
+// scopes: a revoked session, a disabled principal or a removed role closes
+// the stream, a narrowed role narrows what it sends next.
 func (s *session) recheck(ctx context.Context) string {
 	c, err := s.h.auth.Authenticate(ctx, s.bearer)
 	if err != nil {
@@ -342,17 +365,34 @@ func (s *session) recheck(ctx context.Context) string {
 	if !c.CanAnywhere(PermOperations) || c.Org != s.caller.Org || c.Principal != s.caller.Principal {
 		return closedPermission
 	}
-	sc, err := s.h.scoper.Scope(ctx, c)
+	scopes, err := s.h.scopes(ctx, c)
 	if err != nil {
 		return closedFeed
 	}
-	s.caller, s.scope = c, sc
+	s.caller, s.scopes, s.checked = c, scopes, s.h.clk.Now()
+	return ""
+}
+
+// due closes a long drain on time (HR-256): at token expiry, and with a
+// fresh check of the credential and scopes once the recheck interval has
+// passed, between events rather than only between drains.
+func (s *session) due(ctx context.Context) string {
+	now := s.h.clk.Now()
+	if !s.expires.IsZero() && !now.Before(s.expires) {
+		return closedExpired
+	}
+	if now.Sub(s.checked) >= s.h.cfg.Recheck {
+		return s.recheck(ctx)
+	}
 	return ""
 }
 
 // drain sends every focus event after the cursor that the viewer may see.
 func (s *session) drain(ctx context.Context) string {
 	for {
+		if reason := s.due(ctx); reason != "" {
+			return reason
+		}
 		evs, err := s.h.feed.After(ctx, s.caller.Org, s.cursor, s.h.cfg.Batch)
 		if err != nil {
 			if ctx.Err() != nil {
@@ -362,8 +402,12 @@ func (s *session) drain(ctx context.Context) string {
 			return closedFeed
 		}
 		for _, g := range group(evs) {
-			if !Focus(g.Event) || !Visible(s.caller, PermOperations, s.scope, g.Event) {
+			perm, ok := permFor(g.Kind)
+			if !ok || !Visible(s.caller, perm, s.scopes[perm], g.Event) {
 				continue
+			}
+			if reason := s.due(ctx); reason != "" {
+				return reason
 			}
 			b, err := json.Marshal(wireOf(g))
 			if err != nil {
@@ -383,9 +427,16 @@ func (s *session) drain(ctx context.Context) string {
 }
 
 // write sends one frame, extending the write deadline first (the stream
-// outlives the server's write timeout, like workloadrpc's wait stream).
+// outlives the server's write timeout, like workloadrpc's wait stream). A
+// write never runs past the token's expiry.
 func (s *session) write(frame string) bool {
-	_ = s.rc.SetWriteDeadline(time.Now().Add(2 * s.h.cfg.Heartbeat))
+	deadline := time.Now().Add(2 * s.h.cfg.Heartbeat)
+	if !s.expires.IsZero() {
+		if left := s.expires.Sub(s.h.clk.Now()); left < 2*s.h.cfg.Heartbeat {
+			deadline = time.Now().Add(max(left, time.Millisecond))
+		}
+	}
+	_ = s.rc.SetWriteDeadline(deadline)
 	if _, err := fmt.Fprint(s.w, frame); err != nil {
 		return false
 	}

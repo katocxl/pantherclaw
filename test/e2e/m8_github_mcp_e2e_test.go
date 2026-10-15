@@ -57,7 +57,7 @@ func (s *stack) toGitHubMCP(t *testing.T) *mcpsim.Server {
 			digest = d
 		}
 	}
-	const version = "1.0.1"
+	const version = "1.0.2"
 	raw, err := github.MCPMergePackage(pcgithub.Package, version, digest)
 	if err != nil {
 		t.Fatal(err)

@@ -47,6 +47,10 @@ func (s *Service) recordRefusal(ctx context.Context, org ids.OrgID, user ids.UUI
 		return err
 	}
 	request := r.request
+	// Once per (org, responder, request) per minute (D74).
+	if !refusalsOnce.First(org.String() + "|" + user.String() + "|" + request.String()) {
+		return err
+	}
 	if aerr := s.Pool.InTenantTx(context.WithoutCancel(ctx), org, func(ctx context.Context, tx db.TenantTx) error {
 		details := map[string]string{"user": user.String()}
 		if row, err := dbq.New(tx).GetApprovalRequest(ctx, org, request); err == nil {
@@ -62,3 +66,6 @@ func (s *Service) recordRefusal(ctx context.Context, org ids.OrgID, user ids.UUI
 	}
 	return err
 }
+
+// refusalsOnce deduplicates refused-response audits across the process.
+var refusalsOnce audit.Once

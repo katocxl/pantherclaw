@@ -13,33 +13,52 @@ import (
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
 )
 
-// focusKinds are the feed kinds the stream sends (D32): live signals
-// (first sensitive use, significant writes, new or expanded authority,
-// unexpected denials), alerts, incidents and containment. Routine reads
-// and everything else stay searchable but are not streamed.
-var focusKinds = map[string]bool{
-	reflexdomain.KindLive:           true,
-	reflexdomain.KindAlert:          true,
-	reflexdomain.KindIncident:       true,
-	reflexdomain.KindResponseAction: true,
-	reflexdomain.KindResponsePath:   true,
+// focusKinds are the feed kinds the stream sends (D32), each with the read
+// permission that shows it (D8, HR-256): live signals (first sensitive
+// use, significant writes, new or expanded authority, unexpected denials),
+// alerts and incidents need incident.read; containment actions and paths
+// need containment.read. Routine reads and everything else stay searchable
+// but are not streamed.
+var focusKinds = map[string]td.Permission{
+	reflexdomain.KindLive:           td.PermIncidentRead,
+	reflexdomain.KindAlert:          td.PermIncidentRead,
+	reflexdomain.KindIncident:       td.PermIncidentRead,
+	reflexdomain.KindResponseAction: td.PermContainmentRead,
+	reflexdomain.KindResponsePath:   td.PermContainmentRead,
 }
 
-// focusPrefixes are kind prefixes the stream sends: kill switch and
-// containment audit records.
-var focusPrefixes = []string{"audit.containment.", "audit.security.kill_switch"}
+// focusPrefixes are kind prefixes the stream sends with their permission:
+// kill switch and containment audit records (containment.read), and
+// decision receipts (evidence.read) should the focus ever include them.
+var focusPrefixes = []struct {
+	prefix string
+	perm   td.Permission
+}{
+	{"audit.containment.", td.PermContainmentRead},
+	{"audit.security.kill_switch", td.PermContainmentRead},
+}
+
+// eventPerms are the permissions the stream scopes viewers by.
+var eventPerms = []td.Permission{td.PermIncidentRead, td.PermContainmentRead, td.PermEvidenceRead}
+
+// permFor returns the permission that shows an event kind, and false for a
+// kind the stream does not send.
+func permFor(kind string) (td.Permission, bool) {
+	if p, ok := focusKinds[kind]; ok {
+		return p, true
+	}
+	for _, x := range focusPrefixes {
+		if strings.HasPrefix(kind, x.prefix) {
+			return x.perm, true
+		}
+	}
+	return "", false
+}
 
 // Focus reports whether e belongs on the live stream.
 func Focus(e Event) bool {
-	if focusKinds[e.Kind] {
-		return true
-	}
-	for _, p := range focusPrefixes {
-		if strings.HasPrefix(e.Kind, p) {
-			return true
-		}
-	}
-	return false
+	_, ok := permFor(e.Kind)
+	return ok
 }
 
 // agentsOf returns the agents e names, and false when a subject id is

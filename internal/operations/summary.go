@@ -73,31 +73,20 @@ func summarize(q Queue, es EvidenceStatus) Summary {
 		CountExpiringDecisions: 0, CountAuthorityExpansion: 0, CountTelemetryGaps: 0, CountUnconfirmedContainment: 0,
 		CountPostureFindings: 0,
 	}}
-	out.Scope = "the agents in your scope"
+	out.Scope = "what your permissions cover"
 	if q.Whole {
 		out.Scope = "the whole organization"
 	}
-	for _, it := range q.Items {
-		switch it.Kind {
-		case KindIncident:
-			out.Counts[CountActiveIncidents]++
-		case KindAlert:
-			out.Counts[CountOpenAlerts]++
-		case KindProtectionFailure:
-			out.Counts[CountProtectionFailures]++
-		case KindWaitingDecision:
-			out.Counts[CountExpiringDecisions]++
-		case KindUnconfirmedContainment:
-			out.Counts[CountUnconfirmedContainment]++
-		case KindPostureFinding:
-			out.Counts[CountPostureFindings]++
-		case KindAuthorityExpansion:
-			out.Counts[CountAuthorityExpansion]++
-		}
-		if it.Severity == "CRITICAL" {
-			out.Counts[CountCritical]++
-		}
-	}
+	// Counted from every item read, before the queue was cut to its length
+	// (D69 M4).
+	out.Counts[CountActiveIncidents] = q.Counts[KindIncident]
+	out.Counts[CountOpenAlerts] = q.Counts[KindAlert]
+	out.Counts[CountProtectionFailures] = q.Counts[KindProtectionFailure]
+	out.Counts[CountExpiringDecisions] = q.Counts[KindWaitingDecision]
+	out.Counts[CountUnconfirmedContainment] = q.Counts[KindUnconfirmedContainment]
+	out.Counts[CountPostureFindings] = q.Counts[KindPostureFinding]
+	out.Counts[CountAuthorityExpansion] = q.Counts[KindAuthorityExpansion]
+	out.Counts[CountCritical] = q.Critical
 	for _, src := range es.Sources {
 		label := src.Name
 		if label == "" {
@@ -119,7 +108,7 @@ func summarize(q Queue, es EvidenceStatus) Summary {
 	}
 	out.Unknown = append(out.Unknown, q.Pending...)
 	if !q.Whole {
-		out.Unknown = append(out.Unknown, "agents outside your scope are not counted")
+		out.Unknown = append(out.Unknown, "agents and kinds outside your permissions are not counted")
 	}
 	if q.Truncated {
 		out.Unknown = append(out.Unknown, "more items exist than were read")

@@ -86,3 +86,23 @@ func TestBodyIsCanonicalAndChains(t *testing.T) {
 		t.Fatalf("seq 0: %v", err)
 	}
 }
+
+// TestUUIDLinksAreCanonical: a link to an agent, run, transaction, response
+// action or ledger entry names a UUID, stored in canonical form (D70).
+func TestUUIDLinksAreCanonical(t *testing.T) {
+	c, id, agent := ids.NewV7(), ids.NewV7(), ids.NewV7()
+	upper := domain.Draft{Kind: domain.KindLink, Ref: &domain.Ref{Kind: "agent", ID: strings.ToUpper(agent.String())}}
+	b, err := upper.Body(c, id, 1, author)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(b), `"id":"`+agent.String()+`"`) || strings.Contains(string(b), strings.ToUpper(agent.String())) {
+		t.Fatalf("body %s", b)
+	}
+	for _, kind := range []string{"agent", "run", "transaction", domain.RefResponseAction, "ledger"} {
+		d := domain.Draft{Kind: domain.KindLink, Ref: &domain.Ref{Kind: kind, ID: "not-a-uuid"}}
+		if err := d.Validate(); !errors.Is(err, domain.ErrInvalid) {
+			t.Errorf("%s link to a non-UUID: %v", kind, err)
+		}
+	}
+}

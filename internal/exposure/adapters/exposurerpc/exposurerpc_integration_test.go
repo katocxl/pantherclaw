@@ -321,3 +321,38 @@ func idOf(t *testing.T, s string) ids.UUID {
 	}
 	return u
 }
+
+// TestIntRunScopeKeepsChildRunsOfOtherAgents (re-check M1): a run-scope
+// activity graph shows the run's child runs whoever runs them, when the
+// viewer may see that agent; a viewer who may not see the child's agent
+// gets the parent's own activity only.
+func TestIntRunScopeKeepsChildRunsOfOtherAgents(t *testing.T) {
+	w := newWorld(t, billing.Team)
+	inst, child, txn := ids.NewV7(), ids.NewV7(), ids.NewV7()
+	w.o.Exec(t, `INSERT INTO pc.agent_instances (org_id, id, agent_id, jkt, public_jwk, state, enrolled_via)
+		VALUES ($1, $2, $3, '0123456789abcdefghijklmnopqrstuvwxyzABCDEFG', '{}', 'ADMITTED', 'discovery')`, w.o.Org, inst, w.o.Agent)
+	w.o.Exec(t, `INSERT INTO pc.runs (org_id, id, agent_id, environment_id, launcher_instance_id, principal_user_id, principal_source,
+		parent_run_id, depth, expires_at) VALUES ($1, $2, $3, $4, $5, $6, 'parent_run', $7, 1, now() + interval '1 hour')`,
+		w.o.Org, child, w.o.Other, w.o.Env, inst, w.o.User, w.o.Run)
+	w.o.Exec(t, `INSERT INTO pc.transactions (org_id, id, run_id, action_id, action_hash, operation, decision, reason_code,
+		gateway_id, connection_id, channel, mode) VALUES ($1, $2, $3, $4, $5, 'payments.refund.get', 'ALLOW', 'OK', 'gw', $6,
+		'http', 'enforce')`, w.o.Org, txn, child, ids.NewV7(), make([]byte, 32), w.o.Conn)
+	scope := &pb.GraphScope{Type: "run", Id: w.o.Run.String()}
+	has := func(g *pb.GetGraphResponse) bool {
+		return slices.ContainsFunc(g.GetNodes(), func(n *pb.GraphNode) bool { return n.GetId() == txn.String() })
+	}
+	all, err := w.g.GetGraph(w.org, &pb.GetGraphRequest{Mode: pb.GraphMode_GRAPH_MODE_ACTIVITY, Scope: scope})
+	if err != nil || !has(all) {
+		t.Fatalf("org viewer misses the child run's transaction: %v", err)
+	}
+	causal, err := w.g.GetGraph(w.org, &pb.GetGraphRequest{Mode: pb.GraphMode_GRAPH_MODE_CAUSAL, Scope: scope})
+	if err != nil || !slices.ContainsFunc(causal.GetEdges(), func(e *pb.GraphEdge) bool {
+		return e.GetKind() == "delegated" && e.GetFrom().GetId() == w.o.Run.String() && e.GetTo().GetId() == child.String()
+	}) {
+		t.Fatalf("no delegation edge: %v", err)
+	}
+	part, err := w.g.GetGraph(w.team, &pb.GetGraphRequest{Mode: pb.GraphMode_GRAPH_MODE_ACTIVITY, Scope: scope})
+	if err != nil || has(part) || len(part.GetEdges()) == 0 {
+		t.Fatalf("team viewer: %d edges, sees the hidden child: %v %v", len(part.GetEdges()), has(part), err)
+	}
+}

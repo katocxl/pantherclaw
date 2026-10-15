@@ -672,7 +672,9 @@ type MetricPoint struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The start of the hour (UTC).
 	BucketTime *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=bucket_time,json=bucketTime,proto3" json:"bucket_time,omitempty"`
-	// "COLLECTED", "NOT_COLLECTED" (the source is not collected) or
+	// "COLLECTED", "NOT_COLLECTED" (the source is not collected),
+	// "RESTRICTED" (the caller may not read the source across the
+	// organization) or
 	// "NO_SAMPLE" (no sample was taken: a gap).
 	State string `protobuf:"bytes,2,opt,name=state,proto3" json:"state,omitempty"`
 	// Set when COLLECTED.

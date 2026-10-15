@@ -410,45 +410,6 @@ func (q *Queries) CountTransactions(ctx context.Context, arg CountTransactionsPa
 	return count, err
 }
 
-const searchAgentPlacements = `-- name: SearchAgentPlacements :many
-
-
-SELECT id, team_id, environment_id FROM pc.agents WHERE org_id = $1 ORDER BY id
-`
-
-type SearchAgentPlacementsRow struct {
-	ID            ids.UUID
-	TeamID        *ids.UUID
-	EnvironmentID *ids.UUID
-}
-
-// SPDX-License-Identifier: BUSL-1.1
-// Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
-// Structured search (G0 M10 D34, HR-257). Every query takes the viewer's
-// scope: all_agents when the viewer holds the entity's permission at the
-// org, else the agents it may read. Rows outside the scope are filtered
-// here, before paging and counting, so counts never include hidden rows
-// (D8, T-042). Searches page newest first by id; counts stop at 10001.
-func (q *Queries) SearchAgentPlacements(ctx context.Context, orgID ids.OrgID) ([]SearchAgentPlacementsRow, error) {
-	rows, err := q.db.Query(ctx, searchAgentPlacements, orgID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []SearchAgentPlacementsRow{}
-	for rows.Next() {
-		var i SearchAgentPlacementsRow
-		if err := rows.Scan(&i.ID, &i.TeamID, &i.EnvironmentID); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const searchAgents = `-- name: SearchAgents :many
 SELECT a.id, a.name, a.state, a.team_id, a.environment_id, a.owner_user_id, a.created_at, e.kind AS environment_kind
 FROM pc.agents a
@@ -1065,6 +1026,8 @@ func (q *Queries) SearchRuns(ctx context.Context, arg SearchRunsParams) ([]Searc
 }
 
 const searchTransactions = `-- name: SearchTransactions :many
+
+
 SELECT t.id, t.run_id, r.agent_id, t.operation, t.connection_id, t.decision, t.reason_code, t.mode, t.effect_state,
        t.target_type, t.target_id, t.created_at, t.simulated, e.kind AS environment_kind
 FROM pc.transactions t
@@ -1132,6 +1095,13 @@ type SearchTransactionsRow struct {
 	EnvironmentKind string
 }
 
+// SPDX-License-Identifier: BUSL-1.1
+// Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+// Structured search (G0 M10 D34, HR-257). Every query takes the viewer's
+// scope: all_agents when the viewer holds the entity's permission at the
+// org, else the agents it may read. Rows outside the scope are filtered
+// here, before paging and counting, so counts never include hidden rows
+// (D8, T-042). Searches page newest first by id; counts stop at 10001.
 func (q *Queries) SearchTransactions(ctx context.Context, arg SearchTransactionsParams) ([]SearchTransactionsRow, error) {
 	rows, err := q.db.Query(ctx, searchTransactions,
 		arg.OrgID,

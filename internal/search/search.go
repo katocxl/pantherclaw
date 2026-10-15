@@ -157,6 +157,16 @@ func (s *Service) run(ctx context.Context, c tenancy.Caller, tx db.TenantTx, q Q
 		if sc, err = AgentScope(ctx, c, dq, perm); err != nil {
 			return Result{}, err
 		}
+		// Filters that read recorded actions need evidence.read too (D69
+		// L3): an agent or grant list must not reveal usage the viewer may
+		// not read.
+		if q.Filters.UsedConnection != nil || q.Filters.UnusedSince != nil {
+			ev, err := AgentScope(ctx, c, dq, td.PermEvidenceRead)
+			if err != nil {
+				return Result{}, err
+			}
+			sc = sc.intersect(ev)
+		}
 	}
 	asOf := s.now()
 	out := Result{Scope: sc, AsOf: asOf, Range: rangeOf(q.Filters, asOf)}

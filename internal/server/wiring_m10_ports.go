@@ -25,6 +25,8 @@ import (
 	rapp "github.com/katocxl/pantherclaw/internal/response/app"
 	"github.com/katocxl/pantherclaw/internal/search"
 	"github.com/katocxl/pantherclaw/internal/siem"
+	tenancy "github.com/katocxl/pantherclaw/internal/tenancy/app"
+	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
 )
 
 // The M10 cross-stream ports (G0 M10 D1, D49, D55): each provider is built
@@ -86,9 +88,10 @@ func m10CaseOpener(bill *billing.Service) reflexports.CaseOpener {
 	return capp.NewOpener(bill)
 }
 
-// m10Container is response's Container (D21).
-func m10Container(pool *db.Pool, bill *billing.Service) reflexports.Container {
-	return responseContainment(pool, nil, bill)
+// m10Container is response's Container (D21), sending its notifications
+// through notify when there is one (D69 L4).
+func m10Container(pool *db.Pool, bill *billing.Service, notify rapp.Notifier) reflexports.Container {
+	return responseContainment(pool, notify, bill)
 }
 
 func init() {
@@ -179,33 +182,48 @@ func actionIDs(rows []dbq.PcResponseAction) []ids.UUID {
 	return out
 }
 
-// opsContainment is the operations queue's ContainmentReader: the latest
-// actions not confirmed on every material path.
-type opsContainment struct{ r *rapp.Response }
+// opsContainment is the operations queue's ContainmentReader: every
+// containment action not confirmed (unsettled, or settled FAILED or
+// UNSUPPORTED in the last week), read like response's own reads with
+// containment.read at the org (D69 M5).
+type opsContainment struct{ pool *db.Pool }
 
 // maxQueueActions bounds the actions the queue reads.
-const maxQueueActions = 200
+const maxQueueActions = 1000
 
-func (x opsContainment) Unconfirmed(ctx context.Context) ([]operations.ContainmentAction, error) {
-	rows, err := x.r.ListActions(ctx, nil, nil, nil, nil, maxQueueActions)
+func (x opsContainment) Unconfirmed(ctx context.Context) ([]operations.ContainmentAction, bool, error) {
+	c, err := tenancy.CallerFrom(ctx)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
-	var out []operations.ContainmentAction
+	if err := c.Require(td.PermContainmentRead, td.OrgPath(c.Org)); err != nil {
+		return nil, false, err
+	}
+	var rows []dbq.OpsUnconfirmedContainmentRow
+	err = x.pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
+		var err error
+		rows, err = dbq.New(tx).OpsUnconfirmedContainment(ctx, c.Org, maxQueueActions+1)
+		return err
+	}, db.ReadOnly())
+	if err != nil {
+		return nil, false, err
+	}
+	truncated := len(rows) > maxQueueActions
+	if truncated {
+		rows = rows[:maxQueueActions]
+	}
+	out := make([]operations.ContainmentAction, 0, len(rows))
 	for _, a := range rows {
-		if a.Status == "CONFIRMED" {
-			continue
-		}
-		c := operations.ContainmentAction{
+		ca := operations.ContainmentAction{
 			ID: a.ID, Kind: a.Kind, ScopeType: a.ScopeType, ScopeID: a.ScopeID, Status: a.Status,
 			Requested: a.RequestedAt, Incident: a.IncidentID, Case: a.CaseID,
 		}
 		if a.Control != nil {
-			c.Control = *a.Control
+			ca.Control = *a.Control
 		}
-		out = append(out, c)
+		out = append(out, ca)
 	}
-	return out, nil
+	return out, truncated, nil
 }
 
 // opsFindings is the operations queue's FindingReader: posture findings
@@ -339,7 +357,7 @@ func (x searchExposure) Widest(ctx context.Context, limit int) (search.ExposureV
 // opsSources builds the operations queue's ports from apiDeps.
 func opsSources(d apiDeps) operations.Sources {
 	s := operations.Sources{
-		Containment: opsContainment{r: m10Response(d.pool, d.billing)},
+		Containment: opsContainment{pool: d.pool},
 		Findings:    opsFindings{svc: &poapp.Service{Pool: d.pool, Ents: exposureEnts(d.billing)}},
 	}
 	if sv, err := newSIEM(d.pool, d.kp, d.billing, nil, d.publicURL, d.log); err == nil {

@@ -17,10 +17,10 @@ import (
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
 )
 
-// TestHR256_TheStreamScopesViewersByOperationsReadWhereAgentsLive: a team
+// TestHR256_TheStreamScopesViewersByEachPermissionWhereAgentsLive: a team
 // viewer's stream scope holds its team's agent only; an org-wide viewer's
 // holds all; the feed of an empty org starts at 0.
-func TestHR256_TheStreamScopesViewersByOperationsReadWhereAgentsLive(t *testing.T) {
+func TestHR256_TheStreamScopesViewersByEachPermissionWhereAgentsLive(t *testing.T) {
 	d := dbtest.New(t)
 	p := d.AppPool(t)
 	ctx := context.Background()
@@ -53,14 +53,14 @@ func TestHR256_TheStreamScopesViewersByOperationsReadWhereAgentsLive(t *testing.
 			Bindings: []td.Binding{{Role: role, Scope: s}},
 		}}
 	}
-	sc, err := stream.PoolScoper{Pool: p}.Scope(ctx, caller(td.RoleResponder, td.Scope{Type: td.ScopeTeam, ID: teams["alpha"]}))
+	sc, err := stream.PoolScoper{Pool: p}.Scope(ctx, caller(td.RoleResponder, td.Scope{Type: td.ScopeTeam, ID: teams["alpha"]}), td.PermIncidentRead)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if sc.All || len(sc.Agents) != 1 || !sc.Agents[agents["alpha"]] {
 		t.Fatalf("team scope: %+v", sc)
 	}
-	sc, err = stream.PoolScoper{Pool: p}.Scope(ctx, caller(td.RoleAuditor, td.Scope{Type: td.ScopeOrg, ID: org.UUID()}))
+	sc, err = stream.PoolScoper{Pool: p}.Scope(ctx, caller(td.RoleAuditor, td.Scope{Type: td.ScopeOrg, ID: org.UUID()}), td.PermIncidentRead)
 	if err != nil || !sc.All {
 		t.Fatalf("org scope: %+v %v", sc, err)
 	}

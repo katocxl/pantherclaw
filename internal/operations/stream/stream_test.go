@@ -16,13 +16,11 @@ import (
 	"time"
 
 	"github.com/katocxl/pantherclaw/internal/operations/stream"
+	"github.com/katocxl/pantherclaw/internal/platform/clock"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	tenancy "github.com/katocxl/pantherclaw/internal/tenancy/app"
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
 )
-
-// perm is what the stream checks.
-const perm = stream.PermOperations
 
 type fakeFeed struct {
 	mu  sync.Mutex
@@ -89,13 +87,13 @@ func (a *fakeAuth) revoke(bearer string) {
 // agents of their team.
 type teamScoper struct{ team map[ids.UUID]ids.UUID } // agent → team
 
-func (s teamScoper) Scope(_ context.Context, c tenancy.Caller) (stream.Scope, error) {
-	if c.Can(perm, td.OrgPath(c.Org)) {
+func (s teamScoper) Scope(_ context.Context, c tenancy.Caller, p td.Permission) (stream.Scope, error) {
+	if c.Can(p, td.OrgPath(c.Org)) {
 		return stream.Scope{All: true}, nil
 	}
 	out := stream.Scope{Agents: map[ids.UUID]bool{}}
 	for agent, team := range s.team {
-		if c.Can(perm, td.OrgPath(c.Org).Child(td.ScopeTeam, team)) {
+		if c.Can(p, td.OrgPath(c.Org).Child(td.ScopeTeam, team)) {
 			out.Agents[agent] = true
 		}
 	}
@@ -107,6 +105,7 @@ type world struct {
 	feed         *fakeFeed
 	auth         *fakeAuth
 	srv          *httptest.Server
+	clk          *clock.Fake
 	agentA       ids.UUID // in team A
 	agentB       ids.UUID // in team B
 	teamA, teamB ids.UUID
@@ -125,6 +124,7 @@ func newWorld(t *testing.T, cfg stream.Config) *world {
 	w := &world{
 		org: ids.New[ids.Org](), feed: &fakeFeed{}, auth: &fakeAuth{callers: map[string]tenancy.Caller{}},
 		agentA: ids.NewV7(), agentB: ids.NewV7(), teamA: ids.NewV7(), teamB: ids.NewV7(), expiry: map[string]time.Time{},
+		clk: clock.NewFake(time.Now()),
 	}
 	w.auth.set("org-auditor", caller(w.org, td.RoleAuditor, td.Scope{Type: td.ScopeOrg, ID: w.org.UUID()}))
 	w.auth.set("team-a-dev", caller(w.org, td.RoleResponder, td.Scope{Type: td.ScopeTeam, ID: w.teamA}))
@@ -135,7 +135,7 @@ func newWorld(t *testing.T, cfg stream.Config) *world {
 	h, err := stream.New(w.feed, w.auth, sc, func(b string) (time.Time, bool) {
 		e, ok := w.expiry[b]
 		return e, ok
-	}, nil, cfg, nil)
+	}, w.clk, cfg, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -415,5 +415,136 @@ func TestStream_ConcurrentStreamsPerCallerAreBounded(t *testing.T) {
 	}
 	if resp := w.open(t, ctx, stream.Path, "team-a-dev", nil); resp.StatusCode != http.StatusOK {
 		t.Fatalf("another caller: %d", resp.StatusCode)
+	}
+}
+
+// TestHR256_EachKindNeedsItsOwnReadPermission (D69 M1, T-112): a Viewer
+// holds operations.read and incident.read but not containment.read, so it
+// gets alerts but neither containment actions nor kill-switch records,
+// which the org-wide auditor (containment.read) gets. A viewer whose
+// incident.read covers team A only gets no alert about team B even with
+// operations.read across the org.
+func TestHR256_EachKindNeedsItsOwnReadPermission(t *testing.T) {
+	w := newWorld(t, stream.Config{})
+	ctx := ctxFor(t)
+	w.auth.set("viewer", caller(w.org, td.RoleViewer, td.Scope{Type: td.ScopeOrg, ID: w.org.UUID()}))
+	mixed := caller(w.org, td.RoleViewer, td.Scope{Type: td.ScopeTeam, ID: w.teamA})
+	mixed.Bindings = append(mixed.Bindings, td.Binding{Role: td.RoleRunLauncher, Scope: td.Scope{Type: td.ScopeOrg, ID: w.org.UUID()}})
+	w.auth.set("mixed", mixed)
+	w.event("reflex.alert", agent(w.agentA))      // 1
+	w.event("response.action", agent(w.agentA))   // 2 containment.read
+	w.event("audit.security.kill_switch_engaged") // 3 containment.read at the org
+	w.event("reflex.alert", agent(w.agentB))      // 4
+	w.event("response.path", agent(w.agentB))     // 5 containment.read
+
+	got, _ := frames(t, w.open(t, ctx, stream.Path, "viewer", map[string]string{"Last-Event-ID": "0"}).Body, untilEvents(2))
+	if ev := events(got); len(ev) != 2 || ev[0].id != "1" || ev[1].id != "4" {
+		t.Fatalf("viewer: %+v", ev)
+	}
+	got, _ = frames(t, w.open(t, ctx, stream.Path, "org-auditor", map[string]string{"Last-Event-ID": "0"}).Body, untilEvents(5))
+	if ev := events(got); len(ev) != 5 {
+		t.Fatalf("auditor: %+v", ev)
+	}
+	// "mixed" holds operations.read only in team A (Viewer there); the
+	// stream opens and shows team A's alert, nothing about team B.
+	got, _ = frames(t, w.open(t, ctx, stream.Path, "mixed", map[string]string{"Last-Event-ID": "0"}).Body, untilEvents(1))
+	w.event("reflex.alert", agent(w.agentA)) // 6, to end the read below
+	got2, _ := frames(t, w.open(t, ctx, stream.Path, "mixed", map[string]string{"Last-Event-ID": "1"}).Body, untilEvents(1))
+	if ev := events(got); len(ev) != 1 || ev[0].id != "1" {
+		t.Fatalf("mixed: %+v", ev)
+	}
+	if ev := events(got2); len(ev) != 1 || ev[0].id != "6" {
+		t.Fatalf("mixed resume: %+v", ev)
+	}
+}
+
+// slowFeed advances the handler's clock on every read, as a long replay
+// would.
+type slowFeed struct {
+	*fakeFeed
+	clk  *clock.Fake
+	step time.Duration
+	// onRead runs before each read (nil: nothing).
+	onRead func()
+}
+
+func (f slowFeed) After(ctx context.Context, org ids.OrgID, after int64, limit int) ([]stream.Event, error) {
+	if f.onRead != nil {
+		f.onRead()
+	}
+	f.clk.Advance(f.step)
+	return f.fakeFeed.After(ctx, org, after, limit)
+}
+
+// TestHR256_ALongReplayStopsAtExpiryAndRechecks (D69 M6): a replay from
+// seq 0 stops between batches when the token expires, and a role removed
+// during a replay ends it at the next recheck, without waiting for the
+// replay to finish.
+func TestHR256_ALongReplayStopsAtExpiryAndRechecks(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		expire bool
+	}{{"expiry", true}, {"recheck", false}} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := ctxFor(t)
+			clk := clock.NewFake(time.Now())
+			base := &fakeFeed{}
+			org, agentA := ids.New[ids.Org](), ids.NewV7()
+			for range 100 {
+				base.add(stream.Event{Org: org, Kind: "reflex.alert", Subjects: []stream.Subject{agent(agentA)}})
+			}
+			auth := &fakeAuth{callers: map[string]tenancy.Caller{}}
+			auth.set("a", caller(org, td.RoleAuditor, td.Scope{Type: td.ScopeOrg, ID: org.UUID()}))
+			expiry := func(string) (time.Time, bool) { return time.Time{}, false }
+			if tc.expire {
+				// Real time: ten batches; fake time ends it after three.
+				exp := clk.Now().Add(25 * time.Minute)
+				expiry = func(string) (time.Time, bool) { return exp, true }
+			}
+			feed := slowFeed{fakeFeed: base, clk: clk, step: 10 * time.Minute}
+			if !tc.expire {
+				// The role goes during the replay; the recheck inside the
+				// drain ends the stream.
+				reads := 0
+				feed.onRead = func() {
+					if reads++; reads == 2 {
+						auth.revoke("a")
+					}
+				}
+			}
+			h, err := stream.New(feed, auth, teamScoper{}, expiry, clk,
+				stream.Config{Batch: 10, Poll: time.Hour, Heartbeat: time.Hour, Recheck: 15 * time.Minute}, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			mux := http.NewServeMux()
+			h.Mount(mux)
+			srv := httptest.NewServer(mux)
+			t.Cleanup(srv.Close)
+			req, _ := http.NewRequestWithContext(ctx, http.MethodGet, srv.URL+stream.Path, nil)
+			req.Header.Set("Authorization", "Bearer a")
+			req.Header.Set("Last-Event-ID", "0")
+			resp, err := srv.Client().Do(req)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer resp.Body.Close()
+			got, closed := frames(t, resp.Body, func([]frame) bool { return false })
+			if n := len(events(got)); !closed || n == 0 || n >= 100 {
+				t.Fatalf("replayed %d of 100 before closing (closed %v)", len(events(got)), closed)
+			}
+		})
+	}
+}
+
+// TestHR256_OnlyTheCanonicalAfterParameter (D69 L5): "after" in another
+// case is refused, not ignored.
+func TestHR256_OnlyTheCanonicalAfterParameter(t *testing.T) {
+	w := newWorld(t, stream.Config{})
+	ctx := ctxFor(t)
+	for _, p := range []string{"?AFTER=5", "?After=5", "?ACCESS_TOKEN=x"} {
+		if resp := w.open(t, ctx, stream.Path+p, "org-auditor", nil); resp.StatusCode != http.StatusBadRequest {
+			t.Errorf("%s: %d", p, resp.StatusCode)
+		}
 	}
 }

@@ -1248,7 +1248,10 @@ type Obligation struct {
 	// from the requested one).
 	Clamp bool `protobuf:"varint,6,opt,name=clamp,proto3" json:"clamp,omitempty"`
 	// When it applies, for example "before_execution" (F071).
-	Timing        string `protobuf:"bytes,7,opt,name=timing,proto3" json:"timing,omitempty"`
+	Timing string `protobuf:"bytes,7,opt,name=timing,proto3" json:"timing,omitempty"`
+	// Entropy limit in bits per byte (decimal string), for disclosure_limits
+	// (HR-079): max is then the byte limit.
+	MaxEntropy    string `protobuf:"bytes,8,opt,name=max_entropy,json=maxEntropy,proto3" json:"max_entropy,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1328,6 +1331,13 @@ func (x *Obligation) GetClamp() bool {
 func (x *Obligation) GetTiming() string {
 	if x != nil {
 		return x.Timing
+	}
+	return ""
+}
+
+func (x *Obligation) GetMaxEntropy() string {
+	if x != nil {
+		return x.MaxEntropy
 	}
 	return ""
 }
@@ -2529,7 +2539,7 @@ const file_pantherclaw_v1_authority_proto_rawDesc = "" +
 	"\x04code\x18\x04 \x01(\tR\x04code\x12\x16\n" +
 	"\x06detail\x18\x05 \x01(\tR\x06detail\x12\x14\n" +
 	"\x05level\x18\x06 \x01(\tR\x05level\x12\x1a\n" +
-	"\bdecisive\x18\a \x01(\bR\bdecisive\"\xa2\x01\n" +
+	"\bdecisive\x18\a \x01(\bR\bdecisive\"\xc3\x01\n" +
 	"\n" +
 	"Obligation\x12\x12\n" +
 	"\x04rule\x18\x01 \x01(\tR\x04rule\x12\x12\n" +
@@ -2538,7 +2548,9 @@ const file_pantherclaw_v1_authority_proto_rawDesc = "" +
 	"\x03max\x18\x04 \x01(\tR\x03max\x12\x16\n" +
 	"\x06values\x18\x05 \x03(\tR\x06values\x12\x14\n" +
 	"\x05clamp\x18\x06 \x01(\bR\x05clamp\x12\x16\n" +
-	"\x06timing\x18\a \x01(\tR\x06timing\"\x85\x02\n" +
+	"\x06timing\x18\a \x01(\tR\x06timing\x12\x1f\n" +
+	"\vmax_entropy\x18\b \x01(\tR\n" +
+	"maxEntropy\"\x85\x02\n" +
 	"\x14BeginDispatchRequest\x12%\n" +
 	"\tpermit_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\bpermitId\x12\x1d\n" +
 	"\x05epoch\x18\x02 \x01(\x03B\a\xbaH\x04\"\x02 \x00R\x05epoch\x12?\n" +

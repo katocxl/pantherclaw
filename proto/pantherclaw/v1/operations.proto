@@ -39,7 +39,9 @@ service OperationsService {
   }
   // GetMetrics returns hourly operating metrics (Team): consequential
   // outcomes, coverage, bypass routes, exposure by resource group and the
-  // reconciliation backlog, each point with its drill-down search. They are
+  // reconciliation backlog, each point with its drill-down search. Each
+  // metric needs its source's read permission across the organization,
+  // else it reads RESTRICTED. They are
   // organization-wide, so they need operations.read across the
   // organization.
   // permission: operations.read
@@ -148,7 +150,9 @@ message GetEvidenceStatusResponse {
 message MetricPoint {
   // The start of the hour (UTC).
   google.protobuf.Timestamp bucket_time = 1;
-  // "COLLECTED", "NOT_COLLECTED" (the source is not collected) or
+  // "COLLECTED", "NOT_COLLECTED" (the source is not collected),
+  // "RESTRICTED" (the caller may not read the source across the
+  // organization) or
   // "NO_SAMPLE" (no sample was taken: a gap).
   string state = 2;
   // Set when COLLECTED.

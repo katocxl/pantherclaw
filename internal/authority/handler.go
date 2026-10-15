@@ -154,6 +154,7 @@ func gatewayObligations(obligations []pdomain.Obligation) []*pantherclawv1.Oblig
 		}
 		out = append(out, &pantherclawv1.Obligation{
 			Rule: o.Rule, Kind: string(o.Kind), Param: o.Param, Max: o.Max, Values: o.Values, Clamp: o.Clamp, Timing: o.Timing,
+			MaxEntropy: o.MaxEntropy,
 		})
 	}
 	return out

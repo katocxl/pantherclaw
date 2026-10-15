@@ -18,6 +18,7 @@ import (
 	reflexdomain "github.com/katocxl/pantherclaw/internal/reflex/domain"
 	reflexports "github.com/katocxl/pantherclaw/internal/reflex/ports"
 	"github.com/katocxl/pantherclaw/internal/search"
+	tenancy "github.com/katocxl/pantherclaw/internal/tenancy/app"
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
 )
 
@@ -248,6 +249,9 @@ const (
 	Collected    PointState = "COLLECTED"
 	NotCollected PointState = "NOT_COLLECTED"
 	NoSample     PointState = "NO_SAMPLE"
+	// Restricted: the viewer may not read the metric's source across the
+	// organization (D69 M7); nothing of it is read.
+	PointRestricted PointState = "RESTRICTED"
 )
 
 // Point is one hourly value with its drill-down.
@@ -312,11 +316,19 @@ func (s *Service) GetMetrics(ctx context.Context, metrics []string, start, end t
 			return err
 		}
 		out.AsOf = now.UTC()
-		rows, err := q.ListMetricSamples(ctx, dbq.ListMetricSamplesParams{OrgID: c.Org, Metrics: metrics, RangeStart: start, RangeEnd: end})
+		readable, hidden := splitByPermission(c, metrics)
+		rows, err := q.ListMetricSamples(ctx, dbq.ListMetricSamplesParams{OrgID: c.Org, Metrics: readable, RangeStart: start, RangeEnd: end})
 		if err != nil {
 			return err
 		}
-		out.Series = series(metrics, rows, start, end)
+		out.Series = series(readable, rows, start, end)
+		for _, m := range hidden {
+			sr := Series{Metric: m}
+			for b := start; b.Before(end); b = b.Add(time.Hour) {
+				sr.Points = append(sr.Points, Point{Bucket: b, State: PointRestricted})
+			}
+			out.Series = append(out.Series, sr)
+		}
 		return nil
 	}, db.ReadOnly())
 	return out, err
@@ -404,4 +416,38 @@ func drill(metric, dim string, bucket time.Time) *search.Spec {
 	default:
 		return nil
 	}
+}
+
+// metricPerm is the permission that reads each metric's source (D69 M7):
+// an aggregate is shown only to a viewer who may read its source across
+// the organization, so it never counts rows the viewer may not read.
+var metricPerm = map[string]td.Permission{
+	MetricDecisionsAllowed:      td.PermEvidenceRead,
+	MetricDecisionsDenied:       td.PermEvidenceRead,
+	MetricDecisionsHeld:         td.PermEvidenceRead,
+	MetricDecisionsShadow:       td.PermEvidenceRead,
+	MetricEffectsConfirmed:      td.PermEvidenceRead,
+	MetricReconciliationBacklog: td.PermEvidenceRead,
+	MetricCoverageEnforced:      td.PermCoverageRead,
+	MetricCoverageNotEnforced:   td.PermCoverageRead,
+	MetricBypassRoutes:          td.PermCoverageRead,
+	MetricBypassOldestHours:     td.PermCoverageRead,
+	MetricExposureUsable:        td.PermExposureRead,
+	MetricAutomationOutcomes:    td.PermOperationsRead,
+}
+
+// splitByPermission splits metrics into those the viewer may read at the
+// org and those it may not.
+func splitByPermission(c tenancy.Caller, metrics []string) (readable, hidden []string) {
+	for _, m := range metrics {
+		if p, ok := metricPerm[m]; ok && c.Can(p, td.OrgPath(c.Org)) {
+			readable = append(readable, m)
+		} else {
+			hidden = append(hidden, m)
+		}
+	}
+	if readable == nil {
+		readable = []string{}
+	}
+	return readable, hidden
 }

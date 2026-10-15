@@ -67,6 +67,9 @@ type Result struct {
 	// Excerpt is the text around the first hit, at most MaxExcerpt bytes,
 	// with control characters removed.
 	Excerpt string
+	// ExcerptNormalized is the same span of the normalised text the patterns
+	// matched (D74).
+	ExcerptNormalized string
 	// Digest is "sha256:<hex>" of the description.
 	Digest string
 }
@@ -75,7 +78,7 @@ type Result struct {
 func Scan(desc string) Result {
 	sum := sha256.Sum256([]byte(desc))
 	r := Result{Digest: "sha256:" + hex.EncodeToString(sum[:])}
-	text := Normalize(desc)
+	text, at := normalize(desc)
 	first := -1
 	for _, p := range patterns {
 		loc := p.re.FindStringIndex(text)
@@ -91,7 +94,8 @@ func Scan(desc string) Result {
 		return r
 	}
 	r.Flagged = true
-	r.Excerpt = excerpt(text, first)
+	r.Excerpt = excerpt(desc, at[first])
+	r.ExcerptNormalized = excerpt(text, first)
 	return r
 }
 
@@ -122,13 +126,15 @@ func Record(ctx context.Context, tx db.TenantTx, actor evdomain.Actor, object au
 ) error {
 	details := map[string]string{
 		"upstream_tool": tool, "description_digest": r.Digest, "patterns": strings.Join(r.Patterns, ","),
-		"excerpt": r.Excerpt, "source": source,
+		"excerpt": r.Excerpt, "excerpt_normalized": r.ExcerptNormalized, "source": source,
 	}
 	for k, v := range extra {
 		details[k] = v
 	}
-	if details["excerpt"] == "" {
-		delete(details, "excerpt")
+	for _, k := range []string{"excerpt", "excerpt_normalized"} {
+		if details[k] == "" {
+			delete(details, k)
+		}
 	}
 	_, err := audit.Record(ctx, tx, audit.Event{
 		Name: AuditName, Actor: actor, Outcome: audit.Success, ReasonCode: "TOOL_DESCRIPTION_FLAGGED", Object: &object,
@@ -143,22 +149,34 @@ func Record(ctx context.Context, tx db.TenantTx, actor evdomain.Actor, object au
 // plain space, and Cyrillic and Greek letters that look like Latin ones
 // become those Latin letters, so look-alike spellings match the patterns.
 func Normalize(s string) string {
-	s = norm.NFKC.String(s)
+	out, _ := normalize(s)
+	return out
+}
+
+// normalize is Normalize applied one character at a time, with the offset
+// in s of each byte of the result, so a hit maps back to the raw text (D74).
+func normalize(s string) (string, []int) {
 	var b strings.Builder
 	b.Grow(len(s))
-	for _, r := range s {
-		switch {
-		case unicode.Is(unicode.Cf, r):
-			continue
-		case unicode.IsSpace(r) || unicode.Is(unicode.Z, r):
-			r = ' '
+	at := make([]int, 0, len(s))
+	for i, raw := range s {
+		for _, r := range norm.NFKC.String(string(raw)) {
+			switch {
+			case unicode.Is(unicode.Cf, r):
+				continue
+			case unicode.IsSpace(r) || unicode.Is(unicode.Z, r):
+				r = ' '
+			}
+			if l, ok := homoglyphs[r]; ok {
+				r = l
+			}
+			b.WriteRune(r)
+			for range utf8.RuneLen(r) {
+				at = append(at, i)
+			}
 		}
-		if l, ok := homoglyphs[r]; ok {
-			r = l
-		}
-		b.WriteRune(r)
 	}
-	return b.String()
+	return b.String(), at
 }
 
 // homoglyphs maps Cyrillic and Greek letters to the Latin letters they
