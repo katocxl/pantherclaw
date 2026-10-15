@@ -62,7 +62,6 @@ SELECT r.agent_id, t.connection_id::uuid AS connection_id, t.operation::text AS 
     max(t.created_at)::timestamptz AS last_at
 FROM pc.transactions t
 JOIN pc.runs r ON r.org_id = t.org_id AND r.id = t.run_id
-LEFT JOIN pc.runs p ON p.org_id = r.org_id AND p.id = r.parent_run_id
 WHERE t.org_id = sqlc.arg(org_id) AND t.connection_id IS NOT NULL AND t.created_at > now() - interval '30 days'
   AND EXISTS (SELECT 1 FROM pc.execution_attempts a WHERE a.org_id = t.org_id AND a.transaction_id = t.id)
 GROUP BY r.agent_id, t.connection_id, t.operation
