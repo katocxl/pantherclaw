@@ -33,6 +33,8 @@ const (
 	// G0 M8 release controls (HR-207).
 	RoleCodeReviewer    RoleName = "code_reviewer"
 	RoleReleaseApprover RoleName = "release_approver"
+	// G0 M10 SOAR requests (D4, HR-251).
+	RoleSOARIntegration RoleName = "soar_integration"
 )
 
 // Role is a named set of permissions and the scope types it may be bound at.
@@ -42,6 +44,8 @@ type Role struct {
 	Description string
 	Permissions []Permission
 	Scopes      []ScopeType
+	// ServiceOnly roles are bound only to service accounts (G0 M10 D4).
+	ServiceOnly bool
 }
 
 // Has reports whether the role contains p.
@@ -90,7 +94,7 @@ func with(ps ...[]Permission) []Permission {
 var roles = []Role{
 	{
 		Name: RoleOrgAdmin, Title: "Org Admin", Scopes: orgScope,
-		Description: "Administers the organization: hierarchy, users, invitations, roles and service accounts; imports tool packages and registers the org's package-signing keys; asks for policy exceptions, which only policy publishers confirm. Sets the Agent Waitlist's escalation chains and settings. Reads evidence and coverage, and simulates policy versions over recorded decisions. Cannot approve actions or see approval requests, restore suspended agents, publish policies, activate packages, issue grants, change guardrails, manage gateways and connections, engage the kill switch, resolve unknown outcomes, export evidence packs, exclude routes from coverage, set retention or capture, or read restricted evidence.",
+		Description: "Administers the organization: hierarchy, users, invitations, roles and service accounts; imports tool packages and registers the org's package-signing keys; asks for policy exceptions, which only policy publishers confirm. Sets the Agent Waitlist's escalation chains and settings. Reads evidence, coverage, detections, incidents, cases, exposure, posture, operations, search and integrations, and simulates policy versions over recorded decisions. Cannot approve actions or see approval requests, restore suspended agents, publish policies, activate packages, issue grants, change guardrails, manage gateways and connections, engage the kill switch, resolve unknown outcomes, export evidence packs, exclude routes from coverage, set retention or capture, or read restricted evidence.",
 		Permissions: with(basicReads, []Permission{
 			PermOrgUpdate, PermBusinessUnitManage, PermTeamManage, PermTeamMembersManage, PermEnvironmentManage,
 			PermUserRead, PermUserManage, PermInvitationRead, PermInvitationManage, PermRoleRead, PermRoleBind,
@@ -99,18 +103,18 @@ var roles = []Role{
 			PermPackageKeyManage, PermNotificationRead, PermNotificationManage, PermEvidenceRead, PermCoverageRead, PermRedteamRead,
 			PermPolicyExceptionRequest,
 			PermGitHubIdentityManage, PermGitHubIdentityProve, PermGitHubScanRun, PermPolicySimulate,
-		}, authorityReads, boundaryReads),
+		}, authorityReads, boundaryReads, reflexReads),
 	},
 	{
 		Name: RoleSecurityAdmin, Title: "Security Admin", Scopes: orgScope,
-		Description: "Watches and contains: reads users, roles, audit and approval requests, disables compromised users and service accounts, revokes grants, responds to incidents, sets the Agent Waitlist's escalation chains and settings, restores suspended agents with a security key, resolves unknown outcomes, exports evidence packs, sets the change windows (human only), excludes routes from coverage and acknowledges its findings (human only), and reassesses coverage.",
+		Description: "Watches and contains: reads users, roles, audit and approval requests, disables compromised users and service accounts, revokes grants, responds to incidents, sets the Agent Waitlist's escalation chains and settings, restores suspended agents with a security key, resolves unknown outcomes, exports evidence packs, sets the change windows (human only), excludes routes from coverage and acknowledges its findings (human only), reassesses coverage, and manages detections, incidents, cases, posture findings, SIEM export and Shared Signals (human only).",
 		Permissions: with(basicReads, []Permission{
 			PermUserRead, PermUserManage, PermRoleRead, PermInvitationRead, PermServiceAccountRead,
 			PermServiceAccountManage, PermAuditRead, PermAgentRead, PermIncidentRespond, PermRunRead, PermRunManage,
 			PermWaitlistRead, PermWaitlistManage, PermApprovalRead, PermAgentRestore, PermIssuerRead, PermGrantRevoke,
 			PermFactRead, PermNotificationRead, PermNotificationManage, PermEvidenceRead, PermTransactionReconcile,
 			PermEvidenceExport, PermReleaseWindowManage, PermGitHubScanRun, PermCoverageRead, PermCoverageManage, PermCoverageReassess, PermRedteamRead,
-		}, authorityReads, boundaryReads),
+		}, authorityReads, boundaryReads, reflexReads, reflexManage),
 	},
 	{
 		Name: RoleAgentOwner, Title: "Agent Owner", Scopes: anyScope,
@@ -140,11 +144,11 @@ var roles = []Role{
 	},
 	{
 		Name: RoleResponder, Title: "Responder", Scopes: anyScope,
-		Description: "Investigates and contains incidents in scope, and restores suspended agents with a security key (human only).",
+		Description: "Investigates and contains incidents in scope, manages incidents, cases and posture findings, and restores suspended agents with a security key (human only).",
 		Permissions: with(basicReads, []Permission{
 			PermAgentRead, PermIncidentRespond, PermRunRead, PermRunManage, PermGrantRead, PermGrantRevoke,
 			PermConnectionRead, PermContainmentRead, PermWaitlistRead, PermAgentRestore, PermEvidenceRead, PermCoverageRead, PermRedteamRead,
-		}),
+		}, reflexReads, []Permission{PermIncidentManage, PermCaseManage, PermPostureManage}),
 	},
 	{
 		Name: RoleAuditor, Title: "Auditor", Scopes: orgScope,
@@ -153,7 +157,7 @@ var roles = []Role{
 			PermUserRead, PermRoleRead, PermInvitationRead, PermServiceAccountRead, PermAuditRead,
 			PermAgentRead, PermEvidenceReadRestricted, PermRunRead, PermWaitlistRead, PermIssuerRead, PermFactRead,
 			PermNotificationRead, PermApprovalRead, PermEvidenceRead, PermEvidenceExport, PermCoverageRead, PermRedteamRead,
-		}, authorityReads, boundaryReads),
+		}, authorityReads, boundaryReads, reflexReads),
 	},
 	{
 		Name: RoleDeveloper, Title: "Developer", Scopes: anyScope,
@@ -165,8 +169,8 @@ var roles = []Role{
 	},
 	{
 		Name: RoleViewer, Title: "Viewer", Scopes: anyScope,
-		Description: "Sees the hierarchy in scope.",
-		Permissions: with(basicReads),
+		Description: "Sees the hierarchy in scope, the operations view and incidents.",
+		Permissions: with(basicReads, []Permission{PermOperationsRead, PermIncidentRead}),
 	},
 	{
 		Name: RoleRunLauncher, Title: "Run Launcher", Scopes: anyScope,
@@ -228,6 +232,11 @@ var roles = []Role{
 		Name: RoleReleaseApprover, Title: "Release Approver", Scopes: teamScope,
 		Description: "Approves releases, the actions whose predicted or unknown consequence is a deployment, with a security key (human only); a window requirement counts the approval only inside an active change window for the environment. Never the change's reviewer.",
 		Permissions: with(basicReads, []Permission{PermApprovalRespond, PermApprovalRead, PermWaitlistRead, PermGitHubIdentityProve}),
+	},
+	{
+		Name: RoleSOARIntegration, Title: "SOAR Integration", Scopes: orgScope, ServiceOnly: true,
+		Description: "For the service account of a SOAR or response tool: reads incidents and the kill switch's state and asks for narrow containment of a run, agent, grant or connection. Never engages the kill switch, lifts a control or restores anything (HR-251). Bound only to service accounts.",
+		Permissions: with(basicReads, []Permission{PermResponseRequest, PermIncidentRead, PermContainmentRead}),
 	},
 }
 
