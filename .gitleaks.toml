@@ -28,5 +28,9 @@ description = "uv's git-ignored virtual environments (uv run in task sdk:check c
 paths = ['''(^|/)\.venv/''']
 
 [[allowlists]]
+description = "A decision recording made by the test scenario world (internal/authority/recording, TestHR234_RecordingFromBeforeRolloutsReplaysIdentically): SHA-256 digests, a test key thumbprint and random test ids, no secret."
+paths = ['''^internal/authority/recording/testdata/recording_v1_hold\.json$''']
+
+[[allowlists]]
 description = "Local, git-ignored development secrets: the demo's state (`task demo:up`, docs/quickstart.md) and the keys `dev seed` writes. Generated per checkout for loopback-only use; .gitignore keeps them out of commits."
 paths = ['''^\.demo/''', '''^deploy/dev/secrets/''']

@@ -105,8 +105,8 @@ func (r *Recorder) Definition(ctx context.Context, org ids.OrgID, pin actionir.D
 }
 
 // Policy implements pipeline.Reader.
-func (r *Recorder) Policy(ctx context.Context, org ids.OrgID) (*pipeline.Policy, error) {
-	p, err := r.r.Policy(ctx, org)
+func (r *Recorder) Policy(ctx context.Context, org ids.OrgID, agent ids.UUID) (*pipeline.Policy, error) {
+	p, err := r.r.Policy(ctx, org, agent)
 	r.keep(func(x *Reads) error { x.Policy = fromPolicy(p, err); return nil })
 	return p, err
 }

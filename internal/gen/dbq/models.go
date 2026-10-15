@@ -1410,17 +1410,210 @@ type PcPolicy struct {
 	CreatedAt time.Time
 }
 
+type PcPolicyChangeConfirmation struct {
+	OrgID        ids.OrgID
+	RequestID    ids.UUID
+	PrincipalID  ids.UUID
+	CredentialID ids.UUID
+	CreatedAt    time.Time
+}
+
+type PcPolicyChangeRequest struct {
+	OrgID         ids.OrgID
+	ID            ids.UUID
+	Kind          string
+	SubjectID     ids.UUID
+	BaseVersionID *ids.UUID
+	Binding       []byte
+	Summary       []byte
+	Required      int16
+	State         string
+	RequestedBy   string
+	CreatedAt     time.Time
+	ExpiresAt     time.Time
+	DecidedAt     *time.Time
+	DecidedReason *string
+}
+
+type PcPolicyCohort struct {
+	OrgID     ids.OrgID
+	ID        ids.UUID
+	Name      string
+	CreatedBy string
+	CreatedAt time.Time
+}
+
+type PcPolicyCohortMember struct {
+	OrgID    ids.OrgID
+	CohortID ids.UUID
+	AgentID  ids.UUID
+	AddedBy  string
+	AddedAt  time.Time
+}
+
+type PcPolicyException struct {
+	OrgID           ids.OrgID
+	ID              ids.UUID
+	BundleID        string
+	RuleID          string
+	RuleDigest      []byte
+	AgentID         ids.UUID
+	Operations      []string
+	Reason          string
+	OwnerID         ids.UUID
+	RequestedBy     ids.UUID
+	RequestedExpiry time.Time
+	State           string
+	ActivatedAt     *time.Time
+	ExpiresAt       *time.Time
+	RevokedBy       *ids.UUID
+	RevokedReason   *string
+	CreatedAt       time.Time
+}
+
+type PcPolicyRollout struct {
+	OrgID          ids.OrgID
+	ID             ids.UUID
+	VersionID      ids.UUID
+	BaseVersionID  *ids.UUID
+	Stage          string
+	CreatedBy      string
+	CreatedAt      time.Time
+	StageChangedAt time.Time
+	CompletedAt    *time.Time
+}
+
+type PcPolicyRolloutCohort struct {
+	OrgID     ids.OrgID
+	RolloutID ids.UUID
+	CohortID  ids.UUID
+	Mode      string
+}
+
+type PcPolicyRolloutCursor struct {
+	OrgID            ids.OrgID
+	RolloutID        ids.UUID
+	LastCreatedAt    time.Time
+	LastTxn          ids.UUID
+	LastEvaluation   int32
+	VerifyAfterAgent *ids.UUID
+}
+
+type PcPolicyRolloutTarget struct {
+	OrgID     ids.OrgID
+	RolloutID ids.UUID
+	AgentID   ids.UUID
+	State     string
+	OwnerID   *ids.UUID
+	Coverage  *string
+	Reason    *string
+	UpdatedAt time.Time
+}
+
+type PcPolicyShadowCount struct {
+	OrgID     ids.OrgID
+	RolloutID ids.UUID
+	ID        ids.UUID
+	Day       pgtype.Date
+	Category  string
+	N         int64
+}
+
+type PcPolicyShadowResult struct {
+	OrgID            ids.OrgID
+	RolloutID        ids.UUID
+	TransactionID    ids.UUID
+	Evaluation       int32
+	AgentID          ids.UUID
+	Operation        string
+	OriginalDecision string
+	OriginalReason   string
+	ShadowDecision   *string
+	ShadowReason     *string
+	Category         string
+	Limitation       *string
+	CreatedAt        time.Time
+}
+
+type PcPolicySimulation struct {
+	OrgID            ids.OrgID
+	ID               ids.UUID
+	VersionID        ids.UUID
+	ContentDigest    []byte
+	WindowStart      time.Time
+	WindowEnd        time.Time
+	MaxEvaluations   int32
+	State            string
+	Evaluated        int32
+	Counts           []byte
+	ByWorkflow       []byte
+	Burden           []byte
+	CursorCreatedAt  *time.Time
+	CursorTxn        *ids.UUID
+	CursorEvaluation *int32
+	RequestedBy      string
+	CreatedAt        time.Time
+	StartedAt        *time.Time
+	FinishedAt       *time.Time
+	Error            *string
+}
+
+type PcPolicySimulationSample struct {
+	OrgID            ids.OrgID
+	SimulationID     ids.UUID
+	Category         string
+	TransactionID    ids.UUID
+	Evaluation       int32
+	AgentID          ids.UUID
+	Operation        string
+	OriginalDecision string
+	OriginalReason   string
+	ProposedDecision string
+	ProposedReason   string
+	Limitation       string
+}
+
+type PcPolicyTestRun struct {
+	OrgID             ids.OrgID
+	ID                ids.UUID
+	VersionID         ids.UUID
+	ContentDigest     []byte
+	DefinitionsDigest []byte
+	CatalogDigest     []byte
+	Passed            bool
+	Cases             int32
+	Mutants           int32
+	Survivors         int32
+	Results           []byte
+	RunBy             string
+	CreatedAt         time.Time
+}
+
+type PcPolicyValidation struct {
+	OrgID             ids.OrgID
+	ID                ids.UUID
+	VersionID         ids.UUID
+	ContentDigest     []byte
+	DefinitionsDigest []byte
+	CatalogDigest     []byte
+	Passed            bool
+	Findings          []byte
+	RunBy             string
+	CreatedAt         time.Time
+}
+
 type PcPolicyVersion struct {
-	OrgID       ids.OrgID
-	ID          ids.UUID
-	PolicyID    ids.UUID
-	Version     int32
-	Bundle      []byte
-	State       string
-	CreatedBy   string
-	CreatedAt   time.Time
-	PublishedBy *string
-	PublishedAt *time.Time
+	OrgID         ids.OrgID
+	ID            ids.UUID
+	PolicyID      ids.UUID
+	Version       int32
+	Bundle        []byte
+	State         string
+	CreatedBy     string
+	CreatedAt     time.Time
+	PublishedBy   *string
+	PublishedAt   *time.Time
+	ContentDigest []byte
 }
 
 type PcProbeNonce struct {
@@ -1872,19 +2065,20 @@ type PcWaitlistSetting struct {
 }
 
 type PcWebauthnCeremony struct {
-	OrgID              ids.OrgID
-	ID                 ids.UUID
-	SessionID          ids.UUID
-	UserID             ids.UUID
-	Purpose            string
-	Challenge          []byte
-	AllowedCredentials [][]byte
-	CreatedAt          time.Time
-	ExpiresAt          time.Time
-	ConsumedAt         *time.Time
-	ApprovalRequestID  *ids.UUID
-	BatchID            *ids.UUID
-	ReconciliationID   *ids.UUID
+	OrgID                 ids.OrgID
+	ID                    ids.UUID
+	SessionID             ids.UUID
+	UserID                ids.UUID
+	Purpose               string
+	Challenge             []byte
+	AllowedCredentials    [][]byte
+	CreatedAt             time.Time
+	ExpiresAt             time.Time
+	ConsumedAt            *time.Time
+	ApprovalRequestID     *ids.UUID
+	BatchID               *ids.UUID
+	ReconciliationID      *ids.UUID
+	PolicyChangeRequestID *ids.UUID
 }
 
 type PcWebauthnCredential struct {

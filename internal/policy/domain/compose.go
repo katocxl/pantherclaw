@@ -41,6 +41,10 @@ const (
 	StatusError         Status = "ERROR"          // the rule could not be evaluated
 	StatusNotApplicable Status = "NOT_APPLICABLE" // out of the rule's scope
 	StatusNotEvaluated  Status = "NOT_EVALUATED"  // its facts are missing or stale
+	// StatusWaived: the rule matched, but an active policy exception for
+	// the agent and operation waives it (G0 M11.1 D14, HR-235). It restricts
+	// nothing and its obligations are dropped; the item names the exception.
+	StatusWaived Status = "WAIVED"
 )
 
 // Effect is how one rule evaluated.
@@ -65,6 +69,10 @@ const (
 	// not evaluated. Missing evidence is CANNOT_AUTHORIZE, never a
 	// business denial (F096), even for FORBID.
 	FactsMissing
+	// Waived: the condition matched, but a policy exception waives the
+	// rule (D14). Only a rule the publisher marked exceptable is waived,
+	// never one whose facts are missing or stale, and never on an error.
+	Waived
 )
 
 // Obligation is a constraint the gateway or connector must enforce, with its
@@ -147,6 +155,9 @@ const (
 	ReasonCostExceeded          = "POLICY_COST_EXCEEDED"
 	ReasonUnsupportedObligation = "UNSUPPORTED_OBLIGATION"
 	ReasonFactMissing           = "FACT_MISSING"
+	// ReasonExceptionApplied names a rule a policy exception waived; the
+	// item's detail is the exception id (D14).
+	ReasonExceptionApplied = "EXCEPTION_APPLIED"
 )
 
 // classify maps one result to its checklist status and the verdict it
@@ -169,6 +180,8 @@ func classify(r Result) (Status, Verdict, string) {
 			return StatusNotEvaluated, VerdictPass, ReasonFactMissing
 		}
 		return StatusNotEvaluated, VerdictCannotAuthorize, ReasonFactMissing
+	case Waived:
+		return StatusWaived, VerdictPass, ReasonExceptionApplied
 	case Unsupported:
 		return StatusError, VerdictCannotAuthorize, ReasonUnsupportedObligation
 	case Violated:
@@ -241,7 +254,7 @@ func Compose(results []Result) Outcome {
 		d := items[decisive]
 		items = append([]Item{d}, slices.Delete(items, decisive, decisive+1)...)
 	}
-	rank := map[Status]int{StatusFailed: 0, StatusError: 1, StatusNotEvaluated: 2, StatusRequired: 3, StatusConstrained: 4, StatusAnnotated: 5, StatusPassed: 6, StatusNotApplicable: 7}
+	rank := map[Status]int{StatusFailed: 0, StatusError: 1, StatusNotEvaluated: 2, StatusRequired: 3, StatusConstrained: 4, StatusWaived: 5, StatusAnnotated: 6, StatusPassed: 7, StatusNotApplicable: 8}
 	start := 0
 	if decisive >= 0 {
 		start = 1

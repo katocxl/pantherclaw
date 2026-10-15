@@ -5,13 +5,10 @@ package pclaw
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json/v2"
 	"errors"
 	"flag"
 	"fmt"
-	"io/fs"
 	"reflect"
 	"regexp"
 	"slices"
@@ -22,7 +19,6 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	pantherclawv1 "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
-	"github.com/katocxl/pantherclaw/templates"
 )
 
 // pclaw template apply (G0 M8 C4): a template is data in templates/, applied
@@ -35,7 +31,7 @@ import (
 
 func init() {
 	commands["template apply"] = command{
-		usage: "template apply NAME --repos OWNER/REPO[,OWNER/REPO…] [--agent ID] [--team ID | --bu ID] [--environment NAME] " +
+		usage: "template apply NAME [--repos OWNER/REPO[,OWNER/REPO…]] [--workspace PATH] [--agent ID] [--team ID | --bu ID] [--environment NAME] " +
 			"[--time-zone TZ] [--default-branch BRANCH | --default-branch OWNER/REPO=BRANCH]… [--expires DURATION] [--dry-run] [--update] [--yes]",
 		run: templateApply,
 	}
@@ -48,8 +44,12 @@ type templateOptions struct {
 	defaults              map[string]string // repository → default branch
 	agent, team, bu       string
 	environment, timeZone string
-	expires               time.Duration
-	dryRun, update, yes   bool
+	// workspace is the directory a template's shell rules confine
+	// commands to; environmentID is --environment's id, resolved from
+	// the server when the template needs it.
+	workspace, environmentID string
+	expires                  time.Duration
+	dryRun, update, yes      bool
 	// planOnly, set by init --yes without --yes-template, shows the plan
 	// and applies nothing.
 	planOnly bool
@@ -87,10 +87,16 @@ func templateFlags(fs *flag.FlagSet, o *templateOptions) func() error {
 	fs.Var(&defaults, "default-branch", "the default branch to protect (main), or OWNER/REPO=BRANCH for one repository (repeatable)")
 	fs.StringVar(&o.team, "team", "", "bound the grants of this team's agents to the repositories (a guardrail envelope)")
 	fs.StringVar(&o.bu, "bu", "", "bound the grants of this business unit's agents to the repositories (a guardrail envelope)")
-	fs.StringVar(&o.environment, "environment", "production", "the deployment environment of the example change window")
+	fs.StringVar(&o.environment, "environment", "production", "the environment the template's rules and change window are for (its slug)")
+	fs.StringVar(&o.workspace, "workspace", "", "the workspace directory the template's shell rules confine commands to (an absolute path)")
 	fs.StringVar(&o.timeZone, "time-zone", "UTC", "the change window's time zone")
 	fs.DurationVar(&o.expires, "expires", 30*24*time.Hour, "how long the agent's grant lasts")
 	return func() error {
+		info, err := readTemplateInfo(o.name)
+		if err != nil {
+			return err
+		}
+		has := func(kind string) bool { _, ok := info.Placeholders[kind]; return ok }
 		for _, r := range strings.Split(*repos, ",") {
 			if r = strings.TrimSpace(r); r == "" {
 				continue
@@ -102,8 +108,17 @@ func templateFlags(fs *flag.FlagSet, o *templateOptions) func() error {
 				o.repos = append(o.repos, r)
 			}
 		}
-		if len(o.repos) == 0 {
+		switch {
+		case has(kindRepository) && len(o.repos) == 0:
 			return errors.New("--repos names no repository")
+		case !has(kindRepository) && len(o.repos) > 0:
+			return fmt.Errorf("template %s takes no --repos", o.name)
+		case !has(kindDefaultBranch) && len(defaults) > 0:
+			return fmt.Errorf("template %s takes no --default-branch", o.name)
+		case has(kindWorkspace) && o.workspace == "":
+			return fmt.Errorf("template %s needs --workspace", o.name)
+		case !has(kindWorkspace) && o.workspace != "":
+			return fmt.Errorf("template %s takes no --workspace", o.name)
 		}
 		slices.Sort(o.repos)
 		o.defaults = map[string]string{}
@@ -172,198 +187,6 @@ func templateApply(ctx context.Context, a *app, args []string) error {
 	return applyTemplate(ctx, a, o)
 }
 
-// templateData is a template rendered for its options.
-type templateData struct {
-	TaskRef  string
-	Envelope struct {
-		Name   string
-		Bounds []byte
-	}
-	Grant struct {
-		Bounds, Limits []byte
-	}
-	Rules []map[string]any
-	// Skipped are the agent rules left out for want of an agent.
-	Skipped []string
-	Window  *pantherclawv1.CreateChangeWindowRequest
-}
-
-// ruleIDMax is the longest policy rule id.
-const ruleIDMax = 64
-
-// repoRuleID is a per-repository rule's id: c2p-<kind>--<owner>-<repo>-<6
-// hex>, the owner and repository lowercased with anything outside [a-z0-9]
-// turned into "-", and the hex from sha256 of the exact "owner/repo", so
-// repositories that differ only in case or punctuation never share an id.
-// A long name is cut, the hash kept.
-func repoRuleID(base, repo string) string {
-	slug := []byte(strings.ToLower(repo))
-	for i, b := range slug {
-		if (b < 'a' || b > 'z') && (b < '0' || b > '9') {
-			slug[i] = '-'
-		}
-	}
-	sum := sha256.Sum256([]byte(repo))
-	hash := "-" + hex.EncodeToString(sum[:])[:6]
-	prefix := base + "--" + string(slug)
-	if len(prefix)+len(hash) > ruleIDMax {
-		prefix = prefix[:ruleIDMax-len(hash)]
-	}
-	return prefix + hash
-}
-
-// fillRule copies a template rule with its id and its condition filled in.
-func fillRule(r map[string]any, id string, when *strings.Replacer) (map[string]any, error) {
-	raw, err := json.Marshal(r, json.Deterministic(true))
-	if err != nil {
-		return nil, err
-	}
-	var out map[string]any
-	if err := json.Unmarshal(raw, &out); err != nil {
-		return nil, err
-	}
-	out["id"] = id
-	if w, ok := out["when"].(string); ok {
-		out["when"] = when.Replace(w)
-	}
-	return out, nil
-}
-
-// renderTemplate reads the template's files and fills in the options:
-// "{{repo}}" in a list item repeats the item for each repository, and the
-// other placeholders are replaced by CEL lists over the repositories'
-// targets, the environment and the time zone.
-func renderTemplate(o templateOptions) (templateData, error) {
-	var out templateData
-	if !templateNameRe.MatchString(o.name) {
-		return out, fmt.Errorf("no template %q", o.name)
-	}
-	scalar := strings.NewReplacer("{{environment}}", o.environment, "{{time_zone}}", o.timeZone)
-	var walk func(v any) any
-	walk = func(v any) any {
-		switch v := v.(type) {
-		case map[string]any:
-			for k, x := range v {
-				v[k] = walk(x)
-			}
-			return v
-		case []any:
-			var list []any
-			for _, x := range v {
-				if s, ok := x.(string); ok && strings.Contains(s, "{{repo}}") {
-					for _, r := range o.repos {
-						list = append(list, strings.ReplaceAll(s, "{{repo}}", r))
-					}
-					continue
-				}
-				list = append(list, walk(x))
-			}
-			return list
-		case string:
-			return scalar.Replace(v)
-		}
-		return v
-	}
-	read := func(file string, into any) error {
-		raw, err := fs.ReadFile(templates.FS, o.name+"/"+file)
-		if errors.Is(err, fs.ErrNotExist) {
-			return fmt.Errorf("no template %q", o.name)
-		} else if err != nil {
-			return err
-		}
-		var v any
-		if err := json.Unmarshal(raw, &v); err != nil {
-			return fmt.Errorf("template %s/%s: %w", o.name, file, err)
-		}
-		b, err := json.Marshal(walk(v), json.Deterministic(true))
-		if err != nil {
-			return err
-		}
-		return json.Unmarshal(b, into)
-	}
-	var meta struct {
-		TaskRef string `json:"task_ref"`
-	}
-	var env struct {
-		Name   string `json:"name"`
-		Bounds any    `json:"bounds"`
-	}
-	var grant struct {
-		Bounds any `json:"bounds"`
-		Limits any `json:"limits"`
-	}
-	var policy struct {
-		Rules []map[string]any `json:"rules"`
-	}
-	var window struct {
-		Environment string `json:"environment"`
-		TimeZone    string `json:"time_zone"`
-		Weekly      []struct {
-			Day     string `json:"day"`
-			Start   string `json:"start"`
-			Minutes int32  `json:"minutes"`
-		} `json:"weekly"`
-	}
-	for file, into := range map[string]any{
-		"template.json": &meta, "envelope.json": &env, "grant.json": &grant, "policy.json": &policy, "window.json": &window,
-	} {
-		if err := read(file, into); err != nil {
-			return out, err
-		}
-	}
-	var err error
-	out.TaskRef, out.Envelope.Name = meta.TaskRef, env.Name
-	for _, r := range policy.Rules {
-		per, _ := r["per"].(string)
-		delete(r, "per")
-		base, _ := r["id"].(string)
-		switch per {
-		case "repo":
-			// A rule per repository, so applying for one repository never
-			// changes another's rules (the coordinator's decision Q8).
-			for _, repo := range o.repos {
-				rule, err := fillRule(r, repoRuleID(base, repo), strings.NewReplacer(
-					"{{pull_request}}", "action.target.id.startsWith('"+repo+"#')",
-					"{{repository}}", "action.target.id == '"+repo+"'",
-					"{{default_ref}}", "action.target.id == '"+repo+"@refs/heads/"+o.defaults[repo]+"'",
-				))
-				if err != nil {
-					return out, err
-				}
-				out.Rules = append(out.Rules, rule)
-			}
-		case "agent":
-			// A rule for the template's agent only, through the run the
-			// server records for each action (`run.agent_id`).
-			if o.agent == "" {
-				out.Skipped = append(out.Skipped, base)
-				continue
-			}
-			rule, err := fillRule(r, base+"--"+o.agent, strings.NewReplacer("{{agent}}", o.agent))
-			if err != nil {
-				return out, err
-			}
-			out.Rules = append(out.Rules, rule)
-		default:
-			return out, fmt.Errorf("template %s: rule %s: per must be repo or agent", o.name, base)
-		}
-	}
-	if out.Envelope.Bounds, err = json.Marshal(env.Bounds, json.Deterministic(true)); err != nil {
-		return out, err
-	}
-	if out.Grant.Bounds, err = json.Marshal(grant.Bounds, json.Deterministic(true)); err != nil {
-		return out, err
-	}
-	if out.Grant.Limits, err = json.Marshal(grant.Limits, json.Deterministic(true)); err != nil {
-		return out, err
-	}
-	out.Window = &pantherclawv1.CreateChangeWindowRequest{Environment: window.Environment, TimeZone: window.TimeZone}
-	for _, w := range window.Weekly {
-		out.Window.Weekly = append(out.Window.Weekly, &pantherclawv1.WeeklyEntry{Day: w.Day, Start: w.Start, Minutes: w.Minutes})
-	}
-	return out, nil
-}
-
 // sameJSON reports whether two JSON documents hold the same value.
 func sameJSON(a, b []byte) bool {
 	var x, y any
@@ -394,8 +217,9 @@ const (
 )
 
 func applyTemplate(ctx context.Context, a *app, o templateOptions) error {
-	data, err := renderTemplate(o)
-	if err != nil {
+	// The options are checked before anything is read from the server;
+	// the environment's id comes from it.
+	if _, err := renderTemplate(o); err != nil && !errors.Is(err, errNeedsEnvironmentID) {
 		return err
 	}
 	c, err := a.clients()
@@ -408,6 +232,13 @@ func applyTemplate(ctx context.Context, a *app, o templateOptions) error {
 	}
 	if me.GetPrincipal().GetType() != pantherclawv1.PrincipalType_PRINCIPAL_TYPE_USER {
 		return errors.New("a template is applied by a person, signed in with pclaw login")
+	}
+	if err := resolveEnvironment(ctx, c, &o); err != nil {
+		return err
+	}
+	data, err := renderTemplate(o)
+	if err != nil {
+		return err
 	}
 	var steps []templateStep
 	var missing []string
@@ -432,7 +263,11 @@ func applyTemplate(ctx context.Context, a *app, o templateOptions) error {
 	}
 
 	w := a.stdout
-	_, _ = fmt.Fprintf(w, "Template %s for %s, as %s:\n", o.name, strings.Join(o.repos, ", "), me.GetPrincipal().GetDisplayName())
+	if len(o.repos) > 0 {
+		_, _ = fmt.Fprintf(w, "Template %s for %s, as %s:\n", o.name, strings.Join(o.repos, ", "), me.GetPrincipal().GetDisplayName())
+	} else {
+		_, _ = fmt.Fprintf(w, "Template %s, as %s:\n", o.name, me.GetPrincipal().GetDisplayName())
+	}
 	differs, changes := false, 0
 	for _, s := range steps {
 		_, _ = fmt.Fprintf(w, "  %-9s %s\n", s.state, s.what)
@@ -446,11 +281,15 @@ func applyTemplate(ctx context.Context, a *app, o templateOptions) error {
 			changes++
 		}
 	}
-	for _, r := range o.repos {
-		_, _ = fmt.Fprintf(w, "  Protects %s's default branch %s from writes; renaming a default branch needs this template applied again.\n", r, o.defaults[r])
+	if _, ok := data.Info.Placeholders[kindDefaultBranch]; ok {
+		for _, r := range o.repos {
+			_, _ = fmt.Fprintf(w, "  Protects %s's default branch %s from writes; renaming a default branch needs this template applied again.\n", r, o.defaults[r])
+		}
 	}
-	_, _ = fmt.Fprintln(w, "  Binds no people to roles: bind code_reviewer and release_approver yourself (pclaw role bind).")
-	for _, warn := range monitorWarnings(ctx, c) {
+	if roles := approvalRoles(data.Rules); len(roles) > 0 {
+		_, _ = fmt.Fprintf(w, "  Binds no people to roles: bind %s yourself (pclaw role bind).\n", strings.Join(roles, " and "))
+	}
+	for _, warn := range monitorWarnings(ctx, c, data.Info) {
 		_, _ = fmt.Fprintf(w, "  warning: %s\n", warn)
 	}
 	if len(missing) > 0 {
@@ -478,6 +317,15 @@ func applyTemplate(ctx context.Context, a *app, o templateOptions) error {
 			continue
 		}
 		done, err := s.apply(ctx)
+		var wait *waitingError
+		if errors.As(err, &wait) {
+			// A loosening waits for confirmations (D6). The steps after the
+			// policy, the grant last, wait with it, so no grant is issued
+			// before its rules are in effect.
+			_, _ = fmt.Fprintf(w, "Waiting for confirmation: %s\n", wait.msg)
+			_, _ = fmt.Fprintln(w, "Run the command again once it is confirmed to make the remaining changes.")
+			return nil
+		}
 		if err != nil {
 			return fmt.Errorf("%s: %s (the steps before it were made)", s.what, describe(err))
 		}
@@ -492,6 +340,9 @@ func planEnvelope(ctx context.Context, c clients, o templateOptions, d templateD
 	kind, id := pantherclawv1.GuardrailScopeKind_GUARDRAIL_SCOPE_KIND_TEAM, o.team
 	if o.bu != "" {
 		kind, id = pantherclawv1.GuardrailScopeKind_GUARDRAIL_SCOPE_KIND_BUSINESS_UNIT, o.bu
+	}
+	if !d.Envelope.Present {
+		return templateStep{what: "guardrail envelope", state: stepSkipped, notes: []string{"the template sets no envelope"}}, nil
 	}
 	if id == "" {
 		return templateStep{what: "guardrail envelope", state: stepSkipped, notes: []string{
@@ -542,35 +393,71 @@ func planEnvelope(ctx context.Context, c clients, o templateOptions, d templateD
 	return s, nil
 }
 
-// planPolicy adds the template's rules to the published bundle, as a new
-// version that is then published.
+// planPolicy adds the template's rules and scenario tests to the published
+// bundle, as a new version that goes through the publish gate (M11.1 D6):
+// validated, tested, and published when it tightens the policy, or left
+// waiting for confirmations when it loosens it.
 func planPolicy(ctx context.Context, c clients, o templateOptions, d templateData, _ string) (templateStep, error) {
 	s := templateStep{what: "policy rules " + ruleIDs(d.Rules)}
 	bundle, planned, err := publishedBundle(ctx, c)
 	if err != nil {
 		return s, err
 	}
-	rules, _ := bundle["rules"].([]any)
-	added, changed := 0, 0
-	for _, want := range d.Rules {
-		i := slices.IndexFunc(rules, func(r any) bool { m, _ := r.(map[string]any); return m["id"] == want["id"] })
-		switch {
-		case i < 0:
-			rules = append(rules, want)
-			added++
-		case !reflect.DeepEqual(rules[i], any(want)):
-			wantJSON, _ := json.Marshal(want, json.Deterministic(true))
-			curJSON, _ := json.Marshal(rules[i], json.Deterministic(true))
-			s.notes = append(s.notes, fmt.Sprintf("rule %v now: %s", want["id"], curJSON), "the template's: "+string(wantJSON))
-			rules[i] = want
-			changed++
+	// A rule over every repository ({{repos}}) keeps the repositories the
+	// template was applied for before.
+	if len(d.ReposItems) > 0 && !o.update {
+		applied, err := appliedRepos(bundle, o, d)
+		if err != nil {
+			return s, err
+		}
+		if all := union(applied, o.repos); !slices.Equal(all, o.repos) {
+			wide := o
+			wide.repos = all
+			if d, err = renderOver(d, wide); err != nil {
+				return s, err
+			}
 		}
 	}
-	s.notes = append(s.notes, "one rule of each kind per repository: applying for other repositories never changes these, and pclaw template remove takes them away")
+	rules, _ := bundle["rules"].([]any)
+	tests, _ := bundle["tests"].([]any)
+	var added, changed int
+	merge := func(have []any, want []map[string]any, what string) []any {
+		for _, w := range want {
+			i := slices.IndexFunc(have, func(r any) bool { m, _ := r.(map[string]any); return m["id"] == w["id"] })
+			switch {
+			case i < 0:
+				have = append(have, w)
+				added++
+			case !sameValue(have[i], w):
+				id, _ := w["id"].(string)
+				if slices.Contains(d.ReposItems, id) && !o.update {
+					// Over more repositories than before: the template's own
+					// rule, checked by appliedRepos.
+					have[i] = w
+					added++
+					continue
+				}
+				wantJSON, _ := json.Marshal(w, json.Deterministic(true))
+				curJSON, _ := json.Marshal(have[i], json.Deterministic(true))
+				s.notes = append(s.notes, fmt.Sprintf("%s %s now: %s", what, id, curJSON), "the template's: "+string(wantJSON))
+				have[i] = w
+				changed++
+			}
+		}
+		return have
+	}
+	rules = merge(rules, d.Rules, "rule")
+	tests = merge(tests, d.Tests, "test")
+	if d.PerRepo {
+		s.notes = append(s.notes, "one rule of each kind per repository: applying for other repositories never changes these, and pclaw template remove takes them away")
+	}
 	if len(d.Skipped) > 0 {
-		s.notes = append(s.notes, "shell rule skipped: no agent (pass --agent ID)")
-	} else {
-		s.notes = append(s.notes, "the shell rule holds for agent "+o.agent+"'s runs only")
+		s.notes = append(s.notes, "skipped for want of an agent (pass --agent ID): "+strings.Join(d.Skipped, ", "))
+	} else if o.agent != "" {
+		s.notes = append(s.notes, "the agent's rules hold for agent "+o.agent+"'s runs only")
+	}
+	if len(d.Tests) > 0 {
+		s.notes = append(s.notes, fmt.Sprintf("with %d scenario tests, which the publish gate runs with every test of the policy", len(d.Tests)))
 	}
 	switch {
 	case changed > 0:
@@ -582,7 +469,10 @@ func planPolicy(ctx context.Context, c clients, o templateOptions, d templateDat
 		return s, nil
 	}
 	bundle["rules"] = rules
-	s.notes = append(s.notes, "published as a new version of the org's policy")
+	if len(tests) > 0 {
+		bundle["tests"] = tests
+	}
+	s.notes = append(s.notes, "published as a new version of the org's policy once it passes validation and its tests; a loosening waits for confirmations")
 	s.bundle, s.planned = bundle, planned
 	s.apply = publishBundle(c, bundle, planned, func(ctx context.Context) (string, error) {
 		return replanPolicy(ctx, c, o, d, 1)
@@ -620,8 +510,9 @@ func publishBundle(c clients, bundle map[string]any, planned string, retry func(
 			return "", err
 		}
 		v, err := c.policies.CreatePolicyVersion(ctx, &pantherclawv1.CreatePolicyVersionRequest{Bundle: raw, ExpectedCurrentVersion: &planned})
+		var pub *pantherclawv1.PublishPolicyVersionResponse
 		if err == nil {
-			_, err = c.policies.PublishPolicyVersion(ctx, &pantherclawv1.PublishPolicyVersionRequest{Id: v.GetVersion().GetId(), ExpectedCurrentVersion: &planned})
+			pub, err = c.policies.PublishPolicyVersion(ctx, &pantherclawv1.PublishPolicyVersionRequest{Id: v.GetVersion().GetId(), ExpectedCurrentVersion: &planned})
 		}
 		switch {
 		case publishedChanged(err) && retry != nil:
@@ -631,9 +522,20 @@ func publishBundle(c clients, bundle map[string]any, planned string, retry func(
 		case err != nil:
 			return "", err
 		}
+		if cr := pub.GetChangeRequest(); cr != nil {
+			return "", &waitingError{msg: fmt.Sprintf(
+				"policy version %d loosens the published policy, so %d %s holding policy.publish must confirm it with a security key within 24 hours at %s",
+				v.GetVersion().GetVersion(), cr.GetRequired(), people(cr.GetRequired()), cr.GetUrl())}
+		}
 		return fmt.Sprintf("policy version %d published", v.GetVersion().GetVersion()), nil
 	}
 }
+
+// waitingError: the policy version went through the gate and waits for
+// confirmations (a PUBLISH change request, D6); nothing failed.
+type waitingError struct{ msg string }
+
+func (e *waitingError) Error() string { return "waiting for confirmation: " + e.msg }
 
 // errPublishedChanged: another policy version was published after the plan.
 var errPublishedChanged = errors.New("another policy version was published since the plan; nothing was published. Run the command again to see the new plan")
@@ -654,6 +556,9 @@ func ruleIDs(rules []map[string]any) string {
 // planWindow sets the example change window for the environment.
 func planWindow(ctx context.Context, c clients, _ templateOptions, d templateData, _ string) (templateStep, error) {
 	want := d.Window
+	if want == nil {
+		return templateStep{what: "change window", state: stepSkipped, notes: []string{"the template sets no change window"}}, nil
+	}
 	s := templateStep{what: fmt.Sprintf("change window for %s: Mon–Fri 09:00–17:00 %s", want.GetEnvironment(), want.GetTimeZone())}
 	res, err := c.windows.ListChangeWindows(ctx, &pantherclawv1.ListChangeWindowsRequest{Environment: want.GetEnvironment()})
 	if err != nil {
@@ -711,7 +616,7 @@ func planGrant(ctx context.Context, c clients, o templateOptions, d templateData
 	}
 	s := templateStep{
 		what:  fmt.Sprintf("grant to agent %s for %s, for %s", o.agent, d.TaskRef, expires),
-		notes: []string{"reads, branch preparation, contents writes, pull requests and merges on these repositories; one merge per run"},
+		notes: []string{d.Info.Grant},
 	}
 	if expires < o.expires {
 		s.notes = append(s.notes, fmt.Sprintf("capped by the org's grant ceiling of %s (asked for %s)", ceiling, o.expires))
@@ -806,14 +711,13 @@ func grantCeiling(ctx context.Context, c clients, o templateOptions) (time.Durat
 	return ceiling, nil
 }
 
-// templateRoutes are the pc.github routes whose decisions the template's
-// rules are for.
-var templateRoutes = []string{"github-pull-merge", "github-contents-write", "github-branch-create"}
-
-// monitorWarnings names each pc.github connection route the template's
-// rules are for that runs in monitor mode: there a rule's decision is
-// recorded and never blocks (coverage OBSERVE_ONLY).
-func monitorWarnings(ctx context.Context, c clients) []string {
+// monitorWarnings names each connection route the template's rules are
+// for (template.json routes) that runs in monitor mode: there a rule's
+// decision is recorded and never blocks (coverage OBSERVE_ONLY).
+func monitorWarnings(ctx context.Context, c clients, info templateInfo) []string {
+	if len(info.Routes) == 0 {
+		return nil
+	}
 	var out []string
 	for token := ""; ; {
 		res, err := c.connections.ListConnections(ctx, &pantherclawv1.ListConnectionsRequest{PageSize: 200, PageToken: token})
@@ -821,7 +725,7 @@ func monitorWarnings(ctx context.Context, c clients) []string {
 			return []string{"could not read the connections' route modes (" + describe(err) + "); in monitor mode the rules record decisions and do not block"}
 		}
 		for _, conn := range res.GetConnections() {
-			if conn.GetPackage() != "pc.github" {
+			if !slices.ContainsFunc(info.Routes, func(r templateRoute) bool { return r.Package == conn.GetPackage() }) {
 				continue
 			}
 			got, err := c.connections.GetConnection(ctx, &pantherclawv1.GetConnectionRequest{Id: conn.GetId()})
@@ -829,7 +733,11 @@ func monitorWarnings(ctx context.Context, c clients) []string {
 				out = append(out, fmt.Sprintf("could not read connection %s's route modes (%s)", conn.GetName(), describe(err)))
 				continue
 			}
-			for _, route := range templateRoutes {
+			for _, tr := range info.Routes {
+				if tr.Package != conn.GetPackage() {
+					continue
+				}
+				route := tr.Route
 				mode := got.GetConnection().GetDefaultMode()
 				for _, r := range got.GetConnection().GetRoutes() {
 					if r.GetRoute() == route {

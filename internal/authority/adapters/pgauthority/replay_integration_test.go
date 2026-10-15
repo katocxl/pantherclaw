@@ -24,6 +24,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	polpg "github.com/katocxl/pantherclaw/internal/policy/adapters/pgstore"
 	pdomain "github.com/katocxl/pantherclaw/internal/policy/domain"
+	"github.com/katocxl/pantherclaw/internal/policy/policytest"
 )
 
 // rowCounts counts the rows of every table in schema pc, as the admin: what
@@ -61,9 +62,7 @@ func (w *world) publishPolicy(version int, draft bool, rules ...pdomain.Rule) id
 		w.t.Fatalf("policy version %d: %v", got, err)
 	}
 	if !draft {
-		if err := store.Publish(context.Background(), w.org, id, w.alice.String(), nil); err != nil {
-			w.t.Fatal(err)
-		}
+		policytest.PublishVersion(context.Background(), w.t, w.pool, w.org, id)
 	}
 	return id
 }
@@ -153,5 +152,42 @@ func TestIntReplaySourceIsScopedToItsOrg(t *testing.T) {
 	other := ids.New[ids.Org]()
 	if _, err := src.Inputs(context.Background(), other, r.TransactionID, 1); err != replay.ErrNotFound { //nolint:errorlint // the sentinel itself
 		t.Fatalf("another org's inputs: %v", err)
+	}
+}
+
+// TestIntAProposedHoldReplaysCompletely is D36 against the database: an
+// allowed refund replayed under a draft that holds it reads the org's hold
+// settings at replay time, is complete and REQUIRE_APPROVAL with both
+// notes, and writes nothing.
+func TestIntAProposedHoldReplaysCompletely(t *testing.T) {
+	w := newWorld(t)
+	w.keepInputs()
+	w.refundable("ch_1")
+	w.publishPolicy(1, false, pgHoldOver50)
+	hold10 := pgHoldOver50
+	hold10.When = `action.params.amount > money("10", "USD")`
+	draft := w.publishPolicy(2, true, hold10)
+	ok := w.authorize(w.request(w.run(w.grant("500").ID, ids.UUID{}), ids.NewV7(), "ch_1", "30.00"))
+	if ok.Decision != adomain.Allow {
+		t.Fatalf("original: %+v", ok)
+	}
+	src := &pgauthority.ReplaySource{Pool: w.pool, Definitions: &defpg.Store{Pool: w.pool}, FactStore: &factpg.Store{Pool: w.pool}}
+	if h, err := src.HoldSettings(context.Background(), w.org); err != nil || h.HoldDeadline != 0 {
+		t.Fatalf("hold settings with none stored: %+v %v", h, err)
+	}
+	before := w.rowCounts()
+	out, err := w.replayEngine().Replay(context.Background(), w.org, ok.TransactionID, ok.Evaluation, &draft)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !out.Complete || out.Decision != adomain.RequireApproval || out.Reason != "REFUND_OVER_50" ||
+		!slices.Contains(out.Notes, replay.NoteHoldSettings) || !slices.Contains(out.Notes, replay.NoteNoVariants) {
+		t.Fatalf("proposed: %+v", out)
+	}
+	after := w.rowCounts()
+	for tb, n := range before {
+		if after[tb] != n {
+			t.Errorf("table %s: %d rows before the replay, %d after", tb, n, after[tb])
+		}
 	}
 }

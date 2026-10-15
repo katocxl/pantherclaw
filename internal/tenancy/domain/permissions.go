@@ -59,6 +59,7 @@ const (
 	PermAgentManage            Permission = "agent.manage"             // M3
 	PermPolicyAuthor           Permission = "policy.author"            // M4
 	PermPolicyPublish          Permission = "policy.publish"           // M4/M11, human only
+	PermPolicySimulate         Permission = "policy.simulate"          // M11.1
 	PermApprovalRespond        Permission = "approval.respond"         // M5, human only
 	PermIncidentRespond        Permission = "incident.respond"         // M10
 	PermEvidenceReadRestricted Permission = "evidence.read_restricted" // M7, human only
@@ -105,6 +106,10 @@ const (
 	PermPackageImport      Permission = "package.import"
 	PermPackageActivate    Permission = "package.activate"
 	PermPolicyRead         Permission = "policy.read"
+	// PermPolicyExceptionRequest asks for a policy exception (G0 M11.1
+	// D14, HR-235). Only a person may ask; the use case checks it, so the
+	// Org Admin role, which service accounts may hold, can carry it.
+	PermPolicyExceptionRequest Permission = "policy.exception.request"
 )
 
 // PermPackageKeyManage registers and revokes the org's package-signing keys
@@ -218,7 +223,7 @@ var catalog = []Permission{
 	PermWaitlistRead, PermWaitlistManage, PermApprovalRead, PermAgentRestore,
 	PermAgentEnroll, PermAgentAdmit,
 	PermIssuerRead, PermIssuerManage, PermIssuerActivate,
-	PermPolicyAuthor, PermPolicyPublish, PermPolicyRead,
+	PermPolicyAuthor, PermPolicyPublish, PermPolicyRead, PermPolicyExceptionRequest, PermPolicySimulate,
 	PermGrantRead, PermGrantIssue, PermGrantRevoke,
 	PermGuardrailsRead, PermGuardrailsManage, PermBudgetRead,
 	PermFactRead, PermFactProviderManage, PermFactWrite,

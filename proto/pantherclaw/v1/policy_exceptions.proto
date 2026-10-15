@@ -1,0 +1,190 @@
+// SPDX-License-Identifier: BUSL-1.1
+// Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+
+syntax = "proto3";
+
+package pantherclaw.v1;
+
+import "buf/validate/validate.proto";
+import "google/protobuf/timestamp.proto";
+
+// PolicyExceptionService manages policy exceptions (G0 M11.1; F208–F210,
+// HR-235). An exception waives one rule the publisher marked exceptable,
+// for one agent and the listed operations, for at most 30 days. It never
+// waives a grant, a guardrail, containment, identity, a budget, a missing
+// or stale fact, coverage or a route mode. A request is approved like a
+// loosening of the policy, through an EXCEPTION change request; it is
+// never extended (renewal is a new request). Every decision that used one
+// names it in its checklist as EXCEPTION_APPLIED.
+service PolicyExceptionService {
+  // RequestPolicyException asks for an exception (a person only). The rule
+  // must be exceptable in the published version, and each operation an
+  // exact operation inside its scope. The response names the change
+  // request that must be confirmed before it applies.
+  // permission: policy.exception.request
+  rpc RequestPolicyException(RequestPolicyExceptionRequest) returns (RequestPolicyExceptionResponse);
+  // GetPolicyException returns one exception.
+  // permission: policy.read
+  rpc GetPolicyException(GetPolicyExceptionRequest) returns (GetPolicyExceptionResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // ListPolicyExceptions lists exceptions, newest first.
+  // permission: policy.read
+  rpc ListPolicyExceptions(ListPolicyExceptionsRequest) returns (ListPolicyExceptionsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // RevokePolicyException ends a pending or active exception at once (a
+  // person only).
+  // permission: policy.publish
+  rpc RevokePolicyException(RevokePolicyExceptionRequest) returns (RevokePolicyExceptionResponse);
+}
+
+// PolicyException is one exception.
+message PolicyException {
+  // Exception id.
+  string id = 1;
+  // The policy bundle id.
+  string bundle_id = 2;
+  // The waived rule.
+  string rule_id = 3;
+  // SHA-256 of the rule as requested, hex; a changed rule is not waived.
+  string rule_digest = 4;
+  // The agent it applies to.
+  string agent_id = 5;
+  // The exact operations it applies to.
+  repeated string operations = 6;
+  // Why, in the requester's words (untrusted text).
+  string reason = 7;
+  // The person accountable for it.
+  string owner_id = 8;
+  // The person who requested it.
+  string requested_by = 9;
+  // The expiry asked for; the exception ends then or 30 days after it
+  // became active, whichever comes first.
+  google.protobuf.Timestamp requested_expire_time = 10;
+  // "PENDING", "ACTIVE", "DECLINED", "REVOKED" or "EXPIRED".
+  string state = 11;
+  // When it became active; unset before.
+  google.protobuf.Timestamp activate_time = 12;
+  // When it ends; unset before it is active.
+  google.protobuf.Timestamp expire_time = 13;
+  // Who revoked it; empty unless revoked.
+  string revoked_by = 14;
+  // Why it was revoked (untrusted text).
+  string revoked_reason = 15;
+  // When it was requested.
+  google.protobuf.Timestamp create_time = 16;
+}
+
+// RequestPolicyExceptionRequest describes an exception.
+message RequestPolicyExceptionRequest {
+  // The rule id in the published version.
+  string rule_id = 1 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 64
+  }];
+  // Agent id.
+  string agent_id = 2 [(buf.validate.field).string.uuid = true];
+  // Exact operations inside the rule's scope.
+  repeated string operations = 3 [(buf.validate.field).repeated = {
+    min_items: 1
+    max_items: 16
+    unique: true
+    items: {
+      string: {
+        max_len: 128
+        pattern: "^[a-z][a-z0-9_]*(\\.[a-z0-9_]+){1,7}$"
+      }
+    }
+  }];
+  // Why the rule should not apply (1 to 500 characters).
+  string reason = 4 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 500
+  }];
+  // How long it should last, in seconds: at most 30 days.
+  int64 expires_in_seconds = 5 [(buf.validate.field).int64 = {
+    gte: 60
+    lte: 2592000
+  }];
+  // The person accountable for it; unset: the requester.
+  optional string owner_id = 6 [(buf.validate.field).string.uuid = true];
+}
+
+// RequestPolicyExceptionResponse returns the pending exception.
+message RequestPolicyExceptionResponse {
+  // The exception, PENDING.
+  PolicyException exception = 1;
+  // The change request to confirm.
+  string change_request_id = 2;
+  // The page where it is confirmed.
+  string change_request_url = 3;
+}
+
+// GetPolicyExceptionRequest names an exception.
+message GetPolicyExceptionRequest {
+  // Exception id.
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// GetPolicyExceptionResponse returns it.
+message GetPolicyExceptionResponse {
+  // The exception.
+  PolicyException exception = 1;
+}
+
+// ListPolicyExceptionsRequest filters exceptions.
+message ListPolicyExceptionsRequest {
+  // Maximum results (default 50, at most 200).
+  int32 page_size = 1 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 200
+  }];
+  // Token from a previous response.
+  string page_token = 2 [(buf.validate.field).string = {
+    max_len: 64
+    pattern: "^[A-Za-z0-9_-]*$"
+  }];
+  // Only this agent.
+  optional string agent_id = 3 [(buf.validate.field).string.uuid = true];
+  // Only this rule.
+  optional string rule_id = 4 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 64
+  }];
+  // Only this state.
+  optional string state = 5 [(buf.validate.field).string = {
+    in: [
+      "PENDING",
+      "ACTIVE",
+      "DECLINED",
+      "REVOKED",
+      "EXPIRED"
+    ]
+  }];
+}
+
+// ListPolicyExceptionsResponse is one page.
+message ListPolicyExceptionsResponse {
+  // Exceptions, newest first.
+  repeated PolicyException exceptions = 1;
+  // Token for the next page; empty at the end.
+  string next_page_token = 2;
+}
+
+// RevokePolicyExceptionRequest names an exception.
+message RevokePolicyExceptionRequest {
+  // Exception id.
+  string id = 1 [(buf.validate.field).string.uuid = true];
+  // Why (1 to 500 characters).
+  string reason = 2 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 500
+  }];
+}
+
+// RevokePolicyExceptionResponse returns it.
+message RevokePolicyExceptionResponse {
+  // The exception, REVOKED.
+  PolicyException exception = 1;
+}

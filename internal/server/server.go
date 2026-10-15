@@ -74,9 +74,6 @@ import (
 	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
 	"github.com/katocxl/pantherclaw/internal/platform/rpc"
 	"github.com/katocxl/pantherclaw/internal/platform/version"
-	polpg "github.com/katocxl/pantherclaw/internal/policy/adapters/pgstore"
-	"github.com/katocxl/pantherclaw/internal/policy/adapters/policiesrpc"
-	policyapp "github.com/katocxl/pantherclaw/internal/policy/app"
 	"github.com/katocxl/pantherclaw/internal/runs/adapters/runsrpc"
 	runsapp "github.com/katocxl/pantherclaw/internal/runs/app"
 	"github.com/katocxl/pantherclaw/internal/tenancy/adapters/tenancyrpc"
@@ -397,6 +394,17 @@ func cmdServe(ctx context.Context, args []string, stderr io.Writer, env Env, onS
 			return err
 		}
 		evidenceJobs = append(evidenceJobs, rangeJobs...)
+		if evidenceJobs, err = registerPolicyRolloutJobs(evidenceJobs, jreg, pool, bill, m5, kp, log); err != nil {
+			return err
+		}
+		exceptionJobs, err := registerPolicyExceptionJobs(jreg, pool, m5.notifications, log)
+		if err != nil {
+			return err
+		}
+		evidenceJobs = append(evidenceJobs, exceptionJobs...)
+		if err := registerSimulationJobs(jreg, pool, kp, bill, log); err != nil {
+			return err
+		}
 		if err := authnapp.RegisterJanitor(jreg, pool, log); err != nil {
 			return err
 		}
@@ -584,7 +592,12 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	registerCoverage(rs, d)
 	registerSandbox(rs, d)
 	registerRanges(rs, d, evidenceSvc)
+	registerPolicyRollouts(rs, d)
+	if err := registerSimulation(rs, d); err != nil {
+		return nil, err
+	}
 	registerReleases(rs, pool)
+	registerPolicyExceptions(rs, d)
 	mux := http.NewServeMux()
 	rpc.Mount(mux, rs)
 	d.m5p2.mount(mux, workload)
@@ -816,8 +829,6 @@ func registerAuthorityAdmin(rs *connect.Server, d apiDeps, grants *grantsapp.Ser
 		Importer: &defsapp.Importer{Roots: roots, Repo: defs, Keys: defs, Clock: clock.System{}}, Reads: defs, Authz: authz,
 		Ents: d.billing,
 	}))
-	pantherclawv1connect.RegisterPolicyServiceHandler(rs, policiesrpc.New(&policyapp.Versions{
-		Store: &polpg.Store{Pool: d.pool}, Facts: facts, Subjects: facts, Definitions: defs, Authz: authz, Limits: d.cel,
-	}))
+	registerPolicyGate(rs, d)
 	return nil
 }

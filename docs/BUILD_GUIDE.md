@@ -486,8 +486,10 @@ Each milestone starts with a G0 brief in [GATES_AND_REVIEW.md](security/GATES_AN
 
 ```
 M0 → M1 → M1.5 → M2 → M3 → M4 → M5 → M6 → M7 → M8 → M9 → M12 → v0.1.0 preview
-   → M10 → M11 → M14 → M13 → v1.0 → UI phase
+   → M11.1 → M10 → M11 → M14 → M13 → v1.0 → UI phase
 ```
+
+M11 is split in two (founder, 2026-10-15: "finish up with policies!"): **M11.1**, the policy lifecycle, comes after the preview and before M10; **M11**, governed automations, keeps its place after M10.
 
 Releases: `v0.0.x` pre-releases from M1; **v0.1.0 preview after M12** (coding-agent wedge, exit below); **v1.0 after M13**.
 
@@ -613,9 +615,15 @@ The exit status is in [g0/M7.md](g0/M7.md), the latency re-measurement in [docs/
 - Containment actions with per-path verification, restoration workflow; OCSF 1.9 export, Standard Webhooks, delivery health; permission-safe search & saved queries; live operations stream (SSE).
 - Shared Signals (CAEP/RISC) receiver for the customer IdP (PN-024, ADR-0019): signed events from configured transmitters only; identity events suspend grants only through preauthorized playbooks, otherwise open a case. The M10 brief threat-models the new inbound endpoint.
 
-### M11 — Policy lifecycle & governed automations (MVP subset)
-**F:** F172–F210, F652–F754 (subset).
-- Templates (support, refund, diagnostics, release, analysis), policy tests with expected reasons, historical simulation (newly denied/held/constrained/allowed/unevaluable), shadow evaluation, pilot cohorts, per-target rollout states, rollback, exceptions, behavioral diffs.
+### M11.1 — Policy lifecycle (M11 part 1; delivered after the preview, before M10)
+**HR:** HR-044, HR-230..238 · **F:** F172–F178, F184, F187–F210, F287, F636 · **ADR:** 0025 · **G0:** [g0/M11.md](g0/M11.md).
+- Draft-first versioning (draft → validated → tested → published) with a publication gate that re-runs validation and the version's scenario tests (expected decision and reason, mutation-tested) in the publish call; validation with conflict examples; behavioural diffs that classify each change as tighter or looser.
+- Change approval: a version that is not provably tighter needs security-key confirmations from two publishers (one in a one-publisher organization), as do looser rollbacks, pilots and exceptions (founder decision F1).
+- Historical simulation (newly denied/held/constrained/allowed/unevaluable), shadow evaluation, pilot cohorts of agents with per-agent rollout states, rollback that keeps emergency rules, temporary exceptions for rules marked exceptable (F2, F3).
+- Templates: refunds, release deployment, production diagnostics (F4); support and internal analysis come with M14's connectors.
+
+### M11 — Governed automations (M11 part 2; MVP subset, after M10)
+**F:** F652–F754 (subset).
 - Automations: definitions (When/If/Under authority/Do/Wait/If fails/Finish), schedules (timezone, DST, missed-run policy), event/manual triggers, linear steps with waits and approvals, bounded retries, loop detection via ancestry, shadow mode, execution inspector data. Full branching engine = Next.
 
 ### M12 — Adversarial range (delivered after M9, before the preview)
