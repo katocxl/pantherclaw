@@ -7,7 +7,6 @@ import (
 	"context"
 	"encoding/json/jsontext"
 	"fmt"
-	"math"
 
 	adomain "github.com/katocxl/pantherclaw/internal/authority/domain"
 	"github.com/katocxl/pantherclaw/internal/authority/replay"
@@ -65,7 +64,7 @@ func (v *Validator) OutcomeDiff(ctx context.Context, org ids.OrgID, base, next *
 		}
 	}
 	ds, facts := operations(rules, in)
-	g := &generator{lit: collect(rules), catalog: in.catalog, now: v.now(), budget: math.MaxUint64}
+	g := &generator{lit: collect(rules), catalog: in.catalog, now: v.now(), budget: v.Budget}
 	var out []OutcomeChange
 	for _, d := range ds {
 		for _, s := range g.samples(d, facts[d.Digest]) {

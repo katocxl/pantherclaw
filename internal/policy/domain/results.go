@@ -38,11 +38,14 @@ type Finding struct {
 // (M11.1 D7, D7a; HR-044). Error carries a code such as TESTS_TOO_LARGE
 // when the run was refused before completing; Passed is then false.
 type TestResult struct {
-	Passed            bool           `json:"passed"`
-	Cases             []CaseResult   `json:"cases,omitzero"`
-	Mutants           int            `json:"mutants"`
-	Survivors         int            `json:"survivors"`
-	Surviving         []MutantResult `json:"surviving,omitzero"`
+	Passed    bool           `json:"passed"`
+	Cases     []CaseResult   `json:"cases,omitzero"`
+	Mutants   int            `json:"mutants"`
+	Survivors int            `json:"survivors"`
+	Surviving []MutantResult `json:"surviving,omitzero"`
+	// Uncompilable are mutants that did not compile: neither killed nor
+	// surviving (M11.1 D26).
+	Uncompilable      []MutantResult `json:"uncompilable,omitzero"`
 	DefinitionsDigest [32]byte       `json:"definitions_digest"`
 	CatalogDigest     [32]byte       `json:"catalog_digest"`
 	Error             string         `json:"error,omitzero"`
@@ -51,6 +54,9 @@ type TestResult struct {
 // Test run error codes.
 const (
 	ErrTestsTooLarge = "TESTS_TOO_LARGE"
+	// ErrNoCases: the bundle has no scenario tests, so no mutant can be
+	// killed (M11.1 D26).
+	ErrNoCases = "NO_CASES"
 )
 
 // CaseResult is one case's outcome: the decision and decisive reason the

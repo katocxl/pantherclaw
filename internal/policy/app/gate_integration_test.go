@@ -232,11 +232,10 @@ func denyAbove(id, amount string) domain.Rule {
 	}
 }
 
-// emergency is an emergency rule. Only ANNOTATE rules carry labels today
-// (domain.Rule.Validate), so it is one.
+// emergency is an emergency rule added during an incident (D24).
 func emergency(id string) domain.Rule {
 	r := denyAbove(id, "10")
-	r.Kind, r.Reason, r.Labels = domain.Annotate, "INCIDENT_FREEZE", map[string]string{domain.EmergencyLabel: "true"}
+	r.Reason, r.Emergency = "INCIDENT_FREEZE", true
 	return r
 }
 

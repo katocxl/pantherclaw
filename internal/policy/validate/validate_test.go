@@ -21,6 +21,7 @@ import (
 	fdomain "github.com/katocxl/pantherclaw/internal/facts/domain"
 	"github.com/katocxl/pantherclaw/internal/platform/celenv"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
+	papp "github.com/katocxl/pantherclaw/internal/policy/app"
 	pdomain "github.com/katocxl/pantherclaw/internal/policy/domain"
 )
 
@@ -237,6 +238,19 @@ func TestHR238_ValidationSamplesAreBounded(t *testing.T) {
 	}
 	if res := validate(t, v, bundle(rules...)); !res.Passed {
 		t.Fatalf("a large clean bundle: %v", codes(res))
+	}
+	// Samples run under the tenant CEL budget (D26): with a budget of 1
+	// every condition runs out, so nothing matches and no shadow is found.
+	if v.Budget != papp.DefaultBudget {
+		t.Fatalf("default sample budget %d", v.Budget)
+	}
+	shadowed := bundle(rule("deny-over-10", pdomain.Forbid, `action.params.amount > money("10.00", "USD")`), over("50.00"))
+	if got := codes(validate(t, v, shadowed)); !slices.Equal(got, []string{"WARNING SHADOWED"}) {
+		t.Fatalf("default budget: %v", got)
+	}
+	v.Budget = 1
+	if got := codes(validate(t, v, shadowed)); len(got) != 0 {
+		t.Fatalf("budget 1: %v", got)
 	}
 }
 

@@ -6,6 +6,7 @@ package scenario
 import (
 	"context"
 	"fmt"
+	"maps"
 	"slices"
 	"strconv"
 	"time"
@@ -216,18 +217,23 @@ func (f *fixture) buildGrant(g *pdomain.TestGiven) error {
 	return nil
 }
 
-// buildFacts records the case's facts about the action's target, typed by
-// the org's catalog. A fact the case does not give is missing.
+// buildFacts records the case's facts about the action's target. A fact
+// the org's catalog declares is typed by it. A prerequisite of the
+// definition that no provider declares yet (M11.1 D26) matters only by
+// its presence and age: no rule can read it (that is FACT_UNKNOWN), so its
+// value is ignored. A fact the case does not give is missing.
 func (f *fixture) buildFacts(g *pdomain.TestGiven, catalog map[string]fdomain.Type, target *actionir.Target) error {
 	f.facts = map[string]fdomain.Fact{}
-	for name, tf := range g.Facts {
-		t, ok := catalog[name]
-		if !ok {
-			return caseErr("given.facts: %s is not a fact this org's providers declare", name)
-		}
-		v, err := fdomain.DecodeValue(t, tf.Value)
-		if err != nil {
-			return caseErr("given.facts: %s is not a %s: %v", name, t, err)
+	for _, name := range slices.Sorted(maps.Keys(g.Facts)) {
+		tf := g.Facts[name]
+		var v fdomain.Value
+		if t, ok := catalog[name]; ok {
+			var err error
+			if v, err = fdomain.DecodeValue(t, tf.Value); err != nil {
+				return caseErr("given.facts: %s is not a %s: %v", name, t, err)
+			}
+		} else if !slices.ContainsFunc(f.def.Prerequisites, func(p defs.Prerequisite) bool { return p.Fact == name }) {
+			return caseErr("given.facts: %s is neither a fact this org's providers declare nor a prerequisite of %s", name, f.def.Operation)
 		}
 		if tf.AgeSeconds < 0 {
 			return caseErr("given.facts: %s has a negative age", name)

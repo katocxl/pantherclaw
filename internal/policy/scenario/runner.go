@@ -51,6 +51,8 @@ const (
 	// MaxEvaluations counts every pipeline evaluation of a run, mutants
 	// included; an approved case takes two.
 	MaxEvaluations = 20_000
+	// MaxMutants bounds the mutants of one run, each compiled once (D26).
+	MaxMutants = 2_000
 )
 
 // ErrBundleInvalid is the TestResult error of a bundle that does not
@@ -68,12 +70,14 @@ type Runner struct {
 	limits celenv.Limits
 	budget uint64
 	now    func() time.Time
+	// mutate lists a bundle's mutants (mutantsOf; replaced in tests).
+	mutate func(*pdomain.Bundle) ([]mutant, error)
 }
 
 // New returns a runner that compiles with limits and evaluates each case
 // with the tenant's CEL cost budget per evaluation (HR-043).
 func New(definitions Definitions, facts Catalog, limits celenv.Limits, budget uint64) *Runner {
-	return &Runner{defs: definitions, facts: facts, limits: limits, budget: budget, now: time.Now}
+	return &Runner{defs: definitions, facts: facts, limits: limits, budget: budget, now: time.Now, mutate: mutantsOf}
 }
 
 // prepared is a case with its fixture, or why it could not be built.
@@ -130,6 +134,10 @@ func (r *Runner) Run(ctx context.Context, org ids.OrgID, b *pdomain.Bundle) (pdo
 		res.Error = ErrBundleInvalid
 		return res, nil //nolint:nilerr // an invalid bundle is a result, not a failure to run
 	}
+	if len(b.Tests) == 0 {
+		res.Error = pdomain.ErrNoCases
+		return res, nil
+	}
 	now := r.now()
 	reads := httpReads(ds)
 	cases := make([]prepared, len(b.Tests))
@@ -166,16 +174,28 @@ func (r *Runner) Run(ctx context.Context, org ids.OrgID, b *pdomain.Bundle) (pdo
 		passed = passed && cr.Passed
 		res.Cases = append(res.Cases, cr)
 	}
-	mutants, err := mutantsOf(b)
+	mutants, err := r.mutate(b)
 	if err != nil {
 		res.Error = ErrBundleInvalid
 		return res, nil //nolint:nilerr // a condition that cannot be parsed did not compile either
 	}
 	res.Mutants = len(mutants)
+	if len(mutants) > MaxMutants {
+		return tooLarge(res), nil
+	}
+	if !slices.ContainsFunc(cases, func(c prepared) bool { return c.f != nil }) {
+		return res, nil // no case can run, so none can kill a mutant: compiling them is pointless
+	}
 	for _, m := range mutants {
+		if err := ctx.Err(); err != nil {
+			return res, err
+		}
 		mp, err := r.compile(m.bundle, ds, catalog, version)
 		if err != nil {
-			continue // a mutant that cannot compile can never be published: it is dead
+			// It can never be published, but no case showed that: listed,
+			// neither killed nor surviving (D26).
+			res.Uncompilable = append(res.Uncompilable, pdomain.MutantResult{Rule: m.rule, Mutation: m.mutation})
+			continue
 		}
 		killed := false
 		for _, c := range cases {
