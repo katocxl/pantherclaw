@@ -1849,6 +1849,98 @@ type PcSession struct {
 	EndedAt            *time.Time
 }
 
+type PcSiemBatch struct {
+	OrgID         ids.OrgID
+	ID            ids.UUID
+	DestinationID ids.UUID
+	FromSeq       int64
+	ToSeq         int64
+	EventCount    int32
+	BodyBytes     int32
+	State         string
+	Attempts      int32
+	NextAttemptAt time.Time
+	LastAttemptAt *time.Time
+	LastStatus    *int32
+	LastError     *string
+	CreatedAt     time.Time
+	DeliveredAt   *time.Time
+}
+
+type PcSiemCursor struct {
+	OrgID         ids.OrgID
+	DestinationID ids.UUID
+	Seq           int64
+	UpdatedAt     time.Time
+}
+
+type PcSiemDestination struct {
+	OrgID               ids.OrgID
+	ID                  ids.UUID
+	Name                string
+	Url                 string
+	Internal            bool
+	DataClasses         []string
+	Format              string
+	State               string
+	Secret              []byte
+	PrevSecret          []byte
+	PrevSecretExpiresAt *time.Time
+	CreatedBy           string
+	CreatedAt           time.Time
+	ActivatedBy         *ids.UUID
+	ActivatedCredential *ids.UUID
+	ActivatedAt         *time.Time
+	UpdatedAt           time.Time
+	ConfirmedAt         *time.Time
+	LastDeliveredSeq    pgtype.Int8
+	LastDeliveredAt     *time.Time
+	ConsecutiveFailures int32
+	FailingSince        *time.Time
+	LastFailureAt       *time.Time
+	LastFailureCode     *string
+	DeliveredBatches    int64
+	FailedBatches       int64
+	Retries             int64
+}
+
+type PcSsfEvent struct {
+	OrgID         ids.OrgID
+	ID            ids.UUID
+	TransmitterID ids.UUID
+	Jti           string
+	EventType     string
+	IssuedAt      time.Time
+	SubjectFormat *string
+	UserID        *ids.UUID
+	MatchBasis    *string
+	Outcome       string
+	CaseID        *ids.UUID
+	ReceivedAt    time.Time
+	ExpiresAt     time.Time
+}
+
+type PcSsfTransmitter struct {
+	OrgID               ids.OrgID
+	ID                  ids.UUID
+	Name                string
+	Issuer              string
+	JwksUri             string
+	Audience            string
+	State               string
+	CreatedBy           string
+	CreatedAt           time.Time
+	ActivatedBy         *ids.UUID
+	ActivatedCredential *ids.UUID
+	ActivatedAt         *time.Time
+	UpdatedAt           time.Time
+	LastEventAt         *time.Time
+	EventsAccepted      int64
+	EventsRefused       int64
+	LastRefusalAt       *time.Time
+	LastRefusalCode     *string
+}
+
 type PcTargetLogRun struct {
 	OrgID          ids.OrgID
 	VerificationID ids.UUID

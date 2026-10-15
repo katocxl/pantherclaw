@@ -1,0 +1,21 @@
+{{template "head" .}}
+<h1>Export destination: {{.Name}}</h1>
+<p>State: <strong>{{.State}}</strong>. Created by <code>{{.CreatedBy}}</code> at {{.CreatedAt.UTC.Format "2006-01-02 15:04:05 UTC"}}{{with .ActivatedAt}}; activated {{.UTC.Format "2006-01-02 15:04:05 UTC"}}{{end}}.</p>
+<dl>
+<dt>Destination</dt><dd><code>{{.ID}}</code></dd>
+<dt>URL</dt><dd class="untrusted"><code>{{.URL}}</code></dd>
+<dt>Network</dt><dd>{{if .Internal}}<strong>Internal</strong>: this destination may be a private or loopback address inside your network.{{else}}Public addresses only.{{end}}</dd>
+<dt>Data sent</dt><dd>{{range $i, $c := .DataClasses}}{{if $i}}, {{end}}<code>{{$c}}</code>{{end}}</dd>
+<dt>Format</dt><dd>OCSF 1.9, in batches signed with Standard Webhooks</dd>
+<dt>Delivery</dt><dd>{{.Health}}{{with .ConfirmedAt}}; first delivered {{.UTC.Format "2006-01-02 15:04:05 UTC"}}{{else}}; no delivery confirmed yet{{end}}</dd>
+</dl>
+{{if .CanActivate}}
+<h2>Activate</h2>
+<p class="note">Once activated, PantherClaw sends every new event of the data classes above to this URL{{if .Internal}}, inside your network{{end}}. Check the URL before you go on. Activating needs your security key.</p>
+<p><button type="button" class="danger" id="activate" data-path="/integrations/destinations/{{.ID}}/confirm">Activate with your security key</button></p>
+{{else}}{{if eq .State "PENDING"}}
+<p class="note">You cannot activate this destination: that needs siem.manage and a security key.</p>
+{{end}}{{end}}
+<p id="status" role="status"></p>
+<script src="/static/integrations.js"></script>
+{{template "foot" .}}
