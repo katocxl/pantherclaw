@@ -57,3 +57,6 @@ func (o *Opener) Open(ctx context.Context, tx pgx.Tx, s reflexdomain.CaseSeed) (
 	}
 	return k.ID, nil
 }
+
+// NewOpener returns the CaseOpener other streams open cases with (D1, D49).
+func NewOpener(e Editions) *Opener { return &Opener{Editions: e} }

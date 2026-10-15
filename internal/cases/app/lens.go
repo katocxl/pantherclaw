@@ -70,11 +70,22 @@ type ResponseAction struct {
 	Control   string
 	Status    string
 	Requested time.Time
+	// Paths are the per-path confirmations (gateway, route, credential,
+	// in-flight work) and their status.
+	Paths []ResponsePath
 }
 
-// ResponseView reads a case's containment actions (response, D22).
+// ResponsePath is one path of a containment action.
+type ResponsePath struct {
+	Kind   string
+	Status string
+}
+
+// ResponseView reads the containment actions of a case: those naming the
+// case and those on its subjects (response, D22, D49). Ops wires the
+// response stream's implementation; nil: the lens says NOT_AVAILABLE.
 type ResponseView interface {
-	CaseActions(ctx context.Context, org ids.OrgID, caseID ids.UUID, agents []ids.UUID) ([]ResponseAction, error)
+	CaseActions(ctx context.Context, org ids.OrgID, caseID ids.UUID, subjects []reflexdomain.Subject) ([]ResponseAction, error)
 }
 
 // LensItem is one row of a lens.
@@ -440,17 +451,60 @@ func (s *Service) responseLens(ctx context.Context, q *dbq.Queries, org ids.OrgI
 	if err != nil {
 		return err
 	}
-	rows, err := s.Response.CaseActions(ctx, org, c, agents)
+	// The view gets only subjects the caller may read: visible agents and
+	// the case's runs and transactions of visible agents.
+	subjects := make([]reflexdomain.Subject, 0, len(agents)+len(l.runs)+len(l.txns))
+	for _, a := range agents {
+		subjects = append(subjects, reflexdomain.Subject{Type: reflexdomain.SubjectAgent, ID: a.String()})
+	}
+	for _, run := range l.runs {
+		x, err := q.InvRun(ctx, org, run)
+		if db.IsNoRows(err) {
+			continue
+		} else if err != nil {
+			return err
+		}
+		if slices.Contains(agents, x.AgentID) {
+			subjects = append(subjects, reflexdomain.Subject{Type: reflexdomain.SubjectRun, ID: run.String()})
+		}
+	}
+	for _, t := range l.txns {
+		x, err := q.InvTransaction(ctx, org, t)
+		if db.IsNoRows(err) {
+			continue
+		} else if err != nil {
+			return err
+		}
+		if slices.Contains(agents, x.AgentID) {
+			subjects = append(subjects, reflexdomain.Subject{Type: reflexdomain.SubjectTransaction, ID: t.String()})
+		}
+	}
+	rows, err := s.Response.CaseActions(ctx, org, c, subjects)
 	if err != nil {
 		return err
 	}
 	for _, a := range rows {
+		detail := a.Status
+		if open := countOpen(a.Paths); open > 0 {
+			detail = fmt.Sprintf("%s (%d of %d paths unresolved)", a.Status, open, len(a.Paths))
+		}
 		out.Items = append(out.Items, LensItem{
-			At: a.Requested, Kind: "CONTAINMENT", Title: a.Control, Detail: a.Status,
+			At: a.Requested, Kind: "CONTAINMENT", Title: a.Control, Detail: detail,
 			Basis: reflexdomain.BasisObserved, Subjects: []reflexdomain.Subject{
 				{Type: reflexdomain.SubjectType(domain.RefResponseAction), ID: a.ID.String()}, a.Scope,
 			},
 		})
 	}
 	return nil
+}
+
+// countOpen counts the paths not confirmed.
+func countOpen(ps []ResponsePath) int {
+	n := 0
+	for _, p := range ps {
+		if p.Status != "CONFIRMED" {
+			n++
+		}
+	}
+	return n
 }

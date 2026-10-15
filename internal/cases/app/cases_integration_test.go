@@ -332,3 +332,58 @@ func TestCaseOpenerSeedsLinksAndQuestions(t *testing.T) {
 		t.Fatalf("opener across orgs: %v", err)
 	}
 }
+
+// reach is a fake exposure read port; it also answers for an agent it was
+// not asked about, which the lens must drop.
+type reach struct{ asked []ids.UUID }
+
+func (r *reach) AgentReach(_ context.Context, _ ids.OrgID, agents []ids.UUID) ([]capp.ReachAgent, error) {
+	r.asked = agents
+	out := []capp.ReachAgent{{Agent: ids.NewV7(), Reach: reflexdomain.Reach{Resources: 99}}}
+	for _, a := range agents {
+		out = append(out, capp.ReachAgent{Agent: a, Reach: reflexdomain.Reach{Resources: 3, Usable: 2, Uncertain: 1}, Stale: true})
+	}
+	return out, nil
+}
+
+// response is a fake response read port.
+type response struct{ asked []reflexdomain.Subject }
+
+func (r *response) CaseActions(_ context.Context, _ ids.OrgID, _ ids.UUID, subjects []reflexdomain.Subject) ([]capp.ResponseAction, error) {
+	r.asked = subjects
+	return []capp.ResponseAction{{
+		ID: ids.NewV7(), Scope: subjects[0], Control: reflexdomain.ControlDenyAll, Status: "PARTIAL",
+		Paths: []capp.ResponsePath{{Kind: "gateway", Status: "CONFIRMED"}, {Kind: "route", Status: "UNRESOLVED"}},
+	}}, nil
+}
+
+// TestHR247_ReachAndResponseLensesGoThroughPorts: the lenses ask their
+// ports only about the case's subjects the viewer may read, and keep only
+// rows about them.
+func TestHR247_ReachAndResponseLensesGoThroughPorts(t *testing.T) {
+	f := newFixture(t)
+	rp, xp := &reach{}, &response{}
+	f.svc.Reach, f.svc.Response = rp, xp
+	alice := f.as(f.alice, td.RoleResponder, &f.teamA)
+	k, err := f.svc.Open(alice, capp.OpenRequest{Title: "A", Subjects: []reflexdomain.Subject{subject(reflexdomain.SubjectRun, f.runA)}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	l, err := f.svc.GetLens(alice, capp.LensRequest{Case: k.ID, Lens: capp.LensReach})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rp.asked) != 1 || rp.asked[0] != f.agentA || len(l.Items) != 1 || !l.Available ||
+		l.Items[0].Detail != "resources=3 usable=2 conditional=0 uncertain=1 stale" {
+		t.Fatalf("reach asked %v, lens %+v", rp.asked, l)
+	}
+	l, err = f.svc.GetLens(alice, capp.LensRequest{Case: k.ID, Lens: capp.LensResponse})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []reflexdomain.Subject{subject(reflexdomain.SubjectAgent, f.agentA), subject(reflexdomain.SubjectRun, f.runA)}
+	if len(xp.asked) != 2 || xp.asked[0] != want[0] || xp.asked[1] != want[1] || len(l.Items) != 1 ||
+		l.Items[0].Detail != "PARTIAL (1 of 2 paths unresolved)" {
+		t.Fatalf("response asked %v, lens %+v", xp.asked, l)
+	}
+}

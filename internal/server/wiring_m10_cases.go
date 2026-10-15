@@ -24,8 +24,8 @@ func m10CaseEditions(d apiDeps) capp.Editions {
 }
 
 // caseService builds the case use cases (G0 M10 D19). The reach and
-// response lenses say NOT_AVAILABLE until the exposure and response read
-// ports are wired.
+// response lenses say NOT_AVAILABLE until ops wires the exposure and
+// response read ports (capp.ReachView, capp.ResponseView; D49).
 func caseService(d apiDeps) *capp.Service {
 	return &capp.Service{Pool: d.pool, Editions: m10CaseEditions(d)}
 }
@@ -33,7 +33,7 @@ func caseService(d apiDeps) *capp.Service {
 // caseOpener is the reflexdomain.CaseOpener other streams open cases with
 // (D1): detections, response and Shared Signals.
 func caseOpener(d apiDeps) reflexdomain.CaseOpener { //nolint:unused // wired by the M10 streams that open cases (D1)
-	return &capp.Opener{Editions: m10CaseEditions(d)}
+	return capp.NewOpener(m10CaseEditions(d))
 }
 
 // registerCases serves CaseService and InvestigationService on the public
