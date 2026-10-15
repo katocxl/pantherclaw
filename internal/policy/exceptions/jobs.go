@@ -31,8 +31,8 @@ const ExpiringWithin = 24 * time.Hour
 // maxPerSweep bounds one org's sweep; the next run takes the rest.
 const maxPerSweep = 500
 
-// Sweep records the org's exceptions past their expiry as EXPIRED and
-// tells the owners of active ones that end within a day, once each. It
+// Sweep records the org's exceptions past their expiry as EXPIRED,
+// declines pending ones whose change request ended unapproved, and tells the owners of active ones that end within a day, once each. It
 // returns how many it expired.
 func (s *Service) Sweep(ctx context.Context, org ids.OrgID) (int, error) {
 	n := 0
@@ -48,6 +48,15 @@ func (s *Service) Sweep(ctx context.Context, org ids.OrgID) (int, error) {
 			}
 		}
 		n = len(expired)
+		declined, err := q.DeclineEndedPolicyExceptions(ctx, org, maxPerSweep)
+		if err != nil {
+			return err
+		}
+		for _, x := range declined {
+			if err := s.audit(ctx, tx, system, x, "policy.exception_declined", nil); err != nil {
+				return err
+			}
+		}
 		expiring, err := q.ExpiringPolicyExceptions(ctx, org, int64(ExpiringWithin/time.Second), maxPerSweep)
 		if err != nil {
 			return err

@@ -96,6 +96,63 @@ func (q *Queries) ActivePolicyExceptionsForAgent(ctx context.Context, orgID ids.
 	return items, nil
 }
 
+const declineEndedPolicyExceptions = `-- name: DeclineEndedPolicyExceptions :many
+UPDATE pc.policy_exceptions x SET state = 'DECLINED'
+WHERE x.org_id = $1 AND x.id IN (
+    SELECT e.id FROM pc.policy_exceptions e
+    WHERE e.org_id = x.org_id AND e.state = 'PENDING' AND e.requested_expiry > now()
+      AND e.created_at < now() - interval '5 minutes'
+      AND NOT EXISTS (
+          SELECT 1 FROM pc.policy_change_requests r
+          WHERE r.org_id = e.org_id AND r.kind = 'EXCEPTION' AND r.subject_id = e.id
+            AND (r.state = 'APPROVED' OR (r.state = 'PENDING' AND r.expires_at > now())))
+    ORDER BY e.id
+    LIMIT $2)
+RETURNING org_id, id, bundle_id, rule_id, rule_digest, agent_id, operations, reason, owner_id, requested_by, requested_expiry, state, activated_at, expires_at, revoked_by, revoked_reason, created_at
+`
+
+// Pending exceptions whose EXCEPTION change request ended without approval
+// (declined, voided or expired), or that never got one: they can never
+// apply, so the sweep declines them. A fresh one is left alone while its
+// request is being created.
+func (q *Queries) DeclineEndedPolicyExceptions(ctx context.Context, orgID ids.OrgID, maxRows int32) ([]PcPolicyException, error) {
+	rows, err := q.db.Query(ctx, declineEndedPolicyExceptions, orgID, maxRows)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []PcPolicyException{}
+	for rows.Next() {
+		var i PcPolicyException
+		if err := rows.Scan(
+			&i.OrgID,
+			&i.ID,
+			&i.BundleID,
+			&i.RuleID,
+			&i.RuleDigest,
+			&i.AgentID,
+			&i.Operations,
+			&i.Reason,
+			&i.OwnerID,
+			&i.RequestedBy,
+			&i.RequestedExpiry,
+			&i.State,
+			&i.ActivatedAt,
+			&i.ExpiresAt,
+			&i.RevokedBy,
+			&i.RevokedReason,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const declinePolicyException = `-- name: DeclinePolicyException :one
 UPDATE pc.policy_exceptions SET state = 'DECLINED'
 WHERE org_id = $1 AND id = $2 AND state = 'PENDING'

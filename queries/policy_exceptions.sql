@@ -83,3 +83,21 @@ SELECT e.*, (CASE WHEN e.state IN ('PENDING', 'ACTIVE') AND coalesce(e.expires_a
                   THEN 'EXPIRED' ELSE e.state END)::text AS effective_state
 FROM pc.policy_exceptions e
 WHERE e.org_id = sqlc.arg(org_id) AND e.id = sqlc.arg(id);
+
+-- Pending exceptions whose EXCEPTION change request ended without approval
+-- (declined, voided or expired), or that never got one: they can never
+-- apply, so the sweep declines them. A fresh one is left alone while its
+-- request is being created.
+-- name: DeclineEndedPolicyExceptions :many
+UPDATE pc.policy_exceptions x SET state = 'DECLINED'
+WHERE x.org_id = sqlc.arg(org_id) AND x.id IN (
+    SELECT e.id FROM pc.policy_exceptions e
+    WHERE e.org_id = x.org_id AND e.state = 'PENDING' AND e.requested_expiry > now()
+      AND e.created_at < now() - interval '5 minutes'
+      AND NOT EXISTS (
+          SELECT 1 FROM pc.policy_change_requests r
+          WHERE r.org_id = e.org_id AND r.kind = 'EXCEPTION' AND r.subject_id = e.id
+            AND (r.state = 'APPROVED' OR (r.state = 'PENDING' AND r.expires_at > now())))
+    ORDER BY e.id
+    LIMIT sqlc.arg(max_rows))
+RETURNING *;

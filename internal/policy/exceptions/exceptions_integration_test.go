@@ -17,6 +17,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/db/dbtest"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
+	papp "github.com/katocxl/pantherclaw/internal/policy/app"
 	pdomain "github.com/katocxl/pantherclaw/internal/policy/domain"
 	"github.com/katocxl/pantherclaw/internal/policy/exceptions"
 	tenancy "github.com/katocxl/pantherclaw/internal/tenancy/app"
@@ -36,13 +37,16 @@ type changes struct {
 	asked []exceptions.Summary
 	base  ids.UUID
 	sum   [32]byte
+	fail  error
 }
 
-func (c *changes) RequestException(_ context.Context, _ db.TenantTx, x exceptions.Exception, base ids.UUID, digest [32]byte,
-	s exceptions.Summary,
-) (exceptions.ChangeRequest, error) {
-	c.asked, c.base, c.sum = append(c.asked, s), base, digest
-	return exceptions.ChangeRequest{ID: ids.NewV7(), URL: "/policy-changes/" + x.ID.String()}, nil
+func (c *changes) Request(_ context.Context, kind papp.ChangeKind, subject, base ids.UUID, binding [32]byte, summary any,
+) (papp.ChangeRequest, error) {
+	if c.fail != nil {
+		return papp.ChangeRequest{}, c.fail
+	}
+	c.asked, c.base, c.sum = append(c.asked, summary.(exceptions.Summary)), base, binding
+	return papp.ChangeRequest{ID: ids.NewV7(), Kind: kind, Subject: subject, URL: "/policy-changes/" + subject.String()}, nil
 }
 
 type fixture struct {
@@ -211,7 +215,9 @@ func TestT102_OnlyAPersonAsksForAnExceptableRule(t *testing.T) {
 	if d := pdomain.RuleDigest(rule); hex.EncodeToString(x.RuleDigest) != hex.EncodeToString(d[:]) {
 		t.Fatal("the stored rule digest is not the rule's")
 	}
-	if want, _ := exceptions.Digest(x); f.c.base != f.published || f.c.sum != want || len(f.c.asked) != 1 || f.c.asked[0].Kind != "EXCEPTION" {
+	xd, _ := exceptions.Digest(x)
+	want, _ := papp.ChangeBinding(papp.ChangeException, f.org, x.ID, f.published, xd, f.c.asked[0])
+	if f.c.base != f.published || f.c.sum != want || len(f.c.asked) != 1 || f.c.asked[0].Kind != "EXCEPTION" {
 		t.Fatalf("change request base %s digest %x summary %+v", f.c.base, f.c.sum, f.c.asked)
 	}
 	if n := f.count(t, `SELECT count(*) FROM pc.ledger_entries WHERE kind = 'audit.policy.exception_requested'`); n != 1 {

@@ -19,6 +19,7 @@ import (
 	"encoding/hex"
 	"encoding/json/jsontext"
 	"encoding/json/v2"
+	"errors"
 	"regexp"
 	"slices"
 	"strconv"
@@ -34,6 +35,7 @@ import (
 	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	"github.com/katocxl/pantherclaw/internal/platform/page"
+	papp "github.com/katocxl/pantherclaw/internal/policy/app"
 	pdomain "github.com/katocxl/pantherclaw/internal/policy/domain"
 	tenancy "github.com/katocxl/pantherclaw/internal/tenancy/app"
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
@@ -100,9 +102,10 @@ type ChangeRequest struct {
 }
 
 // ChangeRequester creates the EXCEPTION change request (D11) whose
-// approval activates the exception, in the request's transaction.
+// approval activates the exception (papp.Changes, with Apply registered
+// for papp.ChangeException).
 type ChangeRequester interface {
-	RequestException(ctx context.Context, tx db.TenantTx, x Exception, base ids.UUID, digest [32]byte, summary Summary) (ChangeRequest, error)
+	Request(ctx context.Context, kind papp.ChangeKind, subjectID, baseVersionID ids.UUID, binding [32]byte, summary any) (papp.ChangeRequest, error)
 }
 
 // Service runs the exception use cases.
@@ -201,6 +204,9 @@ func requester(ctx context.Context, p td.Permission) (tenancy.Caller, error) {
 func (s *Service) RequestException(ctx context.Context, r Request) (Exception, ChangeRequest, error) {
 	var out Exception
 	var cr ChangeRequest
+	var base ids.UUID
+	var binding [32]byte
+	var summary Summary
 	if !r.valid() {
 		return out, cr, ErrInvalid
 	}
@@ -266,14 +272,53 @@ func (s *Service) RequestException(ctx context.Context, r Request) (Exception, C
 		if err != nil {
 			return err
 		}
-		cr, err = s.Changes.RequestException(ctx, tx, out, pub.ID, xd, summarize(out, rule, agent.Name))
+		base, summary = pub.ID, summarize(out, rule, agent.Name)
+		binding, err = papp.ChangeBinding(papp.ChangeException, c.Org, out.ID, base, xd, summary)
 		if err != nil {
 			return err
 		}
-		return s.audit(ctx, tx, c.Actor(), out, "policy.exception_requested", map[string]string{"change_request": cr.ID.String()})
+		return s.audit(ctx, tx, c.Actor(), out, "policy.exception_requested", nil)
 	})
-	return out, cr, err
+	if err != nil {
+		return out, cr, err
+	}
+	// The change request is created in its own transaction (D11); if that
+	// fails, the exception is closed so it can never be approved.
+	req, err := s.Changes.Request(ctx, papp.ChangeException, out.ID, base, binding, summary)
+	if err != nil {
+		if derr := s.Pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
+			_, err := s.Decline(ctx, tx, c.Org, out.ID)
+			return err
+		}); derr != nil {
+			return out, cr, errors.Join(err, derr)
+		}
+		return out, cr, err
+	}
+	return out, ChangeRequest{ID: req.ID, URL: req.URL}, nil
 }
+
+// Apply is the EXCEPTION change request's apply callback (register it
+// with papp.Changes.Register(papp.ChangeException, s.Apply)): it activates
+// the exception in the confirming transaction, or voids the request with
+// BASE_CHANGED or EXPIRED when the base no longer holds (D23).
+func (s *Service) Apply(ctx context.Context, tx db.TenantTx, req papp.ChangeRequest) error {
+	c, err := tenancy.CallerFrom(ctx)
+	if err != nil {
+		return err
+	}
+	_, err = s.Activate(ctx, tx, c.Org, req.Subject)
+	switch {
+	case errors.Is(err, ErrBaseChanged):
+		return &papp.VoidError{Reason: papp.VoidBaseChanged}
+	case errors.Is(err, ErrRequestExpired):
+		return &papp.VoidError{Reason: VoidExpired}
+	}
+	return err
+}
+
+// VoidExpired voids an EXCEPTION change request whose requested expiry
+// has passed (D23).
+const VoidExpired = "EXPIRED"
 
 func summarize(x Exception, r pdomain.Rule, agentName string) Summary {
 	expiry := x.RequestedExpiry.UTC().Format(time.RFC3339)
