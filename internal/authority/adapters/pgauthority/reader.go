@@ -33,6 +33,7 @@ import (
 	polpg "github.com/katocxl/pantherclaw/internal/policy/adapters/pgstore"
 	papp "github.com/katocxl/pantherclaw/internal/policy/app"
 	pdomain "github.com/katocxl/pantherclaw/internal/policy/domain"
+	"github.com/katocxl/pantherclaw/internal/policy/exceptions"
 )
 
 // maxCompiled bounds the compiled-policy cache.
@@ -198,7 +199,21 @@ func (s *snapshot) Definition(ctx context.Context, org ids.OrgID, pin actionir.D
 // (FALLBACK), and the recording says so, so the rollout sweeper marks the
 // target FAILED. Each bundle version is compiled against the org's fact
 // catalog and active definitions, cached by all three.
+//
+// The selected version carries the agent's active policy exceptions, read
+// in the same snapshot by the database clock (G0 M11.1 D14, HR-235).
 func (s *snapshot) Policy(ctx context.Context, org ids.OrgID, agent ids.UUID) (*pipeline.Policy, error) {
+	p, err := s.selectPolicy(ctx, org, agent)
+	if err != nil || p == nil {
+		return p, err
+	}
+	if p.Exceptions, err = exceptions.ActiveFor(ctx, s.tx, org, agent); err != nil {
+		return nil, err
+	}
+	return p, nil
+}
+
+func (s *snapshot) selectPolicy(ctx context.Context, org ids.OrgID, agent ids.UUID) (*pipeline.Policy, error) {
 	// The catalog and definitions are read only when a version is compiled,
 	// so an org without a policy reads no more than before rollouts.
 	var catalog map[string]fdomain.Type
