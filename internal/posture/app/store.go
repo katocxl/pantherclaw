@@ -14,7 +14,9 @@ import (
 	"errors"
 	"strings"
 	"time"
+	"unicode/utf8"
 
+	"github.com/katocxl/pantherclaw/internal/evidence/audit"
 	evdomain "github.com/katocxl/pantherclaw/internal/evidence/domain"
 	"github.com/katocxl/pantherclaw/internal/evidence/ledger"
 	exapp "github.com/katocxl/pantherclaw/internal/exposure/app"
@@ -77,7 +79,7 @@ func Reconcile(ctx context.Context, tx db.TenantTx, rec exapp.Recomputed) (Summa
 	for _, r := range rows {
 		stored = append(stored, domain.Finding{
 			ID: r.ID, Kind: domain.Kind(r.Kind), Fingerprint: r.Fingerprint, State: domain.State(r.State), Paths: r.AffectedPaths,
-			AcceptedUntil: r.AcceptedUntil, Connection: r.ConnectionID,
+			AcceptedUntil: r.AcceptedUntil, Connection: r.ConnectionID, PathsTruncated: r.PathsTruncated,
 		})
 	}
 	cands := domain.Derive(Inputs(rec))
@@ -146,7 +148,7 @@ func insert(ctx context.Context, q *dbq.Queries, org ids.OrgID, c domain.Candida
 	}
 	return q.InsertPostureFinding(ctx, dbq.InsertPostureFindingParams{
 		OrgID: org, ID: ids.NewV7(), Kind: string(c.Kind), RootCause: c.RootCause, AgentID: c.Agent, ConnectionID: c.Connection,
-		GrantID: c.Grant, CoverageFindingID: c.CoverageFinding, Title: c.Title, Detail: detail, AffectedPaths: c.Paths,
+		GrantID: c.Grant, CoverageFindingID: c.CoverageFinding, Title: c.Title, Detail: detail, AffectedPaths: c.Paths, PathsTruncated: c.PathsTruncated,
 		Severity: c.Severity, Fingerprint: c.Fingerprint(), SnapshotID: snap, SeenAt: at,
 	})
 }
@@ -157,7 +159,7 @@ func see(ctx context.Context, q *dbq.Queries, org ids.OrgID, id ids.UUID, c doma
 		return err
 	}
 	_, err = q.SeePostureFinding(ctx, dbq.SeePostureFindingParams{
-		OrgID: org, ID: id, Title: c.Title, Detail: detail, AffectedPaths: c.Paths, Severity: c.Severity, SnapshotID: snap,
+		OrgID: org, ID: id, Title: c.Title, Detail: detail, AffectedPaths: c.Paths, PathsTruncated: c.PathsTruncated, Severity: c.Severity, SnapshotID: snap,
 		SeenAt: at, AgentID: c.Agent, ConnectionID: c.Connection, GrantID: c.Grant, CoverageFindingID: c.CoverageFinding,
 	})
 	return err
@@ -188,7 +190,17 @@ func move(ctx context.Context, tx db.TenantTx, id ids.UUID, from, to domain.Stat
 		return err
 	}
 	f := from
-	return record(ctx, tx, id, kind, &f, to, actor, note, snap)
+	if err := record(ctx, tx, id, kind, &f, to, actor, note, snap); err != nil {
+		return err
+	}
+	details := map[string]string{"from": string(from), "to": string(to)}
+	if o.owner != nil {
+		details["owner"] = o.owner.String()
+	}
+	if o.until != nil {
+		details["until"] = o.until.UTC().Format(time.RFC3339)
+	}
+	return auditMove(ctx, tx, id, kind, actor, note, details)
 }
 
 func record(ctx context.Context, tx db.TenantTx, id ids.UUID, kind string, from *domain.State, to domain.State,
@@ -306,5 +318,39 @@ func Note(ctx context.Context, tx db.TenantTx, id ids.UUID, note string, actor e
 	if n := len([]rune(strings.TrimSpace(note))); n == 0 || n > 1000 {
 		return errNote
 	}
-	return record(ctx, tx, id, "NOTE", nil, domain.State(f.State), actor, strings.TrimSpace(note), nil)
+	if err := record(ctx, tx, id, "NOTE", nil, domain.State(f.State), actor, strings.TrimSpace(note), nil); err != nil {
+		return err
+	}
+	return auditMove(ctx, tx, id, "NOTE", actor, note, map[string]string{"state": f.State})
+}
+
+// auditMove writes audit.posture.finding_<event> for a person's or a
+// service account's change (D6, D63 M6): who, which finding, from and to,
+// and the reason or note. A recomputation's own changes are the ledger's
+// posture.finding entries and need no audit event.
+func auditMove(ctx context.Context, tx db.TenantTx, id ids.UUID, kind string, actor evdomain.Actor, note string,
+	details map[string]string,
+) error {
+	if actor == System {
+		return nil
+	}
+	if note = strings.TrimSpace(note); note != "" {
+		details["note"] = truncate(note, 500)
+	}
+	_, err := audit.Record(ctx, tx, audit.Event{
+		Name: "posture.finding_" + strings.ToLower(kind), Actor: actor, Outcome: audit.Success,
+		Object: &audit.Object{Type: "posture_finding", ID: id.String()}, Details: details,
+	})
+	return err
+}
+
+// truncate cuts s to at most n bytes on a rune boundary.
+func truncate(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	for n > 0 && !utf8.RuneStart(s[n]) {
+		n--
+	}
+	return s[:n]
 }

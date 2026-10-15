@@ -10,6 +10,7 @@ import (
 	"errors"
 	"slices"
 	"testing"
+	"time"
 
 	billing "github.com/katocxl/pantherclaw/internal/billing/domain"
 	"github.com/katocxl/pantherclaw/internal/exposure/adapters/exposurerpc"
@@ -17,6 +18,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/exposure/exposuretest"
 	pb "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
+	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	tenancy "github.com/katocxl/pantherclaw/internal/tenancy/app"
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
 )
@@ -214,4 +216,108 @@ func TestHR253_ExposureRPCKeepsViewsAndLabels(t *testing.T) {
 	if _, err := c.GetExposure(w.org, &pb.GetExposureRequest{}); !errors.Is(err, app.ErrEdition) {
 		t.Fatalf("community: %v", err)
 	}
+}
+
+// TestIntGraphScopesAndEditions (D63 M3, M4, M7, L6, L8, L11):
+//   - an incident about no agent gives an empty graph, never the org's;
+//   - unknown and hidden runs are both not found;
+//   - on Community only the activity edge table answers;
+//   - DENY_OPERATION without an operation is refused;
+//   - a grant whose window ended since the computation reads as EXPIRED;
+//   - an empty GitHub permissions reading leaves the credential UNCERTAIN.
+func TestIntGraphScopesAndEditions(t *testing.T) {
+	w := newWorld(t, billing.Team)
+	inc, err := w.g.GetGraph(w.org, &pb.GetGraphRequest{
+		Mode:  pb.GraphMode_GRAPH_MODE_ACTIVITY,
+		Scope: &pb.GraphScope{Type: "incident", Id: "01900000-0000-7000-8000-000000000000"},
+	})
+	if err != nil || len(inc.GetEdges()) != 0 {
+		t.Fatalf("empty incident: %d edges %v", len(inc.GetEdges()), err)
+	}
+	w.o.Exec(t, `INSERT INTO pc.runs (org_id, id, agent_id, environment_id, launcher_user_id, principal_user_id, principal_source,
+		expires_at) VALUES ($1, $2, $3, $4, $5, $5, 'launcher', now() + interval '1 hour')`, w.o.Org, idOf(t, "01900000-0000-7000-8000-0000000000aa"),
+		w.o.Other, w.o.Env, w.o.User)
+	for _, run := range []string{"01900000-0000-7000-8000-0000000000aa", "01900000-0000-7000-8000-0000000000bb"} {
+		if _, err := w.g.GetGraph(w.team, &pb.GetGraphRequest{
+			Mode:  pb.GraphMode_GRAPH_MODE_ACTIVITY,
+			Scope: &pb.GraphScope{Type: "run", Id: run},
+		}); !errors.Is(err, app.ErrNotFound) {
+			t.Fatalf("run %s: %v", run, err)
+		}
+	}
+
+	_, community := exposurerpc.New(&app.Service{Pool: w.o.P, Ents: edition(billing.Community)})
+	scope := &pb.GraphScope{Type: "agent", Id: w.o.Agent.String()}
+	if _, err := community.ListGraphEdges(w.org, &pb.ListGraphEdgesRequest{Mode: pb.GraphMode_GRAPH_MODE_ACTIVITY, Scope: scope}); err != nil {
+		t.Fatalf("community activity table: %v", err)
+	}
+	for _, try := range []func() error{
+		func() error {
+			_, err := community.GetGraph(w.org, &pb.GetGraphRequest{Mode: pb.GraphMode_GRAPH_MODE_ACTIVITY, Scope: scope})
+			return err
+		},
+		func() error {
+			_, err := community.ListGraphEdges(w.org, &pb.ListGraphEdgesRequest{Mode: pb.GraphMode_GRAPH_MODE_AUTHORITY, Scope: scope})
+			return err
+		},
+	} {
+		if err := try(); !errors.Is(err, app.ErrEdition) {
+			t.Fatalf("community graph: %v", err)
+		}
+	}
+
+	if _, err := w.h.PreviewReduction(w.org, &pb.PreviewReductionRequest{
+		Kind: "contain", Control: "DENY_OPERATION",
+		Subjects: []*pb.ReductionSubject{{Type: "agent", Id: w.o.Agent.String()}},
+	}); !errors.Is(err, app.ErrOperation) {
+		t.Fatalf("deny operation without one: %v", err)
+	}
+
+	// The grants end two seconds after a fresh computation; once that has
+	// passed, reads show them EXPIRED without waiting for a recomputation.
+	w.o.D.AdminExec(t, `UPDATE pc.grant_revisions SET not_before = now() - interval '2 hours', expires_at = now() + interval '2 seconds'
+		WHERE org_id = $1`, w.o.Org)
+	w.o.Tx(t, func(ctx context.Context, tx db.TenantTx) error {
+		_, err := app.Recompute(ctx, tx, "manual", 0)
+		return err
+	})
+	for passed := false; !passed; {
+		w.o.Tx(t, func(ctx context.Context, tx db.TenantTx) error {
+			return tx.QueryRow(ctx, `SELECT now() > (SELECT max(expires_at) FROM pc.grant_revisions)`).Scan(&passed)
+		})
+		if !passed {
+			time.Sleep(200 * time.Millisecond)
+		}
+	}
+	r, err := w.h.GetExposure(w.org, &pb.GetExposureRequest{View: pb.ExposureView_EXPOSURE_VIEW_EFFECTIVE, PageSize: 200})
+	if err != nil || len(r.GetRights()) == 0 {
+		t.Fatal(err)
+	}
+	for _, x := range r.GetRights() {
+		if x.GetLabel() != pb.ExposureLabel_EXPOSURE_LABEL_EXPIRED {
+			t.Fatalf("a grant past its window reads %v: %v", x.GetLabel(), x)
+		}
+	}
+
+	w.o.Exec(t, `INSERT INTO pc.connection_github (org_id, connection_id, app_client_id, installation_id, account_login, permissions,
+		repository_selection, read_at, updated_by) VALUES ($1, $2, 'Iv1.ci', 7, 'acme', '{}', 'all', now(), 'test')`, w.o.Org, w.o.Conn)
+	w.o.Tx(t, func(ctx context.Context, tx db.TenantTx) error {
+		_, err := app.Recompute(ctx, tx, "manual", 0)
+		return err
+	})
+	cr, err := w.h.GetExposure(w.org, &pb.GetExposureRequest{View: pb.ExposureView_EXPOSURE_VIEW_CREDENTIAL, PageSize: 200})
+	if err != nil || !slices.ContainsFunc(cr.GetRights(), func(x *pb.ExposureRight) bool {
+		return x.GetResourceGroup() == "credential:payments" && x.GetLabel() == pb.ExposureLabel_EXPOSURE_LABEL_UNCERTAIN
+	}) {
+		t.Fatalf("empty permissions reading: %v", err)
+	}
+}
+
+func idOf(t *testing.T, s string) ids.UUID {
+	t.Helper()
+	u, err := ids.ParseUUID(s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return u
 }

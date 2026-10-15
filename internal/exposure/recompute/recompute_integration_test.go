@@ -8,6 +8,7 @@ package recompute_test
 import (
 	"context"
 	"testing"
+	"time"
 
 	billing "github.com/katocxl/pantherclaw/internal/billing/domain"
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
@@ -31,8 +32,21 @@ func audited(t *testing.T, o *exposuretest.Org, name string) {
 		_, err := audit.Record(ctx, tx, audit.Event{Name: name, Actor: evdomain.Actor{Type: "user", ID: "alice"}, Outcome: audit.Success})
 		return err
 	})
-	if _, err := ledger.ChainOrg(context.Background(), o.P, o.Org, 100); err != nil {
-		t.Fatal(err)
+	// The chainer links only entries older than every running transaction
+	// on the cluster; under a parallel test run that can take a moment.
+	deadline := time.Now().Add(30 * time.Second)
+	for {
+		if _, err := ledger.ChainOrg(context.Background(), o.P, o.Org, 100); err != nil {
+			t.Fatal(err)
+		}
+		if count(t, o, "SELECT count(*) FROM pc.ledger_entries e WHERE NOT EXISTS "+
+			"(SELECT 1 FROM pc.ledger_chain c WHERE c.org_id = e.org_id AND c.entry_id = e.id)") == 0 {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("ledger entries not chained within 30 s")
+		}
+		time.Sleep(100 * time.Millisecond)
 	}
 }
 

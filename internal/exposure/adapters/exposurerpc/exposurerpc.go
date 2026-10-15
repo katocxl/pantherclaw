@@ -304,17 +304,17 @@ func edgePB(e domain.Edge) *pb.GraphEdge {
 	}
 }
 
-func (g *Graphs) build(ctx context.Context, mode pb.GraphMode, scope *pb.GraphScope, f *pb.GraphFilter, collapse bool) (app.GraphResult, error) {
+func (g *Graphs) build(ctx context.Context, mode pb.GraphMode, scope *pb.GraphScope, f *pb.GraphFilter, collapse, table bool) (app.GraphResult, error) {
 	m, ok := modes[mode]
 	if !ok {
 		return app.GraphResult{}, app.ErrScope
 	}
-	return g.svc.Graph(ctx, m, app.GraphScope{Type: scope.GetType(), ID: scope.GetId()}, filterOf(f), collapse, domain.DefaultLimits)
+	return g.svc.Graph(ctx, m, app.GraphScope{Type: scope.GetType(), ID: scope.GetId()}, filterOf(f), collapse, table, domain.DefaultLimits)
 }
 
 // GetGraph implements GraphServiceHandler.
 func (g *Graphs) GetGraph(ctx context.Context, req *pb.GetGraphRequest) (*pb.GetGraphResponse, error) {
-	r, err := g.build(ctx, req.GetMode(), req.GetScope(), req.GetFilter(), req.GetCollapse())
+	r, err := g.build(ctx, req.GetMode(), req.GetScope(), req.GetFilter(), req.GetCollapse(), false)
 	if err != nil {
 		return nil, err
 	}
@@ -343,7 +343,7 @@ func (g *Graphs) ListGraphEdges(ctx context.Context, req *pb.ListGraphEdgesReque
 	if err != nil {
 		return nil, err
 	}
-	r, err := g.build(ctx, req.GetMode(), req.GetScope(), req.GetFilter(), req.GetCollapse())
+	r, err := g.build(ctx, req.GetMode(), req.GetScope(), req.GetFilter(), req.GetCollapse(), true)
 	if err != nil {
 		return nil, err
 	}

@@ -1844,6 +1844,7 @@ type PcPostureFinding struct {
 	Title                string
 	Detail               []byte
 	AffectedPaths        []string
+	PathsTruncated       bool
 	Severity             string
 	State                string
 	OwnerUserID          *ids.UUID

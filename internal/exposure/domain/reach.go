@@ -104,6 +104,7 @@ func (c Coverage) Rank() int {
 const (
 	ReasonGrant                 = "GRANT"
 	ReasonGrantExpired          = "GRANT_EXPIRED"
+	ReasonGrantRevoked          = "GRANT_REVOKED"
 	ReasonGrantNotYetValid      = "GRANT_NOT_YET_VALID"
 	ReasonPolicyCondition       = "POLICY_CONDITION"
 	ReasonPolicyForbid          = "POLICY_FORBID"
@@ -242,6 +243,9 @@ type Grant struct {
 	ExpiresAt       time.Time
 	DelegationDepth int
 	CreatedAt       time.Time
+	// Revoked grants (in the last 30 days) are kept as history: their
+	// reach is EXPIRED and shows as HISTORICAL edges (D31).
+	Revoked bool
 }
 
 // PolicyRule is what exposure reads of a published policy rule.
@@ -398,6 +402,8 @@ func effective(b *builder, in Inputs, conns map[ids.UUID]*Connection) {
 		label, reasons := Usable, []string{ReasonGrant}
 		var expires *time.Time
 		switch {
+		case g.Revoked:
+			label, reasons = Expired, []string{ReasonGrantRevoked}
 		case !in.Now.Before(g.ExpiresAt):
 			label, reasons = Expired, []string{ReasonGrantExpired}
 		case in.Now.Before(g.NotBefore):
@@ -554,7 +560,7 @@ func credential(b *builder, in Inputs, conns map[ids.UUID]*Connection) {
 	// Coverage paths that are observe-only or unknown on an operation a
 	// grant reaches: the agent can act there without an enforced decision.
 	for _, g := range in.Grants {
-		if !in.Now.Before(g.ExpiresAt) {
+		if g.Revoked || !in.Now.Before(g.ExpiresAt) {
 			continue
 		}
 		for _, c := range sortedConns(conns) {

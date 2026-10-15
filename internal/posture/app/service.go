@@ -120,7 +120,17 @@ func (s *Service) List(ctx context.Context, states []domain.State, kind, root st
 		for _, v := range states {
 			st = append(st, string(v))
 		}
-		params := dbq.ListPostureFindingsParams{OrgID: x.c.Org, States: st, MaxRows: p.Limit()}
+		vis, err := exapp.VisibleAgents(ctx, x.c, x.q, td.PermPostureRead)
+		if err != nil {
+			return err
+		}
+		now, err := x.q.DBNow(ctx)
+		if err != nil {
+			return err
+		}
+		params := dbq.ListPostureFindingsParams{
+			OrgID: x.c.Org, States: st, MaxRows: p.Limit(), AllAgents: vis.All, AgentIds: orEmpty(vis.IDs), OrgScope: !restricted,
+		}
 		if kind != "" {
 			params.Kind = &kind
 		}
@@ -136,13 +146,7 @@ func (s *Service) List(ctx context.Context, states []domain.State, kind, root st
 		}
 		rows, next = page.Finish(p, rows, func(f dbq.PcPostureFinding) ids.UUID { return f.ID })
 		for _, f := range rows {
-			ok, err := x.can(ctx, f)
-			if err != nil {
-				return err
-			}
-			if ok {
-				out = append(out, f)
-			}
+			out = append(out, effective(f, now))
 		}
 		return nil
 	})
@@ -166,23 +170,21 @@ func (s *Service) RootCauses(ctx context.Context) ([]RootCause, bool, error) {
 	restricted := false
 	err := s.run(ctx, td.PermPostureRead, true, func(ctx context.Context, x *session) error {
 		restricted = !x.c.Can(td.PermPostureRead, td.OrgPath(x.c.Org))
+		vis, err := exapp.VisibleAgents(ctx, x.c, x.q, td.PermPostureRead)
+		if err != nil {
+			return err
+		}
 		by := map[string]*RootCause{}
 		var before *ids.UUID
 		for {
 			rows, err := x.q.ListPostureFindings(ctx, dbq.ListPostureFindingsParams{
 				OrgID: x.c.Org, States: []string{"OPEN", "ASSIGNED", "TESTING", "EVIDENCE_INCOMPLETE"}, Before: before, MaxRows: 1000,
+				AllAgents: vis.All, AgentIds: orEmpty(vis.IDs), OrgScope: !restricted,
 			})
 			if err != nil {
 				return err
 			}
 			for _, f := range rows {
-				ok, err := x.can(ctx, f)
-				if err != nil {
-					return err
-				}
-				if !ok {
-					continue
-				}
 				g, seen := by[f.RootCause]
 				if !seen {
 					g = &RootCause{RootCause: f.RootCause, MaxSeverity: f.Severity}
@@ -247,7 +249,11 @@ func (s *Service) Get(ctx context.Context, id ids.UUID) (Finding, error) {
 		if err != nil {
 			return err
 		}
-		out.Finding = f
+		now, err := x.q.DBNow(ctx)
+		if err != nil {
+			return err
+		}
+		out.Finding = effective(f, now)
 		out.Events, err = x.q.ListPostureFindingEvents(ctx, x.c.Org, id)
 		return err
 	})
@@ -330,4 +336,20 @@ func (s *Service) AddNote(ctx context.Context, id ids.UUID, note string) (dbq.Pc
 		}
 		return nil
 	})
+}
+
+// effective is a finding as a read shows it: an acceptance past its expiry
+// is OPEN at once, before the next recomputation records it (L5).
+func effective(f dbq.PcPostureFinding, now time.Time) dbq.PcPostureFinding {
+	if f.State == string(domain.AcceptedTemporarily) && f.AcceptedUntil != nil && !f.AcceptedUntil.After(now) {
+		f.State = string(domain.Open)
+	}
+	return f
+}
+
+func orEmpty(s []ids.UUID) []ids.UUID {
+	if s == nil {
+		return []ids.UUID{}
+	}
+	return s
 }

@@ -60,9 +60,11 @@ const (
 // Edge is one edge in the shared vocabulary (D29).
 type Edge struct {
 	From, To Node
-	// Owner is the agent the edge belongs to, when an end alone does not
-	// say (a grant allows a resource): the viewer must see it too (D8).
-	Owner      *Node
+	// Context are the agents, runs and principals the edge belongs to when
+	// its ends alone do not say (a grant allows a resource; a run acted):
+	// the viewer must see every one of them (D8), and filters match them
+	// too (F293).
+	Context    []Node
 	Kind       string
 	Verb       Verb
 	Operation  string
@@ -94,25 +96,22 @@ type GraphFilter struct {
 
 func in(list []string, v string) bool { return len(list) == 0 || slices.Contains(list, v) }
 
+// nodes are the edge's ends and context.
+func (e Edge) nodes() []Node { return append([]Node{e.From, e.To}, e.Context...) }
+
+// match keeps an edge only when it is known to belong to every filtered
+// run, agent and principal: an edge that carries no node of a filtered
+// type does not match (an unknown principal is not the one asked for).
 func (f GraphFilter) match(e Edge) bool {
 	if e.At != nil && ((f.Start != nil && e.At.Before(*f.Start)) || (f.End != nil && e.At.After(*f.End))) {
 		return false
 	}
-	ends := []Node{e.From, e.To}
+	ns := e.nodes()
 	for _, c := range []struct {
 		typ  string
 		list []string
 	}{{"run", f.Runs}, {"agent", f.Agents}, {"user", f.Principals}} {
-		if len(c.list) == 0 {
-			continue
-		}
-		hit := false
-		for _, n := range ends {
-			if n.Type == c.typ && slices.Contains(c.list, n.ID) {
-				hit = true
-			}
-		}
-		if !hit && slices.ContainsFunc(ends, func(n Node) bool { return n.Type == c.typ }) {
+		if len(c.list) > 0 && !slices.ContainsFunc(ns, func(n Node) bool { return n.Type == c.typ && slices.Contains(c.list, n.ID) }) {
 			return false
 		}
 	}
@@ -154,7 +153,7 @@ func Build(mode Mode, edges []Edge, visible Visible, f GraphFilter, collapse boo
 	g := Graph{Mode: mode, Current: map[string]int{}}
 	var kept []Edge
 	for _, e := range edges {
-		if !visible(e.From) || !visible(e.To) || (e.Owner != nil && !visible(*e.Owner)) || !f.match(e) {
+		if slices.ContainsFunc(e.nodes(), func(n Node) bool { return !visible(n) }) || !f.match(e) {
 			continue
 		}
 		if e.Count == 0 {
@@ -247,9 +246,14 @@ func agentNode(r Right) Node {
 	return Node{Type: "agent", ID: r.Agent.String()}
 }
 
-func stateOf(l Label) EdgeState {
+// stateOf is a right's edge state: a revoked grant's reach is HISTORICAL
+// (D31), an expired one EXPIRED, an uncertain one POSSIBLE.
+func stateOf(r Right) EdgeState {
+	if slices.Contains(r.Reasons, ReasonGrantRevoked) {
+		return EdgeHistorical
+	}
 	//exhaustive:ignore // usable and conditional rights are active edges
-	switch l {
+	switch r.Label {
 	case Expired:
 		return EdgeExpired
 	case Uncertain:
@@ -268,15 +272,16 @@ func AuthorityEdges(rights []Right) []Edge {
 			continue
 		}
 		grant := Node{Type: "grant", ID: r.Grant.String()}
-		st := stateOf(r.Label)
+		st := stateOf(r)
 		out = append(out,
 			Edge{
 				From: agentNode(r), To: grant, Kind: EdgeHolds, State: st, Basis: "RULE_MATCH", ExpiresAt: r.ExpiresAt,
 				Provenance: string(Effective),
 			},
 			Edge{
-				From: grant, To: Node{Type: "resource", ID: r.ResourceGroup}, Owner: ptr(ownerNode(r)), Kind: EdgeAllows, Verb: r.Verb, State: st,
-				Coverage: r.Coverage, Basis: "RULE_MATCH", ExpiresAt: r.ExpiresAt, Provenance: string(Effective),
+				From: grant, To: Node{Type: "resource", ID: r.ResourceGroup}, Context: []Node{ownerNode(r)}, Kind: EdgeAllows,
+				Verb: r.Verb, Operation: r.Operation, State: st, Coverage: r.Coverage, Basis: "RULE_MATCH", ExpiresAt: r.ExpiresAt,
+				Provenance: string(Effective),
 			})
 	}
 	return out
@@ -288,7 +293,7 @@ func AuthorityEdges(rights []Right) []Edge {
 func ExposureEdges(rights []Right) []Edge {
 	var out []Edge
 	for _, r := range rights {
-		st := stateOf(r.Label)
+		st := stateOf(r)
 		basis := "RULE_MATCH"
 		//exhaustive:ignore // an effective right keeps its rule-match basis
 		switch r.View {
@@ -310,8 +315,9 @@ func ExposureEdges(rights []Right) []Edge {
 			})
 		}
 		out = append(out, Edge{
-			From: from, To: Node{Type: "resource", ID: r.ResourceGroup}, Owner: ptr(ownerNode(r)), Kind: EdgeReaches, Verb: r.Verb,
-			State: st, Coverage: r.Coverage, Basis: basis, Operation: r.Operation, At: r.ObservedAt, ExpiresAt: r.ExpiresAt, Provenance: string(r.View),
+			From: from, To: Node{Type: "resource", ID: r.ResourceGroup}, Context: []Node{ownerNode(r)}, Kind: EdgeReaches,
+			Verb: r.Verb, State: st, Coverage: r.Coverage, Basis: basis, Operation: r.Operation, At: r.ObservedAt,
+			ExpiresAt: r.ExpiresAt, Provenance: string(r.View),
 		})
 	}
 	return out
@@ -321,44 +327,56 @@ func ExposureEdges(rights []Right) []Edge {
 type Activity struct {
 	Run, Agent, Transaction string
 	Principal               string
-	ParentRun               string
-	Operation               string
-	Resource                string
-	Decision                string
-	Execution               string
-	Effect                  string
-	At                      time.Time
+	// ParentRun and ParentAgent name the run that delegated this one.
+	ParentRun   string
+	ParentAgent string
+	Operation   string
+	Resource    string
+	Decision    string
+	Execution   string
+	Effect      string
+	At          time.Time
 	// Missing marks a transaction whose evidence has a gap (no decision
 	// receipt, an unknown effect).
 	Missing string
 }
 
-// ActivityEdges: run acted (transaction), transaction touched resource; a
-// gap edge marks missing evidence (F272).
+// context is what an activity's edges belong to: its agent, run and
+// principal.
+func (a Activity) context() []Node {
+	out := []Node{{Type: "agent", ID: a.Agent}, {Type: "run", ID: a.Run}}
+	if a.Principal != "" {
+		out = append(out, Node{Type: "user", ID: a.Principal})
+	}
+	return out
+}
+
+// ActivityEdges: agent acted in run, run acted (transaction), transaction
+// touched resource; a gap edge marks missing evidence (F272).
 func ActivityEdges(acts []Activity) []Edge {
 	var out []Edge
 	for _, a := range acts {
 		at := a.At
+		ctx := a.context()
 		run, txn := Node{Type: "run", ID: a.Run}, Node{Type: "transaction", ID: a.Transaction}
-		agent := Node{Type: "agent", ID: a.Agent}
 		out = append(out, Edge{
-			From: agent, To: run, Kind: EdgeActed, State: EdgeHistorical,
+			From: Node{Type: "agent", ID: a.Agent}, To: run, Context: ctx, Kind: EdgeActed, State: EdgeHistorical,
 			Basis: "OBSERVED", At: &at,
 		})
 		out = append(out, Edge{
-			From: run, To: txn, Owner: &agent, Kind: EdgeActed, State: EdgeHistorical, Decision: a.Decision,
+			From: run, To: txn, Context: ctx, Kind: EdgeActed, State: EdgeHistorical, Decision: a.Decision,
 			Execution: a.Execution, Effect: a.Effect, Basis: "OBSERVED", At: &at, Operation: a.Operation, Provenance: "transaction",
 		})
 		if a.Resource != "" {
 			out = append(out, Edge{
-				From: txn, To: Node{Type: "resource", ID: a.Resource}, Owner: &agent, Kind: EdgeTouched,
+				From: txn, To: Node{Type: "resource", ID: a.Resource}, Context: ctx, Kind: EdgeTouched,
 				State: EdgeHistorical, Decision: a.Decision, Execution: a.Execution, Effect: a.Effect, Basis: "OBSERVED",
 				At: &at, Operation: a.Operation, Provenance: "transaction",
 			})
 		}
 		if a.Missing != "" {
 			out = append(out, Edge{
-				From: run, To: txn, Owner: &agent, Kind: EdgeGap, State: EdgeHistorical, Basis: "OBSERVED", At: &at,
+				From: run, To: txn, Context: ctx, Kind: EdgeGap, State: EdgeHistorical, Basis: "OBSERVED", At: &at,
 				Provenance: a.Missing,
 			})
 		}
@@ -368,16 +386,13 @@ func ActivityEdges(acts []Activity) []Edge {
 
 // CausalEdges: parent run delegated child run, and each run's transactions
 // in order (then). Order is evidence; causation is never asserted, so the
-// basis is INFERRED.
+// basis is INFERRED. A delegation edge belongs to both runs' agents, so a
+// viewer who may not see the parent's agent never sees the parent run.
 func CausalEdges(acts []Activity) []Edge {
 	var out []Edge
 	byRun := map[string][]Activity{}
-	parents := map[string]string{}
 	for _, a := range acts {
 		byRun[a.Run] = append(byRun[a.Run], a)
-		if a.ParentRun != "" {
-			parents[a.Run] = a.ParentRun
-		}
 	}
 	runs := make([]string, 0, len(byRun))
 	for r := range byRun {
@@ -385,23 +400,26 @@ func CausalEdges(acts []Activity) []Edge {
 	}
 	slices.Sort(runs)
 	for _, r := range runs {
-		if p, ok := parents[r]; ok {
-			owner := Node{Type: "agent", ID: byRun[r][0].Agent}
+		list := byRun[r]
+		if p := list[0]; p.ParentRun != "" {
+			ctx := p.context()
+			if p.ParentAgent != "" {
+				ctx = append(ctx, Node{Type: "agent", ID: p.ParentAgent})
+			}
 			out = append(out, Edge{
-				From: Node{Type: "run", ID: p}, To: Node{Type: "run", ID: r}, Owner: &owner, Kind: EdgeDelegated,
+				From: Node{Type: "run", ID: p.ParentRun}, To: Node{Type: "run", ID: r}, Context: ctx, Kind: EdgeDelegated,
 				State: EdgeHistorical, Basis: "OBSERVED",
 			})
 		}
-		list := byRun[r]
 		slices.SortFunc(list, func(a, b Activity) int {
 			return cmp.Or(a.At.Compare(b.At), cmp.Compare(a.Transaction, b.Transaction))
 		})
 		for i := 1; i < len(list); i++ {
 			at := list[i].At
 			out = append(out, Edge{
-				From: Node{Type: "transaction", ID: list[i-1].Transaction},
-				To:   Node{Type: "transaction", ID: list[i].Transaction}, Owner: ptr(Node{Type: "agent", ID: list[i].Agent}), Kind: EdgeThen, State: EdgeHistorical,
-				Basis: "INFERRED", At: &at,
+				From: Node{Type: "transaction", ID: list[i-1].Transaction}, To: Node{Type: "transaction", ID: list[i].Transaction},
+				Context: list[i].context(), Kind: EdgeThen, State: EdgeHistorical, Basis: "INFERRED", At: &at,
+				Operation: list[i].Operation,
 			})
 		}
 	}
@@ -415,8 +433,8 @@ type ChangeRecord struct {
 	Revision int
 	What     string
 	At       time.Time
-	// Owner is the agent the subject belongs to, when it has one.
-	Owner *Node
+	// Context are the agents the subject belongs to.
+	Context []Node
 	// Current is false for a change since superseded.
 	Current bool
 }
@@ -430,7 +448,7 @@ func ChangeEdges(cs []ChangeRecord) []Edge {
 			st = EdgeActive
 		}
 		out = append(out, Edge{
-			From: c.Actor, To: c.Subject, Owner: c.Owner, Kind: EdgeChanged, State: st, Revision: c.Revision,
+			From: c.Actor, To: c.Subject, Context: c.Context, Kind: EdgeChanged, State: st, Revision: c.Revision,
 			Basis: "OBSERVED", At: &at, Provenance: c.What,
 		})
 	}

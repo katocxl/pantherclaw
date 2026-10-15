@@ -112,6 +112,9 @@ CREATE TABLE pc.posture_findings (
                                                                     AND octet_length(detail::text) <= 8192),
     -- The path keys a remediation must reach (HR-255).
     affected_paths         text[]      NOT NULL CHECK (cardinality(affected_paths) BETWEEN 1 AND 256),
+    -- More affected paths than are kept: the finding is never remediated on
+    -- the kept ones alone (evidence incomplete).
+    paths_truncated        boolean     NOT NULL DEFAULT false,
     severity               text        NOT NULL CHECK (severity IN ('low', 'medium', 'high', 'critical')),
     state                  text        NOT NULL DEFAULT 'OPEN' CHECK (state IN ('OPEN', 'ASSIGNED', 'TESTING', 'REMEDIATED',
                                                                                'ACCEPTED_TEMPORARILY', 'EVIDENCE_INCOMPLETE')),
@@ -216,7 +219,7 @@ BEGIN
         IF NEW.state = 'REMEDIATED' THEN
             SELECT computed_at INTO proof FROM pc.exposure_snapshots
                 WHERE org_id = NEW.org_id AND id = NEW.remediated_snapshot_id;
-            IF proof IS NULL OR proof < NEW.last_seen_at THEN
+            IF proof IS NULL OR proof <= NEW.last_seen_at OR NEW.remediated_snapshot_id = NEW.last_snapshot_id THEN
                 RAISE EXCEPTION 'posture finding % is remediated only on a recomputation after it was last seen', OLD.id
                     USING ERRCODE = 'check_violation';
             END IF;
@@ -230,7 +233,10 @@ BEGIN
             NEW.accepted_reason := NULL;
         END IF;
     ELSIF NEW.remediated_snapshot_id IS DISTINCT FROM OLD.remediated_snapshot_id
-        OR NEW.accepted_until IS DISTINCT FROM OLD.accepted_until THEN
+        OR NEW.remediated_at IS DISTINCT FROM OLD.remediated_at
+        OR NEW.accepted_until IS DISTINCT FROM OLD.accepted_until
+        OR NEW.accepted_reason IS DISTINCT FROM OLD.accepted_reason
+        OR NEW.state_changed_at IS DISTINCT FROM OLD.state_changed_at THEN
         RAISE EXCEPTION 'posture finding % changes its proof or acceptance only with its state', OLD.id
             USING ERRCODE = 'check_violation';
     END IF;
@@ -241,12 +247,30 @@ $$;
 CREATE TRIGGER posture_findings_transition BEFORE UPDATE ON pc.posture_findings
     FOR EACH ROW EXECUTE FUNCTION pc.posture_finding_transition();
 
+-- A finding starts OPEN, unowned, unproven and unaccepted, its times the
+-- database's (L2): only the lifecycle above moves it.
+-- +goose StatementBegin
+CREATE FUNCTION pc.posture_finding_insert() RETURNS trigger
+    LANGUAGE plpgsql SET search_path = pc, pg_temp AS $$
+BEGIN
+    IF NEW.state <> 'OPEN' OR NEW.owner_user_id IS NOT NULL OR NEW.remediated_snapshot_id IS NOT NULL
+        OR NEW.remediated_at IS NOT NULL OR NEW.accepted_until IS NOT NULL OR NEW.accepted_reason IS NOT NULL THEN
+        RAISE EXCEPTION 'a posture finding starts open' USING ERRCODE = 'check_violation';
+    END IF;
+    NEW.state_changed_at := now();
+    RETURN NEW;
+END
+$$;
+-- +goose StatementEnd
+CREATE TRIGGER posture_findings_insert BEFORE INSERT ON pc.posture_findings
+    FOR EACH ROW EXECUTE FUNCTION pc.posture_finding_insert();
+
 GRANT SELECT, INSERT, DELETE ON pc.exposure_snapshots, pc.exposure_rights TO pc_app;
 GRANT SELECT, INSERT ON pc.exposure_changes, pc.posture_findings, pc.posture_finding_events TO pc_app;
 GRANT UPDATE (change_seq, changed_at, read_seq) ON pc.exposure_changes TO pc_app;
-GRANT UPDATE (agent_id, connection_id, grant_id, coverage_finding_id, title, detail, affected_paths, severity, state,
-    owner_user_id, accepted_until, accepted_reason, last_snapshot_id, remediated_snapshot_id, last_seen_at,
-    state_changed_at, remediated_at) ON pc.posture_findings TO pc_app;
+GRANT UPDATE (agent_id, connection_id, grant_id, coverage_finding_id, title, detail, affected_paths, paths_truncated, severity, state,
+    owner_user_id, accepted_until, accepted_reason, last_snapshot_id, remediated_snapshot_id, last_seen_at)
+    ON pc.posture_findings TO pc_app;
 GRANT SELECT ON pc.exposure_snapshots, pc.exposure_rights, pc.exposure_changes, pc.posture_findings,
     pc.posture_finding_events TO pc_audit_ro;
 
@@ -254,6 +278,7 @@ GRANT SELECT ON pc.exposure_snapshots, pc.exposure_rights, pc.exposure_changes, 
 DROP TABLE pc.posture_finding_events;
 DROP TABLE pc.posture_findings;
 DROP FUNCTION pc.posture_finding_transition();
+DROP FUNCTION pc.posture_finding_insert();
 DROP TABLE pc.exposure_changes;
 DROP TABLE pc.exposure_rights;
 DROP TABLE pc.exposure_snapshots;

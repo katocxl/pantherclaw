@@ -26,7 +26,8 @@ type Entitlements interface {
 var (
 	ErrEdition = pcerr.New(pcerr.FailedPrecondition, "EDITION_REQUIRED",
 		"breach radius needs the Team edition or above")
-	ErrChange = pcerr.New(pcerr.InvalidArgument, "REDUCTION_INVALID", "the reduction names no subject it can preview")
+	ErrChange    = pcerr.New(pcerr.InvalidArgument, "REDUCTION_INVALID", "the reduction names no subject it can preview")
+	ErrOperation = pcerr.New(pcerr.InvalidArgument, "REDUCTION_INVALID", "DENY_OPERATION names the operation it denies")
 )
 
 // Reduction kinds the previewer understands (D27, ReductionChange.Kind).
@@ -106,6 +107,11 @@ func ChangeOf(ctx context.Context, q *dbq.Queries, org ids.OrgID, c reflexdomain
 	if len(c.Subjects) == 0 {
 		return out, nil, ErrChange
 	}
+	// DENY_OPERATION names its operation: without one the preview would show
+	// every operation gone (M7).
+	if c.Control == reflexdomain.ControlDenyOperation && c.Operation == "" {
+		return out, nil, ErrOperation
+	}
 	restrict := func(x domain.Restriction) {
 		switch c.Control {
 		case reflexdomain.ControlHoldWrites:
@@ -151,7 +157,11 @@ func ChangeOf(ctx context.Context, q *dbq.Queries, org ids.OrgID, c reflexdomain
 			case reflexdomain.SubjectAgent:
 				restrict(domain.Restriction{Agent: &id})
 			case reflexdomain.SubjectGrant:
-				for _, g := range append([]ids.UUID{id}, descendants(ctx, q, org, id)...) {
+				ds, err := descendants(ctx, q, org, id)
+				if err != nil {
+					return out, nil, err
+				}
+				for _, g := range append([]ids.UUID{id}, ds...) {
 					restrict(domain.Restriction{Grant: &g})
 				}
 			case reflexdomain.SubjectConnection:
@@ -188,10 +198,10 @@ func ChangeOf(ctx context.Context, q *dbq.Queries, org ids.OrgID, c reflexdomain
 	return out, notes, nil
 }
 
-func descendants(ctx context.Context, q *dbq.Queries, org ids.OrgID, grant ids.UUID) []ids.UUID {
+func descendants(ctx context.Context, q *dbq.Queries, org ids.OrgID, grant ids.UUID) ([]ids.UUID, error) {
 	rows, err := q.ExposureGrantLineage(ctx, org)
 	if err != nil {
-		return nil
+		return nil, err
 	}
 	var out []ids.UUID
 	for _, r := range rows {
@@ -199,7 +209,7 @@ func descendants(ctx context.Context, q *dbq.Queries, org ids.OrgID, grant ids.U
 			out = append(out, r.GrantID)
 		}
 	}
-	return out
+	return out, nil
 }
 
 // ReachOf summarizes current rights (effective and credential views).

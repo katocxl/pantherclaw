@@ -190,6 +190,7 @@ SELECT r.agent_id, t.connection_id::uuid AS connection_id, t.operation::text AS 
     max(t.created_at)::timestamptz AS last_at
 FROM pc.transactions t
 JOIN pc.runs r ON r.org_id = t.org_id AND r.id = t.run_id
+LEFT JOIN pc.runs p ON p.org_id = r.org_id AND p.id = r.parent_run_id
 WHERE t.org_id = $1 AND t.connection_id IS NOT NULL AND t.created_at > now() - interval '30 days'
   AND EXISTS (SELECT 1 FROM pc.execution_attempts a WHERE a.org_id = t.org_id AND a.transaction_id = t.id)
 GROUP BY r.agent_id, t.connection_id, t.operation
@@ -266,10 +267,12 @@ func (q *Queries) ExposureGrantLineage(ctx context.Context, orgID ids.OrgID) ([]
 
 const exposureGrants = `-- name: ExposureGrants :many
 
-SELECT g.id, g.agent_id, g.created_at, r.bounds, r.not_before, r.expires_at, r.delegation_depth
+SELECT g.id, g.agent_id, g.created_at, r.bounds, r.not_before, r.expires_at, r.delegation_depth, (g.state = 'REVOKED')::boolean AS revoked
 FROM pc.grants g
 JOIN pc.grant_revisions r ON r.org_id = g.org_id AND r.grant_id = g.id AND r.revision = g.current_revision
-WHERE g.org_id = $1 AND g.state = 'ACTIVE' AND r.expires_at > now() - interval '30 days'
+WHERE g.org_id = $1
+  AND ((g.state = 'ACTIVE' AND r.expires_at > now() - interval '30 days')
+       OR (g.state = 'REVOKED' AND g.revoked_at > now() - interval '30 days'))
 ORDER BY g.id
 `
 
@@ -281,6 +284,7 @@ type ExposureGrantsRow struct {
 	NotBefore       time.Time
 	ExpiresAt       time.Time
 	DelegationDepth int16
+	Revoked         bool
 }
 
 // SPDX-License-Identifier: BUSL-1.1
@@ -288,9 +292,9 @@ type ExposureGrantsRow struct {
 //
 // Breach radius (G0 M10 D27–D31): what a computation reads, and the
 // snapshots it writes.
-// ExposureGrants lists the org's active grants at their current revision,
-// including those whose window ended in the last 30 days (EXPIRED reach is
-// kept as history).
+// ExposureGrants lists the org's grants at their current revision: active
+// ones, those whose window ended and those revoked in the last 30 days
+// (EXPIRED reach is kept as history, D31).
 func (q *Queries) ExposureGrants(ctx context.Context, orgID ids.OrgID) ([]ExposureGrantsRow, error) {
 	rows, err := q.db.Query(ctx, exposureGrants, orgID)
 	if err != nil {
@@ -308,6 +312,7 @@ func (q *Queries) ExposureGrants(ctx context.Context, orgID ids.OrgID) ([]Exposu
 			&i.NotBefore,
 			&i.ExpiresAt,
 			&i.DelegationDepth,
+			&i.Revoked,
 		); err != nil {
 			return nil, err
 		}
@@ -494,24 +499,26 @@ func (q *Queries) GetExposureChanges(ctx context.Context, orgID ids.OrgID) (PcEx
 }
 
 const graphActivity = `-- name: GraphActivity :many
-SELECT t.id, t.run_id, r.agent_id, r.parent_run_id, r.principal_user_id, t.operation::text AS operation,
+SELECT t.id, t.run_id, r.agent_id, r.parent_run_id, p.agent_id AS parent_agent_id, r.principal_user_id, t.operation::text AS operation,
     COALESCE(t.target_type, '')::text AS target_type, t.decision, t.effect_state, t.created_at,
     COALESCE((SELECT a.outcome FROM pc.execution_attempts a WHERE a.org_id = t.org_id AND a.transaction_id = t.id
      ORDER BY a.id DESC LIMIT 1), '')::text AS outcome,
     EXISTS (SELECT 1 FROM pc.decision_receipts d WHERE d.org_id = t.org_id AND d.transaction_id = t.id)::boolean AS has_receipt
 FROM pc.transactions t
 JOIN pc.runs r ON r.org_id = t.org_id AND r.id = t.run_id
+LEFT JOIN pc.runs p ON p.org_id = r.org_id AND p.id = r.parent_run_id
 WHERE t.org_id = $1
   AND ($2::uuid IS NULL OR t.run_id = $2 OR r.parent_run_id = $2)
-  AND (cardinality($3::uuid[]) = 0 OR r.agent_id = ANY ($3::uuid[]))
-  AND t.created_at >= $4 AND t.created_at <= $5
+  AND ($3::boolean OR r.agent_id = ANY ($4::uuid[]))
+  AND t.created_at >= $5 AND t.created_at <= $6
 ORDER BY t.created_at, t.id
-LIMIT $6
+LIMIT $7
 `
 
 type GraphActivityParams struct {
 	OrgID     ids.OrgID
 	RunID     *ids.UUID
+	AllAgents bool
 	AgentIds  []ids.UUID
 	StartTime time.Time
 	EndTime   time.Time
@@ -523,6 +530,7 @@ type GraphActivityRow struct {
 	RunID           ids.UUID
 	AgentID         ids.UUID
 	ParentRunID     *ids.UUID
+	ParentAgentID   *ids.UUID
 	PrincipalUserID *ids.UUID
 	Operation       string
 	TargetType      string
@@ -540,6 +548,7 @@ func (q *Queries) GraphActivity(ctx context.Context, arg GraphActivityParams) ([
 	rows, err := q.db.Query(ctx, graphActivity,
 		arg.OrgID,
 		arg.RunID,
+		arg.AllAgents,
 		arg.AgentIds,
 		arg.StartTime,
 		arg.EndTime,
@@ -557,6 +566,7 @@ func (q *Queries) GraphActivity(ctx context.Context, arg GraphActivityParams) ([
 			&i.RunID,
 			&i.AgentID,
 			&i.ParentRunID,
+			&i.ParentAgentID,
 			&i.PrincipalUserID,
 			&i.Operation,
 			&i.TargetType,
@@ -582,14 +592,15 @@ SELECT g.id AS grant_id, g.agent_id, r.revision, r.created_by, r.created_at,
 FROM pc.grants g
 JOIN pc.grant_revisions r ON r.org_id = g.org_id AND r.grant_id = g.id
 WHERE g.org_id = $1
-  AND (cardinality($2::uuid[]) = 0 OR g.agent_id = ANY ($2::uuid[]))
-  AND r.created_at >= $3 AND r.created_at <= $4
+  AND ($2::boolean OR g.agent_id = ANY ($3::uuid[]))
+  AND r.created_at >= $4 AND r.created_at <= $5
 ORDER BY r.created_at, g.id
-LIMIT $5
+LIMIT $6
 `
 
 type GraphGrantChangesParams struct {
 	OrgID     ids.OrgID
+	AllAgents bool
 	AgentIds  []ids.UUID
 	StartTime time.Time
 	EndTime   time.Time
@@ -609,6 +620,7 @@ type GraphGrantChangesRow struct {
 func (q *Queries) GraphGrantChanges(ctx context.Context, arg GraphGrantChangesParams) ([]GraphGrantChangesRow, error) {
 	rows, err := q.db.Query(ctx, graphGrantChanges,
 		arg.OrgID,
+		arg.AllAgents,
 		arg.AgentIds,
 		arg.StartTime,
 		arg.EndTime,

@@ -106,7 +106,9 @@ type Candidate struct {
 	Title           string
 	Severity        string
 	Paths           []string
-	Detail          map[string]string
+	// PathsTruncated: more than MaxPaths paths; only MaxPaths are kept.
+	PathsTruncated bool
+	Detail         map[string]string
 }
 
 // Fingerprint identifies a candidate across snapshots: its kind, root
@@ -304,8 +306,8 @@ func Derive(in Inputs) []Candidate {
 	for _, c := range d.by {
 		slices.Sort(c.Paths)
 		c.Paths = slices.Compact(c.Paths)
-		if len(c.Paths) > 256 {
-			c.Paths = c.Paths[:256]
+		if len(c.Paths) > MaxPaths {
+			c.Paths, c.PathsTruncated = c.Paths[:MaxPaths], true
 		}
 		out = append(out, *c)
 	}
@@ -423,6 +425,8 @@ type Finding struct {
 	AcceptedUntil *time.Time
 	// Connection scopes gap checks.
 	Connection *ids.UUID
+	// PathsTruncated: more affected paths than were kept.
+	PathsTruncated bool
 }
 
 // Action is what reconciliation does to one finding.
@@ -480,7 +484,7 @@ func (s Snapshot) incomplete(f Finding) bool {
 		return true
 	}
 	for _, g := range s.Gaps {
-		if g == "POLICY_UNKNOWN" || (f.Connection != nil && g == "PACKAGE_UNKNOWN:"+f.Connection.String()) {
+		if g == "POLICY_UNKNOWN" || g == "MORE_GAPS" || (f.Connection != nil && g == "PACKAGE_UNKNOWN:"+f.Connection.String()) {
 			return true
 		}
 	}
@@ -532,6 +536,16 @@ func Reconcile(stored []Finding, cands []Candidate, s Snapshot) []Action {
 			if f.State != EvidenceIncomplete {
 				out = append(out, Action{Kind: ActIncomplete, Finding: f, To: EvidenceIncomplete})
 			}
+		case f.Kind.CauseType():
+			// The cause is fixed (an owner named, a credential rotated, a
+			// verifier added) and a complete snapshot no longer shows it:
+			// that is the proof (D63 M1). Its subject's reach may remain.
+			out = append(out, Action{Kind: ActRemediate, Finding: f, To: Remediated})
+		case f.PathsTruncated:
+			// Paths beyond the kept ones cannot be checked (L4).
+			if f.State != EvidenceIncomplete {
+				out = append(out, Action{Kind: ActIncomplete, Finding: f, To: EvidenceIncomplete})
+			}
 		case s.reachable(f.Paths):
 			// The finding's rule no longer fires, but its paths are still
 			// reachable: removing the cause has not reached them yet.
@@ -540,4 +554,17 @@ func Reconcile(stored []Finding, cands []Candidate, s Snapshot) []Action {
 		}
 	}
 	return out
+}
+
+// MaxPaths is how many affected paths a finding keeps.
+const MaxPaths = 256
+
+// CauseType reports a kind whose cause is a fact about its subject (no
+// owner, an old credential, no verifier) rather than reach: it is
+// remediated when a complete recomputation no longer shows the cause,
+// whatever reach the subject keeps. The other kinds are reach-type: they
+// are remediated only when none of their affected paths is reachable
+// (HR-255, D63 M1).
+func (k Kind) CauseType() bool {
+	return k == UnownedAgent || k == UnverifiedSensitiveTool || k == StaleCredential
 }

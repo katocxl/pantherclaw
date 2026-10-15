@@ -134,7 +134,7 @@ func (l *Loaded) grants(ctx context.Context, q *dbq.Queries, org ids.OrgID) erro
 		}
 		l.Inputs.Grants = append(l.Inputs.Grants, domain.Grant{
 			ID: g.ID, Agent: g.AgentID, Bounds: b, NotBefore: g.NotBefore, ExpiresAt: g.ExpiresAt,
-			DelegationDepth: int(g.DelegationDepth), CreatedAt: g.CreatedAt,
+			DelegationDepth: int(g.DelegationDepth), CreatedAt: g.CreatedAt, Revoked: g.Revoked,
 		})
 		f := GrantFacts{ID: g.ID, CreatedAt: g.CreatedAt}
 		if b.Operations == nil {
@@ -223,7 +223,9 @@ func (l *Loaded) connections(ctx context.Context, q *dbq.Queries, org ids.OrgID)
 			// scope; anything else is uncertain (HR-253).
 			if r.GithubReadAt != nil && len(r.GithubPermissions) > 0 {
 				var perms map[string]string
-				if json.Unmarshal(r.GithubPermissions, &perms) == nil {
+				// An empty reading ({}) says nothing about the scope: it stays
+				// UNCERTAIN, never "no reach" (L8).
+				if json.Unmarshal(r.GithubPermissions, &perms) == nil && len(perms) > 0 {
 					cr.Scopes, cr.ScopeKnown = perms, true
 				}
 			}

@@ -474,3 +474,78 @@ func TestRestrictionsShapeOnlyEffectiveReach(t *testing.T) {
 		t.Fatal("other operation lost")
 	}
 }
+
+// TestGraphFiltersMatchContext (D63 M5, L12): filters match the agent, run
+// and principal an edge belongs to, not only its ends; an edge with no
+// node of a filtered type does not match; a delegation from a run of an
+// agent the viewer may not see is hidden with that agent.
+func TestGraphFiltersMatchContext(t *testing.T) {
+	acts := []domain.Activity{
+		{Run: "r1", Agent: "a1", Principal: "u1", Transaction: "t1", Operation: "x.y", Resource: "res", Decision: "ALLOW", At: now},
+		{
+			Run: "r2", Agent: "a2", Principal: "u2", Transaction: "t2", Operation: "x.y", Resource: "res", Decision: "ALLOW", At: now,
+			ParentRun: "r0", ParentAgent: "hidden",
+		},
+	}
+	all := func(domain.Node) bool { return true }
+	for _, c := range []struct {
+		name string
+		f    domain.GraphFilter
+		keep string // the transaction every kept edge belongs to
+	}{
+		{"principal", domain.GraphFilter{Principals: []string{"u1"}}, "t1"},
+		{"agent", domain.GraphFilter{Agents: []string{"a2"}}, "t2"},
+		{"run", domain.GraphFilter{Runs: []string{"r1"}}, "t1"},
+	} {
+		g := domain.Build(domain.ModeActivity, domain.ActivityEdges(acts), all, c.f, false, domain.DefaultLimits)
+		if len(g.Edges) == 0 {
+			t.Fatalf("%s: nothing kept", c.name)
+		}
+		for _, e := range g.Edges {
+			if !slices.ContainsFunc(e.Context, func(n domain.Node) bool {
+				return n.Type == "run" && n.ID == map[string]string{"t1": "r1", "t2": "r2"}[c.keep]
+			}) {
+				t.Fatalf("%s: kept %+v", c.name, e)
+			}
+		}
+	}
+	none := domain.Build(domain.ModeAuthority, []domain.Edge{{
+		From: domain.Node{Type: "agent", ID: "a1"}, To: domain.Node{Type: "grant", ID: "g"},
+		Kind: domain.EdgeHolds, State: domain.EdgeActive,
+	}}, all, domain.GraphFilter{Principals: []string{"u1"}}, false, domain.DefaultLimits)
+	if len(none.Edges) != 0 {
+		t.Fatal("an edge with no principal matched a principal filter")
+	}
+	hidden := func(n domain.Node) bool { return n.ID != "hidden" }
+	causal := domain.Build(domain.ModeCausal, domain.CausalEdges(acts), hidden, domain.GraphFilter{}, false, domain.DefaultLimits)
+	for _, n := range causal.Nodes {
+		if n.ID == "r0" {
+			t.Fatal("a hidden agent's parent run is shown")
+		}
+	}
+}
+
+// TestRevokedGrantsAreHistorical (D63 L7, D31): a revoked grant's reach
+// stays as EXPIRED rights and HISTORICAL edges, never current.
+func TestRevokedGrantsAreHistorical(t *testing.T) {
+	w := newWorld()
+	w.in.Grants[0].Revoked = true
+	rs := domain.Compute(w.in).Rights
+	r, ok := find(rs, domain.Effective, &w.agent, "payments.refund.create", domain.VerbTransfer)
+	if !ok || r.Label != domain.Expired || !slices.Contains(r.Reasons, domain.ReasonGrantRevoked) {
+		t.Fatalf("revoked right: %+v %v", r, ok)
+	}
+	g := domain.Build(domain.ModeAuthority, domain.AuthorityEdges(rs), func(domain.Node) bool { return true },
+		domain.GraphFilter{}, true, domain.DefaultLimits)
+	if len(g.Edges) == 0 || len(g.Current) != 0 {
+		t.Fatalf("edges %d current %v", len(g.Edges), g.Current)
+	}
+	for _, e := range g.Edges {
+		if e.State != domain.EdgeHistorical {
+			t.Fatalf("state %s", e.State)
+		}
+	}
+	if _, ok := find(rs, domain.Credential, &w.agent, "payments.customer.delete", domain.VerbDelete); ok {
+		t.Fatal("a revoked grant still opens a bypass route")
+	}
+}

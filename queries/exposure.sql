@@ -4,14 +4,16 @@
 -- Breach radius (G0 M10 D27–D31): what a computation reads, and the
 -- snapshots it writes.
 
--- ExposureGrants lists the org's active grants at their current revision,
--- including those whose window ended in the last 30 days (EXPIRED reach is
--- kept as history).
+-- ExposureGrants lists the org's grants at their current revision: active
+-- ones, those whose window ended and those revoked in the last 30 days
+-- (EXPIRED reach is kept as history, D31).
 -- name: ExposureGrants :many
-SELECT g.id, g.agent_id, g.created_at, r.bounds, r.not_before, r.expires_at, r.delegation_depth
+SELECT g.id, g.agent_id, g.created_at, r.bounds, r.not_before, r.expires_at, r.delegation_depth, (g.state = 'REVOKED')::boolean AS revoked
 FROM pc.grants g
 JOIN pc.grant_revisions r ON r.org_id = g.org_id AND r.grant_id = g.id AND r.revision = g.current_revision
-WHERE g.org_id = sqlc.arg(org_id) AND g.state = 'ACTIVE' AND r.expires_at > now() - interval '30 days'
+WHERE g.org_id = sqlc.arg(org_id)
+  AND ((g.state = 'ACTIVE' AND r.expires_at > now() - interval '30 days')
+       OR (g.state = 'REVOKED' AND g.revoked_at > now() - interval '30 days'))
 ORDER BY g.id;
 
 -- ExposureConnections lists the org's connections that are not retired,
@@ -60,6 +62,7 @@ SELECT r.agent_id, t.connection_id::uuid AS connection_id, t.operation::text AS 
     max(t.created_at)::timestamptz AS last_at
 FROM pc.transactions t
 JOIN pc.runs r ON r.org_id = t.org_id AND r.id = t.run_id
+LEFT JOIN pc.runs p ON p.org_id = r.org_id AND p.id = r.parent_run_id
 WHERE t.org_id = sqlc.arg(org_id) AND t.connection_id IS NOT NULL AND t.created_at > now() - interval '30 days'
   AND EXISTS (SELECT 1 FROM pc.execution_attempts a WHERE a.org_id = t.org_id AND a.transaction_id = t.id)
 GROUP BY r.agent_id, t.connection_id, t.operation
@@ -168,16 +171,17 @@ ORDER BY id;
 -- of agents, in a window, oldest first, with their latest execution
 -- outcome and whether a decision receipt was recorded.
 -- name: GraphActivity :many
-SELECT t.id, t.run_id, r.agent_id, r.parent_run_id, r.principal_user_id, t.operation::text AS operation,
+SELECT t.id, t.run_id, r.agent_id, r.parent_run_id, p.agent_id AS parent_agent_id, r.principal_user_id, t.operation::text AS operation,
     COALESCE(t.target_type, '')::text AS target_type, t.decision, t.effect_state, t.created_at,
     COALESCE((SELECT a.outcome FROM pc.execution_attempts a WHERE a.org_id = t.org_id AND a.transaction_id = t.id
      ORDER BY a.id DESC LIMIT 1), '')::text AS outcome,
     EXISTS (SELECT 1 FROM pc.decision_receipts d WHERE d.org_id = t.org_id AND d.transaction_id = t.id)::boolean AS has_receipt
 FROM pc.transactions t
 JOIN pc.runs r ON r.org_id = t.org_id AND r.id = t.run_id
+LEFT JOIN pc.runs p ON p.org_id = r.org_id AND p.id = r.parent_run_id
 WHERE t.org_id = sqlc.arg(org_id)
   AND (sqlc.narg(run_id)::uuid IS NULL OR t.run_id = sqlc.narg(run_id) OR r.parent_run_id = sqlc.narg(run_id))
-  AND (cardinality(sqlc.arg(agent_ids)::uuid[]) = 0 OR r.agent_id = ANY (sqlc.arg(agent_ids)::uuid[]))
+  AND (sqlc.arg(all_agents)::boolean OR r.agent_id = ANY (sqlc.arg(agent_ids)::uuid[]))
   AND t.created_at >= sqlc.arg(start_time) AND t.created_at <= sqlc.arg(end_time)
 ORDER BY t.created_at, t.id
 LIMIT sqlc.arg(max_rows);
@@ -189,7 +193,7 @@ SELECT g.id AS grant_id, g.agent_id, r.revision, r.created_by, r.created_at,
 FROM pc.grants g
 JOIN pc.grant_revisions r ON r.org_id = g.org_id AND r.grant_id = g.id
 WHERE g.org_id = sqlc.arg(org_id)
-  AND (cardinality(sqlc.arg(agent_ids)::uuid[]) = 0 OR g.agent_id = ANY (sqlc.arg(agent_ids)::uuid[]))
+  AND (sqlc.arg(all_agents)::boolean OR g.agent_id = ANY (sqlc.arg(agent_ids)::uuid[]))
   AND r.created_at >= sqlc.arg(start_time) AND r.created_at <= sqlc.arg(end_time)
 ORDER BY r.created_at, g.id
 LIMIT sqlc.arg(max_rows);

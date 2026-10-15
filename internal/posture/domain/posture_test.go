@@ -177,3 +177,42 @@ func TestHR255_RemediatedOnlyWhenEveryPathIsGone(t *testing.T) {
 		t.Fatalf("new: %+v", acts)
 	}
 }
+
+// TestReconcilePerKind: a cause-type finding no longer derived is
+// remediated on a complete snapshot even while its subject keeps reach; a
+// reach-type one is not; a finding with paths beyond the kept ones, or a
+// snapshot whose gaps overflowed, is evidence-incomplete (D63 M1, L3, L4).
+func TestReconcilePerKind(t *testing.T) {
+	agent, conn := ids.NewV7(), ids.NewV7()
+	right := exposure.Right{
+		View: exposure.Effective, Label: exposure.Usable, Agent: p(agent), Connection: p(conn),
+		Operation: "x.y", ResourceGroup: "g", Verb: exposure.VerbUpdate, Coverage: exposure.CoverageUnknown,
+	}
+	snap := domain.Snapshot{Now: now, Rights: []exposure.Right{right}}
+	cause := domain.Finding{
+		ID: ids.NewV7(), Kind: domain.UnownedAgent, Fingerprint: []byte{1}, State: domain.Open,
+		Paths: []string{right.PathKey()},
+	}
+	reach := domain.Finding{
+		ID: ids.NewV7(), Kind: domain.UncoveredPath, Fingerprint: []byte{2}, State: domain.Open,
+		Paths: []string{right.PathKey()},
+	}
+	acts := domain.Reconcile([]domain.Finding{cause, reach}, nil, snap)
+	if len(acts) != 1 || acts[0].Finding.ID != cause.ID || acts[0].Kind != domain.ActRemediate {
+		t.Fatalf("per kind: %+v", acts)
+	}
+	if acts = domain.Reconcile([]domain.Finding{cause}, nil, domain.Snapshot{Now: now, Gaps: []string{"MORE_GAPS"}}); len(acts) != 1 ||
+		acts[0].Kind != domain.ActIncomplete {
+		t.Fatalf("gaps overflowed: %+v", acts)
+	}
+	reach.PathsTruncated = true
+	if acts = domain.Reconcile([]domain.Finding{reach}, nil, domain.Snapshot{Now: now}); len(acts) != 1 || acts[0].Kind != domain.ActIncomplete {
+		t.Fatalf("truncated paths: %+v", acts)
+	}
+	for _, k := range domain.Kinds {
+		want := k == domain.UnownedAgent || k == domain.UnverifiedSensitiveTool || k == domain.StaleCredential
+		if k.CauseType() != want {
+			t.Errorf("%s cause-type %v", k, !want)
+		}
+	}
+}

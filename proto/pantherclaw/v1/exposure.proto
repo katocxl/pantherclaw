@@ -58,10 +58,14 @@ service ExposureService {
 }
 
 // GraphService reads activity, causal, authority, exposure and change
-// graphs (F272, F274, F289, F293, F298; HR-254; Team edition). Every graph
+// graphs (F272, F274, F289, F293, F298; HR-254). Graphs need the Team
+// edition; the activity edge table (ListGraphEdges in activity mode, F298)
+// is Community. Every graph
 // shares one edge vocabulary. Edges the caller may not see are dropped
 // before expansion, collapsing, capping and counting; historical and
-// expired edges are kept but never counted as current authority. Graphs
+// expired edges are kept but never counted as current authority; a revoked
+// grant's reach shows as HISTORICAL. Filters match an edge's ends and the
+// agent, run and principal it belongs to. Graphs
 // are capped at 2000 nodes and 5000 edges and say when they were cut.
 // Every graph has a tabular twin with the same filters.
 service GraphService {

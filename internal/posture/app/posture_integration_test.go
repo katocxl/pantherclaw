@@ -43,7 +43,9 @@ func findings(t *testing.T, o *exposuretest.Org) map[domain.Kind]dbq.PcPostureFi
 	t.Helper()
 	out := map[domain.Kind]dbq.PcPostureFinding{}
 	o.Tx(t, func(ctx context.Context, tx db.TenantTx) error {
-		rows, err := dbq.New(tx).ListPostureFindings(ctx, dbq.ListPostureFindingsParams{OrgID: o.Org, States: []string{}, MaxRows: 200})
+		rows, err := dbq.New(tx).ListPostureFindings(ctx, dbq.ListPostureFindingsParams{
+			OrgID: o.Org, States: []string{}, MaxRows: 200, AllAgents: true, AgentIds: []ids.UUID{}, OrgScope: true,
+		})
 		for _, r := range rows {
 			out[domain.Kind(r.Kind)] = r
 		}
@@ -263,5 +265,91 @@ func TestTenancy_posture_findings(t *testing.T) {
 	})
 	if err == nil {
 		t.Fatal("an event written into another org")
+	}
+}
+
+// TestHR255_CauseTypeFindingsRemediateWhenTheCauseIsFixed (D63 M1): naming
+// an owner remediates unowned_agent on the next recomputation although
+// the agent keeps its reach; a reach-type finding of the same agent stays
+// open while its paths are reachable.
+func TestHR255_CauseTypeFindingsRemediateWhenTheCauseIsFixed(t *testing.T) {
+	o := exposuretest.New(t)
+	o.Grant(t, o.Agent, 0, "", "payments.*")
+	reconcile(t, o)
+	if f := findings(t, o); f[domain.UnownedAgent].State != string(domain.Open) || f[domain.UncoveredPath].State != string(domain.Open) {
+		t.Fatalf("before: %v %v", f[domain.UnownedAgent].State, f[domain.UncoveredPath].State)
+	}
+	o.Claim(t, o.Agent)
+	reconcile(t, o)
+	f := findings(t, o)
+	if f[domain.UnownedAgent].State != string(domain.Remediated) {
+		t.Fatalf("owned agent's finding: %s", f[domain.UnownedAgent].State)
+	}
+	if f[domain.UncoveredPath].State != string(domain.Open) {
+		t.Fatalf("reach-type finding remediated while reachable: %s", f[domain.UncoveredPath].State)
+	}
+}
+
+// TestHR255_DatabaseHoldsTheLifecycle (L1, L2): a finding is inserted only
+// OPEN; its proof, acceptance and state time change only with its state;
+// and the proof is a snapshot later than its last sighting, never that
+// sighting itself.
+func TestHR255_DatabaseHoldsTheLifecycle(t *testing.T) {
+	o := exposuretest.New(t)
+	o.Grant(t, o.Agent, 0, "", "payments.*")
+	rec, _ := reconcile(t, o)
+	f := findings(t, o)[domain.UncoveredPath]
+	for _, sql := range []string{
+		`UPDATE pc.posture_findings SET state = 'REMEDIATED', remediated_snapshot_id = last_snapshot_id WHERE id = $1`,
+		`UPDATE pc.posture_findings SET remediated_at = now() WHERE id = $1`,
+		`UPDATE pc.posture_findings SET accepted_reason = 'accepted for the pilot' WHERE id = $1`,
+		`UPDATE pc.posture_findings SET state_changed_at = now() - interval '89 days' WHERE id = $1`,
+	} {
+		err := o.P.InTenantTx(context.Background(), o.Org, func(ctx context.Context, tx db.TenantTx) error {
+			_, err := tx.Exec(ctx, sql, f.ID)
+			return err
+		})
+		if err == nil {
+			t.Errorf("allowed: %s", sql)
+		}
+	}
+	err := o.P.InTenantTx(context.Background(), o.Org, func(ctx context.Context, tx db.TenantTx) error {
+		_, err := tx.Exec(ctx, `INSERT INTO pc.posture_findings (org_id, id, kind, root_cause, title, affected_paths, severity,
+			fingerprint, last_snapshot_id, state, remediated_snapshot_id, remediated_at)
+			VALUES ($1, $2, 'unowned_agent', $3, 't', '{p}', 'low', $4, $5, 'REMEDIATED', $5, now())`,
+			o.Org, ids.NewV7(), "agent:"+o.Agent.String(), make([]byte, 32), rec.Snapshot.ID)
+		return err
+	})
+	if err == nil {
+		t.Fatal("a finding inserted already remediated")
+	}
+}
+
+// TestIntPostureActionsAreAudited (D63 M6): every person's move writes an
+// audit.posture.finding_<event> entry with the finding, the states and
+// the reason; a recomputation's own changes do not.
+func TestIntPostureActionsAreAudited(t *testing.T) {
+	o := exposuretest.New(t)
+	o.Grant(t, o.Agent, 0, "", "payments.*")
+	reconcile(t, o)
+	if n := count(t, o, `SELECT count(*) FROM pc.ledger_entries WHERE kind LIKE 'audit.posture.%'`); n != 0 {
+		t.Fatalf("recomputation audited: %d", n)
+	}
+	id := findings(t, o)[domain.UncoveredPath].ID
+	o.Tx(t, func(ctx context.Context, tx db.TenantTx) error {
+		if err := app.Assign(ctx, tx, id, o.User, alice); err != nil {
+			return err
+		}
+		return app.Accept(ctx, tx, id, time.Now().Add(24*time.Hour), "accepted for the pilot", alice)
+	})
+	for _, kind := range []string{"audit.posture.finding_assigned", "audit.posture.finding_accepted"} {
+		if n := count(t, o, `SELECT count(*) FROM pc.ledger_entries WHERE kind = '`+kind+`'
+			AND convert_from(body, 'UTF8') LIKE '%`+id.String()+`%'`); n != 1 {
+			t.Errorf("%s: %d", kind, n)
+		}
+	}
+	if n := count(t, o, `SELECT count(*) FROM pc.ledger_entries WHERE kind = 'audit.posture.finding_accepted'
+		AND convert_from(body, 'UTF8') LIKE '%accepted for the pilot%' AND convert_from(body, 'UTF8') LIKE '%until%'`); n != 1 {
+		t.Fatalf("acceptance audit lacks its reason or expiry: %d", n)
 	}
 }

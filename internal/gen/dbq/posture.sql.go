@@ -28,7 +28,7 @@ func (q *Queries) GetExposureSnapshotTime(ctx context.Context, orgID ids.OrgID, 
 }
 
 const getPostureFinding = `-- name: GetPostureFinding :one
-SELECT org_id, id, kind, root_cause, agent_id, connection_id, grant_id, coverage_finding_id, title, detail, affected_paths, severity, state, owner_user_id, accepted_until, accepted_reason, fingerprint, last_snapshot_id, remediated_snapshot_id, first_seen_at, last_seen_at, state_changed_at, remediated_at FROM pc.posture_findings WHERE org_id = $1 AND id = $2
+SELECT org_id, id, kind, root_cause, agent_id, connection_id, grant_id, coverage_finding_id, title, detail, affected_paths, paths_truncated, severity, state, owner_user_id, accepted_until, accepted_reason, fingerprint, last_snapshot_id, remediated_snapshot_id, first_seen_at, last_seen_at, state_changed_at, remediated_at FROM pc.posture_findings WHERE org_id = $1 AND id = $2
 `
 
 func (q *Queries) GetPostureFinding(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (PcPostureFinding, error) {
@@ -46,6 +46,7 @@ func (q *Queries) GetPostureFinding(ctx context.Context, orgID ids.OrgID, iD ids
 		&i.Title,
 		&i.Detail,
 		&i.AffectedPaths,
+		&i.PathsTruncated,
 		&i.Severity,
 		&i.State,
 		&i.OwnerUserID,
@@ -64,11 +65,11 @@ func (q *Queries) GetPostureFinding(ctx context.Context, orgID ids.OrgID, iD ids
 
 const insertPostureFinding = `-- name: InsertPostureFinding :one
 INSERT INTO pc.posture_findings (org_id, id, kind, root_cause, agent_id, connection_id, grant_id, coverage_finding_id, title,
-    detail, affected_paths, severity, fingerprint, last_snapshot_id, first_seen_at, last_seen_at)
+    detail, affected_paths, paths_truncated, severity, fingerprint, last_snapshot_id, first_seen_at, last_seen_at)
 VALUES ($1, $2, $3, $4, $5, $6,
-    $7, $8, $9, $10, $11,
-    $12, $13, $14, $15, $15)
-RETURNING org_id, id, kind, root_cause, agent_id, connection_id, grant_id, coverage_finding_id, title, detail, affected_paths, severity, state, owner_user_id, accepted_until, accepted_reason, fingerprint, last_snapshot_id, remediated_snapshot_id, first_seen_at, last_seen_at, state_changed_at, remediated_at
+    $7, $8, $9, $10, $11, $12,
+    $13, $14, $15, $16, $16)
+RETURNING org_id, id, kind, root_cause, agent_id, connection_id, grant_id, coverage_finding_id, title, detail, affected_paths, paths_truncated, severity, state, owner_user_id, accepted_until, accepted_reason, fingerprint, last_snapshot_id, remediated_snapshot_id, first_seen_at, last_seen_at, state_changed_at, remediated_at
 `
 
 type InsertPostureFindingParams struct {
@@ -83,6 +84,7 @@ type InsertPostureFindingParams struct {
 	Title             string
 	Detail            []byte
 	AffectedPaths     []string
+	PathsTruncated    bool
 	Severity          string
 	Fingerprint       []byte
 	SnapshotID        ids.UUID
@@ -102,6 +104,7 @@ func (q *Queries) InsertPostureFinding(ctx context.Context, arg InsertPostureFin
 		arg.Title,
 		arg.Detail,
 		arg.AffectedPaths,
+		arg.PathsTruncated,
 		arg.Severity,
 		arg.Fingerprint,
 		arg.SnapshotID,
@@ -120,6 +123,7 @@ func (q *Queries) InsertPostureFinding(ctx context.Context, arg InsertPostureFin
 		&i.Title,
 		&i.Detail,
 		&i.AffectedPaths,
+		&i.PathsTruncated,
 		&i.Severity,
 		&i.State,
 		&i.OwnerUserID,
@@ -207,14 +211,18 @@ func (q *Queries) ListPostureFindingEvents(ctx context.Context, orgID ids.OrgID,
 }
 
 const listPostureFindings = `-- name: ListPostureFindings :many
-SELECT org_id, id, kind, root_cause, agent_id, connection_id, grant_id, coverage_finding_id, title, detail, affected_paths, severity, state, owner_user_id, accepted_until, accepted_reason, fingerprint, last_snapshot_id, remediated_snapshot_id, first_seen_at, last_seen_at, state_changed_at, remediated_at FROM pc.posture_findings
+SELECT org_id, id, kind, root_cause, agent_id, connection_id, grant_id, coverage_finding_id, title, detail, affected_paths, paths_truncated, severity, state, owner_user_id, accepted_until, accepted_reason, fingerprint, last_snapshot_id, remediated_snapshot_id, first_seen_at, last_seen_at, state_changed_at, remediated_at FROM pc.posture_findings
 WHERE org_id = $1
-  AND (cardinality($2::text[]) = 0 OR state = ANY ($2::text[]))
+  AND (cardinality($2::text[]) = 0
+       OR (CASE WHEN state = 'ACCEPTED_TEMPORARILY' AND accepted_until <= now() THEN 'OPEN' ELSE state END)
+          = ANY ($2::text[]))
   AND ($3::text IS NULL OR kind = $3)
   AND ($4::text IS NULL OR root_cause = $4)
-  AND ($5::uuid IS NULL OR id < $5)
+  AND ($5::boolean OR agent_id = ANY ($6::uuid[])
+       OR (agent_id IS NULL AND $7::boolean))
+  AND ($8::uuid IS NULL OR id < $8)
 ORDER BY id DESC
-LIMIT $6
+LIMIT $9
 `
 
 type ListPostureFindingsParams struct {
@@ -222,18 +230,27 @@ type ListPostureFindingsParams struct {
 	States    []string
 	Kind      *string
 	RootCause *string
+	AllAgents bool
+	AgentIds  []ids.UUID
+	OrgScope  bool
 	Before    *ids.UUID
 	MaxRows   int32
 }
 
 // ListPostureFindings lists findings newest first, optionally in some
-// states, of one kind or root cause.
+// states, of one kind or root cause, among those the viewer may read:
+// every finding (all_agents), or those of the visible agents plus, with
+// org scope, those of no agent (D60: filtered before the page is cut).
+// An acceptance past its expiry counts as OPEN (L5).
 func (q *Queries) ListPostureFindings(ctx context.Context, arg ListPostureFindingsParams) ([]PcPostureFinding, error) {
 	rows, err := q.db.Query(ctx, listPostureFindings,
 		arg.OrgID,
 		arg.States,
 		arg.Kind,
 		arg.RootCause,
+		arg.AllAgents,
+		arg.AgentIds,
+		arg.OrgScope,
 		arg.Before,
 		arg.MaxRows,
 	)
@@ -256,6 +273,7 @@ func (q *Queries) ListPostureFindings(ctx context.Context, arg ListPostureFindin
 			&i.Title,
 			&i.Detail,
 			&i.AffectedPaths,
+			&i.PathsTruncated,
 			&i.Severity,
 			&i.State,
 			&i.OwnerUserID,
@@ -284,7 +302,7 @@ UPDATE pc.posture_findings SET state = $1, owner_user_id = COALESCE($2, owner_us
     accepted_until = $3, accepted_reason = $4,
     remediated_snapshot_id = $5
 WHERE org_id = $6 AND id = $7 AND state = $8
-RETURNING org_id, id, kind, root_cause, agent_id, connection_id, grant_id, coverage_finding_id, title, detail, affected_paths, severity, state, owner_user_id, accepted_until, accepted_reason, fingerprint, last_snapshot_id, remediated_snapshot_id, first_seen_at, last_seen_at, state_changed_at, remediated_at
+RETURNING org_id, id, kind, root_cause, agent_id, connection_id, grant_id, coverage_finding_id, title, detail, affected_paths, paths_truncated, severity, state, owner_user_id, accepted_until, accepted_reason, fingerprint, last_snapshot_id, remediated_snapshot_id, first_seen_at, last_seen_at, state_changed_at, remediated_at
 `
 
 type MovePostureFindingParams struct {
@@ -324,6 +342,7 @@ func (q *Queries) MovePostureFinding(ctx context.Context, arg MovePostureFinding
 		&i.Title,
 		&i.Detail,
 		&i.AffectedPaths,
+		&i.PathsTruncated,
 		&i.Severity,
 		&i.State,
 		&i.OwnerUserID,
@@ -376,20 +395,21 @@ func (q *Queries) PostureCredentials(ctx context.Context, orgID ids.OrgID) ([]Po
 
 const postureFindingsForReconcile = `-- name: PostureFindingsForReconcile :many
 
-SELECT id, kind, fingerprint, state, affected_paths, accepted_until, connection_id FROM pc.posture_findings
+SELECT id, kind, fingerprint, state, affected_paths, paths_truncated, accepted_until, connection_id FROM pc.posture_findings
 WHERE org_id = $1
 ORDER BY id
 FOR UPDATE
 `
 
 type PostureFindingsForReconcileRow struct {
-	ID            ids.UUID
-	Kind          string
-	Fingerprint   []byte
-	State         string
-	AffectedPaths []string
-	AcceptedUntil *time.Time
-	ConnectionID  *ids.UUID
+	ID             ids.UUID
+	Kind           string
+	Fingerprint    []byte
+	State          string
+	AffectedPaths  []string
+	PathsTruncated bool
+	AcceptedUntil  *time.Time
+	ConnectionID   *ids.UUID
 }
 
 // SPDX-License-Identifier: BUSL-1.1
@@ -413,6 +433,7 @@ func (q *Queries) PostureFindingsForReconcile(ctx context.Context, orgID ids.Org
 			&i.Fingerprint,
 			&i.State,
 			&i.AffectedPaths,
+			&i.PathsTruncated,
 			&i.AcceptedUntil,
 			&i.ConnectionID,
 		); err != nil {
@@ -428,17 +449,19 @@ func (q *Queries) PostureFindingsForReconcile(ctx context.Context, orgID ids.Org
 
 const seePostureFinding = `-- name: SeePostureFinding :one
 UPDATE pc.posture_findings SET title = $1, detail = $2, affected_paths = $3,
-    severity = $4, last_snapshot_id = $5, last_seen_at = $6,
-    agent_id = $7, connection_id = $8, grant_id = $9,
-    coverage_finding_id = $10
-WHERE org_id = $11 AND id = $12
-RETURNING org_id, id, kind, root_cause, agent_id, connection_id, grant_id, coverage_finding_id, title, detail, affected_paths, severity, state, owner_user_id, accepted_until, accepted_reason, fingerprint, last_snapshot_id, remediated_snapshot_id, first_seen_at, last_seen_at, state_changed_at, remediated_at
+    paths_truncated = $4,
+    severity = $5, last_snapshot_id = $6, last_seen_at = $7,
+    agent_id = $8, connection_id = $9, grant_id = $10,
+    coverage_finding_id = $11
+WHERE org_id = $12 AND id = $13
+RETURNING org_id, id, kind, root_cause, agent_id, connection_id, grant_id, coverage_finding_id, title, detail, affected_paths, paths_truncated, severity, state, owner_user_id, accepted_until, accepted_reason, fingerprint, last_snapshot_id, remediated_snapshot_id, first_seen_at, last_seen_at, state_changed_at, remediated_at
 `
 
 type SeePostureFindingParams struct {
 	Title             string
 	Detail            []byte
 	AffectedPaths     []string
+	PathsTruncated    bool
 	Severity          string
 	SnapshotID        ids.UUID
 	SeenAt            time.Time
@@ -456,6 +479,7 @@ func (q *Queries) SeePostureFinding(ctx context.Context, arg SeePostureFindingPa
 		arg.Title,
 		arg.Detail,
 		arg.AffectedPaths,
+		arg.PathsTruncated,
 		arg.Severity,
 		arg.SnapshotID,
 		arg.SeenAt,
@@ -479,6 +503,7 @@ func (q *Queries) SeePostureFinding(ctx context.Context, arg SeePostureFindingPa
 		&i.Title,
 		&i.Detail,
 		&i.AffectedPaths,
+		&i.PathsTruncated,
 		&i.Severity,
 		&i.State,
 		&i.OwnerUserID,

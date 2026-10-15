@@ -6,22 +6,23 @@
 -- PostureFindingsForReconcile lists every finding that is not remediated,
 -- plus remediated ones (a remediated finding found again reopens).
 -- name: PostureFindingsForReconcile :many
-SELECT id, kind, fingerprint, state, affected_paths, accepted_until, connection_id FROM pc.posture_findings
+SELECT id, kind, fingerprint, state, affected_paths, paths_truncated, accepted_until, connection_id FROM pc.posture_findings
 WHERE org_id = sqlc.arg(org_id)
 ORDER BY id
 FOR UPDATE;
 
 -- name: InsertPostureFinding :one
 INSERT INTO pc.posture_findings (org_id, id, kind, root_cause, agent_id, connection_id, grant_id, coverage_finding_id, title,
-    detail, affected_paths, severity, fingerprint, last_snapshot_id, first_seen_at, last_seen_at)
+    detail, affected_paths, paths_truncated, severity, fingerprint, last_snapshot_id, first_seen_at, last_seen_at)
 VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(kind), sqlc.arg(root_cause), sqlc.narg(agent_id), sqlc.narg(connection_id),
-    sqlc.narg(grant_id), sqlc.narg(coverage_finding_id), sqlc.arg(title), sqlc.arg(detail), sqlc.arg(affected_paths),
+    sqlc.narg(grant_id), sqlc.narg(coverage_finding_id), sqlc.arg(title), sqlc.arg(detail), sqlc.arg(affected_paths), sqlc.arg(paths_truncated),
     sqlc.arg(severity), sqlc.arg(fingerprint), sqlc.arg(snapshot_id), sqlc.arg(seen_at), sqlc.arg(seen_at))
 RETURNING *;
 
 -- SeePostureFinding refreshes a finding that a snapshot found again.
 -- name: SeePostureFinding :one
 UPDATE pc.posture_findings SET title = sqlc.arg(title), detail = sqlc.arg(detail), affected_paths = sqlc.arg(affected_paths),
+    paths_truncated = sqlc.arg(paths_truncated),
     severity = sqlc.arg(severity), last_snapshot_id = sqlc.arg(snapshot_id), last_seen_at = sqlc.arg(seen_at),
     agent_id = sqlc.narg(agent_id), connection_id = sqlc.narg(connection_id), grant_id = sqlc.narg(grant_id),
     coverage_finding_id = sqlc.narg(coverage_finding_id)
@@ -46,13 +47,20 @@ VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(finding_id), sqlc.arg(kind), sq
 SELECT * FROM pc.posture_findings WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id);
 
 -- ListPostureFindings lists findings newest first, optionally in some
--- states, of one kind or root cause.
+-- states, of one kind or root cause, among those the viewer may read:
+-- every finding (all_agents), or those of the visible agents plus, with
+-- org scope, those of no agent (D60: filtered before the page is cut).
+-- An acceptance past its expiry counts as OPEN (L5).
 -- name: ListPostureFindings :many
 SELECT * FROM pc.posture_findings
 WHERE org_id = sqlc.arg(org_id)
-  AND (cardinality(sqlc.arg(states)::text[]) = 0 OR state = ANY (sqlc.arg(states)::text[]))
+  AND (cardinality(sqlc.arg(states)::text[]) = 0
+       OR (CASE WHEN state = 'ACCEPTED_TEMPORARILY' AND accepted_until <= now() THEN 'OPEN' ELSE state END)
+          = ANY (sqlc.arg(states)::text[]))
   AND (sqlc.narg(kind)::text IS NULL OR kind = sqlc.narg(kind))
   AND (sqlc.narg(root_cause)::text IS NULL OR root_cause = sqlc.narg(root_cause))
+  AND (sqlc.arg(all_agents)::boolean OR agent_id = ANY (sqlc.arg(agent_ids)::uuid[])
+       OR (agent_id IS NULL AND sqlc.arg(org_scope)::boolean))
   AND (sqlc.narg(before)::uuid IS NULL OR id < sqlc.narg(before))
 ORDER BY id DESC
 LIMIT sqlc.arg(max_rows);
