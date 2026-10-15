@@ -20,15 +20,20 @@ import (
 
 type devDefs struct{ ds []*defs.Definition }
 
-func (d devDefs) ActiveDefinitions(context.Context, ids.OrgID) ([]*defs.Definition, error) { return d.ds, nil }
+func (d devDefs) ActiveDefinitions(context.Context, ids.OrgID) ([]*defs.Definition, error) {
+	return d.ds, nil
+}
 
 type devCatalog map[string]fdomain.Type
 
-func (c devCatalog) Catalog(context.Context, ids.OrgID) (map[string]fdomain.Type, error) { return c, nil }
+func (c devCatalog) Catalog(context.Context, ids.OrgID) (map[string]fdomain.Type, error) {
+	return c, nil
+}
 
-// TestDevHoldBundlePassesTheGate (G0 M11.1 D10): the dev seed's hold policy
-// passes its own scenario tests, every mutant killed, so dev seed publishes
-// it through the gate.
+// TestDevHoldBundlePassesTheGate (G0 M11.1 D10, D26): the dev seed's hold
+// policy passes its own scenario tests, every mutant killed, in an org with
+// no fact provider yet (as dev seed publishes it), so dev seed publishes it
+// through the gate.
 func TestDevHoldBundlePassesTheGate(t *testing.T) {
 	raw, err := os.ReadFile("../../packages/mock-payments/package.yaml")
 	if err != nil {
@@ -46,7 +51,7 @@ func TestDevHoldBundlePassesTheGate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	r := scenario.New(devDefs{ds}, devCatalog{"payments.charge.refundable": fdomain.TypeBoolean}, celenv.DefaultLimits, policyapp.DefaultBudget)
+	r := scenario.New(devDefs{ds}, devCatalog{}, celenv.DefaultLimits, policyapp.DefaultBudget)
 	res, err := r.Run(context.Background(), ids.New[ids.Org](), devHoldBundle(limit))
 	if err != nil {
 		t.Fatal(err)
