@@ -124,7 +124,7 @@ func Entries(ctx context.Context, tx db.TenantTx, c ids.UUID, after int64, limit
 		limit = MaxEntriesPage
 	}
 	rows, err := dbq.New(tx).ListCaseEntries(ctx, dbq.ListCaseEntriesParams{
-		OrgID: tx.OrgID(), CaseID: c, AfterSeq: after, MaxRows: int32(limit), //nolint:gosec // G115: limit ≤ 500
+		OrgID: tx.OrgID(), CaseID: c, AfterSeq: after, MaxRows: int32(limit),
 	})
 	if err != nil {
 		return nil, err

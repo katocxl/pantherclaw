@@ -41,17 +41,23 @@ func newFixture(t *testing.T) *fixture {
 		args []any
 	}{
 		{"INSERT INTO pc.orgs (id, name) VALUES ($1, 'cases')", []any{f.org}},
-		{"INSERT INTO pc.users (org_id, id, issuer, subject) VALUES ($1, $2, 'https://idp.test', 'alice'), ($1, $3, 'https://idp.test', 'bob')",
-			[]any{f.org, f.alice, f.bob}},
+		{
+			"INSERT INTO pc.users (org_id, id, issuer, subject) VALUES ($1, $2, 'https://idp.test', 'alice'), ($1, $3, 'https://idp.test', 'bob')",
+			[]any{f.org, f.alice, f.bob},
+		},
 		{"INSERT INTO pc.teams (org_id, id, slug, name) VALUES ($1, $2, 'eng', 'Eng')", []any{f.org, team}},
-		{"INSERT INTO pc.environments (org_id, id, team_id, slug, name, kind) VALUES ($1, $2, $3, 'dev', 'Dev', 'DEVELOPMENT')",
-			[]any{f.org, env, team}},
+		{
+			"INSERT INTO pc.environments (org_id, id, team_id, slug, name, kind) VALUES ($1, $2, $3, 'dev', 'Dev', 'DEVELOPMENT')",
+			[]any{f.org, env, team},
+		},
 		{"INSERT INTO pc.agents (org_id, id, name, state, created_by) VALUES ($1, $2, 'bot', 'DISCOVERED', 'test')", []any{f.org, f.agent}},
 		{`INSERT INTO pc.runs (org_id, id, agent_id, environment_id, launcher_user_id, principal_user_id, principal_source, expires_at)
 			VALUES ($1, $2, $3, $4, $5, $5, 'launcher', now() + interval '1 hour')`, []any{f.org, f.run, f.agent, env, f.alice}},
-		{`INSERT INTO pc.transactions (org_id, id, run_id, action_id, action_hash, operation, decision, reason_code, gateway_id)
+		{
+			`INSERT INTO pc.transactions (org_id, id, run_id, action_id, action_hash, operation, decision, reason_code, gateway_id)
 			VALUES ($1, $2, $3, $4, $5, 'repo.contents.write', 'ALLOW', 'OK', 'gw')`,
-			[]any{f.org, f.txn, f.run, ids.NewV7(), make([]byte, 32)}},
+			[]any{f.org, f.txn, f.run, ids.NewV7(), make([]byte, 32)},
+		},
 	} {
 		f.exec(t, s.sql, s.args...)
 	}
@@ -114,8 +120,10 @@ func (f *fixture) get(t *testing.T, c ids.UUID) domain.Case {
 }
 
 func (f *fixture) fact() domain.Draft {
-	return domain.Draft{Kind: domain.KindFact, Text: "The agent issued itself a grant.", Basis: domain.BasisObserved,
-		Evidence: []domain.EvidenceRef{{Kind: domain.EvidenceTransaction, ID: f.txn}}}
+	return domain.Draft{
+		Kind: domain.KindFact, Text: "The agent issued itself a grant.", Basis: domain.BasisObserved,
+		Evidence: []domain.EvidenceRef{{Kind: domain.EvidenceTransaction, ID: f.txn}},
+	}
 }
 
 func TestCaseEntriesChainAndRecordInLedger(t *testing.T) {
@@ -126,8 +134,10 @@ func TestCaseEntriesChainAndRecordInLedger(t *testing.T) {
 	}
 	fact := f.must(t, c.ID, f.fact())
 	q := f.must(t, c.ID, domain.Draft{Kind: domain.KindQuestion, Text: "Was anything read first?", Owner: &f.bob})
-	f.must(t, c.ID, domain.Draft{Kind: domain.KindHypothesis, Text: "Prompt injection.", Basis: domain.BasisHypothesis,
-		Confidence: domain.ConfidenceLow, Alternatives: []string{"A misconfigured template."}})
+	f.must(t, c.ID, domain.Draft{
+		Kind: domain.KindHypothesis, Text: "Prompt injection.", Basis: domain.BasisHypothesis,
+		Confidence: domain.ConfidenceLow, Alternatives: []string{"A misconfigured template."},
+	})
 	f.must(t, c.ID, domain.Draft{Kind: domain.KindAnswer, Text: "Not yet known.", Question: &q.ID, Unresolved: true})
 	f.must(t, c.ID, domain.Draft{Kind: domain.KindLink, Ref: &domain.Ref{Kind: "run", ID: f.run.String()}})
 	if fact.Seq != 1 || q.Seq != 2 {
@@ -244,14 +254,21 @@ func TestCaseClosureRules(t *testing.T) {
 	if _, err := f.append(c.ID, contain); !errors.Is(err, store.ErrNotContained) {
 		t.Fatalf("contain without actions or reason: %v", err)
 	}
+	// A linked action that is unknown is not confirmed.
+	f.must(t, c.ID, domain.Draft{Kind: domain.KindLink, Ref: &domain.Ref{Kind: domain.RefResponseAction, ID: ids.NewV7().String()}})
+	if _, err := f.append(c.ID, contain); !errors.Is(err, store.ErrNotContained) {
+		t.Fatalf("contain with an unknown linked action: %v", err)
+	}
 	contain.NoContainmentNeeded, contain.Reason = true, "The grant expired before any use."
 	f.must(t, c.ID, contain)
 	if k := f.get(t, c.ID); k.State != domain.StateContained || k.OperationalClosed == nil {
 		t.Fatalf("contained = %+v", k)
 	}
 
-	closing := domain.Draft{Kind: domain.KindState, State: domain.StateClosed, Disposition: domain.DispositionTruePositive,
-		CaseImpact: domain.ImpactExplicitlyUnresolved}
+	closing := domain.Draft{
+		Kind: domain.KindState, State: domain.StateClosed, Disposition: domain.DispositionTruePositive,
+		CaseImpact: domain.ImpactExplicitlyUnresolved,
+	}
 	if _, err := f.append(c.ID, closing); !errors.Is(err, store.ErrClosureRules) {
 		t.Fatalf("close without a fact: %v", err)
 	}
@@ -272,8 +289,10 @@ func TestCaseClosureRules(t *testing.T) {
 	}
 	// The question stays open and owned; a closed case still takes its answer.
 	f.must(t, c.ID, domain.Draft{Kind: domain.KindAnswer, Text: "Two files.", Question: &q.ID})
-	if _, err := f.append(c.ID, domain.Draft{Kind: domain.KindHypothesis, Text: "h", Basis: domain.BasisHypothesis,
-		Confidence: domain.ConfidenceHigh}); !errors.Is(err, store.ErrTransition) {
+	if _, err := f.append(c.ID, domain.Draft{
+		Kind: domain.KindHypothesis, Text: "h", Basis: domain.BasisHypothesis,
+		Confidence: domain.ConfidenceHigh,
+	}); !errors.Is(err, store.ErrTransition) {
 		t.Fatalf("hypothesis on a closed case: %v", err)
 	}
 	if _, err := f.append(c.ID, domain.Draft{Kind: domain.KindState, State: domain.StateOpen}); !errors.Is(err, store.ErrTransition) {

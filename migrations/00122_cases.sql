@@ -34,9 +34,11 @@
 -- Superseded entries do not count. A closed case takes only facts, answers,
 -- notes and a follow-up owner.
 --
--- Linked containment actions are read from pc.response_actions (M10
--- response, migration 00123); PL/pgSQL binds that table when a case with
--- such a link moves to CONTAINED.
+-- A case's containment actions (D43) are its standing LINK entries to
+-- response actions plus the pc.response_actions rows whose case_id is the
+-- case (M10 response, migration 00123; PL/pgSQL binds that table at run
+-- time, so this migration applies first). A missing or unknown action is
+-- not confirmed.
 
 -- +goose Up
 CREATE TABLE pc.cases (
@@ -408,18 +410,30 @@ BEGIN
     ELSIF NEW.state = 'CONTAINED' THEN
         -- Operational close: confirmed containment or a reason none is needed.
         IF NOT e.no_containment_needed THEN
-            SELECT count(*) INTO links FROM pc.case_entries l
-            WHERE l.org_id = NEW.org_id AND l.case_id = NEW.id AND l.kind = 'LINK' AND l.ref_kind = 'response_action'
-              AND NOT pc.case_entry_superseded(l.org_id, l.id);
+            -- The case's actions (D43): standing LINK entries to response
+            -- actions and the actions that name the case. A missing or
+            -- unknown action is not confirmed.
+            IF to_regclass('pc.response_actions') IS NULL THEN
+                SELECT count(*), count(*) INTO links, pending FROM pc.case_entries l
+                WHERE l.org_id = NEW.org_id AND l.case_id = NEW.id AND l.kind = 'LINK' AND l.ref_kind = 'response_action'
+                  AND NOT pc.case_entry_superseded(l.org_id, l.id);
+            ELSE
+                WITH acts AS (
+                    SELECT l.ref_id AS id FROM pc.case_entries l
+                    WHERE l.org_id = NEW.org_id AND l.case_id = NEW.id AND l.kind = 'LINK' AND l.ref_kind = 'response_action'
+                      AND NOT pc.case_entry_superseded(l.org_id, l.id)
+                    UNION
+                    SELECT a.id::text FROM pc.response_actions a WHERE a.org_id = NEW.org_id AND a.case_id = NEW.id
+                )
+                SELECT count(*), count(*) FILTER (WHERE NOT EXISTS (
+                           SELECT 1 FROM pc.response_actions a
+                           WHERE a.org_id = NEW.org_id AND a.id::text = acts.id AND a.status = 'CONFIRMED'))
+                INTO links, pending FROM acts;
+            END IF;
             IF links = 0 THEN
                 RAISE EXCEPTION 'CASE_NOT_CONTAINED: no containment action is linked and no reason says none is needed'
                     USING ERRCODE = 'check_violation';
             END IF;
-            SELECT count(*) INTO pending FROM pc.case_entries l
-            WHERE l.org_id = NEW.org_id AND l.case_id = NEW.id AND l.kind = 'LINK' AND l.ref_kind = 'response_action'
-              AND NOT pc.case_entry_superseded(l.org_id, l.id)
-              AND NOT EXISTS (SELECT 1 FROM pc.response_actions a
-                              WHERE a.org_id = l.org_id AND a.id::text = l.ref_id AND a.status = 'CONFIRMED');
             IF pending > 0 THEN
                 RAISE EXCEPTION 'CASE_NOT_CONTAINED: % linked containment actions are not confirmed', pending
                     USING ERRCODE = 'check_violation';

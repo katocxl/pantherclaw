@@ -119,19 +119,25 @@ func RunTimeline(ctx context.Context, tx db.TenantTx, s Scope, run ids.UUID, wit
 	}
 	for _, t := range txns {
 		id := t.ID
-		tl.Events = append(tl.Events, Event{At: t.CreatedAt, Kind: EventDecision, Transaction: &id, Operation: t.Operation,
-			Connection: t.ConnectionID, Detail: t.Decision})
+		tl.Events = append(tl.Events, Event{
+			At: t.CreatedAt, Kind: EventDecision, Transaction: &id, Operation: t.Operation,
+			Connection: t.ConnectionID, Detail: t.Decision,
+		})
 		if !t.HasReceipt {
 			tl.Gaps = append(tl.Gaps, Gap{Kind: GapNoDecisionReceipt, Transaction: id, At: t.CreatedAt})
 		}
 		if t.DispatchingAt != nil {
-			tl.Events = append(tl.Events, Event{At: *t.DispatchingAt, Kind: EventDispatch, Transaction: &id,
-				Operation: t.Operation, Connection: t.ConnectionID})
+			tl.Events = append(tl.Events, Event{
+				At: *t.DispatchingAt, Kind: EventDispatch, Transaction: &id,
+				Operation: t.Operation, Connection: t.ConnectionID,
+			})
 		}
 		switch {
 		case t.Outcome != nil && t.OutcomeAt != nil:
-			tl.Events = append(tl.Events, Event{At: *t.OutcomeAt, Kind: EventResult, Transaction: &id,
-				Operation: t.Operation, Connection: t.ConnectionID, Detail: *t.Outcome})
+			tl.Events = append(tl.Events, Event{
+				At: *t.OutcomeAt, Kind: EventResult, Transaction: &id,
+				Operation: t.Operation, Connection: t.ConnectionID, Detail: *t.Outcome,
+			})
 			if *t.Outcome == "unknown" {
 				tl.Gaps = append(tl.Gaps, Gap{Kind: GapOutcomeUnknown, Transaction: id, At: *t.OutcomeAt})
 			}
@@ -148,11 +154,15 @@ func RunTimeline(ctx context.Context, tx db.TenantTx, s Scope, run ids.UUID, wit
 	}
 	for _, a := range aps {
 		id := a.ID
-		tl.Events = append(tl.Events, Event{At: a.CreatedAt, Kind: EventHold, Approval: &id, Transaction: a.TransactionID,
-			Operation: a.Operation, Detail: "PENDING"})
+		tl.Events = append(tl.Events, Event{
+			At: a.CreatedAt, Kind: EventHold, Approval: &id, Transaction: a.TransactionID,
+			Operation: a.Operation, Detail: "PENDING",
+		})
 		if end := firstTime(a.ApprovedAt, a.EndedAt); end != nil {
-			tl.Events = append(tl.Events, Event{At: *end, Kind: EventApproval, Approval: &id, Transaction: a.TransactionID,
-				Operation: a.Operation, Detail: a.State})
+			tl.Events = append(tl.Events, Event{
+				At: *end, Kind: EventApproval, Approval: &id, Transaction: a.TransactionID,
+				Operation: a.Operation, Detail: a.State,
+			})
 		}
 	}
 
@@ -248,8 +258,10 @@ func phases(txns []dbq.InvRunTransactionsRow) []Phase {
 			}
 			continue
 		}
-		out = append(out, Phase{Start: t.CreatedAt, End: t.CreatedAt, Connection: t.ConnectionID, Actions: 1,
-			Operations: []string{t.Operation}, Basis: BasisInferred, FirstAction: t.ID})
+		out = append(out, Phase{
+			Start: t.CreatedAt, End: t.CreatedAt, Connection: t.ConnectionID, Actions: 1,
+			Operations: []string{t.Operation}, Basis: BasisInferred, FirstAction: t.ID,
+		})
 	}
 	for i := range out {
 		slices.SortFunc(out[i].Operations, cmp.Compare[string])

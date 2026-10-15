@@ -337,9 +337,7 @@ func (d Draft) Validate() error {
 		if len(d.Evidence) == 0 {
 			return bad("a fact needs at least one evidence ref")
 		}
-		switch d.Basis {
-		case BasisObserved, BasisRuleMatch, BasisInferred:
-		default:
+		if d.Basis != BasisObserved && d.Basis != BasisRuleMatch && d.Basis != BasisInferred {
 			return bad("a fact is observed, a rule match or inferred")
 		}
 	case KindHypothesis:
@@ -466,7 +464,7 @@ func (d Draft) Body(c, id ids.UUID, seq int64, author Author) ([]byte, error) {
 	}
 	b := body{
 		V: BodyVersion, Case: c.String(), ID: id.String(), Seq: seq, Kind: d.Kind,
-		Author: bodyAuthor{author.Type, author.ID}, Text: d.Text, Basis: d.Basis, Confidence: d.Confidence,
+		Author: bodyAuthor(author), Text: d.Text, Basis: d.Basis, Confidence: d.Confidence,
 		Alternatives: d.Alternatives, Question: idString(d.Question), Unresolved: d.Unresolved,
 		Owner: idString(d.Owner), OwnerRole: d.OwnerRole, Impact: d.Impact, State: d.State,
 		NoContainmentNeeded: d.NoContainmentNeeded, Disposition: d.Disposition, CaseImpact: d.CaseImpact,

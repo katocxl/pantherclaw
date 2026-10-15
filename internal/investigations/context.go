@@ -124,8 +124,10 @@ func PrecedingContext(ctx context.Context, tx db.TenantTx, s Scope, run ids.UUID
 	if err := rng.check(); err != nil {
 		return Preceding{}, err
 	}
-	p := Preceding{Run: r.ID, Agent: r.AgentID, Transaction: txn, Range: rng, ContentProvenance: ProvenanceNotCollected,
-		ScopeLimited: s.Limited()}
+	p := Preceding{
+		Run: r.ID, Agent: r.AgentID, Transaction: txn, Range: rng, ContentProvenance: ProvenanceNotCollected,
+		ScopeLimited: s.Limited(),
+	}
 
 	changes, err := q.InvGrantChanges(ctx, dbq.InvGrantChangesParams{
 		OrgID: tx.OrgID(), AgentID: r.AgentID, StartTime: rng.Start, EndTime: rng.End,
@@ -134,8 +136,10 @@ func PrecedingContext(ctx context.Context, tx db.TenantTx, s Scope, run ids.UUID
 		return Preceding{}, err
 	}
 	for _, c := range changes {
-		p.Authority = append(p.Authority, AuthorityChange{Grant: c.GrantID, Change: authorityDetail(c), At: c.At,
-			Grantor: Party{c.GrantorKind, c.GrantorID}, Parent: c.ParentID, Basis: BasisObserved})
+		p.Authority = append(p.Authority, AuthorityChange{
+			Grant: c.GrantID, Change: authorityDetail(c), At: c.At,
+			Grantor: Party{c.GrantorKind, c.GrantorID}, Parent: c.ParentID, Basis: BasisObserved,
+		})
 	}
 
 	txns, err := runTransactions(ctx, q, tx.OrgID(), run, MaxTimelineActions)
@@ -158,8 +162,10 @@ func PrecedingContext(ctx context.Context, tx db.TenantTx, s Scope, run ids.UUID
 			return Preceding{}, err
 		}
 		for _, c := range tools {
-			p.Tools = append(p.Tools, ToolChange{Connection: c.ConnectionID, Name: c.Connection, Package: c.Package,
-				Change: c.Change, At: c.At, Basis: BasisObserved})
+			p.Tools = append(p.Tools, ToolChange{
+				Connection: c.ConnectionID, Name: c.Connection, Package: c.Package,
+				Change: c.Change, At: c.At, Basis: BasisObserved,
+			})
 		}
 	}
 
@@ -177,9 +183,11 @@ func PrecedingContext(ctx context.Context, tx db.TenantTx, s Scope, run ids.UUID
 		if !ok {
 			continue
 		}
-		p.Shared = append(p.Shared, Shared{Run: x.RunID, Agent: x.AgentID, Connection: x.ConnectionID,
+		p.Shared = append(p.Shared, Shared{
+			Run: x.RunID, Agent: x.AgentID, Connection: x.ConnectionID,
 			TargetType: x.TargetType, TargetID: x.TargetID, Actions: x.Actions, First: x.FirstAt, Last: x.LastAt,
-			Basis: BasisObserved})
+			Basis: BasisObserved,
+		})
 	}
 
 	if subject != nil && str(subject.DestinationClass) == "public" {
@@ -190,9 +198,11 @@ func PrecedingContext(ctx context.Context, tx db.TenantTx, s Scope, run ids.UUID
 			if t.CreatedAt.Before(rng.Start) {
 				continue
 			}
-			p.Links = append(p.Links, Link{Kind: LinkInternalBeforePublic, From: t.ID, To: subject.ID, Operation: t.Operation,
+			p.Links = append(p.Links, Link{
+				Kind: LinkInternalBeforePublic, From: t.ID, To: subject.ID, Operation: t.Operation,
 				Connection: t.ConnectionID, At: t.CreatedAt, Basis: BasisInferred,
-				Explanation: "an earlier action of this run used an internal destination; this is a sequence, not a proven flow"})
+				Explanation: "an earlier action of this run used an internal destination; this is a sequence, not a proven flow",
+			})
 		}
 	}
 	return p, nil

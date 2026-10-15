@@ -35,8 +35,10 @@ type fixture struct {
 func newFixture(t *testing.T) *fixture {
 	t.Helper()
 	d := dbtest.New(t)
-	f := &fixture{p: d.AppPool(t), org: ids.New[ids.Org](), alice: ids.NewV7(), env: ids.NewV7(), agent: ids.NewV7(),
-		other: ids.NewV7(), internal: ids.NewV7(), public: ids.NewV7(), gw: ids.NewV7()}
+	f := &fixture{
+		p: d.AppPool(t), org: ids.New[ids.Org](), alice: ids.NewV7(), env: ids.NewV7(), agent: ids.NewV7(),
+		other: ids.NewV7(), internal: ids.NewV7(), public: ids.NewV7(), gw: ids.NewV7(),
+	}
 	team := ids.NewV7()
 	f.exec(t, "INSERT INTO pc.orgs (id, name) VALUES ($1, 'inv')", f.org)
 	f.exec(t, "INSERT INTO pc.users (org_id, id, issuer, subject) VALUES ($1, $2, 'https://idp.test', 'alice')", f.org, f.alice)
