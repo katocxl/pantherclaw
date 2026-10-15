@@ -17,6 +17,13 @@
 -- BINDING ceremony over the request's binding: distinct persons and
 -- distinct keys. A BINDING ceremony therefore names exactly one of an
 -- approval request, a batch, a reconciliation and a policy change request.
+--
+-- pc_app may UPDATE only the columns the conditional transitions need
+-- (G0 M11.1 design decision 22): policy_versions (state, published_by,
+-- published_at), as granted in 00021, and policy_change_requests (state,
+-- decided_at, decided_reason). Ids, content, digests, bindings and
+-- requesters never change; validations, test runs and confirmations are
+-- insert-only.
 
 -- +goose Up
 ALTER TABLE pc.policy_versions

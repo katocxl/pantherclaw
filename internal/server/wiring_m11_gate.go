@@ -11,6 +11,7 @@ import (
 
 	defspg "github.com/katocxl/pantherclaw/internal/definitions/adapters/pgstore"
 	factspg "github.com/katocxl/pantherclaw/internal/facts/adapters/pgstore"
+	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1/pantherclawv1connect"
 	grantsapp "github.com/katocxl/pantherclaw/internal/grants/app"
 	"github.com/katocxl/pantherclaw/internal/platform/celenv"
@@ -57,6 +58,7 @@ func newPolicyVersions(pool *db.Pool, notify policyapp.Notifier, publicURL strin
 	defs := &defspg.Store{Pool: pool}
 	facts := &factspg.Store{Pool: pool}
 	validator := validate.New(defs, facts, facts, celenv.DefaultLimits)
+	validator.Approvers, validator.Sources = gateReaders{pool}, gateReaders{pool}
 	v := &policyapp.Versions{
 		Store: &polpg.Store{Pool: pool}, Facts: facts, Subjects: facts, Definitions: defs,
 		Authz: grantsapp.SubjectAuthorizer{}, Limits: celenv.DefaultLimits,
@@ -97,4 +99,31 @@ func (o outcomeDiff) OutcomeDiff(ctx context.Context, org ids.OrgID, base, next 
 		changes = []validate.OutcomeChange{}
 	}
 	return json.Marshal(changes, json.Deterministic(true))
+}
+
+// gateReaders answer the validator's optional checks (D8): APPROVER_NONE
+// (no active person holds a rule's approval role at the org) and
+// FACT_NO_SOURCE (no active provider or connection supplies a fact).
+type gateReaders struct{ pool *db.Pool }
+
+func (r gateReaders) Approvers(ctx context.Context, org ids.OrgID, role string) (int, error) {
+	var n int32
+	err := r.pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
+		var err error
+		n, err = dbq.New(tx).PolicyRoleHolders(ctx, org, role)
+		return err
+	}, db.ReadOnly())
+	return int(n), err
+}
+
+func (r gateReaders) SuppliedFacts(ctx context.Context, org ids.OrgID) (map[string]bool, error) {
+	out := map[string]bool{}
+	err := r.pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
+		names, err := dbq.New(tx).PolicySuppliedFacts(ctx, org)
+		for _, n := range names {
+			out[n] = true
+		}
+		return err
+	}, db.ReadOnly())
+	return out, err
 }
