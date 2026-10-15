@@ -806,7 +806,7 @@ const (
 	voidBaseChanged      = "BASE_CHANGED"
 )
 
-// cancel moves an open rollout to CANCELLED and voids its pending change
+// cancel ends an open rollout (StageCancelled) and voids its pending change
 // requests: the ROLLOUT request of its pilot and the PUBLISH request of its
 // version (D31).
 func cancel(ctx context.Context, tx db.TenantTx, actor evdomain.Actor, r dbq.PcPolicyRollout, reason string) error {
@@ -859,9 +859,9 @@ func publishActor(ctx context.Context) evdomain.Actor {
 
 // Published records a publish in its transaction (D6's OnPublished hook).
 // The org's open rollouts are locked; the one of version, if any, becomes
-// COMPLETE (its pending pilot request voided), and every other is
-// CANCELLED with its pending requests voided (BASE_CHANGED, D31): its
-// version was classified against a base that is no longer published.
+// COMPLETE (its pending pilot request voided), and every other ends
+// (StageCancelled) with its pending requests voided (BASE_CHANGED, D31):
+// its version was classified against a base that is no longer published.
 // Their shadow results are kept. Without an open rollout of version a
 // COMPLETE rollout is recorded (every edition: status only). Every
 // non-retired agent becomes a target, so the sweeper can follow each one
