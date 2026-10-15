@@ -26,15 +26,17 @@ const purposeBinding = "BINDING"
 
 // BindingSubject is what a BINDING ceremony signs: one approval request,
 // one batch, (G0 M7 slice A11) the release of one reconciliation, or (G0
-// M11.1 design decision 11) the confirmation of one policy change request.
+// M11.1 design decision 11) the confirmation of one policy change request,
+// or (G0 M10 D38) the confirmation of one identity playbook request.
 type BindingSubject struct {
 	Request        ids.UUID
 	Batch          ids.UUID
 	Reconciliation ids.UUID
 	PolicyChange   ids.UUID
+	Playbook       ids.UUID
 }
 
-func (b BindingSubject) params() (request, batch, reconciliation, policyChange *ids.UUID) {
+func (b BindingSubject) params() (request, batch, reconciliation, policyChange, playbook *ids.UUID) {
 	if !b.Request.IsZero() {
 		r := b.Request
 		request = &r
@@ -51,13 +53,17 @@ func (b BindingSubject) params() (request, batch, reconciliation, policyChange *
 		p := b.PolicyChange
 		policyChange = &p
 	}
-	return request, batch, reconciliation, policyChange
+	if !b.Playbook.IsZero() {
+		x := b.Playbook
+		playbook = &x
+	}
+	return request, batch, reconciliation, policyChange, playbook
 }
 
 // one reports whether the subject names exactly one thing.
 func (b BindingSubject) one() bool {
 	n := 0
-	for _, id := range []ids.UUID{b.Request, b.Batch, b.Reconciliation, b.PolicyChange} {
+	for _, id := range []ids.UUID{b.Request, b.Batch, b.Reconciliation, b.PolicyChange, b.Playbook} {
 		if !id.IsZero() {
 			n++
 		}
@@ -78,7 +84,7 @@ func (w *WebAuthn) BeginBinding(ctx context.Context, s BrowserSession, subject B
 	if !subject.one() {
 		return Ceremony{}, ErrCeremonyInvalid
 	}
-	request, batch, reconciliation, policyChange := subject.params()
+	request, batch, reconciliation, policyChange, playbook := subject.params()
 	var out Ceremony
 	err := w.pool.InTenantTx(ctx, s.Org, func(ctx context.Context, tx db.TenantTx) error {
 		q := dbq.New(tx)
@@ -104,7 +110,7 @@ func (w *WebAuthn) BeginBinding(ctx context.Context, s BrowserSession, subject B
 		}
 		if err := q.DeleteOpenBindingCeremonies(ctx, dbq.DeleteOpenBindingCeremoniesParams{
 			OrgID: s.Org, UserID: s.User(), ApprovalRequestID: request, BatchID: batch, ReconciliationID: reconciliation,
-			PolicyChangeRequestID: policyChange,
+			PolicyChangeRequestID: policyChange, IdentityPlaybookRequestID: playbook,
 		}); err != nil {
 			return err
 		}
@@ -112,7 +118,8 @@ func (w *WebAuthn) BeginBinding(ctx context.Context, s BrowserSession, subject B
 		return q.InsertBindingCeremony(ctx, dbq.InsertBindingCeremonyParams{
 			OrgID: s.Org, ID: out.ID, SessionID: s.ID, UserID: s.User(), Challenge: raw,
 			AllowedCredentials: sd.AllowedCredentialIDs, ApprovalRequestID: request, BatchID: batch,
-			ReconciliationID: reconciliation, PolicyChangeRequestID: policyChange, TtlSeconds: int32(CeremonyTTL / time.Second),
+			ReconciliationID: reconciliation, PolicyChangeRequestID: policyChange, IdentityPlaybookRequestID: playbook,
+			TtlSeconds: int32(CeremonyTTL / time.Second),
 		})
 	})
 	return out, err
@@ -199,6 +206,9 @@ func (w *WebAuthn) VerifyBinding(ctx context.Context, s BrowserSession, ceremony
 		}
 		if row.ReconciliationID != nil {
 			out.Subject.Reconciliation = *row.ReconciliationID
+		}
+		if row.IdentityPlaybookRequestID != nil {
+			out.Subject.Playbook = *row.IdentityPlaybookRequestID
 		}
 		if row.PolicyChangeRequestID != nil {
 			out.Subject.PolicyChange = *row.PolicyChangeRequestID

@@ -1,0 +1,273 @@
+// SPDX-License-Identifier: BUSL-1.1
+// Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+
+syntax = "proto3";
+
+package pantherclaw.v1;
+
+import "buf/validate/validate.proto";
+import "google/protobuf/timestamp.proto";
+
+// SIEMService manages SIEM export destinations (G0 M10 D35, D36; PN-018,
+// F537, HR-259, HR-260; Business edition). A destination is an https URL
+// that receives OCSF 1.9 events in batches signed with Standard Webhooks.
+// It is created PENDING and sends nothing until a person activates it on
+// its page (confirm_url) with a security key; its URL, internal flag and
+// data classes never change. Export follows a cursor over the evidence
+// feed and never skips an event: a failing destination holds its cursor
+// and is retried.
+service SIEMService {
+  // CreateSIEMDestination adds a PENDING destination (a person only) and
+  // returns its signing secret once.
+  // permission: siem.manage
+  rpc CreateSIEMDestination(CreateSIEMDestinationRequest) returns (CreateSIEMDestinationResponse);
+  // GetSIEMDestination returns one destination and its delivery health.
+  // permission: siem.read
+  rpc GetSIEMDestination(GetSIEMDestinationRequest) returns (GetSIEMDestinationResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // ListSIEMDestinations lists destinations that are not disabled.
+  // permission: siem.read
+  rpc ListSIEMDestinations(ListSIEMDestinationsRequest) returns (ListSIEMDestinationsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // SetSIEMDestinationState pauses, resumes or disables a destination (a
+  // person only). Disabling is final.
+  // permission: siem.manage
+  rpc SetSIEMDestinationState(SetSIEMDestinationStateRequest) returns (SetSIEMDestinationStateResponse);
+  // RotateSIEMDestinationSecret replaces the signing secret and returns the
+  // new one once; the old one also signs for 24 hours (a person only).
+  // permission: siem.manage
+  rpc RotateSIEMDestinationSecret(RotateSIEMDestinationSecretRequest) returns (RotateSIEMDestinationSecretResponse);
+  // RetrySIEMDestination tries the destination's waiting batch again now,
+  // with a fresh retry schedule (a person only).
+  // permission: siem.manage
+  rpc RetrySIEMDestination(RetrySIEMDestinationRequest) returns (RetrySIEMDestinationResponse);
+  // ListSIEMBatches lists a destination's last 20 batches.
+  // permission: siem.read
+  rpc ListSIEMBatches(ListSIEMBatchesRequest) returns (ListSIEMBatchesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+}
+
+// SIEMDestination is one export destination.
+message SIEMDestination {
+  // Destination id.
+  string id = 1;
+  // Name.
+  string name = 2;
+  // The https URL batches are posted to.
+  string url = 3;
+  // True when the URL may be a private or loopback address.
+  bool internal = 4;
+  // What it receives: decisions, alerts, incidents, audit, containment,
+  // coverage.
+  repeated string data_classes = 5;
+  // "ocsf_1_9".
+  string format = 6;
+  // "PENDING", "ACTIVE", "PAUSED" or "DISABLED".
+  string state = 7;
+  // Who created it.
+  string created_by = 8;
+  // When it was created.
+  google.protobuf.Timestamp create_time = 9;
+  // Who activated it with a security key; empty while PENDING.
+  string activated_by = 10;
+  // When it was activated.
+  google.protobuf.Timestamp activate_time = 11;
+  // The page where a person activates it.
+  string confirm_url = 12;
+  // Delivery health: "NOT_CONFIRMED" (configured, nothing delivered yet),
+  // "HEALTHY", "DEGRADED" or "FAILING".
+  string health = 13;
+  // When the first batch was delivered (a 2xx); unset before.
+  google.protobuf.Timestamp confirm_time = 14;
+  // The feed sequence export has reached (where it is held when failing).
+  int64 cursor_seq = 15;
+  // The end of the last delivered batch.
+  int64 last_delivered_seq = 16;
+  // When the last batch was delivered.
+  google.protobuf.Timestamp last_delivered_time = 17;
+  // Failed attempts in a row.
+  int32 consecutive_failures = 18;
+  // Since when attempts fail; unset when healthy.
+  google.protobuf.Timestamp failing_since = 19;
+  // The last failure's code ("http_503", "timeout", "destination_denied").
+  string last_failure_code = 20;
+  // Delivered batches.
+  int64 delivered_batches = 21;
+  // Batches that used up the retry schedule (still retried).
+  int64 failed_batches = 22;
+  // Attempts that were retries.
+  int64 retries = 23;
+  // Since when the oldest undelivered event waits; unset when none waits.
+  google.protobuf.Timestamp waiting_since = 24;
+  // When the previous signing secret stops signing; unset without a
+  // rotation in progress.
+  google.protobuf.Timestamp rotation_end_time = 25;
+}
+
+// CreateSIEMDestinationRequest describes a destination.
+message CreateSIEMDestinationRequest {
+  // Lowercase letters, digits and dashes.
+  string name = 1 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 63
+    pattern: "^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$"
+  }];
+  // The https URL.
+  string url = 2 [(buf.validate.field).string = {
+    min_len: 9
+    max_len: 2048
+    prefix: "https://"
+  }];
+  // Allow a private or loopback address (confirmed with the activation).
+  bool internal = 3;
+  // What it receives.
+  repeated string data_classes = 4 [(buf.validate.field).repeated = {
+    min_items: 1
+    max_items: 6
+    unique: true
+    items: {
+      string: {
+        in: [
+          "decisions",
+          "alerts",
+          "incidents",
+          "audit",
+          "containment",
+          "coverage"
+        ]
+      }
+    }
+  }];
+}
+
+// CreateSIEMDestinationResponse returns the PENDING destination.
+message CreateSIEMDestinationResponse {
+  // The destination.
+  SIEMDestination destination = 1;
+  // The signing secret ("whsec_..."), shown once.
+  string signing_secret = 2;
+}
+
+// GetSIEMDestinationRequest names a destination.
+message GetSIEMDestinationRequest {
+  // Destination id.
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// GetSIEMDestinationResponse returns it.
+message GetSIEMDestinationResponse {
+  // The destination.
+  SIEMDestination destination = 1;
+}
+
+// ListSIEMDestinationsRequest pages destinations.
+message ListSIEMDestinationsRequest {
+  // Maximum results (default and at most 200).
+  int32 page_size = 1 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 200
+  }];
+  // Token from a previous response.
+  string page_token = 2 [(buf.validate.field).string = {
+    max_len: 64
+    pattern: "^[A-Za-z0-9_-]*$"
+  }];
+}
+
+// ListSIEMDestinationsResponse is one page.
+message ListSIEMDestinationsResponse {
+  // Destinations, by id.
+  repeated SIEMDestination destinations = 1;
+  // Token for the next page; empty at the end.
+  string next_page_token = 2;
+}
+
+// SetSIEMDestinationStateRequest changes a destination's state.
+message SetSIEMDestinationStateRequest {
+  // Destination id.
+  string id = 1 [(buf.validate.field).string.uuid = true];
+  // "PAUSED", "ACTIVE" (resume a paused one) or "DISABLED".
+  string state = 2 [(buf.validate.field).string = {
+    in: [
+      "PAUSED",
+      "ACTIVE",
+      "DISABLED"
+    ]
+  }];
+}
+
+// SetSIEMDestinationStateResponse returns the destination.
+message SetSIEMDestinationStateResponse {
+  // The destination.
+  SIEMDestination destination = 1;
+}
+
+// RotateSIEMDestinationSecretRequest names a destination.
+message RotateSIEMDestinationSecretRequest {
+  // Destination id.
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// RotateSIEMDestinationSecretResponse returns the new secret once.
+message RotateSIEMDestinationSecretResponse {
+  // The new signing secret ("whsec_...").
+  string signing_secret = 1;
+}
+
+// RetrySIEMDestinationRequest names a destination.
+message RetrySIEMDestinationRequest {
+  // Destination id.
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// RetrySIEMDestinationResponse returns the destination.
+message RetrySIEMDestinationResponse {
+  // The destination.
+  SIEMDestination destination = 1;
+}
+
+// ListSIEMBatchesRequest names a destination.
+message ListSIEMBatchesRequest {
+  // Destination id.
+  string destination_id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// SIEMBatch is one batch: the destination's events in a feed range.
+message SIEMBatch {
+  // Batch id (the webhook-id of its requests).
+  string id = 1;
+  // The feed range starts after this sequence.
+  int64 from_seq = 2;
+  // The feed range ends with this sequence.
+  int64 to_seq = 3;
+  // Events in it.
+  int32 event_count = 4;
+  // Body size in bytes.
+  int32 body_bytes = 5;
+  // "PENDING", "DELIVERED" or "FAILED" (still retried).
+  string state = 6;
+  // Attempts so far.
+  int32 attempts = 7;
+  // The next attempt.
+  google.protobuf.Timestamp next_attempt_time = 8;
+  // The last attempt's HTTP status (0: none).
+  int32 last_status = 9;
+  // The last attempt's failure code.
+  string last_error = 10;
+  // When it was built.
+  google.protobuf.Timestamp create_time = 11;
+  // When it was delivered; unset before.
+  google.protobuf.Timestamp deliver_time = 12;
+  // Entries in the range too large for any batch: recorded here and as an
+  // owned failure, never skipped silently.
+  repeated string skipped_uids = 13;
+}
+
+// ListSIEMBatchesResponse lists batches, newest first.
+message ListSIEMBatchesResponse {
+  // Batches.
+  repeated SIEMBatch batches = 1;
+}

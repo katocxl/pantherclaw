@@ -1,0 +1,343 @@
+// SPDX-License-Identifier: BUSL-1.1
+// Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+
+syntax = "proto3";
+
+package pantherclaw.v1;
+
+import "buf/validate/validate.proto";
+import "google/protobuf/timestamp.proto";
+
+// SharedSignalsService manages Shared Signals (CAEP and RISC) transmitters
+// (G0 M10 D37; PN-024, HR-261, T-113; Business edition). A transmitter is
+// an identity provider that pushes signed Security Event Tokens to its
+// endpoint_url. It is created PENDING and accepts nothing until a person
+// activates it on its page (confirm_url) with a security key; its issuer,
+// key set and audience never change.
+service SharedSignalsService {
+  // CreateSSFTransmitter adds a PENDING transmitter (a person only).
+  // permission: signals.manage
+  rpc CreateSSFTransmitter(CreateSSFTransmitterRequest) returns (CreateSSFTransmitterResponse);
+  // GetSSFTransmitter returns one transmitter.
+  // permission: signals.read
+  rpc GetSSFTransmitter(GetSSFTransmitterRequest) returns (GetSSFTransmitterResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // ListSSFTransmitters lists transmitters that are not disabled.
+  // permission: signals.read
+  rpc ListSSFTransmitters(ListSSFTransmittersRequest) returns (ListSSFTransmittersResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // SetSSFTransmitterState pauses, resumes or disables a transmitter (a
+  // person only). Disabling is final.
+  // permission: signals.manage
+  rpc SetSSFTransmitterState(SetSSFTransmitterStateRequest) returns (SetSSFTransmitterStateResponse);
+  // ListSSFEvents lists a transmitter's last 50 received events.
+  // permission: signals.read
+  rpc ListSSFEvents(ListSSFEventsRequest) returns (ListSSFEventsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // GetIdentityPlaybook returns the identity playbook (D38, HR-262): off by
+  // default; when on, an event of one of its types about a person matched
+  // by issuer and subject contains that person and the grants they issued
+  // and voids their waiting approvals.
+  // permission: signals.read
+  rpc GetIdentityPlaybook(GetIdentityPlaybookRequest) returns (GetIdentityPlaybookResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // RequestIdentityPlaybookChange asks to enable, change or disable the
+  // playbook (a person only). It applies only when confirmed on its page
+  // (confirm_url) with security keys: by two different people with two
+  // different keys to enable or change it, by one to disable it.
+  // permission: signals.manage
+  rpc RequestIdentityPlaybookChange(RequestIdentityPlaybookChangeRequest) returns (RequestIdentityPlaybookChangeResponse);
+  // ListIdentityPlaybookRequests lists the last 50 playbook requests.
+  // permission: signals.read
+  rpc ListIdentityPlaybookRequests(ListIdentityPlaybookRequestsRequest) returns (ListIdentityPlaybookRequestsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // DeclineIdentityPlaybookRequest ends a pending request (a person only).
+  // permission: signals.manage
+  rpc DeclineIdentityPlaybookRequest(DeclineIdentityPlaybookRequestRequest) returns (DeclineIdentityPlaybookRequestResponse);
+}
+
+// IdentityPlaybook is the org's playbook.
+message IdentityPlaybook {
+  // Whether it acts.
+  bool enabled = 1;
+  // The event type URIs it acts on.
+  repeated string events = 2;
+  // Its version (each applied request adds one).
+  int32 version = 3;
+  // The request that set it; empty when never changed.
+  string request_id = 4;
+  // When it last changed.
+  google.protobuf.Timestamp update_time = 5;
+}
+
+// IdentityPlaybookConfirmation is one person's confirmation.
+message IdentityPlaybookConfirmation {
+  // The person.
+  string principal_id = 1;
+  // The security key that signed the request's binding.
+  string credential_id = 2;
+  // When.
+  google.protobuf.Timestamp create_time = 3;
+}
+
+// IdentityPlaybookRequest is a playbook change and its confirmations.
+message IdentityPlaybookRequest {
+  // Request id.
+  string id = 1;
+  // "ENABLE", "CHANGE" or "DISABLE".
+  string kind = 2;
+  // The event type URIs it would act on (none for DISABLE).
+  repeated string events = 3;
+  // The playbook version it changes.
+  int32 base_version = 4;
+  // Confirmations required: 2 to enable or change, 1 to disable.
+  int32 required = 5;
+  // "PENDING", "APPLIED", "DECLINED", "EXPIRED" or "VOIDED".
+  string state = 6;
+  // Who asked.
+  string requested_by = 7;
+  // When it was asked and when it expires (24 hours).
+  google.protobuf.Timestamp create_time = 8;
+  // When it expires.
+  google.protobuf.Timestamp expire_time = 9;
+  // When it ended.
+  google.protobuf.Timestamp decide_time = 10;
+  // Why it ended (untrusted text for a decline).
+  string decided_reason = 11;
+  // Confirmations so far.
+  repeated IdentityPlaybookConfirmation confirmations = 12;
+  // The page where people confirm it.
+  string confirm_url = 13;
+}
+
+// GetIdentityPlaybookRequest asks for the playbook.
+message GetIdentityPlaybookRequest {}
+
+// GetIdentityPlaybookResponse returns it.
+message GetIdentityPlaybookResponse {
+  // The playbook.
+  IdentityPlaybook playbook = 1;
+}
+
+// RequestIdentityPlaybookChangeRequest describes the change.
+message RequestIdentityPlaybookChangeRequest {
+  // "ENABLE", "CHANGE" or "DISABLE".
+  string kind = 1 [(buf.validate.field).string = {
+    in: [
+      "ENABLE",
+      "CHANGE",
+      "DISABLE"
+    ]
+  }];
+  // The event type URIs to act on: 1 to 6 for ENABLE and CHANGE, none for
+  // DISABLE.
+  repeated string events = 2 [(buf.validate.field).repeated = {
+    max_items: 6
+    unique: true
+    items: {
+      string: {
+        min_len: 1
+        max_len: 256
+      }
+    }
+  }];
+}
+
+// RequestIdentityPlaybookChangeResponse returns the pending request.
+message RequestIdentityPlaybookChangeResponse {
+  // The request.
+  IdentityPlaybookRequest request = 1;
+}
+
+// ListIdentityPlaybookRequestsRequest lists requests.
+message ListIdentityPlaybookRequestsRequest {}
+
+// ListIdentityPlaybookRequestsResponse lists them, newest first.
+message ListIdentityPlaybookRequestsResponse {
+  // Requests.
+  repeated IdentityPlaybookRequest requests = 1;
+}
+
+// DeclineIdentityPlaybookRequestRequest names a request.
+message DeclineIdentityPlaybookRequestRequest {
+  // Request id.
+  string id = 1 [(buf.validate.field).string.uuid = true];
+  // Why (1 to 500 characters).
+  string reason = 2 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 500
+  }];
+}
+
+// DeclineIdentityPlaybookRequestResponse returns the request.
+message DeclineIdentityPlaybookRequestResponse {
+  // The request.
+  IdentityPlaybookRequest request = 1;
+}
+
+// SSFTransmitter is one transmitter.
+message SSFTransmitter {
+  // Transmitter id.
+  string id = 1;
+  // Name.
+  string name = 2;
+  // The issuer (iss) its tokens must carry.
+  string issuer = 3;
+  // Its signing keys, on the issuer's host.
+  string jwks_uri = 4;
+  // The audience (aud) its tokens must name.
+  string audience = 5;
+  // "PENDING", "ACTIVE", "PAUSED" or "DISABLED".
+  string state = 6;
+  // Where it pushes events (RFC 8935).
+  string endpoint_url = 7;
+  // The page where a person activates it.
+  string confirm_url = 8;
+  // Who created it.
+  string created_by = 9;
+  // When it was created.
+  google.protobuf.Timestamp create_time = 10;
+  // Who activated it with a security key.
+  string activated_by = 11;
+  // When it was activated.
+  google.protobuf.Timestamp activate_time = 12;
+  // The last accepted event.
+  google.protobuf.Timestamp last_event_time = 13;
+  // Events accepted.
+  int64 events_accepted = 14;
+  // Events refused.
+  int64 events_refused = 15;
+  // The last refusal.
+  google.protobuf.Timestamp last_refusal_time = 16;
+  // The last refusal's RFC 8935 code.
+  string last_refusal_code = 17;
+}
+
+// CreateSSFTransmitterRequest describes a transmitter.
+message CreateSSFTransmitterRequest {
+  // Lowercase letters, digits and dashes.
+  string name = 1 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 63
+    pattern: "^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$"
+  }];
+  // The https issuer.
+  string issuer = 2 [(buf.validate.field).string = {
+    min_len: 9
+    max_len: 512
+    prefix: "https://"
+  }];
+  // The https JWKS URI, on the issuer's host.
+  string jwks_uri = 3 [(buf.validate.field).string = {
+    min_len: 9
+    max_len: 2048
+    prefix: "https://"
+  }];
+  // The audience; unset: the endpoint URL.
+  optional string audience = 4 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 2048
+  }];
+}
+
+// CreateSSFTransmitterResponse returns the PENDING transmitter.
+message CreateSSFTransmitterResponse {
+  // The transmitter.
+  SSFTransmitter transmitter = 1;
+}
+
+// GetSSFTransmitterRequest names a transmitter.
+message GetSSFTransmitterRequest {
+  // Transmitter id.
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// GetSSFTransmitterResponse returns it.
+message GetSSFTransmitterResponse {
+  // The transmitter.
+  SSFTransmitter transmitter = 1;
+}
+
+// ListSSFTransmittersRequest pages transmitters.
+message ListSSFTransmittersRequest {
+  // Maximum results (default and at most 200).
+  int32 page_size = 1 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 200
+  }];
+  // Token from a previous response.
+  string page_token = 2 [(buf.validate.field).string = {
+    max_len: 64
+    pattern: "^[A-Za-z0-9_-]*$"
+  }];
+}
+
+// ListSSFTransmittersResponse is one page.
+message ListSSFTransmittersResponse {
+  // Transmitters, by id.
+  repeated SSFTransmitter transmitters = 1;
+  // Token for the next page; empty at the end.
+  string next_page_token = 2;
+}
+
+// SetSSFTransmitterStateRequest changes a transmitter's state.
+message SetSSFTransmitterStateRequest {
+  // Transmitter id.
+  string id = 1 [(buf.validate.field).string.uuid = true];
+  // "PAUSED", "ACTIVE" (resume a paused one) or "DISABLED".
+  string state = 2 [(buf.validate.field).string = {
+    in: [
+      "PAUSED",
+      "ACTIVE",
+      "DISABLED"
+    ]
+  }];
+}
+
+// SetSSFTransmitterStateResponse returns the transmitter.
+message SetSSFTransmitterStateResponse {
+  // The transmitter.
+  SSFTransmitter transmitter = 1;
+}
+
+// ListSSFEventsRequest names a transmitter.
+message ListSSFEventsRequest {
+  // Transmitter id.
+  string transmitter_id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+// SSFEvent is one received event: what it was and whom it matched, never
+// the token or the subject's identifiers.
+message SSFEvent {
+  // Event id.
+  string id = 1;
+  // The token's jti.
+  string jti = 2;
+  // The event type URI.
+  string event_type = 3;
+  // The token's iat.
+  google.protobuf.Timestamp issue_time = 4;
+  // The subject identifier's format ("iss_sub", "email", "opaque").
+  string subject_format = 5;
+  // The person it matched; empty when none did.
+  string user_id = 6;
+  // How it matched: "iss_sub" or "email".
+  string match_basis = 7;
+  // "ACCEPTED", "UNMATCHED", "IGNORED" or "VERIFICATION".
+  string outcome = 8;
+  // The case it opened; empty when none.
+  string case_id = 9;
+  // When it was received.
+  google.protobuf.Timestamp receive_time = 10;
+}
+
+// ListSSFEventsResponse lists events, newest first.
+message ListSSFEventsResponse {
+  // Events.
+  repeated SSFEvent events = 1;
+}

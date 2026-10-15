@@ -1376,6 +1376,39 @@ type PcHoldSlot struct {
 	UpdatedAt time.Time
 }
 
+type PcIdentityPlaybook struct {
+	OrgID     ids.OrgID
+	Enabled   bool
+	Events    []string
+	Version   int32
+	RequestID *ids.UUID
+	UpdatedAt time.Time
+}
+
+type PcIdentityPlaybookConfirmation struct {
+	OrgID        ids.OrgID
+	RequestID    ids.UUID
+	PrincipalID  ids.UUID
+	CredentialID ids.UUID
+	CreatedAt    time.Time
+}
+
+type PcIdentityPlaybookRequest struct {
+	OrgID         ids.OrgID
+	ID            ids.UUID
+	Kind          string
+	Events        []string
+	BaseVersion   int32
+	Binding       []byte
+	Required      int16
+	State         string
+	RequestedBy   ids.UUID
+	CreatedAt     time.Time
+	ExpiresAt     time.Time
+	DecidedAt     *time.Time
+	DecidedReason *string
+}
+
 type PcIncident struct {
 	OrgID     ids.OrgID
 	ID        ids.UUID
@@ -2329,6 +2362,62 @@ type PcSession struct {
 	EndedAt            *time.Time
 }
 
+type PcSiemBatch struct {
+	OrgID         ids.OrgID
+	ID            ids.UUID
+	DestinationID ids.UUID
+	FromSeq       int64
+	ToSeq         int64
+	EventCount    int32
+	BodyBytes     int32
+	SkippedUids   []ids.UUID
+	State         string
+	Attempts      int32
+	NextAttemptAt time.Time
+	LastAttemptAt *time.Time
+	LastStatus    *int32
+	LastError     *string
+	CreatedAt     time.Time
+	DeliveredAt   *time.Time
+}
+
+type PcSiemCursor struct {
+	OrgID         ids.OrgID
+	DestinationID ids.UUID
+	Seq           int64
+	UpdatedAt     time.Time
+}
+
+type PcSiemDestination struct {
+	OrgID               ids.OrgID
+	ID                  ids.UUID
+	Name                string
+	Url                 string
+	Internal            bool
+	DataClasses         []string
+	Format              string
+	State               string
+	Secret              []byte
+	PrevSecret          []byte
+	PrevSecretExpiresAt *time.Time
+	CreatedBy           string
+	CreatedAt           time.Time
+	ActivatedBy         *ids.UUID
+	ActivatedCredential *ids.UUID
+	ActivatedAt         *time.Time
+	UpdatedAt           time.Time
+	ConfirmedAt         *time.Time
+	LastDeliveredSeq    pgtype.Int8
+	LastDeliveredAt     *time.Time
+	ConsecutiveFailures int32
+	FailingSince        *time.Time
+	LastFailureAt       *time.Time
+	LastFailureCode     *string
+	DeliveredBatches    int64
+	FailedBatches       int64
+	Retries             int64
+}
+
 type PcSoarRequest struct {
 	OrgID          ids.OrgID
 	IdempotencyKey string
@@ -2336,6 +2425,44 @@ type PcSoarRequest struct {
 	ActionID       ids.UUID
 	RequestedBy    string
 	CreatedAt      time.Time
+}
+
+type PcSsfEvent struct {
+	OrgID         ids.OrgID
+	ID            ids.UUID
+	TransmitterID ids.UUID
+	Jti           string
+	EventType     string
+	IssuedAt      time.Time
+	SubjectFormat *string
+	UserID        *ids.UUID
+	MatchBasis    *string
+	Outcome       string
+	CaseID        *ids.UUID
+	CaseNote      *string
+	ReceivedAt    time.Time
+	ExpiresAt     time.Time
+}
+
+type PcSsfTransmitter struct {
+	OrgID               ids.OrgID
+	ID                  ids.UUID
+	Name                string
+	Issuer              string
+	JwksUri             string
+	Audience            string
+	State               string
+	CreatedBy           string
+	CreatedAt           time.Time
+	ActivatedBy         *ids.UUID
+	ActivatedCredential *ids.UUID
+	ActivatedAt         *time.Time
+	UpdatedAt           time.Time
+	LastEventAt         *time.Time
+	EventsAccepted      int64
+	EventsRefused       int64
+	LastRefusalAt       *time.Time
+	LastRefusalCode     *string
 }
 
 type PcSuppression struct {
@@ -2579,20 +2706,21 @@ type PcWaitlistSetting struct {
 }
 
 type PcWebauthnCeremony struct {
-	OrgID                 ids.OrgID
-	ID                    ids.UUID
-	SessionID             ids.UUID
-	UserID                ids.UUID
-	Purpose               string
-	Challenge             []byte
-	AllowedCredentials    [][]byte
-	CreatedAt             time.Time
-	ExpiresAt             time.Time
-	ConsumedAt            *time.Time
-	ApprovalRequestID     *ids.UUID
-	BatchID               *ids.UUID
-	ReconciliationID      *ids.UUID
-	PolicyChangeRequestID *ids.UUID
+	OrgID                     ids.OrgID
+	ID                        ids.UUID
+	SessionID                 ids.UUID
+	UserID                    ids.UUID
+	Purpose                   string
+	Challenge                 []byte
+	AllowedCredentials        [][]byte
+	CreatedAt                 time.Time
+	ExpiresAt                 time.Time
+	ConsumedAt                *time.Time
+	ApprovalRequestID         *ids.UUID
+	BatchID                   *ids.UUID
+	ReconciliationID          *ids.UUID
+	PolicyChangeRequestID     *ids.UUID
+	IdentityPlaybookRequestID *ids.UUID
 }
 
 type PcWebauthnCredential struct {
