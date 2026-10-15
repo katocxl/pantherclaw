@@ -133,7 +133,8 @@ type templateData struct {
 	}
 	Rules []map[string]any
 	Tests []map[string]any
-	// Skipped are the agent rules and tests left out for want of an agent.
+	// Skipped are the agent rules left out for want of an agent (their
+	// tests are left out with them).
 	Skipped []string
 	// Window is nil when the template sets none.
 	Window *pantherclawv1.CreateChangeWindowRequest
@@ -528,14 +529,13 @@ func renderTemplate(o templateOptions) (templateData, error) {
 	if _, err := read("tests.json", &tests, true); err != nil {
 		return out, err
 	}
-	var skipped, more []string
+	var more []string
 	if out.Rules, out.Skipped, out.ReposItems, err = r.items(policy.Rules, "rule"); err != nil {
 		return out, fmt.Errorf("template %s: %w", o.name, err)
 	}
-	if out.Tests, skipped, more, err = r.items(tests.Tests, "test"); err != nil {
+	if out.Tests, _, more, err = r.items(tests.Tests, "test"); err != nil {
 		return out, fmt.Errorf("template %s: %w", o.name, err)
 	}
-	out.Skipped = append(out.Skipped, skipped...)
 	out.PerRepo = slices.ContainsFunc(policy.Rules, func(r map[string]any) bool { return r["per"] == "repo" })
 	out.ReposItems = append(out.ReposItems, more...)
 	out.Info, out.TaskRef, out.Envelope.Name = info, info.TaskRef, env.Name
