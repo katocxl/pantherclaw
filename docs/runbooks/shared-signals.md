@@ -22,11 +22,11 @@ A SET is accepted (202) only when all of these hold:
 - signed with RS256 or ES256 by a key from the pinned JWKS (cached 15 minutes; an unknown `kid` refetches at most once a minute). Headers `jku`, `x5u` and `jwk` are refused: keys never come from the token;
 - `iss` is the issuer; `aud` contains the audience; `iat` is within ±5 minutes; the `jti` was not seen from this transmitter in the last 7 days; exactly one event.
 
-Otherwise the answer is 400 with an RFC 8935 error code: `invalid_request`, `invalid_key`, `invalid_issuer`, `invalid_audience` or `authentication_failed`.
+Otherwise the answer is 400 with an RFC 8935 error code: `invalid_request`, `invalid_key`, `invalid_issuer`, `invalid_audience` or `authentication_failed`. Errors never say whether a subject matched a person.
 
 Events handled: CAEP `session-revoked`, `credential-change`; RISC `account-disabled`, `account-purged`, `credential-compromise`, `account-credential-change-required`. Other event types are recorded and ignored.
 
-Subjects (`sub_id`) in the formats `email`, `iss_sub` and `opaque` are matched to a person: `iss_sub` against the person's linked OIDC identity first; an email only for an ACTIVE person whose email is unique. The match basis is recorded. An email match only opens a case; the identity playbook acts on `iss_sub` matches only. An event with no match is recorded and opens nothing.
+Subjects (`sub_id`) in the formats `email`, `iss_sub` and `opaque` are matched to a person: `iss_sub` against the person's linked OIDC identity first, and only when its issuer is the transmitter's configured issuer (otherwise it counts as an email-grade match or none); an email only for an ACTIVE person whose email is unique. The match basis is recorded. An email match only opens a case; the identity playbook acts on `iss_sub` matches only. An event with no match is recorded and opens nothing.
 
 ## 3. What happens on an event
 

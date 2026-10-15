@@ -13,7 +13,7 @@ PantherClaw sends decisions, alerts, incidents, audit, containment and coverage 
 2. The destination is created **PENDING** and receives nothing yet. Configure its signing secret in the SIEM.
 3. A person opens `/integrations/destinations/{id}/confirm` and confirms with a security key (WebAuthn step-up). The destination becomes **ACTIVE**. Marking a destination internal also needs this step-up.
 
-The URL is refused when it is not HTTPS, resolves to a private or loopback address without `internal`, or is a cloud metadata host (always refused). The egress checks run again at every send, so a DNS change cannot redirect delivery later.
+The URL is refused when it is not HTTPS, resolves to a private or loopback address without `internal`, or is a cloud metadata host (always refused). The URL is checked at creation and enforced at dial time by the egress client.
 
 ## 2. Verify in the SIEM
 
