@@ -29,7 +29,6 @@ import (
 
 	"github.com/go-jose/go-jose/v4"
 
-	billing "github.com/katocxl/pantherclaw/internal/billing/domain"
 	capp "github.com/katocxl/pantherclaw/internal/cases/app"
 	"github.com/katocxl/pantherclaw/internal/evidence/ledger"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
@@ -419,9 +418,10 @@ func (r *reflexStack) sharedSignals(t *testing.T, team, business ents) {
 	}
 	carolID := s.row(t, "SELECT id::text FROM pc.users WHERE subject = 'carol'")
 	contained := func() string {
-		return s.row(t, "SELECT count(*)::text FROM pc.response_actions WHERE scope_type = 'principal' AND scope_id = $1", "user:"+carolID)
+		return s.row(t, `SELECT count(*)::text || ' ' || count(*) FILTER (WHERE control = 'DENY_ALL' AND source = 'PLAYBOOK')::text
+			FROM pc.response_actions WHERE scope_type = 'principal' AND scope_id = $1`, "user:"+carolID)
 	}
-	if n := contained(); n != "0" {
+	if n := contained(); n != "0 0" {
 		t.Fatalf("contained before the playbook: %s", n)
 	}
 
@@ -440,8 +440,8 @@ func (r *reflexStack) sharedSignals(t *testing.T, team, business ents) {
 	if code := push(signals.TypeCredentialCompromise); code != http.StatusAccepted {
 		t.Fatalf("second SET: %d", code)
 	}
-	if n := contained(); n != "1" {
-		t.Fatalf("the person's containment actions after the second SET: %s (failures: %s)", n,
+	if n := contained(); n != "1 1" {
+		t.Fatalf("the person's containment actions after the second SET (all, DENY_ALL by the playbook): %s (failures: %s)", n,
 			s.row(t, "SELECT coalesce(string_agg(kind || ': ' || summary, '; '), '') FROM pc.operational_failures"))
 	}
 	if n := opened(); n != "2" {
@@ -449,52 +449,69 @@ func (r *reflexStack) sharedSignals(t *testing.T, team, business ents) {
 	}
 }
 
-// restore lifts the run's control through a restoration plan an
-// independent reviewer decides (F564, HR-250). The decision runs
-// in-process: over the API it needs a browser step-up (D58).
-func (r *reflexStack) restore(t *testing.T, action string) {
+// live opens the live stream at the feed's head (no after, no
+// Last-Event-ID) and returns the head it opened at and a function that
+// waits for the first event of a kind delivered after it (F215, D71 L1).
+func (r *reflexStack) live(t *testing.T) (int64, func(kind string) sseFrame) {
 	t.Helper()
-	ctx, s := context.Background(), r.s
-	c := &rapp.Containment{Pool: s.pool, Raiser: &alerts.Raiser{}, Failures: &failures.Sink{}, Editions: ents{billing.Team}}
-	reviewer := s.person(t, "reviewer", td.RoleSecurityAdmin)
-	reviewerID := mustUUID(t, s.row(t, "SELECT user_id::text FROM pc.webauthn_credentials WHERE id = $1", reviewer.key))
-	var plan ids.UUID
-	if err := s.pool.InTenantTx(ctx, s.org, func(ctx context.Context, tx db.TenantTx) error {
-		cs, err := dbq.New(tx).ControlsOfAction(ctx, s.org, mustUUID(t, action))
-		if err != nil {
-			return err
-		}
-		if len(cs) == 0 {
-			return errors.New("the action holds no control")
-		}
-		plan, _, err = c.RequestRestorationIn(ctx, tx, rapp.RestorationRequest{Controls: []ids.UUID{cs[0].ID}, Reason: "investigated", Requester: r.aliceID})
-		return err
-	}); err != nil {
-		t.Fatalf("request restoration: %v", err)
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	head, err := strconv.ParseInt(r.s.row(t, "SELECT coalesce(max(seq), 0)::text FROM pc.ledger_chain"), 10, 64)
+	if err != nil {
+		t.Fatal(err)
 	}
-	decide := func(reviewer ids.UUID) (string, error) {
-		var state string
-		err := s.pool.InTenantTx(ctx, s.org, func(ctx context.Context, tx db.TenantTx) error {
-			var err error
-			state, _, err = c.DecideRestorationIn(ctx, tx, plan, reviewer, true)
-			if errors.Is(err, rapp.ErrPreconditions) {
-				return nil
+	res := r.openStream(ctx, t, "", map[string]string{"Authorization": "Bearer " + r.bearer})
+	if res.StatusCode != http.StatusOK {
+		_ = res.Body.Close()
+		t.Fatalf("live stream: %d", res.StatusCode)
+	}
+	ch := make(chan sseFrame, 64)
+	go func() {
+		defer close(ch)
+		defer func() { _ = res.Body.Close() }()
+		var cur sseFrame
+		sc := bufio.NewScanner(res.Body)
+		for sc.Scan() {
+			line := sc.Text()
+			switch {
+			case line == "":
+				if cur.event != "" {
+					ch <- cur
+				}
+				cur = sseFrame{}
+			case strings.HasPrefix(line, "id: "):
+				cur.id = strings.TrimPrefix(line, "id: ")
+			case strings.HasPrefix(line, "event: "):
+				cur.event = strings.TrimPrefix(line, "event: ")
+			case strings.HasPrefix(line, "data: "):
+				cur.data = strings.TrimPrefix(line, "data: ")
 			}
-			return err
-		})
-		return state, err
+		}
+	}()
+	return head, func(kind string) sseFrame {
+		t.Helper()
+		deadline := time.After(30 * time.Second)
+		for {
+			select {
+			case f, ok := <-ch:
+				if !ok {
+					t.Fatalf("the live stream ended before a %s event", kind)
+				}
+				if f.event == kind {
+					return f
+				}
+			case <-deadline:
+				t.Fatalf("no live %s event within 30s", kind)
+			}
+		}
 	}
-	if state, err := decide(r.aliceID); err == nil {
-		t.Fatalf("the requester decided their own restoration: %s", state)
+}
+
+func mustInt(t *testing.T, s string) int64 {
+	t.Helper()
+	n, err := strconv.ParseInt(s, 10, 64)
+	if err != nil {
+		t.Fatalf("not a number: %q", s)
 	}
-	if state, err := decide(reviewerID); err != nil || state != rapp.PlanCompleted {
-		t.Fatalf("restoration: %s %v", state, err)
-	}
-	if n := s.row(t, "SELECT count(*)::text FROM pc.containment_controls WHERE scope_id = $1 AND lifted_at IS NULL", s.run); n != "0" {
-		t.Fatalf("controls on the run still in force: %s", n)
-	}
-	// The run acts again.
-	if code, rep := s.refund(t, ids.NewV7(), "1.00"); code != http.StatusOK {
-		t.Fatalf("a refund after restoration: %d %+v", code, rep)
-	}
+	return n
 }

@@ -170,9 +170,6 @@ func TestE2E_M10_DetectInvestigateRespond(t *testing.T) {
 	// 1. Detect. The agent asks to delegate more than its own grant holds:
 	// refused and audited, and the Community rule pc.authority.self_issue
 	// raises an alert on the real server (PN-006.3).
-	// TODO(D67): add a service account's IssueGrant attempt over RPC once
-	// core audits rpcauth's refusal of a non-human caller on a human-only
-	// procedure, and expect the same alert.
 	wc := pantherclawv1connect.NewWorkloadServiceClient(connect.NewClient(connecthttp.NewTransport(&http.Client{
 		Timeout: 30 * time.Second, Transport: &workloadclient.Transport{Key: s.key, Token: func() string { return s.token }},
 	}, s.apiURL)))
@@ -212,23 +209,67 @@ func TestE2E_M10_DetectInvestigateRespond(t *testing.T) {
 		t.Fatalf("GetIncident: %+v %v", got, err)
 	}
 
+	// A service account asking for a grant over the API is refused by the
+	// RPC layer before any use case runs; the refusal is audited, and
+	// self_issue detects it too (D67).
+	saKey, err := os.ReadFile(s.factsKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	grantsSA := pantherclawv1connect.NewGrantServiceClient(r.client(strings.TrimSpace(string(saKey))))
+	if _, err := grantsSA.IssueGrant(ctx, &pantherclawv1.IssueGrantRequest{AgentId: r.agent.String()}); connect.CodeOf(err) != connect.CodePermissionDenied {
+		t.Fatalf("a service account issuing a grant: %v", err)
+	}
+	eventually(t, 90*time.Second, "self_issue from the service account's refusal", func() (bool, error) {
+		res, err := incidents.ListAlerts(ctx, &pantherclawv1.ListAlertsRequest{RuleId: "pc.authority.self_issue"})
+		if err != nil {
+			return false, err
+		}
+		var n int64
+		for _, a := range res.GetAlerts() {
+			n += int64(a.GetCount())
+		}
+		return n >= 2, nil
+	})
+
 	// The Business rule probing.denial_burst: five refused decisions in one
 	// run, evaluated by the detection engine in-process with Business
-	// entitlements, groups by run.
-	for range 5 {
-		if code, rep := s.refund(t, ids.NewV7(), "100000.00"); code < 400 {
-			t.Fatalf("an over-budget refund was allowed: %d %+v", code, rep)
+	// entitlements, raise an alert grouped by the run. A responder promotes
+	// it; with Team grouping a later burst in the same run attaches to that
+	// incident (D71 M3, F603).
+	burst := func() *pantherclawv1.Alert {
+		t.Helper()
+		for range 5 {
+			if code, rep := s.refund(t, ids.NewV7(), "100000.00"); code < 400 {
+				t.Fatalf("an over-budget refund was allowed: %d %+v", code, rep)
+			}
 		}
+		var open *pantherclawv1.Alert
+		r.runEngine(t, business, func() bool {
+			res, err := incidents.ListAlerts(ctx, &pantherclawv1.ListAlertsRequest{RuleId: "pc.probing.denial_burst", States: []string{"OPEN"}})
+			if err != nil || len(res.GetAlerts()) == 0 {
+				return false
+			}
+			open = res.GetAlerts()[0]
+			return true
+		})
+		if open.GetGroupKey() != "run:"+s.run {
+			t.Fatalf("denial_burst alert %+v, want group run:%s", open, s.run)
+		}
+		return open
 	}
-	burst := r.runEngine(t, business)
-	if !slices.Contains(burst, "pc.probing.denial_burst") {
-		t.Fatalf("the engine raised %v, want pc.probing.denial_burst; decisions %s; cursor %s; alerts %s", burst,
-			s.row(t, "SELECT string_agg(decision || '/' || mode || '/' || reason_code, ' ' ORDER BY created_at) FROM pc.transactions"),
-			s.row(t, "SELECT coalesce(string_agg(seq::text, ' '), 'none') FROM pc.detection_cursors"),
-			s.row(t, "SELECT coalesce(string_agg(rule_id || ' ' || last_seen::text, '; '), 'none') FROM pc.alerts"))
+	first := burst()
+	byRun, err := incidents.PromoteAlert(ctx, &pantherclawv1.PromoteAlertRequest{Id: first.GetId(), Note: "probing"})
+	if err != nil || byRun.GetIncident().GetGroupKey() != "run:"+s.run {
+		t.Fatalf("promote the burst: %+v %v", byRun, err)
 	}
-	if n := s.row(t, `SELECT count(*)::text FROM pc.alerts WHERE rule_id = 'pc.probing.denial_burst' AND group_key = $1`, "run:"+s.run); n != "1" {
-		t.Fatalf("denial_burst alerts grouped by the run: %s", n)
+	if _, err := incidents.SetAlertState(ctx, &pantherclawv1.SetAlertStateRequest{Id: first.GetId(), State: "RESOLVED", Note: "seen"}); err != nil {
+		t.Fatalf("resolve the burst: %v", err)
+	}
+	second := burst()
+	inRun, err := incidents.GetIncident(ctx, &pantherclawv1.GetIncidentRequest{Id: byRun.GetIncident().GetId()})
+	if err != nil || second.GetId() == first.GetId() || second.GetIncidentId() != byRun.GetIncident().GetId() || len(inRun.GetAlerts()) != 2 {
+		t.Fatalf("the second burst %+v, incident %+v %v", second, inRun, err)
 	}
 
 	// 2. Investigate. Cases need Team: the server refuses; the case service
@@ -274,6 +315,8 @@ func TestE2E_M10_DetectInvestigateRespond(t *testing.T) {
 		t.Fatalf("ProposeResponse: %+v %v", proposed, err)
 	}
 	caseID := k.ID.String()
+	// A live stream opened now delivers the containment as it happens.
+	head, liveNext := r.live(t)
 	contained, err := response.Contain(ctx, &pantherclawv1.ContainRequest{
 		Scope: &pantherclawv1.ResponseSubject{Type: "run", Id: s.run}, Control: "DENY_ALL",
 		Reason: "self-authorization attempt", CaseId: &caseID, IncidentId: &incident.Id,
@@ -282,6 +325,9 @@ func TestE2E_M10_DetectInvestigateRespond(t *testing.T) {
 		t.Fatalf("Contain: %v", err)
 	}
 	actionID := contained.GetActionId()
+	if f := liveNext("response.action"); mustInt(t, f.id) <= head || !strings.Contains(f.data, actionID) {
+		t.Fatalf("live response.action %+v at or before the head %d", f, head)
+	}
 	var action *pantherclawv1.GetResponseActionResponse
 	eventually(t, 60*time.Second, "the gateway path to confirm", func() (bool, error) {
 		a, err := response.GetResponseAction(ctx, &pantherclawv1.GetResponseActionRequest{ActionId: actionID})
@@ -315,18 +361,26 @@ func TestE2E_M10_DetectInvestigateRespond(t *testing.T) {
 		t.Fatalf("exposure recompute: %v", err)
 	}
 	ex := &exapp.Service{Pool: s.pool, Ents: team}
+	labels := []exdomain.Label{exdomain.Usable, exdomain.Conditional, exdomain.Expired, exdomain.Uncertain}
 	for _, v := range []exdomain.View{exdomain.Observed, exdomain.Effective, exdomain.Credential} {
 		got, err := ex.Exposure(aliceCtx, exdomain.Filter{Agent: &r.agent, View: v})
 		if err != nil {
 			t.Fatalf("exposure %s: %v", v, err)
 		}
-		if v != exdomain.Credential && len(got.Rights) == 0 {
+		if len(got.Rights) == 0 {
 			t.Fatalf("exposure %s of the agent is empty", v)
 		}
 		for _, right := range got.Rights {
-			if right.View != v {
-				t.Fatalf("exposure %s holds a %s right", v, right.View)
+			if right.View != v || !slices.Contains(labels, right.Label) {
+				t.Fatalf("exposure %s holds a %s right labelled %q", v, right.View, right.Label)
 			}
+		}
+		// The agent's uncovered route is a bypass the credential view shows
+		// as UNCERTAIN, never absent (HR-253, D27).
+		if v == exdomain.Credential && !slices.ContainsFunc(got.Rights, func(x exdomain.Right) bool {
+			return x.Label == exdomain.Uncertain && slices.Contains(x.Reasons, exdomain.ReasonRouteUnknown)
+		}) {
+			t.Fatalf("the credential view has no UNCERTAIN right for the uncovered route: %+v", got.Rights)
 		}
 	}
 
@@ -360,7 +414,7 @@ func TestE2E_M10_DetectInvestigateRespond(t *testing.T) {
 	r.sharedSignals(t, team, business)
 
 	// 9. Restoration: an independent reviewer lifts the run's control.
-	r.restore(t, actionID)
+	r.restore(t, response, actionID, refundTxn)
 
 	// 10. Closure. The main case stays OPEN (its containment is PARTIAL);
 	// a case that needs no containment closes once its rules hold.
@@ -409,10 +463,14 @@ func (r *reflexStack) inProcess(role td.RoleName) context.Context {
 	}, Credential: tapp.CredAccessToken})
 }
 
-// runEngine chains the org's ledger and runs the detection engine until it
-// has caught up, with these entitlements, and returns the rules alerts are
-// open for.
-func (r *reflexStack) runEngine(t *testing.T, e ents) []string {
+// runEngine runs the detection engine in-process with these entitlements
+// until done reports what the test waits for, or fails after 30 s. The
+// server's own engine job evaluates the org too (as Community, so without
+// the Business rules), and the cursor moves for whichever run gets there
+// first: each attempt rewinds the org's cursor and evaluates the feed again
+// (repeats count into the same open alerts), so a race with the server's
+// job only costs another attempt (D71 M1).
+func (r *reflexStack) runEngine(t *testing.T, e ents, done func() bool) {
 	t.Helper()
 	ctx := context.Background()
 	env, err := engine.NewEnv(celenv.DefaultLimits)
@@ -423,32 +481,27 @@ func (r *reflexStack) runEngine(t *testing.T, e ents) []string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	hooks := &reflexapp.Hooks{Ents: e}
 	eng := &engine.Engine{
-		Pool: r.s.pool, Builtin: p.Rules, PackVersion: p.Version, Env: env, Raiser: hooks.Raiser(),
-		Sink: &failures.Sink{}, Ents: e,
+		Pool: r.s.pool, Builtin: p.Rules, PackVersion: p.Version, Env: env,
+		Raiser: (&reflexapp.Hooks{Ents: e}).Raiser(), Sink: &failures.Sink{}, Ents: e,
 	}
-	// The server's own engine job evaluates the org too (as Community); the
-	// cursor moves for whichever run first, so the in-process engine only
-	// sees what is left: rewind it to the start of this test's events.
-	r.s.exec(t, "UPDATE pc.detection_cursors SET seq = 0")
-	for range 50 {
+	eventually(t, 30*time.Second, "the in-process detection", func() (bool, error) {
 		if _, err := ledger.ChainAll(ctx, r.s.pool, r.s.org, 1000); err != nil {
-			t.Fatal(err)
+			return false, err
 		}
-		res, err := eng.Process(ctx, r.s.org)
-		if errors.Is(err, engine.ErrCursorMoved) {
-			continue
+		r.s.exec(t, "UPDATE pc.detection_cursors SET seq = 0")
+		for range 50 {
+			res, err := eng.Process(ctx, r.s.org)
+			if errors.Is(err, engine.ErrCursorMoved) {
+				break
+			}
+			if err != nil {
+				return false, err
+			}
+			if res.Events == 0 && res.To == res.From {
+				break
+			}
 		}
-		if err != nil {
-			t.Fatal(err)
-		}
-		if res.Events == 0 && res.To == res.From {
-			break
-		}
-	}
-	var rules []string
-	rows := strings.Fields(r.s.row(t, "SELECT coalesce(string_agg(DISTINCT rule_id, ' '), '') FROM pc.alerts"))
-	rules = append(rules, rows...)
-	return rules
+		return done(), nil
+	})
 }
