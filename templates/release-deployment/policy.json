@@ -10,7 +10,7 @@
       "id": "rd-environment", "per": "repo", "kind": "FORBID",
       "summary": "the repository deploys to {{environment}} only; a direct deployment that names no environment goes to GitHub's default, production",
       "operations": ["github.deployment.trigger"],
-      "when": "{{repository}} && (has(action.params.environment) ? action.params.environment != '{{environment}}' : (!consequence.present && '{{environment}}' != 'production'))",
+      "when": "{{repository}} && (has(action.params.environment) ? action.params.environment != {{environment}} : (!consequence.present && {{environment}} != 'production'))",
       "reason": "DEPLOYMENT_ENVIRONMENT_NOT_ALLOWED"
     },
     {

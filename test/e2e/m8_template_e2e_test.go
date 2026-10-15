@@ -101,7 +101,7 @@ func TestE2E_M8_C4_Template(t *testing.T) {
 	before := audits()
 	code, o, e = apply("--dry-run")
 	if code != 0 || !strings.Contains(o, "Dry run: nothing was changed.") || !strings.Contains(o, "create") ||
-		!strings.Contains(o, "Protects "+ghRepo+"'s default branch main") || !strings.Contains(o, "the shell rule holds for agent "+agent+"'s runs only") ||
+		!strings.Contains(o, "Protects "+ghRepo+"'s default branch main") || !strings.Contains(o, "the agent's rules hold for agent "+agent+"'s runs only") ||
 		!strings.Contains(o, "capped by the org's grant ceiling of 168h0m0s") {
 		t.Fatalf("dry run: %d %s %s", code, o, e)
 	}

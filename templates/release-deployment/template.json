@@ -14,6 +14,17 @@
     "deployments started outside PantherClaw (a person pushing, another CI system)",
     "people: bind release_approver yourself (pclaw role bind)"
   ],
+  "placeholders": {
+    "repository": {"kind": "repository", "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"},
+    "environment": {"kind": "environment", "pattern": "^[a-z][a-z0-9_-]{0,63}$"},
+    "time_zone": {"kind": "time_zone", "pattern": "^[A-Za-z][A-Za-z0-9_+-]*(/[A-Za-z0-9_+-]+){0,2}$"}
+  },
+  "routes": [
+    {"package": "pc.github", "route": "github-pull-merge"},
+    {"package": "pc.github", "route": "github-contents-write"},
+    {"package": "pc.github", "route": "github-branch-create"}
+  ],
+  "grant": "deployments of these repositories",
   "requires": {
     "packages": ["pc.github"],
     "connections": ["a pc.github connection in enforce mode for the repositories"]

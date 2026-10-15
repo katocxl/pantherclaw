@@ -35,6 +35,19 @@ type templateInfo struct {
 		Packages    []string `json:"packages"`
 		Connections []string `json:"connections"`
 	} `json:"requires"`
+	// Placeholders are the values the template's files use (D27).
+	Placeholders map[string]placeholderSpec `json:"placeholders"`
+	// Routes are the connection routes its rules decide; apply warns about
+	// any in monitor mode.
+	Routes []templateRoute `json:"routes"`
+	// Grant says what the template's grant allows, for the plan.
+	Grant string `json:"grant"`
+}
+
+// templateRoute is a connection route of a package.
+type templateRoute struct {
+	Package string `json:"package"`
+	Route   string `json:"route"`
 }
 
 // templateNames lists the embedded templates, sorted.

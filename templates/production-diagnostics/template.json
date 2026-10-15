@@ -16,6 +16,13 @@
     "other environments: the rules apply to the named environment only",
     "commands the agent runs without asking (a hook that is not installed, another tool)"
   ],
+  "placeholders": {
+    "environment": {"kind": "environment", "pattern": "^[a-z][a-z0-9_-]{0,63}$"},
+    "environment_id": {"kind": "environment_id", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"},
+    "workspace": {"kind": "workspace", "pattern": "^/[^'\\\\[:cntrl:]]*$"}
+  },
+  "routes": [{"package": "pc.shell", "route": "shell-command"}],
+  "grant": "running shell commands on the developer's machine, which the rules narrow to reading in the environment",
   "requires": {
     "packages": ["pc.shell"],
     "connections": ["the pclaw shell hook (pclaw init) on the machines the agents run on"]

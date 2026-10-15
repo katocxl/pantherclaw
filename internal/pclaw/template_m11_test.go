@@ -48,7 +48,7 @@ var m11Templates = []string{"production-diagnostics", "refunds", "release-deploy
 // Example values the placeholders are rendered with.
 const (
 	exampleEnvironmentID = "01890000-0000-7000-8000-0000000000e1"
-	exampleOtherEnvID    = "01890000-0000-7000-8000-0000000000e2"
+	exampleOtherEnvID    = otherEnvironmentID
 	exampleWorkspace     = "/srv/app"
 )
 
@@ -98,13 +98,9 @@ type m11Rendered struct {
 	raw []map[string]any
 }
 
-// renderM11 renders a template's policy.json and tests.json the way apply
-// fills placeholders: a "per": "repo" item once per repository (its id
-// made per repository, {{repo}} and {{repository}} filled), a "per": "org"
-// item once with {{repos}} as a CEL list. A direct deployment that names
-// no environment goes to production (D21), so what it expects depends on
-// the environment applied for: {{no_environment_decision}} and
-// {{no_environment_reason}}.
+// renderM11 renders a template with the product renderer (renderTemplate)
+// for repositories and example values, as apply does once the environment's
+// id is read.
 func renderM11(t *testing.T, name string, repos []string) m11Rendered {
 	t.Helper()
 	return renderM11Env(t, name, repos, "production")
@@ -112,64 +108,38 @@ func renderM11(t *testing.T, name string, repos []string) m11Rendered {
 
 func renderM11Env(t *testing.T, name string, repos []string, environment string) m11Rendered {
 	t.Helper()
-	quoted := make([]string, len(repos))
-	for i, r := range repos {
-		quoted[i] = "'" + r + "'"
+	o := templateOptions{
+		name: name, environment: environment, timeZone: "UTC", defaults: map[string]string{}, agent: templateAgent,
+		environmentID: exampleEnvironmentID, workspace: exampleWorkspace,
 	}
-	noEnvDecision, noEnvReason := "REQUIRE_APPROVAL", "DEPLOYMENT_NEEDS_RELEASE"
-	if environment != "production" {
-		noEnvDecision, noEnvReason = "DENY", "DEPLOYMENT_ENVIRONMENT_NOT_ALLOWED"
+	info, err := readTemplateInfo(name)
+	if err != nil {
+		t.Fatal(err)
 	}
-	common := []string{
-		"{{environment_id}}", exampleEnvironmentID, "{{other_environment_id}}", exampleOtherEnvID,
-		"{{environment}}", environment, "{{workspace}}", exampleWorkspace,
-		"{{repos}}", "[" + strings.Join(quoted, ", ") + "]",
-		"{{no_environment_decision}}", noEnvDecision, "{{no_environment_reason}}", noEnvReason,
+	if _, ok := info.Placeholders[kindRepository]; ok {
+		o.repos = repos
+		for _, r := range repos {
+			o.defaults[r] = "main"
+		}
 	}
-	expand := func(file, key string) []map[string]any {
-		raw, err := fs.ReadFile(templates.FS, name+"/"+file)
-		if err != nil {
-			t.Fatal(err)
-		}
-		var doc map[string][]map[string]any
-		if err := json.Unmarshal(raw, &doc); err != nil {
-			t.Fatalf("%s/%s: %v", name, file, err)
-		}
-		var out []map[string]any
-		fill := func(item map[string]any, id string, pairs ...string) {
-			b, err := json.Marshal(item, json.Deterministic(true))
-			if err != nil {
-				t.Fatal(err)
-			}
-			s := strings.NewReplacer(append(pairs, common...)...).Replace(string(b))
-			var m map[string]any
-			if err := json.Unmarshal([]byte(s), &m); err != nil {
-				t.Fatalf("%s/%s %s: %v", name, file, id, err)
-			}
-			m["id"] = id
-			out = append(out, m)
-		}
-		for _, item := range doc[key] {
-			base, _ := item["id"].(string)
-			switch item["per"] {
-			case "org":
-				fill(item, base)
-			case "repo":
-				for _, r := range repos {
-					fill(item, repoRuleID(base, r), "{{repository}}", "action.target.id == '"+r+"'", "{{repo}}", r)
-				}
-			default:
-				t.Fatalf("%s/%s %s: per %v must be org or repo", name, file, base, item["per"])
+	for _, k := range []string{kindEnvironmentID, kindWorkspace, kindAgent} {
+		if _, ok := info.Placeholders[k]; !ok {
+			switch k {
+			case kindEnvironmentID:
+				o.environmentID = ""
+			case kindWorkspace:
+				o.workspace = ""
+			case kindAgent:
+				o.agent = ""
 			}
 		}
-		return out
 	}
-	var r m11Rendered
-	r.rules = expand("policy.json", "rules")
-	for _, rule := range r.rules {
-		delete(rule, "per")
+	d, err := renderTemplate(o)
+	if err != nil {
+		t.Fatalf("render %s: %v", name, err)
 	}
-	for _, c := range expand("tests.json", "tests") {
+	r := m11Rendered{rules: d.Rules, raw: d.Tests}
+	for _, c := range d.Tests {
 		raw, err := json.Marshal(c)
 		if err != nil {
 			t.Fatal(err)
@@ -179,7 +149,6 @@ func renderM11Env(t *testing.T, name string, repos []string, environment string)
 			t.Fatalf("%s/tests.json %v: not in the D7 format: %v", name, c["id"], err)
 		}
 		r.cases = append(r.cases, tc)
-		r.raw = append(r.raw, c)
 	}
 	return r
 }
@@ -708,6 +677,92 @@ func TestM11TemplatesPassTheGate(t *testing.T) {
 					t.Errorf("gate: passed %v, error %q, %d mutants", res.Passed, res.Error, res.Mutants)
 				}
 			})
+		}
+	}
+}
+
+// TestM11PlaceholdersAreChecked: a value that breaks its placeholder's
+// declared pattern or kind is refused before anything is rendered, and
+// every value that reaches a condition is a quoted CEL literal (M11.1
+// D27): a quote in a value can never end the literal.
+func TestM11PlaceholdersAreChecked(t *testing.T) {
+	base := templateOptions{
+		name: "production-diagnostics", environment: "production", environmentID: exampleEnvironmentID, workspace: exampleWorkspace, timeZone: "UTC",
+	}
+	if _, err := renderTemplate(base); err != nil {
+		t.Fatal(err)
+	}
+	for name, edit := range map[string]func(*templateOptions){
+		"environment with a quote": func(o *templateOptions) { o.environment = "prod'uction" },
+		"environment upper case":   func(o *templateOptions) { o.environment = "Production" },
+		"environment id":           func(o *templateOptions) { o.environmentID = "production" },
+		"relative workspace":       func(o *templateOptions) { o.workspace = "srv/app" },
+		"workspace not normalized": func(o *templateOptions) { o.workspace = "/srv/app/../etc" },
+		"workspace with a quote":   func(o *templateOptions) { o.workspace = "/srv/a'pp" },
+		"workspace with a newline": func(o *templateOptions) { o.workspace = "/srv/a\npp" },
+		"workspace trailing slash": func(o *templateOptions) { o.workspace = "/srv/app/" },
+	} {
+		o := base
+		edit(&o)
+		if _, err := renderTemplate(o); err == nil {
+			t.Errorf("%s: rendered", name)
+		}
+	}
+	rd := templateOptions{name: "release-deployment", environment: "production", timeZone: "UTC", repos: []string{"acme/web"}, defaults: map[string]string{"acme/web": "main"}}
+	if _, err := renderTemplate(rd); err != nil {
+		t.Fatal(err)
+	}
+	rd.repos = []string{"acme/we'b"}
+	if _, err := renderTemplate(rd); err == nil {
+		t.Error("a repository with a quote rendered")
+	}
+	for in, want := range map[string]string{`a'b`: `'a\'b'`, `a\b`: `'a` + `\\` + `b'`, "a\nb": `'a\x0ab'`, "plain/x": `'plain/x'`} {
+		if got := celQuote(in); got != want {
+			t.Errorf("celQuote(%q) = %s, want %s", in, got, want)
+		}
+	}
+	// A placeholder the template does not declare is an error, in a
+	// condition or not, and a condition-only placeholder stays in one.
+	r := renderer{o: base, spec: map[string]placeholderSpec{kindEnvironment: {Kind: kindEnvironment, Pattern: "^[a-z]+$"}}}
+	for _, s := range []string{"{{workspace}}", "{{agent}}", "{{nope}}", "{{repository}}"} {
+		if _, err := r.fill(s, "", true); err == nil {
+			t.Errorf("%s filled without a declaration", s)
+		}
+	}
+	if got, err := r.fill("env == {{environment}}", "", true); err != nil || got != "env == 'production'" {
+		t.Errorf("condition: %q %v", got, err)
+	}
+	if got, err := r.fill("for {{environment}}", "", false); err != nil || got != "for production" {
+		t.Errorf("text: %q %v", got, err)
+	}
+}
+
+// TestM11NoQuotedPlaceholders: no template writes a placeholder inside a
+// string literal of a condition, where it would bypass celQuote.
+func TestM11NoQuotedPlaceholders(t *testing.T) {
+	names, err := templateNames()
+	if err != nil {
+		t.Fatal(err)
+	}
+	quoted := regexp.MustCompile(`'[^']*\{\{[a-z_]+\}\}[^']*'`)
+	for _, n := range names {
+		raw, err := fs.ReadFile(templates.FS, n+"/policy.json")
+		if err != nil {
+			t.Fatal(err)
+		}
+		var doc struct {
+			Rules []struct {
+				ID   string `json:"id"`
+				When string `json:"when"`
+			} `json:"rules"`
+		}
+		if err := json.Unmarshal(raw, &doc); err != nil {
+			t.Fatal(err)
+		}
+		for _, r := range doc.Rules {
+			if m := quoted.FindString(r.When); m != "" {
+				t.Errorf("%s rule %s: placeholder inside a literal: %s", n, r.ID, m)
+			}
 		}
 	}
 }

@@ -14,6 +14,19 @@
     "people: bind code_reviewer and release_approver yourself (pclaw role bind)",
     "routes in monitor mode record the rules' decisions and do not block"
   ],
+  "placeholders": {
+    "repository": {"kind": "repository", "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"},
+    "default_branch": {"kind": "default_branch", "pattern": "^[A-Za-z0-9_-][A-Za-z0-9._-]{0,99}(/[A-Za-z0-9_-][A-Za-z0-9._-]{0,99}){0,7}$"},
+    "environment": {"kind": "environment", "pattern": "^[a-z][a-z0-9_-]{0,63}$"},
+    "time_zone": {"kind": "time_zone", "pattern": "^[A-Za-z][A-Za-z0-9_+-]*(/[A-Za-z0-9_+-]+){0,2}$"},
+    "agent": {"kind": "agent", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"}
+  },
+  "routes": [
+    {"package": "pc.github", "route": "github-pull-merge"},
+    {"package": "pc.github", "route": "github-contents-write"},
+    {"package": "pc.github", "route": "github-branch-create"}
+  ],
+  "grant": "reads, branch preparation, contents writes, pull requests and merges on these repositories; one merge per run",
   "requires": {
     "packages": ["pc.github", "pc.shell"],
     "connections": ["a pc.github connection in enforce mode for the repositories", "the pclaw shell hook (pclaw init) for the shell rule"]

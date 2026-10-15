@@ -15,6 +15,9 @@
     "refunds made outside PantherClaw (the payments dashboard, another integration, a person with the API key) are not seen or limited",
     "the thresholds are examples: change them in a new policy version before relying on them"
   ],
+  "placeholders": {},
+  "routes": [{"package": "pc.mock-payments", "route": "payments-refund"}],
+  "grant": "creating refunds on charges and reading refunds; ten refunds per run",
   "requires": {
     "packages": ["pc.mock-payments"],
     "connections": ["a pc.mock-payments connection in enforce mode", "a provider of the fact payments.charge.refundable"]

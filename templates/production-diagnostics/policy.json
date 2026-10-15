@@ -11,7 +11,7 @@
       "id": "pd-workspace", "per": "org", "kind": "FORBID",
       "summary": "no command runs outside the workspace {{workspace}}",
       "operations": ["shell.command.run"], "environments": ["{{environment_id}}"],
-      "when": "!(action.params.cwd == '{{workspace}}' || action.params.cwd.startsWith('{{workspace}}/'))",
+      "when": "!(action.params.cwd == {{workspace}} || action.params.cwd.startsWith({{workspace}} + '/'))",
       "reason": "OUTSIDE_WORKSPACE"
     },
     {
