@@ -18,10 +18,12 @@ import (
 	"github.com/katocxl/pantherclaw/internal/authority/pipeline"
 	"github.com/katocxl/pantherclaw/internal/authority/replay"
 	billing "github.com/katocxl/pantherclaw/internal/billing/domain"
+	defpg "github.com/katocxl/pantherclaw/internal/definitions/adapters/pgstore"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	napp "github.com/katocxl/pantherclaw/internal/notifications/app"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
+	polpg "github.com/katocxl/pantherclaw/internal/policy/adapters/pgstore"
 	pdomain "github.com/katocxl/pantherclaw/internal/policy/domain"
 	"github.com/katocxl/pantherclaw/internal/policy/policytest"
 	"github.com/katocxl/pantherclaw/internal/policy/rollout"
@@ -86,7 +88,8 @@ type rolloutWorld struct {
 func (w *world) rollouts(ed billing.Edition) *rolloutWorld {
 	w.t.Helper()
 	rw := &rolloutWorld{world: w, notes: &sentNotes{}}
-	rw.svc = &rollout.Service{Pool: w.pool, Editions: &edition{ed}, Replay: w.replayEngine(), Notify: rw.notes, Lag: -1}
+	eng := w.replayEngine()
+	rw.svc = &rollout.Service{Pool: w.pool, Editions: &edition{ed}, Replay: eng, Receipts: eng.Source, Notify: rw.notes, Lag: -1}
 	rw.gate = &fakeGate{w: w, svc: &rw.svc}
 	rw.svc.Gate = rw.gate
 	rw.publisher = w.reader(tdomain.RolePolicyPublisher, tdomain.Scope{Type: tdomain.ScopeOrg, ID: w.org.UUID()})
@@ -122,6 +125,7 @@ func (rw *rolloutWorld) pilot(next ...pdomain.Rule) ids.UUID {
 	ctx := rw.publisher
 	rw.publishPolicy(1, false, pgCapOver1000)
 	draft := rw.publishPolicy(2, true, next...)
+	rw.tested(draft)
 	if _, err := rw.svc.CreateCohort(ctx, "pilot"); err != nil {
 		rw.t.Fatal(err)
 	}
@@ -167,6 +171,7 @@ func TestHR234_PilotSelectsItsVersionForTheCohortsAgentsOnly(t *testing.T) {
 	}
 	draft := w.publishPolicy(2, true, pgCapOver1000, pgHoldOver50)
 	ctx := rw.publisher
+	w.tested(draft)
 	if _, err := rw.svc.CreateCohort(ctx, "pilot"); err != nil {
 		t.Fatal(err)
 	}
@@ -234,7 +239,7 @@ func TestHR234_AVersionThatDoesNotCompileFallsBackAndTheTargetFails(t *testing.T
 		t.Fatalf("target: %+v", tg)
 	}
 	if len(rw.notes.sent) != 1 || rw.notes.sent[0].Type != "policy.rollout_target_failed" ||
-		!slices.Equal(rw.notes.sent[0].Personal, []ids.UUID{w.alice}) || rw.notes.sent[0].Params["agent"] != "refund-bot" {
+		!slices.Equal(rw.notes.sent[0].Personal, []ids.UUID{w.alice}) || rw.notes.sent[0].Params["agent"] != w.agent.String() {
 		t.Fatalf("notifications: %+v", rw.notes.sent)
 	}
 	w.authorize(w.request(run, ids.NewV7(), "ch_2", "70.00"))
@@ -244,16 +249,24 @@ func TestHR234_AVersionThatDoesNotCompileFallsBackAndTheTargetFails(t *testing.T
 }
 
 // TestHR234_TargetsAreAcknowledgedThenVerifiedByCoverage: a decision under
-// the pilot's version acknowledges the agent's target; it is verified only
-// once the latest coverage of its routes for the version's operations is
-// PARTIAL or ENFORCED, and never by the Authority.
+// the pilot's version acknowledges the agent's target, never the Authority.
+// It is VERIFIED only once every route of the agent for the version's exact
+// operations (a prefix rule expanded against the active definitions) has an
+// unexpired PARTIAL or ENFORCED snapshot, a missing one counting as
+// UNKNOWN; without a route it stays ACKNOWLEDGED (NO_ROUTES), and a lapse
+// takes it back (COVERAGE_LAPSED). An agent removed from the pilot's cohort
+// is its EXCEPTION (REMOVED_FROM_COHORT) and keeps the published version.
 func TestHR234_TargetsAreAcknowledgedThenVerifiedByCoverage(t *testing.T) {
 	w := newWorld(t)
 	w.keepInputs()
-	w.refundable("ch_1")
+	w.refundable("ch_1", "ch_2")
 	rw := w.rollouts(billing.Team)
 	run := w.run(w.grant("500").ID, ids.UUID{})
-	id := rw.pilot(pgCapOver1000, pgHoldOver50)
+	everyPayment := pdomain.Rule{
+		ID: "payments-freeze", Kind: pdomain.Forbid, Summary: "no payment operation while frozen (off)", Operations: []string{"payments.*"},
+		When: `false`, Reason: "PAYMENTS_FROZEN",
+	}
+	id := rw.pilot(pgCapOver1000, pgHoldOver50, everyPayment)
 	w.authorize(w.request(run, ids.NewV7(), "ch_1", "30.00"))
 	if tg := rw.target(id); tg.State != rollout.TargetConfigured {
 		t.Fatalf("the Authority changed the target: %+v", tg)
@@ -261,28 +274,67 @@ func TestHR234_TargetsAreAcknowledgedThenVerifiedByCoverage(t *testing.T) {
 	if s := rw.sweep(); s.Acknowledged != 1 {
 		t.Fatalf("sweep: %+v", s)
 	}
-	if tg := rw.target(id); tg.State != rollout.TargetAcknowledged || tg.Reason == nil || *tg.Reason != "COVERAGE_UNKNOWN" {
-		t.Fatalf("without coverage: %+v", tg)
+	reason := func(want, coverage string) {
+		t.Helper()
+		tg := rw.target(id)
+		got := ""
+		if tg.Reason != nil {
+			got = *tg.Reason
+		}
+		cov := ""
+		if tg.Coverage != nil {
+			cov = *tg.Coverage
+		}
+		if got != want || cov != coverage {
+			t.Fatalf("target: %s %q coverage %q, want %q coverage %q", tg.State, got, cov, want, coverage)
+		}
 	}
-	snapshot := func(state string) {
+	reason("NO_ROUTES", "")
+	// A route of the connection for every operation: each of the version's
+	// operations needs its own snapshot.
+	exec(t, w.pool, w.org, `INSERT INTO pc.coverage_routes (org_id, id, agent_id, connection_id, operation, kind, channel, observation, source)
+		VALUES ($1, $2, $3, $4, NULL, 'channel', 'http', 'observed', 'gateway')`, w.org, ids.NewV7(), w.agent, w.conn)
+	snapshot := func(op, state string) {
 		entry := ids.NewV7()
 		exec(t, w.pool, w.org, `INSERT INTO pc.ledger_entries (org_id, id, kind, actor_type, actor_id, body)
 			VALUES ($1, $2, 'coverage.test', 'test', 'test', '\x7b7d')`, w.org, entry)
 		exec(t, w.pool, w.org, `INSERT INTO pc.coverage_snapshots (org_id, id, agent_id, connection_id, operation, state, reasons,
-			body, body_sha256, ledger_entry_id) VALUES ($1, $2, $3, $4, 'payments.refund.create', $5, '{}', '{}', $6, $7)`,
-			w.org, ids.NewV7(), w.agent, w.conn, state, make([]byte, 32), entry)
+			body, body_sha256, ledger_entry_id) VALUES ($1, $2, $3, $4, $5, $6, '{}', '{}', $7, $8)`,
+			w.org, ids.NewV7(), w.agent, w.conn, op, state, make([]byte, 32), entry)
 	}
-	snapshot("OBSERVE_ONLY")
+	snapshot("payments.refund.create", "PARTIAL")
 	rw.sweep()
-	if tg := rw.target(id); tg.State != rollout.TargetAcknowledged || tg.Coverage == nil || *tg.Coverage != "OBSERVE_ONLY" {
-		t.Fatalf("observe only: %+v", tg)
+	reason("COVERAGE_UNKNOWN", "UNKNOWN") // the other payments operations have no snapshot
+	defs, err := (&defpg.Store{Pool: w.pool}).ActiveDefinitions(context.Background(), w.org)
+	if err != nil {
+		t.Fatal(err)
 	}
-	snapshot("PARTIAL")
+	for _, d := range defs {
+		if strings.HasPrefix(d.Operation, "payments.") && d.Operation != "payments.refund.create" {
+			snapshot(d.Operation, "PARTIAL")
+		}
+	}
 	if s := rw.sweep(); s.Verified != 1 {
 		t.Fatalf("sweep: %+v", s)
 	}
-	if tg := rw.target(id); tg.State != rollout.TargetVerified || tg.Coverage == nil || *tg.Coverage != "PARTIAL" || tg.Reason != nil {
+	if tg := rw.target(id); tg.State != rollout.TargetVerified {
 		t.Fatalf("verified: %+v", tg)
+	}
+	reason("", "PARTIAL")
+	snapshot("payments.refund.create", "OBSERVE_ONLY")
+	if s := rw.sweep(); s.Lapsed != 1 {
+		t.Fatalf("sweep: %+v", s)
+	}
+	reason("COVERAGE_LAPSED", "OBSERVE_ONLY")
+	if _, err := rw.svc.ChangeCohort(rw.publisher, "pilot", []ids.UUID{w.agent}, true); err != nil {
+		t.Fatal(err)
+	}
+	if tg := rw.target(id); tg.State != rollout.TargetException || tg.Reason == nil || *tg.Reason != "REMOVED_FROM_COHORT" {
+		t.Fatalf("removed from the cohort: %+v", tg)
+	}
+	res := w.authorize(w.request(run, ids.NewV7(), "ch_2", "70.00"))
+	if ref, _, sel := rw.selection(res); ref != "org-policy@1" || sel != pipeline.SelectedDefault {
+		t.Fatalf("after the removal: %s (%s)", ref, sel)
 	}
 }
 
@@ -575,5 +627,26 @@ func TestHR234_CompletingPublishesForEveryoneAndRecordsTargets(t *testing.T) {
 	all, err := rw.svc.ListRollouts(rw.publisher, 10)
 	if err != nil || len(all) != 2 || all[0].VersionID != v3 || all[0].Stage != rollout.StageComplete || all[0].CreatedBy != "system:publish" {
 		t.Fatalf("rollouts: %+v %v", all, err)
+	}
+}
+
+// tested records a passing validation and test run of a stored draft, as
+// the publish gate does before a pilot (TESTED: the Authority selects only a
+// version that passed the gate, D31).
+func (w *world) tested(id ids.UUID) {
+	w.t.Helper()
+	s := &polpg.Store{Pool: w.pool}
+	ctx := context.Background()
+	v, err := s.Version(ctx, w.org, id)
+	if err != nil {
+		w.t.Fatal(err)
+	}
+	var digest [32]byte
+	copy(digest[:], v.ContentDigest)
+	if _, err := s.RecordValidation(ctx, w.org, id, digest, pdomain.ValidationResult{Passed: true}, "test"); err != nil {
+		w.t.Fatal(err)
+	}
+	if _, err := s.RecordTestRun(ctx, w.org, id, digest, pdomain.TestResult{Passed: true}, "test"); err != nil {
+		w.t.Fatal(err)
 	}
 }

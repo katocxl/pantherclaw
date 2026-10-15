@@ -142,6 +142,9 @@ type Service struct {
 	Gate     Gate
 	Notify   Notifier
 	Log      *slog.Logger
+	// Receipts, when set, gives the sweeper a decision's receipt when its
+	// recording cannot be read (D31).
+	Receipts Receipts
 	// Replay reads the recordings of new decisions and replays them for the
 	// sweeper (D12, D13); nil: the sweeper reads no decisions.
 	Replay Replayer
@@ -259,10 +262,13 @@ func (s *Service) CreateCohort(ctx context.Context, name string) (Cohort, error)
 	return out, err
 }
 
-// ChangeCohort adds agents to a cohort, or removes them (Team; a person
+// ChangeCohort adds agents to a cohort (Team), or removes them (a person
 // holding policy.publish). An agent added to a cohort an open pilot
-// enforces becomes one of its targets at once. It returns how many
-// memberships changed.
+// enforces becomes one of its targets at once; such an addition needs the
+// pilot's base to still be the published version (D31). An agent removed
+// from every ENFORCE cohort of an open rollout is that rollout's EXCEPTION
+// (REMOVED_FROM_COHORT) and keeps the published version. It returns how
+// many memberships changed.
 func (s *Service) ChangeCohort(ctx context.Context, name string, agents []ids.UUID, remove bool) (int, error) {
 	if !cohortName.MatchString(name) {
 		return 0, ErrCohortName
@@ -274,8 +280,10 @@ func (s *Service) ChangeCohort(ctx context.Context, name string, agents []ids.UU
 	if err != nil {
 		return 0, err
 	}
-	if err := s.team(ctx); err != nil {
-		return 0, err
+	if !remove {
+		if err := s.team(ctx); err != nil {
+			return 0, err
+		}
 	}
 	var n int
 	err = s.Pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
@@ -287,10 +295,17 @@ func (s *Service) ChangeCohort(ctx context.Context, name string, agents []ids.UU
 		if err != nil {
 			return err
 		}
+		if !remove {
+			if err := baseStillPublished(ctx, q, c.Org, cohort.ID); err != nil {
+				return err
+			}
+		}
 		for _, a := range agents {
 			var k int64
 			if remove {
-				k, err = q.RemovePolicyCohortMember(ctx, c.Org, cohort.ID, a)
+				if k, err = q.RemovePolicyCohortMember(ctx, c.Org, cohort.ID, a); err == nil && k > 0 {
+					_, err = q.RemovedFromCohortTargets(ctx, c.Org, a)
+				}
 			} else {
 				k, err = q.AddPolicyCohortMember(ctx, dbq.AddPolicyCohortMemberParams{
 					OrgID: c.Org, CohortID: cohort.ID, AgentID: a, AddedBy: c.Principal.String(),
@@ -322,6 +337,26 @@ func (s *Service) ChangeCohort(ctx context.Context, name string, agents []ids.UU
 		return err
 	})
 	return n, err
+}
+
+// baseStillPublished refuses (BASE_CHANGED) when an open pilot that
+// enforces its version for cohort started from a version that is no longer
+// the published one (D31).
+func baseStillPublished(ctx context.Context, q *dbq.Queries, org ids.OrgID, cohort ids.UUID) error {
+	pilots, err := q.PilotsEnforcingCohort(ctx, org, cohort)
+	if err != nil || len(pilots) == 0 {
+		return err
+	}
+	cur, err := published(ctx, q, org)
+	if err != nil {
+		return err
+	}
+	for _, r := range pilots {
+		if !sameVersion(cur, r.BaseVersionID) {
+			return ErrBaseChanged
+		}
+	}
+	return nil
 }
 
 // syncPilotTargets adds a CONFIGURED target for every agent of the org's
@@ -702,23 +737,31 @@ func (s *Service) CompleteRollout(ctx context.Context, rollout ids.UUID) (Rollou
 	if s.Gate == nil {
 		return Rollout{}, nil, ErrGateMissing
 	}
-	r, err := s.get(ctx, c.Org, rollout)
-	if err != nil {
-		return Rollout{}, nil, err
-	}
-	if r.Stage != StageShadow && r.Stage != StagePilot {
-		return Rollout{}, nil, ErrStage
-	}
-	var cur *ids.UUID
+	// The rollout is read under its lock (D31), so a cancel that commits
+	// first is seen; a cancel that commits after voids the PUBLISH request
+	// this may create.
+	var r dbq.PcPolicyRollout
 	if err := s.Pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
+		q := dbq.New(tx)
 		var err error
-		cur, err = published(ctx, dbq.New(tx), c.Org)
-		return err
-	}, db.ReadOnly()); err != nil {
+		if r, err = q.LockPolicyRollout(ctx, c.Org, rollout); db.IsNoRows(err) {
+			return ErrNotFound
+		} else if err != nil {
+			return err
+		}
+		if r.Stage != StageShadow && r.Stage != StagePilot {
+			return ErrStage
+		}
+		cur, err := published(ctx, q, c.Org)
+		if err != nil {
+			return err
+		}
+		if !sameVersion(cur, r.BaseVersionID) {
+			return ErrBaseChanged
+		}
+		return nil
+	}); err != nil {
 		return Rollout{}, nil, err
-	}
-	if !sameVersion(cur, r.BaseVersionID) {
-		return Rollout{}, nil, ErrBaseChanged
 	}
 	cr, err := s.Gate.Publish(ctx, r.VersionID, r.BaseVersionID)
 	if err != nil {
@@ -730,8 +773,9 @@ func (s *Service) CompleteRollout(ctx context.Context, rollout ids.UUID) (Rollou
 
 // CancelRollout ends a rollout in SHADOW or PILOT (a person holding
 // policy.publish): its cohorts' agents are decided by the published version
-// again. No approval is needed: the published version was approved for
-// everyone.
+// again, and its pending change requests (its pilot's, and the publication
+// of its version) are voided (D31). No approval is needed: the published
+// version was approved for everyone.
 func (s *Service) CancelRollout(ctx context.Context, rollout ids.UUID) (Rollout, error) {
 	c, err := publisher(ctx)
 	if err != nil {
@@ -739,16 +783,13 @@ func (s *Service) CancelRollout(ctx context.Context, rollout ids.UUID) (Rollout,
 	}
 	err = s.Pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
 		q := dbq.New(tx)
-		if _, err := q.GetPolicyRollout(ctx, c.Org, rollout); db.IsNoRows(err) {
+		r, err := q.LockPolicyRollout(ctx, c.Org, rollout)
+		if db.IsNoRows(err) {
 			return ErrNotFound
 		} else if err != nil {
 			return err
 		}
-		if _, err := q.SetPolicyRolloutStage(ctx, dbq.SetPolicyRolloutStageParams{
-			Stage: StageCancelled, OrgID: c.Org, ID: rollout, FromStages: []string{StageShadow, StagePilot},
-		}); db.IsNoRows(err) {
-			return ErrStage
-		} else if err != nil {
+		if err := cancel(ctx, tx, c.Actor(), r, voidRolloutCancelled); err != nil {
 			return err
 		}
 		return s.audit(ctx, tx, c, "policy.rollout_cancelled", rollout, nil) //nolint:misspell // as the stage
@@ -759,27 +800,102 @@ func (s *Service) CancelRollout(ctx context.Context, rollout ids.UUID) (Rollout,
 	return s.get(ctx, c.Org, rollout)
 }
 
-// Published records a publish in its transaction (D6's OnPublished hook):
-// the org's open rollout of version, if any, becomes COMPLETE; otherwise a
+// Reasons a rollout's pending change requests are voided with.
+const (
+	voidRolloutCancelled = "ROLLOUT_CANCELLED" //nolint:misspell // as the stage
+	voidBaseChanged      = "BASE_CHANGED"
+)
+
+// cancel moves an open rollout to CANCELLED and voids its pending change
+// requests: the ROLLOUT request of its pilot and the PUBLISH request of its
+// version (D31).
+func cancel(ctx context.Context, tx db.TenantTx, actor evdomain.Actor, r dbq.PcPolicyRollout, reason string) error {
+	q := dbq.New(tx)
+	if _, err := q.SetPolicyRolloutStage(ctx, dbq.SetPolicyRolloutStageParams{
+		Stage: StageCancelled, OrgID: r.OrgID, ID: r.ID, FromStages: []string{StageShadow, StagePilot},
+	}); db.IsNoRows(err) {
+		return ErrStage
+	} else if err != nil {
+		return err
+	}
+	if err := voidRequests(ctx, tx, actor, "ROLLOUT", r.ID, reason); err != nil {
+		return err
+	}
+	return voidRequests(ctx, tx, actor, "PUBLISH", r.VersionID, reason)
+}
+
+// voidRequests voids the pending change requests of a kind for a subject.
+func voidRequests(ctx context.Context, tx db.TenantTx, actor evdomain.Actor, kind string, subject ids.UUID, reason string) error {
+	q := dbq.New(tx)
+	org := tx.OrgID()
+	pending, err := q.PendingChangeRequestsFor(ctx, org, kind, subject)
+	if err != nil {
+		return err
+	}
+	for _, id := range pending {
+		if _, err := q.DecidePolicyChangeRequest(ctx, dbq.DecidePolicyChangeRequestParams{
+			State: "VOIDED", Reason: &reason, OrgID: org, ID: id,
+		}); err != nil {
+			return err
+		}
+		if _, err := audit.Record(ctx, tx, audit.Event{
+			Name: "policy.change_voided", Actor: actor, Outcome: audit.Success,
+			Object: &audit.Object{Type: "policy_change_request", ID: id.String()}, Details: map[string]string{"reason": reason},
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// publishActor is who a publication's hook acts as: the person who made
+// it, or the system for the dev seed.
+func publishActor(ctx context.Context) evdomain.Actor {
+	if c, err := tapp.CallerFrom(ctx); err == nil {
+		return c.Actor()
+	}
+	return evdomain.Actor{Type: "system", ID: "policy-publish"}
+}
+
+// Published records a publish in its transaction (D6's OnPublished hook).
+// The org's open rollouts are locked; the one of version, if any, becomes
+// COMPLETE (its pending pilot request voided), and every other is
+// CANCELLED with its pending requests voided (BASE_CHANGED, D31): its
+// version was classified against a base that is no longer published.
+// Their shadow results are kept. Without an open rollout of version a
 // COMPLETE rollout is recorded (every edition: status only). Every
 // non-retired agent becomes a target, so the sweeper can follow each one
 // to VERIFIED.
 func (s *Service) Published(ctx context.Context, tx db.TenantTx, org ids.OrgID, version ids.UUID, base *ids.UUID) error {
 	q := dbq.New(tx)
-	due, err := q.DuePolicyRollouts(ctx, org)
+	open, err := q.LockOpenPolicyRollouts(ctx, org)
 	if err != nil {
 		return err
 	}
+	actor := publishActor(ctx)
 	var id ids.UUID
-	for _, r := range due {
-		if (r.Stage == StageShadow || r.Stage == StagePilot) && r.VersionID == version {
-			if _, err := q.SetPolicyRolloutStage(ctx, dbq.SetPolicyRolloutStageParams{
-				Stage: StageComplete, OrgID: org, ID: r.ID, FromStages: []string{StageShadow, StagePilot},
+	for _, r := range open {
+		if r.VersionID != version {
+			if err := cancel(ctx, tx, actor, r, voidBaseChanged); err != nil {
+				return err
+			}
+			if _, err := audit.Record(ctx, tx, audit.Event{
+				Name: "policy.rollout_cancelled", Actor: actor, Outcome: audit.Success, ReasonCode: voidBaseChanged, //nolint:misspell // as the stage
+				Object: &audit.Object{Type: "policy_rollout", ID: r.ID.String()}, Details: map[string]string{"published_version_id": version.String()},
 			}); err != nil {
 				return err
 			}
-			id = r.ID
+			continue
 		}
+		if _, err := q.SetPolicyRolloutStage(ctx, dbq.SetPolicyRolloutStageParams{
+			Stage: StageComplete, OrgID: org, ID: r.ID, FromStages: []string{StageShadow, StagePilot},
+		}); err != nil {
+			return err
+		}
+		if err := voidRequests(ctx, tx, actor, "ROLLOUT", r.ID, voidRolloutCompleted); err != nil {
+			return err
+		}
+		id = r.ID
 	}
 	if id.IsZero() {
 		r, err := q.InsertPolicyRollout(ctx, dbq.InsertPolicyRolloutParams{
@@ -793,6 +909,9 @@ func (s *Service) Published(ctx context.Context, tx db.TenantTx, org ids.OrgID, 
 	_, err = q.AddAllRolloutTargets(ctx, id, org)
 	return err
 }
+
+// voidRolloutCompleted voids a completed rollout's pending pilot request.
+const voidRolloutCompleted = "ROLLOUT_COMPLETED"
 
 // GetRollout returns a rollout with its cohorts and target counts
 // (policy.read).
@@ -889,7 +1008,7 @@ func (s *Service) ListTargets(ctx context.Context, rollout ids.UUID, state strin
 		}
 		var err error
 		out, err = q.ListRolloutTargets(ctx, dbq.ListRolloutTargetsParams{
-			OrgID: c.Org, RolloutID: rollout, State: st, AfterAgent: after, MaxRows: int32(min(max(limit, 1), maxList)),
+			OrgID: c.Org, RolloutID: rollout, State: st, AfterAgent: optional(after), MaxRows: int32(min(max(limit, 1), maxList)),
 		})
 		return err
 	}, db.ReadOnly())

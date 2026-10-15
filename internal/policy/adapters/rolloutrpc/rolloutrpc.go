@@ -338,7 +338,8 @@ func (h *Handler) GetShadowSummary(ctx context.Context, r *pantherclawv1.GetShad
 		return nil, err
 	}
 	out := &pantherclawv1.GetShadowSummaryResponse{
-		Label: s.Label, RolloutId: s.Rollout.String(), Total: s.Total, ByCategory: map[string]int64{}, Truncated: s.Truncated,
+		Label: s.Label, RolloutId: s.Rollout.String(), Total: s.Total, ExpandedExposure: s.ExpandedExposure,
+		ExpandedExposureNote: s.ExpandedExposureNote, ByCategory: map[string]int64{}, Truncated: s.Truncated,
 		ByDay: []*pantherclawv1.ShadowCount{}, NewlyHeldPerDay: []*pantherclawv1.ShadowCount{}, ByOperation: []*pantherclawv1.ShadowCount{},
 		ByAgent: []*pantherclawv1.ShadowCount{}, Samples: []*pantherclawv1.ShadowSample{},
 	}

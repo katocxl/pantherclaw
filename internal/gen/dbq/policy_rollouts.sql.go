@@ -16,43 +16,6 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 )
 
-const acknowledgedRolloutTargets = `-- name: AcknowledgedRolloutTargets :many
-SELECT org_id, rollout_id, agent_id, state, owner_id, coverage, reason, updated_at FROM pc.policy_rollout_targets
-WHERE org_id = $1 AND rollout_id = $2 AND state = 'ACKNOWLEDGED'
-ORDER BY updated_at, agent_id
-LIMIT $3
-`
-
-// Targets the sweeper may advance to VERIFIED.
-func (q *Queries) AcknowledgedRolloutTargets(ctx context.Context, orgID ids.OrgID, rolloutID ids.UUID, maxRows int32) ([]PcPolicyRolloutTarget, error) {
-	rows, err := q.db.Query(ctx, acknowledgedRolloutTargets, orgID, rolloutID, maxRows)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []PcPolicyRolloutTarget{}
-	for rows.Next() {
-		var i PcPolicyRolloutTarget
-		if err := rows.Scan(
-			&i.OrgID,
-			&i.RolloutID,
-			&i.AgentID,
-			&i.State,
-			&i.OwnerID,
-			&i.Coverage,
-			&i.Reason,
-			&i.UpdatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const addAllRolloutTargets = `-- name: AddAllRolloutTargets :execrows
 INSERT INTO pc.policy_rollout_targets (org_id, rollout_id, agent_id, state, owner_id)
 SELECT a.org_id, $1, a.id, 'CONFIGURED', a.owner_user_id
@@ -141,15 +104,78 @@ func (q *Queries) AddPolicyRolloutCohort(ctx context.Context, arg AddPolicyRollo
 	return err
 }
 
-const addShadowCount = `-- name: AddShadowCount :exec
-INSERT INTO pc.policy_shadow_counts (org_id, rollout_id, day, category, n)
-VALUES ($1, $2, (now() AT TIME ZONE 'UTC')::date, $3, 1)
-ON CONFLICT (org_id, rollout_id, day, category) DO UPDATE SET n = pc.policy_shadow_counts.n + 1
+const advanceRolloutCursor = `-- name: AdvanceRolloutCursor :execrows
+UPDATE pc.policy_rollout_cursors
+SET last_created_at = $1, last_txn = coalesce($2::uuid, '00000000-0000-0000-0000-000000000000'::uuid), last_evaluation = $3,
+    verify_after_agent = $4
+WHERE org_id = $5 AND rollout_id = $6
+  AND last_created_at = $7 AND last_txn = coalesce($8::uuid, '00000000-0000-0000-0000-000000000000'::uuid) AND last_evaluation = $9
+  AND verify_after_agent IS NOT DISTINCT FROM $10
 `
 
-func (q *Queries) AddShadowCount(ctx context.Context, orgID ids.OrgID, rolloutID ids.UUID, category string) error {
-	_, err := q.db.Exec(ctx, addShadowCount, orgID, rolloutID, category)
-	return err
+type AdvanceRolloutCursorParams struct {
+	LastCreatedAt       time.Time
+	LastTxn             *ids.UUID
+	LastEvaluation      int32
+	VerifyAfterAgent    *ids.UUID
+	OrgID               ids.OrgID
+	RolloutID           ids.UUID
+	OldCreatedAt        time.Time
+	OldTxn              *ids.UUID
+	OldEvaluation       int32
+	OldVerifyAfterAgent *ids.UUID
+}
+
+// Moves a cursor only from the position the sweep read (D31, HR-004).
+func (q *Queries) AdvanceRolloutCursor(ctx context.Context, arg AdvanceRolloutCursorParams) (int64, error) {
+	result, err := q.db.Exec(ctx, advanceRolloutCursor,
+		arg.LastCreatedAt,
+		arg.LastTxn,
+		arg.LastEvaluation,
+		arg.VerifyAfterAgent,
+		arg.OrgID,
+		arg.RolloutID,
+		arg.OldCreatedAt,
+		arg.OldTxn,
+		arg.OldEvaluation,
+		arg.OldVerifyAfterAgent,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const agentRouteScopes = `-- name: AgentRouteScopes :many
+SELECT DISTINCT connection_id, operation FROM pc.coverage_routes
+WHERE org_id = $1 AND (agent_id = $2 OR agent_id IS NULL)
+`
+
+type AgentRouteScopesRow struct {
+	ConnectionID ids.UUID
+	Operation    *string
+}
+
+// The coverage routes an agent has (its own and those of every agent of a
+// connection), by connection and operation (NULL: every operation).
+func (q *Queries) AgentRouteScopes(ctx context.Context, orgID ids.OrgID, agentID *ids.UUID) ([]AgentRouteScopesRow, error) {
+	rows, err := q.db.Query(ctx, agentRouteScopes, orgID, agentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []AgentRouteScopesRow{}
+	for rows.Next() {
+		var i AgentRouteScopesRow
+		if err := rows.Scan(&i.ConnectionID, &i.Operation); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const countRolloutTargets = `-- name: CountRolloutTargets :many
@@ -197,15 +223,12 @@ func (q *Queries) CountShadowResults(ctx context.Context, orgID ids.OrgID, rollo
 const duePolicyRollouts = `-- name: DuePolicyRollouts :many
 SELECT org_id, id, version_id, base_version_id, stage, created_by, created_at, stage_changed_at, completed_at FROM pc.policy_rollouts r
 WHERE r.org_id = $1
-  AND (r.stage IN ('SHADOW', 'PILOT')
-       OR (r.stage = 'COMPLETE' AND r.completed_at > now() - interval '7 days'
-           AND EXISTS (SELECT 1 FROM pc.policy_rollout_targets t
-                       WHERE t.org_id = r.org_id AND t.rollout_id = r.id AND t.state <> 'VERIFIED')))
+  AND (r.stage IN ('SHADOW', 'PILOT') OR (r.stage = 'COMPLETE' AND r.completed_at > now() - interval '7 days'))
 ORDER BY r.created_at, r.id
 `
 
 // Rollouts the sweeper works on: in SHADOW or PILOT, or completed less than
-// 7 days ago with targets not VERIFIED (the lister's policy_rollouts_due).
+// 7 days ago (the lister's policy_rollouts_due).
 func (q *Queries) DuePolicyRollouts(ctx context.Context, orgID ids.OrgID) ([]PcPolicyRollout, error) {
 	rows, err := q.db.Query(ctx, duePolicyRollouts, orgID)
 	if err != nil {
@@ -329,19 +352,26 @@ func (q *Queries) GetPolicyVersionBundle(ctx context.Context, orgID ids.OrgID, i
 }
 
 const getRolloutCursor = `-- name: GetRolloutCursor :one
-SELECT last_created_at, last_txn FROM pc.policy_rollout_cursors
+SELECT last_created_at, last_txn, last_evaluation, verify_after_agent FROM pc.policy_rollout_cursors
 WHERE org_id = $1 AND rollout_id = $2
 `
 
 type GetRolloutCursorRow struct {
-	LastCreatedAt time.Time
-	LastTxn       ids.UUID
+	LastCreatedAt    time.Time
+	LastTxn          ids.UUID
+	LastEvaluation   int32
+	VerifyAfterAgent *ids.UUID
 }
 
 func (q *Queries) GetRolloutCursor(ctx context.Context, orgID ids.OrgID, rolloutID ids.UUID) (GetRolloutCursorRow, error) {
 	row := q.db.QueryRow(ctx, getRolloutCursor, orgID, rolloutID)
 	var i GetRolloutCursorRow
-	err := row.Scan(&i.LastCreatedAt, &i.LastTxn)
+	err := row.Scan(
+		&i.LastCreatedAt,
+		&i.LastTxn,
+		&i.LastEvaluation,
+		&i.VerifyAfterAgent,
+	)
 	return i, err
 }
 
@@ -434,6 +464,60 @@ func (q *Queries) InsertPolicyRollout(ctx context.Context, arg InsertPolicyRollo
 		&i.CompletedAt,
 	)
 	return i, err
+}
+
+const insertRolloutCursor = `-- name: InsertRolloutCursor :exec
+INSERT INTO pc.policy_rollout_cursors (org_id, rollout_id, last_created_at, last_txn, last_evaluation, verify_after_agent)
+VALUES ($1, $2, $3, coalesce($4::uuid, '00000000-0000-0000-0000-000000000000'::uuid), $5,
+    $6)
+`
+
+type InsertRolloutCursorParams struct {
+	OrgID            ids.OrgID
+	RolloutID        ids.UUID
+	LastCreatedAt    time.Time
+	LastTxn          *ids.UUID
+	LastEvaluation   int32
+	VerifyAfterAgent *ids.UUID
+}
+
+// A rollout's first cursor; a concurrent sweep's insert makes it a unique
+// violation, and the sweep is retried.
+func (q *Queries) InsertRolloutCursor(ctx context.Context, arg InsertRolloutCursorParams) error {
+	_, err := q.db.Exec(ctx, insertRolloutCursor,
+		arg.OrgID,
+		arg.RolloutID,
+		arg.LastCreatedAt,
+		arg.LastTxn,
+		arg.LastEvaluation,
+		arg.VerifyAfterAgent,
+	)
+	return err
+}
+
+const insertShadowCount = `-- name: InsertShadowCount :exec
+INSERT INTO pc.policy_shadow_counts (org_id, rollout_id, id, day, category, n)
+VALUES ($1, $2, $3, (now() AT TIME ZONE 'UTC')::date, $4, $5)
+`
+
+type InsertShadowCountParams struct {
+	OrgID     ids.OrgID
+	RolloutID ids.UUID
+	ID        ids.UUID
+	Category  string
+	N         int64
+}
+
+// One sweep's count of a category today (UTC), insert-only (D31).
+func (q *Queries) InsertShadowCount(ctx context.Context, arg InsertShadowCountParams) error {
+	_, err := q.db.Exec(ctx, insertShadowCount,
+		arg.OrgID,
+		arg.RolloutID,
+		arg.ID,
+		arg.Category,
+		arg.N,
+	)
+	return err
 }
 
 const insertShadowResult = `-- name: InsertShadowResult :execrows
@@ -660,7 +744,7 @@ const listRolloutTargets = `-- name: ListRolloutTargets :many
 SELECT org_id, rollout_id, agent_id, state, owner_id, coverage, reason, updated_at FROM pc.policy_rollout_targets
 WHERE org_id = $1 AND rollout_id = $2
   AND ($3::text IS NULL OR state = $3::text)
-  AND agent_id > $4
+  AND agent_id > coalesce($4::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
 ORDER BY agent_id
 LIMIT $5
 `
@@ -669,7 +753,7 @@ type ListRolloutTargetsParams struct {
 	OrgID      ids.OrgID
 	RolloutID  ids.UUID
 	State      *string
-	AfterAgent ids.UUID
+	AfterAgent *ids.UUID
 	MaxRows    int32
 }
 
@@ -708,6 +792,45 @@ func (q *Queries) ListRolloutTargets(ctx context.Context, arg ListRolloutTargets
 	return items, nil
 }
 
+const lockOpenPolicyRollouts = `-- name: LockOpenPolicyRollouts :many
+SELECT org_id, id, version_id, base_version_id, stage, created_by, created_at, stage_changed_at, completed_at FROM pc.policy_rollouts
+WHERE org_id = $1 AND stage IN ('SHADOW', 'PILOT')
+ORDER BY id
+FOR UPDATE
+`
+
+// The org's rollouts in SHADOW or PILOT, locked until the transaction
+// ends.
+func (q *Queries) LockOpenPolicyRollouts(ctx context.Context, orgID ids.OrgID) ([]PcPolicyRollout, error) {
+	rows, err := q.db.Query(ctx, lockOpenPolicyRollouts, orgID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []PcPolicyRollout{}
+	for rows.Next() {
+		var i PcPolicyRollout
+		if err := rows.Scan(
+			&i.OrgID,
+			&i.ID,
+			&i.VersionID,
+			&i.BaseVersionID,
+			&i.Stage,
+			&i.CreatedBy,
+			&i.CreatedAt,
+			&i.StageChangedAt,
+			&i.CompletedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const lockPolicyRollout = `-- name: LockPolicyRollout :one
 SELECT org_id, id, version_id, base_version_id, stage, created_by, created_at, stage_changed_at, completed_at FROM pc.policy_rollouts WHERE org_id = $1 AND id = $2 FOR UPDATE
 `
@@ -731,11 +854,42 @@ func (q *Queries) LockPolicyRollout(ctx context.Context, orgID ids.OrgID, iD ids
 	return i, err
 }
 
+const pendingChangeRequestsFor = `-- name: PendingChangeRequestsFor :many
+SELECT id FROM pc.policy_change_requests
+WHERE org_id = $1 AND kind = $2 AND subject_id = $3 AND state = 'PENDING'
+FOR UPDATE
+`
+
+// Pending change requests of a kind for a subject (D31: a rollout that ends
+// voids its requests).
+func (q *Queries) PendingChangeRequestsFor(ctx context.Context, orgID ids.OrgID, kind string, subjectID ids.UUID) ([]ids.UUID, error) {
+	rows, err := q.db.Query(ctx, pendingChangeRequestsFor, orgID, kind, subjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ids.UUID{}
+	for rows.Next() {
+		var id ids.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const pilotRolloutForAgent = `-- name: PilotRolloutForAgent :one
 
 SELECT r.id, r.version_id
 FROM pc.policy_rollouts r
+JOIN pc.policy_versions v ON v.org_id = r.org_id AND v.id = r.version_id AND v.state IN ('TESTED', 'PUBLISHED')
 WHERE r.org_id = $1 AND r.stage = 'PILOT'
+  AND r.base_version_id IS NOT DISTINCT FROM (SELECT p.id FROM pc.policy_versions p
+                                               WHERE p.org_id = r.org_id AND p.state = 'PUBLISHED')
   AND EXISTS (SELECT 1 FROM pc.policy_rollout_cohorts rc
               JOIN pc.policy_cohort_members m ON m.org_id = rc.org_id AND m.cohort_id = rc.cohort_id
               WHERE rc.org_id = r.org_id AND rc.rollout_id = r.id AND rc.mode = 'ENFORCE' AND m.agent_id = $2)
@@ -756,12 +910,52 @@ type PilotRolloutForAgentRow struct {
 // rollout service and its sweeper write the rest.
 // The pilot rollout whose ENFORCE cohorts hold the agent and that did not
 // exclude it, with the version it enforces (the Authority's selection,
-// HR-234). At most one rollout per org is in PILOT.
+// HR-234). At most one rollout per org is in PILOT. Only a pilot whose base
+// is still the published version, of a version that passed the gate
+// (TESTED, or PUBLISHED), selects anything (D31).
 func (q *Queries) PilotRolloutForAgent(ctx context.Context, orgID ids.OrgID, agentID ids.UUID) (PilotRolloutForAgentRow, error) {
 	row := q.db.QueryRow(ctx, pilotRolloutForAgent, orgID, agentID)
 	var i PilotRolloutForAgentRow
 	err := row.Scan(&i.ID, &i.VersionID)
 	return i, err
+}
+
+const pilotsEnforcingCohort = `-- name: PilotsEnforcingCohort :many
+SELECT r.org_id, r.id, r.version_id, r.base_version_id, r.stage, r.created_by, r.created_at, r.stage_changed_at, r.completed_at FROM pc.policy_rollouts r
+WHERE r.org_id = $1 AND r.stage = 'PILOT'
+  AND EXISTS (SELECT 1 FROM pc.policy_rollout_cohorts rc
+              WHERE rc.org_id = r.org_id AND rc.rollout_id = r.id AND rc.cohort_id = $2 AND rc.mode = 'ENFORCE')
+`
+
+// Open pilots that enforce their version for a cohort.
+func (q *Queries) PilotsEnforcingCohort(ctx context.Context, orgID ids.OrgID, cohortID ids.UUID) ([]PcPolicyRollout, error) {
+	rows, err := q.db.Query(ctx, pilotsEnforcingCohort, orgID, cohortID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []PcPolicyRollout{}
+	for rows.Next() {
+		var i PcPolicyRollout
+		if err := rows.Scan(
+			&i.OrgID,
+			&i.ID,
+			&i.VersionID,
+			&i.BaseVersionID,
+			&i.Stage,
+			&i.CreatedBy,
+			&i.CreatedAt,
+			&i.StageChangedAt,
+			&i.CompletedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const removePolicyCohortMember = `-- name: RemovePolicyCohortMember :execrows
@@ -777,20 +971,36 @@ func (q *Queries) RemovePolicyCohortMember(ctx context.Context, orgID ids.OrgID,
 	return result.RowsAffected(), nil
 }
 
-const rolloutAgentOwner = `-- name: RolloutAgentOwner :one
-SELECT owner_user_id, name FROM pc.agents WHERE org_id = $1 AND id = $2
+const removedFromCohortTargets = `-- name: RemovedFromCohortTargets :execrows
+UPDATE pc.policy_rollout_targets t
+SET state = 'EXCEPTION', reason = 'REMOVED_FROM_COHORT', coverage = NULL, updated_at = now()
+FROM pc.policy_rollouts r
+WHERE t.org_id = $1 AND t.agent_id = $2 AND t.state <> 'EXCEPTION'
+  AND r.org_id = t.org_id AND r.id = t.rollout_id AND r.stage IN ('SHADOW', 'PILOT')
+  AND NOT EXISTS (SELECT 1 FROM pc.policy_rollout_cohorts rc
+                  JOIN pc.policy_cohort_members m ON m.org_id = rc.org_id AND m.cohort_id = rc.cohort_id
+                  WHERE rc.org_id = r.org_id AND rc.rollout_id = r.id AND rc.mode = 'ENFORCE' AND m.agent_id = t.agent_id)
 `
 
-type RolloutAgentOwnerRow struct {
-	OwnerUserID *ids.UUID
-	Name        string
+// An agent removed from a cohort leaves the open pilots that no other of
+// their ENFORCE cohorts holds it in: its target is EXCEPTION (D31).
+func (q *Queries) RemovedFromCohortTargets(ctx context.Context, orgID ids.OrgID, agentID ids.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, removedFromCohortTargets, orgID, agentID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
-func (q *Queries) RolloutAgentOwner(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (RolloutAgentOwnerRow, error) {
+const rolloutAgentOwner = `-- name: RolloutAgentOwner :one
+SELECT owner_user_id FROM pc.agents WHERE org_id = $1 AND id = $2
+`
+
+func (q *Queries) RolloutAgentOwner(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (*ids.UUID, error) {
 	row := q.db.QueryRow(ctx, rolloutAgentOwner, orgID, iD)
-	var i RolloutAgentOwnerRow
-	err := row.Scan(&i.OwnerUserID, &i.Name)
-	return i, err
+	var owner_user_id *ids.UUID
+	err := row.Scan(&owner_user_id)
+	return owner_user_id, err
 }
 
 const rolloutDecisionsAfter = `-- name: RolloutDecisionsAfter :many
@@ -799,18 +1009,20 @@ FROM pc.decision_receipts d
 JOIN pc.transactions t ON t.org_id = d.org_id AND t.id = d.transaction_id
 JOIN pc.runs r ON r.org_id = t.org_id AND r.id = t.run_id
 WHERE d.org_id = $1 AND d.body_removed_at IS NULL
-  AND d.created_at <= now() - make_interval(secs => $2::double precision)
-  AND (d.created_at, d.transaction_id) > ($3::timestamptz, $4::uuid)
+  AND d.created_at < now() - make_interval(secs => $2::double precision)
+  AND (d.created_at, d.transaction_id, d.evaluation)
+      > ($3::timestamptz, coalesce($4::uuid, '00000000-0000-0000-0000-000000000000'::uuid), $5::integer)
 ORDER BY d.created_at, d.transaction_id, d.evaluation
-LIMIT $5
+LIMIT $6
 `
 
 type RolloutDecisionsAfterParams struct {
-	OrgID          ids.OrgID
-	LagSeconds     float64
-	AfterCreatedAt time.Time
-	AfterTxn       ids.UUID
-	MaxRows        int32
+	OrgID           ids.OrgID
+	LagSeconds      float64
+	AfterCreatedAt  time.Time
+	AfterTxn        *ids.UUID
+	AfterEvaluation int32
+	MaxRows         int32
 }
 
 type RolloutDecisionsAfterRow struct {
@@ -822,16 +1034,17 @@ type RolloutDecisionsAfterRow struct {
 }
 
 // Decisions after a cursor, oldest first, with the agent of their run and
-// their operation. Only decisions older than the lag (a minute in
+// their operation. Only receipts older than the lag (2 minutes in
 // production) are read, so one whose transaction committed late is not
-// passed over; receipts whose body retention removed have nothing to
-// replay or read.
+// passed over (a limit: created_at is the transaction's start); receipts
+// whose body retention removed have nothing to replay or read.
 func (q *Queries) RolloutDecisionsAfter(ctx context.Context, arg RolloutDecisionsAfterParams) ([]RolloutDecisionsAfterRow, error) {
 	rows, err := q.db.Query(ctx, rolloutDecisionsAfter,
 		arg.OrgID,
 		arg.LagSeconds,
 		arg.AfterCreatedAt,
 		arg.AfterTxn,
+		arg.AfterEvaluation,
 		arg.MaxRows,
 	)
 	if err != nil {
@@ -894,29 +1107,6 @@ func (q *Queries) SetPolicyRolloutStage(ctx context.Context, arg SetPolicyRollou
 	return i, err
 }
 
-const setRolloutCursor = `-- name: SetRolloutCursor :exec
-INSERT INTO pc.policy_rollout_cursors (org_id, rollout_id, last_created_at, last_txn)
-VALUES ($1, $2, $3, $4)
-ON CONFLICT (org_id, rollout_id) DO UPDATE SET last_created_at = EXCLUDED.last_created_at, last_txn = EXCLUDED.last_txn
-`
-
-type SetRolloutCursorParams struct {
-	OrgID         ids.OrgID
-	RolloutID     ids.UUID
-	LastCreatedAt time.Time
-	LastTxn       ids.UUID
-}
-
-func (q *Queries) SetRolloutCursor(ctx context.Context, arg SetRolloutCursorParams) error {
-	_, err := q.db.Exec(ctx, setRolloutCursor,
-		arg.OrgID,
-		arg.RolloutID,
-		arg.LastCreatedAt,
-		arg.LastTxn,
-	)
-	return err
-}
-
 const setRolloutTargetState = `-- name: SetRolloutTargetState :execrows
 UPDATE pc.policy_rollout_targets
 SET state = $1, coverage = $2, reason = $3, updated_at = now()
@@ -952,8 +1142,9 @@ func (q *Queries) SetRolloutTargetState(ctx context.Context, arg SetRolloutTarge
 }
 
 const shadowCountsByDay = `-- name: ShadowCountsByDay :many
-SELECT day, category, n FROM pc.policy_shadow_counts
+SELECT day, category, sum(n)::bigint AS n FROM pc.policy_shadow_counts
 WHERE org_id = $1 AND rollout_id = $2
+GROUP BY day, category
 ORDER BY day, category
 `
 
@@ -1094,6 +1285,57 @@ func (q *Queries) ShadowSamples(ctx context.Context, orgID ids.OrgID, rolloutID 
 			&i.Category,
 			&i.Limitation,
 			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const verifiableRolloutTargets = `-- name: VerifiableRolloutTargets :many
+SELECT org_id, rollout_id, agent_id, state, owner_id, coverage, reason, updated_at FROM pc.policy_rollout_targets
+WHERE org_id = $1 AND rollout_id = $2 AND state IN ('ACKNOWLEDGED', 'VERIFIED')
+  AND agent_id > coalesce($3::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
+ORDER BY agent_id
+LIMIT $4
+`
+
+type VerifiableRolloutTargetsParams struct {
+	OrgID      ids.OrgID
+	RolloutID  ids.UUID
+	AfterAgent *ids.UUID
+	MaxRows    int32
+}
+
+// Targets the sweeper checks for VERIFIED (and its lapse), by agent id after
+// the cursor's verify_after_agent (a keyset over every target, D31).
+func (q *Queries) VerifiableRolloutTargets(ctx context.Context, arg VerifiableRolloutTargetsParams) ([]PcPolicyRolloutTarget, error) {
+	rows, err := q.db.Query(ctx, verifiableRolloutTargets,
+		arg.OrgID,
+		arg.RolloutID,
+		arg.AfterAgent,
+		arg.MaxRows,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []PcPolicyRolloutTarget{}
+	for rows.Next() {
+		var i PcPolicyRolloutTarget
+		if err := rows.Scan(
+			&i.OrgID,
+			&i.RolloutID,
+			&i.AgentID,
+			&i.State,
+			&i.OwnerID,
+			&i.Coverage,
+			&i.Reason,
+			&i.UpdatedAt,
 		); err != nil {
 			return nil, err
 		}

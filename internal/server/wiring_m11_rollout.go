@@ -35,7 +35,8 @@ func init() {
 // engine, read ports only (HR-232). Without the publish gate (D6) no
 // pilot starts and no rollout completes (fail closed).
 func policyRollouts(pool *db.Pool, bill *billing.Service, m5 *m5Services, kp keys.KeyProvider, log *slog.Logger) *rollout.Service {
-	svc := &rollout.Service{Pool: pool, Replay: replayEngine(pool, kp), Log: log}
+	eng := replayEngine(pool, kp)
+	svc := &rollout.Service{Pool: pool, Replay: eng, Receipts: eng.Source, Log: log}
 	if bill != nil {
 		svc.Editions = bill
 	}

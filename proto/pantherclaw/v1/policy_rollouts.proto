@@ -366,4 +366,8 @@ message GetShadowSummaryResponse {
   // grew.
   bool truncated = 9;
   repeated ShadowSample samples = 10;
+  // expanded_exposure counts the NEWLY_ALLOWED evaluations: what the version
+  // would allow that was held or denied; expanded_exposure_note says so.
+  int64 expanded_exposure = 11;
+  string expanded_exposure_note = 12;
 }
