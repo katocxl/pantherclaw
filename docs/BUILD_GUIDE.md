@@ -28,11 +28,11 @@ Also: [THREAT_MODEL.md](security/THREAT_MODEL.md) (`T-###`), [GATES_AND_REVIEW.m
 
 ```
 G0 brief (GATES_AND_REVIEW §5) → protos/migrations/contracts first → tests named by ID first
-→ implement (domain → app → adapters → cmd) → commit on a branch → task check (+ task test:integration, task trace where they apply) → pull request; the founder merges
+→ implement (domain → app → adapters → cmd) → commit on a branch → task check (+ task test:integration, task trace where they apply) → pull request with auto-merge; it merges when ci-ok is green
 → update traceability (FEATURES status, HR/T test links) → next slice
 ```
 
-While EX-004 is active there is no CI: GitHub runs no checks on a pull request, so the local checks are the only gate. Run them before you open the pull request and report the result in it. Several sessions may work at once: each works on its own branch and worktree and opens its own pull request, and only the founder merges ([PARALLEL_WORK.md](PARALLEL_WORK.md)).
+CI runs on every pull request and `main` requires `ci-ok`. Run the local checks before you open the pull request and report the result in it, then turn on squash auto-merge: GitHub merges the pull request when `ci-ok` is green ([EX-005](security/GATES_AND_REVIEW.md#4-exceptions)). A pull request that changes `.github/` gets no auto-merge; the founder merges it. Several sessions may work at once: each works on its own branch and worktree and opens its own pull request ([PARALLEL_WORK.md](PARALLEL_WORK.md)).
 
 Rules for the AI implementer:
 - Implement only what the current G0 brief covers; surface missing security decisions instead of guessing.
