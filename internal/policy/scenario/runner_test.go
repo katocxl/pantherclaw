@@ -195,7 +195,7 @@ func TestScenarioCaseFailuresExplain(t *testing.T) {
 		"bad-agent":    `given.agent "agent-7" is not a canonical UUID`,
 		"bad-env":      "not a canonical UUID",
 		"bad-op":       "OPERATION_UNKNOWN",
-		"bad-fact":     "unknown.fact is not a fact",
+		"bad-fact":     "unknown.fact is neither a fact this org's providers declare nor a prerequisite",
 		"bad-approval": "given.approval",
 		"bad-grant":    "a grant has no",
 	}
@@ -226,8 +226,8 @@ func TestHR044_EverySurvivingMutantFailsTheGate(t *testing.T) {
 	if none.Passed || !slices.ContainsFunc(none.Surviving, func(m pdomain.MutantResult) bool { return m.Mutation == RemoveRule }) {
 		t.Fatalf("removal survived unnoticed: %+v", none)
 	}
-	// No tests at all can never pass.
-	if empty := runOK(t, r, bundle([]pdomain.Rule{over50()})); empty.Passed || empty.Survivors != 2 {
+	// No tests at all can never pass, and no mutant is compiled (D26).
+	if empty := runOK(t, r, bundle([]pdomain.Rule{over50()})); empty.Passed || empty.Error != pdomain.ErrNoCases || empty.Mutants != 0 {
 		t.Fatalf("no tests: %+v", empty)
 	}
 	strong := runOK(t, r, bundle([]pdomain.Rule{over50()}, refundCase("at", "50.00", allow()), refundCase("above", "50.01", held(""))))
@@ -381,5 +381,62 @@ func TestScenarioAgentScopedRule(t *testing.T) {
 	}
 	if DefaultAgentID.String() != "00000000-0000-7000-8000-0000000000a1" {
 		t.Fatal("the documented default agent id changed")
+	}
+}
+
+// TestScenarioPrerequisiteFactWithoutProvider is D26(d): a case may give a
+// prerequisite of the operation's definition that no provider declares
+// yet, as the dev seed's policy does; only its presence and age count.
+func TestScenarioPrerequisiteFactWithoutProvider(t *testing.T) {
+	w := newWorld(t)
+	w.catalog = map[string]fdomain.Type{} // no provider at all
+	r := newRunner(w, papp.DefaultBudget)
+	stale := refundCase("stale", "10.00", pdomain.TestExpect{Decision: "CANNOT_AUTHORIZE", Reason: fdomain.ReasonFactStale})
+	stale.Given.Facts["payments.charge.refundable"] = pdomain.TestFact{AgeSeconds: 3600}
+	missing := refundCase("missing", "10.00", pdomain.TestExpect{Decision: "CANNOT_AUTHORIZE", Reason: fdomain.ReasonFactMissing})
+	missing.Given.Facts = nil
+	res := runOK(t, r, bundle([]pdomain.Rule{over50()},
+		refundCase("at", "50.00", allow()), refundCase("above", "50.01", held("approve-over-50")), stale, missing))
+	if !res.Passed {
+		t.Fatalf("dev-seed-style cases: %+v", res)
+	}
+	// A rule that reads the undeclared fact still does not compile.
+	reads := over50()
+	reads.When = "facts.payments_charge_refundable"
+	reads.Facts = []pdomain.FactRef{{Name: "payments.charge.refundable", MaxAgeSeconds: 300}}
+	if res := runOK(t, r, bundle([]pdomain.Rule{reads}, refundCase("at", "50.00", allow()))); res.Error != ErrBundleInvalid {
+		t.Fatalf("a rule reading an undeclared fact: %+v", res)
+	}
+}
+
+// TestHR238_MutantsAreBoundedAndUncompilableOnesListed is D26(a, c): more
+// than 2 000 mutants refuse the run before any compiles, and a mutant that
+// does not compile is listed, neither killed nor surviving.
+func TestHR238_MutantsAreBoundedAndUncompilableOnesListed(t *testing.T) {
+	w := newWorld(t)
+	r := newRunner(w, papp.DefaultBudget)
+	b := bundle([]pdomain.Rule{over50()}, refundCase("at", "50.00", allow()), refundCase("above", "50.01", held("")))
+	r.mutate = func(b *pdomain.Bundle) ([]mutant, error) {
+		ms := make([]mutant, MaxMutants+1)
+		for i := range ms {
+			ms[i] = mutant{rule: "approve-over-50", mutation: "x", bundle: b}
+		}
+		return ms, nil
+	}
+	res := runOK(t, r, b)
+	if res.Passed || res.Error != pdomain.ErrTestsTooLarge || res.Mutants != MaxMutants+1 || len(res.Surviving)+len(res.Uncompilable) != 0 {
+		t.Fatalf("too many mutants: %+v", res)
+	}
+	r.mutate = func(b *pdomain.Bundle) ([]mutant, error) {
+		ms, err := mutantsOf(b)
+		bad := *b
+		bad.Rules = slices.Clone(b.Rules)
+		bad.Rules[0].When = "action.params.nope > 1"
+		return append(ms, mutant{rule: "approve-over-50", mutation: bad.Rules[0].When, bundle: &bad}), err
+	}
+	res = runOK(t, r, b)
+	if !res.Passed || res.Mutants != 3 || res.Survivors != 0 ||
+		!slices.Equal(res.Uncompilable, []pdomain.MutantResult{{Rule: "approve-over-50", Mutation: "action.params.nope > 1"}}) {
+		t.Fatalf("uncompilable mutant: %+v", res)
 	}
 }
