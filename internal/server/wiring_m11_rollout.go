@@ -15,8 +15,19 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/jobs"
 	"github.com/katocxl/pantherclaw/internal/platform/keys"
 	"github.com/katocxl/pantherclaw/internal/policy/adapters/rolloutrpc"
+	policyapp "github.com/katocxl/pantherclaw/internal/policy/app"
 	"github.com/katocxl/pantherclaw/internal/policy/rollout"
 )
+
+// The policy versions PolicyService serves record a rollout for every
+// publication (D6's OnPublished hook) and enter a pilot when its ROLLOUT
+// change request is approved on the policy changes page (D11, D12).
+func init() {
+	policyGateExtensions = append(policyGateExtensions, func(d apiDeps, v *policyapp.Versions) {
+		svc := policyRollouts(d.pool, d.billing, d.m5, d.kp, d.log)
+		svc.Gate = rollout.Connect(v, svc)
+	})
+}
 
 // policyRollouts is the policy rollout service (G0 M11.1, D12, D13).
 // Editions come from the licence (without one: Community, no shadow,
@@ -35,9 +46,17 @@ func policyRollouts(pool *db.Pool, bill *billing.Service, m5 *m5Services, kp key
 }
 
 // registerPolicyRollouts serves PolicyRolloutService on the public API, as
-// pc_app.
+// pc_app. Its pilots and completions go through the publish gate of policy
+// versions of their own, connected like PolicyService's: requests are rows,
+// so the page that confirms them applies them with PolicyService's.
 func registerPolicyRollouts(rs *connect.Server, d apiDeps) {
-	pantherclawv1connect.RegisterPolicyRolloutServiceHandler(rs, rolloutrpc.New(policyRollouts(d.pool, d.billing, d.m5, d.kp, d.log)))
+	var notify policyapp.Notifier
+	if d.m5 != nil && d.m5.notifications != nil {
+		notify = d.m5.notifications
+	}
+	svc := policyRollouts(d.pool, d.billing, d.m5, d.kp, d.log)
+	svc.Gate = rollout.Connect(newPolicyVersions(d.pool, notify, d.publicURL), svc)
+	pantherclawv1connect.RegisterPolicyRolloutServiceHandler(rs, rolloutrpc.New(svc))
 }
 
 // registerPolicyRolloutJobs adds the rollout sweeper to reg and returns
