@@ -7,6 +7,7 @@ import (
 	"cmp"
 	"context"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
@@ -25,11 +26,26 @@ const (
 	KindAuthorityExpansion     ItemKind = "AUTHORITY_EXPANSION"
 	KindUnconfirmedContainment ItemKind = "UNCONFIRMED_CONTAINMENT"
 	KindPostureFinding         ItemKind = "POSTURE_FINDING"
+	// KindAutomationException is an open owned failure an automation raised
+	// (G0 M11 D38), routed to the automation's owner.
+	KindAutomationException ItemKind = "AUTOMATION_EXCEPTION"
 )
 
 var kindOrder = map[ItemKind]int{
-	KindIncident: 7, KindUnconfirmedContainment: 6, KindAlert: 5, KindProtectionFailure: 4, KindWaitingDecision: 3,
-	KindPostureFinding: 2, KindAuthorityExpansion: 1,
+	KindIncident: 8, KindUnconfirmedContainment: 7, KindAlert: 6, KindProtectionFailure: 5, KindAutomationException: 4,
+	KindWaitingDecision: 3, KindPostureFinding: 2, KindAuthorityExpansion: 1,
+}
+
+// AutomationFailurePrefix starts every owned failure kind an automation
+// raises (D38): those queue as automation exceptions, the rest as
+// protection failures.
+const AutomationFailurePrefix = "automation."
+
+func failureKind(kind string) ItemKind {
+	if strings.HasPrefix(kind, AutomationFailurePrefix) {
+		return KindAutomationException
+	}
+	return KindProtectionFailure
 }
 
 var severityOrder = map[string]int{"CRITICAL": 4, "HIGH": 3, "MEDIUM": 2, "LOW": 1}
@@ -314,7 +330,7 @@ func failureItems(ctx context.Context, b *builder) error {
 		}
 		d := r.Deadline.UTC()
 		b.out.Items = append(b.out.Items, Item{
-			Kind: KindProtectionFailure, ID: r.ID.String(), Title: r.Summary, Severity: sev, State: r.State,
+			Kind: failureKind(r.Kind), ID: r.ID.String(), Title: r.Summary, Severity: sev, State: r.State,
 			Since: r.FirstSeen, Deadline: &d, Agents: r.Agents, Actions: acts,
 		})
 	}

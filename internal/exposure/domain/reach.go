@@ -40,8 +40,9 @@ const (
 	Credential View = "CREDENTIAL"
 )
 
-// Views lists the views in display order.
-var Views = []View{Observed, Effective, Credential}
+// Views lists the views in display order. IssuanceCeiling (D37) holds an
+// automation's potential reach and is never counted as an agent's.
+var Views = []View{Observed, Effective, Credential, IssuanceCeiling}
 
 // Label says how usable a right is now.
 type Label string
@@ -148,11 +149,19 @@ type Right struct {
 	Basis string
 	// Irreversible flags an operation whose definition is irreversible.
 	Irreversible bool
+	// Automation is the automation the right belongs to: the issuer of its
+	// grant (EFFECTIVE) or the ceiling's holder (ISSUANCE_CEILING).
+	Automation *ids.UUID
 }
 
-// Key identifies a right within a view.
+// Key identifies a right within a view. An automation's rights keep their
+// own key, so its reach never merges into another holder's (D37).
 func (r Right) Key() string {
-	return string(r.View) + "|" + r.PathKey()
+	k := string(r.View) + "|" + r.PathKey()
+	if r.Automation != nil {
+		k += "|automation:" + r.Automation.String()
+	}
+	return k
 }
 
 // PathKey identifies the path a right travels, whatever the view: the agent
@@ -246,6 +255,9 @@ type Grant struct {
 	// Revoked grants (in the last 30 days) are kept as history: their
 	// reach is EXPIRED and shows as HISTORICAL edges (D31).
 	Revoked bool
+	// Automation is set on a grant an automation issued under its ceiling
+	// (D37): its rights are that automation's current execution reach.
+	Automation *ids.UUID
 }
 
 // PolicyRule is what exposure reads of a published policy rule.
@@ -329,6 +341,8 @@ type Inputs struct {
 	// effective view (D23, D27). The credential view never changes with
 	// them: a control stops decisions, not what a credential can do.
 	Restrictions []Restriction
+	// Ceilings are the automations' issuance ceilings (D37).
+	Ceilings []Ceiling
 }
 
 // Result is a computation's rights, sorted, with what it could not read.
@@ -358,6 +372,7 @@ func Compute(in Inputs) Result {
 	effective(&b, in, conns)
 	credential(&b, in, conns)
 	observed(&b, in, conns)
+	ceilings(&b, in, conns)
 	slices.SortFunc(b.out, compareRights)
 	slices.Sort(b.gaps)
 	return Result{Rights: b.out, Gaps: slices.Compact(b.gaps)}
@@ -427,7 +442,7 @@ func effective(b *builder, in Inputs, conns map[ids.UUID]*Connection) {
 				}
 				for _, v := range []Verb{VerbRead, VerbUpdate} {
 					addEff(Right{
-						View: Effective, Label: l, Agent: ptr(g.Agent), Connection: ptr(c.ID), Grant: ptr(g.ID),
+						View: Effective, Label: l, Agent: ptr(g.Agent), Connection: ptr(c.ID), Grant: ptr(g.ID), Automation: g.Automation,
 						ResourceGroup: "connection:" + c.Name, Verb: v, Coverage: CoverageUnknown,
 						Reasons: append(slices.Clone(baseReasons), ReasonPackageUnknown), ExpiresAt: expires,
 					})
@@ -452,14 +467,14 @@ func effective(b *builder, in Inputs, conns map[ids.UUID]*Connection) {
 				for _, cl := range Classify(op, *c) {
 					v := cl.Verb
 					addEff(Right{
-						View: Effective, Label: l, Agent: ptr(g.Agent), Connection: ptr(c.ID), Grant: ptr(g.ID),
+						View: Effective, Label: l, Agent: ptr(g.Agent), Connection: ptr(c.ID), Grant: ptr(g.ID), Automation: g.Automation,
 						Operation: op.Name, ResourceGroup: Group(op, *c), Verb: v, Basis: cl.Explain(), Irreversible: op.Reversibility == defs.Irreversible, Coverage: cov, Reasons: rs,
 						ExpiresAt: expires,
 					})
 				}
 				if g.DelegationDepth > 0 {
 					addEff(Right{
-						View: Effective, Label: l, Agent: ptr(g.Agent), Connection: ptr(c.ID), Grant: ptr(g.ID),
+						View: Effective, Label: l, Agent: ptr(g.Agent), Connection: ptr(c.ID), Grant: ptr(g.ID), Automation: g.Automation,
 						ResourceGroup: Group(op, *c), Verb: VerbDelegate, Basis: BasisDelegation, Coverage: cov,
 						Reasons: append(slices.Clone(rs), ReasonDelegable), Depth: g.DelegationDepth, ExpiresAt: expires,
 					})
@@ -738,6 +753,7 @@ func compareRights(a, b Right) int {
 	return cmp.Or(
 		cmp.Compare(slices.Index(Views, a.View), slices.Index(Views, b.View)),
 		cmp.Compare(a.PathKey(), b.PathKey()),
+		cmp.Compare(a.Key(), b.Key()),
 	)
 }
 

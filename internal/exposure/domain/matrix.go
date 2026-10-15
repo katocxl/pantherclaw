@@ -164,7 +164,9 @@ func Rank(rights []Right, agents []AgentInfo, irreversible map[string]bool) []Ra
 	}
 	by := map[string]*acc{}
 	for _, r := range rights {
-		if r.View == Observed || !r.Label.Current() {
+		// An issuance ceiling is an automation's potential reach (D37), never
+		// an agent's current reach.
+		if r.View == Observed || r.View == IssuanceCeiling || !r.Label.Current() {
 			continue
 		}
 		k := agentKey(r.Agent)
