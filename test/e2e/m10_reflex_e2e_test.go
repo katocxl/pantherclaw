@@ -325,8 +325,16 @@ func TestE2E_M10_DetectInvestigateRespond(t *testing.T) {
 		t.Fatalf("Contain: %v", err)
 	}
 	actionID := contained.GetActionId()
-	if f := liveNext("response.action"); mustInt(t, f.id) <= head || !strings.Contains(f.data, actionID) {
-		t.Fatalf("live response.action %+v at or before the head %d", f, head)
+	// The frame names the ledger entry (ids only, D6); its body names the action.
+	f := liveNext("response.action")
+	var entry struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal([]byte(f.data), &entry); err != nil || mustInt(t, f.id) <= head {
+		t.Fatalf("live response.action %+v at or before the head %d: %v", f, head, err)
+	}
+	if body := s.row(t, "SELECT convert_from(body, 'UTF8') FROM pc.ledger_entries WHERE id = $1", entry.ID); !strings.Contains(body, actionID) {
+		t.Fatalf("the live response.action entry does not name the action %s: %s", actionID, body)
 	}
 	var action *pantherclawv1.GetResponseActionResponse
 	eventually(t, 60*time.Second, "the gateway path to confirm", func() (bool, error) {
