@@ -302,3 +302,41 @@ func TestHR241_CustomRuleRunsOnlyWithItsLedgerDigest(t *testing.T) {
 		t.Errorf("content changed: %v", err)
 	}
 }
+
+// TestHR037_VariantShoppingIsDetectedInEveryEdition: the approvals'
+// security.variant_suspected entry raises the variant-shopping alert in
+// Community too: a hardening rule is never edition-gated (D5).
+func TestHR037_VariantShoppingIsDetectedInEveryEdition(t *testing.T) {
+	f := newFixture(t, billing.Community)
+	f.audit(t, "security.variant_suspected", 1, func(int) map[string]string {
+		return map[string]string{"operation": "payments.refund.create", "agent": "01930000-0000-7000-8000-0000000000a1"}
+	})
+	f.drain(t)
+	if n := f.count(t, `SELECT count(*) FROM pc.alerts WHERE org_id = $1 AND rule_id = 'pc.approvals.variant_shopping'
+		AND state = 'OPEN' AND basis = 'OBSERVED'`, f.org); n != 1 {
+		t.Errorf("variant shopping alerts %d, want 1", n)
+	}
+	// Business rules stay off in Community.
+	if n := f.count(t, `SELECT count(*) FROM pc.alerts WHERE org_id = $1 AND rule_id LIKE 'pc.probing.%'`, f.org); n != 0 {
+		t.Errorf("%d business alerts in Community", n)
+	}
+}
+
+// TestT105_MalformedEntryNeverStallsTheCursor: an entry of a known kind
+// whose body does not parse passes through as kind and actor only; the
+// cursor moves past it and later entries are evaluated.
+func TestT105_MalformedEntryNeverStallsTheCursor(t *testing.T) {
+	f := newFixture(t, billing.Community)
+	if err := f.p.InTenantTx(context.Background(), f.org, func(ctx context.Context, tx db.TenantTx) error {
+		_, err := ledger.Append(ctx, tx, "receipt.decision", evdomain.Actor{Type: "gateway", ID: "g"}, []byte(`{"txn":5}`))
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	f.chain(t)
+	f.audit(t, "security.kill_switch_engaged", 1, nil)
+	f.drain(t)
+	if n := f.count(t, `SELECT count(*) FROM pc.alerts WHERE org_id = $1 AND rule_id = 'pc.containment.kill_switch_engaged'`, f.org); n != 1 {
+		t.Errorf("entries after the malformed one were not evaluated (%d alerts)", n)
+	}
+}

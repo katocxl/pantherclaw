@@ -18,6 +18,7 @@ import (
 	"testing/fstest"
 
 	"github.com/katocxl/pantherclaw/internal/detection/engine"
+	"github.com/katocxl/pantherclaw/internal/detection/rules"
 	"github.com/katocxl/pantherclaw/internal/platform/celenv"
 	reflexdomain "github.com/katocxl/pantherclaw/internal/reflex/domain"
 )
@@ -172,5 +173,89 @@ func TestT105_TamperedPackTurnsDetectionsOff(t *testing.T) {
 		if _, err := load(fsys, PackDigest, env(t)); !errors.Is(err, ErrIntegrity) {
 			t.Errorf("%s: %v, want ErrIntegrity", name, err)
 		}
+	}
+}
+
+// fires runs one built-in rule over events in order and reports whether it
+// raised a signal.
+func fires(t *testing.T, id string, events ...rules.TestEvent) bool {
+	t.Helper()
+	p, err := Load(env(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range p.Rules {
+		if c.Rule.ID != id {
+			continue
+		}
+		st := engine.NewMemory()
+		fired := false
+		for i, te := range events {
+			r, err := engine.Evaluate(context.Background(), st, c, engine.TestFeedEvent(int64(i+1), te))
+			if err != nil {
+				t.Fatal(err)
+			}
+			fired = fired || r.Fired != nil
+		}
+		return fired
+	}
+	t.Fatalf("no rule %s", id)
+	return false
+}
+
+// TestT017_SensitiveReadThenPublicWriteIsDetected: a run that reads data
+// and then writes toward a public destination within 30 minutes raises
+// pc.sequence.read_then_disclose; the same writes in another run, after the
+// window, or denied, do not.
+func TestT017_SensitiveReadThenPublicWriteIsDetected(t *testing.T) {
+	read := rules.TestEvent{Kind: "receipt.decision", Decision: "ALLOW", Operation: "crm.customer.read", DestinationClass: "internal",
+		Subjects: map[string]string{"run": "r1"}}
+	write := rules.TestEvent{Kind: "receipt.decision", Decision: "ALLOW", Operation: "slack.message.post", DestinationClass: "public",
+		Subjects: map[string]string{"run": "r1"}, At: "29m"}
+	if !fires(t, "pc.sequence.read_then_disclose", read, write) {
+		t.Error("read then public write within 30 minutes did not fire")
+	}
+	late := write
+	late.At = "31m"
+	other := write
+	other.Subjects = map[string]string{"run": "r2"}
+	denied := write
+	denied.Decision = "DENY"
+	internal := write
+	internal.DestinationClass = "internal"
+	for name, w := range map[string]rules.TestEvent{"late": late, "other run": other, "denied": denied, "internal": internal} {
+		if fires(t, "pc.sequence.read_then_disclose", read, w) {
+			t.Errorf("%s fired", name)
+		}
+	}
+	if fires(t, "pc.sequence.read_then_disclose", write, read) {
+		t.Error("write then read fired")
+	}
+}
+
+// TestT025_DefinitionDriftIsDetected: a drift report and a drift
+// quarantine raise pc.tools.drift; an ordinary package transition does
+// not; no rule lifts the quarantine (rules only raise signals).
+func TestT025_DefinitionDriftIsDetected(t *testing.T) {
+	if !fires(t, "pc.tools.drift", rules.TestEvent{Kind: "audit.connection.drift_reported", Subjects: map[string]string{"connection": "c1"}}) {
+		t.Error("drift report did not fire")
+	}
+	if !fires(t, "pc.tools.drift", rules.TestEvent{Kind: "audit.package.transitioned",
+		Attrs: map[string]string{"to": "QUARANTINED", "reason": "upstream_drift"}}) {
+		t.Error("drift quarantine did not fire")
+	}
+	if fires(t, "pc.tools.drift", rules.TestEvent{Kind: "audit.package.transitioned",
+		Attrs: map[string]string{"to": "QUARANTINED", "reason": "reviewer"}}) {
+		t.Error("a quarantine for another reason fired")
+	}
+}
+
+// TestT007_VariantShoppingRuleFiresInCommunity: the approvals'
+// variant-shopping report raises pc.approvals.variant_shopping, a
+// community rule (HR-037 is never edition-gated).
+func TestT007_VariantShoppingRuleFiresInCommunity(t *testing.T) {
+	if !fires(t, "pc.approvals.variant_shopping", rules.TestEvent{Kind: "audit.security.variant_suspected", Reason: "VARIANT_SHOPPING",
+		Subjects: map[string]string{"agent": "a1"}}) {
+		t.Error("variant shopping did not fire")
 	}
 }
