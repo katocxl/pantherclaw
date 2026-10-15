@@ -207,7 +207,7 @@ const (
 )
 
 // catalog lists every grantable permission.
-var catalog = []Permission{
+var catalog = append([]Permission{
 	PermOrgRead, PermOrgUpdate,
 	PermBusinessUnitRead, PermBusinessUnitManage,
 	PermTeamRead, PermTeamManage, PermTeamMembersManage,
@@ -237,18 +237,18 @@ var catalog = []Permission{
 	PermCoverageRead, PermCoverageManage, PermCoverageReassess,
 	PermSandboxRun,
 	PermRedteamRun, PermRedteamRead,
-}
+}, reflexCatalog...)
 
 // humanOnly permissions can never be exercised by a service account or an
 // API key, whatever their bindings say (ARCHITECTURE §10: "pck_ keys never
 // able to approve"; F583).
-var humanOnly = []Permission{
+var humanOnly = append([]Permission{
 	PermApprovalRespond, PermPolicyPublish, PermEvidenceReadRestricted, PermAgentAdmit, PermIssuerActivate,
 	PermGrantIssue, PermGuardrailsManage, PermFactProviderManage, PermPackageActivate,
 	PermGatewayManage, PermConnectionManage, PermConnectionTest, PermCredentialSeal, PermContainmentKillSwitch, PermAgentRestore,
 	PermTransactionReconcile, PermEvidenceExport, PermEvidenceRetentionManage, PermEvidenceCaptureManage,
 	PermReleaseWindowManage, PermCoverageManage,
-}
+}, reflexHumanOnly...)
 
 // Catalog returns every grantable permission in a stable order.
 func Catalog() []Permission { return slices.Clone(catalog) }
