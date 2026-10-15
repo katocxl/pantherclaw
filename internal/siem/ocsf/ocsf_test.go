@@ -9,15 +9,18 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/katocxl/pantherclaw/internal/platform/ids"
+	reflexdomain "github.com/katocxl/pantherclaw/internal/reflex/domain"
 )
 
 var at = time.Date(2026, 10, 15, 12, 0, 0, 0, time.UTC)
 
 func event(kind string) Event {
 	return Event{
-		Seq: 42, ID: "0192f0a0-0000-7000-8000-000000000001", Org: "0192f0a0-0000-7000-8000-0000000000aa", Kind: kind,
+		Seq: 42, ID: mustUUID("0192f0a0-0000-7000-8000-000000000001"), Org: ids.MustParse[ids.Org]("0192f0a0-0000-7000-8000-0000000000aa"), Kind: kind,
 		OccurredAt: at, ActorType: "agent", ActorID: "0192f0a0-0000-7000-8000-0000000000bb",
-		Subjects: []Subject{{Type: "run", ID: "r1"}},
+		Subjects: []reflexdomain.Subject{{Type: reflexdomain.SubjectRun, ID: "r1"}},
 	}
 }
 
@@ -81,13 +84,13 @@ func TestMapClasses(t *testing.T) {
 				e := event("reflex.alert")
 				e.Attrs = map[string]string{
 					AttrRuleID: "pc.authority.self_issue", AttrRuleVersion: "1", AttrTitle: "Self-issued grant", AttrSeverity: "HIGH",
-					AttrState: "OPEN", AttrBasis: "RULE_MATCH", AttrATLAS: "AML.T0051, AML.T0053", AttrOWASP: "ASI03",
+					AttrState: "OPEN", AttrID: "alert-1", AttrBasis: "RULE_MATCH", AttrATLAS: "AML.T0051, AML.T0053", AttrOWASP: "ASI03",
 				}
 				return e
 			},
 			check: func(t *testing.T, r Record) {
 				f := r.FindingInfo
-				if f == nil || f.UID != r.Metadata.UID || f.Analytic.UID != "pc.authority.self_issue" || len(f.Attacks) != 2 ||
+				if f == nil || f.UID != "alert-1" || f.Analytic.UID != "pc.authority.self_issue" || len(f.Attacks) != 2 ||
 					f.Attacks[1].Technique.UID != "AML.T0053" || len(f.Types) != 1 || f.Types[0] != "ASI03" {
 					t.Errorf("finding = %+v", f)
 				}
@@ -122,7 +125,7 @@ func TestMapClasses(t *testing.T) {
 			ev: func() Event {
 				e := event("audit.user.disabled")
 				e.ActorType, e.Outcome = "user", "SUCCESS"
-				e.Subjects = []Subject{{Type: "user", ID: "u9"}}
+				e.Subjects = []reflexdomain.Subject{{Type: reflexdomain.SubjectUser, ID: "u9"}}
 				return e
 			},
 			check: func(t *testing.T, r Record) {
@@ -148,8 +151,8 @@ func TestMapClasses(t *testing.T) {
 				t.Errorf("class %d category %d type %d severity %d status %d, want %d %d %d %d %d",
 					r.ClassUID, r.CategoryUID, r.TypeUID, r.SeverityID, r.StatusID, c.class, c.category, c.ty, c.severity, c.status)
 			}
-			if r.Metadata.UID != e.ID || r.Metadata.Sequence != 42 || r.Metadata.Version != "1.9.0" || r.Metadata.EventCode != e.Kind ||
-				r.Metadata.TenantUID != e.Org || r.Time != at.UnixMilli() || r.Metadata.Product.Version != "0.1.0" {
+			if r.Metadata.UID != e.ID.String() || r.Metadata.Sequence != 42 || r.Metadata.Version != "1.9.0" || r.Metadata.EventCode != e.Kind ||
+				r.Metadata.TenantUID != e.Org.String() || r.Time != at.UnixMilli() || r.Metadata.Product.Version != "0.1.0" {
 				t.Errorf("metadata = %+v time %d", r.Metadata, r.Time)
 			}
 			if len(r.Resources) != len(e.Subjects) {
@@ -250,4 +253,12 @@ func TestBuilderBounds(t *testing.T) {
 	if _, err := big.Add(make([]byte, MaxBatchBytes)); err != ErrEventTooLarge {
 		t.Fatalf("oversize event: %v", err)
 	}
+}
+
+func mustUUID(s string) ids.UUID {
+	u, err := ids.ParseUUID(s)
+	if err != nil {
+		panic(err)
+	}
+	return u
 }

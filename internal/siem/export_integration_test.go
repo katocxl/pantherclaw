@@ -207,7 +207,7 @@ func (f *exportFixture) due(t *testing.T, id ids.UUID) {
 
 func ev(seq int64, kind string) ocsf.Event {
 	return ocsf.Event{
-		Seq: seq, ID: ids.NewV7().String(), Kind: kind, OccurredAt: time.Unix(1_760_000_000+seq, 0), ActorType: "agent", ActorID: "a1",
+		Seq: seq, ID: ids.NewV7(), Kind: kind, OccurredAt: time.Unix(1_760_000_000+seq, 0), ActorType: "agent", ActorID: "a1",
 		Attrs: map[string]string{ocsf.AttrSeverity: "HIGH", ocsf.AttrTitle: "t" + strconv.FormatInt(seq, 10)},
 	}
 }
@@ -282,7 +282,7 @@ func TestHR260_ExportIsCursorBasedSignedAndStable(t *testing.T) {
 		t.Fatal(err)
 	}
 	if b.Type != ocsf.BatchType || b.Data.Batch != r.header.Get("webhook-id") || b.Data.FromSeq != 0 || b.Data.ToSeq != 5 || len(b.Data.Events) != 2 ||
-		b.Data.Events[0].Metadata.UID != f.feed.events[1].ID || b.Data.Events[1].Metadata.Sequence != 4 || b.Data.Events[0].ClassUID != 2004 {
+		b.Data.Events[0].Metadata.UID != f.feed.events[1].ID.String() || b.Data.Events[1].Metadata.Sequence != 4 || b.Data.Events[0].ClassUID != 2004 {
 		t.Fatalf("batch = %+v", b)
 	}
 	d := f.state(t, id)

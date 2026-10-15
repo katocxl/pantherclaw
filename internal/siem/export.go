@@ -54,7 +54,9 @@ type DeliveryFailure struct {
 	Name        string
 	Code        string
 	Failures    int
-	Since       time.Time
+	// HeldAt is the cursor: the feed sequence export is held at.
+	HeldAt int64
+	Since  time.Time
 }
 
 // Step is the outcome of one export step.
@@ -195,7 +197,7 @@ func (s *Service) fill(ctx context.Context, tx db.TenantTx, b *ocsf.Builder, fro
 		if errors.Is(err, ocsf.ErrEventTooLarge) {
 			// Never expected (feed bodies are ≤ 8 KiB); skipping it keeps
 			// the export moving and the log says which entry.
-			s.log.ErrorContext(ctx, "siem.event_too_large", slog.String("entry", e.ID), slog.Int64("seq", e.Seq))
+			s.log.ErrorContext(ctx, "siem.event_too_large", slog.String("entry", e.ID.String()), slog.Int64("seq", e.Seq))
 			end = e.Seq
 			continue
 		} else if err != nil {
@@ -339,7 +341,7 @@ func (s *Service) record(ctx context.Context, tx db.TenantTx, org ids.OrgID, id 
 			since = *d.FailingSince
 		}
 		return s.signals.DeliveryFailing(ctx, tx, DeliveryFailure{
-			Org: org, Destination: id, Name: d.Name, Code: code, Failures: int(failures), Since: since,
+			Org: org, Destination: id, Name: d.Name, Code: code, Failures: int(failures), Since: since, HeldAt: d.CursorSeq,
 		})
 	}
 	return nil

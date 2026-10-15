@@ -37,6 +37,7 @@ import (
 	"strconv"
 	"time"
 
+	billing "github.com/katocxl/pantherclaw/internal/billing/domain"
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	ndomain "github.com/katocxl/pantherclaw/internal/notifications/domain"
@@ -47,6 +48,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/httpx"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
+	reflexdomain "github.com/katocxl/pantherclaw/internal/reflex/domain"
 	"github.com/katocxl/pantherclaw/internal/siem/ocsf"
 	"github.com/katocxl/pantherclaw/internal/siem/stepup"
 	tenancy "github.com/katocxl/pantherclaw/internal/tenancy/app"
@@ -55,8 +57,8 @@ import (
 
 // Permissions (D4).
 const (
-	PermRead   td.Permission = "siem.read"
-	PermManage td.Permission = "siem.manage"
+	PermRead   = td.PermSIEMRead
+	PermManage = td.PermSIEMManage
 )
 
 // Parameters.
@@ -98,6 +100,7 @@ var (
 	ErrNotFound       = pcerr.New(pcerr.NotFound, "SIEM_DESTINATION_NOT_FOUND", "destination not found")
 	ErrState          = pcerr.New(pcerr.FailedPrecondition, "SIEM_DESTINATION_STATE", "the destination is not in a state that allows this")
 	ErrHuman          = pcerr.New(pcerr.PermissionDenied, "HUMAN_ONLY", "only a person can do this")
+	ErrEdition        = pcerr.New(pcerr.FailedPrecondition, "EDITION_REQUIRED", "SIEM export needs the Business edition or above")
 	ErrNothingWaiting = pcerr.New(pcerr.FailedPrecondition, "SIEM_NOTHING_WAITING", "no batch is waiting for delivery")
 )
 
@@ -143,6 +146,10 @@ type Service struct {
 	public, internal *http.Client
 	// signals reports delivery that started failing (nil: not wired).
 	signals HealthSink
+	// editions gates the use cases (Business, D5); nil is Community.
+	editions Editions
+	// failures records owned failures (a lapsed edition); nil: not wired.
+	failures reflexdomain.FailureSink
 }
 
 // New returns the service.
@@ -283,8 +290,43 @@ func (s *Service) field(org ids.OrgID, id ids.UUID, column string) pccrypto.Fiel
 	return pccrypto.FieldContext{Org: org, Table: destinationsTable, Column: column, RowID: id.String()}
 }
 
-// manager returns the caller if it is a person holding siem.manage.
-func manager(ctx context.Context) (tenancy.Caller, error) {
+// Editions reports the licence's entitlements.
+type Editions interface {
+	Current(ctx context.Context) (billing.Entitlements, error)
+}
+
+// WithEditions sets the licence source (without one the server is
+// Community and export is refused).
+func (s *Service) WithEditions(e Editions) *Service {
+	s.editions = e
+	return s
+}
+
+// WithFailures records owned failures (a lapsed edition).
+func (s *Service) WithFailures(f reflexdomain.FailureSink) *Service {
+	s.failures = f
+	return s
+}
+
+// business refuses unless the licence includes SIEM export (D5).
+func (s *Service) business(ctx context.Context) error {
+	if s.editions == nil {
+		return ErrEdition
+	}
+	e, err := s.editions.Current(ctx)
+	if err != nil {
+		return err
+	}
+	if !e.SIEMExport() {
+		return ErrEdition
+	}
+	return nil
+}
+
+// manager returns the caller if it is a person holding siem.manage, and
+// with edition the licence must include SIEM export. Pausing and
+// disabling stay possible after the licence lapses.
+func (s *Service) manager(ctx context.Context, edition bool) (tenancy.Caller, error) {
 	c, err := tenancy.CallerFrom(ctx)
 	if err != nil {
 		return c, err
@@ -295,13 +337,18 @@ func manager(ctx context.Context) (tenancy.Caller, error) {
 	if !c.Human() {
 		return c, ErrHuman
 	}
+	if edition {
+		if err := s.business(ctx); err != nil {
+			return c, err
+		}
+	}
 	return c, nil
 }
 
 // Create stores a PENDING destination and returns its signing secret once
 // (D35). It sends nothing until a person activates it.
 func (s *Service) Create(ctx context.Context, in NewDestination) (Created, error) {
-	c, err := manager(ctx)
+	c, err := s.manager(ctx, true)
 	if err != nil {
 		return Created{}, err
 	}
@@ -352,7 +399,7 @@ func (s *Service) Create(ctx context.Context, in NewDestination) (Created, error
 // cursor starts at the feed's head: nothing recorded before activation is
 // sent.
 func (s *Service) Activate(ctx context.Context, id ids.UUID, su stepup.StepUp) (Destination, error) {
-	c, err := manager(ctx)
+	c, err := s.manager(ctx, true)
 	if err != nil {
 		return Destination{}, err
 	}
@@ -406,7 +453,7 @@ func (s *Service) Activate(ctx context.Context, id ids.UUID, su stepup.StepUp) (
 
 // SetState pauses, resumes or disables a destination. DISABLED is final.
 func (s *Service) SetState(ctx context.Context, id ids.UUID, state string) (Destination, error) {
-	c, err := manager(ctx)
+	c, err := s.manager(ctx, state == StateActive)
 	if err != nil {
 		return Destination{}, err
 	}
@@ -450,7 +497,7 @@ func (s *Service) SetState(ctx context.Context, id ids.UUID, state string) (Dest
 // RotateSecret replaces the signing secret and returns the new one once;
 // the old one keeps signing for RotationOverlap.
 func (s *Service) RotateSecret(ctx context.Context, id ids.UUID) (string, error) {
-	c, err := manager(ctx)
+	c, err := s.manager(ctx, true)
 	if err != nil {
 		return "", err
 	}
@@ -504,7 +551,7 @@ func (s *Service) RotateSecret(ctx context.Context, id ids.UUID) (string, error)
 // fresh retry schedule (D46). The cursor stays where it is: no event is
 // ever skipped.
 func (s *Service) RetryDestination(ctx context.Context, id ids.UUID) (Destination, error) {
-	c, err := manager(ctx)
+	c, err := s.manager(ctx, true)
 	if err != nil {
 		return Destination{}, err
 	}

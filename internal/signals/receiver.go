@@ -166,6 +166,11 @@ func (s *Service) receive(ctx context.Context, org ids.OrgID, tid ids.UUID, toke
 		s.log.ErrorContext(ctx, "signals.load_failed", pclog.Err(err))
 		return http.StatusServiceUnavailable, setverify.CodeInvalidRequest, "try again later"
 	}
+	if err := s.business(ctx); err != nil {
+		// A lapsed licence accepts nothing and says so once (D5).
+		s.lapsed(ctx, org)
+		return http.StatusNotFound, setverify.CodeInvalidRequest, "unknown transmitter"
+	}
 	keys, err := s.keysFor(tid, t.Issuer, t.JwksUri)
 	if err != nil {
 		return s.refused(ctx, org, tid, setverify.CodeInvalidKey, "the transmitter's key set is not usable")

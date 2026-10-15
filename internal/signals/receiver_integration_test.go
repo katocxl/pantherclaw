@@ -19,6 +19,7 @@ import (
 
 	"github.com/go-jose/go-jose/v4"
 
+	billing "github.com/katocxl/pantherclaw/internal/billing/domain"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/platform/clock"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
@@ -28,6 +29,13 @@ import (
 )
 
 type recordingSink struct{ got []Received }
+
+// edition is a licence source with a fixed edition.
+type edition struct{ e billing.Edition }
+
+func (e *edition) Current(context.Context) (billing.Entitlements, error) {
+	return billing.Entitlements{Edition: e.e}, nil
+}
 
 func (s *recordingSink) Received(_ context.Context, _ db.TenantTx, r Received) error {
 	s.got = append(s.got, r)
@@ -46,6 +54,7 @@ type rxFixture struct {
 	sink       *recordingSink
 	mux        *http.ServeMux
 	clk        *clock.Fake
+	ed         *edition
 }
 
 func newRxFixture(t *testing.T) *rxFixture {
@@ -71,7 +80,8 @@ func newRxFixture(t *testing.T) *rxFixture {
 		t.Fatal(err)
 	}
 	// The test key server is on 127.0.0.1, which the egress client refuses.
-	f.svc.WithHTTPClient(srv.Client()).WithSink(f.sink)
+	f.ed = &edition{e: billing.Business}
+	f.svc.WithHTTPClient(srv.Client()).WithSink(f.sink).WithEditions(f.ed)
 	f.mux = http.NewServeMux()
 	f.svc.Receiver().Mount(f.mux)
 
@@ -293,5 +303,18 @@ func TestHR261_SubjectMatchingAndEventTypes(t *testing.T) {
 	}
 	if f.sink.got[0].User != f.alice || f.sink.got[0].MatchBasis != "email" {
 		t.Errorf("email match = %+v", f.sink.got[0])
+	}
+}
+
+// TestHR261_LapsedEditionAcceptsNothing: without a Business licence the
+// receiver accepts no event (the same answer as an unknown transmitter).
+func TestHR261_LapsedEditionAcceptsNothing(t *testing.T) {
+	f := newRxFixture(t)
+	f.ed.e = billing.Team
+	if a := f.post(t, f.org, f.tx, ContentType, f.token(t, f.key, f.tx, nil)); a.status != http.StatusNotFound {
+		t.Fatalf("lapsed: %+v", a)
+	}
+	if n := f.count(t, "SELECT count(*) FROM pc.ssf_events"); n != 0 || len(f.sink.got) != 0 {
+		t.Fatalf("events %d, sink %d", n, len(f.sink.got))
 	}
 }

@@ -18,7 +18,9 @@ package ocsf
 
 import (
 	"strings"
-	"time"
+
+	reflexdomain "github.com/katocxl/pantherclaw/internal/reflex/domain"
+	"github.com/katocxl/pantherclaw/internal/reflex/feed"
 )
 
 // Version is the OCSF schema version of every event.
@@ -53,32 +55,25 @@ func (c DataClass) Valid() bool {
 	return false
 }
 
-// Subject is a feed subject (reflexdomain.Subject, D1).
-type Subject struct {
-	Type string
-	ID   string
+// Event is one evidence feed event (D2).
+type Event = feed.Event
+
+// stateOf is an alert's, incident's or case's state: the feed carries it
+// as the outcome of reflex entries.
+func stateOf(e Event) string {
+	if s := e.Attrs[AttrState]; s != "" {
+		return s
+	}
+	return e.Outcome
 }
 
-// Event is one evidence feed event with the fields of the D2 contract
-// (reflex/feed.Event).
-type Event struct {
-	Seq              int64
-	ID               string
-	Org              string
-	Kind             string
-	OccurredAt       time.Time
-	ActorType        string
-	ActorID          string
-	Subjects         []Subject
-	Decision         string
-	Reason           string
-	Operation        string
-	Mode             string
-	Outcome          string
-	Environment      string
-	DestinationClass string
-	Test             bool
-	Attrs            map[string]string
+// findingUID is the finding's own id (stable across its updates), else the
+// ledger entry id.
+func findingUID(e Event) string {
+	if id := e.Attrs[AttrID]; id != "" {
+		return id
+	}
+	return e.ID.String()
 }
 
 // ClassOf returns the data class of a feed kind; ok is false for a kind
@@ -300,12 +295,13 @@ type Unmapped struct {
 const (
 	AttrPolicyVersion = "policy_version"
 	AttrPolicyDigest  = "policy_digest"
-	AttrRuleID        = "rule_id"
+	AttrRuleID        = "rule"
 	AttrRuleVersion   = "rule_version"
 	AttrRuleDigest    = "rule_digest"
 	AttrTitle         = "title"
 	AttrSummary       = "summary"
 	AttrSeverity      = "severity"
+	AttrID            = "id"
 	AttrState         = "state"
 	AttrBasis         = "basis"
 	AttrEffect        = "effect"
@@ -318,7 +314,7 @@ const (
 // unmapped.pantherclaw_attrs.
 var mappedAttrs = map[string]bool{
 	AttrPolicyVersion: true, AttrRuleID: true, AttrRuleVersion: true, AttrTitle: true, AttrSummary: true,
-	AttrSeverity: true, AttrState: true, AttrBasis: true, AttrEffect: true, AttrCoverage: true, AttrATLAS: true,
+	AttrSeverity: true, AttrState: true, AttrID: true, AttrBasis: true, AttrEffect: true, AttrCoverage: true, AttrATLAS: true,
 	AttrOWASP: true,
 }
 
@@ -330,7 +326,7 @@ func Map(e Event, productVersion string) Record {
 		SeverityID: severityInfo,
 		Severity:   "Informational",
 		Metadata: Metadata{
-			Version: Version, UID: e.ID, Sequence: e.Seq, EventCode: e.Kind, TenantUID: e.Org,
+			Version: Version, UID: e.ID.String(), Sequence: e.Seq, EventCode: e.Kind, TenantUID: e.Org.String(),
 			Product: Prod{Name: Product, VendorName: Product, Version: productVersion},
 		},
 		Actor:     actorOf(e),
@@ -383,7 +379,7 @@ func mapDecision(r *Record, e Event) {
 
 func mapDetection(r *Record, e Event) {
 	r.ClassUID, r.ClassName, r.CategoryUID, r.CategoryName = classDetection, "Detection Finding", categoryFindings, "Findings"
-	r.ActivityID, r.ActivityName, r.StatusID, r.Status = findingActivity(e.Attrs[AttrState])
+	r.ActivityID, r.ActivityName, r.StatusID, r.Status = findingActivity(stateOf(e))
 	r.SeverityID, r.Severity = severityOf(e.Attrs[AttrSeverity])
 	r.FindingInfo = findingInfo(e)
 	r.Message = e.Attrs[AttrTitle]
@@ -391,7 +387,7 @@ func mapDetection(r *Record, e Event) {
 
 func mapIncident(r *Record, e Event) {
 	r.ClassUID, r.ClassName, r.CategoryUID, r.CategoryName = classIncident, "Incident Finding", categoryFindings, "Findings"
-	r.ActivityID, r.ActivityName, r.StatusID, r.Status = incidentActivity(e.Attrs[AttrState])
+	r.ActivityID, r.ActivityName, r.StatusID, r.Status = incidentActivity(stateOf(e))
 	r.SeverityID, r.Severity = severityOf(e.Attrs[AttrSeverity])
 	r.FindingList = []FindingInfo{*findingInfo(e)}
 	r.Message = e.Attrs[AttrTitle]
@@ -402,8 +398,8 @@ func mapAccountChange(r *Record, e Event) {
 	r.ActivityID, r.ActivityName = accountActivity(e.Kind)
 	r.StatusID, r.Status = statusOf(e.Outcome)
 	for _, s := range e.Subjects {
-		if s.Type == "user" || s.Type == "service_account" {
-			r.User = userOf(s.Type, s.ID)
+		if s.Type == reflexdomain.SubjectUser || s.Type == reflexdomain.SubjectServiceAccount {
+			r.User = userOf(string(s.Type), s.ID)
 			break
 		}
 	}
@@ -548,7 +544,7 @@ func incidentActivity(state string) (activity int, activityName string, status i
 }
 
 func findingInfo(e Event) *FindingInfo {
-	f := &FindingInfo{UID: e.ID, Title: e.Attrs[AttrTitle], Desc: e.Attrs[AttrSummary], Types: splitList(e.Attrs[AttrOWASP])}
+	f := &FindingInfo{UID: findingUID(e), Title: e.Attrs[AttrTitle], Desc: e.Attrs[AttrSummary], Types: splitList(e.Attrs[AttrOWASP])}
 	if id := e.Attrs[AttrRuleID]; id != "" {
 		f.Analytic = &Analytic{UID: id, Name: id, Type: "Rule", TypeID: 1, Version: e.Attrs[AttrRuleVersion]}
 	}
@@ -590,10 +586,10 @@ func userOf(typ, id string) *User {
 	return u
 }
 
-func resourcesOf(subjects []Subject) []Resource {
+func resourcesOf(subjects []reflexdomain.Subject) []Resource {
 	out := make([]Resource, 0, len(subjects))
 	for _, s := range subjects {
-		out = append(out, Resource{UID: s.ID, Type: s.Type})
+		out = append(out, Resource{UID: s.ID, Type: string(s.Type)})
 	}
 	return out
 }

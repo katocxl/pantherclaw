@@ -26,6 +26,7 @@ import (
 	"sync"
 	"time"
 
+	billing "github.com/katocxl/pantherclaw/internal/billing/domain"
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	ndomain "github.com/katocxl/pantherclaw/internal/notifications/domain"
@@ -35,6 +36,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/httpx"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
+	reflexdomain "github.com/katocxl/pantherclaw/internal/reflex/domain"
 	"github.com/katocxl/pantherclaw/internal/siem/stepup"
 	"github.com/katocxl/pantherclaw/internal/signals/setverify"
 	tenancy "github.com/katocxl/pantherclaw/internal/tenancy/app"
@@ -43,8 +45,8 @@ import (
 
 // Permissions (D4).
 const (
-	PermRead   td.Permission = "signals.read"
-	PermManage td.Permission = "signals.manage"
+	PermRead   = td.PermSignalsRead
+	PermManage = td.PermSignalsManage
 )
 
 // Parameters.
@@ -73,6 +75,7 @@ var (
 	ErrNotFound = pcerr.New(pcerr.NotFound, "SSF_TRANSMITTER_NOT_FOUND", "transmitter not found")
 	ErrState    = pcerr.New(pcerr.FailedPrecondition, "SSF_TRANSMITTER_STATE", "the transmitter is not in a state that allows this")
 	ErrHuman    = pcerr.New(pcerr.PermissionDenied, "HUMAN_ONLY", "only a person can do this")
+	ErrEdition  = pcerr.New(pcerr.FailedPrecondition, "EDITION_REQUIRED", "Shared Signals need the Business edition or above")
 )
 
 // Config is the receiver's deployment configuration.
@@ -92,6 +95,11 @@ type Service struct {
 	client *http.Client
 	// sink handles accepted events (cases, playbook); nil: record only.
 	sink Sink
+	// editions gates the use cases and the receiver (Business, D5); nil
+	// is Community.
+	editions Editions
+	// failures records owned failures (a lapsed edition); nil: not wired.
+	failures reflexdomain.FailureSink
 
 	mu   sync.Mutex
 	jwks map[ids.UUID]*cachedJWKS
@@ -169,7 +177,43 @@ type Transmitter struct {
 	LastRefusalCode string
 }
 
-func manager(ctx context.Context) (tenancy.Caller, error) {
+// Editions reports the licence's entitlements.
+type Editions interface {
+	Current(ctx context.Context) (billing.Entitlements, error)
+}
+
+// WithEditions sets the licence source (without one the server is
+// Community and Shared Signals are refused).
+func (s *Service) WithEditions(e Editions) *Service {
+	s.editions = e
+	return s
+}
+
+// WithFailures records owned failures (a lapsed edition).
+func (s *Service) WithFailures(f reflexdomain.FailureSink) *Service {
+	s.failures = f
+	return s
+}
+
+// business refuses unless the licence includes Shared Signals (D5).
+func (s *Service) business(ctx context.Context) error {
+	if s.editions == nil {
+		return ErrEdition
+	}
+	e, err := s.editions.Current(ctx)
+	if err != nil {
+		return err
+	}
+	if !e.SharedSignals() {
+		return ErrEdition
+	}
+	return nil
+}
+
+// manager returns the caller if it is a person holding signals.manage,
+// and with edition the licence must include Shared Signals. Pausing and
+// disabling stay possible after the licence lapses.
+func (s *Service) manager(ctx context.Context, edition bool) (tenancy.Caller, error) {
 	c, err := tenancy.CallerFrom(ctx)
 	if err != nil {
 		return c, err
@@ -180,12 +224,17 @@ func manager(ctx context.Context) (tenancy.Caller, error) {
 	if !c.Human() {
 		return c, ErrHuman
 	}
+	if edition {
+		if err := s.business(ctx); err != nil {
+			return c, err
+		}
+	}
 	return c, nil
 }
 
 // Create stores a PENDING transmitter.
 func (s *Service) Create(ctx context.Context, in NewTransmitter) (Transmitter, error) {
-	c, err := manager(ctx)
+	c, err := s.manager(ctx, true)
 	if err != nil {
 		return Transmitter{}, err
 	}
@@ -223,7 +272,7 @@ func (s *Service) Create(ctx context.Context, in NewTransmitter) (Transmitter, e
 // Activate makes a PENDING transmitter ACTIVE (HR-261): a person holding
 // signals.manage with a fresh step-up made with their own active key.
 func (s *Service) Activate(ctx context.Context, id ids.UUID, su stepup.StepUp) (Transmitter, error) {
-	c, err := manager(ctx)
+	c, err := s.manager(ctx, true)
 	if err != nil {
 		return Transmitter{}, err
 	}
@@ -260,7 +309,7 @@ func (s *Service) Activate(ctx context.Context, id ids.UUID, su stepup.StepUp) (
 
 // SetState pauses, resumes or disables a transmitter. DISABLED is final.
 func (s *Service) SetState(ctx context.Context, id ids.UUID, state string) (Transmitter, error) {
-	c, err := manager(ctx)
+	c, err := s.manager(ctx, state == StateActive)
 	if err != nil {
 		return Transmitter{}, err
 	}
