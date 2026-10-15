@@ -58,8 +58,8 @@ type Raised struct {
 // and notifications (phase B). Each may be nil.
 type Hooks struct {
 	// Suppress returns the active suppression the signal falls under, if
-	// any, and records breaks (D16).
-	Suppress func(ctx context.Context, tx db.TenantTx, s reflexdomain.Signal) (*ids.UUID, error)
+	// any, and the suppressions it bypassed (D16).
+	Suppress func(ctx context.Context, tx db.TenantTx, s reflexdomain.Signal) (*ids.UUID, []Break, error)
 	// After runs once the alert is written: incidents, notifications.
 	After func(ctx context.Context, tx db.TenantTx, s reflexdomain.Signal, r Raised) error
 }
@@ -103,15 +103,27 @@ func (r *Raiser) RaiseTx(ctx context.Context, tx db.TenantTx, s reflexdomain.Sig
 		return Raised{Attention: s.Attention}, nil
 	}
 	var suppression *ids.UUID
+	var bypassed []Break
 	if r.Hooks.Suppress != nil {
 		var err error
-		if suppression, err = r.Hooks.Suppress(ctx, tx, s); err != nil {
+		if suppression, bypassed, err = r.Hooks.Suppress(ctx, tx, s); err != nil {
 			return Raised{}, err
 		}
 	}
 	res, err := Write(ctx, tx, s, suppression)
 	if err != nil {
 		return Raised{}, err
+	}
+	if err := recordBreaks(ctx, tx, res.Alert, bypassed); err != nil {
+		return Raised{}, err
+	}
+	if suppression == nil && res.State == StateSuppressed {
+		// The signal bypassed or outlived the suppression: the alert opens
+		// again (D16, HR-242).
+		if err := reopen(ctx, tx, res.Alert); err != nil {
+			return Raised{}, err
+		}
+		res.State = StateOpen
 	}
 	if r.Hooks.After != nil {
 		if err := r.Hooks.After(ctx, tx, s, res); err != nil {
@@ -266,4 +278,40 @@ func nonNilMap(m map[string]string) map[string]string {
 		return map[string]string{}
 	}
 	return m
+}
+
+func reopen(ctx context.Context, tx db.TenantTx, alert ids.UUID) error {
+	q := dbq.New(tx)
+	n, err := q.ReopenSuppressedAlert(ctx, tx.OrgID(), alert)
+	if err != nil || n == 0 {
+		return err
+	}
+	from, to := StateSuppressed, StateOpen
+	return q.InsertAlertEvent(ctx, dbq.InsertAlertEventParams{
+		OrgID: tx.OrgID(), ID: ids.NewV7(), AlertID: alert, Kind: "SUPPRESS_BYPASS", ActorType: Actor.Type, ActorID: Actor.ID,
+		FromValue: &from, ToValue: &to,
+	})
+}
+
+// Break is a suppression a signal bypassed, and why (D16): its subjects are
+// no longer covered by that suppression.
+type Break struct {
+	Suppression ids.UUID
+	Reason      string
+	Subjects    []reflexdomain.Subject
+}
+
+func recordBreaks(ctx context.Context, tx db.TenantTx, alert ids.UUID, bs []Break) error {
+	q := dbq.New(tx)
+	for _, b := range bs {
+		for _, sub := range b.Subjects {
+			if err := q.InsertSuppressionBreak(ctx, dbq.InsertSuppressionBreakParams{
+				OrgID: tx.OrgID(), ID: ids.NewV7(), SuppressionID: b.Suppression, Subject: sub.String(), AlertID: alert,
+				Reason: b.Reason,
+			}); err != nil {
+				return fmt.Errorf("alerts: suppression break: %w", err)
+			}
+		}
+	}
+	return nil
 }
