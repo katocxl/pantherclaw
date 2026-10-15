@@ -470,6 +470,35 @@ func (q *Queries) InsertCustomRuleTest(ctx context.Context, arg InsertCustomRule
 	return err
 }
 
+const insertDetectionRuleVersion = `-- name: InsertDetectionRuleVersion :exec
+INSERT INTO pc.detection_rule_versions (org_id, rule, rule_id, version, content_digest, ledger_entry_id, published_by)
+VALUES ($1, $2, $3, $4, $5,
+        $6, $7)
+`
+
+type InsertDetectionRuleVersionParams struct {
+	OrgID         ids.OrgID
+	Rule          ids.UUID
+	RuleID        string
+	Version       int32
+	ContentDigest []byte
+	LedgerEntryID ids.UUID
+	PublishedBy   ids.UUID
+}
+
+func (q *Queries) InsertDetectionRuleVersion(ctx context.Context, arg InsertDetectionRuleVersionParams) error {
+	_, err := q.db.Exec(ctx, insertDetectionRuleVersion,
+		arg.OrgID,
+		arg.Rule,
+		arg.RuleID,
+		arg.Version,
+		arg.ContentDigest,
+		arg.LedgerEntryID,
+		arg.PublishedBy,
+	)
+	return err
+}
+
 const listCustomRules = `-- name: ListCustomRules :many
 SELECT org_id, id, rule_id, version, content, content_digest, state, created_by, created_at, published_by, published_at, ledger_entry_id, disabled_by, disabled_at, disabled_reason FROM pc.custom_detection_rules
 WHERE org_id = $1
@@ -540,6 +569,16 @@ func (q *Queries) LockCustomRule(ctx context.Context, orgID ids.OrgID, iD ids.UU
 		&i.DisabledReason,
 	)
 	return i, err
+}
+
+const lockCustomRulePublishing = `-- name: LockCustomRulePublishing :exec
+SELECT pg_advisory_xact_lock(hashtextextended('detection.publish:' || $1::uuid::text, 0))
+`
+
+// Serialises an org's publishes so the 100-rule cap holds (D59 L3).
+func (q *Queries) LockCustomRulePublishing(ctx context.Context, orgID ids.UUID) error {
+	_, err := q.db.Exec(ctx, lockCustomRulePublishing, orgID)
+	return err
 }
 
 const markDetectionOverflow = `-- name: MarkDetectionOverflow :execrows
@@ -639,24 +678,37 @@ func (q *Queries) PublishCustomRule(ctx context.Context, arg PublishCustomRulePa
 
 const publishedCustomRules = `-- name: PublishedCustomRules :many
 SELECT r.id, r.rule_id, r.version, r.content, r.content_digest,
-       coalesce(convert_from(e.body, 'UTF8')::jsonb -> 'details' ->> 'content_digest', '')::text AS ledger_digest
+       coalesce(v.content_digest, ''::bytea)::bytea AS recorded_digest,
+       (e.id IS NOT NULL)::bool AS ledger_present,
+       (e.body_removed_at IS NOT NULL)::bool AS ledger_body_removed,
+       coalesce(CASE WHEN e.body_removed_at IS NULL
+                     THEN convert_from(e.body, 'UTF8')::jsonb -> 'details' ->> 'content_digest' END, '')::text AS ledger_digest
 FROM pc.custom_detection_rules r
+LEFT JOIN pc.detection_rule_versions v ON v.org_id = r.org_id AND v.rule = r.id
 LEFT JOIN pc.ledger_entries e ON e.org_id = r.org_id AND e.id = r.ledger_entry_id
+    AND e.kind = 'audit.detection.rule_published'
+    AND (e.body_removed_at IS NOT NULL
+         OR convert_from(e.body, 'UTF8')::jsonb -> 'object' ->> 'id' = r.rule_id)
 WHERE r.org_id = $1 AND r.state = 'PUBLISHED'
 ORDER BY r.rule_id
 `
 
 type PublishedCustomRulesRow struct {
-	ID            ids.UUID
-	RuleID        string
-	Version       int32
-	Content       string
-	ContentDigest []byte
-	LedgerDigest  string
+	ID                ids.UUID
+	RuleID            string
+	Version           int32
+	Content           string
+	ContentDigest     []byte
+	RecordedDigest    []byte
+	LedgerPresent     bool
+	LedgerBodyRemoved bool
+	LedgerDigest      string
 }
 
-// Published custom rules with the content digest their publication
-// recorded in the ledger (HR-241).
+// Published custom rules with the digest their publication recorded: in
+// detection_rule_versions (append-only, retention-safe) and in the ledger
+// entry, bound to its kind and to the rule (HR-241, D59 L2). The ledger
+// digest is empty when retention removed the body.
 func (q *Queries) PublishedCustomRules(ctx context.Context, orgID ids.OrgID) ([]PublishedCustomRulesRow, error) {
 	rows, err := q.db.Query(ctx, publishedCustomRules, orgID)
 	if err != nil {
@@ -672,6 +724,9 @@ func (q *Queries) PublishedCustomRules(ctx context.Context, orgID ids.OrgID) ([]
 			&i.Version,
 			&i.Content,
 			&i.ContentDigest,
+			&i.RecordedDigest,
+			&i.LedgerPresent,
+			&i.LedgerBodyRemoved,
 			&i.LedgerDigest,
 		); err != nil {
 			return nil, err

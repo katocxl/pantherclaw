@@ -60,6 +60,11 @@ func newFixture(t *testing.T, edition billing.Edition) *fixture {
 		Ents: ents{edition},
 	}
 	f.exec(t, "INSERT INTO pc.orgs (id, name) VALUES ($1, 'detect')", f.org)
+	// Detection starts at the feed's head (D59 M4): start it before the
+	// test writes anything.
+	if _, err := f.e.Process(context.Background(), f.org); err != nil {
+		t.Fatal(err)
+	}
 	return f
 }
 
@@ -252,6 +257,8 @@ tests: []
 		t.Fatal(err)
 	}
 	f.e.Builtin = append(f.e.Builtin, c)
+	// Small batches: the errors run across several (D59 M3).
+	f.e.Batch = 3
 	f.audit(t, "security.kill_switch_engaged", 12, nil)
 	f.drain(t)
 	if n := f.count(t, `SELECT count(*) FROM pc.detection_rule_state WHERE org_id = $1 AND rule_id = 'pc.test.broken'
@@ -291,14 +298,14 @@ func TestHR241_CustomRuleRunsOnlyWithItsLedgerDigest(t *testing.T) {
 		"basis: OBSERVED\nedition: business\non: [audit.security.kill_switch_engaged]\ntests: []\n"
 	sum := sha256.Sum256([]byte(src))
 	env, _ := engine.NewEnv(celenv.DefaultLimits)
-	if _, err := engine.CustomRule(env, src, sum[:], hex.EncodeToString(sum[:])); err != nil {
+	if _, err := engine.CustomRule(env, src, engine.Recorded{Stored: sum[:], Published: sum[:], LedgerPresent: true, Ledger: hex.EncodeToString(sum[:])}); err != nil {
 		t.Fatalf("matching digests: %v", err)
 	}
 	other := sha256.Sum256([]byte("tampered"))
-	if _, err := engine.CustomRule(env, src, sum[:], hex.EncodeToString(other[:])); !errors.Is(err, engine.ErrDigestMismatch) {
+	if _, err := engine.CustomRule(env, src, engine.Recorded{Stored: sum[:], Published: sum[:], LedgerPresent: true, Ledger: hex.EncodeToString(other[:])}); !errors.Is(err, engine.ErrDigestMismatch) {
 		t.Errorf("ledger digest differs: %v", err)
 	}
-	if _, err := engine.CustomRule(env, src+"#", sum[:], hex.EncodeToString(sum[:])); !errors.Is(err, engine.ErrDigestMismatch) {
+	if _, err := engine.CustomRule(env, src+"#", engine.Recorded{Stored: sum[:], Published: sum[:], LedgerPresent: true, Ledger: hex.EncodeToString(sum[:])}); !errors.Is(err, engine.ErrDigestMismatch) {
 		t.Errorf("content changed: %v", err)
 	}
 }
@@ -338,5 +345,29 @@ func TestT105_MalformedEntryNeverStallsTheCursor(t *testing.T) {
 	f.drain(t)
 	if n := f.count(t, `SELECT count(*) FROM pc.alerts WHERE org_id = $1 AND rule_id = 'pc.containment.kill_switch_engaged'`, f.org); n != 1 {
 		t.Errorf("entries after the malformed one were not evaluated (%d alerts)", n)
+	}
+}
+
+// TestT105_NoHistoryReplayOnFirstRun: an org's first detection run starts
+// at the feed's head; entries written before it are not evaluated (D59 M4).
+func TestT105_NoHistoryReplayOnFirstRun(t *testing.T) {
+	d := dbtest.New(t)
+	env, _ := engine.NewEnv(celenv.DefaultLimits)
+	p, err := pack.Load(env)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f := &fixture{p: d.AppPool(t), org: ids.New[ids.Org](), env: env}
+	f.e = &engine.Engine{Pool: f.p, Builtin: p.Rules, PackVersion: p.Version, Env: env, Raiser: &alerts.Raiser{}, Sink: &failures.Sink{}}
+	f.exec(t, "INSERT INTO pc.orgs (id, name) VALUES ($1, 'history')", f.org)
+	f.audit(t, "security.kill_switch_engaged", 2, nil)
+	f.drain(t)
+	if n := f.count(t, "SELECT count(*) FROM pc.alerts WHERE org_id = $1", f.org); n != 0 {
+		t.Errorf("%d alerts from history", n)
+	}
+	f.audit(t, "security.kill_switch_engaged", 1, nil)
+	f.drain(t)
+	if n := f.count(t, "SELECT coalesce(sum(count), 0) FROM pc.alerts WHERE org_id = $1", f.org); n != 1 {
+		t.Errorf("new entries raised %d, want 1", n)
 	}
 }

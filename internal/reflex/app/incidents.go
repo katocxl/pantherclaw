@@ -175,23 +175,20 @@ func (s *Incidents) ListAlerts(ctx context.Context, f AlertFilter, size int32, t
 		if states == nil {
 			states = []string{}
 		}
+		// Hidden alerts are filtered in SQL before paging, so neither the page
+		// nor its next token reveals them (D60).
+		all, visible, err := newVisibility(c, q).scope.Visible(ctx)
+		if err != nil {
+			return err
+		}
 		rows, err := q.ListAlerts(ctx, dbq.ListAlertsParams{
-			OrgID: c.Org, Before: p.After, States: states, RuleID: f.Rule, IncidentID: f.Incident, PageLimit: p.Limit(),
+			OrgID: c.Org, AllAgents: all, VisibleAgents: nonNil(visible), Before: p.After, States: states, RuleID: f.Rule,
+			IncidentID: f.Incident, PageLimit: p.Limit(),
 		})
 		if err != nil {
 			return err
 		}
-		rows, out.Next = page.Finish(p, rows, func(a dbq.PcAlert) ids.UUID { return a.ID })
-		v := newVisibility(c, q)
-		for _, a := range rows {
-			ok, err := v.alert(ctx, a)
-			if err != nil {
-				return err
-			}
-			if ok {
-				out.Items = append(out.Items, a)
-			}
-		}
+		out.Items, out.Next = page.Finish(p, rows, func(a dbq.PcAlert) ids.UUID { return a.ID })
 		return nil
 	}, db.ReadOnly())
 	return out, err
@@ -237,20 +234,15 @@ func (s *Incidents) GetAlert(ctx context.Context, id ids.UUID) (AlertDetail, err
 		if out.Events, err = q.AlertEvents(ctx, c.Org, id); err != nil {
 			return err
 		}
-		related, err := q.PossibleRelatedAlerts(ctx, dbq.PossibleRelatedAlertsParams{
-			OrgID: c.Org, RuleID: a.RuleID, ID: a.ID, DedupeKey: a.DedupeKey, Since: s.now().Add(-GroupWindow),
-		})
+		all, visible, err := v.scope.Visible(ctx)
 		if err != nil {
 			return err
 		}
-		for _, r := range related {
-			if ok, err := v.alert(ctx, r); err != nil {
-				return err
-			} else if ok {
-				out.Related = append(out.Related, r)
-			}
-		}
-		return nil
+		out.Related, err = q.PossibleRelatedAlerts(ctx, dbq.PossibleRelatedAlertsParams{
+			OrgID: c.Org, AllAgents: all, VisibleAgents: nonNil(visible), RuleID: a.RuleID, ID: a.ID, DedupeKey: a.DedupeKey,
+			Since: s.now().Add(-GroupWindow),
+		})
+		return err
 	}, db.ReadOnly())
 	return out, err
 }
@@ -261,6 +253,9 @@ var alertMoves = map[string][]string{
 	alerts.StateOpen:         {alerts.StateAcknowledged, alerts.StateResolved},
 	alerts.StateAcknowledged: {alerts.StateResolved, alerts.StateOpen},
 	alerts.StateResolved:     {alerts.StateOpen},
+	// A responder may settle a suppressed alert without waiting for the
+	// suppression to end (D59 M1).
+	alerts.StateSuppressed: {alerts.StateAcknowledged, alerts.StateResolved, alerts.StateOpen},
 }
 
 // SetAlertState moves an alert and records a STATE event (HR-243).
@@ -283,14 +278,17 @@ func (s *Incidents) SetAlertState(ctx context.Context, id ids.UUID, to, note str
 		}
 		if a.State == alerts.StateResolved && to == alerts.StateOpen {
 			// A resolved alert reopens only while no other open alert holds
-			// its dedupe key.
-			return reopenResolved(ctx, q, c, a)
-		}
-		if err := one(q.SetAlertState(ctx, dbq.SetAlertStateParams{ToState: to, OrgID: c.Org, ID: id, FromState: a.State})); err != nil {
-			return err
-		}
-		if err := alertEvent(ctx, q, c, id, "STATE", a.State, to, note); err != nil {
-			return err
+			// its dedupe key; it is audited and returned like any move (D59 L7).
+			if err := reopenResolved(ctx, q, c, a, note); err != nil {
+				return err
+			}
+		} else {
+			if err := one(q.SetAlertState(ctx, dbq.SetAlertStateParams{ToState: to, OrgID: c.Org, ID: id, FromState: a.State})); err != nil {
+				return err
+			}
+			if err := alertEvent(ctx, q, c, id, "STATE", a.State, to, note); err != nil {
+				return err
+			}
 		}
 		if err := s.audit(ctx, tx, c, "incident.alert_state_set", "alert", id, map[string]string{"from": a.State, "to": to}); err != nil {
 			return err
@@ -301,7 +299,7 @@ func (s *Incidents) SetAlertState(ctx context.Context, id ids.UUID, to, note str
 	return out, err
 }
 
-func reopenResolved(ctx context.Context, q *dbq.Queries, c tenancy.Caller, a dbq.PcAlert) error {
+func reopenResolved(ctx context.Context, q *dbq.Queries, c tenancy.Caller, a dbq.PcAlert, note string) error {
 	n, err := q.SetAlertState(ctx, dbq.SetAlertStateParams{ToState: alerts.StateOpen, OrgID: c.Org, ID: a.ID, FromState: a.State})
 	if db.IsUniqueViolation(err) {
 		return ErrState
@@ -309,7 +307,7 @@ func reopenResolved(ctx context.Context, q *dbq.Queries, c tenancy.Caller, a dbq
 	if err != nil || n != 1 {
 		return firstErr(err, ErrState)
 	}
-	return alertEvent(ctx, q, c, a.ID, "STATE", a.State, alerts.StateOpen, "")
+	return alertEvent(ctx, q, c, a.ID, "STATE", a.State, alerts.StateOpen, note)
 }
 
 func alertEvent(ctx context.Context, q *dbq.Queries, c tenancy.Caller, alert ids.UUID, kind, from, to, note string) error {
@@ -448,21 +446,17 @@ func (s *Incidents) ListIncidents(ctx context.Context, states []string, size int
 	var out IncidentPage
 	err = s.Pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
 		q := dbq.New(tx)
-		rows, err := q.ListIncidents(ctx, dbq.ListIncidentsParams{OrgID: c.Org, Before: p.After, States: states, PageLimit: p.Limit()})
+		all, visible, err := newVisibility(c, q).scope.Visible(ctx)
 		if err != nil {
 			return err
 		}
-		rows, out.Next = page.Finish(p, rows, func(i dbq.PcIncident) ids.UUID { return i.ID })
-		v := newVisibility(c, q)
-		for _, inc := range rows {
-			ok, err := incidentVisible(ctx, q, v, inc)
-			if err != nil {
-				return err
-			}
-			if ok {
-				out.Items = append(out.Items, inc)
-			}
+		rows, err := q.ListIncidents(ctx, dbq.ListIncidentsParams{
+			OrgID: c.Org, AllAgents: all, VisibleAgents: nonNil(visible), Before: p.After, States: states, PageLimit: p.Limit(),
+		})
+		if err != nil {
+			return err
 		}
+		out.Items, out.Next = page.Finish(p, rows, func(i dbq.PcIncident) ids.UUID { return i.ID })
 		return nil
 	}, db.ReadOnly())
 	return out, err
@@ -653,11 +647,12 @@ func (s *Incidents) SetIncidentState(ctx context.Context, id ids.UUID, to, note 
 		if err := incidentEvent(ctx, q, c, id, "STATE", inc.State, to, note, nil); err != nil {
 			return err
 		}
+		from := inc.State
 		inc.State = to
 		if err := IncidentEntry(ctx, tx, inc, nil); err != nil {
 			return err
 		}
-		if err := s.audit(ctx, tx, c, "incident.state_set", "incident", id, map[string]string{"from": inc.State, "to": to}); err != nil {
+		if err := s.audit(ctx, tx, c, "incident.state_set", "incident", id, map[string]string{"from": from, "to": to}); err != nil {
 			return err
 		}
 		out, err = q.GetIncident(ctx, c.Org, id)
@@ -818,6 +813,10 @@ func (s *Incidents) EndSuppression(ctx context.Context, id ids.UUID, reason stri
 		if n == 0 {
 			return ErrState
 		}
+		// Its suppressed alerts open again (D59 M1).
+		if err := alerts.ReopenUnsuppressed(ctx, tx); err != nil {
+			return err
+		}
 		if out, err = withBreaks(ctx, q, r); err != nil {
 			return err
 		}
@@ -972,4 +971,11 @@ func one(n int64, err error) error {
 		return ErrState
 	}
 	return nil
+}
+
+func nonNil(s []string) []string {
+	if s == nil {
+		return []string{}
+	}
+	return s
 }

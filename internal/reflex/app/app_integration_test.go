@@ -203,8 +203,15 @@ func TestT106_SuppressionCannotHideARealIncident(t *testing.T) {
 	}
 	// Higher severity: bypasses, reopens and pages.
 	loud := f.raise(t, f.signal(rule, reflexdomain.SeverityCritical, reflexdomain.AttentionPage, f.agentA))
-	if loud.Alert != quiet.Alert || loud.State != alerts.StateOpen {
+	if loud.Alert != quiet.Alert || loud.State != alerts.StateOpen || !loud.Reopened {
 		t.Fatalf("severity bypass: %+v", loud)
+	}
+	if f.n.count(reflexdomain.NotifyPage) != 1 {
+		t.Errorf("the bypass did not page: %v", f.n.sent)
+	}
+	if n := f.count(t, `SELECT count(*) FROM pc.alerts WHERE org_id = $1 AND id = $2 AND severity = 'CRITICAL' AND attention = 'PAGE'`,
+		f.org, loud.Alert); n != 1 {
+		t.Error("the bypass did not raise the stored severity")
 	}
 	if f.count(t, `SELECT count(*) FROM pc.suppression_breaks WHERE org_id = $1 AND suppression_id = $2
 		AND reason = 'SEVERITY_ABOVE_MAX'`, f.org, sup.ID) == 0 {
@@ -290,8 +297,11 @@ func TestIncidentsGroupByEvidence(t *testing.T) {
 		if edition == billing.Team && (f.n.count(reflexdomain.NotifyPage) != 1 || f.n.count(reflexdomain.NotifyIncident) != 1) {
 			t.Errorf("Team notifications %v", f.n.sent)
 		}
-		if edition == billing.Community && len(f.n.sent) != 0 {
-			t.Errorf("Community notified %v", f.n.sent)
+		// Pages and incidents notify in every edition; routine alerts only
+		// with Team (D59 L13).
+		if edition == billing.Community && (f.n.count(reflexdomain.NotifyPage) != 1 || f.n.count(reflexdomain.NotifyIncident) != 1 ||
+			f.n.count(reflexdomain.NotifyAlert) != 0) {
+			t.Errorf("Community notifications %v", f.n.sent)
 		}
 	}
 	f := newFixture(t, billing.Team)
@@ -406,5 +416,37 @@ func TestHR241_CustomRulesPublishOnlyWithPassingTests(t *testing.T) {
 	})
 	if !db.IsPermissionDenied(err) {
 		t.Errorf("content update: %v, want permission denied", err)
+	}
+}
+
+// TestT106_EndingASuppressionReopensItsAlerts: ending a suppression opens
+// its suppressed alerts again, and a responder can settle a suppressed
+// alert directly (D59 M1).
+func TestT106_EndingASuppressionReopensItsAlerts(t *testing.T) {
+	f := newFixture(t, billing.Team)
+	ctx := f.as(td.RoleSecurityAdmin)
+	sup, err := f.svc.CreateSuppression(ctx, reflexapp.SuppressionRequest{
+		Rule: rule, MaxSeverity: reflexdomain.SeverityHigh, Reason: "maintenance", ExpiresIn: time.Hour,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := f.raise(t, f.signal(rule, reflexdomain.SeverityMedium, reflexdomain.AttentionAlert, f.agentA))
+	other := f.signal(rule, reflexdomain.SeverityMedium, reflexdomain.AttentionAlert, f.agentB)
+	other.DedupeKey = "other"
+	b := f.raise(t, other)
+	if a.State != alerts.StateSuppressed || b.State != alerts.StateSuppressed {
+		t.Fatalf("%+v %+v", a, b)
+	}
+	if got, err := f.svc.SetAlertState(ctx, b.Alert, alerts.StateResolved, "known"); err != nil || got.State != alerts.StateResolved ||
+		got.SuppressionID != nil {
+		t.Fatalf("settling a suppressed alert: %v %+v", err, got)
+	}
+	if _, err := f.svc.EndSuppression(ctx, sup.ID, "maintenance over"); err != nil {
+		t.Fatal(err)
+	}
+	if n := f.count(t, "SELECT count(*) FROM pc.alerts WHERE org_id = $1 AND id = $2 AND state = 'OPEN' AND suppression_id IS NULL",
+		f.org, a.Alert); n != 1 {
+		t.Error("ending the suppression left its alert suppressed")
 	}
 }

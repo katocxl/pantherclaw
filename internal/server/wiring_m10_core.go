@@ -105,7 +105,7 @@ func registerReflexCoreJobs(reg *jobs.Registry, pool *db.Pool, limits celenv.Lim
 		Pool: pool, Builtin: rules, PackVersion: version, PackErr: c.packErr, Env: c.env, Raiser: c.raiser, Sink: c.failures,
 		Log: log,
 	}
-	d := &reflexapp.Digests{Pool: pool}
+	d := &reflexapp.Digests{Pool: pool, Sink: c.failures}
 	if bill != nil {
 		e.Ents, d.Ents = bill, bill
 	}

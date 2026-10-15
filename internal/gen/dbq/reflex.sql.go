@@ -159,6 +159,41 @@ func (q *Queries) InsertAlertEvidence(ctx context.Context, arg InsertAlertEviden
 	return err
 }
 
+const scopeAgentPlacements = `-- name: ScopeAgentPlacements :many
+SELECT id, team_id, environment_id FROM pc.agents
+WHERE org_id = $1
+ORDER BY id
+LIMIT $2
+`
+
+type ScopeAgentPlacementsRow struct {
+	ID            ids.UUID
+	TeamID        *ids.UUID
+	EnvironmentID *ids.UUID
+}
+
+// Every agent's placement, for computing the agents a scoped viewer may
+// read (D60); at most max_rows.
+func (q *Queries) ScopeAgentPlacements(ctx context.Context, orgID ids.OrgID, maxRows int32) ([]ScopeAgentPlacementsRow, error) {
+	rows, err := q.db.Query(ctx, scopeAgentPlacements, orgID, maxRows)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ScopeAgentPlacementsRow{}
+	for rows.Next() {
+		var i ScopeAgentPlacementsRow
+		if err := rows.Scan(&i.ID, &i.TeamID, &i.EnvironmentID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const upsertAlert = `-- name: UpsertAlert :one
 INSERT INTO pc.alerts (org_id, id, source, rule_id, rule_version, rule_digest, pack_version, title, summary, severity,
                        attention, basis, subjects, atlas, owasp, facts, group_key, dedupe_key, state, suppression_id,

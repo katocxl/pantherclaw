@@ -142,12 +142,22 @@ DELETE FROM pc.detection_sequences WHERE org_id = sqlc.arg(org_id) AND rule_id =
 DELETE FROM pc.detection_sequences WHERE org_id = sqlc.arg(org_id) AND started_at < sqlc.arg(before);
 
 -- name: PublishedCustomRules :many
--- Published custom rules with the content digest their publication
--- recorded in the ledger (HR-241).
+-- Published custom rules with the digest their publication recorded: in
+-- detection_rule_versions (append-only, retention-safe) and in the ledger
+-- entry, bound to its kind and to the rule (HR-241, D59 L2). The ledger
+-- digest is empty when retention removed the body.
 SELECT r.id, r.rule_id, r.version, r.content, r.content_digest,
-       coalesce(convert_from(e.body, 'UTF8')::jsonb -> 'details' ->> 'content_digest', '')::text AS ledger_digest
+       coalesce(v.content_digest, ''::bytea)::bytea AS recorded_digest,
+       (e.id IS NOT NULL)::bool AS ledger_present,
+       (e.body_removed_at IS NOT NULL)::bool AS ledger_body_removed,
+       coalesce(CASE WHEN e.body_removed_at IS NULL
+                     THEN convert_from(e.body, 'UTF8')::jsonb -> 'details' ->> 'content_digest' END, '')::text AS ledger_digest
 FROM pc.custom_detection_rules r
+LEFT JOIN pc.detection_rule_versions v ON v.org_id = r.org_id AND v.rule = r.id
 LEFT JOIN pc.ledger_entries e ON e.org_id = r.org_id AND e.id = r.ledger_entry_id
+    AND e.kind = 'audit.detection.rule_published'
+    AND (e.body_removed_at IS NOT NULL
+         OR convert_from(e.body, 'UTF8')::jsonb -> 'object' ->> 'id' = r.rule_id)
 WHERE r.org_id = sqlc.arg(org_id) AND r.state = 'PUBLISHED'
 ORDER BY r.rule_id;
 
@@ -196,3 +206,12 @@ RETURNING id;
 INSERT INTO pc.custom_detection_rule_tests (org_id, id, rule, passed, firing, non_firing, results, run_by)
 VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(rule), sqlc.arg(passed), sqlc.arg(firing), sqlc.arg(non_firing),
         sqlc.arg(results), sqlc.arg(run_by));
+
+-- name: InsertDetectionRuleVersion :exec
+INSERT INTO pc.detection_rule_versions (org_id, rule, rule_id, version, content_digest, ledger_entry_id, published_by)
+VALUES (sqlc.arg(org_id), sqlc.arg(rule), sqlc.arg(rule_id), sqlc.arg(version), sqlc.arg(content_digest),
+        sqlc.arg(ledger_entry_id), sqlc.arg(published_by));
+
+-- name: LockCustomRulePublishing :exec
+-- Serialises an org's publishes so the 100-rule cap holds (D59 L3).
+SELECT pg_advisory_xact_lock(hashtextextended('detection.publish:' || sqlc.arg(org_id)::uuid::text, 0));

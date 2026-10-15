@@ -228,6 +228,9 @@ func (s *Detections) TestCustomRule(ctx context.Context, id ids.UUID) ([]engine.
 	if err != nil {
 		return nil, false, err
 	}
+	if err := s.custom(ctx); err != nil {
+		return nil, false, err
+	}
 	var results []engine.TestResult
 	err = s.Pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
 		q := dbq.New(tx)
@@ -282,6 +285,10 @@ func (s *Detections) PublishCustomRule(ctx context.Context, id ids.UUID) (Rule, 
 	var results []engine.TestResult
 	err = s.Pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
 		q := dbq.New(tx)
+		// One publish at a time per org, so the cap holds (D59 L3).
+		if err := q.LockCustomRulePublishing(ctx, c.Org.UUID()); err != nil {
+			return err
+		}
 		row, err := q.LockCustomRule(ctx, c.Org, id)
 		if db.IsNoRows(err) {
 			return ErrNotFound
@@ -328,6 +335,12 @@ func (s *Detections) PublishCustomRule(ctx context.Context, id ids.UUID) (Rule, 
 		if err := one(q.PublishCustomRule(ctx, dbq.PublishCustomRuleParams{
 			PublishedBy: &c.Principal.ID, LedgerEntryID: &entry.ID, OrgID: c.Org, ID: id,
 		})); err != nil {
+			return err
+		}
+		if err := q.InsertDetectionRuleVersion(ctx, dbq.InsertDetectionRuleVersionParams{
+			OrgID: c.Org, Rule: row.ID, RuleID: row.RuleID, Version: row.Version, ContentDigest: sum[:], LedgerEntryID: entry.ID,
+			PublishedBy: c.Principal.ID,
+		}); err != nil {
 			return err
 		}
 		if err := recordTests(ctx, q, c, row.ID, results); err != nil {

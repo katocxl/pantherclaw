@@ -107,6 +107,10 @@ func (e *Engine) Process(ctx context.Context, org ids.OrgID) (RunResult, error) 
 	err := e.Pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
 		res = RunResult{}
 		q := dbq.New(tx)
+		// Alerts whose suppression ended or expired open again (D59 M1).
+		if err := alerts.ReopenUnsuppressed(ctx, tx); err != nil {
+			return err
+		}
 		if e.PackErr != nil || e.Builtin == nil {
 			// Detection stays off; the server still serves decisions.
 			return e.report(ctx, tx, reflexdomain.Failure{
@@ -244,7 +248,10 @@ func (e *Engine) ruleSet(ctx context.Context, tx db.TenantTx, q *dbq.Queries, en
 		if disabled[r.RuleID] {
 			continue
 		}
-		c, err := CustomRule(e.Env, r.Content, r.ContentDigest, r.LedgerDigest)
+		c, err := CustomRule(e.Env, r.Content, Recorded{
+			Stored: r.ContentDigest, Published: r.RecordedDigest, LedgerPresent: r.LedgerPresent,
+			LedgerBodyRemoved: r.LedgerBodyRemoved, Ledger: r.LedgerDigest,
+		})
 		if err != nil {
 			if err := e.report(ctx, tx, reflexdomain.Failure{
 				Org: tx.OrgID(), Kind: FailureCustomIntegrity, DedupeKey: FailureCustomIntegrity + ":" + r.ID.String(),
@@ -265,21 +272,38 @@ func (e *Engine) ruleSet(ctx context.Context, tx db.TenantTx, q *dbq.Queries, en
 // match the digest its publication recorded (HR-241).
 var ErrDigestMismatch = errors.New("detection: custom rule digest mismatch")
 
+// Recorded is what a published custom rule's digest is checked against.
+type Recorded struct {
+	// Stored is the rule row's content digest; Published the append-only
+	// version record's.
+	Stored, Published []byte
+	// LedgerPresent reports the publication's ledger entry (kind and object
+	// bound); Ledger is the digest in its body, empty once retention removed
+	// it (LedgerBodyRemoved).
+	LedgerPresent, LedgerBodyRemoved bool
+	Ledger                           string
+}
+
 // CustomRule parses and compiles a published custom rule after checking
-// that its content, its stored digest and the ledger-recorded digest agree.
-func CustomRule(env *celenv.Env, content string, stored []byte, ledger string) (*Compiled, error) {
+// that its content, its stored digest, the append-only published digest
+// and, while retention keeps it, the ledger-recorded digest agree (HR-241,
+// D59 L2).
+func CustomRule(env *celenv.Env, content string, r Recorded) (*Compiled, error) {
 	sum := sha256.Sum256([]byte(content))
-	if !bytes.Equal(sum[:], stored) || hex.EncodeToString(sum[:]) != ledger {
+	switch {
+	case !bytes.Equal(sum[:], r.Stored), !bytes.Equal(sum[:], r.Published), !r.LedgerPresent:
+		return nil, ErrDigestMismatch
+	case !r.LedgerBodyRemoved && hex.EncodeToString(sum[:]) != r.Ledger:
 		return nil, ErrDigestMismatch
 	}
-	r, err := rules.Parse([]byte(content))
+	rule, err := rules.Parse([]byte(content))
 	if err != nil {
 		return nil, err
 	}
-	if r.Builtin() {
+	if rule.Builtin() {
 		return nil, fmt.Errorf("%w: a custom rule id starts with org", rules.ErrInvalid)
 	}
-	return Compile(env, r, hex.EncodeToString(sum[:]), "")
+	return Compile(env, rule, hex.EncodeToString(sum[:]), "")
 }
 
 func (e *Engine) overflow(ctx context.Context, tx db.TenantTx, q *dbq.Queries, c *Compiled) error {

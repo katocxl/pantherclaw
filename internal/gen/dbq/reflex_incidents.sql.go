@@ -198,6 +198,37 @@ func (q *Queries) EndSuppression(ctx context.Context, arg EndSuppressionParams) 
 	return result.RowsAffected(), nil
 }
 
+const escalateAlert = `-- name: EscalateAlert :exec
+UPDATE pc.alerts
+SET severity = CASE WHEN array_position(ARRAY['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'], $1::text)
+                         > array_position(ARRAY['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'], severity)
+                    THEN $1::text ELSE severity END,
+    attention = CASE WHEN array_position(ARRAY['FINDING', 'ALERT', 'INCIDENT', 'PAGE'], $2::text)
+                          > array_position(ARRAY['FINDING', 'ALERT', 'INCIDENT', 'PAGE'], attention)
+                     THEN $2::text ELSE attention END,
+    updated_at = now()
+WHERE org_id = $3 AND id = $4
+`
+
+type EscalateAlertParams struct {
+	Severity  string
+	Attention string
+	OrgID     ids.OrgID
+	ID        ids.UUID
+}
+
+// A signal that bypassed a suppression raises the stored severity and
+// attention to its own when higher (D59 M1).
+func (q *Queries) EscalateAlert(ctx context.Context, arg EscalateAlertParams) error {
+	_, err := q.db.Exec(ctx, escalateAlert,
+		arg.Severity,
+		arg.Attention,
+		arg.OrgID,
+		arg.ID,
+	)
+	return err
+}
+
 const findGroupIncident = `-- name: FindGroupIncident :one
 SELECT i.id, i.severity FROM pc.incidents i
 WHERE i.org_id = $1 AND i.group_key = $2 AND i.state <> 'RESOLVED' AND NOT i.test
@@ -607,27 +638,38 @@ func (q *Queries) InsertSuppressionBreak(ctx context.Context, arg InsertSuppress
 const listAlerts = `-- name: ListAlerts :many
 SELECT org_id, id, source, rule_id, rule_version, rule_digest, pack_version, title, summary, severity, attention, basis, subjects, atlas, owasp, facts, group_key, dedupe_key, state, incident_id, suppression_id, count, first_seen, last_seen, test, created_at, updated_at FROM pc.alerts
 WHERE org_id = $1
-  AND (coalesce($2::uuid, '00000000-0000-0000-0000-000000000000') = '00000000-0000-0000-0000-000000000000'
-       OR id < $2::uuid)
-  AND (cardinality($3::text[]) = 0 OR state = ANY ($3::text[]))
-  AND ($4::text = '' OR rule_id = $4::text)
-  AND ($5::uuid IS NULL OR incident_id = $5::uuid)
+  AND ($2::bool OR (
+      EXISTS (SELECT 1 FROM jsonb_array_elements(subjects) s WHERE s ->> 'type' = 'agent')
+      AND NOT EXISTS (SELECT 1 FROM jsonb_array_elements(subjects) s
+                      WHERE s ->> 'type' = 'agent' AND NOT (s ->> 'id' = ANY ($3::text[])))))
+  AND (coalesce($4::uuid, '00000000-0000-0000-0000-000000000000') = '00000000-0000-0000-0000-000000000000'
+       OR id < $4::uuid)
+  AND (cardinality($5::text[]) = 0 OR state = ANY ($5::text[]))
+  AND ($6::text = '' OR rule_id = $6::text)
+  AND ($7::uuid IS NULL OR incident_id = $7::uuid)
 ORDER BY id DESC
-LIMIT $6
+LIMIT $8
 `
 
 type ListAlertsParams struct {
-	OrgID      ids.OrgID
-	Before     ids.UUID
-	States     []string
-	RuleID     string
-	IncidentID *ids.UUID
-	PageLimit  int32
+	OrgID         ids.OrgID
+	AllAgents     bool
+	VisibleAgents []string
+	Before        ids.UUID
+	States        []string
+	RuleID        string
+	IncidentID    *ids.UUID
+	PageLimit     int32
 }
 
+// Only alerts the viewer may read are paged (D60): every alert with
+// all_agents, otherwise those naming at least one agent, all of them in
+// visible_agents.
 func (q *Queries) ListAlerts(ctx context.Context, arg ListAlertsParams) ([]PcAlert, error) {
 	rows, err := q.db.Query(ctx, listAlerts,
 		arg.OrgID,
+		arg.AllAgents,
+		arg.VisibleAgents,
 		arg.Before,
 		arg.States,
 		arg.RuleID,
@@ -741,25 +783,40 @@ func (q *Queries) ListFailures(ctx context.Context, arg ListFailuresParams) ([]P
 }
 
 const listIncidents = `-- name: ListIncidents :many
-SELECT org_id, id, title, severity, state, owner_id, group_key, opened_by, test, created_at, updated_at FROM pc.incidents
-WHERE org_id = $1
-  AND (coalesce($2::uuid, '00000000-0000-0000-0000-000000000000') = '00000000-0000-0000-0000-000000000000'
-       OR id < $2::uuid)
-  AND (cardinality($3::text[]) = 0 OR state = ANY ($3::text[]))
+SELECT org_id, id, title, severity, state, owner_id, group_key, opened_by, test, created_at, updated_at FROM pc.incidents i
+WHERE i.org_id = $1
+  AND ($2::bool OR (
+      EXISTS (SELECT 1 FROM pc.alerts a WHERE a.org_id = i.org_id AND a.incident_id = i.id)
+      AND NOT EXISTS (
+          SELECT 1 FROM pc.alerts a WHERE a.org_id = i.org_id AND a.incident_id = i.id AND NOT (
+              EXISTS (SELECT 1 FROM jsonb_array_elements(a.subjects) s WHERE s ->> 'type' = 'agent')
+              AND NOT EXISTS (SELECT 1 FROM jsonb_array_elements(a.subjects) s
+                              WHERE s ->> 'type' = 'agent'
+                                AND NOT (s ->> 'id' = ANY ($3::text[])))))))
+  AND (coalesce($4::uuid, '00000000-0000-0000-0000-000000000000') = '00000000-0000-0000-0000-000000000000'
+       OR id < $4::uuid)
+  AND (cardinality($5::text[]) = 0 OR state = ANY ($5::text[]))
 ORDER BY id DESC
-LIMIT $4
+LIMIT $6
 `
 
 type ListIncidentsParams struct {
-	OrgID     ids.OrgID
-	Before    ids.UUID
-	States    []string
-	PageLimit int32
+	OrgID         ids.OrgID
+	AllAgents     bool
+	VisibleAgents []string
+	Before        ids.UUID
+	States        []string
+	PageLimit     int32
 }
 
+// Only incidents the viewer may read are paged (D60): with all_agents
+// every incident, otherwise those with alerts that all name only visible
+// agents.
 func (q *Queries) ListIncidents(ctx context.Context, arg ListIncidentsParams) ([]PcIncident, error) {
 	rows, err := q.db.Query(ctx, listIncidents,
 		arg.OrgID,
+		arg.AllAgents,
+		arg.VisibleAgents,
 		arg.Before,
 		arg.States,
 		arg.PageLimit,
@@ -913,7 +970,7 @@ func (q *Queries) LockIncident(ctx context.Context, orgID ids.OrgID, iD ids.UUID
 
 const markDigest = `-- name: MarkDigest :exec
 UPDATE pc.reflex_digests SET state = $1::text,
-    sent_at = CASE WHEN $1::text = 'SENT' THEN now() END
+    sent_at = CASE WHEN $1::text = 'ENQUEUED' THEN now() END
 WHERE org_id = $2 AND day = $3::date
 `
 
@@ -925,17 +982,23 @@ func (q *Queries) MarkDigest(ctx context.Context, state string, orgID ids.OrgID,
 const possibleRelatedAlerts = `-- name: PossibleRelatedAlerts :many
 SELECT org_id, id, source, rule_id, rule_version, rule_digest, pack_version, title, summary, severity, attention, basis, subjects, atlas, owasp, facts, group_key, dedupe_key, state, incident_id, suppression_id, count, first_seen, last_seen, test, created_at, updated_at FROM pc.alerts
 WHERE org_id = $1 AND rule_id = $2 AND rule_id <> '' AND id <> $3
-  AND dedupe_key <> $4 AND last_seen > $5
+  AND ($4::bool OR (
+      EXISTS (SELECT 1 FROM jsonb_array_elements(subjects) s WHERE s ->> 'type' = 'agent')
+      AND NOT EXISTS (SELECT 1 FROM jsonb_array_elements(subjects) s
+                      WHERE s ->> 'type' = 'agent' AND NOT (s ->> 'id' = ANY ($5::text[])))))
+  AND dedupe_key <> $6 AND last_seen > $7
 ORDER BY id DESC
 LIMIT 50
 `
 
 type PossibleRelatedAlertsParams struct {
-	OrgID     ids.OrgID
-	RuleID    string
-	ID        ids.UUID
-	DedupeKey string
-	Since     time.Time
+	OrgID         ids.OrgID
+	RuleID        string
+	ID            ids.UUID
+	AllAgents     bool
+	VisibleAgents []string
+	DedupeKey     string
+	Since         time.Time
 }
 
 // The same rule on other subjects within a day: listed, never attached
@@ -945,6 +1008,8 @@ func (q *Queries) PossibleRelatedAlerts(ctx context.Context, arg PossibleRelated
 		arg.OrgID,
 		arg.RuleID,
 		arg.ID,
+		arg.AllAgents,
+		arg.VisibleAgents,
 		arg.DedupeKey,
 		arg.Since,
 	)
@@ -1032,6 +1097,35 @@ func (q *Queries) ReopenSuppressedAlert(ctx context.Context, orgID ids.OrgID, iD
 	return result.RowsAffected(), nil
 }
 
+const reopenUnsuppressedAlerts = `-- name: ReopenUnsuppressedAlerts :many
+UPDATE pc.alerts a SET state = 'OPEN', suppression_id = NULL, updated_at = now()
+FROM pc.suppressions s
+WHERE a.org_id = $1 AND a.state = 'SUPPRESSED' AND s.org_id = a.org_id AND s.id = a.suppression_id
+  AND (s.ended_at IS NOT NULL OR s.expires_at <= now())
+RETURNING a.id
+`
+
+// Suppressed alerts whose suppression ended or expired open again (D59 M1).
+func (q *Queries) ReopenUnsuppressedAlerts(ctx context.Context, orgID ids.OrgID) ([]ids.UUID, error) {
+	rows, err := q.db.Query(ctx, reopenUnsuppressedAlerts, orgID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ids.UUID{}
+	for rows.Next() {
+		var id ids.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const resolveFailure = `-- name: ResolveFailure :execrows
 UPDATE pc.operational_failures SET state = 'RESOLVED', resolved_by = $1, resolved_at = now(),
     resolution = $2
@@ -1059,7 +1153,8 @@ func (q *Queries) ResolveFailure(ctx context.Context, arg ResolveFailureParams) 
 }
 
 const setAlertState = `-- name: SetAlertState :execrows
-UPDATE pc.alerts SET state = $1, updated_at = now()
+UPDATE pc.alerts SET state = $1, updated_at = now(),
+    suppression_id = CASE WHEN $1::text = 'SUPPRESSED' THEN suppression_id END
 WHERE org_id = $2 AND id = $3 AND state = $4
 `
 
@@ -1070,6 +1165,7 @@ type SetAlertStateParams struct {
 	FromState string
 }
 
+// Leaving SUPPRESSED by hand also leaves the suppression (D59 M1).
 func (q *Queries) SetAlertState(ctx context.Context, arg SetAlertStateParams) (int64, error) {
 	result, err := q.db.Exec(ctx, setAlertState,
 		arg.ToState,

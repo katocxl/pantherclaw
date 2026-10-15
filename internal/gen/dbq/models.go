@@ -829,6 +829,17 @@ type PcDetectionRuleState struct {
 	UpdatedAt          time.Time
 }
 
+type PcDetectionRuleVersion struct {
+	OrgID         ids.OrgID
+	Rule          ids.UUID
+	RuleID        string
+	Version       int32
+	ContentDigest []byte
+	LedgerEntryID ids.UUID
+	PublishedBy   ids.UUID
+	CreatedAt     time.Time
+}
+
 type PcDetectionSeen struct {
 	OrgID     ids.OrgID
 	RuleID    string

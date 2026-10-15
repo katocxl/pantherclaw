@@ -88,8 +88,15 @@ SELECT * FROM pc.alerts WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id);
 SELECT * FROM pc.alerts WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) FOR UPDATE;
 
 -- name: ListAlerts :many
+-- Only alerts the viewer may read are paged (D60): every alert with
+-- all_agents, otherwise those naming at least one agent, all of them in
+-- visible_agents.
 SELECT * FROM pc.alerts
 WHERE org_id = sqlc.arg(org_id)
+  AND (sqlc.arg(all_agents)::bool OR (
+      EXISTS (SELECT 1 FROM jsonb_array_elements(subjects) s WHERE s ->> 'type' = 'agent')
+      AND NOT EXISTS (SELECT 1 FROM jsonb_array_elements(subjects) s
+                      WHERE s ->> 'type' = 'agent' AND NOT (s ->> 'id' = ANY (sqlc.arg(visible_agents)::text[])))))
   AND (coalesce(sqlc.arg(before)::uuid, '00000000-0000-0000-0000-000000000000') = '00000000-0000-0000-0000-000000000000'
        OR id < sqlc.arg(before)::uuid)
   AND (cardinality(sqlc.arg(states)::text[]) = 0 OR state = ANY (sqlc.arg(states)::text[]))
@@ -109,12 +116,18 @@ SELECT * FROM pc.alert_events WHERE org_id = sqlc.arg(org_id) AND alert_id = sql
 -- (D15).
 SELECT * FROM pc.alerts
 WHERE org_id = sqlc.arg(org_id) AND rule_id = sqlc.arg(rule_id) AND rule_id <> '' AND id <> sqlc.arg(id)
+  AND (sqlc.arg(all_agents)::bool OR (
+      EXISTS (SELECT 1 FROM jsonb_array_elements(subjects) s WHERE s ->> 'type' = 'agent')
+      AND NOT EXISTS (SELECT 1 FROM jsonb_array_elements(subjects) s
+                      WHERE s ->> 'type' = 'agent' AND NOT (s ->> 'id' = ANY (sqlc.arg(visible_agents)::text[])))))
   AND dedupe_key <> sqlc.arg(dedupe_key) AND last_seen > sqlc.arg(since)
 ORDER BY id DESC
 LIMIT 50;
 
 -- name: SetAlertState :execrows
-UPDATE pc.alerts SET state = sqlc.arg(to_state), updated_at = now()
+-- Leaving SUPPRESSED by hand also leaves the suppression (D59 M1).
+UPDATE pc.alerts SET state = sqlc.arg(to_state), updated_at = now(),
+    suppression_id = CASE WHEN sqlc.arg(to_state)::text = 'SUPPRESSED' THEN suppression_id END
 WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state = sqlc.arg(from_state);
 
 -- name: GetIncident :one
@@ -124,8 +137,19 @@ SELECT * FROM pc.incidents WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id)
 SELECT * FROM pc.incidents WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) FOR UPDATE;
 
 -- name: ListIncidents :many
-SELECT * FROM pc.incidents
-WHERE org_id = sqlc.arg(org_id)
+-- Only incidents the viewer may read are paged (D60): with all_agents
+-- every incident, otherwise those with alerts that all name only visible
+-- agents.
+SELECT * FROM pc.incidents i
+WHERE i.org_id = sqlc.arg(org_id)
+  AND (sqlc.arg(all_agents)::bool OR (
+      EXISTS (SELECT 1 FROM pc.alerts a WHERE a.org_id = i.org_id AND a.incident_id = i.id)
+      AND NOT EXISTS (
+          SELECT 1 FROM pc.alerts a WHERE a.org_id = i.org_id AND a.incident_id = i.id AND NOT (
+              EXISTS (SELECT 1 FROM jsonb_array_elements(a.subjects) s WHERE s ->> 'type' = 'agent')
+              AND NOT EXISTS (SELECT 1 FROM jsonb_array_elements(a.subjects) s
+                              WHERE s ->> 'type' = 'agent'
+                                AND NOT (s ->> 'id' = ANY (sqlc.arg(visible_agents)::text[])))))))
   AND (coalesce(sqlc.arg(before)::uuid, '00000000-0000-0000-0000-000000000000') = '00000000-0000-0000-0000-000000000000'
        OR id < sqlc.arg(before)::uuid)
   AND (cardinality(sqlc.arg(states)::text[]) = 0 OR state = ANY (sqlc.arg(states)::text[]))
@@ -181,5 +205,26 @@ RETURNING decisions, authority_changes, alerts;
 
 -- name: MarkDigest :exec
 UPDATE pc.reflex_digests SET state = sqlc.arg(state)::text,
-    sent_at = CASE WHEN sqlc.arg(state)::text = 'SENT' THEN now() END
+    sent_at = CASE WHEN sqlc.arg(state)::text = 'ENQUEUED' THEN now() END
 WHERE org_id = sqlc.arg(org_id) AND day = sqlc.arg(day)::date;
+
+-- name: EscalateAlert :exec
+-- A signal that bypassed a suppression raises the stored severity and
+-- attention to its own when higher (D59 M1).
+UPDATE pc.alerts
+SET severity = CASE WHEN array_position(ARRAY['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'], sqlc.arg(severity)::text)
+                         > array_position(ARRAY['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'], severity)
+                    THEN sqlc.arg(severity)::text ELSE severity END,
+    attention = CASE WHEN array_position(ARRAY['FINDING', 'ALERT', 'INCIDENT', 'PAGE'], sqlc.arg(attention)::text)
+                          > array_position(ARRAY['FINDING', 'ALERT', 'INCIDENT', 'PAGE'], attention)
+                     THEN sqlc.arg(attention)::text ELSE attention END,
+    updated_at = now()
+WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id);
+
+-- name: ReopenUnsuppressedAlerts :many
+-- Suppressed alerts whose suppression ended or expired open again (D59 M1).
+UPDATE pc.alerts a SET state = 'OPEN', suppression_id = NULL, updated_at = now()
+FROM pc.suppressions s
+WHERE a.org_id = sqlc.arg(org_id) AND a.state = 'SUPPRESSED' AND s.org_id = a.org_id AND s.id = a.suppression_id
+  AND (s.ended_at IS NOT NULL OR s.expires_at <= now())
+RETURNING a.id;

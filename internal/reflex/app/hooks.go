@@ -173,12 +173,18 @@ func (h *Hooks) After(ctx context.Context, tx db.TenantTx, s reflexdomain.Signal
 	if err != nil {
 		return err
 	}
-	if !ents.ReflexTeam() || h.Notify == nil {
+	if h.Notify == nil {
 		return nil
 	}
-	if r.New && r.Attention.AtLeast(reflexdomain.AttentionAlert) {
-		if err := h.notifyAlert(ctx, tx, s, r); err != nil {
-			return err
+	// Pages and incidents notify in every edition; routine alert
+	// notifications are Team (D59 L13, amending D5/D17). A reopened alert
+	// notifies like a new one (D59 M1).
+	if (r.New || r.Reopened) && r.Attention.AtLeast(reflexdomain.AttentionAlert) {
+		paging := r.Attention == reflexdomain.AttentionPage && !s.Test
+		if paging || ents.ReflexTeam() {
+			if err := h.notifyAlert(ctx, tx, s, r); err != nil {
+				return err
+			}
 		}
 	}
 	if opened {

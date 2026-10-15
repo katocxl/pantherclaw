@@ -235,6 +235,7 @@ CREATE UNIQUE INDEX alerts_open_dedupe ON pc.alerts (org_id, dedupe_key)
 CREATE INDEX alerts_by_time ON pc.alerts (org_id, id DESC);
 CREATE INDEX alerts_by_group ON pc.alerts (org_id, group_key, last_seen) WHERE group_key <> '';
 CREATE INDEX alerts_by_incident ON pc.alerts (org_id, incident_id) WHERE incident_id IS NOT NULL;
+CREATE INDEX alerts_suppressed ON pc.alerts (org_id, suppression_id) WHERE state = 'SUPPRESSED';
 
 CREATE TABLE pc.alert_evidence (
     org_id      uuid        NOT NULL,
@@ -309,7 +310,9 @@ CREATE INDEX operational_failures_by_time ON pc.operational_failures (org_id, id
 CREATE TABLE pc.reflex_digests (
     org_id          uuid        NOT NULL REFERENCES pc.orgs (id),
     day             date        NOT NULL,
-    state           text        NOT NULL DEFAULT 'PENDING' CHECK (state IN ('PENDING', 'SENT', 'FAILED')),
+    -- ENQUEUED once its notification is queued; a failed enqueue rolls the
+    -- row back and the next run retries (D59 L8).
+    state           text        NOT NULL DEFAULT 'PENDING' CHECK (state IN ('PENDING', 'ENQUEUED')),
     decisions       integer     NOT NULL DEFAULT 0 CHECK (decisions >= 0),
     authority_changes integer   NOT NULL DEFAULT 0 CHECK (authority_changes >= 0),
     alerts          integer     NOT NULL DEFAULT 0 CHECK (alerts >= 0),
@@ -395,7 +398,7 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON pc.detection_window_buckets, pc.detectio
 -- Alerts, incidents and failures change only through their state, owner
 -- and counting columns; their evidence and events are append-only.
 GRANT SELECT, INSERT ON pc.alerts, pc.incidents, pc.suppressions, pc.operational_failures TO pc_app;
-GRANT UPDATE (state, incident_id, suppression_id, count, last_seen, severity, updated_at) ON pc.alerts TO pc_app;
+GRANT UPDATE (state, incident_id, suppression_id, count, last_seen, severity, attention, updated_at) ON pc.alerts TO pc_app;
 GRANT UPDATE (state, owner_id, severity, updated_at) ON pc.incidents TO pc_app;
 GRANT UPDATE (ended_at, ended_by, end_reason) ON pc.suppressions TO pc_app;
 GRANT UPDATE (state, owner_type, owner_id, count, last_seen, resolved_by, resolved_at, resolution, summary, next_step, deadline)

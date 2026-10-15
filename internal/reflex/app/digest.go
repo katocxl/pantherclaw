@@ -13,12 +13,14 @@ import (
 	"github.com/riverqueue/river"
 	"github.com/riverqueue/river/rivertype"
 
+	billing "github.com/katocxl/pantherclaw/internal/billing/domain"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	napp "github.com/katocxl/pantherclaw/internal/notifications/app"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	"github.com/katocxl/pantherclaw/internal/platform/jobs"
 	reflexdomain "github.com/katocxl/pantherclaw/internal/reflex/domain"
+	"github.com/katocxl/pantherclaw/internal/reflex/failures"
 )
 
 // DigestInterval is how often the digest looks for a finished day.
@@ -31,14 +33,14 @@ type Digests struct {
 	Pool   *db.Pool
 	Notify Notifier
 	Ents   Entitlements
-	Now    func() time.Time
+	// Sink records the lapse failure (optional).
+	Sink *failures.Sink
+	Now  func() time.Time
 }
 
-// Digest states.
-const (
-	DigestSent   = "SENT"
-	DigestFailed = "FAILED"
-)
+// DigestEnqueued is a digest whose notification is queued; delivery state
+// is then the notification's own (D59 L8).
+const DigestEnqueued = "ENQUEUED"
 
 // Send records and sends org's digest for the previous UTC day, once. It
 // reports whether it sent one. Without Team it does nothing.
@@ -46,8 +48,12 @@ func (d *Digests) Send(ctx context.Context, org ids.OrgID) (bool, error) {
 	if d.Ents == nil || d.Notify == nil {
 		return false, nil
 	}
-	if e, err := d.Ents.Current(ctx); err != nil || !e.ReflexTeam() {
-		return false, nil //nolint:nilerr // a lapsed or unknown edition sends nothing
+	e, err := d.Ents.Current(ctx)
+	if err != nil {
+		return false, err
+	}
+	if !e.ReflexTeam() {
+		return false, d.lapsed(ctx, org, e)
 	}
 	now := time.Now
 	if d.Now != nil {
@@ -56,7 +62,7 @@ func (d *Digests) Send(ctx context.Context, org ids.OrgID) (bool, error) {
 	day := now().UTC().Truncate(24 * time.Hour).Add(-24 * time.Hour)
 	date := pgtype.Date{Time: day, Valid: true}
 	sent := false
-	err := d.Pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
+	err = d.Pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
 		q := dbq.New(tx)
 		row, err := q.InsertDigest(ctx, org, date)
 		if db.IsNoRows(err) {
@@ -64,7 +70,8 @@ func (d *Digests) Send(ctx context.Context, org ids.OrgID) (bool, error) {
 		} else if err != nil {
 			return err
 		}
-		state := DigestSent
+		// A failed enqueue rolls the digest row back too, so the next run
+		// retries it (D59 L8).
 		if _, err := d.Notify.Enqueue(ctx, tx, napp.Message{
 			Org: org, Type: reflexdomain.NotifyDigest, DedupeKey: reflexdomain.NotifyDigest + ":" + day.Format(time.DateOnly),
 			Params: map[string]string{
@@ -72,10 +79,10 @@ func (d *Digests) Send(ctx context.Context, org ids.OrgID) (bool, error) {
 				"authority_changes": strconv.Itoa(int(row.AuthorityChanges)), "alerts": strconv.Itoa(int(row.Alerts)),
 			},
 		}); err != nil {
-			state = DigestFailed
+			return err
 		}
-		sent = state == DigestSent
-		return q.MarkDigest(ctx, state, org, date)
+		sent = true
+		return q.MarkDigest(ctx, DigestEnqueued, org, date)
 	})
 	return sent, err
 }
@@ -149,4 +156,21 @@ func RegisterDigest(reg *jobs.Registry, d *Digests) ([]*river.PeriodicJob, error
 		river.NewPeriodicJob(river.PeriodicInterval(DigestInterval),
 			func() (river.JobArgs, *river.InsertOpts) { return DigestDispatchArgs{}, nil }, nil),
 	}, nil
+}
+
+// lapsed records, once while it stays open, that a lapsed licence stopped
+// the daily digest (D5, D59 L6). Community without a licence sends nothing
+// and records nothing.
+func (d *Digests) lapsed(ctx context.Context, org ids.OrgID, e billing.Entitlements) error {
+	if e.Status != billing.StatusExpired || d.Sink == nil {
+		return nil
+	}
+	return d.Pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
+		_, _, err := d.Sink.ReportTx(ctx, tx, reflexdomain.Failure{
+			Org: org, Kind: "reflex.digest_lapsed", DedupeKey: "reflex.digest_lapsed",
+			Summary:  "The licence expired, so the daily digest stopped.",
+			NextStep: "Renew the licence to receive it again.",
+		})
+		return err
+	})
 }

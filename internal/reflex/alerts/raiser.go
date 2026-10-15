@@ -53,6 +53,9 @@ type Raised struct {
 	Incident *ids.UUID
 	// Count is how many signals the alert has counted.
 	Count int
+	// Reopened reports a suppressed alert this signal bypassed and opened
+	// again; it notifies like a new one (D59 M1).
+	Reopened bool
 }
 
 // Hooks extend the store-level Raiser with suppression, incident grouping
@@ -123,10 +126,10 @@ func (r *Raiser) RaiseTx(ctx context.Context, tx db.TenantTx, s reflexdomain.Sig
 	if suppression == nil && res.State == StateSuppressed {
 		// The signal bypassed or outlived the suppression: the alert opens
 		// again (D16, HR-242).
-		if err := reopen(ctx, tx, res.Alert); err != nil {
+		if err := reopen(ctx, tx, res.Alert, s); err != nil {
 			return Raised{}, err
 		}
-		res.State = StateOpen
+		res.State, res.Reopened = StateOpen, true
 	}
 	if r.Hooks.After != nil {
 		if err := r.Hooks.After(ctx, tx, s, res); err != nil {
@@ -285,16 +288,23 @@ func nonNilMap(m map[string]string) map[string]string {
 	return m
 }
 
-func reopen(ctx context.Context, tx db.TenantTx, alert ids.UUID) error {
+func reopen(ctx context.Context, tx db.TenantTx, alert ids.UUID, s reflexdomain.Signal) error {
 	q := dbq.New(tx)
 	n, err := q.ReopenSuppressedAlert(ctx, tx.OrgID(), alert)
 	if err != nil || n == 0 {
 		return err
 	}
+	// The bypassing signal raises the stored severity and attention (D59 M1).
+	if err := q.EscalateAlert(ctx, dbq.EscalateAlertParams{
+		Severity: string(s.Severity), Attention: string(s.Attention), OrgID: tx.OrgID(), ID: alert,
+	}); err != nil {
+		return err
+	}
 	from, to := StateSuppressed, StateOpen
+	note := "severity " + string(s.Severity) + ", attention " + string(s.Attention)
 	return q.InsertAlertEvent(ctx, dbq.InsertAlertEventParams{
 		OrgID: tx.OrgID(), ID: ids.NewV7(), AlertID: alert, Kind: "SUPPRESS_BYPASS", ActorType: Actor.Type, ActorID: Actor.ID,
-		FromValue: &from, ToValue: &to,
+		FromValue: &from, ToValue: &to, Note: &note,
 	})
 }
 
@@ -316,6 +326,26 @@ func recordBreaks(ctx context.Context, tx db.TenantTx, alert ids.UUID, bs []Brea
 			}); err != nil {
 				return fmt.Errorf("alerts: suppression break: %w", err)
 			}
+		}
+	}
+	return nil
+}
+
+// ReopenUnsuppressed opens again the org's suppressed alerts whose
+// suppression ended or expired, each with a STATE event (D59 M1).
+func ReopenUnsuppressed(ctx context.Context, tx db.TenantTx) error {
+	q := dbq.New(tx)
+	reopened, err := q.ReopenUnsuppressedAlerts(ctx, tx.OrgID())
+	if err != nil {
+		return err
+	}
+	from, to, note := StateSuppressed, StateOpen, "suppression ended"
+	for _, id := range reopened {
+		if err := q.InsertAlertEvent(ctx, dbq.InsertAlertEventParams{
+			OrgID: tx.OrgID(), ID: ids.NewV7(), AlertID: id, Kind: "STATE", ActorType: Actor.Type, ActorID: Actor.ID,
+			FromValue: &from, ToValue: &to, Note: &note,
+		}); err != nil {
+			return err
 		}
 	}
 	return nil
