@@ -10,18 +10,26 @@ import (
 	"encoding/json/v2"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"maps"
+	"net/http"
+	"net/http/httptest"
 	"regexp"
 	"slices"
 	"strings"
 	"testing"
+
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
 
 	"github.com/katocxl/pantherclaw/internal/actionir"
 	defs "github.com/katocxl/pantherclaw/internal/definitions/domain"
 	"github.com/katocxl/pantherclaw/internal/definitions/manifest"
 	"github.com/katocxl/pantherclaw/internal/definitions/mapping"
 	fdomain "github.com/katocxl/pantherclaw/internal/facts/domain"
+	pantherclawv1 "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
+	"github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1/pantherclawv1connect"
 	"github.com/katocxl/pantherclaw/internal/platform/celenv"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	polapp "github.com/katocxl/pantherclaw/internal/policy/app"
@@ -764,5 +772,130 @@ func TestM11NoQuotedPlaceholders(t *testing.T) {
 				t.Errorf("%s rule %s: placeholder inside a literal: %s", n, r.ID, m)
 			}
 		}
+	}
+}
+
+// gatedPolicies is racingPolicies whose publish answers with a change
+// request when loosen is set, as the publish gate does for a loosening.
+type gatedPolicies struct {
+	racingPolicies
+	loosen bool
+}
+
+func (p *gatedPolicies) PublishPolicyVersion(ctx context.Context, req *pantherclawv1.PublishPolicyVersionRequest) (*pantherclawv1.PublishPolicyVersionResponse, error) {
+	if !p.loosen {
+		return p.racingPolicies.PublishPolicyVersion(ctx, req)
+	}
+	return &pantherclawv1.PublishPolicyVersionResponse{
+		Version:       &pantherclawv1.PolicyVersion{Id: req.GetId(), State: "TESTED"},
+		ChangeRequest: &pantherclawv1.PolicyChangeRequest{Id: "cr", Required: 2, Url: "https://pc.example/policy-changes/cr"},
+	}, nil
+}
+
+func gatedClients(t *testing.T, p *gatedPolicies) clients {
+	t.Helper()
+	cs := connect.NewServer()
+	pantherclawv1connect.RegisterPolicyServiceHandler(cs, p)
+	mux := http.NewServeMux()
+	connecthttp.Mount(mux, cs)
+	ts := httptest.NewServer(mux)
+	t.Cleanup(ts.Close)
+	a := &app{stdout: io.Discard, stderr: io.Discard, http: ts.Client(), env: envOf(map[string]string{"PANTHERCLAW_SERVER": ts.URL, "PANTHERCLAW_API_KEY": "pck_test_x"})}
+	c, err := a.clients()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return c
+}
+
+// TestM11ApplyPublishesTestsThroughTheGate: apply puts the template's
+// scenario tests in the new version with its rules; a publish the gate
+// holds for confirmations comes back as waiting, with the page to confirm
+// it, and publishes nothing.
+func TestM11ApplyPublishesTestsThroughTheGate(t *testing.T) {
+	const v1 = "0192aaaa-bbbb-7ccc-8ddd-000000000000"
+	o := templateOptions{name: "refunds", environment: "production", timeZone: "UTC"}
+	d, err := renderTemplate(o)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, loosen := range []bool{false, true} {
+		p := &gatedPolicies{racingPolicies: racingPolicies{published: v1, bundles: map[string][]byte{v1: []byte(`{"id":"org-policy","rules":[]}`)}, raced: true}, loosen: loosen}
+		s, err := planPolicy(context.Background(), gatedClients(t, p), o, d, "")
+		if err != nil || s.state != stepCreate {
+			t.Fatalf("plan: %s %v", s.state, err)
+		}
+		done, err := s.apply(context.Background())
+		var wait *waitingError
+		if loosen {
+			if !errors.As(err, &wait) || !strings.Contains(wait.msg, "https://pc.example/policy-changes/cr") || !strings.Contains(wait.msg, "2 people") || p.published != v1 {
+				t.Fatalf("a held publish: %q %v, published %s", done, err, p.published)
+			}
+			continue
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		var b struct {
+			Rules []map[string]any `json:"rules"`
+			Tests []map[string]any `json:"tests"`
+		}
+		if err := json.Unmarshal(p.bundles[p.published], &b); err != nil {
+			t.Fatal(err)
+		}
+		if len(b.Rules) != len(d.Rules) || len(b.Tests) != len(d.Tests) || len(b.Tests) == 0 {
+			t.Fatalf("published %d rules and %d tests, want %d and %d", len(b.Rules), len(b.Tests), len(d.Rules), len(d.Tests))
+		}
+	}
+}
+
+// TestM11ReposRuleKeepsEarlierRepositories: applying release-deployment
+// for one more repository renders its rule over every repository applied
+// so far; a list a person changed is never rewritten without --update.
+func TestM11ReposRuleKeepsEarlierRepositories(t *testing.T) {
+	const v1 = "0192aaaa-bbbb-7ccc-8ddd-000000000000"
+	first := withRepos(templateOptions{name: "release-deployment", environment: "production", timeZone: "UTC"}, []string{"acme/api"})
+	d1, err := renderTemplate(first)
+	if err != nil {
+		t.Fatal(err)
+	}
+	published, err := json.Marshal(map[string]any{"id": "org-policy", "rules": d1.Rules, "tests": d1.Tests})
+	if err != nil {
+		t.Fatal(err)
+	}
+	second := withRepos(first, []string{"acme/web"})
+	d2, err := renderTemplate(second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := &gatedPolicies{racingPolicies: racingPolicies{published: v1, bundles: map[string][]byte{v1: published}, raced: true}}
+	s, err := planPolicy(context.Background(), gatedClients(t, p), second, d2, "")
+	if err != nil || s.state != stepCreate {
+		t.Fatalf("plan: %s %v %v", s.state, err, s.notes)
+	}
+	if _, err := s.apply(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if got := p.publishedRules(t)["rd-repository"]["when"]; got != "!(action.target.id in ['acme/api', 'acme/web'])" {
+		t.Fatalf("rd-repository %v", got)
+	}
+
+	// A person widened the list by hand: the plan refuses to rewrite it.
+	var b map[string]any
+	if err := json.Unmarshal(published, &b); err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range b["rules"].([]any) {
+		if m := r.(map[string]any); m["id"] == "rd-repository" {
+			m["when"] = "!(action.target.id in ['acme/api', 'acme/other']) && true"
+		}
+	}
+	edited, err := json.Marshal(b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p = &gatedPolicies{racingPolicies: racingPolicies{published: v1, bundles: map[string][]byte{v1: edited}, raced: true}}
+	if _, err := planPolicy(context.Background(), gatedClients(t, p), second, d2, ""); err == nil || !strings.Contains(err.Error(), "--update") {
+		t.Fatalf("plan over an edited list: %v", err)
 	}
 }
