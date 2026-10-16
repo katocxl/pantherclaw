@@ -484,20 +484,7 @@ func TestHR283_ADestinationRefusalRevokesOnlyTheLaunchGrant(t *testing.T) {
 	dest := ids.NewV7()
 	body := `"do":[{"id":"launch","step":"launch_run","with":{"agent":"AGENT","delivery":"WEBHOOK","destination":"` + dest.String() + `"}}],
 		"finish_when":[]`
-	f := newEfx(t, body, func(f *efx) {
-		f.Exec(t, `INSERT INTO pc.automation_destinations (org_id, id, name, url, purposes, secret, created_by)
-			VALUES ($1, $2, 'runner', 'https://runner.example.com/hook', ARRAY['LAUNCH'], $3, $4)`,
-			f.Org, dest, bytes.Repeat([]byte{9}, 32), f.User)
-		cred, key := ids.NewV7(), bytes.Repeat([]byte{5}, 32)
-		f.Exec(t, `INSERT INTO pc.webauthn_credentials (org_id, id, user_id, credential_id, public_key, alg, backup_eligible,
-			backup_state, attestation_fmt, name) VALUES ($1, $2, $3, $4, $5, -7, false, false, 'none', 'key')`,
-			f.Org, cred, f.User, key[:16], key)
-		f.Exec(t, `UPDATE pc.automation_destinations SET state = 'ACTIVE', activated_by = $3, activated_credential = $4,
-			activated_at = now() WHERE org_id = $1 AND id = $2`, f.Org, dest, f.User, cred)
-		f.Exec(t, "INSERT INTO pc.org_containment (org_id) VALUES ($1)", f.Org) // core's revocation raises the epoch
-		f.authority = `,"destinations":["` + dest.String() + `"]`
-		f.deliverer = refusingDeliverer{}
-	})
+	f := newEfx(t, body, withRefusingDestination(t, dest))
 	exec := f.start("T-7")
 	var other ids.UUID
 	f.Tx(t, func(ctx context.Context, tx db.TenantTx) error {
@@ -528,5 +515,72 @@ func TestHR283_ADestinationRefusalRevokesOnlyTheLaunchGrant(t *testing.T) {
 	if s := f.str(`SELECT state || ' ' || coalesce(reason, '') FROM pc.automation_step_attempts
 		WHERE org_id = $1 AND execution_id = $2 AND step_id = 'launch'`, f.Org, exec); !strings.HasPrefix(s, "FAILED "+autodomain.ReasonDestinationInactive) {
 		t.Fatalf("launch step %q", s)
+	}
+}
+
+// TestD111_StepEffectsAuditUnderTheAutomationContext (D111 G2, HR-274):
+// the steps' effects are written under the execution's attribution
+// context, so an audit detail that names automation, version, execution
+// or trigger with another value is refused and fails the step. A gate's
+// request and end (approvals) and a withdraw's revocation (core grants)
+// all record, and each entry names this automation and execution.
+func TestD111_StepEffectsAuditUnderTheAutomationContext(t *testing.T) {
+	g := newEfx(t, gateSteps)
+	op, key := ids.NewV7(), bytes.Repeat([]byte{6}, 32)
+	g.Exec(t, `INSERT INTO pc.users (org_id, id, issuer, subject, created_at) VALUES ($1, $2, 'https://idp.test', 'olga',
+		now() - interval '30 days')`, g.Org, op)
+	g.Exec(t, `INSERT INTO pc.webauthn_credentials (org_id, id, user_id, credential_id, public_key, alg, backup_eligible,
+		backup_state, attestation_fmt, name, created_at) VALUES ($1, $2, $3, $4, $5, -7, false, false, 'none', 'key',
+		now() - interval '30 days')`, g.Org, ids.NewV7(), op, key[:16], key)
+	g.Exec(t, `INSERT INTO pc.role_bindings (org_id, id, role, user_id, scope_type, created_by, created_at)
+		VALUES ($1, $2, 'automation_operator', $3, 'ORG', 'test', now() - interval '30 days')`, g.Org, ids.NewV7(), op)
+	gated := g.start("T-8")
+	g.advance(gated)
+	if _, _, err := g.e.CancelExecution(g.manager(), gated, "audit check"); err != nil {
+		t.Fatal(err)
+	}
+	g.attributed(t, gated, "audit.approval.gate_requested", "audit.approval.gate_ended")
+
+	dest := ids.NewV7()
+	body := `"do":[{"id":"launch","step":"launch_run","with":{"agent":"AGENT","delivery":"WEBHOOK","destination":"` + dest.String() + `"}}],
+		"finish_when":[]`
+	l := newEfx(t, body, withRefusingDestination(t, dest))
+	launched := l.start("T-9")
+	l.advance(launched)
+	l.attributed(t, launched, "audit.grant.revoked")
+}
+
+// attributed fails unless each kind has an audit entry and every entry of
+// those kinds names this automation and execution.
+func (f *efx) attributed(t *testing.T, exec ids.UUID, kinds ...string) {
+	t.Helper()
+	for _, k := range kinds {
+		n := f.Count(t, `SELECT count(*) FROM pc.ledger_entries WHERE org_id = $1 AND kind = $2`, k)
+		bad := f.Count(t, `SELECT count(*) FROM pc.ledger_entries WHERE org_id = $1 AND kind = $2
+			AND (convert_from(body, 'UTF8')::jsonb -> 'details' ->> 'automation' IS DISTINCT FROM $3
+			  OR convert_from(body, 'UTF8')::jsonb -> 'details' ->> 'execution' IS DISTINCT FROM $4)`,
+			k, f.auto.ID.String(), exec.String())
+		if n == 0 || bad != 0 {
+			t.Fatalf("%s: %d entries, %d without this automation and execution", k, n, bad)
+		}
+	}
+}
+
+// withRefusingDestination declares an ACTIVE launch destination dest in
+// the version's authority and makes every delivery to it refused.
+func withRefusingDestination(t *testing.T, dest ids.UUID) func(*efx) {
+	return func(f *efx) {
+		f.Exec(t, `INSERT INTO pc.automation_destinations (org_id, id, name, url, purposes, secret, created_by)
+			VALUES ($1, $2, 'runner', 'https://runner.example.com/hook', ARRAY['LAUNCH'], $3, $4)`,
+			f.Org, dest, bytes.Repeat([]byte{9}, 32), f.User)
+		cred, key := ids.NewV7(), bytes.Repeat([]byte{5}, 32)
+		f.Exec(t, `INSERT INTO pc.webauthn_credentials (org_id, id, user_id, credential_id, public_key, alg, backup_eligible,
+			backup_state, attestation_fmt, name) VALUES ($1, $2, $3, $4, $5, -7, false, false, 'none', 'key')`,
+			f.Org, cred, f.User, key[:16], key)
+		f.Exec(t, `UPDATE pc.automation_destinations SET state = 'ACTIVE', activated_by = $3, activated_credential = $4,
+			activated_at = now() WHERE org_id = $1 AND id = $2`, f.Org, dest, f.User, cred)
+		f.Exec(t, "INSERT INTO pc.org_containment (org_id) VALUES ($1)", f.Org) // core's revocation raises the epoch
+		f.authority = `,"destinations":["` + dest.String() + `"]`
+		f.deliverer = refusingDeliverer{}
 	}
 }
