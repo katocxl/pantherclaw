@@ -218,7 +218,7 @@ func (s *Service) sendOne(ctx context.Context, org ids.OrgID, id ids.UUID) (bool
 			return nil
 		}
 		a.url, a.internal = d.Url, d.Internal
-		if err := CheckURL(a.url, s.ownHost, a.internal, s.cfg.AllowedPrivateRanges); err != nil {
+		if CheckURL(a.url, s.ownHost, a.internal, s.cfg.AllowedPrivateRanges) != nil {
 			fail = "destination_url"
 			return nil
 		}
@@ -379,7 +379,7 @@ var (
 	ErrDeliveryNotPending = pcerr.New(pcerr.FailedPrecondition, "DELIVERY_NOT_PENDING", "the delivery is no longer pending")
 	// ErrDeliveryMayHaveBeenSent reports a delivery with an attempt (a
 	// leased send included): it may have reached its destination, so it is
-	// never reported as cancelled (D97 N1).
+	// never reported as stopped (D97 N1).
 	ErrDeliveryMayHaveBeenSent = pcerr.New(pcerr.FailedPrecondition, "DELIVERY_MAY_HAVE_BEEN_SENT",
 		"the delivery may have been sent")
 )

@@ -305,8 +305,10 @@ func (s *Service) decide(ctx context.Context, q *dbq.Queries, org ids.OrgID, c C
 	ref autodomain.TriggerRef, declKey string, now time.Time,
 ) (State, string, error) {
 	a, def := c.Automation, c.Automation.Def
+	// A refusal is the outcome of a bad candidate, not an error of Fire.
+	badParams := c.ParamErr != nil
 	switch {
-	case c.ParamErr != nil:
+	case badParams:
 		return StateRefusedInvalid, ReasonParams, nil
 	case lin.Loop(a.ID):
 		switch {
@@ -333,9 +335,10 @@ func (s *Service) decide(ctx context.Context, q *dbq.Queries, org ids.OrgID, c C
 			return StateRefusedDuplicate, ReasonDuplicate, nil
 		}
 	}
-	ok, err := MatchIf(ctx, def.If, c.Kind, c.OccurredAt, ref.Params)
+	ok, matchErr := MatchIf(ctx, def.If, c.Kind, c.OccurredAt, ref.Params)
+	badIf := matchErr != nil
 	switch {
-	case err != nil:
+	case badIf:
 		return StateRefusedCondition, ReasonConditionError, nil
 	case !ok:
 		return StateRefusedCondition, ReasonCondition, nil
