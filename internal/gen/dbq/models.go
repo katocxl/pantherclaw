@@ -509,6 +509,21 @@ type PcAutomationLaunch struct {
 	EndedAt           *time.Time
 }
 
+type PcAutomationProposal struct {
+	OrgID       ids.OrgID
+	ID          ids.UUID
+	ExecutionID ids.UUID
+	StepID      string
+	Kind        string
+	SubjectType string
+	SubjectID   ids.UUID
+	Body        []byte
+	State       string
+	CreatedAt   time.Time
+	DecidedBy   *ids.UUID
+	DecidedAt   *time.Time
+}
+
 type PcAutomationSchedule struct {
 	OrgID        ids.OrgID
 	AutomationID ids.UUID
@@ -1517,23 +1532,25 @@ type PcEvidenceIntegrity struct {
 }
 
 type PcEvidencePack struct {
-	OrgID          ids.OrgID
-	ID             ids.UUID
-	CreatedBy      ids.UUID
-	ScopeKind      string
-	Scope          []byte
-	Include        []byte
-	State          string
-	ErrorCode      *string
-	Manifest       *string
-	ManifestSha256 []byte
-	Content        []byte
-	ContentSha256  []byte
-	ContentSize    pgtype.Int8
-	Items          *int32
-	CreatedAt      time.Time
-	ReadyAt        *time.Time
-	ExpiresAt      *time.Time
+	OrgID            ids.OrgID
+	ID               ids.UUID
+	CreatedBy        ids.UUID
+	ScopeKind        string
+	Scope            []byte
+	Include          []byte
+	State            string
+	ErrorCode        *string
+	Manifest         *string
+	ManifestSha256   []byte
+	Content          []byte
+	ContentSha256    []byte
+	ContentSize      pgtype.Int8
+	Items            *int32
+	CreatedAt        time.Time
+	ReadyAt          *time.Time
+	ExpiresAt        *time.Time
+	AutomationID     *ids.UUID
+	AutomationAgents []ids.UUID
 }
 
 type PcExecutionAttempt struct {

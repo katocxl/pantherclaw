@@ -1,0 +1,145 @@
+# SPDX-License-Identifier: BUSL-1.1
+# Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+#
+# grant_lifecycle (D32): a grant about to expire, a run that ended or a case
+# that closed tells the grant's owner and revokes the grant. No step extends
+# or reissues a grant (T-126): the catalogue has no such kind and this
+# template has no ceiling.
+id: grant_lifecycle
+title: Grant lifecycle
+summary: >-
+  Tell the owner and revoke a grant when it is about to expire, when its run
+  has ended, or when its case is closed. Grants are never extended.
+edition: TEAM
+params:
+  - name: purpose
+    description: What the automation is for, shown to reviewers and approvers.
+    type: string
+    pattern: '[^{}$]{1,1000}'
+    max_len: 1000
+    default: Revoke grants that are no longer needed, after telling their owner.
+  - name: review_by
+    description: The date (YYYY-MM-DD) by which the owner reviews the automation again; at most 90 days ahead.
+    type: string
+    format: date
+    pattern: '[0-9]{4}-[0-9]{2}-[0-9]{2}'
+    max_len: 10
+    example: "2026-12-31"
+  - name: trigger
+    description: What starts an execution - a grant about to expire, a run that ended or a case that closed.
+    type: enum
+    values: [grant.expiring, run.ended, case.closed]
+    default: grant.expiring
+  - name: hours_left
+    description: For grant.expiring, how many hours before its expiry a grant is revoked.
+    type: enum
+    values: ["1", "4", "12", "24"]
+    default: "4"
+
+definition:
+  apiVersion: automations.pantherclaw.dev/v1
+  kind: Automation
+  purpose: "${purpose}"
+  work_kind: SECURITY_WORK
+  review_by: "${review_by}"
+  when:
+    $switch: trigger
+    $cases:
+      grant.expiring:
+        condition:
+          probe: grant.expiring
+          where:
+            $switch: hours_left
+            $cases:
+              "1": int(subject.fields["hours_left"]) < 1
+              "4": int(subject.fields["hours_left"]) < 4
+              "12": int(subject.fields["hours_left"]) < 12
+              "24": int(subject.fields["hours_left"]) < 24
+          for: 1m
+          params:
+            grant: {from: grant, type: uuid}
+        dedupe:
+          key: "{{params.grant}}"
+          window: 1d
+      run.ended:
+        event:
+          on: run.ended
+          params:
+            grant: {from: subjects.grant, type: uuid}
+        dedupe:
+          key: "{{params.grant}}"
+          window: 1d
+      case.closed:
+        event:
+          on: case.closed
+          params:
+            grant: {from: subjects.grant, type: uuid}
+        dedupe:
+          key: "{{params.grant}}"
+          window: 1d
+  authority:
+    principal: self
+    platform:
+      - step: notify
+        scopes: [TRIGGER_OWNER]
+      - step: revoke_grant
+        scopes: [TRIGGER_GRANT]
+  do:
+    - id: tell
+      step: notify
+      with:
+        to: [TRIGGER_OWNER]
+        message:
+          title: A grant is being revoked
+          body: "Grant {{params.grant}} is revoked now. It is not extended; ask for a new grant if the work continues."
+    - id: revoke
+      step: revoke_grant
+      with:
+        scope: TRIGGER_GRANT
+        reason: "Revoked by the grant lifecycle automation: grant {{params.grant}} is no longer needed."
+      timeout: 10m
+  finish_when:
+    - step: revoke
+      condition: GRANT_REVOKED
+  limits:
+    deadline: 1h
+
+tests:
+  - name: the grant is revoked
+    kind: NORMAL
+    trigger:
+      params: {grant: 0192f000-0000-7000-8000-0000000000d3}
+    stubs:
+      tell: [{state: DONE, effect: CHANGED, refs: [ledger]}]
+      revoke: [{state: DONE, effect: CHANGED, refs: [grant]}]
+    expect:
+      state: SUCCEEDED
+      steps: {tell: DONE, revoke: DONE}
+  - name: the revocation is refused
+    kind: DENIED
+    trigger:
+      params: {grant: 0192f000-0000-7000-8000-0000000000d4}
+    stubs:
+      revoke: [{state: FAILED, reason: AUTHORITY_CHANGED}]
+    expect:
+      state: FAILED
+      reason: AUTHORITY_CHANGED
+      steps: {revoke: FAILED}
+  - name: the revocation does not complete in time
+    kind: TIMEOUT
+    trigger:
+      params: {grant: 0192f000-0000-7000-8000-0000000000d5}
+    stubs:
+      revoke: [{state: WAITING}]
+    expect:
+      state: FAILED
+      reason: TIMEOUT
+      steps: {revoke: FAILED}
+  - name: the same grant twice starts one execution
+    kind: DUPLICATE
+    trigger:
+      params: {grant: 0192f000-0000-7000-8000-0000000000d6}
+    stubs:
+      revoke: [{state: DONE, effect: CHANGED, refs: [grant]}]
+    expect:
+      state: SUCCEEDED

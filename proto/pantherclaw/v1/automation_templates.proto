@@ -1,0 +1,205 @@
+// SPDX-License-Identifier: BUSL-1.1
+// Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+
+syntax = "proto3";
+
+package pantherclaw.v1;
+
+import "buf/validate/validate.proto";
+import "google/protobuf/timestamp.proto";
+
+// TemplateService lists the built-in automation templates and creates
+// automations from them (G0 M11 part 2 D32; F691–F700, F562; Team, the
+// containment template Business).
+//
+// A template is a reviewed definition with typed, bounded parameters and
+// baseline tests. Creating from it only drafts: the new automation's
+// version is a DRAFT that still has to validate, pass its tests and be
+// enabled through a confirmed change request like any other (HR-272,
+// HR-287). Every call is made by a person.
+service TemplateService {
+  // ListTemplates lists the templates.
+  // permission: automation.read
+  rpc ListTemplates(ListTemplatesRequest) returns (ListTemplatesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // GetTemplate returns a template's definition, parameters and baseline
+  // tests.
+  // permission: automation.read
+  rpc GetTemplate(GetTemplateRequest) returns (GetTemplateResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // CreateFromTemplate creates a DRAFT automation from a template: its
+  // execution identity, a DRAFT version rendered from the parameters, and
+  // the template's baseline tests for that version.
+  // permission: automation.manage
+  rpc CreateFromTemplate(CreateFromTemplateRequest) returns (CreateFromTemplateResponse);
+}
+
+// ProposalService lists and decides what automations proposed (D31; F692,
+// F698; HR-286): agent owners, grant baselines, safe-test results and
+// least-privilege restrictions. Deciding records the decision only:
+// claiming an agent, issuing a grant and publishing a policy stay on their
+// own human paths. Every call is made by a person.
+service ProposalService {
+  // ListProposals lists proposals, newest first.
+  // permission: automation.read
+  rpc ListProposals(ListProposalsRequest) returns (ListProposalsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // DecideProposal accepts or declines an open proposal.
+  // permission: automation.manage
+  rpc DecideProposal(DecideProposalRequest) returns (DecideProposalResponse);
+}
+
+// AutomationTemplateParam is one parameter a template takes.
+message AutomationTemplateParam {
+  string name = 1;
+  // string, int, decimal, enum, uuid, bool, duration, cron or timezone.
+  string type = 2;
+  string description = 3;
+  bool required = 4;
+  // Allowed values of an enum.
+  repeated string values = 5;
+  string default_value = 6;
+}
+
+// AutomationTemplate is a built-in template.
+message AutomationTemplate {
+  string id = 1;
+  string title = 2;
+  string summary = 3;
+  // AGENT_WORK or SECURITY_WORK.
+  string kind = 4;
+  // TEAM or BUSINESS.
+  string edition = 5;
+  repeated AutomationTemplateParam params = 6;
+}
+
+// AutomationTemplateTest is one baseline test case (D34 format, as JSON).
+message AutomationTemplateTest {
+  string name = 1;
+  // NORMAL, DENIED, TIMEOUT, DUPLICATE, PARTIAL, UNKNOWN or CUSTOM.
+  string kind = 2;
+  // The case as JSON: trigger, stubs and expectation.
+  bytes case_json = 3;
+}
+
+message ListTemplatesRequest {}
+
+message ListTemplatesResponse {
+  repeated AutomationTemplate templates = 1;
+}
+
+message GetTemplateRequest {
+  string id = 1 [(buf.validate.field).string.pattern = "^[a-z][a-z0-9_]{0,62}$"];
+}
+
+message GetTemplateResponse {
+  AutomationTemplate template = 1;
+  // The definition with its parameter placeholders.
+  string definition_yaml = 2;
+  repeated AutomationTemplateTest tests = 3;
+}
+
+message CreateFromTemplateRequest {
+  string template_id = 1 [(buf.validate.field).string.pattern = "^[a-z][a-z0-9_]{0,62}$"];
+  string name = 2 [(buf.validate.field).string.pattern = "^[a-z]([a-z0-9-]{0,50}[a-z0-9])?$"];
+  map<string, string> params = 3 [(buf.validate.field).map = {
+    max_pairs: 32
+    keys: {
+      string: {pattern: "^[a-z][a-z0-9_]{0,62}$"}
+    }
+    values: {
+      string: {max_len: 1024}
+    }
+  }];
+  // The automation's owner; the caller when empty.
+  string owner_user_id = 4 [
+    (buf.validate.field).string.uuid = true,
+    (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE
+  ];
+  // The automation's purpose; the template's summary when empty.
+  string purpose = 5 [(buf.validate.field).string.max_len = 2000];
+}
+
+message CreateFromTemplateResponse {
+  string automation_id = 1;
+  string version_id = 2;
+  // The baseline tests stored for the version.
+  int32 tests = 3;
+}
+
+// AutomationProposal is one proposal an automation made.
+message AutomationProposal {
+  string id = 1;
+  string execution_id = 2;
+  string automation_id = 3;
+  string step_id = 4;
+  // OWNER, BASELINE, TESTS or RESTRICTION.
+  string kind = 5;
+  // agent or policy_version.
+  string subject_type = 6;
+  string subject_id = 7;
+  // The proposal as JSON.
+  bytes body = 8;
+  // PROPOSED, ACCEPTED, DECLINED or SUPERSEDED.
+  string state = 9;
+  google.protobuf.Timestamp created_at = 10;
+  string decided_by = 11;
+  google.protobuf.Timestamp decided_at = 12;
+}
+
+message ListProposalsRequest {
+  string state = 1 [(buf.validate.field).string = {
+    in: [
+      "",
+      "PROPOSED",
+      "ACCEPTED",
+      "DECLINED",
+      "SUPERSEDED"
+    ]
+  }];
+  string kind = 2 [(buf.validate.field).string = {
+    in: [
+      "",
+      "OWNER",
+      "BASELINE",
+      "TESTS",
+      "RESTRICTION"
+    ]
+  }];
+  string subject_id = 3 [
+    (buf.validate.field).string.uuid = true,
+    (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE
+  ];
+  string automation_id = 4 [
+    (buf.validate.field).string.uuid = true,
+    (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE
+  ];
+  int32 page_size = 5 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 100
+  }];
+  string page_token = 6 [(buf.validate.field).string.max_len = 64];
+}
+
+message ListProposalsResponse {
+  repeated AutomationProposal proposals = 1;
+  string next_page_token = 2;
+}
+
+message DecideProposalRequest {
+  string id = 1 [(buf.validate.field).string.uuid = true];
+  // ACCEPT or DECLINE.
+  string decision = 2 [(buf.validate.field).string = {
+    in: [
+      "ACCEPT",
+      "DECLINE"
+    ]
+  }];
+}
+
+message DecideProposalResponse {
+  AutomationProposal proposal = 1;
+}

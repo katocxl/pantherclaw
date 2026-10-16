@@ -141,6 +141,11 @@ type row struct {
 	created   time.Time
 	// retention are the org's retention revisions (migration 00072).
 	retention []retention.Revision
+	// automation is set for a governed automation's pack (G0 M11 part 2
+	// D85): created by its execution identity, holding only the evidence
+	// of agents (nil: all of the org's).
+	automation *ids.UUID
+	agents     []ids.UUID
 }
 
 var errCreator = errors.New("packbuild: the creator is not an active person of the org")
@@ -166,10 +171,12 @@ func (s *Service) Build(ctx context.Context, org ids.OrgID, id ids.UUID) error {
 		if err := json.Unmarshal(p.Include, &r.include, json.RejectUnknownMembers(true)); err != nil {
 			return fmt.Errorf("packbuild: stored include: %w", err)
 		}
-		state, err := q.PackCreatorState(ctx, org, p.CreatedBy)
-		if db.IsNoRows(err) || (err == nil && state != "ACTIVE") {
-			return errCreator
-		} else if err != nil {
+		auto, err := q.EvidencePackAutomation(ctx, org, id)
+		if err != nil {
+			return err
+		}
+		r.automation, r.agents = auto.AutomationID, auto.AutomationAgents
+		if err := creatorActive(ctx, q, org, r); err != nil {
 			return err
 		}
 		revs, err := q.ListRetentionRevisions(ctx, org)
@@ -177,6 +184,9 @@ func (s *Service) Build(ctx context.Context, org ids.OrgID, id ids.UUID) error {
 			return err
 		}
 		r.retention = retention.RevisionsOf(revs)
+		if r.automation != nil {
+			return nil
+		}
 		bindings, err = tenancy.Bindings(ctx, q, org, td.PrincipalRef{Kind: td.KindUser, ID: p.CreatedBy})
 		return err
 	}, db.ReadOnly())
@@ -191,6 +201,9 @@ func (s *Service) Build(ctx context.Context, org ids.OrgID, id ids.UUID) error {
 	caller := tenancy.Caller{Subject: td.Subject{
 		Org: org, Principal: td.PrincipalRef{Kind: td.KindUser, ID: r.createdBy}, Bindings: bindings,
 	}}
+	if r.automation != nil {
+		caller = automationCaller(org, r.createdBy)
+	}
 	// The pack is made now: its manifest's time, and the start of its 7
 	// days (the database checks expires_at = ready_at + 7 days).
 	ready := s.now().UTC().Truncate(time.Second)
@@ -502,6 +515,13 @@ func (b *builder) transactions() error {
 			continue
 		case err != nil:
 			return err
+		case !b.r.declared(ev.Transaction.Agent):
+			// An automation's pack holds only its declared agents (D85).
+			outside++
+			if named {
+				b.gap("transaction "+id.String(), pack.GapOutsidePermission, "its agent is outside the automation's declared scope")
+			}
+			continue
 		}
 		if err := b.transaction(ev); err != nil {
 			return err
@@ -512,4 +532,42 @@ func (b *builder) transactions() error {
 			"%d transactions of the scope are outside your evidence.read: they are not in this pack", outside)
 	}
 	return nil
+}
+
+// creatorActive checks that the pack's creator may still build it: an
+// active person of the org, or for an automation's pack its active
+// execution identity of an automation that is not retired.
+func creatorActive(ctx context.Context, q *dbq.Queries, org ids.OrgID, r *row) error {
+	if r.automation == nil {
+		state, err := q.PackCreatorState(ctx, org, r.createdBy)
+		if db.IsNoRows(err) || (err == nil && state != "ACTIVE") {
+			return errCreator
+		}
+		return err
+	}
+	s, err := q.AutomationPackCreatorState(ctx, org, r.createdBy, *r.automation)
+	if db.IsNoRows(err) || (err == nil && (s.AccountState != "ACTIVE" || s.AutomationState == "RETIRED")) {
+		return errCreator
+	}
+	return err
+}
+
+// automationCaller is who builds an automation's pack (D85): its execution
+// identity, reading evidence only. The automation holds no role binding of
+// its own (HR-270); the pack's declared agents (row.agents) bound what it
+// holds, and the people who confirmed the version held evidence.read and
+// evidence.export there.
+func automationCaller(org ids.OrgID, account ids.UUID) tenancy.Caller {
+	return tenancy.Caller{Subject: td.Subject{
+		Org: org, Principal: td.PrincipalRef{Kind: td.KindServiceAccount, ID: account},
+		Bindings: []td.Binding{{Role: td.RoleAuditor, Scope: td.Scope{Type: td.ScopeOrg, ID: org.UUID()}}},
+		Scopes:   []td.Permission{td.PermEvidenceRead},
+	}}
+}
+
+// declared reports whether an agent's evidence may be in the pack: always
+// for a person's pack (their evidence.read decides), and for an
+// automation's only within the agents it declared.
+func (r *row) declared(agent ids.UUID) bool {
+	return r.automation == nil || r.agents == nil || slices.Contains(r.agents, agent)
 }
