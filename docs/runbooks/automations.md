@@ -1,6 +1,6 @@
 # Runbook — Governed automations
 
-**Milestone:** M11 · **Owner:** the automation's owner, automation authors (`automation_author`), publishers (`automation_publisher`) and operators (`automation_operator`); fleet managers (`fleet_manager`) for promotion · **Edition:** Team (the `contain` step, latent exposure and the compromised-publisher response are Business) · **Status:** procedure written from the [G0 M11 part 2 brief](../g0/M11.md) (D5–D43); tested at the M11 exit.
+**Milestone:** M11 · **Owner:** the automation's owner, automation authors (`automation_author`), publishers (`automation_publisher`) and operators (`automation_operator`); fleet managers (`fleet_manager`) for promotion; the agent owner for promotions that lapse · **Edition:** Team (the `contain` step, latent exposure and the compromised-publisher response are Business) · **Status:** procedure written from the [G0 M11 part 2 brief](../g0/M11.md) (D5–D43); tested at the M11 exit.
 
 An automation is a versioned definition that starts work on a schedule, a platform event, a condition, a threshold, a manual start or a signed inbound event. It acts as its own execution identity, and when it launches an agent, each execution gets a fresh grant inside an issuance ceiling that people approved with security keys. Background: [g0/M11.md](../g0/M11.md), [ADR-0027](../adr/0027-governed-automations.md), HR-270..HR-293, R-33..R-38.
 
@@ -94,13 +94,31 @@ If a person who confirms changes may be compromised:
 3. Another person reviews each item KEEP or ROLLBACK. For a paused automation: KEEP it by enabling a new version through a ceremony with other confirmers and then resuming it, or retire it.
 4. Clearing the mark is a change request that two other people confirm, and only once every item is reviewed.
 
-## 8. Troubleshooting
+## 8. Promote an agent for production
+
+In a PRODUCTION environment, a new or widened grant, whether a person or an automation issues it, needs the agent promoted for each operation the grant lists (HR-290). Grants issued before the gate keep working until they expire.
+
+1. Check readiness: `GetReadiness(agent, environment)` reports each operation's checks (OWNER, IDENTITY, TESTS, APPROVALS, COVERAGE, FAILURE_BEHAVIOUR). It never makes a global claim.
+2. Promote: a `fleet_manager` with `agent.promote` runs `PromoteAgent(agent, environment, operations, failure behaviour)` with a security-key step-up. An `x.*` prefix expands to every operation currently known under it, and each is checked and stored separately. Passing operations are promoted and failing ones are reported.
+3. **A new agent with no traffic yet (provisional promotion, founder decision F7).** If every check passes except COVERAGE, and COVERAGE fails only because no coverage record exists yet, the promotion is PROVISIONAL:
+   - it lasts at most 7 days;
+   - every production grant it covers expires no later than the promotion, so plan short tasks;
+   - readiness says "coverage pending until <time>";
+   - within 5 minutes of ENFORCED or PARTIAL coverage appearing on the agent's serving routes, it becomes ACTIVE (audited);
+   - if no such coverage appears, it EXPIRES and the agent owner gets an owned failure (`promotion.provisional_lapsed`). Get the agent's routes covered, then promote again; you can promote provisionally again only while there is still no coverage record.
+   - A coverage record in a failing state never gives a provisional promotion: fix the coverage first.
+4. Revoke a promotion with `RevokePromotion`. Existing grants keep their own expiry; new grants for those operations are refused NOT_PROMOTED.
+
+A new operation added later under a promoted prefix blocks new grants that use that prefix until the new operation is promoted too.
+
+## 9. Troubleshooting
 
 | Symptom | Likely cause | What to do |
 |---|---|---|
 | Execution FAILED `CEILING_VOID` | An approver lost a permission or was marked compromised | Enable a new version with current approvers, then Resume |
 | Execution FAILED `USAGE_EXCEEDED` | Per-day grant, run or budget cap reached | Wait for the next day, or enable a version with a larger ceiling |
-| Execution FAILED `NOT_PROMOTED` | A production grant lists operations the agent is not promoted for | Promote the agent for those operations (`PromoteAgent`: a `fleet_manager` with `agent.promote` and a step-up) |
+| Execution FAILED `NOT_PROMOTED` | A production grant lists operations the agent is not promoted for | Promote the agent for those operations (section 8); a new agent with no coverage yet can be promoted provisionally |
+| Grants end earlier than their TTL | The agent's promotion is PROVISIONAL, and grants it covers expire with it | Get the agent's routes covered so the promotion becomes ACTIVE (section 8) |
 | Execution FAILED `LAUNCH_NOT_CLAIMED` | No runner or agent claimed the launch in time | Check that the agent's workload (or `pclaw automation runner`) is running and enrolled |
 | Triggers REFUSED_DUPLICATE | The same dedupe key within its window | Expected for retries; check the sender's ids |
 | Triggers REFUSED_LOOP | The automation is already in the trigger's ancestry | Change the triggers so automations do not feed each other |
