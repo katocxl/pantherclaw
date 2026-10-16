@@ -103,7 +103,9 @@ func parseID(s string) (ids.UUID, bool) {
 
 func q(tx pgx.Tx) *dbq.Queries { return dbq.New(tx) }
 
-func ref(kind string, id ids.UUID) reflexdomain.EvidenceRef { return reflexdomain.EvidenceRef{Kind: kind, ID: id} }
+func ref(kind string, id ids.UUID) reflexdomain.EvidenceRef {
+	return reflexdomain.EvidenceRef{Kind: kind, ID: id}
+}
 
 func rfc(t time.Time) string { return t.UTC().Format(time.RFC3339) }
 

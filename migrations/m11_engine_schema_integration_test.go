@@ -179,7 +179,8 @@ func TestHR281_GatesAreAutomationRequestsWithoutAnAgent(t *testing.T) {
 		'{}', $4, date_trunc('second', now()) + interval '24 hours')`, f.org, m5ID(), f.user, m5Secret(55))
 	f.mustExec(t, `UPDATE pc.approval_requests SET state = 'APPROVED', approved_at = now(), consume_by = deadline_at
 		WHERE id = $1`, gate)
-	f.mustExec(t, `UPDATE pc.approval_requests SET state = 'CONSUMED', consumed_at = now() WHERE id = $1`, gate)
+	f.mustExec(t, `UPDATE pc.approval_requests SET state = 'CONSUMED', consumed_at = now(), ended_at = now()
+		WHERE id = $1`, gate)
 
 	f.mustExec(t, m11GateEntry, f.org, m5ID(), gate, nil, none, f.automation)
 	f.want(t, m5Check, "a gate entry without its automation", m11GateEntry, f.org, m5ID(), m5ID(), nil, none, nil)
