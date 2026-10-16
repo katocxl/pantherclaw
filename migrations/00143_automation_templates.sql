@@ -14,8 +14,10 @@
 -- the body never changes.
 --
 -- Contain steps (D61) record the automation as the response action's actor
--- with source PLAYBOOK; pc.response_actions already allows both, so no
--- CHECK changes here.
+-- with source PLAYBOOK; pc.response_actions already allows both. A digest
+-- step's evidence pack (D85) is created by the automation's execution
+-- identity within the agents its version declared, so pc.evidence_packs
+-- takes an automation creator besides a person.
 
 -- +goose Up
 CREATE TABLE pc.automation_proposals (
@@ -87,6 +89,49 @@ GRANT SELECT, INSERT ON pc.automation_proposals TO pc_app;
 GRANT UPDATE (state, decided_by, decided_at) ON pc.automation_proposals TO pc_app;
 GRANT SELECT ON pc.automation_proposals TO pc_audit_ro;
 
+-- A digest step's evidence pack (D85) is created by the automation's own
+-- execution identity, never borrowed from a person: created_by is then
+-- that service account, automation_id names the automation, and
+-- automation_agents the agents its version declared (NULL: all of the
+-- org's). Every other pack is still a person's.
+ALTER TABLE pc.evidence_packs
+    ADD COLUMN automation_id     uuid,
+    ADD COLUMN automation_agents uuid[] CHECK (automation_agents IS NULL OR (cardinality(automation_agents) BETWEEN 1 AND 50
+                                               AND array_position(automation_agents, NULL) IS NULL)),
+    ADD CONSTRAINT evidence_packs_automation_fk FOREIGN KEY (org_id, automation_id) REFERENCES pc.automations (org_id, id),
+    ADD CONSTRAINT evidence_packs_automation_agents CHECK (automation_agents IS NULL OR automation_id IS NOT NULL),
+    DROP CONSTRAINT evidence_packs_org_id_created_by_fkey;
+
+-- +goose StatementBegin
+CREATE FUNCTION pc.evidence_pack_creator_guard() RETURNS trigger
+    LANGUAGE plpgsql AS $$
+BEGIN
+    IF NEW.automation_id IS NULL THEN
+        IF NOT EXISTS (SELECT 1 FROM pc.users WHERE org_id = NEW.org_id AND id = NEW.created_by) THEN
+            RAISE EXCEPTION 'evidence_packs: created_by must be a person of the org' USING ERRCODE = 'foreign_key_violation';
+        END IF;
+    ELSIF NOT EXISTS (SELECT 1 FROM pc.service_accounts
+                      WHERE org_id = NEW.org_id AND id = NEW.created_by AND automation_id = NEW.automation_id) THEN
+        RAISE EXCEPTION 'evidence_packs: an automation''s pack is created by its own execution identity'
+            USING ERRCODE = 'foreign_key_violation';
+    END IF;
+    RETURN NEW;
+END
+$$;
+-- +goose StatementEnd
+
+CREATE TRIGGER evidence_packs_creator BEFORE INSERT ON pc.evidence_packs
+    FOR EACH ROW EXECUTE FUNCTION pc.evidence_pack_creator_guard();
+
+GRANT SELECT (automation_id, automation_agents) ON pc.evidence_packs TO pc_audit_ro;
+
 -- +goose Down
+DELETE FROM pc.evidence_packs WHERE automation_id IS NOT NULL;
+DROP TRIGGER evidence_packs_creator ON pc.evidence_packs;
+DROP FUNCTION pc.evidence_pack_creator_guard();
+ALTER TABLE pc.evidence_packs
+    DROP COLUMN automation_agents,
+    DROP COLUMN automation_id,
+    ADD CONSTRAINT evidence_packs_org_id_created_by_fkey FOREIGN KEY (org_id, created_by) REFERENCES pc.users (org_id, id);
 DROP TABLE pc.automation_proposals;
 DROP FUNCTION pc.automation_proposal_guard();

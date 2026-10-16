@@ -21,7 +21,7 @@ import (
 // its source, it may only DENY_ALL a run, and its idempotency key returns
 // the same action for the same execution and step.
 func TestHR284_AnAutomationContainsOnlyARunAsAPlaybook(t *testing.T) {
-	w := newWorld(t, "ENFORCED")
+	w := newWorld(t, "PARTIAL")
 	auto := ids.NewV7()
 	actor := reflexdomain.Subject{Type: reflexdomain.SubjectAutomation, ID: auto.String()}
 	run := reflexdomain.Subject{Type: reflexdomain.SubjectRun, ID: w.run.String()}
