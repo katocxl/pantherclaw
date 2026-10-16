@@ -259,3 +259,32 @@ func (e Entitlements) SOAR() bool { return e.businessPlus() }
 func (e Entitlements) SharedSignals() bool { return e.businessPlus() }
 
 func (e Entitlements) businessPlus() bool { return e.Edition == Business || e.Edition == Enterprise }
+
+// Governed automations and fleet governance (G0 M11 part 2 D12). The
+// promotion gate, protected changes and the search additions are
+// Community; a hardening rule is never edition-gated.
+
+// Automations reports whether the edition runs governed automations
+// (F025, F652–F745): Team and above.
+func (e Entitlements) Automations() bool { return e.Edition.Paid() }
+
+// AutomationPlaybooks reports whether the edition runs the contain step of
+// security playbooks (F562, F695, F696): Business and above.
+func (e Entitlements) AutomationPlaybooks() bool { return e.businessPlus() }
+
+// AutomationLatentExposure reports whether the edition shows automation
+// issuance ceilings as exposure and previews blast radius (F262,
+// F747–F750): Business and above.
+func (e Entitlements) AutomationLatentExposure() bool { return e.businessPlus() }
+
+// PublisherCompromise reports whether the edition marks compromised
+// publishers (F595, F596): Business and above.
+func (e Entitlements) PublisherCompromise() bool { return e.businessPlus() }
+
+// Cohorts reports whether the edition offers fleet cohorts and baselines
+// (F600, F601): Team and above.
+func (e Entitlements) Cohorts() bool { return e.Edition.Paid() }
+
+// ReferencePacks reports whether the edition applies reference policy
+// packs (F762, F764, F767): Team and above.
+func (e Entitlements) ReferencePacks() bool { return e.Edition.Paid() }

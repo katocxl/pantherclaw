@@ -7,6 +7,7 @@ package pantherclaw.v1;
 
 import "buf/validate/validate.proto";
 import "google/protobuf/timestamp.proto";
+import "pantherclaw/v1/automations.proto";
 
 // AgentService keeps the agent inventory (Badge; F003, F016, F017, F020,
 // F022–F024, F035, F574, F624; G0 M3). An agent is an accountable record:
@@ -295,6 +296,9 @@ message ListAgentsRequest {
   }];
   // Only agents of this team.
   optional string team_id = 4 [(buf.validate.field).string.uuid = true];
+  // Also list automations as execution identities (G0 M11 part 2 D15,
+  // F025); needs automation.read, else omitted with a note.
+  bool include_automations = 5;
 }
 
 // ListAgentsResponse is one page.
@@ -306,6 +310,11 @@ message ListAgentsResponse {
   // True when the org has no agents at all, as opposed to none matching the
   // filters (F624).
   bool org_has_no_agents = 3;
+  // Automations, when include_automations was set and the caller holds
+  // automation.read (on the first page only).
+  repeated AutomationIdentity automations = 4;
+  // Why automations were omitted, when they were asked for.
+  string automations_note = 5;
 }
 
 // UpdateAgentRequest changes the fields that are set.
