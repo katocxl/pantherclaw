@@ -168,23 +168,35 @@ func TestHR290_AutomationIssuanceIsGatedAndCapped(t *testing.T) {
 	svc := &gapp.Service{
 		Repo: gs, Subjects: gs, Defs: &defpg.Store{Pool: w.pool}, Authz: gapp.SubjectAuthorizer{}, Clock: clock.System{},
 		Store: gs, Promotions: gate, Ceilings: ceilings{gapp.AutomationCeiling{
-			ID: ceiling, AutomationName: "refunds", ServiceAccount: sa, Agents: []ids.UUID{w.agent}, Principal: principal,
+			ID: ceiling, AutomationName: "refunds", ServiceAccount: sa, Agents: []ids.UUID{w.agent, w.devAgent}, Principal: principal,
 			Bounds: gdomain.Bounds{Operations: &ops}, TTL: 24 * time.Hour, Limits: lim,
 		}},
 	}
-	issue := func() (gdomain.Grant, error) {
+	issueFor := func(agent ids.UUID) (gdomain.Grant, error) {
 		var g gdomain.Grant
 		err := w.pool.InTenantTx(context.Background(), w.org, func(ctx context.Context, tx db.TenantTx) error {
 			var err error
 			g, err = svc.IssueForAutomationTx(ctx, tx, gapp.AutomationIssue{
 				Org: w.org, Automation: ids.NewV7(), Version: ids.NewV7(), Execution: ids.NewV7(), Ceiling: ceiling,
-				ServiceAccount: sa, AgentID: w.agent, Principal: principal, TaskRef: "ticket T-1",
+				ServiceAccount: sa, AgentID: agent, Principal: principal, TaskRef: "ticket T-1",
 				Bounds: gdomain.Bounds{Operations: &gdomain.Ops{refund}}, Limits: lim, Live: true, DryRun: true,
 			})
 			return err
 		})
 		return g, err
 	}
+	issue := func() (gdomain.Grant, error) { return issueFor(w.agent) }
+
+	// Without a gate a production grant is refused, a development one not
+	// (D105).
+	svc.Promotions = nil
+	_, err = issue()
+	notPromoted(t, "automation issuance with no gate wired", err)
+	if _, err := issueFor(w.devAgent); err != nil {
+		t.Fatalf("a development grant with no gate wired: %v", err)
+	}
+	svc.Promotions = gate
+
 	_, err = issue()
 	notPromoted(t, "automation issuance for an unpromoted production agent", err)
 
@@ -297,5 +309,19 @@ func TestHR290_APrefixCoversWhatTheAgentsConnectionsReach(t *testing.T) {
 		return err
 	}); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// TestHR290_AGrantPrefixWithNothingKnownUnderItIsRefused (D101): a grant
+// prefix with no operation known under it through the agent's
+// connections is refused NOT_PROMOTED, never passed vacuously; the exact
+// operation the agent is promoted for is not.
+func TestHR290_AGrantPrefixWithNothingKnownUnderItIsRefused(t *testing.T) {
+	w := newWorld(t)
+	promotiontest.PromoteNew(t, w.scope, refund) // exact, and no route yet
+	_, err := w.issue(w.agent, `{"operations": ["payments.*"]}`)
+	notPromoted(t, "a grant prefix nothing is known under", err)
+	if _, err := w.issue(w.agent, `{"operations": ["payments.refund.create"]}`); err != nil {
+		t.Fatalf("the promoted exact operation: %v", err)
 	}
 }

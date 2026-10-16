@@ -112,3 +112,13 @@ func (s *Store) AutomationGrantsInTx(ctx context.Context, tx db.TenantTx, in app
 	}
 	return nil, fmt.Errorf("grants: unknown revocation scope %q", in.Scope)
 }
+
+// ProductionInTx implements app.TxStore: an unknown environment counts as
+// a production one (fail closed).
+func (s *Store) ProductionInTx(ctx context.Context, tx db.TenantTx, org ids.OrgID, env ids.UUID) (bool, error) {
+	kind, err := dbq.New(tx).PromotionEnvironmentKind(ctx, org, env)
+	if db.IsNoRows(err) {
+		return true, nil
+	}
+	return kind == "PRODUCTION", err
+}

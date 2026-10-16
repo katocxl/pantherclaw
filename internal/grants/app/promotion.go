@@ -20,6 +20,11 @@ import (
 var ErrNotPromoted = pcerr.New(pcerr.FailedPrecondition, "NOT_PROMOTED",
 	"the agent is not promoted for every operation of this grant in this environment")
 
+// errNoGate refuses a production grant when no promotion gate is wired
+// (D105): the gate fails closed.
+var errNoGate = pcerr.Wrap(ErrNotPromoted, pcerr.FailedPrecondition, "NOT_PROMOTED",
+	"no production promotion gate is configured: production grants are refused")
+
 // PromotionGate is the production promotion gate (G0 M11 part 2 D11, D39,
 // D80, D93, F6, F7). Issue, a widening Revise, Delegate and automation
 // issuance call it once, in their transaction, when the grant's

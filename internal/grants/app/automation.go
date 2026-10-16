@@ -75,6 +75,9 @@ type TxStore interface {
 	// EXECUTION (in.Execution), CEILING (in.Ceiling), CEILING_AGENTS (the
 	// agents' root grants) or AUTOMATION (in.Automation's ceilings).
 	AutomationGrantsInTx(ctx context.Context, tx db.TenantTx, in AutomationRevoke, agents []ids.UUID) ([]ids.UUID, error)
+	// ProductionInTx reports whether env is a PRODUCTION environment (an
+	// unknown one counts as one: fail closed).
+	ProductionInTx(ctx context.Context, tx db.TenantTx, org ids.OrgID, env ids.UUID) (bool, error)
 }
 
 // AutomationCeiling is what issuance needs of an automation's ACTIVE
@@ -257,12 +260,17 @@ func (s *Service) IssueForAutomationTx(ctx context.Context, tx db.TenantTx, in A
 	// (7) the promotion gate for production environments, in this
 	// transaction; a provisional promotion caps the grant's expiry from the
 	// rows the gate read (D39, D80, D93).
+	// Without a gate a production grant is refused, never let through (D105).
 	if s.Promotions != nil {
 		until, err := s.Promotions.Check(ctx, tx.Pgx(), in.Org, agent.ID, agent.EnvironmentID, gateOps(g.Bounds))
 		if err != nil {
 			return domain.Grant{}, err
 		}
 		CapExpiry(&g, until)
+	} else if prod, err := s.Store.ProductionInTx(ctx, tx, in.Org, agent.EnvironmentID); err != nil {
+		return domain.Grant{}, err
+	} else if prod {
+		return domain.Grant{}, errNoGate
 	}
 	budgets, err := taskBudgets(g.Limits)
 	if err != nil {
