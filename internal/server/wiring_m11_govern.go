@@ -34,6 +34,7 @@ import (
 // checks and publish gate as any.
 func registerM11Govern(rs *connect.Server, d apiDeps) {
 	prom := newPromotions(d.pool)
+	wireM11Cross(d, prom)
 	pantherclawv1connect.RegisterPromotionServiceHandler(rs, promotionsrpc.New(prom))
 	if d.web != nil {
 		d.web.WithPromotions(prom) // the only way to promote: a step-up is a browser session's (D53)
