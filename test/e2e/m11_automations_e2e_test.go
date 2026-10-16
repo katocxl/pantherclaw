@@ -155,7 +155,36 @@ func TestE2E_M11_GovernedAutomations(t *testing.T) {
 		t.Fatalf("COHORT enabling after both: %s", st)
 	}
 	live := a.liveRefund(t, auto.ID, source, created.Secret, "msg-2", "T-2")
-	_ = live
+
+	// 6. Replays and duplicates (HR-275, D21): the same webhook-id is a 409;
+	// the same ticket under a new webhook-id is accepted by the receiver and
+	// refused REFUSED_DUPLICATE by the automation's dedupe key.
+	if code := a.signedEvent(t, source, created.Secret, "msg-2", `{"type":"ticket.created","ref":"T-2"}`); code != http.StatusConflict {
+		t.Fatalf("a replayed webhook-id: %d", code)
+	}
+	if code := a.signedEvent(t, source, created.Secret, "msg-3", `{"type":"ticket.created","ref":"T-2"}`); code != http.StatusAccepted {
+		t.Fatalf("the same ticket under a new webhook-id: %d", code)
+	}
+	if st := s.row(t, "SELECT state FROM pc.automation_triggers WHERE automation_id = $1 ORDER BY received_at DESC, id DESC LIMIT 1", auto.ID); st != "REFUSED_DUPLICATE" {
+		t.Fatalf("the duplicate ticket's trigger: %s", st)
+	}
+	if x := a.latestExecution(t, auto.ID); x != live.execution {
+		t.Fatalf("a duplicate started execution %s", x)
+	}
+
+	// 7. FULL after the verified COHORT execution, again by two people (D8,
+	// D36).
+	en, err = a.core.RequestEnable(aliceCtx, v.ID, autodomain.RolloutFull, nil, ids.UUID{})
+	if err != nil || en.Required != 2 {
+		t.Fatalf("RequestEnable FULL: %+v %v", en, err)
+	}
+	bob.confirmAt(t, "/changes/"+en.Request.ID.String())
+	if st := carol.confirmAt(t, "/changes/"+en.Request.ID.String()); st != "APPROVED" {
+		t.Fatalf("FULL enabling after both: %s", st)
+	}
+	if got := s.row(t, "SELECT state || '/' || rollout FROM pc.automations WHERE id = $1", auto.ID); got != "ACTIVE/FULL" {
+		t.Fatalf("the automation after FULL: %s", got)
+	}
 }
 
 // person is an in-process caller: the user with roles at the org.
