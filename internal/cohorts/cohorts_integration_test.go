@@ -70,8 +70,10 @@ func (w *world) count(sql string) int {
 func newWorld(t *testing.T) *world {
 	t.Helper()
 	p := dbtest.New(t).AppPool(t)
-	w := &world{t: t, pool: p, org: ids.New[ids.Org](), teamA: ids.NewV7(), teamB: ids.NewV7(), envA: ids.NewV7(), envB: ids.NewV7(),
-		owner: ids.NewV7(), a1: ids.NewV7(), b1: ids.NewV7()}
+	w := &world{
+		t: t, pool: p, org: ids.New[ids.Org](), teamA: ids.NewV7(), teamB: ids.NewV7(), envA: ids.NewV7(), envB: ids.NewV7(),
+		owner: ids.NewV7(), a1: ids.NewV7(), b1: ids.NewV7(),
+	}
 	w.exec("INSERT INTO pc.orgs (id, name) VALUES ($1, 'acme')", w.org)
 	w.exec("INSERT INTO pc.teams (org_id, id, slug, name) VALUES ($1, $2, 'a', 'A'), ($1, $3, 'b', 'B')", w.org, w.teamA, w.teamB)
 	w.exec(`INSERT INTO pc.environments (org_id, id, team_id, slug, name, kind) VALUES ($1, $2, $3, 'dev', 'Dev', 'DEVELOPMENT'),
@@ -168,13 +170,17 @@ func TestHR291_ABaselineOnlyReportsGrantsBeyondIt(t *testing.T) {
 	w := newWorld(t)
 	gs := &gpg.Store{Pool: w.pool}
 	grants := &gapp.Service{Repo: gs, Subjects: gs, Defs: &defpg.Store{Pool: w.pool}, Authz: gapp.SubjectAuthorizer{}, Clock: clock.System{}}
-	issuer := tapp.WithCaller(context.Background(), tapp.Caller{Subject: td.Subject{Org: w.org,
+	issuer := tapp.WithCaller(context.Background(), tapp.Caller{Subject: td.Subject{
+		Org:       w.org,
 		Principal: td.PrincipalRef{Kind: td.KindUser, ID: w.owner},
-		Bindings:  []td.Binding{{Role: td.RoleGrantIssuer, Scope: td.Scope{Type: td.ScopeOrg, ID: w.org.UUID()}}}}})
+		Bindings:  []td.Binding{{Role: td.RoleGrantIssuer, Scope: td.Scope{Type: td.ScopeOrg, ID: w.org.UUID()}}},
+	}})
 	issue := func(bounds string) gdomain.Grant {
 		b, _ := gdomain.DecodeBounds([]byte(bounds))
-		g, err := grants.Issue(issuer, gapp.IssueRequest{AgentID: w.a1, Principal: gdomain.Principal{Kind: gdomain.PrincipalUser, ID: w.owner},
-			TaskRef: "refunds", ExpiresAt: time.Now().Add(24 * time.Hour), Bounds: b})
+		g, err := grants.Issue(issuer, gapp.IssueRequest{
+			AgentID: w.a1, Principal: gdomain.Principal{Kind: gdomain.PrincipalUser, ID: w.owner},
+			TaskRef: "refunds", ExpiresAt: time.Now().Add(24 * time.Hour), Bounds: b,
+		})
 		if err != nil {
 			t.Fatal(err)
 		}

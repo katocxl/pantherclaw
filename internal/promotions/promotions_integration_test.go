@@ -70,8 +70,10 @@ func (w *world) exec(sql string, args ...any) {
 
 func newOrg(t *testing.T, p *db.Pool) *world {
 	t.Helper()
-	w := &world{t: t, pool: p, org: ids.New[ids.Org](), team: ids.NewV7(), prod: ids.NewV7(), dev: ids.NewV7(), alice: ids.NewV7(),
-		agent: ids.NewV7(), devAgent: ids.NewV7(), conn: ids.NewV7()}
+	w := &world{
+		t: t, pool: p, org: ids.New[ids.Org](), team: ids.NewV7(), prod: ids.NewV7(), dev: ids.NewV7(), alice: ids.NewV7(),
+		agent: ids.NewV7(), devAgent: ids.NewV7(), conn: ids.NewV7(),
+	}
 	w.exec("INSERT INTO pc.orgs (id, name) VALUES ($1, 'acme')", w.org)
 	if err := p.InTenantTx(context.Background(), w.org, func(ctx context.Context, tx db.TenantTx) error {
 		return dbq.New(tx).InsertContainment(ctx, w.org)
@@ -99,8 +101,8 @@ func newOrg(t *testing.T, p *db.Pool) *world {
 	w.grants = &gapp.Service{Repo: gs, Subjects: gs, Defs: &defpg.Store{Pool: p}, Authz: gapp.SubjectAuthorizer{}, Clock: clock.System{}, Promotions: gate}
 	w.svc = &promotions.Service{Pool: p, Packages: &defpg.Store{Pool: p}}
 	w.issuer = w.as(w.alice, td.RoleGrantIssuer)
-	w.scope = promotiontest.Scope{Pool: p, Org: w.org, Agent: w.agent, Env: w.prod, Connection: w.conn}
-	w.devScope = promotiontest.Scope{Pool: p, Org: w.org, Agent: w.devAgent, Env: w.dev, Connection: w.conn}
+	w.scope = promotiontest.Scope{Pool: p, Org: w.org, Agent: w.agent, Env: w.prod, Connection: w.conn, Publish: policytest.Publish}
+	w.devScope = promotiontest.Scope{Pool: p, Org: w.org, Agent: w.devAgent, Env: w.dev, Connection: w.conn, Publish: policytest.Publish}
 	return w
 }
 
@@ -340,8 +342,10 @@ func (w *world) importPayments() {
 	if err != nil {
 		w.t.Fatal(err)
 	}
-	im := &defapp.Importer{Roots: trust.Roots{kid: signer.Public()}, Repo: &defpg.Store{Pool: w.pool},
-		Clock: clock.NewFake(time.Date(2026, 10, 8, 0, 0, 0, 0, time.UTC))}
+	im := &defapp.Importer{
+		Roots: trust.Roots{kid: signer.Public()}, Repo: &defpg.Store{Pool: w.pool},
+		Clock: clock.NewFake(time.Date(2026, 10, 8, 0, 0, 0, 0, time.UTC)),
+	}
 	ctx := context.Background()
 	if _, err := im.Import(ctx, w.org, "pc.mock-payments", "1.0.0", doc, raw, nil); err != nil {
 		w.t.Fatal(err)

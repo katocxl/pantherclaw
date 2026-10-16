@@ -65,7 +65,7 @@ func TestM11Govern_PromotionsChangeOnlyByOneRevocation(t *testing.T) {
 	if err := f.promote(p, ids.NewV7(), "payments.refund.create", "ACTIVE"); err == nil {
 		t.Fatal("two ACTIVE promotions of one operation")
 	}
-	for _, bad := range []string{"Payments.refund", "*", "payments.*.create", ""} {
+	for _, bad := range []string{"Payments.refund", "*", "payments.*.create", "", "payments.*", "payments"} { // exact operations only (D70)
 		if err := f.promote(p, ids.NewV7(), bad, "ACTIVE"); err == nil {
 			t.Errorf("operation %q accepted", bad)
 		}
@@ -100,7 +100,7 @@ func TestTenancy_agent_promotions(t *testing.T) {
 	d := dbtest.New(t)
 	p := d.AppPool(t)
 	a, b := govOrg(t, p), govOrg(t, p)
-	if err := a.promote(p, ids.NewV7(), "payments.*", "ACTIVE"); err != nil {
+	if err := a.promote(p, ids.NewV7(), "payments.refund.create", "ACTIVE"); err != nil {
 		t.Fatal(err)
 	}
 	if n := m10Count(t, p, b.org, "SELECT count(*) FROM pc.agent_promotions"); n != 0 {
@@ -113,7 +113,7 @@ func TestTenancy_agent_promotions(t *testing.T) {
 		t.Fatalf("another org revoked ours: %d active", n)
 	}
 	cross := govFixture{org: b.org, env: a.env, agent: a.agent, user: a.user, cred: a.cred}
-	if err := cross.promote(p, ids.NewV7(), "payments.*", "ACTIVE"); err == nil {
+	if err := cross.promote(p, ids.NewV7(), "payments.refund.get", "ACTIVE"); err == nil {
 		t.Fatal("promoted another org's agent")
 	}
 }

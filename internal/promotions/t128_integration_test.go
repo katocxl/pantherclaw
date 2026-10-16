@@ -17,6 +17,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/db/dbtest"
 	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
+	"github.com/katocxl/pantherclaw/internal/policy/policytest"
 	"github.com/katocxl/pantherclaw/internal/promotions"
 	"github.com/katocxl/pantherclaw/internal/promotions/promotionsrpc"
 	"github.com/katocxl/pantherclaw/internal/promotions/promotiontest"
@@ -51,7 +52,7 @@ func TestT128_OnlyTheAgentsOwnActivePromotionCovers(t *testing.T) {
 	_, err := w.issue(w.agent, `{"operations": ["payments.refund.create"]}`)
 	notPromoted(t, "another org's agent is promoted", err)
 
-	sibling := promotiontest.Scope{Pool: p, Org: w.org, Agent: ids.NewV7(), Env: w.prod, Connection: w.conn}
+	sibling := promotiontest.Scope{Pool: p, Org: w.org, Agent: ids.NewV7(), Env: w.prod, Connection: w.conn, Publish: policytest.Publish}
 	w.exec(`INSERT INTO pc.agents (org_id, id, name, team_id, environment_id, owner_user_id, execution_context, state, created_by, claimed_at)
 		SELECT org_id, $2, 'sibling', team_id, environment_id, owner_user_id, execution_context, state, created_by, claimed_at
 		FROM pc.agents WHERE org_id = $1 AND id = $3`, w.org, sibling.Agent, w.agent)

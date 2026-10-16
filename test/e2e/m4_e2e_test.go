@@ -29,6 +29,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/pclaw"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
+	"github.com/katocxl/pantherclaw/internal/policy/policytest"
 	"github.com/katocxl/pantherclaw/internal/promotions/promotiontest"
 )
 
@@ -166,7 +167,7 @@ func TestE2E_M4_GrantsDelegationRevocationAndCounters(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	promotiontest.Promote(t, promotiontest.Scope{Pool: pool, Org: org, Agent: mustUUID(t, agent), Env: mustUUID(t, env), Connection: conn},
+	promotiontest.Promote(t, promotiontest.Scope{Pool: pool, Org: org, Agent: mustUUID(t, agent), Env: mustUUID(t, env), Connection: conn, Publish: policytest.Publish},
 		"payments.refund.create")
 	grant := field(t, must("grant", "issue", agent, "--principal", "user:"+aliceID, "--expires", "24h", "--bounds-file", bounds,
 		"--limits-file", limits, "--delegation-depth", "1", "--max-children", "2", "--task", "refunds"), "id")

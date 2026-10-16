@@ -25,7 +25,6 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	pdomain "github.com/katocxl/pantherclaw/internal/policy/domain"
-	"github.com/katocxl/pantherclaw/internal/policy/policytest"
 	"github.com/katocxl/pantherclaw/internal/promotions"
 	"github.com/katocxl/pantherclaw/internal/siem/stepup"
 	tapp "github.com/katocxl/pantherclaw/internal/tenancy/app"
@@ -40,6 +39,9 @@ type Scope struct {
 	Agent      ids.UUID
 	Env        ids.UUID
 	Connection ids.UUID
+	// Publish publishes a policy for the test: policytest.Publish, which only
+	// test files may import (HR-230), so the caller passes it.
+	Publish func(ctx context.Context, t testing.TB, pool *db.Pool, org ids.OrgID, b *pdomain.Bundle) ids.UUID
 }
 
 func (s Scope) exec(t testing.TB, sql string, args ...any) {
@@ -54,7 +56,7 @@ func (s Scope) exec(t testing.TB, sql string, args ...any) {
 
 // Record writes what the TESTS and COVERAGE checks read for each operation
 // that is not there yet: the published policy gains a scenario test of the
-// operation in the environment (republished through policytest, its rules
+// operation in the environment (republished through Scope.Publish, its rules
 // unchanged), and the connection gets a PARTIAL coverage snapshot of the
 // operation that has seen every pending change of the scope.
 func Record(t testing.TB, s Scope, ops ...string) {
@@ -94,8 +96,11 @@ func Record(t testing.TB, s Scope, ops ...string) {
 		added = true
 	}
 	if added {
+		if s.Publish == nil {
+			t.Fatal("promotiontest: Scope.Publish is not set (pass policytest.Publish)")
+		}
 		b.Version = 1
-		policytest.Publish(ctx, t, s.Pool, s.Org, &b)
+		s.Publish(ctx, t, s.Pool, s.Org, &b)
 	}
 	var pending []string
 	if err := s.Pool.InTenantTx(ctx, s.Org, func(ctx context.Context, tx db.TenantTx) error {
