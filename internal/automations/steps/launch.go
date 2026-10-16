@@ -14,6 +14,7 @@ import (
 	autodomain "github.com/katocxl/pantherclaw/internal/automations/domain"
 	"github.com/katocxl/pantherclaw/internal/automations/engine"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
+	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	reflexdomain "github.com/katocxl/pantherclaw/internal/reflex/domain"
 )
@@ -162,7 +163,14 @@ func (s *launchRun) Run(ctx context.Context, tx pgx.Tx, sc autodomain.StepContex
 		}
 		return autodomain.StepResult{}, err
 	}
-	calls, err := json.Marshal(callsOf(p.w.Calls), json.Deterministic(true))
+	stored, reason, err := callsOf(ctx, tx, sc.Org, p.w.Calls)
+	if err != nil {
+		return autodomain.StepResult{}, err
+	}
+	if reason != "" {
+		return failed(reason)
+	}
+	calls, err := json.Marshal(stored, json.Deterministic(true))
 	if err != nil {
 		return autodomain.StepResult{}, err
 	}
@@ -236,23 +244,37 @@ type WebhookLaunch struct {
 
 // StoredCall is a runner call as a launch stores it (D33).
 type StoredCall struct {
-	Connection string            `json:"connection"`
-	Face       string            `json:"face"`
-	Tool       string            `json:"tool,omitzero"`
-	Method     string            `json:"method,omitzero"`
-	Path       string            `json:"path,omitzero"`
-	Input      map[string]string `json:"input,omitzero"`
+	Connection string `json:"connection"`
+	// ConnectionName is resolved when the launch is created (the gateway
+	// faces route by name, D83).
+	ConnectionName string            `json:"connection_name"`
+	Face           string            `json:"face"`
+	Tool           string            `json:"tool,omitzero"`
+	Method         string            `json:"method,omitzero"`
+	Path           string            `json:"path,omitzero"`
+	Input          map[string]string `json:"input,omitzero"`
 }
 
-func callsOf(cs []autodomain.RunnerCall) []StoredCall {
+// callsOf stores the declared calls with their connections' names; a
+// connection that is gone, or not ACTIVE, refuses the launch.
+func callsOf(ctx context.Context, tx pgx.Tx, org ids.OrgID, cs []autodomain.RunnerCall) ([]StoredCall, string, error) {
 	out := make([]StoredCall, 0, len(cs))
 	for _, c := range cs {
+		conn, err := q(tx).GetConnection(ctx, org, c.Connection.UUID())
+		if db.IsNoRows(err) {
+			return nil, ReasonConnection, nil
+		} else if err != nil {
+			return nil, "", err
+		}
+		if conn.State != "ACTIVE" {
+			return nil, ReasonConnection, nil
+		}
 		out = append(out, StoredCall{
-			Connection: c.Connection.String(), Face: c.Face, Tool: c.Tool, Method: c.Method,
+			Connection: c.Connection.String(), ConnectionName: conn.Name, Face: c.Face, Tool: c.Tool, Method: c.Method,
 			Path: c.Path, Input: c.Input,
 		})
 	}
-	return out
+	return out, "", nil
 }
 
 // attemptID is the id of the attempt running the step; the engine passes
