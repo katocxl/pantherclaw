@@ -260,7 +260,7 @@ func cmdServe(ctx context.Context, args []string, stderr io.Writer, env Env, onS
 	// jobs share it, so every port set on it reaches both (D91 K6).
 	// protect sets its ports on it in every role (D110 P1).
 	autos, m11protect := newM11Core(pool, bill, cfg.Auth.PublicURL)
-	attachM11Issuance(autos, pool)
+	wireM11Process(autos, m11protect, pool)
 	if cfg.Role == RoleAPI || cfg.Role == RoleAll {
 		tokens, err := token.New(reg, cfg.Auth.PublicURL, token.Audience)
 		if err != nil {

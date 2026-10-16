@@ -43,7 +43,6 @@ func probeM11(kind string, v any) {
 func wireM11Cross(d apiDeps, prom *promotions.Service) {
 	if pub := d.m11protect.publishers; pub != nil && prom != nil {
 		prom.Compromise = promotionsCompromise{p: pub}
-		pub.Undo[protect.ItemPromotion] = protect.PromotionUndo(promotionRevoker{s: prom})
 	}
 	probeM11("promotions", prom)
 }
@@ -59,6 +58,18 @@ func attachM11Issuance(core *automationsCore, pool *db.Pool) {
 	}
 	gstore, grants := newGrants(pool)
 	core.attach(pool, grants, runsapp.New(pool).WithGrants(gstore))
+}
+
+// wireM11Process wires the cross-stream pairs of the process's own
+// instances, in every role, before the role split: the gated grants and
+// runs pair on the one core (D113), and protect's PromotionRevoker on
+// govern's RevokePromotion, so a compromised publisher's promotion rolls
+// back as the reviewer (D90 Q2).
+func wireM11Process(core *automationsCore, p m11Protect, pool *db.Pool) {
+	attachM11Issuance(core, pool)
+	if p.publishers != nil {
+		p.publishers.Undo[protect.ItemPromotion] = protect.PromotionUndo(promotionRevoker{s: newPromotions(pool)})
+	}
 }
 
 // m11Issuance is the grants and runs pair the API serves: the core's when
