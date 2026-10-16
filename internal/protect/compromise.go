@@ -137,7 +137,8 @@ func (p *Publishers) caller(ctx context.Context) (tenancy.Caller, error) {
 	if !c.Human() {
 		return c, ErrHuman
 	}
-	return c, nil
+	// Every publisher use case needs the edition (D72 P11).
+	return c, p.entitled(ctx)
 }
 
 func (p *Publishers) entitled(ctx context.Context) error {
@@ -166,9 +167,6 @@ func (p *Publishers) MarkCompromised(ctx context.Context, user ids.UUID, since t
 	reason = strings.TrimSpace(reason)
 	if user.IsZero() || since.IsZero() || !utf8.ValidString(reason) || utf8.RuneCountInString(reason) < 1 || utf8.RuneCountInString(reason) > 500 {
 		return dbq.PcCompromisedPublisher{}, ErrCompromiseQ
-	}
-	if err := p.entitled(ctx); err != nil {
-		return dbq.PcCompromisedPublisher{}, err
 	}
 	var out dbq.PcCompromisedPublisher
 	err = p.Pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
@@ -370,6 +368,10 @@ func (p *Publishers) ReviewExposed(ctx context.Context, id ids.UUID, kind, item,
 		if err != nil {
 			return err
 		}
+		// A reviewer under any active mark reviews nothing (D72 P9).
+		if err := (&Gate{Compromise: p}).refuseCompromised(ctx, tx, c.Principal.ID); err != nil {
+			return err
+		}
 		return p.reviewable(c, cp, kind, item, &target)
 	}, db.ReadOnly())
 	if err != nil {
@@ -459,6 +461,9 @@ func (p *Publishers) ClearCompromise(ctx context.Context, id ids.UUID) (ids.UUID
 		}
 		cp, err := p.load(ctx, tx, id)
 		if err != nil {
+			return err
+		}
+		if err := (&Gate{Compromise: p}).refuseCompromised(ctx, tx, c.Principal.ID); err != nil {
 			return err
 		}
 		switch {
@@ -568,3 +573,13 @@ func deref[T any](p *T) T {
 	}
 	return *p
 }
+
+// ROLLBACK refusals (D72 P1).
+var (
+	ErrRollbackNotYet = pcerr.New(pcerr.Unimplemented, "NOT_YET_AVAILABLE",
+		"rolling back this kind of item is not available yet: review it KEEP or come back once it is")
+	ErrRollbackNotCurrent = pcerr.New(pcerr.FailedPrecondition, "ROLLBACK_NOT_CURRENT",
+		"the version is no longer the published one, so there is nothing to roll back")
+	ErrRollbackNoEarlier = pcerr.New(pcerr.FailedPrecondition, "ROLLBACK_NO_EARLIER",
+		"no version was published before this one to roll back to")
+)

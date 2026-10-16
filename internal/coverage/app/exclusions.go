@@ -289,3 +289,28 @@ func (s *Service) ListExclusions(ctx context.Context, connection *ids.UUID, size
 	})
 	return out, next, err
 }
+
+// ProtectedExclusionState is the state a protected exclusion's re-run must
+// still find (a protect.State): the connection's coverage binding and the
+// agent.
+func (s *Service) ProtectedExclusionState(ctx context.Context, tx db.TenantTx, payload []byte) ([]byte, error) {
+	var r ExclusionRequest
+	if err := json.Unmarshal(payload, &r); err != nil {
+		return nil, ErrExclusion
+	}
+	q := dbq.New(tx)
+	state := "none"
+	if b, err := q.CoverageBinding(ctx, tx.OrgID(), r.Connection); err == nil {
+		state = b.State
+	} else if !db.IsNoRows(err) {
+		return nil, err
+	}
+	if r.Agent != nil {
+		if _, err := q.GetAgent(ctx, tx.OrgID(), *r.Agent); db.IsNoRows(err) {
+			state += "/no-agent"
+		} else if err != nil {
+			return nil, err
+		}
+	}
+	return []byte(state), nil
+}

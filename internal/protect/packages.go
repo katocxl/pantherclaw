@@ -24,6 +24,10 @@ type PackageGate struct {
 func (p PackageGate) Activate(ctx context.Context, author tenancy.Caller, name, version string, activate func(context.Context, db.TenantTx) error) error {
 	var held *PendingError
 	err := p.Pool.InTenantTx(ctx, author.Org, func(ctx context.Context, tx db.TenantTx) error {
+		// A person marked compromised activates nothing (D43, HR-293).
+		if err := p.Gate.refuseCompromised(ctx, tx, author.Principal.ID); err != nil {
+			return err
+		}
 		var err error
 		held, err = p.Gate.Hold(ctx, tx, author, Change{
 			Category: ToolMeaning, Surface: SurfacePackageActivate, Subject: name + "@" + version,

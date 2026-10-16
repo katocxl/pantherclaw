@@ -14,6 +14,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json/v2"
+	"fmt"
 	"slices"
 	"strconv"
 	"strings"
@@ -324,8 +325,8 @@ func (s *Service) ApplyProtectedRetire(ctx context.Context, tx db.TenantTx, auth
 func (s *Service) WithProtect(g *protect.Gate) *Service {
 	s.Protect = g
 	if g != nil {
-		g.Register(protect.SurfaceWindowCreate, s.ApplyProtectedCreate)
-		g.Register(protect.SurfaceWindowRetire, s.ApplyProtectedRetire)
+		g.Register(protect.SurfaceWindowCreate, s.ApplyProtectedCreate, s.ProtectedCreateState)
+		g.Register(protect.SurfaceWindowRetire, s.ApplyProtectedRetire, s.ProtectedRetireState)
 	}
 	return s
 }
@@ -506,4 +507,36 @@ func orEmpty[T any](s []T) []T {
 		return []T{}
 	}
 	return s
+}
+
+// ProtectedCreateState is the state a protected window's re-run must still
+// find (a protect.State): the window it replaces, by id and revision.
+func (s *Service) ProtectedCreateState(ctx context.Context, tx db.TenantTx, payload []byte) ([]byte, error) {
+	var w domain.Window
+	if err := json.Unmarshal(payload, &w); err != nil {
+		return nil, ErrInvalid
+	}
+	cur, err := dbq.New(tx).ActiveChangeWindow(ctx, tx.OrgID(), domain.NormalizeEnvironment(w.Environment), w.Repository)
+	if db.IsNoRows(err) {
+		return []byte("none"), nil
+	} else if err != nil {
+		return nil, err
+	}
+	return fmt.Appendf(nil, "%s/%d", cur.ID, cur.Revision), nil
+}
+
+// ProtectedRetireState is the state a protected retirement's re-run must
+// still find: the window, active or retired.
+func (s *Service) ProtectedRetireState(ctx context.Context, tx db.TenantTx, payload []byte) ([]byte, error) {
+	var in RetireInput
+	if err := json.Unmarshal(payload, &in); err != nil {
+		return nil, ErrInvalid
+	}
+	cur, err := dbq.New(tx).GetChangeWindow(ctx, tx.OrgID(), in.Window)
+	if db.IsNoRows(err) {
+		return []byte("none"), nil
+	} else if err != nil {
+		return nil, err
+	}
+	return fmt.Appendf(nil, "%s/%d/%t", cur.ID, cur.Revision, cur.RetiredAt != nil), nil
 }

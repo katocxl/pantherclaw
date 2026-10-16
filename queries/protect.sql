@@ -25,10 +25,10 @@ VALUES (sqlc.arg(org_id), sqlc.arg(category), sqlc.arg(mode), sqlc.arg(updated_b
 ON CONFLICT (org_id, category) DO UPDATE SET mode = excluded.mode, updated_by = excluded.updated_by, updated_at = now();
 
 -- name: InsertProtectedChange :one
-INSERT INTO pc.protected_changes (org_id, id, category, surface, subject_id, subject, summary, widening, digest, payload,
+INSERT INTO pc.protected_changes (org_id, id, category, surface, subject_id, subject, summary, widening, digest, subject_digest, payload,
                                   author, author_credential, state, publisher)
 VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(category), sqlc.arg(surface), sqlc.arg(subject_id), sqlc.arg(subject),
-        sqlc.arg(summary), sqlc.arg(widening)::text[], sqlc.arg(digest), sqlc.arg(payload), sqlc.arg(author),
+        sqlc.arg(summary), sqlc.arg(widening)::text[], sqlc.arg(digest), sqlc.arg(subject_digest), sqlc.arg(payload), sqlc.arg(author),
         sqlc.arg(author_credential), sqlc.arg(state), sqlc.narg(publisher))
 RETURNING *;
 
@@ -75,7 +75,7 @@ WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state = 'EMERGENCY' AN
 -- name: ReviewEmergencyChange :execrows
 UPDATE pc.protected_changes SET reviewed_by = sqlc.arg(reviewed_by)::uuid
 WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state = 'EMERGENCY' AND reviewed_by IS NULL
-  AND publisher <> sqlc.arg(reviewed_by)::uuid;
+  AND publisher <> sqlc.arg(reviewed_by)::uuid AND author <> sqlc.arg(reviewed_by)::uuid;
 
 -- name: ListProtectedChanges :many
 SELECT * FROM pc.protected_changes
@@ -194,3 +194,38 @@ LIMIT 1000;
 -- name: GetProtectedChangeByRequest :one
 SELECT * FROM pc.protected_changes
 WHERE org_id = sqlc.arg(org_id) AND (change_request_id = sqlc.arg(request_id)::uuid OR review_request_id = sqlc.arg(request_id)::uuid);
+
+-- name: CompromisedAmong :many
+-- The people among ids marked compromised now (approvals eligibility).
+SELECT DISTINCT user_id FROM pc.compromised_publishers
+WHERE org_id = sqlc.arg(org_id) AND state = 'ACTIVE' AND user_id = ANY (sqlc.arg(user_ids)::uuid[]);
+
+-- name: PendingPolicyChangeRequestsBy :many
+-- A person's pending M11.1 policy change requests (voided when they are
+-- marked compromised).
+SELECT id FROM pc.policy_change_requests
+WHERE org_id = sqlc.arg(org_id) AND requested_by = sqlc.arg(principal)::text AND state = 'PENDING'
+FOR UPDATE;
+
+-- name: PolicyRolloutConfirmedBy :one
+-- Whether the person created the rollout or confirmed a request of it
+-- (its pilot's ROLLOUT, its version's PUBLISH).
+SELECT (EXISTS (
+    SELECT 1 FROM pc.policy_rollouts r
+    WHERE r.org_id = sqlc.arg(org_id) AND r.id = sqlc.arg(rollout_id) AND r.created_by = sqlc.arg(principal)::text
+) OR EXISTS (
+    SELECT 1 FROM pc.policy_change_confirmations c
+    JOIN pc.policy_change_requests q ON q.org_id = c.org_id AND q.id = c.request_id
+    WHERE c.org_id = sqlc.arg(org_id) AND c.principal_id = sqlc.arg(user_id)::uuid
+      AND ((q.kind = 'ROLLOUT' AND q.subject_id = sqlc.arg(rollout_id)) OR (q.kind = 'PUBLISH' AND q.subject_id = sqlc.arg(version_id)))
+))::bool;
+
+-- name: PolicyVersionBefore :one
+-- The version published before a version (a ROLLBACK review's target) and
+-- whether that version is the published one now.
+SELECT p.id AS before_id, (v.state = 'PUBLISHED')::bool AS current
+FROM pc.policy_versions v
+JOIN pc.policy_versions p ON p.org_id = v.org_id AND p.published_at < v.published_at
+WHERE v.org_id = sqlc.arg(org_id) AND v.id = sqlc.arg(id)
+ORDER BY p.published_at DESC
+LIMIT 1;

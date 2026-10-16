@@ -180,8 +180,8 @@ func SubjectID(s Surface, key string) ids.UUID {
 	return u
 }
 
-// digest is SHA-256 over the change's identity and payload.
-func digest(org ids.OrgID, c Change, payload []byte) ([]byte, error) {
+// digest is SHA-256 over the change's identity, payload and subject state.
+func digest(org ids.OrgID, c Change, payload, subject []byte) ([]byte, error) {
 	b, err := json.Marshal(struct {
 		Org      string         `json:"org"`
 		Category Category       `json:"category"`
@@ -189,7 +189,8 @@ func digest(org ids.OrgID, c Change, payload []byte) ([]byte, error) {
 		Subject  string         `json:"subject_id"`
 		Widening []string       `json:"widening"`
 		Payload  jsontext.Value `json:"payload"`
-	}{org.String(), c.Category, c.Surface, c.SubjectID.String(), c.Widening, payload}, json.Deterministic(true))
+		State    []byte         `json:"subject_state"`
+	}{org.String(), c.Category, c.Surface, c.SubjectID.String(), c.Widening, payload, subject}, json.Deterministic(true))
 	if err != nil {
 		return nil, err
 	}
@@ -214,3 +215,30 @@ func isApplying(ctx context.Context, s Surface, subject ids.UUID) bool {
 }
 
 func sha256Sum(b []byte) [32]byte { return sha256.Sum256(b) }
+
+// ReasonSubjectChanged voids a request whose subject changed since it was
+// asked (D72 P5).
+const ReasonSubjectChanged = "SUBJECT_CHANGED"
+
+// ErrSubjectChanged: the subject is no longer as it was when the change
+// was asked, so the confirmation would apply something nobody reviewed.
+var ErrSubjectChanged = pcerr.New(pcerr.FailedPrecondition, ReasonSubjectChanged,
+	"what this change is about changed since it was asked; ask again")
+
+// VoidError is a refusal that voids the request it was confirming: the
+// change ceremony voids the request with Reason instead of failing the
+// confirmation.
+type VoidError struct{ Reason string }
+
+func (e *VoidError) Error() string { return e.Unwrap().Error() }
+
+// Unwrap is the public refusal.
+func (e *VoidError) Unwrap() error {
+	if e.Reason == ReasonSubjectChanged {
+		return ErrSubjectChanged
+	}
+	return pcerr.New(pcerr.FailedPrecondition, e.Reason, "the request was voided")
+}
+
+// VoidReason is the reason the request is voided with.
+func (e *VoidError) VoidReason() string { return e.Reason }

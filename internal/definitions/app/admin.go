@@ -303,3 +303,23 @@ func notFound(err error) error {
 	}
 	return err
 }
+
+// ProtectedActivationState is the state a protected activation's re-run
+// must still find (a protect.State): the version's lifecycle state.
+func (a *Admin) ProtectedActivationState(ctx context.Context, tx db.TenantTx, payload []byte) ([]byte, error) {
+	var in ActivationInput
+	if err := json.Unmarshal(payload, &in); err != nil {
+		return nil, ErrNotFound
+	}
+	repo, ok := a.Importer.Repo.(TxRepository)
+	if !ok {
+		return nil, errNoTxRepository
+	}
+	st, err := repo.StateTx(ctx, tx, in.Name, in.Version)
+	if errors.Is(err, ErrMissing) {
+		return []byte("none"), nil
+	} else if err != nil {
+		return nil, err
+	}
+	return []byte(st), nil
+}

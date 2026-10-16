@@ -270,3 +270,16 @@ func TestHR176_ARestorationIsDecidedByAnotherRestorer(t *testing.T) {
 		t.Error("a restorer may decline a restoration")
 	}
 }
+
+// TestCompromisedPersonNeverApproves: a person marked compromised (G0 M11
+// D43, HR-293) counts toward no requirement, whatever their role and key.
+func TestCompromisedPersonNeverApproves(t *testing.T) {
+	r, c := approver(1, false), ctx()
+	p := veteran()
+	if ok, _ := domain.Check(r, p, c, ids.UUID{}); !ok {
+		t.Fatal("the veteran should be eligible before the mark")
+	}
+	p.Compromised = true
+	ok, code := domain.Check(r, p, c, ids.UUID{})
+	wantCode(t, "compromised", ok, code, domain.IneligibleCompromised)
+}

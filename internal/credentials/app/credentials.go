@@ -17,6 +17,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json/v2"
+	"fmt"
 	"slices"
 	"strconv"
 	"strings"
@@ -259,7 +260,7 @@ func (s *Service) ApplyProtectedPut(ctx context.Context, tx db.TenantTx, author 
 func (s *Service) WithProtect(g *protect.Gate) *Service {
 	s.protect = g
 	if g != nil {
-		g.Register(protect.SurfaceCredentialPut, s.ApplyProtectedPut)
+		g.Register(protect.SurfaceCredentialPut, s.ApplyProtectedPut, s.ProtectedPutState)
 	}
 	return s
 }
@@ -440,4 +441,33 @@ func record(ctx context.Context, tx db.TenantTx, c tenancy.Caller, name string, 
 		Name: name, Actor: c.Actor(), Outcome: audit.Success, Object: &audit.Object{Type: "connection", ID: conn.String()}, Details: details,
 	})
 	return err
+}
+
+// ProtectedPutState is the state a protected upload's re-run must still
+// find (a protect.State): the connection's revision, its next credential
+// version and its gateway's broker key.
+func (s *Service) ProtectedPutState(ctx context.Context, tx db.TenantTx, payload []byte) ([]byte, error) {
+	var in PutInput
+	if err := json.Unmarshal(payload, &in); err != nil {
+		return nil, ErrFormat
+	}
+	q := dbq.New(tx)
+	org := tx.OrgID()
+	conn, err := q.GetConnection(ctx, org, in.Connection)
+	if db.IsNoRows(err) {
+		return []byte("none"), nil
+	} else if err != nil {
+		return nil, err
+	}
+	next, err := q.NextCredentialVersion(ctx, org, conn.ID)
+	if err != nil {
+		return nil, err
+	}
+	key := "none"
+	if k, err := q.GetActiveBrokerKey(ctx, org, conn.GatewayID); err == nil {
+		key = k.ID.String()
+	} else if !db.IsNoRows(err) {
+		return nil, err
+	}
+	return fmt.Appendf(nil, "%s/%d/%s/%d/%s", conn.ID, conn.Revision, conn.State, next, key), nil
 }

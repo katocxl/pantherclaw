@@ -6,6 +6,7 @@ package app
 import (
 	"context"
 	"encoding/json/v2"
+	"fmt"
 	"slices"
 	"strconv"
 	"strings"
@@ -588,8 +589,54 @@ func (s *Service) transition(ctx context.Context, id ids.UUID, from []string, to
 func (s *Service) WithProtect(g *protect.Gate) *Service {
 	s.protect = g
 	if g != nil {
-		g.Register(protect.SurfaceConnectionUpdate, s.ApplyProtectedUpdate)
-		g.Register(protect.SurfaceRouteMode, s.ApplyProtectedRouteMode)
+		g.Register(protect.SurfaceConnectionUpdate, s.ApplyProtectedUpdate, s.ProtectedUpdateState)
+		g.Register(protect.SurfaceRouteMode, s.ApplyProtectedRouteMode, s.ProtectedRouteModeState)
 	}
 	return s
+}
+
+// connectionState is a connection's revision and state, or "none".
+func connectionState(ctx context.Context, q *dbq.Queries, org ids.OrgID, id ids.UUID) ([]byte, error) {
+	conn, err := q.GetConnection(ctx, org, id)
+	if db.IsNoRows(err) {
+		return []byte("none"), nil
+	} else if err != nil {
+		return nil, err
+	}
+	return fmt.Appendf(nil, "%s/%d/%s", conn.ID, conn.Revision, conn.State), nil
+}
+
+// ProtectedUpdateState is the state a protected update's re-run must
+// still find (a protect.State): the connection's revision and state.
+func (s *Service) ProtectedUpdateState(ctx context.Context, tx db.TenantTx, payload []byte) ([]byte, error) {
+	var in UpdateInput
+	if err := json.Unmarshal(payload, &in); err != nil {
+		return nil, ErrShape
+	}
+	return connectionState(ctx, dbq.New(tx), tx.OrgID(), in.ID)
+}
+
+// ProtectedRouteModeState is the state a protected route mode's re-run
+// must still find: the connection's revision and the route's mode.
+func (s *Service) ProtectedRouteModeState(ctx context.Context, tx db.TenantTx, payload []byte) ([]byte, error) {
+	var in RouteModeInput
+	if err := json.Unmarshal(payload, &in); err != nil {
+		return nil, ErrShape
+	}
+	q := dbq.New(tx)
+	st, err := connectionState(ctx, q, tx.OrgID(), in.Connection)
+	if err != nil {
+		return nil, err
+	}
+	routes, err := q.ListConnectionRoutes(ctx, tx.OrgID(), in.Connection)
+	if err != nil {
+		return nil, err
+	}
+	mode := "default"
+	for _, r := range routes {
+		if r.Route == in.Route {
+			mode = r.Mode
+		}
+	}
+	return append(st, "/"+mode...), nil
 }

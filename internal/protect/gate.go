@@ -4,7 +4,9 @@
 package protect
 
 import (
+	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json/v2"
 	"fmt"
 	"maps"
@@ -69,15 +71,25 @@ type Checker interface {
 type Gate struct {
 	Requests   Requests
 	Compromise Checker
-	appliers   map[Surface]Applier
+	surfaces   map[Surface]surface
 }
 
-// Register sets the Applier that re-runs a surface's stored changes.
-func (g *Gate) Register(s Surface, a Applier) {
-	if g.appliers == nil {
-		g.appliers = map[Surface]Applier{}
+// State reads the state of a change's subject now, from the change's
+// payload: what a confirmed re-run must still find (D72 P5).
+type State func(ctx context.Context, tx db.TenantTx, payload []byte) ([]byte, error)
+
+type surface struct {
+	apply Applier
+	state State
+}
+
+// Register sets the Applier that re-runs a surface's stored changes and
+// the State their subject is checked against.
+func (g *Gate) Register(s Surface, a Applier, st State) {
+	if g.surfaces == nil {
+		g.surfaces = map[Surface]surface{}
 	}
-	g.appliers[s] = a
+	g.surfaces[s] = surface{apply: a, state: st}
 }
 
 // Hold applies c through apply when its category is OFF (or ctx is the
@@ -126,6 +138,10 @@ func (g *Gate) store(ctx context.Context, tx db.TenantTx, author tenancy.Caller,
 	if !c.Category.Valid() || c.Subject == "" || len(c.Widening) == 0 || c.Surface.Permission() == "" {
 		return nil, ErrInvalid
 	}
+	// A person marked compromised files no protected change (D72 P8).
+	if err := g.refuseCompromised(ctx, tx, author.Principal.ID); err != nil {
+		return nil, err
+	}
 	payload, err := json.Marshal(c.Payload, json.Deterministic(true))
 	if err != nil {
 		return nil, fmt.Errorf("protect: payload: %w", err)
@@ -133,7 +149,11 @@ func (g *Gate) store(ctx context.Context, tx db.TenantTx, author tenancy.Caller,
 	if c.SubjectID.IsZero() {
 		c.SubjectID = SubjectID(c.Surface, c.Subject)
 	}
-	sum, err := digest(tx.OrgID(), c, payload)
+	sd, err := g.subjectDigest(ctx, tx, c.Surface, payload)
+	if err != nil {
+		return nil, err
+	}
+	sum, err := digest(tx.OrgID(), c, payload, sd)
 	if err != nil {
 		return nil, err
 	}
@@ -166,7 +186,7 @@ func (g *Gate) store(ctx context.Context, tx db.TenantTx, author tenancy.Caller,
 	}
 	row, err := q.InsertProtectedChange(ctx, dbq.InsertProtectedChangeParams{
 		OrgID: org, ID: ids.NewV7(), Category: string(c.Category), Surface: string(c.Surface), SubjectID: c.SubjectID,
-		Subject: c.Subject, Summary: sb, Widening: c.Widening, Digest: sum, Payload: payload, Author: author.Principal.ID,
+		Subject: c.Subject, Summary: sb, Widening: c.Widening, Digest: sum, SubjectDigest: sd, Payload: payload, Author: author.Principal.ID,
 		AuthorCredential: string(author.Credential), State: state,
 	})
 	if err != nil {
@@ -211,7 +231,7 @@ func (g *Gate) Eligible(ctx context.Context, tx db.TenantTx, request, user ids.U
 	switch {
 	case !review && row.Author == user:
 		return false, "SAME_PERSON", nil
-	case review && row.Publisher != nil && *row.Publisher == user:
+	case review && (row.Author == user || (row.Publisher != nil && *row.Publisher == user)):
 		return false, "SAME_PERSON", nil
 	}
 	return g.eligiblePerson(ctx, tx, user, Surface(row.Surface).Permission())
@@ -284,23 +304,11 @@ func (g *Gate) Apply(ctx context.Context, tx db.TenantTx, request ids.UUID, conf
 	})
 }
 
-// run re-runs a stored change as its author.
+// run re-runs a stored change as its author: the author must still be an
+// active person who holds the surface's permission and is not marked
+// compromised (D72 P7, P8), and the subject must be as it was when the
+// change was asked (P5).
 func (g *Gate) run(ctx context.Context, tx db.TenantTx, row dbq.PcProtectedChange) error {
-	if Surface(row.Surface) == SurfaceSettings {
-		var s struct {
-			Category Category `json:"category"`
-		}
-		if err := json.Unmarshal(row.Payload, &s); err != nil || !s.Category.Valid() {
-			return ErrInvalid
-		}
-		return dbq.New(tx).SetProtectedCategoryMode(ctx, dbq.SetProtectedCategoryModeParams{
-			OrgID: tx.OrgID(), Category: string(s.Category), Mode: string(ModeOff), UpdatedBy: row.Author,
-		})
-	}
-	a, ok := g.appliers[Surface(row.Surface)]
-	if !ok {
-		return ErrUnavailable
-	}
 	s, err := personSubject(ctx, tx, row.Author)
 	if err != nil {
 		return err
@@ -308,8 +316,74 @@ func (g *Gate) run(ctx context.Context, tx db.TenantTx, row dbq.PcProtectedChang
 	if s == nil {
 		return pcerr.New(pcerr.FailedPrecondition, "AUTHOR_NOT_ACTIVE", "the change's author is no longer an active person")
 	}
+	if err := g.refuseCompromised(ctx, tx, row.Author); err != nil {
+		return err
+	}
+	surface := Surface(row.Surface)
+	if err := s.Require(surface.Permission(), td.OrgPath(tx.OrgID())); err != nil {
+		return err
+	}
+	if surface == SurfaceSettings {
+		// The settings lock first, as SetCategoryMode takes it.
+		if err := dbq.New(tx).LockProtectedChangeSettings(ctx, tx.OrgID()); err != nil {
+			return err
+		}
+	}
+	sd, err := g.subjectDigest(ctx, tx, surface, row.Payload)
+	if err != nil {
+		return err
+	}
+	if !bytes.Equal(sd, row.SubjectDigest) {
+		return &VoidError{Reason: ReasonSubjectChanged}
+	}
+	if surface == SurfaceSettings {
+		var st struct {
+			Category Category `json:"category"`
+		}
+		if err := json.Unmarshal(row.Payload, &st); err != nil || !st.Category.Valid() {
+			return ErrInvalid
+		}
+		return dbq.New(tx).SetProtectedCategoryMode(ctx, dbq.SetProtectedCategoryModeParams{
+			OrgID: tx.OrgID(), Category: string(st.Category), Mode: string(ModeOff), UpdatedBy: row.Author,
+		})
+	}
+	sf, ok := g.surfaces[surface]
+	if !ok {
+		return ErrUnavailable
+	}
 	author := tenancy.Caller{Subject: *s, Credential: tenancy.Credential(row.AuthorCredential)}
-	return a(applying(ctx, Surface(row.Surface), row.SubjectID), tx, author, row.Payload)
+	return sf.apply(applying(ctx, surface, row.SubjectID), tx, author, row.Payload)
+}
+
+// subjectDigest is SHA-256 of the subject's state now, as the surface's
+// State reads it from a change's payload (the category's mode for
+// SETTINGS).
+func (g *Gate) subjectDigest(ctx context.Context, tx db.TenantTx, s Surface, payload []byte) ([]byte, error) {
+	var state []byte
+	if s == SurfaceSettings {
+		var st struct {
+			Category Category `json:"category"`
+		}
+		if err := json.Unmarshal(payload, &st); err != nil || !st.Category.Valid() {
+			return nil, ErrInvalid
+		}
+		mode, err := dbq.New(tx).ProtectedCategoryMode(ctx, tx.OrgID(), string(st.Category))
+		if err != nil {
+			return nil, err
+		}
+		state = []byte(mode)
+	} else {
+		sf, ok := g.surfaces[s]
+		if !ok || sf.state == nil {
+			return nil, ErrUnavailable
+		}
+		var err error
+		if state, err = sf.state(ctx, tx, payload); err != nil {
+			return nil, err
+		}
+	}
+	sum := sha256.Sum256(append([]byte(string(s)+"\x00"), state...))
+	return sum[:], nil
 }
 
 // personSubject loads an active person's current bindings, or nil.
@@ -354,6 +428,22 @@ func one(n int64, err error) error {
 	}
 	if n != 1 {
 		return ErrState
+	}
+	return nil
+}
+
+// refuseCompromised returns ErrCompromised when user is marked compromised
+// (nil-safe: a nil Gate or one without a checker refuses nobody).
+func (g *Gate) refuseCompromised(ctx context.Context, tx db.TenantTx, user ids.UUID) error {
+	if g == nil || g.Compromise == nil {
+		return nil
+	}
+	bad, err := g.Compromise.CompromisedTx(ctx, tx, user)
+	if err != nil {
+		return err
+	}
+	if bad {
+		return ErrCompromised
 	}
 	return nil
 }

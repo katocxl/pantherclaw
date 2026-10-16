@@ -46,6 +46,9 @@ CREATE TABLE pc.protected_changes (
     summary           jsonb       NOT NULL CHECK (jsonb_typeof(summary) = 'object' AND octet_length(summary::text) <= 16384),
     widening          text[]      NOT NULL CHECK (cardinality(widening) BETWEEN 1 AND 32 AND array_position(widening, NULL) IS NULL),
     digest            bytea       NOT NULL CHECK (octet_length(digest) = 32),
+    -- The subject's state when the change was asked; the confirmed re-run
+    -- refuses when it differs (SUBJECT_CHANGED, D72 P5).
+    subject_digest    bytea       NOT NULL CHECK (octet_length(subject_digest) = 32),
     payload           jsonb       NOT NULL CHECK (octet_length(payload::text) <= 262144),
     author            uuid        NOT NULL,
     author_credential text        NOT NULL CHECK (author_credential ~ '^[a-z_]{1,32}$'),
@@ -70,7 +73,7 @@ CREATE TABLE pc.protected_changes (
     CHECK (publisher IS NULL OR state = 'EMERGENCY' OR publisher <> author),
     CHECK ((state = 'EMERGENCY') = (review_due_at IS NOT NULL)),
     CHECK ((reviewed_by IS NULL) = (reviewed_at IS NULL)),
-    CHECK (reviewed_by IS NULL OR (state = 'EMERGENCY' AND reviewed_by <> publisher))
+    CHECK (reviewed_by IS NULL OR (state = 'EMERGENCY' AND reviewed_by <> publisher AND reviewed_by <> author))
 );
 -- One pending change per subject (a newer one voids the older, D42a).
 CREATE UNIQUE INDEX protected_changes_one_pending ON pc.protected_changes (org_id, surface, subject_id) WHERE state = 'PENDING';
@@ -101,6 +104,7 @@ BEGIN
             OR NEW.subject_id IS DISTINCT FROM OLD.subject_id OR NEW.subject IS DISTINCT FROM OLD.subject
             OR NEW.summary IS DISTINCT FROM OLD.summary OR NEW.widening IS DISTINCT FROM OLD.widening
             OR NEW.digest IS DISTINCT FROM OLD.digest OR NEW.payload IS DISTINCT FROM OLD.payload
+            OR NEW.subject_digest IS DISTINCT FROM OLD.subject_digest
             OR NEW.author IS DISTINCT FROM OLD.author OR NEW.author_credential IS DISTINCT FROM OLD.author_credential
             OR NEW.created_at IS DISTINCT FROM OLD.created_at THEN
         RAISE EXCEPTION 'a protected change never changes' USING ERRCODE = 'check_violation';

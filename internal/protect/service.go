@@ -5,6 +5,7 @@ package protect
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
@@ -107,6 +108,10 @@ func (s *Service) SetCategoryMode(ctx context.Context, cat Category, mode Mode) 
 		switch {
 		case Mode(cur) == mode:
 			return nil
+		case mode == ModeDistinctPublisher && (s.Gate == nil || s.Gate.Requests == nil):
+			// Nobody could confirm a change in it: on would lock the category
+			// (D72 P6).
+			return ErrUnavailable
 		case mode == ModeDistinctPublisher:
 			if err := q.SetProtectedCategoryMode(ctx, dbq.SetProtectedCategoryModeParams{
 				OrgID: c.Org, Category: string(cat), Mode: string(mode), UpdatedBy: c.Principal.ID,
@@ -196,6 +201,7 @@ func (s *Service) ApplyEmergency(ctx context.Context, request ids.UUID, su stepu
 		return dbq.PcProtectedChange{}, ErrUnavailable
 	}
 	var out dbq.PcProtectedChange
+	var changed bool
 	err = s.Pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
 		q := dbq.New(tx)
 		now, err := q.DBNow(ctx)
@@ -225,7 +231,19 @@ func (s *Service) ApplyEmergency(ctx context.Context, request ids.UUID, su stepu
 			return ErrState
 		}
 		if err := s.Gate.run(ctx, tx, row); err != nil {
-			return err
+			var ve *VoidError
+			if !errors.As(err, &ve) {
+				return err
+			}
+			// The subject changed since the change was asked: void it, and the
+			// request, and say so (D72 P5).
+			if _, err := q.DecideProtectedChange(ctx, dbq.DecideProtectedChangeParams{
+				State: StateVoided, Reason: ptr(ve.Reason), OrgID: c.Org, ID: row.ID,
+			}); err != nil {
+				return err
+			}
+			changed = true
+			return s.Gate.Requests.Void(ctx, tx, request, ve.Reason)
 		}
 		by := c.Principal.ID
 		if out, err = q.DecideProtectedChange(ctx, dbq.DecideProtectedChangeParams{
@@ -267,6 +285,9 @@ func (s *Service) ApplyEmergency(ctx context.Context, request ids.UUID, su stepu
 			"publisher": c.Principal.ID.String(), "review_request": review.String(),
 		})
 	})
+	if err == nil && changed {
+		return dbq.PcProtectedChange{}, ErrSubjectChanged
+	}
 	return out, err
 }
 
