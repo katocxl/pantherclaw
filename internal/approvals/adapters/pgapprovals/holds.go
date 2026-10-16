@@ -167,7 +167,7 @@ func RecordHold(ctx context.Context, tx db.TenantTx, org ids.OrgID, h Hold) erro
 		return err
 	}
 	if err := q.InsertApprovalRequest(ctx, dbq.InsertApprovalRequestParams{
-		OrgID: org, ID: h.RequestID, AgentID: h.AgentID, TransactionID: &h.TransactionID, Evaluation: ptr(int32(h.Evaluation)), //nolint:gosec // ≤ 64
+		OrgID: org, ID: h.RequestID, AgentID: &h.AgentID, TransactionID: &h.TransactionID, Evaluation: ptr(int32(h.Evaluation)), //nolint:gosec // ≤ 64
 		RunID: &h.RunID, GrantID: &h.GrantID, GrantRevision: ptr(int32(h.GrantRevision)), VariantKey: h.VariantKey[:], //nolint:gosec // small
 		Operation: h.Operation, PreviousID: h.Previous, Binding: h.Binding.Hash[:], BindingInput: h.Binding.Input,
 		Requirements: reqs, Display: display.Input, DisplayHash: h.DisplayHash[:], ActionIr: h.Action, DeadlineAt: h.Deadline,

@@ -125,6 +125,12 @@ type Requirement struct {
 	// Window: the approval is consumed only inside an active change window
 	// for the consequences' environments (G0 M8, HR-207).
 	Window bool `json:"window,omitzero"`
+	// A gate's deciders (KindGate, G0 M11 part 2 D25): roles holding
+	// automation.approve and people it is narrowed to, and the people who
+	// never decide it.
+	Roles   []string `json:"roles,omitzero"`
+	Users   []string `json:"users,omitzero"`
+	Exclude []string `json:"exclude,omitzero"`
 }
 
 // Needed is how many distinct people must respond.

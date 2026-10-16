@@ -11,11 +11,12 @@
 -- name: InsertRun :one
 INSERT INTO pc.runs (org_id, id, agent_id, instance_id, environment_id, launcher_user_id, launcher_sa_id,
     launcher_instance_id, principal_user_id, principal_sa_id, principal_source, subject_issuer, subject_subject,
-    actor_chain, parent_run_id, depth, grant_id, task_ref, simulated, expires_at)
+    actor_chain, parent_run_id, depth, grant_id, task_ref, simulated, automation_execution_id, expires_at)
 VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(agent_id), sqlc.narg(instance_id), sqlc.arg(environment_id),
     sqlc.narg(launcher_user_id), sqlc.narg(launcher_sa_id), sqlc.narg(launcher_instance_id), sqlc.narg(principal_user_id),
     sqlc.narg(principal_sa_id), sqlc.arg(principal_source), sqlc.narg(subject_issuer), sqlc.narg(subject_subject),
     sqlc.arg(actor_chain), sqlc.narg(parent_run_id), sqlc.arg(depth), sqlc.narg(grant_id), sqlc.arg(task_ref), sqlc.arg(simulated),
+    sqlc.narg(automation_execution_id),
     LEAST(now() + make_interval(mins => sqlc.arg(ttl_minutes)::int),
           coalesce(sqlc.narg(not_after)::timestamptz, 'infinity'::timestamptz)))
 RETURNING *;

@@ -188,6 +188,11 @@ type Grant struct {
 	// a scope, or a parent grant's revision.
 	Grantor Principal
 	Basis   string
+	// Ceiling and Execution name the automation ceiling and execution an
+	// automation-issued grant was issued under (zero otherwise; G0 M11
+	// part 2 D9). Neither ever changes.
+	Ceiling   ids.UUID
+	Execution ids.UUID
 	// RevisedAt is when the current revision was stored (zero before it is).
 	RevisedAt time.Time
 }

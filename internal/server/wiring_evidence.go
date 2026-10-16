@@ -156,8 +156,12 @@ func registerEvidence(rs *connect.Server, d apiDeps) (*evapp.Service, error) {
 // (migration 00073) is in; until then a pack that asks for them records the
 // gap.
 func newPackBuilder(cfg *Config, pool *db.Pool, keyReg *keys.Registry, log *slog.Logger) *packbuild.Service {
-	return &packbuild.Service{
+	s := &packbuild.Service{
 		Pool: pool, Keys: keyReg, LogOrigin: cfg.logOrigin(), Cosign: cfg.Evidence.MLDSACosign,
 		Explorer: &txapp.Explorer{Pool: pool}, Bundles: evapp.New(pool, cfg.logOrigin()), Log: log,
 	}
+	if automationPackExecutions != nil {
+		s.Executions = automationPackExecutions(pool)
+	}
+	return s
 }

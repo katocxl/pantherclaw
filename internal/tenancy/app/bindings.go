@@ -115,6 +115,9 @@ func checkPrincipal(ctx context.Context, q *dbq.Queries, org ids.OrgID, p td.Pri
 		if err != nil {
 			return notFound(err, ErrServiceAccountNotFound)
 		}
+		if err := notAutomationIdentity(ctx, q, org, id); err != nil {
+			return err
+		}
 		if td.AccountState(sa.State) != td.Enabled {
 			return ErrPrincipalDisabled
 		}

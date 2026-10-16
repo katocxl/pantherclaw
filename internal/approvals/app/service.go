@@ -167,15 +167,24 @@ func visible(ctx context.Context, q *dbq.Queries, c tenancy.Caller, l locked) (b
 			}
 		}
 	}
-	a, err := q.GetAgent(ctx, c.Org, l.row.AgentID)
-	if err != nil {
-		return false, err
-	}
-	path, err := agents.PathOf(ctx, q, a)
+	path, err := requestPath(ctx, q, c.Org, l.row)
 	if err != nil {
 		return false, err
 	}
 	return c.Can(td.PermApprovalRead, path), nil
+}
+
+// requestPath is the scope path a request lives on: its agent's, or the
+// org's for an automation gate without an agent (D25a).
+func requestPath(ctx context.Context, q *dbq.Queries, org ids.OrgID, r dbq.PcApprovalRequest) (td.Path, error) {
+	if r.AgentID == nil {
+		return td.OrgPath(org), nil
+	}
+	a, err := q.GetAgent(ctx, org, *r.AgentID)
+	if err != nil {
+		return nil, err
+	}
+	return agents.PathOf(ctx, q, a)
 }
 
 // refuse answers a responder who may not respond: not found unless they may

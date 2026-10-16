@@ -343,7 +343,7 @@ func (q *Queries) ExpireWaitlistEntries(ctx context.Context, orgID ids.OrgID, ki
 }
 
 const getWaitlistEntry = `-- name: GetWaitlistEntry :one
-SELECT org_id, id, kind, subject_type, subject_id, agent_id, state, evidence, deadline_at, decided_by, decided_at, decision_reason, created_at, priority, run_id, transaction_id, requested_by, routing_health, escalation_step, next_step_at, assignee_user_id, assigned_at, first_response_at FROM pc.waitlist_entries WHERE org_id = $1 AND id = $2
+SELECT org_id, id, kind, subject_type, subject_id, agent_id, state, evidence, deadline_at, decided_by, decided_at, decision_reason, created_at, priority, run_id, transaction_id, requested_by, routing_health, escalation_step, next_step_at, assignee_user_id, assigned_at, first_response_at, requested_by_automation FROM pc.waitlist_entries WHERE org_id = $1 AND id = $2
 `
 
 func (q *Queries) GetWaitlistEntry(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (PcWaitlistEntry, error) {
@@ -373,6 +373,7 @@ func (q *Queries) GetWaitlistEntry(ctx context.Context, orgID ids.OrgID, iD ids.
 		&i.AssigneeUserID,
 		&i.AssignedAt,
 		&i.FirstResponseAt,
+		&i.RequestedByAutomation,
 	)
 	return i, err
 }
@@ -473,7 +474,7 @@ func (q *Queries) InsertWaitlistRoute(ctx context.Context, arg InsertWaitlistRou
 
 const listWaitlistEntries = `-- name: ListWaitlistEntries :many
 
-SELECT e.org_id, e.id, e.kind, e.subject_type, e.subject_id, e.agent_id, e.state, e.evidence, e.deadline_at, e.decided_by, e.decided_at, e.decision_reason, e.created_at, e.priority, e.run_id, e.transaction_id, e.requested_by, e.routing_health, e.escalation_step, e.next_step_at, e.assignee_user_id, e.assigned_at, e.first_response_at FROM pc.waitlist_entries e
+SELECT e.org_id, e.id, e.kind, e.subject_type, e.subject_id, e.agent_id, e.state, e.evidence, e.deadline_at, e.decided_by, e.decided_at, e.decision_reason, e.created_at, e.priority, e.run_id, e.transaction_id, e.requested_by, e.routing_health, e.escalation_step, e.next_step_at, e.assignee_user_id, e.assigned_at, e.first_response_at, e.requested_by_automation FROM pc.waitlist_entries e
 WHERE e.org_id = $1 AND e.state = ANY ($2::text[])
   AND ($3::uuid IS NULL OR e.agent_id = $3::uuid)
   AND (cardinality($4::text[]) = 0 OR e.kind = ANY ($4::text[]))
@@ -549,6 +550,7 @@ func (q *Queries) ListWaitlistEntries(ctx context.Context, arg ListWaitlistEntri
 			&i.AssigneeUserID,
 			&i.AssignedAt,
 			&i.FirstResponseAt,
+			&i.RequestedByAutomation,
 		); err != nil {
 			return nil, err
 		}
@@ -603,27 +605,28 @@ func (q *Queries) OpenEntryOf(ctx context.Context, orgID ids.OrgID, subjectType 
 
 const openWaitlistEntry = `-- name: OpenWaitlistEntry :one
 INSERT INTO pc.waitlist_entries (org_id, id, kind, subject_type, subject_id, agent_id, run_id, transaction_id, requested_by,
-    evidence, priority, deadline_at)
+    requested_by_automation, evidence, priority, deadline_at)
 VALUES ($1, $2, $3, $4, $5, $6,
-    $7, $8, $9, $10, $11,
-    $12)
+    $7, $8, $9, $10,
+    $11, $12, $13)
 ON CONFLICT (org_id, subject_type, subject_id) WHERE state = 'OPEN' DO NOTHING
 RETURNING id
 `
 
 type OpenWaitlistEntryParams struct {
-	OrgID         ids.OrgID
-	ID            ids.UUID
-	Kind          string
-	SubjectType   string
-	SubjectID     ids.UUID
-	AgentID       *ids.UUID
-	RunID         *ids.UUID
-	TransactionID *ids.UUID
-	RequestedBy   *string
-	Evidence      []byte
-	Priority      int16
-	DeadlineAt    time.Time
+	OrgID                 ids.OrgID
+	ID                    ids.UUID
+	Kind                  string
+	SubjectType           string
+	SubjectID             ids.UUID
+	AgentID               *ids.UUID
+	RunID                 *ids.UUID
+	TransactionID         *ids.UUID
+	RequestedBy           *string
+	RequestedByAutomation *ids.UUID
+	Evidence              []byte
+	Priority              int16
+	DeadlineAt            time.Time
 }
 
 // Producers (G0 M5 part 2 slice 210). Each entry is opened in the
@@ -640,6 +643,7 @@ func (q *Queries) OpenWaitlistEntry(ctx context.Context, arg OpenWaitlistEntryPa
 		arg.RunID,
 		arg.TransactionID,
 		arg.RequestedBy,
+		arg.RequestedByAutomation,
 		arg.Evidence,
 		arg.Priority,
 		arg.DeadlineAt,

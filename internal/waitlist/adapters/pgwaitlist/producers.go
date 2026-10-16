@@ -30,6 +30,8 @@ type entry struct {
 	subject           ids.UUID
 	agent, run, txn   *ids.UUID
 	requestedBy       *string
+	// automation is the requester of an AUTOMATION_GATE entry (D62).
+	automation *ids.UUID
 	// trusted is what PantherClaw established about the subject.
 	trusted map[string]string
 	// untrusted was written by a person or a workload and is shown only
@@ -82,7 +84,7 @@ func open(ctx context.Context, tx db.TenantTx, org ids.OrgID, e entry, actor evd
 	}
 	id, err := q.OpenWaitlistEntry(ctx, dbq.OpenWaitlistEntryParams{
 		OrgID: org, ID: ids.NewV7(), Kind: e.kind, SubjectType: e.subjectType, SubjectID: e.subject, AgentID: e.agent,
-		RunID: e.run, TransactionID: e.txn, RequestedBy: e.requestedBy, Evidence: ev,
+		RunID: e.run, TransactionID: e.txn, RequestedBy: e.requestedBy, RequestedByAutomation: e.automation, Evidence: ev,
 		Priority: int16(wdomain.Priority(e.kind, "", deadline, now)), DeadlineAt: deadline, //nolint:gosec // 1..4
 	})
 	if db.IsNoRows(err) {
