@@ -100,8 +100,8 @@ func registerM11Protect(rs *connect.Server, d apiDeps, core *automationsCore) {
 // protectCore makes the core's change ceremony carry protected changes and
 // clearings (D6, D42, D43), blocks compromised people from confirming any
 // change request and from counting toward a ceiling (D11's
-// CompromiseChecker), and on marking voids their change requests, pauses
-// the automations whose ceiling they approved (D54) and exposes the
+// CompromiseChecker), and on marking voids their change requests and
+// the ACTIVE ceilings they approved (D54, D110 P3), and exposes the
 // automations they confirmed. It runs once, on the process's one core, so
 // the jobs have it too (D91 K6).
 func protectCore(p m11Protect, core *automationsCore) {
@@ -120,18 +120,15 @@ func protectCore(p m11Protect, core *automationsCore) {
 			if err != nil {
 				return nil, err
 			}
-			autos := make([]ids.UUID, 0, len(ceilings))
+			// Each ACTIVE ceiling they approved is voided now, in the marking
+			// transaction: its automation pauses and the grants issued under it
+			// are revoked at once (D110 P3).
 			for _, c := range ceilings {
-				autos = append(autos, c.AutomationID)
-			}
-			var paused []ids.UUID
-			if len(autos) > 0 {
-				if paused, err = core.svc.Pause(ctx, tx.Pgx(), tx.OrgID(), autodomain.PauseSelector{Automations: autos},
-					autodomain.PauseCompromisedPublisher); err != nil {
+				if err := core.svc.VoidCeilingTx(ctx, tx, tx.OrgID(), c.ID, string(autodomain.PauseCompromisedPublisher)); err != nil {
 					return nil, err
 				}
 			}
-			return map[string]string{"automations_paused": strconv.Itoa(len(paused))}, nil
+			return map[string]string{"ceilings_voided": strconv.Itoa(len(ceilings))}, nil
 		})
 	if pub.Sources == nil {
 		pub.Sources = map[string]protect.ExposureSource{}
