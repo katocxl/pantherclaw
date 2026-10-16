@@ -335,3 +335,66 @@ func TestCeilingNotWiderThan(t *testing.T) {
 		}
 	}
 }
+
+// TestD102_AbsentMinMeansOne: an absent or 0 wait_effect min and gate
+// min_approvals mean 1; a negative one is refused (D102 C2).
+func TestD102_AbsentMinMeansOne(t *testing.T) {
+	doc := func(extra string) string {
+		return strings.Replace(sample, "  - id: wait\n    step: wait_run\n    with:\n      step: launch\n    timeout: 2h\n",
+			"  - id: wait\n    step: wait_effect\n    with:\n      step: launch\n      operation: payments.refund\n"+extra+"    timeout: 2h\n"+
+				"  - id: ok\n    step: gate\n    with:\n      approvers:\n        roles: [automation_operator]\n      deadline: 1h\n"+
+				strings.ReplaceAll(extra, "min:", "min_approvals:"), 1)
+	}
+	bad := func(fs []autodomain.Finding) []string {
+		var out []string
+		for _, f := range fs {
+			if strings.HasSuffix(f.Path, "/min") || strings.HasSuffix(f.Path, "/min_approvals") {
+				out = append(out, f.Path)
+			}
+		}
+		return out
+	}
+	for _, extra := range []string{"", "      min: 0\n"} {
+		if got := bad(validate(t, doc(extra), fakeEnv{approvers: 2})); len(got) != 0 {
+			t.Errorf("%q refused: %v", extra, got)
+		}
+	}
+	if got := bad(validate(t, doc("      min: -1\n"), fakeEnv{approvers: 2})); len(got) != 2 {
+		t.Errorf("negative minimums: %v", got)
+	}
+	if (autodomain.WaitEffectWith{}).Effects() != 1 || (autodomain.GateWith{}).Approvals() != 1 || (autodomain.GateWith{MinApprovals: 2}).Approvals() != 2 {
+		t.Error("absent minimums are not 1")
+	}
+}
+
+// TestD102_RevocableWithin: a replacement that widens revocable is wider
+// (D102 L4).
+func TestD102_RevocableWithin(t *testing.T) {
+	a, b := autodomain.RefID{}, autodomain.RefID(ids.NewV7())
+	agents := &autodomain.AgentScope{Agents: []autodomain.RefID{a}}
+	all := &autodomain.AgentScope{All: true}
+	for name, tc := range map[string]struct {
+		s, prev *autodomain.AgentScope
+		want    bool
+	}{
+		"absent":         {nil, agents, true},
+		"same":           {agents, agents, true},
+		"agents in all":  {agents, all, true},
+		"all over list":  {all, agents, false},
+		"another agent":  {&autodomain.AgentScope{Agents: []autodomain.RefID{a, b}}, agents, false},
+		"new revocation": {agents, nil, false},
+	} {
+		if got := tc.s.Within(tc.prev); got != tc.want {
+			t.Errorf("%s: %v", name, got)
+		}
+	}
+	d, err := autodomain.Parse([]byte(sample))
+	if err != nil {
+		t.Fatal(err)
+	}
+	wider := d.Authority
+	wider.Revocable = all
+	if wider.NotWiderThan(d.Authority) || !d.Authority.NotWiderThan(d.Authority) {
+		t.Error("Authority.NotWiderThan ignores revocable")
+	}
+}

@@ -169,6 +169,9 @@ type Version struct {
 // ControlEffect is what a control verifiably did (HR-283).
 type ControlEffect struct {
 	GrantsRevoked, RunsEnded, LaunchesCancelled, DeliveriesCancelled, ExecutionsAffected []ids.UUID
+	// DeliveriesNotVerified were handed to a receiver and their cancellation
+	// could not be confirmed (D97, D102, HR-283): they may still arrive.
+	DeliveriesNotVerified []ids.UUID
 }
 
 func (e *ControlEffect) add(o ControlEffect) {
@@ -177,6 +180,7 @@ func (e *ControlEffect) add(o ControlEffect) {
 	e.LaunchesCancelled = append(e.LaunchesCancelled, o.LaunchesCancelled...)
 	e.DeliveriesCancelled = append(e.DeliveriesCancelled, o.DeliveriesCancelled...)
 	e.ExecutionsAffected = append(e.ExecutionsAffected, o.ExecutionsAffected...)
+	e.DeliveriesNotVerified = append(e.DeliveriesNotVerified, o.DeliveriesNotVerified...)
 }
 
 func automationView(r dbq.PcAutomation) Automation {

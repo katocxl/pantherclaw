@@ -350,3 +350,12 @@ WHERE r.org_id = sqlc.arg(org_id) AND r.launcher_sa_id = sqlc.arg(service_accoun
 -- An enabling's apply takes the org's containment row as the kill switch's
 -- Engage does, so the two serialize (D91 K5).
 SELECT kill_switch FROM pc.org_containment WHERE org_id = sqlc.arg(org_id) FOR UPDATE;
+
+-- name: ResolveAutomationFailure :execrows
+-- Resolves an open owned failure the automations core raised, by its kind
+-- and dedupe key, once its cause is gone (D102 L6: the next successful
+-- ceiling check resolves automation.sweep_failed).
+UPDATE pc.operational_failures
+SET state = 'RESOLVED', resolved_at = now(), resolution = sqlc.arg(resolution)::text
+WHERE org_id = sqlc.arg(org_id) AND kind = sqlc.arg(kind)::text AND dedupe_key = sqlc.arg(dedupe_key)::text
+  AND state <> 'RESOLVED';
