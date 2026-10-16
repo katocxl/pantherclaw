@@ -129,8 +129,9 @@ type ProtectedChangeServiceClient interface {
 	// fresh 72-hour review that neither the author nor the person who
 	// applied it may confirm. The change stays applied throughout. The
 	// caller is a person holding the change's category permission (the
-	// surface's, for example release.window.manage), not marked compromised.
-	// permission: authenticated (the use case checks the category permission)
+	// surface's, for example release.window.manage), not marked compromised;
+	// the use case checks that permission.
+	// permission: authenticated
 	OpenEmergencyReview(context.Context, *v1.OpenEmergencyReviewRequest) (*v1.OpenEmergencyReviewResponse, error)
 }
 
@@ -169,8 +170,9 @@ type ProtectedChangeServiceHandler interface {
 	// fresh 72-hour review that neither the author nor the person who
 	// applied it may confirm. The change stays applied throughout. The
 	// caller is a person holding the change's category permission (the
-	// surface's, for example release.window.manage), not marked compromised.
-	// permission: authenticated (the use case checks the category permission)
+	// surface's, for example release.window.manage), not marked compromised;
+	// the use case checks that permission.
+	// permission: authenticated
 	OpenEmergencyReview(context.Context, *v1.OpenEmergencyReviewRequest) (*v1.OpenEmergencyReviewResponse, error)
 }
 
