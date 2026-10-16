@@ -1683,7 +1683,7 @@ type ProbeApprovalsWaitingRow struct {
 	SubjectKind           string
 	Operation             string
 	CreatedAt             time.Time
-	AgentID               ids.UUID
+	AgentID               *ids.UUID
 	RunID                 *ids.UUID
 	AutomationExecutionID *ids.UUID
 }

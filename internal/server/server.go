@@ -635,6 +635,7 @@ func apiHandler(d apiDeps) (http.Handler, error) {
 	registerReflexCore(rs, d)
 	registerAutomationsCore(rs, d)
 	registerAutomationAssurance(rs, d)
+	registerAutomationsEngine(rs, d)
 	mux := http.NewServeMux()
 	edges.mount(mux)
 	rpc.Mount(mux, rs)

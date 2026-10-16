@@ -54,7 +54,10 @@ func (s *Service) recordRefusal(ctx context.Context, org ids.OrgID, user ids.UUI
 	if aerr := s.Pool.InTenantTx(context.WithoutCancel(ctx), org, func(ctx context.Context, tx db.TenantTx) error {
 		details := map[string]string{"user": user.String()}
 		if row, err := dbq.New(tx).GetApprovalRequest(ctx, org, request); err == nil {
-			details["agent"], details["operation"] = row.AgentID.String(), row.Operation
+			details["operation"] = row.Operation
+			if row.AgentID != nil {
+				details["agent"] = row.AgentID.String()
+			}
 		}
 		_, err := audit.Record(ctx, tx, audit.Event{
 			Name: "approval.response_refused", Actor: userActor(user), Outcome: audit.Denied, ReasonCode: r.reason,

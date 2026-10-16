@@ -206,36 +206,39 @@ type PcApprovalEvidence struct {
 }
 
 type PcApprovalRequest struct {
-	OrgID              ids.OrgID
-	ID                 ids.UUID
-	SubjectKind        string
-	AgentID            ids.UUID
-	TransactionID      *ids.UUID
-	Evaluation         *int32
-	RunID              *ids.UUID
-	GrantID            *ids.UUID
-	GrantRevision      *int32
-	VariantKey         []byte
-	RequestedBy        *ids.UUID
-	Operation          string
-	PreviousID         *ids.UUID
-	Binding            []byte
-	BindingInput       []byte
-	Requirements       []byte
-	Display            []byte
-	DisplayHash        []byte
-	State              string
-	EndReason          *string
-	CreatedAt          time.Time
-	DeadlineAt         time.Time
-	EvidenceDeadlineAt *time.Time
-	ApprovedAt         *time.Time
-	ConsumeBy          *time.Time
-	ConsumedAt         *time.Time
-	PermitID           *ids.UUID
-	EndedAt            *time.Time
-	ActionIr           []byte
-	InvalidationKey    *string
+	OrgID                 ids.OrgID
+	ID                    ids.UUID
+	SubjectKind           string
+	AgentID               *ids.UUID
+	TransactionID         *ids.UUID
+	Evaluation            *int32
+	RunID                 *ids.UUID
+	GrantID               *ids.UUID
+	GrantRevision         *int32
+	VariantKey            []byte
+	RequestedBy           *ids.UUID
+	Operation             string
+	PreviousID            *ids.UUID
+	Binding               []byte
+	BindingInput          []byte
+	Requirements          []byte
+	Display               []byte
+	DisplayHash           []byte
+	State                 string
+	EndReason             *string
+	CreatedAt             time.Time
+	DeadlineAt            time.Time
+	EvidenceDeadlineAt    *time.Time
+	ApprovedAt            *time.Time
+	ConsumeBy             *time.Time
+	ConsumedAt            *time.Time
+	PermitID              *ids.UUID
+	EndedAt               *time.Time
+	ActionIr              []byte
+	InvalidationKey       *string
+	ExecutionID           *ids.UUID
+	StepID                *string
+	RequestedByAutomation *ids.UUID
 }
 
 type PcApprovalRequestLinkedPerson struct {
@@ -419,12 +422,74 @@ type PcAutomationEventSource struct {
 	UpdatedAt           time.Time
 }
 
+type PcAutomationExecution struct {
+	OrgID             ids.OrgID
+	ID                ids.UUID
+	AutomationID      ids.UUID
+	VersionID         ids.UUID
+	TriggerID         ids.UUID
+	Mode              string
+	State             string
+	Reason            *string
+	CurrentStep       int16
+	Compensating      bool
+	CeilingID         *ids.UUID
+	ServiceAccountID  ids.UUID
+	PrincipalUserID   *ids.UUID
+	PrincipalSaID     *ids.UUID
+	TriggerKind       string
+	Params            []byte
+	Subjects          []byte
+	Evidence          []byte
+	OccurredAt        time.Time
+	RootTriggerID     ids.UUID
+	Ancestry          []ids.UUID
+	Depth             int16
+	Result            []byte
+	Transitions       int32
+	CreatedAt         time.Time
+	StartedAt         *time.Time
+	DeadlineAt        time.Time
+	UpdatedAt         time.Time
+	EndedAt           *time.Time
+	WakeAt            *time.Time
+	CancelRequestedBy *string
+	CancelReason      *string
+	CancelRequestedAt *time.Time
+}
+
 type PcAutomationFeedCursor struct {
 	OrgID         ids.OrgID
 	Seq           int64
 	AgentChangeAt *time.Time
 	AgentChangeID *ids.UUID
 	UpdatedAt     time.Time
+}
+
+type PcAutomationLaunch struct {
+	OrgID             ids.OrgID
+	ID                ids.UUID
+	ExecutionID       ids.UUID
+	AttemptID         ids.UUID
+	AgentID           ids.UUID
+	InstanceID        *ids.UUID
+	RunID             ids.UUID
+	GrantID           ids.UUID
+	TaskRef           string
+	Delivery          string
+	DestinationID     *ids.UUID
+	DeliveryID        *ids.UUID
+	State             string
+	ClaimedInstanceID *ids.UUID
+	ClaimedAt         *time.Time
+	ClaimDeadline     time.Time
+	CompletedAt       *time.Time
+	Outcome           *string
+	Report            []byte
+	Calls             []byte
+	RunParams         []byte
+	CreatedAt         time.Time
+	EndedAt           *time.Time
 }
 
 type PcAutomationSchedule struct {
@@ -452,6 +517,26 @@ type PcAutomationSimulation struct {
 	CreatedAt   time.Time
 	StartedAt   *time.Time
 	FinishedAt  *time.Time
+}
+
+type PcAutomationStepAttempt struct {
+	OrgID        ids.OrgID
+	ID           ids.UUID
+	ExecutionID  ids.UUID
+	StepIndex    int16
+	StepID       string
+	Attempt      int16
+	Kind         string
+	Compensation bool
+	State        string
+	Decision     string
+	Reason       *string
+	Output       []byte
+	Refs         []byte
+	Effect       string
+	StartedAt    time.Time
+	EndedAt      *time.Time
+	WakeAt       *time.Time
 }
 
 type PcAutomationTestCase struct {
@@ -2937,29 +3022,30 @@ type PcVerification struct {
 }
 
 type PcWaitlistEntry struct {
-	OrgID           ids.OrgID
-	ID              ids.UUID
-	Kind            string
-	SubjectType     string
-	SubjectID       ids.UUID
-	AgentID         *ids.UUID
-	State           string
-	Evidence        []byte
-	DeadlineAt      time.Time
-	DecidedBy       *string
-	DecidedAt       *time.Time
-	DecisionReason  string
-	CreatedAt       time.Time
-	Priority        int16
-	RunID           *ids.UUID
-	TransactionID   *ids.UUID
-	RequestedBy     *string
-	RoutingHealth   string
-	EscalationStep  int16
-	NextStepAt      *time.Time
-	AssigneeUserID  *ids.UUID
-	AssignedAt      *time.Time
-	FirstResponseAt *time.Time
+	OrgID                 ids.OrgID
+	ID                    ids.UUID
+	Kind                  string
+	SubjectType           string
+	SubjectID             ids.UUID
+	AgentID               *ids.UUID
+	State                 string
+	Evidence              []byte
+	DeadlineAt            time.Time
+	DecidedBy             *string
+	DecidedAt             *time.Time
+	DecisionReason        string
+	CreatedAt             time.Time
+	Priority              int16
+	RunID                 *ids.UUID
+	TransactionID         *ids.UUID
+	RequestedBy           *string
+	RoutingHealth         string
+	EscalationStep        int16
+	NextStepAt            *time.Time
+	AssigneeUserID        *ids.UUID
+	AssignedAt            *time.Time
+	FirstResponseAt       *time.Time
+	RequestedByAutomation *ids.UUID
 }
 
 type PcWaitlistRoute struct {

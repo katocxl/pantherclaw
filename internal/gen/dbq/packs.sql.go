@@ -340,7 +340,7 @@ type PackApprovalRequestsRow struct {
 	ID            ids.UUID
 	TransactionID *ids.UUID
 	Evaluation    *int32
-	AgentID       ids.UUID
+	AgentID       *ids.UUID
 	Operation     string
 	State         string
 	EndReason     *string
