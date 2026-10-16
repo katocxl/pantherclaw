@@ -5,8 +5,8 @@ package server
 
 import (
 	"context"
+	"errors"
 	"log/slog"
-	"sync"
 
 	"connectrpc.com/connect/v2"
 	"github.com/jackc/pgx/v5"
@@ -14,7 +14,6 @@ import (
 
 	approvalsapp "github.com/katocxl/pantherclaw/internal/approvals/app"
 	autoapp "github.com/katocxl/pantherclaw/internal/automations/app"
-	autodomain "github.com/katocxl/pantherclaw/internal/automations/domain"
 	"github.com/katocxl/pantherclaw/internal/automations/engine"
 	"github.com/katocxl/pantherclaw/internal/automations/engine/adapters/executionsrpc"
 	"github.com/katocxl/pantherclaw/internal/automations/engine/adapters/pgengine"
@@ -23,16 +22,13 @@ import (
 	"github.com/katocxl/pantherclaw/internal/automations/triggers"
 	"github.com/katocxl/pantherclaw/internal/automations/triggers/endpoints"
 	"github.com/katocxl/pantherclaw/internal/billing"
-	defspg "github.com/katocxl/pantherclaw/internal/definitions/adapters/pgstore"
 	evdomain "github.com/katocxl/pantherclaw/internal/evidence/domain"
 	"github.com/katocxl/pantherclaw/internal/evidence/packbuild"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1/pantherclawv1connect"
-	grantspg "github.com/katocxl/pantherclaw/internal/grants/adapters/pgstore"
 	grantsapp "github.com/katocxl/pantherclaw/internal/grants/app"
 	"github.com/katocxl/pantherclaw/internal/identity/adapters/workloadrpc"
 	napp "github.com/katocxl/pantherclaw/internal/notifications/app"
-	"github.com/katocxl/pantherclaw/internal/platform/clock"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	"github.com/katocxl/pantherclaw/internal/platform/jobs"
@@ -47,21 +43,22 @@ import (
 var automationSecuritySteps func(pool *db.Pool, d steps.Deps) autoports.StepRegistry
 
 func init() {
-	automationStarter = func(pool *db.Pool, bill *billing.Service, log *slog.Logger) autoports.Starter {
-		return newAutomationEngine(engineDeps{pool: pool, bill: bill, log: log})
+	automationStarter = func(core *automationsCore, pool *db.Pool, bill *billing.Service, log *slog.Logger) autoports.Starter {
+		return newAutomationEngine(engineDeps{pool: pool, bill: bill, core: core, log: log})
 	}
-	automationExecutions = func(pool *db.Pool) triggers.ExecutionLookup {
-		return newAutomationEngine(engineDeps{pool: pool})
+	automationExecutions = func(core *automationsCore, pool *db.Pool) triggers.ExecutionLookup {
+		return newAutomationEngine(engineDeps{pool: pool, core: core})
 	}
-	automationPauser = func(pool *db.Pool) autoports.Pauser { return &lazyPauser{pool: pool} }
-	automationPackExecutions = func(pool *db.Pool) packbuild.Executions {
-		return newAutomationEngine(engineDeps{pool: pool})
+	automationPauser = func(core *automationsCore) autoports.Pauser { return core.svc }
+	automationPackExecutions = func(core *automationsCore, pool *db.Pool) packbuild.Executions {
+		return newAutomationEngine(engineDeps{pool: pool, core: core})
 	}
 }
 
 // engineDeps are what the engine is built from; kp and publicURL enable
-// webhook deliveries, notify personal notices, core the API's own core
-// services (else the engine builds its own).
+// webhook deliveries, notify personal notices; core is the process's one
+// core (D91 K6, D105): the engine issues, revokes, runs, checks, pauses
+// and voids only through it.
 type engineDeps struct {
 	pool      *db.Pool
 	bill      *billing.Service
@@ -82,7 +79,6 @@ func newAutomationEngine(d engineDeps) *pgengine.Engine {
 		approvals.Notify = d.notify
 		notices = noticePort{n: d.notify}
 	}
-	core := engineCore(d.pool, d.bill, d.core)
 	deps := steps.Deps{
 		Gates: gatesPort{svc: approvals}, Notifier: notices, Rollout: pgengine.Rollout{}, Recipients: pgengine.Recipients{},
 	}
@@ -98,8 +94,8 @@ func newAutomationEngine(d engineDeps) *pgengine.Engine {
 		}
 	}
 	cleanup := pgengine.Cleanup{Gates: approvals, Deliveries: deliveries}
-	if core != nil && core.grants != nil && core.runs != nil {
-		g, r := grantsPort{svc: core.grants}, runsPort{svc: core.runs}
+	if d.core != nil {
+		g, r := grantsPort{core: d.core}, runsPort{core: d.core}
 		deps.Grants, deps.Runs = g, r
 		cleanup.Grants, cleanup.Runs = g, r
 	}
@@ -126,8 +122,8 @@ func newAutomationEngine(d engineDeps) *pgengine.Engine {
 	}
 	e.Reconciler = pgengine.Reconciliation{}
 	e.Cleaner = cleanup
-	if core != nil {
-		e.Pauser, e.Ceilings, e.Voider = core.svc, core.svc, core.svc
+	if d.core != nil {
+		e.Pauser, e.Ceilings, e.Voider = d.core.svc, d.core.svc, d.core.svc
 	}
 	return e
 }
@@ -154,20 +150,35 @@ func shareCore(core *automationsCore, e *pgengine.Engine, pool *db.Pool, bill *b
 		return
 	}
 	core.svc.Executions = executionsPort{e: e}
-	core.svc.Triggers = automationTriggerActivator(pool, bill, log)
+	core.svc.Triggers = automationTriggerActivator(pool, bill, log, core)
 	core.svc.Destinations = endpoints.DestinationChecker{}
 }
 
-// registerAutomationEngineJobs adds the driver and the wake sweep (D24).
-func registerAutomationEngineJobs(periodic []*river.PeriodicJob, reg *jobs.Registry, pool *db.Pool, kp keys.KeyProvider,
+// registerAutomationEngineJobs adds the driver and the wake sweep (D24) on
+// the process's one core, and attaches the engine's ports to it (a
+// worker-only process too, D105).
+func registerAutomationEngineJobs(periodic []*river.PeriodicJob, reg *jobs.Registry, core *automationsCore, kp keys.KeyProvider,
 	bill *billing.Service, publicURL string, notify *napp.Service, log *slog.Logger,
 ) ([]*river.PeriodicJob, error) {
-	e := newAutomationEngine(engineDeps{pool: pool, bill: bill, kp: kp, publicURL: publicURL, notify: notify, log: log})
+	e := driverEngine(core, kp, bill, publicURL, notify, log)
 	p, err := pgengine.Register(reg, e)
 	if err != nil {
 		return nil, err
 	}
 	return append(periodic, p...), nil
+}
+
+// driverEngine is the engine the River driver runs every step with: it
+// shares the process's core, whose grants and runs services are attached
+// by the API or the core jobs.
+func driverEngine(core *automationsCore, kp keys.KeyProvider, bill *billing.Service, publicURL string, notify *napp.Service,
+	log *slog.Logger,
+) *pgengine.Engine {
+	e := newAutomationEngine(engineDeps{
+		pool: core.svc.Pool, bill: bill, kp: kp, publicURL: publicURL, notify: notify, core: core, log: log,
+	})
+	shareCore(core, e, core.svc.Pool, bill, log)
+	return e
 }
 
 // gatesPort is steps.Gates over the approvals use cases (D25).
@@ -219,38 +230,38 @@ func (p noticePort) Notify(ctx context.Context, tx pgx.Tx, n steps.Notice) (ids.
 	}
 	r, err := p.n.Enqueue(ctx, ttx, napp.Message{
 		Org: n.Org, Type: typ, Personal: n.People, PersonalOnly: true,
-		Params:    map[string]string{"automation": n.Automation.String(),"step": n.StepID, "execution": n.Execution.String()},
+		Params:    map[string]string{"automation": n.Automation.String(), "step": n.StepID, "execution": n.Execution.String()},
 		Subject:   &napp.Subject{Type: "automation_execution", ID: n.Execution},
 		DedupeKey: typ + ":" + n.Execution.String() + ":" + n.StepID,
 	})
 	return r.Notification, err
 }
 
-// engineCore is the core the engine issues, revokes, runs, checks and
-// voids through (G0 M11 part 2 D9, D10, D57): the API's own services, or a
-// fresh set for the workers.
-func engineCore(pool *db.Pool, bill *billing.Service, core *automationsCore) *automationsCore {
-	if core != nil || pool == nil {
-		return core
+// grantsPort is steps.Grants and the cleanup's GrantRevoker over the
+// shared core's grants service (D9), read at each call: a worker-only
+// process attaches it after the engine is built.
+type grantsPort struct{ core *automationsCore }
+
+func (g grantsPort) svc() (*grantsapp.Service, error) {
+	if g.core.grants == nil {
+		return nil, errCoreDetached
 	}
-	gstore := &grantspg.Store{Pool: pool}
-	grants := &grantsapp.Service{
-		Repo: gstore, Subjects: gstore, Defs: &defspg.Store{Pool: pool}, Authz: grantsapp.SubjectAuthorizer{},
-		Clock: clock.System{}, Store: gstore,
-	}
-	return newAutomationsCore(pool, bill, "", grants, runsapp.New(pool).WithGrants(gstore))
+	return g.core.grants, nil
 }
 
-// grantsPort is steps.Grants and the cleanup's GrantRevoker over core's
-// grants service (D9).
-type grantsPort struct{ svc *grantsapp.Service }
+// errCoreDetached: the shared core has no grants or runs service yet.
+var errCoreDetached = errors.New("automations: the core has no grants or runs service attached")
 
 func (g grantsPort) IssueForAutomation(ctx context.Context, tx pgx.Tx, in steps.LaunchIssue) (ids.UUID, error) {
+	svc, err := g.svc()
+	if err != nil {
+		return ids.UUID{}, err
+	}
 	ttx, err := db.AdoptTenantTx(ctx, tx, in.Org)
 	if err != nil {
 		return ids.UUID{}, err
 	}
-	gr, err := g.svc.IssueForAutomationTx(ctx, ttx, grantsapp.AutomationIssue{
+	gr, err := svc.IssueForAutomationTx(ctx, ttx, grantsapp.AutomationIssue{
 		Org: in.Org, Automation: in.Automation, Version: in.Version, Execution: in.Execution, Trigger: in.Trigger,
 		Ceiling: in.Ceiling, ServiceAccount: in.ServiceAccount, AgentID: in.Agent, InstanceID: in.Instance,
 		Principal: in.Principal, TaskRef: in.TaskRef, TTL: in.TTL, Bounds: in.Bounds, Requirements: in.Requirements,
@@ -263,6 +274,10 @@ func (g grantsPort) IssueForAutomation(ctx context.Context, tx pgx.Tx, in steps.
 }
 
 func (g grantsPort) RevokeForAutomation(ctx context.Context, tx pgx.Tx, in steps.GrantRevoke) ([]ids.UUID, error) {
+	svc, err := g.svc()
+	if err != nil {
+		return nil, err
+	}
 	ttx, err := db.AdoptTenantTx(ctx, tx, in.Org)
 	if err != nil {
 		return nil, err
@@ -275,7 +290,7 @@ func (g grantsPort) RevokeForAutomation(ctx context.Context, tx pgx.Tx, in steps
 	if in.Grant != nil {
 		r.Grant = *in.Grant
 	}
-	revoked, err := g.svc.RevokeForAutomationTx(ctx, ttx, r)
+	revoked, err := svc.RevokeForAutomationTx(ctx, ttx, r)
 	out := make([]ids.UUID, 0, len(revoked))
 	for _, id := range revoked {
 		out = append(out, id.UUID())
@@ -291,16 +306,27 @@ func (g grantsPort) RevokeExecutionGrants(ctx context.Context, tx pgx.Tx, x *eng
 	})
 }
 
-// runsPort is steps.Runs and the cleanup's RunEnder over core's runs
-// service (D10).
-type runsPort struct{ svc *runsapp.Service }
+// runsPort is steps.Runs and the cleanup's RunEnder over the shared
+// core's runs service (D10), read at each call.
+type runsPort struct{ core *automationsCore }
+
+func (r runsPort) svc() (*runsapp.Service, error) {
+	if r.core.runs == nil {
+		return nil, errCoreDetached
+	}
+	return r.core.runs, nil
+}
 
 func (r runsPort) StartForAutomation(ctx context.Context, tx pgx.Tx, in steps.LaunchStart) (ids.UUID, error) {
+	svc, err := r.svc()
+	if err != nil {
+		return ids.UUID{}, err
+	}
 	ttx, err := db.AdoptTenantTx(ctx, tx, in.Org)
 	if err != nil {
 		return ids.UUID{}, err
 	}
-	run, err := r.svc.StartForAutomationTx(ctx, ttx, runsapp.AutomationStart{
+	run, err := svc.StartForAutomationTx(ctx, ttx, runsapp.AutomationStart{
 		Org: in.Org, Automation: in.Automation, Version: in.Version, Execution: in.Execution, Trigger: in.Trigger,
 		ServiceAccount: in.ServiceAccount, AgentID: in.Agent, InstanceID: in.Instance, GrantID: in.Grant,
 		Principal: in.Principal, TaskRef: in.TaskRef, TTL: in.TTL, DryRun: in.DryRun,
@@ -311,17 +337,25 @@ func (r runsPort) StartForAutomation(ctx context.Context, tx pgx.Tx, in steps.La
 func (r runsPort) EndForAutomation(ctx context.Context, tx pgx.Tx, org ids.OrgID, execution, serviceAccount, run ids.UUID,
 	reason string,
 ) error {
+	svc, err := r.svc()
+	if err != nil {
+		return err
+	}
 	ttx, err := db.AdoptTenantTx(ctx, tx, org)
 	if err != nil {
 		return err
 	}
-	_, err = r.svc.EndForAutomationTx(ctx, ttx, org, execution, serviceAccount, run, reason)
+	_, err = svc.EndForAutomationTx(ctx, ttx, org, execution, serviceAccount, run, reason)
 	return err
 }
 
 // EndExecutionRuns implements pgengine.RunEnder (cleanup, D24): every
 // active run of the execution ends.
 func (r runsPort) EndExecutionRuns(ctx context.Context, tx pgx.Tx, x *engine.Exec, reason string) ([]ids.UUID, error) {
+	svc, err := r.svc()
+	if err != nil {
+		return nil, err
+	}
 	ttx, err := db.AdoptTenantTx(ctx, tx, x.Org)
 	if err != nil {
 		return nil, err
@@ -336,7 +370,7 @@ func (r runsPort) EndExecutionRuns(ctx context.Context, tx pgx.Tx, x *engine.Exe
 		if run.EffectiveState != "ACTIVE" {
 			continue
 		}
-		if _, err := r.svc.EndForAutomationTx(ctx, ttx, x.Org, x.ID, x.View.ServiceAccount, run.ID, reason); err != nil {
+		if _, err := svc.EndForAutomationTx(ctx, ttx, x.Org, x.ID, x.View.ServiceAccount, run.ID, reason); err != nil {
 			return nil, err
 		}
 		out = append(out, run.ID)
@@ -368,23 +402,4 @@ func (p executionsPort) CancelActive(ctx context.Context, tx pgx.Tx, org ids.Org
 
 // automationPackExecutions reads executions for evidence packs of scope
 // automation_execution (D30); set by init.
-var automationPackExecutions func(pool *db.Pool) packbuild.Executions
-
-// lazyPauser is the Pauser triggers call (core's pause, D14): core is built
-// on first use, with triggers' activator, so building triggers never
-// builds core again.
-type lazyPauser struct {
-	pool *db.Pool
-	once sync.Once
-	svc  *autoapp.Service
-}
-
-// Pause implements autoports.Pauser.
-func (p *lazyPauser) Pause(ctx context.Context, tx pgx.Tx, org ids.OrgID, sel autodomain.PauseSelector, reason autodomain.PauseReason,
-) ([]ids.UUID, error) {
-	p.once.Do(func() {
-		p.svc = engineCore(p.pool, nil, nil).svc
-		p.svc.Triggers = automationTriggerActivator(p.pool, nil, nil)
-	})
-	return p.svc.Pause(ctx, tx, org, sel, reason)
-}
+var automationPackExecutions func(core *automationsCore, pool *db.Pool) packbuild.Executions
