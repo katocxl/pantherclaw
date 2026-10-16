@@ -109,7 +109,7 @@ func (h *Handler) ListChangeRequests(ctx context.Context, r *pantherclawv1.ListC
 			}
 		}
 	}
-	rs, err := h.svc.List(ctx, f)
+	rs, next, err := h.svc.List(ctx, f)
 	if err != nil {
 		return nil, err
 	}
@@ -117,8 +117,8 @@ func (h *Handler) ListChangeRequests(ctx context.Context, r *pantherclawv1.ListC
 	for _, x := range rs {
 		out.Requests = append(out.Requests, RequestPB(x))
 	}
-	if len(rs) == f.Limit && len(rs) > 0 {
-		out.NextPageToken = rs[len(rs)-1].ID.String()
+	if !next.IsZero() {
+		out.NextPageToken = next.String()
 	}
 	return out, nil
 }

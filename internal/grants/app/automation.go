@@ -55,7 +55,13 @@ const (
 	RevokeScopeExecution     = "EXECUTION"
 	RevokeScopeTriggerGrant  = "TRIGGER_GRANT"
 	RevokeScopeCeilingAgents = "CEILING_AGENTS"
-	RevokeScopeCeiling       = "CEILING"
+	// RevokeScopeAutomation is every grant under any of the automation's
+	// authority rows, whatever their state (RevokeAuthority, D91 K2).
+	RevokeScopeAutomation = "AUTOMATION"
+	RevokeScopeCeiling    = "CEILING"
+	// RevokeScopeGrant is one grant of the given execution (Grant), for a
+	// failed launch's withdraw (D102).
+	RevokeScopeGrant = "GRANT"
 )
 
 // TxStore is the repository's in-transaction side, for issuance and
@@ -69,10 +75,9 @@ type TxStore interface {
 	IssueInTx(ctx context.Context, tx db.TenantTx, org ids.OrgID, g domain.Grant, ev audit.Event) error
 	RevokeInTx(ctx context.Context, tx db.TenantTx, org ids.OrgID, id domain.GrantID, ev audit.Event) ([]domain.GrantID, error)
 	// AutomationGrantsInTx lists active grants by revocation scope:
-	// EXECUTION (execution), CEILING (ceiling) or CEILING_AGENTS (agents'
-	// root grants).
-	AutomationGrantsInTx(ctx context.Context, tx db.TenantTx, org ids.OrgID, scope string, execution, ceiling ids.UUID,
-		agents []ids.UUID) ([]ids.UUID, error)
+	// EXECUTION (in.Execution), CEILING (in.Ceiling), CEILING_AGENTS (the
+	// agents' root grants) or AUTOMATION (in.Automation's ceilings).
+	AutomationGrantsInTx(ctx context.Context, tx db.TenantTx, in AutomationRevoke, agents []ids.UUID) ([]ids.UUID, error)
 }
 
 // AutomationCeiling is what issuance needs of an automation's ACTIVE
@@ -347,7 +352,7 @@ type AutomationRevoke struct {
 	// scopes.
 	Revocable    []ids.UUID
 	RevocableAll bool
-	// Grant is the trigger's grant (TRIGGER_GRANT).
+	// Grant is the trigger's grant (TRIGGER_GRANT), or the execution's grant (GRANT).
 	Grant  ids.UUID
 	Scope  string
 	Reason string
@@ -357,8 +362,11 @@ type AutomationRevoke struct {
 // of the scope and every grant delegated from them (D9): the execution's
 // own grants (EXECUTION), the trigger's grant when it is one of a
 // revocable agent's (TRIGGER_GRANT), the root grants of the ceiling agents
-// that are revocable (CEILING_AGENTS), or every grant under the ceiling (CEILING, for
-// RevokeAuthority). It returns the revoked ids.
+// that are revocable (CEILING_AGENTS), one grant that belongs to the execution
+// (GRANT), every grant under one ceiling
+// (CEILING: a void or expired authority row) or under any of the
+// automation's ceilings (AUTOMATION, for RevokeAuthority). It returns the
+// revoked ids.
 func (s *Service) RevokeForAutomationTx(ctx context.Context, tx db.TenantTx, in AutomationRevoke) ([]domain.GrantID, error) {
 	if s.Store == nil {
 		return nil, ErrGrantNotFound
@@ -376,12 +384,17 @@ func (s *Service) RevokeForAutomationTx(ctx context.Context, tx db.TenantTx, in 
 		if in.Execution.IsZero() {
 			return nil, ErrGrantNotFound
 		}
-		targets, err = s.Store.AutomationGrantsInTx(ctx, tx, in.Org, in.Scope, in.Execution, ids.UUID{}, nil)
+		targets, err = s.Store.AutomationGrantsInTx(ctx, tx, in, nil)
 	case RevokeScopeCeiling:
 		if in.Ceiling.IsZero() {
 			return nil, ErrGrantNotFound
 		}
-		targets, err = s.Store.AutomationGrantsInTx(ctx, tx, in.Org, in.Scope, ids.UUID{}, in.Ceiling, nil)
+		targets, err = s.Store.AutomationGrantsInTx(ctx, tx, in, nil)
+	case RevokeScopeAutomation:
+		if in.Automation.IsZero() {
+			return nil, ErrGrantNotFound
+		}
+		targets, err = s.Store.AutomationGrantsInTx(ctx, tx, in, nil)
 	case RevokeScopeCeilingAgents:
 		agents := in.Agents
 		if !in.RevocableAll {
@@ -390,7 +403,22 @@ func (s *Service) RevokeForAutomationTx(ctx context.Context, tx db.TenantTx, in 
 		if len(agents) == 0 {
 			return nil, errNotRevocable
 		}
-		targets, err = s.Store.AutomationGrantsInTx(ctx, tx, in.Org, in.Scope, ids.UUID{}, ids.UUID{}, agents)
+		targets, err = s.Store.AutomationGrantsInTx(ctx, tx, in, agents)
+	case RevokeScopeGrant:
+		gid, perr := domain.ParseGrantID(in.Grant.String())
+		if perr != nil || in.Execution.IsZero() {
+			return nil, ErrGrantNotFound
+		}
+		g, found, gerr := s.Store.GrantInTx(ctx, tx, in.Org, gid)
+		switch {
+		case gerr != nil:
+			return nil, gerr
+		case !found || g.Execution != in.Execution:
+			return nil, ErrGrantNotFound
+		case g.State != domain.StateActive:
+			return nil, nil
+		}
+		targets = []ids.UUID{g.ID.UUID()}
 	case RevokeScopeTriggerGrant:
 		gid, perr := domain.ParseGrantID(in.Grant.String())
 		if perr != nil {

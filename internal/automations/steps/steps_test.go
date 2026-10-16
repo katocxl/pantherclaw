@@ -10,7 +10,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"strconv"
 	"strings"
 	"testing"
 	"unicode/utf8"
@@ -126,24 +125,32 @@ func TestHR279_TheServerNeverDispatchesAToolCall(t *testing.T) {
 	}
 }
 
-// D89: a notice's text stays readable on the execution page: the body in
-// parts of at most 512 bytes, never cut inside a character.
+// D89: a notice's text stays readable on the execution page as title,
+// body_1 and body_2 only, each at most 512 bytes, never cut inside a
+// character.
 func TestHR158_NoticeTextIsKeptInTheStepOutput(t *testing.T) {
-	body := strings.Repeat("é", 700) // 1400 bytes
+	short := strings.Repeat("é", 300) // 600 bytes: two parts, whole
 	out := map[string]string{}
-	messageOutput(out, autodomain.NotifyMessage{Title: "Refund done", Body: body})
-	got := ""
-	for i := 1; ; i++ {
-		part, ok := out["body_"+strconv.Itoa(i)]
-		if !ok {
-			break
-		}
-		if len(part) > MaxOutputPart || !utf8.ValidString(part) {
-			t.Fatalf("part %d: %d bytes, valid %v", i, len(part), utf8.ValidString(part))
-		}
-		got += part
+	messageOutput(out, autodomain.NotifyMessage{Title: "Refund done", Body: short})
+	if out["body_1"]+out["body_2"] != short || out["title"] != "Refund done" || len(out) != 3 {
+		t.Fatalf("a 600-byte body: %d keys", len(out))
 	}
-	if got != body || out["title"] != "Refund done" || !(autodomain.StepResult{Output: out}).Valid() {
-		t.Fatalf("output %d keys, body %d bytes", len(out), len(got))
+	long := strings.Repeat("€", 1000) // 3000 bytes, the longest body
+	title := strings.Repeat("€", 200)
+	out = map[string]string{}
+	messageOutput(out, autodomain.NotifyMessage{Title: title, Body: long})
+	if len(out) != 3 {
+		t.Fatalf("output keys %v, want title, body_1, body_2", len(out))
+	}
+	for _, k := range []string{"title", "body_1", "body_2"} {
+		if v := out[k]; v == "" || len(v) > MaxOutputPart || !utf8.ValidString(v) {
+			t.Fatalf("%s: %d bytes, valid %v", k, len(v), utf8.ValidString(v))
+		}
+	}
+	if !strings.HasPrefix(long, out["body_1"]+out["body_2"]) || !(autodomain.StepResult{Output: out}).Valid() {
+		t.Fatal("the parts are not the body's prefix, or the output is invalid")
+	}
+	if got := CutUTF8("aé", 2); got != "a" {
+		t.Fatalf("CutUTF8 cut inside a character: %q", got)
 	}
 }

@@ -73,6 +73,35 @@ func (q *Queries) ActiveAutomationCeilings(ctx context.Context, orgID ids.OrgID)
 	return items, nil
 }
 
+const activeGrantsOfAutomation = `-- name: ActiveGrantsOfAutomation :many
+SELECT g.id FROM pc.grants g
+JOIN pc.automation_ceilings c ON c.org_id = g.org_id AND c.id = g.ceiling_id
+WHERE g.org_id = $1 AND c.automation_id = $2 AND g.state = 'ACTIVE'
+ORDER BY g.id
+`
+
+// RevokeForAutomationTx AUTOMATION: every active grant issued under any of
+// the automation's authority rows, whatever their state (RevokeAuthority).
+func (q *Queries) ActiveGrantsOfAutomation(ctx context.Context, orgID ids.OrgID, automationID ids.UUID) ([]ids.UUID, error) {
+	rows, err := q.db.Query(ctx, activeGrantsOfAutomation, orgID, automationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ids.UUID{}
+	for rows.Next() {
+		var id ids.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const activeGrantsOfCeiling = `-- name: ActiveGrantsOfCeiling :many
 SELECT g.id FROM pc.grants g
 WHERE g.org_id = $1 AND g.ceiling_id = $2 AND g.state = 'ACTIVE'
@@ -248,6 +277,21 @@ func (q *Queries) CeilingsApprovedBy(ctx context.Context, orgID ids.OrgID, userI
 		return nil, err
 	}
 	return items, nil
+}
+
+const countActiveAutomationRuns = `-- name: CountActiveAutomationRuns :one
+SELECT count(*)::int FROM pc.runs r
+WHERE r.org_id = $1 AND r.launcher_sa_id = $2
+  AND r.automation_execution_id IS NOT NULL AND r.state = 'ACTIVE'
+`
+
+// Without the engine's port, the automation's active runs stand for its
+// active executions (D91 K10): Retire refuses while any is live.
+func (q *Queries) CountActiveAutomationRuns(ctx context.Context, orgID ids.OrgID, serviceAccountID *ids.UUID) (int32, error) {
+	row := q.db.QueryRow(ctx, countActiveAutomationRuns, orgID, serviceAccountID)
+	var column_1 int32
+	err := row.Scan(&column_1)
+	return column_1, err
 }
 
 const disableAutomationServiceAccount = `-- name: DisableAutomationServiceAccount :execrows
@@ -1139,6 +1183,19 @@ func (q *Queries) LockAutomationVersion(ctx context.Context, orgID ids.OrgID, iD
 	return i, err
 }
 
+const lockKillSwitch = `-- name: LockKillSwitch :one
+SELECT kill_switch FROM pc.org_containment WHERE org_id = $1 FOR UPDATE
+`
+
+// An enabling's apply takes the org's containment row as the kill switch's
+// Engage does, so the two serialize (D91 K5).
+func (q *Queries) LockKillSwitch(ctx context.Context, orgID ids.OrgID) (bool, error) {
+	row := q.db.QueryRow(ctx, lockKillSwitch, orgID)
+	var kill_switch bool
+	err := row.Scan(&kill_switch)
+	return kill_switch, err
+}
+
 const markAutomationVersionTested = `-- name: MarkAutomationVersionTested :execrows
 UPDATE pc.automation_versions SET state = 'TESTED', tested_run_id = $1, tested_at = now()
 WHERE org_id = $2 AND id = $3 AND state = 'VALIDATED' AND digest = $4
@@ -1347,6 +1404,36 @@ func (q *Queries) ReserveAutomationBudget(ctx context.Context, arg ReserveAutoma
 	var reserved money.Decimal
 	err := row.Scan(&reserved)
 	return reserved, err
+}
+
+const resolveAutomationFailure = `-- name: ResolveAutomationFailure :execrows
+UPDATE pc.operational_failures
+SET state = 'RESOLVED', resolved_at = now(), resolution = $1::text
+WHERE org_id = $2 AND kind = $3::text AND dedupe_key = $4::text
+  AND state <> 'RESOLVED'
+`
+
+type ResolveAutomationFailureParams struct {
+	Resolution string
+	OrgID      ids.OrgID
+	Kind       string
+	DedupeKey  string
+}
+
+// Resolves an open owned failure the automations core raised, by its kind
+// and dedupe key, once its cause is gone (D102 L6: the next successful
+// ceiling check resolves automation.sweep_failed).
+func (q *Queries) ResolveAutomationFailure(ctx context.Context, arg ResolveAutomationFailureParams) (int64, error) {
+	result, err := q.db.Exec(ctx, resolveAutomationFailure,
+		arg.Resolution,
+		arg.OrgID,
+		arg.Kind,
+		arg.DedupeKey,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const resumeAutomation = `-- name: ResumeAutomation :execrows

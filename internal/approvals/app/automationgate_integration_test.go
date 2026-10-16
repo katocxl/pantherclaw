@@ -116,6 +116,15 @@ func TestHR281_AnAgentlessGateIsApprovedEndToEnd(t *testing.T) {
 	if again != id {
 		t.Fatalf("a second request for the step: %s", again)
 	}
+	// Another attempt never reuses the live gate bound to attempt 1 (D105 N4).
+	retry := g.gate("approve", g.alice.id)
+	retry.Attempt = 2
+	if err := g.p.InTenantTx(context.Background(), g.org, func(ctx context.Context, tx db.TenantTx) error {
+		_, _, err := g.svc.RequestAutomationGateTx(ctx, tx.Pgx(), retry)
+		return err
+	}); !errors.Is(err, approvals.ErrGateAttempt) {
+		t.Fatalf("attempt 2 with attempt 1's gate live: %v", err)
+	}
 
 	// An ACTION hold beside it: one gate never breaks the lists (E2).
 	hold := g.fx.request(1)
