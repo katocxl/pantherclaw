@@ -42,6 +42,9 @@ const (
 	RefApprovalRequest = "approval_request"
 	RefDelivery        = "automation_delivery"
 	RefNotification    = "notification"
+	// RefDeliveryNotVerified is a delivery cleanup could not cancel because
+	// its sending may have started (D97 N1): never reported as canceled.
+	RefDeliveryNotVerified = "automation_delivery_not_verified"
 )
 
 // Output keys.
@@ -139,4 +142,26 @@ func destinationUsable(ctx context.Context, tx pgx.Tx, org ids.OrgID, id ids.UUI
 		return autodomain.ReasonDestinationInactive, nil
 	}
 	return "", err
+}
+
+// revokeOf is a revocation by this execution, carrying the version's
+// authority.revocable (D65, D84 E10) and the ceiling's agents.
+func revokeOf(sc autodomain.StepContext, scope string, grant *ids.UUID, reason string) GrantRevoke {
+	ex := sc.Execution
+	in := GrantRevoke{
+		Org: sc.Org, Automation: ex.Automation, Execution: ex.ID, Trigger: ex.Trigger.ID, Ceiling: ex.Ceiling,
+		ServiceAccount: ex.ServiceAccount, Grant: grant, Scope: scope, Reason: reason,
+	}
+	if c := sc.Def.Authority.Ceiling; c != nil {
+		for _, a := range c.Agents {
+			in.Agents = append(in.Agents, a.UUID())
+		}
+	}
+	if r := sc.Def.Authority.Revocable; r != nil {
+		in.RevocableAll = r.All
+		for _, a := range r.Agents {
+			in.Revocable = append(in.Revocable, a.UUID())
+		}
+	}
+	return in
 }

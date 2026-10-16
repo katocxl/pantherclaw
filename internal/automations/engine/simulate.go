@@ -65,8 +65,7 @@ func Simulate(ctx context.Context, def *autodomain.Definition, trigger autodomai
 		ID: ids.NewV7(), Org: trigger.Org, Automation: trigger.Automation, Version: trigger.Version, Mode: autodomain.ModeTest,
 		Def: def, State: autodomain.ExecPending, DeadlineAt: start.Add(def.Limits.DeadlineOrDefault()),
 		View: autodomain.ExecutionView{
-			Automation: trigger.Automation, AutomationName: def.Name, Version: trigger.Version, Trigger: trigger,
-			Mode: autodomain.ModeTest, Owner: def.Owner.UUID(), StartedAt: start,
+			Automation: trigger.Automation, Version: trigger.Version, Trigger: trigger, Mode: autodomain.ModeTest, StartedAt: start,
 		},
 	}
 	x.View.ID = x.ID

@@ -128,6 +128,11 @@ func (e *Engine) Start(ctx context.Context, tx pgx.Tx, t autodomain.TriggerRef) 
 	if def.Authority.Ceiling != nil {
 		limit = def.Authority.Ceiling.ConcurrencyOrDefault()
 	}
+	if s := def.When.Schedule; t.Kind == autodomain.TriggerSchedule && s != nil && s.Overlap != autodomain.OverlapAllow {
+		// A schedule that forbids overlap runs one execution at a time (D17,
+		// D87): the next occurrence is refused while one is active.
+		limit = 1
+	}
 	n, err := q.CountActiveAutomationExecutions(ctx, t.Org, t.Automation)
 	if err != nil {
 		return ids.UUID{}, err

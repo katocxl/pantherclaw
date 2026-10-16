@@ -113,13 +113,15 @@ func (s *launchRun) plan(ctx context.Context, tx pgx.Tx, sc autodomain.StepConte
 	}
 	ex := sc.Execution
 	p.issue = LaunchIssue{
-		Org: sc.Org, Automation: ex.Automation, Version: ex.Version, Execution: ex.ID, Ceiling: ex.Ceiling,
-		ServiceAccount: ex.ServiceAccount, Agent: agent, Instance: instance, Principal: ex.Principal, TaskRef: w.TaskRef,
-		TTL: ttl, Bounds: bounds, Requirements: c.Requirements, Limits: limits, DryRun: dry,
+		Org: sc.Org, Automation: ex.Automation, Version: ex.Version, Execution: ex.ID, Trigger: ex.Trigger.ID,
+		Ceiling: ex.Ceiling, ServiceAccount: ex.ServiceAccount, Agent: agent, Instance: instance, Principal: ex.Principal,
+		TaskRef: w.TaskRef, TTL: ttl, Bounds: bounds, Requirements: c.Requirements, Limits: limits,
+		Live: sc.Mode == autodomain.ModeLive, DryRun: dry,
 	}
 	p.start = LaunchStart{
-		Org: sc.Org, Execution: ex.ID, ServiceAccount: ex.ServiceAccount, Agent: agent, Instance: instance,
-		Principal: ex.Principal, TaskRef: w.TaskRef, TTL: ttl, DryRun: dry,
+		Org: sc.Org, Automation: ex.Automation, Version: ex.Version, Trigger: ex.Trigger.ID, Execution: ex.ID,
+		ServiceAccount: ex.ServiceAccount, Agent: agent, Instance: instance, Principal: ex.Principal, TaskRef: w.TaskRef,
+		TTL: ttl, DryRun: dry,
 	}
 	return p, "", nil
 }
@@ -160,9 +162,7 @@ func (s *launchRun) Run(ctx context.Context, tx pgx.Tx, sc autodomain.StepContex
 	if err != nil {
 		if r, ok := refusal(err); ok {
 			// The grant was issued in this transaction: revoke it at once.
-			if _, rerr := s.d.Grants.RevokeForAutomation(ctx, tx, GrantRevoke{
-				Org: sc.Org, Execution: sc.Execution.ID, Grant: &grant, Scope: autodomain.RevokeExecution, Reason: r,
-			}); rerr != nil {
+			if _, rerr := s.d.Grants.RevokeForAutomation(ctx, tx, revokeOf(sc, autodomain.RevokeExecution, &grant, r)); rerr != nil {
 				return autodomain.StepResult{}, rerr
 			}
 			return autodomain.StepResult{
@@ -350,14 +350,12 @@ func (s *launchRun) withdraw(ctx context.Context, tx pgx.Tx, sc autodomain.StepC
 		return autodomain.StepResult{}, err
 	}
 	if s.d.Grants != nil {
-		if _, err := s.d.Grants.RevokeForAutomation(ctx, tx, GrantRevoke{
-			Org: sc.Org, Execution: sc.Execution.ID, Grant: &grant, Scope: autodomain.RevokeExecution, Reason: reason,
-		}); err != nil {
+		if _, err := s.d.Grants.RevokeForAutomation(ctx, tx, revokeOf(sc, autodomain.RevokeExecution, &grant, reason)); err != nil {
 			return autodomain.StepResult{}, err
 		}
 	}
 	if s.d.Runs != nil {
-		if err := s.d.Runs.EndForAutomation(ctx, tx, sc.Org, sc.Execution.ID, run, reason); err != nil {
+		if err := s.d.Runs.EndForAutomation(ctx, tx, sc.Org, sc.Execution.ID, sc.Execution.ServiceAccount, run, reason); err != nil {
 			return autodomain.StepResult{}, err
 		}
 	}

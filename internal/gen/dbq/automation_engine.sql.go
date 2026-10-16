@@ -41,6 +41,17 @@ func (q *Queries) ActiveAutomationExecutions(ctx context.Context, orgID ids.OrgI
 	return items, nil
 }
 
+const agentOwnerOf = `-- name: AgentOwnerOf :one
+SELECT owner_user_id FROM pc.agents WHERE org_id = $1 AND id = $2
+`
+
+func (q *Queries) AgentOwnerOf(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (*ids.UUID, error) {
+	row := q.db.QueryRow(ctx, agentOwnerOf, orgID, iD)
+	var owner_user_id *ids.UUID
+	err := row.Scan(&owner_user_id)
+	return owner_user_id, err
+}
+
 const allActiveAutomationExecutions = `-- name: AllActiveAutomationExecutions :many
 SELECT id FROM pc.automation_executions
 WHERE org_id = $1 AND state IN ('PENDING', 'RUNNING', 'WAITING')
@@ -188,6 +199,22 @@ func (q *Queries) AutomationExecutionInfo(ctx context.Context, orgID ids.OrgID, 
 		&i.TriggerID,
 		&i.UnknownIrreversible,
 	)
+	return i, err
+}
+
+const automationRolloutOf = `-- name: AutomationRolloutOf :one
+SELECT rollout, cohort_agents FROM pc.automations WHERE org_id = $1 AND id = $2
+`
+
+type AutomationRolloutOfRow struct {
+	Rollout      *string
+	CohortAgents []ids.UUID
+}
+
+func (q *Queries) AutomationRolloutOf(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (AutomationRolloutOfRow, error) {
+	row := q.db.QueryRow(ctx, automationRolloutOf, orgID, iD)
+	var i AutomationRolloutOfRow
+	err := row.Scan(&i.Rollout, &i.CohortAgents)
 	return i, err
 }
 
@@ -410,6 +437,33 @@ func (q *Queries) ExecutionDeliveries(ctx context.Context, orgID ids.OrgID, exec
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const executionGateApprovers = `-- name: ExecutionGateApprovers :many
+SELECT DISTINCT x.user_id FROM pc.approval_responses x
+JOIN pc.approval_requests r ON r.org_id = x.org_id AND r.id = x.request_id
+WHERE x.org_id = $1 AND r.execution_id = $2 AND x.kind = 'APPROVE' AND x.voided_at IS NULL
+`
+
+// The people who approved an execution's gates (notify APPROVERS).
+func (q *Queries) ExecutionGateApprovers(ctx context.Context, orgID ids.OrgID, executionID *ids.UUID) ([]ids.UUID, error) {
+	rows, err := q.db.Query(ctx, executionGateApprovers, orgID, executionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ids.UUID{}
+	for rows.Next() {
+		var user_id ids.UUID
+		if err := rows.Scan(&user_id); err != nil {
+			return nil, err
+		}
+		items = append(items, user_id)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -699,6 +753,30 @@ func (q *Queries) ExecutionTrigger(ctx context.Context, orgID ids.OrgID, iD ids.
 		&i.AuthenticityDetail,
 		&i.SourceRef,
 	)
+	return i, err
+}
+
+const executionUnresolved = `-- name: ExecutionUnresolved :one
+SELECT count(*) FILTER (WHERE t.effect_state IS NULL
+           OR t.effect_state IN ('UNKNOWN', 'CONFLICTING', 'UNVERIFIABLE', 'PROPAGATION_PENDING'))::int AS unresolved,
+       count(*) FILTER (WHERE t.effect_state IN ('CONFIRMED', 'PARTIAL', 'COMPENSATED'))::int AS changed
+FROM pc.transactions t
+JOIN pc.runs r ON r.org_id = t.org_id AND r.id = t.run_id
+WHERE t.org_id = $1 AND r.automation_execution_id = $2
+    AND t.decision IN ('ALLOW', 'ALLOW_WITH_OBLIGATIONS')
+`
+
+type ExecutionUnresolvedRow struct {
+	Unresolved int32
+	Changed    int32
+}
+
+// Reconciliation of an execution (D27): how many of its runs' allowed
+// transactions still have no known outcome, and how many changed something.
+func (q *Queries) ExecutionUnresolved(ctx context.Context, orgID ids.OrgID, executionID *ids.UUID) (ExecutionUnresolvedRow, error) {
+	row := q.db.QueryRow(ctx, executionUnresolved, orgID, executionID)
+	var i ExecutionUnresolvedRow
+	err := row.Scan(&i.Unresolved, &i.Changed)
 	return i, err
 }
 
@@ -1288,6 +1366,31 @@ func (q *Queries) OperationsQuarantined(ctx context.Context, orgID ids.OrgID, ex
 	var column_1 bool
 	err := row.Scan(&column_1)
 	return column_1, err
+}
+
+const pendingExecutionDeliveries = `-- name: PendingExecutionDeliveries :many
+SELECT id FROM pc.automation_deliveries
+WHERE org_id = $1 AND execution_id = $2 AND state = 'PENDING'
+`
+
+func (q *Queries) PendingExecutionDeliveries(ctx context.Context, orgID ids.OrgID, executionID ids.UUID) ([]ids.UUID, error) {
+	rows, err := q.db.Query(ctx, pendingExecutionDeliveries, orgID, executionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ids.UUID{}
+	for rows.Next() {
+		var id ids.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const requestAutomationExecutionCancel = `-- name: RequestAutomationExecutionCancel :execrows

@@ -340,3 +340,30 @@ JOIN pc.runs r ON r.org_id = t.org_id AND r.id = t.run_id
 WHERE t.org_id = sqlc.arg(org_id) AND r.automation_execution_id = sqlc.arg(execution_id)
 ORDER BY t.id
 LIMIT 10000;
+
+-- name: AutomationRolloutOf :one
+SELECT rollout, cohort_agents FROM pc.automations WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id);
+
+-- name: ExecutionGateApprovers :many
+-- The people who approved an execution's gates (notify APPROVERS).
+SELECT DISTINCT x.user_id FROM pc.approval_responses x
+JOIN pc.approval_requests r ON r.org_id = x.org_id AND r.id = x.request_id
+WHERE x.org_id = sqlc.arg(org_id) AND r.execution_id = sqlc.arg(execution_id) AND x.kind = 'APPROVE' AND x.voided_at IS NULL;
+
+-- name: AgentOwnerOf :one
+SELECT owner_user_id FROM pc.agents WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id);
+
+-- name: ExecutionUnresolved :one
+-- Reconciliation of an execution (D27): how many of its runs' allowed
+-- transactions still have no known outcome, and how many changed something.
+SELECT count(*) FILTER (WHERE t.effect_state IS NULL
+           OR t.effect_state IN ('UNKNOWN', 'CONFLICTING', 'UNVERIFIABLE', 'PROPAGATION_PENDING'))::int AS unresolved,
+       count(*) FILTER (WHERE t.effect_state IN ('CONFIRMED', 'PARTIAL', 'COMPENSATED'))::int AS changed
+FROM pc.transactions t
+JOIN pc.runs r ON r.org_id = t.org_id AND r.id = t.run_id
+WHERE t.org_id = sqlc.arg(org_id) AND r.automation_execution_id = sqlc.arg(execution_id)
+    AND t.decision IN ('ALLOW', 'ALLOW_WITH_OBLIGATIONS');
+
+-- name: PendingExecutionDeliveries :many
+SELECT id FROM pc.automation_deliveries
+WHERE org_id = sqlc.arg(org_id) AND execution_id = sqlc.arg(execution_id) AND state = 'PENDING';
