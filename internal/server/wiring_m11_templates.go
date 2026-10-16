@@ -5,7 +5,7 @@ package server
 
 import (
 	"context"
-	"log/slog"
+	"fmt"
 
 	"connectrpc.com/connect/v2"
 	"github.com/jackc/pgx/v5"
@@ -165,10 +165,10 @@ func securityPorts(in securityStepDeps) securitysteps.Deps {
 	}
 	insert, err := jobs.NewClient(in.Pool, nil, jobs.Config{Logger: in.Log}) // insert-only: enqueue in the step's transaction
 	if err != nil {
-		if in.Log != nil {
-			in.Log.Warn("automation.security_steps_queue_unavailable", slog.String("error", err.Error()))
-		}
-		return deps
+		// A licensed server without its job queue is misconfigured: it does
+		// not start (D115 R3), as the engine does not start without its
+		// guard environment.
+		panic(fmt.Errorf("automation security steps: job client: %w", err))
 	}
 	deps.Review.Simulations = securitysteps.NewPolicySimulations(insert, in.Bill)
 	// Digest packs are the automation's own, within its declared agents

@@ -12,6 +12,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/automations/templates/templatesrpc"
 	pantherclawv1 "github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
+	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	tenancy "github.com/katocxl/pantherclaw/internal/tenancy/app"
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
@@ -56,6 +57,32 @@ func TestD103_CreateFromTemplateNeverCreatesPartially(t *testing.T) {
 		d, s := &drafts{}, &tests{}
 		if _, err := h(d, s).CreateFromTemplate(ctx, req); !errors.Is(err, templatesrpc.ErrUnavailable) || d.calls+s.calls != 0 {
 			t.Errorf("%s: %v, %d draft and %d test calls", name, err, d.calls, s.calls)
+		}
+	}
+}
+
+// TestD115_ContainmentRevokingGrantsNeedsRevocable: scoped containment
+// that revokes grants names whose (revocable AGENTS with agents, or ALL);
+// without it CreateFromTemplate refuses TEMPLATE_PARAMS and creates
+// nothing (D103 T3, D115 R1).
+func TestD115_ContainmentRevokingGrantsNeedsRevocable(t *testing.T) {
+	org := ids.New[ids.Org]()
+	ctx := tenancy.WithCaller(context.Background(), tenancy.Caller{Subject: td.Subject{
+		Org: org, Principal: td.PrincipalRef{Kind: td.KindUser, ID: ids.NewV7()},
+		Bindings: []td.Binding{{Role: td.RoleAutomationAuthor, Scope: td.Scope{Type: td.ScopeOrg, ID: org.UUID()}}},
+	}})
+	tm, _ := templates.Get("scoped_incident_containment")
+	for _, drop := range [][]string{{"revocable"}, {"revocable", "agents"}} {
+		params := tm.Example()
+		params["contain"] = "REVOKE_GRANT"
+		for _, k := range drop {
+			delete(params, k)
+		}
+		d, s := &drafts{}, &tests{}
+		h := &templatesrpc.TemplateHandler{Pool: &db.Pool{}, Drafts: d, Tests: s}
+		_, err := h.CreateFromTemplate(ctx, &pantherclawv1.CreateFromTemplateRequest{TemplateId: tm.ID, Name: "contain", Params: params})
+		if pcerr.ReasonOf(err) != "TEMPLATE_PARAMS" || pcerr.CodeOf(err) != pcerr.InvalidArgument || d.calls+s.calls != 0 {
+			t.Errorf("without %v: %v, %d draft and %d test calls", drop, err, d.calls, s.calls)
 		}
 	}
 }
