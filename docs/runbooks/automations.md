@@ -49,6 +49,8 @@ An automation is a versioned definition that starts work on a schedule, a platfo
 5. Widen in steps: SHADOW → COHORT → FULL. Each widening is a ROLLOUT change request with the same ceremony; FULL needs a verified cohort stage (at least one SUCCEEDED live execution with completion evidence, and no authority failures or open reconciliations). Narrowing (`NarrowRollout`) takes one person.
 6. Any change to the definition or the ceiling is a new version and a new ceremony. Review dates: the owner is told 7 days and 1 day before `review_by`; at `review_by` the ceiling expires and the automation pauses (CEILING_EXPIRED). To continue, enable a new version, then Resume: enabling never un-pauses an automation, and only Resume (with its revalidation) does.
 
+**Expired requests.** A change request that is not confirmed before its expiry (at most 24 hours; at most 72 hours for an emergency review of a protected change) is marked EXPIRED by a per-org sweep that runs every minute, which also emits `change.expired`. Nothing is applied; request again.
+
 If an approver later loses a permission or is marked compromised, the ceiling is voided, the automation pauses (CEILING_VOID) and the owner gets an owned failure. This happens at the next issuance, or within 5 minutes through the ceiling sweep, which checks every ACTIVE ceiling's approvers and review date per org. To recover, enable a new version with current approvers, then Resume.
 
 ## 3. Pause, resume, cancel, retire, revoke authority
@@ -78,36 +80,47 @@ Every control returns its verified effects (grants revoked, runs ended, launches
 3. The sender posts to `https://<your PantherClaw>/v1/automations/events/{org}/{source}` with Standard Webhooks headers (`webhook-id`, `webhook-timestamp`, `webhook-signature`), a JSON body of at most 64 KiB and a `type` the source declares.
 4. Responses: 202 accepted; 401 an unknown, inactive or badly signed source, or a timestamp outside ±5 minutes (the same answer for all, so senders cannot probe for sources); 409 a `webhook-id` already seen (7 days); 422 an undeclared type or invalid JSON; 429 over the rate limit. Bodies are never stored; the audit keeps the source, type, id and body digest.
 
+**Rate limit across instances.** The per-source rate limit is held in memory by each server instance. Today the server runs as a single node, so the limit holds; with several instances the effective limit multiplies (a residual recorded under R-34, to be revisited with high availability in M13).
+
 **Rotation:** `RotateEventSourceSecret`, with a step-up on the web page. The previous secret stays valid for 24 hours; switch the sender within that window.
 
 **Suspected leak** (R-34): rotate at once, or disable the source if the sender cannot switch quickly (DISABLED is final; create a new source). Then review the automations it triggers: executions by trigger, grants issued, and whether any parameter values look forged. Event fields never choose identity or authority, and per-day caps bound the damage.
 
 ## 6. Automation destinations
 
-Destinations receive launches (LAUNCH), digests (DIGEST) and notices (NOTICE). They follow the same lifecycle as sources: created PENDING, activated with a step-up, HTTPS only; private and loopback hosts only when marked internal, metadata hosts never. Deliveries are signed with Standard Webhooks and retried up to 8 times (30 seconds to 1 hour). Rotate a destination's secret with a step-up; during the 24-hour overlap each delivery carries both signatures, so the receiver can switch at any time. A step that delivers succeeds only when the destination answered 2xx (DELIVERY_CONFIRMED).
+Destinations receive launches (LAUNCH), digests (DIGEST) and notices (NOTICE). They follow the same lifecycle as sources: created PENDING, activated with a step-up, HTTPS only; private and loopback hosts only when marked internal, metadata hosts never. Deliveries are signed with Standard Webhooks and retried up to 8 times (30 seconds to 1 hour). Rotate a destination's secret with a step-up; during the 24-hour overlap each delivery carries both signatures, so the receiver can switch at any time. A step that delivers succeeds only when the destination answered 2xx (DELIVERY_CONFIRMED). A PAUSED destination returns to ACTIVE without a step-up: its URL cannot change, and the URL is checked again at every send.
 
 ## 7. A compromised publisher (Business)
 
 If a person who confirms changes may be compromised:
 1. A holder of `publisher.compromise` marks them compromised on the web page with a step-up and a `since` time. At once they can no longer confirm, approve, publish, activate or promote; their pending change requests are voided; automations whose ceiling they approved are paused (COMPROMISED_PUBLISHER); open policy rollouts they confirmed are halted (HR-293).
 2. Read `ListExposed`: policy versions, package activations, org package keys (revoke them, see [key-rotation.md](key-rotation.md)), automation versions, protected changes, promotions and grants since `since`.
-3. Another person reviews each item KEEP or ROLLBACK. For a paused automation: KEEP it by enabling a new version through a ceremony with other confirmers and then resuming it, or retire it.
+3. Another person reviews each item KEEP or ROLLBACK. For a paused automation: KEEP it by enabling a new version through a ceremony with other confirmers and then resuming it, or retire it. What ROLLBACK does per item:
+
+   | Item | ROLLBACK |
+   |---|---|
+   | Policy version | Rolls the policy back. If the rollback loosens the policy, it opens a change request instead and the review answers ROLLBACK_PENDING_CONFIRMATION with the request id; nothing is recorded yet. Once that request is confirmed, record ROLLBACK again: the undo is idempotent ("already rolled back" counts as success). |
+   | Grant | Revokes the grant as the reviewer (reason PUBLISHER_COMPROMISED). |
+   | Automation | Pauses it. |
+   | Promotion | Revokes the promotion. |
+   | Policy change request, protected change | KEEP_ONLY: only KEEP can be recorded (pending policy change requests were already voided at marking). |
 4. Clearing the mark is a change request that two other people confirm, and only once every item is reviewed.
 
 ## 8. Promote an agent for production
 
-In a PRODUCTION environment, a new or widened grant, whether a person or an automation issues it, needs the agent promoted for each operation the grant lists (HR-290). Grants issued before the gate keep working until they expire.
+In a PRODUCTION environment, a new, widened or delegated grant, whether a person or an automation issues it, needs the agent promoted for each operation the grant lists (HR-290). Grants issued before the gate keep working until they expire.
 
 1. Check readiness: `GetReadiness(agent, environment)` reports each operation's checks (OWNER, IDENTITY, TESTS, APPROVALS, COVERAGE, FAILURE_BEHAVIOUR). It never makes a global claim.
-2. Promote: a `fleet_manager` with `agent.promote` runs `PromoteAgent(agent, environment, operations, failure behaviour)` with a security-key step-up. An `x.*` prefix expands to every operation currently known under it, and each is checked and stored separately. Passing operations are promoted and failing ones are reported.
-3. **A new agent with no traffic yet (provisional promotion, founder decision F7).** If every check passes except COVERAGE, and COVERAGE fails only because no coverage record exists yet, the promotion is PROVISIONAL:
+2. Promote: a `fleet_manager` with `agent.promote` runs `PromoteAgent(agent, environment, operations, failure behaviour)` with a security-key step-up. An `x.*` prefix expands to every operation currently reachable under it through the agent's connections, and each is checked and stored separately. Passing operations are promoted and failing ones are reported.
+3. **How COVERAGE is checked: per serving connection.** For each operation, the serving connections are the agent's connections that serve it. Any failing coverage record on one of them refuses the promotion. A passing record (ENFORCED or PARTIAL, not lapsed) on every serving connection gives an ACTIVE promotion. Otherwise, when some serving connection has no record yet or no connection serves the operation, the promotion can only be PROVISIONAL.
+4. **A new agent with no traffic yet (provisional promotion, founder decision F7).** If every other check passes and COVERAGE is missing as step 3 describes, the promotion is PROVISIONAL:
    - it lasts at most 7 days;
-   - every production grant it covers expires no later than the promotion, so plan short tasks;
+   - every production grant it covers, issued by a person or an automation, widened or delegated to a child run, expires no later than the promotion, so plan short tasks. The cap is worked out in the same transaction that issues the grant, from the same promotion rows the gate reads, and only PROVISIONAL promotions cap: an ACTIVE promotion never shortens a grant;
    - readiness says "coverage pending until <time>";
    - within 5 minutes of ENFORCED or PARTIAL coverage appearing on the agent's serving routes, it becomes ACTIVE (audited);
    - if no such coverage appears, it EXPIRES and the agent owner gets an owned failure (`promotion.provisional_lapsed`). Get the agent's routes covered, then promote again; you can promote provisionally again only while there is still no coverage record.
    - A coverage record in a failing state never gives a provisional promotion: fix the coverage first.
-4. Revoke a promotion with `RevokePromotion`. Existing grants keep their own expiry; new grants for those operations are refused NOT_PROMOTED.
+5. Revoke a promotion with `RevokePromotion`. Existing grants keep their own expiry; new grants for those operations are refused NOT_PROMOTED.
 
 A new operation added later under a promoted prefix blocks new grants that use that prefix until the new operation is promoted too.
 
