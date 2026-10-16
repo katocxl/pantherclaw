@@ -34,6 +34,7 @@ import (
 
 	autoports "github.com/katocxl/pantherclaw/internal/automations/ports"
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
+	evdomain "github.com/katocxl/pantherclaw/internal/evidence/domain"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
@@ -255,13 +256,13 @@ func Binding(domain, kind string, org ids.OrgID, subject ids.UUID, content [32]b
 	return sha256.Sum256(v), nil
 }
 
-func record(ctx context.Context, tx db.TenantTx, c tapp.Caller, name string, r Request, details map[string]string) error {
+func record(ctx context.Context, tx db.TenantTx, actor evdomain.Actor, name string, r Request, details map[string]string) error {
 	if details == nil {
 		details = map[string]string{}
 	}
 	details["domain"], details["kind"], details["subject"] = r.Domain, r.Kind, r.Subject.String()
 	_, err := audit.Record(ctx, tx, audit.Event{
-		Name: name, Actor: c.Actor(), Outcome: audit.Success, Object: &audit.Object{Type: "change_request", ID: r.ID.String()},
+		Name: name, Actor: actor, Outcome: audit.Success, Object: &audit.Object{Type: "change_request", ID: r.ID.String()},
 		Details: details,
 	})
 	return err
@@ -322,7 +323,7 @@ func (s *Service) RequestTx(ctx context.Context, tx db.TenantTx, caller tapp.Cal
 		return Request{}, err
 	}
 	q := dbq.New(tx)
-	if err := s.expire(ctx, tx, q, caller); err != nil {
+	if err := s.expire(ctx, tx, q, caller.Actor()); err != nil {
 		return Request{}, err
 	}
 	pending, err := q.ListChangeRequests(ctx, dbq.ListChangeRequestsParams{
@@ -346,12 +347,13 @@ func (s *Service) RequestTx(ctx context.Context, tx db.TenantTx, caller tapp.Cal
 		Org: caller.Org, ID: ids.NewV7(), Domain: in.Domain, Kind: in.Kind, Subject: in.Subject, ContentDigest: in.Content,
 		Binding: binding, Summary: raw, State: StatePending, RequestedBy: caller.Principal.String(),
 	}
-	req.Required = in.Required
-	if req.Required == 0 {
-		if req.Required, err = h.Required(ctx, tx, req); err != nil {
-			return Request{}, err
-		}
+	// A caller may ask for more confirmations than the kind needs, never
+	// fewer (D91).
+	need, err := h.Required(ctx, tx, req)
+	if err != nil {
+		return Request{}, err
 	}
+	req.Required = max(in.Required, need)
 	req.Required = min(max(req.Required, 1), 2)
 	if err := q.InsertChangeRequest(ctx, dbq.InsertChangeRequestParams{
 		OrgID: caller.Org, ID: req.ID, Domain: req.Domain, Kind: req.Kind, SubjectID: req.Subject,
@@ -360,7 +362,7 @@ func (s *Service) RequestTx(ctx context.Context, tx db.TenantTx, caller tapp.Cal
 	}); err != nil {
 		return Request{}, err
 	}
-	if err := record(ctx, tx, caller, "change.requested", req, map[string]string{
+	if err := record(ctx, tx, caller.Actor(), "change.requested", req, map[string]string{
 		"required": strconv.Itoa(req.Required), "binding": digest64(binding[:]), "content_digest": digest64(req.ContentDigest[:]),
 	}); err != nil {
 		return Request{}, err
@@ -370,13 +372,13 @@ func (s *Service) RequestTx(ctx context.Context, tx db.TenantTx, caller tapp.Cal
 }
 
 // expire records every pending request past its expiry as EXPIRED.
-func (s *Service) expire(ctx context.Context, tx db.TenantTx, q *dbq.Queries, caller tapp.Caller) error {
-	rows, err := q.ExpireChangeRequests(ctx, caller.Org)
+func (s *Service) expire(ctx context.Context, tx db.TenantTx, q *dbq.Queries, actor evdomain.Actor) error {
+	rows, err := q.ExpireChangeRequests(ctx, tx.OrgID())
 	if err != nil {
 		return err
 	}
 	for _, r := range rows {
-		if err := record(ctx, tx, caller, "change.expired", Request{ID: r.ID, Domain: r.Domain, Kind: r.Kind}, nil); err != nil {
+		if err := record(ctx, tx, actor, "change.expired", Request{ID: r.ID, Domain: r.Domain, Kind: r.Kind}, nil); err != nil {
 			return err
 		}
 		if err := s.closed(ctx, tx, q, r.ID, r.Domain, r.Kind, StateExpired); err != nil {
@@ -413,7 +415,7 @@ func (s *Service) Void(ctx context.Context, tx db.TenantTx, actor tapp.Caller, d
 	}
 	out := make([]ids.UUID, 0, len(rows))
 	for _, r := range rows {
-		if err := record(ctx, tx, actor, "change.voided", Request{ID: r.ID, Domain: domain, Kind: r.Kind, Subject: subject},
+		if err := record(ctx, tx, actor.Actor(), "change.voided", Request{ID: r.ID, Domain: domain, Kind: r.Kind, Subject: subject},
 			map[string]string{"reason": reason}); err != nil {
 			return nil, err
 		}
@@ -437,7 +439,7 @@ func (s *Service) VoidByPerson(ctx context.Context, tx db.TenantTx, actor tapp.C
 	}
 	out := make([]ids.UUID, 0, len(rows))
 	for _, r := range rows {
-		if err := record(ctx, tx, actor, "change.voided", Request{ID: r.ID, Domain: r.Domain, Kind: r.Kind},
+		if err := record(ctx, tx, actor.Actor(), "change.voided", Request{ID: r.ID, Domain: r.Domain, Kind: r.Kind},
 			map[string]string{"reason": reason}); err != nil {
 			return nil, err
 		}
@@ -534,13 +536,21 @@ type Filter struct {
 	Limit   int
 }
 
-// List lists the requests the caller may see, newest first.
-func (s *Service) List(ctx context.Context, f Filter) ([]Request, error) {
+// MaxPage is the most requests one List page scans.
+const MaxPage = 200
+
+// List lists the requests the caller may see, newest first, scanning at
+// most f.Limit (≤ MaxPage) rows. next is the cursor after the last scanned
+// row when more may follow (zero at the end): a page may hold fewer
+// requests than it scanned, since only the domains the caller may read are
+// kept (D91 K8).
+func (s *Service) List(ctx context.Context, f Filter) (out []Request, next ids.UUID, err error) {
 	caller, err := tapp.CallerFrom(ctx)
 	if err != nil {
-		return nil, err
+		return nil, ids.UUID{}, err
 	}
-	p := dbq.ListChangeRequestsParams{OrgID: caller.Org, States: f.States, MaxRows: int32(min(max(f.Limit, 1), 200))}
+	limit := min(max(f.Limit, 1), MaxPage)
+	p := dbq.ListChangeRequestsParams{OrgID: caller.Org, States: f.States, MaxRows: int32(limit)}
 	if p.States == nil {
 		p.States = []string{}
 	}
@@ -553,12 +563,14 @@ func (s *Service) List(ctx context.Context, f Filter) ([]Request, error) {
 	if !f.Before.IsZero() {
 		p.BeforeID = &f.Before
 	}
-	var out []Request
 	err = s.Pool.InTenantTx(ctx, caller.Org, func(ctx context.Context, tx db.TenantTx) error {
 		q := dbq.New(tx)
 		rows, err := q.ListChangeRequests(ctx, p)
 		if err != nil {
 			return err
+		}
+		if len(rows) == limit {
+			next = rows[len(rows)-1].ID
 		}
 		for _, r := range rows {
 			x := s.of(caller.Org, dbq.GetChangeRequestRow(r))
@@ -572,7 +584,7 @@ func (s *Service) List(ctx context.Context, f Filter) ([]Request, error) {
 		}
 		return nil
 	}, db.ReadOnly())
-	return out, err
+	return out, next, err
 }
 
 // browser checks that the caller is a person signed in on the page.
@@ -612,13 +624,27 @@ func MayConfirm(caller tapp.Caller, r Request) bool {
 		!slices.ContainsFunc(r.Confirmations, func(x Confirmation) bool { return x.User == caller.Principal.ID })
 }
 
+// MayDecline reports whether the caller may decline r now (the page's
+// form): a person who asked for it or holds one of its kind's decline
+// permissions (D66).
+func (s *Service) MayDecline(caller tapp.Caller, r Request) bool {
+	if r.State != StatePending || !caller.Human() {
+		return false
+	}
+	if caller.Principal.String() == r.RequestedBy {
+		return true
+	}
+	h, ok := s.handler(r.Domain, r.Kind)
+	return ok && slices.ContainsFunc(h.DeclinePermissions, func(p td.Permission) bool { return caller.Can(p, td.OrgPath(caller.Org)) })
+}
+
 // Pending lists the pending requests the caller may still confirm.
 func (s *Service) Pending(ctx context.Context) ([]Request, error) {
 	caller, err := tapp.CallerFrom(ctx)
 	if err != nil {
 		return nil, err
 	}
-	all, err := s.List(ctx, Filter{States: []string{StatePending}, Limit: 200})
+	all, _, err := s.List(ctx, Filter{States: []string{StatePending}, Limit: MaxPage})
 	if err != nil {
 		return nil, err
 	}
@@ -688,7 +714,7 @@ func (s *Service) Confirm(ctx context.Context, id ids.UUID, a Assertion) (Reques
 		}
 		if row.Expired && row.State == StatePending {
 			expired = true // committed: the expiry is recorded
-			return s.expire(ctx, tx, q, caller)
+			return s.expire(ctx, tx, q, caller.Actor())
 		}
 		if row.State != StatePending {
 			return ErrNotPending
@@ -737,7 +763,7 @@ func (s *Service) Confirm(ctx context.Context, id ids.UUID, a Assertion) (Reques
 			}
 		}
 		confirmers = append(confirmers, caller.Principal.ID)
-		if err := record(ctx, tx, caller, "change.confirmed", req, map[string]string{
+		if err := record(ctx, tx, caller.Actor(), "change.confirmed", req, map[string]string{
 			"confirmations": strconv.Itoa(len(req.Confirmations) + 1), "counted": strconv.Itoa(len(confirmers)),
 			"required": strconv.Itoa(req.Required), "security_key": a.Credential.String(), "ceremony": a.Ceremony.String(),
 			"session": caller.Session.String(),
@@ -798,7 +824,7 @@ func (s *Service) decide(ctx context.Context, tx db.TenantTx, q *dbq.Queries, ca
 	case StateApproved:
 		details["confirmations"] = strconv.Itoa(len(r.Confirmations))
 	}
-	if err := record(ctx, tx, caller, name, r, details); err != nil {
+	if err := record(ctx, tx, caller.Actor(), name, r, details); err != nil {
 		return err
 	}
 	if state == StateApproved {
@@ -865,7 +891,7 @@ func (s *Service) Decline(ctx context.Context, id ids.UUID, reason string) (Requ
 		}
 		if row.Expired && row.State == StatePending {
 			expired = true
-			return s.expire(ctx, tx, q, caller)
+			return s.expire(ctx, tx, q, caller.Actor())
 		}
 		if row.State != StatePending {
 			return ErrNotPending

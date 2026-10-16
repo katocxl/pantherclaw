@@ -204,7 +204,9 @@ CREATE TRIGGER automation_versions_guard BEFORE INSERT OR UPDATE ON pc.automatio
 -- domain's kind to a subject, confirmed by `required` distinct people with
 -- distinct security keys; one PENDING per (domain, kind, subject). It
 -- expires 24 hours after creation at the latest (72 for a protected
--- EMERGENCY_REVIEW, D74).
+-- EMERGENCY_REVIEW, D74). The same content may be asked for again once a
+-- request ended (D91 K1): a confirmation is fresh because its ceremony is
+-- tied to the request id, not because the binding is unique.
 CREATE TABLE pc.change_requests (
     org_id         uuid        NOT NULL REFERENCES pc.orgs (id),
     id             uuid        NOT NULL,
@@ -223,7 +225,6 @@ CREATE TABLE pc.change_requests (
     decided_at     timestamptz,
     decided_reason text        CHECK (char_length(decided_reason) BETWEEN 1 AND 500),
     PRIMARY KEY (org_id, id),
-    UNIQUE (org_id, binding),
     -- 24 hours at most; a protected emergency review may wait 72 (D74).
     CHECK (expires_at > created_at AND expires_at <= created_at + CASE
         WHEN domain = 'protected' AND kind = 'EMERGENCY_REVIEW' THEN interval '72 hours' ELSE interval '24 hours' END),
@@ -533,8 +534,11 @@ ALTER TABLE pc.runs
     DROP CONSTRAINT runs_principal_source_check,
     ADD CONSTRAINT runs_principal_source_check
         CHECK (principal_source IN ('launcher', 'subject_token', 'parent_run', 'automation')) NOT VALID,
-    ADD CONSTRAINT runs_automation CHECK ((principal_source = 'automation') = (automation_execution_id IS NOT NULL)
-        AND (principal_source <> 'automation' OR launcher_sa_id IS NOT NULL)) NOT VALID;
+    -- A child run of an automation's run carries its execution too (D91).
+    ADD CONSTRAINT runs_automation CHECK (CASE principal_source
+        WHEN 'automation' THEN automation_execution_id IS NOT NULL AND launcher_sa_id IS NOT NULL
+        WHEN 'parent_run' THEN true
+        ELSE automation_execution_id IS NULL END) NOT VALID;
 -- squawk-ignore constraint-missing-not-valid
 ALTER TABLE pc.runs VALIDATE CONSTRAINT runs_principal_source_check;
 -- squawk-ignore constraint-missing-not-valid

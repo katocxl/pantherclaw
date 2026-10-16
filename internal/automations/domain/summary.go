@@ -107,7 +107,27 @@ func whenText(d *Definition, names Names) string {
 	return "never."
 }
 
+// revocableText says whose grants the version may revoke (D65, D91).
+func revocableText(a Authority, names Names) string {
+	r := a.Revocable
+	switch {
+	case r == nil:
+		return ""
+	case r.All:
+		return " It may revoke grants of any agent of the organization."
+	}
+	var agents []string
+	for _, x := range r.Agents {
+		agents = append(agents, names.of(x))
+	}
+	return " It may revoke grants of " + strings.Join(agents, ", ") + "."
+}
+
 func authorityText(d *Definition, names Names) string {
+	return authorityGrants(d, names) + revocableText(d.Authority, names)
+}
+
+func authorityGrants(d *Definition, names Names) string {
 	a := d.Authority
 	who := "its own identity"
 	if u, ok := a.PrincipalUser(); ok {

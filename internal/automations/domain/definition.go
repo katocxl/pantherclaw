@@ -16,6 +16,7 @@ import (
 	"time"
 
 	gdomain "github.com/katocxl/pantherclaw/internal/grants/domain"
+	"github.com/katocxl/pantherclaw/internal/platform/money"
 )
 
 // Definition document v1 (D2).
@@ -556,3 +557,58 @@ func (d Date) IsZero() bool { return d.t.IsZero() }
 // End is the first instant after the date (UTC): a review date holds
 // through its whole day.
 func (d Date) End() time.Time { return d.t.UTC().AddDate(0, 0, 1) }
+
+// NotWiderThan reports whether c grants nothing prev did not (D91): agents
+// and bounds inside prev's, requirements, minimum attestation and every
+// per-grant limit kept or tightened, and every cap no higher.
+func (c *Ceiling) NotWiderThan(prev *Ceiling) bool {
+	if c == nil || prev == nil {
+		return c == nil
+	}
+	for _, a := range c.Agents {
+		if !slices.Contains(prev.Agents, a) {
+			return false
+		}
+	}
+	if c.Bounds.Within(prev.Bounds) != nil {
+		return false
+	}
+	for _, r := range prev.Requirements {
+		if !slices.ContainsFunc(c.Requirements, func(x gdomain.Requirement) bool { return reflectEqualJSON(x, r) }) {
+			return false
+		}
+	}
+	if c.PerGrant.TTL > prev.PerGrant.TTL || c.PerGrant.MinAttestation < prev.PerGrant.MinAttestation {
+		return false
+	}
+	if len(c.PerGrant.Limits.Budgets) != len(prev.PerGrant.Limits.Budgets) ||
+		len(c.PerGrant.Limits.Counters) != len(prev.PerGrant.Limits.Counters) {
+		return false
+	}
+	if _, err := gdomain.NarrowLimits(prev.PerGrant.Limits, c.PerGrant.Limits); err != nil {
+		return false
+	}
+	if c.PerDay.Grants > prev.PerDay.Grants || c.PerDay.Runs > prev.PerDay.Runs ||
+		c.ConcurrencyOrDefault() > prev.ConcurrencyOrDefault() ||
+		c.Delegation.Depth > prev.Delegation.Depth || c.Delegation.MaxChildren > prev.Delegation.MaxChildren {
+		return false
+	}
+	for _, m := range c.PerDay.Budget {
+		i := slices.IndexFunc(prev.PerDay.Budget, func(p Money) bool { return p.Currency == m.Currency })
+		if i < 0 {
+			return false
+		}
+		cur, err1 := money.Parse(m.Amount)
+		was, err2 := money.Parse(prev.PerDay.Budget[i].Amount)
+		if err1 != nil || err2 != nil || cur.Cmp(was) > 0 {
+			return false
+		}
+	}
+	return true // a currency without a daily budget is never spent
+}
+
+func reflectEqualJSON(a, b any) bool {
+	x, err1 := json.Marshal(a, json.Deterministic(true))
+	y, err2 := json.Marshal(b, json.Deterministic(true))
+	return err1 == nil && err2 == nil && bytes.Equal(x, y)
+}

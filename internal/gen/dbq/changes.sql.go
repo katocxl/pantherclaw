@@ -76,6 +76,18 @@ func (q *Queries) ConsumeChangeRequestCeremony(ctx context.Context, arg ConsumeC
 	return result.RowsAffected(), nil
 }
 
+const countOverdueChangeRequests = `-- name: CountOverdueChangeRequests :one
+SELECT count(*)::int FROM pc.change_requests
+WHERE org_id = $1 AND state = 'PENDING' AND expires_at <= now()
+`
+
+func (q *Queries) CountOverdueChangeRequests(ctx context.Context, orgID ids.OrgID) (int32, error) {
+	row := q.db.QueryRow(ctx, countOverdueChangeRequests, orgID)
+	var column_1 int32
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const decideChangeRequest = `-- name: DecideChangeRequest :execrows
 UPDATE pc.change_requests SET state = $1, decided_at = now(), decided_reason = $2
 WHERE org_id = $3 AND id = $4 AND state = 'PENDING'
@@ -294,7 +306,8 @@ FROM pc.change_requests r
 WHERE r.org_id = $1
   AND ($2::text IS NULL OR r.domain = $2::text)
   AND ($3::uuid IS NULL OR r.subject_id = $3::uuid)
-  AND (cardinality($4::text[]) = 0 OR r.state = ANY ($4::text[]))
+  AND (cardinality($4::text[]) = 0
+       OR (CASE WHEN r.state = 'PENDING' AND r.expires_at <= now() THEN 'EXPIRED' ELSE r.state END) = ANY ($4::text[]))
   AND ($5::uuid IS NULL OR r.id < $5::uuid)
 ORDER BY r.id DESC
 LIMIT $6::int
@@ -328,7 +341,8 @@ type ListChangeRequestsRow struct {
 	Expired       bool
 }
 
-// Newest first; domain, states and subject filter when set.
+// Newest first; domain, states and subject filter when set. A pending
+// request past its expiry counts as EXPIRED (the sweep may not have run).
 func (q *Queries) ListChangeRequests(ctx context.Context, arg ListChangeRequestsParams) ([]ListChangeRequestsRow, error) {
 	rows, err := q.db.Query(ctx, listChangeRequests,
 		arg.OrgID,

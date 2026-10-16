@@ -34,13 +34,14 @@ var Probes = []string{"grant.expiring", "approval.waiting", "coverage.below", "r
 const EventAutomationFinished = "automation.finished"
 
 // produces maps step kinds to the D18 events their effects can put on the
-// feed (D78). contain causes nothing beyond its own audit record.
+// feed (D78); contain's REVOKE_GRANT revokes a grant (D91).
 var produces = map[string][]string{
 	KindLaunchRun: {
 		"run.ended", "grant.issued", "grant.revoked", "action.decided", "action.held", "action.denied",
 		"effect.recorded", "approval.expired",
 	},
 	KindRevokeGrant: {"grant.revoked"},
+	KindContain:     {"grant.revoked"}, // REVOKE_GRANT (D91)
 }
 
 // Produces lists the platform events (D18) a step of kind can cause (D78);
@@ -291,6 +292,12 @@ func (v *validator) ceiling(c *Ceiling) {
 		}
 		v.infos[op] = info
 		budgeted = budgeted || info.ConsumesBudget
+		// A prefix covering an irreversible operation would let one
+		// wait_effect stand for all of them: list those exactly (K4).
+		if len(info.IrreversibleUnder) > 0 {
+			v.err(CodePrefixIrreversible, at+"/bounds/operations/"+strconv.Itoa(i),
+				"%q covers irreversible operations; list them exactly so each is reconciled: %s", op, strings.Join(info.IrreversibleUnder, ", "))
+		}
 	}
 	if budgeted {
 		for i, op := range v.ops {
@@ -446,6 +453,9 @@ func (v *validator) trigger() {
 func (v *validator) params(ps map[string]ParamSpec) {
 	if len(ps) > MaxParams {
 		v.err(CodeLimitRange, "/when", "at most %d parameters", MaxParams)
+	} else if n := ParamsEnvelopeBytes(ps); n > MaxParamsEnvelope {
+		v.err(CodeParamUnbounded, "/when/"+strings.ToLower(string(v.d.When.Kind()))+"/params",
+			"the parameters can take %d bytes when stored; at most %d: lower max_len or declare fewer", n, MaxParamsEnvelope)
 	}
 	for _, name := range sortedKeys(ps) {
 		p := ps[name]
@@ -686,14 +696,14 @@ func (v *validator) withChecks(at string, s StepSpec, w any, seen map[string]int
 		if c != nil && c.Bounds.Operations != nil && !c.Bounds.Operations.Matches(x.Operation) {
 			v.err(CodeLimitRange, at+"/operation", "the operation must be inside the ceiling")
 		}
-		if x.Min < 0 || x.Min > 100 {
+		if x.Min < 1 || x.Min > 100 {
 			v.err(CodeLimitRange, at+"/min", "min is 1 to 100")
 		}
 	case *GateWith:
 		if !dur(x.Deadline, time.Minute, MaxGateDeadline) {
 			v.err(CodeDeadlineMissing, at+"/deadline", "a gate's deadline is 1m to 72h")
 		}
-		if x.MinApprovals < 0 || x.MinApprovals > 2 {
+		if x.MinApprovals < 1 || x.MinApprovals > 2 {
 			v.err(CodeLimitRange, at+"/min_approvals", "min_approvals is 1 or 2")
 		}
 		for i, e := range x.Exclude {
@@ -704,7 +714,11 @@ func (v *validator) withChecks(at string, s StepSpec, w any, seen map[string]int
 		if utf8.RuneCountInString(x.Summary) > 1000 {
 			v.err(CodeLimitRange, at+"/summary", "a summary is at most 1000 characters")
 		}
-		n, err := v.env.EligibleApprovers(v.ctx, *x, v.env.Owner())
+		var principal ids.UUID
+		if u, ok := v.d.Authority.PrincipalUser(); ok {
+			principal = u.UUID()
+		}
+		n, err := v.env.EligibleApprovers(v.ctx, *x, v.env.Owner(), principal)
 		switch {
 		case err != nil:
 			v.lookupErr(at+"/approvers", err)
@@ -766,16 +780,12 @@ func (v *validator) withChecks(at string, s StepSpec, w any, seen map[string]int
 			v.err(CodeDeadlineMissing, at+"/timeout", "wait_coverage needs a timeout of at most 7d")
 		}
 	case *AssignOwnerWith:
-		if !slices.Contains([]string{ScopeAgentOwner, ScopeConnectionOwner, ScopeOwner}, x.To) {
-			v.err(CodeLimitRange, at+"/to", "to is AGENT_OWNER, CONNECTION_OWNER or OWNER")
-		}
+		scope("/to", x.To, ScopeAgentOwner, ScopeConnectionOwner, ScopeOwner)
 		if x.Deadline.D() > 7*24*time.Hour || x.Deadline < 0 {
 			v.err(CodeLimitRange, at+"/deadline", "a deadline is at most 7d")
 		}
 	case *ApprovalRequestWith:
-		if x.Request != ScopeTriggerRequest {
-			v.err(CodeLimitRange, at+"/request", "request is TRIGGER_REQUEST")
-		}
+		scope("/request", x.Request, ScopeTriggerRequest)
 	case *DraftBaselineWith:
 		if x.From != "COHORT_BASELINE" && x.From != "TEMPLATE" {
 			v.err(CodeLimitRange, at+"/from", "from is COHORT_BASELINE or TEMPLATE")
@@ -796,9 +806,7 @@ func (v *validator) withChecks(at string, s StepSpec, w any, seen map[string]int
 			v.err(CodeLimitRange, at+"/days", "days is at most 30")
 		}
 	case *BuildDigestWith:
-		if x.Scope != ScopeTimeRange && x.Scope != ScopeTriggerCase {
-			v.err(CodeLimitRange, at+"/scope", "scope is TIME_RANGE or TRIGGER_CASE")
-		}
+		scope("/scope", x.Scope, ScopeTimeRange, ScopeTriggerCase)
 		if x.Scope == ScopeTimeRange && (x.Days < 1 || x.Days > 31) {
 			v.err(CodeLimitRange, at+"/days", "a time range is 1 to 31 days")
 		}
@@ -1013,10 +1021,18 @@ func (v *validator) loops() {
 		v.add(SeverityWarning, CodeLoopPossible, "/when", "every execution produces automation.finished; it may trigger this automation again")
 		return
 	}
-	for i, s := range v.d.Do {
+	check := func(at string, s StepSpec) {
 		if slices.Contains(Produces(s.Step), on) {
-			v.add(SeverityWarning, CodeLoopPossible, "/do/"+strconv.Itoa(i),
+			v.add(SeverityWarning, CodeLoopPossible, at,
 				"%s can produce %s, the event this automation listens to; a loop is refused at run time", s.Step, on)
+		}
+	}
+	for i, s := range v.d.Do {
+		check("/do/"+strconv.Itoa(i), s)
+	}
+	if v.d.IfFails != nil {
+		for i, s := range v.d.IfFails.Compensate {
+			check("/if_fails/compensate/"+strconv.Itoa(i), s)
 		}
 	}
 }

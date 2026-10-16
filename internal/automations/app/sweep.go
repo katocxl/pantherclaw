@@ -5,6 +5,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -46,45 +47,68 @@ func (s *Service) SweepOrg(ctx context.Context, org ids.OrgID) (SweptCeilings, e
 	}, db.ReadOnly()); err != nil {
 		return out, err
 	}
+	// One ceiling's error never stops the others (D91): it is reported
+	// to the owner and returned, so the job retries.
+	var errs []error
 	for _, c := range rows {
-		if c.Due {
-			if err := s.Pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
-				return s.endCeilingTx(ctx, tx, org, c.ID, autodomain.CeilingExpired, "REVIEW_DATE", autodomain.PauseCeilingExpired)
-			}); err != nil {
-				return out, err
+		if err := s.sweepCeiling(ctx, org, c, &out); err != nil {
+			errs = append(errs, fmt.Errorf("ceiling %s: %w", c.ID, err))
+			if ferr := s.sweepFailed(ctx, org, c); ferr != nil {
+				errs = append(errs, ferr)
 			}
-			out.Expired++
-			continue
-		}
-		d, err := autodomain.Parse(c.Definition)
-		if err != nil {
-			return out, err
-		}
-		var ok bool
-		var reason string
-		if err := s.Pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
-			var err error
-			ok, reason, err = s.Check(ctx, tx.Pgx(), autodomain.CeilingCheck{
-				Org: org, Automation: c.AutomationID, Ceiling: c.ID, Approvers: c.ApprovedBy, Agents: d.CeilingAgents(), Kinds: d.Kinds(),
-			})
-			return err
-		}, db.ReadOnly()); err != nil {
-			return out, err
-		}
-		if !ok {
-			if err := s.VoidCeiling(ctx, org, c.ID, reason); err != nil {
-				return out, err
-			}
-			out.Voided++
-			continue
-		}
-		if n, err := s.reviewDue(ctx, org, c); err != nil {
-			return out, err
-		} else if n {
-			out.ReviewDue++
 		}
 	}
-	return out, nil
+	return out, errors.Join(errs...)
+}
+
+func (s *Service) sweepCeiling(ctx context.Context, org ids.OrgID, c dbq.ActiveAutomationCeilingsRow, out *SweptCeilings) error {
+	if c.Due {
+		if err := s.Pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
+			return s.endCeilingTx(ctx, tx, org, c.ID, autodomain.CeilingExpired, "REVIEW_DATE", autodomain.PauseCeilingExpired)
+		}); err != nil {
+			return err
+		}
+		out.Expired++
+		return nil
+	}
+	var ok bool
+	var reason string
+	if err := s.Pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
+		var err error
+		ok, reason, err = s.Check(ctx, tx.Pgx(), autodomain.CeilingCheck{
+			Org: org, Automation: c.AutomationID, Ceiling: c.ID, Approvers: c.ApprovedBy,
+		})
+		return err
+	}, db.ReadOnly()); err != nil {
+		return err
+	}
+	if !ok {
+		if err := s.VoidCeiling(ctx, org, c.ID, reason); err != nil {
+			return err
+		}
+		out.Voided++
+		return nil
+	}
+	if n, err := s.reviewDue(ctx, org, c); err != nil {
+		return err
+	} else if n {
+		out.ReviewDue++
+	}
+	return nil
+}
+
+// sweepFailed tells the owner that the automation's authority could not
+// be checked (once per ceiling until it is resolved).
+func (s *Service) sweepFailed(ctx context.Context, org ids.OrgID, c dbq.ActiveAutomationCeilingsRow) error {
+	return s.Pool.InTenantTx(ctx, org, func(ctx context.Context, tx db.TenantTx) error {
+		a, err := loadAutomation(ctx, dbq.New(tx), org, c.AutomationID, false)
+		if err != nil {
+			return err
+		}
+		return s.failure(ctx, tx, a, FailureSweep,
+			"The scheduled check of automation "+a.Name+"'s authority failed; it is retried every 5 minutes.",
+			"If this stays open, ask an administrator to look at the server's logs.", "sweep:"+c.ID.String())
+	})
 }
 
 // reviewDue reports automation.review_due 7 days and 1 day before the

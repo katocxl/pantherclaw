@@ -49,6 +49,7 @@ const (
 	CodeLimitRange               = "LIMIT_RANGE"
 	CodePrincipalInvalid         = "PRINCIPAL_INVALID"
 	CodeDestinationInvalid       = "DESTINATION_INVALID"
+	CodePrefixIrreversible       = "CEILING_PREFIX_IRREVERSIBLE"
 )
 
 // HasErrors reports whether any finding is an error.
@@ -66,6 +67,9 @@ type OperationInfo struct {
 	Known          bool
 	Irreversible   bool
 	ConsumesBudget bool
+	// IrreversibleUnder are, for a prefix "x.*", the known irreversible
+	// operations it covers (D91 K4).
+	IrreversibleUnder []string
 }
 
 // ValidationEnv supplies the lookups Validate needs (D4). Implementations
@@ -90,7 +94,9 @@ type ValidationEnv interface {
 	// ACTIVE and serves the purpose.
 	DestinationActive(ctx context.Context, destination ids.UUID, purpose string) (bool, error)
 	// EligibleApprovers counts the people who could decide a gate.
-	EligibleApprovers(ctx context.Context, g GateWith, owner ids.UUID) (int, error)
+	// An exclusion of PRINCIPAL removes principal (zero: the automation's
+	// own identity); CONFIRMERS removes the most the enabling can have.
+	EligibleApprovers(ctx context.Context, g GateWith, owner, principal ids.UUID) (int, error)
 	// Edition reports whether the org's edition includes e.
 	Edition(e Edition) bool
 }

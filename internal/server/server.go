@@ -258,6 +258,9 @@ func cmdServe(ctx context.Context, args []string, stderr io.Writer, env Env, onS
 	m6.scans = agentsrpc.NewGatewayScans(aapp.NewInventory(pool, bill))
 
 	g, ctx := errgroup.WithContext(ctx)
+	// autos is the one M11 part 2 core of this process: the API and the
+	// jobs share it, so every port set on it reaches both (D91 K6).
+	autos := newAutomationsCore(pool, bill, cfg.Auth.PublicURL)
 	if cfg.Role == RoleAPI || cfg.Role == RoleAll {
 		tokens, err := token.New(reg, cfg.Auth.PublicURL, token.Audience)
 		if err != nil {
@@ -334,6 +337,7 @@ func cmdServe(ctx context.Context, args []string, stderr io.Writer, env Env, onS
 			kp:           kp,
 			freshness:    freshnessOf(cfg),
 			m10ops:       m10OpsDeps{authn: authn, tokens: tokens},
+			autos:        autos,
 		})
 		if err != nil {
 			return err
@@ -431,7 +435,7 @@ func cmdServe(ctx context.Context, args []string, stderr io.Writer, env Env, onS
 			return err
 		}
 		evidenceJobs = append(evidenceJobs, reflexJobs...)
-		if evidenceJobs, err = registerAutomationsCoreJobs(evidenceJobs, jreg, pool, bill, log); err != nil {
+		if evidenceJobs, err = registerAutomationsCoreJobs(evidenceJobs, jreg, autos, log); err != nil {
 			return err
 		}
 		if err := registerSimulationJobs(jreg, pool, kp, bill, log); err != nil {
@@ -562,6 +566,8 @@ type apiDeps struct {
 	freshness coverage.Freshness
 	// M10 ops: the live stream's bearer authentication.
 	m10ops m10OpsDeps
+	// autos is the process's M11 part 2 core (nil: apiHandler builds one).
+	autos *automationsCore
 }
 
 // apiHandler mounts the RPC services, health endpoints and the JWKS.
