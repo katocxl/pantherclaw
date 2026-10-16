@@ -258,7 +258,8 @@ func cmdServe(ctx context.Context, args []string, stderr io.Writer, env Env, onS
 	g, ctx := errgroup.WithContext(ctx)
 	// autos is the one M11 part 2 core of this process: the API and the
 	// jobs share it, so every port set on it reaches both (D91 K6).
-	autos := newAutomationsCore(pool, bill, cfg.Auth.PublicURL)
+	// protect sets its ports on it in every role (D110 P1).
+	autos, m11protect := newM11Core(pool, bill, cfg.Auth.PublicURL)
 	attachM11Issuance(autos, pool)
 	if cfg.Role == RoleAPI || cfg.Role == RoleAll {
 		tokens, err := token.New(reg, cfg.Auth.PublicURL, token.Audience)
@@ -337,6 +338,7 @@ func cmdServe(ctx context.Context, args []string, stderr io.Writer, env Env, onS
 			freshness:    freshnessOf(cfg),
 			m10ops:       m10OpsDeps{authn: authn, tokens: tokens},
 			autos:        autos,
+			m11protect:   m11protect,
 		})
 		if err != nil {
 			return err
@@ -580,7 +582,9 @@ type apiDeps struct {
 // apiHandler mounts the RPC services, health endpoints and the JWKS.
 func apiHandler(d apiDeps) (http.Handler, error) {
 	pool, reg, log := d.pool, d.reg, d.log
-	d.m11protect = newM11Protect(d)
+	if d.m11protect.gate == nil {
+		d.m11protect = newM11Protect(d.pool, d.billing)
+	}
 	rs, err := rpc.NewServer(rpc.Options{
 		Logger:       log,
 		Public:       publicProcedures(),

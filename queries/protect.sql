@@ -70,12 +70,27 @@ RETURNING *;
 
 -- name: SetEmergencyReviewRequest :execrows
 UPDATE pc.protected_changes SET review_request_id = sqlc.arg(review_request_id)::uuid
-WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state = 'EMERGENCY' AND reviewed_by IS NULL;
+WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state = 'EMERGENCY' AND review_request_id IS NULL;
 
 -- name: ReviewEmergencyChange :execrows
 UPDATE pc.protected_changes SET reviewed_by = sqlc.arg(reviewed_by)::uuid
-WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state = 'EMERGENCY' AND reviewed_by IS NULL
+WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state = 'EMERGENCY' AND review_state = 'DUE'
   AND publisher <> sqlc.arg(reviewed_by)::uuid AND author <> sqlc.arg(reviewed_by)::uuid;
+
+-- name: ExpireEmergencyReview :one
+-- An emergency change whose review request expired unconfirmed (D98 L3):
+-- it stays applied; only its review state changes.
+UPDATE pc.protected_changes SET review_state = 'REVIEW_EXPIRED'
+WHERE org_id = sqlc.arg(org_id) AND review_request_id = sqlc.arg(request_id)::uuid
+  AND state = 'EMERGENCY' AND review_state = 'DUE'
+RETURNING *;
+
+-- name: ReopenEmergencyReview :one
+-- A new review of an emergency change whose review expired: a new request
+-- and 72 hours (D98 L3).
+UPDATE pc.protected_changes SET review_state = 'DUE', review_request_id = sqlc.arg(review_request_id)::uuid
+WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state = 'EMERGENCY' AND review_state = 'REVIEW_EXPIRED'
+RETURNING *;
 
 -- name: ListProtectedChanges :many
 SELECT * FROM pc.protected_changes
@@ -89,7 +104,7 @@ LIMIT sqlc.arg(max_rows)::int;
 -- name: OverdueEmergencyChanges :many
 -- Emergency changes past their 72-hour review without one.
 SELECT * FROM pc.protected_changes
-WHERE org_id = sqlc.arg(org_id) AND state = 'EMERGENCY' AND reviewed_by IS NULL AND review_due_at < now()
+WHERE org_id = sqlc.arg(org_id) AND state = 'EMERGENCY' AND review_state = 'DUE' AND review_due_at < now()
 ORDER BY review_due_at
 LIMIT 100;
 
@@ -148,7 +163,7 @@ SELECT id::text AS item_id, ('policy version ' || version::text)::text AS label,
 FROM pc.policy_versions
 WHERE org_id = sqlc.arg(org_id) AND published_by = sqlc.arg(principal)::text AND published_at >= sqlc.arg(since)::timestamptz
 ORDER BY published_at
-LIMIT 1000;
+LIMIT 1001;
 
 -- name: ExposedPolicyChanges :many
 SELECT r.id::text AS item_id, (lower(r.kind) || ' ' || r.state)::text AS label, c.created_at AS at
@@ -156,7 +171,7 @@ FROM pc.policy_change_confirmations c
 JOIN pc.policy_change_requests r ON r.org_id = c.org_id AND r.id = c.request_id
 WHERE c.org_id = sqlc.arg(org_id) AND c.principal_id = sqlc.arg(user_id) AND c.created_at >= sqlc.arg(since)
 ORDER BY c.created_at
-LIMIT 1000;
+LIMIT 1001;
 
 -- name: ExposedPackageActivations :many
 -- package.transitioned to ACTIVE by the person, from the audit trail.
@@ -167,14 +182,14 @@ WHERE org_id = sqlc.arg(org_id) AND kind = 'audit.package.transitioned' AND acto
   AND actor_id = sqlc.arg(actor_id) AND occurred_at >= sqlc.arg(since)
   AND convert_from(body, 'UTF8')::jsonb #>> '{details,to}' = 'ACTIVE'
 ORDER BY occurred_at
-LIMIT 1000;
+LIMIT 1001;
 
 -- name: ExposedPackageKeys :many
 SELECT kid AS item_id, ('package-signing key ' || name || ' (' || state || ')')::text AS label, created_at AS at
 FROM pc.package_signing_keys
 WHERE org_id = sqlc.arg(org_id) AND created_by = sqlc.arg(principal) AND created_at >= sqlc.arg(since)
 ORDER BY created_at
-LIMIT 1000;
+LIMIT 1001;
 
 -- name: ExposedProtectedChanges :many
 SELECT id::text AS item_id, (lower(category) || ' ' || subject)::text AS label, decided_at::timestamptz AS at
@@ -182,14 +197,14 @@ FROM pc.protected_changes
 WHERE org_id = sqlc.arg(org_id) AND state IN ('APPLIED', 'EMERGENCY') AND decided_at >= sqlc.arg(since)::timestamptz
   AND (publisher = sqlc.arg(user_id)::uuid OR reviewed_by = sqlc.arg(user_id)::uuid)
 ORDER BY decided_at
-LIMIT 1000;
+LIMIT 1001;
 
 -- name: ExposedGrants :many
 SELECT id::text AS item_id, ('grant (' || state || ')')::text AS label, created_at AS at
 FROM pc.grants
 WHERE org_id = sqlc.arg(org_id) AND grantor_kind = 'user' AND grantor_id = sqlc.arg(user_id) AND created_at >= sqlc.arg(since)
 ORDER BY created_at
-LIMIT 1000;
+LIMIT 1001;
 
 -- name: GetProtectedChangeByRequest :one
 SELECT * FROM pc.protected_changes
@@ -245,4 +260,4 @@ LEFT JOIN pc.automations a ON a.org_id = r.org_id AND a.id = r.subject_id
 WHERE c.org_id = sqlc.arg(org_id) AND c.user_id = sqlc.arg(user_id) AND r.domain = 'automation'
   AND c.confirmed_at >= sqlc.arg(since)::timestamptz
 ORDER BY r.subject_id, c.confirmed_at DESC
-LIMIT 1000;
+LIMIT 1001;

@@ -20,7 +20,8 @@ import (
 // distinct publisher; compromised publishers, their exposure, its review
 // and clearing. Applying a change in an emergency and marking a publisher
 // compromised need a security key, so they are done on their pages
-// (/protected-changes/{request}/emergency, /publishers/compromise).
+// (/protected-changes/{request}/emergency, /publishers/compromise). An
+// emergency change whose review expired gets a new review with "review".
 
 type protectCall func(ctx context.Context, c pantherclawv1connect.ProtectedChangeServiceClient, args []string) (proto.Message, error)
 
@@ -50,6 +51,11 @@ var protectVerbs = map[string]protectVerb{
 			return c.ListProtectedChanges(ctx, &pantherclawv1.ListProtectedChangesRequest{
 				State: strings.ToUpper(*state), Category: strings.ToUpper(*category), PageSize: size(n), PageToken: *tok,
 			})
+		}
+	}},
+	"review": {"review CHANGE_ID", 1, func(*flag.FlagSet) protectCall {
+		return func(ctx context.Context, c pantherclawv1connect.ProtectedChangeServiceClient, args []string) (proto.Message, error) {
+			return c.OpenEmergencyReview(ctx, &pantherclawv1.OpenEmergencyReviewRequest{Id: args[0]})
 		}
 	}},
 }
@@ -95,7 +101,7 @@ var publisherVerbs = map[string]publisherVerb{
 
 func protectUsage() string {
 	lines := []string{}
-	for _, v := range []string{"settings", "set", "list"} {
+	for _, v := range []string{"settings", "set", "list", "review"} {
 		lines = append(lines, "protect "+protectVerbs[v].usage)
 	}
 	return strings.Join(lines, "\n  pclaw ")

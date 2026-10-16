@@ -99,6 +99,19 @@ func (h *Changes) ApplyEmergencyProtectedChange(ctx context.Context, req *pb.App
 	return &pb.ApplyEmergencyProtectedChangeResponse{Change: ChangeOf(row)}, nil
 }
 
+// OpenEmergencyReview implements ProtectedChangeServiceHandler (D98 L3).
+func (h *Changes) OpenEmergencyReview(ctx context.Context, req *pb.OpenEmergencyReviewRequest) (*pb.OpenEmergencyReviewResponse, error) {
+	id, err := ids.ParseUUID(req.GetId())
+	if err != nil {
+		return nil, errInvalidID
+	}
+	row, err := h.s.OpenEmergencyReview(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	return &pb.OpenEmergencyReviewResponse{Change: ChangeOf(row)}, nil
+}
+
 // Publishers serves PublisherService.
 type Publishers struct {
 	pantherclawv1connect.UnimplementedPublisherServiceHandler
@@ -145,7 +158,7 @@ func (h *Publishers) ListExposed(ctx context.Context, req *pb.ListExposedRequest
 	if err != nil {
 		return nil, err
 	}
-	out := &pb.ListExposedResponse{Compromise: CompromiseOf(cp.PcCompromisedPublisher)}
+	out := &pb.ListExposedResponse{Compromise: CompromiseOf(cp.PcCompromisedPublisher), Truncated: cp.Truncated}
 	for _, i := range cp.Items {
 		out.Items = append(out.Items, ItemOf(i))
 	}
@@ -197,6 +210,9 @@ func ChangeOf(r dbq.PcProtectedChange) *pb.ProtectedChange {
 	}
 	if r.DecidedReason != nil {
 		out.DecidedReason = *r.DecidedReason
+	}
+	if r.ReviewState != nil {
+		out.ReviewState = *r.ReviewState
 	}
 	var summary map[string]string
 	if json.Unmarshal(r.Summary, &summary) == nil {

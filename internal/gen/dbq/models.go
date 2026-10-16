@@ -2512,6 +2512,7 @@ type PcProtectedChange struct {
 	CreatedAt        time.Time
 	DecidedAt        *time.Time
 	DecidedReason    *string
+	ReviewState      *string
 	ReviewDueAt      *time.Time
 	ReviewRequestID  *ids.UUID
 	ReviewedBy       *ids.UUID

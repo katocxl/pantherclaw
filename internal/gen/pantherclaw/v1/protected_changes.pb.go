@@ -137,7 +137,11 @@ type ProtectedChange struct {
 	// Who reviewed it.
 	ReviewedBy string `protobuf:"bytes,17,opt,name=reviewed_by,json=reviewedBy,proto3" json:"reviewed_by,omitempty"`
 	// When.
-	ReviewTime    *timestamppb.Timestamp `protobuf:"bytes,18,opt,name=review_time,json=reviewTime,proto3" json:"review_time,omitempty"`
+	ReviewTime *timestamppb.Timestamp `protobuf:"bytes,18,opt,name=review_time,json=reviewTime,proto3" json:"review_time,omitempty"`
+	// An emergency change's review state: "DUE", "REVIEWED" or
+	// "REVIEW_EXPIRED" (D98 L3). The change is applied in each of them;
+	// empty when it is not an emergency change.
+	ReviewState   string `protobuf:"bytes,19,opt,name=review_state,json=reviewState,proto3" json:"review_state,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -296,6 +300,13 @@ func (x *ProtectedChange) GetReviewTime() *timestamppb.Timestamp {
 		return x.ReviewTime
 	}
 	return nil
+}
+
+func (x *ProtectedChange) GetReviewState() string {
+	if x != nil {
+		return x.ReviewState
+	}
+	return ""
 }
 
 // GetProtectedChangeSettingsRequest asks for the settings.
@@ -702,6 +713,98 @@ func (x *ApplyEmergencyProtectedChangeResponse) GetChange() *ProtectedChange {
 	return nil
 }
 
+// OpenEmergencyReviewRequest names the emergency change.
+type OpenEmergencyReviewRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The protected change id.
+	Id            string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *OpenEmergencyReviewRequest) Reset() {
+	*x = OpenEmergencyReviewRequest{}
+	mi := &file_pantherclaw_v1_protected_changes_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *OpenEmergencyReviewRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*OpenEmergencyReviewRequest) ProtoMessage() {}
+
+func (x *OpenEmergencyReviewRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_protected_changes_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use OpenEmergencyReviewRequest.ProtoReflect.Descriptor instead.
+func (*OpenEmergencyReviewRequest) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_protected_changes_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *OpenEmergencyReviewRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+// OpenEmergencyReviewResponse returns the change with its new review.
+type OpenEmergencyReviewResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The change (EMERGENCY, review_state DUE, a new review request).
+	Change        *ProtectedChange `protobuf:"bytes,1,opt,name=change,proto3" json:"change,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *OpenEmergencyReviewResponse) Reset() {
+	*x = OpenEmergencyReviewResponse{}
+	mi := &file_pantherclaw_v1_protected_changes_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *OpenEmergencyReviewResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*OpenEmergencyReviewResponse) ProtoMessage() {}
+
+func (x *OpenEmergencyReviewResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_protected_changes_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use OpenEmergencyReviewResponse.ProtoReflect.Descriptor instead.
+func (*OpenEmergencyReviewResponse) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_protected_changes_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *OpenEmergencyReviewResponse) GetChange() *ProtectedChange {
+	if x != nil {
+		return x.Change
+	}
+	return nil
+}
+
 // PublisherCompromise is one mark.
 type PublisherCompromise struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -729,7 +832,7 @@ type PublisherCompromise struct {
 
 func (x *PublisherCompromise) Reset() {
 	*x = PublisherCompromise{}
-	mi := &file_pantherclaw_v1_protected_changes_proto_msgTypes[10]
+	mi := &file_pantherclaw_v1_protected_changes_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -741,7 +844,7 @@ func (x *PublisherCompromise) String() string {
 func (*PublisherCompromise) ProtoMessage() {}
 
 func (x *PublisherCompromise) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_protected_changes_proto_msgTypes[10]
+	mi := &file_pantherclaw_v1_protected_changes_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -754,7 +857,7 @@ func (x *PublisherCompromise) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PublisherCompromise.ProtoReflect.Descriptor instead.
 func (*PublisherCompromise) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_protected_changes_proto_rawDescGZIP(), []int{10}
+	return file_pantherclaw_v1_protected_changes_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *PublisherCompromise) GetId() string {
@@ -846,7 +949,7 @@ type ExposedItem struct {
 
 func (x *ExposedItem) Reset() {
 	*x = ExposedItem{}
-	mi := &file_pantherclaw_v1_protected_changes_proto_msgTypes[11]
+	mi := &file_pantherclaw_v1_protected_changes_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -858,7 +961,7 @@ func (x *ExposedItem) String() string {
 func (*ExposedItem) ProtoMessage() {}
 
 func (x *ExposedItem) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_protected_changes_proto_msgTypes[11]
+	mi := &file_pantherclaw_v1_protected_changes_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -871,7 +974,7 @@ func (x *ExposedItem) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExposedItem.ProtoReflect.Descriptor instead.
 func (*ExposedItem) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_protected_changes_proto_rawDescGZIP(), []int{11}
+	return file_pantherclaw_v1_protected_changes_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *ExposedItem) GetKind() string {
@@ -945,7 +1048,7 @@ type MarkCompromisedRequest struct {
 
 func (x *MarkCompromisedRequest) Reset() {
 	*x = MarkCompromisedRequest{}
-	mi := &file_pantherclaw_v1_protected_changes_proto_msgTypes[12]
+	mi := &file_pantherclaw_v1_protected_changes_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -957,7 +1060,7 @@ func (x *MarkCompromisedRequest) String() string {
 func (*MarkCompromisedRequest) ProtoMessage() {}
 
 func (x *MarkCompromisedRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_protected_changes_proto_msgTypes[12]
+	mi := &file_pantherclaw_v1_protected_changes_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -970,7 +1073,7 @@ func (x *MarkCompromisedRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MarkCompromisedRequest.ProtoReflect.Descriptor instead.
 func (*MarkCompromisedRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_protected_changes_proto_rawDescGZIP(), []int{12}
+	return file_pantherclaw_v1_protected_changes_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *MarkCompromisedRequest) GetUserId() string {
@@ -1005,7 +1108,7 @@ type MarkCompromisedResponse struct {
 
 func (x *MarkCompromisedResponse) Reset() {
 	*x = MarkCompromisedResponse{}
-	mi := &file_pantherclaw_v1_protected_changes_proto_msgTypes[13]
+	mi := &file_pantherclaw_v1_protected_changes_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1017,7 +1120,7 @@ func (x *MarkCompromisedResponse) String() string {
 func (*MarkCompromisedResponse) ProtoMessage() {}
 
 func (x *MarkCompromisedResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_protected_changes_proto_msgTypes[13]
+	mi := &file_pantherclaw_v1_protected_changes_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1030,7 +1133,7 @@ func (x *MarkCompromisedResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MarkCompromisedResponse.ProtoReflect.Descriptor instead.
 func (*MarkCompromisedResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_protected_changes_proto_rawDescGZIP(), []int{13}
+	return file_pantherclaw_v1_protected_changes_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *MarkCompromisedResponse) GetCompromise() *PublisherCompromise {
@@ -1051,7 +1154,7 @@ type ListCompromisesRequest struct {
 
 func (x *ListCompromisesRequest) Reset() {
 	*x = ListCompromisesRequest{}
-	mi := &file_pantherclaw_v1_protected_changes_proto_msgTypes[14]
+	mi := &file_pantherclaw_v1_protected_changes_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1063,7 +1166,7 @@ func (x *ListCompromisesRequest) String() string {
 func (*ListCompromisesRequest) ProtoMessage() {}
 
 func (x *ListCompromisesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_protected_changes_proto_msgTypes[14]
+	mi := &file_pantherclaw_v1_protected_changes_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1076,7 +1179,7 @@ func (x *ListCompromisesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListCompromisesRequest.ProtoReflect.Descriptor instead.
 func (*ListCompromisesRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_protected_changes_proto_rawDescGZIP(), []int{14}
+	return file_pantherclaw_v1_protected_changes_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *ListCompromisesRequest) GetActiveOnly() bool {
@@ -1097,7 +1200,7 @@ type ListCompromisesResponse struct {
 
 func (x *ListCompromisesResponse) Reset() {
 	*x = ListCompromisesResponse{}
-	mi := &file_pantherclaw_v1_protected_changes_proto_msgTypes[15]
+	mi := &file_pantherclaw_v1_protected_changes_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1109,7 +1212,7 @@ func (x *ListCompromisesResponse) String() string {
 func (*ListCompromisesResponse) ProtoMessage() {}
 
 func (x *ListCompromisesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_protected_changes_proto_msgTypes[15]
+	mi := &file_pantherclaw_v1_protected_changes_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1122,7 +1225,7 @@ func (x *ListCompromisesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListCompromisesResponse.ProtoReflect.Descriptor instead.
 func (*ListCompromisesResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_protected_changes_proto_rawDescGZIP(), []int{15}
+	return file_pantherclaw_v1_protected_changes_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *ListCompromisesResponse) GetCompromises() []*PublisherCompromise {
@@ -1143,7 +1246,7 @@ type ListExposedRequest struct {
 
 func (x *ListExposedRequest) Reset() {
 	*x = ListExposedRequest{}
-	mi := &file_pantherclaw_v1_protected_changes_proto_msgTypes[16]
+	mi := &file_pantherclaw_v1_protected_changes_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1155,7 +1258,7 @@ func (x *ListExposedRequest) String() string {
 func (*ListExposedRequest) ProtoMessage() {}
 
 func (x *ListExposedRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_protected_changes_proto_msgTypes[16]
+	mi := &file_pantherclaw_v1_protected_changes_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1168,7 +1271,7 @@ func (x *ListExposedRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListExposedRequest.ProtoReflect.Descriptor instead.
 func (*ListExposedRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_protected_changes_proto_rawDescGZIP(), []int{16}
+	return file_pantherclaw_v1_protected_changes_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *ListExposedRequest) GetCompromiseId() string {
@@ -1183,15 +1286,19 @@ type ListExposedResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The mark.
 	Compromise *PublisherCompromise `protobuf:"bytes,1,opt,name=compromise,proto3" json:"compromise,omitempty"`
-	// What the person published since its time.
-	Items         []*ExposedItem `protobuf:"bytes,2,rep,name=items,proto3" json:"items,omitempty"`
+	// What the person published since its time, at most 1000 items per
+	// source.
+	Items []*ExposedItem `protobuf:"bytes,2,rep,name=items,proto3" json:"items,omitempty"`
+	// True when a source has more than it lists (1000 items): the list is
+	// not everything and the mark cannot be cleared (EXPOSURE_TRUNCATED).
+	Truncated     bool `protobuf:"varint,3,opt,name=truncated,proto3" json:"truncated,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ListExposedResponse) Reset() {
 	*x = ListExposedResponse{}
-	mi := &file_pantherclaw_v1_protected_changes_proto_msgTypes[17]
+	mi := &file_pantherclaw_v1_protected_changes_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1203,7 +1310,7 @@ func (x *ListExposedResponse) String() string {
 func (*ListExposedResponse) ProtoMessage() {}
 
 func (x *ListExposedResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_protected_changes_proto_msgTypes[17]
+	mi := &file_pantherclaw_v1_protected_changes_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1216,7 +1323,7 @@ func (x *ListExposedResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListExposedResponse.ProtoReflect.Descriptor instead.
 func (*ListExposedResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_protected_changes_proto_rawDescGZIP(), []int{17}
+	return file_pantherclaw_v1_protected_changes_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *ListExposedResponse) GetCompromise() *PublisherCompromise {
@@ -1231,6 +1338,13 @@ func (x *ListExposedResponse) GetItems() []*ExposedItem {
 		return x.Items
 	}
 	return nil
+}
+
+func (x *ListExposedResponse) GetTruncated() bool {
+	if x != nil {
+		return x.Truncated
+	}
+	return false
 }
 
 // ReviewExposedRequest decides on one item.
@@ -1252,7 +1366,7 @@ type ReviewExposedRequest struct {
 
 func (x *ReviewExposedRequest) Reset() {
 	*x = ReviewExposedRequest{}
-	mi := &file_pantherclaw_v1_protected_changes_proto_msgTypes[18]
+	mi := &file_pantherclaw_v1_protected_changes_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1264,7 +1378,7 @@ func (x *ReviewExposedRequest) String() string {
 func (*ReviewExposedRequest) ProtoMessage() {}
 
 func (x *ReviewExposedRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_protected_changes_proto_msgTypes[18]
+	mi := &file_pantherclaw_v1_protected_changes_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1277,7 +1391,7 @@ func (x *ReviewExposedRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReviewExposedRequest.ProtoReflect.Descriptor instead.
 func (*ReviewExposedRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_protected_changes_proto_rawDescGZIP(), []int{18}
+	return file_pantherclaw_v1_protected_changes_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *ReviewExposedRequest) GetCompromiseId() string {
@@ -1326,7 +1440,7 @@ type ReviewExposedResponse struct {
 
 func (x *ReviewExposedResponse) Reset() {
 	*x = ReviewExposedResponse{}
-	mi := &file_pantherclaw_v1_protected_changes_proto_msgTypes[19]
+	mi := &file_pantherclaw_v1_protected_changes_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1338,7 +1452,7 @@ func (x *ReviewExposedResponse) String() string {
 func (*ReviewExposedResponse) ProtoMessage() {}
 
 func (x *ReviewExposedResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_protected_changes_proto_msgTypes[19]
+	mi := &file_pantherclaw_v1_protected_changes_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1351,7 +1465,7 @@ func (x *ReviewExposedResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReviewExposedResponse.ProtoReflect.Descriptor instead.
 func (*ReviewExposedResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_protected_changes_proto_rawDescGZIP(), []int{19}
+	return file_pantherclaw_v1_protected_changes_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *ReviewExposedResponse) GetItem() *ExposedItem {
@@ -1372,7 +1486,7 @@ type ClearCompromiseRequest struct {
 
 func (x *ClearCompromiseRequest) Reset() {
 	*x = ClearCompromiseRequest{}
-	mi := &file_pantherclaw_v1_protected_changes_proto_msgTypes[20]
+	mi := &file_pantherclaw_v1_protected_changes_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1384,7 +1498,7 @@ func (x *ClearCompromiseRequest) String() string {
 func (*ClearCompromiseRequest) ProtoMessage() {}
 
 func (x *ClearCompromiseRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_protected_changes_proto_msgTypes[20]
+	mi := &file_pantherclaw_v1_protected_changes_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1397,7 +1511,7 @@ func (x *ClearCompromiseRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ClearCompromiseRequest.ProtoReflect.Descriptor instead.
 func (*ClearCompromiseRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_protected_changes_proto_rawDescGZIP(), []int{20}
+	return file_pantherclaw_v1_protected_changes_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *ClearCompromiseRequest) GetCompromiseId() string {
@@ -1418,7 +1532,7 @@ type ClearCompromiseResponse struct {
 
 func (x *ClearCompromiseResponse) Reset() {
 	*x = ClearCompromiseResponse{}
-	mi := &file_pantherclaw_v1_protected_changes_proto_msgTypes[21]
+	mi := &file_pantherclaw_v1_protected_changes_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1430,7 +1544,7 @@ func (x *ClearCompromiseResponse) String() string {
 func (*ClearCompromiseResponse) ProtoMessage() {}
 
 func (x *ClearCompromiseResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_protected_changes_proto_msgTypes[21]
+	mi := &file_pantherclaw_v1_protected_changes_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1443,7 +1557,7 @@ func (x *ClearCompromiseResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ClearCompromiseResponse.ProtoReflect.Descriptor instead.
 func (*ClearCompromiseResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_protected_changes_proto_rawDescGZIP(), []int{21}
+	return file_pantherclaw_v1_protected_changes_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *ClearCompromiseResponse) GetChangeRequestId() string {
@@ -1464,7 +1578,7 @@ const file_pantherclaw_v1_protected_changes_proto_rawDesc = "" +
 	"\n" +
 	"updated_by\x18\x03 \x01(\tR\tupdatedBy\x12;\n" +
 	"\vupdate_time\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"updateTime\"\x90\x06\n" +
+	"updateTime\"\xb3\x06\n" +
 	"\x0fProtectedChange\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1a\n" +
 	"\bcategory\x18\x02 \x01(\tR\bcategory\x12\x18\n" +
@@ -1488,7 +1602,8 @@ const file_pantherclaw_v1_protected_changes_proto_rawDesc = "" +
 	"\vreviewed_by\x18\x11 \x01(\tR\n" +
 	"reviewedBy\x12;\n" +
 	"\vreview_time\x18\x12 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"reviewTime\x1a:\n" +
+	"reviewTime\x12!\n" +
+	"\freview_state\x18\x13 \x01(\tR\vreviewState\x1a:\n" +
 	"\fSummaryEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"#\n" +
@@ -1513,6 +1628,10 @@ const file_pantherclaw_v1_protected_changes_proto_rawDesc = "" +
 	"$ApplyEmergencyProtectedChangeRequest\x124\n" +
 	"\x11change_request_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x0fchangeRequestId\"`\n" +
 	"%ApplyEmergencyProtectedChangeResponse\x127\n" +
+	"\x06change\x18\x01 \x01(\v2\x1f.pantherclaw.v1.ProtectedChangeR\x06change\"6\n" +
+	"\x1aOpenEmergencyReviewRequest\x12\x18\n" +
+	"\x02id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\x02id\"V\n" +
+	"\x1bOpenEmergencyReviewResponse\x127\n" +
 	"\x06change\x18\x01 \x01(\v2\x1f.pantherclaw.v1.ProtectedChangeR\x06change\"\xd9\x02\n" +
 	"\x13PublisherCompromise\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x17\n" +
@@ -1550,12 +1669,13 @@ const file_pantherclaw_v1_protected_changes_proto_rawDesc = "" +
 	"\x17ListCompromisesResponse\x12E\n" +
 	"\vcompromises\x18\x01 \x03(\v2#.pantherclaw.v1.PublisherCompromiseR\vcompromises\"C\n" +
 	"\x12ListExposedRequest\x12-\n" +
-	"\rcompromise_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\fcompromiseId\"\x8d\x01\n" +
+	"\rcompromise_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\fcompromiseId\"\xab\x01\n" +
 	"\x13ListExposedResponse\x12C\n" +
 	"\n" +
 	"compromise\x18\x01 \x01(\v2#.pantherclaw.v1.PublisherCompromiseR\n" +
 	"compromise\x121\n" +
-	"\x05items\x18\x02 \x03(\v2\x1b.pantherclaw.v1.ExposedItemR\x05items\"\xcc\x02\n" +
+	"\x05items\x18\x02 \x03(\v2\x1b.pantherclaw.v1.ExposedItemR\x05items\x12\x1c\n" +
+	"\ttruncated\x18\x03 \x01(\bR\ttruncated\"\xcc\x02\n" +
 	"\x14ReviewExposedRequest\x12-\n" +
 	"\rcompromise_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\fcompromiseId\x12\x8e\x01\n" +
 	"\x04kind\x18\x02 \x01(\tBz\xbaHwruR\x0ePOLICY_VERSIONR\rPOLICY_CHANGER\x0fPACKAGE_VERSIONR\vPACKAGE_KEYR\x12AUTOMATION_VERSIONR\x10PROTECTED_CHANGER\tPROMOTIONR\x05GRANTR\x04kind\x12#\n" +
@@ -1568,12 +1688,13 @@ const file_pantherclaw_v1_protected_changes_proto_rawDesc = "" +
 	"\x16ClearCompromiseRequest\x12-\n" +
 	"\rcompromise_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\fcompromiseId\"E\n" +
 	"\x17ClearCompromiseResponse\x12*\n" +
-	"\x11change_request_id\x18\x01 \x01(\tR\x0fchangeRequestId2\xa9\x04\n" +
+	"\x11change_request_id\x18\x01 \x01(\tR\x0fchangeRequestId2\x99\x05\n" +
 	"\x16ProtectedChangeService\x12\x88\x01\n" +
 	"\x1aGetProtectedChangeSettings\x121.pantherclaw.v1.GetProtectedChangeSettingsRequest\x1a2.pantherclaw.v1.GetProtectedChangeSettingsResponse\"\x03\x90\x02\x01\x12}\n" +
 	"\x18SetProtectedCategoryMode\x12/.pantherclaw.v1.SetProtectedCategoryModeRequest\x1a0.pantherclaw.v1.SetProtectedCategoryModeResponse\x12v\n" +
 	"\x14ListProtectedChanges\x12+.pantherclaw.v1.ListProtectedChangesRequest\x1a,.pantherclaw.v1.ListProtectedChangesResponse\"\x03\x90\x02\x01\x12\x8c\x01\n" +
-	"\x1dApplyEmergencyProtectedChange\x124.pantherclaw.v1.ApplyEmergencyProtectedChangeRequest\x1a5.pantherclaw.v1.ApplyEmergencyProtectedChangeResponse2\xfe\x03\n" +
+	"\x1dApplyEmergencyProtectedChange\x124.pantherclaw.v1.ApplyEmergencyProtectedChangeRequest\x1a5.pantherclaw.v1.ApplyEmergencyProtectedChangeResponse\x12n\n" +
+	"\x13OpenEmergencyReview\x12*.pantherclaw.v1.OpenEmergencyReviewRequest\x1a+.pantherclaw.v1.OpenEmergencyReviewResponse2\xfe\x03\n" +
 	"\x10PublisherService\x12b\n" +
 	"\x0fMarkCompromised\x12&.pantherclaw.v1.MarkCompromisedRequest\x1a'.pantherclaw.v1.MarkCompromisedResponse\x12g\n" +
 	"\x0fListCompromises\x12&.pantherclaw.v1.ListCompromisesRequest\x1a'.pantherclaw.v1.ListCompromisesResponse\"\x03\x90\x02\x01\x12[\n" +
@@ -1594,7 +1715,7 @@ func file_pantherclaw_v1_protected_changes_proto_rawDescGZIP() []byte {
 	return file_pantherclaw_v1_protected_changes_proto_rawDescData
 }
 
-var file_pantherclaw_v1_protected_changes_proto_msgTypes = make([]protoimpl.MessageInfo, 23)
+var file_pantherclaw_v1_protected_changes_proto_msgTypes = make([]protoimpl.MessageInfo, 25)
 var file_pantherclaw_v1_protected_changes_proto_goTypes = []any{
 	(*ProtectedCategorySetting)(nil),              // 0: pantherclaw.v1.ProtectedCategorySetting
 	(*ProtectedChange)(nil),                       // 1: pantherclaw.v1.ProtectedChange
@@ -1606,66 +1727,71 @@ var file_pantherclaw_v1_protected_changes_proto_goTypes = []any{
 	(*ListProtectedChangesResponse)(nil),          // 7: pantherclaw.v1.ListProtectedChangesResponse
 	(*ApplyEmergencyProtectedChangeRequest)(nil),  // 8: pantherclaw.v1.ApplyEmergencyProtectedChangeRequest
 	(*ApplyEmergencyProtectedChangeResponse)(nil), // 9: pantherclaw.v1.ApplyEmergencyProtectedChangeResponse
-	(*PublisherCompromise)(nil),                   // 10: pantherclaw.v1.PublisherCompromise
-	(*ExposedItem)(nil),                           // 11: pantherclaw.v1.ExposedItem
-	(*MarkCompromisedRequest)(nil),                // 12: pantherclaw.v1.MarkCompromisedRequest
-	(*MarkCompromisedResponse)(nil),               // 13: pantherclaw.v1.MarkCompromisedResponse
-	(*ListCompromisesRequest)(nil),                // 14: pantherclaw.v1.ListCompromisesRequest
-	(*ListCompromisesResponse)(nil),               // 15: pantherclaw.v1.ListCompromisesResponse
-	(*ListExposedRequest)(nil),                    // 16: pantherclaw.v1.ListExposedRequest
-	(*ListExposedResponse)(nil),                   // 17: pantherclaw.v1.ListExposedResponse
-	(*ReviewExposedRequest)(nil),                  // 18: pantherclaw.v1.ReviewExposedRequest
-	(*ReviewExposedResponse)(nil),                 // 19: pantherclaw.v1.ReviewExposedResponse
-	(*ClearCompromiseRequest)(nil),                // 20: pantherclaw.v1.ClearCompromiseRequest
-	(*ClearCompromiseResponse)(nil),               // 21: pantherclaw.v1.ClearCompromiseResponse
-	nil,                                           // 22: pantherclaw.v1.ProtectedChange.SummaryEntry
-	(*timestamppb.Timestamp)(nil),                 // 23: google.protobuf.Timestamp
+	(*OpenEmergencyReviewRequest)(nil),            // 10: pantherclaw.v1.OpenEmergencyReviewRequest
+	(*OpenEmergencyReviewResponse)(nil),           // 11: pantherclaw.v1.OpenEmergencyReviewResponse
+	(*PublisherCompromise)(nil),                   // 12: pantherclaw.v1.PublisherCompromise
+	(*ExposedItem)(nil),                           // 13: pantherclaw.v1.ExposedItem
+	(*MarkCompromisedRequest)(nil),                // 14: pantherclaw.v1.MarkCompromisedRequest
+	(*MarkCompromisedResponse)(nil),               // 15: pantherclaw.v1.MarkCompromisedResponse
+	(*ListCompromisesRequest)(nil),                // 16: pantherclaw.v1.ListCompromisesRequest
+	(*ListCompromisesResponse)(nil),               // 17: pantherclaw.v1.ListCompromisesResponse
+	(*ListExposedRequest)(nil),                    // 18: pantherclaw.v1.ListExposedRequest
+	(*ListExposedResponse)(nil),                   // 19: pantherclaw.v1.ListExposedResponse
+	(*ReviewExposedRequest)(nil),                  // 20: pantherclaw.v1.ReviewExposedRequest
+	(*ReviewExposedResponse)(nil),                 // 21: pantherclaw.v1.ReviewExposedResponse
+	(*ClearCompromiseRequest)(nil),                // 22: pantherclaw.v1.ClearCompromiseRequest
+	(*ClearCompromiseResponse)(nil),               // 23: pantherclaw.v1.ClearCompromiseResponse
+	nil,                                           // 24: pantherclaw.v1.ProtectedChange.SummaryEntry
+	(*timestamppb.Timestamp)(nil),                 // 25: google.protobuf.Timestamp
 }
 var file_pantherclaw_v1_protected_changes_proto_depIdxs = []int32{
-	23, // 0: pantherclaw.v1.ProtectedCategorySetting.update_time:type_name -> google.protobuf.Timestamp
-	22, // 1: pantherclaw.v1.ProtectedChange.summary:type_name -> pantherclaw.v1.ProtectedChange.SummaryEntry
-	23, // 2: pantherclaw.v1.ProtectedChange.create_time:type_name -> google.protobuf.Timestamp
-	23, // 3: pantherclaw.v1.ProtectedChange.decide_time:type_name -> google.protobuf.Timestamp
-	23, // 4: pantherclaw.v1.ProtectedChange.review_due_time:type_name -> google.protobuf.Timestamp
-	23, // 5: pantherclaw.v1.ProtectedChange.review_time:type_name -> google.protobuf.Timestamp
+	25, // 0: pantherclaw.v1.ProtectedCategorySetting.update_time:type_name -> google.protobuf.Timestamp
+	24, // 1: pantherclaw.v1.ProtectedChange.summary:type_name -> pantherclaw.v1.ProtectedChange.SummaryEntry
+	25, // 2: pantherclaw.v1.ProtectedChange.create_time:type_name -> google.protobuf.Timestamp
+	25, // 3: pantherclaw.v1.ProtectedChange.decide_time:type_name -> google.protobuf.Timestamp
+	25, // 4: pantherclaw.v1.ProtectedChange.review_due_time:type_name -> google.protobuf.Timestamp
+	25, // 5: pantherclaw.v1.ProtectedChange.review_time:type_name -> google.protobuf.Timestamp
 	0,  // 6: pantherclaw.v1.GetProtectedChangeSettingsResponse.settings:type_name -> pantherclaw.v1.ProtectedCategorySetting
 	0,  // 7: pantherclaw.v1.SetProtectedCategoryModeResponse.setting:type_name -> pantherclaw.v1.ProtectedCategorySetting
 	1,  // 8: pantherclaw.v1.ListProtectedChangesResponse.changes:type_name -> pantherclaw.v1.ProtectedChange
 	1,  // 9: pantherclaw.v1.ApplyEmergencyProtectedChangeResponse.change:type_name -> pantherclaw.v1.ProtectedChange
-	23, // 10: pantherclaw.v1.PublisherCompromise.since:type_name -> google.protobuf.Timestamp
-	23, // 11: pantherclaw.v1.PublisherCompromise.mark_time:type_name -> google.protobuf.Timestamp
-	23, // 12: pantherclaw.v1.PublisherCompromise.clear_time:type_name -> google.protobuf.Timestamp
-	23, // 13: pantherclaw.v1.ExposedItem.time:type_name -> google.protobuf.Timestamp
-	23, // 14: pantherclaw.v1.ExposedItem.review_time:type_name -> google.protobuf.Timestamp
-	23, // 15: pantherclaw.v1.MarkCompromisedRequest.since:type_name -> google.protobuf.Timestamp
-	10, // 16: pantherclaw.v1.MarkCompromisedResponse.compromise:type_name -> pantherclaw.v1.PublisherCompromise
-	10, // 17: pantherclaw.v1.ListCompromisesResponse.compromises:type_name -> pantherclaw.v1.PublisherCompromise
-	10, // 18: pantherclaw.v1.ListExposedResponse.compromise:type_name -> pantherclaw.v1.PublisherCompromise
-	11, // 19: pantherclaw.v1.ListExposedResponse.items:type_name -> pantherclaw.v1.ExposedItem
-	11, // 20: pantherclaw.v1.ReviewExposedResponse.item:type_name -> pantherclaw.v1.ExposedItem
-	2,  // 21: pantherclaw.v1.ProtectedChangeService.GetProtectedChangeSettings:input_type -> pantherclaw.v1.GetProtectedChangeSettingsRequest
-	4,  // 22: pantherclaw.v1.ProtectedChangeService.SetProtectedCategoryMode:input_type -> pantherclaw.v1.SetProtectedCategoryModeRequest
-	6,  // 23: pantherclaw.v1.ProtectedChangeService.ListProtectedChanges:input_type -> pantherclaw.v1.ListProtectedChangesRequest
-	8,  // 24: pantherclaw.v1.ProtectedChangeService.ApplyEmergencyProtectedChange:input_type -> pantherclaw.v1.ApplyEmergencyProtectedChangeRequest
-	12, // 25: pantherclaw.v1.PublisherService.MarkCompromised:input_type -> pantherclaw.v1.MarkCompromisedRequest
-	14, // 26: pantherclaw.v1.PublisherService.ListCompromises:input_type -> pantherclaw.v1.ListCompromisesRequest
-	16, // 27: pantherclaw.v1.PublisherService.ListExposed:input_type -> pantherclaw.v1.ListExposedRequest
-	18, // 28: pantherclaw.v1.PublisherService.ReviewExposed:input_type -> pantherclaw.v1.ReviewExposedRequest
-	20, // 29: pantherclaw.v1.PublisherService.ClearCompromise:input_type -> pantherclaw.v1.ClearCompromiseRequest
-	3,  // 30: pantherclaw.v1.ProtectedChangeService.GetProtectedChangeSettings:output_type -> pantherclaw.v1.GetProtectedChangeSettingsResponse
-	5,  // 31: pantherclaw.v1.ProtectedChangeService.SetProtectedCategoryMode:output_type -> pantherclaw.v1.SetProtectedCategoryModeResponse
-	7,  // 32: pantherclaw.v1.ProtectedChangeService.ListProtectedChanges:output_type -> pantherclaw.v1.ListProtectedChangesResponse
-	9,  // 33: pantherclaw.v1.ProtectedChangeService.ApplyEmergencyProtectedChange:output_type -> pantherclaw.v1.ApplyEmergencyProtectedChangeResponse
-	13, // 34: pantherclaw.v1.PublisherService.MarkCompromised:output_type -> pantherclaw.v1.MarkCompromisedResponse
-	15, // 35: pantherclaw.v1.PublisherService.ListCompromises:output_type -> pantherclaw.v1.ListCompromisesResponse
-	17, // 36: pantherclaw.v1.PublisherService.ListExposed:output_type -> pantherclaw.v1.ListExposedResponse
-	19, // 37: pantherclaw.v1.PublisherService.ReviewExposed:output_type -> pantherclaw.v1.ReviewExposedResponse
-	21, // 38: pantherclaw.v1.PublisherService.ClearCompromise:output_type -> pantherclaw.v1.ClearCompromiseResponse
-	30, // [30:39] is the sub-list for method output_type
-	21, // [21:30] is the sub-list for method input_type
-	21, // [21:21] is the sub-list for extension type_name
-	21, // [21:21] is the sub-list for extension extendee
-	0,  // [0:21] is the sub-list for field type_name
+	1,  // 10: pantherclaw.v1.OpenEmergencyReviewResponse.change:type_name -> pantherclaw.v1.ProtectedChange
+	25, // 11: pantherclaw.v1.PublisherCompromise.since:type_name -> google.protobuf.Timestamp
+	25, // 12: pantherclaw.v1.PublisherCompromise.mark_time:type_name -> google.protobuf.Timestamp
+	25, // 13: pantherclaw.v1.PublisherCompromise.clear_time:type_name -> google.protobuf.Timestamp
+	25, // 14: pantherclaw.v1.ExposedItem.time:type_name -> google.protobuf.Timestamp
+	25, // 15: pantherclaw.v1.ExposedItem.review_time:type_name -> google.protobuf.Timestamp
+	25, // 16: pantherclaw.v1.MarkCompromisedRequest.since:type_name -> google.protobuf.Timestamp
+	12, // 17: pantherclaw.v1.MarkCompromisedResponse.compromise:type_name -> pantherclaw.v1.PublisherCompromise
+	12, // 18: pantherclaw.v1.ListCompromisesResponse.compromises:type_name -> pantherclaw.v1.PublisherCompromise
+	12, // 19: pantherclaw.v1.ListExposedResponse.compromise:type_name -> pantherclaw.v1.PublisherCompromise
+	13, // 20: pantherclaw.v1.ListExposedResponse.items:type_name -> pantherclaw.v1.ExposedItem
+	13, // 21: pantherclaw.v1.ReviewExposedResponse.item:type_name -> pantherclaw.v1.ExposedItem
+	2,  // 22: pantherclaw.v1.ProtectedChangeService.GetProtectedChangeSettings:input_type -> pantherclaw.v1.GetProtectedChangeSettingsRequest
+	4,  // 23: pantherclaw.v1.ProtectedChangeService.SetProtectedCategoryMode:input_type -> pantherclaw.v1.SetProtectedCategoryModeRequest
+	6,  // 24: pantherclaw.v1.ProtectedChangeService.ListProtectedChanges:input_type -> pantherclaw.v1.ListProtectedChangesRequest
+	8,  // 25: pantherclaw.v1.ProtectedChangeService.ApplyEmergencyProtectedChange:input_type -> pantherclaw.v1.ApplyEmergencyProtectedChangeRequest
+	10, // 26: pantherclaw.v1.ProtectedChangeService.OpenEmergencyReview:input_type -> pantherclaw.v1.OpenEmergencyReviewRequest
+	14, // 27: pantherclaw.v1.PublisherService.MarkCompromised:input_type -> pantherclaw.v1.MarkCompromisedRequest
+	16, // 28: pantherclaw.v1.PublisherService.ListCompromises:input_type -> pantherclaw.v1.ListCompromisesRequest
+	18, // 29: pantherclaw.v1.PublisherService.ListExposed:input_type -> pantherclaw.v1.ListExposedRequest
+	20, // 30: pantherclaw.v1.PublisherService.ReviewExposed:input_type -> pantherclaw.v1.ReviewExposedRequest
+	22, // 31: pantherclaw.v1.PublisherService.ClearCompromise:input_type -> pantherclaw.v1.ClearCompromiseRequest
+	3,  // 32: pantherclaw.v1.ProtectedChangeService.GetProtectedChangeSettings:output_type -> pantherclaw.v1.GetProtectedChangeSettingsResponse
+	5,  // 33: pantherclaw.v1.ProtectedChangeService.SetProtectedCategoryMode:output_type -> pantherclaw.v1.SetProtectedCategoryModeResponse
+	7,  // 34: pantherclaw.v1.ProtectedChangeService.ListProtectedChanges:output_type -> pantherclaw.v1.ListProtectedChangesResponse
+	9,  // 35: pantherclaw.v1.ProtectedChangeService.ApplyEmergencyProtectedChange:output_type -> pantherclaw.v1.ApplyEmergencyProtectedChangeResponse
+	11, // 36: pantherclaw.v1.ProtectedChangeService.OpenEmergencyReview:output_type -> pantherclaw.v1.OpenEmergencyReviewResponse
+	15, // 37: pantherclaw.v1.PublisherService.MarkCompromised:output_type -> pantherclaw.v1.MarkCompromisedResponse
+	17, // 38: pantherclaw.v1.PublisherService.ListCompromises:output_type -> pantherclaw.v1.ListCompromisesResponse
+	19, // 39: pantherclaw.v1.PublisherService.ListExposed:output_type -> pantherclaw.v1.ListExposedResponse
+	21, // 40: pantherclaw.v1.PublisherService.ReviewExposed:output_type -> pantherclaw.v1.ReviewExposedResponse
+	23, // 41: pantherclaw.v1.PublisherService.ClearCompromise:output_type -> pantherclaw.v1.ClearCompromiseResponse
+	32, // [32:42] is the sub-list for method output_type
+	22, // [22:32] is the sub-list for method input_type
+	22, // [22:22] is the sub-list for extension type_name
+	22, // [22:22] is the sub-list for extension extendee
+	0,  // [0:22] is the sub-list for field type_name
 }
 
 func init() { file_pantherclaw_v1_protected_changes_proto_init() }
@@ -1679,7 +1805,7 @@ func file_pantherclaw_v1_protected_changes_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pantherclaw_v1_protected_changes_proto_rawDesc), len(file_pantherclaw_v1_protected_changes_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   23,
+			NumMessages:   25,
 			NumExtensions: 0,
 			NumServices:   2,
 		},

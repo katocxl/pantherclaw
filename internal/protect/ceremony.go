@@ -8,9 +8,12 @@ import (
 	"regexp"
 
 	"github.com/katocxl/pantherclaw/internal/changes"
+	"github.com/katocxl/pantherclaw/internal/evidence/audit"
+	evdomain "github.com/katocxl/pantherclaw/internal/evidence/domain"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
+	reflexdomain "github.com/katocxl/pantherclaw/internal/reflex/domain"
 	tenancy "github.com/katocxl/pantherclaw/internal/tenancy/app"
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
 )
@@ -89,7 +92,10 @@ func Register(svc *changes.Service, g *Gate, p *Publishers) {
 		svc.Register(DomainProtected, k, h)
 	}
 	review := h
-	review.Closed, review.TTL = nil, changes.MaxTTL
+	review.TTL = changes.MaxTTL
+	review.Closed = func(ctx context.Context, tx db.TenantTx, r changes.Request, state string) error {
+		return g.ReviewClosed(ctx, tx, r.ID, state)
+	}
 	svc.Register(DomainProtected, KindEmergencyReview, review)
 	svc.Register(DomainPublisher, KindClear, changes.Handler{
 		Permission:         td.PermPublisherCompromise,
@@ -140,5 +146,53 @@ func (g *Gate) Closed(ctx context.Context, tx db.TenantTx, request ids.UUID, sta
 	if db.IsNoRows(err) {
 		return nil
 	}
+	return err
+}
+
+// reviewActor records an emergency review's expiry, which no person does.
+var reviewActor = evdomain.Actor{Type: "system", ID: "protect"}
+
+// ReviewClosed handles an emergency review request that expired
+// unconfirmed (D98 L3). The emergency change stays applied and nothing is
+// undone: its review state becomes REVIEW_EXPIRED, and the person who
+// applied it owns a protected_change.review_expired failure in the
+// operations queue until someone opens a new review. A declined or voided
+// review changes nothing.
+func (g *Gate) ReviewClosed(ctx context.Context, tx db.TenantTx, request ids.UUID, state string) error {
+	if state != changes.StateExpired {
+		return nil
+	}
+	org := tx.OrgID()
+	row, err := dbq.New(tx).ExpireEmergencyReview(ctx, org, request)
+	if db.IsNoRows(err) {
+		return nil
+	} else if err != nil {
+		return err
+	}
+	publisher := uuidString(row.Publisher)
+	if _, err := audit.Record(ctx, tx, audit.Event{
+		Name: "protected_change.review_expired", Actor: reviewActor, Outcome: audit.Success,
+		Object: &audit.Object{Type: "protected_change", ID: row.ID.String()},
+		Details: map[string]string{
+			"category": row.Category, "subject": row.Subject, "applied_by": publisher, "review_request": request.String(),
+		},
+	}); err != nil {
+		return err
+	}
+	if g.Failures == nil {
+		return nil
+	}
+	owner := reflexdomain.Subject{Type: reflexdomain.SubjectUser, ID: publisher}
+	_, _, err = g.Failures.ReportTx(ctx, tx, reflexdomain.Failure{
+		Org:  org,
+		Kind: "protected_change.review_expired",
+		Summary: "The review of the emergency " + row.Category + " change to " + row.Subject +
+			" expired unconfirmed. The change stays applied.",
+		NextStep: "A person holding " + string(Surface(row.Surface).Permission()) + " opens a new review of protected change " +
+			row.ID.String() + "; a publisher other than its author and the person who applied it confirms it.",
+		Owner:     &owner,
+		Scope:     []reflexdomain.Subject{owner},
+		DedupeKey: "protected_change.review_expired:" + row.ID.String() + ":" + request.String(),
+	})
 	return err
 }

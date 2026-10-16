@@ -8,6 +8,7 @@ package protect_test
 import (
 	"context"
 	"errors"
+	"strconv"
 	"testing"
 	"time"
 
@@ -17,6 +18,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/db/dbtest"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	"github.com/katocxl/pantherclaw/internal/protect"
+	"github.com/katocxl/pantherclaw/internal/reflex/failures"
 	rapp "github.com/katocxl/pantherclaw/internal/releases/app"
 	"github.com/katocxl/pantherclaw/internal/releases/domain"
 	"github.com/katocxl/pantherclaw/internal/siem/stepup"
@@ -34,6 +36,7 @@ type person struct {
 // hr is protect wired to the real change ceremony (internal/changes).
 type hr struct {
 	t       *testing.T
+	db      *dbtest.DB
 	pool    *db.Pool
 	org     ids.OrgID
 	changes *changes.Service
@@ -45,9 +48,10 @@ type hr struct {
 
 func newHR(t *testing.T) *hr {
 	t.Helper()
-	e := &hr{t: t, pool: dbtest.New(t).AppPool(t), org: ids.New[ids.Org]()}
+	d := dbtest.New(t)
+	e := &hr{t: t, db: d, pool: d.AppPool(t), org: ids.New[ids.Org]()}
 	e.changes = changes.New(e.pool, "https://pc.test")
-	e.gate = &protect.Gate{Requests: protect.Ceremony{Changes: e.changes}}
+	e.gate = &protect.Gate{Requests: protect.Ceremony{Changes: e.changes}, Failures: &failures.Sink{}}
 	e.pub = &protect.Publishers{Pool: e.pool, Gate: e.gate, Editions: business{}, Undo: map[string]protect.Rollback{}}
 	e.gate.Compromise = e.pub
 	e.changes.Compromise = e.pub
@@ -254,6 +258,100 @@ func TestHR292_EmergencyChangeAppliesNowAndIsReviewedIndependently(t *testing.T)
 	}
 }
 
+// TestHR292_AnExpiredEmergencyReviewKeepsTheChangeAndCanBeReopened (D98
+// L3): when an emergency change's review request expires unconfirmed, the
+// change stays applied and nothing is undone. Its review state is
+// REVIEW_EXPIRED, never "not applied", and the person who applied it owns
+// a protected_change.review_expired failure. A person holding the
+// category's permission opens a fresh 72-hour review with the same
+// exclusions; someone without it cannot.
+func TestHR292_AnExpiredEmergencyReviewKeepsTheChangeAndCanBeReopened(t *testing.T) {
+	e := newHR(t)
+	alice, bob, carol := e.person("alice", td.RoleSecurityAdmin), e.person("bob", td.RoleSecurityAdmin), e.person("carol", td.RoleSecurityAdmin)
+	dave := e.person("dave", td.RoleViewer)
+	w := e.frozen(alice)
+	e.protectRules(alice)
+	_, err := e.windows.Retire(alice.cli, w.ID, "emergency release")
+	var held *protect.PendingError
+	if !errors.As(err, &held) {
+		t.Fatalf("retire = %v", err)
+	}
+	c, err := e.svc.ApplyEmergency(bob.page, held.Request, e.stepUp(bob))
+	if err != nil || c.ReviewState == nil || *c.ReviewState != protect.ReviewDue {
+		t.Fatalf("emergency = %v %+v", err, c)
+	}
+	first := *c.ReviewRequestID
+	if _, err := e.svc.OpenEmergencyReview(carol.page, c.ID); !errors.Is(err, protect.ErrState) {
+		t.Fatalf("a new review while one is due = %v, want refused", err)
+	}
+
+	// The review request runs out: 72 hours pass with no confirmation.
+	e.db.AdminExec(t, "ALTER TABLE pc.change_requests DISABLE TRIGGER USER")
+	e.db.AdminExec(t, `UPDATE pc.change_requests SET created_at = now() - interval '73 hours', expires_at = now() - interval '1 hour'
+		WHERE org_id = $1 AND id = $2`, e.org, first)
+	e.db.AdminExec(t, "ALTER TABLE pc.change_requests ENABLE TRIGGER USER")
+	if n, err := e.changes.ExpireOrg(context.Background(), e.org); err != nil || n != 1 {
+		t.Fatalf("expired %d: %v", n, err)
+	}
+	got := e.row(c.ID)
+	if got.State != protect.StateEmergency || got.ReviewState == nil || *got.ReviewState != protect.ReviewExpired ||
+		got.ReviewedBy != nil || got.Publisher == nil || *got.Publisher != bob.id {
+		t.Fatalf("after the review expired: %+v", got)
+	}
+	retired, err := e.windows.List(alice.cli, "prod", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	undone := true
+	for _, r := range retired {
+		if r.ID == w.ID && r.RetiredAt != nil {
+			undone = false
+		}
+	}
+	if undone {
+		t.Fatal("the expired review undid the emergency change")
+	}
+	var failures int
+	if err := e.pool.InTenantTx(context.Background(), e.org, func(ctx context.Context, tx db.TenantTx) error {
+		return tx.QueryRow(ctx, `SELECT count(*) FROM pc.operational_failures WHERE org_id = $1
+			AND kind = 'protected_change.review_expired' AND owner_type = 'user' AND owner_id = $2`, e.org, bob.id.String()).Scan(&failures)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if failures != 1 {
+		t.Fatalf("review_expired failures owned by the emergency publisher: %d", failures)
+	}
+
+	// Without the category's permission no new review is opened.
+	if _, err := e.svc.OpenEmergencyReview(dave.page, c.ID); err == nil {
+		t.Fatal("a viewer opened a new review")
+	}
+	again, err := e.svc.OpenEmergencyReview(carol.page, c.ID)
+	if err != nil || again.ReviewState == nil || *again.ReviewState != protect.ReviewDue ||
+		again.ReviewRequestID == nil || *again.ReviewRequestID == first || again.State != protect.StateEmergency {
+		t.Fatalf("new review = %v %+v", err, again)
+	}
+	review, err := e.changes.Get(carol.page, *again.ReviewRequestID)
+	if err != nil || review.ExpiresAt.Sub(review.CreatedAt) != 72*time.Hour || review.State != changes.StatePending {
+		t.Fatalf("new review request %v %+v", err, review)
+	}
+	if again.ReviewDueAt == nil || !again.ReviewDueAt.After(*c.ReviewDueAt) {
+		t.Fatalf("review due %v, was %v", again.ReviewDueAt, c.ReviewDueAt)
+	}
+	for _, p := range []person{alice, bob} {
+		if _, err := e.confirm(p, review.ID); err == nil {
+			t.Fatal("the author or the emergency publisher reviewed it")
+		}
+	}
+	if _, err := e.confirm(carol, review.ID); err != nil {
+		t.Fatal(err)
+	}
+	if got := e.row(c.ID); got.ReviewState == nil || *got.ReviewState != protect.ReviewReviewed ||
+		got.ReviewedBy == nil || *got.ReviewedBy != carol.id {
+		t.Fatalf("reviewed %+v", got)
+	}
+}
+
 // TestHR293_ACompromisedPublisherIsStoppedListedAndClearedByTwo: marking
 // Mallory compromised (step-up) voids her pending request and blocks her
 // confirming others' (a valid signature never exempts); what she published
@@ -330,6 +428,51 @@ func TestHR293_ACompromisedPublisherIsStoppedListedAndClearedByTwo(t *testing.T)
 	}
 	if got, _ := e.pub.Get(bob.cli, mark.ID); got.State != protect.CompromiseCleared {
 		t.Fatalf("mark is %s after two confirmations", got.State)
+	}
+}
+
+// TestHR293_ATruncatedExposureIsNeverCleared (D110 P5): when any exposure
+// source has more than ExposureCap items, the list says it is truncated,
+// a clearing is refused (EXPOSURE_TRUNCATED), and a clearing asked while
+// the list was complete does not apply once it is not.
+func TestHR293_ATruncatedExposureIsNeverCleared(t *testing.T) {
+	e := newHR(t)
+	alice, bob, carol := e.person("alice", td.RoleSecurityAdmin), e.person("bob", td.RoleSecurityAdmin), e.person("carol", td.RoleSecurityAdmin)
+	mallory := e.person("mallory", td.RoleSecurityAdmin)
+	n := 0
+	e.pub.Sources = map[string]protect.ExposureSource{
+		"TEST_ITEM": func(context.Context, db.TenantTx, ids.UUID, time.Time) ([]protect.Item, error) {
+			out := make([]protect.Item, n)
+			for i := range out {
+				out[i] = protect.Item{Kind: "TEST_ITEM", ID: strconv.Itoa(i), Label: "item", At: time.Now()}
+			}
+			return out, nil
+		},
+	}
+	mark, err := e.pub.MarkCompromised(bob.page, mallory.id, time.Now().Add(-time.Hour), "phished", e.stepUp(bob))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req, err := e.pub.ClearCompromise(bob.cli, mark.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	n = protect.ExposureCap + 1
+	cp, err := e.pub.Get(alice.cli, mark.ID)
+	if err != nil || !cp.Truncated || len(cp.Items) != protect.ExposureCap {
+		t.Fatalf("exposure %v truncated %v with %d items", err, cp.Truncated, len(cp.Items))
+	}
+	if _, err := e.confirm(alice, req); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.confirm(carol, req); !errors.Is(err, protect.ErrExposureTruncated) {
+		t.Fatalf("clearing a truncated exposure = %v, want EXPOSURE_TRUNCATED", err)
+	}
+	if got, _ := e.pub.Get(bob.cli, mark.ID); got.State != protect.CompromiseActive {
+		t.Fatalf("mark is %s", got.State)
+	}
+	if _, err := e.pub.ClearCompromise(bob.cli, mark.ID); !errors.Is(err, protect.ErrExposureTruncated) {
+		t.Fatalf("clear = %v, want EXPOSURE_TRUNCATED", err)
 	}
 }
 

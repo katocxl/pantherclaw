@@ -60,6 +60,10 @@ CREATE TABLE pc.protected_changes (
     decided_at        timestamptz,
     decided_reason    text        CHECK (decided_reason ~ '^[A-Z][A-Z0-9_]{0,63}$'),
     -- An emergency change: who applied it, with which key, and its review.
+    -- review_state is DUE, REVIEWED or REVIEW_EXPIRED; an expired review
+    -- leaves the change applied (EMERGENCY) until a new review is opened
+    -- (D98 L3).
+    review_state      text        CHECK (review_state IN ('DUE', 'REVIEWED', 'REVIEW_EXPIRED')),
     review_due_at     timestamptz,
     review_request_id uuid,
     reviewed_by       uuid,
@@ -72,6 +76,8 @@ CREATE TABLE pc.protected_changes (
     CHECK ((state IN ('APPLIED', 'EMERGENCY')) = (publisher IS NOT NULL)),
     CHECK (publisher IS NULL OR state = 'EMERGENCY' OR publisher <> author),
     CHECK ((state = 'EMERGENCY') = (review_due_at IS NOT NULL)),
+    CHECK ((state = 'EMERGENCY') = (review_state IS NOT NULL)),
+    CHECK (state <> 'EMERGENCY' OR (review_state = 'REVIEWED') = (reviewed_by IS NOT NULL)),
     CHECK ((reviewed_by IS NULL) = (reviewed_at IS NULL)),
     CHECK (reviewed_by IS NULL OR (state = 'EMERGENCY' AND reviewed_by <> publisher AND reviewed_by <> author))
 );
@@ -94,9 +100,11 @@ BEGIN
             RAISE EXCEPTION 'a protected change is inserted PENDING or EMERGENCY' USING ERRCODE = 'check_violation';
         END IF;
         NEW.created_at := now();
+        NEW.review_state := NULL;
         IF NEW.state = 'EMERGENCY' THEN
             NEW.decided_at := now();
             NEW.review_due_at := now() + interval '72 hours';
+            NEW.review_state := 'DUE';
         END IF;
         RETURN NEW;
     END IF;
@@ -114,14 +122,45 @@ BEGIN
             OR NEW.review_due_at IS DISTINCT FROM OLD.review_due_at) THEN
         RAISE EXCEPTION 'a decided protected change stays decided' USING ERRCODE = 'check_violation';
     END IF;
-    IF OLD.state = 'PENDING' AND NEW.state = 'EMERGENCY' THEN
-        NEW.review_due_at := now() + interval '72 hours';
+    IF OLD.state = 'PENDING' THEN
+        IF NEW.review_state IS DISTINCT FROM OLD.review_state THEN
+            RAISE EXCEPTION 'a review state follows the emergency' USING ERRCODE = 'check_violation';
+        END IF;
+        IF NEW.state = 'EMERGENCY' THEN
+            NEW.review_due_at := now() + interval '72 hours';
+            NEW.review_state := 'DUE';
+        END IF;
     END IF;
     IF OLD.state = 'PENDING' AND NEW.state <> 'PENDING' THEN
         NEW.decided_at := now();
     END IF;
     IF OLD.reviewed_by IS NOT NULL AND (NEW.reviewed_by IS DISTINCT FROM OLD.reviewed_by OR NEW.reviewed_at IS DISTINCT FROM OLD.reviewed_at) THEN
         RAISE EXCEPTION 'an emergency change is reviewed once' USING ERRCODE = 'check_violation';
+    END IF;
+    -- An emergency change's review (D98 L3): DUE becomes REVIEWED when
+    -- someone reviews it or REVIEW_EXPIRED when its request expires; a new
+    -- review moves REVIEW_EXPIRED back to DUE, with a new request and 72
+    -- hours. The change itself stays applied throughout.
+    IF OLD.state = 'EMERGENCY' THEN
+        IF OLD.reviewed_by IS NULL AND NEW.reviewed_by IS NOT NULL THEN
+            IF OLD.review_state <> 'DUE' OR NEW.review_state IS DISTINCT FROM OLD.review_state THEN
+                RAISE EXCEPTION 'only a due review is confirmed' USING ERRCODE = 'check_violation';
+            END IF;
+            NEW.review_state := 'REVIEWED';
+        ELSIF NEW.review_state IS DISTINCT FROM OLD.review_state THEN
+            IF OLD.review_state = 'DUE' AND NEW.review_state = 'REVIEW_EXPIRED'
+                    AND NEW.review_request_id IS NOT DISTINCT FROM OLD.review_request_id THEN
+                NULL;
+            ELSIF OLD.review_state = 'REVIEW_EXPIRED' AND NEW.review_state = 'DUE'
+                    AND NEW.review_request_id IS NOT NULL AND NEW.review_request_id IS DISTINCT FROM OLD.review_request_id THEN
+                NEW.review_due_at := now() + interval '72 hours';
+            ELSE
+                RAISE EXCEPTION 'review state % cannot become %', OLD.review_state, NEW.review_state
+                    USING ERRCODE = 'check_violation';
+            END IF;
+        ELSIF NEW.review_request_id IS DISTINCT FROM OLD.review_request_id AND OLD.review_request_id IS NOT NULL THEN
+            RAISE EXCEPTION 'a new review request needs an expired review' USING ERRCODE = 'check_violation';
+        END IF;
     END IF;
     IF OLD.reviewed_by IS NULL AND NEW.reviewed_by IS NOT NULL THEN
         NEW.reviewed_at := now();
@@ -247,8 +286,8 @@ $$;
 GRANT SELECT, INSERT ON pc.protected_change_settings, pc.protected_changes, pc.compromised_publishers,
     pc.compromise_reviews TO pc_app;
 GRANT UPDATE (mode, updated_by, updated_at) ON pc.protected_change_settings TO pc_app;
-GRANT UPDATE (state, change_request_id, publisher, decided_at, decided_reason, review_due_at, review_request_id,
-    reviewed_by, reviewed_at) ON pc.protected_changes TO pc_app;
+GRANT UPDATE (state, change_request_id, publisher, decided_at, decided_reason, review_state, review_due_at,
+    review_request_id, reviewed_by, reviewed_at) ON pc.protected_changes TO pc_app;
 GRANT UPDATE (state, clear_request_id, cleared_at) ON pc.compromised_publishers TO pc_app;
 GRANT SELECT ON pc.protected_change_settings, pc.protected_changes, pc.compromised_publishers,
     pc.compromise_reviews TO pc_audit_ro;

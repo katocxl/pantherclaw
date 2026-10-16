@@ -83,7 +83,7 @@ const decideProtectedChange = `-- name: DecideProtectedChange :one
 UPDATE pc.protected_changes
 SET state = $1, publisher = $2, decided_reason = $3
 WHERE org_id = $4 AND id = $5 AND state = 'PENDING'
-RETURNING org_id, id, category, surface, subject_id, subject, summary, widening, digest, subject_digest, payload, author, author_credential, state, change_request_id, publisher, created_at, decided_at, decided_reason, review_due_at, review_request_id, reviewed_by, reviewed_at
+RETURNING org_id, id, category, surface, subject_id, subject, summary, widening, digest, subject_digest, payload, author, author_credential, state, change_request_id, publisher, created_at, decided_at, decided_reason, review_state, review_due_at, review_request_id, reviewed_by, reviewed_at
 `
 
 type DecideProtectedChangeParams struct {
@@ -124,6 +124,48 @@ func (q *Queries) DecideProtectedChange(ctx context.Context, arg DecideProtected
 		&i.CreatedAt,
 		&i.DecidedAt,
 		&i.DecidedReason,
+		&i.ReviewState,
+		&i.ReviewDueAt,
+		&i.ReviewRequestID,
+		&i.ReviewedBy,
+		&i.ReviewedAt,
+	)
+	return i, err
+}
+
+const expireEmergencyReview = `-- name: ExpireEmergencyReview :one
+UPDATE pc.protected_changes SET review_state = 'REVIEW_EXPIRED'
+WHERE org_id = $1 AND review_request_id = $2::uuid
+  AND state = 'EMERGENCY' AND review_state = 'DUE'
+RETURNING org_id, id, category, surface, subject_id, subject, summary, widening, digest, subject_digest, payload, author, author_credential, state, change_request_id, publisher, created_at, decided_at, decided_reason, review_state, review_due_at, review_request_id, reviewed_by, reviewed_at
+`
+
+// An emergency change whose review request expired unconfirmed (D98 L3):
+// it stays applied; only its review state changes.
+func (q *Queries) ExpireEmergencyReview(ctx context.Context, orgID ids.OrgID, requestID ids.UUID) (PcProtectedChange, error) {
+	row := q.db.QueryRow(ctx, expireEmergencyReview, orgID, requestID)
+	var i PcProtectedChange
+	err := row.Scan(
+		&i.OrgID,
+		&i.ID,
+		&i.Category,
+		&i.Surface,
+		&i.SubjectID,
+		&i.Subject,
+		&i.Summary,
+		&i.Widening,
+		&i.Digest,
+		&i.SubjectDigest,
+		&i.Payload,
+		&i.Author,
+		&i.AuthorCredential,
+		&i.State,
+		&i.ChangeRequestID,
+		&i.Publisher,
+		&i.CreatedAt,
+		&i.DecidedAt,
+		&i.DecidedReason,
+		&i.ReviewState,
 		&i.ReviewDueAt,
 		&i.ReviewRequestID,
 		&i.ReviewedBy,
@@ -142,7 +184,7 @@ LEFT JOIN pc.automations a ON a.org_id = r.org_id AND a.id = r.subject_id
 WHERE c.org_id = $1 AND c.user_id = $2 AND r.domain = 'automation'
   AND c.confirmed_at >= $3::timestamptz
 ORDER BY r.subject_id, c.confirmed_at DESC
-LIMIT 1000
+LIMIT 1001
 `
 
 type ExposedAutomationConfirmationsRow struct {
@@ -178,7 +220,7 @@ SELECT id::text AS item_id, ('grant (' || state || ')')::text AS label, created_
 FROM pc.grants
 WHERE org_id = $1 AND grantor_kind = 'user' AND grantor_id = $2 AND created_at >= $3
 ORDER BY created_at
-LIMIT 1000
+LIMIT 1001
 `
 
 type ExposedGrantsRow struct {
@@ -215,7 +257,7 @@ WHERE org_id = $1 AND kind = 'audit.package.transitioned' AND actor_type = 'user
   AND actor_id = $2 AND occurred_at >= $3
   AND convert_from(body, 'UTF8')::jsonb #>> '{details,to}' = 'ACTIVE'
 ORDER BY occurred_at
-LIMIT 1000
+LIMIT 1001
 `
 
 type ExposedPackageActivationsRow struct {
@@ -250,7 +292,7 @@ SELECT kid AS item_id, ('package-signing key ' || name || ' (' || state || ')'):
 FROM pc.package_signing_keys
 WHERE org_id = $1 AND created_by = $2 AND created_at >= $3
 ORDER BY created_at
-LIMIT 1000
+LIMIT 1001
 `
 
 type ExposedPackageKeysRow struct {
@@ -285,7 +327,7 @@ FROM pc.policy_change_confirmations c
 JOIN pc.policy_change_requests r ON r.org_id = c.org_id AND r.id = c.request_id
 WHERE c.org_id = $1 AND c.principal_id = $2 AND c.created_at >= $3
 ORDER BY c.created_at
-LIMIT 1000
+LIMIT 1001
 `
 
 type ExposedPolicyChangesRow struct {
@@ -320,7 +362,7 @@ SELECT id::text AS item_id, ('policy version ' || version::text)::text AS label,
 FROM pc.policy_versions
 WHERE org_id = $1 AND published_by = $2::text AND published_at >= $3::timestamptz
 ORDER BY published_at
-LIMIT 1000
+LIMIT 1001
 `
 
 type ExposedPolicyVersionsRow struct {
@@ -357,7 +399,7 @@ FROM pc.protected_changes
 WHERE org_id = $1 AND state IN ('APPLIED', 'EMERGENCY') AND decided_at >= $2::timestamptz
   AND (publisher = $3::uuid OR reviewed_by = $3::uuid)
 ORDER BY decided_at
-LIMIT 1000
+LIMIT 1001
 `
 
 type ExposedProtectedChangesRow struct {
@@ -410,7 +452,7 @@ func (q *Queries) GetCompromisedPublisher(ctx context.Context, orgID ids.OrgID, 
 }
 
 const getProtectedChange = `-- name: GetProtectedChange :one
-SELECT org_id, id, category, surface, subject_id, subject, summary, widening, digest, subject_digest, payload, author, author_credential, state, change_request_id, publisher, created_at, decided_at, decided_reason, review_due_at, review_request_id, reviewed_by, reviewed_at FROM pc.protected_changes WHERE org_id = $1 AND id = $2
+SELECT org_id, id, category, surface, subject_id, subject, summary, widening, digest, subject_digest, payload, author, author_credential, state, change_request_id, publisher, created_at, decided_at, decided_reason, review_state, review_due_at, review_request_id, reviewed_by, reviewed_at FROM pc.protected_changes WHERE org_id = $1 AND id = $2
 `
 
 func (q *Queries) GetProtectedChange(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (PcProtectedChange, error) {
@@ -436,6 +478,7 @@ func (q *Queries) GetProtectedChange(ctx context.Context, orgID ids.OrgID, iD id
 		&i.CreatedAt,
 		&i.DecidedAt,
 		&i.DecidedReason,
+		&i.ReviewState,
 		&i.ReviewDueAt,
 		&i.ReviewRequestID,
 		&i.ReviewedBy,
@@ -445,7 +488,7 @@ func (q *Queries) GetProtectedChange(ctx context.Context, orgID ids.OrgID, iD id
 }
 
 const getProtectedChangeByRequest = `-- name: GetProtectedChangeByRequest :one
-SELECT org_id, id, category, surface, subject_id, subject, summary, widening, digest, subject_digest, payload, author, author_credential, state, change_request_id, publisher, created_at, decided_at, decided_reason, review_due_at, review_request_id, reviewed_by, reviewed_at FROM pc.protected_changes
+SELECT org_id, id, category, surface, subject_id, subject, summary, widening, digest, subject_digest, payload, author, author_credential, state, change_request_id, publisher, created_at, decided_at, decided_reason, review_state, review_due_at, review_request_id, reviewed_by, reviewed_at FROM pc.protected_changes
 WHERE org_id = $1 AND (change_request_id = $2::uuid OR review_request_id = $2::uuid)
 `
 
@@ -472,6 +515,7 @@ func (q *Queries) GetProtectedChangeByRequest(ctx context.Context, orgID ids.Org
 		&i.CreatedAt,
 		&i.DecidedAt,
 		&i.DecidedReason,
+		&i.ReviewState,
 		&i.ReviewDueAt,
 		&i.ReviewRequestID,
 		&i.ReviewedBy,
@@ -564,7 +608,7 @@ INSERT INTO pc.protected_changes (org_id, id, category, surface, subject_id, sub
 VALUES ($1, $2, $3, $4, $5, $6,
         $7, $8::text[], $9, $10, $11, $12,
         $13, $14, $15)
-RETURNING org_id, id, category, surface, subject_id, subject, summary, widening, digest, subject_digest, payload, author, author_credential, state, change_request_id, publisher, created_at, decided_at, decided_reason, review_due_at, review_request_id, reviewed_by, reviewed_at
+RETURNING org_id, id, category, surface, subject_id, subject, summary, widening, digest, subject_digest, payload, author, author_credential, state, change_request_id, publisher, created_at, decided_at, decided_reason, review_state, review_due_at, review_request_id, reviewed_by, reviewed_at
 `
 
 type InsertProtectedChangeParams struct {
@@ -624,6 +668,7 @@ func (q *Queries) InsertProtectedChange(ctx context.Context, arg InsertProtected
 		&i.CreatedAt,
 		&i.DecidedAt,
 		&i.DecidedReason,
+		&i.ReviewState,
 		&i.ReviewDueAt,
 		&i.ReviewRequestID,
 		&i.ReviewedBy,
@@ -746,7 +791,7 @@ func (q *Queries) ListProtectedChangeSettings(ctx context.Context, orgID ids.Org
 }
 
 const listProtectedChanges = `-- name: ListProtectedChanges :many
-SELECT org_id, id, category, surface, subject_id, subject, summary, widening, digest, subject_digest, payload, author, author_credential, state, change_request_id, publisher, created_at, decided_at, decided_reason, review_due_at, review_request_id, reviewed_by, reviewed_at FROM pc.protected_changes
+SELECT org_id, id, category, surface, subject_id, subject, summary, widening, digest, subject_digest, payload, author, author_credential, state, change_request_id, publisher, created_at, decided_at, decided_reason, review_state, review_due_at, review_request_id, reviewed_by, reviewed_at FROM pc.protected_changes
 WHERE org_id = $1
   AND ($2::text IS NULL OR state = $2::text)
   AND ($3::text IS NULL OR category = $3::text)
@@ -798,6 +843,7 @@ func (q *Queries) ListProtectedChanges(ctx context.Context, arg ListProtectedCha
 			&i.CreatedAt,
 			&i.DecidedAt,
 			&i.DecidedReason,
+			&i.ReviewState,
 			&i.ReviewDueAt,
 			&i.ReviewRequestID,
 			&i.ReviewedBy,
@@ -837,7 +883,7 @@ func (q *Queries) LockCompromisedPublisher(ctx context.Context, orgID ids.OrgID,
 }
 
 const lockProtectedChange = `-- name: LockProtectedChange :one
-SELECT org_id, id, category, surface, subject_id, subject, summary, widening, digest, subject_digest, payload, author, author_credential, state, change_request_id, publisher, created_at, decided_at, decided_reason, review_due_at, review_request_id, reviewed_by, reviewed_at FROM pc.protected_changes WHERE org_id = $1 AND id = $2 FOR UPDATE
+SELECT org_id, id, category, surface, subject_id, subject, summary, widening, digest, subject_digest, payload, author, author_credential, state, change_request_id, publisher, created_at, decided_at, decided_reason, review_state, review_due_at, review_request_id, reviewed_by, reviewed_at FROM pc.protected_changes WHERE org_id = $1 AND id = $2 FOR UPDATE
 `
 
 func (q *Queries) LockProtectedChange(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (PcProtectedChange, error) {
@@ -863,6 +909,7 @@ func (q *Queries) LockProtectedChange(ctx context.Context, orgID ids.OrgID, iD i
 		&i.CreatedAt,
 		&i.DecidedAt,
 		&i.DecidedReason,
+		&i.ReviewState,
 		&i.ReviewDueAt,
 		&i.ReviewRequestID,
 		&i.ReviewedBy,
@@ -882,8 +929,8 @@ func (q *Queries) LockProtectedChangeSettings(ctx context.Context, orgID ids.Org
 }
 
 const overdueEmergencyChanges = `-- name: OverdueEmergencyChanges :many
-SELECT org_id, id, category, surface, subject_id, subject, summary, widening, digest, subject_digest, payload, author, author_credential, state, change_request_id, publisher, created_at, decided_at, decided_reason, review_due_at, review_request_id, reviewed_by, reviewed_at FROM pc.protected_changes
-WHERE org_id = $1 AND state = 'EMERGENCY' AND reviewed_by IS NULL AND review_due_at < now()
+SELECT org_id, id, category, surface, subject_id, subject, summary, widening, digest, subject_digest, payload, author, author_credential, state, change_request_id, publisher, created_at, decided_at, decided_reason, review_state, review_due_at, review_request_id, reviewed_by, reviewed_at FROM pc.protected_changes
+WHERE org_id = $1 AND state = 'EMERGENCY' AND review_state = 'DUE' AND review_due_at < now()
 ORDER BY review_due_at
 LIMIT 100
 `
@@ -918,6 +965,7 @@ func (q *Queries) OverdueEmergencyChanges(ctx context.Context, orgID ids.OrgID) 
 			&i.CreatedAt,
 			&i.DecidedAt,
 			&i.DecidedReason,
+			&i.ReviewState,
 			&i.ReviewDueAt,
 			&i.ReviewRequestID,
 			&i.ReviewedBy,
@@ -1042,7 +1090,7 @@ func (q *Queries) ProtectedCategoryMode(ctx context.Context, orgID ids.OrgID, ca
 }
 
 const protectedChangeOfRequest = `-- name: ProtectedChangeOfRequest :one
-SELECT org_id, id, category, surface, subject_id, subject, summary, widening, digest, subject_digest, payload, author, author_credential, state, change_request_id, publisher, created_at, decided_at, decided_reason, review_due_at, review_request_id, reviewed_by, reviewed_at FROM pc.protected_changes
+SELECT org_id, id, category, surface, subject_id, subject, summary, widening, digest, subject_digest, payload, author, author_credential, state, change_request_id, publisher, created_at, decided_at, decided_reason, review_state, review_due_at, review_request_id, reviewed_by, reviewed_at FROM pc.protected_changes
 WHERE org_id = $1 AND (change_request_id = $2::uuid OR review_request_id = $2::uuid)
 FOR UPDATE
 `
@@ -1070,6 +1118,47 @@ func (q *Queries) ProtectedChangeOfRequest(ctx context.Context, orgID ids.OrgID,
 		&i.CreatedAt,
 		&i.DecidedAt,
 		&i.DecidedReason,
+		&i.ReviewState,
+		&i.ReviewDueAt,
+		&i.ReviewRequestID,
+		&i.ReviewedBy,
+		&i.ReviewedAt,
+	)
+	return i, err
+}
+
+const reopenEmergencyReview = `-- name: ReopenEmergencyReview :one
+UPDATE pc.protected_changes SET review_state = 'DUE', review_request_id = $1::uuid
+WHERE org_id = $2 AND id = $3 AND state = 'EMERGENCY' AND review_state = 'REVIEW_EXPIRED'
+RETURNING org_id, id, category, surface, subject_id, subject, summary, widening, digest, subject_digest, payload, author, author_credential, state, change_request_id, publisher, created_at, decided_at, decided_reason, review_state, review_due_at, review_request_id, reviewed_by, reviewed_at
+`
+
+// A new review of an emergency change whose review expired: a new request
+// and 72 hours (D98 L3).
+func (q *Queries) ReopenEmergencyReview(ctx context.Context, reviewRequestID ids.UUID, orgID ids.OrgID, iD ids.UUID) (PcProtectedChange, error) {
+	row := q.db.QueryRow(ctx, reopenEmergencyReview, reviewRequestID, orgID, iD)
+	var i PcProtectedChange
+	err := row.Scan(
+		&i.OrgID,
+		&i.ID,
+		&i.Category,
+		&i.Surface,
+		&i.SubjectID,
+		&i.Subject,
+		&i.Summary,
+		&i.Widening,
+		&i.Digest,
+		&i.SubjectDigest,
+		&i.Payload,
+		&i.Author,
+		&i.AuthorCredential,
+		&i.State,
+		&i.ChangeRequestID,
+		&i.Publisher,
+		&i.CreatedAt,
+		&i.DecidedAt,
+		&i.DecidedReason,
+		&i.ReviewState,
 		&i.ReviewDueAt,
 		&i.ReviewRequestID,
 		&i.ReviewedBy,
@@ -1080,7 +1169,7 @@ func (q *Queries) ProtectedChangeOfRequest(ctx context.Context, orgID ids.OrgID,
 
 const reviewEmergencyChange = `-- name: ReviewEmergencyChange :execrows
 UPDATE pc.protected_changes SET reviewed_by = $1::uuid
-WHERE org_id = $2 AND id = $3 AND state = 'EMERGENCY' AND reviewed_by IS NULL
+WHERE org_id = $2 AND id = $3 AND state = 'EMERGENCY' AND review_state = 'DUE'
   AND publisher <> $1::uuid AND author <> $1::uuid
 `
 
@@ -1107,7 +1196,7 @@ func (q *Queries) SetCompromiseClearRequest(ctx context.Context, clearRequestID 
 
 const setEmergencyReviewRequest = `-- name: SetEmergencyReviewRequest :execrows
 UPDATE pc.protected_changes SET review_request_id = $1::uuid
-WHERE org_id = $2 AND id = $3 AND state = 'EMERGENCY' AND reviewed_by IS NULL
+WHERE org_id = $2 AND id = $3 AND state = 'EMERGENCY' AND review_request_id IS NULL
 `
 
 func (q *Queries) SetEmergencyReviewRequest(ctx context.Context, reviewRequestID ids.UUID, orgID ids.OrgID, iD ids.UUID) (int64, error) {

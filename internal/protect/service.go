@@ -261,13 +261,7 @@ func (s *Service) ApplyEmergency(ctx context.Context, request ids.UUID, su stepu
 		if err := s.Gate.Requests.Void(ctx, tx, request, reasonEmergency); err != nil {
 			return err
 		}
-		review, err := s.Gate.Requests.Open(ctx, tx, Request{
-			Domain: DomainProtected, Kind: KindEmergencyReview, Subject: row.ID, Digest: row.Digest, Required: 1, By: c,
-			Summary: map[string]string{
-				"category": row.Category, "surface": row.Surface, "subject": row.Subject, "applied_by": c.Principal.String(),
-				"author": "user:" + row.Author.String(), "widening": joinWidening(row.Widening),
-			},
-		})
+		review, err := s.openReview(ctx, tx, c, out)
 		if err != nil {
 			return err
 		}
@@ -295,6 +289,76 @@ func (s *Service) ApplyEmergency(ctx context.Context, request ids.UUID, su stepu
 	if err == nil && changed {
 		return dbq.PcProtectedChange{}, ErrSubjectChanged
 	}
+	return out, err
+}
+
+// openReview opens an emergency change's 72-hour review request, asked by
+// by. Neither the author nor the person who applied it may confirm it
+// (Gate.Eligible).
+func (s *Service) openReview(ctx context.Context, tx db.TenantTx, by tenancy.Caller, row dbq.PcProtectedChange) (ids.UUID, error) {
+	return s.Gate.Requests.Open(ctx, tx, Request{
+		Domain: DomainProtected, Kind: KindEmergencyReview, Subject: row.ID, Digest: row.Digest, Required: 1, By: by,
+		Summary: map[string]string{
+			"category": row.Category, "surface": row.Surface, "subject": row.Subject, "applied_by": "user:" + uuidString(row.Publisher),
+			"author": "user:" + row.Author.String(), "widening": joinWidening(row.Widening),
+		},
+	})
+}
+
+// OpenEmergencyReview opens a new review of an emergency change whose
+// review expired (D98 L3): a fresh 72-hour EMERGENCY_REVIEW with the same
+// exclusions. The caller holds the change's surface permission (its
+// category's) and is not marked compromised. The change stays applied
+// throughout.
+func (s *Service) OpenEmergencyReview(ctx context.Context, id ids.UUID) (dbq.PcProtectedChange, error) {
+	c, err := tenancy.CallerFrom(ctx)
+	if err != nil {
+		return dbq.PcProtectedChange{}, err
+	}
+	if !c.Human() {
+		return dbq.PcProtectedChange{}, ErrHuman
+	}
+	if s.Gate == nil || s.Gate.Requests == nil {
+		return dbq.PcProtectedChange{}, ErrUnavailable
+	}
+	var out dbq.PcProtectedChange
+	err = s.Pool.InTenantTx(ctx, c.Org, func(ctx context.Context, tx db.TenantTx) error {
+		q := dbq.New(tx)
+		row, err := q.LockProtectedChange(ctx, c.Org, id)
+		if db.IsNoRows(err) {
+			return ErrNotFound
+		} else if err != nil {
+			return err
+		}
+		if err := c.Require(Surface(row.Surface).Permission(), td.OrgPath(c.Org)); err != nil {
+			return err
+		}
+		if row.State != StateEmergency || row.ReviewState == nil || *row.ReviewState != ReviewExpired {
+			return ErrState
+		}
+		if s.Gate.Compromise != nil {
+			bad, err := s.Gate.Compromise.CompromisedTx(ctx, tx, c.Principal.ID)
+			if err != nil {
+				return err
+			}
+			if bad {
+				return ErrCompromised
+			}
+		}
+		review, err := s.openReview(ctx, tx, c, row)
+		if err != nil {
+			return err
+		}
+		if out, err = q.ReopenEmergencyReview(ctx, review, c.Org, row.ID); db.IsNoRows(err) {
+			return ErrState
+		} else if err != nil {
+			return err
+		}
+		return record(ctx, tx, c, "protected_change.review_reopened", row.ID, map[string]string{
+			"category": row.Category, "subject": row.Subject, "applied_by": uuidString(row.Publisher),
+			"review_request": review.String(),
+		})
+	})
 	return out, err
 }
 
