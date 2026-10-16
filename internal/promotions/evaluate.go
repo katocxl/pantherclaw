@@ -175,7 +175,6 @@ func (s *subject) approvals(ctx context.Context, q *dbq.Queries, op string) (Che
 	return Check{Name: CheckApprovals, Passed: true, Detail: clip("an eligible approver for " + strings.Join(rules, ", "))}, nil
 }
 
-
 func declared(fb string) Check {
 	if !slices.Contains(FailureBehaviors, fb) {
 		return Check{Name: CheckFailureBehavior, Detail: "declare FAIL_CLOSED, QUEUE or DEGRADE_READ_ONLY"}
