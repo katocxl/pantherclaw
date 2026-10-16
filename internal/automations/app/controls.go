@@ -258,7 +258,7 @@ func (s *Service) PauseAutomation(ctx context.Context, automation ids.UUID, canc
 		out = automationView(r)
 		return record(ctx, tx, c.Actor(), "automation.paused", a.ID, map[string]string{
 			"reason": string(autodomain.PauseUser), "cancel_active": boolString(cancelActive), "note_sha256": noteDigest(reason),
-			"executions_canceled": itoa(len(eff.ExecutionsAffected)),
+			"executions_canceled": itoa(len(eff.ExecutionsAffected)), "deliveries_not_verified": itoa(len(eff.DeliveriesNotVerified)),
 		})
 	})
 	return out, eff, err
@@ -449,7 +449,7 @@ func (s *Service) RetireAutomation(ctx context.Context, automation ids.UUID, rea
 		}
 		out = automationView(r)
 		return record(ctx, tx, c.Actor(), "automation.retired", a.ID, map[string]string{
-			"note_sha256": noteDigest(reason), "executions_canceled": itoa(len(eff.ExecutionsAffected)),
+			"note_sha256": noteDigest(reason), "executions_canceled": itoa(len(eff.ExecutionsAffected)), "deliveries_not_verified": itoa(len(eff.DeliveriesNotVerified)),
 		})
 	})
 	return out, eff, err

@@ -696,15 +696,15 @@ func (v *validator) withChecks(at string, s StepSpec, w any, seen map[string]int
 		if c != nil && c.Bounds.Operations != nil && !c.Bounds.Operations.Matches(x.Operation) {
 			v.err(CodeLimitRange, at+"/operation", "the operation must be inside the ceiling")
 		}
-		if x.Min < 1 || x.Min > 100 {
-			v.err(CodeLimitRange, at+"/min", "min is 1 to 100")
+		if x.Min < 0 || x.Min > 100 {
+			v.err(CodeLimitRange, at+"/min", "min is 1 to 100 (absent means 1)")
 		}
 	case *GateWith:
 		if !dur(x.Deadline, time.Minute, MaxGateDeadline) {
 			v.err(CodeDeadlineMissing, at+"/deadline", "a gate's deadline is 1m to 72h")
 		}
-		if x.MinApprovals < 1 || x.MinApprovals > 2 {
-			v.err(CodeLimitRange, at+"/min_approvals", "min_approvals is 1 or 2")
+		if x.MinApprovals < 0 || x.MinApprovals > 2 {
+			v.err(CodeLimitRange, at+"/min_approvals", "min_approvals is 1 or 2 (absent means 1)")
 		}
 		for i, e := range x.Exclude {
 			if !slices.Contains([]string{ExcludeOwner, ExcludeConfirmers, ExcludePrincipal}, e) {
@@ -722,8 +722,8 @@ func (v *validator) withChecks(at string, s StepSpec, w any, seen map[string]int
 		switch {
 		case err != nil:
 			v.lookupErr(at+"/approvers", err)
-		case n < max(x.MinApprovals, 1):
-			v.err(CodeGateNoApprover, at+"/approvers", "no one could decide this gate: %d eligible, %d needed", n, max(x.MinApprovals, 1))
+		case n < x.Approvals():
+			v.err(CodeGateNoApprover, at+"/approvers", "no one could decide this gate: %d eligible, %d needed", n, x.Approvals())
 		}
 	case *RevokeGrantWith:
 		scope("/scope", x.Scope, RevokeExecution, RevokeTriggerGrant, RevokeCeilingAgents)

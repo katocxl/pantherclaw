@@ -181,6 +181,17 @@ func (s *Service) apply(ctx context.Context, tx db.TenantTx, r changes.Request, 
 	if err != nil {
 		return err
 	}
+	// Serialize with the kill switch (D91 K5): an enabling applied while
+	// it is engaged leaves the automation PAUSED (KILL_SWITCH). The
+	// containment row is locked before the automation, the order Engage
+	// takes them in (D102 C1).
+	if err := q.InsertContainment(ctx, r.Org); err != nil {
+		return err
+	}
+	killed, err := q.LockKillSwitch(ctx, r.Org)
+	if err != nil {
+		return err
+	}
 	a, err := loadAutomation(ctx, q, r.Org, v.AutomationID, true)
 	if err != nil {
 		return err
@@ -235,15 +246,6 @@ func (s *Service) apply(ctx context.Context, tx db.TenantTx, r changes.Request, 
 	}
 	if u, ok := d.Authority.PrincipalUser(); ok && !slices.Contains(confirmers, u.UUID()) {
 		return &changes.VoidError{Reason: VoidPrincipal}
-	}
-	// Serialize with the kill switch (D91 K5): an enabling applied while
-	// it is engaged leaves the automation PAUSED (KILL_SWITCH).
-	if err := q.InsertContainment(ctx, r.Org); err != nil {
-		return err
-	}
-	killed, err := q.LockKillSwitch(ctx, r.Org)
-	if err != nil {
-		return err
 	}
 	now, err := dbNow(ctx, q)
 	if err != nil {
@@ -339,7 +341,7 @@ func fullEnableAllowed(ctx context.Context, q *dbq.Queries, a dbq.PcAutomation, 
 	if err != nil {
 		return false, err
 	}
-	return d.Authority.Ceiling.NotWiderThan(prev.Authority.Ceiling), nil
+	return d.Authority.NotWiderThan(prev.Authority), nil
 }
 
 // tested asks the TestGate (assurance, D34); without one nothing is
