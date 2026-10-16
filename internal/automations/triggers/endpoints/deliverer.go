@@ -347,3 +347,36 @@ func (DestinationChecker) Active(ctx context.Context, tx pgx.Tx, org ids.OrgID, 
 	}
 	return d.State == StateActive && slices.Contains(d.Purposes, purpose), nil
 }
+
+// CancelCode is the last_error of a delivery Cancel stopped.
+const CancelCode = "cancelled" //nolint:misspell // the stored value D89 names
+
+// ErrDeliveryNotPending reports a delivery that was already delivered or
+// failed (a cancel included): Cancel changes nothing.
+var ErrDeliveryNotPending = pcerr.New(pcerr.FailedPrecondition, "DELIVERY_NOT_PENDING", "the delivery is no longer pending")
+
+// Cancel stops a delivery that has not been sent (D89, the engine's
+// cleanup): PENDING becomes FAILED with last_error CancelCode and its
+// body is dropped. A delivery in another state is left as it is
+// (ErrDeliveryNotPending); an unknown one is ErrDeliveryNotFound.
+func (dl Deliverer) Cancel(ctx context.Context, tx pgx.Tx, id ids.UUID) error {
+	t, org, err := adopt(ctx, tx)
+	if err != nil {
+		return err
+	}
+	q := dbq.New(t)
+	code := CancelCode
+	n, err := q.CancelAutomationDelivery(ctx, &code, org, id)
+	if err != nil {
+		return err
+	}
+	if n == 1 {
+		return nil
+	}
+	if _, err := q.GetAutomationDelivery(ctx, org, id); db.IsNoRows(err) {
+		return ErrDeliveryNotFound
+	} else if err != nil {
+		return err
+	}
+	return ErrDeliveryNotPending
+}

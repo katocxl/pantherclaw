@@ -475,3 +475,8 @@ WHERE d.org_id = sqlc.arg(org_id) AND d.automation_id = sqlc.arg(automation_id) 
 -- before the lease ends, even if this one never records the outcome.
 UPDATE pc.automation_deliveries SET next_attempt_at = now() + interval '2 minutes'
 WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state = 'PENDING';
+
+-- name: CancelAutomationDelivery :execrows
+-- The engine's cleanup cancels a delivery that has not been sent (D89).
+UPDATE pc.automation_deliveries SET state = 'FAILED', body = NULL, last_error = sqlc.arg(code)
+WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state = 'PENDING';

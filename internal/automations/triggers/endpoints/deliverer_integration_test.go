@@ -285,3 +285,46 @@ func TestDeliverer_RotationOverlapSignsWithBoth(t *testing.T) {
 		t.Fatalf("signatures during the overlap: %v", sigs)
 	}
 }
+
+// TestDeliverer_CancelStopsOnlyPendingDeliveries (D89): a pending
+// delivery is cancelled (FAILED, "cancelled", body dropped) and never
+// sent; a delivered one stays as it is.
+func TestDeliverer_CancelStopsOnlyPendingDeliveries(t *testing.T) {
+	f := newFixture(t)
+	d, _ := f.activeDestination(t, "cancel", "NOTICE")
+	pending, err := f.deliver(t, autodomain.Delivery{Org: f.Org, Destination: d.ID, Execution: ids.NewV7(), Kind: autodomain.DeliveryNotice, Body: []byte(`{"n":1}`)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cancel := func(id ids.UUID) error {
+		return f.Pool.InTenantTx(context.Background(), f.Org, func(ctx context.Context, tx db.TenantTx) error {
+			return f.svc.Deliverer().Cancel(ctx, tx.Pgx(), id)
+		})
+	}
+	if err := cancel(pending); err != nil {
+		t.Fatal(err)
+	}
+	st := f.status(t, pending)
+	if st.State != autodomain.DeliveryFailed || st.LastError != "cancelled" {
+		t.Fatalf("cancelled: %+v", st)
+	}
+	if n, _ := f.svc.SendDue(context.Background(), f.Org); n != 0 || len(f.recv.bodies) != 0 {
+		t.Fatal("a cancelled delivery was sent")
+	}
+	if err := cancel(pending); !errors.Is(err, ErrDeliveryNotPending) {
+		t.Fatalf("second cancel: %v", err)
+	}
+	sent, err := f.deliver(t, autodomain.Delivery{Org: f.Org, Destination: d.ID, Execution: ids.NewV7(), Kind: autodomain.DeliveryNotice, Body: []byte(`{"n":2}`)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.svc.SendDue(context.Background(), f.Org); err != nil {
+		t.Fatal(err)
+	}
+	if err := cancel(sent); !errors.Is(err, ErrDeliveryNotPending) || f.status(t, sent).State != autodomain.DeliveryDelivered {
+		t.Fatalf("a delivered delivery: %v", err)
+	}
+	if err := cancel(ids.NewV7()); !errors.Is(err, ErrDeliveryNotFound) {
+		t.Fatalf("unknown: %v", err)
+	}
+}

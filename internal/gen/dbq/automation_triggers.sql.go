@@ -264,6 +264,20 @@ func (q *Queries) AutomationVersionDefinition(ctx context.Context, orgID ids.Org
 	return i, err
 }
 
+const cancelAutomationDelivery = `-- name: CancelAutomationDelivery :execrows
+UPDATE pc.automation_deliveries SET state = 'FAILED', body = NULL, last_error = $1
+WHERE org_id = $2 AND id = $3 AND state = 'PENDING'
+`
+
+// The engine's cleanup cancels a delivery that has not been sent (D89).
+func (q *Queries) CancelAutomationDelivery(ctx context.Context, code *string, orgID ids.OrgID, iD ids.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, cancelAutomationDelivery, code, orgID, iD)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const caseStatesOfLedgerEntries = `-- name: CaseStatesOfLedgerEntries :many
 SELECT e.ledger_entry_id, e.case_id FROM pc.case_entries e
 WHERE e.org_id = $1 AND e.ledger_entry_id = ANY ($2::uuid[]) AND e.kind = 'STATE'
