@@ -276,3 +276,26 @@ func TestINV12_AutomationsUseBoundedAuthority(t *testing.T) {
 		}
 	})
 }
+
+// TestINV12_AutomationIssuedGrantsDecideLikePeoples (G0 M11 part 2, the
+// INV12 extension): a run launched by an automation's execution identity
+// under a grant that identity issued inside its ceiling decides exactly
+// like a person's run under a person-issued grant with the same bounds.
+func TestINV12_AutomationIssuedGrantsDecideLikePeoples(t *testing.T) {
+	rapid.Check(t, func(t *rapid.T) {
+		w := newWorld(t)
+		identity := gdomain.Principal{Kind: gdomain.PrincipalServiceAccount, ID: ids.NewV7()}
+		issued := w.grant(rootBounds, identity)
+		issued.Grantor, issued.Basis = identity, "automation refunds ceiling test"
+		issued.Ceiling, issued.Execution = ids.NewV7(), ids.NewV7()
+		w.w.Grants.Put(issued)
+		person := w.run(w.grant(rootBounds, w.alice).ID, w.alice)
+		automation := w.run(issued.ID, identity)
+		charge, amount := genRefund(t)
+		a := w.eval(w.request(person, "create_refund", refundInput(charge, amount, "")))
+		b := w.eval(w.request(automation, "create_refund", refundInput(charge, amount, "")))
+		if a.Decision != b.Decision || a.Decisive().Code != b.Decisive().Code {
+			t.Fatalf("person %s/%s, automation-issued %s/%s", a.Decision, a.Decisive().Code, b.Decision, b.Decisive().Code)
+		}
+	})
+}

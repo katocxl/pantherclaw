@@ -31,6 +31,7 @@ var automationCoreProcedures = map[string]td.Permission{
 	pantherclawv1connect.AutomationServiceResumeAutomationProcedure:   td.PermAutomationManage,
 	pantherclawv1connect.AutomationServiceRetireAutomationProcedure:   td.PermAutomationManage,
 	pantherclawv1connect.AutomationServiceRevokeAuthorityProcedure:    td.PermAutomationManage,
+	pantherclawv1connect.AutomationServiceSetAutomationOwnerProcedure: td.PermAutomationManage,
 	pantherclawv1connect.ChangeServiceGetChangeRequestProcedure:       td.PermAuthenticated,
 	pantherclawv1connect.ChangeServiceListChangeRequestsProcedure:     td.PermAuthenticated,
 	pantherclawv1connect.ChangeServiceDeclineChangeRequestProcedure:   td.PermAuthenticated,

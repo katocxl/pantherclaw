@@ -22,10 +22,8 @@ import (
 const base = `
 apiVersion: automations.pantherclaw.dev/v1
 kind: Automation
-name: refund-tickets
 purpose: Refund small tickets from Support.
 work_kind: AGENT_WORK
-owner: 0192f000-0000-7000-8000-000000000001
 review_by: "2026-12-01"
 when:
   inbound:

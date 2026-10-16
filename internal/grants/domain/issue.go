@@ -7,6 +7,7 @@ import (
 	"time"
 
 	defs "github.com/katocxl/pantherclaw/internal/definitions/domain"
+	"github.com/katocxl/pantherclaw/internal/platform/ids"
 )
 
 // IssueContext is what issuance checks need besides the grant itself.
@@ -24,6 +25,11 @@ type IssueContext struct {
 	Parent         *Grant
 	ActiveChildren int
 	TotalChildren  int
+	// Ceiling is the automation ceiling an automation-issued root grant is
+	// issued under (G0 M11 part 2 D9, HR-271): a service-account grantor
+	// is accepted only with one. The ceiling's bounds are passed as one
+	// more envelope.
+	Ceiling ids.UUID
 }
 
 // ValidateIssue checks a new grant or a new revision: its own shape, every
@@ -49,19 +55,27 @@ func (g Grant) ValidateIssue(ic IssueContext) error {
 		}
 	}
 	if ic.Parent == nil {
-		return g.validateRoot(ic.Now, caps)
+		return g.validateRoot(ic, caps)
 	}
 	return g.validateChild(ic, caps)
 }
 
-func (g Grant) validateRoot(now time.Time, caps Caps) error {
+// MaxAutomationLifetime caps an automation-issued grant (F1).
+const MaxAutomationLifetime = 24 * time.Hour
+
+func (g Grant) validateRoot(ic IssueContext, caps Caps) error {
+	now := ic.Now
+	automation := g.Grantor.Kind == PrincipalServiceAccount && !ic.Ceiling.IsZero()
 	switch {
 	case !g.Parent.IsZero() || g.Depth != 0:
 		return invalid("grant: a root grant has no parent and depth 0")
-	case g.Grantor.Kind != PrincipalUser:
+	case g.Grantor.Kind != PrincipalUser && !automation:
 		// Workloads never issue grants (HR-161); service accounts do not
-		// either until governed automations (M11, G0 M4 decision 7).
+		// either, except an automation's identity under its ceiling (G0
+		// M11 part 2 D9, amending G0 M4 decision 7).
 		return outside("only people issue grants (HR-161)")
+	case automation && g.ExpiresAt.Sub(now) > MaxAutomationLifetime:
+		return outside("an automation's grant lasts at most %s", MaxAutomationLifetime)
 	case g.ExpiresAt.Sub(now) > caps.MaxRootLifetime:
 		return outside("a grant may last at most %s here", caps.MaxRootLifetime)
 	case g.Delegation.Depth > caps.MaxDepth:

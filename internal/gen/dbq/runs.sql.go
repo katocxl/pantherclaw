@@ -178,38 +178,40 @@ const insertRun = `-- name: InsertRun :one
 
 INSERT INTO pc.runs (org_id, id, agent_id, instance_id, environment_id, launcher_user_id, launcher_sa_id,
     launcher_instance_id, principal_user_id, principal_sa_id, principal_source, subject_issuer, subject_subject,
-    actor_chain, parent_run_id, depth, grant_id, task_ref, simulated, expires_at)
+    actor_chain, parent_run_id, depth, grant_id, task_ref, simulated, automation_execution_id, expires_at)
 VALUES ($1, $2, $3, $4, $5,
     $6, $7, $8, $9,
     $10, $11, $12, $13,
     $14, $15, $16, $17, $18, $19,
-    LEAST(now() + make_interval(mins => $20::int),
-          coalesce($21::timestamptz, 'infinity'::timestamptz)))
+    $20,
+    LEAST(now() + make_interval(mins => $21::int),
+          coalesce($22::timestamptz, 'infinity'::timestamptz)))
 RETURNING org_id, id, agent_id, instance_id, environment_id, launcher_user_id, launcher_sa_id, launcher_instance_id, principal_user_id, principal_sa_id, principal_source, subject_issuer, subject_subject, actor_chain, parent_run_id, depth, grant_id, task_ref, state, end_reason, created_at, expires_at, ended_at, simulated, automation_execution_id
 `
 
 type InsertRunParams struct {
-	OrgID              ids.OrgID
-	ID                 ids.UUID
-	AgentID            ids.UUID
-	InstanceID         *ids.UUID
-	EnvironmentID      ids.UUID
-	LauncherUserID     *ids.UUID
-	LauncherSaID       *ids.UUID
-	LauncherInstanceID *ids.UUID
-	PrincipalUserID    *ids.UUID
-	PrincipalSaID      *ids.UUID
-	PrincipalSource    string
-	SubjectIssuer      *string
-	SubjectSubject     *string
-	ActorChain         []byte
-	ParentRunID        *ids.UUID
-	Depth              int16
-	GrantID            *ids.UUID
-	TaskRef            string
-	Simulated          bool
-	TtlMinutes         int32
-	NotAfter           *time.Time
+	OrgID                 ids.OrgID
+	ID                    ids.UUID
+	AgentID               ids.UUID
+	InstanceID            *ids.UUID
+	EnvironmentID         ids.UUID
+	LauncherUserID        *ids.UUID
+	LauncherSaID          *ids.UUID
+	LauncherInstanceID    *ids.UUID
+	PrincipalUserID       *ids.UUID
+	PrincipalSaID         *ids.UUID
+	PrincipalSource       string
+	SubjectIssuer         *string
+	SubjectSubject        *string
+	ActorChain            []byte
+	ParentRunID           *ids.UUID
+	Depth                 int16
+	GrantID               *ids.UUID
+	TaskRef               string
+	Simulated             bool
+	AutomationExecutionID *ids.UUID
+	TtlMinutes            int32
+	NotAfter              *time.Time
 }
 
 // SPDX-License-Identifier: BUSL-1.1
@@ -242,6 +244,7 @@ func (q *Queries) InsertRun(ctx context.Context, arg InsertRunParams) (PcRun, er
 		arg.GrantID,
 		arg.TaskRef,
 		arg.Simulated,
+		arg.AutomationExecutionID,
 		arg.TtlMinutes,
 		arg.NotAfter,
 	)

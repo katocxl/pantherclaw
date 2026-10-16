@@ -102,8 +102,9 @@ type CeilingCheck struct {
 	Automation ids.UUID
 	Ceiling    ids.UUID
 	Approvers  []ids.UUID
-	// Agents are the ceiling agents whose paths the approvers must still
-	// cover; Kinds the step kinds the version uses.
+	// Agents and Kinds are kept for callers built against core-A; Check
+	// reads what the approvers must hold from the ceiling's version (its
+	// ceiling agents, authority.revocable and evidence scopes, D65, D85).
 	Agents []ids.UUID
 	Kinds  []string
 }
@@ -116,7 +117,9 @@ type ExecutionView struct {
 	Version        ids.UUID
 	Trigger        TriggerRef
 	Mode           Mode
-	Ceiling        ids.UUID // zero when the version has none
+	// Ceiling is the execution's authority row: every enabling, SHADOW
+	// included, creates one (D54).
+	Ceiling        ids.UUID
 	ServiceAccount ids.UUID
 	Owner          ids.UUID
 	Principal      gdomain.Principal

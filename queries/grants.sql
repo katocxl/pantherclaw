@@ -10,7 +10,7 @@
 SELECT g.id, g.agent_id, g.instance_id, g.principal_user_id, g.principal_sa_id, g.environment_id, g.parent_id,
        g.depth, g.state, g.current_revision, g.grantor_kind, g.grantor_id, g.basis,
        r.task_ref, r.not_before, r.expires_at, r.bounds, r.requirements, r.limits,
-       r.delegation_depth, r.max_children, r.min_attestation, r.created_at
+       r.delegation_depth, r.max_children, r.min_attestation, r.created_at, g.ceiling_id, g.automation_execution_id
 FROM pc.grants g
 JOIN pc.grant_revisions r ON r.org_id = g.org_id AND r.grant_id = g.id AND r.revision = g.current_revision
 WHERE g.org_id = sqlc.arg(org_id) AND g.id = sqlc.arg(id);
@@ -20,7 +20,7 @@ WHERE g.org_id = sqlc.arg(org_id) AND g.id = sqlc.arg(id);
 SELECT g.id, g.agent_id, g.instance_id, g.principal_user_id, g.principal_sa_id, g.environment_id, g.parent_id,
        g.depth, g.state, g.current_revision, g.grantor_kind, g.grantor_id, g.basis,
        r.task_ref, r.not_before, r.expires_at, r.bounds, r.requirements, r.limits,
-       r.delegation_depth, r.max_children, r.min_attestation, r.created_at
+       r.delegation_depth, r.max_children, r.min_attestation, r.created_at, g.ceiling_id, g.automation_execution_id
 FROM pc.grant_lineage l
 JOIN pc.grants g ON g.org_id = l.org_id AND g.id = l.ancestor_id
 JOIN pc.grant_revisions r ON r.org_id = g.org_id AND r.grant_id = g.id AND r.revision = g.current_revision
@@ -29,10 +29,12 @@ ORDER BY l.distance DESC;
 
 -- name: InsertGrant :exec
 INSERT INTO pc.grants (org_id, id, agent_id, instance_id, principal_user_id, principal_sa_id, environment_id,
-                       parent_id, depth, current_revision, grantor_kind, grantor_id, basis)
+                       parent_id, depth, current_revision, grantor_kind, grantor_id, basis, ceiling_id,
+                       automation_execution_id)
 VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(agent_id), sqlc.narg(instance_id), sqlc.narg(principal_user_id),
         sqlc.narg(principal_sa_id), sqlc.arg(environment_id), sqlc.narg(parent_id), sqlc.arg(depth),
-        sqlc.arg(current_revision), sqlc.arg(grantor_kind), sqlc.arg(grantor_id), sqlc.arg(basis));
+        sqlc.arg(current_revision), sqlc.arg(grantor_kind), sqlc.arg(grantor_id), sqlc.arg(basis), sqlc.narg(ceiling_id),
+        sqlc.narg(automation_execution_id));
 
 -- name: InsertGrantRevision :exec
 INSERT INTO pc.grant_revisions (org_id, id, grant_id, revision, task_ref, not_before, expires_at, bounds,

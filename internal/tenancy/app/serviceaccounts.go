@@ -149,6 +149,9 @@ func (s *ServiceAccounts) Create(ctx context.Context, name, description string) 
 	if err := td.CheckSlug("name", name); err != nil {
 		return ServiceAccount{}, err
 	}
+	if strings.HasPrefix(name, AutomationAccountPrefix) {
+		return ServiceAccount{}, ErrAutomationName
+	}
 	description, err := td.CheckDescription(description)
 	if err != nil {
 		return ServiceAccount{}, err
@@ -220,6 +223,9 @@ func (s *ServiceAccounts) Update(ctx context.Context, id td.ServiceAccountID, de
 		if err := c.Require(td.PermServiceAccountManage, td.OrgPath(c.Org)); err != nil {
 			return err
 		}
+		if err := notAutomationIdentity(ctx, q, c.Org, id.UUID()); err != nil {
+			return err
+		}
 		r, err := q.UpdateServiceAccount(ctx, description, c.Org, id.UUID())
 		if err != nil {
 			return notFound(err, ErrServiceAccountNotFound)
@@ -239,6 +245,9 @@ func (s *ServiceAccounts) SetState(ctx context.Context, id td.ServiceAccountID, 
 	var out ServiceAccount
 	err := inOrg(ctx, s.pool, func(ctx context.Context, c Caller, q *dbq.Queries, tx db.TenantTx) error {
 		if err := c.Require(td.PermServiceAccountManage, td.OrgPath(c.Org)); err != nil {
+			return err
+		}
+		if err := notAutomationIdentity(ctx, q, c.Org, id.UUID()); err != nil {
 			return err
 		}
 		r, err := q.SetServiceAccountState(ctx, string(state), c.Org, id.UUID())
@@ -273,6 +282,9 @@ func (s *ServiceAccounts) AddKey(ctx context.Context, id td.ServiceAccountID, al
 		}
 		sa, err := activeAccount(ctx, q, c.Org, id)
 		if err != nil {
+			return err
+		}
+		if err := notAutomationIdentity(ctx, q, c.Org, sa.ID); err != nil {
 			return err
 		}
 		if err := noEscalation(ctx, q, c, sa.ID, nil); err != nil {
@@ -368,6 +380,9 @@ func (s *ServiceAccounts) CreateAPIKey(ctx context.Context, id td.ServiceAccount
 		}
 		sa, err := activeAccount(ctx, q, c.Org, id)
 		if err != nil {
+			return err
+		}
+		if err := notAutomationIdentity(ctx, q, c.Org, sa.ID); err != nil {
 			return err
 		}
 		if err := noEscalation(ctx, q, c, sa.ID, scopes); err != nil {
@@ -511,4 +526,30 @@ func scopePath(ctx context.Context, q *dbq.Queries, org ids.OrgID, s td.Scope) (
 	default:
 		return td.OrgPath(org), nil
 	}
+}
+
+// AutomationAccountPrefix starts the name of every automation's execution
+// identity (G0 M11 part 2 D8, D63 L4); ordinary accounts cannot use it.
+const AutomationAccountPrefix = "automation-"
+
+// Execution identity errors (HR-270).
+var (
+	ErrAutomationIdentity = pcerr.New(pcerr.FailedPrecondition, "AUTOMATION_IDENTITY",
+		"this service account is an automation's execution identity: it holds no keys or role bindings and changes only with its automation")
+	ErrAutomationName = pcerr.New(pcerr.InvalidArgument, "AUTOMATION_NAME_RESERVED",
+		"service account names starting with automation- are reserved for automations")
+)
+
+// notAutomationIdentity refuses an automation's execution identity (D8):
+// the service-account API never edits, re-enables or adds credentials to
+// it. The database refuses the same rows as a backstop.
+func notAutomationIdentity(ctx context.Context, q *dbq.Queries, org ids.OrgID, sa ids.UUID) error {
+	_, err := q.ServiceAccountAutomation(ctx, org, sa)
+	switch {
+	case db.IsNoRows(err):
+		return nil
+	case err != nil:
+		return err
+	}
+	return ErrAutomationIdentity
 }
