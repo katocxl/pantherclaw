@@ -4,7 +4,6 @@
 package domain
 
 import (
-	"encoding/json"
 	"fmt"
 	"math"
 	"regexp"
@@ -35,6 +34,7 @@ func (v Value) Text() string {
 		return v.Decimal
 	case ParamBool:
 		return strconv.FormatBool(v.Bool)
+	case ParamString, ParamEnum, ParamUUID:
 	}
 	return v.String
 }
@@ -64,7 +64,7 @@ func (p ParamSpec) MaxLenOrDefault() int {
 }
 
 // Convert turns a raw value (a JSON-decoded scalar: string, float64,
-// json.Number, bool; or text from a form) into a typed Value within the
+// bool; or text from a form) into a typed Value within the
 // declaration's bounds. It never coerces across types except text to the
 // declared type.
 func (p ParamSpec) Convert(name string, raw any) (Value, error) {
@@ -72,8 +72,6 @@ func (p ParamSpec) Convert(name string, raw any) (Value, error) {
 	switch r := raw.(type) {
 	case string:
 		s = r
-	case json.Number:
-		s = r.String()
 	case float64:
 		if p.Type != ParamInt && p.Type != ParamDecimal {
 			return Value{}, paramErr(name, "a %s is expected", p.Type)

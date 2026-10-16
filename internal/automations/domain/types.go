@@ -3,7 +3,7 @@
 
 // Package domain holds the governed-automation contracts every M11 stream
 // codes against (G0 M11 part 2 D1–D4, D11): the definition document v1, the
-// closed step catalogue and each kind's `with` schema, the state and reason
+// closed step catalog and each kind's `with` schema, the state and reason
 // vocabularies, the ports implemented by the engine, triggers, assurance
 // and protect streams, and the Step interface.
 //
@@ -185,7 +185,7 @@ const (
 	ExecSucceeded           ExecutionState = "SUCCEEDED"
 	ExecPartiallyCompleted  ExecutionState = "PARTIALLY_COMPLETED"
 	ExecFailed              ExecutionState = "FAILED"
-	ExecCancelled           ExecutionState = "CANCELLED"
+	ExecCancelled           ExecutionState = "CANCELLED" //nolint:misspell // stored value, British spelling as in ARCHITECTURE §6.2
 	ExecNeedsReconciliation ExecutionState = "NEEDS_RECONCILIATION"
 )
 
@@ -234,7 +234,7 @@ const (
 	ReasonGateNoApprover      = "GATE_NO_APPROVER"
 	ReasonLaunchNotClaimed    = "LAUNCH_NOT_CLAIMED"
 	ReasonOutsideCohort       = "OUTSIDE_COHORT"
-	ReasonCancelledByUser     = "CANCELLED_BY_USER"
+	ReasonCancelledByUser     = "CANCELLED_BY_USER" //nolint:misspell // stored value, British spelling as in ARCHITECTURE §6.2
 	ReasonDestinationInactive = "DESTINATION_INACTIVE"
 	ReasonToolQuarantined     = "TOOL_QUARANTINED"
 	ReasonUsageExceeded       = "USAGE_EXCEEDED"
@@ -276,7 +276,7 @@ func FinishConditions() []FinishCondition { return slices.Clone(finishConditions
 // OnFailure is what a failed step does to its execution (D2, D27).
 type OnFailure string
 
-// Failure behaviours.
+// Failure behaviors.
 const (
 	OnFailureStop     OnFailure = "STOP"
 	OnFailureContinue OnFailure = "CONTINUE"

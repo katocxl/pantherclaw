@@ -417,7 +417,7 @@ func (d *Definition) canonicalizeWith() error {
 	fix := func(specs []StepSpec, at string) error {
 		for i := range specs {
 			s := &specs[i]
-			spec, ok := Catalogue[s.Step]
+			spec, ok := Catalog[s.Step]
 			if !ok {
 				continue
 			}
@@ -466,7 +466,7 @@ func (d *Definition) Digest() ([]byte, error) {
 
 // DecodeWith decodes the `with` of the step at spec into its kind's schema.
 func (s StepSpec) DecodeWith() (any, error) {
-	k, ok := Catalogue[s.Step]
+	k, ok := Catalog[s.Step]
 	if !ok {
 		return nil, invalid("unknown step kind %q", s.Step)
 	}

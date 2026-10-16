@@ -10,7 +10,7 @@ import (
 	"sort"
 )
 
-// Step kinds (D3). The catalogue is closed: a kind not listed here never
+// Step kinds (D3). The catalog is closed: a kind not listed here never
 // runs (HR-279).
 const (
 	KindLaunchRun           = "launch_run"
@@ -81,7 +81,7 @@ const (
 	ScopeTriggerCase     = "TRIGGER_CASE"
 )
 
-// KindSpec describes one catalogue kind (D3).
+// KindSpec describes one catalog kind (D3).
 type KindSpec struct {
 	Kind    string
 	Owner   string
@@ -137,7 +137,7 @@ func (k KindSpec) DecodeWith(raw jsontext.Value) (any, error) {
 	return w, nil
 }
 
-// Permission names (tenancy domain) the catalogue refers to.
+// Permission names (tenancy domain) the catalog refers to.
 const (
 	permGrantIssue      = "grant.issue"
 	permGrantRevoke     = "grant.revoke"
@@ -155,8 +155,8 @@ const (
 
 func newOf[T any]() func() any { return func() any { return new(T) } }
 
-// Catalogue is the closed step catalogue, the single source of D3.
-var Catalogue = map[string]KindSpec{
+// Catalog is the closed step catalog, the single source of D3.
+var Catalog = map[string]KindSpec{
 	KindLaunchRun: {
 		Kind: KindLaunchRun, Owner: OwnerEngine, Edition: EditionTeam, Effectful: true, RetrySafe: true, RetryUntilBind: true,
 		ConfirmerPermissions: []string{permGrantIssue, permRunStart}, ConfirmAt: ConfirmCeilingAgents,
@@ -279,10 +279,10 @@ func intake(kind string, wait bool, finishes []FinishCondition, nw func() any) K
 	}
 }
 
-// Kinds returns every catalogue kind, sorted.
+// Kinds returns every catalog kind, sorted.
 func Kinds() []string {
-	out := make([]string, 0, len(Catalogue))
-	for k := range Catalogue {
+	out := make([]string, 0, len(Catalog))
+	for k := range Catalog {
 		out = append(out, k)
 	}
 	sort.Strings(out)

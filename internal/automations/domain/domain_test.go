@@ -99,7 +99,7 @@ func TestParseYAMLAndDigest(t *testing.T) {
 
 func TestParseRefusesUnknownAndLooseInput(t *testing.T) {
 	for name, doc := range map[string]string{
-		"unknown field":      strings.Replace(sample, "purpose:", "colour: red\npurpose:", 1),
+		"unknown field":      strings.Replace(sample, "purpose:", "color: red\npurpose:", 1),
 		"unknown with field": strings.Replace(sample, "task_ref:", "shell: rm\n      task_ref:", 1),
 		"wrong kind":         strings.Replace(sample, "kind: Automation", "kind: Workflow", 1),
 		"anchor":             strings.Replace(sample, "purpose: Refund", "purpose: &a Refund", 1),
@@ -112,15 +112,15 @@ func TestParseRefusesUnknownAndLooseInput(t *testing.T) {
 	}
 }
 
-// TestCatalogueIsClosedAndConsistent: every D3 kind decodes an empty with,
+// TestCatalogIsClosedAndConsistent: every D3 kind decodes an empty with,
 // names only catalog permissions, and the finish vocabulary is reachable.
-func TestCatalogueIsClosedAndConsistent(t *testing.T) {
+func TestCatalogIsClosedAndConsistent(t *testing.T) {
 	if n := len(autodomain.Kinds()); n != 25 {
-		t.Errorf("catalogue has %d kinds, want 25", n)
+		t.Errorf("catalog has %d kinds, want 25", n)
 	}
 	reach := map[autodomain.FinishCondition]bool{}
 	for _, k := range autodomain.Kinds() {
-		spec := autodomain.Catalogue[k]
+		spec := autodomain.Catalog[k]
 		if spec.Kind != k {
 			t.Errorf("%s: spec names %s", k, spec.Kind)
 		}
@@ -150,7 +150,7 @@ func TestCatalogueIsClosedAndConsistent(t *testing.T) {
 			t.Errorf("finish condition %s is satisfied by no kind", c)
 		}
 	}
-	if autodomain.Catalogue[autodomain.KindContain].Edition != autodomain.EditionBusiness {
+	if autodomain.Catalog[autodomain.KindContain].Edition != autodomain.EditionBusiness {
 		t.Error("contain must need Business (F562)")
 	}
 }
