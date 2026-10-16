@@ -132,7 +132,8 @@ WHERE org_id = $1 AND user_id = $2 AND purpose = 'BINDING' AND consumed_at IS NU
   AND (approval_request_id = $3::uuid OR batch_id = $4::uuid
        OR reconciliation_id = $5::uuid
        OR policy_change_request_id = $6::uuid
-       OR identity_playbook_request_id = $7::uuid)
+       OR identity_playbook_request_id = $7::uuid
+       OR change_request_id = $8::uuid)
 `
 
 type DeleteOpenBindingCeremoniesParams struct {
@@ -143,6 +144,7 @@ type DeleteOpenBindingCeremoniesParams struct {
 	ReconciliationID          *ids.UUID
 	PolicyChangeRequestID     *ids.UUID
 	IdentityPlaybookRequestID *ids.UUID
+	ChangeRequestID           *ids.UUID
 }
 
 // An approval's BINDING ceremony (G0 M5 part 2, HR-033): its challenge is
@@ -150,7 +152,8 @@ type DeleteOpenBindingCeremoniesParams struct {
 // and the request or batch; or (G0 M7 slice A11) a release's binding,
 // bound to the reconciliation; or (G0 M11.1) a policy change request's
 // binding, bound to the request; or (G0 M10 D38) an identity playbook
-// request's binding. A person's open ceremony for the same
+// request's binding; or (G0 M11 part 2 D6) a change request's binding.
+// A person's open ceremony for the same
 // subject is replaced.
 func (q *Queries) DeleteOpenBindingCeremonies(ctx context.Context, arg DeleteOpenBindingCeremoniesParams) error {
 	_, err := q.db.Exec(ctx, deleteOpenBindingCeremonies,
@@ -161,13 +164,14 @@ func (q *Queries) DeleteOpenBindingCeremonies(ctx context.Context, arg DeleteOpe
 		arg.ReconciliationID,
 		arg.PolicyChangeRequestID,
 		arg.IdentityPlaybookRequestID,
+		arg.ChangeRequestID,
 	)
 	return err
 }
 
 const getOpenBindingCeremony = `-- name: GetOpenBindingCeremony :one
 SELECT challenge, allowed_credentials, expires_at, approval_request_id, batch_id, reconciliation_id, policy_change_request_id,
-       identity_playbook_request_id
+       identity_playbook_request_id, change_request_id
 FROM pc.webauthn_ceremonies
 WHERE org_id = $1 AND id = $2 AND session_id = $3 AND user_id = $4
   AND purpose = 'BINDING' AND consumed_at IS NULL AND expires_at > now()
@@ -189,6 +193,7 @@ type GetOpenBindingCeremonyRow struct {
 	ReconciliationID          *ids.UUID
 	PolicyChangeRequestID     *ids.UUID
 	IdentityPlaybookRequestID *ids.UUID
+	ChangeRequestID           *ids.UUID
 }
 
 // The approval page verifies an assertion against an open ceremony of this
@@ -212,17 +217,19 @@ func (q *Queries) GetOpenBindingCeremony(ctx context.Context, arg GetOpenBinding
 		&i.ReconciliationID,
 		&i.PolicyChangeRequestID,
 		&i.IdentityPlaybookRequestID,
+		&i.ChangeRequestID,
 	)
 	return i, err
 }
 
 const insertBindingCeremony = `-- name: InsertBindingCeremony :exec
 INSERT INTO pc.webauthn_ceremonies (org_id, id, session_id, user_id, purpose, challenge, allowed_credentials,
-    approval_request_id, batch_id, reconciliation_id, policy_change_request_id, identity_playbook_request_id, expires_at)
+    approval_request_id, batch_id, reconciliation_id, policy_change_request_id, identity_playbook_request_id, change_request_id,
+    expires_at)
 VALUES ($1, $2, $3, $4, 'BINDING', $5,
     $6, $7, $8, $9,
-    $10, $11,
-    now() + make_interval(secs => $12::int))
+    $10, $11, $12,
+    now() + make_interval(secs => $13::int))
 `
 
 type InsertBindingCeremonyParams struct {
@@ -237,6 +244,7 @@ type InsertBindingCeremonyParams struct {
 	ReconciliationID          *ids.UUID
 	PolicyChangeRequestID     *ids.UUID
 	IdentityPlaybookRequestID *ids.UUID
+	ChangeRequestID           *ids.UUID
 	TtlSeconds                int32
 }
 
@@ -253,6 +261,7 @@ func (q *Queries) InsertBindingCeremony(ctx context.Context, arg InsertBindingCe
 		arg.ReconciliationID,
 		arg.PolicyChangeRequestID,
 		arg.IdentityPlaybookRequestID,
+		arg.ChangeRequestID,
 		arg.TtlSeconds,
 	)
 	return err
