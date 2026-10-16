@@ -17,6 +17,62 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/money"
 )
 
+const activeAutomationCeilings = `-- name: ActiveAutomationCeilings :many
+SELECT c.id, c.automation_id, c.version_id, c.approved_by, c.review_by, (c.review_by <= now())::bool AS due,
+       a.owner_user_id, a.name, a.state, v.definition
+FROM pc.automation_ceilings c
+JOIN pc.automations a ON a.org_id = c.org_id AND a.id = c.automation_id
+JOIN pc.automation_versions v ON v.org_id = c.org_id AND v.id = c.version_id
+WHERE c.org_id = $1 AND c.state = 'ACTIVE'
+ORDER BY c.review_by
+LIMIT 10000
+`
+
+type ActiveAutomationCeilingsRow struct {
+	ID           ids.UUID
+	AutomationID ids.UUID
+	VersionID    ids.UUID
+	ApprovedBy   []ids.UUID
+	ReviewBy     time.Time
+	Due          bool
+	OwnerUserID  ids.UUID
+	Name         string
+	State        string
+	Definition   []byte
+}
+
+// Every ACTIVE ceiling with its automation and version (CeilingSweep).
+func (q *Queries) ActiveAutomationCeilings(ctx context.Context, orgID ids.OrgID) ([]ActiveAutomationCeilingsRow, error) {
+	rows, err := q.db.Query(ctx, activeAutomationCeilings, orgID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ActiveAutomationCeilingsRow{}
+	for rows.Next() {
+		var i ActiveAutomationCeilingsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.AutomationID,
+			&i.VersionID,
+			&i.ApprovedBy,
+			&i.ReviewBy,
+			&i.Due,
+			&i.OwnerUserID,
+			&i.Name,
+			&i.State,
+			&i.Definition,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const activeGrantsOfCeiling = `-- name: ActiveGrantsOfCeiling :many
 SELECT g.id FROM pc.grants g
 WHERE g.org_id = $1 AND g.ceiling_id = $2 AND g.state = 'ACTIVE'
@@ -94,6 +150,68 @@ func (q *Queries) ActiveRootGrantsOfAgents(ctx context.Context, orgID ids.OrgID,
 			return nil, err
 		}
 		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const activeRunsOfGrants = `-- name: ActiveRunsOfGrants :many
+SELECT r.id, r.automation_execution_id FROM pc.runs r
+WHERE r.org_id = $1 AND r.grant_id = ANY ($2::uuid[]) AND r.state = 'ACTIVE'
+ORDER BY r.id
+`
+
+type ActiveRunsOfGrantsRow struct {
+	ID                    ids.UUID
+	AutomationExecutionID *ids.UUID
+}
+
+// RevokeAuthority: the active runs bound to revoked grants, with the
+// execution that started them.
+func (q *Queries) ActiveRunsOfGrants(ctx context.Context, orgID ids.OrgID, grants []ids.UUID) ([]ActiveRunsOfGrantsRow, error) {
+	rows, err := q.db.Query(ctx, activeRunsOfGrants, orgID, grants)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ActiveRunsOfGrantsRow{}
+	for rows.Next() {
+		var i ActiveRunsOfGrantsRow
+		if err := rows.Scan(&i.ID, &i.AutomationExecutionID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const automationAgentNames = `-- name: AutomationAgentNames :many
+SELECT id, name FROM pc.agents WHERE org_id = $1 AND id = ANY ($2::uuid[])
+`
+
+type AutomationAgentNamesRow struct {
+	ID   ids.UUID
+	Name string
+}
+
+func (q *Queries) AutomationAgentNames(ctx context.Context, orgID ids.OrgID, ids []ids.UUID) ([]AutomationAgentNamesRow, error) {
+	rows, err := q.db.Query(ctx, automationAgentNames, orgID, ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []AutomationAgentNamesRow{}
+	for rows.Next() {
+		var i AutomationAgentNamesRow
+		if err := rows.Scan(&i.ID, &i.Name); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -492,28 +610,17 @@ func (q *Queries) GetAutomationVersion(ctx context.Context, orgID ids.OrgID, iD 
 
 const incrementAutomationGrants = `-- name: IncrementAutomationGrants :one
 INSERT INTO pc.automation_usage AS u (org_id, automation_id, day, grants)
-SELECT $1, $2, $3::date, 1 WHERE $4::int >= 1
+SELECT $1, $2, (now() AT TIME ZONE 'UTC')::date, 1 WHERE $3::int >= 1
 ON CONFLICT (org_id, automation_id, day) DO UPDATE SET grants = u.grants + 1
-WHERE u.grants < $4::int
+WHERE u.grants < $3::int
 RETURNING u.grants
 `
 
-type IncrementAutomationGrantsParams struct {
-	OrgID        ids.OrgID
-	AutomationID ids.UUID
-	Day          pgtype.Date
-	MaxGrants    int32
-}
-
-// One more grant today, only while under the cap (D9 step 8); no row: the
+// One more grant today (the database's UTC day), only while under the cap
+// (D9 step 8); no row: the
 // cap is reached.
-func (q *Queries) IncrementAutomationGrants(ctx context.Context, arg IncrementAutomationGrantsParams) (int32, error) {
-	row := q.db.QueryRow(ctx, incrementAutomationGrants,
-		arg.OrgID,
-		arg.AutomationID,
-		arg.Day,
-		arg.MaxGrants,
-	)
+func (q *Queries) IncrementAutomationGrants(ctx context.Context, orgID ids.OrgID, automationID ids.UUID, maxGrants int32) (int32, error) {
+	row := q.db.QueryRow(ctx, incrementAutomationGrants, orgID, automationID, maxGrants)
 	var grants int32
 	err := row.Scan(&grants)
 	return grants, err
@@ -521,26 +628,14 @@ func (q *Queries) IncrementAutomationGrants(ctx context.Context, arg IncrementAu
 
 const incrementAutomationRuns = `-- name: IncrementAutomationRuns :one
 INSERT INTO pc.automation_usage AS u (org_id, automation_id, day, runs)
-SELECT $1, $2, $3::date, 1 WHERE $4::int >= 1
+SELECT $1, $2, (now() AT TIME ZONE 'UTC')::date, 1 WHERE $3::int >= 1
 ON CONFLICT (org_id, automation_id, day) DO UPDATE SET runs = u.runs + 1
-WHERE u.runs < $4::int
+WHERE u.runs < $3::int
 RETURNING u.runs
 `
 
-type IncrementAutomationRunsParams struct {
-	OrgID        ids.OrgID
-	AutomationID ids.UUID
-	Day          pgtype.Date
-	MaxRuns      int32
-}
-
-func (q *Queries) IncrementAutomationRuns(ctx context.Context, arg IncrementAutomationRunsParams) (int32, error) {
-	row := q.db.QueryRow(ctx, incrementAutomationRuns,
-		arg.OrgID,
-		arg.AutomationID,
-		arg.Day,
-		arg.MaxRuns,
-	)
+func (q *Queries) IncrementAutomationRuns(ctx context.Context, orgID ids.OrgID, automationID ids.UUID, maxRuns int32) (int32, error) {
+	row := q.db.QueryRow(ctx, incrementAutomationRuns, orgID, automationID, maxRuns)
 	var runs int32
 	err := row.Scan(&runs)
 	return runs, err
@@ -868,6 +963,51 @@ func (q *Queries) ListAutomations(ctx context.Context, arg ListAutomationsParams
 	return items, nil
 }
 
+const liveAutomationVersions = `-- name: LiveAutomationVersions :many
+SELECT a.id, a.name, a.state, v.id AS version_id, v.definition
+FROM pc.automations a
+JOIN pc.automation_versions v ON v.org_id = a.org_id AND v.id = a.enabled_version_id
+WHERE a.org_id = $1 AND a.state = 'ACTIVE'
+ORDER BY a.name
+LIMIT 10000
+`
+
+type LiveAutomationVersionsRow struct {
+	ID         ids.UUID
+	Name       string
+	State      string
+	VersionID  ids.UUID
+	Definition []byte
+}
+
+// ACTIVE automations with their enabled version's definition (Pauser
+// selectors by agent or operation).
+func (q *Queries) LiveAutomationVersions(ctx context.Context, orgID ids.OrgID) ([]LiveAutomationVersionsRow, error) {
+	rows, err := q.db.Query(ctx, liveAutomationVersions, orgID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []LiveAutomationVersionsRow{}
+	for rows.Next() {
+		var i LiveAutomationVersionsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.State,
+			&i.VersionID,
+			&i.Definition,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const lockAutomation = `-- name: LockAutomation :one
 SELECT a.org_id, a.id, a.name, a.purpose, a.kind, a.owner_user_id, a.service_account_id, a.state, a.rollout,
        a.cohort_agents, a.enabled_version_id, a.pause_reason, a.paused_at, a.created_by, a.created_at, a.updated_at,
@@ -1160,17 +1300,16 @@ func (q *Queries) RecordAutomationValidation(ctx context.Context, arg RecordAuto
 
 const reserveAutomationBudget = `-- name: ReserveAutomationBudget :one
 INSERT INTO pc.automation_budget_usage AS b (org_id, automation_id, day, currency, reserved)
-SELECT $1, $2, $3::date, $4::text, $5::numeric
-WHERE $5::numeric <= $6::numeric
+SELECT $1, $2, (now() AT TIME ZONE 'UTC')::date, $3::text, $4::numeric
+WHERE $4::numeric <= $5::numeric
 ON CONFLICT (org_id, automation_id, day, currency) DO UPDATE SET reserved = b.reserved + EXCLUDED.reserved
-WHERE b.reserved + EXCLUDED.reserved <= $6::numeric
+WHERE b.reserved + EXCLUDED.reserved <= $5::numeric
 RETURNING b.reserved
 `
 
 type ReserveAutomationBudgetParams struct {
 	OrgID        ids.OrgID
 	AutomationID ids.UUID
-	Day          pgtype.Date
 	Currency     string
 	Amount       money.Decimal
 	MaxAmount    money.Decimal
@@ -1182,7 +1321,6 @@ func (q *Queries) ReserveAutomationBudget(ctx context.Context, arg ReserveAutoma
 	row := q.db.QueryRow(ctx, reserveAutomationBudget,
 		arg.OrgID,
 		arg.AutomationID,
-		arg.Day,
 		arg.Currency,
 		arg.Amount,
 		arg.MaxAmount,
@@ -1289,6 +1427,17 @@ func (q *Queries) ServiceAccountAutomation(ctx context.Context, orgID ids.OrgID,
 	var automation_id ids.UUID
 	err := row.Scan(&automation_id)
 	return automation_id, err
+}
+
+const serviceAccountState = `-- name: ServiceAccountState :one
+SELECT state FROM pc.service_accounts WHERE org_id = $1 AND id = $2
+`
+
+func (q *Queries) ServiceAccountState(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (string, error) {
+	row := q.db.QueryRow(ctx, serviceAccountState, orgID, iD)
+	var state string
+	err := row.Scan(&state)
+	return state, err
 }
 
 const supersedeAutomationVersions = `-- name: SupersedeAutomationVersions :execrows

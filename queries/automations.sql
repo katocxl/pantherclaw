@@ -211,17 +211,18 @@ SELECT c.id, c.automation_id FROM pc.automation_ceilings c
 WHERE c.org_id = sqlc.arg(org_id) AND c.state = 'ACTIVE' AND sqlc.arg(user_id)::uuid = ANY (c.approved_by);
 
 -- name: IncrementAutomationGrants :one
--- One more grant today, only while under the cap (D9 step 8); no row: the
+-- One more grant today (the database's UTC day), only while under the cap
+-- (D9 step 8); no row: the
 -- cap is reached.
 INSERT INTO pc.automation_usage AS u (org_id, automation_id, day, grants)
-SELECT sqlc.arg(org_id), sqlc.arg(automation_id), sqlc.arg(day)::date, 1 WHERE sqlc.arg(max_grants)::int >= 1
+SELECT sqlc.arg(org_id), sqlc.arg(automation_id), (now() AT TIME ZONE 'UTC')::date, 1 WHERE sqlc.arg(max_grants)::int >= 1
 ON CONFLICT (org_id, automation_id, day) DO UPDATE SET grants = u.grants + 1
 WHERE u.grants < sqlc.arg(max_grants)::int
 RETURNING u.grants;
 
 -- name: IncrementAutomationRuns :one
 INSERT INTO pc.automation_usage AS u (org_id, automation_id, day, runs)
-SELECT sqlc.arg(org_id), sqlc.arg(automation_id), sqlc.arg(day)::date, 1 WHERE sqlc.arg(max_runs)::int >= 1
+SELECT sqlc.arg(org_id), sqlc.arg(automation_id), (now() AT TIME ZONE 'UTC')::date, 1 WHERE sqlc.arg(max_runs)::int >= 1
 ON CONFLICT (org_id, automation_id, day) DO UPDATE SET runs = u.runs + 1
 WHERE u.runs < sqlc.arg(max_runs)::int
 RETURNING u.runs;
@@ -230,7 +231,7 @@ RETURNING u.runs;
 -- Adds amount to today's reserved budget in one currency, only while it
 -- stays within max; no row: the cap is reached.
 INSERT INTO pc.automation_budget_usage AS b (org_id, automation_id, day, currency, reserved)
-SELECT sqlc.arg(org_id), sqlc.arg(automation_id), sqlc.arg(day)::date, sqlc.arg(currency)::text, sqlc.arg(amount)::numeric
+SELECT sqlc.arg(org_id), sqlc.arg(automation_id), (now() AT TIME ZONE 'UTC')::date, sqlc.arg(currency)::text, sqlc.arg(amount)::numeric
 WHERE sqlc.arg(amount)::numeric <= sqlc.arg(max_amount)::numeric
 ON CONFLICT (org_id, automation_id, day, currency) DO UPDATE SET reserved = b.reserved + EXCLUDED.reserved
 WHERE b.reserved + EXCLUDED.reserved <= sqlc.arg(max_amount)::numeric
@@ -279,3 +280,37 @@ WHERE g.org_id = sqlc.arg(org_id) AND g.agent_id = ANY (sqlc.arg(agents)::uuid[]
   AND g.parent_id IS NULL
 ORDER BY g.id
 LIMIT 1000;
+
+-- name: ActiveRunsOfGrants :many
+-- RevokeAuthority: the active runs bound to revoked grants, with the
+-- execution that started them.
+SELECT r.id, r.automation_execution_id FROM pc.runs r
+WHERE r.org_id = sqlc.arg(org_id) AND r.grant_id = ANY (sqlc.arg(grants)::uuid[]) AND r.state = 'ACTIVE'
+ORDER BY r.id;
+
+-- name: LiveAutomationVersions :many
+-- ACTIVE automations with their enabled version's definition (Pauser
+-- selectors by agent or operation).
+SELECT a.id, a.name, a.state, v.id AS version_id, v.definition
+FROM pc.automations a
+JOIN pc.automation_versions v ON v.org_id = a.org_id AND v.id = a.enabled_version_id
+WHERE a.org_id = sqlc.arg(org_id) AND a.state = 'ACTIVE'
+ORDER BY a.name
+LIMIT 10000;
+
+-- name: ActiveAutomationCeilings :many
+-- Every ACTIVE ceiling with its automation and version (CeilingSweep).
+SELECT c.id, c.automation_id, c.version_id, c.approved_by, c.review_by, (c.review_by <= now())::bool AS due,
+       a.owner_user_id, a.name, a.state, v.definition
+FROM pc.automation_ceilings c
+JOIN pc.automations a ON a.org_id = c.org_id AND a.id = c.automation_id
+JOIN pc.automation_versions v ON v.org_id = c.org_id AND v.id = c.version_id
+WHERE c.org_id = sqlc.arg(org_id) AND c.state = 'ACTIVE'
+ORDER BY c.review_by
+LIMIT 10000;
+
+-- name: ServiceAccountState :one
+SELECT state FROM pc.service_accounts WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id);
+
+-- name: AutomationAgentNames :many
+SELECT id, name FROM pc.agents WHERE org_id = sqlc.arg(org_id) AND id = ANY (sqlc.arg(ids)::uuid[]);
