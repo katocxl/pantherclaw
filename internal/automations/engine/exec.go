@@ -54,6 +54,11 @@ const OutputIrreversible = "irreversible"
 // bound an instance: from then on it never retries (HR-280).
 const OutputRunBound = "run_bound"
 
+// OutputAttempt is the key under which a starting step finds its own
+// attempt id (StepContext.Outputs[its id]), for rows that name the attempt
+// (a launch).
+const OutputAttempt = "attempt_id"
+
 // Exec is one execution as the Machine works it.
 type Exec struct {
 	ID         ids.UUID

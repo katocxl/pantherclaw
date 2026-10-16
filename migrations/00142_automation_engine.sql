@@ -245,7 +245,8 @@ CREATE TABLE pc.automation_launches (
     PRIMARY KEY (org_id, id),
     UNIQUE (org_id, run_id),
     FOREIGN KEY (org_id, execution_id) REFERENCES pc.automation_executions (org_id, id),
-    FOREIGN KEY (org_id, attempt_id) REFERENCES pc.automation_step_attempts (org_id, id),
+    -- The attempt row is written when the step returns, after the launch.
+    FOREIGN KEY (org_id, attempt_id) REFERENCES pc.automation_step_attempts (org_id, id) DEFERRABLE INITIALLY DEFERRED,
     FOREIGN KEY (org_id, agent_id) REFERENCES pc.agents (org_id, id),
     FOREIGN KEY (org_id, instance_id) REFERENCES pc.agent_instances (org_id, id),
     FOREIGN KEY (org_id, claimed_instance_id) REFERENCES pc.agent_instances (org_id, id),

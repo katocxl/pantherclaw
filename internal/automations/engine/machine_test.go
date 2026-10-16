@@ -232,7 +232,7 @@ func TestHR282_CompensationRunsAfterStop(t *testing.T) {
 	comp := "if_fails:\n  compensate:\n    - id: undo\n      step: revoke_grant\n      with:\n        scope: EXECUTION\n"
 	s := simulate(t, def(t, "", comp), engine.Stubs{
 		"launch": {changed}, "wait": {{State: autodomain.StepFailed, Reason: "RUN_FAILED"}},
-		"undo":   {{State: autodomain.StepDone, Effect: autodomain.EffectChanged}},
+		"undo": {{State: autodomain.StepDone, Effect: autodomain.EffectChanged}},
 	})
 	if s.State != autodomain.ExecPartiallyCompleted || s.Reason != "RUN_FAILED" {
 		t.Fatalf("state %s %s", s.State, s.Reason)

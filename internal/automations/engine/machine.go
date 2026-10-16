@@ -81,10 +81,14 @@ func (NopHooks) Quarantined(context.Context, pgx.Tx, *Exec) (bool, error) { retu
 func (NopHooks) Escalate(context.Context, pgx.Tx, *Exec, string, string, string) error { return nil }
 
 // Cleanup implements Hooks.
-func (NopHooks) Cleanup(context.Context, pgx.Tx, *Exec) ([]reflexdomain.EvidenceRef, error) { return nil, nil }
+func (NopHooks) Cleanup(context.Context, pgx.Tx, *Exec) ([]reflexdomain.EvidenceRef, error) {
+	return nil, nil
+}
 
 // Reconciled implements Hooks.
-func (NopHooks) Reconciled(context.Context, pgx.Tx, *Exec) (bool, bool, error) { return false, false, nil }
+func (NopHooks) Reconciled(context.Context, pgx.Tx, *Exec) (bool, bool, error) {
+	return false, false, nil
+}
 
 // Expirer is implemented by wait kinds that decide their own result when
 // their timeout passes (wait_effect: UNKNOWN, not FAILED). Others fail
@@ -272,6 +276,7 @@ func (m *Machine) start(ctx context.Context, tx pgx.Tx, x *Exec, spec autodomain
 	if err != nil {
 		return m.record(x, a, refused(ReasonTemplate))
 	}
+	sc.Outputs[spec.ID] = map[string]string{OutputAttempt: a.ID.String()}
 	if x.Mode != autodomain.ModeLive && !m.Stubbed {
 		res, err := rt.Preview(ctx, tx, sc)
 		if err != nil {
@@ -320,6 +325,9 @@ func (m *Machine) poll(ctx context.Context, tx pgx.Tx, x *Exec, spec autodomain.
 	if err != nil {
 		return m.record(x, a, refused(ReasonTemplate))
 	}
+	// A waiting step reads what it recorded when it started (its launch,
+	// gate or delivery ids) under its own id.
+	sc.Outputs[spec.ID] = a.Output
 	var res autodomain.StepResult
 	if x.Mode != autodomain.ModeLive && !m.Stubbed {
 		res, err = rt.Preview(ctx, tx, sc)
