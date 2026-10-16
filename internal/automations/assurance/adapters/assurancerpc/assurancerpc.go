@@ -13,6 +13,7 @@ import (
 	"maps"
 	"slices"
 	"strconv"
+	"time"
 
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -267,4 +268,70 @@ func (h *Handler) GetAutomationSimulation(ctx context.Context, req *pb.GetAutoma
 		out.Forecast = f
 	}
 	return &pb.GetAutomationSimulationResponse{Simulation: out}, nil
+}
+
+// GetRolloutReport implements AssuranceServiceHandler.
+func (h *Handler) GetRolloutReport(ctx context.Context, req *pb.GetRolloutReportRequest) (*pb.GetRolloutReportResponse, error) {
+	r, err := h.svc.GetRolloutReport(ctx, id(req.GetAutomationId()))
+	if err != nil {
+		return nil, err
+	}
+	out := &pb.GetRolloutReportResponse{
+		Stage: r.Stage, VersionId: str(r.Version), ShadowedEffects: count(r.ShadowedEffects), FullVerified: r.FullVerified,
+		UnverifiedReasons: r.Unverified, Executions: map[string]int32{}, WouldBeRefusals: map[string]int32{},
+	}
+	for k, v := range r.Executions {
+		out.Executions[k] = count(v)
+	}
+	for k, v := range r.WouldBeRefusals {
+		out.WouldBeRefusals[k] = count(v)
+	}
+	return out, nil
+}
+
+func tsOf(t *time.Time) *timestamppb.Timestamp {
+	if t == nil {
+		return nil
+	}
+	return timestamppb.New(*t)
+}
+
+// GetAutomationStatus implements AssuranceServiceHandler.
+func (h *Handler) GetAutomationStatus(ctx context.Context, req *pb.GetAutomationStatusRequest) (*pb.GetAutomationStatusResponse, error) {
+	s, err := h.svc.GetAutomationStatus(ctx, id(req.GetAutomationId()))
+	if err != nil {
+		return nil, err
+	}
+	out := &pb.GetAutomationStatusResponse{
+		State: s.State, Rollout: s.Rollout, NextRunTime: tsOf(s.NextRun), LatestExecutionId: str(s.LatestExecution),
+		LatestState: s.LatestState, LatestEvidenced: s.LatestEvidenced, LatestEndTime: tsOf(s.LatestEnded),
+		QueuedTriggers: count(s.Queued), WaitingExecutions: count(s.Waiting), PendingGates: count(s.PendingGates),
+		ReviewBy: tsOf(s.ReviewBy),
+	}
+	for _, b := range s.Budgets {
+		out.Budgets = append(out.Budgets, &pb.AutomationBudget{Name: b.Name, Limit: b.Limit, Used: b.Used})
+	}
+	return out, nil
+}
+
+// GetAutomationMetrics implements AssuranceServiceHandler.
+func (h *Handler) GetAutomationMetrics(ctx context.Context, req *pb.GetAutomationMetricsRequest) (*pb.GetAutomationMetricsResponse, error) {
+	var auto *ids.UUID
+	if req.GetAutomationId() != "" {
+		a := id(req.GetAutomationId())
+		auto = &a
+	}
+	hours, err := h.svc.GetAutomationMetrics(ctx, auto, req.GetStartTime().AsTime(), req.GetEndTime().AsTime())
+	if err != nil {
+		return nil, err
+	}
+	out := &pb.GetAutomationMetricsResponse{}
+	for _, o := range hours {
+		out.Hours = append(out.Hours, &pb.AutomationOutcomes{
+			BucketTime: timestamppb.New(o.Bucket), CompletedWithEvidence: count(o.Completed), Partial: count(o.Partial),
+			Failed: count(o.Failed), NeedsReconciliation: count(o.Reconcile), Interventions: count(o.Interventions),
+			TriggersRefused: count(o.Refused),
+		})
+	}
+	return out, nil
 }

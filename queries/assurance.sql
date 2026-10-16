@@ -123,3 +123,79 @@ JOIN pc.grant_revisions r ON r.org_id = g.org_id AND r.grant_id = g.id AND r.rev
 WHERE g.org_id = sqlc.arg(org_id) AND r.expires_at >= sqlc.arg(from_at) AND r.expires_at < sqlc.arg(to_at)
 ORDER BY r.expires_at, g.id
 LIMIT 10000;
+
+-- name: AssuranceAutomation :one
+SELECT a.id, a.name, a.state, a.rollout, a.enabled_version_id, a.owner_user_id
+FROM pc.automations a
+WHERE a.org_id = sqlc.arg(org_id) AND a.id = sqlc.arg(id);
+
+-- name: AssuranceActiveCeiling :one
+-- The automation's ACTIVE authority row (D54): created at the last enable
+-- or rollout apply, so it starts the current stage.
+SELECT c.id, c.version_id, c.created_at, c.review_by
+FROM pc.automation_ceilings c
+WHERE c.org_id = sqlc.arg(org_id) AND c.automation_id = sqlc.arg(automation_id) AND c.state = 'ACTIVE';
+
+-- name: AssuranceExecutionCounts :many
+-- A version's executions by mode and state (D36).
+SELECT e.mode, e.state, count(*)::int AS n
+FROM pc.automation_executions e
+WHERE e.org_id = sqlc.arg(org_id) AND e.automation_id = sqlc.arg(automation_id) AND e.version_id = sqlc.arg(version_id)
+GROUP BY e.mode, e.state
+ORDER BY e.mode, e.state;
+
+-- name: AssuranceShadowSteps :many
+-- A version's shadow step attempts: those recorded SHADOWED, and those
+-- whose would-be decision was a refusal, by reason (D36).
+SELECT a.state, a.decision, coalesce(a.reason, '')::text AS reason, count(*)::int AS n
+FROM pc.automation_step_attempts a
+JOIN pc.automation_executions e ON e.org_id = a.org_id AND e.id = a.execution_id
+WHERE a.org_id = sqlc.arg(org_id) AND e.automation_id = sqlc.arg(automation_id) AND e.version_id = sqlc.arg(version_id)
+  AND e.mode = 'SHADOW' AND (a.state = 'SHADOWED' OR a.decision = 'REFUSED')
+GROUP BY a.state, a.decision, a.reason;
+
+-- name: AssuranceRolloutEvidence :one
+-- What FULL rollout needs from the current COHORT stage (D36): LIVE
+-- executions of the version since the stage began that SUCCEEDED with
+-- completion evidence (every finish condition met with refs), those that
+-- FAILED for AUTHORITY_CHANGED, and open reconciliations.
+SELECT
+  count(*) FILTER (WHERE e.state = 'SUCCEEDED' AND jsonb_array_length(coalesce(e.result -> 'finish', '[]')) > 0
+                   AND NOT EXISTS (SELECT 1 FROM jsonb_array_elements(e.result -> 'finish') f
+                                   WHERE NOT coalesce((f ->> 'met')::boolean, false)
+                                      OR jsonb_array_length(coalesce(f -> 'refs', '[]')) = 0))::int AS evidenced,
+  count(*) FILTER (WHERE e.state = 'FAILED' AND e.reason = 'AUTHORITY_CHANGED')::int AS authority_failed,
+  count(*) FILTER (WHERE e.state = 'NEEDS_RECONCILIATION')::int AS reconciling
+FROM pc.automation_executions e
+WHERE e.org_id = sqlc.arg(org_id) AND e.automation_id = sqlc.arg(automation_id) AND e.version_id = sqlc.arg(version_id)
+  AND e.mode = 'LIVE' AND e.created_at >= sqlc.arg(since);
+
+-- name: AssuranceLatestOutcome :one
+-- The latest LIVE execution to end, with whether its completion evidence
+-- exists (D59).
+SELECT e.id, e.state, e.ended_at,
+  (e.state = 'SUCCEEDED' AND jsonb_array_length(coalesce(e.result -> 'finish', '[]')) > 0
+   AND NOT EXISTS (SELECT 1 FROM jsonb_array_elements(e.result -> 'finish') f
+                   WHERE NOT coalesce((f ->> 'met')::boolean, false)
+                      OR jsonb_array_length(coalesce(f -> 'refs', '[]')) = 0))::boolean AS evidenced
+FROM pc.automation_executions e
+WHERE e.org_id = sqlc.arg(org_id) AND e.automation_id = sqlc.arg(automation_id) AND e.mode = 'LIVE' AND e.ended_at IS NOT NULL
+ORDER BY e.ended_at DESC, e.id DESC
+LIMIT 1;
+
+-- name: AssuranceBacklog :one
+-- An automation's backlog (D59): queued triggers, waiting executions and
+-- pending gates.
+SELECT
+  (SELECT count(*) FROM pc.automation_triggers t
+   WHERE t.org_id = sqlc.arg(org_id) AND t.automation_id = sqlc.arg(automation_id) AND t.state = 'QUEUED')::int AS queued,
+  (SELECT count(*) FROM pc.automation_executions e
+   WHERE e.org_id = sqlc.arg(org_id) AND e.automation_id = sqlc.arg(automation_id) AND e.state = 'WAITING')::int AS waiting,
+  (SELECT count(*) FROM pc.approval_requests r
+   JOIN pc.automation_executions e ON e.org_id = r.org_id AND e.id = r.execution_id
+   WHERE r.org_id = sqlc.arg(org_id) AND e.automation_id = sqlc.arg(automation_id)
+     AND r.subject_kind = 'AUTOMATION_GATE' AND r.state IN ('PENDING', 'EVIDENCE_REQUESTED'))::int AS gates;
+
+-- name: AssuranceNextRun :one
+SELECT s.next_fire_at FROM pc.automation_schedules s
+WHERE s.org_id = sqlc.arg(org_id) AND s.automation_id = sqlc.arg(automation_id) AND s.state = 'ACTIVE';

@@ -207,3 +207,45 @@ WHERE f.org_id = sqlc.arg(org_id) AND f.state <> 'RESOLVED' AND f.kind LIKE 'aut
   AND (sqlc.arg(all_owners)::boolean OR (f.owner_type = 'user' AND f.owner_id = sqlc.arg(owner_id)::text))
 ORDER BY f.id DESC
 LIMIT sqlc.arg(max_rows);
+
+-- name: MetricAutomationOutcomes :many
+-- Automation outcomes in an hour, per automation (G0 M11 D38): LIVE
+-- executions that ended SUCCEEDED with completion evidence, PARTIALLY_
+-- COMPLETED, FAILED, entered NEEDS_RECONCILIATION; interventions (gates
+-- decided and automation exceptions resolved); refused triggers.
+SELECT x.automation_id, x.outcome, count(*)::bigint AS n FROM (
+  SELECT e.automation_id,
+         CASE WHEN e.state = 'SUCCEEDED' AND jsonb_array_length(coalesce(e.result -> 'finish', '[]')) > 0
+                   AND NOT EXISTS (SELECT 1 FROM jsonb_array_elements(e.result -> 'finish') f
+                                   WHERE NOT coalesce((f ->> 'met')::boolean, false)
+                                      OR jsonb_array_length(coalesce(f -> 'refs', '[]')) = 0) THEN 'completed_with_evidence'
+              WHEN e.state = 'SUCCEEDED' THEN 'completed_without_evidence'
+              WHEN e.state = 'PARTIALLY_COMPLETED' THEN 'partial'
+              WHEN e.state = 'FAILED' THEN 'failed'
+              WHEN e.state = 'NEEDS_RECONCILIATION' THEN 'needs_reconciliation'
+              ELSE 'cancelled' END AS outcome
+  FROM pc.automation_executions e
+  WHERE e.org_id = sqlc.arg(org_id) AND e.mode = 'LIVE'
+    AND ((e.ended_at >= sqlc.arg(start_at)::timestamptz AND e.ended_at < sqlc.arg(end_at)::timestamptz)
+         OR (e.state = 'NEEDS_RECONCILIATION' AND e.updated_at >= sqlc.arg(start_at)::timestamptz AND e.updated_at < sqlc.arg(end_at)::timestamptz))
+  UNION ALL
+  SELECT e.automation_id, 'interventions'
+  FROM pc.approval_requests r
+  JOIN pc.automation_executions e ON e.org_id = r.org_id AND e.id = r.execution_id
+  WHERE r.org_id = sqlc.arg(org_id) AND r.subject_kind = 'AUTOMATION_GATE'
+    AND coalesce(r.approved_at, r.ended_at) >= sqlc.arg(start_at)::timestamptz AND coalesce(r.approved_at, r.ended_at) < sqlc.arg(end_at)::timestamptz
+  UNION ALL
+  SELECT t.automation_id, 'triggers_refused'
+  FROM pc.automation_triggers t
+  WHERE t.org_id = sqlc.arg(org_id) AND t.state LIKE 'REFUSED\_%'
+    AND t.received_at >= sqlc.arg(start_at)::timestamptz AND t.received_at < sqlc.arg(end_at)::timestamptz
+) x
+GROUP BY x.automation_id, x.outcome
+ORDER BY x.automation_id, x.outcome;
+
+-- name: MetricAutomationResolved :one
+-- Automation exceptions resolved in an hour (D38 interventions, org-wide:
+-- an owned failure names no automation column).
+SELECT count(*)::bigint FROM pc.operational_failures f
+WHERE f.org_id = sqlc.arg(org_id) AND f.kind LIKE 'automation.%' AND f.state = 'RESOLVED'
+  AND f.resolved_at >= sqlc.arg(start_at)::timestamptz AND f.resolved_at < sqlc.arg(end_at)::timestamptz;

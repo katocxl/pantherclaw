@@ -103,6 +103,83 @@ func (q *Queries) ListMetricSamples(ctx context.Context, arg ListMetricSamplesPa
 	return items, nil
 }
 
+const metricAutomationOutcomes = `-- name: MetricAutomationOutcomes :many
+SELECT x.automation_id, x.outcome, count(*)::bigint AS n FROM (
+  SELECT e.automation_id,
+         CASE WHEN e.state = 'SUCCEEDED' AND jsonb_array_length(coalesce(e.result -> 'finish', '[]')) > 0
+                   AND NOT EXISTS (SELECT 1 FROM jsonb_array_elements(e.result -> 'finish') f
+                                   WHERE NOT coalesce((f ->> 'met')::boolean, false)
+                                      OR jsonb_array_length(coalesce(f -> 'refs', '[]')) = 0) THEN 'completed_with_evidence'
+              WHEN e.state = 'SUCCEEDED' THEN 'completed_without_evidence'
+              WHEN e.state = 'PARTIALLY_COMPLETED' THEN 'partial'
+              WHEN e.state = 'FAILED' THEN 'failed'
+              WHEN e.state = 'NEEDS_RECONCILIATION' THEN 'needs_reconciliation'
+              ELSE 'cancelled' END AS outcome
+  FROM pc.automation_executions e
+  WHERE e.org_id = $1 AND e.mode = 'LIVE'
+    AND ((e.ended_at >= $2::timestamptz AND e.ended_at < $3::timestamptz)
+         OR (e.state = 'NEEDS_RECONCILIATION' AND e.updated_at >= $2::timestamptz AND e.updated_at < $3::timestamptz))
+  UNION ALL
+  SELECT e.automation_id, 'interventions'
+  FROM pc.approval_requests r
+  JOIN pc.automation_executions e ON e.org_id = r.org_id AND e.id = r.execution_id
+  WHERE r.org_id = $1 AND r.subject_kind = 'AUTOMATION_GATE'
+    AND coalesce(r.approved_at, r.ended_at) >= $2::timestamptz AND coalesce(r.approved_at, r.ended_at) < $3::timestamptz
+  UNION ALL
+  SELECT t.automation_id, 'triggers_refused'
+  FROM pc.automation_triggers t
+  WHERE t.org_id = $1 AND t.state LIKE 'REFUSED\_%'
+    AND t.received_at >= $2::timestamptz AND t.received_at < $3::timestamptz
+) x
+GROUP BY x.automation_id, x.outcome
+ORDER BY x.automation_id, x.outcome
+`
+
+type MetricAutomationOutcomesRow struct {
+	AutomationID ids.UUID
+	Outcome      string
+	N            int64
+}
+
+// Automation outcomes in an hour, per automation (G0 M11 D38): LIVE
+// executions that ended SUCCEEDED with completion evidence, PARTIALLY_
+// COMPLETED, FAILED, entered NEEDS_RECONCILIATION; interventions (gates
+// decided and automation exceptions resolved); refused triggers.
+func (q *Queries) MetricAutomationOutcomes(ctx context.Context, orgID ids.OrgID, startAt time.Time, endAt time.Time) ([]MetricAutomationOutcomesRow, error) {
+	rows, err := q.db.Query(ctx, metricAutomationOutcomes, orgID, startAt, endAt)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []MetricAutomationOutcomesRow{}
+	for rows.Next() {
+		var i MetricAutomationOutcomesRow
+		if err := rows.Scan(&i.AutomationID, &i.Outcome, &i.N); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const metricAutomationResolved = `-- name: MetricAutomationResolved :one
+SELECT count(*)::bigint FROM pc.operational_failures f
+WHERE f.org_id = $1 AND f.kind LIKE 'automation.%' AND f.state = 'RESOLVED'
+  AND f.resolved_at >= $2::timestamptz AND f.resolved_at < $3::timestamptz
+`
+
+// Automation exceptions resolved in an hour (D38 interventions, org-wide:
+// an owned failure names no automation column).
+func (q *Queries) MetricAutomationResolved(ctx context.Context, orgID ids.OrgID, startAt time.Time, endAt time.Time) (int64, error) {
+	row := q.db.QueryRow(ctx, metricAutomationResolved, orgID, startAt, endAt)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const metricBypassRoutes = `-- name: MetricBypassRoutes :one
 SELECT count(*)::bigint AS n,
        coalesce(max(extract(epoch FROM (now() - r.first_seen_at)) / 3600), 0)::double precision AS oldest_hours

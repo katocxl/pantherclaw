@@ -15,6 +15,89 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 )
 
+const assuranceActiveCeiling = `-- name: AssuranceActiveCeiling :one
+SELECT c.id, c.version_id, c.created_at, c.review_by
+FROM pc.automation_ceilings c
+WHERE c.org_id = $1 AND c.automation_id = $2 AND c.state = 'ACTIVE'
+`
+
+type AssuranceActiveCeilingRow struct {
+	ID        ids.UUID
+	VersionID ids.UUID
+	CreatedAt time.Time
+	ReviewBy  time.Time
+}
+
+// The automation's ACTIVE authority row (D54): created at the last enable
+// or rollout apply, so it starts the current stage.
+func (q *Queries) AssuranceActiveCeiling(ctx context.Context, orgID ids.OrgID, automationID ids.UUID) (AssuranceActiveCeilingRow, error) {
+	row := q.db.QueryRow(ctx, assuranceActiveCeiling, orgID, automationID)
+	var i AssuranceActiveCeilingRow
+	err := row.Scan(
+		&i.ID,
+		&i.VersionID,
+		&i.CreatedAt,
+		&i.ReviewBy,
+	)
+	return i, err
+}
+
+const assuranceAutomation = `-- name: AssuranceAutomation :one
+SELECT a.id, a.name, a.state, a.rollout, a.enabled_version_id, a.owner_user_id
+FROM pc.automations a
+WHERE a.org_id = $1 AND a.id = $2
+`
+
+type AssuranceAutomationRow struct {
+	ID               ids.UUID
+	Name             string
+	State            string
+	Rollout          *string
+	EnabledVersionID *ids.UUID
+	OwnerUserID      ids.UUID
+}
+
+func (q *Queries) AssuranceAutomation(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (AssuranceAutomationRow, error) {
+	row := q.db.QueryRow(ctx, assuranceAutomation, orgID, iD)
+	var i AssuranceAutomationRow
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.State,
+		&i.Rollout,
+		&i.EnabledVersionID,
+		&i.OwnerUserID,
+	)
+	return i, err
+}
+
+const assuranceBacklog = `-- name: AssuranceBacklog :one
+SELECT
+  (SELECT count(*) FROM pc.automation_triggers t
+   WHERE t.org_id = $1 AND t.automation_id = $2 AND t.state = 'QUEUED')::int AS queued,
+  (SELECT count(*) FROM pc.automation_executions e
+   WHERE e.org_id = $1 AND e.automation_id = $2 AND e.state = 'WAITING')::int AS waiting,
+  (SELECT count(*) FROM pc.approval_requests r
+   JOIN pc.automation_executions e ON e.org_id = r.org_id AND e.id = r.execution_id
+   WHERE r.org_id = $1 AND e.automation_id = $2
+     AND r.subject_kind = 'AUTOMATION_GATE' AND r.state IN ('PENDING', 'EVIDENCE_REQUESTED'))::int AS gates
+`
+
+type AssuranceBacklogRow struct {
+	Queued  int32
+	Waiting int32
+	Gates   int32
+}
+
+// An automation's backlog (D59): queued triggers, waiting executions and
+// pending gates.
+func (q *Queries) AssuranceBacklog(ctx context.Context, orgID ids.OrgID, automationID ids.UUID) (AssuranceBacklogRow, error) {
+	row := q.db.QueryRow(ctx, assuranceBacklog, orgID, automationID)
+	var i AssuranceBacklogRow
+	err := row.Scan(&i.Queued, &i.Waiting, &i.Gates)
+	return i, err
+}
+
 const assuranceEnabledDefinitions = `-- name: AssuranceEnabledDefinitions :many
 SELECT a.id AS automation_id, v.definition
 FROM pc.automations a
@@ -41,6 +124,41 @@ func (q *Queries) AssuranceEnabledDefinitions(ctx context.Context, orgID ids.Org
 	for rows.Next() {
 		var i AssuranceEnabledDefinitionsRow
 		if err := rows.Scan(&i.AutomationID, &i.Definition); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const assuranceExecutionCounts = `-- name: AssuranceExecutionCounts :many
+SELECT e.mode, e.state, count(*)::int AS n
+FROM pc.automation_executions e
+WHERE e.org_id = $1 AND e.automation_id = $2 AND e.version_id = $3
+GROUP BY e.mode, e.state
+ORDER BY e.mode, e.state
+`
+
+type AssuranceExecutionCountsRow struct {
+	Mode  string
+	State string
+	N     int32
+}
+
+// A version's executions by mode and state (D36).
+func (q *Queries) AssuranceExecutionCounts(ctx context.Context, orgID ids.OrgID, automationID ids.UUID, versionID ids.UUID) ([]AssuranceExecutionCountsRow, error) {
+	rows, err := q.db.Query(ctx, assuranceExecutionCounts, orgID, automationID, versionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []AssuranceExecutionCountsRow{}
+	for rows.Next() {
+		var i AssuranceExecutionCountsRow
+		if err := rows.Scan(&i.Mode, &i.State, &i.N); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -170,6 +288,51 @@ func (q *Queries) AssuranceIssuedGrants(ctx context.Context, arg AssuranceIssued
 	return items, nil
 }
 
+const assuranceLatestOutcome = `-- name: AssuranceLatestOutcome :one
+SELECT e.id, e.state, e.ended_at,
+  (e.state = 'SUCCEEDED' AND jsonb_array_length(coalesce(e.result -> 'finish', '[]')) > 0
+   AND NOT EXISTS (SELECT 1 FROM jsonb_array_elements(e.result -> 'finish') f
+                   WHERE NOT coalesce((f ->> 'met')::boolean, false)
+                      OR jsonb_array_length(coalesce(f -> 'refs', '[]')) = 0))::boolean AS evidenced
+FROM pc.automation_executions e
+WHERE e.org_id = $1 AND e.automation_id = $2 AND e.mode = 'LIVE' AND e.ended_at IS NOT NULL
+ORDER BY e.ended_at DESC, e.id DESC
+LIMIT 1
+`
+
+type AssuranceLatestOutcomeRow struct {
+	ID        ids.UUID
+	State     string
+	EndedAt   *time.Time
+	Evidenced bool
+}
+
+// The latest LIVE execution to end, with whether its completion evidence
+// exists (D59).
+func (q *Queries) AssuranceLatestOutcome(ctx context.Context, orgID ids.OrgID, automationID ids.UUID) (AssuranceLatestOutcomeRow, error) {
+	row := q.db.QueryRow(ctx, assuranceLatestOutcome, orgID, automationID)
+	var i AssuranceLatestOutcomeRow
+	err := row.Scan(
+		&i.ID,
+		&i.State,
+		&i.EndedAt,
+		&i.Evidenced,
+	)
+	return i, err
+}
+
+const assuranceNextRun = `-- name: AssuranceNextRun :one
+SELECT s.next_fire_at FROM pc.automation_schedules s
+WHERE s.org_id = $1 AND s.automation_id = $2 AND s.state = 'ACTIVE'
+`
+
+func (q *Queries) AssuranceNextRun(ctx context.Context, orgID ids.OrgID, automationID ids.UUID) (*time.Time, error) {
+	row := q.db.QueryRow(ctx, assuranceNextRun, orgID, automationID)
+	var next_fire_at *time.Time
+	err := row.Scan(&next_fire_at)
+	return next_fire_at, err
+}
+
 const assuranceReceipts = `-- name: AssuranceReceipts :many
 SELECT r.source_id, r.type, r.received_at
 FROM pc.automation_event_receipts r
@@ -210,6 +373,91 @@ func (q *Queries) AssuranceReceipts(ctx context.Context, arg AssuranceReceiptsPa
 	for rows.Next() {
 		var i AssuranceReceiptsRow
 		if err := rows.Scan(&i.SourceID, &i.Type, &i.ReceivedAt); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const assuranceRolloutEvidence = `-- name: AssuranceRolloutEvidence :one
+SELECT
+  count(*) FILTER (WHERE e.state = 'SUCCEEDED' AND jsonb_array_length(coalesce(e.result -> 'finish', '[]')) > 0
+                   AND NOT EXISTS (SELECT 1 FROM jsonb_array_elements(e.result -> 'finish') f
+                                   WHERE NOT coalesce((f ->> 'met')::boolean, false)
+                                      OR jsonb_array_length(coalesce(f -> 'refs', '[]')) = 0))::int AS evidenced,
+  count(*) FILTER (WHERE e.state = 'FAILED' AND e.reason = 'AUTHORITY_CHANGED')::int AS authority_failed,
+  count(*) FILTER (WHERE e.state = 'NEEDS_RECONCILIATION')::int AS reconciling
+FROM pc.automation_executions e
+WHERE e.org_id = $1 AND e.automation_id = $2 AND e.version_id = $3
+  AND e.mode = 'LIVE' AND e.created_at >= $4
+`
+
+type AssuranceRolloutEvidenceParams struct {
+	OrgID        ids.OrgID
+	AutomationID ids.UUID
+	VersionID    ids.UUID
+	Since        time.Time
+}
+
+type AssuranceRolloutEvidenceRow struct {
+	Evidenced       int32
+	AuthorityFailed int32
+	Reconciling     int32
+}
+
+// What FULL rollout needs from the current COHORT stage (D36): LIVE
+// executions of the version since the stage began that SUCCEEDED with
+// completion evidence (every finish condition met with refs), those that
+// FAILED for AUTHORITY_CHANGED, and open reconciliations.
+func (q *Queries) AssuranceRolloutEvidence(ctx context.Context, arg AssuranceRolloutEvidenceParams) (AssuranceRolloutEvidenceRow, error) {
+	row := q.db.QueryRow(ctx, assuranceRolloutEvidence,
+		arg.OrgID,
+		arg.AutomationID,
+		arg.VersionID,
+		arg.Since,
+	)
+	var i AssuranceRolloutEvidenceRow
+	err := row.Scan(&i.Evidenced, &i.AuthorityFailed, &i.Reconciling)
+	return i, err
+}
+
+const assuranceShadowSteps = `-- name: AssuranceShadowSteps :many
+SELECT a.state, a.decision, coalesce(a.reason, '')::text AS reason, count(*)::int AS n
+FROM pc.automation_step_attempts a
+JOIN pc.automation_executions e ON e.org_id = a.org_id AND e.id = a.execution_id
+WHERE a.org_id = $1 AND e.automation_id = $2 AND e.version_id = $3
+  AND e.mode = 'SHADOW' AND (a.state = 'SHADOWED' OR a.decision = 'REFUSED')
+GROUP BY a.state, a.decision, a.reason
+`
+
+type AssuranceShadowStepsRow struct {
+	State    string
+	Decision string
+	Reason   string
+	N        int32
+}
+
+// A version's shadow step attempts: those recorded SHADOWED, and those
+// whose would-be decision was a refusal, by reason (D36).
+func (q *Queries) AssuranceShadowSteps(ctx context.Context, orgID ids.OrgID, automationID ids.UUID, versionID ids.UUID) ([]AssuranceShadowStepsRow, error) {
+	rows, err := q.db.Query(ctx, assuranceShadowSteps, orgID, automationID, versionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []AssuranceShadowStepsRow{}
+	for rows.Next() {
+		var i AssuranceShadowStepsRow
+		if err := rows.Scan(
+			&i.State,
+			&i.Decision,
+			&i.Reason,
+			&i.N,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

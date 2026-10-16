@@ -34,7 +34,8 @@ func (o *Org) Definition(t *testing.T, name string, agents []ids.UUID, ops ...st
 	}
 	doc := `{"apiVersion": "automations.pantherclaw.dev/v1", "kind": "Automation", "name": "` + name + `",
 		"purpose": "Exposure test.", "work_kind": "AGENT_WORK", "owner": "` + o.User.String() + `", "review_by": "2099-01-01",
-		"when": {"manual": {}},
+		"when": {"manual": {"params": {"ticket": {"type": "string", "pattern": "T-[0-9]{1,10}"}}},
+			"dedupe": {"key": "{{params.ticket}}", "window": "24h"}},
 		"authority": {"principal": "self", "ceiling": {"agents": ["` + strings.Join(as, `", "`) + `"], "bounds": ` + bounds + `,
 			"per_grant": {"ttl": "1h"}, "per_day": {"grants": 5, "runs": 5}}},
 		"do": [{"id": "launch", "step": "launch_run", "with": {"agent": "` + as[0] + `"}},

@@ -64,7 +64,7 @@ func TestReplaySchedule(t *testing.T) {
 // D35, HR-288: an inbound trigger replays only receipts that are kept and
 // says that their parameters and older days cannot be evaluated; a manual
 // trigger is never replayed.
-func TestReplayInboundAndManual(t *testing.T) {
+func TestHR288_SimulationReportsWhatItCannotEvaluate(t *testing.T) {
 	d := parse(t)
 	src := d.When.Inbound.Source.UUID()
 	now := time.Date(2026, 10, 16, 0, 0, 0, 0, time.UTC)
