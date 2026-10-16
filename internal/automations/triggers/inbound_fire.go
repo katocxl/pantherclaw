@@ -22,7 +22,10 @@ type InboundEvent struct {
 	// Secret is which secret verified it: "current" or "previous".
 	Secret string
 	Body   []byte
-	SentAt time.Time
+	// SentAt is the sender's timestamp (kept as a detail); ReceivedAt is
+	// when it arrived, the trigger's occurrence time (D87 L9).
+	SentAt     time.Time
+	ReceivedAt time.Time
 }
 
 // FireInbound fires every INBOUND trigger listening to the event's source
@@ -45,9 +48,12 @@ func (s *Service) FireInbound(ctx context.Context, tx db.TenantTx, ev InboundEve
 		params, perr := ExtractInbound(a.Def.When.Inbound.Params, ev.Body)
 		o, ok := s.FireInSavepoint(ctx, tx, Candidate{
 			Automation: a, Kind: autodomain.TriggerInbound, Authenticity: autodomain.AuthSignedSource,
-			Detail:    map[string]string{"source": ev.Source.String(), "generation": ev.Secret, "webhook_id": truncate(ev.WebhookID, 256), "type": ev.Type},
+			Detail: map[string]string{
+				"source": ev.Source.String(), "generation": ev.Secret, "webhook_id": truncate(ev.WebhookID, 256), "type": ev.Type,
+				"sent_at": ev.SentAt.UTC().Format(time.RFC3339),
+			},
 			SourceRef: truncate("inbound:"+ev.Source.String()+":"+ev.Type, 256), Params: params, ParamErr: perr,
-			BaseKey: InboundKey(ev.Source, ev.WebhookID), OccurredAt: ev.SentAt, QueueOK: true,
+			BaseKey: InboundKey(ev.Source, ev.WebhookID), OccurredAt: ev.ReceivedAt, QueueOK: true,
 		})
 		if ok {
 			out = append(out, o)

@@ -16,6 +16,7 @@ import (
 	"github.com/katocxl/pantherclaw/internal/automations/triggers/adapters/triggersrpc"
 	"github.com/katocxl/pantherclaw/internal/automations/triggers/endpoints"
 	"github.com/katocxl/pantherclaw/internal/billing"
+	defspg "github.com/katocxl/pantherclaw/internal/definitions/adapters/pgstore"
 	"github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1/pantherclawv1connect"
 	"github.com/katocxl/pantherclaw/internal/keystore"
 	"github.com/katocxl/pantherclaw/internal/platform/clock"
@@ -46,7 +47,10 @@ var (
 
 // newAutomationTriggers builds the trigger service as pc_app.
 func newAutomationTriggers(pool *db.Pool, bill *billing.Service, log *slog.Logger) *triggers.Service {
-	d := triggers.Deps{Pool: pool, Raiser: m10Raiser{pool: pool}, Failures: &failures.Sink{}, Clock: clock.System{}, Log: log}
+	d := triggers.Deps{
+		Pool: pool, Raiser: m10Raiser{pool: pool}, Failures: &failures.Sink{}, Operations: &defspg.Store{Pool: pool},
+		Clock: clock.System{}, Log: log,
+	}
 	if bill != nil {
 		d.Editions = bill
 	}
@@ -183,4 +187,8 @@ func (p automationPages) Form(ctx context.Context, automation ids.UUID) (trigger
 
 func (p automationPages) StartExecution(ctx context.Context, in triggers.ManualStart, su *stepup.StepUp) (triggers.Outcome, error) {
 	return p.trig.StartExecution(ctx, in, su)
+}
+
+func (p automationPages) RetryExecution(ctx context.Context, execution ids.UUID, idem string, su *stepup.StepUp) (triggers.Outcome, error) {
+	return p.trig.RetryExecution(ctx, execution, idem, su)
 }

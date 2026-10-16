@@ -378,10 +378,12 @@ func (s *Service) count(ctx context.Context, tx db.TenantTx, l listener, e feed.
 	} else if tl.Depth > 0 {
 		tl.Root = e.ID
 	}
-	if len(tl.Ancestry) > autodomain.MaxAncestry {
-		tl.Ancestry = tl.Ancestry[:autodomain.MaxAncestry+1] // refused as too wide
-	}
 	bucket := time.Unix(0, 0).Add(now.Sub(time.Unix(0, 0)).Truncate(over)).UTC()
+	// A bucket that already fired counts the event and records nothing
+	// more (D87 L5): a noisy group never grows the trigger log.
+	if held, err := q.DedupeKeyHeld(ctx, org, l.a.ID, ThresholdKey(l.a.ID, group, bucket)); err != nil || held {
+		return 0, err
+	}
 	out, ok := s.FireInSavepoint(ctx, tx, Candidate{
 		Automation: l.a, Kind: autodomain.TriggerThreshold, Authenticity: autodomain.AuthPlatformFeed,
 		Detail: map[string]string{

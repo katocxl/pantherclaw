@@ -19,6 +19,8 @@ import (
 	"github.com/katocxl/pantherclaw/internal/platform/httpx"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	"github.com/katocxl/pantherclaw/internal/siem/stepup"
+	tenancy "github.com/katocxl/pantherclaw/internal/tenancy/app"
+	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
 )
 
 // CheckURL applies the destination URL rule (D22: the SIEM rule): https,
@@ -347,7 +349,7 @@ func (s *Service) GetDestination(ctx context.Context, id ids.UUID) (Destination,
 		out, err = getDestination(ctx, dbq.New(tx), c.Org, id)
 		return err
 	}, db.ReadOnly())
-	return out, err
+	return shown(c, out), err
 }
 
 // ListDestinations lists the org's destinations (automation.read).
@@ -364,9 +366,29 @@ func (s *Service) ListDestinations(ctx context.Context) ([]Destination, error) {
 		}
 		out = make([]Destination, 0, len(rows))
 		for _, r := range rows {
-			out = append(out, destinationOf(dbq.GetAutomationDestinationRow(r)))
+			out = append(out, shown(c, destinationOf(dbq.GetAutomationDestinationRow(r))))
 		}
 		return nil
 	}, db.ReadOnly())
 	return out, err
+}
+
+// shown is a destination as caller may see it (D87 P4): its URL in full
+// only for people who manage endpoints, else scheme and host — a webhook
+// URL's path or query often carries its credential.
+func shown(c tenancy.Caller, d Destination) Destination {
+	if c.Require(td.PermAutomationEndpointsManage, td.OrgPath(c.Org)) == nil {
+		return d
+	}
+	d.URL = RedactURL(d.URL)
+	return d
+}
+
+// RedactURL keeps a URL's scheme and host.
+func RedactURL(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil || u.Host == "" {
+		return ""
+	}
+	return u.Scheme + "://" + u.Host
 }

@@ -163,3 +163,7 @@ func TestHR275_SourcesActivateOnlyOnThePageWithAStepUp(t *testing.T) {
 		t.Fatal("the start does not record the security key")
 	}
 }
+
+func (p realAutomationPages) RetryExecution(ctx context.Context, id ids.UUID, idem string, su *stepup.StepUp) (triggers.Outcome, error) {
+	return p.trig.RetryExecution(ctx, id, idem, su)
+}

@@ -78,7 +78,7 @@ func TestT122_BaseKeys(t *testing.T) {
 	at := time.Date(2027, 3, 28, 1, 0, 0, 0, time.UTC)
 	keys := []string{
 		ScheduleKey(a, at), ScheduleKey(a, at.Add(time.Minute)), EventKey(src),
-		InboundKey(src, "msg_1"), InboundKey(src, "msg_2"), ManualKey("k"), RetryKey(exec, "k"),
+		InboundKey(src, "msg_1"), InboundKey(src, "msg_2"), ManualKey(a, "k"), ManualKey(src, "k"), RetryKey(exec, a, "k"),
 		ThresholdKey(a, "agent:x", at), ConditionKey(a, "grant:x", at),
 	}
 	for i, k := range keys {

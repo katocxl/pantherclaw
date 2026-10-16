@@ -216,8 +216,8 @@ func TestThresholds_CountOncePerBucketAndNeverTheirOwnWork(t *testing.T) {
 	}
 	h.record(t, "grant.revoked", person(h), nil)
 	h.feed(t)
-	if got := f.States(t, thr); !slices.Equal(got, []string{"ACCEPTED", "ACCEPTED", "REFUSED_DUPLICATE"}) {
-		t.Fatalf("a fourth event in the same bucket: %v", got)
+	if got := f.States(t, thr); !slices.Equal(got, []string{"ACCEPTED", "ACCEPTED"}) {
+		t.Fatalf("a fourth event in the same bucket is counted, not recorded: %v", got)
 	}
 }
 

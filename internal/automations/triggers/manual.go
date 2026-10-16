@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	autodomain "github.com/katocxl/pantherclaw/internal/automations/domain"
+	defs "github.com/katocxl/pantherclaw/internal/definitions/domain"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
 	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
@@ -95,15 +96,37 @@ func (s *Service) runner(ctx context.Context) (tenancy.Caller, error) {
 	return c, s.entitled(ctx)
 }
 
-// requiresStepUp: the version asks for it, or its ceiling spends budget
-// (D2 forces step_up then; validation also forces it for irreversible
-// operations).
-func requiresStepUp(def *autodomain.Definition) bool {
-	m := def.When.Manual
-	if m != nil && m.StepUp {
-		return true
+// requiresStepUp reports whether starting the version by hand needs a
+// step-up (D2, D20, D87 P3): it asks for one, its ceiling spends budget, or
+// its ceiling has an irreversible operation (a prefix counts as one, and
+// so does every operation when operations cannot be looked up).
+func (s *Service) requiresStepUp(ctx context.Context, org ids.OrgID, def *autodomain.Definition) (bool, error) {
+	if m := def.When.Manual; m != nil && m.StepUp {
+		return true, nil
 	}
-	return def.Authority.Ceiling != nil && len(def.Authority.Ceiling.PerDay.Budget) > 0
+	c := def.Authority.Ceiling
+	if c == nil {
+		return false, nil
+	}
+	if len(c.PerDay.Budget) > 0 {
+		return true, nil
+	}
+	if c.Bounds.Operations == nil {
+		return false, nil
+	}
+	for _, op := range *c.Bounds.Operations {
+		if strings.HasSuffix(op, ".*") || s.d.Operations == nil {
+			return true, nil
+		}
+		d, err := s.d.Operations.Active(ctx, org, op)
+		if err != nil {
+			return false, err
+		}
+		if d == nil || d.Reversibility == defs.Irreversible {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 // StartExecution starts an automation by hand (D20): automation.run, a
@@ -133,11 +156,16 @@ func (s *Service) StartExecution(ctx context.Context, in ManualStart, su *stepup
 		if err != nil {
 			return err
 		}
+		key := ManualKey(c.Principal.ID, in.IdempotencyKey)
+		if prior, ok, err := s.repeat(ctx, q, c.Org, a.ID, key); err != nil || ok {
+			out = prior
+			return err
+		}
 		params, perr := ExtractManual(manualSpecs(m.Params), in.Params)
 		out, err = s.Fire(ctx, tx, Candidate{
 			Automation: a, Kind: autodomain.TriggerManual, Authenticity: auth, Detail: detail,
 			SourceRef: "user:" + c.Principal.ID.String(), Params: params, ParamErr: perr,
-			BaseKey: ManualKey(in.IdempotencyKey), QueueOK: true,
+			BaseKey: key, QueueOK: true,
 		})
 		return err
 	})
@@ -146,7 +174,11 @@ func (s *Service) StartExecution(ctx context.Context, in ManualStart, su *stepup
 
 func (s *Service) checkStepUp(ctx context.Context, tx db.TenantTx, c tenancy.Caller, def *autodomain.Definition, su *stepup.StepUp) (autodomain.Authenticity, map[string]string, error) {
 	detail := map[string]string{"user": c.Principal.ID.String()}
-	if !requiresStepUp(def) && su == nil {
+	need, err := s.requiresStepUp(ctx, c.Org, def)
+	if err != nil {
+		return "", nil, err
+	}
+	if !need && su == nil {
 		return autodomain.AuthUserSession, detail, nil
 	}
 	if su == nil {
@@ -207,6 +239,16 @@ func (s *Service) RetryExecution(ctx context.Context, execution ids.UUID, idem s
 		} else if err != nil {
 			return err
 		}
+		// Only LIVE work is retried: a SHADOW or TEST execution never
+		// becomes a LIVE one (D87 P2, T-127).
+		if orig.Mode != string(autodomain.ModeLive) {
+			return ErrNotRetry
+		}
+		key := RetryKey(execution, c.Principal.ID, idem)
+		if prior, ok, err := s.repeat(ctx, q, c.Org, a.ID, key); err != nil || ok {
+			out = prior
+			return err
+		}
 		var params map[string]autodomain.Value
 		if err := json.Unmarshal(orig.Params, &params); err != nil {
 			return err
@@ -225,7 +267,7 @@ func (s *Service) RetryExecution(ctx context.Context, execution ids.UUID, idem s
 		out, err = s.Fire(ctx, tx, Candidate{
 			Automation: a, Kind: autodomain.TriggerManual, Authenticity: auth, Detail: detail,
 			SourceRef: "user:" + c.Principal.ID.String(), Params: params, Lineage: lin,
-			BaseKey: RetryKey(execution, idem), RetriedFrom: &execution, QueueOK: false,
+			BaseKey: key, RetriedFrom: &execution, QueueOK: false,
 		})
 		return err
 	})
@@ -266,8 +308,35 @@ func (s *Service) Form(ctx context.Context, automation ids.UUID) (ManualForm, er
 		if a.Def.When.Manual == nil {
 			return ErrNotManual
 		}
-		out = ManualForm{Automation: a.ID, Name: a.Name, Params: a.Def.When.Manual.Params, StepUp: requiresStepUp(a.Def)}
+		need, err := s.requiresStepUp(ctx, c.Org, a.Def)
+		if err != nil {
+			return err
+		}
+		out = ManualForm{Automation: a.ID, Name: a.Name, Params: a.Def.When.Manual.Params, StepUp: need}
 		return nil
 	}, db.ReadOnly())
 	return out, err
+}
+
+// repeat returns the trigger a person's earlier start with the same key
+// recorded (D87 L7): a repeat answers with the original, never a refusal.
+func (s *Service) repeat(ctx context.Context, q *dbq.Queries, org ids.OrgID, automation ids.UUID, key string) (Outcome, bool, error) {
+	id, err := q.DedupeClaim(ctx, org, automation, key)
+	if db.IsNoRows(err) {
+		return Outcome{}, false, nil
+	} else if err != nil {
+		return Outcome{}, false, err
+	}
+	t, err := q.GetAutomationTrigger(ctx, org, id)
+	if err != nil {
+		return Outcome{}, false, err
+	}
+	out := Outcome{Trigger: t.ID, State: State(t.State)}
+	if t.Reason != nil {
+		out.Reason = *t.Reason
+	}
+	if t.ExecutionID != nil {
+		out.Execution = *t.ExecutionID
+	}
+	return out, true, nil
 }

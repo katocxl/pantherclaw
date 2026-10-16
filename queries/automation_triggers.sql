@@ -54,9 +54,9 @@ FROM pc.automation_triggers t
 WHERE t.org_id = sqlc.arg(org_id) AND t.execution_id = sqlc.arg(execution_id);
 
 -- name: CountStartedTriggersSince :one
--- Triggers that started work in the last hour (D23 per-hour cap).
+-- Accepted (LIVE) triggers in the last hour (D23 per-hour cap, D87 L4).
 SELECT count(*)::int AS n FROM pc.automation_triggers
-WHERE org_id = sqlc.arg(org_id) AND automation_id = sqlc.arg(automation_id) AND state IN ('ACCEPTED', 'SHADOW')
+WHERE org_id = sqlc.arg(org_id) AND automation_id = sqlc.arg(automation_id) AND state = 'ACCEPTED'
   AND received_at >= sqlc.arg(since);
 
 -- name: CountQueuedTriggers :one
@@ -73,13 +73,23 @@ LIMIT 100
 FOR UPDATE;
 
 -- name: ExpireQueuedTriggers :execrows
--- Queued triggers past their time to live (paused_triggers EXPIRE, D23).
-UPDATE pc.automation_triggers SET state = 'EXPIRED', reason = 'QUEUE_TTL'
-WHERE org_id = sqlc.arg(org_id) AND state = 'QUEUED' AND queued_until IS NOT NULL AND queued_until <= now();
+-- Queued triggers past their time to live (paused_triggers EXPIRE, D23)
+-- expire and give their dedupe keys back: nothing ran (D87 P5).
+WITH x AS (
+    UPDATE pc.automation_triggers t SET state = 'EXPIRED', reason = 'QUEUE_TTL', queued_until = NULL
+    WHERE t.org_id = sqlc.arg(org_id) AND t.state = 'QUEUED' AND t.queued_until IS NOT NULL AND t.queued_until <= now()
+    RETURNING t.id
+)
+DELETE FROM pc.automation_dedupe d USING x WHERE d.org_id = sqlc.arg(org_id) AND d.trigger_id = x.id;
 
 -- name: DiscardQueuedTriggers :execrows
-UPDATE pc.automation_triggers SET state = 'DISCARDED', reason = sqlc.arg(reason)
-WHERE org_id = sqlc.arg(org_id) AND automation_id = sqlc.arg(automation_id) AND state = 'QUEUED';
+-- Discarded queued triggers give their dedupe keys back (D87 P5).
+WITH x AS (
+    UPDATE pc.automation_triggers t SET state = 'DISCARDED', reason = sqlc.arg(reason), queued_until = NULL
+    WHERE t.org_id = sqlc.arg(org_id) AND t.automation_id = sqlc.arg(automation_id) AND t.state = 'QUEUED'
+    RETURNING t.id
+)
+DELETE FROM pc.automation_dedupe d USING x WHERE d.org_id = sqlc.arg(org_id) AND d.trigger_id = x.id;
 
 -- name: ActiveAutomationsWithTrigger :many
 -- ACTIVE or PAUSED automations whose enabled version has a trigger of
@@ -230,8 +240,9 @@ VALUES (sqlc.arg(org_id), sqlc.arg(automation_id), sqlc.arg(group_key), sqlc.arg
         sqlc.arg(depth), sqlc.narg(root_trigger_id))
 ON CONFLICT (org_id, automation_id, group_key, minute) DO UPDATE
 SET count = t.count + 1,
-    ancestry = (SELECT coalesce(array_agg(DISTINCT x), '{}') FROM (
-                    SELECT x FROM unnest(t.ancestry || EXCLUDED.ancestry) AS x LIMIT 8) u),
+    -- The distinct union, one past the bound so a too-wide chain is seen.
+    ancestry = (SELECT coalesce(array_agg(x), '{}') FROM (
+                    SELECT DISTINCT x FROM unnest(t.ancestry || EXCLUDED.ancestry) AS x LIMIT 9) u),
     depth = greatest(t.depth, EXCLUDED.depth),
     root_trigger_id = coalesce(t.root_trigger_id, EXCLUDED.root_trigger_id);
 
@@ -241,11 +252,11 @@ WHERE org_id = sqlc.arg(org_id) AND automation_id = sqlc.arg(automation_id) AND 
 
 -- name: ThresholdGroupWindow :one
 SELECT coalesce(sum(count), 0)::int AS total, coalesce(max(depth), 0)::int AS depth,
-       (SELECT coalesce(array_agg(DISTINCT x), '{}') FROM (
-            SELECT unnest(c.ancestry) AS x FROM pc.automation_threshold_counts c
+       (SELECT coalesce(array_agg(x), '{}') FROM (
+            SELECT DISTINCT unnest(c.ancestry) AS x FROM pc.automation_threshold_counts c
             WHERE c.org_id = sqlc.arg(org_id) AND c.automation_id = sqlc.arg(automation_id)
               AND c.group_key = sqlc.arg(group_key) AND c.minute >= sqlc.arg(since)
-            LIMIT 64) u)::uuid[] AS ancestry,
+            LIMIT 9) u)::uuid[] AS ancestry,
        coalesce((array_agg(root_trigger_id ORDER BY minute) FILTER (WHERE root_trigger_id IS NOT NULL))[1],
                 '00000000-0000-0000-0000-000000000000')::uuid AS root_trigger_id
 FROM pc.automation_threshold_counts
@@ -451,4 +462,21 @@ WHERE org_id = sqlc.arg(org_id) AND state = sqlc.arg(state) AND id <> sqlc.arg(e
 -- A paused destination keeps its deliveries waiting without spending
 -- attempts.
 UPDATE pc.automation_deliveries SET next_attempt_at = sqlc.arg(next_attempt_at), last_error = 'destination_paused'
+WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state = 'PENDING';
+
+-- name: DedupeClaim :one
+-- The trigger holding a live key (a repeated manual start returns it).
+SELECT d.trigger_id FROM pc.automation_dedupe d
+WHERE d.org_id = sqlc.arg(org_id) AND d.automation_id = sqlc.arg(automation_id) AND d.key = sqlc.arg(key)
+  AND d.expires_at > now();
+
+-- name: LeaseAutomationDelivery :execrows
+-- Takes a delivery for one send (D87 L11): no other sender picks it up
+-- before the lease ends, even if this one never records the outcome.
+UPDATE pc.automation_deliveries SET next_attempt_at = now() + interval '2 minutes'
+WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state = 'PENDING';
+
+-- name: CancelAutomationDelivery :execrows
+-- The engine's cleanup cancels a delivery that has not been sent (D89).
+UPDATE pc.automation_deliveries SET state = 'FAILED', body = NULL, last_error = sqlc.arg(code)
 WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state = 'PENDING';

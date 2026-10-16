@@ -41,12 +41,15 @@ func InboundKey(source ids.UUID, webhookID string) string {
 	return "inbound:" + source.String() + ":" + digest(webhookID)
 }
 
-// ManualKey is a manual start's key: the caller's idempotency key.
-func ManualKey(idempotency string) string { return "manual:" + digest(idempotency) }
+// ManualKey is a manual start's key: the person's own idempotency key
+// (D87 L7: keys are per person, so nobody can take another's).
+func ManualKey(person ids.UUID, idempotency string) string {
+	return "manual:" + person.String() + ":" + digest(idempotency)
+}
 
 // RetryKey is a retry's key (D59).
-func RetryKey(execution ids.UUID, idempotency string) string {
-	return "retry:" + execution.String() + ":" + digest(idempotency)
+func RetryKey(execution, person ids.UUID, idempotency string) string {
+	return "retry:" + execution.String() + ":" + person.String() + ":" + digest(idempotency)
 }
 
 // ThresholdKey is a threshold window's key.
