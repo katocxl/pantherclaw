@@ -18,13 +18,19 @@ import (
 	autodomain "github.com/katocxl/pantherclaw/internal/automations/domain"
 	"github.com/katocxl/pantherclaw/internal/automations/templates"
 	"github.com/katocxl/pantherclaw/internal/automations/triggers/endpoints"
+	evapp "github.com/katocxl/pantherclaw/internal/evidence/app"
+	"github.com/katocxl/pantherclaw/internal/evidence/pack"
+	"github.com/katocxl/pantherclaw/internal/evidence/packbuild"
 	"github.com/katocxl/pantherclaw/internal/pclaw"
+	"github.com/katocxl/pantherclaw/internal/platform/db"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	"github.com/katocxl/pantherclaw/internal/platform/jobs"
+	pclog "github.com/katocxl/pantherclaw/internal/platform/log"
 	rapp "github.com/katocxl/pantherclaw/internal/response/app"
 	"github.com/katocxl/pantherclaw/internal/siem/stepup"
 	tapp "github.com/katocxl/pantherclaw/internal/tenancy/app"
 	td "github.com/katocxl/pantherclaw/internal/tenancy/domain"
+	txapp "github.com/katocxl/pantherclaw/internal/transactions/app"
 )
 
 // TestE2E_M11_GovernedAutomations is D49's governed-automations exit
@@ -156,6 +162,7 @@ func TestE2E_M11_GovernedAutomations(t *testing.T) {
 		t.Fatalf("COHORT enabling after both: %s", st)
 	}
 	live := a.liveRefund(t, auto.ID, source, created.Secret, "msg-2", "T-2")
+	a.evidencePack(t, live.execution)
 
 	// 6. Replays and duplicates (HR-275, D21): the same webhook-id is a 409;
 	// the same ticket under a new webhook-id is accepted by the receiver and
@@ -187,6 +194,7 @@ func TestE2E_M11_GovernedAutomations(t *testing.T) {
 		t.Fatalf("the automation after FULL: %s", got)
 	}
 
+	a.widen(t, auto.ID, v.ID, source, aliceCtx, bob)
 	a.killSwitch(t, auto.ID, source, created.Secret, aliceCtx)
 	a.ceilingVoid(t, auto.ID, source, created.Secret)
 }
@@ -495,5 +503,84 @@ func (a *autoStack) ceilingVoid(t *testing.T, automation, source ids.UUID, secre
 	}
 	if n := s.row(t, "SELECT count(*)::text FROM pc.operational_failures WHERE kind = 'automation.authority_changed' AND owner_id = $1", a.r.aliceID); n == "0" {
 		t.Fatal("the owner has no owned failure for the void ceiling")
+	}
+}
+
+// evidencePack: an auditor's evidence pack of the LIVE execution (what it
+// was asked, what it did, the grant, the run, the refund's receipts)
+// verifies offline with pclaw verify (D30, HR-196).
+func (a *autoStack) evidencePack(t *testing.T, execution ids.UUID) {
+	t.Helper()
+	s := a.r.s
+	p := s.proof(t)
+	svc := evapp.New(s.pool, p.origin).WithPacks(func(context.Context, db.TenantTx, ids.OrgID, ids.UUID) error { return nil }, a.ents)
+	builder := &packbuild.Service{
+		Pool: s.pool, Keys: p.reg, LogOrigin: p.origin, Explorer: &txapp.Explorer{Pool: s.pool}, Bundles: evapp.New(s.pool, p.origin),
+		Executions: a.engine, Log: pclog.Discard(),
+	}
+	// The builder reads its creator's permissions from the database: an
+	// auditor (evidence.export) who may read automations.
+	id := ids.NewV7()
+	s.exec(t, "INSERT INTO pc.users (org_id, id, issuer, subject) VALUES ($1, $2, 'https://idp.test', 'pack-auditor')", s.org, id)
+	for _, role := range []td.RoleName{td.RoleAuditor, td.RoleAutomationOperator} {
+		s.exec(t, `INSERT INTO pc.role_bindings (org_id, id, role, user_id, scope_type, created_by) VALUES ($1, $2, $3, $4, 'ORG', 'test')`,
+			s.org, ids.NewV7(), string(role), id)
+	}
+	auditor := a.person(id, td.RoleAuditor, td.RoleAutomationOperator)
+	pk, err := svc.CreateEvidencePack(auditor, evapp.PackRequest{Kind: pack.ScopeAutomationExecution, Execution: execution})
+	if err != nil {
+		t.Fatalf("CreateEvidencePack: %v", err)
+	}
+	if err := builder.Build(context.Background(), s.org, pk.ID); err != nil {
+		t.Fatalf("build the execution pack: %v", err)
+	}
+	d, err := svc.DownloadEvidencePack(auditor, pk.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	file := writeFile(t, p.dir, "execution.zip", d.Content)
+	if code, rep := p.verify(t, file); code != 0 {
+		t.Fatalf("pclaw verify of the execution pack: exit %d\n%+v", code, rep.Checks)
+	}
+}
+
+// widen: a wider ceiling (USD 100 per grant instead of 50) is a new
+// version, validated and tested like any, and enabling it is a new
+// two-person ceremony: after one confirmation it is still pending and the
+// automation still runs the published version (D5, D8, HR-271).
+func (a *autoStack) widen(t *testing.T, automation, published, source ids.UUID, author context.Context, bob keyHolder) {
+	t.Helper()
+	s := a.r.s
+	raw, cases, err := templates.Render("bounded_task_launch", map[string]string{
+		"review_by": time.Now().AddDate(0, 0, 60).Format(time.DateOnly), "source": source.String(),
+		"event_type": "ticket.created", "agent": a.r.agent.String(), "operations": "payments.refund.create",
+		"confirm_operation": "payments.refund.create", "budget_per_run": "100.00", "budget_per_day": "500.00",
+		"runs_per_day": "5",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	v2, err := a.core.CreateDraftVersion(author, automation, a.withRefund(t, raw, "25.00"))
+	if err != nil {
+		t.Fatalf("CreateDraftVersion (wider): %v", err)
+	}
+	if _, ok, err := a.core.ValidateVersion(author, v2.ID); err != nil || !ok {
+		t.Fatalf("ValidateVersion (wider): %v %v", ok, err)
+	}
+	if missing, err := a.asr.SetTestCases(author, v2.ID, assuranceCases(cases)); err != nil || len(missing) != 0 {
+		t.Fatalf("SetTestCases (wider): %v %v", missing, err)
+	}
+	if run, err := a.asr.RunTests(author, v2.ID); err != nil || !run.Passed {
+		t.Fatalf("RunTests (wider): %+v %v", run, err)
+	}
+	en, err := a.core.RequestEnable(author, v2.ID, autodomain.RolloutCohort, []ids.UUID{a.r.agent}, ids.UUID{})
+	if err != nil || en.Required != 2 {
+		t.Fatalf("RequestEnable (wider): %+v %v", en, err)
+	}
+	if st := bob.confirmAt(t, "/changes/"+en.Request.ID.String()); st != "PENDING" {
+		t.Fatalf("the wider ceiling after one confirmation: %s", st)
+	}
+	if got := s.row(t, "SELECT enabled_version_id::text FROM pc.automations WHERE id = $1", automation); got != published.String() {
+		t.Fatalf("a wider ceiling took effect before its ceremony: enabled %s, published %s", got, published)
 	}
 }
