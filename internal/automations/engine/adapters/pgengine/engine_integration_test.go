@@ -257,9 +257,9 @@ func TestHR283_CancelStopsAtTheBoundaryAndReportsItsVerifiedEffect(t *testing.T)
 		t.Fatalf("effect %+v", eff)
 	}
 	for sql, want := range map[string]string{
-		"SELECT state FROM pc.automation_launches WHERE execution_id = $1":                         "CANCELLED", //nolint:misspell // stored state
-		"SELECT state FROM pc.grants WHERE automation_execution_id = $1":                            "REVOKED",
-		"SELECT state FROM pc.runs WHERE automation_execution_id = $1":                              "ENDED",
+		"SELECT state FROM pc.automation_launches WHERE execution_id = $1":                                                   "CANCELLED", //nolint:misspell // stored state
+		"SELECT state FROM pc.grants WHERE automation_execution_id = $1":                                                     "REVOKED",
+		"SELECT state FROM pc.runs WHERE automation_execution_id = $1":                                                       "ENDED",
 		"SELECT count(*)::text FROM pc.automation_step_attempts WHERE execution_id = $1 AND state IN ('RUNNING', 'WAITING')": "0",
 	} {
 		if got := f.str(sql, exec); got != want {
