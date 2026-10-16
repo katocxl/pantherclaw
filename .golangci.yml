@@ -64,6 +64,20 @@ linters:
           deny:
             - pkg: "encoding/json$"
               desc: "use encoding/json/v2 + encoding/json/jsontext (ADR-0011)"
+        test-helpers-stay-in-tests:
+          # grantstest.OpenGate passes every production grant; product code
+          # must never reach it or the pipeline fixtures (G0 M11 part 2 D120).
+          files:
+            - "$all"
+            - "!$test"
+            - "!**/test/**"
+            - "!**/internal/grants/grantstest/**"
+            - "!**/internal/authority/pipeline/pipelinetest/**"
+          deny:
+            - pkg: "github.com/katocxl/pantherclaw/internal/grants/grantstest"
+              desc: "test helpers only: grantstest.OpenGate passes every grant (D116, D120)"
+            - pkg: "github.com/katocxl/pantherclaw/internal/authority/pipeline/pipelinetest"
+              desc: "test helpers only (D120)"
         gateway-has-no-database:
           files: ["**/internal/gateway/**"]
           deny:
