@@ -2648,6 +2648,102 @@ func (x *RetireAutomationResponse) GetEffect() *AutomationControlEffect {
 	return nil
 }
 
+type SetAutomationOwnerRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	AutomationId  string                 `protobuf:"bytes,1,opt,name=automation_id,json=automationId,proto3" json:"automation_id,omitempty"`
+	OwnerUserId   string                 `protobuf:"bytes,2,opt,name=owner_user_id,json=ownerUserId,proto3" json:"owner_user_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SetAutomationOwnerRequest) Reset() {
+	*x = SetAutomationOwnerRequest{}
+	mi := &file_pantherclaw_v1_automations_proto_msgTypes[36]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetAutomationOwnerRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetAutomationOwnerRequest) ProtoMessage() {}
+
+func (x *SetAutomationOwnerRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_automations_proto_msgTypes[36]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetAutomationOwnerRequest.ProtoReflect.Descriptor instead.
+func (*SetAutomationOwnerRequest) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_automations_proto_rawDescGZIP(), []int{36}
+}
+
+func (x *SetAutomationOwnerRequest) GetAutomationId() string {
+	if x != nil {
+		return x.AutomationId
+	}
+	return ""
+}
+
+func (x *SetAutomationOwnerRequest) GetOwnerUserId() string {
+	if x != nil {
+		return x.OwnerUserId
+	}
+	return ""
+}
+
+type SetAutomationOwnerResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Automation    *Automation            `protobuf:"bytes,1,opt,name=automation,proto3" json:"automation,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SetAutomationOwnerResponse) Reset() {
+	*x = SetAutomationOwnerResponse{}
+	mi := &file_pantherclaw_v1_automations_proto_msgTypes[37]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetAutomationOwnerResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetAutomationOwnerResponse) ProtoMessage() {}
+
+func (x *SetAutomationOwnerResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pantherclaw_v1_automations_proto_msgTypes[37]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetAutomationOwnerResponse.ProtoReflect.Descriptor instead.
+func (*SetAutomationOwnerResponse) Descriptor() ([]byte, []int) {
+	return file_pantherclaw_v1_automations_proto_rawDescGZIP(), []int{37}
+}
+
+func (x *SetAutomationOwnerResponse) GetAutomation() *Automation {
+	if x != nil {
+		return x.Automation
+	}
+	return nil
+}
+
 type RevokeAuthorityRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	AutomationId  string                 `protobuf:"bytes,1,opt,name=automation_id,json=automationId,proto3" json:"automation_id,omitempty"`
@@ -2658,7 +2754,7 @@ type RevokeAuthorityRequest struct {
 
 func (x *RevokeAuthorityRequest) Reset() {
 	*x = RevokeAuthorityRequest{}
-	mi := &file_pantherclaw_v1_automations_proto_msgTypes[36]
+	mi := &file_pantherclaw_v1_automations_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2670,7 +2766,7 @@ func (x *RevokeAuthorityRequest) String() string {
 func (*RevokeAuthorityRequest) ProtoMessage() {}
 
 func (x *RevokeAuthorityRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_automations_proto_msgTypes[36]
+	mi := &file_pantherclaw_v1_automations_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2683,7 +2779,7 @@ func (x *RevokeAuthorityRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RevokeAuthorityRequest.ProtoReflect.Descriptor instead.
 func (*RevokeAuthorityRequest) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_automations_proto_rawDescGZIP(), []int{36}
+	return file_pantherclaw_v1_automations_proto_rawDescGZIP(), []int{38}
 }
 
 func (x *RevokeAuthorityRequest) GetAutomationId() string {
@@ -2710,7 +2806,7 @@ type RevokeAuthorityResponse struct {
 
 func (x *RevokeAuthorityResponse) Reset() {
 	*x = RevokeAuthorityResponse{}
-	mi := &file_pantherclaw_v1_automations_proto_msgTypes[37]
+	mi := &file_pantherclaw_v1_automations_proto_msgTypes[39]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2722,7 +2818,7 @@ func (x *RevokeAuthorityResponse) String() string {
 func (*RevokeAuthorityResponse) ProtoMessage() {}
 
 func (x *RevokeAuthorityResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pantherclaw_v1_automations_proto_msgTypes[37]
+	mi := &file_pantherclaw_v1_automations_proto_msgTypes[39]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2735,7 +2831,7 @@ func (x *RevokeAuthorityResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RevokeAuthorityResponse.ProtoReflect.Descriptor instead.
 func (*RevokeAuthorityResponse) Descriptor() ([]byte, []int) {
-	return file_pantherclaw_v1_automations_proto_rawDescGZIP(), []int{37}
+	return file_pantherclaw_v1_automations_proto_rawDescGZIP(), []int{39}
 }
 
 func (x *RevokeAuthorityResponse) GetAutomation() *Automation {
@@ -2969,7 +3065,14 @@ const file_pantherclaw_v1_automations_proto_rawDesc = "" +
 	"\n" +
 	"automation\x18\x01 \x01(\v2\x1a.pantherclaw.v1.AutomationR\n" +
 	"automation\x12?\n" +
-	"\x06effect\x18\x02 \x01(\v2'.pantherclaw.v1.AutomationControlEffectR\x06effect\"k\n" +
+	"\x06effect\x18\x02 \x01(\v2'.pantherclaw.v1.AutomationControlEffectR\x06effect\"x\n" +
+	"\x19SetAutomationOwnerRequest\x12-\n" +
+	"\rautomation_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\fautomationId\x12,\n" +
+	"\rowner_user_id\x18\x02 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\vownerUserId\"X\n" +
+	"\x1aSetAutomationOwnerResponse\x12:\n" +
+	"\n" +
+	"automation\x18\x01 \x01(\v2\x1a.pantherclaw.v1.AutomationR\n" +
+	"automation\"k\n" +
 	"\x16RevokeAuthorityRequest\x12-\n" +
 	"\rautomation_id\x18\x01 \x01(\tB\b\xbaH\x05r\x03\xb0\x01\x01R\fautomationId\x12\"\n" +
 	"\x06reason\x18\x02 \x01(\tB\n" +
@@ -3008,7 +3111,7 @@ const file_pantherclaw_v1_automations_proto_rawDesc = "" +
 	"#AUTOMATION_CEILING_STATE_SUPERSEDED\x10\x02\x12$\n" +
 	" AUTOMATION_CEILING_STATE_EXPIRED\x10\x03\x12!\n" +
 	"\x1dAUTOMATION_CEILING_STATE_VOID\x10\x04\x12$\n" +
-	" AUTOMATION_CEILING_STATE_REVOKED\x10\x052\xf9\v\n" +
+	" AUTOMATION_CEILING_STATE_REVOKED\x10\x052\xe6\f\n" +
 	"\x11AutomationService\x12e\n" +
 	"\x10CreateAutomation\x12'.pantherclaw.v1.CreateAutomationRequest\x1a(.pantherclaw.v1.CreateAutomationResponse\x12a\n" +
 	"\rGetAutomation\x12$.pantherclaw.v1.GetAutomationRequest\x1a%.pantherclaw.v1.GetAutomationResponse\"\x03\x90\x02\x01\x12g\n" +
@@ -3024,7 +3127,8 @@ const file_pantherclaw_v1_automations_proto_rawDesc = "" +
 	"\rNarrowRollout\x12$.pantherclaw.v1.NarrowRolloutRequest\x1a%.pantherclaw.v1.NarrowRolloutResponse\x12b\n" +
 	"\x0fPauseAutomation\x12&.pantherclaw.v1.PauseAutomationRequest\x1a'.pantherclaw.v1.PauseAutomationResponse\x12e\n" +
 	"\x10ResumeAutomation\x12'.pantherclaw.v1.ResumeAutomationRequest\x1a(.pantherclaw.v1.ResumeAutomationResponse\x12e\n" +
-	"\x10RetireAutomation\x12'.pantherclaw.v1.RetireAutomationRequest\x1a(.pantherclaw.v1.RetireAutomationResponse\x12b\n" +
+	"\x10RetireAutomation\x12'.pantherclaw.v1.RetireAutomationRequest\x1a(.pantherclaw.v1.RetireAutomationResponse\x12k\n" +
+	"\x12SetAutomationOwner\x12).pantherclaw.v1.SetAutomationOwnerRequest\x1a*.pantherclaw.v1.SetAutomationOwnerResponse\x12b\n" +
 	"\x0fRevokeAuthority\x12&.pantherclaw.v1.RevokeAuthorityRequest\x1a'.pantherclaw.v1.RevokeAuthorityResponseB\xc9\x01\n" +
 	"\x12com.pantherclaw.v1B\x10AutomationsProtoP\x01ZHgithub.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1;pantherclawv1\xa2\x02\x03PXX\xaa\x02\x0ePantherclaw.V1\xca\x02\x0ePantherclaw\\V1\xe2\x02\x1aPantherclaw\\V1\\GPBMetadata\xea\x02\x0fPantherclaw::V1b\x06proto3"
 
@@ -3041,7 +3145,7 @@ func file_pantherclaw_v1_automations_proto_rawDescGZIP() []byte {
 }
 
 var file_pantherclaw_v1_automations_proto_enumTypes = make([]protoimpl.EnumInfo, 5)
-var file_pantherclaw_v1_automations_proto_msgTypes = make([]protoimpl.MessageInfo, 38)
+var file_pantherclaw_v1_automations_proto_msgTypes = make([]protoimpl.MessageInfo, 40)
 var file_pantherclaw_v1_automations_proto_goTypes = []any{
 	(AutomationKind)(0),                // 0: pantherclaw.v1.AutomationKind
 	(AutomationState)(0),               // 1: pantherclaw.v1.AutomationState
@@ -3084,32 +3188,34 @@ var file_pantherclaw_v1_automations_proto_goTypes = []any{
 	(*ResumeAutomationResponse)(nil),   // 38: pantherclaw.v1.ResumeAutomationResponse
 	(*RetireAutomationRequest)(nil),    // 39: pantherclaw.v1.RetireAutomationRequest
 	(*RetireAutomationResponse)(nil),   // 40: pantherclaw.v1.RetireAutomationResponse
-	(*RevokeAuthorityRequest)(nil),     // 41: pantherclaw.v1.RevokeAuthorityRequest
-	(*RevokeAuthorityResponse)(nil),    // 42: pantherclaw.v1.RevokeAuthorityResponse
-	(*timestamppb.Timestamp)(nil),      // 43: google.protobuf.Timestamp
+	(*SetAutomationOwnerRequest)(nil),  // 41: pantherclaw.v1.SetAutomationOwnerRequest
+	(*SetAutomationOwnerResponse)(nil), // 42: pantherclaw.v1.SetAutomationOwnerResponse
+	(*RevokeAuthorityRequest)(nil),     // 43: pantherclaw.v1.RevokeAuthorityRequest
+	(*RevokeAuthorityResponse)(nil),    // 44: pantherclaw.v1.RevokeAuthorityResponse
+	(*timestamppb.Timestamp)(nil),      // 45: google.protobuf.Timestamp
 }
 var file_pantherclaw_v1_automations_proto_depIdxs = []int32{
 	0,  // 0: pantherclaw.v1.Automation.kind:type_name -> pantherclaw.v1.AutomationKind
 	1,  // 1: pantherclaw.v1.Automation.state:type_name -> pantherclaw.v1.AutomationState
 	2,  // 2: pantherclaw.v1.Automation.rollout:type_name -> pantherclaw.v1.AutomationRollout
-	43, // 3: pantherclaw.v1.Automation.paused_at:type_name -> google.protobuf.Timestamp
-	43, // 4: pantherclaw.v1.Automation.created_at:type_name -> google.protobuf.Timestamp
-	43, // 5: pantherclaw.v1.Automation.updated_at:type_name -> google.protobuf.Timestamp
-	43, // 6: pantherclaw.v1.Automation.retired_at:type_name -> google.protobuf.Timestamp
+	45, // 3: pantherclaw.v1.Automation.paused_at:type_name -> google.protobuf.Timestamp
+	45, // 4: pantherclaw.v1.Automation.created_at:type_name -> google.protobuf.Timestamp
+	45, // 5: pantherclaw.v1.Automation.updated_at:type_name -> google.protobuf.Timestamp
+	45, // 6: pantherclaw.v1.Automation.retired_at:type_name -> google.protobuf.Timestamp
 	6,  // 7: pantherclaw.v1.Automation.ceiling:type_name -> pantherclaw.v1.AutomationCeiling
 	4,  // 8: pantherclaw.v1.AutomationCeiling.state:type_name -> pantherclaw.v1.AutomationCeilingState
-	43, // 9: pantherclaw.v1.AutomationCeiling.review_by:type_name -> google.protobuf.Timestamp
-	43, // 10: pantherclaw.v1.AutomationCeiling.created_at:type_name -> google.protobuf.Timestamp
-	43, // 11: pantherclaw.v1.AutomationCeiling.ended_at:type_name -> google.protobuf.Timestamp
+	45, // 9: pantherclaw.v1.AutomationCeiling.review_by:type_name -> google.protobuf.Timestamp
+	45, // 10: pantherclaw.v1.AutomationCeiling.created_at:type_name -> google.protobuf.Timestamp
+	45, // 11: pantherclaw.v1.AutomationCeiling.ended_at:type_name -> google.protobuf.Timestamp
 	3,  // 12: pantherclaw.v1.AutomationVersion.state:type_name -> pantherclaw.v1.AutomationVersionState
 	7,  // 13: pantherclaw.v1.AutomationVersion.findings:type_name -> pantherclaw.v1.AutomationFinding
-	43, // 14: pantherclaw.v1.AutomationVersion.created_at:type_name -> google.protobuf.Timestamp
-	43, // 15: pantherclaw.v1.AutomationVersion.validated_at:type_name -> google.protobuf.Timestamp
-	43, // 16: pantherclaw.v1.AutomationVersion.tested_at:type_name -> google.protobuf.Timestamp
-	43, // 17: pantherclaw.v1.AutomationVersion.published_at:type_name -> google.protobuf.Timestamp
+	45, // 14: pantherclaw.v1.AutomationVersion.created_at:type_name -> google.protobuf.Timestamp
+	45, // 15: pantherclaw.v1.AutomationVersion.validated_at:type_name -> google.protobuf.Timestamp
+	45, // 16: pantherclaw.v1.AutomationVersion.tested_at:type_name -> google.protobuf.Timestamp
+	45, // 17: pantherclaw.v1.AutomationVersion.published_at:type_name -> google.protobuf.Timestamp
 	1,  // 18: pantherclaw.v1.AutomationIdentity.state:type_name -> pantherclaw.v1.AutomationState
 	2,  // 19: pantherclaw.v1.AutomationIdentity.rollout:type_name -> pantherclaw.v1.AutomationRollout
-	43, // 20: pantherclaw.v1.AutomationIdentity.review_by:type_name -> google.protobuf.Timestamp
+	45, // 20: pantherclaw.v1.AutomationIdentity.review_by:type_name -> google.protobuf.Timestamp
 	0,  // 21: pantherclaw.v1.CreateAutomationRequest.kind:type_name -> pantherclaw.v1.AutomationKind
 	5,  // 22: pantherclaw.v1.CreateAutomationResponse.automation:type_name -> pantherclaw.v1.Automation
 	5,  // 23: pantherclaw.v1.GetAutomationResponse.automation:type_name -> pantherclaw.v1.Automation
@@ -3123,7 +3229,7 @@ var file_pantherclaw_v1_automations_proto_depIdxs = []int32{
 	27, // 31: pantherclaw.v1.GetVersionGraphResponse.nodes:type_name -> pantherclaw.v1.AutomationGraphNode
 	28, // 32: pantherclaw.v1.GetVersionGraphResponse.edges:type_name -> pantherclaw.v1.AutomationGraphEdge
 	2,  // 33: pantherclaw.v1.RequestEnableRequest.rollout:type_name -> pantherclaw.v1.AutomationRollout
-	43, // 34: pantherclaw.v1.RequestEnableResponse.expires_at:type_name -> google.protobuf.Timestamp
+	45, // 34: pantherclaw.v1.RequestEnableResponse.expires_at:type_name -> google.protobuf.Timestamp
 	2,  // 35: pantherclaw.v1.NarrowRolloutRequest.rollout:type_name -> pantherclaw.v1.AutomationRollout
 	5,  // 36: pantherclaw.v1.NarrowRolloutResponse.automation:type_name -> pantherclaw.v1.Automation
 	5,  // 37: pantherclaw.v1.PauseAutomationResponse.automation:type_name -> pantherclaw.v1.Automation
@@ -3131,43 +3237,46 @@ var file_pantherclaw_v1_automations_proto_depIdxs = []int32{
 	5,  // 39: pantherclaw.v1.ResumeAutomationResponse.automation:type_name -> pantherclaw.v1.Automation
 	5,  // 40: pantherclaw.v1.RetireAutomationResponse.automation:type_name -> pantherclaw.v1.Automation
 	34, // 41: pantherclaw.v1.RetireAutomationResponse.effect:type_name -> pantherclaw.v1.AutomationControlEffect
-	5,  // 42: pantherclaw.v1.RevokeAuthorityResponse.automation:type_name -> pantherclaw.v1.Automation
-	34, // 43: pantherclaw.v1.RevokeAuthorityResponse.effect:type_name -> pantherclaw.v1.AutomationControlEffect
-	10, // 44: pantherclaw.v1.AutomationService.CreateAutomation:input_type -> pantherclaw.v1.CreateAutomationRequest
-	12, // 45: pantherclaw.v1.AutomationService.GetAutomation:input_type -> pantherclaw.v1.GetAutomationRequest
-	14, // 46: pantherclaw.v1.AutomationService.ListAutomations:input_type -> pantherclaw.v1.ListAutomationsRequest
-	16, // 47: pantherclaw.v1.AutomationService.CreateDraftVersion:input_type -> pantherclaw.v1.CreateDraftVersionRequest
-	18, // 48: pantherclaw.v1.AutomationService.UpdateDraftVersion:input_type -> pantherclaw.v1.UpdateDraftVersionRequest
-	20, // 49: pantherclaw.v1.AutomationService.ValidateVersion:input_type -> pantherclaw.v1.ValidateVersionRequest
-	22, // 50: pantherclaw.v1.AutomationService.GetVersion:input_type -> pantherclaw.v1.GetVersionRequest
-	24, // 51: pantherclaw.v1.AutomationService.ListVersions:input_type -> pantherclaw.v1.ListVersionsRequest
-	26, // 52: pantherclaw.v1.AutomationService.GetVersionGraph:input_type -> pantherclaw.v1.GetVersionGraphRequest
-	30, // 53: pantherclaw.v1.AutomationService.RequestEnable:input_type -> pantherclaw.v1.RequestEnableRequest
-	32, // 54: pantherclaw.v1.AutomationService.NarrowRollout:input_type -> pantherclaw.v1.NarrowRolloutRequest
-	35, // 55: pantherclaw.v1.AutomationService.PauseAutomation:input_type -> pantherclaw.v1.PauseAutomationRequest
-	37, // 56: pantherclaw.v1.AutomationService.ResumeAutomation:input_type -> pantherclaw.v1.ResumeAutomationRequest
-	39, // 57: pantherclaw.v1.AutomationService.RetireAutomation:input_type -> pantherclaw.v1.RetireAutomationRequest
-	41, // 58: pantherclaw.v1.AutomationService.RevokeAuthority:input_type -> pantherclaw.v1.RevokeAuthorityRequest
-	11, // 59: pantherclaw.v1.AutomationService.CreateAutomation:output_type -> pantherclaw.v1.CreateAutomationResponse
-	13, // 60: pantherclaw.v1.AutomationService.GetAutomation:output_type -> pantherclaw.v1.GetAutomationResponse
-	15, // 61: pantherclaw.v1.AutomationService.ListAutomations:output_type -> pantherclaw.v1.ListAutomationsResponse
-	17, // 62: pantherclaw.v1.AutomationService.CreateDraftVersion:output_type -> pantherclaw.v1.CreateDraftVersionResponse
-	19, // 63: pantherclaw.v1.AutomationService.UpdateDraftVersion:output_type -> pantherclaw.v1.UpdateDraftVersionResponse
-	21, // 64: pantherclaw.v1.AutomationService.ValidateVersion:output_type -> pantherclaw.v1.ValidateVersionResponse
-	23, // 65: pantherclaw.v1.AutomationService.GetVersion:output_type -> pantherclaw.v1.GetVersionResponse
-	25, // 66: pantherclaw.v1.AutomationService.ListVersions:output_type -> pantherclaw.v1.ListVersionsResponse
-	29, // 67: pantherclaw.v1.AutomationService.GetVersionGraph:output_type -> pantherclaw.v1.GetVersionGraphResponse
-	31, // 68: pantherclaw.v1.AutomationService.RequestEnable:output_type -> pantherclaw.v1.RequestEnableResponse
-	33, // 69: pantherclaw.v1.AutomationService.NarrowRollout:output_type -> pantherclaw.v1.NarrowRolloutResponse
-	36, // 70: pantherclaw.v1.AutomationService.PauseAutomation:output_type -> pantherclaw.v1.PauseAutomationResponse
-	38, // 71: pantherclaw.v1.AutomationService.ResumeAutomation:output_type -> pantherclaw.v1.ResumeAutomationResponse
-	40, // 72: pantherclaw.v1.AutomationService.RetireAutomation:output_type -> pantherclaw.v1.RetireAutomationResponse
-	42, // 73: pantherclaw.v1.AutomationService.RevokeAuthority:output_type -> pantherclaw.v1.RevokeAuthorityResponse
-	59, // [59:74] is the sub-list for method output_type
-	44, // [44:59] is the sub-list for method input_type
-	44, // [44:44] is the sub-list for extension type_name
-	44, // [44:44] is the sub-list for extension extendee
-	0,  // [0:44] is the sub-list for field type_name
+	5,  // 42: pantherclaw.v1.SetAutomationOwnerResponse.automation:type_name -> pantherclaw.v1.Automation
+	5,  // 43: pantherclaw.v1.RevokeAuthorityResponse.automation:type_name -> pantherclaw.v1.Automation
+	34, // 44: pantherclaw.v1.RevokeAuthorityResponse.effect:type_name -> pantherclaw.v1.AutomationControlEffect
+	10, // 45: pantherclaw.v1.AutomationService.CreateAutomation:input_type -> pantherclaw.v1.CreateAutomationRequest
+	12, // 46: pantherclaw.v1.AutomationService.GetAutomation:input_type -> pantherclaw.v1.GetAutomationRequest
+	14, // 47: pantherclaw.v1.AutomationService.ListAutomations:input_type -> pantherclaw.v1.ListAutomationsRequest
+	16, // 48: pantherclaw.v1.AutomationService.CreateDraftVersion:input_type -> pantherclaw.v1.CreateDraftVersionRequest
+	18, // 49: pantherclaw.v1.AutomationService.UpdateDraftVersion:input_type -> pantherclaw.v1.UpdateDraftVersionRequest
+	20, // 50: pantherclaw.v1.AutomationService.ValidateVersion:input_type -> pantherclaw.v1.ValidateVersionRequest
+	22, // 51: pantherclaw.v1.AutomationService.GetVersion:input_type -> pantherclaw.v1.GetVersionRequest
+	24, // 52: pantherclaw.v1.AutomationService.ListVersions:input_type -> pantherclaw.v1.ListVersionsRequest
+	26, // 53: pantherclaw.v1.AutomationService.GetVersionGraph:input_type -> pantherclaw.v1.GetVersionGraphRequest
+	30, // 54: pantherclaw.v1.AutomationService.RequestEnable:input_type -> pantherclaw.v1.RequestEnableRequest
+	32, // 55: pantherclaw.v1.AutomationService.NarrowRollout:input_type -> pantherclaw.v1.NarrowRolloutRequest
+	35, // 56: pantherclaw.v1.AutomationService.PauseAutomation:input_type -> pantherclaw.v1.PauseAutomationRequest
+	37, // 57: pantherclaw.v1.AutomationService.ResumeAutomation:input_type -> pantherclaw.v1.ResumeAutomationRequest
+	39, // 58: pantherclaw.v1.AutomationService.RetireAutomation:input_type -> pantherclaw.v1.RetireAutomationRequest
+	41, // 59: pantherclaw.v1.AutomationService.SetAutomationOwner:input_type -> pantherclaw.v1.SetAutomationOwnerRequest
+	43, // 60: pantherclaw.v1.AutomationService.RevokeAuthority:input_type -> pantherclaw.v1.RevokeAuthorityRequest
+	11, // 61: pantherclaw.v1.AutomationService.CreateAutomation:output_type -> pantherclaw.v1.CreateAutomationResponse
+	13, // 62: pantherclaw.v1.AutomationService.GetAutomation:output_type -> pantherclaw.v1.GetAutomationResponse
+	15, // 63: pantherclaw.v1.AutomationService.ListAutomations:output_type -> pantherclaw.v1.ListAutomationsResponse
+	17, // 64: pantherclaw.v1.AutomationService.CreateDraftVersion:output_type -> pantherclaw.v1.CreateDraftVersionResponse
+	19, // 65: pantherclaw.v1.AutomationService.UpdateDraftVersion:output_type -> pantherclaw.v1.UpdateDraftVersionResponse
+	21, // 66: pantherclaw.v1.AutomationService.ValidateVersion:output_type -> pantherclaw.v1.ValidateVersionResponse
+	23, // 67: pantherclaw.v1.AutomationService.GetVersion:output_type -> pantherclaw.v1.GetVersionResponse
+	25, // 68: pantherclaw.v1.AutomationService.ListVersions:output_type -> pantherclaw.v1.ListVersionsResponse
+	29, // 69: pantherclaw.v1.AutomationService.GetVersionGraph:output_type -> pantherclaw.v1.GetVersionGraphResponse
+	31, // 70: pantherclaw.v1.AutomationService.RequestEnable:output_type -> pantherclaw.v1.RequestEnableResponse
+	33, // 71: pantherclaw.v1.AutomationService.NarrowRollout:output_type -> pantherclaw.v1.NarrowRolloutResponse
+	36, // 72: pantherclaw.v1.AutomationService.PauseAutomation:output_type -> pantherclaw.v1.PauseAutomationResponse
+	38, // 73: pantherclaw.v1.AutomationService.ResumeAutomation:output_type -> pantherclaw.v1.ResumeAutomationResponse
+	40, // 74: pantherclaw.v1.AutomationService.RetireAutomation:output_type -> pantherclaw.v1.RetireAutomationResponse
+	42, // 75: pantherclaw.v1.AutomationService.SetAutomationOwner:output_type -> pantherclaw.v1.SetAutomationOwnerResponse
+	44, // 76: pantherclaw.v1.AutomationService.RevokeAuthority:output_type -> pantherclaw.v1.RevokeAuthorityResponse
+	61, // [61:77] is the sub-list for method output_type
+	45, // [45:61] is the sub-list for method input_type
+	45, // [45:45] is the sub-list for extension type_name
+	45, // [45:45] is the sub-list for extension extendee
+	0,  // [0:45] is the sub-list for field type_name
 }
 
 func init() { file_pantherclaw_v1_automations_proto_init() }
@@ -3182,7 +3291,7 @@ func file_pantherclaw_v1_automations_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pantherclaw_v1_automations_proto_rawDesc), len(file_pantherclaw_v1_automations_proto_rawDesc)),
 			NumEnums:      5,
-			NumMessages:   38,
+			NumMessages:   40,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
