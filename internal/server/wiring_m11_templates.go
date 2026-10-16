@@ -9,6 +9,8 @@ import (
 	"connectrpc.com/connect/v2"
 	"github.com/jackc/pgx/v5"
 
+	autoapp "github.com/katocxl/pantherclaw/internal/automations/app"
+	autodomain "github.com/katocxl/pantherclaw/internal/automations/domain"
 	autoports "github.com/katocxl/pantherclaw/internal/automations/ports"
 	"github.com/katocxl/pantherclaw/internal/automations/securitysteps"
 	"github.com/katocxl/pantherclaw/internal/automations/templates/templatesrpc"
@@ -32,34 +34,57 @@ import (
 // server's: the server never calls a tool (F3, HR-279).
 
 // registerAutomationTemplates serves TemplateService and ProposalService.
-// Creating from a template needs core's automations app and stores the
-// baseline tests through assurance's test store; until they are wired it
-// answers UNAVAILABLE and lists and reads templates only.
-func registerAutomationTemplates(rs *connect.Server, d apiDeps) {
-	pantherclawv1connect.RegisterTemplateServiceHandler(rs, &templatesrpc.TemplateHandler{
-		Drafts: automationDrafts(d), Tests: automationTestStore(d),
-	})
+// Creating from a template goes through core's automations app (D96); the
+// baseline tests are stored once assurance sets automationTestStore.
+func registerAutomationTemplates(rs *connect.Server, d apiDeps, core *automationsCore) {
+	pantherclawv1connect.RegisterTemplateServiceHandler(rs, templateHandler(d, core))
 	pantherclawv1connect.RegisterProposalServiceHandler(rs, &templatesrpc.ProposalHandler{Pool: d.pool})
 }
 
-// automationDrafts and automationTestStore are set by the core and
-// assurance wiring when they land (D5, D34).
-var (
-	automationDrafts    = func(apiDeps) templatesrpc.Drafts { return nil }
-	automationTestStore = func(apiDeps) templatesrpc.TestStore { return nil }
-)
+// templateHandler creates from templates through core's automations app
+// (D96). automationTestStore is set by the assurance wiring (D34).
+func templateHandler(d apiDeps, core *automationsCore) *templatesrpc.TemplateHandler {
+	h := &templatesrpc.TemplateHandler{Tests: automationTestStore(d)}
+	if core != nil && core.svc != nil {
+		h.Drafts = automationDrafts{svc: core.svc}
+	}
+	return h
+}
+
+var automationTestStore = func(apiDeps) templatesrpc.TestStore { return nil }
+
+// automationDrafts is the Drafts port over core's CreateAutomation and
+// CreateDraftVersion, each checking the caller.
+type automationDrafts struct{ svc *autoapp.Service }
+
+func (a automationDrafts) CreateDraft(ctx context.Context, d templatesrpc.Draft) (automation, version ids.UUID, err error) {
+	auto, err := a.svc.CreateAutomation(ctx, d.Name, d.Purpose, autodomain.WorkKind(d.Kind), d.Owner)
+	if err != nil {
+		return ids.UUID{}, ids.UUID{}, err
+	}
+	v, err := a.svc.CreateDraftVersion(ctx, auto.ID, d.Definition)
+	if err != nil {
+		return auto.ID, ids.UUID{}, err
+	}
+	return auto.ID, v.ID, nil
+}
 
 // templateSteps are the security-work step kinds (D31) the engine's
-// registry merges with its generic kinds (D11). The grants, pause and
-// resume ports are core's; left nil until core wires them, their kinds
-// refuse with UNSUPPORTED_CAPABILITY rather than pretend.
-func templateSteps(d apiDeps) autoports.StepRegistry { //nolint:unused // merged by the engine wiring (D11)
+// registry merges with its generic kinds (D11). core pauses automations
+// (pause_launches). The grants port (contain REVOKE_GRANT) is the
+// engine's issuance wiring and resuming only what a step paused is not
+// core's yet; while nil, their kinds refuse with UNSUPPORTED_CAPABILITY
+// rather than pretend.
+func templateSteps(d apiDeps, core *automationsCore) autoports.StepRegistry { //nolint:unused // merged by the engine wiring (D11)
 	deps := securitysteps.Deps{
 		Actions:  securitysteps.Actions{},
 		Cases:    m10CaseOpener(d.billing),
 		Failures: edgesFailures(),
 		Coverage: routeCoverage{svc: &covapp.Service{Pool: d.pool, Freshness: d.freshness, Verifier: covapp.ConnectionTests{}}},
 		Owners:   securitysteps.StoreOwners{},
+	}
+	if core != nil && core.svc != nil {
+		deps.Pauser = core.svc
 	}
 	var notify rapp.Notifier
 	if d.m5 != nil && d.m5.notifications != nil {

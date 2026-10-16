@@ -96,11 +96,22 @@ GRANT SELECT ON pc.automation_proposals TO pc_audit_ro;
 -- org's). Every other pack is still a person's.
 ALTER TABLE pc.evidence_packs
     ADD COLUMN automation_id     uuid,
-    ADD COLUMN automation_agents uuid[] CHECK (automation_agents IS NULL OR (cardinality(automation_agents) BETWEEN 1 AND 50
-                                               AND array_position(automation_agents, NULL) IS NULL)),
-    ADD CONSTRAINT evidence_packs_automation_fk FOREIGN KEY (org_id, automation_id) REFERENCES pc.automations (org_id, id),
-    ADD CONSTRAINT evidence_packs_automation_agents CHECK (automation_agents IS NULL OR automation_id IS NOT NULL),
+    ADD COLUMN automation_agents uuid[],
+    ADD CONSTRAINT evidence_packs_automation_agents_bounds CHECK (automation_agents IS NULL OR (cardinality(automation_agents) BETWEEN 1 AND 50
+                                                                  AND array_position(automation_agents, NULL) IS NULL)) NOT VALID,
+    ADD CONSTRAINT evidence_packs_automation_fk FOREIGN KEY (org_id, automation_id) REFERENCES pc.automations (org_id, id) NOT VALID,
+    ADD CONSTRAINT evidence_packs_automation_agents CHECK (automation_agents IS NULL OR automation_id IS NOT NULL) NOT VALID,
     DROP CONSTRAINT evidence_packs_org_id_created_by_fkey;
+-- squawk: both columns are new and NULL on every existing row, so each
+-- validation reads pc.evidence_packs once without finding a row to check;
+-- goose runs each migration in one transaction (.squawk.toml), so the
+-- validation cannot move to its own.
+-- squawk-ignore constraint-missing-not-valid
+ALTER TABLE pc.evidence_packs VALIDATE CONSTRAINT evidence_packs_automation_agents_bounds;
+-- squawk-ignore constraint-missing-not-valid
+ALTER TABLE pc.evidence_packs VALIDATE CONSTRAINT evidence_packs_automation_fk;
+-- squawk-ignore constraint-missing-not-valid
+ALTER TABLE pc.evidence_packs VALIDATE CONSTRAINT evidence_packs_automation_agents;
 
 -- +goose StatementBegin
 CREATE FUNCTION pc.evidence_pack_creator_guard() RETURNS trigger

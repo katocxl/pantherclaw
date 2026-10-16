@@ -1,13 +1,6 @@
 // SPDX-License-Identifier: BUSL-1.1
 // Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
 
-//go:build automations_validate
-
-// These tests need autodomain.Validate (core, feat/m11-core), which this
-// branch does not have yet. Remove the build constraint once core is
-// merged; until then run them with -tags automations_validate over a tree
-// that has core's validate.go.
-
 package templates_test
 
 import (
@@ -27,6 +20,11 @@ import (
 type env struct{ editions []autodomain.Edition }
 
 func (env) Now() time.Time { return time.Date(2026, 10, 16, 12, 0, 0, 0, time.UTC) }
+
+// Owner is the automation row's owner (D68), never the template's.
+func (env) Owner() ids.UUID { return owner }
+
+var owner = ids.NewV7()
 
 func (env) OwnerActivePerson(context.Context, ids.UUID) (bool, error) { return true, nil }
 

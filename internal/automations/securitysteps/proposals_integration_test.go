@@ -37,7 +37,11 @@ type propFixture struct {
 func newPropFixture(t *testing.T) *propFixture {
 	t.Helper()
 	f := triggerstest.New(t)
-	a := f.Automation(t, triggerstest.Slug(t), f.Definition(triggerstest.Slug(t), `"manual":{}`, ""), autodomain.RolloutFull)
+	// The definition holds no name or owner: they are the automation row's
+	// (D68).
+	def := `{"apiVersion":"` + autodomain.APIVersion + `","kind":"Automation","purpose":"test","work_kind":"SECURITY_WORK",` +
+		`"when":{"manual":{}},"authority":{"principal":"self"},"do":[],"finish_when":[]}`
+	a := f.Automation(t, triggerstest.Slug(t), def, autodomain.RolloutFull)
 	return &propFixture{f: f, a: a}
 }
 
@@ -310,13 +314,12 @@ func TestHR286_DigestPackIsTheAutomations(t *testing.T) {
 	}, triggerstest.Team)
 	agents := []ids.UUID{ids.NewV7(), ids.NewV7()}
 	reg := reviewSteps(Deps{Review: ReviewDeps{Digests: NewDigestCounts(), Packs: NewDigestPacks(svc)}})
-	step := reg[autodomain.KindBuildDigest].(*buildDigest)
-	step.scope = func(*autodomain.BuildDigestWith) ([]ids.UUID, bool, bool) { return agents, false, true }
+	step := reg[autodomain.KindBuildDigest]
 	sc := p.execution(t, "digest")
 	sc.Def = &autodomain.Definition{Authority: autodomain.Authority{Platform: []autodomain.PlatformScope{
 		{Step: autodomain.KindBuildDigest, Scopes: []string{autodomain.ScopeTimeRange}},
 	}}}
-	sc.With = &autodomain.BuildDigestWith{Scope: autodomain.ScopeTimeRange, Days: 7, Sections: digestSections}
+	sc.With = &autodomain.BuildDigestWith{Scope: autodomain.ScopeTimeRange, Days: 7, Sections: digestSections, Evidence: agentsOf(agents...)}
 	var r autodomain.StepResult
 	p.f.Tx(t, func(ctx context.Context, tx db.TenantTx) error {
 		var err error

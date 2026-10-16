@@ -48,6 +48,12 @@ params:
     type: enum
     values: [CRITICAL, HIGH]
     default: CRITICAL
+  - name: agents
+    description: With REVOKE_GRANT, the agents whose grants it may revoke (authority.revocable), comma-separated; leave empty for every agent of the organization.
+    type: uuid
+    list: true
+    max_items: 50
+    required: false
 
 definition:
   apiVersion: automations.pantherclaw.dev/v1
@@ -73,6 +79,11 @@ definition:
             $cases: {SUSPEND_RUN: TRIGGER_RUN, REVOKE_GRANT: TRIGGER_GRANT}
       - step: open_case
         scopes: [TRIGGER_SUBJECTS]
+    revocable:
+      $when: {param: contain, in: [REVOKE_GRANT]}
+      $value:
+        agents: {$when: {param: agents, set: true}, $value: "${agents}"}
+        all: {$when: {param: agents, set: false}, $value: true}
   do:
     - id: contain
       step: contain
