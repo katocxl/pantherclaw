@@ -289,6 +289,77 @@ type PcAuthReplay struct {
 	ExpiresAt time.Time
 }
 
+type PcAutomation struct {
+	OrgID            ids.OrgID
+	ID               ids.UUID
+	Name             string
+	Purpose          string
+	Kind             string
+	OwnerUserID      ids.UUID
+	ServiceAccountID ids.UUID
+	State            string
+	Rollout          *string
+	CohortAgents     []ids.UUID
+	EnabledVersionID *ids.UUID
+	PauseReason      *string
+	PausedAt         *time.Time
+	CreatedBy        ids.UUID
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
+	RetiredAt        *time.Time
+}
+
+type PcAutomationBudgetUsage struct {
+	OrgID        ids.OrgID
+	AutomationID ids.UUID
+	Day          pgtype.Date
+	Currency     string
+	Reserved     money.Decimal
+}
+
+type PcAutomationCeiling struct {
+	OrgID           ids.OrgID
+	ID              ids.UUID
+	AutomationID    ids.UUID
+	VersionID       ids.UUID
+	Digest          []byte
+	ApprovedBy      []ids.UUID
+	ChangeRequestID ids.UUID
+	State           string
+	ReviewBy        time.Time
+	VoidReason      *string
+	CreatedAt       time.Time
+	EndedAt         *time.Time
+}
+
+type PcAutomationUsage struct {
+	OrgID        ids.OrgID
+	AutomationID ids.UUID
+	Day          pgtype.Date
+	Grants       int32
+	Runs         int32
+}
+
+type PcAutomationVersion struct {
+	OrgID           ids.OrgID
+	ID              ids.UUID
+	AutomationID    ids.UUID
+	Number          int32
+	State           string
+	Definition      []byte
+	Digest          []byte
+	Summary         string
+	Findings        []byte
+	TestedRunID     *ids.UUID
+	CreatedBy       ids.UUID
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
+	ValidatedAt     *time.Time
+	TestedAt        *time.Time
+	PublishedAt     *time.Time
+	ChangeRequestID *ids.UUID
+}
+
 type PcBrokerKey struct {
 	OrgID        ids.OrgID
 	ID           ids.UUID
@@ -425,6 +496,32 @@ type PcCaseEntry struct {
 	Reason              *string
 	Supersedes          *ids.UUID
 	CreatedAt           time.Time
+}
+
+type PcChangeConfirmation struct {
+	OrgID        ids.OrgID
+	RequestID    ids.UUID
+	UserID       ids.UUID
+	CredentialID ids.UUID
+	ConfirmedAt  time.Time
+}
+
+type PcChangeRequest struct {
+	OrgID         ids.OrgID
+	ID            ids.UUID
+	Domain        string
+	Kind          string
+	SubjectID     ids.UUID
+	ContentDigest []byte
+	Binding       []byte
+	Summary       []byte
+	Required      int16
+	State         string
+	RequestedBy   string
+	CreatedAt     time.Time
+	ExpiresAt     time.Time
+	DecidedAt     *time.Time
+	DecidedReason *string
 }
 
 type PcChangeWindow struct {
@@ -1347,24 +1444,26 @@ type PcGithubScanRun struct {
 }
 
 type PcGrant struct {
-	OrgID           ids.OrgID
-	ID              ids.UUID
-	AgentID         ids.UUID
-	InstanceID      *ids.UUID
-	PrincipalUserID *ids.UUID
-	PrincipalSaID   *ids.UUID
-	EnvironmentID   ids.UUID
-	ParentID        *ids.UUID
-	Depth           int16
-	State           string
-	CurrentRevision int32
-	GrantorKind     string
-	GrantorID       ids.UUID
-	Basis           string
-	ChildrenTotal   int32
-	CreatedAt       time.Time
-	RevokedAt       *time.Time
-	RevokeReason    *string
+	OrgID                 ids.OrgID
+	ID                    ids.UUID
+	AgentID               ids.UUID
+	InstanceID            *ids.UUID
+	PrincipalUserID       *ids.UUID
+	PrincipalSaID         *ids.UUID
+	EnvironmentID         ids.UUID
+	ParentID              *ids.UUID
+	Depth                 int16
+	State                 string
+	CurrentRevision       int32
+	GrantorKind           string
+	GrantorID             ids.UUID
+	Basis                 string
+	ChildrenTotal         int32
+	CreatedAt             time.Time
+	RevokedAt             *time.Time
+	RevokeReason          *string
+	CeilingID             *ids.UUID
+	AutomationExecutionID *ids.UUID
 }
 
 type PcGrantLineage struct {
@@ -2298,30 +2397,31 @@ type PcRoleBinding struct {
 }
 
 type PcRun struct {
-	OrgID              ids.OrgID
-	ID                 ids.UUID
-	AgentID            ids.UUID
-	InstanceID         *ids.UUID
-	EnvironmentID      ids.UUID
-	LauncherUserID     *ids.UUID
-	LauncherSaID       *ids.UUID
-	LauncherInstanceID *ids.UUID
-	PrincipalUserID    *ids.UUID
-	PrincipalSaID      *ids.UUID
-	PrincipalSource    string
-	SubjectIssuer      *string
-	SubjectSubject     *string
-	ActorChain         []byte
-	ParentRunID        *ids.UUID
-	Depth              int16
-	GrantID            *ids.UUID
-	TaskRef            string
-	State              string
-	EndReason          *string
-	CreatedAt          time.Time
-	ExpiresAt          time.Time
-	EndedAt            *time.Time
-	Simulated          bool
+	OrgID                 ids.OrgID
+	ID                    ids.UUID
+	AgentID               ids.UUID
+	InstanceID            *ids.UUID
+	EnvironmentID         ids.UUID
+	LauncherUserID        *ids.UUID
+	LauncherSaID          *ids.UUID
+	LauncherInstanceID    *ids.UUID
+	PrincipalUserID       *ids.UUID
+	PrincipalSaID         *ids.UUID
+	PrincipalSource       string
+	SubjectIssuer         *string
+	SubjectSubject        *string
+	ActorChain            []byte
+	ParentRunID           *ids.UUID
+	Depth                 int16
+	GrantID               *ids.UUID
+	TaskRef               string
+	State                 string
+	EndReason             *string
+	CreatedAt             time.Time
+	ExpiresAt             time.Time
+	EndedAt               *time.Time
+	Simulated             bool
+	AutomationExecutionID *ids.UUID
 }
 
 type PcSandboxSession struct {
@@ -2373,14 +2473,15 @@ type PcSavedQuery struct {
 }
 
 type PcServiceAccount struct {
-	OrgID       ids.OrgID
-	ID          ids.UUID
-	Name        string
-	Description string
-	State       string
-	CreatedBy   string
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
+	OrgID        ids.OrgID
+	ID           ids.UUID
+	Name         string
+	Description  string
+	State        string
+	CreatedBy    string
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
+	AutomationID *ids.UUID
 }
 
 type PcServiceAccountKey struct {
@@ -2779,6 +2880,7 @@ type PcWebauthnCeremony struct {
 	ReconciliationID          *ids.UUID
 	PolicyChangeRequestID     *ids.UUID
 	IdentityPlaybookRequestID *ids.UUID
+	ChangeRequestID           *ids.UUID
 }
 
 type PcWebauthnCredential struct {

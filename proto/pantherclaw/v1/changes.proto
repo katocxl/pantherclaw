@@ -1,0 +1,132 @@
+// SPDX-License-Identifier: BUSL-1.1
+// Copyright (c) 2026 Joshua Kato. See LICENSE and NOTICE.
+
+syntax = "proto3";
+
+package pantherclaw.v1;
+
+import "buf/validate/validate.proto";
+import "google/protobuf/timestamp.proto";
+
+// ChangeService reads and declines change requests (G0 M11 part 2 D6;
+// HR-272, HR-292, HR-293). A change request asks to apply exact content
+// (named by its digest) of one kind to one subject: enabling an automation
+// version, a protected change, clearing a compromised publisher. It applies
+// only when `required` distinct people, each eligible for its kind, confirm
+// it with distinct security keys in a BINDING ceremony over its binding, on
+// the web page /changes/{id}; confirming is web only. New content or a new
+// state of the subject voids it; it expires after 24 hours.
+service ChangeService {
+  // GetChangeRequest returns a request with its confirmations.
+  // permission: authenticated
+  rpc GetChangeRequest(GetChangeRequestRequest) returns (GetChangeRequestResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // ListChangeRequests lists requests the caller may see, newest first.
+  // permission: authenticated
+  rpc ListChangeRequests(ListChangeRequestsRequest) returns (ListChangeRequestsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // DeclineChangeRequest declines a pending request (its requester, or a
+  // person eligible to confirm it).
+  // permission: authenticated
+  rpc DeclineChangeRequest(DeclineChangeRequestRequest) returns (DeclineChangeRequestResponse);
+}
+
+// ChangeRequestState is a change request's state.
+enum ChangeRequestState {
+  CHANGE_REQUEST_STATE_UNSPECIFIED = 0;
+  CHANGE_REQUEST_STATE_PENDING = 1;
+  CHANGE_REQUEST_STATE_APPROVED = 2;
+  CHANGE_REQUEST_STATE_DECLINED = 3;
+  CHANGE_REQUEST_STATE_EXPIRED = 4;
+  CHANGE_REQUEST_STATE_VOIDED = 5;
+}
+
+// ChangeConfirmation is one person's confirmation.
+message ChangeConfirmation {
+  string user_id = 1;
+  string credential_id = 2;
+  google.protobuf.Timestamp confirmed_at = 3;
+}
+
+// ChangeRequest is one request.
+message ChangeRequest {
+  string id = 1;
+  // automation, protected or publisher.
+  string domain = 2;
+  // The kind within its domain (ENABLE, ROLLOUT, CUSTODY, ...).
+  string kind = 3;
+  string subject_id = 4;
+  bytes content_digest = 5;
+  // SHA-256 of the canonical {domain, kind, org, subject_id,
+  // content_digest, summary_digest}: what the security keys sign.
+  bytes binding = 6;
+  // What the confirmers see (JSON).
+  string summary = 7;
+  int32 required = 8;
+  ChangeRequestState state = 9;
+  string requested_by = 10;
+  google.protobuf.Timestamp created_at = 11;
+  google.protobuf.Timestamp expires_at = 12;
+  google.protobuf.Timestamp decided_at = 13;
+  string decided_reason = 14;
+  repeated ChangeConfirmation confirmations = 15;
+}
+
+message GetChangeRequestRequest {
+  string id = 1 [(buf.validate.field).string.uuid = true];
+}
+
+message GetChangeRequestResponse {
+  ChangeRequest request = 1;
+}
+
+message ListChangeRequestsRequest {
+  int32 page_size = 1 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 200
+  }];
+  string page_token = 2 [(buf.validate.field).string = {
+    max_len: 64
+    pattern: "^[A-Za-z0-9_-]*$"
+  }];
+  // Only this domain (all when empty).
+  string domain = 3 [(buf.validate.field).string = {
+    in: [
+      "",
+      "automation",
+      "protected",
+      "publisher"
+    ]
+  }];
+  // Only requests about this subject.
+  optional string subject_id = 4 [(buf.validate.field).string.uuid = true];
+  repeated ChangeRequestState states = 5 [(buf.validate.field).repeated = {
+    max_items: 5
+    unique: true
+    items: {
+      enum: {
+        defined_only: true
+        not_in: [0]
+      }
+    }
+  }];
+}
+
+message ListChangeRequestsResponse {
+  repeated ChangeRequest requests = 1;
+  string next_page_token = 2;
+}
+
+message DeclineChangeRequestRequest {
+  string id = 1 [(buf.validate.field).string.uuid = true];
+  string reason = 2 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 500
+  }];
+}
+
+message DeclineChangeRequestResponse {
+  ChangeRequest request = 1;
+}
