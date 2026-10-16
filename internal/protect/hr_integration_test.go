@@ -85,8 +85,10 @@ func (e *hr) person(name string, role td.RoleName) person {
 		VALUES ($1, $2, $3, $4, 'keycloak', now(), $4, now() + interval '12 hours')`, e.org, p.session, p.id, secret)
 	e.exec(`INSERT INTO pc.role_bindings (org_id, id, role, user_id, scope_type, created_by) VALUES ($1, $2, $3, $4, 'ORG', 'test')`,
 		e.org, ids.NewV7(), string(role), p.id)
-	sub := td.Subject{Org: e.org, Principal: td.PrincipalRef{Kind: td.KindUser, ID: p.id},
-		Bindings: []td.Binding{{Role: role, Scope: td.Scope{Type: td.ScopeOrg, ID: e.org.UUID()}}}}
+	sub := td.Subject{
+		Org: e.org, Principal: td.PrincipalRef{Kind: td.KindUser, ID: p.id},
+		Bindings: []td.Binding{{Role: role, Scope: td.Scope{Type: td.ScopeOrg, ID: e.org.UUID()}}},
+	}
 	p.page = tapp.WithCaller(context.Background(), tapp.Caller{Subject: sub, Credential: tapp.CredBrowserSession, Session: p.session})
 	p.cli = tapp.WithCaller(context.Background(), tapp.Caller{Subject: sub, Credential: tapp.CredAccessToken, Session: ids.NewV7()})
 	return p
@@ -125,8 +127,10 @@ func (e *hr) row(id ids.UUID) dbq.PcProtectedChange {
 func (e *hr) frozen(p person) rapp.Record {
 	e.t.Helper()
 	now := time.Now().UTC().Truncate(time.Minute)
-	w, err := e.windows.Create(p.cli, domain.Window{Environment: "prod", TimeZone: "UTC",
-		Freezes: []domain.Span{{Start: now.Add(-time.Hour), End: now.Add(48 * time.Hour)}}})
+	w, err := e.windows.Create(p.cli, domain.Window{
+		Environment: "prod", TimeZone: "UTC",
+		Freezes: []domain.Span{{Start: now.Add(-time.Hour), End: now.Add(48 * time.Hour)}},
+	})
 	if err != nil {
 		e.t.Fatal(err)
 	}
@@ -345,8 +349,10 @@ func TestT129_AConfirmationNeverAppliesAnUnreviewedChange(t *testing.T) {
 		t.Fatalf("create = %v", err)
 	}
 	later := time.Now().UTC().Truncate(time.Minute)
-	if _, err := e.windows.Create(bob.cli, domain.Window{Environment: "prod", TimeZone: "UTC",
-		Freezes: append(x.Freezes, domain.Span{Start: later.Add(72 * time.Hour), End: later.Add(96 * time.Hour)})}); err != nil {
+	if _, err := e.windows.Create(bob.cli, domain.Window{
+		Environment: "prod", TimeZone: "UTC",
+		Freezes: append(x.Freezes, domain.Span{Start: later.Add(72 * time.Hour), End: later.Add(96 * time.Hour)}),
+	}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := e.confirm(bob, held.Request); !errors.Is(err, changes.ErrVoided) {
