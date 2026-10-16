@@ -22,6 +22,7 @@ import (
 	evdomain "github.com/katocxl/pantherclaw/internal/evidence/domain"
 	"github.com/katocxl/pantherclaw/internal/gen/dbq"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
+	pcerr "github.com/katocxl/pantherclaw/internal/platform/errors"
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 	"github.com/katocxl/pantherclaw/internal/platform/jobs"
 	reflexdomain "github.com/katocxl/pantherclaw/internal/reflex/domain"
@@ -212,7 +213,7 @@ func (e *Engine) enqueue(ctx context.Context, tx pgx.Tx, org ids.OrgID, id ids.U
 }
 
 // ErrNotFound reports an execution of another org or none.
-var ErrNotFound = errors.New("pgengine: execution not found")
+var ErrNotFound = pcerr.New(pcerr.NotFound, "EXECUTION_NOT_FOUND", "execution not found")
 
 // Advance works one execution until it waits or ends, in rounds of at most
 // engine.MaxTransitions, each in its own tenant transaction (D24). It

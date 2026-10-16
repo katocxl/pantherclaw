@@ -342,6 +342,25 @@ GRANT UPDATE (state, claimed_instance_id, claimed_at, completed_at, outcome, rep
     ON pc.automation_launches TO pc_app;
 GRANT SELECT ON pc.automation_executions, pc.automation_step_attempts, pc.automation_launches TO pc_audit_ro;
 
+-- An execution and its trigger name each other (00141); deliveries and
+-- launches name their execution and delivery.
+-- squawk-ignore constraint-missing-not-valid
+ALTER TABLE pc.automation_executions ADD CONSTRAINT automation_executions_trigger_fk
+    FOREIGN KEY (org_id, trigger_id) REFERENCES pc.automation_triggers (org_id, id);
+-- squawk-ignore constraint-missing-not-valid
+ALTER TABLE pc.automation_triggers ADD CONSTRAINT automation_triggers_execution_fk
+    FOREIGN KEY (org_id, execution_id) REFERENCES pc.automation_executions (org_id, id) NOT VALID;
+-- squawk-ignore constraint-missing-not-valid
+ALTER TABLE pc.automation_triggers VALIDATE CONSTRAINT automation_triggers_execution_fk;
+-- squawk-ignore constraint-missing-not-valid
+ALTER TABLE pc.automation_deliveries ADD CONSTRAINT automation_deliveries_execution_fk
+    FOREIGN KEY (org_id, execution_id) REFERENCES pc.automation_executions (org_id, id) NOT VALID;
+-- squawk-ignore constraint-missing-not-valid
+ALTER TABLE pc.automation_deliveries VALIDATE CONSTRAINT automation_deliveries_execution_fk;
+-- squawk-ignore constraint-missing-not-valid
+ALTER TABLE pc.automation_launches ADD CONSTRAINT automation_launches_delivery_fk
+    FOREIGN KEY (org_id, delivery_id) REFERENCES pc.automation_deliveries (org_id, id);
+
 -- Grants and runs name their execution (00140 added the columns).
 -- squawk-ignore constraint-missing-not-valid
 ALTER TABLE pc.grants ADD CONSTRAINT grants_automation_execution_fk
@@ -523,6 +542,10 @@ ALTER TABLE pc.approval_requests
         AND (permit_id IS NULL OR state = 'CONSUMED')
         AND (state <> 'CONSUMED' OR subject_kind = 'RESTORATION' OR permit_id IS NOT NULL));
 
+ALTER TABLE pc.automation_launches DROP CONSTRAINT automation_launches_delivery_fk;
+ALTER TABLE pc.automation_deliveries DROP CONSTRAINT automation_deliveries_execution_fk;
+ALTER TABLE pc.automation_triggers DROP CONSTRAINT automation_triggers_execution_fk;
+ALTER TABLE pc.automation_executions DROP CONSTRAINT automation_executions_trigger_fk;
 DROP TRIGGER runs_automation_execution_guard ON pc.runs;
 DROP FUNCTION pc.run_automation_execution_guard();
 ALTER TABLE pc.runs DROP CONSTRAINT runs_automation_execution_fk;

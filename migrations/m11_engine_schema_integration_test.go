@@ -54,6 +54,9 @@ func newM11EngineFixture(t *testing.T, d *dbtest.DB) m11EngineFixture {
 				VALUES ($1, $2, 'refunds', 'Refunds.', 'AGENT_WORK', $3, $4, $3)`, []any{f.org, f.automation, f.user, f.sa}},
 			{`INSERT INTO pc.automation_versions (org_id, id, automation_id, number, definition, digest, created_by)
 				VALUES ($1, $2, $3, 1, '{}', $4, $5)`, []any{f.org, f.version, f.automation, m5Secret(40), f.user}},
+			{`INSERT INTO pc.automation_triggers (org_id, id, automation_id, version_id, kind, mode, source_ref, authenticity,
+				root_trigger_id, state, occurred_at) VALUES ($1, $2, $3, $4, 'MANUAL', 'SHADOW', 'manual:test',
+				'USER_SESSION', $2, 'SHADOW', now())`, []any{f.org, f.trigger, f.automation, f.version}},
 		} {
 			if _, err := tx.Exec(ctx, s.sql, s.args...); err != nil {
 				return err

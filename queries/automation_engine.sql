@@ -195,3 +195,13 @@ SELECT EXISTS (
     WHERE p.org_id = sqlc.arg(org_id) AND d.operation = sqlc.arg(operation)
         AND convert_from(d.canonical, 'UTF8')::jsonb ->> 'reversibility' = 'irreversible'
 )::bool;
+
+-- name: AutomationExecutionInfo :one
+-- What a retry needs to know (D59, D75): the execution and whether a step
+-- of an irreversible operation ended with an unknown outcome.
+SELECT e.automation_id, e.version_id, e.state, e.trigger_id,
+       EXISTS (SELECT 1 FROM pc.automation_step_attempts a
+               WHERE a.org_id = e.org_id AND a.execution_id = e.id AND a.state = 'UNKNOWN'
+                   AND a.output ->> 'irreversible' = 'true')::bool AS unknown_irreversible
+FROM pc.automation_executions e
+WHERE e.org_id = sqlc.arg(org_id) AND e.id = sqlc.arg(id);
