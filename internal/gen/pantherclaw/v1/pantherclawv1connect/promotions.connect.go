@@ -77,8 +77,9 @@ var (
 // PromotionServiceClient is a client for the pantherclaw.v1.PromotionService service.
 type PromotionServiceClient interface {
 	// PromoteAgent promotes an agent in its PRODUCTION environment for each
-	// operation whose checks pass; the others are reported with the checks
-	// they failed. Needs a fresh step-up.
+	// operation whose checks pass, provisionally (7 days) when only coverage
+	// is pending; the others are reported with the checks they failed.
+	// Needs a fresh step-up.
 	// permission: agent.promote
 	PromoteAgent(context.Context, *v1.PromoteAgentRequest) (*v1.PromoteAgentResponse, error)
 	// RevokePromotion revokes an ACTIVE promotion: new and widened grants for
@@ -103,8 +104,9 @@ func NewPromotionServiceClient(client *connect.Client) PromotionServiceClient {
 // PromotionServiceHandler is an implementation of the pantherclaw.v1.PromotionService service.
 type PromotionServiceHandler interface {
 	// PromoteAgent promotes an agent in its PRODUCTION environment for each
-	// operation whose checks pass; the others are reported with the checks
-	// they failed. Needs a fresh step-up.
+	// operation whose checks pass, provisionally (7 days) when only coverage
+	// is pending; the others are reported with the checks they failed.
+	// Needs a fresh step-up.
 	// permission: agent.promote
 	PromoteAgent(context.Context, *v1.PromoteAgentRequest) (*v1.PromoteAgentResponse, error)
 	// RevokePromotion revokes an ACTIVE promotion: new and widened grants for

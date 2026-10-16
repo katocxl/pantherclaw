@@ -119,7 +119,7 @@ SELECT a.id, a.name, a.state, a.owner_user_id, a.environment_id, a.team_id, a.ta
        coalesce((SELECT max(r.created_at) FROM pc.runs r WHERE r.org_id = a.org_id AND r.agent_id = a.id),
                 'epoch'::timestamptz)::timestamptz AS last_run_at,
        ARRAY(SELECT p.operation FROM pc.agent_promotions p
-             WHERE p.org_id = a.org_id AND p.agent_id = a.id AND p.environment_id = a.environment_id AND p.state = 'ACTIVE'
+             WHERE p.org_id = a.org_id AND p.agent_id = a.id AND p.environment_id = a.environment_id AND (p.state = 'ACTIVE' OR (p.state = 'PROVISIONAL' AND p.expires_at > now()))
              ORDER BY p.operation)::text[] AS promoted,
        (SELECT count(*) FROM pc.grants g
         JOIN pc.grant_revisions gr ON gr.org_id = g.org_id AND gr.grant_id = g.id AND gr.revision = g.current_revision
@@ -555,7 +555,7 @@ func (q *Queries) FleetPolicyVersionsPublishedSince(ctx context.Context, orgID i
 }
 
 const fleetPromotionsSince = `-- name: FleetPromotionsSince :many
-SELECT org_id, id, agent_id, environment_id, operation, state, checks, failure_behavior, promoted_by, credential_id, promoted_at, revoked_by, revoked_at, revoke_reason FROM pc.agent_promotions
+SELECT org_id, id, agent_id, environment_id, operation, state, checks, failure_behavior, promoted_by, credential_id, promoted_at, revoked_by, revoked_at, revoke_reason, expires_at, confirmed_at, expired_at FROM pc.agent_promotions
 WHERE org_id = $1 AND agent_id = ANY ($2::uuid[])
   AND (promoted_at >= $3 OR revoked_at >= $3)
 ORDER BY promoted_at, id
@@ -586,6 +586,9 @@ func (q *Queries) FleetPromotionsSince(ctx context.Context, orgID ids.OrgID, age
 			&i.RevokedBy,
 			&i.RevokedAt,
 			&i.RevokeReason,
+			&i.ExpiresAt,
+			&i.ConfirmedAt,
+			&i.ExpiredAt,
 		); err != nil {
 			return nil, err
 		}

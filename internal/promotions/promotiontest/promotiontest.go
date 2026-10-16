@@ -9,7 +9,9 @@
 // that saw the scope's changes records it); Promote then calls the real
 // PromoteAgent as a person holding fleet_manager with a fresh step-up of
 // their own security key, and fails the test unless every operation's
-// checks pass. Nothing here skips a check. Product code never imports it.
+// checks pass. PromoteNew promotes a new agent provisionally (D80): it
+// records only the scenario tests, as no traffic has been seen yet.
+// Nothing here skips a check. Product code never imports it.
 package promotiontest
 
 import (
@@ -56,10 +58,19 @@ func (s Scope) exec(t testing.TB, sql string, args ...any) {
 
 // Record writes what the TESTS and COVERAGE checks read for each operation
 // that is not there yet: the published policy gains a scenario test of the
-// operation in the environment (republished through Scope.Publish, its rules
-// unchanged), and the connection gets a PARTIAL coverage snapshot of the
-// operation that has seen every pending change of the scope.
+// operation in the environment (RecordTests), and the connection gets a
+// PARTIAL coverage snapshot of the operation that has seen every pending
+// change of the scope.
 func Record(t testing.TB, s Scope, ops ...string) {
+	t.Helper()
+	RecordTests(t, s, ops...)
+	recordCoverage(t, s, ops...)
+}
+
+// RecordTests adds a scenario test of each operation in the environment to
+// the published policy where it has none (republished through
+// Scope.Publish, its rules unchanged).
+func RecordTests(t testing.TB, s Scope, ops ...string) {
 	t.Helper()
 	ctx := context.Background()
 	var b pdomain.Bundle
@@ -102,6 +113,13 @@ func Record(t testing.TB, s Scope, ops ...string) {
 		b.Version = 1
 		s.Publish(ctx, t, s.Pool, s.Org, &b)
 	}
+}
+
+// recordCoverage records a PARTIAL coverage snapshot of each operation on
+// the connection, as a reassessment that saw the scope's changes would.
+func recordCoverage(t testing.TB, s Scope, ops ...string) {
+	t.Helper()
+	ctx := context.Background()
 	var pending []string
 	if err := s.Pool.InTenantTx(ctx, s.Org, func(ctx context.Context, tx db.TenantTx) error {
 		rows, err := dbq.New(tx).CoverageChangesPending(ctx, s.Org, s.Connection, &s.Agent)
@@ -183,6 +201,23 @@ func Promote(t testing.TB, s Scope, ops ...string) []promotions.Promotion {
 	if len(exact) > 0 {
 		Record(t, s, exact...)
 	}
+	return promote(t, s, promotions.StateActive, ops...)
+}
+
+// PromoteNew promotes a new agent, one with no traffic yet, as a person
+// does: only its scenario tests are recorded (RecordTests), so the
+// promotion is PROVISIONAL for 7 days (D80, F7) and grants under it end
+// with it. It fails the test unless every operation is promoted
+// provisionally.
+func PromoteNew(t testing.TB, s Scope, ops ...string) []promotions.Promotion {
+	t.Helper()
+	RecordTests(t, s, ops...)
+	return promote(t, s, promotions.StateProvisional, ops...)
+}
+
+func promote(t testing.TB, s Scope, state string, ops ...string) []promotions.Promotion {
+	t.Helper()
+	pk := &defpg.Store{Pool: s.Pool}
 	p := NewPromoter(t, s)
 	res, err := (&promotions.Service{Pool: s.Pool, Packages: pk}).PromoteAgent(p.Ctx, promotions.PromoteInput{
 		Agent: s.Agent, Environment: s.Env, Operations: ops, FailureBehavior: promotions.FailClosed,
@@ -191,8 +226,8 @@ func Promote(t testing.TB, s Scope, ops ...string) []promotions.Promotion {
 		t.Fatalf("promotiontest: PromoteAgent: %v", err)
 	}
 	for _, r := range res.Readiness {
-		if r.Promotion == nil {
-			t.Fatalf("promotiontest: %s not promoted: %+v", r.Operation, r.Checks)
+		if r.Promotion == nil || r.Promotion.State != state {
+			t.Fatalf("promotiontest: %s not promoted %s: %+v %+v", r.Operation, state, r.Promotion, r.Checks)
 		}
 	}
 	return slices.Concat(res.Promoted, res.Already)

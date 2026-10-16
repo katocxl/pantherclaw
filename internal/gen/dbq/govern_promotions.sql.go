@@ -10,14 +10,16 @@ package dbq
 
 import (
 	"context"
+	"time"
 
 	"github.com/katocxl/pantherclaw/internal/platform/ids"
 )
 
 const activeAgentPromotion = `-- name: ActiveAgentPromotion :one
-SELECT org_id, id, agent_id, environment_id, operation, state, checks, failure_behavior, promoted_by, credential_id, promoted_at, revoked_by, revoked_at, revoke_reason FROM pc.agent_promotions
+SELECT org_id, id, agent_id, environment_id, operation, state, checks, failure_behavior, promoted_by, credential_id, promoted_at, revoked_by, revoked_at, revoke_reason, expires_at, confirmed_at, expired_at FROM pc.agent_promotions
 WHERE org_id = $1 AND agent_id = $2 AND environment_id = $3
-  AND operation = $4 AND state = 'ACTIVE'
+  AND operation = $4 AND state IN ('ACTIVE', 'PROVISIONAL')
+FOR UPDATE
 `
 
 type ActiveAgentPromotionParams struct {
@@ -50,39 +52,11 @@ func (q *Queries) ActiveAgentPromotion(ctx context.Context, arg ActiveAgentPromo
 		&i.RevokedBy,
 		&i.RevokedAt,
 		&i.RevokeReason,
+		&i.ExpiresAt,
+		&i.ConfirmedAt,
+		&i.ExpiredAt,
 	)
 	return i, err
-}
-
-const activePromotedOperations = `-- name: ActivePromotedOperations :many
-SELECT operation FROM pc.agent_promotions
-WHERE org_id = $1 AND agent_id = $2 AND environment_id = $3
-  AND state = 'ACTIVE'
-ORDER BY operation
-FOR SHARE
-`
-
-// The operations an agent is promoted for in an environment now, locked
-// FOR SHARE so a concurrent revocation waits for the issuing transaction
-// (D71 G7).
-func (q *Queries) ActivePromotedOperations(ctx context.Context, orgID ids.OrgID, agentID ids.UUID, environmentID ids.UUID) ([]string, error) {
-	rows, err := q.db.Query(ctx, activePromotedOperations, orgID, agentID, environmentID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []string{}
-	for rows.Next() {
-		var operation string
-		if err := rows.Scan(&operation); err != nil {
-			return nil, err
-		}
-		items = append(items, operation)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
 }
 
 const agentGrantBounds = `-- name: AgentGrantBounds :many
@@ -117,8 +91,70 @@ func (q *Queries) AgentGrantBounds(ctx context.Context, orgID ids.OrgID, agentID
 	return items, nil
 }
 
+const confirmAgentPromotion = `-- name: ConfirmAgentPromotion :one
+UPDATE pc.agent_promotions SET state = 'ACTIVE', confirmed_at = now()
+WHERE org_id = $1 AND id = $2 AND state = 'PROVISIONAL' AND expires_at > now()
+RETURNING org_id, id, agent_id, environment_id, operation, state, checks, failure_behavior, promoted_by, credential_id, promoted_at, revoked_by, revoked_at, revoke_reason, expires_at, confirmed_at, expired_at
+`
+
+func (q *Queries) ConfirmAgentPromotion(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (PcAgentPromotion, error) {
+	row := q.db.QueryRow(ctx, confirmAgentPromotion, orgID, iD)
+	var i PcAgentPromotion
+	err := row.Scan(
+		&i.OrgID,
+		&i.ID,
+		&i.AgentID,
+		&i.EnvironmentID,
+		&i.Operation,
+		&i.State,
+		&i.Checks,
+		&i.FailureBehavior,
+		&i.PromotedBy,
+		&i.CredentialID,
+		&i.PromotedAt,
+		&i.RevokedBy,
+		&i.RevokedAt,
+		&i.RevokeReason,
+		&i.ExpiresAt,
+		&i.ConfirmedAt,
+		&i.ExpiredAt,
+	)
+	return i, err
+}
+
+const expireAgentPromotion = `-- name: ExpireAgentPromotion :one
+UPDATE pc.agent_promotions SET state = 'EXPIRED', expired_at = now()
+WHERE org_id = $1 AND id = $2 AND state = 'PROVISIONAL' AND expires_at <= now()
+RETURNING org_id, id, agent_id, environment_id, operation, state, checks, failure_behavior, promoted_by, credential_id, promoted_at, revoked_by, revoked_at, revoke_reason, expires_at, confirmed_at, expired_at
+`
+
+func (q *Queries) ExpireAgentPromotion(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (PcAgentPromotion, error) {
+	row := q.db.QueryRow(ctx, expireAgentPromotion, orgID, iD)
+	var i PcAgentPromotion
+	err := row.Scan(
+		&i.OrgID,
+		&i.ID,
+		&i.AgentID,
+		&i.EnvironmentID,
+		&i.Operation,
+		&i.State,
+		&i.Checks,
+		&i.FailureBehavior,
+		&i.PromotedBy,
+		&i.CredentialID,
+		&i.PromotedAt,
+		&i.RevokedBy,
+		&i.RevokedAt,
+		&i.RevokeReason,
+		&i.ExpiresAt,
+		&i.ConfirmedAt,
+		&i.ExpiredAt,
+	)
+	return i, err
+}
+
 const getAgentPromotion = `-- name: GetAgentPromotion :one
-SELECT org_id, id, agent_id, environment_id, operation, state, checks, failure_behavior, promoted_by, credential_id, promoted_at, revoked_by, revoked_at, revoke_reason FROM pc.agent_promotions WHERE org_id = $1 AND id = $2
+SELECT org_id, id, agent_id, environment_id, operation, state, checks, failure_behavior, promoted_by, credential_id, promoted_at, revoked_by, revoked_at, revoke_reason, expires_at, confirmed_at, expired_at FROM pc.agent_promotions WHERE org_id = $1 AND id = $2
 `
 
 func (q *Queries) GetAgentPromotion(ctx context.Context, orgID ids.OrgID, iD ids.UUID) (PcAgentPromotion, error) {
@@ -139,16 +175,19 @@ func (q *Queries) GetAgentPromotion(ctx context.Context, orgID ids.OrgID, iD ids
 		&i.RevokedBy,
 		&i.RevokedAt,
 		&i.RevokeReason,
+		&i.ExpiresAt,
+		&i.ConfirmedAt,
+		&i.ExpiredAt,
 	)
 	return i, err
 }
 
 const insertAgentPromotion = `-- name: InsertAgentPromotion :one
 INSERT INTO pc.agent_promotions (org_id, id, agent_id, environment_id, operation, state, checks, failure_behavior,
-    promoted_by, credential_id)
-VALUES ($1, $2, $3, $4, $5, 'ACTIVE',
-    $6, $7, $8, $9)
-RETURNING org_id, id, agent_id, environment_id, operation, state, checks, failure_behavior, promoted_by, credential_id, promoted_at, revoked_by, revoked_at, revoke_reason
+    promoted_by, credential_id, expires_at)
+VALUES ($1, $2, $3, $4, $5, $6,
+    $7, $8, $9, $10, $11)
+RETURNING org_id, id, agent_id, environment_id, operation, state, checks, failure_behavior, promoted_by, credential_id, promoted_at, revoked_by, revoked_at, revoke_reason, expires_at, confirmed_at, expired_at
 `
 
 type InsertAgentPromotionParams struct {
@@ -157,10 +196,12 @@ type InsertAgentPromotionParams struct {
 	AgentID         ids.UUID
 	EnvironmentID   ids.UUID
 	Operation       string
+	State           string
 	Checks          []byte
 	FailureBehavior string
 	PromotedBy      ids.UUID
 	CredentialID    ids.UUID
+	ExpiresAt       *time.Time
 }
 
 func (q *Queries) InsertAgentPromotion(ctx context.Context, arg InsertAgentPromotionParams) (PcAgentPromotion, error) {
@@ -170,10 +211,12 @@ func (q *Queries) InsertAgentPromotion(ctx context.Context, arg InsertAgentPromo
 		arg.AgentID,
 		arg.EnvironmentID,
 		arg.Operation,
+		arg.State,
 		arg.Checks,
 		arg.FailureBehavior,
 		arg.PromotedBy,
 		arg.CredentialID,
+		arg.ExpiresAt,
 	)
 	var i PcAgentPromotion
 	err := row.Scan(
@@ -191,12 +234,15 @@ func (q *Queries) InsertAgentPromotion(ctx context.Context, arg InsertAgentPromo
 		&i.RevokedBy,
 		&i.RevokedAt,
 		&i.RevokeReason,
+		&i.ExpiresAt,
+		&i.ConfirmedAt,
+		&i.ExpiredAt,
 	)
 	return i, err
 }
 
 const listAgentPromotions = `-- name: ListAgentPromotions :many
-SELECT org_id, id, agent_id, environment_id, operation, state, checks, failure_behavior, promoted_by, credential_id, promoted_at, revoked_by, revoked_at, revoke_reason FROM pc.agent_promotions
+SELECT org_id, id, agent_id, environment_id, operation, state, checks, failure_behavior, promoted_by, credential_id, promoted_at, revoked_by, revoked_at, revoke_reason, expires_at, confirmed_at, expired_at FROM pc.agent_promotions
 WHERE org_id = $1
   AND ($2::uuid IS NULL OR agent_id = $2::uuid)
   AND ($3::uuid IS NULL OR environment_id = $3::uuid)
@@ -247,7 +293,47 @@ func (q *Queries) ListAgentPromotions(ctx context.Context, arg ListAgentPromotio
 			&i.RevokedBy,
 			&i.RevokedAt,
 			&i.RevokeReason,
+			&i.ExpiresAt,
+			&i.ConfirmedAt,
+			&i.ExpiredAt,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const promotedOperations = `-- name: PromotedOperations :many
+SELECT operation, expires_at FROM pc.agent_promotions
+WHERE org_id = $1 AND agent_id = $2 AND environment_id = $3
+  AND (state = 'ACTIVE' OR (state = 'PROVISIONAL' AND expires_at > now()))
+ORDER BY operation
+FOR SHARE
+`
+
+type PromotedOperationsRow struct {
+	Operation string
+	ExpiresAt *time.Time
+}
+
+// The operations an agent is promoted for in an environment now: ACTIVE,
+// or PROVISIONAL and not expired by the database clock (with its expiry,
+// D80). Locked FOR SHARE so a concurrent revocation or expiry waits for
+// the issuing transaction (D71 G7).
+func (q *Queries) PromotedOperations(ctx context.Context, orgID ids.OrgID, agentID ids.UUID, environmentID ids.UUID) ([]PromotedOperationsRow, error) {
+	rows, err := q.db.Query(ctx, promotedOperations, orgID, agentID, environmentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []PromotedOperationsRow{}
+	for rows.Next() {
+		var i PromotedOperationsRow
+		if err := rows.Scan(&i.Operation, &i.ExpiresAt); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -363,11 +449,60 @@ func (q *Queries) PromotionSubject(ctx context.Context, orgID ids.OrgID, iD ids.
 	return i, err
 }
 
+const provisionalPromotions = `-- name: ProvisionalPromotions :many
+SELECT org_id, id, agent_id, environment_id, operation, state, checks, failure_behavior, promoted_by, credential_id, promoted_at, revoked_by, revoked_at, revoke_reason, expires_at, confirmed_at, expired_at FROM pc.agent_promotions
+WHERE org_id = $1 AND state = 'PROVISIONAL'
+ORDER BY expires_at, id
+LIMIT $2
+FOR UPDATE SKIP LOCKED
+`
+
+// Provisional promotions (D80): the sweep reads them oldest expiry first,
+// confirms one whose coverage appeared, and expires those the database
+// clock has passed.
+func (q *Queries) ProvisionalPromotions(ctx context.Context, orgID ids.OrgID, maxRows int32) ([]PcAgentPromotion, error) {
+	rows, err := q.db.Query(ctx, provisionalPromotions, orgID, maxRows)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []PcAgentPromotion{}
+	for rows.Next() {
+		var i PcAgentPromotion
+		if err := rows.Scan(
+			&i.OrgID,
+			&i.ID,
+			&i.AgentID,
+			&i.EnvironmentID,
+			&i.Operation,
+			&i.State,
+			&i.Checks,
+			&i.FailureBehavior,
+			&i.PromotedBy,
+			&i.CredentialID,
+			&i.PromotedAt,
+			&i.RevokedBy,
+			&i.RevokedAt,
+			&i.RevokeReason,
+			&i.ExpiresAt,
+			&i.ConfirmedAt,
+			&i.ExpiredAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const revokeAgentPromotion = `-- name: RevokeAgentPromotion :one
 UPDATE pc.agent_promotions
 SET state = 'REVOKED', revoked_by = $1, revoked_at = now(), revoke_reason = $2
-WHERE org_id = $3 AND id = $4 AND state = 'ACTIVE'
-RETURNING org_id, id, agent_id, environment_id, operation, state, checks, failure_behavior, promoted_by, credential_id, promoted_at, revoked_by, revoked_at, revoke_reason
+WHERE org_id = $3 AND id = $4 AND state IN ('ACTIVE', 'PROVISIONAL')
+RETURNING org_id, id, agent_id, environment_id, operation, state, checks, failure_behavior, promoted_by, credential_id, promoted_at, revoked_by, revoked_at, revoke_reason, expires_at, confirmed_at, expired_at
 `
 
 type RevokeAgentPromotionParams struct {
@@ -400,6 +535,9 @@ func (q *Queries) RevokeAgentPromotion(ctx context.Context, arg RevokeAgentPromo
 		&i.RevokedBy,
 		&i.RevokedAt,
 		&i.RevokeReason,
+		&i.ExpiresAt,
+		&i.ConfirmedAt,
+		&i.ExpiredAt,
 	)
 	return i, err
 }

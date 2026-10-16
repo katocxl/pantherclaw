@@ -122,6 +122,9 @@ func (s *Service) Issue(ctx context.Context, req IssueRequest) (domain.Grant, er
 	if g.NotBefore.IsZero() {
 		g.NotBefore = now.Add(-domain.IssueSkew)
 	}
+	if err := s.capExpiry(ctx, c.Org, &g); err != nil { // a provisional promotion bounds the grant (D80)
+		return domain.Grant{}, err
+	}
 	envs, err := s.Repo.Envelopes(ctx, c.Org, scopesFor(agent, g.EnvironmentID, g.Principal))
 	if err != nil {
 		return domain.Grant{}, err
@@ -190,6 +193,9 @@ func (s *Service) Revise(ctx context.Context, req ReviseRequest) (domain.Grant, 
 	next.Delegation, next.MinAttestation = req.Delegation, req.MinAttestation
 	if !req.ExpiresAt.IsZero() {
 		next.ExpiresAt = req.ExpiresAt
+	}
+	if err := s.capExpiry(ctx, c.Org, &next); err != nil { // D80
+		return domain.Grant{}, domain.Revision{}, err
 	}
 	rev, err := domain.CompareRevision(cur, next)
 	if err != nil {

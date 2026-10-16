@@ -48,8 +48,10 @@ var failureBehaviors = map[string]pantherclawv1.FailureBehavior{
 }
 
 var promotionStates = map[string]pantherclawv1.PromotionState{
-	"active":  pantherclawv1.PromotionState_PROMOTION_STATE_ACTIVE,
-	"revoked": pantherclawv1.PromotionState_PROMOTION_STATE_REVOKED,
+	"provisional": pantherclawv1.PromotionState_PROMOTION_STATE_PROVISIONAL,
+	"expired":     pantherclawv1.PromotionState_PROMOTION_STATE_EXPIRED,
+	"active":      pantherclawv1.PromotionState_PROMOTION_STATE_ACTIVE,
+	"revoked":     pantherclawv1.PromotionState_PROMOTION_STATE_REVOKED,
 }
 
 func promoteCommands() map[string]command {
@@ -98,10 +100,10 @@ func promoteCommands() map[string]command {
 				return c.promotions.RevokePromotion(ctx, &pantherclawv1.RevokePromotionRequest{PromotionId: a[0], Reason: *reason})
 			}
 		}),
-		"list": rpc("promote list [--agent ID] [--environment ID] [--state active|revoked] [--page-size N] [--page-token T]", 0, func(fs *flag.FlagSet) call {
+		"list": rpc("promote list [--agent ID] [--environment ID] [--state active|provisional|revoked|expired] [--page-size N] [--page-token T]", 0, func(fs *flag.FlagSet) call {
 			agent := fs.String("agent", "", "only this agent's")
 			env := fs.String("environment", "", "only in this environment")
-			state := fs.String("state", "", "active or revoked")
+			state := fs.String("state", "", "active, provisional, revoked or expired")
 			size := fs.Int("page-size", 0, "results per page (at most 200)")
 			token := fs.String("page-token", "", "the next page's token")
 			return func(ctx context.Context, c clients, _ []string) (proto.Message, error) {
@@ -109,7 +111,7 @@ func promoteCommands() map[string]command {
 				if *state != "" {
 					s, ok := promotionStates[*state]
 					if !ok {
-						return nil, fmt.Errorf("--state must be active or revoked")
+						return nil, fmt.Errorf("--state must be active, provisional, revoked or expired")
 					}
 					req.State = s
 				}

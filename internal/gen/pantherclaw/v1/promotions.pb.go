@@ -86,6 +86,12 @@ const (
 	PromotionState_PROMOTION_STATE_UNSPECIFIED PromotionState = 0
 	PromotionState_PROMOTION_STATE_ACTIVE      PromotionState = 1
 	PromotionState_PROMOTION_STATE_REVOKED     PromotionState = 2
+	// PROVISIONAL: every check but coverage passed, and only because no
+	// coverage record exists yet (D80); it covers grants until expire_time,
+	// which caps their expiry, and becomes ACTIVE once coverage appears.
+	PromotionState_PROMOTION_STATE_PROVISIONAL PromotionState = 3
+	// EXPIRED: a provisional promotion whose expiry passed first.
+	PromotionState_PROMOTION_STATE_EXPIRED PromotionState = 4
 )
 
 // Enum value maps for PromotionState.
@@ -94,11 +100,15 @@ var (
 		0: "PROMOTION_STATE_UNSPECIFIED",
 		1: "PROMOTION_STATE_ACTIVE",
 		2: "PROMOTION_STATE_REVOKED",
+		3: "PROMOTION_STATE_PROVISIONAL",
+		4: "PROMOTION_STATE_EXPIRED",
 	}
 	PromotionState_value = map[string]int32{
 		"PROMOTION_STATE_UNSPECIFIED": 0,
 		"PROMOTION_STATE_ACTIVE":      1,
 		"PROMOTION_STATE_REVOKED":     2,
+		"PROMOTION_STATE_PROVISIONAL": 3,
+		"PROMOTION_STATE_EXPIRED":     4,
 	}
 )
 
@@ -133,9 +143,12 @@ func (PromotionState) EnumDescriptor() ([]byte, []int) {
 type PromotionCheck struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// OWNER, IDENTITY, TESTS, APPROVALS, COVERAGE or FAILURE_BEHAVIOUR.
-	Name          string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Passed        bool   `protobuf:"varint,2,opt,name=passed,proto3" json:"passed,omitempty"`
-	Detail        string `protobuf:"bytes,3,opt,name=detail,proto3" json:"detail,omitempty"`
+	Name   string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Passed bool   `protobuf:"varint,2,opt,name=passed,proto3" json:"passed,omitempty"`
+	Detail string `protobuf:"bytes,3,opt,name=detail,proto3" json:"detail,omitempty"`
+	// pending: a COVERAGE check failing only because no coverage record
+	// exists yet; the operation can be promoted provisionally.
+	Pending       bool `protobuf:"varint,4,opt,name=pending,proto3" json:"pending,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -191,6 +204,13 @@ func (x *PromotionCheck) GetDetail() string {
 	return ""
 }
 
+func (x *PromotionCheck) GetPending() bool {
+	if x != nil {
+		return x.Pending
+	}
+	return false
+}
+
 type Promotion struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
@@ -203,11 +223,16 @@ type Promotion struct {
 	FailureBehavior FailureBehavior   `protobuf:"varint,7,opt,name=failure_behavior,json=failureBehavior,proto3,enum=pantherclaw.v1.FailureBehavior" json:"failure_behavior,omitempty"`
 	PromotedBy      string            `protobuf:"bytes,8,opt,name=promoted_by,json=promotedBy,proto3" json:"promoted_by,omitempty"`
 	// The security key of the step-up behind the promotion.
-	CredentialId  string                 `protobuf:"bytes,9,opt,name=credential_id,json=credentialId,proto3" json:"credential_id,omitempty"`
-	PromoteTime   *timestamppb.Timestamp `protobuf:"bytes,10,opt,name=promote_time,json=promoteTime,proto3" json:"promote_time,omitempty"`
-	RevokedBy     string                 `protobuf:"bytes,11,opt,name=revoked_by,json=revokedBy,proto3" json:"revoked_by,omitempty"`
-	RevokeTime    *timestamppb.Timestamp `protobuf:"bytes,12,opt,name=revoke_time,json=revokeTime,proto3" json:"revoke_time,omitempty"`
-	RevokeReason  string                 `protobuf:"bytes,13,opt,name=revoke_reason,json=revokeReason,proto3" json:"revoke_reason,omitempty"`
+	CredentialId string                 `protobuf:"bytes,9,opt,name=credential_id,json=credentialId,proto3" json:"credential_id,omitempty"`
+	PromoteTime  *timestamppb.Timestamp `protobuf:"bytes,10,opt,name=promote_time,json=promoteTime,proto3" json:"promote_time,omitempty"`
+	RevokedBy    string                 `protobuf:"bytes,11,opt,name=revoked_by,json=revokedBy,proto3" json:"revoked_by,omitempty"`
+	RevokeTime   *timestamppb.Timestamp `protobuf:"bytes,12,opt,name=revoke_time,json=revokeTime,proto3" json:"revoke_time,omitempty"`
+	RevokeReason string                 `protobuf:"bytes,13,opt,name=revoke_reason,json=revokeReason,proto3" json:"revoke_reason,omitempty"`
+	// A provisional promotion's expiry, when coverage made it ACTIVE, and
+	// when it expired.
+	ExpireTime    *timestamppb.Timestamp `protobuf:"bytes,14,opt,name=expire_time,json=expireTime,proto3" json:"expire_time,omitempty"`
+	ConfirmTime   *timestamppb.Timestamp `protobuf:"bytes,15,opt,name=confirm_time,json=confirmTime,proto3" json:"confirm_time,omitempty"`
+	ExpiredTime   *timestamppb.Timestamp `protobuf:"bytes,16,opt,name=expired_time,json=expiredTime,proto3" json:"expired_time,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -333,13 +358,36 @@ func (x *Promotion) GetRevokeReason() string {
 	return ""
 }
 
+func (x *Promotion) GetExpireTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ExpireTime
+	}
+	return nil
+}
+
+func (x *Promotion) GetConfirmTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ConfirmTime
+	}
+	return nil
+}
+
+func (x *Promotion) GetExpiredTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ExpiredTime
+	}
+	return nil
+}
+
 // OperationReadiness is one operation's checks.
 type OperationReadiness struct {
 	state     protoimpl.MessageState `protogen:"open.v1"`
 	Operation string                 `protobuf:"bytes,1,opt,name=operation,proto3" json:"operation,omitempty"`
 	// ready: every check passed.
-	Ready  bool              `protobuf:"varint,2,opt,name=ready,proto3" json:"ready,omitempty"`
-	Checks []*PromotionCheck `protobuf:"bytes,3,rep,name=checks,proto3" json:"checks,omitempty"`
+	Ready bool `protobuf:"varint,2,opt,name=ready,proto3" json:"ready,omitempty"`
+	// provisional: every check passed but a pending COVERAGE (D80).
+	Provisional bool              `protobuf:"varint,5,opt,name=provisional,proto3" json:"provisional,omitempty"`
+	Checks      []*PromotionCheck `protobuf:"bytes,3,rep,name=checks,proto3" json:"checks,omitempty"`
 	// promotion is the operation's ACTIVE promotion, when it has one.
 	Promotion     *Promotion `protobuf:"bytes,4,opt,name=promotion,proto3" json:"promotion,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -386,6 +434,13 @@ func (x *OperationReadiness) GetOperation() string {
 func (x *OperationReadiness) GetReady() bool {
 	if x != nil {
 		return x.Ready
+	}
+	return false
+}
+
+func (x *OperationReadiness) GetProvisional() bool {
+	if x != nil {
+		return x.Provisional
 	}
 	return false
 }
@@ -878,11 +933,12 @@ var File_pantherclaw_v1_promotions_proto protoreflect.FileDescriptor
 
 const file_pantherclaw_v1_promotions_proto_rawDesc = "" +
 	"\n" +
-	"\x1fpantherclaw/v1/promotions.proto\x12\x0epantherclaw.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"T\n" +
+	"\x1fpantherclaw/v1/promotions.proto\x12\x0epantherclaw.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"n\n" +
 	"\x0ePromotionCheck\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x16\n" +
 	"\x06passed\x18\x02 \x01(\bR\x06passed\x12\x16\n" +
-	"\x06detail\x18\x03 \x01(\tR\x06detail\"\xbb\x04\n" +
+	"\x06detail\x18\x03 \x01(\tR\x06detail\x12\x18\n" +
+	"\apending\x18\x04 \x01(\bR\apending\"\xf6\x05\n" +
 	"\tPromotion\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x19\n" +
 	"\bagent_id\x18\x02 \x01(\tR\aagentId\x12%\n" +
@@ -900,10 +956,15 @@ const file_pantherclaw_v1_promotions_proto_rawDesc = "" +
 	"revoked_by\x18\v \x01(\tR\trevokedBy\x12;\n" +
 	"\vrevoke_time\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"revokeTime\x12#\n" +
-	"\rrevoke_reason\x18\r \x01(\tR\frevokeReason\"\xb9\x01\n" +
+	"\rrevoke_reason\x18\r \x01(\tR\frevokeReason\x12;\n" +
+	"\vexpire_time\x18\x0e \x01(\v2\x1a.google.protobuf.TimestampR\n" +
+	"expireTime\x12=\n" +
+	"\fconfirm_time\x18\x0f \x01(\v2\x1a.google.protobuf.TimestampR\vconfirmTime\x12=\n" +
+	"\fexpired_time\x18\x10 \x01(\v2\x1a.google.protobuf.TimestampR\vexpiredTime\"\xdb\x01\n" +
 	"\x12OperationReadiness\x12\x1c\n" +
 	"\toperation\x18\x01 \x01(\tR\toperation\x12\x14\n" +
-	"\x05ready\x18\x02 \x01(\bR\x05ready\x126\n" +
+	"\x05ready\x18\x02 \x01(\bR\x05ready\x12 \n" +
+	"\vprovisional\x18\x05 \x01(\bR\vprovisional\x126\n" +
 	"\x06checks\x18\x03 \x03(\v2\x1e.pantherclaw.v1.PromotionCheckR\x06checks\x127\n" +
 	"\tpromotion\x18\x04 \x01(\v2\x19.pantherclaw.v1.PromotionR\tpromotion\"\xa3\x02\n" +
 	"\x13PromoteAgentRequest\x12#\n" +
@@ -950,11 +1011,13 @@ const file_pantherclaw_v1_promotions_proto_rawDesc = "" +
 	"\x1cFAILURE_BEHAVIOR_UNSPECIFIED\x10\x00\x12 \n" +
 	"\x1cFAILURE_BEHAVIOR_FAIL_CLOSED\x10\x01\x12\x1a\n" +
 	"\x16FAILURE_BEHAVIOR_QUEUE\x10\x02\x12&\n" +
-	"\"FAILURE_BEHAVIOR_DEGRADE_READ_ONLY\x10\x03*j\n" +
+	"\"FAILURE_BEHAVIOR_DEGRADE_READ_ONLY\x10\x03*\xa8\x01\n" +
 	"\x0ePromotionState\x12\x1f\n" +
 	"\x1bPROMOTION_STATE_UNSPECIFIED\x10\x00\x12\x1a\n" +
 	"\x16PROMOTION_STATE_ACTIVE\x10\x01\x12\x1b\n" +
-	"\x17PROMOTION_STATE_REVOKED\x10\x022\x97\x03\n" +
+	"\x17PROMOTION_STATE_REVOKED\x10\x02\x12\x1f\n" +
+	"\x1bPROMOTION_STATE_PROVISIONAL\x10\x03\x12\x1b\n" +
+	"\x17PROMOTION_STATE_EXPIRED\x10\x042\x97\x03\n" +
 	"\x10PromotionService\x12Y\n" +
 	"\fPromoteAgent\x12#.pantherclaw.v1.PromoteAgentRequest\x1a$.pantherclaw.v1.PromoteAgentResponse\x12b\n" +
 	"\x0fRevokePromotion\x12&.pantherclaw.v1.RevokePromotionRequest\x1a'.pantherclaw.v1.RevokePromotionResponse\x12^\n" +
@@ -998,30 +1061,33 @@ var file_pantherclaw_v1_promotions_proto_depIdxs = []int32{
 	0,  // 2: pantherclaw.v1.Promotion.failure_behavior:type_name -> pantherclaw.v1.FailureBehavior
 	13, // 3: pantherclaw.v1.Promotion.promote_time:type_name -> google.protobuf.Timestamp
 	13, // 4: pantherclaw.v1.Promotion.revoke_time:type_name -> google.protobuf.Timestamp
-	2,  // 5: pantherclaw.v1.OperationReadiness.checks:type_name -> pantherclaw.v1.PromotionCheck
-	3,  // 6: pantherclaw.v1.OperationReadiness.promotion:type_name -> pantherclaw.v1.Promotion
-	0,  // 7: pantherclaw.v1.PromoteAgentRequest.failure_behavior:type_name -> pantherclaw.v1.FailureBehavior
-	3,  // 8: pantherclaw.v1.PromoteAgentResponse.promoted:type_name -> pantherclaw.v1.Promotion
-	3,  // 9: pantherclaw.v1.PromoteAgentResponse.already:type_name -> pantherclaw.v1.Promotion
-	4,  // 10: pantherclaw.v1.PromoteAgentResponse.readiness:type_name -> pantherclaw.v1.OperationReadiness
-	3,  // 11: pantherclaw.v1.RevokePromotionResponse.promotion:type_name -> pantherclaw.v1.Promotion
-	0,  // 12: pantherclaw.v1.GetReadinessRequest.failure_behavior:type_name -> pantherclaw.v1.FailureBehavior
-	4,  // 13: pantherclaw.v1.GetReadinessResponse.readiness:type_name -> pantherclaw.v1.OperationReadiness
-	1,  // 14: pantherclaw.v1.ListPromotionsRequest.state:type_name -> pantherclaw.v1.PromotionState
-	3,  // 15: pantherclaw.v1.ListPromotionsResponse.promotions:type_name -> pantherclaw.v1.Promotion
-	5,  // 16: pantherclaw.v1.PromotionService.PromoteAgent:input_type -> pantherclaw.v1.PromoteAgentRequest
-	7,  // 17: pantherclaw.v1.PromotionService.RevokePromotion:input_type -> pantherclaw.v1.RevokePromotionRequest
-	9,  // 18: pantherclaw.v1.PromotionService.GetReadiness:input_type -> pantherclaw.v1.GetReadinessRequest
-	11, // 19: pantherclaw.v1.PromotionService.ListPromotions:input_type -> pantherclaw.v1.ListPromotionsRequest
-	6,  // 20: pantherclaw.v1.PromotionService.PromoteAgent:output_type -> pantherclaw.v1.PromoteAgentResponse
-	8,  // 21: pantherclaw.v1.PromotionService.RevokePromotion:output_type -> pantherclaw.v1.RevokePromotionResponse
-	10, // 22: pantherclaw.v1.PromotionService.GetReadiness:output_type -> pantherclaw.v1.GetReadinessResponse
-	12, // 23: pantherclaw.v1.PromotionService.ListPromotions:output_type -> pantherclaw.v1.ListPromotionsResponse
-	20, // [20:24] is the sub-list for method output_type
-	16, // [16:20] is the sub-list for method input_type
-	16, // [16:16] is the sub-list for extension type_name
-	16, // [16:16] is the sub-list for extension extendee
-	0,  // [0:16] is the sub-list for field type_name
+	13, // 5: pantherclaw.v1.Promotion.expire_time:type_name -> google.protobuf.Timestamp
+	13, // 6: pantherclaw.v1.Promotion.confirm_time:type_name -> google.protobuf.Timestamp
+	13, // 7: pantherclaw.v1.Promotion.expired_time:type_name -> google.protobuf.Timestamp
+	2,  // 8: pantherclaw.v1.OperationReadiness.checks:type_name -> pantherclaw.v1.PromotionCheck
+	3,  // 9: pantherclaw.v1.OperationReadiness.promotion:type_name -> pantherclaw.v1.Promotion
+	0,  // 10: pantherclaw.v1.PromoteAgentRequest.failure_behavior:type_name -> pantherclaw.v1.FailureBehavior
+	3,  // 11: pantherclaw.v1.PromoteAgentResponse.promoted:type_name -> pantherclaw.v1.Promotion
+	3,  // 12: pantherclaw.v1.PromoteAgentResponse.already:type_name -> pantherclaw.v1.Promotion
+	4,  // 13: pantherclaw.v1.PromoteAgentResponse.readiness:type_name -> pantherclaw.v1.OperationReadiness
+	3,  // 14: pantherclaw.v1.RevokePromotionResponse.promotion:type_name -> pantherclaw.v1.Promotion
+	0,  // 15: pantherclaw.v1.GetReadinessRequest.failure_behavior:type_name -> pantherclaw.v1.FailureBehavior
+	4,  // 16: pantherclaw.v1.GetReadinessResponse.readiness:type_name -> pantherclaw.v1.OperationReadiness
+	1,  // 17: pantherclaw.v1.ListPromotionsRequest.state:type_name -> pantherclaw.v1.PromotionState
+	3,  // 18: pantherclaw.v1.ListPromotionsResponse.promotions:type_name -> pantherclaw.v1.Promotion
+	5,  // 19: pantherclaw.v1.PromotionService.PromoteAgent:input_type -> pantherclaw.v1.PromoteAgentRequest
+	7,  // 20: pantherclaw.v1.PromotionService.RevokePromotion:input_type -> pantherclaw.v1.RevokePromotionRequest
+	9,  // 21: pantherclaw.v1.PromotionService.GetReadiness:input_type -> pantherclaw.v1.GetReadinessRequest
+	11, // 22: pantherclaw.v1.PromotionService.ListPromotions:input_type -> pantherclaw.v1.ListPromotionsRequest
+	6,  // 23: pantherclaw.v1.PromotionService.PromoteAgent:output_type -> pantherclaw.v1.PromoteAgentResponse
+	8,  // 24: pantherclaw.v1.PromotionService.RevokePromotion:output_type -> pantherclaw.v1.RevokePromotionResponse
+	10, // 25: pantherclaw.v1.PromotionService.GetReadiness:output_type -> pantherclaw.v1.GetReadinessResponse
+	12, // 26: pantherclaw.v1.PromotionService.ListPromotions:output_type -> pantherclaw.v1.ListPromotionsResponse
+	23, // [23:27] is the sub-list for method output_type
+	19, // [19:23] is the sub-list for method input_type
+	19, // [19:19] is the sub-list for extension type_name
+	19, // [19:19] is the sub-list for extension extendee
+	0,  // [0:19] is the sub-list for field type_name
 }
 
 func init() { file_pantherclaw_v1_promotions_proto_init() }

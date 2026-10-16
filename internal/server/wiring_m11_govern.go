@@ -4,19 +4,26 @@
 package server
 
 import (
+	"log/slog"
+
 	"connectrpc.com/connect/v2"
+	"github.com/riverqueue/river"
 
 	"github.com/katocxl/pantherclaw/internal/cohorts"
 	"github.com/katocxl/pantherclaw/internal/cohorts/cohortsrpc"
 	defspg "github.com/katocxl/pantherclaw/internal/definitions/adapters/pgstore"
 	"github.com/katocxl/pantherclaw/internal/gen/pantherclaw/v1/pantherclawv1connect"
+	grantspg "github.com/katocxl/pantherclaw/internal/grants/adapters/pgstore"
 	grantsapp "github.com/katocxl/pantherclaw/internal/grants/app"
+	"github.com/katocxl/pantherclaw/internal/platform/clock"
 	"github.com/katocxl/pantherclaw/internal/platform/db"
+	"github.com/katocxl/pantherclaw/internal/platform/jobs"
 	policyapp "github.com/katocxl/pantherclaw/internal/policy/app"
 	"github.com/katocxl/pantherclaw/internal/policy/packs"
 	"github.com/katocxl/pantherclaw/internal/policy/packs/packsrpc"
 	"github.com/katocxl/pantherclaw/internal/promotions"
 	"github.com/katocxl/pantherclaw/internal/promotions/promotionsrpc"
+	"github.com/katocxl/pantherclaw/internal/reflex/failures"
 )
 
 // registerM11Govern serves the production promotion gate's PromotionService,
@@ -26,7 +33,7 @@ import (
 // through the policy versions API, so a pack's draft passes the same
 // checks and publish gate as any.
 func registerM11Govern(rs *connect.Server, d apiDeps) {
-	prom := &promotions.Service{Pool: d.pool, Packages: &defspg.Store{Pool: d.pool}}
+	prom := newPromotions(d.pool)
 	pantherclawv1connect.RegisterPromotionServiceHandler(rs, promotionsrpc.New(prom))
 	if d.web != nil {
 		d.web.WithPromotions(prom) // the only way to promote: a step-up is a browser session's (D53)
@@ -49,5 +56,36 @@ func registerM11Govern(rs *connect.Server, d apiDeps) {
 // issue a grant or store a widening revision, and the automation issuer
 // when it issues one (D9, D39, D70, HR-290).
 func newPromotionGate(pool *db.Pool) grantsapp.PromotionGate {
-	return promotions.Gate{Packages: &defspg.Store{Pool: pool}}
+	return promotions.Gate{Packages: &defspg.Store{Pool: pool}, Pool: pool}
+}
+
+// newPromotions is the promotion service: its checks read the definitions
+// a prefix covers, and a lapsed provisional promotion is an owned failure
+// for the agent's owner (D80).
+func newPromotions(pool *db.Pool) *promotions.Service {
+	return &promotions.Service{Pool: pool, Packages: &defspg.Store{Pool: pool}, Failures: &failures.Sink{}}
+}
+
+// registerM11GovernJobs adds the provisional promotion sweep (every 5
+// minutes: confirm those whose coverage appeared, expire the lapsed ones)
+// and returns jobs with its schedule appended.
+func registerM11GovernJobs(periodic []*river.PeriodicJob, reg *jobs.Registry, pool *db.Pool, log *slog.Logger) ([]*river.PeriodicJob, error) {
+	p, err := promotions.RegisterSweep(reg, newPromotions(pool), log)
+	if err != nil {
+		return nil, err
+	}
+	return append(periodic, p...), nil
+}
+
+// newGrants is the API's grants store and service, both with the
+// production promotion gate: the store runs it in Issue's and a widening
+// Revise's transaction, and the service carries it for automation
+// issuance and the provisional expiry cap (D9, D80, D81).
+func newGrants(pool *db.Pool) (*grantspg.Store, *grantsapp.Service) {
+	gate := newPromotionGate(pool)
+	gstore := &grantspg.Store{Pool: pool, Promotions: gate}
+	return gstore, &grantsapp.Service{
+		Repo: gstore, Subjects: gstore, Defs: &defspg.Store{Pool: pool}, Authz: grantsapp.SubjectAuthorizer{},
+		Clock: clock.System{}, Listing: gstore, Refusals: gstore, Promotions: gate,
+	}
 }

@@ -213,7 +213,8 @@ func (s *subject) coverage(ctx context.Context, q *dbq.Queries, op string, now t
 	}
 	switch {
 	case n == 0:
-		return Check{Name: CheckCoverage, Detail: "no coverage record: no connection is known to serve " + op + " for the agent (UNKNOWN)"}, nil
+		// No record at all, not a failing one: promotable provisionally (D80).
+		return Check{Name: CheckCoverage, Pending: true, Detail: "no coverage record yet: no traffic of " + op + " has been seen for the agent"}, nil
 	case len(bad) > 0:
 		return Check{Name: CheckCoverage, Detail: clip(strings.Join(bad, "; "))}, nil
 	}

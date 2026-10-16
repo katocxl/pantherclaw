@@ -79,3 +79,33 @@ func TestReadinessIsPerOperationAndComplete(t *testing.T) {
 		t.Error("QUEUE did not pass")
 	}
 }
+
+// TestProvisionalOnlyWhenCoverageIsPending (D80): an operation is
+// promotable provisionally only when every check but COVERAGE passed and
+// COVERAGE is pending (no record), never when it failed on a record.
+func TestProvisionalOnlyWhenCoverageIsPending(t *testing.T) {
+	checks := func(coverage Check, others bool) Readiness {
+		var cs []Check
+		for _, n := range CheckNames {
+			c := Check{Name: n, Passed: others}
+			if n == CheckCoverage {
+				c = coverage
+			}
+			cs = append(cs, c)
+		}
+		return Readiness{Checks: cs}
+	}
+	pendingCoverage := Check{Name: CheckCoverage, Pending: true}
+	if r := checks(pendingCoverage, true); r.Ready() || !r.Provisional() {
+		t.Error("pending coverage with every other check passed is not provisional")
+	}
+	if r := checks(Check{Name: CheckCoverage}, true); r.Provisional() {
+		t.Error("a failing coverage record is provisional")
+	}
+	if r := checks(pendingCoverage, false); r.Provisional() {
+		t.Error("pending coverage with another check failing is provisional")
+	}
+	if r := checks(Check{Name: CheckCoverage, Passed: true}, true); !r.Ready() || r.Provisional() {
+		t.Error("everything passed is not ready, or is provisional")
+	}
+}

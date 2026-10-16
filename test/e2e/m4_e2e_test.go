@@ -154,7 +154,8 @@ func TestE2E_M4_GrantsDelegationRevocationAndCounters(t *testing.T) {
 	  "currency": "USD", "limit": "500.00", "period": "none"}]}`)
 	// The environment is a PRODUCTION one, so the grant needs the agent
 	// promoted for refunds first (G0 M11 part 2 D39, HR-290): the checks
-	// run for real, as a fleet manager with a fresh step-up of their key.
+	// run for real, as a fleet manager with a fresh step-up of their key. A
+	// new agent has no traffic yet, so the promotion is provisional (D80).
 	if code, _, e := alice.pclaw(t, "grant", "issue", agent, "--principal", "user:"+aliceID, "--expires", "24h", "--bounds-file", bounds); code == 0 ||
 		!strings.Contains(e, "NOT_PROMOTED") {
 		t.Fatalf("a production grant before the promotion: %d %s", code, e)
@@ -167,7 +168,7 @@ func TestE2E_M4_GrantsDelegationRevocationAndCounters(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	promotiontest.Promote(t, promotiontest.Scope{Pool: pool, Org: org, Agent: mustUUID(t, agent), Env: mustUUID(t, env), Connection: conn, Publish: policytest.Publish},
+	promotiontest.PromoteNew(t, promotiontest.Scope{Pool: pool, Org: org, Agent: mustUUID(t, agent), Env: mustUUID(t, env), Connection: conn, Publish: policytest.Publish},
 		"payments.refund.create")
 	grant := field(t, must("grant", "issue", agent, "--principal", "user:"+aliceID, "--expires", "24h", "--bounds-file", bounds,
 		"--limits-file", limits, "--delegation-depth", "1", "--max-children", "2", "--task", "refunds"), "id")

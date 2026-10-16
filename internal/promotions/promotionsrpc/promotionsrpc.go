@@ -63,8 +63,10 @@ func behaviorOf(b pantherclawv1.FailureBehavior) string {
 }
 
 var states = map[string]pantherclawv1.PromotionState{
-	promotions.StateActive:  pantherclawv1.PromotionState_PROMOTION_STATE_ACTIVE,
-	promotions.StateRevoked: pantherclawv1.PromotionState_PROMOTION_STATE_REVOKED,
+	promotions.StateActive:      pantherclawv1.PromotionState_PROMOTION_STATE_ACTIVE,
+	promotions.StateRevoked:     pantherclawv1.PromotionState_PROMOTION_STATE_REVOKED,
+	promotions.StateProvisional: pantherclawv1.PromotionState_PROMOTION_STATE_PROVISIONAL,
+	promotions.StateExpired:     pantherclawv1.PromotionState_PROMOTION_STATE_EXPIRED,
 }
 
 func ts(t *time.Time) *timestamppb.Timestamp {
@@ -77,7 +79,7 @@ func ts(t *time.Time) *timestamppb.Timestamp {
 func checksPB(cs []promotions.Check) []*pantherclawv1.PromotionCheck {
 	out := make([]*pantherclawv1.PromotionCheck, len(cs))
 	for i, c := range cs {
-		out[i] = &pantherclawv1.PromotionCheck{Name: c.Name, Passed: c.Passed, Detail: c.Detail}
+		out[i] = &pantherclawv1.PromotionCheck{Name: c.Name, Passed: c.Passed, Detail: c.Detail, Pending: c.Pending}
 	}
 	return out
 }
@@ -88,7 +90,7 @@ func PromotionPB(p promotions.Promotion) *pantherclawv1.Promotion {
 		Id: p.ID.String(), AgentId: p.AgentID.String(), EnvironmentId: p.EnvironmentID.String(), Operation: p.Operation,
 		State: states[p.State], Checks: checksPB(p.Checks), FailureBehavior: behaviors[p.FailureBehavior],
 		PromotedBy: p.PromotedBy.String(), CredentialId: p.CredentialID.String(), PromoteTime: timestamppb.New(p.PromotedAt),
-		RevokeTime: ts(p.RevokedAt),
+		RevokeTime: ts(p.RevokedAt), ExpireTime: ts(p.ExpiresAt), ConfirmTime: ts(p.ConfirmedAt), ExpiredTime: ts(p.ExpiredAt),
 	}
 	if p.RevokedBy != nil {
 		out.RevokedBy = p.RevokedBy.String()
@@ -110,7 +112,7 @@ func promotionsPB(ps []promotions.Promotion) []*pantherclawv1.Promotion {
 func readinessPB(rs []promotions.Readiness) []*pantherclawv1.OperationReadiness {
 	out := make([]*pantherclawv1.OperationReadiness, len(rs))
 	for i, r := range rs {
-		out[i] = &pantherclawv1.OperationReadiness{Operation: r.Operation, Ready: r.Ready(), Checks: checksPB(r.Checks)}
+		out[i] = &pantherclawv1.OperationReadiness{Operation: r.Operation, Ready: r.Ready(), Provisional: r.Provisional(), Checks: checksPB(r.Checks)}
 		if r.Promotion != nil {
 			out[i].Promotion = PromotionPB(*r.Promotion)
 		}

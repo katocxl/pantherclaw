@@ -98,6 +98,9 @@ type PcAgentPromotion struct {
 	RevokedBy       *ids.UUID
 	RevokedAt       *time.Time
 	RevokeReason    *string
+	ExpiresAt       *time.Time
+	ConfirmedAt     *time.Time
+	ExpiredAt       *time.Time
 }
 
 type PcAlert struct {

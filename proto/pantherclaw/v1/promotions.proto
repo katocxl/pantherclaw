@@ -22,8 +22,9 @@ import "google/protobuf/timestamp.proto";
 // per operation, never for the agent as a whole.
 service PromotionService {
   // PromoteAgent promotes an agent in its PRODUCTION environment for each
-  // operation whose checks pass; the others are reported with the checks
-  // they failed. Needs a fresh step-up.
+  // operation whose checks pass, provisionally (7 days) when only coverage
+  // is pending; the others are reported with the checks they failed.
+  // Needs a fresh step-up.
   // permission: agent.promote
   rpc PromoteAgent(PromoteAgentRequest) returns (PromoteAgentResponse);
   // RevokePromotion revokes an ACTIVE promotion: new and widened grants for
@@ -56,6 +57,12 @@ enum PromotionState {
   PROMOTION_STATE_UNSPECIFIED = 0;
   PROMOTION_STATE_ACTIVE = 1;
   PROMOTION_STATE_REVOKED = 2;
+  // PROVISIONAL: every check but coverage passed, and only because no
+  // coverage record exists yet (D80); it covers grants until expire_time,
+  // which caps their expiry, and becomes ACTIVE once coverage appears.
+  PROMOTION_STATE_PROVISIONAL = 3;
+  // EXPIRED: a provisional promotion whose expiry passed first.
+  PROMOTION_STATE_EXPIRED = 4;
 }
 
 // PromotionCheck is one check of one operation.
@@ -64,6 +71,9 @@ message PromotionCheck {
   string name = 1;
   bool passed = 2;
   string detail = 3;
+  // pending: a COVERAGE check failing only because no coverage record
+  // exists yet; the operation can be promoted provisionally.
+  bool pending = 4;
 }
 
 message Promotion {
@@ -82,6 +92,11 @@ message Promotion {
   string revoked_by = 11;
   google.protobuf.Timestamp revoke_time = 12;
   string revoke_reason = 13;
+  // A provisional promotion's expiry, when coverage made it ACTIVE, and
+  // when it expired.
+  google.protobuf.Timestamp expire_time = 14;
+  google.protobuf.Timestamp confirm_time = 15;
+  google.protobuf.Timestamp expired_time = 16;
 }
 
 // OperationReadiness is one operation's checks.
@@ -89,6 +104,8 @@ message OperationReadiness {
   string operation = 1;
   // ready: every check passed.
   bool ready = 2;
+  // provisional: every check passed but a pending COVERAGE (D80).
+  bool provisional = 5;
   repeated PromotionCheck checks = 3;
   // promotion is the operation's ACTIVE promotion, when it has one.
   Promotion promotion = 4;

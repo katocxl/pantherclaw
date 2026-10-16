@@ -24,26 +24,28 @@ WHERE a.org_id = sqlc.arg(org_id) AND a.id = sqlc.arg(id);
 -- name: PromotionEnvironmentKind :one
 SELECT kind FROM pc.environments WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id);
 
--- The operations an agent is promoted for in an environment now, locked
--- FOR SHARE so a concurrent revocation waits for the issuing transaction
--- (D71 G7).
--- name: ActivePromotedOperations :many
-SELECT operation FROM pc.agent_promotions
+-- The operations an agent is promoted for in an environment now: ACTIVE,
+-- or PROVISIONAL and not expired by the database clock (with its expiry,
+-- D80). Locked FOR SHARE so a concurrent revocation or expiry waits for
+-- the issuing transaction (D71 G7).
+-- name: PromotedOperations :many
+SELECT operation, expires_at FROM pc.agent_promotions
 WHERE org_id = sqlc.arg(org_id) AND agent_id = sqlc.arg(agent_id) AND environment_id = sqlc.arg(environment_id)
-  AND state = 'ACTIVE'
+  AND (state = 'ACTIVE' OR (state = 'PROVISIONAL' AND expires_at > now()))
 ORDER BY operation
 FOR SHARE;
 
 -- name: ActiveAgentPromotion :one
 SELECT * FROM pc.agent_promotions
 WHERE org_id = sqlc.arg(org_id) AND agent_id = sqlc.arg(agent_id) AND environment_id = sqlc.arg(environment_id)
-  AND operation = sqlc.arg(operation) AND state = 'ACTIVE';
+  AND operation = sqlc.arg(operation) AND state IN ('ACTIVE', 'PROVISIONAL')
+FOR UPDATE;
 
 -- name: InsertAgentPromotion :one
 INSERT INTO pc.agent_promotions (org_id, id, agent_id, environment_id, operation, state, checks, failure_behavior,
-    promoted_by, credential_id)
-VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(agent_id), sqlc.arg(environment_id), sqlc.arg(operation), 'ACTIVE',
-    sqlc.arg(checks), sqlc.arg(failure_behavior), sqlc.arg(promoted_by), sqlc.arg(credential_id))
+    promoted_by, credential_id, expires_at)
+VALUES (sqlc.arg(org_id), sqlc.arg(id), sqlc.arg(agent_id), sqlc.arg(environment_id), sqlc.arg(operation), sqlc.arg(state),
+    sqlc.arg(checks), sqlc.arg(failure_behavior), sqlc.arg(promoted_by), sqlc.arg(credential_id), sqlc.narg(expires_at))
 RETURNING *;
 
 -- name: GetAgentPromotion :one
@@ -52,7 +54,7 @@ SELECT * FROM pc.agent_promotions WHERE org_id = sqlc.arg(org_id) AND id = sqlc.
 -- name: RevokeAgentPromotion :one
 UPDATE pc.agent_promotions
 SET state = 'REVOKED', revoked_by = sqlc.arg(revoked_by), revoked_at = now(), revoke_reason = sqlc.arg(reason)
-WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state = 'ACTIVE'
+WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state IN ('ACTIVE', 'PROVISIONAL')
 RETURNING *;
 
 -- Promotions, newest first, by agent, environment and state.
@@ -86,3 +88,23 @@ SELECT DISTINCT package FROM pc.connections WHERE org_id = sqlc.arg(org_id) AND 
 -- window can be answered only when one exists (D71 G10).
 -- name: PromotionChangeWindows :one
 SELECT count(*)::integer FROM pc.change_windows WHERE org_id = sqlc.arg(org_id);
+
+-- Provisional promotions (D80): the sweep reads them oldest expiry first,
+-- confirms one whose coverage appeared, and expires those the database
+-- clock has passed.
+-- name: ProvisionalPromotions :many
+SELECT * FROM pc.agent_promotions
+WHERE org_id = sqlc.arg(org_id) AND state = 'PROVISIONAL'
+ORDER BY expires_at, id
+LIMIT sqlc.arg(max_rows)
+FOR UPDATE SKIP LOCKED;
+
+-- name: ConfirmAgentPromotion :one
+UPDATE pc.agent_promotions SET state = 'ACTIVE', confirmed_at = now()
+WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state = 'PROVISIONAL' AND expires_at > now()
+RETURNING *;
+
+-- name: ExpireAgentPromotion :one
+UPDATE pc.agent_promotions SET state = 'EXPIRED', expired_at = now()
+WHERE org_id = sqlc.arg(org_id) AND id = sqlc.arg(id) AND state = 'PROVISIONAL' AND expires_at <= now()
+RETURNING *;

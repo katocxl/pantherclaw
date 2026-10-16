@@ -77,7 +77,7 @@ SELECT a.id, a.name, a.state, a.owner_user_id, a.environment_id, a.team_id, a.ta
        coalesce((SELECT max(r.created_at) FROM pc.runs r WHERE r.org_id = a.org_id AND r.agent_id = a.id),
                 'epoch'::timestamptz)::timestamptz AS last_run_at,
        ARRAY(SELECT p.operation FROM pc.agent_promotions p
-             WHERE p.org_id = a.org_id AND p.agent_id = a.id AND p.environment_id = a.environment_id AND p.state = 'ACTIVE'
+             WHERE p.org_id = a.org_id AND p.agent_id = a.id AND p.environment_id = a.environment_id AND (p.state = 'ACTIVE' OR (p.state = 'PROVISIONAL' AND p.expires_at > now()))
              ORDER BY p.operation)::text[] AS promoted,
        (SELECT count(*) FROM pc.grants g
         JOIN pc.grant_revisions gr ON gr.org_id = g.org_id AND gr.grant_id = g.id AND gr.revision = g.current_revision

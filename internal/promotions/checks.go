@@ -45,6 +45,9 @@ type Check struct {
 	Name   string `json:"name"`
 	Passed bool   `json:"passed"`
 	Detail string `json:"detail"`
+	// Pending marks a COVERAGE check that fails only because no coverage
+	// record exists yet (D80): the operation can be promoted provisionally.
+	Pending bool `json:"pending,omitzero"`
 }
 
 // Readiness is one operation's readiness in one environment: every check
@@ -59,6 +62,20 @@ type Readiness struct {
 // Ready reports whether every check passed.
 func (r Readiness) Ready() bool {
 	return len(r.Checks) == len(CheckNames) && !slices.ContainsFunc(r.Checks, func(c Check) bool { return !c.Passed })
+}
+
+// Provisional reports whether every check passed but COVERAGE, which is
+// only pending: no coverage record exists yet (D80).
+func (r Readiness) Provisional() bool {
+	if len(r.Checks) != len(CheckNames) {
+		return false
+	}
+	for _, c := range r.Checks {
+		if !c.Passed && !(c.Name == CheckCoverage && c.Pending) {
+			return false
+		}
+	}
+	return !r.Ready()
 }
 
 // Failed lists the names of the checks that did not pass.

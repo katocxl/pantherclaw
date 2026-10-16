@@ -23,6 +23,7 @@ import (
 	"encoding/json/v2"
 	"slices"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/katocxl/pantherclaw/internal/evidence/audit"
@@ -47,9 +48,15 @@ const (
 
 // States of a promotion.
 const (
-	StateActive  = "ACTIVE"
-	StateRevoked = "REVOKED"
+	StateActive      = "ACTIVE"
+	StateProvisional = "PROVISIONAL"
+	StateRevoked     = "REVOKED"
+	StateExpired     = "EXPIRED"
 )
+
+// ProvisionalFor is how long a provisional promotion lasts (D80: at most
+// 7 days); grants under it end with it.
+const ProvisionalFor = 7 * 24 * time.Hour
 
 const production = "PRODUCTION"
 
@@ -84,6 +91,9 @@ type Service struct {
 	// Packages names the operations a prefix covers and the consequences
 	// an operation reaches (nil: none, so prefixes are refused).
 	Packages Packages
+	// Failures receives the owned failure of a lapsed provisional promotion
+	// (D80; nil: none is recorded).
+	Failures FailureSink
 }
 
 // Promotion is one stored promotion.
@@ -231,6 +241,20 @@ func (s *Service) PromoteAgent(ctx context.Context, in PromoteInput, su *stepup.
 				OrgID: c.Org, AgentID: in.Agent, EnvironmentID: in.Environment, Operation: r.Operation,
 			})
 			switch {
+			case err == nil && cur.State == StateProvisional && !now.Before(*cur.ExpiresAt):
+				// Lapsed but not swept yet: expire it first (D80).
+				if err := s.expire(ctx, tx, cur); err != nil {
+					return err
+				}
+			case err == nil && cur.State == StateProvisional && r.Ready():
+				// Coverage arrived: the provisional promotion becomes ACTIVE.
+				row, err := s.confirm(ctx, tx, c.Actor(), cur)
+				if err != nil {
+					return err
+				}
+				p := promotionOf(row)
+				out.Readiness[i].Promotion, out.Promoted = &p, append(out.Promoted, p)
+				continue
 			case err == nil:
 				p := promotionOf(cur)
 				out.Readiness[i].Promotion, out.Already = &p, append(out.Already, p)
@@ -238,7 +262,13 @@ func (s *Service) PromoteAgent(ctx context.Context, in PromoteInput, su *stepup.
 			case !db.IsNoRows(err):
 				return err
 			}
-			if !r.Ready() {
+			state, until := StateActive, (*time.Time)(nil)
+			switch {
+			case r.Ready():
+			case r.Provisional():
+				t := now.Add(ProvisionalFor)
+				state, until = StateProvisional, &t
+			default:
 				continue
 			}
 			checks, err := json.Marshal(r.Checks)
@@ -246,25 +276,29 @@ func (s *Service) PromoteAgent(ctx context.Context, in PromoteInput, su *stepup.
 				return err
 			}
 			ins, err := q.InsertAgentPromotion(ctx, dbq.InsertAgentPromotionParams{
-				OrgID: c.Org, ID: ids.NewV7(), AgentID: in.Agent, EnvironmentID: in.Environment, Operation: r.Operation,
-				Checks: checks, FailureBehavior: in.FailureBehavior, PromotedBy: c.Principal.ID, CredentialID: cred,
+				OrgID: c.Org, ID: ids.NewV7(), AgentID: in.Agent, EnvironmentID: in.Environment, Operation: r.Operation, State: state,
+				Checks: checks, FailureBehavior: in.FailureBehavior, PromotedBy: c.Principal.ID, CredentialID: cred, ExpiresAt: until,
 			})
 			if err != nil {
 				return err
 			}
 			p := promotionOf(ins)
 			out.Readiness[i].Promotion, out.Promoted = &p, append(out.Promoted, p)
+			details := map[string]string{
+				"promotion": ins.ID.String(), "environment": in.Environment.String(), "operation": r.Operation,
+				"failure_behavior": in.FailureBehavior, "security_key": cred.String(), "state": state,
+			}
+			if until != nil {
+				details["expires_at"] = until.UTC().Format(time.RFC3339)
+			}
 			if _, err := audit.Record(ctx, tx, audit.Event{
 				Name: "agent.promoted", Actor: c.Actor(), Outcome: audit.Success,
-				Object: &audit.Object{Type: "agent", ID: in.Agent.String()},
-				Details: map[string]string{
-					"promotion": ins.ID.String(), "environment": in.Environment.String(), "operation": r.Operation,
-					"failure_behavior": in.FailureBehavior, "security_key": cred.String(),
-				},
+				Object: &audit.Object{Type: "agent", ID: in.Agent.String()}, Details: details,
 			}); err != nil {
 				return err
 			}
 		}
+		pending(out.Readiness)
 		if !c.Can(td.PermPolicyRead, td.OrgPath(c.Org)) {
 			redact(out.Readiness)
 			for i := range out.Promoted {
@@ -361,11 +395,21 @@ func (s *Service) GetReadiness(ctx context.Context, agent, env ids.UUID, operati
 		if err != nil {
 			return err
 		}
-		active, err := q.ListAgentPromotions(ctx, dbq.ListAgentPromotionsParams{
-			OrgID: c.Org, AgentID: &agent, EnvironmentID: &env, State: ptr(StateActive), MaxRows: maxOperations * 4,
+		now, err := q.DBNow(ctx)
+		if err != nil {
+			return err
+		}
+		listed, err := q.ListAgentPromotions(ctx, dbq.ListAgentPromotionsParams{
+			OrgID: c.Org, AgentID: &agent, EnvironmentID: &env, MaxRows: maxOperations * 8,
 		})
 		if err != nil {
 			return err
+		}
+		var active []dbq.PcAgentPromotion // ACTIVE, or PROVISIONAL not yet expired (D80)
+		for _, p := range listed {
+			if p.State == StateActive || (p.State == StateProvisional && p.ExpiresAt != nil && p.ExpiresAt.After(now)) {
+				active = append(active, p)
+			}
 		}
 		if ops == nil {
 			if ops, err = knownOperations(ctx, q, c.Org, agent, env, active, sub); err != nil {
@@ -373,10 +417,6 @@ func (s *Service) GetReadiness(ctx context.Context, agent, env ids.UUID, operati
 			}
 		}
 		ops, _ = cat.expand(ops)
-		now, err := q.DBNow(ctx)
-		if err != nil {
-			return err
-		}
 		if out, err = sub.evaluate(ctx, q, ops, failureBehavior, now); err != nil {
 			return err
 		}
@@ -391,6 +431,7 @@ func (s *Service) GetReadiness(ctx context.Context, agent, env ids.UUID, operati
 				}
 			}
 		}
+		pending(out)
 		if !c.Can(td.PermPolicyRead, td.OrgPath(c.Org)) {
 			redact(out)
 		}
